@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { painelBarbeiro, profissionalDoUsuario, ehGestao, ModoBarbeiroError } from './dino-modo-barbeiro.js';
+import { assistenteAtendimento, painelBarbeiro, profissionalDoUsuario, ehGestao, ModoBarbeiroError } from './dino-modo-barbeiro.js';
 import * as push from './dino-push-equipe.js';
 
 const profissionais = [
@@ -115,4 +115,31 @@ test('push: validação das chaves da assinatura', () => {
   assert.equal(push.validarAssinatura(ok).endpoint, ok.endpoint);
   assert.throws(() => push.validarAssinatura({ ...ok, keys: { p256dh: 'curta', auth: 'a'.repeat(22) } }), /Chaves/);
   assert.throws(() => push.validarAssinatura({ ...ok, endpoint: 'https://exemplo.test/x' }), /não aceito/);
+});
+
+
+test('assistente do atendimento agrega histórico pelo ID exato e respeita o profissional', () => {
+  const appointment = { id: 'att-1', lojaId: 'loja-1', clienteId: 'cli-1', profissionalId: 'p1', servicoId: 's1', status: 'em_atendimento', dataHora: '2026-10-02T15:00:00.000Z' };
+  const historique = [{ id: 'h1', lojaId: 'loja-1', clienteId: 'cli-1', servicoId: 's2', servicoNome: 'Barba', status: 'concluido', dataAgenda: '2026-08-01' }];
+  const erp = {
+    listarProfissionais: () => profissionais,
+    listarAgendamentos: () => [appointment],
+    listarComandasBarbearia: () => [],
+    listarVendasRevenda: () => [{ id: 'v1', lojaId: 'loja-1', clienteId: 'cli-1', status: 'pago', criadoEm: '2026-08-01T12:00:00.000Z', itens: [{ produtoId: 'prod1', nome: 'Pomada', quantidade: 1 }] }],
+    listarHistoricoAtendimentos: () => historique,
+    listarServicos: () => [{ id: 's1', nome: 'Corte', ativo: true }, { id: 's2', nome: 'Barba', ativo: true, intervaloRecomendacaoDias: 30 }],
+    listarProdutosRevenda: () => [{ id: 'prod1', nome: 'Pomada', ativo: true, estoqueAtual: 4, precoVenda: 45, intervaloRecompraDias: 30 }],
+  };
+  const result = assistenteAtendimento(erp, {
+    empresaId: 'e1', lojaId: 'loja-1', usuario: { role: 'staff', email: 'carlos@dino.test' },
+    agendamentoId: 'att-1', clientes: { obterCliente: () => ({ id: 'cli-1', nome: 'Cliente', padrao: false }) },
+    agora: new Date('2026-10-02T14:00:00.000Z'),
+  });
+  assert.equal(result.disponivel, true);
+  assert.deepEqual(result.servicosParaOferecer.map((item) => item.servicoId), ['s2']);
+  assert.deepEqual(result.oportunidadesProdutos.map((item) => item.produtoId), ['prod1']);
+  assert.throws(() => assistenteAtendimento(erp, {
+    empresaId: 'e1', lojaId: 'loja-1', usuario: { role: 'staff', email: 'rafael@dino.test' },
+    agendamentoId: 'att-1', clientes: { obterCliente: () => ({ id: 'cli-1' }) },
+  }), (error) => error instanceof ModoBarbeiroError && error.status === 403);
 });

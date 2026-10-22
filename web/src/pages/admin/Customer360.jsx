@@ -201,8 +201,37 @@ function CustomerProfile({ reference }) {
         <h3>Atendimentos</h3>
         <Table caption="Atendimentos" rows={data.barbearia.agendamentos} empty="Nenhum atendimento." columns={[
           { key: 'dataHora', label: 'Data', render: (row) => fmtDate(row.dataHora) }, { key: 'servico', label: 'Serviço' }, { key: 'profissional', label: 'Profissional' },
-          { key: 'status', label: 'Status', render: (row) => statusLabel(row.status) }, { key: 'valor', label: 'Valor', align: 'right', render: (row) => row.valor ? fmtR(row.valor) : '—' },
+          { key: 'status', label: 'Status', render: (row) => <span>{statusLabel(row.status)}{row.motivoCancelamento === 'falta_confirmacao' ? ' · cancelado por falta de confirmação' : ''}</span> }, { key: 'valor', label: 'Valor', align: 'right', render: (row) => row.valor ? fmtR(row.valor) : '—' },
         ]} />
+        <h3>Histórico individual de serviços</h3>
+        <Table caption="Última realização por serviço" rows={data.barbearia.historicoServicos || []} empty="Nenhum serviço concluído ligado ao cadastro individual deste cliente." columns={[
+          { key: 'nome', label: 'Serviço' }, { key: 'ultimaRealizacaoEm', label: 'Última realização', render: (row) => fmtDay(row.ultimaRealizacaoEm) },
+          { key: 'diasDesdeUltima', label: 'Há', render: (row) => row.diasDesdeUltima === 0 ? 'hoje' : `${row.diasDesdeUltima} dia(s)` },
+          { key: 'atendimentos', label: 'Ocorrências' }, { key: 'origens', label: 'Fontes', render: (row) => (row.origens || []).join(' · ') || '—' }, { key: 'unidadeIndefinida', label: 'Unidade', render: (row) => row.unidadeIndefinida ? 'Não identificada' : 'Escopo atual' }, { key: 'intervaloRecomendacaoDias', label: 'Intervalo (dias)', render: (row) => row.intervaloRecomendacaoDias || 'Não configurado' },
+        ]} />
+        <h3>Produtos comprados na barbearia</h3>
+        <Table caption="Última compra por produto" rows={data.barbearia.historicoProdutos || []} empty="Nenhuma compra local de revenda/comanda ligada ao cadastro individual." columns={[
+          { key: 'nome', label: 'Produto' }, { key: 'ultimaCompraEm', label: 'Última compra', render: (row) => fmtDay(row.ultimaCompraEm) },
+          { key: 'diasDesdeUltima', label: 'Há', render: (row) => row.diasDesdeUltima === 0 ? 'hoje' : `${row.diasDesdeUltima} dia(s)` },
+          { key: 'compras', label: 'Compras' }, { key: 'quantidadeTotal', label: 'Unidades' }, { key: 'origens', label: 'Fontes', render: (row) => (row.origens || []).join(' · ') || '—' }, { key: 'unidadeIndefinida', label: 'Unidade', render: (row) => row.unidadeIndefinida ? 'Não identificada' : 'Escopo atual' }, { key: 'emEstoque', label: 'Estoque', render: (row) => row.emEstoque ? 'Disponível' : 'Indisponível' }, { key: 'intervaloRecompraDias', label: 'Recompra (dias)', render: (row) => row.intervaloRecompraDias || 'Não configurado' },
+        ]} />
+        <h3>Assistente de atendimento</h3>
+        <p className="c360-muted">Sugestões determinísticas explicadas por histórico e periodicidade configurada. Confirme a necessidade com o cliente; não há venda ou mensagem automática.</p>
+        {data.barbearia.assistenteAtendimento?.disponivel === false && <EmptyLine>{data.barbearia.assistenteAtendimento.motivo === 'unidade_nao_selecionada' ? 'Recomendações ocultadas: selecione a unidade do atendimento para restringir o histórico à loja correta.' : 'Recomendações ocultadas: o vínculo individual do cliente não foi confirmado.'}</EmptyLine>}
+        {data.barbearia.assistenteAtendimento?.disponivel === true && <>
+          <Table caption="Serviços no período para nova avaliação" rows={data.barbearia.assistenteAtendimento.servicosParaOferecer || []} empty="Nenhum serviço com intervalo atingido." columns={[
+            { key: 'nome', label: 'Serviço' }, { key: 'ultimaRealizacaoEm', label: 'Última realização', render: (row) => fmtDay(row.ultimaRealizacaoEm) },
+            { key: 'diasDesdeUltima', label: 'Dias desde a última' }, { key: 'intervaloDias', label: 'Intervalo' }, { key: 'motivo', label: 'Motivo', render: (row) => row.motivo === 'intervalo_recomendado_atingido' ? 'Periodicidade atingida' : row.motivo },
+          ]} />
+          <Table caption="Serviços recentes a não repetir automaticamente" rows={data.barbearia.assistenteAtendimento.servicosRecentes || []} empty="Nenhum procedimento recente encontrado." columns={[
+            { key: 'nome', label: 'Serviço' }, { key: 'ultimaRealizacaoEm', label: 'Última realização', render: (row) => fmtDay(row.ultimaRealizacaoEm) },
+            { key: 'diasDesdeUltima', label: 'Dias desde a última' }, { key: 'intervaloDias', label: 'Intervalo configurado', render: (row) => row.intervaloDias || 'Não configurado' }, { key: 'motivo', label: 'Observação', render: (row) => row.motivo === 'unidade_nao_identificada' ? 'Sem oferta automática: unidade de origem desconhecida' : row.motivo === 'ainda_dentro_do_intervalo' ? 'Ainda dentro da periodicidade' : 'Periodicidade não configurada' },
+          ]} />
+          <Table caption="Oportunidades de recompra de produtos" rows={data.barbearia.assistenteAtendimento.oportunidadesProdutos || []} empty="Nenhuma recompra vencida com produto em estoque." columns={[
+            { key: 'nome', label: 'Produto' }, { key: 'ultimaCompraEm', label: 'Última compra', render: (row) => fmtDay(row.ultimaCompraEm) },
+            { key: 'diasDesdeUltima', label: 'Dias desde a compra' }, { key: 'intervaloDias', label: 'Intervalo' }, { key: 'motivo', label: 'Motivo', render: (row) => row.motivo === 'recompra_periodica' ? 'Periodicidade atingida' : row.motivo },
+          ]} />
+        </>}
         <h3>Comandas e compras no balcão</h3>
         <Table caption="Comandas" rows={[...data.barbearia.comandas.map((row) => ({ ...row, tipo: 'Comanda' })), ...data.barbearia.revenda.map((row) => ({ ...row, tipo: 'Balcão' }))]} empty="Nenhuma comanda ou compra." columns={[
           { key: 'em', label: 'Data', render: (row) => fmtDate(row.em) }, { key: 'tipo', label: 'Tipo' }, { key: 'status', label: 'Status', render: (row) => statusLabel(row.status) },

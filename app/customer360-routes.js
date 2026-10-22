@@ -94,7 +94,7 @@ export function registerCustomer360Routes(app, deps) {
     return { context, commerceCustomers, commerceStatus, locals: localClients(req), rules: customerStore.identityRules(legacyEmpresaId(req)) };
   }
 
-  function localData(req) {
+  function localData(req, { includeHistorical = false, customerId = '' } = {}) {
     const empresaId = legacyEmpresaId(req);
     const lojaId = legacyLojaId(req);
     const fidelidade = canaisFidelidadeKytto.obterFidelidade(empresaId);
@@ -102,6 +102,11 @@ export function registerCustomer360Routes(app, deps) {
       appointments: listarAgendamentosBarbearia(empresaId, { lojaId }),
       comandas: barbeariaErpKytto.listarComandasBarbearia(empresaId, { lojaId }),
       retailSales: barbeariaErpKytto.listarVendasRevenda(empresaId, { lojaId }),
+      historicalAppointments: includeHistorical && customerId ? (barbeariaErpKytto.listarHistoricoAtendimentos?.(empresaId, { lojaId, clienteId: customerId, limite: 50000 }) || []) : [],
+      services: barbeariaErpKytto.listarServicos?.(empresaId, { incluirInativos: true }) || [],
+      products: (barbeariaErpKytto.listarProdutosRevenda?.(empresaId, { incluirInativos: true }) || [])
+        .filter((item) => !lojaId || !item.lojaId || String(item.lojaId) === String(lojaId)),
+      storeId: lojaId,
       receivables: clientesKytto.listarContasReceber(empresaId),
       fidelidade,
     };
@@ -119,7 +124,8 @@ export function registerCustomer360Routes(app, deps) {
     if (!identity) return { status: 404, body: { error: 'Cliente não encontrado nesta empresa.', code: 'CUSTOMER360_NOT_FOUND' } };
 
     const empresaId = legacyEmpresaId(req);
-    const data = localData(req);
+    const singleLocalId = identity.local.length === 1 ? String(identity.local[0].id) : '';
+    const data = localData(req, { includeHistorical: Boolean(singleLocalId), customerId: singleLocalId });
     const localIds = new Set(identity.local.map((item) => String(item.id)));
     const phones = new Set(identity.phones);
     const belongs = (item) => (item.clienteId && localIds.has(String(item.clienteId))) || (!item.clienteId && item.clienteTelefone && phones.has(normalizePhone(item.clienteTelefone)));
@@ -129,6 +135,10 @@ export function registerCustomer360Routes(app, deps) {
       appointments: data.appointments.filter(belongs),
       comandas: data.comandas.filter(belongs),
       retailSales: data.retailSales.filter(belongs),
+      historicalAppointments: data.historicalAppointments.filter(belongs),
+      services: data.services,
+      products: data.products,
+      storeId: data.storeId,
       receivables: data.receivables.filter((item) => localIds.has(String(item.clienteId))),
       loyaltyMember: member,
       loyaltyMoves: member ? data.fidelidade.movimentos.filter((item) => item.membroId === member.id) : [],

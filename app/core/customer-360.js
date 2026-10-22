@@ -9,6 +9,7 @@
 // nunca derruba a ficha. Dados pessoais saem mascarados por padrão (LGPD).
 
 import { db } from './database.js';
+import { buildDinoCustomerAssistant } from './dino-customer-assistant.js';
 
 // ───────────────────────── identidade e mascaramento ─────────────────────────
 
@@ -326,6 +327,16 @@ export function buildCustomer360(identity, { local = {}, commerce = {}, now = ne
   // visitas concluídas também contam como relacionamento (comanda nem sempre é aberta para o atendimento)
   const engagements = Math.max(totalTickets, doneVisits.length + paidOrders.length)
   const segment = customerSegment({ lastActivityMs: lastActivity, lifetimeValue, engagements, nowMs });
+  const identityRef = String(identity.ref || '');
+  const assistant = buildDinoCustomerAssistant({
+    customerId: localClient?.id || '',
+    identityVerified: Boolean(localClient && !localClient.anonimizadoEm && identity.local.length === 1
+      && (identityRef.startsWith('dino:') || (identity.matchedBy || []).includes('vínculo manual'))),
+    appointments, comandas, retailSales: retail,
+    historicalAppointments: local.historicalAppointments || [],
+    services: local.services || [], products: local.products || [],
+    storeId: local.storeId || '', now,
+  });
 
   const phone = identity.phones[0] || normalizePhone(localClient?.telefone || commerceCustomer?.telefone);
   const email = identity.emails[0] || normalizeEmail(localClient?.email || commerceCustomer?.email);
@@ -345,7 +356,7 @@ export function buildCustomer360(identity, { local = {}, commerce = {}, now = ne
   };
 
   const timeline = [
-    ...appointments.map((item) => ({ tipo: 'agendamento', em: item.dataHora, titulo: item.servicoNome || item.servico_nome || 'Atendimento', detalhe: [item.status, item.profissionalNome || item.profissional_nome].filter(Boolean).join(' · '), valor: money(item.valorRecebido || item.valor || 0) })),
+    ...appointments.map((item) => ({ tipo: 'agendamento', em: item.dataHora, titulo: item.servicoNome || item.servico_nome || 'Atendimento', detalhe: [item.status, item.motivoCancelamento === 'falta_confirmacao' ? 'cancelado por falta de confirmação' : '', item.profissionalNome || item.profissional_nome].filter(Boolean).join(' · '), valor: money(item.valorRecebido || item.valor || 0) })),
     ...comandas.map((item) => ({ tipo: 'comanda', em: item.atualizadoEm || item.criadoEm, titulo: `Comanda ${item.id}`, detalhe: item.status, valor: money(item.totalPago || item.total) })),
     ...retail.map((item) => ({ tipo: 'revenda', em: item.criadoEm, titulo: 'Compra no balcão', detalhe: item.status, valor: money(item.total) })),
     ...orders.map((item) => ({ tipo: 'pedido', em: item.criado_em, titulo: `Pedido ${item.public_code}`, detalhe: item.status, valor: money(item.total) })),
@@ -388,7 +399,10 @@ export function buildCustomer360(identity, { local = {}, commerce = {}, now = ne
     },
     proximos: upcoming.sort((a, b) => time(a.dataHora) - time(b.dataHora)).slice(0, 5).map((item) => ({ id: item.id, dataHora: item.dataHora, servico: item.servicoNome || item.servico_nome || '', profissional: item.profissionalNome || item.profissional_nome || '', status: item.status })),
     barbearia: {
-      agendamentos: appointments.slice(0, 50).map((item) => ({ id: item.id, dataHora: item.dataHora, servico: item.servicoNome || item.servico_nome || '', profissional: item.profissionalNome || item.profissional_nome || '', status: item.status, valor: money(item.valorRecebido || item.valor || 0) })),
+      agendamentos: appointments.slice(0, 50).map((item) => ({ id: item.id, dataHora: item.dataHora, servico: item.servicoNome || item.servico_nome || '', profissional: item.profissionalNome || item.profissional_nome || '', status: item.status, motivoCancelamento: item.motivoCancelamento || null, valor: money(item.valorRecebido || item.valor || 0) })),
+      historicoServicos: assistant.historicoServicos,
+      historicoProdutos: assistant.historicoProdutos,
+      assistenteAtendimento: assistant,
       comandas: comandas.slice(0, 50).map((item) => ({ id: item.id, em: item.atualizadoEm || item.criadoEm, status: item.status, total: money(item.total), pago: money(item.totalPago) })),
       revenda: retail.slice(0, 50).map((item) => ({ id: item.id, em: item.criadoEm, status: item.status, total: money(item.total), itens: (item.itens || []).length })),
       contas: receivables.slice(0, 50).map((item) => ({ id: item.id, descricao: item.descricao, valor: money(item.valor), status: item.status, vencimento: item.dataVencimento, diasAtraso: item.diasAtraso || 0 })),

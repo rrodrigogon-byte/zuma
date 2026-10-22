@@ -11,6 +11,7 @@ import { lerAgenda, erroAgenda } from '../../lib/agenda-read'
 import BarbeiroVendaRapida from './BarbeiroVendaRapida'
 import BarbeiroPeriodo from './BarbeiroPeriodo'
 import BarbeiroExtrato from './BarbeiroExtrato'
+import DinoSalesAssistantPanel from '../../components/barbearia/DinoSalesAssistantPanel'
 import { useAuth } from '../../lib/auth'
 import { DINO_BARBERSHOP_LOGO } from '../../lib/brand'
 import InstalarApp from '../../components/pwa/InstalarApp'
@@ -20,6 +21,8 @@ const t = { bg: '#0E1014', surface: '#161922', card: '#1C202B', accent: '#6E7CE0
 const STATUS = {
   agendado: { rotulo: 'Agendado', cor: t.muted },
   confirmado: { rotulo: 'Confirmado', cor: t.blue },
+  aguardando_confirmacao: { rotulo: 'Aguardando confirmação', cor: t.yellow },
+  cancelado_falta_confirmacao: { rotulo: 'Cancelado por falta de confirmação', cor: t.red },
   em_atendimento: { rotulo: 'Em atendimento', cor: t.yellow },
   concluido: { rotulo: 'Concluído', cor: t.green },
   nao_compareceu: { rotulo: 'Não veio', cor: t.red },
@@ -266,7 +269,14 @@ export default function ModoBarbeiro() {
               </div>
               : (() => {
                 const a = item.a
-                const st = STATUS[a.status] || STATUS.agendado
+                const statusVisual = a.motivoCancelamento === 'falta_confirmacao' || a.confirmacaoAutomatica?.status === 'cancelado_falta_confirmacao'
+                  ? 'cancelado_falta_confirmacao'
+                  : a.status === 'confirmado' || a.confirmacaoAutomatica?.status === 'confirmado'
+                    ? 'confirmado'
+                    : a.status === 'agendado' && a.confirmacaoAutomatica?.ativa === true && ['aguardando', 'primeira_enviada', 'segunda_enviada'].includes(a.confirmacaoAutomatica.status)
+                      ? 'aguardando_confirmacao'
+                      : a.status
+                const st = STATUS[statusVisual] || STATUS.agendado
                 const destaque = painel.resumo.proximoId === a.id
                 const ocupado = acaoEmCurso === a.id
                 const zap = linkWhatsapp(a.clienteTelefone)
@@ -289,6 +299,7 @@ export default function ModoBarbeiro() {
                     {!['cancelado', 'nao_compareceu'].includes(a.status) && <button type="button" disabled={ocupado} style={btn} onClick={() => { setVendaAtendimento(a); setFolha('venda') }}>+ Serviços / produtos</button>}
                     {a.status === 'concluido' && <span style={{ fontSize: 13, color: t.muted, alignSelf: 'center' }}>Pagamento no caixa.</span>}
                   </div>}
+                  {!['cancelado', 'nao_compareceu'].includes(a.status) && <DinoSalesAssistantPanel key={a.id} appointmentId={a.id} currentServiceId={a.servicoId} compact />}
                   {(a.clienteTelefone && !['cancelado'].includes(a.status)) && <div style={{ display: 'flex', gap: 8 }}>
                     <a href={`tel:${soDigitos(a.clienteTelefone)}`} style={{ ...btn2, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>Ligar</a>
                     {zap && <a href={zap} target="_blank" rel="noopener noreferrer" style={{ ...btn2, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>WhatsApp</a>}

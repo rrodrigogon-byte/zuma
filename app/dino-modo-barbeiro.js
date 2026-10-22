@@ -1,3 +1,5 @@
+import { buildDinoCustomerAssistant } from './core/dino-customer-assistant.js';
+
 // Modo barbeiro: a tela do celular de cada profissional.
 //
 // O barbeiro entra com o próprio login (perfil de equipe) e vê só a SUA agenda:
@@ -64,6 +66,7 @@ export function painelBarbeiro(erp, { empresaId, lojaId = '', usuario = {}, prof
     };
   }
 
+  const automaticoAtivo = erp.obterConfiguracao?.(empresaId)?.confirmacaoAutomaticaAtiva === true;
   const servicos = erp.listarServicos(empresaId);
   const servicoPorId = new Map(servicos.map((s) => [s.id, s]));
   const agendamentos = erp.listarAgendamentos(empresaId, { data, profissionalId: escolhido.id, lojaId })
@@ -74,6 +77,8 @@ export function painelBarbeiro(erp, { empresaId, lojaId = '', usuario = {}, prof
         dataHora: a.dataHora,
         horaLocal: a.horaLocal || '',
         status: a.status,
+        motivoCancelamento: a.motivoCancelamento || '',
+        confirmacaoAutomatica: automaticoAtivo && a.confirmacaoAutomatica?.ativa === true ? { ativa: true, status: a.confirmacaoAutomatica.status } : null,
         clienteNome: a.clienteNome || '',
         clienteTelefone: a.clienteTelefone || '',
         servicoId: a.servicoId,
@@ -117,4 +122,49 @@ export function painelBarbeiro(erp, { empresaId, lojaId = '', usuario = {}, prof
     agendamentos, bloqueios, resumo, comissao,
     servicos: servicos.filter(s => s.ativo !== false && (!s.profissionaisIds?.length || s.profissionaisIds.includes(escolhido.id))).map((s) => ({ id: s.id, nome: s.nome, preco: dinheiro(s.preco), duracaoMinutos: s.duracaoMinutos })),
   };
+}
+
+
+/** Contexto interno de atendimento. Staff só consulta cliente de um agendamento seu;
+ * a resposta contém histórico operacional e sugestões, nunca contato ou observações pessoais. */
+export function assistenteAtendimento(erp, {
+  empresaId, lojaId = '', usuario = {}, profissionalId = '', agendamentoId = '', clientes = null, agora = new Date(),
+} = {}) {
+  if (!String(agendamentoId || '').trim()) throw new ModoBarbeiroError('Informe o atendimento.', 'AGENDAMENTO_NAO_INFORMADO');
+  const agenda = erp.listarAgendamentos(empresaId, { lojaId });
+  const agendamento = agenda.find((item) => String(item.id) === String(agendamentoId));
+  if (!agendamento || (lojaId && agendamento.lojaId && String(agendamento.lojaId) !== String(lojaId))) {
+    throw new ModoBarbeiroError('Atendimento não encontrado nesta unidade.', 'AGENDAMENTO_NAO_ENCONTRADO', 404);
+  }
+  const gestao = ehGestao(usuario);
+  const profissionais = erp.listarProfissionais(empresaId);
+  const eu = profissionalDoUsuario(profissionais, usuario);
+  if (!gestao && (!eu || String(agendamento.profissionalId || '') !== String(eu.id))) {
+    throw new ModoBarbeiroError('Você só pode consultar clientes dos seus próprios atendimentos.', 'ASSISTENTE_FORBIDDEN', 403);
+  }
+  if (gestao && profissionalId && String(agendamento.profissionalId || '') !== String(profissionalId)) {
+    throw new ModoBarbeiroError('O atendimento não pertence ao profissional selecionado.', 'ASSISTENTE_FORBIDDEN', 403);
+  }
+  const customerId = String(agendamento.clienteId || '');
+  const cliente = customerId && clientes?.obterCliente ? clientes.obterCliente(empresaId, customerId) : null;
+  const identityVerified = Boolean(customerId && cliente && cliente.padrao !== true && !cliente.anonimizadoEm);
+  const scoped = (item) => String(item?.clienteId ?? item?.cliente_id ?? '') === customerId;
+  const comandas = erp.listarComandasBarbearia(empresaId, { lojaId }).filter(scoped);
+  const retailSales = erp.listarVendasRevenda(empresaId, { lojaId }).filter(scoped);
+  const historicalAppointments = erp.listarHistoricoAtendimentos(empresaId, { clienteId: customerId, lojaId, limite: 50000 });
+  const products = erp.listarProdutosRevenda(empresaId, { incluirInativos: true })
+    .filter((item) => !lojaId || !item.lojaId || String(item.lojaId) === String(lojaId));
+  return buildDinoCustomerAssistant({
+    customerId,
+    identityVerified,
+    appointments: agenda.filter(scoped),
+    comandas,
+    retailSales,
+    historicalAppointments,
+    services: erp.listarServicos(empresaId, { incluirInativos: true }),
+    products,
+    currentServiceId: agendamento.servicoId || '',
+    now: agora,
+    storeId: lojaId,
+  });
 }

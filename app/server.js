@@ -3029,6 +3029,17 @@ app.get('/api/admin/barbearia/modo-barbeiro', (req, res) => {
     res.status(status).json({ error: error.message, code: error.code || undefined });
   }
 });
+// Contexto do assistente é somente leitura e valida o vínculo do profissional no servidor.
+app.get('/api/admin/barbearia/modo-barbeiro/atendimento/:id/assistente', (req, res) => {
+  try {
+    const contexto = contextoEquipe(req);
+    const assistente = modoBarbeiro.assistenteAtendimento(barbeariaErpKytto, {
+      ...contexto, agendamentoId: req.params.id, clientes: clientesKytto,
+    });
+    res.setHeader('Cache-Control', 'no-store');
+    res.json({ ok: true, assistente });
+  } catch (error) { erroEquipe(res, error); }
+});
 // Operações móveis: profissional resolvido pelo login, sem confiar no vendedor do cliente.
 function contextoEquipe(req) {
   return { empresaId: legacyEmpresaId(req), lojaId: legacyLojaId(req), usuario: req.user, profissionalId: String(req.query?.profissionalId || req.body?.profissionalId || '') };
@@ -3583,13 +3594,20 @@ app.patch('/api/admin/barbearia/configuracoes/unidade-ativa', (req, res) => {
 app.patch('/api/admin/barbearia/configuracoes', (req, res) => {
   // Taxas de maquininha mudam a base da comissão: só quem gerencia a unidade altera.
   const corpo = { ...(req.body || {}) };
-  if (!['admin', 'organizador', 'gerente'].includes(String(req.user?.role || '').toLowerCase()) && (corpo.taxasPagamento !== undefined || corpo.taxas_pagamento !== undefined)) {
+  const empresaId = legacyEmpresaId(req);
+  const atual = barbeariaErpKytto.obterConfiguracao(empresaId);
+  const gestaoUnidade = ['admin', 'organizador', 'gerente'].includes(String(req.user?.role || '').toLowerCase());
+  const confirmaAutomacaoInformada = corpo.confirmacaoAutomaticaAtiva !== undefined || corpo.confirmacao_automatica_ativa !== undefined;
+  const confirmacaoSolicitada = (corpo.confirmacaoAutomaticaAtiva ?? corpo.confirmacao_automatica_ativa) === true;
+  const alteraConfirmacaoAutomatica = confirmaAutomacaoInformada && atual.confirmacaoAutomaticaAtiva !== confirmacaoSolicitada;
+  if (alteraConfirmacaoAutomatica && !gestaoUnidade) {
+    return res.status(403).json({ error: 'Só a gestão da unidade pode ativar ou desativar cancelamentos automáticos.', code: 'CONFIRMATION_AUTOMATION_RESTRICTED' });
+  }
+  if (!gestaoUnidade && (corpo.taxasPagamento !== undefined || corpo.taxas_pagamento !== undefined)) {
     return res.status(403).json({ error: 'Só a gestão da unidade altera as taxas de pagamento.', code: 'TAXAS_RESTRITAS' });
   }
   // O link público precisa de uma unidade para os avisos de WhatsApp (lembrete,
   // lista de espera). Ao publicar o slug sem unidade definida, usa a unidade da sessão.
-  const empresaId = legacyEmpresaId(req);
-  const atual = barbeariaErpKytto.obterConfiguracao(empresaId);
   if ((corpo.slugPublico || corpo.slug_publico) && !atual.lojaPublicaId && corpo.lojaPublicaId === undefined && corpo.loja_publica_id === undefined && legacyLojaId(req)) {
     corpo.lojaPublicaId = legacyLojaId(req);
   }
@@ -4577,7 +4595,7 @@ app.post('/api/admin/barbearia/operacao/fechar-dia', (req, res) => {
 app.post('/api/admin/barbearia/historico/importar', (req, res) => {
   if (!podeSilenciarAvisoAgenda(req.user)) return res.status(403).json({ error: 'Só a gestão importa histórico de atendimentos.' });
   try {
-    const resultado = barbeariaErpKytto.importarHistoricoAtendimentos(legacyEmpresaId(req), req.body?.itens, { origem: req.body?.origem || 'importacao', usuario: req.user?.email || req.user?.nome || '' });
+    const resultado = barbeariaErpKytto.importarHistoricoAtendimentos(legacyEmpresaId(req), req.body?.itens, { origem: req.body?.origem || 'importacao', lojaId: legacyLojaId(req), usuario: req.user?.email || req.user?.nome || '' });
     audit(req, 'HISTORICO IMPORTADO', `origem=${req.body?.origem || 'importacao'} criados=${resultado.criados} existentes=${resultado.existentes} invalidos=${resultado.invalidos.length}`);
     res.json({ ok: true, ...resultado });
   } catch (error) { res.status(400).json({ error: error.message }); }

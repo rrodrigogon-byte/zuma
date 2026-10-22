@@ -2,10 +2,11 @@ import http from 'node:http';
 import test, { beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { reset } from '../db.js';
-import { criarAgendamento, criarProfissional, criarServico } from '../barbearia-erp-kytto.js';
+import { alterarStatusAgendamento, atualizarConfiguracao, criarAgendamento, criarProfissional, criarServico } from '../barbearia-erp-kytto.js';
 import { atualizarConsentimentoCliente, criarCliente, obterCliente } from '../clientes-contas-kytto.js';
 import { db } from './database.js';
 import {
+  mensagem,
   processAppointmentNotificationTask,
   queueAppointmentNotifications,
   recordAppointmentNotificationOptOut,
@@ -76,6 +77,59 @@ test('enfileira evento e lembrete D−1 com fingerprint e conflito tenant-scoped
   } finally { mock.restore(); }
 });
 
+test('opt-in enfileira as duas etapas e uma mensagem inicial com prazo explícito', async () => {
+  const { cliente, servico, profissional, agendamento } = fixture();
+  atualizarConsentimentoCliente(EMPRESA, cliente.id, { canal: 'whatsapp', finalidade: 'atendimento', concedido: true, origem: 'teste' });
+  atualizarConfiguracao(EMPRESA, { confirmacaoAutomaticaAtiva: true });
+  const mock = mockQueueDatabase();
+  try {
+    const resultado = await queueAppointmentNotifications({ empresaId: EMPRESA, lojaId: LOJA }, agendamento, 'criado');
+    assert.equal(resultado.queued, 3);
+    const inserts = mock.captured.filter((item) => /INSERT INTO tarefas_integracao_canais/.test(item.sql));
+    const payloads = inserts.map((item) => ({ row: item, payload: JSON.parse(item.params[4]) }));
+    assert.deepEqual(new Set(payloads.map(({ payload }) => payload.eventType)), new Set(['criado', 'lembrete', 'confirmacao_dia']));
+    assert.equal(payloads.find(({ payload }) => payload.eventType === 'lembrete').payload.confirmationStage, 'primeira');
+    const second = payloads.find(({ payload }) => payload.eventType === 'confirmacao_dia').row;
+    assert.equal(payloads.find(({ payload }) => payload.eventType === 'confirmacao_dia').payload.confirmationStage, 'segunda');
+    assert.equal(new Date(second.params[5]).toISOString(), '2030-06-10T11:45:00.000Z');
+    assert.ok(payloads.every(({ payload }) => !('phone' in payload)));
+    const text = mensagem({ servicos: [servico], profissionais: [profissional], configuracao: { nomePublico: 'Dino Barbearia' } }, agendamento, cliente, 'confirmacao_dia');
+    assert.match(text, /CONFIRMO em até 1 hora/);
+    assert.match(text, /cancelado automaticamente/);
+  } finally { mock.restore(); }
+});
+
+test('descarta lembrete pendente depois que o agendamento já foi confirmado', async () => {
+  const { cliente, agendamento } = fixture();
+  atualizarConsentimentoCliente(EMPRESA, cliente.id, { canal: 'whatsapp', finalidade: 'atendimento', concedido: true, origem: 'teste' });
+  const mock = mockQueueDatabase();
+  let payload;
+  try {
+    await queueAppointmentNotifications({ empresaId: EMPRESA, lojaId: LOJA }, agendamento, 'criado');
+    const insert = mock.captured.find((item) => /INSERT INTO tarefas_integracao_canais/.test(item.sql) && JSON.parse(item.params[4]).eventType === 'lembrete');
+    payload = JSON.parse(insert.params[4]);
+  } finally { mock.restore(); }
+  alterarStatusAgendamento(EMPRESA, agendamento.id, 'confirmado');
+  const result = await processAppointmentNotificationTask({ id: crypto.randomUUID(), empresa_id: EMPRESA, loja_id: LOJA, canal_id: CANAL, payload });
+  assert.deepEqual(result, { skipped: true, reason: 'appointment_already_confirmed' });
+});
+
+test('opt-out antes do envio descarta a primeira confirmação já enfileirada', async () => {
+  const { cliente, agendamento } = fixture();
+  atualizarConsentimentoCliente(EMPRESA, cliente.id, { canal: 'whatsapp', finalidade: 'atendimento', concedido: true, origem: 'teste' });
+  atualizarConfiguracao(EMPRESA, { confirmacaoAutomaticaAtiva: true });
+  const mock = mockQueueDatabase();
+  let payload;
+  try {
+    await queueAppointmentNotifications({ empresaId: EMPRESA, lojaId: LOJA }, agendamento, 'criado');
+    const insert = mock.captured.find((item) => /INSERT INTO tarefas_integracao_canais/.test(item.sql) && JSON.parse(item.params[4]).confirmationStage === 'primeira');
+    payload = JSON.parse(insert.params[4]);
+  } finally { mock.restore(); }
+  atualizarConfiguracao(EMPRESA, { confirmacaoAutomaticaAtiva: false });
+  const result = await processAppointmentNotificationTask({ id: crypto.randomUUID(), empresa_id: EMPRESA, loja_id: LOJA, canal_id: CANAL, payload });
+  assert.deepEqual(result, { skipped: true, reason: 'automatic_confirmation_disabled' });
+});
+
 test('remarcação cancela lembrete pendente anterior antes de criar nova tarefa', async () => {
   const { cliente, agendamento } = fixture();
   atualizarConsentimentoCliente(EMPRESA, cliente.id, { canal: 'whatsapp', finalidade: 'atendimento', concedido: true, origem: 'teste' });
@@ -85,7 +139,7 @@ test('remarcação cancela lembrete pendente anterior antes de criar nova tarefa
     assert.equal(resultado.queued, 2);
     const cancelamento = mock.captured.find((item) => /UPDATE tarefas_integracao_canais/.test(item.sql));
     assert.ok(cancelamento);
-    assert.match(cancelamento.sql, /payload->>'eventType' IN \('criado','remarcado','lembrete'\)/);
+    assert.match(cancelamento.sql, /payload->>'eventType' IN \('criado','remarcado','lembrete','confirmacao_dia'\)/);
     assert.deepEqual(cancelamento.params.slice(0, 2), [EMPRESA, LOJA]);
   } finally { mock.restore(); }
 });
