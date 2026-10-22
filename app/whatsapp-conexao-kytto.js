@@ -161,6 +161,19 @@ function aplicarEstado(conexao, resultado) {
   }
 }
 
+// O watchdog roda a cada minuto. lastCheckAt é um sinal volátil de saúde e não
+// precisa reescrever o db.json inteiro (que pode ter dezenas de MB) a cada GET.
+// Todo o restante continua sendo persistido quando realmente muda: estado,
+// telefone confirmado, erro, reconexão, timestamps operacionais e histórico.
+function estadoPersistivel(conexao) {
+  const { lastCheckAt, ...persistivel } = conexao;
+  return JSON.stringify(persistivel);
+}
+
+function salvarSeEstadoMudou(antes, conexao) {
+  if (antes !== estadoPersistivel(conexao)) save();
+}
+
 export function mascararNumero(valor) {
   const digits = String(valor || '').replace(/\D/g, '');
   if (digits.length < 8) return '';
@@ -432,10 +445,16 @@ export async function vigiarConexao(empresaId, { now = Date.now(), fetchImpl, ti
   if (disconnecting.has(key)) return { action: 'skip', reason: 'disconnect_in_progress' };
   if (!conexao.ativo || conexao.autoReconnect === false || !conexao.instance) return { action: 'skip', reason: 'inactive' };
   if (canalInterno(tipoCanal)) {
-    if (!wahaControlConfigured()) { conexao.lastError = 'waha_nao_configurado'; save(); return { action: 'status_unavailable' }; }
+    if (!wahaControlConfigured()) {
+      const antes = estadoPersistivel(conexao);
+      conexao.lastError = 'waha_nao_configurado';
+      salvarSeEstadoMudou(antes, conexao);
+      return { action: 'status_unavailable' };
+    }
     const status = await getWahaSessionStatus(conexao.instance);
+    const antes = estadoPersistivel(conexao);
     aplicarEstado(conexao, { ok: true, state: normalizarEstadoWaha(status?.status) });
-    save();
+    salvarSeEstadoMudou(antes, conexao);
     return { action: 'none', state: conexao.state };
   }
   const epoch = disconnectEpoch.get(key) || 0;
@@ -445,10 +464,11 @@ export async function vigiarConexao(empresaId, { now = Date.now(), fetchImpl, ti
   // depois que a ação de desconexão adquiriu o lock em memória.
   if (disconnecting.has(key)) return { action: 'skip', reason: 'disconnect_in_progress' };
   if (epoch !== (disconnectEpoch.get(key) || 0) || conexao.instance !== instance) return { action: 'skip', reason: 'connection_changed' };
+  const antes = estadoPersistivel(conexao);
   aplicarEstado(conexao, status);
-  if (!status.ok || status.authError) { save(); return { action: 'status_unavailable' }; }
-  if (conexao.state === 'open' || conexao.state === 'connecting') { save(); return { action: 'none', state: conexao.state }; }
-  if (conexao.nextReconnectAt && new Date(conexao.nextReconnectAt).getTime() > now) { save(); return { action: 'waiting', until: conexao.nextReconnectAt }; }
+  if (!status.ok || status.authError) { salvarSeEstadoMudou(antes, conexao); return { action: 'status_unavailable' }; }
+  if (conexao.state === 'open' || conexao.state === 'connecting') { salvarSeEstadoMudou(antes, conexao); return { action: 'none', state: conexao.state }; }
+  if (conexao.nextReconnectAt && new Date(conexao.nextReconnectAt).getTime() > now) { salvarSeEstadoMudou(antes, conexao); return { action: 'waiting', until: conexao.nextReconnectAt }; }
   const attempt = (conexao.reconnectAttempts || 0) + 1;
   const result = await requestInstanceQr(instance, fetchImpl);
   if (disconnecting.has(key)) return { action: 'skip', reason: 'disconnect_in_progress' };
@@ -458,7 +478,7 @@ export async function vigiarConexao(empresaId, { now = Date.now(), fetchImpl, ti
   conexao.nextReconnectAt = new Date(now + minutes * 60_000).toISOString();
   registrar(conexao, 'reconexao_automatica', `tentativa ${attempt}${result.ok ? '' : ' (backend indisponível)'}`);
   if (result.ok && result.state === 'open') { conexao.state = 'open'; conexao.reconnectAttempts = 0; conexao.nextReconnectAt = null; }
-  save();
+  salvarSeEstadoMudou(antes, conexao);
   return { action: 'reconnect', attempt, ok: result.ok };
 }
 
