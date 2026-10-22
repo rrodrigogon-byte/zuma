@@ -39,6 +39,9 @@ O arquivo `app/migrations/run-avec-dino-import.js`:
 1. confere o `DATA-MANIFEST.json`, hashes SHA-256, tamanho e contagem de cada arquivo;
 2. exige `AVEC_DINO_IMPORT_CONFIRM=PRD_AVEC_DINO_IMPORT_20261022_V1` para aplicar;
 3. interrompe se o tenant alvo não existir;
+   - se o ID legado histórico não estiver presente, resolve apenas um único registro com `slugPublico/slugAgendamento = dino` ou nome público de Barbearia Dino;
+   - também usa `configuracao.lojaPublicaId` somente quando o ID de loja legado padrão não existir;
+   - se houver zero ou mais de um candidato, interrompe sem gravar;
 4. cria snapshot gzip do `db.json` antes da primeira alteração;
 5. executa todas as alterações em memória e só chama `save()` depois de todas as validações;
 6. restaura o snapshot em memória quando há erro;

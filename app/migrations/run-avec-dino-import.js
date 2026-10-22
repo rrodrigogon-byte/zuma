@@ -518,10 +518,34 @@ function summarize(root, report, empresaId) {
   };
 }
 
+function resolveTargetScope(root, requestedEmpresaId, requestedLojaId) {
+  let empresaId = requestedEmpresaId;
+  const hasTenant = (id) => Boolean(root.barbearias?.[id] || root.clientesKytto?.empresas?.[id]);
+  if (!hasTenant(empresaId)) {
+    const candidates = Object.entries(root.barbearias || {})
+      .filter(([id, state]) => {
+        const configuracao = state?.configuracao || {};
+        const configuredSlug = normalize(configuracao.slugPublico || configuracao.slugAgendamento);
+        const publicName = normalize(configuracao.nomePublico);
+        return id !== DEFAULT_EMPRESA_ID && (configuredSlug === 'dino' || (publicName.includes('dino') && publicName.includes('barbearia')));
+      })
+      .map(([id]) => id);
+    if (candidates.length !== 1) {
+      throw new Error(`Tenant legado ${empresaId} não existe no db.json e a resolução segura encontrou ${candidates.length} candidatos Dino.`);
+    }
+    empresaId = candidates[0];
+  }
+  const configuracao = root.barbearias?.[empresaId]?.configuracao || {};
+  const lojaId = requestedLojaId === DEFAULT_LOJA_ID && configuracao.lojaPublicaId
+    ? text(configuracao.lojaPublicaId, 120)
+    : requestedLojaId;
+  return { empresaId, lojaId };
+}
+
 export async function execute() {
   const pkg = loadPackage();
-  const empresaId = text(process.env.AVEC_DINO_IMPORT_EMPRESA_ID || pkg.manifest.targetEmpresaId || DEFAULT_EMPRESA_ID, 120);
-  const lojaId = text(process.env.AVEC_DINO_IMPORT_LOJA_ID || pkg.manifest.targetLojaId || DEFAULT_LOJA_ID, 120);
+  const requestedEmpresaId = text(process.env.AVEC_DINO_IMPORT_EMPRESA_ID || pkg.manifest.targetEmpresaId || DEFAULT_EMPRESA_ID, 120);
+  const requestedLojaId = text(process.env.AVEC_DINO_IMPORT_LOJA_ID || pkg.manifest.targetLojaId || DEFAULT_LOJA_ID, 120);
   const dryRun = process.argv.includes('--dry-run') || process.env.AVEC_DINO_IMPORT_DRY_RUN === '1';
   if (!dryRun && process.env.AVEC_DINO_IMPORT_CONFIRM !== CONFIRMATION) {
     console.log(JSON.stringify({ skipped: true, reason: 'AVEC_DINO_IMPORT_CONFIRM não habilitado', runKey: RUN_KEY, packageCounts: pkg.actualCounts }));
@@ -529,6 +553,7 @@ export async function execute() {
   }
   ({ db, save, caminhoBanco } = await import('../db.js'));
   const root = db();
+  const { empresaId, lojaId } = resolveTargetScope(root, requestedEmpresaId, requestedLojaId);
   const previous = root.importacoesAvec?.[RUN_KEY];
   if (!dryRun && previous?.status === 'applied') {
     console.log(JSON.stringify({ alreadyApplied: true, runKey: RUN_KEY, report: previous }, null, 2));
