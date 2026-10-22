@@ -22,6 +22,7 @@ const empty = { padding: 24, textAlign: 'center', color: 'var(--muted)', fontSiz
 
 function pct(valor) { return `${(Number(valor || 0) * 100).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%` }
 function dataBR(valor) { return valor ? String(valor).slice(0, 10).split('-').reverse().join('/') : '—' }
+function horas(valor) { return `${Number(valor || 0).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}h` }
 function Pill({ children, tom = 'neutro' }) {
   const cores = { bom: '#14b87a', alerta: '#f59e0b', critico: '#e05c5c', neutro: 'var(--muted)' }
   return <span style={{ display: 'inline-block', padding: '2px 9px', borderRadius: 20, fontSize: 11, fontWeight: 800, color: cores[tom], border: `1px solid ${cores[tom]}` }}>{children}</span>
@@ -282,21 +283,52 @@ export function OcupacaoMetasPanel() {
   const linhas = dados?.profissionais || []
   const capacidade = linhas.reduce((s, item) => s + item.capacidadeMinutos, 0)
   const agendados = linhas.reduce((s, item) => s + item.minutosAgendados, 0)
+  const metasReceita = linhas.filter((item) => item.meta?.receita)
+  const metaTotal = metasReceita.reduce((s, item) => s + Number(item.meta.receita || 0), 0)
+  const receitaTotal = metasReceita.reduce((s, item) => s + Number(item.receita || 0), 0)
+  const projecaoTotal = metasReceita.reduce((s, item) => s + Number(item.projecaoReceita || 0), 0)
   return <div style={{ display: 'grid', gap: 16 }}>
     <div style={card}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
-        <div><h2 style={h2}>Ocupação da agenda e metas por barbeiro</h2><p style={sub}>Ocupação = minutos agendados ÷ jornada disponível no mês (dias de funcionamento, jornada do barbeiro e feriados). A projeção usa o ritmo do mês até hoje.</p></div>
+        <div><h2 style={h2}>Ocupação da agenda e metas por barbeiro</h2><p style={sub}>Defina quanto cada barbeiro quer faturar. A projeção usa dias úteis, histórico real, ticket médio, duração dos atendimentos e a agenda já reservada.</p></div>
         <label style={{ display: 'grid', gap: 4, fontSize: 12, color: 'var(--muted)' }}>Mês<input type="month" style={input} value={mes} onChange={(e) => setMes(e.target.value)} /></label>
       </div>
       {!carregando && !erro && <div style={{ ...grid(160), marginTop: 14 }}>
         <div style={kpi}><div style={kpiLabel}>Ocupação geral</div><div style={kpiValue}>{capacidade ? pct(agendados / capacidade) : '—'}</div></div>
         <div style={kpi}><div style={kpiLabel}>Horas agendadas</div><div style={kpiValue}>{Math.round(agendados / 60)}h</div></div>
         <div style={kpi}><div style={kpiLabel}>Horas disponíveis</div><div style={kpiValue}>{Math.round(capacidade / 60)}h</div></div>
+        {metasReceita.length > 0 && <><div style={kpi}><div style={kpiLabel}>Meta da equipe</div><div style={kpiValue}>{fmtR(metaTotal)}</div></div><div style={kpi}><div style={kpiLabel}>Projeção da equipe</div><div style={kpiValue}>{fmtR(projecaoTotal)}</div><div style={{ color: 'var(--muted)', fontSize: 12 }}>{fmtR(receitaTotal)} realizados</div></div></>}
       </div>}
     </div>
+    {!carregando && !erro && metasReceita.length > 0 && <div style={card}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', alignItems: 'baseline' }}>
+        <div><h2 style={h2}>Plano para bater a meta</h2><p style={sub}>“Produção adicional” é o que ainda precisa entrar além dos horários que já estão na agenda. O cálculo é uma orientação; não cria agendamentos nem promete faturamento.</p></div>
+        <Pill tom={projecaoTotal >= metaTotal ? 'bom' : 'alerta'}>{projecaoTotal >= metaTotal ? 'Equipe no ritmo' : 'Ação necessária'}</Pill>
+      </div>
+      <div style={{ display: 'grid', gap: 12, marginTop: 14 }}>
+        {metasReceita.map((item) => {
+          const temBase = Number(item.ticketMedio || 0) > 0
+          return <div key={item.profissionalId} style={{ border: '1px solid var(--line)', borderRadius: 12, padding: 14 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+              <div><strong style={{ fontSize: 15 }}>{item.nome}</strong><div style={{ color: 'var(--muted)', fontSize: 12 }}>Meta {fmtR(item.meta.receita)} · realizado {fmtR(item.receita)} · projeção {fmtR(item.projecaoReceita)}</div></div>
+              <Pill tom={item.noRitmo ? 'bom' : 'alerta'}>{item.noRitmo ? 'No ritmo' : 'Acelerar'}</Pill>
+            </div>
+            <div style={{ ...grid(135), marginTop: 12 }}>
+              <div style={kpi}><div style={kpiLabel}>Falta no total</div><div style={kpiValue}>{fmtR(item.receitaRestante)}</div></div>
+              <div style={kpi}><div style={kpiLabel}>Já agendado</div><div style={kpiValue}>{fmtR(item.receitaAgendada)}</div><div style={{ color: 'var(--muted)', fontSize: 12 }}>{item.atendimentosAgendados} atendimentos</div></div>
+              <div style={kpi}><div style={kpiLabel}>Produção adicional</div><div style={kpiValue}>{fmtR(item.receitaExtraNecessaria)}</div></div>
+              <div style={kpi}><div style={kpiLabel}>Atendimentos extras</div><div style={kpiValue}>{temBase ? item.atendimentosExtrasReceita : '—'}</div><div style={{ color: 'var(--muted)', fontSize: 12 }}>{temBase ? 'além da agenda' : 'sem histórico suficiente'}</div></div>
+              <div style={kpi}><div style={kpiLabel}>Horas de cadeira extras</div><div style={kpiValue}>{temBase ? horas(item.minutosExtrasReceita / 60) : '—'}</div><div style={{ color: 'var(--muted)', fontSize: 12 }}>{item.ocupacaoNecessaria == null ? 'capacidade não calculada' : `ocupação necessária ${pct(item.ocupacaoNecessaria)}`}</div></div>
+              <div style={kpi}><div style={kpiLabel}>Ritmo necessário</div><div style={kpiValue}>{fmtR(item.receitaDiariaNecessaria)}</div><div style={{ color: 'var(--muted)', fontSize: 12 }}>{item.atendimentosDiariosNecessarios || 0} atend./dia · {item.diasUteisRestantes} dias úteis</div></div>
+            </div>
+            <div style={{ color: 'var(--muted)', fontSize: 12, marginTop: 10 }}>{temBase ? `Base usada: ticket médio de ${fmtR(item.ticketMedio)} e ${horas(item.duracaoMedia / 60)} por atendimento.` : 'Conclua e registre alguns atendimentos para o sistema estimar ticket e tempo de produção.'}</div>
+          </div>
+        })}
+      </div>
+    </div>}
     <div style={card}>
       {(carregando || erro) ? <Estado carregando={carregando} erro={erro} onRetry={carregar} /> : linhas.length === 0 ? <div style={empty}>Cadastre a equipe para ver a ocupação.</div> : <div style={{ overflowX: 'auto' }}><table style={table}>
-        <thead><tr><th style={th}>Barbeiro</th><th style={th}>Ocupação</th><th style={th}>Concluídos</th><th style={th}>Receita</th><th style={th}>Meta de receita</th><th style={th}>Projeção</th><th style={th}>Meta de atendimentos</th><th style={th} /></tr></thead>
+        <thead><tr><th style={th}>Barbeiro</th><th style={th}>Ocupação</th><th style={th}>Concluídos</th><th style={th}>Receita</th><th style={th}>Meta de receita</th><th style={th}>Projeção no ritmo</th><th style={th}>Meta de atendimentos</th><th style={th} /></tr></thead>
         <tbody>{linhas.map((item) => {
           const emEdicao = edicao[item.profissionalId]
           return <tr key={item.profissionalId}>

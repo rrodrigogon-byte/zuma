@@ -950,12 +950,24 @@ function diasNoIntervalo(inicio, fim) {
   return dias;
 }
 
+function diasUteisDoProfissional(calendario, profissional, inicio, fim) {
+  const feriados = new Set(calendario.feriados || []);
+  const diasLoja = Array.isArray(calendario.diasFuncionamento) ? calendario.diasFuncionamento : [1, 2, 3, 4, 5, 6];
+  const diasTrabalho = Array.isArray(profissional.diasTrabalho) ? profissional.diasTrabalho : diasLoja;
+  return diasNoIntervalo(inicio, fim).filter((dia) => {
+    const semana = new Date(`${dia}T12:00:00Z`).getUTCDay();
+    return !feriados.has(dia) && diasLoja.includes(semana) && diasTrabalho.includes(semana);
+  });
+}
+
+function proximoDia(data) {
+  return new Date(new Date(`${data}T12:00:00Z`).valueOf() + DIA_MS).toISOString().slice(0, 10);
+}
+
 export function ocupacaoAgenda(empresaId, { inicio, fim, lojaId = '' } = {}) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(String(inicio)) || !/^\d{4}-\d{2}-\d{2}$/.test(String(fim)) || fim < inicio) throw new CaptacaoError('Período inválido.', 'PERIODO_INVALIDO');
   const configuracao = barbearia.obterConfiguracao(empresaId);
   const calendario = lojaId && configuracao.lojas?.[lojaId] ? { ...configuracao, ...configuracao.lojas[lojaId] } : configuracao;
-  const feriados = new Set(calendario.feriados || []);
-  const diasLoja = Array.isArray(calendario.diasFuncionamento) ? calendario.diasFuncionamento : [1, 2, 3, 4, 5, 6];
   const dias = diasNoIntervalo(inicio, fim);
   const agendamentos = barbearia.listarAgendamentos(empresaId, {})
     .filter((item) => !lojaId || !item.lojaId || item.lojaId === lojaId)
@@ -966,9 +978,8 @@ export function ocupacaoAgenda(empresaId, { inicio, fim, lojaId = '' } = {}) {
     .flatMap((controle) => (controle.usos || []).map((uso) => uso.agendamentoId).filter(Boolean)));
   const profissionais = barbearia.listarProfissionais(empresaId).map((profissional) => {
     const jornada = Math.max(0, Math.min(minutos(profissional.horarioFim), minutos(calendario.horarioFechamento)) - Math.max(minutos(profissional.horarioInicio), minutos(calendario.horarioAbertura)));
-    const diasTrabalho = Array.isArray(profissional.diasTrabalho) ? profissional.diasTrabalho : diasLoja;
-    const diasUteis = dias.filter((dia) => !feriados.has(dia) && diasLoja.includes(new Date(`${dia}T12:00:00Z`).getUTCDay()) && diasTrabalho.includes(new Date(`${dia}T12:00:00Z`).getUTCDay())).length;
-    const capacidade = Number.isFinite(jornada) ? jornada * diasUteis : 0;
+    const diasUteis = diasUteisDoProfissional(calendario, profissional, inicio, fim);
+    const capacidade = Number.isFinite(jornada) ? jornada * diasUteis.length : 0;
     const proprios = agendamentos.filter((item) => item.profissionalId === profissional.id);
     const ocupados = proprios.reduce((soma, item) => soma + Number(item.duracaoMinutos || 0), 0);
     const concluidos = proprios.filter((item) => item.status === 'concluido');
@@ -976,10 +987,12 @@ export function ocupacaoAgenda(empresaId, { inicio, fim, lojaId = '' } = {}) {
       profissionalId: profissional.id,
       nome: profissional.nome,
       capacidadeMinutos: capacidade,
+      diasUteis: diasUteis.length,
       minutosAgendados: ocupados,
       ocupacao: capacidade > 0 ? Number((ocupados / capacidade).toFixed(4)) : 0,
       atendimentos: proprios.length,
       concluidos: concluidos.length,
+      minutosConcluidos: concluidos.reduce((soma, item) => soma + Number(item.duracaoMinutos || 0), 0),
       receita: Number(concluidos.reduce((soma, item) => soma + (cobertosPeloPlano.has(item.id) ? 0 : Number(item.valorRecebido || item.valor || 0)), 0).toFixed(2)),
       cobertosPeloPlano: concluidos.filter((item) => cobertosPeloPlano.has(item.id)).length,
     };
@@ -1022,6 +1035,15 @@ export function painelMetasProfissionais(empresaId, { mes, lojaId = '' } = {}, o
   const fim = ultimoDiaDoMes(competencia);
   const metas = captacao(empresaId).metasProfissionais[competencia] || {};
   const ocupacao = ocupacaoAgenda(empresaId, { inicio, fim, lojaId });
+  const configuracao = barbearia.obterConfiguracao(empresaId);
+  const calendario = lojaId && configuracao.lojas?.[lojaId] ? { ...configuracao, ...configuracao.lojas[lojaId] } : configuracao;
+  const cadastroProfissionais = new Map(barbearia.listarProfissionais(empresaId).map((item) => [item.id, item]));
+  const agendamentos = barbearia.listarAgendamentos(empresaId, {})
+    .filter((item) => !lojaId || !item.lojaId || item.lojaId === lojaId)
+    .filter((item) => !STATUS_FINAIS_INVALIDOS.has(item.status))
+    .filter((item) => item.dataAgenda >= inicio && item.dataAgenda <= fim);
+  const cobertosPeloPlano = new Set(Object.values(captacao(empresaId).assinaturas)
+    .flatMap((controle) => (controle.usos || []).map((uso) => uso.agendamentoId).filter(Boolean)));
   const hoje = dataLocal(agoraMs(opcoes));
   const totalDias = Number(fim.slice(8));
   const decorridos = hoje < inicio ? 0 : hoje > fim ? totalDias : Number(hoje.slice(8));
@@ -1030,8 +1052,45 @@ export function painelMetasProfissionais(empresaId, { mes, lojaId = '' } = {}, o
     mes: competencia,
     fracaoDoMes: Number(fracao.toFixed(4)),
     profissionais: ocupacao.profissionais.map((item) => {
+      const profissional = cadastroProfissionais.get(item.profissionalId) || {};
       const meta = metas[item.profissionalId] || null;
-      const projecao = fracao > 0 ? Number((item.receita / fracao).toFixed(2)) : 0;
+      const diasUteisTotais = item.diasUteis || diasUteisDoProfissional(calendario, profissional, inicio, fim).length;
+      const fimDecorrido = hoje < inicio ? '' : hoje > fim ? fim : hoje;
+      const inicioRestante = hoje < inicio ? inicio : hoje < fim ? proximoDia(hoje) : '';
+      const diasUteisDecorridos = fimDecorrido ? diasUteisDoProfissional(calendario, profissional, inicio, fimDecorrido).length : 0;
+      const diasUteisRestantes = inicioRestante ? diasUteisDoProfissional(calendario, profissional, inicioRestante, fim).length : 0;
+      const proprios = agendamentos.filter((agendamento) => agendamento.profissionalId === item.profissionalId);
+      const cobrados = proprios.filter((agendamento) => agendamento.status === 'concluido' && !cobertosPeloPlano.has(agendamento.id) && Number(agendamento.valorRecebido || agendamento.valor || 0) > 0);
+      const estimados = proprios.filter((agendamento) => !cobertosPeloPlano.has(agendamento.id) && Number(agendamento.valorRecebido || agendamento.valor || 0) > 0);
+      const ticketMedio = cobrados.length
+        ? Number((item.receita / cobrados.length).toFixed(2))
+        : estimados.length
+          ? Number((estimados.reduce((soma, agendamento) => soma + Number(agendamento.valorRecebido || agendamento.valor || 0), 0) / estimados.length).toFixed(2))
+          : 0;
+      const duracaoMedia = cobrados.length
+        ? Number((cobrados.reduce((soma, agendamento) => soma + Number(agendamento.duracaoMinutos || 0), 0) / cobrados.length).toFixed(1))
+        : estimados.length
+          ? Number((estimados.reduce((soma, agendamento) => soma + Number(agendamento.duracaoMinutos || 0), 0) / estimados.length).toFixed(1))
+          : 0;
+      const futuros = proprios.filter((agendamento) => agendamento.dataAgenda > hoje && ['agendado', 'confirmado', 'em_atendimento'].includes(agendamento.status) && !cobertosPeloPlano.has(agendamento.id));
+      const receitaAgendada = Number(futuros.reduce((soma, agendamento) => soma + Number(agendamento.valor || 0), 0).toFixed(2));
+      const atendimentosAgendados = futuros.length;
+      const minutosAgendadosFuturos = futuros.reduce((soma, agendamento) => soma + Number(agendamento.duracaoMinutos || 0), 0);
+      const receitaPorDia = diasUteisDecorridos > 0 ? Number((item.receita / diasUteisDecorridos).toFixed(2)) : 0;
+      const projecao = Number((item.receita + receitaPorDia * diasUteisRestantes).toFixed(2));
+      const receitaRestante = meta?.receita ? Number(Math.max(0, meta.receita - item.receita).toFixed(2)) : 0;
+      const receitaExtraNecessaria = meta?.receita ? Number(Math.max(0, meta.receita - item.receita - receitaAgendada).toFixed(2)) : 0;
+      const atendimentosRestantesReceita = ticketMedio > 0 ? Math.ceil(receitaRestante / ticketMedio) : 0;
+      const atendimentosExtrasReceita = ticketMedio > 0 ? Math.ceil(receitaExtraNecessaria / ticketMedio) : 0;
+      const minutosRestantesReceita = Math.ceil(atendimentosRestantesReceita * duracaoMedia);
+      const minutosExtrasReceita = Math.ceil(atendimentosExtrasReceita * duracaoMedia);
+      const atendimentosRestantesMeta = meta?.atendimentos ? Math.max(0, meta.atendimentos - item.concluidos) : 0;
+      const receitaDiariaNecessaria = diasUteisRestantes > 0 ? Number((receitaRestante / diasUteisRestantes).toFixed(2)) : receitaRestante;
+      const atendimentosDiariosNecessarios = diasUteisRestantes > 0 ? Math.ceil(atendimentosRestantesReceita / diasUteisRestantes) : atendimentosRestantesReceita;
+      const horasDiariasNecessarias = diasUteisRestantes > 0 ? Number((minutosRestantesReceita / diasUteisRestantes / 60).toFixed(2)) : Number((minutosRestantesReceita / 60).toFixed(2));
+      const ocupacaoNecessaria = meta?.receita && item.capacidadeMinutos > 0
+        ? Number(((item.minutosAgendados + minutosExtrasReceita) / item.capacidadeMinutos).toFixed(4))
+        : null;
       return {
         ...item,
         meta,
@@ -1039,6 +1098,26 @@ export function painelMetasProfissionais(empresaId, { mes, lojaId = '' } = {}, o
         progressoAtendimentos: meta?.atendimentos ? Number((item.concluidos / meta.atendimentos).toFixed(4)) : null,
         projecaoReceita: projecao,
         noRitmo: meta?.receita ? projecao >= meta.receita : null,
+        diasUteisTotais,
+        diasUteisDecorridos,
+        diasUteisRestantes,
+        ticketMedio,
+        duracaoMedia,
+        receitaPorDia,
+        receitaAgendada,
+        atendimentosAgendados,
+        minutosAgendadosFuturos,
+        receitaRestante,
+        receitaExtraNecessaria,
+        atendimentosRestantesReceita,
+        atendimentosExtrasReceita,
+        atendimentosRestantesMeta,
+        minutosRestantesReceita,
+        minutosExtrasReceita,
+        receitaDiariaNecessaria,
+        atendimentosDiariosNecessarios,
+        horasDiariasNecessarias,
+        ocupacaoNecessaria,
       };
     }),
   };
