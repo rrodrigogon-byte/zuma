@@ -141,9 +141,10 @@ test('feature desligada devolve fallback sem chamar o executor de IA', async () 
   assert.equal(chamadas, 0);
 });
 
-test('handler do worker aceita snapshot sanitizado e termina com fallback idempotente', async () => {
+test('handler do worker não confirma tarefa sem persistência do insight', async () => {
   const handler = createDinoForecastAiHandler({ db: missingCommerceDb() });
-  const result = await withoutAiProviders(() => handler({ empresa_id: empresaId, loja_id: lojaId, payload_sanitizado: { mes: projection.mes, projection: snapshotForecast(projection) } }));
-  assert.equal(result.status, 'fallback');
-  assert.equal(result.source, 'deterministic');
+  await assert.rejects(
+    () => withoutAiProviders(() => handler({ empresa_id: empresaId, loja_id: lojaId, payload_sanitizado: { mes: projection.mes, projection: snapshotForecast(projection) } })),
+    error => error.code === 'DINO_FORECAST_INSIGHT_PERSIST_FAILED' && error.retryable === true,
+  );
 });
