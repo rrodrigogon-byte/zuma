@@ -4,6 +4,7 @@ import { armazenamentoAvaliacaoDuravel, db } from '../../db.js';
 import * as barbearia from '../../barbearia-erp-kytto.js';
 import { queueAppointmentNotifications } from '../../core/barbershop-appointment-notifications.js';
 import { avisarListaEspera } from '../../core/barbershop-agenda.js';
+import { DinoNpsError, getDinoNpsSchemaReadiness, queueDinoNpsProcessing, recordDinoNpsResponse } from '../../core/dino-nps-canonical.js';
 import * as captacao from '../../dino-captacao-kytto.js';
 import * as cobranca from '../../dino-cobranca-kytto.js';
 import { vincularClienteAoAtendimento } from '../../dino-clientes-vinculo.js';
@@ -11,6 +12,7 @@ import { phoneMatchKey } from '../../core/whatsapp-phone.js';
 
 const router = express.Router();
 const EMPRESA_PADRAO_ID = 'emp-kytto-001';
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function texto(valor, limite = 160) {
   return String(valor ?? '').trim().slice(0, limite);
@@ -195,7 +197,7 @@ router.post('/:slug/confirmar', async (req, res) => {
     if (vinculo.clienteId && corpo.consentimento_whatsapp === true) {
       try { captacao.registrarConsentimentoAtendimento(identidade.empresaId, vinculo.clienteId, 'agendamento_online_checkbox'); } catch (_) { /* não impede o agendamento */ }
     }
-    try { captacao.marcarListaEsperaAgendada(identidade.empresaId, { telefone, data: agendamento.dataAgenda }); } catch (_) { /* não impede o agendamento */ }
+    try { captacao.marcarListaEsperaAgendada(identidade.empresaId, { telefone, data: agendamento.dataAgenda, lojaId: agendamento.lojaId, servicoId: agendamento.servicoId }); } catch (_) { /* não impede o agendamento */ }
     if (corpo.indicacao) {
       try { captacao.registrarIndicacao(identidade.empresaId, { codigo: texto(corpo.indicacao, 12), agendamento }); } catch (_) { /* indicação inválida não impede o agendamento */ }
     }
@@ -237,7 +239,9 @@ router.post('/:slug/confirmar', async (req, res) => {
 });
 
 function erroCaptacao(res, erro) {
-  if (erro instanceof captacao.CaptacaoError || erro instanceof cobranca.CobrancaError) return res.status(erro.status || 400).json({ ok: false, error: erro.message, code: erro.code });
+  if (erro instanceof captacao.CaptacaoError || erro instanceof cobranca.CobrancaError || erro instanceof DinoNpsError) {
+    return res.status(erro.statusCode || erro.status || 400).json({ ok: false, error: erro.message, code: erro.code });
+  }
   return erroHttp(res, erro);
 }
 
@@ -309,8 +313,8 @@ router.post('/:slug/meu-agendamento', autoatendimento(async (req, res, identidad
   const visao = captacao.consultarAgendamentoCliente(identidade.empresaId, { codigo: req.body?.codigo, telefone: req.body?.cliente_telefone, lojaId: identidade.lojaId });
   // Código + telefone conferidos: mostra o sinal pendente (para pagar) e o saldo de cashback.
   const agendamento = barbearia.listarAgendamentos(identidade.empresaId, {}).find((item) => item.codigoConfirmacao === visao.codigo && (!identidade.lojaId || item.lojaId === identidade.lojaId));
-  const sinal = agendamento ? cobranca.sinalDoAgendamento(identidade.empresaId, agendamento.id) : null;
-  const cashback = cobranca.saldoCashback(identidade.empresaId, req.body?.cliente_telefone);
+  const sinal = agendamento ? cobranca.sinalDoAgendamento(identidade.empresaId, agendamento.id, identidade.lojaId) : null;
+  const cashback = cobranca.saldoCashback(identidade.empresaId, req.body?.cliente_telefone, { lojaId: identidade.lojaId });
   res.setHeader('Cache-Control', 'no-store');
   return res.json({
     ok: true,
@@ -324,7 +328,7 @@ router.post('/:slug/meu-agendamento', autoatendimento(async (req, res, identidad
 
 router.post('/:slug/meu-agendamento/cancelar', autoatendimento(async (req, res, identidade) => {
   const { agendamento, visao } = captacao.cancelarAgendamentoCliente(identidade.empresaId, { codigo: req.body?.codigo, telefone: req.body?.cliente_telefone, motivo: req.body?.motivo, lojaId: identidade.lojaId });
-  try { cobranca.cancelarSinalPendente(identidade.empresaId, agendamento.id); } catch (_) { /* não impede o cancelamento */ }
+  try { cobranca.cancelarSinalPendente(identidade.empresaId, agendamento.id, identidade.lojaId); } catch (_) { /* não impede o cancelamento */ }
   const contexto = { empresaId: identidade.empresaId, lojaId: agendamento.lojaId || identidade.lojaId, legacyEmpresaId: identidade.empresaId };
   await queueAppointmentNotifications(contexto, agendamento, 'cancelado').catch(() => null);
   await avisarListaEspera(contexto, agendamento, captacao.candidatosParaVaga(identidade.empresaId, agendamento)).catch(() => null);
@@ -334,15 +338,20 @@ router.post('/:slug/meu-agendamento/cancelar', autoatendimento(async (req, res, 
 
 router.post('/:slug/meu-agendamento/remarcar', autoatendimento(async (req, res, identidade) => {
   const corpo = req.body || {};
-  const { agendamento, visao } = captacao.remarcarAgendamentoCliente(identidade.empresaId, {
+  const { agendamento, anterior, visao } = captacao.remarcarAgendamentoCliente(identidade.empresaId, {
     codigo: corpo.codigo,
     telefone: corpo.cliente_telefone,
     data: texto(corpo.data, 10),
     horario: texto(corpo.horario, 5),
     lojaId: identidade.lojaId,
   });
+  try { captacao.marcarListaEsperaAgendada(identidade.empresaId, { telefone: corpo.cliente_telefone, data: agendamento.dataAgenda, lojaId: agendamento.lojaId, servicoId: agendamento.servicoId }); } catch (_) { /* não impede a remarcação */ }
   const contexto = { empresaId: identidade.empresaId, lojaId: agendamento.lojaId || identidade.lojaId, legacyEmpresaId: identidade.empresaId };
   await queueAppointmentNotifications(contexto, agendamento, 'remarcado').catch(() => null);
+  if (anterior && (anterior.dataAgenda !== agendamento.dataAgenda || anterior.horaLocal !== agendamento.horaLocal || anterior.profissionalId !== agendamento.profissionalId)) {
+    const contextoAnterior = { empresaId: identidade.empresaId, lojaId: anterior.lojaId || identidade.lojaId, legacyEmpresaId: identidade.empresaId };
+    await avisarListaEspera(contextoAnterior, { ...anterior, status: 'cancelado' }, captacao.candidatosParaVaga(identidade.empresaId, { ...anterior, status: 'cancelado' }, { lojaId: anterior.lojaId || identidade.lojaId })).catch(() => null);
+  }
   res.setHeader('Cache-Control', 'no-store');
   return res.json({ ok: true, agendamento: visao });
 }));
@@ -353,10 +362,12 @@ router.post('/:slug/pagamento/verificar', async (req, res) => {
   const identidade = identidadePublica(req.params.slug);
   if (!identidade) return res.status(404).json({ ok: false, error: 'Estabelecimento não encontrado.' });
   try {
+    const invoiceSlug = texto(req.body?.invoice_slug || req.body?.invoiceSlug, 180);
+    if (!invoiceSlug) return res.status(400).json({ ok: false, error: 'O invoice_slug do pagamento é obrigatório.', code: 'PAGAMENTO_INVOICE_SLUG_AUSENTE' });
     const resultado = await cobranca.confirmarPelaInfinitePay({
       order_nsu: texto(req.body?.order_nsu, 40),
       transaction_nsu: texto(req.body?.transaction_nsu, 80),
-      slug: texto(req.body?.slug, 80),
+      invoice_slug: invoiceSlug,
     });
     if (resultado.empresaId !== identidade.empresaId) return res.status(404).json({ ok: false, error: 'Pagamento não encontrado.' });
     res.setHeader('Cache-Control', 'no-store');
@@ -370,7 +381,7 @@ router.post('/:slug/pagamento/verificar', async (req, res) => {
 // App do cliente: "minha conta" com código + telefone no corpo (nunca na URL).
 router.post('/:slug/minha-conta', autoatendimento(async (req, res, identidade) => {
   const conta = captacao.minhaConta(identidade.empresaId, { codigo: req.body?.codigo, telefone: req.body?.cliente_telefone, lojaId: identidade.lojaId });
-  const cashback = cobranca.saldoCashback(identidade.empresaId, req.body?.cliente_telefone);
+  const cashback = cobranca.saldoCashback(identidade.empresaId, req.body?.cliente_telefone, { lojaId: identidade.lojaId });
   res.setHeader('Cache-Control', 'no-store');
   return res.json({ ok: true, conta: { ...conta, cashback: cashback.ativo || cashback.saldo > 0 ? { saldo: cashback.saldo, proximoVencimento: cashback.proximoVencimento } : null } });
 }));
@@ -384,6 +395,7 @@ router.post('/:slug/vale/comprar', async (req, res) => {
     const resultado = await cobranca.comprarVale(identidade.empresaId, {
       valor: Number(corpo.valor), deNome: texto(corpo.de_nome, 80), deTelefone: texto(corpo.de_telefone, 30),
       paraNome: texto(corpo.para_nome, 80), mensagem: texto(corpo.mensagem, 200),
+      lojaId: identidade.lojaId,
     });
     res.setHeader('Cache-Control', 'no-store');
     return res.status(201).json({ ok: true, ...resultado });
@@ -392,7 +404,7 @@ router.post('/:slug/vale/comprar', async (req, res) => {
   }
 });
 router.post('/:slug/vale/consultar', autoatendimento(async (req, res, identidade) => {
-  const vale = cobranca.consultarVale(identidade.empresaId, req.body?.codigo);
+  const vale = cobranca.consultarVale(identidade.empresaId, req.body?.codigo, identidade.lojaId);
   res.setHeader('Cache-Control', 'no-store');
   return res.json({ ok: true, vale: { saldo: vale.saldo, status: vale.status, validoAte: vale.validoAte } });
 }));
@@ -475,6 +487,57 @@ router.get('/:slug/app-barbeiro.webmanifest', (req, res) => {
 
 // NPS pós-atendimento: nota 0–10 do atendimento concluído (código + telefone no corpo).
 router.post('/:slug/avaliar', autoatendimento(async (req, res, identidade) => {
+  if (process.env.DINO_NPS_CANONICAL_ENABLED === '1') {
+    const readiness = getDinoNpsSchemaReadiness();
+    if (process.env.COMMERCE_CORE_ENABLED !== '1' || !readiness.ready) {
+      throw new DinoNpsError('Avaliação canônica indisponível até o schema Commerce estar pronto.', 503, readiness.code || 'DINO_NPS_SCHEMA_NOT_READY');
+    }
+    // A resposta canônica nunca aceita o identificador legado como prova. O
+    // link antigo (código+telefone) recebe 409 e não toca o armazenamento JSON.
+    if (!UUID_RE.test(String(identidade.empresaId || '')) || !UUID_RE.test(String(identidade.lojaId || ''))) {
+      throw new DinoNpsError('Atualize o link de avaliação para uma empresa e loja Commerce canônicas.', 409, 'NPS_CANONICAL_LINK_UPDATE_REQUIRED');
+    }
+    const corpo = req.body || {};
+    const appointmentId = corpo.appointmentId || corpo.appointment_id || corpo.agendamentoId || corpo.agendamento_id;
+    if (!appointmentId || !UUID_RE.test(String(appointmentId))) {
+      throw new DinoNpsError('Atualize o link de avaliação: appointmentId/agendamentoId é obrigatório.', 409, 'NPS_APPOINTMENT_ID_REQUIRED');
+    }
+    const codigo = texto(corpo.codigo || corpo.codigoConfirmacao || corpo.codigo_confirmacao, 80);
+    const telefone = texto(corpo.cliente_telefone || corpo.telefone, 40);
+    if (!codigo || !telefone) {
+      throw new DinoNpsError('Código e telefone são obrigatórios para validar o atendimento.', 400, 'NPS_CUSTOMER_PROOF_REQUIRED');
+    }
+    let resposta;
+    let processamento;
+    try {
+      resposta = await recordDinoNpsResponse({
+        empresaId: identidade.empresaId,
+        lojaId: identidade.lojaId,
+        correlationId: req.requestId,
+      }, {
+        appointmentId,
+        nota: corpo.nota,
+        comentario: texto(corpo.comentario, 2000),
+        codigo,
+        telefone,
+      });
+      processamento = await queueDinoNpsProcessing({
+        empresaId: identidade.empresaId,
+        lojaId: identidade.lojaId,
+        correlationId: req.requestId,
+      }, { responseId: resposta.id });
+    } catch (error) {
+      if (error instanceof DinoNpsError) throw error;
+      console.warn('[Dino NPS] avaliação canônica indisponível:', error?.code || error?.message || error);
+      throw new DinoNpsError('Avaliação canônica temporariamente indisponível.', 503, 'DINO_NPS_DATABASE_UNAVAILABLE');
+    }
+    res.setHeader('Cache-Control', 'no-store');
+    return res.status(resposta.replay || processamento.replay ? 200 : 201).json({
+      ok: true,
+      avaliacao: { repetida: Boolean(resposta.replay), nota: resposta.nota },
+      processamento: { status: processamento.status, replay: Boolean(processamento.replay) },
+    });
+  }
   if (!armazenamentoAvaliacaoDuravel()) {
     res.setHeader('Cache-Control', 'no-store');
     return res.status(503).json({ ok: false, code: 'REVIEW_STORAGE_UNAVAILABLE', error: 'Avaliações temporariamente indisponíveis. Tente novamente mais tarde.' });

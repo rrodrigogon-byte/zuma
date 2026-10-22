@@ -173,11 +173,11 @@ export default function AgendamentoOnline() {
     if (searchParams.get('pagamento') !== 'retorno') return
     const orderNsu = searchParams.get('order_nsu')
     const transactionNsu = searchParams.get('transaction_nsu') || searchParams.get('transaction_id')
-    const slugPagamento = searchParams.get('slug') || searchParams.get('invoice_slug')
-    if (!orderNsu || !transactionNsu || !slugPagamento) { setAvisoPagamento({ tom: 'alerta', texto: 'Recebemos sua volta do pagamento. Se você pagou, a confirmação chega em instantes.' }); return }
+    const invoiceSlug = searchParams.get('invoice_slug')
+    if (!orderNsu || !transactionNsu || !invoiceSlug) { setAvisoPagamento({ tom: 'alerta', texto: 'Recebemos sua volta do pagamento, mas faltou o identificador do checkout. Se você pagou, a confirmação chega em instantes.' }); return }
     fetch(`${API}/api/publico/agendamento/${encodeURIComponent(slug)}/pagamento/verificar`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ order_nsu: orderNsu, transaction_nsu: transactionNsu, slug: slugPagamento }),
+      body: JSON.stringify({ order_nsu: orderNsu, transaction_nsu: transactionNsu, invoice_slug: invoiceSlug }),
     }).then((res) => res.json().catch(() => ({}))).then((data) => {
       setAvisoPagamento(!data?.pago
         ? { tom: 'alerta', texto: data?.error || 'Ainda não recebemos a confirmação do pagamento. Se já pagou, aguarde alguns instantes.' }

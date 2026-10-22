@@ -52,6 +52,20 @@ function chaveUnidade(scope = {}) {
   return limpo(scope.lojaId, 120);
 }
 
+function exigirEscopoOperacional(scope = {}, input = {}, exigirServico = false) {
+  const empresa = chaveEmpresa(scope);
+  const loja = chaveUnidade(scope);
+  const servico = limpo(input.serviceId ?? input.servicoId, 120);
+  if (!empresa || !loja || (exigirServico && !servico)) {
+    throw new SchedulingError('empresaId, lojaId e servicoId são obrigatórios para a operação da agenda', 'AGENDA_SCOPE_REQUIRED');
+  }
+  return { empresa, loja, servico };
+}
+
+function duracaoDoServico(empresa, servicoId) {
+  return Number(barbearia.listarServicos(empresa, { incluirInativos: true }).find((item) => item.id === String(servicoId))?.duracaoMinutos || 30);
+}
+
 function temEquipeNaAgendaDaBarbearia(scope) {
   const estado = legacyDb().barbearias?.[chaveEmpresa(scope)];
   return Object.values(estado?.profissionais || {}).some((item) => item && item.ativo !== false);
@@ -256,6 +270,7 @@ function dataLocalValida(valor) {
 }
 
 export async function listServices(scope) {
+  exigirEscopoOperacional(scope);
   if (await agendaSource(scope) === 'postgres') return pgServices(scope);
   const empresa = chaveEmpresa(scope);
   const nomes = new Map(barbearia.listarProfissionais(empresa).map((item) => [item.id, item.nome]));
@@ -279,6 +294,7 @@ export async function listServices(scope) {
 }
 
 export async function listProfessionals(scope) {
+  exigirEscopoOperacional(scope);
   if (await agendaSource(scope) === 'postgres') return pgProfessionals(scope);
   return barbearia.listarProfissionais(chaveEmpresa(scope))
     .filter((item) => item.ativo !== false)
@@ -286,6 +302,7 @@ export async function listProfessionals(scope) {
 }
 
 export async function availability(scope, input = {}) {
+  exigirEscopoOperacional(scope, input, true);
   if (await agendaSource(scope) === 'postgres') return pgAvailability(scope, input);
   const empresa = chaveEmpresa(scope);
   const date = dataLocalValida(input.date);
@@ -341,10 +358,12 @@ function respostaAgendamento(empresa, agendamento) {
     duracaoMinutos: agendamento.duracaoMinutos,
     valor: Number(agendamento.valor || 0),
     cliente: agendamento.clienteNome,
+    slotFingerprint: agendamento.slotFingerprint || captacao.fingerprintSlot({ empresaId: empresa, ...agendamento }),
   };
 }
 
 export async function createAppointment(trx, scope, input = {}) {
+  exigirEscopoOperacional(scope, input, true);
   if (await agendaSource(scope) === 'postgres') return pgCreate(trx, scope, input);
   return criarNaAgendaDaBarbearia(scope, input);
 }
@@ -410,7 +429,19 @@ function criarNaAgendaDaBarbearia(scope, input = {}) {
       status: 'agendado',
       codigoConfirmacao: codigo,
     });
-    captacao.marcarListaEsperaAgendada(empresa, { telefone: agendamento.clienteTelefone, data: agendamento.dataAgenda });
+    agendamento.slotFingerprint = captacao.fingerprintSlot({ empresaId: empresa, ...agendamento });
+    captacao.marcarListaEsperaAgendada(empresa, {
+      telefone: agendamento.clienteTelefone,
+      data: agendamento.dataAgenda,
+      lojaId: agendamento.lojaId,
+      servicoId: agendamento.servicoId,
+      profissionalId: agendamento.profissionalId,
+      dataHora: agendamento.dataHora,
+      horaLocal: agendamento.horaLocal,
+      duracaoMinutos: agendamento.duracaoMinutos,
+      slotFingerprint: agendamento.slotFingerprint,
+      agendamentoId: agendamento.id,
+    });
     notificarDepois({ empresaId: scope.empresaId, lojaId: scope.lojaId, legacyEmpresaId: empresa }, agendamento, 'criado');
     return respostaAgendamento(empresa, agendamento);
   } catch (erro) {
@@ -437,6 +468,7 @@ function horarioLocalLegivel(dataHora) {
 }
 
 export async function listCustomerAppointments(scope, { includePast = false, limit = 8 } = {}) {
+  exigirEscopoOperacional(scope);
   if (await agendaSource(scope) === 'postgres') return pgCustomerAppointments(scope, { includePast, limit });
   const empresa = chaveEmpresa(scope);
   const servicos = new Map(barbearia.listarServicos(empresa, { incluirInativos: true }).map((item) => [item.id, item]));
@@ -474,6 +506,7 @@ function agendamentoDoContato(empresa, phone, appointmentId, lojaId) {
  * Só no horário do próprio telefone e ainda ativo; idempotente.
  */
 export async function confirmAttendance(scope, appointmentId) {
+  exigirEscopoOperacional(scope);
   if (await agendaSource(scope) === 'postgres') throw new SchedulingError('confirmação de presença disponível apenas na agenda da barbearia', 'NOT_BARBERSHOP_AGENDA');
   const empresa = chaveEmpresa(scope);
   const agendamento = agendamentoDoContato(empresa, scope.phone, appointmentId, scope.lojaId);
@@ -487,6 +520,7 @@ export async function confirmAttendance(scope, appointmentId) {
 
 /** Cliente avisa atraso: anota no horário para a equipe ver na agenda (não move o horário). */
 export async function noteDelay(scope, appointmentId, minutes) {
+  exigirEscopoOperacional(scope);
   if (await agendaSource(scope) === 'postgres') throw new SchedulingError('aviso de atraso disponível apenas na agenda da barbearia', 'NOT_BARBERSHOP_AGENDA');
   const empresa = chaveEmpresa(scope);
   const agendamento = agendamentoDoContato(empresa, scope.phone, appointmentId, scope.lojaId);
@@ -500,6 +534,7 @@ export async function noteDelay(scope, appointmentId, minutes) {
 }
 
 export async function rescheduleAppointment(trx, scope, input = {}) {
+  exigirEscopoOperacional(scope, input);
   if (await agendaSource(scope) === 'postgres') return pgReschedule(trx, scope, input);
   const empresa = chaveEmpresa(scope);
   try {
@@ -519,6 +554,21 @@ export async function rescheduleAppointment(trx, scope, input = {}) {
       profissionalId: livre.profissional.id,
       origem: 'whatsapp_ia',
     });
+    atualizado.slotFingerprint = captacao.fingerprintSlot({ empresaId: empresa, ...atualizado, lojaId: scope.lojaId });
+    // A remarcação muda a identidade do slot; o profissional escolhido permanece
+    // sendo a preferência do agendamento original.
+    captacao.marcarListaEsperaAgendada(empresa, {
+      telefone: atualizado.clienteTelefone,
+      data: atualizado.dataAgenda,
+      lojaId: atualizado.lojaId,
+      servicoId: atualizado.servicoId,
+      profissionalId: atualizado.profissionalId,
+      dataHora: atualizado.dataHora,
+      horaLocal: atualizado.horaLocal,
+      duracaoMinutos: atualizado.duracaoMinutos,
+      slotFingerprint: atualizado.slotFingerprint,
+      agendamentoId: atualizado.id,
+    });
     notificarDepois({ empresaId: scope.empresaId, lojaId: scope.lojaId, legacyEmpresaId: empresa }, atualizado, 'remarcado');
     return { ...respostaAgendamento(empresa, atualizado), profissional: livre.profissional.nome };
   } catch (erro) {
@@ -527,6 +577,7 @@ export async function rescheduleAppointment(trx, scope, input = {}) {
 }
 
 export async function cancelAppointment(trx, scope, appointmentId) {
+  exigirEscopoOperacional(scope);
   if (await agendaSource(scope) === 'postgres') return pgCancel(trx, scope, appointmentId);
   const empresa = chaveEmpresa(scope);
   try {
@@ -548,7 +599,5 @@ export async function cancelAppointment(trx, scope, appointmentId) {
  */
 export async function avisarListaEspera(contexto, agendamentoLiberado, candidatos) {
   if (!candidatos?.length) return { queued: 0, skipped: true, reason: 'no_candidates' };
-  const fila = await queueWaitlistNotifications(contexto, agendamentoLiberado, candidatos);
-  if (fila?.queuedIds?.length) captacao.marcarAvisados(contexto.legacyEmpresaId || contexto.empresaId, agendamentoLiberado, fila.queuedIds);
-  return fila;
+  return queueWaitlistNotifications(contexto, agendamentoLiberado, candidatos);
 }

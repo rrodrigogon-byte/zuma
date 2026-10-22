@@ -4,6 +4,30 @@ const agora = () => new Date().toISOString()
 const id = (prefix) => `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
 const texto = (value, max = 180) => String(value ?? '').trim().slice(0, max)
 
+export class LegacyLoyaltyWriteBlockedError extends Error {
+  constructor(message = 'O ledger JSON legado é somente leitura; informe legacyMigration ou quarantine com lojaId explícito.') {
+    super(message)
+    this.name = 'LegacyLoyaltyWriteBlockedError'
+    this.code = 'LEGACY_LOYALTY_WRITE_BLOCKED'
+    this.statusCode = 409
+  }
+}
+
+// O estado JSON continua disponível apenas para inspeção/quarentena. Nenhum
+// crédito de operação pode cair nele por ausência silenciosa de loja.
+function requireLegacyWriteContext(input = {}, options = {}) {
+  const context = input?.context && typeof input.context === 'object' ? input.context : input
+  const migration = context?.legacyMigration === true
+  const quarantine = context?.quarantine === true
+  const lojaId = texto(context?.lojaId ?? context?.loja_id, 120)
+  if ((!migration && !quarantine) || !lojaId) throw new LegacyLoyaltyWriteBlockedError()
+  if (options?.operational === true && quarantine) {
+    throw new LegacyLoyaltyWriteBlockedError('Quarentena não pode produzir crédito operacional no ledger legado.')
+  }
+  const bridge = texto(context?.bridge, 120)
+  return { legacyMigration: migration, quarantine, lojaId, ...(bridge ? { bridge } : {}) }
+}
+
 function store(criar = true) {
   const state = db()
   if (!criar && !state.canaisKytto?.empresas) return {}
@@ -69,6 +93,7 @@ export function obterFidelidade(empresaId) {
 }
 
 export function salvarRegraFidelidade(empresaId, payload = {}) {
+  requireLegacyWriteContext(payload)
   const data = empresa(empresaId)
   data.fidelidade ||= { regra: { pontosPorReal: 1, valorPonto: 0.01, ativa: true }, membros: {}, movimentos: {} }
   data.fidelidade.membros ||= {}
@@ -85,6 +110,7 @@ export function salvarRegraFidelidade(empresaId, payload = {}) {
 }
 
 export function cadastrarMembroFidelidade(empresaId, payload = {}) {
+  requireLegacyWriteContext(payload)
   const data = empresa(empresaId)
   data.fidelidade ||= { regra: { pontosPorReal: 1, valorPonto: 0.01, ativa: true }, membros: {}, movimentos: {} }
   data.fidelidade.membros ||= {}
@@ -101,6 +127,7 @@ export function cadastrarMembroFidelidade(empresaId, payload = {}) {
 }
 
 export function creditarFidelidade(empresaId, clienteId, valor, origem = 'venda', opcoes = {}) {
+  const legacyContext = requireLegacyWriteContext(opcoes, { operational: true })
   const data = empresa(empresaId)
   data.fidelidade ||= { regra: { pontosPorReal: 1, valorPonto: 0.01, ativa: true }, membros: {}, movimentos: {} }
   data.fidelidade.membros ||= {}
@@ -120,7 +147,7 @@ export function creditarFidelidade(empresaId, clienteId, valor, origem = 'venda'
   membro.pontosAcumulados = Number(membro.pontosAcumulados || 0) + pontos
   membro.nivel = membro.pontos >= 5000 ? 'ouro' : membro.pontos >= 1500 ? 'prata' : 'bronze'
   membro.ultimaOrigem = texto(typeof origem === 'string' ? origem : origem?.origem || 'venda', 40); membro.atualizadoEm = registradoEm
-  const movimento = { id: id('fidmov'), empresaId, membroId: membro.id, clienteId, valor: Number(Number(valor || 0).toFixed(2)), pontos, origem: membro.ultimaOrigem, chaveIdempotencia: chaveIdempotencia || null, criadoEm: registradoEm }
+  const movimento = { id: id('fidmov'), empresaId, lojaId: legacyContext.lojaId, membroId: membro.id, clienteId, valor: Number(Number(valor || 0).toFixed(2)), pontos, origem: membro.ultimaOrigem, chaveIdempotencia: chaveIdempotencia || null, legadoContexto: legacyContext, criadoEm: registradoEm }
   data.fidelidade.movimentos[movimento.id] = movimento
   save()
   return { membro, pontosCreditados: pontos, repetido: false, movimento }
@@ -130,6 +157,7 @@ export function creditarFidelidade(empresaId, clienteId, valor, origem = 'venda'
 // depende do valor da venda e inscreve o cliente no programa se ele ainda não
 // for membro. Idempotente pela chave.
 export function creditarPontosBonus(empresaId, clienteId, pontos, origem = 'bonus', opcoes = {}) {
+  const legacyContext = requireLegacyWriteContext(opcoes, { operational: true })
   const data = empresa(empresaId)
   data.fidelidade ||= { regra: { pontosPorReal: 1, valorPonto: 0.01, ativa: true }, membros: {}, movimentos: {} }
   data.fidelidade.membros ||= {}
@@ -154,10 +182,52 @@ export function creditarPontosBonus(empresaId, clienteId, pontos, origem = 'bonu
   membro.pontosAcumulados = Number(membro.pontosAcumulados || 0) + quantidade
   membro.nivel = membro.pontos >= 5000 ? 'ouro' : membro.pontos >= 1500 ? 'prata' : 'bronze'
   membro.ultimaOrigem = texto(origem, 40); membro.atualizadoEm = registradoEm
-  const movimento = { id: id('fidmov'), empresaId, membroId: membro.id, clienteId: id_, valor: 0, pontos: quantidade, origem: membro.ultimaOrigem, chaveIdempotencia: chaveIdempotencia || null, criadoEm: registradoEm }
+  const movimento = { id: id('fidmov'), empresaId, lojaId: legacyContext.lojaId, membroId: membro.id, clienteId: id_, valor: 0, pontos: quantidade, origem: membro.ultimaOrigem, chaveIdempotencia: chaveIdempotencia || null, legadoContexto: legacyContext, criadoEm: registradoEm }
   data.fidelidade.movimentos[movimento.id] = movimento
   save()
   return { membro, pontosCreditados: quantidade, repetido: false, movimento }
+}
+
+// Reversão de fidelidade é sempre outro movimento. O crédito histórico não é
+// apagado nem atualizado; somente o saldo disponível é compensado, e nunca
+// abaixo de zero. A operação exige loja/contexto para não gravar crédito no
+// ledger legado global por acidente.
+export function reverterFidelidade(empresaId, clienteId, pontos, opcoes = {}) {
+  const legacyContext = requireLegacyWriteContext(opcoes, { operational: true })
+  const data = empresa(empresaId)
+  data.fidelidade ||= { regra: { pontosPorReal: 1, valorPonto: 0.01, ativa: true }, membros: {}, movimentos: {} }
+  data.fidelidade.membros ||= {}
+  data.fidelidade.movimentos ||= {}
+  const idCliente = texto(clienteId, 90)
+  const quantidade = Math.max(0, Math.round(Number(pontos) || 0))
+  const chave = texto(opcoes?.idempotencyKey ?? opcoes?.idempotency_key ?? opcoes?.chaveIdempotencia ?? opcoes?.chave_idempotencia, 220)
+  const actionId = texto(opcoes?.actionId ?? opcoes?.action_id, 180)
+  const motivo = texto(opcoes?.motivo ?? opcoes?.reason, 300)
+  if (!idCliente || quantidade <= 0 || !chave || !actionId || !motivo) throw new Error('clienteId, pontos, actionId, idempotencyKey e motivo são obrigatórios para reversão de fidelidade.')
+  const existente = Object.values(data.fidelidade.movimentos).find((movimento) => movimento.tipo === 'reversao' && movimento.chaveIdempotencia === chave)
+  if (existente) {
+    if (existente.clienteId !== idCliente || Number(existente.pontos) !== -quantidade || existente.actionId !== actionId) throw Object.assign(new Error('A chave de reversão da fidelidade foi reutilizada com dados divergentes.'), { code: 'LOYALTY_REVERSAL_IDEMPOTENCY_CONFLICT', status: 409 })
+    return { membro: data.fidelidade.membros[existente.membroId] || null, pontosRevertidos: quantidade, repetido: true, movimento: existente }
+  }
+  const membro = Object.values(data.fidelidade.membros).find((item) => item.clienteId === idCliente && item.status !== 'inativo')
+  if (!membro) return { membro: null, pontosRevertidos: 0, repetido: false, skipped: true, reason: 'member_not_found' }
+  const saldoAntes = Number(membro.pontos || 0)
+  if (saldoAntes < quantidade) throw Object.assign(new Error('A reversão não pode deixar o saldo de fidelidade negativo.'), { code: 'LOYALTY_BALANCE_NEGATIVE', status: 409, retryable: false })
+  const registradoEm = agora()
+  const saldoDepois = saldoAntes - quantidade
+  membro.pontos = saldoDepois
+  membro.nivel = membro.pontos >= 5000 ? 'ouro' : membro.pontos >= 1500 ? 'prata' : 'bronze'
+  membro.atualizadoEm = registradoEm
+  const movimento = {
+    id: id('fidmov'), empresaId, lojaId: legacyContext.lojaId, membroId: membro.id, clienteId: idCliente,
+    valor: 0, pontos: -quantidade, pontosRevertidos: quantidade, saldoAnterior: saldoAntes,
+    saldoPosterior: saldoDepois, tipo: 'reversao', origem: 'dino_reversal', motivo,
+    actionId, reversalOf: texto(opcoes?.sourceMovementId ?? opcoes?.source_movement_id, 180) || null,
+    chaveIdempotencia: chave, legadoContexto: { ...legacyContext, bridge: legacyContext.bridge || 'legacy-loyalty-bridge' }, criadoEm: registradoEm,
+  }
+  data.fidelidade.movimentos[movimento.id] = movimento
+  save()
+  return { membro, pontosRevertidos: quantidade, repetido: false, movimento }
 }
 
 export function criarPedidoCanal(empresaId, payload = {}) {
@@ -181,4 +251,4 @@ export function listarPedidosCanal(empresaId, filtros = {}) {
   return Object.values(data.pedidos).filter((pedido) => !filtros.canal || pedido.canal === filtros.canal).filter((pedido) => !filtros.status || pedido.status === filtros.status).sort((a, b) => String(b.criadoEm).localeCompare(String(a.criadoEm)))
 }
 
-export default { obterCanais, salvarCanal, obterFidelidade, salvarRegraFidelidade, cadastrarMembroFidelidade, creditarFidelidade, criarPedidoCanal, listarPedidosCanal }
+export default { obterCanais, salvarCanal, obterFidelidade, salvarRegraFidelidade, cadastrarMembroFidelidade, creditarFidelidade, creditarPontosBonus, reverterFidelidade, criarPedidoCanal, listarPedidosCanal }

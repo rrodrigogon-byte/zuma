@@ -92,18 +92,18 @@ export function registerDinoAdminRoutes(app, deps) {
   // ── Financeiro da empresa ────────────────────────────────────────────────
   app.get(`${BASE}/financeiro/lancamentos`, (req, res) => {
     if (!gestor(req, res)) return;
-    const itens = financeiroKytto.listarLancamentos(legacyEmpresaId(req), req.query || {}).map(view);
+    const itens = financeiroKytto.listarLancamentos(legacyEmpresaId(req), { ...(req.query || {}), lojaId: legacyLojaId(req) }).map(view);
     res.json(itens);
   });
 
   app.get(`${BASE}/financeiro/resumo`, (req, res) => {
     if (!gestor(req, res)) return;
-    res.json(financeiroKytto.resumoFinanceiro(legacyEmpresaId(req)));
+    res.json(financeiroKytto.resumoFinanceiro(legacyEmpresaId(req), { lojaId: legacyLojaId(req) }));
   });
 
   app.get(`${BASE}/financeiro/fluxo`, (req, res) => {
     if (!gestor(req, res)) return;
-    res.json(financeiroKytto.fluxoFinanceiro(legacyEmpresaId(req), 12));
+    res.json(financeiroKytto.fluxoFinanceiro(legacyEmpresaId(req), 12, new Date(), { lojaId: legacyLojaId(req) }));
   });
 
   app.get(`${BASE}/financeiro/categorias`, (req, res) => {
@@ -115,7 +115,8 @@ export function registerDinoAdminRoutes(app, deps) {
     if (!gestor(req, res)) return;
     try {
       const empresaId = legacyEmpresaId(req);
-      const dados = sanitizeEntry(req.body || {});
+      const lojaId = legacyLojaId(req);
+      const dados = { ...sanitizeEntry(req.body || {}), lojaId };
       const meses = Math.floor(Number(req.body?.recorrencia?.meses || 1));
       if (!Number.isFinite(meses) || meses < 1 || meses > 24) throw new Error('A recorrência vai de 1 a 24 meses.');
       const vencimentos = meses > 1 ? monthlyDates(dados.vencimento, meses) : [dados.vencimento];
@@ -158,7 +159,8 @@ export function registerDinoAdminRoutes(app, deps) {
   app.patch(`${BASE}/financeiro/lancamentos/:id`, (req, res) => {
     if (!gestor(req, res)) return;
     try {
-      const lancamento = financeiroKytto.atualizarLancamento(legacyEmpresaId(req), req.params.id, sanitizeEntry(req.body || {}));
+      const lojaId = legacyLojaId(req);
+      const lancamento = financeiroKytto.atualizarLancamento(legacyEmpresaId(req), req.params.id, { ...sanitizeEntry(req.body || {}), lojaId }, { lojaId });
       if (!lancamento) return res.status(404).json({ error: 'Lançamento não encontrado nesta empresa.' });
       audit(req, 'FINANCEIRO ATUALIZACAO', `id=${lancamento.id}; status=${lancamento.status}`);
       save();
@@ -169,7 +171,7 @@ export function registerDinoAdminRoutes(app, deps) {
   // Exclusão = cancelamento (mantém a trilha contábil).
   app.delete(`${BASE}/financeiro/lancamentos/:id`, (req, res) => {
     if (!gestor(req, res)) return;
-    const lancamento = financeiroKytto.cancelarLancamento(legacyEmpresaId(req), req.params.id, req.user?.email || req.user?.nome || 'gestor');
+    const lancamento = financeiroKytto.cancelarLancamento(legacyEmpresaId(req), req.params.id, { usuario: req.user?.email || req.user?.nome || 'gestor', lojaId: legacyLojaId(req) });
     if (!lancamento) return res.status(404).json({ error: 'Lançamento não encontrado nesta empresa.' });
     audit(req, 'FINANCEIRO CANCELAMENTO', `id=${lancamento.id}`);
     save();

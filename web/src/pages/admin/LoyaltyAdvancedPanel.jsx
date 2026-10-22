@@ -79,6 +79,7 @@ export default function LoyaltyAdvancedPanel({ data, customer, customerDetail, b
   const [settings, setSettings] = useState(EMPTY_SETTINGS)
   const [reward, setReward] = useState(EMPTY_REWARD)
   const [redemption, setRedemption] = useState({ rewardId: '', quantity: 1, confirmed: false, note: '', idempotencyKey: idempotencyKey() })
+  const [legacyReconciliation, setLegacyReconciliation] = useState(null)
 
   useEffect(() => {
     setLevels((data?.levels || []).map(item => ({ ...item, beneficios_texto: benefitsText(item.beneficios) })))
@@ -239,6 +240,34 @@ export default function LoyaltyAdvancedPanel({ data, customer, customerDetail, b
     }
   }
 
+  const previewLegacyReconciliation = async () => {
+    setBusy(true)
+    try {
+      const result = await api.get(`${LOYALTY_API}/reconciliacao-legada`)
+      setLegacyReconciliation(result.resultado)
+      notify('sucesso', 'Prévia calculada sem gravar pontos. Revise os clientes não encontrados antes de confirmar.')
+    } catch (error) {
+      notify('erro', error.message || 'Não foi possível calcular a prévia legada.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const confirmLegacyReconciliation = async () => {
+    if (!globalThis.confirm('Importar a fidelidade legada para a loja selecionada? A operação cria lançamentos imutáveis no ledger canônico e não apaga o legado.')) return
+    setBusy(true)
+    try {
+      const result = await api.post(`${LOYALTY_API}/reconciliacao-legada`, { confirmar: true })
+      setLegacyReconciliation(result.resultado)
+      notify('sucesso', `Reconciliação concluída: ${fmtNum(result.resultado?.migrated || 0)} membro(s) processado(s).`)
+      await onRefresh()
+    } catch (error) {
+      notify('erro', error.message || 'Não foi possível concluir a reconciliação legada.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const metrics = data?.metrics || {}
 
   return (
@@ -252,6 +281,21 @@ export default function LoyaltyAdvancedPanel({ data, customer, customerDetail, b
           <span><strong>{fmtNum(metrics.pointsRedeemed || 0)}</strong> pontos resgatados</span>
         </div>
       </header>
+
+      <article className="omni-panel">
+        <div className="omni-panel-heading"><div><h3>Reconciliação da fidelidade legada</h3><p>O cadastro antigo é por empresa, sem loja. Primeiro calcule a prévia; confirme somente depois de validar que a loja ativa é o destino correto.</p></div><span className="omni-status omni-status--pausada">Sem gravação automática</span></div>
+        <div className="omni-form-grid">
+          <button className="omni-link-button" type="button" onClick={previewLegacyReconciliation} disabled={busy}>Calcular prévia</button>
+          <button className="omni-button" type="button" onClick={confirmLegacyReconciliation} disabled={busy}>Confirmar importação</button>
+        </div>
+        {legacyReconciliation && <div className="omni-loyalty-metrics" style={{ marginTop: 12 }}>
+          <span><strong>{fmtNum(legacyReconciliation.matched || 0)}</strong> correspondentes</span>
+          <span><strong>{fmtNum(legacyReconciliation.migrated || 0)}</strong> processados</span>
+          <span><strong>{fmtNum(legacyReconciliation.unmatched || 0)}</strong> não encontrados</span>
+          <span><strong>{fmtNum(legacyReconciliation.ambiguous || 0)}</strong> ambíguos</span>
+          <span><strong>{fmtNum(legacyReconciliation.pointsCredited || 0)}</strong> pontos a creditar</span>
+        </div>}
+      </article>
 
       <article className="omni-panel omni-loyalty-settings">
         <div className="omni-panel-heading"><div><h3>Acúmulo de pontos</h3><p>O crédito ocorre uma única vez quando o pedido Commerce é confirmado como pago.</p></div><span className={`omni-status omni-status--${settings.ativo ? 'ativa' : 'pausada'}`}>{settings.ativo ? 'Ativo' : 'Inativo'}</span></div>

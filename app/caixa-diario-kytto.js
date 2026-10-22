@@ -3,7 +3,7 @@
 // Persistência JSON multientidade para abertura, sangria, suprimento e fechamento.
 // ============================================================================
 
-import { db } from './db.js';
+import { db, save } from './db.js';
 
 const agora = () => new Date().toISOString();
 const texto = (valor, limite = 300) => String(valor ?? '').trim().slice(0, limite);
@@ -142,6 +142,67 @@ export function registrarRecebimento(empresaId, dados = {}) {
   return { ...movimento };
 }
 
+// Estorno de recebimento é um movimento compensatório: o recebimento original
+// permanece intacto para auditoria e fechamento histórico. Pode ser registrado
+// mesmo depois do fechamento do caixa, desde que a origem pertença à mesma
+// empresa/unidade. A chave é única no escopo da empresa e evita duplicação em
+// retries do coordenador de estorno.
+export function registrarEstornoRecebimento(empresaId, dados = {}) {
+  const lojaId = texto(dados.lojaId ?? dados.loja_id, 120);
+  if (!lojaId) throw new Error('lojaId é obrigatório para estornar recebimento.');
+  const originalId = texto(dados.movimentoOriginalId ?? dados.movimento_original_id ?? dados.recebimentoId ?? dados.recebimento_id, 180);
+  if (!originalId) throw new Error('movimentoOriginalId é obrigatório para estornar recebimento.');
+  const actionId = texto(dados.actionId ?? dados.action_id, 180);
+  const chave = texto(dados.idempotencyKey ?? dados.idempotency_key ?? dados.chaveIdempotencia ?? dados.chave_idempotencia ?? actionId, 220);
+  if (!actionId || !chave) throw new Error('actionId e idempotencyKey são obrigatórios para estornar recebimento.');
+  const motivo = texto(dados.motivo ?? dados.reason, 300);
+  if (!motivo) throw new Error('Motivo é obrigatório para estornar recebimento.');
+  const store = storeEmpresa(empresaId);
+  const original = store.movimentos[originalId];
+  if (!original || original.empresaId !== String(empresaId) || original.tipo !== 'recebimento' || original.lojaId !== lojaId) {
+    throw new Error('Recebimento original não encontrado na empresa/unidade ativa.');
+  }
+  const valor = dinheiro(dados.valor ?? original.valor);
+  if (!(valor > 0) || valor > Number(original.valor || 0)) throw new Error('Valor do estorno de recebimento inválido.');
+  const existente = Object.values(store.movimentos).find((item) => item.tipo === 'estorno_recebimento' && item.chaveIdempotencia === chave);
+  if (existente) {
+    if (existente.movimentoOriginalId !== original.id || Number(existente.valor) !== valor || existente.actionId !== actionId) {
+      throw Object.assign(new Error('A chave de estorno do caixa foi reutilizada com dados divergentes.'), { code: 'CASH_REVERSAL_IDEMPOTENCY_CONFLICT', status: 409 });
+    }
+    return { ...existente, replayed: true, idempotente: true };
+  }
+  const jaEstornado = Object.values(store.movimentos)
+    .filter((item) => item.tipo === 'estorno_recebimento' && item.movimentoOriginalId === original.id)
+    .reduce((total, item) => total + Number(item.valor || 0), 0);
+  if (jaEstornado + valor > Number(original.valor || 0) + 0.001) {
+    throw Object.assign(new Error('O recebimento já possui estorno integral.'), { code: 'CASH_REVERSAL_ALREADY_EXISTS', status: 409 });
+  }
+  const id = `cxest-${Date.now().toString(36)}-${Object.keys(store.movimentos).length + 1}`;
+  const movimento = {
+    id,
+    empresaId: String(empresaId),
+    lojaId,
+    caixaId: original.caixaId,
+    tipo: 'estorno_recebimento',
+    valor,
+    valorEfeito: -valor,
+    movimentoOriginalId: original.id,
+    actionId,
+    motivo,
+    descricao: texto(dados.descricao || `Estorno do recebimento ${original.id}`),
+    usuario: texto(dados.usuario || 'sistema@kytto.local', 120),
+    referencia: texto(dados.referencia || original.referencia || '', 160) || null,
+    chaveIdempotencia: chave,
+    dataOperacao: dados.dataOperacao ? new Date(dados.dataOperacao).toISOString() : agora(),
+    criadoEm: agora(),
+  };
+  store.movimentos[id] = movimento;
+  const caixa = store.caixas[String(original.caixaId)];
+  if (caixa) caixa.atualizadoEm = agora();
+  save();
+  return { ...movimento, replayed: false, idempotente: false };
+}
+
 export function movimentosDoCaixa(empresaId, caixaId) {
   return Object.values(storeEmpresa(empresaId, false).movimentos)
     .filter((item) => item.empresaId === String(empresaId) && item.caixaId === String(caixaId))
@@ -156,7 +217,8 @@ export function fecharCaixa(empresaId, dados = {}) {
   if (caixa.status !== 'aberto') throw new Error('O caixa já está fechado.');
   const movimentos = movimentosDoCaixa(empresaId, caixa.id);
   const recebimentosRegistrados = movimentos.filter((item) => item.tipo === 'recebimento').reduce((soma, item) => soma + item.valor, 0);
-  const recebimentosDinheiro = dinheiro(recebimentosRegistrados);
+  const estornosRecebimento = movimentos.filter((item) => item.tipo === 'estorno_recebimento').reduce((soma, item) => soma + item.valor, 0);
+  const recebimentosDinheiro = dinheiro(recebimentosRegistrados - estornosRecebimento);
   const sangrias = movimentos.filter((item) => item.tipo === 'sangria').reduce((soma, item) => soma + item.valor, 0);
   const suprimentos = movimentos.filter((item) => item.tipo === 'suprimento').reduce((soma, item) => soma + item.valor, 0);
   const valorEsperado = dinheiro(caixa.valorAbertura + recebimentosDinheiro + suprimentos - sangrias);
@@ -172,6 +234,6 @@ export function fecharCaixa(empresaId, dados = {}) {
   return {
     caixa: serializarCaixa(caixa),
     movimentos,
-    resumo: { recebimentosDinheiro, recebimentosRegistrados: dinheiro(recebimentosRegistrados), sangrias: dinheiro(sangrias), suprimentos: dinheiro(suprimentos), valorEsperado, valorInformado, divergencia: caixa.divergencia },
+    resumo: { recebimentosDinheiro, recebimentosRegistrados: dinheiro(recebimentosRegistrados), estornosRecebimento: dinheiro(estornosRecebimento), recebimentosLiquidos: recebimentosDinheiro, sangrias: dinheiro(sangrias), suprimentos: dinheiro(suprimentos), valorEsperado, valorInformado, divergencia: caixa.divergencia },
   };
 }

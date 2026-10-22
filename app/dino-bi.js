@@ -60,9 +60,12 @@ function sortRanking(map) {
  * Serviços executados no recorte: itens de serviço das comandas pagas mais os
  * atendimentos concluídos que não viraram comanda (evita contar duas vezes).
  */
-export function servicesPerformed({ appointments = [], commands = [] }, window) {
+export function servicesPerformed({ appointments = [], commands = [], financeEntries = [] }, window) {
   const paid = list(commands).filter((item) => item.status === 'paga' && inWindow(commandDate(item), window));
   const inCommand = new Set(paid.map((item) => item.agendamentoId).filter(Boolean));
+  const paidEntriesById = new Map(list(financeEntries)
+    .filter((entry) => entry.tipo === 'receita' && entry.status === 'pago' && entry.id)
+    .map((entry) => [String(entry.id), entry]));
   const rows = [];
   for (const command of paid) {
     for (const item of list(command.itens).filter((entry) => entry.tipo === 'servico')) {
@@ -74,11 +77,12 @@ export function servicesPerformed({ appointments = [], commands = [] }, window) 
     }
   }
   for (const item of list(appointments)) {
-    if (item.status !== 'concluido' || inCommand.has(item.id) || !inWindow(appointmentDate(item), window)) continue;
+    const recebimento = paidEntriesById.get(String(item.financeiroLancamentoId || ''));
+    if (item.status !== 'concluido' || inCommand.has(item.id) || !recebimento || !inWindow(recebimento.pagoEm || recebimento.dataOperacao, window)) continue;
     rows.push({
       servicoId: item.servicoId, nome: item.servicoNome || 'Serviço', quantidade: 1,
-      receita: num(item.valorRecebido || item.valor), profissionalId: item.profissionalId || '',
-      at: appointmentDate(item), cliente: customerKey(item),
+      receita: num(recebimento.valor), profissionalId: item.profissionalId || '',
+      at: recebimento.pagoEm || recebimento.dataOperacao, cliente: customerKey(item),
     });
   }
   return rows;

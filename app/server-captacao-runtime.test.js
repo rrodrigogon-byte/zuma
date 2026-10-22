@@ -96,12 +96,19 @@ test('captação: agendamento online com consentimento e indicação, lista de e
     assert.equal(lista.body.itens[0].avisos.length, 0, 'sem canal de WhatsApp ativo ninguém fica marcado como avisado');
 
     // Painéis do admin respondem para a empresa da sessão.
-    for (const rota of ['/api/admin/barbearia/captacao/clube', '/api/admin/barbearia/captacao/retornos', `/api/admin/barbearia/captacao/ocupacao?inicio=${data}&fim=${data}`, '/api/admin/barbearia/captacao/metas-profissionais', '/api/admin/barbearia/captacao/configuracao']) {
+    for (const rota of ['/api/admin/barbearia/captacao/clube', '/api/admin/barbearia/captacao/retornos', `/api/admin/barbearia/captacao/ocupacao?inicio=${data}&fim=${data}`, '/api/admin/barbearia/captacao/metas-profissionais', '/api/admin/barbearia/captacao/projecao-faturamento?horizonte=6', '/api/admin/barbearia/captacao/configuracao']) {
       const resposta = await request(base, rota, { headers });
       assert.equal(resposta.response.status, 200, rota);
     }
     const meta = await request(base, '/api/admin/barbearia/captacao/metas-profissionais', { method: 'PUT', headers, body: JSON.stringify({ profissionalId: profissional.id, mes: data.slice(0, 7), receita: 4000, atendimentos: 80 }) });
     assert.equal(meta.response.status, 200);
+    const projecao = await request(base, `/api/admin/barbearia/captacao/projecao-faturamento?mes=${data.slice(0, 7)}&horizonte=6`, { headers });
+    assert.equal(projecao.response.status, 200);
+    assert.equal(projecao.body.previsoes.length, 6);
+    assert.equal(projecao.body.escopo.empresaId, 'empresa-captacao');
+    const horizonteInvalido = await request(base, '/api/admin/barbearia/captacao/projecao-faturamento?horizonte=7', { headers });
+    assert.equal(horizonteInvalido.response.status, 400);
+    assert.equal(horizonteInvalido.body.code, 'HORIZONTE_INVALIDO');
     // Assinante concluindo atendimento: cobrado avulso não consome o plano; sem cobrança, consome.
     const assinante = (await request(base, '/api/admin/barbearia/clientes', { method: 'POST', headers, body: JSON.stringify({ nome: 'Assinante', telefone: '65966660001' }) })).body.cliente;
     const plano = (await request(base, '/api/admin/barbearia/planos', { method: 'POST', headers, body: JSON.stringify({ nome: 'Clube', preco: 90, sessoesIncluidas: 4, validadeDias: 30, servicosIds: [servico.id] }) })).body.plano;
@@ -173,6 +180,8 @@ test('captação: agendamento online com consentimento e indicação, lista de e
 
     const semSessao = await request(base, '/api/admin/barbearia/captacao/clube');
     assert.equal(semSessao.response.status, 401);
+    const projecaoSemSessao = await request(base, '/api/admin/barbearia/captacao/projecao-faturamento');
+    assert.equal(projecaoSemSessao.response.status, 401);
   } finally {
     processo.kill('SIGTERM');
   }

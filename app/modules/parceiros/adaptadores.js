@@ -110,6 +110,7 @@ export const wellhub = {
     return {
       plataforma: 'wellhub',
       contaExterna: gymId,
+      eventId: idEvento ? String(idEvento) : `${pessoaExterna}:${Math.floor(em.getTime() / 1000)}`,
       idExterno: idEvento ? `evt:${idEvento}` : `${pessoaExterna}:${Math.floor(em.getTime() / 1000)}`,
       pessoaExterna,
       nome: [u.first_name, u.last_name].filter(Boolean).join(' ').trim() || u.name || 'Aluno Wellhub',
@@ -179,6 +180,7 @@ export const totalpass = {
     return {
       plataforma: 'totalpass',
       contaExterna: String(place.code || place.place || '').trim(),
+      eventId: String(corpo.event_id || corpo.eventId || corpo.id || '').trim() || sha256(endpoint),
       idExterno: sha256(endpoint), // o token é de uso único: identifica o check-in sem guardá-lo em claro
       pessoaExterna,
       nome: u.name || 'Aluno TotalPass',
@@ -228,9 +230,9 @@ function lerReservaGenerica(plataforma, corpo = {}) {
   const ocorrenciaId = String(aula.external_id || aula.externalId || d.external_id || '').trim();
   const pessoaExterna = String(u.unique_token || u.gympass_id || u.code || u.id || '').trim();
   const idReserva = String(d.booking_number || d.booking?.code || d.booking_id || d.id || '').trim();
-  if (!ocorrenciaId || !pessoaExterna) return { invalido: true, motivo: 'reserva sem aula (external_id) ou sem pessoa' };
+  if (!ocorrenciaId || !pessoaExterna || !idReserva) return { invalido: true, motivo: 'reserva sem aula, pessoa ou identificador' };
   return {
-    plataforma, cancelamento, ocorrenciaId, pessoaExterna, idReserva,
+    plataforma, cancelamento, ocorrenciaId, pessoaExterna, idReserva, eventId: idReserva,
     nome: [u.first_name, u.last_name].filter(Boolean).join(' ').trim() || u.name || `Aluno ${plataforma === 'wellhub' ? 'Wellhub' : 'TotalPass'}`,
     email: u.email || null, telefone: telefoneLimpo(u.phone_number || u.phone), documento: u.document_number || null,
   };

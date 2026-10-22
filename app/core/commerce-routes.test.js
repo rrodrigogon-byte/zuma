@@ -10,7 +10,7 @@ import { fulfillmentReport } from './commerce-reports.js';
 import { paymentProviders } from './payment-adapters.js';
 import { infinitepayWebhookDuplicateOwnerSql, infinitepayWebhookUnboundOwnerSql, publicInfinitepayPaymentLookupSql } from './commerce-payment-return.js';
 import { db } from './database.js';
-
+process.env.PUBLIC_RATE_LIMIT_SECRET ||= 'commerce-test-rate-limit-secret';
 const empresaId = '11111111-1111-4111-8111-111111111111';
 const lojaId = '22222222-2222-4222-8222-222222222222';
 const storefrontId = '33333333-3333-4333-8333-333333333333';
@@ -682,7 +682,7 @@ test('webhook autoritativo registra captura tardia apesar de pagamento terminal'
     ]) {
       await t.test(`${paymentStatus}/${orderStatus}`, async () => {
         const calls = [];
-        db.query = async () => ({ rows: [{ payment_id: '55555555-5555-4555-8555-555555555562', empresa_id: empresaId, payment_account_id: '44444444-4444-4444-8444-444444444444', secret_ref: 'env:TEST_PAYMENT_ACCESS', public_config: {} }] });
+        db.query = async sql => sql.includes('dino_webhook_events') ? ({ rows: [] }) : ({ rows: [{ payment_id: '55555555-5555-4555-8555-555555555562', empresa_id: empresaId, loja_id: lojaId, storefront_id: storefrontId, payment_account_id: '44444444-4444-4444-8444-444444444444', secret_ref: 'env:TEST_PAYMENT_ACCESS', public_config: {} }] });
         db.transaction = async callback => callback({ query: async (sql, values = []) => {
           calls.push({ sql, values });
           if (sql.includes('INSERT INTO commerce_payment_webhooks')) return { rows: [{ id: '99999999-9999-4999-8999-999999999999' }] };

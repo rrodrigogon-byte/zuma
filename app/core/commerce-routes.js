@@ -27,7 +27,7 @@ import { commerceMediaIdForIdempotencyKey, deleteCommerceImage, newCommerceMedia
 import { claimWhatsappAiHandoff, closeWhatsappAiHandoff, configureWhatsappAiChannel, configureWhatsappAiHandoff, configureWhatsappAiPersona, configureWhatsappAiPolicy, listWhatsappAiSessions, releaseWhatsappAiHandoff, syncWhatsappAiWebhook, testWhatsappAiGemini, whatsappAiOperationalStatus, whatsappChannelType } from './whatsapp-ai.js';
 import { campaignMetrics, cancelCampaign, confirmCampaign, createCampaign, listCampaignAudience, listCampaigns, previewCampaign, updateCampaignConsent } from './commerce-campaigns.js';
 import { cartRecoveryMetrics, listAbandonedCarts, syncPublicCart } from './commerce-abandoned-carts.js';
-import { consumePublicRateLimit, publicRequestFingerprint } from './commerce-public-rate-limit.js';
+import { consumePublicRateLimit, consumeWebhookRateLimit, createWebhookAuditAdapter, publicRequestFingerprint, webhookPayloadHash, webhookRequestId } from './commerce-public-rate-limit.js';
 import { satisfactionEligible, submitOrderSatisfaction } from './commerce-satisfaction.js';
 import {
   CommerceError,
@@ -131,6 +131,20 @@ const publicShippingRateLimit = publicSharedRateLimit({ scope: 'shipping-ip', li
 const publicCartRateLimit = publicSharedRateLimit({ scope: 'cart-ip', limit: 30, windowSeconds: 300 });
 const publicSatisfactionRateLimit = publicSharedRateLimit({ scope: 'satisfaction-ip', limit: 30, windowSeconds: 600 });
 const publicSatisfactionOrderRateLimit = publicSharedRateLimit({ scope: 'satisfaction-order', limit: 5, windowSeconds: 600, subject: req => req.params.publicCode });
+
+async function enforcePaymentAttemptRateLimit(req, storefront, accountId) {
+  return withCommerceTransaction(trx => consumePublicRateLimit(trx, {
+    empresaId: storefront.empresa_id,
+    lojaId: storefront.loja_id,
+    storefrontId: storefront.id,
+  }, {
+    scope: 'public-payment-provider',
+    subject: `${String(accountId).slice(0, 100)}:${String(req.body?.provider || '').trim().toLowerCase()}`,
+    fingerprintValue: publicRequestFingerprint(req),
+    limit: 8,
+    windowSeconds: 600,
+  }));
+}
 
 export function publicCommercePolicy(req) {
   const route = String(req.path || '/').split('?')[0];
@@ -347,6 +361,7 @@ function jsonError(res, error) {
     SHIPPING_ORIGIN_CEP_REQUIRED: 400,
     SHIPPING_TRACKING_UNSUPPORTED: 400,
     SHIPPING_WEBHOOK_AMBIGUOUS: 409,
+    SHIPPING_WEBHOOK_OWNER_UNKNOWN: 404,
     STOREFRONT_ALIAS_CONFLICT: 409,
     STOREFRONT_ALIAS_INVALID: 400,
     STOREFRONT_BRAND_INVALID: 400,
@@ -480,6 +495,13 @@ function jsonError(res, error) {
     PAYMENT_PROVIDER_TIMEOUT: 504,
     PAYMENT_WEBHOOK_INVALID: 400,
     PAYMENT_WEBHOOK_AMBIGUOUS: 409,
+    PAYMENT_WEBHOOK_SCOPE_REQUIRED: 409,
+    WEBHOOK_PAYLOAD_CONFLICT: 409,
+    WEBHOOK_RATE_LIMIT_UNAVAILABLE: 503,
+    PUBLIC_RATE_LIMIT_UNAVAILABLE: 503,
+    PUBLIC_RATE_LIMIT_SECRET_REQUIRED: 503,
+    WEBHOOK_AUDIT_INPUT_INVALID: 400,
+    WEBHOOK_PROVIDER_REQUIRED: 400,
     PAYMENT_AMOUNT_MISMATCH: 422,
     PAYMENT_PROVIDER_UNSUPPORTED: 400,
     PAYMENT_SECRET_REF_INVALID: 400,
@@ -920,6 +942,11 @@ export function createCommercePublicRouter() {
       }
       const account = await db.query(`SELECT id, provider, ambiente FROM commerce_payment_accounts WHERE empresa_id = $1 AND storefront_id = $2 AND provider = $3 AND ambiente = 'production' AND ativo = true ORDER BY provider LIMIT 1`, [storefront.empresa_id, storefront.id, provider]);
       if (!account.rows[0]) throw new CommerceError('nenhum gateway ativo para este storefront', 'PAYMENT_PROVIDER_NOT_CONFIGURED');
+      const rate = await enforcePaymentAttemptRateLimit(req, storefront, account.rows[0].id);
+      if (!rate.allowed) {
+        res.set('Retry-After', String(rate.retryAfterSeconds));
+        return res.status(429).json({ error: 'limite temporário de tentativas de pagamento atingido', code: 'RATE_LIMIT' });
+      }
       const result = await createPaymentAttempt({ empresaId: storefront.empresa_id, lojaId: storefront.loja_id, storefrontId: storefront.id }, { orderId: order.rows[0].id, provider, method, environment: account.rows[0].ambiente, accountId: account.rows[0].id, idempotencyKey: String(req.body?.idempotencyKey || '').trim().slice(0, 180) });
       res.status(201).json(result);
     } catch (error) { jsonError(res, error); }
@@ -1031,9 +1058,60 @@ export function createCommercePublicRouter() {
   return router;
 }
 
-export function createCommerceWebhookRouter() {
+function webhookScope(ownerRow, accountField = 'account_id') {
+  const empresaId = ownerRow?.empresa_id;
+  const lojaId = ownerRow?.loja_id;
+  const storefrontId = ownerRow?.storefront_id;
+  const accountId = ownerRow?.[accountField] || ownerRow?.payment_account_id || ownerRow?.shipping_account_id;
+  if (!empresaId || !lojaId || !storefrontId || !accountId) {
+    throw new CommerceError('webhook sem escopo empresa/loja/storefront/account inequívoco', 'PAYMENT_WEBHOOK_SCOPE_REQUIRED');
+  }
+  return { empresaId, lojaId, storefrontId, accountId };
+}
+
+async function enforceWebhookRateLimit(scope, requestId, payloadHash, provider, rateLimit = consumeWebhookRateLimit) {
+  const outcome = await withCommerceTransaction(trx => rateLimit(trx, scope, {
+    provider,
+    accountId: scope.accountId,
+    fingerprintValue: `${requestId}:${payloadHash}`,
+    limit: 60,
+    windowSeconds: 60,
+  }));
+  return outcome;
+}
+
+async function persistWebhookObservation(auditAdapter, input) {
+  if (!auditAdapter || typeof auditAdapter.record !== 'function') return null;
+  try {
+    return await auditAdapter.record(input);
+  } catch (error) {
+    // A divergent replay is a security decision, not an observability outage.
+    if (error?.code === 'WEBHOOK_PAYLOAD_CONFLICT') throw error;
+    console.warn('commerce_webhook_observability_unavailable', JSON.stringify({ requestId: input.requestId, provider: input.provider, eventId: input.providerEventId, errorCode: String(error?.code || 'AUDIT_UNAVAILABLE').slice(0, 80) }));
+    return null;
+  }
+}
+
+async function finishWebhookObservation(auditAdapter, input) {
+  if (!auditAdapter || typeof auditAdapter.update !== 'function') return;
+  try {
+    await auditAdapter.update(input);
+  } catch (error) {
+    // Observability must not turn a completed provider operation into a retry,
+    // and logs contain only bounded codes (never payload, secret, or message).
+    console.warn('commerce_webhook_observability_update_unavailable', JSON.stringify({
+      provider: String(input.provider || '').slice(0, 80),
+      errorCode: String(error?.code || 'AUDIT_UPDATE_UNAVAILABLE').replace(/[^A-Za-z0-9_.:-]/g, '').slice(0, 80),
+    }));
+  }
+}
+
+export function createCommerceWebhookRouter({ auditAdapter = createWebhookAuditAdapter({ db }), rateLimit = consumeWebhookRateLimit } = {}) {
   const router = express.Router();
   router.post('/:provider/shipping', async (req, res) => {
+    const startedAt = Date.now();
+    const requestId = webhookRequestId(req);
+    const payloadHash = webhookPayloadHash(req);
     try {
       const provider = String(req.params.provider || '').trim().toLowerCase();
       const adapter = shippingProviders.get(provider);
@@ -1042,24 +1120,38 @@ export function createCommerceWebhookRouter() {
       if (!providerShipmentId) throw new CommerceError('webhook logístico sem id do envio', 'SHIPPING_WEBHOOK_INVALID');
       const owner = await db.query(
         `SELECT f.id AS fulfillment_id, f.empresa_id, f.order_id, f.provider_shipment_id, o.storefront_id, s.loja_id,
-                a.secret_ref, a.public_config, a.provider, a.ambiente
+                a.id AS shipping_account_id, a.secret_ref, a.public_config, a.provider, a.ambiente
            FROM commerce_fulfillments f
            JOIN commerce_orders o ON o.empresa_id = f.empresa_id AND o.id = f.order_id
            JOIN commerce_storefronts s ON s.empresa_id = o.empresa_id AND s.id = o.storefront_id
            JOIN commerce_shipping_accounts a ON a.empresa_id = f.empresa_id AND a.id = COALESCE(f.shipping_account_id, (SELECT q.shipping_account_id FROM commerce_shipping_quotes q WHERE q.empresa_id = f.empresa_id AND q.id = f.shipping_quote_id))
-          WHERE f.provider_shipment_id = $1 AND a.provider = $2
+          WHERE f.provider_shipment_id = $1 AND a.provider = $2 AND a.storefront_id = o.storefront_id AND s.status = 'active'
           LIMIT 2`,
         [providerShipmentId, provider],
       );
-      if (!owner.rows[0]) return res.status(200).json({ ok: true, ignored: true });
+      if (!owner.rows[0]) throw new CommerceError('owner do webhook logístico não encontrado', 'SHIPPING_WEBHOOK_OWNER_UNKNOWN');
       if (owner.rows.length > 1) throw new CommerceError('webhook associado a mais de um fulfillment persistido', 'SHIPPING_WEBHOOK_AMBIGUOUS');
       const ownerRow = owner.rows[0];
-      const verified = await adapter.verifyWebhook({ payload: req.body || {}, signature: req.headers['x-me-signature'] || req.headers['x-signature'] || '', context: { rawBody: req.rawBody || Buffer.from(JSON.stringify(req.body || {})), account: { secret_ref: ownerRow.secret_ref, public_config: ownerRow.public_config }, dataId: providerShipmentId, requestId: req.headers['x-request-id'] || '' } });
+      const scope = webhookScope({ ...ownerRow, account_id: ownerRow.shipping_account_id });
+      const rate = await enforceWebhookRateLimit(scope, requestId, payloadHash, provider, rateLimit);
+      if (!rate.allowed) {
+        res.set('Retry-After', String(rate.retryAfterSeconds));
+        return res.status(429).json({ ok: false, code: 'RATE_LIMIT', error: 'limite temporário de eventos atingido' });
+      }
+      const verified = await adapter.verifyWebhook({ payload: req.body || {}, signature: req.headers['x-me-signature'] || req.headers['x-signature'] || '', context: { rawBody: req.rawBody || Buffer.from(JSON.stringify(req.body || {})), account: { id: ownerRow.shipping_account_id, secret_ref: ownerRow.secret_ref, public_config: ownerRow.public_config }, dataId: providerShipmentId, requestId } });
+      if (verified?.signatureValid !== true) throw new CommerceError('assinatura do webhook logístico inválida ou ausente', 'SHIPPING_WEBHOOK_INVALID');
       if (String(verified.providerShipmentId || '') !== providerShipmentId) throw new CommerceError('webhook não corresponde ao shipment persistido', 'SHIPPING_WEBHOOK_INVALID');
       const eventId = String(verified.eventId || '').trim().slice(0, 180);
       if (!eventId) throw new CommerceError('webhook logístico sem identificador de evento', 'SHIPPING_WEBHOOK_INVALID');
-      const payloadHash = crypto.createHash('sha256').update(req.rawBody || JSON.stringify(req.body || {})).digest('hex');
       const result = await withCommerceTransaction(async trx => {
+        const eventAudit = await persistWebhookObservation(auditAdapter, {
+          trx, requestId, payloadHash, provider, providerAccountId: scope.accountId, providerEventId: eventId,
+          empresaId: scope.empresaId, lojaId: scope.lojaId, status: 'received', metadata: {
+            decision: 'accepted', statusHttp: 200, durationMs: Date.now() - startedAt, attempt: 1,
+            eventType: verified.eventType, providerStatus: verified.providerStatus,
+          }, headers: { requestId },
+        });
+        if (eventAudit?.duplicate) return { duplicate: true };
         const inserted = await trx.query(
           `INSERT INTO commerce_shipping_webhooks
             (empresa_id, provider, provider_event_id, provider_shipment_id, event_type, signature_valid, status, payload_hash, payload_resumido)
@@ -1068,7 +1160,11 @@ export function createCommerceWebhookRouter() {
            RETURNING id`,
           [ownerRow.empresa_id, provider, eventId, providerShipmentId, String(verified.eventType || 'order.status').slice(0, 100), payloadHash, JSON.stringify(verified.summary || {})],
         );
-        if (!inserted.rows[0]) return { duplicate: true };
+        if (!inserted.rows[0]) {
+          const previous = await trx.query(`SELECT payload_hash FROM commerce_shipping_webhooks WHERE empresa_id = $1 AND provider = $2 AND provider_event_id = $3 LIMIT 1`, [scope.empresaId, provider, eventId]);
+          if (previous.rows[0]?.payload_hash && String(previous.rows[0].payload_hash).toLowerCase() !== payloadHash) throw new CommerceError('webhook logístico repetido com payload divergente', 'WEBHOOK_PAYLOAD_CONFLICT');
+          return { duplicate: true };
+        }
         const updated = await updateShippingTracking(trx, { empresaId: ownerRow.empresa_id, lojaId: ownerRow.loja_id }, ownerRow.fulfillment_id, verified, ownerRow.storefront_id);
         await auditLog(trx, { empresaId: ownerRow.empresa_id, lojaId: ownerRow.loja_id }, { entidade: 'fulfillment', entidadeId: ownerRow.fulfillment_id, acao: 'provider_webhook', depois: { storefrontId: ownerRow.storefront_id, provider, eventId, eventType: verified.eventType, status: verified.providerStatus, trackingCode: verified.trackingCode } });
         await trx.query(`UPDATE commerce_shipping_webhooks SET status = 'processed', processado_em = CURRENT_TIMESTAMP WHERE id = $1`, [inserted.rows[0].id]);
@@ -1079,6 +1175,10 @@ export function createCommerceWebhookRouter() {
   });
   router.post('/:provider/payments', async (req, res) => {
     const provider = String(req.params.provider || '').trim().toLowerCase();
+    const startedAt = Date.now();
+    const requestId = webhookRequestId(req);
+    const payloadHash = webhookPayloadHash(req);
+    let auditIdentity = null;
     try {
       const dataId = String(req.query['data.id'] || req.body?.data?.id || req.body?.transaction_nsu || req.body?.transactionNsu || '').trim().slice(0, 180);
       const orderNsu = String(req.body?.order_nsu || req.body?.orderNsu || '').trim().slice(0, 180);
@@ -1086,11 +1186,14 @@ export function createCommerceWebhookRouter() {
       if (!dataId && !orderNsu && !invoiceSlug) throw new CommerceError('webhook sem identificador do pagamento', 'PAYMENT_WEBHOOK_INVALID');
       let owner = { rows: [] };
       if (dataId) owner = await db.query(
-        `SELECT p.id AS payment_id, p.empresa_id, p.payment_account_id, p.amount, p.method, p.provider_payment_id, o.public_code AS order_code, a.secret_ref, a.public_config
+        `SELECT p.id AS payment_id, p.empresa_id, p.payment_account_id, p.amount, p.method, p.provider_payment_id,
+                o.public_code AS order_code, o.storefront_id, s.loja_id, a.secret_ref, a.public_config
            FROM commerce_payments p
            JOIN commerce_orders o ON o.empresa_id = p.empresa_id AND o.id = p.order_id
-           LEFT JOIN commerce_payment_accounts a
+           JOIN commerce_storefronts s ON s.empresa_id = o.empresa_id AND s.id = o.storefront_id AND s.status = 'active'
+           JOIN commerce_payment_accounts a
              ON a.empresa_id = p.empresa_id AND a.id = p.payment_account_id
+            AND a.storefront_id = o.storefront_id AND a.ativo = true AND a.ambiente = 'production'
           WHERE p.provider = $1 AND p.provider_payment_id = $2
           LIMIT 2`,
         [provider, dataId],
@@ -1102,10 +1205,16 @@ export function createCommerceWebhookRouter() {
       // vínculo inequívoco: não selecionar a mais recente nem capturar às cegas.
       if (owner.rows.length > 1) throw new CommerceError('webhook associado a mais de uma tentativa persistida', 'PAYMENT_WEBHOOK_AMBIGUOUS');
       const ownerRow = owner.rows[0];
-      if (!ownerRow.payment_account_id || !ownerRow.secret_ref) throw new CommerceError('conta de pagamento do webhook não está vinculada', 'PAYMENT_WEBHOOK_INVALID');
+      const scope = webhookScope(ownerRow);
+      const rate = await enforceWebhookRateLimit(scope, requestId, payloadHash, provider, rateLimit);
+      if (!rate.allowed) {
+        res.set('Retry-After', String(rate.retryAfterSeconds));
+        return res.status(429).json({ ok: false, code: 'RATE_LIMIT', error: 'limite temporário de eventos atingido' });
+      }
+      if (!ownerRow.secret_ref) throw new CommerceError('conta de pagamento do webhook não está vinculada', 'PAYMENT_WEBHOOK_INVALID');
       const verified = await verifyPaymentWebhook(provider, req.body || {}, req.headers['x-signature'] || req.headers['x-webhook-signature'] || '', {
         rawBody: req.rawBody || Buffer.from(JSON.stringify(req.body || {})),
-        requestId: req.headers['x-request-id'] || '',
+        requestId,
         dataId,
         orderNsu,
         account: { secret_ref: ownerRow.secret_ref, public_config: ownerRow.public_config },
@@ -1120,7 +1229,14 @@ export function createCommerceWebhookRouter() {
       const empresaId = tenantContext({ empresaId: ownerRow.empresa_id }).empresaId;
       const eventId = String(verified.eventId || '').trim().slice(0, 180);
       if (!eventId) throw new CommerceError('webhook sem identificador do provedor', 'PAYMENT_WEBHOOK_INVALID');
-      const payloadHash = crypto.createHash('sha256').update(req.rawBody || JSON.stringify(req.body || {})).digest('hex');
+      auditIdentity = { provider, providerAccountId: scope.accountId, providerEventId: eventId, payloadHash, empresaId: scope.empresaId, lojaId: scope.lojaId, storefrontId: scope.storefrontId, requestId };
+      const eventAudit = await persistWebhookObservation(auditAdapter, {
+        ...auditIdentity,
+        status: 'received',
+        metadata: { eventType: verified.eventType || verified.type || 'payment.updated', providerStatus: verified.status, decision: 'accepted', durationMs: Date.now() - startedAt },
+        headers: { requestId },
+      });
+      if (eventAudit?.duplicate) return res.json({ ok: true, duplicate: true });
       const result = await withCommerceTransaction(async trx => {
         const inserted = await trx.query(
           `INSERT INTO commerce_payment_webhooks
@@ -1130,10 +1246,18 @@ export function createCommerceWebhookRouter() {
            RETURNING id`,
           [empresaId, provider, eventId, String(verified.eventType || verified.type || 'payment.updated').slice(0, 100), verified.signatureValid === true, payloadHash, JSON.stringify({ ...(verified.summary || {}), verification: verified.verification || null })],
         );
+        const webhookId = inserted.rows[0]?.id || null;
         if (!inserted.rows[0]) {
           const previous = await trx.query(`SELECT status, payload_resumido->>'reviewCode' AS review_code FROM commerce_payment_webhooks WHERE provider = $1 AND provider_event_id = $2 LIMIT 1`, [provider, eventId]);
-          return previous.rows[0]?.review_code === 'PROVIDER_CAPTURE_CONFLICT' ? { conflict: true, reviewRequired: true, refundRequired: true } : { duplicate: true };
+          // The legacy table is globally unique by provider/event. Scoped
+          // dino_webhook_events above is authoritative; another account's
+          // collision must not discard this event.
+          if (previous.rows[0]?.review_code === 'PROVIDER_CAPTURE_CONFLICT') return { conflict: true, reviewRequired: true, refundRequired: true };
         }
+        const markWebhook = async (status, extra = '') => {
+          if (!webhookId) return;
+          await trx.query(`UPDATE commerce_payment_webhooks SET status = '${status}'${extra}, processado_em = CURRENT_TIMESTAMP WHERE id = $1`, [webhookId]);
+        };
         const payment = await trx.query(
           `SELECT p.id, p.order_id, p.method, p.amount, p.status, p.provider_payment_id, o.status AS order_status
              FROM commerce_payments p
@@ -1143,7 +1267,7 @@ export function createCommerceWebhookRouter() {
           [empresaId, provider, ownerRow.payment_id],
         );
         if (!payment.rows[0]) {
-          await trx.query(`UPDATE commerce_payment_webhooks SET status = 'ignored', processado_em = CURRENT_TIMESTAMP WHERE id = $1`, [inserted.rows[0].id]);
+          await markWebhook('ignored');
           return { ignored: true };
         }
         const current = payment.rows[0];
@@ -1152,18 +1276,18 @@ export function createCommerceWebhookRouter() {
         // é o ponto final de decisão: nunca trocar o ID da captura anterior.
         if (provider === 'infinitepay' && current.provider_payment_id && dataId && current.provider_payment_id !== dataId) {
           if (verified.status === 'captured' && verified.providerPaymentId === dataId) {
-            await trx.query(`UPDATE commerce_payment_webhooks SET status = 'failed', processado_em = CURRENT_TIMESTAMP, payload_resumido = payload_resumido || '{"reviewCode":"PROVIDER_CAPTURE_CONFLICT","refundRequired":true}'::jsonb WHERE id = $1`, [inserted.rows[0].id]);
+            await markWebhook('failed', `, payload_resumido = payload_resumido || '{"reviewCode":"PROVIDER_CAPTURE_CONFLICT","refundRequired":true}'::jsonb`);
             await auditLog(trx, { empresaId }, { entidade: 'payment', entidadeId: current.id, acao: 'provider_capture_conflict', correlationId: eventId, depois: { provider, refundRequired: true, reviewRequired: true, originalPaymentPreserved: true } });
             return { conflict: true, reviewRequired: true, refundRequired: true };
           }
-          await trx.query(`UPDATE commerce_payment_webhooks SET status = 'ignored', processado_em = CURRENT_TIMESTAMP WHERE id = $1`, [inserted.rows[0].id]);
+          await markWebhook('ignored');
           return { ignored: true };
         }
         if (provider === 'infinitepay' && verified.status === 'captured' && verified.providerPaymentId && !current.provider_payment_id) {
           await trx.query(`UPDATE commerce_payments SET provider_payment_id = $3, metadata = metadata || $4::jsonb, atualizado_em = CURRENT_TIMESTAMP WHERE empresa_id = $1 AND id = $2`, [empresaId, current.id, String(verified.providerPaymentId).slice(0, 180), JSON.stringify({ checkout: { orderNsu: verified.summary?.orderNsu || null, transactionNsu: String(verified.providerPaymentId).slice(0, 180), slug: verified.summary?.slug || null, captureMethod: verified.summary?.captureMethod || null, verifiedBy: verified.verification || null } })]);
         }
         if (verified.amount != null && Math.abs(Number(verified.amount) - Number(current.amount)) > 0.01) {
-          await trx.query(`UPDATE commerce_payment_webhooks SET status = 'failed', processado_em = CURRENT_TIMESTAMP WHERE id = $1`, [inserted.rows[0].id]);
+          await markWebhook('failed');
           throw new CommerceError('valor do webhook diverge do pedido', 'PAYMENT_AMOUNT_MISMATCH');
         }
         const statusMap = { authorized: 'authorized', paid: 'captured', captured: 'captured', failed: 'failed', cancelled: 'cancelled', refunded: 'refunded', partially_refunded: 'partially_refunded' };
@@ -1172,7 +1296,7 @@ export function createCommerceWebhookRouter() {
         const nextPaymentMethod = resolvedPaymentMethod(provider, current.method, verified.summary?.captureMethod);
         const lateCaptureRequired = captureNeedsRefund(current.status, current.order_status, nextPaymentStatus, { otherCaptured: nextPaymentStatus === 'captured' && current.order_status !== 'pending_payment' && await otherCapturedPayment(trx, empresaId, current.order_id, current.id) });
         if (!lateCaptureRequired && !canTransitionPaymentStatus(current.status, nextPaymentStatus)) {
-          await trx.query(`UPDATE commerce_payment_webhooks SET status = 'ignored', processado_em = CURRENT_TIMESTAMP WHERE id = $1`, [inserted.rows[0].id]);
+          await markWebhook('ignored');
           return { stale: true, paymentId: current.id, orderId: current.order_id, status: current.status };
         }
         await trx.query(
@@ -1191,12 +1315,26 @@ export function createCommerceWebhookRouter() {
         const lateCapture = lateCaptureRequired
           ? await recordLatePaymentCapture(trx, { empresaId }, { paymentId: current.id, orderId: current.order_id, orderStatus: current.order_status, source: 'payment_webhook', provider, correlationId: eventId })
           : null;
-        await trx.query(`UPDATE commerce_payment_webhooks SET status = 'processed', processado_em = CURRENT_TIMESTAMP WHERE id = $1`, [inserted.rows[0].id]);
+        await markWebhook('processed');
         return { paymentId: current.id, orderId: current.order_id, status: nextPaymentStatus, refundRequired: Boolean(lateCapture?.refundRequired) };
+      });
+      await finishWebhookObservation(auditAdapter, {
+        ...auditIdentity,
+        status: result.conflict ? 'failed' : (result.ignored || result.stale ? 'ignored' : 'processed'),
+        metadata: { durationMs: Date.now() - startedAt, decision: result.conflict ? 'review_required' : 'completed', statusHttp: result.conflict ? 400 : 200 },
+        errorCode: result.conflict ? 'PROVIDER_CAPTURE_CONFLICT' : null,
       });
       if (result.conflict) return res.status(400).json({ success: false, code: 'PROVIDER_CAPTURE_CONFLICT', reviewRequired: true });
       res.json({ ok: true, ...result });
-    } catch (error) { jsonError(res, error); }
+    } catch (error) {
+      await finishWebhookObservation(auditAdapter, {
+        ...(auditIdentity || {}),
+        status: 'failed',
+        metadata: { durationMs: Date.now() - startedAt, decision: 'rejected', statusHttp: Number(error?.statusCode || 500) },
+        errorCode: error?.code || 'PAYMENT_WEBHOOK_FAILED',
+      });
+      jsonError(res, error);
+    }
   });
   return router;
 }

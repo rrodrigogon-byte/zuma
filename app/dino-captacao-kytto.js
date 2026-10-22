@@ -74,6 +74,7 @@ function configuracaoPadrao() {
     pontosIndicado: 50,
     carenciaInadimplenciaDias: 3,
     avisosListaEsperaPorVaga: 3,
+    ttlOfertaListaEsperaMinutos: 15,
     pedirAvaliacaoAposMinutos: 0,
   };
 }
@@ -85,6 +86,8 @@ function captacao(empresaId) {
   raiz.barbeariaCaptacao[chave] ||= {};
   const estado = raiz.barbeariaCaptacao[chave];
   estado.listaEspera ||= {};
+  estado.listaEsperaOfertas ||= {};
+  estado.listaEsperaOfertaQuarentena ||= {};
   estado.indicacoes ||= {};
   estado.codigosIndicacao ||= {};
   estado.assinaturas ||= {};
@@ -248,6 +251,9 @@ export function remarcarAgendamentoCliente(empresaId, { codigo, telefone, data, 
 // LISTA DE ESPERA DA AGENDA
 // ---------------------------------------------------------------------------
 
+const OFERTA_ATIVA = new Set(['offered', 'held', 'accepted', 'consumed']);
+const OFERTA_EXPIRAVEL = new Set(['offered', 'held']);
+
 function periodoDoHorario(hora) {
   const [h] = String(hora || '').split(':').map(Number);
   if (!Number.isFinite(h)) return 'qualquer';
@@ -256,11 +262,80 @@ function periodoDoHorario(hora) {
   return 'noite';
 }
 
+function hashHex(valor) {
+  return crypto.createHash('sha256').update(String(valor)).digest('hex');
+}
+
+function slotLocalizado(slot = {}) {
+  const dataHoraMs = new Date(slot.dataHora || '').valueOf();
+  const dataAgenda = texto(slot.dataAgenda ?? slot.data, 10)
+    || (Number.isFinite(dataHoraMs) ? dataLocal(dataHoraMs) : '');
+  const horaLocal = texto(slot.horaLocal ?? slot.horario ?? slot.hora, 5)
+    || (Number.isFinite(dataHoraMs) ? new Intl.DateTimeFormat('en-GB', { timeZone: process.env.KYTTO_TIMEZONE || 'America/Cuiaba', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(dataHoraMs)) : '');
+  return {
+    empresaId: texto(slot.empresaId, 120),
+    lojaId: texto(slot.lojaId, 120),
+    servicoId: texto(slot.servicoId ?? slot.serviceId, 100),
+    profissionalId: texto(slot.profissionalId ?? slot.professionalId, 100) || 'qualquer',
+    dataAgenda,
+    horaLocal,
+    duracaoMinutos: Math.max(1, numero(slot.duracaoMinutos ?? slot.durationMinutes, 30)),
+  };
+}
+
+/** Fingerprint imutável do slot; não usa nome/telefone/status do cliente. */
+export function fingerprintSlot(slot = {}) {
+  const normalizado = slotLocalizado(slot);
+  return hashHex([
+    normalizado.empresaId,
+    normalizado.lojaId,
+    normalizado.servicoId,
+    normalizado.profissionalId,
+    normalizado.dataAgenda,
+    normalizado.horaLocal,
+    normalizado.duracaoMinutos,
+  ].join('|'));
+}
+
+export function calcularFingerprintSlot(slot = {}) {
+  return fingerprintSlot(slot);
+}
+
+function escopoEspera(empresaId, dados = {}, { quarentenar = false } = {}) {
+  const empresa = texto(empresaId, 120);
+  const loja = texto(dados.lojaId ?? dados.storeId, 120);
+  const servico = texto(dados.servicoId ?? dados.servico_id ?? dados.serviceId, 100);
+  if (!empresa || !loja || !servico) {
+    if (quarentenar && empresa) {
+      const estado = captacao(empresa);
+      const legadoId = texto(dados.id ?? dados.waitlistId ?? `${dados.telefone || dados.clienteTelefone || 'sem-telefone'}:${dados.data || ''}`, 180);
+      estado.listaEsperaOfertaQuarentena[legadoId] = {
+        id: legadoId,
+        empresaId: empresa,
+        lojaId: null,
+        legadoTipo: 'lista_espera',
+        motivo: 'empresa_loja_servico_obrigatorios',
+        payloadRestrito: { data: texto(dados.data, 10), servicoId: servico || null },
+        status: 'quarantined',
+        criadoEm: new Date().toISOString(),
+      };
+      save();
+    }
+    throw new CaptacaoError('empresaId, lojaId e servicoId são obrigatórios para a lista de espera.', 'LOJA_SERVICO_OBRIGATORIOS');
+  }
+  return { empresaId: empresa, lojaId: loja, servicoId: servico };
+}
+
+function avisoEnviado(item, agendamentoId) {
+  return (item.avisos || []).some((aviso) => aviso.agendamentoId === agendamentoId && aviso.status === 'sent');
+}
+
 export function entrarListaEspera(empresaId, dados = {}, opcoes = {}) {
   const estado = captacao(empresaId);
   const nome = texto(dados.nome ?? dados.clienteNome, 160);
   const telefone = String(dados.telefone ?? dados.clienteTelefone ?? '').replace(/\D/g, '').slice(0, 13);
   const data = texto(dados.data, 10);
+  const lojaId = texto(dados.lojaId ?? dados.storeId, 120);
   const servicoId = texto(dados.servicoId ?? dados.servico_id, 100);
   const profissionalId = texto(dados.profissionalId ?? dados.profissional_id, 100) || 'qualquer';
   const periodo = PERIODOS.has(String(dados.periodo)) ? String(dados.periodo) : 'qualquer';
@@ -270,26 +345,33 @@ export function entrarListaEspera(empresaId, dados = {}, opcoes = {}) {
   if (data < hojeLocal(opcoes)) throw new CaptacaoError('A data desejada já passou.', 'DATA_PASSADA');
   const janelaDias = Math.max(1, numero(barbearia.obterConfiguracao(empresaId).janelaReservaDias, 60)) + 30;
   if (data > dataLocal(agoraMs(opcoes) + janelaDias * DIA_MS)) throw new CaptacaoError('Escolha uma data mais próxima para a lista de espera.', 'DATA_DISTANTE');
-  const servico = barbearia.listarServicos(empresaId).find((item) => item.id === servicoId);
+  const { empresaId: empresa, lojaId: loja, servicoId: servicoChave } = escopoEspera(empresaId, { lojaId, servicoId }, { quarentenar: true });
+  const servico = barbearia.listarServicos(empresa).find((item) => item.id === servicoChave);
   if (!servico) throw new CaptacaoError('Serviço indisponível.', 'SERVICO_INVALIDO');
+  expirarListaEspera(empresa, opcoes);
   const chave = telefoneChave(telefone);
-  expirarListaEspera(empresaId, opcoes);
-  const repetida = Object.values(estado.listaEspera).find((item) => item.status === 'aguardando' && item.data === data && telefoneChave(item.telefone) === chave);
-  if (repetida) return { ...repetida, repetida: true };
-  const ativasDoTelefone = Object.values(estado.listaEspera).filter((item) => item.status === 'aguardando' && telefoneChave(item.telefone) === chave).length;
+  const repetida = Object.values(estado.listaEspera).find((item) => item.status === 'aguardando'
+    && item.data === data && item.lojaId === loja && item.servicoId === servicoChave
+    && (item.profissionalId || 'qualquer') === profissionalId && telefoneChave(item.telefone) === chave);
+  if (repetida) return { ...repetida, repetida: true, avisos: [...(repetida.avisos || [])] };
+  const ativasDoTelefone = Object.values(estado.listaEspera).filter((item) => item.status === 'aguardando'
+    && item.lojaId === loja && item.servicoId === servicoChave && telefoneChave(item.telefone) === chave).length;
   if (ativasDoTelefone >= 3) throw new CaptacaoError('Este telefone já está na lista de espera de outros dias. Fale com a barbearia pelo WhatsApp.', 'LIMITE_LISTA_ESPERA');
   const id = novoId('espera');
   const registro = {
     id,
-    empresaId: String(empresaId),
-    lojaId: texto(dados.lojaId, 120),
+    empresaId: empresa,
+    lojaId: loja,
     nome,
     telefone,
     data,
     periodo,
-    servicoId,
+    servicoId: servicoChave,
     servicoNome: servico.nome,
     profissionalId,
+    // Este fingerprint identifica a intenção da espera; cada vaga concreta tem
+    // seu próprio slotFingerprint nos avisos/ofertas.
+    fingerprint: fingerprintSlot({ empresaId: empresa, lojaId: loja, servicoId: servicoChave, profissionalId, dataAgenda: data, horaLocal: periodo }),
     consentimentoWhatsapp: dados.consentimentoWhatsapp === true,
     origem: texto(dados.origem, 40) || 'agendamento_online',
     status: 'aguardando',
@@ -298,7 +380,7 @@ export function entrarListaEspera(empresaId, dados = {}, opcoes = {}) {
   };
   estado.listaEspera[id] = registro;
   save();
-  return { ...registro };
+  return { ...registro, avisos: [] };
 }
 
 /** Entradas de dias que já passaram deixam de valer. */
@@ -318,14 +400,33 @@ export function expirarListaEspera(empresaId, opcoes = {}) {
 }
 
 /** Quem estava na lista e marcou horário naquele dia sai da lista. */
-export function marcarListaEsperaAgendada(empresaId, { telefone, data } = {}) {
+export function marcarListaEsperaAgendada(empresaId, dados = {}) {
   const estado = captacao(empresaId);
+  const telefone = dados.telefone ?? dados.clienteTelefone;
+  const data = texto(dados.data ?? dados.dataAgenda, 10);
+  const lojaId = texto(dados.lojaId ?? dados.storeId, 120);
+  const servicoId = texto(dados.servicoId ?? dados.serviceId, 100);
+  const profissionalId = texto(dados.profissionalId ?? dados.professionalId, 100) || 'qualquer';
+  const slotFingerprint = texto(dados.slotFingerprint ?? dados.fingerprint, 64).toLowerCase();
+  if (!telefone || !data || !lojaId || !servicoId || !slotFingerprint) throw new CaptacaoError('lojaId, servicoId e fingerprint do slot são obrigatórios para marcar a espera.', 'LISTA_ESPERA_SLOT_OBRIGATORIO');
+  const slotComDados = { empresaId, lojaId, servicoId, profissionalId, dataAgenda: data, horaLocal: dados.horaLocal ?? dados.horario, dataHora: dados.dataHora, duracaoMinutos: dados.duracaoMinutos };
+  if (dados.dataHora || dados.horaLocal || dados.horario) {
+    const esperado = fingerprintSlot(slotComDados);
+    if (esperado !== slotFingerprint) throw new CaptacaoError('O fingerprint não corresponde ao slot informado.', 'SLOT_FINGERPRINT_CONFLICT', 409);
+  }
   const chave = telefoneChave(telefone);
-  if (!chave || !data) return 0;
+  if (!chave) return 0;
   let total = 0;
   for (const item of Object.values(estado.listaEspera)) {
-    if (item.status === 'aguardando' && item.data === String(data).slice(0, 10) && telefoneChave(item.telefone) === chave) {
+    if (item.status === 'aguardando'
+      && item.data === data
+      && telefoneChave(item.telefone) === chave
+      && item.lojaId === lojaId
+      && item.servicoId === servicoId
+      && ((!item.profissionalId || item.profissionalId === 'qualquer') || item.profissionalId === profissionalId)) {
       item.status = 'agendado';
+      item.slotFingerprint = slotFingerprint;
+      item.agendamentoId = texto(dados.agendamentoId, 120) || null;
       item.atualizadoEm = new Date().toISOString();
       total += 1;
     }
@@ -354,8 +455,9 @@ export function revogarAvisosListaEspera(empresaId, telefone) {
 export function listarListaEspera(empresaId, filtros = {}) {
   expirarListaEspera(empresaId);
   return Object.values(captacao(empresaId).listaEspera)
-    .filter((item) => !filtros.lojaId || item.lojaId === filtros.lojaId)
+    .filter((item) => item.lojaId && (!filtros.lojaId || item.lojaId === String(filtros.lojaId)))
     .filter((item) => !filtros.data || item.data === String(filtros.data))
+    .filter((item) => !filtros.servicoId || item.servicoId === String(filtros.servicoId))
     .filter((item) => !filtros.status || item.status === String(filtros.status))
     .sort((a, b) => a.data.localeCompare(b.data) || a.criadoEm.localeCompare(b.criadoEm))
     .map((item) => ({ ...item, avisos: [...(item.avisos || [])] }));
@@ -364,35 +466,33 @@ export function listarListaEspera(empresaId, filtros = {}) {
 export function alterarStatusListaEspera(empresaId, id, status, lojaId = '') {
   const estado = captacao(empresaId);
   const registro = estado.listaEspera[String(id)];
-  if (!registro || (lojaId && registro.lojaId !== lojaId)) return null;
+  if (!registro || !registro.lojaId || (lojaId && registro.lojaId !== lojaId)) return null;
   if (!['aguardando', 'agendado', 'desistiu', 'expirado'].includes(String(status))) throw new CaptacaoError('Status inválido para a lista de espera.', 'STATUS_INVALIDO');
   registro.status = String(status);
   registro.atualizadoEm = new Date().toISOString();
   save();
-  return { ...registro };
+  return { ...registro, avisos: [...(registro.avisos || [])] };
 }
 
-/**
- * Uma vaga abriu (cancelamento). Devolve, na ordem de chegada, quem espera
- * aquele dia, no período e com o barbeiro compatíveis e que ainda não foi
- * avisado desta vaga. Por padrão só quem autorizou o WhatsApp (é quem pode
- * receber o aviso automático). Não grava nada: o aviso só é registrado depois
- * de entrar na fila de envio (marcarAvisados).
- */
+/** Uma vaga concreta só seleciona a mesma unidade, serviço e preferência de profissional. */
 export function candidatosParaVaga(empresaId, agendamentoLiberado = {}, opcoes = {}) {
   const estado = captacao(empresaId);
   const data = String(agendamentoLiberado.dataAgenda || '').slice(0, 10);
-  if (!data) return [];
   const inicio = new Date(agendamentoLiberado.dataHora).valueOf();
-  if (!Number.isFinite(inicio) || inicio <= agoraMs(opcoes)) return [];
+  if (!data || !Number.isFinite(inicio) || inicio <= agoraMs(opcoes)) return [];
   const periodo = periodoDoHorario(agendamentoLiberado.horaLocal);
   const limite = estado.configuracao.avisosListaEsperaPorVaga;
+  const lojaId = texto(agendamentoLiberado.lojaId, 120);
+  const servicoId = texto(agendamentoLiberado.servicoId, 100);
+  if (!lojaId || !servicoId || !agendamentoLiberado.id || !periodo || (opcoes.lojaId && String(opcoes.lojaId) !== lojaId)) return [];
+  const slotFingerprint = fingerprintSlot({ empresaId, ...agendamentoLiberado, lojaId, servicoId });
   return Object.values(estado.listaEspera)
-    .filter((item) => item.status === 'aguardando' && item.data === data)
+    .filter((item) => item.status === 'aguardando' && item.data === data && item.lojaId === lojaId && item.servicoId === servicoId)
     .filter((item) => opcoes.incluirSemConsentimento === true || item.consentimentoWhatsapp === true)
     .filter((item) => item.periodo === 'qualquer' || item.periodo === periodo)
     .filter((item) => !item.profissionalId || item.profissionalId === 'qualquer' || item.profissionalId === agendamentoLiberado.profissionalId)
-    .filter((item) => !(item.avisos || []).some((aviso) => aviso.agendamentoId === agendamentoLiberado.id))
+    // Um aviso queued/avisado não é prova de envio; só sent bloqueia nova seleção.
+    .filter((item) => !avisoEnviado(item, agendamentoLiberado.id))
     .sort((a, b) => a.criadoEm.localeCompare(b.criadoEm))
     .slice(0, limite)
     .map((item) => ({
@@ -400,28 +500,255 @@ export function candidatosParaVaga(empresaId, agendamentoLiberado = {}, opcoes =
       nome: item.nome,
       telefone: item.telefone,
       servicoId: item.servicoId,
+      profissionalId: item.profissionalId || 'qualquer',
       consentimentoWhatsapp: item.consentimentoWhatsapp === true,
+      lojaId,
       data,
       horaLocal: agendamentoLiberado.horaLocal,
+      slotFingerprint,
       mensagem: `Olá, ${nomeCurto(item.nome)}! Abriu um horário em ${data.split('-').reverse().join('/')} às ${agendamentoLiberado.horaLocal}. Quer ficar com ele? Responda por aqui ou agende pelo link da barbearia. Para não receber avisos, responda SAIR.`,
     }));
 }
 
-/** Registra que estes inscritos foram avisados da vaga (após entrar na fila de envio). */
-export function marcarAvisados(empresaId, agendamentoLiberado = {}, ids = [], opcoes = {}) {
+function marcarAvisos(empresaId, agendamentoLiberado = {}, ids = [], opcoes = {}, status = 'queued') {
   const estado = captacao(empresaId);
+  const lojaId = texto(opcoes.lojaId || agendamentoLiberado.lojaId, 120);
+  const servicoId = texto(agendamentoLiberado.servicoId, 100);
+  const profissionalId = texto(agendamentoLiberado.profissionalId, 100) || 'qualquer';
+  const slotFingerprint = texto(opcoes.slotFingerprint || agendamentoLiberado.slotFingerprint, 64).toLowerCase() || fingerprintSlot({ empresaId, ...agendamentoLiberado, lojaId, servicoId });
+  if (!lojaId || !servicoId || !agendamentoLiberado.id || !slotFingerprint) return 0;
   const registradoEm = iso(agoraMs(opcoes));
   let total = 0;
   for (const id of ids) {
     const item = estado.listaEspera[String(id)];
-    if (!item || (item.avisos || []).some((aviso) => aviso.agendamentoId === agendamentoLiberado.id)) continue;
+    if (!item || !item.lojaId || item.lojaId !== lojaId || item.servicoId !== servicoId
+      || (item.profissionalId && item.profissionalId !== 'qualquer' && item.profissionalId !== profissionalId)) continue;
     item.avisos ||= [];
-    item.avisos.push({ agendamentoId: agendamentoLiberado.id, horaLocal: agendamentoLiberado.horaLocal, registradoEm });
+    const existente = item.avisos.find((aviso) => aviso.agendamentoId === agendamentoLiberado.id && aviso.slotFingerprint === slotFingerprint);
+    if (existente) {
+      if (status === 'sent' && existente.status !== 'sent') { existente.status = 'sent'; existente.enviadoEm = registradoEm; total += 1; }
+      continue;
+    }
+    item.avisos.push({ agendamentoId: agendamentoLiberado.id, slotFingerprint, horaLocal: agendamentoLiberado.horaLocal, status, registradoEm, ...(status === 'sent' ? { enviadoEm: registradoEm } : {}) });
     item.ultimoAvisoEm = registradoEm;
     total += 1;
   }
   if (total) save();
   return total;
+}
+
+/** Compatibilidade legada: chamada direta representa aviso já confirmado. */
+export function marcarAvisados(empresaId, agendamentoLiberado = {}, ids = [], opcoes = {}) {
+  return marcarAvisos(empresaId, agendamentoLiberado, ids, opcoes, 'sent');
+}
+
+/** Fila aceita: persiste queued, mas não simula envio ao provedor. */
+export function marcarAvisosEnfileirados(empresaId, agendamentoLiberado = {}, ids = [], opcoes = {}) {
+  return marcarAvisos(empresaId, agendamentoLiberado, ids, opcoes, 'queued');
+}
+
+/** Confirmação do worker: somente aqui queued vira sent. */
+export function marcarAvisoEnviado(empresaId, waitlistId, agendamentoLiberado = {}, opcoes = {}) {
+  return marcarAvisos(empresaId, agendamentoLiberado, [waitlistId], opcoes, 'sent');
+}
+
+function ofertaCopia(oferta, extras = {}) {
+  return { ...oferta, ...extras, eventos: [...(oferta.eventos || [])], agendaIntent: oferta.agendaIntent ? { ...oferta.agendaIntent } : null };
+}
+
+function ofertaConflito(mensagem, code = 'IDEMPOTENCY_CONFLICT') {
+  return new CaptacaoError(mensagem, code, 409);
+}
+
+function ofertaEntrada(empresaId, dados) {
+  const estado = captacao(empresaId);
+  const waitlistId = texto(dados.waitlistId ?? dados.listaEsperaId ?? dados.entradaId ?? dados.candidato?.id, 120);
+  const entrada = waitlistId ? estado.listaEspera[waitlistId] : null;
+  if (!entrada) throw new CaptacaoError('Entrada da lista de espera não encontrada.', 'LISTA_ESPERA_NAO_ENCONTRADA', 404);
+  const slot = dados.slot || dados.agendamento || dados.agendamentoLiberado || dados;
+  const escopo = escopoEspera(empresaId, { lojaId: dados.lojaId ?? slot.lojaId, servicoId: dados.servicoId ?? dados.serviceId ?? slot.servicoId }, {});
+  if (entrada.lojaId !== escopo.lojaId || entrada.servicoId !== escopo.servicoId) throw ofertaConflito('A oferta está fora do escopo da entrada da lista de espera.', 'LISTA_ESPERA_SCOPE_CONFLICT');
+  const profissionalId = texto(dados.profissionalId ?? dados.professionalId ?? slot.profissionalId, 100) || 'qualquer';
+  if (entrada.profissionalId && entrada.profissionalId !== 'qualquer' && entrada.profissionalId !== profissionalId) throw ofertaConflito('A preferência de profissional não coincide com a vaga.', 'PROFESSIONAL_SCOPE_CONFLICT');
+  const dataAgenda = texto(dados.dataAgenda ?? dados.data ?? slot.dataAgenda ?? slot.data, 10);
+  const horaLocal = texto(dados.horaLocal ?? dados.horario ?? slot.horaLocal ?? slot.horario, 5);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dataAgenda) || !/^\d{2}:\d{2}$/.test(horaLocal)) throw new CaptacaoError('Data e horário do slot são obrigatórios para a oferta.', 'SLOT_INVALIDO');
+  const dataHora = dados.dataHora ?? slot.dataHora ?? null;
+  const duracaoMinutos = Math.max(1, numero(dados.duracaoMinutos ?? slot.duracaoMinutos, 30));
+  const slotFingerprint = fingerprintSlot({ empresaId: escopo.empresaId, lojaId: escopo.lojaId, servicoId: escopo.servicoId, profissionalId, dataAgenda, horaLocal, dataHora, duracaoMinutos });
+  const informado = texto(dados.slotFingerprint ?? dados.fingerprint ?? slot.slotFingerprint, 64).toLowerCase();
+  if (informado && informado !== slotFingerprint) throw ofertaConflito('O fingerprint informado não corresponde ao slot.', 'SLOT_FINGERPRINT_CONFLICT');
+  const slotMs = new Date(dataHora || `${dataAgenda}T${horaLocal}:00`).valueOf();
+  if (Number.isFinite(slotMs) && slotMs <= Date.now() && !dados.permitirPassado) throw new CaptacaoError('Não é possível ofertar um slot passado.', 'SLOT_PASSADO', 409);
+  return { estado, entrada, escopo, profissionalId, dataAgenda, horaLocal, dataHora, duracaoMinutos, slotFingerprint };
+}
+
+function acaoDados(dados = {}, prefixo, id) {
+  const actionId = texto(dados.actionId ?? dados.action_id, 180) || `${prefixo}:${id}`;
+  const idempotencyKey = texto(dados.idempotencyKey ?? dados.idempotency_key, 255) || actionId;
+  return { actionId, idempotencyKey };
+}
+
+function acaoFingerprint(empresaId, oferta, acao, dados = {}) {
+  return hashHex(JSON.stringify({ empresaId, ofertaId: oferta.id, slotFingerprint: oferta.slotFingerprint, actionId: acao.actionId, idempotencyKey: acao.idempotencyKey, motivo: texto(dados.motivo, 240) }));
+}
+
+function ofertaPorId(empresaId, referencia) {
+  const estado = captacao(empresaId);
+  const id = typeof referencia === 'string' ? referencia : referencia?.ofertaId ?? referencia?.id;
+  const oferta = estado.listaEsperaOfertas[String(id || '')];
+  if (!oferta) throw new CaptacaoError('Oferta da lista de espera não encontrada.', 'OFERTA_NAO_ENCONTRADA', 404);
+  return { estado, oferta };
+}
+
+/** Cria uma oferta imutável de uma vaga concreta para uma entrada escopada. */
+export function criarOfertaListaEspera(empresaId, dados = {}, opcoes = {}) {
+  const normalizado = ofertaEntrada(empresaId, dados);
+  const { estado, entrada, escopo, profissionalId, dataAgenda, horaLocal, dataHora, duracaoMinutos, slotFingerprint } = normalizado;
+  const agora = agoraMs(opcoes);
+  const acao = acaoDados({ ...opcoes, ...dados }, 'oferta', 'nova');
+  const payload = acaoFingerprint(escopo.empresaId, { id: entrada.id, slotFingerprint }, acao, { motivo: dados.motivo });
+  const porIdempotencia = Object.values(estado.listaEsperaOfertas).find((item) => item.idempotencyKey === acao.idempotencyKey);
+  if (porIdempotencia) {
+    if (porIdempotencia.payloadFingerprint !== payload) throw ofertaConflito('A idempotencyKey já foi usada para outra oferta.');
+    return ofertaCopia(porIdempotencia, { replay: true });
+  }
+  const porAcao = Object.values(estado.listaEsperaOfertas).find((item) => item.actionId === acao.actionId);
+  if (porAcao && porAcao.payloadFingerprint !== payload) throw ofertaConflito('O actionId já foi usado para outra oferta.');
+  expirarOfertasListaEspera(escopo.empresaId, { agora });
+  const mesmaVaga = Object.values(estado.listaEsperaOfertas).find((item) => item.slotFingerprint === slotFingerprint && OFERTA_ATIVA.has(item.status));
+  if (mesmaVaga) throw ofertaConflito('Este slot já possui uma oferta ou reserva ativa.', 'SLOT_JA_OFERTADO');
+  const ttlMs = Math.max(1000, numero(dados.ttlMs ?? dados.ttl ?? opcoes.ttlMs, Math.max(1, numero(estado.configuracao.ttlOfertaListaEsperaMinutos, 15)) * 60000));
+  const expiresAt = iso(agora + ttlMs);
+  const id = novoId('oferta');
+  const oferta = {
+    id,
+    empresaId: escopo.empresaId,
+    lojaId: escopo.lojaId,
+    waitlistEntryId: entrada.id,
+    customerId: texto(dados.customerId ?? dados.clienteId ?? entrada.clienteId, 120) || null,
+    serviceId: escopo.servicoId,
+    professionalId: profissionalId === 'qualquer' ? null : profissionalId,
+    dataAgenda,
+    horaLocal,
+    dataHora,
+    duracaoMinutos,
+    slotFingerprint,
+    fingerprint: slotFingerprint,
+    actionId: acao.actionId,
+    idempotencyKey: acao.idempotencyKey,
+    payloadFingerprint: payload,
+    status: 'offered',
+    holdToken: null,
+    expiresAt,
+    criadoEm: iso(agora),
+    atualizadoEm: iso(agora),
+    eventos: [{ status: 'offered', actionId: acao.actionId, ocorridoEm: iso(agora) }],
+    agendaIntent: null,
+  };
+  estado.listaEsperaOfertas[id] = oferta;
+  save();
+  return ofertaCopia(oferta);
+}
+
+/** Expira ofertas offered/held quando o relógio chega exatamente ao expiresAt. */
+export function expirarOfertasListaEspera(empresaId, opcoes = {}) {
+  const estado = captacao(empresaId);
+  const agora = agoraMs(opcoes);
+  const expiradas = [];
+  for (const oferta of Object.values(estado.listaEsperaOfertas)) {
+    if (OFERTA_EXPIRAVEL.has(oferta.status) && new Date(oferta.expiresAt).valueOf() <= agora) {
+      oferta.status = 'expired';
+      oferta.atualizadoEm = iso(agora);
+      oferta.eventos ||= [];
+      oferta.eventos.push({ status: 'expired', ocorridoEm: iso(agora) });
+      expiradas.push(ofertaCopia(oferta));
+    }
+  }
+  if (expiradas.length) save();
+  return expiradas;
+}
+
+function aplicarAcaoOferta(empresaId, referencia, dados = {}, tipo) {
+  const { estado, oferta } = ofertaPorId(empresaId, referencia);
+  const acao = acaoDados({ ...(typeof referencia === 'object' ? referencia : {}), ...dados }, tipo, oferta.id);
+  const agora = agoraMs(dados);
+  expirarOfertasListaEspera(empresaId, { agora });
+  const atual = estado.listaEsperaOfertas[oferta.id];
+  const acaoExistente = (atual.eventos || []).find((evento) => evento.actionId === acao.actionId || evento.idempotencyKey === acao.idempotencyKey);
+  const payload = acaoFingerprint(String(empresaId), atual, acao, dados);
+  if (acaoExistente) {
+    if (acaoExistente.payloadFingerprint && acaoExistente.payloadFingerprint !== payload) throw ofertaConflito('A ação já foi usada para outro payload.');
+    if ((tipo === 'aceitar' && ['accepted', 'consumed'].includes(atual.status)) || (tipo === 'rejeitar' && atual.status === 'declined')) return ofertaCopia(atual, { replay: true });
+  }
+  if (tipo === 'aceitar') {
+    if (atual.status === 'expired') throw new CaptacaoError('A oferta expirou.', 'OFERTA_EXPIRADA', 409);
+    if (atual.status === 'declined' || atual.status === 'cancelled') throw new CaptacaoError('A oferta não está mais disponível.', 'OFERTA_INDISPONIVEL', 409);
+    if (['accepted', 'consumed'].includes(atual.status)) throw ofertaConflito('Este slot já foi aceito por outro cliente.', 'SLOT_JA_ACEITO');
+    const mesmaVagaAceita = Object.values(estado.listaEsperaOfertas).find((item) => item.id !== atual.id && item.slotFingerprint === atual.slotFingerprint && ['accepted', 'consumed'].includes(item.status));
+    if (mesmaVagaAceita) throw ofertaConflito('Este slot já foi aceito por outro cliente.', 'SLOT_JA_ACEITO');
+    const holdToken = hashHex(`hold:${empresaId}:${atual.id}:${acao.idempotencyKey}`).slice(0, 32);
+    atual.status = 'accepted';
+    atual.holdToken = holdToken;
+    atual.acceptedAt = iso(agora);
+    atual.acceptActionId = acao.actionId;
+    atual.acceptIdempotencyKey = acao.idempotencyKey;
+    atual.agendaIntent = {
+      actionId: acao.actionId,
+      idempotencyKey: acao.idempotencyKey,
+      empresaId: atual.empresaId,
+      lojaId: atual.lojaId,
+      serviceId: atual.serviceId,
+      professionalId: atual.professionalId || 'qualquer',
+      customerId: atual.customerId,
+      date: atual.dataAgenda,
+      time: atual.horaLocal,
+      slotFingerprint: atual.slotFingerprint,
+      holdToken,
+      criarAgendaTransacional: true,
+    };
+    atual.eventos ||= [];
+    atual.eventos.push({ status: 'held', holdToken, actionId: acao.actionId, idempotencyKey: acao.idempotencyKey, ocorridoEm: iso(agora) });
+    atual.eventos.push({ status: 'accepted', holdToken, actionId: acao.actionId, idempotencyKey: acao.idempotencyKey, payloadFingerprint: payload, ocorridoEm: iso(agora) });
+  } else {
+    if (atual.status === 'expired') throw new CaptacaoError('A oferta expirou.', 'OFERTA_EXPIRADA', 409);
+    if (['accepted', 'consumed'].includes(atual.status)) throw new CaptacaoError('A oferta já foi aceita e não pode ser recusada.', 'OFERTA_JA_ACEITA', 409);
+    if (atual.status === 'declined') return ofertaCopia(atual, { replay: true });
+    atual.status = 'declined';
+    atual.declinedAt = iso(agora);
+    atual.declineActionId = acao.actionId;
+    atual.eventos ||= [];
+    atual.eventos.push({ status: 'declined', actionId: acao.actionId, idempotencyKey: acao.idempotencyKey, payloadFingerprint: payload, motivo: texto(dados.motivo, 240), ocorridoEm: iso(agora) });
+  }
+  atual.atualizadoEm = iso(agora);
+  save();
+  return ofertaCopia(atual);
+}
+
+export function aceitarOfertaListaEspera(empresaId, referencia, opcoes = {}) {
+  return aplicarAcaoOferta(empresaId, referencia, opcoes, 'aceitar');
+}
+
+export function rejeitarOfertaListaEspera(empresaId, referencia, opcoes = {}) {
+  return aplicarAcaoOferta(empresaId, referencia, opcoes, 'rejeitar');
+}
+
+/** Marca o aceite como consumido depois da criação transacional externa da agenda. */
+export function consumirOfertaListaEspera(empresaId, referencia, opcoes = {}) {
+  const { estado, oferta } = ofertaPorId(empresaId, referencia);
+  const atual = estado.listaEsperaOfertas[oferta.id];
+  const agora = agoraMs(opcoes);
+  if (atual.status === 'consumed') return ofertaCopia(atual, { replay: true });
+  if (atual.status !== 'accepted') throw new CaptacaoError('Somente uma oferta aceita pode ser consumida.', 'OFERTA_NAO_ACEITA', 409);
+  if (opcoes.slotFingerprint && String(opcoes.slotFingerprint) !== atual.slotFingerprint) throw ofertaConflito('O slot mudou antes do consumo.', 'SLOT_FINGERPRINT_CONFLICT');
+  atual.status = 'consumed';
+  atual.consumedAt = iso(agora);
+  atual.consumptionActionId = texto(opcoes.actionId ?? opcoes.action_id, 180) || `consumir:${atual.id}`;
+  atual.eventos ||= [];
+  atual.eventos.push({ status: 'consumed', actionId: atual.consumptionActionId, ocorridoEm: iso(agora) });
+  atual.atualizadoEm = iso(agora);
+  save();
+  return ofertaCopia(atual);
 }
 
 // ---------------------------------------------------------------------------
@@ -503,8 +830,13 @@ export function processarConclusaoIndicacao(empresaId, agendamento = {}) {
   const indicador = clientesKytto.obterCliente(String(empresaId), indicacao.indicadorClienteId);
   const indicadoId = agendamento.clienteId || indicacao.indicadoClienteId;
   const indicado = indicadoId ? clientesKytto.obterCliente(String(empresaId), indicadoId) : null;
-  const creditoIndicador = indicador ? fidelidadeKytto.creditarPontosBonus(String(empresaId), indicador.id, pontosIndicador, 'indicacao', { nome: indicador.nome, telefone: indicador.telefone, chaveIdempotencia: `indicacao:${indicacao.id}:indicador` }) : null;
-  const creditoIndicado = indicado ? fidelidadeKytto.creditarPontosBonus(String(empresaId), indicado.id, pontosIndicado, 'indicado', { nome: indicado.nome, telefone: indicado.telefone, chaveIdempotencia: `indicacao:${indicacao.id}:indicado` }) : null;
+  const contextoPonteFidelidade = {
+    legacyMigration: true,
+    lojaId: agendamento.lojaId,
+    bridge: 'legacy-loyalty-bridge',
+  };
+  const creditoIndicador = indicador ? fidelidadeKytto.creditarPontosBonus(String(empresaId), indicador.id, pontosIndicador, 'indicacao', { ...contextoPonteFidelidade, nome: indicador.nome, telefone: indicador.telefone, chaveIdempotencia: `indicacao:${indicacao.id}:indicador` }) : null;
+  const creditoIndicado = indicado ? fidelidadeKytto.creditarPontosBonus(String(empresaId), indicado.id, pontosIndicado, 'indicado', { ...contextoPonteFidelidade, nome: indicado.nome, telefone: indicado.telefone, chaveIdempotencia: `indicacao:${indicacao.id}:indicado` }) : null;
   if (!creditoIndicador) {
     // Programa de fidelidade inativo (ou indicador inativo): a indicação fica
     // pendente para ser recompensada quando o programa voltar.
@@ -850,19 +1182,26 @@ function chaveCliente(item) {
  * Classifica em "no prazo", "esta semana" e "atrasado".
  */
 export function retornosPrevistos(empresaId, { horizonteDias = 7, sugerirHorario = true, lojaId = '' } = {}, opcoes = {}) {
+  const unidade = texto(lojaId, 120);
+  const horizonte = Number(horizonteDias);
+  if (!unidade) throw new CaptacaoError('Selecione a unidade para consultar retornos previstos.', 'LOJA_OBRIGATORIA');
+  if (!Number.isInteger(horizonte) || horizonte < 1 || horizonte > 90) throw new CaptacaoError('Informe um horizonte de 1 a 90 dias.', 'HORIZONTE_INVALIDO');
   const ms = agoraMs(opcoes);
-  const agendamentos = barbearia.listarAgendamentos(empresaId, {});
+  const agendamentos = barbearia.listarAgendamentos(empresaId, {})
+    .filter((item) => item.lojaId === unidade);
   const futurosPorChave = new Set(agendamentos
     .filter((item) => STATUS_ATIVOS.has(item.status) && new Date(item.dataHora).valueOf() > ms)
-    .map((item) => chaveCliente(item)));
+    .map((item) => `${chaveCliente(item)}:${item.servicoId || ''}`));
   const porCliente = new Map();
   for (const item of agendamentos) {
     if (item.status !== 'concluido') continue;
     const chave = chaveCliente(item);
-    if (!chave) continue;
-    const lista = porCliente.get(chave) || [];
+    const servicoId = texto(item.servicoId, 100);
+    if (!chave || !servicoId) continue;
+    const chaveRetorno = `${chave}:${servicoId}`;
+    const lista = porCliente.get(chaveRetorno) || [];
     lista.push(item);
-    porCliente.set(chave, lista);
+    porCliente.set(chaveRetorno, lista);
   }
   const profissionais = mapaPorId(barbearia.listarProfissionais(empresaId, { incluirInativos: true }));
   const servicos = mapaPorId(barbearia.listarServicos(empresaId, { incluirInativos: true }));
@@ -889,7 +1228,7 @@ export function retornosPrevistos(empresaId, { horizonteDias = 7, sugerirHorario
     const diasAtraso = Math.floor((ms - previsto) / DIA_MS);
     const situacao = futurosPorChave.has(chave)
       ? 'agendado'
-      : diasAtraso > 0 ? 'atrasado' : previsto - ms <= horizonteDias * DIA_MS ? 'esta_semana' : 'no_prazo';
+      : diasAtraso > 0 ? 'atrasado' : previsto - ms <= horizonte * DIA_MS ? 'esta_semana' : 'no_prazo';
     itens.push({
       clienteId: ultima.clienteId || '',
       nome: ultima.clienteNome,
@@ -913,7 +1252,7 @@ export function retornosPrevistos(empresaId, { horizonteDias = 7, sugerirHorario
       item.sugestao = proximoHorarioLivre(empresaId, {
         servicoId: item.servicoPreferido.id,
         profissionalId: item.profissionalPreferido?.id,
-        lojaId,
+        lojaId: unidade,
         aPartirDe: Math.max(ms, new Date(`${item.retornoPrevisto}T12:00:00Z`).valueOf()),
       });
     }
@@ -970,7 +1309,7 @@ export function ocupacaoAgenda(empresaId, { inicio, fim, lojaId = '' } = {}) {
   const calendario = lojaId && configuracao.lojas?.[lojaId] ? { ...configuracao, ...configuracao.lojas[lojaId] } : configuracao;
   const dias = diasNoIntervalo(inicio, fim);
   const agendamentos = barbearia.listarAgendamentos(empresaId, {})
-    .filter((item) => !lojaId || !item.lojaId || item.lojaId === lojaId)
+    .filter((item) => !lojaId || item.lojaId === lojaId)
     .filter((item) => !STATUS_FINAIS_INVALIDOS.has(item.status))
     .filter((item) => item.dataAgenda >= inicio && item.dataAgenda <= fim);
   // Atendimento coberto pelo plano não é receita avulsa (a receita é a mensalidade).
@@ -993,7 +1332,11 @@ export function ocupacaoAgenda(empresaId, { inicio, fim, lojaId = '' } = {}) {
       atendimentos: proprios.length,
       concluidos: concluidos.length,
       minutosConcluidos: concluidos.reduce((soma, item) => soma + Number(item.duracaoMinutos || 0), 0),
-      receita: Number(concluidos.reduce((soma, item) => soma + (cobertosPeloPlano.has(item.id) ? 0 : Number(item.valorRecebido || item.valor || 0)), 0).toFixed(2)),
+      receita: Number(concluidos.reduce((soma, item) => {
+        if (cobertosPeloPlano.has(item.id)) return soma;
+        const recebimento = barbearia.recebimentoAgendamentoVerificado(empresaId, item);
+        return soma + (recebimento ? Number(recebimento.valor || 0) : 0);
+      }, 0).toFixed(2)),
       cobertosPeloPlano: concluidos.filter((item) => cobertosPeloPlano.has(item.id)).length,
     };
   });
@@ -1120,6 +1463,353 @@ export function painelMetasProfissionais(empresaId, { mes, lojaId = '' } = {}, o
         ocupacaoNecessaria,
       };
     }),
+  };
+}
+
+
+// ---------------------------------------------------------------------------
+// PROJEÇÃO INTELIGENTE DE FATURAMENTO
+// A previsão é deliberadamente explicável: fatos financeiros/operacionais são
+// calculados no servidor e a leitura gerencial aponta a evidência que a gerou.
+// Ela não cria venda, agenda, mensagem ou meta; também não usa IA generativa
+// como fonte dos valores financeiros.
+// ---------------------------------------------------------------------------
+const STATUS_AGENDA_PREVISAO = new Set(['agendado', 'confirmado', 'em_atendimento']);
+
+function competenciaValida(valor, fallback) {
+  const competencia = texto(valor, 7);
+  if (!competencia) return fallback;
+  if (!/^\d{4}-(?:0[1-9]|1[0-2])$/.test(competencia)) throw new CaptacaoError('Mês inválido (use AAAA-MM).', 'MES_INVALIDO');
+  return competencia;
+}
+
+function deslocarCompetencia(competencia, quantidade) {
+  const [ano, mes] = competencia.split('-').map(Number);
+  const data = new Date(Date.UTC(ano, mes - 1 + quantidade, 1));
+  return `${data.getUTCFullYear()}-${String(data.getUTCMonth() + 1).padStart(2, '0')}`;
+}
+
+function diasNoMes(competencia) {
+  return Number(ultimoDiaDoMes(competencia).slice(8));
+}
+
+function mediaPonderada(valores = []) {
+  if (!valores.length) return 0;
+  const totalPesos = valores.reduce((soma, _, indice) => soma + indice + 1, 0);
+  return totalPesos ? valores.reduce((soma, valor, indice) => soma + Number(valor || 0) * (indice + 1), 0) / totalPesos : 0;
+}
+
+function desvioPadrao(valores = []) {
+  if (valores.length < 2) return 0;
+  const media = valores.reduce((soma, valor) => soma + Number(valor || 0), 0) / valores.length;
+  return Math.sqrt(valores.reduce((soma, valor) => soma + (Number(valor || 0) - media) ** 2, 0) / valores.length);
+}
+
+function numeroArredondado(valor) {
+  return Number(Math.max(0, Number(valor || 0)).toFixed(2));
+}
+
+function dataDoAgendamento(item) {
+  return String(item?.dataAgenda || item?.dataHora || '').slice(0, 10);
+}
+
+function dataDoPagamentoRevenda(item) {
+  return dataLocal(new Date(item?.pagamento?.confirmadoEm || item?.atualizadoEm || item?.criadoEm || 0).valueOf());
+}
+
+function noEscopoEstrito(item, lojaId) {
+  return !lojaId || String(item?.lojaId || '') === String(lojaId);
+}
+
+function usosDePlano(empresaId) {
+  return new Set(Object.values(captacao(empresaId).assinaturas)
+    .flatMap((controle) => (controle.usos || []).map((uso) => uso.agendamentoId).filter(Boolean)));
+}
+
+function fatosDeFaturamento(empresaId, lojaId = '', opcoes = {}) {
+  const corte = hojeLocal(opcoes);
+  const usosPlano = usosDePlano(empresaId);
+  const servicos = [];
+  const agenda = [];
+  const ocorrencias = [];
+  for (const item of barbearia.listarAgendamentos(empresaId, {})) {
+    const dia = dataDoAgendamento(item);
+    if (!dia || !noEscopoEstrito(item, lojaId)) continue;
+    const valor = dinheiro(item.valorRecebido || item.valor || 0);
+    const base = {
+      id: item.id,
+      dia,
+      mes: dia.slice(0, 7),
+      profissionalId: item.profissionalId || '',
+      valor,
+      duracaoMinutos: Math.max(0, numero(item.duracaoMinutos)),
+      status: item.status,
+    };
+    ocorrencias.push(base);
+    if (item.status === 'concluido' && dia <= corte && !usosPlano.has(item.id) && valor > 0) servicos.push(base);
+    if (STATUS_AGENDA_PREVISAO.has(item.status) && dia > corte && !usosPlano.has(item.id) && valor > 0) agenda.push(base);
+  }
+  const revenda = [];
+  for (const item of barbearia.listarVendasRevenda(empresaId, {})) {
+    if (item.status !== 'pago' || !noEscopoEstrito(item, lojaId)) continue;
+    const dia = dataDoPagamentoRevenda(item);
+    const valor = dinheiro(item.pagamento?.valorRecebido || item.total || 0);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dia) || dia > corte || valor <= 0) continue;
+    revenda.push({ id: item.id, dia, mes: dia.slice(0, 7), profissionalId: item.profissionalId || '', valor, status: item.status });
+  }
+  return { corte, servicos, agenda, revenda, ocorrencias };
+}
+
+function resumoDaCompetencia(fatos, competencia, { incluirFuturo = true } = {}) {
+  const servicos = fatos.servicos.filter((item) => item.mes === competencia);
+  const revenda = fatos.revenda.filter((item) => item.mes === competencia);
+  const agenda = incluirFuturo ? fatos.agenda.filter((item) => item.mes === competencia) : [];
+  const totalServicos = dinheiro(servicos.reduce((soma, item) => soma + item.valor, 0));
+  const totalRevenda = dinheiro(revenda.reduce((soma, item) => soma + item.valor, 0));
+  const totalAgenda = dinheiro(agenda.reduce((soma, item) => soma + item.valor, 0));
+  return {
+    mes: competencia,
+    servicos: totalServicos,
+    revenda: totalRevenda,
+    realizado: dinheiro(totalServicos + totalRevenda),
+    agendaFutura: totalAgenda,
+    atendimentosConcluidos: servicos.length,
+    atendimentosAgendados: agenda.length,
+    ticketMedio: servicos.length ? dinheiro(totalServicos / servicos.length) : 0,
+  };
+}
+
+function estimativaHistorica(linhas, campo) {
+  const observadas = linhas.map((item) => Number(item[campo] || 0)).filter((valor) => valor > 0);
+  if (!observadas.length) return { base: 0, desvio: 0, tendencia: 0, mesesComDados: 0 };
+  const media = mediaPonderada(observadas);
+  const tendencia = observadas.length > 1 ? (observadas.at(-1) - observadas[0]) / (observadas.length - 1) : 0;
+  const base = Math.max(0, media + tendencia * 0.35);
+  return {
+    base: numeroArredondado(base),
+    desvio: numeroArredondado(desvioPadrao(observadas)),
+    tendencia: numeroArredondado(Math.abs(tendencia)),
+    direcao: tendencia > 0.01 ? 'crescimento' : tendencia < -0.01 ? 'queda' : 'estavel',
+    mesesComDados: observadas.length,
+  };
+}
+
+function nivelConfianca(mesesComDados, historico) {
+  if (mesesComDados >= 5 && historico.length >= 5) return { nivel: 'alta', rotulo: 'Alta', explicacao: 'Há pelo menos cinco meses com faturamento registrado para comparar.' };
+  if (mesesComDados >= 3) return { nivel: 'media', rotulo: 'Média', explicacao: 'Há histórico suficiente para identificar ritmo, mas a série ainda pode oscilar.' };
+  if (mesesComDados >= 1) return { nivel: 'baixa', rotulo: 'Baixa', explicacao: 'A projeção usa poucos meses registrados; complete os lançamentos para refiná-la.' };
+  return { nivel: 'insuficiente', rotulo: 'Histórico insuficiente', explicacao: 'Ainda não há meses concluídos com receita registrada para formar uma tendência.' };
+}
+
+function metaDaEquipe(empresaId, competencia) {
+  const metas = captacao(empresaId).metasProfissionais[competencia] || {};
+  const valores = Object.values(metas);
+  return {
+    receita: dinheiro(valores.reduce((soma, item) => soma + Number(item.receita || 0), 0)),
+    atendimentos: valores.reduce((soma, item) => soma + Math.max(0, Math.round(numero(item.atendimentos))), 0),
+    profissionaisComMeta: valores.filter((item) => Number(item.receita || 0) > 0 || Number(item.atendimentos || 0) > 0).length,
+  };
+}
+
+function previsaoDaCompetencia(competencia, fatos, historico, meta, { corte, competenciaAtual }) {
+  const realizado = resumoDaCompetencia(fatos, competencia);
+  const baseServicos = estimativaHistorica(historico, 'servicos');
+  const baseRevenda = estimativaHistorica(historico, 'revenda');
+  const baseTotal = estimativaHistorica(historico, 'realizado');
+  const inicio = `${competencia}-01`;
+  const fim = ultimoDiaDoMes(competencia);
+  const dentroDoMesAtual = competencia === competenciaAtual;
+  const mesPassado = competencia < competenciaAtual;
+  const diasRestantes = dentroDoMesAtual ? Math.max(0, Number(fim.slice(8)) - Number(corte.slice(8))) : competencia > competenciaAtual ? diasNoMes(competencia) : 0;
+  const fracaoRestante = diasNoMes(competencia) ? diasRestantes / diasNoMes(competencia) : 0;
+
+  let projetadoServicos;
+  let projetadoRevenda;
+  let agendaConsiderada = 0;
+  if (mesPassado) {
+    projetadoServicos = realizado.servicos;
+    projetadoRevenda = realizado.revenda;
+  } else if (dentroDoMesAtual) {
+    agendaConsiderada = realizado.agendaFutura;
+    const ritmoServicos = baseServicos.base * fracaoRestante;
+    projetadoServicos = realizado.servicos + Math.max(agendaConsiderada, ritmoServicos);
+    projetadoRevenda = realizado.revenda + baseRevenda.base * fracaoRestante;
+  } else {
+    agendaConsiderada = realizado.agendaFutura;
+    projetadoServicos = Math.max(agendaConsiderada, baseServicos.base);
+    projetadoRevenda = baseRevenda.base;
+  }
+  const base = dinheiro(projetadoServicos + projetadoRevenda);
+  const intervalo = Math.max(baseTotal.desvio * (dentroDoMesAtual ? Math.max(fracaoRestante, 0.2) : 1), base * 0.08);
+  const compromisso = dinheiro(realizado.realizado + agendaConsiderada);
+  const conservador = dinheiro(Math.max(compromisso, base - intervalo));
+  const favoravel = dinheiro(base + intervalo);
+  const diferencaMeta = meta.receita > 0 ? Number((base - meta.receita).toFixed(2)) : null;
+  return {
+    ...realizado,
+    inicio,
+    fim,
+    tipo: mesPassado ? 'fechado' : dentroDoMesAtual ? 'atual' : 'futuro',
+    projetadoServicos: dinheiro(projetadoServicos),
+    projetadoRevenda: dinheiro(projetadoRevenda),
+    projecao: base,
+    conservador,
+    favoravel,
+    agendaConsiderada,
+    ritmoPendente: dinheiro(Math.max(0, projetadoServicos - realizado.servicos - agendaConsiderada) + Math.max(0, projetadoRevenda - realizado.revenda)),
+    metaReceita: meta.receita || null,
+    diferencaMeta,
+    noRitmo: meta.receita > 0 ? base >= meta.receita : null,
+    estimativa: { servicos: baseServicos, revenda: baseRevenda, total: baseTotal },
+  };
+}
+
+function previsaoProfissionais(empresaId, competencia, fatos, historico, lojaId = '') {
+  const corte = fatos.corte;
+  const competenciaAtual = corte.slice(0, 7);
+  const metas = captacao(empresaId).metasProfissionais[competencia] || {};
+  const configuracao = barbearia.obterConfiguracao(empresaId);
+  const calendario = lojaId && configuracao.lojas?.[lojaId] ? { ...configuracao, ...configuracao.lojas[lojaId] } : configuracao;
+  const inicio = `${competencia}-01`;
+  const fim = ultimoDiaDoMes(competencia);
+  const profissionais = barbearia.listarProfissionais(empresaId, { incluirInativos: true });
+  return profissionais.map((profissional) => {
+    const meta = metas[profissional.id] || null;
+    const realizados = fatos.servicos.filter((item) => item.mes === competencia && item.profissionalId === profissional.id);
+    const agendados = fatos.agenda.filter((item) => item.mes === competencia && item.profissionalId === profissional.id);
+    const serie = historico.map((item) => {
+      const total = fatos.servicos.filter((fato) => fato.mes === item.mes && fato.profissionalId === profissional.id)
+        .reduce((soma, fato) => soma + fato.valor, 0);
+      return { ...item, receitaProfissional: dinheiro(total) };
+    });
+    const base = estimativaHistorica(serie, 'receitaProfissional');
+    const realizado = dinheiro(realizados.reduce((soma, item) => soma + item.valor, 0));
+    const agendaFutura = dinheiro(agendados.reduce((soma, item) => soma + item.valor, 0));
+    const emCurso = competencia === competenciaAtual;
+    const futuro = competencia > competenciaAtual;
+    const restante = emCurso ? Math.max(0, (diasNoMes(competencia) - Number(corte.slice(8))) / diasNoMes(competencia)) : futuro ? 1 : 0;
+    const projecao = competencia < competenciaAtual
+      ? realizado
+      : emCurso
+        ? dinheiro(realizado + Math.max(agendaFutura, base.base * restante))
+        : dinheiro(Math.max(agendaFutura, base.base));
+    const registrosDoProfissional = fatos.ocorrencias
+      .filter((item) => item.mes === competencia && item.profissionalId === profissional.id)
+      .filter((item) => !STATUS_FINAIS_INVALIDOS.has(item.status));
+    const minutosAgendados = registrosDoProfissional.reduce((soma, item) => soma + item.duracaoMinutos, 0);
+    const jornada = Math.max(0, Math.min(minutos(profissional.horarioFim), minutos(calendario.horarioFechamento)) - Math.max(minutos(profissional.horarioInicio), minutos(calendario.horarioAbertura)));
+    const capacidadeMinutos = profissional.ativo === false ? 0 : jornada * diasUteisDoProfissional(calendario, profissional, inicio, fim).length;
+    const ocupacao = capacidadeMinutos > 0 ? Number((minutosAgendados / capacidadeMinutos).toFixed(4)) : null;
+    const ticketMedio = realizados.length ? dinheiro(realizado / realizados.length) : agendados.length ? dinheiro(agendaFutura / agendados.length) : 0;
+    const diferencaMeta = meta?.receita ? Number((projecao - meta.receita).toFixed(2)) : null;
+    return {
+      profissionalId: profissional.id,
+      nome: profissional.nome,
+      ativo: profissional.ativo !== false,
+      meta: meta ? { receita: Number(meta.receita || 0), atendimentos: Number(meta.atendimentos || 0) } : null,
+      realizado,
+      agendaFutura,
+      projecao,
+      diferencaMeta,
+      noRitmo: meta?.receita ? projecao >= meta.receita : null,
+      atendimentosConcluidos: realizados.length,
+      atendimentosAgendados: agendados.length,
+      ticketMedio,
+      minutosAgendados,
+      capacidadeMinutos,
+      ocupacao,
+      tendencia: base.direcao || 'estavel',
+      historicoMeses: base.mesesComDados,
+    };
+  }).sort((a, b) => Number(b.projecao) - Number(a.projecao) || a.nome.localeCompare(b.nome));
+}
+
+function construirLeiturasGerenciais({ atual, historico, qualidade, profissionais, ocorrencias, competencia, corte }) {
+  const fatores = [];
+  const acoes = [];
+  const adicionar = (item, acao = null) => {
+    fatores.push(item);
+    if (acao) acoes.push(acao);
+  };
+  if (qualidade.nivel === 'insuficiente') {
+    adicionar({ tipo: 'dados', severidade: 'informativo', titulo: 'Histórico ainda insuficiente', evidencia: qualidade.explicacao, impacto: null },
+      { prioridade: 'alta', titulo: 'Concluir e registrar recebimentos', descricao: 'A previsão melhora quando atendimentos e vendas de revenda são finalizados no sistema.', aba: 'Atendimento' });
+  }
+  if (atual.metaReceita && atual.projecao < atual.metaReceita) {
+    const falta = dinheiro(atual.metaReceita - atual.projecao);
+    adicionar({ tipo: 'meta', severidade: falta >= atual.metaReceita * 0.2 ? 'critico' : 'alerta', titulo: 'Risco de não alcançar a meta da equipe', evidencia: `A projeção é ${falta.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} abaixo da meta configurada.`, impacto: falta },
+      { prioridade: 'alta', titulo: 'Revisar produção adicional por profissional', descricao: 'Veja a meta individual, o ticket e os horários necessários para recuperar o ritmo.', aba: 'Ocupação e metas' });
+  } else if (atual.metaReceita && atual.projecao >= atual.metaReceita) {
+    adicionar({ tipo: 'meta', severidade: 'positivo', titulo: 'Equipe projetada no ritmo da meta', evidencia: `A projeção supera a meta em ${(atual.projecao - atual.metaReceita).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}.`, impacto: atual.projecao - atual.metaReceita });
+  }
+  const ultimos = historico.filter((item) => item.realizado > 0).slice(-2);
+  if (ultimos.length === 2 && ultimos[0].realizado > 0) {
+    const variacao = (ultimos[1].realizado - ultimos[0].realizado) / ultimos[0].realizado;
+    if (Math.abs(variacao) >= 0.1) {
+      const crescimento = variacao > 0;
+      adicionar({ tipo: 'tendencia', severidade: crescimento ? 'positivo' : 'alerta', titulo: crescimento ? 'Faturamento em crescimento recente' : 'Faturamento em queda recente', evidencia: `${Math.abs(variacao * 100).toFixed(1).replace('.', ',')}% em relação ao mês anterior registrado.`, impacto: ultimos[1].realizado - ultimos[0].realizado });
+    }
+  }
+  if (atual.tipo === 'atual' && atual.agendaFutura > 0) {
+    adicionar({ tipo: 'agenda', severidade: 'informativo', titulo: 'Receita já reservada na agenda', evidencia: `${atual.atendimentosAgendados} atendimento(s) futuro(s) somam ${atual.agendaFutura.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}; esse valor entra uma vez na projeção.`, impacto: atual.agendaFutura });
+  } else if (atual.tipo === 'atual' && atual.projecao > atual.realizado) {
+    adicionar({ tipo: 'agenda', severidade: 'alerta', titulo: 'Agenda futura ainda cobre pouco do fechamento', evidencia: 'A maior parte da previsão depende do ritmo histórico, não de horários já reservados.', impacto: atual.projecao - atual.realizado },
+      { prioridade: 'media', titulo: 'Ocupar horários disponíveis', descricao: 'Use retornos previstos e a lista de espera antes de abrir novos horários.', aba: 'Retorno previsto' });
+  }
+  const ocorrenciasDoMes = ocorrencias.filter((item) => item.mes === competencia);
+  const invalidos = ocorrenciasDoMes.filter((item) => STATUS_FINAIS_INVALIDOS.has(item.status)).length;
+  if (ocorrenciasDoMes.length >= 5 && invalidos / ocorrenciasDoMes.length >= 0.1) {
+    adicionar({ tipo: 'perdas', severidade: 'alerta', titulo: 'Cancelamentos ou faltas pressionam a agenda', evidencia: `${invalidos} de ${ocorrenciasDoMes.length} registros do mês terminaram cancelados ou sem comparecimento.`, impacto: null },
+      { prioridade: 'media', titulo: 'Confirmar agenda e acionar a lista de espera', descricao: 'Priorize confirmações e ofereça vagas liberadas para reduzir horários ociosos.', aba: 'Lista de espera' });
+  }
+  const foraDoRitmo = profissionais.filter((item) => item.meta?.receita && item.noRitmo === false);
+  if (foraDoRitmo.length) {
+    adicionar({ tipo: 'profissionais', severidade: 'alerta', titulo: 'Profissionais abaixo do ritmo individual', evidencia: `${foraDoRitmo.length} profissional(is) têm projeção abaixo da própria meta.`, impacto: null },
+      { prioridade: 'alta', titulo: 'Acompanhar metas individuais', descricao: 'Compare ticket, agenda futura e projeção de cada profissional antes de cobrar ações.', aba: 'Ocupação e metas' });
+  }
+  return { fatores: fatores.slice(0, 8), acoes: acoes.slice(0, 5), geradoPara: corte };
+}
+
+/**
+ * Projeta faturamento de serviços e revenda para o mês selecionado e os cinco
+ * seguintes. Todo valor retornado vem da empresa/unidade recebida pelo servidor.
+ */
+export function projecaoFaturamento(empresaId, { mes, lojaId = '', horizonte = 6 } = {}, opcoes = {}) {
+  const corte = hojeLocal(opcoes);
+  const competencia = competenciaValida(mes, corte.slice(0, 7));
+  const quantidade = Math.max(1, Math.min(6, Math.round(numero(horizonte, 6))));
+  const fatos = fatosDeFaturamento(empresaId, lojaId, opcoes);
+  // Para competência futura, o mês em curso continua sendo parcial; ele não
+  // pode entrar como se fosse um fechamento completo da série histórica.
+  const competenciaHistoricoFinal = competencia > corte.slice(0, 7)
+    ? deslocarCompetencia(corte.slice(0, 7), -1)
+    : deslocarCompetencia(competencia, -1);
+  const historico = Array.from({ length: 6 }, (_, indice) => resumoDaCompetencia(fatos, deslocarCompetencia(competenciaHistoricoFinal, indice - 5), { incluirFuturo: false }));
+  const mesesComDados = historico.filter((item) => item.realizado > 0).length;
+  const qualidade = { ...nivelConfianca(mesesComDados, historico), mesesAnalisados: historico.length, mesesComDados, dataCorte: corte, fontes: { servicos: fatos.servicos.length, revenda: fatos.revenda.length } };
+  const previsoes = Array.from({ length: quantidade }, (_, indice) => {
+    const alvo = deslocarCompetencia(competencia, indice);
+    return previsaoDaCompetencia(alvo, fatos, historico, metaDaEquipe(empresaId, alvo), { corte, competenciaAtual: corte.slice(0, 7) });
+  });
+  const atual = previsoes[0];
+  const profissionais = previsaoProfissionais(empresaId, competencia, fatos, historico, lojaId);
+  const leituras = construirLeiturasGerenciais({ atual, historico, qualidade, profissionais, ocorrencias: fatos.ocorrencias, competencia, corte });
+  return {
+    mes: competencia,
+    horizonte: quantidade,
+    geradoEm: iso(agoraMs(opcoes)),
+    escopo: { empresaId: String(empresaId), lojaId: lojaId || null, filtroEstritoDeUnidade: Boolean(lojaId) },
+    qualidade,
+    metodologia: {
+      versao: '1.0',
+      rotulo: 'Previsão explicável por histórico, agenda e tendência',
+      resumo: 'Os números usam serviços concluídos, revenda paga, agenda futura e histórico recente. Cenários representam variação observada; não são garantia de faturamento.',
+    },
+    atual,
+    previsoes,
+    historico,
+    profissionais,
+    ...leituras,
   };
 }
 
@@ -1358,15 +2048,16 @@ export function registrarCanalAgendamento(empresaId, agendamentoId, { canal, cam
 /** Agendamentos, clientes novos, concluídos e receita por canal no período. */
 // Valor do atendimento: o maior entre o preço e o recebido no dia (o sinal e o
 // cashback, pagos em outro momento, não reduzem o valor gerado pelo canal).
-function valorDoAtendimento(item) {
-  return dinheiro(Math.max(Number(item.valor || 0), Number(item.valorRecebido || 0)));
+function valorDoAtendimento(empresaId, item) {
+  const recebimento = barbearia.recebimentoAgendamentoVerificado(empresaId, item);
+  return recebimento ? dinheiro(Math.max(Number(item.valor || 0), Number(recebimento.valor || 0))) : 0;
 }
 
 export function painelCanais(empresaId, { inicio, fim, lojaId = '' } = {}) {
   const de = /^\d{4}-\d{2}-\d{2}$/.test(String(inicio || '')) ? inicio : '0000-01-01';
   const ate = /^\d{4}-\d{2}-\d{2}$/.test(String(fim || '')) ? fim : '9999-12-31';
   const canais = captacao(empresaId).canais;
-  const todos = barbearia.listarAgendamentos(empresaId, {}).filter((item) => !lojaId || !item.lojaId || item.lojaId === lojaId);
+  const todos = barbearia.listarAgendamentos(empresaId, {}).filter((item) => !lojaId || item.lojaId === lojaId);
   // Primeiro agendamento de cada telefone: define quem é cliente novo.
   const primeiro = new Map();
   for (const item of [...todos].sort((a, b) => String(a.dataHora).localeCompare(String(b.dataHora)))) {
@@ -1383,7 +2074,7 @@ export function painelCanais(empresaId, { inicio, fim, lojaId = '' } = {}) {
     linha.agendamentos += 1;
     const chave = telefoneChave(item.clienteTelefone) || `id:${item.clienteId || item.id}`;
     if (primeiro.get(chave) === item.id) linha.clientesNovos += 1;
-    if (item.status === 'concluido') { linha.concluidos += 1; linha.receita = dinheiro(linha.receita + valorDoAtendimento(item)); }
+    if (item.status === 'concluido') { linha.concluidos += 1; linha.receita = dinheiro(linha.receita + valorDoAtendimento(empresaId, item)); }
     if (['cancelado', 'nao_compareceu'].includes(item.status)) linha.cancelados += 1;
     linhas.set(nome, linha);
   }
@@ -1414,7 +2105,7 @@ export function painelReceitaIa(empresaId, { inicio, fim, lojaId = '' } = {}) {
     indicacao: { fonte: 'Indique um amigo', agendamentos: 0, concluidos: 0, receita: 0 },
   };
   for (const item of barbearia.listarAgendamentos(empresaId, {})) {
-    if (lojaId && item.lojaId && item.lojaId !== lojaId) continue;
+    if (lojaId && item.lojaId !== lojaId) continue;
     const dia = item.dataAgenda || String(item.dataHora).slice(0, 10);
     if (dia < de || dia > ate) continue;
     const fontes = [];
@@ -1424,10 +2115,10 @@ export function painelReceitaIa(empresaId, { inicio, fim, lojaId = '' } = {}) {
     for (const fonte of fontes) {
       const linha = linhas[fonte];
       linha.agendamentos += 1;
-      if (item.status === 'concluido') { linha.concluidos += 1; linha.receita = dinheiro(linha.receita + valorDoAtendimento(item)); }
+      if (item.status === 'concluido') { linha.concluidos += 1; linha.receita = dinheiro(linha.receita + valorDoAtendimento(empresaId, item)); }
     }
     // Um atendimento com duas fontes (ex.: indicação marcada pela IA) conta uma vez no total.
-    if (fontes.length && item.status === 'concluido') totalUnico = dinheiro(totalUnico + valorDoAtendimento(item));
+    if (fontes.length && item.status === 'concluido') totalUnico = dinheiro(totalUnico + valorDoAtendimento(empresaId, item));
   }
   const lista = Object.values(linhas);
   return { fontes: lista, receitaTotal: totalUnico };
@@ -1449,7 +2140,7 @@ export function comparativoUnidades(empresaId, { inicio, fim } = {}) {
     const lojaId = item.lojaId || '';
     const linha = porLoja.get(lojaId) || { lojaId, agendamentos: 0, concluidos: 0, faltas: 0, cancelados: 0, valorAtendido: 0, clientes: new Set() };
     linha.agendamentos += 1;
-    if (item.status === 'concluido') { linha.concluidos += 1; linha.valorAtendido = dinheiro(linha.valorAtendido + valorDoAtendimento(item)); }
+    if (item.status === 'concluido') { linha.concluidos += 1; linha.valorAtendido = dinheiro(linha.valorAtendido + valorDoAtendimento(empresaId, item)); }
     if (item.status === 'nao_compareceu') linha.faltas += 1;
     if (item.status === 'cancelado') linha.cancelados += 1;
     linha.clientes.add(telefoneChave(item.clienteTelefone) || item.clienteId || item.id);

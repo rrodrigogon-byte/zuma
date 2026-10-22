@@ -21,7 +21,10 @@ function modelName() {
 }
 
 function apiKey() {
-  return String(config.integrations?.gemini?.apiKey || process.env.GEMINI_API_KEY || '').trim();
+  // A variável de ambiente é a fonte de verdade do processo. O objeto config
+  // é carregado uma única vez e poderia manter uma credencial antiga após uma
+  // rotação ou durante um teste que remove GEMINI_API_KEY.
+  return String(process.env.GEMINI_API_KEY || '').trim();
 }
 
 export function normalizedGeminiHistory(history = [], maxChars = DEFAULT_MAX_HISTORY_CHARS) {

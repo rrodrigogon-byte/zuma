@@ -20,6 +20,7 @@ import { RepassesPanel, ReguaClubePanel } from './dino/RepassesPanel'
 import DinoBusinessDashboard from './DinoBusinessDashboard'
 import DinoCampaignsPanel from './DinoCampaignsPanel'
 import DinoEquipeDesempenho from './DinoEquipeDesempenho'
+import ProjecaoFaturamentoPanel from './dino/ProjecaoFaturamentoPanel'
 import { CanaisPanel, ClubeSaudePanel, CobrancasPanel, IndicacoesPanel, ListaEsperaPanel, NpsPanel, OcupacaoMetasPanel, ReceitaIaPanel, ResumoDiarioPanel, RetornosPanel, UnidadesPanel, ValesPanel } from './dino/CaptacaoPanels'
 
 const TABS = [
@@ -45,6 +46,7 @@ const TABS = [
   ['Lista de espera', 'Pedidos de horário e avisos de vaga'],
   ['Indicações', 'Indique um amigo com recompensa'],
   ['Saúde do clube', 'Uso, margem e candidatos ao clube'],
+  ['Projeção inteligente', 'Cenários, tendências e ações para faturamento'],
   ['Ocupação e metas', 'Ocupação da agenda e metas por barbeiro'],
   ['Avaliações (NPS)', 'Notas e indicadores no próprio sistema'],
   ['Origem dos clientes', 'Agendamentos e clientes novos por canal'],
@@ -62,7 +64,7 @@ const AREAS = [
   { id: 'operacao', label: 'Operação', short: 'Hoje, agenda, atendimento e caixa', tabs: ['Visão geral', 'Agenda', 'Atendimento', 'Caixa e fechamento', 'Prévia taxas e materiais', 'Fila e bloqueios'] },
   { id: 'relacionamento', label: 'Relacionamento', short: 'Clientes, retorno e indicação', tabs: ['Clientes', 'Retorno previsto', 'Lista de espera', 'Indicações', 'Avaliações (NPS)', 'Origem dos clientes', 'Fidelidade'] },
   { id: 'catalogo', label: 'Catálogo e equipe', short: 'Serviços, planos e revenda', tabs: ['Profissionais', 'Serviços', 'Planos e assinaturas', 'Saúde do clube', 'Estoque de revenda', 'Compras e fornecedores', 'Curva ABC', 'Vendas de revenda'] },
-  { id: 'gestao', label: 'Gestão', short: 'Comissões, metas e regras', tabs: ['Desempenho da equipe', 'Comissões', 'Extrato e repasses', 'Ocupação e metas', 'Cobranças e cashback', 'Vale-presente', 'Receita da IA', 'Resumo diário', 'Unidades', 'Relatórios', 'Configuração'] },
+  { id: 'gestao', label: 'Gestão', short: 'Comissões, metas e regras', tabs: ['Desempenho da equipe', 'Comissões', 'Extrato e repasses', 'Projeção inteligente', 'Ocupação e metas', 'Cobranças e cashback', 'Vale-presente', 'Receita da IA', 'Resumo diário', 'Unidades', 'Relatórios', 'Configuração'] },
   { id: 'integracoes', label: 'Integrações', short: 'WhatsApp e IA controlados', tabs: ['Integrações'] },
 ]
 
@@ -1720,6 +1722,7 @@ export default function BarbeariaERP() {
     if (tab === 'Compras e fornecedores') return <ComprasPanel produtos={produtosRevenda.filter((produto) => produto.ativo !== false)} onEstoqueMudou={carregar} />
     if (tab === 'Curva ABC') return <CurvaAbcPanel />
     if (tab === 'Extrato e repasses') return <RepassesPanel profissionais={profissionais} servicos={servicos} planos={planos} onCadastroMudou={carregar} />
+    if (tab === 'Projeção inteligente') return <ProjecaoFaturamentoPanel onOpenTab={navegarParaTab} />
     if (tab === 'Ocupação e metas') return <OcupacaoMetasPanel />
     if (tab === 'Desempenho da equipe') return <DinoEquipeDesempenho empresaId={empresaAtiva?.id || ''} lojaId={lojaAtiva?.id || ''} onOpenTab={navegarParaTab} />
     if (tab === 'Avaliações (NPS)') return <NpsPanel key={`${empresaAtiva?.id || ''}:${lojaAtiva?.id || ''}`} />

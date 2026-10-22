@@ -51,7 +51,7 @@ test('server.js efetivo expõe Barbearia no contrato administrativo', async () =
   const base = `http://127.0.0.1:${port}`;
   const processo = spawn(process.execPath, ['server.js'], {
     cwd: path.join(ROOT, 'app'),
-    env: { ...process.env, NODE_ENV: 'development', PORT: String(port), DB_PATH: dbPath, JWT_SECRET: 'runtime-only-jwt-secret', COMMERCE_CORE_ENABLED: '0', SEED_DEMO: '0', WPP_BASE_URL: '', WPP_APIKEY: '', AI_API_KEY: '', OPENAI_API_KEY: '' },
+    env: { ...process.env, NODE_ENV: 'development', PORT: String(port), DB_PATH: dbPath, JWT_SECRET: 'runtime-only-jwt-secret', COMMERCE_CORE_ENABLED: '0', SEED_DEMO: '0', WPP_BASE_URL: '', WPP_APIKEY: '', AI_API_KEY: '', OPENAI_API_KEY: '', GEMINI_API_KEY: '' },
     stdio: 'ignore',
   });
 
@@ -287,4 +287,3 @@ test('server.js efetivo expõe Barbearia no contrato administrativo', async () =
     fs.rmSync(diretorio, { recursive: true, force: true });
   }
 });
-

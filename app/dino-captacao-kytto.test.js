@@ -46,10 +46,10 @@ function montarBarbearia() {
   return { bruno, carlos, corte, barba };
 }
 
-function agendar({ profissional, servico, data, hora, nome = 'Cliente Um', telefone = '65999990001', codigo = 'ABCD1234', clienteId }) {
+function agendar({ profissional, servico, data, hora, nome = 'Cliente Um', telefone = '65999990001', codigo = 'ABCD1234', clienteId, lojaId = LOJA }) {
   return barbearia.criarAgendamento(EMPRESA, {
     clienteId, clienteNome: nome, clienteTelefone: telefone, profissionalId: profissional.id, servicoId: servico.id,
-    dataHora: isoLocal(data, hora), dataAgenda: data, horaLocal: hora, lojaId: LOJA, origem: 'agendamento_online', codigoConfirmacao: codigo,
+    dataHora: isoLocal(data, hora), dataAgenda: data, horaLocal: hora, lojaId, origem: 'agendamento_online', codigoConfirmacao: codigo,
   });
 }
 
@@ -60,6 +60,7 @@ function concluir(agendamento) {
   const lancamento = financeiro.registrarLancamento(EMPRESA, {
     tipo: 'receita', categoria: 'Serviços', descricao: `Atendimento de barbearia ${agendamento.id}`,
     valor: agendamento.valor, origem: 'barbearia_atendimento', status: 'pago', meioPagamento: 'pix',
+    lojaId: agendamento.lojaId || LOJA,
     dataOperacao: agora, pagoEm: agora, automatico: true,
     chaveIdempotencia: `barbearia_atendimento:${EMPRESA}:${agendamento.id}`,
     referencia: { agendamentoId: agendamento.id, servicoId: agendamento.servicoId, profissionalId: agendamento.profissionalId },
@@ -111,13 +112,13 @@ test('autoatendimento: fora do prazo da política o cliente é orientado a falar
 test('lista de espera: vaga aberta avisa quem pediu aquele dia e período, sem repetir', () => {
   const { bruno, corte } = montarBarbearia();
   const dia = dataLocal(Date.now() + 3 * DIA_MS);
-  const primeiro = captacao.entrarListaEspera(EMPRESA, { nome: 'Ana', telefone: '65911110001', data: dia, servicoId: corte.id, periodo: 'manha', consentimentoWhatsapp: true });
-  captacao.entrarListaEspera(EMPRESA, { nome: 'Beto', telefone: '65911110002', data: dia, servicoId: corte.id, periodo: 'tarde' });
-  captacao.entrarListaEspera(EMPRESA, { nome: 'Caio', telefone: '65911110003', data: dia, servicoId: corte.id, periodo: 'qualquer' });
-  const repetida = captacao.entrarListaEspera(EMPRESA, { nome: 'Ana', telefone: '65911110001', data: dia, servicoId: corte.id });
+  const primeiro = captacao.entrarListaEspera(EMPRESA, { nome: 'Ana', telefone: '65911110001', data: dia, servicoId: corte.id, lojaId: LOJA, periodo: 'manha', consentimentoWhatsapp: true });
+  captacao.entrarListaEspera(EMPRESA, { nome: 'Beto', telefone: '65911110002', data: dia, servicoId: corte.id, lojaId: LOJA, periodo: 'tarde' });
+  captacao.entrarListaEspera(EMPRESA, { nome: 'Caio', telefone: '65911110003', data: dia, servicoId: corte.id, lojaId: LOJA, periodo: 'qualquer' });
+  const repetida = captacao.entrarListaEspera(EMPRESA, { nome: 'Ana', telefone: '65911110001', data: dia, servicoId: corte.id, lojaId: LOJA });
   assert.equal(repetida.repetida, true);
   assert.equal(repetida.id, primeiro.id);
-  assert.throws(() => captacao.entrarListaEspera(EMPRESA, { nome: 'Ana', telefone: '65911110001', data: '2020-01-01', servicoId: corte.id }), { code: 'DATA_PASSADA' });
+  assert.throws(() => captacao.entrarListaEspera(EMPRESA, { nome: 'Ana', telefone: '65911110001', data: '2020-01-01', servicoId: corte.id, lojaId: LOJA }), { code: 'DATA_PASSADA' });
 
   const ag = agendar({ profissional: bruno, servico: corte, data: dia, hora: '09:00' });
   const cancelado = barbearia.alterarStatusAgendamento(EMPRESA, ag.id, 'cancelado');
@@ -126,12 +127,18 @@ test('lista de espera: vaga aberta avisa quem pediu aquele dia e período, sem r
   const candidatos = captacao.candidatosParaVaga(EMPRESA, cancelado);
   assert.deepEqual(candidatos.map((item) => item.nome), ['Ana'], 'aviso automático só para quem autorizou o WhatsApp');
   assert.match(candidatos[0].mensagem, /Abriu um horário/);
+  assert.deepEqual(captacao.candidatosParaVaga(EMPRESA, { ...cancelado, servicoId: '' }), [], 'vaga sem serviço nunca faz broadcast');
+  assert.deepEqual(captacao.candidatosParaVaga(EMPRESA, { ...cancelado, lojaId: 'outra-loja' }), [], 'vaga de outra unidade nunca seleciona candidatos');
   assert.equal(captacao.candidatosParaVaga(EMPRESA, cancelado).length, 1, 'consultar não marca ninguém como avisado');
   assert.equal(captacao.marcarAvisados(EMPRESA, cancelado, [candidatos[0].id]), 1);
   assert.equal(captacao.candidatosParaVaga(EMPRESA, cancelado).length, 0, 'não avisa duas vezes a mesma vaga');
 
   // Quem marca horário naquele dia sai da lista; SAIR desliga os avisos.
-  assert.equal(captacao.marcarListaEsperaAgendada(EMPRESA, { telefone: '(65) 91111-0002', data: dia }), 1);
+  assert.equal(captacao.marcarListaEsperaAgendada(EMPRESA, {
+    telefone: '(65) 91111-0002', data: dia, lojaId: LOJA, servicoId: corte.id,
+    profissionalId: bruno.id, dataHora: cancelado.dataHora, horaLocal: cancelado.horaLocal,
+    duracaoMinutos: cancelado.duracaoMinutos, slotFingerprint: captacao.fingerprintSlot({ empresaId: EMPRESA, ...cancelado }),
+  }), 1);
   assert.equal(captacao.listarListaEspera(EMPRESA, { data: dia }).find((item) => item.nome === 'Beto').status, 'agendado');
   assert.deepEqual(captacao.revogarAvisosListaEspera(EMPRESA, '65911110001'), [primeiro.id]);
   assert.throws(() => captacao.entrarListaEspera(EMPRESA, { nome: 'Longe', telefone: '65911110009', data: '2099-01-01', servicoId: corte.id }), { code: 'DATA_DISTANTE' });
@@ -145,6 +152,58 @@ test('lista de espera: leitura e status não atravessam a unidade', () => {
   assert.equal(captacao.listarListaEspera(EMPRESA, { lojaId: LOJA }).length, 0);
   assert.equal(captacao.alterarStatusListaEspera(EMPRESA, item.id, 'desistiu', LOJA), null);
   assert.equal(captacao.listarListaEspera(EMPRESA, { lojaId: outraLoja })[0].status, 'aguardando');
+});
+
+test('lista de espera: oferta tem fingerprint imutável, TTL inclusivo, replay/conflict e aceite único', () => {
+  const { bruno, carlos, corte, barba } = montarBarbearia();
+  const agora = Date.parse('2030-06-01T12:00:00.000Z');
+  const dia = '2030-06-03';
+  const espera = captacao.entrarListaEspera(EMPRESA, {
+    nome: 'Cliente Oferta', telefone: '65911112222', data: dia, lojaId: LOJA,
+    servicoId: corte.id, profissionalId: bruno.id, consentimentoWhatsapp: true,
+  }, { agora });
+  const slot = {
+    empresaId: EMPRESA, lojaId: LOJA, servicoId: corte.id, profissionalId: bruno.id,
+    dataAgenda: dia, horaLocal: '10:00', dataHora: '2030-06-03T14:00:00.000Z',
+    duracaoMinutos: corte.duracaoMinutos, id: 'vaga-deterministica',
+  };
+  const fingerprint = captacao.fingerprintSlot(slot);
+  const oferta = captacao.criarOfertaListaEspera(EMPRESA, {
+    waitlistId: espera.id, ...slot, slotFingerprint: fingerprint,
+    actionId: 'offer-action-1', idempotencyKey: 'offer-key-1', ttlMs: 60_000,
+  }, { agora });
+  assert.equal(oferta.expiresAt, '2030-06-01T12:01:00.000Z');
+  assert.deepEqual(captacao.expirarOfertasListaEspera(EMPRESA, { agora: agora - 1 }), []);
+  assert.deepEqual(captacao.expirarOfertasListaEspera(EMPRESA, { agora }), []);
+  assert.equal(captacao.expirarOfertasListaEspera(EMPRESA, { agora: agora + 60_000 })[0].status, 'expired');
+  assert.throws(() => captacao.aceitarOfertaListaEspera(EMPRESA, oferta.id, { actionId: 'accept-expired', agora: agora + 60_000 }), { code: 'OFERTA_EXPIRADA' });
+
+  const replay = captacao.criarOfertaListaEspera(EMPRESA, {
+    waitlistId: espera.id, ...slot, actionId: 'offer-action-2', idempotencyKey: 'offer-key-2', ttlMs: 60_000,
+  }, { agora });
+  const replaySame = captacao.criarOfertaListaEspera(EMPRESA, {
+    waitlistId: espera.id, ...slot, actionId: 'offer-action-2', idempotencyKey: 'offer-key-2', ttlMs: 60_000,
+  }, { agora });
+  assert.equal(replaySame.replay, true);
+  assert.throws(() => captacao.criarOfertaListaEspera(EMPRESA, {
+    waitlistId: espera.id, ...slot, actionId: 'offer-action-2b', idempotencyKey: 'offer-key-2', horaLocal: '11:00',
+  }, { agora }), (error) => error.status === 409);
+  const aceito = captacao.aceitarOfertaListaEspera(EMPRESA, replay.id, { actionId: 'accept-action-1', idempotencyKey: 'accept-key-1', agora: agora + 1 });
+  assert.equal(aceito.status, 'accepted');
+  assert.equal(captacao.aceitarOfertaListaEspera(EMPRESA, replay.id, { actionId: 'accept-action-1', idempotencyKey: 'accept-key-1', agora: agora + 1 }).replay, true);
+  assert.throws(() => captacao.aceitarOfertaListaEspera(EMPRESA, replay.id, { actionId: 'accept-action-2', idempotencyKey: 'accept-key-2', agora: agora + 2 }), (error) => error.status === 409);
+  assert.throws(() => captacao.criarOfertaListaEspera(EMPRESA, {
+    waitlistId: espera.id, ...slot, actionId: 'offer-action-3', idempotencyKey: 'offer-key-3',
+  }, { agora }), (error) => error.code === 'SLOT_JA_OFERTADO');
+
+  const outroServico = captacao.entrarListaEspera(EMPRESA, { nome: 'Outro Serviço', telefone: '65911113333', data: dia, lojaId: LOJA, servicoId: barba.id }, { agora });
+  const outraLoja = captacao.entrarListaEspera(EMPRESA, { nome: 'Outra Loja', telefone: '65911114444', data: dia, lojaId: LOJA_A2, servicoId: corte.id }, { agora });
+  const slotOutroProfissional = { ...slot, profissionalId: carlos.id, id: 'vaga-outro-profissional' };
+  assert.deepEqual(captacao.candidatosParaVaga(EMPRESA, { ...slot, id: 'vaga-candidatos' }, { agora, incluirSemConsentimento: true }).map((item) => item.id), [espera.id]);
+  assert.equal(captacao.candidatosParaVaga(EMPRESA, { ...slot, id: 'vaga-servico' }, { agora, incluirSemConsentimento: true }).some((item) => item.id === outroServico.id), false, 'vaga de outro serviço não é candidata');
+  assert.equal(captacao.candidatosParaVaga(EMPRESA, { ...slot, id: 'vaga-loja' }, { agora, incluirSemConsentimento: true }).some((item) => item.id === outraLoja.id), false, 'vaga de outra unidade não é candidata');
+  assert.notEqual(captacao.fingerprintSlot(slot), captacao.fingerprintSlot(slotOutroProfissional));
+  assert.throws(() => captacao.entrarListaEspera(EMPRESA, { nome: 'Sem Loja', telefone: '65911115555', data: dia, servicoId: corte.id }, { agora }), { code: 'LOJA_SERVICO_OBRIGATORIOS' });
 });
 
 test('indicação: o indicado novo gera pontos para os dois ao concluir o primeiro atendimento', () => {
@@ -171,6 +230,11 @@ test('indicação: o indicado novo gera pontos para os dois ao concluir o primei
   const membros = fidelidade.obterFidelidade(EMPRESA).membros;
   assert.equal(membros.find((m) => m.clienteId === indicador.id).pontos, 100, 'indicador inscrito e pontuado');
   assert.equal(membros.find((m) => m.clienteId === indicado.id).pontos, 50);
+  const movimentos = fidelidade.obterFidelidade(EMPRESA).movimentos;
+  assert.equal(movimentos.length, 2);
+  assert.equal(movimentos.every((movimento) => movimento.lojaId === LOJA
+    && movimento.legadoContexto?.legacyMigration === true
+    && movimento.legadoContexto?.bridge === 'legacy-loyalty-bridge'), true, 'ponte legada exige unidade e contexto explícitos');
   assert.equal(captacao.processarConclusaoIndicacao(EMPRESA, concluido), null, 'idempotente');
   const painel = captacao.painelIndicacoes(EMPRESA);
   assert.equal(painel.convertidas, 1);
@@ -265,6 +329,27 @@ test('retorno previsto: intervalo habitual, atraso e próximo horário do barbei
   assert.ok(acionavel.sugestao?.horario, 'sugere um horário livre');
 });
 
+test('retorno previsto exige unidade, não mistura serviços e rejeita horizonte inválido', () => {
+  const { bruno, carlos, corte, barba } = montarBarbearia();
+  const outraLoja = 'bbbbbbbb-cccc-4ddd-8eee-ffffffffffff';
+  const telefone = '65944445555';
+  concluir(agendar({ profissional: bruno, servico: corte, data: dataLocal(Date.now() - 70 * DIA_MS), hora: '09:00', nome: 'Por serviço', telefone, codigo: 'RET00001' }));
+  concluir(agendar({ profissional: bruno, servico: corte, data: dataLocal(Date.now() - 35 * DIA_MS), hora: '09:00', nome: 'Por serviço', telefone, codigo: 'RET00002' }));
+  agendar({ profissional: carlos, servico: barba, data: dataLocal(Date.now() + 2 * DIA_MS), hora: '10:00', nome: 'Por serviço', telefone, codigo: 'RET00003' });
+  concluir(agendar({ profissional: carlos, servico: corte, data: dataLocal(Date.now() - 55 * DIA_MS), hora: '11:00', nome: 'Por serviço', telefone, codigo: 'RET00004', lojaId: outraLoja }));
+  concluir(agendar({ profissional: carlos, servico: corte, data: dataLocal(Date.now() - 15 * DIA_MS), hora: '11:00', nome: 'Por serviço', telefone, codigo: 'RET00005', lojaId: outraLoja }));
+
+  const retorno = captacao.retornosPrevistos(EMPRESA, { lojaId: LOJA, horizonteDias: 7 });
+  const corteEsperado = retorno.todos.find((item) => item.nome === 'Por serviço' && item.servicoPreferido?.id === corte.id);
+  assert.ok(corteEsperado);
+  assert.notEqual(corteEsperado.situacao, 'agendado', 'futuro de Barba não bloqueia retorno de Corte');
+  assert.equal(corteEsperado.visitas, 2, 'histórico de outra loja não altera a mediana desta unidade');
+  assert.throws(() => captacao.retornosPrevistos(EMPRESA, { horizonteDias: 7 }), { code: 'LOJA_OBRIGATORIA' });
+  assert.throws(() => captacao.retornosPrevistos(EMPRESA, { lojaId: LOJA, horizonteDias: 0 }), { code: 'HORIZONTE_INVALIDO' });
+  assert.throws(() => captacao.retornosPrevistos(EMPRESA, { lojaId: LOJA, horizonteDias: 2.5 }), { code: 'HORIZONTE_INVALIDO' });
+  assert.throws(() => captacao.retornosPrevistos(EMPRESA, { lojaId: LOJA, horizonteDias: 91 }), { code: 'HORIZONTE_INVALIDO' });
+});
+
 test('ocupação da agenda e metas por profissional', () => {
   const { bruno, corte } = montarBarbearia();
   const hoje = dataLocal(Date.now() + DIA_MS);
@@ -338,7 +423,7 @@ test('agenda única: com equipe na agenda da barbearia, a IA lê e grava nela', 
   assert.deepEqual(meus.map((item) => item.id), [criado.id]);
   const remarcado = await agenda.rescheduleAppointment(null, scope, { appointmentId: criado.id, date: dia, time: '14:00' });
   assert.equal(remarcado.horaLocal, '14:00');
-  captacao.entrarListaEspera(EMPRESA, { nome: 'Espera', telefone: '65911118888', data: dia, servicoId: corte.id, periodo: 'tarde', consentimentoWhatsapp: true });
+  captacao.entrarListaEspera(EMPRESA, { nome: 'Espera', telefone: '65911118888', data: dia, servicoId: corte.id, lojaId: LOJA, periodo: 'tarde', consentimentoWhatsapp: true });
   const cancelado = await agenda.cancelAppointment(null, scope, criado.id);
   assert.equal(cancelado.status, 'cancelado');
   assert.equal(cancelado.listaEsperaCandidatos, 1);
@@ -657,4 +742,59 @@ test('agendamento da IA preso no PostgreSQL migra para a agenda do admin (idempo
   const segunda = await agenda.migrarAgendaPostgresParaBarbearia(scope, deps);
   assert.equal(segunda.migrados, 1);
   assert.equal(barbearia.listarAgendamentos(EMPRESA, {}).filter((item) => item.clienteTelefone === '5514997462929').length, 1, 'repetir não duplica');
+});
+
+test('projeção inteligente combina histórico, agenda futura, meta e isola a unidade ativa', () => {
+  const { bruno, corte } = montarBarbearia();
+  const agora = Date.parse('2026-10-15T16:00:00.000Z');
+  const marcar = (data, hora, codigo, lojaId = LOJA, telefone = `6598000${codigo.slice(-4)}`) => {
+    const agendamento = barbearia.criarAgendamento(EMPRESA, {
+      clienteNome: `Cliente ${codigo}`, clienteTelefone: telefone, profissionalId: bruno.id, servicoId: corte.id,
+      dataHora: isoLocal(data, hora), dataAgenda: data, horaLocal: hora, lojaId, origem: 'balcao', codigoConfirmacao: codigo,
+    });
+    return concluir(agendamento);
+  };
+  // Três meses encerrados, com crescimento real de serviços.
+  marcar('2026-07-10', '09:00', 'PRJ00001');
+  marcar('2026-08-10', '09:00', 'PRJ00002'); marcar('2026-08-10', '10:00', 'PRJ00003');
+  marcar('2026-09-10', '09:00', 'PRJ00004'); marcar('2026-09-10', '10:00', 'PRJ00005'); marcar('2026-09-10', '11:00', 'PRJ00006');
+  marcar('2026-10-10', '09:00', 'PRJ00007');
+  // Registro de outra unidade: jamais entra na consulta filtrada da Loja A.
+  marcar('2026-10-11', '17:00', 'PRJ00008', LOJA_A2, '65980000008');
+  barbearia.criarAgendamento(EMPRESA, {
+    clienteNome: 'Cliente agenda', clienteTelefone: '65980000009', profissionalId: bruno.id, servicoId: corte.id,
+    dataHora: isoLocal('2026-10-24', '10:00'), dataAgenda: '2026-10-24', horaLocal: '10:00', lojaId: LOJA, origem: 'balcao', codigoConfirmacao: 'PRJ00009',
+  });
+  captacao.salvarMetaProfissional(EMPRESA, { profissionalId: bruno.id, mes: '2026-10', receita: 500, atendimentos: 10 });
+
+  const painel = captacao.projecaoFaturamento(EMPRESA, { mes: '2026-10', lojaId: LOJA, horizonte: 6 }, { agora });
+  assert.equal(painel.horizonte, 6);
+  assert.equal(painel.previsoes.length, 6);
+  assert.equal(painel.atual.realizado, 50, 'não mistura a receita da outra unidade');
+  assert.equal(painel.atual.agendaFutura, 50);
+  assert.equal(painel.qualidade.nivel, 'media');
+  assert.ok(painel.atual.projecao >= 100, 'realizado, agenda e histórico formam a estimativa');
+  assert.equal(painel.atual.metaReceita, 500);
+  assert.ok(painel.fatores.some((item) => item.tipo === 'meta'));
+  const linhaBruno = painel.profissionais.find((item) => item.profissionalId === bruno.id);
+  assert.equal(linhaBruno.realizado, 50);
+  assert.ok(linhaBruno.capacidadeMinutos > 0);
+  assert.ok(linhaBruno.ocupacao > 0, 'ocupação considera somente os registros da unidade consultada');
+  const futuro = captacao.projecaoFaturamento(EMPRESA, { mes: '2026-11', lojaId: LOJA, horizonte: 6 }, { agora });
+  assert.equal(futuro.historico.at(-1).mes, '2026-09', 'mês atual parcial não entra como histórico fechado da previsão futura');
+  assert.equal(captacao.projecaoFaturamento(EMPRESA_B, { mes: '2026-10' }, { agora }).atual.realizado, 0, 'outra empresa não herda fatos');
+  assert.throws(() => captacao.projecaoFaturamento(EMPRESA, { mes: '2026-13' }, { agora }), { code: 'MES_INVALIDO' });
+});
+
+test('projeção inteligente inclui apenas revenda paga no faturamento realizado', () => {
+  montarBarbearia();
+  const produto = barbearia.criarProdutoRevenda(EMPRESA, { nome: 'Pomada', precoVenda: 30, custoUnitario: 10, estoqueAtual: 3 });
+  const aguardando = barbearia.criarVendaRevenda(EMPRESA, { lojaId: LOJA, clienteNome: 'Cliente', itens: [{ produtoId: produto.id, quantidade: 1 }] });
+  const competencia = dataLocal(Date.now()).slice(0, 7);
+  let painel = captacao.projecaoFaturamento(EMPRESA, { mes: competencia, lojaId: LOJA });
+  assert.equal(painel.atual.revenda, 0, 'venda aguardando pagamento não é faturamento');
+  barbearia.finalizarVendaRevenda(EMPRESA, aguardando.id, { confirmadoPagamento: true, meioPagamento: 'pix', valorRecebido: 30 });
+  painel = captacao.projecaoFaturamento(EMPRESA, { mes: competencia, lojaId: LOJA });
+  assert.equal(painel.atual.revenda, 30);
+  assert.equal(painel.atual.realizado, 30);
 });
