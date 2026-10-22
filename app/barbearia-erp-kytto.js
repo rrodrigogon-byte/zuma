@@ -121,6 +121,7 @@ function estadoVazio() {
     vendasRevenda: {},
     comandas: {},
     historicoAtendimentos: {},
+    historicoComandas: {},
     configuracao: {
       horarioAbertura: '08:00',
       horarioFechamento: '20:00',
@@ -169,6 +170,7 @@ function estadoEmpresa(empresaId, criar = true) {
       vendasRevenda: estado.vendasRevenda || {},
       comandas: estado.comandas || {},
       historicoAtendimentos: estado.historicoAtendimentos || {},
+      historicoComandas: estado.historicoComandas || {},
       configuracao: { ...vazio.configuracao, ...(estado.configuracao || {}), lojas: { ...(vazio.configuracao.lojas || {}), ...(estado.configuracao?.lojas || {}) } },
     };
   }
@@ -192,6 +194,7 @@ function estadoEmpresa(empresaId, criar = true) {
   estado.vendasRevenda ||= {};
   estado.comandas ||= {};
   estado.historicoAtendimentos ||= {};
+  estado.historicoComandas ||= {};
   // Bases legadas podem ter apenas {comandas:{...}} ou configuracao parcial.
   // Mesclar o estado vazio aqui evita que a validação da agenda tente usar
   // horarioAbertura/horarioFechamento indefinidos ao operar uma nova unidade.
@@ -2612,6 +2615,8 @@ export function exportarEstado(empresaId) {
     produtosRevenda: listarProdutosRevenda(empresaId, { incluirInativos: true }),
     movimentosEstoque: listarMovimentosEstoque(empresaId),
     vendasRevenda: listarVendasRevenda(empresaId),
+    historicoAtendimentos: listarHistoricoAtendimentos(empresaId),
+    historicoComandas: listarHistoricoComandas(empresaId),
   };
 }
 
@@ -2670,6 +2675,18 @@ export function listarHistoricoAtendimentos(empresaId, filtros = {}) {
     .filter((item) => !filtros.de || item.dataAgenda >= String(filtros.de).slice(0, 10))
     .filter((item) => !filtros.ate || item.dataAgenda <= String(filtros.ate).slice(0, 10))
     .sort((a, b) => `${b.dataAgenda} ${b.hora}`.localeCompare(`${a.dataAgenda} ${a.hora}`));
+  return filtros.limite ? itens.slice(0, Math.max(1, Math.min(5000, Number(filtros.limite) || 50))) : itens;
+}
+
+// Cabeçalhos Avec preservados para reconciliação. Não são comandas do PDV e
+// nunca entram em comissão, caixa, estoque ou faturamento operacional.
+export function listarHistoricoComandas(empresaId, filtros = {}) {
+  const itens = Object.values(estadoEmpresa(empresaId, false).historicoComandas || {})
+    .filter((item) => !filtros.clienteId || item.clienteId === String(filtros.clienteId))
+    .filter((item) => !filtros.numeroComanda || item.numeroComanda === String(filtros.numeroComanda))
+    .filter((item) => !filtros.de || String(item.dataComandaIso || '').slice(0, 10) >= String(filtros.de).slice(0, 10))
+    .filter((item) => !filtros.ate || String(item.dataComandaIso || '').slice(0, 10) <= String(filtros.ate).slice(0, 10))
+    .sort((a, b) => `${b.dataFinalizacaoOriginal} ${b.numeroComanda}`.localeCompare(`${a.dataFinalizacaoOriginal} ${a.numeroComanda}`));
   return filtros.limite ? itens.slice(0, Math.max(1, Math.min(5000, Number(filtros.limite) || 50))) : itens;
 }
 

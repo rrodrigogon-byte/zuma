@@ -1,0 +1,42 @@
+{
+  "batchId": "avec-dino-20261022-v1",
+  "sourceSystem": "Avec SalãoVIP",
+  "sourceUnitId": "102577",
+  "targetEmpresaId": "emp-kytto-001",
+  "targetLojaId": "dino-web-estoque",
+  "stockTarget": 10,
+  "files": {
+    "clientes.consolidado.jsonl": {
+      "sha256": "011c30686ad58bad6aacc9f1a45d8b083100ba17beb9988af042c2754e08fa82",
+      "bytes": 2523477
+    },
+    "historico-servicos-completo.jsonl": {
+      "sha256": "eebe61aa9e994abee4e7a5335a31ca1f7e9ca8bb35157c0e360c766325e1ad2f",
+      "bytes": 8888966
+    },
+    "produtos-estoque.json": {
+      "sha256": "e270c092eb4d84a5a15ea488816fb5378c551355ab9cd9f2921036713d1ea4a6",
+      "bytes": 16432
+    },
+    "profissionais-inferidos.json": {
+      "sha256": "1e3ffabdb60459b10f408efab6974536d3e0e3974e89d8b19703a6a69b6ff9d8",
+      "bytes": 1378
+    },
+    "servicos.json": {
+      "sha256": "2c2baa7e5d74487a9c4af4a7cb5a3429180f8091517659def4a9d2a25298b959",
+      "bytes": 20041
+    },
+    "vendas-comandas-cabecalho.jsonl": {
+      "sha256": "12ad6ddb496280b909411e030a45c1f67f55660c133419416f9f7ca4ea63c270",
+      "bytes": 10818699
+    }
+  },
+  "expectedCounts": {
+    "clientes": 4403,
+    "servicos": 35,
+    "profissionais_inferidos": 5,
+    "produtos": 32,
+    "historico_servicos": 22485,
+    "comandas_cabecalho": 15468
+  }
+}

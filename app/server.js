@@ -4588,6 +4588,18 @@ app.get('/api/admin/barbearia/historico', (req, res) => {
     res.json({ ok: true, itens, total: itens.length });
   } catch (error) { res.status(400).json({ error: error.message }); }
 });
+app.get('/api/admin/barbearia/historico-comandas', (req, res) => {
+  try {
+    const itens = barbeariaErpKytto.listarHistoricoComandas(legacyEmpresaId(req), {
+      clienteId: req.query?.clienteId,
+      numeroComanda: req.query?.numeroComanda,
+      de: req.query?.de,
+      ate: req.query?.ate,
+      limite: req.query?.limite || 200,
+    });
+    res.json({ ok: true, itens, total: itens.length, somenteHistorico: true, financeiroCriado: false });
+  } catch (error) { res.status(400).json({ error: error.message }); }
+});
 // ── Compras e estoque da revenda ────────────────────────────────────────────
 function respostaComprasRepasses(res, error) {
   const conhecido = error instanceof barbeariaComprasKytto.ComprasError || error instanceof barbeariaRepassesKytto.RepasseError;

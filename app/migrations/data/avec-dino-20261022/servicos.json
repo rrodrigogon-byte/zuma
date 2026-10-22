@@ -1,0 +1,597 @@
+[
+  {
+    "source_type": "avec_service",
+    "source_file": "admin.avec.beauty_admin_agenda__1792676940900.html",
+    "source_row": 1,
+    "nome": "Banho de Gelo Agendamento Online",
+    "categoria": "SPA",
+    "descricao": "Auxilia na limpeza do couro cabeludo, reduz a oleosidade dos fios.",
+    "duracao_minutos": 10,
+    "preco_original": 50.0,
+    "source_fields": [
+      "Banho de Gelo Agendamento Online",
+      "SPA",
+      "Auxilia na limpeza do couro cabeludo, reduz a oleosidade dos fios.",
+      "10",
+      "A partir de 50,00"
+    ]
+  },
+  {
+    "source_type": "avec_service",
+    "source_file": "admin.avec.beauty_admin_agenda__1792676940900.html",
+    "source_row": 2,
+    "nome": "Barba Club",
+    "categoria": "Barba",
+    "descricao": "Serviço exclusivo para clientes assinantes do Dino Club Barba ou Dino Club Barba e Corte",
+    "duracao_minutos": 30,
+    "preco_original": 0.0,
+    "source_fields": [
+      "Barba Club",
+      "Barba",
+      "Serviço exclusivo para clientes assinantes do Dino Club Barba ou Dino Club Barba e Corte",
+      "30",
+      "0,00"
+    ]
+  },
+  {
+    "source_type": "avec_service",
+    "source_file": "admin.avec.beauty_admin_agenda__1792676940900.html",
+    "source_row": 3,
+    "nome": "Barba com Bruno ou Nati Agendamento Online",
+    "categoria": "Barba",
+    "descricao": "Barba completa",
+    "duracao_minutos": 30,
+    "preco_original": 100.0,
+    "source_fields": [
+      "Barba com Bruno ou Nati Agendamento Online",
+      "Barba",
+      "Barba completa",
+      "30",
+      "100,00"
+    ]
+  },
+  {
+    "source_type": "avec_service",
+    "source_file": "admin.avec.beauty_admin_agenda__1792676940900.html",
+    "source_row": 4,
+    "nome": "Barba com David Agendamento Online",
+    "categoria": "Barba",
+    "descricao": "Barba completa",
+    "duracao_minutos": 30,
+    "preco_original": 80.0,
+    "source_fields": [
+      "Barba com David Agendamento Online",
+      "Barba",
+      "Barba completa",
+      "30",
+      "80,00"
+    ]
+  },
+  {
+    "source_type": "avec_service",
+    "source_file": "admin.avec.beauty_admin_agenda__1792676940900.html",
+    "source_row": 5,
+    "nome": "Barba com o Dino Agendamento Online",
+    "categoria": "Barba",
+    "descricao": "Procedimento realizado com o Dino",
+    "duracao_minutos": 30,
+    "preco_original": 300.0,
+    "source_fields": [
+      "Barba com o Dino Agendamento Online",
+      "Barba",
+      "Procedimento realizado com o Dino",
+      "30",
+      "300,00"
+    ]
+  },
+  {
+    "source_type": "avec_service",
+    "source_file": "admin.avec.beauty_admin_agenda__1792676940900.html",
+    "source_row": 6,
+    "nome": "Barba Cortesia",
+    "categoria": "Barba",
+    "descricao": null,
+    "duracao_minutos": 30,
+    "preco_original": 0.0,
+    "source_fields": [
+      "Barba Cortesia",
+      "Barba",
+      "",
+      "30",
+      "0,00"
+    ]
+  },
+  {
+    "source_type": "avec_service",
+    "source_file": "admin.avec.beauty_admin_agenda__1792676940900.html",
+    "source_row": 7,
+    "nome": "Coloração Tonalização Agendamento Online",
+    "categoria": "Tintura",
+    "descricao": "Tintura dos cabelos com produtos do salão de beleza.",
+    "duracao_minutos": 30,
+    "preco_original": null,
+    "source_fields": [
+      "Coloração Tonalização Agendamento Online",
+      "Tintura",
+      "Tintura dos cabelos com produtos do salão de beleza.",
+      "30",
+      "Sob consulta"
+    ]
+  },
+  {
+    "source_type": "avec_service",
+    "source_file": "admin.avec.beauty_admin_agenda__1792676940900.html",
+    "source_row": 8,
+    "nome": "Cone Hindu Agendamento Online",
+    "categoria": "SPA",
+    "descricao": null,
+    "duracao_minutos": 30,
+    "preco_original": 50.0,
+    "source_fields": [
+      "Cone Hindu Agendamento Online",
+      "SPA",
+      "",
+      "30",
+      "50,00"
+    ]
+  },
+  {
+    "source_type": "avec_service",
+    "source_file": "admin.avec.beauty_admin_agenda__1792676940900.html",
+    "source_row": 9,
+    "nome": "Corte Club",
+    "categoria": "Cabelo",
+    "descricao": "Serviço exclusivo para clientes assinantes do Dino Club Corte ou Dino Club Barba e Corte",
+    "duracao_minutos": 30,
+    "preco_original": 0.0,
+    "source_fields": [
+      "Corte Club",
+      "Cabelo",
+      "Serviço exclusivo para clientes assinantes do Dino Club Corte ou Dino Club Barba e Corte",
+      "30",
+      "0,00"
+    ]
+  },
+  {
+    "source_type": "avec_service",
+    "source_file": "admin.avec.beauty_admin_agenda__1792676940900.html",
+    "source_row": 10,
+    "nome": "Corte com Bruno ou Nati Agendamento Online",
+    "categoria": "Cabelo",
+    "descricao": "O corte de cabelo retira as pontas ressecadas do cabelo e ajuda no crescimento dos fios. Com base no conhecimento do visagismo, estudo que avalia a imagem de uma pessoa, é possível determinar os melhores cortes de cabelo para cada tipo de rosto. O objetivo é promover um visual mais homogêneo e confiante.",
+    "duracao_minutos": 40,
+    "preco_original": 100.0,
+    "source_fields": [
+      "Corte com Bruno ou Nati Agendamento Online",
+      "Cabelo",
+      "O corte de cabelo retira as pontas ressecadas do cabelo e ajuda no crescimento dos fios. Com base no conhecimento do visagismo, estudo que avalia a imagem de uma pessoa, é possível determinar os melhores cortes de cabelo para cada tipo de rosto. O objetivo é promover um visual mais homogêneo e confiante.",
+      "40",
+      "100,00"
+    ]
+  },
+  {
+    "source_type": "avec_service",
+    "source_file": "admin.avec.beauty_admin_agenda__1792676940900.html",
+    "source_row": 11,
+    "nome": "Corte com David Agendamento Online",
+    "categoria": "Cabelo",
+    "descricao": "O corte de cabelo retira as pontas ressecadas do cabelo e ajuda no crescimento dos fios. Com base no conhecimento do visagismo, estudo que avalia a imagem de uma pessoa, é possível determinar os melhores cortes de cabelo para cada tipo de rosto. O objetivo é promover um visual mais homogêneo e confiante.",
+    "duracao_minutos": 40,
+    "preco_original": 80.0,
+    "source_fields": [
+      "Corte com David Agendamento Online",
+      "Cabelo",
+      "O corte de cabelo retira as pontas ressecadas do cabelo e ajuda no crescimento dos fios. Com base no conhecimento do visagismo, estudo que avalia a imagem de uma pessoa, é possível determinar os melhores cortes de cabelo para cada tipo de rosto. O objetivo é promover um visual mais homogêneo e confiante.",
+      "40",
+      "80,00"
+    ]
+  },
+  {
+    "source_type": "avec_service",
+    "source_file": "admin.avec.beauty_admin_agenda__1792676940900.html",
+    "source_row": 12,
+    "nome": "Corte com Dino Agendamento Online",
+    "categoria": "Cabelo",
+    "descricao": "Corte feito com Dino",
+    "duracao_minutos": 40,
+    "preco_original": 300.0,
+    "source_fields": [
+      "Corte com Dino Agendamento Online",
+      "Cabelo",
+      "Corte feito com Dino",
+      "40",
+      "300,00"
+    ]
+  },
+  {
+    "source_type": "avec_service",
+    "source_file": "admin.avec.beauty_admin_agenda__1792676940900.html",
+    "source_row": 13,
+    "nome": "Corte Cortesia",
+    "categoria": "Cabelo",
+    "descricao": null,
+    "duracao_minutos": 30,
+    "preco_original": 0.0,
+    "source_fields": [
+      "Corte Cortesia",
+      "Cabelo",
+      "",
+      "30",
+      "0,00"
+    ]
+  },
+  {
+    "source_type": "avec_service",
+    "source_file": "admin.avec.beauty_admin_agenda__1792676940900.html",
+    "source_row": 14,
+    "nome": "Corte e Barba Agendamento Online",
+    "categoria": "Cabelo e Barba",
+    "descricao": null,
+    "duracao_minutos": 60,
+    "preco_original": 160.0,
+    "source_fields": [
+      "Corte e Barba Agendamento Online",
+      "Cabelo e Barba",
+      "",
+      "60",
+      "160,00"
+    ]
+  },
+  {
+    "source_type": "avec_service",
+    "source_file": "admin.avec.beauty_admin_agenda__1792676940900.html",
+    "source_row": 15,
+    "nome": "Corte e barba com Dino Agendamento Online",
+    "categoria": "Cabelo e Barba",
+    "descricao": "Procedimento realizado com o Dino",
+    "duracao_minutos": 60,
+    "preco_original": 600.0,
+    "source_fields": [
+      "Corte e barba com Dino Agendamento Online",
+      "Cabelo e Barba",
+      "Procedimento realizado com o Dino",
+      "60",
+      "600,00"
+    ]
+  },
+  {
+    "source_type": "avec_service",
+    "source_file": "admin.avec.beauty_admin_agenda__1792676940900.html",
+    "source_row": 16,
+    "nome": "Corte Visagista Agendamento Online",
+    "categoria": "Consultoria",
+    "descricao": "O *corte visagista* é um serviço mais ágil que inclui: - *Corte de Cabelo e Barba:* Encontramos o melhor corte de cabelo e barba para o seu formato de rosto, proporcionando uma mudança rápida e significativa na sua aparência. Este serviço é ideal para quem busca uma transformação imediata com um investimento menor. No entanto, é mais limitado e pode não oferecer a profundidade que a consultoria completa proporciona.",
+    "duracao_minutos": 60,
+    "preco_original": 500.0,
+    "source_fields": [
+      "Corte Visagista Agendamento Online",
+      "Consultoria",
+      "O *corte visagista* é um serviço mais ágil que inclui: - *Corte de Cabelo e Barba:* Encontramos o melhor corte de cabelo e barba para o seu formato de rosto, proporcionando uma mudança rápida e significativa na sua aparência. Este serviço é ideal para quem busca uma transformação imediata com um investimento menor. No entanto, é mais limitado e pode não oferecer a profundidade que a consultoria completa proporciona.",
+      "60",
+      "A partir de 500,00"
+    ]
+  },
+  {
+    "source_type": "avec_service",
+    "source_file": "admin.avec.beauty_admin_agenda__1792676940900.html",
+    "source_row": 17,
+    "nome": "Depilação Masculina - Nariz Agendamento Online",
+    "categoria": "Depilação",
+    "descricao": "Depilação com cera. Com a depilação, os pêlos crescem mais uniformes e finos, além de demorarem mais tempo para crescer e encravarem menos.",
+    "duracao_minutos": 10,
+    "preco_original": 20.0,
+    "source_fields": [
+      "Depilação Masculina - Nariz Agendamento Online",
+      "Depilação",
+      "Depilação com cera. Com a depilação, os pêlos crescem mais uniformes e finos, além de demorarem mais tempo para crescer e encravarem menos.",
+      "10",
+      "20,00"
+    ]
+  },
+  {
+    "source_type": "avec_service",
+    "source_file": "admin.avec.beauty_admin_agenda__1792676940900.html",
+    "source_row": 18,
+    "nome": "Depilação Masculina - Nariz e orelha Agendamento Online",
+    "categoria": "Depilação",
+    "descricao": "Depilação com cera. Com a depilação, os pêlos crescem mais uniformes e finos, além de demorarem mais tempo para crescer e encravarem menos.",
+    "duracao_minutos": 15,
+    "preco_original": 30.0,
+    "source_fields": [
+      "Depilação Masculina - Nariz e orelha Agendamento Online",
+      "Depilação",
+      "Depilação com cera. Com a depilação, os pêlos crescem mais uniformes e finos, além de demorarem mais tempo para crescer e encravarem menos.",
+      "15",
+      "30,00"
+    ]
+  },
+  {
+    "source_type": "avec_service",
+    "source_file": "admin.avec.beauty_admin_agenda__1792676940900.html",
+    "source_row": 19,
+    "nome": "Depilação Masculina - Orelha Agendamento Online",
+    "categoria": "Depilação",
+    "descricao": "Depilação com cera. Com a depilação, os pêlos crescem mais uniformes e finos, além de demorarem mais tempo para crescer e encravarem menos.",
+    "duracao_minutos": 10,
+    "preco_original": 20.0,
+    "source_fields": [
+      "Depilação Masculina - Orelha Agendamento Online",
+      "Depilação",
+      "Depilação com cera. Com a depilação, os pêlos crescem mais uniformes e finos, além de demorarem mais tempo para crescer e encravarem menos.",
+      "10",
+      "20,00"
+    ]
+  },
+  {
+    "source_type": "avec_service",
+    "source_file": "admin.avec.beauty_admin_agenda__1792676940900.html",
+    "source_row": 20,
+    "nome": "Dermaplaning Agendamento Online",
+    "categoria": "Estética Facial",
+    "descricao": null,
+    "duracao_minutos": 30,
+    "preco_original": 60.0,
+    "source_fields": [
+      "Dermaplaning Agendamento Online",
+      "Estética Facial",
+      "",
+      "30",
+      "A partir de 60,00"
+    ]
+  },
+  {
+    "source_type": "avec_service",
+    "source_file": "admin.avec.beauty_admin_agenda__1792676940900.html",
+    "source_row": 21,
+    "nome": "Design de Sobrancelha Agendamento Online",
+    "categoria": "Sobrancelha",
+    "descricao": "Técnica que busca alinhar os pelos da sobrancelha com a armonização do rosto da cliente, desenhando a curvatura mais adequada.",
+    "duracao_minutos": 15,
+    "preco_original": 30.0,
+    "source_fields": [
+      "Design de Sobrancelha Agendamento Online",
+      "Sobrancelha",
+      "Técnica que busca alinhar os pelos da sobrancelha com a armonização do rosto da cliente, desenhando a curvatura mais adequada.",
+      "15",
+      "30,00"
+    ]
+  },
+  {
+    "source_type": "avec_service",
+    "source_file": "admin.avec.beauty_admin_agenda__1792676940900.html",
+    "source_row": 22,
+    "nome": "Detox Capilar Agendamento Online",
+    "categoria": "SPA",
+    "descricao": null,
+    "duracao_minutos": 15,
+    "preco_original": 50.0,
+    "source_fields": [
+      "Detox Capilar Agendamento Online",
+      "SPA",
+      "",
+      "15",
+      "50,00"
+    ]
+  },
+  {
+    "source_type": "avec_service",
+    "source_file": "admin.avec.beauty_admin_agenda__1792676940900.html",
+    "source_row": 23,
+    "nome": "Detox de barba",
+    "categoria": "SPA",
+    "descricao": null,
+    "duracao_minutos": 30,
+    "preco_original": 50.0,
+    "source_fields": [
+      "Detox de barba",
+      "SPA",
+      "",
+      "30",
+      "A partir de 50,00"
+    ]
+  },
+  {
+    "source_type": "avec_service",
+    "source_file": "admin.avec.beauty_admin_agenda__1792676940900.html",
+    "source_row": 24,
+    "nome": "Hidratação Agendamento Online",
+    "categoria": "SPA",
+    "descricao": "Utilizada para repor a umidade natural, nutrientes e queratina perdida. A hidratação constante é uma grande aliada para manter os cabelos saudáveis, com brilho, sedosos e macios.",
+    "duracao_minutos": 15,
+    "preco_original": 50.0,
+    "source_fields": [
+      "Hidratação Agendamento Online",
+      "SPA",
+      "Utilizada para repor a umidade natural, nutrientes e queratina perdida. A hidratação constante é uma grande aliada para manter os cabelos saudáveis, com brilho, sedosos e macios.",
+      "15",
+      "50,00"
+    ]
+  },
+  {
+    "source_type": "avec_service",
+    "source_file": "admin.avec.beauty_admin_agenda__1792676940900.html",
+    "source_row": 25,
+    "nome": "Limpeza de Pele Agendamento Online",
+    "categoria": "Estética Facial",
+    "descricao": "Higieniza, esfolia e remove células mortas. Os poros purificados previnem a acne e a oleosidade.",
+    "duracao_minutos": 30,
+    "preco_original": 60.0,
+    "source_fields": [
+      "Limpeza de Pele Agendamento Online",
+      "Estética Facial",
+      "Higieniza, esfolia e remove células mortas. Os poros purificados previnem a acne e a oleosidade.",
+      "30",
+      "60,00"
+    ]
+  },
+  {
+    "source_type": "avec_service",
+    "source_file": "admin.avec.beauty_admin_agenda__1792676940900.html",
+    "source_row": 26,
+    "nome": "Manicure Agendamento Online",
+    "categoria": "Manicure e Pedicure",
+    "descricao": "Cutilação e esmaltação das unhas das mãos.",
+    "duracao_minutos": 30,
+    "preco_original": 50.0,
+    "source_fields": [
+      "Manicure Agendamento Online",
+      "Manicure e Pedicure",
+      "Cutilação e esmaltação das unhas das mãos.",
+      "30",
+      "50,00"
+    ]
+  },
+  {
+    "source_type": "avec_service",
+    "source_file": "admin.avec.beauty_admin_agenda__1792676940900.html",
+    "source_row": 27,
+    "nome": "Manicure e Pedicure Agendamento Online",
+    "categoria": "Manicure e Pedicure",
+    "descricao": "Cutilação e esmaltação das unhas das mãos e dos pés.",
+    "duracao_minutos": 60,
+    "preco_original": 100.0,
+    "source_fields": [
+      "Manicure e Pedicure Agendamento Online",
+      "Manicure e Pedicure",
+      "Cutilação e esmaltação das unhas das mãos e dos pés.",
+      "60",
+      "100,00"
+    ]
+  },
+  {
+    "source_type": "avec_service",
+    "source_file": "admin.avec.beauty_admin_agenda__1792676940900.html",
+    "source_row": 28,
+    "nome": "Manuteçao protese",
+    "categoria": "protese",
+    "descricao": null,
+    "duracao_minutos": 60,
+    "preco_original": 80.0,
+    "source_fields": [
+      "Manuteçao protese",
+      "protese",
+      "",
+      "60",
+      "80,00"
+    ]
+  },
+  {
+    "source_type": "avec_service",
+    "source_file": "admin.avec.beauty_admin_agenda__1792676940900.html",
+    "source_row": 29,
+    "nome": "Massagem Relaxante Agendamento Online",
+    "categoria": "Estética Corporal",
+    "descricao": "A massagem beneficia a flexibilidade e aumenta a circulação, libera as toxinas e promove a saúde.",
+    "duracao_minutos": 30,
+    "preco_original": 40.0,
+    "source_fields": [
+      "Massagem Relaxante Agendamento Online",
+      "Estética Corporal",
+      "A massagem beneficia a flexibilidade e aumenta a circulação, libera as toxinas e promove a saúde.",
+      "30",
+      "A partir de 40,00"
+    ]
+  },
+  {
+    "source_type": "avec_service",
+    "source_file": "admin.avec.beauty_admin_agenda__1792676940900.html",
+    "source_row": 30,
+    "nome": "Massagem Relaxante na cadeira Agendamento Online",
+    "categoria": "SPA",
+    "descricao": "A massagem beneficia a flexibilidade e aumenta a circulação, libera as toxinas e promove a saúde.",
+    "duracao_minutos": 15,
+    "preco_original": 40.0,
+    "source_fields": [
+      "Massagem Relaxante na cadeira Agendamento Online",
+      "SPA",
+      "A massagem beneficia a flexibilidade e aumenta a circulação, libera as toxinas e promove a saúde.",
+      "15",
+      "40,00"
+    ]
+  },
+  {
+    "source_type": "avec_service",
+    "source_file": "admin.avec.beauty_admin_agenda__1792676940900.html",
+    "source_row": 31,
+    "nome": "Pedicure Agendamento Online",
+    "categoria": "Manicure e Pedicure",
+    "descricao": "Cutilação e esmaltação das unhas dos pés.",
+    "duracao_minutos": 30,
+    "preco_original": 50.0,
+    "source_fields": [
+      "Pedicure Agendamento Online",
+      "Manicure e Pedicure",
+      "Cutilação e esmaltação das unhas dos pés.",
+      "30",
+      "50,00"
+    ]
+  },
+  {
+    "source_type": "avec_service",
+    "source_file": "admin.avec.beauty_admin_agenda__1792676940900.html",
+    "source_row": 32,
+    "nome": "Procedimento Pacote",
+    "categoria": "Cabelo",
+    "descricao": null,
+    "duracao_minutos": 30,
+    "preco_original": 0.0,
+    "source_fields": [
+      "Procedimento Pacote",
+      "Cabelo",
+      "",
+      "30",
+      "0,00"
+    ]
+  },
+  {
+    "source_type": "avec_service",
+    "source_file": "admin.avec.beauty_admin_agenda__1792676940900.html",
+    "source_row": 33,
+    "nome": "Prótese Capilar Agendamento Online",
+    "categoria": "protese",
+    "descricao": null,
+    "duracao_minutos": 90,
+    "preco_original": 1850.0,
+    "source_fields": [
+      "Prótese Capilar Agendamento Online",
+      "protese",
+      "",
+      "90",
+      "A partir de 1.850,00"
+    ]
+  },
+  {
+    "source_type": "avec_service",
+    "source_file": "admin.avec.beauty_admin_agenda__1792676940900.html",
+    "source_row": 34,
+    "nome": "Selagem Agendamento Online",
+    "categoria": "química",
+    "descricao": null,
+    "duracao_minutos": 45,
+    "preco_original": 80.0,
+    "source_fields": [
+      "Selagem Agendamento Online",
+      "química",
+      "",
+      "45",
+      "A partir de 80,00"
+    ]
+  },
+  {
+    "source_type": "avec_service",
+    "source_file": "admin.avec.beauty_admin_agenda__1792676940900.html",
+    "source_row": 35,
+    "nome": "Taxa de Deslocamento",
+    "categoria": null,
+    "descricao": null,
+    "duracao_minutos": 30,
+    "preco_original": 0.0,
+    "source_fields": [
+      "Taxa de Deslocamento",
+      "",
+      "",
+      "30",
+      "0,00"
+    ]
+  }
+]
