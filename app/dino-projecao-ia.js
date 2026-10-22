@@ -26,6 +26,11 @@ function text(value, max = MAX_TEXT) {
   return String(value ?? '').replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, max);
 }
 
+function isoTimestamp(value) {
+  const date = value instanceof Date ? value : new Date(value || Date.now());
+  return Number.isFinite(date.valueOf()) ? date.toISOString() : new Date().toISOString();
+}
+
 function number(value, fallback = 0) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
@@ -458,7 +463,7 @@ export async function analyzeForecastWithAi({ db = defaultDb, empresaId, lojaId,
   const cached = force ? null : await getForecastAiInsight({ db, empresaId, lojaId, mes, fingerprint });
   if (cached && ['ready', 'fallback'].includes(cached.status) && cached.expira_em && new Date(cached.expira_em).valueOf() > Date.now()) {
     const alerts = await listForecastAiAlerts({ db, empresaId, lojaId, mes });
-    return { status: cached.status, source: cached.source, analysis: cached.analysis, generatedAt: cached.gerado_em, provider: cached.provider, model: cached.model, fingerprint, alerts, cached: true, persisted: true };
+    return { status: cached.status, source: cached.source, analysis: cached.analysis, generatedAt: isoTimestamp(cached.gerado_em), provider: cached.provider, model: cached.model, fingerprint, alerts, cached: true, persisted: true };
   }
 
   const fallback = buildDeterministicAnalysis(projection);
@@ -490,7 +495,7 @@ export async function analyzeForecastWithAi({ db = defaultDb, empresaId, lojaId,
   }
   const persisted = await persistInsight({ db, empresaId, lojaId, mes, fingerprint, snapshot, analysis, source, provider, model, status, errorCode, errorMessage });
   const alerts = await persistAlerts({ db, empresaId, lojaId, mes, insightId: persisted?.id, projection, analysis });
-  return { status, source, analysis, generatedAt: persisted?.gerado_em || new Date().toISOString(), provider, model, fingerprint, alerts, cached: false, persisted: Boolean(persisted), ...(errorCode ? { errorCode, errorMessage } : {}) };
+  return { status, source, analysis, generatedAt: isoTimestamp(persisted?.gerado_em), provider, model, fingerprint, alerts, cached: false, persisted: Boolean(persisted), ...(errorCode ? { errorCode, errorMessage } : {}) };
 }
 
 export async function enqueueForecastAnalysis({ db = defaultDb, empresaId, lojaId, projection, correlationId = null } = {}) {

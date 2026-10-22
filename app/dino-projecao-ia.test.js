@@ -117,7 +117,7 @@ test('persistência do insight tipa o status para evitar parâmetro PostgreSQL a
       queries.push(sql);
       if (sql.includes('INSERT INTO dino_forecast_ai_insights')) {
         assert.match(sql, /\$6::varchar,.*CASE WHEN \$6::varchar IN \('ready', 'fallback'\)/s);
-        return { rows: [{ id: '33333333-3333-4333-8333-333333333333', gerado_em: new Date().toISOString() }] };
+        return { rows: [{ id: '33333333-3333-4333-8333-333333333333', gerado_em: new Date('2026-10-22T20:00:00.000Z') }] };
       }
       return { rows: [] };
     },
@@ -130,6 +130,7 @@ test('persistência do insight tipa o status para evitar parâmetro PostgreSQL a
     runAiTaskImpl: async () => ({ data: { resumoExecutivo: 'Leitura tipada.', tendencia: 'queda', causas: [], recomendacoes: [] }, provider: 'gemini', model: 'test' }),
   });
   assert.equal(result.persisted, true);
+  assert.equal(result.generatedAt, '2026-10-22T20:00:00.000Z');
   assert.ok(queries.some(sql => sql.includes('INSERT INTO dino_forecast_ai_insights')));
 });
 
