@@ -9,6 +9,8 @@
     "dev": "node --watch server-erp.js",
     "commerce:schema:dry-run": "node migrations/run-commerce-schema-migrations.js --dry-run",
     "commerce:schema:apply": "node migrations/run-commerce-schema-migrations.js && node migrations/run-prd-cutover.js",
+    "avec:import:dry-run": "node migrations/run-avec-dino-import.js --dry-run",
+    "avec:import:apply": "node migrations/run-avec-dino-import.js",
     "commerce:import:dry-run": "node migrations/import-legacy-commerce.js",
     "commerce:import:apply": "node migrations/import-legacy-commerce.js --apply"
   },

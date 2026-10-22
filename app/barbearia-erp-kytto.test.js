@@ -45,6 +45,7 @@ import {
   percentualComissaoServico,
   importarHistoricoAtendimentos,
   listarHistoricoAtendimentos,
+  listarHistoricoComandas,
   criarComandaBarbearia,
   obterComandaBarbearia,
   listarComandasBarbearia,
@@ -622,6 +623,12 @@ test('histórico importado: idempotente, sem financeiro e sem agenda', () => {
   assert.equal(listarHistoricoAtendimentos(EMPRESA_A, { clienteId: 'cli-1' }).length, 2);
   assert.equal(listarHistoricoAtendimentos(EMPRESA_A, { clienteId: 'cli-1' })[0].dataAgenda, '2025-04-10');
   assert.equal(listarHistoricoAtendimentos(EMPRESA_B).length, 0);
+  db().barbearias[EMPRESA_A].historicoComandas = {
+    'cmd-1': { id: 'cmd-1', clienteId: 'cli-1', numeroComanda: '0001', dataComandaIso: '2025-04-10', dataFinalizacaoOriginal: '10/04/2025 12:00' },
+    'cmd-2': { id: 'cmd-2', clienteId: 'cli-2', numeroComanda: '0002', dataComandaIso: '2025-05-10', dataFinalizacaoOriginal: '10/05/2025 12:00' },
+  };
+  assert.equal(listarHistoricoComandas(EMPRESA_A, { clienteId: 'cli-1', de: '2025-04-01', ate: '2025-04-30' }).length, 1);
+  assert.equal(listarHistoricoComandas(EMPRESA_B).length, 0);
   assert.equal(listarAgendamentos(EMPRESA_A).length, 0);
   assert.equal(listarLancamentos(EMPRESA_A).length, antesLanc);
   assert.throws(() => importarHistoricoAtendimentos(EMPRESA_A, new Array(1001).fill(itens[0])), /1000/);

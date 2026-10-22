@@ -4606,6 +4606,18 @@ app.get('/api/admin/barbearia/historico', (req, res) => {
     res.json({ ok: true, itens, total: itens.length });
   } catch (error) { res.status(400).json({ error: error.message }); }
 });
+app.get('/api/admin/barbearia/historico-comandas', (req, res) => {
+  try {
+    const itens = barbeariaErpKytto.listarHistoricoComandas(legacyEmpresaId(req), {
+      clienteId: req.query?.clienteId,
+      numeroComanda: req.query?.numeroComanda,
+      de: req.query?.de,
+      ate: req.query?.ate,
+      limite: req.query?.limite || 200,
+    });
+    res.json({ ok: true, itens, total: itens.length, somenteHistorico: true, financeiroCriado: false });
+  } catch (error) { res.status(400).json({ error: error.message }); }
+});
 // ── Compras e estoque da revenda ────────────────────────────────────────────
 function respostaComprasRepasses(res, error) {
   const conhecido = error instanceof barbeariaComprasKytto.ComprasError || error instanceof barbeariaRepassesKytto.RepasseError;
@@ -8038,13 +8050,21 @@ process.on('uncaughtException', (e)=> console.error('uncaughtException:', e?.mes
 // Boot: hidrata o DB do GCS (se configurado) ANTES de aceitar requisições, para
 // que nenhuma requisição seja servida sobre um estado vazio/efêmero. Os seeds acima
 // já rodaram (gravação local apenas); hydrate() sobrepõe com o estado durável do
-// bucket quando existe. Sem GCS_BUCKET, resolve imediatamente.
+  // bucket quando existe. Sem GCS_BUCKET, resolve imediatamente.
 ;(async () => {
   try { await hydrate(); }
   catch (error) { console.error('Boot interrompido: não foi possível ler o estado durável do GCS.'); process.exit(1); }
   // O estado do GCS substitui o local: garante o admin e aplica a recuperação de senha de novo.
   seedUsuarios();
   aplicarResetAdmin();
+  if (process.env.AVEC_DINO_IMPORT_CONFIRM === 'PRD_AVEC_DINO_IMPORT_20261022_V1') {
+    const { execute: executarImportacaoAvec } = await import('./migrations/run-avec-dino-import.js');
+    const resultadoImportacaoAvec = await executarImportacaoAvec();
+    if (!resultadoImportacaoAvec?.ok && !resultadoImportacaoAvec?.alreadyApplied) {
+      throw new Error(`Importação Avec não concluída: ${resultadoImportacaoAvec?.error || 'resultado ausente'}`);
+    }
+    console.log(`[Avec] lote ${resultadoImportacaoAvec.alreadyApplied ? 'já aplicado' : 'aplicado'} antes do boot HTTP.`);
+  }
   if (process.env.COMMERCE_CORE_ENABLED === '1') {
     // A flag canônica não aplica schema e não liga nada implicitamente: o
     // readiness apenas compara o ledger; migrations continuam sendo pré-deploy.
