@@ -1466,6 +1466,353 @@ export function painelMetasProfissionais(empresaId, { mes, lojaId = '' } = {}, o
   };
 }
 
+
+// ---------------------------------------------------------------------------
+// PROJEÇÃO INTELIGENTE DE FATURAMENTO
+// A previsão é deliberadamente explicável: fatos financeiros/operacionais são
+// calculados no servidor e a leitura gerencial aponta a evidência que a gerou.
+// Ela não cria venda, agenda, mensagem ou meta; também não usa IA generativa
+// como fonte dos valores financeiros.
+// ---------------------------------------------------------------------------
+const STATUS_AGENDA_PREVISAO = new Set(['agendado', 'confirmado', 'em_atendimento']);
+
+function competenciaValida(valor, fallback) {
+  const competencia = texto(valor, 7);
+  if (!competencia) return fallback;
+  if (!/^\d{4}-(?:0[1-9]|1[0-2])$/.test(competencia)) throw new CaptacaoError('Mês inválido (use AAAA-MM).', 'MES_INVALIDO');
+  return competencia;
+}
+
+function deslocarCompetencia(competencia, quantidade) {
+  const [ano, mes] = competencia.split('-').map(Number);
+  const data = new Date(Date.UTC(ano, mes - 1 + quantidade, 1));
+  return `${data.getUTCFullYear()}-${String(data.getUTCMonth() + 1).padStart(2, '0')}`;
+}
+
+function diasNoMes(competencia) {
+  return Number(ultimoDiaDoMes(competencia).slice(8));
+}
+
+function mediaPonderada(valores = []) {
+  if (!valores.length) return 0;
+  const totalPesos = valores.reduce((soma, _, indice) => soma + indice + 1, 0);
+  return totalPesos ? valores.reduce((soma, valor, indice) => soma + Number(valor || 0) * (indice + 1), 0) / totalPesos : 0;
+}
+
+function desvioPadrao(valores = []) {
+  if (valores.length < 2) return 0;
+  const media = valores.reduce((soma, valor) => soma + Number(valor || 0), 0) / valores.length;
+  return Math.sqrt(valores.reduce((soma, valor) => soma + (Number(valor || 0) - media) ** 2, 0) / valores.length);
+}
+
+function numeroArredondado(valor) {
+  return Number(Math.max(0, Number(valor || 0)).toFixed(2));
+}
+
+function dataDoAgendamento(item) {
+  return String(item?.dataAgenda || item?.dataHora || '').slice(0, 10);
+}
+
+function dataDoPagamentoRevenda(item) {
+  return dataLocal(new Date(item?.pagamento?.confirmadoEm || item?.atualizadoEm || item?.criadoEm || 0).valueOf());
+}
+
+function noEscopoEstrito(item, lojaId) {
+  return !lojaId || String(item?.lojaId || '') === String(lojaId);
+}
+
+function usosDePlano(empresaId) {
+  return new Set(Object.values(captacao(empresaId).assinaturas)
+    .flatMap((controle) => (controle.usos || []).map((uso) => uso.agendamentoId).filter(Boolean)));
+}
+
+function fatosDeFaturamento(empresaId, lojaId = '', opcoes = {}) {
+  const corte = hojeLocal(opcoes);
+  const usosPlano = usosDePlano(empresaId);
+  const servicos = [];
+  const agenda = [];
+  const ocorrencias = [];
+  for (const item of barbearia.listarAgendamentos(empresaId, {})) {
+    const dia = dataDoAgendamento(item);
+    if (!dia || !noEscopoEstrito(item, lojaId)) continue;
+    const valor = dinheiro(item.valorRecebido || item.valor || 0);
+    const base = {
+      id: item.id,
+      dia,
+      mes: dia.slice(0, 7),
+      profissionalId: item.profissionalId || '',
+      valor,
+      duracaoMinutos: Math.max(0, numero(item.duracaoMinutos)),
+      status: item.status,
+    };
+    ocorrencias.push(base);
+    if (item.status === 'concluido' && dia <= corte && !usosPlano.has(item.id) && valor > 0) servicos.push(base);
+    if (STATUS_AGENDA_PREVISAO.has(item.status) && dia > corte && !usosPlano.has(item.id) && valor > 0) agenda.push(base);
+  }
+  const revenda = [];
+  for (const item of barbearia.listarVendasRevenda(empresaId, {})) {
+    if (item.status !== 'pago' || !noEscopoEstrito(item, lojaId)) continue;
+    const dia = dataDoPagamentoRevenda(item);
+    const valor = dinheiro(item.pagamento?.valorRecebido || item.total || 0);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dia) || dia > corte || valor <= 0) continue;
+    revenda.push({ id: item.id, dia, mes: dia.slice(0, 7), profissionalId: item.profissionalId || '', valor, status: item.status });
+  }
+  return { corte, servicos, agenda, revenda, ocorrencias };
+}
+
+function resumoDaCompetencia(fatos, competencia, { incluirFuturo = true } = {}) {
+  const servicos = fatos.servicos.filter((item) => item.mes === competencia);
+  const revenda = fatos.revenda.filter((item) => item.mes === competencia);
+  const agenda = incluirFuturo ? fatos.agenda.filter((item) => item.mes === competencia) : [];
+  const totalServicos = dinheiro(servicos.reduce((soma, item) => soma + item.valor, 0));
+  const totalRevenda = dinheiro(revenda.reduce((soma, item) => soma + item.valor, 0));
+  const totalAgenda = dinheiro(agenda.reduce((soma, item) => soma + item.valor, 0));
+  return {
+    mes: competencia,
+    servicos: totalServicos,
+    revenda: totalRevenda,
+    realizado: dinheiro(totalServicos + totalRevenda),
+    agendaFutura: totalAgenda,
+    atendimentosConcluidos: servicos.length,
+    atendimentosAgendados: agenda.length,
+    ticketMedio: servicos.length ? dinheiro(totalServicos / servicos.length) : 0,
+  };
+}
+
+function estimativaHistorica(linhas, campo) {
+  const observadas = linhas.map((item) => Number(item[campo] || 0)).filter((valor) => valor > 0);
+  if (!observadas.length) return { base: 0, desvio: 0, tendencia: 0, mesesComDados: 0 };
+  const media = mediaPonderada(observadas);
+  const tendencia = observadas.length > 1 ? (observadas.at(-1) - observadas[0]) / (observadas.length - 1) : 0;
+  const base = Math.max(0, media + tendencia * 0.35);
+  return {
+    base: numeroArredondado(base),
+    desvio: numeroArredondado(desvioPadrao(observadas)),
+    tendencia: numeroArredondado(Math.abs(tendencia)),
+    direcao: tendencia > 0.01 ? 'crescimento' : tendencia < -0.01 ? 'queda' : 'estavel',
+    mesesComDados: observadas.length,
+  };
+}
+
+function nivelConfianca(mesesComDados, historico) {
+  if (mesesComDados >= 5 && historico.length >= 5) return { nivel: 'alta', rotulo: 'Alta', explicacao: 'Há pelo menos cinco meses com faturamento registrado para comparar.' };
+  if (mesesComDados >= 3) return { nivel: 'media', rotulo: 'Média', explicacao: 'Há histórico suficiente para identificar ritmo, mas a série ainda pode oscilar.' };
+  if (mesesComDados >= 1) return { nivel: 'baixa', rotulo: 'Baixa', explicacao: 'A projeção usa poucos meses registrados; complete os lançamentos para refiná-la.' };
+  return { nivel: 'insuficiente', rotulo: 'Histórico insuficiente', explicacao: 'Ainda não há meses concluídos com receita registrada para formar uma tendência.' };
+}
+
+function metaDaEquipe(empresaId, competencia) {
+  const metas = captacao(empresaId).metasProfissionais[competencia] || {};
+  const valores = Object.values(metas);
+  return {
+    receita: dinheiro(valores.reduce((soma, item) => soma + Number(item.receita || 0), 0)),
+    atendimentos: valores.reduce((soma, item) => soma + Math.max(0, Math.round(numero(item.atendimentos))), 0),
+    profissionaisComMeta: valores.filter((item) => Number(item.receita || 0) > 0 || Number(item.atendimentos || 0) > 0).length,
+  };
+}
+
+function previsaoDaCompetencia(competencia, fatos, historico, meta, { corte, competenciaAtual }) {
+  const realizado = resumoDaCompetencia(fatos, competencia);
+  const baseServicos = estimativaHistorica(historico, 'servicos');
+  const baseRevenda = estimativaHistorica(historico, 'revenda');
+  const baseTotal = estimativaHistorica(historico, 'realizado');
+  const inicio = `${competencia}-01`;
+  const fim = ultimoDiaDoMes(competencia);
+  const dentroDoMesAtual = competencia === competenciaAtual;
+  const mesPassado = competencia < competenciaAtual;
+  const diasRestantes = dentroDoMesAtual ? Math.max(0, Number(fim.slice(8)) - Number(corte.slice(8))) : competencia > competenciaAtual ? diasNoMes(competencia) : 0;
+  const fracaoRestante = diasNoMes(competencia) ? diasRestantes / diasNoMes(competencia) : 0;
+
+  let projetadoServicos;
+  let projetadoRevenda;
+  let agendaConsiderada = 0;
+  if (mesPassado) {
+    projetadoServicos = realizado.servicos;
+    projetadoRevenda = realizado.revenda;
+  } else if (dentroDoMesAtual) {
+    agendaConsiderada = realizado.agendaFutura;
+    const ritmoServicos = baseServicos.base * fracaoRestante;
+    projetadoServicos = realizado.servicos + Math.max(agendaConsiderada, ritmoServicos);
+    projetadoRevenda = realizado.revenda + baseRevenda.base * fracaoRestante;
+  } else {
+    agendaConsiderada = realizado.agendaFutura;
+    projetadoServicos = Math.max(agendaConsiderada, baseServicos.base);
+    projetadoRevenda = baseRevenda.base;
+  }
+  const base = dinheiro(projetadoServicos + projetadoRevenda);
+  const intervalo = Math.max(baseTotal.desvio * (dentroDoMesAtual ? Math.max(fracaoRestante, 0.2) : 1), base * 0.08);
+  const compromisso = dinheiro(realizado.realizado + agendaConsiderada);
+  const conservador = dinheiro(Math.max(compromisso, base - intervalo));
+  const favoravel = dinheiro(base + intervalo);
+  const diferencaMeta = meta.receita > 0 ? Number((base - meta.receita).toFixed(2)) : null;
+  return {
+    ...realizado,
+    inicio,
+    fim,
+    tipo: mesPassado ? 'fechado' : dentroDoMesAtual ? 'atual' : 'futuro',
+    projetadoServicos: dinheiro(projetadoServicos),
+    projetadoRevenda: dinheiro(projetadoRevenda),
+    projecao: base,
+    conservador,
+    favoravel,
+    agendaConsiderada,
+    ritmoPendente: dinheiro(Math.max(0, projetadoServicos - realizado.servicos - agendaConsiderada) + Math.max(0, projetadoRevenda - realizado.revenda)),
+    metaReceita: meta.receita || null,
+    diferencaMeta,
+    noRitmo: meta.receita > 0 ? base >= meta.receita : null,
+    estimativa: { servicos: baseServicos, revenda: baseRevenda, total: baseTotal },
+  };
+}
+
+function previsaoProfissionais(empresaId, competencia, fatos, historico, lojaId = '') {
+  const corte = fatos.corte;
+  const competenciaAtual = corte.slice(0, 7);
+  const metas = captacao(empresaId).metasProfissionais[competencia] || {};
+  const configuracao = barbearia.obterConfiguracao(empresaId);
+  const calendario = lojaId && configuracao.lojas?.[lojaId] ? { ...configuracao, ...configuracao.lojas[lojaId] } : configuracao;
+  const inicio = `${competencia}-01`;
+  const fim = ultimoDiaDoMes(competencia);
+  const profissionais = barbearia.listarProfissionais(empresaId, { incluirInativos: true });
+  return profissionais.map((profissional) => {
+    const meta = metas[profissional.id] || null;
+    const realizados = fatos.servicos.filter((item) => item.mes === competencia && item.profissionalId === profissional.id);
+    const agendados = fatos.agenda.filter((item) => item.mes === competencia && item.profissionalId === profissional.id);
+    const serie = historico.map((item) => {
+      const total = fatos.servicos.filter((fato) => fato.mes === item.mes && fato.profissionalId === profissional.id)
+        .reduce((soma, fato) => soma + fato.valor, 0);
+      return { ...item, receitaProfissional: dinheiro(total) };
+    });
+    const base = estimativaHistorica(serie, 'receitaProfissional');
+    const realizado = dinheiro(realizados.reduce((soma, item) => soma + item.valor, 0));
+    const agendaFutura = dinheiro(agendados.reduce((soma, item) => soma + item.valor, 0));
+    const emCurso = competencia === competenciaAtual;
+    const futuro = competencia > competenciaAtual;
+    const restante = emCurso ? Math.max(0, (diasNoMes(competencia) - Number(corte.slice(8))) / diasNoMes(competencia)) : futuro ? 1 : 0;
+    const projecao = competencia < competenciaAtual
+      ? realizado
+      : emCurso
+        ? dinheiro(realizado + Math.max(agendaFutura, base.base * restante))
+        : dinheiro(Math.max(agendaFutura, base.base));
+    const registrosDoProfissional = fatos.ocorrencias
+      .filter((item) => item.mes === competencia && item.profissionalId === profissional.id)
+      .filter((item) => !STATUS_FINAIS_INVALIDOS.has(item.status));
+    const minutosAgendados = registrosDoProfissional.reduce((soma, item) => soma + item.duracaoMinutos, 0);
+    const jornada = Math.max(0, Math.min(minutos(profissional.horarioFim), minutos(calendario.horarioFechamento)) - Math.max(minutos(profissional.horarioInicio), minutos(calendario.horarioAbertura)));
+    const capacidadeMinutos = profissional.ativo === false ? 0 : jornada * diasUteisDoProfissional(calendario, profissional, inicio, fim).length;
+    const ocupacao = capacidadeMinutos > 0 ? Number((minutosAgendados / capacidadeMinutos).toFixed(4)) : null;
+    const ticketMedio = realizados.length ? dinheiro(realizado / realizados.length) : agendados.length ? dinheiro(agendaFutura / agendados.length) : 0;
+    const diferencaMeta = meta?.receita ? Number((projecao - meta.receita).toFixed(2)) : null;
+    return {
+      profissionalId: profissional.id,
+      nome: profissional.nome,
+      ativo: profissional.ativo !== false,
+      meta: meta ? { receita: Number(meta.receita || 0), atendimentos: Number(meta.atendimentos || 0) } : null,
+      realizado,
+      agendaFutura,
+      projecao,
+      diferencaMeta,
+      noRitmo: meta?.receita ? projecao >= meta.receita : null,
+      atendimentosConcluidos: realizados.length,
+      atendimentosAgendados: agendados.length,
+      ticketMedio,
+      minutosAgendados,
+      capacidadeMinutos,
+      ocupacao,
+      tendencia: base.direcao || 'estavel',
+      historicoMeses: base.mesesComDados,
+    };
+  }).sort((a, b) => Number(b.projecao) - Number(a.projecao) || a.nome.localeCompare(b.nome));
+}
+
+function construirLeiturasGerenciais({ atual, historico, qualidade, profissionais, ocorrencias, competencia, corte }) {
+  const fatores = [];
+  const acoes = [];
+  const adicionar = (item, acao = null) => {
+    fatores.push(item);
+    if (acao) acoes.push(acao);
+  };
+  if (qualidade.nivel === 'insuficiente') {
+    adicionar({ tipo: 'dados', severidade: 'informativo', titulo: 'Histórico ainda insuficiente', evidencia: qualidade.explicacao, impacto: null },
+      { prioridade: 'alta', titulo: 'Concluir e registrar recebimentos', descricao: 'A previsão melhora quando atendimentos e vendas de revenda são finalizados no sistema.', aba: 'Atendimento' });
+  }
+  if (atual.metaReceita && atual.projecao < atual.metaReceita) {
+    const falta = dinheiro(atual.metaReceita - atual.projecao);
+    adicionar({ tipo: 'meta', severidade: falta >= atual.metaReceita * 0.2 ? 'critico' : 'alerta', titulo: 'Risco de não alcançar a meta da equipe', evidencia: `A projeção é ${falta.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} abaixo da meta configurada.`, impacto: falta },
+      { prioridade: 'alta', titulo: 'Revisar produção adicional por profissional', descricao: 'Veja a meta individual, o ticket e os horários necessários para recuperar o ritmo.', aba: 'Ocupação e metas' });
+  } else if (atual.metaReceita && atual.projecao >= atual.metaReceita) {
+    adicionar({ tipo: 'meta', severidade: 'positivo', titulo: 'Equipe projetada no ritmo da meta', evidencia: `A projeção supera a meta em ${(atual.projecao - atual.metaReceita).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}.`, impacto: atual.projecao - atual.metaReceita });
+  }
+  const ultimos = historico.filter((item) => item.realizado > 0).slice(-2);
+  if (ultimos.length === 2 && ultimos[0].realizado > 0) {
+    const variacao = (ultimos[1].realizado - ultimos[0].realizado) / ultimos[0].realizado;
+    if (Math.abs(variacao) >= 0.1) {
+      const crescimento = variacao > 0;
+      adicionar({ tipo: 'tendencia', severidade: crescimento ? 'positivo' : 'alerta', titulo: crescimento ? 'Faturamento em crescimento recente' : 'Faturamento em queda recente', evidencia: `${Math.abs(variacao * 100).toFixed(1).replace('.', ',')}% em relação ao mês anterior registrado.`, impacto: ultimos[1].realizado - ultimos[0].realizado });
+    }
+  }
+  if (atual.tipo === 'atual' && atual.agendaFutura > 0) {
+    adicionar({ tipo: 'agenda', severidade: 'informativo', titulo: 'Receita já reservada na agenda', evidencia: `${atual.atendimentosAgendados} atendimento(s) futuro(s) somam ${atual.agendaFutura.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}; esse valor entra uma vez na projeção.`, impacto: atual.agendaFutura });
+  } else if (atual.tipo === 'atual' && atual.projecao > atual.realizado) {
+    adicionar({ tipo: 'agenda', severidade: 'alerta', titulo: 'Agenda futura ainda cobre pouco do fechamento', evidencia: 'A maior parte da previsão depende do ritmo histórico, não de horários já reservados.', impacto: atual.projecao - atual.realizado },
+      { prioridade: 'media', titulo: 'Ocupar horários disponíveis', descricao: 'Use retornos previstos e a lista de espera antes de abrir novos horários.', aba: 'Retorno previsto' });
+  }
+  const ocorrenciasDoMes = ocorrencias.filter((item) => item.mes === competencia);
+  const invalidos = ocorrenciasDoMes.filter((item) => STATUS_FINAIS_INVALIDOS.has(item.status)).length;
+  if (ocorrenciasDoMes.length >= 5 && invalidos / ocorrenciasDoMes.length >= 0.1) {
+    adicionar({ tipo: 'perdas', severidade: 'alerta', titulo: 'Cancelamentos ou faltas pressionam a agenda', evidencia: `${invalidos} de ${ocorrenciasDoMes.length} registros do mês terminaram cancelados ou sem comparecimento.`, impacto: null },
+      { prioridade: 'media', titulo: 'Confirmar agenda e acionar a lista de espera', descricao: 'Priorize confirmações e ofereça vagas liberadas para reduzir horários ociosos.', aba: 'Lista de espera' });
+  }
+  const foraDoRitmo = profissionais.filter((item) => item.meta?.receita && item.noRitmo === false);
+  if (foraDoRitmo.length) {
+    adicionar({ tipo: 'profissionais', severidade: 'alerta', titulo: 'Profissionais abaixo do ritmo individual', evidencia: `${foraDoRitmo.length} profissional(is) têm projeção abaixo da própria meta.`, impacto: null },
+      { prioridade: 'alta', titulo: 'Acompanhar metas individuais', descricao: 'Compare ticket, agenda futura e projeção de cada profissional antes de cobrar ações.', aba: 'Ocupação e metas' });
+  }
+  return { fatores: fatores.slice(0, 8), acoes: acoes.slice(0, 5), geradoPara: corte };
+}
+
+/**
+ * Projeta faturamento de serviços e revenda para o mês selecionado e os cinco
+ * seguintes. Todo valor retornado vem da empresa/unidade recebida pelo servidor.
+ */
+export function projecaoFaturamento(empresaId, { mes, lojaId = '', horizonte = 6 } = {}, opcoes = {}) {
+  const corte = hojeLocal(opcoes);
+  const competencia = competenciaValida(mes, corte.slice(0, 7));
+  const quantidade = Math.max(1, Math.min(6, Math.round(numero(horizonte, 6))));
+  const fatos = fatosDeFaturamento(empresaId, lojaId, opcoes);
+  // Para competência futura, o mês em curso continua sendo parcial; ele não
+  // pode entrar como se fosse um fechamento completo da série histórica.
+  const competenciaHistoricoFinal = competencia > corte.slice(0, 7)
+    ? deslocarCompetencia(corte.slice(0, 7), -1)
+    : deslocarCompetencia(competencia, -1);
+  const historico = Array.from({ length: 6 }, (_, indice) => resumoDaCompetencia(fatos, deslocarCompetencia(competenciaHistoricoFinal, indice - 5), { incluirFuturo: false }));
+  const mesesComDados = historico.filter((item) => item.realizado > 0).length;
+  const qualidade = { ...nivelConfianca(mesesComDados, historico), mesesAnalisados: historico.length, mesesComDados, dataCorte: corte, fontes: { servicos: fatos.servicos.length, revenda: fatos.revenda.length } };
+  const previsoes = Array.from({ length: quantidade }, (_, indice) => {
+    const alvo = deslocarCompetencia(competencia, indice);
+    return previsaoDaCompetencia(alvo, fatos, historico, metaDaEquipe(empresaId, alvo), { corte, competenciaAtual: corte.slice(0, 7) });
+  });
+  const atual = previsoes[0];
+  const profissionais = previsaoProfissionais(empresaId, competencia, fatos, historico, lojaId);
+  const leituras = construirLeiturasGerenciais({ atual, historico, qualidade, profissionais, ocorrencias: fatos.ocorrencias, competencia, corte });
+  return {
+    mes: competencia,
+    horizonte: quantidade,
+    geradoEm: iso(agoraMs(opcoes)),
+    escopo: { empresaId: String(empresaId), lojaId: lojaId || null, filtroEstritoDeUnidade: Boolean(lojaId) },
+    qualidade,
+    metodologia: {
+      versao: '1.0',
+      rotulo: 'Previsão explicável por histórico, agenda e tendência',
+      resumo: 'Os números usam serviços concluídos, revenda paga, agenda futura e histórico recente. Cenários representam variação observada; não são garantia de faturamento.',
+    },
+    atual,
+    previsoes,
+    historico,
+    profissionais,
+    ...leituras,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // IA QUE VENDE (onda 2): dados que a atendente do WhatsApp pode usar, sempre
 // pelo telefone da própria conversa e sem expor valores gastos.

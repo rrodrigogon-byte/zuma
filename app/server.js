@@ -2891,7 +2891,7 @@ function exigirPapelOperacaoBarbearia(req, res, next) {
   }
   if (['admin', 'organizador'].includes(String(req.user?.role || ''))) return next();
   const endpoint = req.path || '';
-  const leituraGerencial = /^\/(?:overview|dashboard|analytics|metas|financeiro|bi|auditoria|relatorios|comissoes|equipe\/desempenho|clientes|clientes-360|crm\/resumo|operacao\/resumo|operacao\/caixas|fiscal\/documentos|vendas-revenda|caixa\/previa-taxas-materiais)(?:\/|$)/.test(endpoint);
+  const leituraGerencial = /^\/(?:overview|dashboard|analytics|metas|financeiro|bi|auditoria|relatorios|comissoes|equipe\/desempenho|clientes|clientes-360|crm\/resumo|operacao\/resumo|operacao\/caixas|fiscal\/documentos|vendas-revenda|caixa\/previa-taxas-materiais|captacao\/projecao-faturamento)(?:\/|$)/.test(endpoint);
   const mutacaoGerencial = req.method !== 'GET' && (
     /^\/(?:configuracoes|profissionais|servicos|planos|assinaturas|estoque-revenda|fidelidade\/(?:regra|creditar)|operacao\/caixas|operacao\/fechar-dia|financeiro)(?:\/|$)/.test(endpoint)
     || /^\/comandas\/[^/]+\/(?:pagamentos|cancelar|fiscal|consumo-interno)(?:\/|$)/.test(endpoint)
@@ -4184,6 +4184,18 @@ app.get('/api/admin/barbearia/captacao/metas-profissionais', (req, res) => {
 app.put('/api/admin/barbearia/captacao/metas-profissionais', (req, res) => {
   if (!gestaoDaUnidade(req, res)) return;
   try { res.json({ ok: true, meta: captacaoKytto.salvarMetaProfissional(legacyEmpresaId(req), req.body || {}) }); } catch (error) { respostaCaptacao(res, error); }
+});
+app.get('/api/admin/barbearia/captacao/projecao-faturamento', (req, res) => {
+  try {
+    const horizonteBruto = req.query?.horizonte;
+    const horizonte = horizonteBruto === undefined || horizonteBruto === '' ? 6 : Number(horizonteBruto);
+    if (!Number.isFinite(horizonte) || horizonte < 1 || horizonte > 6) throw new captacaoKytto.CaptacaoError('Horizonte inválido: escolha entre 1 e 6 meses.', 'HORIZONTE_INVALIDO');
+    res.json({ ok: true, ...captacaoKytto.projecaoFaturamento(legacyEmpresaId(req), {
+      mes: req.query?.mes,
+      horizonte,
+      lojaId: legacyLojaId(req),
+    }) });
+  } catch (error) { respostaCaptacao(res, error); }
 });
 
 function comandaBarbeariaDaSessao(req, id) {

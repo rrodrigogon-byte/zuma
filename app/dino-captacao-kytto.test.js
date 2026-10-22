@@ -743,3 +743,58 @@ test('agendamento da IA preso no PostgreSQL migra para a agenda do admin (idempo
   assert.equal(segunda.migrados, 1);
   assert.equal(barbearia.listarAgendamentos(EMPRESA, {}).filter((item) => item.clienteTelefone === '5514997462929').length, 1, 'repetir não duplica');
 });
+
+test('projeção inteligente combina histórico, agenda futura, meta e isola a unidade ativa', () => {
+  const { bruno, corte } = montarBarbearia();
+  const agora = Date.parse('2026-10-15T16:00:00.000Z');
+  const marcar = (data, hora, codigo, lojaId = LOJA, telefone = `6598000${codigo.slice(-4)}`) => {
+    const agendamento = barbearia.criarAgendamento(EMPRESA, {
+      clienteNome: `Cliente ${codigo}`, clienteTelefone: telefone, profissionalId: bruno.id, servicoId: corte.id,
+      dataHora: isoLocal(data, hora), dataAgenda: data, horaLocal: hora, lojaId, origem: 'balcao', codigoConfirmacao: codigo,
+    });
+    return concluir(agendamento);
+  };
+  // Três meses encerrados, com crescimento real de serviços.
+  marcar('2026-07-10', '09:00', 'PRJ00001');
+  marcar('2026-08-10', '09:00', 'PRJ00002'); marcar('2026-08-10', '10:00', 'PRJ00003');
+  marcar('2026-09-10', '09:00', 'PRJ00004'); marcar('2026-09-10', '10:00', 'PRJ00005'); marcar('2026-09-10', '11:00', 'PRJ00006');
+  marcar('2026-10-10', '09:00', 'PRJ00007');
+  // Registro de outra unidade: jamais entra na consulta filtrada da Loja A.
+  marcar('2026-10-11', '17:00', 'PRJ00008', LOJA_A2, '65980000008');
+  barbearia.criarAgendamento(EMPRESA, {
+    clienteNome: 'Cliente agenda', clienteTelefone: '65980000009', profissionalId: bruno.id, servicoId: corte.id,
+    dataHora: isoLocal('2026-10-24', '10:00'), dataAgenda: '2026-10-24', horaLocal: '10:00', lojaId: LOJA, origem: 'balcao', codigoConfirmacao: 'PRJ00009',
+  });
+  captacao.salvarMetaProfissional(EMPRESA, { profissionalId: bruno.id, mes: '2026-10', receita: 500, atendimentos: 10 });
+
+  const painel = captacao.projecaoFaturamento(EMPRESA, { mes: '2026-10', lojaId: LOJA, horizonte: 6 }, { agora });
+  assert.equal(painel.horizonte, 6);
+  assert.equal(painel.previsoes.length, 6);
+  assert.equal(painel.atual.realizado, 50, 'não mistura a receita da outra unidade');
+  assert.equal(painel.atual.agendaFutura, 50);
+  assert.equal(painel.qualidade.nivel, 'media');
+  assert.ok(painel.atual.projecao >= 100, 'realizado, agenda e histórico formam a estimativa');
+  assert.equal(painel.atual.metaReceita, 500);
+  assert.ok(painel.fatores.some((item) => item.tipo === 'meta'));
+  const linhaBruno = painel.profissionais.find((item) => item.profissionalId === bruno.id);
+  assert.equal(linhaBruno.realizado, 50);
+  assert.ok(linhaBruno.capacidadeMinutos > 0);
+  assert.ok(linhaBruno.ocupacao > 0, 'ocupação considera somente os registros da unidade consultada');
+  const futuro = captacao.projecaoFaturamento(EMPRESA, { mes: '2026-11', lojaId: LOJA, horizonte: 6 }, { agora });
+  assert.equal(futuro.historico.at(-1).mes, '2026-09', 'mês atual parcial não entra como histórico fechado da previsão futura');
+  assert.equal(captacao.projecaoFaturamento(EMPRESA_B, { mes: '2026-10' }, { agora }).atual.realizado, 0, 'outra empresa não herda fatos');
+  assert.throws(() => captacao.projecaoFaturamento(EMPRESA, { mes: '2026-13' }, { agora }), { code: 'MES_INVALIDO' });
+});
+
+test('projeção inteligente inclui apenas revenda paga no faturamento realizado', () => {
+  montarBarbearia();
+  const produto = barbearia.criarProdutoRevenda(EMPRESA, { nome: 'Pomada', precoVenda: 30, custoUnitario: 10, estoqueAtual: 3 });
+  const aguardando = barbearia.criarVendaRevenda(EMPRESA, { lojaId: LOJA, clienteNome: 'Cliente', itens: [{ produtoId: produto.id, quantidade: 1 }] });
+  const competencia = dataLocal(Date.now()).slice(0, 7);
+  let painel = captacao.projecaoFaturamento(EMPRESA, { mes: competencia, lojaId: LOJA });
+  assert.equal(painel.atual.revenda, 0, 'venda aguardando pagamento não é faturamento');
+  barbearia.finalizarVendaRevenda(EMPRESA, aguardando.id, { confirmadoPagamento: true, meioPagamento: 'pix', valorRecebido: 30 });
+  painel = captacao.projecaoFaturamento(EMPRESA, { mes: competencia, lojaId: LOJA });
+  assert.equal(painel.atual.revenda, 30);
+  assert.equal(painel.atual.realizado, 30);
+});
