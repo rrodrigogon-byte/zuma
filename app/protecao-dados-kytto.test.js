@@ -72,6 +72,39 @@ test('rotinaDoLider não executa em instância que não é líder', async () => 
   assert.ok(protecao.situacao().problemas.includes('outra_instancia_ativa'));
 });
 
+test('cópia externa valida JSON grande sem manter descompressão inteira em memória', async () => {
+  const pasta = pastaTemp();
+  const banco = path.join(pasta, 'db.json');
+  fs.writeFileSync(banco, JSON.stringify({ seq: 7, ruido: 'x'.repeat(1024 * 1024) }));
+  const registros = new Map();
+  let proximoId = 1;
+  const pool = {
+    connect: async () => ({ query: async () => ({ rows: [{ ok: true }] }), release() {}, on() {} }),
+    query: async (sql, values = []) => {
+      if (sql.includes('INSERT INTO kytto_json_snapshots')) {
+        const id = String(proximoId++);
+        registros.set(id, { id, conteudo: values[6], bytesGzip: values[3], sha256: values[4], criado_em: new Date().toISOString(), verificado_em: null, tipo: values[0] });
+        return { rows: [{ id, criado_em: registros.get(id).criado_em }] };
+      }
+      if (sql.includes('SELECT conteudo FROM kytto_json_snapshots')) return { rows: [{ conteudo: registros.get(String(values[0])).conteudo }] };
+      if (sql.includes('UPDATE kytto_json_snapshots SET verificado_em')) { registros.get(String(values[0])).verificado_em = new Date().toISOString(); return { rows: [] }; }
+      if (sql.includes('DELETE FROM kytto_json_snapshots WHERE verificado_em')) return { rows: [] };
+      if (sql.includes('SELECT id, bytes_gzip FROM kytto_json_snapshots')) return { rows: [...registros.values()] };
+      if (sql.includes('SELECT id FROM kytto_json_snapshots')) return { rows: [{ id: [...registros.keys()].at(-1) }] };
+      if (sql.includes('DELETE FROM kytto_json_snapshots WHERE id = ANY')) return { rows: [] };
+      throw new Error(`consulta inesperada no mock: ${sql}`);
+    },
+  };
+  const protecao = criarProtecaoDados({ getPool: () => pool, caminhoBanco: () => banco, env: { DATABASE_URL: 'postgres://x' }, log: silencioso });
+  assert.equal(await protecao.disputarLideranca(), true);
+  const copia = await protecao.criarCopia({ tipo: 'manual', forcar: true });
+  assert.equal(copia.verificada, true);
+  assert.equal(registros.get(copia.id).verificado_em !== null, true);
+  assert.equal(zlib.gunzipSync(registros.get(copia.id).conteudo).toString(), fs.readFileSync(banco, 'utf8'));
+  assert.equal(fs.readdirSync(os.tmpdir()).some((nome) => nome.startsWith(`kytto-snapshot-${process.pid}-`)), false);
+  await protecao.encerrar();
+});
+
 test('db.js grava JSON compacto, mede a gravação e recupera do .bak se o principal sumir', () => {
   const pasta = pastaTemp();
   const banco = path.join(pasta, 'db.json');
