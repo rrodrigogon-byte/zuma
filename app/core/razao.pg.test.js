@@ -299,6 +299,25 @@ describe('Razão financeiro único (PostgreSQL)', { skip: pgDeTeste }, () => {
     assert.ok(pendentes > 0, 'pendentes continuam em aberto');
   });
 
+  test('histórico Avec da Dino entra marcado e aparece à parte na conferência', async () => {
+    const G = randomUUID();
+    await ctx.db.query('INSERT INTO empresas (id) VALUES ($1)', [G]);
+    const lojaG = randomUUID();
+    await ctx.db.query('INSERT INTO lojas (id, empresa_id) VALUES ($1, $2)', [lojaG, G]);
+    const lancamentos = [
+      { id: 'av1', tipo: 'receita', categoria: 'Receitas de Vendas', descricao: 'Comanda Nº2', valor: 100, status: 'pago', vencimento: '2025-06-05', lojaId: 'dino-web-estoque', origem: 'avec-import-financeiro-20261022', metadata: { historicoAvec: true } },
+      { id: 'av2', tipo: 'despesa', categoria: 'Fornecedores', descricao: 'Conta antiga', valor: 40, status: 'pendente', vencimento: '2025-07-01', lojaId: 'dino-web-estoque', origem: 'avec-import-financeiro-20261022', metadata: { historicoAvec: true } },
+      { id: 'op1', tipo: 'receita', categoria: 'Serviços', descricao: 'Atendimento', valor: 70, status: 'pago', vencimento: '2026-10-20', lojaId: 'dino-web-estoque' },
+    ];
+    const opcoes = { chaveLegada: 'emp-kytto-001', lancamentos, mapaUnidades: { 'dino-web-estoque': lojaG } };
+    const conf = await fontes.conferirJsonLegado(ctx.db, G, opcoes);
+    assert.deepEqual(conf.historicoAvec, { quantidade: 2, receitaPaga: 100, despesaPaga: 0, despesaPendente: 40, quantidadeDespesaPendente: 1 });
+    await fontes.liberarJsonLegado(ctx.db, G, { ...opcoes, usuario: 'plataforma' });
+    const r = (await ctx.db.query("SELECT origem, observacao FROM fin_lancamentos WHERE empresa_id = $1 AND chave = 'json:emp-kytto-001:av1'", [G])).rows[0];
+    assert.equal(r.origem, 'legado_avec-import-financeiro-20261022');
+    assert.match(r.observacao, /Histórico Avec/);
+  });
+
   test('prontidão: fiado do bar de antes do Financeiro novo entra como recebido', async () => {
     const F = randomUUID();
     await ctx.db.query('INSERT INTO empresas (id) VALUES ($1)', [F]);

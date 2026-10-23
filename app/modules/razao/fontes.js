@@ -268,6 +268,16 @@ function diaNoFuso(valor, fuso) {
  * ficam de fora, salvo `incluirQuarentena`. Reversões do antigo viram estorno do original no
  * razão (o razão não deixa estornar de novo). `aplicar=false` só simula; nada é gravado.
  */
+// Histórico do sistema anterior (Avec) já importado no financeiro antigo da Dino: entra no razão como
+// histórico, não como venda operacional nova (a mesma marca que o painel e o BI da Dino usam).
+export const ORIGEM_HISTORICO_AVEC = 'avec-import-financeiro-20261022';
+export const ehHistoricoAvec = (item) => item?.metadata?.historicoAvec === true || item?.origem === ORIGEM_HISTORICO_AVEC;
+function observacaoLegada(item) {
+  const propria = item?.observacao ? String(item.observacao) : '';
+  if (!ehHistoricoAvec(item)) return propria ? propria.slice(0, 2000) : null;
+  return `Histórico Avec (não é venda operacional nova)${propria ? ` · ${propria}` : ''}`.slice(0, 2000);
+}
+
 export async function importarJsonLegado(db, empresaId, { chaveLegada, lancamentos = [], mapaUnidades = {}, aplicar = false, incluirQuarentena = false, fuso = FUSO_PADRAO } = {}) {
   const empresa = exigirUuid(empresaId, 'empresa');
   if (!chaveLegada) throw new ErroDominio('VALIDATION_ERROR', 'chaveLegada é obrigatória');
@@ -305,7 +315,7 @@ export async function importarJsonLegado(db, empresaId, { chaveLegada, lancament
         diaNoFuso(item?.dataOperacao, fuso) || venc, venc, status, pagoEm, item.meioPagamento ? String(item.meioPagamento).slice(0, 30) : null,
         status === 'pago' ? 'avulso' : (tipo === 'receita' ? 'receber' : 'pagar'),
         `legado_${String(item.origem || 'manual').slice(0, 32)}`, id.slice(0, 160), `json:${chaveLegada}:${id}`.slice(0, 200),
-        item.automatico === true, String(item.usuario || 'importação').slice(0, 180), item.observacao ? String(item.observacao).slice(0, 2000) : null,
+        item.automatico === true, String(item.usuario || 'importação').slice(0, 180), observacaoLegada(item),
         status === 'cancelado' ? new Date(item.canceladoEm || item.atualizadoEm || Date.now()) : null,
       ],
     });
@@ -421,6 +431,8 @@ export async function conferirJsonLegado(db, empresaId, { chaveLegada, lancament
   const ensaio = await importarJsonLegado(db, empresa, { chaveLegada, lancamentos, mapaUnidades, aplicar: false, incluirQuarentena, fuso });
   const lista = Array.isArray(lancamentos) ? lancamentos : [];
   const quarentena = []; const porUnidadeLegada = {};
+  // histórico Avec à parte, para a conferência mostrar o que é histórico e o que é operação
+  const historicoAvec = { quantidade: 0, receitaPaga: 0, despesaPaga: 0, despesaPendente: 0, quantidadeDespesaPendente: 0 };
   const esperado = {}; const chaves = [];
   for (const item of lista) {
     const id = String(item?.id || '').trim();
@@ -435,6 +447,11 @@ export async function conferirJsonLegado(db, empresaId, { chaveLegada, lancament
       continue;
     }
     if (ensaio.ignorados.some((x) => x.id === id)) continue;
+    if (ehHistoricoAvec(item)) {
+      historicoAvec.quantidade += 1;
+      if (status === 'pago') historicoAvec[tipo === 'receita' ? 'receitaPaga' : 'despesaPaga'] = Math.round((historicoAvec[tipo === 'receita' ? 'receitaPaga' : 'despesaPaga'] + valor) * 100) / 100;
+      if (status === 'pendente' && tipo === 'despesa') { historicoAvec.despesaPendente = Math.round((historicoAvec.despesaPendente + valor) * 100) / 100; historicoAvec.quantidadeDespesaPendente += 1; }
+    }
     const k = `${tipo}:${status}`;
     esperado[k] = esperado[k] || { tipo, status, quantidade: 0, valor: 0 };
     esperado[k].quantidade += 1; esperado[k].valor = Math.round((esperado[k].valor + valor) * 100) / 100;
@@ -470,6 +487,7 @@ export async function conferirJsonLegado(db, empresaId, { chaveLegada, lancament
     faltandoNoRazao: faltando, totalFaltando: chaves.length - presentes.size,
     quarentena: { quantidade: ensaio.quarentena, itens: quarentena, incluida: incluirQuarentena === true },
     porUnidadeLegada,
+    historicoAvec,
   };
 }
 
