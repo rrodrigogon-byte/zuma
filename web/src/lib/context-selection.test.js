@@ -25,3 +25,9 @@ test('ignora unidades inativas e nunca mistura empresas', () => {
   assert.deepEqual(lojasDaEmpresa(lojas, 'dino'), [lojas[0]])
   assert.equal(selecionarLojaAutomatica(lojas, 'ausente'), null)
 })
+
+test('aceita o alias Commerce da empresa sem misturar outras lojas', () => {
+  const loja = { id: 'dino-commerce', empresaId: 'emp-kytto-001', commerceEmpresaId: 'dino-commerce-id', nome: 'DINO-MATRIZ' }
+  assert.deepEqual(lojasDaEmpresa([loja], 'dino-commerce-id'), [loja])
+  assert.equal(lojasDaEmpresa([loja], 'outra-empresa').length, 0)
+})

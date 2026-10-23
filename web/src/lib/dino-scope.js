@@ -20,7 +20,8 @@ export const DINO_COMPANY = Object.freeze({
 // autoridade de autorização e valida o mesmo par canônico.
 export const DINO_STORE = Object.freeze({
   id: DINO_SCOPE.lojaId,
-  empresaId: DINO_SCOPE.empresaId,
+  empresaId: 'emp-kytto-001',
+  commerceEmpresaId: DINO_SCOPE.empresaId,
   codigo: 'DINO-MATRIZ',
   nome: 'Barbearia Dino',
   nome_fantasia: 'Barbearia Dino',

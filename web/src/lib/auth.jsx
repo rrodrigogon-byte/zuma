@@ -133,7 +133,7 @@ export function AuthProvider({ children }) {
       setLojaAtiva(null)
       return true
     }
-    const proxima = lojasAcessiveis.find((loja) => loja.id === lojaId && loja.ativa !== false && (!empresaAtiva?.id || loja.empresaId === empresaAtiva.id))
+    const proxima = lojasAcessiveis.find((loja) => loja.id === lojaId && loja.ativa !== false && (!empresaAtiva?.id || loja.empresaId === empresaAtiva.id || loja.commerceEmpresaId === empresaAtiva.id))
     if (!proxima) return false
     if (lojaAtiva?.id !== proxima.id) desligarPushContextoAtual()
     localStorage.setItem('sp_loja_ativa', JSON.stringify(proxima))

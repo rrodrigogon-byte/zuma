@@ -1,6 +1,10 @@
 export function lojasDaEmpresa(lojas = [], empresaId = '') {
   const id = String(empresaId || '')
-  return (Array.isArray(lojas) ? lojas : []).filter((loja) => loja && loja.ativa !== false && (!id || String(loja.empresaId || '') === id))
+  return (Array.isArray(lojas) ? lojas : []).filter((loja) => {
+    if (!loja || loja.ativa === false) return false
+    if (!id) return true
+    return String(loja.empresaId || '') === id || String(loja.commerceEmpresaId || '') === id
+  })
 }
 
 export function selecionarLojaAutomatica(lojas = [], empresaId = '', atual = null) {
