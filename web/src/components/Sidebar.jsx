@@ -4,7 +4,7 @@ import { rotaVisivel } from '../lib/disponibilidade'
 import { useAuth } from '../lib/auth'
 import { api } from '../lib/api'
 import { applyThemeMode, DINO_BARBERSHOP_LOGO, isClubeBrandContext, isDinoBrandContext, isStalloneBrandContext, STALLONE_LOGO, storedThemeMode } from '../lib/brand'
-import { DINO_STORE } from '../lib/dino-scope'
+import { DINO_STORE, isDinoDedicatedHost } from '../lib/dino-scope'
 
 // ── Badge de pedidos pendentes ─────────────────────────────────────────────────
 function usePendingOrders(isStaff) {
@@ -541,7 +541,7 @@ export default function Sidebar({ collapsed = false, onToggleCollapse = () => {}
   const [open, setOpen] = useState(false)
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
   const pendentes = usePendingOrders(isStaff)
-  const isDino = isDinoBrandContext(empresaAtiva)
+  const isDino = isDinoDedicatedHost() || isDinoBrandContext(empresaAtiva)
   const isStallone = !isDino && isStalloneBrandContext(empresaAtiva)
   const isClube = !isDino && !isStallone && isClubeBrandContext(empresaAtiva)
   const [themeMode, setThemeMode] = useState(() => storedThemeMode())
