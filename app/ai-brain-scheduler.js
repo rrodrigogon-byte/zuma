@@ -20,14 +20,14 @@ export function automationGraphScope(row = {}) {
   return { ...scope, legacyScopeVerified: true };
 }
 
-export async function runAutomationTick({ now = new Date() } = {}) {
+export async function runAutomationTick({ now = new Date(), database = db, runRound = runAutomationRound, loadGraph = loadBrainGraph } = {}) {
   const hour = localHour(now);
   if (hour < 9 || hour >= 20) return [];
-  const empresas = await db.queryRead(
-    `SELECT s.empresa_id,
-            (SELECT c.loja_id FROM canais_integracao c WHERE c.empresa_id = s.empresa_id AND c.provedor = 'whatsapp' AND c.status = 'ativo'
-              ORDER BY c.data_atualizacao DESC NULLS LAST LIMIT 1) AS loja_id
+  const empresas = await database.queryRead(
+    `SELECT DISTINCT s.empresa_id, c.loja_id
        FROM ai_brain_settings s
+       JOIN canais_integracao c ON c.empresa_id = s.empresa_id
+        AND c.provedor = 'whatsapp' AND c.status = 'ativo' AND c.loja_id IS NOT NULL
       WHERE s.ativo = true AND EXISTS (SELECT 1 FROM jsonb_each_text(s.automacoes) a WHERE a.value = 'true')`,
   ).catch(() => ({ rows: [] }));
   const results = [];
@@ -39,13 +39,13 @@ export async function runAutomationTick({ now = new Date() } = {}) {
         results.push({ empresa: String(row.empresa_id || '').slice(0, 8), skipped: true, reason: 'legacy_scope_unverified' });
         continue;
       }
-      const result = await runAutomationRound({
+      const result = await runRound({
         empresaId: row.empresa_id,
         lojaId: row.loja_id,
-        loadGraph: () => loadBrainGraph(graphScope),
+        loadGraph: () => loadGraph(graphScope),
         now,
       });
-      results.push({ empresa: String(row.empresa_id).slice(0, 8), ...result });
+      results.push({ empresa: String(row.empresa_id).slice(0, 8), loja: String(row.loja_id).slice(0, 8), ...result });
     } catch (error) {
       console.warn('[Cérebro] rodada de automações falhou:', String(error?.code || error?.message || 'erro').slice(0, 120));
     }

@@ -279,15 +279,30 @@ function cartDeliveryError(message, code, retryable = false) {
 
 export async function processCartRecoveryTask(task = {}) {
   const cartId = uuid(task.referencia_externa, 'cartId');
-  if (task.delivery_started_at) throw cartDeliveryError('resultado anterior do lembrete incerto; revisão humana obrigatória', 'CART_RECOVERY_DELIVERY_UNKNOWN', false);
+  const empresaId = uuid(task.empresa_id, 'empresaId');
+  const lojaId = uuid(task.loja_id, 'lojaId');
+  const canalId = uuid(task.canal_id, 'canalId');
+  const taskId = uuid(task.id, 'taskId');
+  const leaseToken = uuid(task.lease_token, 'leaseToken');
+  const deliveryStarted = Boolean(task.delivery_started_at);
   const snapshot = await db.transaction(async trx => {
     const locked = await trx.query(
-      `SELECT * FROM commerce_carts WHERE empresa_id=$1 AND id=$2 FOR UPDATE`,
-      [task.empresa_id, cartId],
+      `SELECT c.* FROM commerce_carts c
+         JOIN commerce_storefronts s ON s.empresa_id=c.empresa_id AND s.id=c.storefront_id
+        WHERE c.empresa_id=$1 AND c.id=$2 AND s.loja_id=$3 FOR UPDATE OF c`,
+      [empresaId, cartId, lojaId],
     );
-    if (!locked.rows[0]) return { skipped: true, reason: 'cart_not_found' };
+    const lockedCart = locked.rows[0];
+    if (!lockedCart) return { skipped: true, reason: 'cart_not_found' };
+    if (deliveryStarted) {
+      if (lockedCart.recovery_status === 'sent' || lockedCart.recovery_reminded_at) {
+        return { idempotent: true, cartId: lockedCart.id, providerId: lockedCart.recovery_provider_id };
+      }
+      throw cartDeliveryError('resultado anterior do lembrete incerto; revisão humana obrigatória', 'CART_RECOVERY_DELIVERY_UNKNOWN', false);
+    }
     const result = await trx.query(
       `SELECT c.*, s.loja_id, s.nome AS storefront_name, a.alias, cu.nome AS customer_name, cu.telefone,
+              ci.id AS channel_id,
               ci.api_base_url, ci.configuracao, ci.nome AS channel_name,
               COALESCE(jsonb_agg(jsonb_build_object('nome',p.nome,'quantidade',i.quantidade) ORDER BY i.criado_em) FILTER (WHERE i.id IS NOT NULL),'[]'::jsonb) AS items
          FROM commerce_carts c
@@ -297,47 +312,97 @@ export async function processCartRecoveryTask(task = {}) {
          LEFT JOIN commerce_cart_items i ON i.empresa_id=c.empresa_id AND i.cart_id=c.id
          LEFT JOIN commerce_product_variants v ON v.empresa_id=i.empresa_id AND v.id=i.variant_id
          LEFT JOIN commerce_products p ON p.empresa_id=v.empresa_id AND p.id=v.product_id
-         LEFT JOIN canais_integracao ci ON ci.id=$2 AND ci.empresa_id=c.empresa_id AND ci.loja_id=s.loja_id AND ci.status='ativo'
-        WHERE c.empresa_id=$1 AND c.id=$3
+         JOIN canais_integracao ci ON ci.id=$2 AND ci.empresa_id=c.empresa_id AND ci.loja_id=s.loja_id AND ci.loja_id=$4 AND ci.status='ativo'
+        WHERE c.empresa_id=$1 AND c.id=$3 AND s.loja_id=$4
         GROUP BY c.id,s.loja_id,s.nome,a.alias,cu.id,ci.id`,
-      [task.empresa_id, task.canal_id, cartId],
+      [empresaId, canalId, cartId, lojaId],
     );
     const cart = result.rows[0];
+    if (!cart || String(cart.loja_id) !== lojaId || String(cart.channel_id) !== canalId) {
+      const blocked = await trx.query(
+        `UPDATE commerce_carts SET recovery_status = 'failed', atualizado_em = CURRENT_TIMESTAMP
+          WHERE empresa_id = $1 AND id = $2 AND storefront_id = $3
+            AND status IN ('open','abandoned') AND recovery_status IN ('consented','queued')
+          RETURNING customer_id`,
+        [empresaId, lockedCart.id, lockedCart.storefront_id],
+      );
+      if (blocked.rows[0]) await event(trx, { empresaId, lojaId, cartId: lockedCart.id, customerId: blocked.rows[0].customer_id, type: 'failed', metadata: { reason: 'active_store_channel_mismatch' } });
+      return { skipped: true, reason: 'cart_store_or_channel_mismatch' };
+    }
     if (!['open','abandoned'].includes(cart.status) || !['consented','queued'].includes(cart.recovery_status)) return { skipped: true, reason: 'cart_not_eligible' };
     if (!cart.recovery_consent_at || cart.recovery_revoked_at || cart.recovery_reminded_at) return { skipped: true, reason: 'consent_not_active' };
     if (new Date(cart.recovery_due_at || 0).getTime() > Date.now()) fail('lembrete ainda não venceu', 'CART_RECOVERY_NOT_DUE');
     if (!cart.telefone || !(whatsappProviderConfigured() || process.env.EVOLUTION_API_URL || cart.api_base_url)) fail('canal ou contato de recuperação indisponível', 'MESSAGING_NOT_READY');
-    await trx.query(`UPDATE commerce_carts SET status='abandoned',recovery_status='queued',atualizado_em=CURRENT_TIMESTAMP WHERE empresa_id=$1 AND id=$2`, [cart.empresa_id, cart.id]);
+    await trx.query(`UPDATE commerce_carts SET status='abandoned',recovery_status='queued',atualizado_em=CURRENT_TIMESTAMP WHERE empresa_id=$1 AND id=$2 AND storefront_id=$3`, [empresaId, cart.id, cart.storefront_id]);
     return cart;
   });
+  if (snapshot.idempotent) return { sent: true, idempotent: true, providerMessageId: snapshot.providerId || null, cartId: snapshot.cartId };
   if (snapshot.skipped) return snapshot;
+  if (String(snapshot.loja_id) !== lojaId || String(snapshot.channel_id) !== canalId) return { skipped: true, reason: 'cart_store_or_channel_mismatch' };
   const items = Array.isArray(snapshot.items) ? snapshot.items.slice(0, 3).map(item => `${Number(item.quantidade)}× ${item.nome}`).join(', ') : '';
   const alias = clean(snapshot.alias || '', 80);
   const resumeUrl = alias ? `${publicOrigin()}/ecommerce/${encodeURIComponent(alias)}` : publicOrigin();
   const message = `Olá, ${clean(snapshot.customer_name, 80)}. Você deixou ${items || 'itens'} no carrinho da ${clean(snapshot.storefront_name, 120)}. Se quiser concluir, retome em ${resumeUrl}. Para não receber lembretes deste carrinho, responda SAIR.`;
-  await db.query(
+  const claimed = await db.query(
     `UPDATE tarefas_integracao_canais SET delivery_started_at = CURRENT_TIMESTAMP
-      WHERE id = $1 AND status = 'processando' AND lease_token = $2::uuid`,
-    [task.id, task.lease_token],
+      WHERE id = $1 AND empresa_id = $2 AND loja_id = $3 AND canal_id = $4
+        AND status = 'processando' AND lease_token = $5::uuid RETURNING id`,
+    [taskId, empresaId, lojaId, canalId, leaseToken],
   );
+  if (!claimed.rowCount) throw cartDeliveryError('tarefa de carrinho sem lease ou escopo da unidade correspondente', 'CART_RECOVERY_TASK_SCOPE_MISMATCH', false);
   const sent = await enviarMensagem({
     whatsapp_api_url: process.env.EVOLUTION_API_URL || snapshot.api_base_url,
     whatsapp_api_key: process.env.EVOLUTION_API_KEY,
     whatsapp_instance: snapshot.configuracao?.instance || process.env.EVOLUTION_INSTANCE,
-    empresa_id: snapshot.empresa_id, loja_id: snapshot.loja_id, canal_id: task.canal_id,
+    empresa_id: empresaId, loja_id: lojaId, canal_id: canalId,
   }, snapshot.telefone, message);
   if (!sent?.ok) {
     const unknown = sent?.uncertain === true;
-    if (!unknown) await db.query(`UPDATE tarefas_integracao_canais SET delivery_started_at = NULL WHERE id = $1`, [task.id]);
+    if (!unknown) await db.query(`UPDATE tarefas_integracao_canais SET delivery_started_at = NULL WHERE id = $1 AND empresa_id = $2 AND loja_id = $3 AND canal_id = $4 AND lease_token = $5::uuid`, [taskId, empresaId, lojaId, canalId, leaseToken]);
     throw cartDeliveryError(unknown ? 'resultado do lembrete incerto' : 'falha ao enviar lembrete pelo provedor', unknown ? 'CART_RECOVERY_DELIVERY_UNKNOWN' : 'CART_RECOVERY_SEND_FAILED', !unknown && sent?.retryable === true);
   }
   const providerId = clean(sent?.data?.key?.id || sent?.data?.id || '', 200) || null;
   await db.transaction(async trx => {
-    await trx.query(`UPDATE commerce_carts SET recovery_status='sent',recovery_reminded_at=CURRENT_TIMESTAMP,recovery_provider_id=$3,atualizado_em=CURRENT_TIMESTAMP WHERE empresa_id=$1 AND id=$2 AND recovery_reminded_at IS NULL`, [snapshot.empresa_id, snapshot.id, providerId]);
-    await trx.query(`UPDATE tarefas_integracao_canais SET provider_message_id=$2 WHERE id=$1`, [task.id, providerId]);
-    await event(trx, { empresaId: snapshot.empresa_id, lojaId: snapshot.loja_id, cartId: snapshot.id, customerId: snapshot.customer_id, type: 'sent', metadata: { providerId } });
+    await trx.query(`UPDATE commerce_carts SET recovery_status='sent',recovery_reminded_at=CURRENT_TIMESTAMP,recovery_provider_id=$4,atualizado_em=CURRENT_TIMESTAMP WHERE empresa_id=$1 AND id=$2 AND storefront_id=$3 AND recovery_reminded_at IS NULL`, [empresaId, snapshot.id, snapshot.storefront_id, providerId]);
+    await trx.query(`UPDATE tarefas_integracao_canais SET provider_message_id=$2 WHERE id=$1 AND empresa_id=$3 AND loja_id=$4 AND canal_id=$5`, [taskId, providerId, empresaId, lojaId, canalId]);
+    await event(trx, { empresaId, lojaId, cartId: snapshot.id, customerId: snapshot.customer_id, type: 'sent', metadata: { providerId } });
   });
   return { sent: true, providerMessageId: providerId, cartId: snapshot.id };
+}
+
+export async function markCartRecoveryTaskBlocked(task = {}, reason = 'marketing_gate_skip') {
+  const cartId = uuid(task.referencia_externa, 'cartId');
+  const empresaId = uuid(task.empresa_id, 'empresaId');
+  const lojaId = uuid(task.loja_id, 'lojaId');
+  const canalId = uuid(task.canal_id, 'canalId');
+  const taskId = uuid(task.id, 'taskId');
+  if (task.delivery_started_at) throw cartDeliveryError('envio já iniciado; exige reconciliação, não bloqueio', 'CART_RECOVERY_DELIVERY_UNKNOWN', false);
+  const optedOut = ['opt_out', 'cliente_pediu_sair', 'sair'].includes(String(reason).toLowerCase());
+  const status = optedOut ? 'revoked' : 'failed';
+  return db.transaction(async trx => {
+    const updated = await trx.query(
+      `UPDATE commerce_carts c
+          SET recovery_status = $4,
+              recovery_revoked_at = CASE WHEN $4 = 'revoked' THEN COALESCE(c.recovery_revoked_at, CURRENT_TIMESTAMP) ELSE c.recovery_revoked_at END,
+              atualizado_em = CURRENT_TIMESTAMP
+         FROM commerce_storefronts s
+        WHERE c.empresa_id = $1 AND c.id = $2 AND c.storefront_id = s.id
+          AND s.empresa_id = $1 AND s.loja_id = $3
+          AND c.status IN ('open','abandoned') AND c.recovery_status IN ('consented','queued')
+          AND EXISTS (
+            SELECT 1 FROM tarefas_integracao_canais t
+             WHERE t.id = $5 AND t.empresa_id = $1 AND t.loja_id = $3 AND t.canal_id = $6
+               AND t.tipo = 'recuperar_carrinho' AND t.referencia_externa = c.id::text
+          )
+        RETURNING c.customer_id`,
+      [empresaId, cartId, lojaId, status, taskId, canalId],
+    );
+    if (updated.rows[0]) await event(trx, {
+      empresaId, lojaId, cartId, customerId: updated.rows[0].customer_id,
+      type: status, metadata: { source: 'marketing_gate', reason: clean(reason, 80) },
+    });
+    return { terminalized: Boolean(updated.rows[0]), status };
+  });
 }
 
 export async function recordCartRecoveryOptOut(channel = {}, parsed = {}) {

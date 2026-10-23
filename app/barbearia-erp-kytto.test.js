@@ -675,6 +675,24 @@ test('reservas: commit, release, expire e cancelamento convertem/liberam uma ún
   assert.equal(cancelarComandaBarbearia(EMPRESA_A, comanda.id).idempotente, true);
 });
 
+test('revenda distingue saldo explicitamente informado do zero operacional padrão', () => {
+  const unknown = criarProdutoRevenda(EMPRESA_A, { lojaId: LOJA, nome: 'Saldo desconhecido', precoVenda: 12 });
+  const explicitZero = criarProdutoRevenda(EMPRESA_A, { lojaId: LOJA, nome: 'Saldo zero informado', precoVenda: 13, estoqueAtual: 0 });
+  assert.equal(unknown.estoqueAtual, 0, 'o comportamento transacional existente do PDV permanece inalterado');
+  assert.equal(unknown.estoqueInformado, false);
+  assert.equal(explicitZero.estoqueAtual, 0);
+  assert.equal(explicitZero.estoqueInformado, true);
+  assert.equal(listarProdutosRevenda(EMPRESA_A, { lojaId: LOJA }).find((item) => item.id === unknown.id).estoqueInformado, false);
+  delete db().barbearias[EMPRESA_A].produtosRevenda[unknown.id].estoqueInformado;
+  assert.equal(listarProdutosRevenda(EMPRESA_A, { lojaId: LOJA }).find((item) => item.id === unknown.id).estoqueInformado, false, 'registro legado sem movimento não deve virar estoque zero confirmado');
+  const legacyWithMovement = criarProdutoRevenda(EMPRESA_A, { lojaId: LOJA, nome: 'Saldo legado com movimento', precoVenda: 14, estoqueAtual: 2 });
+  delete db().barbearias[EMPRESA_A].produtosRevenda[legacyWithMovement.id].estoqueInformado;
+  assert.equal(listarProdutosRevenda(EMPRESA_A, { lojaId: LOJA }).find((item) => item.id === legacyWithMovement.id).estoqueInformado, true);
+  const adjusted = ajustarEstoqueRevenda(EMPRESA_A, unknown.id, { lojaId: LOJA, tipo: 'entrada', quantidade: 3 });
+  assert.equal(adjusted.produto.estoqueAtual, 3);
+  assert.equal(adjusted.produto.estoqueInformado, true);
+});
+
 test('reservas: cross-store é bloqueado e produto legado sem loja fica em quarentena', () => {
   const produto = criarProdutoRevenda(EMPRESA_A, { lojaId: 'loja-a', nome: 'Produto unidade A', precoVenda: 10, estoqueAtual: 1 });
   assert.throws(() => reserveInventoryForOperation(EMPRESA_A, { lojaId: 'loja-b', produtoId: produto.id, quantidade: 1, origem: 'teste', actionId: 'cross-store', expiresAt: '2099-01-01T00:00:00.000Z' }), (error) => error.code === 'CROSS_STORE' && error.status === 409);

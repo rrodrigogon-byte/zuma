@@ -19,6 +19,11 @@ const DAY = 86400000;
 const list = (value) => (Array.isArray(value) ? value : []);
 const num = (value) => (Number.isFinite(Number(value)) ? Number(value) : 0);
 const round = (value, digits = 2) => Math.round(value * 10 ** digits) / 10 ** digits;
+const stockNumber = (value) => {
+  if (value === null || value === undefined || typeof value === 'boolean' || (typeof value === 'string' && !value.trim())) return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+};
 
 const MULTIWORD_BRANDS = ['tom ford', 'calvin klein', 'carolina herrera', 'paco rabanne', 'issey miyake', 'jean paul gaultier', 'giorgio armani', 'hugo boss', 'dolce gabbana', 'yves saint laurent', 'silver scent', 'ralph lauren', 'maison margiela', 'le labo', 'club de nuit'];
 
@@ -52,9 +57,68 @@ export function graphPhone(value) {
   return digits.length >= 12 && digits.length <= 15 ? digits : '';
 }
 
+export function isCustomerPhoneUnambiguous(graph, value) {
+  const phone = graphPhone(value);
+  if (!phone || !(graph?.customers instanceof Map)) return false;
+  const identitySources = ['clients', 'appointments', 'commands', 'retailSales', 'pedidos'];
+  const sourceQuality = graph?.quality?.fontes || {};
+  if (identitySources.some((name) => sourceQuality[name]?.status !== 'ok')) return false;
+  const matches = [...graph.customers.values()].filter((customer) => graphPhone(customer?.phone) === phone);
+  return matches.length === 1 && matches[0].identityUnresolved !== true;
+}
+
 function dateMs(value) {
   const ms = new Date(value || '').valueOf();
   return Number.isFinite(ms) ? ms : 0;
+}
+
+function rowTimestamp(row, fields) {
+  for (const field of fields) {
+    const timestamp = dateMs(row?.[field]);
+    if (timestamp > 0) return timestamp;
+  }
+  return 0;
+}
+
+function withinHistory(row, fields, { cutoffMs, nowMs, includeUndated }) {
+  const timestamp = rowTimestamp(row, fields);
+  return timestamp > 0 ? timestamp >= cutoffMs && timestamp <= nowMs : includeUndated;
+}
+
+function windowedInput(rawInput, { now, relationshipWindowDays, includeUndated }) {
+  const days = Number(relationshipWindowDays);
+  if (!Number.isFinite(days) || days <= 0) return rawInput;
+  const nowMs = now instanceof Date ? now.valueOf() : dateMs(now);
+  if (!Number.isFinite(nowMs) || nowMs <= 0) return rawInput;
+  const bounds = { cutoffMs: nowMs - days * DAY, nowMs, includeUndated };
+  const commands = list(rawInput.commands).filter((row) => withinHistory(row, ['fechadaEm', 'fechada_em', 'atualizadoEm', 'atualizado_em', 'criadoEm', 'criado_em'], bounds));
+  const appointments = list(rawInput.appointments).filter((row) => withinHistory(row, ['dataHora', 'data_hora', 'data_agendamento'], bounds));
+  const retailSales = list(rawInput.retailSales).filter((row) => withinHistory(row, ['pagoEm', 'pago_em', 'criadoEm', 'criado_em'], bounds));
+  const orders = list(rawInput.orders).filter((row) => withinHistory(row, ['criadoEm', 'criado_em'], bounds));
+  const facts = list(rawInput.facts).filter((row) => withinHistory(row, ['criadoEm', 'criado_em', 'createdAt', 'created_at'], bounds));
+  const identityClients = list(rawInput.identityClients || rawInput.clients);
+  const recentClientIds = new Set();
+  const localEvents = [...commands, ...appointments, ...retailSales];
+  const clientPhones = new Set();
+  for (const event of localEvents) {
+    const clientId = String(event?.clienteId || event?.cliente_id || '').trim();
+    if (clientId) recentClientIds.add(clientId);
+    const phone = graphPhone(event?.clienteTelefone || event?.cliente_telefone || event?.telefone);
+    if (phone) clientPhones.add(phone);
+  }
+  const clientsByPhone = new Map();
+  for (const client of identityClients) {
+    const phone = graphPhone(client?.telefone);
+    if (!phone || !clientPhones.has(phone) || !client?.id) continue;
+    if (!clientsByPhone.has(phone)) clientsByPhone.set(phone, new Set());
+    clientsByPhone.get(phone).add(String(client.id));
+  }
+  for (const phone of clientPhones) {
+    const matches = clientsByPhone.get(phone);
+    if (matches?.size === 1) recentClientIds.add([...matches][0]);
+  }
+  const clients = list(rawInput.clients).filter((client) => recentClientIds.has(String(client?.id || '')));
+  return { ...rawInput, identityClients, clients, commands, appointments, retailSales, orders, facts };
 }
 
 function dayMonth(value) {
@@ -121,7 +185,8 @@ function emptyCustomer(key) {
  * @param {Array} input.professionals profissionais { id, nome }
  * @param {Array} input.facts       memória { telefone, categoria, valor, status }
  */
-export function buildCustomerGraph(input = {}, { now = new Date() } = {}) {
+export function buildCustomerGraph(rawInput = {}, { now = new Date(), relationshipWindowDays = null, includeUndated = true } = {}) {
+  const input = windowedInput(rawInput, { now, relationshipWindowDays, includeUndated });
   const customers = new Map();
   const quality = { fontes: input.quality?.fontes || {}, memoriaEscopo: input.quality?.memoriaEscopo || 'empresa', estoqueLocalEscopo: input.quality?.estoqueLocalEscopo || 'empresa', excluidos: { anonimizados: 0, pedidosNaoConfirmados: 0, itensTeste: 0 }, telefonesAmbiguos: 0 };
   const owners = new Map();
@@ -146,7 +211,7 @@ export function buildCustomerGraph(input = {}, { now = new Date() } = {}) {
   const serviceNames = new Map(list(input.services).map((s) => [String(s.id), s.nome]));
   const professionalNames = new Map(list(input.professionals).map((p) => [String(p.id), p.nome]));
   const edges = [];
-  const edge = (from, rel, to, at = null, weight = 1) => edges.push({ from, rel, to, at, weight });
+  const edge = (from, rel, to, at = null, weight = 1, source = 'grafo') => edges.push({ from, rel, to, at, weight, source });
 
   const ensure = (key) => { if (!customers.has(key)) customers.set(key, emptyCustomer(key)); return customers.get(key); };
   for (const client of list(input.clients)) {
@@ -167,7 +232,7 @@ export function buildCustomerGraph(input = {}, { now = new Date() } = {}) {
   for (const client of list(input.clients)) {
     const from = idToKey.get(String(client?.id));
     const to = client?.indicadoPor ? idToKey.get(String(client.indicadoPor)) : null;
-    if (from && to && from !== to) { ensure(to).indicou.add(from); edge(`c:${to}`, 'INDICOU', `c:${from}`); }
+    if (from && to && from !== to) { ensure(to).indicou.add(from); edge(`c:${to}`, 'INDICOU', `c:${from}`, null, 1, 'clients'); }
   }
   const keyOf = (item) => {
     if (item?.clienteId) {
@@ -178,7 +243,7 @@ export function buildCustomerGraph(input = {}, { now = new Date() } = {}) {
     if (phone && !ambiguous.has(phone) && !blockedPhones.has(phone)) return phone;
     return null;
   };
-  const addProduct = (c, name, category, at, amount, id = null, metadata = null) => {
+  const addProduct = (c, name, category, at, amount, id = null, metadata = null, source = 'grafo') => {
     if (isTestItem({ nome: name, metadados: metadata })) { quality.excluidos.itensTeste += 1; return; }
     const p = id || byName.get(plainText(name)) || `name:${plainText(name)}`;
     productNames.set(p, name);
@@ -188,7 +253,7 @@ export function buildCustomerGraph(input = {}, { now = new Date() } = {}) {
     if (brand) c.brands.add(brand);
     if (category) c.categories.add(plainText(category));
     c.totalGasto += num(amount);
-    edge(`c:${c.key}`, 'COMPROU', `p:${p}`, at);
+    edge(`c:${c.key}`, 'COMPROU', `p:${p}`, at, 1, source);
   };
 
   const paidCommands = list(input.commands).filter((item) => item?.status === 'paga');
@@ -205,13 +270,13 @@ export function buildCustomerGraph(input = {}, { now = new Date() } = {}) {
         const s = plainText(name);
         c.services.set(s, (c.services.get(s) || 0) + 1);
         c.totalGasto += num(item.subtotal);
-        edge(`c:${key}`, 'AGENDOU', `s:${s}`, at);
-      } else if (item.tipo === 'produto') addProduct(c, item.nome, null, at, item.subtotal, item.produtoId ? `local:${item.produtoId}` : null);
+        edge(`c:${key}`, 'AGENDOU', `s:${s}`, at, 1, 'commands');
+      } else if (item.tipo === 'produto') addProduct(c, item.nome, null, at, item.subtotal, item.produtoId ? `local:${item.produtoId}` : null, null, 'commands');
       const prof = item.profissionalId || command.profissionalId;
       if (prof) { c.professionals.set(String(prof), (c.professionals.get(String(prof)) || 0) + 1); }
     }
     const prof = command.profissionalId || list(command.itens).find((i) => i.profissionalId)?.profissionalId;
-    if (prof) edge(`c:${key}`, 'ATENDIDO_POR', `f:${prof}`, at);
+    if (prof) edge(`c:${key}`, 'ATENDIDO_POR', `f:${prof}`, at, 1, 'commands');
   }
   const nowMsEarly = now.valueOf();
   for (const item of list(input.appointments)) {
@@ -227,13 +292,13 @@ export function buildCustomerGraph(input = {}, { now = new Date() } = {}) {
     c.visits.push(item.dataHora);
     const s = plainText(item.servicoNome || serviceNames.get(String(item.servicoId)) || 'Serviço');
     c.services.set(s, (c.services.get(s) || 0) + 1);
-    edge(`c:${key}`, 'AGENDOU', `s:${s}`, item.dataHora);
-    if (item.profissionalId) { c.professionals.set(String(item.profissionalId), (c.professionals.get(String(item.profissionalId)) || 0) + 1); edge(`c:${key}`, 'ATENDIDO_POR', `f:${item.profissionalId}`, item.dataHora); }
+    edge(`c:${key}`, 'AGENDOU', `s:${s}`, item.dataHora, 1, 'appointments');
+    if (item.profissionalId) { c.professionals.set(String(item.profissionalId), (c.professionals.get(String(item.profissionalId)) || 0) + 1); edge(`c:${key}`, 'ATENDIDO_POR', `f:${item.profissionalId}`, item.dataHora, 1, 'appointments'); }
   }
   for (const sale of list(input.retailSales)) {
     if (sale?.status !== 'pago' || sale.comandaId) continue;
     const key = keyOf(sale); if (!key) continue;
-    for (const item of list(sale.itens)) addProduct(ensure(key), item.nome || item.produtoNome, null, sale.pagoEm || sale.criadoEm, item.subtotal, item.produtoId ? `local:${item.produtoId}` : null);
+    for (const item of list(sale.itens)) addProduct(ensure(key), item.nome || item.produtoNome, null, sale.pagoEm || sale.criadoEm, item.subtotal, item.produtoId ? `local:${item.produtoId}` : null, null, 'retailSales');
   }
   const seenOrders = new Set();
   for (const order of list(input.orders)) {
@@ -249,14 +314,15 @@ export function buildCustomerGraph(input = {}, { now = new Date() } = {}) {
     c.phone = phone;
     c.identityUnresolved = ambiguous.has(phone);
     c.nome ||= String(order.nome || '').trim();
-    for (const item of list(order.itens)) addProduct(c, item.nome, item.categoria, order.criadoEm, item.subtotal, item.produtoId ? `commerce:${item.produtoId}` : null, item.metadados);
+    for (const item of list(order.itens)) addProduct(c, item.nome, item.categoria, order.criadoEm, item.subtotal, item.produtoId ? `commerce:${item.produtoId}` : null, item.metadados, 'orders');
   }
   for (const fact of list(input.facts)) {
     if (fact?.status !== 'ativo') continue;
     const key = graphPhone(fact.telefone); if (!key || ambiguous.has(key) || blockedPhones.has(key)) continue;
+    const factAt = fact.criadoEm || fact.criado_em || fact.createdAt || fact.created_at || null;
     const c = ensure(key);
-    c.interests.push({ categoria: fact.categoria, valor: String(fact.valor || ''), texto: plainText(fact.valor) });
-    if (['produto_interesse', 'servico_interesse', 'familia_olfativa'].includes(fact.categoria)) edge(`c:${key}`, fact.categoria === 'servico_interesse' ? 'INTERESSE' : 'PERGUNTOU', `i:${plainText(fact.valor)}`);
+    c.interests.push({ categoria: fact.categoria, valor: String(fact.valor || ''), texto: plainText(fact.valor), at: factAt });
+    if (['produto_interesse', 'servico_interesse', 'familia_olfativa'].includes(fact.categoria)) edge(`c:${key}`, fact.categoria === 'servico_interesse' ? 'INTERESSE' : 'PERGUNTOU', `i:${plainText(fact.valor)}`, factAt, 1, 'facts');
   }
 
   // Consentimentos do CRM/WhatsApp (PostgreSQL): revogação e "SAIR" vencem o cadastro local.
@@ -273,8 +339,10 @@ export function buildCustomerGraph(input = {}, { now = new Date() } = {}) {
     }
   }
   const nowMs = now.valueOf();
+  const identityCoverageComplete = ['clients', 'appointments', 'commands', 'retailSales', 'pedidos']
+    .every((name) => quality.fontes[name]?.status === 'ok');
   for (const c of customers.values()) {
-    c.automationBlocked = Boolean(c.identityUnresolved || Object.values(quality.fontes).some(s => s.status !== 'ok'));
+    c.automationBlocked = Boolean(c.identityUnresolved || !identityCoverageComplete || Object.values(quality.fontes).some(s => s.status !== 'ok'));
     c.visits = c.visits.filter(v => dateMs(v) > 0 && dateMs(v) <= nowMs).sort((a, b) => dateMs(a) - dateMs(b));
     c.lastVisitMs = c.visits.length ? dateMs(c.visits[c.visits.length - 1]) : 0;
     c.daysSince = c.lastVisitMs ? Math.floor((nowMs - c.lastVisitMs) / DAY) : null;
@@ -344,12 +412,19 @@ function affinityScore(c, candidateKey, candidateBrand, index) {
 
 const UPGRADE_HINT = /(barba|combo|premium|pigment|hidrat|sobrancelha|terapia|limpeza)/;
 
+function hasKnownStock(item) {
+  const explicit = item?.estoqueInformado ?? item?.estoque_informado;
+  return explicit !== false && stockNumber(item?.estoque) !== null;
+}
+
 /** Ofertas candidatas de um cliente, já pontuadas e ordenadas. */
 export function scoreCustomer(c, { catalog = [], services = [], index, maxPrice }) {
   const offers = [];
   const moment = momentScore({ daysSince: c.daysSince, interval: c.interval, birthdayIn: c.birthdayIn });
   for (const item of catalog) {
-    if (!item || isTestItem(item) || item.publicado === false || num(item.estoque) <= 0 || num(item.preco) <= 0) continue;
+    if (!item || isTestItem(item) || item.publicado === false || num(item.preco) <= 0) continue;
+    const estoqueConhecido = hasKnownStock(item);
+    if (estoqueConhecido && num(item.estoque) <= 0) continue;
     const key = productKey(item);
     if (!key || c.products.has(key)) continue;
     const brand = brandOf(item.nome);
@@ -364,7 +439,8 @@ export function scoreCustomer(c, { catalog = [], services = [], index, maxPrice 
     else if (aff.score >= 0.6) reasons.push('já compra essa marca');
     if (moment >= 1) reasons.push(c.birthdayIn !== null && c.birthdayIn <= 7 ? 'aniversário perto' : 'na hora de voltar');
     else if (moment >= 0.5 && c.interval && c.daysSince > c.interval) reasons.push('passou da hora de voltar');
-    offers.push({ tipo: 'produto', id: item.id, nome: item.nome, preco: num(item.preco), estoque: num(item.estoque), score: round(score), partes: { afinidade: aff.score, interesse, momento: moment, margem }, motivos: reasons });
+    if (!estoqueConhecido) reasons.push('disponibilidade não verificada');
+    offers.push({ tipo: 'produto', id: item.id, nome: item.nome, preco: num(item.preco), estoque: estoqueConhecido ? num(item.estoque) : null, estoqueConhecido, disponibilidade: estoqueConhecido ? 'verificada' : 'nao_verificada', score: round(score), partes: { afinidade: aff.score, interesse, momento: moment, margem }, motivos: reasons });
   }
   const done = new Set(c.services.keys());
   if (done.size) {
@@ -401,7 +477,8 @@ export function nextBestOffers(graph, { catalog = [], services = [], limit = 50,
       cliente: customerView(c, graph),
       melhor: offers[0],
       alternativas: offers.slice(1, 3),
-      enviar: offers[0].score >= SEND_THRESHOLD && c.consent.marketing && !c.consent.optOut && !c.automationBlocked,
+      enviar: offers[0].score >= SEND_THRESHOLD && c.consent.marketing && !c.consent.optOut && !c.automationBlocked
+        && (offers[0].tipo !== 'produto' || offers[0].estoqueConhecido === true),
     });
   }
   return rows.sort((a, b) => b.melhor.score - a.melhor.score).slice(0, Math.max(1, Math.min(500, limit)));

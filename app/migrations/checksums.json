@@ -86,5 +86,6 @@
  "081_bar_pdv_multiempresa.sql": "cec9fc97cab9ab3ef21aa7f4e37fabb6eb8d26334c34f1fe1dcab6232e34e11c",
  "082_financeiro_cadastros_multiempresa.sql": "a0bfe2b6e14cb61258c1ee417ba8c4ec971adab9ea0eb7954c3176c38cca6445",
  "083_dino_operational_foundations.sql": "759527ff9017215b5b73e67f27be7046055c4f6497ef014a60e1f7ee14bdf8bc",
- "084_dino_forecast_ai.sql": "30162f46dfc85a337b3478795076ef1a39742a79f212305e9f46f1325421aa11"
+ "084_dino_forecast_ai.sql": "30162f46dfc85a337b3478795076ef1a39742a79f212305e9f46f1325421aa11",
+ "085_ai_automation_log_store_scope.sql": "c8ea0921a0022ff55fbde36b36550f6e284158b30507cb628391470e8879fe27"
 }
