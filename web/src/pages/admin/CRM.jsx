@@ -324,7 +324,7 @@ function TabelaAtletas({ toast }) {
   // KPIs rápidos
   const kAtivos = atletas.filter(u => u.ativo !== false).length
   const kAtletas = atletas.filter(u => u.role === 'atleta').length
-  const kStaff = atletas.filter(u => ['admin','organizador','staff'].includes(u.role)).length
+  const kStaff = atletas.filter(u => ['admin','organizador','operador','profissional','staff'].includes(u.role)).length
 
   if (loading) return <p style={{ color: 'var(--muted)', padding: 20 }}>Carregando…</p>
 
@@ -357,7 +357,7 @@ function TabelaAtletas({ toast }) {
         <select value={filtroRole} onChange={e => setFiltroRole(e.target.value)}
           style={{ padding: '0.5rem 0.8rem', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--fg)', fontSize: '0.9rem' }}>
           <option value="todos">Todos os perfis</option>
-          {['admin','organizador','staff','atleta'].map(r => <option key={r} value={r}>{r}</option>)}
+          {['admin','organizador','operador','profissional','staff','atleta'].map(r => <option key={r} value={r}>{r}</option>)}
         </select>
         <button onClick={handleCSV} style={{ padding: '0.5rem 1rem', borderRadius: 8, border: '1px solid var(--border)', background: 'none', color: 'var(--green)', cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>
           ⬇ CSV

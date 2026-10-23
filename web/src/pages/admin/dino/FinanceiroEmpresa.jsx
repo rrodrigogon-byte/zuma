@@ -33,8 +33,10 @@ function FlowChart({ fluxo }) {
 
 export default function FinanceiroEmpresa() {
   const { toast } = useToast()
-  const { empresaAtiva } = useAuth()
+  const { empresaAtiva, perfil } = useAuth()
   const { unidade } = useUnidadeAtiva()
+  // operador lança despesa; saldo, fluxo e a lista de lançamentos são da administração
+  const operador = perfil === 'operador'
   const stallone = brandFromContext(empresaAtiva) === 'stallone'
   const [lancamentos, setLancamentos] = useState([])
   const [resumo, setResumo] = useState(null)
@@ -50,12 +52,18 @@ export default function FinanceiroEmpresa() {
 
   const load = useCallback(async () => {
     setLoading(true)
+    if (operador) {
+      try { setCategorias((await api.get(`${BASE}/categorias`)) || { receita: [], despesa: [] }); setErro('') }
+      catch (error) { setErro(error.message || 'Não foi possível carregar as categorias.') }
+      finally { setLoading(false) }
+      return
+    }
     try {
       const [lista, r, f, c] = await Promise.all([api.get(`${BASE}/lancamentos`), api.get(`${BASE}/resumo`), api.get(`${BASE}/fluxo`), api.get(`${BASE}/categorias`)])
       setLancamentos(Array.isArray(lista) ? lista : []); setResumo(r); setFluxo(Array.isArray(f) ? f : []); setCategorias(c || { receita: [], despesa: [] }); setErro('')
     } catch (error) { setErro(error.message || 'Não foi possível carregar o financeiro.') }
     finally { setLoading(false) }
-  }, [])
+  }, [operador])
   useEffect(() => { load() }, [load, empresaAtiva?.id])
 
   const lista = useMemo(() => lancamentos.filter((item) => (!filtros.tipo || item.tipo === filtros.tipo)
@@ -114,8 +122,8 @@ export default function FinanceiroEmpresa() {
     <header className="dadm-head">
       <div><div className="dadm-eyebrow">Gestão · {empresaAtiva?.nome || 'Empresa'}</div><h1>Financeiro</h1><p>{stallone ? 'Contas a pagar e a receber desta empresa. Registre despesas e acompanhe os lançamentos. Pedidos e pagamentos da loja online são consultados no painel da loja; a conciliação financeira precisa ser validada.' : 'Contas a pagar e a receber só desta empresa. Atendimentos pagos, comandas e contas a receber entram sozinhos; aqui você lança aluguel, insumos, contas e outras despesas.'}</p></div>
       <div className="dadm-actions">
-        <button type="button" className="c360-btn ghost" onClick={exportar} disabled={!lista.length}>Exportar CSV</button>
-        <button type="button" className="c360-btn ghost" onClick={() => abrirNovo('receita')} disabled={!unidade}>+ Receita</button>
+        {!operador && <button type="button" className="c360-btn ghost" onClick={exportar} disabled={!lista.length}>Exportar CSV</button>}
+        {!operador && <button type="button" className="c360-btn ghost" onClick={() => abrirNovo('receita')} disabled={!unidade}>+ Receita</button>}
         <button type="button" className="c360-btn primary" onClick={() => abrirNovo('despesa')} disabled={!unidade}>+ Despesa</button>
       </div>
     </header>
@@ -123,7 +131,8 @@ export default function FinanceiroEmpresa() {
     {/* a leitura continua como antes (empresa toda); só o lançamento novo precisa da unidade */}
     {!unidade && <EscolherUnidade motivo="Para lançar receita ou despesa, escolha a unidade." />}
     {erro && <p className="dadm-note danger" role="alert">{erro}</p>}
-    {loading && !resumo ? <p className="dadm-muted">Carregando…</p> : resumo && <>
+    {operador && <p className="dadm-note">Seu perfil é de operador: aqui você lança as despesas do dia. Saldo, contas e relatórios ficam com a administração.</p>}
+    {operador ? null : loading && !resumo ? <p className="dadm-muted">Carregando…</p> : resumo && <>
       <section className="dadm-kpis" aria-label="Resumo financeiro">
         <article><span>Saldo realizado</span><strong className={resumo.saldo >= 0 ? '' : 'dadm-neg'}>{money(resumo.saldo)}</strong><small>Receitas − despesas pagas</small></article>
         <article><span>A receber</span><strong>{money(resumo.aReceber)}</strong><small>Pendentes</small></article>
@@ -137,7 +146,7 @@ export default function FinanceiroEmpresa() {
       <section className="dadm-card"><h2>Fluxo dos últimos 12 meses</h2><FlowChart fluxo={fluxo} /></section>
     </>}
 
-    <section className="dadm-card">
+    {!operador && <section className="dadm-card">
       <h2>Lançamentos</h2>
       <div className="dadm-filters" role="group" aria-label="Filtros">
         <input className="c360-input" type="search" placeholder="Buscar descrição" value={filtros.q} onChange={(event) => setFiltros({ ...filtros, q: event.target.value })} aria-label="Buscar descrição" />
@@ -148,7 +157,7 @@ export default function FinanceiroEmpresa() {
         <label className="dadm-muted">Até <input className="c360-input" type="date" value={filtros.ate} onChange={(event) => setFiltros({ ...filtros, ate: event.target.value })} /></label>
       </div>
       <Table caption="Lançamentos financeiros" columns={columns} rows={lista} empty={lancamentos.length ? 'Nenhum lançamento com estes filtros.' : stallone ? 'Nenhum lançamento financeiro registrado nesta empresa.' : 'Nenhum lançamento ainda. Atendimentos pagos e comandas aparecem aqui automaticamente.'} />
-    </section>
+    </section>}
 
     <Dialog open={Boolean(form)} title={form?.id ? 'Editar lançamento' : (form?.tipo === 'receita' ? 'Nova receita' : 'Nova despesa')} labelId="fin-form" onClose={() => setForm(null)} onSubmit={salvar} initialFocusRef={firstField}
       actions={<><button type="button" className="c360-btn ghost" onClick={() => setForm(null)}>Voltar</button><button type="submit" className="c360-btn primary">Salvar</button></>}>

@@ -97,6 +97,28 @@ test('backoffice integrado: Financeiro, estoque e compras, fiscal, conciliação
       ok(await req('/api/admin/razao/categorias', 'POST', { nome: 'Teste', tipo: 'despesa' }, gerenteA2), 403, 'categoria exige empresa toda');
     });
 
+    await t.test('perfis: operador lança despesa e não vê os números; profissional fica no app', async () => {
+      const operador = { Authorization: `Bearer ${await conta('operador-a', [{ empresaId: A, roleCode: 'operator' }])}`, 'X-Empresa-Id': A };
+      const sessao = await req('/api/admin/minhas-permissoes', 'GET', null, operador); ok(sessao, 200, 'permissões do operador');
+      assert.ok(sessao.body.permissoes.includes('customers.write') && !sessao.body.permissoes.includes('reports.read'));
+      ok(await req('/api/admin/razao/lancamentos', 'POST', { tipo: 'despesa', categoria: 'Outras despesas', descricao: 'Gelo', valor: 30, vencimento: dia, lojaId: A1 }, operador), 201, 'operador lança despesa');
+      ok(await req('/api/admin/razao/lancamentos', 'POST', { tipo: 'receita', descricao: 'Receita', valor: 30, vencimento: dia, lojaId: A1 }, operador), 403, 'receita manual é da administração');
+      for (const rota of ['/resumo', '/fluxo', '/lancamentos', '/fechamentos/previa']) ok(await req(`/api/admin/razao${rota}`, 'GET', null, operador), 403, `operador não lê ${rota}`);
+      const caixaBar = await req('/api/admin/bar/caixa', 'GET', null, operador); ok(caixaBar, 200, 'operador vê o caixa do bar');
+      assert.equal(caixaBar.body.saldo, undefined, 'sem o saldo esperado');
+      assert.equal(caixaBar.body.vendas, undefined, 'sem o total vendido');
+      ok(await req('/api/admin/bar/vendas', 'GET', null, operador), 403, 'operador não lista as vendas');
+      // dinheiro além do dia a dia é da gestão, mesmo com payments.* no papel
+      ok(await req('/api/admin/commerce/payments/accounts', 'POST', { provider: 'infinitepay', handle: 'x' }, operador), 403, 'operador não mexe nas contas de pagamento');
+      ok(await req('/api/admin/razao/fechamentos', 'POST', { data: dia }, operador), 403, 'operador não fecha o razão vendo os totais');
+      ok(await req('/api/admin/a2/contas-receber', 'GET', null, operador), 403, 'operador não lê contas a receber');
+      ok(await req('/api/admin/auditoria', 'GET', null, operador), 403, 'operador fora da auditoria');
+      const permissoesMenu = await req('/api/admin/minhas-permissoes', 'GET', null, operador);
+      assert.ok(!permissoesMenu.body.permissoes.includes('payments.read'), 'o menu não oferece telas de dinheiro');
+      const profissional = { Authorization: `Bearer ${await conta('profissional-a', [{ empresaId: A, roleCode: 'professional' }])}`, 'X-Empresa-Id': A };
+      for (const rota of ['/api/admin/razao/estado', '/api/admin/bar/caixa', '/api/admin/suprimentos/itens', '/api/admin/barbearia/overview']) ok(await req(rota, 'GET', null, profissional), 403, `profissional fora de ${rota}`);
+    });
+
     let itemId;
     await t.test('onda 2: item, pedido, recebimento vira estoque e conta a pagar', async () => {
       const it = await req('/api/admin/suprimentos/itens', 'POST', { nome: 'Cerveja lata', sku: `cerv-${sufixo}`, unidade: 'un' }, dono); ok(it, 201, 'item');

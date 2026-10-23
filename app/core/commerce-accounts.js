@@ -5,7 +5,7 @@ import { assertPassword, normalizeEmail } from './commerce-operational-invites.j
 import { assertTenantOwnerSurvives } from './commerce-admin-users.js';
 import { createCustomer } from './commerce-customers.js';
 
-export const ACCOUNT_ROLE_CODES = Object.freeze(['tenant_owner', 'store_admin', 'catalog_manager', 'inventory_manager', 'order_operator', 'finance', 'support', 'customer']);
+export const ACCOUNT_ROLE_CODES = Object.freeze(['tenant_owner', 'store_admin', 'catalog_manager', 'inventory_manager', 'order_operator', 'finance', 'support', 'operator', 'professional', 'customer']);
 
 export function assertAccountManager(actor) {
   if ((actor?.pgAccount && actor?.pgPlatformAdmin !== true) || actor?.pgOperational || actor?.role !== 'admin' || !(actor.platformAdmin === true || actor.mainAdmin === true)) {

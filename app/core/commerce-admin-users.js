@@ -24,7 +24,9 @@ function effectiveMembership(row) {
 const ROLE_RANK = Object.freeze({
   customer: 10,
   support: 30,
+  professional: 20,
   order_operator: 40,
+  operator: 40,
   catalog_manager: 50,
   inventory_manager: 50,
   finance: 50,

@@ -36,10 +36,15 @@ describe('Painel da empresa', () => {
     expect(mocks.api.get).not.toHaveBeenCalledWith('/api/admin/dashboard')
   })
   it('sem a permissão, não consulta o módulo nem mostra o bloco', async () => {
-    const t = await montar(['payments.read'])
+    const t = await montar(['payments.read', 'reports.read'])
     expect(t).toContain('Recebido no mês')
     expect(t).not.toContain('Abaixo do mínimo')
     expect(mocks.api.get.mock.calls.map((c) => c[0].split('?')[0])).not.toContain('/api/admin/suprimentos/itens')
+  })
+  it('sem reports.read (perfil operador) não mostra os números do Financeiro', async () => {
+    const t = await montar(['payments.read'])
+    expect(t).not.toContain('Recebido no mês')
+    expect(mocks.api.get.mock.calls.map((c) => c[0].split('?')[0])).not.toContain('/api/admin/razao/resumo')
   })
   it('espera as permissões antes de consultar', async () => {
     await montar(undefined)

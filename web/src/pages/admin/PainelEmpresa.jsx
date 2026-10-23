@@ -23,7 +23,7 @@ export default function PainelEmpresa() {
     Promise.all([
       // o resumo do razão só é pedido com o Financeiro novo ligado
       talvez(pode(permissoes, 'payments.read'), () => api.get(`/api/admin/razao/estado`).then(async (estado) => ({
-        estado, resumo: estado?.ativo ? await api.get(`/api/admin/razao/resumo${loja ? `?${loja}` : ''}`).catch(() => null) : null,
+        estado, resumo: estado?.ativo && pode(permissoes, 'reports.read') ? await api.get(`/api/admin/razao/resumo${loja ? `?${loja}` : ''}`).catch(() => null) : null,
       }))),
       talvez(pode(permissoes, 'inventory.read'), () => api.get(`/api/admin/suprimentos/itens?abaixoDoMinimo=true${loja ? `&${loja}` : ''}`)),
       talvez(pode(permissoes, 'customers.read'), () => api.get('/api/admin/salao/reservas/visao')),

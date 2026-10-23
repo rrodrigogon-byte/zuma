@@ -4,6 +4,7 @@ import { rotaVisivel } from '../lib/disponibilidade'
 import { useRazaoAtivo } from '../lib/razao-estado'
 import { lojasDaEmpresa as lojasDaEmpresaAtiva } from '../lib/context-selection'
 import { catalogoPorArea, contagemPorEstado, ESTADOS } from '../lib/catalogo-modulos'
+import { itemVisivelNoPerfil } from '../lib/perfis-menu'
 import { useAuth } from '../lib/auth'
 import { api } from '../lib/api'
 import { applyThemeMode, DINO_BARBERSHOP_LOGO, isClubeBrandContext, isDinoBrandContext, isStalloneBrandContext, STALLONE_LOGO, storedThemeMode } from '../lib/brand'
@@ -528,7 +529,7 @@ function Section({ label, items, onNavClick, collapsible = false, badgesMap = {}
 
 function AdminGroups({ groups, onNavClick, isPlatformAdmin, empresa, usuarioDeEmpresa = false, sidebarCollapsed = false, compacto = false }) {
   const location = useLocation()
-  const { permissoes, modulosOcultos } = useAuth()
+  const { permissoes, modulosOcultos, perfil } = useAuth()
   // itens do Financeiro novo (a receber, fechamento do dia) só com ele ligado: antes disso essas
   // telas são as do A2 e a empresa veria dois "a receber" diferentes
   const razaoAtivo = useRazaoAtivo()
@@ -539,7 +540,7 @@ function AdminGroups({ groups, onNavClick, isPlatformAdmin, empresa, usuarioDeEm
   })
   return (
     <>
-      {groups.map(g => ({ ...g, items: g.items.filter((item) => (!item.razao || razaoAtivo === true) && itemDisponivel(item, isPlatformAdmin, empresa, usuarioDeEmpresa, permissoes, modulosOcultos)) }))
+      {groups.map(g => ({ ...g, items: g.items.filter((item) => itemVisivelNoPerfil(item.to, perfil) && (!item.razao || razaoAtivo === true) && itemDisponivel(item, isPlatformAdmin, empresa, usuarioDeEmpresa, permissoes, modulosOcultos)) }))
         .filter((group) => group.items.length > 0)
         .map(g => (
           <Section

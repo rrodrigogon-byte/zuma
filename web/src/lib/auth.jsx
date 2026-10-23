@@ -296,8 +296,11 @@ export function AuthProvider({ children }) {
   // Somente a flag explícita concedida pelo backend libera gestão global de tenants.
   const isPlatformAdmin = user?.platformAdmin === true
   const isAdmin = isPlatformAdmin || ['admin', 'administrador', 'super_admin'].includes(role)
-  const isOrg = isAdmin || ['organizador', 'gerente', 'gerente_operacional'].includes(role)
-  const isStaff = isOrg || ['staff', 'vendedor', 'garcom', 'barbeiro', 'caixa', 'operador', 'operador_pdv', 'cozinha'].includes(role)
+  // Perfis de toda empresa: admin (tudo), operador (operação do dia, sem comissões nem números da
+  // empresa) e profissional (só o app do profissional). O servidor é quem garante; aqui só a interface.
+  const perfil = perfilDaSessao(user)
+  const isOrg = isAdmin || ['organizador', 'gerente', 'gerente_operacional', 'operador'].includes(role)
+  const isStaff = isOrg || ['staff', 'vendedor', 'garcom', 'barbeiro', 'caixa', 'operador_pdv', 'cozinha'].includes(role)
   const isAtleta = role === 'atleta'
 
   return (
@@ -319,10 +322,22 @@ export function AuthProvider({ children }) {
       isOrg,
       isStaff,
       isAtleta,
+      perfil,
     }}>
       {children}
     </AuthContext.Provider>
   )
+}
+
+/** 'admin' | 'operador' | 'profissional' | null (perfil antigo ou especializado, segue a regra de antes). */
+export function perfilDaSessao(user) {
+  if (!user) return null
+  if (user.platformAdmin === true) return 'admin'
+  const role = String(user.role || '').trim().toLowerCase()
+  if (['admin', 'administrador', 'super_admin', 'organizador', 'gerente', 'gerente_operacional'].includes(role)) return 'admin'
+  if (role === 'operador') return 'operador'
+  if (role === 'profissional') return 'profissional'
+  return null
 }
 
 export function useAuth() {

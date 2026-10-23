@@ -1,4 +1,5 @@
 import { CommerceError, tenantContext } from './commerce-core.js';
+import { restricaoDePermissao } from './perfis-acesso.js';
 import { db } from './database.js';
 import { accountRequestIdentity } from './commerce-accounts.js';
 
@@ -119,6 +120,9 @@ export async function requireCommercePermission(req, permissionInput) {
   if (req.user?.pgOperational === true && permission === 'users.write') {
     throw new CommerceError('gestão de usuários indisponível para este perfil', 'PERMISSION_DENIED');
   }
+  // perfil operador/profissional limita o vínculo (core/perfis-acesso.js)
+  const restricao = restricaoDePermissao(req, permission);
+  if (restricao) throw new CommerceError(restricao, 'PERMISSION_DENIED', { permission, perfil: true });
   const context = await resolveCommerceIdentity(req);
   const result = await db.queryRead(
     `SELECT 1

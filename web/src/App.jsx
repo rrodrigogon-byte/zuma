@@ -18,6 +18,8 @@ function PerfilRoute() {
 // permissão → home do papel (staff→/pdv, atleta→/). null = autorizado.
 function gateRedirect(need, auth) {
   if (!auth.user) return '/login'
+  // profissional usa só o app do profissional
+  if (auth.perfil === 'profissional') return '/barbeiro'
   if (need === 'org'   && !auth.isOrg)   return auth.isStaff ? '/pdv' : '/'
   if (need === 'staff' && !auth.isStaff) return '/'
   return null

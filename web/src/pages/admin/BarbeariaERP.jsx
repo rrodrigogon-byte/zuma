@@ -5,6 +5,7 @@ import { api, fmtDate, fmtDateOnly, fmtR } from '../../lib/api'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useToast } from '../../hooks/useToast'
 import { useAuth } from '../../lib/auth'
+import { ABAS_DO_OPERADOR } from '../../lib/perfis-menu'
 import { isDinoBrandContext } from '../../lib/brand'
 import { whatsappIntegrationStatus } from '../../lib/whatsapp-integration-status'
 import BarbeariaAgendaBoard, { agendaBoardColumns } from './BarbeariaAgendaBoard'
@@ -218,16 +219,19 @@ const TABS_AUTONOMAS = new Set(['Desempenho da equipe', 'Retorno previsto', 'Lis
 
 export default function BarbeariaERP() {
   const { toast } = useToast()
-  const { user, empresaAtiva, lojaAtiva, lojasAcessiveis } = useAuth()
+  const { user, empresaAtiva, lojaAtiva, lojasAcessiveis, perfil } = useAuth()
+  // operador: só as abas da operação do dia (comissões, metas e indicadores ficam com a administração)
+  const operador = perfil === 'operador'
+  const areasVisiveis = operador ? AREAS.map((area) => ({ ...area, tabs: area.tabs.filter((nome) => ABAS_DO_OPERADOR.has(nome)) })).filter((area) => area.tabs.length) : AREAS
   const podeAlterarConfirmacaoAutomatica = ['admin', 'organizador', 'gerente'].includes(String(user?.role || '').toLowerCase())
   const isDinoBrand = isDinoBrandContext(empresaAtiva, user?.empresaAtiva, user?.empresa, user?.tenant)
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const requestedTab = searchParams.get('tab')
   const requestedArea = searchParams.get('area')
-  const validRequestedTab = TABS.some(([name]) => name === requestedTab) ? requestedTab : null
-  const validRequestedArea = AREAS.find((area) => area.id === requestedArea) || null
-  const tab = validRequestedTab || validRequestedArea?.tabs[0] || 'Visão geral'
+  const validRequestedTab = TABS.some(([name]) => name === requestedTab) && (!operador || ABAS_DO_OPERADOR.has(requestedTab)) ? requestedTab : null
+  const validRequestedArea = areasVisiveis.find((area) => area.id === requestedArea) || null
+  const tab = validRequestedTab || validRequestedArea?.tabs[0] || (operador ? 'Agenda' : 'Visão geral')
 
   function navegarParaTab(nome) {
     setBusca('')
@@ -432,7 +436,7 @@ export default function BarbeariaERP() {
   }, [tab, scopeKey])
 
   const indicadores = dashboard?.indicadores || {}
-  const areaAtual = AREAS.find((area) => area.id === TAB_AREA[tab]) || AREAS[0]
+  const areaAtual = areasVisiveis.find((area) => area.id === TAB_AREA[tab]) || areasVisiveis[0]
   // Nome da unidade (código + nome) em vez do identificador técnico.
   // No host Dino, a sessão usa o UUID Commerce enquanto a configuração
   // legada mantém o ID interno; ambos já foram validados pelo backend.
@@ -1786,7 +1790,7 @@ export default function BarbeariaERP() {
     </header>
     <div style={styles.contextBar} aria-label="Contexto operacional"><div style={styles.contextBarItem}><span>Área ativa</span><strong>{areaAtual.label}</strong></div><div style={styles.contextBarItem}><span>Unidade</span><strong>{unidadeLabel}</strong></div><div style={styles.contextBarItem}><span>Data operacional</span><strong>{fmtDateOnly(dataSelecionada)}</strong></div><div style={styles.contextBarItem}><span>Estado</span><strong>{loading ? 'Atualizando…' : erro ? 'Revisar dados' : 'Dados sincronizados'}</strong></div></div>
     <nav aria-label="Áreas da Barbearia" style={styles.areaNav}>
-      {AREAS.map((area) => <button key={area.id} type="button" aria-current={area.id === areaAtual.id ? 'page' : undefined} onClick={() => navegarParaTab(area.tabs[0])} style={{ ...styles.areaNavItem, ...(area.id === areaAtual.id ? styles.areaNavItemActive : {}) }}><strong>{area.label}</strong><small>{area.short}</small></button>)}
+      {areasVisiveis.map((area) => <button key={area.id} type="button" aria-current={area.id === areaAtual.id ? 'page' : undefined} onClick={() => navegarParaTab(area.tabs[0])} style={{ ...styles.areaNavItem, ...(area.id === areaAtual.id ? styles.areaNavItemActive : {}) }}><strong>{area.label}</strong><small>{area.short}</small></button>)}
     </nav>
     <nav aria-label={`Seções de ${areaAtual.label}`} style={styles.tabNav}>
       {areaAtual.tabs.map((nome) => <button key={nome} type="button" title={TAB_DESCRICAO[nome]} aria-current={tab === nome ? 'page' : undefined} onClick={() => navegarParaTab(nome)} style={{ ...styles.tabNavItem, ...(tab === nome ? styles.tabNavItemActive : {}) }}>{nome}</button>)}

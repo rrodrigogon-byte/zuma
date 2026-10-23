@@ -11,6 +11,10 @@ import { ErroDominio, exigirUuid, responderErro } from '../acesso/banco.js';
  * { empresaId, lojaRestrita }: com a permissão presa a uma unidade, a leitura e a escrita ficam
  * nessa unidade. `fonteJson(empresaId)` devolve { chaveLegada, lancamentos, mapaUnidades } do
  * financeiro JSON antigo daquela empresa, ou null.
+ *
+ * Permissões: payments.* opera (lançar, baixar, fechar); reports.read lê os números da empresa
+ * (resumo, fluxo, DRE, lista de lançamentos, fechamentos, extrato). O perfil operador tem
+ * payments.* sem reports.read: lança despesa e não vê o dinheiro da empresa.
  */
 export function createRazaoAdminRouter({ db, escopoDaRequisicao, fonteJson = null, ativo = () => process.env.FINANCEIRO_RAZAO === '1', fuso = svc.FUSO_PADRAO, intervaloSyncMs = 60_000 }) {
   if (!db || typeof escopoDaRequisicao !== 'function') throw new Error('createRazaoAdminRouter: db e escopoDaRequisicao são obrigatórios');
@@ -72,11 +76,11 @@ export function createRazaoAdminRouter({ db, escopoDaRequisicao, fonteJson = nul
     return { fontes: lojaRestrita ? [] : resultado };
   }));
 
-  router.get('/resumo', rota('payments.read', async ({ req, empresaId, lojaRestrita }) => {
+  router.get('/resumo', rota('reports.read', async ({ req, empresaId, lojaRestrita }) => {
     await lerFontes(empresaId);
     return svc.resumo(db, empresaId, { lojaId: unidadePedida(req, lojaRestrita), fuso });
   }));
-  router.get('/fluxo', rota('payments.read', async ({ req, empresaId, lojaRestrita }) => {
+  router.get('/fluxo', rota('reports.read', async ({ req, empresaId, lojaRestrita }) => {
     await lerFontes(empresaId);
     return svc.fluxo(db, empresaId, { meses: req.query.meses, lojaId: unidadePedida(req, lojaRestrita), fuso });
   }));
@@ -94,12 +98,14 @@ export function createRazaoAdminRouter({ db, escopoDaRequisicao, fonteJson = nul
     return r;
   }));
 
-  router.get('/lancamentos', rota('payments.read', async ({ req, empresaId, lojaRestrita }) => {
+  router.get('/lancamentos', rota('reports.read', async ({ req, empresaId, lojaRestrita }) => {
     await lerFontes(empresaId);
     return svc.listar(db, empresaId, { ...req.query, lojaId: unidadePedida(req, lojaRestrita) });
   }));
   router.post('/lancamentos', rota('payments.write', async ({ req, empresaId, lojaRestrita, usuario }) => {
     const corpo = { ...(req.body || {}) };
+    // quem opera o dia (perfil operador) lança despesa; receita manual pede acesso aos números da empresa
+    if (String(corpo.tipo || '').toLowerCase() !== 'despesa') await escopoDaRequisicao(req, 'reports.read');
     if (lojaRestrita) corpo.lojaId = lojaRestrita;
     return svc.criarManual(db, empresaId, corpo, { usuario, fuso });
   }, 201));
@@ -139,8 +145,8 @@ export function createRazaoAdminRouter({ db, escopoDaRequisicao, fonteJson = nul
   router.post('/centros-custo', rota('settings.write', ({ req, empresaId, lojaRestrita }) => { empresaToda(lojaRestrita); return svc.salvarCentro(db, empresaId, req.body || {}); }, 201));
   router.patch('/centros-custo/:id', rota('settings.write', ({ req, empresaId, lojaRestrita }) => { empresaToda(lojaRestrita); return svc.salvarCentro(db, empresaId, req.body || {}, exigirUuid(req.params.id, 'centro de custo')); }));
 
-  router.get('/fechamentos', rota('payments.read', async ({ req, empresaId, lojaRestrita }) => ({ fechamentos: await svc.listarFechamentos(db, empresaId, { lojaId: unidadePedida(req, lojaRestrita) }) })));
-  router.get('/fechamentos/previa', rota('payments.read', async ({ req, empresaId, lojaRestrita }) => {
+  router.get('/fechamentos', rota('reports.read', async ({ req, empresaId, lojaRestrita }) => ({ fechamentos: await svc.listarFechamentos(db, empresaId, { lojaId: unidadePedida(req, lojaRestrita) }) })));
+  router.get('/fechamentos/previa', rota('reports.read', async ({ req, empresaId, lojaRestrita }) => {
     await lerFontes(empresaId);
     return svc.totaisDoDia(db, empresaId, { data: req.query.data || svc.hojeNoFuso(new Date(), fuso), lojaId: unidadePedida(req, lojaRestrita), fuso });
   }));
@@ -150,7 +156,7 @@ export function createRazaoAdminRouter({ db, escopoDaRequisicao, fonteJson = nul
   }, 201));
 
   // ── conciliação bancária (extrato OFX × razão) ─────────────────────────────
-  router.get('/conciliacao/contas', rota('payments.read', async ({ empresaId, lojaRestrita }) => {
+  router.get('/conciliacao/contas', rota('reports.read', async ({ empresaId, lojaRestrita }) => {
     const contas = await conc.resumoContas(db, empresaId);
     return lojaRestrita ? contas.filter((c) => c.lojaId === lojaRestrita) : contas;
   }));
@@ -165,7 +171,7 @@ export function createRazaoAdminRouter({ db, escopoDaRequisicao, fonteJson = nul
   router.post('/conciliacao/importar', rota('payments.write', ({ req, empresaId, lojaRestrita, usuario }) => conc.importarOfx(db, empresaId, {
     arquivoBase64: req.body?.arquivoBase64, nomeArquivo: req.body?.nomeArquivo, contaId: req.body?.contaId || null, conciliar: req.body?.conciliar !== false,
   }, { usuario, fuso, lojaRestrita }), 201));
-  router.get('/conciliacao/linhas', rota('payments.read', ({ req, empresaId, lojaRestrita }) => conc.listarLinhas(db, empresaId, { contaId: req.query.contaId || null, status: req.query.status || 'pendente', lojaId: lojaRestrita, fuso })));
+  router.get('/conciliacao/linhas', rota('reports.read', ({ req, empresaId, lojaRestrita }) => conc.listarLinhas(db, empresaId, { contaId: req.query.contaId || null, status: req.query.status || 'pendente', lojaId: lojaRestrita, fuso })));
   router.post('/conciliacao/linhas/:id/conciliar', rota('payments.write', ({ req, empresaId, lojaRestrita, usuario }) => conc.conciliar(db, empresaId, req.params.id, req.body?.lancamentoId, { usuario, fuso, lojaRestrita })));
   router.post('/conciliacao/linhas/:id/criar-lancamento', rota('payments.write', ({ req, empresaId, lojaRestrita, usuario }) => conc.criarLancamentoDaLinha(db, empresaId, req.params.id, { categoria: req.body?.categoria, descricao: req.body?.descricao, lojaId: req.body?.lojaId }, { usuario, fuso, lojaRestrita })));
   router.post('/conciliacao/linhas/:id/ignorar', rota('payments.write', ({ req, empresaId, lojaRestrita, usuario }) => conc.ignorarLinha(db, empresaId, req.params.id, { usuario, lojaRestrita })));

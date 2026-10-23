@@ -10,6 +10,7 @@ import { infinitepayWebhookDuplicateOwnerSql, infinitepayWebhookUnboundOwnerSql,
 import { lateCaptureReviewExistsSql } from './commerce-order-payment-status.js';
 import { createPaymentAccount, listPaymentAccounts, listPaymentProviders, listPayments, updatePaymentAccount } from './commerce-payment-admin.js';
 import { resolveCommerceIdentity } from './commerce-identity-bridge.js';
+import { restricaoDePermissao } from './perfis-acesso.js';
 import { applyPromotionToOrder, createPromotion, createPromotionCode, createPromotionTemplate, listPromotionTemplates, listPromotions, previewPromotion, updatePromotion, updatePromotionCode } from './commerce-promotions.js';
 import { createStorefront, listStorefronts, updateStorefront } from './commerce-storefronts.js';
 import { resolveStorefrontAlias } from './commerce-tenants.js';
@@ -715,6 +716,9 @@ async function adminContext(req) {
 }
 
 async function requirePermission(req, permission) {
+  // perfil operador/profissional limita o vínculo (core/perfis-acesso.js)
+  const restricao = restricaoDePermissao(req, permission);
+  if (restricao) throw new CommerceError(restricao, 'PERMISSION_DENIED', { permission, perfil: true });
   const context = await adminContext(req);
   const result = await db.queryRead(
     `SELECT COUNT(*)::int AS grants, BOOL_OR(m.loja_id IS NULL) AS corporate_access

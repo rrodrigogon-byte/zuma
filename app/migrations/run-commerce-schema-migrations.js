@@ -86,6 +86,7 @@ const migrationFiles = [
   '099_pdv_offline_impressao.sql',
   '100_fiscal_completo.sql',
   '101_varejo_balanca.sql',
+  '102_perfis_acesso.sql',
 ];
 const advisoryLockKey = 825410732;
 

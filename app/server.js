@@ -132,6 +132,8 @@ import { registerWhatsappConexaoRoutes } from './whatsapp-conexao-routes.js';
 import { vigiarTodas as vigiarConexoesWhatsapp } from './whatsapp-conexao-kytto.js';
 import { registerDinoAdminRoutes, loadCommerceSalesDetail } from './dino-admin-routes.js';
 import { buildCurrentMaterials, previewTaxMaterialPlan, PreviewConflictError, PreviewValidationError } from './comandas-caixa-previa.js';
+import { perfilDoUsuario, profissionalPode, operadorPodeNaBarbearia, respostaParaOperador, papelLegadoDoRole, permissoesDoPerfil, MODULOS_FECHADOS_AO_OPERADOR, MENSAGEM_PERFIL } from './core/perfis-acesso.js';
+import { profissionalDoUsuario } from './dino-modo-barbeiro.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -260,8 +262,9 @@ export const CATEGORIAS = [
 ];
 
 // ---- papéis e segurança ----
-const ROLES = ['admin','organizador','staff','atleta'];
-const STAFF = ['admin','organizador','staff']; // acesso ao sistema/painel
+// operador e profissional: perfis de acesso de toda empresa (ver core/perfis-acesso.js)
+const ROLES = ['admin','organizador','staff','operador','profissional','atleta'];
+const STAFF = ['admin','organizador','staff','operador','profissional']; // acesso ao sistema/painel
 const norm = s => String(s||'').trim().toLowerCase();
 // Fuso dos módulos do backoffice: o mesmo KYTTO_TIMEZONE do resto do sistema (KYTTO_FUSO tem prioridade).
 const FUSO_KYTTO = process.env.KYTTO_FUSO || process.env.KYTTO_TIMEZONE || 'America/Cuiaba';
@@ -399,7 +402,7 @@ async function authenticateAccountRequest(req, res, next, accountId) {
       req.user.lojaId = context.lojaId;
       req.user.commerceUserId = context.usuarioId;
       req.user.commerceRoleCode = context.roleCode;
-      req.user.role = context.roleCode === 'customer' ? 'cliente' : ['platform_owner','tenant_owner','store_admin'].includes(context.roleCode) ? 'admin' : 'organizador';
+      req.user.role = papelLegadoDoRole(context.roleCode);
     }
     return next();
   } catch (error) {
@@ -513,7 +516,22 @@ async function tenantBindingFor(email) {
     lojaId: empresas.length === 1 && lojas.length === 1 ? lojas[0] : null };
 }
 const requireRole = (...roles)=> (req,res,next)=> (req.user && roles.includes(req.user.role)) ? next() : res.status(403).json({error:'sem permissão'});
-const requireStaff = (req,res,next)=> (req.user && STAFF.includes(req.user.role)) ? next() : res.status(403).json({error:'acesso restrito à organização'});
+const requireStaff = (req,res,next)=> {
+  if (!(req.user && STAFF.includes(req.user.role))) return res.status(403).json({error:'acesso restrito à organização'});
+  const perfil = perfilDoUsuario(req.user);
+  // operador e profissional são perfis de uma empresa: sem empresa, nada (nem os números da plataforma)
+  if ((perfil === 'operador' || perfil === 'profissional') && !isTenantScopedUser(req.user)) {
+    return res.status(403).json({ error: 'Este perfil precisa estar vinculado a uma empresa.', code: 'EMPRESA_REQUIRED' });
+  }
+  // profissional (barbeiro, manicure…): só o app do profissional, em qualquer rota de equipe
+  if (perfil === 'profissional') {
+    const url = String(req.originalUrl || '').split('?')[0];
+    if (!url.startsWith('/api/admin/') || !profissionalPode(req.method, url.slice('/api/admin'.length))) {
+      return res.status(403).json({ error: MENSAGEM_PERFIL.profissional, code: 'PROFILE_RESTRICTED' });
+    }
+  }
+  return next();
+};
 const requirePlatformAdmin = (req,res,next)=> isPlatformAdminUser(req.user) ? next() : res.status(403).json({error:'acesso restrito à administração da plataforma', code:'PLATFORM_ADMIN_REQUIRED'});
 // Usuário preso a uma empresa (tenant) que não é administrador da plataforma.
 const isTenantScopedUser = user => (Boolean(user?.empresaId) || user?.tenantBound === true) && !isPlatformAdminUser(user) && !isMainAdminUser(user);
@@ -884,6 +902,8 @@ app.use('/api/admin', (req,res,next)=>{
       if(modulo === 'notificacoes') return req.method === 'GET' ? res.json({ notificacoes: [], total: 0 }) : res.json({ ok: true });
       if(!TENANT_ADMIN_MODULES.has(modulo)) return res.status(403).json({ error:'módulo global da plataforma; use o módulo da sua empresa', code:'TENANT_USE_SCOPED_MODULE' });
       if(MODULO_DA_API[modulo] && modulosOcultos().has(MODULO_DA_API[modulo])) return respostaModuloOculto(res);
+      // operador: sem gestão de usuários, plataforma e trilha de auditoria (traz comissões e valores)
+      if(perfilDoUsuario(req.user) === 'operador' && MODULOS_FECHADOS_AO_OPERADOR.has(modulo)) return res.status(403).json({ error: MENSAGEM_PERFIL.operador, code: 'PROFILE_RESTRICTED' });
     }
     // registra mutações (POST/PATCH/DELETE) na auditoria
     if(['POST','PATCH','DELETE','PUT'].includes(req.method)){
@@ -1272,6 +1292,8 @@ if(process.env.COMMERCE_CORE_ENABLED === '1'){
       );
       let permissoes = r.rows.map((row) => row.codigo);
       if (req.user?.pgOperational === true) permissoes = permissoes.filter((codigo) => codigo !== 'users.write');
+      // o perfil (operador, profissional) limita o vínculo; o menu mostra o que a pessoa realmente usa
+      permissoes = permissoesDoPerfil(req.user, permissoes);
       return res.json({ aplicavel: true, empresaId: contexto.empresaId, lojaId: contexto.lojaId || null, permissoes, modulosOcultos: [...modulosOcultos()] });
     } catch {
       return res.status(503).json({ error: 'não foi possível consultar as permissões', code: 'PERMISSIONS_UNAVAILABLE' });
@@ -1301,7 +1323,18 @@ if(process.env.COMMERCE_CORE_ENABLED === '1'){
   // [kytto-bar] Bar, PDV, comandas, estoque fracionado, KDS e caixa por empresa.
   // O prefixo continua sob a trava /api/admin e a empresa é resolvida exclusivamente
   // pela membership SQL; nenhum empresaId do corpo da requisição é aceito.
-  app.use('/api/admin/bar', auth, requireStaff, createBarAdminRouter({
+  // Operador no bar: opera o caixa às cegas (sem vendas nem saldo esperado) e não lista as vendas.
+  const barParaOperador = (req, res, next) => {
+    if (perfilDoUsuario(req.user) !== 'operador') return next();
+    const caminho = req.path || '';
+    if (req.method === 'GET' && /^\/vendas(?:\/|$)/.test(caminho)) return res.status(403).json({ error: MENSAGEM_PERFIL.operador, code: 'PROFILE_RESTRICTED' });
+    if (req.method === 'GET' && /^\/caixa(?:\/hoje)?$/.test(caminho)) {
+      const json = res.json.bind(res);
+      res.json = (corpo) => json(corpo && typeof corpo === 'object' ? { ...corpo, vendas: undefined, saldo: undefined, numerosOcultos: true } : corpo);
+    }
+    return next();
+  };
+  app.use('/api/admin/bar', auth, requireStaff, barParaOperador, createBarAdminRouter({
     db: clubeDb,
     empresaDaRequisicao: empresaDoBar,
     operadorDaRequisicao: (req) => String(req.user?.id || req.user?.email || ''),
@@ -1543,7 +1576,8 @@ async function tryAccountLogin(email, password, res, panelOnly, rateKey) {
   if (sessao.empresaId) {
     const local = accountRequestIdentity(user, { empresaId:sessao.empresaId, lojaId:sessao.lojaId });
     user.commerceUserId = local.usuarioId;
-    user.role = local.roleCode === 'customer' ? 'cliente' : ['platform_owner','tenant_owner','store_admin'].includes(local.roleCode) ? 'admin' : 'organizador';
+    user.role = papelLegadoDoRole(local.roleCode);
+    user.commerceRoleCode = local.roleCode;
   }
   limparTentativas(rateKey);
   const token = jwt.sign({ id:user.id, email:user.email, pgAccount:true }, JWT_SECRET, { expiresIn:'12h' });
@@ -1744,6 +1778,7 @@ app.post('/api/admin/usuarios', auth, requireRole('admin','organizador'), async 
   if(isReservedEmail(email) && !isPlatformAdminUser(req.user)) return res.status(409).json({error:'e-mail reservado à administração da plataforma'});
   if(role === 'admin' && req.user.role !== 'admin') return res.status(403).json({error:'só um administrador cria outro administrador'});
   if(!isGlobalActor(req.user) && !req.user.empresaId) return res.status(409).json({error:'escolha a empresa antes de criar usuários', code:'EMPRESA_REQUIRED'});
+  if(['operador','profissional'].includes(role) && isGlobalActor(req.user)) return res.status(409).json({error:'operador e profissional são perfis de uma empresa: cadastre pela gestão da empresa ou em Contas e acessos', code:'EMPRESA_REQUIRED'});
   const u = { id: nextId(), nome, email: norm(email), senhaHash: bcrypt.hashSync(senha,10),
     role, telefone:telefone||'', ativo:true, criadoEm:new Date().toISOString(),
     ...(isGlobalActor(req.user) ? {} : { empresaId: String(req.user.empresaId), ...(req.user.lojaId ? { lojaId: String(req.user.lojaId) } : {}) }) };
@@ -1755,6 +1790,7 @@ app.patch('/api/admin/usuarios/:id', auth, requireRole('admin','organizador'), (
   const b = req.body||{};
   if(b.nome) u.nome=b.nome;
   if(b.role && ROLES.includes(b.role)){
+    if(['operador','profissional'].includes(b.role) && !u.empresaId) return res.status(409).json({error:'operador e profissional são perfis de uma empresa: este usuário não tem empresa', code:'EMPRESA_REQUIRED'});
     if((b.role === 'admin' || u.role === 'admin') && req.user.role !== 'admin') return res.status(403).json({error:'só um administrador altera papel de administrador'});
     if(u.id === req.user.id && b.role !== u.role) return res.status(403).json({error:'você não pode mudar o próprio papel'});
     u.role=b.role;
@@ -3104,8 +3140,49 @@ async function resolverEscopoBarbearia(req, res, next) {
   req.barbeariaContext = { empresaId: signedEmpresa || 'principal', lojaId: signedLoja };
   next();
 }
+// Agenda e bloqueio do próprio profissional: o vínculo é o e-mail do login no cadastro dele.
+function profissionalDaSessao(req) {
+  return profissionalDoUsuario(barbeariaErpKytto.listarProfissionais(legacyEmpresaId(req)), req.user);
+}
+function exigirPerfilProfissional(req, res, next) {
+  const eu = profissionalDaSessao(req);
+  if (!eu) return res.status(403).json({ error: 'Seu login não está vinculado a um profissional (o e-mail do cadastro precisa ser o mesmo do login).', code: 'SEM_VINCULO' });
+  const caminho = req.path || '';
+  const doCorpo = String(req.body?.profissionalId ?? req.body?.profissional_id ?? '');
+  if (req.method === 'POST' && (caminho === '/agenda' || caminho === '/bloqueios')) {
+    if (doCorpo && doCorpo !== eu.id) return res.status(403).json({ error: 'Você só agenda e bloqueia horários na sua própria agenda.', code: 'PROFILE_RESTRICTED' });
+    req.body = { ...(req.body || {}), profissionalId: eu.id };
+  }
+  const status = /^\/agenda\/([^/]+)\/status$/.exec(caminho);
+  if (status) {
+    const atual = listarAgendamentosBarbearia(legacyEmpresaId(req), { lojaId: legacyLojaId(req) }).find((item) => item.id === status[1]);
+    if (!atual || atual.profissionalId !== eu.id) return res.status(403).json({ error: 'Este atendimento não é da sua agenda.', code: 'PROFILE_RESTRICTED' });
+    if (req.body?.registrarFinanceiro === true) return res.status(403).json({ error: MENSAGEM_PERFIL.profissional, code: 'PROFILE_RESTRICTED' });
+  }
+  return next();
+}
 function exigirPapelOperacaoBarbearia(req, res, next) {
-  if (req.user?.pgAccount === true && !isPlatformAdminUser(req.user) && !['tenant_owner','store_admin'].includes(req.user.commerceRoleCode)) {
+  const perfil = perfilDoUsuario(req.user);
+  if (perfil === 'admin') return next();
+  if (perfil === 'operador') {
+    const contado = req.body?.valorInformado ?? req.body?.valor_informado;
+    if (/^\/operacao\/caixas\/[^/]+\/fechamento$/.test(req.path || '') && req.method === 'POST' && !(contado !== null && contado !== '' && Number.isFinite(Number(contado)) && Number(contado) >= 0)) {
+      return res.status(400).json({ error: 'Informe o valor contado no caixa para fechar.', code: 'VALOR_CONTADO_OBRIGATORIO' });
+    }
+    if (!operadorPodeNaBarbearia(req.method, req.path, req.body)) return res.status(403).json({ error: MENSAGEM_PERFIL.operador, code: 'PROFILE_RESTRICTED' });
+    // vendas de revenda e comandas do histórico: o operador vê o dia, não o acumulado da empresa
+    if (req.method === 'GET' && /^\/(?:vendas-revenda|historico-comandas)$/.test(req.path || '') && !req.query.data) {
+      req.query.data = new Intl.DateTimeFormat('en-CA', { timeZone: FUSO_KYTTO, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+    }
+    // sem comissões e sem os números da empresa na resposta; caixa e fechamento do dia às cegas
+    // o caminho é lido aqui: na rota final req.path já é o endereço completo
+    const caminho = req.path;
+    const json = res.json.bind(res);
+    res.json = (corpo) => json(res.statusCode < 400 ? respostaParaOperador(caminho, corpo) : corpo);
+    return next();
+  }
+  if (perfil === 'profissional') return exigirPerfilProfissional(req, res, next);
+  if (req.user?.pgAccount === true && !isPlatformAdminUser(req.user)) {
     return res.status(403).json({ error:'Este perfil especializado opera somente os módulos Commerce permitidos pelo seu papel.', code:'COMMERCE_ROLE_USE_SCOPED_MODULE' });
   }
   if (['admin', 'organizador'].includes(String(req.user?.role || ''))) return next();
@@ -7677,7 +7754,7 @@ app.post('/api/reservas', auth, async (req,res)=>{
 app.patch('/api/reservas/:id/cancelar', auth, async (req,res)=>{
   const d=db(); const r=(d.reservas||[]).find(x=>x.id==req.params.id);
   if(!r) return res.status(404).json({error:'reserva não encontrada'});
-  if(r.usuarioId!=req.user.id && !STAFF.includes(req.user.role)) return res.status(403).json({error:'sem permissão'});
+  if(r.usuarioId!=req.user.id && (!STAFF.includes(req.user.role) || perfilDoUsuario(req.user) === 'profissional')) return res.status(403).json({error:'sem permissão'});
   r.status='cancelada'; r.canceladoEm=new Date().toISOString(); save();
   const socio=(d.socios||[]).find(s=>s.id==r.socioId);
   const tel=socio?.telefone||socio?.celular||'';
