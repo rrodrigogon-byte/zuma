@@ -50,9 +50,16 @@ function renderMessage(template, customerName) {
   return clean(template, 1600).replace(/\{\{\s*nome\s*\}\}/gi, firstName);
 }
 
-async function queryAudience(query, empresaId, criteriaInput) {
+function assertCampaignAudienceStoreScope(context = {}) {
+  uuid(context.empresaId, 'empresaId');
+  uuid(context.lojaId, 'lojaId');
+  fail('audiência CRM indisponível: o cadastro atual não comprova vínculo entre cliente e unidade', 'AUDIENCE_STORE_SCOPE_UNAVAILABLE');
+}
+
+async function queryAudience(query, context, criteriaInput) {
+  assertCampaignAudienceStoreScope(context);
   const criteria = normalizeCampaignCriteria(criteriaInput);
-  const params = [uuid(empresaId, 'empresaId')];
+  const params = [uuid(context.empresaId, 'empresaId')];
   const conditions = ['c.empresa_id = $1', 'c.ativo = true'];
   if (criteria.city) {
     params.push(criteria.city);
@@ -184,7 +191,7 @@ export async function listCampaigns(context, { limit = 50, offset = 0 } = {}) {
 export async function previewCampaign(context, campaignId) {
   const campaign = await loadCampaign(db.query.bind(db), context, campaignId);
   if (!['rascunho', 'confirmada', 'agendada'].includes(campaign.status)) fail('campanha não admite novo preview', 'CONFLICT');
-  const audience = await queryAudience(db.query.bind(db), context.empresaId, campaign.segmento_criterios);
+  const audience = await queryAudience(db.query.bind(db), context, campaign.segmento_criterios);
   return previewPayload(campaign, audience);
 }
 
@@ -202,7 +209,7 @@ export async function confirmCampaign(context, campaignId, payload = {}) {
       }
       fail('campanha já executada, cancelada ou vinculada a outro preview', 'CONFLICT');
     }
-    const audience = await queryAudience(query, context.empresaId, campaign.segmento_criterios);
+    const audience = await queryAudience(query, context, campaign.segmento_criterios);
     const preview = previewPayload(campaign, audience);
     if (preview.previewHash !== expectedHash) fail('preview obsoleto; gere uma nova prévia', 'STALE_PREVIEW');
     if (!audience.eligible.length) fail('nenhum destinatário possui telefone válido e consentimento de marketing', 'VALIDATION_ERROR');
@@ -558,6 +565,7 @@ export async function campaignMetrics(context, campaignId) {
 }
 
 export async function listCampaignAudience(context, { search = '', limit = 100, offset = 0 } = {}) {
+  assertCampaignAudienceStoreScope(context);
   const term = clean(search, 100);
   const safeLimit = Math.min(200, Math.max(1, Number(limit) || 100));
   const safeOffset = Math.max(0, Number(offset) || 0);
@@ -586,6 +594,7 @@ export async function updateCampaignConsent(context, customerId, payload = {}) {
   const evidenceNote = clean(payload.evidenceNote, 500);
   if (!allowedOrigins.has(origin)) fail('origem do consentimento inválida');
   if (granted && evidenceNote.length < 5) fail('evidência do consentimento é obrigatória para conceder opt-in');
+  assertCampaignAudienceStoreScope(context);
   return db.transaction(async trx => {
     const query = trx.query.bind(trx);
     const customer = await query('SELECT id, nome FROM clientes WHERE id = $1 AND empresa_id = $2 AND ativo = true FOR UPDATE', [uuid(customerId, 'clienteId'), uuid(context.empresaId, 'empresaId')]);

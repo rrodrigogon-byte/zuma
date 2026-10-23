@@ -10,6 +10,7 @@ import {
   markCampaignDeliveryBlocked,
   normalizeCampaignCriteria,
   normalizeCampaignPhone,
+  previewCampaign,
   processCampaignDeliveryTask,
   recordCampaignProviderEvent,
   updateCampaignConsent,
@@ -107,16 +108,16 @@ test('gate bloqueado terminaliza entrega CRM scoped e recalcula contadores', asy
   } finally { db.query = original; }
 });
 
-test('lista audiência somente no tenant e aplica busca parametrizada', async () => {
+test('bloqueia audiência CRM sem vínculo comprovável cliente-unidade antes da consulta', async () => {
   const original = db.query;
-  let captured;
-  db.query = async (sql, params) => { captured = { sql, params }; return { rows: [{ id: CUSTOMER, nome: 'Ana', total: 1 }] }; };
+  let queryCalled = false;
+  db.query = async () => { queryCalled = true; throw new Error('não deve consultar audiência tenant-wide'); };
   try {
-    const result = await listCampaignAudience(CONTEXT, { search: 'Ana', limit: 10 });
-    assert.equal(result.total, 1);
-    assert.match(captured.sql, /c\.empresa_id = \$1/);
-    assert.equal(captured.params[0], CONTEXT.empresaId);
-    assert.equal(captured.params[1], '%Ana%');
+    await assert.rejects(
+      listCampaignAudience(CONTEXT, { search: 'Ana', limit: 10 }),
+      error => error.code === 'AUDIENCE_STORE_SCOPE_UNAVAILABLE' && /não comprova vínculo/.test(error.message),
+    );
+    assert.equal(queryCalled, false);
   } finally { db.query = original; }
 });
 
@@ -125,6 +126,44 @@ test('concessão de opt-in exige origem e evidência antes do banco', async () =
     () => updateCampaignConsent(CONTEXT, CUSTOMER, { granted: true, origin: 'cliente_solicitou', evidenceNote: '' }),
     error => error.code === 'VALIDATION_ERROR' && /evidência/.test(error.message),
   );
+});
+
+test('bloqueia alteração administrativa de consentimento sem vínculo cliente-unidade', async () => {
+  const original = db.transaction;
+  let transactionCalled = false;
+  db.transaction = async () => { transactionCalled = true; throw new Error('não deve consultar cliente tenant-wide'); };
+  try {
+    await assert.rejects(
+      updateCampaignConsent(CONTEXT, CUSTOMER, { granted: true, origin: 'cliente_solicitou', evidenceNote: 'Consentimento registrado' }),
+      error => error.code === 'AUDIENCE_STORE_SCOPE_UNAVAILABLE',
+    );
+    assert.equal(transactionCalled, false);
+  } finally { db.transaction = original; }
+});
+
+test('preview e confirmação CRM falham fechados sem selecionar nem enfileirar contatos', async () => {
+  const originalQuery = db.query;
+  const originalTransaction = db.transaction;
+  const queries = [];
+  db.query = async sql => {
+    queries.push(sql);
+    if (sql.includes('SELECT * FROM campanhas_crm')) return { rows: [{ id: CAMPAIGN, empresa_id: CONTEXT.empresaId, loja_id: CONTEXT.lojaId, status: 'rascunho', segmento_criterios: {} }] };
+    throw new Error(`consulta inesperada: ${sql}`);
+  };
+  db.transaction = async callback => callback({ query: async sql => {
+    queries.push(sql);
+    if (sql.includes('SELECT * FROM campanhas_crm')) return { rows: [{ id: CAMPAIGN, empresa_id: CONTEXT.empresaId, loja_id: CONTEXT.lojaId, status: 'rascunho', segmento_criterios: {} }] };
+    throw new Error(`consulta transacional inesperada: ${sql}`);
+  } });
+  try {
+    await assert.rejects(previewCampaign(CONTEXT, CAMPAIGN), error => error.code === 'AUDIENCE_STORE_SCOPE_UNAVAILABLE');
+    await assert.rejects(
+      confirmCampaign(CONTEXT, CAMPAIGN, { confirmed: true, previewHash: 'a'.repeat(64) }),
+      error => error.code === 'AUDIENCE_STORE_SCOPE_UNAVAILABLE',
+    );
+    assert.equal(queries.some(sql => /FROM clientes c/.test(sql)), false);
+    assert.equal(queries.some(sql => /INSERT INTO envios_campanha|tarefas_integracao_canais/.test(sql)), false);
+  } finally { db.query = originalQuery; db.transaction = originalTransaction; }
 });
 
 test('confirmação de campanha é rejeitada antes do banco sem aceite humano', async () => {
