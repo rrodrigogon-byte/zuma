@@ -5,6 +5,7 @@ import { useAuth } from '../../../lib/auth'
 import { lojasDaEmpresa } from '../../../lib/context-selection'
 import { Badge, Dialog, Table } from '../customer360/shared'
 import { downloadCsv, localDay, money, shortDate, dateTime } from '../dino/format'
+import Conciliacao from './Conciliacao'
 import '../customer360.css'
 import '../dino/dino-admin.css'
 
@@ -14,7 +15,7 @@ import '../dino/dino-admin.css'
 const BASE = '/api/admin/razao'
 const ABAS = [
   ['geral', 'Visão geral'], ['lancamentos', 'Lançamentos'], ['pagar', 'A pagar'], ['receber', 'A receber'],
-  ['dre', 'DRE'], ['fechamento', 'Fechamento do dia'], ['ajustes', 'Ajustes'],
+  ['dre', 'DRE'], ['fechamento', 'Fechamento do dia'], ['conciliacao', 'Conciliação bancária'], ['ajustes', 'Ajustes'],
 ]
 const STATUS = { pendente: { label: 'Pendente', tone: 'warning' }, pago: { label: 'Pago', tone: 'success' }, cancelado: { label: 'Cancelado', tone: 'muted' } }
 const ORIGENS = {
@@ -289,6 +290,7 @@ export default function FinanceiroRazao({ abaInicial = 'geral' }) {
       ]} />
     </section>}
 
+    {aba === 'conciliacao' && <Conciliacao categorias={categorias} toast={toast} onMudou={carregar} />}
     {aba === 'ajustes' && <Ajustes categorias={categorias} centros={centros} estado={estado} onSincronizar={sincronizar} onMudou={carregar} toast={toast} />}
 
     <Dialog open={Boolean(form)} title={form?.id ? 'Editar lançamento' : (form?.tipo === 'receita' ? 'Nova receita' : 'Nova despesa')} labelId="razao-form" onClose={() => setForm(null)} onSubmit={salvar}

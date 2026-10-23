@@ -154,8 +154,9 @@ app.use((req, res, next) => {
 });
 app.use(avecGovernanceNoStore);
 app.use(equipePerformanceNoStore);
-// XML de NF-e de entrada pode passar de 1 MB: o router de suprimentos lê esse corpo com limite próprio (6 MB).
-const corpoJsonGlobal = (req) => !String(req.originalUrl || '').startsWith('/api/admin/suprimentos/nfe/') && /^application\/json\b/i.test(String(req.headers['content-type'] || ''));
+// XML de NF-e de entrada e extrato OFX podem passar de 1 MB: os routers leem esses corpos com limite próprio.
+const CORPOS_GRANDES = ['/api/admin/suprimentos/nfe/', '/api/admin/razao/conciliacao/importar'];
+const corpoJsonGlobal = (req) => !CORPOS_GRANDES.some((p) => String(req.originalUrl || '').startsWith(p)) && /^application\/json\b/i.test(String(req.headers['content-type'] || ''));
 app.use(express.json({ limit: '1mb', type: corpoJsonGlobal, verify: (req, res, buf) => { if (req.originalUrl?.startsWith('/api/webhooks/') || req.originalUrl?.startsWith('/api/integracoes/')) req.rawBody = Buffer.from(buf); } }));
 
 // SSE — realtime para KDS, Mesas, Portaria

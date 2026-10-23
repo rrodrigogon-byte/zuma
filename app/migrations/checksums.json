@@ -90,5 +90,6 @@
  "085_ai_automation_log_store_scope.sql": "c8ea0921a0022ff55fbde36b36550f6e284158b30507cb628391470e8879fe27",
  "090_financeiro_razao.sql": "e24ddefaad86783d2c478052e788112a4977a270d74b2117ff79cbaee19a98d7",
  "091_estoque_compras.sql": "95c017ce949c2da4691073de72b23b3938e4c7466915b08489030174e41e012e",
- "092_fiscal_multiempresa.sql": "276547e4759b7c34ef2ec37c25345ee6d828843bab35d59d9ff808a55fd85f11"
+ "092_fiscal_multiempresa.sql": "276547e4759b7c34ef2ec37c25345ee6d828843bab35d59d9ff808a55fd85f11",
+ "093_conciliacao_bancaria.sql": "cfe0705bce6921cd650be27f5ce0709a1731f10927d0f5ebe7f7eec70603b7e9"
 }

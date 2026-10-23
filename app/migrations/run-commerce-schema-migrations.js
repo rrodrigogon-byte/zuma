@@ -77,6 +77,7 @@ const migrationFiles = [
   '090_financeiro_razao.sql',
   '091_estoque_compras.sql',
   '092_fiscal_multiempresa.sql',
+  '093_conciliacao_bancaria.sql',
 ];
 const advisoryLockKey = 825410732;
 

@@ -1,6 +1,7 @@
 import express from 'express';
 import * as svc from './servico.js';
 import * as fontes from './fontes.js';
+import * as conc from './conciliacao.js';
 import { ErroDominio, exigirUuid, responderErro } from '../acesso/banco.js';
 
 /**
@@ -14,7 +15,9 @@ import { ErroDominio, exigirUuid, responderErro } from '../acesso/banco.js';
 export function createRazaoAdminRouter({ db, escopoDaRequisicao, fonteJson = null, ativo = () => process.env.FINANCEIRO_RAZAO === '1', fuso = svc.FUSO_PADRAO, intervaloSyncMs = 60_000 }) {
   if (!db || typeof escopoDaRequisicao !== 'function') throw new Error('createRazaoAdminRouter: db e escopoDaRequisicao são obrigatórios');
   const router = express.Router();
-  router.use(express.json({ limit: '64kb' }));
+  const jsonPadrao = express.json({ limit: '64kb' });
+  const jsonExtrato = express.json({ limit: '8mb' }); // OFX em base64
+  router.use((req, res, next) => (req.path === '/conciliacao/importar' ? jsonExtrato : jsonPadrao)(req, res, next));
   router.use((req, res, next) => { res.set('Cache-Control', 'private, no-store'); next(); });
 
   const ultimaLeitura = new Map();
@@ -122,6 +125,29 @@ export function createRazaoAdminRouter({ db, escopoDaRequisicao, fonteJson = nul
     await lerFontes(empresaId, { forcar: true });
     return svc.fecharDia(db, empresaId, { data: req.body?.data, lojaId: unidadePedida(req, lojaRestrita), responsavel: usuario, observacao: req.body?.observacao, fuso });
   }, 201));
+
+  // ── conciliação bancária (extrato OFX × razão) ─────────────────────────────
+  router.get('/conciliacao/contas', rota('payments.read', async ({ empresaId, lojaRestrita }) => {
+    const contas = await conc.resumoContas(db, empresaId);
+    return lojaRestrita ? contas.filter((c) => c.lojaId === lojaRestrita) : contas;
+  }));
+  router.post('/conciliacao/contas', rota('settings.write', ({ req, empresaId, lojaRestrita }) => {
+    if (lojaRestrita) throw new ErroDominio('PERMISSION_DENIED', 'Cadastrar conta bancária exige permissão na empresa toda', 403);
+    return conc.salvarConta(db, empresaId, req.body || {});
+  }, 201));
+  router.patch('/conciliacao/contas/:id', rota('settings.write', ({ req, empresaId, lojaRestrita }) => {
+    if (lojaRestrita) throw new ErroDominio('PERMISSION_DENIED', 'Editar conta bancária exige permissão na empresa toda', 403);
+    return conc.salvarConta(db, empresaId, req.body || {}, req.params.id);
+  }));
+  router.post('/conciliacao/importar', rota('payments.write', ({ req, empresaId, lojaRestrita, usuario }) => conc.importarOfx(db, empresaId, {
+    arquivoBase64: req.body?.arquivoBase64, nomeArquivo: req.body?.nomeArquivo, contaId: req.body?.contaId || null, lojaId: lojaRestrita, conciliar: req.body?.conciliar !== false,
+  }, { usuario, fuso }), 201));
+  router.get('/conciliacao/linhas', rota('payments.read', ({ req, empresaId, lojaRestrita }) => conc.listarLinhas(db, empresaId, { contaId: req.query.contaId || null, status: req.query.status || 'pendente', lojaId: lojaRestrita, fuso })));
+  router.post('/conciliacao/linhas/:id/conciliar', rota('payments.write', ({ req, empresaId, lojaRestrita, usuario }) => conc.conciliar(db, empresaId, req.params.id, req.body?.lancamentoId, { usuario, fuso, lojaRestrita })));
+  router.post('/conciliacao/linhas/:id/criar-lancamento', rota('payments.write', ({ req, empresaId, lojaRestrita, usuario }) => conc.criarLancamentoDaLinha(db, empresaId, req.params.id, { categoria: req.body?.categoria, descricao: req.body?.descricao, lojaId: req.body?.lojaId }, { usuario, fuso, lojaRestrita })));
+  router.post('/conciliacao/linhas/:id/ignorar', rota('payments.write', ({ req, empresaId, lojaRestrita, usuario }) => conc.ignorarLinha(db, empresaId, req.params.id, { usuario, lojaRestrita })));
+  router.post('/conciliacao/linhas/:id/desfazer', rota('payments.write', ({ req, empresaId, lojaRestrita }) => conc.desfazer(db, empresaId, req.params.id, { lojaRestrita })));
+  router.post('/conciliacao/automatico', rota('payments.write', ({ req, empresaId, lojaRestrita, usuario }) => conc.conciliarAutomatico(db, empresaId, { contaId: req.body?.contaId || null, usuario, fuso, lojaRestrita })));
 
   return router;
 }
