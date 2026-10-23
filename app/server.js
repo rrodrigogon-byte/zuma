@@ -2937,6 +2937,11 @@ function legacyLojaId(req) {
     || requestedEmpresa === DINO_COMMERCE_EMPRESA_ID
     || requestedEmpresa === DINO_LEGACY_EMPRESA_ID;
   if ((requested === DINO_COMMERCE_LOJA_ID || requested === DINO_LEGACY_LOJA_ID) && empresaDino) return DINO_LEGACY_LOJA_ID;
+  // A unidade Dino é única no tenant. Em sessões legadas, a seleção pode
+  // chegar somente pelo cabeçalho da empresa (ou pelo domínio do Dino), sem
+  // x-loja-id. Nesse caso, usa-se apenas o vínculo canônico conhecido; nunca
+  // se infere uma loja para outro tenant.
+  if (!requested && empresaDino && (hostDino(req) || requestedEmpresa === DINO_COMMERCE_EMPRESA_ID || requestedEmpresa === DINO_LEGACY_EMPRESA_ID)) return DINO_LEGACY_LOJA_ID;
   if (requested && (isPlatformAdminUser(req.user) || isMainAdminUser(req.user))) return legacyLojaIdFromCommerce(requested, rawEmpresa);
   const configuracao = db().barbearias?.[legacyEmpresaId(req)]?.configuracao || {};
   if (configuracao.lojaPublicaId || configuracao.lojaId) return String(configuracao.lojaPublicaId || configuracao.lojaId);
