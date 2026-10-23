@@ -7,7 +7,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 const dir = new URL('../migrations/', import.meta.url);
 const semeadas = new Set(readdirSync(dir).filter((f) => f.endsWith('.sql')).flatMap((f) => [...readFileSync(new URL(f, dir), 'utf8').matchAll(/'([a-z_]+\.[a-z_]+)'/g)].map((m) => m[1])));
 
-for (const arquivo of ['../modules/razao/rotas.js', '../modules/suprimentos/rotas.js', '../modules/unidades/rotas.js']) {
+for (const arquivo of ['../modules/razao/rotas.js', '../modules/suprimentos/rotas.js', '../modules/unidades/rotas.js', '../modules/fiscal/rotas.js']) {
   test(`permissões de ${arquivo} existem nas migrações`, () => {
     const fonte = readFileSync(new URL(arquivo, import.meta.url), 'utf8');
     const usadas = [...fonte.matchAll(/(?:rota|escopoDaRequisicao|escopoDuplo)\([^'"]*'([a-z_]+\.[a-z_]+)'/g)].map((m) => m[1]);

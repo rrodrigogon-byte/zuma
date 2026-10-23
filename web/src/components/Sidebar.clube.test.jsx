@@ -52,7 +52,7 @@ describe('menu do clube (AGRO OPEN TTC)', () => {
     expect(links).toContain('/admin/torneios')
     // backend ainda não montado em produção: fora do menu para todos
     expect(links).not.toContain('/admin/supermercado')
-    expect(links).not.toContain('/admin/fiscal/config')
+    expect(links).toContain('/admin/fiscal/config') // onda 3: fiscal no ar (homologação)
     expect(links).toContain('/admin/contas-receber')
   })
 

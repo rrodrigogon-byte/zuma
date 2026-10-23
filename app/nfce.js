@@ -61,8 +61,9 @@ export async function emitir(nota) {
     // ── Modo simulado ──────────────────────────────────────────────────────
     await new Promise(r => setTimeout(r, 250));
     const chave = chaveSimulada();
+    // Simulação NÃO é nota fiscal: status próprio, para nunca passar por autorizada na conciliação.
     return {
-      status: 'autorizada', ambiente, simulado: true,
+      status: 'simulada', ambiente, simulado: true,
       chaveAcesso: chave, protocolo: protoSim(),
       numero: nota.numero, serie: nota.serie,
       danfeUrl: null, xmlUrl: null, motivoRejeicao: '',

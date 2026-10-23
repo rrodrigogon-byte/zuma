@@ -42,6 +42,7 @@ import { createA2AdminRouter } from './modules/a2/rotas.js';
 import { createUnidadesAdminRouter } from './modules/unidades/rotas.js';
 import { createRazaoAdminRouter, createRazaoPlataformaRouter } from './modules/razao/rotas.js';
 import { createSuprimentosAdminRouter } from './modules/suprimentos/rotas.js';
+import { createFiscalAdminRouter } from './modules/fiscal/rotas.js';
 import { createBarAdminRouter } from './modules/bar/rotas-multiempresa.js';
 import * as barService from './modules/bar/servico.js';
 import { responderErro as responderErroBarra } from './modules/acesso/banco.js';
@@ -644,7 +645,7 @@ app.use('/api/admin/commerce', (req, res, next) => {
 });
 
 // Módulos de /api/admin que separam dados por empresa e podem ser usados por tenant.
-const TENANT_ADMIN_MODULES = new Set(['a2', 'bar', 'barbearia', 'commerce', 'commerce-session', 'usuarios', 'usuarios-diretorio', 'platform', 'fidelidade', 'login', 'auditoria', 'modificadores', 'combos', 'clube', 'unidades', 'razao', 'suprimentos']);
+const TENANT_ADMIN_MODULES = new Set(['a2', 'bar', 'barbearia', 'commerce', 'commerce-session', 'usuarios', 'usuarios-diretorio', 'platform', 'fidelidade', 'login', 'auditoria', 'modificadores', 'combos', 'clube', 'unidades', 'razao', 'suprimentos', 'fiscal']);
 
 // [kytto-clube] Kytto Clube & Academia (catraca, contrato digital, agenda, retenção, Wellhub/TotalPass).
 // Usa o pool do Commerce que já existe (não abre outro pool) e a mesma resolução de empresa e
@@ -1235,6 +1236,9 @@ if(process.env.COMMERCE_CORE_ENABLED === '1'){
   app.use('/api/admin/platform/razao', auth, requirePlatformAdmin, createRazaoPlataformaRouter({ db: clubeDb, fonteJson: fonteJsonDoRazao }));
   // [kytto-suprimentos] Estoque por unidade, inventário, ficha técnica e compras (geram contas a pagar no razão).
   app.use('/api/admin/suprimentos', auth, requireStaff, createSuprimentosAdminRouter({ db: clubeDb, escopoDaRequisicao: escopoComercial, fuso: process.env.KYTTO_FUSO || 'America/Cuiaba' }));
+  // [kytto-fiscal] Emitente, certificado A1 no cofre, classificação e documentos — SÓ HOMOLOGAÇÃO
+  // (transmissão só com FISCAL_TRANSMITIR_HOMOLOGACAO=1; produção exige migração nova).
+  app.use('/api/admin/fiscal', auth, requireStaff, createFiscalAdminRouter({ db: clubeDb, escopoDaRequisicao: escopoComercial }));
   // [kytto-bar] Bar, PDV, comandas, estoque fracionado, KDS e caixa por empresa.
   // O prefixo continua sob a trava /api/admin e a empresa é resolvida exclusivamente
   // pela membership SQL; nenhum empresaId do corpo da requisição é aceito.
@@ -5406,6 +5410,20 @@ const CONFIG_DEFAULT = {
     // padrão fiscal por categoria do cardápio (acelera o cadastro por item)
     padraoCategoria: {} }
 };
+// O CSC da NFC-e é segredo: a configuração devolve só o final dele; ao salvar, o valor mascarado
+// (ou vazio) mantém o CSC atual.
+const CSC_MASCARA = '••••';
+function mascararSegredosFiscais(fiscal = {}) {
+  const csc = String(fiscal.csc || '');
+  return { ...fiscal, csc: csc ? `${CSC_MASCARA}${csc.slice(-4)}` : '', cscConfigurado: Boolean(csc) };
+}
+function preservarSegredosFiscais(novo = {}, atual = {}) {
+  const csc = String(novo.csc ?? '');
+  const saida = { ...novo };
+  delete saida.cscConfigurado;
+  if (!csc || csc.startsWith(CSC_MASCARA)) saida.csc = atual.csc || '';
+  return saida;
+}
 app.get('/api/admin/config', auth, (req,res)=>{
   const d = db();
   res.json({
@@ -5430,7 +5448,7 @@ app.get('/api/admin/config', auth, (req,res)=>{
     restaurante: { ...(CONFIG_DEFAULT.restaurante), ...(d.config?.restaurante||{}) },
     pagamentos:  { ...(CONFIG_DEFAULT.pagamentos),  ...(d.config?.pagamentos||{}) },
     tef:         { ...(CONFIG_DEFAULT.tef),         ...(d.config?.tef||{}) },
-    fiscal:      { ...(CONFIG_DEFAULT.fiscal),      ...(d.config?.fiscal||{}) },
+    fiscal:      mascararSegredosFiscais({ ...(CONFIG_DEFAULT.fiscal),      ...(d.config?.fiscal||{}) }),
     pix: {
       chave:  process.env.PIX_CHAVE ? '***' + process.env.PIX_CHAVE.slice(-4) : '',
       nome:   process.env.PIX_NOME  || '',
@@ -5444,7 +5462,8 @@ app.patch('/api/admin/config', auth, requireRole('admin'), requireLegacyGlobalSc
   const allowed = ['evento','bar','restaurante','quadras','horarios','ingressoTipos','categorias','socioPlanos','assinPlanos','pagamentos','tef','fiscal'];
   allowed.forEach(k => {
     if (req.body[k] != null) {
-      d.config[k] = { ...(d.config[k] || {}), ...req.body[k] };
+      const novo = k === 'fiscal' ? preservarSegredosFiscais(req.body[k], d.config[k] || {}) : req.body[k];
+      d.config[k] = { ...(d.config[k] || {}), ...novo };
     }
   });
   audit(req, 'UPDATE_CONFIG', { keys: Object.keys(req.body) });
@@ -6279,7 +6298,7 @@ app.post('/api/admin/notas/:id/cancelar', auth, requireStaff, async (req,res)=>{
   const d=db(); const n=(d.notasFiscais||[]).find(x=>x.id==req.params.id);
   if(!n) return res.status(404).json({error:'nota não encontrada'});
   if(n.status==='cancelada') return res.status(409).json({error:'nota já cancelada'});
-  if(n.status!=='autorizada' && n.status!=='contingencia') return res.status(409).json({error:'só é possível cancelar nota autorizada'});
+  if(n.status!=='autorizada' && n.status!=='contingencia' && n.status!=='simulada') return res.status(409).json({error:'só é possível cancelar nota autorizada'});
   const justificativa = (req.body?.justificativa||'Cancelamento solicitado pelo emitente').slice(0,255);
   const r = await nfceCancelar({ refId:n.id, ambiente:n.ambiente }, justificativa);
   if(r.status!=='cancelada') return res.status(502).json({error: r.motivoRejeicao || 'falha ao cancelar no provedor'});

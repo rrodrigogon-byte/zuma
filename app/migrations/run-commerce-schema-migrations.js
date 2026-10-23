@@ -76,6 +76,7 @@ const migrationFiles = [
   '085_ai_automation_log_store_scope.sql',
   '090_financeiro_razao.sql',
   '091_estoque_compras.sql',
+  '092_fiscal_multiempresa.sql',
 ];
 const advisoryLockKey = 825410732;
 

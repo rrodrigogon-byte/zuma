@@ -129,15 +129,13 @@ const AdminRanking    = lazy(() => import('./pages/admin/AdminRanking'))
 const AdminLigas      = lazy(() => import('./pages/admin/AdminLigas'))
 const Contatos        = lazy(() => import('./pages/admin/Contatos'))
 const Lojas           = lazy(() => import('./pages/admin/Lojas'))
-const NotasFiscais    = lazy(() => import('./pages/admin/NotasFiscais'))
 const PDVOffline      = lazy(() => import('./pages/admin/PDVOffline'))
 const Oficina         = lazy(() => import('./pages/admin/Oficina'))
 const Agropecuaria    = lazy(() => import('./pages/admin/Agropecuaria'))
 const Varejo          = lazy(() => import('./pages/admin/Varejo'))
 const Compras         = lazy(() => import('./pages/admin/Compras'))
 const Suprimentos     = lazy(() => import('./pages/admin/suprimentos/Suprimentos'))
-const ConfiguracaoFiscal = lazy(() => import('./pages/admin/ConfiguracaoFiscal'))
-const ClassificacaoFiscal = lazy(() => import('./pages/admin/ClassificacaoFiscal'))
+const Fiscal          = lazy(() => import('./pages/admin/fiscal/Fiscal'))
 const Clientes = lazy(() => import('./pages/admin/Clientes'))
 const Customer360 = lazy(() => import('./pages/admin/Customer360'))
 const FinanceiroEmpresa = lazy(() => import('./pages/admin/dino/FinanceiroEmpresa'))
@@ -293,7 +291,7 @@ export default function App() {
           <Route path="/admin/ligas"          element={<Layout><AdminLigas /></Layout>} />
           <Route path="/admin/contatos"       element={<Layout><Contatos /></Layout>} />
           <Route path="/admin/lojas"          element={<Layout><Lojas /></Layout>} />
-          <Route path="/admin/notas"          element={<Layout><NotasFiscais /></Layout>} />
+          <Route path="/admin/notas" element={<TenantAware tenant={<Layout><Fiscal abaInicial="documentos" /></Layout>} legacy={<Layout><EmImplantacao modulo="Central fiscal (NF-e e NFC-e)" /></Layout>} />} />
           <Route path="/admin/clientes"       element={<Layout><Clientes /></Layout>} />
           <Route path="/admin/clientes-360"   element={<Layout><Customer360 /></Layout>} />
           <Route path="/admin/clientes-360/:ref" element={<Layout><Customer360 /></Layout>} />
@@ -306,8 +304,8 @@ export default function App() {
           <Route path="/admin/agropecuaria"    element={<Layout><Agropecuaria /></Layout>} />
           <Route path="/admin/varejo"          element={<Layout><Varejo /></Layout>} />
           <Route path="/admin/compras"         element={<ComprasPorMarca />} />
-          <Route path="/admin/fiscal/config"   element={<Layout><ConfiguracaoFiscal /></Layout>} />
-          <Route path="/admin/fiscal/classificacao" element={<Layout><ClassificacaoFiscal /></Layout>} />
+          <Route path="/admin/fiscal/config" element={<TenantAware tenant={<Layout><Fiscal abaInicial="situacao" /></Layout>} legacy={<Layout><EmImplantacao modulo="Configuração de NF-e e NFC-e" /></Layout>} />} />
+          <Route path="/admin/fiscal/classificacao" element={<TenantAware tenant={<Layout><Fiscal abaInicial="classificacao" /></Layout>} legacy={<Layout><EmImplantacao modulo="Classificação fiscal" /></Layout>} />} />
           <Route path="/admin/loja-moda"       element={<Layout><LojaModa /></Layout>} />
           <Route path="/admin/barbearia-erp"   element={<Layout><BarbeariaERP /></Layout>} />
           <Route path="/admin/barbearia"        element={<Layout><Barbearia /></Layout>} />
