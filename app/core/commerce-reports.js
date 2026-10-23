@@ -79,14 +79,16 @@ export async function salesReport(contextInput, options = {}) {
   );
   // Capturas são medidas pela data de captura, não pela criação do pedido.
   // Não usar total de pedidos pendentes como dinheiro recebido.
+  const captureValues = [context.empresaId, from, to];
+  const captureScope = orderScope(context, options, captureValues);
   const captures = await db.query(
     `SELECT p.method, COUNT(*)::integer AS transactions, COALESCE(SUM(p.amount), 0)::numeric AS value
        FROM commerce_payments p
        JOIN commerce_orders o ON o.empresa_id = p.empresa_id AND o.id = p.order_id
       WHERE p.empresa_id = $1 AND p.status = 'captured'
-        AND p.captured_at >= $2::timestamptz AND p.captured_at < $3::timestamptz${scope('o')}
+        AND p.captured_at >= $2::timestamptz AND p.captured_at < $3::timestamptz${captureScope('o')}
       GROUP BY p.method ORDER BY value DESC`,
-    values,
+    captureValues,
   );
   const capturedDailyValues = [context.empresaId, from, to];
   const capturedDailyScope = orderScope(context, options, capturedDailyValues);
