@@ -41,8 +41,8 @@ test('relatório separa valor de pedidos das capturas, com período e escopo ten
     assert.match(capture.sql, /p\.captured_at >= \$2/);
     assert.match(capture.sql, /p\.captured_at < \$3/);
     assert.match(capture.sql, /o\.empresa_id = p\.empresa_id AND o\.id = p\.order_id/);
-    assert.match(capture.sql, /loja_id = \$5/);
-    assert.deepEqual(capture.params,[empresaId,'2026-09-01T00:00:00.000Z','2026-10-01T00:00:00.000Z', ['paid', 'processing', 'ready', 'shipped', 'ready_for_pickup', 'delivered', 'picked_up', 'completed'], lojaId]);
+    assert.match(capture.sql, /loja_id = \$4/);
+    assert.deepEqual(capture.params,[empresaId,'2026-09-01T00:00:00.000Z','2026-10-01T00:00:00.000Z', lojaId]);
     const daily = calls.find(c => c.sql.includes("AT TIME ZONE 'America/Cuiaba'") && c.sql.includes('commerce_orders'));
     assert.match(daily.sql, /confirmed_total/);
   } finally {db.query=original;}
