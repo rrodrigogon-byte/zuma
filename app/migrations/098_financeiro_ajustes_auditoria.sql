@@ -12,6 +12,9 @@ CREATE TABLE IF NOT EXISTS fin_config (
   json_liberado_em TIMESTAMPTZ,
   json_liberado_por VARCHAR(180),
   json_incluir_quarentena BOOLEAN NOT NULL DEFAULT false,
+  -- primeira leitura das fontes com o Financeiro novo ligado: venda fiada do bar de antes desse
+  -- dia entra como receita já recebida (a baixa aconteceu fora do sistema), não como conta vencida
+  razao_desde TIMESTAMPTZ,
   atualizado_em TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 

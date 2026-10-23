@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { PERMISSAO_DA_ROTA, permissaoQueFalta } from './permissoes-rota.js'
+import { PERMISSAO_DA_ROTA, MODULO_DA_ROTA, moduloOculto, permissaoQueFalta } from './permissoes-rota.js'
 import { rotaVisivel } from './disponibilidade.js'
 
 test('sem lista de permissões (plataforma, legado) nada é escondido', () => {
@@ -32,4 +32,12 @@ test('enquanto as permissões carregam, só as telas do mapa esperam', async () 
   assert.equal(aguardandoPermissoes('/admin/financeiro', undefined), false)
   assert.equal(aguardandoPermissoes('/admin/supermercado', null), false)
   assert.equal(aguardandoPermissoes('/admin/supermercado', ['catalog.read']), false)
+})
+
+test('módulo escondido na instalação some do menu das empresas, não da plataforma', () => {
+  assert.equal(moduloOculto('/admin/notas', ['fiscal']), 'Notas fiscais')
+  assert.equal(moduloOculto('/admin/compras', ['fiscal']), null)
+  assert.equal(rotaVisivel('/admin/notas', { usuarioDeEmpresa: true, permissoes: ['payments.read'], modulosOcultos: ['fiscal'] }), false)
+  assert.equal(rotaVisivel('/admin/notas', { isPlatformAdmin: true, modulosOcultos: ['fiscal'] }), true)
+  for (const rota of Object.keys(MODULO_DA_ROTA)) assert.ok(PERMISSAO_DA_ROTA[rota], `${rota} está no mapa de permissões`)
 })

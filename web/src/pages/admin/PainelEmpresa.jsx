@@ -21,13 +21,15 @@ export default function PainelEmpresa() {
     const loja = lojaAtiva?.id ? `lojaId=${encodeURIComponent(lojaAtiva.id)}` : ''
     const talvez = (ok, consulta) => (ok ? consulta().catch(() => null) : Promise.resolve(null))
     Promise.all([
-      talvez(pode(permissoes, 'payments.read'), () => api.get(`/api/admin/razao/estado`)),
-      talvez(pode(permissoes, 'payments.read'), () => api.get(`/api/admin/razao/resumo${loja ? `?${loja}` : ''}`)),
+      // o resumo do razão só é pedido com o Financeiro novo ligado
+      talvez(pode(permissoes, 'payments.read'), () => api.get(`/api/admin/razao/estado`).then(async (estado) => ({
+        estado, resumo: estado?.ativo ? await api.get(`/api/admin/razao/resumo${loja ? `?${loja}` : ''}`).catch(() => null) : null,
+      }))),
       talvez(pode(permissoes, 'inventory.read'), () => api.get(`/api/admin/suprimentos/itens?abaixoDoMinimo=true${loja ? `&${loja}` : ''}`)),
       talvez(pode(permissoes, 'customers.read'), () => api.get('/api/admin/salao/reservas/visao')),
       talvez(pode(permissoes, 'payments.read'), () => api.get('/api/pdv-offline/conflitos')),
-    ]).then(([estado, resumo, faltando, salao, pdv]) => {
-      if (vivo) setDados({ estado, resumo: estado?.ativo ? resumo : null, faltando: Array.isArray(faltando) ? faltando : null, salao, conflitos: pdv?.conflitos || null })
+    ]).then(([fin, faltando, salao, pdv]) => {
+      if (vivo) setDados({ estado: fin?.estado || null, resumo: fin?.resumo || null, faltando: Array.isArray(faltando) ? faltando : null, salao, conflitos: pdv?.conflitos || null })
     })
     return () => { vivo = false }
   }, [empresaAtiva?.id, lojaAtiva?.id, permissoes])
@@ -49,7 +51,7 @@ export default function PainelEmpresa() {
       <article className={r.receberVencidos ? 'is-alert' : ''}><span>A receber</span><strong>{money(r.aReceber)}</strong><small>{r.receberVencidos ? `${r.receberVencidos} vencida(s)` : 'Nada vencido'}</small></article>
       <article className={r.pagarVencidos ? 'is-alert' : ''}><span>A pagar</span><strong>{money(r.aPagar)}</strong><small>{r.pagarVencidos ? `${r.pagarVencidos} vencida(s)` : r.vencendo3Dias ? `${r.vencendo3Dias} vencem em 3 dias` : 'Nada vencido'}</small></article>
     </section>}
-    {dados?.estado && !dados.estado.ativo && <p className="dadm-note">O Financeiro novo ainda não está ligado nesta instalação. <Link to="/admin/financeiro">Abrir o Financeiro</Link></p>}
+    {dados?.estado && !dados.estado.ativo && <p className="dadm-note">Recebimentos, contas e resultado do mês estão no Financeiro. <Link to="/admin/financeiro">Abrir o Financeiro</Link></p>}
 
     {(dados?.faltando || dados?.salao || dados?.conflitos) && <section className="dadm-kpis" aria-label="Operação">
       {dados.faltando && <article className={dados.faltando.length ? 'is-alert' : ''}><span>Abaixo do mínimo</span><strong>{dados.faltando.length}</strong><small>{dados.faltando.length ? <Link to="/admin/compras">{dados.faltando.slice(0, 2).map((i) => i.nome).join(', ')}{dados.faltando.length > 2 ? '…' : ''}</Link> : 'Estoque em dia'}</small></article>}

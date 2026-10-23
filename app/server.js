@@ -866,6 +866,12 @@ app.post('/api/auth/operational-invite/accept', publicLimit(6), async (req, res)
     return res.status(409).json({ error: 'convite inválido, expirado ou já usado', code: 'INVITE_INVALID' });
   }
 });
+// Módulos novos do backoffice que a instalação ainda não mostra às empresas
+// (BACKOFFICE_MODULOS_OCULTOS=compras,reservas,pdv-offline,supermercado,fiscal). A administração
+// da plataforma continua vendo, para homologar.
+const MODULO_DA_API = { suprimentos: 'compras', salao: 'reservas', varejo: 'supermercado', fiscal: 'fiscal' };
+const modulosOcultos = () => new Set(String(process.env.BACKOFFICE_MODULOS_OCULTOS || '').split(',').map((m) => m.trim().toLowerCase()).filter(Boolean));
+const respostaModuloOculto = (res) => res.status(404).json({ error: 'este módulo ainda não está disponível para a sua empresa', code: 'MODULE_DISABLED' });
 // Trava global: tudo em /api/admin exige login de staff (exceto o próprio login)
 app.use('/api/admin', (req,res,next)=>{
   if(req.path==='/login') return next();
@@ -877,6 +883,7 @@ app.use('/api/admin', (req,res,next)=>{
       const modulo = String(req.path || '').split('/')[1] || '';
       if(modulo === 'notificacoes') return req.method === 'GET' ? res.json({ notificacoes: [], total: 0 }) : res.json({ ok: true });
       if(!TENANT_ADMIN_MODULES.has(modulo)) return res.status(403).json({ error:'módulo global da plataforma; use o módulo da sua empresa', code:'TENANT_USE_SCOPED_MODULE' });
+      if(MODULO_DA_API[modulo] && modulosOcultos().has(MODULO_DA_API[modulo])) return respostaModuloOculto(res);
     }
     // registra mutações (POST/PATCH/DELETE) na auditoria
     if(['POST','PATCH','DELETE','PUT'].includes(req.method)){
@@ -1265,7 +1272,7 @@ if(process.env.COMMERCE_CORE_ENABLED === '1'){
       );
       let permissoes = r.rows.map((row) => row.codigo);
       if (req.user?.pgOperational === true) permissoes = permissoes.filter((codigo) => codigo !== 'users.write');
-      return res.json({ aplicavel: true, empresaId: contexto.empresaId, lojaId: contexto.lojaId || null, permissoes });
+      return res.json({ aplicavel: true, empresaId: contexto.empresaId, lojaId: contexto.lojaId || null, permissoes, modulosOcultos: [...modulosOcultos()] });
     } catch {
       return res.status(503).json({ error: 'não foi possível consultar as permissões', code: 'PERMISSIONS_UNAVAILABLE' });
     }
@@ -1285,7 +1292,8 @@ if(process.env.COMMERCE_CORE_ENABLED === '1'){
   // [kytto-salao] Reservas de mesa e lista de espera, ligadas às mesas e comandas do bar.
   app.use('/api/admin/salao', auth, requireStaff, createSalaoAdminRouter({ db: clubeDb, escopoDaRequisicao: escopoComercial, fuso: FUSO_KYTTO }));
   // [kytto-pdv-offline] Terminais e periféricos por unidade; o agente local sincroniza as vendas feitas sem internet (viram comandas pagas do bar).
-  app.use('/api/pdv-offline', createPdvOfflineRouter({ db: clubeDb, escopoDaRequisicao: escopoComercial, auth, requireStaff, fuso: FUSO_KYTTO }));
+  // limite por IP antes de ler o corpo (até 2 MB na sincronização): o agente consulta a fila de impressão a cada poucos segundos
+  app.use('/api/pdv-offline', (req, res, next) => (modulosOcultos().has('pdv-offline') ? respostaModuloOculto(res) : next()), publicLimit(1200, 10 * 60 * 1000), createPdvOfflineRouter({ db: clubeDb, escopoDaRequisicao: escopoComercial, auth, requireStaff, fuso: FUSO_KYTTO }));
   // [kytto-varejo] Supermercado/varejo sobre o estoque único: preço por unidade, promoções, lotes, etiquetas e transferências.
   app.use('/api/admin/varejo', auth, requireStaff, createVarejoAdminRouter({ db: clubeDb, escopoDaRequisicao: escopoComercial, fuso: FUSO_KYTTO }));
   // [kytto-bar] Bar, PDV, comandas, estoque fracionado, KDS e caixa por empresa.

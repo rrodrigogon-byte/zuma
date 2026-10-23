@@ -14,7 +14,7 @@ CREATE TABLE empresas (id UUID PRIMARY KEY);
 CREATE TABLE lojas (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), empresa_id UUID NOT NULL, codigo VARCHAR(30), nome VARCHAR(255), cnpj VARCHAR(14), ativa BOOLEAN NOT NULL DEFAULT true);
 CREATE TABLE commerce_products (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), empresa_id UUID NOT NULL, nome VARCHAR(200) NOT NULL, status VARCHAR(20) NOT NULL DEFAULT 'active');
 CREATE TABLE commerce_product_variants (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), empresa_id UUID NOT NULL, product_id UUID NOT NULL, sku VARCHAR(100), ativo BOOLEAN NOT NULL DEFAULT true);
-CREATE TABLE commerce_orders (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), empresa_id UUID NOT NULL, loja_id UUID, customer_id UUID, public_code VARCHAR(40) NOT NULL DEFAULT 'P', status VARCHAR(30) NOT NULL);
+CREATE TABLE commerce_orders (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), empresa_id UUID NOT NULL, loja_id UUID, customer_id UUID, public_code VARCHAR(40) NOT NULL DEFAULT 'P', status VARCHAR(30) NOT NULL, criado_em TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE commerce_order_items (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), empresa_id UUID NOT NULL, order_id UUID NOT NULL, variant_id UUID, quantidade INTEGER NOT NULL);`;
 
 const DEST_CNPJ = '11222333000181';
@@ -83,6 +83,19 @@ describe('Estoque e compras por empresa (PostgreSQL)', { skip: pgDeTeste }, () =
     assert.equal(fim.ajustes, 1);
     assert.equal((await est.listarItens(ctx.db, A, { lojaId: lojaA1 }))[0].saldo, 9); // 10 no sistema, 9 contados
     await assert.rejects(() => est.registrarContagem(ctx.db, A, inv.id, []), (e) => e.code === 'INVENTORY_CLOSED');
+  });
+
+  test('ficha técnica nova não baixa as vendas de antes do vínculo', async () => {
+    const hortela = await est.criarItem(ctx.db, A, { nome: 'Hortelã', unidade: 'UN', tipo: 'insumo' });
+    const mojito = await bar.salvarProduto(ctx.db, A, { nome: 'Mojito', categoria: 'Drinks', setor: 'bar', preco: 30, estoqueAtual: 100 });
+    const antiga = await bar.abrirComanda(ctx.db, A, { nome: 'Mesa antiga' });
+    await bar.adicionarItens(ctx.db, A, antiga.id, [{ produtoId: mojito.id, qtd: 4 }]);
+    await bar.pagarComanda(ctx.db, A, antiga.id, { meio: 'pix', servico: false });
+    await ctx.db.query("UPDATE bar_comandas SET fechada_em = CURRENT_TIMESTAMP - interval '2 days' WHERE id = $1", [antiga.id]);
+    await est.salvarFicha(ctx.db, A, { fonte: 'bar_produto', fonteId: mojito.id, itens: [{ itemId: hortela.id, fator: 1 }] });
+    await est.baixarConsumoDasVendas(ctx.db, A, { lojaBar: lojaA1 });
+    const r = await ctx.db.query("SELECT count(*)::int AS n FROM est_movimentos WHERE empresa_id = $1 AND item_id = $2", [A, hortela.id]);
+    assert.equal(r.rows[0].n, 0, 'histórico anterior à ficha não baixa');
   });
 
   test('ficha técnica: venda paga no bar baixa os insumos uma vez só', async () => {

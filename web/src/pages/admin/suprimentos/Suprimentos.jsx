@@ -3,6 +3,7 @@ import { api } from '../../../lib/api'
 import { useToast } from '../../../hooks/useToast'
 import { useAuth } from '../../../lib/auth'
 import { lojasDaEmpresa } from '../../../lib/context-selection'
+import { useRazaoAtivo } from '../../../lib/razao-estado'
 import { Badge, Dialog, Table } from '../customer360/shared'
 import { money, shortDate, dateTime } from '../dino/format'
 import '../customer360.css'
@@ -23,7 +24,11 @@ const STATUS_PEDIDO = { rascunho: ['Rascunho', 'muted'], enviado: ['Enviado', 'i
 const num = (v, casas = 3) => Number(v || 0).toLocaleString('pt-BR', { maximumFractionDigits: casas })
 const chaveUnica = () => `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
 
+// Com o Financeiro novo desligado, a conta a pagar fica guardada e só aparece quando ele for ligado.
+const ondeFicaAConta = (razaoAtivo) => (razaoAtivo === true ? 'no Financeiro' : 'guardada(s) para o Financeiro novo (aparecem quando ele for ativado para a empresa)')
+
 export default function Suprimentos({ abaInicial = 'itens' }) {
+  const razaoAtivo = useRazaoAtivo()
   const { toast } = useToast()
   const { empresaAtiva, lojaAtiva, lojasAcessiveis } = useAuth()
   const lojas = useMemo(() => lojasDaEmpresa(lojasAcessiveis, empresaAtiva?.id), [lojasAcessiveis, empresaAtiva?.id])
@@ -79,7 +84,7 @@ export default function Suprimentos({ abaInicial = 'itens' }) {
   return <div className="dadm-page">
     <header className="dadm-head">
       <div><div className="dadm-eyebrow">Suprimentos · {empresaAtiva?.nome || 'Empresa'}</div><h1>Estoque e compras</h1>
-        <p>O que a empresa compra e controla, por unidade. Receber uma compra dá entrada no estoque e cria as contas a pagar no Financeiro; as vendas do bar e da loja online baixam os insumos pela ficha técnica.</p></div>
+        <p>O que a empresa compra e controla, por unidade. Receber uma compra dá entrada no estoque e cria as contas a pagar {razaoAtivo === true ? 'no Financeiro' : 'para o Financeiro novo, que aparecem quando ele for ativado para a empresa'}; as vendas do bar e da loja online baixam os insumos pela ficha técnica.</p></div>
       <div className="dadm-actions">
         <label className="dadm-muted">Unidade{' '}
           <select className="c360-input" value={unidade} onChange={(e) => setUnidade(e.target.value)} aria-label="Unidade">
@@ -286,6 +291,7 @@ function Fichas({ itens, lojas, toast }) {
 }
 
 function Pedidos({ itens, unidade, qs, toast, onRecebido }) {
+  const razaoAtivo = useRazaoAtivo()
   const [pedidos, setPedidos] = useState([])
   const [fornecedores, setFornecedores] = useState([])
   const [novo, setNovo] = useState(null)
@@ -312,7 +318,7 @@ function Pedidos({ itens, unidade, qs, toast, onRecebido }) {
     setEnviando(true)
     try {
       const r = await api.post('/api/admin/suprimentos/recebimentos', { pedidoId: recebendo.pedido.id, lojaId: recebendo.pedido.lojaId || unidade || null, condicaoPagamento: recebendo.condicao, idempotencia: recebendo.chave, aceitarExcedente: recebendo.excedente, itens: recebendo.linhas.filter((l) => Number(l.quantidade) > 0).map((l) => ({ itemId: l.itemId, quantidade: l.quantidade, custoUnitario: l.custo })) })
-      toast(`Recebido. ${r.contasAPagar.length} conta(s) a pagar criada(s) no Financeiro.`, 'success'); setRecebendo(null); carregar(); onRecebido()
+      toast(`Recebido. ${r.contasAPagar.length} conta(s) a pagar ${ondeFicaAConta(razaoAtivo)}.`, 'success'); setRecebendo(null); carregar(); onRecebido()
     } catch (error) { toast(error.message, 'error') } finally { setEnviando(false) }
   }
   return <section className="dadm-card">
@@ -356,13 +362,14 @@ function Pedidos({ itens, unidade, qs, toast, onRecebido }) {
         </div>)}
         <label className="c360-field">Pagamento<input className="c360-input" value={recebendo.condicao} onChange={(e) => setRecebendo({ ...recebendo, condicao: e.target.value })} /></label>
         <label className="dadm-muted"><input type="checkbox" checked={recebendo.excedente} onChange={(e) => setRecebendo({ ...recebendo, excedente: e.target.checked })} /> Chegou mais do que o pedido e vou aceitar o excedente</label>
-        <p className="dadm-note">Ao confirmar: entrada no estoque e conta(s) a pagar no Financeiro.</p>
+        <p className="dadm-note">Ao confirmar: entrada no estoque e conta(s) a pagar {ondeFicaAConta(razaoAtivo)}.</p>
       </div>}
     </Dialog>
   </section>
 }
 
 function ReceberNfe({ itens, unidade, precisaUnidade, toast, onLancado }) {
+  const razaoAtivo = useRazaoAtivo()
   const [enviando, setEnviando] = useState(false)
   const [xml, setXml] = useState('')
   const [previa, setPrevia] = useState(null)
@@ -383,7 +390,7 @@ function ReceberNfe({ itens, unidade, precisaUnidade, toast, onLancado }) {
     try {
       const mapeamento = previa.itens.map((i) => { const m = mapa[i.item] || {}; return m.itemId ? { item: i.item, itemId: m.itemId, fator: Number(m.fator) || 1 } : { item: i.item, fator: Number(m.fator) || 1, criarItem: { nome: i.descricao, unidade: (i.unidade || 'UN').toUpperCase(), tipo: 'mercadoria' } } })
       const r = await api.post('/api/admin/suprimentos/nfe/lancar', { xml, lojaId: unidade || null, mapeamento, condicaoPagamento: condicao, confirmarAvisos })
-      toast(`NF-e lançada: estoque atualizado e ${r.contasAPagar.length} conta(s) a pagar.`, 'success'); setXml(''); setPrevia(null); carregarRecentes(); onLancado()
+      toast(`NF-e lançada: estoque atualizado e ${r.contasAPagar.length} conta(s) a pagar ${ondeFicaAConta(razaoAtivo)}.`, 'success'); setXml(''); setPrevia(null); carregarRecentes(); onLancado()
     } catch (error) { toast(error.message, 'error') } finally { setEnviando(false) }
   }
   return <section className="dadm-card">

@@ -50,13 +50,15 @@ function Fluxo({ fluxo }) {
 
 export default function FinanceiroRazao({ abaInicial = 'geral' }) {
   const { toast } = useToast()
-  const { empresaAtiva, lojaAtiva, lojasAcessiveis, isPlatformAdmin } = useAuth()
+  const { empresaAtiva, lojasAcessiveis, isPlatformAdmin } = useAuth()
   const [fornecedores, setFornecedores] = useState([])
   const lojas = useMemo(() => lojasDaEmpresa(lojasAcessiveis, empresaAtiva?.id), [lojasAcessiveis, empresaAtiva?.id])
   const nomeLoja = useCallback((id) => (id ? (lojas.find((l) => String(l.id) === String(id))?.nome || 'Outra unidade') : 'Sem unidade'), [lojas])
   const [aba, setAba] = useState(abaInicial)
   // '' = empresa toda; 'sem' = só lançamentos sem unidade; uuid = uma unidade
-  const [unidade, setUnidade] = useState(() => (lojaAtiva?.id && lojas.length > 1 ? lojaAtiva.id : ''))
+  // Abre na empresa toda: a receita do bar e do clube nem sempre tem unidade, e filtrar pela
+  // unidade ativa escondia esse dinheiro. Quem só tem acesso a uma unidade continua preso a ela no servidor.
+  const [unidade, setUnidade] = useState('')
   const [resumo, setResumo] = useState(null)
   // "hoje" no fuso da empresa (vem do servidor); até carregar, o dia do aparelho
   const hoje = resumo?.hoje || localDay()

@@ -49,14 +49,13 @@ export default function FinanceiroEmpresa() {
   const hoje = localDay()
 
   const load = useCallback(async () => {
-    if (!unidade?.id) { setLoading(false); return }
     setLoading(true)
     try {
       const [lista, r, f, c] = await Promise.all([api.get(`${BASE}/lancamentos`), api.get(`${BASE}/resumo`), api.get(`${BASE}/fluxo`), api.get(`${BASE}/categorias`)])
       setLancamentos(Array.isArray(lista) ? lista : []); setResumo(r); setFluxo(Array.isArray(f) ? f : []); setCategorias(c || { receita: [], despesa: [] }); setErro('')
     } catch (error) { setErro(error.message || 'Não foi possível carregar o financeiro.') }
     finally { setLoading(false) }
-  }, [unidade?.id])
+  }, [])
   useEffect(() => { load() }, [load, empresaAtiva?.id])
 
   const lista = useMemo(() => lancamentos.filter((item) => (!filtros.tipo || item.tipo === filtros.tipo)
@@ -121,9 +120,10 @@ export default function FinanceiroEmpresa() {
       </div>
     </header>
 
-    {!unidade && <EscolherUnidade motivo="Receitas, despesas e saldo ficam separados por unidade." />}
-    {unidade && erro && <p className="dadm-note danger" role="alert">{erro}</p>}
-    {!unidade ? null : loading && !resumo ? <p className="dadm-muted">Carregando…</p> : resumo && <>
+    {/* a leitura continua como antes (empresa toda); só o lançamento novo precisa da unidade */}
+    {!unidade && <EscolherUnidade motivo="Para lançar receita ou despesa, escolha a unidade." />}
+    {erro && <p className="dadm-note danger" role="alert">{erro}</p>}
+    {loading && !resumo ? <p className="dadm-muted">Carregando…</p> : resumo && <>
       <section className="dadm-kpis" aria-label="Resumo financeiro">
         <article><span>Saldo realizado</span><strong className={resumo.saldo >= 0 ? '' : 'dadm-neg'}>{money(resumo.saldo)}</strong><small>Receitas − despesas pagas</small></article>
         <article><span>A receber</span><strong>{money(resumo.aReceber)}</strong><small>Pendentes</small></article>
@@ -137,7 +137,7 @@ export default function FinanceiroEmpresa() {
       <section className="dadm-card"><h2>Fluxo dos últimos 12 meses</h2><FlowChart fluxo={fluxo} /></section>
     </>}
 
-    {unidade && <section className="dadm-card">
+    <section className="dadm-card">
       <h2>Lançamentos</h2>
       <div className="dadm-filters" role="group" aria-label="Filtros">
         <input className="c360-input" type="search" placeholder="Buscar descrição" value={filtros.q} onChange={(event) => setFiltros({ ...filtros, q: event.target.value })} aria-label="Buscar descrição" />
@@ -148,7 +148,7 @@ export default function FinanceiroEmpresa() {
         <label className="dadm-muted">Até <input className="c360-input" type="date" value={filtros.ate} onChange={(event) => setFiltros({ ...filtros, ate: event.target.value })} /></label>
       </div>
       <Table caption="Lançamentos financeiros" columns={columns} rows={lista} empty={lancamentos.length ? 'Nenhum lançamento com estes filtros.' : stallone ? 'Nenhum lançamento financeiro registrado nesta empresa.' : 'Nenhum lançamento ainda. Atendimentos pagos e comandas aparecem aqui automaticamente.'} />
-    </section>}
+    </section>
 
     <Dialog open={Boolean(form)} title={form?.id ? 'Editar lançamento' : (form?.tipo === 'receita' ? 'Nova receita' : 'Nova despesa')} labelId="fin-form" onClose={() => setForm(null)} onSubmit={salvar} initialFocusRef={firstField}
       actions={<><button type="button" className="c360-btn ghost" onClick={() => setForm(null)}>Voltar</button><button type="submit" className="c360-btn primary">Salvar</button></>}>

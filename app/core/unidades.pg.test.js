@@ -90,6 +90,16 @@ describe('Unidades da empresa (PostgreSQL)', { skip: pgDeTeste }, () => {
     assert.equal((await unidades.listarUnidades(ctx.db, empresaC)).length, 1);
   });
 
+  test('não desativa unidade em uso pela loja online', async () => {
+    const outra = await unidades.criarUnidade(ctx.db, empresaB, { codigo: 'vitrine', nome: 'Vitrine' });
+    await unidades.criarUnidade(ctx.db, empresaB, { codigo: 'reserva', nome: 'Reserva' });
+    await ctx.db.query("CREATE TABLE IF NOT EXISTS commerce_storefronts (empresa_id UUID, loja_id UUID, status VARCHAR(20))");
+    await ctx.db.query("INSERT INTO commerce_storefronts VALUES ($1, $2, 'active')", [empresaB, outra.id]);
+    await assert.rejects(() => unidades.atualizarUnidade(ctx.db, empresaB, outra.id, { ativa: false }), (e) => e.code === 'STORE_IN_USE' && /loja online/.test(e.message));
+    await ctx.db.query("UPDATE commerce_storefronts SET status = 'paused'");
+    assert.equal((await unidades.atualizarUnidade(ctx.db, empresaB, outra.id, { ativa: false })).ativa, false);
+  });
+
   test('fuso horário precisa ser válido', async () => {
     await assert.rejects(() => unidades.criarUnidade(ctx.db, empresaA, { codigo: 'tz', nome: 'Fuso', timezone: 'Lua/Base' }), (e) => e.code === 'VALIDATION_ERROR');
   });

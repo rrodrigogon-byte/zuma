@@ -1,4 +1,4 @@
-import { permissaoQueFalta } from './permissoes-rota.js'
+import { moduloOculto, permissaoQueFalta } from './permissoes-rota.js'
 
 // Disponibilidade das telas em produção.
 //
@@ -45,8 +45,9 @@ export function ehGlobalDoEvento(to) {
  * - global do evento: só para a administração da plataforma ou usuário legado sem empresa;
  * - tela do backoffice cuja permissão a pessoa não tem na empresa ativa: some (`permissoes`).
  */
-export function rotaVisivel(to, { isPlatformAdmin = false, usuarioDeEmpresa = false, permissoes = null } = {}) {
+export function rotaVisivel(to, { isPlatformAdmin = false, usuarioDeEmpresa = false, permissoes = null, modulosOcultos = null } = {}) {
   if (moduloEmImplantacao(to)) return false
+  if (!isPlatformAdmin && moduloOculto(to, modulosOcultos)) return false
   if (permissaoQueFalta(to, permissoes)) return false
   if (ehGlobalDoEvento(to)) return isPlatformAdmin || !usuarioDeEmpresa
   return true

@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import Sidebar from './Sidebar'
 import EmImplantacao from '../pages/admin/EmImplantacao'
 import SemAcesso from '../pages/admin/SemAcesso'
-import { aguardandoPermissoes, permissaoQueFalta } from '../lib/permissoes-rota'
+import { aguardandoPermissoes, moduloOculto, permissaoQueFalta } from '../lib/permissoes-rota'
 import { moduloEmImplantacao } from '../lib/disponibilidade'
 import NotifBell from './NotifBell'
 import { useAuth } from '../lib/auth'
@@ -62,8 +62,9 @@ function TopBar({ sidebarCollapsed = false }) {
 export default function Layout({ children: conteudo, noSidebar = false, marketing = false }) {
   const location = useLocation()
   // módulo ainda não ligado em produção: aviso no lugar de uma tela cheia de erros 404
-  const emImplantacao = moduloEmImplantacao(location.pathname)
-  const { user, permissoes } = useAuth()
+  const { user, permissoes, modulosOcultos, isPlatformAdmin } = useAuth()
+  // módulo escondido nesta instalação (BACKOFFICE_MODULOS_OCULTOS) aparece como "em implantação"
+  const emImplantacao = moduloEmImplantacao(location.pathname) || (!isPlatformAdmin && moduloOculto(location.pathname, modulosOcultos)) || null
   // tela do backoffice sem a permissão da pessoa na empresa ativa: aviso no lugar dos erros 403
   const faltando = emImplantacao ? null : permissaoQueFalta(location.pathname, permissoes)
   const children = emImplantacao ? <EmImplantacao modulo={emImplantacao} />

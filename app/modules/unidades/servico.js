@@ -110,6 +110,20 @@ export async function criarUnidade(db, empresaId, entrada = {}, { lojaRestrita =
   }
 }
 
+// O que deixaria de funcionar se a unidade fosse desativada (cada tabela só se existir).
+async function usosDaUnidade(q, empresa, unidade) {
+  const existe = async (t) => Boolean((await q('SELECT to_regclass($1) AS t', [t])).rows[0]?.t);
+  const consultas = [
+    ['commerce_storefronts', 'loja online ativa', "SELECT 1 FROM commerce_storefronts WHERE empresa_id = $1 AND loja_id = $2 AND status = 'active' LIMIT 1"],
+    ['pdv_terminais', 'terminal do PDV ativo', 'SELECT 1 FROM pdv_terminais WHERE empresa_id = $1 AND loja_id = $2 AND ativo LIMIT 1'],
+    ['est_config', 'unidade do bar no estoque', 'SELECT 1 FROM est_config WHERE empresa_id = $1 AND loja_bar = $2 LIMIT 1'],
+    ['fin_config', 'unidade padrão das receitas no Financeiro', 'SELECT 1 FROM fin_config WHERE empresa_id = $1 AND loja_padrao = $2 LIMIT 1'],
+  ];
+  const usos = [];
+  for (const [tabela, nome, sql] of consultas) if (await existe(tabela) && (await q(sql, [empresa, unidade])).rows[0]) usos.push(nome);
+  return usos;
+}
+
 export async function atualizarUnidade(db, empresaId, id, entrada = {}, { lojaRestrita = null } = {}) {
   const empresa = exigirUuid(empresaId, 'empresa');
   const unidade = exigirUuid(id, 'unidade');
@@ -125,6 +139,10 @@ export async function atualizarUnidade(db, empresaId, id, entrada = {}, { lojaRe
     if (!lojas.rows.some((l) => l.id === unidade)) throw new ErroDominio('NOT_FOUND', 'Unidade não encontrada nesta empresa', 404);
     if (dados.ativa === false && !lojas.rows.some((l) => l.ativa && l.id !== unidade)) {
       throw new ErroDominio('LAST_STORE', 'A empresa precisa ter pelo menos uma unidade ativa', 409);
+    }
+    if (dados.ativa === false) {
+      const emUso = await usosDaUnidade(q, empresa, unidade);
+      if (emUso.length) throw new ErroDominio('STORE_IN_USE', `Esta unidade ainda é usada por: ${emUso.join(', ')}. Troque antes de desativar.`, 409);
     }
     const r = await q(
       `UPDATE lojas SET ${campos.map((campo, i) => `${campo} = $${i + 3}`).join(', ')}, data_atualizacao = CURRENT_TIMESTAMP

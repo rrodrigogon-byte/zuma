@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useRef, useState } from 'react'
 import { encerrarPushDoAparelho } from './push-equipe'
+import { esquecerRazaoAtivo } from './razao-estado'
 import { mesclarLojas, normalizarLojas, pertenceAEmpresa, repararLojasSemEmpresa, selecionarLojaAutomatica, substituirLojas } from './context-selection'
 import { DINO_COMPANY, DINO_STORE, isDinoDedicatedHost } from './dino-scope'
 import { isDinoBrandContext } from './brand'
@@ -108,23 +109,24 @@ export function AuthProvider({ children }) {
   // cabeçalho); trocou o contexto, volta a "carregando" já no mesmo render.
   const consultaPermissoes = (u, empresa) => Boolean(u && u.platformAdmin !== true && empresa?.id && typeof fetch === 'function')
   const chaveDoContexto = `${empresaAtiva?.id || ''}:${lojaAtiva?.id || ''}`
-  const [consultaFeita, setConsultaFeita] = useState({ chave: null, lista: null })
+  const [consultaFeita, setConsultaFeita] = useState({ chave: null, lista: null, ocultos: [] })
   useEffect(() => {
     const token = (() => { try { return localStorage.getItem('sp_token') || '' } catch { return '' } })()
-    if (!consultaPermissoes(user, empresaAtiva) || !token) { setConsultaFeita({ chave: chaveDoContexto, lista: null }); return undefined }
+    if (!consultaPermissoes(user, empresaAtiva) || !token) { setConsultaFeita({ chave: chaveDoContexto, lista: null, ocultos: [] }); return undefined }
     let vivo = true
-    const fim = (lista) => { if (vivo) setConsultaFeita({ chave: chaveDoContexto, lista }) }
+    const fim = (lista, ocultos = []) => { if (vivo) setConsultaFeita({ chave: chaveDoContexto, lista, ocultos }) }
     // rede travada não pode prender as telas em "Carregando…": sem resposta em 8 s, nada é escondido
     const controle = typeof AbortController === 'function' ? new AbortController() : null
     const limite = setTimeout(() => { controle?.abort(); fim(null) }, 8000)
     fetch('/api/admin/minhas-permissoes', { signal: controle?.signal, headers: { Authorization: `Bearer ${token}`, 'X-Empresa-Id': empresaAtiva.id, ...(lojaAtiva?.id ? { 'X-Loja-Id': lojaAtiva.id } : {}) } })
       .then((resposta) => (resposta.ok ? resposta.json() : null))
-      .then((dados) => fim(dados?.aplicavel === true && Array.isArray(dados.permissoes) ? dados.permissoes : null))
+      .then((dados) => fim(dados?.aplicavel === true && Array.isArray(dados.permissoes) ? dados.permissoes : null, Array.isArray(dados?.modulosOcultos) ? dados.modulosOcultos : []))
       .catch(() => fim(null) /* sem rede: não esconde nada */)
       .finally(() => clearTimeout(limite))
     return () => { vivo = false; clearTimeout(limite); controle?.abort() }
   }, [user, chaveDoContexto])
   const permissoes = !consultaPermissoes(user, empresaAtiva) ? null : consultaFeita.chave === chaveDoContexto ? consultaFeita.lista : undefined
+  const modulosOcultos = consultaPermissoes(user, empresaAtiva) && consultaFeita.chave === chaveDoContexto ? consultaFeita.ocultos : []
 
   const desligarPushContextoAtual = () => {
     try {
@@ -262,6 +264,7 @@ export function AuthProvider({ children }) {
   atualizarContextoLojasRef.current = atualizarContextoLojas
 
   const logout = () => {
+    esquecerRazaoAtivo()
     // App do barbeiro: desliga os avisos deste aparelho e apaga a agenda guardada para
     // uso sem internet. Lê a sessão antes de apagá-la (o cancelamento precisa dela).
     try {
@@ -310,6 +313,7 @@ export function AuthProvider({ children }) {
       trocarLoja,
       atualizarContextoLojas,
       permissoes,
+      modulosOcultos,
       isAdmin,
       isPlatformAdmin,
       isOrg,

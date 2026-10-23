@@ -21,20 +21,28 @@ export function createRazaoAdminRouter({ db, escopoDaRequisicao, fonteJson = nul
   router.use((req, res, next) => { res.set('Cache-Control', 'private, no-store'); next(); });
 
   const ultimaLeitura = new Map();
+  const leituraEmAndamento = new Map(); // empresa → promessa da leitura em curso
+  // Uma leitura por empresa por vez: quem chega durante a leitura espera por ela, para resumo,
+  // fluxo e lançamentos pedidos juntos mostrarem os mesmos números.
   async function lerFontes(empresaId, { forcar = false } = {}) {
-    const agora = Date.now();
     // Com o razão desligado (FINANCEIRO_RAZAO), nada é lido das fontes nem importado.
     if (ativo() !== true) return null;
-    if (!forcar && agora - (ultimaLeitura.get(empresaId) || 0) < intervaloSyncMs) return null;
-    ultimaLeitura.set(empresaId, agora);
-    const resultado = await fontes.sincronizarEmpresa(db, empresaId, { fuso });
-    try {
-      const json = typeof fonteJson === 'function' ? await fonteJson(empresaId) : null;
-      if (json?.chaveLegada) resultado.push(await fontes.sincronizarJson(db, empresaId, { ...json, fuso }));
-    } catch (error) {
-      resultado.push({ fonte: 'json', erro: String(error?.message || error).slice(0, 160) });
-    }
-    return resultado;
+    const emCurso = leituraEmAndamento.get(empresaId);
+    if (emCurso) return emCurso;
+    if (!forcar && Date.now() - (ultimaLeitura.get(empresaId) || 0) < intervaloSyncMs) return null;
+    const leitura = (async () => {
+      const resultado = await fontes.sincronizarEmpresa(db, empresaId, { fuso });
+      try {
+        const json = typeof fonteJson === 'function' ? await fonteJson(empresaId) : null;
+        if (json?.chaveLegada) resultado.push(await fontes.sincronizarJson(db, empresaId, { ...json, fuso }));
+      } catch (error) {
+        resultado.push({ fonte: 'json', erro: String(error?.message || error).slice(0, 160) });
+      }
+      ultimaLeitura.set(empresaId, Date.now());
+      return resultado;
+    })().finally(() => leituraEmAndamento.delete(empresaId));
+    leituraEmAndamento.set(empresaId, leitura);
+    return leitura;
   }
 
   // Unidade pedida na consulta: '' / 'todas' = empresa toda; 'sem' = só sem unidade; uuid = a unidade.

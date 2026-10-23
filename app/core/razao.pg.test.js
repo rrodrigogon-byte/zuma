@@ -271,6 +271,48 @@ describe('Razão financeiro único (PostgreSQL)', { skip: pgDeTeste }, () => {
     assert.equal((await razao.listar(ctx.db, B, { q: 'Lâminas' }))[0].status, 'pago');
   });
 
+  test('prontidão: JSON sem mudança não relê; apagado no antigo sai do razão se ainda em aberto', async () => {
+    const E = randomUUID();
+    await ctx.db.query('INSERT INTO empresas (id) VALUES ($1)', [E]);
+    const lojaE = randomUUID();
+    await ctx.db.query('INSERT INTO lojas (id, empresa_id) VALUES ($1, $2)', [lojaE, E]);
+    const lancamentos = Array.from({ length: 2500 }, (_, i) => ({ id: `m${i}`, tipo: i % 2 ? 'despesa' : 'receita', categoria: 'Outros', descricao: `Item ${i}`, valor: 10 + i, status: i % 3 ? 'pago' : 'pendente', vencimento: '2026-09-15', lojaId: 'u1' }));
+    lancamentos.push({ id: 'rev1', tipo: 'despesa', valor: 10, status: 'pago', vencimento: '2026-09-16', lojaId: 'u1', lancamentoOriginalId: 'm0' });
+    const opcoes = { chaveLegada: 'emp-massa', lancamentos, mapaUnidades: { u1: lojaE } };
+    const lib = await fontes.liberarJsonLegado(ctx.db, E, { ...opcoes, usuario: 'plataforma' });
+    assert.equal(lib.relatorio.inseridos, 2501, 'em lote, com a reversão ligada ao original');
+    assert.equal((await fontes.sincronizarJson(ctx.db, E, opcoes)).inseridos, 0);
+    const est = (await ctx.db.query("SELECT estorno_de FROM fin_lancamentos WHERE empresa_id = $1 AND origem = 'estorno'", [E])).rows;
+    assert.equal(est.length, 1);
+    assert.ok(est[0].estorno_de);
+    assert.equal((await fontes.sincronizarJson(ctx.db, E, opcoes)).semMudanca, true);
+    lancamentos.splice(lancamentos.findIndex((l) => l.id === 'm3'), 1); // pendente apagado no antigo
+    lancamentos.splice(lancamentos.findIndex((l) => l.id === 'm1'), 1); // pago apagado: fica (já entrou no caixa)
+    const r3 = await fontes.sincronizarJson(ctx.db, E, opcoes);
+    assert.equal(r3.atualizados, 1);
+    const st = Object.fromEntries((await ctx.db.query("SELECT chave, status FROM fin_lancamentos WHERE empresa_id = $1 AND chave IN ('json:emp-massa:m3', 'json:emp-massa:m1')", [E])).rows.map((r) => [r.chave, r.status]));
+    assert.deepEqual(st, { 'json:emp-massa:m3': 'cancelado', 'json:emp-massa:m1': 'pago' });
+  });
+
+  test('prontidão: fiado do bar de antes do Financeiro novo entra como recebido', async () => {
+    const F = randomUUID();
+    await ctx.db.query('INSERT INTO empresas (id) VALUES ($1)', [F]);
+    const cliente = await criarCliente(ctx.db, F, 'Fiado Antigo');
+    const produto = await bar.salvarProduto(ctx.db, F, { nome: 'Água', categoria: 'Bebidas', setor: 'bar', preco: 5, estoqueAtual: 10 });
+    const antiga = await bar.abrirComanda(ctx.db, F, { nome: 'Mesa antiga' });
+    await bar.adicionarItens(ctx.db, F, antiga.id, [{ produtoId: produto.id, qtd: 1 }]);
+    await bar.pagarComanda(ctx.db, F, antiga.id, { servico: false, meio: 'conta', clienteId: cliente });
+    await ctx.db.query("UPDATE bar_comanda_pagamentos SET criado_em = CURRENT_TIMESTAMP - interval '40 days' WHERE empresa_id = $1", [F]);
+    const nova = await bar.abrirComanda(ctx.db, F, { nome: 'Mesa nova' });
+    await bar.adicionarItens(ctx.db, F, nova.id, [{ produtoId: produto.id, qtd: 2 }]);
+    await bar.pagarComanda(ctx.db, F, nova.id, { servico: false, meio: 'conta', clienteId: cliente });
+    await fontes.sincronizarEmpresa(ctx.db, F);
+    const doBar = await razao.listar(ctx.db, F, { origem: 'bar_comanda' });
+    assert.equal(doBar.length, 2);
+    assert.deepEqual(doBar.map((l) => `${l.valor}:${l.status}`).sort(), ['10:pendente', '5:pago']);
+    assert.ok((await razao.obterConfig(ctx.db, F)).razaoDesde);
+  });
+
   test('fechamento do dia: totais por meio e um fechamento por dia e unidade', async () => {
     const dia = '2026-10-22';
     await razao.criarManual(ctx.db, B, { tipo: 'receita', descricao: 'Venda dinheiro', valor: 30, status: 'pago', meioPagamento: 'dinheiro', vencimento: dia, pagoEm: '2026-10-22T10:00:00-04:00' }, { agora });

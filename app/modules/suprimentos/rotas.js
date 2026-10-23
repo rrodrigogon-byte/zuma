@@ -14,6 +14,7 @@ export function createSuprimentosAdminRouter({ db, escopoDaRequisicao, fuso = 'A
   router.use((req, res, next) => { res.set('Cache-Control', 'private, no-store'); next(); });
 
   const ultimaBaixa = new Map();
+  const baixaEmAndamento = new Map(); // empresa → promessa: duas telas abertas não baixam em dobro
   // Baixa das vendas pela ficha técnica. Na listagem roda no máximo a cada `intervaloConsumoMs` e
   // um erro não derruba a tela; no inventário (abrir, contar, concluir) roda sempre e o erro para
   // a operação: contar com venda ainda não baixada criaria diferença falsa.
@@ -21,7 +22,14 @@ export function createSuprimentosAdminRouter({ db, escopoDaRequisicao, fuso = 'A
     const agora = Date.now();
     if (!obrigatoria && agora - (ultimaBaixa.get(empresaId) || 0) < intervaloConsumoMs) return;
     ultimaBaixa.set(empresaId, agora);
-    try { await est.baixarConsumoDasVendas(db, empresaId, { fuso }); } catch (error) {
+    try {
+      let andamento = baixaEmAndamento.get(empresaId);
+      if (!andamento) {
+        andamento = est.baixarConsumoDasVendas(db, empresaId, { fuso }).finally(() => baixaEmAndamento.delete(empresaId));
+        baixaEmAndamento.set(empresaId, andamento);
+      }
+      await andamento;
+    } catch (error) {
       if (obrigatoria) throw error;
       console.error('[suprimentos] consumo', String(error?.message || error).slice(0, 160));
     }

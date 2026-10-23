@@ -12,6 +12,8 @@ const authMock = vi.hoisted(() => {
 })
 vi.mock('../lib/auth', () => authMock)
 vi.mock('../lib/api', () => ({ api: { get: vi.fn(async () => ({})) } }))
+const razao = vi.hoisted(() => ({ ativo: false }))
+vi.mock('../lib/razao-estado', () => ({ useRazaoAtivo: () => razao.ativo }))
 vi.mock('react-router-dom', () => ({
   NavLink: ({ children, to, style, ...props }) => createElement('a', { ...props, href: to }, typeof children === 'function' ? children({ isActive: false }) : children),
   useLocation: () => ({ pathname: '/admin', search: '' }),
@@ -102,11 +104,17 @@ describe('Backoffice da plataforma', () => {
     expect(ler().textos).not.toContain('Backoffice da plataforma')
   })
 
-  it('a Dino ganha contas a receber, fechamento, cadastros e unidades no menu', () => {
-    const { links } = render({ id: 'dino', nome: 'Barbearia Dino', brandKey: 'dino' }, { platform: false, empresaId: 'dino' })
-    expect(links).toContain('/admin/contas-receber')
-    expect(links).toContain('/admin/fechamento-diario')
+  it('a Dino ganha cadastros e unidades; contas a receber e fechamento só com o Financeiro novo ligado', () => {
+    razao.ativo = false
+    let { links } = render({ id: 'dino', nome: 'Barbearia Dino', brandKey: 'dino' }, { platform: false, empresaId: 'dino' })
+    expect(links).not.toContain('/admin/contas-receber')
+    expect(links).not.toContain('/admin/fechamento-diario')
     expect(links).toContain('/admin/cadastros-mestres')
     expect(links).toContain('/admin/lojas')
+    razao.ativo = true
+    ;({ links } = render({ id: 'dino', nome: 'Barbearia Dino', brandKey: 'dino' }, { platform: false, empresaId: 'dino' }))
+    expect(links).toContain('/admin/contas-receber')
+    expect(links).toContain('/admin/fechamento-diario')
+    razao.ativo = false
   })
 })

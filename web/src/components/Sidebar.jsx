@@ -1,6 +1,7 @@
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { rotaVisivel } from '../lib/disponibilidade'
+import { useRazaoAtivo } from '../lib/razao-estado'
 import { lojasDaEmpresa as lojasDaEmpresaAtiva } from '../lib/context-selection'
 import { catalogoPorArea, contagemPorEstado, ESTADOS } from '../lib/catalogo-modulos'
 import { useAuth } from '../lib/auth'
@@ -232,8 +233,8 @@ const NAV_DINO_GROUPS = [
       { to: '/admin/bi', icon: '↗', label: 'BI & Analytics' },
       { to: '/admin/barbearia-erp?area=gestao&tab=Desempenho+da+equipe', icon: '↗', label: 'Desempenho da equipe' },
       { to: '/admin/financeiro', icon: '◇', label: 'Financeiro' },
-      { to: '/admin/contas-receber', icon: '◇', label: 'Contas a receber' },
-      { to: '/admin/fechamento-diario', icon: '◇', label: 'Fechamento do dia' },
+      { to: '/admin/contas-receber', icon: '◇', label: 'Contas a receber', razao: true },
+      { to: '/admin/fechamento-diario', icon: '◇', label: 'Fechamento do dia', razao: true },
       { to: '/admin/cadastros-mestres', icon: '▤', label: 'Fornecedores e funcionários' },
       { to: '/admin/lojas', icon: '▤', label: 'Unidades' },
       { to: '/admin/barbearia-erp?area=gestao&tab=Relat%C3%B3rios', icon: '▤', label: 'Relatórios' },
@@ -363,8 +364,8 @@ const NAV_STALLONE_GROUPS = [
     items: [
       { to: '/admin/ecommerce?tab=reports', icon: '▤', label: 'Relatórios' },
       { to: '/admin/financeiro', icon: '◇', label: 'Financeiro' },
-      { to: '/admin/contas-receber', icon: '◇', label: 'Contas a receber' },
-      { to: '/admin/fechamento-diario', icon: '◇', label: 'Fechamento do dia' },
+      { to: '/admin/contas-receber', icon: '◇', label: 'Contas a receber', razao: true },
+      { to: '/admin/fechamento-diario', icon: '◇', label: 'Fechamento do dia', razao: true },
       { to: '/admin/cadastros-mestres', icon: '▤', label: 'Fornecedores e funcionários' },
       { to: '/admin/lojas', icon: '▤', label: 'Unidades' },
       { to: '/admin/ecommerce?tab=users', icon: '♧', label: 'Usuários e acessos' },
@@ -417,10 +418,10 @@ function moduloDaRota(to) {
   return ROUTE_MODULES.find(([prefix]) => path === prefix || path.startsWith(`${prefix}/`))?.[1] || null
 }
 
-function itemDisponivel(item, isPlatformAdmin, empresa, usuarioDeEmpresa = false, permissoes = null) {
+function itemDisponivel(item, isPlatformAdmin, empresa, usuarioDeEmpresa = false, permissoes = null, modulosOcultos = null) {
   // telas sem backend em produção somem para todos; as do banco global do evento, para usuário de
   // empresa; as do backoffice cuja permissão a pessoa não tem, para ela
-  if (!rotaVisivel(item.to, { isPlatformAdmin, usuarioDeEmpresa, permissoes })) return false
+  if (!rotaVisivel(item.to, { isPlatformAdmin, usuarioDeEmpresa, permissoes, modulosOcultos })) return false
   if (isPlatformAdmin) return true
   const modulos = Array.isArray(empresa?.modulos) ? empresa.modulos.map((modulo) => String(modulo).toLowerCase()) : null
   if (!modulos) return true
@@ -524,7 +525,10 @@ function Section({ label, items, onNavClick, collapsible = false, badgesMap = {}
 
 function AdminGroups({ groups, onNavClick, isPlatformAdmin, empresa, usuarioDeEmpresa = false, sidebarCollapsed = false, compacto = false }) {
   const location = useLocation()
-  const { permissoes } = useAuth()
+  const { permissoes, modulosOcultos } = useAuth()
+  // itens do Financeiro novo (a receber, fechamento do dia) só com ele ligado: antes disso essas
+  // telas são as do A2 e a empresa veria dois "a receber" diferentes
+  const razaoAtivo = useRazaoAtivo()
   // menu compacto: só os grupos do dia a dia abertos; o grupo da tela atual abre sozinho
   const naRota = (g) => g.items.some((item) => {
     const p = String(item.to).split('?')[0]
@@ -532,7 +536,7 @@ function AdminGroups({ groups, onNavClick, isPlatformAdmin, empresa, usuarioDeEm
   })
   return (
     <>
-      {groups.map(g => ({ ...g, items: g.items.filter((item) => itemDisponivel(item, isPlatformAdmin, empresa, usuarioDeEmpresa, permissoes)) }))
+      {groups.map(g => ({ ...g, items: g.items.filter((item) => (!item.razao || razaoAtivo === true) && itemDisponivel(item, isPlatformAdmin, empresa, usuarioDeEmpresa, permissoes, modulosOcultos)) }))
         .filter((group) => group.items.length > 0)
         .map(g => (
           <Section
@@ -587,7 +591,7 @@ function BackofficePlataforma({ empresa, onNavClick, sidebarCollapsed = false })
 }
 
 export default function Sidebar({ collapsed = false, onToggleCollapse = () => {} }) {
-  const { user, logout, isOrg, isStaff, isAtleta, isPlatformAdmin, empresaAtiva, empresasAcessiveis, lojaAtiva, lojasAcessiveis, trocarEmpresa, trocarLoja, permissoes } = useAuth()
+  const { user, logout, isOrg, isStaff, isAtleta, isPlatformAdmin, empresaAtiva, empresasAcessiveis, lojaAtiva, lojasAcessiveis, trocarEmpresa, trocarLoja, permissoes, modulosOcultos } = useAuth()
   const navigate = useNavigate()
   const [open, setOpen] = useState(false)
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
@@ -610,7 +614,7 @@ export default function Sidebar({ collapsed = false, onToggleCollapse = () => {}
   const empresaDoMenu = empresaAtiva
   // usuário preso a uma empresa (não é da plataforma nem usuário legado do evento)
   const usuarioDeEmpresa = (Boolean(user?.empresaId) || user?.tenantBound === true) && !isPlatformAdmin
-  const opVisiveis = (itens) => itens.filter((item) => rotaVisivel(item.to, { isPlatformAdmin, usuarioDeEmpresa, permissoes }))
+  const opVisiveis = (itens) => itens.filter((item) => rotaVisivel(item.to, { isPlatformAdmin, usuarioDeEmpresa, permissoes, modulosOcultos }))
   const lojasContexto = isDino && !lojasAcessiveis.some((loja) => loja.id === DINO_STORE.id)
     ? [...lojasAcessiveis, DINO_STORE]
     : lojasAcessiveis

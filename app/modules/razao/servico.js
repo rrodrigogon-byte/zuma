@@ -527,9 +527,20 @@ const temTabela = async (db, nome) => Boolean((await db.query('SELECT to_regclas
 
 export async function obterConfig(db, empresaId) {
   const empresa = exigirUuid(empresaId, 'empresa');
-  if (!(await temTabela(db, 'fin_config'))) return { lojaPadrao: null, jsonLiberadoEm: null, jsonLiberadoPor: null, jsonIncluirQuarentena: false };
+  if (!(await temTabela(db, 'fin_config'))) return { lojaPadrao: null, jsonLiberadoEm: null, jsonLiberadoPor: null, jsonIncluirQuarentena: false, razaoDesde: null };
   const r = (await db.query('SELECT * FROM fin_config WHERE empresa_id = $1', [empresa])).rows[0];
-  return { lojaPadrao: r?.loja_padrao || null, jsonLiberadoEm: r?.json_liberado_em || null, jsonLiberadoPor: r?.json_liberado_por || null, jsonIncluirQuarentena: r?.json_incluir_quarentena === true };
+  return { lojaPadrao: r?.loja_padrao || null, jsonLiberadoEm: r?.json_liberado_em || null, jsonLiberadoPor: r?.json_liberado_por || null, jsonIncluirQuarentena: r?.json_incluir_quarentena === true, razaoDesde: r?.razao_desde || null };
+}
+
+/** Marca (uma vez) o início do uso do Financeiro novo na empresa; devolve a data. */
+export async function marcarRazaoLigado(db, empresaId) {
+  const empresa = exigirUuid(empresaId, 'empresa');
+  if (!(await temTabela(db, 'fin_config'))) return null;
+  const r = await db.query(
+    `INSERT INTO fin_config (empresa_id, razao_desde) VALUES ($1, CURRENT_TIMESTAMP)
+     ON CONFLICT (empresa_id) DO UPDATE SET razao_desde = COALESCE(fin_config.razao_desde, EXCLUDED.razao_desde)
+     RETURNING razao_desde`, [empresa]);
+  return r.rows[0]?.razao_desde || null;
 }
 
 /**

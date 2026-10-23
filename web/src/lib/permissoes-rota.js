@@ -18,6 +18,13 @@ export const PERMISSAO_DA_ROTA = {
   '/admin/supermercado': 'catalog.read',
 }
 
+// Tela → módulo que a instalação pode esconder das empresas (BACKOFFICE_MODULOS_OCULTOS).
+export const MODULO_DA_ROTA = {
+  '/admin/compras': 'compras', '/admin/perdas-inventario': 'compras', '/admin/fichas-tecnicas': 'compras',
+  '/admin/notas': 'fiscal', '/admin/fiscal/config': 'fiscal', '/admin/fiscal/classificacao': 'fiscal',
+  '/admin/reservas': 'reservas', '/admin/pdv-offline': 'pdv-offline', '/admin/supermercado': 'supermercado',
+}
+
 const caminho = (to) => String(to || '').split('?')[0].split('#')[0].replace(/\/+$/, '') || '/'
 
 /** A permissão que falta para abrir a rota (basta uma das listadas); null quando abre ou não se aplica. */
@@ -27,6 +34,15 @@ export function permissaoQueFalta(to, permissoes) {
   if (!exigida) return null
   const opcoes = Array.isArray(exigida) ? exigida : [exigida]
   return opcoes.some((codigo) => permissoes.includes(codigo)) ? null : opcoes[0]
+}
+
+const NOME_DO_MODULO = { compras: 'Compras e estoque', fiscal: 'Notas fiscais', reservas: 'Reservas e salão', 'pdv-offline': 'PDV offline', supermercado: 'Supermercado' }
+
+/** Nome do módulo da tela quando ele está escondido nesta instalação; null quando aparece. */
+export function moduloOculto(to, ocultos) {
+  if (!Array.isArray(ocultos) || !ocultos.length) return null
+  const modulo = MODULO_DA_ROTA[caminho(to)]
+  return modulo && ocultos.includes(modulo) ? NOME_DO_MODULO[modulo] : null
 }
 
 /** Tela do mapa com as permissões ainda carregando (undefined): espera antes de montar. */

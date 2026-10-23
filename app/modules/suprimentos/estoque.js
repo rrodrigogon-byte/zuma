@@ -423,6 +423,8 @@ export async function baixarConsumoDasVendas(db, empresaId, { lojaBar, fuso = 'A
          JOIN bar_comandas c ON c.empresa_id = ci.empresa_id AND c.id = ci.comanda_id AND c.status = 'paga'
          JOIN est_vinculos v ON v.empresa_id = ci.empresa_id AND v.fonte = 'bar_produto' AND v.fonte_id = ci.produto_id
         WHERE ci.empresa_id = $1 AND ci.status <> 'cancelado'
+          -- só vendas depois do vínculo: o histórico anterior à ficha técnica não baixa o insumo
+          AND COALESCE(c.fechada_em, ci.criado_em) >= v.criado_em
           AND NOT EXISTS (SELECT 1 FROM est_movimentos m WHERE m.empresa_id = ci.empresa_id AND m.chave = 'venda_bar:' || ci.id || ':' || v.item_id)
         LIMIT 5000`, [empresa]);
     for (const x of r.rows) vendas.push({ chave: `venda_bar:${x.venda_id}:${x.item_id}`, origem: 'venda_bar', origemId: x.venda_id, loja, item: x.item_id, quantidade: -qtd(Number(x.quantidade) * Number(x.fator)) });
@@ -433,7 +435,7 @@ export async function baixarConsumoDasVendas(db, empresaId, { lojaBar, fuso = 'A
          FROM commerce_order_items oi
          JOIN commerce_orders o ON o.empresa_id = oi.empresa_id AND o.id = oi.order_id AND o.status = ANY($2::text[])
          JOIN est_vinculos v ON v.empresa_id = oi.empresa_id AND v.fonte = 'loja_variante' AND v.fonte_id = oi.variant_id
-        WHERE oi.empresa_id = $1
+        WHERE oi.empresa_id = $1 AND o.criado_em >= v.criado_em
           AND NOT EXISTS (SELECT 1 FROM est_movimentos m WHERE m.empresa_id = oi.empresa_id AND m.chave = 'venda_loja:' || oi.id || ':' || v.item_id)
         LIMIT 5000`, [empresa, STATUS_PEDIDO_VENDIDO]);
     for (const x of r.rows) vendas.push({ chave: `venda_loja:${x.venda_id}:${x.item_id}`, origem: 'venda_loja', origemId: x.venda_id, loja: x.loja_id || null, item: x.item_id, quantidade: -qtd(Number(x.quantidade) * Number(x.fator)) });
@@ -463,10 +465,15 @@ export async function baixarConsumoDasVendas(db, empresaId, { lojaBar, fuso = 'A
     desfazer.push(...r.rows);
   }
   let baixados = 0; let estornados = 0;
-  for (const v of vendas) {
-    if (!v.quantidade) continue;
-    const mov = await transacao(db, (q) => movimentarNaTransacao(q, empresa, { lojaId: v.loja, itemId: v.item, tipo: 'venda', quantidade: v.quantidade, origem: v.origem, origemId: v.origemId, chave: v.chave, permitirNegativo: true }));
-    if (mov) baixados += 1;
+  // em blocos: uma transação por bloco, não por venda
+  const aBaixar = vendas.filter((v) => v.quantidade);
+  for (let i = 0; i < aBaixar.length; i += 200) {
+    const bloco = aBaixar.slice(i, i + 200);
+    baixados += await transacao(db, async (q) => {
+      let n = 0;
+      for (const v of bloco) if (await movimentarNaTransacao(q, empresa, { lojaId: v.loja, itemId: v.item, tipo: 'venda', quantidade: v.quantidade, origem: v.origem, origemId: v.origemId, chave: v.chave, permitirNegativo: true })) n += 1;
+      return n;
+    });
   }
   for (const m of desfazer) {
     const mov = await transacao(db, (q) => movimentarNaTransacao(q, empresa, { lojaId: m.loja_id, itemId: m.item_id, tipo: 'venda', quantidade: -Number(m.quantidade), origem: 'estorno_venda', origemId: m.origem_id, chave: `${m.chave}:estorno`, motivo: 'venda cancelada ou devolvida', permitirNegativo: true }));

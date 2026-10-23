@@ -10,7 +10,8 @@
 // commerce_payments         | loja_online:<id>              | receita paga (Loja online); devolução → estorno
 // financeiro JSON (legado)  | json:<empresa legada>:<id>    | importação dos lançamentos antigos
 import { ErroDominio, exigirUuid, transacao } from '../acesso/banco.js';
-import { FUSO_PADRAO, garantirCategorias, hojeNoFuso, lojaPadraoDaFonte, obterConfig } from './servico.js';
+import { FUSO_PADRAO, garantirCategorias, hojeNoFuso, lojaPadraoDaFonte, marcarRazaoLigado, obterConfig } from './servico.js';
+import { createHash } from 'node:crypto';
 
 async function existeTabela(db, nome) {
   const r = await db.query('SELECT to_regclass($1) AS t', [nome]);
@@ -38,31 +39,40 @@ export async function sincronizarBar(db, empresaId, { fuso = FUSO_PADRAO } = {})
   const temFechamento = await existeTabela(db, 'fin_fechamentos');
   // venda do PDV offline: a unidade é a do terminal (o bar não guarda unidade na comanda)
   const temPdvOffline = await existeTabela(db, 'pdv_eventos');
+  const { razaoDesde } = await obterConfig(db, empresa);
+  // Só os pagamentos que ainda não estão no razão (anti-join pela chave): reler 50 mil pagamentos
+  // a cada minuto custava mais de 1 s por leitura.
   const r = await db.query(
     `INSERT INTO fin_lancamentos ${INSERT_COLS}
-     SELECT p.empresa_id, ${temPdvOffline ? 'COALESCE(pdv.loja_id, $3::uuid)' : '$3::uuid'}, 'receita', 'Bar e restaurante',
-            left('Comanda ' || COALESCE(NULLIF(c.nome, ''), 'do bar') || CASE WHEN p.meio IS NOT NULL THEN ' · ' || p.meio ELSE '' END, 240),
+     WITH novos AS MATERIALIZED (
+       SELECT p.* FROM bar_comanda_pagamentos p
+        WHERE p.empresa_id = $1 AND p.valor > 0
+          AND NOT EXISTS (SELECT 1 FROM fin_lancamentos l WHERE l.empresa_id = $1 AND l.chave = 'bar_pagamento:' || p.id))
+     SELECT p.empresa_id, LOJA, 'receita', 'Bar e restaurante',
+            left('Comanda ' || COALESCE(NULLIF(c.nome, ''), 'do bar') || CASE WHEN p.meio IS NOT NULL THEN ' · ' || p.meio ELSE '' END
+                 || CASE WHEN lower(p.meio) = 'conta' AND NOT fi.aberto THEN ' · fiado anterior ao Financeiro' ELSE '' END, 240),
             p.valor, d.competencia,
-            -- "conta" é venda fiada: vira conta a receber do cliente, com 30 dias para pagar
-            CASE WHEN lower(p.meio) = 'conta' THEN d.competencia + 30 ELSE d.competencia END,
-            CASE WHEN lower(p.meio) = 'conta' THEN 'pendente' ELSE 'pago' END,
-            CASE WHEN lower(p.meio) = 'conta' THEN NULL ELSE p.criado_em END,
+            -- "conta" é venda fiada: vira conta a receber do cliente, com 30 dias para pagar. Fiado de antes
+            -- do Financeiro novo entra como recebido: a baixa aconteceu fora do sistema e viraria inadimplência falsa.
+            CASE WHEN fi.aberto THEN d.competencia + 30 ELSE d.competencia END,
+            CASE WHEN fi.aberto THEN 'pendente' ELSE 'pago' END,
+            CASE WHEN fi.aberto THEN NULL ELSE p.criado_em END,
             CASE lower(p.meio) WHEN 'cartao' THEN 'credito' WHEN 'cartao_debito' THEN 'debito' WHEN 'tef' THEN 'credito' WHEN 'pix' THEN 'pix'
               WHEN 'dinheiro' THEN 'dinheiro' WHEN 'carteira' THEN 'voucher' WHEN 'conta' THEN NULL ELSE 'outro' END,
-            CASE WHEN lower(p.meio) = 'conta' THEN 'receber' ELSE 'avulso' END,
+            CASE WHEN fi.aberto THEN 'receber' ELSE 'avulso' END,
             CASE WHEN c.cliente_id IS NOT NULL THEN 'cliente' END, c.cliente_id, cc.nome,
             'bar_comanda', c.id::text, 'bar_pagamento:' || p.id, true, 'sistema'
-       FROM bar_comanda_pagamentos p
+       FROM novos p
        JOIN bar_comandas c ON c.empresa_id = p.empresa_id AND c.id = p.comanda_id
        LEFT JOIN commerce_customers cc ON cc.empresa_id = c.empresa_id AND cc.id = c.cliente_id
        ${temPdvOffline ? `LEFT JOIN LATERAL (SELECT t.loja_id FROM pdv_eventos e JOIN pdv_terminais t ON t.empresa_id = e.empresa_id AND t.id = e.terminal_id
                                          WHERE e.empresa_id = c.empresa_id AND e.comanda_id = c.id LIMIT 1) pdv ON true` : ''}
        -- pagamento com data de um dia já fechado (venda que chegou atrasada) entra no dia de hoje
-       CROSS JOIN LATERAL (SELECT CASE WHEN ${temFechamento ? `EXISTS (SELECT 1 FROM fin_fechamentos f WHERE f.empresa_id = p.empresa_id AND (f.loja_id IS NULL OR f.loja_id = ${temPdvOffline ? 'COALESCE(pdv.loja_id, $3::uuid)' : '$3::uuid'}) AND f.data = (p.criado_em AT TIME ZONE $2)::date)` : 'false'}
+       CROSS JOIN LATERAL (SELECT CASE WHEN ${temFechamento ? `EXISTS (SELECT 1 FROM fin_fechamentos f WHERE f.empresa_id = p.empresa_id AND (f.loja_id IS NULL OR f.loja_id = LOJA) AND f.data = (p.criado_em AT TIME ZONE $2)::date)` : 'false'}
                                        THEN (CURRENT_TIMESTAMP AT TIME ZONE $2)::date ELSE (p.criado_em AT TIME ZONE $2)::date END AS competencia) d
-      WHERE p.empresa_id = $1 AND p.valor > 0
-     ON CONFLICT (empresa_id, chave) DO NOTHING`,
-    [empresa, fuso, await lojaPadraoDaFonte(db, empresa, 'bar')],
+       CROSS JOIN LATERAL (SELECT lower(p.meio) = 'conta' AND ($4::timestamptz IS NULL OR (p.criado_em AT TIME ZONE $2)::date >= ($4::timestamptz AT TIME ZONE $2)::date) AS aberto) fi
+     ON CONFLICT (empresa_id, chave) DO NOTHING`.replaceAll('LOJA', temPdvOffline ? 'COALESCE(pdv.loja_id, $3::uuid)' : '$3::uuid'),
+    [empresa, fuso, await lojaPadraoDaFonte(db, empresa, 'bar'), razaoDesde],
   );
   const total = await db.query('SELECT count(*)::int AS n FROM bar_comanda_pagamentos WHERE empresa_id = $1', [empresa]);
   const res = { fonte: 'bar', lidos: total.rows[0].n, inseridos: r.rowCount, atualizados: 0 };
@@ -89,6 +99,7 @@ export async function sincronizarClube(db, empresaId, { fuso = FUSO_PADRAO } = {
          FROM clube_cobrancas cb
          LEFT JOIN commerce_customers cc ON cc.empresa_id = cb.empresa_id AND cc.id = cb.customer_id
         WHERE cb.empresa_id = $1 AND cb.status = 'pendente'
+          AND NOT EXISTS (SELECT 1 FROM fin_lancamentos l WHERE l.empresa_id = $1 AND l.chave = 'clube:clube-cobranca:' || cb.id)
        ON CONFLICT (empresa_id, chave) DO NOTHING`,
       [empresa, fuso, loja]);
   }
@@ -104,6 +115,7 @@ export async function sincronizarClube(db, empresaId, { fuso = FUSO_PADRAO } = {
        LEFT JOIN commerce_customers cc ON cc.empresa_id = p.empresa_id AND cc.id = p.customer_id
        ${temCobranca ? `LEFT JOIN clube_cobrancas cb ON cb.empresa_id = p.empresa_id AND p.pagamento_id = 'clube-cobranca:' || cb.id::text` : ''}
       WHERE p.empresa_id = $1 AND p.valor IS NOT NULL AND p.valor > 0
+        AND NOT EXISTS (SELECT 1 FROM fin_lancamentos l WHERE l.empresa_id = $1 AND l.chave = 'clube:' || p.pagamento_id)
      ON CONFLICT (empresa_id, chave) DO NOTHING`,
     [empresa, fuso, loja],
   );
@@ -143,6 +155,7 @@ export async function sincronizarContasReceber(db, empresaId, { fuso = FUSO_PADR
        FROM a2_contas_receber a
        LEFT JOIN commerce_customers cc ON cc.empresa_id = a.empresa_id AND cc.id = a.cliente_id
       WHERE a.empresa_id = $1
+        AND NOT EXISTS (SELECT 1 FROM fin_lancamentos l WHERE l.empresa_id = $1 AND l.chave = 'a2_conta:' || a.id)
      ON CONFLICT (empresa_id, chave) DO NOTHING`,
     [empresa, fuso, await lojaPadraoDaFonte(db, empresa, 'a2')],
   );
@@ -176,6 +189,7 @@ export async function sincronizarLojaOnline(db, empresaId, { fuso = FUSO_PADRAO 
        JOIN commerce_orders o ON o.empresa_id = p.empresa_id AND o.id = p.order_id
        LEFT JOIN commerce_customers cc ON cc.empresa_id = o.empresa_id AND cc.id = o.customer_id
       WHERE p.empresa_id = $1 AND p.amount > 0 AND (p.status IN ('captured', 'refunded', 'partially_refunded') OR p.captured_at IS NOT NULL)
+        AND NOT EXISTS (SELECT 1 FROM fin_lancamentos l WHERE l.empresa_id = $1 AND l.chave = 'loja_online:' || p.id)
      ON CONFLICT (empresa_id, chave) DO NOTHING`,
     [empresa, fuso, await lojaPadraoDaFonte(db, empresa, 'loja_online')],
   );
@@ -190,6 +204,7 @@ export async function sincronizarLojaOnline(db, empresaId, { fuso = FUSO_PADRAO 
        FROM commerce_payments p
        JOIN fin_lancamentos l ON l.empresa_id = p.empresa_id AND l.chave = 'loja_online:' || p.id
       WHERE p.empresa_id = $1 AND p.status = 'refunded' AND p.refunded_at IS NOT NULL
+        AND NOT EXISTS (SELECT 1 FROM fin_lancamentos e WHERE e.empresa_id = $1 AND e.chave = 'estorno:' || l.id)
      ON CONFLICT (empresa_id, chave) DO NOTHING`,
     [empresa, fuso],
   );
@@ -208,6 +223,7 @@ export const FONTES = { bar: sincronizarBar, clube: sincronizarClube, a2: sincro
 export async function sincronizarEmpresa(db, empresaId, opcoes = {}) {
   const empresa = exigirUuid(empresaId, 'empresa');
   await garantirCategorias(db, empresa);
+  await marcarRazaoLigado(db, empresa);
   const resultado = [];
   for (const [nome, fn] of Object.entries(FONTES)) {
     try {
@@ -301,27 +317,39 @@ export async function importarJsonLegado(db, empresaId, { chaveLegada, lancament
   relatorio.jaExistiam += existentes.size;
   const novas = linhas.filter((l) => !existentes.has(l.valores[14]));
   if (!novas.length) return relatorio;
+  // Em lote (jsonb_to_recordset, 1.000 por vez): um INSERT por lançamento gerava 18 mil queries e
+  // centenas de MB de memória nativa numa importação de 20 mil lançamentos.
+  const colunas = ['empresa_id', 'loja_id', 'tipo', 'categoria', 'descricao', 'valor', 'data_competencia', 'vencimento', 'status', 'pago_em',
+    'meio_pagamento', 'natureza', 'origem', 'origem_id', 'chave', 'automatico', 'criado_por', 'observacao', 'cancelado_em'];
+  const tipos = ['uuid', 'uuid', 'text', 'text', 'text', 'numeric', 'date', 'date', 'text', 'timestamptz', 'text', 'text', 'text', 'text', 'text', 'boolean', 'text', 'text', 'timestamptz'];
+  const comoRegistro = (valores, estornoDe = null) => Object.fromEntries([...colunas.map((c, i) => [c, valores[i] instanceof Date ? valores[i].toISOString() : valores[i]]), ['estorno_de', estornoDe]]);
   await transacao(db, async (q) => {
+    const inserir = async (registros) => {
+      for (let i = 0; i < registros.length; i += 1000) {
+        const r = await q(
+          `INSERT INTO fin_lancamentos (${colunas.join(', ')}, estorno_de)
+           SELECT ${colunas.map((c) => `x.${c}`).join(', ')}, x.estorno_de
+             FROM jsonb_to_recordset($1::jsonb) AS x(${colunas.map((c, j) => `${c} ${tipos[j]}`).join(', ')}, estorno_de uuid)
+           ON CONFLICT (empresa_id, chave) DO NOTHING`, [JSON.stringify(registros.slice(i, i + 1000))]);
+        relatorio.inseridos += r.rowCount;
+        relatorio.jaExistiam += Math.min(1000, registros.length - i) - r.rowCount;
+      }
+    };
     // originais antes das reversões, para a reversão achar o original já no razão
-    for (const l of [...novas.filter((x) => !x.original), ...novas.filter((x) => x.original)]) {
-      let estornoDe = null;
-      const valores = [...l.valores];
-      if (l.original) {
-        const orig = await q('SELECT id FROM fin_lancamentos WHERE empresa_id = $1 AND chave = $2', [empresa, `json:${chaveLegada}:${l.original}`.slice(0, 200)]);
-        if (orig.rows[0]) {
-          estornoDe = orig.rows[0].id;
+    await inserir(novas.filter((x) => !x.original).map((l) => comoRegistro(l.valores)));
+    const reversoes = novas.filter((x) => x.original);
+    if (reversoes.length) {
+      const chavesOriginais = reversoes.map((l) => `json:${chaveLegada}:${l.original}`.slice(0, 200));
+      const idPorChave = new Map((await q('SELECT chave, id FROM fin_lancamentos WHERE empresa_id = $1 AND chave = ANY($2::text[])', [empresa, chavesOriginais])).rows.map((r) => [r.chave, r.id]));
+      await inserir(reversoes.map((l, i) => {
+        const valores = [...l.valores];
+        const estornoDe = idPorChave.get(chavesOriginais[i]) || null;
+        if (estornoDe) {
           valores[12] = 'estorno';
           valores[14] = `estorno:${estornoDe}`; // mesma chave do estorno feito no razão: nunca dois estornos
         }
-      }
-      const r = await q(
-        `INSERT INTO fin_lancamentos (empresa_id, loja_id, tipo, categoria, descricao, valor, data_competencia, vencimento, status, pago_em,
-           meio_pagamento, natureza, origem, origem_id, chave, automatico, criado_por, observacao, cancelado_em, estorno_de)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
-         ON CONFLICT (empresa_id, chave) DO NOTHING`,
-        [...valores, estornoDe],
-      );
-      if (r.rowCount) relatorio.inseridos += 1; else relatorio.jaExistiam += 1;
+        return comoRegistro(valores, estornoDe);
+      }));
     }
   });
   await garantirCategorias(db, empresa);
@@ -333,11 +361,17 @@ export async function importarJsonLegado(db, empresaId, { chaveLegada, lancament
  * avança a situação dos já importados só para a frente (pendente → pago/cancelado), num único
  * UPDATE. Uma baixa feita no razão nunca é desfeita pelo JSON.
  */
+const IMPRESSAO_JSON = new Map(); // empresa:chave legada → hash do último JSON lido
+
 export async function sincronizarJson(db, empresaId, { chaveLegada, lancamentos = [], mapaUnidades = {}, fuso = FUSO_PADRAO } = {}) {
   const empresa = exigirUuid(empresaId, 'empresa');
   // só depois do ensaio conferido e liberado pela administração da plataforma
   const cfg = await obterConfig(db, empresa);
   if (!cfg.jsonLiberadoEm) return { fonte: 'json', aguardandoLiberacao: true };
+  // JSON igual ao da última leitura: nada a fazer (a rotina e as telas leem a cada poucos minutos)
+  const impressao = createHash('sha1').update(JSON.stringify([lancamentos, mapaUnidades, cfg.jsonIncluirQuarentena, String(cfg.jsonLiberadoEm)])).digest('hex');
+  const chaveImpressao = `${empresa}:${chaveLegada}`;
+  if (IMPRESSAO_JSON.get(chaveImpressao) === impressao) return { fonte: 'json', semMudanca: true };
   const rel = await importarJsonLegado(db, empresa, { chaveLegada, lancamentos, mapaUnidades, aplicar: true, incluirQuarentena: cfg.jsonIncluirQuarentena, fuso });
   const chaves = []; const situacoes = []; const pagos = [];
   for (const item of Array.isArray(lancamentos) ? lancamentos : []) {
@@ -359,8 +393,17 @@ export async function sincronizarJson(db, empresaId, { chaveLegada, lancamentos 
     );
     atualizados = r.rowCount;
   }
+  // lançamento apagado do JSON que no razão ainda está em aberto: sai (cancelado), como saiu de lá
+  const todasAsChaves = (Array.isArray(lancamentos) ? lancamentos : []).filter((i) => i?.id).map((i) => `json:${chaveLegada}:${String(i.id)}`.slice(0, 200));
+  const apagados = await db.query(
+    `UPDATE fin_lancamentos SET status = 'cancelado', cancelado_em = CURRENT_TIMESTAMP, atualizado_em = CURRENT_TIMESTAMP,
+            observacao = left(COALESCE(observacao || ' · ', '') || 'apagado no financeiro antigo', 2000)
+      WHERE empresa_id = $1 AND chave LIKE $2 AND status = 'pendente' AND NOT (chave = ANY($3::text[]))`,
+    [empresa, `json:${chaveLegada.replace(/[\\%_]/g, (c) => `\\${c}`)}:%`, todasAsChaves]);
+  atualizados += apagados.rowCount;
   const res = { fonte: 'json', lidos: rel.lidos, inseridos: rel.inseridos, atualizados, ignorados: rel.ignorados.length, quarentena: rel.quarentena };
   await marcar(db, empresa, 'json', res);
+  IMPRESSAO_JSON.set(chaveImpressao, impressao);
   return res;
 }
 
