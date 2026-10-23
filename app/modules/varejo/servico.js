@@ -73,12 +73,85 @@ export async function listarProdutos(db, empresaId, { lojaId = null, q = '', ago
   });
 }
 
+// ── balança: etiqueta EAN-13 de peso/preço ────────────────────────────────────
+const BALANCA_PADRAO = { prefixo: '2', digitosPlu: 4, digitosValor: 6, tipoValor: 'preco', validadeDias: null };
+
+/** Dígito verificador do EAN-13 confere? */
+export function ean13Valido(codigo) {
+  const c = String(codigo || '');
+  if (!/^\d{13}$/.test(c)) return false;
+  const soma = [...c.slice(0, 12)].reduce((t, d, i) => t + Number(d) * (i % 2 ? 3 : 1), 0);
+  return (10 - (soma % 10)) % 10 === Number(c[12]);
+}
+
+/**
+ * Lê a etiqueta da balança: prefixo + PLU + … + valor + dígito do EAN. O valor são os
+ * `digitosValor` dígitos logo antes do dígito verificador: preço total em centavos ou peso em
+ * gramas, conforme a balança. null = não é etiqueta de balança.
+ */
+export function lerEtiquetaBalanca(codigo, cfg = BALANCA_PADRAO) {
+  const c = String(codigo || '').trim();
+  const prefixo = String(cfg.prefixo || '2');
+  if (!ean13Valido(c) || !c.startsWith(prefixo)) return null;
+  const plu = c.slice(prefixo.length, prefixo.length + cfg.digitosPlu);
+  const valor = Number(c.slice(12 - cfg.digitosValor, 12));
+  if (!/^\d+$/.test(plu) || !Number.isFinite(valor)) return null;
+  return { plu: String(Number(plu)), pluBruto: plu, tipo: cfg.tipoValor, valor };
+}
+
+export async function configBalanca(db, empresaId) {
+  const r = (await db.query('SELECT * FROM var_balanca_config WHERE empresa_id = $1', [exigirUuid(empresaId, 'empresa')])).rows[0];
+  return r ? { prefixo: r.prefixo, digitosPlu: r.digitos_plu, digitosValor: r.digitos_valor, tipoValor: r.tipo_valor, validadeDias: r.validade_dias } : { ...BALANCA_PADRAO };
+}
+
+export async function salvarConfigBalanca(db, empresaId, dados = {}) {
+  const empresa = exigirUuid(empresaId, 'empresa');
+  const cfg = {
+    prefixo: String(dados.prefixo ?? '2'),
+    digitosPlu: numero(dados.digitosPlu ?? 4, 'Dígitos do PLU', { min: 4, max: 6, inteiro: true }),
+    digitosValor: numero(dados.digitosValor ?? 6, 'Dígitos do valor', { min: 4, max: 6, inteiro: true }),
+    tipoValor: dados.tipoValor === 'peso' ? 'peso' : 'preco',
+    validadeDias: dados.validadeDias === '' || dados.validadeDias == null ? null : numero(dados.validadeDias, 'Validade', { min: 0, max: 999, inteiro: true }),
+  };
+  if (!/^2\d?$/.test(cfg.prefixo)) throw new ErroDominio('VALIDATION_ERROR', 'Prefixo da balança: 2 ou 2 + um dígito');
+  if (cfg.prefixo.length + cfg.digitosPlu + cfg.digitosValor > 12) throw new ErroDominio('VALIDATION_ERROR', 'Prefixo, PLU e valor não cabem no EAN-13');
+  await db.query(
+    `INSERT INTO var_balanca_config (empresa_id, prefixo, digitos_plu, digitos_valor, tipo_valor, validade_dias) VALUES ($1,$2,$3,$4,$5,$6)
+     ON CONFLICT (empresa_id) DO UPDATE SET prefixo = EXCLUDED.prefixo, digitos_plu = EXCLUDED.digitos_plu, digitos_valor = EXCLUDED.digitos_valor,
+       tipo_valor = EXCLUDED.tipo_valor, validade_dias = EXCLUDED.validade_dias, atualizado_em = CURRENT_TIMESTAMP`,
+    [empresa, cfg.prefixo, cfg.digitosPlu, cfg.digitosValor, cfg.tipoValor, cfg.validadeDias]);
+  return cfg;
+}
+
+/** Arquivo de PLU para carregar na balança (CSV com ;): só itens pesáveis com PLU e preço. */
+export async function exportarPluBalanca(db, empresaId, { lojaId = null, agora = new Date() } = {}) {
+  const cfg = await configBalanca(db, empresaId);
+  const produtos = (await listarProdutos(db, empresaId, { lojaId, agora })).filter((p) => p.pesavel && p.plu && p.precoFinal !== null);
+  const linhas = ['PLU;DESCRICAO;PRECO_KG;VALIDADE_DIAS;DEPARTAMENTO'];
+  for (const p of produtos) {
+    const nome = String(p.nome).normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[;\r\n]/g, ' ').toUpperCase().slice(0, 50);
+    linhas.push([String(p.plu).padStart(cfg.digitosPlu, '0'), nome, p.precoFinal.toFixed(2), cfg.validadeDias ?? '', String(p.departamento || '').replace(/[;\r\n]/g, ' ').slice(0, 30)].join(';'));
+  }
+  return { arquivo: `${linhas.join('\r\n')}\r\n`, itens: produtos.length };
+}
+
 export async function buscarPorCodigo(db, empresaId, codigo, opcoes = {}) {
   const c = String(codigo || '').trim();
   if (!c) throw new ErroDominio('VALIDATION_ERROR', 'Informe o código');
   const r = await db.query('SELECT id FROM est_itens WHERE empresa_id = $1 AND ativo = true AND (ean = $2 OR sku = $2 OR plu = $2) LIMIT 1', [exigirUuid(empresaId, 'empresa'), c]);
-  if (!r.rows[0]) throw new ErroDominio('NOT_FOUND', 'Produto não encontrado para este código', 404);
-  return (await listarProdutos(db, empresaId, opcoes)).find((p) => p.id === r.rows[0].id);
+  if (r.rows[0]) return (await listarProdutos(db, empresaId, opcoes)).find((p) => p.id === r.rows[0].id);
+  // etiqueta da balança: acha pelo PLU e calcula quantidade e total
+  const etiqueta = lerEtiquetaBalanca(c, await configBalanca(db, empresaId));
+  if (etiqueta) {
+    const b = await db.query("SELECT id FROM est_itens WHERE empresa_id = $1 AND ativo = true AND pesavel AND (plu = $2 OR plu = $3) LIMIT 1", [exigirUuid(empresaId, 'empresa'), etiqueta.plu, etiqueta.pluBruto]);
+    const produto = b.rows[0] ? (await listarProdutos(db, empresaId, opcoes)).find((p) => p.id === b.rows[0].id) : null;
+    if (produto && produto.precoFinal) {
+      const total = etiqueta.tipo === 'preco' ? dinheiro(etiqueta.valor / 100) : dinheiro((etiqueta.valor / 1000) * produto.precoFinal);
+      const quantidade = etiqueta.tipo === 'peso' ? qtd(etiqueta.valor / 1000) : qtd(total / produto.precoFinal);
+      return { ...produto, etiquetaBalanca: { codigo: c, plu: etiqueta.plu, quantidade, total } };
+    }
+  }
+  throw new ErroDominio('NOT_FOUND', 'Produto não encontrado para este código', 404);
 }
 
 /** Preço base no item (empresa toda) ou da unidade; também departamento, PLU, pesável e lote. */

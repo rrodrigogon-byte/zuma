@@ -20,6 +20,20 @@ export function createVarejoAdminRouter({ db, escopoDaRequisicao, fuso = 'Americ
   const empresaToda = (lojaRestrita, acao) => { if (lojaRestrita) throw new ErroDominio('PERMISSION_DENIED', `${acao} exige permissão na empresa toda`, 403); };
 
   router.get('/produtos', rota('catalog.read', async ({ req, empresaId, lojaId }) => ({ produtos: await svc.listarProdutos(db, empresaId, { lojaId, q: req.query.q || '' }) })));
+  // balança: como a etiqueta é montada e o arquivo de PLU para carregar nela
+  router.get('/balanca/config', rota('catalog.read', ({ empresaId }) => svc.configBalanca(db, empresaId)));
+  router.put('/balanca/config', rota('settings.write', ({ req, empresaId, lojaRestrita }) => { empresaToda(lojaRestrita, 'Configurar a balança'); return svc.salvarConfigBalanca(db, empresaId, req.body || {}); }));
+  router.get('/balanca/exportar', async (req, res) => {
+    try {
+      const { empresaId, lojaRestrita = null } = await escopoDaRequisicao(req, 'catalog.read');
+      const pedida = String(req.query.lojaId || '').trim() || null;
+      if (lojaRestrita && pedida && pedida !== lojaRestrita) throw new ErroDominio('STORE_SCOPE_MISMATCH', 'Unidade fora do seu acesso', 403);
+      const { arquivo } = await svc.exportarPluBalanca(db, empresaId, { lojaId: lojaRestrita || pedida });
+      res.set('Content-Type', 'text/csv; charset=utf-8');
+      res.set('Content-Disposition', 'attachment; filename="plu-balanca.csv"');
+      return res.send(arquivo);
+    } catch (error) { return responderErro(res, error); }
+  });
   router.get('/produtos/codigo/:codigo', rota('catalog.read', ({ req, empresaId, lojaId }) => svc.buscarPorCodigo(db, empresaId, req.params.codigo, { lojaId })));
   router.patch('/produtos/:id', rota('catalog.write', ({ req, empresaId, lojaRestrita, lojaId }) => {
     const corpo = { ...(req.body || {}) };

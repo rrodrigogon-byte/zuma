@@ -15,7 +15,7 @@ describe('Varejo/supermercado (PostgreSQL)', { skip: pgDeTeste }, () => {
   before(async () => {
     ctx = await criarBancoTeste();
     await ctx.db.query('CREATE TABLE empresas (id UUID PRIMARY KEY); CREATE TABLE lojas (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), empresa_id UUID NOT NULL, nome VARCHAR(120), cnpj VARCHAR(14), ativa BOOLEAN NOT NULL DEFAULT true);');
-    for (const m of ['081_bar_pdv_multiempresa.sql', '082_financeiro_cadastros_multiempresa.sql', '090_financeiro_razao.sql', '091_estoque_compras.sql', '096_varejo_supermercado.sql']) await ctx.db.query(sql(m));
+    for (const m of ['081_bar_pdv_multiempresa.sql', '082_financeiro_cadastros_multiempresa.sql', '090_financeiro_razao.sql', '091_estoque_compras.sql', '096_varejo_supermercado.sql', '101_varejo_balanca.sql']) await ctx.db.query(sql(m));
     await ctx.db.query('INSERT INTO empresas (id) VALUES ($1), ($2)', [A, B]);
     l1 = (await ctx.db.query("INSERT INTO lojas (empresa_id, nome) VALUES ($1, 'Centro') RETURNING id", [A])).rows[0].id;
     l2 = (await ctx.db.query("INSERT INTO lojas (empresa_id, nome) VALUES ($1, 'Bairro') RETURNING id", [A])).rows[0].id;
@@ -104,5 +104,27 @@ describe('Varejo/supermercado (PostgreSQL)', { skip: pgDeTeste }, () => {
     assert.deepEqual(r.etiquetas.map((e) => [e.nome, e.preco, e.precoDe]), [['Feijão 1kg', 7.49, 8.99], ['Arroz 5kg', 30, null]]);
     assert.equal((await varejo.listarEtiquetas(ctx.db, A, { lojaId: l1 })).length, 2);
     void promo;
+  });
+  test('balança: etiqueta EAN-13 de preço ou de peso acha o item pelo PLU; exportação de PLU', async () => {
+    const ean = (doze) => { const soma = [...doze].reduce((t, d, i) => t + Number(d) * (i % 2 ? 3 : 1), 0); return `${doze}${(10 - (soma % 10)) % 10}` };
+    assert.equal(varejo.ean13Valido(ean('789100000001')), true);
+    assert.equal(varejo.ean13Valido(`${ean('789100000001').slice(0, 12)}9`), ean('789100000001').endsWith('9'));
+    const queijo = await est.criarItem(ctx.db, A, { nome: 'Queijo minas', unidade: 'KG', sku: 'queijo' });
+    await varejo.configurarProduto(ctx.db, A, queijo.id, { precoBase: 40, plu: '123', pesavel: true });
+    // preço total: 2 + PLU 0123 + 0 + 001250 (R$ 12,50) + DV
+    const porPreco = await varejo.buscarPorCodigo(ctx.db, A, ean('201230001250'), { lojaId: l1 });
+    assert.equal(porPreco.id, queijo.id);
+    assert.deepEqual([porPreco.etiquetaBalanca.total, porPreco.etiquetaBalanca.quantidade], [12.5, 0.313]);
+    await assert.rejects(() => varejo.buscarPorCodigo(ctx.db, A, '2012300012508'), (e) => e.status === 404, 'dígito verificador errado');
+    // balança que imprime o peso em gramas
+    await varejo.salvarConfigBalanca(ctx.db, A, { tipoValor: 'peso', digitosPlu: 4, digitosValor: 6 });
+    const porPeso = await varejo.buscarPorCodigo(ctx.db, A, ean('201230000750'), { lojaId: l1 });
+    assert.deepEqual([porPeso.etiquetaBalanca.quantidade, porPeso.etiquetaBalanca.total], [0.75, 30]);
+    await assert.rejects(() => varejo.salvarConfigBalanca(ctx.db, A, { prefixo: '2', digitosPlu: 6, digitosValor: 6 }), (e) => e.code === 'VALIDATION_ERROR');
+    await assert.rejects(() => varejo.buscarPorCodigo(ctx.db, B, ean('201230001250')), (e) => e.status === 404, 'outra empresa não acha');
+    const { arquivo, itens } = await varejo.exportarPluBalanca(ctx.db, A);
+    assert.equal(itens, 1);
+    assert.match(arquivo, /^PLU;DESCRICAO;PRECO_KG/);
+    assert.match(arquivo, /0123;QUEIJO MINAS;40\.00/);
   });
 });

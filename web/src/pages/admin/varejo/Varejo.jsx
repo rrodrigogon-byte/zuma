@@ -11,7 +11,7 @@ import '../dino/dino-admin.css'
 // Supermercado/varejo sobre o estoque único: preço por unidade, promoções, lotes e validade,
 // etiquetas de gôndola e transferências entre unidades.
 const BASE = '/api/admin/varejo'
-const ABAS = [['produtos', 'Produtos e preços'], ['promocoes', 'Promoções'], ['lotes', 'Lotes e validade'], ['etiquetas', 'Etiquetas'], ['transferencias', 'Transferências']]
+const ABAS = [['produtos', 'Produtos e preços'], ['promocoes', 'Promoções'], ['lotes', 'Lotes e validade'], ['etiquetas', 'Etiquetas'], ['transferencias', 'Transferências'], ['balanca', 'Balança']]
 const TIPO_PROMO = { percentual: '% de desconto', valor_fixo: 'R$ de desconto', preco_fixo: 'Preço fixo', leve_pague: 'Leve X, pague Y' }
 const STATUS_PROMO = { rascunho: ['Rascunho', 'muted'], ativa: ['Ativa', 'success'], pausada: ['Pausada', 'warning'], encerrada: ['Encerrada', 'muted'] }
 const STATUS_TRANSF = { rascunho: ['Rascunho', 'muted'], em_transito: ['Em trânsito', 'info'], recebida: ['Recebida', 'success'], recebida_parcial: ['Recebida em parte', 'warning'], cancelada: ['Cancelada', 'muted'] }
@@ -54,6 +54,7 @@ export default function Varejo({ abaInicial = 'produtos' }) {
     {aba === 'promocoes' && <Promocoes produtos={produtos} unidade={unidade} qs={qs} acao={acao} onMudou={carregarProdutos} />}
     {aba === 'lotes' && <Lotes produtos={produtos} unidade={unidade} qs={qs} acao={acao} />}
     {aba === 'etiquetas' && <Etiquetas produtos={visiveis} qs={qs} unidade={unidade} acao={acao} />}
+    {aba === 'balanca' && <Balanca qs={qs} acao={acao} />}
     {aba === 'transferencias' && <Transferencias produtos={produtos} lojas={lojas} unidade={unidade} qs={qs} acao={acao} nomeLoja={nomeLoja} onMudou={carregarProdutos} />}
   </div>
 }
@@ -239,5 +240,38 @@ function Transferencias({ produtos, lojas, unidade, qs, acao, nomeLoja, onMudou 
         <p className="dadm-muted">O que não chegou é registrado como perda da unidade de origem (aparece no relatório de perdas).</p>
       </div>}
     </Dialog>
+  </section>
+}
+
+/** Balança: como a etiqueta é montada (para o caixa ler o código) e o arquivo de PLU para carregar nela. */
+function Balanca({ qs, acao }) {
+  const [cfg, setCfg] = useState(null)
+  const [codigo, setCodigo] = useState('')
+  const [lido, setLido] = useState(null)
+  useEffect(() => { api.get(`${BASE}/balanca/config`).then(setCfg).catch(() => setCfg(null)) }, [])
+  async function salvar(e) { e.preventDefault(); const r = await acao(() => api.put(`${BASE}/balanca/config`, cfg), 'Configuração da balança salva.'); if (r && r !== true) setCfg(r) }
+  async function testar(e) { e.preventDefault(); setLido(null); const r = await acao(() => api.get(`${BASE}/produtos/codigo/${encodeURIComponent(codigo.trim())}${qs()}`)); if (r && r !== true) setLido(r) }
+  async function exportar() {
+    try {
+      const blob = await api.blob(`${BASE}/balanca/exportar${qs()}`)
+      const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = 'plu-balanca.csv'; a.click(); URL.revokeObjectURL(url)
+    } catch (e) { await acao(() => Promise.reject(e)) }
+  }
+  if (!cfg) return <p className="dadm-muted">Carregando…</p>
+  return <section className="dadm-card" style={{ display: 'grid', gap: 14 }}>
+    <h2>Etiqueta da balança</h2>
+    <p className="dadm-muted">Código EAN-13 que a balança imprime: prefixo, PLU do produto e o valor (preço total ou peso) antes do dígito verificador. Confira no manual da balança (Toledo, Filizola, Urano…).</p>
+    <form onSubmit={salvar} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10 }}>
+      <label className="c360-field">Prefixo<input className="c360-input" value={cfg.prefixo} maxLength={2} onChange={(e) => setCfg({ ...cfg, prefixo: e.target.value })} /></label>
+      <label className="c360-field">Dígitos do PLU<select className="c360-input" value={cfg.digitosPlu} onChange={(e) => setCfg({ ...cfg, digitosPlu: Number(e.target.value) })}>{[4, 5, 6].map((n) => <option key={n}>{n}</option>)}</select></label>
+      <label className="c360-field">Dígitos do valor<select className="c360-input" value={cfg.digitosValor} onChange={(e) => setCfg({ ...cfg, digitosValor: Number(e.target.value) })}>{[4, 5, 6].map((n) => <option key={n}>{n}</option>)}</select></label>
+      <label className="c360-field">O valor é<select className="c360-input" value={cfg.tipoValor} onChange={(e) => setCfg({ ...cfg, tipoValor: e.target.value })}><option value="preco">Preço total (centavos)</option><option value="peso">Peso (gramas)</option></select></label>
+      <label className="c360-field">Validade (dias, opcional)<input className="c360-input" inputMode="numeric" value={cfg.validadeDias ?? ''} onChange={(e) => setCfg({ ...cfg, validadeDias: e.target.value })} /></label>
+      <div className="dadm-actions" style={{ alignSelf: 'end' }}><button type="submit" className="c360-btn primary">Salvar</button></div>
+    </form>
+    <form onSubmit={testar} className="dadm-filters"><input className="c360-input" aria-label="Código da etiqueta" placeholder="Leia ou digite um código para testar" value={codigo} onChange={(e) => setCodigo(e.target.value)} /><button type="submit" className="c360-btn ghost">Testar leitura</button></form>
+    {lido && <p className="dadm-note"><strong>{lido.nome}</strong>{lido.etiquetaBalanca ? ` · ${num(lido.etiquetaBalanca.quantidade)} ${lido.unidade} · total ${money(lido.etiquetaBalanca.total)}` : ' · código normal (não é etiqueta de balança)'}</p>}
+    <div className="dadm-actions"><button type="button" className="c360-btn ghost" onClick={exportar}>Exportar PLU para a balança (CSV)</button>
+      <span className="dadm-muted">Só produtos marcados como pesáveis, com PLU e preço.</span></div>
   </section>
 }

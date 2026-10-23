@@ -97,5 +97,6 @@
  "096_varejo_supermercado.sql": "0940d6cd8ea349ce9dc373c2362369e5fd3768d1c2a7685d5d3f0542163b317b",
  "097_pdv_offline_unidade_no_razao.sql": "8969c49ce470c5228538cbff556f2458154765f4b5ba7597e785226601e13065",
  "098_financeiro_ajustes_auditoria.sql": "d4e78140c8cde65c166b6d1537da14c099feac7ea92efa2d8678cd5a6b618d0b",
- "099_pdv_offline_impressao.sql": "4fbbf924251b8b6199b47e2550032ead57c303c62eb0f49b21707cdfe673da3d"
+ "099_pdv_offline_impressao.sql": "4fbbf924251b8b6199b47e2550032ead57c303c62eb0f49b21707cdfe673da3d",
+ "101_varejo_balanca.sql": "6d9278c9fbe369bdfb1fc26e5efab29e2cc08313f8891382f714787cf46296cb"
 }
