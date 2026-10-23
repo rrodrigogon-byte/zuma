@@ -44,3 +44,39 @@ O schema atual não comprova afinidade cliente–loja para campanhas CRM. Portan
 ## Entrega e validação
 
 O PR #399 permanece o fluxo de promoção para `fix/kytto-comandas-pdv-20260808`. Após rebase em `4aee66b4`, o upstream que fixa o escopo Dino por host foi preservado. Com a barreira CRM, 219 testes focados passaram, `npm run build` passou e sintaxe/diff passaram. A suíte Node integral teve 1.751 aprovados, oito falhas exclusivamente por `initdb`/PostgreSQL 16 local ausente e 85 skipped. A reauditoria read-only confirmou que campanha falha antes de ler audiência; replay idempotente de campanha já executada retorna apenas status/contagem escopados e não gera novo envio. O preDeploy Render observado em 23/10/2026 concluiu com 67 migrations existentes, 0 novas e corte de dados explicitamente pulado. Este PR acrescenta 085, ainda não aplicada nem validada em PostgreSQL real; o próximo preDeploy deve confirmar 68 migrations e sucesso antes do start. A branch está em processo de promoção autorizado pelo usuário, mas nenhum deploy novo deve ser declarado até Render terminar Live e health responder.
+
+
+# Adendo — UX e acesso aos indicadores do Dashboard Dino (23/10/2026)
+
+## Objetivo
+
+Melhorar a leitura do Dashboard Dino e tornar todos os indicadores estratégicos acessíveis a partir da própria tela, sem obrigar o gestor a procurar a aba correta no menu lateral.
+
+## Decisões de UX
+
+A tela seguirá uma hierarquia executiva em três níveis: contexto e período no cabeçalho; acesso rápido por temas logo antes dos KPIs; indicadores e painéis detalhados em blocos com ação explícita. O grid atual de seis KPIs comprimidos será reorganizado para três colunas em desktop, duas em tablet e uma em celular, aumentando a área de leitura sem remover informação.
+
+Será adicionada uma faixa de atalhos com links diretos para Relatórios/BI, Agenda, Clientes, Serviços, Revenda/Estoque, Planos e Equipe. Cada KPI manterá seu cartão inteiro como alvo de navegação, com texto de ação, foco visível e rótulo acessível. Cards secundários, gráficos, agenda, canais, mix estratégico e blocos de origem terão ação no cabeçalho ou no item correspondente.
+
+Os destinos usarão as rotas e abas já existentes do ERP; não serão criadas telas falsas nem links para módulos sem implementação. Quando o indicador não possui detalhamento operacional próprio, o link abrirá Relatórios de gestão ou BI & Analytics, onde a origem e a cobertura são explicadas. Conversão, mix não classificado, histórico Avec e MRR unitário permanecerão explicitamente agregados ou indisponíveis quando a fonte não comprovar um detalhe.
+
+## Implementação
+
+- `DinoBusinessDashboard.jsx`: centralizar mapa de destinos, converter KPIs em links semânticos, adicionar a faixa de acesso rápido e ações nos cabeçalhos dos painéis; preservar o callback `onOpenTab` para compatibilidade do ERP.
+- `dino-dashboard.css`: melhorar grid, espaçamento, estados hover/focus, faixa de atalhos e responsividade.
+- `StrategicRevenueMix.jsx`: receber destinos dos itens e exibir acesso ao detalhamento de serviços, produtos, planos e relatório consolidado.
+- `strategic-revenue-mix.css`: diferenciar itens clicáveis, rodapé de governança e ações.
+- `BIBarbearia.jsx`: passar o destino de seção correto ao componente compartilhado, mantendo query string e exportação.
+- Validação: build web, testes Node mandatórios, teste existente de exportação do BI, sintaxe e diff.
+
+## Critérios de entrega
+
+A tela deve expor links visíveis para os principais indicadores e seus detalhes, permitir navegação por teclado, manter a leitura em 1280px, tablet e celular, não alterar os critérios financeiros do mix e não quebrar as rotas atuais do ERP/BI.
+
+## Implementação concluída
+
+O Dashboard Dino recebeu uma faixa de acesso rápido, KPIs clicáveis, cards operacionais com destinos separados e ações em cada painel analítico. O layout passa a usar três colunas para KPIs em desktop, duas em tablet e uma em celular, com foco visível, rótulos acessíveis e feedback de atualização. A agenda, canais, atividade recente e Histórico Avec também conduzem à fonte operacional ou ao recorte analítico correto.
+
+Os links para Relatórios de gestão passam `de`, `até` e `secao`, preservando o mesmo intervalo do KPI de origem. O endpoint de analytics aceita essa janela explícita e o BI compartilha o mix estratégico inclusive em recortes personalizados. O mix continua excluindo receitas não itemizadas das fatias; quando pagamentos legados de planos não podem ser atribuídos à unidade, o cartão mostra “Cobertura indisponível” e não oferece um falso zero nem um detalhe inexistente. O destino de planos, quando coberto, é o módulo real de Planos e assinaturas.
+
+Também foi corrigido o fallback de estoque Commerce para a aba Catálogo, pois `tab=inventory` não era um alias de rota suportado. A validação inclui build Vite, `dino-dashboard.test.js` (10 casos), `server-dino-admin.test.js`, exportação de BI (3 casos) e `git diff --check`; a suíte Node integral mantém somente as oito falhas ambientais de PostgreSQL real sem `initdb`.

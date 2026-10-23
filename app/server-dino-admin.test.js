@@ -185,6 +185,11 @@ test('admin da empresa: isolamento, guardas legados, BI, cliente automático e W
     assert.deepEqual(painel.body.strategicMix.items.map((item) => item.id), ['services', 'products', 'plans']);
     assert.equal(painel.body.strategicMix.planPaymentsAvailable, false, 'uma unidade não recebe pagamentos de planos legados sem lojaId');
     assert.match(painel.body.strategicMix.planPaymentsReason, /não identificam a unidade ativa/);
+    assert.equal(painel.body.strategicMix.items.find((item) => item.id === 'plans').available, false, 'indisponibilidade de escopo não é exibida como receita zero');
+    const painelCustomizado = await request(base, '/api/admin/barbearia/analytics?inicio=2030-06-11&fim=2030-06-11', { headers: A });
+    assert.equal(painelCustomizado.response.status, 200, 'analytics aceita o mesmo intervalo explícito do BI');
+    assert.equal(painelCustomizado.body.period.days, 1);
+    assert.match(painelCustomizado.body.period.from, /^2030-06-11T04:00:00\.000Z$/);
 
     // ── Módulos globais legados bloqueados para usuários de empresa ──
     const legadoA = await request(base, '/api/admin/financeiro/lancamentos', { headers: A });

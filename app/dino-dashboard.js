@@ -235,6 +235,7 @@ function strategicRevenueMix(input, window, consolidatedRevenue) {
     { id: 'products', label: 'Produtos', description: 'Revenda direta e itens de produto em comandas pagas' },
     { id: 'plans', label: 'Planos e pacotes', description: 'Ciclos de assinatura com pagamento registrado' },
   ];
+  const planPaymentsAvailable = input.subscriptionPaymentsAvailable !== false;
   const total = [...totals.values()].reduce((sum, item) => sum + item.value, 0);
   const operationalItemized = num(totals.get('services')?.value) + num(totals.get('products')?.value);
   const unclassifiedConsolidatedRevenue = Math.max(0, num(consolidatedRevenue) - operationalItemized);
@@ -243,18 +244,21 @@ function strategicRevenueMix(input, window, consolidatedRevenue) {
     items: definitions.map((definition) => {
       const item = totals.get(definition.id);
       const value = money(item?.value || 0);
+      const available = definition.id !== 'plans' || planPaymentsAvailable;
       return {
         ...definition,
         value,
         records: item?.records || 0,
-        percentage: total > 0 ? Number(((value / total) * 100).toFixed(1)) : 0,
+        percentage: available && total > 0 ? Number(((value / total) * 100).toFixed(1)) : 0,
+        available,
+        coverageReason: available ? null : (input.subscriptionPaymentsReason || 'Os pagamentos de planos não estão disponíveis neste escopo.'),
       };
     }),
     operationalItemizedRevenue: money(operationalItemized),
     consolidatedRevenue: money(consolidatedRevenue),
     unclassifiedConsolidatedRevenue: money(unclassifiedConsolidatedRevenue),
     reconciliationDelta: money(num(consolidatedRevenue) - operationalItemized),
-    planPaymentsAvailable: input.subscriptionPaymentsAvailable !== false,
+    planPaymentsAvailable,
     planPaymentsReason: input.subscriptionPaymentsReason || null,
     note: 'A base percentual reúne apenas valores com classificação comercial rastreável. Histórico financeiro, e-commerce sem itemização e ajustes não são redistribuídos entre as categorias.',
   };
@@ -296,7 +300,9 @@ function activityFeed(input, now) {
 
 export function buildDinoDashboardAnalytics(input = {}, options = {}) {
   const now = dateValue(options.now) || new Date();
-  const window = dashboardPeriod(options.period, now, options.timeZone || TIME_ZONE);
+  // O BI pode fornecer uma janela civil explícita; assim, cards e mix usam o
+  // mesmo intervalo de um relatório customizado, inclusive na comparação.
+  const window = options.window || dashboardPeriod(options.period, now, options.timeZone || TIME_ZONE);
   const previousWindow = { ...window, fromDate: window.previousFromDate, toDate: window.previousToDate };
   const historicalAvec = historicalAvecSummary(input, window);
   const historicalFinance = historicalFinanceSummary(input, window);

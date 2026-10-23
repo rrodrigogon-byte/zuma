@@ -32,3 +32,15 @@
 - Validação final da barreira CRM na base `4aee66b4`: **219/219** testes focados passaram, `npm run build` passou, sintaxe Node e `git diff --check` passaram. A suíte Node integral registrou **1.751 aprovados**, **8 falhas ambientais** em testes PostgreSQL real por `initdb` ausente e **85 skipped**; nenhum banco foi alterado.
 - Reauditoria read-only confirmou que audiência, preview, envio normal e consentimento falham antes de ler clientes; replay idempotente de campanha já não-rascunho retorna somente status/contagem scoped sem consultar audiência nem criar novo envio. `SAIR` continua global. Não houve execução real de DDL 085; o índice pode fazer scan/aguardar locks no preDeploy.
 - PR draft [#399](https://github.com/rrodrigogon-byte/agro-open/pull/399) segue no fluxo obrigatório para a branch de produção. Antes das mudanças locais, GitHub reportou `CLEAN/MERGEABLE` e nenhum check; atualizar head e validar estado depois do commit. O usuário autorizou deploy completo; ainda não houve merge nem novo deploy. O preDeploy atual tem evidência de cutover pulado, mas o novo deploy e a aplicação de 085 precisam ser confirmados no Render antes de declarar sucesso.
+
+
+## Melhoria de UX e links dos indicadores — 23/10/2026
+
+- [x] Adicionada uma faixa de acesso rápido no Dashboard Dino com links visíveis para BI/Relatórios, Agenda, Clientes, Serviços, Revenda/Estoque, Planos, Equipe e Commerce.
+- [x] Reorganizado o grid dos seis KPIs para três colunas em desktop, duas em tablet e uma em celular, mantendo período, tendência, valor e texto de ação.
+- [x] Cada KPI principal abre seu detalhe coerente: faturamento, resultado e ticket em Relatórios; clientes em Clientes; agendamentos em Agenda; conversão no BI com cobertura explícita quando o tracking estiver indisponível.
+- [x] Adicionado acesso aos detalhes nos cards de contas a receber, estoque baixo separado por Revenda/Commerce, MRR e Histórico Avec.
+- [x] Adicionadas ações aos painéis de faturamento diário, pagamentos, categorias, produtos/serviços, funil, horários, canais, agenda e atividade.
+- [x] Adicionados links nos itens e no rodapé do Mix estratégico para serviços, produtos, planos e relatório consolidado. Valores não classificados continuam fora das fatias; planos fora de escopo agora exibem “Cobertura indisponível”, não receita zero.
+- [x] Preservada navegação atual do ERP, query strings do BI, exportação CSV e acessibilidade por teclado. Os deep-links de Relatórios carregam o mesmo intervalo `de`/`até` do indicador; o BI busca o mix também em recortes personalizados.
+- [x] Executados build web, testes Node focados/contrato e teste de exportação do BI. A suíte Node integral teve somente oito falhas ambientais conhecidas em PostgreSQL real por `initdb` ausente; PR pendente de criação contra `fix/kytto-comandas-pdv-20260808`.

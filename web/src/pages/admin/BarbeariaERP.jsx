@@ -1705,7 +1705,7 @@ export default function BarbeariaERP() {
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <button type="button" style={styles.primary} disabled={!commerceDisponivel} onClick={() => navigate(commerce?.links?.admin || '/admin/ecommerce')}>Abrir Commerce</button>
             <button type="button" style={styles.secondary} disabled={!commerceDisponivel} onClick={() => navigate(commerce?.links?.catalogo || '/admin/ecommerce?tab=catalog')}>Catálogo</button>
-            <button type="button" style={styles.secondary} disabled={!commerceDisponivel} onClick={() => navigate(commerce?.links?.estoque || '/admin/ecommerce?tab=inventory')}>Estoque</button>
+            <button type="button" style={styles.secondary} disabled={!commerceDisponivel} onClick={() => navigate(commerce?.links?.estoque || '/admin/ecommerce?tab=catalog')}>Estoque</button>
             <button type="button" style={styles.secondary} disabled={!commerceDisponivel} onClick={() => navigate(commerce?.links?.pedidos || '/admin/ecommerce?tab=orders')}>Pedidos</button>
             <button type="button" style={styles.secondary} disabled={!commerceDisponivel} onClick={() => navigate(commerce?.links?.pagamentos || '/admin/ecommerce?tab=payments')}>Pagamentos</button>
             <button type="button" style={styles.secondary} disabled={!commerceDisponivel} onClick={() => navigate(commerce?.links?.frete || '/admin/ecommerce?tab=shipping')}>Entrega</button>

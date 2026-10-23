@@ -3500,7 +3500,13 @@ app.get('/api/admin/barbearia/analytics', async (req, res) => {
     const empresaId = legacyEmpresaId(req);
     const lojaId = legacyLojaId(req);
     const now = new Date();
-    const range = dashboardPeriod(req.query?.period || 30, now);
+    const inicio = req.query?.inicio || req.query?.de;
+    const fim = req.query?.fim || req.query?.ate;
+    // Para deep-links do BI, a janela precisa ser idêntica à de seus cards.
+    // Sem datas explícitas, os atalhos 1/7/30/90 continuam no contrato atual.
+    const range = inicio || fim
+      ? dinoBi.biPeriod({ inicio, fim }, now)
+      : dashboardPeriod(req.query?.period || 30, now);
     let commerceAvailable = false;
     let commerceCurrent = {};
     let commercePrevious = {};
@@ -3573,7 +3579,7 @@ app.get('/api/admin/barbearia/analytics', async (req, res) => {
       profit: { current: profitFor(currentWindow, commerceCurrent), previous: profitFor(previousWindow, commercePrevious) },
       goals: await metasDoMes({ empresaId, now, barbershopInput, commerceContext, profitFor }),
       funnel: commerceAvailable ? { current: funnelSummary(empresaId, range.fromDate, range.toDate), previous: funnelSummary(empresaId, range.previousFromDate, range.previousToDate) } : null,
-    }, { period: range.days, now });
+    }, { period: range.days, now, window: range });
     res.json({ ok: true, ...analytics });
   } catch (error) {
     res.status(400).json({ error: error.message || 'Não foi possível carregar os indicadores.', code: error.code || 'DINO_ANALYTICS_UNAVAILABLE' });

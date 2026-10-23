@@ -79,9 +79,26 @@ test('dashboard omite pagamentos de planos no escopo de uma unidade sem identifi
   input.subscriptionPaymentsReason = 'Receitas de planos são exibidas apenas no agregado da empresa.';
   input.subscriptionPayments = [{ valor: 75, registradoEm: '2026-09-01T13:30:00.000Z' }];
   const result = buildDinoDashboardAnalytics(input, { period: 7, now });
-  assert.equal(result.strategicMix.items.find((item) => item.id === 'plans').value, 0);
+  const plans = result.strategicMix.items.find((item) => item.id === 'plans');
+  assert.equal(plans.value, 0);
+  assert.equal(plans.available, false, 'sem escopo de unidade, zero não significa ausência de receita');
+  assert.equal(plans.coverageReason, 'Receitas de planos são exibidas apenas no agregado da empresa.');
   assert.equal(result.strategicMix.planPaymentsAvailable, false);
   assert.equal(result.strategicMix.planPaymentsReason, 'Receitas de planos são exibidas apenas no agregado da empresa.');
+});
+
+test('dashboard respeita uma janela customizada já validada pelo BI', () => {
+  const window = {
+    days: 14, timeZone: 'America/Cuiaba',
+    fromDate: new Date('2026-08-19T04:00:00.000Z'), toDate: new Date('2026-09-02T04:00:00.000Z'),
+    previousFromDate: new Date('2026-08-05T04:00:00.000Z'), previousToDate: new Date('2026-08-19T04:00:00.000Z'),
+    from: '2026-08-19T04:00:00.000Z', to: '2026-09-02T04:00:00.000Z',
+    previousFrom: '2026-08-05T04:00:00.000Z', previousTo: '2026-08-19T04:00:00.000Z',
+  };
+  const result = buildDinoDashboardAnalytics(baseInput(), { now, window });
+  assert.equal(result.period.days, 14);
+  assert.equal(result.period.from, '2026-08-19T04:00:00.000Z');
+  assert.equal(result.kpis.find((item) => item.id === 'revenue').value, 400);
 });
 
 test('dashboard preenche os dias sem evento com zero e não inventa tendência', () => {
