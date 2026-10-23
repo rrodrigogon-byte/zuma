@@ -233,6 +233,7 @@ const NAV_DINO_GROUPS = [
       { to: '/admin/bi', icon: '↗', label: 'BI & Analytics' },
       { to: '/admin/barbearia-erp?area=gestao&tab=Desempenho+da+equipe', icon: '↗', label: 'Desempenho da equipe' },
       { to: '/admin/financeiro', icon: '◇', label: 'Financeiro' },
+      { to: '/admin/contas-pagar', icon: '◇', label: 'Contas a pagar', razao: true },
       { to: '/admin/contas-receber', icon: '◇', label: 'Contas a receber', razao: true },
       { to: '/admin/fechamento-diario', icon: '◇', label: 'Fechamento do dia', razao: true },
       { to: '/admin/cadastros-mestres', icon: '▤', label: 'Fornecedores e funcionários' },
@@ -296,6 +297,7 @@ export const NAV_CLUBE_GROUPS = [
     label: 'Gestão',
     items: [
       { to: '/admin/financeiro', icon: '💰', label: 'Financeiro' },
+      { to: '/admin/contas-pagar', icon: '🧾', label: 'Contas a Pagar', razao: true },
       { to: '/admin/contas-receber', icon: '🧾', label: 'Contas a Receber' },
       { to: '/admin/pagamentos', icon: '💳', label: 'Pagamentos (evento)' },
       { to: '/admin/notas', icon: '🧾', label: 'Notas Fiscais' },
@@ -364,6 +366,7 @@ const NAV_STALLONE_GROUPS = [
     items: [
       { to: '/admin/ecommerce?tab=reports', icon: '▤', label: 'Relatórios' },
       { to: '/admin/financeiro', icon: '◇', label: 'Financeiro' },
+      { to: '/admin/contas-pagar', icon: '◇', label: 'Contas a pagar', razao: true },
       { to: '/admin/contas-receber', icon: '◇', label: 'Contas a receber', razao: true },
       { to: '/admin/fechamento-diario', icon: '◇', label: 'Fechamento do dia', razao: true },
       { to: '/admin/cadastros-mestres', icon: '▤', label: 'Fornecedores e funcionários' },
@@ -402,7 +405,7 @@ const ROUTE_MODULES = [
   ['/admin/mesas', 'mesas'], ['/admin/reservas', 'mesas'], ['/admin/cardapio', 'cardapio'],
   ['/admin/estoque', 'estoque'], ['/admin/perdas-inventario', 'estoque'], ['/admin/fichas-tecnicas', 'estoque'],
   ['/admin/modificadores-combos', 'cardapio'], ['/admin/pagamentos', 'pagamentos'], ['/admin/notas', 'fiscal'],
-  ['/admin/cadastros-mestres', 'cadastros'], ['/admin/clientes', 'clientes'], ['/admin/contas-receber', 'financeiro'],
+  ['/admin/cadastros-mestres', 'cadastros'], ['/admin/clientes', 'clientes'], ['/admin/contas-receber', 'financeiro'], ['/admin/contas-pagar', 'financeiro'],
   ['/admin/fechamento-diario', 'financeiro'], ['/admin/cupons', 'pdv'], ['/admin/pdv-offline', 'pdv'],
   ['/admin/omnichannel', 'delivery'], ['/admin/erp', 'erp'], ['/admin/ecommerce', 'ecommerce'],
   ['/admin/supermercado', 'supermercado'], ['/admin/loja-moda', 'loja_moda'], ['/admin/barbearia-erp', 'barbearia'],

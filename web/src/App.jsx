@@ -296,6 +296,7 @@ export default function App() {
           <Route path="/admin/clientes-360/:ref" element={<Layout><Customer360 /></Layout>} />
           <Route path="/admin/cadastros-mestres" element={<Layout><CadastrosMestres /></Layout>} />
           <Route path="/admin/contas-receber" element={<Layout><FinanceiroAuto aba="receber" antigo={<ContasReceber />} /></Layout>} />
+          <Route path="/admin/contas-pagar" element={<Layout><FinanceiroAuto aba="pagar" antigo={<Navigate to="/admin/financeiro" replace />} /></Layout>} />
           <Route path="/admin/fechamento-diario" element={<Layout><FinanceiroAuto aba="fechamento" antigo={<FechamentoDiario />} /></Layout>} />
           <Route path="/admin/pdv-offline" element={<TenantAware tenant={<Layout><PDVOffline /></Layout>} legacy={<Layout><EmImplantacao modulo="PDV offline" /></Layout>} />} />
           <Route path="/admin/erp"            element={<Layout><ERP /></Layout>} />
