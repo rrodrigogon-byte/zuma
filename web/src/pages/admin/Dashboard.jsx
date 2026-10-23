@@ -4,6 +4,7 @@ import { api, fmtR, fmtDate } from '../../lib/api'
 import { useToast } from '../../hooks/useToast'
 import { useAuth } from '../../lib/auth'
 import { isDinoBrandContext } from '../../lib/brand'
+import { ehHostDino } from '../../lib/dominios-dino'
 import DinoBusinessDashboard from './DinoBusinessDashboard'
 
 const LINKS = [
@@ -728,7 +729,8 @@ const DINO_TAB_AREA = {
 
 export default function Dashboard() {
   const { empresaAtiva, lojaAtiva, user } = useAuth()
-  const isDino = isDinoBrandContext(empresaAtiva, user?.empresaAtiva, user?.empresa, user?.tenant)
+  const hostDino = typeof window !== 'undefined' && ehHostDino(window.location.hostname)
+  const isDino = hostDino || isDinoBrandContext(empresaAtiva, user?.empresaAtiva, user?.empresa, user?.tenant)
   const scopeKey = `${empresaAtiva?.id || 'empresa'}:${lojaAtiva?.id || 'todas'}`
   const navigate = useNavigate()
   const openDinoTab = (tab) => navigate(`/admin/barbearia-erp?area=${DINO_TAB_AREA[tab] || 'operacao'}&tab=${encodeURIComponent(tab)}`)

@@ -1,4 +1,5 @@
 import { deveEnfileirarOffline, enfileirarOperacao, prepararOperacao, sincronizarFila } from './offline-queue'
+import { scopeDinoAdminHeaders } from './dino-scope'
 export { fmtMoney } from './currency.js'
 
 function getToken() {
@@ -23,22 +24,22 @@ function getLojaAtivaId() {
   }
 }
 
-function authHeaders(extra = {}) {
+function authHeaders(extra = {}, path = '') {
   const token = getToken()
   const empresaId = getEmpresaAtivaId()
   const lojaId = getLojaAtivaId()
-  return {
+  return scopeDinoAdminHeaders(path, {
     'Content-Type': 'application/json',
     ...(token ? { Authorization: 'Bearer ' + token } : {}),
     ...(empresaId ? { 'X-Empresa-Id': empresaId } : {}),
     ...(lojaId ? { 'X-Loja-Id': lojaId } : {}),
     ...extra,
-  }
+  })
 }
 
 async function request(path, opts = {}) {
   const preparado = prepararOperacao(path, opts)
-  const headers = authHeaders(preparado.headers || {})
+  const headers = authHeaders(preparado.headers || {}, path)
   let res
   try {
     if (!navigator.onLine && deveEnfileirarOffline(path, preparado)) return enfileirarOperacao(path, { ...preparado, headers })
