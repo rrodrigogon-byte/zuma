@@ -32,10 +32,12 @@ test('normalizador aceita formas top-level BEGIN WORK e START TRANSACTION', () =
   assert.match(normalized, /SELECT 2;/);
 });
 
-test('runner preserva 084 e registra 085 como próxima migration', () => {
-  assert.equal(migrationFiles.at(-1), '085_ai_automation_log_store_scope.sql');
-  assert.equal(migrationFiles.at(-2), '084_dino_forecast_ai.sql');
-  assert.equal(migrationFiles.at(-3), '083_dino_operational_foundations.sql');
+test('runner preserva 084 e registra 085 logo depois; as migrations posteriores (090+) seguem em ordem', () => {
+  const i = migrationFiles.indexOf('084_dino_forecast_ai.sql');
+  assert.ok(i > 0);
+  assert.equal(migrationFiles[i - 1], '083_dino_operational_foundations.sql');
+  assert.equal(migrationFiles[i + 1], '085_ai_automation_log_store_scope.sql');
+  assert.deepEqual([...migrationFiles].sort(), migrationFiles);
 });
 
 test('migration 083 contém as tabelas, constraints e índices críticos da fundação', () => {
@@ -135,8 +137,8 @@ test('runner usa o mesmo client para lock, controle, migrations, checksum e unlo
   };
   try {
     const result = await runCommerceSchemaMigrations({ db });
-    assert.equal(result.files.at(-1), '085_ai_automation_log_store_scope.sql');
-    assert.equal(result.applied.at(-1), '085_ai_automation_log_store_scope.sql');
+    assert.equal(result.files.at(-1), migrationFiles.at(-1));
+    assert.equal(result.applied.at(-1), migrationFiles.at(-1));
   } finally {
     if (hadDatabaseUrl) process.env.DATABASE_URL = previousDatabaseUrl;
     else delete process.env.DATABASE_URL;

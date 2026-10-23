@@ -40,6 +40,7 @@ import { extensaoIaClube } from './modules/clube/ia-agro-open.js';
 import { lerSociosTtc, importarAlunos } from './modules/clube/importar-legado.js';
 import { createA2AdminRouter } from './modules/a2/rotas.js';
 import { createUnidadesAdminRouter } from './modules/unidades/rotas.js';
+import { createRazaoAdminRouter, createRazaoPlataformaRouter } from './modules/razao/rotas.js';
 import { createBarAdminRouter } from './modules/bar/rotas-multiempresa.js';
 import * as barService from './modules/bar/servico.js';
 import { responderErro as responderErroBarra } from './modules/acesso/banco.js';
@@ -640,7 +641,7 @@ app.use('/api/admin/commerce', (req, res, next) => {
 });
 
 // Módulos de /api/admin que separam dados por empresa e podem ser usados por tenant.
-const TENANT_ADMIN_MODULES = new Set(['a2', 'bar', 'barbearia', 'commerce', 'commerce-session', 'usuarios', 'usuarios-diretorio', 'platform', 'fidelidade', 'login', 'auditoria', 'modificadores', 'combos', 'clube', 'unidades']);
+const TENANT_ADMIN_MODULES = new Set(['a2', 'bar', 'barbearia', 'commerce', 'commerce-session', 'usuarios', 'usuarios-diretorio', 'platform', 'fidelidade', 'login', 'auditoria', 'modificadores', 'combos', 'clube', 'unidades', 'razao']);
 
 // [kytto-clube] Kytto Clube & Academia (catraca, contrato digital, agenda, retenção, Wellhub/TotalPass).
 // Usa o pool do Commerce que já existe (não abre outro pool) e a mesma resolução de empresa e
@@ -708,11 +709,11 @@ function permissaoDasUnidades(req) {
   if (req.method !== 'GET') return 'settings.write';
   return /\/auditoria$/.test(caminho) ? 'reports.read' : 'customers.read';
 }
-// Quem tem a permissão só numa unidade (membership presa a uma loja) vê e edita só aquela
-// unidade e não cria unidades novas; quem tem a permissão na empresa toda vê todas.
-async function empresaDasUnidades(req) {
+// Escopo comercial de uma requisição: empresa autorizada e, quando a permissão da pessoa vale só
+// para uma unidade (membership presa a uma loja), essa unidade em `lojaRestrita`. Quem tem a
+// permissão na empresa toda recebe lojaRestrita = null.
+async function escopoComercial(req, permissao) {
   try {
-    const permissao = permissaoDasUnidades(req);
     const contexto = await requireCommercePermission(req, permissao);
     const todaEmpresa = await commerceDb.queryRead(
       `SELECT 1 FROM commerce_memberships m
@@ -728,6 +729,18 @@ async function empresaDasUnidades(req) {
     if (error?.name !== 'CommerceError') throw error;
     throw Object.assign(new Error(error.message), { status: CLUBE_STATUS_ESCOPO[error.code] || 403, code: error.code });
   }
+}
+// Unidades: quem só tem a permissão numa unidade vê e edita só aquela e não cria unidades.
+const empresaDasUnidades = (req) => escopoComercial(req, permissaoDasUnidades(req));
+// Financeiro JSON antigo da empresa (a barbearia ainda grava lá) para o razão ler.
+async function fonteJsonDoRazao(empresaId) {
+  const chaveLegada = legacyEmpresaIdFromCommerce(empresaId);
+  const store = db().financeiroKytto?.empresas?.[String(chaveLegada)];
+  if (!store || !store.lancamentos) return null;
+  const lojas = await commerceDb.queryRead('SELECT id FROM lojas WHERE empresa_id = $1', [empresaId]);
+  const mapaUnidades = Object.fromEntries(lojas.rows.map((l) => [l.id, l.id]));
+  if (empresaId === DINO_COMMERCE_EMPRESA_ID) mapaUnidades[DINO_LEGACY_LOJA_ID] = DINO_COMMERCE_LOJA_ID;
+  return { chaveLegada: String(chaveLegada), lancamentos: Object.values(store.lancamentos), mapaUnidades };
 }
 const BAR_DINHEIRO = /^\/api\/admin\/bar\/(?:caixa|vendas|comanda\/[^/]+\/(?:pagar|pagamento-parcial))(?:\/|$)/;
 const BAR_CONFIG = /^\/api\/admin\/bar\/(?:produtos|cardapio|mesas|estoque)(?:\/|$)/;
@@ -1214,6 +1227,9 @@ if(process.env.COMMERCE_CORE_ENABLED === '1'){
   }));
   // [kytto-unidades] Cadastro das unidades (lojas) da empresa ativa, no PostgreSQL.
   app.use('/api/admin/unidades', auth, requireStaff, createUnidadesAdminRouter({ db: clubeDb, empresaDaRequisicao: empresaDasUnidades }));
+  // [kytto-razao] Razão financeiro único (Financeiro, contas a pagar e a receber, DRE, fechamento).
+  app.use('/api/admin/razao', auth, requireStaff, createRazaoAdminRouter({ db: clubeDb, escopoDaRequisicao: escopoComercial, fonteJson: fonteJsonDoRazao, fuso: process.env.KYTTO_FUSO || 'America/Cuiaba' }));
+  app.use('/api/admin/platform/razao', auth, requirePlatformAdmin, createRazaoPlataformaRouter({ db: clubeDb, fonteJson: fonteJsonDoRazao }));
   // [kytto-bar] Bar, PDV, comandas, estoque fracionado, KDS e caixa por empresa.
   // O prefixo continua sob a trava /api/admin e a empresa é resolvida exclusivamente
   // pela membership SQL; nenhum empresaId do corpo da requisição é aceito.

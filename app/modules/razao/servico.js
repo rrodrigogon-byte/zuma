@@ -1,0 +1,601 @@
+// Razão financeiro único por empresa e unidade (migração 090).
+//
+// Regras:
+// - todo valor é por empresa; a unidade (loja_id) é opcional: NULL = "sem unidade", aparece no
+//   consolidado da empresa e pode ser atribuída depois;
+// - todo lançamento tem uma chave única por empresa: reprocessar a mesma fonte nunca duplica;
+// - lançamento automático (vindo de outro módulo) não muda de valor nem é cancelado aqui: a
+//   correção é um estorno, que fica registrado ao lado do original;
+// - datas do negócio (competência, vencimento, "mês", "hoje") seguem o fuso da empresa.
+import { randomUUID } from 'node:crypto';
+import { ErroDominio, exigirData, exigirTexto, exigirUuid, transacao } from '../acesso/banco.js';
+
+export const FUSO_PADRAO = 'America/Cuiaba';
+
+export const CATEGORIAS_PADRAO = {
+  receita: [
+    ['Serviços', 'receita_bruta'], ['Vendas de produtos', 'receita_bruta'], ['Bar e restaurante', 'receita_bruta'],
+    ['Mensalidades', 'receita_bruta'], ['Loja online', 'receita_bruta'], ['Contas de clientes', 'receita_bruta'],
+    ['Repasses de parceiros', 'receita_bruta'], ['Rendimentos', 'financeiro'], ['Outros', 'outros'],
+  ],
+  despesa: [
+    ['Compras de mercadoria', 'cmv'], ['Insumos', 'cmv'], ['Perdas e quebras', 'cmv'],
+    ['Salários e encargos', 'pessoal'], ['Comissões', 'pessoal'], ['Aluguel', 'operacional'],
+    ['Energia, água e internet', 'operacional'], ['Manutenção', 'operacional'], ['Marketing', 'operacional'],
+    ['Sistemas e assinaturas', 'operacional'], ['Taxas de cartão e Pix', 'deducao'], ['Estornos e devoluções', 'deducao'],
+    ['Impostos', 'impostos'], ['Juros e tarifas bancárias', 'financeiro'], ['Investimentos', 'investimento'], ['Outros', 'outros'],
+  ],
+};
+
+const STATUS = new Set(['pendente', 'pago', 'cancelado']);
+const NATUREZAS = new Set(['avulso', 'pagar', 'receber']);
+const MEIOS = new Set(['dinheiro', 'pix', 'credito', 'debito', 'boleto', 'transferencia', 'cheque', 'voucher', 'misto', 'outro']);
+const CONTRAPARTES = new Set(['cliente', 'fornecedor', 'funcionario', 'outro']);
+
+const dinheiro = (v) => Math.round(Number(v || 0) * 100) / 100;
+
+export function hojeNoFuso(agora = new Date(), fuso = FUSO_PADRAO) {
+  return new Date(agora).toLocaleDateString('en-CA', { timeZone: fuso });
+}
+
+function valorPositivo(valor, campo = 'valor') {
+  const n = Number(typeof valor === 'string' ? valor.replace(',', '.') : valor);
+  if (!Number.isFinite(n) || n <= 0 || n > 99_999_999) throw new ErroDominio('VALIDATION_ERROR', `${campo} deve ser maior que zero`);
+  return Math.round(n * 100) / 100;
+}
+
+function uuidOpcional(valor, campo) {
+  if (valor === undefined || valor === null || valor === '') return null;
+  return exigirUuid(valor, campo);
+}
+
+function textoOpcional(valor, max = 240) {
+  const t = String(valor ?? '').trim();
+  return t ? t.slice(0, max) : null;
+}
+
+function meioOpcional(valor) {
+  if (valor === undefined || valor === null || valor === '') return null;
+  const m = String(valor).trim().toLowerCase();
+  const aliases = { cartao: 'credito', cartao_credito: 'credito', credit_card: 'credito', debit_card: 'debito', cartao_debito: 'debito', cash: 'dinheiro', especie: 'dinheiro', ted: 'transferencia', doc: 'transferencia' };
+  const normal = aliases[m] || m;
+  return MEIOS.has(normal) ? normal : 'outro';
+}
+
+/** Escopo de leitura: { lojaId: uuid } filtra a unidade; { lojaId: 'sem' } só os sem unidade; nada = empresa toda. */
+function filtroUnidade(lojaId, valores) {
+  if (!lojaId || lojaId === 'todas') return '';
+  if (lojaId === 'sem') return ' AND l.loja_id IS NULL';
+  valores.push(exigirUuid(lojaId, 'unidade'));
+  return ` AND l.loja_id = $${valores.length}`;
+}
+
+export function dto(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    empresaId: row.empresa_id,
+    lojaId: row.loja_id || null,
+    tipo: row.tipo,
+    categoria: row.categoria,
+    centroCustoId: row.centro_custo_id || null,
+    descricao: row.descricao,
+    valor: Number(row.valor),
+    competencia: row.data_competencia instanceof Date ? row.data_competencia.toISOString().slice(0, 10) : String(row.data_competencia || '').slice(0, 10),
+    vencimento: row.vencimento instanceof Date ? row.vencimento.toISOString().slice(0, 10) : String(row.vencimento || '').slice(0, 10),
+    status: row.status,
+    pagoEm: row.pago_em ? new Date(row.pago_em).toISOString() : null,
+    meioPagamento: row.meio_pagamento || null,
+    natureza: row.natureza,
+    contraparteTipo: row.contraparte_tipo || null,
+    contraparteId: row.contraparte_id || null,
+    contraparteNome: row.contraparte_nome || null,
+    origem: row.origem,
+    origemId: row.origem_id || null,
+    automatico: row.automatico === true,
+    serieId: row.serie_id || null,
+    parcela: row.parcela || null,
+    parcelas: row.parcelas || null,
+    documento: row.documento || null,
+    observacao: row.observacao || null,
+    estornoDe: row.estorno_de || null,
+    criadoPor: row.criado_por || null,
+    canceladoEm: row.cancelado_em ? new Date(row.cancelado_em).toISOString() : null,
+    motivoCancelamento: row.motivo_cancelamento || null,
+    criadoEm: row.criado_em ? new Date(row.criado_em).toISOString() : null,
+  };
+}
+
+/** Garante as categorias padrão da empresa (idempotente). */
+export async function garantirCategorias(db, empresaId) {
+  const empresa = exigirUuid(empresaId, 'empresa');
+  const linhas = [];
+  const valores = [empresa];
+  for (const [tipo, lista] of Object.entries(CATEGORIAS_PADRAO)) {
+    for (const [nome, grupo] of lista) {
+      valores.push(tipo, nome, grupo);
+      linhas.push(`($1, $${valores.length - 2}, $${valores.length - 1}, $${valores.length})`);
+    }
+  }
+  await db.query(`INSERT INTO fin_categorias (empresa_id, tipo, nome, grupo_dre) VALUES ${linhas.join(', ')} ON CONFLICT (empresa_id, tipo, nome) DO NOTHING`, valores);
+}
+
+export async function listarCategorias(db, empresaId) {
+  await garantirCategorias(db, empresaId);
+  const r = await db.query('SELECT id, tipo, nome, grupo_dre, ativo FROM fin_categorias WHERE empresa_id = $1 AND ativo = true ORDER BY tipo, nome', [exigirUuid(empresaId, 'empresa')]);
+  const saida = { receita: [], despesa: [], grupos: {} };
+  for (const row of r.rows) { saida[row.tipo].push(row.nome); saida.grupos[`${row.tipo}:${row.nome}`] = row.grupo_dre; }
+  return saida;
+}
+
+export async function criarCategoria(db, empresaId, { tipo, nome, grupoDre = 'operacional' } = {}) {
+  const empresa = exigirUuid(empresaId, 'empresa');
+  if (!['receita', 'despesa'].includes(tipo)) throw new ErroDominio('VALIDATION_ERROR', 'tipo deve ser receita ou despesa');
+  const n = exigirTexto(nome, 'Nome da categoria', { min: 2, max: 80 });
+  const grupos = ['receita_bruta', 'deducao', 'cmv', 'operacional', 'pessoal', 'financeiro', 'impostos', 'investimento', 'outros'];
+  if (!grupos.includes(grupoDre)) throw new ErroDominio('VALIDATION_ERROR', 'grupo do DRE inválido');
+  await db.query('INSERT INTO fin_categorias (empresa_id, tipo, nome, grupo_dre) VALUES ($1, $2, $3, $4) ON CONFLICT (empresa_id, tipo, nome) DO UPDATE SET ativo = true, grupo_dre = EXCLUDED.grupo_dre', [empresa, tipo, n, grupoDre]);
+  return listarCategorias(db, empresa);
+}
+
+// ── centros de custo ─────────────────────────────────────────────────────────
+export async function listarCentros(db, empresaId) {
+  const r = await db.query('SELECT id, codigo, nome, ativo FROM fin_centros_custo WHERE empresa_id = $1 ORDER BY ativo DESC, codigo', [exigirUuid(empresaId, 'empresa')]);
+  return r.rows;
+}
+
+export async function salvarCentro(db, empresaId, entrada = {}, id = null) {
+  const empresa = exigirUuid(empresaId, 'empresa');
+  const nome = exigirTexto(entrada.nome, 'Nome do centro de custo', { min: 2, max: 120 });
+  const ativo = entrada.ativo === undefined ? true : entrada.ativo === true;
+  try {
+    if (id) {
+      const r = await db.query('UPDATE fin_centros_custo SET nome = $3, ativo = $4, atualizado_em = CURRENT_TIMESTAMP WHERE empresa_id = $1 AND id = $2 RETURNING id, codigo, nome, ativo', [empresa, exigirUuid(id, 'centro de custo'), nome, ativo]);
+      if (!r.rows[0]) throw new ErroDominio('NOT_FOUND', 'Centro de custo não encontrado', 404);
+      return r.rows[0];
+    }
+    const codigo = exigirTexto(entrada.codigo, 'Código', { min: 1, max: 30 }).toUpperCase();
+    if (!/^[A-Z0-9_.-]+$/.test(codigo)) throw new ErroDominio('VALIDATION_ERROR', 'Código aceita letras, números, ponto, hífen e sublinhado');
+    const r = await db.query('INSERT INTO fin_centros_custo (empresa_id, codigo, nome, ativo) VALUES ($1, $2, $3, $4) RETURNING id, codigo, nome, ativo', [empresa, codigo, nome, ativo]);
+    return r.rows[0];
+  } catch (error) {
+    if (error?.code === '23505') throw new ErroDominio('CONFLICT', 'Já existe um centro de custo com este código', 409);
+    throw error;
+  }
+}
+
+// ── escrita ─────────────────────────────────────────────────────────────────
+function prepararDados(empresa, dados, { fuso = FUSO_PADRAO, agora = new Date() } = {}) {
+  const tipo = String(dados.tipo || '').toLowerCase();
+  if (!['receita', 'despesa'].includes(tipo)) throw new ErroDominio('VALIDATION_ERROR', 'tipo deve ser receita ou despesa');
+  const descricao = exigirTexto(dados.descricao, 'Descrição', { min: 2, max: 240 });
+  const valor = valorPositivo(dados.valor);
+  const hoje = hojeNoFuso(agora, fuso);
+  const vencimento = dados.vencimento ? exigirData(String(dados.vencimento).slice(0, 10), 'Vencimento') : hoje;
+  const competencia = dados.competencia ? exigirData(String(dados.competencia).slice(0, 10), 'Competência') : vencimento;
+  const status = String(dados.status || 'pendente').toLowerCase();
+  if (!STATUS.has(status) || status === 'cancelado') throw new ErroDominio('VALIDATION_ERROR', 'situação deve ser pendente ou pago');
+  const natureza = String(dados.natureza || (status === 'pago' ? 'avulso' : tipo === 'receita' ? 'receber' : 'pagar')).toLowerCase();
+  if (!NATUREZAS.has(natureza)) throw new ErroDominio('VALIDATION_ERROR', 'natureza deve ser avulso, pagar ou receber');
+  const contraparteTipo = dados.contraparteTipo ? String(dados.contraparteTipo).toLowerCase() : null;
+  if (contraparteTipo && !CONTRAPARTES.has(contraparteTipo)) throw new ErroDominio('VALIDATION_ERROR', 'contraparte inválida');
+  let pagoEm = null;
+  if (status === 'pago') {
+    const informado = dados.pagoEm ? new Date(dados.pagoEm) : agora;
+    if (Number.isNaN(informado.getTime())) throw new ErroDominio('VALIDATION_ERROR', 'data de pagamento inválida');
+    pagoEm = informado;
+  }
+  return {
+    empresa_id: empresa,
+    loja_id: uuidOpcional(dados.lojaId, 'unidade'),
+    tipo,
+    categoria: textoOpcional(dados.categoria, 80) || 'Outros',
+    centro_custo_id: uuidOpcional(dados.centroCustoId, 'centro de custo'),
+    descricao,
+    valor,
+    data_competencia: competencia,
+    vencimento,
+    status,
+    pago_em: pagoEm,
+    meio_pagamento: meioOpcional(dados.meioPagamento),
+    natureza,
+    contraparte_tipo: contraparteTipo,
+    contraparte_id: uuidOpcional(dados.contraparteId, 'contraparte'),
+    contraparte_nome: textoOpcional(dados.contraparteNome, 240),
+    documento: textoOpcional(dados.documento, 80),
+    observacao: textoOpcional(dados.observacao ?? dados.obs, 2000),
+  };
+}
+
+const COLS = ['empresa_id', 'loja_id', 'tipo', 'categoria', 'centro_custo_id', 'descricao', 'valor', 'data_competencia', 'vencimento', 'status', 'pago_em',
+  'meio_pagamento', 'natureza', 'contraparte_tipo', 'contraparte_id', 'contraparte_nome', 'documento', 'observacao',
+  'origem', 'origem_id', 'chave', 'automatico', 'serie_id', 'parcela', 'parcelas', 'estorno_de', 'criado_por'];
+
+async function inserir(q, linha) {
+  const valores = COLS.map((c) => (linha[c] === undefined ? null : linha[c]));
+  const r = await q(
+    `INSERT INTO fin_lancamentos (${COLS.join(', ')}) VALUES (${COLS.map((_, i) => `$${i + 1}`).join(', ')})
+     ON CONFLICT (empresa_id, chave) DO NOTHING RETURNING *`,
+    valores,
+  );
+  if (r.rows[0]) return { row: r.rows[0], criado: true };
+  const existente = await q('SELECT * FROM fin_lancamentos WHERE empresa_id = $1 AND chave = $2', [linha.empresa_id, linha.chave]);
+  return { row: existente.rows[0], criado: false };
+}
+
+/**
+ * Lançamento vindo de outro módulo (atendimento, comanda, mensalidade, pedido, compra…).
+ * `chave` identifica o fato na fonte: a mesma chave nunca gera dois lançamentos.
+ */
+export async function registrarAutomatico(db, empresaId, dados, { chave, origem, origemId = null, fuso, agora } = {}) {
+  const empresa = exigirUuid(empresaId, 'empresa');
+  if (!chave || String(chave).length > 200) throw new ErroDominio('VALIDATION_ERROR', 'chave do lançamento automático é obrigatória');
+  const linha = { ...prepararDados(empresa, dados, { fuso, agora }), origem: String(origem || 'automatico').slice(0, 40), origem_id: origemId ? String(origemId).slice(0, 160) : null, chave: String(chave), automatico: true, criado_por: 'sistema' };
+  const r = await inserir((t, v) => db.query(t, v), linha);
+  return { lancamento: dto(r.row), criado: r.criado };
+}
+
+/** Lançamento manual, com recorrência mensal opcional (1 a 24 meses). */
+export async function criarManual(db, empresaId, dados = {}, { usuario = null, fuso, agora = new Date() } = {}) {
+  const empresa = exigirUuid(empresaId, 'empresa');
+  const base = prepararDados(empresa, dados, { fuso, agora });
+  const meses = dados.recorrencia?.meses === undefined && dados.meses === undefined ? 1 : Number(dados.recorrencia?.meses ?? dados.meses);
+  if (!Number.isInteger(meses) || meses < 1 || meses > 24) throw new ErroDominio('VALIDATION_ERROR', 'A recorrência vai de 1 a 24 meses');
+  const serieId = meses > 1 ? randomUUID() : null;
+  const criadoPor = textoOpcional(usuario, 180);
+  return transacao(db, async (q) => {
+    const criados = [];
+    for (let i = 0; i < meses; i += 1) {
+      const vencimento = i === 0 ? base.vencimento : somarMeses(base.vencimento, i);
+      const competencia = i === 0 ? base.data_competencia : somarMeses(base.data_competencia, i);
+      const pago = i === 0 && base.status === 'pago';
+      const linha = {
+        ...base,
+        vencimento,
+        data_competencia: competencia,
+        status: pago ? 'pago' : 'pendente',
+        pago_em: pago ? base.pago_em : null,
+        natureza: pago ? base.natureza : (base.natureza === 'avulso' ? (base.tipo === 'receita' ? 'receber' : 'pagar') : base.natureza),
+        descricao: serieId ? `${base.descricao} (${i + 1}/${meses})`.slice(0, 240) : base.descricao,
+        origem: 'manual', chave: `manual:${randomUUID()}`, automatico: false,
+        serie_id: serieId, parcela: serieId ? i + 1 : null, parcelas: serieId ? meses : null, criado_por: criadoPor,
+      };
+      const r = await inserir(q, linha);
+      criados.push(dto(r.row));
+    }
+    return criados;
+  });
+}
+
+/** Mesmo dia do mês seguinte; dia 31 vira o último dia do mês quando o mês é mais curto. */
+export function somarMeses(dataIso, meses) {
+  const [a, m, d] = String(dataIso).split('-').map(Number);
+  const alvo = new Date(Date.UTC(a, m - 1 + meses, 1));
+  const ultimo = new Date(Date.UTC(alvo.getUTCFullYear(), alvo.getUTCMonth() + 1, 0)).getUTCDate();
+  alvo.setUTCDate(Math.min(d, ultimo));
+  return alvo.toISOString().slice(0, 10);
+}
+
+async function travar(q, empresa, id) {
+  const r = await q('SELECT * FROM fin_lancamentos WHERE empresa_id = $1 AND id = $2 FOR UPDATE', [empresa, exigirUuid(id, 'lançamento')]);
+  if (!r.rows[0]) throw new ErroDominio('NOT_FOUND', 'Lançamento não encontrado nesta empresa', 404);
+  return r.rows[0];
+}
+
+function dataTexto(v) { return v instanceof Date ? v.toISOString().slice(0, 10) : String(v ?? '').slice(0, 10); }
+/** O pedido tenta mudar o que vem do módulo de origem (valor, datas, descrição, tipo)? */
+function alteraCampoDaFonte(atual, dados) {
+  if (dados.valor !== undefined && Math.abs(Number(dados.valor) - Number(atual.valor)) > 0.004) return true;
+  if (dados.descricao !== undefined && String(dados.descricao).trim() !== atual.descricao) return true;
+  if (dados.tipo !== undefined && dados.tipo !== atual.tipo) return true;
+  if (dados.vencimento !== undefined && String(dados.vencimento).slice(0, 10) !== dataTexto(atual.vencimento)) return true;
+  if (dados.competencia !== undefined && String(dados.competencia).slice(0, 10) !== dataTexto(atual.data_competencia)) return true;
+  return false;
+}
+
+/** Edição. Automático: só unidade, centro de custo, categoria, documento e observação. */
+export async function atualizar(db, empresaId, id, dados = {}, { fuso, agora = new Date() } = {}) {
+  const empresa = exigirUuid(empresaId, 'empresa');
+  return transacao(db, async (q) => {
+    const atual = await travar(q, empresa, id);
+    if (atual.status === 'cancelado') throw new ErroDominio('CANCELLED', 'Lançamento cancelado não pode ser editado', 409);
+    const sets = {};
+    if (dados.lojaId !== undefined) sets.loja_id = uuidOpcional(dados.lojaId, 'unidade');
+    if (dados.centroCustoId !== undefined) sets.centro_custo_id = uuidOpcional(dados.centroCustoId, 'centro de custo');
+    if (dados.categoria !== undefined) sets.categoria = textoOpcional(dados.categoria, 80) || 'Outros';
+    if (dados.documento !== undefined) sets.documento = textoOpcional(dados.documento, 80);
+    if (dados.observacao !== undefined || dados.obs !== undefined) sets.observacao = textoOpcional(dados.observacao ?? dados.obs, 2000);
+    if (!atual.automatico) {
+      if (dados.descricao !== undefined) sets.descricao = exigirTexto(dados.descricao, 'Descrição', { min: 2, max: 240 });
+      if (dados.valor !== undefined) sets.valor = valorPositivo(dados.valor);
+      if (dados.vencimento !== undefined) sets.vencimento = exigirData(String(dados.vencimento).slice(0, 10), 'Vencimento');
+      if (dados.competencia !== undefined) sets.data_competencia = exigirData(String(dados.competencia).slice(0, 10), 'Competência');
+      if (dados.contraparteNome !== undefined) sets.contraparte_nome = textoOpcional(dados.contraparteNome, 240);
+      if (dados.meioPagamento !== undefined) sets.meio_pagamento = meioOpcional(dados.meioPagamento);
+    } else if (alteraCampoDaFonte(atual, dados)) {
+      throw new ErroDominio('AUTOMATIC_ENTRY', 'Lançamento automático: valor, data e descrição vêm do módulo de origem. Use estorno para corrigir.', 409);
+    }
+    if (dados.status !== undefined && dados.status !== atual.status) {
+      if (dados.status === 'pago') { sets.status = 'pago'; sets.pago_em = dados.pagoEm ? new Date(dados.pagoEm) : agora; sets.meio_pagamento = meioOpcional(dados.meioPagamento) || atual.meio_pagamento; }
+      else if (dados.status === 'pendente') {
+        if (atual.automatico) throw new ErroDominio('AUTOMATIC_ENTRY', 'Lançamento automático pago não volta a pendente; use estorno.', 409);
+        sets.status = 'pendente'; sets.pago_em = null;
+      } else throw new ErroDominio('VALIDATION_ERROR', 'Para cancelar, use a ação de cancelar');
+    }
+    const campos = Object.keys(sets);
+    if (!campos.length) return dto(atual);
+    const r = await q(
+      `UPDATE fin_lancamentos SET ${campos.map((c, i) => `${c} = $${i + 3}`).join(', ')}, atualizado_em = CURRENT_TIMESTAMP WHERE empresa_id = $1 AND id = $2 RETURNING *`,
+      [empresa, atual.id, ...campos.map((c) => sets[c])],
+    );
+    return dto(r.rows[0]);
+  });
+}
+
+/** Baixa: marca como pago (recebido ou pago ao fornecedor). */
+export function baixar(db, empresaId, id, { pagoEm, meioPagamento } = {}, opcoes = {}) {
+  return atualizar(db, empresaId, id, { status: 'pago', pagoEm, meioPagamento }, opcoes);
+}
+
+/** Cancelamento de lançamento manual (com motivo). Automático não se cancela: estorna-se. */
+export async function cancelar(db, empresaId, id, { usuario, motivo } = {}) {
+  const empresa = exigirUuid(empresaId, 'empresa');
+  return transacao(db, async (q) => {
+    const atual = await travar(q, empresa, id);
+    if (atual.status === 'cancelado') return dto(atual);
+    if (atual.automatico) throw new ErroDominio('AUTOMATIC_ENTRY', 'Lançamento automático não é cancelado; use estorno.', 409);
+    const r = await q(
+      `UPDATE fin_lancamentos SET status = 'cancelado', pago_em = NULL, cancelado_em = CURRENT_TIMESTAMP, cancelado_por = $3, motivo_cancelamento = $4, atualizado_em = CURRENT_TIMESTAMP
+        WHERE empresa_id = $1 AND id = $2 RETURNING *`,
+      [empresa, atual.id, textoOpcional(usuario, 180) || 'gestor', textoOpcional(motivo, 240)],
+    );
+    return dto(r.rows[0]);
+  });
+}
+
+/** Cancela as parcelas pendentes de uma série (recorrência), mantendo as pagas. */
+export async function cancelarSerie(db, empresaId, serieId, { usuario, motivo } = {}) {
+  const empresa = exigirUuid(empresaId, 'empresa');
+  const r = await db.query(
+    `UPDATE fin_lancamentos SET status = 'cancelado', cancelado_em = CURRENT_TIMESTAMP, cancelado_por = $3, motivo_cancelamento = $4, atualizado_em = CURRENT_TIMESTAMP
+      WHERE empresa_id = $1 AND serie_id = $2 AND status = 'pendente' AND automatico = false RETURNING id`,
+    [empresa, exigirUuid(serieId, 'série'), textoOpcional(usuario, 180) || 'gestor', textoOpcional(motivo, 240) || 'série cancelada'],
+  );
+  return { cancelados: r.rows.length };
+}
+
+/**
+ * Estorno: cria o lançamento oposto, ligado ao original. Serve para corrigir automático pago
+ * (devolução de pedido, comanda paga errado). Um lançamento só tem um estorno.
+ */
+export async function estornar(db, empresaId, id, { usuario, motivo, agora = new Date(), fuso } = {}) {
+  const empresa = exigirUuid(empresaId, 'empresa');
+  const razao = exigirTexto(motivo, 'Motivo do estorno', { min: 3, max: 240 });
+  return transacao(db, async (q) => {
+    const original = await travar(q, empresa, id);
+    if (original.status !== 'pago') throw new ErroDominio('NOT_PAID', 'Só lançamento pago tem estorno; pendente se cancela.', 409);
+    if (original.estorno_de) throw new ErroDominio('IS_REVERSAL', 'Este lançamento já é um estorno.', 409);
+    const hoje = hojeNoFuso(agora, fuso);
+    const linha = {
+      empresa_id: empresa, loja_id: original.loja_id, tipo: original.tipo === 'receita' ? 'despesa' : 'receita',
+      categoria: original.tipo === 'receita' ? 'Estornos e devoluções' : original.categoria, centro_custo_id: original.centro_custo_id,
+      descricao: `Estorno: ${original.descricao}`.slice(0, 240), valor: original.valor, data_competencia: hoje, vencimento: hoje,
+      status: 'pago', pago_em: agora, meio_pagamento: original.meio_pagamento, natureza: 'avulso',
+      contraparte_tipo: original.contraparte_tipo, contraparte_id: original.contraparte_id, contraparte_nome: original.contraparte_nome,
+      origem: 'estorno', origem_id: original.id, chave: `estorno:${original.id}`, automatico: original.automatico, estorno_de: original.id,
+      observacao: razao, criado_por: textoOpcional(usuario, 180) || 'gestor',
+    };
+    const r = await inserir(q, linha);
+    if (!r.criado) throw new ErroDominio('ALREADY_REVERSED', 'Este lançamento já foi estornado.', 409);
+    return dto(r.row);
+  });
+}
+
+// ── leitura ─────────────────────────────────────────────────────────────────
+export async function listar(db, empresaId, filtros = {}) {
+  const empresa = exigirUuid(empresaId, 'empresa');
+  const v = [empresa];
+  let sql = 'SELECT l.* FROM fin_lancamentos l WHERE l.empresa_id = $1';
+  sql += filtroUnidade(filtros.lojaId, v);
+  if (filtros.tipo && ['receita', 'despesa'].includes(filtros.tipo)) { v.push(filtros.tipo); sql += ` AND l.tipo = $${v.length}`; }
+  if (filtros.status && STATUS.has(filtros.status)) { v.push(filtros.status); sql += ` AND l.status = $${v.length}`; }
+  if (filtros.natureza && NATUREZAS.has(filtros.natureza)) { v.push(filtros.natureza); sql += ` AND l.natureza = $${v.length}`; }
+  if (filtros.categoria) { v.push(String(filtros.categoria).slice(0, 80)); sql += ` AND l.categoria = $${v.length}`; }
+  if (filtros.origem) { v.push(String(filtros.origem).slice(0, 40)); sql += ` AND l.origem = $${v.length}`; }
+  if (filtros.centroCustoId) { v.push(exigirUuid(filtros.centroCustoId, 'centro de custo')); sql += ` AND l.centro_custo_id = $${v.length}`; }
+  if (filtros.de) { v.push(exigirData(filtros.de, 'De')); sql += ` AND l.vencimento >= $${v.length}`; }
+  if (filtros.ate) { v.push(exigirData(filtros.ate, 'Até')); sql += ` AND l.vencimento <= $${v.length}`; }
+  if (filtros.q) { v.push(`%${String(filtros.q).slice(0, 80).replace(/[%_\\]/g, (c) => `\\${c}`)}%`); sql += ` AND (l.descricao ILIKE $${v.length} OR l.contraparte_nome ILIKE $${v.length})`; }
+  const limite = Math.min(Math.max(Number(filtros.limite) || 500, 1), 2000);
+  sql += ` ORDER BY l.vencimento DESC, l.criado_em DESC LIMIT ${limite}`;
+  const r = await db.query(sql, v);
+  return r.rows.map(dto);
+}
+
+export async function obter(db, empresaId, id) {
+  const r = await db.query('SELECT * FROM fin_lancamentos WHERE empresa_id = $1 AND id = $2', [exigirUuid(empresaId, 'empresa'), exigirUuid(id, 'lançamento')]);
+  if (!r.rows[0]) throw new ErroDominio('NOT_FOUND', 'Lançamento não encontrado nesta empresa', 404);
+  return dto(r.rows[0]);
+}
+
+/** Números do topo da tela: saldo realizado, a receber, a pagar, mês, vencidos e sem unidade. */
+export async function resumo(db, empresaId, { lojaId = null, agora = new Date(), fuso = FUSO_PADRAO } = {}) {
+  const empresa = exigirUuid(empresaId, 'empresa');
+  const hoje = hojeNoFuso(agora, fuso);
+  const mes = hoje.slice(0, 7);
+  const v = [empresa, hoje, mes, fuso];
+  const unidade = filtroUnidade(lojaId, v);
+  const r = await db.query(
+    `SELECT
+       COALESCE(SUM(CASE WHEN l.status = 'pago' AND l.tipo = 'receita' THEN l.valor END), 0) AS receitas_pagas,
+       COALESCE(SUM(CASE WHEN l.status = 'pago' AND l.tipo = 'despesa' THEN l.valor END), 0) AS despesas_pagas,
+       COALESCE(SUM(CASE WHEN l.status = 'pendente' AND l.tipo = 'receita' THEN l.valor END), 0) AS a_receber,
+       COALESCE(SUM(CASE WHEN l.status = 'pendente' AND l.tipo = 'despesa' THEN l.valor END), 0) AS a_pagar,
+       COALESCE(SUM(CASE WHEN l.status = 'pago' AND l.tipo = 'receita' AND to_char(l.pago_em AT TIME ZONE $4, 'YYYY-MM') = $3 THEN l.valor END), 0) AS rec_mes,
+       COALESCE(SUM(CASE WHEN l.status = 'pago' AND l.tipo = 'despesa' AND to_char(l.pago_em AT TIME ZONE $4, 'YYYY-MM') = $3 THEN l.valor END), 0) AS desp_mes,
+       COUNT(*) FILTER (WHERE l.status = 'pendente' AND l.tipo = 'receita' AND l.vencimento < $2::date) AS receber_vencidos,
+       COALESCE(SUM(CASE WHEN l.status = 'pendente' AND l.tipo = 'receita' AND l.vencimento < $2::date THEN l.valor END), 0) AS receber_vencidos_valor,
+       COUNT(*) FILTER (WHERE l.status = 'pendente' AND l.tipo = 'despesa' AND l.vencimento < $2::date) AS pagar_vencidos,
+       COALESCE(SUM(CASE WHEN l.status = 'pendente' AND l.tipo = 'despesa' AND l.vencimento < $2::date THEN l.valor END), 0) AS pagar_vencidos_valor,
+       COUNT(*) FILTER (WHERE l.status = 'pendente' AND l.vencimento BETWEEN $2::date AND ($2::date + 3)) AS vencendo,
+       COUNT(*) FILTER (WHERE l.loja_id IS NULL AND l.status <> 'cancelado') AS sem_unidade
+     FROM fin_lancamentos l WHERE l.empresa_id = $1${unidade}`,
+    v,
+  );
+  const x = r.rows[0];
+  const n = (k) => dinheiro(x[k]);
+  return {
+    hoje, mesAtual: mes,
+    saldo: dinheiro(n('receitas_pagas') - n('despesas_pagas')),
+    totalReceitas: n('receitas_pagas'), totalDespesas: n('despesas_pagas'),
+    aReceber: n('a_receber'), aPagar: n('a_pagar'),
+    recMes: n('rec_mes'), despMes: n('desp_mes'), resultadoMes: dinheiro(n('rec_mes') - n('desp_mes')),
+    receberVencidos: Number(x.receber_vencidos), receberVencidosValor: n('receber_vencidos_valor'),
+    pagarVencidos: Number(x.pagar_vencidos), pagarVencidosValor: n('pagar_vencidos_valor'),
+    inadimplentes: Number(x.receber_vencidos),
+    vencendo3Dias: Number(x.vencendo),
+    semUnidade: Number(x.sem_unidade),
+  };
+}
+
+/** Receitas e despesas pagas por mês (últimos N meses), pelo mês do pagamento no fuso da empresa. */
+export async function fluxo(db, empresaId, { meses = 12, lojaId = null, agora = new Date(), fuso = FUSO_PADRAO } = {}) {
+  const empresa = exigirUuid(empresaId, 'empresa');
+  const n = Math.min(Math.max(Number(meses) || 12, 1), 36);
+  const hoje = hojeNoFuso(agora, fuso);
+  const periodo = [];
+  for (let i = n - 1; i >= 0; i -= 1) periodo.push(somarMeses(`${hoje.slice(0, 7)}-01`, -i).slice(0, 7));
+  const v = [empresa, fuso, `${periodo[0]}-01`];
+  const unidade = filtroUnidade(lojaId, v);
+  const r = await db.query(
+    `SELECT to_char(l.pago_em AT TIME ZONE $2, 'YYYY-MM') AS mes,
+            COALESCE(SUM(CASE WHEN l.tipo = 'receita' THEN l.valor END), 0) AS receitas,
+            COALESCE(SUM(CASE WHEN l.tipo = 'despesa' THEN l.valor END), 0) AS despesas
+       FROM fin_lancamentos l
+      WHERE l.empresa_id = $1 AND l.status = 'pago' AND (l.pago_em AT TIME ZONE $2)::date >= $3::date${unidade}
+      GROUP BY 1`,
+    v,
+  );
+  const porMes = new Map(r.rows.map((row) => [row.mes, row]));
+  return periodo.map((mes) => {
+    const row = porMes.get(mes);
+    const receitas = dinheiro(row?.receitas); const despesas = dinheiro(row?.despesas);
+    return { mes, receitas, despesas, saldo: dinheiro(receitas - despesas) };
+  });
+}
+
+const ORDEM_DRE = ['receita_bruta', 'deducao', 'cmv', 'pessoal', 'operacional', 'impostos', 'financeiro', 'investimento', 'outros'];
+const ROTULO_DRE = {
+  receita_bruta: 'Receita bruta', deducao: 'Deduções (taxas, estornos)', cmv: 'Custo das mercadorias e insumos (CMV)',
+  pessoal: 'Pessoal', operacional: 'Despesas operacionais', impostos: 'Impostos', financeiro: 'Resultado financeiro',
+  investimento: 'Investimentos', outros: 'Outros',
+};
+
+/**
+ * DRE por competência (o mês a que o fato pertence), só com lançamentos não cancelados.
+ * Receita do grupo "financeiro" soma; despesa do mesmo grupo subtrai.
+ */
+export async function dre(db, empresaId, { de, ate, lojaId = null, centroCustoId = null } = {}) {
+  const empresa = exigirUuid(empresaId, 'empresa');
+  await garantirCategorias(db, empresa);
+  const inicio = exigirData(de, 'De');
+  const fim = exigirData(ate, 'Até');
+  if (fim < inicio) throw new ErroDominio('VALIDATION_ERROR', 'Período inválido');
+  const v = [empresa, inicio, fim];
+  let filtro = filtroUnidade(lojaId, v);
+  if (centroCustoId) { v.push(exigirUuid(centroCustoId, 'centro de custo')); filtro += ` AND l.centro_custo_id = $${v.length}`; }
+  const r = await db.query(
+    `SELECT l.tipo, l.categoria,
+            COALESCE(c.grupo_dre, CASE WHEN l.tipo = 'receita' THEN 'receita_bruta' ELSE 'outros' END) AS grupo,
+            SUM(l.valor) AS total
+       FROM fin_lancamentos l
+       LEFT JOIN fin_categorias c ON c.empresa_id = l.empresa_id AND c.tipo = l.tipo AND c.nome = l.categoria
+      WHERE l.empresa_id = $1 AND l.status <> 'cancelado' AND l.data_competencia BETWEEN $2 AND $3${filtro}
+      GROUP BY 1, 2, 3`,
+    v,
+  );
+  const grupos = Object.fromEntries(ORDEM_DRE.map((g) => [g, { grupo: g, rotulo: ROTULO_DRE[g], total: 0, linhas: [] }]));
+  for (const row of r.rows) {
+    const sinal = row.tipo === 'receita' ? 1 : -1;
+    const valor = dinheiro(Number(row.total) * sinal);
+    const g = grupos[row.grupo] || grupos.outros;
+    g.total = dinheiro(g.total + valor);
+    g.linhas.push({ tipo: row.tipo, categoria: row.categoria, valor });
+  }
+  for (const g of Object.values(grupos)) g.linhas.sort((a, b) => Math.abs(b.valor) - Math.abs(a.valor));
+  const receitaLiquida = dinheiro(grupos.receita_bruta.total + grupos.deducao.total);
+  const lucroBruto = dinheiro(receitaLiquida + grupos.cmv.total);
+  const resultadoOperacional = dinheiro(lucroBruto + grupos.pessoal.total + grupos.operacional.total);
+  const resultadoLiquido = dinheiro(resultadoOperacional + grupos.impostos.total + grupos.financeiro.total + grupos.outros.total);
+  return {
+    de: inicio, ate: fim,
+    grupos: ORDEM_DRE.map((g) => grupos[g]),
+    receitaBruta: grupos.receita_bruta.total, receitaLiquida, lucroBruto, resultadoOperacional, resultadoLiquido,
+    investimentos: grupos.investimento.total,
+    margemLiquida: grupos.receita_bruta.total > 0 ? Math.round((resultadoLiquido / grupos.receita_bruta.total) * 1000) / 10 : null,
+  };
+}
+
+/** Totais do dia (recebido por meio, pago, pendências) — base do fechamento. */
+export async function totaisDoDia(db, empresaId, { data, lojaId = null, fuso = FUSO_PADRAO } = {}) {
+  const empresa = exigirUuid(empresaId, 'empresa');
+  const dia = exigirData(data, 'Data');
+  const v = [empresa, dia, fuso];
+  const unidade = filtroUnidade(lojaId, v);
+  const r = await db.query(
+    `SELECT l.tipo, COALESCE(l.meio_pagamento, 'nao_informado') AS meio, COUNT(*) AS n, SUM(l.valor) AS total
+       FROM fin_lancamentos l
+      WHERE l.empresa_id = $1 AND l.status = 'pago' AND (l.pago_em AT TIME ZONE $3)::date = $2::date${unidade}
+      GROUP BY 1, 2`,
+    v,
+  );
+  const recebidoPorMeio = {}; const pagoPorMeio = {}; let recebido = 0; let pago = 0; let lancamentos = 0;
+  for (const row of r.rows) {
+    const valor = dinheiro(row.total); lancamentos += Number(row.n);
+    if (row.tipo === 'receita') { recebidoPorMeio[row.meio] = valor; recebido += valor; } else { pagoPorMeio[row.meio] = valor; pago += valor; }
+  }
+  const v2 = [empresa, dia];
+  const unidade2 = filtroUnidade(lojaId, v2);
+  const pend = await db.query(
+    `SELECT COUNT(*) FILTER (WHERE l.tipo = 'receita') AS receber_n, COALESCE(SUM(l.valor) FILTER (WHERE l.tipo = 'receita'), 0) AS receber,
+            COUNT(*) FILTER (WHERE l.tipo = 'despesa') AS pagar_n, COALESCE(SUM(l.valor) FILTER (WHERE l.tipo = 'despesa'), 0) AS pagar
+       FROM fin_lancamentos l WHERE l.empresa_id = $1 AND l.status = 'pendente' AND l.vencimento <= $2::date${unidade2}`,
+    v2,
+  );
+  const p = pend.rows[0];
+  return {
+    data: dia, lancamentos, recebido: dinheiro(recebido), pago: dinheiro(pago), saldoDoDia: dinheiro(recebido - pago),
+    recebidoPorMeio, pagoPorMeio,
+    vencidosAteHoje: { receber: Number(p.receber_n), receberValor: dinheiro(p.receber), pagar: Number(p.pagar_n), pagarValor: dinheiro(p.pagar) },
+  };
+}
+
+export async function fecharDia(db, empresaId, { data, lojaId = null, responsavel, observacao = null, fuso = FUSO_PADRAO, agora = new Date() } = {}) {
+  const empresa = exigirUuid(empresaId, 'empresa');
+  const dia = data ? exigirData(data, 'Data') : hojeNoFuso(agora, fuso);
+  if (dia > hojeNoFuso(agora, fuso)) throw new ErroDominio('VALIDATION_ERROR', 'Não dá para fechar um dia que ainda não chegou');
+  const unidade = lojaId && lojaId !== 'todas' ? exigirUuid(lojaId, 'unidade') : null;
+  const totais = await totaisDoDia(db, empresa, { data: dia, lojaId: unidade, fuso });
+  try {
+    const r = await db.query(
+      'INSERT INTO fin_fechamentos (empresa_id, loja_id, data, totais, responsavel, observacao) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
+      [empresa, unidade, dia, JSON.stringify(totais), exigirTexto(responsavel || 'Sistema', 'Responsável', { max: 180 }), textoOpcional(observacao, 2000)],
+    );
+    return fechamentoDto(r.rows[0]);
+  } catch (error) {
+    if (error?.code === '23505') throw new ErroDominio('ALREADY_CLOSED', 'Este dia já foi fechado para esta unidade', 409);
+    throw error;
+  }
+}
+
+function fechamentoDto(row) {
+  return { id: row.id, lojaId: row.loja_id || null, data: row.data instanceof Date ? row.data.toISOString().slice(0, 10) : String(row.data).slice(0, 10), totais: row.totais, responsavel: row.responsavel, observacao: row.observacao || null, criadoEm: row.criado_em };
+}
+
+export async function listarFechamentos(db, empresaId, { lojaId = null, limite = 60 } = {}) {
+  const empresa = exigirUuid(empresaId, 'empresa');
+  const v = [empresa];
+  const unidade = filtroUnidade(lojaId, v).replace(/\bl\./g, '');
+  const r = await db.query(`SELECT * FROM fin_fechamentos WHERE empresa_id = $1${unidade} ORDER BY data DESC, criado_em DESC LIMIT ${Math.min(Number(limite) || 60, 365)}`, v);
+  return r.rows.map(fechamentoDto);
+}
