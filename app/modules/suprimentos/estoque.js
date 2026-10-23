@@ -19,6 +19,13 @@ function numeroPositivo(valor, campo, { zeroOk = false, max = 1e9 } = {}) {
   if (!Number.isFinite(n) || n < 0 || (!zeroOk && n === 0) || n > max) throw new ErroDominio('VALIDATION_ERROR', `${campo} inválido`);
   return n;
 }
+/** A unidade precisa ser desta empresa (nada de loja de outra empresa ou inexistente). */
+export async function exigirUnidade(q, empresa, loja) {
+  if (!loja) return null;
+  const r = await q('SELECT 1 FROM lojas WHERE empresa_id = $1 AND id = $2', [empresa, loja]);
+  if (!r.rows[0]) throw new ErroDominio('NOT_FOUND', 'Unidade não encontrada nesta empresa', 404);
+  return loja;
+}
 function uuidOpcional(v, campo) { return v === undefined || v === null || v === '' ? null : exigirUuid(v, campo); }
 function textoOpcional(v, max) { const t = String(v ?? '').trim(); return t ? t.slice(0, max) : null; }
 
@@ -119,10 +126,13 @@ export async function movimentarNaTransacao(q, empresaId, { lojaId = null, itemI
   const n = qtd(quantidade);
   if (!n) throw new ErroDominio('VALIDATION_ERROR', 'quantidade não pode ser zero');
   if (!chave) throw new ErroDominio('VALIDATION_ERROR', 'chave do movimento é obrigatória');
-  const ja = await q('SELECT id FROM est_movimentos WHERE empresa_id = $1 AND chave = $2', [empresa, String(chave).slice(0, 200)]);
-  if (ja.rows[0]) return null;
+  await exigirUnidade(q, empresa, loja);
+  // a trava do item serializa movimentos concorrentes do mesmo item: a checagem da chave vem
+  // depois dela, então dois envios iguais ao mesmo tempo resultam em um movimento e um "já existe"
   const it = await q('SELECT id, custo_medio FROM est_itens WHERE empresa_id = $1 AND id = $2 FOR UPDATE', [empresa, item]);
   if (!it.rows[0]) throw new ErroDominio('NOT_FOUND', 'Item não encontrado nesta empresa', 404);
+  const ja = await q('SELECT id FROM est_movimentos WHERE empresa_id = $1 AND chave = $2', [empresa, String(chave).slice(0, 200)]);
+  if (ja.rows[0]) return null;
   const saldo = await travarSaldo(q, empresa, loja, item);
   const novo = qtd(saldo + n);
   if (novo < 0 && !permitirNegativo) throw new ErroDominio('ESTOQUE_INSUFICIENTE', `Saldo insuficiente: há ${saldo} na unidade`, 409);
@@ -204,18 +214,23 @@ export async function listarMovimentos(db, empresaId, { lojaId = null, itemId = 
   return r.rows.map(movimentoDto);
 }
 
-/** Perdas e quebras do período, valoradas pelo custo do movimento (entram no CMV do DRE). */
+/**
+ * Perdas e quebras do período, valoradas pelo custo do movimento, líquidas das sobras de ajuste e
+ * inventário. É informação gerencial: o CMV do DRE já é a compra (lançada no razão), então a perda
+ * não é somada de novo.
+ */
 export async function perdasDoPeriodo(db, empresaId, { de, ate, lojaId = null, fuso = 'America/Cuiaba' }) {
   const empresa = exigirUuid(empresaId, 'empresa');
   const v = [empresa, de, ate, fuso];
-  let sql = `SELECT COALESCE(SUM(-m.quantidade * m.custo_unitario), 0) AS valor, COUNT(*) AS n
+  let sql = `SELECT COALESCE(SUM(-m.quantidade * m.custo_unitario), 0) AS valor, COUNT(*) AS n,
+                    COALESCE(SUM(-m.quantidade * m.custo_unitario) FILTER (WHERE m.quantidade < 0), 0) AS bruto
                FROM est_movimentos m
-              WHERE m.empresa_id = $1 AND (m.tipo = 'perda' OR (m.tipo IN ('ajuste', 'inventario') AND m.quantidade < 0))
+              WHERE m.empresa_id = $1 AND m.tipo IN ('perda', 'ajuste', 'inventario')
                 AND (m.criado_em AT TIME ZONE $4)::date BETWEEN $2::date AND $3::date`;
   if (lojaId === 'sem') sql += ' AND m.loja_id IS NULL';
   else if (lojaId && lojaId !== 'todas') { v.push(exigirUuid(lojaId, 'unidade')); sql += ` AND m.loja_id = $${v.length}`; }
   const r = await db.query(sql, v);
-  return { valor: Math.round(Number(r.rows[0].valor) * 100) / 100, movimentos: Number(r.rows[0].n) };
+  return { valor: Math.round(Number(r.rows[0].valor) * 100) / 100, perdasBrutas: Math.round(Number(r.rows[0].bruto) * 100) / 100, movimentos: Number(r.rows[0].n) };
 }
 
 // ── inventário ───────────────────────────────────────────────────────────────
@@ -224,6 +239,7 @@ export async function abrirInventario(db, empresaId, { lojaId = null, descricao,
   const loja = uuidOpcional(lojaId, 'unidade');
   const desc = exigirTexto(descricao || `Inventário de ${new Date().toLocaleDateString('pt-BR')}`, 'Descrição', { max: 160 });
   return transacao(db, async (q) => {
+    await exigirUnidade(q, empresa, loja);
     let inv;
     try {
       inv = (await q('INSERT INTO est_inventarios (empresa_id, loja_id, descricao, criado_por) VALUES ($1, $2, $3, $4) RETURNING *', [empresa, loja, desc, textoOpcional(usuario, 180)])).rows[0];
@@ -269,20 +285,25 @@ export async function registrarContagem(db, empresaId, inventarioId, contagens =
   const empresa = exigirUuid(empresaId, 'empresa');
   const inv = exigirUuid(inventarioId, 'inventário');
   return transacao(db, async (q) => {
-    const st = (await q('SELECT status FROM est_inventarios WHERE empresa_id = $1 AND id = $2 FOR UPDATE', [empresa, inv])).rows[0];
+    const st = (await q('SELECT status, loja_id FROM est_inventarios WHERE empresa_id = $1 AND id = $2 FOR UPDATE', [empresa, inv])).rows[0];
     if (!st) throw new ErroDominio('NOT_FOUND', 'Inventário não encontrado', 404);
     if (st.status !== 'aberto') throw new ErroDominio('INVENTORY_CLOSED', 'Inventário já foi concluído', 409);
     for (const c of Array.isArray(contagens) ? contagens : []) {
       const contado = c.contado === null || c.contado === '' ? null : qtd(numeroPositivo(c.contado, 'Quantidade contada', { zeroOk: true }));
-      await q('UPDATE est_inventario_itens SET contado = $4, contado_em = CURRENT_TIMESTAMP WHERE empresa_id = $1 AND inventario_id = $2 AND item_id = $3', [empresa, inv, exigirUuid(c.itemId, 'item'), contado]);
+      const item = exigirUuid(c.itemId, 'item');
+      // o saldo do sistema no instante da contagem: vendas posteriores continuam valendo na conclusão
+      const saldoAgora = contado === null ? null : await travarSaldo(q, empresa, st.loja_id, item);
+      await q('UPDATE est_inventario_itens SET contado = $4, saldo_na_contagem = $5, contado_em = CURRENT_TIMESTAMP WHERE empresa_id = $1 AND inventario_id = $2 AND item_id = $3', [empresa, inv, item, contado, saldoAgora]);
     }
     return obterInventario({ query: q }, empresa, inv);
   });
 }
 
 /**
- * Conclui: para cada item contado, a diferença entre o contado e o saldo ATUAL (não o do momento da
- * abertura, porque houve vendas no meio) vira um movimento de inventário. Itens não contados ficam como estão.
+ * Conclui: para cada item contado, a diferença entre o contado e o saldo do sistema NO MOMENTO DA
+ * CONTAGEM vira um movimento de inventário sobre o saldo atual. Assim, vendas feitas antes da
+ * contagem já estão no saldo daquele momento e vendas feitas depois continuam descontadas.
+ * Itens não contados ficam como estão. Antes de contar e de concluir, a rota baixa as vendas.
  */
 export async function concluirInventario(db, empresaId, inventarioId, { usuario } = {}) {
   const empresa = exigirUuid(empresaId, 'empresa');
@@ -291,11 +312,12 @@ export async function concluirInventario(db, empresaId, inventarioId, { usuario 
     const cab = (await q('SELECT * FROM est_inventarios WHERE empresa_id = $1 AND id = $2 FOR UPDATE', [empresa, inv])).rows[0];
     if (!cab) throw new ErroDominio('NOT_FOUND', 'Inventário não encontrado', 404);
     if (cab.status !== 'aberto') throw new ErroDominio('INVENTORY_CLOSED', 'Inventário já foi concluído', 409);
-    const itens = (await q('SELECT item_id, contado FROM est_inventario_itens WHERE empresa_id = $1 AND inventario_id = $2 AND contado IS NOT NULL', [empresa, inv])).rows;
+    const itens = (await q('SELECT item_id, contado, saldo_na_contagem, saldo_sistema FROM est_inventario_itens WHERE empresa_id = $1 AND inventario_id = $2 AND contado IS NOT NULL', [empresa, inv])).rows;
     let ajustes = 0;
     for (const it of itens) {
-      const atual = await travarSaldo(q, empresa, cab.loja_id, it.item_id);
-      const delta = qtd(Number(it.contado) - atual);
+      await travarSaldo(q, empresa, cab.loja_id, it.item_id);
+      const base = it.saldo_na_contagem === null ? Number(it.saldo_sistema) : Number(it.saldo_na_contagem);
+      const delta = qtd(Number(it.contado) - base);
       if (!delta) continue;
       await movimentarNaTransacao(q, empresa, { lojaId: cab.loja_id, itemId: it.item_id, tipo: 'inventario', quantidade: delta, origem: 'inventario', origemId: inv, chave: `inventario:${inv}:${it.item_id}`, motivo: cab.descricao, usuario, permitirNegativo: true });
       ajustes += 1;
@@ -342,6 +364,11 @@ export async function salvarFicha(db, empresaId, { fonte, fonteId, itens = [] })
     const tabela = fonte === 'bar_produto' ? 'bar_produtos' : 'commerce_product_variants';
     const existe = await q(`SELECT 1 FROM ${tabela} WHERE empresa_id = $1 AND id = $2`, [empresa, id]);
     if (!existe.rows[0]) throw new ErroDominio('NOT_FOUND', 'Produto não encontrado nesta empresa', 404);
+    const espelho = linhas.find((l) => l.espelho);
+    if (espelho) {
+      const outro = await q("SELECT 1 FROM est_vinculos WHERE empresa_id = $1 AND item_id = $2 AND espelho = true AND NOT (fonte = $3 AND fonte_id = $4)", [empresa, espelho.item, fonte, id]);
+      if (outro.rows[0]) throw new ErroDominio('VALIDATION_ERROR', 'Este item já espelha o estoque de outro produto; a compra somaria duas vezes no bar');
+    }
     await q('DELETE FROM est_vinculos WHERE empresa_id = $1 AND fonte = $2 AND fonte_id = $3', [empresa, fonte, id]);
     for (const l of linhas) {
       await q('INSERT INTO est_vinculos (empresa_id, fonte, fonte_id, item_id, fator, espelho) VALUES ($1, $2, $3, $4, $5, $6)', [empresa, fonte, id, l.item, l.fator, l.espelho]);
@@ -350,17 +377,46 @@ export async function salvarFicha(db, empresaId, { fonte, fonteId, itens = [] })
   });
 }
 
+const STATUS_PEDIDO_VENDIDO = ['paid', 'processing', 'ready', 'ready_for_pickup', 'shipped', 'delivered', 'picked_up', 'completed'];
+
+/** Unidade de onde saem os insumos do bar: a configurada; com uma unidade ativa só, ela. */
+export async function unidadeDoBar(db, empresaId) {
+  const empresa = exigirUuid(empresaId, 'empresa');
+  const cfg = (await db.query("SELECT loja_bar FROM est_config WHERE empresa_id = $1", [empresa])).rows[0];
+  if (cfg?.loja_bar) return cfg.loja_bar;
+  const lojas = (await db.query('SELECT id FROM lojas WHERE empresa_id = $1 AND ativa = true', [empresa])).rows;
+  return lojas.length === 1 ? lojas[0].id : null;
+}
+
+export async function obterConfig(db, empresaId) {
+  const empresa = exigirUuid(empresaId, 'empresa');
+  const cfg = (await db.query('SELECT loja_bar FROM est_config WHERE empresa_id = $1', [empresa])).rows[0];
+  return { lojaBar: cfg?.loja_bar || null, lojaBarEfetiva: await unidadeDoBar(db, empresa) };
+}
+
+export async function salvarConfig(db, empresaId, { lojaBar = null } = {}) {
+  const empresa = exigirUuid(empresaId, 'empresa');
+  const loja = await exigirUnidade((t, v) => db.query(t, v), empresa, uuidOpcional(lojaBar, 'unidade'));
+  await db.query(`INSERT INTO est_config (empresa_id, loja_bar) VALUES ($1, $2)
+                  ON CONFLICT (empresa_id) DO UPDATE SET loja_bar = EXCLUDED.loja_bar, atualizado_em = CURRENT_TIMESTAMP`, [empresa, loja]);
+  return obterConfig(db, empresa);
+}
+
 /**
  * Consumo das vendas pela ficha técnica. Bar: itens de comandas pagas; loja online: itens de
- * pedidos pagos. Cada (venda, item) gera uma saída única. A unidade do bar é a informada em
- * `lojaBar` (o bar não grava unidade); a da loja online é a do pedido.
+ * pedidos pagos. Cada (venda, item) gera uma saída única. A unidade do bar é a da configuração
+ * (o bar não grava unidade na comanda); a da loja online é a do pedido.
+ * Venda que saiu do conjunto válido depois de baixada (item cancelado, comanda reaberta, pedido
+ * cancelado ou devolvido) tem a baixa estornada: o insumo volta ao estoque.
  */
-export async function baixarConsumoDasVendas(db, empresaId, { lojaBar = null, fuso = 'America/Cuiaba' } = {}) {
+export async function baixarConsumoDasVendas(db, empresaId, { lojaBar, fuso = 'America/Cuiaba' } = {}) {
   const empresa = exigirUuid(empresaId, 'empresa');
-  const loja = uuidOpcional(lojaBar, 'unidade');
+  const loja = lojaBar === undefined ? await unidadeDoBar(db, empresa) : uuidOpcional(lojaBar, 'unidade');
   const existe = async (t) => Boolean((await db.query('SELECT to_regclass($1) AS t', [t])).rows[0]?.t);
   const vendas = [];
-  if (await existe('bar_comanda_itens')) {
+  const temBar = await existe('bar_comanda_itens');
+  const temLoja = await existe('commerce_order_items');
+  if (temBar) {
     const r = await db.query(
       `SELECT ci.id AS venda_id, ci.quantidade, v.item_id, v.fator, c.fechada_em
          FROM bar_comanda_itens ci
@@ -371,25 +427,53 @@ export async function baixarConsumoDasVendas(db, empresaId, { lojaBar = null, fu
         LIMIT 5000`, [empresa]);
     for (const x of r.rows) vendas.push({ chave: `venda_bar:${x.venda_id}:${x.item_id}`, origem: 'venda_bar', origemId: x.venda_id, loja, item: x.item_id, quantidade: -qtd(Number(x.quantidade) * Number(x.fator)) });
   }
-  if (await existe('commerce_order_items')) {
+  if (temLoja) {
     const r = await db.query(
       `SELECT oi.id AS venda_id, oi.quantidade, v.item_id, v.fator, o.loja_id
          FROM commerce_order_items oi
-         JOIN commerce_orders o ON o.empresa_id = oi.empresa_id AND o.id = oi.order_id AND o.status IN ('paid', 'processing', 'ready', 'ready_for_pickup', 'shipped', 'delivered', 'picked_up', 'completed')
+         JOIN commerce_orders o ON o.empresa_id = oi.empresa_id AND o.id = oi.order_id AND o.status = ANY($2::text[])
          JOIN est_vinculos v ON v.empresa_id = oi.empresa_id AND v.fonte = 'loja_variante' AND v.fonte_id = oi.variant_id
         WHERE oi.empresa_id = $1
           AND NOT EXISTS (SELECT 1 FROM est_movimentos m WHERE m.empresa_id = oi.empresa_id AND m.chave = 'venda_loja:' || oi.id || ':' || v.item_id)
-        LIMIT 5000`, [empresa]);
+        LIMIT 5000`, [empresa, STATUS_PEDIDO_VENDIDO]);
     for (const x of r.rows) vendas.push({ chave: `venda_loja:${x.venda_id}:${x.item_id}`, origem: 'venda_loja', origemId: x.venda_id, loja: x.loja_id || null, item: x.item_id, quantidade: -qtd(Number(x.quantidade) * Number(x.fator)) });
   }
-  let baixados = 0;
+  // baixas já feitas cuja venda deixou de valer: estorno com a mesma unidade e o mesmo custo
+  const desfazer = [];
+  if (temBar) {
+    const r = await db.query(
+      `SELECT m.* FROM est_movimentos m
+         LEFT JOIN bar_comanda_itens ci ON ci.empresa_id = m.empresa_id AND ci.id::text = m.origem_id
+         LEFT JOIN bar_comandas c ON c.empresa_id = ci.empresa_id AND c.id = ci.comanda_id
+        WHERE m.empresa_id = $1 AND m.origem = 'venda_bar' AND m.tipo = 'venda' AND m.quantidade < 0
+          AND (ci.id IS NULL OR ci.status = 'cancelado' OR c.status IS DISTINCT FROM 'paga')
+          AND NOT EXISTS (SELECT 1 FROM est_movimentos e WHERE e.empresa_id = m.empresa_id AND e.chave = m.chave || ':estorno')
+        LIMIT 5000`, [empresa]);
+    desfazer.push(...r.rows);
+  }
+  if (temLoja) {
+    const r = await db.query(
+      `SELECT m.* FROM est_movimentos m
+         LEFT JOIN commerce_order_items oi ON oi.empresa_id = m.empresa_id AND oi.id::text = m.origem_id
+         LEFT JOIN commerce_orders o ON o.empresa_id = oi.empresa_id AND o.id = oi.order_id
+        WHERE m.empresa_id = $1 AND m.origem = 'venda_loja' AND m.tipo = 'venda' AND m.quantidade < 0
+          AND (oi.id IS NULL OR NOT (o.status = ANY($2::text[])))
+          AND NOT EXISTS (SELECT 1 FROM est_movimentos e WHERE e.empresa_id = m.empresa_id AND e.chave = m.chave || ':estorno')
+        LIMIT 5000`, [empresa, STATUS_PEDIDO_VENDIDO]);
+    desfazer.push(...r.rows);
+  }
+  let baixados = 0; let estornados = 0;
   for (const v of vendas) {
     if (!v.quantidade) continue;
     const mov = await transacao(db, (q) => movimentarNaTransacao(q, empresa, { lojaId: v.loja, itemId: v.item, tipo: 'venda', quantidade: v.quantidade, origem: v.origem, origemId: v.origemId, chave: v.chave, permitirNegativo: true }));
     if (mov) baixados += 1;
   }
+  for (const m of desfazer) {
+    const mov = await transacao(db, (q) => movimentarNaTransacao(q, empresa, { lojaId: m.loja_id, itemId: m.item_id, tipo: 'venda', quantidade: -Number(m.quantidade), origem: 'estorno_venda', origemId: m.origem_id, chave: `${m.chave}:estorno`, motivo: 'venda cancelada ou devolvida', permitirNegativo: true }));
+    if (mov) estornados += 1;
+  }
   void fuso;
-  return { lidos: vendas.length, baixados };
+  return { lidos: vendas.length, baixados, estornados, lojaBar: loja };
 }
 
 /** Sugestão de compra: itens abaixo do mínimo, com a quantidade para voltar ao dobro do mínimo. */

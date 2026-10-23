@@ -265,6 +265,7 @@ export default function FinanceiroRazao({ abaInicial = 'geral' }) {
           <tr><th scope="row">Resultado líquido</th><td className={`num ${dre.resultadoLiquido < 0 ? 'dadm-neg' : 'dadm-pos'}`}><strong>{money(dre.resultadoLiquido)}</strong>{dre.margemLiquida != null && <small className="dadm-muted"> · margem {String(dre.margemLiquida).replace('.', ',')}%</small>}</td></tr>
         </tbody>
       </table>}
+      {dre?.perdasEstoque && <p className="dadm-note">Perdas e diferenças de estoque no período (custo, já descontadas as sobras): <strong>{money(dre.perdasEstoque.valor)}</strong>. Já estão dentro das compras do CMV; o valor aparece aqui para acompanhamento.</p>}
     </section>}
 
     {aba === 'fechamento' && <section className="dadm-card">

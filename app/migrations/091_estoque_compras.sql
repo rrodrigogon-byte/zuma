@@ -105,6 +105,9 @@ CREATE TABLE IF NOT EXISTS est_inventario_itens (
   item_id UUID NOT NULL,
   saldo_sistema NUMERIC(14,3) NOT NULL,
   contado NUMERIC(14,3),
+  -- saldo do sistema no instante da contagem: a conclusão aplica (contado - saldo_na_contagem)
+  -- sobre o saldo atual, preservando vendas feitas depois da contagem
+  saldo_na_contagem NUMERIC(14,3),
   contado_em TIMESTAMPTZ,
   PRIMARY KEY (empresa_id, inventario_id, item_id),
   CONSTRAINT fk_est_inv_item_inv FOREIGN KEY (empresa_id, inventario_id) REFERENCES est_inventarios (empresa_id, id) ON DELETE CASCADE,
@@ -141,6 +144,7 @@ CREATE TABLE IF NOT EXISTS cmp_pedido_itens (
   quantidade NUMERIC(14,3) NOT NULL,
   custo_unitario NUMERIC(14,4) NOT NULL,
   recebido NUMERIC(14,3) NOT NULL DEFAULT 0,
+  CONSTRAINT uq_cmp_pi_item UNIQUE (empresa_id, pedido_id, item_id),
   CONSTRAINT fk_cmp_pi_pedido FOREIGN KEY (empresa_id, pedido_id) REFERENCES cmp_pedidos (empresa_id, id) ON DELETE CASCADE,
   CONSTRAINT fk_cmp_pi_item FOREIGN KEY (empresa_id, item_id) REFERENCES est_itens (empresa_id, id),
   CONSTRAINT chk_cmp_pi_qtd CHECK (quantidade > 0 AND custo_unitario >= 0 AND recebido >= 0)
@@ -162,12 +166,22 @@ CREATE TABLE IF NOT EXISTS cmp_recebimentos (
   parcelas JSONB NOT NULL DEFAULT '[]'::jsonb,
   recebido_por VARCHAR(180),
   observacao TEXT,
+  idempotencia VARCHAR(100),
   criado_em TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT uq_cmp_rec_empresa_id UNIQUE (empresa_id, id),
   CONSTRAINT fk_cmp_rec_pedido FOREIGN KEY (empresa_id, pedido_id) REFERENCES cmp_pedidos (empresa_id, id),
   CONSTRAINT chk_cmp_rec_valor CHECK (valor_total >= 0)
 );
 CREATE UNIQUE INDEX IF NOT EXISTS uq_cmp_rec_nfe ON cmp_recebimentos (empresa_id, nfe_chave) WHERE nfe_chave IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_cmp_rec_idem ON cmp_recebimentos (empresa_id, idempotencia) WHERE idempotencia IS NOT NULL;
+
+-- Configuração do estoque por empresa. O bar não grava unidade na comanda: as vendas do bar
+-- baixam os insumos da unidade escolhida aqui (com uma unidade ativa só, ela é usada).
+CREATE TABLE IF NOT EXISTS est_config (
+  empresa_id UUID PRIMARY KEY REFERENCES empresas(id) ON DELETE CASCADE,
+  loja_bar UUID,
+  atualizado_em TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
 
 CREATE TABLE IF NOT EXISTS cmp_recebimento_itens (
   empresa_id UUID NOT NULL,

@@ -581,13 +581,12 @@ export async function dre(db, empresaId, { de, ate, lojaId = null, centroCustoId
     g.total = dinheiro(g.total + valor);
     g.linhas.push({ tipo: row.tipo, categoria: row.categoria, valor });
   }
-  // perdas, quebras e diferenças de inventário (valor de custo) entram no CMV, sem mexer no caixa
+  // Perdas, quebras e diferenças de inventário (custo, líquidas das sobras): informação gerencial.
+  // Não entram no total do CMV, que já é a compra lançada no razão (somar seria contar duas vezes).
+  let perdasEstoque = null;
   if ((await db.query("SELECT to_regclass('est_movimentos') AS t")).rows[0]?.t && !centroCustoId) {
-    const perdas = await perdasDoPeriodo(db, empresa, { de: inicio, ate: fim, lojaId });
-    if (perdas.valor) {
-      grupos.cmv.total = dinheiro(grupos.cmv.total - perdas.valor);
-      grupos.cmv.linhas.push({ tipo: 'despesa', categoria: 'Perdas e diferenças de estoque', valor: -perdas.valor, origem: 'estoque' });
-    }
+    const p = await perdasDoPeriodo(db, empresa, { de: inicio, ate: fim, lojaId });
+    if (p.movimentos) perdasEstoque = p;
   }
   for (const g of Object.values(grupos)) g.linhas.sort((a, b) => Math.abs(b.valor) - Math.abs(a.valor));
   const receitaLiquida = dinheiro(grupos.receita_bruta.total + grupos.deducao.total);
@@ -597,7 +596,7 @@ export async function dre(db, empresaId, { de, ate, lojaId = null, centroCustoId
   return {
     de: inicio, ate: fim,
     grupos: ORDEM_DRE.map((g) => grupos[g]),
-    receitaBruta: grupos.receita_bruta.total, receitaLiquida, lucroBruto, resultadoOperacional, resultadoLiquido,
+    receitaBruta: grupos.receita_bruta.total, receitaLiquida, lucroBruto, resultadoOperacional, resultadoLiquido, perdasEstoque,
     investimentos: grupos.investimento.total,
     margemLiquida: grupos.receita_bruta.total > 0 ? Math.round((resultadoLiquido / grupos.receita_bruta.total) * 1000) / 10 : null,
   };

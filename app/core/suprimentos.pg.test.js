@@ -150,9 +150,119 @@ describe('Estoque e compras por empresa (PostgreSQL)', { skip: pgDeTeste }, () =
     assert.throws(() => cmp.parcelasDaCondicao(10, '30/x', '2026-01-31'), (e) => e.code === 'VALIDATION_ERROR');
   });
 
-  test('DRE leva as perdas do estoque para o CMV', async () => {
+  test('DRE: perdas são informação, sem somar de novo no CMV (a compra já está lá)', async () => {
     const d = await razao.dre(ctx.db, A, { de: '2020-01-01', ate: '2100-01-01' });
     const cmv = d.grupos.find((g) => g.grupo === 'cmv');
-    assert.ok(cmv.linhas.some((l) => l.categoria === 'Perdas e diferenças de estoque' && l.valor < 0));
+    assert.ok(!cmv.linhas.some((l) => l.categoria === 'Perdas e diferenças de estoque'));
+    assert.ok(d.perdasEstoque && d.perdasEstoque.movimentos > 0);
+  });
+});
+
+describe('Estoque e compras: correções da revisão (PostgreSQL)', { skip: pgDeTeste }, () => {
+  let ctx; let loja; let outraLoja;
+  const C = randomUUID(); const D = randomUUID();
+  const agora = new Date('2026-10-22T15:00:00-04:00');
+  before(async () => {
+    ctx = await criarBancoTeste();
+    await ctx.db.query(STUBS);
+    for (const m of ['081_bar_pdv_multiempresa.sql', '082_financeiro_cadastros_multiempresa.sql', '090_financeiro_razao.sql', '091_estoque_compras.sql']) await ctx.db.query(sql(m));
+    await ctx.db.query('INSERT INTO empresas (id) VALUES ($1), ($2)', [C, D]);
+    loja = (await ctx.db.query("INSERT INTO lojas (empresa_id, codigo, nome) VALUES ($1, 'U1', 'Unidade 1') RETURNING id", [C])).rows[0].id;
+    outraLoja = (await ctx.db.query("INSERT INTO lojas (empresa_id, codigo, nome) VALUES ($1, 'X', 'De outra empresa') RETURNING id", [D])).rows[0].id;
+  });
+  after(async () => { await ctx?.fechar(); });
+  const saldo = async (itemId) => (await est.listarItens(ctx.db, C, { lojaId: loja })).find((i) => i.id === itemId).saldo;
+
+  test('unidade de outra empresa é recusada no movimento e no pedido', async () => {
+    const it = await est.criarItem(ctx.db, C, { nome: 'Copo', unidade: 'UN' });
+    await assert.rejects(() => est.movimentar(ctx.db, C, { lojaId: outraLoja, itemId: it.id, tipo: 'entrada', quantidade: 1, custoUnitario: 1 }), (e) => e.status === 404);
+    await assert.rejects(() => cmp.criarPedido(ctx.db, C, { fornecedorNome: 'X Ltda', lojaId: outraLoja, itens: [{ itemId: it.id, quantidade: 1 }] }), (e) => e.status === 404);
+  });
+
+  test('recebimento: idempotência no clique duplo, pedido não recebe a mais nem item repetido', async () => {
+    const it = await est.criarItem(ctx.db, C, { nome: 'Guardanapo', unidade: 'PCT' });
+    await assert.rejects(() => cmp.criarPedido(ctx.db, C, { fornecedorNome: 'Papelaria', lojaId: loja, itens: [{ itemId: it.id, quantidade: 5 }, { itemId: it.id, quantidade: 5 }] }), (e) => e.code === 'VALIDATION_ERROR');
+    const ped = await cmp.criarPedido(ctx.db, C, { fornecedorNome: 'Papelaria', lojaId: loja, condicaoPagamento: '30/60', itens: [{ itemId: it.id, quantidade: 10, custoUnitario: 5 }] });
+    const corpo = { pedidoId: ped.id, idempotencia: 'clique-1', itens: [{ itemId: it.id, quantidade: 4, custoUnitario: 5 }] };
+    const res = await Promise.allSettled([cmp.receber(ctx.db, C, corpo, { agora }), cmp.receber(ctx.db, C, corpo, { agora })]);
+    assert.equal(res.filter((r) => r.status === 'fulfilled').length, 1);
+    assert.equal(res.find((r) => r.status === 'rejected').reason.code, 'DUPLICATE');
+    const ok = res.find((r) => r.status === 'fulfilled').value;
+    assert.equal(ok.contasAPagar.length, 2, 'condição 30/60 veio do pedido');
+    assert.equal(await saldo(it.id), 4, 'unidade veio do pedido');
+    // dois recebimentos paralelos de 5 com 6 pendentes: um passa, o outro excede
+    const par = await Promise.allSettled([1, 2].map(() => cmp.receber(ctx.db, C, { pedidoId: ped.id, itens: [{ itemId: it.id, quantidade: 5, custoUnitario: 5 }] }, { agora })));
+    assert.equal(par.filter((r) => r.status === 'fulfilled').length, 1);
+    assert.equal(par.find((r) => r.status === 'rejected').reason.code, 'RECEBIMENTO_ACIMA');
+    assert.equal(await saldo(it.id), 9);
+  });
+
+  test('recebimento: total, parcelas e pago no ato conferidos', async () => {
+    const it = await est.criarItem(ctx.db, C, { nome: 'Canudo', unidade: 'PCT' });
+    const base = { fornecedorNome: 'Papelaria', lojaId: loja, itens: [{ itemId: it.id, quantidade: 10, custoUnitario: 1 }] };
+    await assert.rejects(() => cmp.receber(ctx.db, C, { ...base, valorTotal: 500 }, { agora }), (e) => e.code === 'VALIDATION_ERROR');
+    await assert.rejects(() => cmp.receber(ctx.db, C, { ...base, parcelas: [{ vencimento: '2026-11-01', valor: 5 }, { vencimento: '2026-12-01', valor: 4.99 }] }, { agora }), (e) => e.code === 'VALIDATION_ERROR');
+    await assert.rejects(() => cmp.receber(ctx.db, C, { ...base, condicaoPagamento: '30/60', pagoNoAto: true }, { agora }), (e) => e.code === 'VALIDATION_ERROR');
+  });
+
+  test('inventário: venda depois da contagem continua descontada', async () => {
+    const it = await est.criarItem(ctx.db, C, { nome: 'Água 500ml', unidade: 'UN' });
+    await est.movimentar(ctx.db, C, { lojaId: loja, itemId: it.id, tipo: 'entrada', quantidade: 10, custoUnitario: 1 });
+    const inv = await est.abrirInventario(ctx.db, C, { lojaId: loja, descricao: 'Contagem' });
+    await est.registrarContagem(ctx.db, C, inv.id, [{ itemId: it.id, contado: 10 }]);
+    await est.movimentar(ctx.db, C, { lojaId: loja, itemId: it.id, tipo: 'saida', quantidade: 3 });
+    const fim = await est.concluirInventario(ctx.db, C, inv.id);
+    assert.equal(fim.ajustes, 0);
+    assert.equal(await saldo(it.id), 7);
+  });
+
+  test('perdas líquidas das sobras e DRE sem contagem dupla', async () => {
+    const it = await est.criarItem(ctx.db, C, { nome: 'Pão', unidade: 'UN' });
+    await cmp.receber(ctx.db, C, { fornecedorNome: 'Padaria', lojaId: loja, itens: [{ itemId: it.id, quantidade: 10, custoUnitario: 10 }] }, { agora });
+    await est.movimentar(ctx.db, C, { lojaId: loja, itemId: it.id, tipo: 'ajuste', quantidade: 8, motivo: 'contagem' });
+    await est.movimentar(ctx.db, C, { lojaId: loja, itemId: it.id, tipo: 'ajuste', quantidade: 10, motivo: 'achou' });
+    const liq = await est.perdasDoPeriodo(ctx.db, C, { de: '2020-01-01', ate: '2100-01-01' });
+    assert.equal(liq.valor, 0);
+    await est.movimentar(ctx.db, C, { lojaId: loja, itemId: it.id, tipo: 'perda', quantidade: 10, motivo: 'mofou' });
+    const d = await razao.dre(ctx.db, C, { de: '2020-01-01', ate: '2100-01-01' });
+    assert.equal(d.grupos.find((g) => g.grupo === 'cmv').total, -(20 + 25 + 100), 'só as compras (guardanapo 4+5 e pão)');
+    assert.equal(d.perdasEstoque.valor, 100);
+  });
+
+  test('espelho respeita o fator de estoque do bar e um item espelha um produto só', async () => {
+    const garrafa = await est.criarItem(ctx.db, C, { nome: 'Whisky garrafa', unidade: 'UN' });
+    const dose = await bar.salvarProduto(ctx.db, C, { nome: 'Dose de whisky', categoria: 'Drinks', setor: 'bar', preco: 30, estoqueAtual: 0, fatorEstoque: 0.05 });
+    await est.salvarFicha(ctx.db, C, { fonte: 'bar_produto', fonteId: dose.id, itens: [{ itemId: garrafa.id, fator: 0.05, espelho: true }] });
+    const outro = await bar.salvarProduto(ctx.db, C, { nome: 'Dose dupla', categoria: 'Drinks', setor: 'bar', preco: 55, estoqueAtual: 0, fatorEstoque: 0.1 });
+    await assert.rejects(() => est.salvarFicha(ctx.db, C, { fonte: 'bar_produto', fonteId: outro.id, itens: [{ itemId: garrafa.id, fator: 0.1, espelho: true }] }), (e) => e.code === 'VALIDATION_ERROR');
+    await cmp.receber(ctx.db, C, { fornecedorNome: 'Adega', lojaId: loja, itens: [{ itemId: garrafa.id, quantidade: 2, custoUnitario: 90 }] }, { agora });
+    assert.equal((await bar.listarProdutos(ctx.db, C)).find((p) => p.id === dose.id).estoqueAtual, 2);
+  });
+
+  test('venda devolvida depois da baixa devolve o insumo; item de comanda paga não se cancela', async () => {
+    const it = await est.criarItem(ctx.db, C, { nome: 'Camiseta', unidade: 'UN' });
+    await est.movimentar(ctx.db, C, { lojaId: loja, itemId: it.id, tipo: 'entrada', quantidade: 10, custoUnitario: 20 });
+    const prod = (await ctx.db.query("INSERT INTO commerce_products (empresa_id, nome) VALUES ($1, 'Camiseta') RETURNING id", [C])).rows[0].id;
+    const vari = (await ctx.db.query('INSERT INTO commerce_product_variants (empresa_id, product_id, sku) VALUES ($1, $2, $3) RETURNING id', [C, prod, 'CAM-M'])).rows[0].id;
+    await est.salvarFicha(ctx.db, C, { fonte: 'loja_variante', fonteId: vari, itens: [{ itemId: it.id, fator: 1 }] });
+    const ped = (await ctx.db.query("INSERT INTO commerce_orders (empresa_id, loja_id, status) VALUES ($1, $2, 'paid') RETURNING id", [C, loja])).rows[0].id;
+    await ctx.db.query('INSERT INTO commerce_order_items (empresa_id, order_id, variant_id, quantidade) VALUES ($1, $2, $3, 3)', [C, ped, vari]);
+    await est.baixarConsumoDasVendas(ctx.db, C);
+    assert.equal(await saldo(it.id), 7);
+    await ctx.db.query("UPDATE commerce_orders SET status = 'refunded' WHERE id = $1", [ped]);
+    assert.equal((await est.baixarConsumoDasVendas(ctx.db, C)).estornados, 1);
+    assert.equal((await est.baixarConsumoDasVendas(ctx.db, C)).estornados, 0);
+    assert.equal(await saldo(it.id), 10);
+    const lata = await bar.salvarProduto(ctx.db, C, { nome: 'Refri', categoria: 'Bebidas', setor: 'bar', preco: 6, estoqueAtual: 10 });
+    const com = await bar.abrirComanda(ctx.db, C, { nome: 'Mesa 1' });
+    await bar.adicionarItens(ctx.db, C, com.id, [{ produtoId: lata.id, qtd: 1 }]);
+    await bar.pagarComanda(ctx.db, C, com.id, { meio: 'pix', servico: false });
+    await assert.rejects(() => bar.cancelarItemPorIndice(ctx.db, C, com.id, 0), (e) => e.code === 'COMANDA_FECHADA');
+  });
+
+  test('unidade do bar configurável; com uma unidade ativa ela é a padrão', async () => {
+    assert.equal((await est.obterConfig(ctx.db, C)).lojaBarEfetiva, loja);
+    await assert.rejects(() => est.salvarConfig(ctx.db, C, { lojaBar: outraLoja }), (e) => e.status === 404);
+    assert.equal((await est.salvarConfig(ctx.db, C, { lojaBar: loja })).lojaBar, loja);
   });
 });

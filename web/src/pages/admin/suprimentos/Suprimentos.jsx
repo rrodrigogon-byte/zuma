@@ -29,6 +29,9 @@ export default function Suprimentos({ abaInicial = 'itens' }) {
   const lojas = useMemo(() => lojasDaEmpresa(lojasAcessiveis, empresaAtiva?.id), [lojasAcessiveis, empresaAtiva?.id])
   const [aba, setAba] = useState(abaInicial)
   const [unidade, setUnidade] = useState(() => lojaAtiva?.id || (lojas.length === 1 ? lojas[0].id : ''))
+  // Escrita sempre numa unidade: com uma unidade só, "Empresa toda" grava nela.
+  const unidadeEscrita = unidade || (lojas.length === 1 ? lojas[0].id : '')
+  const precisaUnidade = !unidadeEscrita && lojas.length > 1
   const nomeLoja = useCallback((id) => (id ? lojas.find((l) => String(l.id) === String(id))?.nome || 'Outra unidade' : 'Sem unidade'), [lojas])
   const [itens, setItens] = useState([])
   const [busca, setBusca] = useState('')
@@ -36,6 +39,7 @@ export default function Suprimentos({ abaInicial = 'itens' }) {
   const [erro, setErro] = useState('')
   const [form, setForm] = useState(null)
   const [mov, setMov] = useState(null)
+  const [enviando, setEnviando] = useState(false)
   const qs = useCallback((extra = {}) => {
     const p = new URLSearchParams()
     if (unidade) p.set('lojaId', unidade)
@@ -51,18 +55,22 @@ export default function Suprimentos({ abaInicial = 'itens' }) {
   useEffect(() => { carregarItens() }, [carregarItens, empresaAtiva?.id])
 
   async function salvarItem() {
+    if (enviando) return
+    setEnviando(true)
     try {
       const corpo = { nome: form.nome, sku: form.sku, ean: form.ean, unidade: form.unidade, tipo: form.tipo, categoria: form.categoria, ncm: form.ncm, estoqueMinimo: form.estoqueMinimo || 0 }
       if (form.id) await api.patch(`${BASE}/itens/${form.id}`, corpo)
       else await api.post(`${BASE}/itens`, { ...corpo, custoMedio: form.custoMedio || 0 })
       toast('Item salvo.', 'success'); setForm(null); carregarItens()
-    } catch (error) { toast(error.message, 'error') }
+    } catch (error) { toast(error.message, 'error') } finally { setEnviando(false) }
   }
   async function salvarMovimento() {
+    if (enviando) return
+    setEnviando(true)
     try {
-      await api.post(`${BASE}/movimentos`, { lojaId: unidade || null, itemId: mov.item.id, tipo: mov.tipo, quantidade: mov.quantidade, custoUnitario: mov.tipo === 'entrada' ? mov.custoUnitario : undefined, motivo: mov.motivo, idempotencia: mov.chave })
+      await api.post(`${BASE}/movimentos`, { lojaId: unidadeEscrita || null, itemId: mov.item.id, tipo: mov.tipo, quantidade: mov.quantidade, custoUnitario: mov.tipo === 'entrada' ? mov.custoUnitario : undefined, motivo: mov.motivo, idempotencia: mov.chave })
       toast('Movimento registrado.', 'success'); setMov(null); carregarItens()
-    } catch (error) { toast(error.message, 'error') }
+    } catch (error) { toast(error.message, 'error') } finally { setEnviando(false) }
   }
 
   const totalEstoque = itens.reduce((s, i) => s + (i.valorEmEstoque || 0), 0)
@@ -104,21 +112,21 @@ export default function Suprimentos({ abaInicial = 'itens' }) {
         { key: 'custo', label: 'Custo médio', align: 'right', render: (i) => money(i.custoMedio) },
         { key: 'valor', label: 'Valor', align: 'right', render: (i) => money(i.valorEmEstoque) },
         { key: 'acoes', label: 'Ações', render: (i) => <div className="dadm-actions">
-          {['entrada', 'saida', 'perda', 'ajuste'].map((t) => <button key={t} type="button" className="c360-btn ghost" disabled={!unidade && lojas.length > 1} title={!unidade && lojas.length > 1 ? 'Escolha a unidade no topo' : ''} onClick={() => setMov({ item: i, tipo: t, quantidade: '', custoUnitario: i.custoMedio || '', motivo: '', chave: chaveUnica() })}>{{ entrada: 'Entrada', saida: 'Saída', perda: 'Perda', ajuste: 'Contar' }[t]}</button>)}
+          {['entrada', 'saida', 'perda', 'ajuste'].map((t) => <button key={t} type="button" className="c360-btn ghost" disabled={precisaUnidade} title={precisaUnidade ? 'Escolha a unidade no topo' : ''} onClick={() => setMov({ item: i, tipo: t, quantidade: '', custoUnitario: i.custoMedio || '', motivo: '', chave: chaveUnica() })}>{{ entrada: 'Entrada', saida: 'Saída', perda: 'Perda', ajuste: 'Contar' }[t]}</button>)}
           <button type="button" className="c360-btn ghost" onClick={() => setForm({ ...i, estoqueMinimo: String(i.estoqueMinimo), custoMedio: String(i.custoMedio) })}>Editar</button>
         </div> },
       ]} />
     </section>}
 
     {aba === 'movimentos' && <Movimentos qs={qs} nomeLoja={nomeLoja} unidade={unidade} />}
-    {aba === 'inventario' && <Inventario qs={qs} unidade={unidade} lojas={lojas} toast={toast} onMudou={carregarItens} />}
-    {aba === 'fichas' && <Fichas itens={itens} toast={toast} />}
-    {aba === 'compras' && <Pedidos itens={itens} unidade={unidade} qs={qs} toast={toast} onRecebido={carregarItens} />}
-    {aba === 'receber' && <ReceberNfe itens={itens} unidade={unidade} lojas={lojas} toast={toast} onLancado={carregarItens} />}
+    {aba === 'inventario' && <Inventario qs={qs} unidade={unidadeEscrita} precisaUnidade={precisaUnidade} toast={toast} onMudou={carregarItens} />}
+    {aba === 'fichas' && <Fichas itens={itens} lojas={lojas} toast={toast} />}
+    {aba === 'compras' && <Pedidos itens={itens} unidade={unidadeEscrita} qs={qs} toast={toast} onRecebido={carregarItens} />}
+    {aba === 'receber' && <ReceberNfe itens={itens} unidade={unidadeEscrita} precisaUnidade={precisaUnidade} toast={toast} onLancado={carregarItens} />}
     {aba === 'relatorios' && <Relatorios qs={qs} />}
 
     <Dialog open={Boolean(form)} title={form?.id ? 'Editar item' : 'Novo item'} labelId="sup-item" onClose={() => setForm(null)} onSubmit={salvarItem}
-      actions={<><button type="button" className="c360-btn ghost" onClick={() => setForm(null)}>Voltar</button><button type="submit" className="c360-btn primary">Salvar</button></>}>
+      actions={<><button type="button" className="c360-btn ghost" onClick={() => setForm(null)}>Voltar</button><button type="submit" className="c360-btn primary" disabled={enviando}>Salvar</button></>}>
       {form && <div style={{ display: 'grid', gap: 12 }}>
         <label className="c360-field">Nome<input className="c360-input" required minLength={2} maxLength={180} value={form.nome} onChange={(e) => setForm({ ...form, nome: e.target.value })} /></label>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
@@ -138,7 +146,7 @@ export default function Suprimentos({ abaInicial = 'itens' }) {
     </Dialog>
 
     <Dialog open={Boolean(mov)} title={mov ? `${{ entrada: 'Entrada', saida: 'Saída', perda: 'Perda', ajuste: 'Contagem' }[mov.tipo]} · ${mov.item.nome}` : ''} labelId="sup-mov" onClose={() => setMov(null)} onSubmit={salvarMovimento}
-      actions={<><button type="button" className="c360-btn ghost" onClick={() => setMov(null)}>Voltar</button><button type="submit" className="c360-btn primary">Registrar</button></>}>
+      actions={<><button type="button" className="c360-btn ghost" onClick={() => setMov(null)}>Voltar</button><button type="submit" className="c360-btn primary" disabled={enviando}>Registrar</button></>}>
       {mov && <div style={{ display: 'grid', gap: 12 }}>
         <p className="dadm-muted">Saldo atual: {num(mov.item.saldo)} {mov.item.unidade}{unidade ? ` em ${nomeLoja(unidade)}` : ''}.</p>
         <label className="c360-field">{mov.tipo === 'ajuste' ? 'Quantidade contada' : 'Quantidade'} ({mov.item.unidade})<input className="c360-input" required inputMode="decimal" value={mov.quantidade} onChange={(e) => setMov({ ...mov, quantidade: e.target.value })} /></label>
@@ -153,9 +161,11 @@ export default function Suprimentos({ abaInicial = 'itens' }) {
 function Movimentos({ qs, nomeLoja, unidade }) {
   const [lista, setLista] = useState([])
   const [tipo, setTipo] = useState('')
-  useEffect(() => { api.get(`/api/admin/suprimentos/movimentos${qs({ tipo })}`).then(setLista).catch(() => setLista([])) }, [qs, tipo])
+  const [erro, setErro] = useState('')
+  useEffect(() => { api.get(`/api/admin/suprimentos/movimentos${qs({ tipo })}`).then((l) => { setLista(l); setErro('') }).catch((e) => { setLista([]); setErro(e.message || 'Não foi possível carregar os movimentos.') }) }, [qs, tipo])
   return <section className="dadm-card">
     <h2>Movimentos</h2>
+    {erro && <p className="dadm-note danger" role="alert">{erro}</p>}
     <div className="dadm-filters"><select className="c360-input" value={tipo} onChange={(e) => setTipo(e.target.value)} aria-label="Tipo de movimento"><option value="">Todos os tipos</option>{Object.entries(MOVS).map(([v, r]) => <option key={v} value={v}>{r}</option>)}</select></div>
     <Table caption="Movimentos de estoque" rows={lista} empty="Nenhum movimento." columns={[
       { key: 'quando', label: 'Quando', render: (m) => dateTime(m.criadoEm) },
@@ -168,11 +178,13 @@ function Movimentos({ qs, nomeLoja, unidade }) {
   </section>
 }
 
-function Inventario({ qs, unidade, lojas, toast, onMudou }) {
+function Inventario({ qs, unidade, precisaUnidade, toast, onMudou }) {
   const [lista, setLista] = useState([])
   const [aberto, setAberto] = useState(null)
   const [contagens, setContagens] = useState({})
-  const carregar = useCallback(async () => { try { setLista(await api.get(`/api/admin/suprimentos/inventarios${qs()}`)) } catch { setLista([]) } }, [qs])
+  const [erro, setErro] = useState('')
+  const [enviando, setEnviando] = useState(false)
+  const carregar = useCallback(async () => { try { setLista(await api.get(`/api/admin/suprimentos/inventarios${qs()}`)); setErro('') } catch (e) { setLista([]); setErro(e.message || 'Não foi possível carregar os inventários.') } }, [qs])
   useEffect(() => { carregar() }, [carregar])
   async function abrir() {
     try { const inv = await api.post('/api/admin/suprimentos/inventarios', { lojaId: unidade || null, descricao: `Inventário de ${new Date().toLocaleDateString('pt-BR')}` }); setAberto(inv); setContagens({}); carregar() }
@@ -186,14 +198,17 @@ function Inventario({ qs, unidade, lojas, toast, onMudou }) {
     } catch (error) { toast(error.message, 'error') }
   }
   async function concluir() {
+    if (enviando) return
+    setEnviando(true)
     try { const r = await api.post(`/api/admin/suprimentos/inventarios/${aberto.id}/concluir`, {}); setAberto(r); toast(`Inventário concluído: ${r.ajustes} ajuste(s).`, 'success'); carregar(); onMudou() }
-    catch (error) { toast(error.message, 'error') }
+    catch (error) { toast(error.message, 'error') } finally { setEnviando(false) }
   }
   const valorDif = aberto?.itens?.reduce((s, i) => s + (i.valorDiferenca || 0), 0) || 0
   return <section className="dadm-card">
     <h2>Inventário</h2>
     <p className="dadm-muted">Abra, conte item por item e conclua. A diferença vira ajuste de estoque (e perda no DRE quando falta). Vendas feitas durante a contagem são consideradas.</p>
-    <div className="dadm-actions"><button type="button" className="c360-btn primary" disabled={!unidade && lojas.length > 1} onClick={abrir}>Abrir inventário{unidade ? '' : lojas.length > 1 ? ' (escolha a unidade)' : ''}</button></div>
+    {erro && <p className="dadm-note danger" role="alert">{erro}</p>}
+    <div className="dadm-actions"><button type="button" className="c360-btn primary" disabled={precisaUnidade} onClick={abrir}>Abrir inventário{precisaUnidade ? ' (escolha a unidade)' : ''}</button></div>
     {aberto && <div style={{ marginTop: 14 }}>
       <h3>{aberto.descricao} · <Badge tone={aberto.status === 'aberto' ? 'warning' : 'success'}>{aberto.status}</Badge></h3>
       <Table caption="Itens do inventário" rows={aberto.itens.map((i) => ({ ...i, id: i.itemId }))} empty="Sem itens." columns={[
@@ -206,7 +221,7 @@ function Inventario({ qs, unidade, lojas, toast, onMudou }) {
       ]} />
       {aberto.status === 'aberto' && <div className="dadm-actions" style={{ marginTop: 10 }}>
         <button type="button" className="c360-btn ghost" onClick={salvarContagem} disabled={!Object.keys(contagens).length}>Salvar contagem</button>
-        <button type="button" className="c360-btn primary" onClick={concluir}>Concluir ({money(valorDif)} de diferença)</button>
+        <button type="button" className="c360-btn primary" disabled={enviando} onClick={concluir}>Concluir ({money(valorDif)} de diferença)</button>
       </div>}
     </div>}
     <h3 style={{ marginTop: 18 }}>Histórico</h3>
@@ -219,10 +234,15 @@ function Inventario({ qs, unidade, lojas, toast, onMudou }) {
   </section>
 }
 
-function Fichas({ itens, toast }) {
+function Fichas({ itens, lojas, toast }) {
   const [produtos, setProdutos] = useState([])
   const [fichas, setFichas] = useState([])
   const [editando, setEditando] = useState(null)
+  const [config, setConfig] = useState(null)
+  useEffect(() => { api.get('/api/admin/suprimentos/config').then(setConfig).catch(() => setConfig(null)) }, [])
+  async function salvarLojaBar(lojaBar) {
+    try { setConfig(await api.put('/api/admin/suprimentos/config', { lojaBar: lojaBar || null })); toast('Unidade do bar salva.', 'success') } catch (error) { toast(error.message, 'error') }
+  }
   const carregar = useCallback(async () => {
     try { const [p, f] = await Promise.all([api.get('/api/admin/suprimentos/produtos-vendidos'), api.get('/api/admin/suprimentos/fichas')]); setProdutos(p); setFichas(f) } catch (error) { toast(error.message, 'error') }
   }, [toast])
@@ -237,6 +257,15 @@ function Fichas({ itens, toast }) {
   return <section className="dadm-card">
     <h2>Ficha técnica</h2>
     <p className="dadm-muted">Diga quanto de cada item do estoque sai a cada unidade vendida. Ex.: caipirinha = 0,2 KG de limão + 0,05 L de cachaça. Marque “espelhar” quando o produto é o próprio item (cerveja lata): a compra também soma no estoque do bar.</p>
+    {lojas.length > 1 && <div className="dadm-filters">
+      <label className="dadm-muted">Os insumos das vendas do bar saem de{' '}
+        <select className="c360-input" aria-label="Unidade do bar" value={config?.lojaBar || ''} onChange={(e) => salvarLojaBar(e.target.value)}>
+          <option value="">— escolha a unidade —</option>
+          {lojas.map((l) => <option key={l.id} value={l.id}>{l.nome}</option>)}
+        </select>
+      </label>
+      {config && !config.lojaBarEfetiva && <span className="dadm-note warn">Sem unidade do bar, as vendas baixam de “sem unidade”.</span>}
+    </div>}
     <Table caption="Produtos vendidos" rows={produtos.map((p) => ({ ...p, id: p.id }))} empty="Nenhum produto vendido no bar ou na loja online." columns={[
       { key: 'nome', label: 'Produto', render: (p) => <div><strong>{p.nome}</strong><div className="dadm-muted">{p.grupo}</div></div> },
       { key: 'ficha', label: 'Consome', render: (p) => { const f = fichaDe(p); return f ? f.itens.map((i) => `${num(i.fator)} ${i.unidade} ${i.nome}${i.espelho ? ' (espelho)' : ''}`).join(' + ') : <span className="dadm-muted">sem ficha</span> } },
@@ -261,6 +290,7 @@ function Pedidos({ itens, unidade, qs, toast, onRecebido }) {
   const [fornecedores, setFornecedores] = useState([])
   const [novo, setNovo] = useState(null)
   const [recebendo, setRecebendo] = useState(null)
+  const [enviando, setEnviando] = useState(false)
   const carregar = useCallback(async () => {
     try { setPedidos(await api.get(`/api/admin/suprimentos/pedidos${qs()}`)) } catch (error) { toast(error.message, 'error') }
     try { setFornecedores((await api.get('/api/admin/a2/fornecedores')).fornecedores || []) } catch { setFornecedores([]) }
@@ -274,14 +304,16 @@ function Pedidos({ itens, unidade, qs, toast, onRecebido }) {
   }
   async function acao(p, a) { try { await api.post(`/api/admin/suprimentos/pedidos/${p.id}/${a}`, {}); carregar() } catch (error) { toast(error.message, 'error') } }
   async function abrirRecebimento(p) {
-    try { const completo = await api.get(`/api/admin/suprimentos/pedidos/${p.id}`); setRecebendo({ pedido: completo, condicao: completo.condicaoPagamento, linhas: completo.itens.filter((i) => i.pendente > 0).map((i) => ({ itemId: i.itemId, nome: i.nome, unidade: i.unidade, quantidade: String(i.pendente), custo: String(i.custoUnitario) })) }) }
+    try { const completo = await api.get(`/api/admin/suprimentos/pedidos/${p.id}`); setRecebendo({ pedido: completo, condicao: completo.condicaoPagamento, chave: chaveUnica(), excedente: false, linhas: completo.itens.filter((i) => i.pendente > 0).map((i) => ({ itemId: i.itemId, nome: i.nome, unidade: i.unidade, quantidade: String(i.pendente), custo: String(i.custoUnitario) })) }) }
     catch (error) { toast(error.message, 'error') }
   }
   async function receber() {
+    if (enviando) return
+    setEnviando(true)
     try {
-      const r = await api.post('/api/admin/suprimentos/recebimentos', { pedidoId: recebendo.pedido.id, lojaId: unidade || recebendo.pedido.lojaId || null, condicaoPagamento: recebendo.condicao, itens: recebendo.linhas.filter((l) => Number(l.quantidade) > 0).map((l) => ({ itemId: l.itemId, quantidade: l.quantidade, custoUnitario: l.custo })) })
+      const r = await api.post('/api/admin/suprimentos/recebimentos', { pedidoId: recebendo.pedido.id, lojaId: recebendo.pedido.lojaId || unidade || null, condicaoPagamento: recebendo.condicao, idempotencia: recebendo.chave, aceitarExcedente: recebendo.excedente, itens: recebendo.linhas.filter((l) => Number(l.quantidade) > 0).map((l) => ({ itemId: l.itemId, quantidade: l.quantidade, custoUnitario: l.custo })) })
       toast(`Recebido. ${r.contasAPagar.length} conta(s) a pagar criada(s) no Financeiro.`, 'success'); setRecebendo(null); carregar(); onRecebido()
-    } catch (error) { toast(error.message, 'error') }
+    } catch (error) { toast(error.message, 'error') } finally { setEnviando(false) }
   }
   return <section className="dadm-card">
     <h2>Pedidos de compra</h2>
@@ -315,7 +347,7 @@ function Pedidos({ itens, unidade, qs, toast, onRecebido }) {
       </div>}
     </Dialog>
     <Dialog open={Boolean(recebendo)} title={recebendo ? `Receber pedido #${recebendo.pedido.numero}` : ''} labelId="sup-receber" onClose={() => setRecebendo(null)} onSubmit={receber}
-      actions={<><button type="button" className="c360-btn ghost" onClick={() => setRecebendo(null)}>Voltar</button><button type="submit" className="c360-btn primary">Confirmar recebimento</button></>}>
+      actions={<><button type="button" className="c360-btn ghost" onClick={() => setRecebendo(null)}>Voltar</button><button type="submit" className="c360-btn primary" disabled={enviando}>Confirmar recebimento</button></>}>
       {recebendo && <div style={{ display: 'grid', gap: 8 }}>
         {recebendo.linhas.map((l, idx) => <div key={l.itemId} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: 8, alignItems: 'end' }}>
           <span>{l.nome}</span>
@@ -323,13 +355,15 @@ function Pedidos({ itens, unidade, qs, toast, onRecebido }) {
           <label className="c360-field">Custo (R$)<input className="c360-input" inputMode="decimal" value={l.custo} onChange={(e) => { const linhas = [...recebendo.linhas]; linhas[idx] = { ...l, custo: e.target.value }; setRecebendo({ ...recebendo, linhas }) }} /></label>
         </div>)}
         <label className="c360-field">Pagamento<input className="c360-input" value={recebendo.condicao} onChange={(e) => setRecebendo({ ...recebendo, condicao: e.target.value })} /></label>
+        <label className="dadm-muted"><input type="checkbox" checked={recebendo.excedente} onChange={(e) => setRecebendo({ ...recebendo, excedente: e.target.checked })} /> Chegou mais do que o pedido e vou aceitar o excedente</label>
         <p className="dadm-note">Ao confirmar: entrada no estoque e conta(s) a pagar no Financeiro.</p>
       </div>}
     </Dialog>
   </section>
 }
 
-function ReceberNfe({ itens, unidade, lojas, toast, onLancado }) {
+function ReceberNfe({ itens, unidade, precisaUnidade, toast, onLancado }) {
+  const [enviando, setEnviando] = useState(false)
   const [xml, setXml] = useState('')
   const [previa, setPrevia] = useState(null)
   const [mapa, setMapa] = useState({})
@@ -344,15 +378,17 @@ function ReceberNfe({ itens, unidade, lojas, toast, onLancado }) {
     catch (error) { toast(error.message, 'error') }
   }
   async function lancar() {
+    if (enviando || precisaUnidade) return
+    setEnviando(true)
     try {
       const mapeamento = previa.itens.map((i) => { const m = mapa[i.item] || {}; return m.itemId ? { item: i.item, itemId: m.itemId, fator: Number(m.fator) || 1 } : { item: i.item, fator: Number(m.fator) || 1, criarItem: { nome: i.descricao, unidade: (i.unidade || 'UN').toUpperCase(), tipo: 'mercadoria' } } })
       const r = await api.post('/api/admin/suprimentos/nfe/lancar', { xml, lojaId: unidade || null, mapeamento, condicaoPagamento: condicao, confirmarAvisos })
       toast(`NF-e lançada: estoque atualizado e ${r.contasAPagar.length} conta(s) a pagar.`, 'success'); setXml(''); setPrevia(null); carregarRecentes(); onLancado()
-    } catch (error) { toast(error.message, 'error') }
+    } catch (error) { toast(error.message, 'error') } finally { setEnviando(false) }
   }
   return <section className="dadm-card">
     <h2>Receber com NF-e</h2>
-    <p className="dadm-muted">Envie o XML da nota do fornecedor. O sistema confere a autorização e o destinatário, sugere os itens e, ao lançar, dá entrada no estoque{unidade ? '' : lojas.length > 1 ? ' (escolha a unidade no topo)' : ''} e cria as contas a pagar.</p>
+    <p className="dadm-muted">Envie o XML da nota do fornecedor. O sistema confere a autorização e o destinatário, sugere os itens e, ao lançar, dá entrada no estoque{precisaUnidade ? ' (escolha a unidade no topo)' : ''} e cria as contas a pagar. Frete e impostos da nota entram no custo dos itens.</p>
     <div className="dadm-filters"><input type="file" accept=".xml,text/xml" onChange={lerArquivo} aria-label="Arquivo XML da NF-e" /><button type="button" className="c360-btn ghost" disabled={!xml} onClick={verPrevia}>Ler a nota</button></div>
     {previa && <div style={{ display: 'grid', gap: 10, marginTop: 10 }}>
       <p><strong>NF {previa.numero}/{previa.serie}</strong> · {previa.emitente.fantasia || previa.emitente.nome} · {shortDate(previa.emissao)} · {money(previa.valorNota)} {previa.autorizada ? <Badge tone="success">autorizada</Badge> : <Badge tone="danger">sem autorização</Badge>}</p>
@@ -365,7 +401,7 @@ function ReceberNfe({ itens, unidade, lojas, toast, onLancado }) {
         { key: 'fator', label: '1 da nota =', render: (i) => <input className="c360-input" style={{ width: 80 }} aria-label={`Conversão de ${i.descricao}`} inputMode="decimal" value={mapa[i.item]?.fator || '1'} onChange={(e) => setMapa({ ...mapa, [i.item]: { ...mapa[i.item], fator: e.target.value } })} /> },
       ]} />
       <label className="c360-field" style={{ maxWidth: 260 }}>Pagamento<input className="c360-input" placeholder="a_vista ou 30/60" value={condicao} onChange={(e) => setCondicao(e.target.value)} /></label>
-      <div className="dadm-actions"><button type="button" className="c360-btn primary" disabled={previa.jaLancada || (previa.avisos.length > 0 && !confirmarAvisos)} onClick={lancar}>Lançar nota</button></div>
+      <div className="dadm-actions"><button type="button" className="c360-btn primary" disabled={enviando || precisaUnidade || previa.jaLancada || (previa.avisos.length > 0 && !confirmarAvisos)} title={precisaUnidade ? 'Escolha a unidade no topo' : ''} onClick={lancar}>Lançar nota</button></div>
     </div>}
     <h3 style={{ marginTop: 18 }}>Recebimentos recentes</h3>
     <Table caption="Recebimentos" rows={recentes} empty="Nenhum recebimento." columns={[
@@ -381,11 +417,15 @@ function ReceberNfe({ itens, unidade, lojas, toast, onLancado }) {
 function Relatorios({ qs }) {
   const [sugestao, setSugestao] = useState([])
   const [abc, setAbc] = useState([])
+  const [erro, setErro] = useState('')
   useEffect(() => {
-    api.get(`/api/admin/suprimentos/sugestao-compra${qs()}`).then(setSugestao).catch(() => setSugestao([]))
-    api.get('/api/admin/suprimentos/curva-abc?dias=90').then(setAbc).catch(() => setAbc([]))
+    const falhou = (e) => setErro(e.message || 'Não foi possível carregar os relatórios.')
+    setErro('')
+    api.get(`/api/admin/suprimentos/sugestao-compra${qs()}`).then(setSugestao).catch((e) => { setSugestao([]); falhou(e) })
+    api.get('/api/admin/suprimentos/curva-abc?dias=90').then(setAbc).catch((e) => { setAbc([]); falhou(e) })
   }, [qs])
   return <div style={{ display: 'grid', gap: 16 }}>
+    {erro && <p className="dadm-note danger" role="alert">{erro}</p>}
     <section className="dadm-card"><h2>Sugestão de compra</h2>
       <Table caption="Sugestão de compra" rows={sugestao} empty="Nada abaixo do mínimo." columns={[
         { key: 'nome', label: 'Item', render: (i) => i.nome }, { key: 'saldo', label: 'Saldo', align: 'right', render: (i) => `${num(i.saldo)} ${i.unidade}` },
