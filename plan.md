@@ -8,7 +8,7 @@ O BI existente fornece read-model consolidado, histórico financeiro Avec identi
 
 A referência indicada é [CasaNossa — plataforma/grafo](https://nossacasa.kytto.com.br/plataforma/grafo). A rota pública retornou shell/login e não foi possível observar grafo autenticado; tampouco foi encontrado código CasaNossa reutilizável. A solução é própria, inspirada no objetivo de explorar relações, sem alegação de cópia pixel a pixel nem invenção de funcionalidades da referência fechada.
 
-A branch de trabalho é `feat/dino-grafo-completo-20261023`, alvo `fix/kytto-comandas-pdv-20260808`. A base avançou de `cb141271` para `6548c218` enquanto o PR draft #399 estava aberto; o rebase e a reconciliação dos arquivos compartilhados devem terminar antes de atualizar o PR. Não haverá merge, deploy, mudança de configuração nem aplicação de migration sem autorização posterior.
+A branch de trabalho é `feat/dino-grafo-completo-20261023`, alvo `fix/kytto-comandas-pdv-20260808`. Foi rebaseada sobre `6548c218`; a reconciliação preservou os novos links de BI e as mudanças do grafo. O PR draft #399 foi atualizado com `--force-with-lease` e o GitHub reporta `CLEAN/MERGEABLE`. Não haverá merge, deploy, mudança de configuração nem aplicação de migration sem autorização posterior.
 
 ## Arquitetura e dados
 
@@ -43,4 +43,4 @@ As consultas de audiência de campanhas CRM (`queryAudience`/`listCampaignAudien
 
 ## Entrega e validação
 
-O PR draft #399 foi criado em `https://github.com/rrodrigogon-byte/agro-open/pull/399`; a base avançou depois e o PR precisa de atualização por rebase. Após resolver conflitos em `CerebroIA.jsx`, `TODO.md` e `plan.md`, repetir testes focados, `npm run build`, `git diff --check` e testes disponíveis. O suite Node anterior teve apenas oito casos PostgreSQL real bloqueados por ausência de `initdb`; isso não prova execução real de DDL. Não houve acesso/escrita em banco e a migration 085 não foi executada. Não fazer merge/deploy nem alterar produção; a produção continua na entrega anterior do PR #385 até autorização posterior.
+O PR draft #399 está em `https://github.com/rrodrigogon-byte/agro-open/pull/399`. Na base atual, os 217 testes focados passaram, `npm run build` passou e `git diff --check` ficou limpo; a suíte Node integral registrou 1.746 aprovados, oito falhas em testes PostgreSQL real por ausência de `initdb` e 85 skipped. Isso não prova execução real de DDL; a migration 085 não foi executada e nenhum banco foi alterado. O GitHub não reportou checks de CI. A decisão sobre audiência CRM tenant-wide permanece pendente. Não fazer merge/deploy nem alterar produção; a produção continua na entrega anterior do PR #385.

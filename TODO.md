@@ -28,7 +28,7 @@
 
 ## Validação e entrega protegida
 
-- A base avançou para `6548c218` durante a abertura do PR draft #399, e a segunda atualização da branch está em resolução de conflitos. Build/testes precisam ser repetidos nessa base antes de atualizar o PR.
-- Validações na base anterior (`cb141271`): 195/195 testes focados, build Vite aprovado; suíte Node integral 1.741 aprovados, 8 casos PostgreSQL bloqueados por `initdb` ausente, 85 skipped. Nenhum banco foi alterado.
+- A branch foi rebased sobre a base de produção atual `6548c218`; a reconciliação de `CerebroIA.jsx` manteve query params do BI (`tab`, `dias`, `origem=bi`) e os filtros/limpeza do grafo por loja/período.
+- Validação nessa base: **217/217** testes focados aprovados, `npm run build` aprovado, sintaxe JS e `git diff --check` limpos. A suíte Node integral registrou **1.746 aprovados**, **8 falhas ambientais** por `PostgreSQL 16 local ausente: initdb` e **85 skipped**; nenhum banco foi alterado.
 - Reauditorias independentes aprovaram o hardening de marketing e a estrutura estática da FK composta; não houve execução de DDL em PostgreSQL real. A criação do índice pode exigir scan/lock ao aplicar a migration.
-- PR [#399](https://github.com/rrodrigogon-byte/agro-open/pull/399) está em rascunho. A base avançou após sua abertura; atualizar a branch por rebase/`--force-with-lease` e revalidar. Não fazer merge, deploy, alterar Render/WhatsApp nem aplicar migration sem autorização posterior. A produção continua com a entrega anterior do PR #385.
+- PR draft [#399](https://github.com/rrodrigogon-byte/agro-open/pull/399) foi atualizado com `--force-with-lease` e o GitHub reporta `CLEAN/MERGEABLE`; nenhum check GitHub foi reportado. Aguardam decisão sobre audiência CRM, revisão e eventual teste DDL real em PostgreSQL. Não fazer merge, deploy, alterar Render/WhatsApp nem aplicar migration sem autorização posterior. A produção continua com a entrega anterior do PR #385.
