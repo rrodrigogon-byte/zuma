@@ -4,6 +4,7 @@ import { rotaVisivel } from '../lib/disponibilidade'
 import { useAuth } from '../lib/auth'
 import { api } from '../lib/api'
 import { applyThemeMode, DINO_BARBERSHOP_LOGO, isClubeBrandContext, isDinoBrandContext, isStalloneBrandContext, STALLONE_LOGO, storedThemeMode } from '../lib/brand'
+import { DINO_STORE } from '../lib/dino-scope'
 
 // ── Badge de pedidos pendentes ─────────────────────────────────────────────────
 function usePendingOrders(isStaff) {
@@ -559,7 +560,10 @@ export default function Sidebar({ collapsed = false, onToggleCollapse = () => {}
   // usuário preso a uma empresa (não é da plataforma nem usuário legado do evento)
   const usuarioDeEmpresa = (Boolean(user?.empresaId) || user?.tenantBound === true) && !isPlatformAdmin
   const opVisiveis = (itens) => itens.filter((item) => rotaVisivel(item.to, { isPlatformAdmin, usuarioDeEmpresa }))
-  const lojasDaEmpresa = lojasAcessiveis.filter((loja) => !empresaAtiva?.id || loja.empresaId === empresaAtiva.id)
+  const lojasDaEmpresa = lojasAcessiveis.filter((loja) => {
+    if (isDino && loja.id === DINO_STORE.id) return true
+    return !empresaAtiva?.id || loja.empresaId === empresaAtiva.id || loja.commerceEmpresaId === empresaAtiva.id
+  })
 
   useEffect(() => {
     const handler = () => {

@@ -40,12 +40,18 @@ function lojasComFallbackDino(lojas) {
   return [...lista, DINO_STORE]
 }
 
+function selecionarLojaDoContexto(lojas, empresa, atual = null) {
+  const selecionada = selecionarLojaAutomatica(lojas, empresa?.id, atual)
+  if (selecionada || !isDinoDedicatedHost() || !isDinoBrandContext(empresa)) return selecionada
+  return lojas.find((loja) => String(loja?.id || '') === DINO_STORE.id) || null
+}
+
 function readLojaAtivaInicial() {
   const empresa = readEmpresaAtivaInicial()
   const lojasArmazenadas = readStorage('sp_lojas_acessiveis', [])
   const lojas = lojasComFallbackDino(lojasArmazenadas)
   const atual = readStorage('sp_loja_ativa')
-  const selecionada = empresa?.id ? selecionarLojaAutomatica(lojas, empresa.id, atual) : null
+  const selecionada = empresa?.id ? selecionarLojaDoContexto(lojas, empresa, atual) : null
   try {
     if (isDinoDedicatedHost() && lojas.length > 0) localStorage.setItem('sp_lojas_acessiveis', JSON.stringify(lojas))
     if (selecionada?.id && selecionada.id !== atual?.id) localStorage.setItem('sp_loja_ativa', JSON.stringify(selecionada))
@@ -88,7 +94,7 @@ export function AuthProvider({ children }) {
       : empresaNova
     const lojasRecebidas = Array.isArray(sessao.lojas_acessiveis) ? sessao.lojas_acessiveis : []
     const lojas = lojasComFallbackDino(lojasRecebidas)
-    const loja = selecionarLojaAutomatica(lojas, empresa?.id, lojaNova)
+    const loja = selecionarLojaDoContexto(lojas, empresa, lojaNova)
     if (empresas.length > 0) {
       localStorage.setItem('sp_empresas_acessiveis', JSON.stringify(empresas))
       setEmpresasAcessiveis(empresas)
@@ -125,7 +131,7 @@ export function AuthProvider({ children }) {
     const proxima = empresasAcessiveis.find((empresa) => empresa.id === empresaId)
     if (!proxima) return false
     if (empresaAtiva?.id !== proxima.id || lojaAtiva?.id) desligarPushContextoAtual()
-    const proximaLoja = selecionarLojaAutomatica(lojasAcessiveis, proxima.id)
+    const proximaLoja = selecionarLojaDoContexto(lojasAcessiveis, proxima)
     localStorage.setItem('sp_empresa_ativa', JSON.stringify(proxima))
     if (proximaLoja) localStorage.setItem('sp_loja_ativa', JSON.stringify(proximaLoja))
     else localStorage.removeItem('sp_loja_ativa')
@@ -141,7 +147,12 @@ export function AuthProvider({ children }) {
       setLojaAtiva(null)
       return true
     }
-    const proxima = lojasAcessiveis.find((loja) => loja.id === lojaId && loja.ativa !== false && (!empresaAtiva?.id || loja.empresaId === empresaAtiva.id || loja.commerceEmpresaId === empresaAtiva.id))
+    const proxima = lojasAcessiveis.find((loja) => loja.id === lojaId && loja.ativa !== false && (
+      !empresaAtiva?.id
+      || loja.empresaId === empresaAtiva.id
+      || loja.commerceEmpresaId === empresaAtiva.id
+      || (isDinoDedicatedHost() && isDinoBrandContext(empresaAtiva) && loja.id === DINO_STORE.id)
+    ))
     if (!proxima) return false
     if (lojaAtiva?.id !== proxima.id) desligarPushContextoAtual()
     localStorage.setItem('sp_loja_ativa', JSON.stringify(proxima))
@@ -163,7 +174,7 @@ export function AuthProvider({ children }) {
       const lojasAtualizadas = lojasComFallbackDino(lojas)
       localStorage.setItem('sp_lojas_acessiveis', JSON.stringify(lojasAtualizadas))
       setLojasAcessiveis(lojasAtualizadas)
-      const selecionada = selecionarLojaAutomatica(lojasAtualizadas, empresaAtualizada?.id, loja || lojaAtiva)
+      const selecionada = selecionarLojaDoContexto(lojasAtualizadas, empresaAtualizada, loja || lojaAtiva)
       if (selecionada) {
         localStorage.setItem('sp_loja_ativa', JSON.stringify(selecionada))
         setLojaAtiva(selecionada)
