@@ -6,6 +6,8 @@ import { useAuth } from '../../lib/auth'
 import { isDinoBrandContext } from '../../lib/brand'
 import { ehHostDino } from '../../lib/dominios-dino'
 import DinoBusinessDashboard from './DinoBusinessDashboard'
+import PainelEmpresa from './PainelEmpresa'
+import { isTenantScope } from '../../lib/tenant-scope'
 
 const LINKS = [
   { label: 'Atletas', href: '/admin/atletas', icon: '🎾' },
@@ -734,5 +736,7 @@ export default function Dashboard() {
   const scopeKey = `${empresaAtiva?.id || 'empresa'}:${lojaAtiva?.id || 'todas'}`
   const navigate = useNavigate()
   const openDinoTab = (tab) => navigate(`/admin/barbearia-erp?area=${DINO_TAB_AREA[tab] || 'operacao'}&tab=${encodeURIComponent(tab)}`)
-  return isDino ? <DinoBusinessDashboard key={scopeKey} onOpenTab={openDinoTab} /> : <EventDashboard />
+  if (isDino) return <DinoBusinessDashboard key={scopeKey} onOpenTab={openDinoTab} />
+  // empresa sem painel de marca: o painel do evento é global (negado a usuário de empresa)
+  return isTenantScope(user, empresaAtiva) ? <PainelEmpresa key={scopeKey} /> : <EventDashboard />
 }
