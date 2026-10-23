@@ -1,6 +1,8 @@
 import { createContext, useContext, useState } from 'react'
 import { encerrarPushDoAparelho } from './push-equipe'
 import { selecionarLojaAutomatica } from './context-selection'
+import { isDinoDedicatedHost } from './dino-scope'
+import { isDinoBrandContext } from './brand'
 
 const AuthContext = createContext(null)
 
@@ -12,8 +14,18 @@ function readStorage(key, fallback = null) {
   }
 }
 
+function readEmpresaAtivaInicial() {
+  const atual = readStorage('sp_empresa_ativa')
+  if (!isDinoDedicatedHost()) return atual
+  const empresas = readStorage('sp_empresas_acessiveis', [])
+  const dino = Array.isArray(empresas) ? empresas.find((empresa) => isDinoBrandContext(empresa)) : null
+  if (!dino) return atual
+  try { localStorage.setItem('sp_empresa_ativa', JSON.stringify(dino)) } catch { /* armazenamento opcional */ }
+  return dino
+}
+
 function readLojaAtivaInicial() {
-  const empresa = readStorage('sp_empresa_ativa')
+  const empresa = readEmpresaAtivaInicial()
   const lojas = readStorage('sp_lojas_acessiveis', [])
   const atual = readStorage('sp_loja_ativa')
   const selecionada = empresa?.id ? selecionarLojaAutomatica(lojas, empresa.id, atual) : null
@@ -26,7 +38,7 @@ function readLojaAtivaInicial() {
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(() => readStorage('sp_user'))
-  const [empresaAtiva, setEmpresaAtiva] = useState(() => readStorage('sp_empresa_ativa'))
+  const [empresaAtiva, setEmpresaAtiva] = useState(readEmpresaAtivaInicial)
   const [empresasAcessiveis, setEmpresasAcessiveis] = useState(() => readStorage('sp_empresas_acessiveis', []))
   const [lojaAtiva, setLojaAtiva] = useState(readLojaAtivaInicial)
   const [lojasAcessiveis, setLojasAcessiveis] = useState(() => readStorage('sp_lojas_acessiveis', []))

@@ -209,7 +209,9 @@ function Loading() {
 // `clube`: clubes e academias têm telas próprias (não as da barbearia nem as do evento).
 function TenantAware({ tenant, legacy, stallone, clube }) {
   const { user, empresaAtiva } = useAuth()
+  const hostDino = typeof window !== 'undefined' && ehHostDino(window.location.hostname)
   if (stallone && brandFromContext(empresaAtiva) === 'stallone') return stallone
+  if (tenant && hostDino) return tenant
   if (clube && !isDinoBrandContext(empresaAtiva) && !isStalloneBrandContext(empresaAtiva) && isClubeBrandContext(empresaAtiva)) return clube
   return isTenantScope(user, empresaAtiva) ? tenant : legacy
 }
