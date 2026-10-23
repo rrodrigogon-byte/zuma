@@ -560,7 +560,10 @@ export default function Sidebar({ collapsed = false, onToggleCollapse = () => {}
   // usuário preso a uma empresa (não é da plataforma nem usuário legado do evento)
   const usuarioDeEmpresa = (Boolean(user?.empresaId) || user?.tenantBound === true) && !isPlatformAdmin
   const opVisiveis = (itens) => itens.filter((item) => rotaVisivel(item.to, { isPlatformAdmin, usuarioDeEmpresa }))
-  const lojasDaEmpresa = lojasAcessiveis.filter((loja) => {
+  const lojasContexto = isDino && !lojasAcessiveis.some((loja) => loja.id === DINO_STORE.id)
+    ? [...lojasAcessiveis, DINO_STORE]
+    : lojasAcessiveis
+  const lojasDaEmpresa = lojasContexto.filter((loja) => {
     if (isDino && loja.id === DINO_STORE.id) return true
     return !empresaAtiva?.id || loja.empresaId === empresaAtiva.id || loja.commerceEmpresaId === empresaAtiva.id
   })
@@ -696,7 +699,7 @@ export default function Sidebar({ collapsed = false, onToggleCollapse = () => {}
             </label>
             <select
               id="loja-ativa"
-              value={lojaAtiva?.id || ''}
+              value={lojaAtiva?.id || (isDino && lojasDaEmpresa.some((loja) => loja.id === DINO_STORE.id) ? DINO_STORE.id : '')}
               onChange={(event) => trocarLoja(event.target.value)}
               style={{
                 width: '100%', padding: '8px 9px', borderRadius: 7,
