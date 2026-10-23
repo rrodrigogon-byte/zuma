@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { api, fmtDate, fmtR } from '../../lib/api'
+import { api, fmtR } from '../../lib/api'
 import { useAuth } from '../../lib/auth'
 import { GoalsPanel, WhatsappAlert } from './dino/GoalsPanel'
 import StrategicRevenueMix from './dino/StrategicRevenueMix'
@@ -85,6 +85,8 @@ const ACTIVITY_DESTINATIONS = {
   appointment: { to: PATHS.agenda, label: 'Abrir agenda' },
   retail: { to: PATHS.retail, label: 'Abrir revenda' },
   command: { to: PATHS.atendimento, label: 'Abrir atendimento' },
+  finance: { to: PATHS.finance, label: 'Abrir financeiro' },
+  historical: { to: PATHS.atendimento, label: 'Abrir histórico' },
 }
 
 function channelDestination(id, range) {
@@ -102,6 +104,21 @@ function formatValue(value, format) {
   if (format === 'currency') return fmtR(Number(value || 0))
   if (format === 'percent') return `${Number(value || 0).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%`
   return Number(value || 0).toLocaleString('pt-BR')
+}
+
+function formatDateTime(value, timeZone = DASHBOARD_TIME_ZONE) {
+  const date = new Date(value)
+  return Number.isNaN(date.valueOf()) ? 'Data indisponível' : new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short', timeZone }).format(date)
+}
+
+function formatAppointmentStatus(status) {
+  const labels = {
+    agendado: 'Agendado', confirmado: 'Confirmado', aguardando_confirmacao: 'Aguardando confirmação',
+    em_atendimento: 'Em atendimento', concluido: 'Concluído', cancelado: 'Cancelado',
+    cancelado_falta_confirmacao: 'Cancelado por falta de confirmação', nao_compareceu: 'Não compareceu',
+  }
+  const key = String(status || 'agendado').toLowerCase()
+  return labels[key] || key.replace(/[_-]+/g, ' ').replace(/(^|\s)\S/g, (letter) => letter.toUpperCase())
 }
 
 function Sparkline({ values = [], unavailable = false }) {
@@ -159,11 +176,14 @@ function HorizontalBars({ items = [], valueKey = 'revenue', empty = 'Sem dados n
 }
 
 function PaymentDonut({ items = [], caption = 'recebido', empty = 'Sem pagamentos registrados.' }) {
-  const total = items.reduce((sum, item) => sum + Number(item.value || 0), 0)
+  const chartItems = items.map((item) => ({ ...item, value: Number(item.value) })).filter((item) => Number.isFinite(item.value) && item.value > 0)
+  const total = chartItems.reduce((sum, item) => sum + item.value, 0)
   let angle = 0
-  const gradient = items.length ? `conic-gradient(${items.map((item, index) => { const start = angle; angle += total ? Number(item.value || 0) / total * 360 : 0; return `${COLORS[index % COLORS.length]} ${start}deg ${angle}deg` }).join(',')})` : 'var(--surface-2)'
-  const detail = items.map((item) => `${item.method}: ${fmtR(item.value)}`).join('. ')
-  return <div className="dino-donut-layout"><div className="dino-donut" style={{ background: gradient }} role="img" aria-label={`Total ${caption}: ${fmtR(total)}. ${detail}`}><div><strong>{fmtR(total)}</strong><span>{caption}</span></div></div><div className="dino-donut-legend">{items.length ? items.map((item, index) => <div key={item.method}><i style={{ background: COLORS[index % COLORS.length] }}/><span>{item.method}</span><strong>{fmtR(item.value)}</strong></div>) : <div className="dino-panel-empty">{empty}</div>}</div></div>
+  const gradient = chartItems.length ? `conic-gradient(${chartItems.map((item, index) => { const start = angle; angle += item.value / total * 360; return `${COLORS[index % COLORS.length]} ${start}deg ${angle}deg` }).join(',')})` : 'var(--surface-2)'
+  return <div className="dino-payment-chart">
+    <div className="dino-donut-total"><span>Total {caption}</span><strong>{fmtR(total)}</strong></div>
+    <div className="dino-donut-layout"><div className="dino-donut" style={{ background: gradient }} aria-hidden="true"><div /></div><div className="dino-donut-legend">{chartItems.length ? chartItems.map((item, index) => <div key={item.method || index}><i aria-hidden="true" style={{ background: COLORS[index % COLORS.length] }}/><span>{item.method || 'Outro meio'}</span><strong>{fmtR(item.value)}</strong></div>) : <div className="dino-panel-empty">{empty}</div>}</div></div>
+  </div>
 }
 
 function HistoricalAvecPanel({ data, range }) {
@@ -192,10 +212,15 @@ function Funnel({ rows = [] }) {
 
 function Heatmap({ cells = [] }) {
   const days = [['mon', 'Seg'], ['tue', 'Ter'], ['wed', 'Qua'], ['thu', 'Qui'], ['fri', 'Sex'], ['sat', 'Sáb'], ['sun', 'Dom']]
-  const hours = Array.from({ length: 13 }, (_, index) => index + 8)
+  const observedHours = cells.map((item) => Number(item.hour)).filter((hour) => Number.isInteger(hour) && hour >= 0 && hour <= 23)
+  const hours = [...new Set([...Array.from({ length: 13 }, (_, index) => index + 8), ...observedHours])].sort((a, b) => a - b)
   const values = new Map(cells.map((item) => [`${item.weekday}-${item.hour}`, Number(item.value || 0)]))
   const max = Math.max(...cells.map((item) => Number(item.value || 0)), 1)
-  return <div className="dino-heatmap-wrap"><div className="dino-heatmap" style={{ '--heatmap-cols': hours.length + 1 }} role="grid" aria-label="Horários mais movimentados por dia"><span />{hours.map((hour) => <span key={hour} role="columnheader">{hour}h</span>)}{days.flatMap(([day, label]) => [<strong key={`${day}-label`} role="rowheader">{label}</strong>, ...hours.map((hour) => { const value = values.get(`${day}-${hour}`) || 0; return <i key={`${day}-${hour}`} role="gridcell" aria-label={`${label}, ${hour} horas: ${value} agendamento(s)`} style={{ opacity: value ? .2 + value / max * .8 : .06 }} /> })])}</div></div>
+  const total = cells.reduce((sum, item) => sum + Number(item.value || 0), 0)
+  return <>
+    {!total && <p className="dino-heatmap-empty">Sem agendamentos elegíveis no período selecionado. Cancelamentos e faltas não entram no mapa.</p>}
+    <div className="dino-heatmap-wrap"><div className="dino-heatmap" style={{ '--heatmap-cols': hours.length }} role="grid" aria-label="Horários mais movimentados por dia"><span aria-hidden="true" />{hours.map((hour) => <span key={hour} role="columnheader">{hour}h</span>)}{days.flatMap(([day, label]) => [<strong key={`${day}-label`} role="rowheader">{label}</strong>, ...hours.map((hour) => { const value = values.get(`${day}-${hour}`) || 0; return <i key={`${day}-${hour}`} role="gridcell" aria-label={`${label}, ${hour} horas: ${value} agendamento(s)`} title={`${label}, ${hour}h: ${value} agendamento(s)`} data-count={value} style={{ opacity: value ? .2 + value / max * .8 : .06 }} /> })])}</div></div>
+  </>
 }
 
 function ChannelList({ items = [], range }) {
@@ -217,20 +242,51 @@ export default function DinoBusinessDashboard() {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [updatedAt, setUpdatedAt] = useState(null)
+  const requestId = useRef(0)
+  const lastRequest = useRef({ period: null, at: 0 })
+  const lastSuccessfulLoad = useRef(0)
 
-  const load = useCallback(async () => {
+  const load = useCallback(async ({ force = false } = {}) => {
+    const startedAt = Date.now()
+    if (!force && lastRequest.current.period === period && startedAt - lastRequest.current.at < 1000) return
+    lastRequest.current = { period, at: startedAt }
+    const currentRequest = ++requestId.current
     setLoading(true)
     setError('')
-    try { setData(await api.get(`/api/admin/barbearia/analytics?period=${period}`)) }
-    catch (err) { setError(err.message || 'Não foi possível carregar os indicadores.') }
-    finally { setLoading(false) }
+    try {
+      const result = await api.get(`/api/admin/barbearia/analytics?period=${period}`)
+      if (currentRequest !== requestId.current) return
+      setData(result)
+      const loadedAt = new Date()
+      setUpdatedAt(loadedAt)
+      lastSuccessfulLoad.current = loadedAt.getTime()
+    } catch (err) {
+      if (currentRequest === requestId.current) setError(err.message || 'Não foi possível carregar os indicadores.')
+    } finally {
+      if (currentRequest === requestId.current) setLoading(false)
+    }
   }, [period])
 
-  useEffect(() => { load() }, [load])
+  useEffect(() => {
+    load()
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === 'visible' && Date.now() - lastSuccessfulLoad.current > 60_000) load()
+    }
+    window.addEventListener('focus', refreshWhenVisible)
+    document.addEventListener('visibilitychange', refreshWhenVisible)
+    return () => {
+      window.removeEventListener('focus', refreshWhenVisible)
+      document.removeEventListener('visibilitychange', refreshWhenVisible)
+    }
+  }, [load])
 
   const revenueSeries = data?.charts?.revenueDaily?.map((item) => Number(item.total || 0)) || []
   const appointmentSeries = data?.charts?.appointmentsDaily?.map((item) => Number(item.value || 0)) || []
   const reportRange = analyticsRange(data?.period, period)
+  const dataSources = data?.dataQuality?.sources || {}
+  const displayTimeZone = data?.period?.timeZone || DASHBOARD_TIME_ZONE
+  const updatedLabel = updatedAt ? formatDateTime(updatedAt, displayTimeZone) : ''
   const mixDestinations = {
     overview: { to: reportPath('financeiro', reportRange), label: 'Abrir relatório consolidado' },
     services: { to: reportPath('produtos', reportRange), label: 'Ver serviços no BI' },
@@ -242,8 +298,8 @@ export default function DinoBusinessDashboard() {
   if (loading && !data) return <section className="dino-dashboard-loading" aria-busy="true">Carregando indicadores reais…</section>
 
   return <section className="dino-business-dashboard" aria-label="Dashboard do negócio Dino" aria-busy={loading}>
-    <header className="dino-dashboard-header"><div><span>Visão do negócio</span><h2>Central Dino</h2><p>Barbearia, perfumaria e relacionamento no mesmo recorte operacional.</p></div><div className="dino-period-switch" aria-label="Período do dashboard">{PERIODS.map(([value, label]) => <button type="button" key={value} className={period === value ? 'active' : ''} onClick={() => setPeriod(value)} aria-pressed={period === value}>{label}</button>)}<button type="button" onClick={load}>Atualizar</button></div></header>
-    <p className="dino-dashboard-status" role="status">{loading ? 'Atualizando indicadores…' : `Indicadores atualizados para ${PERIODS.find(([value]) => value === period)?.[1] || 'o período selecionado'}.`}</p>
+    <header className="dino-dashboard-header"><div><span>Visão do negócio</span><h2>Central Dino</h2><p>Barbearia, perfumaria e relacionamento no mesmo recorte operacional.</p></div><div className="dino-period-switch" aria-label="Período do dashboard">{PERIODS.map(([value, label]) => <button type="button" key={value} className={period === value ? 'active' : ''} onClick={() => setPeriod(value)} aria-pressed={period === value}>{label}</button>)}<button type="button" onClick={() => load({ force: true })} disabled={loading}>Atualizar</button></div></header>
+    <p className="dino-dashboard-status" role="status">{loading ? 'Atualizando indicadores…' : updatedAt ? `Última atualização bem-sucedida: ${updatedLabel} · ${PERIODS.find(([value]) => value === period)?.[1] || 'período selecionado'}.` : 'Indicadores ainda não foram atualizados.'}</p>
     {error && <div className="dino-dashboard-error" role="alert">{error}</div>}
     <WhatsappAlert />
     {data && <>
@@ -252,16 +308,26 @@ export default function DinoBusinessDashboard() {
       <section className="dino-mini-kpis" aria-label="Indicadores operacionais complementares">
         <MiniKpi to={PATHS.finance} label="Contas a receber operacionais" value={fmtR(data.miniKpis?.receivables || 0)} action="Abrir financeiro" />
         <article className="dino-mini-kpi dino-stock-kpi"><Link to={PATHS.stock}><span>Estoque baixo</span><strong>{data.miniKpis?.lowStock?.total || 0}</strong><small>{data.miniKpis?.lowStock?.retail || 0} revenda · {data.miniKpis?.lowStock?.commerce || 0} Commerce</small><b>Ver estoque de revenda <span aria-hidden="true">→</span></b></Link><Link className="dino-stock-commerce-link" to={PATHS.commerceCatalog}>Abrir catálogo Commerce <span aria-hidden="true">→</span></Link></article>
-        <MiniKpi to={PATHS.plans} label="MRR" value={fmtR(data.miniKpis?.mrr || 0)} note="Consulte assinaturas ativas e sua cobertura." action="Abrir planos" />
+        <MiniKpi to={PATHS.plans} label={data.scope?.level === 'unit' ? 'MRR da empresa' : 'MRR'} value={fmtR(data.miniKpis?.mrr || 0)} note="Assinaturas legadas não identificam a unidade ativa." action="Abrir planos" />
       </section>
       <HistoricalAvecPanel data={{ ...data.historicalAvec, finance: data.historicalFinance }} range={reportRange} />
       <StrategicRevenueMix mix={data.strategicMix} periodLabel={`recorte de ${data.period?.days || period} dia(s)`} destinations={mixDestinations} />
       <div className="dino-dashboard-grid wide-left"><article className="dino-chart-panel"><header><div><span>Valor dos pedidos e vendas</span><h3>Movimento registrado</h3></div><PanelLink to={reportPath('visao', reportRange)}>Ver série no BI</PanelLink></header><strong className="dino-panel-value">{formatValue(data.kpis?.find((item) => item.id === 'revenue')?.value, 'currency')}</strong><RevenueChart rows={data.charts?.revenueDaily || []} /></article><article className="dino-chart-panel"><header><div><span>Barbearia e revenda</span><h3>Pagamentos registrados</h3></div><PanelLink to={reportPath('financeiro', reportRange)}>Ver meios no BI</PanelLink></header><PaymentDonut items={data.charts?.paymentMethods || []} empty="Sem pagamentos conciliados no período." /><div className="dino-panel-subhead"><h4>Capturas do e-commerce</h4><PanelLink to={PATHS.commercePayments}>Abrir pagamentos</PanelLink></div><PaymentDonut items={data.charts?.commercePaymentMethods || []} caption="capturado" empty="Sem capturas no período." /><p className="dino-panel-empty">Capturas registradas no Commerce no período. Não representam liquidação bancária.</p></article></div>
       <div className="dino-dashboard-grid"><article className="dino-chart-panel"><header><div><span>Receita</span><h3>Categorias</h3></div><PanelLink to={reportPath('produtos', reportRange)}>Ver detalhamento</PanelLink></header><HorizontalBars items={data.charts?.categorySales || []} /></article><article className="dino-chart-panel"><header><div><span>Desempenho</span><h3>Produtos e serviços</h3></div><PanelLink to={reportPath('produtos', reportRange)}>Ver ranking no BI</PanelLink></header><HorizontalBars items={data.charts?.topProducts || []} /></article><article className="dino-chart-panel"><header><div><span>Jornada</span><h3>Funil de conversão</h3></div><PanelLink to={reportPath('visao', reportRange)}>Ver cobertura</PanelLink></header><Funnel rows={data.charts?.funnel || []} /></article></div>
-      <div className="dino-dashboard-grid two"><article className="dino-chart-panel"><header><div><span>Capacidade</span><h3>Horários mais movimentados</h3></div><PanelLink to={PATHS.agenda}>Abrir agenda</PanelLink></header><Heatmap cells={data.charts?.scheduleHeatmap || []} /></article><article className="dino-chart-panel"><header><div><span>Origem registrada</span><h3>Canais de venda</h3></div><PanelLink to={reportPath('visao', reportRange)}>Ver composição</PanelLink></header><ChannelList items={data.charts?.channels || []} range={reportRange} /></article></div>
-      <div className="dino-dashboard-grid two"><article className="dino-chart-panel"><header><div><span>Próximos compromissos</span><h3>Agenda</h3></div><PanelLink to={PATHS.agenda}>Abrir agenda</PanelLink></header>{data.upcomingAppointments?.length ? <div className="dino-event-list">{data.upcomingAppointments.map((item) => <div key={item.id}><time>{new Date(item.at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: data.period?.timeZone })}</time><span><strong>{item.customerId ? <Link to={`/admin/clientes-360/${encodeURIComponent(`dino:${item.customerId}`)}`} className="dino-customer-link">{item.customer}</Link> : item.customer}</strong><small>{item.service} · {item.professional}</small></span></div>)}</div> : <div className="dino-panel-empty">Nenhum atendimento futuro registrado.</div>}</article><article className="dino-chart-panel"><header><div><span>Eventos persistidos</span><h3>Atividade recente</h3></div><PanelLink to={reportPath('visao', reportRange)}>Ver indicadores</PanelLink></header>{data.activity?.length ? <div className="dino-event-list dino-activity-list">{data.activity.map((item, index) => { const destination = ACTIVITY_DESTINATIONS[item.type] || { to: reportPath('visao', reportRange), label: 'Ver indicadores' }; return <Link key={`${item.type}-${item.at}-${index}`} to={destination.to} aria-label={`${item.title}. ${item.detail}. ${destination.label}.`}><i className={`type-${item.type}`} /><span><strong>{item.title}</strong><small>{item.detail} · {fmtDate(item.at)}</small></span><em>{destination.label} <span aria-hidden="true">→</span></em></Link> })}</div> : <div className="dino-panel-empty">Nenhuma atividade registrada.</div>}</article></div>
-      <GoalsPanel goals={data.goals} canEdit={canEditGoals} onSaved={load} />
-      <details className="dino-data-quality"><summary>Qualidade e cobertura dos dados</summary><p>{(data.dataQuality?.notes || []).join(' ')}</p><PanelLink to={reportPath('visao', reportRange)}>Ver fontes e definições no BI</PanelLink></details>
+      <div className="dino-dashboard-grid two"><article className="dino-chart-panel"><header><div><span>Capacidade · últimos {data.period?.days || period} dias</span><h3>Horários mais movimentados</h3></div><PanelLink to={PATHS.agenda}>Abrir agenda</PanelLink></header><Heatmap cells={data.charts?.scheduleHeatmap || []} /></article><article className="dino-chart-panel"><header><div><span>Origem registrada</span><h3>Canais de venda</h3></div><PanelLink to={reportPath('visao', reportRange)}>Ver composição</PanelLink></header><ChannelList items={data.charts?.channels || []} range={reportRange} /></article></div>
+      <div className="dino-dashboard-grid two"><article className="dino-chart-panel"><header><div><span>Próximos compromissos</span><h3>Agenda</h3></div><PanelLink to={PATHS.agenda}>Abrir agenda</PanelLink></header>{data.upcomingAppointments?.length ? <div className="dino-event-list">{data.upcomingAppointments.map((item) => <div key={item.id}><time dateTime={item.at}><small>{new Intl.DateTimeFormat('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit', timeZone: displayTimeZone }).format(new Date(item.at))}</small><strong>{new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: displayTimeZone }).format(new Date(item.at))}</strong></time><span><strong>{item.customerId ? <Link to={`/admin/clientes-360/${encodeURIComponent(`dino:${item.customerId}`)}`} className="dino-customer-link">{item.customer}</Link> : item.customer}</strong><small>{item.service} · {item.professional}</small><small className="dino-appointment-status">{formatAppointmentStatus(item.status)}</small></span></div>)}</div> : <div className="dino-panel-empty">Nenhum atendimento futuro registrado para esta unidade.</div>}</article><article className="dino-chart-panel"><header><div><span>Eventos persistidos no período</span><h3>Atividade recente</h3></div><PanelLink to={reportPath('visao', reportRange)}>Ver indicadores</PanelLink></header>{data.activity?.length ? <div className="dino-event-list dino-activity-list">{data.activity.map((item, index) => { const destination = item.type === 'historical' ? { to: reportPath('operacao', reportRange), label: 'Ver histórico no BI' } : (ACTIVITY_DESTINATIONS[item.type] || { to: reportPath('visao', reportRange), label: 'Ver indicadores' }); const amount = item.value == null ? '' : ` · ${fmtR(item.value)}`; return <Link key={`${item.type}-${item.at}-${index}`} to={destination.to} aria-label={`${item.title}. ${item.detail}${amount}. ${formatDateTime(item.at, displayTimeZone)}. ${destination.label}.`}><i aria-hidden="true" className={`type-${item.type}`} /><span><strong>{item.title}</strong><small>{item.detail}{amount} · {formatDateTime(item.at, displayTimeZone)}</small></span><em>{destination.label} <span aria-hidden="true">→</span></em></Link> })}</div> : <div className="dino-panel-empty">Nenhuma atividade persistida neste período.</div>}</article></div>
+      <GoalsPanel goals={data.goals} canEdit={canEditGoals} onSaved={() => load({ force: true })} />
+      <details className="dino-data-quality" open><summary>Qualidade e cobertura dos dados</summary>
+        <ul className="dino-data-quality-sources">
+          <li><strong>Escopo:</strong> {data.scope?.label || 'Empresa'}{data.scope?.level === 'unit' ? ' · indicadores operacionais filtrados pela unidade selecionada' : ' · agregado da empresa'}.</li>
+          <li><strong>Agenda:</strong> {dataSources.agenda?.recordsInHeatmap || 0} agendamento(s) no mapa · {dataSources.agenda?.upcoming || 0} futuro(s) · fuso {dataSources.agenda?.timeZone || displayTimeZone}.</li>
+          <li><strong>Atividade:</strong> {dataSources.activity?.recordsInPeriod || 0} evento(s) exibido(s) no período (máximo de 12, mais recentes).</li>
+          <li><strong>Pagamentos:</strong> {dataSources.payments?.methods || 0} meio(s) listado(s) · {fmtR(dataSources.payments?.total || 0)} registrados; capturas Commerce separadas: {fmtR(dataSources.payments?.commerceCapturedTotal || 0)}.</li>
+          <li><strong>Commerce:</strong> {dataSources.commerce?.status === 'ok' ? 'disponível no escopo validado' : `indisponível${dataSources.commerce?.reason ? ` (${dataSources.commerce.reason})` : ''}`}.</li>
+          <li><strong>Metas:</strong> {dataSources.goals?.status === 'empty' ? 'não configuradas' : dataSources.goals?.status === 'limited' ? 'da empresa; progresso não comparado ao realizado de uma unidade' : 'da empresa · mês corrente'}.</li>
+        </ul>
+        <p>{(data.dataQuality?.notes || []).join(' ')}</p><PanelLink to={reportPath('visao', reportRange)}>Ver fontes e definições no BI</PanelLink>
+      </details>
     </>}
   </section>
 }

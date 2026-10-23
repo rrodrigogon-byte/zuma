@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildDinoDashboardAnalytics, dashboardPeriod } from './dino-dashboard.js';
+import { buildDinoDashboardAnalytics, dashboardPeriod, filterDashboardRowsToStore } from './dino-dashboard.js';
 
 const now = new Date('2026-09-01T16:00:00.000Z');
 
@@ -184,4 +184,95 @@ test('novos clientes: só cadastro no período; atualização, importação e cl
   const r = buildDinoDashboardAnalytics(input, { now, period: 1 });
   const kpi = r.kpis.find((item) => item.id === 'newCustomers');
   assert.equal(kpi.value, 3, '2 do cadastro (novo e o da agenda) + 1 do Commerce; o importado do AVEC não conta');
+});
+
+test('heatmap e próximos usam a hora marcada, incluem os compromissos de hoje ainda futuros e não a última edição', () => {
+  const input = baseInput();
+  input.appointments = [{ id: 'futuro', dataHora: '2026-09-01T22:30:00.000Z', atualizadoEm: '2026-08-01T12:00:00.000Z', status: 'confirmado', clienteNome: 'Cliente sintético' }];
+  const result = buildDinoDashboardAnalytics(input, { period: 1, now });
+  assert.equal(result.upcomingAppointments[0].id, 'futuro');
+  assert.equal(result.upcomingAppointments[0].at, '2026-09-01T22:30:00.000Z');
+  assert.equal(result.charts.scheduleHeatmap.find((cell) => cell.weekday === 'tue' && cell.hour === 18)?.value, 1);
+  assert.equal(result.kpis.find((item) => item.id === 'appointments').value, 1);
+});
+
+test('agendamento antigo editado hoje entra no feed pela edição, mas não no heatmap da janela por data marcada', () => {
+  const input = baseInput();
+  input.appointments = [{ id: 'antigo', dataHora: '2026-07-01T19:00:00.000Z', atualizadoEm: '2026-09-01T15:00:00.000Z', status: 'agendado', clienteNome: 'Cadastro revisado' }];
+  const result = buildDinoDashboardAnalytics(input, { period: 30, now });
+  assert.equal(result.charts.scheduleHeatmap.length, 0);
+  assert.equal(result.upcomingAppointments.length, 0);
+  assert.ok(result.activity.some((item) => item.title === 'Cadastro revisado'), 'o feed recente usa o registro atualizado; mapa e próximos usam dataHora');
+});
+
+test('horário civil sem fuso e campo legado hora convertem corretamente a fronteira de dia de Cuiabá', () => {
+  const input = baseInput();
+  input.appointments = [
+    { id: 'hora-legada', dataAgenda: '2026-09-01', hora: '23:30', status: 'agendado' },
+    { id: 'data-hora-civil', dataHora: '2026-09-01T23:30:00', status: 'agendado' },
+  ];
+  const result = buildDinoDashboardAnalytics(input, { period: 1, now });
+  assert.equal(result.charts.scheduleHeatmap.find((cell) => cell.weekday === 'tue' && cell.hour === 23)?.value, 2);
+  assert.ok(result.upcomingAppointments.every((item) => item.at === '2026-09-02T03:30:00.000Z'));
+  assert.ok(result.upcomingAppointments.every((item) => item.day === '2026-09-01'), 'a data civil continua sendo terça-feira em Cuiabá após virar o dia UTC');
+});
+
+test('heatmap exclui cancelamentos, faltas e remarcações; próximos exclui também concluídos', () => {
+  const input = baseInput();
+  input.appointments = [
+    { id: 'concluido', dataHora: '2026-09-01T14:00:00.000Z', status: 'concluido' },
+    { id: 'cancelado', dataHora: '2026-09-01T15:00:00.000Z', status: 'cancelado' },
+    { id: 'falta', dataHora: '2026-09-01T15:30:00.000Z', status: 'faltou' },
+    { id: 'no-show', dataHora: '2026-09-01T15:40:00.000Z', status: 'não compareceu' },
+    { id: 'remarcado', dataHora: '2026-09-01T15:45:00.000Z', status: 'remarcado' },
+    { id: 'futuro', dataHora: '2026-09-01T22:00:00.000Z', status: 'agendado' },
+  ];
+  const result = buildDinoDashboardAnalytics(input, { period: 1, now });
+  assert.equal(result.charts.scheduleHeatmap.reduce((sum, item) => sum + item.value, 0), 2, 'concluído e agendado contam o horário; cancelamentos e exceções não');
+  assert.deepEqual(result.upcomingAppointments.map((item) => item.id), ['futuro']);
+});
+
+test('feed de atividade respeita a janela selecionada mesmo quando o cadastro foi atualizado em outra data', () => {
+  const input = baseInput();
+  input.financeEntries = [
+    { id: 'atual', tipo: 'receita', status: 'pago', valor: 10, pagoEm: '2026-09-01T15:00:00.000Z' },
+    { id: 'antigo', tipo: 'receita', status: 'pago', valor: 20, pagoEm: '2026-07-01T15:00:00.000Z', atualizadoEm: '2026-09-01T15:30:00.000Z' },
+  ];
+  const result = buildDinoDashboardAnalytics(input, { period: 30, now });
+  assert.ok(result.activity.some((item) => item.value === 10), 'lançamento dentro da janela aparece no feed');
+  assert.ok(!result.activity.some((item) => item.value === 20), 'lançamento antigo continua fora da janela apesar da edição recente');
+  assert.equal(result.dataQuality.sources.activity.status, 'ok');
+});
+
+test('filtro estrito de loja exclui outra unidade e registros sem loja; agregado mantém todos', () => {
+  const rows = [{ id: 'a', lojaId: 'loja-a' }, { id: 'b', lojaId: 'loja-b' }, { id: 'sem-loja' }];
+  assert.deepEqual(filterDashboardRowsToStore(rows, 'loja-a').map((item) => item.id), ['a']);
+  assert.deepEqual(filterDashboardRowsToStore(rows).map((item) => item.id), ['a', 'b', 'sem-loja']);
+});
+
+test('qualidade distingue fonte vazia, Commerce indisponível e escopo de unidade limitado', () => {
+  const empty = buildDinoDashboardAnalytics({}, { period: 1, now });
+  assert.equal(empty.scope.level, 'company');
+  assert.equal(empty.dataQuality.sources.agenda.status, 'empty');
+  assert.equal(empty.dataQuality.sources.payments.status, 'empty');
+  assert.equal(empty.dataQuality.sources.commerce.status, 'unavailable');
+
+  const scoped = buildDinoDashboardAnalytics({
+    scope: { level: 'unit', unitId: 'loja-a' }, commerceAvailable: false, commerceUnavailableReason: 'STORE_SCOPE_MISMATCH',
+    goals: { configured: true, comparable: false, items: [] },
+    unassignedRecords: { appointments: 2, historicalAppointments: 3, historicalCommands: 1 },
+  }, { period: 1, now });
+  assert.equal(scoped.scope.level, 'unit');
+  assert.equal(scoped.dataQuality.sources.commerce.reason, 'STORE_SCOPE_MISMATCH');
+  assert.equal(scoped.dataQuality.sources.goals.status, 'limited');
+  assert.ok(scoped.dataQuality.notes.some((note) => /6 registro\(s\).*excluídos/.test(note)));
+});
+
+test('valores de pagamentos de sete dígitos são preservados no resumo agregado', () => {
+  const input = baseInput();
+  input.retailSales = [];
+  input.commands = [{ id: 'alto', status: 'paga', dataOperacao: '2026-09-01T15:00:00.000Z', pagamentos: [{ meioPagamento: 'pix', valor: 1234567.89 }] }];
+  const result = buildDinoDashboardAnalytics(input, { period: 1, now });
+  assert.deepEqual(result.charts.paymentMethods, [{ method: 'pix', value: 1234567.89 }]);
+  assert.equal(result.dataQuality.sources.payments.total, 1234567.89);
 });
