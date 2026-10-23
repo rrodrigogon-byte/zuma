@@ -39,6 +39,143 @@ const DEFAULT = { admins: [], usuarios: [], inscricoes: [], chaves: {}, ranking:
 
 function ensureDir(){ fs.mkdirSync(path.dirname(DB_PATH), { recursive: true }); }
 
+// O banco legado pode conter dezenas de milhares de registros históricos. Ler o arquivo
+// inteiro com readFileSync + JSON.parse cria simultaneamente Buffer/string, objeto
+// parcialmente analisado e objeto final. Em uma instância Render de 512 MiB isso pode
+// derrubar o processo antes de abrir a porta HTTP. O parser abaixo lê somente o objeto
+// raiz em blocos e materializa uma propriedade por vez; o contrato do db() permanece
+// síncrono para os módulos legados.
+function parseJsonObjectStreaming(arquivo) {
+  const fd = fs.openSync(arquivo, 'r');
+  const buffer = Buffer.allocUnsafe(64 * 1024);
+  const estado = {};
+  let posicao = 0;
+  let fase = 'inicio';
+  let chaveRaw = [];
+  let chaveAtual = null;
+  let chaveEscape = false;
+  let valorTipo = null;
+  let valorProfundidade = 0;
+  let valorString = false;
+  let valorEscape = false;
+  let valorIniciado = false;
+  let segmentoInicio = -1;
+  let segmentosValor = [];
+
+  const erro = (mensagem) => { throw new SyntaxError(`${mensagem} em ${arquivo}`); };
+  const anexarSegmento = (fim, chunk) => {
+    if (segmentoInicio >= 0 && fim > segmentoInicio) segmentosValor.push(Buffer.from(chunk.subarray(segmentoInicio, fim)));
+    segmentoInicio = -1;
+  };
+  const finalizarValor = (fim, chunk) => {
+    anexarSegmento(fim, chunk);
+    try {
+      estado[chaveAtual] = JSON.parse(Buffer.concat(segmentosValor).toString('utf8'));
+    } catch (error) {
+      throw new SyntaxError(`Valor inválido para ${chaveAtual}: ${error.message}`);
+    }
+    segmentosValor = [];
+    chaveAtual = null;
+    valorTipo = null;
+    valorProfundidade = 0;
+    valorString = false;
+    valorEscape = false;
+    valorIniciado = false;
+  };
+
+  try {
+    while (true) {
+      const lidos = fs.readSync(fd, buffer, 0, buffer.length, posicao);
+      if (!lidos) break;
+      posicao += lidos;
+      for (let indice = 0; indice < lidos;) {
+        const byte = buffer[indice];
+        if (fase === 'inicio') {
+          if (byte === 0x20 || byte === 0x09 || byte === 0x0a || byte === 0x0d) { indice += 1; continue; }
+          if (byte !== 0x7b) erro('JSON persistente não começa com objeto');
+          fase = 'chaveOuFim'; indice += 1; continue;
+        }
+        if (fase === 'chaveOuFim') {
+          if (byte === 0x20 || byte === 0x09 || byte === 0x0a || byte === 0x0d || byte === 0x2c) { indice += 1; continue; }
+          if (byte === 0x7d) { fase = 'fim'; indice += 1; continue; }
+          if (byte !== 0x22) erro('chave JSON esperada');
+          chaveRaw = [byte]; chaveEscape = false; fase = 'chave'; indice += 1; continue;
+        }
+        if (fase === 'chave') {
+          chaveRaw.push(byte);
+          if (chaveEscape) chaveEscape = false;
+          else if (byte === 0x5c) chaveEscape = true;
+          else if (byte === 0x22) {
+            try { chaveAtual = JSON.parse(Buffer.from(chaveRaw).toString('utf8')); }
+            catch (error) { throw new SyntaxError(`Chave JSON inválida: ${error.message}`); }
+            fase = 'doisPontos';
+          }
+          indice += 1; continue;
+        }
+        if (fase === 'doisPontos') {
+          if (byte === 0x20 || byte === 0x09 || byte === 0x0a || byte === 0x0d) { indice += 1; continue; }
+          if (byte !== 0x3a) erro('dois-pontos esperado após chave');
+          fase = 'antesDoValor'; indice += 1; continue;
+        }
+        if (fase === 'antesDoValor') {
+          if (byte === 0x20 || byte === 0x09 || byte === 0x0a || byte === 0x0d) { indice += 1; continue; }
+          valorIniciado = true; segmentoInicio = indice;
+          if (byte === 0x7b || byte === 0x5b) { valorTipo = 'complexo'; valorProfundidade = 0; }
+          else if (byte === 0x22) { valorTipo = 'string'; valorString = false; }
+          else valorTipo = 'primitivo';
+          fase = 'valor'; continue;
+        }
+        if (fase === 'valor') {
+          if (valorIniciado && segmentoInicio < 0) segmentoInicio = indice;
+          if (valorTipo === 'primitivo') {
+            if (byte === 0x2c || byte === 0x7d) {
+              finalizarValor(indice, buffer); fase = 'depoisDoValor'; continue;
+            }
+            indice += 1; continue;
+          }
+          if (valorString) {
+            if (valorEscape) valorEscape = false;
+            else if (byte === 0x5c) valorEscape = true;
+            else if (byte === 0x22) {
+              if (valorTipo === 'string') {
+                finalizarValor(indice + 1, buffer); fase = 'depoisDoValor'; indice += 1; continue;
+              }
+              valorString = false;
+            }
+            indice += 1; continue;
+          }
+          if (valorEscape) valorEscape = false;
+          else if (byte === 0x5c) valorEscape = true;
+          else if (byte === 0x22) valorString = true;
+          else if (byte === 0x7b || byte === 0x5b) valorProfundidade += 1;
+          else if (byte === 0x7d || byte === 0x5d) {
+            valorProfundidade -= 1;
+            if (valorProfundidade === 0) {
+              finalizarValor(indice + 1, buffer); fase = 'depoisDoValor'; indice += 1; continue;
+            }
+          }
+          indice += 1; continue;
+        }
+        if (fase === 'depoisDoValor') {
+          if (byte === 0x20 || byte === 0x09 || byte === 0x0a || byte === 0x0d) { indice += 1; continue; }
+          if (byte === 0x2c) { fase = 'chaveOuFim'; indice += 1; continue; }
+          if (byte === 0x7d) { fase = 'fim'; indice += 1; continue; }
+          erro('separador JSON esperado após valor');
+        }
+        if (fase === 'fim') {
+          if (byte === 0x20 || byte === 0x09 || byte === 0x0a || byte === 0x0d) { indice += 1; continue; }
+          erro('conteúdo após o fim do objeto JSON');
+        }
+      }
+      if (fase === 'valor' && segmentoInicio >= 0) anexarSegmento(lidos, buffer);
+    }
+    if (fase !== 'fim') erro('JSON persistente truncado');
+    return estado;
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
 export function load(){
   ensureDir();
   if(!fs.existsSync(DB_PATH)){
@@ -47,21 +184,21 @@ export function load(){
     const bak = DB_PATH + '.bak';
     if(fs.existsSync(bak)){
       try {
-        const d = { ...structuredClone(DEFAULT), ...JSON.parse(fs.readFileSync(bak,'utf8')) };
+        const d = { ...structuredClone(DEFAULT), ...parseJsonObjectStreaming(bak) };
         console.error('DB principal ausente: recuperado da cópia .bak');
         return d;
       } catch(e){ console.error('DB principal ausente e .bak ilegível:', e.message); }
     }
     return structuredClone(DEFAULT);
   }
-  try { return { ...structuredClone(DEFAULT), ...JSON.parse(fs.readFileSync(DB_PATH,'utf8')) }; }
+  try { return { ...structuredClone(DEFAULT), ...parseJsonObjectStreaming(DB_PATH) }; }
   catch(e){
     console.error('DB corrompido:', e.message);
     // Antes de recriar do zero (perda total), tenta o backup .bak da última gravação boa.
     try {
       const bak = DB_PATH + '.bak';
       if(fs.existsSync(bak)){
-        const d = { ...structuredClone(DEFAULT), ...JSON.parse(fs.readFileSync(bak,'utf8')) };
+        const d = { ...structuredClone(DEFAULT), ...parseJsonObjectStreaming(bak) };
         console.error('DB recuperado do backup .bak');
         return d;
       }
