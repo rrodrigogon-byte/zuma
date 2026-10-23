@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { api } from '../../../lib/api'
 import { useAuth } from '../../../lib/auth'
 import { brandFromContext } from '../../../lib/brand'
@@ -65,14 +65,18 @@ function EgoGraph({ ego }) {
 
 export default function CerebroIA() {
   const { empresaAtiva, lojaAtiva } = useAuth()
-  const scopeKey = `${empresaAtiva?.id || ''}:${lojaAtiva?.id || ''}`
-  return <CerebroIAWorkspace key={scopeKey} empresaAtiva={empresaAtiva} />
+  const [searchParams] = useSearchParams()
+  const requestedDays = Number(searchParams.get('dias'))
+  const execDays = [30, 90].includes(requestedDays) ? requestedDays : 30
+  const initialTab = TABS.some(([key]) => key === searchParams.get('tab')) ? searchParams.get('tab') : 'ativacao'
+  const scopeKey = `${empresaAtiva?.id || ''}:${lojaAtiva?.id || ''}:${initialTab}:${execDays}`
+  return <CerebroIAWorkspace key={scopeKey} empresaAtiva={empresaAtiva} initialTab={initialTab} initialExecDays={execDays} cameFromBi={searchParams.get('origem') === 'bi'} />
 }
 
-function CerebroIAWorkspace({ empresaAtiva }) {
+function CerebroIAWorkspace({ empresaAtiva, initialTab = 'ativacao', initialExecDays = 30, cameFromBi = false }) {
   const stallone = brandFromContext(empresaAtiva) === 'stallone'
   const { toast } = useToast()
-  const [tab, setTab] = useState('ativacao')
+  const [tab, setTab] = useState(initialTab)
   const [ativ, setAtiv] = useState(null)
   const [modal, setModal] = useState(null)
   const [vitrine, setVitrine] = useState({ phone: '', usarIdentidadeDino: true })
@@ -82,7 +86,7 @@ function CerebroIAWorkspace({ empresaAtiva }) {
   const [busy, setBusy] = useState('')
   const [propostas, setPropostas] = useState({ status: 'proposto', items: [], drafts: {} })
   const [grafo, setGrafo] = useState(null)
-  const [execDays, setExecDays] = useState(30)
+  const [execDays, setExecDays] = useState(initialExecDays)
   const [execArea, setExecArea] = useState('todas')
   const [executivo, setExecutivo] = useState(null)
   const [execError, setExecError] = useState('')
@@ -321,7 +325,7 @@ function CerebroIAWorkspace({ empresaAtiva }) {
 
     {tab === 'ofertas' && <>
       <section className="dadm-card dadm-executive" aria-labelledby="cb-executive">
-        <div className="dadm-section-heading"><div><h2 id="cb-executive">Mapa e resumo executivo</h2><p>Indicadores agregados da unidade ativa, com evidências e cobertura por fonte.</p><p>Ocupação não é inferida: a agenda alterna entre fontes que ainda não compartilham uma capacidade canônica.</p></div>
+        <div className="dadm-section-heading"><div><h2 id="cb-executive">Mapa e resumo executivo</h2><p>Indicadores agregados da unidade ativa, com evidências e cobertura por fonte.</p><p>Ocupação não é inferida: a agenda alterna entre fontes que ainda não compartilham uma capacidade canônica.</p>{cameFromBi && <p className="dadm-note">Aberto pelo BI: a análise abaixo usa a janela suportada de {execDays} dias, indicada no filtro.</p>}</div>
           <div className="dadm-filters"><label htmlFor="exec-days">Período</label><select id="exec-days" className="c360-input" value={execDays} onChange={e => { const days = Number(e.target.value); setExecDays(days); setExecAnalysis(null); carregarExecutivo(days) }}><option value={30}>30 dias</option><option value={90}>90 dias</option></select><label htmlFor="exec-area">Área</label><select id="exec-area" className="c360-input" value={execArea} onChange={e => setExecArea(e.target.value)}><option value="todas">Todas as áreas</option>{Object.entries(AREA_LABEL).map(([k,v]) => <option key={k} value={k}>{v}</option>)}</select></div></div>
         <p className="dadm-note">A IA recebe somente indicadores agregados. O provedor pode estar indisponível ou sujeito ao orçamento. A análise é apenas informativa: não envia mensagens, não contata clientes e não executa automações.</p>
         <p className="dadm-muted">Pedidos confirmados seguem os estados aceitos pelo grafo; os demais estados não entram no KPI. A quantidade de reembolsos é apenas o estado do pedido: o valor efetivamente estornado não é inferido.</p>

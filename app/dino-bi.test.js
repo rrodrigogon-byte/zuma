@@ -120,3 +120,60 @@ test('BI completo: agenda, clientes, pagamentos e ranking', () => {
   assert.equal(report.revenda[0].margem, 50);
   assert.equal(report.lojaOnline.disponivel, false);
 });
+
+test('período BI aceita intervalo completo de Cuiabá e constrói janela anterior equivalente', () => {
+  const period = bi.biPeriod({ inicio: '2026-09-01', fim: '2026-09-30' });
+  assert.equal(period.days, 30);
+  assert.equal(period.from, '2026-09-01T04:00:00.000Z');
+  assert.equal(period.to, '2026-10-01T04:00:00.000Z');
+  assert.equal(period.previousFrom, '2026-08-02T04:00:00.000Z');
+  assert.equal(period.previousTo, '2026-09-01T04:00:00.000Z');
+  assert.throws(() => bi.biPeriod({ inicio: '2026-10-02', fim: '2026-10-01' }), RangeError);
+  assert.throws(() => bi.biPeriod({ inicio: '2025-01-01', fim: '2026-02-01' }), RangeError);
+});
+
+test('BI apresenta bruto consolidado e série diária sem transformar o histórico Avec em venda operacional', () => {
+  const report = bi.buildBarbershopBi({
+    ...input,
+    customers: [{ id: 'c1', tipo: 'pf', dataNascimento: '1990-09-20', origem: 'Avec' }, { id: 'c2', tipo: 'pj', origem: 'Indicação' }],
+    financeEntries: [...input.financeEntries,
+      { id: 'avec-1', tipo: 'receita', status: 'pago', valor: 200, meioPagamento: 'pix', origem: 'avec-import-financeiro-20261022', metadata: { historicoAvec: true }, pagoEm: '2026-09-15T12:00:00Z' },
+    ],
+    historicalServices: [{ id: 'hist-1', somenteHistorico: true, status: 'concluido', lojaId: 'loja-a', profissionalId: 'p1', clienteId: 'c1', servicoId: 's-hist', servicoNome: 'Barba histórica', valor: 35, dataAgenda: '2026-09-15' }],
+    commerce: { revenue: 300, orders: 2, cost: null, daily: [{ day: '2026-09-15', total: 300 }], topProducts: [] },
+  }, window);
+  assert.equal(report.resultado.receitaLojaBruta, 300);
+  assert.equal(report.resultado.receitaLojaIncluida, 0, 'custo Commerce desconhecido não falsifica o resultado');
+  assert.equal(report.resumo.faturamentoBruto, 720);
+  assert.equal(report.resumo.historicoFinanceiroAvec, 200);
+  assert.equal(report.fontesReceita.find((item) => item.id === 'ecommerce').receita, 300);
+  assert.equal(report.serieDiaria.find((item) => item.dia === '2026-09-15').total, 500);
+  assert.ok(report.pagamentos.some((item) => item.metodo === 'histórico avec · pix' && item.valor === 200));
+  assert.equal(report.perfilClientes.sexoDisponivel, false);
+  assert.equal(report.perfilClientes.nascimentoInformado, 1);
+  assert.equal(report.operacao.itensServicoHistoricos, 1);
+  assert.equal(report.profissionais[0].receitaServicos, 215, 'serviço histórico fica atribuído à equipe');
+  assert.equal(bi.biComparisonSummary(report).faturamentoBruto, 720);
+});
+
+test('BI interpreta datas sem horário como datas civis de Cuiabá e perfila somente atendidos no recorte', () => {
+  const range = bi.biPeriod({ inicio: '2026-09-01', fim: '2026-09-01' });
+  const report = bi.buildBarbershopBi({
+    professionals,
+    products: [],
+    commands: [{ id: 'primeiro-dia', status: 'paga', fechadaEm: '2026-09-01', clienteId: 'c-no-recorte', itens: [{ tipo: 'servico', servicoId: 's', nome: 'Corte', subtotal: 50 }] }],
+    historicalServices: [
+      { somenteHistorico: true, status: 'concluido', dataAgenda: '2026-09-01', clienteId: 'c-no-recorte', servicoNome: 'Barba', valor: 30 },
+      { somenteHistorico: true, status: 'concluido', dataAgenda: '2026-09-02', clienteId: 'c-fora', servicoNome: 'Fora', valor: 999 },
+    ],
+    customers: [
+      { id: 'c-no-recorte', tipo: 'pf', origem: 'Importação Avec', dataNascimento: '1990-01-10' },
+      { id: 'c-fora', tipo: 'pf', origem: 'Indicação', dataNascimento: '1991-01-10' },
+    ],
+    financeEntries: [],
+  }, range);
+  assert.equal(report.servicos.length, 2, 'o primeiro dia inclui comando e detalhe histórico');
+  assert.equal(report.perfilClientes.cadastrosCobertos, 1);
+  assert.equal(report.perfilClientes.origensCadastro[0].nome, 'Importação Avec');
+  assert.equal(report.perfilClientes.nascimentoInformado, 1);
+});

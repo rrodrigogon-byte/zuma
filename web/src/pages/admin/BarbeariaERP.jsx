@@ -20,6 +20,7 @@ import { RepassesPanel, ReguaClubePanel } from './dino/RepassesPanel'
 import DinoBusinessDashboard from './DinoBusinessDashboard'
 import DinoCampaignsPanel from './DinoCampaignsPanel'
 import DinoEquipeDesempenho from './DinoEquipeDesempenho'
+import BIBarbearia from './dino/BIBarbearia'
 import ProjecaoFaturamentoPanel from './dino/ProjecaoFaturamentoPanel'
 import { CanaisPanel, ClubeSaudePanel, CobrancasPanel, IndicacoesPanel, ListaEsperaPanel, NpsPanel, OcupacaoMetasPanel, ReceitaIaPanel, ResumoDiarioPanel, RetornosPanel, UnidadesPanel, ValesPanel } from './dino/CaptacaoPanels'
 
@@ -1430,8 +1431,7 @@ export default function BarbeariaERP() {
   }
 
   function renderRelatorios() {
-    const porStatus = Object.entries(relatorio?.porStatus || {})
-    return <div style={{ display: 'grid', gap: 16 }}><div style={styles.kpiGrid}><Kpi label="Atendimentos no dia" value={relatorio?.totalAgendamentos || 0} note={fmtDateOnly(dataSelecionada)} /><Kpi label="Concluídos" value={relatorio?.porStatus?.concluido || 0} color="#14b87a" /><Kpi label="Cancelados" value={relatorio?.porStatus?.cancelado || 0} color="#e05c5c" /><Kpi label="Não compareceu" value={relatorio?.porStatus?.nao_compareceu || 0} color="#888" /></div><Card style={{ padding: 18 }}><div style={styles.sectionTitle}><div><h2 style={styles.h2}>Distribuição por status</h2><p style={styles.sub}>Dados derivados da agenda da empresa ativa; selecione outra data acima para atualizar.</p></div></div>{porStatus.length === 0 ? <div style={styles.empty}>Sem atendimentos para a data selecionada.</div> : <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>{porStatus.map(([status, quantidade]) => <div key={status} style={{ padding: '12px 16px', background: 'var(--bg)', borderRadius: 10 }}><Badge status={status} /><strong style={{ marginLeft: 10 }}>{quantidade}</strong></div>)}</div>}</Card><Card style={{ padding: 18, overflowX: 'auto' }}><div style={styles.sectionTitle}><div><h2 style={styles.h2}>Desempenho por profissional</h2><p style={styles.sub}>Faturamento é apuração operacional e não cria repasse.</p></div></div><table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 580 }}><thead><tr style={styles.tableHead}>{['Profissional', 'Atendimentos', 'Concluídos', 'Faturamento'].map((coluna) => <th key={coluna} style={styles.th}>{coluna}</th>)}</tr></thead><tbody>{(relatorio?.porProfissional || []).length === 0 ? <tr><td colSpan={4} style={styles.empty}>Nenhum profissional cadastrado.</td></tr> : relatorio.porProfissional.map((item) => <tr key={item.profissionalId} style={{ borderTop: '1px solid var(--line)' }}><td style={styles.td}><strong>{item.profissionalNome}</strong></td><td style={styles.td}>{item.atendimentos}</td><td style={styles.td}>{item.concluidos}</td><td style={{ ...styles.td, fontWeight: 800 }}>{moeda(item.faturamento)}</td></tr>)}</tbody></table></Card></div>
+    return <BIBarbearia embedded onOpenPerformance={() => navegarParaTab('Desempenho da equipe')} />
   }
 
   function renderConfiguracao() {

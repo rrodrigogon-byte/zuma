@@ -279,6 +279,15 @@ test('admin da empresa: isolamento, guardas legados, BI, cliente automático e W
     assert.ok(bi.body.resultado && typeof bi.body.resultado.resultado === 'number');
     assert.ok(Array.isArray(bi.body.profissionais));
     assert.ok(bi.body.agenda && typeof bi.body.agenda.total === 'number');
+    const biCustom = await request(base, '/api/admin/barbearia/bi?inicio=2030-06-01&fim=2030-06-10&comparar=1', { headers: A });
+    assert.equal(biCustom.response.status, 200);
+    assert.equal(biCustom.response.headers.get('cache-control'), 'no-store');
+    assert.equal(biCustom.body.readOnly, true);
+    assert.equal(biCustom.body.writePerformed, false);
+    assert.equal(biCustom.body.periodo.dias, 10);
+    assert.ok(biCustom.body.comparacao?.resumo, 'devolve comparação anterior equivalente sem gravar');
+    assert.equal((await request(base, '/api/admin/barbearia/bi?inicio=2030-06-11&fim=2030-06-10', { headers: A })).response.status, 400);
+    assert.equal((await request(base, '/api/admin/barbearia/bi?inicio=2030-06-01&fim=2030-06-10&forcar=1', { headers: A })).response.status, 400);
     assert.equal((await request(base, '/api/admin/barbearia/bi', { headers: staffA })).response.status, 403);
 
     // ── WhatsApp pelo backend do NossaGente ──

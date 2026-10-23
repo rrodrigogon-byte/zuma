@@ -7,6 +7,7 @@
 
 import * as dinoBi from './dino-bi.js';
 import { PAID_ORDER_STATUSES } from './core/customer-360.js';
+import { legacyEmpresaIdFromCommerce, legacyLojaIdFromCommerce } from './core/legacy-commerce-scope.js';
 
 const BASE = '/api/admin/barbearia';
 const GESTORES = new Set(['admin', 'organizador']);
@@ -63,7 +64,7 @@ function sanitizeEntry(body = {}) {
  * preços; caso contrário volta null e a loja fica fora do lucro estimado.
  */
 export async function loadCommerceSalesDetail(commerceDb, context, from, to) {
-  const values = [context.empresaId, from, to, PAID_ORDER_STATUSES];
+  const values = [context.empresaId, from, to, PAID_ORDER_STATUSES, context.lojaId || null];
   const rows = await commerceDb.queryRead(
     `SELECT i.nome_snapshot AS nome,
             SUM(i.quantidade)::numeric AS quantidade,
@@ -77,6 +78,7 @@ export async function loadCommerceSalesDetail(commerceDb, context, from, to) {
           WHERE p.empresa_id = i.empresa_id AND p.variant_id = i.variant_id
        ) c ON true
       WHERE o.empresa_id = $1 AND o.criado_em >= $2::timestamptz AND o.criado_em < $3::timestamptz
+        AND ($5::uuid IS NULL OR o.storefront_id IN (SELECT id FROM commerce_storefronts WHERE empresa_id = $1 AND loja_id = $5::uuid))
         AND o.status = ANY($4::text[]) -- só pedidos pagos entram no lucro (pendente de pagamento não é receita)
       GROUP BY i.nome_snapshot
       ORDER BY SUM(i.subtotal) DESC`,
@@ -95,7 +97,7 @@ export async function loadCommerceSalesDetail(commerceDb, context, from, to) {
 export function registerDinoAdminRoutes(app, deps) {
   const {
     legacyEmpresaId, legacyLojaId, financeiroKytto, barbeariaErpKytto, clientesKytto,
-    commerceDb, requireCommercePermission, dashboardPeriod, audit, save, salesReport,
+    commerceDb, requireCommercePermission, audit, save, salesReport,
   } = deps;
 
   // ── Financeiro da empresa ────────────────────────────────────────────────
@@ -260,35 +262,74 @@ export function registerDinoAdminRoutes(app, deps) {
     try {
       const empresaId = legacyEmpresaId(req);
       const lojaId = legacyLojaId(req);
-      const range = dashboardPeriod(req.query?.periodo || req.query?.period || 30, new Date());
+      if (!empresaId || empresaId === 'principal' || !lojaId) return res.status(409).json({ error: 'Selecione uma empresa e unidade autorizadas para consultar o BI.', code: 'EXPLICIT_SCOPE_REQUIRED' });
+      const allowed = new Set(['periodo', 'period', 'inicio', 'fim', 'comparar']);
+      if (Object.keys(req.query || {}).some((key) => !allowed.has(key)) || Object.values(req.query || {}).some((value) => typeof value !== 'string')) return res.status(400).json({ error: 'Informe apenas período, início, fim e comparação válidos.', code: 'BI_QUERY_INVALID' });
+      const range = dinoBi.biPeriod(req.query || {}, new Date());
       const window = { fromDate: range.fromDate, toDate: range.toDate, days: range.days };
-      let commerce = null;
+      const previousWindow = { fromDate: range.previousFromDate, toDate: range.previousToDate, days: range.days };
+      const comparar = ['1', 'true'].includes(String(req.query?.comparar || '').toLowerCase());
+      let commerce = null; let commercePrevious = null; let commerceCoverage = 'indisponivel';
       try {
         const context = await requireCommercePermission(req, 'reports.read');
-        const [sales, detail] = await Promise.all([
-          salesReport(context, { from: range.from, to: range.to }),
-          loadCommerceSalesDetail(commerceDb, context, range.from, range.to).catch(() => ({ cost: null, topProducts: [] })),
-        ]);
-        commerce = {
-          revenue: Number(sales?.summary?.gross_total || 0),
-          orders: Number(sales?.summary?.orders || 0),
-          cost: detail.cost,
-          topProducts: detail.topProducts,
+        if (legacyEmpresaIdFromCommerce(context?.empresaId) !== String(empresaId) || legacyLojaIdFromCommerce(context?.lojaId, context?.empresaId) !== String(lojaId)) throw Object.assign(new Error('Escopo Commerce não corresponde à unidade ativa.'), { code: 'STORE_SCOPE_MISMATCH' });
+        const loadCommerce = async (from, to) => {
+          const sales = await salesReport(context, { from, to });
+          let detail = { cost: null, topProducts: [], available: false };
+          try { detail = { ...(await loadCommerceSalesDetail(commerceDb, context, from, to)), available: true }; } catch { /* o subtotal confirmado permanece legível, com custo declarado indisponível */ }
+          return {
+            // No BI, faturamento Commerce é somente pedido em estado confirmado.
+            // Pendências e capturas por data de liquidação são retornadas à parte.
+            revenue: Number(sales?.summary?.confirmed_total || 0),
+            orders: Number(sales?.summary?.confirmed_orders || 0),
+            grossOrders: Number(sales?.summary?.gross_total || 0),
+            pending: Number(sales?.summary?.pending_total || 0),
+            pendingOrders: Number(sales?.summary?.pending_orders || 0),
+            captured: Number(sales?.summary?.captured_total || 0),
+            daily: Array.isArray(sales?.daily) ? sales.daily.map((item) => ({ day: item.day, total: Number(item.confirmed_total || 0) })) : [],
+            capturedDaily: Array.isArray(sales?.capturedDaily) ? sales.capturedDaily.map((item) => ({ day: item.day, total: Number(item.total || 0) })) : [],
+            cost: detail.cost,
+            topProducts: detail.topProducts,
+            detailAvailable: detail.available,
+          };
         };
-      } catch { commerce = null; }
-      const bi = dinoBi.buildBarbershopBi({
-        appointments: barbeariaErpKytto.listarAgendamentos(empresaId, { lojaId }),
-        commands: barbeariaErpKytto.listarComandasBarbearia(empresaId, { lojaId }),
-        retailSales: barbeariaErpKytto.listarVendasRevenda(empresaId, { lojaId }),
-        products: barbeariaErpKytto.listarProdutosRevenda(empresaId, { incluirInativos: true }),
+        [commerce, commercePrevious] = await Promise.all([
+          loadCommerce(range.from, range.to),
+          comparar ? loadCommerce(range.previousFrom, range.previousTo) : Promise.resolve(null),
+        ]);
+        commerceCoverage = commerce?.detailAvailable ? 'ok' : 'limitado';
+      } catch { commerce = null; commercePrevious = null; }
+      const exactUnit = (item) => String(item?.lojaId || '') === String(lojaId);
+      const appointments = barbeariaErpKytto.listarAgendamentos(empresaId, { lojaId }).filter(exactUnit);
+      const commands = barbeariaErpKytto.listarComandasBarbearia(empresaId, { lojaId }).filter(exactUnit);
+      const retailSales = barbeariaErpKytto.listarVendasRevenda(empresaId, { lojaId }).filter(exactUnit);
+      const historicalServices = barbeariaErpKytto.listarHistoricoAtendimentos(empresaId, { lojaId }).filter(exactUnit);
+      const scopedCustomerIds = new Set([...appointments, ...commands, ...historicalServices].map((item) => String(item?.clienteId || '')).filter(Boolean));
+      const customers = clientesKytto.listarClientes(empresaId).filter((item) => scopedCustomerIds.has(String(item?.id || '')));
+      const common = {
+        appointments,
+        commands,
+        retailSales,
+        historicalServices,
+        products: barbeariaErpKytto.listarProdutosRevenda(empresaId, { incluirInativos: true, lojaId }),
         professionals: barbeariaErpKytto.listarProfissionais(empresaId, { incluirInativos: true }),
-        customers: clientesKytto.listarClientes(empresaId),
-        financeEntries: financeiroKytto.listarLancamentos(empresaId, {}),
-        commerce,
-      }, window);
-      res.json({ ok: true, ...bi });
+        customers,
+        financeEntries: financeiroKytto.listarLancamentos(empresaId, { lojaId }),
+      };
+      const bi = dinoBi.buildBarbershopBi({ ...common, commerce }, window);
+      const previous = comparar ? dinoBi.buildBarbershopBi({ ...common, commerce: commercePrevious }, previousWindow) : null;
+      res.set('Cache-Control', 'no-store');
+      res.set('Pragma', 'no-cache');
+      res.json({
+        ok: true, readOnly: true, writePerformed: false, ...bi,
+        cobertura: {
+          operacao: 'ok', financeiro: 'ok', comercio: commerceCoverage,
+          clientes: customers.length ? 'ok' : 'limitado',
+        },
+        comparacao: previous ? { periodo: previous.periodo, resumo: dinoBi.biComparisonSummary(previous), resultado: previous.resultado } : null,
+      });
     } catch (error) {
-      res.status(400).json({ error: error.message || 'Não foi possível montar o BI.' });
+      res.status(error instanceof RangeError ? 400 : 400).json({ error: error.message || 'Não foi possível montar o BI.' });
     }
   });
 }
