@@ -55,6 +55,35 @@ test('dashboard agrega apenas fontes reais e mantém lucro e funil indisponívei
   assert.equal(result.charts.categorySales[0].name, 'Serviços');
 });
 
+test('dashboard separa serviços, produtos e pagamentos de planos sem classificar receita histórica por suposição', () => {
+  const input = baseInput();
+  input.subscriptionPayments = [
+    { valor: 75, registradoEm: '2026-09-01T13:30:00.000Z' },
+    { valor: 99, registradoEm: '2026-08-10T13:30:00.000Z' },
+  ];
+  const result = buildDinoDashboardAnalytics(input, { period: 7, now });
+  const mix = result.strategicMix;
+  assert.equal(mix.total, 225);
+  assert.deepEqual(mix.items.map((item) => [item.id, item.value, item.percentage]), [
+    ['services', 100, 44.4],
+    ['products', 50, 22.2],
+    ['plans', 75, 33.3],
+  ]);
+  assert.equal(mix.unclassifiedConsolidatedRevenue, 250, 'o valor do Commerce não deve ser alocado como serviço, produto ou plano sem itemização');
+  assert.equal(mix.planPaymentsAvailable, true);
+});
+
+test('dashboard omite pagamentos de planos no escopo de uma unidade sem identificação de loja', () => {
+  const input = baseInput();
+  input.subscriptionPaymentsAvailable = false;
+  input.subscriptionPaymentsReason = 'Receitas de planos são exibidas apenas no agregado da empresa.';
+  input.subscriptionPayments = [{ valor: 75, registradoEm: '2026-09-01T13:30:00.000Z' }];
+  const result = buildDinoDashboardAnalytics(input, { period: 7, now });
+  assert.equal(result.strategicMix.items.find((item) => item.id === 'plans').value, 0);
+  assert.equal(result.strategicMix.planPaymentsAvailable, false);
+  assert.equal(result.strategicMix.planPaymentsReason, 'Receitas de planos são exibidas apenas no agregado da empresa.');
+});
+
 test('dashboard preenche os dias sem evento com zero e não inventa tendência', () => {
   const result = buildDinoDashboardAnalytics({}, { period: 7, now });
   assert.equal(result.charts.revenueDaily.length, 7);

@@ -3537,6 +3537,15 @@ app.get('/api/admin/barbearia/analytics', async (req, res) => {
       professionals: barbeariaErpKytto.listarProfissionais(empresaId, { incluirInativos: true, lojaId }),
       financeEntries: financeiroKytto.listarLancamentos(empresaId, { lojaId }),
     };
+    const subscriptions = barbeariaErpKytto.listarAssinaturas(empresaId, {});
+    // Assinaturas legadas ainda não possuem lojaId. Para não vazar uma receita
+    // corporativa no painel de uma unidade específica, o mix só mostra ciclos
+    // registrados quando o contexto é o agregado da empresa.
+    const subscriptionPaymentsAvailable = !lojaId;
+    const subscriptionPayments = subscriptionPaymentsAvailable
+      ? subscriptions.flatMap((subscription) => captacaoKytto.movimentosAssinatura(empresaId, subscription.id).pagamentos
+        .map((payment) => ({ ...payment, assinaturaId: subscription.id, planoId: subscription.planoId, clienteId: subscription.clienteId })))
+      : [];
     const currentWindow = { fromDate: range.fromDate, toDate: range.toDate };
     const previousWindow = { fromDate: range.previousFromDate, toDate: range.previousToDate };
     const profitFor = (win, commerceData) => dinoBi.estimateResult({
@@ -3557,7 +3566,10 @@ app.get('/api/admin/barbearia/analytics', async (req, res) => {
       customers: clientesKytto.listarClientes(empresaId),
       financeEntries: barbershopInput.financeEntries,
       inventory: barbeariaErpKytto.listarProdutosRevenda(empresaId, { incluirInativos: false }),
-      subscriptions: barbeariaErpKytto.listarAssinaturas(empresaId, {}),
+      subscriptions,
+      subscriptionPayments,
+      subscriptionPaymentsAvailable,
+      subscriptionPaymentsReason: subscriptionPaymentsAvailable ? null : 'Os pagamentos de planos legados ainda não identificam a unidade ativa; por segurança, eles aparecem somente no agregado da empresa.',
       profit: { current: profitFor(currentWindow, commerceCurrent), previous: profitFor(previousWindow, commercePrevious) },
       goals: await metasDoMes({ empresaId, now, barbershopInput, commerceContext, profitFor }),
       funnel: commerceAvailable ? { current: funnelSummary(empresaId, range.fromDate, range.toDate), previous: funnelSummary(empresaId, range.previousFromDate, range.previousToDate) } : null,

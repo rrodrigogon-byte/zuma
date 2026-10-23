@@ -179,10 +179,10 @@ function paymentBreakdown(input, window) {
 function saleItems(input, window) {
   const rows = [];
   for (const sale of list(input.retailSales).filter((item) => item.status === 'pago' && !item.comandaId && inWindow(item, window))) {
-    for (const item of list(sale.itens)) rows.push({ name: item.nome || item.produtoNome || 'Produto', category: item.categoria || 'Revenda', quantity: num(item.quantidade || 1), revenue: num(item.subtotal || (num(item.precoUnitario) * num(item.quantidade || 1))) });
+    for (const item of list(sale.itens)) rows.push({ name: item.nome || item.produtoNome || 'Produto', category: item.categoria || 'Revenda', mixCategory: 'products', quantity: num(item.quantidade || 1), revenue: num(item.subtotal || (num(item.precoUnitario) * num(item.quantidade || 1))) });
   }
   for (const command of list(input.commands).filter((item) => item.status === 'paga' && inWindow(item, window))) {
-    for (const item of list(command.itens)) rows.push({ name: item.nome || item.descricao || 'Serviço', category: item.tipo === 'produto' ? 'Revenda' : (item.categoria || 'Serviços'), quantity: num(item.quantidade || 1), revenue: num(item.subtotal || item.total || (num(item.valorUnitario) * num(item.quantidade || 1))) });
+    for (const item of list(command.itens)) rows.push({ name: item.nome || item.descricao || 'Serviço', category: item.tipo === 'produto' ? 'Revenda' : (item.categoria || 'Serviços'), mixCategory: item.tipo === 'produto' ? 'products' : 'services', quantity: num(item.quantidade || 1), revenue: num(item.subtotal || item.total || (num(item.valorUnitario) * num(item.quantidade || 1))) });
   }
   return rows;
 }
@@ -197,6 +197,67 @@ function aggregate(rows, keyName) {
     totals.set(key, current);
   }
   return [...totals.values()].map((item) => ({ ...item, revenue: money(item.revenue) })).sort((a, b) => b.revenue - a.revenue || b.quantity - a.quantity);
+}
+
+/**
+ * O mix mostra apenas recebimentos cujo tipo comercial é conhecido. Itens de
+ * e-commerce e importações financeiras que não trazem itemização são mantidos
+ * fora da base percentual; assim, o painel nunca converte receita histórica em
+ * serviço ou produto por suposição.
+ */
+function strategicRevenueMix(input, window, consolidatedRevenue) {
+  const totals = new Map([
+    ['services', { value: 0, records: 0 }],
+    ['products', { value: 0, records: 0 }],
+    ['plans', { value: 0, records: 0 }],
+  ]);
+  const add = (id, value) => {
+    const item = totals.get(id);
+    if (!item) return;
+    item.value += num(value);
+    item.records += 1;
+  };
+
+  const items = saleItems(input, window);
+  for (const item of items) add(item.mixCategory, item.revenue);
+
+  if (input.subscriptionPaymentsAvailable !== false) {
+    for (const payment of list(input.subscriptionPayments)) {
+      const paidAt = dateValue(payment.registradoEm || payment.recordedAt || payment.pagoEm);
+      if (!paidAt || paidAt < window.fromDate || paidAt >= window.toDate) continue;
+      if (num(payment.valor) <= 0) continue;
+      add('plans', payment.valor);
+    }
+  }
+
+  const definitions = [
+    { id: 'services', label: 'Serviços', description: 'Itens de serviço em comandas pagas' },
+    { id: 'products', label: 'Produtos', description: 'Revenda direta e itens de produto em comandas pagas' },
+    { id: 'plans', label: 'Planos e pacotes', description: 'Ciclos de assinatura com pagamento registrado' },
+  ];
+  const total = [...totals.values()].reduce((sum, item) => sum + item.value, 0);
+  const operationalItemized = num(totals.get('services')?.value) + num(totals.get('products')?.value);
+  const unclassifiedConsolidatedRevenue = Math.max(0, num(consolidatedRevenue) - operationalItemized);
+  return {
+    total: money(total),
+    items: definitions.map((definition) => {
+      const item = totals.get(definition.id);
+      const value = money(item?.value || 0);
+      return {
+        ...definition,
+        value,
+        records: item?.records || 0,
+        percentage: total > 0 ? Number(((value / total) * 100).toFixed(1)) : 0,
+      };
+    }),
+    operationalItemizedRevenue: money(operationalItemized),
+    consolidatedRevenue: money(consolidatedRevenue),
+    unclassifiedConsolidatedRevenue: money(unclassifiedConsolidatedRevenue),
+    reconciliationDelta: money(num(consolidatedRevenue) - operationalItemized),
+    planPaymentsAvailable: input.subscriptionPaymentsAvailable !== false,
+    planPaymentsReason: input.subscriptionPaymentsReason || null,
+    note: 'A base percentual reúne apenas valores com classificação comercial rastreável. Histórico financeiro, e-commerce sem itemização e ajustes não são redistribuídos entre as categorias.',
+  };
 }
 
 function scheduleHeatmap(appointments, window) {
@@ -304,6 +365,7 @@ export function buildDinoDashboardAnalytics(input = {}, options = {}) {
   const trendCustomers = pct(currentNewCustomers, previousNewCustomers);
   const trendAppointments = pct(currentAppointments.length, previousAppointments.length);
   const items = [...saleItems(input, window), ...historicalCategoryRows(input, window)];
+  const strategicMix = strategicRevenueMix(input, window, revenue);
   const commerceAvailable = Boolean(input.commerceAvailable);
   const profitCurrent = input.profit?.current || null;
   const profitPrevious = input.profit?.previous || null;
@@ -332,6 +394,7 @@ export function buildDinoDashboardAnalytics(input = {}, options = {}) {
     miniKpis: { receivables, lowStock: { total: retailLowStock + commerceLowStock, commerce: commerceLowStock, retail: retailLowStock }, mrr },
     historicalAvec,
     historicalFinance,
+    strategicMix,
     charts: {
       revenueDaily: daily,
       appointmentsDaily: daily.map((item) => ({ day: item.day, value: item.appointments })),

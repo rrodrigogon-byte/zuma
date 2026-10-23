@@ -4,6 +4,7 @@ import { api } from '../../../lib/api'
 import { useAuth } from '../../../lib/auth'
 import { Table } from '../customer360/shared'
 import { downloadCsv, int, money, pct } from './format'
+import StrategicRevenueMix from './StrategicRevenueMix'
 import '../customer360.css'
 import './dino-admin.css'
 
@@ -133,29 +134,38 @@ export default function BIBarbearia({ embedded = false, onOpenPerformance }) {
   const [draft, setDraft] = useState({ inicio: initialStart, fim: initialEnd })
   const [range, setRange] = useState({ inicio: initialStart, fim: initialEnd })
   const [bi, setBi] = useState(null)
+  const [analytics, setAnalytics] = useState(null)
   const [loading, setLoading] = useState(true)
   const [erro, setErro] = useState('')
   const [tab, setTab] = useState(searchParams.get('secao') || 'visao')
   const [detail, setDetail] = useState(null)
   const request = useRef(0)
   const scopeKey = `${empresaAtiva?.id || ''}:${lojaAtiva?.id || ''}`
+  const selectedDays = Math.round((new Date(`${range.fim}T12:00:00.000Z`) - new Date(`${range.inicio}T12:00:00.000Z`)) / 86_400_000) + 1
+  const strategicPeriod = [1, 7, 30, 90].includes(selectedDays) ? selectedDays : null
 
   const load = useCallback(() => {
     const current = ++request.current
     const controller = new AbortController()
-    setBi(null); setErro(''); setDetail(null)
+    setBi(null); setAnalytics(null); setErro(''); setDetail(null)
     if (!range.inicio || !range.fim || range.inicio > range.fim) { setErro('Informe um intervalo válido: a data inicial não pode ser posterior à final.'); setLoading(false); return () => controller.abort() }
     setLoading(true)
     const query = new URLSearchParams({ inicio: range.inicio, fim: range.fim, comparar: '1' })
-    api.get(`/api/admin/barbearia/bi?${query}`, { signal: controller.signal }).then((payload) => {
+    const analyticsRequest = strategicPeriod == null
+      ? Promise.resolve(null)
+      : api.get(`/api/admin/barbearia/analytics?period=${strategicPeriod}`, { signal: controller.signal }).catch(() => null)
+    Promise.all([
+      api.get(`/api/admin/barbearia/bi?${query}`, { signal: controller.signal }),
+      analyticsRequest,
+    ]).then(([payload, analyticsPayload]) => {
       if (request.current !== current) return
-      setBi(payload); setErro('')
+      setBi(payload); setAnalytics(analyticsPayload); setErro('')
     }).catch((error) => {
       if (request.current !== current || error?.name === 'AbortError') return
       setErro(error.message || 'Não foi possível carregar o BI.')
     }).finally(() => { if (request.current === current) setLoading(false) })
     return () => controller.abort()
-  }, [range, scopeKey])
+  }, [range, scopeKey, strategicPeriod])
   useEffect(() => load(), [load])
 
   const r = bi?.resultado || {}
@@ -174,7 +184,7 @@ export default function BIBarbearia({ embedded = false, onOpenPerformance }) {
   const applyRange = () => { setRange({ ...draft }); updateQuery({ ...draft, secao: tab }) }
   const choosePeriod = (days) => { const next = { inicio: plusDays(today, -(days - 1)), fim: today }; setDraft(next); setRange(next); updateQuery({ ...next, secao: tab }) }
   const reportTitle = embedded ? 'Relatórios de gestão' : 'BI & Analytics'
-  const exportedRows = useMemo(() => buildBiCsvRows(bi, tab, { empresa: empresaAtiva?.nome || '', unidade: lojaAtiva?.nome || '', periodo: periodLabel }), [bi, tab, empresaAtiva?.nome, lojaAtiva?.nome, periodLabel])
+  const exportedRows = useMemo(() => [...buildBiCsvRows(bi, tab, { empresa: empresaAtiva?.nome || '', unidade: lojaAtiva?.nome || '', periodo: periodLabel }), ...(analytics?.strategicMix?.items || []).map((item) => ({ empresa: empresaAtiva?.nome || '', unidade: lojaAtiva?.nome || '', periodo: periodLabel, fuso: 'America/Cuiaba', bloco: 'Mix estratégico', indicador: item.label, quantidade: item.records, valor: item.value, percentual: item.percentage }))], [bi, tab, empresaAtiva?.nome, lojaAtiva?.nome, periodLabel, analytics])
   function exportar() { if (bi) downloadCsv(`relatorio_bi_dino_${tab}_${range.inicio}_${range.fim}.csv`, exportedRows) }
   function openPerformance() { if (onOpenPerformance) onOpenPerformance(); else setSection('operacao') }
 
@@ -190,6 +200,7 @@ export default function BIBarbearia({ embedded = false, onOpenPerformance }) {
       <p className="dadm-bi-period" role="status">Período: <strong>{periodLabel}</strong> · {bi.periodo?.dias} dia(s) · unidade ativa · leitura somente consulta.</p>
       <section className="dadm-kpis" aria-label="Indicadores consolidados do período"><Metric label="Faturamento bruto" value={money(summary.faturamentoBruto)} delta={variation(summary.faturamentoBruto, previous?.faturamentoBruto)} note="Operação, Commerce confirmado e histórico pago" onClick={() => setSection('financeiro')} /><Metric label="Resultado estimado" value={money(r.resultado)} delta={variation(r.resultado, previous?.resultado)} note={`Margem ${pct(r.margem)}`} alert={numeric(r.resultado) < 0} onClick={() => setSection('financeiro')} /><Metric label="Ticket médio bruto" value={money(summary.ticketMedioBruto)} delta={variation(summary.ticketMedioBruto, previous?.ticketMedioBruto)} note={`${int(summary.transacoes)} transação(ões) confirmadas`} onClick={() => setSection('financeiro')} /><Metric label="Comparecimento" value={pct(bi.agenda?.taxaComparecimento)} delta={variation(bi.agenda?.taxaComparecimento, previous?.agenda?.taxaComparecimento, (value) => `${numeric(value).toFixed(1).replace('.', ',')} p.p.`)} note={`${int(bi.agenda?.faltas)} falta(s) · ${int(bi.agenda?.cancelados)} cancelado(s)`} alert={bi.agenda?.taxaComparecimento != null && bi.agenda.taxaComparecimento < 85} onClick={() => setSection('operacao')} /><Metric label="Clientes atendidos" value={int(bi.clientes?.ativos)} delta={variation(bi.clientes?.ativos, previous?.clientes?.ativos, int)} note={`${pct(bi.clientes?.taxaRecorrencia)} recorrência`} onClick={() => setSection('clientes')} /><Metric label="Agendamentos" value={int(bi.agenda?.total)} delta={variation(bi.agenda?.total, previous?.agenda?.total, int)} note={`${pct(bi.agenda?.participacaoOnline)} vieram da agenda online`} onClick={() => setSection('operacao')} /></section>
       <DetailCallout detail={detail} onClose={() => setDetail(null)} />
+      {analytics?.strategicMix && <StrategicRevenueMix mix={analytics.strategicMix} periodLabel={`recorte de ${strategicPeriod} dia(s)`} />}
 
       {tab === 'visao' && <><div className="dadm-grid dadm-bi-main-grid"><section className="dadm-card"><h2>Faturamento diário consolidado</h2><p className="dadm-muted">Soma de serviços, revenda, pedidos Commerce confirmados e receitas históricas Avec pagas. Capturas Commerce seguem a data de liquidação e não são somadas novamente.</p><RevenueSeries rows={bi.serieDiaria} /></section><section className="dadm-card"><h2>Composição do faturamento</h2><Bars items={bi.fontesReceita} empty="Sem receita registrada no período." onPick={(item) => { setSection('financeiro'); showDetail('Fonte de receita', item) }} /><p className="dadm-muted">Histórico financeiro Avec está identificado e permanece auditável; não vira uma nova venda operacional.</p></section></div><div className="dadm-grid"><section className="dadm-card"><h2>Leitura rápida do período</h2><dl className="dadm-result"><div><dt>Faturamento operacional</dt><dd>{money(summary.faturamentoOperacional)}</dd></div><div><dt>Receitas históricas Avec pagas</dt><dd>{money(summary.historicoFinanceiroAvec)}</dd></div><div><dt>Commerce confirmado (data do pedido)</dt><dd>{money(summary.ecommerce)}</dd></div><div><dt>Capturas Commerce (data de liquidação)</dt><dd>{money(bi.lojaOnline?.capturadoNoPeriodo)}</dd></div><div><dt>Commerce pendente de pagamento</dt><dd>{money(bi.lojaOnline?.pendentePagamento)}</dd></div></dl>{summary.ecommerceSemCusto && <p className="dadm-note warn">Há Commerce confirmado sem custo completo: entra no faturamento, mas não no resultado estimado até haver custo comprovado.</p>}</section><section className="dadm-card"><h2>IA gerencial, com governança</h2><p>Abre a análise opcional de agregados e nunca modifica agenda, preços, comissões, estoque ou lançamentos.</p><p className="dadm-note">A análise assistida trabalha em janelas de 30 ou 90 dias; este link abre {aiDays} dias. Para um intervalo customizado, o recorte do BI continua sendo a fonte determinística.</p><div className="dadm-actions"><Link className="c360-btn primary" to={aiPath}>Abrir análise gerencial com IA</Link><Link className="c360-btn ghost" to="/admin/barbearia-erp?area=gestao&tab=Proje%C3%A7%C3%A3o%20inteligente">Ver projeções e cenários</Link></div></section></div></>}
 

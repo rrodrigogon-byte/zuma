@@ -182,6 +182,9 @@ test('admin da empresa: isolamento, guardas legados, BI, cliente automático e W
     assert.equal(painel.response.status, 200);
     assert.equal(painel.body.goals.configured, true);
     assert.deepEqual(painel.body.goals.items.map((item) => item.id), ['receita', 'atendimentos']);
+    assert.deepEqual(painel.body.strategicMix.items.map((item) => item.id), ['services', 'products', 'plans']);
+    assert.equal(painel.body.strategicMix.planPaymentsAvailable, false, 'uma unidade não recebe pagamentos de planos legados sem lojaId');
+    assert.match(painel.body.strategicMix.planPaymentsReason, /não identificam a unidade ativa/);
 
     // ── Módulos globais legados bloqueados para usuários de empresa ──
     const legadoA = await request(base, '/api/admin/financeiro/lancamentos', { headers: A });
