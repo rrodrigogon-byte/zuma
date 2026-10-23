@@ -3,7 +3,8 @@
 // for preciso: ao abrir o Financeiro e numa rotina periódica.
 //
 // Fonte                     | Chave                         | Vira
-// bar_comanda_pagamentos    | bar_pagamento:<id>            | receita paga; "conta" (fiado) = conta a receber
+// bar_comanda_pagamentos    | bar_pagamento:<id>            | receita paga; "conta" (fiado) = conta a receber;
+//                           |                               | venda do PDV offline leva a unidade do terminal
 // clube_pagamentos_recebidos| clube:<pagamento_id>          | receita paga (Mensalidades)
 // a2_contas_receber         | a2_conta:<id>                 | conta a receber; baixa na fonte → pago aqui
 // commerce_payments         | loja_online:<id>              | receita paga (Loja online); devolução → estorno
@@ -35,9 +36,11 @@ export async function sincronizarBar(db, empresaId, { fuso = FUSO_PADRAO } = {})
   const empresa = exigirUuid(empresaId, 'empresa');
   if (!(await existeTabela(db, 'bar_comanda_pagamentos'))) return { fonte: 'bar', ignorada: true };
   const temFechamento = await existeTabela(db, 'fin_fechamentos');
+  // venda do PDV offline: a unidade é a do terminal (o bar não guarda unidade na comanda)
+  const temPdvOffline = await existeTabela(db, 'pdv_eventos');
   const r = await db.query(
     `INSERT INTO fin_lancamentos ${INSERT_COLS}
-     SELECT p.empresa_id, NULL, 'receita', 'Bar e restaurante',
+     SELECT p.empresa_id, ${temPdvOffline ? 'pdv.loja_id' : 'NULL'}, 'receita', 'Bar e restaurante',
             left('Comanda ' || COALESCE(NULLIF(c.nome, ''), 'do bar') || CASE WHEN p.meio IS NOT NULL THEN ' · ' || p.meio ELSE '' END, 240),
             p.valor, d.competencia,
             -- "conta" é venda fiada: vira conta a receber do cliente, com 30 dias para pagar
@@ -52,6 +55,8 @@ export async function sincronizarBar(db, empresaId, { fuso = FUSO_PADRAO } = {})
        FROM bar_comanda_pagamentos p
        JOIN bar_comandas c ON c.empresa_id = p.empresa_id AND c.id = p.comanda_id
        LEFT JOIN commerce_customers cc ON cc.empresa_id = c.empresa_id AND cc.id = c.cliente_id
+       ${temPdvOffline ? `LEFT JOIN LATERAL (SELECT t.loja_id FROM pdv_eventos e JOIN pdv_terminais t ON t.empresa_id = e.empresa_id AND t.id = e.terminal_id
+                                         WHERE e.empresa_id = c.empresa_id AND e.comanda_id = c.id LIMIT 1) pdv ON true` : ''}
        -- pagamento com data de um dia já fechado (venda que chegou atrasada) entra no dia de hoje
        CROSS JOIN LATERAL (SELECT CASE WHEN ${temFechamento ? `EXISTS (SELECT 1 FROM fin_fechamentos f WHERE f.empresa_id = p.empresa_id AND f.loja_id IS NULL AND f.data = (p.criado_em AT TIME ZONE $2)::date)` : 'false'}
                                        THEN (CURRENT_TIMESTAMP AT TIME ZONE $2)::date ELSE (p.criado_em AT TIME ZONE $2)::date END AS competencia) d

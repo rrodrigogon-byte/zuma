@@ -3,7 +3,7 @@ import * as svc from './servico.js';
 import { ErroDominio, responderErro } from '../acesso/banco.js';
 
 /** /api/admin/varejo — preços por unidade, promoções, lotes, etiquetas e transferências. */
-export function createVarejoAdminRouter({ db, escopoDaRequisicao }) {
+export function createVarejoAdminRouter({ db, escopoDaRequisicao, fuso = 'America/Cuiaba' }) {
   if (!db || typeof escopoDaRequisicao !== 'function') throw new Error('createVarejoAdminRouter: db e escopoDaRequisicao são obrigatórios');
   const router = express.Router();
   router.use(express.json({ limit: '256kb' }));
@@ -28,9 +28,9 @@ export function createVarejoAdminRouter({ db, escopoDaRequisicao }) {
     return svc.configurarProduto(db, empresaId, req.params.id, corpo, { lojaId });
   }));
   router.get('/promocoes', rota('promotions.read', async ({ empresaId, lojaId }) => ({ promocoes: await svc.listarPromocoes(db, empresaId, { lojaId }) })));
-  router.post('/promocoes', rota('promotions.write', ({ req, empresaId, lojaRestrita, lojaId, usuario }) => svc.criarPromocao(db, empresaId, req.body || {}, { usuario, lojaId: lojaRestrita || (req.body?.daUnidade ? lojaId : null) }), 201));
+  router.post('/promocoes', rota('promotions.write', ({ req, empresaId, lojaRestrita, lojaId, usuario }) => svc.criarPromocao(db, empresaId, req.body || {}, { usuario, lojaId: lojaRestrita || (req.body?.daUnidade ? lojaId : null), fuso }), 201));
   router.patch('/promocoes/:id/status', rota('promotions.write', ({ req, empresaId, lojaRestrita }) => svc.mudarStatusPromocao(db, empresaId, req.params.id, String(req.body?.status || ''), { lojaRestrita })));
-  router.get('/lotes', rota('inventory.read', async ({ empresaId, lojaId }) => ({ lotes: await svc.listarLotes(db, empresaId, { lojaId }) })));
+  router.get('/lotes', rota('inventory.read', async ({ empresaId, lojaId }) => ({ lotes: await svc.listarLotes(db, empresaId, { lojaId, fuso }) })));
   router.post('/lotes', rota('inventory.write', ({ req, empresaId, lojaId }) => svc.registrarLote(db, empresaId, req.body || {}, { lojaId }), 201));
   router.get('/etiquetas', rota('catalog.read', async ({ empresaId, lojaId }) => ({ etiquetas: await svc.listarEtiquetas(db, empresaId, { lojaId }) })));
   router.post('/etiquetas', rota('catalog.write', ({ req, empresaId, lojaId, usuario }) => svc.gerarEtiquetas(db, empresaId, req.body || {}, { usuario, lojaId }), 201));

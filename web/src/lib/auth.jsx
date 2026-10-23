@@ -90,6 +90,23 @@ export function AuthProvider({ children }) {
       .catch(() => { /* sem rede ou sem Commerce: mantém o contexto salvo */ })
   }, [user])
 
+  // Permissões da pessoa na empresa ativa (menu e telas do backoffice escondem o que ela não
+  // acessa). undefined = carregando; null = não se aplica (ou falhou): nada é escondido e a API
+  // decide; lista = o que a pessoa pode.
+  const consultaPermissoes = (u, empresa) => Boolean(u && u.platformAdmin !== true && empresa?.id && typeof fetch === 'function')
+  const [permissoes, setPermissoes] = useState(() => (consultaPermissoes(user, empresaAtiva) ? undefined : null))
+  useEffect(() => {
+    const token = (() => { try { return localStorage.getItem('sp_token') || '' } catch { return '' } })()
+    if (!consultaPermissoes(user, empresaAtiva) || !token) { setPermissoes(null); return undefined }
+    setPermissoes(undefined)
+    let vivo = true
+    fetch('/api/admin/minhas-permissoes', { headers: { Authorization: `Bearer ${token}`, 'X-Empresa-Id': empresaAtiva.id } })
+      .then((resposta) => (resposta.ok ? resposta.json() : null))
+      .then((dados) => { if (vivo) setPermissoes(dados?.aplicavel === true && Array.isArray(dados.permissoes) ? dados.permissoes : null) })
+      .catch(() => { if (vivo) setPermissoes(null) /* sem rede: não esconde nada */ })
+    return () => { vivo = false }
+  }, [user, empresaAtiva?.id])
+
   const desligarPushContextoAtual = () => {
     try {
       const token = localStorage.getItem('sp_token') || ''
@@ -268,6 +285,7 @@ export function AuthProvider({ children }) {
       lojasAcessiveis,
       trocarLoja,
       atualizarContextoLojas,
+      permissoes,
       isAdmin,
       isPlatformAdmin,
       isOrg,

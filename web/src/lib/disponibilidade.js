@@ -25,6 +25,8 @@ export const GLOBAIS_DO_EVENTO = [
   '/portaria', '/admin/portaria',
 ]
 
+import { permissaoQueFalta } from './permissoes-rota.js'
+
 const caminho = (to) => String(to || '').split('?')[0].split('#')[0].replace(/\/+$/, '') || '/'
 
 /** Título do módulo quando a tela ainda não está no ar; null quando está disponível. */
@@ -40,10 +42,12 @@ export function ehGlobalDoEvento(to) {
  * O item de menu dos menus de marca aparece para esta sessão? (O administrador da plataforma vê as
  * telas em implantação na seção "Backoffice da plataforma", com o selo do estado.)
  * - em implantação: nunca;
- * - global do evento: só para a administração da plataforma ou usuário legado sem empresa.
+ * - global do evento: só para a administração da plataforma ou usuário legado sem empresa;
+ * - tela do backoffice cuja permissão a pessoa não tem na empresa ativa: some (`permissoes`).
  */
-export function rotaVisivel(to, { isPlatformAdmin = false, usuarioDeEmpresa = false } = {}) {
+export function rotaVisivel(to, { isPlatformAdmin = false, usuarioDeEmpresa = false, permissoes = null } = {}) {
   if (moduloEmImplantacao(to)) return false
+  if (permissaoQueFalta(to, permissoes)) return false
   if (ehGlobalDoEvento(to)) return isPlatformAdmin || !usuarioDeEmpresa
   return true
 }

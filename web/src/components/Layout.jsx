@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import Sidebar from './Sidebar'
 import EmImplantacao from '../pages/admin/EmImplantacao'
+import SemAcesso from '../pages/admin/SemAcesso'
+import { aguardandoPermissoes, permissaoQueFalta } from '../lib/permissoes-rota'
 import { moduloEmImplantacao } from '../lib/disponibilidade'
 import NotifBell from './NotifBell'
 import { useAuth } from '../lib/auth'
@@ -61,10 +63,16 @@ export default function Layout({ children: conteudo, noSidebar = false, marketin
   const location = useLocation()
   // módulo ainda não ligado em produção: aviso no lugar de uma tela cheia de erros 404
   const emImplantacao = moduloEmImplantacao(location.pathname)
-  const children = emImplantacao ? <EmImplantacao modulo={emImplantacao} /> : conteudo
+  const { user, permissoes } = useAuth()
+  // tela do backoffice sem a permissão da pessoa na empresa ativa: aviso no lugar dos erros 403
+  const faltando = emImplantacao ? null : permissaoQueFalta(location.pathname, permissoes)
+  const children = emImplantacao ? <EmImplantacao modulo={emImplantacao} />
+    : faltando ? <SemAcesso permissao={faltando} />
+      // não monta a tela antes de saber se a pessoa pode (evita disparar leituras que dariam 403)
+      : aguardandoPermissoes(location.pathname, permissoes) ? <div className="page" aria-busy="true" style={{ color: 'var(--muted)' }}>Carregando…</div>
+        : conteudo
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(readSidebarCollapsed)
-  const { user } = useAuth()
 
   useEffect(() => {
     const handler = () => setIsMobile(window.innerWidth < 768)

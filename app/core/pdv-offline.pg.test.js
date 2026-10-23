@@ -66,6 +66,7 @@ describe('PDV offline (PostgreSQL)', { skip: pgDeTeste }, () => {
     const [l] = await razao.listar(ctx.db, A, { origem: 'bar_comanda' });
     assert.equal(l.valor, 30);
     assert.equal(l.competencia, '2026-10-22');
+    assert.equal(l.lojaId, loja, 'a venda offline entra no razão com a unidade do terminal');
   });
 
   test('preço divergente aplica e avisa; produto inexistente segura até a gerência; Pix e total errado falham', async () => {

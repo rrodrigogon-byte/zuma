@@ -649,7 +649,7 @@ app.use('/api/admin/commerce', (req, res, next) => {
 });
 
 // Módulos de /api/admin que separam dados por empresa e podem ser usados por tenant.
-const TENANT_ADMIN_MODULES = new Set(['a2', 'bar', 'barbearia', 'commerce', 'commerce-session', 'usuarios', 'usuarios-diretorio', 'platform', 'fidelidade', 'login', 'auditoria', 'modificadores', 'combos', 'clube', 'unidades', 'razao', 'suprimentos', 'fiscal', 'salao', 'varejo']);
+const TENANT_ADMIN_MODULES = new Set(['a2', 'bar', 'barbearia', 'commerce', 'commerce-session', 'usuarios', 'usuarios-diretorio', 'platform', 'fidelidade', 'login', 'auditoria', 'modificadores', 'combos', 'clube', 'unidades', 'razao', 'suprimentos', 'fiscal', 'salao', 'varejo', 'minhas-permissoes']);
 
 // [kytto-clube] Kytto Clube & Academia (catraca, contrato digital, agenda, retenção, Wellhub/TotalPass).
 // Usa o pool do Commerce que já existe (não abre outro pool) e a mesma resolução de empresa e
@@ -738,6 +738,8 @@ async function escopoComercial(req, permissao) {
     throw Object.assign(new Error(error.message), { status: CLUBE_STATUS_ESCOPO[error.code] || 403, code: error.code });
   }
 }
+// Permissões que o menu do backoffice consulta (GET /api/admin/minhas-permissoes).
+const PERMISSOES_DO_MENU = ['payments.read', 'payments.write', 'reports.read', 'inventory.read', 'inventory.write', 'catalog.read', 'catalog.write', 'customers.read', 'customers.write', 'promotions.read', 'settings.write'];
 // Unidades: quem só tem a permissão numa unidade vê e edita só aquela e não cria unidades.
 const empresaDasUnidades = (req) => escopoComercial(req, permissaoDasUnidades(req));
 // Financeiro JSON antigo da empresa (a barbearia ainda grava lá) para o razão ler.
@@ -1233,6 +1235,21 @@ if(process.env.COMMERCE_CORE_ENABLED === '1'){
     empresaDaRequisicao: empresaDoA2,
     operadorDaRequisicao: (req) => String(req.user?.id || req.user?.email || 'sistema'),
   }));
+  // [kytto-permissoes] O que a pessoa pode fazer na empresa ativa, para o menu e as telas do
+  // backoffice esconderem o que ela não acessa. Só orienta a interface: cada rota continua
+  // conferindo a permissão. Administração da plataforma e sessão sem empresa não filtram nada.
+  app.get('/api/admin/minhas-permissoes', auth, requireStaff, async (req, res) => {
+    res.set('Cache-Control', 'private, no-store');
+    if (isPlatformAdminUser(req.user) || isMainAdminUser(req.user)) return res.json({ aplicavel: false });
+    const resultados = await Promise.all(PERMISSOES_DO_MENU.map(async (codigo) => {
+      try { const { lojaRestrita } = await escopoComercial(req, codigo); return { codigo, ok: true, alcance: lojaRestrita ? 'unidade' : 'empresa' }; }
+      catch (error) { return { codigo, ok: false, erro: error?.code || 'ERRO' }; }
+    }));
+    const permitidas = resultados.filter((r) => r.ok);
+    // nenhuma resposta de "permissão insuficiente": a pessoa não tem empresa no Commerce (legado)
+    if (!permitidas.length && !resultados.some((r) => r.erro === 'PERMISSION_DENIED')) return res.json({ aplicavel: false });
+    return res.json({ aplicavel: true, permissoes: permitidas.map((r) => r.codigo), alcance: Object.fromEntries(permitidas.map((r) => [r.codigo, r.alcance])) });
+  });
   // [kytto-unidades] Cadastro das unidades (lojas) da empresa ativa, no PostgreSQL.
   app.use('/api/admin/unidades', auth, requireStaff, createUnidadesAdminRouter({ db: clubeDb, empresaDaRequisicao: empresaDasUnidades }));
   // [kytto-razao] Razão financeiro único (Financeiro, contas a pagar e a receber, DRE, fechamento).
@@ -1246,9 +1263,9 @@ if(process.env.COMMERCE_CORE_ENABLED === '1'){
   // [kytto-salao] Reservas de mesa e lista de espera, ligadas às mesas e comandas do bar.
   app.use('/api/admin/salao', auth, requireStaff, createSalaoAdminRouter({ db: clubeDb, escopoDaRequisicao: escopoComercial, fuso: process.env.KYTTO_FUSO || 'America/Cuiaba' }));
   // [kytto-pdv-offline] Terminais e periféricos por unidade; o agente local sincroniza as vendas feitas sem internet (viram comandas pagas do bar).
-  app.use('/api/pdv-offline', createPdvOfflineRouter({ db: clubeDb, escopoDaRequisicao: escopoComercial, auth, requireStaff }));
+  app.use('/api/pdv-offline', createPdvOfflineRouter({ db: clubeDb, escopoDaRequisicao: escopoComercial, auth, requireStaff, fuso: process.env.KYTTO_FUSO || 'America/Cuiaba' }));
   // [kytto-varejo] Supermercado/varejo sobre o estoque único: preço por unidade, promoções, lotes, etiquetas e transferências.
-  app.use('/api/admin/varejo', auth, requireStaff, createVarejoAdminRouter({ db: clubeDb, escopoDaRequisicao: escopoComercial }));
+  app.use('/api/admin/varejo', auth, requireStaff, createVarejoAdminRouter({ db: clubeDb, escopoDaRequisicao: escopoComercial, fuso: process.env.KYTTO_FUSO || 'America/Cuiaba' }));
   // [kytto-bar] Bar, PDV, comandas, estoque fracionado, KDS e caixa por empresa.
   // O prefixo continua sob a trava /api/admin e a empresa é resolvida exclusivamente
   // pela membership SQL; nenhum empresaId do corpo da requisição é aceito.

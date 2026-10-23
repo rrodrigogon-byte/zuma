@@ -81,6 +81,7 @@ const migrationFiles = [
   '094_salao_reservas.sql',
   '095_pdv_offline_multiempresa.sql',
   '096_varejo_supermercado.sql',
+  '097_pdv_offline_unidade_no_razao.sql',
 ];
 const advisoryLockKey = 825410732;
 

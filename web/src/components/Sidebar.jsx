@@ -417,9 +417,10 @@ function moduloDaRota(to) {
   return ROUTE_MODULES.find(([prefix]) => path === prefix || path.startsWith(`${prefix}/`))?.[1] || null
 }
 
-function itemDisponivel(item, isPlatformAdmin, empresa, usuarioDeEmpresa = false) {
-  // telas sem backend em produção somem para todos; as do banco global do evento, para usuário de empresa
-  if (!rotaVisivel(item.to, { isPlatformAdmin, usuarioDeEmpresa })) return false
+function itemDisponivel(item, isPlatformAdmin, empresa, usuarioDeEmpresa = false, permissoes = null) {
+  // telas sem backend em produção somem para todos; as do banco global do evento, para usuário de
+  // empresa; as do backoffice cuja permissão a pessoa não tem, para ela
+  if (!rotaVisivel(item.to, { isPlatformAdmin, usuarioDeEmpresa, permissoes })) return false
   if (isPlatformAdmin) return true
   const modulos = Array.isArray(empresa?.modulos) ? empresa.modulos.map((modulo) => String(modulo).toLowerCase()) : null
   if (!modulos) return true
@@ -523,6 +524,7 @@ function Section({ label, items, onNavClick, collapsible = false, badgesMap = {}
 
 function AdminGroups({ groups, onNavClick, isPlatformAdmin, empresa, usuarioDeEmpresa = false, sidebarCollapsed = false, compacto = false }) {
   const location = useLocation()
+  const { permissoes } = useAuth()
   // menu compacto: só os grupos do dia a dia abertos; o grupo da tela atual abre sozinho
   const naRota = (g) => g.items.some((item) => {
     const p = String(item.to).split('?')[0]
@@ -530,7 +532,7 @@ function AdminGroups({ groups, onNavClick, isPlatformAdmin, empresa, usuarioDeEm
   })
   return (
     <>
-      {groups.map(g => ({ ...g, items: g.items.filter((item) => itemDisponivel(item, isPlatformAdmin, empresa, usuarioDeEmpresa)) }))
+      {groups.map(g => ({ ...g, items: g.items.filter((item) => itemDisponivel(item, isPlatformAdmin, empresa, usuarioDeEmpresa, permissoes)) }))
         .filter((group) => group.items.length > 0)
         .map(g => (
           <Section
@@ -585,7 +587,7 @@ function BackofficePlataforma({ empresa, onNavClick, sidebarCollapsed = false })
 }
 
 export default function Sidebar({ collapsed = false, onToggleCollapse = () => {} }) {
-  const { user, logout, isOrg, isStaff, isAtleta, isPlatformAdmin, empresaAtiva, empresasAcessiveis, lojaAtiva, lojasAcessiveis, trocarEmpresa, trocarLoja } = useAuth()
+  const { user, logout, isOrg, isStaff, isAtleta, isPlatformAdmin, empresaAtiva, empresasAcessiveis, lojaAtiva, lojasAcessiveis, trocarEmpresa, trocarLoja, permissoes } = useAuth()
   const navigate = useNavigate()
   const [open, setOpen] = useState(false)
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
@@ -608,7 +610,7 @@ export default function Sidebar({ collapsed = false, onToggleCollapse = () => {}
   const empresaDoMenu = empresaAtiva
   // usuário preso a uma empresa (não é da plataforma nem usuário legado do evento)
   const usuarioDeEmpresa = (Boolean(user?.empresaId) || user?.tenantBound === true) && !isPlatformAdmin
-  const opVisiveis = (itens) => itens.filter((item) => rotaVisivel(item.to, { isPlatformAdmin, usuarioDeEmpresa }))
+  const opVisiveis = (itens) => itens.filter((item) => rotaVisivel(item.to, { isPlatformAdmin, usuarioDeEmpresa, permissoes }))
   const lojasContexto = isDino && !lojasAcessiveis.some((loja) => loja.id === DINO_STORE.id)
     ? [...lojasAcessiveis, DINO_STORE]
     : lojasAcessiveis

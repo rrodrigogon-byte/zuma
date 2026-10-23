@@ -6,7 +6,7 @@ import { ErroDominio, responderErro } from '../acesso/banco.js';
  * /api/pdv-offline — gestão (login + escopo da empresa) e endpoints do agente local
  * (credencial do terminal: cabeçalhos X-Terminal-Id e X-Terminal-Token).
  */
-export function createPdvOfflineRouter({ db, escopoDaRequisicao, auth, requireStaff }) {
+export function createPdvOfflineRouter({ db, escopoDaRequisicao, auth, requireStaff, fuso = 'America/Cuiaba' }) {
   if (!db || typeof escopoDaRequisicao !== 'function' || typeof auth !== 'function') throw new Error('createPdvOfflineRouter: dependências obrigatórias');
   const router = express.Router();
   router.use(express.json({ limit: '2mb' }));
@@ -36,12 +36,12 @@ export function createPdvOfflineRouter({ db, escopoDaRequisicao, auth, requireSt
   }));
   router.post('/dispositivos', ...gestao('settings.write', async ({ req, empresaId, lojaRestrita }) => ({ dispositivo: await svc.criarDispositivo(db, empresaId, req.body || {}, { lojaRestrita }) }), 201));
   router.get('/conflitos', ...gestao('payments.read', async ({ req, empresaId, lojaRestrita }) => ({ conflitos: await svc.listarConflitos(db, empresaId, { lojaId: lojaRestrita, todos: req.query.todos === '1' }) })));
-  router.patch('/conflitos/:id', ...gestao('payments.write', ({ req, empresaId, lojaRestrita, usuario }) => svc.resolverConflito(db, empresaId, req.params.id, req.body?.resolucao, { usuario, lojaRestrita })));
+  router.patch('/conflitos/:id', ...gestao('payments.write', ({ req, empresaId, lojaRestrita, usuario }) => svc.resolverConflito(db, empresaId, req.params.id, req.body?.resolucao, { usuario, lojaRestrita, fuso })));
 
   // agente local
   router.post('/terminal/heartbeat', terminal(({ req, terminal: t }) => svc.heartbeat(db, t, req.body || {})));
   router.get('/terminal/fila-impressao', terminal(() => ({ trabalhos: [] })));
   router.post('/terminal/eventos', terminal(({ req }) => ({ sucesso: true, recebidos: Array.isArray(req.body?.eventos) ? Math.min(req.body.eventos.length, 100) : 0 }), 202));
-  router.post('/sincronizar', terminal(({ req, terminal: t }) => svc.sincronizar(db, t, req.body || {})));
+  router.post('/sincronizar', terminal(({ req, terminal: t }) => svc.sincronizar(db, t, req.body || {}, { fuso })));
   return router;
 }
