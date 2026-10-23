@@ -8,6 +8,25 @@ export const DINO_SCOPE = Object.freeze({
   lojaId: 'ab049a75-6e2e-4cc9-abbc-6fd11cdda1d8',
 })
 
+export const DINO_COMPANY = Object.freeze({
+  id: DINO_SCOPE.empresaId,
+  nome: 'Barbearia Dino',
+  nome_fantasia: 'Barbearia Dino',
+  ativa: true,
+})
+
+// Fallback visual mínimo para o host dedicado quando a sessão não devolve
+// a lista de lojas no primeiro carregamento. O backend continua sendo a
+// autoridade de autorização e valida o mesmo par canônico.
+export const DINO_STORE = Object.freeze({
+  id: DINO_SCOPE.lojaId,
+  empresaId: DINO_SCOPE.empresaId,
+  codigo: 'DINO-MATRIZ',
+  nome: 'Barbearia Dino',
+  nome_fantasia: 'Barbearia Dino',
+  ativa: true,
+})
+
 export function isDinoDedicatedHost(host = typeof window === 'undefined' ? '' : window.location.hostname) {
   return ehHostDino(host)
 }
