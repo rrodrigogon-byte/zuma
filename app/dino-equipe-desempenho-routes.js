@@ -1,4 +1,5 @@
 import { buildEquipeDesempenho } from './dino-equipe-desempenho.js';
+import { DINO_COMMERCE_EMPRESA_ID, DINO_COMMERCE_LOJA_ID, legacyEmpresaIdFromCommerce, legacyLojaIdFromCommerce } from './core/legacy-commerce-scope.js';
 
 export const EQUIPE_PERFORMANCE_PATH = '/api/admin/barbearia/equipe/desempenho';
 export function equipePerformanceNoStore(req, res, next) {
@@ -17,6 +18,13 @@ function commerceWindow(period) {
   return { from: from.toISOString(), to: to.toISOString() };
 }
 
+function scopeValueMatches(field, actualLegacy, candidate) {
+  const value = String(candidate || '').trim();
+  if (value === String(actualLegacy || '').trim()) return true;
+  if (field === 'empresaId') return legacyEmpresaIdFromCommerce(value) === String(actualLegacy || '').trim();
+  return legacyLojaIdFromCommerce(value, value === DINO_COMMERCE_LOJA_ID ? DINO_COMMERCE_EMPRESA_ID : '') === String(actualLegacy || '').trim();
+}
+
 // O prefixo /api/admin/barbearia já exige auth, requireStaff e resolução da identidade.
 // Não chama save/audit, não calcula salário, não dispara campanhas nem pagamentos.
 export function registerEquipePerformanceRoutes(app, { db, legacyEmpresaId, legacyLojaId, requireCommercePermission, salesReport, coreEnabled = () => process.env.COMMERCE_CORE_ENABLED === '1' }) {
@@ -31,10 +39,11 @@ export function registerEquipePerformanceRoutes(app, { db, legacyEmpresaId, lega
       const lojaId = String(legacyLojaId(req) || '');
       if (!empresaId || empresaId === 'principal' || !lojaId) return res.status(409).json({ code: 'EXPLICIT_SCOPE_REQUIRED', error: 'Selecione uma empresa e uma unidade autorizadas.' });
       for (const [field, expected] of [['empresaId', empresaId], ['lojaId', lojaId]]) {
-        if (req.query?.[field] !== undefined && req.query[field] !== expected) return res.status(403).json({ code: 'STORE_SCOPE_MISMATCH', error: 'O contexto não corresponde à empresa e unidade autorizadas.' });
+        if (req.query?.[field] !== undefined && !scopeValueMatches(field, expected, req.query[field])) return res.status(403).json({ code: 'STORE_SCOPE_MISMATCH', error: 'O contexto não corresponde à empresa e unidade autorizadas.' });
       }
       for (const [header, expected] of [['x-empresa-id', empresaId], ['x-loja-id', lojaId]]) {
-        if (req.headers[header] && String(req.headers[header]) !== expected) return res.status(403).json({ code: 'STORE_SCOPE_MISMATCH', error: 'O contexto não corresponde à empresa e unidade autorizadas.' });
+        const field = header === 'x-empresa-id' ? 'empresaId' : 'lojaId';
+        if (req.headers[header] && !scopeValueMatches(field, expected, req.headers[header])) return res.status(403).json({ code: 'STORE_SCOPE_MISMATCH', error: 'O contexto não corresponde à empresa e unidade autorizadas.' });
       }
       const allowedQueries = new Set(['inicio', 'fim', 'profissionalId', 'empresaId', 'lojaId']);
       if (Object.keys(req.query || {}).some(key => !allowedQueries.has(key)) || Object.values(req.query || {}).some(value => typeof value !== 'string')) return res.status(400).json({ code: 'PERFORMANCE_QUERY_INVALID', error: 'Informe apenas período e profissional válidos.' });
@@ -42,7 +51,7 @@ export function registerEquipePerformanceRoutes(app, { db, legacyEmpresaId, lega
       if (profissionalId.length > 120) return res.status(400).json({ code: 'PERFORMANCE_QUERY_INVALID', error: 'Filtro de profissional inválido.' });
       if (coreEnabled()) {
         const context = await requireCommercePermission(req, 'reports.read');
-        if (String(context?.empresaId || '') !== empresaId || String(context?.lojaId || '') !== lojaId) return res.status(403).json({ code: 'STORE_SCOPE_MISMATCH', error: 'O contexto do relatório não corresponde à unidade autorizada.' });
+        if (legacyEmpresaIdFromCommerce(context?.empresaId) !== empresaId || legacyLojaIdFromCommerce(context?.lojaId, context?.empresaId) !== lojaId) return res.status(403).json({ code: 'STORE_SCOPE_MISMATCH', error: 'O contexto do relatório não corresponde à unidade autorizada.' });
         if (typeof salesReport !== 'function') return res.status(503).json({ code: 'PERFORMANCE_UNAVAILABLE', error: 'Relatório Commerce indisponível.' });
         const range = commerceWindow({ inicio: req.query.inicio, fim: req.query.fim });
         const sales = await salesReport(context, range);
