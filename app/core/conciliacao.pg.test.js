@@ -96,4 +96,73 @@ describe('Conciliação bancária (PostgreSQL)', { skip: pgDeTeste }, () => {
     assert.equal(imp.automatico.paraConferir, 1);
     assert.equal((await razao.obter(ctx.db, A, conta.id)).status, 'pendente');
   });
+
+  test('revisão: sem nome não baixa; duas linhas para uma conta vão para conferência; dinheiro não casa com Pix', async () => {
+    const C = randomUUID();
+    await ctx.db.query('INSERT INTO empresas (id) VALUES ($1)', [C]);
+    const [joao] = await razao.criarManual(ctx.db, C, { tipo: 'receita', descricao: 'Fiado João', valor: 50, vencimento: '2026-10-20', contraparteNome: 'João Prado' }, { agora });
+    const [conta120] = await razao.criarManual(ctx.db, C, { tipo: 'receita', descricao: 'Mensalidade Rita', valor: 120, vencimento: '2026-10-10', contraparteNome: 'Rita Gomes' }, { agora });
+    await razao.criarManual(ctx.db, C, { tipo: 'receita', descricao: 'Venda balcão', valor: 40, status: 'pago', meioPagamento: 'dinheiro', vencimento: '2026-10-12', pagoEm: '2026-10-12' }, { agora });
+    const imp = await conc.importarOfx(ctx.db, C, { arquivoBase64: ofx([
+      { fitid: 'A1', data: '2026-10-21', valor: 50, memo: 'PIX RECEBIDO PEDRO ALVES' },
+      { fitid: 'A2', data: '2026-10-10', valor: 120, memo: 'PIX RITA GOMES' },
+      { fitid: 'A3', data: '2026-10-11', valor: 120, memo: 'PIX RITA GOMES' },
+      { fitid: 'A4', data: '2026-10-12', valor: 40, memo: 'PIX RECEBIDO' },
+    ], { conta: '777-1' }) });
+    assert.equal(imp.automatico.conciliadas, 0);
+    assert.equal((await razao.obter(ctx.db, C, joao.id)).status, 'pendente');
+    assert.equal((await razao.obter(ctx.db, C, conta120.id)).status, 'pendente');
+    const a4 = (await conc.listarLinhas(ctx.db, C)).find((l) => l.fitid === 'A4');
+    assert.equal(a4.sugestoes.length, 0, 'venda em dinheiro não é candidata de Pix');
+  });
+
+  test('revisão: débito sem sinal, FITID repetido/ausente, data impossível e conta divergente', async () => {
+    const D = randomUUID();
+    await ctx.db.query('INSERT INTO empresas (id) VALUES ($1)', [D]);
+    const [fiado] = await razao.criarManual(ctx.db, D, { tipo: 'receita', descricao: 'Fiado X', valor: 200, vencimento: '2026-10-15', contraparteNome: 'Boleto' }, { agora });
+    const texto = Buffer.from(Buffer.from(ofx([
+      { fitid: 'B1', data: '2026-10-15', valor: 200, memo: 'PAGTO BOLETO', tipo: 'DEBIT' },
+      { fitid: '000000', data: '2026-10-16', valor: -10, memo: 'TARIFA A' },
+      { fitid: '000000', data: '2026-10-16', valor: -25, memo: 'TARIFA B' },
+      { fitid: 'B9', data: '2026-10-17', valor: -5, memo: 'IOF' },
+      { fitid: 'B9', data: '2026-10-17', valor: -5, memo: 'IOF' },
+      { fitid: 'SEMID', data: '2026-10-18', valor: -7, memo: 'DOC SEM FITID' },
+    ], { conta: '888-2' }), 'base64').toString('latin1').replace('<FITID>SEMID\r\n', ''), 'latin1').toString('base64');
+    const imp = await conc.importarOfx(ctx.db, D, { arquivoBase64: texto });
+    assert.equal(imp.novas, 5, 'tarifas com o mesmo FITID e a linha sem FITID entram; a repetida idêntica não');
+    assert.equal(imp.repetidasNoArquivo, 1);
+    assert.equal(imp.sinalCorrigido, 1);
+    assert.equal((await razao.obter(ctx.db, D, fiado.id)).status, 'pendente', 'débito nunca baixa conta a receber');
+    const linhas = await conc.listarLinhas(ctx.db, D);
+    assert.equal(linhas.find((l) => l.descricao === 'PAGTO BOLETO').valor, -200);
+    assert.equal(linhas.filter((l) => /TARIFA/.test(l.descricao)).length, 2);
+    const ruim = ofx([{ fitid: 'Z1', data: '2026-02-31', valor: -1, memo: 'X\u0000Y' }, { fitid: 'Z2', data: '2026-02-28', valor: -1, memo: 'OK' }], { conta: '888-2' });
+    const imp2 = await conc.importarOfx(ctx.db, D, { arquivoBase64: ruim });
+    assert.equal(imp2.descartadas, 1);
+    const outraConta = (await conc.listarContas(ctx.db, D))[0];
+    await assert.rejects(() => conc.importarOfx(ctx.db, D, { arquivoBase64: ofx([{ fitid: 'Q1', data: '2026-10-01', valor: 1, memo: 'x' }], { conta: '999-9' }), contaId: outraConta.id }), (e) => e.code === 'CONTA_DIVERGENTE');
+  });
+
+  test('revisão: desfazer lançamento criado da linha e relançar não duplica; unidades não se cruzam', async () => {
+    const E = randomUUID(); const L1 = randomUUID(); const L2 = randomUUID();
+    await ctx.db.query('INSERT INTO empresas (id) VALUES ($1)', [E]);
+    await ctx.db.query('INSERT INTO lojas (id, empresa_id) VALUES ($1, $3), ($2, $3)', [L1, L2, E]);
+    const matriz = await conc.salvarConta(ctx.db, E, { nome: 'Matriz', banco: '0001', conta: '12345-6' });
+    const [l2] = await razao.criarManual(ctx.db, E, { tipo: 'receita', descricao: 'Conta L2 Ana Reis', valor: 30, vencimento: '2026-10-20', contraparteNome: 'Ana Reis', lojaId: L2 }, { agora });
+    await assert.rejects(() => conc.importarOfx(ctx.db, E, { arquivoBase64: ofx([{ fitid: 'U1', data: '2026-10-20', valor: 30, memo: 'PIX ANA REIS' }]), contaId: matriz.id }, { lojaRestrita: L1 }), (e) => e.status === 404);
+    const contaL1 = await conc.salvarConta(ctx.db, E, { nome: 'Conta L1', banco: '0001', conta: '55555-0', lojaId: L1 });
+    await conc.importarOfx(ctx.db, E, { arquivoBase64: ofx([{ fitid: 'U2', data: '2026-10-20', valor: 30, memo: 'PIX ANA REIS' }, { fitid: 'U3', data: '2026-10-21', valor: -9, memo: 'TARIFA' }], { conta: '55555-0' }) });
+    assert.equal((await razao.obter(ctx.db, E, l2.id)).status, 'pendente', 'conta de L1 não baixa recebível de L2');
+    const [u2, u3] = ['U2', 'U3'].map((f) => null || f);
+    const linhas = await conc.listarLinhas(ctx.db, E, { contaId: contaL1.id });
+    const lU2 = linhas.find((l) => l.fitid === u2);
+    await assert.rejects(() => conc.conciliar(ctx.db, E, lU2.id, l2.id), (e) => e.code === 'UNIDADE_DIVERGENTE');
+    const lU3 = linhas.find((l) => l.fitid === u3);
+    await conc.criarLancamentoDaLinha(ctx.db, E, lU3.id, { categoria: 'Juros e tarifas bancárias' });
+    const volta = await conc.desfazer(ctx.db, E, lU3.id);
+    assert.equal(volta.lancamentoCancelado, true);
+    await conc.criarLancamentoDaLinha(ctx.db, E, lU3.id, { categoria: 'Juros e tarifas bancárias' });
+    const tarifas = (await razao.listar(ctx.db, E, { tipo: 'despesa' })).filter((l) => l.status !== 'cancelado');
+    assert.equal(tarifas.length, 1);
+  });
 });

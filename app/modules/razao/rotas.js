@@ -140,13 +140,13 @@ export function createRazaoAdminRouter({ db, escopoDaRequisicao, fonteJson = nul
     return conc.salvarConta(db, empresaId, req.body || {}, req.params.id);
   }));
   router.post('/conciliacao/importar', rota('payments.write', ({ req, empresaId, lojaRestrita, usuario }) => conc.importarOfx(db, empresaId, {
-    arquivoBase64: req.body?.arquivoBase64, nomeArquivo: req.body?.nomeArquivo, contaId: req.body?.contaId || null, lojaId: lojaRestrita, conciliar: req.body?.conciliar !== false,
-  }, { usuario, fuso }), 201));
+    arquivoBase64: req.body?.arquivoBase64, nomeArquivo: req.body?.nomeArquivo, contaId: req.body?.contaId || null, conciliar: req.body?.conciliar !== false,
+  }, { usuario, fuso, lojaRestrita }), 201));
   router.get('/conciliacao/linhas', rota('payments.read', ({ req, empresaId, lojaRestrita }) => conc.listarLinhas(db, empresaId, { contaId: req.query.contaId || null, status: req.query.status || 'pendente', lojaId: lojaRestrita, fuso })));
   router.post('/conciliacao/linhas/:id/conciliar', rota('payments.write', ({ req, empresaId, lojaRestrita, usuario }) => conc.conciliar(db, empresaId, req.params.id, req.body?.lancamentoId, { usuario, fuso, lojaRestrita })));
   router.post('/conciliacao/linhas/:id/criar-lancamento', rota('payments.write', ({ req, empresaId, lojaRestrita, usuario }) => conc.criarLancamentoDaLinha(db, empresaId, req.params.id, { categoria: req.body?.categoria, descricao: req.body?.descricao, lojaId: req.body?.lojaId }, { usuario, fuso, lojaRestrita })));
   router.post('/conciliacao/linhas/:id/ignorar', rota('payments.write', ({ req, empresaId, lojaRestrita, usuario }) => conc.ignorarLinha(db, empresaId, req.params.id, { usuario, lojaRestrita })));
-  router.post('/conciliacao/linhas/:id/desfazer', rota('payments.write', ({ req, empresaId, lojaRestrita }) => conc.desfazer(db, empresaId, req.params.id, { lojaRestrita })));
+  router.post('/conciliacao/linhas/:id/desfazer', rota('payments.write', ({ req, empresaId, lojaRestrita, usuario }) => conc.desfazer(db, empresaId, req.params.id, { lojaRestrita, usuario, fuso })));
   router.post('/conciliacao/automatico', rota('payments.write', ({ req, empresaId, lojaRestrita, usuario }) => conc.conciliarAutomatico(db, empresaId, { contaId: req.body?.contaId || null, usuario, fuso, lojaRestrita })));
 
   return router;

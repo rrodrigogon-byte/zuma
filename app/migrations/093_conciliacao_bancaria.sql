@@ -56,6 +56,8 @@ CREATE TABLE IF NOT EXISTS fin_extrato_linhas (
   UNIQUE (empresa_id, id),
   CONSTRAINT uq_fin_linha_fitid UNIQUE (empresa_id, conta_id, fitid),
   CONSTRAINT fk_fin_linha_conta FOREIGN KEY (empresa_id, conta_id) REFERENCES fin_contas_bancarias (empresa_id, id) ON DELETE CASCADE,
+  CONSTRAINT fk_fin_linha_extrato FOREIGN KEY (empresa_id, extrato_id) REFERENCES fin_extratos (empresa_id, id) ON DELETE CASCADE,
+  CONSTRAINT fk_fin_linha_lancamento FOREIGN KEY (empresa_id, lancamento_id) REFERENCES fin_lancamentos (empresa_id, id),
   CONSTRAINT chk_fin_linha_status CHECK (status IN ('pendente', 'conciliado', 'ignorado')),
   CONSTRAINT chk_fin_linha_valor CHECK (valor <> 0),
   CONSTRAINT chk_fin_linha_vinculo CHECK ((status = 'conciliado') = (lancamento_id IS NOT NULL))
