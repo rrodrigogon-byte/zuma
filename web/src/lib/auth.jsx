@@ -1,6 +1,6 @@
-import { createContext, useContext, useState } from 'react'
+import { createContext, useContext, useEffect, useRef, useState } from 'react'
 import { encerrarPushDoAparelho } from './push-equipe'
-import { repararLojasSemEmpresa, selecionarLojaAutomatica } from './context-selection'
+import { mesclarLojas, normalizarLojas, pertenceAEmpresa, repararLojasSemEmpresa, selecionarLojaAutomatica, substituirLojas } from './context-selection'
 import { DINO_COMPANY, DINO_STORE, isDinoDedicatedHost } from './dino-scope'
 import { isDinoBrandContext } from './brand'
 
@@ -49,7 +49,7 @@ function selecionarLojaDoContexto(lojas, empresa, atual = null) {
 
 function readLojaAtivaInicial() {
   const empresa = readEmpresaAtivaInicial()
-  const lojasArmazenadas = readStorage('sp_lojas_acessiveis', [])
+  const lojasArmazenadas = normalizarLojas(readStorage('sp_lojas_acessiveis', []))
   const lojas = lojasComFallbackDino(lojasArmazenadas)
   const atual = readStorage('sp_loja_ativa')
   const selecionada = empresa?.id ? selecionarLojaDoContexto(lojas, empresa, atual) : null
@@ -67,8 +67,28 @@ export function AuthProvider({ children }) {
   const [empresasAcessiveis, setEmpresasAcessiveis] = useState(readEmpresasAcessiveisInicial)
   const [lojaAtiva, setLojaAtiva] = useState(readLojaAtivaInicial)
   const [lojasAcessiveis, setLojasAcessiveis] = useState(() => {
-    return lojasComFallbackDino(readStorage('sp_lojas_acessiveis', []))
+    return lojasComFallbackDino(normalizarLojas(readStorage('sp_lojas_acessiveis', [])))
   })
+  const lojasAcessiveisRef = useRef(lojasAcessiveis)
+  useEffect(() => { lojasAcessiveisRef.current = lojasAcessiveis }, [lojasAcessiveis])
+
+  // Ao abrir o painel, relê empresas e unidades do servidor. Repara listas antigas gravadas
+  // no navegador sem o vínculo da unidade com a empresa (o que deixava o Financeiro sem unidade).
+  const contextoAtualizado = useRef(false)
+  useEffect(() => {
+    if (!user || contextoAtualizado.current || typeof fetch !== 'function') return
+    const token = (() => { try { return localStorage.getItem('sp_token') || '' } catch { return '' } })()
+    if (!token) return
+    contextoAtualizado.current = true
+    fetch('/api/admin/commerce-session', { headers: { Authorization: `Bearer ${token}` } })
+      .then((resposta) => (resposta.ok ? resposta.json() : null))
+      .then((sessao) => {
+        if (!sessao || !Array.isArray(sessao.lojas_acessiveis) || sessao.lojas_acessiveis.length === 0) return
+        const empresas = Array.isArray(sessao.empresas_acessiveis) && sessao.empresas_acessiveis.length ? sessao.empresas_acessiveis : undefined
+        atualizarContextoLojasRef.current?.({ lojas_acessiveis: sessao.lojas_acessiveis, empresas_acessiveis: empresas, substituir: true })
+      })
+      .catch(() => { /* sem rede ou sem Commerce: mantém o contexto salvo */ })
+  }, [user])
 
   const desligarPushContextoAtual = () => {
     try {
@@ -93,7 +113,7 @@ export function AuthProvider({ children }) {
     const empresa = isDinoDedicatedHost()
       ? (empresas.find((item) => isDinoBrandContext(item)) || DINO_COMPANY)
       : empresaNova
-    const lojasRecebidas = Array.isArray(sessao.lojas_acessiveis) ? sessao.lojas_acessiveis : []
+    const lojasRecebidas = normalizarLojas(Array.isArray(sessao.lojas_acessiveis) ? sessao.lojas_acessiveis : [])
     const lojas = lojasComFallbackDino(lojasRecebidas)
     const loja = selecionarLojaDoContexto(lojas, empresa, lojaNova)
     if (empresas.length > 0) {
@@ -150,8 +170,7 @@ export function AuthProvider({ children }) {
     }
     const proxima = lojasAcessiveis.find((loja) => loja.id === lojaId && loja.ativa !== false && (
       !empresaAtiva?.id
-      || loja.empresaId === empresaAtiva.id
-      || loja.commerceEmpresaId === empresaAtiva.id
+      || pertenceAEmpresa(loja, empresaAtiva.id)
       || (isDinoDedicatedHost() && isDinoBrandContext(empresaAtiva) && loja.id === DINO_STORE.id)
     ))
     if (!proxima) return false
@@ -161,7 +180,9 @@ export function AuthProvider({ children }) {
     return true
   }
 
-  const atualizarContextoLojas = ({ empresa, empresas_acessiveis: empresas, loja, lojas_acessiveis: lojas }) => {
+  // `substituir`: true = a lista é a completa da sessão; '<empresaId>' = completa só dessa empresa;
+  // ausente = complemento parcial (ex.: lojas das vitrines do e-commerce), que só acrescenta.
+  const atualizarContextoLojas = ({ empresa, empresas_acessiveis: empresas, loja, lojas_acessiveis: lojas, substituir = false }) => {
     const empresasAtualizadas = Array.isArray(empresas) ? empresasComFallbackDino(empresas) : null
     const empresaRecebida = empresa || empresaAtiva
     const empresaAtualizada = isDinoDedicatedHost()
@@ -176,7 +197,11 @@ export function AuthProvider({ children }) {
       setEmpresaAtiva(empresaAtualizada)
     }
     if (Array.isArray(lojas)) {
-      const lojasAtualizadas = lojasComFallbackDino(lojas)
+      // mescla em vez de substituir: quem chama pode mandar lojas sem empresaId (ex.: vitrines)
+      const mescladas = substituir
+        ? substituirLojas(lojasAcessiveisRef.current, lojas, { empresaId: substituir === true ? null : substituir })
+        : mesclarLojas(lojasAcessiveisRef.current, lojas)
+      const lojasAtualizadas = lojasComFallbackDino(mescladas)
       localStorage.setItem('sp_lojas_acessiveis', JSON.stringify(lojasAtualizadas))
       setLojasAcessiveis(lojasAtualizadas)
       const selecionada = selecionarLojaDoContexto(lojasAtualizadas, empresaAtualizada, loja || lojaAtiva)
@@ -192,6 +217,9 @@ export function AuthProvider({ children }) {
       setLojaAtiva(loja)
     }
   }
+
+  const atualizarContextoLojasRef = useRef(null)
+  atualizarContextoLojasRef.current = atualizarContextoLojas
 
   const logout = () => {
     // App do barbeiro: desliga os avisos deste aparelho e apaga a agenda guardada para
@@ -209,6 +237,7 @@ export function AuthProvider({ children }) {
     localStorage.removeItem('sp_empresas_acessiveis')
     localStorage.removeItem('sp_loja_ativa')
     localStorage.removeItem('sp_lojas_acessiveis')
+    contextoAtualizado.current = false
     setUser(null)
     setEmpresaAtiva(null)
     setEmpresasAcessiveis([])

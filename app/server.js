@@ -39,6 +39,7 @@ import { enviarWhatsappClube } from './modules/clube/whatsapp-agro-open.js';
 import { extensaoIaClube } from './modules/clube/ia-agro-open.js';
 import { lerSociosTtc, importarAlunos } from './modules/clube/importar-legado.js';
 import { createA2AdminRouter } from './modules/a2/rotas.js';
+import { createUnidadesAdminRouter } from './modules/unidades/rotas.js';
 import { createBarAdminRouter } from './modules/bar/rotas-multiempresa.js';
 import * as barService from './modules/bar/servico.js';
 import { responderErro as responderErroBarra } from './modules/acesso/banco.js';
@@ -639,7 +640,7 @@ app.use('/api/admin/commerce', (req, res, next) => {
 });
 
 // Módulos de /api/admin que separam dados por empresa e podem ser usados por tenant.
-const TENANT_ADMIN_MODULES = new Set(['a2', 'bar', 'barbearia', 'commerce', 'commerce-session', 'usuarios', 'usuarios-diretorio', 'platform', 'fidelidade', 'login', 'auditoria', 'modificadores', 'combos', 'clube']);
+const TENANT_ADMIN_MODULES = new Set(['a2', 'bar', 'barbearia', 'commerce', 'commerce-session', 'usuarios', 'usuarios-diretorio', 'platform', 'fidelidade', 'login', 'auditoria', 'modificadores', 'combos', 'clube', 'unidades']);
 
 // [kytto-clube] Kytto Clube & Academia (catraca, contrato digital, agenda, retenção, Wellhub/TotalPass).
 // Usa o pool do Commerce que já existe (não abre outro pool) e a mesma resolução de empresa e
@@ -696,6 +697,33 @@ async function empresaDoA2(req) {
   try {
     const contexto = await requireCommercePermission(req, permissaoDoA2(req));
     return contexto.empresaId;
+  } catch (error) {
+    if (error?.name !== 'CommerceError') throw error;
+    throw Object.assign(new Error(error.message), { status: CLUBE_STATUS_ESCOPO[error.code] || 403, code: error.code });
+  }
+}
+// Unidades da empresa: leitura para quem atende; criar, editar e desativar exigem settings.write.
+function permissaoDasUnidades(req) {
+  const caminho = String(req.originalUrl || '').split('?')[0];
+  if (req.method !== 'GET') return 'settings.write';
+  return /\/auditoria$/.test(caminho) ? 'reports.read' : 'customers.read';
+}
+// Quem tem a permissão só numa unidade (membership presa a uma loja) vê e edita só aquela
+// unidade e não cria unidades novas; quem tem a permissão na empresa toda vê todas.
+async function empresaDasUnidades(req) {
+  try {
+    const permissao = permissaoDasUnidades(req);
+    const contexto = await requireCommercePermission(req, permissao);
+    const todaEmpresa = await commerceDb.queryRead(
+      `SELECT 1 FROM commerce_memberships m
+         JOIN commerce_roles r ON r.id = m.role_id AND (r.empresa_id = $1 OR r.empresa_id IS NULL)
+         JOIN commerce_role_permissions rp ON rp.role_id = r.id
+         JOIN commerce_permissions p ON p.id = rp.permission_id AND p.codigo = $2
+        WHERE m.empresa_id = $1 AND m.usuario_id = $3 AND m.ativo = true AND m.loja_id IS NULL
+          AND (m.expires_at IS NULL OR m.expires_at > CURRENT_TIMESTAMP) LIMIT 1`,
+      [contexto.empresaId, permissao, contexto.usuarioId],
+    );
+    return { empresaId: contexto.empresaId, lojaRestrita: todaEmpresa.rows[0] ? null : (contexto.lojaId || null) };
   } catch (error) {
     if (error?.name !== 'CommerceError') throw error;
     throw Object.assign(new Error(error.message), { status: CLUBE_STATUS_ESCOPO[error.code] || 403, code: error.code });
@@ -1184,6 +1212,8 @@ if(process.env.COMMERCE_CORE_ENABLED === '1'){
     empresaDaRequisicao: empresaDoA2,
     operadorDaRequisicao: (req) => String(req.user?.id || req.user?.email || 'sistema'),
   }));
+  // [kytto-unidades] Cadastro das unidades (lojas) da empresa ativa, no PostgreSQL.
+  app.use('/api/admin/unidades', auth, requireStaff, createUnidadesAdminRouter({ db: clubeDb, empresaDaRequisicao: empresaDasUnidades }));
   // [kytto-bar] Bar, PDV, comandas, estoque fracionado, KDS e caixa por empresa.
   // O prefixo continua sob a trava /api/admin e a empresa é resolvida exclusivamente
   // pela membership SQL; nenhum empresaId do corpo da requisição é aceito.
@@ -3014,6 +3044,34 @@ function exigirPapelOperacaoBarbearia(req, res, next) {
 app.use('/api/admin/barbearia', auth, requireStaff, resolverEscopoBarbearia, exigirPapelOperacaoBarbearia);
 registerEquipePerformanceRoutes(app, { db, legacyEmpresaId, legacyLojaId, requireCommercePermission, salesReport, dataVersion: () => estadoGravacao()?.alteracoes ?? null });
 registerCustomer360Routes(app, { legacyEmpresaId, legacyLojaId, clientesKytto, barbeariaErpKytto, canaisFidelidadeKytto, listarAgendamentosBarbearia, requireCommercePermission, audit, save });
+// Diagnóstico do Financeiro (só administração da plataforma): onde estão os lançamentos de cada
+// empresa no banco JSON — quantidades por unidade e por origem, sem valores nem descrições.
+// Serve para achar lançamentos gravados sem unidade ou sob outro identificador de empresa.
+// Fora de /api/admin/barbearia de propósito: lá a trava de escopo barra o admin numa empresa onde ele
+// não tem membership, que é justamente o caso a investigar.
+app.get('/api/admin/platform/financeiro-diagnostico', auth, requirePlatformAdmin, (req, res) => {
+  res.set('Cache-Control', 'private, no-store');
+  const empresas = db().financeiroKytto?.empresas || {};
+  const resumoDe = (store = {}) => {
+    const itens = Object.values(store.lancamentos || {});
+    const porUnidade = {}; const porOrigem = {}; let semUnidade = 0; let primeiro = null; let ultimo = null;
+    for (const item of itens) {
+      const loja = String(item?.lojaId || '').trim();
+      if (!loja) semUnidade += 1; else porUnidade[loja] = (porUnidade[loja] || 0) + 1;
+      const origem = String(item?.origem || 'manual'); porOrigem[origem] = (porOrigem[origem] || 0) + 1;
+      const data = String(item?.dataOperacao || item?.criadoEm || '').slice(0, 10);
+      if (data) { if (!primeiro || data < primeiro) primeiro = data; if (!ultimo || data > ultimo) ultimo = data; }
+    }
+    return { total: itens.length, semUnidade, porUnidade, porOrigem, primeiro, ultimo };
+  };
+  const empresaAtiva = legacyEmpresaId(req);
+  res.json({
+    empresaAtiva,
+    unidadeAtiva: legacyLojaId(req) || null,
+    daEmpresaAtiva: resumoDe(empresas[String(empresaAtiva)]),
+    todasAsChaves: Object.fromEntries(Object.entries(empresas).map(([chave, store]) => [chave, Object.keys(store?.lancamentos || {}).length])),
+  });
+});
 registerDinoAdminRoutes(app, { db, legacyEmpresaId, legacyLojaId, financeiroKytto, barbeariaErpKytto, clientesKytto, commerceDb, requireCommercePermission, dashboardPeriod, audit, save, salesReport });
 registerAiBrainRoutes(app, { legacyEmpresaId, legacyLojaId, requireCommercePermission, audit, clientesKytto, commerceDb, listarAgendamentosBarbearia });
 registerAtivacaoRoutes(app, { legacyEmpresaId, requireCommercePermission, barbeariaErpKytto, audit });

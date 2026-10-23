@@ -17,7 +17,6 @@ export const EM_IMPLANTACAO = {
   '/admin/fiscal/classificacao': 'Classificação fiscal',
   '/admin/fiscal/config': 'Configuração de NF-e e NFC-e',
   '/admin/loja-moda': 'Loja de moda',
-  '/admin/lojas': 'Unidades operacionais',
   '/admin/notas': 'Central fiscal (NF-e e NFC-e)',
   '/admin/oficina': 'Oficina mecânica',
   '/admin/pdv-offline': 'PDV offline e periféricos',
@@ -47,7 +46,8 @@ export function ehGlobalDoEvento(to) {
 }
 
 /**
- * O item de menu aparece para esta sessão?
+ * O item de menu dos menus de marca aparece para esta sessão? (O administrador da plataforma vê as
+ * telas em implantação na seção "Backoffice da plataforma", com o selo do estado.)
  * - em implantação: nunca;
  * - global do evento: só para a administração da plataforma ou usuário legado sem empresa.
  */

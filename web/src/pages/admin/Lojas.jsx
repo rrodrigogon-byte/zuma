@@ -28,7 +28,7 @@ function emptyForm() {
 }
 
 export default function Lojas() {
-  const { lojaAtiva, trocarLoja, atualizarContextoLojas } = useAuth()
+  const { lojaAtiva, trocarLoja, atualizarContextoLojas, empresaAtiva } = useAuth()
   const { toast } = useToast()
   const [lojas, setLojas] = useState([])
   const [form, setForm] = useState(emptyForm)
@@ -42,11 +42,12 @@ export default function Lojas() {
   async function carregar() {
     setLoading(true)
     try {
-      const dados = await api.get('/api/lojas?incluir_inativas=true')
-      const lista = dados.lojas || []
+      const dados = await api.get('/api/admin/unidades?incluir_inativas=true')
+      const lista = dados.unidades || dados.lojas || []
       setLojas(lista)
-      const ativa = lista.find((loja) => loja.id === dados.loja_ativa_id) || lista.find((loja) => loja.id === lojaAtiva?.id) || lista[0]
-      atualizarContextoLojas({ loja: ativa, lojas_acessiveis: lista.filter((loja) => loja.ativa !== false) })
+      const ativa = lista.find((loja) => loja.id === lojaAtiva?.id && loja.ativa !== false) || lista.find((loja) => loja.ativa !== false)
+      // lista completa da empresa (com as inativas): uma unidade desativada sai do seletor
+      atualizarContextoLojas({ loja: ativa, lojas_acessiveis: lista, substituir: empresaAtiva?.id || true })
     } catch (error) {
       toast(error.message || 'Não foi possível carregar as lojas', 'error')
     } finally {
@@ -69,8 +70,8 @@ export default function Lojas() {
     setSaving(true)
     try {
       const dados = Object.fromEntries(Object.entries(form).map(([chave, valor]) => [chave, typeof valor === 'string' ? valor.trim() : valor]).filter(([, valor]) => valor !== ''))
-      const resposta = await api.post('/api/lojas', dados)
-      toast(`Unidade ${resposta.loja.nome} criada com sucesso.`, 'success')
+      const resposta = await api.post('/api/admin/unidades', dados)
+      toast(`Unidade ${resposta.unidade.nome} criada.`, 'success')
       setForm(emptyForm())
       await carregar()
     } catch (error) {
@@ -82,9 +83,9 @@ export default function Lojas() {
 
   async function alternarStatus(loja) {
     try {
-      const resposta = await api.patch(`/api/lojas/${loja.id}`, { ativa: !loja.ativa })
-      setLojas((anteriores) => anteriores.map((item) => item.id === loja.id ? resposta.loja : item))
-      toast(resposta.loja.ativa ? 'Loja reativada.' : 'Loja desativada.', 'success')
+      const resposta = await api.patch(`/api/admin/unidades/${loja.id}`, { ativa: !loja.ativa })
+      setLojas((anteriores) => anteriores.map((item) => item.id === loja.id ? resposta.unidade : item))
+      toast(resposta.unidade.ativa ? 'Unidade reativada.' : 'Unidade desativada.', 'success')
     } catch (error) {
       toast(error.message || 'Não foi possível atualizar a loja', 'error')
     }
@@ -93,7 +94,7 @@ export default function Lojas() {
   async function verificarAuditoria(loja) {
     setCheckingId(loja.id)
     try {
-      const resposta = await api.get(`/api/lojas/${loja.id}/auditoria/verificar`)
+      const resposta = await api.get(`/api/admin/unidades/${loja.id}/auditoria`)
       setAuditoria({ loja, verificacao: resposta.verificacao, sucesso: resposta.sucesso })
       toast(resposta.sucesso ? 'Cadeia de auditoria íntegra.' : 'Foi identificada uma inconsistência na auditoria.', resposta.sucesso ? 'success' : 'error')
     } catch (error) {

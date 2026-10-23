@@ -80,6 +80,7 @@ function mapComanda(row, itens = [], pagamentos = []) {
     total: subtotal,
     subtotal,
     totalFinal: valorFinal,
+    valorFinal,
     valorPago,
     saldoPendente: Math.max(0, Number((valorFinal - valorPago).toFixed(2))),
     clienteId: row.cliente_id || null,
@@ -302,9 +303,9 @@ export async function atualizarStatusItem(db, empresaId, comandaId, itemId, stat
 export async function listarPedidosKds(db, empresaId, { setor = null } = {}) {
   const emp = empresa(empresaId);
   const values = [emp];
-  const setorSql = setor && SETORES.has(String(setor).toLowerCase()) ? ' AND i.setor = $2' : '';
+  const setorSql = setor && SETORES.has(String(setor).toLowerCase()) ? ' AND p.setor = $2' : '';
   if (setorSql) values.push(String(setor).toLowerCase());
-  const result = await db.queryRead(`SELECT i.id, i.comanda_id, i.quantidade, i.valor_unitario, i.observacoes, i.status, i.criado_em, p.nome, i.setor, m.numero AS mesa_numero, m.nome AS mesa_nome FROM bar_comanda_itens i JOIN bar_produtos p ON p.empresa_id=i.empresa_id AND p.id=i.produto_id JOIN bar_comandas c ON c.empresa_id=i.empresa_id AND c.id=i.comanda_id LEFT JOIN bar_mesas m ON m.empresa_id=c.empresa_id AND m.id=c.mesa_id WHERE i.empresa_id=$1 AND i.status <> 'cancelado' AND c.status IN ('aberta','conta')${setorSql} ORDER BY i.criado_em`, values);
+  const result = await db.queryRead(`SELECT i.id, i.comanda_id, i.quantidade, i.valor_unitario, i.observacoes, i.status, i.criado_em, p.nome, p.setor, m.numero AS mesa_numero, m.nome AS mesa_nome FROM bar_comanda_itens i JOIN bar_produtos p ON p.empresa_id=i.empresa_id AND p.id=i.produto_id JOIN bar_comandas c ON c.empresa_id=i.empresa_id AND c.id=i.comanda_id LEFT JOIN bar_mesas m ON m.empresa_id=c.empresa_id AND m.id=c.mesa_id WHERE i.empresa_id=$1 AND i.status <> 'cancelado' AND c.status IN ('aberta','conta')${setorSql} ORDER BY i.criado_em`, values);
   return result.rows.map((row) => ({ ...row, id: row.id, comandaId: row.comanda_id, nome: row.nome, qtd: Number(row.quantidade), mesaNum: row.mesa_numero, mesa: row.mesa_nome || (row.mesa_numero ? `Mesa ${row.mesa_numero}` : ''), obs: row.observacoes || '' }));
 }
 

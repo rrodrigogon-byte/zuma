@@ -292,7 +292,7 @@ function CommerceAdminWorkspace({ defaultTab }) {
     const seen = new Map()
     storefronts.forEach(item => {
       if (!item.loja_id || seen.has(item.loja_id)) return
-      seen.set(item.loja_id, { id: item.loja_id, codigo: item.loja_codigo || item.codigo, nome: item.loja_nome || item.nome, ativa: true })
+      seen.set(item.loja_id, { id: item.loja_id, empresaId: item.empresa_id || undefined, codigo: item.loja_codigo || item.codigo, nome: item.loja_nome || item.nome })
     })
     return Array.from(seen.values())
   }, [storefronts])

@@ -4,11 +4,11 @@ import { a2Path } from '../../lib/tenant-api'
 import { useToast } from '../../hooks/useToast'
 import { useAuth } from '../../lib/auth'
 import Modal from '../../components/Modal'
+import { Link } from 'react-router-dom'
 
 const TABS = [
   { id: 'funcionarios', label: 'Funcionários', icon: '👔', endpoint: '/funcionarios' },
   { id: 'fornecedores', label: 'Fornecedores', icon: '🚚', endpoint: '/fornecedores' },
-  { id: 'usuarios', label: 'Usuários', icon: '🔐', endpoint: '/usuarios-mestres' },
 ]
 const SINGULARES = { funcionarios: 'Funcionário', fornecedores: 'Fornecedor', usuarios: 'Usuário' }
 
@@ -68,7 +68,8 @@ export default function CadastrosMestres() {
       const [funcionarios, fornecedores, usuarios, contexto] = await Promise.all([
         api.get(a2Path('/funcionarios')),
         api.get(a2Path('/fornecedores')),
-        api.get(a2Path('/usuarios-mestres')),
+        // usuários de acesso ficam em Usuários e acessos (login da plataforma), não aqui
+        Promise.resolve({ usuarios: [] }),
         api.get(a2Path('/empresa-ativa')),
       ])
       setDados({
@@ -160,7 +161,7 @@ export default function CadastrosMestres() {
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button className="btn btn-secondary btn-sm" onClick={carregar}>↺ Atualizar</button>
-          {podeGerenciarEmpresas && <button className="btn btn-secondary btn-sm" onClick={() => setModalEmpresa(true)}>🏢 Nova Empresa</button>}
+          {podeGerenciarEmpresas && <Link className="btn btn-secondary btn-sm" to="/admin/plataforma">🏢 Empresas e módulos</Link>}
           <button className="btn btn-primary btn-sm" onClick={abrirNovo}>+ Novo {SINGULARES[tab]}</button>
         </div>
       </div>
@@ -172,6 +173,7 @@ export default function CadastrosMestres() {
           </button>
         ))}
         <a href="/admin/clientes" className="btn btn-ghost btn-sm" style={{ textDecoration: 'none' }}>👥 Clientes & Contas</a>
+        <Link to="/admin/usuarios" className="btn btn-ghost btn-sm" style={{ textDecoration: 'none' }} title="Quem entra no sistema e o que pode fazer">🔐 Usuários e acessos</Link>
       </div>
 
       <div className="card" style={{ marginBottom: 18, border: '1px solid rgba(255,107,44,.22)', background: 'rgba(255,107,44,.04)' }}>

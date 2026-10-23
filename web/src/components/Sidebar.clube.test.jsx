@@ -64,3 +64,48 @@ describe('menu do clube (AGRO OPEN TTC)', () => {
     expect(links).toContain('/pdv')
   })
 })
+
+function renderArvore(empresa, { platform = true, empresaId = null } = {}) {
+  authMock.useAuth.mockReturnValue({
+    user: { nome: 'Rodrigo', role: 'admin', ...(empresaId ? { empresaId } : {}) }, logout: vi.fn(), isOrg: true, isStaff: true, isAtleta: false, isPlatformAdmin: platform,
+    empresaAtiva: empresa, empresasAcessiveis: [empresa], lojaAtiva: null, lojasAcessiveis: [], trocarEmpresa: vi.fn(), trocarLoja: vi.fn(),
+  })
+  let tree
+  act(() => { tree = create(createElement(Sidebar)) })
+  const ler = () => {
+    const textos = []
+    tree.root.findAll((n) => typeof n.type === 'string').forEach((n) => n.children.forEach((c) => { if (typeof c === 'string') textos.push(c) }))
+    return { links: tree.root.findAll((n) => n.type === 'a').map((a) => a.props.href), textos }
+  }
+  return { tree, ler }
+}
+
+describe('Backoffice da plataforma', () => {
+  it('a plataforma vê o catálogo inteiro, com as telas em implantação marcadas, mesmo numa empresa com marca', () => {
+    const { tree, ler } = renderArvore({ id: 'dino', nome: 'Barbearia Dino', brandKey: 'dino' })
+    expect(ler().textos).toContain('Backoffice da plataforma')
+    const botao = tree.root.findByProps({ 'data-testid': 'backoffice-plataforma' }).findByType('button')
+    act(() => { botao.props.onClick() })
+    expect(ler().textos).toContain('Verticais de varejo')
+    // abre a área e confere os selos
+    const cabecalho = tree.root.findAll((n) => n.type === 'div' && typeof n.props.onClick === 'function' && n.findAll((f) => f.children?.includes?.('Verticais de varejo')).length > 0)[0]
+    act(() => { cabecalho.props.onClick() })
+    const { links, textos } = ler()
+    expect(links).toContain('/admin/supermercado')
+    expect(links).toContain('/admin/oficina')
+    expect(textos).toContain('em implantação')
+  })
+
+  it('usuário de empresa não vê a seção', () => {
+    const { ler } = renderArvore({ id: 'ttc', nome: 'AGRO OPEN TTC' }, { platform: false, empresaId: 'ttc' })
+    expect(ler().textos).not.toContain('Backoffice da plataforma')
+  })
+
+  it('a Dino ganha contas a receber, fechamento, cadastros e unidades no menu', () => {
+    const { links } = render({ id: 'dino', nome: 'Barbearia Dino', brandKey: 'dino' }, { platform: false, empresaId: 'dino' })
+    expect(links).toContain('/admin/contas-receber')
+    expect(links).toContain('/admin/fechamento-diario')
+    expect(links).toContain('/admin/cadastros-mestres')
+    expect(links).toContain('/admin/lojas')
+  })
+})

@@ -30,7 +30,8 @@ describe('A2 financeiro e cadastros multiempresa (PostgreSQL)', { skip: pgDeTest
     const [cliente] = await a2.listarClientes(ctx.db, empresaA);
     const conta = (await a2.listarContas(ctx.db, empresaA))[0];
     assert.equal(conta.status, 'pendente');
-    await a2.baixarConta(ctx.db, empresaA, conta.id, new Date('2026-10-18T12:00:00Z'));
+    // o fechamento soma o que foi recebido no dia: a baixa precisa ser de hoje
+    await a2.baixarConta(ctx.db, empresaA, conta.id, new Date());
     assert.equal((await a2.listarContas(ctx.db, empresaA))[0].status, 'paga');
     const fechamento = await a2.criarFechamento(ctx.db, empresaA, 'Conferência do caixa', 'operador-a');
     assert.equal(fechamento.responsavel, 'operador-a');
@@ -46,6 +47,16 @@ describe('A2 financeiro e cadastros multiempresa (PostgreSQL)', { skip: pgDeTest
     assert.equal((await a2.listarCadastros(ctx.db, empresaA, 'fornecedores'))[0].id, fornecedor.id);
     assert.deepEqual(await a2.listarCadastros(ctx.db, empresaB, 'funcionarios'), []);
     assert.deepEqual(await a2.listarCadastros(ctx.db, empresaB, 'fornecedores'), []);
+  });
+
+  test('status do cadastro: padrão ativo, aceita desligado e a edição sem status mantém o atual', async () => {
+    const f = await a2.salvarCadastro(ctx.db, empresaA, 'funcionarios', { nome: 'Funcionária Status' });
+    assert.equal(f.status, 'ativo');
+    const desligada = await a2.salvarCadastro(ctx.db, empresaA, 'funcionarios', { nome: 'Funcionária Status', status: 'desligado' }, f.id);
+    assert.equal(desligada.status, 'desligado');
+    const editada = await a2.salvarCadastro(ctx.db, empresaA, 'funcionarios', { nome: 'Funcionária Status (nova)' }, f.id);
+    assert.equal(editada.status, 'desligado');
+    await assert.rejects(() => a2.salvarCadastro(ctx.db, empresaA, 'funcionarios', { nome: 'X', status: 'demitido' }), (e) => e.code === 'VALIDATION_ERROR');
   });
 
   test('usuário mestre mantém tipo e perfis sem expor senha', async () => {
