@@ -106,12 +106,18 @@ test('dashboard expõe histórico Avec separadamente e não o trata como pagamen
   const input = {
     historicalAppointments: [{ dataAgenda: '2026-09-01', clienteNome: 'Ana', valor: 90 }],
     historicalCommands: [{ dataComandaIso: '2026-09-01T15:00:00.000Z', clienteNome: 'Ana', total: 90 }],
+    financeEntries: [
+      { origem: 'avec-import-financeiro-20261022', metadata: { historicoAvec: true }, tipo: 'receita', status: 'pago', valor: 150, pagoEm: '2026-09-01T12:00:00.000Z' },
+      { origem: 'avec-import-financeiro-20261022', metadata: { historicoAvec: true }, tipo: 'despesa', status: 'pago', valor: 40, pagoEm: '2026-09-01T12:00:00.000Z' },
+      { origem: 'avec-import-financeiro-20261022', metadata: { historicoAvec: true }, tipo: 'despesa', status: 'pendente', valor: 20, dataOperacao: '2026-09-01T12:00:00.000Z' },
+    ],
   };
   const result = buildDinoDashboardAnalytics(input, { period: 7, now });
   assert.deepEqual(result.historicalAvec.services, { count: 1, value: 90 });
   assert.deepEqual(result.historicalAvec.commands, { count: 1, value: 90 });
   assert.equal(result.historicalAvec.uniqueClients, 1);
   assert.equal(result.historicalAvec.reconciled, false);
+  assert.deepEqual(result.historicalFinance, { entries: 3, paidRevenue: 150, paidExpenses: 40, netPaid: 110, pendingRevenue: 0, pendingExpenses: 20, note: 'Lançamentos do extrato Avec preservados no Financeiro para conferência; não são novas vendas operacionais.' });
   assert.equal(result.charts.paymentMethods.length, 0);
   assert.equal(result.miniKpis.receivables, 0);
 });

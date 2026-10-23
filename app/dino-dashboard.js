@@ -12,7 +12,7 @@ function dateValue(value) {
 }
 
 function timestamp(item = {}) {
-  return dateValue(item.pagoEm || item.finalizadoEm || item.atualizadoEm || item.criadoEm || item.dataHora || item.dataAgenda || item.data);
+  return dateValue(item.pagoEm || item.dataOperacao || item.finalizadoEm || item.atualizadoEm || item.criadoEm || item.dataHora || item.dataAgenda || item.data);
 }
 
 function zonedParts(date, timeZone = TIME_ZONE) {
@@ -70,6 +70,25 @@ function historicalAvecSummary(input, window) {
     uniqueClients: identities.size,
     reconciled: false,
     note: 'Histórico Avec preservado para conferência; não comprova pagamento, itemização conciliada ou conta a receber.',
+  };
+}
+
+function historicalFinanceSummary(input, window) {
+  const entries = list(input.financeEntries).filter((item) => item.metadata?.historicoAvec === true || item.origem === 'avec-import-financeiro-20261022');
+  const inPeriod = entries.filter((item) => inWindow(item, window));
+  const paid = inPeriod.filter((item) => item.status === 'pago');
+  const paidRevenue = paid.filter((item) => item.tipo === 'receita').reduce((sum, item) => sum + num(item.valor), 0);
+  const paidExpenses = paid.filter((item) => item.tipo === 'despesa').reduce((sum, item) => sum + num(item.valor), 0);
+  const pendingRevenue = inPeriod.filter((item) => item.tipo === 'receita' && item.status === 'pendente').reduce((sum, item) => sum + num(item.valor), 0);
+  const pendingExpenses = inPeriod.filter((item) => item.tipo === 'despesa' && item.status === 'pendente').reduce((sum, item) => sum + num(item.valor), 0);
+  return {
+    entries: inPeriod.length,
+    paidRevenue: money(paidRevenue),
+    paidExpenses: money(paidExpenses),
+    netPaid: money(paidRevenue - paidExpenses),
+    pendingRevenue: money(pendingRevenue),
+    pendingExpenses: money(pendingExpenses),
+    note: 'Lançamentos do extrato Avec preservados no Financeiro para conferência; não são novas vendas operacionais.',
   };
 }
 
@@ -194,6 +213,7 @@ export function buildDinoDashboardAnalytics(input = {}, options = {}) {
   const window = dashboardPeriod(options.period, now, options.timeZone || TIME_ZONE);
   const previousWindow = { ...window, fromDate: window.previousFromDate, toDate: window.previousToDate };
   const historicalAvec = historicalAvecSummary(input, window);
+  const historicalFinance = historicalFinanceSummary(input, window);
   const commerceCurrent = input.commerceCurrent || {};
   const commercePrevious = input.commercePrevious || {};
   const legacyCurrent = legacyRevenue(input, window);
@@ -279,6 +299,7 @@ export function buildDinoDashboardAnalytics(input = {}, options = {}) {
     ],
     miniKpis: { receivables, lowStock: { total: retailLowStock + commerceLowStock, commerce: commerceLowStock, retail: retailLowStock }, mrr },
     historicalAvec,
+    historicalFinance,
     charts: {
       revenueDaily: daily,
       appointmentsDaily: daily.map((item) => ({ day: item.day, value: item.appointments })),

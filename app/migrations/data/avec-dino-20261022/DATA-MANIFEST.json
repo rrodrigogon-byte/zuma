@@ -29,6 +29,10 @@
     "vendas-comandas-cabecalho.jsonl": {
       "sha256": "12ad6ddb496280b909411e030a45c1f67f55660c133419416f9f7ca4ea63c270",
       "bytes": 10818699
+    },
+    "financeiro-entradas-saidas-full-2026-10-22.jsonl": {
+      "sha256": "8ce8a3124a8004b6e64e58907f8810a65e0e83ba81cee40e03bce1c4d9a8801b",
+      "bytes": 2362143
     }
   },
   "expectedCounts": {
@@ -37,6 +41,7 @@
     "profissionais_inferidos": 5,
     "produtos": 32,
     "historico_servicos": 22485,
-    "comandas_cabecalho": 15468
+    "comandas_cabecalho": 15468,
+    "financeiro_entradas_saidas": 6866
   }
 }

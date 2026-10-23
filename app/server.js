@@ -8194,7 +8194,7 @@ process.on('uncaughtException', (e)=> console.error('uncaughtException:', e?.mes
   // O estado do GCS substitui o local: garante o admin e aplica a recuperação de senha de novo.
   seedUsuarios();
   aplicarResetAdmin();
-  if (process.env.AVEC_DINO_IMPORT_CONFIRM === 'PRD_AVEC_DINO_IMPORT_20261022_V1') {
+  if (process.env.AVEC_DINO_IMPORT_CONFIRM === 'PRD_AVEC_DINO_IMPORT_20261022_FINANCE_V1') {
     const { execute: executarImportacaoAvec } = await import('./migrations/run-avec-dino-import.js');
     const resultadoImportacaoAvec = await executarImportacaoAvec();
     if (!resultadoImportacaoAvec?.ok && !resultadoImportacaoAvec?.alreadyApplied) {
