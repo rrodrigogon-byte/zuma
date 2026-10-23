@@ -420,7 +420,10 @@ export default function BarbeariaERP() {
   const indicadores = dashboard?.indicadores || {}
   const areaAtual = AREAS.find((area) => area.id === TAB_AREA[tab]) || AREAS[0]
   // Nome da unidade (código + nome) em vez do identificador técnico.
-  const nomeLojaAtiva = lojaAtiva && (!configuracaoUnidade?.lojaId || lojaAtiva.id === configuracaoUnidade.lojaId)
+  // No host Dino, a sessão usa o UUID Commerce enquanto a configuração
+  // legada mantém o ID interno; ambos já foram validados pelo backend.
+  const escopoDinoComLoja = isDinoBrand && Boolean(lojaAtiva?.id)
+  const nomeLojaAtiva = lojaAtiva && (escopoDinoComLoja || !configuracaoUnidade?.lojaId || lojaAtiva.id === configuracaoUnidade.lojaId)
     ? `${lojaAtiva.codigo ? `${lojaAtiva.codigo} — ` : ''}${lojaAtiva.nome || lojaAtiva.nome_fantasia || ''}`.trim()
     : ''
   const unidadeLabel = nomeLojaAtiva || (configuracaoUnidade?.lojaId ? 'Unidade da sessão' : 'Unidade definida pela sessão')
