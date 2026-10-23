@@ -39,11 +39,11 @@ export function GoalsPanel({ goals, canEdit, onSaved }) {
   const items = goals?.items || []
   return <article className="dino-chart-panel dino-goals">
     <header>
-      <div><span>Metas de {goals?.month || 'do mês'}</span><h3>Acompanhamento</h3></div>
+      <div><span>Metas da empresa · {goals?.month || 'mês corrente'}</span><h3>Acompanhamento</h3></div>
       {canEdit && <button type="button" onClick={abrir}>{goals?.configured ? 'Editar metas' : 'Definir metas'}</button>}
     </header>
-    {goals?.configured ? <>
-      <p className="dino-goals-meta">Dia {goals.day} de {goals.daysInMonth}. A projeção mantém o ritmo diário atual até o fim do mês.</p>
+    {goals?.configured && goals?.comparable !== false ? <>
+      <p className="dino-goals-meta">Dia {goals.day} de {goals.daysInMonth}. A projeção mantém o ritmo diário atual até o fim do mês. Receita da meta = serviços, revenda e pedidos Commerce confirmados; lançamentos históricos Avec não entram nessa base.</p>
       <ul className="dino-goal-list">
         {items.map((item) => <li key={item.id} className={`is-${item.status}`}>
           <div className="dino-goal-top">
@@ -57,7 +57,9 @@ export function GoalsPanel({ goals, canEdit, onSaved }) {
           <small>{fmt(item.atual, item.format)} de {fmt(item.meta, item.format)} · {String(item.progress).replace('.', ',')}%{!item.media ? ` · projeção ${fmt(item.projecao, item.format)}` : ''}</small>
         </li>)}
       </ul>
-    </> : <div className="dino-panel-empty"><strong>Nenhuma meta definida</strong><span>{canEdit ? 'Defina metas de receita, atendimentos, ticket e novos clientes para acompanhar o ritmo do mês.' : 'Peça ao gestor para definir as metas do mês.'}</span></div>}
+    </> : <div className="dino-panel-empty"><strong>{goals?.configured ? 'Meta da empresa' : 'Nenhuma meta definida'}</strong><span>{goals?.configured
+      ? 'O painel está filtrado por unidade e as metas são corporativas. Selecione o agregado da empresa para comparar realizado e meta sem misturar escopos.'
+      : canEdit ? 'Ainda não há metas corporativas cadastradas. Defina metas de receita, atendimentos, ticket e novos clientes para acompanhar o mês.' : 'Peça ao gestor para definir as metas corporativas do mês.'}</span></div>}
 
     <Dialog open={open} title="Metas mensais" labelId="metas-form" onClose={() => setOpen(false)} onSubmit={salvar} initialFocusRef={firstRef}
       actions={<><button type="button" className="c360-btn ghost" onClick={() => setOpen(false)}>Voltar</button><button type="submit" className="c360-btn primary" disabled={saving}>Salvar metas</button></>}>
