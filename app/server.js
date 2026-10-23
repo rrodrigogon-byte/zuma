@@ -74,6 +74,7 @@ import {
   upsertLoyaltySettings,
 } from './core/loyalty-advanced.js';
 import { requireCommercePermission, resolveCommerceIdentity } from './core/commerce-identity-bridge.js';
+import { legacyEmpresaIdFromCommerce, legacyLojaIdFromCommerce } from './core/legacy-commerce-scope.js';
 import { listAdminUserDirectory } from './core/admin-user-directory.js';
 import { createPlatformAdministratorRouter } from './core/commerce-platform-grant-routes.js';
 import { listCommerceTenants, provisionCommerceTenant } from './core/commerce-tenants.js';
@@ -2907,9 +2908,9 @@ function empresaDinoDoEstado() {
 function legacyEmpresaId(req) {
   const requested = String(req.headers['x-empresa-id'] || '').trim();
   const signed = String(req.user?.empresaId || '').trim();
-  if (req.barbeariaContext?.empresaId) return req.barbeariaContext.empresaId;
-  if (signed) return signed;
-  if (requested && (isPlatformAdminUser(req.user) || isMainAdminUser(req.user))) return requested;
+  if (req.barbeariaContext?.empresaId) return legacyEmpresaIdFromCommerce(req.barbeariaContext.empresaId);
+  if (signed) return legacyEmpresaIdFromCommerce(signed);
+  if (requested && (isPlatformAdminUser(req.user) || isMainAdminUser(req.user))) return legacyEmpresaIdFromCommerce(requested);
   if (hostDino(req)) return empresaDinoDoEstado() || 'principal';
   return 'principal';
 }
@@ -2917,9 +2918,10 @@ function legacyEmpresaId(req) {
 function legacyLojaId(req) {
   const requested = String(req.headers['x-loja-id'] || '').trim();
   const signed = String(req.user?.lojaId || '').trim();
-  if (req.barbeariaContext?.lojaId) return req.barbeariaContext.lojaId;
-  if (signed) return signed;
-  if (requested && (isPlatformAdminUser(req.user) || isMainAdminUser(req.user))) return requested;
+  const rawEmpresa = String(req.barbeariaContext?.empresaId || req.user?.empresaId || (isPlatformAdminUser(req.user) || isMainAdminUser(req.user) ? req.headers['x-empresa-id'] : '') || '').trim();
+  if (req.barbeariaContext?.lojaId) return legacyLojaIdFromCommerce(req.barbeariaContext.lojaId, rawEmpresa);
+  if (signed) return legacyLojaIdFromCommerce(signed, rawEmpresa);
+  if (requested && (isPlatformAdminUser(req.user) || isMainAdminUser(req.user))) return legacyLojaIdFromCommerce(requested, rawEmpresa);
   const configuracao = db().barbearias?.[legacyEmpresaId(req)]?.configuracao || {};
   if (configuracao.lojaPublicaId || configuracao.lojaId) return String(configuracao.lojaPublicaId || configuracao.lojaId);
   const lojas = Object.entries(configuracao.lojas || {}).filter(([, loja]) => loja?.ativa !== false);
