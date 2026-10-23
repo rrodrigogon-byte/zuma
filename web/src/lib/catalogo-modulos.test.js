@@ -38,7 +38,8 @@ test('cada tela em implantação está no catálogo e tem onda e o que falta', (
 
 test('estado: em implantação, evento, fora do contrato e no ar', () => {
   const item = (to) => CATALOGO.find((m) => m.to === to)
-  assert.equal(estadoDoModulo(item('/admin/supermercado')), 'em_implantacao')
+  assert.equal(estadoDoModulo(item('/admin/oficina')), 'em_implantacao')
+  assert.equal(estadoDoModulo(item('/admin/supermercado')), 'no_ar')
   assert.equal(estadoDoModulo(item('/admin/torneios')), 'evento')
   assert.equal(estadoDoModulo(item('/admin/financeiro')), 'no_ar')
   assert.equal(estadoDoModulo(item('/admin/lojas')), 'no_ar')

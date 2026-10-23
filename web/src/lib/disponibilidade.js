@@ -14,7 +14,6 @@ export const EM_IMPLANTACAO = {
   '/admin/agropecuaria': 'Agropecuária e petshop',
   '/admin/loja-moda': 'Loja de moda',
   '/admin/oficina': 'Oficina mecânica',
-  '/admin/supermercado': 'Supermercado',
   '/admin/varejo': 'Varejo geral',
 }
 

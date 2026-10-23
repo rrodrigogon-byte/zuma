@@ -136,6 +136,7 @@ const Varejo          = lazy(() => import('./pages/admin/Varejo'))
 const Compras         = lazy(() => import('./pages/admin/Compras'))
 const Suprimentos     = lazy(() => import('./pages/admin/suprimentos/Suprimentos'))
 const Fiscal          = lazy(() => import('./pages/admin/fiscal/Fiscal'))
+const VarejoUnidade    = lazy(() => import('./pages/admin/varejo/Varejo'))
 const Clientes = lazy(() => import('./pages/admin/Clientes'))
 const Customer360 = lazy(() => import('./pages/admin/Customer360'))
 const FinanceiroEmpresa = lazy(() => import('./pages/admin/dino/FinanceiroEmpresa'))
@@ -153,7 +154,6 @@ const ERP             = lazy(() => import('./pages/admin/ERP'))
 const LojaModa        = lazy(() => import('./pages/admin/LojaModa'))
 const BarbeariaERP    = lazy(() => import('./pages/admin/BarbeariaERP'))
 const Barbearia       = lazy(() => import('./pages/admin/Barbearia'))
-const Supermercado    = lazy(() => import('./pages/admin/Supermercado'))
 const Omnichannel     = lazy(() => import('./pages/admin/Omnichannel'))
 const CanaisFidelidade = lazy(() => import('./pages/admin/CanaisFidelidade'))
 const PDVUnificado    = lazy(() => import('./pages/admin/PDVUnificado'))
@@ -309,7 +309,7 @@ export default function App() {
           <Route path="/admin/loja-moda"       element={<Layout><LojaModa /></Layout>} />
           <Route path="/admin/barbearia-erp"   element={<Layout><BarbeariaERP /></Layout>} />
           <Route path="/admin/barbearia"        element={<Layout><Barbearia /></Layout>} />
-          <Route path="/admin/supermercado"    element={<Layout><Supermercado /></Layout>} />
+          <Route path="/admin/supermercado" element={<TenantAware tenant={<Layout><VarejoUnidade /></Layout>} legacy={<Layout><EmImplantacao modulo="Supermercado" /></Layout>} />} />
           <Route path="/admin/omnichannel"      element={<Layout><CanaisFidelidade /></Layout>} />
           <Route path="/admin/pdv-erp"         element={<PDVUnificado />} />
         </Route>

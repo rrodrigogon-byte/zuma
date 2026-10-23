@@ -4,7 +4,8 @@ import { moduloEmImplantacao, rotaVisivel, EM_IMPLANTACAO, GLOBAIS_DO_EVENTO } f
 
 test('telas sem backend em produção: aviso e fora do menu para todos', () => {
   assert.equal(moduloEmImplantacao('/admin/fiscal/config'), null) // onda 3: fiscal em homologação
-  assert.equal(moduloEmImplantacao('/admin/supermercado?aba=lotes'), 'Supermercado')
+  assert.equal(moduloEmImplantacao('/admin/oficina?aba=os'), 'Oficina mecânica')
+  assert.equal(moduloEmImplantacao('/admin/supermercado'), null) // onda 5
   assert.equal(moduloEmImplantacao('/admin/clube/quadras'), null)
   assert.equal(moduloEmImplantacao('/admin/clientes'), null)
   assert.equal(moduloEmImplantacao('/admin/contas-receber'), null)
@@ -12,7 +13,7 @@ test('telas sem backend em produção: aviso e fora do menu para todos', () => {
   assert.equal(moduloEmImplantacao('/admin/cadastros-mestres'), null)
   assert.equal(rotaVisivel('/admin/clientes', { usuarioDeEmpresa: true }), true)
   assert.equal(rotaVisivel('/admin/notas', { isPlatformAdmin: true }), true)
-  assert.equal(rotaVisivel('/admin/supermercado', { isPlatformAdmin: true }), false)
+  assert.equal(rotaVisivel('/admin/oficina', { isPlatformAdmin: true }), false)
 })
 
 test('telas do banco global do evento: só administração da plataforma ou usuário legado', () => {
