@@ -38,3 +38,36 @@
 .dino-goal-list small { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
 .dino-wa-alert { display: block; }
 .dino-wa-alert a { font-weight: 800; }
+
+/* KPIs clicáveis: cada cartão abre o detalhamento correspondente. */
+.dino-kpi-card {
+  display: block;
+  width: 100%;
+  color: var(--fg);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  appearance: none;
+  transition: border-color .18s ease, box-shadow .18s ease, transform .18s ease;
+}
+.dino-kpi-card:hover {
+  border-color: var(--accent);
+  box-shadow: var(--shadow), 0 0 0 3px var(--accent-soft);
+  transform: translateY(-1px);
+}
+.dino-kpi-card:focus-visible {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+.dino-kpi-card.unavailable:hover {
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.dino-kpi-action {
+  display: block;
+  margin-top: 10px;
+  color: var(--accent);
+  font-size: 10px;
+  font-weight: 800;
+}
+.dino-history-panel{border-color:color-mix(in srgb,var(--accent) 35%,var(--line))}.dino-history-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.dino-history-grid>div{display:grid;gap:3px;padding:12px;border-radius:11px;background:var(--surface)}.dino-history-grid strong{font:800 22px var(--font-display)}.dino-history-grid span{color:var(--muted);font-size:10px;font-weight:800;text-transform:uppercase}.dino-history-grid small,.dino-history-note{color:var(--muted);font-size:10px}.dino-history-note{margin:14px 0 0;line-height:1.5}
+@media(max-width:560px){.dino-history-grid{grid-template-columns:1fr}}

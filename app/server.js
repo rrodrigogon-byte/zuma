@@ -2886,8 +2886,45 @@ app.delete('/api/admin/cardapio/:id', auth, requireLegacyGlobalScope, requireSta
 // ── COMBOS E MODIFICADORES ────────────────────────────────────────────────────
 // O runtime efetivo do Render é server.js (não server-erp.js). Estas rotas
 // reutilizam o domínio já testado e mantêm os dados separados por empresa.
-function legacyEmpresaId(req){ return req.barbeariaContext?.empresaId || req.user?.empresaId || 'principal'; }
-function legacyLojaId(req){ return req.barbeariaContext?.lojaId || req.user?.lojaId || ''; }
+// Administradores legados podem autenticar sem empresa/unidade no JWT. Nessa
+// situação a seleção ativa chega nos cabeçalhos da UI; a loja também pode ser
+// recuperada da configuração da empresa já resolvida, sem cair em outra empresa.
+function hostDino(req) {
+  const host = String(req.hostname || req.headers.host || '').split(':')[0].toLowerCase();
+  return host === 'dino.kytto.com.br' || host.endsWith('.dino.kytto.com.br');
+}
+
+function empresaDinoDoEstado() {
+  const candidatas = Object.entries(db().barbearias || {}).filter(([, estado]) => {
+    const configuracao = estado?.configuracao || {};
+    const slug = String(configuracao.slugPublico || '').toLowerCase();
+    const nome = String(configuracao.nomePublico || '').toLowerCase();
+    return slug === 'dino' || nome.includes('dino');
+  });
+  return candidatas.length === 1 ? String(candidatas[0][0]) : '';
+}
+
+function legacyEmpresaId(req) {
+  const requested = String(req.headers['x-empresa-id'] || '').trim();
+  const signed = String(req.user?.empresaId || '').trim();
+  if (req.barbeariaContext?.empresaId) return req.barbeariaContext.empresaId;
+  if (signed) return signed;
+  if (requested && (isPlatformAdminUser(req.user) || isMainAdminUser(req.user))) return requested;
+  if (hostDino(req)) return empresaDinoDoEstado() || 'principal';
+  return 'principal';
+}
+
+function legacyLojaId(req) {
+  const requested = String(req.headers['x-loja-id'] || '').trim();
+  const signed = String(req.user?.lojaId || '').trim();
+  if (req.barbeariaContext?.lojaId) return req.barbeariaContext.lojaId;
+  if (signed) return signed;
+  if (requested && (isPlatformAdminUser(req.user) || isMainAdminUser(req.user))) return requested;
+  const configuracao = db().barbearias?.[legacyEmpresaId(req)]?.configuracao || {};
+  if (configuracao.lojaPublicaId || configuracao.lojaId) return String(configuracao.lojaPublicaId || configuracao.lojaId);
+  const lojas = Object.entries(configuracao.lojas || {}).filter(([, loja]) => loja?.ativa !== false);
+  return lojas.length === 1 ? String(lojas[0][0]) : '';
+}
 function produtosCardapioAtivos(){ return getCardapio().filter(produto => !produto.indisponivel); }
 
 // ── BARBEARIA ERP — CONTRATO ADMINISTRATIVO NO RUNTIME DO RENDER ─────────────
@@ -3457,6 +3494,8 @@ app.get('/api/admin/barbearia/analytics', async (req, res) => {
     }
     const barbershopInput = {
       appointments: barbeariaErpKytto.listarAgendamentos(empresaId, { lojaId }),
+      historicalAppointments: barbeariaErpKytto.listarHistoricoAtendimentos(empresaId, { lojaId }),
+      historicalCommands: barbeariaErpKytto.listarHistoricoComandas(empresaId, { lojaId }),
       retailSales: barbeariaErpKytto.listarVendasRevenda(empresaId, { lojaId }),
       commands: barbeariaErpKytto.listarComandasBarbearia(empresaId, { lojaId }),
       products: barbeariaErpKytto.listarProdutosRevenda(empresaId, { incluirInativos: true, lojaId }),
