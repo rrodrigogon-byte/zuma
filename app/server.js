@@ -2960,6 +2960,18 @@ async function resolverEscopoBarbearia(req, res, next) {
   const requestedLoja = String(req.headers['x-loja-id'] || '').trim();
   const signedEmpresa = String(req.user?.empresaId || '').trim();
   const signedLoja = String(req.user?.lojaId || '').trim();
+  // O domínio dedicado da Dino também é uma entrada válida para a conta
+  // administrativa legada quando o navegador ainda não persistiu os
+  // seletores no localStorage. Nesse caso, não deixe o contexto sintético
+  // "principal" esconder o tenant canônico nem a unidade Dino. A inferência
+  // é deliberadamente limitada ao host Dino, a uma sessão global e à ausência
+  // de uma empresa assinada; seleções explícitas continuam passando pela
+  // validação do Commerce Core abaixo.
+  if (!requestedEmpresa && !requestedLoja && !signedEmpresa && hostDino(req)
+    && (isPlatformAdminUser(req.user) || isMainAdminUser(req.user))) {
+    req.barbeariaContext = { empresaId: DINO_COMMERCE_EMPRESA_ID, lojaId: DINO_COMMERCE_LOJA_ID };
+    return next();
+  }
   if (process.env.COMMERCE_CORE_ENABLED === '1' && (requestedEmpresa || requestedLoja)) {
     try {
       const contexto = await resolveCommerceIdentity(req);

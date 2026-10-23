@@ -39,6 +39,52 @@ async function aguardarServidor(base, processo) {
   throw new Error('Tempo excedido aguardando server.js iniciar.');
 }
 
+test('domínio Dino resolve empresa e unidade canônicas sem cabeçalhos de seleção', async () => {
+  const diretorio = fs.mkdtempSync(path.join(os.tmpdir(), 'setpoint-dino-host-scope-'));
+  const dbPath = path.join(diretorio, 'db.json');
+  const senhaTeste = 'dino-host-scope-test-pass';
+  fs.writeFileSync(dbPath, JSON.stringify({
+    seq: 1,
+    usuarios: [{ id: 1, nome: 'Administrador Dino', email: 'admin', senhaHash: bcrypt.hashSync(senhaTeste, 4), role: 'admin', ativo: true }],
+    barbearias: {
+      'emp-kytto-001': {
+        configuracao: {
+          slugPublico: 'dino',
+          nomePublico: 'Barbearia Dino',
+          lojas: { 'dino-web-estoque': { lojaId: 'dino-web-estoque', horarioAbertura: '08:00' } },
+        },
+      },
+    },
+  }));
+  const port = 32500 + Math.floor(Math.random() * 400);
+  const base = `http://127.0.0.1:${port}`;
+  const processo = spawn(process.execPath, ['server.js'], {
+    cwd: path.join(ROOT, 'app'),
+    env: { ...process.env, NODE_ENV: 'development', PORT: String(port), DB_PATH: dbPath, JWT_SECRET: 'dino-host-scope-jwt', COMMERCE_CORE_ENABLED: '0', SEED_DEMO: '0', WPP_BASE_URL: '', WPP_APIKEY: '', AI_API_KEY: '', OPENAI_API_KEY: '', GEMINI_API_KEY: '' },
+    stdio: 'ignore',
+  });
+  try {
+    await aguardarServidor(base, processo);
+    const login = await request(base, '/api/admin/login', { method: 'POST', body: JSON.stringify({ user: 'admin', pass: senhaTeste }) });
+    assert.equal(login.response.status, 200);
+    const overview = await request(base, '/api/admin/barbearia/overview?data=2030-06-10', {
+      headers: { Authorization: `Bearer ${login.body.token}`, 'X-Forwarded-Host': 'dino.kytto.com.br' },
+    });
+    assert.equal(overview.response.status, 200, JSON.stringify(overview.body));
+    assert.equal(overview.body.configuracao.nomePublico, 'Barbearia Dino');
+    assert.equal(overview.body.configuracaoUnidade.lojaId, 'dino-web-estoque');
+    const outroHost = await request(base, '/api/admin/barbearia/overview?data=2030-06-10', {
+      headers: { Authorization: `Bearer ${login.body.token}`, 'X-Forwarded-Host': 'setpoint.kytto.com.br' },
+    });
+    assert.equal(outroHost.response.status, 400);
+    assert.equal(outroHost.body.error, 'lojaId é obrigatório para o lançamento financeiro operacional.');
+  } finally {
+    processo.kill('SIGTERM');
+    await Promise.race([once(processo, 'exit'), new Promise((resolve) => setTimeout(resolve, 3000))]);
+    fs.rmSync(diretorio, { recursive: true, force: true });
+  }
+});
+
 test('server.js efetivo expõe Barbearia no contrato administrativo', async () => {
   const diretorio = fs.mkdtempSync(path.join(os.tmpdir(), 'setpoint-barbearia-runtime-'));
   const dbPath = path.join(diretorio, 'db.json');
