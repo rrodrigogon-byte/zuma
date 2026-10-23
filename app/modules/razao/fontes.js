@@ -9,7 +9,7 @@
 // commerce_payments         | loja_online:<id>              | receita paga (Loja online); devolução → estorno
 // financeiro JSON (legado)  | json:<empresa legada>:<id>    | importação dos lançamentos antigos
 import { ErroDominio, exigirUuid, transacao } from '../acesso/banco.js';
-import { FUSO_PADRAO, garantirCategorias } from './servico.js';
+import { FUSO_PADRAO, garantirCategorias, hojeNoFuso } from './servico.js';
 
 async function existeTabela(db, nome) {
   const r = await db.query('SELECT to_regclass($1) AS t', [nome]);
@@ -88,13 +88,13 @@ export async function sincronizarClube(db, empresaId, { fuso = FUSO_PADRAO } = {
 }
 
 /** Contas a receber do A2: nascem pendentes; quando a fonte dá baixa, o razão marca como pago. */
-export async function sincronizarContasReceber(db, empresaId) {
+export async function sincronizarContasReceber(db, empresaId, { fuso = FUSO_PADRAO } = {}) {
   const empresa = exigirUuid(empresaId, 'empresa');
   if (!(await existeTabela(db, 'a2_contas_receber'))) return { fonte: 'a2', ignorada: true };
   const ins = await db.query(
     `INSERT INTO fin_lancamentos ${INSERT_COLS}
      SELECT a.empresa_id, NULL, 'receita', 'Contas de clientes', left(a.descricao, 240), a.valor,
-            a.criado_em::date, a.data_vencimento,
+            (a.criado_em AT TIME ZONE $2)::date, a.data_vencimento,
             CASE WHEN a.data_pagamento IS NULL THEN 'pendente' ELSE 'pago' END, a.data_pagamento,
             NULL, 'receber', 'cliente', a.cliente_id, cc.nome,
             'a2_conta', a.id::text, 'a2_conta:' || a.id, true, 'sistema'
@@ -102,7 +102,7 @@ export async function sincronizarContasReceber(db, empresaId) {
        LEFT JOIN commerce_customers cc ON cc.empresa_id = a.empresa_id AND cc.id = a.cliente_id
       WHERE a.empresa_id = $1
      ON CONFLICT (empresa_id, chave) DO NOTHING`,
-    [empresa],
+    [empresa, fuso],
   );
   const upd = await db.query(
     `UPDATE fin_lancamentos l SET status = 'pago', pago_em = a.data_pagamento, atualizado_em = CURRENT_TIMESTAMP
@@ -187,16 +187,33 @@ export async function saudeDasFontes(db, empresaId) {
 // ── importação do financeiro antigo (JSON do disco) ───────────────────────────
 const STATUS_JSON = { pago: 'pago', pendente: 'pendente', cancelado: 'cancelado', aberto: 'pendente', quitado: 'pago' };
 
+// Categorias do financeiro antigo que não existem no razão → equivalente no plano de contas.
+export const CATEGORIAS_LEGADAS = {
+  receita: { 'Barbearia - Revenda': 'Vendas de produtos', 'Bar/Lanchonete': 'Bar e restaurante', 'Comissões - estorno': 'Estorno de comissões' },
+  despesa: { 'Comissões - vale': 'Comissões', 'Alimentação/Bebidas': 'Compras de mercadoria' },
+};
+
+/** Dia do fato no fuso da empresa: data pura fica como está; data e hora (ISO) é convertida. */
+function diaNoFuso(valor, fuso) {
+  const t = String(valor || '').trim();
+  if (!t) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(t)) return t;
+  const d = new Date(t);
+  return Number.isNaN(d.getTime()) ? null : hojeNoFuso(d, fuso);
+}
+
 /**
  * Importa os lançamentos do financeiro JSON de uma empresa para o razão.
  * `lancamentos` = Object.values(db().financeiroKytto.empresas[chaveLegada].lancamentos).
  * `mapaUnidades` = { lojaIdLegado: lojaUuid } (o que não estiver no mapa entra sem unidade).
- * `aplicar=false` só simula e devolve o relatório; nada é gravado.
+ * Itens sem unidade nenhuma estão em quarentena no financeiro antigo (a tela antiga não mostra):
+ * ficam de fora, salvo `incluirQuarentena`. Reversões do antigo viram estorno do original no
+ * razão (o razão não deixa estornar de novo). `aplicar=false` só simula; nada é gravado.
  */
-export async function importarJsonLegado(db, empresaId, { chaveLegada, lancamentos = [], mapaUnidades = {}, aplicar = false, fuso = FUSO_PADRAO } = {}) {
+export async function importarJsonLegado(db, empresaId, { chaveLegada, lancamentos = [], mapaUnidades = {}, aplicar = false, incluirQuarentena = false, fuso = FUSO_PADRAO } = {}) {
   const empresa = exigirUuid(empresaId, 'empresa');
   if (!chaveLegada) throw new ErroDominio('VALIDATION_ERROR', 'chaveLegada é obrigatória');
-  const relatorio = { chaveLegada, lidos: 0, validos: 0, ignorados: [], porStatus: {}, porTipo: {}, totais: { receitaPaga: 0, despesaPaga: 0, aReceber: 0, aPagar: 0 }, semUnidade: 0, inseridos: 0, jaExistiam: 0, aplicado: aplicar === true };
+  const relatorio = { chaveLegada, lidos: 0, validos: 0, ignorados: [], quarentena: 0, reversoes: 0, porStatus: {}, porTipo: {}, totais: { receitaPaga: 0, despesaPaga: 0, aReceber: 0, aPagar: 0 }, semUnidade: 0, inseridos: 0, jaExistiam: 0, aplicado: aplicar === true };
   const linhas = [];
   for (const item of Array.isArray(lancamentos) ? lancamentos : []) {
     relatorio.lidos += 1;
@@ -204,12 +221,13 @@ export async function importarJsonLegado(db, empresaId, { chaveLegada, lancament
     const valor = Math.round(Number(item?.valor) * 100) / 100;
     const tipo = String(item?.tipo || '').toLowerCase();
     const status = STATUS_JSON[String(item?.status || '').toLowerCase()];
-    const venc = String(item?.vencimento || item?.dataOperacao || item?.criadoEm || '').slice(0, 10);
-    if (!id || !['receita', 'despesa'].includes(tipo) || !(valor > 0) || !status || !/^\d{4}-\d{2}-\d{2}$/.test(venc)) {
+    const venc = diaNoFuso(item?.vencimento || item?.dataOperacao || item?.criadoEm, fuso);
+    if (!id || !['receita', 'despesa'].includes(tipo) || !(valor > 0) || !status || !venc) {
       relatorio.ignorados.push({ id: id || null, motivo: 'campos obrigatórios ausentes ou inválidos' });
       continue;
     }
     const lojaLegada = String(item?.lojaId || '').trim();
+    if (!lojaLegada && !incluirQuarentena) { relatorio.quarentena += 1; continue; }
     const loja = lojaLegada && mapaUnidades[lojaLegada] ? exigirUuid(mapaUnidades[lojaLegada], 'unidade') : null;
     if (!loja) relatorio.semUnidade += 1;
     const pagoEm = status === 'pago' ? new Date(item.pagoEm || item.dataOperacao || `${venc}T12:00:00Z`) : null;
@@ -219,58 +237,79 @@ export async function importarJsonLegado(db, empresaId, { chaveLegada, lancament
     relatorio.porTipo[tipo] = (relatorio.porTipo[tipo] || 0) + 1;
     if (status === 'pago') relatorio.totais[tipo === 'receita' ? 'receitaPaga' : 'despesaPaga'] += valor;
     if (status === 'pendente') relatorio.totais[tipo === 'receita' ? 'aReceber' : 'aPagar'] += valor;
-    const competencia = String(item?.dataOperacao || venc).slice(0, 10);
-    linhas.push([
-      empresa, loja, tipo, String(item.categoria || 'Outros').slice(0, 80), String(item.descricao || 'Lançamento importado').slice(0, 240), valor,
-      /^\d{4}-\d{2}-\d{2}$/.test(competencia) ? competencia : venc, venc, status, pagoEm, item.meioPagamento ? String(item.meioPagamento).slice(0, 30) : null,
-      status === 'pago' ? 'avulso' : (tipo === 'receita' ? 'receber' : 'pagar'),
-      `legado_${String(item.origem || 'manual').slice(0, 32)}`, id.slice(0, 160), `json:${chaveLegada}:${id}`.slice(0, 200),
-      item.automatico === true, String(item.usuario || 'importação').slice(0, 180), item.observacao ? String(item.observacao).slice(0, 2000) : null,
-      status === 'cancelado' ? new Date(item.canceladoEm || item.atualizadoEm || Date.now()) : null,
-    ]);
+    const original = String(item?.lancamentoOriginalId || '').trim() || null;
+    if (original) relatorio.reversoes += 1;
+    const categoriaBruta = String(item.categoria || 'Outros').slice(0, 80);
+    linhas.push({
+      original,
+      valores: [
+        empresa, loja, tipo, CATEGORIAS_LEGADAS[tipo]?.[categoriaBruta] || categoriaBruta, String(item.descricao || 'Lançamento importado').slice(0, 240), valor,
+        diaNoFuso(item?.dataOperacao, fuso) || venc, venc, status, pagoEm, item.meioPagamento ? String(item.meioPagamento).slice(0, 30) : null,
+        status === 'pago' ? 'avulso' : (tipo === 'receita' ? 'receber' : 'pagar'),
+        `legado_${String(item.origem || 'manual').slice(0, 32)}`, id.slice(0, 160), `json:${chaveLegada}:${id}`.slice(0, 200),
+        item.automatico === true, String(item.usuario || 'importação').slice(0, 180), item.observacao ? String(item.observacao).slice(0, 2000) : null,
+        status === 'cancelado' ? new Date(item.canceladoEm || item.atualizadoEm || Date.now()) : null,
+      ],
+    });
   }
   for (const k of Object.keys(relatorio.totais)) relatorio.totais[k] = Math.round(relatorio.totais[k] * 100) / 100;
   if (!aplicar || !linhas.length) return relatorio;
   await transacao(db, async (q) => {
-    for (const l of linhas) {
+    // originais antes das reversões, para a reversão achar o original já no razão
+    for (const l of [...linhas.filter((x) => !x.original), ...linhas.filter((x) => x.original)]) {
+      let estornoDe = null;
+      const valores = [...l.valores];
+      if (l.original) {
+        const orig = await q('SELECT id FROM fin_lancamentos WHERE empresa_id = $1 AND chave = $2', [empresa, `json:${chaveLegada}:${l.original}`.slice(0, 200)]);
+        if (orig.rows[0]) {
+          estornoDe = orig.rows[0].id;
+          valores[12] = 'estorno';
+          valores[14] = `estorno:${estornoDe}`; // mesma chave do estorno feito no razão: nunca dois estornos
+        }
+      }
       const r = await q(
         `INSERT INTO fin_lancamentos (empresa_id, loja_id, tipo, categoria, descricao, valor, data_competencia, vencimento, status, pago_em,
-           meio_pagamento, natureza, origem, origem_id, chave, automatico, criado_por, observacao, cancelado_em)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
+           meio_pagamento, natureza, origem, origem_id, chave, automatico, criado_por, observacao, cancelado_em, estorno_de)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
          ON CONFLICT (empresa_id, chave) DO NOTHING`,
-        l,
+        [...valores, estornoDe],
       );
       if (r.rowCount) relatorio.inseridos += 1; else relatorio.jaExistiam += 1;
     }
   });
   await garantirCategorias(db, empresa);
-  void fuso;
   return relatorio;
 }
 
 /**
  * Leitura contínua do financeiro JSON (a barbearia ainda grava lá): insere o que for novo e
- * avança a situação dos já importados só para a frente (pendente → pago/cancelado). Uma baixa
- * feita no razão nunca é desfeita pelo JSON.
+ * avança a situação dos já importados só para a frente (pendente → pago/cancelado), num único
+ * UPDATE. Uma baixa feita no razão nunca é desfeita pelo JSON.
  */
 export async function sincronizarJson(db, empresaId, { chaveLegada, lancamentos = [], mapaUnidades = {}, fuso = FUSO_PADRAO } = {}) {
   const empresa = exigirUuid(empresaId, 'empresa');
   const rel = await importarJsonLegado(db, empresa, { chaveLegada, lancamentos, mapaUnidades, aplicar: true, fuso });
-  let atualizados = 0;
+  const chaves = []; const situacoes = []; const pagos = [];
   for (const item of Array.isArray(lancamentos) ? lancamentos : []) {
     const status = STATUS_JSON[String(item?.status || '').toLowerCase()];
     if (!item?.id || !status || status === 'pendente') continue;
-    const chave = `json:${chaveLegada}:${String(item.id)}`.slice(0, 200);
     const pagoEm = status === 'pago' ? new Date(item.pagoEm || item.dataOperacao || Date.now()) : null;
-    const r = await db.query(
-      `UPDATE fin_lancamentos SET status = $3::varchar, pago_em = $4::timestamptz,
-              cancelado_em = CASE WHEN $3::varchar = 'cancelado' THEN CURRENT_TIMESTAMP ELSE NULL END, atualizado_em = CURRENT_TIMESTAMP
-        WHERE empresa_id = $1 AND chave = $2 AND status = 'pendente'`,
-      [empresa, chave, status, pagoEm && !Number.isNaN(pagoEm.getTime()) ? pagoEm : (status === 'pago' ? new Date() : null)],
-    );
-    atualizados += r.rowCount;
+    chaves.push(`json:${chaveLegada}:${String(item.id)}`.slice(0, 200));
+    situacoes.push(status);
+    pagos.push(status === 'pago' ? (pagoEm && !Number.isNaN(pagoEm.getTime()) ? pagoEm.toISOString() : new Date().toISOString()) : null);
   }
-  const res = { fonte: 'json', lidos: rel.lidos, inseridos: rel.inseridos, atualizados, ignorados: rel.ignorados.length };
+  let atualizados = 0;
+  if (chaves.length) {
+    const r = await db.query(
+      `UPDATE fin_lancamentos l SET status = u.status, pago_em = u.pago_em,
+              cancelado_em = CASE WHEN u.status = 'cancelado' THEN CURRENT_TIMESTAMP ELSE NULL END, atualizado_em = CURRENT_TIMESTAMP
+         FROM unnest($2::text[], $3::text[], $4::timestamptz[]) AS u(chave, status, pago_em)
+        WHERE l.empresa_id = $1 AND l.chave = u.chave AND l.status = 'pendente'`,
+      [empresa, chaves, situacoes, pagos],
+    );
+    atualizados = r.rowCount;
+  }
+  const res = { fonte: 'json', lidos: rel.lidos, inseridos: rel.inseridos, atualizados, ignorados: rel.ignorados.length, quarentena: rel.quarentena };
   await marcar(db, empresa, 'json', res);
   return res;
 }

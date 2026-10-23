@@ -18,6 +18,8 @@ describe('Rotas do razão: escopo de unidade', { skip: pgDeTeste }, () => {
     await ctx.db.query('CREATE TABLE empresas (id UUID PRIMARY KEY)');
     await ctx.db.query(readFileSync(new URL('../migrations/090_financeiro_razao.sql', import.meta.url), 'utf8'));
     await ctx.db.query('INSERT INTO empresas (id) VALUES ($1)', [empresa]);
+    await ctx.db.query('CREATE TABLE lojas (id UUID PRIMARY KEY, empresa_id UUID NOT NULL)');
+    await ctx.db.query('INSERT INTO lojas (id, empresa_id) VALUES ($1, $3), ($2, $3)', [lojaA, lojaB, empresa]);
     const app = express();
     app.use('/r', createRazaoAdminRouter({
       db: ctx.db,
@@ -61,5 +63,14 @@ describe('Rotas do razão: escopo de unidade', { skip: pgDeTeste }, () => {
     const estado = await chamar('GET', '/estado');
     assert.equal(estado.json.ativo, true);
     assert.ok(Array.isArray(estado.json.fontes));
+    assert.match(estado.json.hoje, /^\d{4}-\d{2}-\d{2}$/);
+  });
+
+  test('quem é de uma unidade não mexe em categorias e centros da empresa nem vê as fontes', async () => {
+    const r = { 'x-loja-restrita': lojaA };
+    assert.equal((await chamar('POST', '/categorias', { tipo: 'despesa', nome: 'Gás', grupoDre: 'operacional' }, r)).status, 403);
+    assert.equal((await chamar('POST', '/centros-custo', { codigo: 'C1', nome: 'Cozinha' }, r)).status, 403);
+    assert.deepEqual((await chamar('GET', '/estado', null, r)).json.fontes, []);
+    assert.equal((await chamar('POST', '/categorias', { tipo: 'despesa', nome: 'Gás', grupoDre: 'operacional' })).status, 201);
   });
 });

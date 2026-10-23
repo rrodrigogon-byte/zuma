@@ -52,8 +52,9 @@ export default function FinanceiroRazao({ abaInicial = 'geral' }) {
   const [aba, setAba] = useState(abaInicial)
   // '' = empresa toda; 'sem' = só lançamentos sem unidade; uuid = uma unidade
   const [unidade, setUnidade] = useState(() => (lojaAtiva?.id && lojas.length > 1 ? lojaAtiva.id : ''))
-  const hoje = localDay()
   const [resumo, setResumo] = useState(null)
+  // "hoje" no fuso da empresa (vem do servidor); até carregar, o dia do aparelho
+  const hoje = resumo?.hoje || localDay()
   const [fluxo, setFluxo] = useState([])
   const [lancamentos, setLancamentos] = useState([])
   const [categorias, setCategorias] = useState({ receita: [], despesa: [], grupos: {} })
@@ -78,17 +79,22 @@ export default function FinanceiroRazao({ abaInicial = 'geral' }) {
     return s ? `?${s}` : ''
   }, [unidade])
 
+  // A pagar / A receber: o servidor filtra os pendentes (todos, do mais antigo ao mais novo);
+  // nenhuma conta vencida some por estar além dos lançamentos mais recentes.
+  const consultaLancamentos = aba === 'pagar' ? { tipo: 'despesa', status: 'pendente', limite: 2000 }
+    : aba === 'receber' ? { tipo: 'receita', status: 'pendente', limite: 2000 } : { limite: 1000 }
+  const chaveConsulta = JSON.stringify(consultaLancamentos)
   const carregar = useCallback(async () => {
     setCarregando(true)
     try {
       const [r, f, l, c, cc] = await Promise.all([
-        api.get(`${BASE}/resumo${qs()}`), api.get(`${BASE}/fluxo${qs()}`), api.get(`${BASE}/lancamentos${qs({ limite: 1000 })}`),
+        api.get(`${BASE}/resumo${qs()}`), api.get(`${BASE}/fluxo${qs()}`), api.get(`${BASE}/lancamentos${qs(JSON.parse(chaveConsulta))}`),
         api.get(`${BASE}/categorias`), api.get(`${BASE}/centros-custo`),
       ])
       setResumo(r); setFluxo(Array.isArray(f) ? f : []); setLancamentos(Array.isArray(l) ? l : []); setCategorias(c || { receita: [], despesa: [], grupos: {} }); setCentros(cc?.centros || []); setErro('')
     } catch (error) { setErro(error.message || 'Não foi possível carregar o Financeiro.') }
     finally { setCarregando(false) }
-  }, [qs])
+  }, [qs, chaveConsulta])
   useEffect(() => { carregar() }, [carregar, empresaAtiva?.id])
 
   const carregarDre = useCallback(async () => {
@@ -106,7 +112,7 @@ export default function FinanceiroRazao({ abaInicial = 'geral' }) {
   }, [])
   useEffect(() => { if (aba === 'dre') carregarDre() }, [aba, carregarDre])
   useEffect(() => { if (aba === 'fechamento') carregarFechamento() }, [aba, carregarFechamento])
-  useEffect(() => { if (aba === 'ajustes') carregarEstado() }, [aba, carregarEstado])
+  useEffect(() => { if (aba === 'ajustes' || aba === 'fechamento') carregarEstado() }, [aba, carregarEstado])
 
   const visiveis = useMemo(() => {
     const base = aba === 'pagar' ? lancamentos.filter((i) => i.tipo === 'despesa' && i.status === 'pendente')
@@ -148,7 +154,7 @@ export default function FinanceiroRazao({ abaInicial = 'geral' }) {
   async function confirmarAcao(dados = {}) {
     const { tipo, item } = acao
     try {
-      if (tipo === 'baixar') await api.post(`${BASE}/lancamentos/${item.id}/baixar`, { meioPagamento: dados.meioPagamento || null, pagoEm: dados.pagoEm ? `${dados.pagoEm}T12:00:00` : undefined })
+      if (tipo === 'baixar') await api.post(`${BASE}/lancamentos/${item.id}/baixar`, { meioPagamento: dados.meioPagamento || null, pagoEm: dados.pagoEm || undefined })
       if (tipo === 'cancelar') await api.post(`${BASE}/lancamentos/${item.id}/cancelar`, { motivo: dados.motivo })
       if (tipo === 'estornar') await api.post(`${BASE}/lancamentos/${item.id}/estornar`, { motivo: dados.motivo })
       if (tipo === 'serie') await api.post(`${BASE}/series/${item.serieId}/cancelar`, { motivo: dados.motivo })
@@ -270,7 +276,7 @@ export default function FinanceiroRazao({ abaInicial = 'geral' }) {
           <article><span>Saldo do dia</span><strong className={previa.saldoDoDia < 0 ? 'dadm-neg' : ''}>{money(previa.saldoDoDia)}</strong><small>{previa.lancamentos} lançamento(s)</small></article>
           <article className={previa.vencidosAteHoje.receber || previa.vencidosAteHoje.pagar ? 'is-alert' : ''}><span>Vencidos até hoje</span><strong>{previa.vencidosAteHoje.receber + previa.vencidosAteHoje.pagar}</strong><small>Receber {money(previa.vencidosAteHoje.receberValor)} · pagar {money(previa.vencidosAteHoje.pagarValor)}</small></article>
         </section>
-        <div className="dadm-actions" style={{ marginTop: 12 }}><button type="button" className="c360-btn primary" onClick={fecharDia} disabled={fechamentos.some((f) => f.data === hoje && (f.lojaId || '') === (unidade && unidade !== 'sem' ? unidade : ''))}>Fechar o dia</button></div>
+        <div className="dadm-actions" style={{ marginTop: 12 }}><button type="button" className="c360-btn primary" onClick={fecharDia} disabled={unidade === 'sem' || fechamentos.some((f) => f.data === hoje && (f.lojaId || '') === (unidade && unidade !== 'sem' ? unidade : (estado?.lojaRestrita || '')))} title={unidade === 'sem' ? 'Escolha uma unidade ou a empresa toda' : ''}>Fechar o dia</button></div>
       </>}
       <h3 style={{ marginTop: 18 }}>Dias fechados</h3>
       <Table caption="Fechamentos" rows={fechamentos} empty="Nenhum dia fechado ainda." columns={[
@@ -289,7 +295,7 @@ export default function FinanceiroRazao({ abaInicial = 'geral' }) {
       {form && <div style={{ display: 'grid', gap: 12 }}>
         {form.automatico && <p className="dadm-note">Lançamento automático ({origem(form)}): valor, datas e descrição vêm do módulo de origem. Para corrigir valor, use Estornar.</p>}
         {!form.automatico && !form.id && <label className="c360-field">Tipo<select ref={primeiroCampo} className="c360-input" value={form.tipo} onChange={(e) => setForm({ ...form, tipo: e.target.value, categoria: 'Outros' })}><option value="despesa">Despesa (sai dinheiro)</option><option value="receita">Receita (entra dinheiro)</option></select></label>}
-        <label className="c360-field">Categoria<select className="c360-input" value={form.categoria} onChange={(e) => setForm({ ...form, categoria: e.target.value })}>{(categorias[form.tipo] || ['Outros']).map((c) => <option key={c}>{c}</option>)}</select></label>
+        <label className="c360-field">Categoria<select className="c360-input" value={form.categoria} onChange={(e) => setForm({ ...form, categoria: e.target.value })}>{[...new Set([...(categorias[form.tipo] || ['Outros']), form.categoria].filter(Boolean))].map((c) => <option key={c}>{c}</option>)}</select></label>
         <label className="c360-field">Descrição<input className="c360-input" required maxLength={240} disabled={form.automatico} value={form.descricao} onChange={(e) => setForm({ ...form, descricao: e.target.value })} /></label>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
           <label className="c360-field">Valor (R$)<input className="c360-input" required inputMode="decimal" disabled={form.automatico} value={form.valor} onChange={(e) => setForm({ ...form, valor: e.target.value })} /></label>

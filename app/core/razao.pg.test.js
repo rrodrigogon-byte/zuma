@@ -12,6 +12,7 @@ const sql = (arquivo) => readFileSync(new URL(`../migrations/${arquivo}`, import
 // Réplicas mínimas das tabelas de produção que o razão lê (só as colunas usadas).
 const STUBS = `
 CREATE TABLE empresas (id UUID PRIMARY KEY);
+CREATE TABLE lojas (id UUID PRIMARY KEY, empresa_id UUID NOT NULL);
 CREATE TABLE clube_pagamentos_recebidos (empresa_id UUID NOT NULL, pagamento_id VARCHAR(120) NOT NULL, customer_id UUID NOT NULL, valor NUMERIC(10,2), nova_data DATE, resultado JSONB, criado_em TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (empresa_id, pagamento_id));
 CREATE TABLE clube_cobrancas (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), empresa_id UUID NOT NULL, descricao VARCHAR(120) NOT NULL);
 CREATE TABLE commerce_orders (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), empresa_id UUID NOT NULL, loja_id UUID, customer_id UUID, public_code VARCHAR(40) NOT NULL, UNIQUE (empresa_id, id));
@@ -30,6 +31,7 @@ describe('Razão financeiro único (PostgreSQL)', { skip: pgDeTeste }, () => {
     await ctx.db.query(sql('082_financeiro_cadastros_multiempresa.sql'));
     await ctx.db.query(sql('090_financeiro_razao.sql'));
     await ctx.db.query('INSERT INTO empresas (id) VALUES ($1), ($2)', [A, B]);
+    await ctx.db.query('INSERT INTO lojas (id, empresa_id) VALUES ($1, $2)', [lojaA, A]);
   });
   after(async () => { await ctx?.fechar(); });
 
@@ -162,13 +164,15 @@ describe('Razão financeiro único (PostgreSQL)', { skip: pgDeTeste }, () => {
   test('importação do JSON antigo: simula, aplica uma vez e só avança a situação', async () => {
     const lancamentos = [
       { id: 'j1', tipo: 'receita', categoria: 'Serviços', descricao: 'Atendimento antigo', valor: 70, status: 'pago', vencimento: '2026-09-10', pagoEm: '2026-09-10T15:00:00Z', lojaId: 'dino-web-estoque', origem: 'barbearia_atendimento', automatico: true },
-      { id: 'j2', tipo: 'despesa', categoria: 'Insumos', descricao: 'Lâminas', valor: 45.5, status: 'pendente', vencimento: '2026-10-30' },
-      { id: '', tipo: 'receita', valor: 10, status: 'pago', vencimento: '2026-09-01' },
+      { id: 'j2', tipo: 'despesa', categoria: 'Insumos', descricao: 'Lâminas', valor: 45.5, status: 'pendente', vencimento: '2026-10-30', lojaId: 'unidade-sem-mapa' },
+      { id: '', tipo: 'receita', valor: 10, status: 'pago', vencimento: '2026-09-01', lojaId: 'dino-web-estoque' },
+      { id: 'q1', tipo: 'receita', categoria: 'Serviços', descricao: 'Em quarentena', valor: 99, status: 'pago', vencimento: '2026-09-02' },
     ];
     const opcoes = { chaveLegada: 'emp-kytto-001', lancamentos, mapaUnidades: { 'dino-web-estoque': lojaA } };
     const sim = await fontes.importarJsonLegado(ctx.db, B, opcoes);
     assert.equal(sim.validos, 2);
     assert.equal(sim.ignorados.length, 1);
+    assert.equal(sim.quarentena, 1, 'sem unidade no antigo = quarentena, fora da importação');
     assert.equal(sim.totais.receitaPaga, 70);
     assert.equal(sim.totais.aPagar, 45.5);
     assert.equal((await razao.listar(ctx.db, B)).length, 0, 'simulação não grava');
@@ -200,5 +204,75 @@ describe('Razão financeiro único (PostgreSQL)', { skip: pgDeTeste }, () => {
     await assert.rejects(() => razao.fecharDia(ctx.db, B, { data: '2026-10-23', responsavel: 'Caixa', agora }), (e) => e.code === 'VALIDATION_ERROR');
     assert.equal((await razao.listarFechamentos(ctx.db, B)).length, 1);
     assert.equal((await razao.listarFechamentos(ctx.db, A)).length, 0);
+  });
+
+  test('revisão: estorno no DRE, travas de pago/estorno, unidade de outra empresa, dia fechado e A2', async () => {
+    const C = randomUUID(); const lojaC = randomUUID();
+    await ctx.db.query('INSERT INTO empresas (id) VALUES ($1)', [C]);
+    await ctx.db.query('INSERT INTO lojas (id, empresa_id) VALUES ($1, $2)', [lojaC, C]);
+    // estorno de despesa reduz a própria despesa (CMV), não vira receita
+    const [compra] = await razao.criarManual(ctx.db, C, { tipo: 'despesa', categoria: 'Compras de mercadoria', descricao: 'Compra errada', valor: 100, status: 'pago', vencimento: '2026-08-05', competencia: '2026-08-05', pagoEm: '2026-08-05' }, { agora });
+    const [venda] = await razao.criarManual(ctx.db, C, { tipo: 'receita', categoria: 'Serviços', descricao: 'Venda', valor: 300, status: 'pago', vencimento: '2026-08-05', pagoEm: '2026-08-05' }, { agora });
+    await razao.estornar(ctx.db, C, compra.id, { motivo: 'nota devolvida', agora: new Date('2026-08-10T12:00:00Z') });
+    await razao.estornar(ctx.db, C, venda.id, { motivo: 'cliente desistiu', agora: new Date('2026-08-10T12:00:00Z') });
+    const d = await razao.dre(ctx.db, C, { de: '2026-08-01', ate: '2026-08-31' });
+    assert.equal(d.receitaBruta, 300);
+    assert.equal(d.grupos.find((g) => g.grupo === 'cmv').total, 0);
+    assert.equal(d.grupos.find((g) => g.grupo === 'deducao').total, -300);
+    // pago não se cancela; estorno não se cancela nem se edita; pago não muda valor
+    await assert.rejects(() => razao.cancelar(ctx.db, C, venda.id, { motivo: 'x' }), (e) => e.code === 'PAID');
+    const est = (await razao.listar(ctx.db, C, { origem: 'estorno' }))[0];
+    await assert.rejects(() => razao.cancelar(ctx.db, C, est.id, { motivo: 'x' }), (e) => e.code === 'LOCKED_ENTRY');
+    await assert.rejects(() => razao.atualizar(ctx.db, C, est.id, { valor: 1 }), (e) => e.code === 'LOCKED_ENTRY');
+    await assert.rejects(() => razao.atualizar(ctx.db, C, venda.id, { valor: 1 }), (e) => e.code === 'LOCKED_ENTRY');
+    await assert.rejects(() => razao.atualizar(ctx.db, C, venda.id, { status: 'pendente' }), (e) => e.code === 'ALREADY_REVERSED');
+    // data pura de pagamento cai no próprio dia, no fuso da empresa
+    assert.equal(razao.hojeNoFuso(new Date(compra.pagoEm)), '2026-08-05');
+    // unidade de outra empresa é recusada
+    await assert.rejects(() => razao.criarManual(ctx.db, C, { tipo: 'despesa', descricao: 'Luz', valor: 10, lojaId: lojaA }), (e) => e.status === 404);
+    // dia fechado não aceita baixa nele
+    await razao.fecharDia(ctx.db, C, { data: '2026-08-20', responsavel: 'Caixa', agora });
+    const [luz] = await razao.criarManual(ctx.db, C, { tipo: 'despesa', descricao: 'Luz', valor: 10, vencimento: '2026-08-20', lojaId: lojaC }, { agora });
+    await assert.rejects(() => razao.baixar(ctx.db, C, luz.id, { pagoEm: '2026-08-20' }), (e) => e.code === 'DAY_CLOSED');
+    assert.equal((await razao.baixar(ctx.db, C, luz.id, { pagoEm: '2026-08-21' })).status, 'pago');
+    await assert.rejects(() => razao.fecharDia(ctx.db, C, { data: '2026-08-21', lojaId: 'sem', responsavel: 'Caixa', agora }), (e) => e.code === 'VALIDATION_ERROR');
+    // pendentes saem do mais antigo para o mais novo
+    await razao.criarManual(ctx.db, C, { tipo: 'despesa', descricao: 'Antiga', valor: 5, vencimento: '2025-01-10' }, { agora });
+    assert.equal((await razao.listar(ctx.db, C, { status: 'pendente', tipo: 'despesa', limite: 1 }))[0].descricao, 'Antiga');
+    assert.equal((await razao.listarFechamentos(ctx.db, C, { limite: -5 })).length, 1);
+  });
+
+  test('revisão: baixa no razão de conta do A2 baixa no A2; competência do A2 no fuso', async () => {
+    const D = randomUUID();
+    await ctx.db.query('INSERT INTO empresas (id) VALUES ($1)', [D]);
+    const cli = await criarCliente(ctx.db, D, 'Cliente A2');
+    const conta = await a2.criarConta(ctx.db, D, { clienteId: cli, descricao: 'Mensalidade outubro', valor: 120, dataVencimento: '2026-10-30' });
+    // criada às 22h de Cuiabá (02h UTC do dia seguinte): competência no dia de Cuiabá
+    await ctx.db.query("UPDATE a2_contas_receber SET criado_em = '2026-10-21T22:00:00-04:00' WHERE id = $1", [conta.id]);
+    await fontes.sincronizarContasReceber(ctx.db, D);
+    const l = (await razao.listar(ctx.db, D, { origem: 'a2_conta' }))[0];
+    assert.equal(l.competencia, '2026-10-21');
+    await razao.baixar(ctx.db, D, l.id, { pagoEm: '2026-10-22', meioPagamento: 'pix' });
+    const a2row = (await ctx.db.query('SELECT data_pagamento FROM a2_contas_receber WHERE id = $1', [conta.id])).rows[0];
+    assert.ok(a2row.data_pagamento, 'A2 também ficou paga');
+  });
+
+  test('revisão: reversão do JSON antigo vira estorno do original e categorias legadas são mapeadas', async () => {
+    const E = randomUUID(); const lojaE = randomUUID();
+    await ctx.db.query('INSERT INTO empresas (id) VALUES ($1)', [E]);
+    const lancamentos = [
+      { id: 'o1', tipo: 'despesa', categoria: 'Comissões - vale', descricao: 'Vale', valor: 50, status: 'pago', vencimento: '2026-10-31', dataOperacao: '2026-11-01T01:30:00Z', pagoEm: '2026-11-01T01:30:00Z', lojaId: 'u1' },
+      { id: 'r1', tipo: 'receita', categoria: 'Comissões - vale', descricao: 'Reversão de Vale', valor: 50, status: 'pago', vencimento: '2026-11-02', dataOperacao: '2026-11-02T12:00:00Z', pagoEm: '2026-11-02T12:00:00Z', lojaId: 'u1', origem: 'reversao', lancamentoOriginalId: 'o1' },
+    ];
+    const rel = await fontes.importarJsonLegado(ctx.db, E, { chaveLegada: 'emp-x', lancamentos, mapaUnidades: { u1: lojaE }, aplicar: true });
+    assert.equal(rel.inseridos, 2);
+    assert.equal(rel.reversoes, 1);
+    const orig = (await razao.listar(ctx.db, E, { tipo: 'despesa' }))[0];
+    assert.equal(orig.categoria, 'Comissões');
+    assert.equal(orig.competencia, '2026-10-31', '21h30 de Cuiabá ainda é outubro');
+    await assert.rejects(() => razao.estornar(ctx.db, E, orig.id, { motivo: 'de novo' }), (e) => e.code === 'ALREADY_REVERSED');
+    const d = await razao.dre(ctx.db, E, { de: '2026-10-01', ate: '2026-11-30' });
+    assert.equal(d.grupos.find((g) => g.grupo === 'pessoal').total, 0);
+    assert.equal(d.receitaBruta, 0);
   });
 });

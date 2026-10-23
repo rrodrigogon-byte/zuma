@@ -20,12 +20,16 @@ export function createRazaoAdminRouter({ db, escopoDaRequisicao, fonteJson = nul
   const ultimaLeitura = new Map();
   async function lerFontes(empresaId, { forcar = false } = {}) {
     const agora = Date.now();
+    // Com o razão desligado (FINANCEIRO_RAZAO), nada é lido das fontes nem importado.
+    if (ativo() !== true) return null;
     if (!forcar && agora - (ultimaLeitura.get(empresaId) || 0) < intervaloSyncMs) return null;
     ultimaLeitura.set(empresaId, agora);
     const resultado = await fontes.sincronizarEmpresa(db, empresaId, { fuso });
-    const json = typeof fonteJson === 'function' ? await fonteJson(empresaId) : null;
-    if (json?.chaveLegada) {
-      try { resultado.push(await fontes.sincronizarJson(db, empresaId, { ...json, fuso })); } catch (error) { resultado.push({ fonte: 'json', erro: String(error?.message || error).slice(0, 160) }); }
+    try {
+      const json = typeof fonteJson === 'function' ? await fonteJson(empresaId) : null;
+      if (json?.chaveLegada) resultado.push(await fontes.sincronizarJson(db, empresaId, { ...json, fuso }));
+    } catch (error) {
+      resultado.push({ fonte: 'json', erro: String(error?.message || error).slice(0, 160) });
     }
     return resultado;
   }
@@ -49,9 +53,13 @@ export function createRazaoAdminRouter({ db, escopoDaRequisicao, fonteJson = nul
     }
   };
 
-  router.get('/estado', rota('payments.read', async ({ empresaId }) => ({ ativo: ativo() === true, fontes: await fontes.saudeDasFontes(db, empresaId) })));
+  // Quem só tem acesso a uma unidade não vê as contagens das fontes da empresa toda.
+  router.get('/estado', rota('payments.read', async ({ empresaId, lojaRestrita }) => ({ ativo: ativo() === true, hoje: svc.hojeNoFuso(new Date(), fuso), lojaRestrita, fontes: lojaRestrita ? [] : await fontes.saudeDasFontes(db, empresaId) })));
 
-  router.post('/sincronizar', rota('payments.write', async ({ empresaId }) => ({ fontes: await lerFontes(empresaId, { forcar: true }) })));
+  router.post('/sincronizar', rota('payments.write', async ({ empresaId, lojaRestrita }) => {
+    const resultado = await lerFontes(empresaId, { forcar: true });
+    return { fontes: lojaRestrita ? [] : resultado };
+  }));
 
   router.get('/resumo', rota('payments.read', async ({ req, empresaId, lojaRestrita }) => {
     await lerFontes(empresaId);
@@ -99,10 +107,11 @@ export function createRazaoAdminRouter({ db, escopoDaRequisicao, fonteJson = nul
   }));
 
   router.get('/categorias', rota('payments.read', ({ empresaId }) => svc.listarCategorias(db, empresaId)));
-  router.post('/categorias', rota('settings.write', ({ req, empresaId }) => svc.criarCategoria(db, empresaId, req.body || {}), 201));
+  const empresaToda = (lojaRestrita) => { if (lojaRestrita) throw new ErroDominio('PERMISSION_DENIED', 'Categorias e centros de custo valem para a empresa toda: exigem permissão na empresa toda', 403); };
+  router.post('/categorias', rota('settings.write', ({ req, empresaId, lojaRestrita }) => { empresaToda(lojaRestrita); return svc.criarCategoria(db, empresaId, req.body || {}); }, 201));
   router.get('/centros-custo', rota('payments.read', async ({ empresaId }) => ({ centros: await svc.listarCentros(db, empresaId) })));
-  router.post('/centros-custo', rota('settings.write', ({ req, empresaId }) => svc.salvarCentro(db, empresaId, req.body || {}), 201));
-  router.patch('/centros-custo/:id', rota('settings.write', ({ req, empresaId }) => svc.salvarCentro(db, empresaId, req.body || {}, exigirUuid(req.params.id, 'centro de custo'))));
+  router.post('/centros-custo', rota('settings.write', ({ req, empresaId, lojaRestrita }) => { empresaToda(lojaRestrita); return svc.salvarCentro(db, empresaId, req.body || {}); }, 201));
+  router.patch('/centros-custo/:id', rota('settings.write', ({ req, empresaId, lojaRestrita }) => { empresaToda(lojaRestrita); return svc.salvarCentro(db, empresaId, req.body || {}, exigirUuid(req.params.id, 'centro de custo')); }));
 
   router.get('/fechamentos', rota('payments.read', async ({ req, empresaId, lojaRestrita }) => ({ fechamentos: await svc.listarFechamentos(db, empresaId, { lojaId: unidadePedida(req, lojaRestrita) }) })));
   router.get('/fechamentos/previa', rota('payments.read', async ({ req, empresaId, lojaRestrita }) => {
@@ -126,7 +135,7 @@ export function createRazaoPlataformaRouter({ db, fonteJson }) {
       const empresaId = exigirUuid(req.body?.empresaId, 'empresa');
       const json = await fonteJson(empresaId);
       if (!json?.chaveLegada) throw new ErroDominio('NOT_FOUND', 'Esta empresa não tem financeiro no banco antigo', 404);
-      res.json(await fontes.importarJsonLegado(db, empresaId, { ...json, aplicar: req.body?.aplicar === true }));
+      res.json(await fontes.importarJsonLegado(db, empresaId, { ...json, aplicar: req.body?.aplicar === true, incluirQuarentena: req.body?.incluirQuarentena === true }));
     } catch (error) {
       responderErro(res, error);
     }

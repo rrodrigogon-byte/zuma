@@ -16,7 +16,7 @@ export const CATEGORIAS_PADRAO = {
   receita: [
     ['Serviços', 'receita_bruta'], ['Vendas de produtos', 'receita_bruta'], ['Bar e restaurante', 'receita_bruta'],
     ['Mensalidades', 'receita_bruta'], ['Loja online', 'receita_bruta'], ['Contas de clientes', 'receita_bruta'],
-    ['Repasses de parceiros', 'receita_bruta'], ['Rendimentos', 'financeiro'], ['Outros', 'outros'],
+    ['Repasses de parceiros', 'receita_bruta'], ['Estorno de comissões', 'pessoal'], ['Rendimentos', 'financeiro'], ['Outros', 'outros'],
   ],
   despesa: [
     ['Compras de mercadoria', 'cmv'], ['Insumos', 'cmv'], ['Perdas e quebras', 'cmv'],
@@ -42,6 +42,34 @@ function valorPositivo(valor, campo = 'valor') {
   const n = Number(typeof valor === 'string' ? valor.replace(',', '.') : valor);
   if (!Number.isFinite(n) || n <= 0 || n > 99_999_999) throw new ErroDominio('VALIDATION_ERROR', `${campo} deve ser maior que zero`);
   return Math.round(n * 100) / 100;
+}
+
+/**
+ * Instante do pagamento. Data pura ('2026-10-10') vira meio-dia UTC (manhã no Brasil), para cair
+ * no mesmo dia em qualquer fuso das Américas e não no dia anterior.
+ */
+export function instanteDePagamento(valor, agora = new Date()) {
+  if (valor === undefined || valor === null || valor === '') return agora;
+  const texto = String(valor).trim();
+  const d = /^\d{4}-\d{2}-\d{2}$/.test(texto) ? new Date(`${texto}T12:00:00Z`) : new Date(texto);
+  if (Number.isNaN(d.getTime())) throw new ErroDominio('VALIDATION_ERROR', 'data de pagamento inválida');
+  return d;
+}
+
+/** A unidade precisa ser desta empresa (evita sujar relatórios com unidade de outra empresa). */
+async function exigirUnidadeDaEmpresa(q, empresa, lojaId) {
+  if (!lojaId) return null;
+  const r = await q('SELECT id FROM lojas WHERE empresa_id = $1 AND id = $2', [empresa, lojaId]);
+  if (!r.rows[0]) throw new ErroDominio('NOT_FOUND', 'Unidade não encontrada nesta empresa', 404);
+  return lojaId;
+}
+
+/** Dia já fechado (da unidade ou da empresa toda) não aceita pagamento novo nele. */
+async function exigirDiaAberto(q, empresa, lojaId, pagoEm, fuso = FUSO_PADRAO) {
+  if (!pagoEm) return;
+  const dia = hojeNoFuso(pagoEm, fuso);
+  const r = await q('SELECT 1 FROM fin_fechamentos WHERE empresa_id = $1 AND data = $2::date AND (loja_id IS NULL OR loja_id = $3::uuid) LIMIT 1', [empresa, dia, lojaId || null]);
+  if (r.rows[0]) throw new ErroDominio('DAY_CLOSED', `O dia ${dia.split('-').reverse().join('/')} já foi fechado. Lance o pagamento em outra data.`, 409);
 }
 
 function uuidOpcional(valor, campo) {
@@ -179,12 +207,7 @@ function prepararDados(empresa, dados, { fuso = FUSO_PADRAO, agora = new Date() 
   if (!NATUREZAS.has(natureza)) throw new ErroDominio('VALIDATION_ERROR', 'natureza deve ser avulso, pagar ou receber');
   const contraparteTipo = dados.contraparteTipo ? String(dados.contraparteTipo).toLowerCase() : null;
   if (contraparteTipo && !CONTRAPARTES.has(contraparteTipo)) throw new ErroDominio('VALIDATION_ERROR', 'contraparte inválida');
-  let pagoEm = null;
-  if (status === 'pago') {
-    const informado = dados.pagoEm ? new Date(dados.pagoEm) : agora;
-    if (Number.isNaN(informado.getTime())) throw new ErroDominio('VALIDATION_ERROR', 'data de pagamento inválida');
-    pagoEm = informado;
-  }
+  const pagoEm = status === 'pago' ? instanteDePagamento(dados.pagoEm, agora) : null;
   return {
     empresa_id: empresa,
     loja_id: uuidOpcional(dados.lojaId, 'unidade'),
@@ -244,6 +267,8 @@ export async function criarManual(db, empresaId, dados = {}, { usuario = null, f
   const serieId = meses > 1 ? randomUUID() : null;
   const criadoPor = textoOpcional(usuario, 180);
   return transacao(db, async (q) => {
+    await exigirUnidadeDaEmpresa(q, empresa, base.loja_id);
+    if (base.status === 'pago') await exigirDiaAberto(q, empresa, base.loja_id, base.pago_em, fuso);
     const criados = [];
     for (let i = 0; i < meses; i += 1) {
       const vencimento = i === 0 ? base.vencimento : somarMeses(base.vencimento, i);
@@ -294,18 +319,21 @@ function alteraCampoDaFonte(atual, dados) {
 }
 
 /** Edição. Automático: só unidade, centro de custo, categoria, documento e observação. */
-export async function atualizar(db, empresaId, id, dados = {}, { fuso, agora = new Date() } = {}) {
+export async function atualizar(db, empresaId, id, dados = {}, { fuso = FUSO_PADRAO, agora = new Date() } = {}) {
   const empresa = exigirUuid(empresaId, 'empresa');
   return transacao(db, async (q) => {
     const atual = await travar(q, empresa, id);
     if (atual.status === 'cancelado') throw new ErroDominio('CANCELLED', 'Lançamento cancelado não pode ser editado', 409);
     const sets = {};
-    if (dados.lojaId !== undefined) sets.loja_id = uuidOpcional(dados.lojaId, 'unidade');
+    if (dados.lojaId !== undefined) sets.loja_id = await exigirUnidadeDaEmpresa(q, empresa, uuidOpcional(dados.lojaId, 'unidade'));
     if (dados.centroCustoId !== undefined) sets.centro_custo_id = uuidOpcional(dados.centroCustoId, 'centro de custo');
     if (dados.categoria !== undefined) sets.categoria = textoOpcional(dados.categoria, 80) || 'Outros';
     if (dados.documento !== undefined) sets.documento = textoOpcional(dados.documento, 80);
     if (dados.observacao !== undefined || dados.obs !== undefined) sets.observacao = textoOpcional(dados.observacao ?? dados.obs, 2000);
-    if (!atual.automatico) {
+    // Valor, datas e descrição ficam presos quando vêm de outro módulo, quando o lançamento é um
+    // estorno ou quando já foi pago: a correção, nesses casos, é o estorno.
+    const travado = atual.automatico || Boolean(atual.estorno_de) || atual.status === 'pago';
+    if (!travado) {
       if (dados.descricao !== undefined) sets.descricao = exigirTexto(dados.descricao, 'Descrição', { min: 2, max: 240 });
       if (dados.valor !== undefined) sets.valor = valorPositivo(dados.valor);
       if (dados.vencimento !== undefined) sets.vencimento = exigirData(String(dados.vencimento).slice(0, 10), 'Vencimento');
@@ -313,12 +341,24 @@ export async function atualizar(db, empresaId, id, dados = {}, { fuso, agora = n
       if (dados.contraparteNome !== undefined) sets.contraparte_nome = textoOpcional(dados.contraparteNome, 240);
       if (dados.meioPagamento !== undefined) sets.meio_pagamento = meioOpcional(dados.meioPagamento);
     } else if (alteraCampoDaFonte(atual, dados)) {
-      throw new ErroDominio('AUTOMATIC_ENTRY', 'Lançamento automático: valor, data e descrição vêm do módulo de origem. Use estorno para corrigir.', 409);
+      const msg = atual.automatico ? 'Lançamento automático: valor, data e descrição vêm do módulo de origem. Use estorno para corrigir.'
+        : atual.estorno_de ? 'Estorno não é editado.' : 'Lançamento já pago: valor e datas não mudam. Use estorno para corrigir.';
+      throw new ErroDominio(atual.automatico ? 'AUTOMATIC_ENTRY' : 'LOCKED_ENTRY', msg, 409);
     }
     if (dados.status !== undefined && dados.status !== atual.status) {
-      if (dados.status === 'pago') { sets.status = 'pago'; sets.pago_em = dados.pagoEm ? new Date(dados.pagoEm) : agora; sets.meio_pagamento = meioOpcional(dados.meioPagamento) || atual.meio_pagamento; }
-      else if (dados.status === 'pendente') {
+      if (dados.status === 'pago') {
+        sets.status = 'pago'; sets.pago_em = instanteDePagamento(dados.pagoEm, agora); sets.meio_pagamento = meioOpcional(dados.meioPagamento) || atual.meio_pagamento;
+        await exigirDiaAberto(q, empresa, sets.loja_id !== undefined ? sets.loja_id : atual.loja_id, sets.pago_em, fuso);
+        // conta do A2: a baixa feita aqui também baixa lá (alertas, cobrança e fechamento do A2)
+        if (atual.origem === 'a2_conta' && atual.origem_id) {
+          await q('UPDATE a2_contas_receber SET data_pagamento = COALESCE(data_pagamento, $3), atualizado_em = CURRENT_TIMESTAMP WHERE empresa_id = $1 AND id::text = $2', [empresa, atual.origem_id, sets.pago_em]);
+        }
+      } else if (dados.status === 'pendente') {
         if (atual.automatico) throw new ErroDominio('AUTOMATIC_ENTRY', 'Lançamento automático pago não volta a pendente; use estorno.', 409);
+        if (atual.estorno_de) throw new ErroDominio('LOCKED_ENTRY', 'Estorno não volta a pendente.', 409);
+        const temEstorno = await q('SELECT 1 FROM fin_lancamentos WHERE empresa_id = $1 AND estorno_de = $2 LIMIT 1', [empresa, atual.id]);
+        if (temEstorno.rows[0]) throw new ErroDominio('ALREADY_REVERSED', 'Lançamento já estornado não volta a pendente.', 409);
+        await exigirDiaAberto(q, empresa, atual.loja_id, atual.pago_em, fuso);
         sets.status = 'pendente'; sets.pago_em = null;
       } else throw new ErroDominio('VALIDATION_ERROR', 'Para cancelar, use a ação de cancelar');
     }
@@ -344,6 +384,8 @@ export async function cancelar(db, empresaId, id, { usuario, motivo } = {}) {
     const atual = await travar(q, empresa, id);
     if (atual.status === 'cancelado') return dto(atual);
     if (atual.automatico) throw new ErroDominio('AUTOMATIC_ENTRY', 'Lançamento automático não é cancelado; use estorno.', 409);
+    if (atual.estorno_de) throw new ErroDominio('LOCKED_ENTRY', 'Estorno não é cancelado.', 409);
+    if (atual.status === 'pago') throw new ErroDominio('PAID', 'Lançamento pago não é cancelado: use estorno (o dinheiro já entrou ou saiu).', 409);
     const r = await q(
       `UPDATE fin_lancamentos SET status = 'cancelado', pago_em = NULL, cancelado_em = CURRENT_TIMESTAMP, cancelado_por = $3, motivo_cancelamento = $4, atualizado_em = CURRENT_TIMESTAMP
         WHERE empresa_id = $1 AND id = $2 RETURNING *`,
@@ -407,7 +449,8 @@ export async function listar(db, empresaId, filtros = {}) {
   if (filtros.ate) { v.push(exigirData(filtros.ate, 'Até')); sql += ` AND l.vencimento <= $${v.length}`; }
   if (filtros.q) { v.push(`%${String(filtros.q).slice(0, 80).replace(/[%_\\]/g, (c) => `\\${c}`)}%`); sql += ` AND (l.descricao ILIKE $${v.length} OR l.contraparte_nome ILIKE $${v.length})`; }
   const limite = Math.min(Math.max(Number(filtros.limite) || 500, 1), 2000);
-  sql += ` ORDER BY l.vencimento DESC, l.criado_em DESC LIMIT ${limite}`;
+  // pendentes: o que vence primeiro vem primeiro (nenhuma conta antiga some da lista)
+  sql += filtros.status === 'pendente' ? ` ORDER BY l.vencimento ASC, l.criado_em ASC LIMIT ${limite}` : ` ORDER BY l.vencimento DESC, l.criado_em DESC LIMIT ${limite}`;
   const r = await db.query(sql, v);
   return r.rows.map(dto);
 }
@@ -505,17 +548,23 @@ export async function dre(db, empresaId, { de, ate, lojaId = null, centroCustoId
   let filtro = filtroUnidade(lojaId, v);
   if (centroCustoId) { v.push(exigirUuid(centroCustoId, 'centro de custo')); filtro += ` AND l.centro_custo_id = $${v.length}`; }
   const r = await db.query(
-    `SELECT l.tipo, l.categoria,
-            COALESCE(c.grupo_dre, CASE WHEN l.tipo = 'receita' THEN 'receita_bruta' ELSE 'outros' END) AS grupo,
-            SUM(l.valor) AS total
+    // Estorno entra no grupo do original com o sinal contrário: estorno de despesa reduz aquela
+    // despesa (não vira receita); estorno de receita é dedução (devolução).
+    `SELECT CASE WHEN o.tipo = 'receita' THEN 'despesa' ELSE COALESCE(o.tipo, l.tipo) END AS tipo,
+            CASE WHEN o.tipo = 'receita' THEN l.categoria ELSE COALESCE(o.categoria, l.categoria) END AS categoria,
+            CASE WHEN o.tipo = 'receita' THEN 'deducao'
+                 ELSE COALESCE(c.grupo_dre, CASE WHEN COALESCE(o.tipo, l.tipo) = 'receita' THEN 'receita_bruta' ELSE 'outros' END) END AS grupo,
+            SUM(CASE WHEN o.tipo = 'despesa' THEN -l.valor ELSE l.valor END) AS total
        FROM fin_lancamentos l
-       LEFT JOIN fin_categorias c ON c.empresa_id = l.empresa_id AND c.tipo = l.tipo AND c.nome = l.categoria
+       LEFT JOIN fin_lancamentos o ON o.empresa_id = l.empresa_id AND o.id = l.estorno_de
+       LEFT JOIN fin_categorias c ON c.empresa_id = l.empresa_id AND c.tipo = COALESCE(o.tipo, l.tipo) AND c.nome = COALESCE(o.categoria, l.categoria)
       WHERE l.empresa_id = $1 AND l.status <> 'cancelado' AND l.data_competencia BETWEEN $2 AND $3${filtro}
       GROUP BY 1, 2, 3`,
     v,
   );
   const grupos = Object.fromEntries(ORDEM_DRE.map((g) => [g, { grupo: g, rotulo: ROTULO_DRE[g], total: 0, linhas: [] }]));
   for (const row of r.rows) {
+    if (!Number(row.total)) continue;
     const sinal = row.tipo === 'receita' ? 1 : -1;
     const valor = dinheiro(Number(row.total) * sinal);
     const g = grupos[row.grupo] || grupos.outros;
@@ -574,6 +623,7 @@ export async function fecharDia(db, empresaId, { data, lojaId = null, responsave
   const empresa = exigirUuid(empresaId, 'empresa');
   const dia = data ? exigirData(data, 'Data') : hojeNoFuso(agora, fuso);
   if (dia > hojeNoFuso(agora, fuso)) throw new ErroDominio('VALIDATION_ERROR', 'Não dá para fechar um dia que ainda não chegou');
+  if (lojaId === 'sem') throw new ErroDominio('VALIDATION_ERROR', 'Feche o dia de uma unidade ou da empresa toda');
   const unidade = lojaId && lojaId !== 'todas' ? exigirUuid(lojaId, 'unidade') : null;
   const totais = await totaisDoDia(db, empresa, { data: dia, lojaId: unidade, fuso });
   try {
@@ -596,6 +646,6 @@ export async function listarFechamentos(db, empresaId, { lojaId = null, limite =
   const empresa = exigirUuid(empresaId, 'empresa');
   const v = [empresa];
   const unidade = filtroUnidade(lojaId, v).replace(/\bl\./g, '');
-  const r = await db.query(`SELECT * FROM fin_fechamentos WHERE empresa_id = $1${unidade} ORDER BY data DESC, criado_em DESC LIMIT ${Math.min(Number(limite) || 60, 365)}`, v);
+  const r = await db.query(`SELECT * FROM fin_fechamentos WHERE empresa_id = $1${unidade} ORDER BY data DESC, criado_em DESC LIMIT ${Math.min(Math.max(Number(limite) || 60, 1), 365)}`, v);
   return r.rows.map(fechamentoDto);
 }
