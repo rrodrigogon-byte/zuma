@@ -4,15 +4,20 @@
 // SOMENTE HOMOLOGAÇÃO. O XML é montado, assinado e validado aqui; a transmissão à SEFAZ / Sefin
 // só acontece com FISCAL_TRANSMITIR_HOMOLOGACAO=1 (senão o documento fica "validado
 // localmente": XML pronto, sem valor fiscal e sem envio). Produção exige migração e decisão novas.
+//
+// Migração 100: inutilização de numeração, contingência offline da NFC-e (tpEmis=9, transmitida
+// depois em até 24 h), tributos aproximados do IBPT (vTotTrib) e DANFE em HTML.
 import crypto from 'node:crypto';
 import { SignedXml } from 'xml-crypto';
 import { ErroDominio, exigirTexto, exigirUuid, transacao } from '../acesso/banco.js';
 import { cifrar, decifrar, cofreDisponivel } from './cofre.js';
 import * as sefaz from './sefaz.js';
 import { gerarChaveAcessoFiscal } from '../../fiscal-kytto.js';
-import { montarXmlFiscalV400, assinarXmlFiscal, validarXmlFiscal, agoraFiscalCuiaba } from '../../fiscal-xml-kytto.js';
+import { montarXmlFiscalV400, assinarXmlFiscal, validarXmlFiscal, agoraFiscalCuiaba, conteudoQrCodeOfflineV3 } from '../../fiscal-xml-kytto.js';
 import { totalizarDocumentoFiscal } from '../../tributacao-kytto.js';
 import * as nfse from '../../core/nfse-nacional.js';
+import { tributosAproximados, importarIbpt as importarTabelaIbpt, listarIbpt as listarTabelasIbpt } from './ibpt.js';
+import { danfeNfceHtml, danfeNfeHtml } from './danfe.js';
 
 export const AMBIENTE = 'homologacao';
 export const TEXTO_HOMOLOGACAO = 'NOTA FISCAL EMITIDA EM AMBIENTE DE HOMOLOGACAO - SEM VALOR FISCAL';
@@ -210,6 +215,13 @@ export async function listarClassificaveis(db, empresaId) {
       saida.push({ fonte: 'loja_variante', fonteId: v.id, nome: v.nome, grupo: 'Loja online', classificacao: cls.get(`loja_variante:${v.id}`) || null, herdada: false });
     }
   }
+  if (await existe('est_itens')) {
+    // estoque único (migração 091): mercadorias com o NCM do cadastro como sugestão
+    for (const i of (await db.query("SELECT id, nome, sku, categoria, ncm FROM est_itens WHERE empresa_id = $1 AND ativo = true AND tipo = 'mercadoria' ORDER BY categoria NULLS LAST, nome LIMIT 5000", [empresa])).rows) {
+      const ncm = soDigitos(i.ncm);
+      saida.push({ fonte: 'est_item', fonteId: i.id, nome: i.sku ? `${i.nome} · ${i.sku}` : i.nome, grupo: `Estoque · ${i.categoria || 'Sem categoria'}`, classificacao: cls.get(`est_item:${i.id}`) || null, herdada: false, ncmSugerido: ncm.length === 8 ? ncm : null });
+    }
+  }
   for (const [k, c] of cls) if (c.fonte === 'servico' || c.fonte === 'categoria') saida.push({ fonte: c.fonte, fonteId: c.fonteId, nome: c.fonteId, grupo: c.fonte === 'servico' ? 'Serviço' : 'Padrão de categoria', classificacao: c, herdada: false, chave: k });
   return saida;
 }
@@ -315,6 +327,9 @@ function docDto(row, { comXml = false } = {}) {
     protocolo: row.protocolo || null, origem: row.origem, origemId: row.origem_id || null, lojaId: row.loja_id || null, valorTotal: Number(row.valor_total),
     mensagens: row.mensagens || [], dados: row.dados || {}, emitidoPor: row.emitido_por || null, autorizadoEm: row.autorizado_em, canceladoEm: row.cancelado_em,
     motivoCancelamento: row.motivo_cancelamento || null, criadoEm: row.criado_em, temXml: Boolean(row.xml_assinado), idempotencia: row.idempotencia,
+    tpEmis: row.tp_emis || '1', contingenciaEm: row.contingencia_em || null,
+    prazoContingencia: row.contingencia_em ? new Date(new Date(row.contingencia_em).getTime() + PRAZO_CONTINGENCIA_MS).toISOString() : null,
+    contingenciaAtrasada: row.status === 'contingencia' && (Boolean(row.contingencia_atrasada) || Date.now() - new Date(row.contingencia_em).getTime() > PRAZO_CONTINGENCIA_MS),
     ...(comXml ? { xmlAssinado: row.xml_assinado || null, xmlAutorizado: row.xml_autorizado || null } : {}),
   };
 }
@@ -324,6 +339,29 @@ async function evento(q, empresa, docId, tipo, detalhe = {}, usuario = null) {
 }
 
 const ENVIANDO_MAX_MS = 2 * 60 * 1000;
+// NFC-e em contingência offline precisa ser transmitida em até 24 h da emissão
+const PRAZO_CONTINGENCIA_MS = 24 * 3600 * 1000;
+const JUSTIFICATIVA_CONTINGENCIA = 'SEFAZ sem resposta: falha de comunicação na autorização da NFC-e';
+const contingenciaLigada = (entrada, env) => entrada?.contingenciaOffline === true || env.FISCAL_NFCE_CONTINGENCIA_OFFLINE === '1';
+
+/** Número na faixa de uma inutilização viva (validada aqui, enviando ou homologada)? */
+async function faixaInutilizada(q, empresa, emitenteId, modelo, serie, numero) {
+  if (!['55', '65'].includes(String(modelo))) return null;
+  return (await q("SELECT numero_inicial, numero_final FROM fis_inutilizacoes WHERE empresa_id = $1 AND emitente_id = $2 AND modelo = $3 AND serie = $4 AND $5::bigint BETWEEN numero_inicial AND numero_final AND status <> 'rejeitada' ORDER BY numero_final DESC LIMIT 1",
+    [empresa, emitenteId, String(modelo), Number(serie), Number(numero)])).rows[0] || null;
+}
+
+/** Reserva o próximo número da série (trava a linha), pulando faixas inutilizadas. */
+async function reservarNumero(q, empresa, emitenteId, modelo, serie) {
+  await q('INSERT INTO fis_numeracao (empresa_id, emitente_id, modelo, serie) VALUES ($1,$2,$3,$4) ON CONFLICT DO NOTHING', [empresa, emitenteId, modelo, serie]);
+  for (let tentativa = 0; tentativa < 1000; tentativa += 1) {
+    const num = Number((await q('UPDATE fis_numeracao SET proximo = proximo + 1 WHERE empresa_id = $1 AND emitente_id = $2 AND modelo = $3 AND serie = $4 RETURNING proximo - 1 AS numero', [empresa, emitenteId, modelo, serie])).rows[0].numero);
+    const faixa = await faixaInutilizada(q, empresa, emitenteId, modelo, serie, num);
+    if (!faixa) return num;
+    await q('UPDATE fis_numeracao SET proximo = GREATEST(proximo, $5::bigint + 1) WHERE empresa_id = $1 AND emitente_id = $2 AND modelo = $3 AND serie = $4', [empresa, emitenteId, modelo, serie, faixa.numero_final]);
+  }
+  throw new ErroDominio('NUMERACAO_ESGOTADA', 'Não foi possível reservar um número livre nesta série', 409);
+}
 const TEXTO_HOMOLOGACAO_NFE = 'NF-E EMITIDA EM AMBIENTE DE HOMOLOGACAO - SEM VALOR FISCAL';
 const PRAZO_CANCELAMENTO_MS = { 65: 30 * 60 * 1000, 55: 24 * 3600 * 1000 };
 
@@ -359,7 +397,7 @@ export async function emitir(db, empresaId, entrada = {}, { usuario = null, env 
         throw new ErroDominio('IDEMPOTENCY_CONFLICT', 'Esta chave já foi usada para outro documento', 409);
       }
       if (lojaRestrita && existente.loja_id !== lojaRestrita) throw new ErroDominio('NOT_FOUND', 'Documento não encontrado', 404);
-      if (['autorizado', 'validado_localmente', 'cancelado'].includes(existente.status)) return { pronto: existente, jaExistia: true };
+      if (['autorizado', 'validado_localmente', 'cancelado', 'contingencia'].includes(existente.status)) return { pronto: existente, jaExistia: true };
       if (existente.status === 'enviando' && agora - new Date(existente.atualizado_em) < ENVIANDO_MAX_MS) throw new ErroDominio('EM_ANDAMENTO', 'Este documento está sendo enviado agora. Aguarde e consulte de novo.', 409);
       if (['enviando', 'falha_comunicacao'].includes(existente.status) && existente.xml_assinado) {
         if (!transmitir) throw new ErroDominio('TRANSMISSAO_DESLIGADA', 'O documento ficou pendente de envio e a transmissão está desligada neste servidor', 409);
@@ -367,6 +405,10 @@ export async function emitir(db, empresaId, entrada = {}, { usuario = null, env 
         const material = await materialAtivo(q, empresa, env, agora);
         const doc = (await q("UPDATE fis_documentos SET status = 'enviando', atualizado_em = CURRENT_TIMESTAMP WHERE empresa_id = $1 AND id = $2 RETURNING *", [empresa, existente.id])).rows[0];
         return { enviar: true, reenvio: true, doc, emit, material };
+      }
+      // número inutilizado depois da rejeição não volta a ser usado
+      if (await faixaInutilizada(q, empresa, existente.emitente_id, existente.modelo, existente.serie, existente.numero)) {
+        throw new ErroDominio('NUMERO_INUTILIZADO', `O número ${existente.numero} (série ${existente.serie}) foi inutilizado: este documento não pode ser reenviado`, 409);
       }
     }
     // venda (num reenvio de documento manual, os itens guardados valem)
@@ -415,15 +457,21 @@ export async function emitir(db, empresaId, entrada = {}, { usuario = null, env 
     const material = await materialAtivo(q, empresa, env, agora);
     const valorTotal = dinheiro(itens.reduce((s, i) => s + i.valorProduto, 0));
     const pagamentos = ajustarPagamentos(venda.pagamentos, valorTotal);
-    const dados = JSON.stringify({
-      itens: itens.map(({ fiscal, ...x }) => ({ ...x, valorUnitarioOriginal: x.valorUnitario, ncm: fiscal?.ncm, cfop: fiscal?.cfop })),
-      destinatario: destinatario || null, pagamentos,
-    });
+    // tributos aproximados (Lei 12.741): só com a tabela do IBPT da UF importada
+    const tributos = modelo === 'nfse' ? null
+      : await tributosAproximados(q, empresa, emit.uf, itens.map((i) => ({ ncm: i.fiscal?.ncm, origem: i.fiscal?.origem, valorProduto: i.valorProduto })), { hoje: agora });
+    if (tributos) itens.forEach((i, idx) => { i.vTotTrib = tributos.itens[idx]; });
+    const dadosObj = {
+      // a classificação usada fica gravada: a contingência offline remonta o XML a partir daqui
+      itens: itens.map(({ fiscal, ...x }) => ({ ...x, valorUnitarioOriginal: x.valorUnitario, ncm: fiscal?.ncm, cfop: fiscal?.cfop, unidade: fiscal?.unidadeTributavel, ...(fiscal ? { fiscal } : {}) })),
+      destinatario: destinatario || null, pagamentos, desconto: dinheiro(venda.desconto || 0),
+      ...(tributos ? { tributos: { total: tributos.total, federal: tributos.federal, estadual: tributos.estadual, municipal: tributos.municipal, fonte: tributos.fonte, versao: tributos.versao, chave: tributos.chave } } : {}),
+    };
+    const dados = JSON.stringify(dadosObj);
     let doc = existente;
     if (!doc) {
       const serie = Number(entrada.serie) || 1;
-      await q('INSERT INTO fis_numeracao (empresa_id, emitente_id, modelo, serie) VALUES ($1,$2,$3,$4) ON CONFLICT DO NOTHING', [empresa, emit.id, modelo, serie]);
-      const num = (await q('UPDATE fis_numeracao SET proximo = proximo + 1 WHERE empresa_id = $1 AND emitente_id = $2 AND modelo = $3 AND serie = $4 RETURNING proximo - 1 AS numero', [empresa, emit.id, modelo, serie])).rows[0].numero;
+      const num = await reservarNumero(q, empresa, emit.id, modelo, serie);
       try {
         doc = (await q(
           `INSERT INTO fis_documentos (empresa_id, emitente_id, loja_id, modelo, serie, numero, ambiente, status, origem, origem_id, idempotencia, valor_total, dados, emitido_por)
@@ -438,13 +486,17 @@ export async function emitir(db, empresaId, entrada = {}, { usuario = null, env 
     // monta, assina e valida aqui: erro de montagem desfaz tudo (nenhum número é gasto)
     const montado = modelo === 'nfse'
       ? montarNfse({ doc, emit, itens, valorTotal, material, agora, destinatario })
-      : montarNfe({ doc, emit, itens, pagamentos, material, env, agora, destinatario, empresa });
+      : montarNfe({ doc, emit, itens, pagamentos, material, env, agora, destinatario, empresa, tributos,
+        // NFC-e de contingência rejeitada é corrigida e reenviada ainda em contingência
+        contingencia: doc.tp_emis === '9' ? { justificativa: doc.contingencia_justificativa || JUSTIFICATIVA_CONTINGENCIA } : null });
+    if (montado.dhEmi) dadosObj.dhEmi = montado.dhEmi;
     const status = transmitir ? 'enviando' : 'validado_localmente';
-    const mensagens = transmitir ? montado.mensagens : [...montado.mensagens, { codigo: 'NAO_TRANSMITIDO', mensagem: modelo === 'nfse' ? 'DPS montada e assinada. Envio à Sefin Nacional (produção restrita) desligado (FISCAL_TRANSMITIR_HOMOLOGACAO).' : 'XML montado, assinado e validado. Transmissão para a SEFAZ de homologação desligada (FISCAL_TRANSMITIR_HOMOLOGACAO).' }];
+    const mensagensBase = [...montado.mensagens, ...(tributos?.mensagens || [])];
+    const mensagens = transmitir ? mensagensBase : [...mensagensBase, { codigo: 'NAO_TRANSMITIDO', mensagem: modelo === 'nfse' ? 'DPS montada e assinada. Envio à Sefin Nacional (produção restrita) desligado (FISCAL_TRANSMITIR_HOMOLOGACAO).' : 'XML montado, assinado e validado. Transmissão para a SEFAZ de homologação desligada (FISCAL_TRANSMITIR_HOMOLOGACAO).' }];
     const atualizado = (await q(
-      `UPDATE fis_documentos SET status = $3, emitente_id = $4, loja_id = $5, valor_total = $6, dados = $7, chave = $8, id_dps = $9, xml_assinado = $10, mensagens = $11, protocolo = NULL, xml_autorizado = NULL, atualizado_em = CURRENT_TIMESTAMP
+      `UPDATE fis_documentos SET status = $3, emitente_id = $4, loja_id = $5, valor_total = $6, dados = $7, chave = $8, id_dps = $9, xml_assinado = $10, mensagens = $11, tp_emis = $12, protocolo = NULL, xml_autorizado = NULL, atualizado_em = CURRENT_TIMESTAMP
         WHERE empresa_id = $1 AND id = $2 RETURNING *`,
-      [empresa, doc.id, status, emit.id, loja, valorTotal, dados, montado.chave || null, montado.idDps || null, montado.xmlAssinado, JSON.stringify(mensagens)])).rows[0];
+      [empresa, doc.id, status, emit.id, loja, valorTotal, JSON.stringify(dadosObj), montado.chave || null, montado.idDps || null, montado.xmlAssinado, JSON.stringify(mensagens), montado.tpEmis || '1'])).rows[0];
     if (!transmitir) { await evento(q, empresa, doc.id, 'validado_localmente', {}, usuario); return { pronto: atualizado, jaExistia: false }; }
     return { enviar: true, reenvio: false, doc: atualizado, emit, material };
   });
@@ -459,25 +511,45 @@ export async function emitir(db, empresaId, entrada = {}, { usuario = null, env 
       : await transmitirNfe({ doc, emit, material, transporte, env });
   } catch (error) {
     const msg = String(error?.message || error).slice(0, 300);
+    if (!(error instanceof ErroDominio) && doc.modelo === '65' && (doc.tp_emis === '9' || contingenciaLigada(entrada, env))) {
+      // SEFAZ sem resposta: a NFC-e sai em contingência offline (tpEmis=9) e é transmitida depois
+      try {
+        const cont = await entrarEmContingencia(db, empresa, doc.id, { motivo: msg, usuario, env, agora, deStatus: ['enviando'] });
+        return { ...cont, idempotente: false };
+      } catch (erroContingencia) {
+        if (!(erroContingencia instanceof ErroDominio)) throw erroContingencia;
+        // sem como remontar em contingência: segue o fluxo normal de falha de comunicação
+      }
+    }
     await db.query("UPDATE fis_documentos SET status = 'falha_comunicacao', mensagens = $3, atualizado_em = CURRENT_TIMESTAMP WHERE empresa_id = $1 AND id = $2 AND status = 'enviando'", [empresa, doc.id, JSON.stringify([{ codigo: 'COMUNICACAO', mensagem: msg }])]);
     await evento(consulta, empresa, doc.id, 'falha_comunicacao', { mensagem: msg }, usuario);
     throw new ErroDominio('FALHA_COMUNICACAO', 'Falha de comunicação com a autorizadora. Tente de novo: o mesmo XML (mesma chave) é reenviado e, se já tiver sido autorizado, o protocolo é recuperado.', 502);
   }
-  const r = await db.query(
-    `UPDATE fis_documentos SET status = $3::varchar, chave = COALESCE($4, chave), protocolo = $5, xml_autorizado = $6, mensagens = $7,
-            autorizado_em = CASE WHEN $3::varchar = 'autorizado' THEN CURRENT_TIMESTAMP ELSE NULL END, atualizado_em = CURRENT_TIMESTAMP
-      WHERE empresa_id = $1 AND id = $2 AND status = 'enviando' RETURNING *`,
-    [empresa, doc.id, resultado.status, resultado.chave || null, resultado.protocolo || null, resultado.xmlAutorizado || null, JSON.stringify(resultado.mensagens || [])]);
+  const r = await gravarResultado(db, empresa, doc.id, resultado);
   if (!r.rows[0]) return { ...docDto((await db.query('SELECT * FROM fis_documentos WHERE empresa_id = $1 AND id = $2', [empresa, doc.id])).rows[0]), idempotente: true };
   await evento(consulta, empresa, doc.id, resultado.status, { cStat: resultado.cStat || null, reenvio }, usuario);
   return { ...docDto(r.rows[0]), idempotente: false };
 }
 
-function montarNfe({ doc, emit, itens, pagamentos, material, env, agora, destinatario, empresa }) {
+/** Grava o resultado da transmissão (só se o documento ainda estiver "enviando"). */
+function gravarResultado(db, empresa, docId, resultado) {
+  return db.query(
+    `UPDATE fis_documentos SET status = $3::varchar, chave = COALESCE($4, chave), protocolo = $5, xml_autorizado = $6, mensagens = $7,
+            xml_assinado = COALESCE($8, xml_assinado), tp_emis = COALESCE($9, tp_emis),
+            autorizado_em = CASE WHEN $3::varchar = 'autorizado' THEN CURRENT_TIMESTAMP ELSE NULL END, atualizado_em = CURRENT_TIMESTAMP
+      WHERE empresa_id = $1 AND id = $2 AND status = 'enviando' RETURNING *`,
+    [empresa, docId, resultado.status, resultado.chave || null, resultado.protocolo || null, resultado.xmlAutorizado || null, JSON.stringify(resultado.mensagens || []),
+      resultado.xmlAssinado || null, resultado.tpEmis || null]);
+}
+
+function montarNfe({ doc, emit, itens, pagamentos, material, env, agora, destinatario, empresa, contingencia = null, tributos = null }) {
   const regime = ['1', '2', '4'].includes(emit.crt) ? 'simples' : 'lucro_presumido';
   const calc = totalizarDocumentoFiscal(itens.map((i) => ({ ...i, desconto: 0 })), { regimeTributario: regime });
+  const totais = tributos && Number.isFinite(Number(tributos.total)) ? { ...calc.totais, vTotTrib: Number(tributos.total) } : calc.totais;
+  if (contingencia && doc.modelo !== '65') throw new ErroDominio('CONTINGENCIA_SO_NFCE', 'Contingência offline é só da NFC-e (65)', 409);
+  const tpEmis = contingencia ? '9' : '1';
   const dhEmi = agoraFiscalCuiaba(agora);
-  const chave = gerarChaveAcessoFiscal({ uf: emit.uf, dhEmi, cnpj: emit.cnpj, modelo: doc.modelo, serie: doc.serie, numero: doc.numero, codigoNumerico: String(crypto.randomInt(0, 99999999)).padStart(8, '0') });
+  const chave = gerarChaveAcessoFiscal({ uf: emit.uf, dhEmi, cnpj: emit.cnpj, modelo: doc.modelo, serie: doc.serie, numero: doc.numero, tpEmis, codigoNumerico: String(crypto.randomInt(0, 99999999)).padStart(8, '0') });
   const end = sefaz.enderecosHomologacao(emit.uf, doc.modelo, env); // UF sem endereço falha aqui, antes de gastar número
   const csc = emit.csc_cifrado ? decifrar(emit.csc_cifrado, empresa, env) : '';
   if (doc.modelo === '65' && (!csc || !emit.csc_id)) throw new ErroDominio('PENDENCIAS_FISCAIS', 'CSC de homologação não cadastrado no emitente', 422);
@@ -487,12 +559,19 @@ function montarNfe({ doc, emit, itens, pagamentos, material, env, agora, destina
     naturezaOperacaoNfce: emit.natureza_operacao, naturezaOperacaoNfe: emit.natureza_operacao, cscId: emit.csc_id, csc,
   };
   const dest = doc.modelo === '55' ? { ...destinatario, nome: TEXTO_HOMOLOGACAO_NFE } : (destinatario?.cpf || destinatario?.cnpj ? destinatario : null);
+  // QR Code v3 de contingência: os parâmetros vão assinados (RSA-SHA1, chave do A1) no próprio QR
+  let assinaturaQr = '';
+  if (contingencia) {
+    const conteudo = conteudoQrCodeOfflineV3({ chaveAcesso: chave, ambiente: AMBIENTE, dataEmissao: dhEmi, valorTotal: totais.valorTotal, identificacaoDestinatario: soDigitos(dest?.cnpj) || soDigitos(dest?.cpf) });
+    try { assinaturaQr = crypto.sign('RSA-SHA1', Buffer.from(conteudo, 'utf8'), material.keyPem).toString('base64'); } catch (error) { throw new ErroDominio('ASSINATURA_FALHOU', `Não foi possível assinar o QR Code de contingência: ${String(error.message).slice(0, 200)}`, 422); }
+  }
   let xml;
   try {
     xml = montarXmlFiscalV400({
       config, modelo: doc.modelo, numero: Number(doc.numero), serie: doc.serie, chaveAcesso: chave, dataEmissao: dhEmi,
-      itens: calc.itens.map((c, idx) => ({ ...itens[idx], ...c, fiscal: c.fiscal })), totais: calc.totais, pagamentos, destinatario: dest,
-      qrCodeUrl: end.qrCode, urlChave: end.consultaChave, qrCodeVersao: env.FISCAL_NFCE_QR_VERSAO || '3',
+      itens: calc.itens.map((c, idx) => ({ ...itens[idx], ...c, fiscal: c.fiscal })), totais, pagamentos, destinatario: dest,
+      qrCodeUrl: end.qrCode, urlChave: end.consultaChave, qrCodeVersao: contingencia ? '3' : (env.FISCAL_NFCE_QR_VERSAO || '3'),
+      contingencia: Boolean(contingencia), justificativaContingencia: contingencia?.justificativa, qrCodeOfflineAssinatura: assinaturaQr,
     });
   } catch (error) { throw new ErroDominio('XML_INVALIDO', String(error.message).slice(0, 300), 422); }
   let assinado;
@@ -504,7 +583,7 @@ function montarNfe({ doc, emit, itens, pagamentos, material, env, agora, destina
     if (!semValidador) throw new ErroDominio('XML_INVALIDO', `XML não passou no schema oficial: ${(validacao.xsd?.erros || validacao.estrutura?.erros || []).slice(0, 3).join(' | ')}`, 422);
     mensagens.push({ codigo: 'XSD_INDISPONIVEL', mensagem: 'Validador de schema indisponível neste servidor; XML assinado sem validação XSD.' });
   }
-  return { chave, xmlAssinado: assinado, mensagens };
+  return { chave, xmlAssinado: assinado, mensagens, dhEmi, tpEmis };
 }
 
 async function transmitirNfe({ doc, emit, material, transporte, env }) {
@@ -513,6 +592,18 @@ async function transmitirNfe({ doc, emit, material, transporte, env }) {
   if (!ret.autorizado && ret.cStat === '204') {
     // "duplicidade de NF-e": a mesma chave já foi recebida (envio anterior sem resposta) → consulta o protocolo
     ret = await sefaz.consultarProtocolo({ uf: emit.uf, modelo: doc.modelo, chave: doc.chave, transporte: t, env });
+  }
+  if (!ret.autorizado && ret.cStat === '539' && doc.chave_substituida && doc.xml_substituido) {
+    // contingência: "duplicidade com diferença na chave" = a emissão normal (sem resposta na hora)
+    // chegou a ser autorizada. Vale a original; o XML de contingência é descartado.
+    const orig = await sefaz.consultarProtocolo({ uf: emit.uf, modelo: doc.modelo, chave: doc.chave_substituida, transporte: t, env });
+    if (orig.autorizado) {
+      const procOrig = `<?xml version="1.0" encoding="UTF-8"?><nfeProc xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00">${doc.xml_substituido.replace(/^\s*<\?xml[^>]*\?>/, '')}${orig.protXml}</nfeProc>`;
+      return {
+        status: 'autorizado', chave: doc.chave_substituida, protocolo: orig.protocolo, cStat: orig.cStat, xmlAutorizado: procOrig, xmlAssinado: doc.xml_substituido, tpEmis: '1',
+        mensagens: [{ codigo: orig.cStat, mensagem: orig.xMotivo }, { codigo: 'CONTINGENCIA_DESCARTADA', mensagem: 'A NFC-e da emissão normal já estava autorizada; o XML de contingência foi descartado.' }],
+      };
+    }
   }
   if (!ret.autorizado) return { status: 'rejeitado', cStat: ret.cStat, mensagens: [{ codigo: ret.cStat, mensagem: ret.xMotivo }] };
   const proc = `<?xml version="1.0" encoding="UTF-8"?><nfeProc xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00">${doc.xml_assinado.replace(/^\s*<\?xml[^>]*\?>/, '')}${ret.protXml}</nfeProc>`;
@@ -553,15 +644,16 @@ async function transmitirNfse({ doc, emit, material, transporte, reenvio }) {
   return { status: 'rejeitado', mensagens: (r.erros || []).map((e) => ({ codigo: e.codigo, mensagem: e.descricao })) };
 }
 
-/** Assinatura do evento (SEFAZ NF-e: RSA-SHA1, C14N) no elemento infEvento. */
-function assinarInfEvento(xml, { certPem, keyPem }) {
+/** Assinatura SEFAZ (RSA-SHA1, C14N) no elemento indicado (infEvento, infInut). */
+function assinarElementoSefaz(xml, elemento, { certPem, keyPem }) {
   const sig = new SignedXml({ privateKey: keyPem, publicCert: certPem });
   sig.canonicalizationAlgorithm = 'http://www.w3.org/TR/2001/REC-xml-c14n-20010315';
   sig.signatureAlgorithm = 'http://www.w3.org/2000/09/xmldsig#rsa-sha1';
-  sig.addReference({ xpath: "//*[local-name(.)='infEvento']", transforms: ['http://www.w3.org/2000/09/xmldsig#enveloped-signature', 'http://www.w3.org/TR/2001/REC-xml-c14n-20010315'], digestAlgorithm: 'http://www.w3.org/2000/09/xmldsig#sha1' });
-  sig.computeSignature(xml, { location: { reference: "//*[local-name(.)='infEvento']", action: 'after' } });
+  sig.addReference({ xpath: `//*[local-name(.)='${elemento}']`, transforms: ['http://www.w3.org/2000/09/xmldsig#enveloped-signature', 'http://www.w3.org/TR/2001/REC-xml-c14n-20010315'], digestAlgorithm: 'http://www.w3.org/2000/09/xmldsig#sha1' });
+  sig.computeSignature(xml, { location: { reference: `//*[local-name(.)='${elemento}']`, action: 'after' } });
   return sig.getSignedXml();
 }
+const assinarInfEvento = (xml, material) => assinarElementoSefaz(xml, 'infEvento', material);
 
 /** Cancela: autorizado → evento na autorizadora; validado localmente → só aqui (nunca foi à SEFAZ). */
 export async function cancelar(db, empresaId, id, { justificativa, usuario = null, env = process.env, transporte = null, agora = new Date(), lojaRestrita = null } = {}) {
@@ -572,6 +664,7 @@ export async function cancelar(db, empresaId, id, { justificativa, usuario = nul
     const doc = (await q('SELECT * FROM fis_documentos WHERE empresa_id = $1 AND id = $2 FOR UPDATE', [empresa, exigirUuid(id, 'documento')])).rows[0];
     if (!doc || (lojaRestrita && doc.loja_id !== lojaRestrita)) throw new ErroDominio('NOT_FOUND', 'Documento não encontrado', 404);
     if (doc.status === 'cancelado') return docDto(doc);
+    if (doc.status === 'contingencia') throw new ErroDominio('INVALID_STATUS', 'NFC-e em contingência ainda não foi autorizada: transmita as contingências antes de cancelar', 409);
     if (!['autorizado', 'validado_localmente'].includes(doc.status)) throw new ErroDominio('INVALID_STATUS', `Documento ${doc.status} não se cancela (só autorizado ou validado)`, 409);
     let protocolo = null;
     if (doc.status === 'autorizado' && PRAZO_CANCELAMENTO_MS[doc.modelo] && agora - new Date(doc.autorizado_em) > PRAZO_CANCELAMENTO_MS[doc.modelo]) {
@@ -625,14 +718,14 @@ export async function vendasSemNota(db, empresaId, { limite = 100 } = {}) {
   const lim = Math.min(Math.max(Number(limite) || 100, 1), 500);
   if (await existe('bar_comandas')) {
     const r = await db.query(`SELECT c.id, c.nome, c.total, c.fechada_em FROM bar_comandas c WHERE c.empresa_id = $1 AND c.status = 'paga'
-      AND NOT EXISTS (SELECT 1 FROM fis_documentos d WHERE d.empresa_id = c.empresa_id AND d.origem = 'bar_comanda' AND d.origem_id = c.id::text AND d.status IN ('autorizado', 'validado_localmente', 'enviando'))
+      AND NOT EXISTS (SELECT 1 FROM fis_documentos d WHERE d.empresa_id = c.empresa_id AND d.origem = 'bar_comanda' AND d.origem_id = c.id::text AND d.status IN ('autorizado', 'validado_localmente', 'enviando', 'contingencia'))
       ORDER BY c.fechada_em DESC NULLS LAST LIMIT ${lim}`, [empresa]);
     saida.push(...r.rows.map((c) => ({ origem: 'bar_comanda', origemId: c.id, descricao: `Comanda ${c.nome || ''}`.trim(), valor: Number(c.total || 0), data: c.fechada_em })));
   }
   if (await existe('commerce_orders')) {
     const r = await db.query(`SELECT o.id, o.public_code, o.criado_em FROM commerce_orders o WHERE o.empresa_id = $1
       AND EXISTS (SELECT 1 FROM commerce_payments p WHERE p.empresa_id = o.empresa_id AND p.order_id = o.id AND (p.status IN ('captured', 'paid') OR p.captured_at IS NOT NULL))
-      AND NOT EXISTS (SELECT 1 FROM fis_documentos d WHERE d.empresa_id = o.empresa_id AND d.origem = 'loja_pedido' AND d.origem_id = o.id::text AND d.status IN ('autorizado', 'validado_localmente', 'enviando'))
+      AND NOT EXISTS (SELECT 1 FROM fis_documentos d WHERE d.empresa_id = o.empresa_id AND d.origem = 'loja_pedido' AND d.origem_id = o.id::text AND d.status IN ('autorizado', 'validado_localmente', 'enviando', 'contingencia'))
       ORDER BY o.criado_em DESC LIMIT ${lim}`, [empresa]).catch(() => ({ rows: [] }));
     saida.push(...r.rows.map((o) => ({ origem: 'loja_pedido', origemId: o.id, descricao: `Pedido ${o.public_code}`, valor: null, data: o.criado_em })));
   }
@@ -645,3 +738,226 @@ export async function testarComunicacao(db, empresaId, { modelo = '65', env = pr
   const material = await materialAtivo((t, v) => db.query(t, v), empresa, env);
   return sefaz.statusServico({ uf: emit.uf, modelo, transporte: transporte || sefaz.transporteSoap({ certPem: material.certPem, keyPem: material.keyPem }), env });
 }
+
+// ── contingência offline da NFC-e (tpEmis=9) ─────────────────────────────────
+
+/**
+ * Passa uma NFC-e sem resposta da SEFAZ para contingência offline: remonta o XML com tpEmis=9,
+ * dhCont/xJust e QR Code v3 assinado (nova chave, MESMO número), guarda o XML da tentativa normal
+ * e deixa o documento "contingencia" até ser transmitido (prazo de 24 h). NF-e 55 não tem
+ * contingência offline: continua no fluxo de falha de comunicação.
+ */
+export async function entrarEmContingencia(db, empresaId, id, { justificativa = null, motivo = null, usuario = null, env = process.env, agora = new Date(), lojaRestrita = null, deStatus = ['falha_comunicacao'] } = {}) {
+  const empresa = exigirUuid(empresaId, 'empresa');
+  const xJust = String(justificativa || JUSTIFICATIVA_CONTINGENCIA).trim().replace(/\s+/g, ' ');
+  if (xJust.length < 15 || xJust.length > 256) throw new ErroDominio('VALIDATION_ERROR', 'A justificativa da contingência precisa ter de 15 a 256 caracteres');
+  return transacao(db, async (q) => {
+    const doc = (await q('SELECT * FROM fis_documentos WHERE empresa_id = $1 AND id = $2 FOR UPDATE', [empresa, exigirUuid(id, 'documento')])).rows[0];
+    if (!doc || (lojaRestrita && doc.loja_id !== lojaRestrita)) throw new ErroDominio('NOT_FOUND', 'Documento não encontrado', 404);
+    if (doc.status === 'contingencia') return docDto(doc);
+    if (doc.modelo !== '65') throw new ErroDominio('CONTINGENCIA_SO_NFCE', 'Só a NFC-e (65) tem contingência offline; a NF-e continua pendente de envio', 409);
+    if (!deStatus.includes(doc.status)) throw new ErroDominio('INVALID_STATUS', 'Só NFC-e sem resposta da SEFAZ (falha de comunicação) entra em contingência', 409);
+    const aviso = { codigo: 'CONTINGENCIA', mensagem: `NFC-e emitida em contingência offline${motivo ? ` (${String(motivo).slice(0, 160)})` : ''}. Transmita em até 24 horas.` };
+    if (doc.tp_emis === '9') {
+      // já era de contingência (reenvio sem resposta): volta a aguardar a transmissão
+      const r = await q("UPDATE fis_documentos SET status = 'contingencia', mensagens = $3, atualizado_em = CURRENT_TIMESTAMP WHERE empresa_id = $1 AND id = $2 RETURNING *", [empresa, doc.id, JSON.stringify([aviso])]);
+      await evento(q, empresa, doc.id, 'contingencia', { reenvio: true, mensagem: motivo || null }, usuario);
+      return docDto(r.rows[0]);
+    }
+    const itens = doc.dados?.itens || [];
+    if (!itens.length || itens.some((i) => !i.fiscal)) throw new ErroDominio('CONTINGENCIA_INDISPONIVEL', 'Documento sem os dados fiscais dos itens gravados: tente transmitir de novo', 409);
+    const emit = (await q('SELECT * FROM fis_emitentes WHERE empresa_id = $1 AND id = $2', [empresa, doc.emitente_id])).rows[0];
+    const material = await materialAtivo(q, empresa, env, agora);
+    const montado = montarNfe({ doc, emit, itens, pagamentos: doc.dados?.pagamentos || [], material, env, agora, destinatario: doc.dados?.destinatario || null, empresa, contingencia: { justificativa: xJust }, tributos: doc.dados?.tributos || null });
+    const dados = { ...(doc.dados || {}), dhEmi: montado.dhEmi };
+    const r = await q(
+      `UPDATE fis_documentos SET status = 'contingencia', tp_emis = '9', xml_substituido = xml_assinado, chave_substituida = chave, chave = $3, xml_assinado = $4,
+              contingencia_em = $5, contingencia_justificativa = $6, contingencia_atrasada = false, dados = $7, mensagens = $8, protocolo = NULL, xml_autorizado = NULL, atualizado_em = CURRENT_TIMESTAMP
+        WHERE empresa_id = $1 AND id = $2 RETURNING *`,
+      [empresa, doc.id, montado.chave, montado.xmlAssinado, agora, xJust, JSON.stringify(dados), JSON.stringify([aviso, ...montado.mensagens])]);
+    await evento(q, empresa, doc.id, 'contingencia', { chaveNormal: doc.chave, chave: montado.chave, mensagem: motivo || null }, usuario);
+    return docDto(r.rows[0]);
+  });
+}
+
+/** NFC-e em contingência, mais antigas primeiro (para a tela e para a rotina de transmissão). */
+export async function listarContingencias(db, empresaId, { lojaRestrita = null } = {}) {
+  const empresa = exigirUuid(empresaId, 'empresa');
+  const v = [empresa]; let sql = "SELECT * FROM fis_documentos WHERE empresa_id = $1 AND status = 'contingencia'";
+  if (lojaRestrita) { v.push(lojaRestrita); sql += ` AND loja_id = $${v.length}`; }
+  return (await db.query(`${sql} ORDER BY contingencia_em`, v)).rows.map((row) => docDto(row));
+}
+
+/**
+ * Rotina das contingências: marca as que passaram de 24 h (atrasadas) e, com a transmissão de
+ * homologação ligada, transmite as pendentes uma a uma (cada uma travada em "enviando").
+ */
+export async function transmitirContingencias(db, empresaId, { usuario = null, env = process.env, transporte = null, agora = new Date(), lojaRestrita = null, limite = 50 } = {}) {
+  const empresa = exigirUuid(empresaId, 'empresa');
+  const filtroLoja = lojaRestrita ? ' AND loja_id = $3' : '';
+  const atrasadas = (await db.query(
+    `UPDATE fis_documentos SET contingencia_atrasada = true WHERE empresa_id = $1 AND status = 'contingencia' AND NOT contingencia_atrasada AND contingencia_em < $2${filtroLoja} RETURNING id`,
+    [empresa, new Date(agora.getTime() - PRAZO_CONTINGENCIA_MS), ...(lojaRestrita ? [lojaRestrita] : [])])).rows;
+  for (const a of atrasadas) await evento((t, v) => db.query(t, v), empresa, a.id, 'contingencia_atrasada', { prazoHoras: 24 }, usuario);
+  const resumo = { transmissao: transmitirLigado(env) ? 'homologacao' : 'desligada', marcadasAtrasadas: atrasadas.length, autorizadas: 0, rejeitadas: 0, falhas: 0, documentos: [] };
+  if (!transmitirLigado(env)) {
+    resumo.pendentes = (await listarContingencias(db, empresa, { lojaRestrita })).length;
+    return resumo;
+  }
+  const ids = (await db.query(
+    `SELECT id FROM fis_documentos WHERE empresa_id = $1 AND tp_emis = '9' AND (status = 'contingencia' OR (status = 'enviando' AND atualizado_em < $2))${filtroLoja} ORDER BY contingencia_em LIMIT ${Math.min(Math.max(Number(limite) || 50, 1), 200)}`,
+    [empresa, new Date(agora.getTime() - ENVIANDO_MAX_MS), ...(lojaRestrita ? [lojaRestrita] : [])])).rows.map((r) => r.id);
+  for (const id of ids) {
+    const passo = await transacao(db, async (q) => {
+      const doc = (await q(`UPDATE fis_documentos SET status = 'enviando', atualizado_em = CURRENT_TIMESTAMP WHERE empresa_id = $1 AND id = $2 AND tp_emis = '9'
+                              AND (status = 'contingencia' OR (status = 'enviando' AND atualizado_em < $3)) RETURNING *`, [empresa, id, new Date(agora.getTime() - ENVIANDO_MAX_MS)])).rows[0];
+      if (!doc) return null; // outra rotina pegou
+      const emit = (await q('SELECT * FROM fis_emitentes WHERE empresa_id = $1 AND id = $2', [empresa, doc.emitente_id])).rows[0];
+      return { doc, emit, material: await materialAtivo(q, empresa, env, agora) };
+    });
+    if (!passo) continue;
+    const { doc, emit, material } = passo;
+    let resultado;
+    try {
+      resultado = await transmitirNfe({ doc, emit, material, transporte, env });
+    } catch (error) {
+      const msg = String(error?.message || error).slice(0, 300);
+      await db.query("UPDATE fis_documentos SET status = 'contingencia', mensagens = $3, atualizado_em = CURRENT_TIMESTAMP WHERE empresa_id = $1 AND id = $2 AND status = 'enviando'",
+        [empresa, doc.id, JSON.stringify([{ codigo: 'COMUNICACAO', mensagem: `Contingência ainda pendente: ${msg}` }])]);
+      await evento((t, v) => db.query(t, v), empresa, doc.id, 'falha_comunicacao', { mensagem: msg, contingencia: true }, usuario);
+      resumo.falhas += 1;
+      resumo.documentos.push({ id: doc.id, numero: Number(doc.numero), status: 'contingencia' });
+      continue;
+    }
+    const r = (await gravarResultado(db, empresa, doc.id, resultado)).rows[0];
+    if (!r) continue;
+    await evento((t, v) => db.query(t, v), empresa, doc.id, resultado.status, { cStat: resultado.cStat || null, contingencia: true }, usuario);
+    if (resultado.status === 'autorizado') resumo.autorizadas += 1; else resumo.rejeitadas += 1;
+    resumo.documentos.push({ id: doc.id, numero: Number(doc.numero), status: resultado.status });
+  }
+  resumo.pendentes = (await listarContingencias(db, empresa, { lojaRestrita })).length;
+  return resumo;
+}
+
+// ── inutilização de numeração (NF-e 55 e NFC-e 65) ───────────────────────────
+function inutDto(row) {
+  return {
+    id: row.id, emitenteId: row.emitente_id, lojaId: row.loja_id || null, modelo: row.modelo, serie: row.serie, numeroInicial: Number(row.numero_inicial), numeroFinal: Number(row.numero_final),
+    ano: row.ano, justificativa: row.justificativa, ambiente: row.ambiente, status: row.status, protocolo: row.protocolo || null, mensagens: row.mensagens || [],
+    criadoPor: row.criado_por || null, criadoEm: row.criado_em, temXml: Boolean(row.xml_assinado),
+  };
+}
+
+const inteiro = (v, rotulo, min, max) => {
+  const n = Number(v);
+  if (!Number.isInteger(n) || n < min || n > max) throw new ErroDominio('VALIDATION_ERROR', `${rotulo} deve ser um número inteiro de ${min} a ${max}`);
+  return n;
+};
+
+/**
+ * Inutiliza uma faixa de números ainda não usados de uma série do emitente. Sem
+ * FISCAL_TRANSMITIR_HOMOLOGACAO o pedido fica "validado_localmente" (montado e assinado, sem
+ * envio), mas os números já ficam bloqueados para emissão. Com a transmissão ligada, o pedido vai
+ * à SEFAZ de homologação fora da transação (mesmo esquema de duas fases da emissão).
+ */
+export async function inutilizarNumeracao(db, empresaId, entrada = {}, { usuario = null, env = process.env, transporte = null, agora = new Date(), lojaRestrita = null } = {}) {
+  const empresa = exigirUuid(empresaId, 'empresa');
+  const modelo = String(entrada.modelo || '');
+  if (!['55', '65'].includes(modelo)) throw new ErroDominio('VALIDATION_ERROR', 'Inutilização é para NF-e (55) ou NFC-e (65)');
+  const serie = inteiro(entrada.serie ?? 1, 'Série', 0, 999);
+  const ini = inteiro(entrada.numeroInicial, 'Número inicial', 1, 999999999);
+  const fin = inteiro(entrada.numeroFinal ?? entrada.numeroInicial, 'Número final', ini, 999999999);
+  const just = String(entrada.justificativa || '').trim().replace(/\s+/g, ' ');
+  if (just.length < 15 || just.length > 255) throw new ErroDominio('VALIDATION_ERROR', 'A justificativa precisa ter de 15 a 255 caracteres');
+  const transmitir = transmitirLigado(env);
+
+  const passo = await transacao(db, async (q) => {
+    const emit = await emitenteDaUnidade(q, empresa, lojaRestrita || entrada.lojaId || null, entrada.emitenteId);
+    if (lojaRestrita && emit.loja_id !== lojaRestrita) throw new ErroDominio('PERMISSION_DENIED', 'Inutilizar a numeração do emitente da empresa toda exige permissão na empresa toda', 403);
+    // endereço que não é de homologação (ou UF sem endereço) falha aqui, antes de gravar
+    if (transmitir && !sefaz.enderecosHomologacao(emit.uf, modelo, env).inutilizacao) throw new ErroDominio('UF_SEM_ENDERECO', `Endereço de inutilização da SEFAZ de homologação para ${emit.uf} não cadastrado`, 422);
+    // trava a série: emissões e outras inutilizações desta série esperam
+    const numeracao = (await q('SELECT proximo FROM fis_numeracao WHERE empresa_id = $1 AND emitente_id = $2 AND modelo = $3 AND serie = $4 FOR UPDATE', [empresa, emit.id, modelo, serie])).rows[0];
+    if (!numeracao) throw new ErroDominio('SERIE_INEXISTENTE', `A série ${serie} do modelo ${modelo} não existe para este emitente (nenhum documento emitido nela)`, 422);
+    const mesma = (await q("SELECT * FROM fis_inutilizacoes WHERE empresa_id = $1 AND emitente_id = $2 AND modelo = $3 AND serie = $4 AND numero_inicial = $5 AND numero_final = $6 AND status <> 'rejeitada' FOR UPDATE",
+      [empresa, emit.id, modelo, serie, ini, fin])).rows[0];
+    if (mesma) {
+      if (mesma.status === 'homologada' || (mesma.status === 'validado_localmente' && !transmitir)) return { pronto: mesma, jaExistia: true };
+      if (mesma.status === 'enviando' && agora - new Date(mesma.atualizado_em) < ENVIANDO_MAX_MS) throw new ErroDominio('EM_ANDAMENTO', 'Esta inutilização está sendo enviada agora. Aguarde e consulte de novo.', 409);
+      if (!transmitir) throw new ErroDominio('TRANSMISSAO_DESLIGADA', 'A inutilização ficou pendente de envio e a transmissão está desligada neste servidor', 409);
+      const material = await materialAtivo(q, empresa, env, agora);
+      const row = (await q("UPDATE fis_inutilizacoes SET status = 'enviando', atualizado_em = CURRENT_TIMESTAMP WHERE empresa_id = $1 AND id = $2 RETURNING *", [empresa, mesma.id])).rows[0];
+      return { enviar: true, reenvio: mesma.status !== 'validado_localmente', row, emit, material };
+    }
+    const sobre = (await q("SELECT numero_inicial, numero_final FROM fis_inutilizacoes WHERE empresa_id = $1 AND emitente_id = $2 AND modelo = $3 AND serie = $4 AND status <> 'rejeitada' AND numero_inicial <= $6 AND numero_final >= $5 LIMIT 1",
+      [empresa, emit.id, modelo, serie, ini, fin])).rows[0];
+    if (sobre) throw new ErroDominio('NUMERO_INUTILIZADO', `A faixa se sobrepõe à inutilização ${sobre.numero_inicial}–${sobre.numero_final} desta série`, 409);
+    const usados = (await q("SELECT numero, status FROM fis_documentos WHERE empresa_id = $1 AND emitente_id = $2 AND modelo = $3 AND serie = $4 AND numero BETWEEN $5 AND $6 AND status <> 'rejeitado' ORDER BY numero LIMIT 5",
+      [empresa, emit.id, modelo, serie, ini, fin])).rows;
+    if (usados.length) throw new ErroDominio('NUMERO_EM_USO', `A faixa tem número já usado por documento: ${usados.map((u) => `${u.numero} (${u.status})`).join(', ')}`, 409);
+    const cert = (await q('SELECT cnpj FROM fis_certificados WHERE empresa_id = $1 AND ativo = true', [empresa])).rows[0];
+    if (cert?.cnpj && cert.cnpj.slice(0, 8) !== emit.cnpj.slice(0, 8)) throw new ErroDominio('PENDENCIAS_FISCAIS', 'O certificado A1 ativo é de outro CNPJ (raiz diferente do emitente)', 422);
+    const material = await materialAtivo(q, empresa, env, agora);
+    const ano = agoraFiscalCuiaba(agora).slice(2, 4);
+    const pedido = sefaz.montarInutilizacao({ uf: emit.uf, ano, cnpj: emit.cnpj, modelo, serie, numeroInicial: ini, numeroFinal: fin, justificativa: just });
+    let assinado;
+    try { assinado = assinarElementoSefaz(pedido.xml, 'infInut', material); } catch (error) { throw new ErroDominio('ASSINATURA_FALHOU', `Não foi possível assinar: ${String(error.message).slice(0, 200)}`, 422); }
+    const mensagens = transmitir ? [] : [{ codigo: 'NAO_TRANSMITIDO', mensagem: 'Pedido de inutilização montado e assinado. Transmissão para a SEFAZ de homologação desligada (FISCAL_TRANSMITIR_HOMOLOGACAO); os números ficam bloqueados para emissão.' }];
+    const row = (await q(
+      `INSERT INTO fis_inutilizacoes (empresa_id, emitente_id, loja_id, modelo, serie, numero_inicial, numero_final, ano, justificativa, ambiente, status, id_inut, xml_assinado, mensagens, criado_por)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *`,
+      [empresa, emit.id, emit.loja_id || null, modelo, serie, ini, fin, ano, pedido.justificativa, AMBIENTE, transmitir ? 'enviando' : 'validado_localmente', pedido.id, assinado, JSON.stringify(mensagens), textoOpcional(usuario, 180)])).rows[0];
+    if (!transmitir) return { pronto: row, jaExistia: false };
+    return { enviar: true, reenvio: false, row, emit, material };
+  });
+  if (passo.pronto) return { ...inutDto(passo.pronto), idempotente: passo.jaExistia };
+
+  const { row, emit, material, reenvio } = passo;
+  let ret;
+  try {
+    ret = await sefaz.inutilizar({ uf: emit.uf, modelo: row.modelo, xmlAssinado: row.xml_assinado, transporte: transporte || sefaz.transporteSoap({ certPem: material.certPem, keyPem: material.keyPem }), env, reenvio });
+  } catch (error) {
+    const msg = String(error?.message || error).slice(0, 300);
+    await db.query("UPDATE fis_inutilizacoes SET status = 'falha_comunicacao', mensagens = $3, atualizado_em = CURRENT_TIMESTAMP WHERE empresa_id = $1 AND id = $2 AND status = 'enviando'", [empresa, row.id, JSON.stringify([{ codigo: 'COMUNICACAO', mensagem: msg }])]);
+    if (error instanceof ErroDominio) throw error;
+    throw new ErroDominio('FALHA_COMUNICACAO', 'Falha de comunicação com a SEFAZ. Peça a mesma inutilização de novo: o mesmo pedido é reenviado. Os números continuam bloqueados.', 502);
+  }
+  const r = await db.query(
+    `UPDATE fis_inutilizacoes SET status = $3, protocolo = $4, xml_retorno = $5, mensagens = $6, atualizado_em = CURRENT_TIMESTAMP
+      WHERE empresa_id = $1 AND id = $2 AND status = 'enviando' RETURNING *`,
+    [empresa, row.id, ret.homologada ? 'homologada' : 'rejeitada', ret.protocolo || null, ret.xmlRetorno || null, JSON.stringify([{ codigo: ret.cStat, mensagem: ret.xMotivo }])]);
+  return { ...inutDto(r.rows[0] || row), idempotente: false };
+}
+
+export async function listarInutilizacoes(db, empresaId, { lojaRestrita = null, limite = 200 } = {}) {
+  const empresa = exigirUuid(empresaId, 'empresa');
+  const v = [empresa]; let sql = 'SELECT * FROM fis_inutilizacoes WHERE empresa_id = $1';
+  if (lojaRestrita) { v.push(lojaRestrita); sql += ` AND loja_id = $${v.length}`; }
+  const r = await db.query(`${sql} ORDER BY criado_em DESC LIMIT ${Math.min(Math.max(Number(limite) || 200, 1), 1000)}`, v);
+  return r.rows.map(inutDto);
+}
+
+// ── DANFE (HTML imprimível) ──────────────────────────────────────────────────
+export async function danfe(db, empresaId, id, { lojaRestrita = null } = {}) {
+  const empresa = exigirUuid(empresaId, 'empresa');
+  const doc = (await db.query('SELECT * FROM fis_documentos WHERE empresa_id = $1 AND id = $2', [empresa, exigirUuid(id, 'documento')])).rows[0];
+  if (!doc || (lojaRestrita && doc.loja_id !== lojaRestrita)) throw new ErroDominio('NOT_FOUND', 'Documento não encontrado', 404);
+  if (doc.modelo === 'nfse') throw new ErroDominio('DANFE_INDISPONIVEL', 'NFS-e não tem DANFE: use o DANFSe do Portal Nacional', 422);
+  if (!doc.xml_assinado || !doc.chave) throw new ErroDominio('DANFE_INDISPONIVEL', 'Documento ainda sem XML assinado', 422);
+  if (doc.ambiente !== AMBIENTE) throw new ErroDominio('AMBIENTE_PROIBIDO', 'Só documentos de homologação', 422);
+  const emitente = (await db.query('SELECT * FROM fis_emitentes WHERE empresa_id = $1 AND id = $2', [empresa, doc.emitente_id])).rows[0];
+  return doc.modelo === '65' ? danfeNfceHtml({ doc, emitente }) : danfeNfeHtml({ doc, emitente });
+}
+
+// ── IBPT ─────────────────────────────────────────────────────────────────────
+/** Importa o CSV oficial do IBPT. Sem UF informada, usa a UF do emitente da empresa. */
+export async function importarIbpt(db, empresaId, { uf = null, arquivo } = {}) {
+  const empresa = exigirUuid(empresaId, 'empresa');
+  let u = String(uf || '').toUpperCase();
+  if (!u) u = (await db.query('SELECT uf FROM fis_emitentes WHERE empresa_id = $1 AND ativo = true ORDER BY loja_id NULLS FIRST LIMIT 1', [empresa])).rows[0]?.uf || '';
+  if (!UFS.includes(u)) throw new ErroDominio('VALIDATION_ERROR', 'Informe a UF da tabela do IBPT (ou cadastre o emitente)');
+  if (!arquivo || (typeof arquivo !== 'string' && !Buffer.isBuffer(arquivo))) throw new ErroDominio('VALIDATION_ERROR', 'Envie o arquivo CSV do IBPT');
+  return importarTabelaIbpt(db, empresa, { uf: u, arquivo });
+}
+
+export const listarIbpt = (db, empresaId) => listarTabelasIbpt(db, empresaId);

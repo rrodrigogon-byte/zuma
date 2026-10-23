@@ -98,5 +98,6 @@
  "097_pdv_offline_unidade_no_razao.sql": "8969c49ce470c5228538cbff556f2458154765f4b5ba7597e785226601e13065",
  "098_financeiro_ajustes_auditoria.sql": "88bced806f2672e8ea855b3e77b86a18d21207eff0f055ee05f48b6a58f902d8",
  "099_pdv_offline_impressao.sql": "4fbbf924251b8b6199b47e2550032ead57c303c62eb0f49b21707cdfe673da3d",
+ "100_fiscal_completo.sql": "ffc3cc873756a7686175a6d94b5483b2a500d046909a54463f52bc233e9b4106",
  "101_varejo_balanca.sql": "6d9278c9fbe369bdfb1fc26e5efab29e2cc08313f8891382f714787cf46296cb"
 }

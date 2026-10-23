@@ -21,12 +21,14 @@ const MT = {
     qrCode: 'https://homologacao.sefaz.mt.gov.br/nfce/qrcode',
     consultaChave: 'https://homologacao.sefaz.mt.gov.br/nfce/consultanfce',
     consulta: 'https://homologacao.sefaz.mt.gov.br/nfcews/services/NfeConsulta4',
+    inutilizacao: 'https://homologacao.sefaz.mt.gov.br/nfcews/services/NfeInutilizacao4',
   },
   '55': {
     autorizacao: 'https://homologacao.sefaz.mt.gov.br/nfews/v2/services/NfeAutorizacao4',
     evento: 'https://homologacao.sefaz.mt.gov.br/nfews/v2/services/RecepcaoEvento4',
     status: 'https://homologacao.sefaz.mt.gov.br/nfews/v2/services/NfeStatusServico4',
     consulta: 'https://homologacao.sefaz.mt.gov.br/nfews/v2/services/NfeConsulta4',
+    inutilizacao: 'https://homologacao.sefaz.mt.gov.br/nfews/v2/services/NfeInutilizacao4',
   },
 };
 const SVRS = {
@@ -37,12 +39,14 @@ const SVRS = {
     qrCode: 'https://dfe-portal.svrs.rs.gov.br/NFCE/QRCode',
     consultaChave: 'www.sefaz.rs.gov.br/nfce/consulta',
     consulta: 'https://nfce-homologacao.svrs.rs.gov.br/ws/NfeConsulta/NfeConsulta4.asmx',
+    inutilizacao: 'https://nfce-homologacao.svrs.rs.gov.br/ws/nfeinutilizacao/nfeinutilizacao4.asmx',
   },
   '55': {
     autorizacao: 'https://nfe-homologacao.svrs.rs.gov.br/ws/NfeAutorizacao/NFeAutorizacao4.asmx',
     evento: 'https://nfe-homologacao.svrs.rs.gov.br/ws/recepcaoevento/recepcaoevento4.asmx',
     status: 'https://nfe-homologacao.svrs.rs.gov.br/ws/NfeStatusServico/NfeStatusServico4.asmx',
     consulta: 'https://nfe-homologacao.svrs.rs.gov.br/ws/NfeConsulta/NfeConsulta4.asmx',
+    inutilizacao: 'https://nfe-homologacao.svrs.rs.gov.br/ws/nfeinutilizacao/nfeinutilizacao4.asmx',
   },
 };
 // UFs atendidas pela SVRS (autorizadora virtual) nos dois modelos.
@@ -56,7 +60,7 @@ export function enderecosHomologacao(uf, modelo, env = process.env) {
   const end = { ...(base?.[modelo] || {}), ...(sobrepostos?.[u]?.[modelo] || {}) };
   if (!end.autorizacao) throw new ErroDominio('UF_SEM_ENDERECO', `Endereço da SEFAZ de homologação para ${u}, modelo ${modelo}, ainda não cadastrado.`, 422);
   // o HOST precisa ser de homologação (não basta "homolog" na URL)
-  for (const url of [end.autorizacao, end.evento, end.status, end.consulta].filter(Boolean)) {
+  for (const url of [end.autorizacao, end.evento, end.status, end.consulta, end.inutilizacao].filter(Boolean)) {
     let host = '';
     try { host = new URL(url).hostname; } catch { host = ''; }
     if (!/^https:$/.test(new URL(url, 'https://x').protocol) || !/homolog/i.test(host)) throw new ErroDominio('AMBIENTE_PROIBIDO', 'Só endereços de homologação são aceitos nesta versão.', 422);
@@ -69,6 +73,7 @@ const SERVICOS = {
   evento: 'http://www.portalfiscal.inf.br/nfe/wsdl/NFeRecepcaoEvento4',
   status: 'http://www.portalfiscal.inf.br/nfe/wsdl/NFeStatusServico4',
   consulta: 'http://www.portalfiscal.inf.br/nfe/wsdl/NFeConsultaProtocolo4',
+  inutilizacao: 'http://www.portalfiscal.inf.br/nfe/wsdl/NFeInutilizacao4',
 };
 
 export function envelope(servico, corpoXml) {
@@ -165,4 +170,45 @@ export async function statusServico({ uf, modelo, transporte, env = process.env 
   const corpo = `<consStatServ xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00"><tpAmb>2</tpAmb><cUF>${CODIGOS_UF[String(uf).toUpperCase()]}</cUF><xServ>STATUS</xServ></consStatServ>`;
   const r = await transporte({ url: end.status, xml: envelope('status', corpo) });
   return { cStat: pegar(r.corpo, 'cStat'), xMotivo: pegar(r.corpo, 'xMotivo') };
+}
+
+// ── inutilização de numeração (NFeInutilizacao4) ────────────────────────────
+
+const escaparXml = (v) => String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+/**
+ * Monta o pedido de inutilização (inutNFe 4.00) sem assinatura; quem chama assina `infInut`.
+ * Id = "ID" + cUF(2) + ano(2) + CNPJ(14) + modelo(2) + série(3) + nNFIni(9) + nNFFin(9).
+ */
+export function montarInutilizacao({ uf, ano, cnpj, modelo, serie, numeroInicial, numeroFinal, justificativa }) {
+  const cUF = CODIGOS_UF[String(uf || '').toUpperCase()];
+  if (!cUF) throw new ErroDominio('VALIDATION_ERROR', 'UF do emitente inválida');
+  const xJust = String(justificativa || '').trim().replace(/\s+/g, ' ');
+  if (xJust.length < 15 || xJust.length > 255) throw new ErroDominio('VALIDATION_ERROR', 'A justificativa da inutilização precisa ter de 15 a 255 caracteres.');
+  if (!['55', '65'].includes(String(modelo))) throw new ErroDominio('VALIDATION_ERROR', 'Inutilização só para NF-e (55) ou NFC-e (65)');
+  const aa = String(ano).padStart(2, '0').slice(-2);
+  const doc = String(cnpj).replace(/\D/g, '');
+  const id = `ID${cUF}${aa}${doc}${modelo}${String(serie).padStart(3, '0')}${String(numeroInicial).padStart(9, '0')}${String(numeroFinal).padStart(9, '0')}`;
+  const xml = `<inutNFe xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00"><infInut Id="${id}"><tpAmb>2</tpAmb><xServ>INUTILIZAR</xServ>`
+    + `<cUF>${cUF}</cUF><ano>${aa}</ano><CNPJ>${doc}</CNPJ><mod>${modelo}</mod><serie>${Number(serie)}</serie>`
+    + `<nNFIni>${Number(numeroInicial)}</nNFIni><nNFFin>${Number(numeroFinal)}</nNFFin><xJust>${escaparXml(xJust)}</xJust></infInut></inutNFe>`;
+  return { id, xml, justificativa: xJust };
+}
+
+/**
+ * Envia o pedido assinado. cStat 102 = inutilização homologada. Num REENVIO do mesmo pedido,
+ * 256 (a faixa já está inutilizada na SEFAZ) significa que a resposta anterior se perdeu e
+ * também vale como homologada; num primeiro envio é recusa (outra faixa já cobre esses números).
+ * Resposta de ambiente que não é homologação nunca vale.
+ */
+export async function inutilizar({ uf, modelo, xmlAssinado, transporte, env = process.env, reenvio = false }) {
+  const end = enderecosHomologacao(uf, modelo, env);
+  if (!end.inutilizacao) throw new ErroDominio('UF_SEM_ENDERECO', `Endereço de inutilização da SEFAZ de homologação para ${uf}, modelo ${modelo}, não cadastrado.`, 422);
+  const r = await transporte({ url: end.inutilizacao, xml: envelope('inutilizacao', semDeclaracao(xmlAssinado)) });
+  const ret = pegar(r.corpo, 'retInutNFe') ?? '';
+  const inf = pegar(ret, 'infInut') ?? ret;
+  const cStat = pegar(inf, 'cStat') || String(r.status);
+  const tpAmb = pegar(inf, 'tpAmb');
+  if (tpAmb && tpAmb !== '2') return { homologada: false, cStat: 'RESPOSTA_DIVERGENTE', xMotivo: 'Resposta de ambiente que não é homologação', protocolo: null, xmlRetorno: null };
+  return { homologada: cStat === '102' || (reenvio && cStat === '256'), cStat, xMotivo: pegar(inf, 'xMotivo') || `Resposta inesperada da SEFAZ (HTTP ${r.status})`, protocolo: pegar(inf, 'nProt'), xmlRetorno: ret ? `<retInutNFe>${ret}</retInutNFe>` : null };
 }
