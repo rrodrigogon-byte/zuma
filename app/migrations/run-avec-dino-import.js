@@ -2,14 +2,16 @@
 /**
  * Importação auditável Avec -> Barbearia Dino.
  *
- * O pacote contém cadastro/catálogo, histórico de serviços e cabeçalhos de
- * comandas. O runner deliberadamente NÃO cria comandas operacionais,
- * pagamentos, contas a receber, lançamentos financeiros ou baixas de estoque a
- * partir de relatórios que não trazem itemização/pagamento reconciliados.
+ * O pacote contém cadastro/catálogo, histórico de serviços, cabeçalhos de
+ * comandas e o extrato financeiro histórico. O runner não cria comandas ou
+ * pagamentos operacionais a partir dos relatórios de histórico. O extrato
+ * financeiro, que traz itemid, data, valor, situação e meio/categoria, é
+ * lançado no livro financeiro como histórico Avec auditável e separado da
+ * operação nova.
  *
  * Modos:
  *   node migrations/run-avec-dino-import.js --dry-run
- *   AVEC_DINO_IMPORT_CONFIRM=PRD_AVEC_DINO_IMPORT_20261022_V1 \
+ *   AVEC_DINO_IMPORT_CONFIRM=PRD_AVEC_DINO_IMPORT_20261022_FINANCE_V1 \
  *     node migrations/run-avec-dino-import.js
  *
  * O modo de aplicação exige a confirmação acima e grava uma única marca de
@@ -26,9 +28,10 @@ let caminhoBanco;
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.join(__dirname, 'data', 'avec-dino-20261022');
-const CONFIRMATION = 'PRD_AVEC_DINO_IMPORT_20261022_V1';
-const RUN_KEY = 'avec-dino-20261022-v1';
+const CONFIRMATION = 'PRD_AVEC_DINO_IMPORT_20261022_FINANCE_V1';
+const RUN_KEY = 'avec-dino-20261022-finance-v1';
 const ORIGEM = 'avec-import-20261022';
+const ORIGEM_FINANCEIRO = 'avec-import-financeiro-20261022';
 const DEFAULT_EMPRESA_ID = 'emp-kytto-001';
 const DEFAULT_LOJA_ID = 'dino-web-estoque';
 const MAX_EXCEPTIONS = 250;
@@ -65,9 +68,35 @@ function money(value) {
   return Number.isFinite(number) ? Number(Math.max(0, number).toFixed(2)) : 0;
 }
 
+function signedMoney(value) {
+  const raw = text(value, 40).replace(/R\$\s?/gi, '').replace(/\s/g, '');
+  const normalized = raw.includes(',') ? raw.replace(/\./g, '').replace(',', '.') : raw;
+  const number = Number(normalized);
+  return Number.isFinite(number) ? Number(number.toFixed(2)) : null;
+}
+
 function brDateToIso(value) {
   const match = text(value, 20).match(/^(\d{2})\/(\d{2})\/(\d{4})/);
   return match ? `${match[3]}-${match[2]}-${match[1]}` : '';
+}
+
+function historicalDateTime(value) {
+  const date = brDateToIso(value);
+  return date ? `${date}T12:00:00.000Z` : '';
+}
+
+function paymentMethod(value) {
+  const key = normalize(value);
+  if (!key) return null;
+  if (key.includes('pix')) return 'pix';
+  if (key.includes('dinheiro')) return 'dinheiro';
+  if (key.includes('transfer')) return 'transferencia';
+  if (key.includes('credito')) return 'credito';
+  if (key.includes('debito')) return 'debito';
+  if (key.includes('boleto')) return 'boleto';
+  if (key.includes('deposit')) return 'deposito';
+  if (key.includes('cheque')) return 'cheque';
+  return key.slice(0, 40).replace(/\s+/g, '_');
 }
 
 function now() {
@@ -109,6 +138,7 @@ function loadPackage() {
   const clientes = parseJsonLines(path.join(DATA_DIR, 'clientes.consolidado.jsonl'));
   const historico = parseJsonLines(path.join(DATA_DIR, 'historico-servicos-completo.jsonl'));
   const comandas = parseJsonLines(path.join(DATA_DIR, 'vendas-comandas-cabecalho.jsonl'));
+  const financeiro = parseJsonLines(path.join(DATA_DIR, 'financeiro-entradas-saidas-full-2026-10-22.jsonl'));
   const servicos = JSON.parse(fs.readFileSync(path.join(DATA_DIR, 'servicos.json'), 'utf8'));
   const profissionais = JSON.parse(fs.readFileSync(path.join(DATA_DIR, 'profissionais-inferidos.json'), 'utf8'));
   const produtos = JSON.parse(fs.readFileSync(path.join(DATA_DIR, 'produtos-estoque.json'), 'utf8'));
@@ -120,11 +150,12 @@ function loadPackage() {
     produtos: produtos.length,
     historico_servicos: historico.length,
     comandas_cabecalho: comandas.length,
+    financeiro_entradas_saidas: financeiro.length,
   };
   for (const [key, value] of Object.entries(expected)) {
     if (actualCounts[key] !== value) throw new Error(`Contagem divergente no pacote em ${key}: esperado ${value}, recebido ${actualCounts[key]}`);
   }
-  return { manifest, clientes, historico, comandas, servicos, profissionais, produtos, actualCounts };
+  return { manifest, clientes, historico, comandas, financeiro, servicos, profissionais, produtos, actualCounts };
 }
 
 function ensureCustomerStore(root, empresaId) {
@@ -196,14 +227,16 @@ function buildReport(pkg, empresaId, lojaId, dryRun) {
       clientesCadastro: 0, clientesHistorico: 0, servicosCatalogo: 0, servicosHistoricosAlias: 0,
       profissionaisAtivosInferidos: 0, profissionaisHistoricosInativos: 0, produtos: 0,
       movimentosEstoqueInicial: 0, historicoServicos: 0, historicoComandasCabecalho: 0,
+      lancamentosFinanceirosHistoricos: 0,
     },
-    existing: { clientes: 0, servicos: 0, profissionais: 0, produtos: 0, historicoServicos: 0, historicoComandas: 0 },
-    skipped: { clientesSemNome: 0, historicoInvalido: 0, comandaInvalida: 0 },
+    existing: { clientes: 0, servicos: 0, profissionais: 0, produtos: 0, historicoServicos: 0, historicoComandas: 0, lancamentosFinanceiros: 0 },
+    skipped: { clientesSemNome: 0, historicoInvalido: 0, comandaInvalida: 0, financeiroSemId: 0, financeiroDataInvalida: 0, financeiroValorInvalido: 0 },
     mappings: { historyCustomers: 0, servicesExact: 0, servicesAliases: 0, professionalsExact: 0, professionalsUnresolved: 0 },
     exceptions: { total: 0, byReason: {}, samples: [] },
     financialSafety: {
       operationalOrdersCreated: 0, paymentsCreated: 0, receivablesCreated: 0, financialEntriesCreated: 0,
-      note: 'Relatórios sem itemização/pagamento não geram vendas, comandas, recebimentos, contas ou lançamentos financeiros.',
+      historicalRowsImported: 0, historicalRowsExisting: 0, historicalPaidRevenue: 0, historicalPaidExpenses: 0, historicalPendingExpenses: 0,
+      note: 'Comandas e pagamentos operacionais não são criados pelo histórico. O extrato Avec é lançado no livro financeiro com origem histórica, chave idempotente e trilha de fonte.',
     },
     stockPolicy: { target: 10, sourceBalancesPreservedAsMetadata: true, operationalStockSetToTarget: true },
   };
@@ -483,6 +516,92 @@ function importHistoricalOrders(state, pkg, report, empresaId, lojaId, historyCu
   }
 }
 
+function ensureFinancialStore(root, empresaId) {
+  root.financeiroKytto ||= { empresas: {} };
+  root.financeiroKytto.empresas ||= {};
+  root.financeiroKytto.empresas[empresaId] ||= { lancamentos: {}, fechamentos: {}, sequencia: 0 };
+  const store = root.financeiroKytto.empresas[empresaId];
+  store.lancamentos ||= {};
+  store.fechamentos ||= {};
+  store.sequencia ||= 0;
+  return store;
+}
+
+function importHistoricalFinance(root, pkg, report, empresaId, lojaId, ts) {
+  const store = ensureFinancialStore(root, empresaId);
+  const existingByKey = new Map(Object.values(store.lancamentos)
+    .filter((item) => item?.origem === ORIGEM_FINANCEIRO && item.chaveIdempotencia)
+    .map((item) => [item.chaveIdempotencia, item]));
+  for (let index = 0; index < pkg.financeiro.length; index += 1) {
+    const row = pkg.financeiro[index];
+    const itemId = text(row.itemid, 120);
+    if (!itemId) {
+      report.skipped.financeiroSemId += 1;
+      addException(report, 'financeiro', 'itemid_ausente', { sourceRow: index + 1 });
+      continue;
+    }
+    const dataOperacao = historicalDateTime(row.date);
+    if (!dataOperacao) {
+      report.skipped.financeiroDataInvalida += 1;
+      addException(report, 'financeiro', 'data_invalida', { sourceRow: index + 1, itemId, date: text(row.date, 30) });
+      continue;
+    }
+    const valorOriginal = signedMoney(row.value);
+    if (valorOriginal === null || valorOriginal === 0) {
+      report.skipped.financeiroValorInvalido += 1;
+      addException(report, 'financeiro', 'valor_invalido', { sourceRow: index + 1, itemId, value: text(row.value, 40) });
+      continue;
+    }
+    const sourceHash = stableHash(row);
+    const chaveIdempotencia = `${ORIGEM_FINANCEIRO}:${itemId}`;
+    const status = normalize(row.status) === 'pago' ? 'pago' : 'pendente';
+    const tipo = valorOriginal > 0 ? 'receita' : 'despesa';
+    const valor = Math.abs(valorOriginal);
+    const existente = existingByKey.get(chaveIdempotencia);
+    report.financialSafety.historicalRowsExisting += existente ? 1 : 0;
+    if (existente) {
+      if (String(existente.metadata?.sourceHash || '') !== sourceHash) {
+        throw new Error(`Conflito idempotente no lançamento financeiro Avec ${itemId}: a fonte mudou.`);
+      }
+      report.existing.lancamentosFinanceiros += 1;
+    } else {
+      const id = `fin-avec-${sha256(itemId).slice(0, 24)}`;
+      const lancamento = {
+        id, empresaId, tipo, categoria: text(row.category, 100) || 'Outros',
+        descricao: text(row.title, 240) || `Lançamento histórico Avec ${itemId}`,
+        valor, moeda: 'BRL', origem: ORIGEM_FINANCEIRO, status,
+        vencimento: brDateToIso(row.date), dataOperacao,
+        pagoEm: status === 'pago' ? dataOperacao : null,
+        meioPagamento: paymentMethod(row.payment), lojaId: lojaId || null,
+        observacao: 'Histórico financeiro Avec importado para conferência; não representa nova venda operacional.',
+        usuario: 'prd-avec-import-runner', automatico: true,
+        chaveIdempotencia, origemId: itemId,
+        referencia: { origemId: itemId },
+        metadata: {
+          historicoAvec: true, somenteHistorico: true, naoEhPagamentoOperacional: true,
+          sourceSystem: 'Avec SalãoVIP', sourceUnitId: pkg.manifest.sourceUnitId,
+          packageBatch: pkg.manifest.batchId, sourceHash, sourceRow: index + 1,
+          sourceFile: text(row.source_file, 300), sourceStatus: text(row.status, 40),
+          sourceCategory: text(row.category, 100), sourcePayment: text(row.payment, 80),
+        },
+        fingerprint: sourceHash, payloadFingerprint: sourceHash,
+        criadoEm: ts, atualizadoEm: ts,
+      };
+      store.lancamentos[id] = lancamento;
+      existingByKey.set(chaveIdempotencia, lancamento);
+      report.imported.lancamentosFinanceirosHistoricos += 1;
+      report.financialSafety.historicalRowsImported += 1;
+      report.financialSafety.financialEntriesCreated += 1;
+    }
+    if (status === 'pago' && tipo === 'receita') report.financialSafety.historicalPaidRevenue += valor;
+    if (status === 'pago' && tipo === 'despesa') report.financialSafety.historicalPaidExpenses += valor;
+    if (status !== 'pago' && tipo === 'despesa') report.financialSafety.historicalPendingExpenses += valor;
+  }
+  for (const key of ['historicalPaidRevenue', 'historicalPaidExpenses', 'historicalPendingExpenses']) {
+    report.financialSafety[key] = Number(report.financialSafety[key].toFixed(2));
+  }
+}
+
 function writeSnapshotIfPossible(report, dryRun) {
   const dbPath = caminhoBanco();
   if (!fs.existsSync(dbPath)) return null;
@@ -504,6 +623,8 @@ function finalizeReport(root, report) {
 function summarize(root, report, empresaId) {
   const state = root.barbearias?.[empresaId] || {};
   const customers = root.clientesKytto?.empresas?.[empresaId]?.clientes || {};
+  const financial = Object.values(root.financeiroKytto?.empresas?.[empresaId]?.lancamentos || {})
+    .filter((item) => item.origem === ORIGEM_FINANCEIRO && item.empresaId === empresaId);
   report.after = {
     clientesEmpresa: Object.values(customers).filter(item => item.status !== 'deletado').length,
     profissionaisEmpresa: Object.values(state.profissionais || {}).length,
@@ -512,9 +633,13 @@ function summarize(root, report, empresaId) {
     estoqueAlvo10: Object.values(state.produtosRevenda || {}).filter(item => item.origemImportacao === ORIGEM && Number(item.estoqueAtual) === 10).length,
     historicoServicos: Object.values(state.historicoAtendimentos || {}).filter(item => item.origem === ORIGEM).length,
     historicoComandas: Object.values(state.historicoComandas || {}).filter(item => item.origem === ORIGEM || item.sourceSystem === 'avec').length,
+    historicoFinanceiro: financial.length,
+    historicoFinanceiroPagoReceitas: Number(financial.filter(item => item.tipo === 'receita' && item.status === 'pago').reduce((sum, item) => sum + Number(item.valor || 0), 0).toFixed(2)),
+    historicoFinanceiroPagoDespesas: Number(financial.filter(item => item.tipo === 'despesa' && item.status === 'pago').reduce((sum, item) => sum + Number(item.valor || 0), 0).toFixed(2)),
+    historicoFinanceiroPendenteDespesas: Number(financial.filter(item => item.tipo === 'despesa' && item.status !== 'pago' && item.status !== 'cancelado').reduce((sum, item) => sum + Number(item.valor || 0), 0).toFixed(2)),
     vendasOperacionaisCriadasPeloLote: 0,
     pagamentosCriadosPeloLote: 0,
-    lancamentosFinanceirosCriadosPeloLote: 0,
+    lancamentosFinanceirosCriadosPeloLote: report.imported.lancamentosFinanceirosHistoricos,
   };
 }
 
@@ -575,11 +700,13 @@ export async function execute() {
     importProducts(state, pkg, report, empresaId, lojaId, ts);
     importHistoricalServices(state, pkg, report, empresaId, lojaId, serviceMap, professionalMap, historyCustomerMap, ts);
     importHistoricalOrders(state, pkg, report, empresaId, lojaId, historyCustomerMap, ts);
+    importHistoricalFinance(root, pkg, report, empresaId, lojaId, ts);
     report.crosswalk = {
       cadastroClientesComSourceKey: sourceMap.size,
       clientesHistoricoComSourceKey: historyCustomerMap.size,
       servicesMapped: serviceMap.size,
       professionalsMapped: professionalMap.size,
+      financialRowsMappedByItemId: report.imported.lancamentosFinanceirosHistoricos + report.existing.lancamentosFinanceiros,
     };
     summarize(root, report, empresaId);
     if (dryRun) {

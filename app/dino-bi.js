@@ -226,6 +226,10 @@ export function professionalRanking({ services = [], retail = [], professionals 
 
 const EXCLUDED_EXPENSE_CATEGORIES = new Set(['comissões', 'comissoes']);
 
+function isHistoricalAvecFinance(item = {}) {
+  return item.metadata?.historicoAvec === true || item.origem === 'avec-import-financeiro-20261022';
+}
+
 /**
  * Resultado estimado = receita (serviços + revenda [+ loja com custo]) − comissões − CMV − despesas pagas.
  * Despesas de estoque (compras) e de comissões lançadas manualmente não entram,
@@ -239,6 +243,7 @@ export function estimateResult({ services = [], retail = [], professionals = [],
   const comissoes = ranking.reduce((s, row) => s + row.comissaoEstimada, 0);
   const despesas = list(financeEntries).filter((item) => item.tipo === 'despesa' && item.status === 'pago'
     && inWindow(item.pagoEm || item.dataOperacao, window)
+    && !isHistoricalAvecFinance(item)
     && item.origem !== 'estoque'
     && !EXCLUDED_EXPENSE_CATEGORIES.has(String(item.categoria || '').toLowerCase()));
   const despesasPagas = despesas.reduce((s, item) => s + num(item.valor), 0);

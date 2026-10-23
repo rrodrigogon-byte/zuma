@@ -11,7 +11,7 @@ import './dino-admin.css'
 const BASE = '/api/admin/barbearia/financeiro'
 const EMPTY_FORM = { tipo: 'despesa', categoria: 'Outros', descricao: '', valor: '', vencimento: '', status: 'pendente', obs: '', meses: 1 }
 const STATUS = { pendente: { label: 'Pendente', tone: 'warning' }, pago: { label: 'Pago', tone: 'success' }, cancelado: { label: 'Cancelado', tone: 'muted' } }
-const ORIGENS = { manual: 'Manual', barbearia_atendimento: 'Atendimento', barbearia_comanda: 'Comanda', barbearia_revenda: 'Revenda', comanda: 'Comanda', contas_receber: 'Conta a receber', estoque: 'Estoque', revenda: 'Revenda' }
+const ORIGENS = { manual: 'Manual', barbearia_atendimento: 'Atendimento', barbearia_comanda: 'Comanda', barbearia_revenda: 'Revenda', comanda: 'Comanda', contas_receber: 'Conta a receber', estoque: 'Estoque', revenda: 'Revenda', 'avec-import-financeiro-20261022': 'Histórico Avec' }
 
 function FlowChart({ fluxo }) {
   const max = Math.max(1, ...fluxo.flatMap((item) => [item.receitas, item.despesas]))

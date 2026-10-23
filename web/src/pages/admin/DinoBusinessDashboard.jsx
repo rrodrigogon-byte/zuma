@@ -85,15 +85,18 @@ function PaymentDonut({ items = [], caption = 'recebido', empty = 'Sem pagamento
 function HistoricalAvecPanel({ data, onOpen }) {
   const services = data?.services || { count: 0, value: 0 }
   const commands = data?.commands || { count: 0, value: 0 }
-  if (!services.count && !commands.count) return null
+  const finance = data?.finance || { entries: 0, paidRevenue: 0, paidExpenses: 0, pendingExpenses: 0 }
+  if (!services.count && !commands.count && !finance.entries) return null
   return <article className="dino-chart-panel dino-history-panel">
     <header><div><span>Origem Avec</span><h3>Histórico importado — não conciliado</h3></div><button type="button" onClick={() => onOpen?.('Relatórios')}>Abrir relatórios</button></header>
     <div className="dino-history-grid">
       <div><strong>{services.count.toLocaleString('pt-BR')}</strong><span>atendimentos detalhados</span><small>{fmtR(services.value)} em valores informados</small></div>
       <div><strong>{commands.count.toLocaleString('pt-BR')}</strong><span>cabeçalhos de comanda</span><small>{fmtR(commands.value)} em totais de origem</small></div>
       <div><strong>{(data.uniqueClients || 0).toLocaleString('pt-BR')}</strong><span>clientes relacionados</span><small>identidades encontradas no recorte</small></div>
+      <div><strong>{(finance.entries || 0).toLocaleString('pt-BR')}</strong><span>lançamentos financeiros</span><small>{fmtR(finance.paidRevenue)} em receitas pagas</small></div>
+      <div><strong>{fmtR(finance.paidExpenses)}</strong><span>despesas pagas</span><small>{fmtR(finance.pendingExpenses)} em despesas pendentes</small></div>
     </div>
-    <p className="dino-history-note">{data.note || 'Os valores são evidência histórica e não entram em pagamentos registrados, contas a receber ou caixa até a conciliação documental.'}</p>
+    <p className="dino-history-note">{data.note || 'Os serviços e comandas permanecem como evidência histórica. Os lançamentos financeiros importados entram no livro financeiro com origem Avec, mas não são novas vendas operacionais.'}</p>
   </article>
 }
 
@@ -145,8 +148,8 @@ export default function DinoBusinessDashboard({ onOpenTab = () => {} }) {
     <WhatsappAlert />
     {data && <>
       <div className="dino-kpi-grid">{(data.kpis || []).map((item) => <KpiCard key={item.id} item={item} series={item.id === 'revenue' || item.id === 'ticket' ? revenueSeries : item.id === 'appointments' ? appointmentSeries : []} onOpen={onOpenTab} />)}</div>
-      <p className="dino-panel-empty">O valor bruto inclui pedidos do e-commerce ainda não pagos. Pagamentos e contas a receber só aparecem quando há evidência operacional conciliada.</p><div className="dino-mini-kpis"><button type="button" onClick={() => onOpenTab('Caixa e fechamento')}><span>Contas a receber operacionais</span><strong>{fmtR(data.miniKpis?.receivables || 0)}</strong></button><button type="button" onClick={() => onOpenTab('Estoque de revenda')}><span>Estoque baixo</span><strong>{data.miniKpis?.lowStock?.total || 0}</strong><small>{data.miniKpis?.lowStock?.commerce || 0} loja · {data.miniKpis?.lowStock?.retail || 0} revenda</small></button><button type="button" onClick={() => onOpenTab('Planos e assinaturas')}><span>MRR</span><strong>{fmtR(data.miniKpis?.mrr || 0)}</strong></button></div>
-      <HistoricalAvecPanel data={data.historicalAvec} onOpen={onOpenTab} />
+      <p className="dino-panel-empty">O valor bruto e os seis KPIs são operacionais. O histórico financeiro Avec aparece no bloco auditável abaixo e no Financeiro, sem ser somado como nova venda.</p><div className="dino-mini-kpis"><button type="button" onClick={() => onOpenTab('Caixa e fechamento')}><span>Contas a receber operacionais</span><strong>{fmtR(data.miniKpis?.receivables || 0)}</strong></button><button type="button" onClick={() => onOpenTab('Estoque de revenda')}><span>Estoque baixo</span><strong>{data.miniKpis?.lowStock?.total || 0}</strong><small>{data.miniKpis?.lowStock?.commerce || 0} loja · {data.miniKpis?.lowStock?.retail || 0} revenda</small></button><button type="button" onClick={() => onOpenTab('Planos e assinaturas')}><span>MRR</span><strong>{fmtR(data.miniKpis?.mrr || 0)}</strong></button></div>
+      <HistoricalAvecPanel data={{ ...data.historicalAvec, finance: data.historicalFinance }} onOpen={onOpenTab} />
       <div className="dino-dashboard-grid wide-left"><article className="dino-chart-panel"><header><div><span>Valor dos pedidos e vendas</span><h3>Movimento registrado</h3></div><strong>{formatValue(data.kpis?.find((item) => item.id === 'revenue')?.value, 'currency')}</strong></header><RevenueChart rows={data.charts?.revenueDaily || []} /></article><article className="dino-chart-panel"><header><div><span>Barbearia e revenda</span><h3>Pagamentos registrados</h3></div></header><PaymentDonut items={data.charts?.paymentMethods || []} empty="Sem pagamentos conciliados no período." /><h4>Capturas do e-commerce</h4><PaymentDonut items={data.charts?.commercePaymentMethods || []} caption="capturado" empty="Sem capturas no período." /><p className="dino-panel-empty">Capturas registradas no Commerce no período. Não representam liquidação bancária.</p></article></div>
       <div className="dino-dashboard-grid"><article className="dino-chart-panel"><header><div><span>Receita</span><h3>Categorias</h3></div></header><HorizontalBars items={data.charts?.categorySales || []} /></article><article className="dino-chart-panel"><header><div><span>Desempenho</span><h3>Produtos e serviços</h3></div></header><HorizontalBars items={data.charts?.topProducts || []} /></article><article className="dino-chart-panel"><header><div><span>Jornada</span><h3>Funil de conversão</h3></div></header><Funnel rows={data.charts?.funnel || []} /></article></div>
       <div className="dino-dashboard-grid two"><article className="dino-chart-panel"><header><div><span>Capacidade</span><h3>Horários mais movimentados</h3></div></header><Heatmap cells={data.charts?.scheduleHeatmap || []} /></article><article className="dino-chart-panel"><header><div><span>Origem registrada</span><h3>Canais de venda</h3></div></header><ChannelList items={data.charts?.channels || []} /></article></div>

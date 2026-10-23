@@ -64,6 +64,20 @@ test('resultado estimado desconta comissão, custo da revenda e despesas pagas (
   assert.equal(result.margem, 25.5);
 });
 
+test('despesas históricas Avec ficam no Financeiro, mas não contaminam o lucro operacional', () => {
+  const services = bi.servicesPerformed(input, window);
+  const result = bi.estimateResult({
+    services,
+    retail: [],
+    professionals,
+    financeEntries: [
+      { tipo: 'despesa', status: 'pago', categoria: 'Aluguel', valor: 50, pagoEm: '2026-09-15T12:00:00Z' },
+      { tipo: 'despesa', status: 'pago', categoria: 'ALUGUEL', valor: 1000, origem: 'avec-import-financeiro-20261022', metadata: { historicoAvec: true }, pagoEm: '2026-09-15T12:00:00Z' },
+    ],
+  }, window);
+  assert.equal(result.despesasPagas, 50);
+});
+
 test('loja online entra no resultado só com custo conhecido', () => {
   const base = { services: [], retail: [], professionals, financeEntries: [] };
   const semCusto = bi.estimateResult({ ...base, commerce: { revenue: 500, cost: null } }, window);
