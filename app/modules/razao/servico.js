@@ -9,6 +9,7 @@
 // - datas do negócio (competência, vencimento, "mês", "hoje") seguem o fuso da empresa.
 import { randomUUID } from 'node:crypto';
 import { ErroDominio, exigirData, exigirTexto, exigirUuid, transacao } from '../acesso/banco.js';
+import { perdasDoPeriodo } from '../suprimentos/estoque.js';
 
 export const FUSO_PADRAO = 'America/Cuiaba';
 
@@ -255,6 +256,15 @@ export async function registrarAutomatico(db, empresaId, dados, { chave, origem,
   if (!chave || String(chave).length > 200) throw new ErroDominio('VALIDATION_ERROR', 'chave do lançamento automático é obrigatória');
   const linha = { ...prepararDados(empresa, dados, { fuso, agora }), origem: String(origem || 'automatico').slice(0, 40), origem_id: origemId ? String(origemId).slice(0, 160) : null, chave: String(chave), automatico: true, criado_por: 'sistema' };
   const r = await inserir((t, v) => db.query(t, v), linha);
+  return { lancamento: dto(r.row), criado: r.criado };
+}
+
+/** Igual a registrarAutomatico, dentro de uma transação já aberta (`q` = query da transação). */
+export async function registrarAutomaticoNaTransacao(q, empresaId, dados, { chave, origem, origemId = null, fuso, agora } = {}) {
+  const empresa = exigirUuid(empresaId, 'empresa');
+  if (!chave || String(chave).length > 200) throw new ErroDominio('VALIDATION_ERROR', 'chave do lançamento automático é obrigatória');
+  const linha = { ...prepararDados(empresa, dados, { fuso, agora }), origem: String(origem || 'automatico').slice(0, 40), origem_id: origemId ? String(origemId).slice(0, 160) : null, chave: String(chave), automatico: true, criado_por: 'sistema' };
+  const r = await inserir(q, linha);
   return { lancamento: dto(r.row), criado: r.criado };
 }
 
@@ -570,6 +580,14 @@ export async function dre(db, empresaId, { de, ate, lojaId = null, centroCustoId
     const g = grupos[row.grupo] || grupos.outros;
     g.total = dinheiro(g.total + valor);
     g.linhas.push({ tipo: row.tipo, categoria: row.categoria, valor });
+  }
+  // perdas, quebras e diferenças de inventário (valor de custo) entram no CMV, sem mexer no caixa
+  if ((await db.query("SELECT to_regclass('est_movimentos') AS t")).rows[0]?.t && !centroCustoId) {
+    const perdas = await perdasDoPeriodo(db, empresa, { de: inicio, ate: fim, lojaId });
+    if (perdas.valor) {
+      grupos.cmv.total = dinheiro(grupos.cmv.total - perdas.valor);
+      grupos.cmv.linhas.push({ tipo: 'despesa', categoria: 'Perdas e diferenças de estoque', valor: -perdas.valor, origem: 'estoque' });
+    }
   }
   for (const g of Object.values(grupos)) g.linhas.sort((a, b) => Math.abs(b.valor) - Math.abs(a.valor));
   const receitaLiquida = dinheiro(grupos.receita_bruta.total + grupos.deducao.total);

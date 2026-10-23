@@ -41,6 +41,7 @@ import { lerSociosTtc, importarAlunos } from './modules/clube/importar-legado.js
 import { createA2AdminRouter } from './modules/a2/rotas.js';
 import { createUnidadesAdminRouter } from './modules/unidades/rotas.js';
 import { createRazaoAdminRouter, createRazaoPlataformaRouter } from './modules/razao/rotas.js';
+import { createSuprimentosAdminRouter } from './modules/suprimentos/rotas.js';
 import { createBarAdminRouter } from './modules/bar/rotas-multiempresa.js';
 import * as barService from './modules/bar/servico.js';
 import { responderErro as responderErroBarra } from './modules/acesso/banco.js';
@@ -641,7 +642,7 @@ app.use('/api/admin/commerce', (req, res, next) => {
 });
 
 // Módulos de /api/admin que separam dados por empresa e podem ser usados por tenant.
-const TENANT_ADMIN_MODULES = new Set(['a2', 'bar', 'barbearia', 'commerce', 'commerce-session', 'usuarios', 'usuarios-diretorio', 'platform', 'fidelidade', 'login', 'auditoria', 'modificadores', 'combos', 'clube', 'unidades', 'razao']);
+const TENANT_ADMIN_MODULES = new Set(['a2', 'bar', 'barbearia', 'commerce', 'commerce-session', 'usuarios', 'usuarios-diretorio', 'platform', 'fidelidade', 'login', 'auditoria', 'modificadores', 'combos', 'clube', 'unidades', 'razao', 'suprimentos']);
 
 // [kytto-clube] Kytto Clube & Academia (catraca, contrato digital, agenda, retenção, Wellhub/TotalPass).
 // Usa o pool do Commerce que já existe (não abre outro pool) e a mesma resolução de empresa e
@@ -1230,6 +1231,8 @@ if(process.env.COMMERCE_CORE_ENABLED === '1'){
   // [kytto-razao] Razão financeiro único (Financeiro, contas a pagar e a receber, DRE, fechamento).
   app.use('/api/admin/razao', auth, requireStaff, createRazaoAdminRouter({ db: clubeDb, escopoDaRequisicao: escopoComercial, fonteJson: fonteJsonDoRazao, fuso: process.env.KYTTO_FUSO || 'America/Cuiaba' }));
   app.use('/api/admin/platform/razao', auth, requirePlatformAdmin, createRazaoPlataformaRouter({ db: clubeDb, fonteJson: fonteJsonDoRazao }));
+  // [kytto-suprimentos] Estoque por unidade, inventário, ficha técnica e compras (geram contas a pagar no razão).
+  app.use('/api/admin/suprimentos', auth, requireStaff, createSuprimentosAdminRouter({ db: clubeDb, escopoDaRequisicao: escopoComercial, fuso: process.env.KYTTO_FUSO || 'America/Cuiaba' }));
   // [kytto-bar] Bar, PDV, comandas, estoque fracionado, KDS e caixa por empresa.
   // O prefixo continua sob a trava /api/admin e a empresa é resolvida exclusivamente
   // pela membership SQL; nenhum empresaId do corpo da requisição é aceito.

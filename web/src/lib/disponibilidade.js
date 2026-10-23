@@ -12,15 +12,12 @@
 
 export const EM_IMPLANTACAO = {
   '/admin/agropecuaria': 'Agropecuária e petshop',
-  '/admin/compras': 'Compras e fornecedores',
-  '/admin/fichas-tecnicas': 'Fichas técnicas',
   '/admin/fiscal/classificacao': 'Classificação fiscal',
   '/admin/fiscal/config': 'Configuração de NF-e e NFC-e',
   '/admin/loja-moda': 'Loja de moda',
   '/admin/notas': 'Central fiscal (NF-e e NFC-e)',
   '/admin/oficina': 'Oficina mecânica',
   '/admin/pdv-offline': 'PDV offline e periféricos',
-  '/admin/perdas-inventario': 'Perdas e inventário',
   '/admin/reservas': 'Reservas de mesa e lista de espera',
   '/admin/supermercado': 'Supermercado',
   '/admin/varejo': 'Varejo geral',

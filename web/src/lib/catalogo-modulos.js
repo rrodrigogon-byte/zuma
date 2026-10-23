@@ -25,9 +25,6 @@ export const AREAS = [
 
 // Em que onda do plano cada tela em implantação entra e o que falta.
 export const PLANO_IMPLANTACAO = {
-  '/admin/compras': { onda: 2, falta: 'compras em PostgreSQL com nota de entrada, recebimento no estoque e conta a pagar' },
-  '/admin/perdas-inventario': { onda: 2, falta: 'estoque único por unidade; perda gera despesa no Financeiro' },
-  '/admin/fichas-tecnicas': { onda: 2, falta: 'ficha técnica baixando insumos do estoque único a cada venda' },
   '/admin/notas': { onda: 3, falta: 'emissão de NFC-e e NF-e com certificado da empresa, em homologação primeiro' },
   '/admin/fiscal/config': { onda: 3, falta: 'cofre do certificado A1 e configuração fiscal por empresa' },
   '/admin/fiscal/classificacao': { onda: 3, falta: 'NCM, CFOP e CST ligados ao cadastro de produtos' },

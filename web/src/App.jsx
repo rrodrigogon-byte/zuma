@@ -135,6 +135,7 @@ const Oficina         = lazy(() => import('./pages/admin/Oficina'))
 const Agropecuaria    = lazy(() => import('./pages/admin/Agropecuaria'))
 const Varejo          = lazy(() => import('./pages/admin/Varejo'))
 const Compras         = lazy(() => import('./pages/admin/Compras'))
+const Suprimentos     = lazy(() => import('./pages/admin/suprimentos/Suprimentos'))
 const ConfiguracaoFiscal = lazy(() => import('./pages/admin/ConfiguracaoFiscal'))
 const ClassificacaoFiscal = lazy(() => import('./pages/admin/ClassificacaoFiscal'))
 const Clientes = lazy(() => import('./pages/admin/Clientes'))
@@ -208,6 +209,13 @@ function Loading() {
 // Telas cujos módulos antigos eram globais da plataforma: com uma empresa
 // ativa, mostram a versão da empresa (ou levam ao módulo equivalente dela).
 // `clube`: clubes e academias têm telas próprias (não as da barbearia nem as do evento).
+// Compras: Dino segue na revenda da barbearia; demais empresas usam Estoque e compras.
+function ComprasPorMarca() {
+  const { user, empresaAtiva } = useAuth()
+  if (isTenantScope(user, empresaAtiva) && isDinoBrandContext(empresaAtiva)) return <Navigate to="/admin/barbearia-erp?area=catalogo&tab=Estoque+de+revenda" replace />
+  return isTenantScope(user, empresaAtiva) ? <Layout><Suprimentos abaInicial="compras" /></Layout> : <Layout><Compras /></Layout>
+}
+
 function TenantAware({ tenant, legacy, stallone, clube }) {
   const { user, empresaAtiva } = useAuth()
   const hostDino = typeof window !== 'undefined' && ehHostDino(window.location.hostname)
@@ -250,8 +258,8 @@ export default function App() {
           <Route path="/admin/inscricoes"   element={<Layout><Inscricoes /></Layout>} />
           <Route path="/admin/cardapio"     element={<Layout><Cardapio /></Layout>} />
           <Route path="/admin/estoque"      element={<Layout><Estoque /></Layout>} />
-          <Route path="/admin/perdas-inventario" element={<Layout><PerdasInventario /></Layout>} />
-          <Route path="/admin/fichas-tecnicas" element={<Layout><FichasTecnicas /></Layout>} />
+          <Route path="/admin/perdas-inventario" element={<TenantAware tenant={<Layout><Suprimentos abaInicial="inventario" /></Layout>} legacy={<Layout><PerdasInventario /></Layout>} />} />
+          <Route path="/admin/fichas-tecnicas" element={<TenantAware tenant={<Layout><Suprimentos abaInicial="fichas" /></Layout>} legacy={<Layout><FichasTecnicas /></Layout>} />} />
           <Route path="/admin/modificadores-combos" element={<Layout><ModificadoresCombos /></Layout>} />
           <Route path="/admin/mesas"        element={<Layout><Mesas /></Layout>} />
           <Route path="/admin/reservas"     element={<Layout><ReservasFilas /></Layout>} />
@@ -297,7 +305,7 @@ export default function App() {
           <Route path="/admin/oficina"         element={<Layout><Oficina /></Layout>} />
           <Route path="/admin/agropecuaria"    element={<Layout><Agropecuaria /></Layout>} />
           <Route path="/admin/varejo"          element={<Layout><Varejo /></Layout>} />
-          <Route path="/admin/compras"         element={<TenantAware clube={<Layout><EmImplantacao modulo="Compras e fornecedores" /></Layout>} tenant={<Navigate to="/admin/barbearia-erp?area=catalogo&tab=Estoque+de+revenda" replace />} legacy={<Layout><Compras /></Layout>} />} />
+          <Route path="/admin/compras"         element={<ComprasPorMarca />} />
           <Route path="/admin/fiscal/config"   element={<Layout><ConfiguracaoFiscal /></Layout>} />
           <Route path="/admin/fiscal/classificacao" element={<Layout><ClassificacaoFiscal /></Layout>} />
           <Route path="/admin/loja-moda"       element={<Layout><LojaModa /></Layout>} />
