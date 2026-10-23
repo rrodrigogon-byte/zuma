@@ -215,7 +215,7 @@ function Documentos({ toast }) {
         { key: 'a', label: '', render: (d) => <div className="dadm-actions">
           {d.temXml && <button type="button" className="c360-btn ghost" onClick={() => baixarXml(d)}>XML</button>}
           {['autorizado', 'validado_localmente'].includes(d.status) && <button type="button" className="c360-btn ghost" onClick={() => setCancelando({ doc: d, justificativa: '' })}>Cancelar</button>}
-          {['rejeitado', 'falha_comunicacao'].includes(d.status) && d.origemId && <button type="button" className="c360-btn ghost" disabled={Boolean(enviando)} onClick={() => emitir({ modelo: d.modelo, origem: d.origem, origemId: d.origemId }, d.id)}>Tentar de novo</button>}
+          {['rejeitado', 'falha_comunicacao', 'enviando'].includes(d.status) && <button type="button" className="c360-btn ghost" disabled={Boolean(enviando)} onClick={() => emitir({ modelo: d.modelo, origem: d.origem, ...(d.origemId ? { origemId: d.origemId } : {}), idempotencia: d.idempotencia }, d.id)}>Tentar de novo</button>}
         </div> },
       ]} />
     </section>

@@ -5420,8 +5420,12 @@ function mascararSegredosFiscais(fiscal = {}) {
 function preservarSegredosFiscais(novo = {}, atual = {}) {
   const csc = String(novo.csc ?? '');
   const saida = { ...novo };
-  delete saida.cscConfigurado;
-  if (!csc || csc.startsWith(CSC_MASCARA)) saida.csc = atual.csc || '';
+  delete saida.cscConfigurado; delete saida.cscLimpar;
+  // vazio ou ainda mascarado (qualquer quantidade de •) mantém o atual; cscLimpar apaga de propósito
+  if (novo.cscLimpar === true) saida.csc = '';
+  else if (!csc || /^•/.test(csc)) saida.csc = atual.csc || '';
+  // a numeração da NFC-e nunca volta atrás por um formulário aberto antes de uma emissão
+  if (saida.proximoNumero !== undefined && Number(atual.proximoNumero) > Number(saida.proximoNumero)) saida.proximoNumero = atual.proximoNumero;
   return saida;
 }
 app.get('/api/admin/config', auth, (req,res)=>{

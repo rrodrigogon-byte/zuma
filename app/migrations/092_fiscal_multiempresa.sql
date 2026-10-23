@@ -139,6 +139,9 @@ CREATE TABLE IF NOT EXISTS fis_documentos (
   CONSTRAINT chk_fis_doc_valor CHECK (valor_total >= 0)
 );
 CREATE INDEX IF NOT EXISTS idx_fis_doc_origem ON fis_documentos (empresa_id, origem, origem_id);
+-- uma venda tem no máximo um documento vivo por modelo (rejeitado e cancelado não contam)
+CREATE UNIQUE INDEX IF NOT EXISTS uq_fis_doc_origem_viva ON fis_documentos (empresa_id, origem, origem_id, modelo)
+  WHERE origem_id IS NOT NULL AND status IN ('rascunho', 'enviando', 'falha_comunicacao', 'autorizado', 'validado_localmente');
 CREATE INDEX IF NOT EXISTS idx_fis_doc_lista ON fis_documentos (empresa_id, criado_em DESC);
 
 CREATE TABLE IF NOT EXISTS fis_eventos (

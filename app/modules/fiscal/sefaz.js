@@ -20,11 +20,13 @@ const MT = {
     status: 'https://homologacao.sefaz.mt.gov.br/nfcews/services/NfeStatusServico4',
     qrCode: 'https://homologacao.sefaz.mt.gov.br/nfce/qrcode',
     consultaChave: 'https://homologacao.sefaz.mt.gov.br/nfce/consultanfce',
+    consulta: 'https://homologacao.sefaz.mt.gov.br/nfcews/services/NfeConsulta4',
   },
   '55': {
     autorizacao: 'https://homologacao.sefaz.mt.gov.br/nfews/v2/services/NfeAutorizacao4',
     evento: 'https://homologacao.sefaz.mt.gov.br/nfews/v2/services/RecepcaoEvento4',
     status: 'https://homologacao.sefaz.mt.gov.br/nfews/v2/services/NfeStatusServico4',
+    consulta: 'https://homologacao.sefaz.mt.gov.br/nfews/v2/services/NfeConsulta4',
   },
 };
 const SVRS = {
@@ -34,11 +36,13 @@ const SVRS = {
     status: 'https://nfce-homologacao.svrs.rs.gov.br/ws/NfeStatusServico/NfeStatusServico4.asmx',
     qrCode: 'https://dfe-portal.svrs.rs.gov.br/NFCE/QRCode',
     consultaChave: 'www.sefaz.rs.gov.br/nfce/consulta',
+    consulta: 'https://nfce-homologacao.svrs.rs.gov.br/ws/NfeConsulta/NfeConsulta4.asmx',
   },
   '55': {
     autorizacao: 'https://nfe-homologacao.svrs.rs.gov.br/ws/NfeAutorizacao/NFeAutorizacao4.asmx',
     evento: 'https://nfe-homologacao.svrs.rs.gov.br/ws/recepcaoevento/recepcaoevento4.asmx',
     status: 'https://nfe-homologacao.svrs.rs.gov.br/ws/NfeStatusServico/NfeStatusServico4.asmx',
+    consulta: 'https://nfe-homologacao.svrs.rs.gov.br/ws/NfeConsulta/NfeConsulta4.asmx',
   },
 };
 // UFs atendidas pela SVRS (autorizadora virtual) nos dois modelos.
@@ -51,8 +55,11 @@ export function enderecosHomologacao(uf, modelo, env = process.env) {
   const base = u === 'MT' ? MT : UFS_SVRS.includes(u) ? SVRS : null;
   const end = { ...(base?.[modelo] || {}), ...(sobrepostos?.[u]?.[modelo] || {}) };
   if (!end.autorizacao) throw new ErroDominio('UF_SEM_ENDERECO', `Endereço da SEFAZ de homologação para ${u}, modelo ${modelo}, ainda não cadastrado.`, 422);
-  for (const url of [end.autorizacao, end.evento, end.status].filter(Boolean)) {
-    if (/^https?:\/\//.test(url) && !/homolog/i.test(url)) throw new ErroDominio('AMBIENTE_PROIBIDO', 'Só endereços de homologação são aceitos nesta versão.', 422);
+  // o HOST precisa ser de homologação (não basta "homolog" na URL)
+  for (const url of [end.autorizacao, end.evento, end.status, end.consulta].filter(Boolean)) {
+    let host = '';
+    try { host = new URL(url).hostname; } catch { host = ''; }
+    if (!/^https:$/.test(new URL(url, 'https://x').protocol) || !/homolog/i.test(host)) throw new ErroDominio('AMBIENTE_PROIBIDO', 'Só endereços de homologação são aceitos nesta versão.', 422);
   }
   return end;
 }
@@ -61,6 +68,7 @@ const SERVICOS = {
   autorizacao: 'http://www.portalfiscal.inf.br/nfe/wsdl/NFeAutorizacao4',
   evento: 'http://www.portalfiscal.inf.br/nfe/wsdl/NFeRecepcaoEvento4',
   status: 'http://www.portalfiscal.inf.br/nfe/wsdl/NFeStatusServico4',
+  consulta: 'http://www.portalfiscal.inf.br/nfe/wsdl/NFeConsultaProtocolo4',
 };
 
 export function envelope(servico, corpoXml) {
@@ -80,7 +88,8 @@ export function transporteSoap({ certPem, keyPem, timeoutMs = 30000 }) {
       res.on('data', (c) => partes.push(c));
       res.on('end', () => resolve({ status: res.statusCode, corpo: Buffer.concat(partes).toString('utf8') }));
     });
-    req.on('timeout', () => req.destroy(new ErroDominio('SEFAZ_TIMEOUT', 'Tempo esgotado na comunicação com a SEFAZ.', 504)));
+    // erro de transporte NÃO é ErroDominio: quem chama trata como falha de comunicação (a nota pode ter sido autorizada)
+    req.on('timeout', () => req.destroy(Object.assign(new Error('Tempo esgotado na comunicação com a SEFAZ.'), { code: 'SEFAZ_TIMEOUT' })));
     req.on('error', reject);
     req.write(xml);
     req.end();
@@ -91,7 +100,7 @@ export function transporteSoap({ certPem, keyPem, timeoutMs = 30000 }) {
  * Envia um NFe assinado (síncrono, indSinc=1). Retorno:
  *  { autorizado, cStat, xMotivo, protocolo, chave, protXml } — cStat 100/150 = autorizado.
  */
-export async function autorizar({ uf, modelo, xmlAssinado, idLote, transporte, env = process.env }) {
+export async function autorizar({ uf, modelo, xmlAssinado, idLote, transporte, env = process.env, chaveEsperada = null }) {
   const end = enderecosHomologacao(uf, modelo, env);
   const corpo = `<enviNFe xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00"><idLote>${String(idLote).replace(/\D/g, '').slice(0, 15) || '1'}</idLote><indSinc>1</indSinc>${semDeclaracao(xmlAssinado)}</enviNFe>`;
   const r = await transporte({ url: end.autorizacao, xml: envelope('autorizacao', corpo) });
@@ -99,8 +108,17 @@ export async function autorizar({ uf, modelo, xmlAssinado, idLote, transporte, e
   const prot = pegar(ret, 'protNFe');
   const cStatLote = pegar(ret, 'cStat');
   if (!prot) return { autorizado: false, cStat: cStatLote || String(r.status), xMotivo: pegar(ret, 'xMotivo') || `Resposta inesperada da SEFAZ (HTTP ${r.status})`, protocolo: null, chave: null, protXml: null };
+  return lerProtocolo(prot, chaveEsperada);
+}
+
+/** Lê o protNFe: só vale como autorizado se for da chave enviada e do ambiente de homologação. */
+function lerProtocolo(prot, chaveEsperada) {
   const infProt = pegar(prot, 'infProt') ?? '';
   const cStat = pegar(infProt, 'cStat');
+  const chave = pegar(infProt, 'chNFe');
+  const tpAmb = pegar(infProt, 'tpAmb');
+  if (chaveEsperada && chave !== chaveEsperada) return { autorizado: false, cStat: 'RESPOSTA_DIVERGENTE', xMotivo: 'A SEFAZ respondeu sobre outra chave de acesso', protocolo: null, chave: null, protXml: null };
+  if (tpAmb && tpAmb !== '2') return { autorizado: false, cStat: 'RESPOSTA_DIVERGENTE', xMotivo: 'Resposta de ambiente que não é homologação', protocolo: null, chave: null, protXml: null };
   return {
     autorizado: ['100', '150'].includes(cStat),
     cStat, xMotivo: pegar(infProt, 'xMotivo'), protocolo: pegar(infProt, 'nProt'), chave: pegar(infProt, 'chNFe'),
@@ -109,6 +127,18 @@ export async function autorizar({ uf, modelo, xmlAssinado, idLote, transporte, e
 }
 
 /** Monta o evento de cancelamento (110111) sem assinatura; quem chama assina `infEvento`. */
+/** Consulta a situação da NF-e pela chave (NfeConsultaProtocolo4). */
+export async function consultarProtocolo({ uf, modelo, chave, transporte, env = process.env }) {
+  const end = enderecosHomologacao(uf, modelo, env);
+  if (!end.consulta) throw new ErroDominio('UF_SEM_ENDERECO', 'Endereço de consulta da SEFAZ não cadastrado', 422);
+  const corpo = `<consSitNFe xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00"><tpAmb>2</tpAmb><xServ>CONSULTAR</xServ><chNFe>${chave}</chNFe></consSitNFe>`;
+  const r = await transporte({ url: end.consulta, xml: envelope('consulta', corpo) });
+  const ret = pegar(r.corpo, 'retConsSitNFe') ?? '';
+  const prot = pegar(ret, 'protNFe');
+  if (!prot) return { autorizado: false, cStat: pegar(ret, 'cStat') || String(r.status), xMotivo: pegar(ret, 'xMotivo') || 'Consulta sem protocolo', protocolo: null, chave: null, protXml: null };
+  return lerProtocolo(prot, chave);
+}
+
 export function montarEventoCancelamento({ uf, cnpj, chave, protocolo, justificativa, dataEvento, seq = 1 }) {
   const xJust = String(justificativa || '').trim().replace(/\s+/g, ' ');
   if (xJust.length < 15 || xJust.length > 255) throw new ErroDominio('VALIDATION_ERROR', 'A justificativa do cancelamento precisa ter de 15 a 255 caracteres.');
@@ -126,7 +156,8 @@ export async function enviarEvento({ uf, modelo, xmlAssinado, transporte, env = 
   const ret = pegar(r.corpo, 'retEvento') ?? pegar(r.corpo, 'retEnvEvento') ?? '';
   const cStat = pegar(ret, 'infEvento') ? pegar(pegar(ret, 'infEvento'), 'cStat') : pegar(ret, 'cStat');
   const inf = pegar(ret, 'infEvento') ?? ret;
-  return { registrado: ['135', '155'].includes(cStat), cStat, xMotivo: pegar(inf, 'xMotivo'), protocolo: pegar(inf, 'nProt') };
+  // 573 = duplicidade de evento: o cancelamento já está registrado (resposta anterior se perdeu)
+  return { registrado: ['135', '155', '573'].includes(cStat), cStat, xMotivo: pegar(inf, 'xMotivo'), protocolo: pegar(inf, 'nProt') };
 }
 
 export async function statusServico({ uf, modelo, transporte, env = process.env }) {

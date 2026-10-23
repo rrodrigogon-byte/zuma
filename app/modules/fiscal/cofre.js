@@ -29,7 +29,7 @@ function exigirChave(env) {
 export function cifrar(conteudo, empresaId, env = process.env) {
   const chave = exigirChave(env);
   const iv = crypto.randomBytes(12);
-  const c = crypto.createCipheriv('aes-256-gcm', chave, iv);
+  const c = crypto.createCipheriv('aes-256-gcm', chave, iv, { authTagLength: 16 });
   c.setAAD(Buffer.from(String(empresaId)));
   const dados = Buffer.concat([c.update(Buffer.isBuffer(conteudo) ? conteudo : Buffer.from(String(conteudo), 'utf8')), c.final()]);
   return `${VERSAO}:${iv.toString('base64')}:${c.getAuthTag().toString('base64')}:${dados.toString('base64')}`;
@@ -40,7 +40,7 @@ export function decifrar(guardado, empresaId, env = process.env, { comoTexto = t
   const [versao, iv, tag, dados] = String(guardado || '').split(':');
   if (versao !== VERSAO || !iv || !tag || !dados) throw new ErroDominio('COFRE_CORROMPIDO', 'Segredo fiscal em formato desconhecido', 500);
   try {
-    const d = crypto.createDecipheriv('aes-256-gcm', chave, Buffer.from(iv, 'base64'));
+    const d = crypto.createDecipheriv('aes-256-gcm', chave, Buffer.from(iv, 'base64'), { authTagLength: 16 });
     d.setAAD(Buffer.from(String(empresaId)));
     d.setAuthTag(Buffer.from(tag, 'base64'));
     const saida = Buffer.concat([d.update(Buffer.from(dados, 'base64')), d.final()]);

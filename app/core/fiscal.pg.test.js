@@ -27,7 +27,13 @@ const EMITENTE = {
 // Respostas falsas da SEFAZ/Sefin (o teste nunca sai da máquina).
 const sefazFalsa = (cStat = '100') => async ({ url, xml }) => {
   if (url.includes('RecepcaoEvento') || url.includes('recepcaoevento')) return { status: 200, corpo: `<retEnvEvento><cStat>128</cStat><retEvento versao="1.00"><infEvento><cStat>135</cStat><xMotivo>Evento registrado e vinculado a NF-e</xMotivo><nProt>151260000000999</nProt></infEvento></retEvento></retEnvEvento>` };
+  if (url.includes('NfeConsulta')) {
+    const ch = (xml.match(/<chNFe>(\d{44})<\/chNFe>/) || [])[1];
+    return { status: 200, corpo: `<retConsSitNFe><tpAmb>2</tpAmb><cStat>100</cStat><xMotivo>Autorizado</xMotivo><protNFe versao="4.00"><infProt><tpAmb>2</tpAmb><chNFe>${ch}</chNFe><nProt>151260000000777</nProt><cStat>100</cStat><xMotivo>Autorizado o uso da NF-e</xMotivo></infProt></protNFe></retConsSitNFe>` };
+  }
   const chave = (xml.match(/Id="NFe(\d{44})"/) || [])[1];
+  if (cStat === '204') return { status: 200, corpo: `<retEnviNFe><cStat>104</cStat><protNFe versao="4.00"><infProt><tpAmb>2</tpAmb><chNFe>${chave}</chNFe><cStat>204</cStat><xMotivo>Duplicidade de NF-e</xMotivo></infProt></protNFe></retEnviNFe>` };
+  if (cStat === 'outra') return { status: 200, corpo: `<retEnviNFe><cStat>104</cStat><protNFe versao="4.00"><infProt><tpAmb>2</tpAmb><chNFe>${'5'.repeat(44)}</chNFe><nProt>1</nProt><cStat>100</cStat><xMotivo>ok</xMotivo></infProt></protNFe></retEnviNFe>` };
   return { status: 200, corpo: `<soap:Envelope><soap:Body><nfeResultMsg><retEnviNFe><cStat>104</cStat><xMotivo>Lote processado</xMotivo><protNFe versao="4.00"><infProt><tpAmb>2</tpAmb><chNFe>${chave}</chNFe><nProt>151260000000123</nProt><cStat>${cStat}</cStat><xMotivo>${cStat === '100' ? 'Autorizado o uso da NF-e' : 'Rejeicao: teste'}</xMotivo></infProt></protNFe></retEnviNFe></nfeResultMsg></soap:Body></soap:Envelope>` };
 };
 
@@ -155,5 +161,68 @@ describe('Fiscal por empresa — homologação (PostgreSQL)', { skip: pgDeTeste 
     assert.equal(p.pronto, true, JSON.stringify(p.pendencias));
     assert.ok((await fiscal.prontidao(ctx.db, B, { env: ENV })).pendencias.length >= 2);
     void loja;
+  });
+
+  test('revisão: chave reutilizada com outro modelo, venda com duas notas e certificado reenviado', async () => {
+    const c = await comandaPaga('Mesa 30');
+    const d = await fiscal.emitir(ctx.db, A, { modelo: '65', origem: 'bar_comanda', origemId: c, idempotencia: 'K-1' }, { env: ENV, agora });
+    await assert.rejects(() => fiscal.emitir(ctx.db, A, { modelo: 'nfse', origem: 'manual', idempotencia: 'K-1', itens: [{ fonte: 'servico', fonteId: 'aula-tenis', descricao: 'x', quantidade: 1, valorUnitario: 1 }] }, { env: ENV, agora }), (e) => e.code === 'IDEMPOTENCY_CONFLICT');
+    await assert.rejects(() => fiscal.emitir(ctx.db, A, { modelo: '65', origem: 'bar_comanda', origemId: c, idempotencia: 'K-2' }, { env: ENV, agora }), (e) => e.code === 'VENDA_JA_TEM_NOTA');
+    assert.equal(d.status, 'validado_localmente');
+    const c2 = await fiscal.importarCertificado(ctx.db, A, { arquivoBase64: PFX, senha: SENHA }, { env: ENV });
+    assert.equal(c2.ativo, true);
+    assert.equal((await fiscal.listarCertificados(ctx.db, A)).length, 1);
+  });
+
+  test('revisão: falha de comunicação reenvia o MESMO XML e recupera o protocolo; resposta de outra chave não autoriza', async () => {
+    const c = await comandaPaga('Mesa 31');
+    const quebra = async () => { throw Object.assign(new Error('socket hang up'), { code: 'ECONNRESET' }); };
+    await assert.rejects(() => fiscal.emitir(ctx.db, A, { modelo: '65', origem: 'bar_comanda', origemId: c }, { env: ENV_TX, transporte: quebra, agora }), (e) => e.code === 'FALHA_COMUNICACAO');
+    const [falhou] = (await fiscal.listarDocumentos(ctx.db, A, { status: 'falha_comunicacao' }));
+    const enviados = [];
+    const espiao = async (req) => { enviados.push(req.xml); return sefazFalsa('204')(req); };
+    const ok = await fiscal.emitir(ctx.db, A, { modelo: '65', origem: 'bar_comanda', origemId: c }, { env: ENV_TX, transporte: espiao, agora });
+    assert.equal(ok.id, falhou.id);
+    assert.equal(ok.status, 'autorizado');
+    assert.equal(ok.chave, falhou.chave, 'mesma chave do primeiro envio');
+    assert.equal(ok.protocolo, '151260000000777');
+    assert.ok(enviados.some((x) => x.includes(falhou.chave)));
+    const c3 = await comandaPaga('Mesa 32');
+    const div = await fiscal.emitir(ctx.db, A, { modelo: '65', origem: 'bar_comanda', origemId: c3 }, { env: ENV_TX, transporte: sefazFalsa('outra'), agora });
+    assert.equal(div.status, 'rejeitado');
+  });
+
+  test('revisão: duas emissões simultâneas com a mesma chave transmitem uma vez só', async () => {
+    const c = await comandaPaga('Mesa 33');
+    let envios = 0;
+    const lento = async (req) => { envios += 1; await new Promise((r) => setTimeout(r, 150)); return sefazFalsa('100')(req); };
+    const res = await Promise.allSettled([1, 2].map(() => fiscal.emitir(ctx.db, A, { modelo: '65', origem: 'bar_comanda', origemId: c }, { env: ENV_TX, transporte: lento, agora })));
+    assert.equal(envios, 1);
+    assert.equal(res.filter((r) => r.status === 'fulfilled' && r.value.status === 'autorizado').length, 1);
+    assert.equal(res.find((r) => r.status === 'rejected').reason.code, 'EM_ANDAMENTO');
+  });
+
+  test('revisão: prazo de cancelamento da NFC-e e NF-e 55 com destinatário passa no schema', async () => {
+    const c = await comandaPaga('Mesa 34');
+    const ok = await fiscal.emitir(ctx.db, A, { modelo: '65', origem: 'bar_comanda', origemId: c }, { env: ENV_TX, transporte: sefazFalsa('100'), agora });
+    await ctx.db.query("UPDATE fis_documentos SET autorizado_em = now() - interval '2 hours' WHERE id = $1", [ok.id]);
+    await assert.rejects(() => fiscal.cancelar(ctx.db, A, ok.id, { justificativa: 'Cliente desistiu da compra no caixa', env: ENV_TX, transporte: sefazFalsa() }), (e) => e.code === 'PRAZO_CANCELAMENTO');
+    const c2 = await comandaPaga('Mesa 35');
+    await assert.rejects(() => fiscal.emitir(ctx.db, A, { modelo: '55', origem: 'bar_comanda', origemId: c2 }, { env: ENV, agora }), (e) => e.code === 'PENDENCIAS_FISCAIS');
+    const dest = { cnpj: '11222333000181', nome: 'Cliente Empresa', endereco: { logradouro: 'Av. Brasil', numero: '10', bairro: 'Centro', cidade: 'Tangará da Serra', uf: 'MT', codigoMunicipio: '5107958', cep: '78300000' }, indIEDest: '9' };
+    const nfe = await fiscal.emitir(ctx.db, A, { modelo: '55', origem: 'bar_comanda', origemId: c2, destinatario: dest }, { env: ENV, agora });
+    assert.equal(nfe.status, 'validado_localmente');
+    assert.ok(!nfe.mensagens.some((m) => m.codigo === 'XSD_INDISPONIVEL'));
+    const xml = (await fiscal.obterDocumento(ctx.db, A, nfe.id, { comXml: true })).xmlAssinado;
+    assert.match(xml, /<xNome>NF-E EMITIDA EM AMBIENTE DE HOMOLOGACAO - SEM VALOR FISCAL<\/xNome>/);
+  });
+
+  test('revisão: usuário de uma unidade não emite com o CNPJ de outra', async () => {
+    const lojaB = (await ctx.db.query("INSERT INTO lojas (empresa_id, nome) VALUES ($1, 'Filial') RETURNING id", [A])).rows[0].id;
+    const emitB = await fiscal.salvarEmitente(ctx.db, A, { ...EMITENTE, lojaId: lojaB, cnpj: '50073355000340' }, { env: ENV });
+    const itens = [{ fonte: 'servico', fonteId: 'aula-tenis', descricao: 'Aula', quantidade: 1, valorUnitario: 10 }];
+    await assert.rejects(() => fiscal.emitir(ctx.db, A, { modelo: 'nfse', origem: 'manual', idempotencia: 'u-1', itens, emitenteId: emitB.id }, { env: ENV, agora, lojaRestrita: loja }), (e) => e.status === 404);
+    const c = await comandaPaga('Mesa 36'); // agora há duas unidades e o bar não tem unidade definida
+    await assert.rejects(() => fiscal.emitir(ctx.db, A, { modelo: '65', origem: 'bar_comanda', origemId: c }, { env: ENV, agora, lojaRestrita: loja }), (e) => e.code === 'PERMISSION_DENIED');
   });
 });
