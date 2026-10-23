@@ -56,8 +56,9 @@ export function registerEquipePerformanceRoutes(app, { db, legacyEmpresaId, lega
         const range = commerceWindow({ inicio: req.query.inicio, fim: req.query.fim });
         const sales = await salesReport(context, range);
         req.equipeCommerce = {
-          revenue: Number(sales?.summary?.gross_total || 0),
-          orders: Number(sales?.summary?.orders_non_cancelled ?? sales?.summary?.orders ?? 0),
+          // Pedidos pendentes não representam faturamento nem produção da equipe.
+          revenue: Number(sales?.summary?.confirmed_total || 0),
+          orders: Number(sales?.summary?.confirmed_orders || 0),
         };
       }
       const result = buildEquipeDesempenho(db(), { empresaId, lojaId, inicio: req.query.inicio, fim: req.query.fim, profissionalId, commerceCurrent: req.equipeCommerce });

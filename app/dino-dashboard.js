@@ -244,10 +244,12 @@ export function buildDinoDashboardAnalytics(input = {}, options = {}) {
   const commercePrevious = input.commercePrevious || {};
   const legacyCurrent = legacyRevenue(input, window);
   const legacyPrevious = legacyRevenue(input, previousWindow);
-  const commerceRevenue = num(commerceCurrent.sales?.summary?.gross_total);
-  const commercePreviousRevenue = num(commercePrevious.sales?.summary?.gross_total);
-  const commerceOrders = num(commerceCurrent.sales?.summary?.orders_non_cancelled ?? commerceCurrent.sales?.summary?.orders);
-  const commercePreviousOrders = num(commercePrevious.sales?.summary?.orders_non_cancelled ?? commercePrevious.sales?.summary?.orders);
+  // Receita e conversão usam exclusivamente pedidos em estado confirmado.
+  // Pendências e capturas permanecem métricas separadas no canal Commerce.
+  const commerceRevenue = num(commerceCurrent.sales?.summary?.confirmed_total);
+  const commercePreviousRevenue = num(commercePrevious.sales?.summary?.confirmed_total);
+  const commerceOrders = num(commerceCurrent.sales?.summary?.confirmed_orders);
+  const commercePreviousOrders = num(commercePrevious.sales?.summary?.confirmed_orders);
   const commerceOrdersTotal = num(commerceCurrent.sales?.summary?.orders_total ?? commerceCurrent.sales?.summary?.orders);
   const commerceCapturedRevenue = list(commerceCurrent.sales?.capturedPayments).reduce((sum, item) => sum + num(item.value), 0);
   const revenue = money(commerceRevenue + legacyCurrent.total + historicalFinance.paidRevenue);
@@ -271,7 +273,7 @@ export function buildDinoDashboardAnalytics(input = {}, options = {}) {
   const byDay = new Map(daily.map((item) => [item.day, item]));
   for (const item of list(commerceCurrent.sales?.daily)) {
     const row = byDay.get(dayKey(item.day, window.timeZone));
-    if (row) row.commerce = money(row.commerce + num(item.total));
+    if (row) row.commerce = money(row.commerce + num(item.confirmed_total));
   }
   for (const item of legacyCurrent.retail) {
     const row = byDay.get(dayKey(timestamp(item), window.timeZone));
@@ -345,7 +347,7 @@ export function buildDinoDashboardAnalytics(input = {}, options = {}) {
       ],
       scheduleHeatmap: scheduleHeatmap(appointments, window),
       channels: [
-        { id: 'commerce', label: 'E-commerce', revenue: money(commerceRevenue), grossValue: money(commerceRevenue), capturedRevenue: money(commerceCapturedRevenue), pendingValue: money(commerceCurrent.sales?.summary?.pending_total), transactions: commerceOrders, ordersTotal: commerceOrdersTotal, pendingOrders: num(commerceCurrent.sales?.summary?.pending_orders), cancelledOrders: num(commerceCurrent.sales?.summary?.cancelled_orders), refundedOrders: num(commerceCurrent.sales?.summary?.refunded_orders), capturedTransactions: list(commerceCurrent.sales?.capturedPayments).reduce((sum, item) => sum + num(item.transactions), 0), available: commerceAvailable },
+        { id: 'commerce', label: 'E-commerce confirmado', revenue: money(commerceRevenue), grossValue: money(commerceRevenue), capturedRevenue: money(commerceCapturedRevenue), pendingValue: money(commerceCurrent.sales?.summary?.pending_total), transactions: commerceOrders, ordersTotal: commerceOrdersTotal, pendingOrders: num(commerceCurrent.sales?.summary?.pending_orders), cancelledOrders: num(commerceCurrent.sales?.summary?.cancelled_orders), refundedOrders: num(commerceCurrent.sales?.summary?.refunded_orders), capturedTransactions: list(commerceCurrent.sales?.capturedPayments).reduce((sum, item) => sum + num(item.transactions), 0), available: commerceAvailable },
         { id: 'barbershop', label: 'Barbearia', revenue: money(legacyCurrent.commands.reduce((sum, item) => sum + num(item.totalPago || item.total), 0)), transactions: legacyCurrent.commands.length, available: true },
         { id: 'retail', label: 'Revenda', revenue: money(legacyCurrent.retail.reduce((sum, item) => sum + num(item.total), 0)), transactions: legacyCurrent.retail.length, available: true },
         { id: 'historical-avec', label: 'Histórico Avec', revenue: historicalFinance.paidRevenue, grossValue: historicalFinance.paidRevenue, expenses: historicalFinance.paidExpenses, transactions: historicalFinance.paidRevenueEntries, available: true, historical: true },

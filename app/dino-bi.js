@@ -10,9 +10,16 @@ const money = (value) => Number(num(value).toFixed(2));
 const list = (value) => (Array.isArray(value) ? value : []);
 const TIME_ZONE = 'America/Cuiaba';
 const WEEKDAYS = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sab'];
+const DAY_MS = 86_400_000;
+const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+const MAX_BI_DAYS = 366;
 
 function dateOf(value) {
-  const date = value instanceof Date ? value : new Date(value || '');
+  const raw = String(value || '').trim();
+  // Datas sem horário são datas civis do negócio, não meia-noite UTC. Cuiabá
+  // equivale atualmente a UTC-04:00; isso mantém os extremos do recorte
+  // alinhados ao biPeriod e evita excluir o primeiro dia.
+  const date = value instanceof Date ? value : new Date(DATE_ONLY.test(raw) ? `${raw}T04:00:00.000Z` : raw);
   return Number.isNaN(date.valueOf()) ? null : date;
 }
 
@@ -36,6 +43,63 @@ function localParts(date) {
   const hour = Number(parts.find((p) => p.type === 'hour')?.value || 0);
   const index = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(weekday);
   return { weekday: WEEKDAYS[index < 0 ? 0 : index], hour };
+}
+
+function localDay(value) {
+  const raw = String(value || '').trim();
+  if (DATE_ONLY.test(raw)) return raw;
+  const date = dateOf(value);
+  if (!date) return '';
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: TIME_ZONE, year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(date);
+  const field = (type) => parts.find((part) => part.type === type)?.value || '';
+  const year = field('year'); const month = field('month'); const day = field('day');
+  return year && month && day ? `${year}-${month}-${day}` : '';
+}
+
+function parseDateOnly(value) {
+  const raw = String(value || '').trim();
+  if (!DATE_ONLY.test(raw)) throw new RangeError('Informe início e fim no formato AAAA-MM-DD.');
+  const date = new Date(`${raw}T12:00:00.000Z`);
+  if (Number.isNaN(date.valueOf()) || date.toISOString().slice(0, 10) !== raw) throw new RangeError('Uma das datas do período é inválida.');
+  return { raw, date };
+}
+
+/** Datas explícitas cobrem dias inteiros em Cuiabá; sem datas, preserva os atalhos publicados. */
+export function biPeriod(query = {}, now = new Date()) {
+  const inicio = String(query.inicio || '').trim();
+  const fim = String(query.fim || '').trim();
+  if (!inicio && !fim) {
+    const parsed = Number.parseInt(String(query.periodo || query.period || 30), 10);
+    const days = [7, 30, 90].includes(parsed) ? parsed : 30;
+    const toDate = new Date(now);
+    const currentDay = localDay(toDate);
+    const fromDate = new Date(new Date(`${currentDay}T04:00:00.000Z`).valueOf() - (days - 1) * DAY_MS);
+    const previousToDate = new Date(fromDate);
+    const previousFromDate = new Date(fromDate.valueOf() - days * DAY_MS);
+    return {
+      days, timeZone: TIME_ZONE, custom: false,
+      fromDate, toDate, previousFromDate, previousToDate,
+      from: fromDate.toISOString(), to: toDate.toISOString(), previousFrom: previousFromDate.toISOString(), previousTo: previousToDate.toISOString(),
+    };
+  }
+  if (!inicio || !fim) throw new RangeError('Informe início e fim juntos para filtrar o relatório.');
+  const start = parseDateOnly(inicio); const end = parseDateOnly(fim);
+  if (start.date > end.date) throw new RangeError('A data inicial deve ser anterior ou igual à final.');
+  const days = Math.round((end.date - start.date) / DAY_MS) + 1;
+  if (days > MAX_BI_DAYS) throw new RangeError(`O período máximo do BI é de ${MAX_BI_DAYS} dias.`);
+  // Cuiabá não adota horário de verão; 04:00Z equivale à meia-noite local.
+  const fromDate = new Date(`${inicio}T04:00:00.000Z`);
+  const next = new Date(end.date.valueOf() + DAY_MS);
+  const toDate = new Date(`${next.toISOString().slice(0, 10)}T04:00:00.000Z`);
+  const previousToDate = new Date(fromDate);
+  const previousFromDate = new Date(fromDate.valueOf() - days * DAY_MS);
+  return {
+    days, timeZone: TIME_ZONE, custom: true,
+    fromDate, toDate, previousFromDate, previousToDate,
+    from: fromDate.toISOString(), to: toDate.toISOString(), previousFrom: previousFromDate.toISOString(), previousTo: previousToDate.toISOString(),
+  };
 }
 
 function phoneKey(value) {
@@ -88,6 +152,31 @@ export function servicesPerformed({ appointments = [], commands = [], financeEnt
   return rows;
 }
 
+/**
+ * Detalhes de serviço trazidos do Avec: servem para ranking, equipe e
+ * relacionamento. O extrato financeiro histórico é a única fonte desses
+ * valores no faturamento consolidado, para não contabilizar a mesma venda duas vezes.
+ */
+export function historicalServicesPerformed({ historicalServices = [] }, window) {
+  return list(historicalServices)
+    .filter((item) => item.somenteHistorico === true && item.status === 'concluido')
+    .filter((item) => inWindow(item.dataAgenda || item.dataOriginal, window))
+    .map((item) => {
+      const quantity = num(item.quantidade || item.qtd || 1);
+      return {
+        servicoId: item.servicoId || item.servicoNome || 'historico-avec',
+        nome: item.servicoNome || 'Serviço histórico Avec',
+        quantidade: quantity > 0 ? quantity : 1,
+        receita: num(item.valor ?? item.total),
+        custo: 0,
+        profissionalId: item.profissionalId || '',
+        cliente: customerKey(item),
+        at: item.dataAgenda || item.dataOriginal,
+        origem: 'historico_avec',
+      };
+    });
+}
+
 /** Produtos de revenda vendidos (avulsos ou dentro de comanda) com custo unitário do cadastro. */
 export function retailSold({ commands = [], retailSales = [], products = [] }, window) {
   const cost = new Map(list(products).map((item) => [item.id, num(item.custoUnitario)]));
@@ -96,20 +185,20 @@ export function retailSold({ commands = [], retailSales = [], products = [] }, w
     if (sale.status !== 'pago' || sale.comandaId || !inWindow(sale.pagoEm || sale.criadoEm, window)) continue;
     for (const item of list(sale.itens)) {
       const quantidade = num(item.quantidade || 1);
-      rows.push({ produtoId: item.produtoId, nome: item.nome || item.produtoNome || 'Produto', quantidade, receita: num(item.subtotal || num(item.precoUnitario) * quantidade), custo: (cost.get(item.produtoId) ?? num(item.custoUnitario)) * quantidade, profissionalId: sale.profissionalId || '' });
+      rows.push({ produtoId: item.produtoId, nome: item.nome || item.produtoNome || 'Produto', quantidade, receita: num(item.subtotal || num(item.precoUnitario) * quantidade), custo: (cost.get(item.produtoId) ?? num(item.custoUnitario)) * quantidade, profissionalId: sale.profissionalId || '', at: sale.pagoEm || sale.criadoEm });
     }
   }
   for (const command of list(commands)) {
     if (command.status !== 'paga' || !inWindow(commandDate(command), window)) continue;
     for (const item of list(command.itens).filter((entry) => entry.tipo === 'produto')) {
       const quantidade = num(item.quantidade || 1);
-      rows.push({ produtoId: item.produtoId, nome: item.nome || 'Produto', quantidade, receita: num(item.subtotal), custo: (cost.get(item.produtoId) ?? 0) * quantidade, profissionalId: item.profissionalId || command.profissionalId || '' });
+      rows.push({ produtoId: item.produtoId, nome: item.nome || 'Produto', quantidade, receita: num(item.subtotal), custo: (cost.get(item.produtoId) ?? 0) * quantidade, profissionalId: item.profissionalId || command.profissionalId || '', at: commandDate(command) });
     }
   }
   return rows;
 }
 
-export function paymentMix({ commands = [], retailSales = [] }, window) {
+export function paymentMix({ commands = [], retailSales = [], financeEntries = [] }, window) {
   const totals = new Map();
   const add = (method, value) => {
     const key = String(method || 'não informado').trim().toLowerCase() || 'não informado';
@@ -124,6 +213,11 @@ export function paymentMix({ commands = [], retailSales = [] }, window) {
   for (const sale of list(retailSales)) {
     if (sale.status !== 'pago' || sale.comandaId || !inWindow(sale.pagoEm || sale.criadoEm, window)) continue;
     add(sale.pagamento?.meioPagamento || sale.meioPagamento, sale.total);
+  }
+  for (const entry of list(financeEntries)) {
+    if (!isHistoricalAvecFinance(entry) || entry.tipo !== 'receita' || entry.status !== 'pago' || !inWindow(entry.pagoEm || entry.dataOperacao, window)) continue;
+    const method = String(entry.meioPagamento || 'não informado').trim() || 'não informado';
+    add(`Histórico Avec · ${method}`, entry.valor);
   }
   const total = [...totals.values()].reduce((sum, value) => sum + value, 0);
   return [...totals.entries()]
@@ -269,6 +363,7 @@ export function estimateResult({ services = [], retail = [], professionals = [],
     receitaHistoricaAvec: money(receitaHistoricaAvec),
     receitaServicos: money(receitaServicos),
     receitaRevenda: money(receitaRevenda),
+    receitaLojaBruta: money(commerceRevenue),
     receitaLojaIncluida: incluiLoja ? money(commerceRevenue) : 0,
     comissoes: money(comissoes),
     cmvRevenda: money(cmvRevenda),
@@ -295,11 +390,105 @@ function rankBy(rows, key) {
   return sortRanking(map).map((item) => ({ ...item, custo: money(item.custo), margem: item.receita > 0 && item.custo > 0 ? Number((((item.receita - item.custo) / item.receita) * 100).toFixed(1)) : null }));
 }
 
+function dailyRevenue(input, window, services, retail) {
+  const rows = [];
+  for (let cursor = new Date(window.fromDate); cursor < window.toDate; cursor = new Date(cursor.valueOf() + DAY_MS)) {
+    rows.push({ dia: localDay(cursor), servicos: 0, revenda: 0, ecommerce: 0, historicoAvec: 0, total: 0 });
+  }
+  const byDay = new Map(rows.map((item) => [item.dia, item]));
+  const add = (at, field, value) => {
+    const row = byDay.get(localDay(at));
+    if (row) row[field] = money(row[field] + num(value));
+  };
+  services.forEach((item) => add(item.at, 'servicos', item.receita));
+  retail.forEach((item) => add(item.at, 'revenda', item.receita));
+  for (const item of list(input.commerce?.daily)) add(item.day, 'ecommerce', item.total);
+  for (const entry of list(input.financeEntries)) {
+    if (isHistoricalAvecFinance(entry) && entry.tipo === 'receita' && entry.status === 'pago' && inWindow(entry.pagoEm || entry.dataOperacao, window)) add(entry.pagoEm || entry.dataOperacao, 'historicoAvec', entry.valor);
+  }
+  return rows.map((item) => ({ ...item, total: money(item.servicos + item.revenda + item.ecommerce + item.historicoAvec) }));
+}
+
+function customerProfile(customers = [], services = [], window) {
+  // Perfil é uma fotografia dos clientes atendidos neste recorte; cadastros
+  // antigos da unidade não devem aparecer como se fossem atendimentos atuais.
+  const attendedIds = new Set(list(services).map((row) => String(row.cliente || ''))
+    .filter((key) => key.startsWith('id:')).map((key) => key.slice(3)));
+  const active = list(customers).filter((item) => attendedIds.has(String(item?.id || '')) && !item.padrao && !item.anonimizadoEm && item.status !== 'deletado');
+  const ageBands = new Map([['Até 17', 0], ['18–24', 0], ['25–34', 0], ['35–44', 0], ['45–54', 0], ['55+', 0]]);
+  const types = new Map(); const origins = new Map();
+  let withBirthDate = 0;
+  const at = window.toDate || new Date();
+  for (const item of active) {
+    const type = String(item.tipo || 'não informado').toUpperCase();
+    types.set(type, (types.get(type) || 0) + 1);
+    const origin = String(item.origemCadastro || item.origem || 'Não informada').trim() || 'Não informada';
+    origins.set(origin, (origins.get(origin) || 0) + 1);
+    const born = dateOf(item.dataNascimento);
+    if (!born || born > at) continue;
+    withBirthDate += 1;
+    let age = at.getUTCFullYear() - born.getUTCFullYear();
+    if (at.getUTCMonth() < born.getUTCMonth() || (at.getUTCMonth() === born.getUTCMonth() && at.getUTCDate() < born.getUTCDate())) age -= 1;
+    const band = age < 18 ? 'Até 17' : age < 25 ? '18–24' : age < 35 ? '25–34' : age < 45 ? '35–44' : age < 55 ? '45–54' : '55+';
+    ageBands.set(band, (ageBands.get(band) || 0) + 1);
+  }
+  const countRows = (map) => [...map.entries()].map(([nome, quantidade]) => ({ nome, quantidade, receita: quantidade })).sort((a, b) => b.quantidade - a.quantidade || a.nome.localeCompare(b.nome, 'pt-BR'));
+  return {
+    cadastrosCobertos: active.length,
+    nascimentoInformado: withBirthDate,
+    coberturaNascimentoPct: active.length ? Number((withBirthDate / active.length * 100).toFixed(1)) : null,
+    faixasEtarias: countRows(ageBands).filter((item) => item.quantidade > 0),
+    tipos: countRows(types),
+    origensCadastro: countRows(origins).slice(0, 10),
+    sexoDisponivel: false,
+    sexoMotivo: 'O cadastro atual não possui campo estruturado de sexo; o BI não infere essa informação.',
+  };
+}
+
+function compactSummary(report = {}) {
+  return {
+    faturamentoBruto: report.resumo?.faturamentoBruto || 0,
+    ticketMedioBruto: report.resumo?.ticketMedioBruto || 0,
+    transacoes: report.resumo?.transacoes || 0,
+    resultado: report.resultado?.resultado || 0,
+    margem: report.resultado?.margem ?? null,
+    agenda: {
+      total: report.agenda?.total || 0,
+      taxaComparecimento: report.agenda?.taxaComparecimento ?? null,
+      taxaCancelamento: report.agenda?.taxaCancelamento ?? null,
+    },
+    clientes: {
+      ativos: report.clientes?.ativos || 0,
+      recorrentes: report.clientes?.recorrentes || 0,
+      taxaRecorrencia: report.clientes?.taxaRecorrencia ?? null,
+    },
+  };
+}
+
+export function biComparisonSummary(report) {
+  return compactSummary(report);
+}
+
 export function buildBarbershopBi(input = {}, window) {
   const services = servicesPerformed(input, window);
+  const historicalServices = historicalServicesPerformed(input, window);
   const retail = retailSold(input, window);
-  const professionals = professionalRanking({ services, retail, professionals: input.professionals });
+  const professionals = professionalRanking({ services: [...services, ...historicalServices], retail, professionals: input.professionals });
   const result = estimateResult({ services, retail, professionals: input.professionals, financeEntries: input.financeEntries, commerce: input.commerce, includeHistoricalFinance: true }, window);
+  const commerceRevenue = num(input.commerce?.revenue);
+  const commerceOrders = Math.max(0, Math.round(num(input.commerce?.orders)));
+  const historicalRevenueEntries = list(input.financeEntries).filter((item) => isHistoricalAvecFinance(item) && item.tipo === 'receita' && item.status === 'pago' && inWindow(item.pagoEm || item.dataOperacao, window));
+  const paidCommands = list(input.commands).filter((item) => item.status === 'paga' && inWindow(commandDate(item), window));
+  const paidRetail = list(input.retailSales).filter((item) => item.status === 'pago' && !item.comandaId && inWindow(item.pagoEm || item.criadoEm, window));
+  const transactions = paidCommands.length + paidRetail.length + commerceOrders + historicalRevenueEntries.length;
+  const faturamentoBruto = money(result.receitaServicos + result.receitaRevenda + commerceRevenue + result.receitaHistoricaAvec);
+  const operationalGross = money(result.receitaServicos + result.receitaRevenda + commerceRevenue);
+  const revenueSources = [
+    { id: 'servicos', nome: 'Serviços', receita: result.receitaServicos, quantidade: services.reduce((sum, item) => sum + num(item.quantidade), 0), origem: 'operacao' },
+    { id: 'revenda', nome: 'Revenda', receita: result.receitaRevenda, quantidade: retail.reduce((sum, item) => sum + num(item.quantidade), 0), origem: 'operacao' },
+    { id: 'ecommerce', nome: 'E-commerce confirmado', receita: money(commerceRevenue), quantidade: commerceOrders, origem: input.commerce ? 'commerce' : 'indisponivel' },
+    { id: 'historico-avec', nome: 'Histórico financeiro Avec', receita: result.receitaHistoricaAvec, quantidade: historicalRevenueEntries.length, origem: 'historico' },
+  ];
   const financeiroPeriodo = list(input.financeEntries).filter((item) => item.status === 'pago' && inWindow(item.pagoEm || item.dataOperacao, window));
   const receitasLancadas = financeiroPeriodo.filter((item) => item.tipo === 'receita').reduce((s, item) => s + num(item.valor), 0);
   const despesasLancadas = financeiroPeriodo.filter((item) => item.tipo === 'despesa').reduce((s, item) => s + num(item.valor), 0);
@@ -309,14 +498,38 @@ export function buildBarbershopBi(input = {}, window) {
     despesasPorCategoria.set(key, num(despesasPorCategoria.get(key)) + num(item.valor));
   });
   return {
-    periodo: { de: window.fromDate.toISOString(), ate: window.toDate.toISOString(), dias: window.days || null },
+    periodo: { de: window.fromDate.toISOString(), ate: window.toDate.toISOString(), dias: window.days || null, timeZone: TIME_ZONE },
     resultado: result,
-    servicos: rankBy(services, 'servicoId').slice(0, 15),
+    resumo: {
+      faturamentoBruto,
+      faturamentoOperacional: operationalGross,
+      historicoFinanceiroAvec: result.receitaHistoricaAvec,
+      ecommerce: money(commerceRevenue),
+      capturasCommerce: money(input.commerce?.captured),
+      commercePendente: money(input.commerce?.pending),
+      transacoes: transactions,
+      ticketMedioBruto: transactions ? money(faturamentoBruto / transactions) : 0,
+      resultadoIncluiEcommerce: result.receitaLojaIncluida > 0,
+      ecommerceSemCusto: commerceRevenue > 0 && result.receitaLojaIncluida === 0,
+    },
+    fontesReceita: revenueSources,
+    serieDiaria: dailyRevenue(input, window, services, retail),
+    servicos: rankBy([...services, ...historicalServices], 'servicoId').slice(0, 15),
     revenda: rankBy(retail, 'produtoId').slice(0, 15),
     profissionais: professionals,
     pagamentos: paymentMix(input, window),
     agenda: scheduleStats(input.appointments, window),
-    clientes: customerStats(services, { customers: input.customers, window }),
+    clientes: customerStats([...services, ...historicalServices], { customers: input.customers, window }),
+    perfilClientes: customerProfile(input.customers, [...services, ...historicalServices], window),
+    operacao: {
+      comandasPagas: paidCommands.length,
+      vendasRevendaPagas: paidRetail.length,
+      itensServico: services.reduce((sum, item) => sum + num(item.quantidade), 0),
+      itensServicoHistoricos: historicalServices.reduce((sum, item) => sum + num(item.quantidade), 0),
+      itensRevenda: retail.reduce((sum, item) => sum + num(item.quantidade), 0),
+      ocupacaoDisponivel: false,
+      ocupacaoMotivo: 'A ocupação exige capacidade e jornada canônicas por profissional; o BI não infere esse dado a partir de agendamentos.',
+    },
     financeiro: {
       receitasPagas: money(receitasLancadas),
       despesasPagas: money(despesasLancadas),
@@ -325,8 +538,17 @@ export function buildBarbershopBi(input = {}, window) {
     },
     lojaOnline: input.commerce ? {
       disponivel: true,
-      receita: money(input.commerce.revenue),
-      pedidos: num(input.commerce.orders),
+      // Receita e pedidos abaixo são confirmados por status, na data do pedido.
+      receitaConfirmada: money(input.commerce.revenue),
+      pedidosConfirmados: num(input.commerce.orders),
+      // Capturas são mostradas separadamente por data de liquidação e nunca são
+      // somadas ao faturamento, pois podem referir-se a outro recorte de pedido.
+      capturadoNoPeriodo: money(input.commerce.captured),
+      capturasDiarias: list(input.commerce.capturedDaily),
+      pendentePagamento: money(input.commerce.pending),
+      pedidosPendentes: num(input.commerce.pendingOrders),
+      brutoPedidosNaoCancelados: money(input.commerce.grossOrders),
+      detalheDisponivel: input.commerce.detailAvailable === true,
       topProdutos: list(input.commerce.topProducts).slice(0, 10),
     } : { disponivel: false },
   };

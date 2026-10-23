@@ -27,8 +27,8 @@ test('painel mostra lucro estimado e conversão quando os dados existem', () => 
   const now = new Date('2026-09-25T12:00:00Z');
   const analytics = buildDinoDashboardAnalytics({
     commerceAvailable: true,
-    commerceCurrent: { sales: { summary: { orders: 3, gross_total: 300 }, daily: [] } },
-    commercePrevious: { sales: { summary: { orders: 1, gross_total: 100 } } },
+    commerceCurrent: { sales: { summary: { orders: 3, gross_total: 300, confirmed_orders: 3, confirmed_total: 300 }, daily: [] } },
+    commercePrevious: { sales: { summary: { orders: 1, gross_total: 100, confirmed_orders: 1, confirmed_total: 100 } } },
     profit: { current: { resultado: 500, margem: 40, receita: 1250, comissoes: 400, cmvRevenda: 50, despesasPagas: 300, notas: [] }, previous: { resultado: 250 } },
     funnel: { current: { visit: 150, cart: 30, checkout: 10 }, previous: { visit: 100 } },
   }, { period: 30, now });

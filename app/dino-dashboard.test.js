@@ -8,12 +8,12 @@ function baseInput() {
   return {
     commerceAvailable: true,
     commerceCurrent: {
-      sales: { summary: { gross_total: '250', orders: 2 }, daily: [{ day: '2026-09-01', total: '250' }] },
+      sales: { summary: { gross_total: '250', confirmed_total: '250', orders: 2, confirmed_orders: 2 }, daily: [{ day: '2026-09-01', total: '250', confirmed_total: '250' }] },
       customers: { summary: { new_customers: 1 } },
       inventory: { items: [{ low_stock: true }, { low_stock: false }] },
     },
     commercePrevious: {
-      sales: { summary: { gross_total: '100', orders: 1 }, daily: [] },
+      sales: { summary: { gross_total: '100', confirmed_total: '100', orders: 1, confirmed_orders: 1 }, daily: [] },
       customers: { summary: { new_customers: 0 } },
     },
     appointments: [
@@ -82,20 +82,22 @@ test('dashboard mantém capturas Commerce separadas dos pedidos e do caixa legad
     cancelled_orders: 1,
     refunded_orders: 1,
     gross_total: '13206.00',
+    confirmed_orders: 1,
+    confirmed_total: '6.00',
     pending_total: '13200.00',
   };
   input.commerceCurrent.sales.capturedPayments = [{method:'pix',transactions:1,value:'6.00'}];
   const result = buildDinoDashboardAnalytics(input, {period:7,now});
   assert.equal(result.kpis.find(item=>item.id==='revenue').label, 'Valor bruto registrado');
-  assert.equal(result.kpis.find(item=>item.id==='revenue').value, 13356);
+  assert.equal(result.kpis.find(item=>item.id==='revenue').value, 156);
   assert.deepEqual(result.charts.commercePaymentMethods,[{method:'pix',value:6}]);
   assert.equal(result.charts.paymentMethods.reduce((sum,item)=>sum+item.value,0),150);
   const commerce = result.charts.channels.find(item=>item.id==='commerce');
-  assert.equal(commerce.grossValue, 13206);
+  assert.equal(commerce.grossValue, 6);
   assert.equal(commerce.pendingValue, 13200);
   assert.equal(commerce.capturedRevenue, 6);
   assert.equal(commerce.ordersTotal, 4);
-  assert.equal(commerce.transactions, 2);
+  assert.equal(commerce.transactions, 1);
   assert.equal(commerce.pendingOrders, 1);
   assert.equal(commerce.cancelledOrders, 1);
   assert.equal(commerce.refundedOrders, 1);

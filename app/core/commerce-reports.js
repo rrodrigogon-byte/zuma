@@ -1,5 +1,6 @@
 import { db } from './database.js';
 import { assertUuid, CommerceError, tenantContext } from './commerce-core.js';
+import { PAID_ORDER_STATUSES } from './customer-360.js';
 
 function dateParam(value, fallback) {
   if (!value) return fallback;
@@ -36,7 +37,7 @@ function orderScopeFilter(context, options, values, alias = 'o') {
 export async function salesReport(contextInput, options = {}) {
   const context = tenantContext(contextInput);
   const { from, to } = period(options);
-  const values = [context.empresaId, from, to];
+  const values = [context.empresaId, from, to, PAID_ORDER_STATUSES];
   const scope = orderScope(context, options, values);
   const summary = await db.query(
     `SELECT COUNT(*)::integer AS orders,
@@ -45,8 +46,10 @@ export async function salesReport(contextInput, options = {}) {
             COUNT(*) FILTER (WHERE o.status = 'pending_payment')::integer AS pending_orders,
             COUNT(*) FILTER (WHERE o.status = 'cancelled')::integer AS cancelled_orders,
             COUNT(*) FILTER (WHERE o.status = 'refunded')::integer AS refunded_orders,
+            COUNT(*) FILTER (WHERE o.status = ANY($4::text[]))::integer AS confirmed_orders,
             COALESCE(SUM(o.total) FILTER (WHERE o.status NOT IN ('cancelled','refunded')), 0)::numeric AS gross_order_total,
             COALESCE(SUM(o.total) FILTER (WHERE o.status NOT IN ('cancelled','refunded')), 0)::numeric AS gross_total,
+            COALESCE(SUM(o.total) FILTER (WHERE o.status = ANY($4::text[])), 0)::numeric AS confirmed_total,
             COALESCE(SUM(o.total) FILTER (WHERE o.status = 'pending_payment'), 0)::numeric AS pending_total,
             COALESCE((SELECT SUM(p.amount)
                         FROM commerce_payments p
@@ -60,13 +63,15 @@ export async function salesReport(contextInput, options = {}) {
     values,
   );
   const daily = await db.query(
-    `SELECT date_trunc('day', o.criado_em)::date AS day,
+    `SELECT (o.criado_em AT TIME ZONE 'America/Cuiaba')::date AS day,
             COUNT(*)::integer AS orders_total,
             COUNT(*) FILTER (WHERE o.status NOT IN ('cancelled','refunded'))::integer AS orders_non_cancelled,
             COUNT(*) FILTER (WHERE o.status = 'pending_payment')::integer AS pending_orders,
             COUNT(*) FILTER (WHERE o.status = 'cancelled')::integer AS cancelled_orders,
             COUNT(*) FILTER (WHERE o.status = 'refunded')::integer AS refunded_orders,
-            COALESCE(SUM(o.total) FILTER (WHERE o.status NOT IN ('cancelled','refunded')), 0)::numeric AS total
+            COUNT(*) FILTER (WHERE o.status = ANY($4::text[]))::integer AS confirmed_orders,
+            COALESCE(SUM(o.total) FILTER (WHERE o.status NOT IN ('cancelled','refunded')), 0)::numeric AS total,
+            COALESCE(SUM(o.total) FILTER (WHERE o.status = ANY($4::text[])), 0)::numeric AS confirmed_total
        FROM commerce_orders o
       WHERE o.empresa_id = $1 AND o.criado_em >= $2::timestamptz AND o.criado_em < $3::timestamptz${scope('o')}
       GROUP BY 1 ORDER BY 1 ASC`,
@@ -83,7 +88,20 @@ export async function salesReport(contextInput, options = {}) {
       GROUP BY p.method ORDER BY value DESC`,
     values,
   );
-  return { period: { from, to }, summary: summary.rows[0], daily: daily.rows, capturedPayments: captures.rows };
+  const capturedDailyValues = [context.empresaId, from, to];
+  const capturedDailyScope = orderScope(context, options, capturedDailyValues);
+  const capturedDaily = await db.query(
+    `SELECT (p.captured_at AT TIME ZONE 'America/Cuiaba')::date AS day,
+            COUNT(*)::integer AS transactions,
+            COALESCE(SUM(p.amount), 0)::numeric AS total
+       FROM commerce_payments p
+       JOIN commerce_orders o ON o.empresa_id = p.empresa_id AND o.id = p.order_id
+      WHERE p.empresa_id = $1 AND p.status = 'captured'
+        AND p.captured_at >= $2::timestamptz AND p.captured_at < $3::timestamptz${capturedDailyScope('o')}
+      GROUP BY 1 ORDER BY 1 ASC`,
+    capturedDailyValues,
+  );
+  return { period: { from, to }, summary: summary.rows[0], daily: daily.rows, capturedPayments: captures.rows, capturedDaily: capturedDaily.rows };
 
 }
 

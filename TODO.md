@@ -1,5 +1,18 @@
 # Grafo executivo Dino — acompanhamento da entrega
 
+## Extensão BI e Relatórios interativos — 23/10/2026
+
+**Branch:** `feat/dino-bi-reporting-20261023`
+**Base:** `fix/kytto-comandas-pdv-20260808` (`cb141271`)
+
+- [x] **Read-model consolidado.** Expor valores reais de operação, histórico financeiro Avec e Commerce por período, sem dupla contagem, com série diária, composição, agenda, clientes e rankings agregados.
+- [x] **Filtro e comparativo.** Aceitar intervalo customizado limitado, comparar com a janela anterior equivalente e manter o escopo estrito empresa + unidade nas fontes Commerce/legado.
+- [x] **BI interativo.** Disponibilizar visão executiva, detalhes clicáveis por dimensão, tabelas/gráficos acessíveis, exportação CSV e impressão; conectar a aba Relatórios aos detalhes já existentes sem criar uma aplicação paralela.
+- [x] **IA gerencial protegida.** Reutilizar a análise consultiva existente apenas sob clique explícito, dados agregados, permissão de gestão e orçamento configurado; nenhuma escrita, automação ou mensagem será acionada.
+- [x] **Qualidade e privacidade.** Identificar cobertura por fonte e não inferir ocupação, demografia, avaliação ou atribuição profissional ausentes. Não exportar PII nesta visão gerencial.
+- [x] **Testes locais.** Testes focados de BI, rota HTTP, painel principal, desempenho, Commerce e exportação passaram; `node --check`, `git diff --check` e build Vite foram concluídos.
+- [ ] **Promoção controlada.** Abrir PR contra a branch de produção correta, revisar estado e checks e só então promover conforme as regras do repositório. A suíte Node ampla foi rodada: a única indisponibilidade local são os oito hooks de PostgreSQL real que exigem `initdb`, binário ausente no Sandbox.
+
 **Branch:** `feat/dino-grafo-executivo-20261022`
 
 **Base:** `fix/kytto-comandas-pdv-20260808` (`a83754aa`)

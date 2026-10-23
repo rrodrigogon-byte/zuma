@@ -3483,7 +3483,7 @@ async function metasDoMes({ empresaId, now, barbershopInput, commerceContext, pr
   const resultado = profitFor(win, commerce);
   const atendimentos = services.reduce((sum, row) => sum + row.quantidade, 0);
   const receitaServicos = services.reduce((sum, row) => sum + row.receita, 0);
-  const receitaLoja = Number(commerce?.sales?.summary?.gross_total || 0);
+  const receitaLoja = Number(commerce?.sales?.summary?.confirmed_total || 0);
   const novosClientes = clientesKytto.listarClientes(empresaId).filter((item) => !item.padrao && !item.anonimizadoEm && item.criadoEm && new Date(item.criadoEm) >= mes.fromDate).length;
   const atual = {
     receita: receitaServicos + retail.reduce((sum, row) => sum + row.receita, 0) + receitaLoja,
@@ -3544,7 +3544,7 @@ app.get('/api/admin/barbearia/analytics', async (req, res) => {
       retail: dinoBi.retailSold(barbershopInput, win),
       professionals: barbershopInput.professionals,
       financeEntries: barbershopInput.financeEntries,
-      commerce: commerceAvailable ? { revenue: Number(commerceData?.sales?.summary?.gross_total || 0), cost: commerceData?.cost ?? null } : null,
+      commerce: commerceAvailable ? { revenue: Number(commerceData?.sales?.summary?.confirmed_total || 0), cost: commerceData?.cost ?? null } : null,
       includeHistoricalFinance: true,
     }, win);
     const analytics = buildDinoDashboardAnalytics({

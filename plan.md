@@ -1,8 +1,10 @@
-# Plano — Grafo executivo da Barbearia Dino
+# Plano — Grafo executivo e BI interativo da Barbearia Dino
 
 ## Objetivo e escopo
 
 Ampliar **Cérebro do atendente → Grafo e ofertas**, que já existe no SetPoint/Kytto, para cruzar sinais de cliente e Commerce com indicadores operacionais, financeiros e de estoque. Manter a visualização de relações por cliente e as ofertas atuais, acrescentando uma visão geral com riscos e oportunidades explicáveis, período e origem dos dados.
+
+Em 23/10/2026, o responsável enviou referências visuais e um vídeo do BI/relatórios do Avec e solicitou sua adaptação completa ao fluxo da Barbearia Dino. Esta extensão adicionará ao BI já existente: período customizado e comparação equivalente, composição consolidada de faturamento, série diária, rankings e detalhes de serviços/produtos/profissionais, indicadores de agenda e clientes baseados em campos efetivamente disponíveis, exportação e impressão. A referência rastreável está em `docs/REFERENCIA-INDICADORES-AVEC-DINO-2026-10-23.md`; anexos não entram no Git.
 
 A referência fornecida, https://nossacasa.kytto.com.br/plataforma/grafo, abre somente a tela de login; portanto, o plano reutiliza a estrutura e o estilo já existentes no Cérebro IA, sem presumir detalhes da tela autenticada que não puderam ser vistos.
 
@@ -35,6 +37,19 @@ O grafo executivo e sua análise são somente leitura: não alteram lançamentos
 - `app/ai-brain-scheduler.js`: manter automações programadas no escopo da loja ativa do canal; carregar o legado somente com empresa/unidade coincidentes e pular/logar escopo inválido.
 - `web/src/pages/admin/dino/CerebroIA.jsx` e `dino-admin.css`: acrescentar mapa/resumo executivo, filtros de período/área, alertas por fonte e uma entrada clara para abrir as ligações de um cliente; remontar/limpar a tela ao trocar empresa ou unidade para nunca manter indicadores do escopo anterior; manter o padrão visual atual.
 - Testes existentes em `app/` e `web/` cobrirão o contrato dos dados, isolamento e comportamento de leitura segura.
+
+### Extensão BI e Relatórios (23/10/2026)
+
+- `app/dino-bi.js`: estender o read-model puro para retornar série diária, composição de receita, resumo operacional e dimensões de clientes agregadas. Dados históricos Avec permanecerão identificados e a composição preservará a soma consolidada existente, sem transformar registros históricos em novas vendas.
+- `app/dino-admin-routes.js`: aceitar somente uma janela de datas válida e limitada para o BI, carregar o comparativo anterior com o mesmo tamanho e retornar ambos os recortes. Commerce seguirá sob `reports.read`, com empresa e unidade autorizadas; quando indisponível o BI continuará lendo apenas as fontes legadas permitidas e declarará a cobertura.
+- `web/src/pages/admin/dino/BIBarbearia.jsx`: entregar visão executiva, filtros de período, comparação, drill-down por abas, gráfico/tabelas acessíveis, exportação CSV da visão selecionada e impressão sem chamar APIs de escrita. O relatório por profissional continuará no componente próprio, acessível por deep link na tabela.
+- `web/src/pages/admin/dino/CerebroIA.jsx`: reutilizar exclusivamente o endpoint de análise gerencial existente para uma leitura consultiva do período, mediante clique explícito e orçamento de IA já configurado. O payload enviado já é minimizado a indicadores agregados; nenhuma IA será introduzida no cliente ou usada para gravar/enviar dados.
+- Não será inventada taxa de ocupação sem agenda/capacidade comparáveis, dado demográfico ausente, avaliação inexistente nem atribuição de e-commerce a profissionais.
+
+### Verificação e promoção desta extensão
+
+- A validação local abrangerá testes puros do BI, testes HTTP da rota, build Vite e testes focados da tela. Como este checkout não possui um projeto WebDev gerenciado ativo, não há diagnóstico LSP associado; `node --check`, os testes e a compilação serão as verificações não destrutivas.
+- A promoção continuará exclusivamente por PR com base `fix/kytto-comandas-pdv-20260808`; não haverá alteração de Render, Blueprint, variáveis de WhatsApp ou migração de dados.
 
 ## Git e entrega
 
