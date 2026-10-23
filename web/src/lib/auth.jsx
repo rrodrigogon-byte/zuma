@@ -17,7 +17,7 @@ function readStorage(key, fallback = null) {
 function readEmpresaAtivaInicial() {
   const atual = readStorage('sp_empresa_ativa')
   if (!isDinoDedicatedHost()) return atual
-  const empresas = readStorage('sp_empresas_acessiveis', [])
+  const empresas = empresasComFallbackDino(readStorage('sp_empresas_acessiveis', []))
   const dino = Array.isArray(empresas) ? empresas.find((empresa) => isDinoBrandContext(empresa)) : null
   const empresaAtiva = dino || DINO_COMPANY
   try { localStorage.setItem('sp_empresa_ativa', JSON.stringify(empresaAtiva)) } catch { /* armazenamento opcional */ }
@@ -25,16 +25,25 @@ function readEmpresaAtivaInicial() {
 }
 
 function readEmpresasAcessiveisInicial() {
-  const empresas = readStorage('sp_empresas_acessiveis', [])
-  return isDinoDedicatedHost() && (!Array.isArray(empresas) || empresas.length === 0) ? [DINO_COMPANY] : empresas
+  return empresasComFallbackDino(readStorage('sp_empresas_acessiveis', []))
+}
+
+function empresasComFallbackDino(empresas) {
+  const lista = Array.isArray(empresas) ? empresas : []
+  if (!isDinoDedicatedHost() || lista.some((empresa) => isDinoBrandContext(empresa))) return lista
+  return [...lista, DINO_COMPANY]
+}
+
+function lojasComFallbackDino(lojas) {
+  const lista = Array.isArray(lojas) ? lojas : []
+  if (!isDinoDedicatedHost() || lista.some((loja) => String(loja?.id || '') === DINO_STORE.id)) return lista
+  return [...lista, DINO_STORE]
 }
 
 function readLojaAtivaInicial() {
   const empresa = readEmpresaAtivaInicial()
   const lojasArmazenadas = readStorage('sp_lojas_acessiveis', [])
-  const lojas = isDinoDedicatedHost() && (!Array.isArray(lojasArmazenadas) || lojasArmazenadas.length === 0)
-    ? [DINO_STORE]
-    : lojasArmazenadas
+  const lojas = lojasComFallbackDino(lojasArmazenadas)
   const atual = readStorage('sp_loja_ativa')
   const selecionada = empresa?.id ? selecionarLojaAutomatica(lojas, empresa.id, atual) : null
   try {
@@ -51,8 +60,7 @@ export function AuthProvider({ children }) {
   const [empresasAcessiveis, setEmpresasAcessiveis] = useState(readEmpresasAcessiveisInicial)
   const [lojaAtiva, setLojaAtiva] = useState(readLojaAtivaInicial)
   const [lojasAcessiveis, setLojasAcessiveis] = useState(() => {
-    const lojas = readStorage('sp_lojas_acessiveis', [])
-    return isDinoDedicatedHost() && (!Array.isArray(lojas) || lojas.length === 0) ? [DINO_STORE] : lojas
+    return lojasComFallbackDino(readStorage('sp_lojas_acessiveis', []))
   })
 
   const desligarPushContextoAtual = () => {
@@ -74,12 +82,12 @@ export function AuthProvider({ children }) {
     localStorage.setItem(site ? 'sp_site_token' : 'sp_token', token)
     localStorage.setItem('sp_user', JSON.stringify(userData))
     const empresasRecebidas = Array.isArray(sessao.empresas_acessiveis) ? sessao.empresas_acessiveis : []
-    const empresas = isDinoDedicatedHost() && empresasRecebidas.length === 0 ? [DINO_COMPANY] : empresasRecebidas
+    const empresas = empresasComFallbackDino(empresasRecebidas)
     const empresa = isDinoDedicatedHost()
       ? (empresas.find((item) => isDinoBrandContext(item)) || DINO_COMPANY)
       : empresaNova
     const lojasRecebidas = Array.isArray(sessao.lojas_acessiveis) ? sessao.lojas_acessiveis : []
-    const lojas = isDinoDedicatedHost() && lojasRecebidas.length === 0 ? [DINO_STORE] : lojasRecebidas
+    const lojas = lojasComFallbackDino(lojasRecebidas)
     const loja = selecionarLojaAutomatica(lojas, empresa?.id, lojaNova)
     if (empresas.length > 0) {
       localStorage.setItem('sp_empresas_acessiveis', JSON.stringify(empresas))
@@ -152,7 +160,7 @@ export function AuthProvider({ children }) {
       setEmpresaAtiva(empresa)
     }
     if (Array.isArray(lojas)) {
-      const lojasAtualizadas = isDinoDedicatedHost() && lojas.length === 0 ? [DINO_STORE] : lojas
+      const lojasAtualizadas = lojasComFallbackDino(lojas)
       localStorage.setItem('sp_lojas_acessiveis', JSON.stringify(lojasAtualizadas))
       setLojasAcessiveis(lojasAtualizadas)
       const selecionada = selecionarLojaAutomatica(lojasAtualizadas, empresaAtualizada?.id, loja || lojaAtiva)
