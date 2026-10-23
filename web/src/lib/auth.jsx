@@ -161,14 +161,18 @@ export function AuthProvider({ children }) {
   }
 
   const atualizarContextoLojas = ({ empresa, empresas_acessiveis: empresas, loja, lojas_acessiveis: lojas }) => {
-    if (Array.isArray(empresas)) {
-      localStorage.setItem('sp_empresas_acessiveis', JSON.stringify(empresas))
-      setEmpresasAcessiveis(empresas)
+    const empresasAtualizadas = Array.isArray(empresas) ? empresasComFallbackDino(empresas) : null
+    const empresaRecebida = empresa || empresaAtiva
+    const empresaAtualizada = isDinoDedicatedHost()
+      ? (empresasAtualizadas?.find((item) => isDinoBrandContext(item)) || (isDinoBrandContext(empresaRecebida) ? empresaRecebida : DINO_COMPANY))
+      : empresaRecebida
+    if (empresasAtualizadas) {
+      localStorage.setItem('sp_empresas_acessiveis', JSON.stringify(empresasAtualizadas))
+      setEmpresasAcessiveis(empresasAtualizadas)
     }
-    const empresaAtualizada = empresa || empresaAtiva
-    if (empresa) {
-      localStorage.setItem('sp_empresa_ativa', JSON.stringify(empresa))
-      setEmpresaAtiva(empresa)
+    if (empresa || isDinoDedicatedHost()) {
+      localStorage.setItem('sp_empresa_ativa', JSON.stringify(empresaAtualizada))
+      setEmpresaAtiva(empresaAtualizada)
     }
     if (Array.isArray(lojas)) {
       const lojasAtualizadas = lojasComFallbackDino(lojas)
