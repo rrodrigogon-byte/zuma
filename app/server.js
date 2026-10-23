@@ -3012,7 +3012,7 @@ function exigirPapelOperacaoBarbearia(req, res, next) {
   next();
 }
 app.use('/api/admin/barbearia', auth, requireStaff, resolverEscopoBarbearia, exigirPapelOperacaoBarbearia);
-registerEquipePerformanceRoutes(app, { db, legacyEmpresaId, legacyLojaId, requireCommercePermission });
+registerEquipePerformanceRoutes(app, { db, legacyEmpresaId, legacyLojaId, requireCommercePermission, salesReport });
 registerCustomer360Routes(app, { legacyEmpresaId, legacyLojaId, clientesKytto, barbeariaErpKytto, canaisFidelidadeKytto, listarAgendamentosBarbearia, requireCommercePermission, audit, save });
 registerDinoAdminRoutes(app, { db, legacyEmpresaId, legacyLojaId, financeiroKytto, barbeariaErpKytto, clientesKytto, commerceDb, requireCommercePermission, dashboardPeriod, audit, save, salesReport });
 registerAiBrainRoutes(app, { legacyEmpresaId, legacyLojaId, requireCommercePermission, audit, clientesKytto, commerceDb, listarAgendamentosBarbearia });
@@ -3545,6 +3545,7 @@ app.get('/api/admin/barbearia/analytics', async (req, res) => {
       professionals: barbershopInput.professionals,
       financeEntries: barbershopInput.financeEntries,
       commerce: commerceAvailable ? { revenue: Number(commerceData?.sales?.summary?.gross_total || 0), cost: commerceData?.cost ?? null } : null,
+      includeHistoricalFinance: true,
     }, win);
     const analytics = buildDinoDashboardAnalytics({
       commerceAvailable,

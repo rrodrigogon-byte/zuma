@@ -102,7 +102,7 @@ test('dashboard mantém capturas Commerce separadas dos pedidos e do caixa legad
   assert.equal(commerce.capturedTransactions, 1);
 });
 
-test('dashboard expõe histórico Avec separadamente e não o trata como pagamento', () => {
+test('dashboard consolida histórico Avec nos valores e o identifica separadamente', () => {
   const input = {
     historicalAppointments: [{ dataAgenda: '2026-09-01', clienteNome: 'Ana', valor: 90 }],
     historicalCommands: [{ dataComandaIso: '2026-09-01T15:00:00.000Z', clienteNome: 'Ana', total: 90 }],
@@ -117,8 +117,10 @@ test('dashboard expõe histórico Avec separadamente e não o trata como pagamen
   assert.deepEqual(result.historicalAvec.commands, { count: 1, value: 90 });
   assert.equal(result.historicalAvec.uniqueClients, 1);
   assert.equal(result.historicalAvec.reconciled, false);
-  assert.deepEqual(result.historicalFinance, { entries: 3, paidRevenue: 150, paidExpenses: 40, netPaid: 110, pendingRevenue: 0, pendingExpenses: 20, note: 'Lançamentos do extrato Avec preservados no Financeiro para conferência; não são novas vendas operacionais.' });
-  assert.equal(result.charts.paymentMethods.length, 0);
+  assert.deepEqual(result.historicalFinance, { entries: 3, paidRevenueEntries: 1, paidExpenseEntries: 1, paidRevenue: 150, paidExpenses: 40, netPaid: 110, pendingRevenue: 0, pendingExpenses: 20, includedInKpis: true, note: 'Receitas e despesas pagas do extrato Avec entram nos valores consolidados do período e permanecem identificadas no Financeiro como histórico; não são novas vendas operacionais.' });
+  assert.equal(result.kpis.find(item => item.id === 'revenue').value, 150);
+  assert.equal(result.charts.paymentMethods.length, 1);
+  assert.equal(result.charts.paymentMethods[0].value, 150);
   assert.equal(result.miniKpis.receivables, 0);
 });
 

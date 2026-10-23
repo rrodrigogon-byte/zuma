@@ -9,9 +9,17 @@ export function equipePerformanceNoStore(req, res, next) {
   next();
 }
 
+function commerceWindow(period) {
+  // America/Cuiaba permanece UTC-4; o intervalo é inclusivo nas datas exibidas.
+  const from = new Date(`${period.inicio}T04:00:00.000Z`);
+  const to = new Date(`${period.fim}T04:00:00.000Z`);
+  to.setUTCDate(to.getUTCDate() + 1);
+  return { from: from.toISOString(), to: to.toISOString() };
+}
+
 // O prefixo /api/admin/barbearia já exige auth, requireStaff e resolução da identidade.
 // Não chama save/audit, não calcula salário, não dispara campanhas nem pagamentos.
-export function registerEquipePerformanceRoutes(app, { db, legacyEmpresaId, legacyLojaId, requireCommercePermission, coreEnabled = () => process.env.COMMERCE_CORE_ENABLED === '1' }) {
+export function registerEquipePerformanceRoutes(app, { db, legacyEmpresaId, legacyLojaId, requireCommercePermission, salesReport, coreEnabled = () => process.env.COMMERCE_CORE_ENABLED === '1' }) {
   app.get(EQUIPE_PERFORMANCE_PATH, async (req, res) => {
     res.set('Cache-Control', 'no-store');
     res.set('Pragma', 'no-cache');
@@ -28,15 +36,22 @@ export function registerEquipePerformanceRoutes(app, { db, legacyEmpresaId, lega
       for (const [header, expected] of [['x-empresa-id', empresaId], ['x-loja-id', lojaId]]) {
         if (req.headers[header] && String(req.headers[header]) !== expected) return res.status(403).json({ code: 'STORE_SCOPE_MISMATCH', error: 'O contexto não corresponde à empresa e unidade autorizadas.' });
       }
-      if (coreEnabled()) {
-        const context = await requireCommercePermission(req, 'reports.read');
-        if (String(context?.empresaId || '') !== empresaId || String(context?.lojaId || '') !== lojaId) return res.status(403).json({ code: 'STORE_SCOPE_MISMATCH', error: 'O contexto do relatório não corresponde à unidade autorizada.' });
-      }
       const allowedQueries = new Set(['inicio', 'fim', 'profissionalId', 'empresaId', 'lojaId']);
       if (Object.keys(req.query || {}).some(key => !allowedQueries.has(key)) || Object.values(req.query || {}).some(value => typeof value !== 'string')) return res.status(400).json({ code: 'PERFORMANCE_QUERY_INVALID', error: 'Informe apenas período e profissional válidos.' });
       const profissionalId = req.query.profissionalId || '';
       if (profissionalId.length > 120) return res.status(400).json({ code: 'PERFORMANCE_QUERY_INVALID', error: 'Filtro de profissional inválido.' });
-      const result = buildEquipeDesempenho(db(), { empresaId, lojaId, inicio: req.query.inicio, fim: req.query.fim, profissionalId });
+      if (coreEnabled()) {
+        const context = await requireCommercePermission(req, 'reports.read');
+        if (String(context?.empresaId || '') !== empresaId || String(context?.lojaId || '') !== lojaId) return res.status(403).json({ code: 'STORE_SCOPE_MISMATCH', error: 'O contexto do relatório não corresponde à unidade autorizada.' });
+        if (typeof salesReport !== 'function') return res.status(503).json({ code: 'PERFORMANCE_UNAVAILABLE', error: 'Relatório Commerce indisponível.' });
+        const range = commerceWindow({ inicio: req.query.inicio, fim: req.query.fim });
+        const sales = await salesReport(context, range);
+        req.equipeCommerce = {
+          revenue: Number(sales?.summary?.gross_total || 0),
+          orders: Number(sales?.summary?.orders_non_cancelled ?? sales?.summary?.orders ?? 0),
+        };
+      }
+      const result = buildEquipeDesempenho(db(), { empresaId, lojaId, inicio: req.query.inicio, fim: req.query.fim, profissionalId, commerceCurrent: req.equipeCommerce });
       res.json(result);
     } catch (error) {
       const denied = ['PERMISSION_DENIED', 'STORE_SCOPE_MISMATCH', 'TENANT_CONTEXT_REQUIRED'].includes(error?.code);

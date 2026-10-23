@@ -110,9 +110,10 @@ function normalizeRoot(root, empresaId, lojaId) {
     agendamentos: recordsForCompany(barbearia.agendamentos, empresaId),
     comandas: recordsForCompany(barbearia.comandas, empresaId),
     vendasRevenda: recordsForCompany(barbearia.vendasRevenda, empresaId),
+    historicoAtendimentos: recordsForCompany(barbearia.historicoAtendimentos, empresaId),
     configuracao: { ...(barbearia.configuracao || {}), taxasPagamento: { ...(barbearia.configuracao?.taxasPagamento || {}) } },
   };
-  const financial = recordsForCompany(financeCompany.lancamentos, empresaId);
+  const financial = recordsForCompany(financeCompany.lancamentos, empresaId).filter((item) => exactUnit(item, lojaId));
   const professionals = raw.profissionais.filter((item) => !unitOf(item) || exactUnit(item, lojaId));
   const professionalIds = new Set(professionals.map(idOf).filter(Boolean));
   const strict = {
@@ -123,6 +124,7 @@ function normalizeRoot(root, empresaId, lojaId) {
     agendamentos: Object.fromEntries(raw.agendamentos.filter((item) => exactUnit(item, lojaId)).map((item) => [idOf(item), item]).filter(([id]) => id)),
     comandas: Object.fromEntries(raw.comandas.filter((item) => exactUnit(item, lojaId)).map((item) => [idOf(item), item]).filter(([id]) => id)),
     vendasRevenda: Object.fromEntries(raw.vendasRevenda.filter((item) => exactUnit(item, lojaId)).map((item) => [idOf(item), item]).filter(([id]) => id)),
+    historicoAtendimentos: Object.fromEntries(raw.historicoAtendimentos.filter((item) => exactUnit(item, lojaId)).map((item) => [idOf(item), item]).filter(([id]) => id)),
     configuracao: raw.configuracao,
   };
   // The repasse store is already partitioned by barbeariaRepasses[empresaId].
@@ -175,6 +177,40 @@ function canonicalServiceRows(commissions, servicesById, commandsById, appointme
     });
   }
   return rows;
+}
+
+function historicalServiceRows(strict, period, professionalIds) {
+  return Object.values(strict.historicoAtendimentos || {})
+    .filter((item) => item.somenteHistorico === true && item.status === 'concluido')
+    .filter((item) => dateInPeriod(item.dataAgenda || item.dataOriginal, period))
+    .filter((item) => professionalIds.has(text(item.profissionalId)))
+    .map((item) => ({
+      id: idOf(item),
+      professionalId: text(item.profissionalId),
+      serviceId: text(item.servicoId),
+      name: text(item.servicoNome) || 'Serviço histórico Avec',
+      quantity: quantityOf(item),
+      revenue: money(item.valor ?? item.total),
+      date: dateOnlyFrom(item.dataAgenda || item.dataOriginal),
+      // O relatório Avec não fornece horário confiável; não criar um horário para o mapa.
+      timestamp: null,
+      kind: 'historico_avec',
+    }))
+    .filter((item) => item.quantity !== null);
+}
+
+function isHistoricalFinance(item = {}) {
+  return item.metadata?.historicoAvec === true || item.origem === 'avec-import-financeiro-20261022';
+}
+
+function historicalFinanceTotals(financial, period) {
+  const entries = financial.filter((item) => isHistoricalFinance(item) && item.status === 'pago' && dateInPeriod(item.pagoEm || item.dataOperacao, period));
+  return {
+    revenue: money(entries.filter((item) => item.tipo === 'receita').reduce((sum, item) => sum + num(item.valor), 0)),
+    expenses: money(entries.filter((item) => item.tipo === 'despesa').reduce((sum, item) => sum + num(item.valor), 0)),
+    revenueEntries: entries.filter((item) => item.tipo === 'receita').length,
+    expenseEntries: entries.filter((item) => item.tipo === 'despesa').length,
+  };
 }
 
 function saleCommandReference(sale) {
@@ -453,9 +489,14 @@ function buildPeriodData(snapshot, period, previousPeriod) {
   const commissionState = deduplicatedCommissionState(strict, materialWarnings);
   const commissions = calcularComissoesEstado(commissionState, snapshot.empresaId, commissionOptions(period));
   const previousCommissions = calcularComissoesEstado(commissionState, snapshot.empresaId, commissionOptions(previousPeriod));
-  const serviceRows = canonicalServiceRows(commissions, servicesById, commandsById, appointmentsById, materialWarnings);
+  const serviceRows = [
+    ...canonicalServiceRows(commissions, servicesById, commandsById, appointmentsById, materialWarnings),
+    ...historicalServiceRows(strict, period, professionalIds),
+  ];
+  const previousHistoricalRows = historicalServiceRows(strict, previousPeriod, professionalIds);
   const productRows = canonicalProductRows(commissionState, commissions, period, materialWarnings);
   const previousRevenue = new Map(previousCommissions.porProfissional.map((row) => [row.profissionalId, money(row.bruto)]));
+  for (const row of previousHistoricalRows) previousRevenue.set(row.professionalId, money((previousRevenue.get(row.professionalId) || 0) + row.revenue));
   const transfers = transferData(repasses, { ...period, lojaId: snapshot.lojaId }, snapshot.lojaId, professionalIds);
   if (transfers.unscoped) warnOnce(materialWarnings, 'Há repasses pagos sem unidade comprovada no recorte; valores de repasse estão indisponíveis até revisão, sem inferir o total desta unidade.');
   // Only starts represented in this heatmap cover the operational appointment.
@@ -470,7 +511,9 @@ function buildPeriodData(snapshot, period, previousPeriod) {
     commissions,
     previousCommissions,
     serviceRows,
+    previousHistoricalRows,
     productRows,
+    historicalFinance: historicalFinanceTotals(financial, period),
     previousRevenue,
     transfers,
     appointments: Object.values(strict.agendamentos).filter((item) => dateInPeriod(item.dataAgenda || item.dataHora, period)),
@@ -492,6 +535,9 @@ export function buildEquipeDesempenho(root, options = {}) {
   const previousPeriod = validatePeriod({ inicio: period.previousInicio, fim: period.previousFim });
   const snapshot = normalizeRoot(root, empresaId, lojaId);
   const current = buildPeriodData(snapshot, period, previousPeriod);
+  const commerceCurrent = options.commerceCurrent || {};
+  const commerceRevenue = money(commerceCurrent.revenue);
+  const commerceOrders = Math.max(0, Math.round(num(commerceCurrent.orders)));
   if (profissionalId && !snapshot.professionalIds.has(profissionalId)) {
     throw Object.assign(new Error('Profissional não encontrado no escopo da unidade.'), { code: 'PROFESSIONAL_NOT_FOUND' });
   }
@@ -503,6 +549,8 @@ export function buildEquipeDesempenho(root, options = {}) {
   };
   const serviceRevenue = current.serviceRows.reduce((sum, row) => sum + row.revenue, 0);
   const productRevenue = current.productRows.reduce((sum, row) => sum + row.revenue, 0);
+  const historicalAttributedServiceRevenue = current.serviceRows.filter((row) => row.kind === 'historico_avec').reduce((sum, row) => sum + row.revenue, 0);
+  const operationalAttributedRevenue = serviceRevenue - historicalAttributedServiceRevenue + productRevenue;
   const employeeCatalog = Object.values(snapshot.strict.profissionais).filter((item) => !profissionalId || idOf(item) === profissionalId);
   const employeeRows = employeeCatalog.map((professional) => {
     const id = idOf(professional);
@@ -515,7 +563,8 @@ export function buildEquipeDesempenho(root, options = {}) {
     const noShow = appointments.filter((item) => item.status === 'nao_compareceu').length;
     const servicesQuantity = money(services.reduce((sum, row) => sum + row.quantity, 0));
     const productsQuantity = money(products.reduce((sum, row) => sum + row.quantity, 0));
-    const revenue = money(num(commission.bruto));
+    const historicalServiceRevenue = services.filter((row) => row.kind === 'historico_avec').reduce((sum, row) => sum + row.revenue, 0);
+    const revenue = money(num(commission.bruto) + historicalServiceRevenue);
     const previousRevenue = money(current.previousRevenue.get(id) || 0);
     const attendanceDenominator = completed + noShow;
     const heatmap = activityHeatmap(id, services, current.appointmentHeatmapRows, period);
@@ -528,7 +577,7 @@ export function buildEquipeDesempenho(root, options = {}) {
       canceled,
       noShow,
       attendanceRate: attendanceDenominator ? pct(completed * 100 / attendanceDenominator) : null,
-      ticketAverage: servicesQuantity ? money(num(commission.brutoServicos) / servicesQuantity) : null,
+      ticketAverage: servicesQuantity ? money((num(commission.brutoServicos) + historicalServiceRevenue) / servicesQuantity) : null,
       topServices: topServices(services),
       previousRevenue,
       revenueTrendPct: previousRevenue ? pct((revenue - previousRevenue) * 100 / previousRevenue) : null,
@@ -542,13 +591,15 @@ export function buildEquipeDesempenho(root, options = {}) {
       active: professional.ativo !== false,
       hasActivity: metrics.hasActivity,
       revenue,
-      serviceRevenue: money(commission.brutoServicos),
+      serviceRevenue: money(num(commission.brutoServicos) + historicalServiceRevenue),
+      historicalServiceRevenue: money(historicalServiceRevenue),
       productRevenue: money(commission.brutoProdutos),
       commission: money(commission.repasse),
       serviceCommission: money(commission.comissaoServicos),
       productCommission: money(commission.comissaoProdutos),
       paidTransfers: current.transfers.available ? money(current.transfers.byProfessional.get(id) || 0) : null,
       services: servicesQuantity,
+      historicalServices: services.filter((row) => row.kind === 'historico_avec').reduce((sum, row) => sum + row.quantity, 0),
       products: productsQuantity,
       appointments: appointments.length,
       completed,
@@ -570,6 +621,7 @@ export function buildEquipeDesempenho(root, options = {}) {
   const quality = {
     unscopedExcluded: buildUnscopedExcluded(snapshot.raw, period, empresaId),
     unattributedEvents: buildAttributionCount(current, snapshot.professionalIds),
+    unattributedHistoricalServices: current.serviceRows.filter((row) => row.kind === 'historico_avec' && !row.professionalId).length,
     ambiguousCommandsExcluded: current.ambiguousCommandsExcluded,
     transfersAvailable: current.transfers.available,
     commissionEstimated: true,
@@ -582,7 +634,13 @@ export function buildEquipeDesempenho(root, options = {}) {
     scope: { empresaId, lojaId },
     period,
     summary: {
-      revenue: money(serviceRevenue + productRevenue),
+      revenue: money(operationalAttributedRevenue + current.historicalFinance.revenue + commerceRevenue),
+      operationalAttributedRevenue: money(operationalAttributedRevenue),
+      historicalFinanceRevenue: current.historicalFinance.revenue,
+      historicalFinanceExpenses: current.historicalFinance.expenses,
+      historicalAttributedServiceRevenue: money(historicalAttributedServiceRevenue),
+      commerceRevenue,
+      commerceOrders,
       commission: summaryCommission,
       services: money(current.serviceRows.reduce((sum, row) => sum + row.quantity, 0)),
       products: money(current.productRows.reduce((sum, row) => sum + row.quantity, 0)),
@@ -604,6 +662,8 @@ export function buildEquipeDesempenho(root, options = {}) {
       'O mapa usa início confirmado de serviço; a série diária usa a data canônica de apuração (fechamento de comanda, criação de revenda paga, ou dia do atendimento com recebimento verificado). Produtos não entram no mapa de serviços. Não há NPS ou ocupação inferidos.',
       'Custos de materiais só são usados com cadastro de serviço e insumo da unidade exata. Sem essa prova, a comissão fica indicativa e o custo real não é afirmado como zero.',
       'Múltiplas comandas faturadas com o mesmo agendamento são ambíguas: ficam fora da receita/comissão deste relatório até revisão, sem alterar os registros. O atendimento concluído permanece na agenda e no mapa operacional.',
+      'Serviços históricos detalhados do Avec entram na atribuição por profissional quando o vínculo foi importado; como o extrato financeiro histórico já contém o total pago, eles são apresentados como atribuição analítica e não são somados novamente ao total consolidado.',
+      'O total consolidado soma receita operacional atribuída, lançamentos financeiros pagos do histórico Avec e receita bruta do e-commerce. Pedidos Commerce sem profissional comprovado ficam no total da loja e não são imputados a alguém.',
     ],
   };
 }

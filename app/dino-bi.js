@@ -235,7 +235,7 @@ function isHistoricalAvecFinance(item = {}) {
  * Despesas de estoque (compras) e de comissões lançadas manualmente não entram,
  * porque CMV e comissões já são descontados pelo cálculo.
  */
-export function estimateResult({ services = [], retail = [], professionals = [], financeEntries = [], commerce = null }, window) {
+export function estimateResult({ services = [], retail = [], professionals = [], financeEntries = [], commerce = null, includeHistoricalFinance = false }, window) {
   const receitaServicos = services.reduce((s, row) => s + row.receita, 0);
   const receitaRevenda = retail.reduce((s, row) => s + row.receita, 0);
   const cmvRevenda = retail.reduce((s, row) => s + row.custo, 0);
@@ -247,25 +247,35 @@ export function estimateResult({ services = [], retail = [], professionals = [],
     && item.origem !== 'estoque'
     && !EXCLUDED_EXPENSE_CATEGORIES.has(String(item.categoria || '').toLowerCase()));
   const despesasPagas = despesas.reduce((s, item) => s + num(item.valor), 0);
+  const historicoPago = list(financeEntries).filter((item) => isHistoricalAvecFinance(item) && item.status === 'pago' && inWindow(item.pagoEm || item.dataOperacao, window));
+  const receitaHistoricaAvec = includeHistoricalFinance ? historicoPago.filter((item) => item.tipo === 'receita').reduce((s, item) => s + num(item.valor), 0) : 0;
+  const despesasHistoricasAvec = includeHistoricalFinance ? historicoPago.filter((item) => item.tipo === 'despesa').reduce((s, item) => s + num(item.valor), 0) : 0;
   const commerceRevenue = num(commerce?.revenue);
   const commerceCost = commerce?.cost == null ? null : num(commerce.cost);
   const incluiLoja = commerceRevenue > 0 && commerceCost != null;
-  const receita = receitaServicos + receitaRevenda + (incluiLoja ? commerceRevenue : 0);
-  const custos = comissoes + cmvRevenda + despesasPagas + (incluiLoja ? commerceCost : 0);
+  const receitaOperacional = receitaServicos + receitaRevenda + (incluiLoja ? commerceRevenue : 0);
+  const custosOperacionais = comissoes + cmvRevenda + despesasPagas + (incluiLoja ? commerceCost : 0);
+  const receita = receitaOperacional + receitaHistoricaAvec;
+  const custos = custosOperacionais + despesasHistoricasAvec;
   const produtosSemCusto = retail.filter((row) => row.custo <= 0).length;
   const notas = [];
   if (produtosSemCusto) notas.push(`${produtosSemCusto} venda(s) de revenda sem custo unitário cadastrado.`);
   if (commerceRevenue > 0 && !incluiLoja) notas.push('Loja online fora do resultado até os produtos terem custo cadastrado.');
   notas.push('Despesas consideradas: lançamentos pagos no Financeiro da empresa (exceto compras de estoque e comissões).');
+  if (includeHistoricalFinance && historicoPago.length) notas.push(`Histórico Avec incluído no consolidado: ${historicoPago.length} lançamento(s) pago(s), sem ser recriado como venda operacional.`);
   return {
     receita: money(receita),
+    receitaOperacional: money(receitaOperacional),
+    receitaHistoricaAvec: money(receitaHistoricaAvec),
     receitaServicos: money(receitaServicos),
     receitaRevenda: money(receitaRevenda),
     receitaLojaIncluida: incluiLoja ? money(commerceRevenue) : 0,
     comissoes: money(comissoes),
     cmvRevenda: money(cmvRevenda),
     despesasPagas: money(despesasPagas),
+    despesasHistoricasAvec: money(despesasHistoricasAvec),
     custoLoja: incluiLoja ? money(commerceCost) : 0,
+    resultadoOperacional: money(receitaOperacional - custosOperacionais),
     resultado: money(receita - custos),
     margem: receita > 0 ? Number((((receita - custos) / receita) * 100).toFixed(1)) : null,
     notas,
@@ -289,7 +299,7 @@ export function buildBarbershopBi(input = {}, window) {
   const services = servicesPerformed(input, window);
   const retail = retailSold(input, window);
   const professionals = professionalRanking({ services, retail, professionals: input.professionals });
-  const result = estimateResult({ services, retail, professionals: input.professionals, financeEntries: input.financeEntries, commerce: input.commerce }, window);
+  const result = estimateResult({ services, retail, professionals: input.professionals, financeEntries: input.financeEntries, commerce: input.commerce, includeHistoricalFinance: true }, window);
   const financeiroPeriodo = list(input.financeEntries).filter((item) => item.status === 'pago' && inWindow(item.pagoEm || item.dataOperacao, window));
   const receitasLancadas = financeiroPeriodo.filter((item) => item.tipo === 'receita').reduce((s, item) => s + num(item.valor), 0);
   const despesasLancadas = financeiroPeriodo.filter((item) => item.tipo === 'despesa').reduce((s, item) => s + num(item.valor), 0);

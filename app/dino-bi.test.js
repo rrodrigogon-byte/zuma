@@ -78,6 +78,24 @@ test('despesas históricas Avec ficam no Financeiro, mas não contaminam o lucro
   assert.equal(result.despesasPagas, 50);
 });
 
+test('BI consolidado inclui histórico Avec pago sem alterar o modo operacional explícito', () => {
+  const result = bi.estimateResult({
+    services: [],
+    retail: [],
+    professionals,
+    financeEntries: [
+      { tipo: 'receita', status: 'pago', valor: 200, origem: 'avec-import-financeiro-20261022', metadata: { historicoAvec: true }, pagoEm: '2026-09-15T12:00:00Z' },
+      { tipo: 'despesa', status: 'pago', valor: 40, origem: 'avec-import-financeiro-20261022', metadata: { historicoAvec: true }, pagoEm: '2026-09-15T12:00:00Z' },
+    ],
+    includeHistoricalFinance: true,
+  }, window);
+  assert.equal(result.receitaOperacional, 0);
+  assert.equal(result.receitaHistoricaAvec, 200);
+  assert.equal(result.despesasHistoricasAvec, 40);
+  assert.equal(result.resultadoOperacional, 0);
+  assert.equal(result.resultado, 160);
+});
+
 test('loja online entra no resultado só com custo conhecido', () => {
   const base = { services: [], retail: [], professionals, financeEntries: [] };
   const semCusto = bi.estimateResult({ ...base, commerce: { revenue: 500, cost: null } }, window);
