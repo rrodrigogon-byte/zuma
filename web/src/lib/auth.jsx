@@ -61,6 +61,17 @@ function readLojaAtivaInicial() {
   return selecionada
 }
 
+// Última unidade escolhida em cada empresa: ao voltar para a empresa, ela volta junto.
+function lembrarLoja(empresaId, loja) {
+  if (!empresaId) return
+  try {
+    const mapa = readStorage('sp_loja_por_empresa', {}) || {}
+    if (loja?.id) mapa[empresaId] = loja.id; else delete mapa[empresaId]
+    localStorage.setItem('sp_loja_por_empresa', JSON.stringify(mapa))
+  } catch { /* armazenamento indisponível: só não lembra */ }
+}
+const lojaLembrada = (empresaId) => { try { return (readStorage('sp_loja_por_empresa', {}) || {})[empresaId] || null } catch { return null } }
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(() => readStorage('sp_user'))
   const [empresaAtiva, setEmpresaAtiva] = useState(readEmpresaAtivaInicial)
@@ -177,7 +188,9 @@ export function AuthProvider({ children }) {
     const proxima = empresasAcessiveis.find((empresa) => empresa.id === empresaId)
     if (!proxima) return false
     if (empresaAtiva?.id !== proxima.id || lojaAtiva?.id) desligarPushContextoAtual()
-    const proximaLoja = selecionarLojaDoContexto(lojasAcessiveis, proxima)
+    // a unidade escolhida da última vez nesta empresa volta; no host da Dino vale a unidade Dino
+    const lembrada = lojaLembrada(proxima.id)
+    const proximaLoja = selecionarLojaDoContexto(lojasAcessiveis, proxima, lembrada ? { id: lembrada } : null)
     localStorage.setItem('sp_empresa_ativa', JSON.stringify(proxima))
     if (proximaLoja) localStorage.setItem('sp_loja_ativa', JSON.stringify(proximaLoja))
     else localStorage.removeItem('sp_loja_ativa')
@@ -189,6 +202,7 @@ export function AuthProvider({ children }) {
   const trocarLoja = (lojaId) => {
     if (!lojaId) {
       if (lojaAtiva?.id) desligarPushContextoAtual()
+      lembrarLoja(empresaAtiva?.id, null)
       localStorage.removeItem('sp_loja_ativa')
       setLojaAtiva(null)
       return true
@@ -200,6 +214,7 @@ export function AuthProvider({ children }) {
     ))
     if (!proxima) return false
     if (lojaAtiva?.id !== proxima.id) desligarPushContextoAtual()
+    lembrarLoja(empresaAtiva?.id || empresaDaLoja(proxima), proxima)
     localStorage.setItem('sp_loja_ativa', JSON.stringify(proxima))
     setLojaAtiva(proxima)
     return true
@@ -262,6 +277,7 @@ export function AuthProvider({ children }) {
     localStorage.removeItem('sp_empresas_acessiveis')
     localStorage.removeItem('sp_loja_ativa')
     localStorage.removeItem('sp_lojas_acessiveis')
+    localStorage.removeItem('sp_loja_por_empresa')
     contextoAtualizado.current = false
     setUser(null)
     setEmpresaAtiva(null)

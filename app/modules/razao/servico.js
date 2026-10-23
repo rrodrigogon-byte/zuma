@@ -268,12 +268,63 @@ export async function registrarAutomaticoNaTransacao(q, empresaId, dados, { chav
   return { lancamento: dto(r.row), criado: r.criado };
 }
 
-/** Lançamento manual, com recorrência mensal opcional (1 a 24 meses). */
+// ── rateio entre centros de custo ─────────────────────────────────────────────
+/** [{ centroCustoId, percentual }] → linhas validadas (percentuais somando 100, centros distintos). */
+export function validarRateio(rateio) {
+  if (rateio === undefined || rateio === null) return null;
+  if (!Array.isArray(rateio)) throw new ErroDominio('VALIDATION_ERROR', 'Rateio inválido');
+  if (!rateio.length) return [];
+  const linhas = rateio.map((r) => ({ centro: exigirUuid(r?.centroCustoId, 'centro de custo'), percentual: Math.round(Number(r?.percentual) * 10000) / 10000 }));
+  if (linhas.some((l) => !(l.percentual > 0) || l.percentual > 100)) throw new ErroDominio('VALIDATION_ERROR', 'Cada centro do rateio leva de 0,01% a 100%');
+  if (new Set(linhas.map((l) => l.centro)).size !== linhas.length) throw new ErroDominio('VALIDATION_ERROR', 'Centro de custo repetido no rateio');
+  const soma = linhas.reduce((t, l) => t + l.percentual, 0);
+  if (Math.abs(soma - 100) > 0.001) throw new ErroDominio('VALIDATION_ERROR', `O rateio precisa somar 100% (está em ${soma.toFixed(2).replace('.', ',')}%)`);
+  return linhas;
+}
+
+async function gravarRateio(q, empresa, lancamentoId, linhas) {
+  if (linhas === null) return;
+  if (linhas.length) {
+    const ok = await q('SELECT count(*)::int AS n FROM fin_centros_custo WHERE empresa_id = $1 AND id = ANY($2::uuid[])', [empresa, linhas.map((l) => l.centro)]);
+    if (ok.rows[0].n !== linhas.length) throw new ErroDominio('NOT_FOUND', 'Centro de custo não encontrado nesta empresa', 404);
+  }
+  await q('DELETE FROM fin_rateios WHERE empresa_id = $1 AND lancamento_id = $2', [empresa, lancamentoId]);
+  for (const l of linhas) await q('INSERT INTO fin_rateios (empresa_id, lancamento_id, centro_custo_id, percentual) VALUES ($1,$2,$3,$4)', [empresa, lancamentoId, l.centro, l.percentual]);
+}
+
+async function rateiosDe(db, empresa, ids) {
+  if (!ids.length || !(await db.query("SELECT to_regclass('fin_rateios') AS t")).rows[0]?.t) return new Map();
+  const r = await db.query('SELECT lancamento_id, centro_custo_id, percentual FROM fin_rateios WHERE empresa_id = $1 AND lancamento_id = ANY($2::uuid[])', [empresa, ids]);
+  const mapa = new Map();
+  for (const row of r.rows) {
+    if (!mapa.has(row.lancamento_id)) mapa.set(row.lancamento_id, []);
+    mapa.get(row.lancamento_id).push({ centroCustoId: row.centro_custo_id, percentual: Number(row.percentual) });
+  }
+  return mapa;
+}
+
+/** Divide um total em n parcelas em centavos; a diferença dos centavos vai para a última. */
+export function dividirEmParcelas(total, n) {
+  const centavos = Math.round(Number(total) * 100);
+  const base = Math.floor(centavos / n);
+  return Array.from({ length: n }, (_, i) => (i === n - 1 ? centavos - base * (n - 1) : base) / 100);
+}
+
+/**
+ * Lançamento manual, com recorrência mensal opcional (1 a 24 meses). Com `parcelarTotal`, o
+ * valor informado é o total e é dividido nas parcelas (uma conta de R$ 1.000 em 3x); sem ele,
+ * cada mês repete o valor (aluguel). `rateio` divide o lançamento entre centros de custo.
+ */
 export async function criarManual(db, empresaId, dados = {}, { usuario = null, fuso, agora = new Date() } = {}) {
   const empresa = exigirUuid(empresaId, 'empresa');
   const base = prepararDados(empresa, dados, { fuso, agora });
   const meses = dados.recorrencia?.meses === undefined && dados.meses === undefined ? 1 : Number(dados.recorrencia?.meses ?? dados.meses);
   if (!Number.isInteger(meses) || meses < 1 || meses > 24) throw new ErroDominio('VALIDATION_ERROR', 'A recorrência vai de 1 a 24 meses');
+  const parcelarTotal = dados.parcelarTotal === true && meses > 1;
+  const valores = parcelarTotal ? dividirEmParcelas(base.valor, meses) : null;
+  if (valores && valores.some((v) => !(v > 0))) throw new ErroDominio('VALIDATION_ERROR', 'Total pequeno demais para tantas parcelas');
+  const rateio = validarRateio(dados.rateio);
+  if (rateio?.length) base.centro_custo_id = null;
   const serieId = meses > 1 ? randomUUID() : null;
   const criadoPor = textoOpcional(usuario, 180);
   return transacao(db, async (q) => {
@@ -291,12 +342,14 @@ export async function criarManual(db, empresaId, dados = {}, { usuario = null, f
         status: pago ? 'pago' : 'pendente',
         pago_em: pago ? base.pago_em : null,
         natureza: pago ? base.natureza : (base.natureza === 'avulso' ? (base.tipo === 'receita' ? 'receber' : 'pagar') : base.natureza),
+        ...(valores ? { valor: valores[i] } : {}),
         descricao: serieId ? `${base.descricao} (${i + 1}/${meses})`.slice(0, 240) : base.descricao,
         origem: 'manual', chave: `manual:${randomUUID()}`, automatico: false,
         serie_id: serieId, parcela: serieId ? i + 1 : null, parcelas: serieId ? meses : null, criado_por: criadoPor,
       };
       const r = await inserir(q, linha);
-      criados.push(dto(r.row));
+      if (rateio?.length) await gravarRateio(q, empresa, r.row.id, rateio);
+      criados.push({ ...dto(r.row), ...(rateio?.length ? { rateio: rateio.map((l) => ({ centroCustoId: l.centro, percentual: l.percentual })) } : {}) });
     }
     return criados;
   });
@@ -337,6 +390,9 @@ export async function atualizar(db, empresaId, id, dados = {}, { fuso = FUSO_PAD
     const sets = {};
     if (dados.lojaId !== undefined) sets.loja_id = await exigirUnidadeDaEmpresa(q, empresa, uuidOpcional(dados.lojaId, 'unidade'));
     if (dados.centroCustoId !== undefined) sets.centro_custo_id = uuidOpcional(dados.centroCustoId, 'centro de custo');
+    // rateio é classificação (como o centro): vale também para lançamento automático ou pago
+    const rateio = validarRateio(dados.rateio);
+    if (rateio !== null) { await gravarRateio(q, empresa, atual.id, rateio); if (rateio.length) sets.centro_custo_id = null; }
     if (dados.categoria !== undefined) sets.categoria = textoOpcional(dados.categoria, 80) || 'Outros';
     if (dados.documento !== undefined) sets.documento = textoOpcional(dados.documento, 80);
     if (dados.observacao !== undefined || dados.obs !== undefined) sets.observacao = textoOpcional(dados.observacao ?? dados.obs, 2000);
@@ -373,7 +429,7 @@ export async function atualizar(db, empresaId, id, dados = {}, { fuso = FUSO_PAD
       } else throw new ErroDominio('VALIDATION_ERROR', 'Para cancelar, use a ação de cancelar');
     }
     const campos = Object.keys(sets);
-    if (!campos.length) return dto(atual);
+    if (!campos.length) return { ...dto(atual), ...(rateio !== null ? { rateio: rateio.map((l) => ({ centroCustoId: l.centro, percentual: l.percentual })) } : {}) };
     const r = await q(
       `UPDATE fin_lancamentos SET ${campos.map((c, i) => `${c} = $${i + 3}`).join(', ')}, atualizado_em = CURRENT_TIMESTAMP WHERE empresa_id = $1 AND id = $2 RETURNING *`,
       [empresa, atual.id, ...campos.map((c) => sets[c])],
@@ -462,7 +518,57 @@ export async function listar(db, empresaId, filtros = {}) {
   // pendentes: o que vence primeiro vem primeiro (nenhuma conta antiga some da lista)
   sql += filtros.status === 'pendente' ? ` ORDER BY l.vencimento ASC, l.criado_em ASC LIMIT ${limite}` : ` ORDER BY l.vencimento DESC, l.criado_em DESC LIMIT ${limite}`;
   const r = await db.query(sql, v);
-  return r.rows.map(dto);
+  const rateios = await rateiosDe(db, empresa, r.rows.map((row) => row.id));
+  return r.rows.map((row) => ({ ...dto(row), ...(rateios.has(row.id) ? { rateio: rateios.get(row.id) } : {}) }));
+}
+
+// ── configuração do Financeiro da empresa ────────────────────────────────────
+const temTabela = async (db, nome) => Boolean((await db.query('SELECT to_regclass($1) AS t', [nome])).rows[0]?.t);
+
+export async function obterConfig(db, empresaId) {
+  const empresa = exigirUuid(empresaId, 'empresa');
+  if (!(await temTabela(db, 'fin_config'))) return { lojaPadrao: null, jsonLiberadoEm: null, jsonLiberadoPor: null, jsonIncluirQuarentena: false };
+  const r = (await db.query('SELECT * FROM fin_config WHERE empresa_id = $1', [empresa])).rows[0];
+  return { lojaPadrao: r?.loja_padrao || null, jsonLiberadoEm: r?.json_liberado_em || null, jsonLiberadoPor: r?.json_liberado_por || null, jsonIncluirQuarentena: r?.json_incluir_quarentena === true };
+}
+
+/**
+ * Unidade das receitas automáticas que chegam sem unidade (bar, clube, contas do A2). Ao trocar,
+ * as que já entraram sem unidade passam para ela, fora de dia já fechado.
+ */
+export async function salvarLojaPadrao(db, empresaId, lojaId) {
+  const empresa = exigirUuid(empresaId, 'empresa');
+  const loja = uuidOpcional(lojaId, 'unidade');
+  return transacao(db, async (q) => {
+    await exigirUnidadeDaEmpresa(q, empresa, loja);
+    await q(`INSERT INTO fin_config (empresa_id, loja_padrao) VALUES ($1, $2)
+             ON CONFLICT (empresa_id) DO UPDATE SET loja_padrao = EXCLUDED.loja_padrao, atualizado_em = CURRENT_TIMESTAMP`, [empresa, loja]);
+    let atribuidos = 0;
+    if (loja) {
+      const r = await q(
+        `UPDATE fin_lancamentos l SET loja_id = $2, atualizado_em = CURRENT_TIMESTAMP
+          WHERE l.empresa_id = $1 AND l.loja_id IS NULL AND l.automatico AND l.origem IN ('bar_comanda', 'clube_pagamento', 'a2_conta', 'loja_online')
+            AND NOT EXISTS (SELECT 1 FROM fin_fechamentos f WHERE f.empresa_id = l.empresa_id AND f.data = l.data_competencia)`, [empresa, loja]);
+      atribuidos = r.rowCount;
+    }
+    return { lojaPadrao: loja, atribuidos };
+  });
+}
+
+/**
+ * Unidade que uma fonte usa quando o fato não traz unidade: o bar usa a unidade do bar configurada
+ * no Estoque; as demais, a unidade padrão do Financeiro; empresa com uma unidade só usa ela.
+ */
+export async function lojaPadraoDaFonte(db, empresaId, fonte) {
+  const empresa = exigirUuid(empresaId, 'empresa');
+  if (fonte === 'bar' && await temTabela(db, 'est_config')) {
+    const bar = (await db.query('SELECT loja_bar FROM est_config WHERE empresa_id = $1', [empresa])).rows[0]?.loja_bar;
+    if (bar) return bar;
+  }
+  const cfg = await obterConfig(db, empresa);
+  if (cfg.lojaPadrao) return cfg.lojaPadrao;
+  const lojas = (await db.query("SELECT id FROM lojas l WHERE l.empresa_id = $1 AND COALESCE((to_jsonb(l)->>'ativa')::boolean, true) LIMIT 2", [empresa])).rows;
+  return lojas.length === 1 ? lojas[0].id : null;
 }
 
 export async function obter(db, empresaId, id) {
@@ -556,7 +662,18 @@ export async function dre(db, empresaId, { de, ate, lojaId = null, centroCustoId
   if (fim < inicio) throw new ErroDominio('VALIDATION_ERROR', 'Período inválido');
   const v = [empresa, inicio, fim];
   let filtro = filtroUnidade(lojaId, v);
-  if (centroCustoId) { v.push(exigirUuid(centroCustoId, 'centro de custo')); filtro += ` AND l.centro_custo_id = $${v.length}`; }
+  // com centro: lançamento do centro inteiro, ou a fração dele no rateio
+  let fator = '1';
+  let juncaoRateio = '';
+  if (centroCustoId) {
+    v.push(exigirUuid(centroCustoId, 'centro de custo'));
+    const temRateio = (await db.query("SELECT to_regclass('fin_rateios') AS t")).rows[0]?.t;
+    if (temRateio) {
+      juncaoRateio = ` LEFT JOIN fin_rateios rt ON rt.empresa_id = l.empresa_id AND rt.lancamento_id = COALESCE(l.estorno_de, l.id) AND rt.centro_custo_id = $${v.length}`;
+      fator = 'COALESCE(rt.percentual / 100.0, 1)';
+      filtro += ` AND (rt.lancamento_id IS NOT NULL OR (l.centro_custo_id = $${v.length} AND NOT EXISTS (SELECT 1 FROM fin_rateios rx WHERE rx.empresa_id = l.empresa_id AND rx.lancamento_id = COALESCE(l.estorno_de, l.id))))`;
+    } else filtro += ` AND l.centro_custo_id = $${v.length}`;
+  }
   const r = await db.query(
     // Estorno entra no grupo do original com o sinal contrário: estorno de despesa reduz aquela
     // despesa (não vira receita); estorno de receita é dedução (devolução).
@@ -564,9 +681,9 @@ export async function dre(db, empresaId, { de, ate, lojaId = null, centroCustoId
             CASE WHEN o.tipo = 'receita' THEN l.categoria ELSE COALESCE(o.categoria, l.categoria) END AS categoria,
             CASE WHEN o.tipo = 'receita' THEN 'deducao'
                  ELSE COALESCE(c.grupo_dre, CASE WHEN COALESCE(o.tipo, l.tipo) = 'receita' THEN 'receita_bruta' ELSE 'outros' END) END AS grupo,
-            SUM(CASE WHEN o.tipo = 'despesa' THEN -l.valor ELSE l.valor END) AS total
+            SUM(CASE WHEN o.tipo = 'despesa' THEN -l.valor ELSE l.valor END * ${fator}) AS total
        FROM fin_lancamentos l
-       LEFT JOIN fin_lancamentos o ON o.empresa_id = l.empresa_id AND o.id = l.estorno_de
+       LEFT JOIN fin_lancamentos o ON o.empresa_id = l.empresa_id AND o.id = l.estorno_de${juncaoRateio}
        LEFT JOIN fin_categorias c ON c.empresa_id = l.empresa_id AND c.tipo = COALESCE(o.tipo, l.tipo) AND c.nome = COALESCE(o.categoria, l.categoria)
       WHERE l.empresa_id = $1 AND l.status <> 'cancelado' AND l.data_competencia BETWEEN $2 AND $3${filtro}
       GROUP BY 1, 2, 3`,

@@ -49,9 +49,10 @@ export const CATALOGO = [
   M('/admin/fichas-tecnicas', 'Fichas técnicas', '🧪', 'Compras e estoque', 'estoque'),
   M('/admin/cadastros-mestres', 'Fornecedores e funcionários', '🗂️', 'Compras e estoque', 'cadastros'),
 
-  M('/admin/notas', 'Notas fiscais', '🧾', 'Fiscal', 'fiscal'),
-  M('/admin/fiscal/config', 'Configuração fiscal', '⚙️', 'Fiscal', 'fiscal'),
-  M('/admin/fiscal/classificacao', 'Classificação fiscal', '🏷️', 'Fiscal', 'fiscal'),
+  // fiscal novo: só homologação da SEFAZ até liberar produção (certificado, CSC e credenciamento)
+  M('/admin/notas', 'Notas fiscais', '🧾', 'Fiscal', 'fiscal', { homologacao: true }),
+  M('/admin/fiscal/config', 'Configuração fiscal', '⚙️', 'Fiscal', 'fiscal', { homologacao: true }),
+  M('/admin/fiscal/classificacao', 'Classificação fiscal', '🏷️', 'Fiscal', 'fiscal', { homologacao: true }),
 
   M('/admin/pdv', 'PDV', '🛒', 'Vendas e operação', 'pdv'),
   M('/admin/mesas', 'Mesas', '🪑', 'Vendas e operação', 'mesas'),
@@ -116,6 +117,7 @@ export const CATALOGO = [
 
 export const ESTADOS = {
   no_ar: { rotulo: 'no ar', descricao: 'Funcionando nesta empresa' },
+  homologacao: { rotulo: 'homologação', descricao: 'No ar só em homologação: notas sem valor fiscal até liberar produção' },
   em_implantacao: { rotulo: 'em implantação', descricao: 'Tela pronta, backend ainda não está no ar' },
   nao_contratado: { rotulo: 'não contratado', descricao: 'No ar, mas fora do contrato desta empresa' },
   evento: { rotulo: 'evento', descricao: 'Usa os dados globais do evento Agro Open, sem separação por empresa' },
@@ -133,7 +135,7 @@ export function estadoDoModulo(item, empresa = null) {
   if (ehGlobalDoEvento(item.to)) return 'evento'
   const contratados = modulosContratados(empresa)
   if (item.contrato && contratados && !contratados.includes(String(item.contrato).toLowerCase())) return 'nao_contratado'
-  return 'no_ar'
+  return item.homologacao ? 'homologacao' : 'no_ar'
 }
 
 export function planoDaRota(to) {

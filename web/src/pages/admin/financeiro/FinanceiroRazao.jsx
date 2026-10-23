@@ -26,7 +26,10 @@ const ORIGENS = {
 const FONTES = { bar: 'Bar e restaurante', clube: 'Clube (mensalidades e Pix)', a2: 'Contas de clientes', loja_online: 'Loja online', json: 'Financeiro antigo (barbearia)' }
 const MEIOS = [['', '—'], ['dinheiro', 'Dinheiro'], ['pix', 'Pix'], ['credito', 'Crédito'], ['debito', 'Débito'], ['boleto', 'Boleto'], ['transferencia', 'Transferência'], ['outro', 'Outro']]
 const origem = (item) => ORIGENS[item.origem] || (String(item.origem || '').startsWith('legado_') ? 'Antigo' : item.origem)
-const EMPTY = { tipo: 'despesa', categoria: 'Outros', descricao: '', valor: '', vencimento: '', competencia: '', status: 'pendente', meioPagamento: '', contraparteNome: '', documento: '', centroCustoId: '', lojaId: '', observacao: '', meses: 1 }
+const EMPTY = { tipo: 'despesa', categoria: 'Outros', descricao: '', valor: '', vencimento: '', competencia: '', status: 'pendente', meioPagamento: '', contraparteNome: '', contraparteId: '', documento: '', centroCustoId: '', lojaId: '', observacao: '', meses: 1, parcelarTotal: false, ratear: false, rateio: [] }
+
+/** Soma dos percentuais do rateio (para mostrar e validar antes de enviar). */
+export const somaRateio = (rateio = []) => Math.round(rateio.reduce((t, r) => t + (Number(String(r.percentual).replace(',', '.')) || 0), 0) * 100) / 100
 
 function primeiroDia(hoje) { return `${hoje.slice(0, 7)}-01` }
 function ultimoDia(hoje) { const [a, m] = hoje.split('-').map(Number); return new Date(Date.UTC(a, m, 0)).toISOString().slice(0, 10) }
@@ -47,7 +50,8 @@ function Fluxo({ fluxo }) {
 
 export default function FinanceiroRazao({ abaInicial = 'geral' }) {
   const { toast } = useToast()
-  const { empresaAtiva, lojaAtiva, lojasAcessiveis } = useAuth()
+  const { empresaAtiva, lojaAtiva, lojasAcessiveis, isPlatformAdmin } = useAuth()
+  const [fornecedores, setFornecedores] = useState([])
   const lojas = useMemo(() => lojasDaEmpresa(lojasAcessiveis, empresaAtiva?.id), [lojasAcessiveis, empresaAtiva?.id])
   const nomeLoja = useCallback((id) => (id ? (lojas.find((l) => String(l.id) === String(id))?.nome || 'Outra unidade') : 'Sem unidade'), [lojas])
   const [aba, setAba] = useState(abaInicial)
@@ -129,24 +133,36 @@ export default function FinanceiroRazao({ abaInicial = 'geral' }) {
   const origensPresentes = useMemo(() => [...new Set(lancamentos.map(origem))].sort(), [lancamentos])
   const totalVisivel = useMemo(() => visiveis.filter((i) => i.status !== 'cancelado').reduce((s, i) => s + (i.tipo === 'receita' ? i.valor : -i.valor), 0), [visiveis])
 
+  // fornecedores do cadastro único (A2): a conta a pagar fica ligada a eles
+  useEffect(() => {
+    if (!form || form.tipo !== 'despesa' || fornecedores.length) return
+    api.get('/api/admin/a2/fornecedores').then((r) => setFornecedores(Array.isArray(r) ? r : r?.fornecedores || [])).catch(() => setFornecedores([]))
+  }, [form, fornecedores.length])
+  function escolherContraparte(nome) {
+    const f = form.tipo === 'despesa' ? fornecedores.find((x) => String(x.nome || x.razaoSocial || '').toLowerCase() === nome.trim().toLowerCase()) : null
+    setForm({ ...form, contraparteNome: nome, contraparteId: f?.id || '', contraparteTipo: f ? 'fornecedor' : (form.tipo === 'despesa' ? 'fornecedor' : 'cliente') })
+  }
   function abrirNovo(tipo) {
     setForm({ ...EMPTY, tipo, vencimento: hoje, status: 'pendente', lojaId: unidade && unidade !== 'sem' ? unidade : (lojas.length === 1 ? lojas[0].id : '') })
     setTimeout(() => primeiroCampo.current?.focus(), 30)
   }
   function abrirEdicao(item) {
-    setForm({ ...EMPTY, ...item, valor: String(item.valor), competencia: item.competencia, observacao: item.observacao || '', meioPagamento: item.meioPagamento || '', centroCustoId: item.centroCustoId || '', lojaId: item.lojaId || '' })
+    setForm({ ...EMPTY, ...item, valor: String(item.valor), competencia: item.competencia, observacao: item.observacao || '', meioPagamento: item.meioPagamento || '', centroCustoId: item.centroCustoId || '', lojaId: item.lojaId || '', ratear: Boolean(item.rateio?.length), rateio: (item.rateio || []).map((r) => ({ ...r, percentual: String(r.percentual) })) })
   }
   async function salvar() {
     try {
-      const corpo = { ...form, lojaId: form.lojaId || null, centroCustoId: form.centroCustoId || null, meioPagamento: form.meioPagamento || null }
+      const rateio = form.ratear ? form.rateio.filter((r) => r.centroCustoId).map((r) => ({ centroCustoId: r.centroCustoId, percentual: Number(String(r.percentual).replace(',', '.')) })) : []
+      if (form.ratear && somaRateio(form.rateio) !== 100) { toast('O rateio precisa somar 100%.', 'error'); return }
+      const { ratear: _r, rateio: _ra, ...resto } = form
+      const corpo = { ...resto, lojaId: form.lojaId || null, centroCustoId: form.ratear ? null : (form.centroCustoId || null), meioPagamento: form.meioPagamento || null, contraparteId: form.contraparteId || null, contraparteTipo: form.contraparteNome ? (form.contraparteTipo || (form.tipo === 'despesa' ? 'fornecedor' : 'cliente')) : null, rateio }
       if (form.id) {
         const editavel = form.automatico
-          ? { lojaId: corpo.lojaId, centroCustoId: corpo.centroCustoId, categoria: corpo.categoria, documento: corpo.documento, observacao: corpo.observacao }
-          : { lojaId: corpo.lojaId, centroCustoId: corpo.centroCustoId, categoria: corpo.categoria, documento: corpo.documento, observacao: corpo.observacao, descricao: corpo.descricao, valor: corpo.valor, vencimento: corpo.vencimento, competencia: corpo.competencia, contraparteNome: corpo.contraparteNome, meioPagamento: corpo.meioPagamento }
+          ? { lojaId: corpo.lojaId, centroCustoId: corpo.centroCustoId, categoria: corpo.categoria, documento: corpo.documento, observacao: corpo.observacao, rateio }
+          : { lojaId: corpo.lojaId, centroCustoId: corpo.centroCustoId, categoria: corpo.categoria, documento: corpo.documento, observacao: corpo.observacao, descricao: corpo.descricao, valor: corpo.valor, vencimento: corpo.vencimento, competencia: corpo.competencia, contraparteNome: corpo.contraparteNome, meioPagamento: corpo.meioPagamento, rateio }
         await api.patch(`${BASE}/lancamentos/${form.id}`, editavel)
         toast('Lançamento atualizado.', 'success')
       } else {
-        const criados = await api.post(`${BASE}/lancamentos`, { ...corpo, meses: Number(corpo.meses) || 1 })
+        const criados = await api.post(`${BASE}/lancamentos`, { ...corpo, meses: Number(corpo.meses) || 1, parcelarTotal: Number(corpo.meses) > 1 && form.parcelarTotal === true })
         toast(criados.length > 1 ? `${criados.length} parcelas criadas.` : 'Lançamento criado.', 'success')
       }
       setForm(null); carregar()
@@ -291,7 +307,7 @@ export default function FinanceiroRazao({ abaInicial = 'geral' }) {
     </section>}
 
     {aba === 'conciliacao' && <Conciliacao categorias={categorias} toast={toast} onMudou={carregar} />}
-    {aba === 'ajustes' && <Ajustes categorias={categorias} centros={centros} estado={estado} onSincronizar={sincronizar} onMudou={carregar} toast={toast} />}
+    {aba === 'ajustes' && <Ajustes categorias={categorias} centros={centros} estado={estado} onSincronizar={sincronizar} onMudou={carregar} toast={toast} lojas={lojas} empresaId={empresaAtiva?.id} plataforma={isPlatformAdmin} />}
 
     <Dialog open={Boolean(form)} title={form?.id ? 'Editar lançamento' : (form?.tipo === 'receita' ? 'Nova receita' : 'Nova despesa')} labelId="razao-form" onClose={() => setForm(null)} onSubmit={salvar}
       actions={<><button type="button" className="c360-btn ghost" onClick={() => setForm(null)}>Voltar</button><button type="submit" className="c360-btn primary">Salvar</button></>}>
@@ -304,16 +320,29 @@ export default function FinanceiroRazao({ abaInicial = 'geral' }) {
           <label className="c360-field">Valor (R$)<input className="c360-input" required inputMode="decimal" disabled={form.automatico} value={form.valor} onChange={(e) => setForm({ ...form, valor: e.target.value })} /></label>
           <label className="c360-field">Vencimento<input className="c360-input" type="date" required disabled={form.automatico} value={form.vencimento} onChange={(e) => setForm({ ...form, vencimento: e.target.value })} /></label>
         </div>
-        {!form.automatico && <label className="c360-field">{form.tipo === 'receita' ? 'Cliente' : 'Fornecedor ou favorecido'} (opcional)<input className="c360-input" maxLength={240} value={form.contraparteNome || ''} onChange={(e) => setForm({ ...form, contraparteNome: e.target.value })} /></label>}
+        {!form.automatico && <label className="c360-field">{form.tipo === 'receita' ? 'Cliente' : 'Fornecedor ou favorecido'} (opcional)<input className="c360-input" maxLength={240} list={form.tipo === 'despesa' ? 'razao-fornecedores' : undefined} value={form.contraparteNome || ''} onChange={(e) => escolherContraparte(e.target.value)} />
+          {form.tipo === 'despesa' && <datalist id="razao-fornecedores">{fornecedores.map((f) => <option key={f.id} value={f.nome || f.razaoSocial} />)}</datalist>}
+          {form.tipo === 'despesa' && form.contraparteNome && <small className="dadm-muted">{form.contraparteId ? 'Fornecedor do cadastro' : 'Não está no cadastro de fornecedores (fica só o nome)'}</small>}</label>}
         {!form.id && <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
           <label className="c360-field">Situação<select className="c360-input" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}><option value="pendente">A {form.tipo === 'receita' ? 'receber' : 'pagar'}</option><option value="pago">Já {form.tipo === 'receita' ? 'recebido' : 'pago'}</option></select></label>
-          <label className="c360-field">Repetir por (meses)<input className="c360-input" type="number" min="1" max="24" value={form.meses} onChange={(e) => setForm({ ...form, meses: e.target.value })} /></label>
+          <label className="c360-field">Parcelas ou meses<input className="c360-input" type="number" min="1" max="24" value={form.meses} onChange={(e) => setForm({ ...form, meses: e.target.value })} /></label>
         </div>}
+        {!form.id && Number(form.meses) > 1 && <label className="dadm-muted"><input type="checkbox" checked={form.parcelarTotal} onChange={(e) => setForm({ ...form, parcelarTotal: e.target.checked })} /> O valor é o total: dividir em {form.meses} parcelas (sem marcar, o valor se repete todo mês)</label>}
         {(form.status === 'pago' || form.id) && <label className="c360-field">Forma de pagamento<select className="c360-input" disabled={form.automatico} value={form.meioPagamento || ''} onChange={(e) => setForm({ ...form, meioPagamento: e.target.value })}>{MEIOS.map(([v, r]) => <option key={v} value={v}>{r}</option>)}</select></label>}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
           <label className="c360-field">Unidade<select className="c360-input" value={form.lojaId || ''} onChange={(e) => setForm({ ...form, lojaId: e.target.value })}><option value="">Sem unidade</option>{lojas.map((l) => <option key={l.id} value={l.id}>{l.nome}</option>)}</select></label>
-          <label className="c360-field">Centro de custo<select className="c360-input" value={form.centroCustoId || ''} onChange={(e) => setForm({ ...form, centroCustoId: e.target.value })}><option value="">—</option>{centros.filter((c) => c.ativo).map((c) => <option key={c.id} value={c.id}>{c.codigo} · {c.nome}</option>)}</select></label>
+          <label className="c360-field">Centro de custo<select className="c360-input" disabled={form.ratear} value={form.centroCustoId || ''} onChange={(e) => setForm({ ...form, centroCustoId: e.target.value })}><option value="">—</option>{centros.filter((c) => c.ativo).map((c) => <option key={c.id} value={c.id}>{c.codigo} · {c.nome}</option>)}</select></label>
         </div>
+        {centros.some((c) => c.ativo) && <label className="dadm-muted"><input type="checkbox" checked={form.ratear} onChange={(e) => setForm({ ...form, ratear: e.target.checked, rateio: e.target.checked && !form.rateio.length ? [{ centroCustoId: form.centroCustoId || '', percentual: '100' }] : form.rateio })} /> Ratear entre centros de custo</label>}
+        {form.ratear && <div style={{ display: 'grid', gap: 8 }} role="group" aria-label="Rateio">
+          {form.rateio.map((r, i) => <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 110px auto', gap: 8 }}>
+            <select className="c360-input" aria-label={`Centro ${i + 1}`} value={r.centroCustoId} onChange={(e) => { const rateio = [...form.rateio]; rateio[i] = { ...r, centroCustoId: e.target.value }; setForm({ ...form, rateio }) }}><option value="">Centro…</option>{centros.filter((c) => c.ativo).map((c) => <option key={c.id} value={c.id}>{c.codigo} · {c.nome}</option>)}</select>
+            <input className="c360-input" aria-label={`Percentual ${i + 1}`} inputMode="decimal" value={r.percentual} onChange={(e) => { const rateio = [...form.rateio]; rateio[i] = { ...r, percentual: e.target.value }; setForm({ ...form, rateio }) }} />
+            <button type="button" className="c360-btn ghost" onClick={() => setForm({ ...form, rateio: form.rateio.filter((_, j) => j !== i) })}>Remover</button>
+          </div>)}
+          <div className="dadm-actions"><button type="button" className="c360-btn ghost" onClick={() => setForm({ ...form, rateio: [...form.rateio, { centroCustoId: '', percentual: '' }] })}>+ Centro</button>
+            <span className={somaRateio(form.rateio) === 100 ? 'dadm-muted' : 'dadm-neg'}>Soma: {String(somaRateio(form.rateio)).replace('.', ',')}%</span></div>
+        </div>}
         <label className="c360-field">Documento (NF, boleto)<input className="c360-input" maxLength={80} value={form.documento || ''} onChange={(e) => setForm({ ...form, documento: e.target.value })} /></label>
         <label className="c360-field">Observação<textarea className="c360-input" rows={2} value={form.observacao || ''} onChange={(e) => setForm({ ...form, observacao: e.target.value })} /></label>
       </div>}
@@ -349,7 +378,13 @@ function AcaoDialog({ acao, hoje, onClose, onConfirmar }) {
   </Dialog>
 }
 
-function Ajustes({ categorias, centros, estado, onSincronizar, onMudou, toast }) {
+function Ajustes({ categorias, centros, estado, onSincronizar, onMudou, toast, lojas = [], empresaId, plataforma = false }) {
+  const [config, setConfig] = useState(null)
+  useEffect(() => { api.get(`${BASE}/config`).then(setConfig).catch(() => setConfig(null)) }, [empresaId])
+  async function salvarLojaPadrao(lojaPadrao) {
+    try { const r = await api.put(`${BASE}/config`, { lojaPadrao: lojaPadrao || null }); setConfig({ ...config, lojaPadrao: r.lojaPadrao }); toast(r.atribuidos ? `Unidade salva; ${r.atribuidos} lançamento(s) sem unidade passaram para ela.` : 'Unidade salva.', 'success'); onMudou() }
+    catch (error) { toast(error.message, 'error') }
+  }
   const [novaCat, setNovaCat] = useState({ tipo: 'despesa', nome: '', grupoDre: 'operacional' })
   const [novoCentro, setNovoCentro] = useState({ codigo: '', nome: '' })
   async function criarCategoria(e) {
@@ -366,7 +401,7 @@ function Ajustes({ categorias, centros, estado, onSincronizar, onMudou, toast })
   return <div style={{ display: 'grid', gap: 16 }}>
     <section className="dadm-card">
       <h2>De onde vêm os lançamentos</h2>
-      <p className="dadm-muted">O Financeiro lê sozinho estas fontes (ao abrir e a cada minuto). Nada é lançado duas vezes.</p>
+      <p className="dadm-muted">O Financeiro lê sozinho estas fontes (ao abrir e numa rotina a cada poucos minutos). Nada é lançado duas vezes.</p>
       <Table caption="Fontes" rows={estado?.fontes || []} empty="Nenhuma leitura feita ainda." columns={[
         { key: 'fonte', label: 'Fonte', render: (f) => FONTES[f.fonte] || f.fonte },
         { key: 'quando', label: 'Última leitura', render: (f) => dateTime(f.sincronizadoEm) },
@@ -376,6 +411,12 @@ function Ajustes({ categorias, centros, estado, onSincronizar, onMudou, toast })
       ]} />
       <div className="dadm-actions" style={{ marginTop: 10 }}><button type="button" className="c360-btn ghost" onClick={onSincronizar}>Ler as fontes agora</button></div>
     </section>
+    {lojas.length > 1 && config && <section className="dadm-card">
+      <h2>Unidade das receitas sem unidade</h2>
+      <p className="dadm-muted">Bar (sem unidade do bar no Estoque), mensalidades do clube e contas de clientes chegam sem unidade. Elas entram nesta unidade, para o Financeiro e o fechamento por unidade não perderem receita. Ao escolher, as que já entraram sem unidade passam para ela (menos as de dia já fechado).</p>
+      <label className="c360-field" style={{ maxWidth: 360 }}>Unidade<select className="c360-input" value={config.lojaPadrao || ''} onChange={(e) => salvarLojaPadrao(e.target.value)}><option value="">Deixar sem unidade</option>{lojas.map((l) => <option key={l.id} value={l.id}>{l.nome}</option>)}</select></label>
+    </section>}
+    {plataforma && empresaId && <MigracaoJson empresaId={empresaId} toast={toast} onMudou={onMudou} />}
     <section className="dadm-card">
       <h2>Categorias</h2>
       <p className="dadm-muted">Receitas: {categorias.receita.join(', ')}.</p>
@@ -402,4 +443,50 @@ function Ajustes({ categorias, centros, estado, onSincronizar, onMudou, toast })
       </form>
     </section>
   </div>
+}
+
+/**
+ * Migração do financeiro antigo (JSON) para o razão — só a administração da plataforma.
+ * Conferir = ensaio + JSON × razão, centavo a centavo; Liberar = importa e liga a leitura contínua.
+ */
+export function MigracaoJson({ empresaId, toast, onMudou }) {
+  const [incluirQuarentena, setIncluirQuarentena] = useState(false)
+  const [r, setR] = useState(null)
+  const [ocupado, setOcupado] = useState(false)
+  async function chamar(acao) {
+    setOcupado(true)
+    try {
+      const resposta = await api.post(`/api/admin/platform/razao/legado/${acao}`, { empresaId, incluirQuarentena })
+      setR(acao === 'liberar' ? { ...resposta.conferencia, config: { jsonLiberadoEm: new Date().toISOString() } } : resposta)
+      if (acao === 'liberar') { toast(`Importação liberada: ${resposta.relatorio.inseridos} lançamento(s) novos.`, 'success'); onMudou() }
+    } catch (error) { toast(error.message || 'Não foi possível conferir.', 'error') }
+    finally { setOcupado(false) }
+  }
+  return <section className="dadm-card">
+    <h2>Financeiro antigo (migração)</h2>
+    <p className="dadm-muted">Só a administração da plataforma vê. Confira o ensaio antes de liberar: a leitura contínua do financeiro antigo só começa depois da liberação.</p>
+    <label className="dadm-muted"><input type="checkbox" checked={incluirQuarentena} onChange={(e) => setIncluirQuarentena(e.target.checked)} /> Incluir os lançamentos sem unidade (a tela antiga não mostrava esses)</label>
+    <div className="dadm-actions" style={{ marginTop: 8 }}>
+      <button type="button" className="c360-btn ghost" disabled={ocupado} onClick={() => chamar('conferencia')}>Conferir (ensaio)</button>
+      <button type="button" className="c360-btn primary" disabled={ocupado || !r} onClick={() => chamar('liberar')}>Liberar e importar</button>
+    </div>
+    {r && <>
+      {r.config?.jsonLiberadoEm && <p className="dadm-note">Leitura contínua liberada em {dateTime(r.config.jsonLiberadoEm)}{r.config.jsonLiberadoPor ? ` por ${r.config.jsonLiberadoPor}` : ''}.</p>}
+      <p className={r.fecha ? 'dadm-note' : 'dadm-note danger'}>{r.fecha ? 'Fecha centavo a centavo: tudo o que o financeiro antigo tem já está no razão.' : `Ainda não fecha: ${r.totalFaltando} lançamento(s) do financeiro antigo não estão no razão.`}</p>
+      <Table caption="Conferência" rows={r.conferencia.map((l) => ({ ...l, id: `${l.tipo}-${l.status}` }))} empty="Nada no financeiro antigo." columns={[
+        { key: 'tipo', label: 'Tipo' }, { key: 'status', label: 'Situação' },
+        { key: 'json', label: 'Antigo', align: 'right', render: (l) => `${l.json.quantidade} · ${money(l.json.valor)}` },
+        { key: 'razao', label: 'No razão', align: 'right', render: (l) => `${l.razao.quantidade} · ${money(l.razao.valor)}` },
+        { key: 'diferenca', label: 'Diferença', align: 'right', render: (l) => <span className={l.diferenca ? 'dadm-neg' : ''}>{money(l.diferenca)}</span> },
+      ]} />
+      <p className="dadm-muted">Lidos {r.ensaio.lidos} · válidos {r.ensaio.validos} · ignorados {r.ensaio.ignorados.length} · sem unidade {r.quarentena.quantidade}{r.quarentena.incluida ? ' (incluídos)' : ' (fora da importação)'} · por unidade antiga: {Object.entries(r.porUnidadeLegada || {}).map(([k, v]) => `${k} ${v}`).join(', ') || '—'}</p>
+      {r.quarentena.itens.length > 0 && <details><summary>Ver os sem unidade ({r.quarentena.quantidade})</summary>
+        <Table caption="Sem unidade" rows={r.quarentena.itens} empty="" columns={[
+          { key: 'data', label: 'Data' }, { key: 'tipo', label: 'Tipo' }, { key: 'descricao', label: 'Descrição' }, { key: 'origem', label: 'Origem' },
+          { key: 'valor', label: 'Valor', align: 'right', render: (i) => money(i.valor) },
+        ]} />
+      </details>}
+      {r.ensaio.ignorados.length > 0 && <details><summary>Ignorados ({r.ensaio.ignorados.length})</summary><ul>{r.ensaio.ignorados.slice(0, 100).map((i, k) => <li key={k}>{i.id || 'sem id'}: {i.motivo}</li>)}</ul></details>}
+    </>}
+  </section>
 }

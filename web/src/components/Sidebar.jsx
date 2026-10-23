@@ -569,7 +569,7 @@ function BackofficePlataforma({ empresa, onNavClick, sidebarCollapsed = false })
       </button>
       {!aberto && (
         <div style={{ padding: '0 16px 6px', fontSize: 11, color: 'var(--muted)' }}>
-          {contagem.no_ar || 0} no ar · {contagem.em_implantacao || 0} em implantação{contagem.nao_contratado ? ` · ${contagem.nao_contratado} fora do contrato` : ''}
+          {contagem.no_ar || 0} no ar{contagem.homologacao ? ` · ${contagem.homologacao} em homologação` : ''} · {contagem.em_implantacao || 0} em implantação{contagem.nao_contratado ? ` · ${contagem.nao_contratado} fora do contrato` : ''}
         </div>
       )}
       {aberto && grupos.map((grupo) => (

@@ -160,6 +160,15 @@ export default function PDVOffline() {
     finally { setSalvando(false) }
   }
 
+  const imprimirTeste = async (dispositivo) => {
+    setSalvando(true); setErro('')
+    try {
+      await api.post('/api/pdv-offline/impressoes', { loja_id: dispositivo.loja_id, dispositivo_id: dispositivo.id, terminal_id: dispositivo.terminal_id || undefined, tipo_documento: 'teste' })
+      setMensagem(`Teste enviado para ${dispositivo.nome}. O agente do terminal imprime em alguns segundos.`)
+    } catch (err) { setErro(err.message || 'Não foi possível enviar o teste') }
+    finally { setSalvando(false) }
+  }
+
   const alternarTerminal = async (terminal) => {
     const acao = terminal.ativo ? 'desativar' : 'reativar'
     if (!window.confirm(`Deseja ${acao} o terminal ${terminal.codigo}?${terminal.ativo ? ' Ele deixa de sincronizar até ser reativado.' : ''}`)) return
@@ -246,7 +255,7 @@ export default function PDVOffline() {
 
         {gerencia && <article className="pdvo-panel pdvo-panel--wide">
           <header className="pdvo-panel-header"><div><h2>Periféricos da loja ativa</h2><p>Cadastre em modo de diagnóstico e ative após validar a instalação física.</p></div><button className="pdvo-link-button" onClick={abrirDispositivo}>Cadastrar periférico</button></header>
-          <div className="pdvo-device-grid">{dispositivos.length === 0 ? <p className="pdvo-empty">Nenhum periférico cadastrado para esta loja.</p> : dispositivos.map((dispositivo) => <article className="pdvo-device" key={dispositivo.id}><div className="pdvo-device-top"><span>{TIPOS_DISPOSITIVO.find(([id]) => id === dispositivo.tipo)?.[1] || dispositivo.tipo}</span><Status value={dispositivo.ultimo_status} /></div><strong>{dispositivo.nome}</strong><p>{[dispositivo.fabricante, dispositivo.modelo].filter(Boolean).join(' · ') || 'Modelo não informado'}</p><small>Terminal: {dispositivo.terminal_codigo || 'Compartilhado pela loja'}</small></article>)}</div>
+          <div className="pdvo-device-grid">{dispositivos.length === 0 ? <p className="pdvo-empty">Nenhum periférico cadastrado para esta loja.</p> : dispositivos.map((dispositivo) => <article className="pdvo-device" key={dispositivo.id}><div className="pdvo-device-top"><span>{TIPOS_DISPOSITIVO.find(([id]) => id === dispositivo.tipo)?.[1] || dispositivo.tipo}</span><Status value={dispositivo.ultimo_status} /></div><strong>{dispositivo.nome}</strong><p>{[dispositivo.fabricante, dispositivo.modelo].filter(Boolean).join(' · ') || 'Modelo não informado'}</p><small>Terminal: {dispositivo.terminal_codigo || 'Compartilhado pela loja'}</small>{dispositivo.tipo === 'impressora_termica' && <button className="pdvo-text-action" onClick={() => imprimirTeste(dispositivo)} disabled={salvando}>Imprimir teste</button>}</article>)}</div>
         </article>}
 
         <article className="pdvo-panel pdvo-panel--wide">

@@ -363,3 +363,86 @@ export async function resolverConflito(db, empresaId, id, resolucao, { usuario =
 }
 
 export { naTransacao };
+
+// ── fila de impressão do agente local ────────────────────────────────────────
+const TIPOS_IMPRESSAO = new Set(['cupom', 'comanda', 'teste', 'outro']);
+// trabalho entregue e sem resposta volta para a fila depois disto (agente caiu no meio)
+const ENTREGA_EXPIRA_MIN = 5;
+
+function conteudoDeImpressao(c = {}) {
+  const linha = (l) => (typeof l === 'string' ? l.slice(0, 120) : { ...(l?.esquerda !== undefined ? { esquerda: String(l.esquerda).slice(0, 80) } : {}), ...(l?.direita !== undefined ? { direita: String(l.direita).slice(0, 40) } : {}), ...(l?.texto ? { texto: String(l.texto).slice(0, 120), alinhamento: ['esquerda', 'centro', 'direita'].includes(l.alinhamento) ? l.alinhamento : 'esquerda' } : {}) });
+  const linhas = (Array.isArray(c.linhas) ? c.linhas : []).slice(0, 200).map(linha);
+  return { ...(c.titulo ? { titulo: String(c.titulo).slice(0, 60) } : {}), ...(c.subtitulo ? { subtitulo: String(c.subtitulo).slice(0, 60) } : {}), linhas, ...(c.total ? { total: String(c.total).slice(0, 60) } : {}), ...(c.rodape ? { rodape: String(c.rodape).slice(0, 120) } : {}), ...(c.acao === 'abrir_gaveta' ? { acao: 'abrir_gaveta' } : {}) };
+}
+
+/** Põe um trabalho na fila da unidade (opcionalmente de um terminal e de um periférico). */
+export async function enfileirarImpressao(db, empresaId, dados = {}, { usuario = null, lojaRestrita = null } = {}) {
+  const empresa = exigirUuid(empresaId, 'empresa');
+  if (lojaRestrita && dados.loja_id && dados.loja_id !== lojaRestrita) throw new ErroDominio('NOT_FOUND', 'Unidade não encontrada nesta empresa', 404);
+  const loja = await exigirLoja((t, v) => db.query(t, v), empresa, lojaRestrita || dados.loja_id);
+  const tipo = TIPOS_IMPRESSAO.has(dados.tipo_documento) ? dados.tipo_documento : 'cupom';
+  const terminal = dados.terminal_id ? exigirUuid(dados.terminal_id, 'terminal') : null;
+  const dispositivo = dados.dispositivo_id ? exigirUuid(dados.dispositivo_id, 'periférico') : null;
+  if (terminal && !(await db.query('SELECT 1 FROM pdv_terminais WHERE empresa_id = $1 AND id = $2 AND loja_id = $3', [empresa, terminal, loja])).rows[0]) throw new ErroDominio('NOT_FOUND', 'Terminal não encontrado nesta unidade', 404);
+  if (dispositivo && !(await db.query('SELECT 1 FROM pdv_dispositivos WHERE empresa_id = $1 AND id = $2 AND loja_id = $3', [empresa, dispositivo, loja])).rows[0]) throw new ErroDominio('NOT_FOUND', 'Periférico não encontrado nesta unidade', 404);
+  const conteudo = tipo === 'teste'
+    ? { titulo: 'Teste de impressão', subtitulo: new Date().toLocaleString('pt-BR', { timeZone: 'America/Cuiaba' }), linhas: ['Se você lê isto, a impressora está ligada', 'ao terminal do Kytto.'], rodape: 'Kytto' }
+    : conteudoDeImpressao(dados.conteudo);
+  if (tipo !== 'teste' && !conteudo.linhas.length && !conteudo.titulo && !conteudo.acao) throw new ErroDominio('VALIDATION_ERROR', 'Nada para imprimir');
+  const r = await db.query(
+    'INSERT INTO pdv_impressoes (empresa_id, loja_id, terminal_id, dispositivo_id, tipo_documento, conteudo, criado_por) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id, status, criado_em',
+    [empresa, loja, terminal, dispositivo, tipo, JSON.stringify(conteudo), textoOpcional(usuario, 180)]);
+  return r.rows[0];
+}
+
+/** Próximo trabalho do terminal (dele ou da unidade sem terminal). null = fila vazia. */
+export async function proximoTrabalho(db, terminal) {
+  const r = await db.query(
+    `UPDATE pdv_impressoes SET status = 'entregue', entregue_em = CURRENT_TIMESTAMP, tentativas = tentativas + 1, terminal_id = COALESCE(terminal_id, $3)
+      WHERE id = (SELECT id FROM pdv_impressoes
+                   WHERE empresa_id = $1 AND loja_id = $2 AND (terminal_id IS NULL OR terminal_id = $3) AND tentativas < 5
+                     AND (status = 'pendente' OR (status = 'entregue' AND entregue_em < CURRENT_TIMESTAMP - make_interval(mins => $4)))
+                   ORDER BY criado_em FOR UPDATE SKIP LOCKED LIMIT 1)
+      RETURNING id, dispositivo_id, tipo_documento, conteudo`,
+    [terminal.empresa_id, terminal.loja_id, terminal.id, ENTREGA_EXPIRA_MIN]);
+  const t = r.rows[0];
+  return t ? { id: t.id, dispositivo_id: t.dispositivo_id, tipo_documento: t.tipo_documento === 'teste' ? 'cupom' : t.tipo_documento, conteudo: t.conteudo } : null;
+}
+
+export async function resultadoDoTrabalho(db, terminal, id, { sucesso, erro } = {}) {
+  if (!UUID_RE.test(String(id || ''))) throw new ErroDominio('VALIDATION_ERROR', 'Trabalho inválido');
+  const r = await db.query(
+    `UPDATE pdv_impressoes SET status = $4, erro = $5, concluido_em = CURRENT_TIMESTAMP
+      WHERE empresa_id = $1 AND id = $2 AND terminal_id = $3 AND status = 'entregue' RETURNING id, status`,
+    [terminal.empresa_id, id, terminal.id, sucesso === true ? 'impresso' : 'erro', sucesso === true ? null : textoOpcional(erro, 300) || 'Falha sem detalhe']);
+  if (!r.rows[0]) throw new ErroDominio('NOT_FOUND', 'Trabalho não encontrado para este terminal', 404);
+  return r.rows[0];
+}
+
+export async function listarImpressoes(db, empresaId, { lojaId = null, limite = 50 } = {}) {
+  const r = await db.query(
+    `SELECT i.id, i.loja_id, i.tipo_documento, i.status, i.erro, i.tentativas, i.criado_em, i.concluido_em, t.codigo AS terminal_codigo, d.nome AS dispositivo_nome
+       FROM pdv_impressoes i LEFT JOIN pdv_terminais t ON t.empresa_id = i.empresa_id AND t.id = i.terminal_id
+       LEFT JOIN pdv_dispositivos d ON d.empresa_id = i.empresa_id AND d.id = i.dispositivo_id
+      WHERE i.empresa_id = $1 AND ($2::uuid IS NULL OR i.loja_id = $2::uuid) ORDER BY i.criado_em DESC LIMIT $3`,
+    [exigirUuid(empresaId, 'empresa'), lojaId, Math.min(Math.max(Number(limite) || 50, 1), 200)]);
+  return r.rows;
+}
+
+/** Eventos técnicos do agente (telemetria): até 100 por envio. */
+export async function registrarEventosDoAgente(db, terminal, eventos = []) {
+  const lista = (Array.isArray(eventos) ? eventos : []).slice(0, 100).filter((e) => e && typeof e === 'object');
+  for (const e of lista) {
+    const quando = e.ocorrido_em && !Number.isNaN(new Date(e.ocorrido_em).valueOf()) ? new Date(e.ocorrido_em) : null;
+    const dados = JSON.stringify(e.dados && typeof e.dados === 'object' ? e.dados : {}).slice(0, 4000);
+    await db.query('INSERT INTO pdv_eventos_agente (empresa_id, terminal_id, tipo_evento, severidade, dados, ocorrido_em) VALUES ($1,$2,$3,$4,$5::jsonb,$6)',
+      [terminal.empresa_id, terminal.id, String(e.tipo_evento || e.tipo || 'evento').slice(0, 60), ['info', 'aviso', 'erro'].includes(e.severidade) ? e.severidade : 'info', dados.endsWith('}') ? dados : '{}', quando]);
+  }
+  return { sucesso: true, gravados: lista.length };
+}
+
+export async function listarEventosDoAgente(db, empresaId, { terminalId, limite = 100 } = {}) {
+  const r = await db.query('SELECT tipo_evento, severidade, dados, ocorrido_em, recebido_em FROM pdv_eventos_agente WHERE empresa_id = $1 AND terminal_id = $2 ORDER BY recebido_em DESC LIMIT $3',
+    [exigirUuid(empresaId, 'empresa'), exigirUuid(terminalId, 'terminal'), Math.min(Math.max(Number(limite) || 100, 1), 300)]);
+  return r.rows;
+}

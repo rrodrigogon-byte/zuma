@@ -41,6 +41,7 @@ import { lerSociosTtc, importarAlunos } from './modules/clube/importar-legado.js
 import { createA2AdminRouter } from './modules/a2/rotas.js';
 import { createUnidadesAdminRouter } from './modules/unidades/rotas.js';
 import { createRazaoAdminRouter, createRazaoPlataformaRouter } from './modules/razao/rotas.js';
+import { iniciarRotina as iniciarRotinaBackoffice } from './modules/razao/rotina.js';
 import { createSuprimentosAdminRouter } from './modules/suprimentos/rotas.js';
 import { createFiscalAdminRouter } from './modules/fiscal/rotas.js';
 import { createSalaoAdminRouter } from './modules/salao/rotas.js';
@@ -262,6 +263,8 @@ export const CATEGORIAS = [
 const ROLES = ['admin','organizador','staff','atleta'];
 const STAFF = ['admin','organizador','staff']; // acesso ao sistema/painel
 const norm = s => String(s||'').trim().toLowerCase();
+// Fuso dos módulos do backoffice: o mesmo KYTTO_TIMEZONE do resto do sistema (KYTTO_FUSO tem prioridade).
+const FUSO_KYTTO = process.env.KYTTO_FUSO || process.env.KYTTO_TIMEZONE || 'America/Cuiaba';
 const PLATFORM_ADMIN_EMAILS = new Set((process.env.PLATFORM_ADMIN_EMAILS || '').split(',').map(norm).filter(Boolean));
 const isPlatformAdminUser = user => Boolean(user?.pgOperational !== true && (user?.pgAccount === true ? user?.pgPlatformAdmin === true && user?.platformAdmin === true : user?.platformAdmin === true || PLATFORM_ADMIN_EMAILS.has(norm(user?.email))));
 // E-mails de administração (plataforma e admin principal) não podem ser cadastrados por
@@ -1270,19 +1273,21 @@ if(process.env.COMMERCE_CORE_ENABLED === '1'){
   // [kytto-unidades] Cadastro das unidades (lojas) da empresa ativa, no PostgreSQL.
   app.use('/api/admin/unidades', auth, requireStaff, createUnidadesAdminRouter({ db: clubeDb, empresaDaRequisicao: empresaDasUnidades }));
   // [kytto-razao] Razão financeiro único (Financeiro, contas a pagar e a receber, DRE, fechamento).
-  app.use('/api/admin/razao', auth, requireStaff, createRazaoAdminRouter({ db: clubeDb, escopoDaRequisicao: escopoComercial, fonteJson: fonteJsonDoRazao, fuso: process.env.KYTTO_FUSO || 'America/Cuiaba' }));
-  app.use('/api/admin/platform/razao', auth, requirePlatformAdmin, createRazaoPlataformaRouter({ db: clubeDb, fonteJson: fonteJsonDoRazao }));
+  app.use('/api/admin/razao', auth, requireStaff, createRazaoAdminRouter({ db: clubeDb, escopoDaRequisicao: escopoComercial, fonteJson: fonteJsonDoRazao, fuso: FUSO_KYTTO }));
+  app.use('/api/admin/platform/razao', auth, requirePlatformAdmin, createRazaoPlataformaRouter({ db: clubeDb, fonteJson: fonteJsonDoRazao, fuso: FUSO_KYTTO }));
+  // [kytto-rotina] Lê as fontes do razão e baixa o estoque das vendas a cada BACKOFFICE_ROTINA_MINUTOS (padrão 5; 0 desliga).
+  iniciarRotinaBackoffice(clubeDb, { minutos: process.env.BACKOFFICE_ROTINA_MINUTOS ?? 5, fonteJson: fonteJsonDoRazao, fuso: FUSO_KYTTO, razaoAtivo: () => process.env.FINANCEIRO_RAZAO === '1' });
   // [kytto-suprimentos] Estoque por unidade, inventário, ficha técnica e compras (geram contas a pagar no razão).
-  app.use('/api/admin/suprimentos', auth, requireStaff, createSuprimentosAdminRouter({ db: clubeDb, escopoDaRequisicao: escopoComercial, fuso: process.env.KYTTO_FUSO || 'America/Cuiaba' }));
+  app.use('/api/admin/suprimentos', auth, requireStaff, createSuprimentosAdminRouter({ db: clubeDb, escopoDaRequisicao: escopoComercial, fuso: FUSO_KYTTO }));
   // [kytto-fiscal] Emitente, certificado A1 no cofre, classificação e documentos — SÓ HOMOLOGAÇÃO
   // (transmissão só com FISCAL_TRANSMITIR_HOMOLOGACAO=1; produção exige migração nova).
   app.use('/api/admin/fiscal', auth, requireStaff, createFiscalAdminRouter({ db: clubeDb, escopoDaRequisicao: escopoComercial }));
   // [kytto-salao] Reservas de mesa e lista de espera, ligadas às mesas e comandas do bar.
-  app.use('/api/admin/salao', auth, requireStaff, createSalaoAdminRouter({ db: clubeDb, escopoDaRequisicao: escopoComercial, fuso: process.env.KYTTO_FUSO || 'America/Cuiaba' }));
+  app.use('/api/admin/salao', auth, requireStaff, createSalaoAdminRouter({ db: clubeDb, escopoDaRequisicao: escopoComercial, fuso: FUSO_KYTTO }));
   // [kytto-pdv-offline] Terminais e periféricos por unidade; o agente local sincroniza as vendas feitas sem internet (viram comandas pagas do bar).
-  app.use('/api/pdv-offline', createPdvOfflineRouter({ db: clubeDb, escopoDaRequisicao: escopoComercial, auth, requireStaff, fuso: process.env.KYTTO_FUSO || 'America/Cuiaba' }));
+  app.use('/api/pdv-offline', createPdvOfflineRouter({ db: clubeDb, escopoDaRequisicao: escopoComercial, auth, requireStaff, fuso: FUSO_KYTTO }));
   // [kytto-varejo] Supermercado/varejo sobre o estoque único: preço por unidade, promoções, lotes, etiquetas e transferências.
-  app.use('/api/admin/varejo', auth, requireStaff, createVarejoAdminRouter({ db: clubeDb, escopoDaRequisicao: escopoComercial, fuso: process.env.KYTTO_FUSO || 'America/Cuiaba' }));
+  app.use('/api/admin/varejo', auth, requireStaff, createVarejoAdminRouter({ db: clubeDb, escopoDaRequisicao: escopoComercial, fuso: FUSO_KYTTO }));
   // [kytto-bar] Bar, PDV, comandas, estoque fracionado, KDS e caixa por empresa.
   // O prefixo continua sob a trava /api/admin e a empresa é resolvida exclusivamente
   // pela membership SQL; nenhum empresaId do corpo da requisição é aceito.

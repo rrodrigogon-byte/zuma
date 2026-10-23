@@ -43,6 +43,7 @@ test('estado: em implantação, evento, fora do contrato e no ar', () => {
   assert.equal(estadoDoModulo(item('/admin/torneios')), 'evento')
   assert.equal(estadoDoModulo(item('/admin/financeiro')), 'no_ar')
   assert.equal(estadoDoModulo(item('/admin/lojas')), 'no_ar')
+  assert.equal(estadoDoModulo(item('/admin/notas')), 'homologacao', 'fiscal novo só em homologação')
   assert.equal(estadoDoModulo(item('/admin/financeiro'), { modulos: ['clube'] }), 'nao_contratado')
   assert.equal(estadoDoModulo(item('/admin/financeiro'), { modulos: ['Financeiro'] }), 'no_ar')
   // sem contrato definido, nada é marcado como fora do contrato

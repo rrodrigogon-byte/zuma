@@ -68,8 +68,23 @@ export function createRazaoAdminRouter({ db, escopoDaRequisicao, fonteJson = nul
     await lerFontes(empresaId);
     return svc.resumo(db, empresaId, { lojaId: unidadePedida(req, lojaRestrita), fuso });
   }));
-  router.get('/fluxo', rota('payments.read', async ({ req, empresaId, lojaRestrita }) => svc.fluxo(db, empresaId, { meses: req.query.meses, lojaId: unidadePedida(req, lojaRestrita), fuso })));
-  router.get('/dre', rota('reports.read', ({ req, empresaId, lojaRestrita }) => svc.dre(db, empresaId, { de: req.query.de, ate: req.query.ate, lojaId: unidadePedida(req, lojaRestrita), centroCustoId: req.query.centroCustoId || null })));
+  router.get('/fluxo', rota('payments.read', async ({ req, empresaId, lojaRestrita }) => {
+    await lerFontes(empresaId);
+    return svc.fluxo(db, empresaId, { meses: req.query.meses, lojaId: unidadePedida(req, lojaRestrita), fuso });
+  }));
+  router.get('/dre', rota('reports.read', async ({ req, empresaId, lojaRestrita }) => {
+    await lerFontes(empresaId);
+    return svc.dre(db, empresaId, { de: req.query.de, ate: req.query.ate, lojaId: unidadePedida(req, lojaRestrita), centroCustoId: req.query.centroCustoId || null });
+  }));
+
+  // unidade das receitas que chegam sem unidade (bar, clube, contas do A2)
+  router.get('/config', rota('payments.read', ({ empresaId }) => svc.obterConfig(db, empresaId)));
+  router.put('/config', rota('settings.write', async ({ req, empresaId, lojaRestrita }) => {
+    if (lojaRestrita) throw new ErroDominio('PERMISSION_DENIED', 'A unidade padrão vale para a empresa toda: exige permissão na empresa toda', 403);
+    const r = await svc.salvarLojaPadrao(db, empresaId, req.body?.lojaPadrao || null);
+    ultimaLeitura.delete(empresaId);
+    return r;
+  }));
 
   router.get('/lancamentos', rota('payments.read', async ({ req, empresaId, lojaRestrita }) => {
     await lerFontes(empresaId);
@@ -152,19 +167,30 @@ export function createRazaoAdminRouter({ db, escopoDaRequisicao, fonteJson = nul
   return router;
 }
 
-/** Rotas só da administração da plataforma: simular e aplicar a importação do JSON antigo. */
-export function createRazaoPlataformaRouter({ db, fonteJson }) {
+/**
+ * Rotas só da administração da plataforma: migração do financeiro antigo (JSON).
+ * conferencia = ensaio + JSON × razão (não grava); liberar = importa e liga a leitura contínua.
+ */
+export function createRazaoPlataformaRouter({ db, fonteJson, fuso = svc.FUSO_PADRAO }) {
   const router = express.Router();
   router.use(express.json({ limit: '8kb' }));
-  router.post('/importar-legado', async (req, res) => {
+  router.use((req, res, next) => { res.set('Cache-Control', 'private, no-store'); next(); });
+  const comJson = (fn) => async (req, res) => {
     try {
       const empresaId = exigirUuid(req.body?.empresaId, 'empresa');
       const json = await fonteJson(empresaId);
       if (!json?.chaveLegada) throw new ErroDominio('NOT_FOUND', 'Esta empresa não tem financeiro no banco antigo', 404);
-      res.json(await fontes.importarJsonLegado(db, empresaId, { ...json, aplicar: req.body?.aplicar === true, incluirQuarentena: req.body?.incluirQuarentena === true }));
+      res.json(await fn({ empresaId, json, incluirQuarentena: req.body?.incluirQuarentena === true, usuario: String(req.user?.email || req.user?.nome || 'plataforma') }));
     } catch (error) {
       responderErro(res, error);
     }
-  });
+  };
+  router.post('/legado/conferencia', comJson(async ({ empresaId, json, incluirQuarentena }) => ({
+    ...(await fontes.conferirJsonLegado(db, empresaId, { ...json, incluirQuarentena, fuso })),
+    config: await svc.obterConfig(db, empresaId),
+  })));
+  router.post('/legado/liberar', comJson(({ empresaId, json, incluirQuarentena, usuario }) => fontes.liberarJsonLegado(db, empresaId, { ...json, incluirQuarentena, usuario, fuso })));
+  // compatibilidade: só ensaio (aplicar agora passa pela liberação conferida)
+  router.post('/importar-legado', comJson(({ empresaId, json, incluirQuarentena }) => fontes.importarJsonLegado(db, empresaId, { ...json, aplicar: false, incluirQuarentena, fuso })));
   return router;
 }

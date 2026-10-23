@@ -17,7 +17,7 @@ describe('PDV offline (PostgreSQL)', { skip: pgDeTeste }, () => {
   before(async () => {
     ctx = await criarBancoTeste();
     await ctx.db.query('CREATE TABLE empresas (id UUID PRIMARY KEY); CREATE TABLE lojas (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), empresa_id UUID NOT NULL, nome VARCHAR(120), ativa BOOLEAN NOT NULL DEFAULT true);');
-    for (const m of ['081_bar_pdv_multiempresa.sql', '090_financeiro_razao.sql', '095_pdv_offline_multiempresa.sql']) await ctx.db.query(sql(m));
+    for (const m of ['081_bar_pdv_multiempresa.sql', '090_financeiro_razao.sql', '095_pdv_offline_multiempresa.sql', '099_pdv_offline_impressao.sql']) await ctx.db.query(sql(m));
     await ctx.db.query('INSERT INTO empresas (id) VALUES ($1), ($2)', [A, B]);
     loja = (await ctx.db.query("INSERT INTO lojas (empresa_id, nome) VALUES ($1, 'Sede') RETURNING id", [A])).rows[0].id;
     cerveja = await bar.salvarProduto(ctx.db, A, { nome: 'Cerveja', categoria: 'Bebidas', setor: 'bar', preco: 10, estoqueAtual: 1 });
@@ -171,6 +171,28 @@ describe('PDV offline (PostgreSQL)', { skip: pgDeTeste }, () => {
     await pdv.resolverConflito(ctx.db, A, c1.id, 'descartado');
     assert.equal((await pdv.listarConflitos(ctx.db, A)).filter((x) => x.tipo_conflito === 'produto_inexistente').length, 0);
     assert.equal((await pdv.resolverConflito(ctx.db, A, c2.id, 'aceito_cliente')).status, 'resolvido'); // já resolvido junto: devolve o estado
+  });
+
+  test('fila de impressão: teste vai para o agente da unidade, um por vez, com resultado; eventos do agente gravados', async () => {
+    const t = await pdv.autenticarTerminal(ctx.db, terminal.id, token);
+    assert.equal(await pdv.proximoTrabalho(ctx.db, t), null, 'fila vazia');
+    const disp = await pdv.criarDispositivo(ctx.db, A, { loja_id: loja, terminal_id: terminal.id, tipo: 'impressora_termica', nome: 'Térmica caixa' });
+    const job = await pdv.enfileirarImpressao(ctx.db, A, { loja_id: loja, dispositivo_id: disp.id, tipo_documento: 'teste' }, { usuario: 'gerente' });
+    await assert.rejects(() => pdv.enfileirarImpressao(ctx.db, B, { loja_id: loja, tipo_documento: 'teste' }), (e) => e.status === 404);
+    await assert.rejects(() => pdv.enfileirarImpressao(ctx.db, A, { loja_id: loja, tipo_documento: 'cupom', conteudo: {} }), (e) => e.code === 'VALIDATION_ERROR');
+    const trabalho = await pdv.proximoTrabalho(ctx.db, t);
+    assert.equal(trabalho.id, job.id);
+    assert.equal(trabalho.dispositivo_id, disp.id);
+    assert.match(trabalho.conteudo.titulo, /Teste/);
+    assert.equal(await pdv.proximoTrabalho(ctx.db, t), null, 'entregue não sai de novo antes de expirar');
+    assert.equal((await pdv.resultadoDoTrabalho(ctx.db, t, job.id, { sucesso: false, erro: 'Sem papel' })).status, 'erro');
+    await assert.rejects(() => pdv.resultadoDoTrabalho(ctx.db, t, job.id, { sucesso: true }), (e) => e.status === 404);
+    const lista = await pdv.listarImpressoes(ctx.db, A, { lojaId: loja });
+    assert.equal(lista[0].erro, 'Sem papel');
+    assert.equal((await pdv.listarImpressoes(ctx.db, B)).length, 0);
+    const r = await pdv.registrarEventosDoAgente(ctx.db, t, [{ tipo_evento: 'impressao_falhou', severidade: 'erro', dados: { erro: 'Sem papel' }, ocorrido_em: new Date().toISOString() }]);
+    assert.equal(r.gravados, 1);
+    assert.equal((await pdv.listarEventosDoAgente(ctx.db, A, { terminalId: terminal.id }))[0].tipo_evento, 'impressao_falhou');
   });
 
   test('terminal desativado não sincroniza; dispositivos por unidade', async () => {

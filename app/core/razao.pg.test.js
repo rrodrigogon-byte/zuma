@@ -14,7 +14,7 @@ const STUBS = `
 CREATE TABLE empresas (id UUID PRIMARY KEY);
 CREATE TABLE lojas (id UUID PRIMARY KEY, empresa_id UUID NOT NULL);
 CREATE TABLE clube_pagamentos_recebidos (empresa_id UUID NOT NULL, pagamento_id VARCHAR(120) NOT NULL, customer_id UUID NOT NULL, valor NUMERIC(10,2), nova_data DATE, resultado JSONB, criado_em TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (empresa_id, pagamento_id));
-CREATE TABLE clube_cobrancas (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), empresa_id UUID NOT NULL, descricao VARCHAR(120) NOT NULL);
+CREATE TABLE clube_cobrancas (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), empresa_id UUID NOT NULL, customer_id UUID, valor NUMERIC(10,2) NOT NULL DEFAULT 199.9, descricao VARCHAR(120) NOT NULL, status VARCHAR(20) NOT NULL DEFAULT 'pendente', enviar_em TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP, cancelado_em TIMESTAMPTZ);
 CREATE TABLE commerce_orders (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), empresa_id UUID NOT NULL, loja_id UUID, customer_id UUID, public_code VARCHAR(40) NOT NULL, UNIQUE (empresa_id, id));
 CREATE TABLE commerce_payments (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), empresa_id UUID NOT NULL, order_id UUID NOT NULL, method VARCHAR(30) NOT NULL, status VARCHAR(30) NOT NULL, amount NUMERIC(14,2) NOT NULL, captured_at TIMESTAMPTZ, refunded_at TIMESTAMPTZ, criado_em TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP);`;
 
@@ -30,6 +30,7 @@ describe('Razão financeiro único (PostgreSQL)', { skip: pgDeTeste }, () => {
     await ctx.db.query(sql('081_bar_pdv_multiempresa.sql'));
     await ctx.db.query(sql('082_financeiro_cadastros_multiempresa.sql'));
     await ctx.db.query(sql('090_financeiro_razao.sql'));
+    await ctx.db.query(sql('098_financeiro_ajustes_auditoria.sql'));
     await ctx.db.query('INSERT INTO empresas (id) VALUES ($1), ($2)', [A, B]);
     await ctx.db.query('INSERT INTO lojas (id, empresa_id) VALUES ($1, $2)', [lojaA, A]);
   });
@@ -125,6 +126,61 @@ describe('Razão financeiro único (PostgreSQL)', { skip: pgDeTeste }, () => {
     assert.equal((await fontes.sincronizarBar(ctx.db, B)).inseridos, 0);
   });
 
+  test('auditoria: empresa de uma unidade só leva a receita do bar para ela; com várias, vale a unidade padrão', async () => {
+    const doBar = await razao.listar(ctx.db, A, { origem: 'bar_comanda' });
+    assert.ok(doBar.length && doBar.every((l) => l.lojaId === lojaA), 'A tem uma unidade só: a receita do bar é dela');
+    // empresa com duas unidades: sem padrão fica sem unidade; ao escolher, o que já entrou passa para ela
+    const C = randomUUID(); const c1 = randomUUID(); const c2 = randomUUID();
+    await ctx.db.query('INSERT INTO empresas (id) VALUES ($1)', [C]);
+    await ctx.db.query('INSERT INTO lojas (id, empresa_id) VALUES ($1, $3), ($2, $3)', [c1, c2, C]);
+    const produto = await bar.salvarProduto(ctx.db, C, { nome: 'Água', categoria: 'Bebidas', setor: 'bar', preco: 5, estoqueAtual: 10 });
+    const cm = await bar.abrirComanda(ctx.db, C, { nome: 'Balcão' });
+    await bar.adicionarItens(ctx.db, C, cm.id, [{ produtoId: produto.id, qtd: 1 }]);
+    await bar.pagarComanda(ctx.db, C, cm.id, { servico: false, meio: 'dinheiro' });
+    await fontes.sincronizarBar(ctx.db, C);
+    assert.equal((await razao.listar(ctx.db, C, { origem: 'bar_comanda' }))[0].lojaId, null);
+    const r = await razao.salvarLojaPadrao(ctx.db, C, c2);
+    assert.equal(r.atribuidos, 1);
+    assert.equal((await razao.listar(ctx.db, C, { origem: 'bar_comanda' }))[0].lojaId, c2);
+    assert.equal((await razao.totaisDoDia(ctx.db, C, { data: (await razao.listar(ctx.db, C, { origem: 'bar_comanda' }))[0].competencia, lojaId: c2 })).recebido, 5, 'o fechamento da unidade enxerga o bar');
+    await assert.rejects(() => razao.salvarLojaPadrao(ctx.db, C, lojaA), (e) => e.status === 404);
+  });
+
+  test('auditoria: parcelar um total em centavos e ratear entre centros de custo no DRE', async () => {
+    const D = randomUUID();
+    await ctx.db.query('INSERT INTO empresas (id) VALUES ($1)', [D]);
+    const parcelas = await razao.criarManual(ctx.db, D, { tipo: 'despesa', categoria: 'Manutenção', descricao: 'Reforma', valor: 1000, vencimento: '2026-11-10', meses: 3, parcelarTotal: true }, { agora });
+    assert.deepEqual(parcelas.map((p) => p.valor), [333.33, 333.33, 333.34]);
+    assert.deepEqual(razao.dividirEmParcelas(10, 3), [3.33, 3.33, 3.34]);
+    const bar = await razao.salvarCentro(ctx.db, D, { codigo: 'BAR', nome: 'Bar' });
+    const quadra = await razao.salvarCentro(ctx.db, D, { codigo: 'QDR', nome: 'Quadras' });
+    await assert.rejects(() => razao.criarManual(ctx.db, D, { tipo: 'despesa', categoria: 'Energia, água e internet', descricao: 'Luz', valor: 300, vencimento: '2026-12-05', rateio: [{ centroCustoId: bar.id, percentual: 60 }, { centroCustoId: quadra.id, percentual: 30 }] }, { agora }), (e) => e.code === 'VALIDATION_ERROR');
+    const [luz] = await razao.criarManual(ctx.db, D, { tipo: 'despesa', categoria: 'Energia, água e internet', descricao: 'Luz', valor: 300, vencimento: '2026-12-05', rateio: [{ centroCustoId: bar.id, percentual: 60 }, { centroCustoId: quadra.id, percentual: 40 }] }, { agora });
+    assert.equal(luz.rateio.length, 2);
+    const dreBar = await razao.dre(ctx.db, D, { de: '2026-12-01', ate: '2026-12-31', centroCustoId: bar.id });
+    const dreQuadra = await razao.dre(ctx.db, D, { de: '2026-12-01', ate: '2026-12-31', centroCustoId: quadra.id });
+    assert.equal(dreBar.grupos.find((g) => g.grupo === 'operacional').total, -180);
+    assert.equal(dreQuadra.grupos.find((g) => g.grupo === 'operacional').total, -120);
+    assert.equal((await razao.dre(ctx.db, D, { de: '2026-12-01', ate: '2026-12-31' })).grupos.find((g) => g.grupo === 'operacional').total, -633.33, 'sem centro: tudo (luz inteira + parcela da reforma)');
+    const [listado] = await razao.listar(ctx.db, D, { q: 'Luz' });
+    assert.equal(listado.rateio.length, 2);
+    // tirar o rateio volta a um centro só
+    await razao.atualizar(ctx.db, D, luz.id, { rateio: [], centroCustoId: bar.id });
+    assert.equal((await razao.dre(ctx.db, D, { de: '2026-12-01', ate: '2026-12-31', centroCustoId: bar.id })).grupos.find((g) => g.grupo === 'operacional').total, -300);
+  });
+
+  test('auditoria: rotina periódica lê as fontes com o razão ligado e uma vez por vez', async () => {
+    const { executarRotina } = await import('../modules/razao/rotina.js');
+    const desligado = await executarRotina(ctx.db, { razaoAtivo: () => false });
+    assert.equal(desligado.pulou, false);
+    const ligado = await executarRotina(ctx.db, { razaoAtivo: () => true });
+    assert.ok(ligado.empresas >= 2);
+    assert.deepEqual(ligado.erros.filter((e) => e.fonte !== 'estoque'), []);
+    await ctx.db.query("UPDATE sys_rotinas SET travada_ate = CURRENT_TIMESTAMP + interval '5 minutes' WHERE nome = 'backoffice'");
+    assert.equal((await executarRotina(ctx.db, { razaoAtivo: () => true })).pulou, true, 'outra instância com a vez: pula');
+    await ctx.db.query("UPDATE sys_rotinas SET travada_ate = '-infinity'");
+  });
+
   test('A2: conta a receber nasce pendente e a baixa na fonte chega ao razão', async () => {
     const cli = await a2.salvarCliente(ctx.db, A, { nome: 'Cliente A2', email: 'a2@teste.local' });
     const conta = await a2.criarConta(ctx.db, A, { clienteId: cli.id, descricao: 'Mensalidade bar', valor: 90, dataVencimento: '2026-11-10' });
@@ -141,13 +197,29 @@ describe('Razão financeiro único (PostgreSQL)', { skip: pgDeTeste }, () => {
 
   test('clube e loja online entram uma vez; devolução vira estorno', async () => {
     const aluno = await criarCliente(ctx.db, A, 'Aluno Pix');
-    const cb = (await ctx.db.query("INSERT INTO clube_cobrancas (empresa_id, descricao) VALUES ($1, 'Mensalidade outubro') RETURNING id", [A])).rows[0].id;
+    const cb = (await ctx.db.query("INSERT INTO clube_cobrancas (empresa_id, customer_id, descricao) VALUES ($1, $2, 'Mensalidade outubro') RETURNING id", [A, aluno])).rows[0].id;
     await ctx.db.query('INSERT INTO clube_pagamentos_recebidos (empresa_id, pagamento_id, customer_id, valor) VALUES ($1, $2, $3, 199.9), ($1, $4, $3, NULL)', [A, `clube-cobranca:${cb}`, aluno, 'sem-valor']);
     assert.equal((await fontes.sincronizarClube(ctx.db, A)).inseridos, 1);
     assert.equal((await fontes.sincronizarClube(ctx.db, A)).inseridos, 0);
     const mens = (await razao.listar(ctx.db, A, { origem: 'clube_pagamento' }))[0];
     assert.equal(mens.descricao, 'Mensalidade outubro · Aluno Pix');
     assert.equal(mens.meioPagamento, 'pix');
+    assert.equal(mens.status, 'pago');
+
+    // cobrança em aberto já é conta a receber; paga, a mesma conta recebe a baixa; cancelada, sai
+    const nov = (await ctx.db.query("INSERT INTO clube_cobrancas (empresa_id, customer_id, valor, descricao) VALUES ($1, $2, 150, 'Mensalidade novembro') RETURNING id", [A, aluno])).rows[0].id;
+    const dez = (await ctx.db.query("INSERT INTO clube_cobrancas (empresa_id, customer_id, valor, descricao) VALUES ($1, $2, 150, 'Mensalidade dezembro') RETURNING id", [A, aluno])).rows[0].id;
+    await fontes.sincronizarClube(ctx.db, A);
+    const pendentes = await razao.listar(ctx.db, A, { origem: 'clube_pagamento', status: 'pendente' });
+    assert.deepEqual(pendentes.map((l) => l.natureza), ['receber', 'receber']);
+    await ctx.db.query('INSERT INTO clube_pagamentos_recebidos (empresa_id, pagamento_id, customer_id, valor) VALUES ($1, $2, $3, 150)', [A, `clube-cobranca:${nov}`, aluno]);
+    await ctx.db.query("UPDATE clube_cobrancas SET status = 'cancelada', cancelado_em = CURRENT_TIMESTAMP WHERE id = $1", [dez]);
+    const r3 = await fontes.sincronizarClube(ctx.db, A);
+    assert.equal(r3.inseridos, 0, 'o pagamento não vira outro lançamento');
+    assert.equal(r3.atualizados, 2);
+    const todos = await razao.listar(ctx.db, A, { origem: 'clube_pagamento' });
+    assert.equal(todos.find((l) => l.descricao.startsWith('Mensalidade novembro')).status, 'pago');
+    assert.equal(todos.find((l) => l.descricao.startsWith('Mensalidade dezembro')).status, 'cancelado');
 
     const pedido = (await ctx.db.query("INSERT INTO commerce_orders (empresa_id, loja_id, public_code) VALUES ($1, $2, 'PED-1') RETURNING id", [A, lojaA])).rows[0].id;
     const pag = (await ctx.db.query("INSERT INTO commerce_payments (empresa_id, order_id, method, status, amount, captured_at) VALUES ($1, $2, 'credit_card', 'captured', 250, CURRENT_TIMESTAMP) RETURNING id", [A, pedido])).rows[0].id;
@@ -185,7 +257,15 @@ describe('Razão financeiro único (PostgreSQL)', { skip: pgDeTeste }, () => {
     // a fonte paga a despesa: o razão acompanha; depois o JSON não "despaga"
     lancamentos[1].status = 'pago';
     lancamentos[1].pagoEm = '2026-10-21T12:00:00Z';
+    // a leitura contínua só roda depois da liberação conferida
+    assert.equal((await fontes.sincronizarJson(ctx.db, B, opcoes)).aguardandoLiberacao, true);
+    const conf = await fontes.conferirJsonLegado(ctx.db, B, opcoes);
+    assert.equal(conf.quarentena.quantidade, 1);
+    assert.equal(conf.totalFaltando, 0);
+    assert.equal(conf.fecha, false, 'o antigo já pagou a despesa e o razão ainda não');
+    await fontes.liberarJsonLegado(ctx.db, B, { ...opcoes, usuario: 'plataforma' });
     assert.equal((await fontes.sincronizarJson(ctx.db, B, opcoes)).atualizados, 1);
+    assert.equal((await fontes.conferirJsonLegado(ctx.db, B, opcoes)).fecha, true, 'fecha centavo a centavo');
     lancamentos[1].status = 'pendente';
     await fontes.sincronizarJson(ctx.db, B, opcoes);
     assert.equal((await razao.listar(ctx.db, B, { q: 'Lâminas' }))[0].status, 'pago');

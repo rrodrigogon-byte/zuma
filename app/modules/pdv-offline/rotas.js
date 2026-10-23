@@ -35,13 +35,30 @@ export function createPdvOfflineRouter({ db, escopoDaRequisicao, auth, requireSt
     return { dispositivos: await svc.listarDispositivos(db, empresaId, { lojaId: lojaRestrita || req.query.loja_id || null }) };
   }));
   router.post('/dispositivos', ...gestao('settings.write', async ({ req, empresaId, lojaRestrita }) => ({ dispositivo: await svc.criarDispositivo(db, empresaId, req.body || {}, { lojaRestrita }) }), 201));
+  // fila de impressão: teste de periférico e impressão enviada pelo sistema
+  router.get('/impressoes', ...gestao('settings.write', async ({ req, empresaId, lojaRestrita }) => ({ impressoes: await svc.listarImpressoes(db, empresaId, { lojaId: lojaRestrita || req.query.loja_id || null }) })));
+  router.post('/impressoes', ...gestao('settings.write', ({ req, empresaId, lojaRestrita, usuario }) => svc.enfileirarImpressao(db, empresaId, req.body || {}, { usuario, lojaRestrita }), 201));
+  router.get('/terminais/:id/eventos', ...gestao('settings.write', async ({ req, empresaId, lojaRestrita }) => {
+    const [t] = (await svc.listarTerminais(db, empresaId, { lojaId: lojaRestrita })).filter((x) => x.id === req.params.id);
+    if (!t) throw new ErroDominio('NOT_FOUND', 'Terminal não encontrado', 404);
+    return { eventos: await svc.listarEventosDoAgente(db, empresaId, { terminalId: t.id }) };
+  }));
   router.get('/conflitos', ...gestao('payments.read', async ({ req, empresaId, lojaRestrita }) => ({ conflitos: await svc.listarConflitos(db, empresaId, { lojaId: lojaRestrita, todos: req.query.todos === '1' }) })));
   router.patch('/conflitos/:id', ...gestao('payments.write', ({ req, empresaId, lojaRestrita, usuario }) => svc.resolverConflito(db, empresaId, req.params.id, req.body?.resolucao, { usuario, lojaRestrita, fuso })));
 
   // agente local
   router.post('/terminal/heartbeat', terminal(({ req, terminal: t }) => svc.heartbeat(db, t, req.body || {})));
-  router.get('/terminal/fila-impressao', terminal(() => ({ trabalhos: [] })));
-  router.post('/terminal/eventos', terminal(({ req }) => ({ sucesso: true, recebidos: Array.isArray(req.body?.eventos) ? Math.min(req.body.eventos.length, 100) : 0 }), 202));
+  // um trabalho por vez; 204 = fila vazia (é o que o agente espera)
+  router.get('/terminal/fila-impressao', async (req, res) => {
+    try {
+      const token = req.get('x-terminal-token') || String(req.get('authorization') || '').replace(/^Terminal\s+/i, '');
+      const t = await svc.autenticarTerminal(db, req.get('x-terminal-id'), token);
+      const trabalho = await svc.proximoTrabalho(db, t);
+      return trabalho ? res.json({ trabalho }) : res.status(204).end();
+    } catch (error) { return responderErro(res, error); }
+  });
+  router.post('/terminal/fila-impressao/:id/resultado', terminal(({ req, terminal: t }) => svc.resultadoDoTrabalho(db, t, req.params.id, req.body || {})));
+  router.post('/terminal/eventos', terminal(({ req, terminal: t }) => svc.registrarEventosDoAgente(db, t, req.body?.eventos), 202));
   router.post('/sincronizar', terminal(({ req, terminal: t }) => svc.sincronizar(db, t, req.body || {}, { fuso })));
   return router;
 }
