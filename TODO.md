@@ -1,7 +1,7 @@
 # Cérebro IA Dino — acompanhamento
 
 **Branch atual:** `feat/dino-grafo-completo-20261023`
-**Base de produção:** `fix/kytto-comandas-pdv-20260808` (`6548c218`)
+**Base de produção:** `fix/kytto-comandas-pdv-20260808` (`4aee66b4`)
 **Última revisão:** 23/10/2026
 
 ## Base já incorporada à produção
@@ -20,7 +20,7 @@
 - [x] **Troca de escopo e período.** A mudança de empresa/unidade/período limpa dados antigos e descarta respostas atrasadas. Navegação vinda do BI preserva `tab`, `dias` e `origem=bi` via query parameters.
 - [x] **Limites de automação por loja.** Scheduler, guards, logs, cotas, cooldown e reservas de marketing foram ajustados para empresa+unidade. Opt-out explícito `SAIR` permanece global. Skips terminam o registro de domínio e resultados de envio ambíguos não geram retry inseguro. O grafo não dispara mensagens.
 - [x] **Migration 085 aprovada pelo usuário.** Acrescenta `loja_id` a `ai_automation_log`, mantém históricos sem vínculo como NULL (sem backfill), cria índices de idempotência por unidade e FK composta com índice UNIQUE de suporte. 053 já estava ocupado. Registrada no runner/checksum; ainda não aplicada a banco.
-- [ ] **Audiência de campanhas CRM — decisão pendente.** `queryAudience` e `listCampaignAudience` ainda consultam clientes por empresa, não por `loja_id`, porque não há afinidade de unidade comprovável no cadastro. O comportamento foi mantido sem decisão explícita. Pendente escolher: falhar fechado sem afinidade; manter audiência compartilhada como exceção existente; ou criar vínculo de afinidade em outra mudança de schema.
+- [x] **Audiência CRM fail-closed até haver afinidade.** Sem vínculo verificável cliente–unidade, listagem de audiência, preview, confirmação/envio e alteração administrativa de consentimento retornam HTTP 409 antes de ler clientes; rascunhos podem ser criados, mas não geram envios. O comando de opt-out explícito `SAIR` permanece global. Isso cumpre o isolamento agora; reativar campanhas requer modelo explícito de afinidade cliente–loja, preenchimento auditado e UI/fluxo de gerenciamento em mudança própria.
 
 ## Referência e limite conhecidos
 
@@ -28,7 +28,7 @@
 
 ## Validação e entrega protegida
 
-- A branch foi rebased sobre a base de produção atual `6548c218`; a reconciliação de `CerebroIA.jsx` manteve query params do BI (`tab`, `dias`, `origem=bi`) e os filtros/limpeza do grafo por loja/período.
-- Validação nessa base: **217/217** testes focados aprovados, `npm run build` aprovado, sintaxe JS e `git diff --check` limpos. A suíte Node integral registrou **1.746 aprovados**, **8 falhas ambientais** por `PostgreSQL 16 local ausente: initdb` e **85 skipped**; nenhum banco foi alterado.
-- Reauditorias independentes aprovaram o hardening de marketing e a estrutura estática da FK composta; não houve execução de DDL em PostgreSQL real. A criação do índice pode exigir scan/lock ao aplicar a migration.
-- PR draft [#399](https://github.com/rrodrigogon-byte/agro-open/pull/399) foi atualizado com `--force-with-lease` e o GitHub reporta `CLEAN/MERGEABLE`; nenhum check GitHub foi reportado. Aguardam decisão sobre audiência CRM, revisão e eventual teste DDL real em PostgreSQL. Não fazer merge, deploy, alterar Render/WhatsApp nem aplicar migration sem autorização posterior. A produção continua com a entrega anterior do PR #385.
+- A branch foi rebased sobre a produção atual `4aee66b4`; a reconciliação de `CerebroIA.jsx` manteve query params do BI (`tab`, `dias`, `origem=bi`) e os filtros/limpeza do grafo por loja/período. O upstream adicionou escopo por host Dino e foi preservado.
+- Validação final da barreira CRM na base `4aee66b4`: **219/219** testes focados passaram, `npm run build` passou, sintaxe Node e `git diff --check` passaram. A suíte Node integral registrou **1.751 aprovados**, **8 falhas ambientais** em testes PostgreSQL real por `initdb` ausente e **85 skipped**; nenhum banco foi alterado.
+- Reauditoria read-only confirmou que audiência, preview, envio normal e consentimento falham antes de ler clientes; replay idempotente de campanha já não-rascunho retorna somente status/contagem scoped sem consultar audiência nem criar novo envio. `SAIR` continua global. Não houve execução real de DDL 085; o índice pode fazer scan/aguardar locks no preDeploy.
+- PR draft [#399](https://github.com/rrodrigogon-byte/agro-open/pull/399) segue no fluxo obrigatório para a branch de produção. Antes das mudanças locais, GitHub reportou `CLEAN/MERGEABLE` e nenhum check; atualizar head e validar estado depois do commit. O usuário autorizou deploy completo; ainda não houve merge nem novo deploy. O preDeploy atual tem evidência de cutover pulado, mas o novo deploy e a aplicação de 085 precisam ser confirmados no Render antes de declarar sucesso.
