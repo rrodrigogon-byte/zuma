@@ -74,22 +74,47 @@ function historicalAvecSummary(input, window) {
 }
 
 function historicalFinanceSummary(input, window) {
-  const entries = list(input.financeEntries).filter((item) => item.metadata?.historicoAvec === true || item.origem === 'avec-import-financeiro-20261022');
+  const entries = list(input.financeEntries).filter(isHistoricalAvecFinance);
   const inPeriod = entries.filter((item) => inWindow(item, window));
   const paid = inPeriod.filter((item) => item.status === 'pago');
-  const paidRevenue = paid.filter((item) => item.tipo === 'receita').reduce((sum, item) => sum + num(item.valor), 0);
-  const paidExpenses = paid.filter((item) => item.tipo === 'despesa').reduce((sum, item) => sum + num(item.valor), 0);
+  const paidRevenueEntries = paid.filter((item) => item.tipo === 'receita');
+  const paidExpenseEntries = paid.filter((item) => item.tipo === 'despesa');
+  const paidRevenue = paidRevenueEntries.reduce((sum, item) => sum + num(item.valor), 0);
+  const paidExpenses = paidExpenseEntries.reduce((sum, item) => sum + num(item.valor), 0);
   const pendingRevenue = inPeriod.filter((item) => item.tipo === 'receita' && item.status === 'pendente').reduce((sum, item) => sum + num(item.valor), 0);
   const pendingExpenses = inPeriod.filter((item) => item.tipo === 'despesa' && item.status === 'pendente').reduce((sum, item) => sum + num(item.valor), 0);
   return {
     entries: inPeriod.length,
+    paidRevenueEntries: paidRevenueEntries.length,
+    paidExpenseEntries: paidExpenseEntries.length,
     paidRevenue: money(paidRevenue),
     paidExpenses: money(paidExpenses),
     netPaid: money(paidRevenue - paidExpenses),
     pendingRevenue: money(pendingRevenue),
     pendingExpenses: money(pendingExpenses),
-    note: 'Lançamentos do extrato Avec preservados no Financeiro para conferência; não são novas vendas operacionais.',
+    includedInKpis: true,
+    note: 'Receitas e despesas pagas do extrato Avec entram nos valores consolidados do período e permanecem identificadas no Financeiro como histórico; não são novas vendas operacionais.',
   };
+}
+
+function isHistoricalAvecFinance(item = {}) {
+  return item.metadata?.historicoAvec === true || item.origem === 'avec-import-financeiro-20261022';
+}
+
+function historicalPaymentBreakdown(input, window) {
+  const totals = new Map();
+  for (const item of list(input.financeEntries).filter((entry) => isHistoricalAvecFinance(entry) && entry.tipo === 'receita' && entry.status === 'pago' && inWindow(entry, window))) {
+    const method = String(item.meioPagamento || 'não informado').trim().toLowerCase() || 'não informado';
+    const key = `Histórico Avec · ${method}`;
+    totals.set(key, money((totals.get(key) || 0) + num(item.valor)));
+  }
+  return [...totals.entries()].map(([method, value]) => ({ method, value })).sort((a, b) => b.value - a.value);
+}
+
+function historicalCategoryRows(input, window) {
+  return list(input.financeEntries)
+    .filter((item) => isHistoricalAvecFinance(item) && item.tipo === 'receita' && item.status === 'pago' && inWindow(item, window))
+    .map((item) => ({ name: 'Histórico Avec', category: `Histórico Avec · ${item.categoria || 'Receitas'}`, quantity: 1, revenue: num(item.valor) }));
 }
 
 function pct(current, previous) {
@@ -116,7 +141,7 @@ export function dashboardPeriod(value, now = new Date(), timeZone = TIME_ZONE) {
 function zeroSeries(window) {
   const output = [];
   for (let cursor = new Date(window.fromDate); cursor < window.toDate; cursor = new Date(cursor.getTime() + DAY_MS)) {
-    output.push({ day: dayKey(cursor, window.timeZone), commerce: 0, barbershop: 0, retail: 0, total: 0, appointments: 0 });
+    output.push({ day: dayKey(cursor, window.timeZone), commerce: 0, barbershop: 0, retail: 0, historicalAvec: 0, total: 0, appointments: 0 });
   }
   return output;
 }
@@ -214,6 +239,7 @@ export function buildDinoDashboardAnalytics(input = {}, options = {}) {
   const previousWindow = { ...window, fromDate: window.previousFromDate, toDate: window.previousToDate };
   const historicalAvec = historicalAvecSummary(input, window);
   const historicalFinance = historicalFinanceSummary(input, window);
+  const historicalFinancePrevious = historicalFinanceSummary(input, previousWindow);
   const commerceCurrent = input.commerceCurrent || {};
   const commercePrevious = input.commercePrevious || {};
   const legacyCurrent = legacyRevenue(input, window);
@@ -224,10 +250,10 @@ export function buildDinoDashboardAnalytics(input = {}, options = {}) {
   const commercePreviousOrders = num(commercePrevious.sales?.summary?.orders_non_cancelled ?? commercePrevious.sales?.summary?.orders);
   const commerceOrdersTotal = num(commerceCurrent.sales?.summary?.orders_total ?? commerceCurrent.sales?.summary?.orders);
   const commerceCapturedRevenue = list(commerceCurrent.sales?.capturedPayments).reduce((sum, item) => sum + num(item.value), 0);
-  const revenue = money(commerceRevenue + legacyCurrent.total);
-  const previousRevenue = money(commercePreviousRevenue + legacyPrevious.total);
-  const transactions = commerceOrders + legacyCurrent.transactions;
-  const previousTransactions = commercePreviousOrders + legacyPrevious.transactions;
+  const revenue = money(commerceRevenue + legacyCurrent.total + historicalFinance.paidRevenue);
+  const previousRevenue = money(commercePreviousRevenue + legacyPrevious.total + historicalFinancePrevious.paidRevenue);
+  const transactions = commerceOrders + legacyCurrent.transactions + historicalFinance.paidRevenueEntries;
+  const previousTransactions = commercePreviousOrders + legacyPrevious.transactions + historicalFinancePrevious.paidRevenueEntries;
   const appointments = list(input.appointments);
   const currentAppointments = appointments.filter((item) => inWindow(item, window));
   const previousAppointments = appointments.filter((item) => inWindow(item, previousWindow));
@@ -255,11 +281,15 @@ export function buildDinoDashboardAnalytics(input = {}, options = {}) {
     const row = byDay.get(dayKey(timestamp(item), window.timeZone));
     if (row) row.barbershop = money(row.barbershop + num(item.totalPago || item.total));
   }
+  for (const item of list(input.financeEntries).filter((entry) => isHistoricalAvecFinance(entry) && entry.tipo === 'receita' && entry.status === 'pago' && inWindow(entry, window))) {
+    const row = byDay.get(dayKey(timestamp(item), window.timeZone));
+    if (row) row.historicalAvec = money(row.historicalAvec + num(item.valor));
+  }
   for (const item of currentAppointments) {
     const row = byDay.get(dayKey(timestamp(item), window.timeZone));
     if (row) row.appointments += 1;
   }
-  daily.forEach((row) => { row.total = money(row.commerce + row.barbershop + row.retail); });
+  daily.forEach((row) => { row.total = money(row.commerce + row.barbershop + row.retail + row.historicalAvec); });
   const receivables = money(list(input.financeEntries).filter((item) => !['pago', 'paga', 'cancelado', 'cancelada'].includes(String(item.status || '').toLowerCase()) && String(item.tipo || '').toLowerCase() === 'receita').reduce((sum, item) => sum + num(item.valor), 0));
   const retailLowStock = list(input.inventory).filter((item) => item.ativo !== false && num(item.estoqueAtual) <= num(item.estoqueMinimo)).length;
   const commerceLowStock = list(commerceCurrent.inventory?.items).filter((item) => item.low_stock === true || item.low_stock === 'true').length;
@@ -271,7 +301,7 @@ export function buildDinoDashboardAnalytics(input = {}, options = {}) {
   const trendTicket = pct(currentTicket, previousTicket);
   const trendCustomers = pct(currentNewCustomers, previousNewCustomers);
   const trendAppointments = pct(currentAppointments.length, previousAppointments.length);
-  const items = saleItems(input, window);
+  const items = [...saleItems(input, window), ...historicalCategoryRows(input, window)];
   const commerceAvailable = Boolean(input.commerceAvailable);
   const profitCurrent = input.profit?.current || null;
   const profitPrevious = input.profit?.previous || null;
@@ -288,7 +318,7 @@ export function buildDinoDashboardAnalytics(input = {}, options = {}) {
     kpis: [
       { id: 'revenue', label: 'Valor bruto registrado', value: revenue, previousValue: previousRevenue, trendPct: trendRevenue.value, trendAvailable: trendRevenue.available, available: true, format: 'currency' },
       profitAvailable
-        ? { id: 'profit', label: 'Lucro estimado', value: profitCurrent.resultado, previousValue: profitPrevious?.resultado ?? null, trendPct: trendProfit.value, trendAvailable: trendProfit.available, available: true, format: 'currency', margin: profitCurrent.margem, breakdown: { receita: profitCurrent.receita, comissoes: profitCurrent.comissoes, cmvRevenda: profitCurrent.cmvRevenda, despesasPagas: profitCurrent.despesasPagas }, reason: (profitCurrent.notas || []).join(' ') }
+        ? { id: 'profit', label: 'Resultado consolidado', value: profitCurrent.resultado, previousValue: profitPrevious?.resultado ?? null, trendPct: trendProfit.value, trendAvailable: trendProfit.available, available: true, format: 'currency', margin: profitCurrent.margem, breakdown: { receita: profitCurrent.receita, receitaOperacional: profitCurrent.receitaOperacional, receitaHistoricaAvec: profitCurrent.receitaHistoricaAvec, comissoes: profitCurrent.comissoes, cmvRevenda: profitCurrent.cmvRevenda, despesasPagas: profitCurrent.despesasPagas, despesasHistoricasAvec: profitCurrent.despesasHistoricasAvec }, reason: (profitCurrent.notas || []).join(' ') }
         : { id: 'profit', label: 'Lucro', value: null, previousValue: null, trendPct: null, trendAvailable: false, available: false, format: 'currency', reason: 'Custos completos não estão disponíveis para todo o recorte.' },
       { id: 'ticket', label: 'Ticket médio bruto', value: currentTicket, previousValue: previousTicket, trendPct: trendTicket.value, trendAvailable: trendTicket.available, available: true, format: 'currency' },
       { id: 'newCustomers', label: 'Novos clientes', value: currentNewCustomers, previousValue: previousNewCustomers, trendPct: trendCustomers.value, trendAvailable: trendCustomers.available, available: true, format: 'number' },
@@ -303,7 +333,7 @@ export function buildDinoDashboardAnalytics(input = {}, options = {}) {
     charts: {
       revenueDaily: daily,
       appointmentsDaily: daily.map((item) => ({ day: item.day, value: item.appointments })),
-      paymentMethods: paymentBreakdown(input, window),
+      paymentMethods: [...paymentBreakdown(input, window), ...historicalPaymentBreakdown(input, window)],
       commercePaymentMethods: list(commerceCurrent.sales?.capturedPayments).map(item => ({ method: item.method, value: num(item.value) })),
       categorySales: aggregate(items, 'category').slice(0, 8),
       topProducts: aggregate(items, 'name').slice(0, 8),
@@ -318,6 +348,7 @@ export function buildDinoDashboardAnalytics(input = {}, options = {}) {
         { id: 'commerce', label: 'E-commerce', revenue: money(commerceRevenue), grossValue: money(commerceRevenue), capturedRevenue: money(commerceCapturedRevenue), pendingValue: money(commerceCurrent.sales?.summary?.pending_total), transactions: commerceOrders, ordersTotal: commerceOrdersTotal, pendingOrders: num(commerceCurrent.sales?.summary?.pending_orders), cancelledOrders: num(commerceCurrent.sales?.summary?.cancelled_orders), refundedOrders: num(commerceCurrent.sales?.summary?.refunded_orders), capturedTransactions: list(commerceCurrent.sales?.capturedPayments).reduce((sum, item) => sum + num(item.transactions), 0), available: commerceAvailable },
         { id: 'barbershop', label: 'Barbearia', revenue: money(legacyCurrent.commands.reduce((sum, item) => sum + num(item.totalPago || item.total), 0)), transactions: legacyCurrent.commands.length, available: true },
         { id: 'retail', label: 'Revenda', revenue: money(legacyCurrent.retail.reduce((sum, item) => sum + num(item.total), 0)), transactions: legacyCurrent.retail.length, available: true },
+        { id: 'historical-avec', label: 'Histórico Avec', revenue: historicalFinance.paidRevenue, grossValue: historicalFinance.paidRevenue, expenses: historicalFinance.paidExpenses, transactions: historicalFinance.paidRevenueEntries, available: true, historical: true },
       ],
     },
     goals: input.goals || { configured: false, items: [] },
@@ -329,7 +360,7 @@ export function buildDinoDashboardAnalytics(input = {}, options = {}) {
       profitAvailable,
       funnelAvailable,
       notes: [
-        profitAvailable ? 'Lucro estimado = receita da barbearia e revenda − comissões − custo da revenda − despesas pagas no Financeiro.' : 'Lucro indisponível até que todos os custos do recorte estejam persistidos.',
+        profitAvailable ? 'Resultado consolidado = operação, e-commerce com custo conhecido e histórico Avec pago − comissões − custo da revenda − despesas pagas; a origem histórica permanece identificada.' : 'Lucro indisponível até que todos os custos do recorte estejam persistidos.',
         funnelAvailable ? 'Funil da loja com visitas, carrinhos e checkouts únicos por sessão/dia.' : 'Funil parcial até a loja registrar visitas no período.',
         'Estoques Commerce e revenda são contados separadamente.',
       ],

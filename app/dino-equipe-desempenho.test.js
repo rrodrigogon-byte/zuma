@@ -329,3 +329,28 @@ test('comandas com mesmo atendimento são ambíguas e excluídas sem escolha fin
   assert.equal(result.employees.find(item => item.id === 'p1').heatmap.reduce((sum, cell) => sum + cell.quantity, 0), 1);
   assert.deepEqual(root, before);
 });
+
+test('histórico Avec atribui serviços ao profissional e total consolida Financeiro e e-commerce sem duplicar o detalhamento', () => {
+  const root = snapshot();
+  root.barbearias[EMP].historicoAtendimentos = {
+    hist1: {
+      id: 'hist1', empresaId: EMP, lojaId: STORE, somenteHistorico: true, status: 'concluido',
+      dataAgenda: '2026-03-01', clienteNome: 'Cliente histórico', profissionalId: 'p1', profissionalNome: 'Ana',
+      servicoId: 's1', servicoNome: 'Corte Avec', valor: 80, total: 80, quantidade: 1,
+    },
+  };
+  root.financeiroKytto.empresas[EMP].lancamentos.histFin = {
+    id: 'histFin', empresaId: EMP, lojaId: STORE, origem: 'avec-import-financeiro-20261022',
+    metadata: { historicoAvec: true }, tipo: 'receita', status: 'pago', valor: 200, dataOperacao: '2026-03-01T12:00:00.000Z', pagoEm: '2026-03-01T12:00:00.000Z',
+  };
+  const result = buildEquipeDesempenho(root, { ...PERIOD, commerceCurrent: { revenue: 300, orders: 2 } });
+  const ana = result.employees.find((item) => item.id === 'p1');
+  assert.equal(ana.historicalServices, 1);
+  assert.equal(ana.historicalServiceRevenue, 80);
+  assert.equal(ana.serviceRevenue, 315.71);
+  assert.equal(result.summary.historicalFinanceRevenue, 200);
+  assert.equal(result.summary.commerceRevenue, 300);
+  assert.equal(result.summary.commerceOrders, 2);
+  assert.equal(result.summary.historicalAttributedServiceRevenue, 80);
+  assert.equal(result.summary.revenue, 810, 'o detalhamento histórico é atribuído, mas não é somado novamente ao extrato pago');
+});
