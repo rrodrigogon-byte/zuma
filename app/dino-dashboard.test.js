@@ -102,6 +102,20 @@ test('dashboard mantém capturas Commerce separadas dos pedidos e do caixa legad
   assert.equal(commerce.capturedTransactions, 1);
 });
 
+test('dashboard expõe histórico Avec separadamente e não o trata como pagamento', () => {
+  const input = {
+    historicalAppointments: [{ dataAgenda: '2026-09-01', clienteNome: 'Ana', valor: 90 }],
+    historicalCommands: [{ dataComandaIso: '2026-09-01T15:00:00.000Z', clienteNome: 'Ana', total: 90 }],
+  };
+  const result = buildDinoDashboardAnalytics(input, { period: 7, now });
+  assert.deepEqual(result.historicalAvec.services, { count: 1, value: 90 });
+  assert.deepEqual(result.historicalAvec.commands, { count: 1, value: 90 });
+  assert.equal(result.historicalAvec.uniqueClients, 1);
+  assert.equal(result.historicalAvec.reconciled, false);
+  assert.equal(result.charts.paymentMethods.length, 0);
+  assert.equal(result.miniKpis.receivables, 0);
+});
+
 test('novos clientes: só cadastro no período; atualização, importação e cliente padrão não contam', () => {
   const input = baseInput();
   input.customers = [

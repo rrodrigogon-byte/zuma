@@ -39,6 +39,15 @@ function view(lancamento) {
   return { ...lancamento, obs: lancamento.observacao || '' };
 }
 
+function respondFinanceError(res, error) {
+  const code = String(error?.code || 'FINANCIAL_UNAVAILABLE');
+  const status = code === 'FINANCIAL_SCOPE_REQUIRED' ? 409 : 400;
+  res.status(status).json({
+    error: status === 409 ? 'Selecione a empresa e a unidade ativa para consultar o Financeiro.' : (error?.message || 'Não foi possível carregar o Financeiro.'),
+    code,
+  });
+}
+
 function sanitizeEntry(body = {}) {
   const out = {};
   for (const key of ['tipo', 'categoria', 'descricao', 'valor', 'vencimento', 'status', 'meioPagamento', 'pagoEm']) {
@@ -92,18 +101,22 @@ export function registerDinoAdminRoutes(app, deps) {
   // ── Financeiro da empresa ────────────────────────────────────────────────
   app.get(`${BASE}/financeiro/lancamentos`, (req, res) => {
     if (!gestor(req, res)) return;
-    const itens = financeiroKytto.listarLancamentos(legacyEmpresaId(req), { ...(req.query || {}), lojaId: legacyLojaId(req) }).map(view);
-    res.json(itens);
+    try {
+      const itens = financeiroKytto.listarLancamentos(legacyEmpresaId(req), { ...(req.query || {}), lojaId: legacyLojaId(req) }).map(view);
+      res.json(itens);
+    } catch (error) { respondFinanceError(res, error); }
   });
 
   app.get(`${BASE}/financeiro/resumo`, (req, res) => {
     if (!gestor(req, res)) return;
-    res.json(financeiroKytto.resumoFinanceiro(legacyEmpresaId(req), { lojaId: legacyLojaId(req) }));
+    try { res.json(financeiroKytto.resumoFinanceiro(legacyEmpresaId(req), { lojaId: legacyLojaId(req) })); }
+    catch (error) { respondFinanceError(res, error); }
   });
 
   app.get(`${BASE}/financeiro/fluxo`, (req, res) => {
     if (!gestor(req, res)) return;
-    res.json(financeiroKytto.fluxoFinanceiro(legacyEmpresaId(req), 12, new Date(), { lojaId: legacyLojaId(req) }));
+    try { res.json(financeiroKytto.fluxoFinanceiro(legacyEmpresaId(req), 12, new Date(), { lojaId: legacyLojaId(req) })); }
+    catch (error) { respondFinanceError(res, error); }
   });
 
   app.get(`${BASE}/financeiro/categorias`, (req, res) => {

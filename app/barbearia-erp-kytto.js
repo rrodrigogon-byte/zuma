@@ -2779,6 +2779,7 @@ export function listarHistoricoAtendimentos(empresaId, filtros = {}) {
 // nunca entram em comissão, caixa, estoque ou faturamento operacional.
 export function listarHistoricoComandas(empresaId, filtros = {}) {
   const itens = Object.values(estadoEmpresa(empresaId, false).historicoComandas || {})
+    .filter((item) => !filtros.lojaId || !item.lojaId || String(item.lojaId) === String(filtros.lojaId))
     .filter((item) => !filtros.clienteId || item.clienteId === String(filtros.clienteId))
     .filter((item) => !filtros.numeroComanda || item.numeroComanda === String(filtros.numeroComanda))
     .filter((item) => !filtros.de || String(item.dataComandaIso || '').slice(0, 10) >= String(filtros.de).slice(0, 10))

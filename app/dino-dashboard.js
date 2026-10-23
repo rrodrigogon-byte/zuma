@@ -47,6 +47,32 @@ function inWindow(item, window) {
   return Boolean(date && date >= window.fromDate && date < window.toDate);
 }
 
+function historicalDate(item = {}) {
+  return dateValue(item.dataAgenda || item.dataComandaIso || item.dataFinalizacaoOriginal || item.data);
+}
+
+function inHistoricalWindow(item, window) {
+  const date = historicalDate(item);
+  return Boolean(date && date >= window.fromDate && date < window.toDate);
+}
+
+function historicalAvecSummary(input, window) {
+  const services = list(input.historicalAppointments).filter((item) => inHistoricalWindow(item, window));
+  const commands = list(input.historicalCommands).filter((item) => inHistoricalWindow(item, window));
+  const identities = new Set();
+  for (const item of [...services, ...commands]) {
+    const identity = item.clienteId || item.clienteTelefone || item.clienteNome || item.cliente;
+    if (identity) identities.add(String(identity).trim().toLowerCase());
+  }
+  return {
+    services: { count: services.length, value: money(services.reduce((sum, item) => sum + num(item.valor), 0)) },
+    commands: { count: commands.length, value: money(commands.reduce((sum, item) => sum + num(item.total), 0)) },
+    uniqueClients: identities.size,
+    reconciled: false,
+    note: 'Histórico Avec preservado para conferência; não comprova pagamento, itemização conciliada ou conta a receber.',
+  };
+}
+
 function pct(current, previous) {
   if (previous <= 0) return { value: null, available: false };
   return { value: Number((((current - previous) / previous) * 100).toFixed(1)), available: true };
@@ -167,6 +193,7 @@ export function buildDinoDashboardAnalytics(input = {}, options = {}) {
   const now = dateValue(options.now) || new Date();
   const window = dashboardPeriod(options.period, now, options.timeZone || TIME_ZONE);
   const previousWindow = { ...window, fromDate: window.previousFromDate, toDate: window.previousToDate };
+  const historicalAvec = historicalAvecSummary(input, window);
   const commerceCurrent = input.commerceCurrent || {};
   const commercePrevious = input.commercePrevious || {};
   const legacyCurrent = legacyRevenue(input, window);
@@ -251,6 +278,7 @@ export function buildDinoDashboardAnalytics(input = {}, options = {}) {
         : { id: 'conversion', label: 'Conversão', value: null, previousValue: null, trendPct: null, trendAvailable: false, available: false, format: 'percent', reason: input.funnel ? 'Ainda sem visitas registradas na loja neste período.' : 'Tracking de visita e checkout ainda não está disponível.' },
     ],
     miniKpis: { receivables, lowStock: { total: retailLowStock + commerceLowStock, commerce: commerceLowStock, retail: retailLowStock }, mrr },
+    historicalAvec,
     charts: {
       revenueDaily: daily,
       appointmentsDaily: daily.map((item) => ({ day: item.day, value: item.appointments })),

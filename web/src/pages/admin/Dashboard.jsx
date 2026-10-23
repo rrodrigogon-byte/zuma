@@ -717,7 +717,14 @@ function EventDashboard() {
 
 
 // Abas do Central Dino alcançadas pelos atalhos do painel do negócio.
-const DINO_TAB_AREA = { 'Agenda': 'operacao', 'Caixa e fechamento': 'operacao', 'Estoque de revenda': 'catalogo', 'Planos e assinaturas': 'catalogo' }
+const DINO_TAB_AREA = {
+  Agenda: 'operacao',
+  'Caixa e fechamento': 'operacao',
+  Clientes: 'relacionamento',
+  'Estoque de revenda': 'catalogo',
+  'Planos e assinaturas': 'catalogo',
+  Relatórios: 'gestao',
+}
 
 export default function Dashboard() {
   const { empresaAtiva, lojaAtiva, user } = useAuth()
