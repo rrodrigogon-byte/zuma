@@ -2931,7 +2931,11 @@ function legacyLojaId(req) {
   // O seletor do painel mantém o ID Commerce no cabeçalho mesmo quando o
   // Commerce Core está desligado. Aceitamos somente o vínculo canônico Dino,
   // sem transformar um cabeçalho arbitrário em escopo legado.
-  const empresaDino = rawEmpresa === DINO_COMMERCE_EMPRESA_ID || rawEmpresa === DINO_LEGACY_EMPRESA_ID;
+  const requestedEmpresa = String(req.headers['x-empresa-id'] || '').trim();
+  const empresaDino = rawEmpresa === DINO_COMMERCE_EMPRESA_ID
+    || rawEmpresa === DINO_LEGACY_EMPRESA_ID
+    || requestedEmpresa === DINO_COMMERCE_EMPRESA_ID
+    || requestedEmpresa === DINO_LEGACY_EMPRESA_ID;
   if ((requested === DINO_COMMERCE_LOJA_ID || requested === DINO_LEGACY_LOJA_ID) && empresaDino) return DINO_LEGACY_LOJA_ID;
   if (requested && (isPlatformAdminUser(req.user) || isMainAdminUser(req.user))) return legacyLojaIdFromCommerce(requested, rawEmpresa);
   const configuracao = db().barbearias?.[legacyEmpresaId(req)]?.configuracao || {};
