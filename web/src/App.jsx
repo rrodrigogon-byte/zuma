@@ -260,7 +260,7 @@ export default function App() {
           <Route path="/admin/fichas-tecnicas" element={<TenantAware tenant={<Layout><Suprimentos abaInicial="fichas" /></Layout>} legacy={<Layout><FichasTecnicas /></Layout>} />} />
           <Route path="/admin/modificadores-combos" element={<Layout><ModificadoresCombos /></Layout>} />
           <Route path="/admin/mesas"        element={<Layout><Mesas /></Layout>} />
-          <Route path="/admin/reservas"     element={<Layout><ReservasFilas /></Layout>} />
+          <Route path="/admin/reservas" element={<TenantAware tenant={<Layout><ReservasFilas /></Layout>} legacy={<Layout><EmImplantacao modulo="Reservas e fila de espera" /></Layout>} />} />
           <Route path="/admin/kds"          element={<Layout><KDSConfiguracao /></Layout>} />
           <Route path="/admin/socios"       element={<Layout><Socios /></Layout>} />
           <Route path="/admin/clube"        element={<Navigate to="/admin/clube/recepcao" replace />} />
@@ -298,7 +298,7 @@ export default function App() {
           <Route path="/admin/cadastros-mestres" element={<Layout><CadastrosMestres /></Layout>} />
           <Route path="/admin/contas-receber" element={<Layout><FinanceiroAuto aba="receber" antigo={<ContasReceber />} /></Layout>} />
           <Route path="/admin/fechamento-diario" element={<Layout><FinanceiroAuto aba="fechamento" antigo={<FechamentoDiario />} /></Layout>} />
-          <Route path="/admin/pdv-offline"    element={<Layout><PDVOffline /></Layout>} />
+          <Route path="/admin/pdv-offline" element={<TenantAware tenant={<Layout><PDVOffline /></Layout>} legacy={<Layout><EmImplantacao modulo="PDV offline" /></Layout>} />} />
           <Route path="/admin/erp"            element={<Layout><ERP /></Layout>} />
           <Route path="/admin/oficina"         element={<Layout><Oficina /></Layout>} />
           <Route path="/admin/agropecuaria"    element={<Layout><Agropecuaria /></Layout>} />

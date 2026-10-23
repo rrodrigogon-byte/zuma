@@ -25,9 +25,7 @@ export const AREAS = [
 
 // Em que onda do plano cada tela em implantação entra e o que falta.
 export const PLANO_IMPLANTACAO = {
-  '/admin/pdv-offline': { onda: 5, falta: 'terminais e periféricos por unidade, vendas offline lançando no Financeiro' },
   '/admin/supermercado': { onda: 5, falta: 'promoções, etiquetas, lotes e transferências por unidade' },
-  '/admin/reservas': { onda: 5, falta: 'reservas de mesa e fila de espera ligadas às mesas do bar' },
   '/admin/varejo': { onda: 5, falta: 'orçamento, pedido e entrega; entra quando houver empresa de varejo' },
   '/admin/loja-moda': { onda: 5, falta: 'grade, condicional, crediário e vale; entra quando houver loja de moda' },
   '/admin/oficina': { onda: 5, falta: 'ordem de serviço com aprovação por WhatsApp; entra quando houver oficina' },

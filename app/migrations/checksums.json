@@ -91,5 +91,7 @@
  "090_financeiro_razao.sql": "e24ddefaad86783d2c478052e788112a4977a270d74b2117ff79cbaee19a98d7",
  "091_estoque_compras.sql": "95c017ce949c2da4691073de72b23b3938e4c7466915b08489030174e41e012e",
  "092_fiscal_multiempresa.sql": "276547e4759b7c34ef2ec37c25345ee6d828843bab35d59d9ff808a55fd85f11",
- "093_conciliacao_bancaria.sql": "18a031a48bbc178dfa358fbb079b63a48ae31523aad50692a29d7ba1c60f1421"
+ "093_conciliacao_bancaria.sql": "18a031a48bbc178dfa358fbb079b63a48ae31523aad50692a29d7ba1c60f1421",
+ "094_salao_reservas.sql": "cd5cc62527d1382fd3c59fb34b920d044ee8f9815d38aefb9c4581652599985b",
+ "095_pdv_offline_multiempresa.sql": "713b4f6ab4ff58e1cf564eb5610c35bdf299c6a58c897dd3bca4e4b9172aca8c"
 }

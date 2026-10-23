@@ -43,6 +43,8 @@ import { createUnidadesAdminRouter } from './modules/unidades/rotas.js';
 import { createRazaoAdminRouter, createRazaoPlataformaRouter } from './modules/razao/rotas.js';
 import { createSuprimentosAdminRouter } from './modules/suprimentos/rotas.js';
 import { createFiscalAdminRouter } from './modules/fiscal/rotas.js';
+import { createSalaoAdminRouter } from './modules/salao/rotas.js';
+import { createPdvOfflineRouter } from './modules/pdv-offline/rotas.js';
 import { createBarAdminRouter } from './modules/bar/rotas-multiempresa.js';
 import * as barService from './modules/bar/servico.js';
 import { responderErro as responderErroBarra } from './modules/acesso/banco.js';
@@ -155,7 +157,7 @@ app.use((req, res, next) => {
 app.use(avecGovernanceNoStore);
 app.use(equipePerformanceNoStore);
 // XML de NF-e de entrada e extrato OFX podem passar de 1 MB: os routers leem esses corpos com limite próprio.
-const CORPOS_GRANDES = ['/api/admin/suprimentos/nfe/', '/api/admin/razao/conciliacao/importar'];
+const CORPOS_GRANDES = ['/api/admin/suprimentos/nfe/', '/api/admin/razao/conciliacao/importar', '/api/pdv-offline/sincronizar'];
 const corpoJsonGlobal = (req) => !CORPOS_GRANDES.some((p) => String(req.originalUrl || '').startsWith(p)) && /^application\/json\b/i.test(String(req.headers['content-type'] || ''));
 app.use(express.json({ limit: '1mb', type: corpoJsonGlobal, verify: (req, res, buf) => { if (req.originalUrl?.startsWith('/api/webhooks/') || req.originalUrl?.startsWith('/api/integracoes/')) req.rawBody = Buffer.from(buf); } }));
 
@@ -646,7 +648,7 @@ app.use('/api/admin/commerce', (req, res, next) => {
 });
 
 // Módulos de /api/admin que separam dados por empresa e podem ser usados por tenant.
-const TENANT_ADMIN_MODULES = new Set(['a2', 'bar', 'barbearia', 'commerce', 'commerce-session', 'usuarios', 'usuarios-diretorio', 'platform', 'fidelidade', 'login', 'auditoria', 'modificadores', 'combos', 'clube', 'unidades', 'razao', 'suprimentos', 'fiscal']);
+const TENANT_ADMIN_MODULES = new Set(['a2', 'bar', 'barbearia', 'commerce', 'commerce-session', 'usuarios', 'usuarios-diretorio', 'platform', 'fidelidade', 'login', 'auditoria', 'modificadores', 'combos', 'clube', 'unidades', 'razao', 'suprimentos', 'fiscal', 'salao']);
 
 // [kytto-clube] Kytto Clube & Academia (catraca, contrato digital, agenda, retenção, Wellhub/TotalPass).
 // Usa o pool do Commerce que já existe (não abre outro pool) e a mesma resolução de empresa e
@@ -1240,6 +1242,10 @@ if(process.env.COMMERCE_CORE_ENABLED === '1'){
   // [kytto-fiscal] Emitente, certificado A1 no cofre, classificação e documentos — SÓ HOMOLOGAÇÃO
   // (transmissão só com FISCAL_TRANSMITIR_HOMOLOGACAO=1; produção exige migração nova).
   app.use('/api/admin/fiscal', auth, requireStaff, createFiscalAdminRouter({ db: clubeDb, escopoDaRequisicao: escopoComercial }));
+  // [kytto-salao] Reservas de mesa e lista de espera, ligadas às mesas e comandas do bar.
+  app.use('/api/admin/salao', auth, requireStaff, createSalaoAdminRouter({ db: clubeDb, escopoDaRequisicao: escopoComercial, fuso: process.env.KYTTO_FUSO || 'America/Cuiaba' }));
+  // [kytto-pdv-offline] Terminais e periféricos por unidade; o agente local sincroniza as vendas feitas sem internet (viram comandas pagas do bar).
+  app.use('/api/pdv-offline', createPdvOfflineRouter({ db: clubeDb, escopoDaRequisicao: escopoComercial, auth, requireStaff }));
   // [kytto-bar] Bar, PDV, comandas, estoque fracionado, KDS e caixa por empresa.
   // O prefixo continua sob a trava /api/admin e a empresa é resolvida exclusivamente
   // pela membership SQL; nenhum empresaId do corpo da requisição é aceito.
