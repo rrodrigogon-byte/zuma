@@ -4,6 +4,8 @@ import { hojeAgenda } from '../../lib/barbearia-calendar'
 import './dino-equipe-desempenho.css'
 
 const DAYS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
+const DINO_COMMERCE_SCOPE = { empresaId: 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6', lojaId: 'ab049a75-6e2e-4cc9-abbc-6fd11cdda1d8' }
+const DINO_LEGACY_SCOPE = { empresaId: 'emp-kytto-001', lojaId: 'dino-web-estoque' }
 const amount = value => value == null ? 'Indisponível' : fmtR(value)
 const count = value => value == null ? '—' : Number(value).toLocaleString('pt-BR')
 const percent = value => value == null ? 'Sem base' : `${Number(value).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%`
@@ -14,6 +16,13 @@ export function shiftEquipeDate(day, delta) {
 }
 const initialPeriod = () => { const fim = hojeAgenda(); return { inicio: shiftEquipeDate(fim, -29), fim } }
 function dateLabel(value) { return String(value || '').split('-').reverse().join('/') }
+function samePerformanceScope(requested, returned) {
+  if (requested?.empresaId === returned?.empresaId && requested?.lojaId === returned?.lojaId) return true
+  return (requested?.empresaId === DINO_COMMERCE_SCOPE.empresaId && requested?.lojaId === DINO_COMMERCE_SCOPE.lojaId
+    && returned?.empresaId === DINO_LEGACY_SCOPE.empresaId && returned?.lojaId === DINO_LEGACY_SCOPE.lojaId)
+    || (requested?.empresaId === DINO_LEGACY_SCOPE.empresaId && requested?.lojaId === DINO_LEGACY_SCOPE.lojaId
+      && returned?.empresaId === DINO_COMMERCE_SCOPE.empresaId && returned?.lojaId === DINO_COMMERCE_SCOPE.lojaId)
+}
 function Metric({ label, value, note }) { return <article className="eq-metric"><span>{label}</span><strong>{value}</strong><small>{note}</small></article> }
 function Notes({ title, items = [], empty, type = '' }) { return <section className={`eq-notes ${type}`}><h3>{title}</h3>{items.length ? <ul>{items.map((item, i) => <li key={`${item.code}-${i}`}><strong>{item.text}</strong>{typeof item.evidence === 'string' && item.evidence && <small>{item.evidence}</small>}</li>)}</ul> : <p>{empty}</p>}</section> }
 function ServiceBars({ items = [] }) {
@@ -56,7 +65,7 @@ export default function DinoEquipeDesempenho({ empresaId = '', lojaId = '', onOp
     const headers = { 'X-Empresa-Id': empresaId, 'X-Loja-Id': lojaId }
     api.get(`/api/admin/barbearia/equipe/desempenho?${query}`, { headers }).then(payload => {
       if (!alive || request.current !== current || activeScope.current !== scopeKey) return
-      if (payload?.scope?.empresaId !== empresaId || payload?.scope?.lojaId !== lojaId || payload?.period?.inicio !== period.inicio || payload?.period?.fim !== period.fim || payload?.readOnly !== true || payload?.writePerformed !== false || !Array.isArray(payload?.employees)) throw new Error('INVALID_PERFORMANCE_SCOPE')
+      if (!samePerformanceScope({ empresaId, lojaId }, payload?.scope) || payload?.period?.inicio !== period.inicio || payload?.period?.fim !== period.fim || payload?.readOnly !== true || payload?.writePerformed !== false || !Array.isArray(payload?.employees)) throw new Error('INVALID_PERFORMANCE_SCOPE')
       setData({ ...payload, viewScope: scopeKey, viewPeriod: periodKey })
     }).catch(() => {
       if (alive && request.current === current && activeScope.current === scopeKey) { setData(null); setError('Não foi possível carregar o desempenho neste contexto. Confira a empresa, a unidade, o período e sua permissão de gestão.') }
