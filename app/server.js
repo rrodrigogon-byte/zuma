@@ -74,7 +74,14 @@ import {
   upsertLoyaltySettings,
 } from './core/loyalty-advanced.js';
 import { requireCommercePermission, resolveCommerceIdentity } from './core/commerce-identity-bridge.js';
-import { legacyEmpresaIdFromCommerce, legacyLojaIdFromCommerce } from './core/legacy-commerce-scope.js';
+import {
+  DINO_COMMERCE_EMPRESA_ID,
+  DINO_COMMERCE_LOJA_ID,
+  DINO_LEGACY_EMPRESA_ID,
+  DINO_LEGACY_LOJA_ID,
+  legacyEmpresaIdFromCommerce,
+  legacyLojaIdFromCommerce,
+} from './core/legacy-commerce-scope.js';
 import { listAdminUserDirectory } from './core/admin-user-directory.js';
 import { createPlatformAdministratorRouter } from './core/commerce-platform-grant-routes.js';
 import { listCommerceTenants, provisionCommerceTenant } from './core/commerce-tenants.js';
@@ -2921,6 +2928,11 @@ function legacyLojaId(req) {
   const rawEmpresa = String(req.barbeariaContext?.empresaId || req.user?.empresaId || (isPlatformAdminUser(req.user) || isMainAdminUser(req.user) ? req.headers['x-empresa-id'] : '') || '').trim();
   if (req.barbeariaContext?.lojaId) return legacyLojaIdFromCommerce(req.barbeariaContext.lojaId, rawEmpresa);
   if (signed) return legacyLojaIdFromCommerce(signed, rawEmpresa);
+  // O seletor do painel mantém o ID Commerce no cabeçalho mesmo quando o
+  // Commerce Core está desligado. Aceitamos somente o vínculo canônico Dino,
+  // sem transformar um cabeçalho arbitrário em escopo legado.
+  const empresaDino = rawEmpresa === DINO_COMMERCE_EMPRESA_ID || rawEmpresa === DINO_LEGACY_EMPRESA_ID;
+  if ((requested === DINO_COMMERCE_LOJA_ID || requested === DINO_LEGACY_LOJA_ID) && empresaDino) return DINO_LEGACY_LOJA_ID;
   if (requested && (isPlatformAdminUser(req.user) || isMainAdminUser(req.user))) return legacyLojaIdFromCommerce(requested, rawEmpresa);
   const configuracao = db().barbearias?.[legacyEmpresaId(req)]?.configuracao || {};
   if (configuracao.lojaPublicaId || configuracao.lojaId) return String(configuracao.lojaPublicaId || configuracao.lojaId);
