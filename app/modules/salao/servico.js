@@ -1,5 +1,6 @@
 // Reservas de mesa e lista de espera (migração 094), ligadas às mesas do bar.
-// Acomodar uma reserva ou atender uma senha abre (ou reaproveita) a comanda da mesa no bar.
+// Acomodar uma reserva ou atender uma senha abre a comanda da mesa no bar; mesa com comanda
+// aberta de outro cliente devolve MESA_OCUPADA. Usuário de unidade só vê os registros da unidade.
 // O chamado da fila gera a mensagem pronta; o envio por WhatsApp fica com a integração de
 // mensageria (não é disparado daqui).
 import { ErroDominio, exigirTexto, exigirUuid, transacao } from '../acesso/banco.js';
@@ -55,6 +56,18 @@ async function exigirMesaLivre(q, empresa, mesaId, inicio, fim, ignorarId = null
   if (r.rows[0]) throw new ErroDominio('MESA_RESERVADA', `A mesa já está reservada nesse horário (${r.rows[0].cliente_nome})`, 409);
 }
 
+/** Mesa com comanda aberta de outro cliente não recebe ninguém (fecha a conta antes). */
+async function exigirMesaDesocupada(q, empresa, mesaId) {
+  const r = await q("SELECT nome FROM bar_comandas WHERE empresa_id = $1 AND mesa_id = $2 AND status IN ('aberta', 'conta') LIMIT 1", [empresa, mesaId]);
+  if (r.rows[0]) throw new ErroDominio('MESA_OCUPADA', `A mesa está ocupada${r.rows[0].nome ? ` (${r.rows[0].nome})` : ''}: feche a conta antes`, 409);
+}
+
+// Quem é chamado da fila fica na mesa por este tempo, no mínimo, antes de uma reserva começar.
+const JANELA_FILA_MIN = 90;
+
+/** Unidade do registro × escopo do usuário: usuário de unidade só vê o que é da unidade dele. */
+const foraDaUnidade = (registro, lojaRestrita) => Boolean(lojaRestrita) && registro.loja_id !== lojaRestrita;
+
 export async function criarReserva(db, empresaId, dados = {}, { usuario = null, fuso = FUSO_PADRAO, agora = new Date(), lojaId = null } = {}) {
   const empresa = exigirUuid(empresaId, 'empresa');
   const inicio = instanteLocal(dados.inicioEm, fuso);
@@ -63,9 +76,17 @@ export async function criarReserva(db, empresaId, dados = {}, { usuario = null, 
   if (!Number.isInteger(duracao) || duracao < 15 || duracao > 720) throw new ErroDominio('VALIDATION_ERROR', 'Duração de 15 a 720 minutos');
   const fim = new Date(inicio.valueOf() + duracao * 60 * 1000);
   const idem = textoOpcional(dados.idempotencia, 100);
-  return transacao(db, async (q) => {
+  const jaCriada = async (q) => (await q('SELECT r.*, m.numero AS mesa_numero FROM sal_reservas r LEFT JOIN bar_mesas m ON m.empresa_id = r.empresa_id AND m.id = r.mesa_id WHERE r.empresa_id = $1 AND r.idempotencia = $2', [empresa, idem])).rows[0];
+  try {
+    return await criarReservaNaTransacao();
+  } catch (error) {
+    // dois envios simultâneos com a mesma chave: o segundo devolve a reserva do primeiro
+    if (error?.code === '23505' && idem) { const ja = await jaCriada((t, v) => db.query(t, v)); if (ja) return reservaDto(ja); }
+    throw error;
+  }
+  async function criarReservaNaTransacao() { return transacao(db, async (q) => {
     if (idem) {
-      const ja = (await q('SELECT r.*, m.numero AS mesa_numero FROM sal_reservas r LEFT JOIN bar_mesas m ON m.empresa_id = r.empresa_id AND m.id = r.mesa_id WHERE r.empresa_id = $1 AND r.idempotencia = $2', [empresa, idem])).rows[0];
+      const ja = await jaCriada(q);
       if (ja) return reservaDto(ja);
     }
     const mesa = await mesaPorNumero(q, empresa, dados.mesaNum ?? dados.mesaId);
@@ -75,7 +96,7 @@ export async function criarReserva(db, empresaId, dados = {}, { usuario = null, 
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
       [empresa, lojaId, mesa?.id || null, exigirTexto(dados.clienteNome, 'Nome do cliente', { min: 2, max: 160 }), telefone(dados.telefone), pessoas(dados.pessoas ?? 2), inicio, fim, textoOpcional(dados.observacao, 500), idem, textoOpcional(usuario, 180)])).rows[0];
     return reservaDto({ ...r, mesa_numero: mesa?.numero ?? null });
-  });
+  }); }
 }
 
 export async function listarReservas(db, empresaId, { de, ate, fuso = FUSO_PADRAO, lojaId = null } = {}) {
@@ -84,7 +105,7 @@ export async function listarReservas(db, empresaId, { de, ate, fuso = FUSO_PADRA
   const d2 = /^\d{4}-\d{2}-\d{2}$/.test(String(ate)) ? ate : d1;
   const r = await db.query(
     `SELECT r.*, m.numero AS mesa_numero FROM sal_reservas r LEFT JOIN bar_mesas m ON m.empresa_id = r.empresa_id AND m.id = r.mesa_id
-      WHERE r.empresa_id = $1 AND (r.inicio_em AT TIME ZONE $4)::date BETWEEN $2::date AND $3::date AND ($5::uuid IS NULL OR r.loja_id IS NULL OR r.loja_id = $5::uuid)
+      WHERE r.empresa_id = $1 AND (r.inicio_em AT TIME ZONE $4)::date BETWEEN $2::date AND $3::date AND ($5::uuid IS NULL OR r.loja_id = $5::uuid)
       ORDER BY r.inicio_em`, [empresa, d1, d2, fuso, lojaId]);
   return r.rows.map(reservaDto);
 }
@@ -102,9 +123,10 @@ export async function mudarStatusReserva(db, empresaId, id, status, { usuario = 
   const empresa = exigirUuid(empresaId, 'empresa');
   const res = await transacao(db, async (q) => {
     const r = (await q('SELECT * FROM sal_reservas WHERE empresa_id = $1 AND id = $2 FOR UPDATE', [empresa, exigirUuid(id, 'reserva')])).rows[0];
-    if (!r || (lojaRestrita && r.loja_id && r.loja_id !== lojaRestrita)) throw new ErroDominio('NOT_FOUND', 'Reserva não encontrada', 404);
+    if (!r || foraDaUnidade(r, lojaRestrita)) throw new ErroDominio('NOT_FOUND', 'Reserva não encontrada', 404);
     if (r.status === status) return r;
     if (!(TRANSICOES[r.status] || []).includes(status)) throw new ErroDominio('INVALID_STATUS', `Reserva ${r.status} não pode virar ${status}`, 409);
+    if (status === 'em_atendimento' && r.mesa_id) await exigirMesaDesocupada(q, empresa, r.mesa_id);
     if (status === 'no_show' && new Date(r.inicio_em) > agora) throw new ErroDominio('INVALID_STATUS', 'Só dá para marcar no-show depois do horário da reserva', 409);
     return (await q('UPDATE sal_reservas SET status = $3, atualizado_em = CURRENT_TIMESTAMP WHERE empresa_id = $1 AND id = $2 RETURNING *', [empresa, r.id, status])).rows[0];
   });
@@ -141,19 +163,28 @@ export async function listarFila(db, empresaId, { fuso = FUSO_PADRAO, agora = ne
   const empresa = exigirUuid(empresaId, 'empresa');
   const r = await db.query(
     `SELECT f.*, m.numero AS mesa_numero FROM sal_fila f LEFT JOIN bar_mesas m ON m.empresa_id = f.empresa_id AND m.id = f.mesa_id
-      WHERE f.empresa_id = $1 AND f.dia = $2 AND ($3::boolean OR f.status IN ('aguardando', 'chamado')) AND ($4::uuid IS NULL OR f.loja_id IS NULL OR f.loja_id = $4::uuid)
-      ORDER BY f.senha`, [empresa, hojeNoFuso(agora, fuso), todas, lojaId]);
+      WHERE f.empresa_id = $1 AND ($4::uuid IS NULL OR f.loja_id = $4::uuid)
+        AND ((f.dia = $2 AND ($3::boolean OR f.status IN ('aguardando', 'chamado')))
+             -- quem entrou antes da meia-noite e ainda espera continua na lista (até 12 h)
+             OR (f.status IN ('aguardando', 'chamado') AND f.criado_em > $5::timestamptz - INTERVAL '12 hours'))
+      ORDER BY f.dia, f.senha`, [empresa, hojeNoFuso(agora, fuso), todas, lojaId, agora]);
   return r.rows.map(filaDto);
 }
 
-export async function chamar(db, empresaId, id, { mesaNum, lojaRestrita = null } = {}) {
+export async function chamar(db, empresaId, id, { mesaNum, lojaRestrita = null, agora = new Date() } = {}) {
   const empresa = exigirUuid(empresaId, 'empresa');
   return transacao(db, async (q) => {
     const f = (await q('SELECT * FROM sal_fila WHERE empresa_id = $1 AND id = $2 FOR UPDATE', [empresa, exigirUuid(id, 'senha')])).rows[0];
-    if (!f || (lojaRestrita && f.loja_id && f.loja_id !== lojaRestrita)) throw new ErroDominio('NOT_FOUND', 'Senha não encontrada', 404);
+    if (!f || foraDaUnidade(f, lojaRestrita)) throw new ErroDominio('NOT_FOUND', 'Senha não encontrada', 404);
     if (!['aguardando', 'chamado'].includes(f.status)) throw new ErroDominio('INVALID_STATUS', 'Esta senha já foi finalizada', 409);
     const mesa = await mesaPorNumero(q, empresa, mesaNum);
     if (!mesa) throw new ErroDominio('VALIDATION_ERROR', 'Informe a mesa');
+    await exigirMesaDesocupada(q, empresa, mesa.id);
+    // mesa com reserva começando logo (ou com o cliente da reserva já na casa) não vai para a fila
+    await exigirMesaLivre(q, empresa, mesa.id, agora, new Date(agora.valueOf() + JANELA_FILA_MIN * 60 * 1000));
+    // outra senha já chamada para esta mesa e ainda não sentada
+    const outra = (await q("SELECT senha FROM sal_fila WHERE empresa_id = $1 AND mesa_id = $2 AND status = 'chamado' AND id <> $3 LIMIT 1", [empresa, mesa.id, f.id])).rows[0];
+    if (outra) throw new ErroDominio('MESA_OCUPADA', `A mesa já foi chamada para a senha ${outra.senha}`, 409);
     const mensagem = `${f.cliente_nome.split(' ')[0]}, sua mesa ${mesa.numero} está pronta. Senha ${f.senha}.`.slice(0, 300);
     const r = (await q("UPDATE sal_fila SET status = 'chamado', mesa_id = $3, chamado_em = CURRENT_TIMESTAMP, mensagem = $4 WHERE empresa_id = $1 AND id = $2 RETURNING *", [empresa, f.id, mesa.id, mensagem])).rows[0];
     return { ...filaDto({ ...r, mesa_numero: mesa.numero }), notificacao: f.telefone ? `Mensagem pronta para ${f.telefone}: "${mensagem}"` : `Chame a senha ${f.senha} para a mesa ${mesa.numero}.` };
@@ -166,10 +197,11 @@ export async function finalizar(db, empresaId, id, status, { usuario = null, loj
   if (!['atendido', 'cancelado', 'ausente'].includes(status)) throw new ErroDominio('VALIDATION_ERROR', 'status deve ser atendido, cancelado ou ausente');
   const f = await transacao(db, async (q) => {
     const atual = (await q('SELECT * FROM sal_fila WHERE empresa_id = $1 AND id = $2 FOR UPDATE', [empresa, exigirUuid(id, 'senha')])).rows[0];
-    if (!atual || (lojaRestrita && atual.loja_id && atual.loja_id !== lojaRestrita)) throw new ErroDominio('NOT_FOUND', 'Senha não encontrada', 404);
+    if (!atual || foraDaUnidade(atual, lojaRestrita)) throw new ErroDominio('NOT_FOUND', 'Senha não encontrada', 404);
     if (atual.status === status) return atual;
     if (!['aguardando', 'chamado'].includes(atual.status)) throw new ErroDominio('INVALID_STATUS', 'Esta senha já foi finalizada', 409);
     if (status === 'atendido' && !atual.mesa_id) throw new ErroDominio('INVALID_STATUS', 'Chame a senha para uma mesa antes de atender', 409);
+    if (status === 'atendido') await exigirMesaDesocupada(q, empresa, atual.mesa_id);
     return (await q('UPDATE sal_fila SET status = $3, finalizado_em = CURRENT_TIMESTAMP WHERE empresa_id = $1 AND id = $2 RETURNING *', [empresa, atual.id, status])).rows[0];
   });
   if (status === 'atendido' && f.mesa_id && !f.comanda_id) {

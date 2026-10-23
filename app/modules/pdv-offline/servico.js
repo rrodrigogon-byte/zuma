@@ -2,18 +2,24 @@
 //
 // - terminal: credencial própria (kytto_term_…); só o SHA-256 fica no banco; rotacionar invalida a anterior;
 // - sincronizar: lote ordenado de eventos, idempotente por terminal (evento e venda externa);
-// - venda offline vira comanda PAGA do bar com o preço cobrado no caixa, o estoque do bar é
-//   baixado mesmo que fique negativo (a venda já aconteceu) e os pagamentos levam a data da venda;
+// - venda offline vira comanda PAGA do bar com o preço cobrado no caixa (desconto em reais na
+//   comanda, para a soma dos itens bater com o total e a nota fechar); o estoque do bar vai no
+//   máximo a zero (a venda já aconteceu; a falta vira aviso) e os pagamentos levam a data da venda;
 //   assim o razão, a ficha técnica e o fiscal seguem sozinhos;
-// - conflitos: preço diferente do cadastro (venda aplicada, só aviso) e produto inexistente ou
-//   inativo (venda NÃO aplicada até a gerência decidir).
+// - conflitos: preço diferente do cadastro e estoque insuficiente (venda aplicada, só aviso);
+//   produto inexistente/inativo, dia já fechado no Financeiro e venda recusada na validação
+//   (venda NÃO aplicada até a gerência decidir);
+// - estoque e Financeiro do bar são por empresa (bar_produtos e bar_comandas não têm unidade): a
+//   unidade do terminal fica no evento e no conflito.
+import { FUSO_PADRAO, hojeNoFuso } from '../razao/servico.js';
 import crypto from 'node:crypto';
 import { ErroDominio, exigirTexto, exigirUuid, transacao } from '../acesso/banco.js';
 
 const TIPOS_DISPOSITIVO = new Set(['impressora_termica', 'leitor_codigo_barras', 'balanca', 'gaveta', 'pinpad', 'display_cliente', 'outro']);
 const TIPOS_EVENTO = new Set(['venda_offline', 'movimento_caixa', 'impressao', 'atualizacao_catalogo', 'outro']);
 // meio do PDV → meio do bar (bar_comanda_pagamentos)
-const MEIOS = { dinheiro: 'dinheiro', cartao_credito: 'cartao', cartao_debito: 'cartao', cartao: 'cartao', tef: 'tef', vale: 'carteira', carteira: 'carteira' };
+const MEIOS = { dinheiro: 'dinheiro', cartao_credito: 'cartao', cartao_debito: 'cartao_debito', cartao: 'cartao', tef: 'tef', vale: 'carteira', carteira: 'carteira' };
+const MEIOS_COM_NSU = new Set(['cartao', 'cartao_debito', 'tef']);
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MAX_ATRASO_MS = 30 * 24 * 3600 * 1000;
 
@@ -112,7 +118,14 @@ export async function criarDispositivo(db, empresaId, dados = {}, { lojaRestrita
 // ── autenticação do terminal ─────────────────────────────────────────────────
 export async function autenticarTerminal(db, terminalId, token) {
   if (!UUID_RE.test(String(terminalId || '')) || !token) throw new ErroDominio('TERMINAL_NAO_AUTENTICADO', 'Credencial de terminal ausente', 401);
-  const r = await db.query('SELECT * FROM pdv_terminais WHERE id = $1 AND ativo = true', [terminalId]);
+  // empresa e unidade precisam estar ativas (a coluna é "ativa" em lojas e "ativo" em empresas; lê as duas formas)
+  const r = await db.query(
+    `SELECT t.* FROM pdv_terminais t
+       JOIN empresas e ON e.id = t.empresa_id
+       JOIN lojas l ON l.id = t.loja_id AND l.empresa_id = t.empresa_id
+      WHERE t.id = $1 AND t.ativo = true
+        AND COALESCE((to_jsonb(e)->>'ativo')::boolean, (to_jsonb(e)->>'ativa')::boolean, true)
+        AND COALESCE((to_jsonb(l)->>'ativa')::boolean, (to_jsonb(l)->>'ativo')::boolean, true)`, [terminalId]);
   const t = r.rows[0];
   const a = Buffer.from(t?.token_hash || '0'.repeat(64)); const b = Buffer.from(hashToken(token));
   if (!t || a.length !== b.length || !crypto.timingSafeEqual(a, b)) throw new ErroDominio('TERMINAL_NAO_AUTENTICADO', 'Terminal inválido ou desativado', 401);
@@ -124,23 +137,37 @@ export async function heartbeat(db, terminal, { versao_agente = null, dispositiv
   for (const d of Array.isArray(dispositivos) ? dispositivos.slice(0, 50) : []) {
     if (!UUID_RE.test(String(d?.id || ''))) continue;
     const status = ['online', 'offline', 'erro'].includes(d.status) ? d.status : 'desconhecido';
-    await db.query('UPDATE pdv_dispositivos SET ultimo_status = $3, ultimo_status_em = CURRENT_TIMESTAMP WHERE empresa_id = $1 AND id = $2 AND loja_id = $4', [terminal.empresa_id, d.id, status, terminal.loja_id]);
+    await db.query('UPDATE pdv_dispositivos SET ultimo_status = $3, ultimo_status_em = CURRENT_TIMESTAMP WHERE empresa_id = $1 AND id = $2 AND loja_id = $4 AND (terminal_id IS NULL OR terminal_id = $5)', [terminal.empresa_id, d.id, status, terminal.loja_id, terminal.id]);
   }
   return { sucesso: true, servidor_em: new Date().toISOString(), modo_offline_habilitado: terminal.modo_offline_habilitado };
 }
 
 // ── sincronização ────────────────────────────────────────────────────────────
+/** Data da venda: no futuro (> 5 min) ou com mais de 30 dias é recusada (não troca por "agora" calado). */
 function instanteDaVenda(valor, agora) {
-  const d = new Date(valor || agora);
-  if (Number.isNaN(d.valueOf()) || d > new Date(agora.valueOf() + 5 * 60 * 1000) || agora - d > MAX_ATRASO_MS) return agora;
+  if (!valor) return agora;
+  const d = new Date(valor);
+  if (Number.isNaN(d.valueOf())) throw new ErroDominio('VALIDATION_ERROR', 'Data da venda offline inválida');
+  if (d > new Date(agora.valueOf() + 5 * 60 * 1000)) throw new ErroDominio('VALIDATION_ERROR', 'Data da venda offline no futuro: confira o relógio do caixa');
+  if (agora - d > MAX_ATRASO_MS) throw new ErroDominio('VALIDATION_ERROR', 'Venda offline com mais de 30 dias: lance pela gerência');
   return d;
+}
+
+const tresCasas = (n) => Math.abs(Math.round(n * 1000) / 1000 - n) < 1e-9;
+
+/** Dia da venda já fechado no Financeiro (da empresa toda: o bar não tem unidade no razão)? */
+async function diaFechado(q, empresa, quando, fuso) {
+  if (!(await q("SELECT to_regclass('fin_fechamentos') AS t")).rows[0]?.t) return null;
+  const dia = hojeNoFuso(quando, fuso);
+  const r = await q('SELECT 1 FROM fin_fechamentos WHERE empresa_id = $1 AND data = $2::date AND loja_id IS NULL LIMIT 1', [empresa, dia]);
+  return r.rows[0] ? dia : null;
 }
 
 /**
  * Aplica a venda dentro da transação `q`. Devolve { aplicado, comandaId, conflitos[] }.
  * Conflito bloqueante (produto inexistente/inativo) não aplica nada.
  */
-async function aplicarVenda(q, terminal, payload, { agora }) {
+async function aplicarVenda(q, terminal, payload, { agora, fuso = FUSO_PADRAO, lancarHojeSeFechado = false }) {
   const empresa = terminal.empresa_id;
   if (!UUID_RE.test(String(payload.id_externo || ''))) throw new ErroDominio('VALIDATION_ERROR', 'id_externo da venda é obrigatório (UUID)');
   const ja = (await q("SELECT comanda_id FROM pdv_eventos WHERE terminal_id = $1 AND id_externo = $2 AND status = 'processado'", [terminal.id, payload.id_externo])).rows[0];
@@ -148,15 +175,18 @@ async function aplicarVenda(q, terminal, payload, { agora }) {
   const itens = (Array.isArray(payload.itens) ? payload.itens : []).map((i) => ({
     produtoId: String(i.produto_id || ''), quantidade: Number(i.quantidade), valorUnitario: dinheiro(i.valor_unitario), desconto: dinheiro(i.desconto_item || 0), observacoes: textoOpcional(i.observacoes, 300),
   }));
-  if (!itens.length || itens.some((i) => !UUID_RE.test(i.produtoId) || !(i.quantidade > 0) || i.quantidade > 100000 || i.valorUnitario < 0 || i.desconto < 0 || i.desconto > i.quantidade * i.valorUnitario)) throw new ErroDominio('VALIDATION_ERROR', 'Item inválido na venda offline');
+  if (!itens.length || itens.some((i) => !UUID_RE.test(i.produtoId) || !(i.quantidade > 0) || !tresCasas(i.quantidade) || i.quantidade > 100000 || i.valorUnitario < 0 || i.desconto < 0 || i.desconto > i.quantidade * i.valorUnitario)) throw new ErroDominio('VALIDATION_ERROR', 'Item inválido na venda offline');
   const pagamentos = (Array.isArray(payload.pagamentos) ? payload.pagamentos : []).filter((p) => (p.status || 'aprovado') === 'aprovado').map((p) => ({ tipo: String(p.tipo || '').toLowerCase(), valor: dinheiro(p.valor), referencia: textoOpcional(p.referencia_externa, 180) }));
   if (!pagamentos.length) throw new ErroDominio('VALIDATION_ERROR', 'Venda offline sem pagamento aprovado');
   if (pagamentos.some((p) => p.tipo === 'pix')) throw new ErroDominio('VALIDATION_ERROR', 'Pix exige confirmação online: não entra por venda offline');
   if (pagamentos.some((p) => !MEIOS[p.tipo] || !(p.valor > 0))) throw new ErroDominio('VALIDATION_ERROR', 'Forma de pagamento inválida na venda offline');
-  if (pagamentos.some((p) => MEIOS[p.tipo] === 'cartao' && !p.referencia)) throw new ErroDominio('VALIDATION_ERROR', 'Cartão offline exige NSU/referência do TEF');
+  if (pagamentos.some((p) => MEIOS_COM_NSU.has(MEIOS[p.tipo]) && !p.referencia)) throw new ErroDominio('VALIDATION_ERROR', 'Cartão/TEF offline exige NSU/referência do TEF');
   const acrescimo = dinheiro(payload.valor_acrescimo || 0);
   if (acrescimo < 0) throw new ErroDominio('VALIDATION_ERROR', 'Acréscimo inválido');
-  const total = dinheiro(itens.reduce((s, i) => s + i.quantidade * i.valorUnitario - i.desconto, 0) + acrescimo);
+  // bruto por linha em centavos (quantidade fracionada: kg/litro)
+  const bruto = dinheiro(itens.reduce((s, i) => s + dinheiro(i.quantidade * i.valorUnitario), 0));
+  const desconto = dinheiro(itens.reduce((s, i) => s + i.desconto, 0));
+  const total = dinheiro(bruto - desconto + acrescimo);
   if (Math.abs(dinheiro(pagamentos.reduce((s, p) => s + p.valor, 0)) - total) > 0.01) throw new ErroDominio('VALIDATION_ERROR', 'Pagamentos não conferem com o total da venda offline');
 
   const produtos = new Map((await q('SELECT * FROM bar_produtos WHERE empresa_id = $1 AND id = ANY($2::uuid[]) FOR UPDATE', [empresa, itens.map((i) => i.produtoId)])).rows.map((p) => [p.id, p]));
@@ -171,27 +201,40 @@ async function aplicarVenda(q, terminal, payload, { agora }) {
       if (Number(p.estoque_atual) < consumo - 1e-6) conflitos.push({ tipo: 'estoque_insuficiente', bloqueante: false, cliente: { produto_id: i.produtoId, quantidade: i.quantidade }, servidor: { estoque_atual: Number(p.estoque_atual), nome: p.nome } });
     }
   }
+  let quando = instanteDaVenda(payload.ocorreu_em, agora);
+  const fechado = await diaFechado(q, empresa, quando, fuso);
+  if (fechado) {
+    // gerência aceitou lançar hoje (o caixa daquele dia já foi conferido e fechado)
+    if (lancarHojeSeFechado && !(await diaFechado(q, empresa, agora, fuso))) quando = agora;
+    else conflitos.push({ tipo: 'dia_fechado', bloqueante: true, cliente: { ocorreu_em: payload.ocorreu_em || null, total }, servidor: { dia_fechado: fechado } });
+  }
   if (conflitos.some((c) => c.bloqueante)) return { aplicado: false, conflitos };
 
-  const quando = instanteDaVenda(payload.ocorreu_em, agora);
   const comanda = (await q("INSERT INTO bar_comandas (empresa_id, nome, operador_id) VALUES ($1, $2, $3) RETURNING *", [empresa, `PDV ${terminal.codigo} · ${payload.id_externo.slice(0, 8)}`.slice(0, 120), textoOpcional(payload.usuario_vendedor_id, 180)])).rows[0];
   for (const i of itens) {
     const p = produtos.get(i.produtoId);
-    const liquidoUnit = (i.quantidade * i.valorUnitario - i.desconto) / i.quantidade;
     const consumo = Number((i.quantidade * Number(p.fator_estoque || 1)).toFixed(6));
-    await q('UPDATE bar_produtos SET estoque_atual = GREATEST(estoque_atual - $1, 0), atualizado_em = CURRENT_TIMESTAMP WHERE empresa_id = $2 AND id = $3', [consumo, empresa, p.id]);
+    // o item guarda o preço cobrado por unidade; o desconto vai para a comanda (desconto_valor)
     await q("INSERT INTO bar_comanda_itens (empresa_id, comanda_id, produto_id, quantidade, valor_unitario, consumo_estoque, observacoes, status, criado_em) VALUES ($1,$2,$3,$4,$5,$6,$7,'servido',$8)",
-      [empresa, comanda.id, p.id, i.quantidade, Number(liquidoUnit.toFixed(2)), consumo, i.observacoes, quando]);
-    await q("INSERT INTO bar_estoque_movimentos (empresa_id, produto_id, tipo, quantidade, saldo_apos, origem, referencia_id, criado_por) SELECT $1,$2,'saida',$3,estoque_atual,'pdv_offline',$4,$5 FROM bar_produtos WHERE empresa_id=$1 AND id=$2",
-      [empresa, p.id, consumo, comanda.id, `terminal ${terminal.codigo}`]);
+      [empresa, comanda.id, p.id, i.quantidade, i.valorUnitario, consumo, i.observacoes, quando]);
+    // baixa até zero; o movimento registra só o que saiu de fato (a falta já virou aviso)
+    const saldoAntes = Number(p.estoque_atual);
+    const efetivo = Number(Math.min(consumo, Math.max(saldoAntes, 0)).toFixed(6));
+    p.estoque_atual = Number(Math.max(saldoAntes - consumo, 0).toFixed(6));
+    if (efetivo > 0) {
+      await q('UPDATE bar_produtos SET estoque_atual = $1, atualizado_em = CURRENT_TIMESTAMP WHERE empresa_id = $2 AND id = $3', [p.estoque_atual, empresa, p.id]);
+      await q("INSERT INTO bar_estoque_movimentos (empresa_id, produto_id, tipo, quantidade, saldo_apos, origem, referencia_id, criado_por) VALUES ($1,$2,'saida',$3,$4,'pdv_offline',$5,$6)",
+        [empresa, p.id, efetivo, p.estoque_atual, comanda.id, `terminal ${terminal.codigo}`]);
+    }
   }
   for (const pg of pagamentos) {
     await q('INSERT INTO bar_comanda_pagamentos (empresa_id, comanda_id, meio, valor, referencia, criado_em) VALUES ($1,$2,$3,$4,$5,$6)', [empresa, comanda.id, MEIOS[pg.tipo], pg.valor, pg.referencia, quando]);
   }
-  await q(`UPDATE bar_comandas SET status = 'paga', total = $3, valor_final = $3, incluir_servico = false, desconto_percentual = 0, meio_pagamento = $4,
+  // total = soma dos itens (como no bar); valor_final = o que foi pago (− desconto + acréscimo)
+  await q(`UPDATE bar_comandas SET status = 'paga', total = $7, valor_final = $3, desconto_valor = $8, incluir_servico = false, desconto_percentual = 0, meio_pagamento = $4,
              pagamentos = (SELECT COALESCE(jsonb_agg(jsonb_build_object('meio', meio, 'valor', valor, 'referencia', referencia) ORDER BY criado_em), '[]'::jsonb) FROM bar_comanda_pagamentos WHERE empresa_id = $1 AND comanda_id = $2),
              cpf_nota = $5, fechada_em = $6, atualizado_em = CURRENT_TIMESTAMP WHERE empresa_id = $1 AND id = $2`,
-  [empresa, comanda.id, total, MEIOS[pagamentos[0].tipo], textoOpcional(String(payload.cpf || '').replace(/\D/g, ''), 14), quando]);
+  [empresa, comanda.id, total, MEIOS[pagamentos[0].tipo], textoOpcional(String(payload.cpf || '').replace(/\D/g, ''), 14), quando, bruto, desconto]);
   return { aplicado: true, comandaId: comanda.id, total, conflitos };
 }
 
@@ -203,26 +246,28 @@ async function registrarConflitos(q, terminal, eventoId, conflitos) {
 }
 
 /** Processa um evento já gravado (status pendente/conflito/falha) dentro de uma transação. */
-async function processarEvento(db, terminal, eventoDb, { agora }) {
+async function processarEvento(db, terminal, eventoDb, { agora, fuso }) {
   return transacao(db, async (q) => {
     const ev = (await q('SELECT * FROM pdv_eventos WHERE id = $1 FOR UPDATE', [eventoDb.id])).rows[0];
-    if (ev.status === 'processado') return { status: 'processado', resultado: ev.resultado, repetido: true };
+    // outro envio do mesmo evento já decidiu (processou, segurou em conflito ou a gerência descartou)
+    if (['processado', 'conflito', 'descartado'].includes(ev.status)) return { status: ev.status, resultado: ev.resultado, repetido: true };
     if (ev.tipo !== 'venda_offline') {
       const resultado = { recebido: true };
       await q("UPDATE pdv_eventos SET status = 'processado', resultado = $2, processado_em = CURRENT_TIMESTAMP WHERE id = $1", [ev.id, JSON.stringify(resultado)]);
       return { status: 'processado', resultado };
     }
-    const venda = await aplicarVenda(q, terminal, ev.payload || {}, { agora });
+    const venda = await aplicarVenda(q, terminal, ev.payload || {}, { agora, fuso });
     const status = venda.aplicado ? 'processado' : 'conflito';
     const resultado = { aplicado: venda.aplicado, comanda_id: venda.comandaId || null, total: venda.total ?? null, repetida: Boolean(venda.repetida), conflitos: venda.conflitos.map((c) => c.tipo) };
     await q('UPDATE pdv_eventos SET status = $2, resultado = $3, comanda_id = $4, id_externo = $5, processado_em = CURRENT_TIMESTAMP WHERE id = $1',
       [ev.id, status, JSON.stringify(resultado), venda.repetida ? null : (venda.comandaId || null), venda.aplicado && !venda.repetida ? ev.payload.id_externo : null]);
-    if (!venda.repetida) await registrarConflitos(q, terminal, ev.id, venda.conflitos);
+    // venda segurada: só os bloqueios (os avisos de preço/estoque nascem quando ela for aplicada)
+    if (!venda.repetida) await registrarConflitos(q, terminal, ev.id, venda.aplicado ? venda.conflitos : venda.conflitos.filter((c) => c.bloqueante));
     return { status: venda.conflitos.length ? 'conflito' : 'processado', resultado };
   });
 }
 
-export async function sincronizar(db, terminal, { lote_cliente_id, versao_cliente = null, eventos } = {}, { agora = new Date() } = {}) {
+export async function sincronizar(db, terminal, { lote_cliente_id, versao_cliente = null, eventos } = {}, { agora = new Date(), fuso = FUSO_PADRAO } = {}) {
   if (!terminal.modo_offline_habilitado) throw new ErroDominio('OFFLINE_DESABILITADO', 'Sincronização offline desligada para este terminal', 403);
   if (!UUID_RE.test(String(lote_cliente_id || '')) || !Array.isArray(eventos) || !eventos.length || eventos.length > 200) throw new ErroDominio('VALIDATION_ERROR', 'Lote UUID e entre 1 e 200 eventos são obrigatórios');
   if (eventos.some((e) => !UUID_RE.test(String(e?.id || '')) || !Number.isInteger(e.sequencia) || !TIPOS_EVENTO.has(e.tipo))) throw new ErroDominio('VALIDATION_ERROR', 'Há evento com id, sequência ou tipo inválido');
@@ -248,13 +293,20 @@ export async function sincronizar(db, terminal, { lote_cliente_id, versao_client
       continue;
     }
     try {
-      const r = await processarEvento(db, terminal, ev, { agora });
+      const r = await processarEvento(db, terminal, ev, { agora, fuso });
       resultados.push({ id: e.id, sequencia: e.sequencia, ...r });
       processados += 1; if (r.status === 'conflito') conflitos += 1;
     } catch (error) {
       const resultado = { erro: error instanceof ErroDominio ? error.message : 'Erro ao processar evento' };
       if (!(error instanceof ErroDominio)) console.error('[pdv-offline] evento', String(error?.message || error).slice(0, 200));
-      await db.query("UPDATE pdv_eventos SET status = 'falha', resultado = $2, processado_em = CURRENT_TIMESTAMP WHERE id = $1 AND status <> 'processado'", [ev.id, JSON.stringify(resultado)]);
+      const marcado = await db.query("UPDATE pdv_eventos SET status = 'falha', resultado = $2, processado_em = CURRENT_TIMESTAMP WHERE id = $1 AND status IN ('pendente', 'falha') RETURNING id", [ev.id, JSON.stringify(resultado)]);
+      // venda recusada na validação (total, Pix, NSU, data…) aparece para a gerência; não aplica nada
+      if (marcado.rows[0] && e.tipo === 'venda_offline' && error instanceof ErroDominio && error.status < 500) {
+        await db.query(
+          `INSERT INTO pdv_conflitos (empresa_id, loja_id, terminal_id, evento_id, tipo_conflito, bloqueante, dados_cliente, dados_servidor)
+           SELECT $1,$2,$3,$4,'venda_rejeitada',false,$5,$6 WHERE NOT EXISTS (SELECT 1 FROM pdv_conflitos WHERE evento_id = $4 AND tipo_conflito = 'venda_rejeitada' AND status = 'pendente')`,
+          [terminal.empresa_id, terminal.loja_id, terminal.id, ev.id, JSON.stringify({ id_externo: e.payload?.id_externo || null, ocorreu_em: e.payload?.ocorreu_em || null }), JSON.stringify({ erro: resultado.erro })]);
+      }
       resultados.push({ id: e.id, sequencia: e.sequencia, status: 'falha', resultado });
     }
   }
@@ -277,25 +329,32 @@ export async function listarConflitos(db, empresaId, { lojaId = null, todos = fa
  * Resolve. Conflito bloqueante + aceito_cliente: tenta aplicar a venda de novo (o produto pode ter
  * sido cadastrado/reativado). Bloqueante + descartado/aceito_servidor: a venda não entra.
  */
-export async function resolverConflito(db, empresaId, id, resolucao, { usuario = null, lojaRestrita = null, agora = new Date() } = {}) {
+export async function resolverConflito(db, empresaId, id, resolucao, { usuario = null, lojaRestrita = null, agora = new Date(), fuso = FUSO_PADRAO } = {}) {
   const empresa = exigirUuid(empresaId, 'empresa');
   if (!['aceito_cliente', 'aceito_servidor', 'descartado'].includes(resolucao)) throw new ErroDominio('VALIDATION_ERROR', 'resolução inválida');
   return transacao(db, async (q) => {
     const c = (await q('SELECT * FROM pdv_conflitos WHERE empresa_id = $1 AND id = $2 FOR UPDATE', [empresa, exigirUuid(id, 'conflito')])).rows[0];
     if (!c || (lojaRestrita && c.loja_id !== lojaRestrita)) throw new ErroDominio('NOT_FOUND', 'Conflito não encontrado', 404);
     if (c.status === 'resolvido') return { id: c.id, status: c.status, resolucao: c.resolucao };
+    // aviso (preço, estoque, venda recusada): só registra que a gerência viu
+    if (!c.bloqueante && resolucao !== 'aceito_servidor') throw new ErroDominio('VALIDATION_ERROR', 'Aviso só pode ser marcado como ciente', 422);
     let venda = null;
     if (c.bloqueante) {
       const ev = (await q('SELECT * FROM pdv_eventos WHERE empresa_id = $1 AND id = $2 FOR UPDATE', [empresa, c.evento_id])).rows[0];
       if (resolucao === 'aceito_cliente') {
+        if (ev.status !== 'conflito') throw new ErroDominio('CONFLICT', 'Esta venda já foi decidida (processada ou descartada)', 409);
         const terminal = (await q('SELECT * FROM pdv_terminais WHERE empresa_id = $1 AND id = $2', [empresa, c.terminal_id])).rows[0];
-        venda = await aplicarVenda(q, terminal, ev.payload || {}, { agora });
-        if (!venda.aplicado) throw new ErroDominio('AINDA_EM_CONFLITO', 'O produto continua inexistente ou inativo: cadastre/reative e tente de novo', 409);
+        venda = await aplicarVenda(q, terminal, ev.payload || {}, { agora, fuso, lancarHojeSeFechado: true });
+        if (!venda.aplicado) throw new ErroDominio('AINDA_EM_CONFLITO', 'A venda continua em conflito (produto inexistente/inativo ou dia fechado): resolva a causa e tente de novo', 409);
         await q("UPDATE pdv_eventos SET status = 'processado', comanda_id = $2, id_externo = $3, resultado = $4, processado_em = CURRENT_TIMESTAMP WHERE id = $1",
           [ev.id, venda.comandaId || null, venda.repetida ? null : ev.payload.id_externo, JSON.stringify({ aplicado: true, comanda_id: venda.comandaId, total: venda.total ?? null, resolvido: true })]);
         await q("UPDATE pdv_conflitos SET status = 'resolvido', resolucao = 'aceito_cliente', resolvido_por = $3, resolvido_em = CURRENT_TIMESTAMP WHERE empresa_id = $1 AND evento_id = $2 AND bloqueante AND status = 'pendente'", [empresa, ev.id, textoOpcional(usuario, 180)]);
+        // avisos novos desta aplicação (preço, estoque) ficam para a gerência ver
+        await registrarConflitos(q, terminal, ev.id, venda.conflitos.filter((x) => !x.bloqueante));
       } else {
+        // venda não entra: todos os bloqueios do evento ficam resolvidos com a mesma decisão
         await q("UPDATE pdv_eventos SET status = 'descartado', processado_em = CURRENT_TIMESTAMP WHERE id = $1 AND status = 'conflito'", [ev.id]);
+        await q("UPDATE pdv_conflitos SET status = 'resolvido', resolucao = $3, resolvido_por = $4, resolvido_em = CURRENT_TIMESTAMP WHERE empresa_id = $1 AND evento_id = $2 AND bloqueante AND status = 'pendente'", [empresa, ev.id, resolucao, textoOpcional(usuario, 180)]);
       }
     }
     await q("UPDATE pdv_conflitos SET status = 'resolvido', resolucao = $3, resolvido_por = $4, resolvido_em = CURRENT_TIMESTAMP WHERE empresa_id = $1 AND id = $2", [empresa, c.id, resolucao, textoOpcional(usuario, 180)]);

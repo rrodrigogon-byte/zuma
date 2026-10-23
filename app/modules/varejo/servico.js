@@ -1,8 +1,11 @@
 // Varejo/supermercado sobre o estoque único (migração 096), por unidade:
 // preço de venda (base no item e por unidade), promoções com período, preço final vigente,
 // lotes e validade, etiquetas de gôndola e transferências entre unidades com trânsito.
+// Lotes são um controle de validade à parte: registram entrada/baixa por unidade, mas não mexem
+// no saldo do estoque (o saldo é do movimento de estoque/compra/venda).
 import { ErroDominio, exigirTexto, exigirUuid, transacao } from '../acesso/banco.js';
 import { movimentarNaTransacao, exigirUnidade } from '../suprimentos/estoque.js';
+import { FUSO_PADRAO, hojeNoFuso, instanteLocal } from '../salao/servico.js';
 
 const textoOpcional = (v, max) => { const t = String(v ?? '').trim(); return t ? t.slice(0, max) : null; };
 const dinheiro = (v) => Math.round(Number(v || 0) * 100) / 100;
@@ -14,19 +17,34 @@ const numero = (v, campo, { min = 0, max = 1e9, inteiro = false } = {}) => {
 };
 const SEM = '00000000-0000-0000-0000-000000000000';
 
-/** Promoção ativa agora para o item na unidade (a mais vantajosa para o cliente). */
-function aplicarPromocoes(precoBase, promocoes) {
+/**
+ * Promoção vigente para o item na unidade: vale o menor preço por unidade. Promoção que não baixa
+ * o preço (preço fixo maior que o de venda) é ignorada. "Leve X, pague Y" é só texto na etiqueta:
+ * o preço unitário continua o de venda, então qualquer desconto real ganha dela.
+ */
+export function aplicarPromocoes(precoBase, promocoes) {
   let melhor = null;
   for (const p of promocoes) {
     let preco = precoBase; let texto = '';
     if (p.tipo === 'percentual') { preco = dinheiro(precoBase * (1 - Number(p.percentual) / 100)); texto = `${Number(p.percentual)}% OFF`; }
     else if (p.tipo === 'valor_fixo') { preco = dinheiro(Math.max(0, precoBase - Number(p.valor_desconto))); texto = `R$ ${Number(p.valor_desconto).toFixed(2).replace('.', ',')} de desconto`; }
-    else if (p.tipo === 'preco_fixo') { preco = dinheiro(p.preco_fixo); texto = 'Preço promocional'; }
+    else if (p.tipo === 'preco_fixo') { preco = dinheiro(Math.min(precoBase, Number(p.preco_fixo))); texto = 'Preço promocional'; }
     else if (p.tipo === 'leve_pague') { texto = `Leve ${p.leve}, pague ${p.pague}`; preco = precoBase; }
-    const efetivo = p.tipo === 'leve_pague' ? dinheiro((precoBase * p.pague) / p.leve) : preco;
-    if (!melhor || efetivo < melhor.efetivo) melhor = { id: p.id, nome: p.nome, tipo: p.tipo, preco, efetivo, texto };
+    if (p.tipo !== 'leve_pague' && !(preco < precoBase)) continue;
+    const ganha = !melhor || preco < melhor.preco || (preco === melhor.preco && melhor.tipo === 'leve_pague' && p.tipo !== 'leve_pague');
+    if (ganha) melhor = { id: p.id, nome: p.nome, tipo: p.tipo, preco, texto };
   }
   return melhor;
+}
+
+/** Início/fim da promoção no fuso da empresa: data sozinha = começo do dia; fim com data sozinha = fim do dia. */
+function instantePromocao(valor, fuso, { fimDoDia = false } = {}) {
+  const t = String(valor || '').trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(t)) {
+    const d = instanteLocal(`${t}T00:00`, fuso);
+    return fimDoDia ? instanteLocal(`${new Date(Date.UTC(+t.slice(0, 4), +t.slice(5, 7) - 1, +t.slice(8, 10) + 1)).toISOString().slice(0, 10)}T00:00`, fuso) : d;
+  }
+  try { return instanteLocal(t, fuso); } catch { return new Date(NaN); }
 }
 
 // ── produtos e preços ────────────────────────────────────────────────────────
@@ -108,11 +126,11 @@ export async function listarPromocoes(db, empresaId, { lojaId = null } = {}) {
   return r.rows.map(promoDto);
 }
 
-export async function criarPromocao(db, empresaId, dados = {}, { usuario = null, lojaId = null } = {}) {
+export async function criarPromocao(db, empresaId, dados = {}, { usuario = null, lojaId = null, fuso = FUSO_PADRAO } = {}) {
   const empresa = exigirUuid(empresaId, 'empresa');
   const tipo = String(dados.tipo || '');
   if (!['percentual', 'valor_fixo', 'preco_fixo', 'leve_pague'].includes(tipo)) throw new ErroDominio('VALIDATION_ERROR', 'Tipo de promoção inválido');
-  const inicio = new Date(dados.inicio); const fim = new Date(dados.fim);
+  const inicio = instantePromocao(dados.inicio, fuso); const fim = instantePromocao(dados.fim, fuso, { fimDoDia: true });
   if (Number.isNaN(inicio.valueOf()) || Number.isNaN(fim.valueOf()) || fim <= inicio) throw new ErroDominio('VALIDATION_ERROR', 'Período inválido');
   const itens = [...new Set((Array.isArray(dados.itens) ? dados.itens : []).map((i) => exigirUuid(i, 'produto')))];
   if (!itens.length) throw new ErroDominio('VALIDATION_ERROR', 'Escolha os produtos da promoção');
@@ -146,11 +164,11 @@ export async function mudarStatusPromocao(db, empresaId, id, status, { lojaRestr
 }
 
 // ── lotes e validade ─────────────────────────────────────────────────────────
-export async function listarLotes(db, empresaId, { lojaId = null, hoje } = {}) {
+export async function listarLotes(db, empresaId, { lojaId = null, hoje, fuso = FUSO_PADRAO } = {}) {
   const r = await db.query(
     `SELECT l.*, i.nome AS item_nome, i.unidade, i.sku FROM est_lotes l JOIN est_itens i ON i.empresa_id = l.empresa_id AND i.id = l.item_id
       WHERE l.empresa_id = $1 AND l.quantidade > 0 AND ($2::uuid IS NULL OR l.loja_id = $2::uuid) ORDER BY l.validade NULLS LAST, i.nome LIMIT 1000`, [exigirUuid(empresaId, 'empresa'), lojaId]);
-  const base = hoje || new Date().toISOString().slice(0, 10);
+  const base = hoje || hojeNoFuso(new Date(), fuso);
   return r.rows.map((l) => {
     const validade = l.validade ? (l.validade instanceof Date ? l.validade.toISOString().slice(0, 10) : String(l.validade).slice(0, 10)) : null;
     const dias = validade ? Math.round((new Date(`${validade}T12:00:00Z`) - new Date(`${base}T12:00:00Z`)) / 864e5) : null;
@@ -159,7 +177,7 @@ export async function listarLotes(db, empresaId, { lojaId = null, hoje } = {}) {
   });
 }
 
-/** Registra entrada de lote (soma) ou baixa (quantidade negativa). Não mexe no saldo do estoque. */
+/** Registra entrada de lote (soma) ou baixa (quantidade negativa) na unidade. Não mexe no saldo do estoque. */
 export async function registrarLote(db, empresaId, dados = {}, { lojaId = null } = {}) {
   const empresa = exigirUuid(empresaId, 'empresa');
   const item = exigirUuid(dados.itemId, 'produto');
@@ -168,6 +186,7 @@ export async function registrarLote(db, empresaId, dados = {}, { lojaId = null }
   if (validade && !/^\d{4}-\d{2}-\d{2}$/.test(validade)) throw new ErroDominio('VALIDATION_ERROR', 'Validade inválida');
   const delta = numero(dados.quantidade, 'Quantidade', { min: -1e9 });
   if (!delta) throw new ErroDominio('VALIDATION_ERROR', 'Quantidade não pode ser zero');
+  if (!lojaId) throw new ErroDominio('VALIDATION_ERROR', 'Escolha a unidade do lote');
   return transacao(db, async (q) => {
     await exigirUnidade(q, empresa, lojaId);
     if (!(await q('SELECT 1 FROM est_itens WHERE empresa_id = $1 AND id = $2', [empresa, item])).rows[0]) throw new ErroDominio('NOT_FOUND', 'Produto não encontrado', 404);
@@ -244,10 +263,10 @@ export async function criarTransferencia(db, empresaId, dados = {}, { usuario = 
 
 /**
  * enviar: sai da origem (não deixa negativo) e fica em trânsito; receber: entra no destino o que
- * chegou (o que faltar volta para a origem como devolução); cancelar: rascunho, ou em trânsito
- * com estorno para a origem.
+ * chegou; o que faltar é perda da origem (com motivo, entra no relatório de perdas); cancelar:
+ * rascunho, ou em trânsito com estorno para a origem.
  */
-export async function acaoTransferencia(db, empresaId, id, acao, { recebidos = null, usuario = null, lojaRestrita = null } = {}) {
+export async function acaoTransferencia(db, empresaId, id, acao, { recebidos = null, motivoFalta = null, usuario = null, lojaRestrita = null } = {}) {
   const empresa = exigirUuid(empresaId, 'empresa');
   return transacao(db, async (q) => {
     const t = (await q('SELECT * FROM var_transferencias WHERE empresa_id = $1 AND id = $2 FOR UPDATE', [empresa, exigirUuid(id, 'transferência')])).rows[0];
@@ -255,7 +274,7 @@ export async function acaoTransferencia(db, empresaId, id, acao, { recebidos = n
     // quem envia é a origem; quem recebe é o destino
     if (lojaRestrita && ((acao === 'receber' && t.loja_destino_id !== lojaRestrita) || (acao !== 'receber' && t.loja_origem_id !== lojaRestrita))) throw new ErroDominio('NOT_FOUND', 'Transferência não encontrada', 404);
     const itens = (await q('SELECT * FROM var_transferencia_itens WHERE empresa_id = $1 AND transferencia_id = $2', [empresa, t.id])).rows;
-    const mov = (loja, item, quantidade, tipo, chave, permitirNegativo = false) => movimentarNaTransacao(q, empresa, { lojaId: loja, itemId: item, tipo, quantidade, origem: 'transferencia', origemId: t.id, chave, usuario, motivo: `Transferência ${t.numero}`, permitirNegativo });
+    const mov = (loja, item, quantidade, tipo, chave, permitirNegativo = false, motivo = `Transferência ${t.numero}`) => movimentarNaTransacao(q, empresa, { lojaId: loja, itemId: item, tipo, quantidade, origem: 'transferencia', origemId: t.id, chave, usuario, motivo, permitirNegativo });
     if (acao === 'enviar') {
       if (t.status !== 'rascunho') throw new ErroDominio('INVALID_STATUS', 'Só rascunho é enviado', 409);
       for (const i of itens) await mov(t.loja_origem_id, i.item_id, -Number(i.quantidade), 'transferencia_saida', `transf:${t.id}:saida:${i.item_id}`);
@@ -268,7 +287,13 @@ export async function acaoTransferencia(db, empresaId, id, acao, { recebidos = n
         const veio = mapa.has(i.item_id) ? qtd(numero(mapa.get(i.item_id), 'Quantidade recebida', { min: 0, max: Number(i.quantidade) })) : Number(i.quantidade);
         if (veio > 0) await mov(t.loja_destino_id, i.item_id, veio, 'transferencia_entrada', `transf:${t.id}:entrada:${i.item_id}`);
         const falta = qtd(Number(i.quantidade) - veio);
-        if (falta > 0) { parcial = true; await mov(t.loja_origem_id, i.item_id, falta, 'transferencia_entrada', `transf:${t.id}:devolucao:${i.item_id}`); }
+        if (falta > 0) {
+          // o que não chegou já saiu da origem: volta ao saldo dela e sai como perda (saldo líquido zero, perda registrada com custo)
+          parcial = true;
+          const motivo = `Falta no recebimento da transferência ${t.numero}${textoOpcional(motivoFalta, 180) ? `: ${textoOpcional(motivoFalta, 180)}` : ''}`;
+          await mov(t.loja_origem_id, i.item_id, falta, 'transferencia_entrada', `transf:${t.id}:falta:${i.item_id}`, false, motivo);
+          await mov(t.loja_origem_id, i.item_id, -falta, 'perda', `transf:${t.id}:perda:${i.item_id}`, true, motivo);
+        }
         await q('UPDATE var_transferencia_itens SET recebido = $4 WHERE empresa_id = $1 AND transferencia_id = $2 AND item_id = $3', [empresa, t.id, i.item_id, veio]);
       }
       await q('UPDATE var_transferencias SET status = $2, recebido_em = CURRENT_TIMESTAMP WHERE id = $1', [t.id, parcial ? 'recebida_parcial' : 'recebida']);

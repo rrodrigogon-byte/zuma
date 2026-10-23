@@ -81,16 +81,84 @@ describe('PDV offline (PostgreSQL)', { skip: pgDeTeste }, () => {
     assert.equal(r.eventos[1].resultado.aplicado, false);
     assert.equal(r.lote.status, 'parcial');
     const conflitos = await pdv.listarConflitos(ctx.db, A);
-    assert.deepEqual(conflitos.map((c) => c.tipo_conflito).sort(), ['estoque_insuficiente', 'estoque_insuficiente', 'preco_divergente', 'produto_inexistente']);
+    // venda segurada registra só o bloqueio; Pix e total errado aparecem como venda recusada
+    assert.deepEqual(conflitos.map((c) => c.tipo_conflito).sort(), ['estoque_insuficiente', 'estoque_insuficiente', 'preco_divergente', 'produto_inexistente', 'venda_rejeitada', 'venda_rejeitada']);
+    assert.equal((await ctx.db.query("SELECT meio FROM bar_comanda_pagamentos WHERE comanda_id = $1", [r.eventos[0].resultado.comanda_id])).rows[0].meio, 'cartao_debito');
+    // aviso só aceita "ciente"
+    const aviso = conflitos.find((c) => c.tipo_conflito === 'preco_divergente');
+    await assert.rejects(() => pdv.resolverConflito(ctx.db, A, aviso.id, 'aceito_cliente'), (e) => e.status === 422);
+    assert.equal((await pdv.resolverConflito(ctx.db, A, aviso.id, 'aceito_servidor')).status, 'resolvido')
     const bloqueante = conflitos.find((c) => c.tipo_conflito === 'produto_inexistente');
     await assert.rejects(() => pdv.resolverConflito(ctx.db, A, bloqueante.id, 'aceito_cliente'), (e) => e.code === 'AINDA_EM_CONFLITO');
     assert.equal((await pdv.resolverConflito(ctx.db, A, bloqueante.id, 'descartado', { usuario: 'gerente' })).status, 'resolvido');
     assert.equal((await pdv.listarConflitos(ctx.db, B)).length, 0);
   });
 
+  test('desconto e acréscimo: itens com o preço cobrado, desconto na comanda, total = pago; estoque efetivo no movimento', async () => {
+    const t = await pdv.autenticarTerminal(ctx.db, terminal.id, token);
+    const agua = await bar.salvarProduto(ctx.db, A, { nome: 'Água', categoria: 'Bebidas', setor: 'bar', preco: 3.33, estoqueAtual: 2 });
+    const v = venda({ itens: [{ produto_id: agua.id, quantidade: 3, valor_unitario: 3.33, desconto_item: 0.1 }], valor_acrescimo: 1, pagamentos: [{ tipo: 'dinheiro', valor: 10.89 }] });
+    const r = await pdv.sincronizar(ctx.db, t, { lote_cliente_id: randomUUID(), eventos: [evento(v)] }, { agora });
+    assert.equal(r.eventos[0].resultado.aplicado, true);
+    const c = (await ctx.db.query('SELECT * FROM bar_comandas WHERE id = $1', [r.eventos[0].resultado.comanda_id])).rows[0];
+    const itens = (await ctx.db.query('SELECT quantidade, valor_unitario FROM bar_comanda_itens WHERE comanda_id = $1', [c.id])).rows;
+    const somaItens = itens.reduce((s, i) => s + Number(i.quantidade) * Number(i.valor_unitario), 0);
+    assert.equal(Number(c.total), 9.99);
+    assert.ok(Math.abs(somaItens - Number(c.total)) < 0.001);
+    assert.equal(Number(c.desconto_valor), 0.1);
+    assert.equal(Number(c.valor_final), 10.89);
+    // havia 2, vendeu 3: o movimento registra 2 (o que saiu de fato)
+    const mov = (await ctx.db.query("SELECT quantidade, saldo_apos FROM bar_estoque_movimentos WHERE produto_id = $1 AND origem = 'pdv_offline'", [agua.id])).rows;
+    assert.deepEqual(mov.map((m) => [Number(m.quantidade), Number(m.saldo_apos)]), [[2, 0]]);
+    // quantidade com mais de 3 casas e TEF sem NSU são recusados
+    const r2 = await pdv.sincronizar(ctx.db, t, { lote_cliente_id: randomUUID(), eventos: [
+      evento(venda({ itens: [{ produto_id: agua.id, quantidade: 1.0001, valor_unitario: 3.33 }], pagamentos: [{ tipo: 'dinheiro', valor: 3.33 }] }), 1),
+      evento(venda({ itens: [{ produto_id: agua.id, quantidade: 1, valor_unitario: 3.33 }], pagamentos: [{ tipo: 'tef', valor: 3.33 }] }), 2),
+    ] }, { agora });
+    assert.deepEqual(r2.eventos.map((e) => e.status), ['falha', 'falha']);
+  });
+
+  test('dia fechado segura a venda; "lançar hoje" aplica na data de hoje; decidido não reaplica', async () => {
+    const t = await pdv.autenticarTerminal(ctx.db, terminal.id, token);
+    await ctx.db.query("INSERT INTO fin_fechamentos (empresa_id, loja_id, data, totais, responsavel) VALUES ($1, NULL, '2026-10-21', '{}', 'gerente')", [A]);
+    const v = venda({ ocorreu_em: '2026-10-21T15:00:00-04:00', itens: [{ produto_id: cerveja.id, quantidade: 1, valor_unitario: 10 }], pagamentos: [{ tipo: 'dinheiro', valor: 10 }] });
+    const ev = evento(v);
+    const r = await pdv.sincronizar(ctx.db, t, { lote_cliente_id: randomUUID(), eventos: [ev] }, { agora });
+    assert.equal(r.eventos[0].status, 'conflito');
+    assert.equal(r.eventos[0].resultado.aplicado, false);
+    const c = (await pdv.listarConflitos(ctx.db, A)).find((x) => x.tipo_conflito === 'dia_fechado');
+    assert.equal(c.dados_servidor.dia_fechado, '2026-10-21');
+    const res = await pdv.resolverConflito(ctx.db, A, c.id, 'aceito_cliente', { agora });
+    const comanda = (await ctx.db.query('SELECT fechada_em FROM bar_comandas WHERE id = $1', [res.comandaId])).rows[0];
+    assert.equal(new Date(comanda.fechada_em).toISOString(), agora.toISOString());
+    // reenvio do mesmo evento não reaplica
+    const r2 = await pdv.sincronizar(ctx.db, t, { lote_cliente_id: randomUUID(), eventos: [ev] }, { agora });
+    assert.equal(r2.eventos[0].repetido, true);
+    // pagamento antigo com data de dia fechado entra no razão no dia de hoje
+    await ctx.db.query("UPDATE bar_comanda_pagamentos SET criado_em = '2026-10-21T15:00:00-04:00' WHERE comanda_id = $1", [res.comandaId]);
+    await fontes.sincronizarBar(ctx.db, A);
+    const l = (await ctx.db.query("SELECT data_competencia::text AS d FROM fin_lancamentos WHERE origem_id = $1", [res.comandaId])).rows[0];
+    assert.notEqual(l.d, '2026-10-21');
+  });
+
+  test('descartar resolve todos os bloqueios do evento; aceitar depois de descartado é recusado', async () => {
+    const t = await pdv.autenticarTerminal(ctx.db, terminal.id, token);
+    const v = venda({ itens: [{ produto_id: randomUUID(), quantidade: 1, valor_unitario: 5 }, { produto_id: randomUUID(), quantidade: 1, valor_unitario: 5 }], pagamentos: [{ tipo: 'dinheiro', valor: 10 }] });
+    const r = await pdv.sincronizar(ctx.db, t, { lote_cliente_id: randomUUID(), eventos: [evento(v)] }, { agora });
+    assert.equal(r.eventos[0].status, 'conflito');
+    const [c1, c2] = (await pdv.listarConflitos(ctx.db, A)).filter((x) => x.tipo_conflito === 'produto_inexistente');
+    await pdv.resolverConflito(ctx.db, A, c1.id, 'descartado');
+    assert.equal((await pdv.listarConflitos(ctx.db, A)).filter((x) => x.tipo_conflito === 'produto_inexistente').length, 0);
+    assert.equal((await pdv.resolverConflito(ctx.db, A, c2.id, 'aceito_cliente')).status, 'resolvido'); // já resolvido junto: devolve o estado
+  });
+
   test('terminal desativado não sincroniza; dispositivos por unidade', async () => {
     await pdv.criarDispositivo(ctx.db, A, { loja_id: loja, terminal_id: terminal.id, tipo: 'impressora_termica', nome: 'Térmica balcão', configuracoes: { modo: 'rede', host: '192.168.0.50', porta: 9100 } });
     assert.equal((await pdv.listarDispositivos(ctx.db, A, { lojaId: loja }))[0].configuracoes.porta, 9100);
+    // unidade inativa: o terminal não autentica
+    await ctx.db.query('UPDATE lojas SET ativa = false WHERE id = $1', [loja]);
+    await assert.rejects(() => pdv.autenticarTerminal(ctx.db, terminal.id, token), (e) => e.status === 401);
+    await ctx.db.query('UPDATE lojas SET ativa = true WHERE id = $1', [loja]);
     await pdv.atualizarTerminal(ctx.db, A, terminal.id, { ativo: false });
     await assert.rejects(() => pdv.autenticarTerminal(ctx.db, terminal.id, token), (e) => e.status === 401);
   });

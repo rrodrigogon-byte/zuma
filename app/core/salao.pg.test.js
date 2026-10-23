@@ -55,15 +55,39 @@ describe('Reservas de mesa e fila de espera (PostgreSQL)', { skip: pgDeTeste }, 
     const s2 = await salao.entrarNaFila(ctx.db, A, { clienteNome: 'Duda', pessoas: 2 }, { agora });
     assert.deepEqual([s1.senha, s2.senha], [1, 2]);
     await assert.rejects(() => salao.finalizar(ctx.db, A, s1.id, 'atendido'), (e) => e.code === 'INVALID_STATUS');
-    const ch = await salao.chamar(ctx.db, A, s1.id, { mesaNum: 5 });
-    assert.match(ch.mensagem, /Carlos, sua mesa 5 está pronta/);
+    // mesa 5 tem a comanda da reserva da Ana aberta: ocupada
+    await assert.rejects(() => salao.chamar(ctx.db, A, s1.id, { mesaNum: 5, agora }), (e) => e.code === 'MESA_OCUPADA');
+    // mesa 7 tem reserva às 16h (daqui a 1 h): não vai para a fila
+    await bar.salvarMesa(ctx.db, A, { numero: 7, nome: 'Salão' });
+    await salao.criarReserva(ctx.db, A, { clienteNome: 'Gil', pessoas: 2, mesaNum: 7, inicioEm: '2026-10-22T16:00' }, { agora });
+    await assert.rejects(() => salao.chamar(ctx.db, A, s1.id, { mesaNum: 7, agora }), (e) => e.code === 'MESA_RESERVADA');
+    await bar.salvarMesa(ctx.db, A, { numero: 6, nome: 'Janela' });
+    const ch = await salao.chamar(ctx.db, A, s1.id, { mesaNum: 6, agora });
+    assert.match(ch.mensagem, /Carlos, sua mesa 6 está pronta/);
+    // a mesma mesa não é chamada para duas senhas
+    await assert.rejects(() => salao.chamar(ctx.db, A, s2.id, { mesaNum: 6, agora }), (e) => e.code === 'MESA_OCUPADA');
     assert.match(ch.notificacao, /65988887777/);
     const fim = await salao.finalizar(ctx.db, A, s1.id, 'atendido', { usuario: 'garcom' });
     assert.ok(fim.comandaId);
     await salao.finalizar(ctx.db, A, s2.id, 'cancelado');
     assert.deepEqual((await salao.listarFila(ctx.db, A, { agora })).map((f) => f.senha), []);
     assert.equal((await salao.listarFila(ctx.db, A, { agora, todas: true })).length, 2);
+    // quem entrou às 23h40 e ainda espera aparece depois da meia-noite
+    const tarde = await salao.entrarNaFila(ctx.db, A, { clienteNome: 'Noturno', pessoas: 2 }, { agora: new Date('2026-10-22T23:40:00-04:00') });
+    await ctx.db.query("UPDATE sal_fila SET criado_em = '2026-10-22T23:40:00-04:00' WHERE id = $1", [tarde.id]);
+    assert.ok((await salao.listarFila(ctx.db, A, { agora: new Date('2026-10-23T00:30:00-04:00') })).some((f) => f.id === tarde.id));
     const amanha = await salao.entrarNaFila(ctx.db, A, { clienteNome: 'Eva', pessoas: 1 }, { agora: new Date('2026-10-23T12:00:00-04:00') });
     assert.equal(amanha.senha, 1);
+  });
+
+  test('isolamento por unidade: usuário de unidade não vê nem mexe em registro sem unidade ou de outra', async () => {
+    const L1 = randomUUID(); const L2 = randomUUID();
+    const daL1 = await salao.criarReserva(ctx.db, A, { clienteNome: 'Unidade 1', pessoas: 2, inicioEm: '2026-10-23T19:00' }, { agora, lojaId: L1 });
+    await salao.criarReserva(ctx.db, A, { clienteNome: 'Sem unidade', pessoas: 2, inicioEm: '2026-10-23T19:00' }, { agora });
+    const vistas = await salao.listarReservas(ctx.db, A, { de: '2026-10-23', lojaId: L1 });
+    assert.deepEqual(vistas.map((r) => r.clienteNome), ['Unidade 1']);
+    await assert.rejects(() => salao.mudarStatusReserva(ctx.db, A, daL1.id, 'cancelada', { lojaRestrita: L2 }), (e) => e.status === 404);
+    const semUnidade = (await salao.listarReservas(ctx.db, A, { de: '2026-10-23' })).find((r) => r.clienteNome === 'Sem unidade');
+    await assert.rejects(() => salao.mudarStatusReserva(ctx.db, A, semUnidade.id, 'cancelada', { lojaRestrita: L1 }), (e) => e.status === 404);
   });
 });

@@ -42,6 +42,25 @@ describe('Varejo/supermercado (PostgreSQL)', { skip: pgDeTeste }, () => {
     assert.equal((await varejo.listarProdutos(ctx.db, B)).length, 0);
   });
 
+  test('promoção: menor preço por unidade ganha; preço fixo acima do de venda é ignorado; leve-pague é só texto', () => {
+    const promos = [
+      { id: 'a', tipo: 'preco_fixo', preco_fixo: 35, nome: 'Fixo acima' },
+      { id: 'b', tipo: 'leve_pague', leve: 3, pague: 2, nome: '3 por 2' },
+    ];
+    // preço fixo acima não vale; sobra o leve-pague, que mantém o preço de venda
+    assert.deepEqual(varejo.aplicarPromocoes(30, promos).id, 'b');
+    assert.equal(varejo.aplicarPromocoes(30, promos).preco, 30);
+    // um desconto real ganha do leve-pague
+    assert.equal(varejo.aplicarPromocoes(30, [...promos, { id: 'c', tipo: 'percentual', percentual: 5 }]).id, 'c');
+    assert.equal(varejo.aplicarPromocoes(30, [{ id: 'd', tipo: 'preco_fixo', preco_fixo: 30 }]), null);
+  });
+
+  test('promoção com data sozinha usa o fuso: começa à 0h e termina no fim do dia', async () => {
+    const p = await varejo.criarPromocao(ctx.db, A, { nome: 'Só sábado', tipo: 'percentual', percentual: 5, inicio: '2026-10-24', fim: '2026-10-24', itens: [arroz.id] });
+    assert.equal(new Date(p.inicio).toISOString(), '2026-10-24T04:00:00.000Z');
+    assert.equal(new Date(p.fim).toISOString(), '2026-10-25T04:00:00.000Z');
+  });
+
   test('lotes com validade: entrada, baixa, situação e isolamento', async () => {
     await varejo.registrarLote(ctx.db, A, { itemId: feijao.id, lote: 'L01', validade: '2026-10-25', quantidade: 12 }, { lojaId: l1 });
     await varejo.registrarLote(ctx.db, A, { itemId: feijao.id, lote: 'L00', validade: '2026-10-01', quantidade: 3 }, { lojaId: l1 });
@@ -50,9 +69,11 @@ describe('Varejo/supermercado (PostgreSQL)', { skip: pgDeTeste }, () => {
     const lotes = await varejo.listarLotes(ctx.db, A, { lojaId: l1, hoje: '2026-10-22' });
     assert.deepEqual(lotes.map((l) => [l.lote, l.quantidade, l.situacao]), [['L00', 3, 'vencido'], ['L01', 10, 'critico']]);
     assert.equal((await varejo.listarLotes(ctx.db, B)).length, 0);
+    // lote é por unidade: sem unidade não registra
+    await assert.rejects(() => varejo.registrarLote(ctx.db, A, { itemId: feijao.id, lote: 'L02', quantidade: 1 }), (e) => e.code === 'VALIDATION_ERROR');
   });
 
-  test('transferência: sai na origem ao enviar, entra no destino ao receber, falta volta', async () => {
+  test('transferência: sai na origem ao enviar, entra no destino ao receber, falta vira perda da origem', async () => {
     const t = await varejo.criarTransferencia(ctx.db, A, { origemId: l1, destinoId: l2, itens: [{ itemId: arroz.id, quantidade: 4 }] }, { usuario: 'gerente' });
     assert.equal(t.status, 'rascunho');
     await assert.rejects(() => varejo.acaoTransferencia(ctx.db, A, t.id, 'receber'), (e) => e.code === 'INVALID_STATUS');
@@ -60,15 +81,19 @@ describe('Varejo/supermercado (PostgreSQL)', { skip: pgDeTeste }, () => {
     const saldo = async (loja) => (await est.listarItens(ctx.db, A, { lojaId: loja })).find((i) => i.id === arroz.id)?.saldo ?? 0;
     assert.deepEqual([await saldo(l1), await saldo(l2)], [6, 0]);
     await assert.rejects(() => varejo.acaoTransferencia(ctx.db, A, t.id, 'receber', { lojaRestrita: l1 }), (e) => e.status === 404);
-    const r = await varejo.acaoTransferencia(ctx.db, A, t.id, 'receber', { recebidos: [{ itemId: arroz.id, quantidade: 3 }], lojaRestrita: l2 });
+    const r = await varejo.acaoTransferencia(ctx.db, A, t.id, 'receber', { recebidos: [{ itemId: arroz.id, quantidade: 3 }], motivoFalta: 'pacote rasgado', lojaRestrita: l2 });
     assert.equal(r.status, 'recebida_parcial');
-    assert.deepEqual([await saldo(l1), await saldo(l2)], [7, 3]);
+    assert.deepEqual([await saldo(l1), await saldo(l2)], [6, 3]);
+    const perda = (await ctx.db.query("SELECT quantidade, motivo FROM est_movimentos WHERE empresa_id = $1 AND tipo = 'perda' AND origem_id = $2", [A, t.id])).rows;
+    assert.equal(perda.length, 1);
+    assert.equal(Number(perda[0].quantidade), -1);
+    assert.match(perda[0].motivo, /pacote rasgado/);
     const grande = await varejo.criarTransferencia(ctx.db, A, { origemId: l1, destinoId: l2, itens: [{ itemId: arroz.id, quantidade: 100 }] });
     await assert.rejects(() => varejo.acaoTransferencia(ctx.db, A, grande.id, 'enviar'), (e) => e.code === 'ESTOQUE_INSUFICIENTE');
     const c = await varejo.criarTransferencia(ctx.db, A, { origemId: l1, destinoId: l2, itens: [{ itemId: arroz.id, quantidade: 2 }] });
     await varejo.acaoTransferencia(ctx.db, A, c.id, 'enviar');
     await varejo.acaoTransferencia(ctx.db, A, c.id, 'cancelar');
-    assert.equal(await saldo(l1), 7);
+    assert.equal(await saldo(l1), 6);
   });
 
   test('etiquetas com o preço vigente (e o "de" da promoção)', async () => {

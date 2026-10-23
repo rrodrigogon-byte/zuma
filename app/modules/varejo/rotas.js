@@ -36,6 +36,6 @@ export function createVarejoAdminRouter({ db, escopoDaRequisicao }) {
   router.post('/etiquetas', rota('catalog.write', ({ req, empresaId, lojaId, usuario }) => svc.gerarEtiquetas(db, empresaId, req.body || {}, { usuario, lojaId }), 201));
   router.get('/transferencias', rota('inventory.read', async ({ empresaId, lojaId }) => ({ transferencias: await svc.listarTransferencias(db, empresaId, { lojaId }) })));
   router.post('/transferencias', rota('inventory.write', ({ req, empresaId, lojaRestrita, usuario }) => svc.criarTransferencia(db, empresaId, req.body || {}, { usuario, lojaRestrita }), 201));
-  router.post('/transferencias/:id/:acao(enviar|receber|cancelar)', rota('inventory.write', ({ req, empresaId, lojaRestrita, usuario }) => svc.acaoTransferencia(db, empresaId, req.params.id, req.params.acao, { recebidos: req.body?.recebidos, usuario, lojaRestrita })));
+  router.post('/transferencias/:id/:acao(enviar|receber|cancelar)', rota('inventory.write', ({ req, empresaId, lojaRestrita, usuario }) => svc.acaoTransferencia(db, empresaId, req.params.id, req.params.acao, { recebidos: req.body?.recebidos, motivoFalta: req.body?.motivoFalta, usuario, lojaRestrita })));
   return router;
 }

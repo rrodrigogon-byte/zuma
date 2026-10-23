@@ -14,9 +14,28 @@ const TIPOS_DISPOSITIVO = [
   ['outro', 'Outro'],
 ]
 
+const TIPOS_CONFLITO = {
+  produto_inexistente: 'Produto inexistente ou inativo (venda segurada)',
+  dia_fechado: 'Dia já fechado no Financeiro (venda segurada)',
+  preco_divergente: 'Preço diferente do cadastro',
+  estoque_insuficiente: 'Estoque insuficiente (baixado até zero)',
+  venda_rejeitada: 'Venda recusada na sincronização',
+}
+const brl = (v) => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+
+/** Resumo legível do que o caixa mandou e do que o servidor tem. */
+export function detalheConflito({ tipo_conflito: tipo, dados_cliente: c = {}, dados_servidor: s = {} }) {
+  if (tipo === 'preco_divergente') return `${s.nome || 'Produto'}: caixa cobrou ${brl(c.valor_unitario)}, cadastro ${brl(s.preco)}`
+  if (tipo === 'estoque_insuficiente') return `${s.nome || 'Produto'}: vendeu ${c.quantidade}, havia ${s.estoque_atual}`
+  if (tipo === 'produto_inexistente') return s.encontrado ? 'Produto inativo: reative-o e lance a venda' : 'Produto não cadastrado nesta empresa'
+  if (tipo === 'dia_fechado') return `Venda de ${String(s.dia_fechado || '').split('-').reverse().join('/')} (${brl(c.total)}): o dia já foi fechado`
+  if (tipo === 'venda_rejeitada') return s.erro || 'Venda recusada'
+  return ''
+}
+
 function Status({ value }) {
   const label = {
-    online: 'Online', offline: 'Offline', erro: 'Erro', desconhecido: 'Sem sinal',
+    online: 'Online', offline: 'Offline', erro: 'Erro', desconhecido: 'Sem sinal', aviso: 'Aviso',
     pendente: 'Pendente', processado: 'Processado', conflito: 'Conflito', falha: 'Falha',
   }[value] || value || '—'
   return <span className={`pdvo-status pdvo-status--${value || 'desconhecido'}`}>{label}</span>
@@ -138,11 +157,23 @@ export default function PDVOffline() {
     finally { setSalvando(false) }
   }
 
+  const alternarTerminal = async (terminal) => {
+    const acao = terminal.ativo ? 'desativar' : 'reativar'
+    if (!window.confirm(`Deseja ${acao} o terminal ${terminal.codigo}?${terminal.ativo ? ' Ele deixa de sincronizar até ser reativado.' : ''}`)) return
+    setSalvando(true); setErro('')
+    try {
+      await api.patch(`/api/pdv-offline/terminais/${terminal.id}`, { ativo: !terminal.ativo })
+      setMensagem(`Terminal ${terminal.codigo} ${terminal.ativo ? 'desativado' : 'reativado'}.`)
+      await carregar()
+    } catch (err) { setErro(err.message || 'Não foi possível alterar o terminal') }
+    finally { setSalvando(false) }
+  }
+
   const resolverConflito = async (conflito, resolucao) => {
     setSalvando(true); setErro('')
     try {
       await api.patch(`/api/pdv-offline/conflitos/${conflito.id}`, { resolucao })
-      setMensagem('Conflito marcado para reconciliação.')
+      setMensagem(resolucao === 'aceito_cliente' ? 'Venda lançada.' : resolucao === 'descartado' ? 'Venda descartada.' : 'Aviso marcado como ciente.')
       await carregar()
     } catch (err) { setErro(err.message || 'Não foi possível resolver o conflito') }
     finally { setSalvando(false) }
@@ -197,7 +228,7 @@ export default function PDVOffline() {
           <div className="pdvo-table-wrap">
             <table><thead><tr><th>Terminal</th><th>Loja</th><th>Agente</th><th>Último sinal</th><th>Periféricos</th><th>Ações</th></tr></thead>
               <tbody>{carregando ? <tr><td colSpan="6" className="pdvo-empty">Carregando terminais…</td></tr> : terminais.length === 0 ? <tr><td colSpan="6" className="pdvo-empty">Nenhum terminal provisionado.</td></tr> : terminais.map((terminal) => <tr key={terminal.id}>
-                <td><strong>{terminal.nome}</strong><small>{terminal.codigo}</small></td><td>{terminal.loja_nome || mapaLojas.get(terminal.loja_id)?.nome || '—'}</td><td><Status value={terminal.ultimo_heartbeat_em ? 'online' : 'desconhecido'} /><small>{terminal.versao_agente || 'Não informado'}</small></td><td>{fmtDate(terminal.ultimo_heartbeat_em)}</td><td>{terminal.total_dispositivos || 0}</td><td><button className="pdvo-text-action" onClick={() => rotacionarToken(terminal)} disabled={salvando}>Rotacionar token</button></td>
+                <td><strong>{terminal.nome}</strong><small>{terminal.codigo}</small></td><td>{terminal.loja_nome || mapaLojas.get(terminal.loja_id)?.nome || '—'}</td><td><Status value={terminal.ultimo_heartbeat_em ? 'online' : 'desconhecido'} /><small>{terminal.versao_agente || 'Não informado'}</small></td><td>{fmtDate(terminal.ultimo_heartbeat_em)}</td><td>{terminal.total_dispositivos || 0}</td><td><button className="pdvo-text-action" onClick={() => rotacionarToken(terminal)} disabled={salvando || !terminal.ativo}>Rotacionar token</button> <button className="pdvo-text-action" onClick={() => alternarTerminal(terminal)} disabled={salvando}>{terminal.ativo ? 'Desativar' : 'Reativar'}</button></td>
               </tr>)}</tbody>
             </table>
           </div>
@@ -216,8 +247,8 @@ export default function PDVOffline() {
         </article>
 
         <article className="pdvo-panel pdvo-panel--wide">
-          <header className="pdvo-panel-header"><div><h2>Conflitos de sincronização</h2><p>Vendas que criaram saldo negativo ou divergência permanecem rastreáveis até a decisão de um gestor.</p></div></header>
-          <div className="pdvo-conflict-list">{conflitos.length === 0 ? <p className="pdvo-empty">Não há conflitos pendentes.</p> : conflitos.map((conflito) => <article className="pdvo-conflict" key={conflito.id}><div><Status value="conflito" /><strong>{conflito.tipo_conflito.replaceAll('_', ' ')}</strong><p>Terminal {conflito.terminal_codigo || '—'} · {fmtDate(conflito.data_criacao)}</p></div><div className="pdvo-conflict-actions"><button onClick={() => resolverConflito(conflito, 'aceito_cliente')} disabled={salvando}>Aceitar operação</button><button onClick={() => resolverConflito(conflito, 'aceito_servidor')} disabled={salvando}>Manter servidor</button><button onClick={() => resolverConflito(conflito, 'descartado')} disabled={salvando}>Descartar</button></div></article>)}</div>
+          <header className="pdvo-panel-header"><div><h2>Conflitos de sincronização</h2><p>Venda segurada (produto inexistente ou dia fechado) só entra com a decisão de um gestor; avisos de preço e estoque já foram lançados e pedem só ciência.</p></div></header>
+          <div className="pdvo-conflict-list">{conflitos.length === 0 ? <p className="pdvo-empty">Não há conflitos pendentes.</p> : conflitos.map((conflito) => <article className="pdvo-conflict" key={conflito.id}><div><Status value={conflito.bloqueante ? 'conflito' : 'aviso'} /><strong>{TIPOS_CONFLITO[conflito.tipo_conflito] || conflito.tipo_conflito.replaceAll('_', ' ')}</strong><p>Terminal {conflito.terminal_codigo || '—'} · {fmtDate(conflito.data_criacao)}</p><small>{detalheConflito(conflito)}</small></div><div className="pdvo-conflict-actions">{conflito.bloqueante ? <><button onClick={() => resolverConflito(conflito, 'aceito_cliente')} disabled={salvando}>{conflito.tipo_conflito === 'dia_fechado' ? 'Lançar hoje' : 'Lançar venda'}</button><button onClick={() => resolverConflito(conflito, 'descartado')} disabled={salvando}>Descartar venda</button></> : <button onClick={() => resolverConflito(conflito, 'aceito_servidor')} disabled={salvando}>Ciente</button>}</div></article>)}</div>
         </article>
       </section>
 

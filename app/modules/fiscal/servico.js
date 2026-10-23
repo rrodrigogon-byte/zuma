@@ -232,9 +232,10 @@ async function vendaDaOrigem(q, empresa, { origem, origemId, itens = [], pagamen
     const pct = Math.min(100, Math.max(0, Number(c.desconto_percentual || 0)));
     return {
       loja: null, cpf: soDigitos(c.cpf_nota).length === 11 ? soDigitos(c.cpf_nota) : null,
-      desconto: dinheiro(bruto * pct / 100),
+      // desconto em % (bar) e em reais (venda do PDV offline)
+      desconto: Math.min(dinheiro(bruto), dinheiro(bruto * pct / 100 + Number(c.desconto_valor || 0))),
       itens: linhas.map((l) => ({ fonte: 'bar_produto', fonteId: l.produto_id, categoria: l.categoria, descricao: l.nome, quantidade: Number(l.quantidade), valorUnitario: Number(l.valor_unitario) })),
-      pagamentos: pags.map((p) => ({ meio: p.meio === 'cartao' || p.meio === 'tef' ? 'credito' : p.meio === 'carteira' ? 'outros' : p.meio === 'conta' ? 'credito_loja' : p.meio, valor: Number(p.valor) })),
+      pagamentos: pags.map((p) => ({ meio: p.meio === 'cartao' || p.meio === 'tef' ? 'credito' : p.meio === 'cartao_debito' ? 'debito' : p.meio === 'carteira' ? 'outros' : p.meio === 'conta' ? 'credito_loja' : p.meio, valor: Number(p.valor) })),
     };
   }
   if (origem === 'loja_pedido') {

@@ -34,16 +34,17 @@ const INSERT_COLS = `(empresa_id, loja_id, tipo, categoria, descricao, valor, da
 export async function sincronizarBar(db, empresaId, { fuso = FUSO_PADRAO } = {}) {
   const empresa = exigirUuid(empresaId, 'empresa');
   if (!(await existeTabela(db, 'bar_comanda_pagamentos'))) return { fonte: 'bar', ignorada: true };
+  const temFechamento = await existeTabela(db, 'fin_fechamentos');
   const r = await db.query(
     `INSERT INTO fin_lancamentos ${INSERT_COLS}
      SELECT p.empresa_id, NULL, 'receita', 'Bar e restaurante',
             left('Comanda ' || COALESCE(NULLIF(c.nome, ''), 'do bar') || CASE WHEN p.meio IS NOT NULL THEN ' · ' || p.meio ELSE '' END, 240),
-            p.valor, (p.criado_em AT TIME ZONE $2)::date,
+            p.valor, d.competencia,
             -- "conta" é venda fiada: vira conta a receber do cliente, com 30 dias para pagar
-            CASE WHEN lower(p.meio) = 'conta' THEN (p.criado_em AT TIME ZONE $2)::date + 30 ELSE (p.criado_em AT TIME ZONE $2)::date END,
+            CASE WHEN lower(p.meio) = 'conta' THEN d.competencia + 30 ELSE d.competencia END,
             CASE WHEN lower(p.meio) = 'conta' THEN 'pendente' ELSE 'pago' END,
             CASE WHEN lower(p.meio) = 'conta' THEN NULL ELSE p.criado_em END,
-            CASE lower(p.meio) WHEN 'cartao' THEN 'credito' WHEN 'tef' THEN 'credito' WHEN 'pix' THEN 'pix'
+            CASE lower(p.meio) WHEN 'cartao' THEN 'credito' WHEN 'cartao_debito' THEN 'debito' WHEN 'tef' THEN 'credito' WHEN 'pix' THEN 'pix'
               WHEN 'dinheiro' THEN 'dinheiro' WHEN 'carteira' THEN 'voucher' WHEN 'conta' THEN NULL ELSE 'outro' END,
             CASE WHEN lower(p.meio) = 'conta' THEN 'receber' ELSE 'avulso' END,
             CASE WHEN c.cliente_id IS NOT NULL THEN 'cliente' END, c.cliente_id, cc.nome,
@@ -51,6 +52,9 @@ export async function sincronizarBar(db, empresaId, { fuso = FUSO_PADRAO } = {})
        FROM bar_comanda_pagamentos p
        JOIN bar_comandas c ON c.empresa_id = p.empresa_id AND c.id = p.comanda_id
        LEFT JOIN commerce_customers cc ON cc.empresa_id = c.empresa_id AND cc.id = c.cliente_id
+       -- pagamento com data de um dia já fechado (venda que chegou atrasada) entra no dia de hoje
+       CROSS JOIN LATERAL (SELECT CASE WHEN ${temFechamento ? `EXISTS (SELECT 1 FROM fin_fechamentos f WHERE f.empresa_id = p.empresa_id AND f.loja_id IS NULL AND f.data = (p.criado_em AT TIME ZONE $2)::date)` : 'false'}
+                                       THEN (CURRENT_TIMESTAMP AT TIME ZONE $2)::date ELSE (p.criado_em AT TIME ZONE $2)::date END AS competencia) d
       WHERE p.empresa_id = $1 AND p.valor > 0
      ON CONFLICT (empresa_id, chave) DO NOTHING`,
     [empresa, fuso],

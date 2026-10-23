@@ -231,11 +231,12 @@ function Transferencias({ produtos, lojas, unidade, qs, acao, nomeLoja, onMudou 
       </div>}
     </Dialog>
     <Dialog open={Boolean(recebendo)} title={recebendo ? `Receber transferência #${recebendo.t.numero}` : ''} labelId="var-receber" onClose={() => setRecebendo(null)}
-      onSubmit={() => fazer(recebendo.t, 'receber', { recebidos: Object.entries(recebendo.recebidos).map(([itemId, quantidade]) => ({ itemId, quantidade: Number(String(quantidade).replace(',', '.')) })) })}
+      onSubmit={() => fazer(recebendo.t, 'receber', { recebidos: Object.entries(recebendo.recebidos).map(([itemId, quantidade]) => ({ itemId, quantidade: Number(String(quantidade).replace(',', '.')) })), motivoFalta: recebendo.motivoFalta || '' })}
       actions={<><button type="button" className="c360-btn ghost" onClick={() => setRecebendo(null)}>Voltar</button><button type="submit" className="c360-btn primary">Confirmar recebimento</button></>}>
       {recebendo && <div style={{ display: 'grid', gap: 8 }}>
         {recebendo.t.itens.map((i) => <label key={i.itemId} className="c360-field">{i.nome} (enviado {num(i.quantidade)} {i.unidade})<input className="c360-input" inputMode="decimal" value={recebendo.recebidos[i.itemId]} onChange={(e) => setRecebendo({ ...recebendo, recebidos: { ...recebendo.recebidos, [i.itemId]: e.target.value } })} /></label>)}
-        <p className="dadm-muted">O que não chegou volta para o estoque da origem.</p>
+        <label className="c360-field">Motivo da falta (se faltou algo)<input className="c360-input" maxLength={180} value={recebendo.motivoFalta || ''} onChange={(e) => setRecebendo({ ...recebendo, motivoFalta: e.target.value })} /></label>
+        <p className="dadm-muted">O que não chegou é registrado como perda da unidade de origem (aparece no relatório de perdas).</p>
       </div>}
     </Dialog>
   </section>

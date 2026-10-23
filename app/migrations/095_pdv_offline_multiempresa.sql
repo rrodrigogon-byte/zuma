@@ -4,6 +4,11 @@
 -- A venda feita sem internet vira comanda paga do bar: Financeiro, estoque e fiscal seguem o
 -- caminho normal.
 
+-- Esta migração mexe em bar_comandas (coluna nova e chaves estrangeiras), que o bar usa o dia
+-- todo: se o lock não sair em 3 s, a migração falha e o deploy para, sem enfileirar as vendas
+-- atrás dela. Rodar de novo fora do horário de movimento.
+SET LOCAL lock_timeout = '3s';
+
 CREATE TABLE IF NOT EXISTS pdv_terminais (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   empresa_id UUID NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
@@ -106,3 +111,7 @@ CREATE TABLE IF NOT EXISTS pdv_conflitos (
   CONSTRAINT chk_pdv_conf_resolucao CHECK (resolucao IS NULL OR resolucao IN ('aceito_cliente', 'aceito_servidor', 'descartado'))
 );
 CREATE INDEX IF NOT EXISTS idx_pdv_conf_pendente ON pdv_conflitos (empresa_id, status, data_criacao DESC);
+
+-- Desconto em reais da comanda (venda do PDV offline): os itens guardam o preço cobrado por
+-- unidade e o desconto fica aqui, para a soma dos itens bater com o total e a nota fechar.
+ALTER TABLE bar_comandas ADD COLUMN IF NOT EXISTS desconto_valor NUMERIC(12,2) NOT NULL DEFAULT 0;
