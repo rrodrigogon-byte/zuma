@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-  brandOf, buildCustomerGraph, customerEgo, daysUntilBirthday, graphSummary, habitualInterval, momentScore, nextBestOffers, SEND_THRESHOLD,
+  brandOf, buildCustomerGraph, customerEgo, daysUntilBirthday, graphSummary, habitualInterval, isCustomerPhoneUnambiguous, momentScore, nextBestOffers, SEND_THRESHOLD,
 } from './dino-grafo.js';
 
 const NOW = new Date('2026-09-28T15:00:00Z');
 const d = (days) => new Date(NOW.valueOf() - days * 86400000).toISOString();
 const consent = (marketing = true) => ({ whatsapp: { atendimento: { concedido: true }, marketing: { concedido: marketing } } });
+const completeIdentityQuality = () => ({ fontes: Object.fromEntries(['clients', 'appointments', 'commands', 'retailSales', 'pedidos'].map((name) => [name, { status: 'ok' }])) });
 
 function fixture() {
   const clients = [
@@ -68,6 +69,45 @@ test('grafo liga clientes pelo telefone e ignora o cliente balcão', () => {
   assert.ok(summary.relacoes.COMPROU >= 3);
 });
 
+test('janela executiva usa apenas eventos datados nos últimos 365 dias e separa fatos sem data', () => {
+  const client = { id: 'window-client', nome: 'Cliente de teste', telefone: '5565999990123' };
+  const command = (id, at) => ({ id, clienteId: client.id, status: 'paga', fechadaEm: at, itens: [{ tipo: 'produto', produtoId: id, nome: `Produto ${id}`, subtotal: 20 }] });
+  const input = {
+    clients: [client],
+    commands: [command('recent', d(10)), command('old', d(400)), command('future', new Date(NOW.valueOf() + 86400000).toISOString())],
+    facts: [{ telefone: client.telefone, categoria: 'servico_interesse', valor: 'Barba', status: 'ativo' }],
+  };
+  const metricsGraph = buildCustomerGraph(input, { now: NOW, relationshipWindowDays: 365, includeUndated: false });
+  const networkGraph = buildCustomerGraph(input, { now: NOW, relationshipWindowDays: 365, includeUndated: true });
+  const metricsCustomer = metricsGraph.customers.get(client.telefone);
+  const networkCustomer = networkGraph.customers.get(client.telefone);
+  assert.equal(metricsCustomer.visits.length, 1);
+  assert.equal(metricsCustomer.products.size, 1);
+  assert.equal(metricsCustomer.interests.length, 0);
+  assert.equal(metricsGraph.edges.filter((edge) => edge.source === 'commands').length, 1);
+  assert.equal(networkCustomer.visits.length, 1);
+  assert.ok(networkGraph.edges.some((edge) => edge.source === 'facts' && edge.at === null));
+  assert.ok(!networkGraph.edges.some((edge) => edge.at === d(400) || edge.at === new Date(NOW.valueOf() + 86400000).toISOString()));
+});
+
+test('telefone ambíguo não pode identificar uma memória única dentro do grafo', () => {
+  const data = fixture();
+  data.quality = completeIdentityQuality();
+  data.clients.push({ id: 'duplicate-c1', nome: 'Outro cadastro', telefone: data.clients[0].telefone, consentimentos: consent() });
+  const graph = buildCustomerGraph(data, { now: NOW });
+  assert.equal(isCustomerPhoneUnambiguous(graph, data.clients[0].telefone), false);
+  const unique = fixture();
+  unique.quality = completeIdentityQuality();
+  assert.equal(isCustomerPhoneUnambiguous(buildCustomerGraph(unique, { now: NOW }), '5565999990001'), true);
+  for (const source of ['clients', 'appointments', 'commands', 'retailSales', 'pedidos']) {
+    const incomplete = fixture();
+    incomplete.quality = completeIdentityQuality();
+    incomplete.quality.fontes[source].status = 'limitado';
+    assert.equal(isCustomerPhoneUnambiguous(buildCustomerGraph(incomplete, { now: NOW }), '5565999990001'), false, `${source} parcial não comprova identidade única`);
+  }
+  assert.equal(isCustomerPhoneUnambiguous(buildCustomerGraph(fixture(), { now: NOW }), '5565999990001'), false, 'ausência de qualidade também falha fechado');
+});
+
 test('próxima oferta: Diego recebe Armaf (clientes parecidos do Bruno compraram), nunca item esgotado ou já comprado', () => {
   const data = fixture();
   const graph = buildCustomerGraph(data, { now: NOW });
@@ -79,6 +119,17 @@ test('próxima oferta: Diego recebe Armaf (clientes parecidos do Bruno compraram
   assert.ok(!all.includes('Xerjoff Erba Pura'));
   assert.ok(!all.includes('Corte Premium com o Dino'), 'serviço premium de R$ 1.000 não é sugerido automaticamente');
   assert.ok(!(diego.melhor.nome === 'Dior Sauvage EDT'));
+});
+
+test('saldo textual inválido permanece desconhecido e bloqueia envio da recomendação', () => {
+  const data = fixture();
+  const malformed = { id: 'bad-stock', nome: 'Cera especial', preco: 40, estoque: 'abc', estoqueInformado: true, publicado: true };
+  const rows = nextBestOffers(buildCustomerGraph(data, { now: NOW }), { catalog: [malformed] });
+  const offer = rows[0]?.melhor;
+  assert.equal(offer.estoqueConhecido, false);
+  assert.equal(offer.estoque, null);
+  assert.equal(offer.disponibilidade, 'nao_verificada');
+  assert.equal(rows[0].enviar, false);
 });
 
 test('interesse registrado na memória puxa a oferta do Lucas para o Lattafa', () => {
@@ -202,4 +253,34 @@ test('sem custo conhecido margem é zero; preço alto não inventa lucro', () =>
   const rows = nextBestOffers(buildCustomerGraph(data, { now: NOW }), { catalog: [{ id: 'expensive', nome: 'Perfume caro', preco: 5000, estoque: 1 }], services: [] });
   assert.ok(rows.length);
   assert.ok(rows.every(row => row.melhor.partes.margem === 0));
+});
+
+test('saldo desconhecido não vira ruptura nem autorização de envio de oferta', () => {
+  const customer = { id: 'unknown-stock-client', nome: 'Cliente', telefone: '65999990001', consentimentos: consent() };
+  const graph = buildCustomerGraph({ clients: [customer], commands: [
+    { clienteId: customer.id, status: 'paga', fechadaEm: d(20), itens: [{ tipo: 'servico', nome: 'Corte', subtotal: 40 }] },
+  ] }, { now: NOW });
+  const rows = nextBestOffers(graph, { services: [], catalog: [
+    { id: 'unknown', nome: 'Produto sem nível', preco: 100, estoque: null, estoqueInformado: false },
+    { id: 'known-zero', nome: 'Produto esgotado', preco: 100, estoque: 0, estoqueInformado: true },
+  ] });
+  const offer = rows.find((row) => row.melhor.id === 'unknown');
+  assert.ok(offer);
+  assert.equal(offer.melhor.estoque, null);
+  assert.equal(offer.melhor.estoqueConhecido, false);
+  assert.equal(offer.melhor.disponibilidade, 'nao_verificada');
+  assert.ok(offer.melhor.motivos.includes('disponibilidade não verificada'));
+  assert.equal(offer.enviar, false);
+  assert.equal(rows.some((row) => row.melhor.id === 'known-zero'), false);
+});
+
+test('arestas do grafo preservam a origem de comandas, PDV e pedidos Commerce', () => {
+  const graph = buildCustomerGraph({
+    clients: [{ id: 'source-client', telefone: '65999990001' }],
+    commands: [{ clienteId: 'source-client', status: 'paga', fechadaEm: d(2), itens: [{ tipo: 'produto', produtoId: 'same', nome: 'Pomada', subtotal: 20 }] }],
+    retailSales: [{ clienteTelefone: '65999990001', status: 'pago', pagoEm: d(1), itens: [{ produtoId: 'same', nome: 'Pomada', subtotal: 20 }] }],
+    orders: [{ id: 'commerce-order', telefone: '65999990001', status: 'paid', criadoEm: d(1), itens: [{ produtoId: 'same', nome: 'Pomada', subtotal: 20 }] }],
+  }, { now: NOW });
+  const purchaseEdges = graph.edges.filter((edge) => edge.rel === 'COMPROU');
+  assert.deepEqual(new Set(purchaseEdges.map((edge) => edge.source)), new Set(['commands', 'retailSales', 'orders']));
 });

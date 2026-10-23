@@ -219,6 +219,17 @@ function factView(row) {
   };
 }
 
+export async function getFactPhone(empresaId, factId, lojaId) {
+  const result = await db.queryRead(
+    `SELECT f.telefone FROM ai_customer_facts f
+      JOIN ai_conversation_summaries s ON s.id = f.fonte_resumo_id AND s.empresa_id = f.empresa_id
+     WHERE f.empresa_id = $1 AND f.id = $2 AND s.loja_id = $3
+     LIMIT 1`,
+    [uuid(empresaId), uuid(factId, 'factId'), uuid(lojaId, 'lojaId')],
+  );
+  return memoryPhone(result.rows[0]?.telefone);
+}
+
 export async function customerMemory(empresaId, telefone, { limitSummaries = 10, lojaId = null } = {}) {
   const phone = memoryPhone(telefone);
   if (!phone) return { telefone: null, facts: [], summaries: [], reviews: [] };
@@ -435,7 +446,7 @@ export async function recordAutomationOptOut(query, empresaId, telefone, motivo 
   if (!phone || !UUID.test(String(empresaId || ''))) return false;
   await query(
     `INSERT INTO ai_automation_log (empresa_id, telefone, automacao, referencia, status, motivo)
-     VALUES ($1, $2, 'opt_out', 'permanente', 'bloqueada', $3) ON CONFLICT (empresa_id, automacao, telefone, referencia) DO NOTHING`,
+     VALUES ($1, $2, 'opt_out', 'permanente', 'bloqueada', $3) ON CONFLICT DO NOTHING`,
     [empresaId, phone, clean(motivo, 80)],
   );
   return true;

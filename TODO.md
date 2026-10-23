@@ -1,56 +1,34 @@
-# Grafo executivo Dino — acompanhamento da entrega
+# Cérebro IA Dino — acompanhamento
 
-## Extensão BI e Relatórios interativos — 23/10/2026
+**Branch atual:** `feat/dino-grafo-completo-20261023`
+**Base de produção:** `fix/kytto-comandas-pdv-20260808` (`6548c218`)
+**Última revisão:** 23/10/2026
 
-**Branch:** `feat/dino-bi-reporting-20261023`
-**Base:** `fix/kytto-comandas-pdv-20260808` (`cb141271`)
+## Base já incorporada à produção
 
-- [x] **Read-model consolidado.** Expor valores reais de operação, histórico financeiro Avec e Commerce por período, sem dupla contagem, com série diária, composição, agenda, clientes e rankings agregados.
-- [x] **Filtro e comparativo.** Aceitar intervalo customizado limitado, comparar com a janela anterior equivalente e manter o escopo estrito empresa + unidade nas fontes Commerce/legado.
-- [x] **BI interativo.** Disponibilizar visão executiva, detalhes clicáveis por dimensão, tabelas/gráficos acessíveis, exportação CSV e impressão; conectar a aba Relatórios aos detalhes já existentes sem criar uma aplicação paralela.
-- [x] **IA gerencial protegida.** Reutilizar a análise consultiva existente apenas sob clique explícito, dados agregados, permissão de gestão e orçamento configurado; nenhuma escrita, automação ou mensagem será acionada.
-- [x] **Qualidade e privacidade.** Identificar cobertura por fonte e não inferir ocupação, demografia, avaliação ou atribuição profissional ausentes. Não exportar PII nesta visão gerencial.
-- [x] **Testes locais.** Testes focados de BI, rota HTTP, painel principal, desempenho, Commerce e exportação passaram; `node --check`, `git diff --check` e build Vite foram concluídos.
-- [ ] **Promoção controlada.** Abrir PR contra a branch de produção correta, revisar estado e checks e só então promover conforme as regras do repositório. A suíte Node ampla foi rodada: a única indisponibilidade local são os oito hooks de PostgreSQL real que exigem `initdb`, binário ausente no Sandbox.
+- [x] **Grafo executivo e fontes múltiplas.** PR #385 trouxe métricas explicáveis de clientes, agenda, financeiro/caixa, Commerce, estoque e oportunidades, IA sob demanda agregada, isolamento por loja e memória administrativa limitada à unidade.
+- [x] **BI e relatórios interativos.** A base atual incorpora o read-model consolidado, histórico financeiro Avec, período e comparação, detalhes por dimensão, visualizações acessíveis, exportação/impressão e IA gerencial somente por clique e com métricas agregadas.
+- [x] **Integridade dos indicadores.** A experiência existente evita dupla contagem, não infere ocupação, demografia, avaliações ou atribuição profissional ausentes, e informa cobertura/fonte.
+- [x] **Grafo ego e base operacional preservados.** `customerEgo` continua com autorização, token opaco, mascaramento e limites. Outbox/worker, cobrança, reservas, estoque, agenda, waitlist, fidelidade, NPS, integração e projeção seguem na base de produção.
 
-**Branch:** `feat/dino-grafo-executivo-20261022`
+## Evolução do grafo — esta solicitação
 
-**Base:** `fix/kytto-comandas-pdv-20260808` (`a83754aa`)
-**Última revisão:** 22/10/2026
+- [x] **Rede tipada e derivada de relações reais.** Inclui unidade, hubs, KPIs e entidades observadas (clientes anônimos/opacos, produtos, serviços, profissionais, pedidos, operação, financeiro/caixa, estoque e oportunidades). Arestas consolidam eventos com fonte, janela e qualidade. Raiz, hubs e KPIs são preservados no limite; eventos observados têm prioridade sobre agrupamentos estruturais; omissões observadas/estruturais têm contagens separadas. Ocorrências não são unidades vendidas e conexões não são inferidas.
+- [x] **Privacidade e cobertura.** A rede executiva não retorna nomes/telefones/IDs brutos nem texto livre; usa rótulos anônimos, tokens scoped por empresa+unidade e categorias de interesse. Desconhecido não vira zero ou risco inventado. O estoque Commerce só é conhecido com cobertura completa variante×localização; revenda sem movimento/saldo comprovado permanece desconhecida.
+- [x] **Janelas explícitas.** Métricas executivas respeitam 30/90 dias; relações datadas usam 365 dias; sem data têm estado separado. Recebíveis vencidos são posição atual e estoque é snapshot com timestamp real. Ledger não é lucro, capturado não é líquido de estorno e demandas não são volume ou probabilidade calibrada.
+- [x] **Explorador acessível.** A aba possui pesquisa, filtro por área, SVG responsivo, zoom, seleção, destaque de vizinhos, detalhes de evidência/proveniência/cobertura e alternativa tabular acessível.
+- [x] **Troca de escopo e período.** A mudança de empresa/unidade/período limpa dados antigos e descarta respostas atrasadas. Navegação vinda do BI preserva `tab`, `dias` e `origem=bi` via query parameters.
+- [x] **Limites de automação por loja.** Scheduler, guards, logs, cotas, cooldown e reservas de marketing foram ajustados para empresa+unidade. Opt-out explícito `SAIR` permanece global. Skips terminam o registro de domínio e resultados de envio ambíguos não geram retry inseguro. O grafo não dispara mensagens.
+- [x] **Migration 085 aprovada pelo usuário.** Acrescenta `loja_id` a `ai_automation_log`, mantém históricos sem vínculo como NULL (sem backfill), cria índices de idempotência por unidade e FK composta com índice UNIQUE de suporte. 053 já estava ocupado. Registrada no runner/checksum; ainda não aplicada a banco.
+- [ ] **Audiência de campanhas CRM — decisão pendente.** `queryAudience` e `listCampaignAudience` ainda consultam clientes por empresa, não por `loja_id`, porque não há afinidade de unidade comprovável no cadastro. O comportamento foi mantido sem decisão explícita. Pendente escolher: falhar fechado sem afinidade; manter audiência compartilhada como exceção existente; ou criar vínculo de afinidade em outra mudança de schema.
 
-## Resultados desta entrega
+## Referência e limite conhecidos
 
-- [x] **Mapa integrado sem substituir o grafo atual.** Manter Cérebro do atendente → Grafo e ofertas, suas ligações por cliente e as próximas ofertas; acrescentar uma visão geral que cruze clientes/Commerce com operação, finanças e estoque, permitindo examinar riscos, desvios e oportunidades com período e motivo observável. Grafo e rotas de automação exigem unidade ativa; sem unidade não consultam nem enfileiram dados tenant-wide.
-- [x] **Sinais operacionais e financeiros rastreáveis.** Exibir volume/status de agenda, conclusões, cancelamentos e faltas; decidir a fonte pelo resolvedor canônico em modo estrito por unidade e evidência local, sem somar JSON com PostgreSQL. Sem vínculo legado assinado coincidente, nunca consultar JSON; somente usar PostgreSQL filtrado por empresa+loja com cobertura parcial. Se o ambiente exigir JSON e o vínculo faltar, indicar indisponibilidade. Não contar histórico importado como operação atual. Ocupação fica fora desta entrega porque a medição disponível só lê JSON, enquanto a fonte canônica pode ser PostgreSQL. A visão executiva exige empresa e unidade ativa autorizadas; sem unidade não consulta dados tenant-wide. Mostrar receitas pendentes vencidas, diferenças de fechamento de caixa e variações de receita/despesa somente com empresa e loja identificadas, janela e cobertura suficientes. Financeiro/Caixa legados só são lidos quando os IDs de empresa e loja do token assinado coincidem com os do Commerce; sem isso ficam indisponíveis em vez de consultar a empresa inteira. Não tratar comissão estimada como repasse pago.
-- [x] **Estoque e oportunidades comerciais conectados.** Cruzar apenas estados de pedidos confirmados aceitos pelo grafo, produtos publicados, preço/custo vigente e saldo mínimo/disponível por local ativo com vendas e serviços observados. Estoque local de revenda só entra quando a unidade ativa estiver vinculada por IDs coincidentes e validados; itens sem loja são excluídos e deixam a cobertura parcial, sem incluir estoque de outra unidade. Sem vínculo, a fonte fica indisponível. Associar venda/cliente apenas quando a identidade for verificável. Contagem de reembolsos representa somente o status do pedido, sem inferir o valor ou a liquidação do estorno. Explicar cada oportunidade; não prometer margem, disponibilidade futura nem probabilidade calibrada.
-- [x] **Análise por IA sob demanda e minimizada.** Oferecer ação explícita que use o fluxo `previsao_gerencial` já existente apenas com indicadores agregados, sem nome, telefone, ID de cliente ou texto de conversa; respeitar o teto diário da empresa e manter sinais determinísticos disponíveis quando a IA estiver indisponível ou sem orçamento. A chamada registra somente metadados de uso/custo no log existente, sem persistir prompt, resposta ou dados pessoais. A memória empresa/telefone usada pelo assistente WhatsApp durante o atendimento permanece como comportamento existente e não é redefinida pelo painel.
-- [x] **Privacidade, escopo e leitura segura.** Restringir dados à empresa/unidade autorizada; exigir igualdade exata dos IDs de empresa/loja antes de ler legado e UUID válido; o próprio loader também bloqueia consulta Commerce sem empresa+unidade. Se a unidade estiver ausente, não permitir leitura Kytto/Commerce tenant-wide; o scheduler usa o escopo da loja ativa do canal e pula/loga vínculo ausente ou inválido. Memória administrativa do Customer 360 exige unidade ativa: resumos são filtrados por `loja_id`, fatos só aparecem/mudam quando a fonte é resumo da mesma loja, e o esquecimento cancela apenas sessões/fila/resumos/fatos atribuíveis a essa unidade; identidade sem fonte de loja não é exposta nem alterada nessa operação. A memória empresa/telefone do runtime WhatsApp permanece inalterada e fora do escopo da tela. Manter identidade ambígua separada, consentimento/anonimização, telefone mascarado e estados de qualidade `ok`/`limitado`/`indisponível`. Não gravar dados de negócio, alterar pedidos/estoque, unir identidades, disparar mensagens nem executar automações a partir desta análise executiva.
-- [x] **Interface coerente com Kytto.** Ampliar a aba existente com mapa/resumo executivo da unidade ativa, filtros de período/área, origem/cobertura dos sinais e acesso ao grafo de um cliente, reutilizando os padrões visuais existentes. Ao trocar empresa/unidade, limpar e recarregar todos os dados da tela para não exibir o escopo anterior; não criar aplicação paralela, migração ou dependência nova.
-- [x] **Entrega protegida.** Manter o trabalho em branch derivada de `fix/kytto-comandas-pdv-20260808`; validar e abrir PR com a mesma base. PR [#385](https://github.com/rrodrigogon-byte/agro-open/pull/385), base `fix/kytto-comandas-pdv-20260808`. Não fazer merge, deploy, alterar Render/WhatsApp nem promover automaticamente a produção.
+- [CasaNossa — plataforma/grafo](https://nossacasa.kytto.com.br/plataforma/grafo): a rota pública retornou shell/login; nenhum grafo/controle autenticado pôde ser observado e não foi encontrado código CasaNossa reutilizável. A solução é própria, inspirada no objetivo de explorar relações, sem alegação de cópia.
 
-## Evidências desta entrega
+## Validação e entrega protegida
 
-- Testes focados no commit-base atual: **138 aprovados, 0 falhas**; cobrem grafo, memória por unidade, referências de cliente, loader, agenda, estoque/revenda, scheduler e módulos da Barbearia Dino adicionados à base.
-- Build do frontend `npm run build` em `web/`: **concluído com sucesso**.
-- `node --check` nos módulos alterados e `git diff --check`: **concluídos sem erro**.
-- Suíte Node ampla no commit-base atual: **1.761 testes, 1.668 aprovados, 8 falhas e 85 ignorados**. As 8 falhas são hooks `PG real` e retornam `PostgreSQL 16 local ausente: initdb`; o ambiente não dispõe do binário local necessário para esses testes. Não foram executados testes contra banco de produção.
-- Nenhuma migration, configuração Render, variável de WhatsApp, publicação, merge ou deploy foi alterado nesta entrega.
-- PR #385 está aberto para revisão; a branch publicada é `feat/dino-grafo-executivo-20261022`, baseada na produção atual `a83754aa`.
-
-## Entregas anteriores preservadas da base de produção
-
-- [x] **Fundação operacional 083.** Migration incremental, checksum e runner com lock/reexecução para outbox, efeitos, reversões, reservas, waitlist, NPS, quarentena e webhooks.
-- [x] **Escopo multiloja.** Agenda, cobrança, ledger, caixa, comissões, repasses, fidelidade, lista de espera, estoque, compras, NF-e, revenda e comandas respeitam empresa + unidade; legado sem `lojaId` fica fora da sessão de loja ou em diagnóstico/quarentena.
-- [x] **Agenda e receita comprovada.** `dataHora`/`horaLocal` coerentes com `America/Cuiaba`, calendário e jornada; ocupação não vira receita sem recebimento financeiro verificado; replays de recebimento são idempotentes.
-- [x] **Cobrança e retorno de pagamento.** InfinitePay valida exclusivamente o `invoice_slug` persistido, com proteção contra divergência, duplicidade, timeout e confirmação forjada; efeitos pendentes têm rastreabilidade para reconciliação.
-- [x] **Outbox e worker operacional.** Lease, retry, backoff, dead-letter, idempotência, auditoria e métricas com testes determinísticos.
-- [x] **Estorno coordenado e reserva de estoque.** Estornos são append-only e idempotentes; hold, commit, release, expiração e cancelamento evitam dupla baixa e concorrência.
-- [x] **Lista de espera, fidelidade e NPS.** Escopo por loja, aceite com TTL, ledger canônico Commerce/PostgreSQL, NPS opt-in, pendências e processamento pelo worker.
-- [x] **Proteções de integração e projeção inteligente.** Rate limit, deduplicação, assinatura/owner de webhook; motor de projeção por loja com receita paga, serviços, revenda, histórico, capacidade, metas e profissionais, horizonte até seis meses.
-
-## Evidências históricas da base (não são validação desta entrega)
-
-- Gate focado dos bloqueios: 137 testes aprovados.
-- Suíte Node ampla: 1.696 testes descobertos, 1.603 aprovados; 8 falhas de hooks PostgreSQL real por ausência de `initdb`.
-- Projeção/runtime de captação: 27 testes aprovados; build web Vite aprovado com aviso existente de importação dinâmica/estática.
-- O registro anterior indicava lint indisponível naquele checkout por falta de configuração ESLint.
+- A base avançou para `6548c218` durante a abertura do PR draft #399, e a segunda atualização da branch está em resolução de conflitos. Build/testes precisam ser repetidos nessa base antes de atualizar o PR.
+- Validações na base anterior (`cb141271`): 195/195 testes focados, build Vite aprovado; suíte Node integral 1.741 aprovados, 8 casos PostgreSQL bloqueados por `initdb` ausente, 85 skipped. Nenhum banco foi alterado.
+- Reauditorias independentes aprovaram o hardening de marketing e a estrutura estática da FK composta; não houve execução de DDL em PostgreSQL real. A criação do índice pode exigir scan/lock ao aplicar a migration.
+- PR [#399](https://github.com/rrodrigogon-byte/agro-open/pull/399) está em rascunho. A base avançou após sua abertura; atualizar a branch por rebase/`--force-with-lease` e revalidar. Não fazer merge, deploy, alterar Render/WhatsApp nem aplicar migration sem autorização posterior. A produção continua com a entrega anterior do PR #385.

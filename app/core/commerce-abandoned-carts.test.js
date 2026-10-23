@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { db } from './database.js';
-import { markCartConverted, normalizeCartPhone, recordCartRecoveryOptOut, syncPublicCart } from './commerce-abandoned-carts.js';
+import { markCartConverted, markCartRecoveryTaskBlocked, normalizeCartPhone, processCartRecoveryTask, recordCartRecoveryOptOut, syncPublicCart } from './commerce-abandoned-carts.js';
 
 const CONTEXT = {
   empresaId: '11111111-1111-4111-8111-111111111111',
@@ -12,12 +12,40 @@ const CART = '44444444-4444-4444-8444-444444444444';
 const VARIANT = '55555555-5555-4555-8555-555555555555';
 const ORDER = '66666666-6666-4666-8666-666666666666';
 const CUSTOMER = '77777777-7777-4777-8777-777777777777';
+const CHANNEL = '88888888-8888-4888-8888-888888888888';
+const TASK = '99999999-9999-4999-8999-999999999999';
+const LEASE = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const SESSION = 'session_key_1234567890_abcdefghij';
 
 test('normaliza WhatsApp brasileiro e rejeita contato incompleto', () => {
   assert.equal(normalizeCartPhone('(65) 99999-0000'), '5565999990000');
   assert.equal(normalizeCartPhone('+55 65 99999-0000'), '5565999990000');
   assert.equal(normalizeCartPhone('999'), '');
+});
+
+test('skip do gate terminaliza carrinho na loja: falha de telefone ou revogação explícita', async () => {
+  const original = db.transaction;
+  const task = { id: TASK, empresa_id: CONTEXT.empresaId, loja_id: CONTEXT.lojaId, canal_id: CHANNEL, tipo: 'recuperar_carrinho', referencia_externa: CART };
+  const cases = [
+    { reason: 'telefone_nao_verificado', status: 'failed', event: 'failed' },
+    { reason: 'cliente_pediu_sair', status: 'revoked', event: 'revoked' },
+  ];
+  try {
+    for (const scenario of cases) {
+      const calls = [];
+      db.transaction = async callback => callback({ query: async (sql, params) => {
+        calls.push({ sql, params });
+        return sql.includes('UPDATE commerce_carts c') ? { rows: [{ customer_id: CUSTOMER }], rowCount: 1 } : { rows: [], rowCount: 1 };
+      } });
+      assert.deepEqual(await markCartRecoveryTaskBlocked(task, scenario.reason), { terminalized: true, status: scenario.status });
+      const update = calls.find(call => call.sql.includes('UPDATE commerce_carts c'));
+      const event = calls.find(call => call.sql.includes('INSERT INTO commerce_cart_recovery_events'));
+      assert.match(update.sql, /s\.empresa_id = \$1 AND s\.loja_id = \$3/);
+      assert.match(update.sql, /t\.id = \$5 AND t\.empresa_id = \$1 AND t\.loja_id = \$3 AND t\.canal_id = \$6/);
+      assert.deepEqual(update.params.slice(0, 4), [CONTEXT.empresaId, CART, CONTEXT.lojaId, scenario.status]);
+      assert.equal(event.params[4], scenario.event);
+    }
+  } finally { db.transaction = original; }
 });
 
 test('consentimento exige checkbox, texto e origem antes de abrir transação', async () => {
@@ -30,6 +58,59 @@ test('consentimento exige checkbox, texto e origem antes de abrir transação', 
       error => error.code === 'CONSENT_EVIDENCE_REQUIRED',
     );
     assert.equal(called, false);
+  } finally { db.transaction = original; }
+});
+
+test('recuperação de carrinho descarta tarefa sem storefront ou canal ativo da unidade indicada', async () => {
+  const originalTransaction = db.transaction;
+  const originalQuery = db.query;
+  const cases = [
+    { store: 'aaaaaaaa-1111-4111-8111-111111111111', reason: 'cart_not_found', expectedQueries: 1 },
+    { store: CONTEXT.lojaId, reason: 'cart_store_or_channel_mismatch', expectedQueries: 3 },
+  ];
+  try {
+    for (const scenario of cases) {
+      const calls = [];
+      db.transaction = async callback => callback({ async query(sql, params) {
+        calls.push({ sql, params });
+        if (calls.length === 1) return { rows: scenario.expectedQueries === 1 ? [] : [{ id: CART, storefront_id: CONTEXT.storefrontId, customer_id: CUSTOMER, status: 'abandoned', recovery_status: 'queued' }] };
+        return { rows: [] };
+      } });
+      let providerCalled = false;
+      db.query = async () => { providerCalled = true; return { rows: [] }; };
+      const result = await processCartRecoveryTask({
+        id: TASK, empresa_id: CONTEXT.empresaId, loja_id: scenario.store, canal_id: CHANNEL,
+        lease_token: LEASE, referencia_externa: CART,
+      });
+      assert.deepEqual(result, { skipped: true, reason: scenario.reason });
+      assert.equal(calls.length, scenario.expectedQueries);
+      assert.equal(providerCalled, false);
+      if (scenario.expectedQueries === 1) assert.match(calls[0].sql, /s\.loja_id=\$3/);
+      else {
+        assert.match(calls[1].sql, /JOIN canais_integracao ci/);
+        assert.match(calls[1].sql, /ci\.loja_id=\$4/);
+        assert.equal(calls[1].params[3], CONTEXT.lojaId);
+        assert.match(calls[2].sql, /UPDATE commerce_carts SET recovery_status = 'failed'/);
+        assert.deepEqual(calls[2].params, [CONTEXT.empresaId, CART, CONTEXT.storefrontId]);
+      }
+    }
+  } finally { db.transaction = originalTransaction; db.query = originalQuery; }
+});
+
+test('replay com delivery_started_at reconhece carrinho já enviado sem reenvio', async () => {
+  const original = db.transaction;
+  let calls = 0;
+  db.transaction = async callback => callback({ query: async () => {
+    calls += 1;
+    return { rows: [{ id: CART, storefront_id: CONTEXT.storefrontId, customer_id: CUSTOMER, recovery_status: 'sent', recovery_reminded_at: new Date().toISOString(), recovery_provider_id: 'provider-1' }] };
+  } });
+  try {
+    const result = await processCartRecoveryTask({
+      id: TASK, empresa_id: CONTEXT.empresaId, loja_id: CONTEXT.lojaId, canal_id: CHANNEL,
+      lease_token: LEASE, referencia_externa: CART, delivery_started_at: new Date().toISOString(),
+    });
+    assert.deepEqual(result, { sent: true, idempotent: true, providerMessageId: 'provider-1', cartId: CART });
+    assert.equal(calls, 1);
   } finally { db.transaction = original; }
 });
 

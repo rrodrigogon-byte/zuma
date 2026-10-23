@@ -3,9 +3,11 @@ import test from 'node:test';
 import { db } from './database.js';
 import {
   campaignOptOutRequested,
+  cancelCampaign,
   confirmCampaign,
   createCampaign,
   listCampaignAudience,
+  markCampaignDeliveryBlocked,
   normalizeCampaignCriteria,
   normalizeCampaignPhone,
   processCampaignDeliveryTask,
@@ -63,6 +65,48 @@ test('cria campanha somente como rascunho e audita sem enfileirar envio', async 
   } finally { db.transaction = original; }
 });
 
+test('cancelamento limita campanha, destinatários e tarefas à empresa+unidade ativas', async () => {
+  const original = db.transaction;
+  const calls = [];
+  db.transaction = async callback => callback({ async query(sql, params) {
+    calls.push({ sql, params });
+    if (sql.includes('SELECT * FROM campanhas_crm')) return { rows: [{ id: CAMPAIGN, empresa_id: CONTEXT.empresaId, loja_id: CONTEXT.lojaId, status: 'enviando' }] };
+    return { rows: [], rowCount: 1 };
+  } });
+  try {
+    assert.deepEqual(await cancelCampaign(CONTEXT, CAMPAIGN), { id: CAMPAIGN, status: 'cancelada' });
+    const campaignUpdate = calls.find(call => call.sql.includes('UPDATE campanhas_crm'));
+    const deliveryUpdate = calls.find(call => call.sql.includes('UPDATE envios_campanha'));
+    const taskUpdate = calls.find(call => call.sql.includes('UPDATE tarefas_integracao_canais'));
+    assert.match(campaignUpdate.sql, /id = \$1 AND empresa_id = \$2 AND loja_id = \$3/);
+    assert.deepEqual(campaignUpdate.params, [CAMPAIGN, CONTEXT.empresaId, CONTEXT.lojaId]);
+    assert.match(deliveryUpdate.sql, /campanha_id = \$1 AND empresa_id = \$2 AND loja_id = \$3/);
+    assert.deepEqual(deliveryUpdate.params, [CAMPAIGN, CONTEXT.empresaId, CONTEXT.lojaId]);
+    assert.match(taskUpdate.sql, /empresa_id = \$1 AND loja_id = \$2/);
+    assert.deepEqual(taskUpdate.params, [CONTEXT.empresaId, CONTEXT.lojaId, `${CAMPAIGN}:%`]);
+  } finally { db.transaction = original; }
+});
+
+test('gate bloqueado terminaliza entrega CRM scoped e recalcula contadores', async () => {
+  const original = db.query;
+  const calls = [];
+  db.query = async (sql, params) => {
+    calls.push({ sql, params });
+    if (sql.includes('UPDATE envios_campanha ec')) return { rows: [{ campanha_id: CAMPAIGN }], rowCount: 1 };
+    if (sql.includes('WITH metrics AS')) return { rows: [{ id: CAMPAIGN }], rowCount: 1 };
+    return { rows: [], rowCount: 1 };
+  };
+  const task = { id: '99999999-9999-4999-8999-999999999999', empresa_id: CONTEXT.empresaId, loja_id: CONTEXT.lojaId, canal_id: CHANNEL, tipo: 'enviar_campanha', payload: { campaignDeliveryId: DELIVERY } };
+  try {
+    assert.deepEqual(await markCampaignDeliveryBlocked(task, 'cliente_pediu_sair'), { terminalized: true });
+    const update = calls.find(call => call.sql.includes('UPDATE envios_campanha ec'));
+    assert.match(update.sql, /ec\.empresa_id = \$2 AND ec\.loja_id = \$3 AND ec\.canal_id = \$4/);
+    assert.match(update.sql, /t\.id = \$6 AND t\.empresa_id = \$2 AND t\.loja_id = \$3 AND t\.canal_id = \$4/);
+    assert.deepEqual(update.params.slice(0, 4), [DELIVERY, CONTEXT.empresaId, CONTEXT.lojaId, CHANNEL]);
+    assert.equal(calls.some(call => call.sql.includes('WITH metrics AS')), true);
+  } finally { db.query = original; }
+});
+
 test('lista audiência somente no tenant e aplica busca parametrizada', async () => {
   const original = db.query;
   let captured;
@@ -116,7 +160,7 @@ test('worker revalida consentimento e bloqueia destinatário antes de chamar Evo
     if (sql.includes('FROM envios_campanha ec')) return { rows: [{
       id: DELIVERY, campanha_id: CAMPAIGN, empresa_id: CONTEXT.empresaId, loja_id: CONTEXT.lojaId,
       canal_id: CHANNEL, cliente_id: CUSTOMER, status: 'pendente', telefone: '(65) 99999-0000',
-      mensagem: 'Olá, {{nome}}', cliente_nome: 'Ana Silva', campanha_status: 'enviando', configuracao: { instance: 'dino' },
+      mensagem: 'Olá, {{nome}}', cliente_nome: 'Ana Silva', campanha_status: 'enviando', canal_status: 'ativo', configuracao: { instance: 'dino' },
     }] };
     if (sql.includes('FROM consentimentos_cliente')) return { rows: [{ concedido: false }] };
     if (sql.includes("SET status = 'bloqueado'")) return { rows: [], rowCount: 1 };
@@ -124,9 +168,78 @@ test('worker revalida consentimento e bloqueia destinatário antes de chamar Evo
     throw new Error(`SQL inesperado: ${sql}`);
   };
   try {
-    const result = await processCampaignDeliveryTask({ empresa_id: CONTEXT.empresaId, loja_id: CONTEXT.lojaId, payload: { campaignDeliveryId: DELIVERY } });
+    const result = await processCampaignDeliveryTask({ empresa_id: CONTEXT.empresaId, loja_id: CONTEXT.lojaId, canal_id: CHANNEL, payload: { campaignDeliveryId: DELIVERY } });
     assert.deepEqual(result, { blocked: true });
+    assert.match(calls[0].sql, /c\.loja_id = ec\.loja_id/);
+    assert.match(calls[0].sql, /ci\.loja_id = ec\.loja_id/);
+    assert.match(calls[0].sql, /ec\.canal_id = \$4 AND ci\.id = \$4/);
+    assert.deepEqual(calls[0].params, [DELIVERY, CONTEXT.empresaId, CONTEXT.lojaId, CHANNEL]);
     assert.equal(calls.some(call => call.sql.includes("status = 'processando'")), false);
+  } finally { db.query = original; }
+});
+
+test('exception do provedor só libera retry quando marcada retryable; caso ambíguo fica incerto', async () => {
+  const originalQuery = db.query;
+  const originalTransaction = db.transaction;
+  const task = {
+    id: '99999999-9999-4999-8999-999999999999', empresa_id: CONTEXT.empresaId, loja_id: CONTEXT.lojaId,
+    canal_id: CHANNEL, lease_token: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    payload: { campaignDeliveryId: DELIVERY },
+  };
+  const run = async (providerError, expectedStatus, shouldClearClaim) => {
+    const calls = [];
+    db.query = async (sql, params) => {
+      calls.push({ sql, params });
+      if (sql.includes('FROM envios_campanha ec')) return { rows: [{
+        id: DELIVERY, campanha_id: CAMPAIGN, empresa_id: CONTEXT.empresaId, loja_id: CONTEXT.lojaId,
+        canal_id: CHANNEL, cliente_id: CUSTOMER, status: 'pendente', telefone: '5565999990000',
+        mensagem: 'Olá', cliente_nome: 'Ana', campanha_status: 'enviando', canal_status: 'ativo',
+      }] };
+      if (sql.includes('FROM consentimentos_cliente')) return { rows: [{ concedido: true }] };
+      if (sql.includes('WITH metrics AS')) return { rows: [{ id: CAMPAIGN }] };
+      throw new Error(`SQL inesperado: ${sql}`);
+    };
+    db.transaction = async callback => callback({ query: async (sql, params) => {
+      calls.push({ sql, params });
+      if (sql.includes('delivery_started_at = CURRENT_TIMESTAMP')) return { rowCount: 1 };
+      if (sql.includes("SET status = 'processando'")) return { rowCount: 1 };
+      if (sql.includes('SET status = $5, erro = $6')) return { rowCount: 1 };
+      if (sql.includes('SET delivery_started_at = NULL')) return { rowCount: 1 };
+      throw new Error(`SQL transacional inesperado: ${sql}`);
+    } });
+    await assert.rejects(
+      processCampaignDeliveryTask(task, { sendMessage: async () => { throw providerError; } }),
+      error => error.code === (shouldClearClaim ? 'CAMPAIGN_SEND_FAILED' : 'CAMPAIGN_DELIVERY_UNKNOWN')
+        && error.retryable === shouldClearClaim,
+    );
+    const state = calls.find(call => call.sql.includes('SET status = $5, erro = $6'));
+    assert.equal(state.params[4], expectedStatus);
+    const clear = calls.find(call => call.sql.includes('SET delivery_started_at = NULL'));
+    assert.equal(Boolean(clear), shouldClearClaim);
+    if (clear) assert.deepEqual(clear.params, [task.id, CONTEXT.empresaId, CONTEXT.lojaId, CHANNEL, task.lease_token]);
+  };
+  try {
+    await run(Object.assign(new Error('timeout'), { uncertain: true }), 'incerto', false);
+    await run(Object.assign(new Error('rate limit'), { retryable: true, uncertain: false }), 'falha', true);
+  } finally { db.query = originalQuery; db.transaction = originalTransaction; }
+});
+
+test('replay de campanha já enviado conclui idempotente mesmo com canal agora inativo', async () => {
+  const original = db.query;
+  const calls = [];
+  db.query = async (sql, params) => {
+    calls.push({ sql, params });
+    return { rows: [{ id: DELIVERY, campanha_id: CAMPAIGN, status: 'enviado', canal_status: 'inativo' }] };
+  };
+  try {
+    const result = await processCampaignDeliveryTask({
+      id: '99999999-9999-4999-8999-999999999999', empresa_id: CONTEXT.empresaId, loja_id: CONTEXT.lojaId,
+      canal_id: CHANNEL, delivery_started_at: new Date().toISOString(),
+      payload: { campaignDeliveryId: DELIVERY },
+    });
+    assert.deepEqual(result, { idempotent: true, status: 'enviado' });
+    assert.equal(calls.length, 1);
+    assert.doesNotMatch(calls[0].sql, /ci\.status = 'ativo'/);
   } finally { db.query = original; }
 });
 

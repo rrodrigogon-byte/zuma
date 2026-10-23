@@ -1169,6 +1169,10 @@ export function alterarStatusAssinatura(empresaId, assinaturaId, status, dados =
 }
 
 function produtoRevendaNormalizado(dados = {}, anterior = {}) {
+  const stockProvided = [dados.estoqueAtual, dados.estoque_atual].some((value) => value !== undefined && value !== null && value !== '');
+  const estoqueInformado = typeof anterior.estoqueInformado === 'boolean'
+    ? anterior.estoqueInformado
+    : stockProvided || (anterior.estoqueAtual !== undefined && anterior.estoqueAtual !== null);
   return {
     lojaId: texto(dados.lojaId ?? dados.loja_id ?? anterior.lojaId, 120),
     nome: texto(dados.nome ?? anterior.nome, 140),
@@ -1180,6 +1184,7 @@ function produtoRevendaNormalizado(dados = {}, anterior = {}) {
     unidade: texto(dados.unidade ?? anterior.unidade, 20) || 'un',
     precoVenda: dinheiro(dados.precoVenda ?? dados.preco_venda ?? anterior.precoVenda),
     custoUnitario: dinheiro(dados.custoUnitario ?? dados.custo_unitario ?? anterior.custoUnitario),
+    estoqueInformado,
     estoqueAtual: Math.max(0, Math.round(numero(dados.estoqueAtual ?? dados.estoque_atual ?? anterior.estoqueAtual, 0))),
     estoqueMinimo: Math.max(0, Math.round(numero(dados.estoqueMinimo ?? dados.estoque_minimo ?? anterior.estoqueMinimo, 0))),
     intervaloRecompraDias: Math.max(0, Math.min(3650, Math.round(numero(dados.intervaloRecompraDias ?? dados.intervalo_recompra_dias ?? anterior.intervaloRecompraDias, 30)))),
@@ -1194,11 +1199,13 @@ function statusEstoque(item) {
 }
 
 export function listarProdutosRevenda(empresaId, { incluirInativos = false, lojaId = '', incluirSemLoja = false } = {}) {
-  return Object.values(estadoEmpresa(empresaId, false).produtosRevenda)
+  const estado = estadoEmpresa(empresaId, false);
+  const knownStockProductIds = new Set(Object.values(estado.movimentosEstoque || {}).map((movement) => String(movement.produtoId || '')));
+  return Object.values(estado.produtosRevenda)
     .filter((item) => incluirInativos || item.ativo !== false)
     .filter((item) => !lojaId || item.lojaId === String(lojaId) || (incluirSemLoja && !item.lojaId))
     .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
-    .map((item) => ({ ...item, statusEstoque: statusEstoque(item) }));
+    .map((item) => ({ ...item, estoqueInformado: typeof item.estoqueInformado === 'boolean' ? item.estoqueInformado : knownStockProductIds.has(String(item.id)), statusEstoque: statusEstoque(item) }));
 }
 
 export function criarProdutoRevenda(empresaId, dados = {}) {
@@ -1251,6 +1258,7 @@ export function ajustarEstoqueRevenda(empresaId, produtoId, dados = {}) {
   const movimentoId = novoId('mov', estado.movimentosEstoque);
   estado.movimentosEstoque[movimentoId] = { id: movimentoId, empresaId: String(empresaId), lojaId: produto.lojaId || lojaId || null, produtoId: produto.id, tipo, quantidade, estoqueAnterior: anterior, estoquePosterior: posterior, observacao: texto(dados.observacao ?? dados.motivo, 300), criadoEm: agora };
   produto.estoqueAtual = posterior;
+  produto.estoqueInformado = true;
   produto.atualizadoEm = agora;
   produto.ultimoMovimentoEm = agora;
   save();
@@ -1307,6 +1315,7 @@ export function entradaEstoqueRevenda(empresaId, produtoId, dados = {}) {
     criadoEm: agora,
   };
   produto.estoqueAtual = posterior;
+  produto.estoqueInformado = true;
   if (dados.fornecedorId) produto.fornecedorPadraoId = texto(dados.fornecedorId, 120);
   produto.atualizadoEm = agora;
   produto.ultimoMovimentoEm = agora;

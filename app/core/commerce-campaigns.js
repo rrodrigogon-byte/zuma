@@ -250,8 +250,8 @@ export async function confirmCampaign(context, campaignId, payload = {}) {
           SET canal_id = $2, status = $3, qtd_elegiveis = $4, qtd_bloqueados = $5,
               preview_hash = $6, confirmado_por = $7, confirmado_em = CURRENT_TIMESTAMP,
               atualizado_em = CURRENT_TIMESTAMP
-        WHERE id = $1`,
-      [campaign.id, channel.id, status, audience.eligible.length, preview.summary.blocked, preview.previewHash, context.usuarioId || null],
+        WHERE id = $1 AND empresa_id = $8 AND loja_id = $9`,
+      [campaign.id, channel.id, status, audience.eligible.length, preview.summary.blocked, preview.previewHash, context.usuarioId || null, context.empresaId, context.lojaId],
     );
     await auditCampaign(query, context, campaign.id, 'campaign.confirmed', { previewHash: preview.previewHash, queued, ...preview.summary });
     return { campaignId: campaign.id, status, queued, previewHash: preview.previewHash, summary: preview.summary, replayed: false };
@@ -263,9 +263,9 @@ export async function cancelCampaign(context, campaignId) {
     const query = trx.query.bind(trx);
     const campaign = await loadCampaign(query, context, campaignId, { lock: true });
     if (['enviada', 'parcial', 'cancelada'].includes(campaign.status)) fail('campanha concluída ou já cancelada', 'CONFLICT');
-    await query(`UPDATE campanhas_crm SET status = 'cancelada', cancelado_em = CURRENT_TIMESTAMP, atualizado_em = CURRENT_TIMESTAMP WHERE id = $1`, [campaign.id]);
-    await query(`UPDATE envios_campanha SET status = 'cancelado', atualizado_em = CURRENT_TIMESTAMP WHERE campanha_id = $1 AND status IN ('pendente','falha')`, [campaign.id]);
-    await query(`UPDATE tarefas_integracao_canais SET status = 'cancelada', data_atualizacao = CURRENT_TIMESTAMP WHERE tipo = 'enviar_campanha' AND referencia_externa LIKE $1 AND status IN ('pendente','falha')`, [`${campaign.id}:%`]);
+    await query(`UPDATE campanhas_crm SET status = 'cancelada', cancelado_em = CURRENT_TIMESTAMP, atualizado_em = CURRENT_TIMESTAMP WHERE id = $1 AND empresa_id = $2 AND loja_id = $3`, [campaign.id, context.empresaId, context.lojaId]);
+    await query(`UPDATE envios_campanha SET status = 'cancelado', atualizado_em = CURRENT_TIMESTAMP WHERE campanha_id = $1 AND empresa_id = $2 AND loja_id = $3 AND status IN ('pendente','falha')`, [campaign.id, context.empresaId, context.lojaId]);
+    await query(`UPDATE tarefas_integracao_canais SET status = 'cancelada', data_atualizacao = CURRENT_TIMESTAMP WHERE empresa_id = $1 AND loja_id = $2 AND tipo = 'enviar_campanha' AND referencia_externa LIKE $3 AND status IN ('pendente','falha')`, [context.empresaId, context.lojaId, `${campaign.id}:%`]);
     await auditCampaign(query, context, campaign.id, 'campaign.cancelled');
     return { id: campaign.id, status: 'cancelada' };
   });
@@ -282,30 +282,40 @@ function campaignDeliveryError(message, code, retryable = false) {
   return error;
 }
 
-export async function processCampaignDeliveryTask(task) {
+export async function processCampaignDeliveryTask(task, { sendMessage = enviarMensagem } = {}) {
   const deliveryId = uuid(task?.payload?.campaignDeliveryId, 'campaignDeliveryId');
+  const empresaId = uuid(task?.empresa_id, 'empresaId');
+  const lojaId = uuid(task?.loja_id, 'lojaId');
+  const canalId = uuid(task?.canal_id, 'canalId');
   const result = await db.query(
     `SELECT ec.*, c.nome AS campanha_nome, c.mensagem, c.status AS campanha_status,
-            cl.nome AS cliente_nome, cl.telefone, ci.configuracao, ci.api_base_url
+            cl.nome AS cliente_nome, cl.telefone, ci.configuracao, ci.api_base_url, ci.status AS canal_status
        FROM envios_campanha ec
-       JOIN campanhas_crm c ON c.id = ec.campanha_id AND c.empresa_id = ec.empresa_id
+       JOIN campanhas_crm c ON c.id = ec.campanha_id AND c.empresa_id = ec.empresa_id AND c.loja_id = ec.loja_id AND c.canal_id = ec.canal_id
        JOIN clientes cl ON cl.id = ec.cliente_id AND cl.empresa_id = ec.empresa_id
-       JOIN canais_integracao ci ON ci.id = ec.canal_id AND ci.empresa_id = ec.empresa_id
-      WHERE ec.id = $1 AND ec.empresa_id = $2 AND ec.loja_id = $3 AND ci.status = 'ativo'
+       JOIN canais_integracao ci ON ci.id = ec.canal_id AND ci.empresa_id = ec.empresa_id AND ci.loja_id = ec.loja_id
+      WHERE ec.id = $1 AND ec.empresa_id = $2 AND ec.loja_id = $3 AND ec.canal_id = $4 AND ci.id = $4
       LIMIT 1`,
-    [deliveryId, task.empresa_id, task.loja_id],
+    [deliveryId, empresaId, lojaId, canalId],
   );
   const delivery = result.rows[0];
   if (!delivery) fail('destinatário de campanha não encontrado', 'NOT_FOUND');
   if (['enviado','entregue','lido','respondido','convertido'].includes(delivery.status)) return { idempotent: true, status: delivery.status };
+  if (delivery.status === 'bloqueado') return { blocked: true, reason: 'already_blocked' };
+  if (delivery.status === 'cancelado') return { cancelled: true };
   if (delivery.status === 'incerto' || (delivery.status === 'processando' && task.delivery_started_at)) {
-    await db.query(`UPDATE envios_campanha SET status = 'incerto', erro = 'resultado de envio incerto; revisão humana obrigatória', atualizado_em = CURRENT_TIMESTAMP WHERE id = $1`, [delivery.id]);
+    await db.query(`UPDATE envios_campanha SET status = 'incerto', erro = 'resultado de envio incerto; revisão humana obrigatória', atualizado_em = CURRENT_TIMESTAMP WHERE id = $1 AND empresa_id = $2 AND loja_id = $3 AND canal_id = $4`, [delivery.id, empresaId, lojaId, canalId]);
     await refreshCampaignMetrics(delivery.campanha_id);
     throw campaignDeliveryError('resultado anterior de campanha incerto', 'CAMPAIGN_DELIVERY_UNKNOWN', false);
   }
   if (delivery.campanha_status === 'cancelada') {
-    await db.query(`UPDATE envios_campanha SET status = 'cancelado', atualizado_em = CURRENT_TIMESTAMP WHERE id = $1`, [delivery.id]);
+    await db.query(`UPDATE envios_campanha SET status = 'cancelado', atualizado_em = CURRENT_TIMESTAMP WHERE id = $1 AND empresa_id = $2 AND loja_id = $3 AND canal_id = $4`, [delivery.id, empresaId, lojaId, canalId]);
     return { cancelled: true };
+  }
+  if (delivery.canal_status !== 'ativo') {
+    await db.query(`UPDATE envios_campanha SET status = 'bloqueado', erro = 'canal WhatsApp inativo', atualizado_em = CURRENT_TIMESTAMP WHERE id = $1 AND empresa_id = $2 AND loja_id = $3 AND canal_id = $4`, [delivery.id, empresaId, lojaId, canalId]);
+    await refreshCampaignMetrics(delivery.campanha_id);
+    return { blocked: true, reason: 'channel_inactive' };
   }
   const consent = await db.query(
     `SELECT concedido FROM consentimentos_cliente
@@ -313,39 +323,61 @@ export async function processCampaignDeliveryTask(task) {
     [delivery.empresa_id, delivery.cliente_id],
   );
   if (!consent.rows[0]?.concedido || !normalizeCampaignPhone(delivery.telefone)) {
-    await db.query(`UPDATE envios_campanha SET status = 'bloqueado', erro = 'consentimento ou telefone indisponível', atualizado_em = CURRENT_TIMESTAMP WHERE id = $1`, [delivery.id]);
+    await db.query(`UPDATE envios_campanha SET status = 'bloqueado', erro = 'consentimento ou telefone indisponível', atualizado_em = CURRENT_TIMESTAMP WHERE id = $1 AND empresa_id = $2 AND loja_id = $3 AND canal_id = $4`, [delivery.id, empresaId, lojaId, canalId]);
     await refreshCampaignMetrics(delivery.campanha_id);
     return { blocked: true };
   }
   // Só um processo envia: a tarefa precisa ainda ser deste worker (lease) e o destinatário
   // não pode ter sido pego por outro. Sem isso, dois workers com lease vencido enviavam duas vezes.
   await db.transaction(async trx => {
-    const owned = await trx.query(`UPDATE tarefas_integracao_canais SET delivery_started_at = CURRENT_TIMESTAMP WHERE id = $1 AND status = 'processando' AND lease_token = $2::uuid AND delivery_started_at IS NULL`, [task.id, task.lease_token]);
+    const owned = await trx.query(`UPDATE tarefas_integracao_canais SET delivery_started_at = CURRENT_TIMESTAMP WHERE id = $1 AND empresa_id = $2 AND loja_id = $3 AND canal_id = $4 AND status = 'processando' AND lease_token = $5::uuid AND delivery_started_at IS NULL`, [task.id, empresaId, lojaId, canalId, task.lease_token]);
     if (!owned.rowCount) throw campaignDeliveryError('tarefa de campanha já está com outro processo', 'TASK_LEASE_LOST', false);
-    const claimed = await trx.query(`UPDATE envios_campanha SET status = 'processando', tentativas = tentativas + 1, erro = NULL, atualizado_em = CURRENT_TIMESTAMP WHERE id = $1 AND status NOT IN ('processando','enviado','entregue','lido','respondido','convertido','incerto','cancelado','bloqueado')`, [delivery.id]);
+    const claimed = await trx.query(`UPDATE envios_campanha SET status = 'processando', tentativas = tentativas + 1, erro = NULL, atualizado_em = CURRENT_TIMESTAMP WHERE id = $1 AND empresa_id = $2 AND loja_id = $3 AND canal_id = $4 AND status NOT IN ('processando','enviado','entregue','lido','respondido','convertido','incerto','cancelado','bloqueado')`, [delivery.id, empresaId, lojaId, canalId]);
     if (!claimed.rowCount) throw campaignDeliveryError('destinatário de campanha já em envio', 'CAMPAIGN_DELIVERY_UNKNOWN', false);
   });
   let response;
   try {
-    response = await enviarMensagem({
+    response = await sendMessage({
       whatsapp_api_url: process.env.EVOLUTION_API_URL || delivery.api_base_url,
       whatsapp_api_key: process.env.EVOLUTION_API_KEY,
       whatsapp_instance: delivery.configuracao?.instance || process.env.EVOLUTION_INSTANCE,
       empresa_id: delivery.empresa_id, loja_id: delivery.loja_id, canal_id: delivery.canal_id,
     }, delivery.telefone, renderMessage(delivery.mensagem, delivery.cliente_nome));
   } catch (error) {
-    await db.query(`UPDATE envios_campanha SET status = 'falha', erro = $2, atualizado_em = CURRENT_TIMESTAMP WHERE id = $1`, [delivery.id, clean(error?.message || 'falha Evolution', 1000)]);
+    const retryable = error?.retryable === true && error?.uncertain !== true;
+    const status = retryable ? 'falha' : 'incerto';
+    await db.transaction(async trx => {
+      await trx.query(
+        `UPDATE envios_campanha SET status = $5, erro = $6, atualizado_em = CURRENT_TIMESTAMP
+          WHERE id = $1 AND empresa_id = $2 AND loja_id = $3 AND canal_id = $4`,
+        [delivery.id, empresaId, lojaId, canalId, status, retryable ? clean(error?.message || 'falha Evolution', 1000) : 'resultado de envio incerto; revisão humana obrigatória'],
+      );
+      if (retryable) await trx.query(
+        `UPDATE tarefas_integracao_canais SET delivery_started_at = NULL
+          WHERE id = $1 AND empresa_id = $2 AND loja_id = $3 AND canal_id = $4 AND lease_token = $5::uuid`,
+        [task.id, empresaId, lojaId, canalId, task.lease_token],
+      );
+    });
     await refreshCampaignMetrics(delivery.campanha_id);
-    throw new Error('falha ao enviar destinatário da campanha');
+    throw campaignDeliveryError(
+      retryable ? 'falha retryable ao enviar destinatário da campanha' : 'resultado de envio incerto; revisão humana obrigatória',
+      retryable ? 'CAMPAIGN_SEND_FAILED' : 'CAMPAIGN_DELIVERY_UNKNOWN',
+      retryable,
+    );
   }
   if (!response?.ok) {
     const unknown = response?.uncertain === true;
     await db.transaction(async trx => {
       await trx.query(
-        `UPDATE envios_campanha SET status = $2, erro = $3, atualizado_em = CURRENT_TIMESTAMP WHERE id = $1`,
-        [delivery.id, unknown ? 'incerto' : 'falha', unknown ? 'resultado de envio incerto; revisão humana obrigatória' : clean(response?.data?.message || response?.error || 'falha Evolution', 1000)],
+        `UPDATE envios_campanha SET status = $5, erro = $6, atualizado_em = CURRENT_TIMESTAMP
+          WHERE id = $1 AND empresa_id = $2 AND loja_id = $3 AND canal_id = $4`,
+        [delivery.id, empresaId, lojaId, canalId, unknown ? 'incerto' : 'falha', unknown ? 'resultado de envio incerto; revisão humana obrigatória' : clean(response?.data?.message || response?.error || 'falha Evolution', 1000)],
       );
-      if (!unknown) await trx.query(`UPDATE tarefas_integracao_canais SET delivery_started_at = NULL WHERE id = $1`, [task.id]);
+      if (!unknown) await trx.query(
+        `UPDATE tarefas_integracao_canais SET delivery_started_at = NULL
+          WHERE id = $1 AND empresa_id = $2 AND loja_id = $3 AND canal_id = $4 AND lease_token = $5::uuid`,
+        [task.id, empresaId, lojaId, canalId, task.lease_token],
+      );
     });
     await refreshCampaignMetrics(delivery.campanha_id);
     throw campaignDeliveryError(unknown ? 'resultado de campanha incerto' : 'falha ao enviar destinatário da campanha', unknown ? 'CAMPAIGN_DELIVERY_UNKNOWN' : 'CAMPAIGN_SEND_FAILED', !unknown && response?.retryable === true);
@@ -353,9 +385,9 @@ export async function processCampaignDeliveryTask(task) {
   const providerId = externalMessageId(response.data);
   await db.transaction(async trx => {
     await trx.query(
-      `UPDATE envios_campanha SET status = 'enviado', evento_externo_id = NULLIF($2, ''), enviado_em = CURRENT_TIMESTAMP,
-              erro = NULL, atualizado_em = CURRENT_TIMESTAMP WHERE id = $1`,
-      [delivery.id, providerId],
+        `UPDATE envios_campanha SET status = 'enviado', evento_externo_id = NULLIF($5, ''), enviado_em = CURRENT_TIMESTAMP,
+              erro = NULL, atualizado_em = CURRENT_TIMESTAMP WHERE id = $1 AND empresa_id = $2 AND loja_id = $3 AND canal_id = $4`,
+      [delivery.id, empresaId, lojaId, canalId, providerId],
     );
     await trx.query(`UPDATE tarefas_integracao_canais SET provider_message_id = $2 WHERE id = $1`, [task.id, providerId || null]);
   });
@@ -392,6 +424,32 @@ export async function refreshCampaignMetrics(campaignId) {
     [uuid(campaignId, 'campanhaId')],
   );
   return result.rows[0] || null;
+}
+
+export async function markCampaignDeliveryBlocked(task = {}, reason = 'marketing_gate_skip') {
+  const deliveryId = uuid(task?.payload?.campaignDeliveryId, 'campaignDeliveryId');
+  const empresaId = uuid(task?.empresa_id, 'empresaId');
+  const lojaId = uuid(task?.loja_id, 'lojaId');
+  const canalId = uuid(task?.canal_id, 'canalId');
+  const taskId = uuid(task?.id, 'taskId');
+  if (task.delivery_started_at) throw campaignDeliveryError('envio já iniciado; exige reconciliação, não bloqueio', 'CAMPAIGN_DELIVERY_UNKNOWN', false);
+  const result = await db.query(
+    `UPDATE envios_campanha ec
+        SET status = 'bloqueado', erro = $5, atualizado_em = CURRENT_TIMESTAMP
+       FROM campanhas_crm c
+      WHERE ec.id = $1 AND ec.empresa_id = $2 AND ec.loja_id = $3 AND ec.canal_id = $4
+        AND c.id = ec.campanha_id AND c.empresa_id = $2 AND c.loja_id = $3
+        AND EXISTS (
+          SELECT 1 FROM tarefas_integracao_canais t
+           WHERE t.id = $6 AND t.empresa_id = $2 AND t.loja_id = $3 AND t.canal_id = $4
+             AND t.tipo = 'enviar_campanha' AND t.payload->>'campaignDeliveryId' = ec.id::text
+        )
+        AND ec.status IN ('pendente','falha','processando')
+      RETURNING ec.campanha_id`,
+    [deliveryId, empresaId, lojaId, canalId, clean(`bloqueado pelo gate: ${reason}`, 1000), taskId],
+  );
+  if (result.rows[0]) await refreshCampaignMetrics(result.rows[0].campanha_id);
+  return { terminalized: Boolean(result.rows[0]) };
 }
 
 export async function recordCampaignProviderEvent(channel, payload = {}, parsed = {}) {

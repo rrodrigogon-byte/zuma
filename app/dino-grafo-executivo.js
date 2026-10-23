@@ -1,5 +1,7 @@
+import { buildBusinessNetwork } from './dino-grafo-rede.js';
+
 const DAY_MS = 24 * 60 * 60 * 1000;
-const SOURCE_STATUSES = new Set(['ok', 'limitado', 'indisponivel']);
+const SOURCE_STATUSES = new Set(['ok', 'limitado', 'indisponivel', 'desconhecido']);
 const list = (value) => (Array.isArray(value) ? value : []);
 const num = (value) => (Number.isFinite(Number(value)) ? Number(value) : 0);
 const round = (value) => Math.round(num(value) * 100) / 100;
@@ -8,6 +10,15 @@ const CONFIRMED_ORDER_STATUSES = new Set(['paid', 'processing', 'ready', 'shippe
 function asDate(value) {
   const date = value instanceof Date ? value : new Date(value || '');
   return Number.isNaN(date.valueOf()) ? null : date;
+}
+
+function dateOnly(value) {
+  if (value instanceof Date) return Number.isNaN(value.valueOf()) ? '' : value.toISOString().slice(0, 10);
+  const day = String(value ?? '').trim().slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return '';
+  const [year, month, date] = day.split('-').map(Number);
+  const parsed = new Date(Date.UTC(year, month - 1, date));
+  return parsed.getUTCFullYear() === year && parsed.getUTCMonth() === month - 1 && parsed.getUTCDate() === date ? day : '';
 }
 
 function inWindow(value, from, to) {
@@ -29,7 +40,7 @@ function todayInCuiaba(now) {
 function normalizeSource(source) {
   const input = source && typeof source === 'object' ? source : {};
   const candidate = input.status === 'unavailable' ? 'indisponivel' : input.status;
-  const status = SOURCE_STATUSES.has(candidate) ? candidate : 'indisponivel';
+  const status = SOURCE_STATUSES.has(candidate) ? candidate : 'desconhecido';
   const rawRecords = input.records ?? input.registros;
   const records = rawRecords == null || !Number.isFinite(Number(rawRecords)) ? null : Number(rawRecords);
   return {
@@ -42,15 +53,18 @@ function normalizeSource(source) {
 function qualityView(quality = {}, graph = {}) {
   const sources = quality.sources || quality;
   const graphSources = graph?.qualidade?.fontes || {};
-  const graphStates = Object.values(graphSources).map((source) => source?.status);
-  const inferredGraphStatus = graphStates.length
-    ? (graphStates.some((status) => status === 'indisponivel') ? 'limitado' : graphStates.some((status) => status === 'limitado') ? 'limitado' : 'ok')
-    : 'indisponivel';
+  const graphStates = Object.values(graphSources).map((source) => SOURCE_STATUSES.has(source?.status) ? source.status : 'desconhecido');
+  const inferredGraphStatus = graphStates.length === 0 || graphStates.every((status) => status === 'desconhecido')
+    ? 'desconhecido'
+    : graphStates.every((status) => status === 'indisponivel')
+      ? 'indisponivel'
+      : graphStates.some((status) => status !== 'ok') ? 'limitado' : 'ok';
   const entries = {
     graph: sources.graph || { status: inferredGraphStatus, records: graph?.clientes ?? null },
     offers: sources.offers,
     appointments: sources.appointments || graphSources.appointments,
     finance: sources.finance,
+    receivables: sources.receivables || sources.finance,
     cash: sources.cash,
     orders: sources.orders,
     payments: sources.payments,
@@ -86,21 +100,27 @@ function commerceOrderMetrics(commerce = {}) {
 }
 
 function inventoryMetrics(commerce = {}) {
+  const stockNumber = (value) => {
+    if (value === null || value === undefined || typeof value === 'boolean' || (typeof value === 'string' && !value.trim())) return null;
+    const parsed = Number(value);
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+  };
   const products = list(commerce.inventory).slice(0, 2000).map((item) => ({
     name: String(item.name || item.nome || 'Produto').slice(0, 100),
-    available: Math.max(0, num(item.available ?? item.estoque)),
-    minimum: item.minimum == null && item.minimo == null ? null : Math.max(0, num(item.minimum ?? item.minimo)),
+    available: stockNumber(item.available ?? item.estoque),
+    minimum: stockNumber(item.minimum ?? item.minimo),
     sold: Math.max(0, num(item.sold ?? item.vendido)),
   }));
-  const outOfStock = products.filter((item) => item.available <= 0);
-  const lowStock = products.filter((item) => item.minimum !== null && item.available > 0 && item.available <= item.minimum);
+  const outOfStock = products.filter((item) => item.available === 0);
+  const lowStock = products.filter((item) => item.available !== null && item.minimum !== null && item.available > 0 && item.available <= item.minimum);
   const actionable = products
-    .filter((item) => item.available <= 0 || (item.minimum !== null && item.available <= item.minimum))
+    .filter((item) => item.available !== null && (item.available === 0 || (item.minimum !== null && item.available <= item.minimum)))
     .sort((a, b) => b.sold - a.sold || a.available - b.available || a.name.localeCompare(b.name, 'pt-BR'));
   return {
     products: products.length,
     lowStock: lowStock.length,
     outOfStock: outOfStock.length,
+    unknownBalances: products.filter((item) => item.available === null).length,
     lowStockProducts: actionable.slice(0, 20),
   };
 }
@@ -116,7 +136,13 @@ function paidFinance(finance, from, to) {
 function overdueReceivables(finance, today) {
   return list(finance).filter((entry) => entry.tipo === 'receita'
     && ['pendente', 'pending', 'vencido', 'atrasado'].includes(String(entry.status || '').toLowerCase())
-    && String(entry.vencimento || '').slice(0, 10) < today);
+    && Boolean(dateOnly(entry.vencimento)) && dateOnly(entry.vencimento) < today);
+}
+
+function receivablesWithoutDueDate(finance) {
+  return list(finance).filter((entry) => entry.tipo === 'receita'
+    && ['pendente', 'pending', 'vencido', 'atrasado'].includes(String(entry.status || '').toLowerCase())
+    && !dateOnly(entry.vencimento)).length;
 }
 
 function cashDiscrepancies(cash, fromDay, toDay) {
@@ -131,7 +157,7 @@ function money(value) {
 
 /** Constrói uma visão executiva a partir de dados já escopados e agregáveis. */
 export function buildExecutiveGraph({
-  days = 30, from, to, now = new Date(), graph = {}, schedule = {}, finance = [], cash = [], commerce = {}, offers = [], quality = {},
+  days = 30, from, to, now = new Date(), graph = {}, graphModel = {}, graphSources = {}, schedule = {}, finance = [], cash = [], commerce = {}, offers = [], quality = {}, businessLabel = 'Unidade ativa', scope = null,
 } = {}) {
   const end = asDate(to) || asDate(now) || new Date();
   const start = asDate(from) || new Date(end.valueOf() - Number(days) * DAY_MS);
@@ -139,7 +165,7 @@ export function buildExecutiveGraph({
   const fromDay = start.toISOString().slice(0, 10);
   const toDay = end.toISOString().slice(0, 10);
   const qualitySources = qualityView(quality, graph);
-  const available = (name) => qualitySources[name]?.status !== 'indisponivel';
+  const available = (name) => qualitySources[name]?.status === 'ok';
   const count = (value) => (available(value) ? Math.max(0, num(value)) : null);
 
   const customerTotal = count('graph') === null ? null : Math.max(0, num(graph.clientes ?? graph.customers));
@@ -155,7 +181,16 @@ export function buildExecutiveGraph({
     ? num(schedule.taxaCancelamento) : null;
 
   const financeTotals = paidFinance(finance, start, end);
-  const overdue = overdueReceivables(finance, todayInCuiaba(asDate(now) || new Date()));
+  const today = todayInCuiaba(asDate(now) || new Date());
+  const overdue = overdueReceivables(finance, today);
+  const overdueWithoutDueDate = receivablesWithoutDueDate(finance);
+  if (overdueWithoutDueDate > 0 && qualitySources.receivables.status !== 'indisponivel') {
+    qualitySources.receivables = {
+      ...qualitySources.receivables,
+      status: 'limitado',
+      detail: `${overdueWithoutDueDate} lançamento(s) pendente(s) sem vencimento válido; não foram classificados como vencidos e a posição atual é parcial.`.slice(0, 220),
+    };
+  }
   const periodCashDiscrepancies = available('cash') ? cashDiscrepancies(cash, fromDay, toDay) : [];
   const cashDiscrepancyCount = available('cash') ? periodCashDiscrepancies.length : null;
   const cashDiscrepancyNet = available('cash') ? round(periodCashDiscrepancies
@@ -166,8 +201,8 @@ export function buildExecutiveGraph({
     paidIncome: financeTotals.income,
     paidExpenses: financeTotals.expenses,
     net: financeTotals.net,
-    overdueCount: overdue.length,
-    overdueAmount: round(overdue.reduce((sum, entry) => sum + num(entry.valor), 0)),
+    overdueCount: available('receivables') ? overdue.length : null,
+    overdueAmount: available('receivables') ? round(overdue.reduce((sum, entry) => sum + num(entry.valor), 0)) : null,
     cashDiscrepancyCount,
     cashDiscrepancyNet,
     cashDiscrepancyGross,
@@ -188,8 +223,18 @@ export function buildExecutiveGraph({
     capturedTransactions: available('payments') ? orderMetrics.capturedTransactions : null,
     capturedAmount: available('payments') ? orderMetrics.capturedAmount : null,
   };
+  const inventorySourceAvailable = available('inventory');
   const inv = inventoryMetrics(commerce);
-  const inventory = available('inventory') ? inv : { products: null, lowStock: null, outOfStock: null, lowStockProducts: [] };
+  if (inventorySourceAvailable && inv.unknownBalances > 0) {
+    qualitySources.inventory = {
+      ...qualitySources.inventory,
+      status: 'limitado',
+      detail: `${inv.unknownBalances} produto(s) sem saldo calculável; ausência de saldo não é tratada como zero.`.slice(0, 220),
+    };
+  }
+  const inventory = inventorySourceAvailable
+    ? inv
+    : { products: null, lowStock: null, outOfStock: null, unknownBalances: null, lowStockProducts: [] };
   const safeOffers = available('graph') ? list(offers).slice(0, 20).map((offer) => ({
     name: String(offer.name || 'Oferta').slice(0, 100),
     type: String(offer.type || 'produto').slice(0, 40),
@@ -215,8 +260,8 @@ export function buildExecutiveGraph({
   if (available('appointments') && scheduleTotal >= 10 && cancelled > 0 && cancelled / scheduleTotal >= 0.2) {
     addSignal('appointment-cancel', 'operacao', 'medium', 'Cancelamentos na agenda', `${cancelled} de ${scheduleTotal} agendamentos foram cancelados no período (${(cancelled / scheduleTotal * 100).toFixed(1).replace('.', ',')}%).`, 'appointments');
   }
-  if (available('finance') && overdue.length) {
-    addSignal('finance-overdue', 'financeiro', 'high', 'Receitas pendentes vencidas', `${overdue.length} lançamento(s), totalizando ${money(financeMetrics.overdueAmount)}, estão pendentes e vencidos hoje.`, 'finance');
+  if (available('receivables') && overdue.length) {
+    addSignal('finance-overdue', 'financeiro', 'high', 'Receitas pendentes vencidas', `${overdue.length} lançamento(s), totalizando ${money(financeMetrics.overdueAmount)}, estão pendentes e vencidos na posição atual.`, 'receivables');
   }
   const discrepancies = periodCashDiscrepancies;
   if (discrepancies.length) {
@@ -232,29 +277,12 @@ export function buildExecutiveGraph({
   if (available('graph') && safeOffers.length) {
     addSignal('cross-sell', 'commerce', 'info', 'Oportunidades agregadas de venda', `${offersTotal} cliente(s) têm uma próxima oferta sugerida pelas regras atuais; os nomes abaixo são agregados, sem ação automática.`, 'graph');
   }
-  const statusForNode = (area, countValue) => (countValue == null ? 'normal' : countValue > 0 ? 'medium' : 'low');
-  const network = {
-    nodes: [
-      { id: 'business', type: 'business', label: 'Barbearia Dino', value: '', severity: 'normal' },
-      { id: 'customers', type: 'customers', label: 'Clientes', value: customerTotal == null ? '—' : String(customerTotal), severity: statusForNode('clientes', atRisk) },
-      { id: 'operations', type: 'operations', label: 'Operação', value: scheduleTotal == null ? '—' : String(scheduleTotal), severity: statusForNode('operacao', noShow) },
-      { id: 'finance', type: 'finance', label: 'Financeiro', value: financeMetrics.paidIncome == null ? '—' : money(financeMetrics.paidIncome), severity: statusForNode('financeiro', financeMetrics.overdueCount) },
-      { id: 'commerce', type: 'commerce', label: 'Commerce', value: commerceMetrics.confirmedOrders == null ? '—' : String(commerceMetrics.confirmedOrders), severity: statusForNode('commerce', commerceMetrics.cancelledOrders) },
-      { id: 'inventory', type: 'inventory', label: 'Estoque', value: inventory.products == null ? '—' : String(inventory.products), severity: statusForNode('estoque', inventory.lowStock) },
-      { id: 'offers', type: 'opportunities', label: 'Oportunidades', value: offersTotal == null ? '—' : String(offersTotal), severity: 'normal' },
-    ],
-    links: [
-      { from: 'business', to: 'customers', label: 'relacionamento' },
-      { from: 'business', to: 'operations', label: 'agenda' },
-      { from: 'business', to: 'finance', label: 'lançamentos' },
-      { from: 'business', to: 'commerce', label: 'pedidos' },
-      { from: 'business', to: 'inventory', label: 'disponibilidade' },
-      { from: 'customers', to: 'offers', label: 'sugestões' },
-      { from: 'customers', to: 'commerce', label: 'histórico' },
-      { from: 'commerce', to: 'inventory', label: 'demanda × saldo' },
-      { from: 'operations', to: 'finance', label: 'atendimentos × recebimentos' },
-    ],
-  };
+  const network = buildBusinessNetwork({
+    graphModel, graphSources: { ...graphSources, commerce: { ...(graphSources?.commerce || {}), ...commerce } },
+    metrics, offers: safeOffers, quality: qualitySources,
+    period: { days: safeDays, from: start.toISOString(), to: end.toISOString() }, now: end,
+    businessLabel, scope,
+  });
 
   return {
     period: { days: safeDays, from: start.toISOString(), to: end.toISOString() },

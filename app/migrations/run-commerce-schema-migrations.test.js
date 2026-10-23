@@ -32,9 +32,10 @@ test('normalizador aceita formas top-level BEGIN WORK e START TRANSACTION', () =
   assert.match(normalized, /SELECT 2;/);
 });
 
-test('runner expõe explicitamente a migration 084 de projeção com IA', () => {
-  assert.equal(migrationFiles.at(-1), '084_dino_forecast_ai.sql');
-  assert.equal(migrationFiles.at(-2), '083_dino_operational_foundations.sql');
+test('runner preserva 084 e registra 085 como próxima migration', () => {
+  assert.equal(migrationFiles.at(-1), '085_ai_automation_log_store_scope.sql');
+  assert.equal(migrationFiles.at(-2), '084_dino_forecast_ai.sql');
+  assert.equal(migrationFiles.at(-3), '083_dino_operational_foundations.sql');
 });
 
 test('migration 083 contém as tabelas, constraints e índices críticos da fundação', () => {
@@ -102,6 +103,12 @@ test('manifesto de checksums cobre a migration 084 para o health check de produ�
   assert.equal(checksums['084_dino_forecast_ai.sql'], createHash('sha256').update(sql).digest('hex'));
 });
 
+test('manifesto de checksums cobre a migration 085 do escopo de automações', () => {
+  const sql = readFileSync(new URL('./085_ai_automation_log_store_scope.sql', import.meta.url), 'utf8');
+  const checksums = JSON.parse(readFileSync(new URL('./checksums.json', import.meta.url), 'utf8'));
+  assert.equal(checksums['085_ai_automation_log_store_scope.sql'], createHash('sha256').update(sql).digest('hex'));
+});
+
 test('runner usa o mesmo client para lock, controle, migrations, checksum e unlock', async () => {
   const hadDatabaseUrl = Object.hasOwn(process.env, 'DATABASE_URL');
   const previousDatabaseUrl = process.env.DATABASE_URL;
@@ -128,8 +135,8 @@ test('runner usa o mesmo client para lock, controle, migrations, checksum e unlo
   };
   try {
     const result = await runCommerceSchemaMigrations({ db });
-    assert.equal(result.files.at(-1), '084_dino_forecast_ai.sql');
-    assert.equal(result.applied.at(-1), '084_dino_forecast_ai.sql');
+    assert.equal(result.files.at(-1), '085_ai_automation_log_store_scope.sql');
+    assert.equal(result.applied.at(-1), '085_ai_automation_log_store_scope.sql');
   } finally {
     if (hadDatabaseUrl) process.env.DATABASE_URL = previousDatabaseUrl;
     else delete process.env.DATABASE_URL;

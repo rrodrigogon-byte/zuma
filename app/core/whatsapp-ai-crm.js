@@ -341,7 +341,7 @@ export async function queueWhatsappPromotion(trx, context = {}, input = {}) {
     `INSERT INTO envios_campanha
       (campanha_id, empresa_id, loja_id, canal_id, cliente_id, status, telefone_normalizado, mensagem_hash, idempotency_key)
      VALUES ($1, $2, $3, $4, $5, 'pendente', $6, $7, $8)
-     ON CONFLICT (idempotency_key) DO UPDATE SET atualizado_em = CURRENT_TIMESTAMP
+     ON CONFLICT (idempotency_key) WHERE idempotency_key IS NOT NULL DO UPDATE SET atualizado_em = CURRENT_TIMESTAMP
      RETURNING id`,
     [campaignId, scope.empresaId, scope.lojaId, channel.id, customer.id, phone, renderedHash, `${campaignId}:${customer.id}`],
   );

@@ -73,6 +73,7 @@ const migrationFiles = [
   '082_financeiro_cadastros_multiempresa.sql',
   '083_dino_operational_foundations.sql',
   '084_dino_forecast_ai.sql',
+  '085_ai_automation_log_store_scope.sql',
 ];
 const advisoryLockKey = 825410732;
 

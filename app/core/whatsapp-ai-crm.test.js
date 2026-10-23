@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { normalizeWhatsappPhone } from './whatsapp-ai-crm.js';
 import { WHATSAPP_AI_TOOL_DECLARATIONS } from './whatsapp-ai-tools.js';
@@ -8,6 +9,11 @@ test('normaliza telefones brasileiros para o formato Evolution', () => {
   assert.equal(normalizeWhatsappPhone('(65) 99999-9999'), '5565999999999');
   assert.equal(normalizeWhatsappPhone('5565999999999'), '5565999999999');
   assert.equal(normalizeWhatsappPhone('123'), '');
+});
+
+test('promoção CRM da IA infere o índice parcial de idempotência', () => {
+  const source = readFileSync(new URL('./whatsapp-ai-crm.js', import.meta.url), 'utf8');
+  assert.match(source, /ON CONFLICT \(idempotency_key\) WHERE idempotency_key IS NOT NULL DO UPDATE/);
 });
 
 test('catálogo do agente cobre CRM, loja, agenda, vendas e marketing consentido', () => {

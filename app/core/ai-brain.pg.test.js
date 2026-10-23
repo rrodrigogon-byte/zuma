@@ -13,7 +13,7 @@ const memory = await import('./ai-memory.js');
 const learning = await import('./ai-learning.js');
 const automations = await import('./ai-automations.js');
 
-const IDS = { empresa: crypto.randomUUID(), loja: crypto.randomUUID(), canal: crypto.randomUUID(), sessao: crypto.randomUUID(), sessao2: crypto.randomUUID() };
+const IDS = { empresa: crypto.randomUUID(), loja: crypto.randomUUID(), loja2: crypto.randomUUID(), canal: crypto.randomUUID(), canal2: crypto.randomUUID(), sessao: crypto.randomUUID(), sessao2: crypto.randomUUID() };
 const PHONE = '5565999990001';
 const PHONE2 = '5565999990002';
 const DIA = '2026-09-27';
@@ -21,7 +21,9 @@ const DIA = '2026-09-27';
 async function seed() {
   await db.query(`INSERT INTO empresas (id, nome, cnpj, razao_social) VALUES ($1, 'Dino Teste', $2, 'Dino Teste LTDA')`, [IDS.empresa, String(Date.now()).slice(-14).padStart(14, '1')]);
   await db.query(`INSERT INTO lojas (id, empresa_id, codigo, nome) VALUES ($1, $2, $3, 'Loja')`, [IDS.loja, IDS.empresa, `L${Date.now().toString(36)}`]);
+  await db.query(`INSERT INTO lojas (id, empresa_id, codigo, nome) VALUES ($1, $2, $3, 'Loja 2')`, [IDS.loja2, IDS.empresa, `M${Date.now().toString(36)}`]);
   await db.query(`INSERT INTO canais_integracao (id, empresa_id, loja_id, provedor, nome, status) VALUES ($1, $2, $3, 'whatsapp', 'WA', 'ativo')`, [IDS.canal, IDS.empresa, IDS.loja]);
+  await db.query(`INSERT INTO canais_integracao (id, empresa_id, loja_id, provedor, nome, status) VALUES ($1, $2, $3, 'whatsapp', 'WA 2', 'ativo')`, [IDS.canal2, IDS.empresa, IDS.loja2]);
   for (const [sessao, phone] of [[IDS.sessao, PHONE], [IDS.sessao2, PHONE2]]) {
     await db.query(`INSERT INTO whatsapp_ai_sessions (id, empresa_id, loja_id, canal_id, remote_jid, telefone) VALUES ($1,$2,$3,$4,$5,$6)`, [sessao, IDS.empresa, IDS.loja, IDS.canal, `${phone}@s.whatsapp.net`, phone]);
   }
@@ -127,11 +129,18 @@ test('ciclo completo no PostgreSQL: configuração, aprendizado, memória, aprov
   assert.equal((await automations.enqueueAutomations(IDS.empresa, IDS.loja, planned, { quiet: true })).reason, 'horario_silencioso');
   assert.equal((await automations.enqueueAutomations(IDS.empresa, IDS.loja, planned, {})).queued, 1);
   assert.equal((await automations.enqueueAutomations(IDS.empresa, IDS.loja, planned, {})).queued, 0);
-  const task = await db.query(`SELECT * FROM tarefas_integracao_canais WHERE empresa_id = $1 AND tipo = 'automacao_ia'`, [IDS.empresa]);
+  const otherStoreBefore = await automations.automationGuards(IDS.empresa, IDS.loja2);
+  assert.equal(otherStoreBefore.sentToday, 0);
+  assert.equal(otherStoreBefore.recentMarketing.has(PHONE2), false);
+  assert.equal((await automations.enqueueAutomations(IDS.empresa, IDS.loja2, planned, {})).queued, 1, 'mesma referência pode existir em outra loja');
+  const task = await db.query(`SELECT * FROM tarefas_integracao_canais WHERE empresa_id = $1 AND loja_id = $2 AND tipo = 'automacao_ia'`, [IDS.empresa, IDS.loja]);
   assert.equal(task.rows.length, 1);
-  const guards = await automations.automationGuards(IDS.empresa);
+  const guards = await automations.automationGuards(IDS.empresa, IDS.loja);
   assert.equal(guards.sentToday, 1);
   assert.ok(guards.recentMarketing.has(PHONE2));
+  assert.equal((await automations.automationGuards(IDS.empresa, IDS.loja2)).sentToday, 1);
+  await db.query(`UPDATE tarefas_integracao_canais SET status = 'cancelada' WHERE empresa_id = $1 AND loja_id = $2 AND tipo = 'automacao_ia'`, [IDS.empresa, IDS.loja2]);
+  await db.query(`UPDATE ai_automation_log SET status = 'bloqueada' WHERE empresa_id = $1 AND loja_id = $2`, [IDS.empresa, IDS.loja2]);
 
   // Opt-out permanente aparece no mapa de consentimentos mesmo sem sessão
   await memory.recordAutomationOptOut(db.query.bind(db), IDS.empresa, PHONE2, 'teste');

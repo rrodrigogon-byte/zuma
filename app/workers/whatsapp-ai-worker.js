@@ -2,10 +2,10 @@ import { onWhatsappAiWake } from '../core/whatsapp-ai-wake.js';
 import crypto from 'node:crypto';
 import { db } from '../core/database.js';
 import { processWhatsappConversationTask, whatsappAiReady, whatsappMessagingReady } from '../core/whatsapp-ai.js';
-import { processCampaignDeliveryTask } from '../core/commerce-campaigns.js';
-import { enqueueDueCartRecoveries, processCartRecoveryTask } from '../core/commerce-abandoned-carts.js';
+import { markCampaignDeliveryBlocked, processCampaignDeliveryTask } from '../core/commerce-campaigns.js';
+import { enqueueDueCartRecoveries, markCartRecoveryTaskBlocked, processCartRecoveryTask } from '../core/commerce-abandoned-carts.js';
 import { enqueueDueAppointmentReminders, processAppointmentNotificationTask } from '../core/barbershop-appointment-notifications.js';
-import { processAutomationTask } from '../core/ai-automations.js';
+import { markAutomationTaskBlocked, processAutomationTask } from '../core/ai-automations.js';
 
 const MAX_ATTEMPTS = Math.max(1, Number.parseInt(process.env.WHATSAPP_AI_MAX_ATTEMPTS || '6', 10));
 const BATCH_SIZE = Math.min(20, Math.max(1, Number.parseInt(process.env.WHATSAPP_AI_WORKER_BATCH || '5', 10)));
@@ -87,7 +87,7 @@ async function releaseWhatsappAiWorkerLease(holder = WORKER_ID) {
   ).catch(() => null);
 }
 
-import { marketingGate, recordMarketingSend } from '../core/whatsapp-marketing-guard.js';
+import { marketingGate, markMarketingSendBlocked, recordMarketingSend, reserveMarketingSend } from '../core/whatsapp-marketing-guard.js';
 
 // Tarefa de marketing fora do horário ou acima do limite volta para a fila, sem contar tentativa.
 async function deferTask(task, until, reason) {
@@ -271,6 +271,7 @@ export async function runWhatsappAiBatch({ limit = BATCH_SIZE } = {}) {
     const tasks = await claimWhatsappAiTasks(limit);
     const summary = { worker: 'whatsapp-ai', runId: crypto.randomUUID(), retentionRemoved, recoveriesQueued, appointmentRemindersQueued, claimed: tasks.length, completed: 0, failed: 0, deadLettered: 0 };
     for (const task of tasks) {
+      let gate = null;
       try {
         // Uma conversa pode levar mais que o lease (várias chamadas de IA). Renova o lease do
         // worker e o da tarefa antes de começar cada uma; se a tarefa já foi para outro
@@ -282,9 +283,20 @@ export async function runWhatsappAiBatch({ limit = BATCH_SIZE } = {}) {
           [task.id, task.lease_token, LEASE_SECONDS],
         );
         if (!renewed.rowCount) { summary.leaseLost = (summary.leaseLost || 0) + 1; continue; }
-        const gate = await marketingGate(task);
+        gate = await marketingGate(task);
         if (gate.action === 'defer') { await deferTask(task, gate.until, gate.reason); summary.deferred = (summary.deferred || 0) + 1; continue; }
-        if (gate.action === 'skip') { await completeTask(task, { skipped: true, reason: gate.reason }); summary.completed += 1; continue; }
+        if (gate.action === 'skip' && !task.delivery_started_at) {
+          if (task.tipo === 'enviar_campanha') await markCampaignDeliveryBlocked(task, gate.reason);
+          else if (task.tipo === 'recuperar_carrinho') await markCartRecoveryTaskBlocked(task, gate.reason);
+          else if (task.tipo === 'automacao_ia') await markAutomationTaskBlocked(task, gate.reason);
+          await markMarketingSendBlocked(task, gate.phone, gate.reason);
+          await completeTask(task, { skipped: true, reason: gate.reason });
+          summary.completed += 1;
+          continue;
+        }
+        // Uma tarefa com delivery_started_at precisa reconciliar o resultado anterior; o gate
+        // não pode transformar um envio possivelmente concluído em skip silencioso.
+        if (gate.phone && !task.delivery_started_at) await reserveMarketingSend(task, gate.phone);
         const response = task.tipo === 'enviar_campanha'
           ? await processCampaignDeliveryTask(task)
           : task.tipo === 'recuperar_carrinho'
@@ -294,9 +306,9 @@ export async function runWhatsappAiBatch({ limit = BATCH_SIZE } = {}) {
               : task.tipo === 'automacao_ia'
                 ? await processAutomationTask(task)
                 : await processWhatsappConversationTask(task);
+        if (gate.phone && response && !response.skipped && !response.blocked && !response.cancelled) await recordMarketingSend(task, gate.phone);
+        else if (gate.phone && response && !task.delivery_started_at) await markMarketingSendBlocked(task, gate.phone, response.reason || 'provider_did_not_send');
         await completeTask(task, response);
-        // Envio bloqueado ou cancelado não conta como mensagem de marketing entregue.
-        if (gate.phone && response && !response.idempotent && !response.skipped && !response.blocked && !response.cancelled) await recordMarketingSend(task, gate.phone);
         summary.completed += 1;
       } catch (error) {
         const failure = await failTask(task, error);

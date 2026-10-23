@@ -20,6 +20,18 @@ const MAX_CASH_ROWS = 500;
 const MAX_INVENTORY_ROWS = 2000;
 const MAX_ORDER_STATUS_ROWS = 100;
 const MAX_APPOINTMENT_ROWS = 5000;
+const MAX_CLIENT_ROWS = 5000;
+const MAX_COMMAND_ROWS = 5000;
+const MAX_RETAIL_SALE_ROWS = 5000;
+const MAX_LOCAL_PRODUCT_ROWS = 2000;
+const MAX_SERVICE_ROWS = 1000;
+const MAX_PROFESSIONAL_ROWS = 1000;
+
+function nonNegativeNumber(value) {
+  if (value === null || value === undefined || typeof value === 'boolean' || (typeof value === 'string' && !value.trim())) return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+}
 
 function asDate(value) {
   const date = value instanceof Date ? value : new Date(value || '');
@@ -105,7 +117,8 @@ export async function loadCatalog(empresaId, lojaId = null) {
   if (!UUID.test(String(lojaId || ''))) throw new Error('Unidade Commerce é obrigatória para ler o catálogo.');
   const result = await db.queryRead(
     `SELECT DISTINCT ON (p.id) p.id, p.nome, c.nome AS categoria, p.status = 'active' AS publicado,
-            vp.preco::float AS preco, NULLIF(vp.custo, 0)::float AS custo, stock.estoque
+            vp.preco::float AS preco, NULLIF(vp.custo, 0)::float AS custo, stock.estoque,
+            COALESCE(stock.niveis_esperados, 0) > 0 AND stock.niveis = stock.niveis_esperados AS estoque_informado
        FROM commerce_products p
        LEFT JOIN commerce_categories c ON c.empresa_id = p.empresa_id AND c.id = p.category_id
        LEFT JOIN commerce_product_variants v ON v.empresa_id = p.empresa_id AND v.product_id = p.id AND v.ativo = true
@@ -116,18 +129,29 @@ export async function loadCatalog(empresaId, lojaId = null) {
             AND EXISTS (SELECT 1 FROM commerce_product_channels pc
               JOIN commerce_storefronts sf ON sf.empresa_id = pc.empresa_id AND sf.id = pc.storefront_id
               WHERE pc.empresa_id = p.empresa_id AND pc.product_id = p.id AND pc.publicado = true AND sf.status = 'active'
-                AND pc.price_list_id = vp.price_list_id AND ($2::uuid IS NULL OR sf.loja_id = $2))
+                AND pc.price_list_id = vp.price_list_id AND sf.loja_id = $2)
             AND (vp.vigencia_inicio IS NULL OR vp.vigencia_inicio <= CURRENT_TIMESTAMP)
             AND (vp.vigencia_fim IS NULL OR vp.vigencia_fim > CURRENT_TIMESTAMP)
           ORDER BY vp.vigencia_inicio DESC NULLS LAST LIMIT 1
        ) vp ON true
        LEFT JOIN LATERAL (
-         SELECT COALESCE(SUM(GREATEST(il.disponivel - il.reservado, 0)), 0)::int AS estoque
-         FROM commerce_inventory_levels il
-         JOIN commerce_inventory_locations loc ON loc.empresa_id = il.empresa_id AND loc.id = il.location_id AND loc.ativo = true
-         WHERE il.empresa_id = p.empresa_id AND il.variant_id = v.id AND ($2::uuid IS NULL OR loc.loja_id = $2)
+         SELECT COUNT(DISTINCT (il.variant_id::text || ':' || il.location_id::text))::int AS niveis,
+                (COUNT(DISTINCT iv.id) * COUNT(DISTINCT loc.id))::int AS niveis_esperados,
+                CASE WHEN COUNT(DISTINCT iv.id) > 0 AND COUNT(DISTINCT loc.id) > 0
+                       AND COUNT(DISTINCT (il.variant_id::text || ':' || il.location_id::text)) = COUNT(DISTINCT iv.id) * COUNT(DISTINCT loc.id)
+                     THEN SUM(GREATEST(il.disponivel - il.reservado, 0))::int ELSE NULL END AS estoque
+         FROM commerce_product_variants iv
+         JOIN commerce_inventory_locations loc ON loc.empresa_id = iv.empresa_id AND loc.ativo = true AND loc.loja_id = $2
+         LEFT JOIN commerce_inventory_levels il ON il.empresa_id = iv.empresa_id AND il.variant_id = iv.id AND il.location_id = loc.id
+         WHERE iv.empresa_id = p.empresa_id AND iv.product_id = p.id AND iv.ativo = true
        ) stock ON true
       WHERE p.empresa_id = $1 AND p.tipo = 'physical' AND p.status <> 'archived'
+        AND EXISTS (
+          SELECT 1 FROM commerce_product_channels pc
+          JOIN commerce_storefronts sf ON sf.empresa_id = pc.empresa_id AND sf.id = pc.storefront_id
+          WHERE pc.empresa_id = p.empresa_id AND pc.product_id = p.id AND pc.publicado = true
+            AND sf.status = 'active' AND sf.loja_id = $2
+        )
       ORDER BY p.id, (stock.estoque > 0 AND vp.preco > 0) DESC NULLS LAST, vp.preco ASC NULLS LAST, v.id LIMIT 2000`,
     [empresaId, lojaId],
   );
@@ -147,8 +171,9 @@ export async function loadOrders(empresaId, lojaId = null) {
        LEFT JOIN commerce_products p ON p.empresa_id = o.empresa_id AND p.id = v.product_id
        LEFT JOIN commerce_categories cat ON cat.empresa_id = p.empresa_id AND cat.id = p.category_id
       WHERE o.empresa_id = $1 AND o.status = ANY($3::text[])
-        AND ($2::uuid IS NULL OR o.loja_id = $2)
+        AND o.loja_id = $2
         AND o.criado_em >= CURRENT_TIMESTAMP - INTERVAL '365 days'
+        AND o.criado_em < CURRENT_TIMESTAMP
       GROUP BY o.id, cc.id, cc.telefone, cc.nome, o.criado_em
       ORDER BY o.criado_em DESC, o.id LIMIT 5000`,
     [empresaId, lojaId, PURCHASE_STATUSES],
@@ -162,7 +187,7 @@ export async function loadActiveFacts(empresaId, lojaId = null) {
   const result = await db.queryRead(
     `SELECT f.telefone, f.categoria, f.valor, f.status, f.criado_em FROM ai_customer_facts f
       WHERE f.empresa_id = $1 AND f.status = 'ativo' AND (valido_ate IS NULL OR valido_ate >= CURRENT_DATE)
-      AND ($2::uuid IS NULL OR EXISTS (SELECT 1 FROM ai_conversation_summaries s WHERE s.empresa_id = f.empresa_id AND s.id = f.fonte_resumo_id AND s.loja_id = $2))
+      AND EXISTS (SELECT 1 FROM ai_conversation_summaries s WHERE s.empresa_id = f.empresa_id AND s.id = f.fonte_resumo_id AND s.loja_id = $2)
       ORDER BY f.criado_em DESC, f.id LIMIT 20000`,
     [empresaId, lojaId],
   );
@@ -187,8 +212,10 @@ export async function loadBrainSources(scope = {}, deps = {}) {
   const read = async (name, fn, fallback, limit = null) => {
     try {
       const value = await fn();
-      quality.fontes[name] = { status: limit && value?.length >= limit ? 'limitado' : 'ok', registros: Array.isArray(value) ? value.length : value instanceof Map ? value.size : null };
-      return value;
+      const records = Array.isArray(value) ? value.length : value instanceof Map ? value.size : null;
+      const limited = Number.isFinite(Number(limit)) && Number(limit) > 0 && records !== null && records >= Number(limit);
+      quality.fontes[name] = { status: limited ? 'limitado' : 'ok', registros: records };
+      return Array.isArray(value) && Number.isFinite(Number(limit)) && Number(limit) > 0 ? value.slice(0, Number(limit)) : value;
     } catch {
       quality.fontes[name] = { status: 'indisponivel', registros: null };
       return fallback;
@@ -199,7 +226,8 @@ export async function loadBrainSources(scope = {}, deps = {}) {
     quality.fontes[name] = { status: 'indisponivel', registros: null, detail: 'Empresa/unidade ativa ausente ou inválida; consulta Commerce sem filtro foi bloqueada.' };
     return Promise.resolve(fallback);
   };
-  const listarClientes = deps.listarClientes || ((id) => clientes.listarClientes(id).map((c) => clientes.obterCliente(id, c.id) || c));
+  const listarClientes = typeof deps.listarClientes === 'function' ? deps.listarClientes : null;
+  const obterCliente = deps.obterCliente || ((id, clientId) => clientes.obterCliente(id, clientId));
   const listarAgendamentos = deps.listarAgendamentos || ((id, filtros) => barbearia.listarAgendamentos(id, filtros));
   const queryRead = deps.queryRead || ((sql, params) => db.queryRead(sql, params));
   let agendaFonte = '';
@@ -252,6 +280,14 @@ export async function loadBrainSources(scope = {}, deps = {}) {
     readCommerce('memoria', () => (deps.loadActiveFacts || loadActiveFacts)(scope.empresaId, commerceLojaId), [], 20000),
     readCommerce('consentimentos', () => (deps.loadConsents || whatsappConsentMap)(scope.empresaId), null),
   ]);
+  const catalogBalancesUnknown = catalog.filter((item) => item?.publicado !== false
+    && (item?.estoque_informado === false || item?.estoque == null || item?.estoque === '')).length;
+  if (catalogBalancesUnknown > 0 && quality.fontes.catalogo?.status !== 'indisponivel') {
+    quality.fontes.catalogo = {
+      ...quality.fontes.catalogo, status: 'limitado',
+      detail: `${catalogBalancesUnknown} produto(s) publicado(s) não têm nível de estoque registrado; saldos não foram presumidos como zero.`,
+    };
+  }
   // Memória só entra no grafo (e nas ofertas) de quem autorizou a personalização.
   const facts = consents ? rawFacts.filter((fact) => consents.get(memoryPhone(fact.telefone))?.personalizacao === true) : [];
   const local = read;
@@ -260,7 +296,7 @@ export async function loadBrainSources(scope = {}, deps = {}) {
     return [];
   };
   const localProducts = legacyUnitUsable
-    ? await local('produtosLocais', () => (deps.listarProdutosRevenda || barbearia.listarProdutosRevenda)(legacy, { incluirInativos: false, ...(legacyLojaId ? { lojaId: legacyLojaId, incluirSemLoja: true } : {}) }), [])
+    ? await local('produtosLocais', () => (deps.listarProdutosRevenda || barbearia.listarProdutosRevenda)(legacy, { incluirInativos: false, ...(legacyLojaId ? { lojaId: legacyLojaId, incluirSemLoja: true } : {}) }), [], MAX_LOCAL_PRODUCT_ROWS)
     : semUnidadeLegada('produtosLocais');
   const scopedLocalProducts = legacyLojaId
     ? localProducts.filter((item) => String(item.lojaId || '') === String(legacyLojaId))
@@ -270,12 +306,10 @@ export async function loadBrainSources(scope = {}, deps = {}) {
   }
   const mergedCatalog = [...catalog];
   for (const item of scopedLocalProducts) {
-    const minimum = item.estoqueMinimo == null || item.estoqueMinimo === '' ? null : Math.max(0, Number(item.estoqueMinimo) || 0);
-    mergedCatalog.push({ id: `local:${item.id}`, nome: item.nome, categoria: item.categoria || 'Balcão', preco: Number(item.precoVenda || 0), custo: Number(item.custoUnitario || 0), estoque: Number(item.estoqueAtual || 0), estoqueMinimo: minimum, publicado: item.ativo !== false, origem: 'balcao' });
+    const minimum = nonNegativeNumber(item.estoqueMinimo);
+    const stock = item.estoqueInformado === false ? null : nonNegativeNumber(item.estoqueAtual);
+    mergedCatalog.push({ id: `local:${item.id}`, nome: item.nome, categoria: item.categoria || 'Balcão', preco: Number(item.precoVenda || 0), custo: Number(item.custoUnitario || 0), estoque: stock, estoqueMinimo: minimum, publicado: item.ativo !== false, origem: 'balcao' });
   }
-  const identityClients = legacyUnitUsable
-    ? await local('clients', () => listarClientes(legacy), [])
-    : semUnidadeLegada('clients');
   const appointments = await local('appointments', loadAppointments, [], MAX_APPOINTMENT_ROWS);
   if (quality.fontes.appointments && agendaFonte) {
     quality.fontes.appointments.fonte = agendaFonte;
@@ -287,10 +321,10 @@ export async function loadBrainSources(scope = {}, deps = {}) {
     }
   }
   const commands = legacyUnitUsable
-    ? await local('commands', () => (deps.listarComandasBarbearia || barbearia.listarComandasBarbearia)(legacy, legacyLojaId ? { lojaId: legacyLojaId } : {}), [])
+    ? await local('commands', () => (deps.listarComandasBarbearia || barbearia.listarComandasBarbearia)(legacy, legacyLojaId ? { lojaId: legacyLojaId } : {}), [], MAX_COMMAND_ROWS)
     : semUnidadeLegada('commands');
   const retailSales = legacyUnitUsable
-    ? await local('retailSales', () => (deps.listarVendasRevenda || barbearia.listarVendasRevenda)(legacy, legacyLojaId ? { lojaId: legacyLojaId } : {}), [])
+    ? await local('retailSales', () => (deps.listarVendasRevenda || barbearia.listarVendasRevenda)(legacy, legacyLojaId ? { lojaId: legacyLojaId } : {}), [], MAX_RETAIL_SALE_ROWS)
     : semUnidadeLegada('retailSales');
   // Reaplicar o filtro exato mesmo depois de validar o vínculo, por defesa em profundidade.
   const inLegacyStore = (rows) => legacyLojaId
@@ -302,13 +336,58 @@ export async function loadBrainSources(scope = {}, deps = {}) {
   const scopedAppointments = inStoreAppointments(appointments);
   const scopedCommands = inLegacyStore(commands);
   const scopedRetailSales = inLegacyStore(retailSales);
-  const scopedIds = new Set([...scopedAppointments, ...scopedCommands, ...scopedRetailSales].map(r => String(r.clienteId)));
-  const services = legacyUnitUsable
-    ? await local('services', () => (deps.listarServicos || barbearia.listarServicos)(legacy, { incluirInativos: false }), [])
+  const reportDroppedScopeRows = (name, loadedRows, scopedRows) => {
+    const previous = quality.fontes[name];
+    if (!previous || previous.status === 'indisponivel' || scopedRows.length === loadedRows.length) return;
+    quality.fontes[name] = {
+      ...previous, status: 'limitado', registros: scopedRows.length,
+      detail: [previous.detail, 'Registros sem vínculo exato à unidade foram descartados; cobertura parcial.'].filter(Boolean).join(' ').slice(0, 220),
+    };
+  };
+  reportDroppedScopeRows('appointments', appointments, scopedAppointments);
+  reportDroppedScopeRows('commands', commands, scopedCommands);
+  reportDroppedScopeRows('retailSales', retailSales, scopedRetailSales);
+  const scopedIds = new Set([...scopedAppointments, ...scopedCommands, ...scopedRetailSales].map(r => String(r.clienteId || '')).filter(Boolean));
+  const scopedClientIds = [...scopedIds].slice(0, MAX_CLIENT_ROWS);
+  const identityClients = legacyUnitUsable
+    ? await local('clients', async () => {
+      if (listarClientes) {
+        const rows = await listarClientes(legacy);
+        const wanted = new Set(scopedClientIds);
+        return (Array.isArray(rows) ? rows : []).filter((client) => client?.status !== 'deletado' && wanted.has(String(client?.id || '')));
+      }
+      const rows = await Promise.all(scopedClientIds.map((clientId) => obterCliente(legacy, clientId)));
+      return rows.filter((client) => client && client.status !== 'deletado');
+    }, [], MAX_CLIENT_ROWS)
+    : semUnidadeLegada('clients');
+  if (identityClients.length < scopedClientIds.length && quality.fontes.clients?.status === 'ok') {
+    quality.fontes.clients = { ...quality.fontes.clients, status: 'limitado', registros: identityClients.length, detail: 'Uma ou mais identidades citadas pela atividade desta unidade não têm cadastro legível; a cobertura ficou parcial.' };
+  }
+  if (scopedIds.size > MAX_CLIENT_ROWS && quality.fontes.clients) {
+    quality.fontes.clients = { ...quality.fontes.clients, status: 'limitado', detail: `Limite de ${MAX_CLIENT_ROWS} identidades relacionadas à unidade; cobertura parcial.` };
+  }
+  const scopedServiceIds = new Set([
+    ...scopedAppointments.map((item) => item.servicoId),
+    ...scopedCommands.flatMap((command) => (Array.isArray(command.itens) ? command.itens : []).filter((item) => item.tipo === 'servico').map((item) => item.servicoId)),
+  ].filter(Boolean).map(String));
+  const scopedProfessionalIds = new Set([
+    ...scopedAppointments.map((item) => item.profissionalId),
+    ...scopedCommands.flatMap((command) => [command.profissionalId, ...(Array.isArray(command.itens) ? command.itens.map((item) => item.profissionalId) : [])]),
+  ].filter(Boolean).map(String));
+  const allServices = legacyUnitUsable
+    ? await local('services', () => (deps.listarServicos || barbearia.listarServicos)(legacy, { incluirInativos: false }), [], MAX_SERVICE_ROWS)
     : semUnidadeLegada('services');
-  const professionals = legacyUnitUsable
-    ? await local('professionals', () => (deps.listarProfissionais || barbearia.listarProfissionais)(legacy, { incluirInativos: true }), [])
+  const services = allServices.filter((service) => scopedServiceIds.has(String(service.id)));
+  if (services.length !== allServices.length && quality.fontes.services?.status === 'ok') {
+    quality.fontes.services = { ...quality.fontes.services, status: 'limitado', registros: services.length, detail: 'Serviços sem vínculo explícito com a unidade foram omitidos; somente serviços observados nesta loja entram nas oportunidades.' };
+  }
+  const allProfessionals = legacyUnitUsable
+    ? await local('professionals', () => (deps.listarProfissionais || barbearia.listarProfissionais)(legacy, { incluirInativos: true }), [], MAX_PROFESSIONAL_ROWS)
     : semUnidadeLegada('professionals');
+  const professionals = allProfessionals.filter((professional) => scopedProfessionalIds.has(String(professional.id)));
+  if (professionals.length !== allProfessionals.length && quality.fontes.professionals?.status === 'ok') {
+    quality.fontes.professionals = { ...quality.fontes.professionals, status: 'limitado', registros: professionals.length, detail: 'Profissionais sem vínculo observado na unidade foram omitidos desta rede.' };
+  }
   const professionalById = new Map(professionals.map((item) => [String(item.id), item]));
   for (const appointment of scopedAppointments) {
     if (appointment.profissionalId && appointment.profissionalNome && !professionalById.has(String(appointment.profissionalId))) {
@@ -317,7 +396,7 @@ export async function loadBrainSources(scope = {}, deps = {}) {
   }
   return {
     identityClients,
-    clients: legacyLojaId || commerceLojaId ? identityClients.filter(c => scopedIds.has(String(c.id))) : identityClients,
+    clients: identityClients,
     appointments: scopedAppointments,
     commands: scopedCommands,
     retailSales: scopedRetailSales,
@@ -375,16 +454,23 @@ export async function loadBrainExecutiveSources({ scope = {}, from, to, graphSou
        AND o.loja_id = $2
        AND p.captured_at >= $3::timestamptz AND p.captured_at < $4::timestamptz`;
   const inventorySql = `SELECT p.id::text AS id, p.nome AS name,
-            COALESCE(SUM(GREATEST(il.disponivel - il.reservado, 0)), 0)::int AS available,
-            COALESCE(SUM(il.minimo), 0)::int AS minimum
-       FROM commerce_inventory_levels il
-       JOIN commerce_inventory_locations loc ON loc.empresa_id = il.empresa_id AND loc.id = il.location_id AND loc.ativo = true
-       JOIN commerce_product_variants v ON v.empresa_id = il.empresa_id AND v.id = il.variant_id AND v.ativo = true
-       JOIN commerce_products p ON p.empresa_id = v.empresa_id AND p.id = v.product_id
-      WHERE il.empresa_id = $1 AND p.tipo = 'physical' AND p.status <> 'archived'
-        AND loc.loja_id = $2
+            CASE WHEN COUNT(DISTINCT v.id) > 0
+                       AND COUNT(DISTINCT (il.variant_id::text || ':' || il.location_id::text)) = COUNT(DISTINCT v.id) * COUNT(DISTINCT loc.id)
+                 THEN SUM(GREATEST(il.disponivel - il.reservado, 0))::int ELSE NULL END AS available,
+            CASE WHEN COUNT(DISTINCT v.id) > 0
+                       AND COUNT(DISTINCT (il.variant_id::text || ':' || il.location_id::text)) = COUNT(DISTINCT v.id) * COUNT(DISTINCT loc.id)
+                 THEN SUM(il.minimo)::int ELSE NULL END AS minimum,
+            MAX(il.atualizado_em)::text AS updated_at,
+            COUNT(DISTINCT v.id)::int AS variants,
+            COUNT(DISTINCT (il.variant_id::text || ':' || il.location_id::text))::int AS recorded_levels,
+            (COUNT(DISTINCT v.id) * COUNT(DISTINCT loc.id))::int AS expected_levels
+       FROM commerce_products p
+       JOIN commerce_product_variants v ON v.empresa_id = p.empresa_id AND v.product_id = p.id AND v.ativo = true
+       JOIN commerce_inventory_locations loc ON loc.empresa_id = p.empresa_id AND loc.ativo = true AND loc.loja_id = $2
+       LEFT JOIN commerce_inventory_levels il ON il.empresa_id = p.empresa_id AND il.variant_id = v.id AND il.location_id = loc.id
+      WHERE p.empresa_id = $1 AND p.tipo = 'physical' AND p.status <> 'archived'
       GROUP BY p.id, p.nome
-      ORDER BY (COALESCE(SUM(GREATEST(il.disponivel - il.reservado, 0)), 0) <= COALESCE(SUM(il.minimo), 0)) DESC, p.nome
+      ORDER BY (available <= minimum) DESC NULLS LAST, p.nome
       LIMIT ${MAX_INVENTORY_ROWS}`;
 
   let ordersResult = { value: [], quality: state('orders', 'indisponivel', null) };
@@ -400,22 +486,41 @@ export async function loadBrainExecutiveSources({ scope = {}, from, to, graphSou
   }
 
   const commerceSold = commerceProductSales(graphSources, fromDate, toDate);
-  const commerceInventory = inventoryResult.value.map((item) => ({ ...item, sold: commerceSold.get(String(item.id)) || 0 }));
+  const commerceInventory = inventoryResult.value.map((item) => ({ ...item, updatedAt: item.updated_at || null, sold: commerceSold.get(String(item.id)) || 0 }));
+  const inventoryProductIds = new Set(commerceInventory.map((item) => String(item.id)));
+  const unknownCommerceInventory = (Array.isArray(graphSources.catalog) ? graphSources.catalog : [])
+    .filter((item) => item && !String(item.id || '').startsWith('local:') && item.publicado !== false
+      && (item.estoque_informado === false || item.estoque == null || item.estoque === '')
+      && !inventoryProductIds.has(String(item.id || '').replace(/^commerce:/, '')))
+    .map((item) => {
+      const id = String(item.id || '').replace(/^commerce:/, '');
+      return { id, name: String(item.nome || 'Produto'), available: null, minimum: null,
+        updatedAt: null, sold: commerceSold.get(id) || 0, estoqueInformado: false };
+    });
+  commerceInventory.push(...unknownCommerceInventory);
   const localSold = localProductSales(graphSources, fromDate, toDate);
   const localProducts = (Array.isArray(graphSources.catalog) ? graphSources.catalog : [])
     .filter((item) => String(item.id || '').startsWith('local:'))
     .map((item) => ({
       id: String(item.id), name: String(item.nome || 'Produto local'),
-      available: Math.max(0, Number(item.estoque) || 0),
-      minimum: item.estoqueMinimo == null ? null : Math.max(0, Number(item.estoqueMinimo) || 0),
+      available: item.estoqueInformado === false || item.estoque_informado === false ? null : nonNegativeNumber(item.estoque),
+      minimum: nonNegativeNumber(item.estoqueMinimo),
       sold: localSold.get(String(item.id)) || 0, origem: 'balcao',
     }));
   const localQuality = graphSources.quality?.fontes?.produtosLocais || state('localInventory', 'indisponivel', null);
   const localInventoryQuality = ['nao_mapeado', 'omitido_sem_vinculo_loja'].includes(graphSources.quality?.estoqueLocalEscopo)
     ? state('localInventory', 'indisponivel', null, 'Estoque de revenda não foi consultado porque falta vínculo seguro entre a unidade ativa e a loja Kytto.')
     : normalizeSource(localQuality);
+  if (localInventoryQuality.status === 'ok' && localProducts.some((item) => item.origem === 'balcao' && item.available === null)) {
+    localInventoryQuality.status = 'limitado';
+    localInventoryQuality.detail = 'Um ou mais produtos locais não têm saldo informado; o saldo desconhecido não foi tratado como zero.';
+  }
   const inventoryQuality = inventoryResult.quality;
-  if (inventoryQuality.status === 'ok' && inventoryResult.value.length === 0) {
+  const unknownCommerceBalances = commerceInventory.filter((item) => item.available == null).length;
+  if (inventoryQuality.status !== 'indisponivel' && unknownCommerceBalances > 0) {
+    inventoryQuality.status = 'limitado';
+    inventoryQuality.detail = `${unknownCommerceBalances} produto(s) da unidade têm níveis ausentes ou incompletos; o saldo permaneceu desconhecido, não zero.`;
+  } else if (inventoryQuality.status === 'ok' && inventoryResult.value.length === 0) {
     inventoryQuality.status = 'limitado';
     inventoryQuality.detail = 'Nenhum saldo de estoque em local ativo foi encontrado; não foi possível avaliar disponibilidade.';
   } else if (inventoryQuality.status === 'ok') {
@@ -460,12 +565,14 @@ function normalizeSource(source) {
 }
 
 function graphStatesQuality(sources = {}) {
-  const states = Object.values(sources.quality?.fontes || {}).map((item) => item?.status);
-  if (!states.length) return state('graph', 'indisponivel', null);
-  if (states.some((status) => status === 'indisponivel' || status === 'limitado')) {
-    return state('graph', 'limitado', null, 'O grafo contém fontes com cobertura parcial ou indisponível.');
+  const fontes = sources.quality?.fontes || {};
+  const names = ['clients', 'appointments', 'commands', 'retailSales', 'pedidos', 'memoria'];
+  const states = names.map((name) => fontes[name]?.status).filter((status) => ['ok', 'limitado', 'indisponivel'].includes(status));
+  if (!states.length || states.every((status) => status === 'indisponivel')) return state('graph', 'indisponivel', null);
+  if (states.length !== names.length || states.some((status) => status !== 'ok')) {
+    return state('graph', 'limitado', null, 'Uma ou mais fontes de relacionamentos têm cobertura parcial ou indisponível; catálogo e estoque são avaliados separadamente.');
   }
-  return state('graph', 'ok', Object.keys(sources.quality?.fontes || {}).length);
+  return state('graph', 'ok', null, 'Fontes relacionais completas nesta leitura.');
 }
 
 export async function loadBrainGraph(scope, deps = {}, { now = new Date() } = {}) {
