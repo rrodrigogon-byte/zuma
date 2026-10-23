@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { DINO_SCOPE, isDinoDedicatedHost, scopeDinoAdminHeaders } from './dino-scope.js'
+import { DINO_COMPANY, DINO_SCOPE, DINO_STORE, isDinoDedicatedHost, scopeDinoAdminHeaders } from './dino-scope.js'
 
 test('host dedicado Dino reconhece os domínios permitidos e rejeita homônimos', () => {
   assert.equal(isDinoDedicatedHost('dino.kytto.com.br'), true)
@@ -19,6 +19,15 @@ test('chamadas do ERP no host Dino usam somente a empresa e loja canônicas', ()
   assert.equal(headers.Authorization, 'Bearer test')
   assert.equal(headers['X-Empresa-Id'], DINO_SCOPE.empresaId)
   assert.equal(headers['X-Loja-Id'], DINO_SCOPE.lojaId)
+})
+
+test('fallback visual da unidade mantém o par canônico e o rótulo operacional', () => {
+  assert.equal(DINO_COMPANY.id, DINO_SCOPE.empresaId)
+  assert.equal(DINO_COMPANY.nome, 'Barbearia Dino')
+  assert.equal(DINO_STORE.id, DINO_SCOPE.lojaId)
+  assert.equal(DINO_STORE.empresaId, DINO_SCOPE.empresaId)
+  assert.equal(DINO_STORE.codigo, 'DINO-MATRIZ')
+  assert.equal(DINO_STORE.nome, 'Barbearia Dino')
 })
 
 test('rotas fora do ERP Dino e outros hosts preservam os cabeçalhos recebidos', () => {

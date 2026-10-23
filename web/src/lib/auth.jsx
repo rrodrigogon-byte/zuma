@@ -1,7 +1,7 @@
 import { createContext, useContext, useState } from 'react'
 import { encerrarPushDoAparelho } from './push-equipe'
 import { selecionarLojaAutomatica } from './context-selection'
-import { isDinoDedicatedHost } from './dino-scope'
+import { DINO_COMPANY, DINO_STORE, isDinoDedicatedHost } from './dino-scope'
 import { isDinoBrandContext } from './brand'
 
 const AuthContext = createContext(null)
@@ -19,17 +19,26 @@ function readEmpresaAtivaInicial() {
   if (!isDinoDedicatedHost()) return atual
   const empresas = readStorage('sp_empresas_acessiveis', [])
   const dino = Array.isArray(empresas) ? empresas.find((empresa) => isDinoBrandContext(empresa)) : null
-  if (!dino) return atual
-  try { localStorage.setItem('sp_empresa_ativa', JSON.stringify(dino)) } catch { /* armazenamento opcional */ }
-  return dino
+  const empresaAtiva = dino || DINO_COMPANY
+  try { localStorage.setItem('sp_empresa_ativa', JSON.stringify(empresaAtiva)) } catch { /* armazenamento opcional */ }
+  return empresaAtiva
+}
+
+function readEmpresasAcessiveisInicial() {
+  const empresas = readStorage('sp_empresas_acessiveis', [])
+  return isDinoDedicatedHost() && (!Array.isArray(empresas) || empresas.length === 0) ? [DINO_COMPANY] : empresas
 }
 
 function readLojaAtivaInicial() {
   const empresa = readEmpresaAtivaInicial()
-  const lojas = readStorage('sp_lojas_acessiveis', [])
+  const lojasArmazenadas = readStorage('sp_lojas_acessiveis', [])
+  const lojas = isDinoDedicatedHost() && (!Array.isArray(lojasArmazenadas) || lojasArmazenadas.length === 0)
+    ? [DINO_STORE]
+    : lojasArmazenadas
   const atual = readStorage('sp_loja_ativa')
   const selecionada = empresa?.id ? selecionarLojaAutomatica(lojas, empresa.id, atual) : null
   try {
+    if (isDinoDedicatedHost() && lojas.length > 0) localStorage.setItem('sp_lojas_acessiveis', JSON.stringify(lojas))
     if (selecionada?.id && selecionada.id !== atual?.id) localStorage.setItem('sp_loja_ativa', JSON.stringify(selecionada))
     if (!selecionada && atual?.id) localStorage.removeItem('sp_loja_ativa')
   } catch { /* armazenamento pode estar indisponível durante a hidratação */ }
@@ -39,9 +48,12 @@ function readLojaAtivaInicial() {
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(() => readStorage('sp_user'))
   const [empresaAtiva, setEmpresaAtiva] = useState(readEmpresaAtivaInicial)
-  const [empresasAcessiveis, setEmpresasAcessiveis] = useState(() => readStorage('sp_empresas_acessiveis', []))
+  const [empresasAcessiveis, setEmpresasAcessiveis] = useState(readEmpresasAcessiveisInicial)
   const [lojaAtiva, setLojaAtiva] = useState(readLojaAtivaInicial)
-  const [lojasAcessiveis, setLojasAcessiveis] = useState(() => readStorage('sp_lojas_acessiveis', []))
+  const [lojasAcessiveis, setLojasAcessiveis] = useState(() => {
+    const lojas = readStorage('sp_lojas_acessiveis', [])
+    return isDinoDedicatedHost() && (!Array.isArray(lojas) || lojas.length === 0) ? [DINO_STORE] : lojas
+  })
 
   const desligarPushContextoAtual = () => {
     try {
@@ -61,9 +73,13 @@ export function AuthProvider({ children }) {
     if (identidadeAnterior && (identidadeAnterior !== identidadeNova || empresaAtiva?.id !== empresaNova?.id || lojaAtiva?.id !== lojaNova?.id)) desligarPushContextoAtual()
     localStorage.setItem(site ? 'sp_site_token' : 'sp_token', token)
     localStorage.setItem('sp_user', JSON.stringify(userData))
-    const empresas = Array.isArray(sessao.empresas_acessiveis) ? sessao.empresas_acessiveis : []
-    const empresa = empresaNova
-    const lojas = Array.isArray(sessao.lojas_acessiveis) ? sessao.lojas_acessiveis : []
+    const empresasRecebidas = Array.isArray(sessao.empresas_acessiveis) ? sessao.empresas_acessiveis : []
+    const empresas = isDinoDedicatedHost() && empresasRecebidas.length === 0 ? [DINO_COMPANY] : empresasRecebidas
+    const empresa = isDinoDedicatedHost()
+      ? (empresas.find((item) => isDinoBrandContext(item)) || DINO_COMPANY)
+      : empresaNova
+    const lojasRecebidas = Array.isArray(sessao.lojas_acessiveis) ? sessao.lojas_acessiveis : []
+    const lojas = isDinoDedicatedHost() && lojasRecebidas.length === 0 ? [DINO_STORE] : lojasRecebidas
     const loja = selecionarLojaAutomatica(lojas, empresa?.id, lojaNova)
     if (empresas.length > 0) {
       localStorage.setItem('sp_empresas_acessiveis', JSON.stringify(empresas))
@@ -136,9 +152,10 @@ export function AuthProvider({ children }) {
       setEmpresaAtiva(empresa)
     }
     if (Array.isArray(lojas)) {
-      localStorage.setItem('sp_lojas_acessiveis', JSON.stringify(lojas))
-      setLojasAcessiveis(lojas)
-      const selecionada = selecionarLojaAutomatica(lojas, empresaAtualizada?.id, loja || lojaAtiva)
+      const lojasAtualizadas = isDinoDedicatedHost() && lojas.length === 0 ? [DINO_STORE] : lojas
+      localStorage.setItem('sp_lojas_acessiveis', JSON.stringify(lojasAtualizadas))
+      setLojasAcessiveis(lojasAtualizadas)
+      const selecionada = selecionarLojaAutomatica(lojasAtualizadas, empresaAtualizada?.id, loja || lojaAtiva)
       if (selecionada) {
         localStorage.setItem('sp_loja_ativa', JSON.stringify(selecionada))
         setLojaAtiva(selecionada)
