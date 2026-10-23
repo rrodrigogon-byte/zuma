@@ -56,7 +56,10 @@ const inicialTerminal = { loja_id: '', codigo: '', nome: '', identificador_dispo
 const inicialDispositivo = { loja_id: '', terminal_id: '', tipo: 'impressora_termica', nome: '', fabricante: '', modelo: '', endereco_conexao: '', modo: 'diagnostico', host: '', porta: '9100' }
 
 export default function PDVOffline() {
-  const { lojaAtiva, lojasAcessiveis } = useAuth()
+  const { lojaAtiva, lojasAcessiveis, permissoes } = useAuth()
+  // quem só resolve conflitos (perfil financeiro) não gerencia terminais e periféricos
+  const gerencia = !Array.isArray(permissoes) || permissoes.includes('settings.write')
+  const resolve = !Array.isArray(permissoes) || permissoes.includes('payments.read')
   const [terminais, setTerminais] = useState([])
   const [dispositivos, setDispositivos] = useState([])
   const [conflitos, setConflitos] = useState([])
@@ -78,9 +81,9 @@ export default function PDVOffline() {
     setErro('')
     try {
       const [dadosTerminais, dadosDispositivos, dadosConflitos, fila] = await Promise.all([
-        api.get('/api/pdv-offline/terminais'),
-        lojaAtiva?.id ? api.get(`/api/pdv-offline/dispositivos?loja_id=${lojaAtiva.id}`) : Promise.resolve({ dispositivos: [] }),
-        api.get('/api/pdv-offline/conflitos').catch(() => ({ conflitos: [] })),
+        gerencia ? api.get('/api/pdv-offline/terminais') : Promise.resolve({ terminais: [] }),
+        gerencia && lojaAtiva?.id ? api.get(`/api/pdv-offline/dispositivos?loja_id=${lojaAtiva.id}`) : Promise.resolve({ dispositivos: [] }),
+        resolve ? api.get('/api/pdv-offline/conflitos').catch(() => ({ conflitos: [] })) : Promise.resolve({ conflitos: [] }),
         resumoFilaOffline(),
       ])
       setTerminais(dadosTerminais.terminais || [])
@@ -92,7 +95,7 @@ export default function PDVOffline() {
     } finally {
       setCarregando(false)
     }
-  }, [lojaAtiva?.id])
+  }, [lojaAtiva?.id, gerencia, resolve])
 
   useEffect(() => { carregar() }, [carregar])
 
@@ -208,7 +211,7 @@ export default function PDVOffline() {
         </div>
         <div className="pdvo-actions">
           <button className="pdvo-button pdvo-button--secondary" onClick={carregar} disabled={carregando}>Atualizar</button>
-          <button className="pdvo-button" onClick={abrirTerminal}>Novo terminal</button>
+          {gerencia && <button className="pdvo-button" onClick={abrirTerminal}>Novo terminal</button>}
         </div>
       </section>
 
@@ -216,14 +219,14 @@ export default function PDVOffline() {
       {mensagem && <div className="pdvo-alert pdvo-alert--success">{mensagem}<button onClick={() => setMensagem('')} aria-label="Fechar mensagem">×</button></div>}
 
       <section className="pdvo-cards" aria-label="Resumo operacional">
-        <article><span>Terminais ativos</span><strong>{terminais.filter((terminal) => terminal.ativo).length}</strong><small>{terminais.filter((terminal) => terminal.ultimo_heartbeat_em).length} com sinal registrado</small></article>
-        <article><span>Periféricos ativos</span><strong>{dispositivos.filter((dispositivo) => dispositivo.ativo).length}</strong><small>{dispositivos.filter((dispositivo) => dispositivo.ultimo_status === 'online').length} online na loja ativa</small></article>
+{gerencia && <>        <article><span>Terminais ativos</span><strong>{terminais.filter((terminal) => terminal.ativo).length}</strong><small>{terminais.filter((terminal) => terminal.ultimo_heartbeat_em).length} com sinal registrado</small></article>
+        <article><span>Periféricos ativos</span><strong>{dispositivos.filter((dispositivo) => dispositivo.ativo).length}</strong><small>{dispositivos.filter((dispositivo) => dispositivo.ultimo_status === 'online').length} online na loja ativa</small></article></>}
         <article><span>Fila no navegador</span><strong>{resumoLocal.total}</strong><small>{resumoLocal.falha || 0} com falha de entrega</small></article>
         <article className={conflitos.length ? 'pdvo-card--warning' : ''}><span>Conflitos pendentes</span><strong>{conflitos.length}</strong><small>{conflitos.length ? 'Exigem decisão gerencial' : 'Sem divergências abertas'}</small></article>
       </section>
 
       <section className="pdvo-grid">
-        <article className="pdvo-panel pdvo-panel--wide">
+        {gerencia && <article className="pdvo-panel pdvo-panel--wide">
           <header className="pdvo-panel-header"><div><h2>Terminais provisionados</h2><p>Cada terminal recebe uma credencial independente e pode operar em uma única loja.</p></div><button className="pdvo-link-button" onClick={abrirTerminal}>Adicionar</button></header>
           <div className="pdvo-table-wrap">
             <table><thead><tr><th>Terminal</th><th>Loja</th><th>Agente</th><th>Último sinal</th><th>Periféricos</th><th>Ações</th></tr></thead>
@@ -232,7 +235,7 @@ export default function PDVOffline() {
               </tr>)}</tbody>
             </table>
           </div>
-        </article>
+        </article>}
 
         <article className="pdvo-panel">
           <header className="pdvo-panel-header"><div><h2>Fila offline local</h2><p>Eventos ficam no navegador até serem entregues de forma durável ao agente local.</p></div></header>
@@ -241,10 +244,10 @@ export default function PDVOffline() {
           <p className="pdvo-note">Cartão exige autorização TEF local e Pix exige conexão. O navegador não repete operações financeiras automaticamente.</p>
         </article>
 
-        <article className="pdvo-panel pdvo-panel--wide">
+        {gerencia && <article className="pdvo-panel pdvo-panel--wide">
           <header className="pdvo-panel-header"><div><h2>Periféricos da loja ativa</h2><p>Cadastre em modo de diagnóstico e ative após validar a instalação física.</p></div><button className="pdvo-link-button" onClick={abrirDispositivo}>Cadastrar periférico</button></header>
           <div className="pdvo-device-grid">{dispositivos.length === 0 ? <p className="pdvo-empty">Nenhum periférico cadastrado para esta loja.</p> : dispositivos.map((dispositivo) => <article className="pdvo-device" key={dispositivo.id}><div className="pdvo-device-top"><span>{TIPOS_DISPOSITIVO.find(([id]) => id === dispositivo.tipo)?.[1] || dispositivo.tipo}</span><Status value={dispositivo.ultimo_status} /></div><strong>{dispositivo.nome}</strong><p>{[dispositivo.fabricante, dispositivo.modelo].filter(Boolean).join(' · ') || 'Modelo não informado'}</p><small>Terminal: {dispositivo.terminal_codigo || 'Compartilhado pela loja'}</small></article>)}</div>
-        </article>
+        </article>}
 
         <article className="pdvo-panel pdvo-panel--wide">
           <header className="pdvo-panel-header"><div><h2>Conflitos de sincronização</h2><p>Venda segurada (produto inexistente ou dia fechado) só entra com a decisão de um gestor; avisos de preço e estoque já foram lançados e pedem só ciência.</p></div></header>

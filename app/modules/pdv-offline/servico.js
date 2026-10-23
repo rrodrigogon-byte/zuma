@@ -9,8 +9,8 @@
 // - conflitos: preço diferente do cadastro e estoque insuficiente (venda aplicada, só aviso);
 //   produto inexistente/inativo, dia já fechado no Financeiro e venda recusada na validação
 //   (venda NÃO aplicada até a gerência decidir);
-// - estoque e Financeiro do bar são por empresa (bar_produtos e bar_comandas não têm unidade): a
-//   unidade do terminal fica no evento e no conflito.
+// - o estoque do bar é por empresa (bar_produtos não tem unidade); no razão a venda entra com a
+//   unidade do terminal (fontes.js acha pela comanda), então o dia fechado vale da empresa ou dela.
 import { FUSO_PADRAO, hojeNoFuso } from '../razao/servico.js';
 import crypto from 'node:crypto';
 import { ErroDominio, exigirTexto, exigirUuid, transacao } from '../acesso/banco.js';
@@ -155,11 +155,11 @@ function instanteDaVenda(valor, agora) {
 
 const tresCasas = (n) => Math.abs(Math.round(n * 1000) / 1000 - n) < 1e-9;
 
-/** Dia da venda já fechado no Financeiro (da empresa toda: o bar não tem unidade no razão)? */
-async function diaFechado(q, empresa, quando, fuso) {
+/** Dia da venda já fechado no Financeiro, da empresa toda ou da unidade do terminal (a venda entra no razão com ela)? */
+async function diaFechado(q, empresa, lojaId, quando, fuso) {
   if (!(await q("SELECT to_regclass('fin_fechamentos') AS t")).rows[0]?.t) return null;
   const dia = hojeNoFuso(quando, fuso);
-  const r = await q('SELECT 1 FROM fin_fechamentos WHERE empresa_id = $1 AND data = $2::date AND loja_id IS NULL LIMIT 1', [empresa, dia]);
+  const r = await q('SELECT 1 FROM fin_fechamentos WHERE empresa_id = $1 AND data = $2::date AND (loja_id IS NULL OR loja_id = $3::uuid) LIMIT 1', [empresa, dia, lojaId || null]);
   return r.rows[0] ? dia : null;
 }
 
@@ -202,10 +202,10 @@ async function aplicarVenda(q, terminal, payload, { agora, fuso = FUSO_PADRAO, l
     }
   }
   let quando = instanteDaVenda(payload.ocorreu_em, agora);
-  const fechado = await diaFechado(q, empresa, quando, fuso);
+  const fechado = await diaFechado(q, empresa, terminal.loja_id, quando, fuso);
   if (fechado) {
     // gerência aceitou lançar hoje (o caixa daquele dia já foi conferido e fechado)
-    if (lancarHojeSeFechado && !(await diaFechado(q, empresa, agora, fuso))) quando = agora;
+    if (lancarHojeSeFechado && !(await diaFechado(q, empresa, terminal.loja_id, agora, fuso))) quando = agora;
     else conflitos.push({ tipo: 'dia_fechado', bloqueante: true, cliente: { ocorreu_em: payload.ocorreu_em || null, total }, servidor: { dia_fechado: fechado } });
   }
   if (conflitos.some((c) => c.bloqueante)) return { aplicado: false, conflitos };

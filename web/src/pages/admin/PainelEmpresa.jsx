@@ -36,9 +36,9 @@ export default function PainelEmpresa() {
   const nada = dados && !r && !dados.faltando && !dados.salao && !dados.conflitos
   return <section className="dadm-page" aria-labelledby="painel-empresa-titulo">
     <header className="dadm-head"><div>
-      <div className="dadm-eyebrow">{empresaAtiva?.nome || 'Empresa'}{lojaAtiva?.nome ? ` · ${lojaAtiva.nome}` : ''}</div>
+      <div className="dadm-eyebrow">{empresaAtiva?.nome || 'Empresa'}</div>
       <h1 id="painel-empresa-titulo">Painel</h1>
-      <p>O dia da empresa: dinheiro, estoque, salão e caixa.</p>
+      <p>O dia da empresa: dinheiro, estoque, salão e caixa.{lojaAtiva?.nome ? ` Financeiro e estoque da unidade ${lojaAtiva.nome}.` : ''}</p>
     </div></header>
 
     {!dados && <p className="dadm-muted">Carregando…</p>}
@@ -53,7 +53,7 @@ export default function PainelEmpresa() {
 
     {(dados?.faltando || dados?.salao || dados?.conflitos) && <section className="dadm-kpis" aria-label="Operação">
       {dados.faltando && <article className={dados.faltando.length ? 'is-alert' : ''}><span>Abaixo do mínimo</span><strong>{dados.faltando.length}</strong><small>{dados.faltando.length ? <Link to="/admin/compras">{dados.faltando.slice(0, 2).map((i) => i.nome).join(', ')}{dados.faltando.length > 2 ? '…' : ''}</Link> : 'Estoque em dia'}</small></article>}
-      {dados.salao && <article><span>Reservas hoje</span><strong>{dados.salao.ocupacao?.totalReservas ?? 0}</strong><small><Link to="/admin/reservas">{dados.salao.ocupacao?.pessoasPrevistas ?? 0} pessoa(s) previstas</Link></small></article>}
+      {dados.salao && <article><span>Reservas hoje</span><strong>{dados.salao.ocupacao?.totalReservas ?? 0}</strong><small><Link to="/admin/reservas">{dados.salao.ocupacao?.pessoasPrevistas ?? 0} pessoa(s) prevista(s)</Link></small></article>}
       {dados.conflitos && <article className={dados.conflitos.length ? 'is-alert' : ''}><span>PDV offline</span><strong>{dados.conflitos.length}</strong><small>{dados.conflitos.length ? <Link to="/admin/pdv-offline">conflito(s) para decidir</Link> : 'Sem pendências'}</small></article>}
     </section>}
 

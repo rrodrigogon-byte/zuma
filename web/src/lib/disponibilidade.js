@@ -1,3 +1,5 @@
+import { permissaoQueFalta } from './permissoes-rota.js'
+
 // Disponibilidade das telas em produção.
 //
 // EM_IMPLANTACAO: telas cujo backend ainda não está montado no server.js de produção (o código
@@ -24,8 +26,6 @@ export const GLOBAIS_DO_EVENTO = [
   '/admin/contatos', '/admin/relatorios',
   '/portaria', '/admin/portaria',
 ]
-
-import { permissaoQueFalta } from './permissoes-rota.js'
 
 const caminho = (to) => String(to || '').split('?')[0].split('#')[0].replace(/\/+$/, '') || '/'
 

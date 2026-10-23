@@ -738,8 +738,6 @@ async function escopoComercial(req, permissao) {
     throw Object.assign(new Error(error.message), { status: CLUBE_STATUS_ESCOPO[error.code] || 403, code: error.code });
   }
 }
-// Permissões que o menu do backoffice consulta (GET /api/admin/minhas-permissoes).
-const PERMISSOES_DO_MENU = ['payments.read', 'payments.write', 'reports.read', 'inventory.read', 'inventory.write', 'catalog.read', 'catalog.write', 'customers.read', 'customers.write', 'promotions.read', 'settings.write'];
 // Unidades: quem só tem a permissão numa unidade vê e edita só aquela e não cria unidades.
 const empresaDasUnidades = (req) => escopoComercial(req, permissaoDasUnidades(req));
 // Financeiro JSON antigo da empresa (a barbearia ainda grava lá) para o razão ler.
@@ -1235,20 +1233,39 @@ if(process.env.COMMERCE_CORE_ENABLED === '1'){
     empresaDaRequisicao: empresaDoA2,
     operadorDaRequisicao: (req) => String(req.user?.id || req.user?.email || 'sistema'),
   }));
-  // [kytto-permissoes] O que a pessoa pode fazer na empresa ativa, para o menu e as telas do
+  // [kytto-permissoes] O que a pessoa pode fazer na empresa e na unidade ativas, para o menu e as telas do
   // backoffice esconderem o que ela não acessa. Só orienta a interface: cada rota continua
   // conferindo a permissão. Administração da plataforma e sessão sem empresa não filtram nada.
   app.get('/api/admin/minhas-permissoes', auth, requireStaff, async (req, res) => {
     res.set('Cache-Control', 'private, no-store');
     if (isPlatformAdminUser(req.user) || isMainAdminUser(req.user)) return res.json({ aplicavel: false });
-    const resultados = await Promise.all(PERMISSOES_DO_MENU.map(async (codigo) => {
-      try { const { lojaRestrita } = await escopoComercial(req, codigo); return { codigo, ok: true, alcance: lojaRestrita ? 'unidade' : 'empresa' }; }
-      catch (error) { return { codigo, ok: false, erro: error?.code || 'ERRO' }; }
-    }));
-    const permitidas = resultados.filter((r) => r.ok);
-    // nenhuma resposta de "permissão insuficiente": a pessoa não tem empresa no Commerce (legado)
-    if (!permitidas.length && !resultados.some((r) => r.erro === 'PERMISSION_DENIED')) return res.json({ aplicavel: false });
-    return res.json({ aplicavel: true, permissoes: permitidas.map((r) => r.codigo), alcance: Object.fromEntries(permitidas.map((r) => [r.codigo, r.alcance])) });
+    let contexto;
+    try { contexto = await resolveCommerceIdentity(req); }
+    catch (error) {
+      // sem empresa no Commerce (legado) ou sem unidade escolhida: a interface não filtra e cada tela segue como antes
+      if (error?.name === 'CommerceError') return res.json({ aplicavel: false, motivo: error.code || null });
+      return res.status(503).json({ error: 'não foi possível consultar as permissões', code: 'PERMISSIONS_UNAVAILABLE' });
+    }
+    try {
+      // mesmo critério do requireCommercePermission, numa consulta só: vínculo da empresa toda ou da unidade escolhida
+      const r = await commerceDb.queryRead(
+        `SELECT DISTINCT p.codigo
+           FROM commerce_memberships m
+           JOIN commerce_roles r ON r.id = m.role_id AND (r.empresa_id = $1 OR r.empresa_id IS NULL)
+           JOIN commerce_role_permissions rp ON rp.role_id = r.id
+           JOIN commerce_permissions p ON p.id = rp.permission_id
+          WHERE m.empresa_id = $1 AND m.usuario_id = $2 AND m.ativo = true
+            AND (m.expires_at IS NULL OR m.expires_at > CURRENT_TIMESTAMP)
+            AND (m.loja_id IS NULL OR m.loja_id = $3)
+          ORDER BY p.codigo`,
+        [contexto.empresaId, contexto.usuarioId, contexto.lojaId || null],
+      );
+      let permissoes = r.rows.map((row) => row.codigo);
+      if (req.user?.pgOperational === true) permissoes = permissoes.filter((codigo) => codigo !== 'users.write');
+      return res.json({ aplicavel: true, empresaId: contexto.empresaId, lojaId: contexto.lojaId || null, permissoes });
+    } catch {
+      return res.status(503).json({ error: 'não foi possível consultar as permissões', code: 'PERMISSIONS_UNAVAILABLE' });
+    }
   });
   // [kytto-unidades] Cadastro das unidades (lojas) da empresa ativa, no PostgreSQL.
   app.use('/api/admin/unidades', auth, requireStaff, createUnidadesAdminRouter({ db: clubeDb, empresaDaRequisicao: empresaDasUnidades }));

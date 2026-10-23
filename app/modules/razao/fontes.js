@@ -58,7 +58,7 @@ export async function sincronizarBar(db, empresaId, { fuso = FUSO_PADRAO } = {})
        ${temPdvOffline ? `LEFT JOIN LATERAL (SELECT t.loja_id FROM pdv_eventos e JOIN pdv_terminais t ON t.empresa_id = e.empresa_id AND t.id = e.terminal_id
                                          WHERE e.empresa_id = c.empresa_id AND e.comanda_id = c.id LIMIT 1) pdv ON true` : ''}
        -- pagamento com data de um dia já fechado (venda que chegou atrasada) entra no dia de hoje
-       CROSS JOIN LATERAL (SELECT CASE WHEN ${temFechamento ? `EXISTS (SELECT 1 FROM fin_fechamentos f WHERE f.empresa_id = p.empresa_id AND f.loja_id IS NULL AND f.data = (p.criado_em AT TIME ZONE $2)::date)` : 'false'}
+       CROSS JOIN LATERAL (SELECT CASE WHEN ${temFechamento ? `EXISTS (SELECT 1 FROM fin_fechamentos f WHERE f.empresa_id = p.empresa_id AND (f.loja_id IS NULL${temPdvOffline ? ' OR f.loja_id = pdv.loja_id' : ''}) AND f.data = (p.criado_em AT TIME ZONE $2)::date)` : 'false'}
                                        THEN (CURRENT_TIMESTAMP AT TIME ZONE $2)::date ELSE (p.criado_em AT TIME ZONE $2)::date END AS competencia) d
       WHERE p.empresa_id = $1 AND p.valor > 0
      ON CONFLICT (empresa_id, chave) DO NOTHING`,

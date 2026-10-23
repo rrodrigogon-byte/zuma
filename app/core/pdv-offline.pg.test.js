@@ -67,6 +67,10 @@ describe('PDV offline (PostgreSQL)', { skip: pgDeTeste }, () => {
     assert.equal(l.valor, 30);
     assert.equal(l.competencia, '2026-10-22');
     assert.equal(l.lojaId, loja, 'a venda offline entra no razão com a unidade do terminal');
+    // lançamento lido antes da versão com unidade: a migração 097 completa (sem dia fechado)
+    await ctx.db.query("UPDATE fin_lancamentos SET loja_id = NULL WHERE origem = 'bar_comanda' AND empresa_id = $1", [A]);
+    await ctx.db.query(sql('097_pdv_offline_unidade_no_razao.sql'));
+    assert.equal((await razao.listar(ctx.db, A, { origem: 'bar_comanda' }))[0].lojaId, loja);
   });
 
   test('preço divergente aplica e avisa; produto inexistente segura até a gerência; Pix e total errado falham', async () => {
@@ -140,6 +144,22 @@ describe('PDV offline (PostgreSQL)', { skip: pgDeTeste }, () => {
     await fontes.sincronizarBar(ctx.db, A);
     const l = (await ctx.db.query("SELECT data_competencia::text AS d FROM fin_lancamentos WHERE origem_id = $1", [res.comandaId])).rows[0];
     assert.notEqual(l.d, '2026-10-21');
+  });
+
+  test('dia fechado só da unidade do terminal também segura; o de outra unidade não', async () => {
+    const t = await pdv.autenticarTerminal(ctx.db, terminal.id, token);
+    const outra = (await ctx.db.query("INSERT INTO lojas (empresa_id, nome) VALUES ($1, 'Filial') RETURNING id", [A])).rows[0].id;
+    await ctx.db.query("INSERT INTO fin_fechamentos (empresa_id, loja_id, data, totais, responsavel) VALUES ($1, $2, '2026-10-20', '{}', 'gerente'), ($1, $3, '2026-10-19', '{}', 'gerente')", [A, loja, outra]);
+    const v = (dia) => evento(venda({ ocorreu_em: `${dia}T15:00:00-04:00`, itens: [{ produto_id: cerveja.id, quantidade: 1, valor_unitario: 10 }], pagamentos: [{ tipo: 'dinheiro', valor: 10 }] }));
+    const r = await pdv.sincronizar(ctx.db, t, { lote_cliente_id: randomUUID(), eventos: [v('2026-10-20'), { ...v('2026-10-19'), sequencia: 2 }] }, { agora });
+    assert.deepEqual(r.eventos.map((e) => e.resultado.aplicado), [false, true]);
+    // pagamento antigo de venda do terminal num dia fechado só da unidade entra no razão no dia de hoje
+    const comanda = r.eventos[1].resultado.comanda_id;
+    await ctx.db.query("UPDATE bar_comanda_pagamentos SET criado_em = '2026-10-20T15:00:00-04:00' WHERE comanda_id = $1", [comanda]);
+    await fontes.sincronizarBar(ctx.db, A);
+    const l = (await ctx.db.query('SELECT data_competencia::text AS d, loja_id FROM fin_lancamentos WHERE origem_id = $1', [comanda])).rows[0];
+    assert.equal(l.loja_id, loja);
+    assert.notEqual(l.d, '2026-10-20');
   });
 
   test('descartar resolve todos os bloqueios do evento; aceitar depois de descartado é recusado', async () => {

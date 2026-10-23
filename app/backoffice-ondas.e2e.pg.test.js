@@ -69,7 +69,11 @@ test('backoffice integrado: Financeiro, estoque e compras, fiscal, conciliação
       assert.equal(s.body.aplicavel, true);
       assert.ok(s.body.permissoes.includes('customers.read') && !s.body.permissoes.includes('payments.read'));
       const g = await req('/api/admin/minhas-permissoes', 'GET', null, gerenteA2); ok(g, 200, 'gerente');
-      assert.equal(g.body.alcance['inventory.read'], 'unidade');
+      assert.ok(g.body.permissoes.includes('inventory.read'), 'unidade escolhida no cabeçalho');
+      // financeiro na empresa e estoque só na unidade A1: o estoque aparece com a A1 escolhida
+      const misto = { Authorization: `Bearer ${await conta('misto-a', [{ empresaId: A, roleCode: 'finance' }, { empresaId: A, roleCode: 'inventory_manager', lojaId: A1 }])}`, 'X-Empresa-Id': A };
+      assert.ok(!(await req('/api/admin/minhas-permissoes', 'GET', null, misto)).body.permissoes.includes('inventory.read'));
+      assert.ok((await req('/api/admin/minhas-permissoes', 'GET', null, { ...misto, 'X-Loja-Id': A1 })).body.permissoes.includes('inventory.read'));
       assert.equal((await req('/api/admin/minhas-permissoes', 'GET', null, admin)).body.aplicavel, false, 'plataforma não filtra');
     });
 
@@ -104,7 +108,8 @@ test('backoffice integrado: Financeiro, estoque e compras, fiscal, conciliação
       assert.equal((itens.body.itens || itens.body).find((i) => i.id === itemId).saldo, 24);
       const contas = await req('/api/admin/razao/lancamentos?tipo=despesa&status=pendente', 'GET', null, dono);
       assert.ok((contas.body.lancamentos || contas.body.itens || contas.body).some((l) => l.valor === 96), 'conta a pagar de R$ 96');
-      ok(await req('/api/admin/suprimentos/itens', 'GET', null, donoB), 200, 'B lista itens');
+      const itensB = await req('/api/admin/suprimentos/itens', 'GET', null, donoB); ok(itensB, 200, 'B lista itens');
+      assert.equal((itensB.body.itens || itensB.body).length, 0, 'B não vê os itens de A');
     });
 
     await t.test('onda 3: fiscal só em homologação', async () => {
@@ -139,7 +144,8 @@ test('backoffice integrado: Financeiro, estoque e compras, fiscal, conciliação
       const s = await req('/api/pdv-offline/sincronizar', 'POST', { lote_cliente_id: crypto.randomUUID(), eventos: [evento] }, agente); ok(s, 200, 'sincronizar');
       assert.equal(s.body.eventos[0].status, 'processado');
       ok(await req('/api/pdv-offline/sincronizar', 'POST', { lote_cliente_id: crypto.randomUUID(), eventos: [evento] }, { ...agente, 'X-Terminal-Token': 'kytto_term_errado' }), 401, 'token errado');
-      ok(await req('/api/pdv-offline/terminais', 'GET', null, donoB), 200, 'B lista terminais');
+      const termB = await req('/api/pdv-offline/terminais', 'GET', null, donoB); ok(termB, 200, 'B lista terminais');
+      assert.equal((termB.body.terminais || termB.body).length, 0, 'B não vê os terminais de A');
       const v = await req(`/api/admin/varejo/produtos?lojaId=${A1}`, 'GET', null, dono); ok(v, 200, 'produtos do varejo');
       assert.ok(v.body.produtos.some((p) => p.id === itemId && p.saldo === 24));
       ok(await req(`/api/admin/varejo/produtos/${itemId}`, 'PATCH', { precoBase: 7.5 }, gerenteA2), 403, 'gerente não muda cadastro');
@@ -159,7 +165,10 @@ test('backoffice integrado: Financeiro, estoque e compras, fiscal, conciliação
       assert.equal(venda.lojaId, A1, 'com a unidade do terminal');
     });
   } finally {
+    const saiu = filho.exitCode !== null ? Promise.resolve() : new Promise((r) => filho.once('exit', r));
     filho.kill('SIGTERM');
+    await Promise.race([saiu, new Promise((r) => setTimeout(r, 5000))]);
     await sql.end();
+    fs.rmSync(dir, { recursive: true, force: true });
   }
 });

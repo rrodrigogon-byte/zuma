@@ -738,5 +738,6 @@ export default function Dashboard() {
   const openDinoTab = (tab) => navigate(`/admin/barbearia-erp?area=${DINO_TAB_AREA[tab] || 'operacao'}&tab=${encodeURIComponent(tab)}`)
   if (isDino) return <DinoBusinessDashboard key={scopeKey} onOpenTab={openDinoTab} />
   // empresa sem painel de marca: o painel do evento é global (negado a usuário de empresa)
-  return isTenantScope(user, empresaAtiva) ? <PainelEmpresa key={scopeKey} /> : <EventDashboard />
+  // (a administração da plataforma continua vendo o painel do evento)
+  return isTenantScope(user, empresaAtiva) && user?.platformAdmin !== true ? <PainelEmpresa key={scopeKey} /> : <EventDashboard />
 }

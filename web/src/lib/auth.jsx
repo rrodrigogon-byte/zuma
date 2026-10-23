@@ -93,19 +93,27 @@ export function AuthProvider({ children }) {
   // Permissões da pessoa na empresa ativa (menu e telas do backoffice escondem o que ela não
   // acessa). undefined = carregando; null = não se aplica (ou falhou): nada é escondido e a API
   // decide; lista = o que a pessoa pode.
+  // A lista vale para a empresa e a unidade em que foi pedida (as telas mandam as mesmas no
+  // cabeçalho); trocou o contexto, volta a "carregando" já no mesmo render.
   const consultaPermissoes = (u, empresa) => Boolean(u && u.platformAdmin !== true && empresa?.id && typeof fetch === 'function')
-  const [permissoes, setPermissoes] = useState(() => (consultaPermissoes(user, empresaAtiva) ? undefined : null))
+  const chaveDoContexto = `${empresaAtiva?.id || ''}:${lojaAtiva?.id || ''}`
+  const [consultaFeita, setConsultaFeita] = useState({ chave: null, lista: null })
   useEffect(() => {
     const token = (() => { try { return localStorage.getItem('sp_token') || '' } catch { return '' } })()
-    if (!consultaPermissoes(user, empresaAtiva) || !token) { setPermissoes(null); return undefined }
-    setPermissoes(undefined)
+    if (!consultaPermissoes(user, empresaAtiva) || !token) { setConsultaFeita({ chave: chaveDoContexto, lista: null }); return undefined }
     let vivo = true
-    fetch('/api/admin/minhas-permissoes', { headers: { Authorization: `Bearer ${token}`, 'X-Empresa-Id': empresaAtiva.id } })
+    const fim = (lista) => { if (vivo) setConsultaFeita({ chave: chaveDoContexto, lista }) }
+    // rede travada não pode prender as telas em "Carregando…": sem resposta em 8 s, nada é escondido
+    const controle = typeof AbortController === 'function' ? new AbortController() : null
+    const limite = setTimeout(() => { controle?.abort(); fim(null) }, 8000)
+    fetch('/api/admin/minhas-permissoes', { signal: controle?.signal, headers: { Authorization: `Bearer ${token}`, 'X-Empresa-Id': empresaAtiva.id, ...(lojaAtiva?.id ? { 'X-Loja-Id': lojaAtiva.id } : {}) } })
       .then((resposta) => (resposta.ok ? resposta.json() : null))
-      .then((dados) => { if (vivo) setPermissoes(dados?.aplicavel === true && Array.isArray(dados.permissoes) ? dados.permissoes : null) })
-      .catch(() => { if (vivo) setPermissoes(null) /* sem rede: não esconde nada */ })
-    return () => { vivo = false }
-  }, [user, empresaAtiva?.id])
+      .then((dados) => fim(dados?.aplicavel === true && Array.isArray(dados.permissoes) ? dados.permissoes : null))
+      .catch(() => fim(null) /* sem rede: não esconde nada */)
+      .finally(() => clearTimeout(limite))
+    return () => { vivo = false; clearTimeout(limite); controle?.abort() }
+  }, [user, chaveDoContexto])
+  const permissoes = !consultaPermissoes(user, empresaAtiva) ? null : consultaFeita.chave === chaveDoContexto ? consultaFeita.lista : undefined
 
   const desligarPushContextoAtual = () => {
     try {
