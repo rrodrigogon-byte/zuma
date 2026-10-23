@@ -1283,7 +1283,9 @@ if(process.env.COMMERCE_CORE_ENABLED === '1'){
   app.use('/api/admin/razao', auth, requireStaff, createRazaoAdminRouter({ db: clubeDb, escopoDaRequisicao: escopoComercial, fonteJson: fonteJsonDoRazao, fuso: FUSO_KYTTO }));
   app.use('/api/admin/platform/razao', auth, requirePlatformAdmin, createRazaoPlataformaRouter({ db: clubeDb, fonteJson: fonteJsonDoRazao, fuso: FUSO_KYTTO }));
   // [kytto-rotina] Lê as fontes do razão e baixa o estoque das vendas a cada BACKOFFICE_ROTINA_MINUTOS (padrão 5; 0 desliga).
-  iniciarRotinaBackoffice(clubeDb, { minutos: process.env.BACKOFFICE_ROTINA_MINUTOS ?? 5, fonteJson: fonteJsonDoRazao, fuso: FUSO_KYTTO, razaoAtivo: () => process.env.FINANCEIRO_RAZAO === '1' });
+  // Rotina do backoffice: só liga sozinha com o Financeiro novo ligado (ou com BACKOFFICE_ROTINA_MINUTOS);
+  // a baixa de estoque respeita o módulo Compras escondido.
+  iniciarRotinaBackoffice(clubeDb, { minutos: process.env.BACKOFFICE_ROTINA_MINUTOS ?? (process.env.FINANCEIRO_RAZAO === '1' ? 5 : 0), fonteJson: fonteJsonDoRazao, fuso: FUSO_KYTTO, razaoAtivo: () => process.env.FINANCEIRO_RAZAO === '1', estoqueAtivo: () => !modulosOcultos().has('compras') });
   // [kytto-suprimentos] Estoque por unidade, inventário, ficha técnica e compras (geram contas a pagar no razão).
   app.use('/api/admin/suprimentos', auth, requireStaff, createSuprimentosAdminRouter({ db: clubeDb, escopoDaRequisicao: escopoComercial, fuso: FUSO_KYTTO }));
   // [kytto-fiscal] Emitente, certificado A1 no cofre, classificação e documentos — SÓ HOMOLOGAÇÃO
@@ -1293,7 +1295,7 @@ if(process.env.COMMERCE_CORE_ENABLED === '1'){
   app.use('/api/admin/salao', auth, requireStaff, createSalaoAdminRouter({ db: clubeDb, escopoDaRequisicao: escopoComercial, fuso: FUSO_KYTTO }));
   // [kytto-pdv-offline] Terminais e periféricos por unidade; o agente local sincroniza as vendas feitas sem internet (viram comandas pagas do bar).
   // limite por IP antes de ler o corpo (até 2 MB na sincronização): o agente consulta a fila de impressão a cada poucos segundos
-  app.use('/api/pdv-offline', (req, res, next) => (modulosOcultos().has('pdv-offline') ? respostaModuloOculto(res) : next()), publicLimit(1200, 10 * 60 * 1000), createPdvOfflineRouter({ db: clubeDb, escopoDaRequisicao: escopoComercial, auth, requireStaff, fuso: FUSO_KYTTO }));
+  app.use('/api/pdv-offline', (req, res, next) => (modulosOcultos().has('pdv-offline') ? respostaModuloOculto(res) : next()), publicLimit(3000, 10 * 60 * 1000), createPdvOfflineRouter({ db: clubeDb, escopoDaRequisicao: escopoComercial, auth, requireStaff, fuso: FUSO_KYTTO }));
   // [kytto-varejo] Supermercado/varejo sobre o estoque único: preço por unidade, promoções, lotes, etiquetas e transferências.
   app.use('/api/admin/varejo', auth, requireStaff, createVarejoAdminRouter({ db: clubeDb, escopoDaRequisicao: escopoComercial, fuso: FUSO_KYTTO }));
   // [kytto-bar] Bar, PDV, comandas, estoque fracionado, KDS e caixa por empresa.

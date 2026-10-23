@@ -4,6 +4,10 @@
 -- 'contingencia'. O CHECK de ambiente (= 'homologacao') continua valendo em tudo.
 
 -- ── contingência offline da NFC-e ────────────────────────────────────────────
+-- tabelas já em uso (fin_lancamentos, fis_documentos): se o lock não sair em 3 s, a migração
+-- falha e o deploy para, em vez de enfileirar as operações atrás dela.
+SET LOCAL lock_timeout = '3s';
+
 ALTER TABLE fis_documentos ADD COLUMN IF NOT EXISTS tp_emis CHAR(1) NOT NULL DEFAULT '1';
 ALTER TABLE fis_documentos ADD COLUMN IF NOT EXISTS contingencia_em TIMESTAMPTZ;
 ALTER TABLE fis_documentos ADD COLUMN IF NOT EXISTS contingencia_justificativa VARCHAR(256);

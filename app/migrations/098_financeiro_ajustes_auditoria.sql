@@ -6,6 +6,10 @@
 --    - liberação da leitura do financeiro antigo (JSON): só depois do ensaio conferido;
 -- 2. Rateio de um lançamento entre centros de custo (percentuais que somam 100).
 
+-- tabelas já em uso (fin_lancamentos, fis_documentos): se o lock não sair em 3 s, a migração
+-- falha e o deploy para, em vez de enfileirar as operações atrás dela.
+SET LOCAL lock_timeout = '3s';
+
 CREATE TABLE IF NOT EXISTS fin_config (
   empresa_id UUID PRIMARY KEY REFERENCES empresas(id) ON DELETE CASCADE,
   loja_padrao UUID,

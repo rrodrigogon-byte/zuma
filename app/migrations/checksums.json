@@ -96,8 +96,8 @@
  "095_pdv_offline_multiempresa.sql": "3e12ef422680285f2954f4b91c112af7a9465ba3ae23e19688eabf98d280b0f7",
  "096_varejo_supermercado.sql": "0940d6cd8ea349ce9dc373c2362369e5fd3768d1c2a7685d5d3f0542163b317b",
  "097_pdv_offline_unidade_no_razao.sql": "8969c49ce470c5228538cbff556f2458154765f4b5ba7597e785226601e13065",
- "098_financeiro_ajustes_auditoria.sql": "88bced806f2672e8ea855b3e77b86a18d21207eff0f055ee05f48b6a58f902d8",
+ "098_financeiro_ajustes_auditoria.sql": "7123242f57bd4f9d2959379481b570c7dc933aeb44e164429499680d361682a6",
  "099_pdv_offline_impressao.sql": "4fbbf924251b8b6199b47e2550032ead57c303c62eb0f49b21707cdfe673da3d",
- "100_fiscal_completo.sql": "ffc3cc873756a7686175a6d94b5483b2a500d046909a54463f52bc233e9b4106",
+ "100_fiscal_completo.sql": "5b002b86f5731e1566bcb26a3e300d68f95f0345618ea998dc4030fc84db9b1c",
  "101_varejo_balanca.sql": "6d9278c9fbe369bdfb1fc26e5efab29e2cc08313f8891382f714787cf46296cb"
 }

@@ -395,7 +395,11 @@ export async function sincronizarJson(db, empresaId, { chaveLegada, lancamentos 
   }
   // lançamento apagado do JSON que no razão ainda está em aberto: sai (cancelado), como saiu de lá
   const todasAsChaves = (Array.isArray(lancamentos) ? lancamentos : []).filter((i) => i?.id).map((i) => `json:${chaveLegada}:${String(i.id)}`.slice(0, 200));
-  const apagados = await db.query(
+  // JSON vazio ou que encolheu de repente (restauração, arquivo corrompido) não apaga nada: só
+  // cancela quando a lista lida tem pelo menos 80% do que já entrou no razão
+  const jaNoRazao = Number((await db.query("SELECT count(*)::int AS n FROM fin_lancamentos WHERE empresa_id = $1 AND chave LIKE $2", [empresa, `json:${chaveLegada.replace(/[\\%_]/g, (c) => `\\${c}`)}:%`])).rows[0].n);
+  const confiavel = todasAsChaves.length > 0 && todasAsChaves.length >= jaNoRazao * 0.8;
+  const apagados = !confiavel ? { rowCount: 0 } : await db.query(
     `UPDATE fin_lancamentos SET status = 'cancelado', cancelado_em = CURRENT_TIMESTAMP, atualizado_em = CURRENT_TIMESTAMP,
             observacao = left(COALESCE(observacao || ' · ', '') || 'apagado no financeiro antigo', 2000)
       WHERE empresa_id = $1 AND chave LIKE $2 AND status = 'pendente' AND NOT (chave = ANY($3::text[]))`,

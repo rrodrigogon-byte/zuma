@@ -11,15 +11,16 @@ const NOME = 'backoffice';
 const VEZ_MINUTOS = 15;
 
 /** Uma passada: devolve quantas empresas leu e os erros (por empresa e fonte), sem lançar. */
-export async function executarRotina(db, { fonteJson = null, fuso = 'America/Cuiaba', razaoAtivo = () => false } = {}) {
+export async function executarRotina(db, { fonteJson = null, fuso = 'America/Cuiaba', razaoAtivo = () => false, estoqueAtivo = () => true } = {}) {
   const resultado = { empresas: 0, erros: [], pulou: false };
   if (!(await db.query("SELECT to_regclass('sys_rotinas') AS t")).rows[0]?.t) return { ...resultado, pulou: true };
   await db.query('INSERT INTO sys_rotinas (nome) VALUES ($1) ON CONFLICT (nome) DO NOTHING', [NOME]);
-  const vez = await db.query(`UPDATE sys_rotinas SET travada_ate = CURRENT_TIMESTAMP + make_interval(mins => $2) WHERE nome = $1 AND travada_ate < CURRENT_TIMESTAMP RETURNING nome`, [NOME, VEZ_MINUTOS]);
+  const vez = await db.query(`UPDATE sys_rotinas SET travada_ate = CURRENT_TIMESTAMP + make_interval(mins => $2) WHERE nome = $1 AND travada_ate < CURRENT_TIMESTAMP RETURNING travada_ate::text AS vez`, [NOME, VEZ_MINUTOS]);
   if (!vez.rows[0]) return { ...resultado, pulou: true };
+  const minhaVez = vez.rows[0].vez; // texto, com os microssegundos: só devolve a vez se ainda for desta passada
   try {
     const empresas = (await db.query("SELECT id FROM empresas e WHERE COALESCE((to_jsonb(e)->>'ativa')::boolean, (to_jsonb(e)->>'ativo')::boolean, true) ORDER BY id")).rows.map((r) => r.id);
-    const temEstoque = Boolean((await db.query("SELECT to_regclass('est_itens') AS t")).rows[0]?.t);
+    const temEstoque = estoqueAtivo() === true && Boolean((await db.query("SELECT to_regclass('est_itens') AS t")).rows[0]?.t);
     for (const empresa of empresas) {
       resultado.empresas += 1;
       if (razaoAtivo() === true) {
@@ -35,8 +36,8 @@ export async function executarRotina(db, { fonteJson = null, fuso = 'America/Cui
       }
     }
   } finally {
-    await db.query("UPDATE sys_rotinas SET travada_ate = '-infinity', ultima_execucao = CURRENT_TIMESTAMP, ultimo_resultado = $2 WHERE nome = $1",
-      [NOME, JSON.stringify({ empresas: resultado.empresas, erros: resultado.erros.slice(0, 20) })]).catch(() => {});
+    await db.query("UPDATE sys_rotinas SET travada_ate = '-infinity', ultima_execucao = CURRENT_TIMESTAMP, ultimo_resultado = $2 WHERE nome = $1 AND travada_ate = $3::timestamptz",
+      [NOME, JSON.stringify({ empresas: resultado.empresas, erros: resultado.erros.slice(0, 20) }), minhaVez]).catch(() => {});
   }
   return resultado;
 }

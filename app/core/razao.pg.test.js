@@ -292,6 +292,11 @@ describe('Razão financeiro único (PostgreSQL)', { skip: pgDeTeste }, () => {
     assert.equal(r3.atualizados, 1);
     const st = Object.fromEntries((await ctx.db.query("SELECT chave, status FROM fin_lancamentos WHERE empresa_id = $1 AND chave IN ('json:emp-massa:m3', 'json:emp-massa:m1')", [E])).rows.map((r) => [r.chave, r.status]));
     assert.deepEqual(st, { 'json:emp-massa:m3': 'cancelado', 'json:emp-massa:m1': 'pago' });
+    // JSON vazio ou encolhido de repente (restauração, arquivo corrompido) não cancela nada
+    const r4 = await fontes.sincronizarJson(ctx.db, E, { ...opcoes, lancamentos: [] });
+    assert.equal(r4.atualizados, 0);
+    const pendentes = (await ctx.db.query("SELECT count(*)::int AS n FROM fin_lancamentos WHERE empresa_id = $1 AND chave LIKE 'json:emp-massa:%' AND status = 'pendente'", [E])).rows[0].n;
+    assert.ok(pendentes > 0, 'pendentes continuam em aberto');
   });
 
   test('prontidão: fiado do bar de antes do Financeiro novo entra como recebido', async () => {
