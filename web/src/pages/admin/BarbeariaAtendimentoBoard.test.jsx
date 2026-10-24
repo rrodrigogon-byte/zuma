@@ -71,6 +71,12 @@ const profissionaisFixture = [
   { id: 'prof-2', nome: 'Marcos Barbeiro', ativo: true },
 ]
 
+const servicosFixture = [
+  { id: 'srv-1', nome: 'Corte Degradê', preco: 50, duracaoMinutos: 30, ativo: true },
+  { id: 'srv-2', nome: 'Barba Terapia', preco: 40, duracaoMinutos: 45, ativo: true },
+  { id: 'srv-3', nome: 'Combo Corte + Barba', preco: 85, duracaoMinutos: 60, ativo: true },
+]
+
 const comandasFixture = [
   {
     id: 'com-1',
@@ -119,6 +125,7 @@ describe('BarbeariaAtendimentoBoard', () => {
           onDateChange={vi.fn()}
           agendamentos={agendamentosFixture}
           profissionais={profissionaisFixture}
+          servicos={servicosFixture}
           comandas={comandasFixture}
           onStatusChange={vi.fn()}
         />
@@ -147,6 +154,7 @@ describe('BarbeariaAtendimentoBoard', () => {
           onDateChange={vi.fn()}
           agendamentos={agendamentosFixture}
           profissionais={profissionaisFixture}
+          servicos={servicosFixture}
           comandas={comandasFixture}
           onStatusChange={onStatusChange}
         />
@@ -168,6 +176,7 @@ describe('BarbeariaAtendimentoBoard', () => {
           onDateChange={vi.fn()}
           agendamentos={agendamentosFixture}
           profissionais={profissionaisFixture}
+          servicos={servicosFixture}
           comandas={comandasFixture}
         />
       )
@@ -195,6 +204,7 @@ describe('BarbeariaAtendimentoBoard', () => {
           onDateChange={vi.fn()}
           agendamentos={agendamentosFixture}
           profissionais={profissionaisFixture}
+          servicos={servicosFixture}
           comandas={comandasFixture}
         />
       )
@@ -223,6 +233,7 @@ describe('BarbeariaAtendimentoBoard', () => {
           onDateChange={vi.fn()}
           agendamentos={agendamentosFixture}
           profissionais={profissionaisFixture}
+          servicos={servicosFixture}
           comandas={comandasFixture}
         />
       )
@@ -241,5 +252,66 @@ describe('BarbeariaAtendimentoBoard', () => {
     const texto = allText(renderer.toJSON())
     expect(texto).toContain('Pedro Santos')
     expect(texto).not.toContain('João Silva')
+  })
+
+  it('alterna o botão de efeitos sonoros entre ligado e mudo', async () => {
+    await act(async () => {
+      renderer = create(
+        <BarbeariaAtendimentoBoard
+          dataSelecionada="2026-10-24"
+          onDateChange={vi.fn()}
+          agendamentos={agendamentosFixture}
+          profissionais={profissionaisFixture}
+          servicos={servicosFixture}
+          comandas={comandasFixture}
+        />
+      )
+      await tick()
+    })
+
+    const btnSom = renderer.root.findByProps({ className: 'atendimento-sound-btn active' })
+    expect(btnSom).toBeDefined()
+    expect(allText(btnSom)).toContain('Som ligado')
+
+    await act(async () => {
+      btnSom.props.onClick()
+      await tick()
+    })
+
+    const btnSomMudo = renderer.root.findByProps({ className: 'atendimento-sound-btn ' })
+    expect(allText(btnSomMudo)).toContain('Mudo')
+  })
+
+  it('abre o modal de Encaixe Rápido ao clicar no botão correspondente', async () => {
+    const onCreateEncaixe = vi.fn()
+    await act(async () => {
+      renderer = create(
+        <BarbeariaAtendimentoBoard
+          dataSelecionada="2026-10-24"
+          onDateChange={vi.fn()}
+          agendamentos={agendamentosFixture}
+          profissionais={profissionaisFixture}
+          servicos={servicosFixture}
+          comandas={comandasFixture}
+          onCreateEncaixe={onCreateEncaixe}
+        />
+      )
+      await tick()
+    })
+
+    const botoes = renderer.root.findAllByType('button')
+    const btnEncaixe = botoes.find((b) => allText(b).includes('+ Encaixe Rápido'))
+    expect(btnEncaixe).toBeDefined()
+
+    await act(async () => {
+      btnEncaixe.props.onClick()
+      await tick()
+    })
+
+    const textoModal = allText(renderer.toJSON())
+    expect(textoModal).toContain('Encaixe Rápido de Cliente')
+    expect(textoModal).toContain('Nome do cliente')
+    expect(textoModal).toContain('Escolha o serviço')
+    expect(textoModal).toContain('Confirmar encaixe')
   })
 })
