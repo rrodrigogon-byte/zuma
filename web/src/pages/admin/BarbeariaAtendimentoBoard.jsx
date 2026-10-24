@@ -26,6 +26,10 @@ import {
   SlidersHorizontal,
   Flame,
   Zap,
+  RefreshCw,
+  Printer,
+  Package,
+  ShoppingBag,
 } from 'lucide-react'
 import { fmtR } from '../../lib/api'
 import { hojeAgenda } from '../../lib/barbearia-calendar'
@@ -44,7 +48,7 @@ const ACOES_PRINCIPAIS = {
   em_atendimento: { label: 'Concluir serviço', next: 'concluido', icon: Check },
 }
 
-// ── SÍNTESE DE ÁUDIO VIA WEB AUDIO API (Zero arquivos externos) ──
+// ── SÍNTESE DE ÁUDIO VIA WEB AUDIO API ──
 function tocarSomInterativo(tipo, ativo = true) {
   if (!ativo || typeof window === 'undefined') return
   try {
@@ -108,6 +112,28 @@ function formatarHora(value) {
   return data.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Cuiaba' })
 }
 
+function extrairHoraNumero(dataHora) {
+  if (!dataHora) return 12
+  const s = String(dataHora)
+  if (s.includes('T')) {
+    const horaStr = s.split('T')[1].slice(0, 2)
+    const h = parseInt(horaStr, 10)
+    if (!Number.isNaN(h)) return h
+  }
+  const d = new Date(dataHora)
+  if (Number.isNaN(d.valueOf())) {
+    return parseInt(s.slice(0, 2), 10) || 12
+  }
+  return d.getHours()
+}
+
+function obterTurno(dataHora) {
+  const h = extrairHoraNumero(dataHora)
+  if (h < 12) return 'manha'
+  if (h < 18) return 'tarde'
+  return 'noite'
+}
+
 function extrairIniciais(nome) {
   return String(nome || '?')
     .trim()
@@ -159,6 +185,7 @@ export default function BarbeariaAtendimentoBoard({
   agendamentos = [],
   profissionais = [],
   servicos = [],
+  produtosRevenda = [],
   comandas = [],
   onStatusChange,
   onOpenAppointment,
@@ -170,19 +197,25 @@ export default function BarbeariaAtendimentoBoard({
   onOpenHistorico,
   onReassignBarber,
   onCreateEncaixe,
+  onAddItemComanda,
+  onRefresh,
   loading = false,
 }) {
   const [draggedCardId, setDraggedCardId] = useState(null)
   const [dragOverCol, setDragOverCol] = useState(null)
   const [busca, setBusca] = useState('')
   const [filtroProfissional, setFiltroProfissional] = useState('')
+  const [filtroTurno, setFiltroTurno] = useState('todos') // todos, manha, tarde, noite
   const [filtroRapido, setFiltroRapido] = useState('todos') // todos, atrasados, com_comanda, sem_comanda
   const [ordenacao, setOrdenacao] = useState('horario') // horario, atraso, valor, barbeiro
   const [menuAbertoId, setMenuAbertoId] = useState(null)
   const [moverAbertoId, setMoverAbertoId] = useState(null)
   const [reatribuirAbertoId, setReatribuirAbertoId] = useState(null)
+  const [whatsappMenuId, setWhatsappMenuId] = useState(null)
   const [agoraTempo, setAgoraTempo] = useState(Date.now())
   const [modoVisualizacao, setModoVisualizacao] = useState('kanban')
+  const [ultimaAtualizacao, setUltimaAtualizacao] = useState(Date.now())
+  const [rotacionandoRefresh, setRotacionandoRefresh] = useState(false)
 
   // Feedback Sonoro
   const [somAtivo, setSomAtivo] = useState(() => {
@@ -207,6 +240,10 @@ export default function BarbeariaAtendimentoBoard({
     iniciarImediato: true,
   })
 
+  // Modal de Adicionar Item Rápido na Comanda
+  const [modalItemComanda, setModalItemComanda] = useState(null) // { agendamento, comanda }
+  const [abaItemComanda, setAbaItemComanda] = useState('produtos') // produtos, servicos
+
   // Touch Drag para Mobile
   const [touchDragging, setTouchDragging] = useState(false)
   const [touchPos, setTouchPos] = useState({ x: 0, y: 0 })
@@ -214,7 +251,6 @@ export default function BarbeariaAtendimentoBoard({
   const touchStartPos = useRef({ x: 0, y: 0 })
   const boardRef = useRef(null)
 
-  // Salvar preferência de som
   function toggleSom() {
     setSomAtivo((prev) => {
       const next = !prev
@@ -258,16 +294,30 @@ export default function BarbeariaAtendimentoBoard({
       if (
         !e.target.closest('.atendimento-popover') &&
         !e.target.closest('.atendimento-menu-trigger') &&
-        !e.target.closest('.atendimento-move-btn')
+        !e.target.closest('.atendimento-move-btn') &&
+        !e.target.closest('.atendimento-whatsapp-btn')
       ) {
         setMenuAbertoId(null)
         setMoverAbertoId(null)
         setReatribuirAbertoId(null)
+        setWhatsappMenuId(null)
       }
     }
     document.addEventListener('click', handleClickFora)
     return () => document.removeEventListener('click', handleClickFora)
   }, [])
+
+  // Disparar atualização rápida
+  async function executarRefresh() {
+    setRotacionandoRefresh(true)
+    if (onRefresh) {
+      try {
+        await onRefresh()
+      } catch (_) {}
+    }
+    setUltimaAtualizacao(Date.now())
+    setTimeout(() => setRotacionandoRefresh(false), 600)
+  }
 
   // Filtragem e Ordenação Inteligente
   const agendamentosProcessados = useMemo(() => {
@@ -277,6 +327,11 @@ export default function BarbeariaAtendimentoBoard({
       // Filtro por barbeiro
       if (filtroProfissional && String(item.profissionalId) !== String(filtroProfissional)) {
         return false
+      }
+      // Filtro por turno
+      if (filtroTurno !== 'todos') {
+        const turnoItem = obterTurno(item.dataHora)
+        if (turnoItem !== filtroTurno) return false
       }
       // Filtro rápido
       const comanda = comandas.find((c) => c.agendamentoId === item.id && c.status !== 'cancelada')
@@ -316,7 +371,7 @@ export default function BarbeariaAtendimentoBoard({
     })
 
     return lista
-  }, [agendamentos, busca, filtroProfissional, filtroRapido, ordenacao, comandas, agoraTempo])
+  }, [agendamentos, busca, filtroProfissional, filtroTurno, filtroRapido, ordenacao, comandas, agoraTempo])
 
   // Métricas do dia
   const metricas = useMemo(() => {
@@ -330,6 +385,14 @@ export default function BarbeariaAtendimentoBoard({
       .reduce((acc, i) => acc + Number(i.valor || 0), 0)
     return { total, emAtendimento, concluidos, atrasados, totalPrevisto, faturado }
   }, [agendamentos, agoraTempo])
+
+  // Contagem por turno
+  const contagemTurnos = useMemo(() => {
+    const manha = agendamentos.filter((i) => obterTurno(i.dataHora) === 'manha').length
+    const tarde = agendamentos.filter((i) => obterTurno(i.dataHora) === 'tarde').length
+    const noite = agendamentos.filter((i) => obterTurno(i.dataHora) === 'noite').length
+    return { manha, tarde, noite }
+  }, [agendamentos])
 
   // Drag and drop nativo
   function handleDragStart(e, item) {
@@ -408,7 +471,6 @@ export default function BarbeariaAtendimentoBoard({
     setDragOverCol(null)
   }
 
-  // Execução de transição com efeitos sonoros e hápticos
   function executarTransicaoComEfeitos(item, novoStatus) {
     if (novoStatus === 'cancelado') {
       if (!window.confirm(`Deseja cancelar o atendimento de ${item.clienteNome || 'cliente'}?`)) return
@@ -417,7 +479,6 @@ export default function BarbeariaAtendimentoBoard({
       if (!window.confirm(`Marcar que ${item.clienteNome || 'o cliente'} não compareceu?`)) return
     }
 
-    // Feedback sonoro e háptico
     if (novoStatus === 'concluido') {
       dispararCelebracao()
     } else {
@@ -436,9 +497,9 @@ export default function BarbeariaAtendimentoBoard({
     setMenuAbertoId(null)
     setMoverAbertoId(null)
     setReatribuirAbertoId(null)
+    setWhatsappMenuId(null)
   }
 
-  // Submissão de Encaixe Rápido
   function submeterEncaixeRapido(e) {
     e.preventDefault()
     if (!formEncaixe.clienteNome.trim()) return
@@ -460,6 +521,20 @@ export default function BarbeariaAtendimentoBoard({
       profissionalId: '',
       iniciarImediato: true,
     })
+    tocarSomInterativo('avancar', somAtivo)
+  }
+
+  function submeterAdicaoItem(itemEscolhido, tipo) {
+    if (!modalItemComanda?.comanda?.id) return
+    if (onAddItemComanda) {
+      onAddItemComanda(modalItemComanda.comanda.id, {
+        tipo,
+        id: itemEscolhido.id,
+        quantidade: 1,
+        profissionalId: modalItemComanda.agendamento.profissionalId,
+      })
+    }
+    setModalItemComanda(null)
     tocarSomInterativo('avancar', somAtivo)
   }
 
@@ -546,6 +621,17 @@ export default function BarbeariaAtendimentoBoard({
               />
             </div>
 
+            {/* Botão de Atualização Rápida */}
+            <button
+              type="button"
+              className={`atendimento-refresh-btn ${rotacionandoRefresh ? 'rotating' : ''}`}
+              onClick={executarRefresh}
+              title="Sincronizar quadro agora"
+            >
+              <RefreshCw size={14} />
+              <span>Sincronizar</span>
+            </button>
+
             {/* Alternador de Som */}
             <button
               type="button"
@@ -555,6 +641,16 @@ export default function BarbeariaAtendimentoBoard({
             >
               {somAtivo ? <Volume2 size={15} /> : <VolumeX size={15} />}
               <span>{somAtivo ? 'Som ligado' : 'Mudo'}</span>
+            </button>
+
+            {/* Botão de Imprimir Ficha do Dia */}
+            <button
+              type="button"
+              className="atendimento-pill"
+              onClick={() => typeof window !== 'undefined' && window.print()}
+              title="Imprimir folha operacional do dia para a bancada"
+            >
+              <Printer size={14} /> Imprimir Escala
             </button>
 
             {/* Alternador de visualização */}
@@ -681,7 +777,7 @@ export default function BarbeariaAtendimentoBoard({
           </div>
         </div>
 
-        {/* ── BARRA DE FILTROS, BUSCA E ORDENAÇÃO ── */}
+        {/* ── BARRA DE FILTROS, BUSCA, TURNOS E ORDENAÇÃO ── */}
         <div className="atendimento-filter-bar">
           <div className="atendimento-search-box">
             <Search className="atendimento-search-icon" size={15} />
@@ -692,6 +788,38 @@ export default function BarbeariaAtendimentoBoard({
               value={busca}
               onChange={(e) => setBusca(e.target.value)}
             />
+          </div>
+
+          {/* Filtro por Turno do Dia (Manhã, Tarde, Noite) */}
+          <div className="atendimento-shift-group">
+            <button
+              type="button"
+              className={`atendimento-shift-btn ${filtroTurno === 'todos' ? 'active' : ''}`}
+              onClick={() => setFiltroTurno('todos')}
+            >
+              Todos os turnos
+            </button>
+            <button
+              type="button"
+              className={`atendimento-shift-btn ${filtroTurno === 'manha' ? 'active' : ''}`}
+              onClick={() => setFiltroTurno('manha')}
+            >
+              🌅 Manhã ({contagemTurnos.manha})
+            </button>
+            <button
+              type="button"
+              className={`atendimento-shift-btn ${filtroTurno === 'tarde' ? 'active' : ''}`}
+              onClick={() => setFiltroTurno('tarde')}
+            >
+              ☀️ Tarde ({contagemTurnos.tarde})
+            </button>
+            <button
+              type="button"
+              className={`atendimento-shift-btn ${filtroTurno === 'noite' ? 'active' : ''}`}
+              onClick={() => setFiltroTurno('noite')}
+            >
+              🌙 Noite ({contagemTurnos.noite})
+            </button>
           </div>
 
           {/* Filtros rápidos por estado */}
@@ -868,12 +996,15 @@ export default function BarbeariaAtendimentoBoard({
                           onCreateComanda={onCreateComanda}
                           onOpenRecebimento={onOpenRecebimento}
                           onOpenHistorico={onOpenHistorico}
+                          onOpenAddItem={(ag, cm) => setModalItemComanda({ agendamento: ag, comanda: cm })}
                           menuAbertoId={menuAbertoId}
                           setMenuAbertoId={setMenuAbertoId}
                           moverAbertoId={moverAbertoId}
                           setMoverAbertoId={setMoverAbertoId}
                           reatribuirAbertoId={reatribuirAbertoId}
                           setReatribuirAbertoId={setReatribuirAbertoId}
+                          whatsappMenuId={whatsappMenuId}
+                          setWhatsappMenuId={setWhatsappMenuId}
                         />
                       )
                     })
@@ -1199,6 +1330,143 @@ export default function BarbeariaAtendimentoBoard({
           </div>
         </div>
       )}
+
+      {/* ── MODAL INTERATIVO: ADICIONAR ITEM / PRODUTO À COMANDA ── */}
+      {modalItemComanda && (
+        <div className="atendimento-modal-backdrop" onClick={() => setModalItemComanda(null)}>
+          <div className="atendimento-modal-box" onClick={(e) => e.stopPropagation()}>
+            <div className="atendimento-modal-head">
+              <h3>
+                <ShoppingBag size={18} style={{ color: 'var(--accent)' }} />
+                Adicionar Item à Comanda
+              </h3>
+              <button
+                type="button"
+                className="atendimento-modal-close"
+                onClick={() => setModalItemComanda(null)}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="atendimento-modal-body">
+              <div style={{ padding: '8px 12px', background: 'var(--card2)', borderRadius: 10, fontSize: 13 }}>
+                Cliente: <strong>{modalItemComanda.agendamento?.clienteNome || 'Cliente'}</strong> · Barbeiro: <strong>{modalItemComanda.agendamento?.profissionalNome || 'Atendente'}</strong>
+              </div>
+
+              {/* Abas: Produtos de Revenda vs Serviços Adicionais */}
+              <div style={{ display: 'flex', gap: 8, borderBottom: '1px solid var(--line)', paddingBottom: 8 }}>
+                <button
+                  type="button"
+                  className={`atendimento-pill ${abaItemComanda === 'produtos' ? 'active' : ''}`}
+                  onClick={() => setAbaItemComanda('produtos')}
+                >
+                  <Package size={14} /> Produtos de revenda ({produtosRevenda.length})
+                </button>
+                <button
+                  type="button"
+                  className={`atendimento-pill ${abaItemComanda === 'servicos' ? 'active' : ''}`}
+                  onClick={() => setAbaItemComanda('servicos')}
+                >
+                  <Scissors size={14} /> Serviços extras ({servicos.length})
+                </button>
+              </div>
+
+              {abaItemComanda === 'produtos' ? (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 8, maxHeight: 300, overflowY: 'auto' }}>
+                  {produtosRevenda.length === 0 ? (
+                    <div style={{ gridColumn: '1 / -1', padding: 20, textAlign: 'center', color: 'var(--muted)' }}>
+                      Nenhum produto cadastrado no estoque de revenda.
+                    </div>
+                  ) : (
+                    produtosRevenda.map((p) => (
+                      <div
+                        key={p.id}
+                        className="atendimento-service-option"
+                        onClick={() => submeterAdicaoItem(p, 'produto')}
+                        title="Clique para adicionar à comanda"
+                      >
+                        <strong style={{ fontSize: 13, color: 'var(--navy)' }}>{p.nome}</strong>
+                        <span style={{ fontSize: 13, fontWeight: 800, color: '#10b981' }}>{fmtR(p.precoVenda)}</span>
+                        <small style={{ color: 'var(--muted)', fontSize: 10 }}>Estoque: {p.estoqueAtual ?? 0}</small>
+                      </div>
+                    ))
+                  )}
+                </div>
+              ) : (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 8, maxHeight: 300, overflowY: 'auto' }}>
+                  {servicos
+                    .filter((s) => s.ativo !== false && s.id !== modalItemComanda.agendamento?.servicoId)
+                    .map((s) => (
+                      <div
+                        key={s.id}
+                        className="atendimento-service-option"
+                        onClick={() => submeterAdicaoItem(s, 'servico')}
+                        title="Clique para adicionar à comanda"
+                      >
+                        <strong style={{ fontSize: 13, color: 'var(--navy)' }}>{s.nome}</strong>
+                        <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--accent)' }}>{fmtR(s.preco)}</span>
+                        <small style={{ color: 'var(--muted)', fontSize: 10 }}>{s.duracaoMinutos || 30} min</small>
+                      </div>
+                    ))}
+                </div>
+              )}
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 10 }}>
+                <button
+                  type="button"
+                  className="atendimento-pill"
+                  onClick={() => setModalItemComanda(null)}
+                >
+                  Fechar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── FOLHA DE IMPRESSÃO LIMPA (ESCALA DO DIA) ── */}
+      <div className="atendimento-print-sheet" style={{ display: 'none' }}>
+        <div style={{ borderBottom: '2px solid #000', paddingBottom: 10, marginBottom: 16 }}>
+          <h1 style={{ margin: '0 0 4px 0', fontSize: 22, textTransform: 'uppercase' }}>
+            Escala e Quadro Operacional de Atendimentos
+          </h1>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
+            <span>Data: <strong>{dataSelecionada}</strong></span>
+            <span>Total: <strong>{metricas.total} clientes</strong> | Faturamento previsto: <strong>{fmtR(metricas.totalPrevisto)}</strong></span>
+          </div>
+        </div>
+
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+          <thead>
+            <tr style={{ background: '#f0f0f0', borderBottom: '1px solid #000' }}>
+              <th style={{ padding: '6px 8px', textAlign: 'left' }}>Hora</th>
+              <th style={{ padding: '6px 8px', textAlign: 'left' }}>Cliente</th>
+              <th style={{ padding: '6px 8px', textAlign: 'left' }}>Telefone</th>
+              <th style={{ padding: '6px 8px', textAlign: 'left' }}>Serviço</th>
+              <th style={{ padding: '6px 8px', textAlign: 'left' }}>Barbeiro</th>
+              <th style={{ padding: '6px 8px', textAlign: 'right' }}>Valor</th>
+              <th style={{ padding: '6px 8px', textAlign: 'center' }}>Status</th>
+              <th style={{ padding: '6px 8px', textAlign: 'center' }}>Visto</th>
+            </tr>
+          </thead>
+          <tbody>
+            {agendamentosProcessados.map((item) => (
+              <tr key={item.id} style={{ borderBottom: '1px solid #ddd' }}>
+                <td style={{ padding: '6px 8px', fontWeight: 'bold' }}>{formatarHora(item.dataHora)}</td>
+                <td style={{ padding: '6px 8px' }}>{item.clienteNome || 'Cliente'}</td>
+                <td style={{ padding: '6px 8px' }}>{item.clienteTelefone || '—'}</td>
+                <td style={{ padding: '6px 8px' }}>{item.servicoNome}</td>
+                <td style={{ padding: '6px 8px' }}>{item.profissionalNome}</td>
+                <td style={{ padding: '6px 8px', textAlign: 'right' }}>{fmtR(item.valor)}</td>
+                <td style={{ padding: '6px 8px', textAlign: 'center', textTransform: 'capitalize' }}>{item.status}</td>
+                <td style={{ padding: '6px 8px', textAlign: 'center' }}>[ &nbsp; ]</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   )
 }
@@ -1222,17 +1490,21 @@ function CardAtendimentoSwipeable({
   onCreateComanda,
   onOpenRecebimento,
   onOpenHistorico,
+  onOpenAddItem,
   menuAbertoId,
   setMenuAbertoId,
   moverAbertoId,
   setMoverAbertoId,
   reatribuirAbertoId,
   setReatribuirAbertoId,
+  whatsappMenuId,
+  setWhatsappMenuId,
 }) {
   const telLimpo = limparTelefone(item.clienteTelefone || item.cliente_telefone)
   const isMenuAberto = menuAbertoId === item.id
   const isMoverAberto = moverAbertoId === item.id
   const isReatribuirAberto = reatribuirAbertoId === item.id
+  const isWhatsappMenuAberto = whatsappMenuId === item.id
   const acaoPrincipal = ACOES_PRINCIPAIS[item.status]
 
   // Estado de Swipe horizontal no celular (iPhone)
@@ -1259,7 +1531,6 @@ function CardAtendimentoSwipeable({
     }
 
     if (isHorizontalSwipe.current) {
-      // Limita deslocamento entre -110px e 110px
       const clamped = Math.max(-110, Math.min(110, dx))
       setSwipeOffset(clamped)
     }
@@ -1267,12 +1538,9 @@ function CardAtendimentoSwipeable({
 
   function handleCardTouchEnd() {
     if (isHorizontalSwipe.current) {
-      // Se deslizou mais de 70px para a direita -> Avança status
       if (swipeOffset > 70 && acaoPrincipal) {
         onStatusChange(item, acaoPrincipal.next)
-      }
-      // Se deslizou mais de 70px para a esquerda -> Abre comanda ou WhatsApp
-      else if (swipeOffset < -70) {
+      } else if (swipeOffset < -70) {
         if (comanda && onOpenComanda) {
           onOpenComanda(comanda)
         } else if (onCreateComanda) {
@@ -1284,14 +1552,19 @@ function CardAtendimentoSwipeable({
     isHorizontalSwipe.current = false
   }
 
-  // Link do WhatsApp com mensagem pronta
-  const linkWhatsapp = telLimpo
-    ? `https://wa.me/55${telLimpo}?text=${encodeURIComponent(
-        `Olá, ${item.clienteNome || 'tudo bem'}! Aqui é da barbearia sobre seu horário agendado às ${formatarHora(
-          item.dataHora
-        )}.`
-      )}`
-    : null
+  // Modelos de mensagens do WhatsApp
+  function gerarLinkWhatsapp(tipoMsg = 'lembrete') {
+    if (!telLimpo) return null
+    let texto = ''
+    if (tipoMsg === 'lembrete') {
+      texto = `Olá, ${item.clienteNome || 'tudo bem'}! Aqui é da barbearia. Confirmando seu horário agendado hoje às ${formatarHora(item.dataHora)}.`
+    } else if (tipoMsg === 'cadeira') {
+      texto = `Olá, ${item.clienteNome || 'tudo bem'}! Seu barbeiro ${item.profissionalNome || ''} já está pronto. Sua cadeira está liberada, pode entrar!`
+    } else if (tipoMsg === 'obrigado') {
+      texto = `Olá, ${item.clienteNome || 'tudo bem'}! Foi um prazer atendê-lo hoje na barbearia. Qualquer dúvida estamos à disposição. Até a próxima!`
+    }
+    return `https://wa.me/55${telLimpo}?text=${encodeURIComponent(texto)}`
+  }
 
   return (
     <div className="atendimento-card-swipe-wrapper">
@@ -1386,17 +1659,57 @@ function CardAtendimentoSwipeable({
             </div>
           </div>
 
-          {linkWhatsapp && (
-            <a
-              href={linkWhatsapp}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="atendimento-whatsapp-btn"
-              title="Abrir WhatsApp com cliente"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <MessageSquare size={14} />
-            </a>
+          {telLimpo && (
+            <div style={{ position: 'relative' }} onClick={(e) => e.stopPropagation()}>
+              <button
+                type="button"
+                className="atendimento-whatsapp-btn"
+                title="Mensagens de WhatsApp"
+                onClick={() => {
+                  setWhatsappMenuId(isWhatsappMenuAberto ? null : item.id)
+                  setMenuAbertoId(null)
+                  setMoverAbertoId(null)
+                  setReatribuirAbertoId(null)
+                }}
+              >
+                <MessageSquare size={14} />
+              </button>
+
+              {isWhatsappMenuAberto && (
+                <div className="atendimento-popover">
+                  <strong style={{ fontSize: 11, padding: '4px 8px', color: 'var(--muted)' }}>
+                    Enviar via WhatsApp:
+                  </strong>
+                  <a
+                    href={gerarLinkWhatsapp('lembrete')}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="atendimento-popover-item"
+                    onClick={() => setWhatsappMenuId(null)}
+                  >
+                    ⏰ Lembrete de horário
+                  </a>
+                  <a
+                    href={gerarLinkWhatsapp('cadeira')}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="atendimento-popover-item"
+                    onClick={() => setWhatsappMenuId(null)}
+                  >
+                    ✂ Cadeira liberada / Pode entrar
+                  </a>
+                  <a
+                    href={gerarLinkWhatsapp('obrigado')}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="atendimento-popover-item"
+                    onClick={() => setWhatsappMenuId(null)}
+                  >
+                    ⭐ Agradecimento pós-corte
+                  </a>
+                </div>
+              )}
+            </div>
           )}
         </div>
 
@@ -1419,6 +1732,7 @@ function CardAtendimentoSwipeable({
                 setReatribuirAbertoId(isReatribuirAberto ? null : item.id)
                 setMenuAbertoId(null)
                 setMoverAbertoId(null)
+                setWhatsappMenuId(null)
               }
             }}
           >
@@ -1444,18 +1758,32 @@ function CardAtendimentoSwipeable({
         {/* ── LINHA DA COMANDA ── */}
         <div className="atendimento-comanda-row" onClick={(e) => e.stopPropagation()}>
           {comanda ? (
-            <span
-              className={`atendimento-comanda-chip ${
-                comanda.status === 'paga' ? 'paga' : comanda.saldoPendente > 0 ? 'aguardando' : 'aberta'
-              }`}
-              onClick={() => onOpenComanda && onOpenComanda(comanda)}
-              title="Clique para ver ou gerenciar a comanda"
-            >
-              <Receipt size={12} />
-              {comanda.status === 'paga'
-                ? `Comanda paga (${fmtR(comanda.total)})`
-                : `Comanda #${comanda.id.slice(-4)} (${fmtR(comanda.total)})`}
-            </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+              <span
+                className={`atendimento-comanda-chip ${
+                  comanda.status === 'paga' ? 'paga' : comanda.saldoPendente > 0 ? 'aguardando' : 'aberta'
+                }`}
+                onClick={() => onOpenComanda && onOpenComanda(comanda)}
+                title="Clique para ver ou gerenciar a comanda"
+              >
+                <Receipt size={12} />
+                {comanda.status === 'paga'
+                  ? `Comanda paga (${fmtR(comanda.total)})`
+                  : `Comanda #${comanda.id.slice(-4)} (${fmtR(comanda.total)})`}
+              </span>
+
+              {/* Botão rápido para adicionar pomada / cerveja / serviço */}
+              {onOpenAddItem && comanda.status !== 'paga' && (
+                <button
+                  type="button"
+                  className="atendimento-add-item-chip"
+                  onClick={() => onOpenAddItem(item, comanda)}
+                  title="Adicionar produto ou serviço extra na comanda"
+                >
+                  <Plus size={11} /> Item
+                </button>
+              )}
+            </div>
           ) : (
             <button
               type="button"
@@ -1493,7 +1821,7 @@ function CardAtendimentoSwipeable({
             </button>
           )}
 
-          {/* Botão de mover status em 1 toque (ótimo para touch) */}
+          {/* Botão de mover status em 1 toque */}
           <div style={{ position: 'relative' }}>
             <button
               type="button"
@@ -1503,6 +1831,7 @@ function CardAtendimentoSwipeable({
                 setMoverAbertoId(isMoverAberto ? null : item.id)
                 setMenuAbertoId(null)
                 setReatribuirAbertoId(null)
+                setWhatsappMenuId(null)
               }}
             >
               ⇄ Mover
@@ -1563,6 +1892,7 @@ function CardAtendimentoSwipeable({
                 setMenuAbertoId(isMenuAberto ? null : item.id)
                 setMoverAbertoId(null)
                 setReatribuirAbertoId(null)
+                setWhatsappMenuId(null)
               }}
             >
               <MoreVertical size={16} />

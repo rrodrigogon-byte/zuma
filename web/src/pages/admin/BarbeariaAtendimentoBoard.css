@@ -120,10 +120,40 @@
   color: #059669;
 }
 
+/* Botão de refresh com animação */
+.atendimento-refresh-btn {
+  background: var(--card2);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 7px 11px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--navy);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.15s ease;
+}
+
+.atendimento-refresh-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.atendimento-refresh-btn.rotating svg {
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
 /* ── RESUMO RÁPIDO DO DIA (KPIs) ── */
 .atendimento-kpi-row {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
   gap: 12px;
   margin-top: 14px;
   padding-top: 14px;
@@ -176,7 +206,7 @@
   letter-spacing: 0.04em;
 }
 
-/* ── FILTROS, BUSCA E ORDENAÇÃO ── */
+/* ── FILTROS, BUSCA, TURNOS E ORDENAÇÃO ── */
 .atendimento-filter-bar {
   display: flex;
   align-items: center;
@@ -236,7 +266,41 @@
   border-color: var(--accent);
 }
 
-/* Pílulas de filtro rápido (status / alertas) */
+/* Pílulas de filtro de turnos (Manhã, Tarde, Noite) */
+.atendimento-shift-group {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background: var(--card2);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: 2px 4px;
+}
+
+.atendimento-shift-btn {
+  background: transparent;
+  border: none;
+  border-radius: 7px;
+  padding: 5px 9px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.atendimento-shift-btn:hover {
+  color: var(--navy);
+}
+
+.atendimento-shift-btn.active {
+  background: var(--card);
+  color: var(--navy);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+/* Pílulas de filtro rápido */
 .atendimento-quick-filter-group {
   display: flex;
   align-items: center;
@@ -723,7 +787,7 @@
   color: var(--muted);
 }
 
-/* Botão de WhatsApp direto */
+/* Botão de WhatsApp direto com dropdown de mensagens */
 .atendimento-whatsapp-btn {
   display: inline-flex;
   align-items: center;
@@ -846,6 +910,26 @@
 .atendimento-comanda-btn-create:hover {
   background: var(--accent-soft);
   border-color: var(--accent);
+}
+
+.atendimento-add-item-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px 7px;
+  border-radius: 6px;
+  background: var(--card2);
+  border: 1px solid var(--line);
+  color: var(--navy);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.atendimento-add-item-chip:hover {
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 /* Rodapé de Ações do Card */
@@ -997,7 +1081,7 @@
   transform: scale(1.01);
 }
 
-/* ── MODAL / DRAWER INTERATIVO DE ENCAIXE RÁPIDO ── */
+/* ── MODAL DE ADICIONAR ITEM NA COMANDA ── */
 .atendimento-modal-backdrop {
   position: fixed;
   inset: 0;
@@ -1162,5 +1246,26 @@
   100% {
     transform: translateY(100vh) rotate(720deg) scale(0.6);
     opacity: 0;
+  }
+}
+
+/* ── ESTILOS EXCLUSIVOS DE IMPRESSÃO (ESCALA DO DIA) ── */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .atendimento-print-sheet, .atendimento-print-sheet * {
+    visibility: visible;
+  }
+  .atendimento-print-sheet {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    margin: 0;
+    padding: 20px;
+    background: #fff !important;
+    color: #000 !important;
+    font-family: Arial, sans-serif !important;
   }
 }
