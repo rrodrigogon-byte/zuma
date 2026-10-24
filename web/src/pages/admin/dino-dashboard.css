@@ -51,3 +51,5 @@
 .dino-data-quality-sources strong{color:var(--fg)}
 @media(max-width:820px){.dino-dashboard-grid.wide-left,.dino-dashboard-grid.two{grid-template-columns:minmax(0,1fr)}.dino-dashboard-grid.wide-left>article:first-child,.dino-dashboard-grid.two>article:first-child{grid-column:auto}.dino-donut-layout{grid-template-columns:120px minmax(0,1fr)}.dino-donut{width:120px}}
 @media(max-width:560px){.dino-donut-layout{grid-template-columns:minmax(0,1fr)}.dino-donut{margin:0 auto}.dino-donut-total{align-items:flex-start;flex-direction:column;gap:4px}.dino-donut-total strong{text-align:left}.dino-donut-legend>div{grid-template-columns:8px minmax(0,1fr) auto}.dino-data-quality-sources{padding-left:17px}}
+
+.dino-chart-note { margin: 8px 0 14px; font-size: 12px; line-height: 1.5; color: var(--muted, #667085); }

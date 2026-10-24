@@ -1,3 +1,4 @@
+import { avecMixReportLink } from '../../../lib/avec-mix-report'
 import { useAuth } from '../../../lib/auth'
 import { useState } from 'react'
 import { downloadCsv } from './format'
@@ -43,7 +44,7 @@ export default function StrategicRevenueMix({ mix, title = 'Mix estratégico de 
       <div><span>Receita por linha de negócio</span><h3>{title}</h3><p>Participação sobre valores com itemização confiável no {periodLabel}.</p></div>
       <div className="dino-strategic-mix-heading-actions"><div className="dino-strategic-mix-total"><span>Base classificada</span><strong>{fmtR(mix.total)}</strong></div><MixAction destination={overviewDestination} onClick={onOpenOverview}>Ver relatório consolidado</MixAction></div>
     </header>
-    {!hasData ? <div className="dino-strategic-mix-empty"><p>Ainda não há itens classificados de serviços, produtos ou planos neste recorte.</p><MixAction destination={overviewDestination} onClick={onOpenOverview}>Ver fontes e cobertura</MixAction></div> : <div className="dino-strategic-mix-items">{(mix.items || []).map((item) => <MixItem key={item.id} item={item} destination={destinations[item.id]} onOpenItem={onOpenItem} />)}</div>}
+    {!hasData ? <div className="dino-strategic-mix-empty"><p>Ainda não há itens classificados de serviços, produtos ou planos neste recorte.</p><MixAction destination={overviewDestination} onClick={onOpenOverview}>Ver fontes e cobertura</MixAction></div> : <div className="dino-strategic-mix-items">{(mix.items || []).map((item) => <MixItem key={item.id} item={item} destination={mix.historical?.details?.some(row => row.type === item.id) ? { to: avecMixReportLink(mix.historical, item.id), label: 'Ver itens Avec no período' } : destinations[item.id]} onOpenItem={onOpenItem} />)}</div>}
     <footer className="dino-strategic-mix-footnote">
       {!mix.historical && Number(mix.unclassifiedConsolidatedRevenue || 0) > 0 && <p><strong>{fmtR(mix.unclassifiedConsolidatedRevenue)}</strong> da receita consolidada permanece sem classificação nesta visão (histórico, e-commerce sem itemização ou ajustes) e não entra nas fatias. <MixAction destination={unclassifiedDestination} onClick={onOpenOverview}>Ver fontes e cobertura</MixAction></p>}
       {!mix.planPaymentsAvailable && <p>{mix.planPaymentsReason || 'Os recebimentos de planos não estão disponíveis para este escopo.'}</p>}

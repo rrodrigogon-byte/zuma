@@ -287,7 +287,19 @@ function aggregate(rows, keyName) {
  * No período coberto, o snapshot substitui os itens da operação para não somar
  * duas representações da mesma venda.
  */
-function strategicRevenueMix(input, window, consolidatedRevenue) {
+function itemizedMixRows(input, window) {
+  const dayFor = date => { const p = zonedParts(date, window.timeZone); return `${p.year}-${String(p.month).padStart(2, '0')}-${String(p.day).padStart(2, '0')}`; };
+  const coveredByAvec = date => { const day = date && dayFor(date); return Boolean(day && input.historicalMix && day >= input.historicalMix.summary.from && day <= input.historicalMix.summary.to); };
+  // No intervalo completo exportado, o 0186 é a fonte exclusiva do mix.
+  // Não somar outra vez itens operacionais/assinaturas que possam representar a mesma venda.
+  const items = saleItems(input.historicalMix ? { ...input, commands: list(input.commands).filter(row => !coveredByAvec(timestamp(row))), retailSales: list(input.retailSales).filter(row => !coveredByAvec(timestamp(row))) } : input, window);
+  const historicalEnd = localMidnightUtc(window.toDate, window.timeZone);
+  if (window.toDate > historicalEnd) historicalEnd.setTime(historicalEnd.getTime() + DAY_MS);
+  const historicalDetails = mixForPeriod(input.historicalMix, dayFor(window.fromDate), dayFor(historicalEnd));
+  return { items, historicalDetails, coveredByAvec, selectedFrom: dayFor(window.fromDate), selectedToExclusive: dayFor(historicalEnd) };
+}
+
+function strategicRevenueMix(input, window, consolidatedRevenue, itemization) {
   const totals = new Map([
     ['services', { value: 0, records: 0 }],
     ['products', { value: 0, records: 0 }],
@@ -301,11 +313,7 @@ function strategicRevenueMix(input, window, consolidatedRevenue) {
     item.records += records;
   };
 
-  const dayFor = date => { const p = zonedParts(date, window.timeZone); return `${p.year}-${String(p.month).padStart(2, '0')}-${String(p.day).padStart(2, '0')}`; };
-  const coveredByAvec = date => { const day = date && dayFor(date); return Boolean(day && input.historicalMix && day >= input.historicalMix.summary.from && day <= input.historicalMix.summary.to); };
-  // No intervalo completo exportado, o 0186 é a fonte exclusiva do mix.
-  // Não somar outra vez itens operacionais/assinaturas que possam representar a mesma venda.
-  const items = saleItems(input.historicalMix ? { ...input, commands: list(input.commands).filter(row => !coveredByAvec(timestamp(row))), retailSales: list(input.retailSales).filter(row => !coveredByAvec(timestamp(row))) } : input, window);
+  const { items, historicalDetails, coveredByAvec, selectedFrom, selectedToExclusive } = itemization;
   for (const item of items) add(item.mixCategory, item.revenue);
 
   if (input.subscriptionPaymentsAvailable !== false) {
@@ -317,9 +325,6 @@ function strategicRevenueMix(input, window, consolidatedRevenue) {
     }
   }
 
-  const historicalEnd = localMidnightUtc(window.toDate, window.timeZone);
-  if (window.toDate > historicalEnd) historicalEnd.setTime(historicalEnd.getTime() + DAY_MS);
-  const historicalDetails = mixForPeriod(input.historicalMix, dayFor(window.fromDate), dayFor(historicalEnd));
   for (const row of historicalDetails) add(row.type, row.value, row.records);
   const definitions = [
     { id: 'services', label: 'Serviços', description: 'Itens de serviço em comandas pagas' },
@@ -333,7 +338,7 @@ function strategicRevenueMix(input, window, consolidatedRevenue) {
   const unclassifiedConsolidatedRevenue = Math.max(0, num(consolidatedRevenue) - operationalItemized);
   return {
     total: money(total),
-    historical: input.historicalMix ? { reportHash: input.historicalMix.reportHash, ...input.historicalMix.summary, selectedFrom: dayFor(window.fromDate), selectedToExclusive: dayFor(historicalEnd), value: money(historicalDetails.reduce((sum, row) => sum + row.value, 0)), details: historicalDetails } : null,
+    historical: input.historicalMix ? { reportHash: input.historicalMix.reportHash, ...input.historicalMix.summary, selectedFrom, selectedToExclusive, value: money(historicalDetails.reduce((sum, row) => sum + row.value, 0)), details: historicalDetails } : null,
     historicalMixUnavailable: input.historicalMixUnavailable === true,
     basis: input.historicalMix ? 'sold-items-and-operational-payments' : 'operational-payments',
     items: definitions.map((definition) => {
@@ -529,8 +534,11 @@ export function buildDinoDashboardAnalytics(input = {}, options = {}) {
   const trendTicket = pct(currentTicket, previousTicket);
   const trendCustomers = pct(currentNewCustomers, previousNewCustomers);
   const trendAppointments = pct(currentAppointments.length, previousAppointments.length);
-  const items = [...saleItems(input, window), ...historicalCategoryRows(input, window)];
-  const strategicMix = strategicRevenueMix(input, window, revenue);
+  const itemization = itemizedMixRows(input, window);
+  const strategicMix = strategicRevenueMix(input, window, revenue, itemization);
+  const items = input.historicalMix
+    ? [...itemization.items, ...itemization.historicalDetails.map(row => ({ name: row.name, category: row.category, quantity: row.quantity, revenue: row.value }))]
+    : [...itemization.items, ...historicalCategoryRows(input, window)];
   const commerceAvailable = Boolean(input.commerceAvailable);
   const profitCurrent = input.profit?.current || null;
   const profitPrevious = input.profit?.previous || null;
@@ -587,6 +595,7 @@ export function buildDinoDashboardAnalytics(input = {}, options = {}) {
     historicalFinance,
     strategicMix,
     charts: {
+      itemizedSalesBasis: input.historicalMix ? 'avec-sale-date-and-operation-outside-coverage' : null,
       revenueDaily: daily,
       appointmentsDaily: daily.map((item) => ({ day: item.day, value: item.appointments })),
       paymentMethods,
