@@ -17,6 +17,11 @@ import {
   criarProfissional,
   atualizarProfissional,
   excluirProfissional,
+  excluirServico,
+  excluirPlano,
+  excluirProdutoRevenda,
+  atualizarServico,
+  atualizarPlano,
   criarServico,
   listarAgendamentos,
   listarProfissionais,
@@ -709,4 +714,67 @@ test('comanda: atualização que ficaria abaixo do faturado é TOTAL_BELOW_BILLE
   const antes = structuredClone(raw);
   assert.throws(() => atualizarComandaBarbearia(EMPRESA_A, comanda.id, { desconto: 50 }), (error) => error.code === 'TOTAL_BELOW_BILLED' && error.status === 409);
   assert.deepEqual(db().barbearias[EMPRESA_A].comandas[comanda.id], antes);
+});
+
+
+test('excluir profissional, serviço, plano e produto é lógico: some das listas, preserva o histórico e pode ser restaurado', () => {
+  const profissional = baseProfissional();
+  const servico = baseServico();
+  const agendamento = criarAgendamento(EMPRESA_A, { clienteNome: 'Cliente histórico', profissionalId: profissional.id, servicoId: servico.id, dataHora: '2030-01-15T14:00:00.000Z', dataAgenda: '2030-01-15' });
+  const plano = criarPlano(EMPRESA_A, { nome: 'Plano mensal', preco: 120, sessoesIncluidas: 4, validadeDias: 30, servicosIds: [servico.id] });
+  const assinatura = criarAssinatura(EMPRESA_A, { clienteNome: 'Cliente do plano', planoId: plano.id });
+  const produto = criarProdutoRevenda(EMPRESA_A, { nome: 'Pomada teste', sku: 'P-001', precoVenda: 35, custoUnitario: 18, estoqueAtual: 2, estoqueMinimo: 1, lojaId: LOJA });
+
+  assert.ok(excluirProfissional(EMPRESA_A, profissional.id).removidoEm);
+  assert.ok(excluirServico(EMPRESA_A, servico.id).removidoEm);
+  assert.ok(excluirPlano(EMPRESA_A, plano.id).removidoEm);
+  assert.ok(excluirProdutoRevenda(EMPRESA_A, produto.id).removidoEm);
+  assert.equal(excluirServico(EMPRESA_B, servico.id), null, 'outra empresa não exclui');
+
+  // Fora das listas de uso, mas o registro continua no banco.
+  assert.equal(listarServicos(EMPRESA_A).length, 0);
+  assert.equal(listarPlanos(EMPRESA_A).length, 0);
+  assert.equal(listarProdutosRevenda(EMPRESA_A).length, 0);
+  assert.equal(listarServicos(EMPRESA_A, { incluirInativos: true }).length, 1);
+  assert.equal(listarProdutosRevenda(EMPRESA_A, { incluirInativos: true })[0].estoqueAtual, 2, 'saldo preservado');
+
+  // Histórico intacto: agendamento e assinatura seguem apontando para os cadastros.
+  const aindaAgendado = listarAgendamentos(EMPRESA_A).find((item) => item.id === agendamento.id);
+  assert.equal(aindaAgendado.profissionalId, profissional.id);
+  assert.equal(aindaAgendado.servicoId, servico.id);
+  assert.equal(listarAssinaturas(EMPRESA_A).find((item) => item.id === assinatura.id).planoId, plano.id);
+
+  // Restaurar (ativo: true) devolve às listas e limpa a marca de exclusão.
+  const plano2 = atualizarPlano(EMPRESA_A, plano.id, { ativo: true });
+  assert.equal(plano2.ativo, true);
+  assert.equal(plano2.removidoEm, undefined);
+  const servico2 = atualizarServico(EMPRESA_A, servico.id, { ativo: true });
+  assert.equal(servico2.removidoEm, undefined);
+  assert.equal(atualizarProfissional(EMPRESA_A, profissional.id, { ativo: true }).removidoEm, undefined);
+  assert.equal(atualizarProdutoRevenda(EMPRESA_A, produto.id, { ativo: true, lojaId: LOJA }).removidoEm, undefined);
+  assert.equal(listarProdutosRevenda(EMPRESA_A).length, 1);
+});
+
+test('desativar e reativar não trava em cadastro antigo; plano edita mesmo com serviço já desativado', () => {
+  const servico = baseServico();
+  const plano = criarPlano(EMPRESA_A, { nome: 'Plano mensal', preco: 120, sessoesIncluidas: 4, validadeDias: 30, servicosIds: [servico.id] });
+  atualizarServico(EMPRESA_A, servico.id, { ativo: false });
+  assert.equal(atualizarPlano(EMPRESA_A, plano.id, { ativo: false }).ativo, false);
+  assert.equal(atualizarPlano(EMPRESA_A, plano.id, { ativo: true }).ativo, true);
+  const editado = atualizarPlano(EMPRESA_A, plano.id, { nome: 'Plano mensal VIP', preco: 150 });
+  assert.equal(editado.nome, 'Plano mensal VIP');
+  assert.deepEqual(editado.servicosIds, [servico.id], 'o serviço desativado continua no plano');
+  const outro = criarServico(EMPRESA_A, { nome: 'Outro', duracaoMinutos: 30, preco: 40 });
+  atualizarServico(EMPRESA_A, outro.id, { ativo: false });
+  assert.throws(() => atualizarPlano(EMPRESA_A, plano.id, { servicosIds: [servico.id, outro.id] }), /inexistente ou inativo/, 'não deixa incluir serviço inativo novo');
+});
+
+test('produto importado com unidade legada da Dino pode ser editado pela unidade canônica', () => {
+  const DINO = 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
+  const produto = criarProdutoRevenda(DINO, { nome: 'Pomada Avec', precoVenda: 40, estoqueAtual: 3, lojaId: 'dino-web-estoque' });
+  const editado = atualizarProdutoRevenda(DINO, produto.id, { nome: 'Pomada Avec 100g', precoVenda: 45, lojaId: 'ab049a75-6e2e-4cc9-abbc-6fd11cdda1d8' });
+  assert.equal(editado.nome, 'Pomada Avec 100g');
+  assert.equal(editado.lojaId, 'dino-web-estoque', 'mantém a unidade original');
+  assert.equal(editado.estoqueAtual, 3);
+  assert.equal(atualizarProdutoRevenda(DINO, produto.id, { nome: 'X', precoVenda: 1, lojaId: 'outra-loja' }), null, 'outra unidade não edita');
 });

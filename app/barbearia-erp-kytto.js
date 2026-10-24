@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import { identificarCliente, indiceIdentidadeClientes } from './barbearia-identidade.js';
 import { canonizarRegistroAvec, historicoAvecVigente } from './dino-historico-avec.js';
+import { legacyLojaIdFromCommerce } from './core/legacy-commerce-scope.js';
 import { db, save, nextId } from './db.js';
 import * as financeiroKytto from './financeiro-central-kytto.js';
 import * as clientesKytto from './clientes-contas-kytto.js';
@@ -853,6 +854,7 @@ export function atualizarProfissional(empresaId, profissionalId, dados = {}) {
   const profissional = profissionalNormalizado(dados, atual);
   if (!profissional.nome) throw new Error('Nome do profissional é obrigatório.');
   Object.assign(atual, profissional, { atualizadoEm: dataAtual() });
+  restaurarSeReativado(atual, dados);
   save();
   return { ...atual };
 }
@@ -868,6 +870,50 @@ export function excluirProfissional(empresaId, profissionalId) {
   Object.assign(atual, { ativo: false, removidoEm: atual.removidoEm || agora, atualizadoEm: agora });
   save();
   return { ...atual };
+}
+
+// Reativar um cadastro excluído (ativo: true) o devolve às listas; a marca de exclusão sai.
+function restaurarSeReativado(atual, dados = {}) {
+  if (dados.ativo === true && atual.removidoEm) {
+    atual.restauradoEm = dataAtual();
+    delete atual.removidoEm;
+  }
+}
+
+// Desativar/reativar sem mexer no resto do cadastro: não revalida preço, serviços do plano
+// ou unidade de registros antigos (ex.: importados do Avec), que travariam a ação.
+function somenteAlternarAtivo(atual, dados = {}) {
+  const chaves = Object.keys(dados || {}).filter((chave) => !['lojaId', 'loja_id'].includes(chave));
+  if (chaves.length !== 1 || chaves[0] !== 'ativo' || typeof dados.ativo !== 'boolean') return false;
+  Object.assign(atual, { ativo: dados.ativo, atualizadoEm: dataAtual() });
+  restaurarSeReativado(atual, dados);
+  save();
+  return true;
+}
+
+// Exclusão lógica comum a serviços, planos e produtos de revenda: o registro sai das
+// listas e das novas operações, mas continua no banco para agenda, comandas, vendas,
+// comissões, assinaturas e histórico do Avec que o referenciam.
+function arquivarCadastro(empresaId, colecao, id) {
+  const estado = estadoEmpresa(empresaId);
+  const atual = estado[colecao]?.[String(id)];
+  if (!atual || atual.empresaId !== String(empresaId)) return null;
+  const agora = dataAtual();
+  Object.assign(atual, { ativo: false, removidoEm: atual.removidoEm || agora, atualizadoEm: agora });
+  save();
+  return { ...atual };
+}
+
+export function excluirServico(empresaId, servicoId) {
+  return arquivarCadastro(empresaId, 'servicos', servicoId);
+}
+
+export function excluirPlano(empresaId, planoId) {
+  return arquivarCadastro(empresaId, 'planos', planoId);
+}
+
+export function excluirProdutoRevenda(empresaId, produtoId) {
+  return arquivarCadastro(empresaId, 'produtosRevenda', produtoId);
 }
 
 export function listarServicos(empresaId, { incluirInativos = false } = {}) {
@@ -903,11 +949,13 @@ export function atualizarServico(empresaId, servicoId, dados = {}) {
   const estado = estadoEmpresa(empresaId);
   const atual = estado.servicos[String(servicoId)];
   if (!atual || atual.empresaId !== String(empresaId)) return null;
+  if (somenteAlternarAtivo(atual, dados)) return { ...atual };
   const servico = servicoNormalizado(dados, atual);
   if (!servico.nome) throw new Error('Nome do serviço é obrigatório.');
   validarPrecoServico(servico);
   validarConsumoInternoServico(estado, empresaId, servico);
   Object.assign(atual, servico, { atualizadoEm: dataAtual() });
+  restaurarSeReativado(atual, dados);
   save();
   return { ...atual };
 }
@@ -1121,11 +1169,15 @@ export function atualizarPlano(empresaId, planoId, dados = {}) {
   const estado = estadoEmpresa(empresaId);
   const atual = estado.planos[String(planoId)];
   if (!atual || atual.empresaId !== String(empresaId)) return null;
+  if (somenteAlternarAtivo(atual, dados)) return { ...atual };
   const plano = planoNormalizado(dados, atual);
   if (!plano.nome || plano.preco <= 0) throw new Error('Nome e preço positivo são obrigatórios para o plano.');
-  const servicoInvalido = plano.servicosIds.find((id) => !estado.servicos[id] || estado.servicos[id].ativo === false);
+  // Serviços que já estavam no plano podem ter sido desativados depois; só os novos precisam estar ativos.
+  const jaNoPlano = new Set(atual.servicosIds || []);
+  const servicoInvalido = plano.servicosIds.find((id) => !jaNoPlano.has(id) && (!estado.servicos[id] || estado.servicos[id].ativo === false));
   if (servicoInvalido) throw new Error('O plano referencia um serviço inexistente ou inativo.');
   Object.assign(atual, plano, { atualizadoEm: dataAtual() });
+  restaurarSeReativado(atual, dados);
   save();
   return { ...atual };
 }
@@ -1248,11 +1300,16 @@ export function atualizarProdutoRevenda(empresaId, produtoId, dados = {}) {
   const atual = estado.produtosRevenda[String(produtoId)];
   if (!atual || atual.empresaId !== String(empresaId)) return null;
   const lojaId = texto(dados.lojaId ?? dados.loja_id, 120);
-  if (lojaId && atual.lojaId && atual.lojaId !== lojaId) return null;
-  const produto = produtoRevendaNormalizado(dados, atual);
+  // Produtos importados do Avec guardam a unidade pelo id legado; ele equivale ao canônico.
+  const mesmaUnidade = !lojaId || !atual.lojaId || atual.lojaId === lojaId
+    || legacyLojaIdFromCommerce(atual.lojaId, empresaId) === legacyLojaIdFromCommerce(lojaId, empresaId);
+  if (!mesmaUnidade) return null;
+  if (somenteAlternarAtivo(atual, dados)) return { ...atual, statusEstoque: statusEstoque(atual) };
+  const produto = produtoRevendaNormalizado({ ...dados, lojaId: atual.lojaId || lojaId }, atual);
   if (!produto.nome || produto.precoVenda <= 0) throw new Error('Nome e preço positivo são obrigatórios para o produto.');
   if (produto.estoqueAtual !== atual.estoqueAtual) throw new Error('Use o endpoint de ajuste para alterar estoque e manter o histórico.');
   Object.assign(atual, produto, { atualizadoEm: dataAtual() });
+  restaurarSeReativado(atual, dados);
   save();
   return { ...atual, statusEstoque: statusEstoque(atual) };
 }

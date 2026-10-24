@@ -329,6 +329,21 @@ test('server.js efetivo expõe Barbearia no contrato administrativo', async () =
     assert.equal(equipeRetry.response.status, 200);
     assert.equal(equipeRetry.body.comanda.id, equipeVenda.body.comanda.id);
     assert.equal(equipeRetry.body.comanda.idempotente, true);
+
+    // Excluir é lógico: some do catálogo, o histórico (comanda acima) continua e dá para restaurar.
+    for (const [rota, id, chave] of [['servicos', servico.body.servico.id, 'servico'], ['planos', plano.body.plano.id, 'plano'], ['estoque-revenda', produto.body.produto.id, 'produto'], ['profissionais', profissional.body.profissional.id, 'profissional']]) {
+      const excluido = await request(base, `/api/admin/barbearia/${rota}/${id}`, { method: 'DELETE', headers });
+      assert.equal(excluido.response.status, 200, rota);
+      assert.equal(excluido.body.exclusao, 'logica');
+      assert.ok(excluido.body[chave].removidoEm, rota);
+      const restaurado = await request(base, `/api/admin/barbearia/${rota}/${id}`, { method: 'PATCH', headers, body: JSON.stringify({ ativo: true }) });
+      assert.equal(restaurado.response.status, 200, rota);
+      assert.equal(restaurado.body[chave].removidoEm, undefined, rota);
+    }
+    const inexistente = await request(base, '/api/admin/barbearia/servicos/srv-inexistente', { method: 'DELETE', headers });
+    assert.equal(inexistente.response.status, 404);
+    const comandaPreservada = await request(base, `/api/admin/barbearia/comandas/${equipeVenda.body.comanda.id}`, { headers });
+    assert.equal(comandaPreservada.response.status, 200);
   } finally {
     processo.kill('SIGTERM');
     await Promise.race([once(processo, 'exit'), new Promise((resolve) => setTimeout(resolve, 3000))]);
