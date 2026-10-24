@@ -414,6 +414,15 @@ function importProducts(state, pkg, report, empresaId, lojaId, ts) {
     const existing = byName.get(key);
     const targetStock = Number(pkg.manifest.stockTarget || 10);
     if (existing) {
+      // O lote financeiro também percorre o catálogo. Um produto já recebido
+      // desta fonte pode ter vendas, ajustes e edições posteriores à carga.
+      // A ausência da marca de lote não autoriza redefinir esse estado atual.
+      if (existing.origemImportacao === ORIGEM
+        && existing.sourceUnitId === pkg.manifest.sourceUnitId
+        && existing.sourceKey === `product:${key}`) {
+        report.existing.produtos += 1;
+        continue;
+      }
       const previousStock = Number(existing.estoqueAtual || 0);
       existing.precoVenda = money(row.preco_original) || existing.precoVenda;
       existing.estoqueMinimo = Math.max(0, Math.round(Number(row.estoque_minimo) || 0));
