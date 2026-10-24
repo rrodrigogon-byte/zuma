@@ -160,7 +160,7 @@ const unidadeCanonica = (valor) => { const t = String(valor || '').trim(); retur
 const normalizarNome = (valor) => String(valor || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase().replace(/\s+/g, ' ');
 const primeiroNome = (valor) => normalizarNome(valor).split(' ')[0] || '';
 const ehHistoricoAvec = (item) => item?.somenteHistorico === true && (String(item.sourceSystem || '').toLowerCase() === 'avec' || String(item.origem || '').startsWith('avec-import'));
-const ehProfissionalAvec = (id) => String(id || '').startsWith('prof-avec-');
+const ehProfissionalAvec = (id) => String(id || '').startsWith('prof-avec-hist-');
 
 /**
  * Liga cada nome de profissional do Avec ao cadastro do Kytto. Primeiro pela
