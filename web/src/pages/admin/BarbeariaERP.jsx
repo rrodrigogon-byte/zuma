@@ -1,5 +1,4 @@
 import BarbeariaComandasAbertas from './BarbeariaComandasAbertas'
-import BarbeariaAtendimentoBoard from './BarbeariaAtendimentoBoard'
 import BarbeariaHistoricoCliente from './BarbeariaHistoricoCliente'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { api, fmtDate, fmtDateOnly, fmtR } from '../../lib/api'
@@ -114,11 +113,8 @@ const STATUS = {
 
 const TRANSICOES = {
   agendado: ['confirmado', 'em_atendimento', 'cancelado', 'nao_compareceu'],
-  confirmado: ['agendado', 'em_atendimento', 'cancelado', 'nao_compareceu'],
-  em_atendimento: ['confirmado', 'agendado', 'concluido', 'cancelado', 'nao_compareceu'],
-  concluido: ['em_atendimento'],
-  cancelado: ['agendado', 'confirmado'],
-  nao_compareceu: ['agendado', 'confirmado'],
+  confirmado: ['em_atendimento', 'cancelado', 'nao_compareceu'],
+  em_atendimento: ['concluido', 'cancelado', 'nao_compareceu'],
 }
 
 const DIAS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
@@ -741,41 +737,6 @@ export default function BarbeariaERP() {
     )
   }
 
-  async function mudarStatusAtendimento(agendamento, novoStatus) {
-    if (agendamento.status === novoStatus) return
-    const statusAnterior = agendamento.status
-
-    // Atualização otimista imediata para resposta instantânea ao arrastar
-    setAgendamentos((prev) =>
-      prev.map((item) => (item.id === agendamento.id ? { ...item, status: novoStatus } : item))
-    )
-
-    // Se for transição direta de agendado para concluído, passa por em_atendimento
-    if (statusAnterior === 'agendado' && novoStatus === 'concluido') {
-      try {
-        await api.patch(`/api/admin/barbearia/agenda/${agendamento.id}/status`, { status: 'em_atendimento', registrarFinanceiro: false })
-        await api.patch(`/api/admin/barbearia/agenda/${agendamento.id}/status`, { status: 'concluido', registrarFinanceiro: false })
-        toast('Atendimento concluído com sucesso.', 'success')
-        await carregar()
-        return
-      } catch (err) {
-        setAgendamentos((prev) =>
-          prev.map((item) => (item.id === agendamento.id ? { ...item, status: statusAnterior } : item))
-        )
-        toast(err.message || 'Falha ao concluir atendimento.', 'error')
-        return
-      }
-    }
-
-    try {
-      await mudarStatus(agendamento, novoStatus)
-    } catch (err) {
-      setAgendamentos((prev) =>
-        prev.map((item) => (item.id === agendamento.id ? { ...item, status: statusAnterior } : item))
-      )
-    }
-  }
-
   function valorDevidoRecebimento(agendamento) {
     const total = Number(agendamento?.valor || 0)
     const devido = total - Number(saldoCashbackCliente?.sinalPago || 0) - Number(formRecebimento.usarCashback || 0) - (formRecebimento.valeCodigo ? Number(formRecebimento.valeValor || 0) : 0)
@@ -1021,7 +982,7 @@ export default function BarbeariaERP() {
   async function salvarPlano(event) {
     event.preventDefault()
     const planoPayload = (corpo) => edicaoId ? api.patch(`/api/admin/barbearia/planos/${edicaoId}`, corpo) : api.post('/api/admin/barbearia/planos', corpo)
-    await executar(() => planoPayload({ ...formPlano, percentualPote: Number(formPlano.percentualPote || 0), preco: Number(formPlano.preco), sessoesIncluidas: Number(formPlano.sessoesIncluidas), validadeDias: Number(formPlano.validadeDias) }), edicaoId ? 'Plano atualizado.' : 'Plano criado.')
+    await executar(() => planoPayload({ ...formPlano, percentualPote: Number(formPlano.percentualPote || 0), rateioPote: formPlano.rateioPote || 'valor_tabela', valorFixoPorUso: Number(formPlano.valorFixoPorUso || 0), preco: Number(formPlano.preco), sessoesIncluidas: Number(formPlano.sessoesIncluidas), validadeDias: Number(formPlano.validadeDias) }), edicaoId ? 'Plano atualizado.' : 'Plano criado.')
   }
 
   async function salvarAssinatura(event) {
@@ -1396,28 +1357,17 @@ export default function BarbeariaERP() {
   }
 
   function renderAtendimento() {
-    return (
-      <div style={{ display: 'grid', gap: 18 }}>
-        <BarbeariaComandasAbertas key={scopeKey} profissionais={profissionais} onOpen={abrirComanda} refreshKey={agendaRevisao} />
-        <BarbeariaAtendimentoBoard
-          dataSelecionada={dataSelecionada}
-          onDateChange={(novaData) => setDataSelecionada(novaData)}
-          agendamentos={agendamentos}
-          profissionais={profissionais}
-          servicos={servicos}
-          comandas={comandas}
-          onStatusChange={mudarStatusAtendimento}
-          onOpenAppointment={(item) => setModal({ tipo: 'detalheAgenda', agendamento: item })}
-          onOpenComanda={abrirComanda}
-          onCreateComanda={(item) => abrirNovaComanda(item)}
-          onNewAppointment={abrirNovoAgendamento}
-          onNewComanda={() => abrirNovaComanda()}
-          onOpenRecebimento={abrirRecebimento}
-          onOpenHistorico={abrirHistoricoCliente}
-          loading={loading}
-        />
-      </div>
-    )
+    const colunas = ['agendado', 'confirmado', 'em_atendimento', 'concluido']
+    return <div style={{ display: 'grid', gap: 16 }}>
+      <Card style={{ padding: 16 }}>
+        <div style={styles.toolbar}>
+          <div><h2 style={styles.h2}>Quadro de atendimento</h2><p style={styles.sub}>Atualize o status, abra a comanda e conclua o recebimento no mesmo fluxo operacional.</p></div>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'end', flexWrap: 'wrap' }}><Field label="Data"><input type="date" value={dataSelecionada} onChange={(event) => event.target.value && setDataSelecionada(event.target.value)} style={inputStyle} /></Field><button type="button" style={styles.secondary} onClick={() => abrirNovaComanda()}>Abrir comanda avulsa</button><button type="button" style={styles.primary} onClick={abrirNovoAgendamento}>Novo atendimento</button></div>
+        </div>
+      </Card>
+      <BarbeariaComandasAbertas key={scopeKey} profissionais={profissionais} onOpen={abrirComanda} refreshKey={agendaRevisao} />
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(235px, 100%), 1fr))', gap: 12 }}>{colunas.map((status) => <Card key={status} style={{ padding: 14, minHeight: 220 }}><div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}><Badge status={status} /><strong>{agendamentos.filter((item) => item.status === status).length}</strong></div><div style={{ display: 'grid', gap: 9 }}>{agendamentos.filter((item) => item.status === status).map((item) => { const comandaDoAtendimento = comandas.find((comanda) => comanda.agendamentoId === item.id && comanda.status !== 'cancelada'); return <div key={item.id} role="button" tabIndex={0} onClick={() => setModal({ tipo: 'detalheAgenda', agendamento: item })} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') setModal({ tipo: 'detalheAgenda', agendamento: item }) }} style={{ ...styles.attendanceCard, borderLeftColor: STATUS[status]?.color || 'var(--accent)' }}><strong>{horario(item.dataHora)} · {item.clienteNome || item.cliente_nome || 'Cliente sem nome'}</strong><div style={styles.sub}>{item.servicoNome || item.servico_nome || 'Serviço não informado'} · {item.profissionalNome || item.profissional_nome || 'Sem atendente'}</div><div style={styles.attendanceMeta}><span>{item.clienteTelefone || item.cliente_telefone || 'Sem telefone'}</span><span>{item.duracaoMinutos || item.duracao_minutos || 0} min</span></div><div onClick={(event) => event.stopPropagation()} style={{ marginTop: 9, display: 'flex', gap: 6, flexWrap: 'wrap' }}>{(TRANSICOES[status] || []).slice(0, 2).map((proximo) => <button key={proximo} type="button" style={styles.small} onClick={() => mudarStatus(item, proximo)}>{STATUS[proximo]?.label}</button>)}{status === 'concluido' && !item.financeiroLancamentoId && <button type="button" style={{ ...styles.small, color: 'var(--accent)' }} onClick={() => abrirRecebimento(item)}>Receber legado</button>}<button type="button" style={{ ...styles.small, color: 'var(--accent)' }} onClick={() => comandaDoAtendimento ? abrirComanda(comandaDoAtendimento) : abrirNovaComanda(item)}>{comandaDoAtendimento ? 'Abrir comanda' : 'Criar comanda'}</button></div></div> })}</div></Card>)}</div>
+    </div>
   }
 
   function renderOperacao() {
@@ -1629,7 +1579,7 @@ export default function BarbeariaERP() {
         <div style={styles.modalActions}>{clienteCrm ? <button type="button" style={styles.secondary} onClick={() => abrirEdicaoCliente(clienteCrm)}>Conferir cadastro do cliente</button> : <button type="button" style={styles.secondary} onClick={() => navigate('/admin/clientes-360')}>Abrir Clientes 360</button>}<button type="button" style={styles.secondary} onClick={() => { setModal(null); navegarParaTab('Caixa e fechamento') }}>Ver comandas do caixa</button></div>
         <div style={styles.modalActions}>{!['concluido', 'cancelado', 'nao_compareceu'].includes(agendamento.status) && <button type="button" style={styles.primary} onClick={() => abrirEdicaoAgendamento(agendamento)}>Remarcar</button>}{proximas.map((proximo) => <button key={proximo} type="button" style={styles.secondary} onClick={() => { setModal(null); mudarStatus(agendamento, proximo) }}>{STATUS[proximo]?.label}</button>)}{agendamento.status === 'concluido' && !agendamento.financeiroLancamentoId && <button type="button" style={styles.primary} onClick={() => { abrirRecebimento(agendamento) }}>Registrar recebimento</button>}<button type="button" style={styles.secondary} onClick={() => conferirComandaDoAtendimento(agendamento)}>Conferir / abrir comanda</button><button type="button" style={styles.secondary} onClick={() => abrirHistoricoCliente(agendamento)} title="Abre em nova guia">Histórico do cliente ↗</button></div></div></Modal>
     }
-    if (modal === 'plano') return <Modal title={edicaoId ? 'Editar plano de recorrência' : 'Novo plano de recorrência'} onClose={() => setModal(null)} wide><form onSubmit={salvarPlano} style={{ display: 'grid', gap: 16 }}><div style={styles.formGrid}><Field label="Nome *" full><input required value={formPlano.nome} onChange={(event) => setFormPlano((atual) => ({ ...atual, nome: event.target.value }))} style={inputStyle} placeholder="Plano mensal corte" /></Field><Field label="Preço do ciclo (R$) *"><input required type="number" min="0.01" step="0.01" value={formPlano.preco} onChange={(event) => setFormPlano((atual) => ({ ...atual, preco: event.target.value }))} style={inputStyle} /></Field><Field label="Ciclo"><select value={formPlano.ciclo} onChange={(event) => setFormPlano((atual) => ({ ...atual, ciclo: event.target.value }))} style={inputStyle}><option value="mensal">Mensal</option><option value="trimestral">Trimestral</option><option value="anual">Anual</option></select></Field><Field label="Sessões incluídas"><input required type="number" min="1" max="100" value={formPlano.sessoesIncluidas} onChange={(event) => setFormPlano((atual) => ({ ...atual, sessoesIncluidas: event.target.value }))} style={inputStyle} /></Field><Field label="Pote de comissão (% da mensalidade)"><input type="number" min="0" max="100" value={formPlano.percentualPote ?? 0} onChange={(event) => setFormPlano((atual) => ({ ...atual, percentualPote: event.target.value }))} style={inputStyle} /></Field><Field label="Validade (dias)"><input required type="number" min="1" value={formPlano.validadeDias} onChange={(event) => setFormPlano((atual) => ({ ...atual, validadeDias: event.target.value }))} style={inputStyle} /></Field><Field label="Serviços cobertos" full><select multiple value={formPlano.servicosIds} onChange={(event) => setFormPlano((atual) => ({ ...atual, servicosIds: Array.from(event.target.selectedOptions).map((option) => option.value) }))} style={{ ...inputStyle, minHeight: 110 }}>{servicos.filter((item) => item.ativo !== false).map((servico) => <option key={servico.id} value={servico.id}>{servico.nome}</option>)}</select><small style={styles.sub}>Use Ctrl/Cmd para selecionar mais de um serviço.</small></Field><Field label="Descrição" full><textarea rows={3} value={formPlano.descricao} onChange={(event) => setFormPlano((atual) => ({ ...atual, descricao: event.target.value }))} style={{ ...inputStyle, resize: 'vertical' }} /></Field></div><div style={styles.modalActions}><button type="button" style={styles.secondary} onClick={() => setModal(null)}>Cancelar</button><button type="submit" style={styles.primary} disabled={salvando}>{salvando ? 'Salvando…' : 'Salvar plano'}</button></div></form></Modal>
+    if (modal === 'plano') return <Modal title={edicaoId ? 'Editar plano de recorrência' : 'Novo plano de recorrência'} onClose={() => setModal(null)} wide><form onSubmit={salvarPlano} style={{ display: 'grid', gap: 16 }}><div style={styles.formGrid}><Field label="Nome *" full><input required value={formPlano.nome} onChange={(event) => setFormPlano((atual) => ({ ...atual, nome: event.target.value }))} style={inputStyle} placeholder="Plano mensal corte" /></Field><Field label="Preço do ciclo (R$) *"><input required type="number" min="0.01" step="0.01" value={formPlano.preco} onChange={(event) => setFormPlano((atual) => ({ ...atual, preco: event.target.value }))} style={inputStyle} /></Field><Field label="Ciclo"><select value={formPlano.ciclo} onChange={(event) => setFormPlano((atual) => ({ ...atual, ciclo: event.target.value }))} style={inputStyle}><option value="mensal">Mensal</option><option value="trimestral">Trimestral</option><option value="anual">Anual</option></select></Field><Field label="Sessões incluídas"><input required type="number" min="1" max="100" value={formPlano.sessoesIncluidas} onChange={(event) => setFormPlano((atual) => ({ ...atual, sessoesIncluidas: event.target.value }))} style={inputStyle} /></Field><Field label="Pote de comissão (% da mensalidade)"><input type="number" min="0" max="100" value={formPlano.percentualPote ?? 0} onChange={(event) => setFormPlano((atual) => ({ ...atual, percentualPote: event.target.value }))} style={inputStyle} /></Field><Field label="Rateio do pote"><select value={formPlano.rateioPote || 'valor_tabela'} onChange={(event) => setFormPlano((atual) => ({ ...atual, rateioPote: event.target.value }))} style={inputStyle}><option value="valor_tabela">Por valor de tabela dos serviços</option><option value="atendimento">Por atendimento (partes iguais)</option></select></Field><Field label="Valor fixo por atendimento (R$)"><input type="number" min="0" step="0.01" value={formPlano.valorFixoPorUso ?? 0} onChange={(event) => setFormPlano((atual) => ({ ...atual, valorFixoPorUso: event.target.value }))} style={inputStyle} /></Field><Field label="Validade (dias)"><input required type="number" min="1" value={formPlano.validadeDias} onChange={(event) => setFormPlano((atual) => ({ ...atual, validadeDias: event.target.value }))} style={inputStyle} /></Field><Field label="Serviços cobertos" full><select multiple value={formPlano.servicosIds} onChange={(event) => setFormPlano((atual) => ({ ...atual, servicosIds: Array.from(event.target.selectedOptions).map((option) => option.value) }))} style={{ ...inputStyle, minHeight: 110 }}>{servicos.filter((item) => item.ativo !== false).map((servico) => <option key={servico.id} value={servico.id}>{servico.nome}</option>)}</select><small style={styles.sub}>Use Ctrl/Cmd para selecionar mais de um serviço.</small></Field><Field label="Descrição" full><textarea rows={3} value={formPlano.descricao} onChange={(event) => setFormPlano((atual) => ({ ...atual, descricao: event.target.value }))} style={{ ...inputStyle, resize: 'vertical' }} /></Field></div><div style={styles.modalActions}><button type="button" style={styles.secondary} onClick={() => setModal(null)}>Cancelar</button><button type="submit" style={styles.primary} disabled={salvando}>{salvando ? 'Salvando…' : 'Salvar plano'}</button></div></form></Modal>
     if (modal === 'produtoRevenda') return <Modal title={edicaoId ? 'Editar produto de revenda' : 'Novo produto de revenda'} onClose={() => setModal(null)} wide><form onSubmit={salvarProdutoRevenda} style={{ display: 'grid', gap: 16 }}><div style={styles.formGrid}><Field label="Nome *" full><input required value={formProdutoRevenda.nome} onChange={(event) => setFormProdutoRevenda((atual) => ({ ...atual, nome: event.target.value }))} style={inputStyle} placeholder="Pomada modeladora" /></Field><Field label="Código de barras (EAN)"><input inputMode="numeric" value={formProdutoRevenda.ean || ''} onChange={(event) => setFormProdutoRevenda((atual) => ({ ...atual, ean: event.target.value }))} style={inputStyle} /></Field><Field label="SKU"><input value={formProdutoRevenda.sku} onChange={(event) => setFormProdutoRevenda((atual) => ({ ...atual, sku: event.target.value }))} style={inputStyle} /></Field><Field label="Categoria"><input value={formProdutoRevenda.categoria} onChange={(event) => setFormProdutoRevenda((atual) => ({ ...atual, categoria: event.target.value }))} style={inputStyle} /></Field><Field label="Unidade"><input value={formProdutoRevenda.unidade} onChange={(event) => setFormProdutoRevenda((atual) => ({ ...atual, unidade: event.target.value }))} style={inputStyle} /></Field><Field label="Preço de venda (R$) *"><input required type="number" min="0.01" step="0.01" value={formProdutoRevenda.precoVenda} onChange={(event) => setFormProdutoRevenda((atual) => ({ ...atual, precoVenda: event.target.value }))} style={inputStyle} /></Field><Field label="Custo unitário (R$)"><input type="number" min="0" step="0.01" value={formProdutoRevenda.custoUnitario} onChange={(event) => setFormProdutoRevenda((atual) => ({ ...atual, custoUnitario: event.target.value }))} style={inputStyle} /></Field><Field label={edicaoId ? 'Saldo atual (altere por Entrada/Saída)' : 'Estoque inicial'}><input type="number" min="0" step="1" disabled={Boolean(edicaoId)} value={formProdutoRevenda.estoqueAtual} onChange={(event) => setFormProdutoRevenda((atual) => ({ ...atual, estoqueAtual: event.target.value }))} style={inputStyle} /></Field><Field label="Estoque mínimo"><input type="number" min="0" step="1" value={formProdutoRevenda.estoqueMinimo} onChange={(event) => setFormProdutoRevenda((atual) => ({ ...atual, estoqueMinimo: event.target.value }))} style={inputStyle} /></Field><Field label="Intervalo de recompra (dias)" hint="Usado só como sugestão; 0 desativa recompra automática."><input type="number" min="0" max="3650" step="1" value={formProdutoRevenda.intervaloRecompraDias ?? 30} onChange={(event) => setFormProdutoRevenda((atual) => ({ ...atual, intervaloRecompraDias: event.target.value }))} style={inputStyle} /></Field></div><p style={styles.sub}>O estoque inicial gera apenas um movimento de entrada inicial; nenhum financeiro é criado.</p><div style={styles.modalActions}><button type="button" style={styles.secondary} onClick={() => setModal(null)}>Cancelar</button><button type="submit" style={styles.primary} disabled={salvando}>{salvando ? 'Salvando…' : edicaoId ? 'Salvar produto' : 'Cadastrar produto'}</button></div></form></Modal>
     return null
   }
