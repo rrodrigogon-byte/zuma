@@ -54,3 +54,10 @@ test('histórico completo exige data final e aceita somente 0/1', async () => { 
   assert.equal((await f.request({ query: 'historico=1' })).status, 400);
   assert.equal((await f.request({ query: 'historico=talvez&fim=2026-10-15' })).status, 400);
 } finally { await f.close(); } });
+test('visões por item: só valores conhecidos, chave exige visão e não mistura com profissional', async () => { const f = await fixture(); try {
+  const ok = await f.request({ query: 'historico=1&fim=2026-10-15&visao=servicos' }); assert.equal(ok.status, 200); assert.equal(ok.body.view, 'servicos'); assert.ok(Array.isArray(ok.body.groups));
+  assert.equal((await f.request({ query: 'historico=1&fim=2026-10-15&visao=senhas' })).status, 400);
+  assert.equal((await f.request({ query: 'historico=1&fim=2026-10-15&chave=x' })).status, 400);
+  assert.equal((await f.request({ query: 'historico=1&fim=2026-10-15&visao=servicos&profissionalId=p1' })).status, 400);
+  assert.equal((await f.request({ query: 'historico=1&fim=2026-10-15&visao=servicos&chave=nao-existe' })).status, 400);
+} finally { await f.close(); } });

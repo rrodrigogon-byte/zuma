@@ -181,6 +181,7 @@ function canonicalServiceRows(commissions, servicesById, commandsById, appointme
       timestamp,
       kind: item.origemTipo,
       client: text(item.clienteNome || command?.clienteNome || appointment?.clienteNome),
+      group: text(servicesById.get(text(item.servicoId))?.categoria),
     });
   }
   return rows;
@@ -596,14 +597,11 @@ function buildPeriodData(snapshot, period, previousPeriod, { skipPrevious = fals
   };
 }
 
-export function buildEquipeDesempenho(root, options = {}) {
+function prepareContext(root, options) {
   if (!root || typeof root !== 'object' || Array.isArray(root)) throw new TypeError('Snapshot raiz inválido.');
   const empresaId = text(options.empresaId);
   const lojaId = text(options.lojaId);
-  const profissionalId = text(options.profissionalId);
   const historico = options.historico === true;
-  // lean: lista sem mapa/série/recomendações por pessoa — o detalhe é buscado sob demanda.
-  const lean = options.lean === true && !profissionalId;
   if (!empresaId || !lojaId) throw Object.assign(new Error('empresaId e lojaId explícitos são obrigatórios.'), { code: 'EXPLICIT_SCOPE_REQUIRED' });
   const snapshot = normalizeRoot(root, empresaId, lojaId);
   let period;
@@ -618,6 +616,122 @@ export function buildEquipeDesempenho(root, options = {}) {
   const previousPeriod = historico
     ? { inicio: period.previousInicio, fim: period.previousFim, days: period.days }
     : validatePeriod({ inicio: period.previousInicio, fim: period.previousFim });
+  return { empresaId, lojaId, historico, snapshot, period, previousPeriod };
+}
+
+// ── Visões por item: o que está sendo vendido (serviços/produtos), para quem e em que categoria ──
+export const ITEM_VIEWS = ['servicos', 'clientes', 'categorias'];
+const normKey = (value) => text(value).toLocaleLowerCase('pt-BR').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ');
+const ITEM_GROUPERS = {
+  servicos: (row) => { const type = row.type; return { key: `${type}:${normKey(row.name) || '-'}`, label: row.name || (type === 'produto' ? 'Produto' : 'Serviço'), type }; },
+  clientes: (row) => ({ key: normKey(row.client) || '-', label: row.client || 'Cliente não informado', type: 'cliente' }),
+  categorias: (row) => { const label = row.type === 'produto' ? 'Produtos (revenda)' : (row.group || 'Sem categoria'); return { key: normKey(label), label, type: row.type === 'produto' ? 'produto' : 'categoria' }; },
+};
+
+function itemRows(snapshot, data) {
+  const names = new Map(Object.values(snapshot.strict.profissionais).map((item) => [idOf(item), text(item.nome) || 'Profissional']));
+  const categories = new Map(snapshot.raw.servicos.map((item) => [idOf(item), text(item.categoria)]));
+  const lines = [
+    ...data.serviceRows.filter((row) => snapshot.professionalIds.has(row.professionalId)),
+    ...data.unattributedHistoricalRows,
+    ...data.productRows.filter((row) => snapshot.professionalIds.has(row.professionalId)),
+  ];
+  return lines.filter((row) => row.date).map((row) => ({
+    date: row.date,
+    hour: row.timestamp ? localHour(row.timestamp) : null,
+    type: row.product ? 'produto' : 'servico',
+    origin: row.kind,
+    name: row.name || (row.product ? 'Produto' : 'Serviço'),
+    group: row.group || categories.get(row.serviceId) || '',
+    client: row.client || '',
+    professionalId: snapshot.professionalIds.has(row.professionalId) ? row.professionalId : UNATTRIBUTED_PROFESSIONAL_ID,
+    professionalName: names.get(row.professionalId) || 'Sem profissional atribuído',
+    quantity: money(row.quantity),
+    revenue: money(row.revenue),
+  }));
+}
+
+function groupItems(rows, grouper) {
+  const map = new Map();
+  for (const row of rows) {
+    const { key, label, type } = grouper(row);
+    let group = map.get(key);
+    if (!group) { group = { key, label, type, revenue: 0, serviceRevenue: 0, services: 0, products: 0, records: 0, professionals: new Map(), clients: new Set(), firstDate: row.date, lastDate: row.date }; map.set(key, group); }
+    group.revenue += row.revenue;
+    group.records += 1;
+    if (row.type === 'produto') group.products += row.quantity; else { group.services += row.quantity; group.serviceRevenue += row.revenue; }
+    group.professionals.set(row.professionalName, (group.professionals.get(row.professionalName) || 0) + row.revenue);
+    if (row.client) group.clients.add(normKey(row.client));
+    if (row.date < group.firstDate) group.firstDate = row.date;
+    if (row.date > group.lastDate) group.lastDate = row.date;
+  }
+  return map;
+}
+
+export function buildEquipeItens(root, options = {}) {
+  const view = text(options.visao);
+  if (!ITEM_VIEWS.includes(view)) throw Object.assign(new Error('Visão inválida.'), { code: 'PERFORMANCE_QUERY_INVALID' });
+  const ctx = prepareContext(root, options);
+  const current = buildPeriodData(ctx.snapshot, ctx.period, ctx.previousPeriod, { skipPrevious: true });
+  const rows = itemRows(ctx.snapshot, current);
+  const grouper = ITEM_GROUPERS[view];
+  const groups = groupItems(rows, grouper);
+  // Comparação com o período anterior de mesma duração (só fora do histórico completo).
+  let previous = null;
+  if (!ctx.historico) {
+    const prevPrev = validatePeriod({ inicio: ctx.previousPeriod.previousInicio, fim: ctx.previousPeriod.previousFim });
+    previous = groupItems(itemRows(ctx.snapshot, buildPeriodData(ctx.snapshot, ctx.previousPeriod, prevPrev, { skipPrevious: true })), grouper);
+  }
+  const total = rows.reduce((sum, row) => sum + row.revenue, 0);
+  const chave = text(options.chave);
+  const list = [...groups.values()].map((group) => {
+    const top = [...group.professionals.entries()].sort((a, b) => b[1] - a[1])[0];
+    const qty = group.services + group.products;
+    const before = previous?.get(group.key)?.revenue || 0;
+    return {
+      key: group.key, label: group.label, type: group.type,
+      revenue: money(group.revenue), services: money(group.services), products: money(group.products), records: group.records,
+      share: total ? pct(group.revenue * 100 / total) : 0,
+      ticket: qty ? money(group.revenue / qty) : null,
+      professionals: group.professionals.size, clients: group.clients.size,
+      topProfessional: top ? { name: top[0], revenue: money(top[1]) } : null,
+      firstDate: group.firstDate, lastDate: group.lastDate,
+      previousRevenue: previous ? money(before) : null,
+      trendPct: previous && before ? pct((group.revenue - before) * 100 / before) : null,
+    };
+  }).sort((a, b) => b.revenue - a.revenue || a.label.localeCompare(b.label, 'pt-BR'));
+  if (chave && !groups.has(chave)) throw Object.assign(new Error('Item não encontrado no recorte.'), { code: 'PROFESSIONAL_NOT_FOUND' });
+  const clients = new Set(rows.map((row) => normKey(row.client)).filter(Boolean));
+  const servicesQty = rows.filter((row) => row.type === 'servico').reduce((sum, row) => sum + row.quantity, 0);
+  const productsQty = rows.filter((row) => row.type === 'produto').reduce((sum, row) => sum + row.quantity, 0);
+  const productRevenue = rows.filter((row) => row.type === 'produto').reduce((sum, row) => sum + row.revenue, 0);
+  return {
+    ok: true,
+    readOnly: true,
+    writePerformed: false,
+    scope: { empresaId: ctx.empresaId, lojaId: ctx.lojaId },
+    period: ctx.period,
+    seriesGranularity: seriesGranularity(ctx.period),
+    view,
+    summary: {
+      revenue: money(total),
+      groups: list.length,
+      services: money(servicesQty),
+      products: money(productsQty),
+      productShare: total ? pct(productRevenue * 100 / total) : 0,
+      clients: clients.size,
+      ticket: servicesQty + productsQty ? money(total / (servicesQty + productsQty)) : null,
+    },
+    groups: chave ? list.filter((group) => group.key === chave) : list,
+    ...(chave ? { rows: rows.filter((row) => grouper(row).key === chave).sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : b.revenue - a.revenue)) } : {}),
+  };
+}
+
+export function buildEquipeDesempenho(root, options = {}) {
+  const profissionalId = text(options.profissionalId);
+  // lean: lista sem mapa/série/recomendações por pessoa — o detalhe é buscado sob demanda.
+  const lean = options.lean === true && !profissionalId;
+  const { empresaId, lojaId, historico, snapshot, period, previousPeriod } = prepareContext(root, options);
   const current = buildPeriodData(snapshot, period, previousPeriod, { skipPrevious: historico });
   const commerceCurrent = options.commerceCurrent || {};
   const commerceRevenue = money(commerceCurrent.revenue);

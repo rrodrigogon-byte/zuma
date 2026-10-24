@@ -1,4 +1,4 @@
-import { buildEquipeDesempenho } from './dino-equipe-desempenho.js';
+import { buildEquipeDesempenho, buildEquipeItens, ITEM_VIEWS } from './dino-equipe-desempenho.js';
 import { DINO_COMMERCE_EMPRESA_ID, DINO_COMMERCE_LOJA_ID, legacyEmpresaIdFromCommerce, legacyLojaIdFromCommerce } from './core/legacy-commerce-scope.js';
 
 export const EQUIPE_PERFORMANCE_PATH = '/api/admin/barbearia/equipe/desempenho';
@@ -62,15 +62,18 @@ export function registerEquipePerformanceRoutes(app, { db, legacyEmpresaId, lega
         const field = header === 'x-empresa-id' ? 'empresaId' : 'lojaId';
         if (req.headers[header] && !scopeValueMatches(field, expected, req.headers[header])) return res.status(403).json({ code: 'STORE_SCOPE_MISMATCH', error: 'O contexto não corresponde à empresa e unidade autorizadas.' });
       }
-      const allowedQueries = new Set(['inicio', 'fim', 'profissionalId', 'empresaId', 'lojaId', 'historico', 'fresh']);
+      const allowedQueries = new Set(['inicio', 'fim', 'profissionalId', 'empresaId', 'lojaId', 'historico', 'fresh', 'visao', 'chave']);
       if (Object.keys(req.query || {}).some(key => !allowedQueries.has(key)) || Object.values(req.query || {}).some(value => typeof value !== 'string')) return res.status(400).json({ code: 'PERFORMANCE_QUERY_INVALID', error: 'Informe apenas período e profissional válidos.' });
       const profissionalId = req.query.profissionalId || '';
       if (profissionalId.length > 120) return res.status(400).json({ code: 'PERFORMANCE_QUERY_INVALID', error: 'Filtro de profissional inválido.' });
       const historico = req.query.historico === '1';
+      const visao = req.query.visao || '';
+      const chave = req.query.chave || '';
+      if ((visao && !ITEM_VIEWS.includes(visao)) || chave.length > 300 || (chave && !visao) || (visao && profissionalId)) return res.status(400).json({ code: 'PERFORMANCE_QUERY_INVALID', error: 'Visão ou item inválido.' });
       if (historico && !req.query.fim) return res.status(400).json({ code: 'PERFORMANCE_QUERY_INVALID', error: 'Informe a data final do histórico.' });
       if (req.query.historico !== undefined && !['0', '1'].includes(req.query.historico)) return res.status(400).json({ code: 'PERFORMANCE_QUERY_INVALID', error: 'Filtro de histórico inválido.' });
       // A chave só é montada depois de autorização e escopo validados acima.
-      const cacheKey = JSON.stringify([empresaId, lojaId, historico ? '' : req.query.inicio, req.query.fim, historico, profissionalId, coreEnabled()]);
+      const cacheKey = JSON.stringify([empresaId, lojaId, historico ? '' : req.query.inicio, req.query.fim, historico, profissionalId, visao, chave, coreEnabled()]);
       let version = null;
       try { version = dataVersion(); } catch { version = null; }
       const fromCache = () => {
@@ -86,22 +89,25 @@ export function registerEquipePerformanceRoutes(app, { db, legacyEmpresaId, lega
         if (legacyEmpresaIdFromCommerce(context?.empresaId) !== empresaId || legacyLojaIdFromCommerce(context?.lojaId, context?.empresaId) !== lojaId) return res.status(403).json({ code: 'STORE_SCOPE_MISMATCH', error: 'O contexto do relatório não corresponde à unidade autorizada.' });
         // Permissão reports.read e escopo já conferidos: só então o cache pode responder.
         if (fromCache()) return;
-        if (typeof salesReport !== 'function') return res.status(503).json({ code: 'PERFORMANCE_UNAVAILABLE', error: 'Relatório Commerce indisponível.' });
+        // Visões por item não usam o total do e-commerce (pedidos não têm profissional nem serviço).
+        if (!visao && typeof salesReport !== 'function') return res.status(503).json({ code: 'PERFORMANCE_UNAVAILABLE', error: 'Relatório Commerce indisponível.' });
         const range = commerceWindow({ inicio: historico ? '2000-01-01' : req.query.inicio, fim: req.query.fim });
-        const sales = await salesReport(context, range);
+        const sales = visao ? null : await salesReport(context, range);
         req.equipeCommerce = {
           // Pedidos pendentes não representam faturamento nem produção da equipe.
           revenue: Number(sales?.summary?.confirmed_total || 0),
           orders: Number(sales?.summary?.confirmed_orders || 0),
         };
       } else if (fromCache()) return;
-      const result = buildEquipeDesempenho(db(), { empresaId, lojaId, inicio: req.query.inicio, fim: req.query.fim, profissionalId, historico, lean: !profissionalId, commerceCurrent: req.equipeCommerce });
+      const result = visao
+        ? buildEquipeItens(db(), { empresaId, lojaId, inicio: req.query.inicio, fim: req.query.fim, historico, visao, chave })
+        : buildEquipeDesempenho(db(), { empresaId, lojaId, inicio: req.query.inicio, fim: req.query.fim, profissionalId, historico, lean: !profissionalId, commerceCurrent: req.equipeCommerce });
       cacheSet(cacheKey, version, result);
       res.set('X-Performance-Cache', 'miss');
       res.json(result);
     } catch (error) {
       const denied = ['PERMISSION_DENIED', 'STORE_SCOPE_MISMATCH', 'TENANT_CONTEXT_REQUIRED'].includes(error?.code);
-      const invalid = ['PERIOD_INVALID', 'PERIODO_INVALIDO', 'EXPLICIT_SCOPE_REQUIRED', 'PROFESSIONAL_NOT_FOUND'].includes(error?.code);
+      const invalid = ['PERIOD_INVALID', 'PERIODO_INVALIDO', 'EXPLICIT_SCOPE_REQUIRED', 'PROFESSIONAL_NOT_FOUND', 'PERFORMANCE_QUERY_INVALID'].includes(error?.code);
       res.status(denied ? 403 : invalid || error instanceof RangeError ? 400 : 503).json({ code: denied ? 'PERMISSION_DENIED' : invalid ? error.code : 'PERFORMANCE_UNAVAILABLE', error: denied ? 'Esta sessão não pode consultar o desempenho da equipe.' : invalid ? 'Confira o período, a unidade e o filtro de profissional.' : 'Não foi possível carregar o desempenho. Tente novamente.' });
     }
   });

@@ -59,7 +59,7 @@ function totals(rows) {
   return result
 }
 export function buildDrillTree(rows = [], dimension = 'tempo') {
-  const config = DRILL_DIMENSIONS[dimension] || DRILL_DIMENSIONS.tempo
+  const config = typeof dimension === 'object' && dimension ? dimension : DRILL_DIMENSIONS[dimension] || DRILL_DIMENSIONS.tempo
   const level = (items, depth) => {
     if (depth >= config.levels.length) return null
     const groups = new Map()
@@ -163,7 +163,7 @@ function Leaves({ rows, path, parentRevenue, limit, showMore }) {
   const visible = rows.slice(0, limit)
   return <>
     {visible.map((row, index) => <tr key={`${path}#${index}`} className="eq-node eq-leaf lvl-5" style={{ '--lvl': 4 }}>
-      <th scope="row"><span className="eq-leaf-label">{dateLabel(row.date)}{row.hour != null ? ` · ${String(row.hour).padStart(2, '0')}h` : ''} · <strong>{row.name}</strong></span><small>Nível 5 · {row.client || 'Cliente não informado'} · {ORIGIN[row.origin] || row.origin || 'Registro'}{row.group ? ` · ${row.group}` : ''}</small></th>
+      <th scope="row"><span className="eq-leaf-label">{dateLabel(row.date)}{row.hour != null ? ` · ${String(row.hour).padStart(2, '0')}h` : ''} · <strong>{row.name}</strong></span><small>Nível 5 · {row.client || 'Cliente não informado'}{row.professionalName ? ` · ${row.professionalName}` : ''} · {ORIGIN[row.origin] || row.origin || 'Registro'}{row.group ? ` · ${row.group}` : ''}</small></th>
       <td><div className="eq-money">{amount(row.revenue)}<ShareBar value={row.revenue} total={parentRevenue} /></div></td>
       <td>{percent(share(row.revenue, parentRevenue))}</td>
       <td className="eq-dim">—</td>
@@ -173,6 +173,128 @@ function Leaves({ rows, path, parentRevenue, limit, showMore }) {
       <td className="eq-dim">{row.type === 'produto' ? 'Produto' : 'Serviço'}</td>
     </tr>)}
     {rows.length > limit && <tr className="eq-node eq-leaf lvl-5" style={{ '--lvl': 4 }}><td colSpan={8}><button type="button" className="eq-more" onClick={() => showMore(path)}>Mostrar mais {count(Math.min(LEAF_PAGE, rows.length - limit))} de {count(rows.length - limit)} restantes</button></td></tr>}
+  </>
+}
+
+// ── Visões por item: o que está sendo vendido, para quem e em que categoria ──
+const prof = row => [row.professionalId || '—', row.professionalName || 'Sem profissional atribuído']
+const svc = row => [`${row.type}:${row.name}`, `${row.type === 'produto' ? 'Produto · ' : ''}${row.name}`]
+export const ITEM_VIEWS = {
+  servicos: { label: 'Serviços e produtos', item: 'Serviço / produto', drill: 'Profissional › Ano › Mês', config: { levels: [prof, year, month], timeSorted: [false, true, true] } },
+  clientes: { label: 'Clientes', item: 'Cliente', drill: 'Serviço › Profissional › Mês', config: { levels: [svc, prof, month], timeSorted: [false, false, true] } },
+  categorias: { label: 'Categorias', item: 'Categoria', drill: 'Serviço › Profissional › Mês', config: { levels: [svc, prof, month], timeSorted: [false, false, true] } },
+}
+function TopBars({ groups = [], total }) {
+  const top = groups.slice(0, 10)
+  if (!top.length) return null
+  const max = Math.max(1, ...top.map(item => item.revenue))
+  return <section className="eq-card eq-topbars"><h3>Top 10 por receita</h3><ol>{top.map((item, index) => <li key={item.key}><span className="eq-top-rank">{index + 1}</span><span className="eq-top-label" title={item.label}>{item.type === 'produto' ? 'Produto · ' : ''}{item.label}</span><span className="eq-top-bar"><i style={{ width: `${item.revenue / max * 100}%` }} /></span><span className="eq-top-value">{amount(item.revenue)}<small>{percent(share(item.revenue, total))} · {count(item.services + item.products)} un.</small></span></li>)}</ol></section>
+}
+function validItemsPayload(payload, scope, period, view) {
+  return samePerformanceScope(scope, payload?.scope) && samePeriod(period, payload?.period) && payload?.readOnly === true && payload?.writePerformed === false && payload?.view === view && Array.isArray(payload?.groups)
+}
+function ItemsView({ view, period, empresaId, lojaId, refresh }) {
+  const config = ITEM_VIEWS[view]
+  const [data, setData] = useState(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const [search, setSearch] = useState('')
+  const [type, setType] = useState('todos')
+  const [sort, setSort] = useState('revenue')
+  const [expanded, setExpanded] = useState(() => new Set())
+  const [limits, setLimits] = useState({})
+  const [details, setDetails] = useState({})
+  const key = `${empresaId}:${lojaId}|${period.historico ? `h:${period.fim}` : `${period.inicio}:${period.fim}`}|${view}`
+  const activeKey = useRef(key)
+  activeKey.current = key
+  const pending = useRef(new Set())
+  useEffect(() => {
+    let alive = true
+    setData(null); setError(''); setExpanded(new Set()); setDetails({}); setLimits({}); pending.current = new Set()
+    if (!empresaId || !lojaId) return undefined
+    setLoading(true)
+    api.get(`/api/admin/barbearia/equipe/desempenho?${periodQuery(period, { visao: view, ...(refresh ? { fresh: '1' } : {}) })}`, { headers: { 'X-Empresa-Id': empresaId, 'X-Loja-Id': lojaId } }).then(payload => {
+      if (!alive) return
+      if (!validItemsPayload(payload, { empresaId, lojaId }, period, view)) throw new Error('INVALID_ITEMS_SCOPE')
+      setData(payload)
+    }).catch(() => { if (alive) setError('Não foi possível carregar esta visão. Confira a empresa, a unidade, o período e sua permissão de gestão.') })
+      .finally(() => { if (alive) setLoading(false) })
+    return () => { alive = false }
+  }, [key, refresh]) // eslint-disable-line react-hooks/exhaustive-deps
+  const loadRows = useCallback(groupKey => {
+    if (details[groupKey] || pending.current.has(groupKey)) return
+    pending.current.add(groupKey)
+    const requestKey = key
+    setDetails(value => ({ ...value, [groupKey]: { loading: true } }))
+    api.get(`/api/admin/barbearia/equipe/desempenho?${periodQuery(period, { visao: view, chave: groupKey })}`, { headers: { 'X-Empresa-Id': empresaId, 'X-Loja-Id': lojaId } }).then(payload => {
+      if (activeKey.current !== requestKey) return
+      if (!validItemsPayload(payload, { empresaId, lojaId }, period, view) || !Array.isArray(payload.rows)) throw new Error('INVALID_ITEMS_SCOPE')
+      setDetails(value => ({ ...value, [groupKey]: { rows: payload.rows } }))
+    }).catch(() => { if (activeKey.current !== requestKey) return; pending.current.delete(groupKey); setDetails(value => ({ ...value, [groupKey]: { error: true } })) })
+  }, [details, key, period, view, empresaId, lojaId])
+  const toggle = useCallback(id => setExpanded(value => { const next = new Set(value); if (next.has(id)) { for (const item of next) if (item === id || item.startsWith(`${id}/`)) next.delete(item) } else next.add(id); return next }), [])
+  const toggleGroup = groupKey => { loadRows(groupKey); toggle(groupKey) }
+  const showMore = useCallback(path => setLimits(value => ({ ...value, [path]: (value[path] || LEAF_PAGE) + LEAF_PAGE })), [])
+  const total = data?.summary?.revenue || 0
+  const groups = useMemo(() => {
+    const term = search.toLocaleLowerCase('pt-BR')
+    const value = item => sort === 'quantity' ? item.services + item.products : sort === 'trend' ? (item.trendPct ?? -Infinity) : Number(item[sort] ?? 0)
+    return (data?.groups || [])
+      .filter(item => type === 'todos' || (type === 'produto' ? item.type === 'produto' : item.type !== 'produto'))
+      .filter(item => String(item.label).toLocaleLowerCase('pt-BR').includes(term))
+      .sort((a, b) => value(b) - value(a) || String(a.label).localeCompare(String(b.label), 'pt-BR'))
+  }, [data, search, type, sort])
+  const trees = useMemo(() => Object.fromEntries(Object.entries(details).filter(([, value]) => value.rows).map(([groupKey, value]) => [groupKey, buildDrillTree(value.rows, config.config)])), [details, config])
+  const exportGroups = () => downloadCsv(`${view}-${slug(data?.period?.inicio)}-a-${slug(data?.period?.fim)}.csv`, toCsv(
+    [config.item, 'Tipo', 'Receita', 'Participação %', 'Serviços', 'Produtos', 'Ticket', 'Profissionais', 'Clientes', 'Quem mais vendeu', 'Primeira venda', 'Última venda', 'Vs. período anterior %'],
+    groups.map(item => [item.label, item.type === 'produto' ? 'Produto' : item.type === 'servico' ? 'Serviço' : item.type, item.revenue, share(item.revenue, total), item.services, item.products, item.ticket, item.professionals, item.clients, item.topProfessional?.name || '', dateLabel(item.firstDate), dateLabel(item.lastDate), item.trendPct])))
+  const summary = data?.summary || {}
+  return <>
+    {loading && <div role="status" className="eq-loading"><span className="eq-skeleton" /><span className="eq-skeleton" /><p className="eq-muted">Apurando {config.label.toLowerCase()}…</p></div>}
+    {error && <p role="alert" className="eq-alert">{error}</p>}
+    {data && <>
+      <div className="eq-period">{dateLabel(data.period.inicio)} a {dateLabel(data.period.fim)}<small>{data.period.historico ? 'Histórico completo' : `Comparação: ${dateLabel(data.period.previousInicio)} a ${dateLabel(data.period.previousFim)}`} · inclui histórico Avec, comandas e revenda atribuídos (e-commerce fica fora: não tem serviço nem profissional)</small></div>
+      <div className="eq-metrics">
+        <Metric tone="is-hero" label="Receita no recorte" value={amount(summary.revenue)} note={`${count(summary.groups)} ${config.item.toLowerCase()}(s) distintos`} />
+        <Metric label="Serviços vendidos" value={count(summary.services)} note="Quantidade apurada" />
+        <Metric label="Produtos vendidos" value={count(summary.products)} note={`${percent(summary.productShare)} da receita`} />
+        <Metric label="Clientes atendidos" value={count(summary.clients)} note="Nomes distintos registrados" />
+        <Metric label="Ticket médio por item" value={amount(summary.ticket)} note="Receita ÷ itens vendidos" />
+      </div>
+      <TopBars groups={groups} total={total} />
+      <section className="eq-card eq-grid-card">
+        <div className="eq-section-head">
+          <div><h3>{config.label}</h3><p>Clique na linha para explodir: {config.item} › {config.drill} › atendimentos.</p></div>
+          <label>Buscar<input type="search" value={search} onChange={event => setSearch(event.target.value)} placeholder={`Nome do ${config.item.toLowerCase()}`} /></label>
+          {view !== 'clientes' && <label>Tipo<select value={type} onChange={event => setType(event.target.value)}><option value="todos">Serviços e produtos</option><option value="servico">Somente serviços</option><option value="produto">Somente produtos</option></select></label>}
+          <label>Ordenar por<select value={sort} onChange={event => setSort(event.target.value)}><option value="revenue">Receita</option><option value="quantity">Quantidade</option><option value="ticket">Ticket</option><option value="clients">Clientes</option><option value="professionals">Profissionais</option>{!data.period.historico && <option value="trend">Crescimento</option>}</select></label>
+          <div className="eq-head-actions"><button type="button" onClick={exportGroups} disabled={!groups.length}>Exportar CSV</button><button type="button" onClick={() => setExpanded(new Set())} disabled={!expanded.size}>Recolher</button></div>
+        </div>
+        <div className="eq-scroll eq-tree-wrap"><table className="eq-table eq-employee-table eq-tree"><caption>{count(groups.length)} {config.item.toLowerCase()}(s) — clique para detalhar até o atendimento</caption>
+          <thead><tr><th>{config.item} / nível</th><th>Receita</th><th>Participação</th><th>Profissionais · clientes</th><th>Serviços</th><th>Produtos</th><th>Ticket</th><th>{data.period.historico ? 'Última venda' : 'Vs. período anterior'}</th></tr></thead>
+          <tbody>{groups.map(item => {
+            const open = expanded.has(item.key)
+            const detail = details[item.key]
+            const tree = trees[item.key]
+            return <Fragment key={item.key}>
+              <tr className={`eq-node lvl-1${open ? ' is-open' : ''}`} style={{ '--lvl': 0 }} onClick={() => toggleGroup(item.key)}>
+                <th scope="row"><button type="button" className="eq-toggle" aria-expanded={open} aria-label={`${open ? 'Recolher' : 'Detalhar'} ${item.label}`} onClick={event => { event.stopPropagation(); toggleGroup(item.key) }}><span className="eq-caret" aria-hidden="true">▸</span><span className="eq-node-label">{item.label}</span></button><small>{item.type === 'produto' ? <span className="eq-badge is-muted">Produto</span> : item.type === 'servico' ? <span className="eq-badge is-active">Serviço</span> : null}{item.topProfessional ? ` · quem mais vendeu: ${item.topProfessional.name}` : ''}</small></th>
+                <td><div className="eq-money">{amount(item.revenue)}<ShareBar value={item.revenue} total={total} /></div></td>
+                <td>{percent(share(item.revenue, total))}</td>
+                <td>{count(item.professionals)} · {count(item.clients)}</td>
+                <td>{count(item.services)}</td>
+                <td>{count(item.products)}</td>
+                <td>{amount(item.ticket)}</td>
+                <td>{data.period.historico ? dateLabel(item.lastDate) : item.trendPct == null ? (item.previousRevenue ? '—' : 'Novo no período') : `${item.trendPct > 0 ? '+' : ''}${percent(item.trendPct)}`}</td>
+              </tr>
+              {open && (detail?.loading ? <tr className="eq-node lvl-2"><td colSpan={8} className="eq-dim">Carregando detalhamento de {item.label}…</td></tr>
+                : detail?.error ? <tr className="eq-node lvl-2"><td colSpan={8} className="eq-dim">Não foi possível carregar o detalhe. Recolha e tente de novo.</td></tr>
+                  : tree ? <DrillNodes nodes={tree} depth={2} path={item.key} parentRevenue={item.revenue} expanded={expanded} toggle={toggle} limits={limits} showMore={showMore} /> : null)}
+            </Fragment>
+          })}</tbody></table></div>
+        {!groups.length && <p className="eq-empty">Nada encontrado com estes filtros.</p>}
+      </section>
+    </>}
   </>
 }
 
@@ -186,6 +308,8 @@ export default function DinoEquipeDesempenho({ empresaId = '', lojaId = '', onOp
   const [sort, setSort] = useState(prefs.sort || 'revenue')
   const [onlyWithValues, setOnlyWithValues] = useState(prefs.onlyWithValues !== false)
   const [dimension, setDimension] = useState(DRILL_DIMENSIONS[prefs.dimension] ? prefs.dimension : 'tempo')
+  const [view, setView] = useState(ITEM_VIEWS[prefs.view] ? prefs.view : 'profissionais')
+  const [itemsRefresh, setItemsRefresh] = useState(0)
   const [employeeId, setEmployeeId] = useState('')
   const [expanded, setExpanded] = useState(() => new Set())
   const [limits, setLimits] = useState({})
@@ -204,7 +328,7 @@ export default function DinoEquipeDesempenho({ empresaId = '', lojaId = '', onOp
   activeView.current = viewKey
   useLayoutEffect(() => { request.current++; setData(null); setError(''); setEmployeeId(''); setSearch(''); setExpanded(new Set()); setLimits({}); setDetails({}); detailRequests.current = new Set() }, [scopeKey, periodKey])
   useEffect(() => {
-    if (!empresaId || !lojaId) { setLoading(false); return undefined }
+    if (!empresaId || !lojaId || view !== 'profissionais') { setLoading(false); return undefined }
     const current = ++request.current
     let alive = true
     setLoading(true); setError(''); setData(null)
@@ -219,7 +343,7 @@ export default function DinoEquipeDesempenho({ empresaId = '', lojaId = '', onOp
       if (alive && request.current === current && activeScope.current === scopeKey) { setData(null); setError('Não foi possível carregar o desempenho neste contexto. Confira a empresa, a unidade, o período e sua permissão de gestão.') }
     }).finally(() => { if (alive && request.current === current) setLoading(false) })
     return () => { alive = false }
-  }, [empresaId, lojaId, scopeKey, period, periodKey, refresh])
+  }, [empresaId, lojaId, scopeKey, period, periodKey, refresh, view])
   // Detalhe (linhas para o drill + mapa/série/recomendações) é carregado sob demanda e guardado.
   const loadDetail = useCallback(id => {
     if (!id || details[id] || detailRequests.current.has(id) || !empresaId || !lojaId) return
@@ -259,7 +383,7 @@ export default function DinoEquipeDesempenho({ empresaId = '', lojaId = '', onOp
   const selected = selectedDetail?.employee || null
   const choosePeriod = days => { const fim = hojeAgenda(); setPeriod({ historico: false, inicio: shiftEquipeDate(fim, -(days - 1)), fim }) }
   const chooseHistory = () => setPeriod({ historico: true, inicio: '', fim: hojeAgenda() })
-  const reload = () => { fresh.current = true; setDetails({}); detailRequests.current = new Set(); setRefresh(value => value + 1) }
+  const reload = () => { setItemsRefresh(value => value + 1); fresh.current = true; setDetails({}); detailRequests.current = new Set(); setRefresh(value => value + 1) }
   const expandAll = () => setExpanded(new Set(employees.map(item => item.id)))
   useEffect(() => { for (const id of expanded) if (!id.includes('/')) loadDetail(id) }, [expanded, loadDetail])
   const activateAll = async () => {
@@ -269,7 +393,7 @@ export default function DinoEquipeDesempenho({ empresaId = '', lojaId = '', onOp
     setActivation({ step: 'done', message: `${ok} de ${toActivate.length} profissional(is) ativado(s) no cadastro.` })
     reload()
   }
-  useEffect(() => { writePrefs({ sort, onlyWithValues, dimension }) }, [sort, onlyWithValues, dimension])
+  useEffect(() => { writePrefs({ sort, onlyWithValues, dimension, view }) }, [sort, onlyWithValues, dimension, view])
   const pickBucket = key => { const today = hojeAgenda(); if (key.length === 7) setPeriod({ historico: false, ...monthBounds(key, today) }); else setPeriod({ historico: false, inicio: key, fim: key }) }
   const exportEmployees = () => downloadCsv(`desempenho-equipe-${slug(visible?.period?.inicio)}-a-${slug(visible?.period?.fim)}.csv`, toCsv(
     ['Profissional', 'Situação', 'Receita atribuída', 'Participação %', 'Comissão indicativa', 'Serviços', 'Históricos Avec', 'Produtos', 'Ticket / serviço', 'Última atividade', 'Vs. período anterior %'],
@@ -286,10 +410,12 @@ export default function DinoEquipeDesempenho({ empresaId = '', lojaId = '', onOp
       <label>Até<input aria-label="Fim do período" type="date" value={period.fim} onChange={event => setPeriod(value => ({ ...value, fim: event.target.value, inicio: value.historico ? '' : value.inicio }))} /></label>
       <span className="eq-muted">{period.historico ? 'Desde o primeiro registro · horário de Cuiabá' : 'Até 93 dias · horário de Cuiabá'}</span>
     </div>
+    <div className="eq-views" role="tablist" aria-label="Ver desempenho por">{[['profissionais', 'Profissionais'], ...Object.entries(ITEM_VIEWS).map(([key, item]) => [key, item.label])].map(([key, label]) => <button key={key} type="button" role="tab" aria-selected={view === key} className={view === key ? 'is-on' : ''} onClick={() => setView(key)}>{label}</button>)}</div>
+    {view !== 'profissionais' && empresaId && lojaId && <ItemsView view={view} period={period} empresaId={empresaId} lojaId={lojaId} refresh={itemsRefresh} />}
     {(!empresaId || !lojaId) && <p className="eq-alert" role="status">Selecione a empresa e uma unidade para consultar. Nenhum relatório sem contexto será carregado.</p>}
-    {loading && <div role="status" className="eq-loading"><span className="eq-skeleton" /><span className="eq-skeleton" /><span className="eq-skeleton" /><p className="eq-muted">Conferindo os indicadores da unidade…</p></div>}
-    {error && <p role="alert" className="eq-alert">{error}</p>}
-    {visible && <>
+    {view === 'profissionais' && loading && <div role="status" className="eq-loading"><span className="eq-skeleton" /><span className="eq-skeleton" /><span className="eq-skeleton" /><p className="eq-muted">Conferindo os indicadores da unidade…</p></div>}
+    {view === 'profissionais' && error && <p role="alert" className="eq-alert">{error}</p>}
+    {view === 'profissionais' && visible && <>
       <div className="eq-period">{dateLabel(visible.period.inicio)} a {dateLabel(visible.period.fim)}<small>{visible.period.historico ? `Histórico completo · ${count(visible.period.days)} dias · série ${visible.seriesGranularity === 'month' ? 'mensal' : 'diária'}` : `Comparação: ${dateLabel(visible.period.previousInicio)} a ${dateLabel(visible.period.previousFim)} · mesmo número de dias`}</small></div>
       <div className="eq-metrics">
         <Metric tone="is-hero" label="Receita consolidada" value={amount(summary.revenue)} note={visible.quality?.ambiguousCommandsExcluded ? `APURAÇÃO PARCIAL: ${count(visible.quality.ambiguousCommandsExcluded)} comandas ambíguas excluídas; equipe + histórico Avec + e-commerce` : 'Equipe atribuída + histórico Avec pago + e-commerce'} />

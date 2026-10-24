@@ -404,3 +404,35 @@ test('detalhe por profissional traz linhas para drill-down (ano/mês/dia/atendim
   assert.equal(sem.employees.length, 0, 'sem histórico sem vínculo no recorte, nada é inventado');
   assert.throws(() => buildEquipeDesempenho(root, { ...PERIOD, inicio: '2025-01-01' }), (error) => error.code === 'PERIOD_INVALID', 'fora do modo histórico o limite de 93 dias continua');
 });
+
+test('visão por serviços: ranking do que foi vendido, comparação e explosão das linhas do item', async () => {
+  const { buildEquipeItens } = await import('./dino-equipe-desempenho.js');
+  const root = snapshot();
+  root.barbearias[EMP].historicoAtendimentos = {
+    h1: { id: 'h1', empresaId: EMP, lojaId: STORE, somenteHistorico: true, status: 'concluido', dataAgenda: '2026-03-01', clienteNome: 'Cliente A', profissionalId: 'p1', servicoNome: 'Barba Avec', frenteAtuacao: 'Barba', valor: 30, quantidade: 1 },
+    h2: { id: 'h2', empresaId: EMP, lojaId: STORE, somenteHistorico: true, status: 'concluido', dataAgenda: '2026-03-02', clienteNome: 'Cliente B', profissionalId: null, servicoNome: 'barba avec', frenteAtuacao: 'Barba', valor: 20, quantidade: 1 },
+    h3: { id: 'h3', empresaId: EMP, lojaId: STORE, somenteHistorico: true, status: 'concluido', dataAgenda: '2026-02-27', clienteNome: 'Cliente A', profissionalId: 'p1', servicoNome: 'Barba Avec', frenteAtuacao: 'Barba', valor: 25, quantidade: 1 },
+  };
+  const before = clone(root); freeze(root);
+  const result = buildEquipeItens(root, { ...PERIOD, visao: 'servicos' });
+  const barba = result.groups.find((item) => item.key === 'servico:barba avec');
+  assert.equal(barba.revenue, 50, 'mesmo serviço com grafias diferentes soma junto');
+  assert.equal(barba.services, 2);
+  assert.equal(barba.professionals, 2);
+  assert.equal(barba.clients, 2);
+  assert.equal(barba.previousRevenue, 25);
+  assert.equal(barba.trendPct, 100);
+  assert.ok(result.groups.some((item) => item.type === 'produto'), 'produtos também entram no ranking');
+  assert.ok(Math.abs(result.groups.reduce((sum, item) => sum + item.share, 0) - 100) < 1);
+  const detail = buildEquipeItens(root, { ...PERIOD, visao: 'servicos', chave: 'servico:barba avec' });
+  assert.equal(detail.groups.length, 1);
+  assert.deepEqual(detail.rows.map((row) => [row.date, row.professionalName, row.client]), [['2026-03-02', 'Sem profissional atribuído', 'Cliente B'], ['2026-03-01', 'Ana', 'Cliente A']]);
+  const clientes = buildEquipeItens(root, { ...PERIOD, visao: 'clientes' });
+  assert.ok(clientes.groups.find((item) => item.label === 'Cliente A'));
+  const categorias = buildEquipeItens(root, { ...PERIOD, visao: 'categorias' });
+  assert.ok(categorias.groups.find((item) => item.label === 'Barba'));
+  assert.ok(categorias.groups.find((item) => item.label === 'Produtos (revenda)'));
+  assert.throws(() => buildEquipeItens(root, { ...PERIOD, visao: 'servicos', chave: 'nao-existe' }), (error) => error.code === 'PROFESSIONAL_NOT_FOUND');
+  assert.throws(() => buildEquipeItens(root, { ...PERIOD, visao: 'senhas' }), (error) => error.code === 'PERFORMANCE_QUERY_INVALID');
+  assert.deepEqual(root, before);
+});

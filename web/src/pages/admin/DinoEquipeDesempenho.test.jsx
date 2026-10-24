@@ -102,6 +102,27 @@ describe('desempenho da equipe', () => {
     const csv = toCsv(['Nome', 'Valor'], [['Ana; "A"', 1234.5], ['Beto', null]])
     expect(csv.startsWith('﻿')).toBe(true); expect(csv).toContain('"Ana; ""A""";1234,5'); expect(csv).toContain('Beto;')
   })
+  it('visão por serviços: ranking, top 10 e explosão até o atendimento', async () => {
+    mocks.get.mockImplementation(url => {
+      const query = new URL(url, 'https://fixture.invalid').searchParams
+      if (!query.get('visao')) return Promise.resolve(fixture(url))
+      const base = fixture(url)
+      const groups = [{ key: 'servico:corte', label: 'Corte', type: 'servico', revenue: 50, services: 1, products: 0, ticket: 50, professionals: 1, clients: 1, topProfessional: { name: 'Profissional sintético A', revenue: 50 }, firstDate: '2025-11-03', lastDate: '2025-11-03' }, { key: 'produto:pomada', label: 'Pomada', type: 'produto', revenue: 40, services: 0, products: 2, ticket: 20, professionals: 1, clients: 1, firstDate: '2026-01-15', lastDate: '2026-01-15' }]
+      const chave = query.get('chave')
+      return Promise.resolve({ readOnly: true, writePerformed: false, scope: base.scope, period: base.period, view: query.get('visao'), summary: { revenue: 90, groups: 2, services: 1, products: 2, productShare: 44.4, clients: 1, ticket: 30 }, groups: chave ? groups.filter(item => item.key === chave) : groups, ...(chave ? { rows: [{ ...ROWS[0], professionalId: 'employee-a', professionalName: 'Profissional sintético A' }] } : {}) })
+    })
+    await mount()
+    const tab = renderer.root.findAllByType('button').find(item => item.props.role === 'tab' && text({ children: [item.props.children] }) === 'Serviços e produtos')
+    await act(async () => { tab.props.onClick(); await tick() })
+    expect(mocks.get.mock.calls.at(-1)[0]).toContain('visao=servicos')
+    expect(content()).toContain('Top 10 por receita'); expect(content()).toContain('Pomada'); expect(content()).toContain('quem mais vendeu')
+    await act(async () => { byAria('Detalhar Corte').props.onClick({ stopPropagation() {} }); await tick() })
+    expect(mocks.get.mock.calls.at(-1)[0]).toContain('chave=servico%3Acorte')
+    await act(async () => byAria('Expandir Profissional sintético A').props.onClick({ stopPropagation() {} }))
+    await act(async () => byAria('Expandir 2025').props.onClick({ stopPropagation() {} }))
+    await act(async () => byAria('Expandir nov/2025').props.onClick({ stopPropagation() {} }))
+    expect(content()).toContain('Nível 5'); expect(content()).toContain('Cliente Um')
+  })
   it('deslocamento de dia respeita viradas e ano bissexto', () => { expect(shiftEquipeDate('2024-03-01', -1)).toBe('2024-02-29'); expect(shiftEquipeDate('2026-01-01', -1)).toBe('2025-12-31') })
   it('comandas ambíguas mostram apuração parcial e ressalva financeira', async () => {
     mocks.get.mockImplementation(url => { const data = fixture(url); data.quality.ambiguousCommandsExcluded = 2; data.quality.commissionWarnings = ['Vínculo financeiro ambíguo: revisão requerida.']; return Promise.resolve(data) })
