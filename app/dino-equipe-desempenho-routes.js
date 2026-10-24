@@ -13,7 +13,9 @@ export function equipePerformanceNoStore(req, res, next) {
 // Cache curto por escopo autorizado: o cálculo percorre a base inteira da empresa.
 // Invalida quando o banco grava (dataVersion) ou após o TTL (pedidos Commerce vêm de outra base).
 const CACHE_TTL_MS = 90_000;
-const CACHE_MAX = 60;
+// Poucas entradas: com o histórico completo cada resposta pesa; numa instância de 512 MB
+// não se guarda resultado velho (versão anterior do banco ou TTL vencido) esperando ser lido.
+const CACHE_MAX = 20;
 const performanceCache = new Map();
 function cacheGet(key, version) {
   const hit = performanceCache.get(key);
@@ -22,6 +24,10 @@ function cacheGet(key, version) {
   return hit.value;
 }
 function cacheSet(key, version, value) {
+  const agora = Date.now();
+  for (const [chave, item] of performanceCache) {
+    if (item.version !== version || agora - item.at > CACHE_TTL_MS) performanceCache.delete(chave);
+  }
   if (performanceCache.size >= CACHE_MAX) performanceCache.delete(performanceCache.keys().next().value);
   performanceCache.set(key, { version, at: Date.now(), value });
 }

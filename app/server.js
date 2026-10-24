@@ -1,3 +1,5 @@
+// Primeiro import: a vigia de memória começa antes de carregar o banco (ver vigia-memoria.js).
+import { situacaoMemoria } from './vigia-memoria.js';
 import express from 'express';
 import { stallonePageMeta } from './core/stallone-page-meta.js';
 import { stalloneDiscovery } from './core/stallone-discovery.js';
@@ -227,6 +229,12 @@ app.get('/health/persistencia', (req, res) => {
   const { status, problemas } = protecaoDados.situacao();
   res.setHeader('Cache-Control', 'no-store');
   res.status(status === 'ok' ? 200 : 503).json({ status, problemas });
+});
+
+// Memória do processo (sem dados de clientes): para acompanhar a pressão de memória no Render.
+app.get('/health/memoria', (req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  res.json(situacaoMemoria());
 });
 
 // Digital Asset Links: permite publicar o app da equipe (PWA) na Play Store como
