@@ -87,6 +87,7 @@ const migrationFiles = [
   '100_fiscal_completo.sql',
   '101_varejo_balanca.sql',
   '102_perfis_acesso.sql',
+  '103_barbershop_history_archive.sql',
 ];
 const advisoryLockKey = 825410732;
 
