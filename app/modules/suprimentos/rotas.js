@@ -15,9 +15,9 @@ export function createSuprimentosAdminRouter({ db, escopoDaRequisicao, fuso = 'A
 
   const ultimaBaixa = new Map();
   const baixaEmAndamento = new Map(); // empresa → promessa: duas telas abertas não baixam em dobro
-  // Baixa das vendas pela ficha técnica. Na listagem roda no máximo a cada `intervaloConsumoMs` e
-  // um erro não derruba a tela; no inventário (abrir, contar, concluir) roda sempre e o erro para
-  // a operação: contar com venda ainda não baixada criaria diferença falsa.
+  // GETs não movimentam estoque. A ação explícita e o inventário exigem reconciliação
+  // bem-sucedida: contar com venda ainda não baixada criaria diferença falsa.
+  // O limitador permanece disponível para chamadas opcionais.
   async function baixarConsumo(empresaId, { obrigatoria = false } = {}) {
     const agora = Date.now();
     if (!obrigatoria && agora - (ultimaBaixa.get(empresaId) || 0) < intervaloConsumoMs) return;
@@ -68,9 +68,9 @@ export function createSuprimentosAdminRouter({ db, escopoDaRequisicao, fuso = 'A
 
   // itens e saldos
   router.get('/itens', rota('inventory.read', async ({ req, empresaId, lojaRestrita }) => {
-    await baixarConsumo(empresaId);
     return est.listarItens(db, empresaId, { lojaId: unidade(req, lojaRestrita), q: req.query.q || '', abaixoDoMinimo: req.query.abaixoDoMinimo === 'true', incluirInativos: req.query.incluirInativos === 'true' });
   }));
+  router.post('/consumo/sincronizar', rota('inventory.write', async ({ empresaId, lojaRestrita }) => { exigirEmpresaToda(lojaRestrita, 'Atualizar consumo das vendas'); await baixarConsumo(empresaId, { obrigatoria: true }); return { ok: true }; }));
   router.post('/itens', rota('inventory.write', ({ req, empresaId, lojaRestrita }) => { exigirEmpresaToda(lojaRestrita, 'Cadastrar item'); return est.criarItem(db, empresaId, req.body || {}); }, 201));
   router.patch('/itens/:id', rota('inventory.write', ({ req, empresaId, lojaRestrita }) => { exigirEmpresaToda(lojaRestrita, 'Editar item'); return est.atualizarItem(db, empresaId, req.params.id, req.body || {}); }));
 
@@ -115,6 +115,7 @@ export function createSuprimentosAdminRouter({ db, escopoDaRequisicao, fuso = 'A
 
   // ficha técnica
   router.get('/fichas', rota('inventory.read', ({ req, empresaId }) => est.listarFichas(db, empresaId, { fonte: req.query.fonte || null })));
+  router.post('/fichas/previa', rota('inventory.read', ({ req, empresaId, lojaRestrita }) => est.preverFicha(db, empresaId, { ...(req.body || {}), lojaId: unidade(req, lojaRestrita) })));
   router.put('/fichas', rota('catalog.write', ({ req, empresaId, lojaRestrita }) => { exigirEmpresaToda(lojaRestrita, 'Editar ficha técnica'); return est.salvarFicha(db, empresaId, req.body || {}); }));
   router.get('/produtos-vendidos', rota('inventory.read', async ({ empresaId }) => {
     const existe = async (t) => Boolean((await db.query('SELECT to_regclass($1) AS t', [t])).rows[0]?.t);

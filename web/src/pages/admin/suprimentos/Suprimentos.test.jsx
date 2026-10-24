@@ -69,6 +69,17 @@ describe('Estoque e compras', () => {
     expect(mocks.toast).toHaveBeenCalledWith(expect.stringContaining('2 conta(s) a pagar'), 'success')
   })
 
+  it('simula a ficha na unidade ativa sem salvar ou movimentar estoque', async () => {
+    const tree = await montar('fichas')
+    mocks.api.post.mockResolvedValue({ quantidade:1, custoCompleto:true, custoTotal:1, saldoSuficiente:true, itens:[{itemId:'i1',nome:'Limão',unidade:'KG',necessario:0.2,saldo:2,falta:0}], avisos:[], nota:'Somente consulta' })
+    await act(async () => { botao(tree,'Editar').props.onClick() })
+    await act(async () => { botao(tree,'Simular consumo e custo').props.onClick() })
+    expect(mocks.api.post).toHaveBeenCalledWith('/api/admin/suprimentos/fichas/previa',expect.objectContaining({fonte:'bar_produto',fonteId:'b1',lojaId:'l1',quantidade:'1',itens:[{itemId:'i1',fator:0.2}]}))
+    expect(mocks.api.put).not.toHaveBeenCalled()
+    expect(texto(tree)).toContain('Prévia de consumo e custo')
+    expect(texto(tree)).toContain('Somente consulta')
+  })
+
   it('ficha técnica mostra o consumo do produto vendido', async () => {
     const tree = await montar('fichas')
     const s = texto(tree)

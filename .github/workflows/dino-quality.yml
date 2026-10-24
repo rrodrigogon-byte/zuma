@@ -32,6 +32,10 @@ jobs:
       - run: npm ci --include=dev --prefix web
       - name: Testes seriais e fixture PostgreSQL isolada
         run: npm run test:node
+      - name: Suprimentos com PostgreSQL real isolado
+        run: node scripts/test-suprimentos-pg-local.mjs
+      - name: Interface de fichas técnicas
+        run: cd web && ../node_modules/.bin/vitest --config vite.config.js run src/pages/admin/suprimentos/Suprimentos.test.jsx --no-cache
       - name: Build web
         run: npm run build --prefix web
       - name: Medições sintéticas (sem limiar de tempo dependente do runner)

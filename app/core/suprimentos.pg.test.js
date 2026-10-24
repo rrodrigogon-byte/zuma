@@ -57,6 +57,31 @@ describe('Estoque e compras por empresa (PostgreSQL)', { skip: pgDeTeste }, () =
     assert.equal(linha.abaixoDoMinimo, false);
   });
 
+  test('prévia da ficha lê saldo e custo da unidade sem gravar ficha, movimento ou razão', async () => {
+    const insumo = await est.criarItem(ctx.db, A, { nome: 'Insumo para prévia', unidade: 'KG', custoMedio: 6 });
+    const semCusto = await est.criarItem(ctx.db, A, { nome: 'Insumo sem custo', unidade: 'UN' });
+    const produto = await bar.salvarProduto(ctx.db, A, { nome: 'Produto simulado', preco: 30 });
+    await est.movimentar(ctx.db, A, { lojaId: lojaA1, itemId: insumo.id, tipo: 'entrada', quantidade: 2, custoUnitario: 6 });
+    const before = (await ctx.db.query('SELECT (SELECT count(*) FROM est_movimentos) AS movimentos, (SELECT count(*) FROM est_vinculos) AS fichas, (SELECT count(*) FROM fin_lancamentos) AS financeiro')).rows[0];
+    const input = { fonte: 'bar_produto', fonteId: produto.id, lojaId: lojaA1, quantidade: 10, itens: [{ itemId: insumo.id, fator: '0,3' }] };
+    const preview = await est.preverFicha(ctx.db,A,input);
+    assert.equal(preview.custoTotal,18);
+    assert.equal(preview.itens[0].necessario,3);
+    assert.equal(preview.itens[0].falta,1);
+    assert.equal(preview.capacidadeUnidadesInteiras,6);
+    assert.equal(preview.saldoSuficiente,false);
+    assert.equal(preview.movimentosCriados,0);
+    assert.equal((await est.preverFicha(ctx.db,A,{...input,lojaId:lojaA2})).itens[0].saldo,0);
+    const incomplete = await est.preverFicha(ctx.db,A,{...input,itens:[{itemId:semCusto.id,fator:1}]});
+    assert.equal(incomplete.custoTotal,null);
+    assert.equal(incomplete.custoCompleto,false);
+    await assert.rejects(est.preverFicha(ctx.db,B,input),{code:'NOT_FOUND'});
+    await assert.rejects(est.preverFicha(ctx.db,A,{...input,itens:[input.itens[0],input.itens[0]]}),{code:'VALIDATION_ERROR'});
+    await assert.rejects(est.preverFicha(ctx.db,A,{...input,quantidade:-1}),{code:'VALIDATION_ERROR'});
+    const after = (await ctx.db.query('SELECT (SELECT count(*) FROM est_movimentos) AS movimentos, (SELECT count(*) FROM est_vinculos) AS fichas, (SELECT count(*) FROM fin_lancamentos) AS financeiro')).rows[0];
+    assert.deepEqual(after,before);
+  });
+
   test('ajuste pede motivo, perda sai pelo custo e transferência move entre unidades', async () => {
     const [gelo] = await est.listarItens(ctx.db, A);
     await assert.rejects(() => est.movimentar(ctx.db, A, { lojaId: lojaA1, itemId: gelo.id, tipo: 'perda', quantidade: 2 }), (e) => e.code === 'VALIDATION_ERROR');

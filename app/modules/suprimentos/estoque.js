@@ -351,6 +351,51 @@ export async function listarFichas(db, empresaId, { fonte = null } = {}) {
   return [...porProduto.values()];
 }
 
+/** Simula uma ficha na unidade escolhida. Executa somente SELECT e não reserva saldo. */
+export async function preverFicha(db, empresaId, { fonte, fonteId, itens, quantidade = 1, lojaId } = {}) {
+  const empresa = exigirUuid(empresaId, 'empresa');
+  const loja = exigirUuid(lojaId, 'unidade');
+  await exigirUnidade((sql, values) => db.query(sql, values), empresa, loja);
+  if (!['bar_produto', 'loja_variante'].includes(fonte)) throw new ErroDominio('VALIDATION_ERROR', 'Fonte inválida');
+  const produto = exigirUuid(fonteId, 'produto');
+  const tabela = fonte === 'bar_produto' ? 'bar_produtos' : 'commerce_product_variants';
+  if (!(await db.query(`SELECT 1 FROM ${tabela} WHERE empresa_id=$1 AND id=$2`, [empresa, produto])).rows[0]) throw new ErroDominio('NOT_FOUND', 'Produto não encontrado nesta empresa', 404);
+  const unidades = numeroPositivo(quantidade, 'Quantidade a simular', { max: 1e6 });
+  const origem = itens === undefined ? (await listarFichas(db, empresa, { fonte })).find(f => f.fonteId === produto)?.itens : itens;
+  if (!Array.isArray(origem) || !origem.length || origem.length > 200) throw new ErroDominio('VALIDATION_ERROR', 'Informe entre 1 e 200 insumos para simular');
+  const linhas = origem.map(row => ({ itemId: exigirUuid(row.itemId, 'insumo'), fator: numeroPositivo(row.fator, 'Quantidade por venda', { max: 1e6 }) }));
+  if (new Set(linhas.map(row => row.itemId)).size !== linhas.length) throw new ErroDominio('VALIDATION_ERROR', 'Item repetido na ficha');
+  const result = await db.query(`SELECT i.id, i.nome, i.unidade, i.ativo, i.custo_medio, COALESCE(s.quantidade,0) AS saldo
+    FROM est_itens i LEFT JOIN est_saldos s ON s.empresa_id=i.empresa_id AND s.item_id=i.id AND s.loja_id=$2
+    WHERE i.empresa_id=$1 AND i.id=ANY($3::uuid[])`, [empresa, loja, linhas.map(row => row.itemId)]);
+  const porId = new Map(result.rows.map(row => [row.id, row]));
+  let conhecido = 0, capacidade = Infinity;
+  const avisos = [];
+  const detalhes = linhas.map(linha => {
+    const item = porId.get(linha.itemId);
+    if (!item) throw new ErroDominio('NOT_FOUND', 'Insumo não encontrado nesta empresa', 404);
+    const raw = linha.fator * unidades;
+    if (!Number.isFinite(raw) || raw > 1e9) throw new ErroDominio('VALIDATION_ERROR', 'Consumo simulado excede o limite');
+    const necessario = qtd(raw), saldo = Number(item.saldo), custo = Number(item.custo_medio);
+    const custoConhecido = custo > 0;
+    const valor = custo4(necessario * custo);
+    if (!Number.isSafeInteger(Math.round(valor * 10000))) throw new ErroDominio('VALIDATION_ERROR', 'Custo simulado excede a precisão suportada');
+    conhecido = custo4(conhecido + valor);
+    if (!Number.isSafeInteger(Math.round(conhecido * 10000))) throw new ErroDominio('VALIDATION_ERROR', 'Custo total excede a precisão suportada');
+    capacidade = Math.min(capacidade, Math.floor(Math.max(0, saldo) / linha.fator));
+    if (!custoConhecido) avisos.push(`${item.nome}: custo médio não informado; o custo total está incompleto.`);
+    if (item.ativo === false) avisos.push(`${item.nome}: insumo inativo.`);
+    if (necessario === 0) avisos.push(`${item.nome}: consumo inferior à precisão de 0,001 ${item.unidade}.`);
+    return { itemId: linha.itemId, nome: item.nome, unidade: item.unidade, fator: linha.fator, necessario, saldo, falta: qtd(Math.max(0, necessario-saldo)), custoMedio: custoConhecido ? custo : null, custoTotal: custoConhecido ? valor : null, ativo: item.ativo !== false, precisaoInsuficiente: necessario === 0 };
+  });
+  const custoCompleto = detalhes.every(row => row.custoMedio !== null);
+  return { somenteConsulta: true, movimentosCriados: 0, empresaId: empresa, lojaId: loja, fonte, fonteId: produto, quantidade: unidades, itens: detalhes,
+    custoCompleto, custoTotal: custoCompleto ? conhecido : null, custoParcialConhecido: conhecido,
+    custoPorUnidade: custoCompleto ? custo4(conhecido / unidades) : null, capacidadeUnidadesInteiras: Number.isSafeInteger(capacidade) ? capacidade : null,
+    saldoSuficiente: detalhes.every(row => row.falta === 0 && row.ativo && !row.precisaoInsuficiente), avisos,
+    nota: 'Simulação pelo custo médio e saldo atuais; não reserva materiais nem inclui mão de obra, impostos ou despesas.' };
+}
+
 /** Grava a ficha inteira de um produto (substitui a anterior). */
 export async function salvarFicha(db, empresaId, { fonte, fonteId, itens = [] }) {
   const empresa = exigirUuid(empresaId, 'empresa');
