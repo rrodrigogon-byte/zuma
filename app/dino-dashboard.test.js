@@ -178,6 +178,8 @@ test('novos clientes: só cadastro no período; atualização, importação e cl
     { id: 'novo', criadoEm: '2026-09-01T12:00:00.000Z' },
     { id: 'antigo-atualizado', criadoEm: '2025-01-10T12:00:00.000Z', atualizadoEm: '2026-09-01T10:00:00.000Z' },
     { id: 'importado', criadoEm: '2026-09-01T09:00:00.000Z', observacao: 'Origem AVEC (carga 09/10/2026)' },
+    { id: 'importado-completo', criadoEm: '2026-09-01T09:10:00.000Z', observacao: 'Cliente observado no relatório Avec 0031', origemImportacao: 'avec-import-20261022', sourceSystem: 'avec' },
+    { id: 'importado-sistema', criadoEm: '2026-09-01T09:20:00.000Z', sourceSystem: 'avec' },
     { id: 'agenda', criadoEm: '2026-09-01T09:30:00.000Z', observacao: 'Cadastro automático (agenda) por x', origemCadastro: 'agenda' },
     { id: 'padrao', criadoEm: '2026-09-01T08:00:00.000Z', padrao: true },
   ];
