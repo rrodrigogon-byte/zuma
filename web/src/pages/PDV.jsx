@@ -994,11 +994,11 @@ export default function PDV() {
         </div>
         <div style={S.bannerStat}>
           <span style={S.bannerLabel}>Vendas</span>
-          <span style={{ ...S.bannerValSmall, color: '#FF9B72' }}>{fmtR(caixaHoje.vendas || 0)}</span>
+          <span style={{ ...S.bannerValSmall, color: '#FF9B72' }}>{caixaHoje.numerosOcultos ? '•••' : fmtR(caixaHoje.vendas || 0)}</span>
         </div>
         <div style={S.bannerStat}>
           <span style={S.bannerLabel}>Saldo est.</span>
-          <span style={{ ...S.bannerValSmall, color: '#FF6B2C' }}>{fmtR(caixaHoje.saldo || 0)}</span>
+          <span style={{ ...S.bannerValSmall, color: '#FF6B2C' }}>{caixaHoje.numerosOcultos ? '•••' : fmtR(caixaHoje.saldo || 0)}</span>
         </div>
         {/* Botão Sangria/Suprimento */}
         <button

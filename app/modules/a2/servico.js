@@ -143,6 +143,7 @@ export async function criarFechamento(db, empresaId, observacao, responsavel) {
   return (await listarFechamentos(db, empresa)).find((item) => item.id === result.rows[0].id);
 }
 
+const STATUS_CADASTRO = new Set(['ativo', 'afastado', 'desligado', 'inativo']);
 const TABELAS = {
   funcionarios: { tabela: 'a2_funcionarios', campos: ['nome', 'cpf', 'email', 'telefone', 'cargo', 'departamento', 'data_admissao', 'salario', 'status', 'observacao'] },
   fornecedores: { tabela: 'a2_fornecedores', campos: ['nome', 'cnpj', 'inscricao_estadual', 'email', 'telefone', 'endereco', 'condicao_pagamento', 'status', 'observacao'] },
@@ -171,10 +172,17 @@ export async function salvarCadastro(db, empresaId, tipo, corpo = {}, registroId
     if (campo === 'nome') return nome;
     if (campo === 'data_admissao') return dataOpcional(corpo[chave], chave);
     if (campo === 'salario') return corpo[chave] === '' || corpo[chave] == null ? null : numero(corpo[chave], chave);
+    if (campo === 'status') {
+      // na edição sem status no corpo, mantém o atual (o UPDATE usa COALESCE para esta coluna)
+      if (registroId && (corpo.status === undefined || corpo.status === null || corpo.status === '')) return null;
+      const status = String(corpo.status ?? 'ativo').trim().toLowerCase() || 'ativo';
+      if (!STATUS_CADASTRO.has(status)) throw new ErroDominio('VALIDATION_ERROR', 'status deve ser ativo, afastado, desligado ou inativo');
+      return status;
+    }
     return corpo[chave] === undefined || corpo[chave] === '' ? null : String(corpo[chave]).slice(0, 2000);
   });
   if (registroId) {
-    const sets = cfg.campos.map((campo, index) => `${campo}=$${index + 1}`).join(', ');
+    const sets = cfg.campos.map((campo, index) => (campo === 'status' ? `${campo}=COALESCE($${index + 1}, ${campo})` : `${campo}=$${index + 1}`)).join(', ');
     const result = await db.query(`UPDATE ${cfg.tabela} SET ${sets}, atualizado_em=CURRENT_TIMESTAMP WHERE empresa_id=$${valores.length + 1} AND id=$${valores.length + 2} RETURNING *`, [...valores, empresa, id(registroId, 'registro')]);
     if (!result.rows[0]) throw new ErroDominio('NOT_FOUND', 'Cadastro não encontrado', 404);
     return cadastroDto(tipo, result.rows[0]);

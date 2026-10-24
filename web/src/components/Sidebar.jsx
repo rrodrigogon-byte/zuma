@@ -1,6 +1,10 @@
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { rotaVisivel } from '../lib/disponibilidade'
+import { useRazaoAtivo } from '../lib/razao-estado'
+import { lojasDaEmpresa as lojasDaEmpresaAtiva } from '../lib/context-selection'
+import { catalogoPorArea, contagemPorEstado, ESTADOS } from '../lib/catalogo-modulos'
+import { itemVisivelNoPerfil } from '../lib/perfis-menu'
 import { useAuth } from '../lib/auth'
 import { api } from '../lib/api'
 import { applyThemeMode, DINO_BARBERSHOP_LOGO, isClubeBrandContext, isDinoBrandContext, isStalloneBrandContext, STALLONE_LOGO, storedThemeMode } from '../lib/brand'
@@ -225,11 +229,27 @@ const NAV_DINO_GROUPS = [
     ],
   },
   {
+    // Retaguarda (ERP) da Dino: compras da revenda/perfumaria, estoque e notas em homologação.
+    // Cada item respeita a permissão do perfil e BACKOFFICE_MODULOS_OCULTOS (itemDisponivel).
+    label: 'Retaguarda (ERP)',
+    items: [
+      { to: '/admin/compras', icon: '▤', label: 'Compras e fornecedores' },
+      { to: '/admin/perdas-inventario', icon: '▤', label: 'Perdas e inventário' },
+      { to: '/admin/notas', icon: '◇', label: 'Notas fiscais (homologação)' },
+      { to: '/admin/fiscal/config', icon: '⚙', label: 'Configuração fiscal' },
+    ],
+  },
+  {
     label: 'Gestão',
     items: [
       { to: '/admin/bi', icon: '↗', label: 'BI & Analytics' },
       { to: '/admin/barbearia-erp?area=gestao&tab=Desempenho+da+equipe', icon: '↗', label: 'Desempenho da equipe' },
       { to: '/admin/financeiro', icon: '◇', label: 'Financeiro' },
+      { to: '/admin/contas-pagar', icon: '◇', label: 'Contas a pagar', razao: true },
+      { to: '/admin/contas-receber', icon: '◇', label: 'Contas a receber', razao: true },
+      { to: '/admin/fechamento-diario', icon: '◇', label: 'Fechamento do dia', razao: true },
+      { to: '/admin/cadastros-mestres', icon: '▤', label: 'Fornecedores e funcionários' },
+      { to: '/admin/lojas', icon: '▤', label: 'Unidades' },
       { to: '/admin/barbearia-erp?area=gestao&tab=Relat%C3%B3rios', icon: '▤', label: 'Relatórios' },
       { to: '/admin/ecommerce?tab=users', icon: '♧', label: 'Usuários e acessos' },
       { to: '/admin/auditoria', icon: '◌', label: 'Auditoria' },
@@ -286,9 +306,22 @@ export const NAV_CLUBE_GROUPS = [
     ],
   },
   {
+    // Retaguarda (ERP) do clube: salão do bar, insumos e compras, PDV offline e fiscal.
+    label: 'Retaguarda (ERP)',
+    items: [
+      { to: '/admin/reservas', icon: '🍽️', label: 'Reservas e fila do bar' },
+      { to: '/admin/fichas-tecnicas', icon: '📋', label: 'Fichas técnicas' },
+      { to: '/admin/perdas-inventario', icon: '📦', label: 'Perdas e inventário' },
+      { to: '/admin/compras', icon: '🛒', label: 'Compras e fornecedores' },
+      { to: '/admin/pdv-offline', icon: '🖨️', label: 'PDV offline e periféricos' },
+      { to: '/admin/fiscal/config', icon: '⚙️', label: 'Configuração fiscal' },
+    ],
+  },
+  {
     label: 'Gestão',
     items: [
       { to: '/admin/financeiro', icon: '💰', label: 'Financeiro' },
+      { to: '/admin/contas-pagar', icon: '🧾', label: 'Contas a Pagar', razao: true },
       { to: '/admin/contas-receber', icon: '🧾', label: 'Contas a Receber' },
       { to: '/admin/pagamentos', icon: '💳', label: 'Pagamentos (evento)' },
       { to: '/admin/notas', icon: '🧾', label: 'Notas Fiscais' },
@@ -307,6 +340,7 @@ export const NAV_CLUBE_GROUPS = [
     label: 'Configurações',
     items: [
       { to: '/admin/clube/ajustes', icon: '⚙️', label: 'Quadras, horário, catracas e planos' },
+      { to: '/admin/lojas', icon: '🏬', label: 'Unidades' },
       { to: '/admin/usuarios', icon: '👥', label: 'Usuários' },
       { to: '/admin/configuracoes', icon: '🛠️', label: 'Configurações' },
       { to: '/admin/auditoria', icon: '🔍', label: 'Auditoria' },
@@ -352,10 +386,27 @@ const NAV_STALLONE_GROUPS = [
     ],
   },
   {
+    // Retaguarda (ERP) da Stallone: compras, estoque, PDV da loja física e fiscal em homologação.
+    label: 'Retaguarda (ERP)',
+    items: [
+      { to: '/admin/compras', icon: '▤', label: 'Compras e fornecedores' },
+      { to: '/admin/perdas-inventario', icon: '▤', label: 'Perdas e inventário' },
+      { to: '/admin/pdv-offline', icon: '▱', label: 'PDV da loja e periféricos' },
+      { to: '/admin/notas', icon: '◇', label: 'Notas fiscais (homologação)' },
+      { to: '/admin/fiscal/config', icon: '⚙', label: 'Configuração fiscal' },
+      { to: '/admin/fiscal/classificacao', icon: '⚙', label: 'Classificação fiscal (NCM)' },
+    ],
+  },
+  {
     label: 'Gestão',
     items: [
       { to: '/admin/ecommerce?tab=reports', icon: '▤', label: 'Relatórios' },
       { to: '/admin/financeiro', icon: '◇', label: 'Financeiro' },
+      { to: '/admin/contas-pagar', icon: '◇', label: 'Contas a pagar', razao: true },
+      { to: '/admin/contas-receber', icon: '◇', label: 'Contas a receber', razao: true },
+      { to: '/admin/fechamento-diario', icon: '◇', label: 'Fechamento do dia', razao: true },
+      { to: '/admin/cadastros-mestres', icon: '▤', label: 'Fornecedores e funcionários' },
+      { to: '/admin/lojas', icon: '▤', label: 'Unidades' },
       { to: '/admin/ecommerce?tab=users', icon: '♧', label: 'Usuários e acessos' },
       { to: '/admin/ecommerce?tab=audit', icon: '◌', label: 'Auditoria' },
     ],
@@ -390,7 +441,7 @@ const ROUTE_MODULES = [
   ['/admin/mesas', 'mesas'], ['/admin/reservas', 'mesas'], ['/admin/cardapio', 'cardapio'],
   ['/admin/estoque', 'estoque'], ['/admin/perdas-inventario', 'estoque'], ['/admin/fichas-tecnicas', 'estoque'],
   ['/admin/modificadores-combos', 'cardapio'], ['/admin/pagamentos', 'pagamentos'], ['/admin/notas', 'fiscal'],
-  ['/admin/cadastros-mestres', 'cadastros'], ['/admin/clientes', 'clientes'], ['/admin/contas-receber', 'financeiro'],
+  ['/admin/cadastros-mestres', 'cadastros'], ['/admin/clientes', 'clientes'], ['/admin/contas-receber', 'financeiro'], ['/admin/contas-pagar', 'financeiro'],
   ['/admin/fechamento-diario', 'financeiro'], ['/admin/cupons', 'pdv'], ['/admin/pdv-offline', 'pdv'],
   ['/admin/omnichannel', 'delivery'], ['/admin/erp', 'erp'], ['/admin/ecommerce', 'ecommerce'],
   ['/admin/supermercado', 'supermercado'], ['/admin/loja-moda', 'loja_moda'], ['/admin/barbearia-erp', 'barbearia'],
@@ -406,9 +457,10 @@ function moduloDaRota(to) {
   return ROUTE_MODULES.find(([prefix]) => path === prefix || path.startsWith(`${prefix}/`))?.[1] || null
 }
 
-function itemDisponivel(item, isPlatformAdmin, empresa, usuarioDeEmpresa = false) {
-  // telas sem backend em produção somem para todos; as do banco global do evento, para usuário de empresa
-  if (!rotaVisivel(item.to, { isPlatformAdmin, usuarioDeEmpresa })) return false
+function itemDisponivel(item, isPlatformAdmin, empresa, usuarioDeEmpresa = false, permissoes = null, modulosOcultos = null) {
+  // telas sem backend em produção somem para todos; as do banco global do evento, para usuário de
+  // empresa; as do backoffice cuja permissão a pessoa não tem, para ela
+  if (!rotaVisivel(item.to, { isPlatformAdmin, usuarioDeEmpresa, permissoes, modulosOcultos })) return false
   if (isPlatformAdmin) return true
   const modulos = Array.isArray(empresa?.modulos) ? empresa.modulos.map((modulo) => String(modulo).toLowerCase()) : null
   if (!modulos) return true
@@ -451,7 +503,7 @@ const activeStyle = {
   borderLeft: '3px solid var(--accent)',
 }
 
-function NavItem({ to, icon, label, end, onClick, badgeCount, sidebarCollapsed = false }) {
+function NavItem({ to, icon, label, end, onClick, badgeCount, sidebarCollapsed = false, tag = null, tagTitle = '' }) {
   const location = useLocation()
   const [targetPath, targetQuery = ''] = String(to || '').split('?')
   const queryAware = Boolean(targetQuery) || ['/admin/barbearia-erp', '/admin/ecommerce'].includes(targetPath)
@@ -474,6 +526,7 @@ function NavItem({ to, icon, label, end, onClick, badgeCount, sidebarCollapsed =
     >
       <span style={{ fontSize: 16 }} aria-hidden="true">{icon}</span>
       {!sidebarCollapsed && <span style={{ flex: 1 }}>{label}</span>}
+      {!sidebarCollapsed && tag && <span className={`nav-estado nav-estado-${tag}`} title={tagTitle} style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.4px', padding: '2px 6px', borderRadius: 999, border: '1px solid var(--line)', color: tag === 'em_implantacao' ? 'var(--gold, #C9A656)' : 'var(--muted)', whiteSpace: 'nowrap' }}>{ESTADOS[tag]?.rotulo || tag}</span>}
       {badgeCount > 0 && <Badge count={badgeCount} />}
     </NavLink>
   )
@@ -511,6 +564,10 @@ function Section({ label, items, onNavClick, collapsible = false, badgesMap = {}
 
 function AdminGroups({ groups, onNavClick, isPlatformAdmin, empresa, usuarioDeEmpresa = false, sidebarCollapsed = false, compacto = false }) {
   const location = useLocation()
+  const { permissoes, modulosOcultos, perfil } = useAuth()
+  // itens do Financeiro novo (a receber, fechamento do dia) só com ele ligado: antes disso essas
+  // telas são as do A2 e a empresa veria dois "a receber" diferentes
+  const razaoAtivo = useRazaoAtivo()
   // menu compacto: só os grupos do dia a dia abertos; o grupo da tela atual abre sozinho
   const naRota = (g) => g.items.some((item) => {
     const p = String(item.to).split('?')[0]
@@ -518,7 +575,7 @@ function AdminGroups({ groups, onNavClick, isPlatformAdmin, empresa, usuarioDeEm
   })
   return (
     <>
-      {groups.map(g => ({ ...g, items: g.items.filter((item) => itemDisponivel(item, isPlatformAdmin, empresa, usuarioDeEmpresa)) }))
+      {groups.map(g => ({ ...g, items: g.items.filter((item) => itemVisivelNoPerfil(item.to, perfil) && (!item.razao || razaoAtivo === true) && itemDisponivel(item, isPlatformAdmin, empresa, usuarioDeEmpresa, permissoes, modulosOcultos)) }))
         .filter((group) => group.items.length > 0)
         .map(g => (
           <Section
@@ -535,8 +592,45 @@ function AdminGroups({ groups, onNavClick, isPlatformAdmin, empresa, usuarioDeEm
   )
 }
 
+// Seção só da administração da plataforma: o catálogo inteiro de módulos, de qualquer marca,
+// com o estado de cada um na empresa ativa (no ar, em implantação, não contratado, evento).
+function BackofficePlataforma({ empresa, onNavClick, sidebarCollapsed = false }) {
+  const [aberto, setAberto] = useState(false)
+  const grupos = catalogoPorArea(empresa)
+  const contagem = contagemPorEstado(empresa)
+  if (sidebarCollapsed) return null
+  return (
+    <div style={{ padding: '4px 0', borderBottom: '1px solid var(--line)' }} data-testid="backoffice-plataforma">
+      <button
+        type="button"
+        onClick={() => setAberto((valor) => !valor)}
+        aria-expanded={aberto}
+        style={{ width: '100%', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', fontSize: 10, fontWeight: 800, color: 'var(--muted)', padding: '6px 16px 4px', textTransform: 'uppercase', letterSpacing: '.8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+      >
+        <span>Backoffice da plataforma</span>
+        <span style={{ fontSize: 9 }}>{aberto ? '▼' : '▶'}</span>
+      </button>
+      {!aberto && (
+        <div style={{ padding: '0 16px 6px', fontSize: 11, color: 'var(--muted)' }}>
+          {contagem.no_ar || 0} no ar{contagem.homologacao ? ` · ${contagem.homologacao} em homologação` : ''} · {contagem.em_implantacao || 0} em implantação{contagem.nao_contratado ? ` · ${contagem.nao_contratado} fora do contrato` : ''}
+        </div>
+      )}
+      {aberto && grupos.map((grupo) => (
+        <Section
+          key={grupo.area}
+          label={grupo.area}
+          items={grupo.itens.map((item) => ({ ...item, tag: item.estado === 'no_ar' ? null : item.estado, tagTitle: ESTADOS[item.estado]?.descricao || '' }))}
+          onNavClick={onNavClick}
+          collapsible
+          startCollapsed
+        />
+      ))}
+    </div>
+  )
+}
+
 export default function Sidebar({ collapsed = false, onToggleCollapse = () => {} }) {
-  const { user, logout, isOrg, isStaff, isAtleta, isPlatformAdmin, empresaAtiva, empresasAcessiveis, lojaAtiva, lojasAcessiveis, trocarEmpresa, trocarLoja } = useAuth()
+  const { user, logout, isOrg, isStaff, isAtleta, isPlatformAdmin, empresaAtiva, empresasAcessiveis, lojaAtiva, lojasAcessiveis, trocarEmpresa, trocarLoja, permissoes, modulosOcultos } = useAuth()
   const navigate = useNavigate()
   const [open, setOpen] = useState(false)
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
@@ -559,14 +653,15 @@ export default function Sidebar({ collapsed = false, onToggleCollapse = () => {}
   const empresaDoMenu = empresaAtiva
   // usuário preso a uma empresa (não é da plataforma nem usuário legado do evento)
   const usuarioDeEmpresa = (Boolean(user?.empresaId) || user?.tenantBound === true) && !isPlatformAdmin
-  const opVisiveis = (itens) => itens.filter((item) => rotaVisivel(item.to, { isPlatformAdmin, usuarioDeEmpresa }))
+  const opVisiveis = (itens) => itens.filter((item) => rotaVisivel(item.to, { isPlatformAdmin, usuarioDeEmpresa, permissoes, modulosOcultos }))
   const lojasContexto = isDino && !lojasAcessiveis.some((loja) => loja.id === DINO_STORE.id)
     ? [...lojasAcessiveis, DINO_STORE]
     : lojasAcessiveis
-  const lojasDaEmpresa = lojasContexto.filter((loja) => {
-    if (isDino && loja.id === DINO_STORE.id) return true
-    return !empresaAtiva?.id || loja.empresaId === empresaAtiva.id || loja.commerceEmpresaId === empresaAtiva.id
-  })
+  // lojas da empresa ativa (id legado ou do Commerce); no host da Dino a unidade Dino sempre aparece
+  const lojasDaEmpresa = [
+    ...lojasDaEmpresaAtiva(lojasContexto.filter((loja) => !(isDino && loja.id === DINO_STORE.id)), empresaAtiva?.id),
+    ...(isDino ? lojasContexto.filter((loja) => loja.id === DINO_STORE.id) : []),
+  ]
 
   useEffect(() => {
     const handler = () => {
@@ -739,6 +834,7 @@ export default function Sidebar({ collapsed = false, onToggleCollapse = () => {}
         {isStaff && !isDino && !isStallone && <Section label={isClube ? 'Balcão, bar e portaria' : 'Operações'} items={opVisiveis(isClube ? NAV_OP.filter((item) => item.to !== '/loja-atendimento') : NAV_OP)} onNavClick={handleNavClick} badgesMap={badgesMap} sidebarCollapsed={collapsed && !isMobile} />}
         {isOrg && <AdminGroups groups={isDino ? NAV_DINO_GROUPS : isStallone ? NAV_STALLONE_GROUPS : isClube ? NAV_CLUBE_GROUPS : NAV_ADMIN_GROUPS} onNavClick={handleNavClick} isPlatformAdmin={isPlatformAdmin} empresa={empresaDoMenu} usuarioDeEmpresa={usuarioDeEmpresa} sidebarCollapsed={collapsed && !isMobile} compacto={isClube} />}
         {isPlatformAdmin && <Section label="Administração da Plataforma" items={NAV_PLATFORM} onNavClick={handleNavClick} sidebarCollapsed={collapsed && !isMobile} />}
+        {isPlatformAdmin && <BackofficePlataforma empresa={empresaDoMenu} onNavClick={handleNavClick} sidebarCollapsed={collapsed && !isMobile} />}
         {isAtleta && <Section label="Portal do Atleta" items={NAV_ATLETA} onNavClick={handleNavClick} sidebarCollapsed={collapsed && !isMobile} />}
         <Section label={isDino ? 'Dino público' : isStallone ? 'Stallone público' : 'Site Público'} items={isDino ? NAV_DINO_PUBLIC : isStallone ? NAV_STALLONE_PUBLIC : NAV_PUBLIC} onNavClick={handleNavClick} sidebarCollapsed={collapsed && !isMobile} />
 

@@ -1,3 +1,5 @@
+import { moduloOculto, permissaoQueFalta } from './permissoes-rota.js'
+
 // Disponibilidade das telas em produção.
 //
 // EM_IMPLANTACAO: telas cujo backend ainda não está montado no server.js de produção (o código
@@ -12,18 +14,8 @@
 
 export const EM_IMPLANTACAO = {
   '/admin/agropecuaria': 'Agropecuária e petshop',
-  '/admin/compras': 'Compras e fornecedores',
-  '/admin/fichas-tecnicas': 'Fichas técnicas',
-  '/admin/fiscal/classificacao': 'Classificação fiscal',
-  '/admin/fiscal/config': 'Configuração de NF-e e NFC-e',
   '/admin/loja-moda': 'Loja de moda',
-  '/admin/lojas': 'Unidades operacionais',
-  '/admin/notas': 'Central fiscal (NF-e e NFC-e)',
   '/admin/oficina': 'Oficina mecânica',
-  '/admin/pdv-offline': 'PDV offline e periféricos',
-  '/admin/perdas-inventario': 'Perdas e inventário',
-  '/admin/reservas': 'Reservas de mesa e lista de espera',
-  '/admin/supermercado': 'Supermercado',
   '/admin/varejo': 'Varejo geral',
 }
 
@@ -47,12 +39,16 @@ export function ehGlobalDoEvento(to) {
 }
 
 /**
- * O item de menu aparece para esta sessão?
+ * O item de menu dos menus de marca aparece para esta sessão? (O administrador da plataforma vê as
+ * telas em implantação na seção "Backoffice da plataforma", com o selo do estado.)
  * - em implantação: nunca;
- * - global do evento: só para a administração da plataforma ou usuário legado sem empresa.
+ * - global do evento: só para a administração da plataforma ou usuário legado sem empresa;
+ * - tela do backoffice cuja permissão a pessoa não tem na empresa ativa: some (`permissoes`).
  */
-export function rotaVisivel(to, { isPlatformAdmin = false, usuarioDeEmpresa = false } = {}) {
+export function rotaVisivel(to, { isPlatformAdmin = false, usuarioDeEmpresa = false, permissoes = null, modulosOcultos = null } = {}) {
   if (moduloEmImplantacao(to)) return false
+  if (!isPlatformAdmin && moduloOculto(to, modulosOcultos)) return false
+  if (permissaoQueFalta(to, permissoes)) return false
   if (ehGlobalDoEvento(to)) return isPlatformAdmin || !usuarioDeEmpresa
   return true
 }

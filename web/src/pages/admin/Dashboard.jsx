@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router-dom'
+import { Navigate, useNavigate } from 'react-router-dom'
 import { useState, useEffect, useMemo } from 'react'
 import { api, fmtR, fmtDate } from '../../lib/api'
 import { useToast } from '../../hooks/useToast'
@@ -6,6 +6,9 @@ import { useAuth } from '../../lib/auth'
 import { isDinoBrandContext } from '../../lib/brand'
 import { ehHostDino } from '../../lib/dominios-dino'
 import DinoBusinessDashboard from './DinoBusinessDashboard'
+import PainelEmpresa from './PainelEmpresa'
+import { isTenantScope } from '../../lib/tenant-scope'
+import { inicioDoOperador } from '../../lib/perfis-menu'
 
 const LINKS = [
   { label: 'Atletas', href: '/admin/atletas', icon: '🎾' },
@@ -728,11 +731,16 @@ const DINO_TAB_AREA = {
 }
 
 export default function Dashboard() {
-  const { empresaAtiva, lojaAtiva, user } = useAuth()
+  const { empresaAtiva, lojaAtiva, user, perfil } = useAuth()
   const hostDino = typeof window !== 'undefined' && ehHostDino(window.location.hostname)
   const isDino = hostDino || isDinoBrandContext(empresaAtiva, user?.empresaAtiva, user?.empresa, user?.tenant)
-  const scopeKey = `${empresaAtiva?.id || 'empresa'}:${lojaAtiva?.id || 'todas'}`
   const navigate = useNavigate()
+  // o painel mostra os números da empresa: o operador começa pela operação do dia
+  if (perfil === 'operador') return <Navigate to={inicioDoOperador(isDino)} replace />
+  const scopeKey = `${empresaAtiva?.id || 'empresa'}:${lojaAtiva?.id || 'todas'}`
   const openDinoTab = (tab) => navigate(`/admin/barbearia-erp?area=${DINO_TAB_AREA[tab] || 'operacao'}&tab=${encodeURIComponent(tab)}`)
-  return isDino ? <DinoBusinessDashboard key={scopeKey} onOpenTab={openDinoTab} /> : <EventDashboard />
+  if (isDino) return <DinoBusinessDashboard key={scopeKey} onOpenTab={openDinoTab} />
+  // empresa sem painel de marca: o painel do evento é global (negado a usuário de empresa)
+  // (a administração da plataforma continua vendo o painel do evento)
+  return isTenantScope(user, empresaAtiva) && user?.platformAdmin !== true ? <PainelEmpresa key={scopeKey} /> : <EventDashboard />
 }

@@ -1,6 +1,7 @@
-import { createContext, useContext, useState } from 'react'
+import { createContext, useContext, useEffect, useRef, useState } from 'react'
 import { encerrarPushDoAparelho } from './push-equipe'
-import { repararLojasSemEmpresa, selecionarLojaAutomatica } from './context-selection'
+import { esquecerRazaoAtivo } from './razao-estado'
+import { empresaDaLoja, mesclarLojas, normalizarLojas, pertenceAEmpresa, repararLojasSemEmpresa, selecionarLojaAutomatica, substituirLojas } from './context-selection'
 import { DINO_COMPANY, DINO_STORE, isDinoDedicatedHost } from './dino-scope'
 import { isDinoBrandContext } from './brand'
 
@@ -49,7 +50,7 @@ function selecionarLojaDoContexto(lojas, empresa, atual = null) {
 
 function readLojaAtivaInicial() {
   const empresa = readEmpresaAtivaInicial()
-  const lojasArmazenadas = readStorage('sp_lojas_acessiveis', [])
+  const lojasArmazenadas = normalizarLojas(readStorage('sp_lojas_acessiveis', []))
   const lojas = lojasComFallbackDino(lojasArmazenadas)
   const atual = readStorage('sp_loja_ativa')
   const selecionada = empresa?.id ? selecionarLojaDoContexto(lojas, empresa, atual) : null
@@ -61,14 +62,71 @@ function readLojaAtivaInicial() {
   return selecionada
 }
 
+// Última unidade escolhida em cada empresa: ao voltar para a empresa, ela volta junto.
+function lembrarLoja(empresaId, loja) {
+  if (!empresaId) return
+  try {
+    const mapa = readStorage('sp_loja_por_empresa', {}) || {}
+    if (loja?.id) mapa[empresaId] = loja.id; else delete mapa[empresaId]
+    localStorage.setItem('sp_loja_por_empresa', JSON.stringify(mapa))
+  } catch { /* armazenamento indisponível: só não lembra */ }
+}
+const lojaLembrada = (empresaId) => { try { return (readStorage('sp_loja_por_empresa', {}) || {})[empresaId] || null } catch { return null } }
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(() => readStorage('sp_user'))
   const [empresaAtiva, setEmpresaAtiva] = useState(readEmpresaAtivaInicial)
   const [empresasAcessiveis, setEmpresasAcessiveis] = useState(readEmpresasAcessiveisInicial)
   const [lojaAtiva, setLojaAtiva] = useState(readLojaAtivaInicial)
   const [lojasAcessiveis, setLojasAcessiveis] = useState(() => {
-    return lojasComFallbackDino(readStorage('sp_lojas_acessiveis', []))
+    return lojasComFallbackDino(normalizarLojas(readStorage('sp_lojas_acessiveis', [])))
   })
+  const lojasAcessiveisRef = useRef(lojasAcessiveis)
+  useEffect(() => { lojasAcessiveisRef.current = lojasAcessiveis }, [lojasAcessiveis])
+
+  // Ao abrir o painel, relê empresas e unidades do servidor. Repara listas antigas gravadas
+  // no navegador sem o vínculo da unidade com a empresa (o que deixava o Financeiro sem unidade).
+  const contextoAtualizado = useRef(false)
+  useEffect(() => {
+    if (!user || contextoAtualizado.current || typeof fetch !== 'function') return
+    const token = (() => { try { return localStorage.getItem('sp_token') || '' } catch { return '' } })()
+    if (!token) return
+    contextoAtualizado.current = true
+    fetch('/api/admin/commerce-session', { headers: { Authorization: `Bearer ${token}` } })
+      .then((resposta) => (resposta.ok ? resposta.json() : null))
+      .then((sessao) => {
+        if (!sessao || !Array.isArray(sessao.lojas_acessiveis) || sessao.lojas_acessiveis.length === 0) return
+        const empresas = Array.isArray(sessao.empresas_acessiveis) && sessao.empresas_acessiveis.length ? sessao.empresas_acessiveis : undefined
+        atualizarContextoLojasRef.current?.({ lojas_acessiveis: sessao.lojas_acessiveis, empresas_acessiveis: empresas, substituir: true })
+      })
+      .catch(() => { /* sem rede ou sem Commerce: mantém o contexto salvo */ })
+  }, [user])
+
+  // Permissões da pessoa na empresa ativa (menu e telas do backoffice escondem o que ela não
+  // acessa). undefined = carregando; null = não se aplica (ou falhou): nada é escondido e a API
+  // decide; lista = o que a pessoa pode.
+  // A lista vale para a empresa e a unidade em que foi pedida (as telas mandam as mesmas no
+  // cabeçalho); trocou o contexto, volta a "carregando" já no mesmo render.
+  const consultaPermissoes = (u, empresa) => Boolean(u && u.platformAdmin !== true && empresa?.id && typeof fetch === 'function')
+  const chaveDoContexto = `${empresaAtiva?.id || ''}:${lojaAtiva?.id || ''}`
+  const [consultaFeita, setConsultaFeita] = useState({ chave: null, lista: null, ocultos: [] })
+  useEffect(() => {
+    const token = (() => { try { return localStorage.getItem('sp_token') || '' } catch { return '' } })()
+    if (!consultaPermissoes(user, empresaAtiva) || !token) { setConsultaFeita({ chave: chaveDoContexto, lista: null, ocultos: [] }); return undefined }
+    let vivo = true
+    const fim = (lista, ocultos = []) => { if (vivo) setConsultaFeita({ chave: chaveDoContexto, lista, ocultos }) }
+    // rede travada não pode prender as telas em "Carregando…": sem resposta em 8 s, nada é escondido
+    const controle = typeof AbortController === 'function' ? new AbortController() : null
+    const limite = setTimeout(() => { controle?.abort(); fim(null) }, 8000)
+    fetch('/api/admin/minhas-permissoes', { signal: controle?.signal, headers: { Authorization: `Bearer ${token}`, 'X-Empresa-Id': empresaAtiva.id, ...(lojaAtiva?.id ? { 'X-Loja-Id': lojaAtiva.id } : {}) } })
+      .then((resposta) => (resposta.ok ? resposta.json() : null))
+      .then((dados) => fim(dados?.aplicavel === true && Array.isArray(dados.permissoes) ? dados.permissoes : null, Array.isArray(dados?.modulosOcultos) ? dados.modulosOcultos : []))
+      .catch(() => fim(null) /* sem rede: não esconde nada */)
+      .finally(() => clearTimeout(limite))
+    return () => { vivo = false; clearTimeout(limite); controle?.abort() }
+  }, [user, chaveDoContexto])
+  const permissoes = !consultaPermissoes(user, empresaAtiva) ? null : consultaFeita.chave === chaveDoContexto ? consultaFeita.lista : undefined
+  const modulosOcultos = consultaPermissoes(user, empresaAtiva) && consultaFeita.chave === chaveDoContexto ? consultaFeita.ocultos : []
 
   const desligarPushContextoAtual = () => {
     try {
@@ -93,7 +151,7 @@ export function AuthProvider({ children }) {
     const empresa = isDinoDedicatedHost()
       ? (empresas.find((item) => isDinoBrandContext(item)) || DINO_COMPANY)
       : empresaNova
-    const lojasRecebidas = Array.isArray(sessao.lojas_acessiveis) ? sessao.lojas_acessiveis : []
+    const lojasRecebidas = normalizarLojas(Array.isArray(sessao.lojas_acessiveis) ? sessao.lojas_acessiveis : [])
     const lojas = lojasComFallbackDino(lojasRecebidas)
     const loja = selecionarLojaDoContexto(lojas, empresa, lojaNova)
     if (empresas.length > 0) {
@@ -132,7 +190,9 @@ export function AuthProvider({ children }) {
     const proxima = empresasAcessiveis.find((empresa) => empresa.id === empresaId)
     if (!proxima) return false
     if (empresaAtiva?.id !== proxima.id || lojaAtiva?.id) desligarPushContextoAtual()
-    const proximaLoja = selecionarLojaDoContexto(lojasAcessiveis, proxima)
+    // a unidade escolhida da última vez nesta empresa volta; no host da Dino vale a unidade Dino
+    const lembrada = lojaLembrada(proxima.id)
+    const proximaLoja = selecionarLojaDoContexto(lojasAcessiveis, proxima, lembrada ? { id: lembrada } : null)
     localStorage.setItem('sp_empresa_ativa', JSON.stringify(proxima))
     if (proximaLoja) localStorage.setItem('sp_loja_ativa', JSON.stringify(proximaLoja))
     else localStorage.removeItem('sp_loja_ativa')
@@ -144,24 +204,27 @@ export function AuthProvider({ children }) {
   const trocarLoja = (lojaId) => {
     if (!lojaId) {
       if (lojaAtiva?.id) desligarPushContextoAtual()
+      lembrarLoja(empresaAtiva?.id, null)
       localStorage.removeItem('sp_loja_ativa')
       setLojaAtiva(null)
       return true
     }
     const proxima = lojasAcessiveis.find((loja) => loja.id === lojaId && loja.ativa !== false && (
       !empresaAtiva?.id
-      || loja.empresaId === empresaAtiva.id
-      || loja.commerceEmpresaId === empresaAtiva.id
+      || pertenceAEmpresa(loja, empresaAtiva.id)
       || (isDinoDedicatedHost() && isDinoBrandContext(empresaAtiva) && loja.id === DINO_STORE.id)
     ))
     if (!proxima) return false
     if (lojaAtiva?.id !== proxima.id) desligarPushContextoAtual()
+    lembrarLoja(empresaAtiva?.id || empresaDaLoja(proxima), proxima)
     localStorage.setItem('sp_loja_ativa', JSON.stringify(proxima))
     setLojaAtiva(proxima)
     return true
   }
 
-  const atualizarContextoLojas = ({ empresa, empresas_acessiveis: empresas, loja, lojas_acessiveis: lojas }) => {
+  // `substituir`: true = a lista é a completa da sessão; '<empresaId>' = completa só dessa empresa;
+  // ausente = complemento parcial (ex.: lojas das vitrines do e-commerce), que só acrescenta.
+  const atualizarContextoLojas = ({ empresa, empresas_acessiveis: empresas, loja, lojas_acessiveis: lojas, substituir = false }) => {
     const empresasAtualizadas = Array.isArray(empresas) ? empresasComFallbackDino(empresas) : null
     const empresaRecebida = empresa || empresaAtiva
     const empresaAtualizada = isDinoDedicatedHost()
@@ -176,7 +239,11 @@ export function AuthProvider({ children }) {
       setEmpresaAtiva(empresaAtualizada)
     }
     if (Array.isArray(lojas)) {
-      const lojasAtualizadas = lojasComFallbackDino(lojas)
+      // mescla em vez de substituir: quem chama pode mandar lojas sem empresaId (ex.: vitrines)
+      const mescladas = substituir
+        ? substituirLojas(lojasAcessiveisRef.current, lojas, { empresaId: substituir === true ? null : substituir })
+        : mesclarLojas(lojasAcessiveisRef.current, lojas)
+      const lojasAtualizadas = lojasComFallbackDino(mescladas)
       localStorage.setItem('sp_lojas_acessiveis', JSON.stringify(lojasAtualizadas))
       setLojasAcessiveis(lojasAtualizadas)
       const selecionada = selecionarLojaDoContexto(lojasAtualizadas, empresaAtualizada, loja || lojaAtiva)
@@ -193,7 +260,11 @@ export function AuthProvider({ children }) {
     }
   }
 
+  const atualizarContextoLojasRef = useRef(null)
+  atualizarContextoLojasRef.current = atualizarContextoLojas
+
   const logout = () => {
+    esquecerRazaoAtivo()
     // App do barbeiro: desliga os avisos deste aparelho e apaga a agenda guardada para
     // uso sem internet. Lê a sessão antes de apagá-la (o cancelamento precisa dela).
     try {
@@ -209,6 +280,8 @@ export function AuthProvider({ children }) {
     localStorage.removeItem('sp_empresas_acessiveis')
     localStorage.removeItem('sp_loja_ativa')
     localStorage.removeItem('sp_lojas_acessiveis')
+    localStorage.removeItem('sp_loja_por_empresa')
+    contextoAtualizado.current = false
     setUser(null)
     setEmpresaAtiva(null)
     setEmpresasAcessiveis([])
@@ -223,8 +296,11 @@ export function AuthProvider({ children }) {
   // Somente a flag explícita concedida pelo backend libera gestão global de tenants.
   const isPlatformAdmin = user?.platformAdmin === true
   const isAdmin = isPlatformAdmin || ['admin', 'administrador', 'super_admin'].includes(role)
-  const isOrg = isAdmin || ['organizador', 'gerente', 'gerente_operacional'].includes(role)
-  const isStaff = isOrg || ['staff', 'vendedor', 'garcom', 'barbeiro', 'caixa', 'operador', 'operador_pdv', 'cozinha'].includes(role)
+  // Perfis de toda empresa: admin (tudo), operador (operação do dia, sem comissões nem números da
+  // empresa) e profissional (só o app do profissional). O servidor é quem garante; aqui só a interface.
+  const perfil = perfilDaSessao(user)
+  const isOrg = isAdmin || ['organizador', 'gerente', 'gerente_operacional', 'operador'].includes(role)
+  const isStaff = isOrg || ['staff', 'vendedor', 'garcom', 'barbeiro', 'caixa', 'operador_pdv', 'cozinha'].includes(role)
   const isAtleta = role === 'atleta'
 
   return (
@@ -239,15 +315,29 @@ export function AuthProvider({ children }) {
       lojasAcessiveis,
       trocarLoja,
       atualizarContextoLojas,
+      permissoes,
+      modulosOcultos,
       isAdmin,
       isPlatformAdmin,
       isOrg,
       isStaff,
       isAtleta,
+      perfil,
     }}>
       {children}
     </AuthContext.Provider>
   )
+}
+
+/** 'admin' | 'operador' | 'profissional' | null (perfil antigo ou especializado, segue a regra de antes). */
+export function perfilDaSessao(user) {
+  if (!user) return null
+  if (user.platformAdmin === true) return 'admin'
+  const role = String(user.role || '').trim().toLowerCase()
+  if (['admin', 'administrador', 'super_admin', 'organizador', 'gerente', 'gerente_operacional'].includes(role)) return 'admin'
+  if (role === 'operador') return 'operador'
+  if (role === 'profissional') return 'profissional'
+  return null
 }
 
 export function useAuth() {

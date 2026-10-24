@@ -61,6 +61,9 @@ function normalizarModelo(value) {
 }
 
 function diaEmissao(value) {
+  // dhEmi vem com o fuso local (ex.: 2026-10-23T21:00:00-04:00): o dia é o local, não o UTC
+  const local = String(value ?? '').match(/^\d{4}-\d{2}-(\d{2})T/);
+  if (local) return local[1];
   const parsed = new Date(value);
   if (Number.isNaN(parsed.valueOf())) throw new Error('Data de emissão inválida.');
   return String(parsed.getUTCDate()).padStart(2, '0');
@@ -81,6 +84,19 @@ export function resolverMeioPagamento(value) {
   return MEIO_PAGAMENTO[normalized] || '99';
 }
 
+/**
+ * Conteúdo assinado no QR Code v3 de contingência offline (tpEmis=9): os sete primeiros
+ * parâmetros do QR, separados por "|" (chave|3|tpAmb|dia|vNF|tpIdDest|idDest). A assinatura
+ * (RSA-SHA1 com a chave do certificado A1, em Base64) vai como oitavo parâmetro.
+ */
+export function conteudoQrCodeOfflineV3({ chaveAcesso, ambiente = 'homologacao', dataEmissao, valorTotal = 0, identificacaoDestinatario = '' } = {}) {
+  const chave = digits(chaveAcesso);
+  const identificacao = digits(identificacaoDestinatario, 14);
+  const tipoIdentificacao = identificacao.length === 11 ? '1' : identificacao.length === 14 ? '2' : '';
+  const tpAmb = ambiente === 'producao' ? '1' : '2';
+  return `${chave}|3|${tpAmb}|${diaEmissao(dataEmissao)}|${decimal(valorTotal, 2)}|${tipoIdentificacao}|${tipoIdentificacao ? identificacao : ''}`;
+}
+
 export function construirQrCodeNfce({ chaveAcesso, ambiente = 'homologacao', urlBase, versao = QR_VERSAO_ATUAL, contingencia = false, valorTotal = 0, dataEmissao = new Date(), identificacaoDestinatario = '', assinaturaOfflineBase64 = '', cscId = '', csc = '' } = {}) {
   const chave = digits(chaveAcesso);
   if (!validarChaveAcessoFiscal(chave)) throw new Error('A chave de acesso deve ter 44 dígitos e DV válido para gerar o QR Code.');
@@ -95,10 +111,8 @@ export function construirQrCodeNfce({ chaveAcesso, ambiente = 'homologacao', url
   }
 
   if (String(versao) === '3' && contingencia) {
-    const identificacao = digits(identificacaoDestinatario, 14);
-    const tipoIdentificacao = identificacao.length === 11 ? '1' : identificacao.length === 14 ? '2' : '';
     if (!assinaturaOfflineBase64) throw new Error('QR Code v3 em contingência exige assinatura offline do certificado A1.');
-    return `${url}${chave}|3|${tpAmb}|${diaEmissao(dataEmissao)}|${decimal(valorTotal, 2)}|${tipoIdentificacao}|${identificacao}|${assinaturaOfflineBase64}`;
+    return `${url}${conteudoQrCodeOfflineV3({ chaveAcesso: chave, ambiente, dataEmissao, valorTotal, identificacaoDestinatario })}|${assinaturaOfflineBase64}`;
   }
 
   if (String(versao) === '2') {
@@ -205,7 +219,7 @@ function xmlItens(itens, regime) {
       + `${tag('NCM', ncm)}${fiscal.cest ? tag('CEST', digits(fiscal.cest, 7)) : ''}${tag('CFOP', digits(fiscal.cfop, 4) || '5102')}`
       + `${tag('uCom', fiscal.unidadeTributavel || item.unidade || 'UN')}${tag('qCom', decimal(qCom, 4))}${tag('vUnCom', decimal(vUn, 10))}${tag('vProd', decimal(vProd, 2))}`
       + `${tag('cEANTrib', text(item.gtin || 'SEM GTIN', 14))}${tag('uTrib', fiscal.unidadeTributavel || item.unidade || 'UN')}${tag('qTrib', decimal(qCom, 4))}${tag('vUnTrib', decimal(vUn, 10))}${tag('indTot', '1')}`
-      + `</prod><imposto>${xmlIcms(item, regime)}${xmlPis(item)}${xmlCofins(item)}</imposto></det>`;
+      + `</prod><imposto>${item.vTotTrib !== undefined && item.vTotTrib !== null ? tag('vTotTrib', decimal(item.vTotTrib, 2)) : ''}${xmlIcms(item, regime)}${xmlPis(item)}${xmlCofins(item)}</imposto></det>`;
   }).join('');
 }
 
@@ -259,7 +273,7 @@ function xmlTotais(totais = {}) {
     + `${tag('vBC', decimal(totais.baseIcms, 2))}${tag('vICMS', decimal(totais.valorIcms, 2))}${tag('vICMSDeson', '0.00')}${tag('vFCP', decimal(totais.valorFcp, 2))}`
     + `${tag('vBCST', decimal(totais.baseSt, 2))}${tag('vST', decimal(totais.valorSt, 2))}${tag('vFCPST', '0.00')}${tag('vFCPSTRet', '0.00')}`
     + `${tag('vProd', decimal(totais.valorProdutos, 2))}${tag('vFrete', '0.00')}${tag('vSeg', '0.00')}${tag('vDesc', decimal(totais.desconto, 2))}${tag('vII', '0.00')}${tag('vIPI', '0.00')}${tag('vIPIDevol', '0.00')}`
-    + `${tag('vPIS', decimal(totais.valorPis, 2))}${tag('vCOFINS', decimal(totais.valorCofins, 2))}${tag('vOutro', '0.00')}${tag('vNF', decimal(totais.valorTotal, 2))}`
+    + `${tag('vPIS', decimal(totais.valorPis, 2))}${tag('vCOFINS', decimal(totais.valorCofins, 2))}${tag('vOutro', '0.00')}${tag('vNF', decimal(totais.valorTotal, 2))}${totais.vTotTrib !== undefined && totais.vTotTrib !== null ? tag('vTotTrib', decimal(totais.vTotTrib, 2)) : ''}`
     + `</ICMSTot></total>`;
 }
 
@@ -279,7 +293,7 @@ export function montarXmlFiscalV400({ config, modelo = '65', numero, serie, chav
   const natOp = model === '65' ? (config?.naturezaOperacaoNfce || 'VENDA DE MERCADORIA') : (config?.naturezaOperacaoNfe || 'VENDA DE MERCADORIA');
   const qr = model === '65' ? construirQrCodeNfce({
     chaveAcesso: chave, ambiente: config?.ambiente, urlBase: qrCodeUrl, versao: qrCodeVersao, contingencia,
-    valorTotal: total.valorTotal, dataEmissao, identificacaoDestinatario: destinatario?.cpf || destinatario?.cnpj || '',
+    valorTotal: total.valorTotal, dataEmissao, identificacaoDestinatario: digits(destinatario?.cnpj) || digits(destinatario?.cpf) || '',
     assinaturaOfflineBase64: qrCodeOfflineAssinatura, cscId: config?.cscId, csc: config?.csc,
   }) : null;
   const pagamentosXml = xmlPagamentos(pagamentos, total.valorTotal);
@@ -336,6 +350,7 @@ export default {
   agoraFiscalCuiaba,
   resolverMeioPagamento,
   construirQrCodeNfce,
+  conteudoQrCodeOfflineV3,
   verificarSchemaOficial,
   validarXmlComXsd,
   validarXmlFiscal,

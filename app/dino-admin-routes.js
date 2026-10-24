@@ -29,6 +29,13 @@ export function monthlyDates(start, count) {
   });
 }
 
+// Operador (perfil de toda empresa) lança despesa e lê as categorias; o resto do financeiro é da gestão.
+// A trava da barbearia (server.js) já confere que o lançamento do operador é despesa.
+function gestorOuOperador(req, res) {
+  if (String(req.user?.role || '') === 'operador') return true;
+  return gestor(req, res);
+}
+
 function gestor(req, res) {
   if (GESTORES.has(String(req.user?.role || ''))) return true;
   res.status(403).json({ error: 'Disponível para administradores e gestores da empresa.', code: 'TENANT_MANAGER_REQUIRED' });
@@ -122,12 +129,15 @@ export function registerDinoAdminRoutes(app, deps) {
   });
 
   app.get(`${BASE}/financeiro/categorias`, (req, res) => {
-    if (!gestor(req, res)) return;
+    if (!gestorOuOperador(req, res)) return;
     res.json(CATEGORIAS_BARBEARIA);
   });
 
   app.post(`${BASE}/financeiro/lancamentos`, (req, res) => {
-    if (!gestor(req, res)) return;
+    if (!gestorOuOperador(req, res)) return;
+    if (String(req.user?.role || '') === 'operador' && String(req.body?.tipo || '').toLowerCase() !== 'despesa') {
+      return res.status(403).json({ error: 'O operador lança só despesas.', code: 'PROFILE_RESTRICTED' });
+    }
     try {
       const empresaId = legacyEmpresaId(req);
       const lojaId = legacyLojaId(req);

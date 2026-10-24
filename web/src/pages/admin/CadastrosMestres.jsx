@@ -4,6 +4,7 @@ import { a2Path } from '../../lib/tenant-api'
 import { useToast } from '../../hooks/useToast'
 import { useAuth } from '../../lib/auth'
 import Modal from '../../components/Modal'
+import { Link } from 'react-router-dom'
 
 const TABS = [
   { id: 'funcionarios', label: 'Funcionários', icon: '👔', endpoint: '/funcionarios' },
@@ -172,6 +173,7 @@ export default function CadastrosMestres() {
           </button>
         ))}
         <a href="/admin/clientes" className="btn btn-ghost btn-sm" style={{ textDecoration: 'none' }}>👥 Clientes & Contas</a>
+        <Link to="/admin/usuarios" className="btn btn-ghost btn-sm" style={{ textDecoration: 'none' }} title="Quem entra no sistema e o que pode fazer">🔐 Usuários e acessos</Link>
       </div>
 
       <div className="card" style={{ marginBottom: 18, border: '1px solid rgba(255,107,44,.22)', background: 'rgba(255,107,44,.04)' }}>

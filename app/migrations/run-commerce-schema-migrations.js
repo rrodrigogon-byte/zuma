@@ -74,6 +74,19 @@ const migrationFiles = [
   '083_dino_operational_foundations.sql',
   '084_dino_forecast_ai.sql',
   '085_ai_automation_log_store_scope.sql',
+  '090_financeiro_razao.sql',
+  '091_estoque_compras.sql',
+  '092_fiscal_multiempresa.sql',
+  '093_conciliacao_bancaria.sql',
+  '094_salao_reservas.sql',
+  '095_pdv_offline_multiempresa.sql',
+  '096_varejo_supermercado.sql',
+  '097_pdv_offline_unidade_no_razao.sql',
+  '098_financeiro_ajustes_auditoria.sql',
+  '099_pdv_offline_impressao.sql',
+  '100_fiscal_completo.sql',
+  '101_varejo_balanca.sql',
+  '102_perfis_acesso.sql',
 ];
 const advisoryLockKey = 825410732;
 

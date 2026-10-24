@@ -213,7 +213,7 @@ export default function AdminPlataforma() {
         confirmPublicContact: form.confirmAddress,
       })
       const session = await api.get('/api/admin/commerce-session')
-      atualizarContextoLojas(session)
+      atualizarContextoLojas({ ...session, substituir: true })
       setResult(response)
       toast(response.created ? `Tenant ${response.empresa?.nome || form.nomeFantasia} criado em modo rascunho.` : `Tenant ${response.empresa?.nome || form.nomeFantasia} reconciliado com segurança.`)
       await carregar()

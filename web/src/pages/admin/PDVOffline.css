@@ -34,7 +34,7 @@
 .pdvo-status::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
 .pdvo-status--online, .pdvo-status--processado { color: #2D6F9E; background: rgba(37,129,60,.12); }
 .pdvo-status--offline, .pdvo-status--falha, .pdvo-status--erro { color: #b73b3b; background: rgba(183,59,59,.12); }
-.pdvo-status--conflito, .pdvo-status--pendente { color: #a76e0a; background: rgba(167,110,10,.12); }
+.pdvo-status--conflito, .pdvo-status--pendente, .pdvo-status--aviso { color: #a76e0a; background: rgba(167,110,10,.12); }
 .pdvo-status--desconhecido { color: #65707a; background: rgba(101,112,122,.12); }
 .pdvo-definition-list { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 12px 0 17px; }
 .pdvo-definition-list div { background: var(--surface2); padding: 10px; border-radius: 9px; }

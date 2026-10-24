@@ -39,6 +39,14 @@ import { enviarWhatsappClube } from './modules/clube/whatsapp-agro-open.js';
 import { extensaoIaClube } from './modules/clube/ia-agro-open.js';
 import { lerSociosTtc, importarAlunos } from './modules/clube/importar-legado.js';
 import { createA2AdminRouter } from './modules/a2/rotas.js';
+import { createUnidadesAdminRouter } from './modules/unidades/rotas.js';
+import { createRazaoAdminRouter, createRazaoPlataformaRouter } from './modules/razao/rotas.js';
+import { iniciarRotina as iniciarRotinaBackoffice } from './modules/razao/rotina.js';
+import { createSuprimentosAdminRouter } from './modules/suprimentos/rotas.js';
+import { createFiscalAdminRouter } from './modules/fiscal/rotas.js';
+import { createSalaoAdminRouter } from './modules/salao/rotas.js';
+import { createPdvOfflineRouter } from './modules/pdv-offline/rotas.js';
+import { createVarejoAdminRouter } from './modules/varejo/rotas.js';
 import { createBarAdminRouter } from './modules/bar/rotas-multiempresa.js';
 import * as barService from './modules/bar/servico.js';
 import { responderErro as responderErroBarra } from './modules/acesso/banco.js';
@@ -124,6 +132,8 @@ import { registerWhatsappConexaoRoutes } from './whatsapp-conexao-routes.js';
 import { vigiarTodas as vigiarConexoesWhatsapp } from './whatsapp-conexao-kytto.js';
 import { registerDinoAdminRoutes, loadCommerceSalesDetail } from './dino-admin-routes.js';
 import { buildCurrentMaterials, previewTaxMaterialPlan, PreviewConflictError, PreviewValidationError } from './comandas-caixa-previa.js';
+import { perfilDoUsuario, profissionalPode, operadorPodeNaBarbearia, respostaParaOperador, papelLegadoDoRole, permissoesDoPerfil, MODULOS_FECHADOS_AO_OPERADOR, MENSAGEM_PERFIL } from './core/perfis-acesso.js';
+import { profissionalDoUsuario } from './dino-modo-barbeiro.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -150,7 +160,10 @@ app.use((req, res, next) => {
 });
 app.use(avecGovernanceNoStore);
 app.use(equipePerformanceNoStore);
-app.use(express.json({ limit: '1mb', verify: (req, res, buf) => { if (req.originalUrl?.startsWith('/api/webhooks/') || req.originalUrl?.startsWith('/api/integracoes/')) req.rawBody = Buffer.from(buf); } }));
+// XML de NF-e de entrada e extrato OFX podem passar de 1 MB: os routers leem esses corpos com limite próprio.
+const CORPOS_GRANDES = ['/api/admin/suprimentos/nfe/', '/api/admin/razao/conciliacao/importar', '/api/pdv-offline/sincronizar'];
+const corpoJsonGlobal = (req) => !CORPOS_GRANDES.some((p) => String(req.originalUrl || '').startsWith(p)) && /^application\/json\b/i.test(String(req.headers['content-type'] || ''));
+app.use(express.json({ limit: '1mb', type: corpoJsonGlobal, verify: (req, res, buf) => { if (req.originalUrl?.startsWith('/api/webhooks/') || req.originalUrl?.startsWith('/api/integracoes/')) req.rawBody = Buffer.from(buf); } }));
 
 // SSE — realtime para KDS, Mesas, Portaria
 const sseClients = new Set();
@@ -249,9 +262,12 @@ export const CATEGORIAS = [
 ];
 
 // ---- papéis e segurança ----
-const ROLES = ['admin','organizador','staff','atleta'];
-const STAFF = ['admin','organizador','staff']; // acesso ao sistema/painel
+// operador e profissional: perfis de acesso de toda empresa (ver core/perfis-acesso.js)
+const ROLES = ['admin','organizador','staff','operador','profissional','atleta'];
+const STAFF = ['admin','organizador','staff','operador','profissional']; // acesso ao sistema/painel
 const norm = s => String(s||'').trim().toLowerCase();
+// Fuso dos módulos do backoffice: o mesmo KYTTO_TIMEZONE do resto do sistema (KYTTO_FUSO tem prioridade).
+const FUSO_KYTTO = process.env.KYTTO_FUSO || process.env.KYTTO_TIMEZONE || 'America/Cuiaba';
 const PLATFORM_ADMIN_EMAILS = new Set((process.env.PLATFORM_ADMIN_EMAILS || '').split(',').map(norm).filter(Boolean));
 const isPlatformAdminUser = user => Boolean(user?.pgOperational !== true && (user?.pgAccount === true ? user?.pgPlatformAdmin === true && user?.platformAdmin === true : user?.platformAdmin === true || PLATFORM_ADMIN_EMAILS.has(norm(user?.email))));
 // E-mails de administração (plataforma e admin principal) não podem ser cadastrados por
@@ -386,7 +402,7 @@ async function authenticateAccountRequest(req, res, next, accountId) {
       req.user.lojaId = context.lojaId;
       req.user.commerceUserId = context.usuarioId;
       req.user.commerceRoleCode = context.roleCode;
-      req.user.role = context.roleCode === 'customer' ? 'cliente' : ['platform_owner','tenant_owner','store_admin'].includes(context.roleCode) ? 'admin' : 'organizador';
+      req.user.role = papelLegadoDoRole(context.roleCode);
     }
     return next();
   } catch (error) {
@@ -500,7 +516,22 @@ async function tenantBindingFor(email) {
     lojaId: empresas.length === 1 && lojas.length === 1 ? lojas[0] : null };
 }
 const requireRole = (...roles)=> (req,res,next)=> (req.user && roles.includes(req.user.role)) ? next() : res.status(403).json({error:'sem permissão'});
-const requireStaff = (req,res,next)=> (req.user && STAFF.includes(req.user.role)) ? next() : res.status(403).json({error:'acesso restrito à organização'});
+const requireStaff = (req,res,next)=> {
+  if (!(req.user && STAFF.includes(req.user.role))) return res.status(403).json({error:'acesso restrito à organização'});
+  const perfil = perfilDoUsuario(req.user);
+  // operador e profissional são perfis de uma empresa: sem empresa, nada (nem os números da plataforma)
+  if ((perfil === 'operador' || perfil === 'profissional') && !isTenantScopedUser(req.user)) {
+    return res.status(403).json({ error: 'Este perfil precisa estar vinculado a uma empresa.', code: 'EMPRESA_REQUIRED' });
+  }
+  // profissional (barbeiro, manicure…): só o app do profissional, em qualquer rota de equipe
+  if (perfil === 'profissional') {
+    const url = String(req.originalUrl || '').split('?')[0];
+    if (!url.startsWith('/api/admin/') || !profissionalPode(req.method, url.slice('/api/admin'.length))) {
+      return res.status(403).json({ error: MENSAGEM_PERFIL.profissional, code: 'PROFILE_RESTRICTED' });
+    }
+  }
+  return next();
+};
 const requirePlatformAdmin = (req,res,next)=> isPlatformAdminUser(req.user) ? next() : res.status(403).json({error:'acesso restrito à administração da plataforma', code:'PLATFORM_ADMIN_REQUIRED'});
 // Usuário preso a uma empresa (tenant) que não é administrador da plataforma.
 const isTenantScopedUser = user => (Boolean(user?.empresaId) || user?.tenantBound === true) && !isPlatformAdminUser(user) && !isMainAdminUser(user);
@@ -639,7 +670,7 @@ app.use('/api/admin/commerce', (req, res, next) => {
 });
 
 // Módulos de /api/admin que separam dados por empresa e podem ser usados por tenant.
-const TENANT_ADMIN_MODULES = new Set(['a2', 'bar', 'barbearia', 'commerce', 'commerce-session', 'usuarios', 'usuarios-diretorio', 'platform', 'fidelidade', 'login', 'auditoria', 'modificadores', 'combos', 'clube']);
+const TENANT_ADMIN_MODULES = new Set(['a2', 'bar', 'barbearia', 'commerce', 'commerce-session', 'usuarios', 'usuarios-diretorio', 'platform', 'fidelidade', 'login', 'auditoria', 'modificadores', 'combos', 'clube', 'unidades', 'razao', 'suprimentos', 'fiscal', 'salao', 'varejo', 'minhas-permissoes']);
 
 // [kytto-clube] Kytto Clube & Academia (catraca, contrato digital, agenda, retenção, Wellhub/TotalPass).
 // Usa o pool do Commerce que já existe (não abre outro pool) e a mesma resolução de empresa e
@@ -700,6 +731,45 @@ async function empresaDoA2(req) {
     if (error?.name !== 'CommerceError') throw error;
     throw Object.assign(new Error(error.message), { status: CLUBE_STATUS_ESCOPO[error.code] || 403, code: error.code });
   }
+}
+// Unidades da empresa: leitura para quem atende; criar, editar e desativar exigem settings.write.
+function permissaoDasUnidades(req) {
+  const caminho = String(req.originalUrl || '').split('?')[0];
+  if (req.method !== 'GET') return 'settings.write';
+  return /\/auditoria$/.test(caminho) ? 'reports.read' : 'customers.read';
+}
+// Escopo comercial de uma requisição: empresa autorizada e, quando a permissão da pessoa vale só
+// para uma unidade (membership presa a uma loja), essa unidade em `lojaRestrita`. Quem tem a
+// permissão na empresa toda recebe lojaRestrita = null.
+async function escopoComercial(req, permissao) {
+  try {
+    const contexto = await requireCommercePermission(req, permissao);
+    const todaEmpresa = await commerceDb.queryRead(
+      `SELECT 1 FROM commerce_memberships m
+         JOIN commerce_roles r ON r.id = m.role_id AND (r.empresa_id = $1 OR r.empresa_id IS NULL)
+         JOIN commerce_role_permissions rp ON rp.role_id = r.id
+         JOIN commerce_permissions p ON p.id = rp.permission_id AND p.codigo = $2
+        WHERE m.empresa_id = $1 AND m.usuario_id = $3 AND m.ativo = true AND m.loja_id IS NULL
+          AND (m.expires_at IS NULL OR m.expires_at > CURRENT_TIMESTAMP) LIMIT 1`,
+      [contexto.empresaId, permissao, contexto.usuarioId],
+    );
+    return { empresaId: contexto.empresaId, lojaRestrita: todaEmpresa.rows[0] ? null : (contexto.lojaId || null) };
+  } catch (error) {
+    if (error?.name !== 'CommerceError') throw error;
+    throw Object.assign(new Error(error.message), { status: CLUBE_STATUS_ESCOPO[error.code] || 403, code: error.code });
+  }
+}
+// Unidades: quem só tem a permissão numa unidade vê e edita só aquela e não cria unidades.
+const empresaDasUnidades = (req) => escopoComercial(req, permissaoDasUnidades(req));
+// Financeiro JSON antigo da empresa (a barbearia ainda grava lá) para o razão ler.
+async function fonteJsonDoRazao(empresaId) {
+  const chaveLegada = legacyEmpresaIdFromCommerce(empresaId);
+  const store = db().financeiroKytto?.empresas?.[String(chaveLegada)];
+  if (!store || !store.lancamentos) return null;
+  const lojas = await commerceDb.queryRead('SELECT id FROM lojas WHERE empresa_id = $1', [empresaId]);
+  const mapaUnidades = Object.fromEntries(lojas.rows.map((l) => [l.id, l.id]));
+  if (empresaId === DINO_COMMERCE_EMPRESA_ID) mapaUnidades[DINO_LEGACY_LOJA_ID] = DINO_COMMERCE_LOJA_ID;
+  return { chaveLegada: String(chaveLegada), lancamentos: Object.values(store.lancamentos), mapaUnidades };
 }
 const BAR_DINHEIRO = /^\/api\/admin\/bar\/(?:caixa|vendas|comanda\/[^/]+\/(?:pagar|pagamento-parcial))(?:\/|$)/;
 const BAR_CONFIG = /^\/api\/admin\/bar\/(?:produtos|cardapio|mesas|estoque)(?:\/|$)/;
@@ -814,6 +884,12 @@ app.post('/api/auth/operational-invite/accept', publicLimit(6), async (req, res)
     return res.status(409).json({ error: 'convite inválido, expirado ou já usado', code: 'INVITE_INVALID' });
   }
 });
+// Módulos novos do backoffice que a instalação ainda não mostra às empresas
+// (BACKOFFICE_MODULOS_OCULTOS=compras,reservas,pdv-offline,supermercado,fiscal). A administração
+// da plataforma continua vendo, para homologar.
+const MODULO_DA_API = { suprimentos: 'compras', salao: 'reservas', varejo: 'supermercado', fiscal: 'fiscal' };
+const modulosOcultos = () => new Set(String(process.env.BACKOFFICE_MODULOS_OCULTOS || '').split(',').map((m) => m.trim().toLowerCase()).filter(Boolean));
+const respostaModuloOculto = (res) => res.status(404).json({ error: 'este módulo ainda não está disponível para a sua empresa', code: 'MODULE_DISABLED' });
 // Trava global: tudo em /api/admin exige login de staff (exceto o próprio login)
 app.use('/api/admin', (req,res,next)=>{
   if(req.path==='/login') return next();
@@ -825,6 +901,9 @@ app.use('/api/admin', (req,res,next)=>{
       const modulo = String(req.path || '').split('/')[1] || '';
       if(modulo === 'notificacoes') return req.method === 'GET' ? res.json({ notificacoes: [], total: 0 }) : res.json({ ok: true });
       if(!TENANT_ADMIN_MODULES.has(modulo)) return res.status(403).json({ error:'módulo global da plataforma; use o módulo da sua empresa', code:'TENANT_USE_SCOPED_MODULE' });
+      if(MODULO_DA_API[modulo] && modulosOcultos().has(MODULO_DA_API[modulo])) return respostaModuloOculto(res);
+      // operador: sem gestão de usuários, plataforma e trilha de auditoria (traz comissões e valores)
+      if(perfilDoUsuario(req.user) === 'operador' && MODULOS_FECHADOS_AO_OPERADOR.has(modulo)) return res.status(403).json({ error: MENSAGEM_PERFIL.operador, code: 'PROFILE_RESTRICTED' });
     }
     // registra mutações (POST/PATCH/DELETE) na auditoria
     if(['POST','PATCH','DELETE','PUT'].includes(req.method)){
@@ -1184,10 +1263,78 @@ if(process.env.COMMERCE_CORE_ENABLED === '1'){
     empresaDaRequisicao: empresaDoA2,
     operadorDaRequisicao: (req) => String(req.user?.id || req.user?.email || 'sistema'),
   }));
+  // [kytto-permissoes] O que a pessoa pode fazer na empresa e na unidade ativas, para o menu e as telas do
+  // backoffice esconderem o que ela não acessa. Só orienta a interface: cada rota continua
+  // conferindo a permissão. Administração da plataforma e sessão sem empresa não filtram nada.
+  app.get('/api/admin/minhas-permissoes', auth, requireStaff, async (req, res) => {
+    res.set('Cache-Control', 'private, no-store');
+    if (isPlatformAdminUser(req.user) || isMainAdminUser(req.user)) return res.json({ aplicavel: false });
+    let contexto;
+    try { contexto = await resolveCommerceIdentity(req); }
+    catch (error) {
+      // sem empresa no Commerce (legado) ou sem unidade escolhida: a interface não filtra e cada tela segue como antes
+      if (error?.name === 'CommerceError') return res.json({ aplicavel: false, motivo: error.code || null });
+      return res.status(503).json({ error: 'não foi possível consultar as permissões', code: 'PERMISSIONS_UNAVAILABLE' });
+    }
+    try {
+      // mesmo critério do requireCommercePermission, numa consulta só: vínculo da empresa toda ou da unidade escolhida
+      const r = await commerceDb.queryRead(
+        `SELECT DISTINCT p.codigo
+           FROM commerce_memberships m
+           JOIN commerce_roles r ON r.id = m.role_id AND (r.empresa_id = $1 OR r.empresa_id IS NULL)
+           JOIN commerce_role_permissions rp ON rp.role_id = r.id
+           JOIN commerce_permissions p ON p.id = rp.permission_id
+          WHERE m.empresa_id = $1 AND m.usuario_id = $2 AND m.ativo = true
+            AND (m.expires_at IS NULL OR m.expires_at > CURRENT_TIMESTAMP)
+            AND (m.loja_id IS NULL OR m.loja_id = $3)
+          ORDER BY p.codigo`,
+        [contexto.empresaId, contexto.usuarioId, contexto.lojaId || null],
+      );
+      let permissoes = r.rows.map((row) => row.codigo);
+      if (req.user?.pgOperational === true) permissoes = permissoes.filter((codigo) => codigo !== 'users.write');
+      // o perfil (operador, profissional) limita o vínculo; o menu mostra o que a pessoa realmente usa
+      permissoes = permissoesDoPerfil(req.user, permissoes);
+      return res.json({ aplicavel: true, empresaId: contexto.empresaId, lojaId: contexto.lojaId || null, permissoes, modulosOcultos: [...modulosOcultos()] });
+    } catch {
+      return res.status(503).json({ error: 'não foi possível consultar as permissões', code: 'PERMISSIONS_UNAVAILABLE' });
+    }
+  });
+  // [kytto-unidades] Cadastro das unidades (lojas) da empresa ativa, no PostgreSQL.
+  app.use('/api/admin/unidades', auth, requireStaff, createUnidadesAdminRouter({ db: clubeDb, empresaDaRequisicao: empresaDasUnidades }));
+  // [kytto-razao] Razão financeiro único (Financeiro, contas a pagar e a receber, DRE, fechamento).
+  app.use('/api/admin/razao', auth, requireStaff, createRazaoAdminRouter({ db: clubeDb, escopoDaRequisicao: escopoComercial, fonteJson: fonteJsonDoRazao, fuso: FUSO_KYTTO }));
+  app.use('/api/admin/platform/razao', auth, requirePlatformAdmin, createRazaoPlataformaRouter({ db: clubeDb, fonteJson: fonteJsonDoRazao, fuso: FUSO_KYTTO }));
+  // [kytto-rotina] Lê as fontes do razão e baixa o estoque das vendas a cada BACKOFFICE_ROTINA_MINUTOS (padrão 5; 0 desliga).
+  // Rotina do backoffice: só liga sozinha com o Financeiro novo ligado (ou com BACKOFFICE_ROTINA_MINUTOS);
+  // a baixa de estoque respeita o módulo Compras escondido.
+  iniciarRotinaBackoffice(clubeDb, { minutos: process.env.BACKOFFICE_ROTINA_MINUTOS ?? (process.env.FINANCEIRO_RAZAO === '1' ? 5 : 0), fonteJson: fonteJsonDoRazao, fuso: FUSO_KYTTO, razaoAtivo: () => process.env.FINANCEIRO_RAZAO === '1', estoqueAtivo: () => !modulosOcultos().has('compras') });
+  // [kytto-suprimentos] Estoque por unidade, inventário, ficha técnica e compras (geram contas a pagar no razão).
+  app.use('/api/admin/suprimentos', auth, requireStaff, createSuprimentosAdminRouter({ db: clubeDb, escopoDaRequisicao: escopoComercial, fuso: FUSO_KYTTO }));
+  // [kytto-fiscal] Emitente, certificado A1 no cofre, classificação e documentos — SÓ HOMOLOGAÇÃO
+  // (transmissão só com FISCAL_TRANSMITIR_HOMOLOGACAO=1; produção exige migração nova).
+  app.use('/api/admin/fiscal', auth, requireStaff, createFiscalAdminRouter({ db: clubeDb, escopoDaRequisicao: escopoComercial }));
+  // [kytto-salao] Reservas de mesa e lista de espera, ligadas às mesas e comandas do bar.
+  app.use('/api/admin/salao', auth, requireStaff, createSalaoAdminRouter({ db: clubeDb, escopoDaRequisicao: escopoComercial, fuso: FUSO_KYTTO }));
+  // [kytto-pdv-offline] Terminais e periféricos por unidade; o agente local sincroniza as vendas feitas sem internet (viram comandas pagas do bar).
+  // limite por IP antes de ler o corpo (até 2 MB na sincronização): o agente consulta a fila de impressão a cada poucos segundos
+  app.use('/api/pdv-offline', (req, res, next) => (modulosOcultos().has('pdv-offline') ? respostaModuloOculto(res) : next()), publicLimit(3000, 10 * 60 * 1000), createPdvOfflineRouter({ db: clubeDb, escopoDaRequisicao: escopoComercial, auth, requireStaff, fuso: FUSO_KYTTO }));
+  // [kytto-varejo] Supermercado/varejo sobre o estoque único: preço por unidade, promoções, lotes, etiquetas e transferências.
+  app.use('/api/admin/varejo', auth, requireStaff, createVarejoAdminRouter({ db: clubeDb, escopoDaRequisicao: escopoComercial, fuso: FUSO_KYTTO }));
   // [kytto-bar] Bar, PDV, comandas, estoque fracionado, KDS e caixa por empresa.
   // O prefixo continua sob a trava /api/admin e a empresa é resolvida exclusivamente
   // pela membership SQL; nenhum empresaId do corpo da requisição é aceito.
-  app.use('/api/admin/bar', auth, requireStaff, createBarAdminRouter({
+  // Operador no bar: opera o caixa às cegas (sem vendas nem saldo esperado) e não lista as vendas.
+  const barParaOperador = (req, res, next) => {
+    if (perfilDoUsuario(req.user) !== 'operador') return next();
+    const caminho = req.path || '';
+    if (req.method === 'GET' && /^\/vendas(?:\/|$)/.test(caminho)) return res.status(403).json({ error: MENSAGEM_PERFIL.operador, code: 'PROFILE_RESTRICTED' });
+    if (req.method === 'GET' && /^\/caixa(?:\/hoje)?$/.test(caminho)) {
+      const json = res.json.bind(res);
+      res.json = (corpo) => json(corpo && typeof corpo === 'object' ? { ...corpo, vendas: undefined, saldo: undefined, numerosOcultos: true } : corpo);
+    }
+    return next();
+  };
+  app.use('/api/admin/bar', auth, requireStaff, barParaOperador, createBarAdminRouter({
     db: clubeDb,
     empresaDaRequisicao: empresaDoBar,
     operadorDaRequisicao: (req) => String(req.user?.id || req.user?.email || ''),
@@ -1429,7 +1576,8 @@ async function tryAccountLogin(email, password, res, panelOnly, rateKey) {
   if (sessao.empresaId) {
     const local = accountRequestIdentity(user, { empresaId:sessao.empresaId, lojaId:sessao.lojaId });
     user.commerceUserId = local.usuarioId;
-    user.role = local.roleCode === 'customer' ? 'cliente' : ['platform_owner','tenant_owner','store_admin'].includes(local.roleCode) ? 'admin' : 'organizador';
+    user.role = papelLegadoDoRole(local.roleCode);
+    user.commerceRoleCode = local.roleCode;
   }
   limparTentativas(rateKey);
   const token = jwt.sign({ id:user.id, email:user.email, pgAccount:true }, JWT_SECRET, { expiresIn:'12h' });
@@ -1630,6 +1778,7 @@ app.post('/api/admin/usuarios', auth, requireRole('admin','organizador'), async 
   if(isReservedEmail(email) && !isPlatformAdminUser(req.user)) return res.status(409).json({error:'e-mail reservado à administração da plataforma'});
   if(role === 'admin' && req.user.role !== 'admin') return res.status(403).json({error:'só um administrador cria outro administrador'});
   if(!isGlobalActor(req.user) && !req.user.empresaId) return res.status(409).json({error:'escolha a empresa antes de criar usuários', code:'EMPRESA_REQUIRED'});
+  if(['operador','profissional'].includes(role) && isGlobalActor(req.user)) return res.status(409).json({error:'operador e profissional são perfis de uma empresa: cadastre pela gestão da empresa ou em Contas e acessos', code:'EMPRESA_REQUIRED'});
   const u = { id: nextId(), nome, email: norm(email), senhaHash: bcrypt.hashSync(senha,10),
     role, telefone:telefone||'', ativo:true, criadoEm:new Date().toISOString(),
     ...(isGlobalActor(req.user) ? {} : { empresaId: String(req.user.empresaId), ...(req.user.lojaId ? { lojaId: String(req.user.lojaId) } : {}) }) };
@@ -1641,6 +1790,7 @@ app.patch('/api/admin/usuarios/:id', auth, requireRole('admin','organizador'), (
   const b = req.body||{};
   if(b.nome) u.nome=b.nome;
   if(b.role && ROLES.includes(b.role)){
+    if(['operador','profissional'].includes(b.role) && !u.empresaId) return res.status(409).json({error:'operador e profissional são perfis de uma empresa: este usuário não tem empresa', code:'EMPRESA_REQUIRED'});
     if((b.role === 'admin' || u.role === 'admin') && req.user.role !== 'admin') return res.status(403).json({error:'só um administrador altera papel de administrador'});
     if(u.id === req.user.id && b.role !== u.role) return res.status(403).json({error:'você não pode mudar o próprio papel'});
     u.role=b.role;
@@ -2990,8 +3140,49 @@ async function resolverEscopoBarbearia(req, res, next) {
   req.barbeariaContext = { empresaId: signedEmpresa || 'principal', lojaId: signedLoja };
   next();
 }
+// Agenda e bloqueio do próprio profissional: o vínculo é o e-mail do login no cadastro dele.
+function profissionalDaSessao(req) {
+  return profissionalDoUsuario(barbeariaErpKytto.listarProfissionais(legacyEmpresaId(req)), req.user);
+}
+function exigirPerfilProfissional(req, res, next) {
+  const eu = profissionalDaSessao(req);
+  if (!eu) return res.status(403).json({ error: 'Seu login não está vinculado a um profissional (o e-mail do cadastro precisa ser o mesmo do login).', code: 'SEM_VINCULO' });
+  const caminho = req.path || '';
+  const doCorpo = String(req.body?.profissionalId ?? req.body?.profissional_id ?? '');
+  if (req.method === 'POST' && (caminho === '/agenda' || caminho === '/bloqueios')) {
+    if (doCorpo && doCorpo !== eu.id) return res.status(403).json({ error: 'Você só agenda e bloqueia horários na sua própria agenda.', code: 'PROFILE_RESTRICTED' });
+    req.body = { ...(req.body || {}), profissionalId: eu.id };
+  }
+  const status = /^\/agenda\/([^/]+)\/status$/.exec(caminho);
+  if (status) {
+    const atual = listarAgendamentosBarbearia(legacyEmpresaId(req), { lojaId: legacyLojaId(req) }).find((item) => item.id === status[1]);
+    if (!atual || atual.profissionalId !== eu.id) return res.status(403).json({ error: 'Este atendimento não é da sua agenda.', code: 'PROFILE_RESTRICTED' });
+    if (req.body?.registrarFinanceiro === true) return res.status(403).json({ error: MENSAGEM_PERFIL.profissional, code: 'PROFILE_RESTRICTED' });
+  }
+  return next();
+}
 function exigirPapelOperacaoBarbearia(req, res, next) {
-  if (req.user?.pgAccount === true && !isPlatformAdminUser(req.user) && !['tenant_owner','store_admin'].includes(req.user.commerceRoleCode)) {
+  const perfil = perfilDoUsuario(req.user);
+  if (perfil === 'admin') return next();
+  if (perfil === 'operador') {
+    const contado = req.body?.valorInformado ?? req.body?.valor_informado;
+    if (/^\/operacao\/caixas\/[^/]+\/fechamento$/.test(req.path || '') && req.method === 'POST' && !(contado !== null && contado !== '' && Number.isFinite(Number(contado)) && Number(contado) >= 0)) {
+      return res.status(400).json({ error: 'Informe o valor contado no caixa para fechar.', code: 'VALOR_CONTADO_OBRIGATORIO' });
+    }
+    if (!operadorPodeNaBarbearia(req.method, req.path, req.body)) return res.status(403).json({ error: MENSAGEM_PERFIL.operador, code: 'PROFILE_RESTRICTED' });
+    // vendas de revenda e comandas do histórico: o operador vê o dia, não o acumulado da empresa
+    if (req.method === 'GET' && /^\/(?:vendas-revenda|historico-comandas)$/.test(req.path || '') && !req.query.data) {
+      req.query.data = new Intl.DateTimeFormat('en-CA', { timeZone: FUSO_KYTTO, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+    }
+    // sem comissões e sem os números da empresa na resposta; caixa e fechamento do dia às cegas
+    // o caminho é lido aqui: na rota final req.path já é o endereço completo
+    const caminho = req.path;
+    const json = res.json.bind(res);
+    res.json = (corpo) => json(res.statusCode < 400 ? respostaParaOperador(caminho, corpo) : corpo);
+    return next();
+  }
+  if (perfil === 'profissional') return exigirPerfilProfissional(req, res, next);
+  if (req.user?.pgAccount === true && !isPlatformAdminUser(req.user)) {
     return res.status(403).json({ error:'Este perfil especializado opera somente os módulos Commerce permitidos pelo seu papel.', code:'COMMERCE_ROLE_USE_SCOPED_MODULE' });
   }
   if (['admin', 'organizador'].includes(String(req.user?.role || ''))) return next();
@@ -3014,6 +3205,34 @@ function exigirPapelOperacaoBarbearia(req, res, next) {
 app.use('/api/admin/barbearia', auth, requireStaff, resolverEscopoBarbearia, exigirPapelOperacaoBarbearia);
 registerEquipePerformanceRoutes(app, { db, legacyEmpresaId, legacyLojaId, requireCommercePermission, salesReport, dataVersion: () => estadoGravacao()?.alteracoes ?? null });
 registerCustomer360Routes(app, { legacyEmpresaId, legacyLojaId, clientesKytto, barbeariaErpKytto, canaisFidelidadeKytto, listarAgendamentosBarbearia, requireCommercePermission, audit, save });
+// Diagnóstico do Financeiro (só administração da plataforma): onde estão os lançamentos de cada
+// empresa no banco JSON — quantidades por unidade e por origem, sem valores nem descrições.
+// Serve para achar lançamentos gravados sem unidade ou sob outro identificador de empresa.
+// Fora de /api/admin/barbearia de propósito: lá a trava de escopo barra o admin numa empresa onde ele
+// não tem membership, que é justamente o caso a investigar.
+app.get('/api/admin/platform/financeiro-diagnostico', auth, requirePlatformAdmin, (req, res) => {
+  res.set('Cache-Control', 'private, no-store');
+  const empresas = db().financeiroKytto?.empresas || {};
+  const resumoDe = (store = {}) => {
+    const itens = Object.values(store.lancamentos || {});
+    const porUnidade = {}; const porOrigem = {}; let semUnidade = 0; let primeiro = null; let ultimo = null;
+    for (const item of itens) {
+      const loja = String(item?.lojaId || '').trim();
+      if (!loja) semUnidade += 1; else porUnidade[loja] = (porUnidade[loja] || 0) + 1;
+      const origem = String(item?.origem || 'manual'); porOrigem[origem] = (porOrigem[origem] || 0) + 1;
+      const data = String(item?.dataOperacao || item?.criadoEm || '').slice(0, 10);
+      if (data) { if (!primeiro || data < primeiro) primeiro = data; if (!ultimo || data > ultimo) ultimo = data; }
+    }
+    return { total: itens.length, semUnidade, porUnidade, porOrigem, primeiro, ultimo };
+  };
+  const empresaAtiva = legacyEmpresaId(req);
+  res.json({
+    empresaAtiva,
+    unidadeAtiva: legacyLojaId(req) || null,
+    daEmpresaAtiva: resumoDe(empresas[String(empresaAtiva)]),
+    todasAsChaves: Object.fromEntries(Object.entries(empresas).map(([chave, store]) => [chave, Object.keys(store?.lancamentos || {}).length])),
+  });
+});
 registerDinoAdminRoutes(app, { db, legacyEmpresaId, legacyLojaId, financeiroKytto, barbeariaErpKytto, clientesKytto, commerceDb, requireCommercePermission, dashboardPeriod, audit, save, salesReport });
 registerAiBrainRoutes(app, { legacyEmpresaId, legacyLojaId, requireCommercePermission, audit, clientesKytto, commerceDb, listarAgendamentosBarbearia });
 registerAtivacaoRoutes(app, { legacyEmpresaId, requireCommercePermission, barbeariaErpKytto, audit });
@@ -5327,6 +5546,24 @@ const CONFIG_DEFAULT = {
     // padrão fiscal por categoria do cardápio (acelera o cadastro por item)
     padraoCategoria: {} }
 };
+// O CSC da NFC-e é segredo: a configuração devolve só o final dele; ao salvar, o valor mascarado
+// (ou vazio) mantém o CSC atual.
+const CSC_MASCARA = '••••';
+function mascararSegredosFiscais(fiscal = {}) {
+  const csc = String(fiscal.csc || '');
+  return { ...fiscal, csc: csc ? `${CSC_MASCARA}${csc.slice(-4)}` : '', cscConfigurado: Boolean(csc) };
+}
+function preservarSegredosFiscais(novo = {}, atual = {}) {
+  const csc = String(novo.csc ?? '');
+  const saida = { ...novo };
+  delete saida.cscConfigurado; delete saida.cscLimpar;
+  // vazio ou ainda mascarado (qualquer quantidade de •) mantém o atual; cscLimpar apaga de propósito
+  if (novo.cscLimpar === true) saida.csc = '';
+  else if (!csc || /^•/.test(csc)) saida.csc = atual.csc || '';
+  // a numeração da NFC-e nunca volta atrás por um formulário aberto antes de uma emissão
+  if (saida.proximoNumero !== undefined && Number(atual.proximoNumero) > Number(saida.proximoNumero)) saida.proximoNumero = atual.proximoNumero;
+  return saida;
+}
 app.get('/api/admin/config', auth, (req,res)=>{
   const d = db();
   res.json({
@@ -5351,7 +5588,7 @@ app.get('/api/admin/config', auth, (req,res)=>{
     restaurante: { ...(CONFIG_DEFAULT.restaurante), ...(d.config?.restaurante||{}) },
     pagamentos:  { ...(CONFIG_DEFAULT.pagamentos),  ...(d.config?.pagamentos||{}) },
     tef:         { ...(CONFIG_DEFAULT.tef),         ...(d.config?.tef||{}) },
-    fiscal:      { ...(CONFIG_DEFAULT.fiscal),      ...(d.config?.fiscal||{}) },
+    fiscal:      mascararSegredosFiscais({ ...(CONFIG_DEFAULT.fiscal),      ...(d.config?.fiscal||{}) }),
     pix: {
       chave:  process.env.PIX_CHAVE ? '***' + process.env.PIX_CHAVE.slice(-4) : '',
       nome:   process.env.PIX_NOME  || '',
@@ -5365,7 +5602,8 @@ app.patch('/api/admin/config', auth, requireRole('admin'), requireLegacyGlobalSc
   const allowed = ['evento','bar','restaurante','quadras','horarios','ingressoTipos','categorias','socioPlanos','assinPlanos','pagamentos','tef','fiscal'];
   allowed.forEach(k => {
     if (req.body[k] != null) {
-      d.config[k] = { ...(d.config[k] || {}), ...req.body[k] };
+      const novo = k === 'fiscal' ? preservarSegredosFiscais(req.body[k], d.config[k] || {}) : req.body[k];
+      d.config[k] = { ...(d.config[k] || {}), ...novo };
     }
   });
   audit(req, 'UPDATE_CONFIG', { keys: Object.keys(req.body) });
@@ -6200,7 +6438,7 @@ app.post('/api/admin/notas/:id/cancelar', auth, requireStaff, async (req,res)=>{
   const d=db(); const n=(d.notasFiscais||[]).find(x=>x.id==req.params.id);
   if(!n) return res.status(404).json({error:'nota não encontrada'});
   if(n.status==='cancelada') return res.status(409).json({error:'nota já cancelada'});
-  if(n.status!=='autorizada' && n.status!=='contingencia') return res.status(409).json({error:'só é possível cancelar nota autorizada'});
+  if(n.status!=='autorizada' && n.status!=='contingencia' && n.status!=='simulada') return res.status(409).json({error:'só é possível cancelar nota autorizada'});
   const justificativa = (req.body?.justificativa||'Cancelamento solicitado pelo emitente').slice(0,255);
   const r = await nfceCancelar({ refId:n.id, ambiente:n.ambiente }, justificativa);
   if(r.status!=='cancelada') return res.status(502).json({error: r.motivoRejeicao || 'falha ao cancelar no provedor'});
@@ -7516,7 +7754,7 @@ app.post('/api/reservas', auth, async (req,res)=>{
 app.patch('/api/reservas/:id/cancelar', auth, async (req,res)=>{
   const d=db(); const r=(d.reservas||[]).find(x=>x.id==req.params.id);
   if(!r) return res.status(404).json({error:'reserva não encontrada'});
-  if(r.usuarioId!=req.user.id && !STAFF.includes(req.user.role)) return res.status(403).json({error:'sem permissão'});
+  if(r.usuarioId!=req.user.id && (!STAFF.includes(req.user.role) || perfilDoUsuario(req.user) === 'profissional')) return res.status(403).json({error:'sem permissão'});
   r.status='cancelada'; r.canceladoEm=new Date().toISOString(); save();
   const socio=(d.socios||[]).find(s=>s.id==r.socioId);
   const tel=socio?.telefone||socio?.celular||'';

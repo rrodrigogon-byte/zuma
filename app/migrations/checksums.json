@@ -87,5 +87,18 @@
  "082_financeiro_cadastros_multiempresa.sql": "a0bfe2b6e14cb61258c1ee417ba8c4ec971adab9ea0eb7954c3176c38cca6445",
  "083_dino_operational_foundations.sql": "759527ff9017215b5b73e67f27be7046055c4f6497ef014a60e1f7ee14bdf8bc",
  "084_dino_forecast_ai.sql": "30162f46dfc85a337b3478795076ef1a39742a79f212305e9f46f1325421aa11",
- "085_ai_automation_log_store_scope.sql": "c8ea0921a0022ff55fbde36b36550f6e284158b30507cb628391470e8879fe27"
+ "085_ai_automation_log_store_scope.sql": "c8ea0921a0022ff55fbde36b36550f6e284158b30507cb628391470e8879fe27",
+ "090_financeiro_razao.sql": "e24ddefaad86783d2c478052e788112a4977a270d74b2117ff79cbaee19a98d7",
+ "091_estoque_compras.sql": "95c017ce949c2da4691073de72b23b3938e4c7466915b08489030174e41e012e",
+ "092_fiscal_multiempresa.sql": "276547e4759b7c34ef2ec37c25345ee6d828843bab35d59d9ff808a55fd85f11",
+ "093_conciliacao_bancaria.sql": "18a031a48bbc178dfa358fbb079b63a48ae31523aad50692a29d7ba1c60f1421",
+ "094_salao_reservas.sql": "e862ee2185f3fefadefd62ef3e992cfbc63ecdee4e97b529fae23bcec68d3f5b",
+ "095_pdv_offline_multiempresa.sql": "3e12ef422680285f2954f4b91c112af7a9465ba3ae23e19688eabf98d280b0f7",
+ "096_varejo_supermercado.sql": "0940d6cd8ea349ce9dc373c2362369e5fd3768d1c2a7685d5d3f0542163b317b",
+ "097_pdv_offline_unidade_no_razao.sql": "8969c49ce470c5228538cbff556f2458154765f4b5ba7597e785226601e13065",
+ "098_financeiro_ajustes_auditoria.sql": "7123242f57bd4f9d2959379481b570c7dc933aeb44e164429499680d361682a6",
+ "099_pdv_offline_impressao.sql": "4fbbf924251b8b6199b47e2550032ead57c303c62eb0f49b21707cdfe673da3d",
+ "100_fiscal_completo.sql": "5b002b86f5731e1566bcb26a3e300d68f95f0345618ea998dc4030fc84db9b1c",
+ "101_varejo_balanca.sql": "6d9278c9fbe369bdfb1fc26e5efab29e2cc08313f8891382f714787cf46296cb",
+ "102_perfis_acesso.sql": "bce1bd8e1730a4479539bb94ccb5afbd73e248e01e37bc2df929158dd627c35c"
 }
