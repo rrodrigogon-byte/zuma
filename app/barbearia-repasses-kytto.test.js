@@ -1,6 +1,6 @@
 import test, { beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { reset } from './db.js';
+import { reset, db } from './db.js';
 import * as barbearia from './barbearia-erp-kytto.js';
 import * as captacao from './dino-captacao-kytto.js';
 import * as repasses from './barbearia-repasses-kytto.js';
@@ -108,4 +108,29 @@ test('comissão sobre plano: pote dividido pelos pontos dos serviços atendidos 
   const ex = repasses.extratoProfissional(EMP, a.id, { inicio: hoje(), fim: hoje(), lojaId: LOJA });
   assert.equal(ex.totais.comissaoPlanos, 36);
   assert.equal(ex.pote[0].plano, 'Clube');
+});
+
+test('extrato traz o histórico Avec do profissional pela regra de comissão dele, sem somar ao a receber', () => {
+  const c = cenario();
+  const outro = barbearia.criarProfissional(EMP, { nome: 'Bruna', email: 'bruna@dino.test', percentualComissao: 40 });
+  // Agenda importada antes (12/10) já trazia o profissional do Kytto: é a evidência do vínculo.
+  const antigos = [];
+  for (let dia = 1; dia <= 6; dia += 1) antigos.push({ dataAgenda: `2026-09-0${dia}`, hora: '10:00', clienteNome: `Cliente ${dia}`, profissionalId: c.prof.id, profissionalNome: 'Bruno', servicoNome: 'Corte' });
+  barbearia.importarHistoricoAtendimentos(EMP, antigos, { origem: 'importacao_avec' });
+  const estado = db().barbearias[EMP];
+  const avec = (dia, cliente, nome, valor) => ({ id: `hist-avec-${dia}-${cliente}-${nome}`, empresaId: EMP, lojaId: LOJA, dataAgenda: dia, clienteNome: cliente, profissionalId: `prof-avec-hist-${nome}`, profissionalNome: nome, servicoNome: 'Corte Avec', status: 'concluido', valor, total: valor, numeroComanda: '10', somenteHistorico: true, sourceSystem: 'avec', origem: 'avec-import-20261022' });
+  for (let dia = 1; dia <= 6; dia += 1) { const item = avec(`2026-09-0${dia}`, `Cliente ${dia}`, 'Bruno Mendes Pedroso', 100); estado.historicoAtendimentos[item.id] = item; }
+  const semVinculo = avec('2026-09-02', 'Cliente X', 'Bruno Rafael dos Santos', 70);
+  estado.historicoAtendimentos[semVinculo.id] = semVinculo;
+  const ex = repasses.extratoProfissional(EMP, c.prof.id, { inicio: '2026-09-01', fim: '2026-09-30', lojaId: LOJA });
+  assert.equal(ex.historicoAvec.atendimentos, 6, 'só o Bruno ligado pela agenda; o outro Bruno do Avec não entra');
+  assert.equal(ex.historicoAvec.bruto, 600);
+  assert.equal(ex.historicoAvec.percentual, 50);
+  assert.equal(ex.historicoAvec.comissao, 300);
+  assert.deepEqual(ex.historicoAvec.nomesAvec, ['Bruno Mendes Pedroso']);
+  assert.equal(ex.totais.aReceber, 0, 'histórico Avec não vira a receber');
+  assert.equal(repasses.extratoProfissional(EMP, outro.id, { inicio: '2026-09-01', fim: '2026-09-30', lojaId: LOJA }).historicoAvec.atendimentos, 0);
+  const vinculos = repasses.vinculosProfissionaisAvec(EMP);
+  assert.equal(vinculos.get('bruno mendes pedroso').profissionalId, c.prof.id);
+  assert.equal(vinculos.has('bruno rafael dos santos'), false, 'dois Brunos no Avec: sem evidência na agenda, não liga pelo nome');
 });
