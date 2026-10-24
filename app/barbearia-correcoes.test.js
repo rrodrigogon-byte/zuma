@@ -37,7 +37,8 @@ test('atendimento da agenda pago em comanda de outro dia não conta duas vezes',
   assert.equal(total.brutoServicos, 50);
 });
 
-test('parte em conta + outro meio não cobra acima do total', () => {
+test('parte em conta + outro meio não cobra acima do total', (t) => {
+  t.mock.method(Date, 'now', () => Date.parse('2026-10-24T17:00:00Z'));
   const { servico } = base();
   const cliente = criarCliente(EMPRESA, { nome: 'Cliente conta', limiteCreditoMensal: 200 });
   const comanda = criarComandaBarbearia(EMPRESA, { lojaId: LOJA, clienteId: cliente.id, clienteNome: cliente.nome, itens: [{ tipo: 'servico', servicoId: servico.id }] });
@@ -45,6 +46,11 @@ test('parte em conta + outro meio não cobra acima do total', () => {
   assert.throws(() => registrarPagamentoComandaBarbearia(EMPRESA, comanda.id, { lojaId: LOJA, confirmado: true, meioPagamento: 'pix', valor: 30, chaveIdempotencia: 'p2' }), /excede o saldo pendente de 20/);
   const fim = registrarPagamentoComandaBarbearia(EMPRESA, comanda.id, { lojaId: LOJA, confirmado: true, meioPagamento: 'pix', valor: 20, chaveIdempotencia: 'p3' });
   assert.equal(fim.status, 'em_conta');
+  assert.equal(fim.pagamentos.length, 2);
+  assert.equal(new Set(fim.pagamentos.map(item => item.id)).size, 2, 'pagamentos no mesmo milissegundo precisam de IDs distintos');
+  const replay = registrarPagamentoComandaBarbearia(EMPRESA, comanda.id, { lojaId: LOJA, confirmado: true, meioPagamento: 'pix', valor: 20, chaveIdempotencia: 'p3' });
+  assert.equal(replay.pagamentos.length, 2, 'retry não pode criar outro pagamento');
+  assert.deepEqual(replay.pagamentos.map(item => item.financeiroLancamentoId), fim.pagamentos.map(item => item.financeiroLancamentoId));
 });
 
 test('dinheiro sem caixa escolhido vai para o caixa aberto da unidade; caixa usa o dia local', () => {
