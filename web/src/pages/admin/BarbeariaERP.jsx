@@ -820,6 +820,23 @@ export default function BarbeariaERP() {
     }, 'Encaixe rápido registrado com sucesso.')
   }
 
+  async function adicionarItemComandaRapido(comandaId, { tipo, id, quantidade = 1, profissionalId }) {
+    await executar(
+      () =>
+        api.post(`/api/admin/barbearia/comandas/${comandaId}/itens`, {
+          itens: [
+            {
+              tipo,
+              [tipo === 'servico' ? 'servicoId' : 'produtoId']: id,
+              quantidade: Number(quantidade || 1),
+              profissionalId,
+            },
+          ],
+        }),
+      'Item adicionado à comanda.'
+    )
+  }
+
   function valorDevidoRecebimento(agendamento) {
     const total = Number(agendamento?.valor || 0)
     const devido = total - Number(saldoCashbackCliente?.sinalPago || 0) - Number(formRecebimento.usarCashback || 0) - (formRecebimento.valeCodigo ? Number(formRecebimento.valeValor || 0) : 0)
@@ -1449,6 +1466,7 @@ export default function BarbeariaERP() {
           agendamentos={agendamentos}
           profissionais={profissionais}
           servicos={servicos}
+          produtosRevenda={produtosRevenda}
           comandas={comandas}
           onStatusChange={mudarStatusAtendimento}
           onOpenAppointment={(item) => setModal({ tipo: 'detalheAgenda', agendamento: item })}
@@ -1460,6 +1478,8 @@ export default function BarbeariaERP() {
           onOpenHistorico={abrirHistoricoCliente}
           onReassignBarber={reatribuirBarbeiroAtendimento}
           onCreateEncaixe={criarEncaixeRapido}
+          onAddItemComanda={adicionarItemComandaRapido}
+          onRefresh={carregar}
           loading={loading}
         />
       </div>

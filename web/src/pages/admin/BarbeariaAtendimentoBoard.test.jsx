@@ -40,7 +40,7 @@ const agendamentosFixture = [
   },
   {
     id: 'ag-3',
-    dataHora: '2026-10-24T11:00:00-04:00',
+    dataHora: '2026-10-24T14:00:00-04:00',
     clienteNome: 'Lucas Oliveira',
     clienteTelefone: '65999990003',
     servicoNome: 'Combo Corte + Barba',
@@ -75,6 +75,11 @@ const servicosFixture = [
   { id: 'srv-1', nome: 'Corte Degradê', preco: 50, duracaoMinutos: 30, ativo: true },
   { id: 'srv-2', nome: 'Barba Terapia', preco: 40, duracaoMinutos: 45, ativo: true },
   { id: 'srv-3', nome: 'Combo Corte + Barba', preco: 85, duracaoMinutos: 60, ativo: true },
+]
+
+const produtosRevendaFixture = [
+  { id: 'prod-1', nome: 'Pomada Efeito Seco', precoVenda: 45, estoqueAtual: 12 },
+  { id: 'prod-2', nome: 'Óleo para Barba', precoVenda: 35, estoqueAtual: 8 },
 ]
 
 const comandasFixture = [
@@ -126,6 +131,7 @@ describe('BarbeariaAtendimentoBoard', () => {
           agendamentos={agendamentosFixture}
           profissionais={profissionaisFixture}
           servicos={servicosFixture}
+          produtosRevenda={produtosRevendaFixture}
           comandas={comandasFixture}
           onStatusChange={vi.fn()}
         />
@@ -155,6 +161,7 @@ describe('BarbeariaAtendimentoBoard', () => {
           agendamentos={agendamentosFixture}
           profissionais={profissionaisFixture}
           servicos={servicosFixture}
+          produtosRevenda={produtosRevendaFixture}
           comandas={comandasFixture}
           onStatusChange={onStatusChange}
         />
@@ -177,6 +184,7 @@ describe('BarbeariaAtendimentoBoard', () => {
           agendamentos={agendamentosFixture}
           profissionais={profissionaisFixture}
           servicos={servicosFixture}
+          produtosRevenda={produtosRevendaFixture}
           comandas={comandasFixture}
         />
       )
@@ -205,6 +213,7 @@ describe('BarbeariaAtendimentoBoard', () => {
           agendamentos={agendamentosFixture}
           profissionais={profissionaisFixture}
           servicos={servicosFixture}
+          produtosRevenda={produtosRevendaFixture}
           comandas={comandasFixture}
         />
       )
@@ -225,7 +234,7 @@ describe('BarbeariaAtendimentoBoard', () => {
     expect(texto).not.toContain('João Silva')
   })
 
-  it('filtra por profissional ao clicar na pílula correspondente', async () => {
+  it('filtra por turno ao clicar na pílula correspondente', async () => {
     await act(async () => {
       renderer = create(
         <BarbeariaAtendimentoBoard
@@ -234,6 +243,7 @@ describe('BarbeariaAtendimentoBoard', () => {
           agendamentos={agendamentosFixture}
           profissionais={profissionaisFixture}
           servicos={servicosFixture}
+          produtosRevenda={produtosRevendaFixture}
           comandas={comandasFixture}
         />
       )
@@ -241,17 +251,17 @@ describe('BarbeariaAtendimentoBoard', () => {
     })
 
     const botoes = renderer.root.findAllByType('button')
-    const pillMarcos = botoes.find((b) => allText(b).includes('Marcos Barbeiro'))
-    expect(pillMarcos).toBeDefined()
+    const btnTarde = botoes.find((b) => allText(b).includes('Tarde'))
+    expect(btnTarde).toBeDefined()
 
     await act(async () => {
-      pillMarcos.props.onClick()
+      btnTarde.props.onClick()
       await tick()
     })
 
     const texto = allText(renderer.toJSON())
-    expect(texto).toContain('Pedro Santos')
-    expect(texto).not.toContain('João Silva')
+    expect(texto).toContain('Lucas Oliveira') // Agendado para as 14h
+    expect(texto).not.toContain('João Silva') // Agendado para as 10h
   })
 
   it('alterna o botão de efeitos sonoros entre ligado e mudo', async () => {
@@ -263,6 +273,7 @@ describe('BarbeariaAtendimentoBoard', () => {
           agendamentos={agendamentosFixture}
           profissionais={profissionaisFixture}
           servicos={servicosFixture}
+          produtosRevenda={produtosRevendaFixture}
           comandas={comandasFixture}
         />
       )
@@ -282,6 +293,36 @@ describe('BarbeariaAtendimentoBoard', () => {
     expect(allText(btnSomMudo)).toContain('Mudo')
   })
 
+  it('chama onRefresh ao clicar no botão Sincronizar', async () => {
+    const onRefresh = vi.fn()
+    await act(async () => {
+      renderer = create(
+        <BarbeariaAtendimentoBoard
+          dataSelecionada="2026-10-24"
+          onDateChange={vi.fn()}
+          agendamentos={agendamentosFixture}
+          profissionais={profissionaisFixture}
+          servicos={servicosFixture}
+          produtosRevenda={produtosRevendaFixture}
+          comandas={comandasFixture}
+          onRefresh={onRefresh}
+        />
+      )
+      await tick()
+    })
+
+    const botoes = renderer.root.findAllByType('button')
+    const btnSync = botoes.find((b) => allText(b).includes('Sincronizar'))
+    expect(btnSync).toBeDefined()
+
+    await act(async () => {
+      btnSync.props.onClick()
+      await tick()
+    })
+
+    expect(onRefresh).toHaveBeenCalledTimes(1)
+  })
+
   it('abre o modal de Encaixe Rápido ao clicar no botão correspondente', async () => {
     const onCreateEncaixe = vi.fn()
     await act(async () => {
@@ -292,6 +333,7 @@ describe('BarbeariaAtendimentoBoard', () => {
           agendamentos={agendamentosFixture}
           profissionais={profissionaisFixture}
           servicos={servicosFixture}
+          produtosRevenda={produtosRevendaFixture}
           comandas={comandasFixture}
           onCreateEncaixe={onCreateEncaixe}
         />
