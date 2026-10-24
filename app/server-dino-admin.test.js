@@ -178,6 +178,13 @@ test('admin da empresa: isolamento, guardas legados, BI, cliente automático e W
     const staffFin = await request(base, '/api/admin/barbearia/financeiro/lancamentos', { headers: staffA });
     assert.equal(staffFin.response.status, 403, 'barbeiro não vê o financeiro');
 
+    // Liquidação em lote
+    const pend1 = await request(base, '/api/admin/barbearia/financeiro/lancamentos', { method: 'POST', headers: A, body: JSON.stringify({ tipo: 'despesa', descricao: 'Despesa Lote 1', valor: 100, vencimento: '2026-10-01' }) });
+    const pend2 = await request(base, '/api/admin/barbearia/financeiro/lancamentos', { method: 'POST', headers: A, body: JSON.stringify({ tipo: 'despesa', descricao: 'Despesa Lote 2', valor: 200, vencimento: '2026-10-02' }) });
+    const lote = await request(base, '/api/admin/barbearia/financeiro/lancamentos/liquidar-lote', { method: 'POST', headers: A, body: JSON.stringify({ ids: [pend1.body.id, pend2.body.id] }) });
+    assert.equal(lote.response.status, 200);
+    assert.equal(lote.body.liquidados, 2);
+
     // ── Despesa recorrente: 12 parcelas mensais, série encerrável ──
     const serie = await request(base, '/api/admin/barbearia/financeiro/lancamentos', { method: 'POST', headers: A, body: JSON.stringify({ tipo: 'despesa', categoria: 'Internet e telefone', descricao: 'Internet', valor: 150, vencimento: '2026-01-31', status: 'pago', recorrencia: { meses: 12 } }) });
     assert.equal(serie.response.status, 201);
