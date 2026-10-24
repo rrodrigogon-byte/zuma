@@ -1357,16 +1357,20 @@ export function ocupacaoAgenda(empresaId, { inicio, fim, lojaId = '' } = {}) {
   };
 }
 
-export function salvarMetaProfissional(empresaId, { profissionalId, mes, receita, atendimentos } = {}) {
+export function salvarMetaProfissional(empresaId, { profissionalId, mes, receita, atendimentos, planoAcao, diagnostico, tendenciaObservada } = {}) {
   const estado = captacao(empresaId);
   const id = texto(profissionalId, 100);
   const competencia = texto(mes, 7);
   if (!barbearia.listarProfissionais(empresaId, { incluirInativos: true }).some((item) => item.id === id)) throw new CaptacaoError('Profissional não encontrado.', 'PROFISSIONAL_NAO_ENCONTRADO', 404);
   if (!/^\d{4}-\d{2}$/.test(competencia)) throw new CaptacaoError('Mês inválido (use AAAA-MM).', 'MES_INVALIDO');
   estado.metasProfissionais[competencia] ||= {};
+  const anterior = estado.metasProfissionais[competencia][id] || {};
   estado.metasProfissionais[competencia][id] = {
-    receita: dinheiro(receita),
-    atendimentos: Math.max(0, Math.round(numero(atendimentos))),
+    receita: receita !== undefined && receita !== null && receita !== '' ? dinheiro(receita) : (anterior.receita || 0),
+    atendimentos: atendimentos !== undefined && atendimentos !== null && atendimentos !== '' ? Math.max(0, Math.round(numero(atendimentos))) : (anterior.atendimentos || 0),
+    planoAcao: planoAcao !== undefined ? texto(planoAcao, 4000) : (anterior.planoAcao || ''),
+    diagnostico: diagnostico !== undefined ? texto(diagnostico, 2000) : (anterior.diagnostico || ''),
+    tendenciaObservada: tendenciaObservada !== undefined ? texto(tendenciaObservada, 50) : (anterior.tendenciaObservada || ''),
     atualizadoEm: new Date().toISOString(),
   };
   save();
@@ -1814,7 +1818,14 @@ function previsaoProfissionais(empresaId, competencia, fatos, historico, lojaId 
       profissionalId: profissional.id,
       nome: profissional.nome,
       ativo: profissional.ativo !== false,
-      meta: meta ? { receita: Number(meta.receita || 0), atendimentos: Number(meta.atendimentos || 0) } : null,
+      meta: meta ? {
+        receita: Number(meta.receita || 0),
+        atendimentos: Number(meta.atendimentos || 0),
+        planoAcao: meta.planoAcao || '',
+        diagnostico: meta.diagnostico || '',
+        tendenciaObservada: meta.tendenciaObservada || '',
+        atualizadoEm: meta.atualizadoEm || null,
+      } : null,
       realizado,
       agendaFutura,
       projecao,
@@ -1947,6 +1958,178 @@ export function projecaoFaturamento(empresaId, { mes, lojaId = '', horizonte = 6
     ...leituras,
   };
 }
+
+export function analisarProfissionalProjecao(empresaId, profissionalId, { mes, lojaId = '' } = {}, opcoes = {}) {
+  const projecao = projecaoFaturamento(empresaId, { mes, lojaId }, opcoes);
+  const id = texto(profissionalId, 100);
+  const profissional = (projecao.profissionais || []).find((p) => p.profissionalId === id);
+  if (!profissional) {
+    throw new CaptacaoError('Profissional não encontrado na competência.', 'PROFISSIONAL_NAO_ENCONTRADO', 404);
+  }
+  const competencia = projecao.mes;
+  const metas = captacao(empresaId).metasProfissionais?.[competencia] || {};
+  const metaAtual = metas[id] || null;
+
+  const nome = profissional.nome;
+  const tendencia = profissional.tendencia || 'estavel';
+  const realizado = profissional.realizado || 0;
+  const agenda = profissional.agendaFutura || 0;
+  const valorProjecao = profissional.projecao || 0;
+  const ticket = profissional.ticketMedio || 0;
+  const ocupacao = profissional.ocupacao;
+  const concluidos = profissional.atendimentosConcluidos || 0;
+  const agendados = profissional.atendimentosAgendados || 0;
+  const metaReceitaAtual = profissional.meta?.receita || null;
+  const metaAtendimentosAtual = profissional.meta?.atendimentos || null;
+
+  const motivos = [];
+  if (tendencia === 'queda') {
+    if (agenda === 0) {
+      motivos.push({
+        fator: 'Agenda futura sem reservas',
+        detalhe: `${nome} não possui atendimentos futuros agendados nesta competência (R$ 0,00 agendado), fazendo a projeção depender exclusivamente da produção já realizada sem tração de novas reservas.`
+      });
+    }
+    if (ocupacao !== null && ocupacao !== undefined && ocupacao < 0.25) {
+      motivos.push({
+        fator: 'Baixa ocupação da capacidade',
+        detalhe: `Taxa de ocupação calculada em apenas ${(ocupacao * 100).toFixed(1)}%. A cadeira possui ampla capacidade ociosa de horários úteis que não foram aproveitados.`
+      });
+    }
+    if (ticket > 0 && ticket < 65) {
+      motivos.push({
+        fator: 'Ticket médio abaixo do potencial',
+        detalhe: `O ticket médio atual de R$ ${ticket.toFixed(2).replace('.', ',')} indica concentração em serviços de menor valor unitário, com baixa agregação de combos ou serviços adicionais (barba terapia, sobrancelha, tratamentos).`
+      });
+    }
+    if (concluidos > 0 && agenda === 0) {
+      motivos.push({
+        fator: 'Falta de pré-agendamento de retorno',
+        detalhe: `Os clientes atendidos (${concluidos} concluídos) não saíram com o retorno já agendado no balcão, interrompendo o ciclo de faturamento recorrente.`
+      });
+    }
+  } else if (tendencia === 'crescimento') {
+    if (agenda > 0) {
+      motivos.push({
+        fator: 'Forte carteira de reservas futuras',
+        detalhe: `${nome} já conta com R$ ${agenda.toFixed(2).replace('.', ',')} (${agendados} atendimentos) garantidos na agenda futura, impulsionando a projeção para R$ ${valorProjecao.toFixed(2).replace('.', ',')}.`
+      });
+    }
+    if (ticket >= 65) {
+      motivos.push({
+        fator: 'Ticket médio elevado e saudável',
+        detalhe: `Ticket médio de R$ ${ticket.toFixed(2).replace('.', ',')} por atendimento, refletindo excelente mix de serviços e valor agregado por cliente.`
+      });
+    }
+    if (ocupacao !== null && ocupacao !== undefined && ocupacao >= 0.25) {
+      motivos.push({
+        fator: 'Boa taxa de ocupação da cadeira',
+        detalhe: `Ocupação de ${(ocupacao * 100).toFixed(1)}% da capacidade produtiva, demonstrando alta procura e fidelização da carteira.`
+      });
+    }
+  } else {
+    motivos.push({
+      fator: 'Produção linear e previsível',
+      detalhe: `Produção em ritmo regular de atendimentos, com ticket de R$ ${ticket.toFixed(2).replace('.', ',')} e ocupação de ${((ocupacao || 0) * 100).toFixed(1)}%.`
+    });
+    motivos.push({
+      fator: 'Potencial reprimido de expansão',
+      detalhe: `Existe espaço livre na agenda para aumentar o volume de atendimentos e trabalhar cross-selling de produtos e serviços para acelerar.`
+    });
+  }
+
+  const ticketAlvo = ticket > 0 ? Math.max(70, Number((ticket * 1.15).toFixed(2))) : 75;
+  const atendAlvo = Math.max(concluidos + agendados + 15, 40);
+  let receitaAlvo = Number((atendAlvo * ticketAlvo).toFixed(2));
+  if (metaReceitaAtual && metaReceitaAtual > receitaAlvo) {
+    receitaAlvo = metaReceitaAtual;
+  }
+
+  const alavancas = [
+    {
+      titulo: '1. Reativação ativa de clientes da carteira',
+      acao: `Disparar contato via WhatsApp para clientes atendidos por ${nome} há mais de 25 dias que ainda não retornaram, oferecendo horários exclusivos de preferência.`,
+      impacto: '+10 a 15 atendimentos extras no mês.'
+    },
+    {
+      titulo: '2. Elevação do ticket médio (Cross-sell de combos)',
+      acao: `Oferecer ativamente serviços complementares (barba terapia, selagem capilar, hidratação ou sobrancelha) e pomadas/produtos de finalização. Meta de ticket de R$ ${ticketAlvo.toFixed(2).replace('.', ',')}.`,
+      impacto: `Aumento de R$ ${(ticketAlvo - ticket).toFixed(2).replace('.', ',')} por cliente atendido.`
+    },
+    {
+      titulo: '3. Travamento do próximo retorno no balcão',
+      acao: 'Orientar o profissional a fechar cada atendimento já agendando a volta do cliente para 15 a 21 dias antes da saída da barbearia.',
+      impacto: 'Garante estabilidade e previsibilidade de agenda nas semanas seguintes.'
+    },
+    {
+      titulo: '4. Preenchimento de horários nobres e dias ociosos',
+      acao: 'Estimular o agendamento de clientes nos horários de menor movimento (terça e quarta à tarde) para liberar finais de semana para serviços mais longos e rentáveis.',
+      impacto: 'Aumento direto da taxa de ocupação da cadeira.'
+    }
+  ];
+
+  const textoPlanoSugerido = `PLANO DE AÇÃO DE CRESCIMENTO — ${nome.toUpperCase()} (${competencia})
+Meta de Receita: R$ ${receitaAlvo.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} | Meta de Atendimentos: ${atendAlvo} | Ticket Médio Alvo: R$ ${ticketAlvo.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+
+1. FOCO PRINCIPAL:
+- ${tendencia === 'queda' ? 'Reverter queda de produção alavancando agenda futura e ticket médio.' : tendencia === 'crescimento' ? 'Manter ritmo de crescimento e consolidar retenção e upsell.' : 'Acelerar ocupação e aumentar o ticket médio por cliente.'}
+
+2. AÇÕES PRÁTICAS DO PROFISSIONAL:
+- Pré-agendar o retorno de 100% dos clientes atendidos antes da finalização da comanda.
+- Ofertar combo complementar (cabelo + barba terapia / sobrancelha) em pelo menos 1 de cada 3 atendimentos para bater o ticket alvo de R$ ${ticketAlvo.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}.
+- Reativar 5 clientes sumidos da carteira por semana via WhatsApp.
+
+3. ROTINA E HORÁRIOS:
+- Preencher horários ociosos entre terça e quinta-feira para elevar a taxa de ocupação.
+- Oferecer produtos de acabamento (pomada modeladora / óleo para barba) no pós-atendimento.
+
+4. ACOMPANHAMENTO:
+- Revisão semanal de metas toda segunda-feira com o gestor da unidade.`;
+
+  return {
+    profissionalId: id,
+    nome,
+    mes: competencia,
+    tendencia,
+    metricas: {
+      realizado,
+      agendaFutura: agenda,
+      projecao: valorProjecao,
+      ticketMedio: ticket,
+      ocupacao,
+      atendimentosConcluidos: concluidos,
+      atendimentosAgendados: agendados,
+      capacidadeMinutos: profissional.capacidadeMinutos,
+      minutosAgendados: profissional.minutosAgendados,
+      diferencaMeta: profissional.diferencaMeta,
+      noRitmo: profissional.noRitmo,
+    },
+    metaAtual: {
+      receita: metaReceitaAtual,
+      atendimentos: metaAtendimentosAtual,
+      planoAcao: metaAtual?.planoAcao || '',
+      diagnostico: metaAtual?.diagnostico || '',
+      tendenciaObservada: metaAtual?.tendenciaObservada || '',
+      atualizadoEm: metaAtual?.atualizadoEm || null,
+    },
+    diagnostico: {
+      titulo: tendencia === 'queda' ? `Diagnóstico de Desempenho: Tendência de Queda (${nome})` : tendencia === 'crescimento' ? `Diagnóstico de Desempenho: Tendência de Crescimento (${nome})` : `Diagnóstico de Desempenho: Ritmo Estável (${nome})`,
+      tendencia,
+      motivos,
+    },
+    planoAcao: {
+      titulo: `Plano de Ação Sugerido para Crescimento — ${nome}`,
+      alavancas,
+      metasSugeridas: {
+        receita: receitaAlvo,
+        atendimentos: atendAlvo,
+        ticketMedio: ticketAlvo,
+      },
+      textoPlanoSugerido,
+    },
+  };
+}
+
 
 // ---------------------------------------------------------------------------
 // IA QUE VENDE (onda 2): dados que a atendente do WhatsApp pode usar, sempre

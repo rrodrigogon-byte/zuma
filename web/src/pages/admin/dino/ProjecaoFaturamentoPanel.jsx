@@ -9,6 +9,7 @@ const value = { fontSize: 25, fontWeight: 800, marginTop: 6, fontFamily: 'var(--
 const title = { margin: 0, fontSize: 18, fontFamily: 'var(--font-display)' }
 const sub = { margin: '4px 0 0', color: 'var(--muted)', fontSize: 13, lineHeight: 1.45 }
 const button = { padding: '8px 12px', borderRadius: 9, border: '1px solid var(--line)', background: 'transparent', color: 'var(--fg)', cursor: 'pointer', font: 'inherit', fontSize: 12, fontWeight: 700 }
+const buttonPrimary = { ...button, background: 'var(--accent, #b0892e)', color: '#fff', border: '1px solid var(--accent, #b0892e)' }
 const table = { width: '100%', borderCollapse: 'collapse', fontSize: 13 }
 const th = { textAlign: 'left', padding: '9px 10px', color: 'var(--muted)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '.05em', borderBottom: '1px solid var(--line)' }
 const td = { padding: '10px', borderBottom: '1px solid var(--line)', verticalAlign: 'top' }
@@ -34,6 +35,7 @@ function Pill({ children, severidade = 'informativo' }) {
   const cor = tom(severidade)
   return <span style={{ display: 'inline-block', padding: '3px 9px', borderRadius: 20, border: `1px solid ${cor}`, color: cor, fontSize: 11, fontWeight: 800 }}>{children}</span>
 }
+
 function GraficoPrevisao({ itens = [] }) {
   const pontos = useMemo(() => {
     const dados = itens.filter((item) => Number.isFinite(Number(item.projecao)))
@@ -50,7 +52,9 @@ function GraficoPrevisao({ itens = [] }) {
   const faixa = `${linha('favoravel')} ${[...pontos.dados].reverse().map((item, indice) => `${pontos.x(pontos.dados.length - indice - 1)},${pontos.y(item.conservador)}`).join(' ')}`
   return <div style={{ overflowX: 'auto' }}>
     <svg viewBox={`0 0 ${pontos.largura} ${pontos.altura}`} role="img" aria-label="Cenários de faturamento para os próximos meses" style={{ minWidth: 560, width: '100%', display: 'block' }}>
-      {[0, 0.5, 1].map((fracao) => <g key={fracao}><line x1={pontos.lateral} x2={pontos.largura - pontos.lateral} y1={pontos.superior + (pontos.altura - pontos.superior - pontos.inferior) * fracao} y2={pontos.superior + (pontos.altura - pontos.superior - pontos.inferior) * fracao} stroke="var(--line)" strokeWidth="1" /><text x="2" y={pontos.superior + (pontos.altura - pontos.superior - pontos.inferior) * fracao + 4} fill="var(--muted)" fontSize="10">{fmtR(pontos.maximo * (1 - fracao))}</text></g>)}
+      <line x1={pontos.lateral} y1={pontos.superior} x2={pontos.largura - pontos.lateral} y2={pontos.superior} stroke="var(--line)" strokeDasharray="3 3" />
+      <line x1={pontos.lateral} y1={pontos.altura - pontos.inferior} x2={pontos.largura - pontos.lateral} y2={pontos.altura - pontos.inferior} stroke="var(--line)" />
+      {[0.25, 0.5, 0.75].map((fracao) => <g key={fracao}><line x1={pontos.lateral} y1={pontos.superior + (pontos.altura - pontos.superior - pontos.inferior) * fracao} x2={pontos.largura - pontos.lateral} y2={pontos.superior + (pontos.altura - pontos.superior - pontos.inferior) * fracao} stroke="var(--line)" strokeOpacity="0.4" strokeDasharray="2 3" /><text x={pontos.lateral - 6} y={pontos.superior + (pontos.altura - pontos.superior - pontos.inferior) * fracao + 4} textAnchor="end" fill="var(--muted)" fontSize="10">{Math.round((pontos.maximo * (1 - fracao)) / 1000)}k</text></g>)}
       <polygon points={faixa} fill="rgba(74, 158, 255, .12)" />
       <polyline points={linha('conservador')} fill="none" stroke="#f59e0b" strokeWidth="2" strokeDasharray="5 4" />
       <polyline points={linha('favoravel')} fill="none" stroke="#14b87a" strokeWidth="2" strokeDasharray="5 4" />
@@ -62,25 +66,25 @@ function GraficoPrevisao({ itens = [] }) {
 }
 
 function variacaoPct(atual, anterior) {
-  if (!(Number(anterior) > 0)) return null
-  return (Number(atual) - Number(anterior)) / Number(anterior)
+  if (!anterior || !atual) return null
+  return Number(((atual - anterior) / anterior).toFixed(4))
 }
-function HistoricoMensal({ itens = [], resumo = {} }) {
+
+function SerieHistorica({ itens = [], resumo = {} }) {
   const [verTabela, setVerTabela] = useState(false)
-  const maximo = Math.max(1, ...itens.map((item) => Number(item.realizado || 0)))
+  const ultimos = useMemo(() => [...itens].reverse().slice(0, 18), [itens])
+  const maximo = useMemo(() => Math.max(1, ...itens.map((item) => Number(item.realizado || 0))), [itens])
   if (!itens.length) return null
-  const ultimos = [...itens].reverse()
   return <section style={card}>
-    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', alignItems: 'baseline' }}>
-      <div><h2 style={title}>Faturamento realizado mês a mês</h2><p style={sub}>Desde {mesBR(resumo.primeiroMes)}: recebimentos do histórico Avec até {resumo.ultimoDiaAvec ? resumo.ultimoDiaAvec.split('-').reverse().join('/') : 'a virada'} e, depois, serviços e revenda registrados no Kytto. Tudo na Dino Matriz.</p></div>
-      <button type="button" style={button} onClick={() => setVerTabela((valor) => !valor)}>{verTabela ? 'Ver gráfico' : 'Ver tabela'}</button>
+    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'baseline', flexWrap: 'wrap' }}>
+      <div><h2 style={title}>Histórico de faturamento</h2><p style={sub}>Série real registrada desde o primeiro mês, somando o histórico Avec e o realizado no Kytto.</p></div>
+      <button type="button" style={button} onClick={() => setVerTabela((v) => !v)}>{verTabela ? 'Ver gráfico' : 'Ver tabela completa'}</button>
     </div>
-    <div style={{ ...grid(160), marginTop: 14 }}>
-      <div style={kpi}><div style={label}>Total realizado</div><div style={{ ...value, fontSize: 21 }}>{fmtR(resumo.totalRealizado)}</div><small style={{ color: 'var(--muted)' }}>{resumo.meses || 0} mês(es)</small></div>
-      <div style={kpi}><div style={label}>Histórico Avec</div><div style={{ ...value, fontSize: 21 }}>{fmtR(resumo.totalAvec)}</div><small style={{ color: 'var(--muted)' }}>recebimentos importados</small></div>
-      <div style={kpi}><div style={label}>Registrado no Kytto</div><div style={{ ...value, fontSize: 21 }}>{fmtR(resumo.totalKytto)}</div><small style={{ color: 'var(--muted)' }}>serviços e revenda</small></div>
-      <div style={kpi}><div style={label}>Média mensal</div><div style={{ ...value, fontSize: 21 }}>{fmtR(resumo.mediaMensal)}</div><small style={{ color: 'var(--muted)' }}>meses fechados</small></div>
-      <div style={kpi}><div style={label}>Melhor mês</div><div style={{ ...value, fontSize: 21 }}>{resumo.melhorMes ? fmtR(resumo.melhorMes.realizado) : '—'}</div><small style={{ color: 'var(--muted)' }}>{resumo.melhorMes ? mesBR(resumo.melhorMes.mes) : ''}</small></div>
+    <div style={{ ...grid(190), marginTop: 14 }}>
+      <div style={kpi}><div style={label}>Meses registrados</div><div style={value}>{resumo.meses || itens.length}</div><small style={{ color: 'var(--muted)' }}>Desde {resumo.primeiroMes ? mesBR(resumo.primeiroMes) : '—'}</small></div>
+      <div style={kpi}><div style={label}>Média dos meses fechados</div><div style={value}>{fmtR(resumo.mediaMensal)}</div><small style={{ color: 'var(--muted)' }}>Exclui mês em curso</small></div>
+      <div style={kpi}><div style={label}>Total faturado no histórico</div><div style={value}>{fmtR(resumo.totalRealizado)}</div><small style={{ color: 'var(--muted)' }}>Avec {fmtR(resumo.totalAvec)} · Kytto {fmtR(resumo.totalKytto)}</small></div>
+      <div style={kpi}><div style={label}>Melhor mês</div><div style={value}>{resumo.melhorMes ? fmtR(resumo.melhorMes.realizado) : '—'}</div><small style={{ color: 'var(--muted)' }}>{resumo.melhorMes ? mesBR(resumo.melhorMes.mes) : ''}</small></div>
     </div>
     {!verTabela ? <div style={{ overflowX: 'auto', marginTop: 16 }}>
       <div role="img" aria-label="Faturamento realizado por mês" style={{ display: 'flex', alignItems: 'flex-end', gap: 6, minWidth: Math.max(520, itens.length * 46), height: 220, padding: '0 4px' }}>
@@ -128,6 +132,192 @@ function AnaliseIa({ inteligencia, alertas, onAtualizar, onReconhecer, fatores, 
   </section>
 }
 
+function ModalAnaliseProfissional({ profissional, mes, onClose, onSalvo }) {
+  const [carregando, setCarregando] = useState(true)
+  const [erro, setErro] = useState('')
+  const [dados, setDados] = useState(null)
+  const [form, setForm] = useState({ receita: '', atendimentos: '', planoAcao: '' })
+  const [salvando, setSalvando] = useState(false)
+  const [sucesso, setSucesso] = useState('')
+
+  useEffect(() => {
+    let ativo = true
+    setCarregando(true); setErro(''); setSucesso('')
+    api.get(`/api/admin/barbearia/captacao/profissionais/${encodeURIComponent(profissional.profissionalId)}/analise-projecao?mes=${encodeURIComponent(mes)}`)
+      .then((res) => {
+        if (!ativo) return
+        setDados(res)
+        const rec = res.metaAtual?.receita ?? profissional.meta?.receita ?? res.planoAcao?.metasSugeridas?.receita ?? ''
+        const atend = res.metaAtual?.atendimentos ?? profissional.meta?.atendimentos ?? res.planoAcao?.metasSugeridas?.atendimentos ?? ''
+        const plano = res.metaAtual?.planoAcao || res.planoAcao?.textoPlanoSugerido || ''
+        setForm({ receita: rec, atendimentos: atend, planoAcao: plano })
+      })
+      .catch((err) => { if (ativo) setErro(err.message || 'Erro ao carregar diagnóstico.') })
+      .finally(() => { if (ativo) setCarregando(false) })
+    return () => { ativo = false }
+  }, [profissional.profissionalId, mes, profissional.meta])
+
+  const usarSugestao = () => {
+    if (dados?.planoAcao?.textoPlanoSugerido) {
+      setForm((prev) => ({
+        ...prev,
+        planoAcao: dados.planoAcao.textoPlanoSugerido,
+        receita: dados.planoAcao.metasSugeridas?.receita || prev.receita,
+        atendimentos: dados.planoAcao.metasSugeridas?.atendimentos || prev.atendimentos,
+      }))
+    }
+  }
+
+  const salvar = async () => {
+    setSalvando(true); setErro(''); setSucesso('')
+    try {
+      await api.put('/api/admin/barbearia/captacao/metas-profissionais', {
+        profissionalId: profissional.profissionalId,
+        mes,
+        receita: form.receita,
+        atendimentos: form.atendimentos,
+        planoAcao: form.planoAcao,
+        diagnostico: dados?.diagnostico?.titulo || '',
+        tendenciaObservada: profissional.tendencia || '',
+      })
+      setSucesso('Metas e plano de ação salvos com sucesso!')
+      onSalvo?.()
+    } catch (err) {
+      setErro(err.message || 'Erro ao salvar metas.')
+    } finally {
+      setSalvando(false)
+    }
+  }
+
+  const m = dados?.metricas || profissional
+  const corTendencia = profissional.tendencia === 'crescimento' ? '#14b87a' : profissional.tendencia === 'queda' ? '#f59e0b' : '#4a9eff'
+
+  return <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(3px)', zIndex: 1200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+    <div style={{ background: 'var(--card)', border: '1px solid var(--line)', borderRadius: 16, width: '100%', maxWidth: 780, maxHeight: '92vh', overflowY: 'auto', padding: '24px 26px', display: 'flex', flexDirection: 'column', gap: 18, boxShadow: '0 20px 45px rgba(0,0,0,0.45)' }} role="dialog" aria-modal="true" aria-labelledby="modal-prof-title">
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, borderBottom: '1px solid var(--line)', paddingBottom: 14 }}>
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <h2 id="modal-prof-title" style={{ ...title, fontSize: 20 }}>Análise de IA & Plano de Ação: {profissional.nome}</h2>
+            <Pill severidade={profissional.tendencia === 'crescimento' ? 'positivo' : profissional.tendencia === 'queda' ? 'alerta' : 'informativo'}>
+              Tendência {profissional.tendencia}
+            </Pill>
+            {profissional.meta?.receita ? <Pill severidade={profissional.noRitmo ? 'positivo' : 'alerta'}>{profissional.noRitmo ? 'No ritmo' : 'Acelerar'}</Pill> : <small style={{ color: 'var(--muted)' }}>Sem meta definida</small>}
+          </div>
+          <p style={sub}>Competência {mesBR(mes)} · Diagnóstico analítico de produção, tendências e plano de crescimento.</p>
+        </div>
+        <button type="button" onClick={onClose} style={{ background: 'transparent', border: 'none', color: 'var(--muted)', fontSize: 22, cursor: 'pointer', lineHeight: 1, padding: 4 }} title="Fechar">✕</button>
+      </div>
+
+      <div style={grid(150)}>
+        <div style={kpi}><div style={label}>Realizado</div><div style={{ ...value, fontSize: 20 }}>{fmtR(m.realizado)}</div><small style={{ color: 'var(--muted)' }}>{m.atendimentosConcluidos || 0} concluídos</small></div>
+        <div style={kpi}><div style={label}>Agenda futura</div><div style={{ ...value, fontSize: 20 }}>{fmtR(m.agendaFutura)}</div><small style={{ color: 'var(--muted)' }}>{m.atendimentosAgendados || 0} agendados</small></div>
+        <div style={kpi}><div style={label}>Projeção final</div><div style={{ ...value, fontSize: 20, color: 'var(--accent)' }}>{fmtR(m.projecao)}</div><small style={{ color: 'var(--muted)' }}>Estimativa do mês</small></div>
+        <div style={kpi}><div style={label}>Meta cadastrada</div><div style={{ ...value, fontSize: 20 }}>{form.receita ? fmtR(form.receita) : '—'}</div><small style={{ color: 'var(--muted)' }}>{form.atendimentos ? `${form.atendimentos} atendimentos` : 'Sem meta de qtd'}</small></div>
+        <div style={kpi}><div style={label}>Ticket médio</div><div style={{ ...value, fontSize: 20 }}>{m.ticketMedio ? fmtR(m.ticketMedio) : '—'}</div><small style={{ color: 'var(--muted)' }}>Por atendimento</small></div>
+        <div style={kpi}><div style={label}>Taxa de ocupação</div><div style={{ ...value, fontSize: 20 }}>{porcentagem(m.ocupacao)}</div><small style={{ color: 'var(--muted)' }}>{horas(m.minutosAgendados)} de {horas(m.capacidadeMinutos)}</small></div>
+      </div>
+
+      {carregando ? <div style={{ padding: 24, textAlign: 'center', color: 'var(--muted)' }}>Gerando diagnóstico inteligente e recomendações com IA…</div> : erro && !dados ? <div style={{ color: '#e05c5c', padding: 12 }}>{erro}</div> : <>
+        <div style={{ background: 'var(--card2, var(--card))', border: '1px solid var(--line)', borderLeft: `4px solid ${corTendencia}`, borderRadius: 12, padding: '16px 18px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 16 }}>🔍</span>
+            <strong style={{ fontSize: 15 }}>{dados?.diagnostico?.titulo || 'Diagnóstico da Tendência'}</strong>
+          </div>
+          <p style={{ ...sub, marginTop: 4 }}>Por que os números mostram essa tendência de faturamento:</p>
+          <div style={{ display: 'grid', gap: 10, marginTop: 12 }}>
+            {(dados?.diagnostico?.motivos || []).map((motivo, idx) => <div key={idx} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <span style={{ fontWeight: 700, fontSize: 13, color: 'var(--fg)' }}>• {motivo.fator}:</span>
+              <span style={{ fontSize: 13, color: 'var(--muted)', lineHeight: 1.45, paddingLeft: 12 }}>{motivo.detalhe}</span>
+            </div>)}
+          </div>
+        </div>
+
+        <div style={{ border: '1px solid var(--line)', borderRadius: 12, padding: '16px 18px', background: 'var(--card)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 16 }}>🚀</span>
+                <strong style={{ fontSize: 15 }}>Sugestão de Plano de Ação para Crescimento</strong>
+              </div>
+              <p style={{ ...sub, marginTop: 4 }}>Alavancas práticas para o profissional bater e superar a meta na competência.</p>
+            </div>
+            <button type="button" style={{ ...button, fontSize: 11, padding: '6px 10px', background: 'var(--card2)' }} onClick={usarSugestao} title="Preenche os campos abaixo com a sugestão completa da IA">
+              Copiar sugestão para o plano ↵
+            </button>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 12, marginTop: 14 }}>
+            {(dados?.planoAcao?.alavancas || []).map((alavanca, idx) => <div key={idx} style={{ border: '1px solid var(--line)', borderRadius: 10, padding: 12, background: 'var(--card2)' }}>
+              <strong style={{ display: 'block', fontSize: 13, color: 'var(--accent, #b0892e)' }}>{alavanca.titulo}</strong>
+              <p style={{ margin: '6px 0 0', fontSize: 12, color: 'var(--fg)', lineHeight: 1.45 }}>{alavanca.acao}</p>
+              <div style={{ marginTop: 8, fontSize: 11, color: '#14b87a', fontWeight: 700 }}>Impacto: {alavanca.impacto}</div>
+            </div>)}
+          </div>
+        </div>
+
+        <div style={{ border: '1px solid var(--line)', borderRadius: 12, padding: '16px 18px', background: 'var(--card2)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', flexWrap: 'wrap', gap: 8 }}>
+            <div>
+              <strong style={{ fontSize: 15 }}>Ajustar e Complementar Plano de Ação</strong>
+              <p style={{ ...sub, marginTop: 3 }}>Liberado para o gestor ajustar metas, detalhar compromissos e complementar o plano acordado com o profissional.</p>
+            </div>
+            <small style={{ color: 'var(--muted)' }}>Será salvo diretamente nas metas do profissional</small>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginTop: 14 }}>
+            <label style={{ display: 'grid', gap: 6, fontSize: 12, fontWeight: 700, color: 'var(--fg)' }}>
+              Meta de receita do mês (R$):
+              <input
+                type="number"
+                min="0"
+                step="50"
+                style={{ padding: '8px 10px', borderRadius: 8, border: '1px solid var(--line)', background: 'var(--card)', color: 'var(--fg)', font: 'inherit', fontSize: 14 }}
+                value={form.receita}
+                onChange={(e) => setForm({ ...form, receita: e.target.value })}
+                placeholder="Ex: 6000"
+              />
+            </label>
+            <label style={{ display: 'grid', gap: 6, fontSize: 12, fontWeight: 700, color: 'var(--fg)' }}>
+              Meta de atendimentos do mês:
+              <input
+                type="number"
+                min="0"
+                step="1"
+                style={{ padding: '8px 10px', borderRadius: 8, border: '1px solid var(--line)', background: 'var(--card)', color: 'var(--fg)', font: 'inherit', fontSize: 14 }}
+                value={form.atendimentos}
+                onChange={(e) => setForm({ ...form, atendimentos: e.target.value })}
+                placeholder="Ex: 85"
+              />
+            </label>
+          </div>
+
+          <label style={{ display: 'grid', gap: 6, fontSize: 12, fontWeight: 700, color: 'var(--fg)', marginTop: 14 }}>
+            Detalhamento do plano de ação acordado:
+            <textarea
+              rows={8}
+              style={{ padding: 12, borderRadius: 8, border: '1px solid var(--line)', background: 'var(--card)', color: 'var(--fg)', font: 'inherit', fontSize: 13, lineHeight: 1.5, resize: 'vertical' }}
+              value={form.planoAcao}
+              onChange={(e) => setForm({ ...form, planoAcao: e.target.value })}
+              placeholder="Digite ou ajuste as ações acordadas com o profissional..."
+            />
+          </label>
+        </div>
+      </>}
+
+      {sucesso && <div style={{ color: '#14b87a', fontWeight: 700, fontSize: 13, padding: '4px 0' }}>✓ {sucesso}</div>}
+      {erro && <div style={{ color: '#e05c5c', fontWeight: 700, fontSize: 13, padding: '4px 0' }}>✕ {erro}</div>}
+
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 4, paddingTop: 12, borderTop: '1px solid var(--line)' }}>
+        <button type="button" style={button} onClick={onClose}>Fechar</button>
+        <button type="button" style={button} onClick={usarSugestao} disabled={carregando || salvando}>Restaurar sugestão da IA</button>
+        <button type="button" style={buttonPrimary} onClick={salvar} disabled={salvando || carregando}>
+          {salvando ? 'Salvando…' : 'Salvar em Metas do Profissional'}
+        </button>
+      </div>
+    </div>
+  </div>
+}
+
 export default function ProjecaoFaturamentoPanel({ onOpenTab }) {
   const [mes, setMes] = useState(mesAtual)
   const [dados, setDados] = useState(null)
@@ -137,6 +327,8 @@ export default function ProjecaoFaturamentoPanel({ onOpenTab }) {
   const [fatores, setFatores] = useState({ atendimentos: 1, ticket: 1, revenda: 1, ocupacao: 1 })
   const [erro, setErro] = useState('')
   const [carregando, setCarregando] = useState(true)
+  const [profissionalModal, setProfissionalModal] = useState(null)
+
   const carregar = useCallback(async (signal, forcar = false) => {
     setCarregando(true); setErro('')
     try {
@@ -158,14 +350,179 @@ export default function ProjecaoFaturamentoPanel({ onOpenTab }) {
   const atual = dados?.atual || {}
   const qualidade = dados?.qualidade || {}
   const profissionais = (dados?.profissionais || []).filter((item) => item.ativo || item.realizado || item.agendaFutura || item.meta)
-  const corMeta = atual.noRitmo === true ? '#14b87a' : atual.noRitmo === false ? '#f59e0b' : 'var(--fg)'
+
   return <div style={{ display: 'grid', gap: 16 }}>
-    <section style={card}><div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 16, flexWrap: 'wrap' }}><div><h2 style={title}>Projeção inteligente de faturamento</h2><p style={sub}>Leitura explicável do histórico Avec, serviços concluídos, revenda paga, agenda futura e sazonalidade. A previsão é apoio à decisão; não é garantia de faturamento.</p></div><div style={{ display: 'flex', gap: 8, alignItems: 'end', flexWrap: 'wrap' }}><label style={{ display: 'grid', gap: 4, color: 'var(--muted)', fontSize: 12 }}>Competência<input type="month" value={mes} onChange={(event) => setMes(event.target.value)} style={{ ...button, padding: '8px 10px' }} /></label><button type="button" style={button} onClick={() => carregar()}>Atualizar</button></div></div><div style={{ ...grid(155), marginTop: 16 }}><div style={kpi}><div style={label}>Realizado</div><div style={value}>{fmtR(atual.realizado)}</div><small style={{ color: 'var(--muted)' }}>{Number(atual.historicoAvec) > 0 ? `${fmtR(atual.historicoAvec)} Avec · ` : ''}{fmtR(atual.servicos)} serviços · {fmtR(atual.revenda)} revenda</small></div><div style={kpi}><div style={label}>Projeção de fechamento</div><div style={value}>{fmtR(atual.projecao)}</div><small style={{ color: 'var(--muted)' }}>{fmtR(atual.agendaFutura)} já na agenda</small></div><div style={kpi}><div style={label}>Meta da equipe</div><div style={{ ...value, color: corMeta }}>{atual.metaReceita ? fmtR(atual.metaReceita) : 'Não definida'}</div><small style={{ color: 'var(--muted)' }}>{atual.metaReceita ? (atual.noRitmo ? 'No ritmo projetado' : `${fmtR(Math.abs(atual.diferencaMeta || 0))} de diferença`) : 'Defina metas por profissional'}</small></div><div style={kpi}><div style={label}>Qualidade da previsão</div><div style={{ ...value, fontSize: 20 }}>{qualidade.rotulo || '—'}</div><small style={{ color: 'var(--muted)' }}>{qualidade.mesesComDados || 0} mês(es) com dados</small></div></div>{qualidade.explicacao && <p style={{ ...sub, marginTop: 14 }}><strong>Base dos dados:</strong> {qualidade.explicacao} Corte em {qualidade.dataCorte?.split('-').reverse().join('/')}.</p>}</section>
-    <HistoricoMensal itens={dados?.historicoCompleto || []} resumo={dados?.resumoHistorico || {}} />
+    <section style={card}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+        <div><h1 style={{ ...title, fontSize: 22 }}>Projeção inteligente de faturamento</h1><p style={sub}>Estimativa explicável baseada no histórico Avec, nas vendas do Kytto, na sazonalidade e na agenda futura.</p></div>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <label style={{ display: 'flex', gap: 6, alignItems: 'center', color: 'var(--muted)', fontSize: 13, fontWeight: 700 }}>Competência:
+            <input aria-label="Competência" type="month" style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid var(--line)', background: 'transparent', color: 'var(--fg)', font: 'inherit' }} value={mes} onChange={(event) => setMes(event.target.value)} />
+          </label>
+          <button type="button" style={button} onClick={atualizar}>Atualizar</button>
+        </div>
+      </div>
+      <div style={{ ...grid(190), marginTop: 16 }}>
+        <div style={kpi}><div style={label}>Faturamento realizado</div><div style={value}>{fmtR(atual.realizado)}</div><small style={{ color: 'var(--muted)' }}>Serviços {fmtR(atual.servicos)} · Revenda {fmtR(atual.revenda)}</small></div>
+        <div style={kpi}><div style={label}>Receita já reservada na agenda</div><div style={value}>{fmtR(atual.agendaFutura)}</div><small style={{ color: 'var(--muted)' }}>{atual.atendimentosAgendados || 0} agendamentos futuros no mês</small></div>
+        <div style={kpi}><div style={label}>Projeção de fechamento</div><div style={{ ...value, color: 'var(--accent)' }}>{fmtR(atual.projecao)}</div><small style={{ color: 'var(--muted)' }}>Cenário conservador: {fmtR(atual.conservador)} · favorável: {fmtR(atual.favoravel)}</small></div>
+        <div style={kpi}><div style={label}>Meta da equipe</div><div style={value}>{atual.metaReceita ? fmtR(atual.metaReceita) : '—'}</div><small style={{ color: 'var(--muted)' }}>{atual.diferencaMeta == null ? 'Sem meta configurada' : atual.diferencaMeta >= 0 ? `+${fmtR(atual.diferencaMeta)} acima da meta` : `${fmtR(atual.diferencaMeta)} para atingir a meta`}</small></div>
+      </div>
+    </section>
+
+    <section style={card}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'baseline', flexWrap: 'wrap' }}>
+        <div><h2 style={title}>Cenários para os próximos 6 meses</h2><p style={sub}>Faixa delimitada pelo histórico de variação da barbearia. Não é garantia de faturamento.</p></div>
+        <Pill severidade={qualidade.nivel === 'alta' ? 'positivo' : qualidade.nivel === 'media' ? 'informativo' : 'alerta'}>Confiança {qualidade.nivel || 'insuficiente'}</Pill>
+      </div>
+      <div style={{ marginTop: 14 }}><GraficoPrevisao itens={dados?.previsoes || []} /></div>
+    </section>
+
+    <SerieHistorica itens={dados?.historicoCompleto || []} resumo={dados?.resumoHistorico || {}} />
+
     <AnaliseIa inteligencia={inteligencia} alertas={alertas} onAtualizar={atualizar} onReconhecer={reconhecer} fatores={fatores} setFatores={setFatores} simulacao={simulacao} onSimular={simular} />
-    <section style={card}><div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', alignItems: 'baseline' }}><div><h2 style={title}>Cenários dos próximos seis meses</h2><p style={sub}>A faixa mostra a variação observada no histórico. O cenário base considera a tendência recente e a agenda já reservada.</p></div><Pill severidade={qualidade.nivel === 'alta' ? 'positivo' : qualidade.nivel === 'insuficiente' ? 'alerta' : 'informativo'}>{qualidade.rotulo || 'Em análise'}</Pill></div><div style={{ marginTop: 14 }}><GraficoPrevisao itens={dados?.previsoes || []} /></div><div style={{ overflowX: 'auto', marginTop: 16 }}><table style={table}><thead><tr><th style={th}>Mês</th><th style={th}>Serviços</th><th style={th}>Revenda</th><th style={th}>Sazonalidade</th><th style={th}>Conservador</th><th style={th}>Base</th><th style={th}>Favorável</th><th style={th}>Meta</th></tr></thead><tbody>{(dados?.previsoes || []).map((item) => <tr key={item.mes}><td style={td}><strong>{mesBR(item.mes)}</strong>{item.tipo === 'atual' && <div><Pill>Em curso</Pill></div>}</td><td style={td}>{fmtR(item.projetadoServicos)}</td><td style={td}>{fmtR(item.projetadoRevenda)}</td><td style={td}>{item.sazonalidade?.referencia ? `${item.sazonalidade.fator >= 1 ? '+' : ''}${porcentagem(item.sazonalidade.fator - 1)} (${mesBR(item.sazonalidade.referencia)})` : '—'}</td><td style={td}>{fmtR(item.conservador)}</td><td style={{ ...td, fontWeight: 800 }}>{fmtR(item.projecao)}</td><td style={td}>{fmtR(item.favoravel)}</td><td style={td}>{item.metaReceita ? fmtR(item.metaReceita) : '—'}</td></tr>)}</tbody></table></div></section>
-    <section style={{ ...grid(340), alignItems: 'start' }}><div style={card}><h2 style={title}>O que está influenciando a projeção</h2><p style={sub}>Cada ponto tem uma evidência observável; o painel não atribui causas que não estejam registradas.</p><div style={{ display: 'grid', gap: 10, marginTop: 14 }}>{(dados?.fatores || []).length ? dados.fatores.map((item, index) => <div key={`${item.tipo}-${index}`} style={{ borderLeft: `3px solid ${tom(item.severidade)}`, padding: '8px 0 8px 11px' }}><Pill severidade={item.severidade}>{item.severidade}</Pill><strong style={{ display: 'block', marginTop: 6 }}>{item.titulo}</strong><div style={{ color: 'var(--muted)', fontSize: 12, marginTop: 3 }}>{item.evidencia}</div></div>) : <div style={{ color: 'var(--muted)', padding: 14 }}>Registre mais atendimentos e vendas para receber leituras gerenciais.</div>}</div></div><div style={card}><h2 style={title}>Ações recomendadas</h2><p style={sub}>Sugestões não executam cobranças, agendamentos ou mensagens automaticamente.</p><div style={{ display: 'grid', gap: 10, marginTop: 14 }}>{(dados?.acoes || []).length ? dados.acoes.map((acao, index) => <div key={`${acao.aba}-${index}`} style={{ border: '1px solid var(--line)', borderRadius: 10, padding: 12 }}><Pill severidade={acao.prioridade === 'alta' ? 'alerta' : 'informativo'}>Prioridade {acao.prioridade}</Pill><strong style={{ display: 'block', marginTop: 7 }}>{acao.titulo}</strong><p style={{ ...sub, marginTop: 4 }}>{acao.descricao}</p>{acao.aba && <button type="button" style={{ ...button, marginTop: 9 }} onClick={() => onOpenTab?.(acao.aba)}>Abrir {acao.aba}</button>}</div>) : <div style={{ color: 'var(--muted)', padding: 14 }}>Nenhuma ação adicional foi identificada nesta atualização.</div>}</div></div></section>
-    <section style={card}><div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'baseline', flexWrap: 'wrap' }}><div><h2 style={title}>Comparativo por profissional</h2><p style={sub}>Produção atual, agenda, ticket, capacidade, tendência e meta da competência selecionada.</p></div><button type="button" style={button} onClick={() => onOpenTab?.('Ocupação e metas')}>Editar metas</button></div><div style={{ overflowX: 'auto', marginTop: 14 }}><table style={table}><thead><tr><th style={th}>Profissional</th><th style={th}>Realizado</th><th style={th}>Agenda futura</th><th style={th}>Projeção</th><th style={th}>Meta</th><th style={th}>Ticket</th><th style={th}>Ocupação</th><th style={th}>Tendência</th></tr></thead><tbody>{profissionais.length ? profissionais.map((item) => <tr key={item.profissionalId}><td style={td}><strong>{item.nome}</strong>{item.meta?.receita ? <div style={{ marginTop: 4 }}><Pill severidade={item.noRitmo ? 'positivo' : 'alerta'}>{item.noRitmo ? 'No ritmo' : 'Acelerar'}</Pill></div> : <small style={{ display: 'block', color: 'var(--muted)', marginTop: 4 }}>Sem meta</small>}</td><td style={td}>{fmtR(item.realizado)}<small style={{ display: 'block', color: 'var(--muted)' }}>{item.atendimentosConcluidos} atend.</small></td><td style={td}>{fmtR(item.agendaFutura)}<small style={{ display: 'block', color: 'var(--muted)' }}>{item.atendimentosAgendados} atend.</small></td><td style={{ ...td, fontWeight: 800 }}>{fmtR(item.projecao)}</td><td style={td}>{item.meta?.receita ? fmtR(item.meta.receita) : '—'}</td><td style={td}>{item.ticketMedio ? fmtR(item.ticketMedio) : '—'}</td><td style={td}>{porcentagem(item.ocupacao)}<small style={{ display: 'block', color: 'var(--muted)' }}>{horas(item.minutosAgendados)} de {horas(item.capacidadeMinutos)}</small></td><td style={td}><Pill severidade={item.tendencia === 'crescimento' ? 'positivo' : item.tendencia === 'queda' ? 'alerta' : 'informativo'}>{item.tendencia}</Pill></td></tr>) : <tr><td colSpan="8" style={{ ...td, textAlign: 'center', color: 'var(--muted)' }}>Cadastre profissionais e conclua atendimentos para comparar produção.</td></tr>}</tbody></table></div></section>
+
+    <section style={card}>
+      <h2 style={title}>Metodologia e qualidade dos dados</h2>
+      <p style={sub}>{dados?.metodologia?.resumo}</p>
+      <div style={{ ...grid(200), marginTop: 14 }}>
+        <div style={kpi}><div style={label}>Nível de confiança</div><div style={{ ...value, fontSize: 18 }}><Pill severidade={qualidade.nivel === 'alta' ? 'positivo' : qualidade.nivel === 'media' ? 'informativo' : 'alerta'}>{qualidade.nivel || 'insuficiente'}</Pill></div><small style={{ color: 'var(--muted)' }}>{qualidade.mesesComDados || 0} mês(es) com dados</small></div>
+        <div style={kpi}><div style={label}>Recebimentos Avec</div><div style={{ ...value, fontSize: 18 }}>{qualidade.fontes?.recebimentosAvec || 0}</div><small style={{ color: 'var(--muted)' }}>Até {qualidade.fontes?.ultimoDiaAvec ? qualidade.fontes.ultimoDiaAvec.split('-').reverse().join('/') : '—'}</small></div>
+        <div style={kpi}><div style={label}>Serviços Kytto</div><div style={{ ...value, fontSize: 18 }}>{qualidade.fontes?.servicos || 0}</div><small style={{ color: 'var(--muted)' }}>Concluídos após a virada</small></div>
+        <div style={kpi}><div style={label}>Revenda Kytto</div><div style={{ ...value, fontSize: 18 }}>{qualidade.fontes?.revenda || 0}</div><small style={{ color: 'var(--muted)' }}>Produtos pagos</small></div>
+      </div>
+      {qualidade.explicacao && <p style={{ ...sub, marginTop: 14 }}><strong>Base dos dados:</strong> {qualidade.explicacao} Corte em {qualidade.dataCorte?.split('-').reverse().join('/')}.</p>}
+    </section>
+
+    <section style={card}>
+      <h2 style={title}>Projeção mês a mês</h2>
+      <div style={{ overflowX: 'auto', marginTop: 14 }}>
+        <table style={table}>
+          <thead>
+            <tr>
+              <th style={th}>Mês</th>
+              <th style={th}>Serviços</th>
+              <th style={th}>Revenda</th>
+              <th style={th}>Sazonalidade</th>
+              <th style={th}>Conservador</th>
+              <th style={th}>Projeção base</th>
+              <th style={th}>Favorável</th>
+              <th style={th}>Meta</th>
+            </tr>
+          </thead>
+          <tbody>
+            {(dados?.previsoes || []).map((item) => <tr key={item.mes}>
+              <td style={td}><strong>{mesBR(item.mes)}</strong>{item.tipo === 'atual' && <div><Pill>Em curso</Pill></div>}</td>
+              <td style={td}>{fmtR(item.projetadoServicos)}</td>
+              <td style={td}>{fmtR(item.projetadoRevenda)}</td>
+              <td style={td}>{item.sazonalidade?.referencia ? `${item.sazonalidade.fator >= 1 ? '+' : ''}${porcentagem(item.sazonalidade.fator - 1)} (${mesBR(item.sazonalidade.referencia)})` : '—'}</td>
+              <td style={td}>{fmtR(item.conservador)}</td>
+              <td style={{ ...td, fontWeight: 800 }}>{fmtR(item.projecao)}</td>
+              <td style={td}>{fmtR(item.favoravel)}</td>
+              <td style={td}>{item.metaReceita ? fmtR(item.metaReceita) : '—'}</td>
+            </tr>)}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section style={{ ...grid(340), alignItems: 'start' }}>
+      <div style={card}>
+        <h2 style={title}>O que está influenciando a projeção</h2>
+        <p style={sub}>Cada ponto tem uma evidência observável; o painel não atribui causas que não estejam registradas.</p>
+        <div style={{ display: 'grid', gap: 10, marginTop: 14 }}>
+          {(dados?.fatores || []).length ? dados.fatores.map((item, index) => <div key={`${item.tipo}-${index}`} style={{ borderLeft: `3px solid ${tom(item.severidade)}`, padding: '8px 0 8px 11px' }}>
+            <Pill severidade={item.severidade}>{item.severidade}</Pill>
+            <strong style={{ display: 'block', marginTop: 6 }}>{item.titulo}</strong>
+            <div style={{ color: 'var(--muted)', fontSize: 12, marginTop: 3 }}>{item.evidencia}</div>
+          </div>) : <div style={{ color: 'var(--muted)', padding: 14 }}>Registre mais atendimentos e vendas para receber leituras gerenciais.</div>}
+        </div>
+      </div>
+      <div style={card}>
+        <h2 style={title}>Ações recomendadas</h2>
+        <p style={sub}>Sugestões não executam cobranças, agendamentos ou mensagens automaticamente.</p>
+        <div style={{ display: 'grid', gap: 10, marginTop: 14 }}>
+          {(dados?.acoes || []).length ? dados.acoes.map((acao, index) => <div key={`${acao.aba}-${index}`} style={{ border: '1px solid var(--line)', borderRadius: 10, padding: 12 }}>
+            <Pill severidade={acao.prioridade === 'alta' ? 'alerta' : 'informativo'}>Prioridade {acao.prioridade}</Pill>
+            <strong style={{ display: 'block', marginTop: 7 }}>{acao.titulo}</strong>
+            <p style={{ ...sub, marginTop: 4 }}>{acao.descricao}</p>
+            {acao.aba && <button type="button" style={{ ...button, marginTop: 9 }} onClick={() => onOpenTab?.(acao.aba)}>Abrir {acao.aba}</button>}
+          </div>) : <div style={{ color: 'var(--muted)', padding: 14 }}>Nenhuma ação adicional foi identificada nesta atualização.</div>}
+        </div>
+      </div>
+    </section>
+
+    <section style={card}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'baseline', flexWrap: 'wrap' }}>
+        <div>
+          <h2 style={title}>Comparativo por profissional</h2>
+          <p style={sub}>Produção atual, agenda, ticket, capacidade, tendência e meta da competência selecionada. <strong>Clique no nome do profissional</strong> para ver a análise profunda de IA (por que da queda ou aumento) e o plano de ação.</p>
+        </div>
+        <button type="button" style={button} onClick={() => onOpenTab?.('Ocupação e metas')}>Editar metas</button>
+      </div>
+      <div style={{ overflowX: 'auto', marginTop: 14 }}>
+        <table style={table}>
+          <thead>
+            <tr>
+              <th style={th}>Profissional (clique para análise)</th>
+              <th style={th}>Realizado</th>
+              <th style={th}>Agenda futura</th>
+              <th style={th}>Projeção</th>
+              <th style={th}>Meta</th>
+              <th style={th}>Ticket</th>
+              <th style={th}>Ocupação</th>
+              <th style={th}>Tendência</th>
+            </tr>
+          </thead>
+          <tbody>
+            {profissionais.length ? profissionais.map((item) => <tr key={item.profissionalId} style={{ cursor: 'pointer' }} onClick={() => setProfissionalModal(item)}>
+              <td style={td}>
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); setProfissionalModal(item); }}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    padding: 0,
+                    textAlign: 'left',
+                    cursor: 'pointer',
+                    font: 'inherit',
+                    color: 'inherit',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                  }}
+                  title="Clique para ver análise profunda de IA e plano de ação"
+                >
+                  <strong style={{ color: 'var(--accent, #b0892e)', textDecoration: 'underline', textUnderlineOffset: 3 }}>
+                    {item.nome}
+                  </strong>
+                  <span style={{ fontSize: 10, fontWeight: 800, color: 'var(--fg)', background: 'var(--line)', padding: '2px 5px', borderRadius: 4 }}>
+                    IA ↗
+                  </span>
+                </button>
+                {item.meta?.receita ? <div style={{ marginTop: 4 }}><Pill severidade={item.noRitmo ? 'positivo' : 'alerta'}>{item.noRitmo ? 'No ritmo' : 'Acelerar'}</Pill></div> : <small style={{ display: 'block', color: 'var(--muted)', marginTop: 4 }}>Sem meta</small>}
+              </td>
+              <td style={td}>{fmtR(item.realizado)}<small style={{ display: 'block', color: 'var(--muted)' }}>{item.atendimentosConcluidos} atend.</small></td>
+              <td style={td}>{fmtR(item.agendaFutura)}<small style={{ display: 'block', color: 'var(--muted)' }}>{item.atendimentosAgendados} atend.</small></td>
+              <td style={{ ...td, fontWeight: 800 }}>{fmtR(item.projecao)}</td>
+              <td style={td}>{item.meta?.receita ? fmtR(item.meta.receita) : '—'}</td>
+              <td style={td}>{item.ticketMedio ? fmtR(item.ticketMedio) : '—'}</td>
+              <td style={td}>{porcentagem(item.ocupacao)}<small style={{ display: 'block', color: 'var(--muted)' }}>{horas(item.minutosAgendados)} de {horas(item.capacidadeMinutos)}</small></td>
+              <td style={td}><Pill severidade={item.tendencia === 'crescimento' ? 'positivo' : item.tendencia === 'queda' ? 'alerta' : 'informativo'}>{item.tendencia}</Pill></td>
+            </tr>) : <tr><td colSpan="8" style={{ ...td, textAlign: 'center', color: 'var(--muted)' }}>Cadastre profissionais e conclua atendimentos para comparar produção.</td></tr>}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    {profissionalModal && <ModalAnaliseProfissional
+      profissional={profissionalModal}
+      mes={mes}
+      onClose={() => setProfissionalModal(null)}
+      onSalvo={() => { carregar(); }}
+    />}
+
     {erro && <div style={{ ...card, borderColor: '#f59e0b', color: 'var(--muted)' }} role="alert">A última atualização falhou: {erro} <button type="button" style={{ ...button, marginLeft: 8 }} onClick={() => carregar()}>Tentar novamente</button></div>}
   </div>
 }
