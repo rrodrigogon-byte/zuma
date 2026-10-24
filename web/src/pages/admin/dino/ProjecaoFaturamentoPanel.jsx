@@ -20,7 +20,7 @@ function mesAtual() {
 function mesBR(mes) {
   const [ano, numero] = String(mes || '').split('-').map(Number)
   if (!ano || !numero) return '—'
-  return new Intl.DateTimeFormat('pt-BR', { month: 'short', year: 'numeric' }).format(new Date(Date.UTC(ano, numero - 1, 1))).replace('.', '')
+  return new Intl.DateTimeFormat('pt-BR', { month: 'short', year: 'numeric', timeZone: 'UTC' }).format(new Date(Date.UTC(ano, numero - 1, 1))).replace('.', '')
 }
 function porcentagem(valor) {
   if (valor == null || !Number.isFinite(Number(valor))) return '—'
