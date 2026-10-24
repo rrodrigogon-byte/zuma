@@ -1794,6 +1794,19 @@ export default function BarbeariaERP() {
     return renderConfiguracao()
   }
 
+  // Tela cheia (aberta pelo menu em nova guia): só a seção pedida, na largura toda, sem menus.
+  if (searchParams.get('tela') === 'cheia') {
+    return <div style={{ padding: '16px clamp(12px, 2vw, 28px)' }}>
+      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 14, flexWrap: 'wrap', marginBottom: 14 }}>
+        <div><div style={{ color: 'var(--accent)', fontSize: 12, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.08em' }}>Dino · {unidadeLabel || 'Dino Matriz'} · visão completa</div><h1 style={{ margin: '5px 0 0', fontSize: 'clamp(22px, 3vw, 30px)', fontFamily: 'var(--font-display)' }}>{tab}</h1></div>
+        <div style={styles.headerActions}><button type="button" style={styles.secondary} onClick={carregar}>Atualizar</button>{tab === 'Agenda' && <button type="button" style={styles.primary} onClick={abrirNovoAgendamento}>+ Agendamento</button>}<a href={`/admin/barbearia-erp?area=${encodeURIComponent(TAB_AREA[tab] || 'operacao')}&tab=${encodeURIComponent(tab)}`} style={{ ...styles.secondary, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>Abrir com o menu</a></div>
+      </header>
+      {erro && <Card style={{ padding: 16, marginBottom: 18, borderColor: '#e05c5c' }}><strong role="status" aria-live="polite">Atenção no carregamento</strong><div style={{ color: 'var(--muted)', marginTop: 5 }}>{erro}</div></Card>}
+      {loading && !dadosCarregados && !tabAutonoma ? <Card style={{ padding: 60, textAlign: 'center', color: 'var(--muted)' }} role="status" aria-live="polite" aria-busy="true">Carregando a agenda…</Card> : <div aria-busy={loading && !tabAutonoma}>{renderConteudo()}</div>}
+      {renderModal()}
+    </div>
+  }
+
   // Painéis analíticos usam 100% da largura; os demais mantêm leitura confortável.
   return <div style={{ padding: '24px clamp(16px, 3vw, 36px)', maxWidth: tab === 'Desempenho da equipe' ? 'none' : 1440, margin: '0 auto' }}>
     <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 20, flexWrap: 'wrap', marginBottom: 14 }}>

@@ -13,6 +13,7 @@ import { db, save } from './db.js';
 import * as barbearia from './barbearia-erp-kytto.js';
 import * as captacao from './dino-captacao-kytto.js';
 import * as financeiroKytto from './financeiro-central-kytto.js';
+import { profissionalKyttoDoAvec } from './dino-vinculos-avec.js';
 
 export class RepasseError extends Error {
   constructor(message, code = 'REPASSE_ERRO', status = 400) {
@@ -193,6 +194,9 @@ export function vinculosProfissionaisAvec(empresaId) {
   for (const nome of votos.keys()) nomesAvecPorPrimeiro.set(primeiroNome(nome), (nomesAvecPorPrimeiro.get(primeiroNome(nome)) || 0) + 1);
   const vinculos = new Map();
   for (const [nome, contagem] of votos) {
+    // 1º: vínculo do cadastro do Avec (nome social = cadastro do Kytto).
+    const cadastro = profissionalKyttoDoAvec(nome, kytto);
+    if (cadastro) { vinculos.set(nome, { profissionalId: cadastro.id, criterio: 'cadastro_avec' }); continue; }
     const total = [...contagem.values()].reduce((a, b) => a + b, 0);
     const [melhor, quantidade] = [...contagem.entries()].sort((a, b) => b[1] - a[1])[0] || [];
     if (melhor && quantidade >= 5 && quantidade / total >= 0.7) { vinculos.set(nome, { profissionalId: melhor, criterio: 'agenda' }); continue; }
@@ -223,6 +227,7 @@ function historicoAvecDoProfissional(empresaId, prof, { inicio, fim, lojaId }) {
     })
     .sort((a, b) => String(b.data).localeCompare(String(a.data)));
   const nomesAvec = [...new Set(linhas.map((l) => l.profissionalAvec).filter(Boolean))];
+  const pagamentos = pagamentosAvecDoProfissional(empresaId, prof, { inicio, fim, vinculos, kytto });
   const bruto = dinheiro(linhas.reduce((soma, l) => soma + l.bruto, 0));
   return {
     atendimentos: linhas.length,
@@ -234,7 +239,48 @@ function historicoAvecDoProfissional(empresaId, prof, { inicio, fim, lojaId }) {
     regraDe: regra.id !== prof.id ? regra.nome : null,
     linhas: linhas.slice(0, 2000),
     linhasOmitidas: Math.max(0, linhas.length - 2000),
+    pagamentos,
   };
+}
+
+// Comissões e antecipações pagas no Avec (extrato financeiro importado): o valor
+// que de fato saiu para o profissional, para comparar com a comissão calculada.
+const RE_COMISSAO_AVEC = /^Comiss[aã]o\s+(.+?)\s+-\s+[^-]*?\s+de\s+(\d{2})\/(\d{2})\/(\d{4})\s+a\s+(\d{2})\/(\d{2})\/(\d{4})/i;
+const RE_ANTECIPACAO_AVEC = /^Antecipa[cç][aã]o de comiss[aã]o/i;
+function pagamentosAvecDoProfissional(empresaId, prof, { inicio, fim, vinculos, kytto }) {
+  let lancamentos = [];
+  try { lancamentos = financeiroKytto.listarLancamentos(empresaId, {}); } catch { lancamentos = []; }
+  const nomeProf = normalizarNome(prof.nome);
+  const ehDoProfissional = (nomeAvec) => {
+    const nome = normalizarNome(nomeAvec);
+    if (ehProfissionalAvec(prof.id)) return nome === nomeProf;
+    return vinculos.get(nome)?.profissionalId === prof.id || profissionalKyttoDoAvec(nome, kytto)?.id === prof.id;
+  };
+  // Categoria das antecipações no Avec usa o primeiro nome (BRUNO1, DAVID, NATANI…).
+  const primeiroDoKytto = ehProfissionalAvec(prof.id) ? primeiroNome(prof.nome) : primeiroNome(prof.nome);
+  const itens = [];
+  for (const item of lancamentos) {
+    if (item?.tipo !== 'despesa' || !(item.metadata?.historicoAvec === true || String(item.origem || '').startsWith('avec-import-financeiro'))) continue;
+    const descricao = String(item.descricao || '');
+    const dia = String(item.pagoEm || item.vencimento || item.dataOperacao || '').slice(0, 10);
+    const comissao = descricao.match(RE_COMISSAO_AVEC);
+    if (comissao) {
+      const de = `${comissao[4]}-${comissao[3]}-${comissao[2]}`;
+      const ate = `${comissao[7]}-${comissao[6]}-${comissao[5]}`;
+      if (ate < inicio || de > fim || !ehDoProfissional(comissao[1])) continue;
+      itens.push({ tipo: 'comissao', data: dia, periodo: { de, ate }, descricao, valor: dinheiro(item.valor), status: item.status });
+      continue;
+    }
+    if (RE_ANTECIPACAO_AVEC.test(descricao)) {
+      const categoria = normalizarNome(item.categoria).replace(/[^a-z]/g, '');
+      if (!categoria || categoria !== primeiroDoKytto.replace(/[^a-z]/g, '') || dia < inicio || dia > fim) continue;
+      itens.push({ tipo: 'antecipacao', data: dia, descricao, valor: dinheiro(item.valor), status: item.status });
+    }
+  }
+  itens.sort((a, b) => String(b.data).localeCompare(String(a.data)));
+  const comissoes = dinheiro(itens.filter((i) => i.tipo === 'comissao').reduce((s, i) => s + i.valor, 0));
+  const antecipacoes = dinheiro(itens.filter((i) => i.tipo === 'antecipacao').reduce((s, i) => s + i.valor, 0));
+  return { comissoes, antecipacoes, total: dinheiro(comissoes + antecipacoes), itens: itens.slice(0, 500) };
 }
 
 export function extratoProfissional(empresaId, profissionalId, { inicio, fim, lojaId = '' }, opcoes = {}) {

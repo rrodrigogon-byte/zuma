@@ -1,5 +1,6 @@
 import { calcularComissoesEstado } from './barbearia-erp-kytto.js';
 import { historicoAvecVigente, canonizarRegistroAvec } from './dino-historico-avec.js';
+import { profissionalKyttoDoAvec } from './dino-vinculos-avec.js';
 
 const TIME_ZONE = 'America/Cuiaba';
 const MAX_DAYS = 93;
@@ -215,12 +216,20 @@ function historicalServiceRows(strict, period, professionalIds) {
 }
 
 function historicalServiceRowsAll(strict, period) {
+  // Uma equipe só: quem tem vínculo no cadastro do Avec aparece no próprio cadastro do Kytto.
+  const equipe = Object.values(strict.profissionais || {});
+  const vinculos = new Map();
+  const vinculado = (item) => {
+    const nome = text(item.profissionalNome);
+    if (!vinculos.has(nome)) vinculos.set(nome, profissionalKyttoDoAvec(nome, equipe)?.id || null);
+    return vinculos.get(nome) || text(item.profissionalId);
+  };
   return Object.values(strict.historicoAtendimentos || {})
     .filter((item) => item.somenteHistorico === true && item.status === 'concluido')
     .filter((item) => dateInPeriod(item.dataAgenda || item.dataOriginal, period))
     .map((item) => ({
       id: idOf(item),
-      professionalId: text(item.profissionalId),
+      professionalId: vinculado(item),
       serviceId: text(item.servicoId),
       name: text(item.servicoNome) || 'Serviço histórico Avec',
       quantity: quantityOf(item),

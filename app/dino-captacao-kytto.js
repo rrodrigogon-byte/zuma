@@ -24,6 +24,7 @@ import * as clientesKytto from './clientes-contas-kytto.js';
 import * as fidelidadeKytto from './canais-fidelidade-kytto.js';
 import { telefoneChave } from './dino-clientes-vinculo.js';
 import * as financeiroKytto from './financeiro-central-kytto.js';
+import { profissionalKyttoDoAvec } from './dino-vinculos-avec.js';
 import { DINO_COMMERCE_LOJA_ID, DINO_LEGACY_LOJA_ID } from './core/legacy-commerce-scope.js';
 
 const DIA_MS = 24 * 60 * 60 * 1000;
@@ -1674,22 +1675,43 @@ function metaDaEquipe(empresaId, competencia) {
 
 // Sazonalidade: quanto o mesmo mês do ano anterior ficou acima ou abaixo da média
 // dos seis meses que vieram antes dele. Sem um ano de histórico, o fator é 1.
+// O mapa só traz meses completos (o primeiro mês do histórico, se começou no meio,
+// fica fora para não distorcer). Fator: o mês do ano anterior sobre a média dos três
+// meses completos antes dele.
 function fatorSazonal(competencia, mapaRealizado) {
   const anoAnterior = deslocarCompetencia(competencia, -12);
   const valor = Number(mapaRealizado.get(anoAnterior) || 0);
-  if (valor <= 0) return { fator: 1, referencia: null };
-  const anteriores = Array.from({ length: 6 }, (_, indice) => Number(mapaRealizado.get(deslocarCompetencia(anoAnterior, -(indice + 1))) || 0)).filter((item) => item > 0);
-  if (anteriores.length < 3) return { fator: 1, referencia: null };
+  if (valor <= 0) return { fator: 1, referencia: null, anoAnterior: null };
+  const anteriores = Array.from({ length: 3 }, (_, indice) => Number(mapaRealizado.get(deslocarCompetencia(anoAnterior, -(indice + 1))) || 0)).filter((item) => item > 0);
+  if (anteriores.length < 2) return { fator: 1, referencia: null, anoAnterior: valor };
   const media = anteriores.reduce((soma, item) => soma + item, 0) / anteriores.length;
-  const fator = Math.min(1.6, Math.max(0.7, valor / media));
-  return { fator: Number(fator.toFixed(4)), referencia: anoAnterior };
+  const fator = Math.min(2.2, Math.max(0.6, valor / media));
+  return { fator: Number(fator.toFixed(4)), referencia: anoAnterior, anoAnterior: valor };
 }
 
-function previsaoDaCompetencia(competencia, fatos, historico, meta, { corte, competenciaAtual, mapaRealizado = new Map() }) {
+// Crescimento contra o ano anterior: soma dos meses fechados recentes que têm o
+// mesmo mês no ano anterior (pelo menos três pares).
+function crescimentoAnual(mapaRealizado, ultimoFechado) {
+  let atual = 0; let anterior = 0; let pares = 0;
+  for (let indice = 0; indice < 6; indice += 1) {
+    const mes = deslocarCompetencia(ultimoFechado, -indice);
+    const valor = Number(mapaRealizado.get(mes) || 0);
+    const passado = Number(mapaRealizado.get(deslocarCompetencia(mes, -12)) || 0);
+    if (valor > 0 && passado > 0) { atual += valor; anterior += passado; pares += 1; }
+  }
+  if (pares < 3 || anterior <= 0) return null;
+  return { fator: Number(Math.min(1.6, Math.max(0.7, atual / anterior)).toFixed(4)), pares };
+}
+
+function previsaoDaCompetencia(competencia, fatos, historico, meta, { corte, competenciaAtual, mapaRealizado = new Map(), crescimento = null }) {
   const realizado = resumoDaCompetencia(fatos, competencia);
   const sazonal = fatorSazonal(competencia, mapaRealizado);
   const baseServicosBruta = estimativaHistorica(historico, 'servicosConsolidados');
-  const baseServicos = { ...baseServicosBruta, base: numeroArredondado(baseServicosBruta.base * sazonal.fator) };
+  // Base = metade pelo nível recente com sazonalidade, metade pelo mesmo mês do ano
+  // anterior corrigido pelo crescimento anual (quando há esse histórico).
+  const porNivel = baseServicosBruta.base * sazonal.fator;
+  const porAnoAnterior = crescimento && sazonal.anoAnterior ? sazonal.anoAnterior * crescimento.fator : null;
+  const baseServicos = { ...baseServicosBruta, base: numeroArredondado(porAnoAnterior === null ? porNivel : (porNivel + porAnoAnterior) / 2) };
   const baseRevenda = estimativaHistorica(historico, 'revenda');
   const baseTotal = estimativaHistorica(historico, 'realizado');
   const inicio = `${competencia}-01`;
@@ -1737,7 +1759,7 @@ function previsaoDaCompetencia(competencia, fatos, historico, meta, { corte, com
     diferencaMeta,
     noRitmo: meta.receita > 0 ? base >= meta.receita : null,
     estimativa: { servicos: baseServicos, revenda: baseRevenda, total: baseTotal },
-    sazonalidade: sazonal,
+    sazonalidade: { fator: sazonal.fator, referencia: sazonal.referencia, crescimentoAnual: crescimento?.fator ?? null },
   };
 }
 
@@ -1751,7 +1773,14 @@ function previsaoProfissionais(empresaId, competencia, fatos, historico, lojaId 
   const fim = ultimoDiaDoMes(competencia);
   const profissionais = barbearia.listarProfissionais(empresaId, { incluirInativos: true });
   // Produção por profissional: serviços do Kytto e, no período do Avec, os atendimentos importados.
-  const producao = [...fatos.servicos, ...(fatos.servicosAvec || [])];
+  // Quem tem vínculo no cadastro do Avec (nome social = cadastro do Kytto) soma no próprio cadastro.
+  const vinculoPorNome = new Map();
+  const producaoAvec = (fatos.servicosAvec || []).map((item) => {
+    if (!vinculoPorNome.has(item.profissionalNome)) vinculoPorNome.set(item.profissionalNome, profissionalKyttoDoAvec(item.profissionalNome, profissionais)?.id || null);
+    const vinculado = vinculoPorNome.get(item.profissionalNome);
+    return vinculado ? { ...item, profissionalId: vinculado } : item;
+  });
+  const producao = [...fatos.servicos, ...producaoAvec];
   return profissionais.map((profissional) => {
     const meta = metas[profissional.id] || null;
     const realizados = producao.filter((item) => item.mes === competencia && item.profissionalId === profissional.id);
@@ -1872,7 +1901,11 @@ export function projecaoFaturamento(empresaId, { mes, lojaId = '', horizonte = 6
       historicoCompleto.push({ ...resumoDaCompetencia(fatos, mesSerie, { incluirFuturo: false }), emCurso: mesSerie === corte.slice(0, 7) });
     }
   }
-  const mapaRealizado = new Map(historicoCompleto.filter((item) => !item.emCurso).map((item) => [item.mes, item.realizado]));
+  // Meses completos: o primeiro fica fora quando o histórico começou no meio do mês.
+  const primeiroDia = [...fatos.avec, ...fatos.servicos, ...fatos.revenda].reduce((menor, item) => (!menor || item.dia < menor ? item.dia : menor), '');
+  const primeiroParcial = primeiroDia && primeiroDia.slice(8) > '03';
+  const mapaRealizado = new Map(historicoCompleto.filter((item) => !item.emCurso && !(primeiroParcial && item.mes === primeiroMes)).map((item) => [item.mes, item.servicosConsolidados]));
+  const crescimento = crescimentoAnual(mapaRealizado, deslocarCompetencia(corte.slice(0, 7), -1));
   const fechados = historicoCompleto.filter((item) => !item.emCurso && item.realizado > 0);
   const melhor = fechados.reduce((maior, item) => (!maior || item.realizado > maior.realizado ? item : maior), null);
   const resumoHistorico = {
@@ -1889,7 +1922,7 @@ export function projecaoFaturamento(empresaId, { mes, lojaId = '', horizonte = 6
   const qualidade = { ...nivelConfianca(mesesComDados, historico), mesesAnalisados: historico.length, mesesComDados, mesesNoHistorico: fechados.length, dataCorte: corte, fontes: { servicos: fatos.servicos.length, revenda: fatos.revenda.length, recebimentosAvec: fatos.avec.length, atendimentosAvec: fatos.servicosAvec.length, ultimoDiaAvec: fatos.ultimoDiaAvec || null } };
   const previsoes = Array.from({ length: quantidade }, (_, indice) => {
     const alvo = deslocarCompetencia(competencia, indice);
-    return previsaoDaCompetencia(alvo, fatos, historico, metaDaEquipe(empresaId, alvo), { corte, competenciaAtual: corte.slice(0, 7), mapaRealizado });
+    return previsaoDaCompetencia(alvo, fatos, historico, metaDaEquipe(empresaId, alvo), { corte, competenciaAtual: corte.slice(0, 7), mapaRealizado, crescimento });
   });
   const atual = previsoes[0];
   const profissionais = previsaoProfissionais(empresaId, competencia, fatos, historico, lojaId);
@@ -1901,9 +1934,9 @@ export function projecaoFaturamento(empresaId, { mes, lojaId = '', horizonte = 6
     escopo: { empresaId: String(empresaId), lojaId: lojaId || null, filtroEstritoDeUnidade: Boolean(lojaId) },
     qualidade,
     metodologia: {
-      versao: '2.0',
+      versao: '2.1',
       rotulo: 'Previsão explicável por histórico, agenda, tendência e sazonalidade',
-      resumo: 'O realizado de cada mês soma os recebimentos do histórico Avec (até a virada) e, depois dela, os serviços concluídos e a revenda paga no Kytto, sem contar o mesmo dia duas vezes. A base usa os últimos seis meses fechados com tendência, ajustada pela sazonalidade do mesmo mês no ano anterior, e respeita a agenda já reservada. Cenários representam a variação observada; não são garantia de faturamento.',
+      resumo: 'O realizado de cada mês soma os recebimentos do histórico Avec (até a virada) e, depois dela, os serviços concluídos e a revenda paga no Kytto, sem contar o mesmo dia duas vezes. A base combina o nível dos últimos seis meses fechados ajustado pela sazonalidade do mesmo mês no ano anterior com esse mesmo mês corrigido pelo crescimento anual; respeita a agenda já reservada e ignora o primeiro mês quando ele é parcial. Cenários representam a variação observada; não são garantia de faturamento.',
     },
     atual,
     previsoes,
