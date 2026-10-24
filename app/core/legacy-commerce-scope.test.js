@@ -9,15 +9,17 @@ import {
   legacyLojaIdFromCommerce,
 } from './legacy-commerce-scope.js';
 
-test('mapeia exatamente o tenant Commerce da Dino para o ERP legado', () => {
-  assert.equal(legacyEmpresaIdFromCommerce(DINO_COMMERCE_EMPRESA_ID), DINO_LEGACY_EMPRESA_ID);
-  assert.equal(legacyLojaIdFromCommerce(DINO_COMMERCE_LOJA_ID, DINO_COMMERCE_EMPRESA_ID), DINO_LEGACY_LOJA_ID);
+test('ERP da Dino resolve para o cadastro canônico, inclusive a partir do id legado', () => {
+  assert.equal(legacyEmpresaIdFromCommerce(DINO_COMMERCE_EMPRESA_ID), DINO_COMMERCE_EMPRESA_ID);
+  assert.equal(legacyEmpresaIdFromCommerce(DINO_LEGACY_EMPRESA_ID), DINO_COMMERCE_EMPRESA_ID);
+  assert.equal(legacyLojaIdFromCommerce(DINO_COMMERCE_LOJA_ID, DINO_COMMERCE_EMPRESA_ID), DINO_COMMERCE_LOJA_ID);
+  assert.equal(legacyLojaIdFromCommerce(DINO_LEGACY_LOJA_ID, DINO_LEGACY_EMPRESA_ID), DINO_COMMERCE_LOJA_ID);
 });
 
 test('preserva IDs desconhecidos e não cruza loja entre empresas', () => {
   assert.equal(legacyEmpresaIdFromCommerce('empresa-desconhecida'), 'empresa-desconhecida');
   assert.equal(legacyLojaIdFromCommerce('loja-desconhecida', DINO_COMMERCE_EMPRESA_ID), 'loja-desconhecida');
-  assert.equal(legacyLojaIdFromCommerce(DINO_COMMERCE_LOJA_ID, 'outra-empresa'), DINO_COMMERCE_LOJA_ID);
+  assert.equal(legacyLojaIdFromCommerce(DINO_LEGACY_LOJA_ID, 'outra-empresa'), DINO_LEGACY_LOJA_ID);
 });
 
 test('conexão WhatsApp volta ao id canônico do Commerce somente para o vínculo Dino', async () => {
