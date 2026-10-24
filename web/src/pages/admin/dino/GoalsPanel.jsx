@@ -43,7 +43,7 @@ export function GoalsPanel({ goals, canEdit, onSaved }) {
       {canEdit && <button type="button" onClick={abrir}>{goals?.configured ? 'Editar metas' : 'Definir metas'}</button>}
     </header>
     {goals?.configured && goals?.comparable !== false ? <>
-      <p className="dino-goals-meta">Dia {goals.day} de {goals.daysInMonth}. A projeção mantém o ritmo diário atual até o fim do mês. Receita da meta = serviços, revenda e pedidos Commerce confirmados; lançamentos históricos Avec não entram nessa base.</p>
+      <p className="dino-goals-meta">Dia {goals.day} de {goals.daysInMonth}. A projeção mantém o ritmo diário atual até o fim do mês. Receita da meta = serviços, revenda e pedidos Commerce confirmados{goals.historicoAvecIncluido ? ' + receita paga do histórico Avec (até a migração); atendimentos incluem os serviços do histórico' : ''}.</p>
       <ul className="dino-goal-list">
         {items.map((item) => <li key={item.id} className={`is-${item.status}`}>
           <div className="dino-goal-top">

@@ -6,7 +6,7 @@ import { hojeAgenda, somarDias, diasEntre, periodoMes, diaDoItem, horaDoItem, di
 import './BarbeariaAgendaPeriodo.css'
 
 const STATUS = { agendado: 'Agendado', confirmado: 'Confirmado', em_atendimento: 'Em atendimento', concluido: 'Concluído', cancelado: 'Cancelado', nao_compareceu: 'Não compareceu' }
-const ORIGEM = { whatsapp_ia: 'WhatsApp IA', publico: 'Link público', online: 'Link público', admin: 'Recepção' }
+const ORIGEM = { whatsapp_ia: 'WhatsApp IA', publico: 'Link público', online: 'Link público', admin: 'Recepção', avec: 'Histórico Avec' }
 const WEEK = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom']
 
 export default function BarbeariaAgendaPeriodo({ profissionais = [], servicos = [], profissionalId = '', onProfissionalChange, onOpenAppointment, onPickSlot, refreshKey = 0, dataSelecionada, onDateChange, statusFiltro = '' }) {
@@ -53,7 +53,10 @@ export default function BarbeariaAgendaPeriodo({ profissionais = [], servicos = 
     const q = new URLSearchParams({ de, ate })
     if (profissionalId) q.set('profissionalId', profissionalId)
     lerAgenda(() => api.get(`/api/admin/barbearia/agenda-periodo?${q}`), { ativo: () => ativo }).then(r => {
-      if (ativo && r) setConsulta({ chave, itens: r.itens || [], horario: new Date().toLocaleTimeString('pt-BR', { timeZone: 'America/Cuiaba' }) })
+      // O histórico Avec entra como atendimento concluído somente leitura; a hora, quando
+      // existe, é a do fechamento da comanda no mesmo dia (referência, não horário marcado).
+      const historico = (r?.historico || []).map(item => ({ ...item, horaLocal: item.hora || '' }))
+      if (ativo && r) setConsulta({ chave, itens: [...(r.itens || []), ...historico], horario: new Date().toLocaleTimeString('pt-BR', { timeZone: 'America/Cuiaba' }) })
     }).catch(e => { if (ativo) setErro(erroAgenda(e)) })
     return () => { ativo = false }
   }, [chave])
@@ -92,7 +95,11 @@ export default function BarbeariaAgendaPeriodo({ profissionais = [], servicos = 
   const totalVagas = (vagas?.itens || []).reduce((n, item) => n + item.horarios.length, 0)
   const recuo = dias.length ? (new Date(`${de}T12:00:00Z`).getUTCDay() + 6) % 7 : 0
   const abrirDia = dia => { if (onDateChange) onDateChange(dia); else escolherPeriodo(dia, dia, 'lista') }
-  const renderItem = item => <button type="button" className="dino-cal-event" data-status={item.status} key={item.id} onClick={() => onOpenAppointment?.(item)}>
+  const renderItem = item => item.historico ? <div className="dino-cal-event" data-status={item.status} data-historico="avec" key={item.id} title={`Histórico Avec · comanda ${item.numeroComanda || 's/n'}${item.profissionalNomeAvec && item.profissionalNomeAvec !== item.profissionalNome ? ` · ${item.profissionalNomeAvec}` : ''}`}>
+    <strong>{item.hora ? `${item.hora}*` : 'Sem hora'} · {item.clienteNome || 'Cliente sem nome'}</strong>
+    <span>{item.servicoNome || 'Serviço'} · {item.profissionalNome || 'Sem profissional'}</span>
+    <small>Concluído · Histórico Avec{item.hora ? ' · *hora de fechamento da comanda' : ''}</small>
+  </div> : <button type="button" className="dino-cal-event" data-status={item.status} key={item.id} onClick={() => onOpenAppointment?.(item)}>
     <strong>{horaDoItem(item)} · {item.clienteNome || item.cliente_nome || 'Cliente sem nome'}</strong>
     <span>{item.servicoNome || item.servico_nome || 'Serviço'} · {item.profissionalNome || item.profissional_nome || 'Sem profissional'}</span>
     <small>{STATUS[item.status] || item.status} · {ORIGEM[item.origem] || item.origem || 'Origem não informada'}</small>
@@ -113,7 +120,7 @@ export default function BarbeariaAgendaPeriodo({ profissionais = [], servicos = 
       <button type="button" onClick={() => { setErro(''); setAtualizacao(n => n + 1) }}>Atualizar calendário</button>
     </div>
     <AgendaProfissionais profissionais={profissionais} value={profissionalId} onChange={onProfissionalChange} />
-    <div className="dino-cal-meta" aria-live="polite">{carregando ? 'Consultando a agenda…' : erro ? <span role="alert">{erro}</span> : <><strong>{visiveis.length} atendimento(s)</strong><span>{visiveis.filter(i => i.status === 'confirmado').length} confirmado(s)</span><span>{visiveis.filter(i => i.origem === 'whatsapp_ia').length} pelo WhatsApp</span><small>Consultado às {consulta?.horario} · {statusFiltro ? STATUS[statusFiltro] || statusFiltro : 'Todos os status'}</small></>}</div>
+    <div className="dino-cal-meta" aria-live="polite">{carregando ? 'Consultando a agenda…' : erro ? <span role="alert">{erro}</span> : <><strong>{visiveis.length} atendimento(s)</strong>{visiveis.some(i => i.historico) && <span>{visiveis.filter(i => i.historico).length} do histórico Avec</span>}<span>{visiveis.filter(i => i.status === 'confirmado').length} confirmado(s)</span><span>{visiveis.filter(i => i.origem === 'whatsapp_ia').length} pelo WhatsApp</span><small>Consultado às {consulta?.horario} · {statusFiltro ? STATUS[statusFiltro] || statusFiltro : 'Todos os status'}</small></>}</div>
     {!carregando && !erro && <>
       {modo !== 'lista' ? <div className="dino-cal-scroll"><div className={`dino-cal-grid ${modo === 'mes' ? 'dino-cal-month' : modo === 'dia' ? 'dino-cal-single' : ''}`}>
         {modo === 'mes' && WEEK.map(d => <strong className="dino-cal-weekday" key={d}>{d}</strong>)}

@@ -119,6 +119,7 @@ import { purgeExpiredCommercePublicData, startCommerceReservationExpiryCleanup, 
 import { compareLegacyAndCoreInventory, createDestructiveAdminGuard, createLegacyCommerceMutationGuard, createLegacyPaymentMutationGuard } from './core/commerce-legacy-guards.js';
 import { readScopedCatalogDiagnostic } from './core/catalog-read-diagnostic.js';
 import { buildDinoDashboardAnalytics, dashboardPeriod, filterDashboardRowsToStore } from './dino-dashboard.js';
+import { agendaHistoricaAvec } from './dino-agenda-historica.js';
 import { registerCustomer360Routes } from './customer360-routes.js';
 import { registerEquipePerformanceRoutes, equipePerformanceNoStore } from './dino-equipe-desempenho-routes.js';
 import { registerAiBrainRoutes } from './ai-brain-routes.js';
@@ -3730,11 +3731,20 @@ function legacyWppAllowedForBarbearia(req, whatsappAi) {
 }
 
 // Metas do mês corrente (independem do período escolhido no painel).
-async function metasDoMes({ empresaId, now, barbershopInput, commerceContext, profitFor, scopeLevel = 'company' }) {
+async function empresaComUnidadeUnica(commerceContext) {
+  if (!commerceContext?.empresaId) return false;
+  try {
+    const result = await commerceDb.queryRead('SELECT COUNT(*)::int AS total FROM lojas WHERE empresa_id = $1 AND ativa = true', [commerceContext.empresaId]);
+    return Number(result.rows[0]?.total || 0) === 1;
+  } catch { return false; }
+}
+
+async function metasDoMes({ empresaId, now, barbershopInput, commerceContext, profitFor, scopeLevel = 'company', unidadeUnica = false }) {
   const metas = dinoMetas.obterMetas(empresaId);
   const mes = dinoMetas.monthWindow(now);
   const configured = Object.values(metas).some(Boolean);
-  const comparable = scopeLevel !== 'unit';
+  // Empresa com uma única unidade ativa: o realizado da unidade é o da empresa.
+  const comparable = scopeLevel !== 'unit' || unidadeUnica === true;
   if (!configured) return { configured: false, comparable, targetScope: 'company', items: [], month: mes.label, metas };
   if (!comparable) return { configured: true, comparable: false, targetScope: 'company', month: mes.label, day: mes.day, daysInMonth: mes.daysInMonth, metas, items: [] };
   let commerce = null;
@@ -3751,18 +3761,28 @@ async function metasDoMes({ empresaId, now, barbershopInput, commerceContext, pr
   const services = dinoBi.servicesPerformed(barbershopInput, win);
   const retail = dinoBi.retailSold(barbershopInput, win);
   const resultado = profitFor(win, commerce);
-  const atendimentos = services.reduce((sum, row) => sum + row.quantidade, 0);
-  const receitaServicos = services.reduce((sum, row) => sum + row.receita, 0);
+  // Histórico Avec do mês (até a migração): atendimentos e serviços do histórico e a
+  // receita paga do extrato financeiro histórico, sem duplicar a operação nova.
+  const noMes = (value) => { const date = value ? new Date(value) : null; return Boolean(date && !Number.isNaN(date.valueOf()) && date >= mes.fromDate && date < mes.toDate); };
+  const historicoServicos = (barbershopInput.historicalAppointments || []).filter((item) => /^\d{4}-\d{2}-\d{2}$/.test(String(item.dataAgenda || '')) && noMes(`${item.dataAgenda}T12:00:00-04:00`));
+  const historicoReceita = (barbershopInput.financeEntries || [])
+    .filter((entry) => (entry.metadata?.historicoAvec === true || entry.origem === 'avec-import-financeiro-20261022') && entry.tipo === 'receita' && entry.status === 'pago' && noMes(entry.pagoEm || entry.dataOperacao))
+    .reduce((sum, entry) => sum + (Number(entry.valor) || 0), 0);
+  const historicoAtendimentos = historicoServicos.reduce((sum, item) => sum + Math.max(1, Number(item.quantidade) || 1), 0);
+  const historicoServicosValor = historicoServicos.reduce((sum, item) => sum + (Number(item.total) || 0), 0);
+  const atendimentos = services.reduce((sum, row) => sum + row.quantidade, 0) + historicoAtendimentos;
+  const receitaServicosOperacao = services.reduce((sum, row) => sum + row.receita, 0);
+  const receitaServicos = receitaServicosOperacao + historicoServicosValor;
   const receitaLoja = Number(commerce?.sales?.summary?.confirmed_total || 0);
   const novosClientes = clientesKytto.listarClientes(empresaId).filter((item) => !item.padrao && !item.anonimizadoEm && item.criadoEm && new Date(item.criadoEm) >= mes.fromDate).length;
   const atual = {
-    receita: receitaServicos + retail.reduce((sum, row) => sum + row.receita, 0) + receitaLoja,
+    receita: receitaServicosOperacao + retail.reduce((sum, row) => sum + row.receita, 0) + receitaLoja + historicoReceita,
     resultado: resultado.resultado,
     atendimentos,
     ticketMedio: atendimentos ? receitaServicos / atendimentos : 0,
     novosClientes,
   };
-  return { configured: true, comparable: true, targetScope: 'company', month: mes.label, day: mes.day, daysInMonth: mes.daysInMonth, metas, items: dinoMetas.progressoMetas(metas, atual, mes) };
+  return { configured: true, comparable: true, targetScope: 'company', month: mes.label, day: mes.day, daysInMonth: mes.daysInMonth, metas, historicoAvecIncluido: historicoAtendimentos > 0 || historicoReceita > 0, items: dinoMetas.progressoMetas(metas, atual, mes) };
 }
 
 app.get('/api/admin/barbearia/analytics', async (req, res) => {
@@ -3867,7 +3887,7 @@ app.get('/api/admin/barbearia/analytics', async (req, res) => {
       scope: { level: lojaId ? 'unit' : 'company', unitId: lojaId || '' },
       unassignedRecords,
       profit: { current: profitFor(currentWindow, commerceCurrent), previous: profitFor(previousWindow, commercePrevious) },
-      goals: await metasDoMes({ empresaId, now, barbershopInput, commerceContext, profitFor, scopeLevel: lojaId ? 'unit' : 'company' }),
+      goals: await metasDoMes({ empresaId, now, barbershopInput, commerceContext, profitFor, scopeLevel: lojaId ? 'unit' : 'company', unidadeUnica: await empresaComUnidadeUnica(commerceContext) }),
       funnel: commerceAvailable ? { current: funnelSummary(empresaId, range.fromDate, range.toDate), previous: funnelSummary(empresaId, range.previousFromDate, range.previousToDate) } : null,
     }, { period: range.days, now, window: range });
     res.json({ ok: true, ...analytics });
@@ -3895,12 +3915,22 @@ app.get('/api/admin/barbearia/agenda-periodo', (req, res) => {
   try {
     const empresaId = legacyEmpresaId(req);
     const { de, ate } = intervaloDias(req.query?.de, req.query?.ate, 62);
+    const lojaId = legacyLojaId(req);
     const itens = listarAgendamentosBarbearia(empresaId, {
-      de, ate, lojaId: legacyLojaId(req),
+      de, ate, lojaId,
       profissionalId: req.query?.profissionalId || undefined,
       status: req.query?.status || undefined,
     });
-    res.json({ ok: true, de, ate, total: itens.length, itens });
+    // Histórico importado do Avec (somente leitura), ligado aos profissionais ativos.
+    // Não entra quando o filtro de status pede algo diferente de "concluído".
+    const statusPedido = String(req.query?.status || '');
+    const historico = req.query?.historico === '0' || (statusPedido && statusPedido !== 'concluido') ? [] : agendaHistoricaAvec({
+      historico: barbeariaErpKytto.listarHistoricoAtendimentos(empresaId, { de, ate, lojaId }),
+      comandas: barbeariaErpKytto.listarHistoricoComandas(empresaId, { de, ate, lojaId }),
+      profissionais: barbeariaErpKytto.listarProfissionais(empresaId, { incluirInativos: true }),
+      profissionalId: req.query?.profissionalId || '',
+    });
+    res.json({ ok: true, de, ate, total: itens.length, itens, totalHistorico: historico.length, historico });
   } catch (error) {
     res.status(400).json({ error: error.message || 'Não foi possível carregar a agenda do período.' });
   }

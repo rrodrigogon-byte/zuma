@@ -345,20 +345,37 @@ function strategicRevenueMix(input, window, consolidatedRevenue) {
   };
 }
 
-function scheduleHeatmap(appointments, window) {
+// O Avec não exporta a hora do atendimento. O horário confiável disponível é o de
+// fechamento da comanda; só entra no mapa a comanda fechada no MESMO dia em que foi
+// aberta (fechamento em outro dia não representa o horário do atendimento).
+export function historicalCommandSlot(item = {}, timeZone = TIME_ZONE) {
+  const day = String(item.dataComandaIso || '').slice(0, 10);
+  const match = String(item.dataFinalizacaoOriginal || '').match(/^(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2})/);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || !match) return null;
+  if (`${match[3]}-${match[2]}-${match[1]}` !== day) return null;
+  return localWallTimeToUtc(day, `${match[4]}:${match[5]}`, timeZone);
+}
+
+function mergedScheduleHeatmap(appointments, historicalCommands, window) {
   const cells = new Map();
-  for (const item of appointments.filter((entry) => !excludedAppointmentStatus(entry.status) && inAppointmentWindow(entry, window))) {
-    const date = appointmentTimestamp(item, window.timeZone);
-    if (!date) continue;
+  const add = (date, field) => {
     const parts = zonedParts(date, window.timeZone);
     const weekday = dateFormatter(window.timeZone, true).format(date).toLowerCase();
     const key = `${weekday}-${parts.hour}`;
-    cells.set(key, (cells.get(key) || 0) + 1);
+    const cell = cells.get(key) || { weekday, hour: parts.hour, value: 0, agenda: 0, historicoAvec: 0 };
+    cell.value += 1;
+    cell[field] += 1;
+    cells.set(key, cell);
+  };
+  for (const item of appointments.filter((entry) => !excludedAppointmentStatus(entry.status) && inAppointmentWindow(entry, window))) {
+    const date = appointmentTimestamp(item, window.timeZone);
+    if (date) add(date, 'agenda');
   }
-  return [...cells.entries()].map(([key, value]) => {
-    const [weekday, hour] = key.split('-');
-    return { weekday, hour: Number(hour), value };
-  });
+  for (const item of list(historicalCommands)) {
+    const date = historicalCommandSlot(item, window.timeZone);
+    if (date && date >= window.fromDate && date < window.toDate) add(date, 'historicoAvec');
+  }
+  return [...cells.values()];
 }
 
 function upcomingAppointments(appointments, now, timeZone) {
@@ -478,12 +495,13 @@ export function buildDinoDashboardAnalytics(input = {}, options = {}) {
   const conversion = funnelAvailable ? Number(((commerceOrders / num(funnelCurrent.visit)) * 100).toFixed(2)) : null;
   const previousConversion = funnelPrevious && num(funnelPrevious.visit) > 0 ? Number(((commercePreviousOrders / num(funnelPrevious.visit)) * 100).toFixed(2)) : null;
   const trendConversion = conversion != null && previousConversion ? pct(conversion, previousConversion) : { value: null, available: false };
-  const heatmapCells = scheduleHeatmap(appointments, currentAppointmentWindow);
+  const heatmapCells = mergedScheduleHeatmap(appointments, input.historicalCommands, currentAppointmentWindow);
   const activity = activityFeed(input, now, window);
   const upcoming = upcomingAppointments(appointments, now, window.timeZone);
   const paymentMethods = [...paymentBreakdown(input, window), ...historicalPaymentBreakdown(input, window)];
   const commercePaymentMethods = list(commerceCurrent.sales?.capturedPayments).map((item) => ({ method: item.method, value: num(item.value) }));
-  const heatmapAppointmentCount = heatmapCells.reduce((sum, item) => sum + item.value, 0);
+  const heatmapAppointmentCount = heatmapCells.reduce((sum, item) => sum + item.agenda, 0);
+  const heatmapHistoricalCount = heatmapCells.reduce((sum, item) => sum + item.historicoAvec, 0);
   const goals = input.goals || { configured: false, items: [] };
   const unitDataExclusions = input.unassignedRecords || {};
   const dataQualityNotes = [
@@ -491,6 +509,7 @@ export function buildDinoDashboardAnalytics(input = {}, options = {}) {
     funnelAvailable ? 'Funil da loja com visitas, carrinhos e checkouts únicos por sessão/dia.' : 'Funil parcial até a loja registrar visitas no período.',
     'Estoques Commerce e revenda são contados separadamente.',
     `Horários movimentados usam a hora marcada no fuso ${window.timeZone}; cancelamentos e faltas não entram no mapa.`,
+    'Histórico Avec no mapa de horários: o Avec não exporta a hora do atendimento; usa-se a hora de fechamento das comandas fechadas no mesmo dia em que foram abertas.',
     'A atividade recente usa a data persistida/criada/atualizada do registro; heatmap e próximos compromissos usam a data e a hora marcadas.',
   ];
   if (scopeLevel === 'unit') {
@@ -550,7 +569,7 @@ export function buildDinoDashboardAnalytics(input = {}, options = {}) {
       profitAvailable,
       funnelAvailable,
       sources: {
-        agenda: { status: heatmapAppointmentCount ? 'ok' : 'empty', recordsInPeriod: currentAppointments.length, recordsInHeatmap: heatmapAppointmentCount, upcoming: upcoming.length, scope: scopeLevel, timeZone: window.timeZone },
+        agenda: { status: heatmapAppointmentCount || heatmapHistoricalCount ? 'ok' : 'empty', recordsInPeriod: currentAppointments.length, recordsInHeatmap: heatmapAppointmentCount, historicalInHeatmap: heatmapHistoricalCount, upcoming: upcoming.length, scope: scopeLevel, timeZone: window.timeZone },
         activity: { status: activity.length ? 'ok' : 'empty', recordsInPeriod: activity.length, scope: scopeLevel },
         payments: { status: paymentMethods.length ? 'ok' : 'empty', methods: paymentMethods.length, total: money(paymentMethods.reduce((sum, item) => sum + num(item.value), 0)), commerceCapturedMethods: commercePaymentMethods.length, commerceCapturedTotal: money(commercePaymentMethods.reduce((sum, item) => sum + num(item.value), 0)) },
         commerce: { status: commerceAvailable ? 'ok' : 'unavailable', reason: input.commerceUnavailableReason || null },

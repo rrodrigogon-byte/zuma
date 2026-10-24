@@ -214,12 +214,19 @@ function Heatmap({ cells = [] }) {
   const days = [['mon', 'Seg'], ['tue', 'Ter'], ['wed', 'Qua'], ['thu', 'Qui'], ['fri', 'Sex'], ['sat', 'Sáb'], ['sun', 'Dom']]
   const observedHours = cells.map((item) => Number(item.hour)).filter((hour) => Number.isInteger(hour) && hour >= 0 && hour <= 23)
   const hours = [...new Set([...Array.from({ length: 13 }, (_, index) => index + 8), ...observedHours])].sort((a, b) => a - b)
-  const values = new Map(cells.map((item) => [`${item.weekday}-${item.hour}`, Number(item.value || 0)]))
+  const byKey = new Map(cells.map((item) => [`${item.weekday}-${item.hour}`, item]))
   const max = Math.max(...cells.map((item) => Number(item.value || 0)), 1)
   const total = cells.reduce((sum, item) => sum + Number(item.value || 0), 0)
+  const historico = cells.reduce((sum, item) => sum + Number(item.historicoAvec || 0), 0)
+  const describe = (label, hour, cell) => {
+    const value = Number(cell?.value || 0)
+    const partes = [Number(cell?.agenda || 0) ? `${cell.agenda} da agenda` : '', Number(cell?.historicoAvec || 0) ? `${cell.historicoAvec} do histórico Avec` : ''].filter(Boolean)
+    return `${label}, ${hour}h: ${value} atendimento(s)${partes.length ? ` (${partes.join(' + ')})` : ''}`
+  }
   return <>
-    {!total && <p className="dino-heatmap-empty">Sem agendamentos elegíveis no período selecionado. Cancelamentos e faltas não entram no mapa.</p>}
-    <div className="dino-heatmap-wrap"><div className="dino-heatmap" style={{ '--heatmap-cols': hours.length }} role="grid" aria-label="Horários mais movimentados por dia"><span aria-hidden="true" />{hours.map((hour) => <span key={hour} role="columnheader">{hour}h</span>)}{days.flatMap(([day, label]) => [<strong key={`${day}-label`} role="rowheader">{label}</strong>, ...hours.map((hour) => { const value = values.get(`${day}-${hour}`) || 0; return <i key={`${day}-${hour}`} role="gridcell" aria-label={`${label}, ${hour} horas: ${value} agendamento(s)`} title={`${label}, ${hour}h: ${value} agendamento(s)`} data-count={value} style={{ opacity: value ? .2 + value / max * .8 : .06 }} /> })])}</div></div>
+    {!total && <p className="dino-heatmap-empty">Sem atendimentos elegíveis no período selecionado. Cancelamentos e faltas não entram no mapa.</p>}
+    {historico > 0 && <p className="dino-heatmap-empty">Inclui {historico} atendimento(s) do histórico Avec pela hora de fechamento da comanda (só comandas fechadas no mesmo dia).</p>}
+    <div className="dino-heatmap-wrap"><div className="dino-heatmap" style={{ '--heatmap-cols': hours.length }} role="grid" aria-label="Horários mais movimentados por dia"><span aria-hidden="true" />{hours.map((hour) => <span key={hour} role="columnheader">{hour}h</span>)}{days.flatMap(([day, label]) => [<strong key={`${day}-label`} role="rowheader">{label}</strong>, ...hours.map((hour) => { const cell = byKey.get(`${day}-${hour}`); const value = Number(cell?.value || 0); const text = describe(label, hour, cell); return <i key={`${day}-${hour}`} role="gridcell" aria-label={text} title={text} data-count={value} style={{ opacity: value ? .2 + value / max * .8 : .06 }} /> })])}</div></div>
   </>
 }
 
@@ -320,7 +327,7 @@ export default function DinoBusinessDashboard() {
       <details className="dino-data-quality" open><summary>Qualidade e cobertura dos dados</summary>
         <ul className="dino-data-quality-sources">
           <li><strong>Escopo:</strong> {data.scope?.label || 'Empresa'}{data.scope?.level === 'unit' ? ' · indicadores operacionais filtrados pela unidade selecionada' : ' · agregado da empresa'}.</li>
-          <li><strong>Agenda:</strong> {dataSources.agenda?.recordsInHeatmap || 0} agendamento(s) no mapa · {dataSources.agenda?.upcoming || 0} futuro(s) · fuso {dataSources.agenda?.timeZone || displayTimeZone}.</li>
+          <li><strong>Agenda:</strong> {dataSources.agenda?.recordsInHeatmap || 0} agendamento(s) e {dataSources.agenda?.historicalInHeatmap || 0} atendimento(s) do histórico Avec no mapa · {dataSources.agenda?.upcoming || 0} futuro(s) · fuso {dataSources.agenda?.timeZone || displayTimeZone}.</li>
           <li><strong>Atividade:</strong> {dataSources.activity?.recordsInPeriod || 0} evento(s) exibido(s) no período (máximo de 12, mais recentes).</li>
           <li><strong>Pagamentos:</strong> {dataSources.payments?.methods || 0} meio(s) listado(s) · {fmtR(dataSources.payments?.total || 0)} registrados; capturas Commerce separadas: {fmtR(dataSources.payments?.commerceCapturedTotal || 0)}.</li>
           <li><strong>Commerce:</strong> {dataSources.commerce?.status === 'ok' ? 'disponível no escopo validado' : `indisponível${dataSources.commerce?.reason ? ` (${dataSources.commerce.reason})` : ''}`}.</li>
