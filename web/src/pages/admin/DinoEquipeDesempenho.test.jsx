@@ -3,7 +3,7 @@ import { act, create } from 'react-test-renderer'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({ get: vi.fn(), patch: vi.fn() }))
 vi.mock('../../lib/api', () => ({ api: { get: mocks.get, patch: mocks.patch }, fmtR: value => `VALOR ${value}` }))
-import DinoEquipeDesempenho, { buildDrillTree, shiftEquipeDate } from './DinoEquipeDesempenho'
+import DinoEquipeDesempenho, { buildDrillTree, shiftEquipeDate, toCsv } from './DinoEquipeDesempenho'
 const props = { empresaId: 'tenant-a', lojaId: 'unit-a', onOpenTab: vi.fn() }
 const tick = () => new Promise(resolve => setTimeout(resolve, 0))
 const text = node => typeof node === 'string' ? node : (node?.children || []).map(text).join(' ')
@@ -20,7 +20,7 @@ function fixture(url, scope = { empresaId: 'tenant-a', lojaId: 'unit-a' }) {
   const employeeA2 = { id: 'employee-ex', name: 'Ex Profissional Avec', active: true, registeredActive: false, activeByMovement: true, revenue: 90, services: 2, products: 0, commission: 0, hasActivity: true, historicalServices: 2 }
   const employeeB = { id: 'employee-b', name: 'Profissional sintético B', revenue: 0, services: 0, products: 0, commission: 0, paidTransfers: null, hasActivity: false }
   const full = { ...employeeA, topServices: [{ id: 'svc', name: 'Serviço sintético', quantity: 4, revenue: 180 }], heatmap: [{ day: 1, hour: 9, quantity: 4, revenue: 180 }], daily: [{ date: '2026-01', revenue: 200, services: 4 }], strengths: [{ code: 'REC', text: 'Resultado registrado no período.' }], attention: [], suggestions: [{ code: 'ACT', text: 'Revisar o fluxo com a equipe.', evidence: 'Base: 4 serviços.' }], rows: ROWS }
-  return { readOnly: true, writePerformed: false, scope, seriesGranularity: historico ? 'month' : 'day', period: { inicio: historico ? '2024-05-10' : query.get('inicio'), fim: query.get('fim'), historico, days: 900, previousInicio: '2026-08-01', previousFim: '2026-08-30' }, summary: { revenue: 200, commission: 80, services: 4, products: 1, paidTransfers: null, withValues: 2, activeByMovement: 1, unattributedHistoricalRevenue: 30 }, employees: detail ? [full] : [employeeA, employeeA2, employeeB], quality: { transfersAvailable: false, unscopedExcluded: 2, unattributedEvents: 1 }, definitions: ['Comissão não é pagamento.'] }
+  return { readOnly: true, writePerformed: false, scope, teamSeries: historico ? [{ date: '2025-11', revenue: 80, services: 2 }, { date: '2026-01', revenue: 40, services: 0 }] : [], seriesGranularity: historico ? 'month' : 'day', period: { inicio: historico ? '2024-05-10' : query.get('inicio'), fim: query.get('fim'), historico, days: 900, previousInicio: '2026-08-01', previousFim: '2026-08-30' }, summary: { revenue: 200, commission: 80, services: 4, products: 1, paidTransfers: null, withValues: 2, activeByMovement: 1, unattributedHistoricalRevenue: 30 }, employees: detail ? [full] : [employeeA, employeeA2, employeeB], quality: { transfersAvailable: false, unscopedExcluded: 2, unattributedEvents: 1 }, definitions: ['Comissão não é pagamento.'] }
 }
 let renderer
 beforeEach(() => { mocks.get.mockReset(); mocks.patch.mockReset(); props.onOpenTab.mockClear(); mocks.get.mockImplementation(url => Promise.resolve(fixture(url))); mocks.patch.mockResolvedValue({ ok: true }); globalThis.IS_REACT_ACT_ENVIRONMENT = true })
@@ -93,6 +93,15 @@ describe('desempenho da equipe', () => {
   it('erro não ecoa dados de cliente/servidor e permite tentar novamente', async () => { mocks.get.mockRejectedValue(new Error('PRIVATE-ERROR-CLIENT-CANARY')); await mount(); expect(content()).not.toContain('PRIVATE-ERROR'); expect(content()).toContain('Não foi possível'); mocks.get.mockImplementation(url => Promise.resolve(fixture(url))); await act(async () => { button('Atualizar indicadores').props.onClick(); await tick() }); expect(content()).toContain('Profissional sintético A') })
   it('busca filtra e os atalhos abrem os módulos existentes', async () => { await mount(); const search = renderer.root.findAllByType('input').find(item => item.props.type === 'search'); await act(async () => search.props.onChange({ target: { value: 'Ex Prof' } })); expect(content()).toContain('Ex Profissional Avec'); expect(content()).not.toContain('Profissional sintético A'); await act(async () => button('Conferir extratos e repasses').props.onClick()); expect(props.onOpenTab).toHaveBeenCalledWith('Extrato e repasses') })
   it('preset de 7 dias sai do histórico e busca um período fechado', async () => { await mount(); await act(async () => { button('7 dias').props.onClick(); await tick() }); expect(mocks.get).toHaveBeenCalledTimes(2); expect(mocks.get.mock.calls[1][0]).toMatch(/\?inicio=\d{4}-\d{2}-\d{2}&fim=/) })
+  it('gráfico da equipe: clicar no mês abre aquele mês como período', async () => {
+    await mount(); expect(content()).toContain('Evolução da equipe')
+    await act(async () => { byAria('Abrir nov/2025: VALOR 80').props.onClick(); await tick() })
+    expect(mocks.get.mock.calls.at(-1)[0]).toContain('inicio=2025-11-01&fim=2025-11-30')
+  })
+  it('CSV sai no formato do Excel pt-BR', () => {
+    const csv = toCsv(['Nome', 'Valor'], [['Ana; "A"', 1234.5], ['Beto', null]])
+    expect(csv.startsWith('﻿')).toBe(true); expect(csv).toContain('"Ana; ""A""";1234,5'); expect(csv).toContain('Beto;')
+  })
   it('deslocamento de dia respeita viradas e ano bissexto', () => { expect(shiftEquipeDate('2024-03-01', -1)).toBe('2024-02-29'); expect(shiftEquipeDate('2026-01-01', -1)).toBe('2025-12-31') })
   it('comandas ambíguas mostram apuração parcial e ressalva financeira', async () => {
     mocks.get.mockImplementation(url => { const data = fixture(url); data.quality.ambiguousCommandsExcluded = 2; data.quality.commissionWarnings = ['Vínculo financeiro ambíguo: revisão requerida.']; return Promise.resolve(data) })

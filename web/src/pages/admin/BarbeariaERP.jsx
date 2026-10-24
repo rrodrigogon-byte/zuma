@@ -213,6 +213,9 @@ function rotuloPreco(servico) {
   return servico?.tipoPreco === 'a_partir_de' ? `A partir de ${valor}` : valor
 }
 
+// Abas que não dependem da visão geral da barbearia (cada uma busca seus próprios dados).
+const TABS_AUTONOMAS = new Set(['Desempenho da equipe', 'Retorno previsto', 'Lista de espera', 'Saúde do clube', 'Curva ABC', 'Projeção inteligente', 'Ocupação e metas', 'Avaliações (NPS)', 'Origem dos clientes', 'Cobranças e cashback', 'Receita da IA', 'Resumo diário', 'Vale-presente'])
+
 export default function BarbeariaERP() {
   const { toast } = useToast()
   const { user, empresaAtiva, lojaAtiva, lojasAcessiveis } = useAuth()
@@ -394,7 +397,18 @@ export default function BarbeariaERP() {
     setRelatorio(null)
   }, [scopeKey])
 
-  useEffect(() => { carregar() }, [carregar])
+  // Painéis autônomos buscam os próprios dados: a visão geral (pesada) não bloqueia a tela
+  // nem disputa o servidor com eles — é adiada e só carrega em segundo plano.
+  const tabAutonoma = TABS_AUTONOMAS.has(tab)
+  const adiarVisaoGeral = tabAutonoma && !dadosCarregados
+  const visaoGeralPedida = useRef(null)
+  useEffect(() => {
+    if (visaoGeralPedida.current === carregar) return undefined
+    const pedir = () => { visaoGeralPedida.current = carregar; carregar() }
+    if (!adiarVisaoGeral) { pedir(); return undefined }
+    const timer = setTimeout(pedir, 3000)
+    return () => clearTimeout(timer)
+  }, [carregar, adiarVisaoGeral])
 
   useEffect(() => {
     if (tab !== 'Integrações') return undefined
@@ -1778,7 +1792,7 @@ export default function BarbeariaERP() {
       {areaAtual.tabs.map((nome) => <button key={nome} type="button" title={TAB_DESCRICAO[nome]} aria-current={tab === nome ? 'page' : undefined} onClick={() => navegarParaTab(nome)} style={{ ...styles.tabNavItem, ...(tab === nome ? styles.tabNavItemActive : {}) }}>{nome}</button>)}
     </nav>
     {erro && <Card style={{ padding: 16, marginBottom: 18, borderColor: '#e05c5c' }}><strong role="status" aria-live="polite">Atenção no carregamento</strong><div style={{ color: 'var(--muted)', marginTop: 5 }}>{erro}</div></Card>}
-    {loading && !dadosCarregados ? <Card style={{ padding: 60, textAlign: 'center', color: 'var(--muted)' }} role="status" aria-live="polite" aria-busy="true">Carregando dados da empresa ativa…</Card> : <div aria-busy={loading} inert={loading ? "" : undefined}>{renderConteudo()}</div>}
+    {loading && !dadosCarregados && !tabAutonoma ? <Card style={{ padding: 60, textAlign: 'center', color: 'var(--muted)' }} role="status" aria-live="polite" aria-busy="true">Carregando dados da empresa ativa…</Card> : <div aria-busy={loading && !tabAutonoma} inert={loading && !tabAutonoma ? "" : undefined}>{renderConteudo()}</div>}
     {renderModal()}
   </div>
 }

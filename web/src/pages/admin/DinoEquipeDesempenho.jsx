@@ -76,6 +76,38 @@ export function buildDrillTree(rows = [], dimension = 'tempo') {
 }
 const ORIGIN = { historico_avec: 'Histórico Avec', comanda: 'Comanda', agendamento: 'Agenda', venda: 'Revenda' }
 
+// ── Exportação CSV (Excel pt-BR: ponto e vírgula, vírgula decimal e BOM) ──
+const csvCell = value => { const raw = value == null ? '' : typeof value === 'number' ? String(Math.round(value * 100) / 100).replace('.', ',') : String(value); return /[;"\n\r]/.test(raw) ? `"${raw.replace(/"/g, '""')}"` : raw }
+export function toCsv(header, rows) { return '\ufeff' + [header, ...rows].map(row => row.map(csvCell).join(';')).join('\r\n') }
+function downloadCsv(name, content) {
+  try {
+    const url = URL.createObjectURL(new Blob([content], { type: 'text/csv;charset=utf-8' }))
+    const link = document.createElement('a'); link.href = url; link.download = name; document.body.appendChild(link); link.click(); link.remove()
+    setTimeout(() => URL.revokeObjectURL(url), 1000)
+  } catch { /* navegador sem suporte a download */ }
+}
+const slug = value => String(value || 'equipe').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-|-$/g, '').toLowerCase()
+
+// Preferências visuais do gestor (só conveniência local; nunca dados).
+const PREFS_KEY = 'dino-equipe-desempenho:prefs'
+function readPrefs() { try { return JSON.parse(globalThis.localStorage?.getItem(PREFS_KEY) || '{}') || {} } catch { return {} } }
+function writePrefs(value) { try { globalThis.localStorage?.setItem(PREFS_KEY, JSON.stringify(value)) } catch { /* armazenamento indisponível */ } }
+function monthBounds(key, today) {
+  const [y, m] = key.split('-').map(Number)
+  const last = new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10)
+  return { inicio: `${key}-01`, fim: last > today ? today : last }
+}
+
+function TeamChart({ rows = [], monthly, onPick }) {
+  const max = Math.max(1, ...rows.map(item => item.revenue || 0))
+  const total = rows.reduce((sum, item) => sum + (item.revenue || 0), 0)
+  const best = rows.reduce((top, item) => (item.revenue > (top?.revenue || 0) ? item : top), null)
+  if (!rows.length) return null
+  return <section className="eq-card eq-team-chart"><div className="eq-chart-head"><div><h3>Evolução da equipe</h3><p className="eq-muted">Receita atribuída por {monthly ? 'mês' : 'dia'} · clique numa barra para abrir {monthly ? 'o mês' : 'o dia'}.</p></div><div className="eq-chart-stats"><span><small>Total no recorte</small><strong>{amount(total)}</strong></span>{best && <span><small>Melhor {monthly ? 'mês' : 'dia'}</small><strong>{monthly ? monthLabel(best.date) : dateLabel(best.date)} · {amount(best.revenue)}</strong></span>}</div></div>
+    <div className="eq-scroll"><div className="eq-team-bars" style={{ '--bars': rows.length }}>{rows.map(item => <button type="button" key={item.date} className="eq-team-bar" onClick={() => onPick(item.date)} title={`${monthly ? monthLabel(item.date) : dateLabel(item.date)}: ${amount(item.revenue)} · ${count(item.services)} serviços`} aria-label={`Abrir ${monthly ? monthLabel(item.date) : dateLabel(item.date)}: ${amount(item.revenue)}`}><i style={{ height: `${Math.max(item.revenue > 0 ? 2 : 0, (item.revenue || 0) / max * 100)}%` }} /><small>{monthly ? `${MONTHS[Number(item.date.slice(5, 7)) - 1]}${item.date.slice(5, 7) === '01' || item === rows[0] ? `/${item.date.slice(2, 4)}` : ''}` : item.date.slice(8)}</small></button>)}</div></div>
+  </section>
+}
+
 function Metric({ label, value, note, tone = '' }) { return <article className={`eq-metric ${tone}`}><span>{label}</span><strong>{value}</strong><small>{note}</small></article> }
 function Notes({ title, items = [], empty, type = '' }) { return <section className={`eq-notes ${type}`}><h3>{title}</h3>{items.length ? <ul>{items.map((item, i) => <li key={`${item.code}-${i}`}><strong>{item.text}</strong>{typeof item.evidence === 'string' && item.evidence && <small>{item.evidence}</small>}</li>)}</ul> : <p>{empty}</p>}</section> }
 function ServiceBars({ items = [] }) {
@@ -150,9 +182,10 @@ export default function DinoEquipeDesempenho({ empresaId = '', lojaId = '', onOp
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [search, setSearch] = useState('')
-  const [sort, setSort] = useState('revenue')
-  const [onlyWithValues, setOnlyWithValues] = useState(true)
-  const [dimension, setDimension] = useState('tempo')
+  const prefs = useMemo(readPrefs, [])
+  const [sort, setSort] = useState(prefs.sort || 'revenue')
+  const [onlyWithValues, setOnlyWithValues] = useState(prefs.onlyWithValues !== false)
+  const [dimension, setDimension] = useState(DRILL_DIMENSIONS[prefs.dimension] ? prefs.dimension : 'tempo')
   const [employeeId, setEmployeeId] = useState('')
   const [expanded, setExpanded] = useState(() => new Set())
   const [limits, setLimits] = useState({})
@@ -236,9 +269,17 @@ export default function DinoEquipeDesempenho({ empresaId = '', lojaId = '', onOp
     setActivation({ step: 'done', message: `${ok} de ${toActivate.length} profissional(is) ativado(s) no cadastro.` })
     reload()
   }
+  useEffect(() => { writePrefs({ sort, onlyWithValues, dimension }) }, [sort, onlyWithValues, dimension])
+  const pickBucket = key => { const today = hojeAgenda(); if (key.length === 7) setPeriod({ historico: false, ...monthBounds(key, today) }); else setPeriod({ historico: false, inicio: key, fim: key }) }
+  const exportEmployees = () => downloadCsv(`desempenho-equipe-${slug(visible?.period?.inicio)}-a-${slug(visible?.period?.fim)}.csv`, toCsv(
+    ['Profissional', 'Situação', 'Receita atribuída', 'Participação %', 'Comissão indicativa', 'Serviços', 'Históricos Avec', 'Produtos', 'Ticket / serviço', 'Última atividade', 'Vs. período anterior %'],
+    employees.map(item => [item.name, item.synthetic ? 'Sem vínculo' : item.activeByMovement ? 'Ativo (com movimento; inativo no cadastro)' : item.active === false ? 'Inativo' : 'Ativo', item.revenue, share(item.revenue, totalAttributed), item.synthetic ? null : item.commission, item.services, item.historicalServices || 0, item.products, item.ticketAverage, item.lastActivity ? dateLabel(item.lastActivity) : '', item.revenueTrendPct])))
+  const exportRows = employee => downloadCsv(`atendimentos-${slug(employee.name)}.csv`, toCsv(
+    ['Data', 'Hora', 'Tipo', 'Item', 'Cliente', 'Origem', 'Grupo', 'Quantidade', 'Valor'],
+    (employee.rows || []).map(row => [dateLabel(row.date), row.hour == null ? '' : `${String(row.hour).padStart(2, '0')}h`, row.type === 'produto' ? 'Produto' : 'Serviço', row.name, row.client, ORIGIN[row.origin] || row.origin, row.group, row.quantity, row.revenue])))
   const presetActive = days => !period.historico && period.fim === hojeAgenda() && period.inicio === shiftEquipeDate(period.fim, -(days - 1))
   return <div className="eq-panel eq-full">
-    <header className="eq-hero"><div><span className="eq-kicker">GESTÃO DA EQUIPE · {period.historico ? 'HISTÓRICO COMPLETO' : 'PERÍODO'} · SOMENTE LEITURA</span><h2>Desempenho da equipe</h2><p>Todo o histórico carregado (Avec + operação + e-commerce). Clique em um profissional para detalhar em até 5 níveis.</p></div><button type="button" className="eq-primary" onClick={reload} disabled={loading || !empresaId || !lojaId}>Atualizar indicadores</button></header>
+    <header className="eq-hero"><div><span className="eq-kicker">GESTÃO DA EQUIPE · {period.historico ? 'HISTÓRICO COMPLETO' : 'PERÍODO'} · SOMENTE LEITURA</span><h2>Desempenho da equipe</h2><p>{period.historico ? 'Todo o histórico carregado (Avec + operação + e-commerce).' : 'Recorte de período com comparação ao período anterior de mesma duração.'} Clique em um profissional para detalhar em até 5 níveis.</p></div><button type="button" className="eq-primary" onClick={reload} disabled={loading || !empresaId || !lojaId}>Atualizar indicadores</button></header>
     <div className="eq-filterbar">
       <div className="eq-presets" role="group" aria-label="Períodos rápidos"><button type="button" aria-pressed={period.historico} className={period.historico ? 'is-on' : ''} onClick={chooseHistory}>Todo o histórico</button>{[[7, '7 dias'], [30, '30 dias'], [90, '90 dias']].map(([days, label]) => <button key={days} type="button" aria-pressed={presetActive(days)} className={presetActive(days) ? 'is-on' : ''} onClick={() => choosePeriod(days)}>{label}</button>)}</div>
       <label>De<input aria-label="Início do período" type="date" value={period.historico ? (visible?.period?.inicio || '') : period.inicio} onChange={event => setPeriod(value => ({ historico: false, inicio: event.target.value, fim: value.fim }))} /></label>
@@ -260,6 +301,7 @@ export default function DinoEquipeDesempenho({ empresaId = '', lojaId = '', onOp
         <Metric label="Profissionais com valores" value={count(summary.withValues ?? employees.length)} note={summary.activeByMovement ? `${count(summary.activeByMovement)} inativo(s) no cadastro exibidos como ativos` : 'Todos ativos no cadastro'} />
         <Metric label="Sem profissional atribuído" value={amount(summary.unattributedHistoricalRevenue || 0)} note="Histórico Avec sem vínculo — linha própria" />
       </div>
+      <TeamChart rows={visible.teamSeries || []} monthly={visible.seriesGranularity === 'month'} onPick={pickBucket} />
       <section className="eq-card eq-grid-card">
         <div className="eq-section-head">
           <div><h3>Todos os profissionais</h3><p>Clique na linha ou no nome para detalhar: {DRILL_DIMENSIONS[dimension].label} › atendimentos. Volume não mede sozinho a qualidade do atendimento.</p></div>
@@ -267,7 +309,7 @@ export default function DinoEquipeDesempenho({ empresaId = '', lojaId = '', onOp
           <label>Ordenar por<select value={sort} onChange={event => setSort(event.target.value)}><option value="revenue">Receita atribuída</option><option value="commission">Comissão</option><option value="services">Serviços</option><option value="ticketAverage">Ticket / serviço</option><option value="completed">Agenda concluída</option><option value="name">Nome</option></select></label>
           <label>Detalhar por<select value={dimension} onChange={event => { setDimension(event.target.value); setExpanded(value => new Set([...value].filter(item => !item.includes('/')))) }}>{Object.entries(DRILL_DIMENSIONS).map(([key, item]) => <option key={key} value={key}>{item.label}</option>)}</select></label>
           <label className="eq-check"><input type="checkbox" checked={onlyWithValues} onChange={event => setOnlyWithValues(event.target.checked)} /><span>Somente com valores{hiddenWithoutValues && onlyWithValues ? ` (${count(hiddenWithoutValues)} ocultos)` : ''}</span></label>
-          <div className="eq-head-actions"><button type="button" onClick={expandAll} disabled={!employees.length}>Expandir todos</button><button type="button" onClick={() => setExpanded(new Set())} disabled={!expanded.size}>Recolher</button></div>
+          <div className="eq-head-actions"><button type="button" onClick={exportEmployees} disabled={!employees.length}>Exportar CSV</button><button type="button" onClick={expandAll} disabled={!employees.length}>Expandir todos</button><button type="button" onClick={() => setExpanded(new Set())} disabled={!expanded.size}>Recolher</button></div>
         </div>
         {toActivate.length > 0 && <div className="eq-activate" role="status">
           {activation.step === 'confirm' ? <><span>Ativar <strong>{count(toActivate.length)}</strong> profissional(is) no cadastro? Eles passam a aparecer como disponíveis na agenda.</span><button type="button" className="eq-primary" onClick={activateAll}>Confirmar ativação</button><button type="button" onClick={() => setActivation({ step: 'idle', message: '' })}>Cancelar</button></>
@@ -299,7 +341,7 @@ export default function DinoEquipeDesempenho({ empresaId = '', lojaId = '', onOp
           })}</tbody></table></div>
         {!employees.length && <p className="eq-empty">{onlyWithValues && hiddenWithoutValues ? 'Nenhum profissional com valores corresponde à busca. Desmarque “Somente com valores” para ver todos.' : 'Nenhum profissional corresponde à busca neste contexto.'}</p>}
       </section>
-      {selected ? <section className="eq-detail" aria-label={`Detalhe de ${selected.name}`}><div className="eq-detail-head"><div><span className="eq-kicker">ANÁLISE INDIVIDUAL</span><h3>{selected.name}</h3></div><button type="button" onClick={() => setEmployeeId('')}>Fechar detalhe</button></div><div className="eq-metrics"><Metric label="Serviços" value={amount(selected.serviceRevenue)} note={`${count(selected.services)} serviços apurados`} /><Metric label="Revenda" value={amount(selected.productRevenue)} note={`${count(selected.products)} unidades vendidas`} /><Metric label="Comissão de serviços" value={amount(selected.serviceCommission)} note="Calculada, não paga automaticamente" /><Metric label="Comissão de produtos" value={amount(selected.productCommission)} note="Regra atual de revenda" /><Metric label="Comparecimento observado" value={percent(selected.attendanceRate)} note="Concluídos / (concluídos + faltas)" /></div>
+      {selected ? <section className="eq-detail" aria-label={`Detalhe de ${selected.name}`}><div className="eq-detail-head"><div><span className="eq-kicker">ANÁLISE INDIVIDUAL</span><h3>{selected.name}</h3></div><div className="eq-head-actions"><button type="button" onClick={() => exportRows(selected)} disabled={!selected.rows?.length}>Exportar atendimentos</button><button type="button" onClick={() => setEmployeeId('')}>Fechar detalhe</button></div></div><div className="eq-metrics"><Metric label="Serviços" value={amount(selected.serviceRevenue)} note={`${count(selected.services)} serviços apurados`} /><Metric label="Revenda" value={amount(selected.productRevenue)} note={`${count(selected.products)} unidades vendidas`} /><Metric label="Comissão de serviços" value={amount(selected.serviceCommission)} note="Calculada, não paga automaticamente" /><Metric label="Comissão de produtos" value={amount(selected.productCommission)} note="Regra atual de revenda" /><Metric label="Comparecimento observado" value={percent(selected.attendanceRate)} note="Concluídos / (concluídos + faltas)" /></div>
         <div className="eq-agenda-stats"><span>{count(selected.completed)} concluídos</span><span>{count(selected.canceled)} cancelados</span><span>{count(selected.noShow)} faltas de clientes</span><span>{count(selected.appointments)} reservas</span></div>
         <div className="eq-two-columns"><section className="eq-card"><h3>Serviços mais vendidos</h3><p className="eq-muted">Quantidade apurada e valor atribuído após descontos; inclui histórico Avec detalhado quando disponível.</p><ServiceBars items={selected.topServices} /></section><section className="eq-card"><h3>Evolução {selectedDetail.granularity === 'month' ? 'mensal' : 'diária'}</h3><p className="eq-muted">Receita atribuída no período selecionado.</p><DailyChart rows={selected.daily} monthly={selectedDetail.granularity === 'month'} /></section></div>
         <section className="eq-card"><h3>Dias e horários de maior volume</h3><p className="eq-muted">Início do serviço, quando conhecido. Sem horário confirmado, o registro não entra no mapa.</p><HourMap cells={selected.heatmap} /></section>

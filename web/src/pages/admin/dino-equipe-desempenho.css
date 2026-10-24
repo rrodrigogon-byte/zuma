@@ -149,7 +149,19 @@ details.eq-quality summary { padding:0; }
 }
 .eq-tree tbody th,.eq-tree tbody th small,.eq-tree tbody td { text-transform:none; font-family:inherit; letter-spacing:normal; background:transparent; }
 .eq-tree tbody th small { font-size:11px; color:var(--muted); }
-.eq-full .eq-metrics { grid-template-columns:repeat(auto-fit,minmax(215px,1fr)); }
+.eq-full .eq-metrics { grid-template-columns:repeat(auto-fit,minmax(178px,1fr)); }
 .eq-full .eq-metric strong { font-size:clamp(18px,1.45vw,24px); white-space:nowrap; overflow-wrap:normal; }
 .eq-tree tbody tr.eq-node:hover > * { background:color-mix(in srgb,var(--eq-gold-light) 18%,var(--card)); }
 @media(max-width:700px) { .eq-full .eq-metrics { grid-template-columns:repeat(2,minmax(0,1fr)); } .eq-full .eq-metric strong { white-space:normal; font-size:18px; } }
+.eq-team-chart { display:grid; gap:12px; }
+.eq-chart-head { display:flex; flex-wrap:wrap; justify-content:space-between; gap:14px; align-items:end; }
+.eq-chart-head h3 { margin:0 0 4px; }
+.eq-chart-stats { display:flex; flex-wrap:wrap; gap:18px; }
+.eq-chart-stats span { display:grid; gap:3px; }
+.eq-chart-stats small { color:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:.04em; font-weight:750; }
+.eq-chart-stats strong { font-size:15px; font-variant-numeric:tabular-nums; }
+.eq-team-bars { display:grid; grid-template-columns:repeat(var(--bars),minmax(18px,1fr)); align-items:end; gap:4px; height:170px; min-width:calc(var(--bars) * 22px); }
+.eq-panel .eq-team-bar { display:flex; flex-direction:column; justify-content:end; align-items:stretch; gap:6px; height:100%; min-height:0; padding:0; border:0; border-radius:0; background:transparent; }
+.eq-team-bar i { display:block; width:100%; background:var(--eq-gold); border-radius:4px 4px 0 0; transition:filter 120ms ease-out; }
+.eq-team-bar:hover i,.eq-team-bar:focus-visible i { filter:brightness(1.15) saturate(1.2); background:var(--eq-navy); }
+.eq-team-bar small { color:var(--muted); font-size:10px; text-align:center; white-space:nowrap; height:13px; }

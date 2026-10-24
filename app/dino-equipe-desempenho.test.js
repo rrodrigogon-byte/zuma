@@ -378,6 +378,10 @@ test('histórico completo: período desde o 1º registro, ex-profissional com va
   assert.equal(sem.synthetic, true);
   assert.equal(sem.commission, 0);
   assert.equal(result.summary.unattributedHistoricalRevenue, 30);
+  const serie = result.teamSeries.reduce((sum, item) => sum + item.revenue, 0);
+  const pessoas = result.employees.reduce((sum, item) => sum + item.revenue, 0);
+  assert.ok(Math.abs(serie - pessoas) < 0.05, `série da equipe (${serie}) = soma das linhas (${pessoas})`);
+  assert.equal(result.teamSeries[0].date, '2023-05');
   assert.ok(result.summary.activeByMovement >= 1);
   assert.equal(result.employees.find((item) => item.id === 'p3').active, true);
   assert.deepEqual(root, before);

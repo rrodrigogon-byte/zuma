@@ -726,6 +726,8 @@ export function buildEquipeDesempenho(root, options = {}) {
     scope: { empresaId, lojaId },
     period,
     seriesGranularity: seriesGranularity(period),
+    // Evolução da equipe inteira (atribuído + histórico sem vínculo), para o gráfico do topo.
+    teamSeries: dailySeries(period, [...current.serviceRows.filter((row) => snapshot.professionalIds.has(row.professionalId)), ...current.unattributedHistoricalRows], current.productRows.filter((row) => snapshot.professionalIds.has(row.professionalId))),
     summary: {
       unattributedHistoricalRevenue: money(current.unattributedHistoricalRows.reduce((sum, row) => sum + row.revenue, 0)),
       activeByMovement: employeeRows.filter((row) => row.activeByMovement).length,
