@@ -2038,7 +2038,7 @@ export function registrarPagamentoComandaBarbearia(empresaId, comandaId, dados =
     || existing.some(item => explicitIds.includes(item.id) || explicitKeys.includes(item.chaveIdempotencia))) {
     throw Object.assign(new Error('Um identificador de pagamento já pertence a outro recebimento.'), { code: 'IDEMPOTENCY_CONFLICT' });
   }
-  const pagamentos = pagamentosEntrada.map((item, indice) => {
+  const pagamentos = pagamentosEntrada.map((item) => {
     const meio = texto(item?.meio ?? item?.meioPagamento, 40).toLowerCase();
     const valor = dinheiro(item?.valor);
     if (!MEIOS_PAGAMENTO_COMANDA_BARBEARIA.has(meio) || valor <= 0) throw new Error('Informe meio e valor válidos para cada pagamento.');
@@ -2052,7 +2052,7 @@ export function registrarPagamentoComandaBarbearia(empresaId, comandaId, dados =
       const caixa = caixaKytto.obterCaixa(empresaId, caixaId);
       if (!caixa || caixa.status !== 'aberto' || (lojaIdOperacao && caixa.lojaId !== lojaIdOperacao)) throw new Error('O caixa informado não está aberto ou não pertence à unidade ativa.');
     }
-    return { id: texto(item?.id, 120) || `pagbar-${Date.now().toString(36)}-${String(indice + 1).padStart(2, '0')}`, meio, valor, caixaId, ...(meio === 'dinheiro' && !caixaId ? { semCaixa: true } : {}), chaveIdempotencia: texto(item?.chaveIdempotencia ?? item?.chave_idempotencia ?? chaveIdempotencia, 220) || null, registradoEm: dataAtual() };
+    return { id: texto(item?.id, 120) || `pagbar-${crypto.randomUUID()}`, meio, valor, caixaId, ...(meio === 'dinheiro' && !caixaId ? { semCaixa: true } : {}), chaveIdempotencia: texto(item?.chaveIdempotencia ?? item?.chave_idempotencia ?? chaveIdempotencia, 220) || null, registradoEm: dataAtual() };
   });
   const valorNovo = Number(pagamentos.reduce((soma, item) => soma + item.valor, 0).toFixed(2));
   if (valorNovo - saldoAnterior > 0.02) throw new Error(`O pagamento excede o saldo pendente de ${saldoAnterior.toFixed(2)}.`);
