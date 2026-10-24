@@ -110,6 +110,79 @@ describe('Estoque e compras por empresa (PostgreSQL)', { skip: pgDeTeste }, () =
     await assert.rejects(() => est.registrarContagem(ctx.db, A, inv.id, []), (e) => e.code === 'INVENTORY_CLOSED');
   });
 
+  test('salvar a mesma ficha preserva vigência, identidade e baixa pendente exatamente uma vez', async () => {
+    const item = await est.criarItem(ctx.db, A, { nome: 'Insumo da ficha preservada', unidade: 'UN' });
+    const produto = await bar.salvarProduto(ctx.db, A, { nome: 'Produto da ficha preservada', preco: 10, estoqueAtual: 100 });
+    const ficha = { fonte: 'bar_produto', fonteId: produto.id, itens: [{ itemId: item.id, fator: 0.5 }] };
+    await est.salvarFicha(ctx.db, A, ficha);
+    await ctx.db.query("UPDATE est_vinculos SET criado_em = CURRENT_TIMESTAMP - interval '2 days' WHERE empresa_id=$1 AND fonte_id=$2", [A,produto.id]);
+    const ler = async () => (await ctx.db.query('SELECT id, criado_em, fator FROM est_vinculos WHERE empresa_id=$1 AND fonte_id=$2', [A,produto.id])).rows;
+    const anterior = await ler();
+    const venda = await bar.abrirComanda(ctx.db, A, { nome: 'Venda pendente da rotina' });
+    await bar.adicionarItens(ctx.db, A, venda.id, [{ produtoId: produto.id, qtd: 2 }]);
+    await bar.pagarComanda(ctx.db, A, venda.id, { meio: 'pix', servico: false });
+    await ctx.db.query("UPDATE bar_comandas SET fechada_em = CURRENT_TIMESTAMP - interval '1 day' WHERE id=$1", [venda.id]);
+    await est.salvarFicha(ctx.db, A, { ...ficha, itens: [{ itemId: item.id, fator: '0,5', espelho: true }] });
+    await est.salvarFicha(ctx.db, A, ficha);
+    assert.deepEqual(await ler(),anterior);
+    assert.equal((await est.baixarConsumoDasVendas(ctx.db,A,{lojaBar:lojaA1})).baixados,1);
+    assert.equal((await est.baixarConsumoDasVendas(ctx.db,A,{lojaBar:lojaA1})).baixados,0);
+    const movimentos = (await ctx.db.query('SELECT quantidade FROM est_movimentos WHERE empresa_id=$1 AND item_id=$2', [A,item.id])).rows;
+    assert.deepEqual(movimentos.map(m => Number(m.quantidade)),[-1]);
+    for (const itens of [undefined, null, {}, 'inválido', [null], Array(201).fill(ficha.itens[0])]) {
+      await assert.rejects(est.salvarFicha(ctx.db,A,{...ficha,itens}),{code:'VALIDATION_ERROR'});
+      assert.deepEqual(await ler(),anterior);
+    }
+    await est.salvarFicha(ctx.db,A,{...ficha,itens:[{itemId:item.id,fator:0.75}]});
+    const alterado = (await ler())[0];
+    assert.equal(alterado.id,anterior[0].id);
+    assert.ok(alterado.criado_em > anterior[0].criado_em);
+    assert.equal(Number(alterado.fator),0.75);
+  });
+
+  test('edições concorrentes não deixam o mesmo insumo espelhando dois produtos', async () => {
+    const item = await est.criarItem(ctx.db,A,{nome:'Espelho concorrente',unidade:'UN'});
+    const produtos = await Promise.all([1,2].map(n => bar.salvarProduto(ctx.db,A,{nome:`Espelho ${n}`,preco:10})));
+    const resultados = await Promise.allSettled(produtos.map(p => est.salvarFicha(ctx.db,A,{fonte:'bar_produto',fonteId:p.id,itens:[{itemId:item.id,fator:1,espelho:true}]})));
+    assert.equal(resultados.filter(r => r.status === 'fulfilled').length,1);
+    assert.equal(resultados.find(r => r.status === 'rejected').reason.code,'VALIDATION_ERROR');
+    assert.equal((await ctx.db.query('SELECT count(*)::int AS n FROM est_vinculos WHERE empresa_id=$1 AND item_id=$2 AND espelho', [A,item.id])).rows[0].n,1);
+  });
+
+  test('edições paralelas da mesma ficha substituem o conjunto inteiro sem misturar insumos', async () => {
+    const produto = await bar.salvarProduto(ctx.db,A,{nome:'Ficha simultânea',preco:10});
+    const itens = await Promise.all([1,2,3].map(n => est.criarItem(ctx.db,A,{nome:`Material concorrente ${n}`,unidade:'UN'})));
+    const ficha = {fonte:'bar_produto',fonteId:produto.id};
+    await est.salvarFicha(ctx.db,A,{...ficha,itens:[{itemId:itens[0].id,fator:1}]});
+    const idOriginal = (await ctx.db.query('SELECT id FROM est_vinculos WHERE empresa_id=$1 AND fonte_id=$2',[A,produto.id])).rows[0].id;
+    await Promise.all([1,2].map(n => est.salvarFicha(ctx.db,A,{...ficha,itens:[{itemId:itens[0].id,fator:1},{itemId:itens[n].id,fator:n}]})));
+    const salvos = (await ctx.db.query('SELECT id,item_id FROM est_vinculos WHERE empresa_id=$1 AND fonte_id=$2',[A,produto.id])).rows;
+    assert.equal(salvos.length,2);
+    assert.equal(salvos.find(v => v.item_id===itens[0].id).id,idOriginal);
+    await est.salvarFicha(ctx.db,A,{...ficha,itens:[]});
+    assert.equal((await ctx.db.query('SELECT count(*)::int AS n FROM est_vinculos WHERE empresa_id=$1 AND fonte_id=$2',[A,produto.id])).rows[0].n,0);
+  });
+
+  test('loja online preserva venda pendente e não aplica insumo novo ao histórico anterior', async () => {
+    const materiais = await Promise.all([1,2].map(n => est.criarItem(ctx.db,A,{nome:`Insumo loja vigência ${n}`,unidade:'UN'})));
+    const produto = (await ctx.db.query("INSERT INTO commerce_products (empresa_id,nome) VALUES ($1,'Vigência loja') RETURNING id",[A])).rows[0].id;
+    const variante = (await ctx.db.query('INSERT INTO commerce_product_variants (empresa_id,product_id) VALUES ($1,$2) RETURNING id',[A,produto])).rows[0].id;
+    const ficha = {fonte:'loja_variante',fonteId:variante,itens:[{itemId:materiais[0].id,fator:1}]};
+    await est.salvarFicha(ctx.db,A,ficha);
+    await ctx.db.query("UPDATE est_vinculos SET criado_em=CURRENT_TIMESTAMP-interval '2 days' WHERE empresa_id=$1 AND fonte_id=$2",[A,variante]);
+    for (const dias of [1,3]) {
+      const pedido = (await ctx.db.query("INSERT INTO commerce_orders (empresa_id,loja_id,status,criado_em) VALUES ($1,$2,'paid',CURRENT_TIMESTAMP-$3*interval '1 day') RETURNING id",[A,lojaA1,dias])).rows[0].id;
+      await ctx.db.query('INSERT INTO commerce_order_items (empresa_id,order_id,variant_id,quantidade) VALUES ($1,$2,$3,2)',[A,pedido,variante]);
+    }
+    await est.salvarFicha(ctx.db,A,{...ficha,itens:[...ficha.itens,{itemId:materiais[1].id,fator:3}]});
+    assert.equal((await est.baixarConsumoDasVendas(ctx.db,A,{lojaBar:lojaA1})).baixados,1);
+    assert.equal((await est.baixarConsumoDasVendas(ctx.db,A,{lojaBar:lojaA1})).baixados,0);
+    const movimentos = (await ctx.db.query('SELECT item_id,quantidade FROM est_movimentos WHERE empresa_id=$1 AND item_id=ANY($2::uuid[])',[A,materiais.map(m=>m.id)])).rows;
+    assert.equal(movimentos.length,1);
+    assert.equal(movimentos[0].item_id,materiais[0].id);
+    assert.equal(Number(movimentos[0].quantidade),-2);
+  });
+
   test('ficha técnica nova não baixa as vendas de antes do vínculo', async () => {
     const hortela = await est.criarItem(ctx.db, A, { nome: 'Hortelã', unidade: 'UN', tipo: 'insumo' });
     const mojito = await bar.salvarProduto(ctx.db, A, { nome: 'Mojito', categoria: 'Drinks', setor: 'bar', preco: 30, estoqueAtual: 100 });
@@ -303,6 +376,28 @@ describe('Estoque e compras: correções da revisão (PostgreSQL)', { skip: pgDe
     await bar.adicionarItens(ctx.db, C, com2.id, [{ produtoId: lata.id, qtd: 1 }]);
     await bar.pagarComanda(ctx.db, C, com2.id, { meio: 'pix', servico: false });
     await assert.rejects(() => bar.cancelarItemPorIndice(ctx.db, C, com2.id, 0), (e) => e.code === 'COMANDA_FECHADA');
+  });
+
+  test('devolução recupera custo original depois de nova compra e não duplica estorno concorrente', async () => {
+    const item = await est.criarItem(ctx.db,C,{nome:'Insumo custo devolução',unidade:'UN'});
+    await est.movimentar(ctx.db,C,{lojaId:loja,itemId:item.id,tipo:'entrada',quantidade:10,custoUnitario:20});
+    const produto = (await ctx.db.query("INSERT INTO commerce_products (empresa_id,nome) VALUES ($1,'Produto custo devolução') RETURNING id",[C])).rows[0].id;
+    const variante = (await ctx.db.query('INSERT INTO commerce_product_variants (empresa_id,product_id) VALUES ($1,$2) RETURNING id',[C,produto])).rows[0].id;
+    await est.salvarFicha(ctx.db,C,{fonte:'loja_variante',fonteId:variante,itens:[{itemId:item.id,fator:1}]});
+    const pedido = (await ctx.db.query("INSERT INTO commerce_orders (empresa_id,loja_id,status) VALUES ($1,$2,'paid') RETURNING id",[C,loja])).rows[0].id;
+    await ctx.db.query('INSERT INTO commerce_order_items (empresa_id,order_id,variant_id,quantidade) VALUES ($1,$2,$3,3)',[C,pedido,variante]);
+    await est.baixarConsumoDasVendas(ctx.db,C);
+    await est.movimentar(ctx.db,C,{lojaId:loja,itemId:item.id,tipo:'entrada',quantidade:7,custoUnitario:40});
+    assert.equal((await est.obterItem(ctx.db,C,item.id)).custoMedio,30);
+    await ctx.db.query("UPDATE commerce_orders SET status='refunded' WHERE id=$1",[pedido]);
+    const resultado = await Promise.all([est.baixarConsumoDasVendas(ctx.db,C),est.baixarConsumoDasVendas(ctx.db,C)]);
+    assert.equal(resultado.reduce((s,r) => s+r.estornados,0),1);
+    assert.equal((await est.baixarConsumoDasVendas(ctx.db,C)).estornados,0);
+    assert.equal(await saldo(item.id),17);
+    const movimentos = (await ctx.db.query("SELECT origem,quantidade,custo_unitario FROM est_movimentos WHERE empresa_id=$1 AND item_id=$2 AND origem IN ('venda_loja','estorno_venda') ORDER BY quantidade",[C,item.id])).rows;
+    assert.equal(movimentos.length,2);
+    assert.deepEqual(movimentos.map(m => [Number(m.quantidade),Number(m.custo_unitario)]),[[-3,20],[3,20]]);
+    assert.equal((await est.obterItem(ctx.db,C,item.id)).custoMedio,28.2353);
   });
 
   test('unidade do bar configurável; com uma unidade ativa ela é a padrão', async () => {

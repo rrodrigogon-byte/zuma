@@ -397,14 +397,18 @@ export async function preverFicha(db, empresaId, { fonte, fonteId, itens, quanti
 }
 
 /** Grava a ficha inteira de um produto (substitui a anterior). */
-export async function salvarFicha(db, empresaId, { fonte, fonteId, itens = [] }) {
+export async function salvarFicha(db, empresaId, { fonte, fonteId, itens }) {
   const empresa = exigirUuid(empresaId, 'empresa');
   if (!['bar_produto', 'loja_variante'].includes(fonte)) throw new ErroDominio('VALIDATION_ERROR', 'fonte deve ser bar_produto ou loja_variante');
   const id = exigirUuid(fonteId, 'produto');
-  const linhas = (Array.isArray(itens) ? itens : []).map((i) => ({ item: exigirUuid(i.itemId, 'item'), fator: numeroPositivo(i.fator, 'Quantidade por venda', { max: 1e6 }), espelho: i.espelho === true }));
+  if (!Array.isArray(itens) || itens.length > 200) throw new ErroDominio('VALIDATION_ERROR', 'Informe uma lista com até 200 insumos');
+  if (itens.some(i => !i || typeof i !== 'object' || Array.isArray(i))) throw new ErroDominio('VALIDATION_ERROR', 'Insumo inválido na ficha');
+  const linhas = itens.map((i) => ({ item: exigirUuid(i.itemId, 'item'), fator: numeroPositivo(i.fator, 'Quantidade por venda', { max: 1e6 }), espelho: i.espelho === true }));
   if (new Set(linhas.map((l) => l.item)).size !== linhas.length) throw new ErroDominio('VALIDATION_ERROR', 'Item repetido na ficha');
   if (linhas.filter((l) => l.espelho).length > 1) throw new ErroDominio('VALIDATION_ERROR', 'Só um item pode espelhar o estoque do produto');
   return transacao(db, async (q) => {
+    // Serializa edições da empresa, inclusive a verificação de espelho entre produtos.
+    await q("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", [`fichas:${empresa}`]);
     // o produto precisa existir nesta empresa
     const tabela = fonte === 'bar_produto' ? 'bar_produtos' : 'commerce_product_variants';
     const existe = await q(`SELECT 1 FROM ${tabela} WHERE empresa_id = $1 AND id = $2`, [empresa, id]);
@@ -414,9 +418,14 @@ export async function salvarFicha(db, empresaId, { fonte, fonteId, itens = [] })
       const outro = await q("SELECT 1 FROM est_vinculos WHERE empresa_id = $1 AND item_id = $2 AND espelho = true AND NOT (fonte = $3 AND fonte_id = $4)", [empresa, espelho.item, fonte, id]);
       if (outro.rows[0]) throw new ErroDominio('VALIDATION_ERROR', 'Este item já espelha o estoque de outro produto; a compra somaria duas vezes no bar');
     }
-    await q('DELETE FROM est_vinculos WHERE empresa_id = $1 AND fonte = $2 AND fonte_id = $3', [empresa, fonte, id]);
+    await q('DELETE FROM est_vinculos WHERE empresa_id = $1 AND fonte = $2 AND fonte_id = $3 AND NOT (item_id = ANY($4::uuid[]))', [empresa, fonte, id, linhas.map(l => l.item)]);
     for (const l of linhas) {
-      await q('INSERT INTO est_vinculos (empresa_id, fonte, fonte_id, item_id, fator, espelho) VALUES ($1, $2, $3, $4, $5, $6)', [empresa, fonte, id, l.item, l.fator, l.espelho]);
+      // Salvar de novo não muda o início de consumo nem perde vendas ainda não processadas.
+      // Um fator diferente continua valendo apenas a partir desta alteração.
+      await q(`INSERT INTO est_vinculos (empresa_id, fonte, fonte_id, item_id, fator, espelho) VALUES ($1, $2, $3, $4, $5, $6)
+        ON CONFLICT (empresa_id, fonte, fonte_id, item_id) DO UPDATE SET
+          criado_em = CASE WHEN est_vinculos.fator = EXCLUDED.fator THEN est_vinculos.criado_em ELSE CURRENT_TIMESTAMP END,
+          fator = EXCLUDED.fator, espelho = EXCLUDED.espelho`, [empresa, fonte, id, l.item, l.fator, l.espelho]);
     }
     return { fonte, fonteId: id, itens: linhas.length };
   });
@@ -521,7 +530,7 @@ export async function baixarConsumoDasVendas(db, empresaId, { lojaBar, fuso = 'A
     });
   }
   for (const m of desfazer) {
-    const mov = await transacao(db, (q) => movimentarNaTransacao(q, empresa, { lojaId: m.loja_id, itemId: m.item_id, tipo: 'venda', quantidade: -Number(m.quantidade), origem: 'estorno_venda', origemId: m.origem_id, chave: `${m.chave}:estorno`, motivo: 'venda cancelada ou devolvida', permitirNegativo: true }));
+    const mov = await transacao(db, (q) => movimentarNaTransacao(q, empresa, { lojaId: m.loja_id, itemId: m.item_id, tipo: 'venda', quantidade: -Number(m.quantidade), custoUnitario: Number(m.custo_unitario), origem: 'estorno_venda', origemId: m.origem_id, chave: `${m.chave}:estorno`, motivo: 'venda cancelada ou devolvida', permitirNegativo: true }));
     if (mov) estornados += 1;
   }
   void fuso;
