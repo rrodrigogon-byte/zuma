@@ -55,6 +55,10 @@ test('etiquetas normalizadas, sem duplicar entre refs da mesma pessoa', () => {
 
 test('anonimização remove dados pessoais só do titular e preserva valores', () => {
   seed();
+  Object.assign(db().clientesKytto.empresas.e1.clientes.c1, {
+    dataNascimento: '1990-10-30', aniversario: '10-30', familia: [{ id: 'f1', relacao: 'filho', nome: 'Lucas' }], familiaConsentimento: { concedido: true },
+    preferencias: { bebida: 'café' }, redesSociais: { instagram: 'joao' },
+  });
   store.addNote('e1', { refs: ['dino:c1'], texto: 'nota sobre o João', autor: 'Ana' });
   store.setTags('e1', { refs: ['dino:c1'], canonicalRef: 'dino:c1', tags: ['vip'] });
   const counts = store.anonymizeLocalCustomer('e1', { clientIds: ['c1'], phones: ['65993360000'], refs: ['dino:c1'], operador: 'Rodrigo (admin)' });
@@ -63,6 +67,7 @@ test('anonimização remove dados pessoais só do titular e preserva valores', (
   assert.equal(c1.nome, 'Titular anonimizado');
   assert.equal(c1.cpfCnpj + c1.email + c1.telefone + c1.endereco + c1.observacao, '');
   assert.equal(c1.consentimentos.whatsapp.marketing.concedido, false);
+  assert.deepEqual([c1.dataNascimento, c1.aniversario, c1.familia, c1.familiaConsentimento, c1.preferencias, c1.redesSociais], ['', '', [], null, {}, {}], 'família, gostos, redes e aniversário também saem');
   assert.ok(c1.anonimizadoEm);
   const agenda = db().barbearias.e1.agendamentos;
   assert.equal(agenda.a1.clienteNome, 'Titular anonimizado');

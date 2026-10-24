@@ -335,7 +335,7 @@ export function buildCustomer360(identity, { local = {}, commerce = {}, now = ne
   const visitTimes = doneVisits.map((item) => time(item.dataHora)).filter(Boolean).sort((a, b) => a - b);
   const visitGaps = visitTimes.slice(1).map((ms, index) => ms - visitTimes[index]);
   const averageReturnDays = visitGaps.length ? Math.round(visitGaps.reduce((a, b) => a + b, 0) / visitGaps.length / 86400000) : null;
-  const daysSinceLast = lastActivity ? Math.floor((nowMs - lastActivity) / 86400000) : null;
+  const daysSinceLast = lastActivity ? Math.max(0, Math.floor((nowMs - lastActivity) / 86400000)) : null; // agendamento de hoje ainda por vir conta como "hoje", não "há -1 dias"
 
   const lifetimeValue = money(barberRevenue + storeRevenue);
   const totalTickets = comandas.filter((item) => item.status === 'paga').length + retail.filter((item) => item.status === 'pago').length + paidOrders.length;

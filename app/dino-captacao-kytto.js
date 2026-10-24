@@ -1011,6 +1011,9 @@ export function registrarUsoAssinatura(empresaId, assinaturaId, dados = {}, opco
     servicoId: servicoId || null,
     servicoNome: servico?.nome || '',
     valorAvulso: Number(servico?.preco || 0),
+    // Uso lançado pela comanda não tem agendamento: guarda quem atendeu para o pote do plano.
+    profissionalId: texto(dados.profissionalId, 120) || null,
+    comandaId: texto(dados.comandaId, 120) || null,
     registradoEm: iso(agoraMs(opcoes)),
   });
   controle.usos = controle.usos.slice(-500);
