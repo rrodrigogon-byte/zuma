@@ -87,6 +87,8 @@ import {
   DINO_COMMERCE_LOJA_ID,
   DINO_LEGACY_EMPRESA_ID,
   DINO_LEGACY_LOJA_ID,
+  commerceEmpresaIdFromLegacy,
+  commerceLojaIdFromLegacy,
   legacyEmpresaIdFromCommerce,
   legacyLojaIdFromCommerce,
 } from './core/legacy-commerce-scope.js';
@@ -3098,6 +3100,17 @@ function legacyLojaId(req) {
   const lojas = Object.entries(configuracao.lojas || {}).filter(([, loja]) => loja?.ativa !== false);
   return lojas.length === 1 ? String(lojas[0][0]) : '';
 }
+// A conexão WhatsApp (sessões WAHA/backend, dono da instância em
+// CHATBOT_BACKEND_INSTANCES, IA e entrada/saída) é chaveada pelo id canônico
+// do Commerce. O ERP legado da Dino usa ids próprios (emp-kytto-001 /
+// dino-web-estoque); sem esta volta ao id canônico a Central WhatsApp da Dino
+// procurava a conexão no lugar errado e ficava sem instância atribuída.
+function whatsappEmpresaId(req) {
+  return commerceEmpresaIdFromLegacy(legacyEmpresaId(req));
+}
+function whatsappLojaId(req) {
+  return commerceLojaIdFromLegacy(legacyLojaId(req), legacyEmpresaId(req));
+}
 function produtosCardapioAtivos(){ return getCardapio().filter(produto => !produto.indisponivel); }
 
 // ── BARBEARIA ERP — CONTRATO ADMINISTRATIVO NO RUNTIME DO RENDER ─────────────
@@ -3236,9 +3249,9 @@ app.get('/api/admin/platform/financeiro-diagnostico', auth, requirePlatformAdmin
 registerDinoAdminRoutes(app, { db, legacyEmpresaId, legacyLojaId, financeiroKytto, barbeariaErpKytto, clientesKytto, commerceDb, requireCommercePermission, dashboardPeriod, audit, save, salesReport });
 registerAiBrainRoutes(app, { legacyEmpresaId, legacyLojaId, requireCommercePermission, audit, clientesKytto, commerceDb, listarAgendamentosBarbearia });
 registerAtivacaoRoutes(app, { legacyEmpresaId, requireCommercePermission, barbeariaErpKytto, audit });
-registerWhatsappConexaoRoutes(app, { legacyEmpresaId, legacyLojaId, audit, save, enviarMensagem: enviarWhatsappCore, isPlatformAdmin: user => isPlatformAdminUser(user) || isMainAdminUser(user) });
-registerWhatsappConexaoRoutes(app, { legacyEmpresaId, legacyLojaId, audit, save, enviarMensagem: enviarWhatsappCore, isPlatformAdmin: user => isPlatformAdminUser(user) || isMainAdminUser(user), basePath: '/api/admin/barbearia/whatsapp-conexao-gestao', tipoCanal: 'gestao' });
-registerWhatsappConexaoRoutes(app, { legacyEmpresaId, legacyLojaId, audit, save, enviarMensagem: enviarWhatsappCore, isPlatformAdmin: user => isPlatformAdminUser(user) || isMainAdminUser(user), basePath: '/api/admin/barbearia/whatsapp-conexao-lancamentos', tipoCanal: 'lancamentos' });
+registerWhatsappConexaoRoutes(app, { legacyEmpresaId: whatsappEmpresaId, legacyLojaId: whatsappLojaId, audit, save, enviarMensagem: enviarWhatsappCore, isPlatformAdmin: user => isPlatformAdminUser(user) || isMainAdminUser(user) });
+registerWhatsappConexaoRoutes(app, { legacyEmpresaId: whatsappEmpresaId, legacyLojaId: whatsappLojaId, audit, save, enviarMensagem: enviarWhatsappCore, isPlatformAdmin: user => isPlatformAdminUser(user) || isMainAdminUser(user), basePath: '/api/admin/barbearia/whatsapp-conexao-gestao', tipoCanal: 'gestao' });
+registerWhatsappConexaoRoutes(app, { legacyEmpresaId: whatsappEmpresaId, legacyLojaId: whatsappLojaId, audit, save, enviarMensagem: enviarWhatsappCore, isPlatformAdmin: user => isPlatformAdminUser(user) || isMainAdminUser(user), basePath: '/api/admin/barbearia/whatsapp-conexao-lancamentos', tipoCanal: 'lancamentos' });
 // Prévia integrada de taxas/materiais: POST por ser um cálculo de payload, nunca uma mutação.
 // Não há rota de aplicar neste recorte; o plano só devolve hash, divergências e pendências.
 function temPropriedade(valor, chave) {

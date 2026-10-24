@@ -10,6 +10,7 @@ import { db, save } from './db.js';
 import {
   disconnectInstance, getInstanceStatus, providerSummary, requestInstanceQr,
   validInstance, whatsappProviderName, chatbotBackendConfig, confirmedPhone, instancesOfCompany,
+  setPersistedInstanceRegistrySource, instanceOwner,
 } from './core/whatsapp-provider.js';
 import {
   getWahaSessionQr, getWahaSessionStatus, logoutWahaSession, provisionWahaSession,
@@ -54,6 +55,31 @@ function store() {
 // ambiente (CHATBOT_BACKEND_INSTANCE) vai para a empresa de CHATBOT_BACKEND_EMPRESA_ID
 // quando definida; sem ela, para a primeira empresa que abrir a conexão, nunca para a
 // empresa 'principal' da plataforma. Empresa sem instância não conecta nem envia.
+const UUID_EMPRESA = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+// A instância do canal Clientes foi atribuída (ou confirmada) pela administração
+// da plataforma. Registros anteriores comprovam isso pelo evento 'instancia_alterada',
+// que só a plataforma consegue gerar (configurar exige podeTrocarInstancia).
+export function instanciaConfirmadaPelaPlataforma(conexao) {
+  if (!conexao?.instance) return false;
+  if (conexao.instanciaConfirmadaPelaPlataforma === true) return true;
+  const comprovada = (conexao.history || []).some((item) => item?.tipo === 'instancia_alterada' && String(item?.detalhe || '').endsWith(`→ ${conexao.instance}`));
+  // Fixa a comprovação no registro: o histórico é curto e o evento pode sair dele.
+  if (comprovada) conexao.instanciaConfirmadaPelaPlataforma = true;
+  return comprovada;
+}
+
+// Empresas cuja instância do canal Clientes foi atribuída no painel passam a ser
+// donas dela no servidor (entrada, saída e diagnóstico) sem editar variável no
+// Render. A linha conta como conferida depois do primeiro pareamento por QR.
+export function instanciasAtribuidasNoPainel() {
+  return Object.values(store())
+    .filter((c) => normalizarTipoCanal(c?.tipoCanal) === 'cliente' && UUID_EMPRESA.test(String(c?.empresaId || '')) && instanciaConfirmadaPelaPlataforma(c))
+    .map((c) => ({ instance: c.instance, owner: String(c.empresaId).toLowerCase(), lineVerified: Boolean(c.lastConnectedAt) }));
+}
+
+setPersistedInstanceRegistrySource(instanciasAtribuidasNoPainel);
+
 export function instanciaEmUso(instance, exceto = '', tipoCanal = '') {
   if (!instance) return false;
   const tipo = tipoCanal ? normalizarTipoCanal(tipoCanal) : '';
@@ -202,6 +228,12 @@ export function visaoPublica(conexao, { numeroCompleto = false } = {}) {
     keyConfigured: provider.keyConfigured,
     backendUrl: provider.baseUrl,
     instance: conexao.instance,
+    // Canal Clientes: a empresa é a dona registrada da instância (variável do Render
+    // ou atribuição confirmada pela plataforma). Sem isso nada entra nem sai.
+    ...(canalInterno(conexao.tipoCanal) ? {} : {
+      instanciaConfirmada: instanciaConfirmadaPelaPlataforma(conexao),
+      donoRegistrado: Boolean(conexao.instance) && instanceOwner(conexao.instance) === String(conexao.empresaId || '').toLowerCase(),
+    }),
     ativo: Boolean(conexao.ativo),
     autoReconnect: conexao.autoReconnect !== false,
     state: conexao.state,
@@ -399,6 +431,11 @@ export function configurar(empresaId, { instance, autoReconnect, numeroExibicao 
   const conexao = obterConexao(empresaId, perfil);
   conexao.transport = perfil === 'cliente' ? 'legado' : 'waha';
   const reference = numeroExibicao !== undefined ? numeroReferencia(numeroExibicao) : undefined;
+  // A plataforma pode confirmar a instância atual (registro de dono sem variável de ambiente).
+  if (instance !== undefined && podeTrocarInstancia && perfil === 'cliente' && instance === conexao.instance && conexao.instance && !conexao.instanciaConfirmadaPelaPlataforma) {
+    conexao.instanciaConfirmadaPelaPlataforma = true;
+    registrar(conexao, 'instancia_confirmada', conexao.instance);
+  }
   if (instance !== undefined && instance !== conexao.instance) {
     // Trocar a instância muda qual número do backend a empresa controla: só a
     // administração da plataforma faz isso, e nunca para uma instância de outra empresa.
@@ -413,6 +450,7 @@ export function configurar(empresaId, { instance, autoReconnect, numeroExibicao 
       conexao.history = (conexao.history || []).map((item) => ({ ...item, instance: item.instance || conexao.instance }));
       registrar(conexao, 'instancia_alterada', `${conexao.instance} → ${valida}`);
       conexao.instance = valida;
+      conexao.instanciaConfirmadaPelaPlataforma = perfil === 'cliente';
       conexao.state = 'unknown';
       conexao.phone = '';
       conexao.numeroExibicao = '';

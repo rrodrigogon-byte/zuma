@@ -3,6 +3,8 @@ import { Link, useLocation } from 'react-router-dom'
 import { Clock3, Inbox, MessageSquare, ShieldCheck, Smartphone } from 'lucide-react'
 import { api } from '../../../lib/api'
 import { useAuth } from '../../../lib/auth'
+import { lojasDaEmpresa } from '../../../lib/context-selection'
+import { empresaSemUnidade, sincronizarContextoComercial } from '../../../lib/contexto-comercial'
 import { brandFromContext } from '../../../lib/brand'
 import { channelStatusPayload, webhookSecretEnvFor } from '../../../lib/whatsapp-webhook-secret'
 import { useToast } from '../../../hooks/useToast'
@@ -31,7 +33,14 @@ function Check({ ok, children, hint }) {
 }
 
 export default function WhatsappConexao() {
-  const { empresaAtiva, lojaAtiva } = useAuth()
+  const { empresaAtiva, lojaAtiva, lojasAcessiveis, atualizarContextoLojas } = useAuth()
+  const precisaSincronizar = empresaSemUnidade(lojasAcessiveis, empresaAtiva?.id) || (Boolean(empresaAtiva?.id) && !lojaAtiva?.id)
+  // Sem unidade da empresa ativa no navegador, relê o contexto autorizado no servidor
+  // antes de bloquear QR e pareamento (corrige vínculos antigos sem novo login).
+  useEffect(() => {
+    if (!precisaSincronizar) return
+    sincronizarContextoComercial({ cliente: api, lojasAcessiveis, atualizarContextoLojas, forcar: true })
+  }, [precisaSincronizar, empresaAtiva?.id]) // eslint-disable-line react-hooks/exhaustive-deps
   const scopeKey = `${empresaAtiva?.id || ''}:${lojaAtiva?.id || ''}`
   const { pathname } = useLocation()
   return <WhatsappConexaoEmpresa key={`${scopeKey}:${pathname}`} />
@@ -52,9 +61,8 @@ function WhatsappConexaoEmpresa() {
   const lojaId = String(lojaAtiva?.id || '')
   const requestOptions = { headers: { 'X-Empresa-Id': tenantId, 'X-Loja-Id': lojaId } }
   const empresas = Array.isArray(empresasAcessiveis) ? empresasAcessiveis.filter((empresa) => empresa?.id) : []
-  const lojas = Array.isArray(lojasAcessiveis)
-    ? lojasAcessiveis.filter((loja) => loja?.id && loja.ativa !== false && (!tenantId || String(loja.empresaId || '') === tenantId))
-    : []
+  // Aceita o vínculo pelo id da empresa e pelo alias Commerce, como o restante do painel.
+  const lojas = lojasDaEmpresa(lojasAcessiveis, tenantId).filter((loja) => loja?.id)
   const [conexao, setConexao] = useState(null)
   const [podeGerenciar, setPodeGerenciar] = useState(false)
   const [ia, setIa] = useState(null)
@@ -594,7 +602,8 @@ function WhatsappConexaoEmpresa() {
             <h2 id="wa-auto">Reconexão automática</h2>
             <label className="dadm-toggle"><input type="checkbox" checked={conexao.autoReconnect} disabled={!podeGerenciar || Boolean(busy)} onChange={(event) => salvarConfig({ autoReconnect: event.target.checked })} />Reconectar sozinho quando a conexão cair</label>
             <p>{tipoCanal === 'cliente' ? 'O servidor verifica a conexão a cada minuto. Quando ela cair, tenta reconectar com espera crescente de 1 a 30 minutos; se necessário, um novo QR aparece nesta tela.' : 'O servidor consulta o estado da sessão interna. A reconexão depende da ponte WAHA e do pareamento; consulta de status não comprova reconexão nem entrega.'}</p>
-            {podeGerenciar && user?.platformAdmin === true && <form className="dadm-filters" onSubmit={(event) => { event.preventDefault(); salvarConfig({ instance: instancia }) }}><label className="c360-field" style={{ flex: 1 }}>Instância no backend<input className="c360-input" value={instancia} onChange={(event) => setInstancia(event.target.value.toLowerCase())} pattern="[a-z0-9][a-z0-9_-]{1,63}" /></label><button type="submit" className="c360-btn ghost" disabled={Boolean(busy) || instancia === conexao.instance}>Salvar</button></form>}
+            {podeGerenciar && user?.platformAdmin === true && <form className="dadm-filters" onSubmit={(event) => { event.preventDefault(); salvarConfig({ instance: instancia }) }}><label className="c360-field" style={{ flex: 1 }}>Instância no backend<input className="c360-input" value={instancia} onChange={(event) => setInstancia(event.target.value.toLowerCase())} pattern="[a-z0-9][a-z0-9_-]{1,63}" /></label><button type="submit" className="c360-btn ghost" disabled={Boolean(busy) || !instancia || (instancia === conexao.instance && (tipoCanal !== 'cliente' || conexao.donoRegistrado !== false))}>{instancia === conexao.instance && tipoCanal === 'cliente' && conexao.donoRegistrado === false ? 'Confirmar instância' : 'Salvar'}</button></form>}
+            {tipoCanal === 'cliente' && conexao.instance && conexao.donoRegistrado === false && <p className="dadm-note warn" role="status">A instância {conexao.instance} ainda não está registrada como desta empresa no servidor: mensagens não entram nem saem. {user?.platformAdmin === true ? 'Toque em Confirmar instância para registrá-la.' : 'Peça à administração da plataforma para confirmar a instância.'}</p>}
           </section>
 
           <section className="dadm-card" aria-labelledby="wa-hist"><h2 id="wa-hist">Histórico da conexão</h2>{conexao.history?.length ? <ul className="dadm-history">{conexao.history.slice(0, 8).map((item) => <li key={`${item.at}-${item.tipo}-${item.instance || ''}`}><span>{HISTORY[item.tipo] || item.tipo}{item.instance && item.instance !== conexao.instance ? ` · instância ${item.instance}` : ''}{item.detalhe ? ` · ${item.detalhe}` : ''}</span><span>{dateTime(item.at)}</span></li>)}</ul> : <p className="c360-empty">Nada registrado ainda.</p>}</section>

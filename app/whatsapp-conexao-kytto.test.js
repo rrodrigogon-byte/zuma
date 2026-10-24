@@ -388,3 +388,65 @@ test('gera código de pareamento somente para a sessão interna atribuída e sal
     global.fetch = oldFetch;
   }
 });
+
+const EMP_A = '2e041110-db20-4fd1-8278-12bd3dead008';
+const EMP_B = '31f70c83-9172-40c2-945f-9e793b5048be';
+
+test('instância atribuída pela plataforma no painel registra a empresa dona sem variável de ambiente', async () => {
+  const conexao = await import('./whatsapp-conexao-kytto.js');
+  const provider = await import('./core/whatsapp-provider.js');
+  assert.equal(provider.instanceOwner('agro-open-1'), '');
+  conexao.configurar(EMP_A, { instance: 'agro-open-1' }, { podeTrocarInstancia: true });
+  assert.equal(provider.instanceOwner('agro-open-1'), EMP_A);
+  assert.deepEqual(provider.instancesOfCompany(EMP_A), ['agro-open-1']);
+  assert.equal(provider.instanceLineVerified('agro-open-1'), false, 'sem pareamento a linha ainda não está conferida');
+  conexao.obterConexao(EMP_A).lastConnectedAt = new Date().toISOString();
+  assert.equal(provider.instanceLineVerified('agro-open-1'), true, 'pareada por QR, a linha passa a contar como conferida');
+});
+
+test('atribuição automática ou de empresa sem UUID não vira dona; variável de ambiente prevalece', async () => {
+  const conexao = await import('./whatsapp-conexao-kytto.js');
+  const provider = await import('./core/whatsapp-provider.js');
+  assert.equal(conexao.obterConexao(EMP_B).instance, 'dino-1', 'instância padrão herdada automaticamente');
+  assert.equal(provider.instanceOwner('dino-1'), '', 'herança automática não comprova dono');
+  conexao.configurar('emp-legado', { instance: 'legado-1' }, { podeTrocarInstancia: true });
+  assert.equal(provider.instanceOwner('legado-1'), '', 'id legado sem UUID nunca vira dono');
+  conexao.configurar(EMP_A, { instance: 'stallone-1' }, { podeTrocarInstancia: true });
+  process.env.CHATBOT_BACKEND_INSTANCES = `stallone-1=${EMP_B}`;
+  try {
+    assert.equal(provider.instanceOwner('stallone-1'), EMP_B, 'variável de ambiente prevalece sobre o painel');
+    assert.equal(provider.instanceLineVerified('stallone-1'), false);
+  } finally {
+    delete process.env.CHATBOT_BACKEND_INSTANCES;
+  }
+});
+
+test('plataforma confirma a instância atual e evidência antiga de atribuição é aceita e fixada', async () => {
+  const conexao = await import('./whatsapp-conexao-kytto.js');
+  const provider = await import('./core/whatsapp-provider.js');
+  const registro = conexao.obterConexao(EMP_B);
+  registro.instance = 'stallone-1';
+  assert.equal(provider.instanceOwner('stallone-1'), '', 'sem confirmação não há dono');
+  assert.throws(() => conexao.configurar(EMP_B, { instance: 'outra-1' }), /administração da plataforma/);
+  conexao.configurar(EMP_B, { instance: 'stallone-1' });
+  assert.equal(provider.instanceOwner('stallone-1'), '', 'gestor da empresa não confirma');
+  conexao.configurar(EMP_B, { instance: 'stallone-1' }, { podeTrocarInstancia: true });
+  assert.equal(provider.instanceOwner('stallone-1'), EMP_B);
+  assert.equal(registro.history[0].tipo, 'instancia_confirmada');
+
+  const antigo = conexao.obterConexao(EMP_A);
+  antigo.instance = 'agro-open-1';
+  antigo.history = [{ at: '2026-10-18T00:00:00.000Z', tipo: 'instancia_alterada', instance: 'agro-open-1', detalhe: ' → agro-open-1' }];
+  assert.equal(provider.instanceOwner('agro-open-1'), EMP_A);
+  assert.equal(antigo.instanciaConfirmadaPelaPlataforma, true, 'comprovação fixada antes de o histórico girar');
+});
+
+test('instância reivindicada no painel por duas empresas fica sem dono', async () => {
+  const conexao = await import('./whatsapp-conexao-kytto.js');
+  const provider = await import('./core/whatsapp-provider.js');
+  const a = conexao.obterConexao(EMP_A);
+  const b = conexao.obterConexao(EMP_B);
+  Object.assign(a, { instance: 'linha-x', instanciaConfirmadaPelaPlataforma: true });
+  Object.assign(b, { instance: 'linha-x', instanciaConfirmadaPelaPlataforma: true });
+  assert.equal(provider.instanceOwner('linha-x'), '');
+});

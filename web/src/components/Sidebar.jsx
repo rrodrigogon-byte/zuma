@@ -9,6 +9,7 @@ import { useAuth } from '../lib/auth'
 import { api } from '../lib/api'
 import { applyThemeMode, DINO_BARBERSHOP_LOGO, isClubeBrandContext, isDinoBrandContext, isStalloneBrandContext, STALLONE_LOGO, storedThemeMode } from '../lib/brand'
 import { DINO_STORE, isDinoDedicatedHost } from '../lib/dino-scope'
+import { empresaSemUnidade, sincronizarContextoComercial } from '../lib/contexto-comercial'
 
 // ── Badge de pedidos pendentes ─────────────────────────────────────────────────
 function usePendingOrders(isStaff) {
@@ -630,7 +631,7 @@ function BackofficePlataforma({ empresa, onNavClick, sidebarCollapsed = false })
 }
 
 export default function Sidebar({ collapsed = false, onToggleCollapse = () => {} }) {
-  const { user, logout, isOrg, isStaff, isAtleta, isPlatformAdmin, empresaAtiva, empresasAcessiveis, lojaAtiva, lojasAcessiveis, trocarEmpresa, trocarLoja, permissoes, modulosOcultos } = useAuth()
+  const { user, logout, isOrg, isStaff, isAtleta, isPlatformAdmin, empresaAtiva, empresasAcessiveis, lojaAtiva, lojasAcessiveis, trocarEmpresa, trocarLoja, permissoes, modulosOcultos, atualizarContextoLojas } = useAuth()
   const navigate = useNavigate()
   const [open, setOpen] = useState(false)
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
@@ -639,6 +640,13 @@ export default function Sidebar({ collapsed = false, onToggleCollapse = () => {}
   const isStallone = !isDino && isStalloneBrandContext(empresaAtiva)
   const isClube = !isDino && !isStallone && isClubeBrandContext(empresaAtiva)
   const [themeMode, setThemeMode] = useState(() => storedThemeMode())
+  const contextoSemUnidade = Boolean(user && isStaff && empresaAtiva?.id) && (empresaSemUnidade(lojasAcessiveis, empresaAtiva?.id) || !lojaAtiva?.id)
+  // Corrige no carregamento o contexto antigo do navegador em que a unidade perdeu o
+  // vínculo com a empresa; o servidor (memberships) é a fonte da verdade.
+  useEffect(() => {
+    if (!contextoSemUnidade) return
+    sincronizarContextoComercial({ cliente: api, lojasAcessiveis, atualizarContextoLojas })
+  }, [contextoSemUnidade, empresaAtiva?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // 🔒 SEGURANÇA: Ocultar sidebar completamente se não autenticado
   if (!user) {
