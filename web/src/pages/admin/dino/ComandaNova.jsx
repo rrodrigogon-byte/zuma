@@ -150,8 +150,8 @@ export function SeletorItens({ servicos, produtosRevenda, planos, carrinho, setC
   }, [aba, termo])
 
   const resultados = useMemo(() => {
-    if (aba === 'servico') return filtrarCatalogo(servicos, termo, ['nome', 'categoria']).map((s) => ({ tipo: 'servico', itemId: s.id, nome: s.nome, preco: Number(s.preco || 0), detalhe: s.duracaoMinutos ? `${s.duracaoMinutos} min` : '' }))
-    if (aba === 'produto') return filtrarCatalogo((produtosRevenda || []).filter((p) => Number(p.estoqueAtual || 0) > 0), termo, ['nome', 'sku', 'ean', 'categoria']).map((p) => ({ tipo: 'produto', itemId: p.id, nome: p.nome, preco: Number(p.precoVenda || 0), detalhe: `${p.estoqueAtual} em estoque`, estoque: Number(p.estoqueAtual || 0) }))
+    if (aba === 'servico') return filtrarCatalogo((servicos || []).filter((s) => s.ativo !== false), termo, ['nome', 'categoria']).map((s) => ({ tipo: 'servico', itemId: s.id, nome: s.nome, preco: Number(s.preco || 0), detalhe: s.duracaoMinutos ? `${s.duracaoMinutos} min` : '' }))
+    if (aba === 'produto') return filtrarCatalogo((produtosRevenda || []).filter((p) => p.ativo !== false && Number(p.estoqueAtual || 0) > 0), termo, ['nome', 'sku', 'ean', 'categoria']).map((p) => ({ tipo: 'produto', itemId: p.id, nome: p.nome, preco: Number(p.precoVenda || 0), detalhe: `${p.estoqueAtual} em estoque`, estoque: Number(p.estoqueAtual || 0) }))
     return loja.itens.map((p) => ({ tipo: 'loja', itemId: p.variantId, nome: p.nome, preco: p.preco, detalhe: `${p.disponivel} na loja${p.sku ? ` · ${p.sku}` : ''}`, estoque: p.disponivel, imagem: p.imagem, precoCheio: p.precoCheio }))
   }, [aba, termo, servicos, produtosRevenda, loja.itens])
 
