@@ -297,6 +297,7 @@ test('dashboard mantém indicadores e reutiliza formatadores em uma agenda exten
 
 test('mapa de horários soma comandas Avec fechadas no mesmo dia pela hora de fechamento', () => {
   const input = baseInput();
+  input.appointments = []; // período anterior à agenda do Kytto
   input.historicalCommands = [
     { id: 'c1', dataComandaIso: '2026-08-25', dataFinalizacaoOriginal: '25/08/2026 17:40' },
     { id: 'c2', dataComandaIso: '2026-08-25', dataFinalizacaoOriginal: '25/08/2026 17:05' },
@@ -329,4 +330,14 @@ test('feed seleciona os 12 mais recentes e mantém ordem estável entre fontes e
   }, { period: 7, now });
   assert.equal(result.activity.length, 12);
   assert.deepEqual(result.activity.map(row => row.title), ['Agenda', 'Comanda', ...Array.from({ length: 10 }, (_, i) => `Histórico ${i}`)]);
+});
+
+test('mapa não soma comanda Avec a partir do primeiro dia com agenda no Kytto', async () => {
+  const { firstAgendaDay } = await import('./dino-dashboard.js');
+  const input = baseInput();
+  const primeiro = firstAgendaDay(input.appointments);
+  assert.ok(primeiro, 'a base de teste tem agenda');
+  input.historicalCommands = [{ id: 'no-dia', dataComandaIso: primeiro, dataFinalizacaoOriginal: `${primeiro.slice(8, 10)}/${primeiro.slice(5, 7)}/${primeiro.slice(0, 4)} 10:00` }];
+  const result = buildDinoDashboardAnalytics(input, { period: 30, now });
+  assert.equal(result.dataQuality.sources.agenda.historicalInHeatmap, 0);
 });

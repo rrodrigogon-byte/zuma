@@ -1,4 +1,5 @@
 import { calcularComissoesEstado } from './barbearia-erp-kytto.js';
+import { historicoAvecVigente } from './dino-historico-avec.js';
 
 const TIME_ZONE = 'America/Cuiaba';
 const MAX_DAYS = 93;
@@ -116,7 +117,8 @@ function normalizeRoot(root, empresaId, lojaId) {
     agendamentos: recordsForCompany(barbearia.agendamentos, empresaId),
     comandas: recordsForCompany(barbearia.comandas, empresaId),
     vendasRevenda: recordsForCompany(barbearia.vendasRevenda, empresaId),
-    historicoAtendimentos: recordsForCompany(barbearia.historicoAtendimentos, empresaId),
+    // Histórico Avec vigente, com os ids legados da Dino convertidos para os canônicos.
+    historicoAtendimentos: recordsForCompany(historicoAvecVigente(barbearia.historicoAtendimentos), empresaId),
     configuracao: { ...(barbearia.configuracao || {}), taxasPagamento: { ...(barbearia.configuracao?.taxasPagamento || {}) } },
   };
   const financial = recordsForCompany(financeCompany.lancamentos, empresaId).filter((item) => exactUnit(item, lojaId));

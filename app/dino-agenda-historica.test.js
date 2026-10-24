@@ -35,3 +35,12 @@ test('agenda histórica usa a hora de fechamento só quando a comanda fechou no 
   assert.deepEqual(agendaHistoricaAvec({ historico, comandas, profissionais, profissionalId: 'p-bruno' }).map((item) => item.id), ['h1']);
   assert.deepEqual(agendaHistoricaAvec({ historico, comandas, profissionais, profissionalId: 'hist-velho' }).map((item) => item.id), ['h3']);
 });
+
+test('histórico só completa os dias anteriores ao primeiro agendamento do Kytto', () => {
+  const historico = [
+    { id: 'antes', dataAgenda: '2026-10-08', profissionalNome: 'Bruno Mendes pedroso' },
+    { id: 'depois', dataAgenda: '2026-10-09', profissionalNome: 'Bruno Mendes pedroso' },
+  ];
+  assert.deepEqual(agendaHistoricaAvec({ historico, profissionais, antesDe: '2026-10-09' }).map((item) => item.id), ['antes']);
+  assert.deepEqual(agendaHistoricaAvec({ historico, profissionais }).map((item) => item.id), ['antes', 'depois']);
+});
