@@ -177,3 +177,16 @@ test('BI interpreta datas sem horário como datas civis de Cuiabá e perfila som
   assert.equal(report.perfilClientes.origensCadastro[0].nome, 'Importação Avec');
   assert.equal(report.perfilClientes.nascimentoInformado, 1);
 });
+
+test('BI reutiliza formatadores ao agregar uma agenda extensa', (t) => {
+  const Original = Intl.DateTimeFormat;
+  let constructions = 0;
+  t.mock.method(Intl, 'DateTimeFormat', function (...args) {
+    constructions += 1;
+    return new Original(...args);
+  });
+  const appointments = Array.from({ length: 2000 }, () => ({ status: 'concluido', dataHora: '2026-09-10T14:00:00Z' }));
+  const result = bi.scheduleStats(appointments, window);
+  assert.equal(result.total, 2000);
+  assert.ok(constructions <= 2, `Consulta criou ${constructions} formatadores nativos`);
+});

@@ -389,15 +389,32 @@ function upcomingAppointments(appointments, now, timeZone) {
 }
 
 function activityFeed(input, now, window) {
-  const rows = [
-    ...list(input.appointments).map((item) => ({ type: 'appointment', at: timestamp(item), title: item.clienteNome || item.cliente_nome || 'Agendamento', detail: item.servicoNome || item.servico_nome || item.status || 'Agenda' })),
-    ...list(input.retailSales).map((item) => ({ type: 'retail', at: timestamp(item), title: item.clienteNome || 'Venda de revenda', detail: item.status || 'Venda' })),
-    ...list(input.commands).map((item) => ({ type: 'command', at: timestamp(item), title: item.clienteNome || 'Comanda', detail: item.status || 'Atendimento' })),
-    ...list(input.historicalAppointments).map((item) => ({ type: 'historical', at: historicalDate(item), title: item.clienteNome || item.cliente_nome || 'Atendimento histórico', detail: `${item.servicoNome || item.servico || 'Atendimento'} · histórico Avec` })),
-    ...list(input.historicalCommands).map((item) => ({ type: 'historical', at: historicalDate(item), title: item.clienteNome || item.cliente_nome || 'Comanda histórica', detail: 'Comanda · histórico Avec' })),
-    ...list(input.financeEntries).map((item) => ({ type: 'finance', at: timestamp(item), title: `Lançamento ${item.tipo || 'financeiro'}`, detail: `${item.status || 'registrado'} · ${item.categoria || 'Financeiro'}`, value: num(item.valor) })),
-  ];
-  return rows.filter((item) => item.at && item.at <= now && item.at >= window.fromDate && item.at < window.toDate).sort((a, b) => b.at - a.at).slice(0, 12).map((item) => ({ ...item, at: item.at.toISOString() }));
+  // Guarde só os 12 eventos exibidos. Empates mantêm a ordem das fontes,
+  // como o sort estável anterior, sem materializar e ordenar o histórico inteiro.
+  const recent = [];
+  const consider = (item, type, at) => {
+    if (!at || at > now || at < window.fromDate || at >= window.toDate) return;
+    let index = 0;
+    while (index < recent.length && recent[index].at >= at) index += 1;
+    if (index >= 12) return;
+    recent.splice(index, 0, { item, type, at });
+    if (recent.length > 12) recent.pop();
+  };
+  for (const item of list(input.appointments)) consider(item, 'appointment', timestamp(item));
+  for (const item of list(input.retailSales)) consider(item, 'retail', timestamp(item));
+  for (const item of list(input.commands)) consider(item, 'command', timestamp(item));
+  for (const item of list(input.historicalAppointments)) consider(item, 'historical-service', historicalDate(item));
+  for (const item of list(input.historicalCommands)) consider(item, 'historical-command', historicalDate(item));
+  for (const item of list(input.financeEntries)) consider(item, 'finance', timestamp(item));
+  return recent.map(({ item, type, at }) => {
+    const date = at.toISOString();
+    if (type === 'appointment') return { type, at: date, title: item.clienteNome || item.cliente_nome || 'Agendamento', detail: item.servicoNome || item.servico_nome || item.status || 'Agenda' };
+    if (type === 'retail') return { type, at: date, title: item.clienteNome || 'Venda de revenda', detail: item.status || 'Venda' };
+    if (type === 'command') return { type, at: date, title: item.clienteNome || 'Comanda', detail: item.status || 'Atendimento' };
+    if (type === 'historical-service') return { type: 'historical', at: date, title: item.clienteNome || item.cliente_nome || 'Atendimento histórico', detail: `${item.servicoNome || item.servico || 'Atendimento'} · histórico Avec` };
+    if (type === 'historical-command') return { type: 'historical', at: date, title: item.clienteNome || item.cliente_nome || 'Comanda histórica', detail: 'Comanda · histórico Avec' };
+    return { type, at: date, title: `Lançamento ${item.tipo || 'financeiro'}`, detail: `${item.status || 'registrado'} · ${item.categoria || 'Financeiro'}`, value: num(item.valor) };
+  });
 }
 
 export function buildDinoDashboardAnalytics(input = {}, options = {}) {

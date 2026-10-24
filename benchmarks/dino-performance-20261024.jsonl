@@ -1,0 +1,6 @@
+{"name":"bi","version":"before","milliseconds":61,"peakRssMB":99,"hash":"17b3dacd2c17c879a8cb50fee5070ecd1076bc24b74f87455c5e61c424624af1"}
+{"name":"bi","version":"after","milliseconds":4,"peakRssMB":53,"hash":"17b3dacd2c17c879a8cb50fee5070ecd1076bc24b74f87455c5e61c424624af1"}
+{"name":"dashboard","version":"before","milliseconds":957,"peakRssMB":109,"hash":"081aa7ce6cbbaf42a726dbf054addd48df6a82f1369680a3e729fee35542df06"}
+{"name":"dashboard","version":"after","milliseconds":967,"peakRssMB":101,"hash":"081aa7ce6cbbaf42a726dbf054addd48df6a82f1369680a3e729fee35542df06"}
+{"name":"identity","version":"before","milliseconds":663,"peakRssMB":61,"hash":"5af52511b97bfa8a72a73de5a9f4e638d06d86e1181f07defa2e14019a24acf1"}
+{"name":"identity","version":"after","milliseconds":9,"peakRssMB":60,"hash":"5af52511b97bfa8a72a73de5a9f4e638d06d86e1181f07defa2e14019a24acf1"}

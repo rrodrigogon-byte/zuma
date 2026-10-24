@@ -1,6 +1,7 @@
 // Primeiro import: a vigia de memória começa antes de carregar o banco (ver vigia-memoria.js).
 import { situacaoMemoria } from './vigia-memoria.js';
 import express from 'express';
+import { createPerformanceMetrics, eventLoopMetrics } from './core/performance-metrics.js';
 import { stallonePageMeta } from './core/stallone-page-meta.js';
 import { stalloneDiscovery } from './core/stallone-discovery.js';
 import bcrypt from 'bcryptjs';
@@ -142,6 +143,9 @@ import { profissionalDoUsuario } from './dino-modo-barbeiro.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
+const requestPerformance = createPerformanceMetrics();
+const eventLoopPerformance = eventLoopMetrics();
+app.use(requestPerformance.middleware);
 const destructiveAdminGuard = createDestructiveAdminGuard();
 const legacyCommerceMutationGuard = createLegacyCommerceMutationGuard();
 const legacyPaymentMutationGuard = createLegacyPaymentMutationGuard(process.env, {
@@ -927,6 +931,11 @@ app.use('/api/admin', (req,res,next)=>{
 
 // Proteção dos dados: estado, cópias guardadas e cópia manual (só a administração
 // da plataforma). Sem o servidor no ar, use app/scripts/restaurar-copia-json.js.
+app.get('/api/admin/platform/performance', requirePlatformAdmin, (req, res) => {
+  res.set('Cache-Control', 'private, no-store');
+  res.json({ ok: true, requests: requestPerformance.snapshot(), eventLoop: eventLoopPerformance.snapshot(), memory: situacaoMemoria() });
+});
+
 app.get('/api/admin/platform/protecao-dados', requirePlatformAdmin, async (req, res) => {
   try { res.json({ ok: true, ...protecaoDados.situacao(), copias: await protecaoDados.listarCopias({ limite: req.query?.limite }) }); }
   catch (error) { res.status(500).json({ error: 'não foi possível ler o estado da proteção de dados', code: 'PROTECAO_DADOS_INDISPONIVEL' }); }

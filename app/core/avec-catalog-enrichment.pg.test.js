@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { tmpdir, userInfo } from 'node:os';
 import { spawnSync } from 'node:child_process';
 import pg from 'pg';
+import { postgres16TestBin } from '../tests/pg-test-bin.js';
 
 // Este teste nunca usa DATABASE_URL/PG* nem o pool do aplicativo. O banco é um
 // cluster PostgreSQL local, criado pelo próprio teste em um Unix socket privado.
@@ -19,7 +20,7 @@ process.env.NODE_ENV = 'test';
 const { Client } = pg;
 const { executeAvecCatalogEnrichment, previewAvecCatalogEnrichment } = await import('./avec-catalog-enrichment.js');
 
-const PG_BIN = '/usr/lib/postgresql/16/bin';
+const PG_BIN = postgres16TestBin();
 const IDs = {
   tenantA: '11111111-1111-4111-8111-111111111111',
   storeA: '22222222-2222-4222-8222-222222222222',

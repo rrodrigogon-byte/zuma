@@ -1,0 +1,38 @@
+name: Dino - testes e build
+on:
+  pull_request:
+    branches: [fix/kytto-comandas-pdv-20260808]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: dino-quality-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      NODE_ENV: test
+      PG_TEST_BIN: /usr/lib/postgresql/16/bin
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            app/package-lock.json
+            web/package-lock.json
+      - name: PostgreSQL local descartável
+        run: sudo apt-get update && sudo apt-get install -y postgresql-16
+      - run: npm ci
+      - run: npm ci --prefix app
+      - run: npm ci --include=dev --prefix web
+      - name: Testes seriais e fixture PostgreSQL isolada
+        run: npm run test:node
+      - name: Build web
+        run: npm run build --prefix web
+      - name: Medições sintéticas (sem limiar de tempo dependente do runner)
+        run: node scripts/benchmark-dino-performance.mjs

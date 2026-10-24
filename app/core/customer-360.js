@@ -110,16 +110,31 @@ export function buildIdentityGraph({ localClients = [], commerceCustomers = [], 
     for (const ref of [a, b]) { if (!reasons.has(ref)) reasons.set(ref, new Set()); reasons.get(ref).add(reason); }
   };
   const byKey = new Map();
+  const addContact = (key, position) => {
+    if (!byKey.has(key)) byKey.set(key, []);
+    byKey.get(key).push(position);
+  };
   nodes.forEach((node, position) => {
-    for (const phone of node.identity.phones) byKey.set(`p:${phone}`, [...(byKey.get(`p:${phone}`) || []), position]);
-    for (const email of node.identity.emails) byKey.set(`e:${email}`, [...(byKey.get(`e:${email}`) || []), position]);
+    for (const phone of node.identity.phones) addContact(`p:${phone}`, position);
+    for (const email of node.identity.emails) addContact(`e:${email}`, position);
   });
+  const separationRefs = new Set(separations.flatMap(item => [item.a, item.b]));
   const contactConflictKeys = new Set();
   for (const [key, positions] of byKey) {
     const commercePositions = positions.filter((position) => nodes[position].kind === 'commerce');
     if (new Set(commercePositions.map((position) => nodes[position].record?.id)).size > 1) {
       contactConflictKeys.add(key);
       for (const position of positions) reasons.set(nodes[position].ref, new Set([...(reasons.get(nodes[position].ref) || []), 'conflito de contato']));
+      continue;
+    }
+    // Sem regras de separação neste grupo, uma árvore conecta os mesmos nós
+    // que todos os pares. Grupos com qualquer separação mantêm a regra original.
+    if (positions.length > 1 && positions.every(position => !separationRefs.has(nodes[position].ref))) {
+      const first = positions[0];
+      for (let i = 1; i < positions.length; i += 1) {
+        union(positions[i], first);
+        addReason(nodes[positions[i]].ref, nodes[first].ref, key.startsWith('p:') ? 'telefone' : 'e-mail');
+      }
       continue;
     }
     for (let i = 1; i < positions.length; i += 1) {

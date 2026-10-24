@@ -318,3 +318,15 @@ test('horário da comanda Avec é interpretado no fuso de Cuiabá', () => {
   assert.equal(historicalCommandSlot({ dataComandaIso: '2026-08-25', dataFinalizacaoOriginal: '26/08/2026 09:00' }), null);
   assert.equal(historicalCommandSlot({}), null);
 });
+
+test('feed seleciona os 12 mais recentes e mantém ordem estável entre fontes empatadas', () => {
+  const at = '2026-09-01T15:00:00Z';
+  const history = Array.from({ length: 20000 }, (_, i) => ({ clienteNome: `Histórico ${i}`, dataAgenda: at, servicoNome: 'Corte' }));
+  const result = buildDinoDashboardAnalytics({
+    appointments: [{ clienteNome: 'Agenda', dataHora: at }],
+    commands: [{ clienteNome: 'Comanda', criadoEm: at }],
+    historicalAppointments: [...history, { clienteNome: 'Futuro', dataAgenda: '2030-01-01' }, { clienteNome: 'Inválido', dataAgenda: 'inválido' }],
+  }, { period: 7, now });
+  assert.equal(result.activity.length, 12);
+  assert.deepEqual(result.activity.map(row => row.title), ['Agenda', 'Comanda', ...Array.from({ length: 10 }, (_, i) => `Histórico ${i}`)]);
+});

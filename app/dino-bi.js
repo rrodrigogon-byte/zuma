@@ -9,6 +9,12 @@ const num = (value) => (Number.isFinite(Number(value)) ? Number(value) : 0);
 const money = (value) => Number(num(value).toFixed(2));
 const list = (value) => (Array.isArray(value) ? value : []);
 const TIME_ZONE = 'America/Cuiaba';
+const localTimeFormatter = new Intl.DateTimeFormat('en-US', {
+  timeZone: TIME_ZONE, weekday: 'short', hour: '2-digit', hourCycle: 'h23',
+});
+const localDayFormatter = new Intl.DateTimeFormat('en-CA', {
+  timeZone: TIME_ZONE, year: 'numeric', month: '2-digit', day: '2-digit',
+});
 const WEEKDAYS = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sab'];
 const DAY_MS = 86_400_000;
 const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
@@ -37,8 +43,7 @@ function commandDate(item) {
 }
 
 function localParts(date) {
-  const parts = new Intl.DateTimeFormat('en-US', { timeZone: TIME_ZONE, weekday: 'short', hour: '2-digit', hourCycle: 'h23' })
-    .formatToParts(date);
+  const parts = localTimeFormatter.formatToParts(date);
   const weekday = parts.find((p) => p.type === 'weekday')?.value || 'Sun';
   const hour = Number(parts.find((p) => p.type === 'hour')?.value || 0);
   const index = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(weekday);
@@ -50,9 +55,7 @@ function localDay(value) {
   if (DATE_ONLY.test(raw)) return raw;
   const date = dateOf(value);
   if (!date) return '';
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: TIME_ZONE, year: 'numeric', month: '2-digit', day: '2-digit',
-  }).formatToParts(date);
+  const parts = localDayFormatter.formatToParts(date);
   const field = (type) => parts.find((part) => part.type === type)?.value || '';
   const year = field('year'); const month = field('month'); const day = field('day');
   return year && month && day ? `${year}-${month}-${day}` : '';
