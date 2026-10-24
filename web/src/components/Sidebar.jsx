@@ -229,6 +229,17 @@ const NAV_DINO_GROUPS = [
     ],
   },
   {
+    // Retaguarda (ERP) da Dino: compras da revenda/perfumaria, estoque e notas em homologação.
+    // Cada item respeita a permissão do perfil e BACKOFFICE_MODULOS_OCULTOS (itemDisponivel).
+    label: 'Retaguarda (ERP)',
+    items: [
+      { to: '/admin/compras', icon: '▤', label: 'Compras e fornecedores' },
+      { to: '/admin/perdas-inventario', icon: '▤', label: 'Perdas e inventário' },
+      { to: '/admin/notas', icon: '◇', label: 'Notas fiscais (homologação)' },
+      { to: '/admin/fiscal/config', icon: '⚙', label: 'Configuração fiscal' },
+    ],
+  },
+  {
     label: 'Gestão',
     items: [
       { to: '/admin/bi', icon: '↗', label: 'BI & Analytics' },
@@ -292,6 +303,18 @@ export const NAV_CLUBE_GROUPS = [
       { to: '/admin/estoque', icon: '📦', label: 'Estoque' },
       { to: '/admin/kds', icon: '🖨️', label: 'KDS & Impressão' },
       { to: '/admin/fechamento-diario', icon: '🔐', label: 'Fechamento do dia' },
+    ],
+  },
+  {
+    // Retaguarda (ERP) do clube: salão do bar, insumos e compras, PDV offline e fiscal.
+    label: 'Retaguarda (ERP)',
+    items: [
+      { to: '/admin/reservas', icon: '🍽️', label: 'Reservas e fila do bar' },
+      { to: '/admin/fichas-tecnicas', icon: '📋', label: 'Fichas técnicas' },
+      { to: '/admin/perdas-inventario', icon: '📦', label: 'Perdas e inventário' },
+      { to: '/admin/compras', icon: '🛒', label: 'Compras e fornecedores' },
+      { to: '/admin/pdv-offline', icon: '🖨️', label: 'PDV offline e periféricos' },
+      { to: '/admin/fiscal/config', icon: '⚙️', label: 'Configuração fiscal' },
     ],
   },
   {
@@ -360,6 +383,18 @@ const NAV_STALLONE_GROUPS = [
       { to: '/admin/ecommerce?tab=shipping', icon: '↝', label: 'Frete e retirada' },
       { to: '/admin/ecommerce?tab=payments', icon: '▰', label: 'Pagamentos' },
       { to: '/admin/ecommerce?tab=domains', icon: '◎', label: 'Domínios' },
+    ],
+  },
+  {
+    // Retaguarda (ERP) da Stallone: compras, estoque, PDV da loja física e fiscal em homologação.
+    label: 'Retaguarda (ERP)',
+    items: [
+      { to: '/admin/compras', icon: '▤', label: 'Compras e fornecedores' },
+      { to: '/admin/perdas-inventario', icon: '▤', label: 'Perdas e inventário' },
+      { to: '/admin/pdv-offline', icon: '▱', label: 'PDV da loja e periféricos' },
+      { to: '/admin/notas', icon: '◇', label: 'Notas fiscais (homologação)' },
+      { to: '/admin/fiscal/config', icon: '⚙', label: 'Configuração fiscal' },
+      { to: '/admin/fiscal/classificacao', icon: '⚙', label: 'Classificação fiscal (NCM)' },
     ],
   },
   {
