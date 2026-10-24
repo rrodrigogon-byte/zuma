@@ -14,7 +14,7 @@ function installTransport(empresaId, lojaId) {
     requests.push({ path, method: opts.method, empresaId: headers.get('x-empresa-id'), lojaId: headers.get('x-loja-id') })
     const valid = headers.get('x-empresa-id') === empresaId && headers.get('x-loja-id') === lojaId
     const query = new URL(path, 'https://fixture.invalid').searchParams
-    return new Response(JSON.stringify(valid ? { readOnly: true, writePerformed: false, scope: { empresaId, lojaId }, period: { inicio: query.get('inicio'), fim: query.get('fim') }, summary: { revenue: 0, commission: 0, services: 0, products: 0, paidTransfers: null }, employees: [], quality: {}, definitions: [] } : { code: 'STORE_SCOPE_MISMATCH' }), { status: valid ? 200 : 403, headers: { 'Content-Type': 'application/json' } })
+    return new Response(JSON.stringify(valid ? { readOnly: true, writePerformed: false, scope: { empresaId, lojaId }, period: { inicio: query.get('inicio') || '2024-01-01', fim: query.get('fim'), historico: query.get('historico') === '1' }, summary: { revenue: 0, commission: 0, services: 0, products: 0, paidTransfers: null }, employees: [], quality: {}, definitions: [] } : { code: 'STORE_SCOPE_MISMATCH' }), { status: valid ? 200 : 403, headers: { 'Content-Type': 'application/json' } })
   }))
 }
 beforeEach(() => { requests = []; globalThis.IS_REACT_ACT_ENVIRONMENT = true })

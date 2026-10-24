@@ -53,18 +53,27 @@ function diaOperacional(value) {
   if (/^\d{4}-\d{2}-\d{2}$/.test(String(value))) return String(value);
   const date = new Date(value);
   if (Number.isNaN(date.valueOf())) return String(value).slice(0, 10);
-  return new Intl.DateTimeFormat('en-CA', { timeZone: process.env.KYTTO_TIMEZONE || 'America/Cuiaba', year: 'numeric', month: '2-digit', day: '2-digit' }).format(date);
+  return formatadorOperacional('dia', process.env.KYTTO_TIMEZONE || 'America/Cuiaba').format(date);
+}
+
+// Intl.DateTimeFormat é caro de construir; reaproveita um formatador por fuso/tipo.
+const FORMATADORES_OPERACIONAIS = new Map();
+function formatadorOperacional(tipo, timeZone) {
+  const chave = `${tipo}:${timeZone}`;
+  let formatador = FORMATADORES_OPERACIONAIS.get(chave);
+  if (!formatador) {
+    formatador = tipo === 'dia'
+      ? new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' })
+      : new Intl.DateTimeFormat('en-GB', { timeZone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+    FORMATADORES_OPERACIONAIS.set(chave, formatador);
+  }
+  return formatador;
 }
 
 function horaOperacional(value) {
   const date = new Date(value);
   if (Number.isNaN(date.valueOf())) return '';
-  return new Intl.DateTimeFormat('en-GB', {
-    timeZone: process.env.KYTTO_TIMEZONE || 'America/Cuiaba',
-    hour: '2-digit',
-    minute: '2-digit',
-    hourCycle: 'h23',
-  }).format(date);
+  return formatadorOperacional('hora', process.env.KYTTO_TIMEZONE || 'America/Cuiaba').format(date);
 }
 
 function novoId(prefixo, bucket) {

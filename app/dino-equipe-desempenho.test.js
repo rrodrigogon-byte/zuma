@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildEquipeDesempenho } from './dino-equipe-desempenho.js';
+import { buildEquipeDesempenho, UNATTRIBUTED_PROFESSIONAL_ID } from './dino-equipe-desempenho.js';
 
 const EMP = 'emp-sintetica';
 const STORE = 'loja-a';
@@ -353,4 +353,50 @@ test('histórico Avec atribui serviços ao profissional e total consolida Financ
   assert.equal(result.summary.commerceOrders, 2);
   assert.equal(result.summary.historicalAttributedServiceRevenue, 80);
   assert.equal(result.summary.revenue, 810, 'o detalhamento histórico é atribuído, mas não é somado novamente ao extrato pago');
+});
+
+test('histórico completo: período desde o 1º registro, ex-profissional com valor fica ativo e histórico sem vínculo vira linha própria', () => {
+  const root = snapshot();
+  root.barbearias[EMP].profissionais.p5 = { id: 'p5', empresaId: EMP, nome: 'Ex Avec', lojaId: STORE, ativo: false };
+  root.barbearias[EMP].historicoAtendimentos = {
+    h1: { id: 'h1', empresaId: EMP, lojaId: STORE, somenteHistorico: true, status: 'concluido', dataAgenda: '2023-05-10', clienteNome: 'Cliente A', profissionalId: 'p5', servicoNome: 'Corte Avec', valor: 50, quantidade: 1 },
+    h2: { id: 'h2', empresaId: EMP, lojaId: STORE, somenteHistorico: true, status: 'concluido', dataAgenda: '2024-01-02', clienteNome: 'Cliente B', profissionalId: null, profissionalNome: 'Não informado', servicoNome: 'Barba Avec', valor: 30, quantidade: 1 },
+  };
+  const before = clone(root); freeze(root);
+  const result = buildEquipeDesempenho(root, { empresaId: EMP, lojaId: STORE, fim: '2026-03-02', historico: true, lean: true });
+  assert.equal(result.period.inicio, '2023-05-10');
+  assert.equal(result.period.historico, true);
+  assert.equal(result.seriesGranularity, 'month');
+  const ex = result.employees.find((item) => item.id === 'p5');
+  assert.equal(ex.revenue, 50);
+  assert.equal(ex.active, true, 'quem tem valor aparece ativo');
+  assert.equal(ex.registeredActive, false);
+  assert.equal(ex.activeByMovement, true);
+  assert.equal(ex.heatmap, undefined, 'lista enxuta não carrega mapa por pessoa');
+  const sem = result.employees.find((item) => item.id === UNATTRIBUTED_PROFESSIONAL_ID);
+  assert.equal(sem.revenue, 30);
+  assert.equal(sem.synthetic, true);
+  assert.equal(sem.commission, 0);
+  assert.equal(result.summary.unattributedHistoricalRevenue, 30);
+  assert.ok(result.summary.activeByMovement >= 1);
+  assert.equal(result.employees.find((item) => item.id === 'p3').active, true);
+  assert.deepEqual(root, before);
+});
+
+test('detalhe por profissional traz linhas para drill-down (ano/mês/dia/atendimento) com série mensal no histórico', () => {
+  const root = snapshot();
+  root.barbearias[EMP].historicoAtendimentos = {
+    h1: { id: 'h1', empresaId: EMP, lojaId: STORE, somenteHistorico: true, status: 'concluido', dataAgenda: '2024-12-30', clienteNome: 'Cliente A', profissionalId: 'p1', servicoNome: 'Corte Avec', frenteAtuacao: 'Cabelo', valor: 50, quantidade: 1 },
+  };
+  const detail = buildEquipeDesempenho(root, { empresaId: EMP, lojaId: STORE, fim: '2026-03-02', historico: true, profissionalId: 'p1' });
+  const ana = detail.employees[0];
+  assert.equal(detail.employees.length, 1);
+  assert.ok(Array.isArray(ana.rows) && ana.rows.length >= 1);
+  const hist = ana.rows.find((row) => row.origin === 'historico_avec');
+  assert.deepEqual({ date: hist.date, client: hist.client, group: hist.group, revenue: hist.revenue, type: hist.type }, { date: '2024-12-30', client: 'Cliente A', group: 'Cabelo', revenue: 50, type: 'servico' });
+  assert.ok(ana.daily.every((item) => /^\d{4}-\d{2}$/.test(item.date)));
+  assert.equal(ana.daily.find((item) => item.date === '2024-12').revenue, 50);
+  const sem = buildEquipeDesempenho(root, { ...PERIOD, profissionalId: UNATTRIBUTED_PROFESSIONAL_ID });
+  assert.equal(sem.employees.length, 0, 'sem histórico sem vínculo no recorte, nada é inventado');
+  assert.throws(() => buildEquipeDesempenho(root, { ...PERIOD, inicio: '2025-01-01' }), (error) => error.code === 'PERIOD_INVALID', 'fora do modo histórico o limite de 93 dias continua');
 });
