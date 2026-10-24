@@ -149,6 +149,94 @@ export function registrarVale(empresaId, dados = {}, opcoes = {}) {
 
 // ── Extrato ────────────────────────────────────────────────────────────────
 
+// ── Histórico Avec no extrato ───────────────────────────────────────────────
+// O Avec foi o sistema da Dino até a virada para o Kytto. Os atendimentos
+// importados entram no extrato como histórico: mostram bruto e comissão pela
+// regra do profissional, mas não somam ao "a receber" (esse período foi acertado
+// no Avec) e nunca geram repasse novo.
+const UNIDADE_EQUIVALENTE = new Map([['dino-web-estoque', 'ab049a75-6e2e-4cc9-abbc-6fd11cdda1d8']]);
+const unidadeCanonica = (valor) => { const t = String(valor || '').trim(); return UNIDADE_EQUIVALENTE.get(t) || t; };
+const normalizarNome = (valor) => String(valor || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase().replace(/\s+/g, ' ');
+const primeiroNome = (valor) => normalizarNome(valor).split(' ')[0] || '';
+const ehHistoricoAvec = (item) => item?.somenteHistorico === true && (String(item.sourceSystem || '').toLowerCase() === 'avec' || String(item.origem || '').startsWith('avec-import'));
+const ehProfissionalAvec = (id) => String(id || '').startsWith('prof-avec-');
+
+/**
+ * Liga cada nome de profissional do Avec ao cadastro do Kytto. Primeiro pela
+ * agenda importada antes (12/10), que já trazia o profissional do Kytto no mesmo
+ * dia e cliente; depois pelo primeiro nome, quando ele é único no Avec e no Kytto. Sem evidência, o nome fica sem vínculo (não inventa).
+ */
+export function vinculosProfissionaisAvec(empresaId) {
+  // Lê o estado bruto: a agenda importada antes não aparece mais na leitura vigente
+  // (fica substituída pela importação completa), mas continua sendo a evidência do vínculo.
+  const itens = Object.values(db().barbearias?.[String(empresaId)]?.historicoAtendimentos || {});
+  const kytto = barbearia.listarProfissionais(empresaId, { incluirInativos: true }).filter((p) => !ehProfissionalAvec(p.id));
+  const kyttoIds = new Set(kytto.map((p) => p.id));
+  const agendaAntiga = new Map();
+  for (const item of itens) {
+    if (ehHistoricoAvec(item) || !kyttoIds.has(String(item.profissionalId || ''))) continue;
+    agendaAntiga.set(`${item.dataAgenda}|${normalizarNome(item.clienteNome)}`, item.profissionalId);
+  }
+  const votos = new Map();
+  for (const item of itens) {
+    if (!ehHistoricoAvec(item)) continue;
+    const nome = normalizarNome(item.profissionalNome);
+    if (!nome) continue;
+    const alvo = agendaAntiga.get(`${item.dataAgenda}|${normalizarNome(item.clienteNome)}`);
+    const contagem = votos.get(nome) || new Map();
+    if (alvo) contagem.set(alvo, (contagem.get(alvo) || 0) + 1);
+    votos.set(nome, contagem);
+  }
+  const porPrimeiroNome = new Map();
+  for (const p of kytto) { const chave = primeiroNome(p.nome); porPrimeiroNome.set(chave, [...(porPrimeiroNome.get(chave) || []), p.id]); }
+  const nomesAvecPorPrimeiro = new Map();
+  for (const nome of votos.keys()) nomesAvecPorPrimeiro.set(primeiroNome(nome), (nomesAvecPorPrimeiro.get(primeiroNome(nome)) || 0) + 1);
+  const vinculos = new Map();
+  for (const [nome, contagem] of votos) {
+    const total = [...contagem.values()].reduce((a, b) => a + b, 0);
+    const [melhor, quantidade] = [...contagem.entries()].sort((a, b) => b[1] - a[1])[0] || [];
+    if (melhor && quantidade >= 5 && quantidade / total >= 0.7) { vinculos.set(nome, { profissionalId: melhor, criterio: 'agenda' }); continue; }
+    // Pelo nome só quando o primeiro nome é único dos dois lados (no Avec e no Kytto).
+    const candidatos = porPrimeiroNome.get(primeiroNome(nome)) || [];
+    if (candidatos.length === 1 && nomesAvecPorPrimeiro.get(primeiroNome(nome)) === 1) vinculos.set(nome, { profissionalId: candidatos[0], criterio: 'nome' });
+  }
+  return vinculos;
+}
+
+function historicoAvecDoProfissional(empresaId, prof, { inicio, fim, lojaId }) {
+  const historico = barbearia.listarHistoricoAtendimentos(empresaId, {});
+  const vinculos = vinculosProfissionaisAvec(empresaId);
+  const kytto = barbearia.listarProfissionais(empresaId, { incluirInativos: true }).filter((p) => !ehProfissionalAvec(p.id));
+  // Profissional do histórico Avec sem cadastro próprio usa o percentual do profissional do Kytto vinculado a ele.
+  const vinculoDoProprio = ehProfissionalAvec(prof.id) ? vinculos.get(normalizarNome(prof.nome)) : null;
+  const regra = vinculoDoProprio ? kytto.find((p) => p.id === vinculoDoProprio.profissionalId) || prof : prof;
+  const percentual = Number(prof.percentualComissao || 0) > 0 ? Number(prof.percentualComissao) : Number(regra.percentualComissao || 0);
+  // Linhas: só o histórico Avec vigente (a importação completa, com a unidade canônica).
+  const linhas = historico
+    .filter((item) => ehHistoricoAvec(item))
+    .filter((item) => !lojaId || !item.lojaId || unidadeCanonica(item.lojaId) === unidadeCanonica(lojaId))
+    .filter((item) => item.dataAgenda >= inicio && item.dataAgenda <= fim)
+    .filter((item) => item.profissionalId === prof.id || (!ehProfissionalAvec(prof.id) && vinculos.get(normalizarNome(item.profissionalNome))?.profissionalId === prof.id))
+    .map((item) => {
+      const bruto = dinheiro(item.total ?? item.valor ?? 0);
+      return { data: item.dataAgenda, descricao: item.servicoNome || 'Serviço', cliente: item.clienteNome || '', comanda: item.numeroComanda || '', profissionalAvec: item.profissionalNome || '', frente: item.frenteAtuacao || '', bruto, percentual, comissao: dinheiro(bruto * percentual / 100) };
+    })
+    .sort((a, b) => String(b.data).localeCompare(String(a.data)));
+  const nomesAvec = [...new Set(linhas.map((l) => l.profissionalAvec).filter(Boolean))];
+  const bruto = dinheiro(linhas.reduce((soma, l) => soma + l.bruto, 0));
+  return {
+    atendimentos: linhas.length,
+    comValor: linhas.filter((l) => l.bruto > 0).length,
+    bruto,
+    percentual,
+    comissao: dinheiro(linhas.reduce((soma, l) => soma + l.comissao, 0)),
+    nomesAvec,
+    regraDe: regra.id !== prof.id ? regra.nome : null,
+    linhas: linhas.slice(0, 2000),
+    linhasOmitidas: Math.max(0, linhas.length - 2000),
+  };
+}
+
 export function extratoProfissional(empresaId, profissionalId, { inicio, fim, lojaId = '' }, opcoes = {}) {
   validarPeriodo(inicio, fim);
   const prof = profissional(empresaId, profissionalId);
@@ -183,6 +271,7 @@ export function extratoProfissional(empresaId, profissionalId, { inicio, fim, lo
     },
     taxasConfiguradas: comissoes.taxasConfiguradas,
     meiosSemTaxaConfigurada: comissoes.meiosSemTaxaConfigurada,
+    historicoAvec: historicoAvecDoProfissional(empresaId, prof, { inicio, fim, lojaId }),
   };
 }
 

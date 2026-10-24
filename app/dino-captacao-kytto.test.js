@@ -798,3 +798,45 @@ test('projeção inteligente inclui apenas revenda paga no faturamento realizado
   assert.equal(painel.atual.revenda, 30);
   assert.equal(painel.atual.realizado, 30);
 });
+
+test('projeção inteligente usa o histórico Avec mês a mês, sem somar o mesmo dia duas vezes, e projeta com sazonalidade', () => {
+  const { bruno, corte } = montarBarbearia();
+  const agora = Date.parse('2026-10-15T16:00:00.000Z');
+  const avec = (dia, valor, extra = {}) => ({ id: `fin-avec-${dia}-${valor}`, tipo: 'receita', status: 'pago', valor, lojaId: LOJA, pagoEm: `${dia}T12:00:00.000Z`, origem: 'avec-import-financeiro-20261022', metadata: { historicoAvec: true }, ...extra });
+  // Um ano e meio de recebimentos Avec, com dezembro forte.
+  const lancamentosFinanceiros = [];
+  for (let mes = 6; mes <= 21; mes += 1) {
+    const ano = 2025 + Math.floor((mes - 1) / 12);
+    const numero = ((mes - 1) % 12) + 1;
+    const valor = numero === 12 ? 2000 : 1000;
+    lancamentosFinanceiros.push(avec(`${ano}-${String(numero).padStart(2, '0')}-10`, valor));
+  }
+  lancamentosFinanceiros.push(avec('2026-10-08', 400));
+  // Outra empresa/loja e despesa: não entram.
+  lancamentosFinanceiros.push(avec('2026-09-10', 9999, { lojaId: LOJA_B }));
+  lancamentosFinanceiros.push(avec('2026-09-10', 777, { tipo: 'despesa' }));
+  // Atendimento no Kytto num dia coberto pelo Avec não soma; depois do último dia do Avec, soma.
+  const marcar = (data, codigo) => concluir(barbearia.criarAgendamento(EMPRESA, {
+    clienteNome: `Cliente ${codigo}`, clienteTelefone: `6598111${codigo.slice(-4)}`, profissionalId: bruno.id, servicoId: corte.id,
+    dataHora: isoLocal(data, '09:00'), dataAgenda: data, horaLocal: '09:00', lojaId: LOJA, origem: 'balcao', codigoConfirmacao: codigo,
+  }));
+  marcar('2026-10-08', 'AVC00001');
+  marcar('2026-10-12', 'AVC00002');
+
+  const painel = captacao.projecaoFaturamento(EMPRESA, { mes: '2026-10', lojaId: LOJA, horizonte: 6 }, { agora, lancamentosFinanceiros });
+  assert.equal(painel.resumoHistorico.primeiroMes, '2025-06');
+  assert.equal(painel.historicoCompleto[0].mes, '2025-06');
+  assert.equal(painel.historicoCompleto.at(-1).mes, '2026-10');
+  assert.equal(painel.historicoCompleto.find((item) => item.mes === '2025-12').realizado, 2000);
+  assert.equal(painel.historicoCompleto.find((item) => item.mes === '2026-09').realizado, 1000, 'outra loja e despesa ficam fora');
+  assert.equal(painel.atual.historicoAvec, 400);
+  assert.equal(painel.atual.servicos, 50, 'só o atendimento depois do último dia do Avec entra');
+  assert.equal(painel.atual.realizado, 450);
+  assert.equal(painel.qualidade.nivel, 'alta');
+  assert.equal(painel.qualidade.fontes.ultimoDiaAvec, '2026-10-08');
+  const dezembro = painel.previsoes.find((item) => item.mes === '2026-12');
+  const novembro = painel.previsoes.find((item) => item.mes === '2026-11');
+  assert.ok(dezembro.sazonalidade.fator > 1.5, 'dezembro do ano anterior foi o dobro da média');
+  assert.ok(dezembro.projecao > novembro.projecao * 1.5, 'a tendência respeita a sazonalidade');
+  assert.equal(painel.resumoHistorico.melhorMes.mes, '2025-12');
+});

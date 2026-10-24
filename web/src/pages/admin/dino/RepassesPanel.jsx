@@ -59,6 +59,29 @@ export function ExtratoTabela({ extrato }) {
   </div>
 }
 
+export function HistoricoAvecExtrato({ historico }) {
+  const [limite, setLimite] = useState(100)
+  if (!historico) return null
+  const linhas = historico.linhas || []
+  return <div style={card}>
+    <h3 style={h3}>Histórico Avec no período</h3>
+    <p style={sub}>Atendimentos importados do Avec{historico.nomesAvec?.length ? ` (${historico.nomesAvec.join(', ')})` : ''}, com a comissão pela regra de {historico.percentual}%{historico.regraDe ? ` de ${historico.regraDe}` : ' do cadastro'}. É só consulta: esse período foi acertado no Avec, não entra no "a receber" nem gera repasse.</p>
+    <div style={{ ...grid(150), marginTop: 12 }}>
+      <div style={kpi}><div style={kpiLabel}>Atendimentos</div><div style={kpiValue}>{historico.atendimentos}</div><div style={sub}>{historico.comValor} com valor na comanda</div></div>
+      <div style={kpi}><div style={kpiLabel}>Bruto no Avec</div><div style={kpiValue}>{moeda(historico.bruto)}</div></div>
+      <div style={kpi}><div style={kpiLabel}>Percentual</div><div style={kpiValue}>{historico.percentual}%</div></div>
+      <div style={kpi}><div style={kpiLabel}>Comissão calculada</div><div style={{ ...kpiValue, color: ok }}>{moeda(historico.comissao)}</div><div style={sub}>referência do período Avec</div></div>
+    </div>
+    <div style={{ overflowX: 'auto', marginTop: 12 }}><table style={{ ...table, minWidth: 760 }}><thead><tr>{['Data', 'Serviço', 'Cliente', 'Comanda', 'Profissional no Avec', 'Bruto', '%', 'Comissão'].map((c) => <th key={c} style={th}>{c}</th>)}</tr></thead>
+      <tbody>{linhas.length === 0 ? <tr><td colSpan={8} style={empty}>Nenhum atendimento do Avec no período.</td></tr> : linhas.slice(0, limite).map((l, i) => <tr key={`${l.data}-${l.comanda}-${i}`}><td style={td}>{dataBR(l.data)}</td><td style={td}>{l.descricao}{l.frente ? <div style={sub}>{l.frente}</div> : null}</td><td style={td}>{l.cliente || '—'}</td><td style={td}>{l.comanda || '—'}</td><td style={td}>{l.profissionalAvec || '—'}</td><td style={td}>{moeda(l.bruto)}</td><td style={td}>{l.percentual}%</td><td style={td}><strong>{moeda(l.comissao)}</strong></td></tr>)}</tbody></table></div>
+    {linhas.length > limite && <button type="button" style={{ ...btn, marginTop: 10 }} onClick={() => setLimite((v) => v + 200)}>Mostrar mais ({linhas.length - limite} restantes)</button>}
+    {historico.linhasOmitidas > 0 && <div style={{ ...sub, marginTop: 6 }}>{historico.linhasOmitidas} linha(s) além das 2.000 primeiras ficaram fora da lista; os totais consideram todas.</div>}
+  </div>
+}
+
+function inicioMes(deslocamento = 0) { const d = new Date(`${hojeIso()}T12:00:00`); d.setDate(1); d.setMonth(d.getMonth() + deslocamento); return d.toISOString().slice(0, 10) }
+function fimMes(deslocamento = 0) { const d = new Date(`${inicioMes(deslocamento + 1)}T12:00:00`); d.setDate(d.getDate() - 1); return d.toISOString().slice(0, 10) }
+
 function RegrasComissao({ servicos = [], planos = [], onSalvo }) {
   const [material, setMaterial] = useState({})
   const [pote, setPote] = useState({})
@@ -91,8 +114,13 @@ function RegrasComissao({ servicos = [], planos = [], onSalvo }) {
   </div>
 }
 
-export function RepassesPanel({ profissionais = [], servicos = [], planos = [], onCadastroMudou }) {
+export function RepassesPanel({ profissionais: profissionaisBase = [], servicos = [], planos = [], onCadastroMudou }) {
+  // Inclui os inativos (equipe antiga e nomes do histórico Avec) para consultar o histórico deles.
+  const [todos, setTodos] = useState(null)
+  useEffect(() => { let vivo = true; api.get('/api/admin/barbearia/profissionais?incluirInativos=true').then((r) => { if (vivo && Array.isArray(r?.profissionais)) setTodos(r.profissionais) }).catch(() => null); return () => { vivo = false } }, [])
+  const profissionais = todos?.length ? todos : profissionaisBase
   const ativos = profissionais.filter((p) => p.ativo !== false)
+  const inativos = profissionais.filter((p) => p.ativo === false).sort((a, b) => String(a.nome).localeCompare(String(b.nome)))
   const [profissionalId, setProfissionalId] = useState(ativos[0]?.id || '')
   const [inicio, setInicio] = useState(inicioSemana())
   const [fim, setFim] = useState(hojeIso())
@@ -147,16 +175,20 @@ export function RepassesPanel({ profissionais = [], servicos = [], planos = [], 
       <h2 style={h2}>Extrato e repasses</h2>
       <p style={sub}>Extrato por período com taxa e material descontados da base, comissão de produtos e a parte do pote dos planos. O repasse gera recibo numerado, abate os vales e lança a despesa no financeiro; um período já repassado não é pago de novo.</p>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
-        <select aria-label="Profissional" value={profissionalId} onChange={(e) => setProfissionalId(e.target.value)} style={{ ...input, width: 'auto', minWidth: 180 }}>{ativos.map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}</select>
+        <select aria-label="Profissional" value={profissionalId} onChange={(e) => setProfissionalId(e.target.value)} style={{ ...input, width: 'auto', minWidth: 180 }}><optgroup label="Equipe ativa">{ativos.map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}</optgroup>{inativos.length > 0 && <optgroup label="Inativos e histórico Avec">{inativos.map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}</optgroup>}</select>
         <input aria-label="Início" type="date" value={inicio} onChange={(e) => setInicio(e.target.value)} style={{ ...input, width: 'auto' }} />
         <input aria-label="Fim" type="date" value={fim} onChange={(e) => setFim(e.target.value)} style={{ ...input, width: 'auto' }} />
         <select aria-label="Meio do pagamento" value={meio} onChange={(e) => setMeio(e.target.value)} style={{ ...input, width: 'auto' }}><option value="pix">Pix</option><option value="dinheiro">Dinheiro</option><option value="transferencia">Transferência</option><option value="outro">Outro</option></select>
         <button type="button" style={btnPrimary} onClick={registrarRepasse} disabled={!extrato || extrato.totais.comissaoTotal <= 0}>Registrar repasse e gerar recibo</button>
       </div>
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
+        {[['Esta semana', inicioSemana(), hojeIso()], ['Este mês', inicioMes(0), hojeIso()], ['Mês passado', inicioMes(-1), fimMes(-1)], ['Últimos 12 meses', inicioMes(-11), hojeIso()], ['Todo o histórico', '2025-01-01', hojeIso()]].map(([rotulo, de, ate]) => <button key={rotulo} type="button" style={{ ...btn, ...(inicio === de && fim === ate ? { borderColor: 'var(--accent)', color: 'var(--accent)' } : {}) }} onClick={() => { setInicio(de); setFim(ate) }}>{rotulo}</button>)}
+      </div>
       {erro && <div role="alert" style={{ color: ruim, fontSize: 13, marginTop: 8 }}>{erro}</div>}
       {msg && <div style={{ color: ok, fontSize: 13, marginTop: 8 }}>{msg}</div>}
     </div>
     <div style={card}><ExtratoTabela extrato={extrato} /></div>
+    <HistoricoAvecExtrato historico={extrato?.historicoAvec} />
     <div style={grid(320)}>
       <div style={card}>
         <h3 style={h3}>Vale (adiantamento)</h3>
