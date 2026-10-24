@@ -63,6 +63,201 @@ function FlowChart({ fluxo, mesSelecionado, onSelectMes }) {
   </figure>
 }
 
+// Painel do Demonstrativo do Resultado do Exercício (DRE Gerencial)
+function DreGerencialPanel({ dre, mes, onMesChange, onFilterCategoria }) {
+  if (!dre) return <p className="dadm-muted">Carregando DRE Gerencial…</p>
+
+  const anos = mes.slice(0, 4)
+  const mesNum = mes.slice(5, 7)
+
+  function mudarMes(delta) {
+    const d = new Date(Number(anos), Number(mesNum) - 1 + delta, 1)
+    const novoMes = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+    onMesChange(novoMes)
+  }
+
+  return <div style={{ display: 'grid', gap: 16 }}>
+    {/* Controles de Mês do DRE */}
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+      <div>
+        <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>Competência: {mesNum}/{anos}</h3>
+        <p style={{ margin: '2px 0 0', fontSize: 12, color: 'var(--muted)' }}>Demonstrativo contábil gerencial com análise vertical de margens</p>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <button type="button" className="c360-btn ghost" style={{ fontSize: 12, padding: '4px 8px' }} onClick={() => mudarMes(-1)}>« Mês anterior</button>
+        <button type="button" className="c360-btn ghost" style={{ fontSize: 12, padding: '4px 8px' }} onClick={() => mudarMes(1)}>Próximo mês »</button>
+      </div>
+    </div>
+
+    {/* Resumo de Margens do DRE */}
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 10 }}>
+      <div style={{ padding: '12px 14px', background: 'var(--card2)', border: '1px solid var(--line)', borderRadius: 10 }}>
+        <span style={{ fontSize: 11, color: 'var(--muted)', textTransform: 'uppercase', fontWeight: 700 }}>Receita Bruta</span>
+        <strong style={{ display: 'block', fontSize: 18, marginTop: 4 }}>{money(dre.receitaBruta)}</strong>
+        <small style={{ fontSize: 11, color: 'var(--muted)' }}>100% da base</small>
+      </div>
+      <div style={{ padding: '12px 14px', background: 'var(--card2)', border: '1px solid var(--line)', borderRadius: 10 }}>
+        <span style={{ fontSize: 11, color: 'var(--muted)', textTransform: 'uppercase', fontWeight: 700 }}>Margem de Contribuição</span>
+        <strong style={{ display: 'block', fontSize: 18, marginTop: 4, color: dre.margemContribuicao >= 0 ? 'var(--fg)' : '#e05c5c' }}>
+          {money(dre.margemContribuicao)}
+        </strong>
+        <small style={{ fontSize: 11, color: 'var(--muted)' }}>{dre.margemContribuicaoPercentual}% da receita</small>
+      </div>
+      <div style={{ padding: '12px 14px', background: 'var(--card2)', border: '1px solid var(--line)', borderRadius: 10 }}>
+        <span style={{ fontSize: 11, color: 'var(--muted)', textTransform: 'uppercase', fontWeight: 700 }}>Despesas Fixas</span>
+        <strong style={{ display: 'block', fontSize: 18, marginTop: 4, color: '#e05c5c' }}>
+          {money(dre.totalDespesasOperacionais)}
+        </strong>
+        <small style={{ fontSize: 11, color: 'var(--muted)' }}>Custos estruturais</small>
+      </div>
+      <div style={{ padding: '12px 14px', background: 'var(--card2)', border: '1px solid var(--accent, #b0892e)', borderRadius: 10 }}>
+        <span style={{ fontSize: 11, color: 'var(--accent, #b0892e)', textTransform: 'uppercase', fontWeight: 700 }}>Lucro Líquido Real</span>
+        <strong style={{ display: 'block', fontSize: 18, marginTop: 4, color: dre.resultadoLiquido >= 0 ? '#10b981' : '#e05c5c' }}>
+          {money(dre.resultadoLiquido)}
+        </strong>
+        <small style={{ fontSize: 11, fontWeight: 700, color: dre.resultadoLiquido >= 0 ? '#10b981' : '#e05c5c' }}>
+          Margem Líquida {dre.margemLiquidaPercentual}%
+        </small>
+      </div>
+    </div>
+
+    {/* Estrutura Detalhada em Tabela DRE */}
+    <div style={{ border: '1px solid var(--line)', borderRadius: 10, overflow: 'hidden' }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+        <thead>
+          <tr style={{ background: 'var(--card2)', borderBottom: '1px solid var(--line)', textAlign: 'left' }}>
+            <th style={{ padding: '8px 12px' }}>Linha do DRE</th>
+            <th style={{ padding: '8px 12px', textAlign: 'right' }}>Valor (R$)</th>
+            <th style={{ padding: '8px 12px', textAlign: 'right' }}>Análise Vertical (%)</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr style={{ fontWeight: 700, background: 'rgba(16, 185, 129, 0.05)' }}>
+            <td style={{ padding: '8px 12px' }}>(+) RECEITA OPERACIONAL BRUTA</td>
+            <td style={{ padding: '8px 12px', textAlign: 'right' }}>{money(dre.receitaBruta)}</td>
+            <td style={{ padding: '8px 12px', textAlign: 'right' }}>100.0%</td>
+          </tr>
+          <tr style={{ color: 'var(--muted)' }}>
+            <td style={{ padding: '6px 12px 6px 28px' }}>• Atendimentos e Serviços</td>
+            <td style={{ padding: '6px 12px', textAlign: 'right' }}>{money(dre.detalhesReceita?.servicos || 0)}</td>
+            <td style={{ padding: '6px 12px', textAlign: 'right' }}>
+              {dre.receitaBruta > 0 ? ((dre.detalhesReceita?.servicos / dre.receitaBruta) * 100).toFixed(1) : 0}%
+            </td>
+          </tr>
+          <tr style={{ color: 'var(--muted)' }}>
+            <td style={{ padding: '6px 12px 6px 28px' }}>• Planos e Assinaturas (Clube)</td>
+            <td style={{ padding: '6px 12px', textAlign: 'right' }}>{money(dre.detalhesReceita?.planos || 0)}</td>
+            <td style={{ padding: '6px 12px', textAlign: 'right' }}>
+              {dre.receitaBruta > 0 ? ((dre.detalhesReceita?.planos / dre.receitaBruta) * 100).toFixed(1) : 0}%
+            </td>
+          </tr>
+          <tr style={{ color: 'var(--muted)' }}>
+            <td style={{ padding: '6px 12px 6px 28px' }}>• Produtos e Revenda</td>
+            <td style={{ padding: '6px 12px', textAlign: 'right' }}>{money(dre.detalhesReceita?.revenda || 0)}</td>
+            <td style={{ padding: '6px 12px', textAlign: 'right' }}>
+              {dre.receitaBruta > 0 ? ((dre.detalhesReceita?.revenda / dre.receitaBruta) * 100).toFixed(1) : 0}%
+            </td>
+          </tr>
+
+          <tr style={{ color: '#e05c5c', borderTop: '1px dashed var(--line)' }}>
+            <td style={{ padding: '8px 12px' }}>(-) Deduções e Taxas de Cartão</td>
+            <td style={{ padding: '8px 12px', textAlign: 'right' }}>- {money(dre.totalDeducoes)}</td>
+            <td style={{ padding: '8px 12px', textAlign: 'right' }}>
+              {dre.receitaBruta > 0 ? ((dre.totalDeducoes / dre.receitaBruta) * 100).toFixed(1) : 0}%
+            </td>
+          </tr>
+
+          <tr style={{ fontWeight: 600, borderTop: '1px solid var(--line)', background: 'var(--card2)' }}>
+            <td style={{ padding: '8px 12px' }}>(=) RECEITA OPERACIONAL LÍQUIDA</td>
+            <td style={{ padding: '8px 12px', textAlign: 'right' }}>{money(dre.receitaLiquida)}</td>
+            <td style={{ padding: '8px 12px', textAlign: 'right' }}>
+              {dre.receitaBruta > 0 ? ((dre.receitaLiquida / dre.receitaBruta) * 100).toFixed(1) : 0}%
+            </td>
+          </tr>
+
+          <tr style={{ color: '#e05c5c' }}>
+            <td style={{ padding: '8px 12px' }}>(-) Custos Variáveis (Repasses & Insumos)</td>
+            <td style={{ padding: '8px 12px', textAlign: 'right' }}>- {money(dre.totalCustosVariaveis)}</td>
+            <td style={{ padding: '8px 12px', textAlign: 'right' }}>
+              {dre.receitaBruta > 0 ? ((dre.totalCustosVariaveis / dre.receitaBruta) * 100).toFixed(1) : 0}%
+            </td>
+          </tr>
+
+          <tr style={{ fontWeight: 700, borderTop: '1px solid var(--line)', background: 'rgba(176, 137, 46, 0.08)' }}>
+            <td style={{ padding: '8px 12px' }}>(=) MARGEM DE CONTRIBUIÇÃO (LUCRO BRUTO)</td>
+            <td style={{ padding: '8px 12px', textAlign: 'right', color: 'var(--accent, #b0892e)' }}>{money(dre.margemContribuicao)}</td>
+            <td style={{ padding: '8px 12px', textAlign: 'right', color: 'var(--accent, #b0892e)' }}>{dre.margemContribuicaoPercentual}%</td>
+          </tr>
+
+          <tr style={{ color: '#e05c5c' }}>
+            <td style={{ padding: '8px 12px' }}>(-) Despesas Operacionais Fixas</td>
+            <td style={{ padding: '8px 12px', textAlign: 'right' }}>- {money(dre.totalDespesasOperacionais)}</td>
+            <td style={{ padding: '8px 12px', textAlign: 'right' }}>
+              {dre.receitaBruta > 0 ? ((dre.totalDespesasOperacionais / dre.receitaBruta) * 100).toFixed(1) : 0}%
+            </td>
+          </tr>
+
+          <tr style={{ fontWeight: 800, fontSize: 14, borderTop: '2px solid var(--line)', background: dre.resultadoLiquido >= 0 ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)' }}>
+            <td style={{ padding: '10px 12px' }}>(=) RESULTADO LÍQUIDO DO EXERCÍCIO (EBITDA)</td>
+            <td style={{ padding: '10px 12px', textAlign: 'right', color: dre.resultadoLiquido >= 0 ? '#10b981' : '#e05c5c' }}>
+              {money(dre.resultadoLiquido)}
+            </td>
+            <td style={{ padding: '10px 12px', textAlign: 'right', color: dre.resultadoLiquido >= 0 ? '#10b981' : '#e05c5c' }}>
+              {dre.margemLiquidaPercentual}%
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+}
+
+// Painel de Despesas por Categoria com Gráfico e Participação
+function DespesasCategoriaPanel({ dre, onSelectCategoria }) {
+  if (!dre?.rankingCategorias) return <p className="dadm-muted">Carregando categorias…</p>
+
+  const total = dre.totalDespesasOperacionais || 1
+  return <div style={{ display: 'grid', gap: 14 }}>
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div>
+        <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>Centros de Custo & Despesas</h3>
+        <p style={{ margin: '2px 0 0', fontSize: 12, color: 'var(--muted)' }}>Distribuição percentual das despesas pagas no mês</p>
+      </div>
+      <span style={{ fontSize: 13, fontWeight: 700 }}>Total: {money(total)}</span>
+    </div>
+
+    {!dre.rankingCategorias.length ? (
+      <p className="dadm-muted">Nenhuma despesa operacional registrada para este mês.</p>
+    ) : (
+      <div style={{ display: 'grid', gap: 8 }}>
+        {dre.rankingCategorias.map((item) => (
+          <div
+            key={item.categoria}
+            onClick={() => onSelectCategoria(item.categoria)}
+            style={{
+              padding: '10px 14px',
+              border: '1px solid var(--line)',
+              borderRadius: 8,
+              background: 'var(--card)',
+              cursor: 'pointer',
+              transition: 'all 0.15s ease',
+            }}
+            title="Clique para filtrar a tabela de lançamentos por esta categoria"
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4, fontSize: 13 }}>
+              <strong>{item.categoria}</strong>
+              <span>{money(item.valor)} · <span style={{ color: 'var(--accent, #b0892e)', fontWeight: 700 }}>{item.percentual}%</span></span>
+            </div>
+            <div style={{ height: 6, background: 'var(--line)', borderRadius: 3, overflow: 'hidden' }}>
+              <div style={{ height: '100%', width: `${Math.min(100, item.percentual)}%`, background: 'var(--accent, #b0892e)', borderRadius: 3 }} />
+            </div>
+          </div>
+        ))}
+      </div>
+    )}
+  </div>
+}
+
 export default function FinanceiroEmpresa() {
   const { toast } = useToast()
   const { empresaAtiva, perfil } = useAuth()
@@ -74,12 +269,14 @@ export default function FinanceiroEmpresa() {
   const [lancamentos, setLancamentos] = useState([])
   const [resumo, setResumo] = useState(null)
   const [fluxo, setFluxo] = useState([])
+  const [dre, setDre] = useState(null)
   const [categorias, setCategorias] = useState({ receita: [], despesa: [] })
   const [loading, setLoading] = useState(true)
   const [erro, setErro] = useState('')
   const [filtros, setFiltros] = useState({ tipo: '', status: '', categoria: '', q: '', de: '', ate: '' })
   const [cardFiltroAtivo, setCardFiltroAtivo] = useState(null)
   const [mesSelecionado, setMesSelecionado] = useState(null)
+  const [abaAnalitica, setAbaAnalitica] = useState('fluxo') // 'fluxo' | 'dre' | 'categorias'
 
   const [ordenacao, setOrdenacao] = useState({ campo: 'vencimento', direcao: 'desc' })
   const [itensPorPagina, setItensPorPagina] = useState(50)
@@ -92,6 +289,8 @@ export default function FinanceiroEmpresa() {
   const [cancelando, setCancelando] = useState(null)
   const firstField = useRef(null)
   const hoje = localDay()
+  const mesAtual = resumo?.mesAtual || hoje.slice(0, 7)
+  const [mesDre, setMesDre] = useState(mesAtual)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -102,24 +301,24 @@ export default function FinanceiroEmpresa() {
       return
     }
     try {
-      const [lista, r, f, c] = await Promise.all([
+      const [lista, r, f, c, d] = await Promise.all([
         api.get(`${BASE}/lancamentos`),
         api.get(`${BASE}/resumo`),
         api.get(`${BASE}/fluxo`),
-        api.get(`${BASE}/categorias`)
+        api.get(`${BASE}/categorias`),
+        api.get(`${BASE}/dre?mes=${mesDre}`).catch(() => null)
       ])
       setLancamentos(Array.isArray(lista) ? lista : [])
       setResumo(r)
       setFluxo(Array.isArray(f) ? f : [])
       setCategorias(c || { receita: [], despesa: [] })
+      setDre(d)
       setErro('')
     } catch (error) { setErro(error.message || 'Não foi possível carregar o financeiro.') }
     finally { setLoading(false) }
-  }, [operador])
+  }, [operador, mesDre])
 
   useEffect(() => { load() }, [load, empresaAtiva?.id])
-
-  const mesAtual = resumo?.mesAtual || hoje.slice(0, 7)
 
   // Lançamentos vencidos
   const vencidos = useMemo(() => {
@@ -182,6 +381,11 @@ export default function FinanceiroEmpresa() {
     } else {
       setFiltros((prev) => ({ ...prev, de: `${mes}-01`, ate: `${mes}-31` }))
     }
+  }
+
+  function handleSelectCategoriaFiltro(cat) {
+    setFiltros((prev) => ({ ...prev, categoria: cat }))
+    setPaginaAtual(1)
   }
 
   function limparTodosFiltros() {
@@ -570,13 +774,53 @@ export default function FinanceiroEmpresa() {
         </div>
       )}
 
-      {/* Gráfico Interativo com Clique por Mês */}
+      {/* Seção Analítica: Abas de Fluxo de Caixa, DRE Gerencial e Despesas por Categoria */}
       <section className="dadm-card">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', flexWrap: 'wrap', gap: 8 }}>
-          <h2>Fluxo dos últimos 12 meses</h2>
-          <span style={{ fontSize: 12, color: 'var(--muted)' }}>Clique em um mês para filtrar a lista abaixo</span>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10, borderBottom: '1px solid var(--line)', paddingBottom: 10, marginBottom: 14 }}>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button
+              type="button"
+              className={`c360-btn ${abaAnalitica === 'fluxo' ? 'primary' : 'ghost'}`}
+              style={{ fontSize: 13, padding: '6px 12px' }}
+              onClick={() => setAbaAnalitica('fluxo')}
+            >
+              📊 Fluxo dos 12 Meses
+            </button>
+            <button
+              type="button"
+              className={`c360-btn ${abaAnalitica === 'dre' ? 'primary' : 'ghost'}`}
+              style={{ fontSize: 13, padding: '6px 12px' }}
+              onClick={() => setAbaAnalitica('dre')}
+            >
+              📑 DRE Gerencial
+            </button>
+            <button
+              type="button"
+              className={`c360-btn ${abaAnalitica === 'categorias' ? 'primary' : 'ghost'}`}
+              style={{ fontSize: 13, padding: '6px 12px' }}
+              onClick={() => setAbaAnalitica('categorias')}
+            >
+              🏷️ Despesas por Categoria
+            </button>
+          </div>
+          <span style={{ fontSize: 12, color: 'var(--muted)' }}>
+            {abaAnalitica === 'fluxo' && 'Clique em um mês para filtrar'}
+            {abaAnalitica === 'dre' && 'Demonstrativo contábil gerencial'}
+            {abaAnalitica === 'categorias' && 'Clique na categoria para filtrar a lista'}
+          </span>
         </div>
-        <FlowChart fluxo={fluxo} mesSelecionado={mesSelecionado} onSelectMes={handleSelectMesFluxo} />
+
+        {abaAnalitica === 'fluxo' && (
+          <FlowChart fluxo={fluxo} mesSelecionado={mesSelecionado} onSelectMes={handleSelectMesFluxo} />
+        )}
+
+        {abaAnalitica === 'dre' && (
+          <DreGerencialPanel dre={dre} mes={mesDre} onMesChange={setMesDre} onFilterCategoria={handleSelectCategoriaFiltro} />
+        )}
+
+        {abaAnalitica === 'categorias' && (
+          <DespesasCategoriaPanel dre={dre} onSelectCategoria={handleSelectCategoriaFiltro} />
+        )}
       </section>
     </>}
 
@@ -598,7 +842,7 @@ export default function FinanceiroEmpresa() {
       </div>
 
       {/* Banner de Filtro Ativo */}
-      {(cardFiltroAtivo || mesSelecionado) && (
+      {(cardFiltroAtivo || mesSelecionado || filtros.categoria) && (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', background: 'var(--card2)', border: '1px solid var(--line)', borderRadius: 8, margin: '8px 0' }}>
           <span style={{ fontSize: 13 }}>
             Filtro ativo: <strong style={{ color: 'var(--accent, #b0892e)' }}>
@@ -610,6 +854,7 @@ export default function FinanceiroEmpresa() {
               {cardFiltroAtivo === 'despMes' && `Despesas Pagas do Mês (${mesAtual})`}
               {cardFiltroAtivo === 'resultadoMes' && `Movimentações do Mês (${mesAtual})`}
               {mesSelecionado && `Mês do Fluxo: ${mesSelecionado.slice(5)}/${mesSelecionado.slice(0, 4)}`}
+              {filtros.categoria && `Categoria: ${filtros.categoria}`}
             </strong>
           </span>
           <button type="button" className="c360-btn ghost" style={{ fontSize: 11, padding: '2px 8px' }} onClick={limparTodosFiltros}>

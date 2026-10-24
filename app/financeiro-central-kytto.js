@@ -632,22 +632,54 @@ export function resumoFinanceiro(empresaOuOpcoes, opcoes = {}) {
   const lancamentos = listarLancamentos(escopo.empresaId, { ...filtros, lojaId: escopo.lojaId });
   const hoje = dataCurta(filtros.hoje || agora());
   const mesAtual = String(hoje).slice(0, 7);
-  const ativos = lancamentos.filter((item) => item.status !== 'cancelado');
-  const receitasPagas = ativos.filter((item) => item.tipo === 'receita' && item.status === 'pago');
-  const despesasPagas = ativos.filter((item) => item.tipo === 'despesa' && item.status === 'pago');
-  const receitasMes = receitasPagas.filter((item) => item.pagoEm?.slice(0, 7) === mesAtual);
-  const despesasMes = despesasPagas.filter((item) => item.pagoEm?.slice(0, 7) === mesAtual);
-  const aReceber = ativos.filter((item) => item.tipo === 'receita' && item.status === 'pendente');
-  const aPagar = ativos.filter((item) => item.tipo === 'despesa' && item.status === 'pendente');
-  const recBar = receitasPagas.filter((item) => item.origem === 'comanda' || item.origem === 'barbearia_cobranca').reduce((soma, item) => soma + item.valor, 0);
-  const inadimplentes = aReceber.filter((item) => item.vencimento < hoje).length;
-  const totalReceitas = receitasPagas.reduce((soma, item) => soma + item.valor, 0);
-  const totalDespesas = despesasPagas.reduce((soma, item) => soma + item.valor, 0);
+
+  // Single-pass O(N) aggregation sem arrays intermediários (alta performance e economia de memória no Render)
+  let totalReceitas = 0;
+  let totalDespesas = 0;
+  let recMes = 0;
+  let despMes = 0;
+  let aReceber = 0;
+  let aPagar = 0;
+  let recBar = 0;
+  let inadimplentes = 0;
+
+  for (let i = 0; i < lancamentos.length; i++) {
+    const item = lancamentos[i];
+    if (item.status === 'cancelado') continue;
+    const valor = Number(item.valor || 0);
+
+    if (item.tipo === 'receita') {
+      if (item.status === 'pago') {
+        totalReceitas += valor;
+        if (item.pagoEm && item.pagoEm.slice(0, 7) === mesAtual) {
+          recMes += valor;
+        }
+        if (item.origem === 'comanda' || item.origem === 'barbearia_cobranca') {
+          recBar += valor;
+        }
+      } else if (item.status === 'pendente') {
+        aReceber += valor;
+        if (item.vencimento < hoje) {
+          inadimplentes += 1;
+        }
+      }
+    } else if (item.tipo === 'despesa') {
+      if (item.status === 'pago') {
+        totalDespesas += valor;
+        if (item.pagoEm && item.pagoEm.slice(0, 7) === mesAtual) {
+          despMes += valor;
+        }
+      } else if (item.status === 'pendente') {
+        aPagar += valor;
+      }
+    }
+  }
+
   return {
     empresaId: escopo.empresaId, lojaId: escopo.lojaId || null, hoje, mesAtual,
     saldo: valorMonetario(totalReceitas - totalDespesas), totalReceitas: valorMonetario(totalReceitas), totalDespesas: valorMonetario(totalDespesas), recBar: valorMonetario(recBar),
-    recMes: valorMonetario(receitasMes.reduce((soma, item) => soma + item.valor, 0)), despMes: valorMonetario(despesasMes.reduce((soma, item) => soma + item.valor, 0)),
-    aReceber: valorMonetario(aReceber.reduce((soma, item) => soma + item.valor, 0)), aPagar: valorMonetario(aPagar.reduce((soma, item) => soma + item.valor, 0)), inadimplentes,
+    recMes: valorMonetario(recMes), despMes: valorMonetario(despMes),
+    aReceber: valorMonetario(aReceber), aPagar: valorMonetario(aPagar), inadimplentes,
     mensRecebidas: 0, mensPendentes: 0, mensVencidas: 0, inscRec: 0,
     quarentenaCount: contagemQuarentena(escopo.empresaId),
   };
@@ -705,12 +737,140 @@ export function fluxoFinanceiro(empresaId, meses = 12, dataReferencia = agora(),
     periodo.push(`${data.getFullYear()}-${String(data.getMonth() + 1).padStart(2, '0')}`);
   }
   const lancamentos = listarLancamentos(escopo.empresaId, { lojaId: escopo.lojaId });
+
+  // Agrupamento em única passagem O(N) com hash-map O(1) eliminando buscas aninhadas
+  const mesesMap = Object.create(null);
+  for (let i = 0; i < lancamentos.length; i++) {
+    const item = lancamentos[i];
+    if (item.status !== 'pago' || !item.pagoEm) continue;
+    const mes = item.pagoEm.slice(0, 7);
+    let entry = mesesMap[mes];
+    if (!entry) {
+      entry = mesesMap[mes] = { receitas: 0, despesas: 0 };
+    }
+    const val = Number(item.valor || 0);
+    if (item.tipo === 'receita') entry.receitas += val;
+    else if (item.tipo === 'despesa') entry.despesas += val;
+  }
+
   return periodo.map((mes) => {
-    const pagos = lancamentos.filter((item) => item.status === 'pago' && item.pagoEm?.slice(0, 7) === mes);
-    const receitas = pagos.filter((item) => item.tipo === 'receita').reduce((soma, item) => soma + item.valor, 0);
-    const despesas = pagos.filter((item) => item.tipo === 'despesa').reduce((soma, item) => soma + item.valor, 0);
+    const entry = mesesMap[mes];
+    const receitas = entry ? entry.receitas : 0;
+    const despesas = entry ? entry.despesas : 0;
     return { mes, receitas: valorMonetario(receitas), despesas: valorMonetario(despesas), saldo: valorMonetario(receitas - despesas) };
   });
+}
+
+// Demonstrativo do Resultado do Exercício Gerencial (DRE Gerencial)
+export function dreGerencial(empresaOuOpcoes, opcoes = {}) {
+  const parsed = parseResumo(empresaOuOpcoes, opcoes);
+  const filtros = parsed.opcoes || {};
+  const escopo = exigeLeituraLoja(parsed.empresaId, filtros.lojaId, filtros, 'DRE gerencial');
+  const lancamentos = listarLancamentos(escopo.empresaId, { ...filtros, lojaId: escopo.lojaId });
+  const hoje = dataCurta(filtros.hoje || agora());
+  const mesAlvo = String(filtros.mes || hoje).slice(0, 7);
+
+  let receitaServicos = 0;
+  let receitaPlanos = 0;
+  let receitaRevenda = 0;
+  let receitaOutras = 0;
+
+  let deducoesTaxas = 0;
+  let deducoesEstornos = 0;
+
+  let custoComissoes = 0;
+  let custoInsumos = 0;
+
+  const despesasOperacionaisPorCategoria = Object.create(null);
+  let totalDespesasFixas = 0;
+
+  for (let i = 0; i < lancamentos.length; i++) {
+    const item = lancamentos[i];
+    if (item.status === 'cancelado') continue;
+    const refData = item.pagoEm || item.dataOperacao || item.vencimento;
+    if (!refData || !refData.startsWith(mesAlvo)) continue;
+
+    const valor = Number(item.valor || 0);
+
+    if (item.tipo === 'receita') {
+      if (item.status !== 'pago') continue;
+      const origem = item.origem || '';
+      const cat = (item.categoria || '').toLowerCase();
+      if (origem === 'comanda' || origem === 'barbearia_atendimento' || cat.includes('serviço')) {
+        receitaServicos += valor;
+      } else if (cat.includes('plano') || cat.includes('mensalidade') || cat.includes('assinatura') || cat.includes('clube')) {
+        receitaPlanos += valor;
+      } else if (origem === 'barbearia_revenda' || origem === 'revenda' || cat.includes('produto') || cat.includes('revenda')) {
+        receitaRevenda += valor;
+      } else {
+        receitaOutras += valor;
+      }
+    } else if (item.tipo === 'despesa') {
+      if (item.status !== 'pago') continue;
+      const cat = item.categoria || 'Outros';
+      const catLower = cat.toLowerCase();
+
+      if (catLower.includes('taxa') || catLower.includes('cartão') || catLower.includes('maquininha')) {
+        deducoesTaxas += valor;
+      } else if (catLower.includes('comissão') || catLower.includes('repasse') || catLower.includes('barbeiro')) {
+        custoComissoes += valor;
+      } else if (catLower.includes('insumo') || catLower.includes('lavatório') || catLower.includes('consumo')) {
+        custoInsumos += valor;
+      } else {
+        despesasOperacionaisPorCategoria[cat] = (despesasOperacionaisPorCategoria[cat] || 0) + valor;
+        totalDespesasFixas += valor;
+      }
+    }
+  }
+
+  const receitaBruta = valorMonetario(receitaServicos + receitaPlanos + receitaRevenda + receitaOutras);
+  const totalDeducoes = valorMonetario(deducoesTaxas + deducoesEstornos);
+  const receitaLiquida = valorMonetario(receitaBruta - totalDeducoes);
+  const totalCustosVariaveis = valorMonetario(custoComissoes + custoInsumos);
+  const margemContribuicao = valorMonetario(receitaLiquida - totalCustosVariaveis);
+  const margemContribuicaoPercentual = receitaBruta > 0 ? Number(((margemContribuicao / receitaBruta) * 100).toFixed(1)) : 0;
+
+  const totalDespesasOperacionais = valorMonetario(totalDespesasFixas);
+  const ebitda = valorMonetario(margemContribuicao - totalDespesasOperacionais);
+  const resultadoLiquido = ebitda;
+  const margemLiquidaPercentual = receitaBruta > 0 ? Number(((resultadoLiquido / receitaBruta) * 100).toFixed(1)) : 0;
+
+  const rankingCategorias = Object.entries(despesasOperacionaisPorCategoria)
+    .map(([categoria, total]) => ({
+      categoria,
+      valor: valorMonetario(total),
+      percentual: totalDespesasOperacionais > 0 ? Number(((total / totalDespesasOperacionais) * 100).toFixed(1)) : 0,
+    }))
+    .sort((a, b) => b.valor - a.valor);
+
+  return {
+    mes: mesAlvo,
+    receitaBruta,
+    detalhesReceita: {
+      servicos: valorMonetario(receitaServicos),
+      planos: valorMonetario(receitaPlanos),
+      revenda: valorMonetario(receitaRevenda),
+      outras: valorMonetario(receitaOutras),
+    },
+    totalDeducoes,
+    detalhesDeducoes: {
+      taxasCartao: valorMonetario(deducoesTaxas),
+      estornos: valorMonetario(deducoesEstornos),
+    },
+    receitaLiquida,
+    totalCustosVariaveis,
+    detalhesCustos: {
+      comissoes: valorMonetario(custoComissoes),
+      insumos: valorMonetario(custoInsumos),
+    },
+    margemContribuicao,
+    margemContribuicaoPercentual,
+    totalDespesasOperacionais,
+    ebitda,
+    resultadoLiquido,
+    margemLiquidaPercentual,
+    rankingCategorias,
+  };
 }
 
 export const CATEGORIAS_FINANCEIRAS = {

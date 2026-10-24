@@ -185,6 +185,13 @@ test('admin da empresa: isolamento, guardas legados, BI, cliente automático e W
     assert.equal(lote.response.status, 200);
     assert.equal(lote.body.liquidados, 2);
 
+    // DRE Gerencial
+    const dre = await request(base, '/api/admin/barbearia/financeiro/dre?mes=2026-10', { headers: A });
+    assert.equal(dre.response.status, 200);
+    assert.equal(typeof dre.body.receitaBruta, 'number');
+    assert.equal(typeof dre.body.margemContribuicao, 'number');
+    assert.equal(typeof dre.body.resultadoLiquido, 'number');
+
     // ── Despesa recorrente: 12 parcelas mensais, série encerrável ──
     const serie = await request(base, '/api/admin/barbearia/financeiro/lancamentos', { method: 'POST', headers: A, body: JSON.stringify({ tipo: 'despesa', categoria: 'Internet e telefone', descricao: 'Internet', valor: 150, vencimento: '2026-01-31', status: 'pago', recorrencia: { meses: 12 } }) });
     assert.equal(serie.response.status, 201);
