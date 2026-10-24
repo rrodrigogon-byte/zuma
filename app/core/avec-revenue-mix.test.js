@@ -36,9 +36,13 @@ test('mix histórico substitui sobreposição operacional, inclui pacotes na uni
   assert.equal(after.strategicMix.items.find(x=>x.id==='plans').available,true);
   assert.equal(after.strategicMix.historical.details.length,4);
   assert.deepEqual(after.kpis,before.kpis);
+  assert.equal(after.charts.topProducts.reduce((sum,row)=>sum+row.revenue,0),412);
+  assert.equal(after.charts.categorySales.reduce((sum,row)=>sum+row.revenue,0),412);
+  assert.equal(after.charts.topProducts.some(row=>row.name==='Histórico Avec'),false);
   assert.equal(mixForPeriod(historicalMix,'2026-09-02','2026-09-03').length,0);
   const nextDay = buildDinoDashboardAnalytics({...input,historicalMix,commands:[{status:'paga',atualizadoEm:'2026-09-02T16:00:00Z',itens:[{tipo:'produto',subtotal:50}]}]},{period:7,now:new Date('2026-09-02T18:00:00Z')});
   assert.equal(nextDay.strategicMix.total,462);
+  assert.equal(nextDay.charts.topProducts.reduce((sum,row)=>sum+row.revenue,0),462);
 });
 test('PostgreSQL: replay, concorrência, troca atômica, isolamento e versões para recuperação', async () => {
   const fixture = await localPostgresFixture();
