@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '../../../lib/api'
 import { useToast } from '../../../hooks/useToast'
 import { useAuth } from '../../../lib/auth'
@@ -78,6 +78,13 @@ export default function Suprimentos({ abaInicial = 'itens' }) {
     } catch (error) { toast(error.message, 'error') } finally { setEnviando(false) }
   }
 
+  async function atualizarConsumo() {
+    if (enviando) return
+    setEnviando(true)
+    try { await api.post(`${BASE}/consumo/sincronizar`, {}); await carregarItens(); toast('Consumo das vendas atualizado sem repetir baixas já processadas.', 'success') }
+    catch(error) { toast(error.message, 'error') } finally { setEnviando(false) }
+  }
+
   const totalEstoque = itens.reduce((s, i) => s + (i.valorEmEstoque || 0), 0)
   const abaixo = itens.filter((i) => i.abaixoDoMinimo).length
 
@@ -92,6 +99,7 @@ export default function Suprimentos({ abaInicial = 'itens' }) {
             {lojas.map((l) => <option key={l.id} value={l.id}>{l.nome}</option>)}
           </select>
         </label>
+        <button type="button" className="c360-btn ghost" disabled={enviando} onClick={atualizarConsumo}>Atualizar consumo das vendas</button>
         <button type="button" className="c360-btn primary" onClick={() => setForm({ nome: '', sku: '', ean: '', unidade: 'UN', tipo: 'mercadoria', categoria: '', ncm: '', estoqueMinimo: '', custoMedio: '' })}>+ Item</button>
       </div>
     </header>
@@ -125,7 +133,7 @@ export default function Suprimentos({ abaInicial = 'itens' }) {
 
     {aba === 'movimentos' && <Movimentos qs={qs} nomeLoja={nomeLoja} unidade={unidade} />}
     {aba === 'inventario' && <Inventario qs={qs} unidade={unidadeEscrita} precisaUnidade={precisaUnidade} toast={toast} onMudou={carregarItens} />}
-    {aba === 'fichas' && <Fichas itens={itens} lojas={lojas} toast={toast} />}
+    {aba === 'fichas' && <Fichas key={`${empresaAtiva?.id}:${unidadeEscrita}`} itens={itens} lojas={lojas} unidade={unidadeEscrita} toast={toast} />}
     {aba === 'compras' && <Pedidos itens={itens} unidade={unidadeEscrita} qs={qs} toast={toast} onRecebido={carregarItens} />}
     {aba === 'receber' && <ReceberNfe itens={itens} unidade={unidadeEscrita} precisaUnidade={precisaUnidade} toast={toast} onLancado={carregarItens} />}
     {aba === 'relatorios' && <Relatorios qs={qs} />}
@@ -239,10 +247,20 @@ function Inventario({ qs, unidade, precisaUnidade, toast, onMudou }) {
   </section>
 }
 
-function Fichas({ itens, lojas, toast }) {
+function Fichas({ itens, lojas, unidade, toast }) {
   const [produtos, setProdutos] = useState([])
   const [fichas, setFichas] = useState([])
-  const [editando, setEditando] = useState(null)
+  const [editando, setEditandoBase] = useState(null)
+  const [previa, setPrevia] = useState(null), [simulando, setSimulando] = useState(false), [quantidade, setQuantidade] = useState('1')
+  const previaSeq = useRef(0)
+  const setEditando = value => { previaSeq.current++; setSimulando(false); setPrevia(null); setEditandoBase(value) }
+  async function simular() {
+    if (!editando || !unidade || simulando) return
+    const seq = ++previaSeq.current
+    setSimulando(true); setPrevia(null)
+    try { const result = await api.post('/api/admin/suprimentos/fichas/previa', { fonte: editando.produto.fonte, fonteId: editando.produto.id, lojaId: unidade, quantidade, itens: editando.linhas.filter(row => row.itemId).map(row => ({ itemId: row.itemId, fator: row.fator })) }); if(seq === previaSeq.current) setPrevia(result) }
+    catch(error) { if(seq === previaSeq.current) toast(error.message, 'error') } finally { if(seq === previaSeq.current) setSimulando(false) }
+  }
   const [config, setConfig] = useState(null)
   useEffect(() => { api.get('/api/admin/suprimentos/config').then(setConfig).catch(() => setConfig(null)) }, [])
   async function salvarLojaBar(lojaBar) {
@@ -280,10 +298,15 @@ function Fichas({ itens, lojas, toast }) {
     <Dialog open={Boolean(editando)} title={editando ? `Ficha · ${editando.produto.nome}` : ''} labelId="sup-ficha" onClose={() => setEditando(null)} onSubmit={salvar}
       actions={<><button type="button" className="c360-btn ghost" onClick={() => setEditando(null)}>Voltar</button><button type="submit" className="c360-btn primary">Salvar ficha</button></>}>
       {editando && <div style={{ display: 'grid', gap: 8 }}>
+        <p className="dadm-note">As quantidades usam a unidade de cada insumo. Simular não salva a ficha, não reserva materiais e não movimenta estoque.</p>
+        <label className="c360-field">Quantidade de produtos para simular<input className="c360-input" inputMode="decimal" value={quantidade} disabled={simulando} onChange={e => { setQuantidade(e.target.value); setPrevia(null) }} /></label>
+        <button type="button" className="c360-btn ghost" disabled={!unidade || simulando || !editando.linhas.some(row => row.itemId)} onClick={simular}>{simulando ? 'Calculando…' : 'Simular consumo e custo'}</button>
+        {!unidade && <p className="dadm-note">Selecione uma unidade para conferir saldo e consumo.</p>}
+        {previa && <section aria-label="Prévia de consumo e custo" className="dadm-card"><h3>Prévia para {num(previa.quantidade)} produto(s)</h3><p>Custo total: <strong>{previa.custoCompleto ? money(previa.custoTotal) : 'Incompleto — há insumos sem custo informado'}</strong></p><p>Saldo da unidade: {previa.saldoSuficiente ? 'suficiente para a quantidade simulada' : 'há falta de material, insumo inativo ou precisão insuficiente'}.</p><Table caption="Materiais necessários sem movimentar estoque" rows={previa.itens.map(row => ({ ...row, id: row.itemId }))} columns={[{ key: 'nome', label: 'Insumo' },{ key: 'necessario', label: 'Necessário', render: row => `${num(row.necessario)} ${row.unidade}` },{ key: 'saldo', label: 'Saldo', render: row => `${num(row.saldo)} ${row.unidade}` },{ key: 'falta', label: 'Falta', render: row => `${num(row.falta)} ${row.unidade}` }]} />{previa.avisos.map((aviso,idx) => <p key={idx} className="dadm-note warn">{aviso}</p>)}<p className="dadm-muted">{previa.nota}</p></section>}
         {editando.linhas.map((l, idx) => <div key={idx} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr auto', gap: 8, alignItems: 'end' }}>
-          <label className="c360-field">Item<select className="c360-input" value={l.itemId} onChange={(e) => { const linhas = [...editando.linhas]; linhas[idx] = { ...l, itemId: e.target.value }; if (idx === linhas.length - 1 && e.target.value) linhas.push({ itemId: '', fator: '', espelho: false }); setEditando({ ...editando, linhas }) }}><option value="">—</option>{itens.map((i) => <option key={i.id} value={i.id}>{i.nome} ({i.unidade})</option>)}</select></label>
-          <label className="c360-field">Por venda<input className="c360-input" inputMode="decimal" value={l.fator} onChange={(e) => { const linhas = [...editando.linhas]; linhas[idx] = { ...l, fator: e.target.value }; setEditando({ ...editando, linhas }) }} /></label>
-          {editando.produto.fonte === 'bar_produto' && <label className="dadm-muted"><input type="checkbox" checked={l.espelho} onChange={(e) => { const linhas = editando.linhas.map((x, j) => ({ ...x, espelho: j === idx ? e.target.checked : false })); setEditando({ ...editando, linhas }) }} /> espelhar</label>}
+          <label className="c360-field">Item<select className="c360-input" value={l.itemId} disabled={simulando} onChange={(e) => { const linhas = [...editando.linhas]; linhas[idx] = { ...l, itemId: e.target.value }; if (idx === linhas.length - 1 && e.target.value) linhas.push({ itemId: '', fator: '', espelho: false }); setEditando({ ...editando, linhas }) }}><option value="">—</option>{itens.map((i) => <option key={i.id} value={i.id}>{i.nome} ({i.unidade})</option>)}</select></label>
+          <label className="c360-field">Por venda<input className="c360-input" inputMode="decimal" value={l.fator} disabled={simulando} onChange={(e) => { const linhas = [...editando.linhas]; linhas[idx] = { ...l, fator: e.target.value }; setEditando({ ...editando, linhas }) }} /></label>
+          {editando.produto.fonte === 'bar_produto' && <label className="dadm-muted"><input type="checkbox" checked={l.espelho} disabled={simulando} onChange={(e) => { const linhas = editando.linhas.map((x, j) => ({ ...x, espelho: j === idx ? e.target.checked : false })); setEditando({ ...editando, linhas }) }} /> espelhar</label>}
         </div>)}
       </div>}
     </Dialog>

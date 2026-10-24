@@ -1,0 +1,131 @@
+{
+  "data": "2026-10-24",
+  "prioridade_usuario": "Dino primeiro, depois demais empresas",
+  "escopo": "Inventário de diretórios e primeira auditoria de suprimentos; existência de código não comprova funcionamento integral.",
+  "modulos_inventariados": [
+    "a2",
+    "acesso",
+    "agro",
+    "agropecuaria",
+    "aulas",
+    "bar",
+    "barbearia",
+    "bi",
+    "billing",
+    "caixa",
+    "catalogo",
+    "clientes",
+    "clube",
+    "cobrancas",
+    "compras",
+    "contratos",
+    "crediario",
+    "crm",
+    "estoque",
+    "financeiro",
+    "fiscal",
+    "loja",
+    "loja-moda",
+    "multi-loja",
+    "oficina",
+    "pagamentos",
+    "parceiros",
+    "pdv",
+    "pdv-offline",
+    "quadras",
+    "razao",
+    "relatorios",
+    "restaurante",
+    "retencao",
+    "rh",
+    "salao",
+    "sped",
+    "supermercado",
+    "suprimentos",
+    "unidades",
+    "varejo"
+  ],
+  "referencias": [
+    {
+      "projeto": "ERPNext",
+      "repositorio": "https://github.com/frappe/erpnext",
+      "licenca": "GPL-3.0",
+      "uso": "Referência de ficha/BOM, materiais e custos",
+      "documentacao": "https://docs.frappe.io/erpnext/bill-of-materials"
+    },
+    {
+      "projeto": "Odoo Community",
+      "repositorio": "https://github.com/odoo/odoo",
+      "licenca": "LGPL-3.0; verificar licença de cada módulo",
+      "uso": "Referência de integração entre catálogo, compras e estoque"
+    },
+    {
+      "projeto": "Dolibarr",
+      "repositorio": "https://github.com/Dolibarr/dolibarr",
+      "licenca": "GPL-3.0 ou posterior",
+      "uso": "Referência de fluxos de ERP para pequenas empresas"
+    },
+    {
+      "projeto": "OCA manufacture e localização Brasil",
+      "repositorio": "https://github.com/OCA/manufacture",
+      "localizacao": "https://github.com/OCA/l10n-brazil",
+      "licenca": "Verificar manifesto de cada módulo antes de reutilizar",
+      "uso": "Referência técnica; extensões dependem de Odoo"
+    }
+  ],
+  "politica_reuso": "Nenhum código externo copiado ou instalado. Referências não garantem operação perfeita nem compatibilidade direta com Node/React. Avaliar licença antes de qualquer reutilização.",
+  "entrega_atual": {
+    "estado": "implementada, aguardando publicação e validação em produção",
+    "mudancas": [
+      "GET de itens somente leitura",
+      "Sincronização de consumo explícita com inventory.write e alcance da empresa",
+      "Prévia de ficha por empresa/unidade, saldo, falta e custo médio conhecido",
+      "Custos ausentes sinalizados como desconhecidos",
+      "Teste real PostgreSQL obrigatório no CI"
+    ],
+    "nao_executado": [
+      "Criação de receitas ou vínculos em produção",
+      "Importação Avec",
+      "Baixas manuais, ajustes de saldo, lançamentos financeiros"
+    ]
+  },
+  "proximas_etapas": [
+    {
+      "ordem": 1,
+      "foco": "Dino — fichas e insumos",
+      "pendencias": [
+        "Validar receitas e quantidades reais com operação antes de cadastrar",
+        "Mapear serviços da barbearia e sua identidade entre JSON/PostgreSQL",
+        "Revisar sistemas de fichas paralelos antes de consolidar",
+        "Testar consumo exatamente uma vez, cancelamentos, estornos e concorrência em homologação"
+      ]
+    },
+    {
+      "ordem": 2,
+      "foco": "Dino — compras, estoque e perfumaria",
+      "pendencias": [
+        "Auditar recebimento parcial, devolução, inventário e transferência por unidade",
+        "Cobrir custos, unidade de medida, rastreio e permissões com testes reais"
+      ]
+    },
+    {
+      "ordem": 3,
+      "foco": "Dino — agenda, comanda, planos, caixa, financeiro e relatórios",
+      "pendencias": [
+        "Auditar integração ponta a ponta e reconciliação sem somar históricos duplicados",
+        "Separar classificação comercial de receita financeira",
+        "Manter itens Avec retidos até prova de identidade"
+      ]
+    },
+    {
+      "ordem": 4,
+      "foco": "Demais empresas",
+      "pendencias": [
+        "Definir cenário e matriz de módulos de cada empresa",
+        "Repetir testes de isolamento por empresa/unidade e homologar fluxos setoriais",
+        "Fiscal exige cenário tributário e homologação próprios"
+      ]
+    }
+  ],
+  "criterio_conclusao": "Não considerar todos os módulos completos: exigir casos ponta a ponta, dados reconciliados, permissões, testes, revisão e publicação Live para cada entrega."
+}
