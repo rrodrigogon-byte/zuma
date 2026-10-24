@@ -1,6 +1,6 @@
 import { createContext, useContext, useState } from 'react'
 import { encerrarPushDoAparelho } from './push-equipe'
-import { selecionarLojaAutomatica } from './context-selection'
+import { repararLojasSemEmpresa, selecionarLojaAutomatica } from './context-selection'
 import { DINO_COMPANY, DINO_STORE, isDinoDedicatedHost } from './dino-scope'
 import { isDinoBrandContext } from './brand'
 
@@ -35,7 +35,8 @@ function empresasComFallbackDino(empresas) {
 }
 
 function lojasComFallbackDino(lojas) {
-  const lista = Array.isArray(lojas) ? lojas : []
+  // Entradas antigas da loja Dino gravadas sem vínculo de empresa são reparadas aqui.
+  const lista = repararLojasSemEmpresa(Array.isArray(lojas) ? lojas : [], [DINO_STORE])
   if (!isDinoDedicatedHost() || lista.some((loja) => String(loja?.id || '') === DINO_STORE.id)) return lista
   return [...lista, DINO_STORE]
 }
