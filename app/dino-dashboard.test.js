@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildDinoDashboardAnalytics, dashboardPeriod, filterDashboardRowsToStore } from './dino-dashboard.js';
+import { buildDinoDashboardAnalytics, dashboardPeriod, filterDashboardRowsToStore, historicalCommandSlot } from './dino-dashboard.js';
 
 const now = new Date('2026-09-01T16:00:00.000Z');
 
@@ -293,4 +293,28 @@ test('dashboard mantém indicadores e reutiliza formatadores em uma agenda exten
   assert.equal(result.kpis.find((item) => item.id === 'appointments').value, 1631);
   assert.equal(result.charts.appointmentsDaily.reduce((sum, item) => sum + item.value, 0), 1631);
   assert.ok(created <= 2, `Agenda criou ${created} formatadores nativos em uma única leitura`);
+});
+
+test('mapa de horários soma comandas Avec fechadas no mesmo dia pela hora de fechamento', () => {
+  const input = baseInput();
+  input.historicalCommands = [
+    { id: 'c1', dataComandaIso: '2026-08-25', dataFinalizacaoOriginal: '25/08/2026 17:40' },
+    { id: 'c2', dataComandaIso: '2026-08-25', dataFinalizacaoOriginal: '25/08/2026 17:05' },
+    { id: 'c3', dataComandaIso: '2026-08-25', dataFinalizacaoOriginal: '29/08/2026 10:00' },
+    { id: 'c4', dataComandaIso: '2026-08-25', dataFinalizacaoOriginal: '' },
+  ];
+  const result = buildDinoDashboardAnalytics(input, { period: 30, now });
+  const cell = result.charts.scheduleHeatmap.find((item) => item.weekday === 'tue' && item.hour === 17);
+  assert.deepEqual({ value: cell.value, agenda: cell.agenda, historicoAvec: cell.historicoAvec }, { value: 2, agenda: 0, historicoAvec: 2 });
+  assert.equal(result.charts.scheduleHeatmap.reduce((sum, item) => sum + item.historicoAvec, 0), 2, 'fechamento em outro dia ou sem hora não entra');
+  assert.equal(result.charts.scheduleHeatmap.reduce((sum, item) => sum + item.value, 0), result.charts.scheduleHeatmap.reduce((sum, item) => sum + item.agenda + item.historicoAvec, 0));
+  assert.equal(result.dataQuality.sources.agenda.historicalInHeatmap, 2);
+  assert.equal(result.dataQuality.sources.agenda.status, 'ok');
+  assert.ok(result.dataQuality.notes.some((note) => note.includes('hora de fechamento')));
+});
+
+test('horário da comanda Avec é interpretado no fuso de Cuiabá', () => {
+  assert.equal(historicalCommandSlot({ dataComandaIso: '2026-08-25', dataFinalizacaoOriginal: '25/08/2026 17:40' }).toISOString(), '2026-08-25T21:40:00.000Z');
+  assert.equal(historicalCommandSlot({ dataComandaIso: '2026-08-25', dataFinalizacaoOriginal: '26/08/2026 09:00' }), null);
+  assert.equal(historicalCommandSlot({}), null);
 });
