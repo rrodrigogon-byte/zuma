@@ -3875,7 +3875,8 @@ app.get('/api/admin/barbearia/analytics', async (req, res) => {
       commerceUnavailableReason = code;
       console.warn(`Analytics Dino sem agregados Commerce: ${code}`);
     }
-    const rawAppointments = barbeariaErpKytto.listarAgendamentos(empresaId, { lojaId });
+    // Com nomes de serviço e profissional resolvidos (os importados do Avec só guardam os ids).
+    const rawAppointments = listarAgendamentosBarbearia(empresaId, { lojaId });
     const rawHistoricalAppointments = barbeariaErpKytto.listarHistoricoAtendimentos(empresaId, { lojaId });
     const rawHistoricalCommands = barbeariaErpKytto.listarHistoricoComandas(empresaId, { lojaId });
     const unassignedRecords = lojaId ? {
