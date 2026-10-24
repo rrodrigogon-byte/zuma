@@ -193,6 +193,29 @@ export function registerDinoAdminRoutes(app, deps) {
     } catch (error) { res.status(400).json({ error: error.message }); }
   });
 
+  // Liquidação em lote de lançamentos (ex: marcar selecionados ou vencidos como pagos)
+  app.post(`${BASE}/financeiro/lancamentos/liquidar-lote`, (req, res) => {
+    if (!gestor(req, res)) return;
+    try {
+      const empresaId = legacyEmpresaId(req);
+      const lojaId = legacyLojaId(req);
+      const ids = Array.isArray(req.body?.ids) ? req.body.ids : [];
+      if (!ids.length) return res.status(400).json({ error: 'Nenhum lançamento informado para liquidação.' });
+      const dataPagamento = req.body?.dataPagamento || new Date().toISOString();
+      const liquidados = [];
+      for (const id of ids) {
+        const item = financeiroKytto.obterLancamento(empresaId, id, { lojaId });
+        if (item && item.status === 'pendente') {
+          const atualizado = financeiroKytto.atualizarLancamento(empresaId, id, { status: 'pago', pagoEm: dataPagamento }, { lojaId });
+          if (atualizado) liquidados.push(atualizado.id);
+        }
+      }
+      audit(req, 'FINANCEIRO LIQUIDACAO LOTE', `quantidade=${liquidados.length}`);
+      save();
+      res.json({ ok: true, liquidados: liquidados.length, ids: liquidados });
+    } catch (error) { res.status(400).json({ error: error.message }); }
+  });
+
   // Exclusão = cancelamento (mantém a trilha contábil).
   app.delete(`${BASE}/financeiro/lancamentos/:id`, (req, res) => {
     if (!gestor(req, res)) return;
