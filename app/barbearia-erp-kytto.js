@@ -12,11 +12,11 @@ import { executeDinoReversal, getDinoReversalMemoryAdapter } from './core/dino-r
 const STATUS = new Set(['agendado', 'confirmado', 'em_atendimento', 'concluido', 'cancelado', 'nao_compareceu']);
 const TRANSICOES = {
   agendado: new Set(['confirmado', 'em_atendimento', 'cancelado', 'nao_compareceu']),
-  confirmado: new Set(['em_atendimento', 'cancelado', 'nao_compareceu']),
-  em_atendimento: new Set(['concluido', 'cancelado', 'nao_compareceu']),
-  concluido: new Set(),
-  cancelado: new Set(),
-  nao_compareceu: new Set(),
+  confirmado: new Set(['agendado', 'em_atendimento', 'cancelado', 'nao_compareceu']),
+  em_atendimento: new Set(['confirmado', 'agendado', 'concluido', 'cancelado', 'nao_compareceu']),
+  concluido: new Set(['em_atendimento']),
+  cancelado: new Set(['agendado', 'confirmado']),
+  nao_compareceu: new Set(['agendado', 'confirmado']),
 };
 
 function texto(value, limite = 240) {
@@ -2625,6 +2625,9 @@ export function alterarStatusAgendamento(empresaId, agendamentoId, status, dados
   if (!STATUS.has(novoStatus)) throw new Error('Status de atendimento inválido.');
   if (novoStatus !== atual.status && !TRANSICOES[atual.status]?.has(novoStatus)) {
     throw new Error(`Transição de ${atual.status} para ${novoStatus} não permitida.`);
+  }
+  if (atual.status === 'concluido' && atual.financeiroLancamentoId && novoStatus !== 'concluido') {
+    throw new Error('Não é possível alterar status de atendimento já faturado no financeiro.');
   }
   if (novoStatus === 'confirmado' && atual.confirmacaoAutomatica?.ativa === true
       && atual.confirmacaoAutomatica.status === 'segunda_enviada'
