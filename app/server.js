@@ -3012,7 +3012,7 @@ function exigirPapelOperacaoBarbearia(req, res, next) {
   next();
 }
 app.use('/api/admin/barbearia', auth, requireStaff, resolverEscopoBarbearia, exigirPapelOperacaoBarbearia);
-registerEquipePerformanceRoutes(app, { db, legacyEmpresaId, legacyLojaId, requireCommercePermission, salesReport });
+registerEquipePerformanceRoutes(app, { db, legacyEmpresaId, legacyLojaId, requireCommercePermission, salesReport, dataVersion: () => estadoGravacao()?.alteracoes ?? null });
 registerCustomer360Routes(app, { legacyEmpresaId, legacyLojaId, clientesKytto, barbeariaErpKytto, canaisFidelidadeKytto, listarAgendamentosBarbearia, requireCommercePermission, audit, save });
 registerDinoAdminRoutes(app, { db, legacyEmpresaId, legacyLojaId, financeiroKytto, barbeariaErpKytto, clientesKytto, commerceDb, requireCommercePermission, dashboardPeriod, audit, save, salesReport });
 registerAiBrainRoutes(app, { legacyEmpresaId, legacyLojaId, requireCommercePermission, audit, clientesKytto, commerceDb, listarAgendamentosBarbearia });

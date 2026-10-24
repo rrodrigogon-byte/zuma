@@ -213,6 +213,9 @@ function rotuloPreco(servico) {
   return servico?.tipoPreco === 'a_partir_de' ? `A partir de ${valor}` : valor
 }
 
+// Abas que não dependem da visão geral da barbearia (cada uma busca seus próprios dados).
+const TABS_AUTONOMAS = new Set(['Desempenho da equipe', 'Retorno previsto', 'Lista de espera', 'Saúde do clube', 'Curva ABC', 'Projeção inteligente', 'Ocupação e metas', 'Avaliações (NPS)', 'Origem dos clientes', 'Cobranças e cashback', 'Receita da IA', 'Resumo diário', 'Vale-presente'])
+
 export default function BarbeariaERP() {
   const { toast } = useToast()
   const { user, empresaAtiva, lojaAtiva, lojasAcessiveis } = useAuth()
@@ -394,7 +397,18 @@ export default function BarbeariaERP() {
     setRelatorio(null)
   }, [scopeKey])
 
-  useEffect(() => { carregar() }, [carregar])
+  // Painéis autônomos buscam os próprios dados: a visão geral (pesada) não bloqueia a tela
+  // nem disputa o servidor com eles — é adiada e só carrega em segundo plano.
+  const tabAutonoma = TABS_AUTONOMAS.has(tab)
+  const adiarVisaoGeral = tabAutonoma && !dadosCarregados
+  const visaoGeralPedida = useRef(null)
+  useEffect(() => {
+    if (visaoGeralPedida.current === carregar) return undefined
+    const pedir = () => { visaoGeralPedida.current = carregar; carregar() }
+    if (!adiarVisaoGeral) { pedir(); return undefined }
+    const timer = setTimeout(pedir, 3000)
+    return () => clearTimeout(timer)
+  }, [carregar, adiarVisaoGeral])
 
   useEffect(() => {
     if (tab !== 'Integrações') return undefined
@@ -1765,7 +1779,8 @@ export default function BarbeariaERP() {
     return renderConfiguracao()
   }
 
-  return <div style={{ padding: '24px clamp(16px, 3vw, 36px)', maxWidth: 1440, margin: '0 auto' }}>
+  // Painéis analíticos usam 100% da largura; os demais mantêm leitura confortável.
+  return <div style={{ padding: '24px clamp(16px, 3vw, 36px)', maxWidth: tab === 'Desempenho da equipe' ? 'none' : 1440, margin: '0 auto' }}>
     <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 20, flexWrap: 'wrap', marginBottom: 14 }}>
       <div><div style={{ color: 'var(--accent)', fontSize: 12, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.08em' }}>Dino · ERP operacional · empresa ativa</div><h1 style={{ margin: '7px 0 5px', fontSize: 'clamp(25px, 4vw, 34px)', fontFamily: 'var(--font-display)' }}>{configuracao?.nomePublico || 'Dino'} · Barbearia & Salão</h1><p style={{ margin: 0, color: 'var(--muted)', maxWidth: 720 }}>A operação da unidade em um fluxo único: agenda, atendimento, relacionamento, catálogo e gestão.</p></div><div style={styles.headerActions}><div style={styles.globalSearch}><input aria-label="Buscar na Barbearia" aria-expanded={Boolean(buscaGlobal.trim())} aria-controls="barbearia-global-search-results" value={buscaGlobal} onChange={(event) => setBuscaGlobal(event.target.value)} onKeyDown={(event) => { if (event.key === 'Escape') setBuscaGlobal(''); if (event.key === 'Enter' && resultadosBuscaGlobal[0]) abrirResultadoBusca(resultadosBuscaGlobal[0]) }} placeholder="Buscar cliente, serviço ou agenda…" style={{ ...inputStyle, paddingRight: 40 }} /><span aria-hidden="true" style={styles.searchIcon}>⌕</span>{buscaGlobal.trim() && <div id="barbearia-global-search-results" role="listbox" aria-label="Resultados da busca" style={styles.globalSearchResults}>{resultadosBuscaGlobal.length === 0 ? <div style={styles.globalSearchEmpty}>Nenhum registro encontrado no overview carregado.</div> : resultadosBuscaGlobal.map((resultado) => <button key={resultado.id} type="button" role="option" style={styles.globalSearchItem} onClick={() => abrirResultadoBusca(resultado)}><span><strong>{resultado.nome}</strong><small>{resultado.tipo} · {resultado.meta}</small></span><span aria-hidden="true">›</span></button>)}</div>}</div><button type="button" style={styles.secondary} onClick={carregar}>Atualizar</button><button type="button" style={styles.primary} onClick={() => navegarParaTab('Atendimento')}>Atender agora</button><Link to={`/barbeiro/${encodeURIComponent(formConfig.slugPublico || "dino")}`} style={{ ...styles.secondary, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }} title="Agenda do dia de cada profissional no celular (instalável)">App do barbeiro</Link>{tab === 'Agenda' && <button type="button" style={styles.primary} onClick={abrirNovoAgendamento}>+ Agendamento</button>}</div>
     </header>
@@ -1777,7 +1792,7 @@ export default function BarbeariaERP() {
       {areaAtual.tabs.map((nome) => <button key={nome} type="button" title={TAB_DESCRICAO[nome]} aria-current={tab === nome ? 'page' : undefined} onClick={() => navegarParaTab(nome)} style={{ ...styles.tabNavItem, ...(tab === nome ? styles.tabNavItemActive : {}) }}>{nome}</button>)}
     </nav>
     {erro && <Card style={{ padding: 16, marginBottom: 18, borderColor: '#e05c5c' }}><strong role="status" aria-live="polite">Atenção no carregamento</strong><div style={{ color: 'var(--muted)', marginTop: 5 }}>{erro}</div></Card>}
-    {loading && !dadosCarregados ? <Card style={{ padding: 60, textAlign: 'center', color: 'var(--muted)' }} role="status" aria-live="polite" aria-busy="true">Carregando dados da empresa ativa…</Card> : <div aria-busy={loading} inert={loading ? "" : undefined}>{renderConteudo()}</div>}
+    {loading && !dadosCarregados && !tabAutonoma ? <Card style={{ padding: 60, textAlign: 'center', color: 'var(--muted)' }} role="status" aria-live="polite" aria-busy="true">Carregando dados da empresa ativa…</Card> : <div aria-busy={loading && !tabAutonoma} inert={loading && !tabAutonoma ? "" : undefined}>{renderConteudo()}</div>}
     {renderModal()}
   </div>
 }

@@ -2,6 +2,11 @@ import { calcularComissoesEstado } from './barbearia-erp-kytto.js';
 
 const TIME_ZONE = 'America/Cuiaba';
 const MAX_DAYS = 93;
+// Histórico completo (Avec + operação): até ~10 anos, com série mensal.
+const MAX_DAYS_HISTORY = 3660;
+export const UNATTRIBUTED_PROFESSIONAL_ID = '__sem_profissional__';
+const DAY_FORMATTER = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Cuiaba', year: 'numeric', month: '2-digit', day: '2-digit' });
+const HOUR_FORMATTER = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Cuiaba', hour: '2-digit', hourCycle: 'h23' });
 const DAY_MS = 86_400_000;
 const PERIOD_RE = /^\d{4}-\d{2}-\d{2}$/;
 const COMMISSION_STATUSES = new Set(['paga', 'em_conta']);
@@ -50,7 +55,8 @@ function validatePeriod(options = {}) {
   const end = parseDateOnly(fim);
   const days = Math.round((end - start) / DAY_MS) + 1;
   if (start > end) throw Object.assign(new Error('O início do período deve ser menor ou igual ao fim.'), { code: 'PERIOD_INVALID' });
-  if (days > MAX_DAYS) throw Object.assign(new Error('O período máximo é de 93 dias.'), { code: 'PERIOD_INVALID' });
+  const maxDays = options.historico ? MAX_DAYS_HISTORY : MAX_DAYS;
+  if (days > maxDays) throw Object.assign(new Error(`O período máximo é de ${maxDays} dias.`), { code: 'PERIOD_INVALID' });
   const previousEnd = new Date(start.valueOf() - DAY_MS);
   const previousStart = new Date(previousEnd.valueOf() - (days - 1) * DAY_MS);
   return {
@@ -68,7 +74,7 @@ function dateOnlyFrom(value) {
   if (PERIOD_RE.test(raw)) return raw;
   const date = new Date(raw);
   if (Number.isNaN(date.valueOf())) return '';
-  return new Intl.DateTimeFormat('en-CA', { timeZone: TIME_ZONE, year: 'numeric', month: '2-digit', day: '2-digit' }).format(date);
+  return DAY_FORMATTER.format(date);
 }
 
 function dateInPeriod(value, period) {
@@ -84,7 +90,7 @@ function dayIndex(date) {
 function localHour(value) {
   const date = new Date(value || '');
   if (Number.isNaN(date.valueOf())) return null;
-  return Number(new Intl.DateTimeFormat('en-US', { timeZone: TIME_ZONE, hour: '2-digit', hourCycle: 'h23' }).format(date));
+  return Number(HOUR_FORMATTER.format(date));
 }
 
 function cloneRecord(item) {
@@ -174,16 +180,21 @@ function canonicalServiceRows(commissions, servicesById, commandsById, appointme
       date: dateOnlyFrom(item.dataRef),
       timestamp,
       kind: item.origemTipo,
+      client: text(item.clienteNome || command?.clienteNome || appointment?.clienteNome),
+      group: text(servicesById.get(text(item.servicoId))?.categoria),
     });
   }
   return rows;
 }
 
 function historicalServiceRows(strict, period, professionalIds) {
+  return historicalServiceRowsAll(strict, period).filter((item) => professionalIds.has(item.professionalId));
+}
+
+function historicalServiceRowsAll(strict, period) {
   return Object.values(strict.historicoAtendimentos || {})
     .filter((item) => item.somenteHistorico === true && item.status === 'concluido')
     .filter((item) => dateInPeriod(item.dataAgenda || item.dataOriginal, period))
-    .filter((item) => professionalIds.has(text(item.profissionalId)))
     .map((item) => ({
       id: idOf(item),
       professionalId: text(item.profissionalId),
@@ -195,6 +206,9 @@ function historicalServiceRows(strict, period, professionalIds) {
       // O relatório Avec não fornece horário confiável; não criar um horário para o mapa.
       timestamp: null,
       kind: 'historico_avec',
+      client: text(item.clienteNome),
+      group: text(item.frenteAtuacao),
+      sourceProfessional: text(item.profissionalNome),
     }))
     .filter((item) => item.quantity !== null);
 }
@@ -320,6 +334,8 @@ function canonicalProductRows(strict, commissions, period, warnings) {
         date: dateOnlyFrom(sourceDate),
         timestamp: sourceDate || null,
         kind: isCommandProduct ? 'comanda' : 'venda',
+        product: true,
+        client: text(source.clienteNome || command?.clienteNome),
       });
     }
   }
@@ -371,16 +387,68 @@ function topServices(rows) {
     .map((row) => ({ ...row, quantity: money(row.quantity), revenue: money(row.revenue) }));
 }
 
+function seriesGranularity(period) {
+  return period.days > MAX_DAYS ? 'month' : 'day';
+}
+
+// Agrupa uma única vez (O(n)); para históricos longos a série vira mensal.
 function dailySeries(period, serviceRows, productRows) {
-  const days = [];
-  const start = new Date(`${period.inicio}T12:00:00.000Z`);
-  for (let index = 0; index < period.days; index += 1) {
-    const date = new Date(start.valueOf() + index * DAY_MS).toISOString().slice(0, 10);
-    const services = serviceRows.filter((row) => row.date === date);
-    const products = productRows.filter((row) => row.date === date);
-    days.push({ date, revenue: money([...services, ...products].reduce((sum, row) => sum + row.revenue, 0)), services: money(services.reduce((sum, row) => sum + row.quantity, 0)) });
+  const monthly = seriesGranularity(period) === 'month';
+  const keyOf = (date) => (monthly ? date.slice(0, 7) : date);
+  const buckets = new Map();
+  const bucket = (date) => { const key = keyOf(date); let current = buckets.get(key); if (!current) { current = { revenue: 0, services: 0 }; buckets.set(key, current); } return current; };
+  for (const row of serviceRows) { if (!row.date) continue; const current = bucket(row.date); current.revenue += row.revenue; current.services += row.quantity; }
+  for (const row of productRows) { if (!row.date) continue; bucket(row.date).revenue += row.revenue; }
+  const keys = [];
+  if (monthly) {
+    let [year, month] = period.inicio.slice(0, 7).split('-').map(Number);
+    const last = period.fim.slice(0, 7);
+    for (let guard = 0; guard < 200; guard += 1) {
+      const key = `${year}-${String(month).padStart(2, '0')}`;
+      keys.push(key);
+      if (key >= last) break;
+      month += 1; if (month > 12) { month = 1; year += 1; }
+    }
+  } else {
+    const start = new Date(`${period.inicio}T12:00:00.000Z`);
+    for (let index = 0; index < period.days; index += 1) keys.push(new Date(start.valueOf() + index * DAY_MS).toISOString().slice(0, 10));
   }
-  return days;
+  return keys.map((date) => { const current = buckets.get(date) || { revenue: 0, services: 0 }; return { date, revenue: money(current.revenue), services: money(current.services) }; });
+}
+
+function groupByProfessional(rows, idFn = (row) => row.professionalId) {
+  const map = new Map();
+  for (const row of rows) { const id = text(idFn(row)); let current = map.get(id); if (!current) { current = []; map.set(id, current); } current.push(row); }
+  return map;
+}
+
+function earliestActivityDate(snapshot) {
+  let min = '';
+  const consider = (value) => { const date = dateOnlyFrom(value); if (date && date >= '2000-01-01' && (!min || date < min)) min = date; };
+  for (const item of Object.values(snapshot.strict.historicoAtendimentos || {})) if (item.somenteHistorico === true && item.status === 'concluido') consider(item.dataAgenda || item.dataOriginal);
+  for (const item of Object.values(snapshot.strict.comandas || {})) if (COMMISSION_STATUSES.has(item.status)) consider(item.fechadaEm || item.atualizadoEm);
+  for (const item of Object.values(snapshot.strict.agendamentos || {})) consider(item.dataAgenda || item.dataHora);
+  for (const item of Object.values(snapshot.strict.vendasRevenda || {})) if (item.status === 'pago') consider(item.criadoEm);
+  for (const item of snapshot.financial || []) if (isHistoricalFinance(item) && item.status === 'pago') consider(item.pagoEm || item.dataOperacao);
+  return min;
+}
+
+// Linhas enxutas para o detalhamento (drill-down) por ano/mês/dia/atendimento.
+function drillRows(services, products) {
+  return [...services, ...products]
+    .filter((row) => row.date)
+    .map((row) => ({
+      date: row.date,
+      hour: row.timestamp ? localHour(row.timestamp) : null,
+      type: row.product ? 'produto' : 'servico',
+      origin: row.kind,
+      name: row.name || (row.product ? 'Produto' : 'Serviço'),
+      group: row.group || '',
+      client: row.client || '',
+      quantity: money(row.quantity),
+      revenue: money(row.revenue),
+    }))
+    .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : b.revenue - a.revenue));
 }
 
 function peakObservation(heatmap) {
@@ -445,7 +513,7 @@ function commissionWarnings(commissions, warnings, materialWarnings) {
   return [...new Set(result)];
 }
 
-function buildPeriodData(snapshot, period, previousPeriod) {
+function buildPeriodData(snapshot, period, previousPeriod, { skipPrevious = false } = {}) {
   const { strict, financial, repasses, professionalIds } = snapshot;
   const servicesById = new Map(Object.values(strict.servicos).map((item) => [idOf(item), item]));
   const commandsById = new Map(Object.values(strict.comandas).map((item) => [idOf(item), item]));
@@ -488,12 +556,15 @@ function buildPeriodData(snapshot, period, previousPeriod) {
   });
   const commissionState = deduplicatedCommissionState(strict, materialWarnings);
   const commissions = calcularComissoesEstado(commissionState, snapshot.empresaId, commissionOptions(period));
-  const previousCommissions = calcularComissoesEstado(commissionState, snapshot.empresaId, commissionOptions(previousPeriod));
+  // Histórico completo não tem período anterior comparável: evita um segundo cálculo inteiro.
+  const previousCommissions = skipPrevious ? { porProfissional: [] } : calcularComissoesEstado(commissionState, snapshot.empresaId, commissionOptions(previousPeriod));
+  const allHistoricalRows = historicalServiceRowsAll(strict, period);
   const serviceRows = [
     ...canonicalServiceRows(commissions, servicesById, commandsById, appointmentsById, materialWarnings),
-    ...historicalServiceRows(strict, period, professionalIds),
+    ...allHistoricalRows.filter((row) => professionalIds.has(row.professionalId)),
   ];
-  const previousHistoricalRows = historicalServiceRows(strict, previousPeriod, professionalIds);
+  const unattributedHistoricalRows = allHistoricalRows.filter((row) => !professionalIds.has(row.professionalId));
+  const previousHistoricalRows = skipPrevious ? [] : historicalServiceRows(strict, previousPeriod, professionalIds);
   const productRows = canonicalProductRows(commissionState, commissions, period, materialWarnings);
   const previousRevenue = new Map(previousCommissions.porProfissional.map((row) => [row.profissionalId, money(row.bruto)]));
   for (const row of previousHistoricalRows) previousRevenue.set(row.professionalId, money((previousRevenue.get(row.professionalId) || 0) + row.revenue));
@@ -511,6 +582,7 @@ function buildPeriodData(snapshot, period, previousPeriod) {
     commissions,
     previousCommissions,
     serviceRows,
+    unattributedHistoricalRows,
     previousHistoricalRows,
     productRows,
     historicalFinance: historicalFinanceTotals(financial, period),
@@ -525,20 +597,147 @@ function buildPeriodData(snapshot, period, previousPeriod) {
   };
 }
 
-export function buildEquipeDesempenho(root, options = {}) {
+function prepareContext(root, options) {
   if (!root || typeof root !== 'object' || Array.isArray(root)) throw new TypeError('Snapshot raiz inválido.');
   const empresaId = text(options.empresaId);
   const lojaId = text(options.lojaId);
-  const profissionalId = text(options.profissionalId);
+  const historico = options.historico === true;
   if (!empresaId || !lojaId) throw Object.assign(new Error('empresaId e lojaId explícitos são obrigatórios.'), { code: 'EXPLICIT_SCOPE_REQUIRED' });
-  const period = validatePeriod(options);
-  const previousPeriod = validatePeriod({ inicio: period.previousInicio, fim: period.previousFim });
   const snapshot = normalizeRoot(root, empresaId, lojaId);
-  const current = buildPeriodData(snapshot, period, previousPeriod);
+  let period;
+  if (historico) {
+    const fim = text(options.fim) || dateOnlyFrom(new Date().toISOString());
+    parseDateOnly(fim);
+    const earliest = earliestActivityDate(snapshot);
+    period = { ...validatePeriod({ inicio: earliest && earliest < fim ? earliest : fim, fim, historico: true }), historico: true };
+  } else {
+    period = validatePeriod(options);
+  }
+  const previousPeriod = historico
+    ? { inicio: period.previousInicio, fim: period.previousFim, days: period.days }
+    : validatePeriod({ inicio: period.previousInicio, fim: period.previousFim });
+  return { empresaId, lojaId, historico, snapshot, period, previousPeriod };
+}
+
+// ── Visões por item: o que está sendo vendido (serviços/produtos), para quem e em que categoria ──
+export const ITEM_VIEWS = ['servicos', 'clientes', 'categorias'];
+const normKey = (value) => text(value).toLocaleLowerCase('pt-BR').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ');
+const ITEM_GROUPERS = {
+  servicos: (row) => { const type = row.type; return { key: `${type}:${normKey(row.name) || '-'}`, label: row.name || (type === 'produto' ? 'Produto' : 'Serviço'), type }; },
+  clientes: (row) => ({ key: normKey(row.client) || '-', label: row.client || 'Cliente não informado', type: 'cliente' }),
+  categorias: (row) => { const label = row.type === 'produto' ? 'Produtos (revenda)' : (row.group || 'Sem categoria'); return { key: normKey(label), label, type: row.type === 'produto' ? 'produto' : 'categoria' }; },
+};
+
+function itemRows(snapshot, data) {
+  const names = new Map(Object.values(snapshot.strict.profissionais).map((item) => [idOf(item), text(item.nome) || 'Profissional']));
+  const categories = new Map(snapshot.raw.servicos.map((item) => [idOf(item), text(item.categoria)]));
+  const lines = [
+    ...data.serviceRows.filter((row) => snapshot.professionalIds.has(row.professionalId)),
+    ...data.unattributedHistoricalRows,
+    ...data.productRows.filter((row) => snapshot.professionalIds.has(row.professionalId)),
+  ];
+  return lines.filter((row) => row.date).map((row) => ({
+    date: row.date,
+    hour: row.timestamp ? localHour(row.timestamp) : null,
+    type: row.product ? 'produto' : 'servico',
+    origin: row.kind,
+    name: row.name || (row.product ? 'Produto' : 'Serviço'),
+    group: row.group || categories.get(row.serviceId) || '',
+    client: row.client || '',
+    professionalId: snapshot.professionalIds.has(row.professionalId) ? row.professionalId : UNATTRIBUTED_PROFESSIONAL_ID,
+    professionalName: names.get(row.professionalId) || 'Sem profissional atribuído',
+    quantity: money(row.quantity),
+    revenue: money(row.revenue),
+  }));
+}
+
+function groupItems(rows, grouper) {
+  const map = new Map();
+  for (const row of rows) {
+    const { key, label, type } = grouper(row);
+    let group = map.get(key);
+    if (!group) { group = { key, label, type, revenue: 0, serviceRevenue: 0, services: 0, products: 0, records: 0, professionals: new Map(), clients: new Set(), firstDate: row.date, lastDate: row.date }; map.set(key, group); }
+    group.revenue += row.revenue;
+    group.records += 1;
+    if (row.type === 'produto') group.products += row.quantity; else { group.services += row.quantity; group.serviceRevenue += row.revenue; }
+    group.professionals.set(row.professionalName, (group.professionals.get(row.professionalName) || 0) + row.revenue);
+    if (row.client) group.clients.add(normKey(row.client));
+    if (row.date < group.firstDate) group.firstDate = row.date;
+    if (row.date > group.lastDate) group.lastDate = row.date;
+  }
+  return map;
+}
+
+export function buildEquipeItens(root, options = {}) {
+  const view = text(options.visao);
+  if (!ITEM_VIEWS.includes(view)) throw Object.assign(new Error('Visão inválida.'), { code: 'PERFORMANCE_QUERY_INVALID' });
+  const ctx = prepareContext(root, options);
+  const current = buildPeriodData(ctx.snapshot, ctx.period, ctx.previousPeriod, { skipPrevious: true });
+  const rows = itemRows(ctx.snapshot, current);
+  const grouper = ITEM_GROUPERS[view];
+  const groups = groupItems(rows, grouper);
+  // Comparação com o período anterior de mesma duração (só fora do histórico completo).
+  let previous = null;
+  if (!ctx.historico) {
+    const prevPrev = validatePeriod({ inicio: ctx.previousPeriod.previousInicio, fim: ctx.previousPeriod.previousFim });
+    previous = groupItems(itemRows(ctx.snapshot, buildPeriodData(ctx.snapshot, ctx.previousPeriod, prevPrev, { skipPrevious: true })), grouper);
+  }
+  const total = rows.reduce((sum, row) => sum + row.revenue, 0);
+  const chave = text(options.chave);
+  const list = [...groups.values()].map((group) => {
+    const top = [...group.professionals.entries()].sort((a, b) => b[1] - a[1])[0];
+    const qty = group.services + group.products;
+    const before = previous?.get(group.key)?.revenue || 0;
+    return {
+      key: group.key, label: group.label, type: group.type,
+      revenue: money(group.revenue), services: money(group.services), products: money(group.products), records: group.records,
+      share: total ? pct(group.revenue * 100 / total) : 0,
+      ticket: qty ? money(group.revenue / qty) : null,
+      professionals: group.professionals.size, clients: group.clients.size,
+      topProfessional: top ? { name: top[0], revenue: money(top[1]) } : null,
+      firstDate: group.firstDate, lastDate: group.lastDate,
+      previousRevenue: previous ? money(before) : null,
+      trendPct: previous && before ? pct((group.revenue - before) * 100 / before) : null,
+    };
+  }).sort((a, b) => b.revenue - a.revenue || a.label.localeCompare(b.label, 'pt-BR'));
+  if (chave && !groups.has(chave)) throw Object.assign(new Error('Item não encontrado no recorte.'), { code: 'PROFESSIONAL_NOT_FOUND' });
+  const clients = new Set(rows.map((row) => normKey(row.client)).filter(Boolean));
+  const servicesQty = rows.filter((row) => row.type === 'servico').reduce((sum, row) => sum + row.quantity, 0);
+  const productsQty = rows.filter((row) => row.type === 'produto').reduce((sum, row) => sum + row.quantity, 0);
+  const productRevenue = rows.filter((row) => row.type === 'produto').reduce((sum, row) => sum + row.revenue, 0);
+  return {
+    ok: true,
+    readOnly: true,
+    writePerformed: false,
+    scope: { empresaId: ctx.empresaId, lojaId: ctx.lojaId },
+    period: ctx.period,
+    seriesGranularity: seriesGranularity(ctx.period),
+    view,
+    summary: {
+      revenue: money(total),
+      groups: list.length,
+      services: money(servicesQty),
+      products: money(productsQty),
+      productShare: total ? pct(productRevenue * 100 / total) : 0,
+      clients: clients.size,
+      ticket: servicesQty + productsQty ? money(total / (servicesQty + productsQty)) : null,
+    },
+    groups: chave ? list.filter((group) => group.key === chave) : list,
+    ...(chave ? { rows: rows.filter((row) => grouper(row).key === chave).sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : b.revenue - a.revenue)) } : {}),
+  };
+}
+
+export function buildEquipeDesempenho(root, options = {}) {
+  const profissionalId = text(options.profissionalId);
+  // lean: lista sem mapa/série/recomendações por pessoa — o detalhe é buscado sob demanda.
+  const lean = options.lean === true && !profissionalId;
+  const { empresaId, lojaId, historico, snapshot, period, previousPeriod } = prepareContext(root, options);
+  const current = buildPeriodData(snapshot, period, previousPeriod, { skipPrevious: historico });
   const commerceCurrent = options.commerceCurrent || {};
   const commerceRevenue = money(commerceCurrent.revenue);
   const commerceOrders = Math.max(0, Math.round(num(commerceCurrent.orders)));
-  if (profissionalId && !snapshot.professionalIds.has(profissionalId)) {
+  const wantsUnattributed = profissionalId === UNATTRIBUTED_PROFESSIONAL_ID;
+  if (profissionalId && !wantsUnattributed && !snapshot.professionalIds.has(profissionalId)) {
     throw Object.assign(new Error('Profissional não encontrado no escopo da unidade.'), { code: 'PROFESSIONAL_NOT_FOUND' });
   }
   const schedule = {
@@ -551,13 +750,13 @@ export function buildEquipeDesempenho(root, options = {}) {
   const productRevenue = current.productRows.reduce((sum, row) => sum + row.revenue, 0);
   const historicalAttributedServiceRevenue = current.serviceRows.filter((row) => row.kind === 'historico_avec').reduce((sum, row) => sum + row.revenue, 0);
   const operationalAttributedRevenue = serviceRevenue - historicalAttributedServiceRevenue + productRevenue;
-  const employeeCatalog = Object.values(snapshot.strict.profissionais).filter((item) => !profissionalId || idOf(item) === profissionalId);
-  const employeeRows = employeeCatalog.map((professional) => {
-    const id = idOf(professional);
-    const commission = current.commissions.porProfissional.find((row) => row.profissionalId === id) || {};
-    const services = current.serviceRows.filter((row) => row.professionalId === id);
-    const products = current.productRows.filter((row) => row.professionalId === id);
-    const appointments = current.appointments.filter((item) => text(item.profissionalId) === id);
+  // Índices por profissional (uma passada) em vez de filtrar a base inteira para cada pessoa.
+  const servicesByProfessional = groupByProfessional(current.serviceRows);
+  const productsByProfessional = groupByProfessional(current.productRows);
+  const appointmentsByProfessional = groupByProfessional(current.appointments, (item) => item.profissionalId);
+  const commissionByProfessional = new Map(current.commissions.porProfissional.map((row) => [row.profissionalId, row]));
+  const buildRow = (identity, services, products, appointments, commission) => {
+    const id = identity.id;
     const completed = appointments.filter((item) => item.status === 'concluido').length;
     const canceled = appointments.filter((item) => item.status === 'cancelado').length;
     const noShow = appointments.filter((item) => item.status === 'nao_compareceu').length;
@@ -565,31 +764,19 @@ export function buildEquipeDesempenho(root, options = {}) {
     const productsQuantity = money(products.reduce((sum, row) => sum + row.quantity, 0));
     const historicalServiceRevenue = services.filter((row) => row.kind === 'historico_avec').reduce((sum, row) => sum + row.revenue, 0);
     const revenue = money(num(commission.bruto) + historicalServiceRevenue);
-    const previousRevenue = money(current.previousRevenue.get(id) || 0);
+    const previousRevenue = identity.synthetic ? 0 : money(current.previousRevenue.get(id) || 0);
     const attendanceDenominator = completed + noShow;
-    const heatmap = activityHeatmap(id, services, current.appointmentHeatmapRows, period);
-    const metrics = {
-      revenue,
-      services: servicesQuantity,
-      products: productsQuantity,
-      appointments: appointments.length,
-      completed,
-      canceled,
-      noShow,
-      attendanceRate: attendanceDenominator ? pct(completed * 100 / attendanceDenominator) : null,
-      ticketAverage: servicesQuantity ? money((num(commission.brutoServicos) + historicalServiceRevenue) / servicesQuantity) : null,
-      topServices: topServices(services),
-      previousRevenue,
-      revenueTrendPct: previousRevenue ? pct((revenue - previousRevenue) * 100 / previousRevenue) : null,
-      peak: peakObservation(heatmap),
-      hasActivity: Boolean(revenue || services.length || products.length || appointments.length),
-    };
-    const advice = recommendations(metrics);
-    return {
+    const hasActivity = Boolean(revenue || services.length || products.length || appointments.length);
+    const registeredActive = identity.active !== false;
+    const row = {
       id,
-      name: text(professional.nome) || 'Profissional',
-      active: professional.ativo !== false,
-      hasActivity: metrics.hasActivity,
+      name: identity.name,
+      // Quem tem movimento/valor no período aparece como ativo no painel, mesmo inativo no cadastro.
+      active: registeredActive || hasActivity,
+      registeredActive,
+      activeByMovement: !registeredActive && hasActivity,
+      synthetic: identity.synthetic === true,
+      hasActivity,
       revenue,
       serviceRevenue: money(num(commission.brutoServicos) + historicalServiceRevenue),
       historicalServiceRevenue: money(historicalServiceRevenue),
@@ -597,26 +784,45 @@ export function buildEquipeDesempenho(root, options = {}) {
       commission: money(commission.repasse),
       serviceCommission: money(commission.comissaoServicos),
       productCommission: money(commission.comissaoProdutos),
-      paidTransfers: current.transfers.available ? money(current.transfers.byProfessional.get(id) || 0) : null,
+      paidTransfers: identity.synthetic || !current.transfers.available ? null : money(current.transfers.byProfessional.get(id) || 0),
       services: servicesQuantity,
-      historicalServices: services.filter((row) => row.kind === 'historico_avec').reduce((sum, row) => sum + row.quantity, 0),
+      historicalServices: services.filter((item) => item.kind === 'historico_avec').reduce((sum, item) => sum + item.quantity, 0),
       products: productsQuantity,
       appointments: appointments.length,
       completed,
       canceled,
       noShow,
-      attendanceRate: metrics.attendanceRate,
-      ticketAverage: metrics.ticketAverage,
+      attendanceRate: attendanceDenominator ? pct(completed * 100 / attendanceDenominator) : null,
+      ticketAverage: servicesQuantity ? money((num(commission.brutoServicos) + historicalServiceRevenue) / servicesQuantity) : null,
       previousRevenue,
-      revenueTrendPct: metrics.revenueTrendPct,
-      topServices: metrics.topServices,
+      revenueTrendPct: previousRevenue ? pct((revenue - previousRevenue) * 100 / previousRevenue) : null,
+      lastActivity: [...services, ...products].reduce((max, item) => (item.date && item.date > max ? item.date : max), '') || null,
+    };
+    if (lean) return row;
+    const heatmap = activityHeatmap(id, services, identity.synthetic ? [] : current.appointmentHeatmapRows, period);
+    const top = topServices(services);
+    const advice = recommendations({ ...row, topServices: top, peak: peakObservation(heatmap) });
+    return {
+      ...row,
+      topServices: top,
       heatmap,
       daily: dailySeries(period, services, products),
       strengths: advice.strengths,
       attention: advice.attention,
       suggestions: advice.suggestions,
+      ...(profissionalId ? { rows: drillRows(services, products) } : {}),
     };
+  };
+  const employeeCatalog = wantsUnattributed ? [] : Object.values(snapshot.strict.profissionais).filter((item) => !profissionalId || idOf(item) === profissionalId);
+  const employeeRows = employeeCatalog.map((professional) => {
+    const id = idOf(professional);
+    return buildRow({ id, name: text(professional.nome) || 'Profissional', active: professional.ativo !== false },
+      servicesByProfessional.get(id) || [], productsByProfessional.get(id) || [], appointmentsByProfessional.get(id) || [], commissionByProfessional.get(id) || {});
   });
+  // Histórico Avec sem vínculo de profissional: aparece como linha própria (sem comissão) para não sumir valor.
+  if (current.unattributedHistoricalRows.length && (!profissionalId || wantsUnattributed)) {
+    employeeRows.push(buildRow({ id: UNATTRIBUTED_PROFESSIONAL_ID, name: 'Sem profissional atribuído (histórico Avec)', active: true, synthetic: true }, current.unattributedHistoricalRows, [], [], {}));
+  }
   const summaryCommission = money(current.commissions.porProfissional.reduce((sum, row) => sum + num(row.repasse), 0));
   const quality = {
     unscopedExcluded: buildUnscopedExcluded(snapshot.raw, period, empresaId),
@@ -633,7 +839,13 @@ export function buildEquipeDesempenho(root, options = {}) {
     writePerformed: false,
     scope: { empresaId, lojaId },
     period,
+    seriesGranularity: seriesGranularity(period),
+    // Evolução da equipe inteira (atribuído + histórico sem vínculo), para o gráfico do topo.
+    teamSeries: dailySeries(period, [...current.serviceRows.filter((row) => snapshot.professionalIds.has(row.professionalId)), ...current.unattributedHistoricalRows], current.productRows.filter((row) => snapshot.professionalIds.has(row.professionalId))),
     summary: {
+      unattributedHistoricalRevenue: money(current.unattributedHistoricalRows.reduce((sum, row) => sum + row.revenue, 0)),
+      activeByMovement: employeeRows.filter((row) => row.activeByMovement).length,
+      withValues: employeeRows.filter((row) => row.hasActivity).length,
       revenue: money(operationalAttributedRevenue + current.historicalFinance.revenue + commerceRevenue),
       operationalAttributedRevenue: money(operationalAttributedRevenue),
       historicalFinanceRevenue: current.historicalFinance.revenue,
@@ -670,3 +882,4 @@ export function buildEquipeDesempenho(root, options = {}) {
 
 export const EQUIPE_DESEMPENHO_TIME_ZONE = TIME_ZONE;
 export const EQUIPE_DESEMPENHO_MAX_DAYS = MAX_DAYS;
+export const EQUIPE_DESEMPENHO_MAX_DAYS_HISTORY = MAX_DAYS_HISTORY;

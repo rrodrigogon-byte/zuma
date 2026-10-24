@@ -2,9 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import express from 'express';
 import { once } from 'node:events';
-import { equipePerformanceNoStore, registerEquipePerformanceRoutes, EQUIPE_PERFORMANCE_PATH } from './dino-equipe-desempenho-routes.js';
+import { equipePerformanceNoStore, registerEquipePerformanceRoutes, clearEquipePerformanceCache, EQUIPE_PERFORMANCE_PATH } from './dino-equipe-desempenho-routes.js';
 
 async function fixture(options = {}) {
+  clearEquipePerformanceCache();
   const app = express(); let reads = 0;
   app.use(equipePerformanceNoStore);
   app.use((req, res, next) => {
@@ -14,10 +15,10 @@ async function fixture(options = {}) {
   });
   const root = { barbearias: { 'tenant-a': { profissionais: {}, agendamentos: {}, comandas: {}, vendasRevenda: {}, servicos: {}, configuracao: {} } } };
   const before = structuredClone(root);
-  registerEquipePerformanceRoutes(app, { db: () => { reads++; return root; }, legacyEmpresaId: options.legacyEmpresaId || (req => req.user.empresaId), legacyLojaId: options.legacyLojaId || (req => req.user.lojaId), coreEnabled: () => options.core === true, salesReport: options.salesReport || (async (_context, range) => ({ period: range, summary: { gross_total: 999, orders_non_cancelled: 9, confirmed_total: 321, confirmed_orders: 2 } })), requireCommercePermission: async (req, permission) => { assert.equal(permission, 'reports.read'); if (options.deny) throw Object.assign(new Error('PRIVATE-ERROR-CANARY'), { code: 'PERMISSION_DENIED' }); return options.context || { empresaId: req.user.empresaId, lojaId: req.user.lojaId }; } });
+  registerEquipePerformanceRoutes(app, { dataVersion: options.dataVersion, db: () => { reads++; return root; }, legacyEmpresaId: options.legacyEmpresaId || (req => req.user.empresaId), legacyLojaId: options.legacyLojaId || (req => req.user.lojaId), coreEnabled: () => options.core === true, salesReport: options.salesReport || (async (_context, range) => ({ period: range, summary: { gross_total: 999, orders_non_cancelled: 9, confirmed_total: 321, confirmed_orders: 2 } })), requireCommercePermission: async (req, permission) => { assert.equal(permission, 'reports.read'); if (options.deny) throw Object.assign(new Error('PRIVATE-ERROR-CANARY'), { code: 'PERMISSION_DENIED' }); return options.context || { empresaId: req.user.empresaId, lojaId: req.user.lojaId }; } });
   const server = app.listen(0, '127.0.0.1'); await once(server, 'listening');
   const base = `http://127.0.0.1:${server.address().port}${EQUIPE_PERFORMANCE_PATH}`;
-  return { root, before, reads: () => reads, request: async ({ query = 'inicio=2026-10-01&fim=2026-10-15', method = 'GET', auth = true, headers = {} } = {}) => { const result = await fetch(`${base}?${query}`, { method, headers: { ...(auth ? { Authorization: 'Bearer synthetic' } : {}), ...headers } }); return { status: result.status, cache: result.headers.get('cache-control'), allow: result.headers.get('allow'), body: await result.json() }; }, close: () => new Promise(resolve => server.close(resolve)) };
+  return { root, before, reads: () => reads, request: async ({ query = 'inicio=2026-10-01&fim=2026-10-15', method = 'GET', auth = true, headers = {} } = {}) => { const result = await fetch(`${base}?${query}`, { method, headers: { ...(auth ? { Authorization: 'Bearer synthetic' } : {}), ...headers } }); return { status: result.status, perfCache: result.headers.get('x-performance-cache'), cache: result.headers.get('cache-control'), allow: result.headers.get('allow'), body: await result.json() }; }, close: () => new Promise(resolve => server.close(resolve)) };
 }
 
 test('HTTP read-only retorna contexto exato e no-store; não muta snapshot', async () => { const f = await fixture(); try { const r = await f.request(); assert.equal(r.status, 200); assert.equal(r.cache, 'no-store'); assert.deepEqual(r.body.scope, { empresaId: 'tenant-a', lojaId: 'unit-a' }); assert.equal(r.body.readOnly, true); assert.equal(r.body.writePerformed, false); assert.deepEqual(f.root, f.before); } finally { await f.close(); } });
@@ -40,3 +41,23 @@ test('query e cabeçalho não autorizam troca de tenant/unidade', async () => { 
 test('métodos de mutação são 405 e não carregam nem escrevem dados', async () => { const f = await fixture(); try { for (const method of ['POST', 'PUT', 'PATCH', 'DELETE']) { const r = await f.request({ method }); assert.equal(r.status, 405); assert.equal(r.allow, 'GET'); assert.equal(r.cache, 'no-store'); } assert.equal(f.reads(), 0); assert.deepEqual(f.root, f.before); } finally { await f.close(); } });
 test('query com dados sensíveis/campos extra é rejeitada sem eco', async () => { const f = await fixture(); try { const r = await f.request({ query: 'inicio=2026-10-01&fim=2026-10-15&email=PRIVATE-CONTACT-CANARY' }); assert.equal(r.status, 400); assert.equal(f.reads(), 0); assert.equal(JSON.stringify(r.body).includes('PRIVATE-CONTACT'), false); } finally { await f.close(); } });
 test('período impossível é rejeitado com mensagem sanitizada', async () => { const f = await fixture(); try { const r = await f.request({ query: 'inicio=2026-02-30&fim=2026-10-15' }); assert.equal(r.status, 400); assert.equal(JSON.stringify(r.body).includes('2026-02-30'), false); } finally { await f.close(); } });
+
+test('cache curto por escopo: repete sem reler a base, invalida por gravação e por fresh=1', async () => { let version = 1; const f = await fixture({ dataVersion: () => version }); try {
+  const a = await f.request(); assert.equal(a.perfCache, 'miss'); assert.equal(f.reads(), 1);
+  const b = await f.request(); assert.equal(b.status, 200); assert.equal(b.perfCache, 'hit'); assert.equal(f.reads(), 1);
+  version = 2; assert.equal((await f.request()).perfCache, 'miss'); assert.equal(f.reads(), 2);
+  assert.equal((await f.request({ query: 'inicio=2026-10-01&fim=2026-10-15&fresh=1' })).perfCache, 'miss'); assert.equal(f.reads(), 3);
+} finally { await f.close(); } });
+test('cache nunca pula a permissão Commerce', async () => { const f = await fixture({ core: true }); try { assert.equal((await f.request()).status, 200); } finally { await f.close(); } const g = await fixture({ core: true, deny: true }); try { assert.equal((await g.request()).status, 403); } finally { await g.close(); } });
+test('histórico completo exige data final e aceita somente 0/1', async () => { const f = await fixture(); try {
+  const ok = await f.request({ query: 'historico=1&fim=2026-10-15' }); assert.equal(ok.status, 200); assert.equal(ok.body.period.historico, true); assert.equal(ok.body.period.fim, '2026-10-15');
+  assert.equal((await f.request({ query: 'historico=1' })).status, 400);
+  assert.equal((await f.request({ query: 'historico=talvez&fim=2026-10-15' })).status, 400);
+} finally { await f.close(); } });
+test('visões por item: só valores conhecidos, chave exige visão e não mistura com profissional', async () => { const f = await fixture(); try {
+  const ok = await f.request({ query: 'historico=1&fim=2026-10-15&visao=servicos' }); assert.equal(ok.status, 200); assert.equal(ok.body.view, 'servicos'); assert.ok(Array.isArray(ok.body.groups));
+  assert.equal((await f.request({ query: 'historico=1&fim=2026-10-15&visao=senhas' })).status, 400);
+  assert.equal((await f.request({ query: 'historico=1&fim=2026-10-15&chave=x' })).status, 400);
+  assert.equal((await f.request({ query: 'historico=1&fim=2026-10-15&visao=servicos&profissionalId=p1' })).status, 400);
+  assert.equal((await f.request({ query: 'historico=1&fim=2026-10-15&visao=servicos&chave=nao-existe' })).status, 400);
+} finally { await f.close(); } });

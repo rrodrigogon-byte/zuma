@@ -293,6 +293,7 @@ async function runUpload(){
 
 // Flush imediato — chamar no encerramento (SIGTERM) para não perder o último save.
 export async function flush(){
+  try { gravarPendenteAgora(); } catch(e){ console.error('[DB] falha ao gravar pendente no flush:', e?.message || e); }
   if(!GCS_BUCKET) return;
   if(_uploadTimer){ clearTimeout(_uploadTimer); _uploadTimer = null; }
   await runUpload();
@@ -314,59 +315,79 @@ const FSYNC_INTERVALO_MS = 30 * 1000;
 let _ultimoFsync = 0;
 let _avisoFallbackBackup = false;
 const GRAVACAO_LENTA_MS = 250;
-const TAMANHO_BLOCO_JSON = 64 * 1024;
-const _metricas = { gravacoes: 0, ultimaGravacaoEm: null, ultimaDuracaoMs: 0, maiorDuracaoMs: 0, tamanhoBytes: 0, ultimoErro: null, ultimoErroEm: null, gravacoesLentas: 0, ultimoBakEm: 0 };
+const TAMANHO_BLOCO_JSON = 1024 * 1024;
+const _metricas = { gravacoes: 0, alteracoes: 0, gravacoesAgrupadas: 0, ultimaGravacaoEm: null, ultimaDuracaoMs: 0, maiorDuracaoMs: 0, tamanhoBytes: 0, ultimoErro: null, ultimoErroEm: null, gravacoesLentas: 0, ultimoBakEm: 0 };
 
 // JSON.stringify(_cache) cria uma string do tamanho inteiro do banco antes de o
 // primeiro byte chegar ao disco. Com o histórico Avec importado isso duplicava
 // dezenas de megabytes no heap e fazia o processo ultrapassar o limite de memória
-// do serviço. A escrita abaixo mantém apenas um bloco pequeno em memória e
-// conserva a semântica do JSON compacto usado pelo banco legado.
+// do serviço. A escrita abaixo percorre só os contêineres grandes (mapas/listas com
+// muitos nós) e serializa cada registro pequeno com o JSON.stringify nativo — cerca
+// de 3x mais rápido que visitar campo a campo em JS — mantendo poucos blocos em
+// memória e a mesma saída byte a byte do JSON compacto.
+const NOS_REGISTRO_PEQUENO = 3000;
+const _temProprio = Object.prototype.hasOwnProperty;
+function cabeEmRegistroPequeno(item, orcamento = NOS_REGISTRO_PEQUENO) {
+  let restante = orcamento;
+  const pilha = [item];
+  while (pilha.length) {
+    const atual = pilha.pop();
+    if (--restante < 0) return false;
+    if (atual && typeof atual === 'object') {
+      if (Array.isArray(atual)) { for (let i = 0; i < atual.length; i++) pilha.push(atual[i]); }
+      else for (const chave in atual) if (_temProprio.call(atual, chave)) pilha.push(atual[chave]);
+    }
+  }
+  return true;
+}
+
 function escreverJsonEmFluxo(fd, valor) {
-  let bloco = '';
-  let blocoBytes = 0;
+  let partes = [];
+  let tamanhoBloco = 0;
   let tamanhoBytes = 0;
   const ancestrais = new WeakSet();
-  let descarregar;
+  const descarregar = () => {
+    if (!partes.length) return;
+    tamanhoBytes += fs.writeSync(fd, partes.join(''), null, 'utf8');
+    partes = [];
+    tamanhoBloco = 0;
+  };
   const anexar = (texto) => {
     if (!texto) return;
-    bloco += texto;
-    blocoBytes += Buffer.byteLength(texto, 'utf8');
-    if (blocoBytes >= TAMANHO_BLOCO_JSON) descarregar();
+    partes.push(texto);
+    tamanhoBloco += texto.length;
+    if (tamanhoBloco >= TAMANHO_BLOCO_JSON) descarregar();
   };
-  descarregar = () => {
-    if (!bloco) return;
-    tamanhoBytes += fs.writeSync(fd, bloco, null, 'utf8');
-    bloco = '';
-    blocoBytes = 0;
-  };
+  const ignorado = (item) => item === undefined || typeof item === 'function' || typeof item === 'symbol';
   const visitar = (item, dentroDeArray = false) => {
-    if (item === null) { anexar('null'); return; }
-    const tipo = typeof item;
-    if (tipo === 'string') { anexar(JSON.stringify(item)); return; }
-    if (tipo === 'number') { anexar(Number.isFinite(item) ? String(item) : 'null'); return; }
-    if (tipo === 'boolean') { anexar(item ? 'true' : 'false'); return; }
-    if (tipo === 'undefined' || tipo === 'function' || tipo === 'symbol') { if (dentroDeArray) anexar('null'); return; }
-    if (tipo === 'bigint') throw new TypeError('Do not know how to serialize a BigInt');
+    if (item === null || typeof item !== 'object' || typeof item.toJSON === 'function' || cabeEmRegistroPequeno(item)) {
+      const texto = JSON.stringify(item);
+      anexar(texto === undefined ? (dentroDeArray ? 'null' : '') : texto);
+      return;
+    }
     if (ancestrais.has(item)) throw new TypeError('Converting circular structure to JSON');
     ancestrais.add(item);
     try {
       if (Array.isArray(item)) {
         anexar('[');
-        item.forEach((valorItem, indice) => { if (indice) anexar(','); visitar(valorItem, true); });
+        for (let indice = 0; indice < item.length; indice += 1) {
+          if (indice) anexar(',');
+          if (ignorado(item[indice])) anexar('null'); else visitar(item[indice], true);
+        }
         anexar(']');
       } else {
         anexar('{');
         let primeiro = true;
-        Object.keys(item).forEach((chave) => {
+        for (const chave of Object.keys(item)) {
           const valorChave = item[chave];
-          if (valorChave === undefined || typeof valorChave === 'function' || typeof valorChave === 'symbol') return;
+          if (ignorado(valorChave)) continue;
+          if (typeof valorChave === 'bigint') throw new TypeError('Do not know how to serialize a BigInt');
           if (!primeiro) anexar(',');
           primeiro = false;
           anexar(JSON.stringify(chave));
           anexar(':');
           visitar(valorChave);
-        });
+        }
         anexar('}');
       }
     } finally { ancestrais.delete(item); }
@@ -410,7 +431,45 @@ function renovarBackup(){
   }
 }
 
+// Agrupamento de gravações: cada save() reescreve o banco inteiro. Em produção, várias
+// chamadas na mesma requisição (ou em rajada) viram UMA gravação logo em seguida
+// (até DB_SAVE_COALESCE_MS). Falha de disco fica pendente e é relançada no próximo
+// save(), para a requisição seguinte não confirmar algo que não foi gravado; SIGTERM,
+// saída do processo e leituras do arquivo (caminhoBanco) gravam o pendente antes.
+const _agruparEnv = process.env.DB_SAVE_COALESCE;
+const AGRUPAR_GRAVACOES = _agruparEnv ? _agruparEnv === '1' : process.env.NODE_ENV === 'production';
+const _janelaEnv = Number.parseInt(process.env.DB_SAVE_COALESCE_MS ?? '', 10);
+const JANELA_AGRUPAMENTO_MS = Number.isFinite(_janelaEnv) && _janelaEnv >= 0 ? _janelaEnv : 40;
+let _gravacaoPendente = null;
+let _erroGravacaoPendente = null;
+
 export function save(){
+  _metricas.alteracoes += 1;
+  if(!AGRUPAR_GRAVACOES) return gravarAgora();
+  if(_erroGravacaoPendente){
+    // A última gravação adiada falhou: tenta já e propaga o erro ao chamador.
+    _erroGravacaoPendente = null;
+    if(_gravacaoPendente){ clearTimeout(_gravacaoPendente); _gravacaoPendente = null; }
+    return gravarAgora();
+  }
+  if(_gravacaoPendente){ _metricas.gravacoesAgrupadas += 1; return; }
+  _gravacaoPendente = setTimeout(() => {
+    _gravacaoPendente = null;
+    try { gravarAgora(); } catch(e){ _erroGravacaoPendente = e; }
+  }, JANELA_AGRUPAMENTO_MS);
+}
+
+// Grava imediatamente o que estiver pendente (usado antes de ler o arquivo e no encerramento).
+export function gravarPendenteAgora(){
+  if(!_gravacaoPendente && !_erroGravacaoPendente) return false;
+  if(_gravacaoPendente){ clearTimeout(_gravacaoPendente); _gravacaoPendente = null; }
+  _erroGravacaoPendente = null;
+  gravarAgora();
+  return true;
+}
+if(AGRUPAR_GRAVACOES) process.on('exit', () => { try { gravarPendenteAgora(); } catch(e){ console.error('[DB] falha ao gravar pendente na saída:', e?.message || e); } });
+
+function gravarAgora(){
   const inicio = Date.now();
   try {
     ensureDir();
@@ -444,12 +503,13 @@ export function save(){
 // Estado da gravação local para o health check e o painel (sem dados de clientes).
 export function estadoGravacao(){
   return { arquivo: path.basename(DB_PATH), ...(_metricas.ultimoBakEm ? { ultimoBakEm: new Date(_metricas.ultimoBakEm).toISOString() } : {}),
-    gravacoes: _metricas.gravacoes, ultimaGravacaoEm: _metricas.ultimaGravacaoEm, ultimaDuracaoMs: _metricas.ultimaDuracaoMs,
+    gravacoes: _metricas.gravacoes, alteracoes: _metricas.alteracoes, gravacoesAgrupadas: _metricas.gravacoesAgrupadas, gravacaoPendente: Boolean(_gravacaoPendente), agrupamento: AGRUPAR_GRAVACOES, ultimaGravacaoEm: _metricas.ultimaGravacaoEm, ultimaDuracaoMs: _metricas.ultimaDuracaoMs,
     maiorDuracaoMs: _metricas.maiorDuracaoMs, gravacoesLentas: _metricas.gravacoesLentas, tamanhoBytes: _metricas.tamanhoBytes,
     ultimoErro: _metricas.ultimoErro, ultimoErroEm: _metricas.ultimoErroEm, replicacaoGcs: Boolean(GCS_BUCKET) };
 }
 
-export function caminhoBanco(){ return DB_PATH; }
+// Quem vai ler o arquivo (backup/exportação) recebe a versão já com o pendente gravado.
+export function caminhoBanco(){ gravarPendenteAgora(); return DB_PATH; }
 
 // Restauração: troca o estado em memória por uma cópia já conferida e grava.
 // Usada só pela rota de restauração da administração da plataforma, que antes
@@ -458,7 +518,7 @@ export function substituirBanco(estado){
   if(!estado || typeof estado !== 'object' || Array.isArray(estado)) throw new Error('estado inválido para restauração');
   const anterior = _cache;
   _cache = { ...structuredClone(DEFAULT), ...estado };
-  try { save(); }
+  try { save(); gravarPendenteAgora(); }
   catch(e){ _cache = anterior; throw e; }  // memória e disco nunca divergem
   return _cache;
 }
