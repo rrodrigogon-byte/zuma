@@ -123,6 +123,95 @@ function migrarEstruturaLegada(estado) {
   return store;
 }
 
+// ── Relacionamento: família, preferências e redes sociais ──────────────────
+// Só muda o que vier no corpo da requisição. Os perfis sociais são apenas
+// links informados pela equipe: o sistema não lê nem coleta dados dessas redes.
+const RELACOES_FAMILIA = Object.freeze(['conjuge', 'esposa', 'marido', 'namorada', 'namorado', 'filho', 'filha', 'enteado', 'enteada', 'pai', 'mae', 'irmao', 'irma', 'outro']);
+const RELACOES_MENOR_POSSIVEL = new Set(['filho', 'filha', 'enteado', 'enteada']);
+const CAMPOS_PREFERENCIA = Object.freeze(['corte', 'barba', 'bebida', 'perfumes', 'produtos', 'horario', 'atendimento', 'observacoes']);
+
+function idFamiliar(item = {}, indice = 0) {
+  const informado = texto(item.id, 60);
+  return /^fam-[a-z0-9-]{4,56}$/.test(informado) ? informado : `fam-${Date.now().toString(36)}-${indice}`;
+}
+
+export function normalizarFamilia(lista) {
+  if (lista === null || lista === undefined || lista === '') return [];
+  if (!Array.isArray(lista)) throw new Error('A família deve ser uma lista de pessoas.');
+  if (lista.length > 12) throw new Error('Cadastre no máximo 12 familiares por cliente.');
+  return lista.map((item, indice) => {
+    const nome = texto(item?.nome, 120);
+    if (!nome) throw new Error('Informe o nome de cada familiar.');
+    const relacao = String(item?.relacao || 'outro').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+    if (!RELACOES_FAMILIA.includes(relacao)) throw new Error(`Parentesco inválido para ${nome}.`);
+    const nascimento = item?.dataNascimento ? normalizarNascimento(item.dataNascimento) : { dataNascimento: '', aniversario: '' };
+    return {
+      id: idFamiliar(item, indice),
+      relacao,
+      nome,
+      dataNascimento: nascimento.dataNascimento,
+      aniversario: nascimento.aniversario,
+      telefone: texto(item?.telefone, 30),
+      clienteId: texto(item?.clienteId, 120) || null,
+      observacao: texto(item?.observacao, 300),
+    };
+  });
+}
+
+export function normalizarPreferencias(valor) {
+  const origem = valor && typeof valor === 'object' ? valor : {};
+  const preferencias = {};
+  for (const campo of CAMPOS_PREFERENCIA) preferencias[campo] = texto(origem[campo], campo === 'observacoes' ? 600 : 200);
+  preferencias.profissionalPreferidoId = texto(origem.profissionalPreferidoId, 120) || null;
+  const tags = Array.isArray(origem.tags) ? origem.tags : String(origem.tags || '').split(',');
+  preferencias.tags = [...new Set(tags.map((tag) => texto(tag, 40)).filter(Boolean))].slice(0, 20);
+  return preferencias;
+}
+
+// Instagram: aceita @usuario, usuario ou o link do perfil. Guarda só o usuário.
+export function normalizarInstagram(valor) {
+  const bruto = texto(valor, 200);
+  if (!bruto) return '';
+  const semUrl = bruto.replace(/^https?:\/\/(www\.)?instagram\.com\//i, '').replace(/^@/, '').split(/[/?#]/)[0];
+  if (!/^[A-Za-z0-9._]{1,30}$/.test(semUrl)) throw new Error('Instagram inválido. Use @usuario ou o link do perfil.');
+  return semUrl.toLowerCase();
+}
+
+// LinkedIn: aceita o link do perfil (linkedin.com/in/...) ou só o identificador.
+export function normalizarLinkedin(valor) {
+  const bruto = texto(valor, 300);
+  if (!bruto) return '';
+  const m = bruto.match(/^(?:https?:\/\/)?(?:[a-z]{2,3}\.)?linkedin\.com\/(in|company)\/([A-Za-z0-9\-_%.]{2,100})\/?(?:[?#].*)?$/i);
+  if (m) return `https://www.linkedin.com/${m[1].toLowerCase()}/${m[2]}`;
+  if (/^[A-Za-z0-9\-_%.]{2,100}$/.test(bruto)) return `https://www.linkedin.com/in/${bruto}`;
+  throw new Error('LinkedIn inválido. Use o link do perfil (linkedin.com/in/...).');
+}
+
+function camposRelacionamento(payload = {}, atual = {}) {
+  const tem = (chave) => Object.prototype.hasOwnProperty.call(payload, chave);
+  const resultado = {};
+  if (tem('familia')) {
+    resultado.familia = normalizarFamilia(payload.familia);
+    // LGPD art. 14: dados de criança ou adolescente só com consentimento do responsável.
+    const possivelMenor = resultado.familia.some((item) => RELACOES_MENOR_POSSIVEL.has(item.relacao));
+    const consentido = payload.familiaConsentimento === true || (atual.familiaConsentimento?.concedido === true && !tem('familiaConsentimento'));
+    if (possivelMenor && !consentido) throw new Error('Para cadastrar filhos ou enteados, confirme que o cliente (responsável) autorizou o registro.');
+    if (tem('familiaConsentimento') || possivelMenor) {
+      resultado.familiaConsentimento = payload.familiaConsentimento === true || consentido
+        ? { concedido: true, registradoEm: atual.familiaConsentimento?.concedido ? atual.familiaConsentimento.registradoEm : agora(), origem: texto(payload.familiaConsentimentoOrigem, 60) || atual.familiaConsentimento?.origem || 'painel_barbearia' }
+        : { concedido: false, registradoEm: agora(), origem: 'painel_barbearia' };
+    }
+  }
+  if (tem('preferencias')) resultado.preferencias = normalizarPreferencias(payload.preferencias);
+  if (tem('redesSociais') || tem('instagram') || tem('linkedin')) {
+    const redes = payload.redesSociais && typeof payload.redesSociais === 'object' ? payload.redesSociais : {};
+    const instagram = tem('instagram') ? payload.instagram : (Object.prototype.hasOwnProperty.call(redes, 'instagram') ? redes.instagram : atual.redesSociais?.instagram);
+    const linkedin = tem('linkedin') ? payload.linkedin : (Object.prototype.hasOwnProperty.call(redes, 'linkedin') ? redes.linkedin : atual.redesSociais?.linkedin);
+    resultado.redesSociais = { instagram: normalizarInstagram(instagram), linkedin: normalizarLinkedin(linkedin) };
+  }
+  return resultado;
+}
+
 export function clientesPersistidos(empresaId = EMPRESA_PADRAO_ID) {
   const estado = db();
   const store = migrarEstruturaLegada(estado);
@@ -172,6 +261,7 @@ export function criarCliente(empresaId, dados) {
   const store = clientesPersistidos(empresaId);
   const cliente = clientePadrao(empresaId, `cli-${hashEmpresa(empresaId)}-${Date.now().toString(36)}-${String(Object.keys(store.clientes).length + 1).padStart(3, '0')}`, dados);
   if (!cliente.nome) throw new Error('Nome do cliente é obrigatório.');
+  Object.assign(cliente, camposRelacionamento(dados, {}));
   if (cliente.cpfCnpj && Object.values(store.clientes).some((item) => item.cpfCnpj === cliente.cpfCnpj && item.status !== 'deletado')) {
     throw new Error('Já existe cliente ativo com este CPF/CNPJ nesta empresa.');
   }
@@ -183,7 +273,8 @@ export function atualizarCliente(empresaId, clienteId, dados) {
   const cliente = clientesPersistidos(empresaId).clientes[clienteId];
   if (!cliente || cliente.empresaId !== empresaId) return null;
   // Nascimento só muda quando vier no corpo; senão preserva o que já existe.
-  Object.assign(cliente, normalizarCliente({ ...cliente, ...dados }), camposNascimento(dados, cliente), { atualizadoEm: agora() });
+  const relacionamento = camposRelacionamento(dados, cliente);
+  Object.assign(cliente, normalizarCliente({ ...cliente, ...dados }), camposNascimento(dados, cliente), relacionamento, { atualizadoEm: agora() });
   garantirConsentimentos(cliente);
   return cliente;
 }

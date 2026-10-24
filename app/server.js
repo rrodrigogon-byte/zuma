@@ -37,6 +37,8 @@ import { accountByLegacyId, accountCredential, accountRequestIdentity, accountSe
 import { createAccountManagementRouter } from './core/commerce-account-routes.js';
 import { emitir as nfceEmitir, cancelar as nfceCancelar, nfceConfigurado } from './nfce.js';
 import { createCommerceAdminRouter, createCommercePublicRateLimitGuard, createCommercePublicRouter, createCommerceWebhookRouter } from './core/commerce-routes.js';
+import { baixarEstoqueLoja, buscarProdutosLoja, obterProdutoLoja } from './core/commerce-comanda-bridge.js';
+import * as comandaPlanoKytto from './barbearia-comanda-plano.js';
 import { lookupPostalCode } from './core/commerce-shipping.js';
 import { createWhatsappAiWebhookRouter } from './core/whatsapp-ai-routes.js';
 import { montarClube, iniciarRotinasClube } from './modules/clube/index.js';
@@ -3297,7 +3299,7 @@ function exigirPapelOperacaoBarbearia(req, res, next) {
 }
 app.use('/api/admin/barbearia', auth, requireStaff, resolverEscopoBarbearia, exigirPapelOperacaoBarbearia);
 registerEquipePerformanceRoutes(app, { db, legacyEmpresaId, legacyLojaId, requireCommercePermission, salesReport, dataVersion: () => estadoGravacao()?.alteracoes ?? null });
-registerCustomer360Routes(app, { legacyEmpresaId, legacyLojaId, clientesKytto, barbeariaErpKytto, canaisFidelidadeKytto, listarAgendamentosBarbearia, requireCommercePermission, audit, save });
+registerCustomer360Routes(app, { legacyEmpresaId, legacyLojaId, clientesKytto, barbeariaErpKytto, canaisFidelidadeKytto, listarAgendamentosBarbearia, requireCommercePermission, audit, save, coberturasDoCliente: comandaPlanoKytto.coberturasDoCliente });
 // Diagnóstico do Financeiro (só administração da plataforma): onde estão os lançamentos de cada
 // empresa no banco JSON — quantidades por unidade e por origem, sem valores nem descrições.
 // Serve para achar lançamentos gravados sem unidade ou sob outro identificador de empresa.
@@ -3542,7 +3544,10 @@ function sanitizarClienteBarbearia(cliente) {
          scoreCredito: cliente.scoreCredito, risco: cliente.risco,
      consentimentos: cliente.consentimentos || { whatsapp: { atendimento: { concedido: false }, marketing: { concedido: false } }, email: { atendimento: { concedido: false }, marketing: { concedido: false } } },
      criadoEm: cliente.criadoEm, atualizadoEm: cliente.atualizadoEm,
-
+     familia: Array.isArray(cliente.familia) ? cliente.familia : [],
+     familiaConsentimento: cliente.familiaConsentimento || null,
+     preferencias: cliente.preferencias || null,
+     redesSociais: cliente.redesSociais || { instagram: '', linkedin: '' },
   };
 }
 
@@ -4799,6 +4804,99 @@ function payloadComandaBarbearia(req) {
   return { ...(req.body || {}), lojaId: legacyLojaId(req), usuario: req.user?.email || req.user?.nome || '' };
 }
 
+// Itens da comanda vindos da tela: produtos da loja são conferidos no catálogo
+// da loja (preço e estoque do servidor) e serviços recebem o plano do cliente.
+async function prepararItensComanda(req, { clienteId, itens, comandaId = '' }) {
+  const empresaId = legacyEmpresaId(req);
+  const limpos = comandaPlanoKytto.limparItensRecebidos(itens);
+  let contextoLoja = null;
+  for (const item of limpos) {
+    if (String(item.tipo || '').toLowerCase() !== 'loja') continue;
+    contextoLoja ||= await requireCommercePermission(req, 'catalog.read');
+    item.itemLoja = await obterProdutoLoja(contextoLoja, item.variantId || item.lojaVarianteId);
+  }
+  return comandaPlanoKytto.aplicarPlanoAosItens(empresaId, { clienteId, itens: limpos, comandaId });
+}
+
+// Falha de infraestrutura (banco da loja fora do ar, SQLSTATE, rede): não expõe detalhe técnico.
+function falhaInfraComanda(error) {
+  const code = String(error?.code || '');
+  return Boolean(error?.errno) || /^E[A-Z]{3,}$/.test(code) || /^[0-9][0-9A-Z]{4}$/.test(code);
+}
+function erroComanda(res, error) {
+  if (falhaInfraComanda(error)) {
+    console.error('[comanda] falha de infraestrutura:', error?.code || '', error?.message || error);
+    return res.status(503).json({ error: 'A loja virtual está indisponível agora. Serviços e produtos de revenda podem ser lançados normalmente; tente a loja de novo em instantes.', code: 'LOJA_INDISPONIVEL' });
+  }
+  const status = error?.code === 'PERMISSION_DENIED' ? 403 : ['PLANO_INDISPONIVEL', 'PLANO_SEM_SESSAO'].includes(error?.code) ? 409 : 400;
+  res.status(status).json({ error: error?.code === 'PERMISSION_DENIED' ? 'Seu usuário não tem permissão na loja virtual para esta operação.' : error.message, code: error?.code });
+}
+
+// Depois do faturamento: grava o uso dos planos e baixa o estoque da loja virtual.
+async function posFaturamentoComanda(req, comanda) {
+  const empresaId = legacyEmpresaId(req);
+  if (!comanda || !['paga', 'em_conta'].includes(comanda.status)) return { planos: [], loja: [] };
+  const planos = comandaPlanoKytto.consumirPlanosDaComanda(empresaId, comanda);
+  const loja = [];
+  const itensLoja = (comanda.itens || []).filter((item) => item.tipo === 'loja' && item.estoqueLoja?.status !== 'baixado');
+  if (itensLoja.length) {
+    let contexto = null;
+    try {
+      // A permissão foi conferida no vínculo Commerce do usuário; o núcleo exige a capacidade no contexto.
+      const base = await requireCommercePermission(req, 'inventory.write');
+      contexto = { ...base, capabilities: new Set(['inventory.write']) };
+    } catch (error) {
+      for (const item of itensLoja) {
+        barbeariaErpKytto.registrarBaixaLojaNoItemComanda(empresaId, comanda.id, item.id, { ok: false, erro: 'Sem permissão de estoque na loja virtual; peça à gestão para concluir a baixa.' });
+        loja.push({ itemId: item.id, ok: false });
+      }
+      return { planos, loja };
+    }
+    for (const item of itensLoja) {
+      try {
+        const movimento = await baixarEstoqueLoja(contexto, {
+          variantId: item.lojaVarianteId, locationId: item.lojaLocalEstoqueId, quantidade: item.quantidade,
+          chave: `barbearia-comanda:${comanda.id}:${item.id}`, observacao: `Venda na comanda ${comanda.id} da barbearia`,
+        });
+        barbeariaErpKytto.registrarBaixaLojaNoItemComanda(empresaId, comanda.id, item.id, { ok: true, movimento: { disponivel: movimento?.disponivel ?? null } });
+        loja.push({ itemId: item.id, ok: true });
+      } catch (error) {
+        const erro = falhaInfraComanda(error) ? 'Loja virtual indisponível no momento; use "Baixar estoque da loja" em instantes.' : error.message;
+        if (falhaInfraComanda(error)) console.error('[comanda] baixa da loja falhou:', error?.code || '', error?.message || error);
+        barbeariaErpKytto.registrarBaixaLojaNoItemComanda(empresaId, comanda.id, item.id, { ok: false, erro });
+        loja.push({ itemId: item.id, ok: false, erro });
+      }
+    }
+    audit(req, 'COMANDA BAIXA LOJA', `${comanda.id} itens=${itensLoja.length} ok=${loja.filter((x) => x.ok).length}`);
+  }
+  return { planos, loja };
+}
+
+function avisosPosFaturamento(pos) {
+  const avisos = [];
+  const planosFalhos = (pos?.planos || []).filter((x) => !x.ok);
+  if (planosFalhos.length) avisos.push(`Uso do plano não registrado em ${planosFalhos.length} item(ns): ${planosFalhos[0].erro}`);
+  const lojaFalhos = (pos?.loja || []).filter((x) => !x.ok);
+  if (lojaFalhos.length) avisos.push(`Baixa de estoque da loja pendente em ${lojaFalhos.length} item(ns). Use "Baixar estoque da loja" na comanda.`);
+  return avisos;
+}
+
+app.get('/api/admin/barbearia/comandas/catalogo-loja', async (req, res) => {
+  try {
+    const contexto = await requireCommercePermission(req, 'catalog.read');
+    const itens = await buscarProdutosLoja(contexto, { q: req.query?.q, limite: req.query?.limite });
+    res.json({ ok: true, itens });
+  } catch (error) { erroComanda(res, error); }
+});
+app.get('/api/admin/barbearia/clientes/:id/planos', (req, res) => {
+  try {
+    const empresaId = legacyEmpresaId(req);
+    const cliente = clientesKytto.obterCliente(empresaId, req.params.id);
+    if (!cliente) return res.status(404).json({ error: 'Cliente não encontrado na empresa ativa.' });
+    res.json({ ok: true, planos: comandaPlanoKytto.coberturasDoCliente(empresaId, req.params.id) });
+  } catch (error) { res.status(400).json({ error: error.message }); }
+});
+
 app.get('/api/admin/barbearia/comandas', (req, res) => {
   try {
     const empresaId = legacyEmpresaId(req);
@@ -4819,14 +4917,20 @@ app.get('/api/admin/barbearia/comandas/:id', (req, res) => {
   if (!comanda) return res.status(404).json({ error: 'Comanda não encontrada na empresa/unidade ativa.' });
   res.json({ ok: true, comanda });
 });
-app.post('/api/admin/barbearia/comandas', (req, res) => {
+app.post('/api/admin/barbearia/comandas', async (req, res) => {
   try {
     const vinculo = vincularClienteAoAtendimento(legacyEmpresaId(req), payloadComandaBarbearia(req), { origem: 'comanda', usuario: req.user?.email || '' });
     const body = vinculo.dados;
     body.chaveIdempotencia = req.get('Idempotency-Key') || body.chaveIdempotencia || body.chave_idempotencia;
+    let avisos = [];
+    if (Array.isArray(body.itens)) {
+      const preparo = await prepararItensComanda(req, { clienteId: body.clienteId, itens: body.itens });
+      body.itens = preparo.itens;
+      avisos = preparo.avisos;
+    }
     const comanda = barbeariaErpKytto.criarComandaBarbearia(legacyEmpresaId(req), body);
-    res.status(201).json({ ok: true, comanda, cliente: { id: vinculo.clienteId || null, criado: vinculo.criado } });
-  } catch (error) { res.status(400).json({ error: error.message }); }
+    res.status(201).json({ ok: true, comanda, avisos, cliente: { id: vinculo.clienteId || null, criado: vinculo.criado } });
+  } catch (error) { erroComanda(res, error); }
 });
 app.patch('/api/admin/barbearia/comandas/:id', (req, res) => {
   try {
@@ -4835,13 +4939,35 @@ app.patch('/api/admin/barbearia/comandas/:id', (req, res) => {
     res.json({ ok: true, comanda });
   } catch (error) { res.status(400).json({ error: error.message }); }
 });
-app.post('/api/admin/barbearia/comandas/:id/itens', (req, res) => {
+app.post('/api/admin/barbearia/comandas/:id/itens', async (req, res) => {
   try {
-    if (!comandaBarbeariaDaSessao(req, req.params.id)) return res.status(404).json({ error: 'Comanda não encontrada na empresa/unidade ativa.' });
+    const atual = comandaBarbeariaDaSessao(req, req.params.id);
+    if (!atual) return res.status(404).json({ error: 'Comanda não encontrada na empresa/unidade ativa.' });
     const itens = Array.isArray(req.body?.itens) ? req.body.itens : [req.body || {}];
-    const comanda = barbeariaErpKytto.adicionarItensComandaBarbearia(legacyEmpresaId(req), req.params.id, itens);
-    res.status(201).json({ ok: true, comanda });
-  } catch (error) { res.status(400).json({ error: error.message }); }
+    const preparo = await prepararItensComanda(req, { clienteId: atual.clienteId, itens, comandaId: atual.id });
+    const comanda = barbeariaErpKytto.adicionarItensComandaBarbearia(legacyEmpresaId(req), req.params.id, preparo.itens);
+    res.status(201).json({ ok: true, comanda, avisos: preparo.avisos });
+  } catch (error) { erroComanda(res, error); }
+});
+app.post('/api/admin/barbearia/comandas/:id/fechar-plano', async (req, res) => {
+  try {
+    const atual = comandaBarbeariaDaSessao(req, req.params.id);
+    if (!atual) return res.status(404).json({ error: 'Comanda não encontrada na empresa/unidade ativa.' });
+    comandaPlanoKytto.validarCoberturasDaComanda(legacyEmpresaId(req), atual);
+    const fechada = barbeariaErpKytto.fecharComandaSemSaldoBarbearia(legacyEmpresaId(req), req.params.id, { confirmado: req.body?.confirmado === true, usuario: req.user?.email || req.user?.nome || '' });
+    const pos = await posFaturamentoComanda(req, fechada);
+    audit(req, 'COMANDA FECHADA PELO PLANO', `${fechada.id} itens=${fechada.itens.length}`);
+    res.json({ ok: true, comanda: comandaBarbeariaDaSessao(req, req.params.id), avisos: avisosPosFaturamento(pos) });
+  } catch (error) { erroComanda(res, error); }
+});
+app.post('/api/admin/barbearia/comandas/:id/loja/baixar', async (req, res) => {
+  try {
+    const atual = comandaBarbeariaDaSessao(req, req.params.id);
+    if (!atual) return res.status(404).json({ error: 'Comanda não encontrada na empresa/unidade ativa.' });
+    if (!['paga', 'em_conta'].includes(atual.status)) return res.status(409).json({ error: 'A baixa da loja acontece depois do recebimento da comanda.' });
+    const pos = await posFaturamentoComanda(req, atual);
+    res.json({ ok: true, comanda: comandaBarbeariaDaSessao(req, req.params.id), avisos: avisosPosFaturamento(pos) });
+  } catch (error) { erroComanda(res, error); }
 });
 app.patch('/api/admin/barbearia/comandas/:id/itens/:itemId', (req, res) => {
   try {
@@ -4873,17 +4999,22 @@ app.patch('/api/admin/barbearia/comandas/:id/status', (req, res) => {
     res.json({ ok: true, comanda });
   } catch (error) { res.status(400).json({ error: error.message }); }
 });
-app.post('/api/admin/barbearia/comandas/:id/pagamentos', (req, res) => {
+app.post('/api/admin/barbearia/comandas/:id/pagamentos', async (req, res) => {
   try {
-    if (!comandaBarbeariaDaSessao(req, req.params.id)) return res.status(404).json({ error: 'Comanda não encontrada na empresa/unidade ativa.' });
+    const atual = comandaBarbeariaDaSessao(req, req.params.id);
+    if (!atual) return res.status(404).json({ error: 'Comanda não encontrada na empresa/unidade ativa.' });
     const body = payloadComandaBarbearia(req);
     body.chaveIdempotencia = req.get('Idempotency-Key') || body.chaveIdempotencia || body.chave_idempotencia;
     if (body.confirmado !== true) return res.status(400).json({ error: 'A confirmação explícita do recebimento é obrigatória.' });
-    const comanda = barbeariaErpKytto.registrarPagamentoComandaBarbearia(legacyEmpresaId(req), req.params.id, body);
+    // O plano ainda cobre o que foi lançado como coberto? (antes de mexer no financeiro)
+    if (!['paga', 'em_conta'].includes(atual.status)) comandaPlanoKytto.validarCoberturasDaComanda(legacyEmpresaId(req), atual);
+    let comanda = barbeariaErpKytto.registrarPagamentoComandaBarbearia(legacyEmpresaId(req), req.params.id, body);
+    const pos = await posFaturamentoComanda(req, comanda);
+    if (pos.planos.length || pos.loja.length) comanda = comandaBarbeariaDaSessao(req, req.params.id) || comanda;
     const pagamentosEntrada = Array.isArray(body.pagamentos) && body.pagamentos.length ? body.pagamentos : [body];
     const possuiDinheiroSemCaixa = pagamentosEntrada.some((item) => String(item?.meio ?? item?.meioPagamento ?? body.meioPagamento ?? '').toLowerCase() === 'dinheiro' && !(item?.caixaId || item?.caixa_id || body.caixaId || body.caixa_id));
-    res.json({ ok: true, comanda, aviso: possuiDinheiroSemCaixa ? 'Recebimento em dinheiro confirmado sem vínculo a um caixa aberto.' : null });
-  } catch (error) { res.status(400).json({ error: error.message }); }
+    res.json({ ok: true, comanda, aviso: possuiDinheiroSemCaixa ? 'Recebimento em dinheiro confirmado sem vínculo a um caixa aberto.' : null, avisos: avisosPosFaturamento(pos) });
+  } catch (error) { erroComanda(res, error); }
 });
 app.get('/api/admin/barbearia/fiscal/documentos', (req, res) => {
   try {
@@ -4910,7 +5041,7 @@ app.post('/api/admin/barbearia/comandas/:id/fiscal/rascunho', (req, res) => {
       total: comanda.total,
       observacoes: req.body?.observacoes || 'Rascunho preparado pela Barbearia. Emissão depende de integração fiscal externa configurada.',
       usuario: req.user?.email || req.user?.nome || '',
-      itens: (comanda.itens || []).map((item) => ({ tipo: item.tipo, descricao: item.nome, quantidade: item.quantidade || 1, valorUnitario: item.precoUnitario, total: item.subtotal, referenciaId: item.servicoId || item.produtoId })),
+      itens: (comanda.itens || []).filter((item) => !item.coberturaPlano && Number(item.subtotal || 0) > 0).map((item) => ({ tipo: item.tipo === 'loja' ? 'produto' : item.tipo, descricao: item.nome, quantidade: item.quantidade || 1, valorUnitario: item.precoUnitario, total: item.subtotal, referenciaId: item.servicoId || item.produtoId || item.lojaVarianteId })),
     });
     res.status(resultado.idempotente ? 200 : 201).json({ ok: true, ...resultado });
   } catch (error) { res.status(400).json({ error: error.message }); }

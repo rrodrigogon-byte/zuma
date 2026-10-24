@@ -26,6 +26,7 @@ import {
   summarizePortfolio,
 } from './core/customer-360.js';
 import * as store from './customer360-store.js';
+import { montarHistoricoCliente } from './cliente-historico-kytto.js';
 
 const MANAGE_ROLES = new Set(['admin', 'organizador']);
 const EXPORT_ROLES = new Set(['admin']);
@@ -52,6 +53,7 @@ export function registerCustomer360Routes(app, deps) {
   const {
     legacyEmpresaId, legacyLojaId, clientesKytto, barbeariaErpKytto, canaisFidelidadeKytto,
     listarAgendamentosBarbearia, requireCommercePermission, audit, save,
+    coberturasDoCliente = null,
     commerceEnabled = () => process.env.COMMERCE_CORE_ENABLED === '1',
     customerStore = store,
   } = deps;
@@ -149,7 +151,34 @@ export function registerCustomer360Routes(app, deps) {
       ? await loadCommerceFacets(context, { customerIds: identity.commerce.map((item) => item.id), phones: identity.phones, emails: identity.emails })
       : Object.fromEntries(['orders', 'credit', 'loyalty', 'carts', 'whatsapp', 'campaigns', 'consents'].map((key) => [key, { unavailable: true, items: [], reason: commerceStatus.motivo }]));
     const allRefs = [...new Set([identity.ref, identity.canonicalRef, ...identity.refs, ...identity.phones.map((phone) => `tel:${phone}`)])].filter(Boolean);
-    return { identity, local, commerce: commerceFacets, context, commerceStatus, allRefs };
+    return { identity, local, commerce: commerceFacets, context, commerceStatus, allRefs, comandasUnidade: data.comandas };
+  }
+
+  // Histórico completo (consumo, família, gostos e sugestões de venda). Se falhar,
+  // a ficha continua abrindo com o que já mostrava antes.
+  function historicoDaFicha(req, loaded, profile) {
+    try {
+      const empresaId = legacyEmpresaId(req);
+      const cliente = loaded.identity.local.find((item) => !item.anonimizadoEm) || null;
+      const coberturas = coberturasDoCliente && cliente
+        ? loaded.identity.local.flatMap((item) => { try { return coberturasDoCliente(empresaId, item.id) || []; } catch { return []; } })
+        : [];
+      return montarHistoricoCliente({
+        cliente,
+        comandas: loaded.local.comandas,
+        vendas: loaded.local.retailSales,
+        comandasEmpresa: loaded.comandasUnidade || [],
+        profissionais: barbeariaErpKytto.listarProfissionais?.(empresaId, { incluirInativos: true }) || [],
+        produtos: loaded.local.products,
+        planosAtivos: barbeariaErpKytto.listarPlanos(empresaId, {}),
+        coberturas,
+        perfil360: profile,
+        maskPhone,
+      });
+    } catch (error) {
+      console.warn('Customer 360: histórico do cliente indisponível:', error?.message || error);
+      return null;
+    }
   }
 
   function sendError(res, error, fallback) {
@@ -259,6 +288,7 @@ export function registerCustomer360Routes(app, deps) {
       const profile = buildCustomer360(loaded.identity, { local: loaded.local, commerce: loaded.commerce });
       await trail(req, loaded, 'view');
       const empresaId = legacyEmpresaId(req);
+      const historico = historicoDaFicha(req, loaded, profile);
       res.json({
         ok: true, ...profile,
         canonicalRef: loaded.identity.canonicalRef,
@@ -267,6 +297,7 @@ export function registerCustomer360Routes(app, deps) {
         etiquetas: customerStore.listTags(empresaId, loaded.allRefs),
         etiquetasDisponiveis: customerStore.allTags(empresaId).map((item) => item.tag),
         clienteBarbeariaId: loaded.identity.local[0]?.id || null,
+        historico,
         anonimizado: [...loaded.identity.local, ...loaded.identity.commerce].length > 0 && [...loaded.identity.local, ...loaded.identity.commerce].every((record) => record.anonimizadoEm || record.metadados?.anonimizadoEm),
         permissoes: { revelar: canReveal(req.user), exportar: canExport(req.user), gerenciar: canManage(req.user), anonimizar: canExport(req.user), verAcessos: canExport(req.user) },
       });

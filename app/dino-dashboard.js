@@ -264,7 +264,7 @@ function saleItems(input, window) {
     for (const item of list(sale.itens)) rows.push({ name: item.nome || item.produtoNome || 'Produto', category: item.categoria || 'Revenda', mixCategory: 'products', quantity: num(item.quantidade || 1), revenue: num(item.subtotal || (num(item.precoUnitario) * num(item.quantidade || 1))) });
   }
   for (const command of list(input.commands).filter((item) => item.status === 'paga' && inWindow(item, window))) {
-    for (const item of list(command.itens)) rows.push({ name: item.nome || item.descricao || 'Serviço', category: item.tipo === 'produto' ? 'Revenda' : (item.categoria || 'Serviços'), mixCategory: item.tipo === 'produto' ? 'products' : 'services', quantity: num(item.quantidade || 1), revenue: num(item.subtotal || item.total || (num(item.valorUnitario) * num(item.quantidade || 1))) });
+    for (const item of list(command.itens)) rows.push({ name: item.nome || item.descricao || 'Serviço', category: item.tipo === 'produto' ? 'Revenda' : item.tipo === 'loja' ? 'Loja' : (item.categoria || 'Serviços'), mixCategory: ['produto', 'loja'].includes(item.tipo) ? 'products' : 'services', quantity: num(item.quantidade || 1), revenue: num(item.subtotal || item.total || (num(item.valorUnitario) * num(item.quantidade || 1))) });
   }
   return rows;
 }

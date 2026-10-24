@@ -81,6 +81,12 @@ function novoId(prefixo, bucket) {
   return `${prefixo}-${Date.now().toString(36)}-${String(Object.keys(bucket).length + 1).padStart(3, '0')}`;
 }
 
+// Vários itens lançados no mesmo milissegundo recebiam o mesmo id (o sufixo era a
+// contagem de comandas). Agora cada linha tem um id único.
+function novoIdItemComanda() {
+  return `citem-${Date.now().toString(36)}-${crypto.randomUUID().slice(0, 8)}`;
+}
+
 function fingerprintPagamentoComanda({ clienteId, lojaId, dataVencimento, pagamentos }) {
   const payload = {
     clienteId: texto(clienteId, 120) || null,
@@ -1538,8 +1544,42 @@ function copiarComandaBarbearia(comanda, idempotente = false) {
   };
 }
 
+function itemLojaComandaNormalizado(estado, comanda, dados = {}) {
+  // Item da loja virtual (Commerce). Os dados vêm do servidor, que consulta o
+  // catálogo e o estoque da loja da unidade; nunca do corpo da requisição.
+  const loja = dados.itemLoja;
+  if (!loja || typeof loja !== 'object' || loja.verificadoPeloServidor !== true) throw new Error('Produto da loja não verificado. Busque o produto pelo catálogo da loja.');
+  const quantidade = Math.max(1, Math.round(numero(dados.quantidade ?? dados.qtd, 1)));
+  const precoUnitario = dinheiro(loja.preco);
+  if (precoUnitario <= 0) throw new Error(`O produto ${texto(loja.nome, 120)} não tem preço ativo na loja.`);
+  if (Number(loja.disponivel || 0) < quantidade) throw new Error(`Estoque insuficiente na loja para ${texto(loja.nome, 120)} (disponível: ${Number(loja.disponivel || 0)}).`);
+  const profissionalId = texto(dados.profissionalId ?? dados.profissional_id ?? comanda.profissionalId, 120);
+  if (profissionalId && (!estado.profissionais[profissionalId] || estado.profissionais[profissionalId].ativo === false)) throw new Error('Profissional responsável não encontrado ou inativo.');
+  return {
+    id: novoIdItemComanda(),
+    tipo: 'loja',
+    servicoId: null,
+    produtoId: null,
+    lojaVarianteId: texto(loja.variantId, 60),
+    lojaProdutoId: texto(loja.productId, 60),
+    lojaLocalEstoqueId: texto(loja.locationId, 60),
+    sku: texto(loja.sku, 80),
+    nome: texto(loja.nome, 160),
+    categoria: texto(loja.categoria, 100) || 'Loja',
+    quantidade,
+    precoUnitario,
+    subtotal: dinheiro(precoUnitario * quantidade),
+    duracaoMinutos: 0,
+    profissionalId: profissionalId || null,
+    estoqueLoja: { status: 'pendente', movimento: null, erro: null, atualizadoEm: null },
+    observacao: texto(dados.observacao ?? dados.obs, 400),
+    criadoEm: dataAtual(),
+  };
+}
+
 function itemComandaBarbeariaNormalizado(estado, comanda, dados = {}) {
   const tipo = String(dados.tipo || (dados.servicoId || dados.servico_id ? 'servico' : 'produto')).toLowerCase();
+  if (tipo === 'loja') return itemLojaComandaNormalizado(estado, comanda, dados);
   const id = String(dados.itemId || dados.servicoId || dados.servico_id || dados.produtoId || dados.produto_id || '').trim();
   const quantidade = Math.max(1, Math.round(numero(dados.quantidade ?? dados.qtd, 1)));
   if (!id) throw new Error('Informe o serviço ou produto do item.');
@@ -1552,8 +1592,11 @@ function itemComandaBarbeariaNormalizado(estado, comanda, dados = {}) {
   const precoUnitario = dinheiro(tipo === 'servico' ? cadastro.preco : cadastro.precoVenda);
   if (precoUnitario <= 0) throw new Error('O item precisa possuir preço positivo.');
   if (tipo === 'produto' && Number(cadastro.estoqueAtual || 0) < quantidade) throw new Error(`Estoque insuficiente para ${cadastro.nome} (disponível: ${cadastro.estoqueAtual || 0}).`);
+  // Cobertura de plano: preparada e validada pelo servidor (barbearia-comanda-plano.js).
+  const cobertura = tipo === 'servico' && dados.coberturaPlano && dados.coberturaPlano.verificadoPeloServidor === true ? dados.coberturaPlano : null;
+  if (cobertura && quantidade !== 1) throw new Error('Item coberto pelo plano entra com quantidade 1 por linha.');
   return {
-    id: novoId('citem', estado.comandas),
+    id: novoIdItemComanda(),
     tipo,
     servicoId: tipo === 'servico' ? cadastro.id : null,
     produtoId: tipo === 'produto' ? cadastro.id : null,
@@ -1561,7 +1604,18 @@ function itemComandaBarbeariaNormalizado(estado, comanda, dados = {}) {
     categoria: texto(cadastro.categoria, 100),
     quantidade,
     precoUnitario,
-    subtotal: dinheiro(precoUnitario * quantidade),
+    // Coberto pelo plano: o preço de tabela fica registrado, mas a linha não soma na conta.
+    subtotal: cobertura ? 0 : dinheiro(precoUnitario * quantidade),
+    ...(cobertura ? {
+      coberturaPlano: {
+        assinaturaId: texto(cobertura.assinaturaId, 120),
+        planoId: texto(cobertura.planoId, 120),
+        planoNome: texto(cobertura.planoNome, 160),
+        valorAbatido: dinheiro(precoUnitario * quantidade),
+        usoId: null,
+        consumidoEm: null,
+      },
+    } : {}),
     duracaoMinutos: tipo === 'servico' ? Number(cadastro.duracaoMinutos || 0) : 0,
     profissionalId: profissionalId || null,
     observacao: texto(dados.observacao ?? dados.obs, 400),
@@ -1914,19 +1968,20 @@ export function atualizarItemComandaBarbearia(empresaId, comandaId, itemId, dado
   const atual = comanda.itens.find((item) => item.id === String(itemId));
   if (!atual) return null;
   const quantidade = dados.quantidade !== undefined || dados.qtd !== undefined ? Math.max(1, Math.round(numero(dados.quantidade ?? dados.qtd, atual.quantidade))) : atual.quantidade;
+  if (quantidade !== atual.quantidade && (atual.coberturaPlano || atual.tipo === 'loja')) throw new Error('Para mudar a quantidade deste item, remova a linha e lance de novo.');
   if (atual.tipo === 'produto') {
     const produto = estado.produtosRevenda[atual.produtoId];
     if (!produto || Number(produto.estoqueAtual || 0) < quantidade) throw new Error(`Estoque insuficiente para ${atual.nome}.`);
   }
   const subtotalAtual = Number((comanda.itens || []).reduce((soma, item) => soma + Number(item.subtotal || 0), 0).toFixed(2));
-  const subtotalNovo = Number((subtotalAtual - Number(atual.subtotal || 0) + dinheiro(atual.precoUnitario * quantidade)).toFixed(2));
+  const subtotalNovo = Number((subtotalAtual - Number(atual.subtotal || 0) + (atual.coberturaPlano ? 0 : dinheiro(atual.precoUnitario * quantidade))).toFixed(2));
   const desconto = Number(Math.min(subtotalNovo, Math.max(0, Number(comanda.desconto || 0))).toFixed(2));
   const totalNovo = Number(Math.max(0, subtotalNovo - desconto + Math.max(0, Number(comanda.gorjeta || 0))).toFixed(2));
   if (totalNovo + 0.02 < Number(comanda.totalFaturado || 0)) throw erroEstoqueReserva('O total da comanda não pode ficar abaixo do total já faturado.', 'TOTAL_BELOW_BILLED', 409);
   const snapshot = raizSnapshot();
   try {
     atual.quantidade = quantidade;
-    atual.subtotal = dinheiro(atual.precoUnitario * quantidade);
+    atual.subtotal = atual.coberturaPlano ? 0 : dinheiro(atual.precoUnitario * quantidade);
     if (dados.observacao !== undefined || dados.obs !== undefined) atual.observacao = texto(dados.observacao ?? dados.obs, 400);
     atual.atualizadoEm = dataAtual();
     sincronizarReservasOperacao(empresaId, comanda, estado, { origem: 'comanda_barbearia', expiresAt: comanda.reservaEstoqueExpiresAt });
@@ -2187,6 +2242,100 @@ export function cancelarComandaBarbearia(empresaId, comandaId, dados = {}) {
     restaurarRaiz(snapshot);
     throw error;
   }
+}
+
+/** Itens cobertos por plano que ainda não registraram o uso na assinatura. */
+export function itensPlanoNaoConsumidos(empresaId) {
+  const estado = estadoEmpresa(empresaId);
+  const lista = [];
+  for (const comanda of Object.values(estado.comandas || {})) {
+    if (comanda.empresaId !== String(empresaId) || comanda.status === 'cancelada') continue;
+    for (const item of comanda.itens || []) {
+      if (item.coberturaPlano && !item.coberturaPlano.usoId) lista.push({ comandaId: comanda.id, status: comanda.status, itemId: item.id, assinaturaId: item.coberturaPlano.assinaturaId });
+    }
+  }
+  return lista;
+}
+
+/** Serviço do agendamento vinculado (para não consumir o plano duas vezes). */
+export function servicoDoAgendamento(empresaId, agendamentoId) {
+  const agendamento = estadoEmpresa(empresaId).agendamentos?.[String(agendamentoId || '')];
+  return agendamento && agendamento.empresaId === String(empresaId) ? agendamento.servicoId || null : null;
+}
+
+/**
+ * Fecha a comanda cujos itens foram todos cobertos por plano (total zero):
+ * não há dinheiro a receber, mas o atendimento precisa sair da fila, baixar os
+ * insumos da ficha técnica e liberar o consumo das sessões do plano.
+ */
+export function fecharComandaSemSaldoBarbearia(empresaId, comandaId, dados = {}) {
+  const estado = estadoEmpresa(empresaId);
+  const comanda = estado.comandas[String(comandaId)];
+  if (!comanda || comanda.empresaId !== String(empresaId)) return null;
+  if (dados.confirmado !== true) throw new Error('Confirme o fechamento da comanda coberta pelo plano.');
+  if (comanda.status === 'paga') return copiarComandaBarbearia(comanda, true);
+  if (!['aberta', 'aguardando_pagamento'].includes(comanda.status)) throw new Error('A comanda não está aberta para fechamento.');
+  if (!comanda.itens.length) throw new Error('Inclua ao menos um item antes de fechar a comanda.');
+  const subtotal = Number(comanda.itens.reduce((soma, item) => soma + Number(item.subtotal || 0), 0).toFixed(2));
+  if (subtotal > 0.009 || Number(comanda.gorjeta || 0) > 0) throw new Error('Há valor a receber nesta comanda: use o recebimento.');
+  if (comanda.itens.some((item) => !item.coberturaPlano)) throw new Error('Só fecha sem recebimento a comanda em que todos os itens são cobertos pelo plano.');
+  const consumoPlanejado = planejarConsumoInternoComanda(estado, comanda);
+  validarEstoqueComandaBarbearia(estado, comanda, consumoPlanejado);
+  const snapshot = raizSnapshot();
+  try {
+    const reserva = commitarReservasOperacao(empresaId, comanda, estado);
+    if (reserva.committed) {
+      comanda.reservaEstoqueMovimentoIds = reserva.movimentos.map((item) => item.id);
+      comanda.consumoInternoBaixado = true;
+      comanda.consumoInternoMovimentoIds = [...(comanda.consumoInternoMovimentoIds || []), ...reserva.movimentos.map((item) => item.id)];
+    } else {
+      aplicarConsumoInternoComanda(estado, comanda, consumoPlanejado);
+    }
+    comanda.status = 'paga';
+    comanda.estoqueBaixado = true;
+    comanda.estoqueBaixadoAntes = true;
+    comanda.saldoPendente = 0;
+    comanda.fechadaPeloPlano = true;
+    comanda.fechadaPor = texto(dados.usuario, 120) || null;
+    comanda.atualizadoEm = dataAtual();
+    comanda.fechadaEm = comanda.atualizadoEm;
+    save();
+    return copiarComandaBarbearia(comanda);
+  } catch (error) {
+    restaurarRaiz(snapshot);
+    throw error;
+  }
+}
+
+/** Grava, no item coberto, o uso do plano que foi registrado na assinatura. */
+export function registrarUsoPlanoNoItemComanda(empresaId, comandaId, itemId, { usoId = null, erro = null } = {}) {
+  const comanda = estadoEmpresa(empresaId).comandas[String(comandaId)];
+  const item = comanda?.itens?.find((linha) => linha.id === String(itemId));
+  if (!item?.coberturaPlano) return null;
+  if (usoId) {
+    item.coberturaPlano.usoId = texto(usoId, 120);
+    item.coberturaPlano.consumidoEm = item.coberturaPlano.consumidoEm || dataAtual();
+    item.coberturaPlano.erro = null;
+  } else if (erro) {
+    item.coberturaPlano.erro = texto(erro, 300);
+  }
+  save();
+  return { ...item.coberturaPlano };
+}
+
+/** Resultado da baixa de estoque na loja virtual para um item da comanda. */
+export function registrarBaixaLojaNoItemComanda(empresaId, comandaId, itemId, { ok = false, movimento = null, erro = null } = {}) {
+  const comanda = estadoEmpresa(empresaId).comandas[String(comandaId)];
+  const item = comanda?.itens?.find((linha) => linha.id === String(itemId));
+  if (!item || item.tipo !== 'loja') return null;
+  item.estoqueLoja = {
+    status: ok ? 'baixado' : 'pendente',
+    movimento: ok ? movimento : (item.estoqueLoja?.movimento || null),
+    erro: ok ? null : texto(erro, 300) || 'Baixa não realizada.',
+    atualizadoEm: dataAtual(),
+  };
+  save();
+  return { ...item.estoqueLoja };
 }
 
 function validarCalendarioAgendamento(estado, agendamento, profissional) {

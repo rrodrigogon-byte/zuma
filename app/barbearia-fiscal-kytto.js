@@ -23,7 +23,7 @@ function itensNormalizados(itens = []) {
     const valorUnitario = dinheiro(item?.valorUnitario ?? item?.precoUnitario ?? item?.preco);
     if (!descricao || !Number.isFinite(quantidade) || valorUnitario <= 0) throw new Error(`Item fiscal ${indice + 1} inválido.`);
     return {
-      tipo: ['servico', 'produto'].includes(String(item?.tipo)) ? String(item.tipo) : 'servico',
+      tipo: String(item?.tipo) === 'loja' ? 'produto' : ['servico', 'produto'].includes(String(item?.tipo)) ? String(item.tipo) : 'servico',
       descricao,
       quantidade: Number(quantidade.toFixed(3)),
       valorUnitario,

@@ -166,6 +166,8 @@ export function anonymizeLocalCustomer(empresaId, { clientIds = [], phones = [],
     if (!ids.has(String(cliente.id))) continue;
     Object.assign(cliente, {
       nome: ANON_NAME, cpfCnpj: '', email: '', telefone: '', endereco: '', observacao: '',
+      // Família, gostos, redes e aniversário também são dados pessoais do titular (e de terceiros).
+      dataNascimento: '', aniversario: '', familia: [], familiaConsentimento: null, preferencias: {}, redesSociais: {},
       anonimizadoEm: stamp, atualizadoEm: stamp,
     });
     for (const canal of Object.keys(cliente.consentimentos || {})) {

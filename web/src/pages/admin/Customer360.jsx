@@ -8,6 +8,7 @@ import { API, Badge, daysLabel, EmptyLine, FIELD_LABELS, fmtDay, REASONS, REVEAL
 import Portfolio from './customer360/Portfolio'
 import { AccessHistory, AnonymizePanel, ConsentEditor, IdentityPanel, NotesAndTags } from './customer360/Panels'
 import AiMemoryPanel from './customer360/AiMemoryPanel'
+import { ConsumoCliente, VisaoCliente } from './customer360/HistoricoCliente'
 
 // ─────────────────────────── revelar ───────────────────────────
 
@@ -46,6 +47,8 @@ function RevealDialog({ field, onClose, onConfirm }) {
 // ─────────────────────────── ficha ───────────────────────────
 
 const TABS = [
+  ['visao', 'Visão do cliente'],
+  ['consumo', 'Consumo'],
   ['timeline', 'Linha do tempo'],
   ['barbearia', 'Barbearia'],
   ['loja', 'Loja online'],
@@ -57,7 +60,7 @@ const TABS = [
 function CustomerProfile({ reference }) {
   const { toast } = useToast()
   const [state, setState] = useState({ loading: true, data: null, error: '', status: 0 })
-  const [tab, setTab] = useState('timeline')
+  const [tab, setTab] = useState('visao')
   const [revealed, setRevealed] = useState({})
   const [revealField, setRevealField] = useState('')
   const [exporting, setExporting] = useState(false)
@@ -189,6 +192,10 @@ function CustomerProfile({ reference }) {
     </div>
 
     <div className="c360-panel" role="tabpanel" id={`c360-panel-${tab}`} aria-labelledby={`c360-tab-${tab}`} tabIndex={0}>
+      {tab === 'visao' && <VisaoCliente historico={data.historico} agendarHref={!data.anonimizado ? `/admin/barbearia-erp?area=operacao&tab=Agenda${data.clienteBarbeariaId ? `&agendarCliente=${encodeURIComponent(data.clienteBarbeariaId)}` : ''}` : ''} />}
+
+      {tab === 'consumo' && <ConsumoCliente historico={data.historico} />}
+
       {tab === 'timeline' && (data.linhaDoTempo.length ? <ol className="c360-timeline">
         {data.linhaDoTempo.map((item, index) => <li key={`${item.tipo}-${item.em}-${index}`}>
           <span className={`c360-dot type-${item.tipo}`} aria-hidden="true">{TIMELINE_ICONS[item.tipo] || '•'}</span>
