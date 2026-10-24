@@ -68,9 +68,11 @@ test('admin da empresa: isolamento, guardas legados, BI, cliente automático e W
     seq: 1,
     lancamentos: [{ id: 900, tipo: 'receita', categoria: 'Inscrição Torneio', descricao: 'Receita do evento', valor: 300, status: 'pendente', vencimento: '2026-01-01' }],
     barbearias: { 'emp-a': {
+      servicos: { 'srv-sintetico': { id: 'srv-sintetico', empresaId: 'emp-a', nome: 'Corte sintético', ativo: true } },
+      profissionais: { 'prof-sintetico': { id: 'prof-sintetico', empresaId: 'emp-a', nome: 'Barbeiro sintético', ativo: true } },
       comandas: { 'cmd-sem-loja': { id: 'cmd-sem-loja', empresaId: 'emp-a', lojaId: '', status: 'aberta', itens: [], pagamentos: [], criadoEm: '2030-06-11T12:00:00.000Z' } },
       agendamentos: {
-        'agenda-loja-a': { id: 'agenda-loja-a', empresaId: 'emp-a', lojaId: 'loja-a', status: 'agendado', dataAgenda: '2030-06-11', dataHora: '2030-06-11T15:00:00.000Z', clienteNome: 'Cliente sintético A' },
+        'agenda-loja-a': { id: 'agenda-loja-a', empresaId: 'emp-a', lojaId: 'loja-a', status: 'agendado', dataAgenda: '2030-06-11', dataHora: '2030-06-11T15:00:00.000Z', clienteNome: 'Cliente sintético A', servicoId: 'srv-sintetico', profissionalId: 'prof-sintetico' },
         'agenda-loja-a2': { id: 'agenda-loja-a2', empresaId: 'emp-a', lojaId: 'loja-a2', status: 'agendado', dataAgenda: '2030-06-11', dataHora: '2030-06-11T16:00:00.000Z', clienteNome: 'Cliente sintético filial' },
         'agenda-sem-loja': { id: 'agenda-sem-loja', empresaId: 'emp-a', lojaId: '', status: 'agendado', dataAgenda: '2030-06-11', dataHora: '2030-06-11T17:00:00.000Z', clienteNome: 'Cliente sintético sem unidade' },
       },
@@ -203,6 +205,8 @@ test('admin da empresa: isolamento, guardas legados, BI, cliente automático e W
     assert.equal(painel.body.dataQuality.sources.commerce.status, 'unavailable');
     assert.equal(painel.body.dataQuality.sources.agenda.upcoming, 1, 'agenda unitária exclui outra filial e registro sem unidade');
     assert.ok(painel.body.upcomingAppointments.every((item) => item.id === 'agenda-loja-a'));
+    assert.equal(painel.body.upcomingAppointments[0].service, 'Corte sintético', 'agendamento importado só com ids mostra o nome do serviço');
+    assert.equal(painel.body.upcomingAppointments[0].professional, 'Barbeiro sintético');
     assert.match(painel.body.dataQuality.notes.join(' '), /3 registro\(s\).*excluídos/);
     assert.deepEqual(painel.body.strategicMix.items.map((item) => item.id), ['services', 'products', 'plans']);
     assert.equal(painel.body.strategicMix.planPaymentsAvailable, false, 'uma unidade não recebe pagamentos de planos legados sem lojaId');

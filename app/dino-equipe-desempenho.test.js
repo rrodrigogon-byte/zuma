@@ -436,3 +436,26 @@ test('visão por serviços: ranking do que foi vendido, comparação e explosão
   assert.throws(() => buildEquipeItens(root, { ...PERIOD, visao: 'senhas' }), (error) => error.code === 'PERFORMANCE_QUERY_INVALID');
   assert.deepEqual(root, before);
 });
+
+test('Dino: extrato Avec gravado no cadastro legado entra no total, com ids canônicos e sem duplicar', () => {
+  const DINO = 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
+  const LOJA = 'ab049a75-6e2e-4cc9-abbc-6fd11cdda1d8';
+  const lanc = (id, empresaId, lojaId, valor, extra = {}) => ({
+    id, empresaId, lojaId, origem: 'avec-import-financeiro-20261022', metadata: { historicoAvec: true },
+    tipo: 'receita', status: 'pago', valor, dataOperacao: '2026-03-01T12:00:00.000Z', pagoEm: '2026-03-01T12:00:00.000Z', ...extra,
+  });
+  const root = {
+    barbearias: { [DINO]: { profissionais: {}, servicos: {}, produtosRevenda: {}, agendamentos: {}, comandas: {}, vendasRevenda: {}, historicoAtendimentos: {}, configuracao: {} } },
+    financeiroKytto: { empresas: {
+      [DINO]: { lancamentos: { canon: lanc('canon', DINO, LOJA, 50, { chaveIdempotencia: 'k-dup' }) } },
+      'emp-kytto-001': { lancamentos: {
+        l1: lanc('l1', 'emp-kytto-001', 'dino-web-estoque', 200),
+        dup: lanc('dup', 'emp-kytto-001', 'dino-web-estoque', 999, { chaveIdempotencia: 'k-dup' }),
+        outraUnidade: lanc('outraUnidade', 'emp-kytto-001', 'loja-x', 70),
+      } },
+      'emp-outra': { lancamentos: { o1: lanc('o1', 'emp-outra', 'loja-y', 1000) } },
+    } },
+  };
+  const result = buildEquipeDesempenho(root, { empresaId: DINO, lojaId: LOJA, inicio: '2026-03-01', fim: '2026-03-02' });
+  assert.equal(result.summary.historicalFinanceRevenue, 250, 'canônico (50) + legado da Dino (200); a cópia com a mesma chave e as outras unidades/empresas ficam fora');
+});

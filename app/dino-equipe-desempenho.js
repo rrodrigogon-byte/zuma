@@ -1,5 +1,5 @@
 import { calcularComissoesEstado } from './barbearia-erp-kytto.js';
-import { historicoAvecVigente } from './dino-historico-avec.js';
+import { historicoAvecVigente, canonizarRegistroAvec } from './dino-historico-avec.js';
 
 const TIME_ZONE = 'America/Cuiaba';
 const MAX_DAYS = 93;
@@ -105,6 +105,27 @@ function recordsForCompany(value, empresaId) {
   return list(value).filter((item) => companyMatches(item, empresaId)).map(cloneRecord);
 }
 
+// O extrato financeiro do Avec da Dino foi gravado no cadastro legado (emp-kytto-001 /
+// dino-web-estoque). Aqui ele é somado ao canônico, com os ids convertidos e sem repetir
+// lançamento que já exista no canônico (mesmo id, chave de idempotência ou impressão).
+function lancamentosComCadastroLegado(root, financeCompany, empresaId) {
+  const proprios = list(financeCompany.lancamentos);
+  const ids = new Set(proprios.map(idOf).filter(Boolean));
+  const chaves = new Set(proprios.map((item) => item?.chaveIdempotencia).filter(Boolean));
+  const impressoes = new Set(proprios.map((item) => item?.fingerprint).filter(Boolean));
+  const extras = [];
+  for (const [chave, store] of Object.entries(root?.financeiroKytto?.empresas || {})) {
+    if (chave === String(empresaId)) continue;
+    for (const item of list(store?.lancamentos)) {
+      const canonico = canonizarRegistroAvec(item);
+      if (!canonico || String(canonico.empresaId) !== String(empresaId) || String(item.empresaId) === String(empresaId)) continue;
+      if (ids.has(idOf(item)) || (item.chaveIdempotencia && chaves.has(item.chaveIdempotencia)) || (item.fingerprint && impressoes.has(item.fingerprint))) continue;
+      extras.push({ ...canonico, somenteLeitura: true, fonteCadastro: 'legado' });
+    }
+  }
+  return [...proprios, ...extras];
+}
+
 function normalizeRoot(root, empresaId, lojaId) {
   const barbearia = root?.barbearias?.[empresaId] || root?.barbearias?.[String(empresaId)] || {};
   const financeCompany = root?.financeiroKytto?.empresas?.[empresaId] || root?.financeiroKytto?.empresas?.[String(empresaId)] || {};
@@ -121,7 +142,7 @@ function normalizeRoot(root, empresaId, lojaId) {
     historicoAtendimentos: recordsForCompany(historicoAvecVigente(barbearia.historicoAtendimentos), empresaId),
     configuracao: { ...(barbearia.configuracao || {}), taxasPagamento: { ...(barbearia.configuracao?.taxasPagamento || {}) } },
   };
-  const financial = recordsForCompany(financeCompany.lancamentos, empresaId).filter((item) => exactUnit(item, lojaId));
+  const financial = recordsForCompany(lancamentosComCadastroLegado(root, financeCompany, empresaId), empresaId).filter((item) => exactUnit(item, lojaId));
   const professionals = raw.profissionais.filter((item) => !unitOf(item) || exactUnit(item, lojaId));
   const professionalIds = new Set(professionals.map(idOf).filter(Boolean));
   const strict = {

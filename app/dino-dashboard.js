@@ -478,7 +478,9 @@ export function buildDinoDashboardAnalytics(input = {}, options = {}) {
   // cliente novo = cadastrado no período (criadoEm), sem o cliente padrão e sem os trazidos por
   // importação; atualizar um cadastro antigo (consentimento, telefone) não o torna novo
   // A carga do AVEC (09/10/2026) marcou os 3.327 clientes trazidos com "Origem AVEC (carga …)" na observação.
-  const importado = (item) => Boolean(item.importadoEm)
+  // A carga completa (22/10/2026) grava origemImportacao/sourceSystem em vez de origem/observação.
+  const importado = (item) => Boolean(item.importadoEm || item.origemImportacao)
+    || /^avec$/i.test(String(item.sourceSystem || ''))
     || /import|avec|\(carga/i.test(`${item.origem || ''} ${item.origemCadastro || ''}`)
     || /^origem\s+\S+.*\(carga|importa[cç][aã]o|importado/i.test(String(item.observacao || ''));
   const unitCustomerIds = new Set([
