@@ -19,6 +19,6 @@ try {
     : await previewHistoryArchive(client, planHistoryArchive(await getSource(), scope));
   console.log(JSON.stringify(result));
 } catch (error) {
-  console.error(JSON.stringify({ ok: false, code: error.code || 'HISTORY_ARCHIVE_FAILED', applied: false }));
+  console.error(JSON.stringify({ ok: false, code: error.code || 'HISTORY_ARCHIVE_FAILED', commitConfirmed: false }));
   process.exitCode = 1;
 } finally { await client.end(); }
