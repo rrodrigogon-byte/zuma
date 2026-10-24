@@ -128,6 +128,14 @@ export function registerDinoAdminRoutes(app, deps) {
     catch (error) { respondFinanceError(res, error); }
   });
 
+  app.get(`${BASE}/financeiro/dre`, (req, res) => {
+    if (!gestor(req, res)) return;
+    try {
+      const mes = req.query?.mes || new Date().toISOString().slice(0, 7);
+      res.json(financeiroKytto.dreGerencial(legacyEmpresaId(req), { mes, lojaId: legacyLojaId(req) }));
+    } catch (error) { respondFinanceError(res, error); }
+  });
+
   app.get(`${BASE}/financeiro/categorias`, (req, res) => {
     if (!gestorOuOperador(req, res)) return;
     res.json(CATEGORIAS_BARBEARIA);
