@@ -46,14 +46,16 @@ test('domínio Dino resolve empresa e unidade canônicas sem cabeçalhos de sele
   fs.writeFileSync(dbPath, JSON.stringify({
     seq: 1,
     usuarios: [{ id: 1, nome: 'Administrador Dino', email: 'admin', senhaHash: bcrypt.hashSync(senhaTeste, 4), role: 'admin', ativo: true }],
+    // Desde 24/10 o ERP da Dino é o cadastro sob o id Commerce (agenda, equipe e planos).
     barbearias: {
-      'emp-kytto-001': {
+      'd0d0ac01-8e50-4b61-8c79-de4aaa916da6': {
         configuracao: {
           slugPublico: 'dino',
           nomePublico: 'Barbearia Dino',
-          lojas: { 'dino-web-estoque': { lojaId: 'dino-web-estoque', horarioAbertura: '08:00' } },
+          lojas: { 'ab049a75-6e2e-4cc9-abbc-6fd11cdda1d8': { lojaId: 'ab049a75-6e2e-4cc9-abbc-6fd11cdda1d8', horarioAbertura: '08:00' } },
         },
       },
+      'emp-kytto-001': { configuracao: { nomePublico: 'Reimportação Avec' } },
     },
   }));
   const port = 32500 + Math.floor(Math.random() * 400);
@@ -72,7 +74,7 @@ test('domínio Dino resolve empresa e unidade canônicas sem cabeçalhos de sele
     });
     assert.equal(overview.response.status, 200, JSON.stringify(overview.body));
     assert.equal(overview.body.configuracao.nomePublico, 'Barbearia Dino');
-    assert.equal(overview.body.configuracaoUnidade.lojaId, 'dino-web-estoque');
+    assert.equal(overview.body.configuracaoUnidade.lojaId, 'ab049a75-6e2e-4cc9-abbc-6fd11cdda1d8');
     const outroHost = await request(base, '/api/admin/barbearia/overview?data=2030-06-10', {
       headers: { Authorization: `Bearer ${login.body.token}`, 'X-Forwarded-Host': 'setpoint.kytto.com.br' },
     });

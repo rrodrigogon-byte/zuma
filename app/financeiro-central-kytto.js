@@ -523,9 +523,37 @@ export function cancelarLancamento(empresaId, id, usuarioOuOpcoes = 'sistema@kyt
   return atualizarLancamento(empresa, id, { status: 'cancelado', observacao: `Cancelado por ${texto(extras.usuarioId || extras.usuario || usuarioOuOpcoes || 'sistema@kytto.local', 120)}` }, { ...extras, permitirAutomatico: true, lojaId: extras.lojaId || lancamento.lojaId, legacy: semLoja(lancamento) });
 }
 
+// Extrato JSON da Dino gravado sob o id legado (histórico Avec de 22/10 e o que foi
+// lançado entre 23 e 24/10, quando o ERP apontou para lá). Entra na leitura da Dino
+// como somente leitura, sem duplicar lançamentos que já existam no cadastro canônico.
+const DINO_EMPRESA_CANONICA = 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
+const DINO_LOJA_CANONICA = 'ab049a75-6e2e-4cc9-abbc-6fd11cdda1d8';
+const DINO_EMPRESA_LEGADA = 'emp-kytto-001';
+const DINO_LOJA_LEGADA = 'dino-web-estoque';
+
+function lancamentosLegadosDaDino(proprios) {
+  const legado = db().financeiroKytto?.empresas?.[DINO_EMPRESA_LEGADA]?.lancamentos;
+  if (!legado) return [];
+  const ids = new Set(proprios.map((item) => item.id));
+  const chaves = new Set(proprios.map((item) => item.chaveIdempotencia).filter(Boolean));
+  const impressoes = new Set(proprios.map((item) => item.fingerprint).filter(Boolean));
+  return Object.values(legado)
+    .filter((item) => item && item.empresaId === DINO_EMPRESA_LEGADA)
+    .filter((item) => !ids.has(item.id) && !(item.chaveIdempotencia && chaves.has(item.chaveIdempotencia)) && !(item.fingerprint && impressoes.has(item.fingerprint)))
+    .map((item) => ({
+      ...item,
+      empresaId: DINO_EMPRESA_CANONICA,
+      lojaId: item.lojaId === DINO_LOJA_LEGADA ? DINO_LOJA_CANONICA : item.lojaId,
+      somenteLeitura: true,
+      fonteCadastro: 'legado',
+    }));
+}
+
 export function listarLancamentos(empresaId, filtros = {}) {
   const empresa = idEscopo(empresaId);
   const store = storeEmpresa(empresa);
+  const proprios = Object.values(store.lancamentos).filter((item) => item.empresaId === empresa);
+  const base = empresa === DINO_EMPRESA_CANONICA && filtros.semCadastroLegado !== true ? [...proprios, ...lancamentosLegadosDaDino(proprios)] : proprios;
   const tipo = texto(filtros.tipo, 20).toLowerCase();
   const status = texto(filtros.status, 20).toLowerCase();
   const origem = texto(filtros.origem, 60).toLowerCase();
@@ -534,8 +562,7 @@ export function listarLancamentos(empresaId, filtros = {}) {
   const ate = texto(filtros.ate, 10);
   const lojaId = idEscopo(filtros.lojaId);
   const incluirQuarentena = filtros.incluirQuarentena === true || filtros.quarantine === true || filtros.quarentena === true;
-  return Object.values(store.lancamentos)
-    .filter((item) => item.empresaId === empresa)
+  return base
     .filter((item) => incluirQuarentena || !semLoja(item))
     .filter((item) => !lojaId || item.lojaId === lojaId)
     .filter((item) => !tipo || item.tipo === tipo)
