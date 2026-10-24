@@ -31,3 +31,21 @@ test('aceita o alias Commerce da empresa sem misturar outras lojas', () => {
   assert.deepEqual(lojasDaEmpresa([loja], 'dino-commerce-id'), [loja])
   assert.equal(lojasDaEmpresa([loja], 'outra-empresa').length, 0)
 })
+
+test('lojas do Commerce sem empresa não apagam o vínculo já conhecido e herdam a empresa ativa', async () => {
+  const { mesclarLojasComerciais } = await import('./context-selection.js')
+  const existentes = [{ id: 'dino-matriz', empresaId: 'dino', nome: 'DINO-MATRIZ' }]
+  const novas = [{ id: 'dino-matriz', codigo: 'DINO-MATRIZ', nome: 'Barbearia Dino', ativa: true }, { id: 'loja-nova', nome: 'Nova', ativa: true }]
+  const mescladas = mesclarLojasComerciais(existentes, novas, 'dino-commerce')
+  assert.equal(mescladas.find((loja) => loja.id === 'dino-matriz').empresaId, 'dino')
+  assert.equal(mescladas.find((loja) => loja.id === 'loja-nova').commerceEmpresaId, 'dino-commerce')
+  assert.deepEqual(selecionarLojaAutomatica(mescladas, 'dino').id, 'dino-matriz')
+})
+
+test('repara entrada gravada sem vínculo usando a referência conhecida', async () => {
+  const { repararLojasSemEmpresa } = await import('./context-selection.js')
+  const reparadas = repararLojasSemEmpresa([{ id: 'dino-matriz', nome: 'Barbearia Dino' }, { id: 'x', nome: 'X' }], [{ id: 'dino-matriz', empresaId: 'emp', commerceEmpresaId: 'dino-commerce' }])
+  assert.equal(reparadas[0].commerceEmpresaId, 'dino-commerce')
+  assert.equal(reparadas[1].empresaId, undefined)
+  assert.equal(selecionarLojaAutomatica(reparadas, 'dino-commerce').id, 'dino-matriz')
+})

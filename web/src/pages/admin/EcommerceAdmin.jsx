@@ -16,6 +16,7 @@ function CustomerName({ id, children }) {
 import { adminProductMediaUrl, archiveCoreVariant, createCoreCategory, createCoreCustomer, createCoreCustomerAddress, createCoreDomain, createCoreFulfillment, createCorePaymentAccount, createCorePaymentAttempt, createCoreProductMedia, createCorePromotionTemplate, createCoreShippingLabel, cancelCoreShippingLabel, createCoreShippingAccount, createCoreShippingMethod, createCoreStorefront, createCoreCreditAccount, updateCoreCreditAccount, reconcileCorePayment, updateCoreStorefront, createCorePromotion, createCoreVariant, deleteCoreCustomerAddress, deleteCoreProduct, deleteCoreProductMedia, formatPromotionValidity, listCoreProductMedia, loadCommerceAdmin, loadCoreCustomerAddresses, loadCoreReports, localDateTimeToUtcIso, promotionStatus, promotionStatusLabel, saveCoreProduct, setPrimaryCoreDomain, syncCorePayment, syncCoreShippingTracking, toggleCoreProduct, updateCoreCategory, updateCoreCustomer, updateCoreCustomerAddress, updateCoreFulfillment, updateCoreOrder, updateCorePaymentAccount, updateCoreShippingAccount, updateCoreVariant, updateCorePromotion, uploadCoreProductMedia, updateCoreShippingMethod, validateProductCommercialInput, verifyCoreDomain, utcIsoToLocalDateTime } from './commerce-admin-adapter'
 import { api } from '../../lib/api'
 import { useAuth } from '../../lib/auth'
+import { mesclarLojasComerciais } from '../../lib/context-selection'
 import { isTenantScope } from '../../lib/tenant-scope'
 import { paymentAccountForm, paymentAccountPublicConfig, primaryVerifiedDomain } from '../../lib/payment-account-form'
 import { commerceDisplayName, DINO_COMMERCE_LOGO, isDinoBrandContext, isStalloneBrandContext, STALLONE_LOGO_LIGHT } from '../../lib/brand'
@@ -298,10 +299,10 @@ function CommerceAdminWorkspace({ defaultTab }) {
 
   function syncStoreContext(storefront) {
     if (!storefront?.loja_id) return
-    const merged = new Map((Array.isArray(lojasAcessiveis) ? lojasAcessiveis : []).map(item => [item.id, item]))
-    commerceStores.forEach(item => merged.set(item.id, item))
-    const loja = commerceStores.find(item => item.id === storefront.loja_id)
-    if (loja) atualizarContextoLojas({ lojas_acessiveis: Array.from(merged.values()), loja })
+    // Preserva empresaId/commerceEmpresaId já conhecidos: sem eles a loja sai do contexto ativo.
+    const lojas = mesclarLojasComerciais(lojasAcessiveis, commerceStores, empresaAtivaAuth?.id || '')
+    const loja = lojas.find(item => item.id === storefront.loja_id)
+    if (loja) atualizarContextoLojas({ lojas_acessiveis: lojas, loja })
   }
 
   function selectStorefront(storefront) {
