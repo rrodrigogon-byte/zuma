@@ -12,11 +12,11 @@ import { executeDinoReversal, getDinoReversalMemoryAdapter } from './core/dino-r
 const STATUS = new Set(['agendado', 'confirmado', 'em_atendimento', 'concluido', 'cancelado', 'nao_compareceu']);
 const TRANSICOES = {
   agendado: new Set(['confirmado', 'em_atendimento', 'cancelado', 'nao_compareceu']),
-  confirmado: new Set(['agendado', 'em_atendimento', 'cancelado', 'nao_compareceu']),
-  em_atendimento: new Set(['confirmado', 'agendado', 'concluido', 'cancelado', 'nao_compareceu']),
-  concluido: new Set(['em_atendimento']),
-  cancelado: new Set(['agendado', 'confirmado']),
-  nao_compareceu: new Set(['agendado', 'confirmado']),
+  confirmado: new Set(['em_atendimento', 'cancelado', 'nao_compareceu']),
+  em_atendimento: new Set(['concluido', 'cancelado', 'nao_compareceu']),
+  concluido: new Set(),
+  cancelado: new Set(),
+  nao_compareceu: new Set(),
 };
 
 function texto(value, limite = 240) {
@@ -1139,6 +1139,11 @@ function planoNormalizado(dados = {}, anterior = {}) {
     servicosIds,
     // Parte da mensalidade (%) que vai para o pote de comissão dos profissionais.
     percentualPote: Math.min(100, Math.max(0, numero(dados.percentualPote ?? dados.percentual_pote ?? anterior.percentualPote, 0))),
+    // Como o pote é dividido: pelo valor de tabela dos serviços usados ("valor_tabela")
+    // ou em partes iguais por atendimento pelo plano ("atendimento", como era no Avec).
+    rateioPote: ['valor_tabela', 'atendimento'].includes(String(dados.rateioPote ?? dados.rateio_pote ?? anterior.rateioPote)) ? String(dados.rateioPote ?? dados.rateio_pote ?? anterior.rateioPote) : 'valor_tabela',
+    // Valor fixo (R$) pago ao profissional por atendimento feito pelo plano; soma ao pote, se houver.
+    valorFixoPorUso: Math.max(0, dinheiro(dados.valorFixoPorUso ?? dados.valor_fixo_por_uso ?? anterior.valorFixoPorUso ?? 0)),
     ativo: dados.ativo ?? anterior.ativo ?? true,
   };
 }
@@ -2625,9 +2630,6 @@ export function alterarStatusAgendamento(empresaId, agendamentoId, status, dados
   if (!STATUS.has(novoStatus)) throw new Error('Status de atendimento inválido.');
   if (novoStatus !== atual.status && !TRANSICOES[atual.status]?.has(novoStatus)) {
     throw new Error(`Transição de ${atual.status} para ${novoStatus} não permitida.`);
-  }
-  if (atual.status === 'concluido' && atual.financeiroLancamentoId && novoStatus !== 'concluido') {
-    throw new Error('Não é possível alterar status de atendimento já faturado no financeiro.');
   }
   if (novoStatus === 'confirmado' && atual.confirmacaoAutomatica?.ativa === true
       && atual.confirmacaoAutomatica.status === 'segunda_enviada'
