@@ -1,5 +1,7 @@
 // Primeiro import: a vigia de memória começa antes de carregar o banco (ver vigia-memoria.js).
 import { situacaoMemoria } from './vigia-memoria.js';
+import { registerAvecMixRoutes } from './avec-revenue-mix-routes.js';
+import { loadAvecMix } from './core/avec-revenue-mix.js';
 import express from 'express';
 import { createPerformanceMetrics, eventLoopMetrics } from './core/performance-metrics.js';
 import { stallonePageMeta } from './core/stallone-page-meta.js';
@@ -171,7 +173,8 @@ app.use(avecGovernanceNoStore);
 app.use(equipePerformanceNoStore);
 // XML de NF-e de entrada e extrato OFX podem passar de 1 MB: os routers leem esses corpos com limite próprio.
 const CORPOS_GRANDES = ['/api/admin/suprimentos/nfe/', '/api/admin/razao/conciliacao/importar', '/api/pdv-offline/sincronizar'];
-const corpoJsonGlobal = (req) => !CORPOS_GRANDES.some((p) => String(req.originalUrl || '').startsWith(p)) && /^application\/json\b/i.test(String(req.headers['content-type'] || ''));
+const AVEC_MIX_UPLOADS = new Set(['/api/admin/barbearia/avec-mix/preview', '/api/admin/barbearia/avec-mix/apply']);
+const corpoJsonGlobal = (req) => !AVEC_MIX_UPLOADS.has(String(req.originalUrl || '').split('?')[0]) && !CORPOS_GRANDES.some((p) => String(req.originalUrl || '').startsWith(p)) && /^application\/json\b/i.test(String(req.headers['content-type'] || ''));
 app.use(express.json({ limit: '1mb', type: corpoJsonGlobal, verify: (req, res, buf) => { if (req.originalUrl?.startsWith('/api/webhooks/') || req.originalUrl?.startsWith('/api/integracoes/')) req.rawBody = Buffer.from(buf); } }));
 
 // SSE — realtime para KDS, Mesas, Portaria
@@ -3825,6 +3828,8 @@ async function metasDoMes({ empresaId, now, barbershopInput, commerceContext, pr
   return { configured: true, comparable: true, targetScope: 'company', month: mes.label, day: mes.day, daysInMonth: mes.daysInMonth, metas, historicoAvecIncluido: historicoAtendimentos > 0 || historicoReceita > 0, items: dinoMetas.progressoMetas(metas, atual, mes) };
 }
 
+registerAvecMixRoutes(app, { jsonParser: express.json({ limit: '12mb' }), requirePlatformAdmin, empresaIdFor: legacyEmpresaId, lojaIdFor: legacyLojaId, acquireClient: loyaltyDb.acquireClient, releaseClient: loyaltyDb.releaseClient });
+
 app.get('/api/admin/barbearia/analytics', async (req, res) => {
   try {
     const empresaId = legacyEmpresaId(req);
@@ -3907,7 +3912,10 @@ app.get('/api/admin/barbearia/analytics', async (req, res) => {
       commerce: commerceAvailable ? { revenue: Number(commerceData?.sales?.summary?.confirmed_total || 0), cost: commerceData?.cost ?? null } : null,
       includeHistoricalFinance: true,
     }, win);
+    let historicalMix = null, historicalMixUnavailable = false;
+    try { historicalMix = await loadAvecMix({ query: commerceDb.queryRead }, empresaId, lojaId); } catch { historicalMixUnavailable = true; }
     const analytics = buildDinoDashboardAnalytics({
+      historicalMix, historicalMixUnavailable,
       commerceAvailable,
       commerceUnavailableReason,
       commerceCurrent,

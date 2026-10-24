@@ -1,3 +1,4 @@
+import { mixForPeriod } from './core/avec-revenue-mix.js';
 const ALLOWED_PERIODS = new Set([1, 7, 30, 90]);
 const DAY_MS = 86_400_000;
 const TIME_ZONE = 'America/Cuiaba';
@@ -281,51 +282,64 @@ function aggregate(rows, keyName) {
 }
 
 /**
- * O mix mostra apenas recebimentos cujo tipo comercial é conhecido. Itens de
- * e-commerce e importações financeiras que não trazem itemização são mantidos
- * fora da base percentual; assim, o painel nunca converte receita histórica em
- * serviço ou produto por suposição.
+ * O mix usa itens tipados da operação e do relatório Avec auditado.
+ * Recebimentos financeiros sem itemização não são classificados por suposição.
+ * No período coberto, o snapshot substitui os itens da operação para não somar
+ * duas representações da mesma venda.
  */
 function strategicRevenueMix(input, window, consolidatedRevenue) {
   const totals = new Map([
     ['services', { value: 0, records: 0 }],
     ['products', { value: 0, records: 0 }],
     ['plans', { value: 0, records: 0 }],
+    ['tips', { value: 0, records: 0 }],
   ]);
-  const add = (id, value) => {
+  const add = (id, value, records = 1) => {
     const item = totals.get(id);
     if (!item) return;
     item.value += num(value);
-    item.records += 1;
+    item.records += records;
   };
 
-  const items = saleItems(input, window);
+  const dayFor = date => { const p = zonedParts(date, window.timeZone); return `${p.year}-${String(p.month).padStart(2, '0')}-${String(p.day).padStart(2, '0')}`; };
+  const coveredByAvec = date => { const day = date && dayFor(date); return Boolean(day && input.historicalMix && day >= input.historicalMix.summary.from && day <= input.historicalMix.summary.to); };
+  // No intervalo completo exportado, o 0186 é a fonte exclusiva do mix.
+  // Não somar outra vez itens operacionais/assinaturas que possam representar a mesma venda.
+  const items = saleItems(input.historicalMix ? { ...input, commands: list(input.commands).filter(row => !coveredByAvec(timestamp(row))), retailSales: list(input.retailSales).filter(row => !coveredByAvec(timestamp(row))) } : input, window);
   for (const item of items) add(item.mixCategory, item.revenue);
 
   if (input.subscriptionPaymentsAvailable !== false) {
     for (const payment of list(input.subscriptionPayments)) {
       const paidAt = dateValue(payment.registradoEm || payment.recordedAt || payment.pagoEm);
-      if (!paidAt || paidAt < window.fromDate || paidAt >= window.toDate) continue;
+      if (!paidAt || paidAt < window.fromDate || paidAt >= window.toDate || coveredByAvec(paidAt)) continue;
       if (num(payment.valor) <= 0) continue;
       add('plans', payment.valor);
     }
   }
 
+  const historicalEnd = localMidnightUtc(window.toDate, window.timeZone);
+  if (window.toDate > historicalEnd) historicalEnd.setTime(historicalEnd.getTime() + DAY_MS);
+  const historicalDetails = mixForPeriod(input.historicalMix, dayFor(window.fromDate), dayFor(historicalEnd));
+  for (const row of historicalDetails) add(row.type, row.value, row.records);
   const definitions = [
     { id: 'services', label: 'Serviços', description: 'Itens de serviço em comandas pagas' },
     { id: 'products', label: 'Produtos', description: 'Revenda direta e itens de produto em comandas pagas' },
-    { id: 'plans', label: 'Planos e pacotes', description: 'Ciclos de assinatura com pagamento registrado' },
+    { id: 'plans', label: 'Planos e pacotes', description: 'Pacotes Avec e ciclos de assinatura com pagamento registrado' },
+    ...(input.historicalMix ? [{ id: 'tips', label: 'Gorjetas', description: 'Caixinhas identificadas no Avec' }] : []),
   ];
   const planPaymentsAvailable = input.subscriptionPaymentsAvailable !== false;
   const total = [...totals.values()].reduce((sum, item) => sum + item.value, 0);
-  const operationalItemized = num(totals.get('services')?.value) + num(totals.get('products')?.value);
+  const operationalItemized = items.reduce((sum, item) => sum + num(item.revenue), 0);
   const unclassifiedConsolidatedRevenue = Math.max(0, num(consolidatedRevenue) - operationalItemized);
   return {
     total: money(total),
+    historical: input.historicalMix ? { reportHash: input.historicalMix.reportHash, ...input.historicalMix.summary, selectedFrom: dayFor(window.fromDate), selectedToExclusive: dayFor(historicalEnd), value: money(historicalDetails.reduce((sum, row) => sum + row.value, 0)), details: historicalDetails } : null,
+    historicalMixUnavailable: input.historicalMixUnavailable === true,
+    basis: input.historicalMix ? 'sold-items-and-operational-payments' : 'operational-payments',
     items: definitions.map((definition) => {
       const item = totals.get(definition.id);
       const value = money(item?.value || 0);
-      const available = definition.id !== 'plans' || planPaymentsAvailable;
+      const available = definition.id !== 'plans' || planPaymentsAvailable || Boolean(input.historicalMix);
       return {
         ...definition,
         value,
@@ -341,7 +355,7 @@ function strategicRevenueMix(input, window, consolidatedRevenue) {
     reconciliationDelta: money(num(consolidatedRevenue) - operationalItemized),
     planPaymentsAvailable,
     planPaymentsReason: input.subscriptionPaymentsReason || null,
-    note: 'A base percentual reúne apenas valores com classificação comercial rastreável. Histórico financeiro, e-commerce sem itemização e ajustes não são redistribuídos entre as categorias.',
+    note: input.historicalMix ? 'Histórico Avec por data de venda: valor da linha menos desconto. No intervalo coberto, o 0186 substitui os demais itens do mix para evitar sobreposição. O caixa consolidado usa recebimentos e pode divergir por datas e ajustes. Estes itens não geram novos lançamentos financeiros nem movimentam estoque.' : 'A base percentual reúne apenas valores com classificação comercial rastreável. Histórico financeiro, e-commerce sem itemização e ajustes não são redistribuídos entre as categorias.',
   };
 }
 

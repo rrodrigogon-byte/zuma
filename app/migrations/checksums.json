@@ -101,5 +101,6 @@
  "100_fiscal_completo.sql": "5b002b86f5731e1566bcb26a3e300d68f95f0345618ea998dc4030fc84db9b1c",
  "101_varejo_balanca.sql": "6d9278c9fbe369bdfb1fc26e5efab29e2cc08313f8891382f714787cf46296cb",
  "102_perfis_acesso.sql": "bce1bd8e1730a4479539bb94ccb5afbd73e248e01e37bc2df929158dd627c35c",
- "103_barbershop_history_archive.sql": "c62491b79598cd5d8bacb4b86e703b1dc3e7723ffa0d0f6a18a968096932eafb"
+ "103_barbershop_history_archive.sql": "c62491b79598cd5d8bacb4b86e703b1dc3e7723ffa0d0f6a18a968096932eafb",
+ "104_avec_revenue_mix.sql": "11315b615ad834a9e95f90cd6bd9d4d6210992ce9e0d0f35c01efc8a6b64d010"
 }
