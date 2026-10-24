@@ -774,7 +774,8 @@ async function escopoComercial(req, permissao) {
 const empresaDasUnidades = (req) => escopoComercial(req, permissaoDasUnidades(req));
 // Financeiro JSON antigo da empresa (a barbearia ainda grava lá) para o razão ler.
 async function fonteJsonDoRazao(empresaId) {
-  const chaveLegada = legacyEmpresaIdFromCommerce(empresaId);
+  // O extrato JSON antigo da Dino (inclui o histórico Avec de 22/10) está no cadastro legado.
+  const chaveLegada = empresaId === DINO_COMMERCE_EMPRESA_ID ? DINO_LEGACY_EMPRESA_ID : legacyEmpresaIdFromCommerce(empresaId);
   const store = db().financeiroKytto?.empresas?.[String(chaveLegada)];
   if (!store || !store.lancamentos) return null;
   const lojas = await commerceDb.queryRead('SELECT id FROM lojas WHERE empresa_id = $1', [empresaId]);
@@ -1017,9 +1018,31 @@ if(process.env.COMMERCE_CORE_ENABLED === '1'){
         assinaturas: contar(estado?.assinaturas),
         clientes: contar(db().clientesKytto?.empresas?.[chave]?.clientes),
         metas: Boolean(configuracao.metas || estado?.metas),
+        historicoPorOrigem: Object.values(estado?.historicoAtendimentos || {}).reduce((acc, item) => { const k = `${item?.origem || item?.origemImportacao || item?.sourceSystem || '(sem)'}@${item?.lojaId || '(sem loja)'}`; acc[k] = (acc[k] || 0) + 1; return acc; }, {}),
+        historicoPeriodo: (() => { const d = Object.values(estado?.historicoAtendimentos || {}).map((item) => String(item?.dataAgenda || '')).filter(Boolean).sort(); return [d[0] || null, d[d.length - 1] || null]; })(),
+        financeiro: (() => {
+          const lanc = Object.values(db().financeiroKytto?.empresas?.[chave]?.lancamentos || {});
+          return {
+            lancamentos: lanc.length,
+            porOrigem: lanc.reduce((acc, item) => { const k = String(item?.origem || '(sem)'); acc[k] = (acc[k] || 0) + 1; return acc; }, {}),
+            receitasPagas: lanc.filter((item) => item?.tipo === 'receita' && item?.status === 'pago').length,
+            chavesIdempotencia: lanc.filter((item) => item?.chaveIdempotencia).length,
+          };
+        })(),
       };
     });
-    res.json({ ok: true, hoje, empresas });
+    // Sobreposição entre cadastros da mesma empresa (somente contagens).
+    const lancDe = (chave) => Object.values(db().financeiroKytto?.empresas?.[chave]?.lancamentos || {});
+    const chaves = Object.keys(db().barbearias || {});
+    const sobreposicaoFinanceira = [];
+    for (let i = 0; i < chaves.length; i += 1) for (let j = i + 1; j < chaves.length; j += 1) {
+      const a = lancDe(chaves[i]); const b = lancDe(chaves[j]);
+      const ka = new Set(a.map((item) => item?.chaveIdempotencia).filter(Boolean));
+      const fa = new Set(a.map((item) => item?.fingerprint).filter(Boolean));
+      const comuns = b.filter((item) => (item?.chaveIdempotencia && ka.has(item.chaveIdempotencia)) || (item?.fingerprint && fa.has(item.fingerprint))).length;
+      if (a.length && b.length) sobreposicaoFinanceira.push({ entre: [chaves[i], chaves[j]], comuns });
+    }
+    res.json({ ok: true, hoje, empresas, sobreposicaoFinanceira });
   });
   // Grupos empresariais (holdings): organização e visão consolidada, sem herança de acesso.
   const businessGroupStatus = (error) => ['BUSINESS_GROUP_NAME_INVALID','BUSINESS_GROUP_CNPJ_INVALID','BUSINESS_GROUP_INVALID','BUSINESS_GROUP_COMPANY_INVALID'].includes(error?.code) ? 400
@@ -3115,7 +3138,7 @@ function legacyEmpresaId(req) {
   if (req.barbeariaContext?.empresaId) return legacyEmpresaIdFromCommerce(req.barbeariaContext.empresaId);
   if (signed) return legacyEmpresaIdFromCommerce(signed);
   if (requested && (isPlatformAdminUser(req.user) || isMainAdminUser(req.user))) return legacyEmpresaIdFromCommerce(requested);
-  if (hostDino(req)) return empresaDinoDoEstado() || 'principal';
+  if (hostDino(req)) return legacyEmpresaIdFromCommerce(empresaDinoDoEstado()) || DINO_COMMERCE_EMPRESA_ID;
   return 'principal';
 }
 
@@ -3133,12 +3156,12 @@ function legacyLojaId(req) {
     || rawEmpresa === DINO_LEGACY_EMPRESA_ID
     || requestedEmpresa === DINO_COMMERCE_EMPRESA_ID
     || requestedEmpresa === DINO_LEGACY_EMPRESA_ID;
-  if ((requested === DINO_COMMERCE_LOJA_ID || requested === DINO_LEGACY_LOJA_ID) && empresaDino) return DINO_LEGACY_LOJA_ID;
+  if ((requested === DINO_COMMERCE_LOJA_ID || requested === DINO_LEGACY_LOJA_ID) && empresaDino) return DINO_COMMERCE_LOJA_ID;
   // A unidade Dino é única no tenant. Em sessões legadas, a seleção pode
   // chegar somente pelo cabeçalho da empresa (ou pelo domínio do Dino), sem
   // x-loja-id. Nesse caso, usa-se apenas o vínculo canônico conhecido; nunca
   // se infere uma loja para outro tenant.
-  if (!requested && empresaDino && (hostDino(req) || requestedEmpresa === DINO_COMMERCE_EMPRESA_ID || requestedEmpresa === DINO_LEGACY_EMPRESA_ID)) return DINO_LEGACY_LOJA_ID;
+  if (!requested && empresaDino && (hostDino(req) || requestedEmpresa === DINO_COMMERCE_EMPRESA_ID || requestedEmpresa === DINO_LEGACY_EMPRESA_ID)) return DINO_COMMERCE_LOJA_ID;
   if (requested && (isPlatformAdminUser(req.user) || isMainAdminUser(req.user))) return legacyLojaIdFromCommerce(requested, rawEmpresa);
   const configuracao = db().barbearias?.[legacyEmpresaId(req)]?.configuracao || {};
   if (configuracao.lojaPublicaId || configuracao.lojaId) return String(configuracao.lojaPublicaId || configuracao.lojaId);

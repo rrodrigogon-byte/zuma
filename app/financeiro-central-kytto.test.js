@@ -145,3 +145,30 @@ test('reversão e cancelamento não mutam em falha de validação', () => {
   assert.throws(() => financeiro.cancelarLancamento(EMPRESA, original.id, 'operador'), (erro) => erro.code === 'FINANCIAL_REVERSAL_REQUIRED');
   assert.deepEqual(db().financeiroKytto, antes);
 });
+
+test('financeiro da Dino inclui o extrato legado somente leitura, sem duplicar o que já existe no cadastro canônico', async () => {
+  const { db } = await import('./db.js');
+  const fin = await import('./financeiro-central-kytto.js');
+  const estado = db();
+  estado.financeiroKytto ||= { empresas: {} };
+  estado.financeiroKytto.empresas ||= {};
+  const UUID = 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
+  const LOJA = 'ab049a75-6e2e-4cc9-abbc-6fd11cdda1d8';
+  estado.financeiroKytto.empresas[UUID] = { sequencia: 0, fechamentos: {}, lancamentos: {
+    'novo-1': { id: 'novo-1', empresaId: UUID, lojaId: LOJA, tipo: 'receita', status: 'pago', valor: 100, vencimento: '2026-10-24', dataOperacao: '2026-10-24', pagoEm: '2026-10-24', origem: 'comanda', chaveIdempotencia: 'k-novo' },
+  } };
+  estado.financeiroKytto.empresas['emp-kytto-001'] = { sequencia: 0, fechamentos: {}, lancamentos: {
+    'avec-1': { id: 'avec-1', empresaId: 'emp-kytto-001', lojaId: 'dino-web-estoque', tipo: 'receita', status: 'pago', valor: 50, vencimento: '2026-10-20', dataOperacao: '2026-10-20', pagoEm: '2026-10-20', origem: 'avec-import-financeiro-20261022', chaveIdempotencia: 'k-avec' },
+    'dup-1': { id: 'dup-1', empresaId: 'emp-kytto-001', lojaId: 'dino-web-estoque', tipo: 'receita', status: 'pago', valor: 100, vencimento: '2026-10-24', dataOperacao: '2026-10-24', pagoEm: '2026-10-24', origem: 'comanda', chaveIdempotencia: 'k-novo' },
+  } };
+  const itens = fin.listarLancamentos(UUID, { lojaId: LOJA });
+  assert.deepEqual(itens.map((item) => item.id).sort(), ['avec-1', 'novo-1']);
+  const avec = itens.find((item) => item.id === 'avec-1');
+  assert.equal(avec.empresaId, UUID);
+  assert.equal(avec.lojaId, LOJA);
+  assert.equal(avec.somenteLeitura, true);
+  assert.deepEqual(fin.listarLancamentos(UUID, { lojaId: LOJA, semCadastroLegado: true }).map((item) => item.id), ['novo-1']);
+  assert.deepEqual(fin.listarLancamentos('outra-empresa', {}), [], 'outras empresas não recebem o extrato da Dino');
+  delete estado.financeiroKytto.empresas[UUID];
+  delete estado.financeiroKytto.empresas['emp-kytto-001'];
+});

@@ -26,16 +26,22 @@ test('401 e staff 403 têm no-store e zero leitura do snapshot', async () => { c
 test('Core exige reports.read e não usa fallback financeiro após negativa', async () => { const f = await fixture({ core: true, deny: true }); try { const r = await f.request(); assert.equal(r.status, 403); assert.equal(f.reads(), 0); assert.equal(JSON.stringify(r.body).includes('PRIVATE-ERROR'), false); } finally { await f.close(); } });
 test('Core rejeita outra empresa/unidade resolvida antes do snapshot', async () => { for (const context of [{ empresaId: 'tenant-b', lojaId: 'unit-a' }, { empresaId: 'tenant-a', lojaId: 'unit-b' }]) { const f = await fixture({ core: true, context }); try { assert.equal((await f.request()).status, 403); assert.equal(f.reads(), 0); } finally { await f.close(); } } });
 test('Core soma somente receita e pedidos Commerce confirmados ao resumo da equipe', async () => { const f = await fixture({ core: true }); try { const r = await f.request(); assert.equal(r.status, 200); assert.equal(r.body.summary.commerceRevenue, 321); assert.equal(r.body.summary.commerceOrders, 2); assert.equal(r.body.summary.revenue, 321); } finally { await f.close(); } });
-test('Core aceita o contexto Dino em IDs Commerce e consulta o legado mapeado', async () => { const f = await fixture({
+test('Core aceita o contexto Dino em IDs Commerce e consulta o cadastro canônico', async () => { const f = await fixture({
   core: true,
-  legacyEmpresaId: () => 'emp-kytto-001',
-  legacyLojaId: () => 'dino-web-estoque',
+  legacyEmpresaId: () => 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6',
+  legacyLojaId: () => 'ab049a75-6e2e-4cc9-abbc-6fd11cdda1d8',
   context: { empresaId: 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6', lojaId: 'ab049a75-6e2e-4cc9-abbc-6fd11cdda1d8' },
 }); try {
   const r = await f.request({ headers: { 'x-empresa-id': 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6', 'x-loja-id': 'ab049a75-6e2e-4cc9-abbc-6fd11cdda1d8' } });
   assert.equal(r.status, 200);
-  assert.deepEqual(r.body.scope, { empresaId: 'emp-kytto-001', lojaId: 'dino-web-estoque' });
+  assert.deepEqual(r.body.scope, { empresaId: 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6', lojaId: 'ab049a75-6e2e-4cc9-abbc-6fd11cdda1d8' });
 } finally { await f.close(); } });
+
+test('sessão antiga com o id legado da Dino também resolve para o cadastro canônico', async () => {
+  const { legacyEmpresaIdFromCommerce, legacyLojaIdFromCommerce } = await import('./core/legacy-commerce-scope.js');
+  assert.equal(legacyEmpresaIdFromCommerce('emp-kytto-001'), 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6');
+  assert.equal(legacyLojaIdFromCommerce('dino-web-estoque', 'emp-kytto-001'), 'ab049a75-6e2e-4cc9-abbc-6fd11cdda1d8');
+});
 test('empresa principal ou seleção todas unidades é bloqueada', async () => { for (const user of [{ role: 'admin', empresaId: 'principal', lojaId: 'unit-a' }, { role: 'admin', empresaId: 'tenant-a', lojaId: '' }]) { const f = await fixture({ user }); try { assert.equal((await f.request()).status, 409); assert.equal(f.reads(), 0); } finally { await f.close(); } } });
 test('query e cabeçalho não autorizam troca de tenant/unidade', async () => { const f = await fixture(); try { assert.equal((await f.request({ query: 'inicio=2026-10-01&fim=2026-10-15&empresaId=tenant-b' })).status, 403); assert.equal((await f.request({ headers: { 'x-loja-id': 'unit-b' } })).status, 403); assert.equal(f.reads(), 0); } finally { await f.close(); } });
 test('métodos de mutação são 405 e não carregam nem escrevem dados', async () => { const f = await fixture(); try { for (const method of ['POST', 'PUT', 'PATCH', 'DELETE']) { const r = await f.request({ method }); assert.equal(r.status, 405); assert.equal(r.allow, 'GET'); assert.equal(r.cache, 'no-store'); } assert.equal(f.reads(), 0); assert.deepEqual(f.root, f.before); } finally { await f.close(); } });
