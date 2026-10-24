@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createMembership, listMembershipCandidates, updateMembership } from './commerce-admin-users.js';
+import { createMembership, isLegacyGlobalAdmin, listMembershipCandidates, updateMembership } from './commerce-admin-users.js';
 
 const empresaId = '11111111-1111-4111-8111-111111111111';
 const actorId = '22222222-2222-4222-8222-222222222222';
@@ -131,4 +131,52 @@ test('busca de candidatos permite vincular usuário existente também a outra un
   assert.deepEqual(result.items.map(item => item.id), [targetId]);
   assert.match(sqlExecuted, /u\.empresa_id = \$1 AND u\.ativo = true/);
   assert.doesNotMatch(sqlExecuted, /NOT EXISTS.*commerce_memberships/s);
+});
+
+test('administrador global legado é reconhecido somente pelo critério do servidor', () => {
+  assert.equal(isLegacyGlobalAdmin({ role: 'admin', platformAdmin: true }), true);
+  assert.equal(isLegacyGlobalAdmin({ role: 'admin', mainAdmin: true }), true);
+  assert.equal(isLegacyGlobalAdmin({ role: 'admin' }), false);
+  assert.equal(isLegacyGlobalAdmin({ role: 'organizador', platformAdmin: true }), false);
+  assert.equal(isLegacyGlobalAdmin({ role: 'admin', platformAdmin: true, pgAccount: true }), false);
+  assert.equal(isLegacyGlobalAdmin({ role: 'admin', platformAdmin: true, pgOperational: true }), false);
+  assert.equal(isLegacyGlobalAdmin(null), false);
+});
+
+test('administrador global legado com vínculo tenant_owner promove store_admin a tenant_owner', async () => {
+  const current = { id: membershipId, role_id: 'store-admin-role', role_codigo: 'store_admin', ativo: true, loja_id: null };
+  const trx = trxFor({ actor: 'tenant_owner', role: 'tenant_owner', current });
+  const result = await updateMembership(trx, { ...context, legacyGlobalAdmin: true }, membershipId, { roleId });
+  assert.ok(result);
+  assert.equal(trx.calls.some(sql => sql.startsWith('UPDATE commerce_memberships')), true);
+});
+
+test('administrador global legado cria membership tenant_owner corporativa', async () => {
+  const trx = trxFor({ actor: 'tenant_owner', role: 'tenant_owner' });
+  const result = await createMembership(trx, { ...context, legacyGlobalAdmin: true }, { usuarioId: targetId, roleId });
+  assert.ok(result);
+  assert.equal(trx.calls.some(sql => /INSERT INTO commerce_memberships/.test(sql)), true);
+});
+
+test('sem o marcador global, tenant_owner continua sem poder atribuir tenant_owner', async () => {
+  const current = { id: membershipId, role_id: 'store-admin-role', role_codigo: 'store_admin', ativo: true, loja_id: null };
+  const trx = trxFor({ actor: 'tenant_owner', role: 'tenant_owner', current });
+  await assert.rejects(() => updateMembership(trx, context, membershipId, { roleId }), error => error.code === 'PERMISSION_DENIED');
+  assert.equal(trx.calls.some(sql => sql.startsWith('UPDATE commerce_memberships')), false);
+});
+
+test('administrador global legado não atribui tenant_owner restrito a uma loja', async () => {
+  const trx = trxFor({ actor: 'tenant_owner', role: 'tenant_owner' });
+  await assert.rejects(() => createMembership(trx, { ...context, legacyGlobalAdmin: true }, { usuarioId: targetId, roleId, lojaId: lojaBId }), error => error.code === 'PERMISSION_DENIED' || /loja|unidade/i.test(error.message));
+});
+
+test('administrador global legado sem vínculo users.write no tenant é negado', async () => {
+  const trx = trxFor();
+  trx.query = async sql => {
+    trx.calls.push(sql);
+    if (sql.includes('pg_advisory_xact_lock')) return { rows: [{}] };
+    if (sql.includes("p.codigo = 'users.write'")) return { rows: [] };
+    throw new Error('DML inesperada');
+  };
+  await assert.rejects(() => createMembership(trx, { ...context, legacyGlobalAdmin: true }, { usuarioId: targetId, roleId }), error => error.code === 'PERMISSION_DENIED');
 });

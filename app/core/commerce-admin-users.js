@@ -43,7 +43,19 @@ async function lockTenantMembershipMutations(trx, empresaId) {
   await trx.query(`SELECT pg_advisory_xact_lock(hashtextextended('commerce-membership:' || $1::text, 0))`, [empresaId]);
 }
 
-async function actorAuthorization(trx, context) {
+// Administrador global legado da plataforma: conta JSON com papel admin e
+// marcador mainAdmin/platformAdmin calculado no servidor a partir do cadastro
+// (nunca do token ou de cabeçalhos). É o mesmo critério usado para conceder o
+// acesso global em commerce-platform-grants. Contas SQL e operacionais não se
+// enquadram e seguem exclusivamente o papel da membership.
+export function isLegacyGlobalAdmin(user) {
+  return String(user?.role || '').toLowerCase() === 'admin'
+    && (user?.mainAdmin === true || user?.platformAdmin === true)
+    && user?.pgAccount !== true
+    && user?.pgOperational !== true;
+}
+
+async function actorAuthorization(trx, context, { legacyGlobalAdmin = false } = {}) {
   const result = await trx.query(
     `SELECT r.id, r.codigo, r.empresa_id, m.loja_id
        FROM commerce_memberships m
@@ -62,6 +74,12 @@ async function actorAuthorization(trx, context) {
   );
   const actor = result.rows.sort((a, b) => rank(b) - rank(a))[0];
   if (!actor) throw new CommerceError('permissão insuficiente para administrar memberships', 'PERMISSION_DENIED');
+  // O administrador global continua precisando de vínculo ativo com users.write
+  // no tenant (consulta acima), mas age com a autoridade de platform_owner
+  // para atribuir ou alterar Dono da empresa (tenant_owner).
+  if (legacyGlobalAdmin === true && String(actor.codigo) !== 'platform_owner') {
+    return { ...actor, codigo: 'platform_owner', loja_id: null, legacyGlobalAdmin: true };
+  }
   return actor;
 }
 
@@ -182,7 +200,7 @@ export async function createMembership(trx, contextInput, input = {}) {
   const expiration = parseMembershipExpiration(input);
 
   await lockTenantMembershipMutations(trx, empresaId);
-  const actor = await actorAuthorization(trx, context);
+  const actor = await actorAuthorization(trx, context, { legacyGlobalAdmin: contextInput?.legacyGlobalAdmin === true });
   const role = await targetRole(trx, empresaId, roleId);
   assertActorStoreScope(actor, lojaId);
   assertAssignable(actor, role, lojaId);
@@ -246,7 +264,7 @@ export async function updateMembership(trx, contextInput, membershipId, input = 
   const id = assertUuid(membershipId, 'membershipId');
 
   await lockTenantMembershipMutations(trx, empresaId);
-  const actor = await actorAuthorization(trx, context);
+  const actor = await actorAuthorization(trx, context, { legacyGlobalAdmin: contextInput?.legacyGlobalAdmin === true });
   const currentResult = await trx.query(
     `SELECT m.*, r.codigo AS role_codigo
        FROM commerce_memberships m

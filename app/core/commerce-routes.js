@@ -17,7 +17,7 @@ import { resolveStorefrontAlias } from './commerce-tenants.js';
 import { executeCatalogImport, previewCatalogImport } from './commerce-catalog-import.js';
 import { previewAvecCatalog } from './avec-catalog-preview.js';
 import { previewAvecGovernance } from './avec-import-governance.js';
-import { createMembership, listMembershipCandidates, listMemberships, listRoles, updateMembership } from './commerce-admin-users.js';
+import { createMembership, isLegacyGlobalAdmin, listMembershipCandidates, listMemberships, listRoles, updateMembership } from './commerce-admin-users.js';
 import { createCustomer, createCustomerAddress, deleteCustomerAddress, getCustomer, listCustomerAddresses, updateCustomer, updateCustomerAddress } from './commerce-customers.js';
 import { createCreditAccount, listCreditAccounts, listCreditEntries, updateCreditAccount } from './commerce-credit.js';
 import { createStorefrontDomain, listStorefrontDomains, setPrimaryStorefrontDomain, verifyStorefrontDomain } from './commerce-domains.js';
@@ -1367,14 +1367,14 @@ export function createCommerceAdminRouter() {
   router.post('/users/memberships', async (req, res) => {
     try {
       const context = await requirePermission(req, 'users.write');
-      const result = await withCommerceTransaction(trx => createMembership(trx, context, req.body));
+      const result = await withCommerceTransaction(trx => createMembership(trx, { ...context, legacyGlobalAdmin: isLegacyGlobalAdmin(req.user) }, req.body));
       res.status(201).json(result);
     } catch (error) { jsonError(res, error); }
   });
   router.patch('/users/memberships/:id', async (req, res) => {
     try {
       const context = await requirePermission(req, 'users.write');
-      const result = await withCommerceTransaction(trx => updateMembership(trx, context, req.params.id, req.body));
+      const result = await withCommerceTransaction(trx => updateMembership(trx, { ...context, legacyGlobalAdmin: isLegacyGlobalAdmin(req.user) }, req.params.id, req.body));
       res.json(result);
     } catch (error) { jsonError(res, error); }
   });
