@@ -149,6 +149,7 @@ const CerebroIA = lazy(() => import('./pages/admin/dino/CerebroIA'))
 const ContasReceber = lazy(() => import('./pages/admin/ContasReceber'))
 const FechamentoDiario = lazy(() => import('./pages/admin/FechamentoDiario'))
 const CadastrosMestres = lazy(() => import('./pages/admin/CadastrosMestres'))
+const AvecMixImport = lazy(() => import('./pages/admin/dino/AvecMixImport'))
 const AdminPlataforma = lazy(() => import('./pages/admin/AdminPlataforma'))
 const ERP             = lazy(() => import('./pages/admin/ERP'))
 const LojaModa        = lazy(() => import('./pages/admin/LojaModa'))
@@ -250,6 +251,7 @@ export default function App() {
         {/* Admin (admin/organizador) — guarda única via Outlet */}
         <Route element={<ProtectedOutlet need="org" />}>
           <Route path="/admin"              element={<Layout><TenantAware stallone={<Navigate to="/admin/ecommerce?tab=overview" replace />} clube={<ClubeDashboard />} tenant={<Dashboard />} legacy={<Dashboard />} /></Layout>} />
+          <Route path="/admin/avec-historico" element={<PlatformOnly><Layout><AvecMixImport /></Layout></PlatformOnly>} />
           <Route path="/admin/plataforma"  element={<PlatformOnly><Layout><AdminPlataforma /></Layout></PlatformOnly>} />
           <Route path="/admin/usuarios"     element={<TenantAware tenant={<Navigate to="/admin/ecommerce?tab=users" replace />} legacy={<Layout><Usuarios /></Layout>} />} />
           <Route path="/admin/torneios"     element={<Layout><Torneios /></Layout>} />
