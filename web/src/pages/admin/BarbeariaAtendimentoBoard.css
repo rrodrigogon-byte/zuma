@@ -1,10 +1,11 @@
-/* BarbeariaAtendimentoBoard.css — Quadro Dinâmico de Atendimento Kanban (Kytto) */
+/* BarbeariaAtendimentoBoard.css — Quadro Dinâmico e Ultra-Interativo (Kytto) */
 
 .atendimento-board {
   display: flex;
   flex-direction: column;
   gap: 18px;
   width: 100%;
+  position: relative;
 }
 
 /* ── BARRA DE FERRAMENTAS E CONTROLES SUPERIORES ── */
@@ -44,7 +45,7 @@
 .atendimento-toolbar-actions {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   flex-wrap: wrap;
 }
 
@@ -52,7 +53,7 @@
 .atendimento-date-picker {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 3px;
   background: var(--card2);
   border: 1px solid var(--line);
   border-radius: 10px;
@@ -92,6 +93,33 @@
   cursor: pointer;
 }
 
+/* Botão de som / feedback sonoro */
+.atendimento-sound-btn {
+  background: var(--card2);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 7px 11px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--navy);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.15s ease;
+}
+
+.atendimento-sound-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.atendimento-sound-btn.active {
+  background: #10b98115;
+  border-color: #10b98145;
+  color: #059669;
+}
+
 /* ── RESUMO RÁPIDO DO DIA (KPIs) ── */
 .atendimento-kpi-row {
   display: grid;
@@ -110,6 +138,11 @@
   background: var(--card2);
   border: 1px solid var(--line);
   border-radius: 10px;
+  transition: transform 0.15s ease;
+}
+
+.atendimento-kpi-item:hover {
+  transform: translateY(-1px);
 }
 
 .atendimento-kpi-icon {
@@ -143,20 +176,20 @@
   letter-spacing: 0.04em;
 }
 
-/* ── FILTROS E BUSCA ── */
+/* ── FILTROS, BUSCA E ORDENAÇÃO ── */
 .atendimento-filter-bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 14px;
+  gap: 12px;
   flex-wrap: wrap;
   margin-top: 14px;
 }
 
 .atendimento-search-box {
   position: relative;
-  flex: 1 1 260px;
-  min-width: 220px;
+  flex: 1 1 240px;
+  min-width: 200px;
 }
 
 .atendimento-search-input {
@@ -184,10 +217,66 @@
   transform: translateY(-50%);
   color: var(--muted);
   pointer-events: none;
-  font-size: 15px;
 }
 
-/* Pílulas de filtro por profissional (barbeiro) */
+/* Seletor de ordenação e filtros rápidos */
+.atendimento-sort-select {
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--card);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--navy);
+  outline: none;
+  cursor: pointer;
+}
+
+.atendimento-sort-select:focus {
+  border-color: var(--accent);
+}
+
+/* Pílulas de filtro rápido (status / alertas) */
+.atendimento-quick-filter-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.atendimento-filter-chip {
+  padding: 5px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--card2);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  transition: all 0.15s ease;
+}
+
+.atendimento-filter-chip:hover {
+  border-color: var(--navy);
+  color: var(--navy);
+}
+
+.atendimento-filter-chip.active {
+  background: var(--navy);
+  border-color: var(--navy);
+  color: #fff;
+}
+
+.atendimento-filter-chip.active-warning {
+  background: #f59e0b;
+  border-color: #f59e0b;
+  color: #fff;
+}
+
+/* Pílulas de filtro por barbeiro */
 .atendimento-barbeiro-pills {
   display: flex;
   align-items: center;
@@ -272,7 +361,6 @@
   position: relative;
 }
 
-/* Efeito ao arrastar card sobre a coluna */
 .atendimento-kanban-col.drag-over {
   border-color: var(--accent);
   background: color-mix(in srgb, var(--accent) 7%, var(--card2));
@@ -324,6 +412,28 @@
   color: var(--muted);
 }
 
+/* Botão de adicionar direto na coluna */
+.atendimento-col-add-btn {
+  background: transparent;
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  color: var(--muted);
+  width: 26px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.atendimento-col-add-btn:hover {
+  background: var(--card);
+  border-color: var(--accent);
+  color: var(--accent);
+  transform: scale(1.08);
+}
+
 /* Área de soltura e lista de cards */
 .atendimento-cards-container {
   display: flex;
@@ -333,7 +443,6 @@
   min-height: 200px;
 }
 
-/* Indicador de soltura quando arrastando */
 .atendimento-drop-hint {
   border: 2px dashed var(--accent);
   border-radius: 12px;
@@ -355,7 +464,6 @@
   50% { opacity: 1; transform: scale(1); }
 }
 
-/* Estado vazio da coluna */
 .atendimento-col-empty {
   display: flex;
   flex-direction: column;
@@ -377,6 +485,52 @@
   opacity: 0.5;
 }
 
+/* ── WRAPPER DE SWIPE PARA MOBILE (CARD ARRASTÁVEL) ── */
+.atendimento-card-swipe-wrapper {
+  position: relative;
+  overflow: hidden;
+  border-radius: 12px;
+}
+
+/* Indicador de Swipe para a Direita (Avançar Status) */
+.atendimento-swipe-bg-right {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  background: linear-gradient(90deg, #10b981, #059669);
+  display: flex;
+  align-items: center;
+  padding-left: 20px;
+  color: #fff;
+  font-weight: 800;
+  font-size: 13px;
+  border-radius: 12px;
+  gap: 8px;
+  z-index: 1;
+}
+
+/* Indicador de Swipe para a Esquerda (Ações Rápidas) */
+.atendimento-swipe-bg-left {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 100%;
+  background: linear-gradient(270deg, #3b82f6, #1d4ed8);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-right: 20px;
+  color: #fff;
+  font-weight: 800;
+  font-size: 13px;
+  border-radius: 12px;
+  gap: 8px;
+  z-index: 1;
+}
+
 /* ── CARD DO ATENDIMENTO ── */
 .atendimento-card {
   background: var(--card);
@@ -392,19 +546,19 @@
   display: flex;
   flex-direction: column;
   gap: 9px;
+  z-index: 2;
 }
 
 .atendimento-card:hover {
   transform: translateY(-2px);
-  box-shadow: 0 6px 16px rgba(18, 40, 63, 0.10);
-  border-color: color-mix(in srgb, var(--navy) 25%, var(--line));
+  box-shadow: 0 8px 20px rgba(18, 40, 63, 0.12);
+  border-color: color-mix(in srgb, var(--navy) 30%, var(--line));
 }
 
 .atendimento-card:active {
   cursor: grabbing;
 }
 
-/* Estado quando o card está sendo arrastado */
 .atendimento-card.is-dragging {
   opacity: 0.45;
   transform: scale(0.97) rotate(-1.5deg);
@@ -412,7 +566,7 @@
   border-color: var(--accent);
 }
 
-/* Cabeçalho do Card: Horário, Grip e Valor */
+/* Cabeçalho do Card: Horário, Grip, Live Timer e Alertas */
 .atendimento-card-top {
   display: flex;
   align-items: center;
@@ -424,6 +578,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
+  flex-wrap: wrap;
 }
 
 .atendimento-drag-handle {
@@ -453,6 +608,39 @@
   font-weight: 800;
   color: var(--navy);
   font-family: var(--font-mono, monospace);
+}
+
+/* Alertas de urgência e tempo */
+.atendimento-badge-urgente {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #dc2626;
+  font-size: 10px;
+  font-weight: 800;
+  padding: 2px 6px;
+  border-radius: 6px;
+  animation: pulseAlert 2s infinite;
+}
+
+@keyframes pulseAlert {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+.atendimento-badge-chegando {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #2563eb;
+  font-size: 10px;
+  font-weight: 800;
+  padding: 2px 6px;
+  border-radius: 6px;
 }
 
 .atendimento-timer-live {
@@ -530,6 +718,11 @@
   text-decoration: underline;
 }
 
+.atendimento-client-phone-sub {
+  font-size: 11px;
+  color: var(--muted);
+}
+
 /* Botão de WhatsApp direto */
 .atendimento-whatsapp-btn {
   display: inline-flex;
@@ -549,7 +742,7 @@
 .atendimento-whatsapp-btn:hover {
   background: #25d366;
   color: #fff;
-  transform: scale(1.06);
+  transform: scale(1.08);
 }
 
 /* Linha do Serviço e Barbeiro */
@@ -580,7 +773,6 @@
   gap: 5px;
 }
 
-/* Barra de progresso para quem está na cadeira */
 .atendimento-progress-track {
   height: 4px;
   background: var(--line);
@@ -596,7 +788,7 @@
   transition: width 0.3s ease;
 }
 
-/* Chip de Comanda */
+/* Linha da Comanda */
 .atendimento-comanda-row {
   display: flex;
   align-items: center;
@@ -689,7 +881,6 @@
   transform: translateY(-1px);
 }
 
-/* Seletor rápido de transição / mover (ideal para mobile) */
 .atendimento-move-btn {
   display: inline-flex;
   align-items: center;
@@ -731,7 +922,6 @@
   color: var(--navy);
 }
 
-/* Menu popover de mais opções */
 .atendimento-popover {
   position: absolute;
   bottom: calc(100% + 4px);
@@ -807,16 +997,170 @@
   transform: scale(1.01);
 }
 
-/* ── SUPORTE TOUCH PARA MOBILE (CARD FLUTUANTE) ── */
-.atendimento-touch-proxy {
+/* ── MODAL / DRAWER INTERATIVO DE ENCAIXE RÁPIDO ── */
+.atendimento-modal-backdrop {
   position: fixed;
-  pointer-events: none;
+  inset: 0;
+  background: rgba(18, 40, 63, 0.55);
+  backdrop-filter: blur(4px);
   z-index: 9999;
-  width: 260px;
-  opacity: 0.88;
-  transform: translate(-50%, -50%) rotate(2deg) scale(1.04);
-  box-shadow: 0 16px 36px rgba(18, 40, 63, 0.35);
-  border: 2px solid var(--accent);
-  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  animation: fadeIn 0.15s ease-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.atendimento-modal-box {
   background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  width: min(520px, 100%);
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 48px rgba(18, 40, 63, 0.25);
+  display: flex;
+  flex-direction: column;
+  animation: slideUp 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes slideUp {
+  from { transform: translateY(20px) scale(0.97); opacity: 0; }
+  to { transform: translateY(0) scale(1); opacity: 1; }
+}
+
+.atendimento-modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 20px;
+  border-bottom: 1px solid var(--line);
+}
+
+.atendimento-modal-head h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--navy);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.atendimento-modal-close {
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.atendimento-modal-close:hover {
+  background: var(--card2);
+  color: var(--navy);
+}
+
+.atendimento-modal-body {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.atendimento-service-selector-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 8px;
+}
+
+.atendimento-service-option {
+  padding: 10px;
+  border: 1.5px solid var(--line);
+  border-radius: 10px;
+  background: var(--card2);
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.atendimento-service-option:hover {
+  border-color: var(--accent);
+  background: var(--card);
+}
+
+.atendimento-service-option.selected {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, var(--card));
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+.atendimento-barber-selector-grid {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.atendimento-barber-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border: 1.5px solid var(--line);
+  border-radius: 10px;
+  background: var(--card2);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--navy);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.atendimento-barber-option:hover {
+  border-color: var(--navy);
+}
+
+.atendimento-barber-option.selected {
+  border-color: var(--navy);
+  background: var(--navy);
+  color: #fff;
+}
+
+/* ── CONFETTI CELEBRAÇÃO ── */
+.atendimento-confetti-container {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 99999;
+  overflow: hidden;
+}
+
+.atendimento-confetti-piece {
+  position: absolute;
+  width: 10px;
+  height: 14px;
+  opacity: 0.9;
+  animation: confettiFall 2.4s ease-out forwards;
+}
+
+@keyframes confettiFall {
+  0% {
+    transform: translateY(0) rotate(0deg) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(100vh) rotate(720deg) scale(0.6);
+    opacity: 0;
+  }
 }

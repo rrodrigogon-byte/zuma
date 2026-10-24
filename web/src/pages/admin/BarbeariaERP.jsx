@@ -776,6 +776,50 @@ export default function BarbeariaERP() {
     }
   }
 
+  async function reatribuirBarbeiroAtendimento(agendamento, novoProfissionalId) {
+    const prof = profissionais.find((p) => p.id === novoProfissionalId)
+    const dataAgenda = agendamento.dataAgenda || String(agendamento.dataHora || '').slice(0, 10)
+    await executar(
+      () =>
+        api.patch(`/api/admin/barbearia/agenda/${agendamento.id}`, {
+          profissionalId: novoProfissionalId,
+          dataAgenda,
+          dataHora: agendamento.dataHora,
+          servicoId: agendamento.servicoId,
+          origem: 'admin',
+          encaixe: true,
+        }),
+      `Atendimento reatribuído para ${prof?.nome || 'profissional'}.`
+    )
+  }
+
+  async function criarEncaixeRapido(dados) {
+    const dataAgenda = dataSelecionada
+    const payload = {
+      clienteId: dados.clienteId || '',
+      clienteNome: dados.clienteNome,
+      clienteTelefone: dados.clienteTelefone,
+      profissionalId: dados.profissionalId,
+      servicoId: dados.servicoId,
+      dataHora: new Date().toISOString(),
+      dataAgenda,
+      observacoes: dados.observacoes || 'Encaixe rápido / walk-in',
+      origem: 'admin',
+      encaixe: true,
+    }
+    await executar(async () => {
+      const resp = await api.post('/api/admin/barbearia/agenda', payload)
+      const novoAgendamento = resp?.agendamento || resp
+      if (dados.iniciarImediato && novoAgendamento?.id) {
+        await api.patch(`/api/admin/barbearia/agenda/${novoAgendamento.id}/status`, {
+          status: 'em_atendimento',
+          registrarFinanceiro: false,
+        })
+      }
+      return resp
+    }, 'Encaixe rápido registrado com sucesso.')
+  }
+
   function valorDevidoRecebimento(agendamento) {
     const total = Number(agendamento?.valor || 0)
     const devido = total - Number(saldoCashbackCliente?.sinalPago || 0) - Number(formRecebimento.usarCashback || 0) - (formRecebimento.valeCodigo ? Number(formRecebimento.valeValor || 0) : 0)
@@ -1414,11 +1458,13 @@ export default function BarbeariaERP() {
           onNewComanda={() => abrirNovaComanda()}
           onOpenRecebimento={abrirRecebimento}
           onOpenHistorico={abrirHistoricoCliente}
+          onReassignBarber={reatribuirBarbeiroAtendimento}
+          onCreateEncaixe={criarEncaixeRapido}
           loading={loading}
         />
       </div>
-    )
-  }
+      )
+    }
 
   function renderOperacao() {
     return <div style={{ display: 'grid', gap: 20 }}><BarbeariaComandasAbertas key={scopeKey} profissionais={profissionais} onOpen={abrirComanda} refreshKey={agendaRevisao} /><BarbeariaOperacaoPanel data={dataSelecionada} operacao={operacao || {}} onOpenCaixa={abrirCaixaOperacao} onMove={movimentarCaixaOperacao} onClose={fecharCaixaOperacao} onCloseDay={fecharDiaOperacao} salvando={salvando} /></div>
