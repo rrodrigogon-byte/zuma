@@ -976,6 +976,42 @@ if(process.env.COMMERCE_CORE_ENABLED === '1'){
     try { res.json(await listCommerceTenants()); }
     catch(error){ res.status(500).json({ error:'não foi possível listar os tenants do Commerce', code:error?.code || 'TENANT_LIST_ERROR' }); }
   });
+  // Diagnóstico somente leitura dos cadastros operacionais (barbearia/ERP) por chave
+  // de empresa: contagens e configuração pública, nunca nomes, telefones ou valores.
+  // Serve para localizar dados gravados sob ids diferentes da mesma empresa.
+  app.get('/api/admin/platform/cadastros-operacionais', requirePlatformAdmin, (req,res)=>{
+    res.set('Cache-Control', 'private, no-store');
+    const hoje = new Date(Date.now() - 4 * 3600e3).toISOString().slice(0, 10);
+    const dia = (item) => String(item?.dataAgenda || item?.dataHora || '').slice(0, 10);
+    const contar = (obj) => Object.keys(obj || {}).length;
+    const empresas = Object.entries(db().barbearias || {}).map(([chave, estado]) => {
+      const agendamentos = Object.values(estado?.agendamentos || {});
+      const datas = agendamentos.map(dia).filter(Boolean).sort();
+      const configuracao = estado?.configuracao || {};
+      return {
+        chave,
+        slugPublico: String(configuracao.slugPublico || configuracao.slugAgendamento || ''),
+        lojaPublicaId: String(configuracao.lojaPublicaId || configuracao.lojaId || ''),
+        agendamentoPublicoAtivo: configuracao.agendamentoPublicoAtivo !== false,
+        profissionais: contar(estado?.profissionais),
+        profissionaisAtivos: Object.values(estado?.profissionais || {}).filter((item) => item?.ativo !== false).length,
+        servicos: contar(estado?.servicos),
+        agendamentos: agendamentos.length,
+        agendamentosFuturos: agendamentos.filter((item) => dia(item) >= hoje).length,
+        agendamentosPorLoja: agendamentos.reduce((acc, item) => { const k = String(item?.lojaId || '(sem)'); acc[k] = (acc[k] || 0) + 1; return acc; }, {}),
+        primeiroAgendamento: datas[0] || null,
+        ultimoAgendamento: datas[datas.length - 1] || null,
+        comandas: contar(estado?.comandas),
+        historicoAtendimentos: contar(estado?.historicoAtendimentos),
+        historicoComandas: contar(estado?.historicoComandas),
+        planos: contar(estado?.planos),
+        assinaturas: contar(estado?.assinaturas),
+        clientes: contar(db().clientesKytto?.empresas?.[chave]?.clientes),
+        metas: Boolean(configuracao.metas || estado?.metas),
+      };
+    });
+    res.json({ ok: true, hoje, empresas });
+  });
   // Grupos empresariais (holdings): organização e visão consolidada, sem herança de acesso.
   const businessGroupStatus = (error) => ['BUSINESS_GROUP_NAME_INVALID','BUSINESS_GROUP_CNPJ_INVALID','BUSINESS_GROUP_INVALID','BUSINESS_GROUP_COMPANY_INVALID'].includes(error?.code) ? 400
     : error?.code === 'BUSINESS_GROUP_CONFLICT' ? 409
