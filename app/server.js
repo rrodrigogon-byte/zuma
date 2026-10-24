@@ -4066,7 +4066,8 @@ app.get('/api/admin/barbearia/overview', async (req, res) => {
       fidelidade: canaisFidelidadeKytto.obterFidelidade(empresaId),
       relatorio: relatorioOperacionalBarbearia(empresaId, { data, lojaId }),
       comissoes: barbeariaErpKytto.obterComissoes(empresaId, { data, lojaId }),
-      produtos: barbeariaErpKytto.listarProdutosRevenda(empresaId, { incluirInativos: false }),
+      // Inclui os desativados para poder reativá-los; as telas de venda e compra filtram os ativos.
+      produtos: barbeariaErpKytto.listarProdutosRevenda(empresaId, { incluirInativos: true }),
       vendas: barbeariaErpKytto.listarVendasRevenda(empresaId, { lojaId }),
       comandas,
       documentosFiscais: barbeariaFiscalKytto.listarDocumentosFiscais(empresaId, { lojaId }).slice(0, 50).map(barbeariaNfseKytto.documentoParaPainel),
@@ -4150,6 +4151,16 @@ app.delete('/api/admin/barbearia/profissionais/:id', (req, res) => {
     const profissional = barbeariaErpKytto.excluirProfissional(legacyEmpresaId(req), req.params.id);
     if (!profissional) return res.status(404).json({ error: 'Profissional não encontrado na empresa ativa.' });
     res.json({ ok: true, profissional, exclusao: 'logica' });
+  } catch (error) { res.status(400).json({ error: error.message }); }
+});
+
+// Exclusão lógica: o serviço sai do catálogo e da agenda nova, mas agendamentos, comandas,
+// planos e histórico que o citam continuam com o nome e o valor da época.
+app.delete('/api/admin/barbearia/servicos/:id', (req, res) => {
+  try {
+    const servico = barbeariaErpKytto.excluirServico(legacyEmpresaId(req), req.params.id);
+    if (!servico) return res.status(404).json({ error: 'Serviço não encontrado na empresa ativa.' });
+    res.json({ ok: true, servico, exclusao: 'logica' });
   } catch (error) { res.status(400).json({ error: error.message }); }
 });
 
@@ -5458,6 +5469,15 @@ app.patch('/api/admin/barbearia/planos/:id', (req, res) => {
   } catch (error) { res.status(400).json({ error: error.message }); }
 });
 
+// Exclusão lógica: assinaturas já vendidas continuam ligadas ao plano.
+app.delete('/api/admin/barbearia/planos/:id', (req, res) => {
+  try {
+    const plano = barbeariaErpKytto.excluirPlano(legacyEmpresaId(req), req.params.id);
+    if (!plano) return res.status(404).json({ error: 'Plano não encontrado na empresa ativa.' });
+    res.json({ ok: true, plano, exclusao: 'logica' });
+  } catch (error) { res.status(400).json({ error: error.message }); }
+});
+
 app.get('/api/admin/barbearia/assinaturas', (req, res) => res.json({ ok: true, assinaturas: barbeariaErpKytto.listarAssinaturas(legacyEmpresaId(req), { status: req.query?.status, clienteId: req.query?.clienteId }) }));
 app.post('/api/admin/barbearia/assinaturas', (req, res) => {
   try { res.status(201).json({ ok: true, assinatura: barbeariaErpKytto.criarAssinatura(legacyEmpresaId(req), req.body || {}) }); }
@@ -5483,6 +5503,15 @@ app.patch('/api/admin/barbearia/estoque-revenda/:id', (req, res) => {
     res.json({ ok: true, produto });
   } catch (error) { res.status(400).json({ error: error.message }); }
 });
+// Exclusão lógica: vendas, movimentos de estoque e comissões do produto continuam no histórico.
+app.delete('/api/admin/barbearia/estoque-revenda/:id', (req, res) => {
+  try {
+    const produto = barbeariaErpKytto.excluirProdutoRevenda(legacyEmpresaId(req), req.params.id);
+    if (!produto) return res.status(404).json({ error: 'Produto de revenda não encontrado na empresa ativa.' });
+    res.json({ ok: true, produto, exclusao: 'logica' });
+  } catch (error) { res.status(400).json({ error: error.message }); }
+});
+
 app.get('/api/admin/barbearia/estoque-revenda/movimentos', (req, res) => res.json({ ok: true, movimentos: barbeariaErpKytto.listarMovimentosEstoque(legacyEmpresaId(req), { produtoId: req.query?.produtoId, lojaId: legacyLojaId(req) }) }));
 app.post('/api/admin/barbearia/estoque-revenda/:id/movimentos', (req, res) => {
   try {
