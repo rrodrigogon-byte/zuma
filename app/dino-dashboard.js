@@ -370,8 +370,21 @@ export function historicalCommandSlot(item = {}, timeZone = TIME_ZONE) {
   return localWallTimeToUtc(day, `${match[4]}:${match[5]}`, timeZone);
 }
 
+// A partir do primeiro dia com agenda no Kytto, os mesmos atendimentos também
+// estão na agenda: o histórico Avec só preenche os dias anteriores (sem duplicar).
+export function firstAgendaDay(appointments = [], timeZone = TIME_ZONE) {
+  let first = '';
+  for (const item of list(appointments)) {
+    const date = appointmentTimestamp(item, timeZone);
+    const day = date ? dayKey(date, timeZone) : String(item?.dataAgenda || '').slice(0, 10);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(day) && (!first || day < first)) first = day;
+  }
+  return first;
+}
+
 function mergedScheduleHeatmap(appointments, historicalCommands, window) {
   const cells = new Map();
+  const cutoff = firstAgendaDay(appointments, window.timeZone);
   const add = (date, field) => {
     const parts = zonedParts(date, window.timeZone);
     const weekday = dateFormatter(window.timeZone, true).format(date).toLowerCase();
@@ -387,6 +400,7 @@ function mergedScheduleHeatmap(appointments, historicalCommands, window) {
   }
   for (const item of list(historicalCommands)) {
     const date = historicalCommandSlot(item, window.timeZone);
+    if (cutoff && String(item.dataComandaIso || '').slice(0, 10) >= cutoff) continue;
     if (date && date >= window.fromDate && date < window.toDate) add(date, 'historicoAvec');
   }
   return [...cells.values()];
@@ -540,7 +554,7 @@ export function buildDinoDashboardAnalytics(input = {}, options = {}) {
     funnelAvailable ? 'Funil da loja com visitas, carrinhos e checkouts únicos por sessão/dia.' : 'Funil parcial até a loja registrar visitas no período.',
     'Estoques Commerce e revenda são contados separadamente.',
     `Horários movimentados usam a hora marcada no fuso ${window.timeZone}; cancelamentos e faltas não entram no mapa.`,
-    'Histórico Avec no mapa de horários: o Avec não exporta a hora do atendimento; usa-se a hora de fechamento das comandas fechadas no mesmo dia em que foram abertas.',
+    'Histórico Avec no mapa de horários: o Avec não exporta a hora do atendimento; usa-se a hora de fechamento das comandas fechadas no mesmo dia em que foram abertas, e só nos dias anteriores ao primeiro agendamento do Kytto (depois disso vale a agenda).',
     'A atividade recente usa a data persistida/criada/atualizada do registro; heatmap e próximos compromissos usam a data e a hora marcadas.',
   ];
   if (scopeLevel === 'unit') {

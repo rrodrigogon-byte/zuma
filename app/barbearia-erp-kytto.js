@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import { identificarCliente, indiceIdentidadeClientes } from './barbearia-identidade.js';
+import { canonizarRegistroAvec, historicoAvecVigente } from './dino-historico-avec.js';
 import { db, save, nextId } from './db.js';
 import * as financeiroKytto from './financeiro-central-kytto.js';
 import * as clientesKytto from './clientes-contas-kytto.js';
@@ -2784,7 +2785,7 @@ export function importarHistoricoAtendimentos(empresaId, itens = [], opcoes = {}
 }
 
 export function listarHistoricoAtendimentos(empresaId, filtros = {}) {
-  const itens = Object.values(estadoEmpresa(empresaId, false).historicoAtendimentos || {})
+  const itens = historicoAvecVigente(estadoEmpresa(empresaId, false).historicoAtendimentos || {})
     .filter((item) => !filtros.lojaId || !item.lojaId || String(item.lojaId) === String(filtros.lojaId))
     .filter((item) => !filtros.clienteId || item.clienteId === String(filtros.clienteId))
     .filter((item) => !filtros.de || item.dataAgenda >= String(filtros.de).slice(0, 10))
@@ -2796,7 +2797,7 @@ export function listarHistoricoAtendimentos(empresaId, filtros = {}) {
 // Cabeçalhos Avec preservados para reconciliação. Não são comandas do PDV e
 // nunca entram em comissão, caixa, estoque ou faturamento operacional.
 export function listarHistoricoComandas(empresaId, filtros = {}) {
-  const itens = Object.values(estadoEmpresa(empresaId, false).historicoComandas || {})
+  const itens = Object.values(estadoEmpresa(empresaId, false).historicoComandas || {}).map(canonizarRegistroAvec)
     .filter((item) => !filtros.lojaId || !item.lojaId || String(item.lojaId) === String(filtros.lojaId))
     .filter((item) => !filtros.clienteId || item.clienteId === String(filtros.clienteId))
     .filter((item) => !filtros.numeroComanda || item.numeroComanda === String(filtros.numeroComanda))

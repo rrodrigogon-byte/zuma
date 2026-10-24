@@ -39,7 +39,7 @@ function horaDeFechamentoMesmoDia(comanda, dia) {
  * Converte o histórico Avec no formato de itens da agenda (somente leitura).
  * `profissionalId` filtra pelo profissional ativo (ou pelo id histórico).
  */
-export function agendaHistoricaAvec({ historico = [], comandas = [], profissionais = [], profissionalId = '' } = {}) {
+export function agendaHistoricaAvec({ historico = [], comandas = [], profissionais = [], profissionalId = '', antesDe = '' } = {}) {
   const fechamento = new Map();
   for (const comanda of comandas) {
     const dia = String(comanda?.dataComandaIso || '').slice(0, 10);
@@ -49,6 +49,8 @@ export function agendaHistoricaAvec({ historico = [], comandas = [], profissiona
   const filtro = String(profissionalId || '').split(',').map((item) => item.trim()).filter(Boolean);
   return historico
     .filter((item) => item && /^\d{4}-\d{2}-\d{2}$/.test(String(item.dataAgenda || '')))
+    // Dias com agenda no Kytto já mostram os atendimentos reais; o histórico só completa o passado.
+    .filter((item) => !antesDe || String(item.dataAgenda) < String(antesDe))
     .map((item) => {
       const ativo = profissionalAtivoDoHistorico(item.profissionalNome, profissionais);
       const hora = fechamento.get(`${item.dataAgenda}|${item.numeroComanda}`) || '';

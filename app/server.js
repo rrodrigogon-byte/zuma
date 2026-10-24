@@ -3977,6 +3977,7 @@ app.get('/api/admin/barbearia/agenda-periodo', (req, res) => {
       comandas: barbeariaErpKytto.listarHistoricoComandas(empresaId, { de, ate, lojaId }),
       profissionais: barbeariaErpKytto.listarProfissionais(empresaId, { incluirInativos: true }),
       profissionalId: req.query?.profissionalId || '',
+      antesDe: barbeariaErpKytto.listarAgendamentos(empresaId, { lojaId }).reduce((menor, item) => { const dia = String(item?.dataAgenda || item?.dataHora || '').slice(0, 10); return /^\d{4}-\d{2}-\d{2}$/.test(dia) && (!menor || dia < menor) ? dia : menor; }, ''),
     });
     res.json({ ok: true, de, ate, total: itens.length, itens, totalHistorico: historico.length, historico });
   } catch (error) {
