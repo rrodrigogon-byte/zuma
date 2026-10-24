@@ -840,3 +840,45 @@ test('projeção inteligente usa o histórico Avec mês a mês, sem somar o mesm
   assert.ok(dezembro.projecao > novembro.projecao * 1.5, 'a tendência respeita a sazonalidade');
   assert.equal(painel.resumoHistorico.melhorMes.mes, '2025-12');
 });
+
+
+test('analisarProfissionalProjecao gera diagnostico de tendencia e plano de acao salvando nas metas', () => {
+  const { bruno, corte } = montarBarbearia();
+  const agora = new Date('2026-10-24T15:00:00.000Z');
+
+  // 1. Salvar meta com plano de acao e diagnostico
+  const metaSalva = captacao.salvarMetaProfissional(EMPRESA, {
+    profissionalId: bruno.id,
+    mes: '2026-10',
+    receita: 8000,
+    atendimentos: 120,
+    planoAcao: 'Plano customizado pelo gestor para Bruno focar em barba terapia.',
+    diagnostico: 'Diagnostico de crescimento com boa carteira.',
+    tendenciaObservada: 'crescimento',
+  });
+  assert.equal(metaSalva.receita, 8000);
+  assert.equal(metaSalva.atendimentos, 120);
+  assert.equal(metaSalva.planoAcao, 'Plano customizado pelo gestor para Bruno focar em barba terapia.');
+
+  // 2. Analisar profissional na projecao
+  const analise = captacao.analisarProfissionalProjecao(EMPRESA, bruno.id, { mes: '2026-10', lojaId: LOJA }, { agora });
+  assert.equal(analise.profissionalId, bruno.id);
+  assert.equal(analise.nome, bruno.nome);
+  assert.equal(analise.mes, '2026-10');
+  assert.ok(analise.diagnostico);
+  assert.ok(analise.diagnostico.motivos.length > 0);
+  assert.ok(analise.planoAcao);
+  assert.ok(analise.planoAcao.alavancas.length >= 4);
+  assert.ok(analise.planoAcao.metasSugeridas.receita > 0);
+  assert.ok(analise.planoAcao.textoPlanoSugerido.includes(bruno.nome.toUpperCase()));
+  // Meta salva persiste e vem preenchida
+  assert.equal(analise.metaAtual.receita, 8000);
+  assert.equal(analise.metaAtual.planoAcao, 'Plano customizado pelo gestor para Bruno focar em barba terapia.');
+
+  // 3. ProjecaoFaturamento inclui planoAcao e diagnostico na lista de profissionais
+  const painel = captacao.projecaoFaturamento(EMPRESA, { mes: '2026-10', lojaId: LOJA }, { agora });
+  const itemBruno = painel.profissionais.find((p) => p.profissionalId === bruno.id);
+  assert.ok(itemBruno);
+  assert.equal(itemBruno.meta.receita, 8000);
+  assert.equal(itemBruno.meta.planoAcao, 'Plano customizado pelo gestor para Bruno focar em barba terapia.');
+});

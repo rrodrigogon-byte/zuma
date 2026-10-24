@@ -4728,6 +4728,18 @@ app.get('/api/admin/barbearia/captacao/projecao-faturamento', (req, res) => {
     }) });
   } catch (error) { respostaCaptacao(res, error); }
 });
+app.get('/api/admin/barbearia/captacao/profissionais/:id/analise-projecao', (req, res) => {
+  if (!gestaoDaUnidade(req, res)) return;
+  try {
+    res.json({
+      ok: true,
+      ...captacaoKytto.analisarProfissionalProjecao(legacyEmpresaId(req), req.params.id, {
+        mes: req.query?.mes,
+        lojaId: legacyLojaId(req),
+      }),
+    });
+  } catch (error) { respostaCaptacao(res, error); }
+});
 
 // Camada narrativa da projeção: os números permanecem no motor determinístico;
 // a IA apenas explica, prioriza e sugere ações sem mutar o ERP.
