@@ -350,3 +350,13 @@ test('anonimização da loja usa savepoints, tolera tabela ausente e audita só 
     assert.ok(statements.filter((item) => /^(UPDATE|DELETE|INSERT)/.test(item.sql)).every((item) => item.params[0] === EMPRESA));
   } finally { db.transaction = original; }
 });
+
+test('grupo extenso por contato conserva identidade, ordem e motivo sem todos os pares', () => {
+  const localClients = Array.from({ length: 2000 }, (_, i) => ({ id: `grupo-${i}`, nome: 'Cliente', telefone: '65999999999' }));
+  const result = buildIdentityGraph({ localClients });
+  assert.equal(result.persons.length, 1);
+  assert.equal(result.persons[0].local.length, 2000);
+  assert.equal(result.persons[0].ref, 'dino:grupo-0');
+  assert.deepEqual(result.persons[0].matchedBy, ['telefone']);
+  assert.equal(result.persons[0].ambiguous, true);
+});
