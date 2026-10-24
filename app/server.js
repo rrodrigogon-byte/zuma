@@ -108,7 +108,7 @@ import { customerReport, inventoryReport, salesReport } from './core/commerce-re
 import { purgeExpiredCommercePublicData, startCommerceReservationExpiryCleanup, startCommerceRetentionCleanup, startLoyaltyExpiry } from './core/commerce-retention.js';
 import { compareLegacyAndCoreInventory, createDestructiveAdminGuard, createLegacyCommerceMutationGuard, createLegacyPaymentMutationGuard } from './core/commerce-legacy-guards.js';
 import { readScopedCatalogDiagnostic } from './core/catalog-read-diagnostic.js';
-import { buildDinoDashboardAnalytics, dashboardPeriod } from './dino-dashboard.js';
+import { buildDinoDashboardAnalytics, dashboardPeriod, filterDashboardRowsToStore } from './dino-dashboard.js';
 import { registerCustomer360Routes } from './customer360-routes.js';
 import { registerEquipePerformanceRoutes, equipePerformanceNoStore } from './dino-equipe-desempenho-routes.js';
 import { registerAiBrainRoutes } from './ai-brain-routes.js';
@@ -3462,11 +3462,13 @@ function legacyWppAllowedForBarbearia(req, whatsappAi) {
 }
 
 // Metas do mês corrente (independem do período escolhido no painel).
-async function metasDoMes({ empresaId, now, barbershopInput, commerceContext, profitFor }) {
+async function metasDoMes({ empresaId, now, barbershopInput, commerceContext, profitFor, scopeLevel = 'company' }) {
   const metas = dinoMetas.obterMetas(empresaId);
   const mes = dinoMetas.monthWindow(now);
   const configured = Object.values(metas).some(Boolean);
-  if (!configured) return { configured: false, items: [], month: mes.label, metas };
+  const comparable = scopeLevel !== 'unit';
+  if (!configured) return { configured: false, comparable, targetScope: 'company', items: [], month: mes.label, metas };
+  if (!comparable) return { configured: true, comparable: false, targetScope: 'company', month: mes.label, day: mes.day, daysInMonth: mes.daysInMonth, metas, items: [] };
   let commerce = null;
   if (commerceContext) {
     try {
@@ -3492,7 +3494,7 @@ async function metasDoMes({ empresaId, now, barbershopInput, commerceContext, pr
     ticketMedio: atendimentos ? receitaServicos / atendimentos : 0,
     novosClientes,
   };
-  return { configured: true, month: mes.label, day: mes.day, daysInMonth: mes.daysInMonth, metas, items: dinoMetas.progressoMetas(metas, atual, mes) };
+  return { configured: true, comparable: true, targetScope: 'company', month: mes.label, day: mes.day, daysInMonth: mes.daysInMonth, metas, items: dinoMetas.progressoMetas(metas, atual, mes) };
 }
 
 app.get('/api/admin/barbearia/analytics', async (req, res) => {
@@ -3511,8 +3513,14 @@ app.get('/api/admin/barbearia/analytics', async (req, res) => {
     let commerceCurrent = {};
     let commercePrevious = {};
     let commerceContext = null;
+    let commerceUnavailableReason = null;
     try {
       const context = await requireCommercePermission(req, 'reports.read');
+      const commerceEmpresaId = legacyEmpresaIdFromCommerce(context?.empresaId);
+      const commerceLojaId = legacyLojaIdFromCommerce(context?.lojaId, context?.empresaId);
+      if (commerceEmpresaId !== String(empresaId)) throw Object.assign(new Error('Empresa Commerce não corresponde ao contexto administrativo ativo.'), { code: 'TENANT_SCOPE_MISMATCH' });
+      if (lojaId && commerceLojaId !== String(lojaId)) throw Object.assign(new Error('Escopo Commerce não corresponde à unidade ativa.'), { code: 'STORE_SCOPE_MISMATCH' });
+      if (!lojaId && commerceLojaId) throw Object.assign(new Error('Commerce está vinculado a uma unidade, mas o painel está no agregado da empresa.'), { code: 'COMMERCE_AGGREGATE_SCOPE_UNAVAILABLE' });
       commerceContext = context;
       const currentOptions = { from: range.from, to: range.to };
       const previousOptions = { from: range.previousFrom, to: range.previousTo };
@@ -3531,12 +3539,21 @@ app.get('/api/admin/barbearia/analytics', async (req, res) => {
       commercePrevious.cost = detailBefore?.cost ?? null;
     } catch (error) {
       const code = String(error?.code || 'COMMERCE_REPORTS_UNAVAILABLE');
+      commerceUnavailableReason = code;
       console.warn(`Analytics Dino sem agregados Commerce: ${code}`);
     }
+    const rawAppointments = barbeariaErpKytto.listarAgendamentos(empresaId, { lojaId });
+    const rawHistoricalAppointments = barbeariaErpKytto.listarHistoricoAtendimentos(empresaId, { lojaId });
+    const rawHistoricalCommands = barbeariaErpKytto.listarHistoricoComandas(empresaId, { lojaId });
+    const unassignedRecords = lojaId ? {
+      appointments: rawAppointments.filter((item) => !item.lojaId && !item.loja_id).length,
+      historicalAppointments: rawHistoricalAppointments.filter((item) => !item.lojaId && !item.loja_id).length,
+      historicalCommands: rawHistoricalCommands.filter((item) => !item.lojaId && !item.loja_id).length,
+    } : {};
     const barbershopInput = {
-      appointments: barbeariaErpKytto.listarAgendamentos(empresaId, { lojaId }),
-      historicalAppointments: barbeariaErpKytto.listarHistoricoAtendimentos(empresaId, { lojaId }),
-      historicalCommands: barbeariaErpKytto.listarHistoricoComandas(empresaId, { lojaId }),
+      appointments: filterDashboardRowsToStore(rawAppointments, lojaId),
+      historicalAppointments: filterDashboardRowsToStore(rawHistoricalAppointments, lojaId),
+      historicalCommands: filterDashboardRowsToStore(rawHistoricalCommands, lojaId),
       retailSales: barbeariaErpKytto.listarVendasRevenda(empresaId, { lojaId }),
       commands: barbeariaErpKytto.listarComandasBarbearia(empresaId, { lojaId }),
       products: barbeariaErpKytto.listarProdutosRevenda(empresaId, { incluirInativos: true, lojaId }),
@@ -3564,20 +3581,25 @@ app.get('/api/admin/barbearia/analytics', async (req, res) => {
     }, win);
     const analytics = buildDinoDashboardAnalytics({
       commerceAvailable,
+      commerceUnavailableReason,
       commerceCurrent,
       commercePrevious,
       appointments: barbershopInput.appointments,
+      historicalAppointments: barbershopInput.historicalAppointments,
+      historicalCommands: barbershopInput.historicalCommands,
       retailSales: barbershopInput.retailSales,
       commands: barbershopInput.commands,
       customers: clientesKytto.listarClientes(empresaId),
       financeEntries: barbershopInput.financeEntries,
-      inventory: barbeariaErpKytto.listarProdutosRevenda(empresaId, { incluirInativos: false }),
+      inventory: barbeariaErpKytto.listarProdutosRevenda(empresaId, { incluirInativos: false, lojaId }),
       subscriptions,
       subscriptionPayments,
       subscriptionPaymentsAvailable,
       subscriptionPaymentsReason: subscriptionPaymentsAvailable ? null : 'Os pagamentos de planos legados ainda não identificam a unidade ativa; por segurança, eles aparecem somente no agregado da empresa.',
+      scope: { level: lojaId ? 'unit' : 'company', unitId: lojaId || '' },
+      unassignedRecords,
       profit: { current: profitFor(currentWindow, commerceCurrent), previous: profitFor(previousWindow, commercePrevious) },
-      goals: await metasDoMes({ empresaId, now, barbershopInput, commerceContext, profitFor }),
+      goals: await metasDoMes({ empresaId, now, barbershopInput, commerceContext, profitFor, scopeLevel: lojaId ? 'unit' : 'company' }),
       funnel: commerceAvailable ? { current: funnelSummary(empresaId, range.fromDate, range.toDate), previous: funnelSummary(empresaId, range.previousFromDate, range.previousToDate) } : null,
     }, { period: range.days, now, window: range });
     res.json({ ok: true, ...analytics });

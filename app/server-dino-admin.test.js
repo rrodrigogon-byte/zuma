@@ -67,7 +67,22 @@ test('admin da empresa: isolamento, guardas legados, BI, cliente automático e W
   fs.writeFileSync(dbPath, JSON.stringify({
     seq: 1,
     lancamentos: [{ id: 900, tipo: 'receita', categoria: 'Inscrição Torneio', descricao: 'Receita do evento', valor: 300, status: 'pendente', vencimento: '2026-01-01' }],
-    barbearias: { 'emp-a': { comandas: { 'cmd-sem-loja': { id: 'cmd-sem-loja', empresaId: 'emp-a', lojaId: '', status: 'aberta', itens: [], pagamentos: [], criadoEm: '2030-06-11T12:00:00.000Z' } } } },
+    barbearias: { 'emp-a': {
+      comandas: { 'cmd-sem-loja': { id: 'cmd-sem-loja', empresaId: 'emp-a', lojaId: '', status: 'aberta', itens: [], pagamentos: [], criadoEm: '2030-06-11T12:00:00.000Z' } },
+      agendamentos: {
+        'agenda-loja-a': { id: 'agenda-loja-a', empresaId: 'emp-a', lojaId: 'loja-a', status: 'agendado', dataAgenda: '2030-06-11', dataHora: '2030-06-11T15:00:00.000Z', clienteNome: 'Cliente sintético A' },
+        'agenda-loja-a2': { id: 'agenda-loja-a2', empresaId: 'emp-a', lojaId: 'loja-a2', status: 'agendado', dataAgenda: '2030-06-11', dataHora: '2030-06-11T16:00:00.000Z', clienteNome: 'Cliente sintético filial' },
+        'agenda-sem-loja': { id: 'agenda-sem-loja', empresaId: 'emp-a', lojaId: '', status: 'agendado', dataAgenda: '2030-06-11', dataHora: '2030-06-11T17:00:00.000Z', clienteNome: 'Cliente sintético sem unidade' },
+      },
+      historicoAtendimentos: {
+        'historico-loja-a': { id: 'historico-loja-a', empresaId: 'emp-a', lojaId: 'loja-a', dataAgenda: '2030-06-11', hora: '11:00', clienteId: 'cliente-a', clienteNome: 'Histórico sintético A', servicoNome: 'Corte', valor: 50 },
+        'historico-sem-loja': { id: 'historico-sem-loja', empresaId: 'emp-a', lojaId: '', dataAgenda: '2030-06-11', hora: '12:00', clienteId: 'cliente-sem-loja', clienteNome: 'Histórico sem unidade', servicoNome: 'Barba', valor: 60 },
+      },
+      historicoComandas: {
+        'comanda-historica-loja-a': { id: 'comanda-historica-loja-a', empresaId: 'emp-a', lojaId: 'loja-a', dataComandaIso: '2030-06-11', dataFinalizacaoOriginal: '2030-06-11', numeroComanda: '1', clienteId: 'cliente-a', clienteNome: 'Histórico sintético A', total: 100 },
+        'comanda-historica-sem-loja': { id: 'comanda-historica-sem-loja', empresaId: 'emp-a', lojaId: '', dataComandaIso: '2030-06-11', dataFinalizacaoOriginal: '2030-06-11', numeroComanda: '2', clienteId: 'cliente-sem-loja', clienteNome: 'Histórico sem unidade', total: 90 },
+      },
+    } },
     usuarios: [
       { id: 1, nome: 'Gestor A', email: 'a@dino.test', senhaHash: hash, role: 'admin', ativo: true, empresaId: 'emp-a', lojaId: 'loja-a' },
       { id: 2, nome: 'Barbeiro A', email: 'staff@dino.test', senhaHash: hash, role: 'staff', ativo: true, empresaId: 'emp-a', lojaId: 'loja-a' },
@@ -180,8 +195,15 @@ test('admin da empresa: isolamento, guardas legados, BI, cliente automático e W
     assert.equal((await request(base, '/api/admin/barbearia/metas', { headers: B })).body.metas.receita, null, 'metas são por empresa');
     const painel = await request(base, '/api/admin/barbearia/analytics?period=30', { headers: A });
     assert.equal(painel.response.status, 200);
+    assert.equal(painel.body.scope.level, 'unit');
     assert.equal(painel.body.goals.configured, true);
-    assert.deepEqual(painel.body.goals.items.map((item) => item.id), ['receita', 'atendimentos']);
+    assert.equal(painel.body.goals.comparable, false, 'metas corporativas não são comparadas com realizado de uma unidade');
+    assert.deepEqual(painel.body.goals.items, []);
+    assert.equal(painel.body.dataQuality.sources.goals.status, 'limited');
+    assert.equal(painel.body.dataQuality.sources.commerce.status, 'unavailable');
+    assert.equal(painel.body.dataQuality.sources.agenda.upcoming, 1, 'agenda unitária exclui outra filial e registro sem unidade');
+    assert.ok(painel.body.upcomingAppointments.every((item) => item.id === 'agenda-loja-a'));
+    assert.match(painel.body.dataQuality.notes.join(' '), /3 registro\(s\).*excluídos/);
     assert.deepEqual(painel.body.strategicMix.items.map((item) => item.id), ['services', 'products', 'plans']);
     assert.equal(painel.body.strategicMix.planPaymentsAvailable, false, 'uma unidade não recebe pagamentos de planos legados sem lojaId');
     assert.match(painel.body.strategicMix.planPaymentsReason, /não identificam a unidade ativa/);
@@ -190,6 +212,9 @@ test('admin da empresa: isolamento, guardas legados, BI, cliente automático e W
     assert.equal(painelCustomizado.response.status, 200, 'analytics aceita o mesmo intervalo explícito do BI');
     assert.equal(painelCustomizado.body.period.days, 1);
     assert.match(painelCustomizado.body.period.from, /^2030-06-11T04:00:00\.000Z$/);
+    assert.equal(painelCustomizado.body.historicalAvec.services.count, 1, 'histórico com loja ativa permanece no recorte');
+    assert.equal(painelCustomizado.body.historicalAvec.commands.count, 1, 'comanda histórica com loja ativa permanece no recorte');
+    assert.ok(painelCustomizado.body.dataQuality.notes.join(' ').includes('3 registro(s)'));
 
     // ── Módulos globais legados bloqueados para usuários de empresa ──
     const legadoA = await request(base, '/api/admin/financeiro/lancamentos', { headers: A });
@@ -226,10 +251,11 @@ test('admin da empresa: isolamento, guardas legados, BI, cliente automático e W
     const serv = await request(base, '/api/admin/barbearia/servicos', { method: 'POST', headers: A, body: JSON.stringify({ nome: 'Corte BI', preco: 60, duracaoMinutos: 30 }) });
     assert.equal(serv.response.status, 201);
     const agendar = (hora, extra = {}) => request(base, '/api/admin/barbearia/agenda', { method: 'POST', headers: A, body: JSON.stringify({ clienteNome: 'Carlos Novo', clienteTelefone: '(65) 99811-2233', profissionalId: prof.body.profissional.id, servicoId: serv.body.servico.id, dataAgenda: '2030-06-11', dataHora: `2030-06-11T${hora}:00.000Z`, ...extra }) });
+    const agendaAntesPrecoForjado = (await request(base, '/api/admin/barbearia/agenda', { headers: A })).body.agendamentos.length;
     const precoForjado = await agendar('12:00', { valor: 1 });
     assert.equal(precoForjado.response.status, 409);
     assert.equal(precoForjado.body.code, 'APPOINTMENT_PRICE_MISMATCH');
-    assert.equal((await request(base, '/api/admin/barbearia/agenda', { headers: A })).body.agendamentos.length, 0, 'preço forjado não cria agenda');
+    assert.equal((await request(base, '/api/admin/barbearia/agenda', { headers: A })).body.agendamentos.length, agendaAntesPrecoForjado, 'preço forjado não cria agenda');
     const ag1 = await agendar('13:00');
     assert.equal(ag1.response.status, 201, JSON.stringify(ag1.body));
     assert.ok(ag1.body.cliente.id);

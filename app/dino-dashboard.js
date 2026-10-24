@@ -5,6 +5,7 @@ const TIME_ZONE = 'America/Cuiaba';
 const num = (value) => Number.isFinite(Number(value)) ? Number(value) : 0;
 const money = (value) => Number(num(value).toFixed(2));
 const list = (value) => Array.isArray(value) ? value : [];
+const EXCLUDED_APPOINTMENT_STATUSES = new Set(['cancelado', 'cancelada', 'canceled', 'cancelled', 'cancelado_falta_confirmacao', 'cancelado_por_cliente', 'cancelado_cliente', 'nao_compareceu', 'faltou', 'falta', 'no_show', 'noshow', 'ausente', 'missed', 'remarcado', 'reagendado']);
 
 function dateValue(value) {
   const date = value instanceof Date ? value : new Date(value || '');
@@ -28,6 +29,60 @@ function zoneOffset(date, timeZone = TIME_ZONE) {
   return Date.UTC(value.year, value.month - 1, value.day, value.hour, value.minute, value.second) - date.getTime();
 }
 
+function localWallTimeToUtc(day, time, timeZone = TIME_ZONE) {
+  const dateMatch = String(day || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const timeMatch = String(time || '').match(/^(\d{2}):(\d{2})(?::(\d{2}))?$/);
+  if (!dateMatch || !timeMatch) return null;
+  const [, year, month, date] = dateMatch.map(Number);
+  const [, hour, minute, second = '0'] = timeMatch;
+  const wall = Date.UTC(year, month - 1, date, Number(hour), Number(minute), Number(second));
+  const check = new Date(wall);
+  if (check.getUTCFullYear() !== year || check.getUTCMonth() + 1 !== month || check.getUTCDate() !== date) return null;
+  let instant = wall;
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const candidate = wall - zoneOffset(new Date(instant), timeZone);
+    if (candidate === instant) break;
+    instant = candidate;
+  }
+  const result = new Date(instant);
+  const local = zonedParts(result, timeZone);
+  if (local.year !== year || local.month !== month || local.day !== date || local.hour !== Number(hour) || local.minute !== Number(minute)) return null;
+  return result;
+}
+
+function appointmentTimestamp(item = {}, timeZone = TIME_ZONE) {
+  const raw = item.dataHora || item.data_hora || item.scheduledAt || item.scheduled_at;
+  if (raw) {
+    const value = String(raw).trim();
+    const localMatch = value.match(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})(?::(\d{2}))?$/);
+    if (localMatch) return localWallTimeToUtc(localMatch[1], localMatch[2] + (localMatch[3] ? `:${localMatch[3]}` : ''), timeZone);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+      const parsed = dateValue(value);
+      if (parsed) return parsed;
+    }
+  }
+  const day = String(item.dataAgenda || item.data_agenda || raw || '').slice(0, 10);
+  const hour = String(item.horaLocal || item.hora_local || item.horaMarcada || item.hora_marcada || item.hora || '').slice(0, 5);
+  return localWallTimeToUtc(day, hour, timeZone);
+}
+
+function normalizedAppointmentStatus(status) {
+  return String(status || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[\s-]+/g, '_');
+}
+
+function excludedAppointmentStatus(status) {
+  return EXCLUDED_APPOINTMENT_STATUSES.has(normalizedAppointmentStatus(status));
+}
+
+function appointmentDayWindow(window, now) {
+  const today = zonedParts(now, window.timeZone);
+  const windowEnd = zonedParts(new Date(window.toDate.getTime() - 1), window.timeZone);
+  const endIsToday = today.year === windowEnd.year && today.month === windowEnd.month && today.day === windowEnd.day;
+  if (!endIsToday && window.toDate.valueOf() !== now.valueOf()) return window;
+  const nextDay = new Date(Date.UTC(today.year, today.month - 1, today.day + 1)).toISOString().slice(0, 10);
+  return { ...window, toDate: localWallTimeToUtc(nextDay, '00:00', window.timeZone) || window.toDate };
+}
+
 function localMidnightUtc(date, timeZone = TIME_ZONE) {
   const value = zonedParts(date, timeZone);
   const approximate = new Date(Date.UTC(value.year, value.month - 1, value.day));
@@ -47,8 +102,21 @@ function inWindow(item, window) {
   return Boolean(date && date >= window.fromDate && date < window.toDate);
 }
 
+function inAppointmentWindow(item, window) {
+  const date = appointmentTimestamp(item, window.timeZone);
+  return Boolean(date && date >= window.fromDate && date < window.toDate);
+}
+
+export function filterDashboardRowsToStore(items, lojaId = '') {
+  const rows = list(items);
+  if (!lojaId) return rows;
+  return rows.filter((item) => String(item?.lojaId || item?.loja_id || '') === String(lojaId));
+}
+
 function historicalDate(item = {}) {
-  return dateValue(item.dataAgenda || item.dataComandaIso || item.dataFinalizacaoOriginal || item.data);
+  const raw = item.dataAgenda || item.dataComandaIso || item.dataFinalizacaoOriginal || item.data;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(String(raw || ''))) return localWallTimeToUtc(String(raw), '00:00');
+  return dateValue(raw);
 }
 
 function inHistoricalWindow(item, window) {
@@ -266,8 +334,8 @@ function strategicRevenueMix(input, window, consolidatedRevenue) {
 
 function scheduleHeatmap(appointments, window) {
   const cells = new Map();
-  for (const item of appointments.filter((entry) => !['cancelado', 'nao_compareceu'].includes(entry.status) && inWindow(entry, window))) {
-    const date = timestamp(item);
+  for (const item of appointments.filter((entry) => !excludedAppointmentStatus(entry.status) && inAppointmentWindow(entry, window))) {
+    const date = appointmentTimestamp(item, window.timeZone);
     if (!date) continue;
     const parts = zonedParts(date, window.timeZone);
     const weekday = new Intl.DateTimeFormat('en-US', { timeZone: window.timeZone, weekday: 'short' }).format(date).toLowerCase();
@@ -281,21 +349,25 @@ function scheduleHeatmap(appointments, window) {
 }
 
 function upcomingAppointments(appointments, now, timeZone) {
+  const excludedStatuses = new Set(['concluido', 'finalizado', 'em_atendimento']);
   return appointments
-    .map((item) => ({ item, date: timestamp(item) }))
-    .filter(({ item, date }) => date && date >= now && !['cancelado', 'nao_compareceu', 'concluido'].includes(item.status))
+    .map((item) => ({ item, date: appointmentTimestamp(item, timeZone) }))
+    .filter(({ item, date }) => date && date >= now && !excludedAppointmentStatus(item.status) && !excludedStatuses.has(normalizedAppointmentStatus(item.status)))
     .sort((a, b) => a.date - b.date)
     .slice(0, 8)
     .map(({ item, date }) => ({ id: item.id, at: date.toISOString(), day: dayKey(date, timeZone), customerId: item.clienteId || '', customer: item.clienteNome || item.cliente_nome || 'Cliente', service: item.servicoNome || item.servico_nome || 'Serviço', professional: item.profissionalNome || item.profissional_nome || 'A definir', status: item.status || 'agendado' }));
 }
 
-function activityFeed(input, now) {
+function activityFeed(input, now, window) {
   const rows = [
     ...list(input.appointments).map((item) => ({ type: 'appointment', at: timestamp(item), title: item.clienteNome || item.cliente_nome || 'Agendamento', detail: item.servicoNome || item.servico_nome || item.status || 'Agenda' })),
     ...list(input.retailSales).map((item) => ({ type: 'retail', at: timestamp(item), title: item.clienteNome || 'Venda de revenda', detail: item.status || 'Venda' })),
     ...list(input.commands).map((item) => ({ type: 'command', at: timestamp(item), title: item.clienteNome || 'Comanda', detail: item.status || 'Atendimento' })),
+    ...list(input.historicalAppointments).map((item) => ({ type: 'historical', at: historicalDate(item), title: item.clienteNome || item.cliente_nome || 'Atendimento histórico', detail: `${item.servicoNome || item.servico || 'Atendimento'} · histórico Avec` })),
+    ...list(input.historicalCommands).map((item) => ({ type: 'historical', at: historicalDate(item), title: item.clienteNome || item.cliente_nome || 'Comanda histórica', detail: 'Comanda · histórico Avec' })),
+    ...list(input.financeEntries).map((item) => ({ type: 'finance', at: timestamp(item), title: `Lançamento ${item.tipo || 'financeiro'}`, detail: `${item.status || 'registrado'} · ${item.categoria || 'Financeiro'}`, value: num(item.valor) })),
   ];
-  return rows.filter((item) => item.at && item.at <= now).sort((a, b) => b.at - a.at).slice(0, 12).map((item) => ({ ...item, at: item.at.toISOString() }));
+  return rows.filter((item) => item.at && item.at <= now && item.at >= window.fromDate && item.at < window.toDate).sort((a, b) => b.at - a.at).slice(0, 12).map((item) => ({ ...item, at: item.at.toISOString() }));
 }
 
 export function buildDinoDashboardAnalytics(input = {}, options = {}) {
@@ -303,6 +375,7 @@ export function buildDinoDashboardAnalytics(input = {}, options = {}) {
   // O BI pode fornecer uma janela civil explícita; assim, cards e mix usam o
   // mesmo intervalo de um relatório customizado, inclusive na comparação.
   const window = options.window || dashboardPeriod(options.period, now, options.timeZone || TIME_ZONE);
+  const scopeLevel = input.scope?.level === 'unit' ? 'unit' : 'company';
   const previousWindow = { ...window, fromDate: window.previousFromDate, toDate: window.previousToDate };
   const historicalAvec = historicalAvecSummary(input, window);
   const historicalFinance = historicalFinanceSummary(input, window);
@@ -324,15 +397,24 @@ export function buildDinoDashboardAnalytics(input = {}, options = {}) {
   const transactions = commerceOrders + legacyCurrent.transactions + historicalFinance.paidRevenueEntries;
   const previousTransactions = commercePreviousOrders + legacyPrevious.transactions + historicalFinancePrevious.paidRevenueEntries;
   const appointments = list(input.appointments);
-  const currentAppointments = appointments.filter((item) => inWindow(item, window));
-  const previousAppointments = appointments.filter((item) => inWindow(item, previousWindow));
+  const currentAppointmentWindow = appointmentDayWindow(window, now);
+  const currentAppointments = appointments.filter((item) => inAppointmentWindow(item, currentAppointmentWindow));
+  const previousAppointments = appointments.filter((item) => inAppointmentWindow(item, previousWindow));
   // cliente novo = cadastrado no período (criadoEm), sem o cliente padrão e sem os trazidos por
   // importação; atualizar um cadastro antigo (consentimento, telefone) não o torna novo
   // A carga do AVEC (09/10/2026) marcou os 3.327 clientes trazidos com "Origem AVEC (carga …)" na observação.
   const importado = (item) => Boolean(item.importadoEm)
     || /import|avec|\(carga/i.test(`${item.origem || ''} ${item.origemCadastro || ''}`)
     || /^origem\s+\S+.*\(carga|importa[cç][aã]o|importado/i.test(String(item.observacao || ''));
-  const customers = list(input.customers).filter((item) => !item.padrao && !importado(item));
+  const unitCustomerIds = new Set([
+    ...appointments,
+    ...list(input.retailSales),
+    ...list(input.commands),
+    ...list(input.historicalAppointments),
+    ...list(input.historicalCommands),
+  ].map((item) => String(item?.clienteId || item?.cliente_id || '')).filter(Boolean));
+  const customers = list(input.customers).filter((item) => !item.padrao && !importado(item)
+    && (scopeLevel !== 'unit' || unitCustomerIds.has(String(item.id || '')) || String(item.lojaId || item.loja_id || '') === String(input.scope?.unitId || '')));
   const createdIn = (item, w) => { const date = dateValue(item.criadoEm); return Boolean(date && date >= w.fromDate && date < w.toDate); };
   const currentNewCustomers = customers.filter((item) => createdIn(item, window)).length + num(commerceCurrent.customers?.summary?.new_customers);
   const previousNewCustomers = customers.filter((item) => createdIn(item, previousWindow)).length + num(commercePrevious.customers?.summary?.new_customers);
@@ -355,7 +437,7 @@ export function buildDinoDashboardAnalytics(input = {}, options = {}) {
     if (row) row.historicalAvec = money(row.historicalAvec + num(item.valor));
   }
   for (const item of currentAppointments) {
-    const row = byDay.get(dayKey(timestamp(item), window.timeZone));
+    const row = byDay.get(dayKey(appointmentTimestamp(item, window.timeZone), window.timeZone));
     if (row) row.appointments += 1;
   }
   daily.forEach((row) => { row.total = money(row.commerce + row.barbershop + row.retail + row.historicalAvec); });
@@ -383,29 +465,53 @@ export function buildDinoDashboardAnalytics(input = {}, options = {}) {
   const conversion = funnelAvailable ? Number(((commerceOrders / num(funnelCurrent.visit)) * 100).toFixed(2)) : null;
   const previousConversion = funnelPrevious && num(funnelPrevious.visit) > 0 ? Number(((commercePreviousOrders / num(funnelPrevious.visit)) * 100).toFixed(2)) : null;
   const trendConversion = conversion != null && previousConversion ? pct(conversion, previousConversion) : { value: null, available: false };
+  const heatmapCells = scheduleHeatmap(appointments, currentAppointmentWindow);
+  const activity = activityFeed(input, now, window);
+  const upcoming = upcomingAppointments(appointments, now, window.timeZone);
+  const paymentMethods = [...paymentBreakdown(input, window), ...historicalPaymentBreakdown(input, window)];
+  const commercePaymentMethods = list(commerceCurrent.sales?.capturedPayments).map((item) => ({ method: item.method, value: num(item.value) }));
+  const heatmapAppointmentCount = heatmapCells.reduce((sum, item) => sum + item.value, 0);
+  const goals = input.goals || { configured: false, items: [] };
+  const unitDataExclusions = input.unassignedRecords || {};
+  const dataQualityNotes = [
+    profitAvailable ? 'Resultado consolidado = operação, e-commerce com custo conhecido e histórico Avec pago − comissões − custo da revenda − despesas pagas; a origem histórica permanece identificada.' : 'Lucro indisponível até que todos os custos do recorte estejam persistidos.',
+    funnelAvailable ? 'Funil da loja com visitas, carrinhos e checkouts únicos por sessão/dia.' : 'Funil parcial até a loja registrar visitas no período.',
+    'Estoques Commerce e revenda são contados separadamente.',
+    `Horários movimentados usam a hora marcada no fuso ${window.timeZone}; cancelamentos e faltas não entram no mapa.`,
+    'A atividade recente usa a data persistida/criada/atualizada do registro; heatmap e próximos compromissos usam a data e a hora marcadas.',
+  ];
+  if (scopeLevel === 'unit') {
+    dataQualityNotes.push('Escopo operacional: unidade ativa. Registros sem unidade identificada são omitidos, não atribuídos por suposição.');
+    dataQualityNotes.push('Novos clientes são contados quando ligados a uma operação desta unidade; MRR e metas permanecem no escopo da empresa.');
+    if (goals.configured) dataQualityNotes.push('O progresso das metas corporativas não é comparado ao realizado de uma única unidade.');
+    const unassignedCount = num(unitDataExclusions.appointments) + num(unitDataExclusions.historicalAppointments) + num(unitDataExclusions.historicalCommands);
+    if (unassignedCount) dataQualityNotes.push(`${unassignedCount.toLocaleString('pt-BR')} registro(s) de agenda/histórico sem unidade foram excluídos deste recorte.`);
+  }
+  if (!commerceAvailable && input.commerceUnavailableReason) dataQualityNotes.push(`Commerce indisponível neste recorte (${input.commerceUnavailableReason}); os valores restantes não incluem pedidos da loja.`);
   return {
     period: { days: window.days, from: window.from, to: window.to, previousFrom: window.previousFrom, previousTo: window.previousTo, timeZone: window.timeZone },
+    scope: { level: scopeLevel, label: scopeLevel === 'unit' ? 'Unidade ativa' : 'Empresa' },
     kpis: [
       { id: 'revenue', label: 'Valor bruto registrado', value: revenue, previousValue: previousRevenue, trendPct: trendRevenue.value, trendAvailable: trendRevenue.available, available: true, format: 'currency' },
       profitAvailable
         ? { id: 'profit', label: 'Resultado consolidado', value: profitCurrent.resultado, previousValue: profitPrevious?.resultado ?? null, trendPct: trendProfit.value, trendAvailable: trendProfit.available, available: true, format: 'currency', margin: profitCurrent.margem, breakdown: { receita: profitCurrent.receita, receitaOperacional: profitCurrent.receitaOperacional, receitaHistoricaAvec: profitCurrent.receitaHistoricaAvec, comissoes: profitCurrent.comissoes, cmvRevenda: profitCurrent.cmvRevenda, despesasPagas: profitCurrent.despesasPagas, despesasHistoricasAvec: profitCurrent.despesasHistoricasAvec }, reason: (profitCurrent.notas || []).join(' ') }
         : { id: 'profit', label: 'Lucro', value: null, previousValue: null, trendPct: null, trendAvailable: false, available: false, format: 'currency', reason: 'Custos completos não estão disponíveis para todo o recorte.' },
       { id: 'ticket', label: 'Ticket médio bruto', value: currentTicket, previousValue: previousTicket, trendPct: trendTicket.value, trendAvailable: trendTicket.available, available: true, format: 'currency' },
-      { id: 'newCustomers', label: 'Novos clientes', value: currentNewCustomers, previousValue: previousNewCustomers, trendPct: trendCustomers.value, trendAvailable: trendCustomers.available, available: true, format: 'number' },
+      { id: 'newCustomers', label: scopeLevel === 'unit' ? 'Novos clientes vinculados à unidade' : 'Novos clientes', value: currentNewCustomers, previousValue: previousNewCustomers, trendPct: trendCustomers.value, trendAvailable: trendCustomers.available, available: true, format: 'number' },
       { id: 'appointments', label: 'Agendamentos', value: currentAppointments.length, previousValue: previousAppointments.length, trendPct: trendAppointments.value, trendAvailable: trendAppointments.available, available: true, format: 'number' },
       funnelAvailable
         ? { id: 'conversion', label: 'Conversão da loja', value: conversion, previousValue: previousConversion, trendPct: trendConversion.value, trendAvailable: trendConversion.available, available: true, format: 'percent', reason: 'Pedidos da loja online ÷ visitas únicas por dia.' }
         : { id: 'conversion', label: 'Conversão', value: null, previousValue: null, trendPct: null, trendAvailable: false, available: false, format: 'percent', reason: input.funnel ? 'Ainda sem visitas registradas na loja neste período.' : 'Tracking de visita e checkout ainda não está disponível.' },
     ],
-    miniKpis: { receivables, lowStock: { total: retailLowStock + commerceLowStock, commerce: commerceLowStock, retail: retailLowStock }, mrr },
+    miniKpis: { receivables, lowStock: { total: retailLowStock + commerceLowStock, commerce: commerceLowStock, retail: retailLowStock }, mrr, mrrScope: 'company' },
     historicalAvec,
     historicalFinance,
     strategicMix,
     charts: {
       revenueDaily: daily,
       appointmentsDaily: daily.map((item) => ({ day: item.day, value: item.appointments })),
-      paymentMethods: [...paymentBreakdown(input, window), ...historicalPaymentBreakdown(input, window)],
-      commercePaymentMethods: list(commerceCurrent.sales?.capturedPayments).map(item => ({ method: item.method, value: num(item.value) })),
+      paymentMethods,
+      commercePaymentMethods,
       categorySales: aggregate(items, 'category').slice(0, 8),
       topProducts: aggregate(items, 'name').slice(0, 8),
       funnel: [
@@ -414,7 +520,7 @@ export function buildDinoDashboardAnalytics(input = {}, options = {}) {
         { id: 'checkout', label: 'Checkout', value: funnelCurrent ? num(funnelCurrent.checkout) : null, available: Boolean(funnelCurrent) },
         { id: 'orders', label: 'Pedidos', value: commerceOrdersTotal, available: commerceAvailable },
       ],
-      scheduleHeatmap: scheduleHeatmap(appointments, window),
+      scheduleHeatmap: heatmapCells,
       channels: [
         { id: 'commerce', label: 'E-commerce confirmado', revenue: money(commerceRevenue), grossValue: money(commerceRevenue), capturedRevenue: money(commerceCapturedRevenue), pendingValue: money(commerceCurrent.sales?.summary?.pending_total), transactions: commerceOrders, ordersTotal: commerceOrdersTotal, pendingOrders: num(commerceCurrent.sales?.summary?.pending_orders), cancelledOrders: num(commerceCurrent.sales?.summary?.cancelled_orders), refundedOrders: num(commerceCurrent.sales?.summary?.refunded_orders), capturedTransactions: list(commerceCurrent.sales?.capturedPayments).reduce((sum, item) => sum + num(item.transactions), 0), available: commerceAvailable },
         { id: 'barbershop', label: 'Barbearia', revenue: money(legacyCurrent.commands.reduce((sum, item) => sum + num(item.totalPago || item.total), 0)), transactions: legacyCurrent.commands.length, available: true },
@@ -422,19 +528,22 @@ export function buildDinoDashboardAnalytics(input = {}, options = {}) {
         { id: 'historical-avec', label: 'Histórico Avec', revenue: historicalFinance.paidRevenue, grossValue: historicalFinance.paidRevenue, expenses: historicalFinance.paidExpenses, transactions: historicalFinance.paidRevenueEntries, available: true, historical: true },
       ],
     },
-    goals: input.goals || { configured: false, items: [] },
-    activity: activityFeed(input, now),
-    upcomingAppointments: upcomingAppointments(appointments, now, window.timeZone),
+    goals,
+    activity,
+    upcomingAppointments: upcoming,
     dataQuality: {
       commerceAvailable,
       combinedRevenueAvailable: true,
       profitAvailable,
       funnelAvailable,
-      notes: [
-        profitAvailable ? 'Resultado consolidado = operação, e-commerce com custo conhecido e histórico Avec pago − comissões − custo da revenda − despesas pagas; a origem histórica permanece identificada.' : 'Lucro indisponível até que todos os custos do recorte estejam persistidos.',
-        funnelAvailable ? 'Funil da loja com visitas, carrinhos e checkouts únicos por sessão/dia.' : 'Funil parcial até a loja registrar visitas no período.',
-        'Estoques Commerce e revenda são contados separadamente.',
-      ],
+      sources: {
+        agenda: { status: heatmapAppointmentCount ? 'ok' : 'empty', recordsInPeriod: currentAppointments.length, recordsInHeatmap: heatmapAppointmentCount, upcoming: upcoming.length, scope: scopeLevel, timeZone: window.timeZone },
+        activity: { status: activity.length ? 'ok' : 'empty', recordsInPeriod: activity.length, scope: scopeLevel },
+        payments: { status: paymentMethods.length ? 'ok' : 'empty', methods: paymentMethods.length, total: money(paymentMethods.reduce((sum, item) => sum + num(item.value), 0)), commerceCapturedMethods: commercePaymentMethods.length, commerceCapturedTotal: money(commercePaymentMethods.reduce((sum, item) => sum + num(item.value), 0)) },
+        commerce: { status: commerceAvailable ? 'ok' : 'unavailable', reason: input.commerceUnavailableReason || null },
+        goals: { status: !goals.configured ? 'empty' : goals.comparable === false ? 'limited' : 'ok', scope: 'company', comparable: goals.comparable !== false },
+      },
+      notes: dataQualityNotes,
     },
   };
 }
