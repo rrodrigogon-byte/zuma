@@ -1,4 +1,5 @@
 import BarbeariaComandasAbertas from './BarbeariaComandasAbertas'
+import BarbeariaAtendimentoBoard from './BarbeariaAtendimentoBoard'
 import BarbeariaHistoricoCliente from './BarbeariaHistoricoCliente'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { api, fmtDate, fmtDateOnly, fmtR } from '../../lib/api'
@@ -113,8 +114,11 @@ const STATUS = {
 
 const TRANSICOES = {
   agendado: ['confirmado', 'em_atendimento', 'cancelado', 'nao_compareceu'],
-  confirmado: ['em_atendimento', 'cancelado', 'nao_compareceu'],
-  em_atendimento: ['concluido', 'cancelado', 'nao_compareceu'],
+  confirmado: ['agendado', 'em_atendimento', 'cancelado', 'nao_compareceu'],
+  em_atendimento: ['confirmado', 'agendado', 'concluido', 'cancelado', 'nao_compareceu'],
+  concluido: ['em_atendimento'],
+  cancelado: ['agendado', 'confirmado'],
+  nao_compareceu: ['agendado', 'confirmado'],
 }
 
 const DIAS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
@@ -737,6 +741,85 @@ export default function BarbeariaERP() {
     )
   }
 
+  async function mudarStatusAtendimento(agendamento, novoStatus) {
+    if (agendamento.status === novoStatus) return
+    const statusAnterior = agendamento.status
+
+    // Atualização otimista imediata para resposta instantânea ao arrastar
+    setAgendamentos((prev) =>
+      prev.map((item) => (item.id === agendamento.id ? { ...item, status: novoStatus } : item))
+    )
+
+    // Se for transição direta de agendado para concluído, passa por em_atendimento
+    if (statusAnterior === 'agendado' && novoStatus === 'concluido') {
+      try {
+        await api.patch(`/api/admin/barbearia/agenda/${agendamento.id}/status`, { status: 'em_atendimento', registrarFinanceiro: false })
+        await api.patch(`/api/admin/barbearia/agenda/${agendamento.id}/status`, { status: 'concluido', registrarFinanceiro: false })
+        toast('Atendimento concluído com sucesso.', 'success')
+        await carregar()
+        return
+      } catch (err) {
+        setAgendamentos((prev) =>
+          prev.map((item) => (item.id === agendamento.id ? { ...item, status: statusAnterior } : item))
+        )
+        toast(err.message || 'Falha ao concluir atendimento.', 'error')
+        return
+      }
+    }
+
+    try {
+      await mudarStatus(agendamento, novoStatus)
+    } catch (err) {
+      setAgendamentos((prev) =>
+        prev.map((item) => (item.id === agendamento.id ? { ...item, status: statusAnterior } : item))
+      )
+    }
+  }
+
+  async function reatribuirBarbeiroAtendimento(agendamento, novoProfissionalId) {
+    const prof = profissionais.find((p) => p.id === novoProfissionalId)
+    const dataAgenda = agendamento.dataAgenda || String(agendamento.dataHora || '').slice(0, 10)
+    await executar(
+      () =>
+        api.patch(`/api/admin/barbearia/agenda/${agendamento.id}`, {
+          profissionalId: novoProfissionalId,
+          dataAgenda,
+          dataHora: agendamento.dataHora,
+          servicoId: agendamento.servicoId,
+          origem: 'admin',
+          encaixe: true,
+        }),
+      `Atendimento reatribuído para ${prof?.nome || 'profissional'}.`
+    )
+  }
+
+  async function criarEncaixeRapido(dados) {
+    const dataAgenda = dataSelecionada
+    const payload = {
+      clienteId: dados.clienteId || '',
+      clienteNome: dados.clienteNome,
+      clienteTelefone: dados.clienteTelefone,
+      profissionalId: dados.profissionalId,
+      servicoId: dados.servicoId,
+      dataHora: new Date().toISOString(),
+      dataAgenda,
+      observacoes: dados.observacoes || 'Encaixe rápido / walk-in',
+      origem: 'admin',
+      encaixe: true,
+    }
+    await executar(async () => {
+      const resp = await api.post('/api/admin/barbearia/agenda', payload)
+      const novoAgendamento = resp?.agendamento || resp
+      if (dados.iniciarImediato && novoAgendamento?.id) {
+        await api.patch(`/api/admin/barbearia/agenda/${novoAgendamento.id}/status`, {
+          status: 'em_atendimento',
+          registrarFinanceiro: false,
+        })
+      }
+      return resp
+    }, 'Encaixe rápido registrado com sucesso.')
+  }
+
   function valorDevidoRecebimento(agendamento) {
     const total = Number(agendamento?.valor || 0)
     const devido = total - Number(saldoCashbackCliente?.sinalPago || 0) - Number(formRecebimento.usarCashback || 0) - (formRecebimento.valeCodigo ? Number(formRecebimento.valeValor || 0) : 0)
@@ -1357,18 +1440,31 @@ export default function BarbeariaERP() {
   }
 
   function renderAtendimento() {
-    const colunas = ['agendado', 'confirmado', 'em_atendimento', 'concluido']
-    return <div style={{ display: 'grid', gap: 16 }}>
-      <Card style={{ padding: 16 }}>
-        <div style={styles.toolbar}>
-          <div><h2 style={styles.h2}>Quadro de atendimento</h2><p style={styles.sub}>Atualize o status, abra a comanda e conclua o recebimento no mesmo fluxo operacional.</p></div>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'end', flexWrap: 'wrap' }}><Field label="Data"><input type="date" value={dataSelecionada} onChange={(event) => event.target.value && setDataSelecionada(event.target.value)} style={inputStyle} /></Field><button type="button" style={styles.secondary} onClick={() => abrirNovaComanda()}>Abrir comanda avulsa</button><button type="button" style={styles.primary} onClick={abrirNovoAgendamento}>Novo atendimento</button></div>
-        </div>
-      </Card>
-      <BarbeariaComandasAbertas key={scopeKey} profissionais={profissionais} onOpen={abrirComanda} refreshKey={agendaRevisao} />
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(235px, 100%), 1fr))', gap: 12 }}>{colunas.map((status) => <Card key={status} style={{ padding: 14, minHeight: 220 }}><div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}><Badge status={status} /><strong>{agendamentos.filter((item) => item.status === status).length}</strong></div><div style={{ display: 'grid', gap: 9 }}>{agendamentos.filter((item) => item.status === status).map((item) => { const comandaDoAtendimento = comandas.find((comanda) => comanda.agendamentoId === item.id && comanda.status !== 'cancelada'); return <div key={item.id} role="button" tabIndex={0} onClick={() => setModal({ tipo: 'detalheAgenda', agendamento: item })} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') setModal({ tipo: 'detalheAgenda', agendamento: item }) }} style={{ ...styles.attendanceCard, borderLeftColor: STATUS[status]?.color || 'var(--accent)' }}><strong>{horario(item.dataHora)} · {item.clienteNome || item.cliente_nome || 'Cliente sem nome'}</strong><div style={styles.sub}>{item.servicoNome || item.servico_nome || 'Serviço não informado'} · {item.profissionalNome || item.profissional_nome || 'Sem atendente'}</div><div style={styles.attendanceMeta}><span>{item.clienteTelefone || item.cliente_telefone || 'Sem telefone'}</span><span>{item.duracaoMinutos || item.duracao_minutos || 0} min</span></div><div onClick={(event) => event.stopPropagation()} style={{ marginTop: 9, display: 'flex', gap: 6, flexWrap: 'wrap' }}>{(TRANSICOES[status] || []).slice(0, 2).map((proximo) => <button key={proximo} type="button" style={styles.small} onClick={() => mudarStatus(item, proximo)}>{STATUS[proximo]?.label}</button>)}{status === 'concluido' && !item.financeiroLancamentoId && <button type="button" style={{ ...styles.small, color: 'var(--accent)' }} onClick={() => abrirRecebimento(item)}>Receber legado</button>}<button type="button" style={{ ...styles.small, color: 'var(--accent)' }} onClick={() => comandaDoAtendimento ? abrirComanda(comandaDoAtendimento) : abrirNovaComanda(item)}>{comandaDoAtendimento ? 'Abrir comanda' : 'Criar comanda'}</button></div></div> })}</div></Card>)}</div>
-    </div>
-  }
+    return (
+      <div style={{ display: 'grid', gap: 18 }}>
+        <BarbeariaComandasAbertas key={scopeKey} profissionais={profissionais} onOpen={abrirComanda} refreshKey={agendaRevisao} />
+        <BarbeariaAtendimentoBoard
+          dataSelecionada={dataSelecionada}
+          onDateChange={(novaData) => setDataSelecionada(novaData)}
+          agendamentos={agendamentos}
+          profissionais={profissionais}
+          servicos={servicos}
+          comandas={comandas}
+          onStatusChange={mudarStatusAtendimento}
+          onOpenAppointment={(item) => setModal({ tipo: 'detalheAgenda', agendamento: item })}
+          onOpenComanda={abrirComanda}
+          onCreateComanda={(item) => abrirNovaComanda(item)}
+          onNewAppointment={abrirNovoAgendamento}
+          onNewComanda={() => abrirNovaComanda()}
+          onOpenRecebimento={abrirRecebimento}
+          onOpenHistorico={abrirHistoricoCliente}
+          onReassignBarber={reatribuirBarbeiroAtendimento}
+          onCreateEncaixe={criarEncaixeRapido}
+          loading={loading}
+        />
+      </div>
+      )
+    }
 
   function renderOperacao() {
     return <div style={{ display: 'grid', gap: 20 }}><BarbeariaComandasAbertas key={scopeKey} profissionais={profissionais} onOpen={abrirComanda} refreshKey={agendaRevisao} /><BarbeariaOperacaoPanel data={dataSelecionada} operacao={operacao || {}} onOpenCaixa={abrirCaixaOperacao} onMove={movimentarCaixaOperacao} onClose={fecharCaixaOperacao} onCloseDay={fecharDiaOperacao} salvando={salvando} /></div>
