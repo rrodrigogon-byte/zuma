@@ -252,7 +252,7 @@ describe('Estoque e compras: correções da revisão (PostgreSQL)', { skip: pgDe
     assert.equal((await bar.listarProdutos(ctx.db, C)).find((p) => p.id === dose.id).estoqueAtual, 2);
   });
 
-  test('venda devolvida depois da baixa devolve o insumo; item de comanda paga não se cancela', async () => {
+  test('venda devolvida depois da baixa devolve o insumo; item de comanda paga com ficha técnica não se cancela', async () => {
     const it = await est.criarItem(ctx.db, C, { nome: 'Camiseta', unidade: 'UN' });
     await est.movimentar(ctx.db, C, { lojaId: loja, itemId: it.id, tipo: 'entrada', quantidade: 10, custoUnitario: 20 });
     const prod = (await ctx.db.query("INSERT INTO commerce_products (empresa_id, nome) VALUES ($1, 'Camiseta') RETURNING id", [C])).rows[0].id;
@@ -270,7 +270,14 @@ describe('Estoque e compras: correções da revisão (PostgreSQL)', { skip: pgDe
     const com = await bar.abrirComanda(ctx.db, C, { nome: 'Mesa 1' });
     await bar.adicionarItens(ctx.db, C, com.id, [{ produtoId: lata.id, qtd: 1 }]);
     await bar.pagarComanda(ctx.db, C, com.id, { meio: 'pix', servico: false });
-    await assert.rejects(() => bar.cancelarItemPorIndice(ctx.db, C, com.id, 0), (e) => e.code === 'COMANDA_FECHADA');
+    // sem ficha técnica: como sempre foi na produção, o item da comanda paga ainda se cancela
+    await bar.cancelarItemPorIndice(ctx.db, C, com.id, 0);
+    // com ficha técnica: o insumo já baixou na venda, então o cancelamento é barrado
+    await est.salvarFicha(ctx.db, C, { fonte: 'bar_produto', fonteId: lata.id, itens: [{ itemId: it.id, fator: 1 }] });
+    const com2 = await bar.abrirComanda(ctx.db, C, { nome: 'Mesa 2' });
+    await bar.adicionarItens(ctx.db, C, com2.id, [{ produtoId: lata.id, qtd: 1 }]);
+    await bar.pagarComanda(ctx.db, C, com2.id, { meio: 'pix', servico: false });
+    await assert.rejects(() => bar.cancelarItemPorIndice(ctx.db, C, com2.id, 0), (e) => e.code === 'COMANDA_FECHADA');
   });
 
   test('unidade do bar configurável; com uma unidade ativa ela é a padrão', async () => {

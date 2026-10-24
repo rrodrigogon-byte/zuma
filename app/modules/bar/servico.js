@@ -280,9 +280,13 @@ export async function cancelarItemPorIndice(db, empresaId, comandaId, indice, op
     const items = await q("SELECT i.*, p.nome AS produto_nome FROM bar_comanda_itens i JOIN bar_produtos p ON p.empresa_id=i.empresa_id AND p.id=i.produto_id WHERE i.empresa_id=$1 AND i.comanda_id=$2 AND i.status <> 'cancelado' ORDER BY i.criado_em, i.id", [emp, exigirUuid(comandaId, 'comanda')]);
     const item = items.rows[Number(indice)];
     if (!item) throw new ErroDominio('NOT_FOUND', 'item não encontrado', 404);
-    // comanda paga: o dinheiro já entrou; cancelar o item aqui deixaria caixa e estoque sem par
-    const cab = (await q('SELECT status FROM bar_comandas WHERE empresa_id=$1 AND id=$2 FOR UPDATE', [emp, exigirUuid(comandaId, 'comanda')])).rows[0];
-    if (cab && ['paga', 'cancelada'].includes(cab.status)) throw new ErroDominio('COMANDA_FECHADA', 'Comanda já paga: o item não pode ser cancelado. Faça o estorno do pagamento.', 409);
+    // Comanda paga com produto ligado a ficha técnica do Estoque: o insumo já foi baixado pela venda,
+    // então cancelar o item aqui deixaria estoque e caixa sem par. Sem ficha, segue como sempre.
+    const cab = (await q('SELECT status FROM bar_comandas WHERE empresa_id=$1 AND id=$2', [emp, exigirUuid(comandaId, 'comanda')])).rows[0];
+    if (cab && ['paga', 'cancelada'].includes(cab.status)) {
+      const ficha = await q("SELECT 1 FROM est_vinculos WHERE empresa_id=$1 AND fonte='bar_produto' AND fonte_id=$2 LIMIT 1", [emp, item.produto_id]);
+      if (ficha.rows[0]) throw new ErroDominio('COMANDA_FECHADA', 'Comanda já paga e o produto tem ficha técnica no Estoque: faça o estorno do pagamento.', 409);
+    }
     await q('UPDATE bar_comanda_itens SET status=\'cancelado\', atualizado_em=CURRENT_TIMESTAMP WHERE empresa_id=$1 AND id=$2', [emp, item.id]);
     await q('UPDATE bar_produtos SET estoque_atual=estoque_atual+$1, atualizado_em=CURRENT_TIMESTAMP WHERE empresa_id=$2 AND id=$3', [item.consumo_estoque, emp, item.produto_id]);
     await q('INSERT INTO bar_estoque_movimentos (empresa_id, produto_id, tipo, quantidade, saldo_apos, origem, referencia_id, criado_por) SELECT $1,$2,\'entrada\',$3,estoque_atual,\'cancelamento\',$4,$5 FROM bar_produtos WHERE empresa_id=$1 AND id=$2', [emp, item.produto_id, item.consumo_estoque, comandaId, textoOpcional(operadorId, 180)]);

@@ -3,6 +3,7 @@ import { api } from '../../../lib/api'
 import { useToast } from '../../../hooks/useToast'
 import { useAuth } from '../../../lib/auth'
 import EscolherUnidade, { useUnidadeAtiva } from '../../../components/EscolherUnidade'
+import { useRazaoAtivo } from '../../../lib/razao-estado'
 import { brandFromContext } from '../../../lib/brand'
 import { Badge, Dialog, Table } from '../customer360/shared'
 import { downloadCsv, localDay, money, shortDate } from './format'
@@ -35,6 +36,8 @@ export default function FinanceiroEmpresa() {
   const { toast } = useToast()
   const { empresaAtiva, perfil } = useAuth()
   const { unidade } = useUnidadeAtiva()
+  // a unidade só é exigida no lançamento com o Financeiro novo ligado; desligado, lança como sempre
+  const exigeUnidade = useRazaoAtivo() === true && !unidade
   // operador lança despesa; saldo, fluxo e a lista de lançamentos são da administração
   const operador = perfil === 'operador'
   const stallone = brandFromContext(empresaAtiva) === 'stallone'
@@ -123,13 +126,13 @@ export default function FinanceiroEmpresa() {
       <div><div className="dadm-eyebrow">Gestão · {empresaAtiva?.nome || 'Empresa'}</div><h1>Financeiro</h1><p>{stallone ? 'Contas a pagar e a receber desta empresa. Registre despesas e acompanhe os lançamentos. Pedidos e pagamentos da loja online são consultados no painel da loja; a conciliação financeira precisa ser validada.' : 'Contas a pagar e a receber só desta empresa. Atendimentos pagos, comandas e contas a receber entram sozinhos; aqui você lança aluguel, insumos, contas e outras despesas.'}</p></div>
       <div className="dadm-actions">
         {!operador && <button type="button" className="c360-btn ghost" onClick={exportar} disabled={!lista.length}>Exportar CSV</button>}
-        {!operador && <button type="button" className="c360-btn ghost" onClick={() => abrirNovo('receita')} disabled={!unidade}>+ Receita</button>}
-        <button type="button" className="c360-btn primary" onClick={() => abrirNovo('despesa')} disabled={!unidade}>+ Despesa</button>
+        {!operador && <button type="button" className="c360-btn ghost" onClick={() => abrirNovo('receita')} disabled={exigeUnidade}>+ Receita</button>}
+        <button type="button" className="c360-btn primary" onClick={() => abrirNovo('despesa')} disabled={exigeUnidade}>+ Despesa</button>
       </div>
     </header>
 
     {/* a leitura continua como antes (empresa toda); só o lançamento novo precisa da unidade */}
-    {!unidade && <EscolherUnidade motivo="Para lançar receita ou despesa, escolha a unidade." />}
+    {exigeUnidade && <EscolherUnidade motivo="Para lançar receita ou despesa, escolha a unidade." />}
     {erro && <p className="dadm-note danger" role="alert">{erro}</p>}
     {operador && <p className="dadm-note">Seu perfil é de operador: aqui você lança as despesas do dia. Saldo, contas e relatórios ficam com a administração.</p>}
     {operador ? null : loading && !resumo ? <p className="dadm-muted">Carregando…</p> : resumo && <>

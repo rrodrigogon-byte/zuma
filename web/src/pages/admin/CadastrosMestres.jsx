@@ -9,6 +9,7 @@ import { Link } from 'react-router-dom'
 const TABS = [
   { id: 'funcionarios', label: 'Funcionários', icon: '👔', endpoint: '/funcionarios' },
   { id: 'fornecedores', label: 'Fornecedores', icon: '🚚', endpoint: '/fornecedores' },
+  { id: 'usuarios', label: 'Usuários', icon: '🔐', endpoint: '/usuarios-mestres' },
 ]
 const SINGULARES = { funcionarios: 'Funcionário', fornecedores: 'Fornecedor', usuarios: 'Usuário' }
 
@@ -68,8 +69,7 @@ export default function CadastrosMestres() {
       const [funcionarios, fornecedores, usuarios, contexto] = await Promise.all([
         api.get(a2Path('/funcionarios')),
         api.get(a2Path('/fornecedores')),
-        // usuários de acesso ficam em Usuários e acessos (login da plataforma), não aqui
-        Promise.resolve({ usuarios: [] }),
+        api.get(a2Path('/usuarios-mestres')),
         api.get(a2Path('/empresa-ativa')),
       ])
       setDados({
@@ -161,7 +161,7 @@ export default function CadastrosMestres() {
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button className="btn btn-secondary btn-sm" onClick={carregar}>↺ Atualizar</button>
-          {podeGerenciarEmpresas && <Link className="btn btn-secondary btn-sm" to="/admin/plataforma">🏢 Empresas e módulos</Link>}
+          {podeGerenciarEmpresas && <button className="btn btn-secondary btn-sm" onClick={() => setModalEmpresa(true)}>🏢 Nova Empresa</button>}
           <button className="btn btn-primary btn-sm" onClick={abrirNovo}>+ Novo {SINGULARES[tab]}</button>
         </div>
       </div>

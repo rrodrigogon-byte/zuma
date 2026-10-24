@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useRef, useState } from 'react'
 import { encerrarPushDoAparelho } from './push-equipe'
 import { esquecerRazaoAtivo } from './razao-estado'
-import { mesclarLojas, normalizarLojas, pertenceAEmpresa, repararLojasSemEmpresa, selecionarLojaAutomatica, substituirLojas } from './context-selection'
+import { empresaDaLoja, mesclarLojas, normalizarLojas, pertenceAEmpresa, repararLojasSemEmpresa, selecionarLojaAutomatica, substituirLojas } from './context-selection'
 import { DINO_COMPANY, DINO_STORE, isDinoDedicatedHost } from './dino-scope'
 import { isDinoBrandContext } from './brand'
 

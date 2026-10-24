@@ -1,5 +1,8 @@
 -- 094 — Reservas de mesa e lista de espera por empresa (onda 5), ligadas às mesas do bar (081).
 -- Sem extensão: a sobreposição de horário da mesma mesa é barrada no serviço, com trava por mesa.
+-- As FKs para bar_mesas pedem trava na tabela: se ela estiver presa mais de 3 s, o deploy para
+-- (a versão atual continua no ar) em vez de enfileirar as vendas do bar.
+SET LOCAL lock_timeout = '3s';
 
 CREATE TABLE IF NOT EXISTS sal_reservas (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

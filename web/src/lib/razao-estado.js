@@ -6,12 +6,20 @@ import { useAuth } from './auth'
 // compartilhada entre o menu, o Financeiro e as telas que falam dele.
 const cache = new Map()
 
+// Sem resposta em 6 s, ou com erro (sem permissão, servidor ocupado), vale "desligado": as telas
+// de hoje abrem como sempre. O erro fica guardado por 1 min para não repetir a consulta a cada tela.
+const ESPERA_MS = 6000
+const NOVA_TENTATIVA_MS = 60000
+
 export function razaoAtivoDaEmpresa(empresaId) {
   const chave = String(empresaId || '')
   if (!cache.has(chave)) {
-    cache.set(chave, api.get('/api/admin/razao/estado')
-      .then((r) => r?.ativo === true)
-      .catch(() => { cache.delete(chave); return false }))
+    const desligado = () => { setTimeout(() => cache.delete(chave), NOVA_TENTATIVA_MS); return false }
+    const consulta = api.get('/api/admin/razao/estado').then((r) => r?.ativo === true)
+    const limite = new Promise((resolve) => setTimeout(() => resolve('tempo'), ESPERA_MS))
+    cache.set(chave, Promise.race([consulta, limite])
+      .then((v) => (v === 'tempo' ? desligado() : v))
+      .catch(desligado))
   }
   return cache.get(chave)
 }
