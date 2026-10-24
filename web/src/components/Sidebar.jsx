@@ -179,7 +179,8 @@ const NAV_DINO_GROUPS = [
     items: [
       { to: '/admin', icon: '◔', label: 'Painel do negócio', end: true },
       { to: '/admin/barbearia-erp?area=operacao&tab=Vis%C3%A3o+geral', icon: '⌂', label: 'Operação do dia' },
-      { to: '/admin/barbearia-erp?area=operacao&tab=Agenda', icon: '▣', label: 'Agenda' },
+      // A agenda abre numa guia própria, em tela cheia, para ficar aberta ao lado do painel.
+      { to: '/admin/barbearia-erp?area=operacao&tab=Agenda', icon: '▣', label: 'Agenda', novaGuia: true },
       { to: '/admin/barbearia-erp?area=operacao&tab=Atendimento', icon: '✂', label: 'Atendimento e comandas' },
       { to: '/admin/barbearia-erp?area=operacao&tab=Caixa+e+fechamento', icon: '▱', label: 'Caixa e fechamento' },
     ],
@@ -504,7 +505,7 @@ const activeStyle = {
   borderLeft: '3px solid var(--accent)',
 }
 
-function NavItem({ to, icon, label, end, onClick, badgeCount, sidebarCollapsed = false, tag = null, tagTitle = '' }) {
+function NavItem({ to, icon, label, end, onClick, badgeCount, sidebarCollapsed = false, tag = null, tagTitle = '', novaGuia = false }) {
   const location = useLocation()
   const [targetPath, targetQuery = ''] = String(to || '').split('?')
   const queryAware = Boolean(targetQuery) || ['/admin/barbearia-erp', '/admin/ecommerce'].includes(targetPath)
@@ -515,7 +516,8 @@ function NavItem({ to, icon, label, end, onClick, badgeCount, sidebarCollapsed =
     : !currentParams.has('tab') && !currentParams.has('area')
   return (
     <NavLink
-      to={to}
+      to={novaGuia ? `${to}${String(to).includes('?') ? '&' : '?'}tela=cheia` : to}
+      {...(novaGuia ? { target: '_blank', rel: 'noopener' } : {})}
       end={end}
       style={({ isActive }) => {
         const selected = isActive && (!queryAware || searchMatches)
@@ -527,6 +529,7 @@ function NavItem({ to, icon, label, end, onClick, badgeCount, sidebarCollapsed =
     >
       <span style={{ fontSize: 16 }} aria-hidden="true">{icon}</span>
       {!sidebarCollapsed && <span style={{ flex: 1 }}>{label}</span>}
+      {!sidebarCollapsed && novaGuia && <span aria-label="abre em nova guia" title="Abre em nova guia" style={{ fontSize: 11, color: 'var(--muted)' }}>↗</span>}
       {!sidebarCollapsed && tag && <span className={`nav-estado nav-estado-${tag}`} title={tagTitle} style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.4px', padding: '2px 6px', borderRadius: 999, border: '1px solid var(--line)', color: tag === 'em_implantacao' ? 'var(--gold, #C9A656)' : 'var(--muted)', whiteSpace: 'nowrap' }}>{ESTADOS[tag]?.rotulo || tag}</span>}
       {badgeCount > 0 && <Badge count={badgeCount} />}
     </NavLink>

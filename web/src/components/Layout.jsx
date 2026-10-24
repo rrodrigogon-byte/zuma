@@ -93,6 +93,10 @@ export default function Layout({ children: conteudo, noSidebar = false, marketin
   // Sempre renderizam em full-bleed, inclusive para usuários autenticados; a Home
   // oferece um CTA contextual para retornar ao painel sem misturar os layouts.
   if (noSidebar || marketing) return <>{children}</>
+  // Tela cheia (ex.: Agenda aberta em nova guia pelo menu): sem menu lateral nem barra superior.
+  if (new URLSearchParams(location.search).get('tela') === 'cheia') {
+    return <main style={{ minHeight: '100vh', background: 'var(--bg)', color: 'var(--fg)' }}>{children}</main>
+  }
 
   const hasTopBar = !!user
   const topBarH = hasTopBar ? 50 : 0

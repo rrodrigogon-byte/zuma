@@ -134,3 +134,23 @@ test('extrato traz o histórico Avec do profissional pela regra de comissão del
   assert.equal(vinculos.get('bruno mendes pedroso').profissionalId, c.prof.id);
   assert.equal(vinculos.has('bruno rafael dos santos'), false, 'dois Brunos no Avec: sem evidência na agenda, não liga pelo nome');
 });
+
+test('extrato mostra comissões e antecipações pagas no Avec para o profissional do período', () => {
+  const c = cenario();
+  const raiz = db();
+  raiz.financeiroKytto ||= { empresas: {} };
+  raiz.financeiroKytto.empresas ||= {};
+  raiz.financeiroKytto.empresas[EMP] ||= { lancamentos: {} };
+  const store = raiz.financeiroKytto.empresas[EMP];
+  store.lancamentos ||= {};
+  const lanc = (id, descricao, categoria, valor, pagoEm) => { store.lancamentos[id] = { id, empresaId: EMP, lojaId: LOJA, tipo: 'despesa', status: 'pago', descricao, categoria, valor, pagoEm: `${pagoEm}T12:00:00.000Z`, vencimento: pagoEm, dataOperacao: `${pagoEm}T12:00:00.000Z`, origem: 'avec-import-financeiro-20261022', metadata: { historicoAvec: true } }; };
+  lanc('a1', 'Comissão Bruno Mendes pedroso - Barbeiro de 01/09/2026 a 30/09/2026', 'BRUNO1', 3000, '2026-10-04');
+  lanc('a2', 'Antecipação de comissão - VALE PIX', 'BRUNO1', 500, '2026-09-15');
+  lanc('a3', 'Antecipação de comissão - VALE PIX', 'DAVID', 200, '2026-09-15');
+  lanc('a4', 'Comissão Natani Minanis Dobler  - Barbeiro de 01/09/2026 a 30/09/2026', 'NATANI', 2500, '2026-10-04');
+  const ex = repasses.extratoProfissional(EMP, c.prof.id, { inicio: '2026-09-01', fim: '2026-09-30', lojaId: LOJA });
+  assert.equal(ex.historicoAvec.pagamentos.comissoes, 3000, 'comissão do período, pelo vínculo do cadastro do Avec');
+  assert.equal(ex.historicoAvec.pagamentos.antecipacoes, 500, 'só a antecipação na categoria do Bruno');
+  assert.equal(ex.historicoAvec.pagamentos.total, 3500);
+  assert.equal(ex.totais.aReceber, 0, 'pagamento do Avec não mexe no a receber do Kytto');
+});
