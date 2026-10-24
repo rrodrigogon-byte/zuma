@@ -22,3 +22,19 @@ export function legacyLojaIdFromCommerce(lojaId, empresaId = '') {
   }
   return store;
 }
+
+// Volta do id legado para o canônico do Commerce. Usado onde o dado pertence ao
+// Commerce (conexão WhatsApp, dono da instância, IA), mesmo atrás das rotas do ERP.
+export function commerceEmpresaIdFromLegacy(empresaId) {
+  const value = clean(empresaId);
+  return value === DINO_LEGACY_EMPRESA_ID ? DINO_COMMERCE_EMPRESA_ID : value;
+}
+
+export function commerceLojaIdFromLegacy(lojaId, empresaId = '') {
+  const store = clean(lojaId);
+  const company = clean(empresaId);
+  if (store === DINO_LEGACY_LOJA_ID && (company === DINO_LEGACY_EMPRESA_ID || company === DINO_COMMERCE_EMPRESA_ID)) {
+    return DINO_COMMERCE_LOJA_ID;
+  }
+  return store;
+}

@@ -239,7 +239,8 @@ export function registerAtivacaoRoutes(app, deps) {
     const s = await scope(req, res); if (!s) return;
     try {
       const config = barbeariaErpKytto.obterConfiguracao(s.legacy) || {};
-      const conexao = obterConexao(s.legacy);
+      // A conexão WhatsApp é chaveada pelo id canônico do Commerce, não pelo id do ERP legado.
+      const conexao = obterConexao(String(s.context?.empresaId || s.legacy));
       const base = String(process.env.SERVER_URL || process.env.PUBLIC_BASE_URL || `${req.protocol}://${req.get('host')}`).replace(/\/+$/, '');
       const facts = {
         agora: Date.now(), baseUrl: base,
