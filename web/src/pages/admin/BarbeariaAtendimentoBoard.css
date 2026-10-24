@@ -1,0 +1,822 @@
+/* BarbeariaAtendimentoBoard.css — Quadro Dinâmico de Atendimento Kanban (Kytto) */
+
+.atendimento-board {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  width: 100%;
+}
+
+/* ── BARRA DE FERRAMENTAS E CONTROLES SUPERIORES ── */
+.atendimento-toolbar-card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 18px 20px;
+  box-shadow: 0 4px 16px rgba(18, 40, 63, 0.04);
+}
+
+.atendimento-toolbar-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.atendimento-toolbar-title h2 {
+  margin: 0 0 4px 0;
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--navy);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.atendimento-toolbar-title p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.atendimento-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* Seletor rápido de data com Ontem / Hoje / Amanhã */
+.atendimento-date-picker {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--card2);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 3px;
+}
+
+.atendimento-date-btn {
+  background: transparent;
+  border: none;
+  border-radius: 7px;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.atendimento-date-btn:hover {
+  background: var(--card);
+  color: var(--fg);
+}
+
+.atendimento-date-btn.active {
+  background: var(--accent);
+  color: #fff;
+}
+
+.atendimento-date-input {
+  border: none;
+  background: transparent;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fg);
+  padding: 4px 8px;
+  outline: none;
+  cursor: pointer;
+}
+
+/* ── RESUMO RÁPIDO DO DIA (KPIs) ── */
+.atendimento-kpi-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+.atendimento-kpi-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: var(--card2);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.atendimento-kpi-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: 18px;
+}
+
+.atendimento-kpi-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.atendimento-kpi-val {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--navy);
+  line-height: 1.2;
+}
+
+.atendimento-kpi-lbl {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* ── FILTROS E BUSCA ── */
+.atendimento-filter-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+}
+
+.atendimento-search-box {
+  position: relative;
+  flex: 1 1 260px;
+  min-width: 220px;
+}
+
+.atendimento-search-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 9px 12px 9px 36px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--card);
+  font-size: 13px;
+  color: var(--fg);
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.atendimento-search-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.atendimento-search-icon {
+  position: absolute;
+  left: 11px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--muted);
+  pointer-events: none;
+  font-size: 15px;
+}
+
+/* Pílulas de filtro por profissional (barbeiro) */
+.atendimento-barbeiro-pills {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  scrollbar-width: thin;
+  max-width: 100%;
+}
+
+.atendimento-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--card);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+
+.atendimento-pill:hover {
+  border-color: var(--accent);
+  color: var(--fg);
+}
+
+.atendimento-pill.active {
+  background: var(--navy);
+  border-color: var(--navy);
+  color: #fff;
+}
+
+.atendimento-pill-count {
+  background: rgba(0, 0, 0, 0.08);
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 10px;
+}
+
+.atendimento-pill.active .atendimento-pill-count {
+  background: rgba(255, 255, 255, 0.25);
+  color: #fff;
+}
+
+/* ── GRADE KANBAN ── */
+.atendimento-kanban-board {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(280px, 1fr));
+  gap: 16px;
+  width: 100%;
+  box-sizing: border-box;
+  align-items: start;
+}
+
+@media (max-width: 1200px) {
+  .atendimento-kanban-board {
+    grid-template-columns: repeat(2, minmax(280px, 1fr));
+  }
+}
+
+@media (max-width: 680px) {
+  .atendimento-kanban-board {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ── COLUNA KANBAN ── */
+.atendimento-kanban-col {
+  background: var(--card2);
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius);
+  padding: 12px;
+  min-height: 480px;
+  display: flex;
+  flex-direction: column;
+  transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+  position: relative;
+}
+
+/* Efeito ao arrastar card sobre a coluna */
+.atendimento-kanban-col.drag-over {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 7%, var(--card2));
+  box-shadow: 0 0 0 3px var(--accent-soft), inset 0 0 16px color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.atendimento-col-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 6px 12px 6px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 12px;
+}
+
+.atendimento-col-title-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.atendimento-col-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.atendimento-col-title {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--navy);
+  margin: 0;
+}
+
+.atendimento-col-count {
+  background: var(--card);
+  border: 1px solid var(--line);
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--navy);
+}
+
+.atendimento-col-total {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--muted);
+}
+
+/* Área de soltura e lista de cards */
+.atendimento-cards-container {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex: 1;
+  min-height: 200px;
+}
+
+/* Indicador de soltura quando arrastando */
+.atendimento-drop-hint {
+  border: 2px dashed var(--accent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  padding: 18px;
+  text-align: center;
+  color: var(--accent-strong);
+  font-size: 12px;
+  font-weight: 700;
+  animation: pulseHint 1.2s infinite ease-in-out;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+@keyframes pulseHint {
+  0%, 100% { opacity: 0.7; transform: scale(0.99); }
+  50% { opacity: 1; transform: scale(1); }
+}
+
+/* Estado vazio da coluna */
+.atendimento-col-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 36px 14px;
+  color: var(--muted);
+  font-size: 12px;
+  border: 1px dashed var(--line);
+  border-radius: 10px;
+  margin: auto 0;
+  background: rgba(255, 255, 255, 0.4);
+}
+
+.atendimento-col-empty-icon {
+  font-size: 24px;
+  margin-bottom: 8px;
+  opacity: 0.5;
+}
+
+/* ── CARD DO ATENDIMENTO ── */
+.atendimento-card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-left: 4.5px solid var(--line);
+  border-radius: 12px;
+  padding: 13px 14px;
+  box-shadow: 0 2px 6px rgba(18, 40, 63, 0.05);
+  cursor: grab;
+  transition: transform 0.16s cubic-bezier(0.2, 0, 0, 1), box-shadow 0.16s ease, border-color 0.16s ease;
+  position: relative;
+  user-select: none;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.atendimento-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(18, 40, 63, 0.10);
+  border-color: color-mix(in srgb, var(--navy) 25%, var(--line));
+}
+
+.atendimento-card:active {
+  cursor: grabbing;
+}
+
+/* Estado quando o card está sendo arrastado */
+.atendimento-card.is-dragging {
+  opacity: 0.45;
+  transform: scale(0.97) rotate(-1.5deg);
+  box-shadow: 0 14px 28px rgba(18, 40, 63, 0.22);
+  border-color: var(--accent);
+}
+
+/* Cabeçalho do Card: Horário, Grip e Valor */
+.atendimento-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.atendimento-card-time-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.atendimento-drag-handle {
+  color: var(--muted);
+  opacity: 0.5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: grab;
+  transition: opacity 0.15s ease;
+}
+
+.atendimento-card:hover .atendimento-drag-handle {
+  opacity: 1;
+  color: var(--accent);
+}
+
+.atendimento-time-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--card2);
+  border: 1px solid var(--line);
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--navy);
+  font-family: var(--font-mono, monospace);
+}
+
+.atendimento-timer-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #f59e0b;
+}
+
+.atendimento-pulse-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #f59e0b;
+  box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.6);
+  animation: pulseLive 1.8s infinite;
+}
+
+@keyframes pulseLive {
+  0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.7); }
+  70% { transform: scale(1.1); box-shadow: 0 0 0 6px rgba(245, 158, 11, 0); }
+  100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
+}
+
+.atendimento-card-price {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--navy);
+}
+
+/* Linha do Cliente: Avatar, Nome e WhatsApp */
+.atendimento-client-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.atendimento-client-info {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  flex: 1;
+}
+
+.atendimento-client-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--navy);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.atendimento-client-name {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--navy);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+.atendimento-client-name:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+/* Botão de WhatsApp direto */
+.atendimento-whatsapp-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  background: #25d36618;
+  color: #25d366;
+  border: 1px solid #25d36635;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.atendimento-whatsapp-btn:hover {
+  background: #25d366;
+  color: #fff;
+  transform: scale(1.06);
+}
+
+/* Linha do Serviço e Barbeiro */
+.atendimento-service-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 8px;
+  background: var(--card2);
+  border-radius: 8px;
+}
+
+.atendimento-service-name {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--navy);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.atendimento-barber-name {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+/* Barra de progresso para quem está na cadeira */
+.atendimento-progress-track {
+  height: 4px;
+  background: var(--line);
+  border-radius: 999px;
+  overflow: hidden;
+  margin-top: 2px;
+}
+
+.atendimento-progress-fill {
+  height: 100%;
+  background: #f59e0b;
+  border-radius: 999px;
+  transition: width 0.3s ease;
+}
+
+/* Chip de Comanda */
+.atendimento-comanda-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.atendimento-comanda-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: all 0.15s ease;
+}
+
+.atendimento-comanda-chip.aberta {
+  background: #3b82f618;
+  color: #2563eb;
+  border-color: #3b82f635;
+}
+
+.atendimento-comanda-chip.aguardando {
+  background: #f59e0b18;
+  color: #d97706;
+  border-color: #f59e0b35;
+}
+
+.atendimento-comanda-chip.paga {
+  background: #10b98118;
+  color: #059669;
+  border-color: #10b98135;
+}
+
+.atendimento-comanda-btn-create {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: transparent;
+  border: 1px dashed var(--line);
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.atendimento-comanda-btn-create:hover {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+
+/* Rodapé de Ações do Card */
+.atendimento-card-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin-top: 4px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+
+.atendimento-action-primary {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: var(--navy);
+  color: #fff;
+  border: none;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.atendimento-action-primary:hover {
+  background: var(--accent);
+  transform: translateY(-1px);
+}
+
+/* Seletor rápido de transição / mover (ideal para mobile) */
+.atendimento-move-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: var(--card2);
+  border: 1px solid var(--line);
+  color: var(--navy);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.atendimento-move-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.atendimento-menu-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.atendimento-menu-trigger:hover {
+  background: var(--card2);
+  border-color: var(--line);
+  color: var(--navy);
+}
+
+/* Menu popover de mais opções */
+.atendimento-popover {
+  position: absolute;
+  bottom: calc(100% + 4px);
+  right: 0;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 6px;
+  box-shadow: 0 10px 24px rgba(18, 40, 63, 0.18);
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 170px;
+}
+
+.atendimento-popover-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: 6px;
+  background: transparent;
+  border: none;
+  color: var(--navy);
+  font-size: 12px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+
+.atendimento-popover-item:hover {
+  background: var(--card2);
+  color: var(--accent);
+}
+
+.atendimento-popover-item.danger {
+  color: #ef4444;
+}
+
+.atendimento-popover-item.danger:hover {
+  background: #fef2f2;
+}
+
+/* ── ZONA DE ARRASTO RÁPIDO PARA CANCELAR / NÃO COMPARECEU ── */
+.atendimento-drop-quick-bar {
+  display: flex;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.atendimento-quick-drop-zone {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px;
+  border: 1.5px dashed var(--line);
+  border-radius: 10px;
+  background: var(--card);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  transition: all 0.2s ease;
+}
+
+.atendimento-quick-drop-zone.drag-over {
+  border-color: #ef4444;
+  background: #fef2f2;
+  color: #ef4444;
+  transform: scale(1.01);
+}
+
+/* ── SUPORTE TOUCH PARA MOBILE (CARD FLUTUANTE) ── */
+.atendimento-touch-proxy {
+  position: fixed;
+  pointer-events: none;
+  z-index: 9999;
+  width: 260px;
+  opacity: 0.88;
+  transform: translate(-50%, -50%) rotate(2deg) scale(1.04);
+  box-shadow: 0 16px 36px rgba(18, 40, 63, 0.35);
+  border: 2px solid var(--accent);
+  border-radius: 12px;
+  background: var(--card);
+}
