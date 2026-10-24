@@ -1,6 +1,22 @@
 const ALLOWED_PERIODS = new Set([1, 7, 30, 90]);
 const DAY_MS = 86_400_000;
 const TIME_ZONE = 'America/Cuiaba';
+const dateFormatters = new Map();
+
+function dateFormatter(timeZone, weekdayOnly = false) {
+  const key = JSON.stringify([timeZone, weekdayOnly]);
+  if (!dateFormatters.has(key)) {
+    const options = weekdayOnly ? { timeZone, weekday: 'short' } : {
+      timeZone, year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
+    };
+    // Intl mantém recursos nativos; reutilize-os sem acumular fusos indefinidamente.
+    const formatter = new Intl.DateTimeFormat('en-US', options);
+    if (dateFormatters.size >= 8) dateFormatters.delete(dateFormatters.keys().next().value);
+    dateFormatters.set(key, formatter);
+  }
+  return dateFormatters.get(key);
+}
 
 const num = (value) => Number.isFinite(Number(value)) ? Number(value) : 0;
 const money = (value) => Number(num(value).toFixed(2));
@@ -17,10 +33,7 @@ function timestamp(item = {}) {
 }
 
 function zonedParts(date, timeZone = TIME_ZONE) {
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone, year: 'numeric', month: '2-digit', day: '2-digit',
-    hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
-  }).formatToParts(date);
+  const parts = dateFormatter(timeZone).formatToParts(date);
   return Object.fromEntries(parts.filter((item) => item.type !== 'literal').map((item) => [item.type, Number(item.value)]));
 }
 
@@ -338,7 +351,7 @@ function scheduleHeatmap(appointments, window) {
     const date = appointmentTimestamp(item, window.timeZone);
     if (!date) continue;
     const parts = zonedParts(date, window.timeZone);
-    const weekday = new Intl.DateTimeFormat('en-US', { timeZone: window.timeZone, weekday: 'short' }).format(date).toLowerCase();
+    const weekday = dateFormatter(window.timeZone, true).format(date).toLowerCase();
     const key = `${weekday}-${parts.hour}`;
     cells.set(key, (cells.get(key) || 0) + 1);
   }

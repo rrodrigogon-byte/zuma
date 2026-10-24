@@ -276,3 +276,21 @@ test('valores de pagamentos de sete dígitos são preservados no resumo agregado
   assert.deepEqual(result.charts.paymentMethods, [{ method: 'pix', value: 1234567.89 }]);
   assert.equal(result.dataQuality.sources.payments.total, 1234567.89);
 });
+
+
+test('dashboard mantém indicadores e reutiliza formatadores em uma agenda extensa', (t) => {
+  const OriginalFormatter = Intl.DateTimeFormat;
+  let created = 0;
+  t.mock.method(Intl, 'DateTimeFormat', function (...args) {
+    created += 1;
+    return new OriginalFormatter(...args);
+  });
+  const input = baseInput();
+  input.appointments = Array.from({ length: 1631 }, (_, index) => ({
+    id: `agenda-${index}`, dataAgenda: '2026-09-01', hora: '10:00', status: 'agendado',
+  }));
+  const result = buildDinoDashboardAnalytics(input, { period: 30, now });
+  assert.equal(result.kpis.find((item) => item.id === 'appointments').value, 1631);
+  assert.equal(result.charts.appointmentsDaily.reduce((sum, item) => sum + item.value, 0), 1631);
+  assert.ok(created <= 2, `Agenda criou ${created} formatadores nativos em uma única leitura`);
+});
