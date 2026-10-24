@@ -61,3 +61,12 @@ test('PostgreSQL: replay, concorrência, troca atômica, isolamento e versões p
     assert.equal((await a.query('SELECT count(*)::int AS n FROM kytto_avec_revenue_mix_versions')).rows[0].n,2);
   } finally {await fixture.close();}
 });
+
+test('relatório cobre mais de um ano e preserva todas as categorias sem limite do BI geral', () => {
+  const snapshot = normalizeAvecRevenueMix(report(row('Serviço',100,1,'05/06/2025'),row('Produto',60,2,'23/10/2026'),row('Pacote',200,1,'01/09/2026')));
+  const all = mixForPeriod(snapshot,'2025-06-05','2026-10-24');
+  assert.equal(all.reduce((sum,row)=>sum+row.value,0),330);
+  assert.equal(all.length,3);
+  assert.equal(mixForPeriod(snapshot,'2026-10-23','2026-10-24')[0].value,50);
+  assert.equal(mixForPeriod(snapshot,'2025-06-06','2026-10-23').length,1);
+});

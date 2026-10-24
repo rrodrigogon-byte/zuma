@@ -50,6 +50,7 @@ export default function StrategicRevenueMix({ mix, title = 'Mix estratégico de 
       {mix.historicalMixUnavailable && <p role="alert">A fonte histórica Avec está temporariamente indisponível. A base abaixo pode estar incompleta.</p>}
       {mix.historical && <><p><strong>{fmtR(mix.historical.value)}</strong> em itens Avec no recorte. Histórico disponível: {mix.historical.from} a {mix.historical.to}; {mix.historical.heldRows} linhas retidas em todo o arquivo para conferência ({fmtR(mix.historical.heldCents / 100)}).</p><p>Recebimentos consolidados no recorte: <strong>{fmtR(mix.consolidatedRevenue)}</strong>. Venda itemizada e recebimento usam datas e critérios diferentes.</p><HistoricalMixDetails history={mix.historical} /></>}
       <p>{mix.note}</p>
+      {mix.historical && <p><Link to="/admin/avec-relatorio">Abrir relatório de todo o histórico Avec</Link></p>}
       {isPlatformAdmin && <Link to="/admin/avec-historico">Conferir histórico Avec</Link>}
     </footer>
   </section>

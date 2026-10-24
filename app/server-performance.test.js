@@ -32,6 +32,8 @@ test('HTTP real: métricas só para administração da plataforma, sem cache nem
     const login = async user => (await (await request('/api/admin/login', '', { user, pass: password })).json()).token;
     const admin = await login('admin@fixture.invalid'), tenant = await login('tenant@fixture.invalid');
     const upload = '/api/admin/barbearia/avec-mix/preview';
+    assert.equal((await request('/api/admin/barbearia/avec-mix/report')).status, 401);
+    assert.equal((await request('/api/admin/barbearia/avec-mix/report', tenant)).status, 400);
     const largeBody = { report: 'x'.repeat(1100000) };
     assert.equal((await request(upload, '', largeBody)).status, 401);
     assert.equal((await request(upload, tenant, largeBody)).status, 403);
