@@ -3,6 +3,8 @@ import { Link, useLocation } from 'react-router-dom'
 import { Clock3, Inbox, MessageSquare, ShieldCheck, Smartphone } from 'lucide-react'
 import { api } from '../../../lib/api'
 import { useAuth } from '../../../lib/auth'
+import { lojasDaEmpresa } from '../../../lib/context-selection'
+import { empresaSemUnidade, sincronizarContextoComercial } from '../../../lib/contexto-comercial'
 import { brandFromContext } from '../../../lib/brand'
 import { channelStatusPayload, webhookSecretEnvFor } from '../../../lib/whatsapp-webhook-secret'
 import { useToast } from '../../../hooks/useToast'
@@ -31,7 +33,14 @@ function Check({ ok, children, hint }) {
 }
 
 export default function WhatsappConexao() {
-  const { empresaAtiva, lojaAtiva } = useAuth()
+  const { empresaAtiva, lojaAtiva, lojasAcessiveis, atualizarContextoLojas } = useAuth()
+  const precisaSincronizar = empresaSemUnidade(lojasAcessiveis, empresaAtiva?.id) || (Boolean(empresaAtiva?.id) && !lojaAtiva?.id)
+  // Sem unidade da empresa ativa no navegador, relê o contexto autorizado no servidor
+  // antes de bloquear QR e pareamento (corrige vínculos antigos sem novo login).
+  useEffect(() => {
+    if (!precisaSincronizar) return
+    sincronizarContextoComercial({ cliente: api, lojasAcessiveis, atualizarContextoLojas, forcar: true })
+  }, [precisaSincronizar, empresaAtiva?.id]) // eslint-disable-line react-hooks/exhaustive-deps
   const scopeKey = `${empresaAtiva?.id || ''}:${lojaAtiva?.id || ''}`
   const { pathname } = useLocation()
   return <WhatsappConexaoEmpresa key={`${scopeKey}:${pathname}`} />
@@ -52,9 +61,8 @@ function WhatsappConexaoEmpresa() {
   const lojaId = String(lojaAtiva?.id || '')
   const requestOptions = { headers: { 'X-Empresa-Id': tenantId, 'X-Loja-Id': lojaId } }
   const empresas = Array.isArray(empresasAcessiveis) ? empresasAcessiveis.filter((empresa) => empresa?.id) : []
-  const lojas = Array.isArray(lojasAcessiveis)
-    ? lojasAcessiveis.filter((loja) => loja?.id && loja.ativa !== false && (!tenantId || String(loja.empresaId || '') === tenantId))
-    : []
+  // Aceita o vínculo pelo id da empresa e pelo alias Commerce, como o restante do painel.
+  const lojas = lojasDaEmpresa(lojasAcessiveis, tenantId).filter((loja) => loja?.id)
   const [conexao, setConexao] = useState(null)
   const [podeGerenciar, setPodeGerenciar] = useState(false)
   const [ia, setIa] = useState(null)

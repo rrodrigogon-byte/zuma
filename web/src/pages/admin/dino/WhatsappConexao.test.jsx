@@ -427,3 +427,53 @@ it('exibe cadastro de número e solicita código de pareamento para canal intern
  expect(textOf(renderer)).toContain('1234-5678')
  await unmount(renderer)
 })
+
+describe('WhatsappConexao · unidade da empresa ativa', () => {
+  it('lista a unidade vinculada pelo alias Commerce da empresa', async () => {
+    authMock.useAuth.mockReturnValue({
+      empresaAtiva: { id: 'empresa-a', nome: 'Empresa A' },
+      empresasAcessiveis: [{ id: 'empresa-a', nome: 'Empresa A' }],
+      trocarEmpresa: vi.fn(),
+      lojaAtiva: null,
+      lojasAcessiveis: [{ id: 'loja-a', commerceEmpresaId: 'empresa-a', nome: 'Unidade A' }, { id: 'loja-b', empresaId: 'empresa-b', nome: 'Unidade B' }],
+      trocarLoja: vi.fn(),
+      atualizarContextoLojas: vi.fn(),
+      user: {},
+    })
+    let renderer
+    await act(async () => { renderer = create(<WhatsappConexao />) })
+    await tick()
+    const loja = renderer.root.findByProps({ id: 'whatsapp-loja-ativa' })
+    expect(loja.props.disabled).toBe(false)
+    const valores = loja.findAllByType('option').map((option) => option.props.value)
+    expect(valores).toContain('loja-a')
+    expect(valores).not.toContain('loja-b')
+    await unmount(renderer)
+  })
+
+  it('relê o contexto autorizado no servidor quando a unidade perdeu o vínculo com a empresa', async () => {
+    const atualizarContextoLojas = vi.fn()
+    authMock.useAuth.mockReturnValue({
+      empresaAtiva: { id: 'empresa-a', nome: 'Empresa A' },
+      empresasAcessiveis: [{ id: 'empresa-a', nome: 'Empresa A' }],
+      trocarEmpresa: vi.fn(),
+      lojaAtiva: null,
+      lojasAcessiveis: [{ id: 'loja-a', nome: 'Unidade A' }],
+      trocarLoja: vi.fn(),
+      atualizarContextoLojas,
+      user: {},
+    })
+    apiMock.get.mockImplementation((path) => path === '/api/admin/commerce-session'
+      ? Promise.resolve({ empresas_acessiveis: [{ id: 'empresa-a', nome: 'Empresa A' }], lojas_acessiveis: [{ id: 'loja-a', empresaId: 'empresa-a', nome: 'Unidade A' }] })
+      : Promise.resolve(operational()))
+    let renderer
+    await act(async () => { renderer = create(<WhatsappConexao />) })
+    await tick()
+    expect(apiMock.get).toHaveBeenCalledWith('/api/admin/commerce-session')
+    expect(atualizarContextoLojas).toHaveBeenCalledTimes(1)
+    const [payload] = atualizarContextoLojas.mock.calls[0]
+    expect(payload.lojas_acessiveis).toEqual([expect.objectContaining({ id: 'loja-a', empresaId: 'empresa-a' })])
+    expect(payload.empresas_acessiveis).toHaveLength(1)
+    await unmount(renderer)
+  })
+})
