@@ -28,6 +28,6 @@ export function nomeKyttoDoAvec(nomeAvec) {
 export function profissionalKyttoDoAvec(nomeAvec, profissionais = []) {
   const alvo = nomeKyttoDoAvec(nomeAvec);
   if (!alvo) return null;
-  const candidatos = profissionais.filter((p) => !String(p.id || '').startsWith('prof-avec-') && normalizarNomeProfissional(p.nome) === normalizarNomeProfissional(alvo));
+  const candidatos = profissionais.filter((p) => !String(p.id || '').startsWith('prof-avec-hist-') && normalizarNomeProfissional(p.nome) === normalizarNomeProfissional(alvo));
   return candidatos.length === 1 ? candidatos[0] : null;
 }
