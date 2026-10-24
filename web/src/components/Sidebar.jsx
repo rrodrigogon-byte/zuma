@@ -429,6 +429,7 @@ const NAV_ADMIN = NAV_ADMIN_GROUPS.flatMap(g => g.items)
 
 const NAV_PLATFORM = [
   { to: '/admin/plataforma', icon: '🏢', label: 'Empresas e Módulos' },
+  { to: '/admin/plataforma/conciliacao-financeira', icon: '⚖️', label: 'Conciliação financeira' },
 ]
 
 // O backend continua sendo a autoridade final. Este mapa apenas mantém o menu

@@ -152,6 +152,7 @@ const CadastrosMestres = lazy(() => import('./pages/admin/CadastrosMestres'))
 const AvecMixReport = lazy(() => import('./pages/admin/dino/AvecMixReport'))
 const AvecMixImport = lazy(() => import('./pages/admin/dino/AvecMixImport'))
 const AdminPlataforma = lazy(() => import('./pages/admin/AdminPlataforma'))
+const ConciliacaoFinanceiraPlataforma = lazy(() => import('./pages/admin/financeiro/ConciliacaoFinanceiraPlataforma'))
 const ERP             = lazy(() => import('./pages/admin/ERP'))
 const LojaModa        = lazy(() => import('./pages/admin/LojaModa'))
 const BarbeariaERP    = lazy(() => import('./pages/admin/BarbeariaERP'))
@@ -255,6 +256,7 @@ export default function App() {
           <Route path="/admin/avec-relatorio" element={<Layout><AvecMixReport /></Layout>} />
           <Route path="/admin/avec-historico" element={<PlatformOnly><Layout><AvecMixImport /></Layout></PlatformOnly>} />
           <Route path="/admin/plataforma"  element={<PlatformOnly><Layout><AdminPlataforma /></Layout></PlatformOnly>} />
+          <Route path="/admin/plataforma/conciliacao-financeira" element={<PlatformOnly><Layout><ConciliacaoFinanceiraPlataforma /></Layout></PlatformOnly>} />
           <Route path="/admin/usuarios"     element={<TenantAware tenant={<Navigate to="/admin/ecommerce?tab=users" replace />} legacy={<Layout><Usuarios /></Layout>} />} />
           <Route path="/admin/torneios"     element={<Layout><Torneios /></Layout>} />
           <Route path="/admin/agenda"       element={<Layout><Agenda /></Layout>} />

@@ -199,6 +199,48 @@ export function createRazaoPlataformaRouter({ db, fonteJson, fuso = svc.FUSO_PAD
       responderErro(res, error);
     }
   };
+  // Panorama somente leitura de todas as empresas, para a conciliação antes de ligar o razão:
+  // o que cada uma tem no financeiro antigo (JSON), nas contas a receber do A2 e no razão. Não grava.
+  router.get('/empresas', async (req, res) => {
+    try {
+      const temTabela = async (nome) => Boolean((await db.query('SELECT to_regclass($1) AS t', [nome])).rows[0]?.t);
+      const [temA2, temFin] = [await temTabela('a2_contas_receber'), await temTabela('fin_lancamentos')];
+      const empresas = (await db.query("SELECT id, nome FROM empresas e WHERE COALESCE((to_jsonb(e)->>'ativa')::boolean, (to_jsonb(e)->>'ativo')::boolean, true) ORDER BY lower(nome)")).rows;
+      const itens = [];
+      for (const empresa of empresas) {
+        const item = { empresaId: empresa.id, nome: empresa.nome, financeiroAntigo: null, a2ContasReceber: null, razao: null, config: null, fontes: [] };
+        try {
+          const json = typeof fonteJson === 'function' ? await fonteJson(empresa.id) : null;
+          if (json?.chaveLegada) {
+            const resumo = { chaveLegada: json.chaveLegada, quantidade: 0, receitaPendente: 0, despesaPendente: 0, receitaPaga: 0, despesaPaga: 0, semUnidade: 0 };
+            for (const l of json.lancamentos || []) {
+              const tipo = String(l?.tipo || '').toLowerCase(); const status = String(l?.status || '').toLowerCase(); const valor = Number(l?.valor) || 0;
+              if (!['receita', 'despesa'].includes(tipo) || !(valor > 0)) continue;
+              resumo.quantidade += 1;
+              if (!String(l?.lojaId || '').trim()) resumo.semUnidade += 1;
+              const chave = `${tipo}${['pago', 'quitado'].includes(status) ? 'Paga' : ['pendente', 'aberto'].includes(status) ? 'Pendente' : ''}`;
+              if (chave in resumo) resumo[chave] = Math.round((resumo[chave] + valor) * 100) / 100;
+            }
+            item.financeiroAntigo = resumo;
+          }
+        } catch (error) { item.financeiroAntigo = { erro: String(error?.message || error).slice(0, 160) }; }
+        if (temA2) {
+          const r = (await db.query(`SELECT count(*)::int AS quantidade, COALESCE(SUM(valor) FILTER (WHERE data_pagamento IS NULL), 0)::float AS aberto, COALESCE(SUM(valor) FILTER (WHERE data_pagamento IS NOT NULL), 0)::float AS pago FROM a2_contas_receber WHERE empresa_id = $1`, [empresa.id])).rows[0];
+          item.a2ContasReceber = { quantidade: r.quantidade, aberto: Number(r.aberto), pago: Number(r.pago) };
+        }
+        if (temFin) {
+          const r = (await db.query(`SELECT count(*)::int AS quantidade, COALESCE(SUM(valor) FILTER (WHERE tipo = 'receita' AND status = 'pendente'), 0)::float AS receber, COALESCE(SUM(valor) FILTER (WHERE tipo = 'despesa' AND status = 'pendente'), 0)::float AS pagar FROM fin_lancamentos WHERE empresa_id = $1`, [empresa.id])).rows[0];
+          item.razao = { quantidade: r.quantidade, receber: Number(r.receber), pagar: Number(r.pagar) };
+        }
+        item.config = await svc.obterConfig(db, empresa.id).catch(() => null);
+        item.fontes = await fontes.saudeDasFontes(db, empresa.id).catch(() => []);
+        itens.push(item);
+      }
+      res.json({ ativo: process.env.FINANCEIRO_RAZAO === '1', empresas: itens });
+    } catch (error) {
+      responderErro(res, error);
+    }
+  });
   router.post('/legado/conferencia', comJson(async ({ empresaId, json, incluirQuarentena }) => ({
     ...(await fontes.conferirJsonLegado(db, empresaId, { ...json, incluirQuarentena, fuso })),
     config: await svc.obterConfig(db, empresaId),
