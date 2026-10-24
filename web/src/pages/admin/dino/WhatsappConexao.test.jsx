@@ -476,4 +476,23 @@ describe('WhatsappConexao · unidade da empresa ativa', () => {
     expect(payload.empresas_acessiveis).toHaveLength(1)
     await unmount(renderer)
   })
+
+  it('oferece à plataforma confirmar a instância sem dono registrado e avisa que nada entra nem sai', async () => {
+    authMock.useAuth.mockReturnValue({ empresaAtiva: { id: 'empresa-a', nome: 'Empresa A' }, lojaAtiva: { id: 'loja-a', nome: 'Unidade A' }, user: { platformAdmin: true } })
+    apiMock.get.mockImplementation((path) => path.startsWith('/api/admin/barbearia/whatsapp-conexao')
+      ? Promise.resolve({ conexao: { ...connection, instance: 'stallone-1', donoRegistrado: false, instanciaConfirmada: false }, podeGerenciar: true })
+      : Promise.resolve(operational()))
+    apiMock.put.mockResolvedValue({ conexao: { ...connection, instance: 'stallone-1', donoRegistrado: true, instanciaConfirmada: true } })
+    let renderer
+    await act(async () => { renderer = create(<WhatsappConexao />) })
+    await tick()
+    const html = textOf(renderer)
+    expect(html).toContain('ainda não está registrada como desta empresa')
+    const botao = renderer.root.findAll((node) => node.type === 'button' && JSON.stringify(node.props.children).includes('Confirmar instância'))[0]
+    expect(botao.props.disabled).toBe(false)
+    const form = renderer.root.findAll((node) => node.type === 'form' && node.findAll((child) => child === botao).length > 0)[0]
+    await act(async () => { form.props.onSubmit({ preventDefault() {} }) })
+    expect(apiMock.put).toHaveBeenCalledWith('/api/admin/barbearia/whatsapp-conexao/config', { instance: 'stallone-1' }, expect.anything())
+    await unmount(renderer)
+  })
 })

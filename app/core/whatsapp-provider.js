@@ -85,7 +85,28 @@ export function chatbotBackendConfig(overrides = {}) {
 // ----------------------------------------------------------------------------
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-export function instanceRegistry(env = process.env) {
+// Atribuições feitas pela administração da plataforma no painel (Central WhatsApp)
+// também registram a empresa dona da instância, sem exigir nova variável no
+// Render. A fonte é injetada por whatsapp-conexao-kytto (evita import circular)
+// e devolve [{ instance, owner, lineVerified }]. A variável de ambiente sempre
+// prevalece; instância reivindicada por duas empresas fica sem dono.
+let persistedRegistrySource = null;
+
+export function setPersistedInstanceRegistrySource(source) {
+  persistedRegistrySource = typeof source === 'function' ? source : null;
+}
+
+function persistedInstanceEntries() {
+  if (!persistedRegistrySource) return [];
+  try {
+    const entries = persistedRegistrySource();
+    return Array.isArray(entries) ? entries : [];
+  } catch {
+    return [];
+  }
+}
+
+function envInstanceRegistry(env = process.env) {
   const registry = new Map();
   const raw = clean(env.CHATBOT_BACKEND_INSTANCES, 4000);
   if (raw) {
@@ -106,6 +127,25 @@ export function instanceRegistry(env = process.env) {
   return registry;
 }
 
+function persistedInstanceRegistry(envRegistry) {
+  const persisted = new Map();
+  for (const entry of persistedInstanceEntries()) {
+    const instance = validInstance(entry?.instance);
+    const owner = clean(entry?.owner, 60).toLowerCase();
+    if (!instance || !UUID_RE.test(owner) || envRegistry.has(instance)) continue;
+    if (persisted.has(instance) && persisted.get(instance).owner !== owner) { persisted.set(instance, null); continue; }
+    persisted.set(instance, { owner, lineVerified: entry?.lineVerified === true });
+  }
+  for (const [instance, entry] of [...persisted]) if (!entry) persisted.delete(instance);
+  return persisted;
+}
+
+export function instanceRegistry(env = process.env) {
+  const registry = envInstanceRegistry(env);
+  for (const [instance, entry] of persistedInstanceRegistry(registry)) registry.set(instance, entry.owner);
+  return registry;
+}
+
 export function instanceOwner(instance, env = process.env) {
   return instanceRegistry(env).get(validInstance(instance)) || '';
 }
@@ -121,9 +161,13 @@ export function instanceLineVerified(instance, env = process.env) {
   const resolved = validInstance(instance);
   if (!resolved) return false;
   const list = clean(env.WHATSAPP_LINE_VERIFIED_INSTANCES, 2000);
-  if (list) return list.split(/[,;\s]+/).map((item) => validInstance(item)).includes(resolved);
-  // Compatível: WHATSAPP_LINE_VERIFIED=1 vale só para a instância padrão do ambiente.
-  return env.WHATSAPP_LINE_VERIFIED === '1' && resolved === validInstance(env.CHATBOT_BACKEND_INSTANCE || DEFAULT_INSTANCE);
+  const byEnv = list
+    ? list.split(/[,;\s]+/).map((item) => validInstance(item)).includes(resolved)
+    // Compatível: WHATSAPP_LINE_VERIFIED=1 vale só para a instância padrão do ambiente.
+    : env.WHATSAPP_LINE_VERIFIED === '1' && resolved === validInstance(env.CHATBOT_BACKEND_INSTANCE || DEFAULT_INSTANCE);
+  if (byEnv) return true;
+  // Linha atribuída pela plataforma e já pareada por QR no aparelho da empresa.
+  return persistedInstanceRegistry(envInstanceRegistry(env)).get(resolved)?.lineVerified === true;
 }
 
 /** A instância é de alguma empresa registrada (não pode ser usada por canal legado/global). */
