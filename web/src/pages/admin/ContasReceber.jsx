@@ -92,6 +92,36 @@ export default function ContasReceber() {
     }
   }
 
+  const handleExcluirConta = async (conta) => {
+    if (!window.confirm(`Deseja realmente excluir a conta "${conta.descricao || 'sem descrição'}" (${fmtR(conta.valor)})?`)) {
+      return
+    }
+    setLoading(true)
+    try {
+      await api.delete(a2Path(`/contas-receber/${conta.id}`))
+      toast('Conta a receber excluída com sucesso')
+      load()
+    } catch (e) {
+      toast(e.message || 'Erro ao excluir conta', true)
+      setLoading(false)
+    }
+  }
+
+  const handleExpurgarTestes = async () => {
+    if (!window.confirm('Deseja excluir permanentemente todas as contas de teste e manter apenas dados oficiais/Avec?')) {
+      return
+    }
+    setLoading(true)
+    try {
+      const res = await api.post(a2Path('/contas-receber/expurgar-testes'), {})
+      toast(`Expurgo concluído! ${res?.removidas ?? 0} conta(s) de teste removida(s).`)
+      load()
+    } catch (e) {
+      toast(e.message || 'Erro ao expurgar contas de teste', true)
+      setLoading(false)
+    }
+  }
+
   const getNomeCliente = (id, fallbackNome) => {
     if (fallbackNome) return fallbackNome
     if (!id) return 'Cliente Geral'
@@ -127,6 +157,7 @@ export default function ContasReceber() {
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:24, flexWrap:'wrap', gap:12 }}>
         <h1 className="page-title" style={{ margin:0 }}>💰 Contas a Receber</h1>
         <div style={{ display:'flex', gap:8 }}>
+          <button className="btn btn-outline btn-sm" onClick={handleExpurgarTestes} disabled={loading} title="Remover registros de teste e manter oficiais/Avec">🗑️ Limpar Testes</button>
           <button className="btn btn-secondary btn-sm" onClick={load} disabled={loading}>↺ Atualizar</button>
           <button className="btn btn-primary btn-sm" onClick={abrirNovaConta} disabled={loading || clientes.length === 0}>+ Nova Conta</button>
         </div>
@@ -234,10 +265,20 @@ export default function ContasReceber() {
                     {c.status.toUpperCase()}
                   </span>
                 </td>
-                <td style={{ textAlign: 'right' }}>
-                  {c.status !== 'paga' && (
-                    <button className="btn btn-primary btn-sm" onClick={() => setModalPagamento(c)}>Baixar</button>
-                  )}
+                <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                  <div style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+                    {c.status !== 'paga' && (
+                      <button className="btn btn-primary btn-sm" onClick={() => setModalPagamento(c)}>Baixar</button>
+                    )}
+                    <button
+                      className="btn btn-outline btn-sm"
+                      style={{ color: '#e74c3c', borderColor: 'rgba(231,76,60,0.3)', padding: '4px 8px' }}
+                      title="Excluir conta a receber"
+                      onClick={() => handleExcluirConta(c)}
+                    >
+                      Excluir
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}

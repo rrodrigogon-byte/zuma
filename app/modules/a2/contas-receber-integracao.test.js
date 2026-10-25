@@ -52,4 +52,10 @@ test('A2 e Kytto: contas a receber consolidadas, baixa e alertas de vencimento',
   const contasAposBaixa = await svc.listarContas(null, emp);
   const contaBaixadaNaLista = contasAposBaixa.find((c) => c.id === atrasada.id);
   assert.equal(contaBaixadaNaLista?.status, 'paga');
+
+  // 7. Exclui a conta criada e verifica que foi removida
+  const resExclusao = await svc.excluirConta(null, emp, conta.id);
+  assert.equal(resExclusao.ok, true);
+  const contasAposExclusao = await svc.listarContas(null, emp);
+  assert.equal(contasAposExclusao.some((c) => c.id === conta.id), false, 'Conta excluída não deve constar na listagem');
 });

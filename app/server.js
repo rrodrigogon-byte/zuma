@@ -1382,6 +1382,25 @@ if(process.env.COMMERCE_CORE_ENABLED === '1'){
 
   // Sincronização inicial em segundo plano de pedidos pendentes para contas a receber
   if (clubeDb) {
+    clubeDb.query(`
+      DELETE FROM a2_contas_receber
+       WHERE descricao LIKE 'Pedido KC-%'
+          OR observacao LIKE '%Loja Online%'
+          OR observacao LIKE '%teste%'
+          OR descricao ILIKE '%teste%'
+    `).then((res) => {
+      console.log(`[a2] Expurgadas ${res.rowCount || 0} contas a receber de teste do anexo.`);
+    }).catch((err) => console.warn('[a2] erro limpeza contas teste inicial:', err.message));
+
+    clubeDb.query(`
+      UPDATE commerce_orders
+         SET status = 'cancelled', atualizado_em = CURRENT_TIMESTAMP
+       WHERE status = 'pending_payment'
+         AND criado_em < '2026-10-25T18:00:00Z'
+    `).then((res) => {
+      console.log(`[a2] Cancelados ${res.rowCount || 0} pedidos de teste antigos.`);
+    }).catch((err) => console.warn('[a2] erro cancelamento pedidos teste inicial:', err.message));
+
     clubeDb.query(`SELECT id FROM empresas`).then((res) => {
       for (const row of res.rows || []) {
         a2Svc.sincronizarPedidosPendentes(clubeDb, row.id).catch((err) => console.warn('[a2] sync inicial:', err.message));

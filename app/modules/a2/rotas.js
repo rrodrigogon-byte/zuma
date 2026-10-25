@@ -26,6 +26,8 @@ export function createA2AdminRouter({ db, empresaDaRequisicao, operadorDaRequisi
   router.get('/contas-receber', executar(async ({ empresaId, req }) => ({ contas: await svc.listarContas(db, empresaId, req.query) })));
   router.post('/contas-receber', executar(({ empresaId, req, operador }) => svc.criarConta(db, empresaId, req.body || {}, operador), 201));
   router.patch('/contas-receber/:id', executar(({ empresaId, req }) => svc.baixarConta(db, empresaId, req.params.id, req.body?.dataPagamento || new Date())));
+  router.delete('/contas-receber/:id', executar(({ empresaId, req }) => svc.excluirConta(db, empresaId, req.params.id)));
+  router.post('/contas-receber/expurgar-testes', executar(({ empresaId }) => svc.expurgarContasTeste(db, empresaId)));
   router.get('/alertas-vencimento', executar(async ({ empresaId }) => ({ alertas: await svc.listarAlertas(db, empresaId) })));
 
   router.get('/fechamento-diario', executar(async ({ empresaId }) => ({ fechamentos: await svc.listarFechamentos(db, empresaId) })));
