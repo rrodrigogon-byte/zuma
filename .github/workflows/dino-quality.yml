@@ -25,8 +25,8 @@ jobs:
             package-lock.json
             app/package-lock.json
             web/package-lock.json
-      - name: PostgreSQL local descartável
-        run: sudo apt-get update && sudo apt-get install -y postgresql-16
+      - name: PostgreSQL e validador XML locais
+        run: sudo apt-get update && sudo apt-get install -y postgresql-16 libxml2-utils
       - run: npm ci
       - run: npm ci --prefix app
       - run: npm ci --include=dev --prefix web

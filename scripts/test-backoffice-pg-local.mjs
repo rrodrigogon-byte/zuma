@@ -1,8 +1,10 @@
 // Suítes reais do ERP em PostgreSQL descartável: não lê DSNs nem credenciais remotas.
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { once } from 'node:events';
 import { localPostgresFixture } from '../app/tests/local-postgres-fixture.js';
 const suites = ['unidades', 'a2', 'bar-a1', 'razao', 'razao-rotas', 'suprimentos', 'conciliacao', 'salao', 'pdv-offline', 'varejo', 'fiscal', 'fiscal-completo'];
+// As suítes fiscais exigem validação real do XSD; não ignorar testes sem o binário.
+if (spawnSync('xmllint', ['--version'], { stdio: 'ignore' }).status !== 0) throw new Error('Instale o validador XML xmllint (libxml2-utils no Ubuntu) para executar a matriz completa.');
 const fixture = await localPostgresFixture();
 try {
   const client = await fixture.connect();
