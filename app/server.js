@@ -7834,12 +7834,28 @@ app.post('/api/admin/financeiro/lancamentos', auth, requireLegacyGlobalScope, re
 });
 app.patch('/api/admin/financeiro/lancamentos/:id', auth, requireLegacyGlobalScope, requireStaff, (req,res)=>{
   const d=db(); const l=(d.lancamentos||[]).find(x=>x.id==req.params.id);
+  if(!l && financeiroKytto) {
+    try {
+      const empresaId = legacyEmpresaId(req);
+      const lojaId = legacyLojaId(req);
+      const atualizado = financeiroKytto.atualizarLancamento(empresaId, req.params.id, req.body || {}, { lojaId, permitirAutomatico: true });
+      if (atualizado) { save(); return res.json(atualizado); }
+    } catch {}
+  }
   if(!l) return res.status(404).json({error:'não encontrado'});
   if(req.body.status==='pago' && !l.pagoEm) req.body.pagoEm=new Date().toISOString();
   Object.assign(l, req.body); save(); res.json(l);
 });
 app.delete('/api/admin/financeiro/lancamentos/:id', auth, requireLegacyGlobalScope, requireRole('admin','organizador'), (req,res)=>{
-  const d=db(); d.lancamentos=(d.lancamentos||[]).filter(x=>x.id!=req.params.id); save(); res.json({ok:true});
+  const d=db();
+  if(financeiroKytto) {
+    try {
+      const empresaId = legacyEmpresaId(req);
+      const cancelado = financeiroKytto.cancelarLancamento(empresaId, req.params.id, { usuario: req.user?.email || 'admin', lojaId: legacyLojaId(req), permitirAutomatico: true });
+      if (cancelado) { save(); return res.json({ ok: true }); }
+    } catch {}
+  }
+  d.lancamentos=(d.lancamentos||[]).filter(x=>x.id!=req.params.id); save(); res.json({ok:true});
 });
 
 // --- Resumo financeiro e fluxo de caixa ---

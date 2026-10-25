@@ -112,7 +112,14 @@ export function createRazaoAdminRouter({ db, escopoDaRequisicao, fonteJson = nul
 
   async function exigirNoAlcance(empresaId, id, lojaRestrita) {
     const l = await svc.obter(db, empresaId, id);
-    if (lojaRestrita && l.lojaId !== lojaRestrita) throw new ErroDominio('NOT_FOUND', 'Lançamento não encontrado nesta empresa', 404);
+    if (lojaRestrita && l.lojaId && l.lojaId !== lojaRestrita) {
+      const a = String(l.lojaId || '').trim();
+      const b = String(lojaRestrita || '').trim();
+      const CANONICA = 'ab049a75-6e2e-4cc9-abbc-6fd11cdda1d8';
+      const LEGADA = 'dino-web-estoque';
+      const equivalentes = (a === CANONICA && b === LEGADA) || (a === LEGADA && b === CANONICA);
+      if (!equivalentes) throw new ErroDominio('NOT_FOUND', 'Lançamento não encontrado nesta empresa', 404);
+    }
     return l;
   }
   router.patch('/lancamentos/:id', rota('payments.write', async ({ req, empresaId, lojaRestrita }) => {

@@ -273,8 +273,29 @@ export default function FinanceiroEmpresa() {
   const [categorias, setCategorias] = useState({ receita: [], despesa: [] })
   const [loading, setLoading] = useState(true)
   const [erro, setErro] = useState('')
-  const [filtros, setFiltros] = useState({ tipo: '', status: '', categoria: '', q: '', de: '', ate: '' })
-  const [cardFiltroAtivo, setCardFiltroAtivo] = useState(null)
+  const [filtros, setFiltros] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const sp = new URLSearchParams(window.location.search)
+      return {
+        tipo: sp.get('tipo') || (sp.get('aba') === 'pagar' ? 'despesa' : sp.get('aba') === 'receber' ? 'receita' : ''),
+        status: sp.get('status') || (sp.get('aba') === 'pagar' || sp.get('aba') === 'receber' ? 'pendente' : ''),
+        categoria: sp.get('categoria') || '',
+        q: sp.get('q') || '',
+        de: sp.get('de') || '',
+        ate: sp.get('ate') || ''
+      }
+    }
+    return { tipo: '', status: '', categoria: '', q: '', de: '', ate: '' }
+  })
+  const [cardFiltroAtivo, setCardFiltroAtivo] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const sp = new URLSearchParams(window.location.search)
+      if (sp.get('filtro') === 'vencidos') return 'vencidos'
+      if (sp.get('aba') === 'pagar') return 'aPagar'
+      if (sp.get('aba') === 'receber') return 'aReceber'
+    }
+    return null
+  })
   const [mesSelecionado, setMesSelecionado] = useState(null)
   const [abaAnalitica, setAbaAnalitica] = useState('fluxo') // 'fluxo' | 'dre' | 'categorias'
 
@@ -531,10 +552,10 @@ export default function FinanceiroEmpresa() {
 
   async function marcarPago(item) {
     try {
-      await api.patch(`${BASE}/lancamentos/${item.id}`, { status: 'pago' })
+      await api.patch(`${BASE}/lancamentos/${item.id}`, { status: 'pago', pagoEm: new Date().toISOString() })
       toast('Marcado como pago.')
       load()
-    } catch (error) { toast(error.message, true) }
+    } catch (error) { toast(error.message || 'Erro ao marcar como pago.', true) }
   }
 
   async function encerrarSerie() {
@@ -846,7 +867,7 @@ export default function FinanceiroEmpresa() {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', background: 'var(--card2)', border: '1px solid var(--line)', borderRadius: 8, margin: '8px 0' }}>
           <span style={{ fontSize: 13 }}>
             Filtro ativo: <strong style={{ color: 'var(--accent, #b0892e)' }}>
-              {cardFiltroAtivo === 'vencidos' && '71 Lançamentos Vencidos'}
+              {cardFiltroAtivo === 'vencidos' && `${vencidos.length} Lançamentos Vencidos`}
               {cardFiltroAtivo === 'saldo' && 'Todos os Lançamentos Pagos'}
               {cardFiltroAtivo === 'aReceber' && 'Contas a Receber Pendentes'}
               {cardFiltroAtivo === 'aPagar' && 'Contas a Pagar Pendentes'}

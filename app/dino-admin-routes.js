@@ -183,7 +183,7 @@ export function registerDinoAdminRoutes(app, deps) {
     const empresaId = legacyEmpresaId(req);
     const pendentes = financeiroKytto.listarLancamentos(empresaId, {}).filter((item) => item.serieId === String(req.params.serieId) && item.status === 'pendente');
     if (!pendentes.length) return res.status(404).json({ error: 'Nenhuma parcela pendente nesta série.' });
-    pendentes.forEach((item) => financeiroKytto.cancelarLancamento(empresaId, item.id, req.user?.email || req.user?.nome || 'gestor'));
+    pendentes.forEach((item) => financeiroKytto.cancelarLancamento(empresaId, item.id, { usuario: req.user?.email || req.user?.nome || 'gestor', permitirAutomatico: true }));
     audit(req, 'FINANCEIRO SERIE ENCERRADA', `serie=${req.params.serieId}; parcelas=${pendentes.length}`);
     save();
     res.json({ ok: true, canceladas: pendentes.length });
@@ -193,7 +193,9 @@ export function registerDinoAdminRoutes(app, deps) {
     if (!gestor(req, res)) return;
     try {
       const lojaId = legacyLojaId(req);
-      const lancamento = financeiroKytto.atualizarLancamento(legacyEmpresaId(req), req.params.id, { ...sanitizeEntry(req.body || {}), lojaId }, { lojaId });
+      const dados = sanitizeEntry(req.body || {});
+      if (req.body?.lojaId !== undefined) dados.lojaId = req.body.lojaId;
+      const lancamento = financeiroKytto.atualizarLancamento(legacyEmpresaId(req), req.params.id, dados, { lojaId, permitirAutomatico: true });
       if (!lancamento) return res.status(404).json({ error: 'Lançamento não encontrado nesta empresa.' });
       audit(req, 'FINANCEIRO ATUALIZACAO', `id=${lancamento.id}; status=${lancamento.status}`);
       save();
@@ -214,7 +216,7 @@ export function registerDinoAdminRoutes(app, deps) {
       for (const id of ids) {
         const item = financeiroKytto.obterLancamento(empresaId, id, { lojaId });
         if (item && item.status === 'pendente') {
-          const atualizado = financeiroKytto.atualizarLancamento(empresaId, id, { status: 'pago', pagoEm: dataPagamento }, { lojaId });
+          const atualizado = financeiroKytto.atualizarLancamento(empresaId, id, { status: 'pago', pagoEm: dataPagamento }, { lojaId, permitirAutomatico: true });
           if (atualizado) liquidados.push(atualizado.id);
         }
       }
@@ -227,7 +229,7 @@ export function registerDinoAdminRoutes(app, deps) {
   // Exclusão = cancelamento (mantém a trilha contábil).
   app.delete(`${BASE}/financeiro/lancamentos/:id`, (req, res) => {
     if (!gestor(req, res)) return;
-    const lancamento = financeiroKytto.cancelarLancamento(legacyEmpresaId(req), req.params.id, { usuario: req.user?.email || req.user?.nome || 'gestor', lojaId: legacyLojaId(req) });
+    const lancamento = financeiroKytto.cancelarLancamento(legacyEmpresaId(req), req.params.id, { usuario: req.user?.email || req.user?.nome || 'gestor', lojaId: legacyLojaId(req), permitirAutomatico: true });
     if (!lancamento) return res.status(404).json({ error: 'Lançamento não encontrado nesta empresa.' });
     audit(req, 'FINANCEIRO CANCELAMENTO', `id=${lancamento.id}`);
     save();
