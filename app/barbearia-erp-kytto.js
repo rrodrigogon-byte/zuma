@@ -1381,6 +1381,7 @@ function assinaturaNormalizada(dados = {}, anterior = {}, plano = {}) {
     clienteId: texto(dados.clienteId ?? dados.cliente_id ?? anterior.clienteId, 100),
     clienteNome: texto(dados.clienteNome ?? dados.cliente_nome ?? anterior.clienteNome, 160),
     planoId: texto(dados.planoId ?? dados.plano_id ?? anterior.planoId, 100),
+    regraRenovacao: ['aniversario','dias'].includes(dados.regraRenovacao ?? anterior.regraRenovacao ?? plano.regraRenovacao) ? (dados.regraRenovacao ?? anterior.regraRenovacao ?? plano.regraRenovacao) : 'dias',
     inicio,
     fim,
     status: STATUS_ASSINATURA.has(String(dados.status ?? anterior.status)) ? String(dados.status ?? anterior.status) : 'pendente_ativacao',
@@ -1401,7 +1402,7 @@ export function listarAssinaturas(empresaId, filtros = {}) {
 }
 
 function assinaturaHash(item) {
-  return crypto.createHash('sha256').update(JSON.stringify(['clienteId','clienteNome','planoId','inicio','fim','sessoesContratadas','observacoes'].map(k=>item[k]??null))).digest('hex');
+  return crypto.createHash('sha256').update(JSON.stringify(['clienteId','clienteNome','planoId','inicio','fim','sessoesContratadas','observacoes','regraRenovacao'].map(k=>item[k]??null))).digest('hex');
 }
 
 export function criarAssinatura(empresaId, dados = {}) {
@@ -1417,9 +1418,10 @@ export function criarAssinatura(empresaId, dados = {}) {
   const plano = estado.planos[String(dados.planoId ?? dados.plano_id)];
   if (!plano || plano.ativo === false) throw new Error('Plano ativo é obrigatório.');
   const assinatura = assinaturaNormalizada(dados, {}, plano);
-  if (plano.regraRenovacao === 'aniversario') assinatura.inicio = subscriptionStart(assinatura.inicio);
-  assinatura.condicoesContratadas = condicoesDoPlano(plano);
-  if(plano.regraRenovacao==='aniversario'){
+  if (assinatura.regraRenovacao === 'aniversario') assinatura.inicio = subscriptionStart(assinatura.inicio);
+  assinatura.condicoesContratadas = {...condicoesDoPlano(plano),regraRenovacao:assinatura.regraRenovacao};
+  if(assinatura.regraRenovacao==='aniversario'){
+    if(!plano.servicosIds.length)throw new Error('Configure os serviços cobertos no plano antes de contratar o pacote.');
     const cliente=clientesKytto.obterCliente(empresaId,assinatura.clienteId);
     if(!cliente||cliente.bloqueado||cliente.anonimizadoEm)throw new Error('Selecione um cliente ativo cadastrado nesta empresa.');
   }

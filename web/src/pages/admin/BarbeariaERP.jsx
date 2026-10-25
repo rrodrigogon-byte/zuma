@@ -319,7 +319,7 @@ export default function BarbeariaERP() {
   const [grupoServicos, setGrupoServicos] = useState('todos')
   const [formPlano, setFormPlano] = useState({ nome: '', descricao: '', ciclo: 'mensal', regraRenovacao: 'aniversario', preco: '', sessoesIncluidas: 4, validadeDias: 30, servicosIds: [] })
   const pedidoAssinatura=useRef(null)
-  const [formAssinatura, setFormAssinatura] = useState({ clienteId: '', clienteNome: '', planoId: '', inicio: hojeLocal(), observacoes: '' })
+  const [formAssinatura, setFormAssinatura] = useState({ clienteId: '', clienteNome: '', planoId: '', regraRenovacao:'aniversario', inicio: hojeLocal(), observacoes: '' })
   const [formProdutoRevenda, setFormProdutoRevenda] = useState({ nome: '', sku: '', categoria: 'Revenda', unidade: 'un', precoVenda: '', custoUnitario: '', estoqueAtual: 0, estoqueMinimo: 0, intervaloRecompraDias: 30 })
   const [formMovimentoRevenda, setFormMovimentoRevenda] = useState({ quantidade: 1, observacao: 'Movimento manual no módulo Barbearia.' })
   const [formVendaRevenda, setFormVendaRevenda] = useState({ clienteId: '', clienteNome: '', profissionalId: '', observacao: '', produtoId: '', quantidade: 1 })
@@ -1104,7 +1104,7 @@ export default function BarbeariaERP() {
     const conteudo=JSON.stringify(dados)
     if(pedidoAssinatura.current?.conteudo!==conteudo)pedidoAssinatura.current={conteudo,chave:crypto.randomUUID()}
     const chaveIdempotencia=pedidoAssinatura.current.chave
-    await executar(async()=>{const resposta=await api.post('/api/admin/barbearia/assinaturas',{...dados,chaveIdempotencia});setFormAssinatura({clienteId:'',clienteNome:'',planoId:'',inicio:hojeLocal(),observacoes:''});pedidoAssinatura.current=null;return resposta},'Assinatura criada como pendente de ativação.')
+    await executar(async()=>{const resposta=await api.post('/api/admin/barbearia/assinaturas',{...dados,chaveIdempotencia});setFormAssinatura({clienteId:'',clienteNome:'',planoId:'',regraRenovacao:'aniversario',inicio:hojeLocal(),observacoes:''});pedidoAssinatura.current=null;return resposta},'Assinatura criada como pendente de ativação.')
   }
 
   async function ativarAssinatura(assinatura) {
@@ -1609,7 +1609,7 @@ export default function BarbeariaERP() {
           <div style={styles.sectionTitle}><div><h2 style={styles.h2}>Nova assinatura</h2><p style={styles.sub}>Fica pendente de ativação até uma confirmação operacional externa.</p></div></div>
           <form onSubmit={salvarAssinatura} style={{ display: 'grid', gap: 14 }}>
             <Field label="Cliente cadastrado"><select required value={formAssinatura.clienteId} onChange={(event) => setFormAssinatura((atual) => ({ ...atual, clienteId: event.target.value, clienteNome: '' }))} style={inputStyle}><option value="">Selecionar cliente</option>{clientes.map((cliente) => <option key={cliente.id} value={cliente.id}>{cliente.nome}</option>)}</select></Field>
-            <Field label="Data de contratação"><input type="date" required value={formAssinatura.inicio || ''} onChange={e=>setFormAssinatura(atual=>({...atual,inicio:e.target.value}))} style={inputStyle} /></Field><Field label="Plano"><select required value={formAssinatura.planoId} onChange={(event) => setFormAssinatura((atual) => ({ ...atual, planoId: event.target.value }))} style={inputStyle}><option value="">Selecionar plano</option>{planos.filter((plano) => plano.ativo !== false && !plano.removidoEm).map((plano) => <option key={plano.id} value={plano.id}>{plano.nome} · {moeda(plano.preco)}</option>)}</select></Field>
+            <Field label="Renovação do contrato"><select value={formAssinatura.regraRenovacao || 'aniversario'} onChange={e=>setFormAssinatura(atual=>({...atual,regraRenovacao:e.target.value}))} style={inputStyle}><option value="aniversario">Mesmo dia da contratação em cada ciclo</option><option value="dias">Validade em dias do catálogo</option></select></Field><Field label="Data de contratação"><input type="date" required value={formAssinatura.inicio || ''} onChange={e=>setFormAssinatura(atual=>({...atual,inicio:e.target.value}))} style={inputStyle} /></Field><Field label="Plano"><select required value={formAssinatura.planoId} onChange={(event) => setFormAssinatura((atual) => ({ ...atual, planoId: event.target.value }))} style={inputStyle}><option value="">Selecionar plano</option>{planos.filter((plano) => plano.ativo !== false && !plano.removidoEm).map((plano) => <option key={plano.id} value={plano.id}>{plano.nome} · {moeda(plano.preco)}</option>)}</select></Field>
             <Field label="Observações" full><textarea rows={3} value={formAssinatura.observacoes} onChange={(event) => setFormAssinatura((atual) => ({ ...atual, observacoes: event.target.value }))} style={{ ...inputStyle, resize: 'vertical' }} /></Field>
             <button type="submit" style={styles.primary} disabled={salvando || !planos.some((plano) => plano.ativo !== false && !plano.removidoEm)}>Criar assinatura pendente</button>
           </form>

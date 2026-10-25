@@ -1340,6 +1340,13 @@ test('simulação ponta a ponta do atendente da Dino', { skip, timeout: Number(p
     const ativo=barbearia.criarAssinatura(IDS.empresa,{clienteId:titular.id,planoId:plano.id,inicio:new Date(Date.now()-86400000).toISOString()});
     barbearia.alterarStatusAssinatura(IDS.empresa,ativo.id,'ativa',{confirmadoSemCobranca:true,pagamentoConfirmado:true});
     assert.equal((await run('consultar_meu_plano',{})).plano.perfil,'pacote_ativo');
+    const preparada=await run('preparar_agendamento',dados);assert.ok(preparada.acao?.id);
+    // A ferramenta foi chamada diretamente: simula a apresentação do resumo que o worker faz antes do SIM.
+    await db.query(`UPDATE whatsapp_ai_sessions SET acao_pendente=acao_pendente || '{"mostrado":true}'::jsonb WHERE id=$1`,[session.id]);
+    assert.equal((await sessao(tel)).acao_pendente.actionId,preparada.acao.id);
+    barbearia.alterarStatusAssinatura(IDS.empresa,ativo.id,'pausada');
+    cliente(tel,'CONFIRMAR');const bloqueio=await ciclo();assert.match(ultima(bloqueio),/pacote não está disponível/i);assert.equal(agendamentosDe(tel).length,0);
+    barbearia.alterarStatusAssinatura(IDS.empresa,ativo.id,'ativa',{confirmadoSemCobranca:true,pagamentoConfirmado:true});
     const agenda=await import('./barbershop-agenda.js');await db.transaction(trx=>agenda.createAppointment(trx,scope,{...dados,customerPhone:tel,actionId:crypto.randomUUID()}));
     const gravado=barbearia.listarAgendamentos(IDS.empresa).find(a=>a.clienteId===titular.id);assert.equal(gravado.assinaturaId,ativo.id);assert.equal(gravado.usarPlano,true);
   });

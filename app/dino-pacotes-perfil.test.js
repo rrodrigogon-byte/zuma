@@ -96,3 +96,9 @@ test('repetir criação com mesma chave não duplica assinatura; chave divergent
  assert.throws(()=>bar.criarAssinatura(f.emp,{...dados,inicio:'2026-02-11'}),/dados diferentes/);
  assert.throws(()=>bar.criarAssinatura(f.emp,{...dados,chaveIdempotencia:'outro',clienteId:'cliente-de-outra-empresa'}),/cliente ativo cadastrado nesta empresa/);
 });
+test('saldo reservado aparece no perfil e não pode ser consumido por outro atendimento',()=>{
+ const f=fixture({inicio:'2027-01-10',sessoes:4}),prof=bar.criarProfissional(f.emp,{nome:'Barbeiro teste'}),o=at('2027-01-11T12:00:00Z');
+ for(let i=0;i<4;i++)bar.criarAgendamento(f.emp,{clienteId:f.cliente.id,clienteNome:f.cliente.nome,servicoId:f.servico.id,profissionalId:prof.id,usarPlano:true,dataHora:`2027-01-12T${10+i}:00:00-04:00`},o);
+ const p=cap.perfilDoTelefone(f.emp,'65988880001',o);assert.equal(p.perfil,'pacote_reservado');assert.equal(p.pacotes[0].disponiveisParaAgendar,0);assert.equal(p.pacotes[0].sessoesReservadas,4);
+ assert.throws(()=>cap.registrarUsoAssinatura(f.emp,f.ass.id,{servicoId:f.servico.id},o),{code:'LIMITE_DO_CICLO'});
+});

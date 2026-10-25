@@ -307,6 +307,7 @@ export function limparCacheFonteAgenda() {
 
 function traduzirErro(erro) {
   if (erro instanceof SchedulingError) return erro;
+  if(['PLANO_VENCIDO','PLANO_INDISPONIVEL','LIMITE_DO_CICLO'].includes(erro?.code))return new SchedulingError(limpo(erro.message,240),erro.code);
   const mensagem = limpo(erro?.message, 240) || 'não foi possível concluir';
   const indisponivel = /indispon|conflito|fora do funcionamento|não funciona|não trabalha|feriado|jornada/i.test(mensagem);
   return new SchedulingError(mensagem, indisponivel ? 'SLOT_UNAVAILABLE' : 'SCHEDULING_ERROR');

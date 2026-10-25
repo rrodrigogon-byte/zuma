@@ -2166,21 +2166,24 @@ export function perfilDoTelefone(empresaId, telefone, opcoes = {}) {
   const visitas = dias.size;
   const pacotes = cliente ? barbearia.listarAssinaturas(empresaId).filter(item=>item.clienteId===String(cliente.id)).map(item=>{
     const r=resumoAssinatura(empresaId,item.id,opcoes);
+    const reservadas=reservasAssinatura(empresaId,item.id,r,opcoes),disponiveis=Math.max(0,r.sessoesRestantes-reservadas);
     return {assinaturaId:item.id,plano:r.plano?.nome || 'Pacote',status:item.status,situacao:r.situacaoPagamento,
       sessoesNoCiclo:r.limiteNoCiclo,usadasNoCiclo:r.usosNoCiclo,restantes:r.sessoesRestantes,pagoAte:r.pagoAte,
       proximaRenovacao:r.pagoAte || r.ciclo.inicio,regraRenovacao:r.plano?.regraRenovacao || 'dias',
-      utilizavel:item.status==='ativa'&&r.situacaoPagamento==='em_dia'&&r.sessoesRestantes>0,
+      sessoesReservadas:reservadas,disponiveisParaAgendar:disponiveis,
+      utilizavel:item.status==='ativa'&&r.situacaoPagamento==='em_dia'&&disponiveis>0,
       servicosIncluidos:(r.plano?.servicosIds||[]).map(id=>barbearia.listarServicos(empresaId,{incluirInativos:true}).find(s=>s.id===id)?.nome).filter(Boolean)};
   }) : [];
   const ativo=pacotes.find(p=>p.utilizavel),vencido=pacotes.find(p=>p.status==='ativa'&&['inadimplente','encerrada'].includes(p.situacao));
-  const perfil=ativo?'pacote_ativo':vencido?'pacote_vencido':pacotes.some(p=>p.status==='pausada')?'pacote_pausado':pacotes.some(p=>p.status==='ativa'&&p.situacao==='em_dia')?'pacote_esgotado':pacotes.some(p=>p.status==='ativa'||p.status==='pendente_ativacao')?'pacote_pendente':visitas>=2?'recorrente':cliente||visitas?'avulso':'novo';
+  const emDia=pacotes.find(p=>p.status==='ativa'&&p.situacao==='em_dia');
+  const perfil=ativo?'pacote_ativo':emDia?(emDia.restantes>0?'pacote_reservado':'pacote_esgotado'):vencido?'pacote_vencido':pacotes.some(p=>p.status==='pausada')?'pacote_pausado':pacotes.some(p=>p.status==='ativa'||p.status==='pendente_ativacao')?'pacote_pendente':visitas>=2?'recorrente':cliente||visitas?'avulso':'novo';
   return {perfil,clienteEncontrado:Boolean(cliente),visitasConhecidas:visitas,pacotes,
     orientacao:perfil==='pacote_vencido'?'Renove com a equipe para voltar a usar benefícios e agendamentos pelo pacote.':perfil==='pacote_esgotado'?'As sessões deste ciclo foram utilizadas. Consulte a equipe sobre renovação ou atendimento avulso.':null};
 }
 
 export function planoDoTelefone(empresaId, telefone, opcoes = {}) {
   const perfil=perfilDoTelefone(empresaId,telefone,opcoes);
-  const p=perfil.pacotes.find(item=>item.utilizavel)||perfil.pacotes.find(item=>['ativa','pausada'].includes(item.status));
+  const p=perfil.pacotes.find(item=>item.utilizavel)||perfil.pacotes.find(item=>item.status==='ativa'&&item.situacao==='em_dia')||perfil.pacotes.find(item=>['ativa','pausada'].includes(item.status));
   if (!p) return null;
   return {...p,perfil:perfil.perfil,pagamentoEmDia:p.situacao==='em_dia',cicloTermina:p.proximaRenovacao ? dataLocal(new Date(p.proximaRenovacao).valueOf()):null,orientacao:perfil.orientacao};
 }

@@ -334,6 +334,9 @@ export function personaConfirmationFailure(code, type = '') {
   const oQue = type === 'pedido' ? 'o pedido' : type === 'cancelamento' ? 'o cancelamento' : type === 'remarcacao' ? 'a remarcação' : 'o horário';
   switch (code) {
     case 'ACTION_EXPIRED': return `Demorou um pouco e ${oQue} não foi concluído. Vejo de novo? Me fala o dia.`;
+    case 'PLANO_VENCIDO':
+    case 'PLANO_INDISPONIVEL': return 'O pacote não está disponível para esse horário. Confira a renovação com a equipe para usar os benefícios. Quer ver um atendimento avulso?';
+    case 'LIMITE_DO_CICLO': return 'As sessões deste ciclo já foram usadas ou reservadas. Quer conferir com a equipe ou ver um atendimento avulso?';
     case 'SLOT_UNAVAILABLE': return 'Foi mal, esse horário acabou de sair. Te mostro os próximos?';
     case 'PHONE_LIMIT': return 'Você já tem horário marcado por este número. Quer remarcar ou cancelar um deles?';
     case 'ALREADY_BOOKED': return 'Você já tem esse serviço marcado nesse dia, então não dupliquei. Quer mudar o horário?';
