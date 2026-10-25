@@ -205,3 +205,68 @@ test('Relatório Individual Completo: Faturamento, Categorias, Planos, Extras no
   assert.equal(relEquipe.equipe[0].profissional.nome, 'Naty Barbeira');
   assert.equal(relEquipe.totaisGerais.faturamentoBrutoTotal, 280);
 });
+
+test('Integração de histórico Avec/legado no relatório individual e equipe', () => {
+  reset();
+  const empresaId = 'emp-teste-hist-avec';
+  const profNaty = barbearia.criarProfissional(empresaId, {
+    nome: 'Natani',
+    especialidade: 'Barbeira Master',
+    percentualComissao: 40,
+    percentualComissaoProduto: 10,
+    faixasComissaoServico: [
+      { metaFaturamento: 100, bonusPercentual: 5, descricao: 'Meta 100 (+5%)' }
+    ]
+  });
+
+  // Importa atendimentos históricos do Avec com o nome "Natani Minanis Dobler"
+  barbearia.importarHistoricoAtendimentos(empresaId, [
+    {
+      dataAgenda: '2026-09-15',
+      hora: '14:00',
+      clienteNome: 'Marcos Histórico',
+      profissionalNome: 'Natani Minanis Dobler',
+      servicoNome: 'Corte Fade',
+      valor: 80,
+      status: 'concluido'
+    },
+    {
+      dataAgenda: '2026-09-20',
+      hora: '15:30',
+      clienteNome: 'Lucas Histórico',
+      profissionalNome: 'Natani Minanis Dobler',
+      servicoNome: 'Pomada Modeladora',
+      valor: 50,
+      status: 'concluido'
+    },
+    {
+      dataAgenda: '2026-10-10',
+      hora: '16:00',
+      clienteNome: 'Roberto Histórico',
+      profissionalNome: 'Natani Minanis Dobler',
+      servicoNome: 'Hidratação Capilar',
+      valor: 120,
+      status: 'concluido'
+    }
+  ]);
+
+  // Consulta por "tudo" (todo o histórico completo)
+  const relTudo = relatorioIndividualProfissional(empresaId, profNaty.id, { periodo: 'tudo' });
+  assert.equal(relTudo.faturamento.brutoServicos, 200); // 80 + 120 (atinge a meta de 100 -> 45%)
+  assert.equal(relTudo.faturamento.brutoProdutos, 50); // 50
+  assert.equal(relTudo.faturamento.brutoTotal, 250);
+  assert.equal(relTudo.metasEvolucao.servicos.percentualEfetivo, 45);
+  assert.equal(relTudo.faturamento.comissaoServicos, 90); // 45% de 200
+  assert.equal(relTudo.servicosExtras.quantidadeTotal, 1); // Hidratação Capilar
+  assert.equal(relTudo.servicosExtras.clientesAtendidos[0].cliente, 'Roberto Histórico');
+
+  // Consulta por mês de outubro (2026-10)
+  const relMes = relatorioIndividualProfissional(empresaId, profNaty.id, { periodo: 'mes', inicio: '2026-10-01', fim: '2026-10-31' });
+  assert.equal(relMes.faturamento.brutoServicos, 120); // Somente 10/10
+  assert.equal(relMes.faturamento.brutoProdutos, 0);
+
+  // Consulta da equipe inteira
+  const relEquipe = relatorioEquipeMetasComissoes(empresaId, { periodo: 'tudo' });
+  assert.equal(relEquipe.equipe[0].profissional.nome, 'Natani');
+  assert.equal(relEquipe.equipe[0].faturamento.brutoTotal, 250);
+});
