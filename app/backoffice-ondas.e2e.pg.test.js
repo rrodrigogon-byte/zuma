@@ -126,7 +126,7 @@ test('backoffice integrado: Financeiro, estoque e compras, fiscal, conciliação
       ok(await req('/api/auth/redefinir-senha','POST',{token:resetToken,novaSenha:'fraca',confirmacao:'fraca'}),400,'senha fraca recusada');
       const newPassword='Nova-Senha-Operacional-123!';
       const resets=await Promise.all([1,2].map(()=>req('/api/auth/redefinir-senha','POST',{token:resetToken,novaSenha:newPassword,confirmacao:newPassword})));
-      assert.deepEqual(resets.map(r=>r.status).sort(),[200,401],'consumo único por HTTP');
+      assert.deepEqual(resets.map(r=>r.status).sort(),[200,400],'consumo único por HTTP');
       ok(await req('/api/admin/unidades','GET',null,headers),401,'reset encerra sessão anterior');
       const renewed=await req('/api/admin/login','POST',{user:email,senha:newPassword});ok(renewed,200,'nova senha operacional entra');
       headers={Authorization:`Bearer ${renewed.body.token}`,'X-Empresa-Id':A};
@@ -280,6 +280,8 @@ test('backoffice integrado: Financeiro, estoque e compras, fiscal, conciliação
         const logged=await req('/api/admin/login','POST',{user:target.email,senha});ok(logged,200,`login novo ${target.type}`);
         assert.equal(logged.body.user.platformAdmin,target.type==='legacy' ? adm.body.user.platformAdmin : false);
         const replay=await req('/api/auth/redefinir-senha/validar','POST',{token});assert.equal(replay.body.ok,false);
+        ok(await req('/api/auth/redefinir-senha','POST',{token,novaSenha:senha,confirmacao:senha}),400,'link consumido é recusado sem simular expiração da sessão atual');
+        ok(await req('/api/admin/minhas-permissoes','GET',null,{Authorization:`Bearer ${logged.body.token}`}),200,'pedido inválido não revoga o novo login');
       }
     });
   } finally {

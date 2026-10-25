@@ -1664,7 +1664,7 @@ app.post('/api/auth/redefinir-senha', publicLimit(10), async(req,res)=>{
   if (req.body?.novaSenha !== req.body?.confirmacao) return res.status(400).json({error:'As senhas não coincidem.',code:'PASSWORD_MISMATCH'});
   try {
     const result=await accountRecovery.consume(req.body?.token,req.body?.novaSenha);
-    if (!result.ok) return res.status(result.code === 'WEAK_PASSWORD' ? 400 : 401).json({code:result.code,error:result.code === 'WEAK_PASSWORD' ? 'Use de 12 caracteres a 72 bytes, com maiúscula, minúscula, número e símbolo.' : 'Link inválido ou expirado. Solicite um novo link.'});
+    if (!result.ok) return res.status(400).json({code:result.code,error:result.code === 'WEAK_PASSWORD' ? 'Use de 12 caracteres a 72 bytes, com maiúscula, minúscula, número e símbolo.' : 'Link inválido ou expirado. Solicite um novo link.'});
     res.json({ok:true,message:'Senha alterada. Entre novamente.'});
   } catch {res.status(503).json({error:'Não foi possível concluir a recuperação. Solicite um novo link.'});}
 });
