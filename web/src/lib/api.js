@@ -40,13 +40,26 @@ function authHeaders(extra = {}, path = '') {
 async function request(path, opts = {}) {
   const preparado = prepararOperacao(path, opts)
   const headers = authHeaders(preparado.headers || {}, path)
+  const isSafeRead = !opts.method || String(opts.method).toUpperCase() === 'GET'
+  const maxAttempts = isSafeRead ? 3 : 1
   let res
-  try {
-    if (!navigator.onLine && deveEnfileirarOffline(path, preparado)) return enfileirarOperacao(path, { ...preparado, headers })
-    res = await fetch(path, { ...preparado, headers })
-  } catch (erro) {
-    if (deveEnfileirarOffline(path, preparado)) return enfileirarOperacao(path, { ...preparado, headers })
-    throw erro
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      if (!navigator.onLine && deveEnfileirarOffline(path, preparado)) return enfileirarOperacao(path, { ...preparado, headers })
+      res = await fetch(path, { ...preparado, headers })
+    } catch (erro) {
+      if (deveEnfileirarOffline(path, preparado)) return enfileirarOperacao(path, { ...preparado, headers })
+      if (isSafeRead && attempt < maxAttempts) {
+        await new Promise((resolve) => setTimeout(resolve, attempt === 1 ? 600 : 1500))
+        continue
+      }
+      throw erro
+    }
+    if (isSafeRead && [502, 503, 504].includes(res.status) && attempt < maxAttempts) {
+      await new Promise((resolve) => setTimeout(resolve, attempt === 1 ? 600 : 1500))
+      continue
+    }
+    break
   }
   const data = await res.json().catch(() => ({}))
   if (res.status === 401) {
