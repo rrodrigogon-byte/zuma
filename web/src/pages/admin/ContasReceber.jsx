@@ -27,11 +27,14 @@ export default function ContasReceber() {
         api.get(a2Path('/clientes', '/api/admin/clientes')),
         api.get(a2Path('/alertas-vencimento'))
       ])
-      setContas(resContas.contas || [])
-      setClientes(resClientes.clientes || [])
-      setAlertas(resAlertas.alertas || [])
+      const listaContas = Array.isArray(resContas) ? resContas : (resContas?.contas || [])
+      const listaClientes = Array.isArray(resClientes) ? resClientes : (resClientes?.clientes || [])
+      const listaAlertas = Array.isArray(resAlertas) ? resAlertas : (resAlertas?.alertas || [])
+      setContas(listaContas)
+      setClientes(listaClientes)
+      setAlertas(listaAlertas)
     } catch (e) {
-      toast('Erro ao carregar dados financeiros', true)
+      toast(e.message || 'Erro ao carregar dados financeiros', true)
     } finally {
       setLoading(false)
     }

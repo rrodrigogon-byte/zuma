@@ -11,6 +11,7 @@
 // financeiro JSON (legado)  | json:<empresa legada>:<id>    | importação dos lançamentos antigos
 import { ErroDominio, exigirUuid, transacao } from '../acesso/banco.js';
 import { FUSO_PADRAO, garantirCategorias, hojeNoFuso, lojaPadraoDaFonte, marcarRazaoLigado, obterConfig } from './servico.js';
+import { sincronizarPedidosPendentes } from '../a2/servico.js';
 import { createHash } from 'node:crypto';
 
 async function existeTabela(db, nome) {
@@ -145,6 +146,7 @@ export async function sincronizarClube(db, empresaId, { fuso = FUSO_PADRAO } = {
 export async function sincronizarContasReceber(db, empresaId, { fuso = FUSO_PADRAO } = {}) {
   const empresa = exigirUuid(empresaId, 'empresa');
   if (!(await existeTabela(db, 'a2_contas_receber'))) return { fonte: 'a2', ignorada: true };
+  await sincronizarPedidosPendentes(db, empresa).catch((e) => console.warn('[razao] erro sync pedidos a2:', e.message));
   const ins = await db.query(
     `INSERT INTO fin_lancamentos ${INSERT_COLS}
      SELECT a.empresa_id, $3::uuid, 'receita', 'Contas de clientes', left(a.descricao, 240), a.valor,

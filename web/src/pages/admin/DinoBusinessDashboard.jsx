@@ -270,7 +270,13 @@ export default function DinoBusinessDashboard() {
       setUpdatedAt(loadedAt)
       lastSuccessfulLoad.current = loadedAt.getTime()
     } catch (err) {
-      if (currentRequest === requestId.current) setError(err.message || 'Não foi possível carregar os indicadores.')
+      if (currentRequest === requestId.current) {
+        const is502 = [502, 503, 504].includes(Number(err?.status)) || String(err?.message || '').includes('502')
+        setError(is502 ? 'Servidor temporariamente indisponível durante atualização. Tentando novamente…' : (err.message || 'Não foi possível carregar os indicadores.'))
+        if (is502) {
+          setTimeout(() => { if (!data) load({ force: true }) }, 2500)
+        }
+      }
     } finally {
       if (currentRequest === requestId.current) setLoading(false)
     }
@@ -308,7 +314,14 @@ export default function DinoBusinessDashboard() {
   return <section className="dino-business-dashboard" aria-label="Dashboard do negócio Dino" aria-busy={loading}>
     <header className="dino-dashboard-header"><div><span>Visão do negócio</span><h2>Central Dino</h2><p>Barbearia, perfumaria e relacionamento no mesmo recorte operacional.</p></div><div className="dino-period-switch" aria-label="Período do dashboard">{PERIODS.map(([value, label]) => <button type="button" key={value} className={period === value ? 'active' : ''} onClick={() => setPeriod(value)} aria-pressed={period === value}>{label}</button>)}<button type="button" onClick={() => load({ force: true })} disabled={loading}>Atualizar</button></div></header>
     <p className="dino-dashboard-status" role="status">{loading ? 'Atualizando indicadores…' : updatedAt ? `Última atualização bem-sucedida: ${updatedLabel} · ${PERIODS.find(([value]) => value === period)?.[1] || 'período selecionado'}.` : 'Indicadores ainda não foram atualizados.'}</p>
-    {error && <div className="dino-dashboard-error" role="alert">{error}</div>}
+    {error && (
+      <div className="dino-dashboard-error" role="alert" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+        <span>{error}</span>
+        <button type="button" className="c360-btn secondary" style={{ fontSize: 12, padding: '4px 10px', whiteSpace: 'nowrap' }} onClick={() => load({ force: true })}>
+          Atualizar ↻
+        </button>
+      </div>
+    )}
     <WhatsappAlert />
     {data && <>
       <nav className="dino-access-hub" aria-label="Atalhos para indicadores e operação"><div className="dino-access-hub-heading"><span>Ir direto ao ponto</span><strong>Indicadores, operação e análise</strong></div><div className="dino-access-links">{quickLinks(reportRange).map((item) => <Link key={item.title} to={item.to}><strong>{item.title}</strong><small>{item.detail}</small><b aria-hidden="true">→</b></Link>)}</div></nav>
