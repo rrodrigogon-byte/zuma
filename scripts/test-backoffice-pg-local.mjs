@@ -20,6 +20,7 @@ try {
   await run(['--test', '--test-concurrency=1', ...suites.map(name => `app/core/${name}.pg.test.js`)], { CLUBE_PG_TEST_URL: url.href });
   if (process.argv.includes('--e2e')) {
     await run(['app/migrations/run-commerce-schema-migrations.js'], { DATABASE_URL: url.href, DB_SSL: 'false', COMMERCE_SCHEMA_REQUIRED: '1' });
+    await run(['--test', 'app/core/commerce-operational-invites.pg.test.js'], { COMMERCE_OPERATIONAL_INVITE_TEST_DATABASE_URL: url.href });
     await run(['--test', 'app/backoffice-ondas.e2e.pg.test.js'], { BACKOFFICE_E2E_DATABASE_URL: url.href });
   }
 } finally { await fixture.close(); }

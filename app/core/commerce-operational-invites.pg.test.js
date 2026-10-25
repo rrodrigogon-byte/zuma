@@ -224,3 +224,23 @@ pgTest('dois aceites simultâneos resultam em um usuário, um acesso e uma audit
     (SELECT count(*)::int FROM commerce_audit_logs WHERE empresa_id=$1 AND entidade_id=$2 AND entidade='operational_invite' AND acao='accepted') AS audits`, [empresaId, invite.inviteId]);
   assert.deepEqual(counts.rows[0], { users: 1, memberships: 1, audits: 1 });
 });
+
+pgTest('promover convidado a dono da empresa preserva login e sessão sem alterar senha ou alcance', async () => {
+  const empresaId = await fixture('tenant-owner-login');
+  const outraEmpresa = await fixture('other-owner-scope');
+  const email = `owner-login-${randomUUID()}@example.invalid`;
+  let token = '';
+  const database = { transaction, queryRead: (sql, values = []) => pool.query(sql, values) };
+  await issueOperationalInvite({ empresaId, email, nome: 'Dono Sintético', sendInvite: async payload => { token=payload.token; return {ok:true}; } }, {database});
+  const user = await acceptOperationalInvite({token,password:'Senha-Sintetica-123!'}, {database});
+  await pool.query("UPDATE commerce_memberships SET role_id=(SELECT id FROM commerce_roles WHERE empresa_id IS NULL AND codigo='tenant_owner' AND sistema=true) WHERE empresa_id=$1 AND usuario_id=$2",[empresaId,user.id]);
+  assert.deepEqual(await findOperationalByEmail(email.toUpperCase(),{database}),user);
+  assert.deepEqual(await resolveOperationalById({userId:user.id,empresaId,database}),user);
+  assert.equal(await resolveOperationalById({userId:user.id,empresaId:outraEmpresa,database}),null);
+  assert.equal((await pool.query('SELECT senha_hash FROM usuarios WHERE id=$1',[user.id])).rows[0].senha_hash,user.senhaHash);
+  await pool.query("UPDATE commerce_memberships SET expires_at=CURRENT_TIMESTAMP-interval '1 second' WHERE empresa_id=$1 AND usuario_id=$2",[empresaId,user.id]);
+  assert.equal(await findOperationalByEmail(email,{database}),null);
+  assert.equal(await resolveOperationalById({userId:user.id,empresaId,database}),null);
+  await pool.query('UPDATE commerce_memberships SET expires_at=NULL,ativo=false WHERE empresa_id=$1 AND usuario_id=$2',[empresaId,user.id]);
+  assert.equal(await findOperationalByEmail(email,{database}),null);
+});

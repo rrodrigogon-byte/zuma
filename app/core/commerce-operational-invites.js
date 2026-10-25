@@ -387,7 +387,7 @@ export async function findOperationalByEmail(email, options = {}) {
       WHERE lower(btrim(u.email)) = $1
         AND u.ativo = true AND m.ativo = true AND m.loja_id IS NULL
         AND (m.expires_at IS NULL OR m.expires_at > CURRENT_TIMESTAMP)
-        AND r.empresa_id IS NULL AND r.codigo = 'store_admin'
+        AND r.empresa_id IS NULL AND r.codigo IN ('store_admin', 'tenant_owner')
       ORDER BY u.id
       LIMIT 2`,
     [emailNorm],
@@ -415,7 +415,7 @@ export async function resolveOperationalById(input, maybeEmpresaId, options = {}
       WHERE u.id = $1 AND u.empresa_id = $2
         AND u.ativo = true AND m.ativo = true AND m.loja_id IS NULL
         AND (m.expires_at IS NULL OR m.expires_at > CURRENT_TIMESTAMP)
-        AND r.empresa_id IS NULL AND r.codigo = 'store_admin'
+        AND r.empresa_id IS NULL AND r.codigo IN ('store_admin', 'tenant_owner')
       LIMIT 2`,
     [userId, empresaId],
   );

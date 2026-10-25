@@ -11,6 +11,7 @@ import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import bcrypt from 'bcryptjs';
 import pg from 'pg';
+import { issueOperationalInvite, acceptOperationalInvite } from './core/commerce-operational-invites.js';
 
 function localDatabaseUrl(value) {
   if (!value) return '';
@@ -97,6 +98,32 @@ test('backoffice integrado: Financeiro, estoque e compras, fiscal, conciliação
       assert.ok(!(await req('/api/admin/minhas-permissoes', 'GET', null, misto)).body.permissoes.includes('inventory.read'));
       assert.ok((await req('/api/admin/minhas-permissoes', 'GET', null, { ...misto, 'X-Loja-Id': A1 })).body.permissoes.includes('inventory.read'));
       assert.equal((await req('/api/admin/minhas-permissoes', 'GET', null, admin)).body.aplicavel, false, 'plataforma não filtra');
+    });
+
+    await t.test('convidado promovido a dono mantém login, sessão e isolamento sem redefinir senha', async () => {
+      const database = { queryRead: (text,values=[]) => sql.query(text,values), transaction: async callback => {
+        await sql.query('BEGIN');
+        try {const result=await callback({query:(text,values=[])=>sql.query(text,values)});await sql.query('COMMIT');return result;}
+        catch(error){await sql.query('ROLLBACK');throw error;}
+      }};
+      const email=`dono-convidado-${sufixo}@example.invalid`;
+      let inviteToken='';
+      await issueOperationalInvite({empresaId:A,email,nome:'Dono convidado local',sendInvite:async payload=>{inviteToken=payload.token;return {ok:true};}}, {database});
+      const user=await acceptOperationalInvite({token:inviteToken,password:SENHA},{database});
+      await sql.query("UPDATE commerce_memberships SET role_id=(SELECT id FROM commerce_roles WHERE empresa_id IS NULL AND codigo='tenant_owner' AND sistema=true) WHERE empresa_id=$1 AND usuario_id=$2",[A,user.id]);
+      const login=await req('/api/admin/login','POST',{user:email.toUpperCase(),senha:SENHA});ok(login,200,'dono convidado entra com senha original');
+      assert.equal(login.body.user.platformAdmin,false);
+      assert.equal(login.body.sessao.empresaId,A);
+      assert.equal(login.body.sessao.empresas_acessiveis.length,1);
+      const headers={Authorization:`Bearer ${login.body.token}`,'X-Empresa-Id':A};
+      ok(await req('/api/admin/unidades','GET',null,headers),200,'sessão do dono permanece válida');
+      ok(await req('/api/admin/unidades','GET',null,{...headers,'X-Empresa-Id':B}),403,'dono não atravessa empresa');
+      ok(await req('/api/admin/platform/accounts','GET',null,headers),403,'dono não vira administrador da plataforma');
+      await sql.query("UPDATE commerce_memberships SET expires_at=CURRENT_TIMESTAMP-interval '1 second' WHERE empresa_id=$1 AND usuario_id=$2",[A,user.id]);
+      ok(await req('/api/admin/unidades','GET',null,headers),401,'sessão expirada perde acesso');
+      ok(await req('/api/admin/login','POST',{user:email,senha:SENHA}),401,'membership expirada não entra');
+      await sql.query("UPDATE commerce_memberships SET expires_at=NULL,role_id=(SELECT id FROM commerce_roles WHERE empresa_id IS NULL AND codigo='support' AND sistema=true) WHERE empresa_id=$1 AND usuario_id=$2",[A,user.id]);
+      ok(await req('/api/admin/login','POST',{user:email,senha:SENHA}),401,'outro perfil não recebe login por esta correção');
     });
 
     await t.test('onda 1: razão, unidade presa e isolamento', async () => {
