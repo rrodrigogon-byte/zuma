@@ -101,7 +101,7 @@ function capabilityAllows(name, capabilities = {}) {
   if (name === 'solicitar_humano') return capabilities.humanHandoff !== false;
   if (name === 'captar_cliente' || name === 'consultar_perfil_cliente') return capabilities.captureLeads !== false;
   if (name.includes('promoc') || name === 'listar_promocoes_ativas' || name === 'atualizar_consentimento_marketing') return capabilities.sendPromotions === true;
-  if (name === 'consultar_meu_plano' || name === 'avaliar_clube' || name === 'consultar_meu_cashback' || name === 'listar_planos') return capabilities.manageAppointments !== false;
+  if (name === 'consultar_meu_plano' || name === 'avaliar_clube' || name === 'consultar_meu_cashback' || name === 'listar_planos' || name === 'calcular_pacote_frequencia') return capabilities.manageAppointments !== false;
   if (name === 'sugerir_produto_pos_servico') return capabilities.operateStore !== false;
   if (name === 'preparar_despesa') return capabilities.financialOperations !== false;
   if (name.includes('agendamento') || name.includes('remarcacao') || name.includes('cancelamento') || name === 'listar_servicos' || name === 'listar_profissionais' || name === 'consultar_disponibilidade' || name === 'consultar_meus_agendamentos' || name === 'sugerir_proximos_horarios' || name === 'entrar_lista_espera' || name === 'confirmar_presenca' || name === 'avisar_atraso') return capabilities.manageAppointments !== false;
@@ -1140,6 +1140,118 @@ async function toolMyCashback(context) {
   return { ok: true, ativo: true, saldo: cashback.saldo, proximoVencimento: cashback.proximoVencimento, percentual: cashback.percentual, instrucao: 'Informe o saldo e o vencimento. O uso é feito na hora do pagamento com a equipe.' };
 }
 
+/**
+ * Calcula pacotes de procedimentos mensais com desconto progressivo (4 = 10%, 6 = 15%, 8+ = 20%)
+ * com base no profissional escolhido e na rotina do cliente (frequência e serviços).
+ */
+async function toolCalculatePackage(context, args = {}) {
+  let empresaId = context.empresaId || '';
+  try {
+    const scope = await barbeariaScope(context);
+    empresaId = scope.empresaId;
+  } catch {
+    empresaId = context.empresaId || 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
+  }
+  const profissionalInformado = String(args.profissional || '').trim();
+  const servicoInformado = String(args.servico || '').trim();
+  const frequenciaDias = Number(args.frequenciaDias) || 0;
+  const frequenciaTexto = String(args.frequenciaTexto || '').trim().toLowerCase();
+  const procedimentosDesejados = String(args.procedimentosDesejados || 'ambos').toLowerCase();
+
+  let precoUnitario = 100;
+  let profissionalIdentificado = 'Bruno / Nati';
+
+  const servicos = barbeariaErp.listarServicos(empresaId, { incluirInativos: false });
+  const profs = barbeariaErp.listarProfissionais(empresaId);
+
+  const lastProf = context.sessionSnapshot?.last_professional || '';
+  const profBusca = profissionalInformado || lastProf || '';
+  const profNorm = profBusca.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
+  if (/david|vitor|gustavo/.test(profNorm)) {
+    precoUnitario = 80;
+    profissionalIdentificado = 'David';
+  } else if (/dino/.test(profNorm)) {
+    precoUnitario = 300;
+    profissionalIdentificado = 'Dino';
+  } else if (/nati|bruno/.test(profNorm)) {
+    precoUnitario = 100;
+    profissionalIdentificado = 'Bruno / Nati';
+  } else if (profBusca) {
+    const pEnc = profs.find((p) => p.nome.toLowerCase().includes(profNorm));
+    if (pEnc) {
+      profissionalIdentificado = pEnc.nome;
+      const sProf = servicos.find((s) => s.preco > 0 && s.nome.toLowerCase().includes(pEnc.nome.toLowerCase()));
+      if (sProf) precoUnitario = Number(sProf.preco);
+    }
+  }
+
+  if (servicoInformado) {
+    const sEnc = servicos.find((s) => s.preco > 0 && s.nome.toLowerCase().includes(servicoInformado.toLowerCase()));
+    if (sEnc) precoUnitario = Number(sEnc.preco);
+  }
+
+  let dias = frequenciaDias;
+  if (!dias) {
+    if (/15|quinz|duas sem|2 sem/.test(frequenciaTexto)) dias = 15;
+    else if (/seman|7|toda|1 sem|uma sem/.test(frequenciaTexto)) dias = 7;
+    else if (/20|vinte/.test(frequenciaTexto)) dias = 20;
+    else if (/mes|mensal|30/.test(frequenciaTexto)) dias = 30;
+    else dias = 15;
+  }
+
+  const p4Cheio = 4 * precoUnitario;
+  const p4Valor = Math.round(p4Cheio * 0.90);
+  const p4Economia = p4Cheio - p4Valor;
+
+  const p6Cheio = 6 * precoUnitario;
+  const p6Valor = Math.round(p6Cheio * 0.85);
+  const p6Economia = p6Cheio - p6Valor;
+
+  const p8Cheio = 8 * precoUnitario;
+  const p8Valor = Math.round(p8Cheio * 0.80);
+  const p8Economia = p8Cheio - p8Valor;
+
+  let pacoteRecomendado = '4 procedimentos';
+  let explicacao = '';
+  if (dias <= 10) {
+    if (procedimentosDesejados === 'ambos') {
+      pacoteRecomendado = '8 procedimentos';
+      explicacao = `Como você vem toda semana e faz cabelo e barba (8 procedimentos no mês), o pacote de 8 procedimentos é perfeito: garante 20% de desconto e economia de R$ ${p8Economia} no mês.`;
+    } else {
+      pacoteRecomendado = '4 procedimentos';
+      explicacao = `Como você vem toda semana (4 procedimentos no mês), o pacote de 4 procedimentos cobre o mês todo com 10% de desconto e economia de R$ ${p4Economia}.`;
+    }
+  } else if (dias <= 20) {
+    if (procedimentosDesejados === 'ambos') {
+      pacoteRecomendado = '4 procedimentos';
+      explicacao = `Como você vem a cada 15 dias e faz cabelo e barba, você consome 4 procedimentos no mês (2 cortes e 2 barbas). O pacote de 4 procedimentos dá 10% de desconto e economia de R$ ${p4Economia} no mês.`;
+    } else {
+      pacoteRecomendado = '4 procedimentos';
+      explicacao = `Como você vem a cada 15 dias (2 cortes por mês), o pacote de 4 procedimentos garante 2 meses de visual alinhado ou dá margem para fazer a barba com 10% de desconto e economia de R$ ${p4Economia}.`;
+    }
+  } else {
+    pacoteRecomendado = '4 procedimentos';
+    explicacao = `O pacote de 4 procedimentos é o mais versátil para manter seu corte em dia com 10% de desconto e economia de R$ ${p4Economia}.`;
+  }
+
+  const pacotesCalculados = [
+    { procedimentos: 4, desconto: '10%', valorCheio: p4Cheio, valorComDesconto: p4Valor, economia: p4Economia, resumo: `4 procedimentos: de R$ ${p4Cheio} por R$ ${p4Valor} (10% de desconto, economiza R$ ${p4Economia})` },
+    { procedimentos: 6, desconto: '15%', valorCheio: p6Cheio, valorComDesconto: p6Valor, economia: p6Economia, resumo: `6 procedimentos: de R$ ${p6Cheio} por R$ ${p6Valor} (15% de desconto, economiza R$ ${p6Economia})` },
+    { procedimentos: 8, desconto: '20%', valorCheio: p8Cheio, valorComDesconto: p8Valor, economia: p8Economia, resumo: `8 ou mais procedimentos: de R$ ${p8Cheio} por R$ ${p8Valor} (20% de desconto, economiza R$ ${p8Economia})` },
+  ];
+
+  return {
+    ok: true,
+    dataClassification: 'untrusted_business_data',
+    profissional: profissionalIdentificado,
+    precoUnitarioAvulso: precoUnitario,
+    pacotes: pacotesCalculados,
+    recomendacao: { pacote: pacoteRecomendado, motivo: explicacao },
+    instrucao: `Apresente a oportunidade de forma amigável e descontraída: pergunte 'Você sabia que temos pacotes mensais para você economizar e manter seu visual sempre alinhado?'. Apresente os benefícios com clareza: 4 procedimentos (10% de desconto, de R$ ${p4Cheio} por R$ ${p4Valor}, economizando R$ ${p4Economia}), 6 procedimentos (15% de desconto, de R$ ${p6Cheio} por R$ ${p6Valor}, economizando R$ ${p6Economia}) e 8 procedimentos (20% de desconto, de R$ ${p8Cheio} por R$ ${p8Valor}, economizando R$ ${p8Economia}). Destaque a recomendação calculada para o perfil dele (${explicacao}). Termine com uma pergunta leve: 'Quer que eu te passe como funciona pra você aproveitar?' ou 'Faz sentido pra você garantir esse pacote?'. Sem pressão nem insistência. A adesão é feita diretamente com a equipe na unidade.`,
+  };
+}
+
 async function toolClubFit(context) {
   const scope = await barbeariaScope(context);
   if (!liberadoPeloCliente(context, PEDIU_CLUBE, CATEGORIA_CLUBE)) {
@@ -1287,6 +1399,7 @@ export const WHATSAPP_AI_TOOL_DECLARATIONS = [
   { name: 'avaliar_clube', description: 'Avalia se o clube/plano mensal compensa para o contato pela frequência de visitas. Só use se o cliente perguntou de plano/clube ou depois de propor_oportunidade liberar a categoria "clube". Nunca cite gasto do cliente.', parameters: { type: 'OBJECT', properties: {} } },
   { name: 'sugerir_produto_pos_servico', description: 'Busca até 3 produtos publicados ligados ao último serviço do contato (ex.: pomada após corte, óleo após barba). Só use se o cliente pediu indicação de produto ou depois de propor_oportunidade liberar a categoria "cuidados pos-servico".', parameters: { type: 'OBJECT', properties: {} } },
   { name: 'propor_oportunidade', description: 'Autoriza ou bloqueia uma única sugestão comercial opcional com base em consentimento, relevância, cooldown e limite. É obrigatória antes de qualquer oferta não solicitada.', parameters: { type: 'OBJECT', properties: { category: { type: 'STRING', description: 'Categoria factual e relevante retornada pelo perfil consentido' } }, required: ['category'] } },
+  { name: 'calcular_pacote_frequencia', description: 'Calcula pacotes mensais de procedimentos (4 = 10% off, 6 = 15% off, 8 = 20% off) e a economia real em R$ com base no profissional agendado (Nati/Bruno R$ 100, David R$ 80, Dino R$ 300) e na frequência do cliente (ex.: a cada 15 dias, semanal, 30 dias). Retorna a economia exata e a recomendação ideal para o perfil do cliente (cabelo, barba ou combo). Chame assim que o cliente responder sua frequência ou perguntar sobre pacotes, planos ou descontos.', parameters: { type: 'OBJECT', properties: { profissional: { type: 'STRING', description: 'Nome do profissional agendado ou preferido (ex.: Nati, Bruno, David, Dino)' }, servico: { type: 'STRING', description: 'Serviço de referência (corte, barba, corte e barba)' }, frequenciaDias: { type: 'INTEGER', description: 'Dias entre visitas (ex.: 15 para quinzenal, 7 para semanal, 30 para mensal)' }, frequenciaTexto: { type: 'STRING', description: 'Frequência informada pelo cliente (ex.: "a cada 15 dias", "uma vez por semana")' }, procedimentosDesejados: { type: 'STRING', description: 'cabelo, barba ou ambos' } } } },
   { name: 'solicitar_humano', description: 'Encaminha a conversa para atendimento humano em dúvidas sensíveis, exceções, reclamações ou pedido explícito.', parameters: { type: 'OBJECT', properties: { reason: { type: 'STRING' } }, required: ['reason'] } },
 ];
 
@@ -1323,6 +1436,7 @@ const TOOL_MAP = {
   avaliar_clube: toolClubFit,
   sugerir_produto_pos_servico: toolPostServiceProduct,
   propor_oportunidade: toolOpportunity,
+  calcular_pacote_frequencia: toolCalculatePackage,
   solicitar_humano: toolHuman,
 };
 
