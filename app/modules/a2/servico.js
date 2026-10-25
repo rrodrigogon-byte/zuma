@@ -163,9 +163,10 @@ export async function sincronizarPedidosPendentes(db, empresaId) {
            o.total,
            (o.criado_em::date + INTERVAL '30 days')::date,
            'Pedido gerado na Loja Online (' || COALESCE(o.public_code, o.id::text) || ')'
-      FROM commerce_orders o
+     FROM commerce_orders o
      WHERE o.empresa_id = $1
        AND o.status = 'pending_payment'
+       AND o.criado_em >= '2026-10-25T18:00:00Z'
        AND o.customer_id IS NOT NULL
        AND NOT EXISTS (
          SELECT 1 FROM a2_contas_receber cr
@@ -449,6 +450,89 @@ export async function baixarConta(db, empresaId, contaId, dataPagamento = new Da
 
   if (!baixada) throw new ErroDominio('NOT_FOUND', 'Conta a receber não encontrada', 404);
   return baixada;
+}
+
+export async function excluirConta(db, empresaId, contaId) {
+  const equivalentes = empresasEquivalentes(empresaId);
+  let excluida = false;
+
+  if (db && typeof db.query === 'function') {
+    try {
+      const empresaUuid = id(empresaId, 'empresa');
+      const res = await db.query(`DELETE FROM a2_contas_receber WHERE empresa_id = $1 AND id = $2 RETURNING id`, [empresaUuid, id(contaId, 'conta')]);
+      if (res.rowCount > 0) excluida = true;
+    } catch {}
+  }
+
+  for (const emp of equivalentes) {
+    try {
+      const store = clientesKytto.clientesPersistidos(emp);
+      if (store?.contasReceber?.[contaId]) {
+        delete store.contasReceber[contaId];
+        excluida = true;
+      }
+    } catch {}
+  }
+
+  for (const emp of equivalentes) {
+    try {
+      const lanc = financeiroKytto.obterLancamento(emp, contaId);
+      if (lanc) {
+        financeiroKytto.cancelarLancamento(emp, contaId, { motivo: 'Excluído pelo usuário' });
+        excluida = true;
+      }
+    } catch {}
+  }
+
+  return { ok: true, excluida };
+}
+
+export async function expurgarContasTeste(db, empresaId) {
+  const equivalentes = empresasEquivalentes(empresaId);
+  const empresaUuid = id(empresaId, 'empresa');
+  let removidasPostgres = 0;
+
+  if (db && typeof db.query === 'function') {
+    try {
+      const res = await db.query(`
+        DELETE FROM a2_contas_receber
+         WHERE empresa_id = $1
+           AND (
+             descricao LIKE 'Pedido KC-%'
+             OR observacao LIKE '%Loja Online%'
+             OR observacao LIKE '%teste%'
+             OR descricao ILIKE '%teste%'
+           )
+        RETURNING id
+      `, [empresaUuid]);
+      removidasPostgres = res.rowCount || 0;
+
+      await db.query(`
+        UPDATE commerce_orders
+           SET status = 'cancelled', atualizado_em = CURRENT_TIMESTAMP
+         WHERE empresa_id = $1
+           AND status = 'pending_payment'
+           AND criado_em < '2026-10-25T18:00:00Z'
+      `, [empresaUuid]);
+    } catch (e) {
+      console.warn('[a2] erro ao expurgar testes no Postgres:', e.message);
+    }
+  }
+
+  for (const emp of equivalentes) {
+    try {
+      const store = clientesKytto.clientesPersistidos(emp);
+      if (store?.contasReceber) {
+        for (const [k, v] of Object.entries(store.contasReceber)) {
+          if (v.descricao && (/Pedido KC-/i.test(v.descricao) || /teste/i.test(v.descricao))) {
+            delete store.contasReceber[k];
+          }
+        }
+      }
+    } catch {}
+  }
+
+  return { ok: true, removidas: removidasPostgres };
 }
 
 export async function listarAlertas(db, empresaId) {
