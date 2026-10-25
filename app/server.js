@@ -1363,7 +1363,7 @@ if(process.env.COMMERCE_CORE_ENABLED === '1'){
   app.use('/api/admin/a2', auth, requireStaff, a2RouterInstance);
 
   // [kytto-a2-aliases] Rotas diretas em /api/admin/* para retrocompatibilidade com telas sem /a2
-  app.use('/api/admin', auth, requireStaff, (req, res, next) => {
+  app.use('/api/admin', (req, res, next) => {
     const subPath = req.path;
     const rotasA2 = [
       '/contas-receber',
@@ -1375,7 +1375,7 @@ if(process.env.COMMERCE_CORE_ENABLED === '1'){
       '/usuarios-mestres',
     ];
     if (rotasA2.some((r) => subPath === r || subPath.startsWith(`${r}/`))) {
-      return a2RouterInstance(req, res, next);
+      return auth(req, res, () => requireStaff(req, res, () => a2RouterInstance(req, res, next)));
     }
     next();
   });
