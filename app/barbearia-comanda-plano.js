@@ -11,32 +11,25 @@ import * as captacao from './dino-captacao-kytto.js';
 
 const texto = (valor, limite = 160) => String(valor ?? '').trim().slice(0, limite);
 
-function pendentesPorAssinatura(empresaId, { ignorarComandaId = '' } = {}) {
-  const mapa = new Map();
-  for (const item of barbearia.itensPlanoNaoConsumidos(empresaId)) {
-    if (ignorarComandaId && item.comandaId === String(ignorarComandaId)) continue;
-    mapa.set(item.assinaturaId, (mapa.get(item.assinaturaId) || 0) + 1);
-  }
-  return mapa;
-}
 
 const MOTIVOS = {
   aguardando_pagamento: 'plano sem pagamento confirmado',
   inadimplente: 'plano com pagamento em atraso',
   pausada: 'plano pausado',
+  aguardando_inicio:'pacote ainda não iniciado',
+  encerrada:'validade do contrato encerrada',
 };
 
 /** Planos ativos do cliente com o saldo de sessões já descontando comandas em aberto. */
 export function coberturasDoCliente(empresaId, clienteId, opcoes = {}) {
   if (!clienteId) return [];
   const servicos = new Map(barbearia.listarServicos(empresaId, { incluirInativos: true }).map((item) => [item.id, item.nome]));
-  const pendentes = pendentesPorAssinatura(empresaId, opcoes);
   return barbearia.listarAssinaturas(empresaId)
     .filter((item) => item.clienteId === String(clienteId) && ['ativa', 'pausada'].includes(item.status))
     .map((assinatura) => {
       const resumo = captacao.resumoAssinatura(empresaId, assinatura.id, opcoes);
       if (!resumo) return null;
-      const reservadas = pendentes.get(assinatura.id) || 0;
+      const reservadas = captacao.reservasAssinatura(empresaId,assinatura.id,resumo,opcoes);
       const restantes = Math.max(0, resumo.sessoesRestantes - reservadas);
       const situacao = assinatura.status === 'pausada' ? 'pausada' : resumo.situacaoPagamento;
       const utilizavel = assinatura.status === 'ativa' && situacao === 'em_dia' && restantes > 0;
@@ -78,11 +71,11 @@ export function limparItensRecebidos(itens = []) {
  * Aplica o plano aos serviços da entrada. Serviço com quantidade maior que o
  * saldo vira uma linha por sessão coberta e uma linha avulsa com o restante.
  */
-export function aplicarPlanoAosItens(empresaId, { clienteId, itens = [], comandaId = '' } = {}, opcoes = {}) {
+export function aplicarPlanoAosItens(empresaId, { clienteId, itens = [], comandaId = '', agendamentoId = '' } = {}, opcoes = {}) {
   const entrada = limparItensRecebidos(itens);
   const avisos = [];
   if (!clienteId) return { itens: entrada, cobertos: 0, avisos };
-  const coberturas = coberturasDoCliente(empresaId, clienteId, opcoes);
+  const coberturas = coberturasDoCliente(empresaId, clienteId, {...opcoes,ignorarAgendamentoId:agendamentoId});
   if (!coberturas.length) return { itens: entrada, cobertos: 0, avisos };
   const saldo = new Map(coberturas.map((c) => [c.assinaturaId, c.utilizavel ? c.sessoesRestantes : 0]));
   const saida = [];
@@ -115,7 +108,7 @@ export function aplicarPlanoAosItens(empresaId, { clienteId, itens = [], comanda
 export function validarCoberturasDaComanda(empresaId, comanda, opcoes = {}) {
   const itens = (comanda?.itens || []).filter((item) => item.coberturaPlano && !item.coberturaPlano.usoId);
   if (!itens.length) return true;
-  const coberturas = new Map(coberturasDoCliente(empresaId, comanda.clienteId, { ...opcoes, ignorarComandaId: comanda.id }).map((c) => [c.assinaturaId, c]));
+  const coberturas = new Map(coberturasDoCliente(empresaId, comanda.clienteId, { ...opcoes, ignorarComandaId: comanda.id, ignorarAgendamentoId:comanda.agendamentoId }).map((c) => [c.assinaturaId, c]));
   const porAssinatura = new Map();
   for (const item of itens) porAssinatura.set(item.coberturaPlano.assinaturaId, [...(porAssinatura.get(item.coberturaPlano.assinaturaId) || []), item]);
   for (const [assinaturaId, lista] of porAssinatura) {

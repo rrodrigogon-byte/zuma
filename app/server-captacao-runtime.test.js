@@ -186,6 +186,22 @@ test('captação: agendamento online com consentimento e indicação, lista de e
     assert.match(estranha, /<title>Agende seu horário \| Dino &quot;Top&quot; \$&#39; &lt;b&gt;<\/title>/);
     assert.equal((estranha.match(/<\/head>/g) || []).length, 1, 'o documento não foi duplicado');
 
+    // Pacotes: perfil autenticado e bloqueio real no servidor, sem impedir avulso.
+    const lookupSemSessao=await request(base,'/api/admin/barbearia/captacao/perfil-cliente',{method:'POST',body:JSON.stringify({telefone:'65977771111'})});
+    assert.equal(lookupSemSessao.response.status,401);
+    const titular=(await request(base,'/api/admin/barbearia/clientes',{method:'POST',headers,body:JSON.stringify({nome:'Titular sintético pacote',telefone:'65977771111'})})).body.cliente;
+    const pacote=(await request(base,'/api/admin/barbearia/planos',{method:'POST',headers,body:JSON.stringify({nome:'Pacote 6 sintético',preco:240,sessoesIncluidas:6,ciclo:'mensal',regraRenovacao:'aniversario',servicosIds:[servico.id]})})).body.plano;
+    assert.ok(pacote?.id);
+    const contrato=(await request(base,'/api/admin/barbearia/assinaturas',{method:'POST',headers,body:JSON.stringify({clienteId:titular.id,clienteNome:titular.nome,planoId:pacote.id,inicio:'2020-01-10'})})).body.assinatura;
+    await request(base,`/api/admin/barbearia/assinaturas/${contrato.id}/status`,{method:'PATCH',headers,body:JSON.stringify({status:'ativa',confirmadoSemCobranca:true,pagamentoConfirmado:true})});
+    const perfil=await request(base,'/api/admin/barbearia/captacao/perfil-cliente',{method:'POST',headers,body:JSON.stringify({telefone:'+55 (65) 97777-1111',empresaId:'outra-empresa'})});
+    assert.equal(perfil.response.status,200);assert.equal(perfil.body.perfil,'pacote_vencido');assert.equal(perfil.body.pacotes[0].utilizavel,false);
+    const pedido={clienteId:titular.id,clienteNome:titular.nome,clienteTelefone:titular.telefone,profissionalId:profissional.id,servicoId:servico.id,dataAgenda:dataFutura(20),dataHora:`${dataFutura(20)}T17:00:00-04:00`,horaLocal:'17:00',usarPlano:true,notificarCliente:false};
+    const bloqueado=await request(base,'/api/admin/barbearia/agenda',{method:'POST',headers,body:JSON.stringify(pedido)});
+    assert.equal(bloqueado.response.status,400);assert.match(bloqueado.body.error,/Renove o pacote/);
+    const reservaAvulsa=await request(base,'/api/admin/barbearia/agenda',{method:'POST',headers,body:JSON.stringify({...pedido,usarPlano:false})});
+    assert.equal(reservaAvulsa.response.status,201);assert.equal(reservaAvulsa.body.agendamento.usarPlano,false);
+
     const semSessao = await request(base, '/api/admin/barbearia/captacao/clube');
     assert.equal(semSessao.response.status, 401);
     const projecaoSemSessao = await request(base, '/api/admin/barbearia/captacao/projecao-faturamento');

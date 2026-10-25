@@ -307,6 +307,7 @@ export function limparCacheFonteAgenda() {
 
 function traduzirErro(erro) {
   if (erro instanceof SchedulingError) return erro;
+  if(['PLANO_VENCIDO','PLANO_INDISPONIVEL','LIMITE_DO_CICLO'].includes(erro?.code))return new SchedulingError(limpo(erro.message,240),erro.code);
   const mensagem = limpo(erro?.message, 240) || 'não foi possível concluir';
   const indisponivel = /indispon|conflito|fora do funcionamento|não funciona|não trabalha|feriado|jornada/i.test(mensagem);
   return new SchedulingError(mensagem, indisponivel ? 'SLOT_UNAVAILABLE' : 'SCHEDULING_ERROR');
@@ -330,6 +331,7 @@ export async function listServices(scope) {
       nome: item.nome,
       descricao: item.descricao || '',
       categoria: item.categoria || 'Geral',
+      grupoServico: item.grupoServico || 'nao_classificado',
       duracaoMinutos: Number(item.duracaoMinutos || 30),
       preco: Number(item.preco || 0),
       // A IA deve dizer "a partir de" ou "sob consulta" em vez de prometer valor fechado.
@@ -475,6 +477,7 @@ function criarNaAgendaDaBarbearia(scope, input = {}) {
       lojaId: scope.lojaId,
       observacoes: limpo(input.notes, 600),
       origem: 'whatsapp_ia',
+      usarPlano: input.usePlan===true,
       status: 'agendado',
       codigoConfirmacao: codigo,
     });

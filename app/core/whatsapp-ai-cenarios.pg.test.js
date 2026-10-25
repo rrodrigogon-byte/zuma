@@ -1323,6 +1323,34 @@ test('simulação ponta a ponta do atendente da Dino', { skip, timeout: Number(p
     assert.equal((await ciclo()).length, 0, 'encaminhamento de segurança não volta sozinho');
     assert.equal((await sessao(tel)).status, 'humano');
   });
+  await cena(t,'53 · Pacote vencido é reconhecido pela IA e não autoriza agendamento; pacote pago reserva sessão',async()=>{
+    const tel=telefoneNovo();cliente(tel,'oi');await ciclo();const session=await sessao(tel);
+    const clientes=await import('../clientes-contas-kytto.js');
+    const titular=clientes.criarCliente(IDS.empresa,{nome:'Cliente Pacote',telefone:tel});
+    const plano=barbearia.criarPlano(IDS.empresa,{nome:'Pacote 8 simulado',preco:240,sessoesIncluidas:8,ciclo:'mensal',regraRenovacao:'aniversario',servicosIds:[SERVICOS.corte.id]});
+    const vencido=barbearia.criarAssinatura(IDS.empresa,{clienteId:titular.id,planoId:plano.id,inicio:'2020-01-10'});
+    barbearia.alterarStatusAssinatura(IDS.empresa,vencido.id,'ativa',{confirmadoSemCobranca:true,pagamentoConfirmado:true});
+    const {createWhatsappAiToolExecutor}=await import('./whatsapp-ai-tools.js');
+    const scope={empresaId:IDS.empresa,lojaId:IDS.loja,canalId:IDS.canal,sessionId:session.id,phone:tel,customerName:'Cliente Pacote',customerText:'quero usar meu pacote'};
+    const run=createWhatsappAiToolExecutor(scope);const perfil=await run('consultar_perfil_cliente',{});
+    assert.equal(perfil.relacionamentoBarbearia.perfil,'pacote_vencido');assert.equal(perfil.relacionamentoBarbearia.pacotes[0].utilizavel,false);
+    const prox=await run('sugerir_proximos_horarios',{serviceId:SERVICOS.corte.id,professionalId:'qualquer',limit:1});const slot=prox.proximosHorarios[0];assert.ok(slot);
+    const dados={serviceId:SERVICOS.corte.id,professionalId:'qualquer',date:slot.date,time:slot.time,customerName:'Cliente Pacote',usePlan:true};
+    await assert.rejects(()=>run('preparar_agendamento',dados),error=>error.code==='PLANO_VENCIDO');assert.equal(agendamentosDe(tel).length,0);
+    const ativo=barbearia.criarAssinatura(IDS.empresa,{clienteId:titular.id,planoId:plano.id,inicio:new Date(Date.now()-86400000).toISOString()});
+    barbearia.alterarStatusAssinatura(IDS.empresa,ativo.id,'ativa',{confirmadoSemCobranca:true,pagamentoConfirmado:true});
+    assert.equal((await run('consultar_meu_plano',{})).plano.perfil,'pacote_ativo');
+    const preparada=await run('preparar_agendamento',dados);assert.ok(preparada.acao?.id);
+    // A ferramenta foi chamada diretamente: simula a apresentação do resumo que o worker faz antes do SIM.
+    await db.query(`UPDATE whatsapp_ai_sessions SET acao_pendente=acao_pendente || '{"mostrado":true}'::jsonb WHERE id=$1`,[session.id]);
+    assert.equal((await sessao(tel)).acao_pendente.actionId,preparada.acao.id);
+    barbearia.alterarStatusAssinatura(IDS.empresa,ativo.id,'pausada');
+    cliente(tel,'CONFIRMAR');const bloqueio=await ciclo();assert.match(ultima(bloqueio),/pacote não está disponível/i);assert.equal(agendamentosDe(tel).length,0);
+    barbearia.alterarStatusAssinatura(IDS.empresa,ativo.id,'ativa',{confirmadoSemCobranca:true,pagamentoConfirmado:true});
+    const agenda=await import('./barbershop-agenda.js');await db.transaction(trx=>agenda.createAppointment(trx,scope,{...dados,customerPhone:tel,actionId:crypto.randomUUID()}));
+    const gravado=barbearia.listarAgendamentos(IDS.empresa).find(a=>a.clienteId===titular.id);assert.equal(gravado.assinaturaId,ativo.id);assert.equal(gravado.usarPlano,true);
+  });
+
 
 });
 

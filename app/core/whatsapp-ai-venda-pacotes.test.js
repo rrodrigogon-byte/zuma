@@ -1,9 +1,15 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createWhatsappAiToolExecutor, WHATSAPP_AI_TOOL_DECLARATIONS } from './whatsapp-ai-tools.js';
-import { unbackedPrices } from './whatsapp-ai-normalize.js';
-import { validateWhatsappAiOutput } from './whatsapp-ai-profile.js';
-import * as barbearia from '../barbearia-erp-kytto.js';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+process.env.DB_PATH=path.join(fs.mkdtempSync(path.join(os.tmpdir(),'venda-pacotes-')),'db.json');
+process.env.BARBEARIA_AGENDA_FONTE='barbearia';
+const {createWhatsappAiToolExecutor,WHATSAPP_AI_TOOL_DECLARATIONS}=await import('./whatsapp-ai-tools.js');
+const {unbackedPrices}=await import('./whatsapp-ai-normalize.js');
+const {validateWhatsappAiOutput}=await import('./whatsapp-ai-profile.js');
+const barbearia=await import('../barbearia-erp-kytto.js');
+const {db}=await import('./database.js');db.queryRead=async()=>({rows:[]});
 
 const CONTEXTO = {
   empresaId: '11111111-1111-4111-8111-111111111111',
@@ -11,11 +17,19 @@ const CONTEXTO = {
   canalId: '33333333-3333-4333-8333-333333333333',
   sessionId: '44444444-4444-4444-8444-444444444444',
   phone: '5565999887766',
-  customerText: 'corto a cada 15 dias e faco a barba tambem',
+  customerText: 'quero conhecer os pacotes; corto a cada 15 dias e faco a barba tambem',
   sessionSnapshot: {
     last_professional: 'Nati',
   },
 };
+
+// Valores são fixtures cadastradas explicitamente: o cálculo não presume esta tabela.
+for(const [nome,preco,valores] of [['Nati',100,[360,510,640]],['David',80,[288,408,512]]]){
+ const profissional=barbearia.criarProfissional(CONTEXTO.empresaId,{nome});
+ const corte=barbearia.criarServico(CONTEXTO.empresaId,{nome:`Corte ${nome}`,preco,profissionaisIds:[profissional.id]});
+ const barba=barbearia.criarServico(CONTEXTO.empresaId,{nome:`Barba ${nome}`,preco,profissionaisIds:[profissional.id]});
+ [4,6,8].forEach((q,i)=>barbearia.criarPlano(CONTEXTO.empresaId,{nome:`Pacote ${q} ${nome}`,preco:valores[i],sessoesIncluidas:q,servicosIds:[corte.id,barba.id]}));
+}
 
 test('1. Tool calcular_pacote_frequencia está devidamente declarada na allowlist', () => {
   const tool = WHATSAPP_AI_TOOL_DECLARATIONS.find((t) => t.name === 'calcular_pacote_frequencia');
@@ -33,8 +47,8 @@ test('2. Cálculo com profissional Bruno ou Nati (base R$ 100) para cliente quin
   });
 
   assert.equal(res.ok, true);
-  assert.equal(res.precoUnitarioAvulso, 100);
-  assert.equal(res.profissional, 'Bruno / Nati');
+  assert.equal(res.pacotes[0].valorCheio/res.pacotes[0].procedimentos,100);
+  assert.equal(res.profissional,'Nati');
 
   // 4 procedimentos (10% off)
   const p4 = res.pacotes.find((p) => p.procedimentos === 4);
@@ -61,8 +75,8 @@ test('2. Cálculo com profissional Bruno ou Nati (base R$ 100) para cliente quin
   assert.equal(p8.desconto, '20%');
 
   // Recomendação inteligente para cliente a cada 15 dias com corte + barba
-  assert.equal(res.recomendacao.pacote, '4 procedimentos');
-  assert.match(res.recomendacao.motivo, /4 procedimentos no mês/i);
+  assert.equal(res.recomendacao.pacote,'Pacote 4 Nati');
+  assert.match(res.recomendacao.motivo,/4 procedimentos em 30 dias/i);
 });
 
 test('3. Cálculo com profissional David (base R$ 80) para cliente semanal combo', async () => {
@@ -74,7 +88,7 @@ test('3. Cálculo com profissional David (base R$ 80) para cliente semanal combo
   });
 
   assert.equal(res.ok, true);
-  assert.equal(res.precoUnitarioAvulso, 80);
+  assert.equal(res.pacotes[0].valorCheio/res.pacotes[0].procedimentos,80);
   assert.equal(res.profissional, 'David');
 
   // 4 procedimentos (10% off sobre R$ 320)
@@ -95,10 +109,8 @@ test('3. Cálculo com profissional David (base R$ 80) para cliente semanal combo
   assert.equal(p8.valorComDesconto, 512);
   assert.equal(p8.economia, 128);
 
-  // Recomendação semanal para ambos (cabelo + barba)
-  assert.equal(res.recomendacao.pacote, '8 procedimentos');
-  assert.match(res.recomendacao.motivo, /8 procedimentos no mês/i);
-  assert.match(res.recomendacao.motivo, /20% de desconto/i);
+  // Frequência semanal pode exigir 10 procedimentos em 30 dias; não promete que 8 cobrem o mês.
+  assert.equal(res.recomendacao,null);
 });
 
 test('4. Resposta com valores calculados é autorizada por unbackedPrices (sem preços inventados)', async () => {
@@ -124,7 +136,7 @@ test('5. Mensagem consultiva de pacotes é aprovada pelo validador de saída sem
   const textoAssistente = 'Você sabia que temos pacotes mensais para você economizar e manter o visual sempre alinhado? Como você vem a cada 15 dias e faz cabelo e barba, você usa 4 procedimentos no mês. No pacote de 4 procedimentos com a Nati, você tem 10% de desconto: sai de R$ 400 por R$ 360 (já economiza R$ 40 no mês). Temos também de 6 (15% off) e 8 procedimentos (20% off). Faz sentido pra você garantir um pacote desse?';
 
   const validacao = validateWhatsappAiOutput(textoAssistente, {
-    traces: [{ name: 'calcular_pacote_frequencia', ok: true }],
+    traces: [{name:'propor_oportunidade',ok:true},{ name: 'calcular_pacote_frequencia', ok: true }],
     opportunityAllowed: true,
   });
 
@@ -132,7 +144,7 @@ test('5. Mensagem consultiva de pacotes é aprovada pelo validador de saída sem
   assert.deepEqual(validacao.violations, []);
 });
 
-test('6. Semeadura de pacotes no ERP da barbearia cria os 6 planos oficiais', () => {
+test('6. Semeadura explícita na fixture cria os 6 planos sem execução na inicialização', () => {
   const EMPRESA_TESTE = 'emp-teste-pacotes-2026';
   // Garante estado inicial vazio
   barbearia.semearPacotesPadrao(EMPRESA_TESTE);
