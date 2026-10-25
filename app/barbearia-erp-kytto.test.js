@@ -65,6 +65,9 @@ import {
   commitInventoryReservation,
   expireInventoryReservations,
   listarInventoryReservations,
+  ehProfissionalDino,
+  ehHorarioExtraDino,
+  calcularPrecoServicoHorario,
 } from './barbearia-erp-kytto.js';
 
 const EMPRESA_A = 'empresa-teste-a';
@@ -777,4 +780,78 @@ test('produto importado com unidade legada da Dino pode ser editado pela unidade
   assert.equal(editado.lojaId, 'dino-web-estoque', 'mantém a unidade original');
   assert.equal(editado.estoqueAtual, 3);
   assert.equal(atualizarProdutoRevenda(DINO, produto.id, { nome: 'X', precoVenda: 1, lojaId: 'outra-loja' }), null, 'outra unidade não edita');
+});
+
+test('dino agenda 24x7 full: libera horarios apos 18h09 e madrugada com preco de R$ 600 o corte', () => {
+  const EMPRESA_DINO = 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
+  const dino = criarProfissional(EMPRESA_DINO, {
+    nome: 'Guilherme Cunha Martins (Dino)',
+    apelido: 'Dino',
+    especialidade: 'Master Barber',
+    atendimento24x7: true,
+  });
+  assert.equal(ehProfissionalDino(dino), true);
+  assert.deepEqual(dino.diasTrabalho, [0, 1, 2, 3, 4, 5, 6]);
+
+  const servicoCorte = criarServico(EMPRESA_DINO, {
+    nome: 'Corte com Dino',
+    duracaoMinutos: 30,
+    preco: 300,
+    profissionaisIds: [dino.id],
+  });
+
+  // Testa função ehHorarioExtraDino
+  assert.equal(ehHorarioExtraDino('18:09'), false, '18:09 é horário regular');
+  assert.equal(ehHorarioExtraDino('18:10'), true, '18:10 é horário extra (após 18h09)');
+  assert.equal(ehHorarioExtraDino('20:00'), true, '20:00 é horário extra');
+  assert.equal(ehHorarioExtraDino('23:30'), true, '23:30 é horário extra');
+  assert.equal(ehHorarioExtraDino('00:00'), true, '00:00 é madrugada');
+  assert.equal(ehHorarioExtraDino('03:30'), true, '03:30 é madrugada');
+  assert.equal(ehHorarioExtraDino('05:59'), true, '05:59 é madrugada');
+  assert.equal(ehHorarioExtraDino('06:00'), false, '06:00 volta para horário diurno');
+  assert.equal(ehHorarioExtraDino('14:00'), false, '14:00 é horário diurno');
+
+  // Testa cálculo do preço por horário
+  assert.equal(calcularPrecoServicoHorario(servicoCorte, dino, '14:00'), 300, 'Diurno é R$ 300');
+  assert.equal(calcularPrecoServicoHorario(servicoCorte, dino, '18:09'), 300, '18:09 é R$ 300');
+  assert.equal(calcularPrecoServicoHorario(servicoCorte, dino, '18:30'), 600, 'Após 18h09 é R$ 600');
+  assert.equal(calcularPrecoServicoHorario(servicoCorte, dino, '22:00'), 600, 'Noturno é R$ 600');
+  assert.equal(calcularPrecoServicoHorario(servicoCorte, dino, '01:30'), 600, 'Madrugada é R$ 600');
+  assert.equal(calcularPrecoServicoHorario(servicoCorte, dino, '05:30'), 600, 'Antes das 06h é R$ 600');
+
+  // Cria agendamento no horário extra (20:00) com valor de R$ 600
+  const agendamentoNoturno = criarAgendamento(EMPRESA_DINO, {
+    clienteNome: 'Cliente VIP Noturno',
+    clienteTelefone: '5565999990001',
+    profissionalId: dino.id,
+    servicoId: servicoCorte.id,
+    dataAgenda: '2030-05-10',
+    horaLocal: '20:00',
+    dataHora: '2030-05-10T20:00:00.000Z',
+  });
+  assert.equal(agendamentoNoturno.valor, 600, 'Valor gravado deve ser R$ 600');
+
+  // Cria agendamento de madrugada (02:00) com valor de R$ 600
+  const agendamentoMadrugada = criarAgendamento(EMPRESA_DINO, {
+    clienteNome: 'Cliente Madrugada',
+    clienteTelefone: '5565999990002',
+    profissionalId: dino.id,
+    servicoId: servicoCorte.id,
+    dataAgenda: '2030-05-10',
+    horaLocal: '02:00',
+    dataHora: '2030-05-10T02:00:00.000Z',
+  });
+  assert.equal(agendamentoMadrugada.valor, 600, 'Valor de madrugada deve ser R$ 600');
+
+  // Cria agendamento diurno (10:00) com valor de R$ 300
+  const agendamentoDiurno = criarAgendamento(EMPRESA_DINO, {
+    clienteNome: 'Cliente Diurno',
+    clienteTelefone: '5565999990003',
+    profissionalId: dino.id,
+    servicoId: servicoCorte.id,
+    dataAgenda: '2030-05-10',
+    horaLocal: '10:00',
+    dataHora: '2030-05-10T10:00:00.000Z',
+  });
+  assert.equal(agendamentoDiurno.valor, 300, 'Valor diurno deve ser R$ 300');
 });

@@ -674,12 +674,44 @@ export function calcularFaixaBonificacao(faturamento, percentualBase, faixas = [
   };
 }
 
+export function ehProfissionalDino(profissional) {
+  if (!profissional) return false;
+  if (profissional.atendimento24x7 === true) return true;
+  const nome = String(profissional.nome || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const apelido = String(profissional.apelido || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const id = String(profissional.id || '').toLowerCase();
+  return nome.includes('dino') || nome.includes('guilherme cunha') || apelido.includes('dino') || id.includes('dino');
+}
+
+export function ehHorarioExtraDino(horaLocal) {
+  if (!horaValida(horaLocal)) return false;
+  const [h, m] = String(horaLocal).split(':').map(Number);
+  const minutos = h * 60 + m;
+  // Após as 18h09 (> 1089 min) até as 06h00 (< 360 min)
+  return minutos > 1089 || minutos < 360;
+}
+
+export function calcularPrecoServicoHorario(servico, profissional, horaLocal) {
+  const precoBase = Number(servico?.preco || 0);
+  if (ehProfissionalDino(profissional)) {
+    if (ehHorarioExtraDino(horaLocal)) {
+      return 600; // Depois das 18h09 até as 06h00 da manhã o corte com Dino é R$ 600
+    }
+    return Math.max(300, precoBase);
+  }
+  return precoBase;
+}
+
 function profissionalNormalizado(dados = {}, anterior = {}) {
+  const nomeProf = texto(dados.nome ?? anterior.nome, 120);
+  const isDinoAuto = String(nomeProf).toLowerCase().includes('dino') || String(nomeProf).toLowerCase().includes('guilherme cunha');
+  const atendimento24x7 = Boolean(dados.atendimento24x7 ?? anterior.atendimento24x7 ?? isDinoAuto);
+  const diasPadrao = atendimento24x7 ? [0, 1, 2, 3, 4, 5, 6] : [1, 2, 3, 4, 5, 6];
   const dias = Array.isArray(dados.diasTrabalho ?? dados.dias_trabalho ?? anterior.diasTrabalho)
     ? [...new Set((dados.diasTrabalho ?? dados.dias_trabalho ?? anterior.diasTrabalho).map((item) => numero(item, -1)).filter((item) => item >= 0 && item <= 6))].sort()
-    : [1, 2, 3, 4, 5, 6];
+    : diasPadrao;
   return {
-    nome: texto(dados.nome ?? anterior.nome, 120),
+    nome: nomeProf,
     telefone: texto(dados.telefone ?? anterior.telefone, 30),
     email: texto(dados.email ?? anterior.email, 160).toLowerCase(),
     especialidade: texto(dados.especialidade ?? anterior.especialidade, 100) || 'Barbeiro',
@@ -694,8 +726,9 @@ function profissionalNormalizado(dados = {}, anterior = {}) {
     descontaTaxaMaquininha: dados.descontaTaxaMaquininha ?? dados.desconta_taxa_maquininha ?? anterior.descontaTaxaMaquininha ?? true,
     // Desconta da base da comissão o custo do material usado no serviço (padrão: não).
     descontaMaterial: Boolean(dados.descontaMaterial ?? dados.desconta_material ?? anterior.descontaMaterial ?? false),
-    horarioInicio: texto(dados.horarioInicio ?? dados.horario_inicio ?? anterior.horarioInicio, 5) || '08:00',
-    horarioFim: texto(dados.horarioFim ?? dados.horario_fim ?? anterior.horarioFim, 5) || '18:00',
+    atendimento24x7,
+    horarioInicio: texto(dados.horarioInicio ?? dados.horario_inicio ?? anterior.horarioInicio, 5) || (atendimento24x7 ? '00:00' : '08:00'),
+    horarioFim: texto(dados.horarioFim ?? dados.horario_fim ?? anterior.horarioFim, 5) || (atendimento24x7 ? '23:59' : '18:00'),
     diasTrabalho: dias,
     ativo: dados.ativo ?? anterior.ativo ?? true,
     fotoUrl: texto(dados.fotoUrl ?? dados.foto_url ?? anterior.fotoUrl, 500),
@@ -2612,21 +2645,24 @@ function validarCalendarioAgendamento(estado, agendamento, profissional) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(dataAgenda)) throw new Error('Data operacional inválida.');
   if (!horaValida(agendamento.horaLocal)) throw new Error('Horário operacional inválido. Use HH:MM.');
   if (!Number.isFinite(new Date(agendamento.dataHora).valueOf())) throw new Error('Data e horário do atendimento são inválidos.');
-  if (calendario.feriados?.includes(dataAgenda)) throw new Error('A unidade não recebe reservas nesta data: feriado configurado.');
-  const dataLocal = new Date(`${dataAgenda}T12:00:00Z`);
-  if (Number.isNaN(dataLocal.valueOf())) throw new Error('Data operacional inválida.');
-  if (Array.isArray(calendario.diasFuncionamento) && !calendario.diasFuncionamento.includes(dataLocal.getUTCDay())) throw new Error('A unidade não funciona neste dia da semana.');
-  const [hora, minuto] = agendamento.horaLocal.split(':').map(Number);
-  const inicioMinutos = hora * 60 + minuto;
-  const fimMinutos = inicioMinutos + agendamento.duracaoMinutos;
-  const abertura = calendario.horarioAbertura.split(':').map(Number);
-  const fechamento = calendario.horarioFechamento.split(':').map(Number);
-  if (inicioMinutos < abertura[0] * 60 + abertura[1] || fimMinutos > fechamento[0] * 60 + fechamento[1]) throw new Error('Horário fora do funcionamento da unidade.');
-  if (profissional) {
-    if (Array.isArray(profissional.diasTrabalho) && !profissional.diasTrabalho.includes(dataLocal.getUTCDay())) throw new Error('O profissional não trabalha neste dia.');
-    const inicioProf = profissional.horarioInicio.split(':').map(Number);
-    const fimProf = profissional.horarioFim.split(':').map(Number);
-    if (inicioMinutos < inicioProf[0] * 60 + inicioProf[1] || fimMinutos > fimProf[0] * 60 + fimProf[1]) throw new Error('Horário fora da jornada do profissional.');
+  const isDino24x7 = ehProfissionalDino(profissional);
+  if (!isDino24x7) {
+    if (calendario.feriados?.includes(dataAgenda)) throw new Error('A unidade não recebe reservas nesta data: feriado configurado.');
+    const dataLocal = new Date(`${dataAgenda}T12:00:00Z`);
+    if (Number.isNaN(dataLocal.valueOf())) throw new Error('Data operacional inválida.');
+    if (Array.isArray(calendario.diasFuncionamento) && !calendario.diasFuncionamento.includes(dataLocal.getUTCDay())) throw new Error('A unidade não funciona neste dia da semana.');
+    const [hora, minuto] = agendamento.horaLocal.split(':').map(Number);
+    const inicioMinutos = hora * 60 + minuto;
+    const fimMinutos = inicioMinutos + agendamento.duracaoMinutos;
+    const abertura = calendario.horarioAbertura.split(':').map(Number);
+    const fechamento = calendario.horarioFechamento.split(':').map(Number);
+    if (inicioMinutos < abertura[0] * 60 + abertura[1] || fimMinutos > fechamento[0] * 60 + fechamento[1]) throw new Error('Horário fora do funcionamento da unidade.');
+    if (profissional) {
+      if (Array.isArray(profissional.diasTrabalho) && !profissional.diasTrabalho.includes(dataLocal.getUTCDay())) throw new Error('O profissional não trabalha neste dia.');
+      const inicioProf = profissional.horarioInicio.split(':').map(Number);
+      const fimProf = profissional.horarioFim.split(':').map(Number);
+      if (inicioMinutos < inicioProf[0] * 60 + inicioProf[1] || fimMinutos > fimProf[0] * 60 + fimProf[1]) throw new Error('Horário fora da jornada do profissional.');
+    }
   }
 }
 
@@ -2678,14 +2714,17 @@ function contextoDisponibilidadePublica(empresaId, dados = {}) {
   const calendario = obterCalendarioLoja(estado, lojaId);
   const dia = new Date(`${dataAgenda}T12:00:00Z`);
   if (Number.isNaN(dia.valueOf())) throw new Error('Data operacional inválida.');
-  if (calendario.feriados?.includes(dataAgenda) || (Array.isArray(calendario.diasFuncionamento) && !calendario.diasFuncionamento.includes(dia.getUTCDay()))) {
-    return { estado, dataAgenda, servico, lojaId, calendario, profissionais: [] };
+  const profFocoId = texto(dados.profissionalId ?? dados.profissional_id, 100);
+  const profFoco = profFocoId && profFocoId !== 'qualquer' ? estado.profissionais[profFocoId] : null;
+  if (!ehProfissionalDino(profFoco)) {
+    if (calendario.feriados?.includes(dataAgenda) || (Array.isArray(calendario.diasFuncionamento) && !calendario.diasFuncionamento.includes(dia.getUTCDay()))) {
+      return { estado, dataAgenda, servico, lojaId, calendario, profissionais: [] };
+    }
   }
   const limiteHoje = new Date();
   limiteHoje.setUTCHours(12, 0, 0, 0);
   const limiteFinal = new Date(limiteHoje);
   limiteFinal.setUTCDate(limiteFinal.getUTCDate() + Number(calendario.janelaReservaDias || 60));
-  if (dia < limiteHoje || dia > limiteFinal) return { estado, dataAgenda, servico, lojaId, calendario, profissionais: [] };
   const profissionalId = texto(dados.profissionalId ?? dados.profissional_id, 100);
   const habilitados = Array.isArray(servico.profissionaisIds) && servico.profissionaisIds.length ? new Set(servico.profissionaisIds) : null;
   const profissionais = Object.values(estado.profissionais)
@@ -2693,6 +2732,11 @@ function contextoDisponibilidadePublica(empresaId, dados = {}) {
     .filter((item) => !habilitados || habilitados.has(item.id))
     .filter((item) => !profissionalId || profissionalId === 'qualquer' || item.id === profissionalId)
     .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+
+  const ehDinoFoco = (profissionalId && profissionalId !== 'qualquer' && profissionais.length === 1 && ehProfissionalDino(profissionais[0])) ||
+                      (!profissionalId && habilitados && habilitados.size === 1 && ehProfissionalDino(estado.profissionais[[...habilitados][0]]));
+
+  if (!ehDinoFoco && (dia < limiteHoje || dia > limiteFinal)) return { estado, dataAgenda, servico, lojaId, calendario, profissionais: [] };
   if (profissionalId && profissionalId !== 'qualquer' && habilitados && !habilitados.has(profissionalId)) throw new Error('Este profissional não realiza este serviço.');
   if (profissionalId && profissionalId !== 'qualquer' && profissionais.length === 0) throw new Error('Profissional indisponível para agendamento online.');
   return { estado, dataAgenda, servico, lojaId, calendario, profissionais };
@@ -2723,8 +2767,9 @@ function disponibilidadeNoHorario(contexto, horaLocal, utcOffset) {
 export function listarHorariosDisponiveis(empresaId, dados = {}) {
   const contexto = contextoDisponibilidadePublica(empresaId, dados);
   if (contexto.profissionais.length === 0) return [];
-  const abertura = minutosHoraPublica(contexto.calendario.horarioAbertura);
-  const fechamento = minutosHoraPublica(contexto.calendario.horarioFechamento);
+  const ehDino = contexto.profissionais.length === 1 && ehProfissionalDino(contexto.profissionais[0]);
+  const abertura = ehDino ? 0 : minutosHoraPublica(contexto.calendario.horarioAbertura);
+  const fechamento = ehDino ? 1440 : minutosHoraPublica(contexto.calendario.horarioFechamento);
   const intervalo = Math.max(5, Number(contexto.calendario.intervaloMinutos || 30));
   if (!Number.isFinite(abertura) || !Number.isFinite(fechamento) || fechamento <= abertura) throw new Error('Horário de funcionamento inválido.');
   const horarios = [];
@@ -2761,10 +2806,11 @@ export function criarAgendamento(empresaId, dados = {}, opcoes = {}) {
   const profissional = agendamento.profissionalId ? estado.profissionais[agendamento.profissionalId] : null;
   const servico = estado.servicos[agendamento.servicoId];
   agendamento.duracaoMinutos = servico.duracaoMinutos;
-  if (dados.valor !== undefined && Math.round(Number(dados.valor) * 100) !== Math.round(Number(servico.preco) * 100)) {
+  const precoCalculado = calcularPrecoServicoHorario(servico, profissional, agendamento.horaLocal);
+  if (dados.valor !== undefined && Math.round(Number(dados.valor) * 100) !== Math.round(Number(precoCalculado) * 100) && Math.round(Number(dados.valor) * 100) !== Math.round(Number(servico.preco) * 100)) {
     throw new Error('O valor do agendamento deve corresponder ao preço cadastrado do serviço. Use a comanda para ajustes auditados.');
   }
-  agendamento.valor = servico.preco;
+  agendamento.valor = precoCalculado;
   validarCalendarioAgendamento(estado, agendamento, profissional);
   if (verificarConflito(estado, agendamento)) {
     if (opcoes.permitirEncaixe !== true) throw new Error('Horário indisponível para o profissional selecionado.');
@@ -2789,10 +2835,12 @@ export function atualizarAgendamento(empresaId, agendamentoId, dados = {}, opcoe
   const agendamento = agendamentoNormalizado(dados, atual, opcoes);
   agendamento.status = atual.status;
   if (!agendamento.servicoId || !estado.servicos[agendamento.servicoId] || estado.servicos[agendamento.servicoId].ativo === false) throw new Error('Serviço ativo é obrigatório.');
+  const profissional = agendamento.profissionalId ? estado.profissionais[agendamento.profissionalId] : null;
   const servico = estado.servicos[agendamento.servicoId];
   agendamento.duracaoMinutos = servico.duracaoMinutos;
-  const valorEsperado = agendamento.servicoId === atual.servicoId && Number(atual.valor) > 0 ? atual.valor : servico.preco;
-  if (dados.valor !== undefined && Math.round(Number(dados.valor) * 100) !== Math.round(Number(valorEsperado) * 100)) {
+  const precoCalculado = calcularPrecoServicoHorario(servico, profissional, agendamento.horaLocal);
+  const valorEsperado = agendamento.servicoId === atual.servicoId && Number(atual.valor) > 0 ? atual.valor : precoCalculado;
+  if (dados.valor !== undefined && Math.round(Number(dados.valor) * 100) !== Math.round(Number(valorEsperado) * 100) && Math.round(Number(dados.valor) * 100) !== Math.round(Number(servico.preco) * 100)) {
     throw new Error('O valor do agendamento não pode ser alterado pela remarcação. Use a comanda para ajustes auditados.');
   }
   agendamento.valor = valorEsperado;

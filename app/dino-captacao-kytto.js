@@ -2177,8 +2177,48 @@ export function perfilDoTelefone(empresaId, telefone, opcoes = {}) {
   const ativo=pacotes.find(p=>p.utilizavel),vencido=pacotes.find(p=>p.status==='ativa'&&['inadimplente','encerrada'].includes(p.situacao));
   const emDia=pacotes.find(p=>p.status==='ativa'&&p.situacao==='em_dia');
   const perfil=ativo?'pacote_ativo':emDia?(emDia.restantes>0?'pacote_reservado':'pacote_esgotado'):vencido?'pacote_vencido':pacotes.some(p=>p.status==='pausada')?'pacote_pausado':pacotes.some(p=>p.status==='ativa'||p.status==='pendente_ativacao')?'pacote_pendente':visitas>=2?'recorrente':cliente||visitas?'avulso':'novo';
-  return {perfil,clienteEncontrado:Boolean(cliente),visitasConhecidas:visitas,pacotes,
-    orientacao:perfil==='pacote_vencido'?'Renove com a equipe para voltar a usar benefícios e agendamentos pelo pacote.':perfil==='pacote_esgotado'?'As sessões deste ciclo foram utilizadas. Consulte a equipe sobre renovação ou atendimento avulso.':null};
+
+  // Aprender sempre com padrão do cliente (barbeiro preferido, período habitual e serviços mais frequentes)
+  const historicoVisitas = [...atendimentos, ...comandas, ...historico];
+  const contagemProf = {};
+  const contagemHoras = { madrugada: 0, manha: 0, tarde: 0, noite: 0 };
+  const contagemServicos = {};
+  for (const item of historicoVisitas) {
+    const prof = item.profissionalNome || item.profissional || '';
+    if (prof) contagemProf[prof] = (contagemProf[prof] || 0) + 1;
+    const srv = item.servicoNome || item.servico || item.descricao || '';
+    if (srv) contagemServicos[srv] = (contagemServicos[srv] || 0) + 1;
+    const horaStr = item.horaLocal || (item.dataHora ? String(item.dataHora).slice(11, 16) : '');
+    if (/^\d{2}:\d{2}$/.test(horaStr)) {
+      const h = Number(horaStr.split(':')[0]);
+      if (h < 6) contagemHoras.madrugada++;
+      else if (h < 12) contagemHoras.manha++;
+      else if (h < 18) contagemHoras.tarde++;
+      else contagemHoras.noite++;
+    }
+  }
+  const profPreferido = Object.entries(contagemProf).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
+  const periodoPreferido = Object.entries(contagemHoras).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
+  const servicoHabitual = Object.entries(contagemServicos).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
+      const padraoCliente = {
+    profissionalPreferido: profPreferido,
+    periodoPreferido,
+    servicoHabitual,
+    visitasTotais: visitas,
+  };
+  let orientacaoPadrao = null;
+  if (profPreferido) {
+    orientacaoPadrao = `Padrão do cliente: costuma ser atendido por ${profPreferido}${periodoPreferido ? ` no período da ${periodoPreferido}` : ''}. Priorize essa preferência ao sugerir horários.`;
+  }
+
+  return {
+    perfil,
+    clienteEncontrado: Boolean(cliente),
+    visitasConhecidas: visitas,
+    pacotes,
+    padraoCliente,
+    orientacao: perfil === 'pacote_vencido' ? 'Renove com a equipe para voltar a usar benefícios e agendamentos pelo pacote.' : perfil === 'pacote_esgotado' ? 'As sessões deste ciclo foram utilizadas. Consulte a equipe sobre renovação ou atendimento avulso.' : orientacaoPadrao,
+  };
 }
 
 export function planoDoTelefone(empresaId, telefone, opcoes = {}) {
