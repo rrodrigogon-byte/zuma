@@ -89,6 +89,7 @@ function mapOperationalUser(row) {
     nome: row.nome_completo ?? row.nome,
     senhaHash: row.senha_hash ?? row.senhaHash,
     role: 'organizador',
+    ...(row.password_changed_at ? {passwordChangedAt:row.password_changed_at} : {}),
     ativo: row.ativo === true,
   };
 }
@@ -377,7 +378,7 @@ export async function findOperationalByEmail(email, options = {}) {
   const emailNorm = normalizeEmail(email);
   const query = queryMethod(database, true);
   const result = await query(
-    `SELECT u.id, u.empresa_id, u.email, u.nome_completo, u.senha_hash, u.ativo
+    `SELECT u.id, u.empresa_id, u.email, u.nome_completo, u.senha_hash, u.ativo, to_jsonb(u)->>'password_changed_at' AS password_changed_at
        FROM usuarios u
        JOIN empresas e ON e.id = u.empresa_id AND COALESCE(e.ativa, true) = true
        JOIN commerce_operational_invites i ON i.usuario_id = u.id AND i.empresa_id = u.empresa_id
@@ -405,7 +406,7 @@ export async function resolveOperationalById(input, maybeEmpresaId, options = {}
   const empresaId = assertUuid(payload.empresaId, 'empresaId');
   const query = queryMethod(database, true);
   const result = await query(
-    `SELECT u.id, u.empresa_id, u.email, u.nome_completo, u.senha_hash, u.ativo
+    `SELECT u.id, u.empresa_id, u.email, u.nome_completo, u.senha_hash, u.ativo, to_jsonb(u)->>'password_changed_at' AS password_changed_at
        FROM usuarios u
        JOIN empresas e ON e.id = u.empresa_id AND COALESCE(e.ativa, true) = true
        JOIN commerce_operational_invites i ON i.usuario_id = u.id AND i.empresa_id = u.empresa_id

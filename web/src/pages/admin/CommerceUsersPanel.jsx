@@ -36,6 +36,9 @@ export function inviteStatusLabel(item) {
 }
 
 export default function CommerceUsersPanel({ memberships = [], roles = [], stores = [], currentUserId, platformAdmin = false, storefrontId, empresaId, empresaNome, onRefresh }) {
+  const [recoveryState,setRecoveryState]=useState(null)
+  useEffect(()=>{let active=true;(async()=>{try{const result=await api.get('/api/admin/commerce-session/recovery-status');if(active)setRecoveryState(result)}catch{}})();return()=>{active=false}},[])
+
   const [editing, setEditing] = useState(null)
   const [creating, setCreating] = useState(false)
   const [inviting, setInviting] = useState(false)
@@ -173,6 +176,7 @@ export default function CommerceUsersPanel({ memberships = [], roles = [], store
 
   return <section className="ecommerce-admin-panel commerce-users-panel" aria-label="Usuários e acessos da empresa">
     <CommerceAccountManager empresaId={empresaId} onRefresh={onRefresh} />
+    {typeof recoveryState?.configured === 'boolean' && <p className="commerce-admin-help">{recoveryState.configured ? 'Recuperação de senha por e-mail configurada' : 'Envio de recuperação de senha indisponível'} · contato@kytto.com.br · links individuais válidos por 20 minutos. O titular solicita o link em “Esqueci minha senha”, na tela de login.</p>}
     <div className="ecommerce-admin-panel-heading"><div><span className="ecommerce-admin-kicker">Governança</span><h2>Usuários e permissões</h2><p className="commerce-admin-help">Atribua papéis somente à empresa selecionada. Excluir acesso desativa a membership; não apaga identidade ou auditoria.</p></div><div className="ecommerce-row-actions">{canInvite && <button type="button" disabled={!empresaId || busy} onClick={beginInvite}>Convidar usuário</button>}<button type="button" className="ecommerce-admin-button primary" disabled={!storefrontId || busy} onClick={beginCreate}>Adicionar acesso existente</button></div></div>
     {notice && <p role="status">{notice}</p>}{error && !modalOpen && <p role="alert">{error}</p>}
     {canInvite && <div className="commerce-invite-history">

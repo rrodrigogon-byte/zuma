@@ -13,7 +13,7 @@ try {
   url.searchParams.set('host', host);
   const env = Object.fromEntries(['PATH', 'HOME', 'LANG', 'TZ'].filter(key => process.env[key]).map(key => [key, process.env[key]]));
   const run = async (args, localEnv) => {
-    const child = spawn(process.execPath, args, { cwd: new URL('..', import.meta.url), env: { ...env, NODE_ENV: 'test', ...localEnv }, stdio: 'inherit' });
+    const child = spawn(process.execPath, args, { cwd: new URL('..', import.meta.url), env: { ...env, NODE_ENV: 'test', DB_PATH: `${host}/fixture-db.json`, ...localEnv }, stdio: 'inherit' });
     const [code] = await once(child, 'exit');
     if (code !== 0) throw new Error('Validação local do ERP falhou; consulte o resultado dos testes.');
   };
@@ -21,6 +21,7 @@ try {
   if (process.argv.includes('--e2e')) {
     await run(['app/migrations/run-commerce-schema-migrations.js'], { DATABASE_URL: url.href, DB_SSL: 'false', COMMERCE_SCHEMA_REQUIRED: '1' });
     await run(['--test', 'app/core/commerce-operational-invites.pg.test.js'], { COMMERCE_OPERATIONAL_INVITE_TEST_DATABASE_URL: url.href });
+    await run(['--test', 'app/core/account-password-reset.pg.test.js'], { PASSWORD_RESET_TEST_DATABASE_URL: url.href });
     await run(['--test', 'app/backoffice-ondas.e2e.pg.test.js'], { BACKOFFICE_E2E_DATABASE_URL: url.href });
   }
 } finally { await fixture.close(); }

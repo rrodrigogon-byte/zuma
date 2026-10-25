@@ -21,7 +21,10 @@ describe('A2 financeiro e cadastros multiempresa (PostgreSQL)', { skip: pgDeTest
     const clienteA = await a2.salvarCliente(ctx.db, empresaA, { nome: 'Cliente A', email: 'a@teste.local', limiteCreditoMensal: 500 });
     const clienteB = await a2.salvarCliente(ctx.db, empresaB, { nome: 'Cliente B', email: 'b@teste.local' });
     await a2.criarConta(ctx.db, empresaA, { clienteId: clienteA.id, descricao: 'Consumo A', valor: 120, dataVencimento: '2099-12-31' });
-    assert.deepEqual((await a2.listarClientes(ctx.db, empresaB)).map((cliente) => cliente.id), [clienteB.id]);
+    const clientesB = await a2.listarClientes(ctx.db, empresaB);
+    assert.deepEqual(clientesB.filter(cliente => !cliente.padrao).map(cliente => cliente.id), [clienteB.id]);
+    assert.deepEqual(clientesB.filter(cliente => cliente.padrao).map(cliente => [cliente.id, cliente.nome]), [['cli-padrao-balcao', 'Cliente Balcão']]);
+    assert.deepEqual((await ctx.db.query('SELECT id FROM commerce_customers WHERE empresa_id=$1',[empresaB])).rows.map(cliente=>cliente.id), [clienteB.id]);
     assert.equal((await a2.listarContas(ctx.db, empresaB)).length, 0);
     await assert.rejects(() => a2.baixarConta(ctx.db, empresaB, clienteA.id), (error) => error.code === 'NOT_FOUND' || error.code === 'INVALID_ID');
   });

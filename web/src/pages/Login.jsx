@@ -135,7 +135,7 @@ export default function Login() {
             </div>
             {recuperacaoEnviada ? (
               <div role="status" style={{ background: pal.noticeBg, border: pal.noticeBorder, color: pal.noticeText, borderRadius: 12, padding: 16, lineHeight: 1.55, fontSize: '0.9rem' }}>
-                Pedido registrado. Por segurança, a senha não é trocada automaticamente: peça ao administrador da sua empresa para gerar uma senha temporária no painel (Usuários → Redefinir senha).
+                Se este e-mail estiver cadastrado e ativo, você receberá um link de contato@kytto.com.br para criar uma nova senha. O link vale por 20 minutos. Confira também o spam.
               </div>
             ) : (
               <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -144,7 +144,7 @@ export default function Login() {
                   <label style={labelStyle}>E-mail cadastrado</label>
                   <input type="email" value={emailRecuperacao} onChange={e => setEmailRecuperacao(e.target.value)} placeholder="voce@empresa.com" required autoComplete="email" style={inputStyle} onFocus={focusInput} onBlur={blurInput} />
                 </div>
-                <button type="submit" disabled={loading} style={{ background: pal.accent, color: '#fff', padding: '16px', borderRadius: 12, border: 'none', fontWeight: 800, fontSize: '1.05rem', cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.7 : 1, boxShadow: pal.buttonShadow }}>{loading ? 'Registrando...' : 'Registrar pedido de redefinição'}</button>
+                <button type="submit" disabled={loading} style={{ background: pal.accent, color: '#fff', padding: '16px', borderRadius: 12, border: 'none', fontWeight: 800, fontSize: '1.05rem', cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.7 : 1, boxShadow: pal.buttonShadow }}>{loading ? 'Enviando...' : 'Enviar link de recuperação'}</button>
               </form>
             )}
           </>
