@@ -20,6 +20,46 @@ export class ModoBarbeiroError extends Error {
 function dinheiro(valor) { return Math.round(Number(valor || 0) * 100) / 100; }
 function dataValida(data) { return /^\d{4}-\d{2}-\d{2}$/.test(String(data || '')); }
 
+export function clientesRecentesDoBarbeiro(erp, { empresaId, lojaId = '', profissionalId = '', agora = new Date() } = {}) {
+  if (!empresaId || !profissionalId) return [];
+  try {
+    const todosAgendamentos = erp.listarAgendamentos(empresaId, { profissionalId, lojaId });
+    const mapa = new Map();
+    for (const a of todosAgendamentos) {
+      if (a.status !== 'concluido' && a.status !== 'agendado') continue;
+      const chave = String(a.clienteTelefone || a.clienteNome || '').trim();
+      if (!chave) continue;
+      const dataIso = String(a.dataAgenda || a.dataHora || '').slice(0, 10);
+      const item = mapa.get(chave) || {
+        nome: a.clienteNome || 'Cliente',
+        telefone: a.clienteTelefone || '',
+        ultimoServico: a.servicoNome || 'Serviço',
+        ultimaData: dataIso,
+        totalAtendimentos: 0,
+        status: a.status,
+      };
+      item.totalAtendimentos += 1;
+      if (dataIso >= item.ultimaData) {
+        item.ultimaData = dataIso;
+        item.ultimoServico = a.servicoNome || item.ultimoServico;
+      }
+      mapa.set(chave, item);
+    }
+    const agoraMs = agora.valueOf();
+    const lista = Array.from(mapa.values()).map((c) => {
+      const diffDias = c.ultimaData ? Math.floor((agoraMs - new Date(`${c.ultimaData}T12:00:00`).valueOf()) / 86400000) : 0;
+      return {
+        ...c,
+        diasDesdeUltimo: Math.max(0, diffDias),
+        statusRetorno: diffDias <= 15 ? 'em_dia' : diffDias <= 30 ? 'ideal_retorno' : 'atrasado',
+      };
+    });
+    return lista.sort((a, b) => b.ultimaData.localeCompare(a.ultimaData)).slice(0, 30);
+  } catch {
+    return [];
+  }
+}
+
 export function ehGestao(usuario = {}) {
   return usuario.platformAdmin === true || PAPEIS_GESTAO.has(String(usuario.role || '').toLowerCase());
 }
@@ -47,8 +87,36 @@ export function profissionalDoUsuario(profissionais = [], usuario = {}) {
 function resumoComissao(comissoes, profissionalId) {
   const item = (comissoes?.porProfissional || []).find((linha) => linha.profissionalId === profissionalId);
   return item
-    ? { atendimentos: item.atendimentos, bruto: item.bruto, repasse: item.repasse, comissaoServicos: item.comissaoServicos, comissaoProdutos: item.comissaoProdutos }
-    : { atendimentos: 0, bruto: 0, repasse: 0, comissaoServicos: 0, comissaoProdutos: 0 };
+    ? {
+        atendimentos: item.atendimentos || 0,
+        vendasProdutos: item.vendasProdutos || 0,
+        brutoServicos: item.brutoServicos || 0,
+        brutoProdutos: item.brutoProdutos || 0,
+        bruto: item.bruto || 0,
+        repasse: item.repasse || 0,
+        comissaoServicos: item.comissaoServicos || 0,
+        comissaoProdutos: item.comissaoProdutos || 0,
+        taxas: item.taxas || 0,
+        materiais: item.materiais || 0,
+        percentualEfetivoServico: item.percentualEfetivoServico || item.percentualComissao || 0,
+        percentualEfetivoProduto: item.percentualEfetivoProduto || item.percentualComissaoProduto || 0,
+        linhas: (item.linhas || []).slice(0, 50),
+      }
+    : {
+        atendimentos: 0,
+        vendasProdutos: 0,
+        brutoServicos: 0,
+        brutoProdutos: 0,
+        bruto: 0,
+        repasse: 0,
+        comissaoServicos: 0,
+        comissaoProdutos: 0,
+        taxas: 0,
+        materiais: 0,
+        percentualEfetivoServico: 0,
+        percentualEfetivoProduto: 0,
+        linhas: [],
+      };
 }
 
 export function painelBarbeiro(erp, { empresaId, lojaId = '', usuario = {}, profissionalId = '', data, agora = new Date() } = {}) {
@@ -119,11 +187,29 @@ export function painelBarbeiro(erp, { empresaId, lojaId = '', usuario = {}, prof
     proximoId: proximo?.id || null,
   };
   const inicioMes = `${data.slice(0, 7)}-01`;
+  const dObj = new Date(`${data}T12:00:00Z`);
+  const diaSemana = (dObj.getUTCDay() + 6) % 7;
+  const dSemana = new Date(dObj);
+  dSemana.setUTCDate(dSemana.getUTCDate() - diaSemana);
+  const inicioSemana = dSemana.toISOString().slice(0, 10);
+
+  const comissaoDia = resumoComissao(erp.obterComissoes(empresaId, { data, lojaId }), escolhido.id);
+  const comissaoMes = resumoComissao(erp.obterComissoes(empresaId, { inicio: inicioMes, fim: data, lojaId }), escolhido.id);
+  const comissaoSemana = resumoComissao(erp.obterComissoes(empresaId, { inicio: inicioSemana, fim: data, lojaId }), escolhido.id);
+
+  const pendentesHoje = ativos.filter((a) => ['agendado', 'confirmado', 'em_atendimento'].includes(a.status));
+  const valorPendenteHoje = pendentesHoje.reduce((soma, a) => soma + (a.valor || 0), 0);
+  const percServ = Number(escolhido.percentualComissao || 50) / 100;
+  const comissaoPendente = dinheiro(valorPendenteHoje * percServ);
+  const totalPrevistoHoje = dinheiro(comissaoDia.repasse + comissaoPendente);
+  const ticketMedioHoje = comissaoDia.atendimentos > 0 ? dinheiro(comissaoDia.bruto / comissaoDia.atendimentos) : 0;
+
   const comissao = {
     percentualServicos: Number(escolhido.percentualComissao || 0),
     percentualProdutos: Number(escolhido.percentualComissaoProduto || 0),
-    dia: resumoComissao(erp.obterComissoes(empresaId, { data, lojaId }), escolhido.id),
-    mes: { ...resumoComissao(erp.obterComissoes(empresaId, { inicio: inicioMes, fim: data, lojaId }), escolhido.id), inicio: inicioMes, fim: data },
+    dia: { ...comissaoDia, previsaoTotal: totalPrevistoHoje, pendenteEstimado: comissaoPendente, ticketMedio: ticketMedioHoje },
+    semana: { ...comissaoSemana, inicio: inicioSemana, fim: data },
+    mes: { ...comissaoMes, inicio: inicioMes, fim: data },
   };
   const bloqueios = erp.listarBloqueios(empresaId, { data, profissionalId: escolhido.id, lojaId })
     .map((b) => ({ id: b.id, titulo: b.titulo, inicio: b.inicio, fim: b.fim, geral: !b.profissionalId }));
@@ -148,6 +234,7 @@ export function painelBarbeiro(erp, { empresaId, lojaId = '', usuario = {}, prof
   return {
     ...base,
     gamificacao,
+    clientesRecentes: clientesRecentesDoBarbeiro(erp, { empresaId, lojaId, profissionalId: escolhido.id, agora }),
     profissional: {
       id: escolhido.id, nome: escolhido.nome, especialidade: escolhido.especialidade, fotoUrl: escolhido.fotoUrl || '',
       horarioInicio: escolhido.horarioInicio, horarioFim: escolhido.horarioFim, diasTrabalho: escolhido.diasTrabalho,
