@@ -8,6 +8,7 @@
 - **PR #446:** [feat(financeiro): otimizacao de performance O(N), modulo DRE gerencial e despesas por categoria](https://github.com/rrodrigogon-byte/agro-open/pull/446) — **MERGED** (Deploy: `dep-dbeka8qjnfac73du9tm0` — **LIVE**)
 - **PR #448:** [feat(crm-perf): crm de retencao inteligente e code-splitting no erp barbearia](https://github.com/rrodrigogon-byte/agro-open/pull/448) — **MERGED** (Deploy: `dep-dbekocg473hc73982a4g` — **LIVE**)
 - **PR #453:** [fix(whatsapp): permitir desconectar linha aguardando conexao e parear novo numero](https://github.com/rrodrigogon-byte/agro-open/pull/453) — **MERGED** (Deploy: `dep-dbf3tqrbc2fs738pjkhg` — **LIVE**)
+ - **PR #458:** [feat(metas): controle de metas, comissoes e bonificacoes individuais com 5 relatorios analiticos por barbeiro](https://github.com/rrodrigogon-byte/agro-open/pull/458) — **MERGED** (Deploy: `dep-dbf4r367bikc73br43u0` — **LIVE**)
 
 ---
 
