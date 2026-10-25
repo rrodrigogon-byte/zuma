@@ -450,3 +450,50 @@ test('instância reivindicada no painel por duas empresas fica sem dono', async 
   Object.assign(b, { instance: 'linha-x', instanciaConfirmadaPelaPlataforma: true });
   assert.equal(provider.instanceOwner('linha-x'), '');
 });
+
+test('desconectar quando a conexão está em estado qr encerra localmente para permitir novo número', async () => {
+  const saved = { WHATSAPP_PROVIDER: process.env.WHATSAPP_PROVIDER, CHATBOT_BACKEND_URL: process.env.CHATBOT_BACKEND_URL, CHATBOT_BACKEND_KEY: process.env.CHATBOT_BACKEND_KEY };
+  process.env.WHATSAPP_PROVIDER = 'chatbot_backend';
+  process.env.CHATBOT_BACKEND_URL = 'https://backend.test';
+  process.env.CHATBOT_BACKEND_KEY = 'k'.repeat(24);
+  try {
+    const conexao = await import('./whatsapp-conexao-kytto.js');
+    const estado = conexao.obterConexao('emp-qr-rec');
+    estado.state = 'qr';
+    estado.ativo = true;
+    estado.autoReconnect = true;
+    const result = await conexao.desconectar('emp-qr-rec', {
+      fetchImpl: async () => ({ ok: false, status: 502, text: async () => '{"error":"gateway_error"}' })
+    });
+    assert.equal(result.ok, true);
+    assert.equal(result.conexao.ativo, false);
+    assert.equal(result.conexao.autoReconnect, false);
+    assert.equal(result.conexao.state, 'close');
+  } finally {
+    for (const [key, value] of Object.entries(saved)) { if (value === undefined) delete process.env[key]; else process.env[key] = value; }
+  }
+});
+
+test('desconectar com forcar: true encerra localmente mesmo se a conexão estiver open e o gateway falhar', async () => {
+  const saved = { WHATSAPP_PROVIDER: process.env.WHATSAPP_PROVIDER, CHATBOT_BACKEND_URL: process.env.CHATBOT_BACKEND_URL, CHATBOT_BACKEND_KEY: process.env.CHATBOT_BACKEND_KEY };
+  process.env.WHATSAPP_PROVIDER = 'chatbot_backend';
+  process.env.CHATBOT_BACKEND_URL = 'https://backend.test';
+  process.env.CHATBOT_BACKEND_KEY = 'k'.repeat(24);
+  try {
+    const conexao = await import('./whatsapp-conexao-kytto.js');
+    const estado = conexao.obterConexao('emp-force-test');
+    estado.state = 'open';
+    estado.ativo = true;
+    estado.phone = '5565999998888';
+    const result = await conexao.desconectar('emp-force-test', {
+      forcar: true,
+      fetchImpl: async () => ({ ok: false, status: 500, text: async () => '{"error":"internal_error"}' })
+    });
+    assert.equal(result.ok, true);
+    assert.equal(result.conexao.ativo, false);
+    assert.equal(result.conexao.state, 'close');
+    assert.equal(result.conexao.phoneMasked, '');
+  } finally {
+    for (const [key, value] of Object.entries(saved)) { if (value === undefined) delete process.env[key]; else process.env[key] = value; }
+  }
+});
