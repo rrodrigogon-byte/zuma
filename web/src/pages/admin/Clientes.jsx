@@ -31,6 +31,7 @@ export default function Clientes() {
   const [clientes, setClientes] = useState([])
   const [loading, setLoading] = useState(true)
   const [busca, setBusca] = useState('')
+  const [abaFiltro, setAbaFiltro] = useState('todos') // 'todos' | 'aniversariantes' | 'viralgram' | 'familia'
   const [modal, setModal] = useState(null) // null | 'novo' | cliente_id
   const [form, setForm] = useState(EMPTY_FORM)
   const [saving, setSaving] = useState(false)
@@ -127,9 +128,32 @@ export default function Clientes() {
     setModal(c.id)
   }
 
+  const mesAtual = String(new Date().getMonth() + 1).padStart(2, '0')
+  const totalAniversariantes = clientes.filter(c => {
+    const aniv = c.aniversario || (c.dataNascimento ? c.dataNascimento.slice(5) : '')
+    const anivEsp = c.conjugeAniversario || ''
+    return Boolean((aniv && aniv.startsWith(mesAtual)) || (anivEsp && anivEsp.startsWith(mesAtual)))
+  }).length
+  const totalViralgram = clientes.filter(c => Boolean(c.viralgramProfile?.status === 'mapeado' || c.instagram || c.linkedin)).length
+  const totalFamilia = clientes.filter(c => Boolean(c.conjugeNome || (c.familia && c.familia.length > 0) || c.estadoCivil === 'casado')).length
+
   const filtrados = clientes.filter(c => {
     const term = busca.toLowerCase()
-    return !term || c.nome.toLowerCase().includes(term) || (c.cpfCnpj || '').includes(term) || (c.email || '').toLowerCase().includes(term)
+    const matchBusca = !term || c.nome.toLowerCase().includes(term) || (c.cpfCnpj || '').includes(term) || (c.email || '').toLowerCase().includes(term) || (c.telefone || '').includes(term)
+    if (!matchBusca) return false
+
+    if (abaFiltro === 'aniversariantes') {
+      const aniv = c.aniversario || (c.dataNascimento ? c.dataNascimento.slice(5) : '')
+      const anivEsp = c.conjugeAniversario || ''
+      return Boolean((aniv && aniv.startsWith(mesAtual)) || (anivEsp && anivEsp.startsWith(mesAtual)))
+    }
+    if (abaFiltro === 'viralgram') {
+      return Boolean(c.viralgramProfile?.status === 'mapeado' || c.instagram || c.linkedin)
+    }
+    if (abaFiltro === 'familia') {
+      return Boolean(c.conjugeNome || (c.familia && c.familia.length > 0) || c.estadoCivil === 'casado')
+    }
+    return true
   })
 
   // KPIs
@@ -176,8 +200,37 @@ export default function Clientes() {
         </div>
       </div>
 
-      <div style={{ marginBottom:16 }}>
-        <input type="search" className="input" placeholder="🔍 Buscar por nome, CPF/CNPJ ou email..." value={busca} onChange={e => setBusca(e.target.value)} style={{ maxWidth: 400 }} />
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 12 }}>
+        <input type="search" className="input" placeholder="🔍 Buscar por nome, telefone, CPF ou email..." value={busca} onChange={e => setBusca(e.target.value)} style={{ maxWidth: 360 }} />
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button
+            className={`btn btn-sm ${abaFiltro === 'todos' ? 'btn-primary' : 'btn-secondary'}`}
+            onClick={() => setAbaFiltro('todos')}
+          >
+            Todos ({totalClientes})
+          </button>
+          <button
+            className={`btn btn-sm ${abaFiltro === 'aniversariantes' ? 'btn-primary' : 'btn-secondary'}`}
+            onClick={() => setAbaFiltro('aniversariantes')}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}
+          >
+            🎂 Aniversariantes do Mês ({totalAniversariantes})
+          </button>
+          <button
+            className={`btn btn-sm ${abaFiltro === 'viralgram' ? 'btn-primary' : 'btn-secondary'}`}
+            onClick={() => setAbaFiltro('viralgram')}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}
+          >
+            🌟 Mapeados ViralGram ({totalViralgram})
+          </button>
+          <button
+            className={`btn btn-sm ${abaFiltro === 'familia' ? 'btn-primary' : 'btn-secondary'}`}
+            onClick={() => setAbaFiltro('familia')}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}
+          >
+            💍 Família & Cônjuge ({totalFamilia})
+          </button>
+        </div>
       </div>
 
       <div className="table-wrap">
@@ -257,6 +310,29 @@ export default function Clientes() {
                     <div style={{ fontSize: 11, color: 'var(--primary, #FF6B2C)' }}>
                       ☕ {c.preferencias?.bebida || c.bebida}
                     </div>
+                  ) : null}
+                  {c.telefone && c.aniversario && c.aniversario.startsWith(mesAtual) ? (
+                    <a
+                      href={`https://wa.me/${c.telefone.replace(/\D/g, '')}?text=${encodeURIComponent(`Fala ${c.nome?.split(' ')[0] || ''}! Aqui é o T-Rex da Barbearia Dino. Vi que seu aniversário tá chegando e a equipe preparou um presente especial pra você: uma hidratação cortesia no seu corte e aquela bebida comemorativa gelada da casa! Bora agendar seu horário pra comemorar no estilo? Se quiser, já garanto um horário adicional pra trazer um parceiro ou filho pra cortar junto!`)}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 4,
+                        marginTop: 4,
+                        fontSize: 10,
+                        padding: '2px 6px',
+                        borderRadius: 4,
+                        background: '#25D366',
+                        color: '#fff',
+                        textDecoration: 'none',
+                        fontWeight: 600,
+                      }}
+                      title="Enviar parabéns com brinde e agendamento adicional no WhatsApp"
+                    >
+                      🎁 Enviar Brinde
+                    </a>
                   ) : null}
                 </td>
                 <td>

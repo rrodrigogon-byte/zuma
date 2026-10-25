@@ -65,8 +65,8 @@ export function renderMessage(automacao, variante, data = {}) {
       B: `${oi} Valeu por vir na ${loja}! Como foi o atendimento${prof}? Responda com uma nota de 1 a 5.`,
     },
     aniversario: {
-      A: `${oi} Seu aniversário está chegando e a ${loja} deseja um ótimo dia! Quer aproveitar para agendar um horário especial?`,
-      B: `${oi} Parabéns adiantado! 🎉 Que tal chegar no seu dia com o visual em dia? Posso ver um horário pra você.`,
+      A: `${oi} Seu aniversário tá chegando e a equipe da ${loja} preparou um presente especial pra você: uma hidratação cortesia no seu corte e aquela bebida comemorativa gelada da casa! Bora agendar seu horário pra comemorar no estilo? Se quiser, já garanto um horário adicional pra trazer um parceiro ou filho pra cortar junto!`,
+      B: `${oi} Parabéns adiantado pelo seu aniversário! 🎉 Pra você comemorar com o visual impecável, você ganhou de brinde da ${loja} uma hidratação cortesia por nossa conta! Bora marcar seu corte? Se quiser trazer alguém pra comemorar na resenha, já reservo um horário duplo pra vocês!`,
     },
     oferta_individual: {
       A: `${oi} Separei uma sugestão pra você na ${loja}: ${data.produto || 'um produto'}${data.preco ? ` (${data.preco})` : ''}. Quer que eu reserve um?`,
