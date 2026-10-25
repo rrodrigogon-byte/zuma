@@ -2,13 +2,14 @@
 //
 // Suporta:
 // 1. Faturamento bruto total separado (serviços vs produtos vs pacotes) com comissões independentes;
-// 2. Relatório de serviços por categoria (cortes, barbas, procedimentos);
-// 3. Relatório de pacotes e planos (atendimentos, assinaturas ativas, rateio do pote);
-// 4. Relatório de serviços extras (hidratações, sobrancelhas, pigmentações, selagens, etc.) com clientes que fizeram;
-// 5. Relatório de produtos com quantidades, faturamento e comissão separada;
-// 6. Evolução de metas e bonificações progressivas em tempo real (faixas, bônus, quanto falta);
-// 7. Filtros ágeis por todo o histórico, mês, quinzena, semana, dia ou personalizado;
-// 8. Integração completa: dados operacionais ao vivo do Kytto + histórico completo do banco (Avec/legado).
+// 2. Relatório de serviços por categoria com categorização inteligente de procedimentos (Cabelo, Barba, Combos, Prótese, Extras);
+// 3. Separação contábil clara entre atendimentos avulsos pagos e atendimentos cobertos por Clube / Pacote;
+// 4. Relatório de pacotes e planos (atendimentos, assinaturas ativas, rateio do pote);
+// 5. Relatório de serviços extras (hidratações, sobrancelhas, pigmentações, selagens, etc.) com clientes que fizeram;
+// 6. Relatório de produtos com quantidades, faturamento e comissão separada;
+// 7. Evolução de metas e bonificações progressivas em tempo real (faixas, bônus, quanto falta);
+// 8. Filtros ágeis por todo o histórico, mês, quinzena, semana, dia ou personalizado;
+// 9. Integração completa: dados operacionais ao vivo do Kytto + histórico completo do banco (Avec/legado).
 
 import * as barbearia from './barbearia-erp-kytto.js';
 import * as repassesKytto from './barbearia-repasses-kytto.js';
@@ -104,20 +105,50 @@ export function ehProduto(nomeItem = '', frenteAtuacao = '') {
   return ['pomada', 'oleo', 'óleo', 'shampoo', 'condicionador', 'tonico', 'tônico', 'cera', 'balm', 'gel', 'creme', 'minoxidil', 'pasta', 'loção', 'locao', 'spray', 'pente', 'escova de madeira'].some((p) => n.includes(p));
 }
 
+const CATEGORIAS_GENERICAS = new Set([
+  'geral', 'padrao', 'padrão', 'outros', 'historico avec', 'histórico avec',
+  'historico', 'avec', 'sem categoria', 'diversos', 'sem_categoria', ''
+]);
+
 export function categorizarServico(servicoNome = '', categoriaCadastrada = '') {
   const cat = String(categoriaCadastrada || '').trim();
-  if (cat && cat !== 'Geral' && cat !== 'Padrão' && cat !== 'Padrao' && cat !== 'Outros') return cat;
+  const catNorm = cat.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const nome = String(servicoNome || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 
+  // 1. Prótese Capilar
+  if (nome.includes('protese') || catNorm.includes('protese')) {
+    return 'Prótese Capilar';
+  }
+
+  // 2. Combos (Corte + Barba)
+  const temCorte = nome.includes('corte') || nome.includes('cabelo') || nome.includes('fade') || nome.includes('degrade') || nome.includes('navalhad') || nome.includes('pezinho') || nome.includes('acabamento') || nome.includes('infantil') || nome.includes('social') || nome.includes('maquina');
+  const temBarba = nome.includes('barba') || nome.includes('barboterapia') || nome.includes('bigode') || nome.includes('cavanhaque');
+  if (temCorte && temBarba) {
+    return 'Combos (Cabelo + Barba)';
+  }
+
+  // 3. Extras e Procedimentos Especiais
   if (ehServicoExtra(servicoNome, categoriaCadastrada)) {
     return 'Procedimentos & Extras';
   }
-  const nome = String(servicoNome || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
-  if (nome.includes('barba') || nome.includes('barboterapia') || nome.includes('bigode') || nome.includes('cavanhaque')) {
-    return 'Barba & Modelagem';
+
+  // 4. Se a categoria cadastrada for específica (não genérica), aproveita ela
+  if (cat && !CATEGORIAS_GENERICAS.has(catNorm)) {
+    if (catNorm.includes('cabelo') || catNorm.includes('corte')) return 'Cabelo & Cortes';
+    if (catNorm.includes('barba')) return 'Barba & Modelagem';
+    return cat;
   }
-  if (nome.includes('corte') || nome.includes('cabelo') || nome.includes('fade') || nome.includes('degrade') || nome.includes('tesoura') || nome.includes('maquina') || nome.includes('pezinho') || nome.includes('acabamento') || nome.includes('infantil')) {
+
+  // 5. Cabelo isolado
+  if (temCorte) {
     return 'Cabelo & Cortes';
   }
+
+  // 6. Barba isolada
+  if (temBarba) {
+    return 'Barba & Modelagem';
+  }
+
   return 'Outros Procedimentos';
 }
 
@@ -211,6 +242,7 @@ export function relatorioIndividualProfissional(empresaId, profissionalId, opcoe
       if (chavesAoVivo.has(`${dataAgenda}|${clienteNome}|${descItem}`)) continue;
 
       const isProd = ehProduto(descItem, item.frenteAtuacao);
+      const isClub = valorBruto <= 0 || repassesKytto.ehAtendimentoClubAvec(item, valorBruto);
 
       linhasHistorico.push({
         tipo: isProd ? 'produto' : 'servico',
@@ -227,6 +259,7 @@ export function relatorioIndividualProfissional(empresaId, profissionalId, opcoe
         base: valorBruto,
         percentual: isProd ? Number(prof.percentualComissaoProduto || 10) : Number(prof.percentualComissao || 40),
         comissao: dinheiro(valorBruto * (isProd ? Number(prof.percentualComissaoProduto || 10) : Number(prof.percentualComissao || 40)) / 100),
+        club: isClub,
       });
     }
   } catch (e) {
@@ -256,6 +289,9 @@ export function relatorioIndividualProfissional(empresaId, profissionalId, opcoe
   } catch (e) {
     brutoPlanos = 0;
   }
+
+  // Atendimentos do Clube no período (inclui linhas marcadas como Club e atendimentos com valor 0)
+  const atendimentosClubLinhas = linhasServicos.filter((l) => l.club === true || Number(l.bruto || 0) === 0);
 
   // 4. EVOLUÇÃO DE METAS E BONIFICAÇÕES EM TEMPO REAL
   const metasServico = barbearia.calcularFaixaBonificacao(
@@ -290,7 +326,7 @@ export function relatorioIndividualProfissional(empresaId, profissionalId, opcoe
     totalVales = 0;
   }
 
-  // 5. RELATÓRIO DE SERVIÇOS POR CATEGORIA
+  // 5. RELATÓRIO DE SERVIÇOS POR CATEGORIA (RECONCILIAÇÃO INTELIGENTE)
   const servicosCatalogo = barbearia.listarServicos(empresaId, { incluirInativos: true });
   const mapaServicosCatalogo = new Map(servicosCatalogo.map((s) => [s.id, s]));
 
@@ -298,15 +334,42 @@ export function relatorioIndividualProfissional(empresaId, profissionalId, opcoe
   for (const item of linhasServicos) {
     const servicoCadastrado = item.servicoId ? mapaServicosCatalogo.get(item.servicoId) : null;
     const cat = categorizarServico(item.descricao, servicoCadastrado?.categoria);
-    const dadosCat = categoriasMap.get(cat) || { categoria: cat, quantidade: 0, faturamento: 0, itens: new Map() };
+    const dadosCat = categoriasMap.get(cat) || {
+      categoria: cat,
+      quantidadeTotal: 0,
+      quantidadePaga: 0,
+      quantidadeClube: 0,
+      faturamento: 0,
+      itens: new Map(),
+    };
 
-    dadosCat.quantidade += Number(item.quantidade || 1);
-    dadosCat.faturamento = dinheiro(dadosCat.faturamento + Number(item.bruto || 0));
+    const qtd = Number(item.quantidade || 1);
+    const valor = Number(item.bruto || 0);
+    const ehClube = item.club === true || valor === 0;
+
+    dadosCat.quantidadeTotal += qtd;
+    if (ehClube) {
+      dadosCat.quantidadeClube += qtd;
+    } else {
+      dadosCat.quantidadePaga += qtd;
+      dadosCat.faturamento = dinheiro(dadosCat.faturamento + valor);
+    }
 
     const nomeServico = item.descricao;
-    const dadoItem = dadosCat.itens.get(nomeServico) || { nome: nomeServico, quantidade: 0, faturamento: 0 };
-    dadoItem.quantidade += Number(item.quantidade || 1);
-    dadoItem.faturamento = dinheiro(dadoItem.faturamento + Number(item.bruto || 0));
+    const dadoItem = dadosCat.itens.get(nomeServico) || {
+      nome: nomeServico,
+      quantidadeTotal: 0,
+      quantidadePaga: 0,
+      quantidadeClube: 0,
+      faturamento: 0,
+    };
+    dadoItem.quantidadeTotal += qtd;
+    if (ehClube) {
+      dadoItem.quantidadeClube += qtd;
+    } else {
+      dadoItem.quantidadePaga += qtd;
+      dadoItem.faturamento = dinheiro(dadoItem.faturamento + valor);
+    }
     dadosCat.itens.set(nomeServico, dadoItem);
 
     categoriasMap.set(cat, dadosCat);
@@ -314,16 +377,22 @@ export function relatorioIndividualProfissional(empresaId, profissionalId, opcoe
 
   const relatorioServicosPorCategoria = Array.from(categoriasMap.values()).map((cat) => ({
     categoria: cat.categoria,
-    quantidade: cat.quantidade,
+    quantidade: cat.quantidadeTotal,
+    quantidadeTotal: cat.quantidadeTotal,
+    quantidadePaga: cat.quantidadePaga,
+    quantidadeClube: cat.quantidadeClube,
     faturamento: cat.faturamento,
-    ticketMedio: cat.quantidade > 0 ? dinheiro(cat.faturamento / cat.quantidade) : 0,
+    ticketMedio: cat.quantidadePaga > 0 ? dinheiro(cat.faturamento / cat.quantidadePaga) : 0,
     itens: Array.from(cat.itens.values()).map((it) => ({
       nome: it.nome,
-      quantidade: it.quantidade,
+      quantidade: it.quantidadeTotal,
+      quantidadeTotal: it.quantidadeTotal,
+      quantidadePaga: it.quantidadePaga,
+      quantidadeClube: it.quantidadeClube,
       faturamento: it.faturamento,
-      ticketMedio: it.quantidade > 0 ? dinheiro(it.faturamento / it.quantidade) : 0,
-    })).sort((a, b) => b.faturamento - a.faturamento),
-  })).sort((a, b) => b.faturamento - a.faturamento);
+      ticketMedio: it.quantidadePaga > 0 ? dinheiro(it.faturamento / it.quantidadePaga) : 0,
+    })).sort((a, b) => b.faturamento - a.faturamento || b.quantidadeTotal - a.quantidadeTotal),
+  })).sort((a, b) => b.faturamento - a.faturamento || b.quantidadeTotal - a.quantidadeTotal);
 
   // 6. RELATÓRIO DE SERVIÇOS EXTRAS COM CLIENTES NOMINAIS
   const itensExtrasNominais = [];
@@ -338,6 +407,7 @@ export function relatorioIndividualProfissional(empresaId, profissionalId, opcoe
         valor: item.bruto,
         comissao: item.comissao,
         comandaId: item.origemId || null,
+        club: item.club || false,
       });
 
       const res = resumoExtrasMap.get(item.descricao) || { nome: item.descricao, quantidade: 0, faturamento: 0 };
@@ -429,8 +499,12 @@ export function relatorioIndividualProfissional(empresaId, profissionalId, opcoe
       valesAbertos: totalVales,
       repasseLiquido: dinheiro(Math.max(0, comissaoTotal - totalVales)),
       totalAtendimentos: linhasServicos.length,
+      totalAtendimentosAvulsos: linhasServicos.filter((l) => Number(l.bruto || 0) > 0 && !l.club).length,
+      totalAtendimentosClube: atendimentosClubLinhas.length,
       totalVendasProdutos: linhasProdutos.length,
-      ticketMedioServicos: linhasServicos.length > 0 ? dinheiro(brutoServicos / linhasServicos.length) : 0,
+      ticketMedioServicos: linhasServicos.filter((l) => Number(l.bruto || 0) > 0).length > 0
+        ? dinheiro(brutoServicos / linhasServicos.filter((l) => Number(l.bruto || 0) > 0).length)
+        : 0,
     },
     metasEvolucao: {
       servicos: metasServico,
@@ -438,10 +512,17 @@ export function relatorioIndividualProfissional(empresaId, profissionalId, opcoe
     },
     servicosPorCategoria: relatorioServicosPorCategoria,
     pacotesEPlanos: {
+      totalAtendimentosClube: atendimentosClubLinhas.length,
       atendimentosPeloPlano,
       totalValorPote: brutoPlanos,
       planosAtivosNaEmpresa: planosCatalogo.filter((p) => p.ativo !== false).map((p) => ({ id: p.id, nome: p.nome, precoMensal: p.precoMensal, percentualPote: p.percentualPote })),
       assinaturasAtivasTotal: assinaturasEmpresa.filter((a) => a.status === 'ativa').length,
+      linhasClube: atendimentosClubLinhas.slice(0, 500).map((l) => ({
+        data: l.data,
+        cliente: l.cliente,
+        servico: l.descricao,
+        valorOriginal: l.bruto,
+      })),
     },
     servicosExtras: relatorioServicosExtras,
     produtos: relatorioProdutos,
@@ -474,6 +555,7 @@ export function relatorioEquipeMetasComissoes(empresaId, opcoes = {}) {
     comissaoTotalGeral: dinheiro(relatorios.reduce((s, r) => s + r.faturamento.comissaoTotal, 0)),
     bonusTotalGeral: dinheiro(relatorios.reduce((s, r) => s + r.faturamento.bonusTotalValor, 0)),
     totalAtendimentos: relatorios.reduce((s, r) => s + r.faturamento.totalAtendimentos, 0),
+    totalAtendimentosClube: relatorios.reduce((s, r) => s + (r.faturamento.totalAtendimentosClube || 0), 0),
     totalProdutosVendidos: relatorios.reduce((s, r) => s + r.faturamento.totalVendasProdutos, 0),
   };
 

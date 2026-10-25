@@ -26,6 +26,22 @@ Para que os relatórios analíticos individuais e o ranking de metas da equipe r
 
 ---
 
+### 1.0.1 Melhorias de UX e Conciliação Completa de Todas as Abas
+
+A partir da análise dos dados reais em produção:
+* **Categorização Real de Procedimentos:**
+  * Procedimentos importados com categoria genérica ('Histórico Avec') agora são reclassificados dinamicamente para categorias de negócio autênticas: **Cabelo & Cortes**, **Barba & Modelagem**, **Combos (Cabelo + Barba)**, **Prótese Capilar**, **Procedimentos & Extras** e **Outros Procedimentos**.
+* **Separação Contábil de Atendimentos Avulsos vs Clube:**
+  * O cálculo de Ticket Médio agora considera apenas os atendimentos avulsos pagos, exibindo claramente o total de atendimentos realizados e a divisão entre avulsos e sessões cobertas pelo Clube Dino (evitando distorções de cálculo).
+* **Interatividade e UX nas Abas:**
+  * **Aba 2 (Serviços):** Cards clicáveis que filtram a tabela por categoria, barra de participação visual no faturamento e distinção clara entre atendimentos avulsos e clube.
+  * **Aba 3 (Pacotes & Planos):** Tabela detalhada de atendimentos dos membros do clube, rateio do pote e assinaturas ativas.
+  * **Aba 4 (Serviços Extras):** Busca rápida por cliente ou procedimento extra e tabela nominal dos clientes.
+  * **Aba 5 (Produtos):** Cards de faturamento de varejo, comissão separada com metas e tabela de itens vendidos com clientes compradores.
+  * **Aba 6 (Extrato):** Busca rápida por cliente/serviço e filtro por tipo de lançamento (Serviço, Produto, Clube, Extra).
+
+---
+
 ## 1. Módulo de Metas, Comissões e Bonificações Progressivas Individuais
 
 ### 1.1 Objetivo e Regras de Negócio Implementadas
