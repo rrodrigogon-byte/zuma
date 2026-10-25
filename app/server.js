@@ -4762,6 +4762,9 @@ app.get('/api/admin/barbearia/captacao/clientes/:id/indicacao', (req, res) => {
     res.json({ ok: true, ...codigo, link: `/agendar/${slug}?indicacao=${codigo.codigo}` });
   } catch (error) { respostaCaptacao(res, error); }
 });
+app.post('/api/admin/barbearia/captacao/perfil-cliente', (req,res)=>{
+  try {res.json({ok:true,...captacaoKytto.perfilDoTelefone(legacyEmpresaId(req),req.body?.telefone)});} catch(error){respostaCaptacao(res,error);}
+});
 app.get('/api/admin/barbearia/captacao/clube', (req, res) => {
   try { res.json({ ok: true, saude: captacaoKytto.saudeClube(legacyEmpresaId(req)), candidatos: captacaoKytto.candidatosAoClube(legacyEmpresaId(req), { dias: req.query?.dias }) }); } catch (error) { respostaCaptacao(res, error); }
 });
@@ -4923,7 +4926,7 @@ function payloadComandaBarbearia(req) {
 
 // Itens da comanda vindos da tela: produtos da loja são conferidos no catálogo
 // da loja (preço e estoque do servidor) e serviços recebem o plano do cliente.
-async function prepararItensComanda(req, { clienteId, itens, comandaId = '' }) {
+async function prepararItensComanda(req, { clienteId, itens, comandaId = '', agendamentoId = '' }) {
   const empresaId = legacyEmpresaId(req);
   const limpos = comandaPlanoKytto.limparItensRecebidos(itens);
   let contextoLoja = null;
@@ -4932,7 +4935,7 @@ async function prepararItensComanda(req, { clienteId, itens, comandaId = '' }) {
     contextoLoja ||= await requireCommercePermission(req, 'catalog.read');
     item.itemLoja = await obterProdutoLoja(contextoLoja, item.variantId || item.lojaVarianteId);
   }
-  return comandaPlanoKytto.aplicarPlanoAosItens(empresaId, { clienteId, itens: limpos, comandaId });
+  return comandaPlanoKytto.aplicarPlanoAosItens(empresaId, { clienteId, itens: limpos, comandaId, agendamentoId });
 }
 
 // Falha de infraestrutura (banco da loja fora do ar, SQLSTATE, rede): não expõe detalhe técnico.
@@ -5041,7 +5044,7 @@ app.post('/api/admin/barbearia/comandas', async (req, res) => {
     body.chaveIdempotencia = req.get('Idempotency-Key') || body.chaveIdempotencia || body.chave_idempotencia;
     let avisos = [];
     if (Array.isArray(body.itens)) {
-      const preparo = await prepararItensComanda(req, { clienteId: body.clienteId, itens: body.itens });
+      const preparo = await prepararItensComanda(req, { clienteId: body.clienteId, itens: body.itens, agendamentoId:body.agendamentoId });
       body.itens = preparo.itens;
       avisos = preparo.avisos;
     }
@@ -5061,7 +5064,7 @@ app.post('/api/admin/barbearia/comandas/:id/itens', async (req, res) => {
     const atual = comandaBarbeariaDaSessao(req, req.params.id);
     if (!atual) return res.status(404).json({ error: 'Comanda não encontrada na empresa/unidade ativa.' });
     const itens = Array.isArray(req.body?.itens) ? req.body.itens : [req.body || {}];
-    const preparo = await prepararItensComanda(req, { clienteId: atual.clienteId, itens, comandaId: atual.id });
+    const preparo = await prepararItensComanda(req, { clienteId: atual.clienteId, itens, comandaId: atual.id, agendamentoId:atual.agendamentoId });
     const comanda = barbeariaErpKytto.adicionarItensComandaBarbearia(legacyEmpresaId(req), req.params.id, preparo.itens);
     res.status(201).json({ ok: true, comanda, avisos: preparo.avisos });
   } catch (error) { erroComanda(res, error); }

@@ -1,3 +1,4 @@
+import PerfilPacoteTelefone from './PerfilPacoteTelefone'
 // Painéis de captação e retenção da barbearia (onda 1): retorno previsto,
 // lista de espera, indicações, saúde do clube, ocupação/metas por barbeiro e NPS.
 // Todos leem /api/admin/barbearia/captacao/* da empresa da sessão.
@@ -517,7 +518,7 @@ export function IndicacoesPanel({ clientes = [] }) {
   </div>
 }
 
-const ALERTAS = { inadimplente: ['Pagamento em atraso', 'critico'], sem_pagamento: ['Sem pagamento confirmado', 'alerta'], sem_uso_risco_cancelamento: ['Sem uso: risco de cancelar', 'alerta'], uso_acima_da_mensalidade: ['Uso acima da mensalidade', 'alerta'] }
+const ALERTAS = { inadimplente: ['Pacote vencido / renovação pendente', 'critico'], sem_pagamento: ['Sem pagamento confirmado', 'alerta'], sem_uso_risco_cancelamento: ['Sem uso: risco de cancelar', 'alerta'], uso_acima_da_mensalidade: ['Uso acima da mensalidade', 'alerta'] }
 
 export function ClubeSaudePanel() {
   const { toast } = useToast()
@@ -526,12 +527,13 @@ export function ClubeSaudePanel() {
   async function registrarPagamento(item) {
     if (!window.confirm(`Confirmar o recebimento de ${fmtR(item.mensalidade)} de ${item.clienteNome} para este ciclo?`)) return
     setPagando(item.assinaturaId)
-    try { await api.post(`/api/admin/barbearia/captacao/assinaturas/${encodeURIComponent(item.assinaturaId)}/pagamentos`, { confirmado: true, valor: item.mensalidade, meio: 'pix' }); toast('Pagamento do ciclo registrado.', 'success'); carregar() } catch (e) { toast(e.message, 'error') } finally { setPagando('') }
+    try { await api.post(`/api/admin/barbearia/captacao/assinaturas/${encodeURIComponent(item.assinaturaId)}/pagamentos`, { confirmado: true, valor: item.mensalidade, meio: 'pix', referencia:item.referenciaRenovacao, periodoInicio:item.pagoAte || item.inicio }); toast('Pagamento do ciclo registrado.', 'success'); carregar() } catch (e) { toast(e.message, 'error') } finally { setPagando('') }
   }
   if (carregando || erro) return <div style={card}><Estado carregando={carregando} erro={erro} onRetry={carregar} /></div>
   const saude = dados?.saude || {}
   const candidatos = dados?.candidatos?.candidatos || []
   return <div style={{ display: 'grid', gap: 16 }}>
+    <PerfilPacoteTelefone />
     <div style={card}>
       <h2 style={h2}>Saúde do clube de assinatura</h2>
       <p style={sub}>Uso de cada assinante contra a mensalidade. O uso é descontado quando o atendimento do assinante é concluído; inadimplente não consome o plano.</p>
@@ -546,11 +548,11 @@ export function ClubeSaudePanel() {
     <div style={card}>
       <strong>Assinantes</strong>
       {(saude.itens || []).length === 0 ? <div style={empty}>Nenhuma assinatura ativa. Crie um plano em Planos e assinaturas.</div> : <div style={{ overflowX: 'auto' }}><table style={{ ...table, marginTop: 10 }}>
-        <thead><tr><th style={th}>Cliente</th><th style={th}>Plano</th><th style={th}>Uso no ciclo</th><th style={th}>Valor avulso usado</th><th style={th}>Margem do ciclo</th><th style={th}>Alertas</th><th style={th} /></tr></thead>
+        <thead><tr><th style={th}>Cliente</th><th style={th}>Plano</th><th style={th}>Vencimento / renovação</th><th style={th}>Uso no ciclo</th><th style={th}>Valor avulso usado</th><th style={th}>Margem do ciclo</th><th style={th}>Alertas</th><th style={th} /></tr></thead>
         <tbody>{saude.itens.map((item) => <tr key={item.assinaturaId}>
           <td style={td}><strong>{item.clienteNome}</strong></td>
           <td style={td}>{item.plano}<div style={{ color: 'var(--muted)', fontSize: 12 }}>{fmtR(item.mensalidade)}</div></td>
-          <td style={td}>{item.usosNoCiclo} de {item.limiteNoCiclo}</td>
+          <td style={td}>{item.pagoAte ? dataBR(item.pagoAte) : 'Pagamento pendente'}<div style={{fontSize:12,color:'var(--muted)'}}>{item.regraRenovacao==='aniversario'?'Aniversário da contratação':'Período em dias'}</div></td><td style={td}>{item.usosNoCiclo} de {item.limiteNoCiclo}</td>
           <td style={td}>{fmtR(item.valorAvulsoConsumido)}</td>
           <td style={{ ...td, color: item.margemCiclo < 0 ? '#e05c5c' : undefined, fontWeight: 700 }}>{fmtR(item.margemCiclo)}</td>
           <td style={td}><div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>{item.alertas.length ? item.alertas.map((alerta) => <Pill key={alerta} tom={(ALERTAS[alerta] || [])[1]}>{(ALERTAS[alerta] || [alerta])[0]}</Pill>) : <Pill tom="bom">Saudável</Pill>}</div></td>

@@ -1,3 +1,4 @@
+import { subscriptionCycle } from './core/subscription-calendar.js';
 // ============================================================================
 // CAPTAÇÃO E RETENÇÃO DA BARBEARIA (onda 1)
 // Tudo aqui se apoia na MESMA agenda da barbearia (barbearia-erp-kytto.js),
@@ -893,14 +894,7 @@ function controleAssinatura(empresaId, assinaturaId) {
   return controle;
 }
 
-function cicloAtual(assinatura, plano, ms) {
-  const inicio = new Date(assinatura.inicio).valueOf();
-  const dias = Math.max(1, numero(plano?.validadeDias, 30));
-  if (!Number.isFinite(inicio) || ms < inicio) return { indice: 0, inicio: Number.isFinite(inicio) ? inicio : ms, fim: (Number.isFinite(inicio) ? inicio : ms) + dias * DIA_MS };
-  const indice = Math.floor((ms - inicio) / (dias * DIA_MS));
-  const comeco = inicio + indice * dias * DIA_MS;
-  return { indice, inicio: comeco, fim: comeco + dias * DIA_MS };
-}
+function cicloAtual(assinatura, plano, ms) { return subscriptionCycle(assinatura,plano,ms); }
 
 /**
  * Até quando a assinatura está paga. Sem pagamento registrado vale o 1º ciclo
@@ -910,15 +904,17 @@ function pagoAteMs(assinatura, plano, controle) {
   if (controle.pagoAte) return new Date(controle.pagoAte).valueOf();
   const inicio = new Date(assinatura.inicio).valueOf();
   if (!Number.isFinite(inicio)) return null;
-  return assinatura.pagamentoConfirmado ? inicio + Math.max(1, numero(plano?.validadeDias, 30)) * DIA_MS : null;
+  return assinatura.pagamentoConfirmado ? cicloAtual(assinatura,plano,inicio).fim : null;
 }
 
 function situacaoPagamento(empresaId, assinatura, plano, controle, ms) {
   if (assinatura.status !== 'ativa') return assinatura.status;
-  const carencia = captacao(empresaId).configuracao.carenciaInadimplenciaDias * DIA_MS;
+  if (ms < new Date(assinatura.inicio).valueOf()) return 'aguardando_inicio';
+  if (assinatura.fim && ms >= new Date(assinatura.fim).valueOf()) return 'encerrada';
+  const carencia = plano?.regraRenovacao === 'aniversario' ? 0 : captacao(empresaId).configuracao.carenciaInadimplenciaDias * DIA_MS;
   const pagoAte = pagoAteMs(assinatura, plano, controle);
   if (pagoAte === null) return 'aguardando_pagamento';
-  return ms <= pagoAte + carencia ? 'em_dia' : 'inadimplente';
+  return (plano?.regraRenovacao === 'aniversario' ? ms < pagoAte : ms <= pagoAte + carencia) ? 'em_dia' : 'inadimplente';
 }
 
 /** Usos e pagamentos completos de uma assinatura (base da comissão sobre plano). */
@@ -930,7 +926,8 @@ export function movimentosAssinatura(empresaId, assinaturaId) {
 export function resumoAssinatura(empresaId, assinaturaId, opcoes = {}) {
   const assinatura = barbearia.listarAssinaturas(empresaId).find((item) => item.id === String(assinaturaId));
   if (!assinatura) return null;
-  const plano = barbearia.listarPlanos(empresaId, { incluirInativos: true }).find((item) => item.id === assinatura.planoId) || null;
+  const catalogo = barbearia.listarPlanos(empresaId, { incluirInativos: true }).find((item) => item.id === assinatura.planoId) || null;
+  const plano = assinatura.condicoesContratadas ? {...catalogo,...assinatura.condicoesContratadas} : catalogo;
   const controle = controleAssinatura(empresaId, assinatura.id);
   const ms = agoraMs(opcoes);
   const ciclo = cicloAtual(assinatura, plano, ms);
@@ -941,6 +938,7 @@ export function resumoAssinatura(empresaId, assinaturaId, opcoes = {}) {
     plano,
     ciclo: { indice: ciclo.indice, inicio: iso(ciclo.inicio), fim: iso(ciclo.fim) },
     usosNoCiclo: usosCiclo.length,
+    usosDoCiclo: usosCiclo.map(uso=>({...uso})),
     limiteNoCiclo: limite,
     sessoesRestantes: Math.max(0, limite - usosCiclo.length),
     situacaoPagamento: situacaoPagamento(empresaId, assinatura, plano, controle, ms),
@@ -968,7 +966,8 @@ export function registrarPagamentoAssinatura(empresaId, assinaturaId, dados = {}
   const referencia = texto(dados.referencia, 120) || `${resumo.assinatura.id}:ate:${iso(base).slice(0, 10)}`;
   const repetido = controle.pagamentos.find((item) => item.referencia === referencia);
   if (repetido) return { ...resumoAssinatura(empresaId, assinaturaId, opcoes), repetido: true };
-  controle.pagoAte = iso(base + dias * DIA_MS);
+  if (dados.periodoInicio && new Date(dados.periodoInicio).valueOf() !== base) throw new CaptacaoError('O ciclo já foi atualizado. Recarregue antes de registrar outro pagamento.', 'CICLO_ATUALIZADO', 409);
+  controle.pagoAte = iso(resumo.plano?.regraRenovacao === 'aniversario' ? cicloAtual(resumo.assinatura,resumo.plano,base).fim : base + dias * DIA_MS);
   controle.pagamentos.push({ id: novoId('asspag'), valor, meio: texto(dados.meio, 40) || 'pix', referencia, periodoAte: controle.pagoAte, registradoEm: iso(agoraMs(opcoes)), responsavel: texto(dados.usuario, 120) || null });
   controle.pagamentos = controle.pagamentos.slice(-120);
   save();
@@ -979,15 +978,13 @@ export function registrarPagamentoAssinatura(empresaId, assinaturaId, dados = {}
 export function assinaturaQueCobre(empresaId, { clienteId, clienteTelefone, servicoId } = {}, opcoes = {}) {
   const chave = telefoneChave(clienteTelefone);
   const clientes = clienteId ? null : (chave ? clientesKytto.listarClientes(String(empresaId)).filter((item) => telefoneChave(item.telefone) === chave).map((item) => item.id) : []);
+  if (!clienteId && clientes.length !== 1) return null;
   const candidatas = barbearia.listarAssinaturas(empresaId, { status: 'ativa' })
     .filter((item) => (clienteId ? item.clienteId === String(clienteId) : clientes.includes(item.clienteId)));
-  for (const assinatura of candidatas) {
-    const resumo = resumoAssinatura(empresaId, assinatura.id, opcoes);
-    const servicos = resumo.plano?.servicosIds || [];
-    if (servicos.length && !servicos.includes(String(servicoId))) continue;
-    return resumo;
-  }
-  return null;
+  const resumos=candidatas.map(assinatura=>resumoAssinatura(empresaId,assinatura.id,opcoes)).filter(resumo=>{
+    const servicos=resumo.plano?.servicosIds||[];return !servicos.length||servicos.includes(String(servicoId));
+  });
+  return resumos.find(r=>r.situacaoPagamento==='em_dia'&&r.sessoesRestantes>0)||resumos[0]||null;
 }
 
 export function registrarUsoAssinatura(empresaId, assinaturaId, dados = {}, opcoes = {}) {
@@ -1005,7 +1002,8 @@ export function registrarUsoAssinatura(empresaId, assinaturaId, dados = {}, opco
     const repetido = controle.usos.find((uso) => uso.agendamentoId === agendamentoId);
     if (repetido) return { ...resumoAssinatura(empresaId, assinaturaId, opcoes), repetido: true };
   }
-  if (resumo.sessoesRestantes <= 0) throw new CaptacaoError('O plano já usou todas as sessões deste ciclo.', 'LIMITE_DO_CICLO', 409);
+  if (resumo.situacaoPagamento !== 'em_dia') throw new CaptacaoError('O pacote não está disponível nesta data. Verifique o início e o vencimento.', 'ASSINATURA_FORA_DA_VALIDADE',409);
+  if (resumo.sessoesRestantes <= reservasAssinatura(empresaId,resumo.assinatura.id,resumo,{ignorarAgendamentoId:dados.agendamentoId,ignorarComandaId:dados.comandaId})) throw new CaptacaoError('O plano já usou ou reservou todas as sessões deste ciclo.', 'LIMITE_DO_CICLO', 409);
   const servico = barbearia.listarServicos(empresaId, { incluirInativos: true }).find((item) => item.id === servicoId);
   controle.usos.push({
     id: novoId('assuso'),
@@ -1032,7 +1030,7 @@ export function registrarUsoAssinatura(empresaId, assinaturaId, dados = {}, opco
 export function consumirAssinaturaNaConclusao(empresaId, agendamento = {}, opcoes = {}) {
   if (agendamento.status !== 'concluido') return null;
   try {
-    const resumo = assinaturaQueCobre(empresaId, agendamento, opcoes);
+    const resumo = agendamento.assinaturaId ? resumoAssinatura(empresaId,agendamento.assinaturaId,opcoes) : assinaturaQueCobre(empresaId, agendamento, opcoes);
     if (!resumo || resumo.situacaoPagamento !== 'em_dia' || resumo.sessoesRestantes <= 0) return null;
     return registrarUsoAssinatura(empresaId, resumo.assinatura.id, { servicoId: agendamento.servicoId, agendamentoId: agendamento.id }, opcoes);
   } catch (_) {
@@ -1042,6 +1040,7 @@ export function consumirAssinaturaNaConclusao(empresaId, agendamento = {}, opcoe
 
 function precoMensal(plano) {
   const preco = Number(plano?.preco || 0);
+  if (plano?.regraRenovacao==='aniversario') return Number((preco/(plano.ciclo==='anual'?12:plano.ciclo==='trimestral'?3:1)).toFixed(2));
   const dias = Math.max(1, numero(plano?.validadeDias, 30));
   return Number((preco * 30 / dias).toFixed(2));
 }
@@ -1051,7 +1050,7 @@ export function saudeClube(empresaId, opcoes = {}) {
   const assinaturas = barbearia.listarAssinaturas(empresaId).filter((item) => ['ativa', 'pausada'].includes(item.status));
   const itens = assinaturas.map((assinatura) => {
     const resumo = resumoAssinatura(empresaId, assinatura.id, opcoes);
-    const usosCiclo = (resumo.usos || []).filter((uso) => uso.ciclo === resumo.ciclo.indice);
+    const usosCiclo = resumo.usosDoCiclo;
     const valorAvulso = usosCiclo.reduce((soma, uso) => soma + Number(uso.valorAvulso || 0), 0);
     const mensalidade = Number(resumo.plano?.preco || 0);
     const decorrido = (ms - new Date(resumo.ciclo.inicio).valueOf()) / Math.max(1, new Date(resumo.ciclo.fim).valueOf() - new Date(resumo.ciclo.inicio).valueOf());
@@ -1073,6 +1072,10 @@ export function saudeClube(empresaId, opcoes = {}) {
       valorAvulsoConsumido: Number(valorAvulso.toFixed(2)),
       margemCiclo: Number((mensalidade - valorAvulso).toFixed(2)),
       pagoAte: resumo.pagoAte,
+      inicio: assinatura.inicio,
+      ciclo: resumo.ciclo,
+      regraRenovacao: resumo.plano?.regraRenovacao || 'dias',
+      referenciaRenovacao: `${assinatura.id}:ate:${resumo.pagoAte || assinatura.inicio}`,
       alertas,
     };
   });
@@ -1080,7 +1083,7 @@ export function saudeClube(empresaId, opcoes = {}) {
   const mrr = assinaturas
     .filter((item) => item.status === 'ativa')
     .reduce((soma, item) => {
-      const plano = barbearia.listarPlanos(empresaId, { incluirInativos: true }).find((p) => p.id === item.planoId);
+      const plano = resumoAssinatura(empresaId,item.id,opcoes)?.plano;
       return soma + precoMensal(plano);
     }, 0);
   return {
@@ -2146,24 +2149,40 @@ function agendamentosConcluidosDoTelefone(empresaId, telefone, { desde = 0 } = {
 }
 
 /** Plano do próprio cliente (pedido por ele): nome, saldo do ciclo e validade. */
-export function planoDoTelefone(empresaId, telefone, opcoes = {}) {
+export function perfilDoTelefone(empresaId, telefone, opcoes = {}) {
   const chave = telefoneChave(telefone);
-  if (!chave) return null;
-  const clientes = clientesKytto.listarClientes(String(empresaId)).filter((item) => telefoneChave(item.telefone) === chave).map((item) => item.id);
-  const assinatura = barbearia.listarAssinaturas(empresaId)
-    .find((item) => clientes.includes(item.clienteId) && ['ativa', 'pausada'].includes(item.status));
-  if (!assinatura) return null;
-  const resumo = resumoAssinatura(empresaId, assinatura.id, opcoes);
-  return {
-    plano: resumo.plano?.nome || 'Plano',
-    status: assinatura.status,
-    sessoesNoCiclo: resumo.limiteNoCiclo,
-    usadasNoCiclo: resumo.usosNoCiclo,
-    restantes: resumo.sessoesRestantes,
-    cicloTermina: dataLocal(new Date(resumo.ciclo.fim).valueOf()),
-    pagamentoEmDia: resumo.situacaoPagamento === 'em_dia',
-    servicosIncluidos: (resumo.plano?.servicosIds || []).map((id) => barbearia.listarServicos(empresaId, { incluirInativos: true }).find((s) => s.id === id)?.nome).filter(Boolean),
-  };
+  if (!chave) return {perfil:'telefone_invalido',clienteEncontrado:false,pacotes:[]};
+  const clientes = clientesKytto.listarClientes(String(empresaId)).filter(item=>telefoneChave(item.telefone)===chave && !item.anonimizadoEm);
+  if (clientes.length > 1) return {perfil:'cadastro_ambiguo',clienteEncontrado:false,pacotes:[],orientacao:'A equipe precisa conferir os cadastros deste telefone antes de informar benefícios.'};
+  const cliente = clientes[0];
+  const atendimentos=agendamentosConcluidosDoTelefone(empresaId,telefone);
+  const comandas=cliente ? barbearia.listarComandasBarbearia(empresaId).filter(c=>c.clienteId===String(cliente.id)&&['paga','em_conta'].includes(c.status)) : [];
+  const historico=cliente ? barbearia.listarHistoricoAtendimentos(empresaId,{clienteId:cliente.id}).filter(a=>a.status==='concluido') : [];
+  const hoje=dataLocal(agoraMs(opcoes));
+  const dias=new Set([...atendimentos,...comandas,...historico].map(a=>{
+    const data=a.dataAgenda||a.dataHora||a.fechadaEm||a.criadoEm;
+    if(!data)return '';return /^\d{4}-\d{2}-\d{2}$/.test(String(data)) ? data : Number.isFinite(new Date(data).valueOf()) ? dataLocal(new Date(data).valueOf()) : '';
+  }).filter(d=>d&&d<=hoje));
+  const visitas = dias.size;
+  const pacotes = cliente ? barbearia.listarAssinaturas(empresaId).filter(item=>item.clienteId===String(cliente.id)).map(item=>{
+    const r=resumoAssinatura(empresaId,item.id,opcoes);
+    return {assinaturaId:item.id,plano:r.plano?.nome || 'Pacote',status:item.status,situacao:r.situacaoPagamento,
+      sessoesNoCiclo:r.limiteNoCiclo,usadasNoCiclo:r.usosNoCiclo,restantes:r.sessoesRestantes,pagoAte:r.pagoAte,
+      proximaRenovacao:r.pagoAte || r.ciclo.inicio,regraRenovacao:r.plano?.regraRenovacao || 'dias',
+      utilizavel:item.status==='ativa'&&r.situacaoPagamento==='em_dia'&&r.sessoesRestantes>0,
+      servicosIncluidos:(r.plano?.servicosIds||[]).map(id=>barbearia.listarServicos(empresaId,{incluirInativos:true}).find(s=>s.id===id)?.nome).filter(Boolean)};
+  }) : [];
+  const ativo=pacotes.find(p=>p.utilizavel),vencido=pacotes.find(p=>p.status==='ativa'&&['inadimplente','encerrada'].includes(p.situacao));
+  const perfil=ativo?'pacote_ativo':vencido?'pacote_vencido':pacotes.some(p=>p.status==='pausada')?'pacote_pausado':pacotes.some(p=>p.status==='ativa'&&p.situacao==='em_dia')?'pacote_esgotado':pacotes.some(p=>p.status==='ativa'||p.status==='pendente_ativacao')?'pacote_pendente':visitas>=2?'recorrente':cliente||visitas?'avulso':'novo';
+  return {perfil,clienteEncontrado:Boolean(cliente),visitasConhecidas:visitas,pacotes,
+    orientacao:perfil==='pacote_vencido'?'Renove com a equipe para voltar a usar benefícios e agendamentos pelo pacote.':perfil==='pacote_esgotado'?'As sessões deste ciclo foram utilizadas. Consulte a equipe sobre renovação ou atendimento avulso.':null};
+}
+
+export function planoDoTelefone(empresaId, telefone, opcoes = {}) {
+  const perfil=perfilDoTelefone(empresaId,telefone,opcoes);
+  const p=perfil.pacotes.find(item=>item.utilizavel)||perfil.pacotes.find(item=>['ativa','pausada'].includes(item.status));
+  if (!p) return null;
+  return {...p,perfil:perfil.perfil,pagamentoEmDia:p.situacao==='em_dia',cicloTermina:p.proximaRenovacao ? dataLocal(new Date(p.proximaRenovacao).valueOf()):null,orientacao:perfil.orientacao};
 }
 
 /**
@@ -2173,7 +2192,8 @@ export function planoDoTelefone(empresaId, telefone, opcoes = {}) {
  */
 export function clubeParaTelefone(empresaId, telefone, { dias = 60 } = {}, opcoes = {}) {
   const ms = agoraMs(opcoes);
-  if (planoDoTelefone(empresaId, telefone, opcoes)) return { elegivel: false, motivo: 'ja_assinante' };
+  const existente=planoDoTelefone(empresaId,telefone,opcoes);
+  if(existente) return {elegivel:false,motivo:existente.pagamentoEmDia ? 'ja_assinante' : 'renovacao_pendente'};
   const visitas = agendamentosConcluidosDoTelefone(empresaId, telefone, { desde: ms - dias * DIA_MS });
   const planos = barbearia.listarPlanos(empresaId).filter((plano) => plano.preco > 0);
   if (!planos.length) return { elegivel: false, motivo: 'sem_plano' };
@@ -2531,4 +2551,29 @@ export function minhaConta(empresaId, { codigo, telefone, lojaId = '' } = {}, op
       try { return cliente ? codigoIndicacaoCliente(empresaId, cliente.id).codigo : null; } catch (_) { return null; }
     })(),
   };
+}
+
+/** Valida explicitamente uma reserva pelo pacote, inclusive na data futura. */
+export function validarAgendamentoComPlano(empresaId, agendamento, opcoes={}) {
+  const assinatura=assinaturaQueCobre(empresaId,agendamento,{...opcoes,agora:new Date(agendamento.dataHora)});
+  if(!assinatura)throw new CaptacaoError('Cliente sem pacote elegível para este serviço.','PLANO_INDISPONIVEL',409);
+  const futuro=resumoAssinatura(empresaId,assinatura.assinatura.id,{...opcoes,agora:new Date(agendamento.dataHora)});
+  if(resumoAssinatura(empresaId,assinatura.assinatura.id,opcoes).situacaoPagamento!=='em_dia'||futuro.situacaoPagamento!=='em_dia'||assinatura.assinatura.status!=='ativa')throw new CaptacaoError('Renove o pacote para agendar nesta data. Você pode optar por um atendimento avulso.','PLANO_VENCIDO',409);
+  const reservas=reservasAssinatura(empresaId,assinatura.assinatura.id,futuro,opcoes);
+  if(futuro.sessoesRestantes<=reservas)throw new CaptacaoError('Todas as sessões disponíveis deste ciclo já foram usadas ou reservadas.','LIMITE_DO_CICLO',409);
+  return assinatura.assinatura.id;
+}
+
+/** Reservas de agenda e comanda compartilham o mesmo saldo, sem contar a visita duas vezes. */
+export function reservasAssinatura(empresaId, assinaturaId, resumo, opcoes={}) {
+  const consumidos=new Set((resumo.usosDoCiclo||[]).map(u=>u.agendamentoId));
+  const inicio=new Date(resumo.ciclo.inicio).valueOf(),fim=new Date(resumo.ciclo.fim).valueOf();
+  const ids=new Set(barbearia.listarAgendamentos(empresaId).filter(a=>a.id!==opcoes.ignorarAgendamentoId&&a.assinaturaId===assinaturaId&&['agendado','confirmado','em_atendimento'].includes(a.status)&&!consumidos.has(a.id)&&new Date(a.dataHora).valueOf()>=inicio&&new Date(a.dataHora).valueOf()<fim).map(a=>a.id));
+  let total=ids.size;const pareados=new Set();
+  for(const item of barbearia.itensPlanoNaoConsumidos(empresaId)){
+    if(item.assinaturaId!==assinaturaId||item.comandaId===opcoes.ignorarComandaId)continue;
+    if(item.agendamentoId&&ids.has(item.agendamentoId)&&!pareados.has(item.agendamentoId)){pareados.add(item.agendamentoId);continue;}
+    total++;
+  }
+  return total;
 }

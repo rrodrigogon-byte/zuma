@@ -882,3 +882,15 @@ test('analisarProfissionalProjecao gera diagnostico de tendencia e plano de acao
   assert.equal(itemBruno.meta.receita, 8000);
   assert.equal(itemBruno.meta.planoAcao, 'Plano customizado pelo gestor para Bruno focar em barba terapia.');
 });
+
+test('IA consulta pacote vencido pelo telefone da conversa sem oferecer benefícios ativos',async()=>{
+ const {corte}=montarBarbearia();
+ const cliente=clientes.criarCliente(EMPRESA,{nome:'Titular teste',telefone:'65988880111'});
+ const plano=barbearia.criarPlano(EMPRESA,{nome:'Pacote 8',preco:240,sessoesIncluidas:8,ciclo:'mensal',regraRenovacao:'aniversario',servicosIds:[corte.id]});
+ const assinatura=barbearia.criarAssinatura(EMPRESA,{clienteId:cliente.id,planoId:plano.id,inicio:'2020-01-10'});
+ barbearia.alterarStatusAssinatura(EMPRESA,assinatura.id,'ativa',{confirmadoSemCobranca:true,pagamentoConfirmado:true});
+ await comFonteBarbearia(async()=>{
+  const executor=tools.createWhatsappAiToolExecutor({...CONTEXTO_IA,phone:'5565988880111',customerText:'meu pacote venceu?'});
+  const resposta=await executor('consultar_meu_plano',{});assert.equal(resposta.assinante,true);assert.equal(resposta.plano.perfil,'pacote_vencido');assert.equal(resposta.plano.utilizavel,false);assert.match(resposta.instrucao,/não prometa benefícios/);
+ });
+});

@@ -330,6 +330,7 @@ export async function listServices(scope) {
       nome: item.nome,
       descricao: item.descricao || '',
       categoria: item.categoria || 'Geral',
+      grupoServico: item.grupoServico || 'nao_classificado',
       duracaoMinutos: Number(item.duracaoMinutos || 30),
       preco: Number(item.preco || 0),
       // A IA deve dizer "a partir de" ou "sob consulta" em vez de prometer valor fechado.
@@ -475,6 +476,7 @@ function criarNaAgendaDaBarbearia(scope, input = {}) {
       lojaId: scope.lojaId,
       observacoes: limpo(input.notes, 600),
       origem: 'whatsapp_ia',
+      usarPlano: input.usePlan===true,
       status: 'agendado',
       codigoConfirmacao: codigo,
     });

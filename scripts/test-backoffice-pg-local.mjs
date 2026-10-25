@@ -23,5 +23,7 @@ try {
     await run(['--test', 'app/core/commerce-operational-invites.pg.test.js'], { COMMERCE_OPERATIONAL_INVITE_TEST_DATABASE_URL: url.href });
     await run(['--test', 'app/core/account-password-reset.pg.test.js'], { PASSWORD_RESET_TEST_DATABASE_URL: url.href });
     await run(['--test', 'app/backoffice-ondas.e2e.pg.test.js'], { BACKOFFICE_E2E_DATABASE_URL: url.href });
+    // Volume de dezenas de conversas por segundo só na fixture; não altera limites de produção.
+    if(process.argv.includes('--ai')) await run(['--test','app/core/whatsapp-ai-cenarios.pg.test.js'],{WHATSAPP_SIM_PG_URL:url.href,WHATSAPP_AI_CHANNEL_HOURLY_LIMIT:'5000',WHATSAPP_AI_WEBHOOK_EVENTS_PER_MINUTE:'1000'});
   }
 } finally { await fixture.close(); }

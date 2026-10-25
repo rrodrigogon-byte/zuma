@@ -1,3 +1,6 @@
+import { serviceGroup } from './core/service-groups.js';
+import { validarAgendamentoComPlano } from './dino-captacao-kytto.js';
+import { subscriptionStart } from './core/subscription-calendar.js';
 import crypto from 'node:crypto';
 import { identificarCliente, indiceIdentidadeClientes } from './barbearia-identidade.js';
 import { canonizarRegistroAvec, historicoAvecVigente } from './dino-historico-avec.js';
@@ -657,6 +660,7 @@ function servicoNormalizado(dados = {}, anterior = {}) {
     nome: texto(dados.nome ?? anterior.nome, 120),
     descricao: texto(dados.descricao ?? anterior.descricao, 500),
     categoria: texto(dados.categoria ?? anterior.categoria, 80) || 'Geral',
+    grupoServico: ['convencionais','extras'].includes(dados.grupoServico ?? anterior.grupoServico) ? (dados.grupoServico ?? anterior.grupoServico) : 'nao_classificado',
     duracaoMinutos: duracao,
     intervaloRecomendacaoDias: Math.max(0, Math.min(3650, Math.round(numero(dados.intervaloRecomendacaoDias ?? dados.intervalo_recomendacao_dias ?? anterior.intervaloRecomendacaoDias, 0)))),
     preco,
@@ -777,6 +781,8 @@ function agendamentoNormalizado(dados = {}, anterior = {}, opcoes = {}) {
     status,
     observacoes: texto(dados.observacoes ?? anterior.observacoes, 600),
     origem: texto(dados.origem ?? anterior.origem, 40) || 'admin',
+    usarPlano: dados.usarPlano === true || (dados.usarPlano === undefined && anterior.usarPlano === true),
+    assinaturaId: dados.usarPlano === false ? null : (anterior.assinaturaId || null),
     codigoConfirmacao: texto(dados.codigoConfirmacao ?? dados.codigo_confirmacao ?? anterior.codigoConfirmacao, 20).toUpperCase(),
     meioPagamento: texto(anterior.meioPagamento, 40).toLowerCase(),
     valorRecebido: dinheiro(anterior.valorRecebido),
@@ -919,7 +925,8 @@ export function excluirProdutoRevenda(empresaId, produtoId) {
 export function listarServicos(empresaId, { incluirInativos = false } = {}) {
   return Object.values(estadoEmpresa(empresaId, false).servicos)
     .filter((item) => incluirInativos || item.ativo !== false)
-    .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+    .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
+    .map(item=>({...item,grupoServico:serviceGroup(item),grupoServicoSugerido:!item.grupoServico}));
 }
 
 function validarConsumoInternoServico(estado, empresaId, servico) {
@@ -1126,6 +1133,11 @@ export function chamarFila(empresaId, filaId, dados = {}) {
   return alterarStatusFila(empresaId, filaId, 'chamado', dados);
 }
 
+function condicoesDoPlano(plano) {
+  plano=planoNormalizado({},plano);
+  return {...Object.fromEntries(['nome','preco','ciclo','regraRenovacao','validadeDias','sessoesIncluidas','percentualPote','rateioPote','valorFixoPorUso'].map(key=>[key,plano[key]])),servicosIds:[...(plano.servicosIds||[])]};
+}
+
 function planoNormalizado(dados = {}, anterior = {}) {
   const ciclo = ['mensal', 'trimestral', 'anual'].includes(String(dados.ciclo ?? anterior.ciclo)) ? String(dados.ciclo ?? anterior.ciclo) : 'mensal';
   const servicosIds = Array.isArray(dados.servicosIds ?? dados.servicos_ids ?? anterior.servicosIds) ? [...new Set((dados.servicosIds ?? dados.servicos_ids ?? anterior.servicosIds).map((id) => texto(id, 100)).filter(Boolean))] : [];
@@ -1133,6 +1145,7 @@ function planoNormalizado(dados = {}, anterior = {}) {
     nome: texto(dados.nome ?? anterior.nome, 140),
     descricao: texto(dados.descricao ?? anterior.descricao, 500),
     ciclo,
+    regraRenovacao: ['aniversario','dias'].includes(dados.regraRenovacao ?? anterior.regraRenovacao) ? (dados.regraRenovacao ?? anterior.regraRenovacao) : 'dias',
     preco: dinheiro(dados.preco ?? anterior.preco),
     sessoesIncluidas: Math.max(1, Math.min(100, Math.round(numero(dados.sessoesIncluidas ?? dados.sessoes_incluidas ?? anterior.sessoesIncluidas, 1)))),
     validadeDias: Math.max(1, Math.min(730, Math.round(numero(dados.validadeDias ?? dados.validade_dias ?? anterior.validadeDias, ciclo === 'anual' ? 365 : ciclo === 'trimestral' ? 90 : 30)))),
@@ -1160,6 +1173,7 @@ export function criarPlano(empresaId, dados = {}) {
   const plano = planoNormalizado(dados);
   if (!plano.nome) throw new Error('Nome do plano é obrigatório.');
   if (plano.preco <= 0) throw new Error('Preço do plano deve ser positivo.');
+  if (plano.regraRenovacao==='aniversario'&&!plano.servicosIds.length) throw new Error('Selecione os serviços cobertos pelo pacote.');
   if (Object.values(estado.planos).some((item) => item.ativo !== false && item.nome.toLowerCase() === plano.nome.toLowerCase())) throw new Error('Já existe um plano ativo com este nome.');
   const servicoInvalido = plano.servicosIds.find((id) => !estado.servicos[id] || estado.servicos[id].ativo === false);
   if (servicoInvalido) throw new Error('O plano referencia um serviço inexistente ou inativo.');
@@ -1177,10 +1191,14 @@ export function atualizarPlano(empresaId, planoId, dados = {}) {
   if (somenteAlternarAtivo(atual, dados)) return { ...atual };
   const plano = planoNormalizado(dados, atual);
   if (!plano.nome || plano.preco <= 0) throw new Error('Nome e preço positivo são obrigatórios para o plano.');
+  if (plano.regraRenovacao==='aniversario'&&!plano.servicosIds.length) throw new Error('Selecione os serviços cobertos pelo pacote.');
   // Serviços que já estavam no plano podem ter sido desativados depois; só os novos precisam estar ativos.
   const jaNoPlano = new Set(atual.servicosIds || []);
   const servicoInvalido = plano.servicosIds.find((id) => !jaNoPlano.has(id) && (!estado.servicos[id] || estado.servicos[id].ativo === false));
   if (servicoInvalido) throw new Error('O plano referencia um serviço inexistente ou inativo.');
+  for(const assinatura of Object.values(estado.assinaturas||{})){
+    if(assinatura.planoId===atual.id&&!assinatura.condicoesContratadas) assinatura.condicoesContratadas=condicoesDoPlano(atual);
+  }
   Object.assign(atual, plano, { atualizadoEm: dataAtual() });
   restaurarSeReativado(atual, dados);
   save();
@@ -1214,16 +1232,34 @@ export function listarAssinaturas(empresaId, filtros = {}) {
     .map((item) => ({ ...item }));
 }
 
+function assinaturaHash(item) {
+  return crypto.createHash('sha256').update(JSON.stringify(['clienteId','clienteNome','planoId','inicio','fim','sessoesContratadas','observacoes'].map(k=>item[k]??null))).digest('hex');
+}
+
 export function criarAssinatura(empresaId, dados = {}) {
   const estado = estadoEmpresa(empresaId);
+  const chave=texto(dados.chaveIdempotencia,160);
+  const anterior=chave ? Object.values(estado.assinaturas).find(a=>a.chaveIdempotencia===chave) : null;
+  if(anterior){
+    const pedido=assinaturaNormalizada({...dados,inicio:dados.inicio??dados.inicioEm??anterior.inicio},{},anterior.condicoesContratadas||estado.planos[anterior.planoId]);
+    if(anterior.condicoesContratadas?.regraRenovacao==='aniversario')pedido.inicio=subscriptionStart(pedido.inicio);
+    if(assinaturaHash(pedido)!==anterior.solicitacaoHash)throw new Error('Esta solicitação já foi utilizada com dados diferentes. Recarregue o cadastro.');
+    return {...structuredClone(anterior),idempotente:true};
+  }
   const plano = estado.planos[String(dados.planoId ?? dados.plano_id)];
   if (!plano || plano.ativo === false) throw new Error('Plano ativo é obrigatório.');
   const assinatura = assinaturaNormalizada(dados, {}, plano);
+  if (plano.regraRenovacao === 'aniversario') assinatura.inicio = subscriptionStart(assinatura.inicio);
+  assinatura.condicoesContratadas = condicoesDoPlano(plano);
+  if(plano.regraRenovacao==='aniversario'){
+    const cliente=clientesKytto.obterCliente(empresaId,assinatura.clienteId);
+    if(!cliente||cliente.bloqueado||cliente.anonimizadoEm)throw new Error('Selecione um cliente ativo cadastrado nesta empresa.');
+  }
   if (!assinatura.clienteId && !assinatura.clienteNome) throw new Error('Informe o cliente da assinatura.');
   if (assinatura.status === 'ativa') throw new Error('A assinatura deve ser criada como pendente de ativação; a ativação é uma ação separada e sem cobrança automática.');
   const id = novoId('ass', estado.assinaturas);
   const agora = dataAtual();
-  estado.assinaturas[id] = { id, empresaId: String(empresaId), ...assinatura, criadoEm: agora, atualizadoEm: agora };
+  estado.assinaturas[id] = { id, empresaId: String(empresaId), ...assinatura, ...(chave?{chaveIdempotencia:chave,solicitacaoHash:assinaturaHash(assinatura)}:{}), criadoEm: agora, atualizadoEm: agora };
   save();
   return { ...estado.assinaturas[id] };
 }
@@ -2313,7 +2349,7 @@ export function itensPlanoNaoConsumidos(empresaId) {
   for (const comanda of Object.values(estado.comandas || {})) {
     if (comanda.empresaId !== String(empresaId) || comanda.status === 'cancelada') continue;
     for (const item of comanda.itens || []) {
-      if (item.coberturaPlano && !item.coberturaPlano.usoId) lista.push({ comandaId: comanda.id, status: comanda.status, itemId: item.id, assinaturaId: item.coberturaPlano.assinaturaId });
+      if (item.coberturaPlano && !item.coberturaPlano.usoId) lista.push({ comandaId: comanda.id, status: comanda.status, agendamentoId:comanda.agendamentoId, criadoEm:comanda.criadoEm, itemId: item.id, assinaturaId: item.coberturaPlano.assinaturaId });
     }
   }
   return lista;
@@ -2564,6 +2600,7 @@ export function criarAgendamento(empresaId, dados = {}, opcoes = {}) {
     if (opcoes.permitirEncaixe !== true) throw new Error('Horário indisponível para o profissional selecionado.');
     agendamento.encaixe = true;
   }
+  if(agendamento.usarPlano) agendamento.assinaturaId=validarAgendamentoComPlano(empresaId,agendamento,opcoes);
   const id = novoId('age', estado.agendamentos);
   const agora = dataAtual();
   estado.agendamentos[id] = { id, empresaId: String(empresaId), ...agendamento, criadoEm: agora, atualizadoEm: agora };
@@ -2596,6 +2633,7 @@ export function atualizarAgendamento(empresaId, agendamentoId, dados = {}, opcoe
   } else {
     agendamento.encaixe = false;
   }
+  if(agendamento.usarPlano) agendamento.assinaturaId=validarAgendamentoComPlano(empresaId,agendamento,{...opcoes,ignorarAgendamentoId:atual.id});
   const remarcado = ['dataHora', 'dataAgenda', 'profissionalId', 'servicoId'].some((campo) => String(antes[campo] || '') !== String(agendamento[campo] || ''));
   if (remarcado) {
     atual.historicoRemarcacoes ||= [];

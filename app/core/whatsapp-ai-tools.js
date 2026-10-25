@@ -25,7 +25,7 @@ import {
   confirmAttendance,
   noteDelay,
 } from './barbershop-agenda.js';
-import { clubeParaTelefone, entrarListaEspera, planoDoTelefone, sugestaoPosServico } from '../dino-captacao-kytto.js';
+import { clubeParaTelefone, entrarListaEspera, planoDoTelefone, perfilDoTelefone, validarAgendamentoComPlano, sugestaoPosServico } from '../dino-captacao-kytto.js';
 import { saldoCashback } from '../dino-cobranca-kytto.js';
 import * as barbeariaErp from '../barbearia-erp-kytto.js';
 import { actionTtlMinutes, isGenericCustomerName } from './whatsapp-ai-intents.js';
@@ -729,13 +729,20 @@ async function toolPrepareAppointment(context, args = {}) {
     customerName,
     customerPhone: scope.phone,
     notes: cleanText(args.notes, 500),
+    ...(args.usePlan===true ? {usePlan:true} : {}),
     ...(combo.length ? { combo } : {}),
   };
+  if (args.usePlan===true) {
+    if(await agendaSource(scope)!=='barbearia') throw new WhatsappAiToolError('Pacotes não estão disponíveis nesta agenda.','PLAN_UNAVAILABLE');
+    if(perfilDoTelefone(scope.empresaId,scope.phone).perfil==='cadastro_ambiguo') throw new WhatsappAiToolError('A equipe precisa conferir os cadastros deste telefone.','CUSTOMER_AMBIGUOUS');
+    if(combo.length) throw new WhatsappAiToolError('Para usar o pacote, confirme um procedimento por vez para conferir o saldo.','PLAN_SINGLE_SERVICE');
+    validarAgendamentoComPlano(scope.empresaId,{clienteTelefone:scope.phone,servicoId:serviceId,dataHora:`${date}T${time}:00-04:00`});
+  }
   const para = customerName ? ` para ${customerName}` : '';
   const summary = combo.length
     ? `${friendlyWhen(date, time)}${para}: ${partes.join(' + ')}, total R$ ${total.toFixed(2).replace('.', ',')}`
     : `${servicoComQuem}${para}, ${friendlyWhen(date, time)}, no valor de R$ ${availability.service.preco.toFixed(2).replace('.', ',')}`;
-  return savePreparedAction(scope, 'agendamento', request, summary);
+  return savePreparedAction(scope, 'agendamento', request, args.usePlan===true ? `${servicoComQuem}${para}, ${friendlyWhen(date,time)}, pelo pacote (saldo e validade revalidados na confirmação)` : summary);
 }
 
 function cartItemsFromArgs(rawItems) {
@@ -978,7 +985,8 @@ async function toolCaptureLead(context, args = {}) {
 async function toolCustomerProfile(context) {
   const scope = contextScope(context);
   const profile = await getWhatsappLeadProfile(scope);
-  return { ok: true, encontrado: Boolean(profile), cliente: profile || null };
+  const barbearia = await agendaSource(scope) === 'barbearia' ? perfilDoTelefone(scope.empresaId,scope.phone) : null;
+  return { ok: true, encontrado: Boolean(profile)||Boolean(barbearia?.clienteEncontrado), cliente: profile || null, ...(barbearia ? {relacionamentoBarbearia:sanitizeToolData(barbearia)} : {}) };
 }
 
 async function toolCustomerAppointments(context, args = {}) {
@@ -1099,7 +1107,7 @@ async function toolMyPlan(context) {
   const scope = await barbeariaScope(context);
   const plano = planoDoTelefone(scope.empresaId, scope.phone);
   if (!plano) return { ok: true, assinante: false, instrucao: 'O contato não tem plano ativo. Não ofereça o clube sem o cliente pedir ou sem propor_oportunidade.' };
-  return { ok: true, assinante: true, plano: sanitizeToolData(plano), instrucao: 'Informe o saldo e a validade com clareza. Não fale de cobrança nem cobre pelo WhatsApp; pagamento é com a equipe.' };
+  return { ok: true, assinante: true, plano: sanitizeToolData(plano), instrucao: 'Informe saldo, validade e situação reais. Se vencido, pausado, pendente ou esgotado, não prometa benefícios ou agendamento pelo pacote: oriente renovar ou falar com a equipe. Não cobre pelo WhatsApp nem confirme renovação sem pagamento registrado.' };
 }
 
 /** Catálogo público dos planos/clubes ativos (nome, preço, ciclo, sessões e serviços incluídos). */
@@ -1113,6 +1121,7 @@ async function toolPlans(context) {
     ciclo: plano.ciclo,
     sessoesIncluidas: plano.sessoesIncluidas,
     validadeDias: plano.validadeDias,
+    regraRenovacao: plano.regraRenovacao || 'dias',
     servicosIncluidos: (plano.servicosIds || []).map((id) => servicos.get(id)).filter(Boolean),
   }));
   if (!planos.length) return { ok: true, planos: [], instrucao: 'A unidade não tem planos ativos. Não invente planos nem valores.' };
@@ -1264,7 +1273,7 @@ export const WHATSAPP_AI_TOOL_DECLARATIONS = [
   { name: 'atualizar_consentimento_marketing', description: 'Registra ou revoga a autorização do cliente para receber promoções no WhatsApp. Para conceder, exige evidência da solicitação expressa.', parameters: { type: 'OBJECT', properties: { granted: { type: 'BOOLEAN' }, evidence: { type: 'STRING' } }, required: ['granted'] } },
   { name: 'listar_promocoes_ativas', description: 'Lista somente promoções ativas e vigentes da unidade. Nunca invente ofertas, valores ou cupons.', parameters: { type: 'OBJECT', properties: { limit: { type: 'INTEGER' } } } },
   { name: 'preparar_promocao_cliente', description: 'Prepara o envio de uma promoção ao cliente com opt-in. O envio só ocorre após CONFIRMAR.', parameters: { type: 'OBJECT', properties: { promotionId: { type: 'STRING' }, code: { type: 'STRING' }, message: { type: 'STRING' } }, required: ['promotionId', 'message'] } },
-  { name: 'preparar_agendamento', description: 'Prepara um agendamento para confirmação. Não grava o agendamento. Use o id retornado por listar_profissionais; na agenda da barbearia também é aceito "qualquer" quando o cliente não tem preferência. Vários serviços na mesma ida: passe os demais em extraServiceIds e eles são encaixados em sequência. Para outra pessoa (filho, amigo), use o nome DELA em customerName. customerName é o nome real (nunca "Cliente"): se não souber, pergunte antes.', parameters: { type: 'OBJECT', properties: { serviceId: { type: 'STRING' }, professionalId: { type: 'STRING' }, date: { type: 'STRING' }, time: { type: 'STRING' }, customerName: { type: 'STRING', description: 'Nome real da pessoa atendida' }, notes: { type: 'STRING' }, extraServiceIds: { type: 'ARRAY', items: { type: 'STRING' }, description: 'até 3 serviços seguidos na mesma visita' } }, required: ['serviceId', 'professionalId', 'date', 'time', 'customerName'] } },
+  { name: 'preparar_agendamento', description: 'Prepara um agendamento para confirmação. Não grava o agendamento. Use o id retornado por listar_profissionais; na agenda da barbearia também é aceito "qualquer" quando o cliente não tem preferência. Vários serviços na mesma ida: passe os demais em extraServiceIds e eles são encaixados em sequência. Para outra pessoa (filho, amigo), use o nome DELA em customerName. customerName é o nome real (nunca "Cliente"): se não souber, pergunte antes.', parameters: { type: 'OBJECT', properties: { serviceId: { type: 'STRING' }, professionalId: { type: 'STRING' }, date: { type: 'STRING' }, time: { type: 'STRING' }, customerName: { type: 'STRING', description: 'Nome real da pessoa atendida' }, notes: { type: 'STRING' }, usePlan: { type: 'BOOLEAN', description: 'Somente quando o cliente pedir usar seu pacote. Exige saldo e validade, um procedimento por confirmação.' }, extraServiceIds: { type: 'ARRAY', items: { type: 'STRING' }, description: 'até 3 serviços seguidos na mesma visita' } }, required: ['serviceId', 'professionalId', 'date', 'time', 'customerName'] } },
   { name: 'preparar_remarcacao', description: 'Prepara a remarcação de um agendamento do cliente para confirmação.', parameters: { type: 'OBJECT', properties: { appointmentId: { type: 'STRING' }, date: { type: 'STRING' }, time: { type: 'STRING' } }, required: ['appointmentId', 'date', 'time'] } },
   { name: 'preparar_cancelamento', description: 'Prepara o cancelamento de um agendamento do cliente para confirmação.', parameters: { type: 'OBJECT', properties: { appointmentId: { type: 'STRING' } }, required: ['appointmentId'] } },
   { name: 'preparar_despesa', description: 'Prepara um lançamento de despesa PENDENTE a partir da nota ou recibo extraído da imagem desta conversa. Só use quando houver valor, data e confiança suficientes. Não paga, não confirma pagamento e exige SIM do responsável.', parameters: { type: 'OBJECT', properties: {} } },
