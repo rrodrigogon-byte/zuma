@@ -42,7 +42,7 @@ export async function resolveCommerceIdentity(req) {
          JOIN commerce_roles r ON r.id = m.role_id AND (r.empresa_id IS NULL OR r.empresa_id = m.empresa_id)
         WHERE u.id = $1 AND u.empresa_id = $2 AND u.ativo = true
           AND m.ativo = true AND (m.expires_at IS NULL OR m.expires_at > CURRENT_TIMESTAMP)
-          AND m.loja_id IS NULL AND r.codigo = 'store_admin'
+          AND m.loja_id IS NULL AND r.empresa_id IS NULL AND r.codigo IN ('store_admin', 'tenant_owner')
         LIMIT 1`,
       [user.id, empresaId],
     );
