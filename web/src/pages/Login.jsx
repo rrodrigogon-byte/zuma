@@ -131,7 +131,7 @@ export default function Login() {
             <button type="button" onClick={voltarLogin} style={{ ...linkStyle, marginBottom: 22 }}>← Voltar para o login</button>
             <div style={{ marginBottom: 24 }}>
               <h1 style={{ color: pal.ink, fontSize: '1.35rem', margin: '0 0 8px', fontWeight: 800 }}>Recuperar senha</h1>
-              <p style={{ color: '#5A6570', fontSize: '0.9rem', lineHeight: 1.55, margin: 0 }}>Registraremos seu pedido de redefinição. Esta tela não envia link nem altera a senha automaticamente.</p>
+              <p style={{ color: '#5A6570', fontSize: '0.9rem', lineHeight: 1.55, margin: 0 }}>Informe o e-mail do seu cadastro. Se a conta estiver ativa, enviaremos um link por contato@kytto.com.br, válido por 20 minutos. Sua senha só muda após a confirmação pelo link.</p>
             </div>
             {recuperacaoEnviada ? (
               <div role="status" style={{ background: pal.noticeBg, border: pal.noticeBorder, color: pal.noticeText, borderRadius: 12, padding: 16, lineHeight: 1.55, fontSize: '0.9rem' }}>
