@@ -1380,7 +1380,7 @@ if(process.env.COMMERCE_CORE_ENABLED === '1'){
 
   // Sincronização inicial em segundo plano de pedidos pendentes para contas a receber
   if (clubeDb) {
-    clubeDb.query(`SELECT id FROM empresas WHERE ativo = true`).then((res) => {
+    clubeDb.query(`SELECT id FROM empresas`).then((res) => {
       for (const row of res.rows || []) {
         a2Svc.sincronizarPedidosPendentes(clubeDb, row.id).catch((err) => console.warn('[a2] sync inicial:', err.message));
       }
