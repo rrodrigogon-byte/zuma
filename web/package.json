@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite --port 5173",
-    "build": "vite build",
+    "build": "node --max-old-space-size=1536 ./node_modules/.bin/vite build",
     "preview": "vite preview",
     "test:commerce": "node --test src/lib/*.test.js tests/checkout-races.test.mjs",
     "test:agenda": "node --test src/lib/barbearia-calendar.test.js src/lib/agenda-read.test.js tests/barbearia-calendar.test.mjs tests/barbeiro-venda.test.mjs tests/barbeiro-pwa.test.mjs"
