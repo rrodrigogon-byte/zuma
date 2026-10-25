@@ -53,61 +53,366 @@ function Estado({ carregando, erro, onRetry }) {
 
 const SITUACAO = { atrasado: ['Atrasado', 'critico'], esta_semana: ['Volta esta semana', 'alerta'], agendado: ['Já agendado', 'bom'], no_prazo: ['No prazo', 'neutro'] }
 
-// Convite manual: abre o WhatsApp da equipe com a mensagem pronta (nada é
-// enviado automaticamente). Só para quem autorizou mensagens de atendimento.
-function conviteWhatsApp(item) {
-  if (!item?.whatsappAutorizado) return ''
-  const digitos = String(item.telefone || '').replace(/\D/g, '')
+// Gera o texto calibrado para o convite de retorno
+function gerarTextoConvite(item) {
+  const primeiro = String(item?.nome || '').trim().split(/\s+/)[0] || 'Cliente'
+  const servico = item?.servicoPreferido?.nome ? ` o seu ${item.servicoPreferido.nome.toLowerCase()}` : ' o seu corte'
+  const horario = item?.sugestao
+    ? ` Tenho horário livre no dia ${dataBR(item.sugestao.data)} às ${item.sugestao.horario}${item.profissionalPreferido ? ` com ${item.profissionalPreferido.nome}` : ''}. Quer que eu reserve para você?`
+    : ' Quer que eu separe o melhor horário da semana para você?'
+  return `Olá, ${primeiro}! Tudo bem? Notamos que já está na hora de renovar${servico}.${horario}`
+}
+
+function conviteWhatsApp(item, textoPersonalizado) {
+  const digitos = String(item?.telefone || '').replace(/\D/g, '')
   if (digitos.length < 10) return ''
   const destino = digitos.startsWith('55') ? digitos : `55${digitos}`
-  const primeiro = String(item.nome || '').split(/\s+/)[0] || ''
-  const servico = item.servicoPreferido?.nome ? ` o seu ${item.servicoPreferido.nome.toLowerCase()}` : ''
-  const horario = item.sugestao ? ` Tenho ${dataBR(item.sugestao.data)} às ${item.sugestao.horario}${item.profissionalPreferido ? ` com ${item.profissionalPreferido.nome}` : ''}. Quer que eu reserve?` : ' Quer que eu veja um horário para você?'
-  const texto = `Olá, ${primeiro}! Já está na hora de renovar${servico}.${horario}`
+  const texto = textoPersonalizado || gerarTextoConvite(item)
   return `https://wa.me/${destino}?text=${encodeURIComponent(texto)}`
 }
 
 export function RetornosPanel() {
+  const { toast } = useToast()
   const { dados, erro, carregando, carregar } = useCarregar('/api/admin/barbearia/captacao/retornos')
-  const [filtro, setFiltro] = useState('acionaveis')
+  const [filtroBase, setFiltroBase] = useState('acionaveis') // 'acionaveis' | 'todos'
+  const [situacaoFiltro, setSituacaoFiltro] = useState(null) // null | 'atrasado' | 'esta_semana' | 'agendado'
+  const [busca, setBusca] = useState('')
+  const [ordenacao, setOrdenacao] = useState('atraso') // 'atraso' | 'visitas' | 'nome'
+  const [modalCliente, setModalCliente] = useState(null)
+  const [textoModal, setTextoModal] = useState('')
+
   if (carregando || erro) return <div style={card}><Estado carregando={carregando} erro={erro} onRetry={carregar} /></div>
+
   const resumo = dados?.resumo || {}
-  const lista = filtro === 'acionaveis' ? (dados?.acionaveis || []) : (dados?.todos || [])
+  const listaBase = filtroBase === 'acionaveis' ? (dados?.acionaveis || []) : (dados?.todos || [])
+
+  // Filtragem combinada (situação do card + busca)
+  const listaFiltrada = listaBase.filter((item) => {
+    if (situacaoFiltro && item.situacao !== situacaoFiltro) return false
+    if (busca) {
+      const q = busca.toLowerCase()
+      const t = `${item.nome || ''} ${item.servicoPreferido?.nome || ''} ${item.profissionalPreferido?.nome || ''}`.toLowerCase()
+      if (!t.includes(q)) return false
+    }
+    return true
+  })
+
+  // Ordenação
+  const listaOrdenada = [...listaFiltrada].sort((a, b) => {
+    if (ordenacao === 'atraso') return (b.diasAtraso || 0) - (a.diasAtraso || 0)
+    if (ordenacao === 'visitas') return (b.visitas || 0) - (a.visitas || 0)
+    if (ordenacao === 'nome') return String(a.nome || '').localeCompare(String(b.nome || ''))
+    return 0
+  })
+
+  // Estimativa de faturamento recuperável (R$ 65 médio ou valor do serviço preferido)
+  const faturamentoRecuperavel = (dados?.acionaveis || [])
+    .filter((i) => i.situacao === 'atrasado')
+    .reduce((soma, i) => soma + (i.servicoPreferido?.preco || 65), 0)
+
+  function copiarTexto(item, textoPersonalizado) {
+    const texto = textoPersonalizado || gerarTextoConvite(item)
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(texto).then(() => {
+        toast('Mensagem copiada para a área de transferência!')
+      }).catch(() => {
+        toast('Não foi possível copiar automaticamente.', true)
+      })
+    }
+  }
+
+  function abrirModalConvite(item) {
+    setModalCliente(item)
+    setTextoModal(gerarTextoConvite(item))
+  }
+
+  const kpiCardStyle = (ativo) => ({
+    ...kpi,
+    cursor: 'pointer',
+    transition: 'all 0.15s ease',
+    border: ativo ? '2px solid var(--accent, #b0892e)' : '1px solid var(--line)',
+    background: ativo ? 'var(--card2, rgba(176, 137, 46, 0.08))' : 'var(--card)',
+  })
+
   return <div style={{ display: 'grid', gap: 16 }}>
+    {/* Cabeçalho e KPIs Clicáveis */}
     <div style={card}>
-      <h2 style={h2}>Retorno previsto</h2>
-      <p style={sub}>Cada cliente com duas ou mais visitas tem um intervalo habitual. Quem passou da data é o primeiro a receber um convite, com o próximo horário livre do barbeiro preferido.</p>
-      <div style={{ ...grid(160), marginTop: 14 }}>
-        <div style={kpi}><div style={kpiLabel}>Com histórico</div><div style={kpiValue}>{resumo.clientesComHistorico || 0}</div></div>
-        <div style={kpi}><div style={kpiLabel}>Atrasados</div><div style={{ ...kpiValue, color: '#e05c5c' }}>{resumo.atrasados || 0}</div></div>
-        <div style={kpi}><div style={kpiLabel}>Voltam esta semana</div><div style={{ ...kpiValue, color: '#f59e0b' }}>{resumo.estaSemana || 0}</div></div>
-        <div style={kpi}><div style={kpiLabel}>Já agendados</div><div style={{ ...kpiValue, color: '#14b87a' }}>{resumo.agendados || 0}</div></div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 10 }}>
+        <div>
+          <h2 style={h2}>CRM de Retenção & Reativação (Retorno Previsto)</h2>
+          <p style={sub}>Identificação preditiva do hábito de retorno de cada cliente para reativação ativa e combate ao churn.</p>
+        </div>
+        {situacaoFiltro && (
+          <button type="button" style={{ ...btn, fontSize: 11, padding: '4px 8px' }} onClick={() => setSituacaoFiltro(null)}>
+            Ver todos ✕
+          </button>
+        )}
       </div>
-    </div>
-    <div style={card}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 10 }}>
-        <strong>{filtro === 'acionaveis' ? 'Para chamar agora' : 'Todos os clientes com histórico'}</strong>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button type="button" style={filtro === 'acionaveis' ? btnPrimary : btn} onClick={() => setFiltro('acionaveis')}>Para chamar</button>
-          <button type="button" style={filtro === 'todos' ? btnPrimary : btn} onClick={() => setFiltro('todos')}>Todos</button>
+
+      <div style={{ ...grid(160), marginTop: 14 }}>
+        <div
+          role="button"
+          tabIndex={0}
+          style={kpiCardStyle(situacaoFiltro === null)}
+          onClick={() => setSituacaoFiltro(null)}
+          title="Clique para ver todos os clientes com histórico"
+        >
+          <div style={kpiLabel}>Com histórico</div>
+          <div style={kpiValue}>{resumo.clientesComHistorico || 0}</div>
+          <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>Base cadastrada</div>
+        </div>
+
+        <div
+          role="button"
+          tabIndex={0}
+          style={kpiCardStyle(situacaoFiltro === 'atrasado')}
+          onClick={() => setSituacaoFiltro(situacaoFiltro === 'atrasado' ? null : 'atrasado')}
+          title="Clique para filtrar clientes atrasados"
+        >
+          <div style={kpiLabel}>Atrasados</div>
+          <div style={{ ...kpiValue, color: '#e05c5c' }}>{resumo.atrasados || 0}</div>
+          <div style={{ fontSize: 11, color: '#e05c5c', marginTop: 4 }}>Passaram do prazo habitual</div>
+        </div>
+
+        <div
+          role="button"
+          tabIndex={0}
+          style={kpiCardStyle(situacaoFiltro === 'esta_semana')}
+          onClick={() => setSituacaoFiltro(situacaoFiltro === 'esta_semana' ? null : 'esta_semana')}
+          title="Clique para filtrar quem volta esta semana"
+        >
+          <div style={kpiLabel}>Voltam esta semana</div>
+          <div style={{ ...kpiValue, color: '#f59e0b' }}>{resumo.estaSemana || 0}</div>
+          <div style={{ fontSize: 11, color: '#f59e0b', marginTop: 4 }}>Janela de agendamento</div>
+        </div>
+
+        <div
+          role="button"
+          tabIndex={0}
+          style={kpiCardStyle(situacaoFiltro === 'agendado')}
+          onClick={() => setSituacaoFiltro(situacaoFiltro === 'agendado' ? null : 'agendado')}
+          title="Clique para filtrar clientes já agendados"
+        >
+          <div style={kpiLabel}>Já agendados</div>
+          <div style={{ ...kpiValue, color: '#14b87a' }}>{resumo.agendados || 0}</div>
+          <div style={{ fontSize: 11, color: '#14b87a', marginTop: 4 }}>Com horário confirmado</div>
         </div>
       </div>
-      {lista.length === 0 ? <div style={empty}>Ninguém para chamar agora. A lista aparece quando houver clientes com duas visitas concluídas ou mais.</div> : <div style={{ overflowX: 'auto' }}><table style={table}>
-        <thead><tr><th style={th}>Cliente</th><th style={th}>Hábito</th><th style={th}>Última visita</th><th style={th}>Retorno previsto</th><th style={th}>Situação</th><th style={th}>Sugestão</th><th style={th}>Convite</th></tr></thead>
-        <tbody>{lista.map((item) => {
-          const [rotulo, tom] = SITUACAO[item.situacao] || ['—', 'neutro']
-          return <tr key={`${item.clienteId}-${item.nome}`}>
-            <td style={td}><strong>{item.nome}</strong><div style={{ color: 'var(--muted)', fontSize: 12 }}>{item.visitas} visitas · {item.servicoPreferido?.nome || '—'}</div></td>
-            <td style={td}>a cada {item.intervaloHabitualDias} dias</td>
-            <td style={td}>{dataBR(item.ultimaVisita)}</td>
-            <td style={td}>{dataBR(item.retornoPrevisto)}{item.diasAtraso > 0 && <div style={{ color: '#e05c5c', fontSize: 12 }}>{item.diasAtraso} dias de atraso</div>}</td>
-            <td style={td}><Pill tom={tom}>{rotulo}</Pill></td>
-            <td style={td}>{item.sugestao ? `${dataBR(item.sugestao.data)} às ${item.sugestao.horario}${item.profissionalPreferido ? ` com ${item.profissionalPreferido.nome}` : ''}` : '—'}</td>
-            <td style={td}>{conviteWhatsApp(item) ? <a href={conviteWhatsApp(item)} target="_blank" rel="noopener noreferrer" style={{ ...btn, display: 'inline-block', textDecoration: 'none' }}>Convidar pelo WhatsApp</a> : <span style={{ color: 'var(--muted)', fontSize: 12 }}>{item.whatsappAutorizado || item.temTelefone ? 'Sem autorização de WhatsApp' : 'Sem telefone'}</span>}</td>
-          </tr>
-        })}</tbody>
-      </table></div>}
+
+      {/* Banner de Oportunidade Financeira */}
+      {faturamentoRecuperavel > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, marginTop: 14, padding: '10px 14px', background: 'rgba(176, 137, 46, 0.1)', border: '1px solid var(--accent, #b0892e)', borderRadius: 10 }}>
+          <span style={{ fontSize: 13, fontWeight: 700 }}>
+            💰 Potencial de faturamento a reativar: <span style={{ color: 'var(--accent, #b0892e)' }}>{fmtR(faturamentoRecuperavel)}</span> ({resumo.atrasados || 0} clientes atrasados)
+          </span>
+          <span style={{ fontSize: 12, color: 'var(--muted)' }}>
+            Reative esses clientes enviando convites pelo WhatsApp com 1 clique.
+          </span>
+        </div>
+      )}
     </div>
+
+    {/* Toolbar de Filtros e Lista */}
+    <div style={card}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <strong>{filtroBase === 'acionaveis' ? 'Para chamar agora' : 'Todos com histórico'}</strong>
+          <span style={{ fontSize: 12, color: 'var(--muted)' }}>({listaOrdenada.length} exibidos)</span>
+        </div>
+
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <input
+            style={{ ...input, minWidth: 200, padding: '6px 10px', fontSize: 12 }}
+            type="search"
+            placeholder="Buscar cliente ou barbeiro..."
+            value={busca}
+            onChange={(e) => setBusca(e.target.value)}
+          />
+
+          <select
+            style={{ ...input, padding: '6px 8px', fontSize: 12 }}
+            value={ordenacao}
+            onChange={(e) => setOrdenacao(e.target.value)}
+            aria-label="Ordenar por"
+          >
+            <option value="atraso">Mais atrasados primeiro</option>
+            <option value="visitas">Mais visitas (VIPs)</option>
+            <option value="nome">Nome alfabético</option>
+          </select>
+
+          <div style={{ display: 'flex', gap: 4 }}>
+            <button type="button" style={filtroBase === 'acionaveis' ? btnPrimary : btn} onClick={() => setFiltroBase('acionaveis')}>Para chamar</button>
+            <button type="button" style={filtroBase === 'todos' ? btnPrimary : btn} onClick={() => setFiltroBase('todos')}>Todos</button>
+          </div>
+        </div>
+      </div>
+
+      {situacaoFiltro && (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 12px', background: 'var(--card2)', borderRadius: 8, marginBottom: 10, fontSize: 12 }}>
+          <span>Filtrando por: <strong>{SITUACAO[situacaoFiltro]?.[0] || situacaoFiltro}</strong></span>
+          <button type="button" style={{ ...btn, padding: '2px 6px', fontSize: 11 }} onClick={() => setSituacaoFiltro(null)}>Limpar filtro ✕</button>
+        </div>
+      )}
+
+      {listaOrdenada.length === 0 ? (
+        <div style={empty}>Nenhum cliente com estes critérios de busca ou filtro.</div>
+      ) : (
+        <div style={{ overflowX: 'auto' }}>
+          <table style={table}>
+            <thead>
+              <tr>
+                <th style={th}>Cliente</th>
+                <th style={th}>Hábito</th>
+                <th style={th}>Última visita</th>
+                <th style={th}>Retorno previsto</th>
+                <th style={th}>Situação</th>
+                <th style={th}>Sugestão</th>
+                <th style={th}>Ações de Reativação</th>
+              </tr>
+            </thead>
+            <tbody>
+              {listaOrdenada.map((item) => {
+                const [rotulo, tom] = SITUACAO[item.situacao] || ['—', 'neutro']
+                const linkWa = conviteWhatsApp(item)
+                return <tr key={`${item.clienteId}-${item.nome}`}>
+                  <td style={td}>
+                    <strong>{item.nome}</strong>
+                    <div style={{ color: 'var(--muted)', fontSize: 12 }}>
+                      {item.visitas} visitas · {item.servicoPreferido?.nome || 'Serviço habitual'}
+                      {item.telefone ? ` · ${item.telefone}` : ''}
+                    </div>
+                  </td>
+                  <td style={td}>a cada {item.intervaloHabitualDias} dias</td>
+                  <td style={td}>{dataBR(item.ultimaVisita)}</td>
+                  <td style={td}>
+                    {dataBR(item.retornoPrevisto)}
+                    {item.diasAtraso > 0 && <div style={{ color: '#e05c5c', fontSize: 12, fontWeight: 700 }}>{item.diasAtraso} dias de atraso</div>}
+                  </td>
+                  <td style={td}><Pill tom={tom}>{rotulo}</Pill></td>
+                  <td style={td}>
+                    {item.sugestao ? (
+                      <div>
+                        <strong>{dataBR(item.sugestao.data)} às {item.sugestao.horario}</strong>
+                        {item.profissionalPreferido && <div style={{ fontSize: 12, color: 'var(--muted)' }}>com {item.profissionalPreferido.nome}</div>}
+                      </div>
+                    ) : '—'}
+                  </td>
+                  <td style={td}>
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                      {linkWa ? (
+                        <a
+                          href={linkWa}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{ ...btnPrimary, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 4, padding: '5px 8px', fontSize: 11 }}
+                          title="Abrir WhatsApp com mensagem pronta"
+                        >
+                          💬 WhatsApp
+                        </a>
+                      ) : (
+                        <span style={{ color: 'var(--muted)', fontSize: 11 }}>Sem telefone</span>
+                      )}
+
+                      <button
+                        type="button"
+                        style={{ ...btn, padding: '5px 8px', fontSize: 11 }}
+                        onClick={() => copiarTexto(item)}
+                        title="Copiar texto da mensagem de convite"
+                      >
+                        📋 Copiar
+                      </button>
+
+                      <button
+                        type="button"
+                        style={{ ...btn, padding: '5px 8px', fontSize: 11 }}
+                        onClick={() => abrirModalConvite(item)}
+                        title="Ver e personalizar a mensagem antes de enviar"
+                      >
+                        ✏️ Editar
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+
+    {/* Modal de Personalização do Convite */}
+    {modalCliente && (
+      <div
+        role="dialog"
+        aria-modal="true"
+        style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'rgba(0, 0, 0, 0.6)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 9999,
+          padding: 16,
+        }}
+        onClick={() => setModalCliente(null)}
+      >
+        <div
+          style={{
+            background: 'var(--card, #fff)',
+            border: '1px solid var(--line)',
+            borderRadius: 14,
+            padding: 24,
+            maxWidth: 520,
+            width: '100%',
+            display: 'grid',
+            gap: 14,
+            boxShadow: '0 20px 40px rgba(0, 0, 0, 0.3)',
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>Convite para {modalCliente.nome}</h3>
+            <button type="button" style={{ ...btn, padding: '2px 8px' }} onClick={() => setModalCliente(null)}>✕</button>
+          </div>
+
+          <p style={{ margin: 0, fontSize: 13, color: 'var(--muted)' }}>
+            Personalize a mensagem abaixo antes de enviar pelo WhatsApp ou copiar para a área de transferência:
+          </p>
+
+          <textarea
+            style={{ ...input, minHeight: 110, resize: 'vertical', width: '100%', boxSizing: 'border-box' }}
+            value={textoModal}
+            onChange={(e) => setTextoModal(e.target.value)}
+          />
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              style={btn}
+              onClick={() => {
+                copiarTexto(modalCliente, textoModal)
+                setModalCliente(null)
+              }}
+            >
+              📋 Copiar texto
+            </button>
+
+            {conviteWhatsApp(modalCliente, textoModal) && (
+              <a
+                href={conviteWhatsApp(modalCliente, textoModal)}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ ...btnPrimary, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                onClick={() => setModalCliente(null)}
+              >
+                💬 Abrir no WhatsApp
+              </a>
+            )}
+          </div>
+        </div>
+      </div>
+    )}
   </div>
 }
 
