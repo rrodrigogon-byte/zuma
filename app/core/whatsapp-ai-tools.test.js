@@ -85,3 +85,32 @@ test('mesma mídia de despesa não cria segunda ação', async () => {
     assert.equal(result.acao.id, 'acao-existente');
   } finally { db.queryRead = original; }
 });
+
+test('calcular_pacote_frequencia calcula descontos e economia para Nati/Bruno e David', async () => {
+  assert.equal(WHATSAPP_AI_TOOL_DECLARATIONS.some((tool) => tool.name === 'calcular_pacote_frequencia'), true);
+  const executor = createWhatsappAiToolExecutor(CONTEXT);
+
+  // Nati ou Bruno (base 100)
+  const resNati = await executor('calcular_pacote_frequencia', { profissional: 'Nati', frequenciaTexto: 'a cada 15 dias', procedimentosDesejados: 'ambos' });
+  assert.equal(resNati.ok, true);
+  assert.equal(resNati.precoUnitarioAvulso, 100);
+  assert.equal(resNati.pacotes[0].valorComDesconto, 360);
+  assert.equal(resNati.pacotes[0].economia, 40);
+  assert.equal(resNati.pacotes[1].valorComDesconto, 510);
+  assert.equal(resNati.pacotes[1].economia, 90);
+  assert.equal(resNati.pacotes[2].valorComDesconto, 640);
+  assert.equal(resNati.pacotes[2].economia, 160);
+  assert.equal(resNati.recomendacao.pacote, '4 procedimentos');
+
+  // David (base 80)
+  const resDavid = await executor('calcular_pacote_frequencia', { profissional: 'David', frequenciaDias: 7, procedimentosDesejados: 'ambos' });
+  assert.equal(resDavid.ok, true);
+  assert.equal(resDavid.precoUnitarioAvulso, 80);
+  assert.equal(resDavid.pacotes[0].valorComDesconto, 288);
+  assert.equal(resDavid.pacotes[0].economia, 32);
+  assert.equal(resDavid.pacotes[1].valorComDesconto, 408);
+  assert.equal(resDavid.pacotes[1].economia, 72);
+  assert.equal(resDavid.pacotes[2].valorComDesconto, 512);
+  assert.equal(resDavid.pacotes[2].economia, 128);
+  assert.equal(resDavid.recomendacao.pacote, '8 procedimentos');
+});

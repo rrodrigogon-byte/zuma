@@ -536,7 +536,7 @@ export function validateWhatsappAiOutput(text, { traces = [], recommendationWasR
   if (/\b(ultima chance|imperdivel|compre agora|nao perca|so hoje|voce precisa (comprar|garantir|aproveitar|levar|fechar))\b/.test(normalized)) violations.push('PRESSURE_LANGUAGE');
   const opportunityLanguage = /\b(oferta|promocao|aproveite|recomendo|sugiro|temos tambem|voce pode gostar|combina com|posso te mostrar uma opcao|que tal adicionar)\b/.test(normalized)
     || (!customerRequestedPurchase && /\badicionar ao pedido\b/.test(normalized));
-  const opportunityTrace = traces.some(trace => trace?.name === 'propor_oportunidade' && trace?.ok === true);
+  const opportunityTrace = traces.some(trace => (trace?.name === 'propor_oportunidade' || trace?.name === 'calcular_pacote_frequencia') && trace?.ok === true);
   if (opportunityLanguage && !recommendationWasRequested && !(opportunityAllowed && opportunityTrace)) violations.push('UNGOVERNED_OPPORTUNITY');
   return { ok: violations.length === 0, text: value, violations };
 }

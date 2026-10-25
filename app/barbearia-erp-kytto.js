@@ -1187,6 +1187,90 @@ export function atualizarPlano(empresaId, planoId, dados = {}) {
   return { ...atual };
 }
 
+export function semearPacotesPadrao(empresaId) {
+  const estado = estadoEmpresa(empresaId, false);
+  if (!estado) return false;
+  const planosExistentes = Object.values(estado.planos || {});
+  const nomesExistentes = new Set(planosExistentes.map((p) => p.nome.toLowerCase()));
+
+  const servicos = Object.values(estado.servicos || {});
+  const idValido = (s) => s && s.ativo !== false;
+  const srvNatiBrunoCorte = servicos.find((s) => idValido(s) && s.nome.toLowerCase().includes('corte') && s.nome.toLowerCase().includes('bruno'))?.id;
+  const srvNatiBrunoBarba = servicos.find((s) => idValido(s) && s.nome.toLowerCase().includes('barba') && s.nome.toLowerCase().includes('bruno'))?.id;
+  const srvDavidCorte = servicos.find((s) => idValido(s) && s.nome.toLowerCase().includes('corte') && s.nome.toLowerCase().includes('david'))?.id;
+  const srvDavidBarba = servicos.find((s) => idValido(s) && s.nome.toLowerCase().includes('barba') && s.nome.toLowerCase().includes('david'))?.id;
+
+  const pacotes = [
+    {
+      nome: 'Pacote 4 Procedimentos (Bruno e Nati)',
+      preco: 360,
+      sessoesIncluidas: 4,
+      ciclo: 'mensal',
+      validadeDias: 30,
+      servicosIds: [srvNatiBrunoCorte, srvNatiBrunoBarba].filter(Boolean),
+      descricao: 'Pacote mensal de 4 procedimentos com Bruno ou Nati. 10% de desconto sobre o valor avulso (de R$ 400 por R$ 360, economia de R$ 40).',
+    },
+    {
+      nome: 'Pacote 6 Procedimentos (Bruno e Nati)',
+      preco: 510,
+      sessoesIncluidas: 6,
+      ciclo: 'mensal',
+      validadeDias: 30,
+      servicosIds: [srvNatiBrunoCorte, srvNatiBrunoBarba].filter(Boolean),
+      descricao: 'Pacote mensal de 6 procedimentos com Bruno ou Nati. 15% de desconto sobre o valor avulso (de R$ 600 por R$ 510, economia de R$ 90).',
+    },
+    {
+      nome: 'Pacote 8 Procedimentos (Bruno e Nati)',
+      preco: 640,
+      sessoesIncluidas: 8,
+      ciclo: 'mensal',
+      validadeDias: 30,
+      servicosIds: [srvNatiBrunoCorte, srvNatiBrunoBarba].filter(Boolean),
+      descricao: 'Pacote mensal de 8 procedimentos com Bruno ou Nati. 20% de desconto sobre o valor avulso (de R$ 800 por R$ 640, economia de R$ 160).',
+    },
+    {
+      nome: 'Pacote 4 Procedimentos (David)',
+      preco: 288,
+      sessoesIncluidas: 4,
+      ciclo: 'mensal',
+      validadeDias: 30,
+      servicosIds: [srvDavidCorte, srvDavidBarba].filter(Boolean),
+      descricao: 'Pacote mensal de 4 procedimentos com David. 10% de desconto sobre o valor avulso (de R$ 320 por R$ 288, economia de R$ 32).',
+    },
+    {
+      nome: 'Pacote 6 Procedimentos (David)',
+      preco: 408,
+      sessoesIncluidas: 6,
+      ciclo: 'mensal',
+      validadeDias: 30,
+      servicosIds: [srvDavidCorte, srvDavidBarba].filter(Boolean),
+      descricao: 'Pacote mensal de 6 procedimentos com David. 15% de desconto sobre o valor avulso (de R$ 480 por R$ 408, economia de R$ 72).',
+    },
+    {
+      nome: 'Pacote 8 Procedimentos (David)',
+      preco: 512,
+      sessoesIncluidas: 8,
+      ciclo: 'mensal',
+      validadeDias: 30,
+      servicosIds: [srvDavidCorte, srvDavidBarba].filter(Boolean),
+      descricao: 'Pacote mensal de 8 procedimentos com David. 20% de desconto sobre o valor avulso (de R$ 640 por R$ 512, economia de R$ 128).',
+    },
+  ];
+
+  let adicionou = false;
+  for (const pct of pacotes) {
+    if (!nomesExistentes.has(pct.nome.toLowerCase())) {
+      try {
+        criarPlano(empresaId, pct);
+        adicionou = true;
+      } catch (err) {
+        console.warn(`[barbearia] semear plano ${pct.nome}:`, err.message);
+      }
+    }
+  }
+  return adicionou;
+}
+
 function assinaturaNormalizada(dados = {}, anterior = {}, plano = {}) {
   const inicio = texto(dados.inicio ?? dados.inicioEm ?? anterior.inicio, 40) || dataAtual();
   const fim = texto(dados.fim ?? dados.fimEm ?? anterior.fim, 40);

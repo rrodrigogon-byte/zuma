@@ -1404,6 +1404,7 @@ if(process.env.COMMERCE_CORE_ENABLED === '1'){
     clubeDb.query(`SELECT id FROM empresas`).then((res) => {
       for (const row of res.rows || []) {
         a2Svc.sincronizarPedidosPendentes(clubeDb, row.id).catch((err) => console.warn('[a2] sync inicial:', err.message));
+        try { barbeariaErpKytto.semearPacotesPadrao(row.id); } catch {}
       }
     }).catch((err) => console.warn('[a2] sync inicial empresas:', err.message));
   }
