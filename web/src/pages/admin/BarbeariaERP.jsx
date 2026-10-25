@@ -21,6 +21,7 @@ import { ComprasPanel, CurvaAbcPanel } from './dino/ComprasPanels'
 import { RepassesPanel, ReguaClubePanel } from './dino/RepassesPanel'
 
 // Lazy loading dos módulos analíticos e relatórios para acelerar o carregamento inicial da Barbearia
+const MetasComissoesPanel = lazy(() => import('./dino/MetasComissoesPanel'))
 const DinoBusinessDashboard = lazy(() => import('./DinoBusinessDashboard'))
 const DinoCampaignsPanel = lazy(() => import('./DinoCampaignsPanel'))
 const DinoEquipeDesempenho = lazy(() => import('./DinoEquipeDesempenho'))
@@ -45,6 +46,7 @@ const TABS = [
   ['Planos e assinaturas', 'Pacotes sem cobrança automática'],
   ['Fidelidade', 'Pontos do CRM'],
   ['Estoque de revenda', 'Produtos e movimentos manuais'],
+  ['Metas e comissões', 'Controle individual de metas, bonificações e relatórios por profissional'],
   ['Desempenho da equipe', 'Resultado, comissão, horários e melhoria por profissional'],
   ['Vendas de revenda', 'Venda, pagamento e baixa auditáveis'],
   ['Relatórios', 'Indicadores operacionais'],
@@ -72,7 +74,7 @@ const AREAS = [
   { id: 'operacao', label: 'Operação', short: 'Hoje, agenda, atendimento e caixa', tabs: ['Visão geral', 'Agenda', 'Atendimento', 'Caixa e fechamento', 'Prévia taxas e materiais', 'Fila e bloqueios'] },
   { id: 'relacionamento', label: 'Relacionamento', short: 'Clientes, retorno e indicação', tabs: ['Clientes', 'Retorno previsto', 'Lista de espera', 'Indicações', 'Avaliações (NPS)', 'Origem dos clientes', 'Fidelidade'] },
   { id: 'catalogo', label: 'Catálogo e equipe', short: 'Serviços, planos e revenda', tabs: ['Profissionais', 'Serviços', 'Planos e assinaturas', 'Saúde do clube', 'Estoque de revenda', 'Compras e fornecedores', 'Curva ABC', 'Vendas de revenda'] },
-  { id: 'gestao', label: 'Gestão', short: 'Comissões, metas e regras', tabs: ['Desempenho da equipe', 'Comissões', 'Extrato e repasses', 'Projeção inteligente', 'Ocupação e metas', 'Cobranças e cashback', 'Vale-presente', 'Receita da IA', 'Resumo diário', 'Unidades', 'Relatórios', 'Configuração'] },
+  { id: 'gestao', label: 'Gestão', short: 'Comissões, metas e regras', tabs: ['Metas e comissões', 'Desempenho da equipe', 'Comissões', 'Extrato e repasses', 'Projeção inteligente', 'Ocupação e metas', 'Cobranças e cashback', 'Vale-presente', 'Receita da IA', 'Resumo diário', 'Unidades', 'Relatórios', 'Configuração'] },
   { id: 'integracoes', label: 'Integrações', short: 'WhatsApp e IA controlados', tabs: ['Integrações'] },
 ]
 
@@ -905,6 +907,8 @@ export default function BarbeariaERP() {
       diasTrabalho: Array.isArray(profissional.diasTrabalho) ? [...profissional.diasTrabalho] : [1, 2, 3, 4, 5, 6],
       ativo: profissional.ativo !== false,
       fotoUrl: profissional.fotoUrl || '',
+      faixasComissaoServico: Array.isArray(profissional.faixasComissaoServico) ? [...profissional.faixasComissaoServico] : [],
+      faixasComissaoProduto: Array.isArray(profissional.faixasComissaoProduto) ? [...profissional.faixasComissaoProduto] : [],
     }
   }
 
@@ -928,6 +932,8 @@ export default function BarbeariaERP() {
       // Só envia exceções preenchidas; campo vazio volta ao percentual padrão.
       comissoesPorServico: Object.fromEntries(Object.entries(formProf.comissoesPorServico || {}).filter(([, valor]) => valor !== '' && valor !== null && valor !== undefined).map(([id, valor]) => [id, Number(valor)])),
       diasTrabalho: Array.isArray(formProf.diasTrabalho) ? formProf.diasTrabalho : [],
+      faixasComissaoServico: Array.isArray(formProf.faixasComissaoServico) ? formProf.faixasComissaoServico : [],
+      faixasComissaoProduto: Array.isArray(formProf.faixasComissaoProduto) ? formProf.faixasComissaoProduto : [],
     }
     await executar(
       () => profissionalId ? api.patch(`/api/admin/barbearia/profissionais/${profissionalId}`, payload) : api.post('/api/admin/barbearia/profissionais', payload),
@@ -1956,6 +1962,7 @@ export default function BarbeariaERP() {
     if (tab === 'Saúde do clube') return <div style={{ display: 'grid', gap: 16 }}><ClubeSaudePanel /><ReguaClubePanel /></div>
     if (tab === 'Compras e fornecedores') return <ComprasPanel produtos={produtosRevenda.filter((produto) => produto.ativo !== false)} onEstoqueMudou={carregar} />
     if (tab === 'Curva ABC') return <CurvaAbcPanel />
+    if (tab === 'Metas e comissões') return <Suspense fallback={<Card style={{ padding: 40, textAlign: 'center', color: 'var(--muted)' }}>Carregando metas e comissões…</Card>}><MetasComissoesPanel onOpenTab={navegarParaTab} /></Suspense>
     if (tab === 'Extrato e repasses') return <RepassesPanel profissionais={profissionais} servicos={servicos} planos={planos} onCadastroMudou={carregar} />
     if (tab === 'Projeção inteligente') return <Suspense fallback={<Card style={{ padding: 40, textAlign: 'center', color: 'var(--muted)' }}>Carregando projeção de IA…</Card>}><ProjecaoFaturamentoPanel onOpenTab={navegarParaTab} /></Suspense>
     if (tab === 'Ocupação e metas') return <OcupacaoMetasPanel />

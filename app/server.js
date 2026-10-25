@@ -111,6 +111,7 @@ import * as barbeariaFiscalKytto from './barbearia-fiscal-kytto.js';
 import * as barbeariaNfseKytto from './barbearia-nfse-kytto.js';
 import * as barbeariaComprasKytto from './barbearia-compras-kytto.js';
 import * as barbeariaRepassesKytto from './barbearia-repasses-kytto.js';
+import * as barbeariaRelatorioKytto from './barbearia-relatorio-individual-kytto.js';
 import { appointmentNotificationMetrics, queueAppointmentNotifications, queueChargeNotification, queueReviewRequest, reviewNotificationMetrics } from './core/barbershop-appointment-notifications.js';
 import * as cobrancaKytto from './dino-cobranca-kytto.js';
 import * as modoBarbeiro from './dino-modo-barbeiro.js';
@@ -4222,7 +4223,7 @@ app.get('/api/admin/barbearia/profissionais', (req, res) => {
 });
 // Percentual de comissão e dados de repasse são definidos por quem gerencia a unidade;
 // equipe operacional (staff) pode editar o cadastro, mas não a própria remuneração.
-const CAMPOS_REMUNERACAO = ['percentualComissao', 'percentual_comissao', 'percentualComissaoProduto', 'percentual_comissao_produto', 'comissoesPorServico', 'comissoes_por_servico', 'descontaTaxaMaquininha', 'desconta_taxa_maquininha'];
+const CAMPOS_REMUNERACAO = ['percentualComissao', 'percentual_comissao', 'percentualComissaoProduto', 'percentual_comissao_produto', 'comissoesPorServico', 'comissoes_por_servico', 'descontaTaxaMaquininha', 'desconta_taxa_maquininha', 'faixasComissaoServico', 'faixas_comissao_servico', 'faixasComissaoProduto', 'faixas_comissao_produto'];
 function semCamposDeRemuneracao(req) {
   const corpo = { ...(req.body || {}) };
   if (['admin', 'organizador', 'gerente'].includes(String(req.user?.role || '').toLowerCase())) return corpo;
@@ -5473,6 +5474,60 @@ app.get('/api/admin/barbearia/comissoes/repasses/:id/recibo', (req, res) => {
     res.set('Content-Type', 'text/html; charset=utf-8').set('Cache-Control', 'no-store').send(barbeariaRepassesKytto.reciboHtml(empresaId, req.params.id, { empresaNome, lojaId }));
   } catch (error) { respostaComprasRepasses(res, error); }
 });
+
+// ── Metas, bonificações e relatórios individuais da equipe ─────────────────
+app.get('/api/admin/barbearia/profissionais/:id/relatorio-individual', (req, res) => {
+  const empresaId = legacyEmpresaId(req);
+  const profId = String(req.params.id || '');
+  const eu = modoBarbeiro.profissionalDoUsuario(barbeariaErpKytto.listarProfissionais(empresaId), req.user);
+  if (!modoBarbeiro.ehGestao(req.user) && eu?.id !== profId) {
+    return res.status(403).json({ error: 'Relatório restrito ao profissional ou à gestão da unidade.', code: 'ACESSO_RESTRITO' });
+  }
+  try {
+    const relatorio = barbeariaRelatorioKytto.relatorioIndividualProfissional(empresaId, profId, {
+      periodo: req.query.periodo || 'mes',
+      inicio: req.query.inicio,
+      fim: req.query.fim,
+      lojaId: legacyLojaId(req),
+    });
+    res.json({ ok: true, relatorio });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+app.get('/api/admin/barbearia/equipe/metas-comissoes', (req, res) => {
+  if (!gestaoDaUnidade(req, res)) return;
+  try {
+    const relatorio = barbeariaRelatorioKytto.relatorioEquipeMetasComissoes(legacyEmpresaId(req), {
+      periodo: req.query.periodo || 'mes',
+      inicio: req.query.inicio,
+      fim: req.query.fim,
+      lojaId: legacyLojaId(req),
+    });
+    res.json({ ok: true, ...relatorio });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+app.put('/api/admin/barbearia/profissionais/:id/metas-comissoes', (req, res) => {
+  if (!gestaoDaUnidade(req, res)) return;
+  try {
+    const profissional = barbeariaErpKytto.atualizarProfissional(legacyEmpresaId(req), req.params.id, {
+      faixasComissaoServico: req.body?.faixasComissaoServico,
+      faixasComissaoProduto: req.body?.faixasComissaoProduto,
+      percentualComissao: req.body?.percentualComissao,
+      percentualComissaoProduto: req.body?.percentualComissaoProduto,
+    });
+    if (!profissional) return res.status(404).json({ error: 'Profissional não encontrado na empresa ativa.' });
+    audit(req, 'CONFIGURAR METAS PROFISSIONAL', `${profissional.nome} faixas atualizadas`);
+    res.json({ ok: true, profissional });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
 app.get('/api/admin/barbearia/cobrancas/regua-clube', (req, res) => {
   if (!gestaoDaUnidade(req, res)) return;
   try { res.json({ ok: true, ...cobrancaKytto.painelReguaClube(legacyEmpresaId(req)) }); } catch (error) { res.status(400).json({ error: error.message }); }

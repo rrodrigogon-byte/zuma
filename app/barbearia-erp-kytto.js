@@ -590,6 +590,87 @@ export function percentualComissaoServico(profissional = {}, servicoId = '') {
   return Number.isFinite(Number(excecao)) ? Number(excecao) : Number(profissional.percentualComissao || 0);
 }
 
+export function normalizarFaixasComissao(faixas) {
+  if (!Array.isArray(faixas)) return [];
+  return faixas
+    .map((item) => {
+      if (!item || typeof item !== 'object') return null;
+      const meta = dinheiro(item.metaFaturamento ?? item.meta_faturamento ?? item.meta ?? item.valor);
+      const bonus = numero(item.bonusPercentual ?? item.bonus_percentual ?? item.bonus ?? item.percentualAdicional, 0);
+      const desc = texto(item.descricao ?? item.label ?? item.nome, 120);
+      return meta > 0 ? { metaFaturamento: meta, bonusPercentual: Math.min(100, Math.max(0, bonus)), descricao: desc || `Meta R$ ${meta.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` } : null;
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.metaFaturamento - b.metaFaturamento);
+}
+
+export function calcularFaixaBonificacao(faturamento, percentualBase, faixas = []) {
+  const fat = dinheiro(faturamento);
+  const base = Number(percentualBase || 0);
+  const lista = normalizarFaixasComissao(faixas);
+
+  if (!lista.length) {
+    return {
+      faturamento: fat,
+      percentualBase: base,
+      faixaAtual: null,
+      bonusPercentual: 0,
+      percentualEfetivo: base,
+      proximaFaixa: null,
+      faltaParaProxima: 0,
+      progressoPct: 100,
+      mensagemStatus: `Comissão padrão de ${base}%. Nenhuma meta configurada.`,
+      todasFaixas: [],
+    };
+  }
+
+  let faixaAtual = null;
+  let proximaFaixa = null;
+
+  for (let i = 0; i < lista.length; i++) {
+    const f = lista[i];
+    if (fat >= f.metaFaturamento) {
+      faixaAtual = f;
+    } else {
+      proximaFaixa = f;
+      break;
+    }
+  }
+
+  const bonus = faixaAtual ? faixaAtual.bonusPercentual : 0;
+  const percentualEfetivo = Math.min(100, base + bonus);
+  const faltaParaProxima = proximaFaixa ? dinheiro(Math.max(0, proximaFaixa.metaFaturamento - fat)) : 0;
+  const piso = faixaAtual ? faixaAtual.metaFaturamento : 0;
+  const teto = proximaFaixa ? proximaFaixa.metaFaturamento : (faixaAtual ? faixaAtual.metaFaturamento : 1);
+  const progressoPct = proximaFaixa
+    ? Math.min(100, Math.max(0, Number(((fat - piso) / (teto - piso) * 100).toFixed(1))))
+    : 100;
+
+  let mensagemStatus = '';
+  if (proximaFaixa) {
+    if (faixaAtual) {
+      mensagemStatus = `Já faturou R$ ${fat.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}, atingiu ${faixaAtual.descricao} (${percentualEfetivo}%) e faltam R$ ${faltaParaProxima.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} para alcançar a próxima meta (${base + proximaFaixa.bonusPercentual}%).`;
+    } else {
+      mensagemStatus = `Já faturou R$ ${fat.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} (comissão base de ${base}%) e faltam R$ ${faltaParaProxima.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} para alcançar a 1ª meta (${base + proximaFaixa.bonusPercentual}%).`;
+    }
+  } else {
+    mensagemStatus = `Parabéns! Faturou R$ ${fat.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} e alcançou o teto máximo de bonificação: ${percentualEfetivo}%.`;
+  }
+
+  return {
+    faturamento: fat,
+    percentualBase: base,
+    faixaAtual,
+    bonusPercentual: bonus,
+    percentualEfetivo,
+    proximaFaixa,
+    faltaParaProxima,
+    progressoPct,
+    mensagemStatus,
+    todasFaixas: lista,
+  };
+}
+
 function profissionalNormalizado(dados = {}, anterior = {}) {
   const dias = Array.isArray(dados.diasTrabalho ?? dados.dias_trabalho ?? anterior.diasTrabalho)
     ? [...new Set((dados.diasTrabalho ?? dados.dias_trabalho ?? anterior.diasTrabalho).map((item) => numero(item, -1)).filter((item) => item >= 0 && item <= 6))].sort()
@@ -604,6 +685,9 @@ function profissionalNormalizado(dados = {}, anterior = {}) {
     percentualComissaoProduto: Math.min(100, Math.max(0, numero(dados.percentualComissaoProduto ?? dados.percentual_comissao_produto ?? anterior.percentualComissaoProduto, 30))),
     // Exceções por serviço ({ servicoId: percentual }). Sem exceção vale percentualComissao.
     comissoesPorServico: comissoesPorServicoNormalizadas(dados.comissoesPorServico ?? dados.comissoes_por_servico ?? anterior.comissoesPorServico),
+    // Faixas progressivas de bonificação por metas alcançadas (serviços e produtos independentes)
+    faixasComissaoServico: normalizarFaixasComissao(dados.faixasComissaoServico ?? dados.faixas_comissao_servico ?? anterior.faixasComissaoServico),
+    faixasComissaoProduto: normalizarFaixasComissao(dados.faixasComissaoProduto ?? dados.faixas_comissao_produto ?? anterior.faixasComissaoProduto),
     descontaTaxaMaquininha: dados.descontaTaxaMaquininha ?? dados.desconta_taxa_maquininha ?? anterior.descontaTaxaMaquininha ?? true,
     // Desconta da base da comissão o custo do material usado no serviço (padrão: não).
     descontaMaterial: Boolean(dados.descontaMaterial ?? dados.desconta_material ?? anterior.descontaMaterial ?? false),
@@ -2814,7 +2898,7 @@ export function recebimentoAgendamentoVerificado(empresaId, agendamento) {
     && Number(lancamento.valor) > 0 ? lancamento : null;
 }
 
-export function calcularComissoesEstado(estado, empresaId, { data = '', lojaId = '', inicio = '', fim = '', detalhar = false, profissionalId: somenteProfissional = '', strictUnit = false, capturedOnly = false, recebimentoAgendamento = null, custoMaterialServicoFn = null } = {}) {
+export function calcularComissoesEstado(estado, empresaId, { data = '', lojaId = '', inicio = '', fim = '', detalhar = false, profissionalId: somenteProfissional = '', strictUnit = false, capturedOnly = false, recebimentoAgendamento = null, custoMaterialServicoFn = null, semBonificacao = false } = {}) {
   // Função pura: `estado` é somente lido; callbacks permitem usar um snapshot sem tocar no db global.
   // Filtro por dia (data) ou por período (inicio/fim, AAAA-MM-DD inclusivos).
   const diaIni = String(inicio || '').slice(0, 10);
@@ -2873,18 +2957,22 @@ export function calcularComissoesEstado(estado, empresaId, { data = '', lojaId =
   const servicosComanda = comandasPagas.flatMap((comanda) => (comanda.itens || [])
     .filter((item) => item.tipo === 'servico')
     .map((item) => ({ ...item, origemTipo: 'comanda', origemId: comanda.id, clienteNome: comanda.clienteNome || '', dataRef: diaOperacional(comanda.fechadaEm || comanda.atualizadoEm), nomeItem: item.nome, profissionalId: item.profissionalId || comanda.profissionalId, valorRecebido: dinheiro(Number(item.subtotal || 0) * fatorDesconto(comanda)), valor: dinheiro(Number(item.subtotal || 0) * fatorDesconto(comanda)), pesoNaComanda: pesoNaComanda(comanda, Number(item.subtotal || 0)), rateio: rateioPagamentos(comanda), meioPagamento: comanda.pagamentos?.find((pagamento) => pagamento.meio !== 'conta')?.meio || comanda.pagamento })));
-  const produtosComanda = comandasPagas.map((comanda) => ({
-    id: comanda.id,
-    clienteNome: comanda.clienteNome || '',
-    empresaId: comanda.empresaId,
-    lojaId: comanda.lojaId,
-    profissionalId: comanda.profissionalId || null,
-    total: dinheiro((comanda.itens || []).filter((item) => item.tipo === 'produto').reduce((soma, item) => soma + Number(item.subtotal || 0), 0) * fatorDesconto(comanda)),
-    pagamento: { meioPagamento: comanda.pagamentos?.find((pagamento) => pagamento.meio !== 'conta')?.meio || comanda.pagamento },
-    rateio: rateioPagamentos(comanda),
-    pesoNaComanda: pesoNaComanda(comanda, (comanda.itens || []).filter((item) => item.tipo === 'produto').reduce((soma, item) => soma + Number(item.subtotal || 0), 0)),
-    criadoEm: comanda.fechadaEm || comanda.atualizadoEm,
-  }));
+  const produtosComanda = comandasPagas.map((comanda) => {
+    const itensProduto = (comanda.itens || []).filter((item) => item.tipo === 'produto');
+    return {
+      id: comanda.id,
+      clienteNome: comanda.clienteNome || '',
+      empresaId: comanda.empresaId,
+      lojaId: comanda.lojaId,
+      profissionalId: comanda.profissionalId || null,
+      itens: itensProduto,
+      total: dinheiro(itensProduto.reduce((soma, item) => soma + Number(item.subtotal || 0), 0) * fatorDesconto(comanda)),
+      pagamento: { meioPagamento: comanda.pagamentos?.find((pagamento) => pagamento.meio !== 'conta')?.meio || comanda.pagamento },
+      rateio: rateioPagamentos(comanda),
+      pesoNaComanda: pesoNaComanda(comanda, itensProduto.reduce((soma, item) => soma + Number(item.subtotal || 0), 0)),
+      criadoEm: comanda.fechadaEm || comanda.atualizadoEm,
+    };
+  });
   const vendas = [...vendasLegadas, ...produtosComanda.filter((item) => item.total > 0)];
   const atendimentosConsolidados = [...atendimentos, ...servicosComanda];
   const taxas = estado.configuracao?.taxasPagamento || {};
@@ -2915,29 +3003,62 @@ export function calcularComissoesEstado(estado, empresaId, { data = '', lojaId =
     .map((profissional) => {
       const servicos = atendimentosConsolidados.filter((item) => item.profissionalId === profissional.id);
       const produtos = vendas.filter((item) => item.profissionalId === profissional.id);
+      const brutoServicosTotal = servicos.reduce((s, it) => s + Number(it.valorRecebido || it.valor || 0), 0);
+      const brutoProdutosTotal = produtos.reduce((s, it) => s + Number(it.total || 0), 0);
+      const aplicarBonus = semBonificacao !== true;
+      const metaServico = calcularFaixaBonificacao(brutoServicosTotal, profissional.percentualComissao, profissional.faixasComissaoServico);
+      const metaProduto = calcularFaixaBonificacao(brutoProdutosTotal, profissional.percentualComissaoProduto, profissional.faixasComissaoProduto);
+
       const linhas = [];
       let brutoServicos = 0; let taxaServicos = 0; let materiaisTotal = 0; let comissaoServicos = 0;
       for (const item of servicos) {
         const valor = Number(item.valorRecebido || item.valor || 0);
         const taxa = taxaDoItem(valor, item, String(item.meioPagamento || '').toLowerCase(), profissional);
         const material = profissional.descontaMaterial ? Math.min(Math.max(0, valor - taxa), materialDoServico(item.servicoId) * Math.max(1, Number(item.quantidade || 1))) : 0;
-        const percentual = percentualComissaoServico(profissional, item.servicoId);
+        const temExcecao = Object.hasOwn(profissional.comissoesPorServico || {}, String(item.servicoId || ''));
+        const percentual = temExcecao
+          ? Number(profissional.comissoesPorServico[String(item.servicoId)])
+          : (aplicarBonus ? metaServico.percentualEfetivo : Number(profissional.percentualComissao || 0));
         const comissao = Math.max(0, valor - taxa - material) * percentual / 100;
         brutoServicos += valor; taxaServicos += taxa; materiaisTotal += material; comissaoServicos += comissao;
         if (detalhar) linhas.push({ tipo: 'servico', data: item.dataRef || '', origemTipo: item.origemTipo || '', origemId: item.origemId || item.id || '', cliente: item.clienteNome || '', descricao: item.nomeItem || item.servicoNome || 'Serviço', servicoId: item.servicoId || null, quantidade: Number(item.quantidade || 1), bruto: dinheiro(valor), taxa: dinheiro(taxa), material: dinheiro(material), base: dinheiro(Math.max(0, valor - taxa - material)), percentual, comissao: dinheiro(comissao) });
       }
       let brutoProdutos = 0; let taxaProdutos = 0;
+      const percentualProduto = aplicarBonus ? metaProduto.percentualEfetivo : Number(profissional.percentualComissaoProduto || 0);
       for (const item of produtos) {
         const valor = Number(item.total || 0);
         const taxa = taxaDoItem(valor, item, String(item.pagamento?.meioPagamento || '').toLowerCase(), profissional);
         brutoProdutos += valor; taxaProdutos += taxa;
-        if (detalhar) linhas.push({ tipo: 'produto', data: diaOperacional(item.criadoEm), origemTipo: item.itens ? 'venda' : 'comanda', origemId: item.id, cliente: item.clienteNome || '', descricao: item.itens ? item.itens.map((linha) => `${linha.quantidade}× ${linha.nome}`).join(', ') : 'Produtos da comanda', bruto: dinheiro(valor), taxa: dinheiro(taxa), material: 0, base: dinheiro(valor - taxa), percentual: Number(profissional.percentualComissaoProduto || 0), comissao: dinheiro((valor - taxa) * Number(profissional.percentualComissaoProduto || 0) / 100) });
+        if (detalhar) linhas.push({ tipo: 'produto', data: diaOperacional(item.criadoEm), origemTipo: item.itens ? 'venda' : 'comanda', origemId: item.id, cliente: item.clienteNome || '', descricao: item.itens?.length ? item.itens.map((linha) => `${linha.quantidade || 1}× ${linha.nome}`).join(', ') : 'Produtos da comanda', itens: item.itens || [], bruto: dinheiro(valor), taxa: dinheiro(taxa), material: 0, base: dinheiro(valor - taxa), percentual: percentualProduto, comissao: dinheiro((valor - taxa) * percentualProduto / 100) });
       }
-      const comissaoProdutos = (brutoProdutos - taxaProdutos) * Number(profissional.percentualComissaoProduto || 0) / 100;
+      const comissaoProdutos = (brutoProdutos - taxaProdutos) * percentualProduto / 100;
       const bruto = brutoServicos + brutoProdutos;
       const taxasTotal = taxaServicos + taxaProdutos;
       const repasse = Math.max(0, comissaoServicos + comissaoProdutos);
-      const resultado = { profissionalId: profissional.id, profissionalNome: profissional.nome, percentualComissao: Number(profissional.percentualComissao || 0), percentualComissaoProduto: Number(profissional.percentualComissaoProduto || 0), descontaMaterial: Boolean(profissional.descontaMaterial), atendimentos: servicos.length, vendasProdutos: produtos.length, brutoServicos: dinheiro(brutoServicos), brutoProdutos: dinheiro(brutoProdutos), bruto: dinheiro(bruto), taxas: dinheiro(taxasTotal), materiais: dinheiro(materiaisTotal), comissaoServicos: dinheiro(comissaoServicos), comissaoProdutos: dinheiro(comissaoProdutos), repasse: dinheiro(repasse), parcelaSalao: dinheiro(Math.max(0, bruto - taxasTotal - repasse)) };
+      const resultado = {
+        profissionalId: profissional.id,
+        profissionalNome: profissional.nome,
+        percentualComissao: Number(profissional.percentualComissao || 0),
+        percentualComissaoProduto: Number(profissional.percentualComissaoProduto || 0),
+        percentualEfetivoServico: metaServico.percentualEfetivo,
+        bonusPercentualServico: metaServico.bonusPercentual,
+        metasServico: metaServico,
+        percentualEfetivoProduto: metaProduto.percentualEfetivo,
+        bonusPercentualProduto: metaProduto.bonusPercentual,
+        metasProduto: metaProduto,
+        descontaMaterial: Boolean(profissional.descontaMaterial),
+        atendimentos: servicos.length,
+        vendasProdutos: produtos.length,
+        brutoServicos: dinheiro(brutoServicos),
+        brutoProdutos: dinheiro(brutoProdutos),
+        bruto: dinheiro(bruto),
+        taxas: dinheiro(taxasTotal),
+        materiais: dinheiro(materiaisTotal),
+        comissaoServicos: dinheiro(comissaoServicos),
+        comissaoProdutos: dinheiro(comissaoProdutos),
+        repasse: dinheiro(repasse),
+        parcelaSalao: dinheiro(Math.max(0, bruto - taxasTotal - repasse))
+      };
       if (detalhar) resultado.linhas = linhas.sort((a, b) => String(a.data).localeCompare(String(b.data)));
       return resultado;
     }).filter((item) => item.atendimentos > 0 || item.vendasProdutos > 0 || estado.profissionais[item.profissionalId].ativo !== false);
