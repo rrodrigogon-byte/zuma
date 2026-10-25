@@ -131,7 +131,8 @@ export function painelBarbeiro(erp, { empresaId, lojaId = '', usuario = {}, prof
   let gamificacao = null;
   try {
     const painelGamif = dinoGamificacao.avaliarMetasESincronizarGiros(empresaId, { dataIso: data, lojaId });
-    const meuDesempenho = (painelGamif.profissionais || []).find((p) => p.profissionalId === escolhido.id);
+    const listaProfs = painelGamif.profissionais || painelGamif.apuracao?.profissionais || [];
+    const meuDesempenho = listaProfs.find((p) => p.profissionalId === escolhido.id);
     if (meuDesempenho) {
       gamificacao = {
         dia: meuDesempenho.dia,
