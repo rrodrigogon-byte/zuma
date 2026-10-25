@@ -151,13 +151,56 @@ function contaDto(row) {
 
 const contasSql = `SELECT cr.*, CASE WHEN cr.data_pagamento IS NOT NULL THEN 'paga' WHEN cr.data_vencimento < CURRENT_DATE THEN 'atrasada' ELSE 'pendente' END AS status FROM a2_contas_receber cr WHERE cr.empresa_id = $1`;
 
+export async function sincronizarPedidosPendentes(db, empresaId) {
+  if (!db || typeof db.query !== 'function') return;
+  const empresa = id(empresaId, 'empresa');
+  await db.query(`
+    INSERT INTO a2_contas_receber (empresa_id, cliente_id, mesa_numero, descricao, valor, data_vencimento, observacao)
+    SELECT o.empresa_id,
+           o.customer_id,
+           0,
+           'Pedido ' || COALESCE(o.public_code, left(o.id::text, 8)),
+           o.total,
+           (o.criado_em::date + INTERVAL '30 days')::date,
+           'Pedido gerado na Loja Online (' || COALESCE(o.public_code, o.id::text) || ')'
+      FROM commerce_orders o
+     WHERE o.empresa_id = $1
+       AND o.status = 'pending_payment'
+       AND o.customer_id IS NOT NULL
+       AND NOT EXISTS (
+         SELECT 1 FROM a2_contas_receber cr
+          WHERE cr.empresa_id = o.empresa_id
+            AND (
+              cr.observacao LIKE '%' || o.id::text || '%'
+              OR (o.public_code IS NOT NULL AND cr.descricao = 'Pedido ' || o.public_code)
+            )
+       )
+  `, [empresa]).catch((e) => console.warn('[a2] aviso ao sincronizar pedidos pendentes:', e.message));
+
+  await db.query(`
+    UPDATE a2_contas_receber cr
+       SET data_pagamento = COALESCE(o.atualizado_em, CURRENT_TIMESTAMP),
+           atualizado_em = CURRENT_TIMESTAMP
+      FROM commerce_orders o
+     WHERE cr.empresa_id = $1
+       AND o.empresa_id = cr.empresa_id
+       AND cr.data_pagamento IS NULL
+       AND o.status IN ('paid', 'completed', 'delivered', 'shipped', 'ready')
+       AND (
+         cr.observacao LIKE '%' || o.id::text || '%'
+         OR (o.public_code IS NOT NULL AND cr.descricao = 'Pedido ' || o.public_code)
+       )
+  `, [empresa]).catch((e) => console.warn('[a2] aviso ao sincronizar pedidos quitados:', e.message));
+}
+
 export async function listarContas(db, empresaId, filtros = {}) {
   const equivalentes = empresasEquivalentes(empresaId);
+  const empresaUuid = id(empresaId, 'empresa');
   const contasMap = new Map();
 
   if (db && typeof db.query === 'function') {
     try {
-      const empresaUuid = id(empresaId, 'empresa');
+      await sincronizarPedidosPendentes(db, empresaUuid);
       const result = await db.query(`${contasSql} ORDER BY cr.data_vencimento ASC, cr.criado_em DESC`, [empresaUuid]);
       for (const row of result.rows) {
         const dto = contaDto(row);
@@ -332,7 +375,32 @@ export async function baixarConta(db, empresaId, contaId, dataPagamento = new Da
     try {
       const empresaUuid = id(empresaId, 'empresa');
       const result = await db.query(`UPDATE a2_contas_receber SET data_pagamento=COALESCE(data_pagamento,$1), atualizado_em=CURRENT_TIMESTAMP WHERE empresa_id=$2 AND id=$3 RETURNING *, CASE WHEN data_pagamento IS NOT NULL THEN 'paga' ELSE 'pendente' END AS status`, [dataIso, empresaUuid, id(contaId, 'conta')]);
-      if (result.rows[0]) baixada = contaDto(result.rows[0]);
+      if (result.rows[0]) {
+        baixada = contaDto(result.rows[0]);
+        const conta = result.rows[0];
+        if (conta.observacao && conta.observacao.includes('Pedido gerado na Loja Online')) {
+          try {
+            const match = conta.descricao.match(/Pedido\s+(KC-[A-Z0-9]+)/);
+            if (match) {
+              const publicCode = match[1];
+              await db.query(`
+                UPDATE commerce_orders
+                   SET status = 'paid', atualizado_em = CURRENT_TIMESTAMP
+                 WHERE empresa_id = $1 AND public_code = $2 AND status = 'pending_payment'
+              `, [empresaUuid, publicCode]);
+              await db.query(`
+                UPDATE commerce_payments
+                   SET status = 'captured', captured_at = COALESCE(captured_at, $3), atualizado_em = CURRENT_TIMESTAMP
+                 WHERE empresa_id = $1 AND status = 'pending' AND order_id IN (
+                   SELECT id FROM commerce_orders WHERE empresa_id = $1 AND public_code = $2
+                 )
+              `, [empresaUuid, publicCode, dataIso]);
+            }
+          } catch (err) {
+            console.warn('[a2] aviso ao sincronizar baixa com pedido commerce:', err.message);
+          }
+        }
+      }
     } catch {}
   }
 
@@ -384,6 +452,10 @@ export async function baixarConta(db, empresaId, contaId, dataPagamento = new Da
 }
 
 export async function listarAlertas(db, empresaId) {
+  const empresaUuid = id(empresaId, 'empresa');
+  if (db && typeof db.query === 'function') {
+    try { await sincronizarPedidosPendentes(db, empresaUuid); } catch {}
+  }
   const contas = await listarContas(db, empresaId);
   const ts = new Date().toISOString();
   const alertas = [];
@@ -478,7 +550,6 @@ export async function salvarCadastro(db, empresaId, tipo, corpo = {}, registroId
     if (campo === 'data_admissao') return dataOpcional(corpo[chave], chave);
     if (campo === 'salario') return corpo[chave] === '' || corpo[chave] == null ? null : numero(corpo[chave], chave);
     if (campo === 'status') {
-      // na edição sem status no corpo, mantém o atual (o UPDATE usa COALESCE para esta coluna)
       if (registroId && (corpo.status === undefined || corpo.status === null || corpo.status === '')) return null;
       const status = String(corpo.status ?? 'ativo').trim().toLowerCase() || 'ativo';
       if (!STATUS_CADASTRO.has(status)) throw new ErroDominio('VALIDATION_ERROR', 'status deve ser ativo, afastado, desligado ou inativo');

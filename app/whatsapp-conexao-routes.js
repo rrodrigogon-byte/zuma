@@ -128,8 +128,9 @@ export function registerWhatsappConexaoRoutes(app, { legacyEmpresaId, legacyLoja
     if (!gestor(req, res)) return;
     if (req.body?.confirmado !== true) return res.status(400).json({ error: 'Confirme a desconexão.' });
     const empresaId = legacyEmpresaId(req);
-    const result = await conexaoKytto.desconectar(empresaId, { usuario: who(req), fetchImpl, tipoCanal: perfil });
-    audit(req, 'WHATSAPP CONEXAO DESCONECTAR', `instancia=${result.conexao.instance}; ok=${result.ok}`);
+    const forcar = req.body?.forcar === true;
+    const result = await conexaoKytto.desconectar(empresaId, { usuario: who(req), fetchImpl, tipoCanal: perfil, forcar });
+    audit(req, 'WHATSAPP CONEXAO DESCONECTAR', `instancia=${result.conexao.instance}; ok=${result.ok}; forcar=${forcar}`);
     save();
     res.status(result.ok ? 200 : result.code === 'WHATSAPP_INSTANCE_UNASSIGNED' ? 409 : 502).json({ ...result, conexao: view(req, empresaId) });
   });

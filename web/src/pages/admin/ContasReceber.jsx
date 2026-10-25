@@ -35,7 +35,7 @@ export default function ContasReceber() {
       setClientes(listaClientes)
       setAlertas(listaAlertas)
     } catch (e) {
-      toast('Erro ao carregar dados financeiros', true)
+      toast(e.message || 'Erro ao carregar dados financeiros', true)
     } finally {
       setLoading(false)
     }
