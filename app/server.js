@@ -139,6 +139,7 @@ import { registerAtivacaoRoutes } from './dino-ativacao-routes.js';
 import { vincularClienteAoAtendimento } from './dino-clientes-vinculo.js';
 import * as dinoBi from './dino-bi.js';
 import * as dinoMetas from './dino-metas.js';
+import * as dinoGamificacao from './dino-metas-gamificacao.js';
 import { funnelSummary } from './storefront-funnel.js';
 import { whatsappProviderConfigured, whatsappProviderName } from './core/whatsapp-provider.js';
 import { enviarMensagem as enviarWhatsappCore } from './core/whatsapp.js';
@@ -3627,6 +3628,101 @@ app.put('/api/admin/barbearia/metas', (req, res) => {
     res.json({ ok: true, metas });
   } catch (error) { res.status(400).json({ error: error.message }); }
 });
+
+// --- CENTRAL DINO: METAS DIÁRIAS, SEMANAIS E ROLETA DE PREMIAÇÕES ---
+app.get('/api/admin/barbearia/gamificacao/config', (req, res) => {
+  try {
+    const config = dinoGamificacao.obterConfiguracao(legacyEmpresaId(req));
+    res.json({ ok: true, config });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+app.put('/api/admin/barbearia/gamificacao/config', (req, res) => {
+  if (!['admin', 'organizador', 'gerente'].includes(String(req.user?.role || '').toLowerCase())) {
+    return res.status(403).json({ error: 'Apenas administradores e gestores podem configurar metas e premiações.' });
+  }
+  try {
+    const config = dinoGamificacao.salvarConfiguracao(legacyEmpresaId(req), req.body || {}, req.user?.nome || req.user?.email);
+    audit(req, 'CONFIG_METAS_ROLETA_ATUALIZADA', `Metas e prêmios atualizados por ${req.user?.nome || req.user?.email}`);
+    res.json({ ok: true, config });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+app.get('/api/admin/barbearia/gamificacao/painel', (req, res) => {
+  try {
+    const dataIso = req.query?.data ? String(req.query.data).slice(0, 10) : dinoGamificacao.dataIsoCuiaba();
+    const lojaId = req.query?.lojaId || legacyLojaId(req) || null;
+    const painel = dinoGamificacao.avaliarMetasESincronizarGiros(legacyEmpresaId(req), { dataIso, lojaId });
+    res.json({ ok: true, ...painel });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+app.post('/api/admin/barbearia/gamificacao/giros/executar', (req, res) => {
+  try {
+    const { giroId, premioNome, premioId } = req.body || {};
+    const giro = dinoGamificacao.executarGiro(legacyEmpresaId(req), {
+      giroId,
+      premioNome,
+      premioId,
+      usuario: req.user?.nome || req.user?.email,
+    });
+    audit(req, 'ROLETA_GIRADA', `Giro ${giroId} executado: Prêmio ${giro.premioGanho}`);
+    res.json({ ok: true, giro });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+app.patch('/api/admin/barbearia/gamificacao/giros/:id/entrega', (req, res) => {
+  if (!['admin', 'organizador', 'gerente', 'staff'].includes(String(req.user?.role || '').toLowerCase())) {
+    return res.status(403).json({ error: 'Sem permissão para confirmar entrega de premiação.' });
+  }
+  try {
+    const giro = dinoGamificacao.confirmarEntregaPremio(legacyEmpresaId(req), req.params.id, {
+      entreguePor: req.body?.entreguePor || req.user?.nome || req.user?.email,
+      observacao: req.body?.observacao || '',
+    });
+    audit(req, 'PREMIACAO_ENTREGUE', `Giro ${req.params.id} entregue por ${giro.entreguePor}`);
+    res.json({ ok: true, giro });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+app.post('/api/admin/barbearia/gamificacao/giros/bonus', (req, res) => {
+  if (!['admin', 'organizador', 'gerente'].includes(String(req.user?.role || '').toLowerCase())) {
+    return res.status(403).json({ error: 'Apenas administradores e gestores podem conceder giros bônus.' });
+  }
+  try {
+    const { profissionalId, profissionalNome, motivo } = req.body || {};
+    const giro = dinoGamificacao.concederGiroBonus(legacyEmpresaId(req), {
+      profissionalId,
+      profissionalNome,
+      motivo,
+      usuario: req.user?.nome || req.user?.email,
+    });
+    audit(req, 'GIRO_BONUS_CONCEDIDO', `Bônus para ${profissionalNome || profissionalId}: ${motivo}`);
+    res.json({ ok: true, giro });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+app.get('/api/admin/barbearia/gamificacao/historico', (req, res) => {
+  try {
+    const historico = dinoGamificacao.listarHistoricoGiros(legacyEmpresaId(req), req.query || {});
+    res.json({ ok: true, historico });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
 function sanitizarClienteBarbearia(cliente) {
   if (!cliente) return cliente;
   return {

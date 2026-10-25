@@ -27,6 +27,7 @@ const DinoCampaignsPanel = lazy(() => import('./DinoCampaignsPanel'))
 const DinoEquipeDesempenho = lazy(() => import('./DinoEquipeDesempenho'))
 const BIBarbearia = lazy(() => import('./dino/BIBarbearia'))
 const ProjecaoFaturamentoPanel = lazy(() => import('./dino/ProjecaoFaturamentoPanel'))
+const DinoMetasRoletaPanel = lazy(() => import('./dino/DinoMetasRoletaPanel'))
 import ComandaNova, { AdicionarItensComanda, BuscaCliente } from './dino/ComandaNova'
 import { abrirHistoricoEmNovaGuia } from './dino/historico-cliente'
 import ClienteRelacionamento, { RELACIONAMENTO_VAZIO, relacionamentoDoCliente, relacionamentoParaApi } from './dino/ClienteRelacionamento'
@@ -56,6 +57,7 @@ const TABS = [
   ['Lista de espera', 'Pedidos de horário e avisos de vaga'],
   ['Indicações', 'Indique um amigo com recompensa'],
   ['Saúde do clube', 'Uso, margem e candidatos ao clube'],
+  ['Metas & Roleta', 'Metas diárias, semanais de produtos e roleta de prêmios'],
   ['Projeção inteligente', 'Cenários, tendências e ações para faturamento'],
   ['Ocupação e metas', 'Ocupação da agenda e metas por barbeiro'],
   ['Avaliações (NPS)', 'Notas e indicadores no próprio sistema'],
@@ -74,7 +76,7 @@ const AREAS = [
   { id: 'operacao', label: 'Operação', short: 'Hoje, agenda, atendimento e caixa', tabs: ['Visão geral', 'Agenda', 'Atendimento', 'Caixa e fechamento', 'Prévia taxas e materiais', 'Fila e bloqueios'] },
   { id: 'relacionamento', label: 'Relacionamento', short: 'Clientes, retorno e indicação', tabs: ['Clientes', 'Retorno previsto', 'Lista de espera', 'Indicações', 'Avaliações (NPS)', 'Origem dos clientes', 'Fidelidade'] },
   { id: 'catalogo', label: 'Catálogo e equipe', short: 'Serviços, planos e revenda', tabs: ['Profissionais', 'Serviços', 'Planos e assinaturas', 'Saúde do clube', 'Estoque de revenda', 'Compras e fornecedores', 'Curva ABC', 'Vendas de revenda'] },
-  { id: 'gestao', label: 'Gestão', short: 'Comissões, metas e regras', tabs: ['Metas e comissões', 'Desempenho da equipe', 'Comissões', 'Extrato e repasses', 'Projeção inteligente', 'Ocupação e metas', 'Cobranças e cashback', 'Vale-presente', 'Receita da IA', 'Resumo diário', 'Unidades', 'Relatórios', 'Configuração'] },
+  { id: 'gestao', label: 'Gestão', short: 'Comissões, metas e regras', tabs: ['Metas & Roleta', 'Metas e comissões', 'Desempenho da equipe', 'Comissões', 'Extrato e repasses', 'Projeção inteligente', 'Ocupação e metas', 'Cobranças e cashback', 'Vale-presente', 'Receita da IA', 'Resumo diário', 'Unidades', 'Relatórios', 'Configuração'] },
   { id: 'integracoes', label: 'Integrações', short: 'WhatsApp e IA controlados', tabs: ['Integrações'] },
 ]
 
@@ -226,7 +228,7 @@ function rotuloPreco(servico) {
 }
 
 // Abas que não dependem da visão geral da barbearia (cada uma busca seus próprios dados).
-const TABS_AUTONOMAS = new Set(['Desempenho da equipe', 'Retorno previsto', 'Lista de espera', 'Saúde do clube', 'Curva ABC', 'Projeção inteligente', 'Ocupação e metas', 'Avaliações (NPS)', 'Origem dos clientes', 'Cobranças e cashback', 'Receita da IA', 'Resumo diário', 'Vale-presente'])
+const TABS_AUTONOMAS = new Set(['Desempenho da equipe', 'Retorno previsto', 'Lista de espera', 'Saúde do clube', 'Curva ABC', 'Metas & Roleta', 'Projeção inteligente', 'Ocupação e metas', 'Avaliações (NPS)', 'Origem dos clientes', 'Cobranças e cashback', 'Receita da IA', 'Resumo diário', 'Vale-presente'])
 
 export default function BarbeariaERP() {
   const { toast } = useToast()
@@ -1974,6 +1976,7 @@ export default function BarbeariaERP() {
     if (tab === 'Curva ABC') return <CurvaAbcPanel />
     if (tab === 'Metas e comissões') return <Suspense fallback={<Card style={{ padding: 40, textAlign: 'center', color: 'var(--muted)' }}>Carregando metas e comissões…</Card>}><MetasComissoesPanel onOpenTab={navegarParaTab} /></Suspense>
     if (tab === 'Extrato e repasses') return <RepassesPanel profissionais={profissionais} servicos={servicos} planos={planos} onCadastroMudou={carregar} />
+    if (tab === 'Metas & Roleta') return <Suspense fallback={<Card style={{ padding: 40, textAlign: 'center', color: 'var(--muted)' }}>Carregando metas e roleta…</Card>}><DinoMetasRoletaPanel /></Suspense>
     if (tab === 'Projeção inteligente') return <Suspense fallback={<Card style={{ padding: 40, textAlign: 'center', color: 'var(--muted)' }}>Carregando projeção de IA…</Card>}><ProjecaoFaturamentoPanel onOpenTab={navegarParaTab} /></Suspense>
     if (tab === 'Ocupação e metas') return <OcupacaoMetasPanel />
     if (tab === 'Desempenho da equipe') return <Suspense fallback={<Card style={{ padding: 40, textAlign: 'center', color: 'var(--muted)' }}>Carregando desempenho da equipe…</Card>}><DinoEquipeDesempenho empresaId={empresaAtiva?.id || ''} lojaId={lojaAtiva?.id || ''} onOpenTab={navegarParaTab} /></Suspense>
