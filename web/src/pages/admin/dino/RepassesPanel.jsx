@@ -54,7 +54,7 @@ export function ExtratoTabela({ extrato }) {
     <div style={{ overflowX: 'auto' }}><table style={{ ...table, minWidth: 820 }}><thead><tr>{['Data', 'Item', 'Cliente', 'Bruto', 'Taxa', 'Material', 'Base', '%', 'Comissão'].map((c) => <th key={c} style={th}>{c}</th>)}</tr></thead>
       <tbody>{extrato.linhas.length === 0 && extrato.pote.length === 0 ? <tr><td colSpan={9} style={empty}>Nada no período.</td></tr> : <>
         {extrato.linhas.map((l, i) => <tr key={`${l.origemId}-${i}`}><td style={td}>{dataBR(l.data)}</td><td style={td}>{l.descricao}<div style={sub}>{l.tipo === 'produto' ? 'produto' : 'serviço'}</div></td><td style={td}>{l.cliente || '—'}</td><td style={td}>{moeda(l.bruto)}</td><td style={td}>{moeda(l.taxa)}</td><td style={td}>{moeda(l.material)}</td><td style={td}>{moeda(l.base)}</td><td style={td}>{l.percentual}%</td><td style={td}><strong>{moeda(l.comissao)}</strong></td></tr>)}
-        {extrato.pote.map((p) => <tr key={p.planoId}><td style={td}>—</td><td style={td}>Pote do plano {p.plano}<div style={sub}>{p.pontos} de {p.totalPontos} pontos</div></td><td style={td}>—</td><td style={td} colSpan={5} /><td style={td}><strong>{moeda(p.valor)}</strong></td></tr>)}
+        {extrato.pote.map((p) => <tr key={p.planoId}><td style={td}>—</td><td style={td}>Pote do plano {p.plano}<div style={sub}>{p.rateioPote === 'atendimento' ? `${p.usos} de ${p.totalPontos} atendimentos pelo plano` : `${p.pontos} de ${p.totalPontos} pontos`}{p.valorFixo > 0 ? ` · fixo ${moeda(p.valorFixoPorUso)} × ${p.usos} = ${moeda(p.valorFixo)}` : ''}</div></td><td style={td}>—</td><td style={td} colSpan={5} /><td style={td}><strong>{moeda(p.valor)}</strong></td></tr>)}
       </>}</tbody></table></div>
   </div>
 }
@@ -72,7 +72,10 @@ export function HistoricoAvecExtrato({ historico }) {
       <div style={kpi}><div style={kpiLabel}>Percentual</div><div style={kpiValue}>{historico.percentual}%</div></div>
       <div style={kpi}><div style={kpiLabel}>Comissão calculada</div><div style={{ ...kpiValue, color: ok }}>{moeda(historico.comissao)}</div><div style={sub}>pela regra do Avec</div></div>
       <div style={kpi}><div style={kpiLabel}>Pago no Avec</div><div style={kpiValue}>{moeda(historico.pagamentos?.total)}</div><div style={sub}>comissões {moeda(historico.pagamentos?.comissoes)} · antecipações {moeda(historico.pagamentos?.antecipacoes)}</div></div>
+      <div style={kpi}><div style={kpiLabel}>Atendimentos Club</div><div style={kpiValue}>{historico.club?.atendimentos ?? 0}</div><div style={sub}>sem valor na comanda{(historico.club?.porServico || []).length ? ` · ${historico.club.porServico.slice(0, 3).map((s) => `${s.servico} ${s.quantidade}`).join(' · ')}` : ''}</div></div>
+      {historico.conferencia?.diferenca != null && <div style={kpi}><div style={kpiLabel}>Pago − calculado</div><div style={kpiValue}>{moeda(historico.conferencia.diferenca)}</div><div style={sub}>{historico.conferencia.porAtendimentoClub != null ? `${moeda(historico.conferencia.porAtendimentoClub)} por atendimento Club (pote do Avec)` : 'sem atendimento Club no período'}</div></div>}
     </div>
+    {historico.conferencia?.observacao && <p style={{ ...sub, marginTop: 8 }}>{historico.conferencia.observacao}</p>}
     {(historico.pagamentos?.itens || []).length > 0 && <div style={{ overflowX: 'auto', marginTop: 12 }}><table style={{ ...table, minWidth: 620 }}><thead><tr>{['Pago em', 'Lançamento no Avec', 'Tipo', 'Valor'].map((c) => <th key={c} style={th}>{c}</th>)}</tr></thead><tbody>{historico.pagamentos.itens.map((p, i) => <tr key={`${p.data}-${i}`}><td style={td}>{dataBR(p.data)}</td><td style={td}>{p.descricao}{p.periodo ? <div style={sub}>período {dataBR(p.periodo.de)} a {dataBR(p.periodo.ate)}</div> : null}</td><td style={td}>{p.tipo === 'comissao' ? 'Comissão' : 'Antecipação (vale)'}</td><td style={td}><strong>{moeda(p.valor)}</strong></td></tr>)}</tbody></table></div>}
     <div style={{ overflowX: 'auto', marginTop: 12 }}><table style={{ ...table, minWidth: 760 }}><thead><tr>{['Data', 'Serviço', 'Cliente', 'Comanda', 'Profissional no Avec', 'Bruto', '%', 'Comissão'].map((c) => <th key={c} style={th}>{c}</th>)}</tr></thead>
       <tbody>{linhas.length === 0 ? <tr><td colSpan={8} style={empty}>Nenhum atendimento do Avec no período.</td></tr> : linhas.slice(0, limite).map((l, i) => <tr key={`${l.data}-${l.comanda}-${i}`}><td style={td}>{dataBR(l.data)}</td><td style={td}>{l.descricao}{l.frente ? <div style={sub}>{l.frente}</div> : null}</td><td style={td}>{l.cliente || '—'}</td><td style={td}>{l.comanda || '—'}</td><td style={td}>{l.profissionalAvec || '—'}</td><td style={td}>{moeda(l.bruto)}</td><td style={td}>{l.percentual}%</td><td style={td}><strong>{moeda(l.comissao)}</strong></td></tr>)}</tbody></table></div>
@@ -87,6 +90,8 @@ function fimMes(deslocamento = 0) { const d = new Date(`${inicioMes(deslocamento
 function RegrasComissao({ servicos = [], planos = [], onSalvo }) {
   const [material, setMaterial] = useState({})
   const [pote, setPote] = useState({})
+  const [rateio, setRateio] = useState({})
+  const [fixo, setFixo] = useState({})
   const [msg, setMsg] = useState('')
   async function salvarServico(servico) {
     const bruto = material[servico.id]
@@ -97,7 +102,12 @@ function RegrasComissao({ servicos = [], planos = [], onSalvo }) {
   }
   async function salvarPlano(plano) {
     try {
-      await api.patch(`/api/admin/barbearia/planos/${plano.id}`, { ...plano, percentualPote: Number(pote[plano.id]) })
+      await api.patch(`/api/admin/barbearia/planos/${plano.id}`, {
+        ...plano,
+        percentualPote: Number(pote[plano.id] ?? (plano.percentualPote || 0)),
+        rateioPote: rateio[plano.id] ?? (plano.rateioPote || 'valor_tabela'),
+        valorFixoPorUso: Number(String(fixo[plano.id] ?? (plano.valorFixoPorUso || 0)).replace(',', '.')) || 0,
+      })
       setMsg(`Pote do plano ${plano.nome} salvo.`); onSalvo?.()
     } catch (e) { setMsg(e.message) }
   }
@@ -109,8 +119,8 @@ function RegrasComissao({ servicos = [], planos = [], onSalvo }) {
     </div>
     <div style={card}>
       <h3 style={h3}>Comissão sobre planos (pote)</h3>
-      <p style={sub}>Percentual de cada mensalidade que vai para o pote dividido entre quem atendeu pelo plano.</p>
-      {planos.filter((pl) => pl.ativo !== false).length === 0 && <div style={empty}>Nenhum plano ativo. Crie em Catálogo → Planos e assinaturas.</div>}<div style={{ overflowX: 'auto', marginTop: 8 }}><table style={table}><tbody>{planos.filter((pl) => pl.ativo !== false).map((pl) => <tr key={pl.id}><td style={td}>{pl.nome}<div style={sub}>{moeda(pl.preco)}</div></td><td style={td}><input aria-label={`Pote do plano ${pl.nome}`} type="number" min="0" max="100" value={pote[pl.id] ?? (pl.percentualPote || 0)} onChange={(e) => setPote({ ...pote, [pl.id]: e.target.value })} style={{ ...input, width: 80 }} /> %</td><td style={td}><button type="button" style={btn} onClick={() => salvarPlano(pl)}>Salvar</button></td></tr>)}</tbody></table></div>
+      <p style={sub}>Percentual de cada mensalidade que vai para o pote dividido entre quem atendeu pelo plano: pelo valor de tabela dos serviços ou em partes iguais por atendimento (como o Avec fazia no Club). O valor fixo por atendimento é pago além do pote.</p>
+      {planos.filter((pl) => pl.ativo !== false).length === 0 && <div style={empty}>Nenhum plano ativo. Crie em Catálogo → Planos e assinaturas.</div>}<div style={{ overflowX: 'auto', marginTop: 8 }}><table style={table}><tbody>{planos.filter((pl) => pl.ativo !== false).map((pl) => <tr key={pl.id}><td style={td}>{pl.nome}<div style={sub}>{moeda(pl.preco)}</div></td><td style={td}><input aria-label={`Pote do plano ${pl.nome}`} type="number" min="0" max="100" value={pote[pl.id] ?? (pl.percentualPote || 0)} onChange={(e) => setPote({ ...pote, [pl.id]: e.target.value })} style={{ ...input, width: 80 }} /> %</td><td style={td}><select aria-label={`Rateio do pote do plano ${pl.nome}`} value={rateio[pl.id] ?? (pl.rateioPote || 'valor_tabela')} onChange={(e) => setRateio({ ...rateio, [pl.id]: e.target.value })} style={input}><option value="valor_tabela">por valor de tabela</option><option value="atendimento">por atendimento</option></select></td><td style={td}><input aria-label={`Valor fixo por atendimento do plano ${pl.nome}`} inputMode="decimal" placeholder="R$ fixo" value={fixo[pl.id] ?? (pl.valorFixoPorUso || '')} onChange={(e) => setFixo({ ...fixo, [pl.id]: e.target.value })} style={{ ...input, width: 90 }} /></td><td style={td}><button type="button" style={btn} onClick={() => salvarPlano(pl)}>Salvar</button></td></tr>)}</tbody></table></div>
     </div>
     {msg && <div style={{ ...sub, gridColumn: '1 / -1' }}>{msg}</div>}
   </div>
@@ -205,7 +215,7 @@ export function RepassesPanel({ profissionais: profissionaisBase = [], servicos 
       <div style={card}>
         <h3 style={h3}>Pote dos planos no período</h3>
         <p style={sub}>Parte da mensalidade definida em cada plano, dividida pelo valor de tabela dos serviços que cada profissional atendeu pelo plano.</p>
-        {(pote?.planos || []).length === 0 ? <div style={empty}>Nenhum plano com pote ou nenhuma mensalidade no período.</div> : pote.planos.map((p) => <div key={p.planoId} style={{ marginTop: 8, fontSize: 13 }}><strong>{p.plano}</strong> · {p.percentualPote}% de {moeda(p.receita)} = {moeda(p.pote)}{p.semRateio > 0 ? <span style={{ color: alerta }}> · {moeda(p.semRateio)} sem uso para dividir</span> : null}</div>)}
+        {(pote?.planos || []).length === 0 ? <div style={empty}>Nenhum plano com pote ou nenhuma mensalidade no período.</div> : pote.planos.map((p) => <div key={p.planoId} style={{ marginTop: 8, fontSize: 13 }}><strong>{p.plano}</strong> · {p.percentualPote}% de {moeda(p.receita)} = {moeda(p.pote)}{p.rateioPote === 'atendimento' ? ` · ${p.usos} atendimento(s), ${moeda(p.valorPorPonto)} cada` : ''}{p.fixoPago > 0 ? ` · fixo pago ${moeda(p.fixoPago)}` : ''}{p.semRateio > 0 ? <span style={{ color: alerta }}> · {moeda(p.semRateio)} sem uso para dividir</span> : null}</div>)}
       </div>
     </div>
     <RegrasComissao servicos={servicos} planos={planos} onSalvo={() => { onCadastroMudou?.(); carregar() }} />

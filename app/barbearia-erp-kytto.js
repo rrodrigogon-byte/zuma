@@ -1139,6 +1139,11 @@ function planoNormalizado(dados = {}, anterior = {}) {
     servicosIds,
     // Parte da mensalidade (%) que vai para o pote de comissão dos profissionais.
     percentualPote: Math.min(100, Math.max(0, numero(dados.percentualPote ?? dados.percentual_pote ?? anterior.percentualPote, 0))),
+    // Como o pote é dividido: pelo valor de tabela dos serviços usados ("valor_tabela")
+    // ou em partes iguais por atendimento pelo plano ("atendimento", como era no Avec).
+    rateioPote: ['valor_tabela', 'atendimento'].includes(String(dados.rateioPote ?? dados.rateio_pote ?? anterior.rateioPote)) ? String(dados.rateioPote ?? dados.rateio_pote ?? anterior.rateioPote) : 'valor_tabela',
+    // Valor fixo (R$) pago ao profissional por atendimento feito pelo plano; soma ao pote, se houver.
+    valorFixoPorUso: Math.max(0, dinheiro(dados.valorFixoPorUso ?? dados.valor_fixo_por_uso ?? anterior.valorFixoPorUso ?? 0)),
     ativo: dados.ativo ?? anterior.ativo ?? true,
   };
 }
