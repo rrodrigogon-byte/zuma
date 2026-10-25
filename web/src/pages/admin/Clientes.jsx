@@ -11,6 +11,12 @@ const EMPTY_FORM = {
   email: '',
   telefone: '',
   endereco: '',
+  bairro: '',
+  cidade: '',
+  aniversario: '',
+  estadoCivil: 'solteiro',
+  conjugeNome: '',
+  conjugeAniversario: '',
   limiteCreditoMensal: 0,
   diasVencimento: 30,
   observacao: ''
@@ -72,6 +78,12 @@ export default function Clientes() {
       email: c.email || '',
       telefone: c.telefone || '',
       endereco: c.endereco || '',
+      bairro: c.bairro || '',
+      cidade: c.cidade || '',
+      aniversario: c.aniversario || c.dataNascimento || '',
+      estadoCivil: c.estadoCivil || 'solteiro',
+      conjugeNome: c.conjugeNome || (c.familia?.find(f => f.relacao === 'esposa' || f.relacao === 'conjuge')?.nome) || '',
+      conjugeAniversario: c.conjugeAniversario || (c.familia?.find(f => f.relacao === 'esposa' || f.relacao === 'conjuge')?.aniversario) || '',
       limiteCreditoMensal: c.limiteCreditoMensal || 0,
       diasVencimento: c.diasVencimento || 30,
       observacao: c.observacao || ''
@@ -129,6 +141,8 @@ export default function Clientes() {
             <tr>
               <th>Nome / Razão Social</th>
               <th>Contato</th>
+              <th>Aniversário / Região</th>
+              <th>Família / Cônjuge</th>
               <th>Limite Mensal</th>
               <th>Saldo Devedor</th>
               <th>Score</th>
@@ -136,8 +150,8 @@ export default function Clientes() {
             </tr>
           </thead>
           <tbody>
-            {loading && <tr><td colSpan="6" style={{ textAlign:'center', padding:20 }}>Carregando...</td></tr>}
-            {!loading && filtrados.length === 0 && <tr><td colSpan="6" style={{ textAlign:'center', padding:20, color:'var(--muted)' }}>Nenhum cliente encontrado.</td></tr>}
+            {loading && <tr><td colSpan="8" style={{ textAlign:'center', padding:20 }}>Carregando...</td></tr>}
+            {!loading && filtrados.length === 0 && <tr><td colSpan="8" style={{ textAlign:'center', padding:20, color:'var(--muted)' }}>Nenhum cliente encontrado.</td></tr>}
             {filtrados.map(c => (
               <tr key={c.id}>
                 <td>
@@ -147,6 +161,24 @@ export default function Clientes() {
                 <td>
                   <div style={{ fontSize: 13 }}>{c.telefone || '—'}</div>
                   <div style={{ fontSize: 11, color: 'var(--muted)' }}>{c.email}</div>
+                </td>
+                <td>
+                  <div style={{ fontSize: 13, fontWeight: 500 }}>
+                    {c.aniversario ? `🎂 ${c.aniversario}` : '—'}
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--muted)' }}>
+                    {[c.bairro, c.cidade].filter(Boolean).join(', ') || '—'}
+                  </div>
+                </td>
+                <td>
+                  <div style={{ fontSize: 12 }}>
+                    {c.estadoCivil ? (c.estadoCivil.charAt(0).toUpperCase() + c.estadoCivil.slice(1)) : '—'}
+                  </div>
+                  {c.conjugeNome ? (
+                    <div style={{ fontSize: 11, color: 'var(--muted)' }}>
+                      💍 {c.conjugeNome} {c.conjugeAniversario ? `(${c.conjugeAniversario})` : ''}
+                    </div>
+                  ) : null}
                 </td>
                 <td>{fmtR(c.limiteCreditoMensal)}</td>
                 <td>
@@ -201,6 +233,49 @@ export default function Clientes() {
             <div className="form-group">
               <label>Endereço Completo</label>
               <input value={form.endereco} onChange={e => setForm({ ...form, endereco: e.target.value })} placeholder="Rua, Número, Bairro, Cidade - UF" />
+            </div>
+            <div style={{ borderTop: '1px solid var(--border)', paddingTop: 12, marginTop: 4 }}>
+              <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 8, color: 'var(--primary, #FF6B2C)' }}>
+                Dados Pessoais e Família (T-Rex / Fidelidade)
+              </div>
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Data de Aniversário</label>
+                  <input value={form.aniversario} onChange={e => setForm({ ...form, aniversario: e.target.value })} placeholder="DD/MM ou DD/MM/AAAA" />
+                </div>
+                <div className="form-group">
+                  <label>Estado Civil</label>
+                  <select value={form.estadoCivil} onChange={e => setForm({ ...form, estadoCivil: e.target.value })}>
+                    <option value="solteiro">Solteiro</option>
+                    <option value="casado">Casado</option>
+                    <option value="namorando">Namorando</option>
+                    <option value="uniao_estavel">União Estável</option>
+                    <option value="outro">Outro</option>
+                  </select>
+                </div>
+              </div>
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Bairro</label>
+                  <input value={form.bairro} onChange={e => setForm({ ...form, bairro: e.target.value })} placeholder="Ex: Jardim das Américas" />
+                </div>
+                <div className="form-group">
+                  <label>Cidade</label>
+                  <input value={form.cidade} onChange={e => setForm({ ...form, cidade: e.target.value })} placeholder="Ex: Cuiabá" />
+                </div>
+              </div>
+              {form.estadoCivil === 'casado' || form.estadoCivil === 'namorando' || form.estadoCivil === 'uniao_estavel' ? (
+                <div className="form-row">
+                  <div className="form-group">
+                    <label>Nome da Esposa / Parceira</label>
+                    <input value={form.conjugeNome} onChange={e => setForm({ ...form, conjugeNome: e.target.value })} placeholder="Nome da esposa" />
+                  </div>
+                  <div className="form-group">
+                    <label>Aniversário da Esposa</label>
+                    <input value={form.conjugeAniversario} onChange={e => setForm({ ...form, conjugeAniversario: e.target.value })} placeholder="DD/MM" />
+                  </div>
+                </div>
+              ) : null}
             </div>
             <div className="form-row">
               <div className="form-group">

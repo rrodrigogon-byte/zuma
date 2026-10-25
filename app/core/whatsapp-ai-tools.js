@@ -28,6 +28,9 @@ import {
 import { clubeParaTelefone, entrarListaEspera, planoDoTelefone, perfilDoTelefone, validarAgendamentoComPlano, sugestaoPosServico } from '../dino-captacao-kytto.js';
 import { saldoCashback } from '../dino-cobranca-kytto.js';
 import * as barbeariaErp from '../barbearia-erp-kytto.js';
+import * as clientesKytto from '../clientes-contas-kytto.js';
+import { normalizarNascimento } from '../clientes-contas-kytto.js';
+import { encontrarClientePorTelefone } from '../dino-clientes-vinculo.js';
 import { actionTtlMinutes, isGenericCustomerName } from './whatsapp-ai-intents.js';
 import {
   ensureWhatsappLead,
@@ -99,7 +102,7 @@ function contextScope(context = {}) {
 function capabilityAllows(name, capabilities = {}) {
   if (name === 'apresentar_produto' || name === 'consultar_pagamentos') return capabilities.operateStore !== false;
   if (name === 'solicitar_humano') return capabilities.humanHandoff !== false;
-  if (name === 'captar_cliente' || name === 'consultar_perfil_cliente') return capabilities.captureLeads !== false;
+  if (name === 'captar_cliente' || name === 'consultar_perfil_cliente' || name === 'atualizar_cadastro_cliente' || name === 'consultar_cadastro_cliente') return capabilities.captureLeads !== false;
   if (name.includes('promoc') || name === 'listar_promocoes_ativas' || name === 'atualizar_consentimento_marketing') return capabilities.sendPromotions === true;
   if (name === 'consultar_meu_plano' || name === 'avaliar_clube' || name === 'consultar_meu_cashback' || name === 'listar_planos' || name === 'calcular_pacote_frequencia') return capabilities.manageAppointments !== false;
   if (name === 'sugerir_produto_pos_servico') return capabilities.operateStore !== false;
@@ -1133,6 +1136,107 @@ async function toolPlans(context) {
   };
 }
 
+/** Consulta os dados cadastrais do cliente e aponta os campos pendentes (aniversário, bairro, cidade, solteiro/casado, esposa). */
+async function toolConsultCustomerProfile(context) {
+  const scope = await barbeariaScope(context).catch(() => contextScope(context));
+  const phone = context.phone || scope.phone;
+  if (!phone) return { ok: true, dataClassification: 'untrusted_business_data', cadastrado: false, camposPendentes: ['aniversario', 'bairro', 'cidade', 'estadoCivil'] };
+  const empresaId = scope.empresaId;
+  const cliente = encontrarClientePorTelefone(empresaId, phone);
+
+  if (!cliente) {
+    return {
+      ok: true,
+      dataClassification: 'untrusted_business_data',
+      cadastrado: false,
+      camposPendentes: ['aniversario', 'bairro e cidade onde mora', 'se é solteiro ou casado'],
+      instrucao: 'Cliente ainda sem cadastro completo. Pergunte os dados pendentes de forma natural e descontraída após resolver a intenção principal.',
+    };
+  }
+
+  const pendentes = [];
+  if (!cliente.aniversario && !cliente.dataNascimento) pendentes.push('data de aniversário');
+  if (!cliente.bairro || !cliente.cidade) pendentes.push('bairro e cidade onde mora');
+  if (!cliente.estadoCivil) pendentes.push('se é solteiro ou casado');
+  if (cliente.estadoCivil === 'casado' && !cliente.conjugeNome) pendentes.push('nome da esposa e aniversário dela');
+
+  return {
+    ok: true,
+    dataClassification: 'untrusted_business_data',
+    cadastrado: true,
+    clienteId: cliente.id,
+    nome: cliente.nome,
+    aniversario: cliente.aniversario || null,
+    bairro: cliente.bairro || null,
+    cidade: cliente.cidade || null,
+    estadoCivil: cliente.estadoCivil || null,
+    conjugeNome: cliente.conjugeNome || null,
+    conjugeAniversario: cliente.conjugeAniversario || null,
+    camposPendentes: pendentes,
+    instrucao: pendentes.length
+      ? `Ainda faltam no cadastro: ${pendentes.join(', ')}. Pergunte de forma leve e simpática durante ou no final do atendimento para garantir mimos e vantagens.`
+      : 'Cadastro do cliente está completo! Não precisa perguntar dados cadastrais novamente.',
+  };
+}
+
+/** Salva ou complementa o cadastro do cliente com aniversário, bairro, cidade, estado civil e dados do cônjuge. */
+async function toolUpdateCustomerProfile(context, args = {}) {
+  const scope = await barbeariaScope(context).catch(() => contextScope(context));
+  const phone = context.phone || scope.phone;
+  if (!phone) throw new WhatsappAiToolError('Telefone não identificado no contexto da conversa.', 'PHONE_REQUIRED');
+  const empresaId = scope.empresaId;
+
+  let cliente = encontrarClientePorTelefone(empresaId, phone);
+  const dados = {
+    nome: cleanText(args.nome || context.customerName || (cliente ? cliente.nome : 'Cliente'), 120),
+    telefone: phone,
+  };
+
+  if (args.dataNascimento || args.aniversario) {
+    try {
+      const n = normalizarNascimento(args.dataNascimento || args.aniversario);
+      if (n.aniversario) dados.aniversario = n.aniversario;
+      if (n.dataNascimento) dados.dataNascimento = n.dataNascimento;
+    } catch {}
+  }
+  if (args.bairro) dados.bairro = cleanText(args.bairro, 80);
+  if (args.cidade) dados.cidade = cleanText(args.cidade, 80);
+  if (args.estadoCivil) dados.estadoCivil = cleanText(args.estadoCivil, 40);
+  if (args.conjugeNome || args.nomeEsposa) dados.conjugeNome = cleanText(args.conjugeNome || args.nomeEsposa, 120);
+  if (args.conjugeAniversario || args.aniversarioEsposa) {
+    try {
+      const n = normalizarNascimento(args.conjugeAniversario || args.aniversarioEsposa);
+      if (n.aniversario) dados.conjugeAniversario = n.aniversario;
+      if (n.dataNascimento) dados.conjugeDataNascimento = n.dataNascimento;
+    } catch {}
+  }
+
+  if (cliente) {
+    cliente = clientesKytto.atualizarCliente(empresaId, cliente.id, dados);
+  } else {
+    cliente = clientesKytto.criarCliente(empresaId, {
+      ...dados,
+      observacao: 'Cadastro criado pelo atendimento WhatsApp T-Rex',
+    });
+  }
+
+  return {
+    ok: true,
+    dataClassification: 'untrusted_business_data',
+    clienteId: cliente?.id,
+    clienteNome: cliente?.nome,
+    dadosAtualizados: {
+      aniversario: cliente?.aniversario || dados.aniversario || null,
+      bairro: cliente?.bairro || dados.bairro || null,
+      cidade: cliente?.cidade || dados.cidade || null,
+      estadoCivil: cliente?.estadoCivil || dados.estadoCivil || null,
+      conjugeNome: cliente?.conjugeNome || dados.conjugeNome || null,
+      conjugeAniversario: cliente?.conjugeAniversario || dados.conjugeAniversario || null,
+    },
+    instrucao: 'Dados cadastrais do cliente salvos com sucesso no sistema da barbearia. Agradeça de forma simpática, descontraída e acolhedora.',
+  };
+}
+
 async function toolMyCashback(context) {
   const scope = await barbeariaScope(context);
   const cashback = saldoCashback(scope.empresaId, scope.phone);
@@ -1322,6 +1426,27 @@ export const WHATSAPP_AI_TOOL_DECLARATIONS = [
   { name: 'avaliar_clube', description: 'Avalia se o clube/plano mensal compensa para o contato pela frequência de visitas. Só use se o cliente perguntou de plano/clube ou depois de propor_oportunidade liberar a categoria "clube". Nunca cite gasto do cliente.', parameters: { type: 'OBJECT', properties: {} } },
   { name: 'sugerir_produto_pos_servico', description: 'Busca até 3 produtos publicados ligados ao último serviço do contato (ex.: pomada após corte, óleo após barba). Só use se o cliente pediu indicação de produto ou depois de propor_oportunidade liberar a categoria "cuidados pos-servico".', parameters: { type: 'OBJECT', properties: {} } },
   { name: 'propor_oportunidade', description: 'Autoriza ou bloqueia uma única sugestão comercial opcional com base em consentimento, relevância, cooldown e limite. É obrigatória antes de qualquer oferta não solicitada.', parameters: { type: 'OBJECT', properties: { category: { type: 'STRING', description: 'Categoria factual e relevante retornada pelo perfil consentido' } }, required: ['category'] } },
+  {
+    name: 'consultar_cadastro_cliente',
+    description: 'Consulta os dados cadastrais atuais do cliente pelo telefone (aniversário, bairro, cidade, se é solteiro ou casado, nome da esposa e aniversário dela) e informa quais campos faltam preencher. Use para saber o que já está cadastrado antes de perguntar.',
+    parameters: { type: 'OBJECT', properties: {} },
+  },
+  {
+    name: 'atualizar_cadastro_cliente',
+    description: 'Salva ou complementa o cadastro do cliente (aniversário, bairro, cidade, se é solteiro ou casado, nome da esposa e data de aniversário dela). Use IMEDIATAMENTE sempre que o cliente responder qualquer um desses dados durante o atendimento.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        nome: { type: 'STRING', description: 'Nome do cliente' },
+        aniversario: { type: 'STRING', description: 'Data de aniversário ou nascimento do cliente (ex.: "15/03" ou "15/03/1990")' },
+        bairro: { type: 'STRING', description: 'Bairro onde o cliente mora' },
+        cidade: { type: 'STRING', description: 'Cidade onde o cliente mora (ex.: Cuiabá)' },
+        estadoCivil: { type: 'STRING', description: 'Estado civil: "solteiro", "casado", "namorando", "uniao_estavel"' },
+        conjugeNome: { type: 'STRING', description: 'Nome da esposa ou parceira (se casado/namorando)' },
+        conjugeAniversario: { type: 'STRING', description: 'Data de aniversário da esposa (ex.: "22/07")' },
+      },
+    },
+  },
   { name: 'calcular_pacote_frequencia', description: 'Compara pacotes mensais cadastrados na empresa atual, com seus preços, cobertura e economia quando comparável. Use quando o cliente perguntar de pacotes ou após autorização da política de oportunidades. Não inventa tabela por profissional nem percentuais de desconto.', parameters: { type: 'OBJECT', properties: { profissional: { type: 'STRING', description: 'Nome do profissional agendado ou preferido (ex.: Nati, Bruno, David, Dino)' }, servico: { type: 'STRING', description: 'Serviço de referência (corte, barba, corte e barba)' }, frequenciaDias: { type: 'INTEGER', description: 'Dias entre visitas (ex.: 15 para quinzenal, 7 para semanal, 30 para mensal)' }, frequenciaTexto: { type: 'STRING', description: 'Frequência informada pelo cliente (ex.: "a cada 15 dias", "uma vez por semana")' }, procedimentosDesejados: { type: 'STRING', description: 'cabelo, barba ou ambos' } } } },
   { name: 'solicitar_humano', description: 'Encaminha a conversa para atendimento humano em dúvidas sensíveis, exceções, reclamações ou pedido explícito.', parameters: { type: 'OBJECT', properties: { reason: { type: 'STRING' } }, required: ['reason'] } },
 ];
@@ -1359,6 +1484,8 @@ const TOOL_MAP = {
   avaliar_clube: toolClubFit,
   sugerir_produto_pos_servico: toolPostServiceProduct,
   propor_oportunidade: toolOpportunity,
+  consultar_cadastro_cliente: toolConsultCustomerProfile,
+  atualizar_cadastro_cliente: toolUpdateCustomerProfile,
   calcular_pacote_frequencia: toolCalculatePackage,
   solicitar_humano: toolHuman,
 };

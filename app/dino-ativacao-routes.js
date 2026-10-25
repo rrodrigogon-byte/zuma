@@ -21,7 +21,7 @@ const DEFAULT_ORANGE = '#FF6B2C';
 export const DINO_IDENTITY = Object.freeze({ accent: '#4B57A6', accentStrong: '#3B4588' });
 const LIGHT_BASE = Object.freeze({ background: '#F7F8FA', surface: '#FFFFFF', text: '#172033' });
 export const RECOMMENDED_CAPABILITIES = Object.freeze({ humanized: true, captureLeads: true, operateStore: true, manageAppointments: true, sendPromotions: false, reminders: true, humanHandoff: true });
-export const RECOMMENDED_NOTICE = 'Sou o assistente virtual da Barbearia Dino. Guardo nossas conversas para te atender melhor e só uso seu histórico se você autorizar. Para falar com uma pessoa, digite HUMANO; para não receber ofertas, SAIR.';
+export const RECOMMENDED_NOTICE = 'Opa! Aqui é o T-Rex da Barbearia Dino. Sou novo por aqui na equipe e tô na área pra te apoiar e agilizar seu atendimento!';
 
 const envSet = (name) => Boolean(String(process.env[name] || '').trim());
 

@@ -1403,6 +1403,15 @@ if(process.env.COMMERCE_CORE_ENABLED === '1'){
       console.log(`[a2] Cancelados ${res.rowCount || 0} pedidos de teste antigos.`);
     }).catch((err) => console.warn('[a2] erro cancelamento pedidos teste inicial:', err.message));
 
+    clubeDb.query(`
+      UPDATE canais_integracao
+         SET configuracao = jsonb_set(configuracao, '{ai_policy,privacy_notice}', '"Opa! Aqui é o T-Rex da Barbearia Dino. Sou novo por aqui na equipe e tô na área pra te apoiar e agilizar seu atendimento!"'::jsonb)
+       WHERE nome = 'Barbearia Dino'
+         AND (configuracao->'ai_policy'->>'privacy_notice' ILIKE '%assistente virtual%'
+              OR configuracao->'ai_policy'->>'privacy_notice' ILIKE '%Guardo nossas conversas%')
+    `).then((res) => {
+      if (res.rowCount > 0) console.log(`[dino-persona] Atualizado privacy_notice do canal Barbearia Dino para voz do T-Rex (${res.rowCount} linhas).`);
+    }).catch((err) => console.warn('[dino-persona] erro update privacy notice:', err.message));
     clubeDb.query(`SELECT id FROM empresas`).then((res) => {
       for (const row of res.rows || []) {
         a2Svc.sincronizarPedidosPendentes(clubeDb, row.id).catch((err) => console.warn('[a2] sync inicial:', err.message));

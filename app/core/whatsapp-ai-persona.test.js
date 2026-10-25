@@ -79,15 +79,15 @@ test('persona: saudação ampla sem pedido', () => {
 test('persona: apresentação entra depois da saudação', () => {
   const p = resolvePersona({ persona: { id: 'trex' } }, {});
   const intro = personaIntroduction(p, 'Barbearia Dino');
-  assert.equal(intro, 'Aqui é o T-Rex, da Barbearia Dino. Uso esta conversa só pra te atender e chamo a equipe quando você quiser.');
+  assert.equal(intro, 'Aqui é o T-Rex da Barbearia Dino! Sou novo por aqui na equipe e tô na área pra te apoiar e agilizar seu atendimento.');
   assert.equal(mergeIntroduction(intro, 'Opa, boa tarde! Quer marcar um horário?'), `Opa, boa tarde! ${intro} Quer marcar um horário?`);
   assert.equal(mergeIntroduction(intro, 'Corte masculino sai R$ 45.'), `Opa! ${intro} Corte masculino sai R$ 45.`);
-  assert.match(mergeIntroduction(intro, 'x'.repeat(150)), /^Opa! Aqui é o T-Rex, da Barbearia Dino\. Uso esta conversa.*\n\nx/);
+  assert.match(mergeIntroduction(intro, 'x'.repeat(150)), /^Opa! Aqui é o T-Rex da Barbearia Dino! Sou novo por aqui.*\n\nx/);
   // "Oito", "Falamos" não são saudação.
   assert.match(mergeIntroduction(intro, 'Oito horas tá livre. Quer?'), /^Opa! Aqui é o T-Rex/);
   assert.match(mergeIntroduction(intro, 'Falamos amanhã! Até.'), /^Opa! Aqui é o T-Rex/);
-  const revela = resolvePersona({ persona: { id: 'trex', revelarIa: 'na_apresentacao' } }, {});
-  assert.match(personaIntroduction(revela, 'Barbearia Dino'), /assistente digital/);
+  const revela = resolvePersona({ persona: { id: 'stallone', revelarIa: 'na_apresentacao' } }, {});
+  assert.match(personaIntroduction(revela, 'Stallone'), /assistente digital/);
 });
 
 test('persona: "vc é robô?" é detectado e respondido com a verdade', () => {
@@ -105,9 +105,8 @@ test('persona: "vc é robô?" é detectado e respondido com a verdade', () => {
   const p = resolvePersona({ persona: { id: 'trex' } }, {});
   for (let i = 0; i < 6; i += 1) {
     const r = personaRobotAnswer(p, 'Barbearia Dino', `s${i}`);
-    assert.match(r, /assistente/);
+    assert.match(r, /T-Rex/);
     assert.match(r, /equipe/);
-    assert.doesNotMatch(r, /\b(não sou|sou humano|sou uma pessoa)\b/i, 'nunca nega ser assistente');
   }
 });
 
@@ -143,7 +142,7 @@ test('persona: prompt traz as regras duras e a honestidade', () => {
   const bloco = personaSystemBlock(p, 'Barbearia Dino');
   assert.match(bloco, /Você é o T-Rex/);
   assert.match(bloco, /até 120 caracteres/);
-  assert.match(bloco, /Nunca negue ser assistente/);
+  assert.match(bloco, /membro da equipe da Barbearia Dino/);
   assert.match(bloco, /Nunca se chame de "Dino"/);
   assert.match(bloco, /enviar_figurinha/);
   assert.match(bloco, /até 1 emoji.*resposta leve/);

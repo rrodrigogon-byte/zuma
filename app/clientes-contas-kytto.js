@@ -42,6 +42,7 @@ export function normalizarNascimento(valor) {
   let m = bruto.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (m) [, ano, mes, dia] = m;
   else if ((m = bruto.match(/^(\d{1,2})\/(\d{1,2})(?:\/(\d{4}))?$/))) { dia = m[1].padStart(2, '0'); mes = m[2].padStart(2, '0'); ano = m[3] || ''; }
+  else if ((m = bruto.match(/^(\d{2})-(\d{2})$/))) { mes = m[1]; dia = m[2]; ano = ''; }
   else throw new Error('Data de nascimento inválida. Use DD/MM/AAAA ou DD/MM.');
   const anoTeste = ano ? Number(ano) : 2000; // 2000 é bissexto: aceita 29/02 sem ano
   const data = new Date(Date.UTC(anoTeste, Number(mes) - 1, Number(dia)));
@@ -57,6 +58,11 @@ function camposNascimento(payload = {}, atual = {}) {
 }
 
 function normalizarCliente(payload = {}) {
+  const normNasc = (val) => {
+    if (!val) return { dataNascimento: '', aniversario: '' };
+    try { return normalizarNascimento(val); } catch { return { dataNascimento: '', aniversario: '' }; }
+  };
+  const conjNasc = normNasc(payload.conjugeAniversario || payload.conjuge_aniversario || payload.aniversarioEsposa || payload.dataNascimentoEsposa);
   return {
     ...camposNascimento(payload),
     nome: texto(payload.nome, 120),
@@ -65,6 +71,12 @@ function normalizarCliente(payload = {}) {
     email: texto(payload.email, 100).toLowerCase(),
     telefone: texto(payload.telefone, 30),
     endereco: texto(payload.endereco, 240),
+    bairro: texto(payload.bairro, 80),
+    cidade: texto(payload.cidade, 80),
+    estadoCivil: texto(payload.estadoCivil ?? payload.estado_civil, 40),
+    conjugeNome: texto(payload.conjugeNome ?? payload.conjuge_nome ?? payload.nomeEsposa, 120),
+    conjugeAniversario: conjNasc.aniversario,
+    conjugeDataNascimento: conjNasc.dataNascimento,
     limiteCreditoMensal: Math.max(0, numero(payload.limiteCreditoMensal ?? payload.limite_credito)),
     diasVencimento: Math.max(1, Math.min(90, Math.floor(numero(payload.diasVencimento ?? payload.dias_pagamento ?? 30) || 30))),
     observacao: texto(payload.observacao, 300),
@@ -209,6 +221,26 @@ function camposRelacionamento(payload = {}, atual = {}) {
     const linkedin = tem('linkedin') ? payload.linkedin : (Object.prototype.hasOwnProperty.call(redes, 'linkedin') ? redes.linkedin : atual.redesSociais?.linkedin);
     resultado.redesSociais = { instagram: normalizarInstagram(instagram), linkedin: normalizarLinkedin(linkedin) };
   }
+  if (payload.conjugeNome || payload.nomeEsposa || payload.conjuge_nome) {
+    const nomeConj = texto(payload.conjugeNome || payload.nomeEsposa || payload.conjuge_nome, 120);
+    let nConj = { dataNascimento: '', aniversario: '' };
+    try {
+      if (payload.conjugeAniversario || payload.aniversarioEsposa) {
+        nConj = normalizarNascimento(payload.conjugeAniversario || payload.aniversarioEsposa);
+      }
+    } catch {}
+    resultado.familia = resultado.familia || atual.familia || [];
+    const idx = resultado.familia.findIndex((f) => f.relacao === 'esposa' || f.relacao === 'conjuge');
+    const item = {
+      relacao: 'esposa',
+      nome: nomeConj,
+      aniversario: nConj.aniversario,
+      dataNascimento: nConj.dataNascimento,
+      observacao: 'Cadastrado pelo atendimento WhatsApp',
+    };
+    if (idx >= 0) resultado.familia[idx] = { ...resultado.familia[idx], ...item };
+    else resultado.familia.push(item);
+  }
   return resultado;
 }
 
@@ -266,6 +298,7 @@ export function criarCliente(empresaId, dados) {
     throw new Error('Já existe cliente ativo com este CPF/CNPJ nesta empresa.');
   }
   store.clientes[cliente.id] = cliente;
+  saveFn();
   return cliente;
 }
 
@@ -276,6 +309,7 @@ export function atualizarCliente(empresaId, clienteId, dados) {
   const relacionamento = camposRelacionamento(dados, cliente);
   Object.assign(cliente, normalizarCliente({ ...cliente, ...dados }), camposNascimento(dados, cliente), relacionamento, { atualizadoEm: agora() });
   garantirConsentimentos(cliente);
+  saveFn();
   return cliente;
 }
 

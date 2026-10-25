@@ -201,17 +201,20 @@ export function personaGreeting(persona, { text = '', seed = '' } = {}) {
   const abre = periodo
     ? pick([`Opa, ${periodo}!`, `${periodo[0].toUpperCase()}${periodo.slice(1)}!`, `E aí, ${periodo}!`], seed)
     : pick(['Opa, tudo bem?', 'E aí, beleza?', 'Fala, tudo certo?'], seed);
+  const intro = persona?.id === 'trex' ? 'Aqui é o T-Rex da Dino!' : '';
   const perguntas = persona?.segmento === 'suplementos'
     ? ['Tá procurando algum suplemento hoje?', 'Whey, creatina ou outra coisa? Me fala que eu vejo aqui.', 'Em que posso te ajudar no treino hoje?']
-    : ['Quer marcar um horário ou ver algum perfume?', 'Bora marcar um horário? Ou tá procurando perfume?', 'Corte, barba ou perfume hoje?'];
+    : ['Quer marcar um horário ou ver algum serviço?', 'Bora marcar um horário no visual? Ou quer ver algum serviço?', 'Corte, barba ou quer agendar um horário hoje?'];
   const pergunta = pick(perguntas, `${seed}:q`);
-  return `${abre} ${pergunta}`;
+  return intro ? `${abre} ${intro} ${pergunta}` : `${abre} ${pergunta}`;
 }
 
 /** Apresentação curta do primeiro contato do dia (substitui o aviso padrão). */
 export function personaIntroduction(persona, storeName) {
   const loja = clean(storeName, 120) || 'unidade';
-  // Finalidade e caminho para a equipe ficam no aviso (transparência LGPD), na voz da persona.
+  if (persona.id === 'trex') {
+    return `Aqui é o T-Rex da ${loja}! Sou novo por aqui na equipe e tô na área pra te apoiar e agilizar seu atendimento.`;
+  }
   const finalidade = 'Uso esta conversa só pra te atender e chamo a equipe quando você quiser.';
   if (persona.revelarIa === 'na_apresentacao') return `Aqui é o ${persona.nome}, assistente digital da ${loja}. ${finalidade}`;
   return `Aqui é o ${persona.nome}, da ${loja}. ${finalidade}`;
@@ -261,14 +264,20 @@ export function personaRobotQuestion(text) {
 
 /** Com ação pendente: só a verdade, sem perguntar "chamo alguém?" (o "sim" seguinte é do resumo). */
 export function personaRobotAnswerShort(storeName) {
-  return `Sou o assistente digital da ${clean(storeName, 120) || 'unidade'}. Se quiser falar com a equipe, é só pedir.`;
+  return `Aqui é o T-Rex, da Barbearia Dino! Sou novo por aqui na equipe pra te apoiar e agilizar tudo. Quer falar com outro colega ou sigo com você?`;
 }
 
 export function personaRobotAnswer(persona, storeName, seed = '') {
-  const loja = clean(storeName, 120) || 'unidade';
+  const loja = clean(storeName, 120) || 'Barbearia Dino';
+  if (persona?.id === 'trex') {
+    return pick([
+      `Opa, aqui é o T-Rex da ${loja}! Sou novo por aqui na equipe e tô na área pra te apoiar e agilizar seu atendimento. Quer que eu continue ou prefere falar com outro colega?`,
+      `Aqui é o T-Rex da ${loja}! Cheguei faz pouco tempo na equipe pra te dar todo o suporte e agilizar seu horário. Posso continuar te atendendo ou quer que eu chame alguém?`,
+    ], seed);
+  }
   return pick([
-    `Sou o assistente digital da ${loja}. Quer que eu chame a equipe ou sigo com você?`,
-    `Sou o assistente digital da ${loja}. Se preferir uma pessoa, eu chamo a equipe. Sigo com você?`,
+    `Sou o atendente da ${loja}. Quer que eu chame a equipe ou sigo com você?`,
+    `Sou o atendente da ${loja}. Se preferir uma pessoa, eu chamo a equipe. Sigo com você?`,
   ], seed);
 }
 
@@ -393,9 +402,11 @@ export function personaSystemBlock(persona, storeName = 'esta unidade') {
   const figurinhas = persona.figurinhas
     ? `\n\nFIGURINHAS: você pode chamar enviar_figurinha no máximo 1 vez por conversa, só em momento leve: ${Object.entries(STICKERS).filter(([nome]) => STICKERS_RESTRITAS[nome] !== 'nunca').map(([nome, uso]) => `${nome} (${uso})`).join('; ')}. Nunca em reclamação, problema, cobrança ou conversa com a equipe. Não escreva o nome da figurinha no texto.`
     : '';
-  const revelar = persona.revelarIa === 'na_apresentacao'
-    ? 'Na primeira apresentação, diga que é o assistente digital da unidade.'
-    : 'Não se apresente como robô nem como assistente virtual: comece pelo assunto do cliente. Se o cliente perguntar se fala com robô, IA ou pessoa, diga a verdade em uma linha ("sou o assistente da unidade") e ofereça chamar a equipe. Nunca negue ser assistente.';
+  const revelar = persona.id === 'trex'
+    ? 'Você é o T-Rex, membro da equipe da Barbearia Dino. Você é novo por aqui, humano, atencioso e prestativo, e está na área para apoiar a galera e agilizar os atendimentos. NUNCA se identifique como IA, robô ou assistente virtual. Se perguntarem se é robô ou IA, diga com simpatia que é o T-Rex da equipe da Dino, novo por aqui pra apoiar e agilizar o visual do cliente, e pergunte se quer continuar com você ou falar com outro colega.'
+    : (persona.revelarIa === 'na_apresentacao'
+      ? 'Na primeira apresentação, diga que é o assistente digital da unidade.'
+      : 'Não se apresente como robô nem como assistente virtual: comece pelo assunto do cliente. Se o cliente perguntar se fala com robô, IA ou pessoa, diga a verdade em uma linha ("sou o assistente da unidade") e ofereça chamar a equipe. Nunca negue ser assistente.');
   if (persona.segmento === 'suplementos') return supplementsPersonaBlock(persona, loja, revelar);
   return `Você é o ${persona.nome}, da recepção da ${loja} no WhatsApp. Seu mascote é ${persona.mascote}. Fale como alguém da casa: direto, simpático e resolvendo na hora, em português brasileiro, em primeira pessoa ("vou ver aqui", "te mando já"). ${revelar} Não invente vida pessoal (almoço, família, cansaço). Nunca se chame de "Dino": Dino é o barbeiro master, e "corte com o Dino" é o serviço Corte Premium com o Dino.
 
