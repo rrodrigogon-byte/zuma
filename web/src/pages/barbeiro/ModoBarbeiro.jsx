@@ -11,6 +11,8 @@ import { lerAgenda, erroAgenda } from '../../lib/agenda-read'
 import BarbeiroVendaRapida from './BarbeiroVendaRapida'
 import BarbeiroPeriodo from './BarbeiroPeriodo'
 import BarbeiroExtrato from './BarbeiroExtrato'
+import BarbeiroGanhos from './BarbeiroGanhos'
+import BarbeiroClientes from './BarbeiroClientes'
 import DinoSalesAssistantPanel from '../../components/barbearia/DinoSalesAssistantPanel'
 import { useAuth } from '../../lib/auth'
 import { DINO_BARBERSHOP_LOGO } from '../../lib/brand'
@@ -89,6 +91,17 @@ const somarDias = (dia, n) => { const d = new Date(`${dia}T12:00:00`); d.setDate
 const primeiroNome = (nome) => String(nome || '').trim().split(/\s+/)[0] || ''
 const soDigitos = (v) => String(v || '').replace(/\D/g, '')
 function linkWhatsapp(telefone) { const d = soDigitos(telefone); if (d.length < 10) return ''; return `https://wa.me/${d.startsWith('55') ? d : `55${d}`}` }
+function linkWhatsappAgendamento(telefone, clienteNome, barbeiroNome, horaAgenda, servicoNome) {
+  const d = soDigitos(telefone)
+  if (d.length < 10) return ''
+  const telCompleto = d.startsWith('55') ? d : `55${d}`
+  const primCliente = primeiroNome(clienteNome) || 'amigo'
+  const primBarber = primeiroNome(barbeiroNome) || 'seu barbeiro'
+  const msg = encodeURIComponent(
+    `Olá ${primCliente}! Sou o ${primBarber} da Barbearia Dino. 💈 Confirmando seu horário hoje às ${horaAgenda} (${servicoNome}). Te aguardo aqui na cadeira!`
+  )
+  return `https://wa.me/${telCompleto}?text=${msg}`
+}
 
 function Folha({ titulo, onFechar, children, podeFechar = true }) {
   useEffect(() => { const esc = (e) => e.key === 'Escape' && podeFechar && onFechar(); window.addEventListener('keydown', esc); return () => window.removeEventListener('keydown', esc) }, [onFechar, podeFechar])
@@ -178,6 +191,7 @@ export default function ModoBarbeiro() {
   const { slug = '' } = useParams()
   const [params, setParams] = useSearchParams()
   const { user, logout, empresaAtiva, lojaAtiva } = useAuth()
+  const [abaAtiva, setAbaAtiva] = useState('agenda') // 'agenda', 'ganhos', 'metas', 'clientes'
   const [filtroStatus, setFiltroStatus] = useState('todos')
   const [painelRecebido, setPainel] = useState(null)
   const [erro, setErro] = useState('')
@@ -229,6 +243,16 @@ export default function ModoBarbeiro() {
   const offline = !online || Boolean(painel?._offline)
   const podeOperar = !offline && !carregando && !erro
 
+  const emAtendimentoAtual = useMemo(() => {
+    return (painel?.agendamentos || []).find((a) => a.status === 'em_atendimento') || null
+  }, [painel])
+
+  const proximoCliente = useMemo(() => {
+    return (painel?.agendamentos || [])
+      .filter((a) => ['agendado', 'confirmado'].includes(a.status))
+      .sort((a, b) => new Date(a.dataHora) - new Date(b.dataHora))[0] || null
+  }, [painel])
+
   async function mudarStatus(agendamento, status, pergunta) {
     if (pergunta && !window.confirm(pergunta)) return
     setAcaoEmCurso(agendamento.id); setErro('')
@@ -271,6 +295,141 @@ export default function ModoBarbeiro() {
   const corpo = !user
     ? <><LoginEquipe isDino={isDino} /><InstalarApp nomeApp={isDino ? 'o app Dino Equipe' : 'o app da equipe'} tema={t} /></>
     : <>
+        {painel?.profissional && (
+          <nav aria-label="Abas do app" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6, marginBottom: 4 }}>
+            {[
+              ['agenda', 'Agenda', '📅'],
+              ['ganhos', 'Ganhos', '💰'],
+              ['metas', 'Metas', '🎯'],
+              ['clientes', 'Clientes', '👥'],
+            ].map(([id, label, icon]) => {
+              const ativo = abaAtiva === id
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => setAbaAtiva(id)}
+                  style={{
+                    ...btn2,
+                    padding: '8px 4px',
+                    fontSize: 12,
+                    fontWeight: 800,
+                    background: ativo ? t.accent : 'transparent',
+                    color: ativo ? '#fff' : t.cream,
+                    borderColor: ativo ? t.accent : t.line,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 4,
+                    borderRadius: 12,
+                  }}
+                >
+                  <span>{icon}</span> {label}
+                </button>
+              )
+            })}
+          </nav>
+        )}
+
+        {abaAtiva === 'ganhos' && painel?.profissional && (
+          <BarbeiroGanhos painel={painel} onAtualizar={carregar} />
+        )}
+
+        {abaAtiva === 'clientes' && painel?.profissional && (
+          <BarbeiroClientes clientes={painel.clientesRecentes || []} profissionalNome={painel.profissional?.nome} />
+        )}
+
+        {abaAtiva === 'metas' && painel?.profissional && (
+          <div style={{ display: 'grid', gap: 12 }}>
+            {painel.gamificacao ? (
+              <div style={{ ...card, padding: 16, background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.95) 0%, rgba(15, 23, 42, 1) 100%)', border: '1.5px solid rgba(245, 158, 11, 0.45)', display: 'grid', gap: 14 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 800, fontSize: 16, color: '#fbbf24' }}>
+                    <span style={{ fontSize: 20 }}>🎡</span> Metas Diárias & Roleta de Prêmios
+                  </div>
+                  {painel.gamificacao.girosPendentes?.length > 0 && (
+                    <span style={{ background: '#f59e0b', color: '#000', fontWeight: 800, fontSize: 11.5, padding: '3px 10px', borderRadius: 20 }}>
+                      {painel.gamificacao.girosPendentes.length} {painel.gamificacao.girosPendentes.length > 1 ? 'Giros Ganhos' : 'Giro Ganho'}!
+                    </span>
+                  )}
+                </div>
+
+                {painel.gamificacao.config?.metasDiarias?.servicosExtrasAtivo && (
+                  <div style={{ background: t.surface, border: `1px solid ${t.line}`, borderRadius: 12, padding: 12, display: 'grid', gap: 6 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontWeight: 700, color: t.cream, fontSize: 13 }}>✂️ Serviços Extras Diários</span>
+                      <span style={{ fontSize: 12, fontWeight: 800, color: painel.gamificacao.dia?.metaExtrasAtingida ? t.green : t.accent }}>
+                        {painel.gamificacao.dia?.servicosExtras || 0} de {painel.gamificacao.config.metasDiarias.servicosExtrasQtd} extras
+                      </span>
+                    </div>
+                    <div style={{ height: 8, background: 'rgba(255,255,255,0.08)', borderRadius: 10, overflow: 'hidden' }}>
+                      <div style={{ height: '100%', background: painel.gamificacao.dia?.metaExtrasAtingida ? t.green : t.accent, width: `${Math.min(100, Math.round(((painel.gamificacao.dia?.servicosExtras || 0) / (painel.gamificacao.config.metasDiarias.servicosExtrasQtd || 1)) * 100))}%` }} />
+                    </div>
+                    <div style={{ fontSize: 11.5, color: painel.gamificacao.dia?.metaExtrasAtingida ? t.green : t.muted }}>
+                      {painel.gamificacao.dia?.metaExtrasAtingida ? '✓ Parabéns! Meta de extras atingida hoje!' : `Faltam ${Math.max(0, painel.gamificacao.config.metasDiarias.servicosExtrasQtd - (painel.gamificacao.dia?.servicosExtras || 0))} extras para ganhar 1 giro na Roleta!`}
+                    </div>
+                  </div>
+                )}
+
+                {painel.gamificacao.config?.metasDiarias?.produtosAtivo && (
+                  <div style={{ background: t.surface, border: `1px solid ${t.line}`, borderRadius: 12, padding: 12, display: 'grid', gap: 6 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontWeight: 700, color: t.cream, fontSize: 13 }}>🧴 Venda Diária de Produtos</span>
+                      <span style={{ fontSize: 12, fontWeight: 800, color: painel.gamificacao.dia?.metaProdutosAtingida ? t.green : '#10b981' }}>
+                        {painel.gamificacao.dia?.produtosQtd || 0} de {painel.gamificacao.config.metasDiarias?.produtosQtd ?? 2} un
+                      </span>
+                    </div>
+                    <div style={{ height: 8, background: 'rgba(255,255,255,0.08)', borderRadius: 10, overflow: 'hidden' }}>
+                      <div style={{ height: '100%', background: painel.gamificacao.dia?.metaProdutosAtingida ? t.green : '#10b981', width: `${painel.gamificacao.dia?.metaProdutosProgresso ?? 0}%` }} />
+                    </div>
+                    <div style={{ fontSize: 11.5, color: painel.gamificacao.dia?.metaProdutosAtingida ? t.green : t.muted }}>
+                      {painel.gamificacao.dia?.metaProdutosAtingida ? '✓ Parabéns! Meta de produtos atingida hoje!' : `Falta ${Math.max(0, (painel.gamificacao.config.metasDiarias?.produtosQtd ?? 2) - (painel.gamificacao.dia?.produtosQtd || 0))} un para ganhar 1 giro na Roleta!`}
+                    </div>
+                  </div>
+                )}
+
+                {painel.gamificacao.config?.metasSemanais?.ativo && (
+                  <div style={{ background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.15) 0%, rgba(217, 119, 6, 0.25) 100%)', border: '1px solid rgba(245, 158, 11, 0.4)', padding: 14, borderRadius: 12, display: 'grid', gap: 6 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontWeight: 800, fontSize: 13, color: '#fbbf24' }}>
+                        🔥 {painel.gamificacao.config.metasSemanais.tituloDesafio || 'Desafio Semanal de Vendas'}
+                      </span>
+                      <span style={{ background: '#0f172a', color: '#fbbf24', fontSize: 10.5, fontWeight: 800, padding: '2px 8px', borderRadius: 10 }}>
+                        Semana
+                      </span>
+                    </div>
+                    <div style={{ fontSize: 12, color: '#fef3c7' }}>
+                      Vendas acumuladas na semana: <strong>{reais(painel.gamificacao.semana?.produtosValor || 0)} ({painel.gamificacao.semana?.produtosQtd || 0} un)</strong>
+                    </div>
+                    <div style={{ fontSize: 11.5, color: '#fed7aa', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: 6 }}>
+                      🎁 Premiação: <strong>{painel.gamificacao.config.metasSemanais.premiacaoDescricao || 'Super Bônus'}</strong>
+                    </div>
+                  </div>
+                )}
+
+                {/* TABELA DE PRÊMIOS DA ROLETA */}
+                <div style={{ background: t.surface, border: `1px solid ${t.line}`, borderRadius: 12, padding: 12, display: 'grid', gap: 8 }}>
+                  <span style={{ fontWeight: 800, fontSize: 13, color: t.cream }}>🎁 Prêmios Disponíveis na Roleta Dino</span>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, fontSize: 11.5 }}>
+                    <div style={{ background: t.card, padding: '6px 8px', borderRadius: 8 }}>💵 R$ 50 no Pix</div>
+                    <div style={{ background: t.card, padding: '6px 8px', borderRadius: 8 }}>💰 R$ 100 no Pix</div>
+                    <div style={{ background: t.card, padding: '6px 8px', borderRadius: 8 }}>🏖️ Folga Bônus</div>
+                    <div style={{ background: t.card, padding: '6px 8px', borderRadius: 8 }}>🍔 Almoço Completo</div>
+                    <div style={{ background: t.card, padding: '6px 8px', borderRadius: 8 }}>🧴 Kit de Produtos</div>
+                    <div style={{ background: t.card, padding: '6px 8px', borderRadius: 8 }}>☕ Café Especial</div>
+                  </div>
+                  <div style={{ fontSize: 11, color: t.muted, textAlign: 'center', marginTop: 4 }}>
+                    Ao atingir as metas diárias, o Dino aciona a Roleta no painel para você girar ao vivo!
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div style={card}>Gamificação não disponível no momento.</div>
+            )}
+          </div>
+        )}
+
+        {abaAtiva === 'agenda' && <>
         <nav aria-label="Escolher dia" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0,1fr))', gap: 8 }}>
           {[['Ontem', -1], ['Hoje', 0], ['Amanhã', 1]].map(([rotulo, n]) => {
             const alvo = hoje ? somarDias(hoje, n) : ''
@@ -293,6 +452,100 @@ export default function ModoBarbeiro() {
 
         {painel?.profissional && dia && <BarbeiroPeriodo dia={dia} profissionalId={profissionalId || painel.profissional.id} onDateChange={irPara} refreshKey={atualizadoEm?.valueOf()} />}
         {painel?.profissional && <>
+          {/* HERO CARD INTELIGENTE: CLIENTE NA CADEIRA OU PRÓXIMO */}
+          {emAtendimentoAtual ? (
+            <div
+              style={{
+                background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.16) 0%, rgba(6, 78, 59, 0.28) 100%)',
+                border: '1.5px solid #10B981',
+                borderRadius: 16,
+                padding: 14,
+                display: 'grid',
+                gap: 10,
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ background: '#10B981', color: '#0E1014', fontWeight: 800, fontSize: 11, padding: '2px 8px', borderRadius: 20 }}>
+                  ● NA CADEIRA AGORA
+                </span>
+                <span style={{ fontSize: 13, color: '#A7F3D0', fontWeight: 700 }}>
+                  {hora(emAtendimentoAtual.dataHora)}
+                </span>
+              </div>
+              <div>
+                <div style={{ fontSize: 18, fontWeight: 800, color: '#fff' }}>
+                  {emAtendimentoAtual.clienteNome || 'Cliente'}
+                </div>
+                <div style={{ fontSize: 13, color: '#D1FAE5', marginTop: 2 }}>
+                  {emAtendimentoAtual.servicoNome} · {reais(emAtendimentoAtual.valor)}
+                </div>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                <button
+                  type="button"
+                  style={{ ...btn, background: t.green, color: '#0E1014' }}
+                  onClick={() => mudarStatus(emAtendimentoAtual, 'concluido', `Concluir o atendimento de ${primeiroNome(emAtendimentoAtual.clienteNome)}? O pagamento é recebido no caixa.`)}
+                >
+                  ✓ Concluir Atendimento
+                </button>
+                <button
+                  type="button"
+                  style={{ ...btn, background: t.accent }}
+                  onClick={() => { setVendaAtendimento(emAtendimentoAtual); setFolha('venda') }}
+                >
+                  + Extra / Produto
+                </button>
+              </div>
+            </div>
+          ) : proximoCliente ? (
+            <div
+              style={{
+                background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.12) 0%, rgba(30, 58, 138, 0.2) 100%)',
+                border: '1.5px solid #3B82F6',
+                borderRadius: 16,
+                padding: 14,
+                display: 'grid',
+                gap: 10,
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ background: '#3B82F6', color: '#fff', fontWeight: 800, fontSize: 11, padding: '2px 8px', borderRadius: 20 }}>
+                  PRÓXIMO AGENDAMENTO
+                </span>
+                <span style={{ fontSize: 13, color: '#93C5FD', fontWeight: 700 }}>
+                  {hora(proximoCliente.dataHora)}
+                </span>
+              </div>
+              <div>
+                <div style={{ fontSize: 18, fontWeight: 800, color: '#fff' }}>
+                  {proximoCliente.clienteNome || 'Cliente'}
+                </div>
+                <div style={{ fontSize: 13, color: t.muted, marginTop: 2 }}>
+                  {proximoCliente.servicoNome} · {proximoCliente.duracaoMinutos} min · {reais(proximoCliente.valor)}
+                </div>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 8 }}>
+                <button
+                  type="button"
+                  style={btn}
+                  onClick={() => mudarStatus(proximoCliente, 'em_atendimento')}
+                >
+                  ▶ Iniciar Atendimento
+                </button>
+                {proximoCliente.clienteTelefone && (
+                  <a
+                    href={linkWhatsappAgendamento(proximoCliente.clienteTelefone, proximoCliente.clienteNome, painel.profissional?.nome, hora(proximoCliente.dataHora), proximoCliente.servicoNome)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ ...btn2, textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}
+                  >
+                    💬 WhatsApp
+                  </a>
+                )}
+              </div>
+            </div>
+          ) : null}
+
           <section aria-label="Resumo do dia" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0,1fr))', gap: 8 }}>
             {[
               ['Atendimentos', `${painel.resumo.concluidos}/${painel.resumo.total}`, painel.resumo.faltas ? `${painel.resumo.faltas} não veio` : `${painel.resumo.pendentes} a atender`],
@@ -430,7 +683,7 @@ export default function ModoBarbeiro() {
                   {!['cancelado', 'nao_compareceu'].includes(a.status) && <DinoSalesAssistantPanel key={a.id} appointmentId={a.id} currentServiceId={a.servicoId} compact />}
                   {(a.clienteTelefone && !['cancelado'].includes(a.status)) && <div style={{ display: 'flex', gap: 8 }}>
                     <a href={`tel:${soDigitos(a.clienteTelefone)}`} style={{ ...btn2, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>Ligar</a>
-                    {zap && <a href={zap} target="_blank" rel="noopener noreferrer" style={{ ...btn2, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>WhatsApp</a>}
+                    {zap && <a href={linkWhatsappAgendamento(a.clienteTelefone, a.clienteNome, painel.profissional?.nome, hora(a.dataHora), a.servicoNome)} target="_blank" rel="noopener noreferrer" style={{ ...btn2, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 4 }}>💬 WhatsApp</a>}
                   </div>}
                 </article>
               })())}
@@ -438,21 +691,107 @@ export default function ModoBarbeiro() {
         </>}
 
         {painel?.profissional && podeOperar && <button type="button" style={btn2} onClick={() => setFolha('bloqueio')}>Bloquear horário</button>}
+        </>}
         {painel?.profissional && <Avisos key={JSON.stringify([user?.id, empresaAtiva?.id, lojaAtiva?.id])} contexto={JSON.stringify([user?.id, empresaAtiva?.id, lojaAtiva?.id])} gestao={painel.gestao} />}
         <InstalarApp nomeApp={isDino ? 'o app Dino Equipe' : 'o app da equipe'} tema={t} />
       </>
 
   return <div style={{ minHeight: '100vh', background: t.bg, color: t.cream, fontFamily: "'Plus Jakarta Sans', 'Inter', system-ui, sans-serif" }}>
     {cabecalho}
-    <main style={{ maxWidth: 560, margin: '0 auto', padding: `14px 16px calc(${painel?.profissional && !offline ? 96 : 24}px + env(safe-area-inset-bottom))`, display: 'grid', gap: 12, boxSizing: 'border-box' }}>
+    <main style={{ maxWidth: 560, margin: '0 auto', padding: `14px 16px calc(${painel?.profissional && !offline ? 110 : 24}px + env(safe-area-inset-bottom))`, display: 'grid', gap: 12, boxSizing: 'border-box' }}>
       {corpo}
     </main>
-    {user && painel?.profissional && podeOperar && <div style={{ position: 'fixed', left: 0, right: 0, bottom: 0, background: t.surface, borderTop: `1px solid ${t.line}`, padding: '10px 16px calc(10px + env(safe-area-inset-bottom))', zIndex: 20 }}>
-      <div style={{ maxWidth: 560, margin: '0 auto', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-        <button type="button" style={btn} onClick={() => setFolha('encaixe')}>+ Encaixe</button>
-        <button type="button" style={btn2} onClick={() => { setVendaAtendimento(null); setFolha('venda') }}>+ Venda / serviços</button>
+
+    {/* BARRA DE NAVEGAÇÃO INFERIOR FIXA (BOTTOM NAV) */}
+    {user && painel?.profissional && (
+      <nav
+        aria-label="Navegação do aplicativo"
+        style={{
+          position: 'fixed',
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: '#161922',
+          borderTop: '1px solid #2B3140',
+          padding: '6px 12px calc(6px + env(safe-area-inset-bottom))',
+          zIndex: 30,
+          display: 'flex',
+          justifyContent: 'space-around',
+          alignItems: 'center',
+          boxShadow: '0 -4px 16px rgba(0,0,0,0.3)',
+        }}
+      >
+        {[
+          ['agenda', 'Agenda', '📅', agenda.filter((i) => i.tipo === 'atendimento' && ['agendado', 'confirmado'].includes(i.a.status)).length],
+          ['ganhos', 'Ganhos', '💰', reais(painel?.comissao?.dia?.repasse || 0)],
+          ['metas', 'Metas', '🎯', painel?.gamificacao?.girosPendentes?.length ? `${painel.gamificacao.girosPendentes.length}🎡` : null],
+          ['clientes', 'Clientes', '👥', painel?.clientesRecentes?.filter((c) => c.statusRetorno === 'ideal_retorno').length || null],
+        ].map(([id, label, icon, badge]) => {
+          const ativo = abaAtiva === id
+          return (
+            <button
+              key={id}
+              type="button"
+              onClick={() => { setAbaAtiva(id); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: ativo ? '#6E7CE0' : '#A4AABE',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: 2,
+                padding: '4px 6px',
+                cursor: 'pointer',
+                position: 'relative',
+                minWidth: 64,
+              }}
+            >
+              <span style={{ fontSize: 20 }}>{icon}</span>
+              <span style={{ fontSize: 11, fontWeight: ativo ? 800 : 600 }}>{label}</span>
+              {badge && (
+                <span
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    right: id === 'ganhos' ? -2 : 6,
+                    background: id === 'ganhos' ? '#10B981' : id === 'metas' ? '#F59E0B' : '#EF4444',
+                    color: '#000',
+                    fontWeight: 800,
+                    fontSize: 9.5,
+                    padding: '1px 5px',
+                    borderRadius: 10,
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {badge}
+                </span>
+              )}
+            </button>
+          )
+        })}
+      </nav>
+    )}
+
+    {/* AÇÕES FLUTUANTES RÁPIDAS NA ABA AGENDA */}
+    {user && painel?.profissional && podeOperar && abaAtiva === 'agenda' && (
+      <div
+        style={{
+          position: 'fixed',
+          left: 0,
+          right: 0,
+          bottom: 'calc(54px + env(safe-area-inset-bottom))',
+          padding: '6px 16px',
+          zIndex: 25,
+          pointerEvents: 'none',
+        }}
+      >
+        <div style={{ maxWidth: 560, margin: '0 auto', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, pointerEvents: 'auto' }}>
+          <button type="button" style={{ ...btn, boxShadow: '0 4px 14px rgba(0,0,0,0.4)' }} onClick={() => setFolha('encaixe')}>+ Encaixe</button>
+          <button type="button" style={{ ...btn2, background: t.surface, boxShadow: '0 4px 14px rgba(0,0,0,0.4)' }} onClick={() => { setVendaAtendimento(null); setFolha('venda') }}>+ Venda / serviços</button>
+        </div>
       </div>
-    </div>}
+    )}
     {folha === 'venda' && painel?.profissional && <Folha titulo="Serviços e produtos" podeFechar={!vendaPendente} onFechar={() => setFolha('')}><BarbeiroVendaRapida key={`${painel.profissional.id}-${vendaAtendimento?.id || 'avulsa'}`} profissional={painel.profissional} atendimento={vendaAtendimento} onEstadoChange={setVendaPendente} onPronto={carregar} /></Folha>}
     {folha === 'encaixe' && painel?.profissional && <FolhaEncaixe painel={painel} dia={dia} onFechar={() => { setFolha(''); const p = new URLSearchParams(params); p.delete('acao'); setParams(p, { replace: true }) }} onPronto={carregar} />}
     {folha === 'extrato' && painel?.profissional && <Folha titulo="Meu extrato" onFechar={() => setFolha('')}><BarbeiroExtrato profissionalId={painel.gestao ? painel.profissional.id : ''} /></Folha>}
