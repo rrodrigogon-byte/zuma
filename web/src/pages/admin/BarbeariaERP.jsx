@@ -1,7 +1,7 @@
 import BarbeariaComandasAbertas from './BarbeariaComandasAbertas'
 import BarbeariaAtendimentoBoard from './BarbeariaAtendimentoBoard'
 import BarbeariaHistoricoCliente from './BarbeariaHistoricoCliente'
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { api, fmtDate, fmtDateOnly, fmtR } from '../../lib/api'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useToast } from '../../hooks/useToast'
@@ -19,11 +19,13 @@ import BarbeariaCaixaPrevia from './BarbeariaCaixaPrevia'
 import { NfseComandaAcoes, NfseConfigCard } from './BarbeariaNfsePanel'
 import { ComprasPanel, CurvaAbcPanel } from './dino/ComprasPanels'
 import { RepassesPanel, ReguaClubePanel } from './dino/RepassesPanel'
-import DinoBusinessDashboard from './DinoBusinessDashboard'
-import DinoCampaignsPanel from './DinoCampaignsPanel'
-import DinoEquipeDesempenho from './DinoEquipeDesempenho'
-import BIBarbearia from './dino/BIBarbearia'
-import ProjecaoFaturamentoPanel from './dino/ProjecaoFaturamentoPanel'
+
+// Lazy loading dos módulos analíticos e relatórios para acelerar o carregamento inicial da Barbearia
+const DinoBusinessDashboard = lazy(() => import('./DinoBusinessDashboard'))
+const DinoCampaignsPanel = lazy(() => import('./DinoCampaignsPanel'))
+const DinoEquipeDesempenho = lazy(() => import('./DinoEquipeDesempenho'))
+const BIBarbearia = lazy(() => import('./dino/BIBarbearia'))
+const ProjecaoFaturamentoPanel = lazy(() => import('./dino/ProjecaoFaturamentoPanel'))
 import ComandaNova, { AdicionarItensComanda, BuscaCliente } from './dino/ComandaNova'
 import { abrirHistoricoEmNovaGuia } from './dino/historico-cliente'
 import ClienteRelacionamento, { RELACIONAMENTO_VAZIO, relacionamentoDoCliente, relacionamentoParaApi } from './dino/ClienteRelacionamento'
@@ -1955,9 +1957,9 @@ export default function BarbeariaERP() {
     if (tab === 'Compras e fornecedores') return <ComprasPanel produtos={produtosRevenda.filter((produto) => produto.ativo !== false)} onEstoqueMudou={carregar} />
     if (tab === 'Curva ABC') return <CurvaAbcPanel />
     if (tab === 'Extrato e repasses') return <RepassesPanel profissionais={profissionais} servicos={servicos} planos={planos} onCadastroMudou={carregar} />
-    if (tab === 'Projeção inteligente') return <ProjecaoFaturamentoPanel onOpenTab={navegarParaTab} />
+    if (tab === 'Projeção inteligente') return <Suspense fallback={<Card style={{ padding: 40, textAlign: 'center', color: 'var(--muted)' }}>Carregando projeção de IA…</Card>}><ProjecaoFaturamentoPanel onOpenTab={navegarParaTab} /></Suspense>
     if (tab === 'Ocupação e metas') return <OcupacaoMetasPanel />
-    if (tab === 'Desempenho da equipe') return <DinoEquipeDesempenho empresaId={empresaAtiva?.id || ''} lojaId={lojaAtiva?.id || ''} onOpenTab={navegarParaTab} />
+    if (tab === 'Desempenho da equipe') return <Suspense fallback={<Card style={{ padding: 40, textAlign: 'center', color: 'var(--muted)' }}>Carregando desempenho da equipe…</Card>}><DinoEquipeDesempenho empresaId={empresaAtiva?.id || ''} lojaId={lojaAtiva?.id || ''} onOpenTab={navegarParaTab} /></Suspense>
     if (tab === 'Avaliações (NPS)') return <NpsPanel key={`${empresaAtiva?.id || ''}:${lojaAtiva?.id || ''}`} />
     if (tab === 'Origem dos clientes') return <CanaisPanel />
     if (tab === 'Cobranças e cashback') return <CobrancasPanel />
