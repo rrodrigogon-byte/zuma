@@ -1,8 +1,21 @@
 import { ErroDominio, exigirData, exigirTexto, exigirUuid } from '../acesso/banco.js';
+import * as clientesKytto from '../../clientes-contas-kytto.js';
+import * as financeiroKytto from '../../financeiro-central-kytto.js';
+
+const DINO_EMPRESA_CANONICA = 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
+const DINO_EMPRESA_LEGADA = 'emp-kytto-001';
+
+function empresasEquivalentes(empresaId) {
+  const v = String(empresaId || '').trim();
+  if (v === DINO_EMPRESA_CANONICA || v === DINO_EMPRESA_LEGADA || v === 'dino') {
+    return [DINO_EMPRESA_CANONICA, DINO_EMPRESA_LEGADA, 'dino'];
+  }
+  return [v];
+}
 
 const id = (valor, campo = 'id') => {
   const v = String(valor || '').trim();
-  if (campo === 'empresa' && v === 'emp-kytto-001') return 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
+  if (campo === 'empresa' && (v === DINO_EMPRESA_LEGADA || v === 'dino')) return DINO_EMPRESA_CANONICA;
   return exigirUuid(v, campo);
 };
 const numero = (valor, campo, { min = 0, max = 999999999 } = {}) => {
@@ -39,20 +52,61 @@ function clienteDto(row) {
 }
 
 export async function listarClientes(db, empresaId) {
-  const empresa = id(empresaId, 'empresa');
-  const result = await db.query(`
-    SELECT c.*, COALESCE(SUM(CASE WHEN cr.data_pagamento IS NULL THEN cr.valor ELSE 0 END), 0) AS saldo_devedor,
-           CASE WHEN COALESCE(SUM(CASE WHEN cr.data_pagamento IS NULL THEN cr.valor ELSE 0 END), 0) = 0 THEN 100
-                WHEN COALESCE(SUM(CASE WHEN cr.data_pagamento IS NULL THEN cr.valor ELSE 0 END), 0) <= c.limite_credito_mensal THEN 70 ELSE 35 END AS score_credito,
-           CASE WHEN COALESCE(SUM(CASE WHEN cr.data_pagamento IS NULL THEN cr.valor ELSE 0 END), 0) = 0 THEN 'baixo'
-                WHEN COALESCE(SUM(CASE WHEN cr.data_pagamento IS NULL THEN cr.valor ELSE 0 END), 0) <= c.limite_credito_mensal THEN 'medio' ELSE 'alto' END AS risco,
-           COALESCE((c.metadados->>'padrao')::boolean, false) AS padrao
-      FROM commerce_customers c
-      LEFT JOIN a2_contas_receber cr ON cr.empresa_id = c.empresa_id AND cr.cliente_id = c.id
-     WHERE c.empresa_id = $1 AND c.bloqueado = false
-     GROUP BY c.id
-     ORDER BY lower(c.nome)`, [empresa]);
-  return result.rows.map(clienteDto);
+  const equivalentes = empresasEquivalentes(empresaId);
+  const clientesMap = new Map();
+
+  if (db && typeof db.query === 'function') {
+    try {
+      const empresaUuid = id(empresaId, 'empresa');
+      const result = await db.query(`
+        SELECT c.*, COALESCE(SUM(CASE WHEN cr.data_pagamento IS NULL THEN cr.valor ELSE 0 END), 0) AS saldo_devedor,
+               CASE WHEN COALESCE(SUM(CASE WHEN cr.data_pagamento IS NULL THEN cr.valor ELSE 0 END), 0) = 0 THEN 100
+                    WHEN COALESCE(SUM(CASE WHEN cr.data_pagamento IS NULL THEN cr.valor ELSE 0 END), 0) <= c.limite_credito_mensal THEN 70 ELSE 35 END AS score_credito,
+               CASE WHEN COALESCE(SUM(CASE WHEN cr.data_pagamento IS NULL THEN cr.valor ELSE 0 END), 0) = 0 THEN 'baixo'
+                    WHEN COALESCE(SUM(CASE WHEN cr.data_pagamento IS NULL THEN cr.valor ELSE 0 END), 0) <= c.limite_credito_mensal THEN 'medio' ELSE 'alto' END AS risco,
+               COALESCE((c.metadados->>'padrao')::boolean, false) AS padrao
+          FROM commerce_customers c
+          LEFT JOIN a2_contas_receber cr ON cr.empresa_id = c.empresa_id AND cr.cliente_id = c.id
+         WHERE c.empresa_id = $1 AND c.bloqueado = false
+         GROUP BY c.id
+         ORDER BY lower(c.nome)`, [empresaUuid]);
+      for (const row of result.rows) {
+        const dto = clienteDto(row);
+        clientesMap.set(String(dto.id), dto);
+      }
+    } catch {}
+  }
+
+  for (const emp of equivalentes) {
+    try {
+      const lista = clientesKytto.listarClientes(emp);
+      if (Array.isArray(lista)) {
+        for (const c of lista) {
+          if (!clientesMap.has(String(c.id))) {
+            clientesMap.set(String(c.id), {
+              id: c.id,
+              nome: c.nome,
+              tipo: c.tipo || 'pf',
+              cpfCnpj: c.documento || c.cpf || '',
+              email: c.email || '',
+              telefone: c.telefone || '',
+              endereco: c.endereco || '',
+              limiteCreditoMensal: Number(c.limiteCreditoMensal || 0),
+              diasVencimento: Number(c.diasVencimento || 30),
+              observacao: c.observacao || '',
+              saldoDevedor: Number(c.saldoDevedor || 0),
+              scoreCredito: 100,
+              risco: 'baixo',
+              padrao: Boolean(c.padrao),
+              status: c.bloqueado ? 'bloqueado' : 'ativo',
+            });
+          }
+        }
+      }
+    } catch {}
+  }
+
+  return Array.from(clientesMap.values());
 }
 
 async function clienteExiste(db, empresaId, clienteId) {
@@ -98,6 +152,7 @@ function contaDto(row) {
 const contasSql = `SELECT cr.*, CASE WHEN cr.data_pagamento IS NOT NULL THEN 'paga' WHEN cr.data_vencimento < CURRENT_DATE THEN 'atrasada' ELSE 'pendente' END AS status FROM a2_contas_receber cr WHERE cr.empresa_id = $1`;
 
 export async function sincronizarPedidosPendentes(db, empresaId) {
+  if (!db || typeof db.query !== 'function') return;
   const empresa = id(empresaId, 'empresa');
   await db.query(`
     INSERT INTO a2_contas_receber (empresa_id, cliente_id, mesa_numero, descricao, valor, data_vencimento, observacao)
@@ -138,60 +193,310 @@ export async function sincronizarPedidosPendentes(db, empresaId) {
   `, [empresa]).catch((e) => console.warn('[a2] aviso ao sincronizar pedidos quitados:', e.message));
 }
 
-export async function listarContas(db, empresaId) {
-  const empresa = id(empresaId, 'empresa');
-  await sincronizarPedidosPendentes(db, empresa);
-  const result = await db.query(`${contasSql} ORDER BY cr.data_vencimento ASC, cr.criado_em DESC`, [empresa]);
-  return result.rows.map(contaDto);
+export async function listarContas(db, empresaId, filtros = {}) {
+  const equivalentes = empresasEquivalentes(empresaId);
+  const empresaUuid = id(empresaId, 'empresa');
+  const contasMap = new Map();
+
+  if (db && typeof db.query === 'function') {
+    try {
+      await sincronizarPedidosPendentes(db, empresaUuid);
+      const result = await db.query(`${contasSql} ORDER BY cr.data_vencimento ASC, cr.criado_em DESC`, [empresaUuid]);
+      for (const row of result.rows) {
+        const dto = contaDto(row);
+        contasMap.set(String(dto.id), dto);
+      }
+    } catch {}
+  }
+
+  for (const emp of equivalentes) {
+    try {
+      const contasKytto = clientesKytto.listarContasReceber(emp, filtros);
+      if (Array.isArray(contasKytto)) {
+        for (const c of contasKytto) {
+          if (!contasMap.has(String(c.id))) {
+            const diasAtraso = c.dataVencimento ? Math.floor((Date.now() - new Date(c.dataVencimento).valueOf()) / 86400000) : 0;
+            const status = c.dataPagamento ? 'paga' : (diasAtraso > 0 ? 'atrasada' : (c.status || 'pendente'));
+            contasMap.set(String(c.id), {
+              id: c.id,
+              clienteId: c.clienteId || null,
+              clienteNome: c.clienteNome || null,
+              mesaNumero: Number(c.mesaNumero || 0),
+              descricao: c.descricao || 'Conta a receber',
+              valor: Number(c.valor || 0),
+              dataVencimento: c.dataVencimento,
+              dataPagamento: c.dataPagamento || null,
+              observacao: c.observacao || '',
+              status,
+              origem: 'clientes_kytto',
+            });
+          }
+        }
+      }
+    } catch {}
+  }
+
+  for (const emp of equivalentes) {
+    try {
+      const lancamentos = financeiroKytto.listarLancamentos(emp);
+      if (Array.isArray(lancamentos)) {
+        for (const l of lancamentos) {
+          if (String(l.tipo || '').toLowerCase() === 'receita' && l.status !== 'cancelado') {
+            const refId = String(l.referencia?.contaReceberId || l.contaReceberId || '');
+            if (refId && contasMap.has(refId)) {
+              const existente = contasMap.get(refId);
+              if (l.pagoEm && !existente.dataPagamento) {
+                existente.dataPagamento = l.pagoEm;
+                existente.status = 'paga';
+              }
+              continue;
+            }
+            if (!contasMap.has(String(l.id))) {
+              const vencimento = l.vencimento || l.dataOperacao || l.criadoEm;
+              const diasAtraso = vencimento ? Math.floor((Date.now() - new Date(vencimento).valueOf()) / 86400000) : 0;
+              const status = (l.pagoEm || l.status === 'pago') ? 'paga' : (diasAtraso > 0 ? 'atrasada' : (l.status || 'pendente'));
+              contasMap.set(String(l.id), {
+                id: l.id,
+                clienteId: l.referencia?.clienteId || l.clienteId || null,
+                clienteNome: l.referencia?.clienteNome || l.clienteNome || null,
+                mesaNumero: Number(l.referencia?.mesaNumero || 0),
+                descricao: l.descricao || l.categoria || 'Receita financeira',
+                valor: Number(l.valor || 0),
+                dataVencimento: vencimento,
+                dataPagamento: l.pagoEm || null,
+                observacao: l.observacao || (l.categoria ? `Categoria: ${l.categoria}` : ''),
+                status,
+                origem: 'financeiro',
+              });
+            }
+          }
+        }
+      }
+    } catch {}
+  }
+
+  const todas = Array.from(contasMap.values());
+  todas.sort((a, b) => new Date(a.dataVencimento || 0) - new Date(b.dataVencimento || 0));
+  return todas;
 }
 
 export async function criarConta(db, empresaId, corpo = {}, operador = null) {
-  const empresa = id(empresaId, 'empresa');
-  const cliente = await clienteExiste(db, empresa, corpo.clienteId);
+  const equivalentes = empresasEquivalentes(empresaId);
+  const empresaUuid = id(empresaId, 'empresa');
   const descricao = exigirTexto(corpo.descricao, 'descricao', { max: 240 });
   const valor = numero(corpo.valor, 'valor', { min: 0.01 });
   const vencimento = exigirData(String(corpo.dataVencimento || '').slice(0, 10), 'dataVencimento');
   const mesa = inteiro(corpo.mesaNumero || 0, 'mesaNumero', { max: 9999 });
   const observacao = corpo.observacao ? exigirTexto(corpo.observacao, 'observacao', { max: 2000 }) : null;
-  const criadoPor = operador && /^[0-9a-f-]{36}$/i.test(String(operador)) ? operador : null;
-  const result = await db.query(`INSERT INTO a2_contas_receber (empresa_id, cliente_id, mesa_numero, descricao, valor, data_vencimento, observacao, criado_por) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *, 'pendente' AS status`, [empresa, cliente, mesa, descricao, valor, vencimento, observacao, criadoPor]);
-  return contaDto(result.rows[0]);
+  const clienteId = corpo.clienteId || null;
+  const lojaIdEfetivo = corpo.lojaId || (equivalentes.includes(DINO_EMPRESA_CANONICA) ? financeiroKytto.DINO_LOJA_CANONICA : null);
+  const empDestino = equivalentes[0] || empresaId;
+
+  let contaResultado = null;
+  let lancamentoCriado = null;
+
+  if (db && typeof db.query === 'function') {
+    try {
+      let clienteValido = null;
+      if (clienteId) {
+        try { clienteValido = await clienteExiste(db, empresaUuid, clienteId); } catch {}
+      }
+      const criadoPor = operador && /^[0-9a-f-]{36}$/i.test(String(operador)) ? operador : null;
+      const result = await db.query(
+        `INSERT INTO a2_contas_receber (empresa_id, cliente_id, mesa_numero, descricao, valor, data_vencimento, observacao, criado_por) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *, 'pendente' AS status`,
+        [empresaUuid, clienteValido, mesa, descricao, valor, vencimento, observacao, criadoPor]
+      );
+      if (result.rows[0]) contaResultado = contaDto(result.rows[0]);
+    } catch {}
+  }
+
+  try {
+    clientesKytto.criarContaReceber(empDestino, {
+      clienteId,
+      descricao,
+      valor,
+      dataVencimento: vencimento,
+      mesaNumero: mesa,
+      observacao: observacao || undefined,
+    });
+  } catch {}
+
+  try {
+    const lanc = financeiroKytto.registrarLancamento(empDestino, {
+      tipo: 'receita',
+      categoria: 'Contas a receber',
+      descricao,
+      valor,
+      origem: 'contas_receber',
+      status: 'pendente',
+      vencimento,
+      dataOperacao: new Date().toISOString().slice(0, 10),
+      observacao,
+      lojaId: lojaIdEfetivo,
+      referencia: { clienteId, contaReceberId: contaResultado?.id },
+    });
+    if (lanc && !lancamentoCriado) lancamentoCriado = lanc;
+  } catch {}
+
+  if (contaResultado) return contaResultado;
+  if (lancamentoCriado) {
+    return {
+      id: lancamentoCriado.id,
+      clienteId,
+      mesaNumero: mesa,
+      descricao,
+      valor,
+      dataVencimento: vencimento,
+      dataPagamento: null,
+      observacao: observacao || '',
+      status: 'pendente',
+      origem: 'financeiro',
+    };
+  }
+  return {
+    id: `ctr-${Date.now().toString(36)}`,
+    clienteId,
+    mesaNumero: mesa,
+    descricao,
+    valor,
+    dataVencimento: vencimento,
+    dataPagamento: null,
+    observacao: observacao || '',
+    status: 'pendente',
+  };
 }
 
 export async function baixarConta(db, empresaId, contaId, dataPagamento = new Date()) {
-  const result = await db.query(`UPDATE a2_contas_receber SET data_pagamento=COALESCE(data_pagamento,$1), atualizado_em=CURRENT_TIMESTAMP WHERE empresa_id=$2 AND id=$3 RETURNING *, CASE WHEN data_pagamento IS NOT NULL THEN 'paga' ELSE 'pendente' END AS status`, [dataPagamento, id(empresaId, 'empresa'), id(contaId, 'conta')]);
-  if (!result.rows[0]) throw new ErroDominio('NOT_FOUND', 'Conta a receber não encontrada', 404);
-  const conta = result.rows[0];
-  if (conta.observacao && conta.observacao.includes('Pedido gerado na Loja Online')) {
+  const equivalentes = empresasEquivalentes(empresaId);
+  const dataIso = typeof dataPagamento === 'string' ? dataPagamento : new Date(dataPagamento).toISOString();
+  let baixada = null;
+
+  if (db && typeof db.query === 'function') {
     try {
-      const match = conta.descricao.match(/Pedido\s+(KC-[A-Z0-9]+)/);
-      if (match) {
-        const publicCode = match[1];
-        await db.query(`
-          UPDATE commerce_orders
-             SET status = 'paid', atualizado_em = CURRENT_TIMESTAMP
-           WHERE empresa_id = $1 AND public_code = $2 AND status = 'pending_payment'
-        `, [id(empresaId, 'empresa'), publicCode]);
-        await db.query(`
-          UPDATE commerce_payments
-             SET status = 'captured', captured_at = COALESCE(captured_at, $3), atualizado_em = CURRENT_TIMESTAMP
-           WHERE empresa_id = $1 AND status = 'pending' AND order_id IN (
-             SELECT id FROM commerce_orders WHERE empresa_id = $1 AND public_code = $2
-           )
-        `, [id(empresaId, 'empresa'), publicCode, dataPagamento]);
+      const empresaUuid = id(empresaId, 'empresa');
+      const result = await db.query(`UPDATE a2_contas_receber SET data_pagamento=COALESCE(data_pagamento,$1), atualizado_em=CURRENT_TIMESTAMP WHERE empresa_id=$2 AND id=$3 RETURNING *, CASE WHEN data_pagamento IS NOT NULL THEN 'paga' ELSE 'pendente' END AS status`, [dataIso, empresaUuid, id(contaId, 'conta')]);
+      if (result.rows[0]) {
+        baixada = contaDto(result.rows[0]);
+        const conta = result.rows[0];
+        if (conta.observacao && conta.observacao.includes('Pedido gerado na Loja Online')) {
+          try {
+            const match = conta.descricao.match(/Pedido\s+(KC-[A-Z0-9]+)/);
+            if (match) {
+              const publicCode = match[1];
+              await db.query(`
+                UPDATE commerce_orders
+                   SET status = 'paid', atualizado_em = CURRENT_TIMESTAMP
+                 WHERE empresa_id = $1 AND public_code = $2 AND status = 'pending_payment'
+              `, [empresaUuid, publicCode]);
+              await db.query(`
+                UPDATE commerce_payments
+                   SET status = 'captured', captured_at = COALESCE(captured_at, $3), atualizado_em = CURRENT_TIMESTAMP
+                 WHERE empresa_id = $1 AND status = 'pending' AND order_id IN (
+                   SELECT id FROM commerce_orders WHERE empresa_id = $1 AND public_code = $2
+                 )
+              `, [empresaUuid, publicCode, dataIso]);
+            }
+          } catch (err) {
+            console.warn('[a2] aviso ao sincronizar baixa com pedido commerce:', err.message);
+          }
+        }
       }
-    } catch (err) {
-      console.warn('[a2] aviso ao sincronizar baixa com pedido commerce:', err.message);
-    }
+    } catch {}
   }
-  return contaDto(conta);
+
+  for (const emp of equivalentes) {
+    try {
+      const conta = clientesKytto.atualizarContaReceber(emp, contaId, { dataPagamento: dataIso });
+      if (conta) {
+        if (!baixada) {
+          baixada = {
+            id: conta.id,
+            clienteId: conta.clienteId,
+            mesaNumero: Number(conta.mesaNumero || 0),
+            descricao: conta.descricao,
+            valor: Number(conta.valor),
+            dataVencimento: conta.dataVencimento,
+            dataPagamento: conta.dataPagamento,
+            observacao: conta.observacao || '',
+            status: 'paga',
+          };
+        }
+        financeiroKytto.sincronizarContaReceber(emp, conta, { meioPagamento: 'conta' });
+      }
+    } catch {}
+  }
+
+  for (const emp of equivalentes) {
+    try {
+      const lancamento = financeiroKytto.atualizarLancamento(emp, contaId, {
+        status: 'pago',
+        pagoEm: dataIso.slice(0, 10),
+      });
+      if (lancamento && !baixada) {
+        baixada = {
+          id: lancamento.id,
+          clienteId: lancamento.referencia?.clienteId || lancamento.clienteId || null,
+          descricao: lancamento.descricao,
+          valor: Number(lancamento.valor),
+          dataVencimento: lancamento.vencimento,
+          dataPagamento: lancamento.pagoEm,
+          observacao: lancamento.observacao || '',
+          status: 'paga',
+        };
+      }
+    } catch {}
+  }
+
+  if (!baixada) throw new ErroDominio('NOT_FOUND', 'Conta a receber não encontrada', 404);
+  return baixada;
 }
 
 export async function listarAlertas(db, empresaId) {
-  const empresa = id(empresaId, 'empresa');
-  await sincronizarPedidosPendentes(db, empresa);
-  const result = await db.query(`SELECT id AS conta_id, cliente_id, valor, CASE WHEN data_vencimento < CURRENT_DATE THEN 'atrasada' ELSE 'vencimento_proximo' END AS tipo, GREATEST(CURRENT_DATE - data_vencimento, 0) AS dias_atraso, GREATEST(data_vencimento - CURRENT_DATE, 0) AS dias_ate_venc, CASE WHEN data_vencimento < CURRENT_DATE - 7 THEN 'critica' ELSE 'atencao' END AS severidade FROM a2_contas_receber WHERE empresa_id=$1 AND data_pagamento IS NULL AND data_vencimento <= CURRENT_DATE + 7 ORDER BY data_vencimento`, [empresa]);
-  return result.rows.map((row) => ({ contaId: row.conta_id, clienteId: row.cliente_id, valor: Number(row.valor), tipo: row.tipo, diasAtraso: Number(row.dias_atraso), diasAteVenc: Number(row.dias_ate_venc), severidade: row.severidade }));
+  const empresaUuid = id(empresaId, 'empresa');
+  if (db && typeof db.query === 'function') {
+    try { await sincronizarPedidosPendentes(db, empresaUuid); } catch {}
+  }
+  const contas = await listarContas(db, empresaId);
+  const ts = new Date().toISOString();
+  const alertas = [];
+
+  for (const conta of contas) {
+    if (conta.status === 'paga' || !conta.dataVencimento) continue;
+    const vencMs = new Date(conta.dataVencimento).valueOf();
+    if (!Number.isFinite(vencMs)) continue;
+    const diasAteVenc = Math.floor((vencMs - Date.now()) / 86400000);
+    const diasAtraso = Math.floor((Date.now() - vencMs) / 86400000);
+
+    if (diasAteVenc >= 0 && diasAteVenc <= 3) {
+      alertas.push({
+        id: `alt-${conta.id}`,
+        contaId: conta.id,
+        clienteId: conta.clienteId,
+        valor: Number(conta.valor || 0),
+        dataVencimento: conta.dataVencimento,
+        diasAteVenc,
+        diasAtraso: 0,
+        tipo: 'vencimento_proximo',
+        severidade: diasAteVenc === 0 ? 'critica' : 'atencao',
+        criadoEm: ts,
+      });
+    } else if (diasAtraso > 0) {
+      alertas.push({
+        id: `alt-${conta.id}`,
+        contaId: conta.id,
+        clienteId: conta.clienteId,
+        valor: Number(conta.valor || 0),
+        dataVencimento: conta.dataVencimento,
+        diasAteVenc: 0,
+        diasAtraso,
+        tipo: 'atrasada',
+        severidade: diasAtraso > 7 ? 'critica' : 'atencao',
+        criadoEm: ts,
+      });
+    }
+  }
+
+  return alertas;
 }
 
 async function resumo(db, empresaId) {
@@ -245,7 +550,6 @@ export async function salvarCadastro(db, empresaId, tipo, corpo = {}, registroId
     if (campo === 'data_admissao') return dataOpcional(corpo[chave], chave);
     if (campo === 'salario') return corpo[chave] === '' || corpo[chave] == null ? null : numero(corpo[chave], chave);
     if (campo === 'status') {
-      // na edição sem status no corpo, mantém o atual (o UPDATE usa COALESCE para esta coluna)
       if (registroId && (corpo.status === undefined || corpo.status === null || corpo.status === '')) return null;
       const status = String(corpo.status ?? 'ativo').trim().toLowerCase() || 'ativo';
       if (!STATUS_CADASTRO.has(status)) throw new ErroDominio('VALIDATION_ERROR', 'status deve ser ativo, afastado, desligado ou inativo');

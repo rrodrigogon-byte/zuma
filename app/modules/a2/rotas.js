@@ -23,7 +23,7 @@ export function createA2AdminRouter({ db, empresaDaRequisicao, operadorDaRequisi
   router.post('/clientes', executar(({ empresaId, req }) => svc.salvarCliente(db, empresaId, req.body || {}), 201));
   router.patch('/clientes/:id', executar(({ empresaId, req }) => svc.salvarCliente(db, empresaId, req.body || {}, req.params.id)));
 
-  router.get('/contas-receber', executar(async ({ empresaId }) => ({ contas: await svc.listarContas(db, empresaId) })));
+  router.get('/contas-receber', executar(async ({ empresaId, req }) => ({ contas: await svc.listarContas(db, empresaId, req.query) })));
   router.post('/contas-receber', executar(({ empresaId, req, operador }) => svc.criarConta(db, empresaId, req.body || {}, operador), 201));
   router.patch('/contas-receber/:id', executar(({ empresaId, req }) => svc.baixarConta(db, empresaId, req.params.id, req.body?.dataPagamento || new Date())));
   router.get('/alertas-vencimento', executar(async ({ empresaId }) => ({ alertas: await svc.listarAlertas(db, empresaId) })));
