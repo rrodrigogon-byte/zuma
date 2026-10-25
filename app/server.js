@@ -445,7 +445,7 @@ function auth(req,res,next){
       return res.status(401).json({ error: 'sessão encerrada', code: 'SESSION_REVOKED' });
     }
     return resolveOperationalById({ userId: req.user.id, empresaId: req.user.empresaId }).then(async owner => {
-      if (!owner || owner.email !== req.user.email || !credentialSessionValid(req.user,credentialVersion(owner.senhaHash),owner.passwordChangedAt)) return res.status(401).json({ error: 'sessão encerrada', code: 'SESSION_REVOKED' });
+      if (!owner || owner.email !== req.user.email || !credentialSessionValid(req.user,credentialVersion(owner.senhaHash,owner.passwordChangedAt),owner.passwordChangedAt)) return res.status(401).json({ error: 'sessão encerrada', code: 'SESSION_REVOKED' });
       const linked = await linkedAccountForLocalUser(owner.id);
       if (linked?.ativo === false) return res.status(401).json({ error:'sessão encerrada', code:'SESSION_REVOKED' });
       req.user = { id: owner.id, nome: owner.nome, email: owner.email, role: 'organizador', empresaId: owner.empresaId, pgOperational: true, tenantBound: true, platformAdmin: false };
@@ -455,7 +455,7 @@ function auth(req,res,next){
   // Conta desativada ou excluída perde o acesso na hora, e mudança de papel vale já
   // (antes o token de 12 h continuava valendo com o papel antigo).
   const conta = (db().usuarios || []).find(x => x.id === req.user.id);
-  if (!conta || conta.ativo === false || !credentialSessionValid(req.user,credentialVersion(conta.senhaHash),conta.passwordChangedAt)) return res.status(401).json({ error:'sessão encerrada; entre novamente', code:'SESSION_REVOKED' });
+  if (!conta || conta.ativo === false || !credentialSessionValid(req.user,credentialVersion(conta.senhaHash,conta.passwordChangedAt),conta.passwordChangedAt)) return res.status(401).json({ error:'sessão encerrada; entre novamente', code:'SESSION_REVOKED' });
   req.user.role = conta.role;
   req.user.platformAdmin = isPlatformAdminUser(conta);
   req.user.mainAdmin = isMainAdminUser(conta);
@@ -574,7 +574,7 @@ function auditEmpresaId(req){
   const header = String(req?.headers?.['x-empresa-id'] || '').trim();
   return header && isPlatformAdminUser(req?.user) ? header.slice(0, 64) : null;
 }
-const tokenFor = u => jwt.sign({ id:u.id, nome:u.nome, email:u.email, role:u.role, credentialVersion:credentialVersion(u.senhaHash), platformAdmin:isPlatformAdminUser(u), ...(u.empresaId ? { empresaId:u.empresaId } : {}), ...(u.lojaId ? { lojaId:u.lojaId } : {}) }, JWT_SECRET, { expiresIn:'12h' });
+const tokenFor = u => jwt.sign({ id:u.id, nome:u.nome, email:u.email, role:u.role, credentialVersion:credentialVersion(u.senhaHash,u.passwordChangedAt), platformAdmin:isPlatformAdminUser(u), ...(u.empresaId ? { empresaId:u.empresaId } : {}), ...(u.lojaId ? { lojaId:u.lojaId } : {}) }, JWT_SECRET, { expiresIn:'12h' });
 
 // ---- rate-limit simples (anti força-bruta no login) ----
 const tentativas = new Map(); // chave -> { n, until }
@@ -1719,7 +1719,7 @@ async function tryAccountLogin(email, password, res, panelOnly, rateKey) {
     user.commerceRoleCode = local.roleCode;
   }
   limparTentativas(rateKey);
-  const token = jwt.sign({ id:user.id, email:user.email, pgAccount:true, credentialVersion:credentialVersion(credential) }, JWT_SECRET, { expiresIn:'12h' });
+  const token = jwt.sign({ id:user.id, email:user.email, pgAccount:true, credentialVersion:user.credentialVersion }, JWT_SECRET, { expiresIn:'12h' });
   res.json({ token, user:publicUser(user), role:user.role, sessao });
   return true;
 }
@@ -1742,7 +1742,7 @@ app.post('/api/admin/login', async (req,res)=>{
           return res.status(503).json({ error: 'escopo indisponível', code: 'SCOPE_UNAVAILABLE' });
         }
         const scoped = { id: owner.id, nome: owner.nome, email: owner.email, role: 'organizador', empresaId: owner.empresaId, pgOperational: true, platformAdmin: false };
-        return res.json({ token: jwt.sign({...scoped,credentialVersion:credentialVersion(owner.senhaHash)}, JWT_SECRET, { expiresIn: '12h' }), user: publicUser(scoped), role: 'organizador', sessao });
+        return res.json({ token: jwt.sign({...scoped,credentialVersion:credentialVersion(owner.senhaHash,owner.passwordChangedAt)}, JWT_SECRET, { expiresIn: '12h' }), user: publicUser(scoped), role: 'organizador', sessao });
       }
     } catch {
       return res.status(503).json({ error: 'acesso temporariamente indisponível', code: 'SCOPE_UNAVAILABLE' });

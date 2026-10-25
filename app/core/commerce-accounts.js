@@ -248,7 +248,7 @@ export async function resolveAccountUser(accountId, { legacyUsers = [], database
   if (!access.length) return null;
   const panel = access.some(row => row.role_codigo !== 'customer');
   const admin = global || access.some(row => ['tenant_owner','store_admin'].includes(row.role_codigo));
-  return { id:account.id, nome:account.nome, email:account.email, telefone:account.telefone, ativo:true, role:admin ? 'admin' : panel ? 'organizador' : 'cliente', pgAccount:true, credentialVersion:credentialVersion(accountCredential(account,legacyUsers)), passwordChangedAt:account.password_changed_at || null, tenantBound:!global, platformAdmin:global, pgPlatformAdmin:global, accountAccess:access };
+  return { id:account.id, nome:account.nome, email:account.email, telefone:account.telefone, ativo:true, role:admin ? 'admin' : panel ? 'organizador' : 'cliente', pgAccount:true, credentialVersion:credentialVersion(accountCredential(account,legacyUsers),account.password_changed_at), passwordChangedAt:account.password_changed_at || null, tenantBound:!global, platformAdmin:global, pgPlatformAdmin:global, accountAccess:access };
 }
 async function activeAccountAccess(accountId, database = db) {
   return (await database.queryRead(`SELECT au.usuario_id, m.empresa_id, m.loja_id, m.expires_at, r.codigo AS role_codigo, e.nome AS empresa_nome

@@ -74,6 +74,6 @@ run('desativação depois do envio impede redefinição',async()=>{
 });
 test('política forte, limite UTF-8 e revogação de sessões antigas',()=>{
  assert.equal(resetPasswordPolicy(newPassword),true);for(const p of ['fraca','SemSimbolo1234','A1!'+ '😀'.repeat(20)])assert.equal(resetPasswordPolicy(p),false);
- const a=credentialVersion('hash-a'),b=credentialVersion('hash-b');assert.equal(credentialSessionValid({credentialVersion:a},b),false);assert.equal(credentialSessionValid({credentialVersion:b},b),true);
+ const a=credentialVersion('hash-a'),b=credentialVersion('hash-b');const stamped=credentialVersion('hash-a','2026-01-01T00:00:00Z');assert.equal(credentialSessionValid({credentialVersion:a},stamped),false);assert.equal(credentialSessionValid({credentialVersion:stamped},credentialVersion('hash-a',new Date('2026-01-01T00:00:00Z'))),true);assert.equal(credentialSessionValid({credentialVersion:a},b),false);assert.equal(credentialSessionValid({credentialVersion:b},b),true);
  assert.equal(credentialSessionValid({iat:1},b,'2026-01-01T00:00:00Z'),false);assert.equal(credentialSessionValid({iat:1},b,null),true);
 });
