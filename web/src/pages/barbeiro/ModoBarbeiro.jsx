@@ -30,6 +30,38 @@ const STATUS = {
 }
 const btn = { minHeight: 44, padding: '10px 14px', borderRadius: 12, border: 'none', background: t.accent, color: '#fff', font: 'inherit', fontSize: 15, fontWeight: 800, cursor: 'pointer' }
 const btn2 = { ...btn, background: 'transparent', color: t.cream, border: `1px solid ${t.line}`, fontWeight: 700 }
+
+function tocarSom(tipo = 'sucesso') {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)()
+    if (tipo === 'meta') {
+      [523.25, 659.25, 783.99, 1046.5].forEach((freq, idx) => {
+        const o = ctx.createOscillator()
+        const g = ctx.createGain()
+        o.connect(g)
+        g.connect(ctx.destination)
+        o.frequency.setValueAtTime(freq, ctx.currentTime + idx * 0.1)
+        g.gain.setValueAtTime(0.12, ctx.currentTime + idx * 0.1)
+        g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + idx * 0.1 + 0.3)
+        o.start(ctx.currentTime + idx * 0.1)
+        o.stop(ctx.currentTime + idx * 0.1 + 0.35)
+      })
+      navigator.vibrate?.([60, 50, 60, 50, 120])
+      return
+    }
+    const osc = ctx.createOscillator()
+    const gain = ctx.createGain()
+    osc.connect(gain)
+    gain.connect(ctx.destination)
+    osc.frequency.setValueAtTime(tipo === 'iniciar' ? 440 : 587.33, ctx.currentTime)
+    osc.frequency.exponentialRampToValueAtTime(tipo === 'iniciar' ? 660 : 880, ctx.currentTime + 0.15)
+    gain.gain.setValueAtTime(0.1, ctx.currentTime)
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.2)
+    osc.start()
+    osc.stop(ctx.currentTime + 0.22)
+    navigator.vibrate?.([40])
+  } catch (_) {}
+}
 const input = { width: '100%', boxSizing: 'border-box', minHeight: 44, padding: '10px 12px', borderRadius: 10, border: `1px solid ${t.line}`, background: t.surface, color: t.cream, font: 'inherit', fontSize: 16 }
 const label = { display: 'grid', gap: 6, fontSize: 13, color: t.muted, fontWeight: 600 }
 const card = { background: t.card, border: `1px solid ${t.line}`, borderRadius: 16, padding: 14 }
@@ -146,6 +178,7 @@ export default function ModoBarbeiro() {
   const { slug = '' } = useParams()
   const [params, setParams] = useSearchParams()
   const { user, logout, empresaAtiva, lojaAtiva } = useAuth()
+  const [filtroStatus, setFiltroStatus] = useState('todos')
   const [painelRecebido, setPainel] = useState(null)
   const [erro, setErro] = useState('')
   const [carregando, setCarregando] = useState(false)
@@ -199,7 +232,12 @@ export default function ModoBarbeiro() {
   async function mudarStatus(agendamento, status, pergunta) {
     if (pergunta && !window.confirm(pergunta)) return
     setAcaoEmCurso(agendamento.id); setErro('')
-    try { await api.patch(`/api/admin/barbearia/agenda/${agendamento.id}/status`, { status, registrarFinanceiro: false }); await carregar() }
+    try {
+      await api.patch(`/api/admin/barbearia/agenda/${agendamento.id}/status`, { status, registrarFinanceiro: false })
+      if (status === 'em_atendimento') tocarSom('iniciar')
+      else if (status === 'concluido') tocarSom('sucesso')
+      await carregar()
+    }
     catch (error) { setErro(error.message || 'Não foi possível atualizar o atendimento.') }
     finally { setAcaoEmCurso('') }
   }
@@ -209,6 +247,14 @@ export default function ModoBarbeiro() {
       .concat((painel?.bloqueios || []).map((b) => ({ tipo: 'bloqueio', quando: b.inicio, b })))
     return itens.sort((x, y) => new Date(x.quando) - new Date(y.quando))
   }, [painel])
+
+  const agendaFiltrada = useMemo(() => {
+    if (filtroStatus === 'todos') return agenda
+    if (filtroStatus === 'pendentes') return agenda.filter((i) => i.tipo === 'bloqueio' || ['agendado', 'confirmado'].includes(i.a.status))
+    if (filtroStatus === 'na_cadeira') return agenda.filter((i) => i.tipo === 'atendimento' && i.a.status === 'em_atendimento')
+    if (filtroStatus === 'concluidos') return agenda.filter((i) => i.tipo === 'atendimento' && i.a.status === 'concluido')
+    return agenda
+  }, [agenda, filtroStatus])
 
   const cabecalho = <header style={{ position: 'sticky', top: 0, zIndex: 20, background: t.surface, borderBottom: `1px solid ${t.line}`, padding: 'calc(10px + env(safe-area-inset-top)) 16px 10px' }}>
     <div style={{ display: 'flex', alignItems: 'center', gap: 10, maxWidth: 560, margin: '0 auto' }}>
@@ -312,9 +358,40 @@ export default function ModoBarbeiro() {
 
           <button type="button" style={btn2} onClick={() => setFolha('extrato')}>Meu extrato e repasses</button>
 
+          <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 4, scrollbarWidth: 'none' }}>
+            {[
+              ['todos', `Todos (${agenda.filter((i) => i.tipo === 'atendimento').length})`],
+              ['pendentes', `Pendentes (${agenda.filter((i) => i.tipo === 'atendimento' && ['agendado', 'confirmado'].includes(i.a.status)).length})`],
+              ['na_cadeira', `Na cadeira (${agenda.filter((i) => i.tipo === 'atendimento' && i.a.status === 'em_atendimento').length})`],
+              ['concluidos', `Concluídos (${agenda.filter((i) => i.tipo === 'atendimento' && i.a.status === 'concluido').length})`],
+            ].map(([chave, rotulo]) => {
+              const ativo = filtroStatus === chave
+              return (
+                <button
+                  key={chave}
+                  type="button"
+                  onClick={() => setFiltroStatus(chave)}
+                  style={{
+                    ...btn2,
+                    padding: '6px 12px',
+                    fontSize: 12,
+                    fontWeight: 700,
+                    background: ativo ? (chave === 'na_cadeira' ? t.green : t.accent) : 'transparent',
+                    color: ativo ? (chave === 'na_cadeira' ? '#0E1014' : '#fff') : t.cream,
+                    borderColor: ativo ? 'transparent' : t.line,
+                    whiteSpace: 'nowrap',
+                    borderRadius: 20,
+                  }}
+                >
+                  {rotulo}
+                </button>
+              )
+            })}
+          </div>
+
           <section aria-label="Agenda" style={{ display: 'grid', gap: 10 }}>
-            {agenda.length === 0 && <div style={{ ...card, textAlign: 'center', color: t.muted }}>Nenhum atendimento neste dia.</div>}
-            {agenda.map((item) => item.tipo === 'bloqueio'
+            {agendaFiltrada.length === 0 && <div style={{ ...card, textAlign: 'center', color: t.muted }}>Nenhum atendimento neste filtro.</div>}
+            {agendaFiltrada.map((item) => item.tipo === 'bloqueio'
               ? <div key={`b-${item.b.id}`} style={{ ...card, borderStyle: 'dashed', color: t.muted, display: 'flex', justifyContent: 'space-between', gap: 8 }}>
                 <span><strong style={{ color: t.cream }}>{hora(item.b.inicio)}–{hora(item.b.fim)}</strong> · {item.b.titulo}{item.b.geral ? ' (toda a equipe)' : ''}</span>
               </div>

@@ -500,6 +500,8 @@ export function avaliarMetasESincronizarGiros(empresaId, { dataIso = dataIsoCuia
   return {
     config,
     apuracao,
+    semana: apuracao.semana,
+    profissionais: apuracao.profissionais,
     resumoGiros: {
       totalPendentesGiro: Object.values(estado.giros || {}).filter((g) => g.status === 'pendente_giro').length,
       totalAguardandoEntrega: Object.values(estado.giros || {}).filter((g) => g.status === 'girado' && !g.entregueEm).length,
