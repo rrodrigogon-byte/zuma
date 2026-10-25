@@ -1,0 +1,681 @@
+/* ==========================================================================
+   CENTRAL DINO — PAINEL DE METAS DIÁRIAS, SEMANAIS E ROLETA DE PREMIAÇÕES
+   ========================================================================== */
+
+.dino-metas-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  max-width: 1300px;
+  margin: 0 auto;
+  padding-bottom: 40px;
+}
+
+/* Header Principal */
+.dino-metas-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 16px;
+  background: var(--surface, #1e293b);
+  border: 1px solid var(--line, rgba(255, 255, 255, 0.08));
+  border-radius: 16px;
+  padding: 20px 24px;
+}
+
+.dino-metas-title-group h1 {
+  margin: 0 0 6px 0;
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text, #f8fafc);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.dino-metas-subtitle {
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted, #94a3b8);
+  line-height: 1.5;
+}
+
+.dino-metas-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* Banner do Desafio Semanal */
+.dino-desafio-banner {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.15) 0%, rgba(239, 68, 68, 0.12) 100%);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  border-radius: 16px;
+  padding: 18px 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  position: relative;
+  overflow: hidden;
+}
+
+.dino-desafio-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #f59e0b;
+  color: #000;
+  font-weight: 800;
+  font-size: 11px;
+  padding: 3px 10px;
+  border-radius: 20px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 6px;
+}
+
+.dino-desafio-banner h3 {
+  margin: 0 0 4px 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: #fbbf24;
+}
+
+.dino-desafio-desc {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text, #f8fafc);
+}
+
+.dino-desafio-premiacao {
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-radius: 12px;
+  padding: 12px 18px;
+  text-align: right;
+}
+
+.dino-desafio-premio-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  color: #f59e0b;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+.dino-desafio-premio-val {
+  font-size: 15px;
+  font-weight: 700;
+  color: #ffffff;
+  margin-top: 2px;
+}
+
+/* Regras Rápidas das Metas */
+.dino-regras-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 14px;
+}
+
+.dino-regra-card {
+  background: var(--surface, #1e293b);
+  border: 1px solid var(--line, rgba(255, 255, 255, 0.08));
+  border-radius: 14px;
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  position: relative;
+}
+
+.dino-regra-icon {
+  font-size: 28px;
+  width: 52px;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 12px;
+  flex-shrink: 0;
+}
+
+.dino-regra-info h4 {
+  margin: 0 0 2px 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text, #f8fafc);
+}
+
+.dino-regra-info p {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted, #94a3b8);
+}
+
+.dino-regra-tag {
+  margin-top: 4px;
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  color: #10b981;
+}
+
+/* Navegação por Abas */
+.dino-metas-tabs {
+  display: flex;
+  gap: 8px;
+  border-bottom: 1px solid var(--line, rgba(255, 255, 255, 0.08));
+  padding-bottom: 10px;
+  overflow-x: auto;
+}
+
+.dino-metas-tab-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--muted, #94a3b8);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 16px;
+  border-radius: 10px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+}
+
+.dino-metas-tab-btn:hover {
+  color: var(--text, #f8fafc);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.dino-metas-tab-btn.active {
+  background: var(--surface, #1e293b);
+  border-color: rgba(245, 158, 11, 0.4);
+  color: #f59e0b;
+}
+
+/* Grid de Barbeiros / Profissionais */
+.dino-barbeiros-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  gap: 18px;
+}
+
+.dino-barbeiro-card {
+  background: var(--surface, #1e293b);
+  border: 1px solid var(--line, rgba(255, 255, 255, 0.08));
+  border-radius: 16px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  position: relative;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.dino-barbeiro-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+}
+
+.dino-barbeiro-card.has-spins {
+  border-color: rgba(245, 158, 11, 0.6);
+  box-shadow: 0 0 15px rgba(245, 158, 11, 0.15);
+}
+
+.dino-barbeiro-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.dino-barbeiro-perfil {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.dino-barbeiro-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  color: #000;
+  font-weight: 800;
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-transform: uppercase;
+}
+
+.dino-barbeiro-nome {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text, #f8fafc);
+}
+
+.dino-barbeiro-cargo {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted, #94a3b8);
+}
+
+.dino-spin-badge {
+  background: linear-gradient(135deg, #f59e0b 0%, #ea580c 100%);
+  color: #ffffff;
+  font-weight: 800;
+  font-size: 11px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  box-shadow: 0 2px 8px rgba(245, 158, 11, 0.4);
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+  100% { transform: scale(1); }
+}
+
+/* Barras de Metas */
+.dino-metas-track-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.dino-meta-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.dino-meta-item-head {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.dino-meta-label {
+  color: var(--text, #f8fafc);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dino-meta-values {
+  color: var(--muted, #94a3b8);
+}
+
+.dino-meta-prog-bar {
+  height: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  overflow: hidden;
+  position: relative;
+}
+
+.dino-meta-prog-fill {
+  height: 100%;
+  border-radius: 10px;
+  transition: width 0.4s ease;
+}
+
+.dino-meta-prog-fill.extras {
+  background: linear-gradient(90deg, #3b82f6 0%, #6366f1 100%);
+}
+
+.dino-meta-prog-fill.produtos {
+  background: linear-gradient(90deg, #10b981 0%, #14b8a6 100%);
+}
+
+.dino-meta-prog-fill.desafio {
+  background: linear-gradient(90deg, #f59e0b 0%, #ef4444 100%);
+}
+
+.dino-meta-prog-fill.batida {
+  background: #10b981 !important;
+  box-shadow: 0 0 10px rgba(16, 185, 129, 0.5);
+}
+
+/* Ações e Roleta no Card */
+.dino-barbeiro-footer {
+  border-top: 1px solid var(--line, rgba(255, 255, 255, 0.08));
+  padding-top: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dino-btn-girar-roleta {
+  width: 100%;
+  padding: 10px;
+  background: linear-gradient(135deg, #f59e0b 0%, #ea580c 100%);
+  color: #ffffff;
+  border: none;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);
+  transition: all 0.2s ease;
+}
+
+.dino-btn-girar-roleta:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(245, 158, 11, 0.45);
+}
+
+.dino-premio-ganho-card {
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  border-radius: 10px;
+  padding: 10px 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.dino-premio-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.dino-premio-nome {
+  font-size: 12px;
+  font-weight: 700;
+  color: #10b981;
+}
+
+.dino-premio-status {
+  font-size: 11px;
+  color: var(--muted, #94a3b8);
+}
+
+/* Modal da Roleta */
+.dino-roleta-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(8px);
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.dino-roleta-modal-content {
+  background: #0f172a;
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  border-radius: 24px;
+  width: 100%;
+  max-width: 520px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.8), 0 0 40px rgba(245, 158, 11, 0.2);
+  overflow: hidden;
+  animation: modalEnter 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes modalEnter {
+  from { opacity: 0; transform: scale(0.92); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.dino-roleta-header {
+  padding: 20px 24px 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.dino-roleta-header h2 {
+  margin: 4px 0 2px 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.dino-roleta-badge {
+  font-size: 11px;
+  font-weight: 700;
+  color: #f59e0b;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.dino-roleta-motivo {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted, #94a3b8);
+}
+
+.dino-roleta-close-btn {
+  background: rgba(255, 255, 255, 0.08);
+  border: none;
+  color: #fff;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+}
+
+.dino-roleta-body {
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+}
+
+/* Palco da Roleta */
+.dino-roleta-stage {
+  position: relative;
+  width: 340px;
+  height: 340px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.dino-roleta-pointer {
+  position: absolute;
+  top: -10px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 14px solid transparent;
+  border-right: 14px solid transparent;
+  border-top: 24px solid #ef4444;
+  z-index: 10;
+  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));
+}
+
+.dino-roleta-wheel-wrap {
+  width: 320px;
+  height: 320px;
+  border-radius: 50%;
+  box-shadow: 0 0 30px rgba(245, 158, 11, 0.3);
+}
+
+.dino-roleta-svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.dino-roleta-center-spin-btn {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #f59e0b 0%, #ea580c 100%);
+  border: 4px solid #0f172a;
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 900;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6);
+  z-index: 5;
+  transition: transform 0.15s ease;
+}
+
+.dino-roleta-center-spin-btn:hover {
+  transform: translate(-50%, -50%) scale(1.08);
+}
+
+/* Box do Ganhador */
+.dino-roleta-winner-box {
+  width: 100%;
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.2) 0%, rgba(5, 150, 105, 0.1) 100%);
+  border: 2px solid #10b981;
+  border-radius: 16px;
+  padding: 20px;
+  text-align: center;
+  animation: bounceIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+@keyframes bounceIn {
+  0% { transform: scale(0.6); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.dino-roleta-winner-emoji {
+  font-size: 44px;
+  margin-bottom: 8px;
+}
+
+.dino-roleta-winner-box h3 {
+  margin: 0 0 4px 0;
+  font-size: 16px;
+  color: #ffffff;
+}
+
+.dino-roleta-winner-prize {
+  font-size: 22px;
+  font-weight: 800;
+  color: #34d399;
+  text-shadow: 0 2px 8px rgba(16, 185, 129, 0.5);
+}
+
+.dino-roleta-winner-sub {
+  margin: 6px 0 0 0;
+  font-size: 12px;
+  color: var(--muted, #94a3b8);
+}
+
+/* Modo Manual */
+.dino-roleta-manual-toggle {
+  width: 100%;
+  text-align: center;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.dino-roleta-manual-form {
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 12px;
+  padding: 12px;
+}
+
+/* Tabela de Histórico e Auditoria */
+.dino-historico-table-wrap {
+  background: var(--surface, #1e293b);
+  border: 1px solid var(--line, rgba(255, 255, 255, 0.08));
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+.dino-historico-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.dino-historico-table th {
+  background: rgba(0, 0, 0, 0.2);
+  text-align: left;
+  padding: 12px 16px;
+  color: var(--muted, #94a3b8);
+  font-weight: 600;
+  font-size: 12px;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--line, rgba(255, 255, 255, 0.08));
+}
+
+.dino-historico-table td {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--line, rgba(255, 255, 255, 0.05));
+  color: var(--text, #f8fafc);
+}
+
+.dino-historico-table tr:hover td {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.dino-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 20px;
+}
+
+.dino-status-pill.pendente {
+  background: rgba(245, 158, 11, 0.15);
+  color: #f59e0b;
+}
+
+.dino-status-pill.girado {
+  background: rgba(59, 130, 246, 0.15);
+  color: #60a5fa;
+}
+
+.dino-status-pill.entregue {
+  background: rgba(16, 185, 129, 0.15);
+  color: #10b981;
+}
+
+/* Responsividade Mobile */
+@media (max-width: 640px) {
+  .dino-metas-header {
+    padding: 16px;
+  }
+  .dino-barbeiros-grid {
+    grid-template-columns: 1fr;
+  }
+  .dino-roleta-stage {
+    width: 280px;
+    height: 280px;
+  }
+  .dino-roleta-wheel-wrap {
+    width: 260px;
+    height: 260px;
+  }
+}

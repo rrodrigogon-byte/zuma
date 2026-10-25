@@ -214,6 +214,7 @@ const NAV_DINO_GROUPS = [
       { to: '/admin/barbearia-erp?area=catalogo&tab=Estoque+de+revenda', icon: '▧', label: 'Revenda e estoque' },
       { to: '/admin/barbearia-erp?area=gestao&tab=Comiss%C3%B5es', icon: '△', label: 'Comissões' },
       { to: '/admin/barbearia-erp?area=gestao&tab=Ocupa%C3%A7%C3%A3o+e+metas', icon: '◐', label: 'Ocupação e metas' },
+      { to: '/admin/metas-roleta', icon: '🎯', label: 'Metas & Roleta' },
       { to: '/admin/barbearia-erp?area=gestao&tab=Cobran%C3%A7as+e+cashback', icon: '$', label: 'Cobranças e cashback' },
       { to: '/admin/barbearia-erp?area=gestao&tab=Receita+da+IA', icon: '✦', label: 'Receita da IA' },
     ],
