@@ -1,5 +1,6 @@
 import express from 'express';
 import * as svc from './servico.js';
+import { mapearClienteNoViralgram, mapearTodosClientesViralgram, statusIntegracaoViralgram } from '../../core/viralgram-connector.js';
 import { responderErro } from '../acesso/banco.js';
 
 export function createA2AdminRouter({ db, empresaDaRequisicao, operadorDaRequisicao = null }) {
@@ -21,6 +22,9 @@ export function createA2AdminRouter({ db, empresaDaRequisicao, operadorDaRequisi
 
   router.get('/clientes', executar(async ({ empresaId }) => ({ clientes: await svc.listarClientes(db, empresaId) })));
   router.post('/clientes', executar(({ empresaId, req }) => svc.salvarCliente(db, empresaId, req.body || {}), 201));
+  router.get('/clientes/viralgram/status', executar(({ empresaId }) => statusIntegracaoViralgram(empresaId)));
+  router.post('/clientes/viralgram/mapear-todos', executar(({ empresaId }) => mapearTodosClientesViralgram(empresaId)));
+  router.post('/clientes/:id/mapear-viralgram', executar(({ empresaId, req }) => mapearClienteNoViralgram(empresaId, req.params.id)));
   router.patch('/clientes/:id', executar(({ empresaId, req }) => svc.salvarCliente(db, empresaId, req.body || {}, req.params.id)));
 
   router.get('/contas-receber', executar(async ({ empresaId, req }) => ({ contas: await svc.listarContas(db, empresaId, req.query) })));

@@ -1172,6 +1172,9 @@ async function toolConsultCustomerProfile(context) {
     estadoCivil: cliente.estadoCivil || null,
     conjugeNome: cliente.conjugeNome || null,
     conjugeAniversario: cliente.conjugeAniversario || null,
+    instagram: cliente.instagram || cliente.redesSociais?.instagram || null,
+    linkedin: cliente.linkedin || cliente.redesSociais?.linkedin || null,
+    viralgramStatus: cliente.viralgramProfile?.status || 'pendente',
     camposPendentes: pendentes,
     instrucao: pendentes.length
       ? `Ainda faltam no cadastro: ${pendentes.join(', ')}. Pergunte de forma leve e simpática durante ou no final do atendimento para garantir mimos e vantagens.`
@@ -1215,6 +1218,12 @@ async function toolUpdateCustomerProfile(context, args = {}) {
     if (args.bebida) dados.preferencias.bebida = cleanText(args.bebida, 100);
     if (args.corte) dados.preferencias.corte = cleanText(args.corte, 100);
     if (args.barba) dados.preferencias.barba = cleanText(args.barba, 100);
+  }
+  if (args.instagram) {
+    dados.instagram = cleanText(args.instagram, 100);
+  }
+  if (args.linkedin) {
+    dados.linkedin = cleanText(args.linkedin, 200);
   }
   if (args.filhoNome) {
     dados.familia = Array.isArray(cliente?.familia) ? [...cliente.familia] : [];
@@ -1260,6 +1269,8 @@ async function toolUpdateCustomerProfile(context, args = {}) {
       corte: cliente?.preferencias?.corte || dados.preferencias?.corte || null,
       barba: cliente?.preferencias?.barba || dados.preferencias?.barba || null,
       filhos: (cliente?.familia || dados.familia || []).filter(f => f.relacao === 'filho').map(f => f.nome),
+      instagram: cliente?.instagram || dados.instagram || null,
+      linkedin: cliente?.linkedin || dados.linkedin || null,
     },
     instrucao: 'Dados cadastrais do cliente salvos com sucesso no sistema da barbearia. Agradeça de forma simpática, descontraída e acolhedora.',
   };
@@ -1477,6 +1488,8 @@ export const WHATSAPP_AI_TOOL_DECLARATIONS = [
         barba: { type: 'STRING', description: 'Estilo de barba de preferência (ex.: "desenhada", "toalha quente", "barboterapia")' },
         filhoNome: { type: 'STRING', description: 'Nome do filho ou filha do cliente (se mencionado)' },
         filhoAniversario: { type: 'STRING', description: 'Data de aniversário do filho ou filha (ex.: "12/04")' },
+        instagram: { type: 'STRING', description: 'Perfil ou @ do cliente no Instagram (ex.: "@marcos" ou "instagram.com/marcos")' },
+        linkedin: { type: 'STRING', description: 'Perfil ou link do LinkedIn do cliente (ex.: "linkedin.com/in/marcos" ou "marcos")' },
       },
     },
   },

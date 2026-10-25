@@ -19,6 +19,8 @@ const EMPTY_FORM = {
   conjugeAniversario: '',
   bebida: '',
   corte: '',
+  instagram: '',
+  linkedin: '',
   limiteCreditoMensal: 0,
   diasVencimento: 30,
   observacao: ''
@@ -32,6 +34,33 @@ export default function Clientes() {
   const [modal, setModal] = useState(null) // null | 'novo' | cliente_id
   const [form, setForm] = useState(EMPTY_FORM)
   const [saving, setSaving] = useState(false)
+  const [mappingViralgram, setMappingViralgram] = useState(false)
+
+  const handleMapearTodosViralgram = async () => {
+    setMappingViralgram(true)
+    try {
+      const res = await api.post(a2Path('/clientes/viralgram/mapear-todos'))
+      toast(`${res.mapeadosComRedes || 0} clientes mapeados com ViralGram 4.0!`)
+      load()
+    } catch (e) {
+      toast('Erro ao mapear clientes no ViralGram', true)
+    } finally {
+      setMappingViralgram(false)
+    }
+  }
+
+  const handleMapearIndividualViralgram = async (clienteId) => {
+    try {
+      const res = await api.post(a2Path(`/clientes/${clienteId}/mapear-viralgram`))
+      toast('Cliente mapeado com ViralGram!')
+      load()
+      if (res.viralgramProfile) {
+        setForm(prev => ({ ...prev, viralgramProfile: res.viralgramProfile }))
+      }
+    } catch (e) {
+      toast('Erro ao analisar no ViralGram', true)
+    }
+  }
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -88,6 +117,9 @@ export default function Clientes() {
       conjugeAniversario: c.conjugeAniversario || (c.familia?.find(f => f.relacao === 'esposa' || f.relacao === 'conjuge')?.aniversario) || '',
       bebida: c.preferencias?.bebida || c.bebida || '',
       corte: c.preferencias?.corte || c.corte || '',
+      instagram: c.instagram || c.redesSociais?.instagram || '',
+      linkedin: c.linkedin || c.redesSociais?.linkedin || '',
+      viralgramProfile: c.viralgramProfile || null,
       limiteCreditoMensal: c.limiteCreditoMensal || 0,
       diasVencimento: c.diasVencimento || 30,
       observacao: c.observacao || ''
@@ -112,6 +144,15 @@ export default function Clientes() {
         <h1 className="page-title" style={{ margin:0 }}>👥 Clientes & Contas</h1>
         <div style={{ display:'flex', gap:8 }}>
           <button className="btn btn-secondary btn-sm" onClick={load}>↺ Atualizar</button>
+          <button
+            className="btn btn-secondary btn-sm"
+            onClick={handleMapearTodosViralgram}
+            disabled={mappingViralgram}
+            title="Mapear presença social de todos os clientes com o motor ViralGram 4.0"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+          >
+            {mappingViralgram ? 'Mapeando...' : '🌟 Mapear ViralGram'}
+          </button>
           <button className="btn btn-primary btn-sm" onClick={openNovo}>+ Novo Cliente</button>
         </div>
       </div>
@@ -165,6 +206,45 @@ export default function Clientes() {
                 <td>
                   <div style={{ fontSize: 13 }}>{c.telefone || '—'}</div>
                   <div style={{ fontSize: 11, color: 'var(--muted)' }}>{c.email}</div>
+                  <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 3, flexWrap: 'wrap' }}>
+                    {(c.instagram || c.redesSociais?.instagram) ? (
+                      <a
+                        href={`https://instagram.com/${String(c.instagram || c.redesSociais?.instagram).replace(/^@/, '')}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={{ fontSize: 11, color: '#E1306C', textDecoration: 'none', fontWeight: 500 }}
+                        title="Ver perfil no Instagram"
+                      >
+                        📸 @{String(c.instagram || c.redesSociais?.instagram).replace(/^@/, '')}
+                      </a>
+                    ) : null}
+                    {(c.linkedin || c.redesSociais?.linkedin) ? (
+                      <a
+                        href={String(c.linkedin || c.redesSociais?.linkedin).startsWith('http') ? String(c.linkedin || c.redesSociais?.linkedin) : `https://www.linkedin.com/in/${c.linkedin || c.redesSociais?.linkedin}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={{ fontSize: 11, color: '#0077B5', textDecoration: 'none', fontWeight: 500 }}
+                        title="Ver perfil no LinkedIn"
+                      >
+                        💼 LinkedIn
+                      </a>
+                    ) : null}
+                    {c.viralgramProfile?.reputationScore ? (
+                      <span
+                        style={{
+                          fontSize: 10,
+                          padding: '1px 5px',
+                          borderRadius: 4,
+                          background: 'rgba(255, 107, 44, 0.15)',
+                          color: 'var(--primary, #FF6B2C)',
+                          fontWeight: 600,
+                        }}
+                        title={`ViralGram Score: ${c.viralgramProfile.reputationScore}/100 · ${c.viralgramProfile.tier || ''}`}
+                      >
+                        🌟 VG {c.viralgramProfile.reputationScore}
+                      </span>
+                    ) : null}
+                  </div>
                 </td>
                 <td>
                   <div style={{ fontSize: 13, fontWeight: 500 }}>
@@ -273,6 +353,62 @@ export default function Clientes() {
                   <input value={form.corte} onChange={e => setForm({ ...form, corte: e.target.value })} placeholder="Ex: Degradê navalhado" />
                 </div>
               </div>
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Instagram (@ ou link do perfil)</label>
+                  <input
+                    value={form.instagram}
+                    onChange={e => setForm({ ...form, instagram: e.target.value })}
+                    placeholder="Ex: @usuario ou instagram.com/usuario"
+                  />
+                </div>
+                <div className="form-group">
+                  <label>LinkedIn (link ou perfil)</label>
+                  <input
+                    value={form.linkedin}
+                    onChange={e => setForm({ ...form, linkedin: e.target.value })}
+                    placeholder="Ex: linkedin.com/in/usuario"
+                  />
+                </div>
+              </div>
+              {form.viralgramProfile && (
+                <div style={{ marginBottom: 12, padding: 10, background: 'rgba(255, 107, 44, 0.08)', borderRadius: 8, border: '1px solid rgba(255, 107, 44, 0.25)', fontSize: 12 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                    <span style={{ fontWeight: 600, color: '#FF6B2C' }}>
+                      🌟 Inteligência ViralGram 4.0 ({form.viralgramProfile.tier || 'Mapeado'})
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleMapearIndividualViralgram(modal)}
+                      style={{ fontSize: 11, background: 'none', border: 'none', color: '#FF6B2C', cursor: 'pointer', textDecoration: 'underline' }}
+                    >
+                      Reanalisar
+                    </button>
+                  </div>
+                  <div>
+                    <strong>Score de Reputação:</strong> {form.viralgramProfile.reputationScore}/100 &nbsp;|&nbsp; <strong>Visibilidade:</strong> {form.viralgramProfile.visibilityScore}/100
+                  </div>
+                  <div style={{ marginTop: 4, color: 'var(--muted)' }}>
+                    {form.viralgramProfile.resumoPerfil}
+                  </div>
+                  {form.viralgramProfile.estrategiaDino && (
+                    <div style={{ marginTop: 4, fontWeight: 500, color: 'var(--foreground)' }}>
+                      💡 <strong>Estratégia Dino:</strong> {form.viralgramProfile.estrategiaDino}
+                    </div>
+                  )}
+                </div>
+              )}
+              {modal && modal !== 'novo' && !form.viralgramProfile && (form.instagram || form.linkedin) && (
+                <div style={{ marginBottom: 12, textAlign: 'right' }}>
+                  <button
+                    type="button"
+                    onClick={() => handleMapearIndividualViralgram(modal)}
+                    style={{ fontSize: 12, padding: '4px 8px', borderRadius: 4, border: '1px solid #FF6B2C', color: '#FF6B2C', background: 'transparent', cursor: 'pointer' }}
+                  >
+                    🌟 Mapear Presença no ViralGram
+                  </button>
+                </div>
+              )}
               <div className="form-row">
                 <div className="form-group">
                   <label>Bairro</label>

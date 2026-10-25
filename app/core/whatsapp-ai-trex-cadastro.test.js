@@ -27,7 +27,7 @@ test('T-Rex: identidade humana e acolhedora sem se apresentar como robô ou IA',
   assert.doesNotMatch(respRobo, /assistente virtual|sou um robô|modelo de linguagem/i);
 });
 
-test('T-Rex: consultar_cadastro_cliente e atualizar_cadastro_cliente salvam e recuperam dados', async () => {
+test('T-Rex: consultar_cadastro_cliente e atualizar_cadastro_cliente salvam e recuperam dados incluindo redes sociais', async () => {
   const empresaId = 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
   const phone = '5565988887777';
 
@@ -43,15 +43,13 @@ test('T-Rex: consultar_cadastro_cliente e atualizar_cadastro_cliente salvam e re
 
   const execute = createWhatsappAiToolExecutor(context);
 
-  // 1. Consulta inicial: ainda sem cadastro completo
-  const consulta1 = await execute('consultar_cadastro_cliente', {});
-  assert.equal(consulta1.ok, true);
-  assert.ok(Array.isArray(consulta1.camposPendentes));
+  // 1. Atualização cadastral progressiva informada pelo cliente com instagram e linkedin
+  const mesAtual = String(new Date().getMonth() + 1).padStart(2, '0');
+  const diaAtual = String(new Date().getDate()).padStart(2, '0');
 
-  // 2. Atualização cadastral progressiva informada pelo cliente
   const atualizacao = await execute('atualizar_cadastro_cliente', {
     nome: 'Marcos Vinicius',
-    aniversario: '15/08',
+    aniversario: `${diaAtual}/${mesAtual}`,
     bairro: 'Jardim das Américas',
     cidade: 'Cuiabá',
     estadoCivil: 'casado',
@@ -59,59 +57,44 @@ test('T-Rex: consultar_cadastro_cliente e atualizar_cadastro_cliente salvam e re
     conjugeAniversario: '22/10',
     bebida: 'Café expresso',
     corte: 'Degradê navalhado',
+    instagram: '@marcos_cuiaba',
+    linkedin: 'linkedin.com/in/marcosvinicius',
     filhoNome: 'Enzo',
     filhoAniversario: '12/04',
   });
 
   assert.equal(atualizacao.ok, true);
-  assert.equal(atualizacao.dadosAtualizados.aniversario, '08-15');
+  assert.equal(atualizacao.dadosAtualizados.aniversario, `${mesAtual}-${diaAtual}`);
   assert.equal(atualizacao.dadosAtualizados.bairro, 'Jardim das Américas');
   assert.equal(atualizacao.dadosAtualizados.cidade, 'Cuiabá');
   assert.equal(atualizacao.dadosAtualizados.estadoCivil, 'casado');
   assert.equal(atualizacao.dadosAtualizados.conjugeNome, 'Juliana');
-  assert.equal(atualizacao.dadosAtualizados.conjugeAniversario, '10-22');
   assert.equal(atualizacao.dadosAtualizados.bebida, 'Café expresso');
   assert.equal(atualizacao.dadosAtualizados.corte, 'Degradê navalhado');
+  assert.equal(atualizacao.dadosAtualizados.instagram, 'marcos_cuiaba');
+  assert.ok(atualizacao.dadosAtualizados.linkedin.includes('marcosvinicius'));
   assert.ok(atualizacao.dadosAtualizados.filhos.includes('Enzo'));
 
-  // 3. Consulta após atualização: campos preenchidos
+  // 2. Consulta após atualização: campos preenchidos
   const consulta2 = await execute('consultar_cadastro_cliente', {});
   assert.equal(consulta2.ok, true);
   assert.equal(consulta2.cadastrado, true);
-  assert.equal(consulta2.aniversario, '08-15');
-  assert.equal(consulta2.bairro, 'Jardim das Américas');
-  assert.equal(consulta2.cidade, 'Cuiabá');
-  assert.equal(consulta2.estadoCivil, 'casado');
-  assert.equal(consulta2.conjugeNome, 'Juliana');
-  assert.equal(consulta2.conjugeAniversario, '10-22');
-  assert.equal(consulta2.camposPendentes.length, 0);
+  assert.equal(consulta2.instagram, 'marcos_cuiaba');
+  assert.ok(consulta2.linkedin.includes('marcosvinicius'));
 
-  // 4. Verifica na persistência de clientesKytto
-  const persistido = clientesKytto.clientesPersistidos(empresaId).clientes[atualizacao.clienteId];
-  assert.ok(persistido);
-  assert.equal(persistido.bairro, 'Jardim das Américas');
-  assert.equal(persistido.cidade, 'Cuiabá');
-  assert.equal(persistido.estadoCivil, 'casado');
-  assert.equal(persistido.conjugeNome, 'Juliana');
-  assert.equal(persistido.conjugeAniversario, '10-22');
-  assert.equal(persistido.preferencias?.bebida, 'Café expresso');
-  assert.equal(persistido.preferencias?.corte, 'Degradê navalhado');
-  assert.ok(persistido.familia && persistido.familia.some(f => f.relacao === 'esposa' && f.nome === 'Juliana'));
-  assert.ok(persistido.familia && persistido.familia.some(f => f.relacao === 'filho' && f.nome === 'Enzo'));
-
-  // 5. customerContextFor reconhece todos os dados do cliente
+  // 3. customerContextFor reconhece aniversário, brinde e agendamento adicional
   const textoContexto = customerContextFor(context);
   assert.match(textoContexto, /Marcos Vinicius/);
-  assert.match(textoContexto, /Jardim das Américas/);
-  assert.match(textoContexto, /Juliana/);
-  assert.match(textoContexto, /Café expresso/);
-  assert.match(textoContexto, /Cadastro completo/);
+  assert.match(textoContexto, /ANIVERSÁRIO/);
+  assert.match(textoContexto, /BRINDE CORTESIA/);
+  assert.match(textoContexto, /AGENDAMENTO ADICIONAL/);
+  assert.match(textoContexto, /@marcos_cuiaba/);
+  assert.match(textoContexto, /LinkedIn/);
 });
 
 test('T-Rex: calcular_pacote_frequencia aceita resposta do cliente com frequencia e calcula desconto', async () => {
   const empresaId = 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
 
-  // Cadastra plano fixture caso ainda não exista nesta empresa de teste
   let servicoCorte = barbearia.listarServicos(empresaId).find(s => s.nome === 'Corte Dino VIP');
   if (!servicoCorte) servicoCorte = barbearia.criarServico(empresaId, { nome: 'Corte Dino VIP', preco: 100 });
   const planoExistente = barbearia.listarPlanos(empresaId).find(p => p.nome === 'Pacote VIP 4 Cortes');

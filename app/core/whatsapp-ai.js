@@ -685,6 +685,31 @@ export function customerContextFor(toolContext) {
   if (!cliente.estadoCivil) pendentes.push('se é solteiro ou casado');
   if (cliente.estadoCivil === 'casado' && !cliente.conjugeNome) pendentes.push('nome e aniversário da esposa');
   if (!cliente.preferencias?.bebida) pendentes.push('bebida preferida');
+  if (!cliente.instagram && !cliente.redesSociais?.instagram) pendentes.push('Instagram (@)');
+  if (!cliente.linkedin && !cliente.redesSociais?.linkedin) pendentes.push('LinkedIn');
+
+  // Checagem de aniversário do cliente
+  const hoje = new Date();
+  const mesAtual = String(hoje.getMonth() + 1).padStart(2, '0');
+  const diaAtual = String(hoje.getDate()).padStart(2, '0');
+  const anivCliente = cliente.aniversario || (cliente.dataNascimento ? cliente.dataNascimento.slice(5) : '');
+  const isMesAniv = Boolean(anivCliente && anivCliente.startsWith(`${mesAtual}-`));
+  const isHojeAniv = Boolean(anivCliente === `${mesAtual}-${diaAtual}`);
+
+  let alertaAniversario = '';
+  if (isHojeAniv) {
+    alertaAniversario = `HOJE É O ANIVERSÁRIO DO CLIENTE (${diaAtual}/${mesAtual})! PARABENIZE COM MUITO ENTUSIASMO! Ofereça o BRINDE CORTESIA DE ANIVERSÁRIO da Dino (hidratação cortesia ou bebida especial) e proponha um AGENDAMENTO ADICIONAL para ele trazer um amigo, irmão ou filho para comemorar e cortar junto na resenha!`;
+  } else if (isMesAniv) {
+    alertaAniversario = `ESTE É O MÊS DE ANIVERSÁRIO DO CLIENTE (dia ${anivCliente.slice(3)}/${mesAtual})! Parabenize com carinho! Ofereça o BRINDE CORTESIA DE ANIVERSÁRIO da casa (hidratação cortesia ou mimo especial no corte) e sugira agendar um horário adicional para um amigo ou filho vir cortar junto!`;
+  }
+
+  // Checagem de aniversário da esposa
+  const anivEsposa = cliente.conjugeAniversario || '';
+  const isMesAnivEsposa = Boolean(anivEsposa && anivEsposa.startsWith(`${mesAtual}-`));
+  let alertaEsposa = '';
+  if (isMesAnivEsposa) {
+    alertaEsposa = `A ESPOSA DO CLIENTE (${cliente.conjugeNome || 'esposa'}) FAZ ANIVERSÁRIO ESTE MÊS (dia ${anivEsposa.slice(3)}/${mesAtual})! Lembre com gentileza e sugira que ele venha cortar o cabelo antes da festa ou comprar um mimo/voucher para ela!`;
+  }
 
   const conhecidos = [
     `Nome: ${cliente.nome}`,
@@ -695,13 +720,16 @@ export function customerContextFor(toolContext) {
     cliente.preferencias?.bebida ? `Bebida preferida: ${cliente.preferencias.bebida}` : null,
     cliente.preferencias?.corte ? `Estilo de corte de costume: ${cliente.preferencias.corte}` : null,
     cliente.preferencias?.barba ? `Estilo de barba de costume: ${cliente.preferencias.barba}` : null,
+    (cliente.instagram || cliente.redesSociais?.instagram) ? `Instagram: @${String(cliente.instagram || cliente.redesSociais?.instagram).replace(/^@/, '')}` : null,
+    (cliente.linkedin || cliente.redesSociais?.linkedin) ? `LinkedIn: ${cliente.linkedin || cliente.redesSociais?.linkedin}` : null,
+    cliente.viralgramProfile?.tier ? `Perfil ViralGram: ${cliente.viralgramProfile.tier} (Score ${cliente.viralgramProfile.reputationScore})` : null,
   ].filter(Boolean).join(' | ');
 
   const instrucaoPendentes = pendentes.length
     ? `Campos pendentes no cadastro para você perguntar com simpatia após confirmar o agendamento: ${pendentes.join(', ')}.`
     : 'Cadastro completo! Agradeça o cliente e chame pelo primeiro nome com calor humano.';
 
-  return `PERFIL DO CLIENTE CADASTRADO (${conhecidos}). ${instrucaoPendentes}`;
+  return `PERFIL DO CLIENTE CADASTRADO (${conhecidos}). ${alertaAniversario ? `${alertaAniversario} ` : ''}${alertaEsposa ? `${alertaEsposa} ` : ''}${instrucaoPendentes}`;
 }
 
 export async function agendaContextFor(toolContext, { now = Date.now() } = {}) {

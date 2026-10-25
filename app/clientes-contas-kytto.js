@@ -80,6 +80,13 @@ function normalizarCliente(payload = {}) {
     limiteCreditoMensal: Math.max(0, numero(payload.limiteCreditoMensal ?? payload.limite_credito)),
     diasVencimento: Math.max(1, Math.min(90, Math.floor(numero(payload.diasVencimento ?? payload.dias_pagamento ?? 30) || 30))),
     observacao: texto(payload.observacao, 300),
+    instagram: (() => {
+      try { return normalizarInstagram(payload.instagram || payload.redesSociais?.instagram); } catch { return ''; }
+    })(),
+    linkedin: (() => {
+      try { return normalizarLinkedin(payload.linkedin || payload.redesSociais?.linkedin); } catch { return ''; }
+    })(),
+    viralgramProfile: payload.viralgramProfile || null,
   };
 }
 
@@ -217,9 +224,18 @@ function camposRelacionamento(payload = {}, atual = {}) {
   if (tem('preferencias')) resultado.preferencias = normalizarPreferencias(payload.preferencias);
   if (tem('redesSociais') || tem('instagram') || tem('linkedin')) {
     const redes = payload.redesSociais && typeof payload.redesSociais === 'object' ? payload.redesSociais : {};
-    const instagram = tem('instagram') ? payload.instagram : (Object.prototype.hasOwnProperty.call(redes, 'instagram') ? redes.instagram : atual.redesSociais?.instagram);
-    const linkedin = tem('linkedin') ? payload.linkedin : (Object.prototype.hasOwnProperty.call(redes, 'linkedin') ? redes.linkedin : atual.redesSociais?.linkedin);
-    resultado.redesSociais = { instagram: normalizarInstagram(instagram), linkedin: normalizarLinkedin(linkedin) };
+    const instagram = tem('instagram') ? payload.instagram : (Object.prototype.hasOwnProperty.call(redes, 'instagram') ? redes.instagram : atual.redesSociais?.instagram || atual.instagram);
+    const linkedin = tem('linkedin') ? payload.linkedin : (Object.prototype.hasOwnProperty.call(redes, 'linkedin') ? redes.linkedin : atual.redesSociais?.linkedin || atual.linkedin);
+    let igNorm = '';
+    let liNorm = '';
+    try { igNorm = normalizarInstagram(instagram); } catch {}
+    try { liNorm = normalizarLinkedin(linkedin); } catch {}
+    resultado.redesSociais = { instagram: igNorm, linkedin: liNorm };
+    resultado.instagram = igNorm;
+    resultado.linkedin = liNorm;
+  }
+  if (tem('viralgramProfile')) {
+    resultado.viralgramProfile = payload.viralgramProfile;
   }
   if (payload.conjugeNome || payload.nomeEsposa || payload.conjuge_nome) {
     const nomeConj = texto(payload.conjugeNome || payload.nomeEsposa || payload.conjuge_nome, 120);
