@@ -59,6 +59,37 @@ function idEscopo(valor, limite = 120) {
   return resultado && !['undefined', 'null', 'nan'].includes(resultado.toLowerCase()) ? resultado : '';
 }
 
+export const DINO_EMPRESA_CANONICA = 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
+export const DINO_LOJA_CANONICA = 'ab049a75-6e2e-4cc9-abbc-6fd11cdda1d8';
+export const DINO_EMPRESA_LEGADA = 'emp-kytto-001';
+export const DINO_LOJA_LEGADA = 'dino-web-estoque';
+
+export function saoEmpresasEquivalentes(empresaA, empresaB) {
+  const a = idEscopo(empresaA);
+  const b = idEscopo(empresaB);
+  if (!a || !b) return false;
+  if (a === b) return true;
+  if ((a === DINO_EMPRESA_CANONICA && b === DINO_EMPRESA_LEGADA) ||
+      (a === DINO_EMPRESA_LEGADA && b === DINO_EMPRESA_CANONICA)) return true;
+  return false;
+}
+
+export function saoLojasEquivalentes(lojaA, lojaB) {
+  const a = idEscopo(lojaA);
+  const b = idEscopo(lojaB);
+  if (a === b) return true;
+  if ((a === DINO_LOJA_CANONICA && b === DINO_LOJA_LEGADA) ||
+      (a === DINO_LOJA_LEGADA && b === DINO_LOJA_CANONICA)) return true;
+  return false;
+}
+
+export function podeAcessarLancamentoNaLoja(lojaPedida, lojaRegistro) {
+  const pedida = idEscopo(lojaPedida);
+  const registro = idEscopo(lojaRegistro);
+  if (!pedida || !registro) return true;
+  return saoLojasEquivalentes(pedida, registro);
+}
+
 function marcadorCompatibilidade(...valores) {
   return valores.some((valor) => valor === true)
     || valores.some((valor) => ['legacy', 'quarantine', 'quarentena', 'legado'].includes(String(valor || '').toLowerCase()));
@@ -75,7 +106,7 @@ function contexto(empresaId, lojaId, dados = {}, opcoes = {}, { lojaObrigatoria 
   const modo = modoCompatibilidade(dados, opcoes);
   const empresaInformada = idEscopo(empresaId);
   const empresaDados = idEscopo(dados?.empresaId);
-  if (empresaInformada && empresaDados && empresaInformada !== empresaDados) throw new FinancialError('empresaId divergente no escopo financeiro.', 'FINANCIAL_SCOPE_MISMATCH', 409);
+  if (empresaInformada && empresaDados && !saoEmpresasEquivalentes(empresaInformada, empresaDados)) throw new FinancialError('empresaId divergente no escopo financeiro.', 'FINANCIAL_SCOPE_MISMATCH', 409);
   const empresa = empresaInformada || empresaDados;
   const loja = idEscopo(lojaId || dados?.lojaId);
   if (!empresa && !modo.legacy) throw new FinancialError('empresaId é obrigatório para o lançamento financeiro.', 'FINANCIAL_SCOPE_REQUIRED', 400);
@@ -240,9 +271,21 @@ function parseRegistrar(empresaOuDados, dadosOuOpcoes = {}, opcoes = {}) {
 
 export function obterLancamento(empresaId, id, opcoes = {}) {
   const empresa = idEscopo(empresaId);
-  const item = db().financeiroKytto?.empresas?.[empresa]?.lancamentos?.[String(id)];
+  const estado = db().financeiroKytto?.empresas || {};
+  let item = estado[empresa]?.lancamentos?.[String(id)];
+  if (!item && saoEmpresasEquivalentes(empresa, DINO_EMPRESA_CANONICA)) {
+    const outraEmpresa = empresa === DINO_EMPRESA_CANONICA ? DINO_EMPRESA_LEGADA : DINO_EMPRESA_CANONICA;
+    item = estado[outraEmpresa]?.lancamentos?.[String(id)];
+  }
+  if (!item || !saoEmpresasEquivalentes(item.empresaId, empresa)) return null;
   const lojaId = idEscopo(typeof opcoes === 'string' ? opcoes : opcoes?.lojaId);
-  return item?.empresaId === empresa && (!lojaId || item.lojaId === lojaId) ? serializar(item) : null;
+  if (!podeAcessarLancamentoNaLoja(lojaId, item.lojaId)) return null;
+  const serializado = serializar(item);
+  if (empresa === DINO_EMPRESA_CANONICA && serializado.empresaId === DINO_EMPRESA_LEGADA) {
+    serializado.empresaId = DINO_EMPRESA_CANONICA;
+    if (serializado.lojaId === DINO_LOJA_LEGADA) serializado.lojaId = DINO_LOJA_CANONICA;
+  }
+  return serializado;
 }
 
 export function registrarLancamento(empresaOuDados, dadosOuOpcoes = {}, opcoes = {}) {
@@ -383,19 +426,29 @@ export function listarLancamentosPorOrigem(empresaOuOpcoes, origemOuLoja, origem
 
 export function atualizarLancamento(empresaId, id, dados = {}, opcoes = {}) {
   const empresa = idEscopo(empresaId);
-  const store = storeEmpresa(empresa);
-  const lancamento = store.lancamentos[String(id)];
-  if (!lancamento || lancamento.empresaId !== empresa) return null;
-  const lojaId = idEscopo(opcoes.lojaId || dados.lojaId);
-  if (lojaId && lancamento.lojaId !== lojaId) return null;
-  if (!lojaId && semLoja(lancamento) === false && !marcadorCompatibilidade(opcoes.legacy, opcoes.quarantine, opcoes.quarentena)) {
-    throw new FinancialError('lojaId é obrigatório para atualizar lançamento operacional.', 'FINANCIAL_SCOPE_REQUIRED', 400);
+  let store = storeEmpresa(empresa);
+  let lancamento = store.lancamentos[String(id)];
+  let storeOrigem = store;
+  let ehLegadoDino = false;
+
+  if (!lancamento && saoEmpresasEquivalentes(empresa, DINO_EMPRESA_CANONICA)) {
+    const outraEmpresa = empresa === DINO_EMPRESA_CANONICA ? DINO_EMPRESA_LEGADA : DINO_EMPRESA_CANONICA;
+    const storeOutra = storeEmpresa(outraEmpresa);
+    if (storeOutra.lancamentos[String(id)]) {
+      lancamento = storeOutra.lancamentos[String(id)];
+      storeOrigem = storeOutra;
+      ehLegadoDino = true;
+    }
   }
+
+  if (!lancamento || !saoEmpresasEquivalentes(lancamento.empresaId, empresa)) return null;
+  const lojaId = idEscopo(opcoes.lojaId || dados.lojaId);
+  if (!podeAcessarLancamentoNaLoja(lojaId, lancamento.lojaId)) return null;
   if (lancamento.status === 'pago' && String(dados.status || '').toLowerCase() === 'cancelado') {
     throw new FinancialError('Lançamento pago é imutável; use reverterLancamento.', 'FINANCIAL_REVERSAL_REQUIRED', 409);
   }
   if (lancamento.automatico && !opcoes.permitirAutomatico) {
-    const camposPermitidos = new Set(['status', 'pagoEm', 'meioPagamento', 'observacao', 'obs']);
+    const camposPermitidos = new Set(['status', 'pagoEm', 'meioPagamento', 'observacao', 'obs', 'lojaId']);
     if (Object.keys(dados).some((campo) => !camposPermitidos.has(campo))) throw new FinancialError('Lançamentos automáticos só podem ter status, pagamento ou observação atualizados.', 'FINANCIAL_AUTOMATIC_ENTRY', 400);
   }
   const snapshot = snapshotStore(store);
@@ -416,8 +469,7 @@ export function atualizarLancamento(empresaId, id, dados = {}, opcoes = {}) {
     if (dados.meioPagamento !== undefined) lancamento.meioPagamento = texto(dados.meioPagamento, 40).toLowerCase() || null;
     if (dados.lojaId !== undefined) {
       const novaLoja = idEscopo(dados.lojaId);
-      if (!novaLoja) throw new FinancialError('lojaId é obrigatório para atualizar lançamento operacional.', 'FINANCIAL_SCOPE_REQUIRED', 400);
-      lancamento.lojaId = novaLoja;
+      lancamento.lojaId = novaLoja || null;
     }
     if (dados.observacao !== undefined || dados.obs !== undefined) lancamento.observacao = texto(dados.observacao ?? dados.obs, 500);
     if (dados.referencia !== undefined) lancamento.referencia = normalizarReferencia(dados.referencia);
@@ -433,6 +485,20 @@ export function atualizarLancamento(empresaId, id, dados = {}, opcoes = {}) {
       if (lancamento.pagoEm) lancamento.status = 'pago';
     }
     lancamento.atualizadoEm = agora();
+
+    // Se o lançamento era originário do cadastro legado da Dino, materializa também no cadastro canônico:
+    if (ehLegadoDino && empresa === DINO_EMPRESA_CANONICA) {
+      const canonico = {
+        ...lancamento,
+        empresaId: DINO_EMPRESA_CANONICA,
+        lojaId: (!lancamento.lojaId || lancamento.lojaId === DINO_LOJA_LEGADA) ? DINO_LOJA_CANONICA : lancamento.lojaId,
+      };
+      delete canonico.somenteLeitura;
+      delete canonico.fonteCadastro;
+      store.lancamentos[String(id)] = canonico;
+      return serializar(canonico);
+    }
+
     return serializar(lancamento);
   });
 }
@@ -526,10 +592,6 @@ export function cancelarLancamento(empresaId, id, usuarioOuOpcoes = 'sistema@kyt
 // Extrato JSON da Dino gravado sob o id legado (histórico Avec de 22/10 e o que foi
 // lançado entre 23 e 24/10, quando o ERP apontou para lá). Entra na leitura da Dino
 // como somente leitura, sem duplicar lançamentos que já existam no cadastro canônico.
-const DINO_EMPRESA_CANONICA = 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
-const DINO_LOJA_CANONICA = 'ab049a75-6e2e-4cc9-abbc-6fd11cdda1d8';
-const DINO_EMPRESA_LEGADA = 'emp-kytto-001';
-const DINO_LOJA_LEGADA = 'dino-web-estoque';
 
 function lancamentosLegadosDaDino(proprios) {
   const legado = db().financeiroKytto?.empresas?.[DINO_EMPRESA_LEGADA]?.lancamentos;
@@ -564,7 +626,7 @@ export function listarLancamentos(empresaId, filtros = {}) {
   const incluirQuarentena = filtros.incluirQuarentena === true || filtros.quarantine === true || filtros.quarentena === true;
   return base
     .filter((item) => incluirQuarentena || !semLoja(item))
-    .filter((item) => !lojaId || item.lojaId === lojaId)
+    .filter((item) => !lojaId || saoLojasEquivalentes(lojaId, item.lojaId) || (incluirQuarentena && semLoja(item)))
     .filter((item) => !tipo || item.tipo === tipo)
     .filter((item) => !status || item.status === status)
     .filter((item) => !origem || item.origem === origem)

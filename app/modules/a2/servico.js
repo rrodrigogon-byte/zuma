@@ -1,6 +1,10 @@
 import { ErroDominio, exigirData, exigirTexto, exigirUuid } from '../acesso/banco.js';
 
-const id = (valor, campo = 'id') => exigirUuid(valor, campo);
+const id = (valor, campo = 'id') => {
+  const v = String(valor || '').trim();
+  if (campo === 'empresa' && v === 'emp-kytto-001') return 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
+  return exigirUuid(v, campo);
+};
 const numero = (valor, campo, { min = 0, max = 999999999 } = {}) => {
   const n = Number(valor);
   if (!Number.isFinite(n) || n < min || n > max) throw new ErroDominio('VALIDATION_ERROR', `${campo} inválido`);

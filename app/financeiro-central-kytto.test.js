@@ -172,3 +172,46 @@ test('financeiro da Dino inclui o extrato legado somente leitura, sem duplicar o
   delete estado.financeiroKytto.empresas[UUID];
   delete estado.financeiroKytto.empresas['emp-kytto-001'];
 });
+
+test('permite baixar contas legadas Avec e contas gerais sem unidade, liquidando como pago sob a empresa canônica', async () => {
+  const { db } = await import('./db.js');
+  const fin = await import('./financeiro-central-kytto.js');
+  const estado = db();
+  estado.financeiroKytto ||= { empresas: {} };
+  estado.financeiroKytto.empresas ||= {};
+  const UUID = 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
+  const LOJA = 'ab049a75-6e2e-4cc9-abbc-6fd11cdda1d8';
+
+  estado.financeiroKytto.empresas[UUID] = { sequencia: 0, fechamentos: {}, lancamentos: {
+    'despesa-geral': { id: 'despesa-geral', empresaId: UUID, lojaId: null, tipo: 'despesa', status: 'pendente', valor: 250, vencimento: '2026-10-25', dataOperacao: '2026-10-25', descricao: 'Aluguel Matriz' }
+  } };
+  estado.financeiroKytto.empresas['emp-kytto-001'] = { sequencia: 0, fechamentos: {}, lancamentos: {
+    'avec-mentoria': { id: 'avec-mentoria', empresaId: 'emp-kytto-001', lojaId: 'dino-web-estoque', tipo: 'despesa', status: 'pendente', valor: 300, vencimento: '2026-10-21', dataOperacao: '2026-10-21', descricao: '32/50 - MENTORIA BOOK', origem: 'avec-import-financeiro-20261022', automatico: true },
+    'avec-lavada': { id: 'avec-lavada', empresaId: 'emp-kytto-001', lojaId: 'dino-web-estoque', tipo: 'despesa', status: 'pendente', valor: 155, vencimento: '2026-10-20', dataOperacao: '2026-10-20', descricao: '15/20 - LAVADA DE TOALHAS SEMANAL', origem: 'avec-import-financeiro-20261022', automatico: true }
+  } };
+
+  // 1. Obter lançamento legado pelo id e unidade canônica
+  const obtido = fin.obterLancamento(UUID, 'avec-mentoria', { lojaId: LOJA });
+  assert.ok(obtido, 'obterLancamento deve encontrar a conta legada');
+  assert.equal(obtido.descricao, '32/50 - MENTORIA BOOK');
+
+  // 2. Baixar a conta legada marcando como pago
+  const pagoMentoria = fin.atualizarLancamento(UUID, 'avec-mentoria', { status: 'pago', pagoEm: '2026-10-25T12:00:00.000Z' }, { lojaId: LOJA, permitirAutomatico: true });
+  assert.ok(pagoMentoria, 'atualizarLancamento deve permitir marcar como pago');
+  assert.equal(pagoMentoria.status, 'pago');
+  assert.equal(pagoMentoria.empresaId, UUID);
+  assert.equal(pagoMentoria.lojaId, LOJA);
+
+  // 3. Baixar despesa geral sem loja através da unidade ativa
+  const pagoGeral = fin.atualizarLancamento(UUID, 'despesa-geral', { status: 'pago' }, { lojaId: LOJA });
+  assert.ok(pagoGeral, 'atualizarLancamento deve permitir pagar despesa sem loja');
+  assert.equal(pagoGeral.status, 'pago');
+
+  // 4. Cancelamento de conta legada pendente
+  const cancelado = fin.cancelarLancamento(UUID, 'avec-lavada', { usuario: 'gestor@kytto.com.br', lojaId: LOJA, permitirAutomatico: true });
+  assert.ok(cancelado, 'cancelarLancamento deve cancelar conta legada pendente');
+  assert.equal(cancelado.status, 'cancelado');
+
+  delete estado.financeiroKytto.empresas[UUID];
+  delete estado.financeiroKytto.empresas['emp-kytto-001'];
+});

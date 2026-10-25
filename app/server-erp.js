@@ -2070,7 +2070,7 @@ async function iniciar() {
 
   app.patch('/api/admin/financeiro/lancamentos/:id', requerEditorCatalogo, (req, res) => {
     try {
-      const lancamento = financeiroKytto.atualizarLancamento(req.empresaId, req.params.id, req.body || {});
+      const lancamento = financeiroKytto.atualizarLancamento(req.empresaId, req.params.id, req.body || {}, { permitirAutomatico: true });
       if (!lancamento) return res.status(404).json({ erro: 'Lançamento financeiro não encontrado na empresa ativa.' });
       save();
       res.json(lancamento);
@@ -2081,7 +2081,7 @@ async function iniciar() {
 
   app.delete('/api/admin/financeiro/lancamentos/:id', requerEditorCatalogo, (req, res) => {
     try {
-      const lancamento = financeiroKytto.cancelarLancamento(req.empresaId, req.params.id, req.usuario?.email);
+      const lancamento = financeiroKytto.cancelarLancamento(req.empresaId, req.params.id, { usuario: req.usuario?.email, permitirAutomatico: true });
       if (!lancamento) return res.status(404).json({ erro: 'Lançamento financeiro não encontrado na empresa ativa.' });
       save();
       res.json({ ok: true, lancamento });
