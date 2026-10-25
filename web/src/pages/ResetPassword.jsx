@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../lib/api'
+import { useAuth } from '../lib/auth'
 
 const COLORS = { navy: '#12283F', orange: '#FF6B2C', cream: '#FFF9F5', text: '#344454', muted: '#6C7884', border: 'rgba(18,40,63,0.15)', soft: '#FFF4EC', danger: '#B91C1C' }
 
@@ -11,13 +12,14 @@ function getToken() {
 }
 
 function passwordError(value) {
-  if (value.length < 10) return 'Use pelo menos 10 caracteres.'
-  if (!/[a-z]/.test(value) || !/[A-Z]/.test(value) || !/[0-9]/.test(value)) return 'Inclua letras maiúsculas, minúsculas e números.'
+  if (value.length < 12 || new TextEncoder().encode(value).length > 72) return 'Use pelo menos 12 caracteres e no máximo 72 bytes.'
+  if (!/[a-z]/.test(value) || !/[A-Z]/.test(value) || !/[0-9]/.test(value) || !/[^A-Za-z0-9\s]/.test(value)) return 'Inclua letras maiúsculas, minúsculas, números e um símbolo.'
   return ''
 }
 
 export default function ResetPassword() {
   const navigate = useNavigate()
+  const { logout } = useAuth()
   const token = useMemo(getToken, [])
   const [validating, setValidating] = useState(true)
   const [valid, setValid] = useState(false)
@@ -36,7 +38,7 @@ export default function ResetPassword() {
       setError('Este link não contém um token válido.')
       return () => { alive = false }
     }
-    api.get(`/api/auth/redefinir-senha/validar?token=${encodeURIComponent(token)}`)
+    api.post('/api/auth/redefinir-senha/validar', { token })
       .then(result => {
         if (!alive) return
         setValid(Boolean(result?.ok))
@@ -56,6 +58,7 @@ export default function ResetPassword() {
     setLoading(true)
     try {
       await api.post('/api/auth/redefinir-senha', { token, novaSenha: password, confirmacao: confirmation })
+      logout()
       setDone(true)
     } catch (err) {
       setError(err?.message || 'Não foi possível alterar a senha. Solicite um novo link.')
@@ -82,7 +85,7 @@ export default function ResetPassword() {
           {validating && <div style={{ textAlign: 'center', color: COLORS.muted, padding: 28 }}>Validando link…</div>}
           {!validating && done && <div style={{ textAlign: 'center' }}><div style={{ color: COLORS.orange, fontSize: 42, marginBottom: 12 }}>✓</div><h1 style={{ color: COLORS.navy, fontSize: '1.35rem', margin: '0 0 10px' }}>Senha alterada</h1><p style={{ color: COLORS.muted, lineHeight: 1.6, fontSize: '0.9rem' }}>Sua nova senha já está ativa. Entre novamente na plataforma para continuar.</p><button onClick={() => navigate('/login')} style={{ width: '100%', marginTop: 18, padding: 14, border: 0, borderRadius: 12, background: COLORS.orange, color: '#fff', fontWeight: 800, cursor: 'pointer' }}>Ir para o login</button></div>}
           {!validating && !done && valid && <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-            <div><h1 style={{ color: COLORS.navy, fontSize: '1.35rem', margin: 0 }}>Criar nova senha</h1><p style={{ color: COLORS.muted, fontSize: '0.9rem', lineHeight: 1.55, margin: '8px 0 0' }}>Use uma senha individual com pelo menos 10 caracteres, incluindo maiúsculas, minúsculas e números.</p></div>
+            <div><h1 style={{ color: COLORS.navy, fontSize: '1.35rem', margin: 0 }}>Criar nova senha</h1><p style={{ color: COLORS.muted, fontSize: '0.9rem', lineHeight: 1.55, margin: '8px 0 0' }}>Use uma senha individual com pelo menos 12 caracteres, incluindo maiúsculas, minúsculas, números e um símbolo (máximo de 72 bytes).</p></div>
             <label style={fieldLabel}>Nova senha<div style={{ position: 'relative', marginTop: 8 }}><input type={showPassword ? 'text' : 'password'} value={password} onChange={e => setPassword(e.target.value)} autoComplete="new-password" style={{ ...inputStyle, paddingRight: 72 }} autoFocus onFocus={focusInput} onBlur={blurInput} /><button type="button" aria-label={showPassword ? 'Ocultar nova senha' : 'Mostrar nova senha'} aria-pressed={showPassword} onClick={() => setShowPassword(value => !value)} style={toggleStyle}>{showPassword ? '◉' : '◌'}</button></div></label>
             <label style={fieldLabel}>Confirmar senha<div style={{ position: 'relative', marginTop: 8 }}><input type={showConfirmation ? 'text' : 'password'} value={confirmation} onChange={e => setConfirmation(e.target.value)} autoComplete="new-password" style={{ ...inputStyle, paddingRight: 72 }} onFocus={focusInput} onBlur={blurInput} /><button type="button" aria-label={showConfirmation ? 'Ocultar confirmação' : 'Mostrar confirmação'} aria-pressed={showConfirmation} onClick={() => setShowConfirmation(value => !value)} style={toggleStyle}>{showConfirmation ? '◉' : '◌'}</button></div></label>
             {error && <div role="alert" style={{ color: COLORS.danger, background: '#FEE2E2', border: '1px solid #FCA5A5', borderRadius: 10, padding: '11px 13px', fontSize: '0.88rem', lineHeight: 1.5 }}>{error}</div>}

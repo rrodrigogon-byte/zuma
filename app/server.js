@@ -10,7 +10,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { db, save, nextId, hydrate, flush, armazenamentoAvaliacaoDuravel, estadoGravacao, caminhoBanco, substituirBanco } from './db.js';
+import { db, save, nextId, hydrate, flush, armazenamentoAvaliacaoDuravel, estadoGravacao, caminhoBanco, substituirBanco, gravarPendenteAgora } from './db.js';
 import { criarProtecaoDados } from './protecao-dados-kytto.js';
 import { CATALOGO_BAR_TTC_SKUS, RESUMO_CATALOGO_BAR_TTC } from './catalogo-bar-ttc-oficial.js';
 import { sortear } from './bracket.js';
@@ -31,6 +31,8 @@ import QRCode from 'qrcode';
 import { wpp } from './whatsapp.js';
 import * as modificadoresCombosKytto from './modificadores-combos-kytto.js';
 import { mail } from './email.js';
+import { createAccountPasswordRecovery, RESET_MESSAGE } from './core/account-password-reset.js';
+import { credentialVersion, credentialSessionValid } from './core/credential-session.js';
 import { acceptOperationalInvite, findOperationalByEmail, resolveOperationalById, issueOperationalInvite, isOperationalEmailReserved } from './core/commerce-operational-invites.js';
 import { listOperationalInvites, operationalInviteHttpError, operationalInviteReadiness } from './core/commerce-invite-status.js';
 import { accountByLegacyId, accountCredential, accountRequestIdentity, accountSession, findAccountByEmail, linkedAccountForLocalUser, resolveAccountUser } from './core/commerce-accounts.js';
@@ -408,7 +410,7 @@ async function authenticateAccountRequest(req, res, next, accountId) {
   try {
     if (process.env.COMMERCE_CORE_ENABLED !== '1') return res.status(401).json({ error:'sessão encerrada', code:'SESSION_REVOKED' });
     const account = await resolveAccountUser(accountId, { legacyUsers:db().usuarios || [] });
-    if (!account || account.email !== norm(req.user.email)) return res.status(401).json({ error:'sessão encerrada', code:'SESSION_REVOKED' });
+    if (!account || account.email !== norm(req.user.email) || !credentialSessionValid(req.user,account.credentialVersion,account.passwordChangedAt)) return res.status(401).json({ error:'sessão encerrada', code:'SESSION_REVOKED' });
     req.user = account;
     const empresaId = String(req.headers['x-empresa-id'] || '').trim();
     const lojaId = String(req.headers['x-loja-id'] || '').trim();
@@ -442,7 +444,7 @@ function auth(req,res,next){
       return res.status(401).json({ error: 'sessão encerrada', code: 'SESSION_REVOKED' });
     }
     return resolveOperationalById({ userId: req.user.id, empresaId: req.user.empresaId }).then(async owner => {
-      if (!owner || owner.email !== req.user.email) return res.status(401).json({ error: 'sessão encerrada', code: 'SESSION_REVOKED' });
+      if (!owner || owner.email !== req.user.email || !credentialSessionValid(req.user,credentialVersion(owner.senhaHash),owner.passwordChangedAt)) return res.status(401).json({ error: 'sessão encerrada', code: 'SESSION_REVOKED' });
       const linked = await linkedAccountForLocalUser(owner.id);
       if (linked?.ativo === false) return res.status(401).json({ error:'sessão encerrada', code:'SESSION_REVOKED' });
       req.user = { id: owner.id, nome: owner.nome, email: owner.email, role: 'organizador', empresaId: owner.empresaId, pgOperational: true, tenantBound: true, platformAdmin: false };
@@ -452,7 +454,7 @@ function auth(req,res,next){
   // Conta desativada ou excluída perde o acesso na hora, e mudança de papel vale já
   // (antes o token de 12 h continuava valendo com o papel antigo).
   const conta = (db().usuarios || []).find(x => x.id === req.user.id);
-  if (!conta || conta.ativo === false) return res.status(401).json({ error:'sessão encerrada; entre novamente', code:'SESSION_REVOKED' });
+  if (!conta || conta.ativo === false || !credentialSessionValid(req.user,credentialVersion(conta.senhaHash),conta.passwordChangedAt)) return res.status(401).json({ error:'sessão encerrada; entre novamente', code:'SESSION_REVOKED' });
   req.user.role = conta.role;
   req.user.platformAdmin = isPlatformAdminUser(conta);
   req.user.mainAdmin = isMainAdminUser(conta);
@@ -571,7 +573,7 @@ function auditEmpresaId(req){
   const header = String(req?.headers?.['x-empresa-id'] || '').trim();
   return header && isPlatformAdminUser(req?.user) ? header.slice(0, 64) : null;
 }
-const tokenFor = u => jwt.sign({ id:u.id, nome:u.nome, email:u.email, role:u.role, platformAdmin:isPlatformAdminUser(u), ...(u.empresaId ? { empresaId:u.empresaId } : {}), ...(u.lojaId ? { lojaId:u.lojaId } : {}) }, JWT_SECRET, { expiresIn:'12h' });
+const tokenFor = u => jwt.sign({ id:u.id, nome:u.nome, email:u.email, role:u.role, credentialVersion:credentialVersion(u.senhaHash), platformAdmin:isPlatformAdminUser(u), ...(u.empresaId ? { empresaId:u.empresaId } : {}), ...(u.lojaId ? { lojaId:u.lojaId } : {}) }, JWT_SECRET, { expiresIn:'12h' });
 
 // ---- rate-limit simples (anti força-bruta no login) ----
 const tentativas = new Map(); // chave -> { n, until }
@@ -1600,20 +1602,34 @@ app.post('/api/inscricoes', (req,res)=>{
 // morto (nunca alcançada após o next('route')) e foi removida.
 app.get('/api/ingressos/tipos', (req,res,next)=>{ req.url='/api/ingresso-tipos'; next('route'); });
 
-// Esqueci senha: NÃO troca a senha aqui. Antes, qualquer pessoa que soubesse um e-mail
-// trocava a senha da conta (e a nova senha nunca chegava), travando o acesso. Agora só
-// registra o pedido; a redefinição é feita por um administrador da mesma empresa.
-app.post('/api/auth/esqueci-senha', publicLimit(10), (req,res)=>{
-  const { email } = req.body||{};
-  const u = email ? findUser(email) : null;
-  if(u && u.ativo){
-    const d = db(); d.pedidosSenha = (d.pedidosSenha || []).filter(p => p.usuarioId !== u.id).slice(-200);
-    d.pedidosSenha.push({ usuarioId:u.id, em:new Date().toISOString(), ip:String(req.ip||'').slice(0,64) });
-    audit({ user:{ nome:u.nome, role:u.role }, ip:req.ip }, 'PEDIDO de redefinição de senha'); save();
-  }
-  // resposta neutra: não revela se o e-mail existe
-  res.json({ ok:true, message:'Se este e-mail estiver cadastrado, peça ao administrador da sua empresa para gerar uma senha temporária.' });
+// Recuperação por identidade canônica; resposta neutra e nenhum token no retorno.
+const accountRecovery = createAccountPasswordRecovery({
+  database:commerceDb, getLegacyUsers:()=>db().usuarios || [],
+  saveLegacy:async()=>{ save(); gravarPendenteAgora(); await flush(); },
+  sendMail:(...args)=>mail.redefinicaoSenha(...args),
+  enabled:()=>process.env.COMMERCE_CORE_ENABLED === '1', canSend:()=>mail.recuperacaoSenhaAtiva(),
 });
+app.post(['/api/auth/esqueci-senha','/api/auth/forgot-password'], publicLimit(10), async (req,res)=>{
+  res.set('Cache-Control','no-store');
+  // Responde antes do envio: duração não revela se a identidade existe.
+  void accountRecovery.request(req.body?.email).catch(()=>console.error('[AUTH_RESET] request_unavailable'));
+  res.json({ok:true,message:RESET_MESSAGE});
+});
+app.post('/api/auth/redefinir-senha/validar', publicLimit(30), async(req,res)=>{
+  res.set('Cache-Control','no-store');
+  try {res.json(await accountRecovery.validate(req.body?.token));}
+  catch {res.status(503).json({error:'Recuperação temporariamente indisponível.'});}
+});
+app.post('/api/auth/redefinir-senha', publicLimit(10), async(req,res)=>{
+  res.set('Cache-Control','no-store');
+  if (req.body?.novaSenha !== req.body?.confirmacao) return res.status(400).json({error:'As senhas não coincidem.',code:'PASSWORD_MISMATCH'});
+  try {
+    const result=await accountRecovery.consume(req.body?.token,req.body?.novaSenha);
+    if (!result.ok) return res.status(result.code === 'WEAK_PASSWORD' ? 400 : 401).json({code:result.code,error:result.code === 'WEAK_PASSWORD' ? 'Use de 12 caracteres a 72 bytes, com maiúscula, minúscula, número e símbolo.' : 'Link inválido ou expirado. Solicite um novo link.'});
+    res.json({ok:true,message:'Senha alterada. Entre novamente.'});
+  } catch {res.status(503).json({error:'Não foi possível concluir a recuperação. Solicite um novo link.'});}
+});
+app.get('/api/admin/commerce-session/recovery-status',auth,requireStaff,(req,res)=>res.json({configured:process.env.COMMERCE_CORE_ENABLED === '1' && mail.recuperacaoSenhaAtiva(),from:mail.recuperacaoSenhaFrom(),ttlMinutes:20}));
 
 app.get('/api/chave/:categoria', (req,res)=>{
   const c = db().chaves[req.params.categoria];
@@ -1664,7 +1680,7 @@ async function tryAccountLogin(email, password, res, panelOnly, rateKey) {
     user.commerceRoleCode = local.roleCode;
   }
   limparTentativas(rateKey);
-  const token = jwt.sign({ id:user.id, email:user.email, pgAccount:true }, JWT_SECRET, { expiresIn:'12h' });
+  const token = jwt.sign({ id:user.id, email:user.email, pgAccount:true, credentialVersion:credentialVersion(credential) }, JWT_SECRET, { expiresIn:'12h' });
   res.json({ token, user:publicUser(user), role:user.role, sessao });
   return true;
 }
@@ -1687,7 +1703,7 @@ app.post('/api/admin/login', async (req,res)=>{
           return res.status(503).json({ error: 'escopo indisponível', code: 'SCOPE_UNAVAILABLE' });
         }
         const scoped = { id: owner.id, nome: owner.nome, email: owner.email, role: 'organizador', empresaId: owner.empresaId, pgOperational: true, platformAdmin: false };
-        return res.json({ token: jwt.sign(scoped, JWT_SECRET, { expiresIn: '12h' }), user: publicUser(scoped), role: 'organizador', sessao });
+        return res.json({ token: jwt.sign({...scoped,credentialVersion:credentialVersion(owner.senhaHash)}, JWT_SECRET, { expiresIn: '12h' }), user: publicUser(scoped), role: 'organizador', sessao });
       }
     } catch {
       return res.status(503).json({ error: 'acesso temporariamente indisponível', code: 'SCOPE_UNAVAILABLE' });

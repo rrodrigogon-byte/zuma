@@ -439,11 +439,12 @@ async function solicitarRecuperacao(req, res) {
 app.post(['/api/auth/forgot-password', '/api/auth/esqueci-senha'], authLimiter, solicitarRecuperacao);
 
 function validarTokenRecuperacao(req, res) {
-  const token = String(req.query?.token || '').trim();
+  const token = String(req.body?.token || req.query?.token || '').trim();
   return res.status(200).json(validatePasswordResetToken(token));
 }
 
 app.get(['/api/auth/reset-password/validate', '/api/auth/redefinir-senha/validar'], validarTokenRecuperacao);
+app.post('/api/auth/redefinir-senha/validar', validarTokenRecuperacao);
 
 function redefinirSenha(req, res) {
   try {

@@ -35,7 +35,7 @@ jobs:
       - name: ERP com PostgreSQL real e servidor integrado isolados
         run: node scripts/test-backoffice-pg-local.mjs --e2e
       - name: Interface de fichas técnicas
-        run: cd web && ../node_modules/.bin/vitest --config vite.config.js run src/pages/admin/suprimentos/Suprimentos.test.jsx --no-cache
+        run: cd web && ../node_modules/.bin/vitest --config vite.config.js run src/pages/admin/suprimentos/Suprimentos.test.jsx src/pages/ResetPassword.test.jsx src/pages/admin/CommerceUsersPanel.test.jsx --no-cache
       - name: Build web
         run: npm run build --prefix web
       - name: Medições sintéticas (sem limiar de tempo dependente do runner)

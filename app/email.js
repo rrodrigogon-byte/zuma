@@ -69,7 +69,13 @@ async function enviar({ to, subject, html, text }) {
   }
 }
 
+function recoveryConfig() {
+  return { key:String(process.env.PASSWORD_RESET_RESEND_API_KEY || process.env.OPERATIONAL_INVITE_RESEND_API_KEY || process.env.RESEND_API_KEY || '').trim(), from:'Kytto <contato@kytto.com.br>' }
+}
+
 export const mail = {
+  recuperacaoSenhaAtiva: () => Boolean(recoveryConfig().key),
+  recuperacaoSenhaFrom: () => recoveryConfig().from,
   ativo,
   conviteOperacionalAtivo: operationalInviteAtivo,
   conviteOperacionalFrom: operationalInviteFrom,
@@ -166,13 +172,16 @@ Este link é individual, de uso único e válido por 24 horas. Por segurança, n
   async redefinicaoSenha(to, nome, resetUrl, expiresAt) {
     const nomeSeguro = escapeHtml(nome || 'cliente')
     const urlSegura = escapeHtml(resetUrl)
-    const expira = expiresAt ? new Date(expiresAt).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) : 'em breve'
-    const html = layout('Recuperação segura de acesso 🔐', `
-      <p>Olá, <b>${nomeSeguro}</b>!</p>
-      <p>Recebemos uma solicitação para criar uma nova senha na sua conta Kytto.</p>
-      <p><a href="${urlSegura}" style="display:inline-block;background:#FF6B2C;color:#fff;text-decoration:none;border-radius:10px;padding:13px 18px;font-weight:bold">Criar nova senha</a></p>
-      <p>Este link é de uso único e expira em <b>${expira}</b>. Se você não solicitou a recuperação, ignore esta mensagem.</p>`)
-    const text = `Olá, ${nome || 'cliente'}! Acesse ${resetUrl} para criar uma nova senha. O link é de uso único e expira em ${expira}.`
-    return enviar({ to, subject: 'Kytto · Recuperação segura de acesso', html, text })
+    const expira = expiresAt ? new Date(expiresAt).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short', timeZone:'America/Cuiaba' }) : 'em breve'
+    const html = `<!doctype html><html lang="pt-BR"><body style="margin:0;background:#fff9f5;font-family:Arial,sans-serif;color:#12283f"><main style="max-width:560px;margin:24px auto;padding:28px;background:#fff;border-radius:16px"><h1 style="font-size:24px">Kytto · Recuperação de acesso</h1><p>Olá, <strong>${nomeSeguro}</strong>.</p><p>Recebemos uma solicitação para criar uma nova senha da sua conta Kytto.</p><p><a href="${urlSegura}" style="display:inline-block;background:#ff6b2c;color:#fff;padding:14px 20px;border-radius:10px;text-decoration:none">Criar nova senha</a></p><p>Este link é individual, de uso único e expira em ${escapeHtml(expira)}.</p><p>Se você não fez este pedido, ignore a mensagem. Sua senha e seus acessos permanecem iguais até a confirmação.</p><p style="font-size:12px;color:#6c7884">Kytto · Sistemas inteligentes para negócios<br>contato@kytto.com.br</p></main></body></html>`
+    const text = `Olá, ${nome || 'cliente'}! Acesse ${resetUrl} para criar uma nova senha. O link é de uso único e expira em ${expira}. Se não fez este pedido, ignore esta mensagem.`
+    const configured = recoveryConfig()
+    if (!configured.key || !to) return {ok:false,code:'MAIL_NOT_CONFIGURED'}
+    try {
+      const response = await fetch('https://api.resend.com/emails', { method:'POST',signal:AbortSignal.timeout(10000),headers:{'Content-Type':'application/json',Authorization:`Bearer ${configured.key}`},body:JSON.stringify({from:configured.from,to:[to],subject:'Kytto · Recuperação segura de acesso',html,text}) })
+      const result = await response.json().catch(()=>({}))
+      return response.ok && typeof result.id === 'string' && result.id ? {ok:true,id:result.id} : {ok:false,code:'MAIL_REJECTED'}
+    } catch { return {ok:false,code:'MAIL_UNAVAILABLE'} }
+
   },
 }

@@ -115,15 +115,27 @@ test('backoffice integrado: Financeiro, estoque e compras, fiscal, conciliação
       assert.equal(login.body.user.platformAdmin,false);
       assert.equal(login.body.sessao.empresaId,A);
       assert.equal(login.body.sessao.empresas_acessiveis.length,1);
-      const headers={Authorization:`Bearer ${login.body.token}`,'X-Empresa-Id':A};
+      let headers={Authorization:`Bearer ${login.body.token}`,'X-Empresa-Id':A};
       ok(await req('/api/admin/unidades','GET',null,headers),200,'sessão do dono permanece válida');
       ok(await req('/api/admin/unidades','GET',null,{...headers,'X-Empresa-Id':B}),403,'dono não atravessa empresa');
       ok(await req('/api/admin/platform/accounts','GET',null,headers),403,'dono não vira administrador da plataforma');
+      const resetToken=crypto.randomBytes(32).toString('base64url');
+      const digest=value=>crypto.createHash('sha256').update(value).digest('hex');
+      await sql.query("INSERT INTO auth_password_resets(subject_type,subject_id,token_hash,credential_hash,expires_at,delivered) VALUES('operational',$1,$2,$3,CURRENT_TIMESTAMP+interval '20 minutes',true)",[user.id,digest(resetToken),digest(user.senhaHash)]);
+      const validated=await req('/api/auth/redefinir-senha/validar','POST',{token:resetToken});ok(validated,200,'validar link operacional');assert.equal(validated.body.ok,true);
+      ok(await req('/api/auth/redefinir-senha','POST',{token:resetToken,novaSenha:'fraca',confirmacao:'fraca'}),400,'senha fraca recusada');
+      const newPassword='Nova-Senha-Operacional-123!';
+      const resets=await Promise.all([1,2].map(()=>req('/api/auth/redefinir-senha','POST',{token:resetToken,novaSenha:newPassword,confirmacao:newPassword})));
+      assert.deepEqual(resets.map(r=>r.status).sort(),[200,401],'consumo único por HTTP');
+      ok(await req('/api/admin/unidades','GET',null,headers),401,'reset encerra sessão anterior');
+      const renewed=await req('/api/admin/login','POST',{user:email,senha:newPassword});ok(renewed,200,'nova senha operacional entra');
+      headers={Authorization:`Bearer ${renewed.body.token}`,'X-Empresa-Id':A};
+      ok(await req('/api/admin/unidades','GET',null,headers),200,'sessão nova funciona');
       await sql.query("UPDATE commerce_memberships SET expires_at=CURRENT_TIMESTAMP-interval '1 second' WHERE empresa_id=$1 AND usuario_id=$2",[A,user.id]);
       ok(await req('/api/admin/unidades','GET',null,headers),401,'sessão expirada perde acesso');
-      ok(await req('/api/admin/login','POST',{user:email,senha:SENHA}),401,'membership expirada não entra');
+      ok(await req('/api/admin/login','POST',{user:email,senha:newPassword}),401,'membership expirada não entra');
       await sql.query("UPDATE commerce_memberships SET expires_at=NULL,role_id=(SELECT id FROM commerce_roles WHERE empresa_id IS NULL AND codigo='support' AND sistema=true) WHERE empresa_id=$1 AND usuario_id=$2",[A,user.id]);
-      ok(await req('/api/admin/login','POST',{user:email,senha:SENHA}),401,'outro perfil não recebe login por esta correção');
+      ok(await req('/api/admin/login','POST',{user:email,senha:newPassword}),401,'outro perfil não recebe login por esta correção');
     });
 
     await t.test('onda 1: razão, unidade presa e isolamento', async () => {
@@ -251,6 +263,24 @@ test('backoffice integrado: Financeiro, estoque e compras, fiscal, conciliação
       const venda = (l.body.lancamentos || l.body.itens || l.body).find((x) => x.valor === 10);
       assert.ok(venda, 'venda offline no razão');
       assert.equal(venda.lojaId, A1, 'com a unidade do terminal');
+    });
+    await t.test('recuperação HTTP de conta multiempresa e legado não revela identidade e revoga sessões',async()=>{
+      const missing=await req('/api/auth/esqueci-senha','POST',{email:'ausente@example.invalid'});
+      const existing=await req('/api/auth/esqueci-senha','POST',{email:`dono-a-${sufixo}@example.invalid`});
+      ok(existing,200,'pedido neutro');assert.deepEqual(existing.body,missing.body);assert.equal('token' in existing.body,false);
+      const readiness=await req('/api/admin/commerce-session/recovery-status','GET',null,dono);ok(readiness,200,'configuração autenticada');assert.equal(readiness.body.from,'Kytto <contato@kytto.com.br>');
+      const native=(await sql.query('SELECT id,senha_hash FROM commerce_accounts WHERE email=$1',[`dono-a-${sufixo}@example.invalid`])).rows[0];
+      const legacy=JSON.parse(fs.readFileSync(path.join(dir,'db.json'),'utf8')).usuarios.find(u=>u.email==='admin');
+      for(const target of [{type:'account',id:native.id,hash:native.senha_hash,email:`dono-a-${sufixo}@example.invalid`,headers:dono},{type:'legacy',id:String(legacy.id),hash:legacy.senhaHash,email:'admin',headers:admin}]){
+        const token=crypto.randomBytes(32).toString('base64url'),digest=value=>crypto.createHash('sha256').update(value).digest('hex');
+        await sql.query("INSERT INTO auth_password_resets(subject_type,subject_id,token_hash,credential_hash,expires_at,delivered) VALUES($1,$2,$3,$4,CURRENT_TIMESTAMP+interval '20 minutes',true)",[target.type,target.id,digest(token),digest(target.hash)]);
+        const senha='Nova-Senha-Multiempresa-123!';
+        ok(await req('/api/auth/redefinir-senha','POST',{token,novaSenha:senha,confirmacao:senha}),200,`redefinir ${target.type}`);
+        ok(await req('/api/admin/minhas-permissoes','GET',null,target.headers),401,`revoga ${target.type}`);
+        const logged=await req('/api/admin/login','POST',{user:target.email,senha});ok(logged,200,`login novo ${target.type}`);
+        assert.equal(logged.body.user.platformAdmin,target.type==='legacy' ? adm.body.user.platformAdmin : false);
+        const replay=await req('/api/auth/redefinir-senha/validar','POST',{token});assert.equal(replay.body.ok,false);
+      }
     });
   } finally {
     const saiu = filho.exitCode !== null ? Promise.resolve() : new Promise((r) => filho.once('exit', r));
