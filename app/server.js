@@ -1342,11 +1342,20 @@ if(process.env.COMMERCE_CORE_ENABLED === '1'){
     urlPublica: process.env.PUBLIC_BASE_URL || '',
   });
   // [kytto-a2] Financeiro, contas a receber, fechamento e cadastros mestres por empresa.
-  app.use('/api/admin/a2', auth, requireStaff, createA2AdminRouter({
+  const a2Router = createA2AdminRouter({
     db: clubeDb,
     empresaDaRequisicao: empresaDoA2,
     operadorDaRequisicao: (req) => String(req.user?.id || req.user?.email || 'sistema'),
-  }));
+  });
+  app.use('/api/admin/a2', auth, requireStaff, a2Router);
+  app.use('/api/admin/contas-receber', auth, requireStaff, (req, res, next) => {
+    req.url = req.url === '/' || req.url === '' ? '/contas-receber' : `/contas-receber${req.url}`;
+    a2Router(req, res, next);
+  });
+  app.use('/api/admin/alertas-vencimento', auth, requireStaff, (req, res, next) => {
+    req.url = req.url === '/' || req.url === '' ? '/alertas-vencimento' : `/alertas-vencimento${req.url}`;
+    a2Router(req, res, next);
+  });
   // [kytto-permissoes] O que a pessoa pode fazer na empresa e na unidade ativas, para o menu e as telas do
   // backoffice esconderem o que ela não acessa. Só orienta a interface: cada rota continua
   // conferindo a permissão. Administração da plataforma e sessão sem empresa não filtram nada.

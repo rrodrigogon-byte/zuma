@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { api, fmtR, fmtDate } from '../../lib/api'
+import { api, fmtR, fmtDateOnly } from '../../lib/api'
 import { a2Path } from '../../lib/tenant-api'
 import { useToast } from '../../hooks/useToast'
 import Modal from '../../components/Modal'
@@ -14,6 +14,7 @@ export default function ContasReceber() {
   const [alertas, setAlertas] = useState([])
   const [loading, setLoading] = useState(true)
   const [filtroStatus, setFiltroStatus] = useState('todos') // todos | pendente | atrasada | paga
+  const [busca, setBusca] = useState('')
   const [modalPagamento, setModalPagamento] = useState(null)
   const [modalNovaConta, setModalNovaConta] = useState(false)
   const [novaConta, setNovaConta] = useState(EMPTY_CONTA_FORM)
@@ -27,9 +28,12 @@ export default function ContasReceber() {
         api.get(a2Path('/clientes', '/api/admin/clientes')),
         api.get(a2Path('/alertas-vencimento'))
       ])
-      setContas(resContas.contas || [])
-      setClientes(resClientes.clientes || [])
-      setAlertas(resAlertas.alertas || [])
+      const listaContas = Array.isArray(resContas?.contas) ? resContas.contas : (Array.isArray(resContas) ? resContas : [])
+      const listaClientes = Array.isArray(resClientes?.clientes) ? resClientes.clientes : (Array.isArray(resClientes) ? resClientes : [])
+      const listaAlertas = Array.isArray(resAlertas?.alertas) ? resAlertas.alertas : (Array.isArray(resAlertas) ? resAlertas : [])
+      setContas(listaContas)
+      setClientes(listaClientes)
+      setAlertas(listaAlertas)
     } catch (e) {
       toast('Erro ao carregar dados financeiros', true)
     } finally {
@@ -88,17 +92,35 @@ export default function ContasReceber() {
     }
   }
 
-  const getNomeCliente = (id) => {
-    const c = clientes.find(c => c.id === id)
-    return c ? c.nome : 'Cliente não encontrado'
+  const getNomeCliente = (id, fallbackNome) => {
+    if (fallbackNome) return fallbackNome
+    if (!id) return 'Cliente Geral'
+    const c = clientes.find(c => String(c.id) === String(id))
+    return c ? c.nome : 'Cliente Geral'
   }
 
-  const filtradas = contas.filter(c => filtroStatus === 'todos' || c.status === filtroStatus)
+  const termo = busca.trim().toLowerCase()
+  const filtradas = contas.filter(c => {
+    if (filtroStatus !== 'todos' && c.status !== filtroStatus) return false
+    if (termo) {
+      const nome = getNomeCliente(c.clienteId, c.clienteNome).toLowerCase()
+      const desc = String(c.descricao || '').toLowerCase()
+      const obs = String(c.observacao || '').toLowerCase()
+      return nome.includes(termo) || desc.includes(termo) || obs.includes(termo)
+    }
+    return true
+  })
 
   // KPIs
   const totalReceber = contas.filter(c => c.status !== 'paga').reduce((acc, c) => acc + (c.valor || 0), 0)
   const totalAtrasado = contas.filter(c => c.status === 'atrasada').reduce((acc, c) => acc + (c.valor || 0), 0)
   const totalAlertas = alertas.length
+  const contagem = {
+    todos: contas.length,
+    pendente: contas.filter(c => c.status === 'pendente').length,
+    atrasada: contas.filter(c => c.status === 'atrasada').length,
+    paga: contas.filter(c => c.status === 'paga').length,
+  }
 
   return (
     <div className="page">
@@ -154,12 +176,24 @@ export default function ContasReceber() {
         </div>
       )}
 
-      <div style={{ display:'flex', gap:8, marginBottom:16 }}>
-        {['todos', 'pendente', 'atrasada', 'paga'].map(s => (
-          <button key={s} onClick={() => setFiltroStatus(s)} className={`btn btn-sm ${filtroStatus === s ? 'btn-primary' : 'btn-ghost'}`}>
-            {STATUS_LABEL[s]}
-          </button>
-        ))}
+      <div style={{ display:'flex', gap:12, marginBottom:16, flexWrap:'wrap', alignItems:'center', justifyContent:'space-between' }}>
+        <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
+          {['todos', 'pendente', 'atrasada', 'paga'].map(s => (
+            <button key={s} onClick={() => setFiltroStatus(s)} className={`btn btn-sm ${filtroStatus === s ? 'btn-primary' : 'btn-ghost'}`}>
+              {STATUS_LABEL[s]} ({contagem[s] || 0})
+            </button>
+          ))}
+        </div>
+        <div style={{ minWidth: 260 }}>
+          <input
+            type="search"
+            className="input input-sm"
+            placeholder="Buscar por cliente ou descrição…"
+            value={busca}
+            onChange={(e) => setBusca(e.target.value)}
+            style={{ width: '100%', padding: '6px 12px', borderRadius: 6, border: '1px solid var(--border)' }}
+          />
+        </div>
       </div>
 
       <div className="table-wrap">
@@ -180,15 +214,16 @@ export default function ContasReceber() {
             {filtradas.map(c => (
               <tr key={c.id}>
                 <td>
-                  <div style={{ fontWeight: 600 }}>{getNomeCliente(c.clienteId)}</div>
+                  <div style={{ fontWeight: 600 }}>{getNomeCliente(c.clienteId, c.clienteNome)}</div>
                   {c.mesaNumero > 0 && <div style={{ fontSize: 11, color: 'var(--muted)' }}>Mesa {c.mesaNumero}</div>}
+                  {c.origem && <div style={{ fontSize: 10, color: 'var(--muted)', textTransform: 'uppercase' }}>{c.origem === 'financeiro' ? 'Financeiro' : c.origem === 'clientes_kytto' ? 'Comanda / ERP' : 'A2'}</div>}
                 </td>
                 <td>{c.descricao || '—'}</td>
                 <td>
-                  <div style={{ color: c.status === 'atrasada' ? '#e74c3c' : 'inherit' }}>
-                    {fmtDate(c.dataVencimento)}
+                  <div style={{ color: c.status === 'atrasada' ? '#e74c3c' : 'inherit', fontWeight: c.status === 'atrasada' ? 600 : 'normal' }}>
+                    {fmtDateOnly(c.dataVencimento)}
                   </div>
-                  {c.status === 'paga' && <div style={{ fontSize: 11, color: '#2ecc71' }}>Pago em {fmtDate(c.dataPagamento)}</div>}
+                  {c.status === 'paga' && <div style={{ fontSize: 11, color: '#2ecc71' }}>Pago em {fmtDateOnly(c.dataPagamento)}</div>}
                 </td>
                 <td style={{ fontWeight: 600 }}>{fmtR(c.valor)}</td>
                 <td>
