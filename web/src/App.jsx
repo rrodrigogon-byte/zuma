@@ -148,6 +148,7 @@ const WhatsappControlCenter = lazy(() => import('./pages/admin/dino/WhatsappCont
 const CerebroIA = lazy(() => import('./pages/admin/dino/CerebroIA'))
 const ContasReceber = lazy(() => import('./pages/admin/ContasReceber'))
 const FechamentoDiario = lazy(() => import('./pages/admin/FechamentoDiario'))
+const DinoMetasRoletaPanel = lazy(() => import('./pages/admin/dino/DinoMetasRoletaPanel'))
 const CadastrosMestres = lazy(() => import('./pages/admin/CadastrosMestres'))
 const AvecMixReport = lazy(() => import('./pages/admin/dino/AvecMixReport'))
 const AvecMixImport = lazy(() => import('./pages/admin/dino/AvecMixImport'))
@@ -317,6 +318,7 @@ export default function App() {
           <Route path="/admin/loja-moda"       element={<Layout><LojaModa /></Layout>} />
           <Route path="/admin/barbearia-erp"   element={<Layout><BarbeariaERP /></Layout>} />
           <Route path="/admin/barbearia"        element={<Layout><Barbearia /></Layout>} />
+          <Route path="/admin/metas-roleta"    element={<Layout><DinoMetasRoletaPanel /></Layout>} />
           <Route path="/admin/supermercado" element={<TenantAware tenant={<Layout><VarejoUnidade /></Layout>} legacy={<Layout><EmImplantacao modulo="Supermercado" /></Layout>} />} />
           <Route path="/admin/omnichannel"      element={<Layout><CanaisFidelidade /></Layout>} />
           <Route path="/admin/pdv-erp"         element={<PDVUnificado />} />
