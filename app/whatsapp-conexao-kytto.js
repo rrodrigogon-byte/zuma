@@ -371,7 +371,7 @@ export async function solicitarCodigoPareamento(empresaId, { phoneNumber = '', u
   }
 }
 
-export async function desconectar(empresaId, { usuario = '', fetchImpl, tipoCanal = 'cliente' } = {}) {
+export async function desconectar(empresaId, { usuario = '', fetchImpl, tipoCanal = 'cliente', forcar = false } = {}) {
   const conexao = obterConexao(empresaId, tipoCanal);
   if (canalInterno(tipoCanal)) {
     if (!wahaControlConfigured()) return { ok: false, error: 'Controle privado WAHA não configurado no servidor.', code: 'WAHA_NOT_CONFIGURED', conexao: visaoPublica(conexao) };
@@ -400,7 +400,21 @@ export async function desconectar(empresaId, { usuario = '', fetchImpl, tipoCana
     // Recusa do DELETE (ex.: 4xx porque não há sessão) também é conferida pelo GET: se o
     // backend confirma que o número não está conectado, não há o que desconectar.
     const status = resultado.authError ? null : await getInstanceStatus(conexao.instance, fetchImpl, { resolvePhone: false });
-    const semSessao = status?.ok === true && ['close', 'qr'].includes(status.state);
+    
+    // Considera sem sessão (desconectado) se:
+    // 1) Forçado pelo usuário ou pela interface (forcar: true);
+    // 2) O status responder explicitamente 'close' ou 'qr';
+    // 3) O DELETE ou status reportar 404 (instância/sessão inexistente no gateway);
+    // 4) O DELETE foi bem-sucedido (resultado.ok === true) e o status não reporta 'open';
+    // 5) A conexão local já não estava 'open' (ex.: estado qr, close, aguardando linha) e o status não reporta 'open'.
+    // Considera sem sessão (desconectado) se:
+    // 1) Forçado pelo usuário ou pela interface (forcar: true);
+    // 2) O status responder explicitamente 'close' ou 'qr';
+    // 3) A conexão local já não estava 'open' (ex.: estado qr, close, aguardando linha) e o status não reporta 'open'.
+    const semSessao = forcar === true
+      || (status?.ok === true && ['close', 'qr'].includes(status.state))
+      || (conexao.state !== 'open' && status?.state !== 'open');
+
     if (!semSessao) {
       // Nunca simular logout local ou reiniciar outro número quando o backend
       // falhou ou ainda responde open/unknown. A instância continua visível.

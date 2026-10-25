@@ -289,11 +289,12 @@ function WhatsappConexaoEmpresa() {
     finally { if (scope === scopeRef.current) setBusy('') }
   }
 
-  async function desconectar() {
+  async function desconectar(forcar = false) {
     const scope = scopeRef.current
     setBusy('sair')
     try {
-      const data = await api.post(`${basePath}/desconectar`, { confirmado: true }, requestOptions)
+      const deveForcar = forcar || state !== 'open'
+      const data = await api.post(`${basePath}/desconectar`, { confirmado: true, ...(deveForcar ? { forcar: true } : {}) }, requestOptions)
       if (scope !== scopeRef.current) return
       statusSeqRef.current += 1
       statusFlightRef.current = null
@@ -617,8 +618,13 @@ function WhatsappConexaoEmpresa() {
       <p className="dadm-muted">O backend aceita o envio, mas a entrega no aparelho deve ser conferida. Limite de 5 testes por hora.</p>
     </Dialog>
     <Dialog open={confirmarSaida} title="Desconectar o WhatsApp?" labelId="wa-sair" danger onClose={() => setConfirmarSaida(false)}
-      actions={<><button type="button" className="c360-btn ghost" onClick={() => setConfirmarSaida(false)}>Voltar</button><button type="button" className="c360-btn primary" disabled={busy === 'sair'} onClick={desconectar}>Desconectar</button></>}>
+      actions={<>
+        <button type="button" className="c360-btn ghost" onClick={() => setConfirmarSaida(false)}>Voltar</button>
+        {state !== 'open' && <button type="button" className="c360-btn ghost" disabled={busy === 'sair'} onClick={() => desconectar(true)}>Forçar desconexão</button>}
+        <button type="button" className="c360-btn primary" disabled={busy === 'sair'} onClick={() => desconectar(false)}>Desconectar</button>
+      </>}>
       <p>O atendente IA, lembretes de agenda, campanhas e recuperação de carrinho param de enviar mensagens até você conectar de novo. A reconexão automática fica pausada.</p>
+      {state !== 'open' && <p className="dadm-note warn">A linha já está aguardando pareamento (sem aparelho conectado no momento). A desconexão irá limpar a sessão e pausar a reconexão automática para você conectar um novo número com segurança.</p>}
     </Dialog>
   </div>
 }
