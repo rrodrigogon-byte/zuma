@@ -157,3 +157,50 @@ test('agendamento whats: alerta sempre os valores e regras de forma humana e tra
     db.queryRead = originalQueryRead;
   }
 });
+
+test('novas ferramentas autonomas: historico, indicacao, lembrete, feedback, dino vip e beneficios', async () => {
+  const executor = createWhatsappAiToolExecutor(CONTEXT);
+
+  // 1. consultar_codigo_indicacao
+  const resIndicacao = await executor('consultar_codigo_indicacao', {});
+  assert.equal(resIndicacao.ok, true);
+  assert.ok(resIndicacao.codigo);
+  assert.match(resIndicacao.link, /indique/);
+  assert.match(resIndicacao.explicacaoHumana, /código exclusivo de indicação/);
+
+  // 2. agendar_lembrete_retorno
+  const resLembrete = await executor('agendar_lembrete_retorno', { dias: 15, servico: 'Corte e Barba' });
+  assert.equal(resLembrete.ok, true);
+  assert.equal(resLembrete.servico, 'Corte e Barba');
+  assert.match(resLembrete.mensagemHumana, /Deixei anotado com carinho/);
+
+  // 3. registrar_feedback_atendimento
+  const resFeedback = await executor('registrar_feedback_atendimento', { nota: 5, comentario: 'Corte impecável com o Dino!', profissional: 'Dino' });
+  assert.equal(resFeedback.ok, true);
+  assert.equal(resFeedback.nota, 5);
+  assert.match(resFeedback.mensagemHumana, /Muito obrigado de coração/);
+
+  // 4. consultar_historico_visitas
+  const resHistorico = await executor('consultar_historico_visitas', { limite: 3 });
+  assert.equal(resHistorico.ok, true);
+  assert.ok(Array.isArray(resHistorico.ultimasVisitas));
+
+  // 5. consultar_beneficios_e_clube
+  const resBeneficios = await executor('consultar_beneficios_e_clube', {});
+  assert.equal(resBeneficios.ok, true);
+  assert.ok(resBeneficios.cashback);
+  assert.match(resBeneficios.resumoHumana || resBeneficios.resumoHumano, /aproveitar na barbearia|sessão/);
+
+  // 6. consultar_agenda_dino_vip
+  const originalQueryRead = db.queryRead;
+  db.queryRead = async () => ({ rows: [] });
+  try {
+    const resDinoVip = await executor('consultar_agenda_dino_vip', { periodo: 'noite' });
+    assert.equal(resDinoVip.ok, true);
+    assert.equal(resDinoVip.atendimento24x7, true);
+    assert.match(resDinoVip.tabelaPrecos.noturnoExtra, /R\$ 600,00/);
+    assert.match(resDinoVip.tabelaPrecos.diurno, /R\$ 300,00/);
+  } finally {
+    db.queryRead = originalQueryRead;
+  }
+});

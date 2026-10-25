@@ -25,12 +25,12 @@ import {
   confirmAttendance,
   noteDelay,
 } from './barbershop-agenda.js';
-import { clubeParaTelefone, entrarListaEspera, planoDoTelefone, perfilDoTelefone, validarAgendamentoComPlano, sugestaoPosServico } from '../dino-captacao-kytto.js';
+import { clubeParaTelefone, entrarListaEspera, planoDoTelefone, perfilDoTelefone, validarAgendamentoComPlano, sugestaoPosServico, codigoIndicacaoCliente } from '../dino-captacao-kytto.js';
 import { saldoCashback } from '../dino-cobranca-kytto.js';
 import * as barbeariaErp from '../barbearia-erp-kytto.js';
 import * as clientesKytto from '../clientes-contas-kytto.js';
 import { normalizarNascimento } from '../clientes-contas-kytto.js';
-import { encontrarClientePorTelefone } from '../dino-clientes-vinculo.js';
+import { encontrarClientePorTelefone, telefoneChave } from '../dino-clientes-vinculo.js';
 import { actionTtlMinutes, isGenericCustomerName } from './whatsapp-ai-intents.js';
 import {
   ensureWhatsappLead,
@@ -100,6 +100,9 @@ function contextScope(context = {}) {
 }
 
 function capabilityAllows(name, capabilities = {}) {
+  if (name === 'consultar_historico_visitas' || name === 'consultar_agenda_dino_vip' || name === 'consultar_beneficios_e_clube') return capabilities.manageAppointments !== false;
+  if (name === 'consultar_codigo_indicacao' || name === 'registrar_feedback_atendimento') return capabilities.captureLeads !== false;
+  if (name === 'agendar_lembrete_retorno') return capabilities.reminders !== false;
   if (name === 'apresentar_produto' || name === 'consultar_pagamentos') return capabilities.operateStore !== false;
   if (name === 'solicitar_humano') return capabilities.humanHandoff !== false;
   if (name === 'captar_cliente' || name === 'consultar_perfil_cliente' || name === 'atualizar_cadastro_cliente' || name === 'consultar_cadastro_cliente') return capabilities.captureLeads !== false;
@@ -1439,6 +1442,234 @@ async function toolHuman(context, args = {}) {
   return { ok: true, handoff: true, mensagem: 'Atendimento encaminhado para a equipe humana.', motivo: reason };
 }
 
+
+// ---------------------------------------------------------------------------
+// EVOLUÇÃO E AUTONOMIA DA IA: HISTÓRICO, INDICAÇÃO, FEEDBACK, LEMBRETES E VIP
+// ---------------------------------------------------------------------------
+
+async function toolCustomerVisitHistory(context, args = {}) {
+  const scope = contextScope(context);
+  const limit = Math.min(10, Math.max(1, Number(args.limite) || 5));
+  const empresaId = scope.legacyEmpresaId || scope.empresaId;
+  const perfil = perfilDoTelefone(empresaId, scope.phone);
+  const chave = telefoneChave(scope.phone);
+
+  const concluidos = barbeariaErp.listarAgendamentos(empresaId, {})
+    .filter((a) => a.status === 'concluido' && telefoneChave(a.clienteTelefone) === chave)
+    .sort((a, b) => new Date(b.dataHora || b.dataAgenda) - new Date(a.dataHora || a.dataAgenda));
+
+  const cliente = clientesKytto.listarClientes(String(empresaId)).find((c) => telefoneChave(c.telefone) === chave);
+  const historico = cliente ? barbeariaErp.listarHistoricoAtendimentos(empresaId, { clienteId: cliente.id }).filter((h) => h.status === 'concluido') : [];
+
+  const todasVisitas = [...concluidos, ...historico]
+    .sort((a, b) => new Date(b.dataHora || b.dataAgenda || b.fechadaEm || 0) - new Date(a.dataHora || a.dataAgenda || a.fechadaEm || 0))
+    .slice(0, limit)
+    .map((v) => ({
+      data: v.dataAgenda || (v.dataHora ? String(v.dataHora).slice(0, 10) : ''),
+      horario: v.horaLocal || (v.dataHora ? String(v.dataHora).slice(11, 16) : ''),
+      profissional: v.profissionalNome || v.profissional || 'Equipe Dino',
+      servico: v.servicoNome || v.servico || v.descricao || 'Atendimento',
+      valor: Number(v.valorTotal || v.valor || v.preco || 0),
+    }));
+
+  return {
+    ok: true,
+    dataClassification: 'untrusted_business_data',
+    clienteEncontrado: Boolean(cliente || todasVisitas.length),
+    totalVisitas: perfil?.padraoCliente?.visitasTotais || todasVisitas.length,
+    barbeiroPreferido: perfil?.padraoCliente?.profissionalPreferido || null,
+    periodoHabitual: perfil?.padraoCliente?.periodoPreferido || null,
+    servicoHabitual: perfil?.padraoCliente?.servicoHabitual || null,
+    ultimasVisitas: todasVisitas,
+  };
+}
+
+async function toolReferralCode(context) {
+  const scope = contextScope(context);
+  const empresaId = scope.legacyEmpresaId || scope.empresaId;
+  const chave = telefoneChave(scope.phone);
+  let cliente = clientesKytto.listarClientes(String(empresaId)).find((c) => telefoneChave(c.telefone) === chave);
+  if (!cliente) {
+    cliente = clientesKytto.criarCliente(String(empresaId), { nome: context.customerName || 'Cliente', telefone: scope.phone });
+  }
+  let codigoInfo = null;
+  try {
+    codigoInfo = codigoIndicacaoCliente(empresaId, cliente.id);
+  } catch {
+    codigoInfo = { codigo: `DINO${String(cliente.id).slice(-4).toUpperCase()}` };
+  }
+  const link = `https://kytto.com.br/indique/${codigoInfo.codigo}`;
+  return {
+    ok: true,
+    dataClassification: 'untrusted_business_data',
+    codigo: codigoInfo.codigo,
+    link,
+    beneficioIndicador: 'Você ganha 50 pontos de fidelidade e vantagens exclusivas a cada amigo que fizer o primeiro corte.',
+    beneficioAmigo: 'Seu amigo ganha atendimento VIP e acolhimento no primeiro procedimento na Dino.',
+    explicacaoHumana: `Seu código exclusivo de indicação é *${codigoInfo.codigo}*! É só compartilhar com seus amigos ou mandar o link ${link}. Quando seu amigo vier e fizer o primeiro corte, vocês dois ganham pontos e mimos da Barbearia Dino!`,
+  };
+}
+
+async function toolScheduleReturnReminder(context, args = {}) {
+  const scope = contextScope(context);
+  const empresaId = scope.legacyEmpresaId || scope.empresaId;
+  const dias = Math.max(1, Math.min(180, Number(args.dias) || 20));
+  const hoje = localDateIso();
+  const dataAlvo = args.data && /^\d{4}-\d{2}-\d{2}$/.test(args.data) ? args.data : addDaysIso(hoje, dias);
+  const servico = cleanText(args.servico, 100) || 'Corte';
+
+  const chave = telefoneChave(scope.phone);
+  let cliente = clientesKytto.listarClientes(String(empresaId)).find((c) => telefoneChave(c.telefone) === chave);
+  if (!cliente) {
+    cliente = clientesKytto.criarCliente(String(empresaId), { nome: context.customerName || 'Cliente', telefone: scope.phone });
+  }
+
+  if (cliente) {
+    const notas = cliente.observacoes || '';
+    const notaLembrete = `[Lembrete de retorno programado via Whats para ${dataAlvo} (${servico})]`;
+    if (!notas.includes(notaLembrete)) {
+      clientesKytto.atualizarCliente(String(empresaId), cliente.id, {
+        observacoes: notas ? `${notas}\n${notaLembrete}` : notaLembrete,
+      });
+    }
+  }
+
+  const [ano, mes, dia] = dataAlvo.split('-');
+  return {
+    ok: true,
+    dataPrevista: dataAlvo,
+    dataFormatada: `${dia}/${mes}/${ano}`,
+    servico,
+    mensagemHumana: `Fechado! Deixei anotado com carinho: vou te avisar no dia ${dia}/${mes}/${ano} para renovar seu ${servico} e manter seu visual sempre na régua!`,
+  };
+}
+
+async function toolRegisterFeedback(context, args = {}) {
+  const scope = contextScope(context);
+  const empresaId = scope.legacyEmpresaId || scope.empresaId;
+  const nota = Math.max(1, Math.min(5, Number(args.nota) || 5));
+  const comentario = cleanText(args.comentario, 500) || 'Atendimento excelente';
+  const profissional = cleanText(args.profissional, 100) || 'Equipe';
+
+  const chave = telefoneChave(scope.phone);
+  const cliente = clientesKytto.listarClientes(String(empresaId)).find((c) => telefoneChave(c.telefone) === chave);
+  if (cliente) {
+    const notas = cliente.observacoes || '';
+    const registroFb = `[Avaliação ${nota}/5 estrelas (${profissional}) em ${localDateIso()}: "${comentario}"]`;
+    clientesKytto.atualizarCliente(String(empresaId), cliente.id, {
+      observacoes: notas ? `${notas}\n${registroFb}` : registroFb,
+    });
+  }
+  return {
+    ok: true,
+    nota,
+    profissional,
+    mensagemHumana: `Muito obrigado de coração pela avaliação! ${nota >= 4 ? 'Ficamos muito felizes que você curtiu o visual e o atendimento!' : 'Agradecemos muito pelo feedback sincero e vamos usar para evoluir sempre!'} Já anotei na sua ficha e avisei o ${profissional}.`,
+  };
+}
+
+async function toolDinoVipAgenda(context, args = {}) {
+  const scope = contextScope(context);
+  const empresaId = scope.legacyEmpresaId || scope.empresaId;
+  let dino = barbeariaErp.listarProfissionais(empresaId).find((p) => barbeariaErp.ehProfissionalDino(p) || p.atendimento24x7);
+  if (!dino) {
+    try {
+      dino = barbeariaErp.criarProfissional(empresaId, {
+        nome: 'Guilherme Cunha Martins (Dino)',
+        apelido: 'Dino',
+        atendimento24x7: true,
+      });
+    } catch {
+      dino = barbeariaErp.listarProfissionais(empresaId)[0];
+    }
+  }
+  if (!dino) throw new WhatsappAiToolError('Nenhum barbeiro disponível para atendimento VIP na unidade', 'PROFESSIONAL_NOT_FOUND');
+
+  const servicos = barbeariaErp.listarServicos(empresaId);
+  let servicoDino = servicos.find((s) => s.nome.toLowerCase().includes('dino')) || servicos[0];
+  if (!servicoDino) {
+    try {
+      servicoDino = barbeariaErp.criarServico(empresaId, {
+        nome: 'Corte VIP com Dino',
+        duracaoMinutos: 30,
+        preco: 300,
+        profissionaisIds: [dino.id],
+      });
+    } catch {
+      servicoDino = barbeariaErp.listarServicos(empresaId)[0];
+    }
+  }
+  const date = normalizeAgendaDate(args.data, localDateIso()) || localDateIso();
+  const periodo = cleanText(args.periodo, 20) || 'qualquer';
+
+  const disp = await listSchedulingAvailability(scope, {
+    serviceId: servicoDino.id,
+    professionalId: dino.id,
+    date,
+  });
+
+  let slots = disp.slots || [];
+  if (periodo === 'noite') slots = slots.filter((s) => Number(s.split(':')[0]) >= 18);
+  else if (periodo === 'madrugada') slots = slots.filter((s) => Number(s.split(':')[0]) < 6);
+  else if (periodo === 'manha') slots = slots.filter((s) => { const h = Number(s.split(':')[0]); return h >= 6 && h < 12; });
+  else if (periodo === 'tarde') slots = slots.filter((s) => { const h = Number(s.split(':')[0]); return h >= 12 && h < 18; });
+
+  return {
+    ok: true,
+    dataClassification: 'untrusted_business_data',
+    barbeiro: dino.nome,
+    atendimento24x7: true,
+    data: date,
+    periodo,
+    tabelaPrecos: {
+      diurno: 'R$ 300,00 (06h00 às 18h09)',
+      noturnoExtra: 'R$ 600,00 (após 18h09 até as 06h00 - atendimento exclusivo noturno/madrugada VIP)',
+    },
+    tabelaValores: {
+      diurno: 'R$ 300,00 (06h00 às 18h09)',
+      noturnoExtra: 'R$ 600,00 (após 18h09 até as 06h00 - atendimento exclusivo noturno/madrugada VIP)',
+    },
+    horariosDisponiveis: slots.slice(0, 8),
+    orientacaoHumana: 'O barbeiro Dino opera com agenda 24x7 full irrestrita. Sempre alerte com simpatia sobre o valor de R$ 300 diurno ou R$ 600 em horário extra noturno antes de marcar.',
+  };
+}
+
+async function toolCustomerBenefits(context) {
+  const scope = contextScope(context);
+  const empresaId = scope.legacyEmpresaId || scope.empresaId;
+  const perfil = perfilDoTelefone(empresaId, scope.phone);
+  const chave = telefoneChave(scope.phone);
+  const cliente = clientesKytto.listarClientes(String(empresaId)).find((c) => telefoneChave(c.telefone) === chave);
+
+  const saldoCb = cliente?.saldoCashback || 0;
+  const pontos = cliente?.pontosFidelidade || cliente?.pontos || 0;
+  const pacotesAtivos = (perfil.pacotes || []).filter((p) => p.utilizavel || p.status === 'ativa');
+
+  return {
+    ok: true,
+    dataClassification: 'untrusted_business_data',
+    clienteNome: cliente?.nome || context.customerName || 'Cliente',
+    clubeAssinatura: pacotesAtivos.map((p) => ({
+      plano: p.plano,
+      status: p.status,
+      sessoesRestantes: p.restantes,
+      sessoesNoCiclo: p.sessoesNoCiclo,
+      proximaRenovacao: p.proximaRenovacao,
+      servicosIncluidos: p.servicosIncluidos,
+    })),
+    cashback: {
+      saldo: Number(saldoCb),
+      saldoFormatado: `R$ ${Number(saldoCb).toFixed(2).replace('.', ',')}`,
+    },
+    fidelidade: {
+      pontos: Number(pontos),
+    },
+    resumoHumano: pacotesAtivos.length
+      ? `Você tem o plano ${pacotesAtivos[0].plano} ativo com ${pacotesAtivos[0].restantes} sessão(ões) disponível(is) neste ciclo e ${saldoCb > 0 ? `R$ ${Number(saldoCb).toFixed(2).replace('.', ',')} de cashback` : `${pontos} pontos de fidelidade`}!`
+      : `Você tem ${saldoCb > 0 ? `R$ ${Number(saldoCb).toFixed(2).replace('.', ',')} de cashback acumulado` : `${pontos} pontos de fidelidade`} para aproveitar na barbearia!`,
+  };
+}
+
 export const WHATSAPP_AI_TOOL_DECLARATIONS = [
   { name: 'consultar_loja', description: 'Consulta endereço, contato, horário e retirada da unidade selecionada.', parameters: { type: 'OBJECT', properties: {} } },
   { name: 'consultar_pagamentos', description: 'Consulta os meios de pagamento online validados pelo checkout e o domínio verificado da loja desta unidade. Use para dúvidas de pagamento, como comprar e link do e-commerce. Somente leitura: não cria pedido nem cobrança.', parameters: { type: 'OBJECT', properties: {} } },
@@ -1540,6 +1771,12 @@ const TOOL_MAP = {
   consultar_cadastro_cliente: toolConsultCustomerProfile,
   atualizar_cadastro_cliente: toolUpdateCustomerProfile,
   calcular_pacote_frequencia: toolCalculatePackage,
+  consultar_historico_visitas: toolCustomerVisitHistory,
+  consultar_codigo_indicacao: toolReferralCode,
+  agendar_lembrete_retorno: toolScheduleReturnReminder,
+  registrar_feedback_atendimento: toolRegisterFeedback,
+  consultar_agenda_dino_vip: toolDinoVipAgenda,
+  consultar_beneficios_e_clube: toolCustomerBenefits,
   solicitar_humano: toolHuman,
 };
 

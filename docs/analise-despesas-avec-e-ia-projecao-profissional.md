@@ -161,3 +161,26 @@ Ao pesquisar qualquer profissional (ex.: Naty) no painel, o sistema exibe:
 * **Metadados Estruturados em Ferramentas da IA:**
   * Em `barbershop-agenda.js` (`listServices` e `availability`), os objetos retornados para a IA agora contam com os campos `avisoValorHumano` e `tabelaValores`, instruindo deterministicamente o modelo com a fraseologia acolhedora e as faixas de valores exatas.
   * O resumo de preparação da ação (`toolPrepareAppointment`) destaca com clareza o valor e a nota explicativa de horário extra noturno.
+
+---
+
+## 12.0 Evolução da IA: Autonomia Ampliada e Novas Ações Completas no Atendimento
+
+### 12.1 Histórico de Atendimentos Anteriores (`consultar_historico_visitas`)
+* **Autonomia de Memória:** O cliente pode perguntar no WhatsApp quando foi a última vez que cortou o cabelo, quem foi o barbeiro que o atendeu, qual procedimento realizou ou quanto pagou.
+* **Consolidação Unificada:** A ferramenta integra agendamentos concluídos no sistema e histórico importado do Avec, trazendo data, horário, barbeiro, serviço executado e valor, além do padrão habitual.
+
+### 12.2 Programa Indique um Amigo (`consultar_codigo_indicacao`)
+* **Member-Get-Member no WhatsApp:** Quando o cliente pergunta como indicar alguém ou quer compartilhar com amigos, a IA gera ou consulta o código exclusivo do cliente (`DINOXXXX`) e o link de indicação (`https://kytto.com.br/indique/...`), explicando de maneira calorosa os benefícios mútuos (50 pontos de fidelidade para o indicador e vantagens de boas-vindas para o amigo).
+
+### 12.3 Lembretes Personalizados de Retorno (`agendar_lembrete_retorno`)
+* **Agendamento Proativo de Lembretes:** Permite ao cliente solicitar lembretes automáticos para cortar o cabelo ou alinhar a barba daqui a X dias (ex.: 15, 20 ou 30 dias) ou em data específica, salvando a programação na ficha do cliente para follow-up.
+
+### 12.4 Avaliação e Feedback em Tempo Real (`registrar_feedback_atendimento`)
+* **Escuta Ativa do Cliente:** Registra avaliações de 1 a 5 estrelas e elogios/sugestões expressas pelo cliente diretamente no cadastro e repassa à gestão e ao barbeiro avaliado.
+
+### 12.5 Consulta Rápida da Agenda VIP 24x7 do Dino (`consultar_agenda_dino_vip`)
+* **Atendimento Exclusivo e Plantão Noturno:** Permite à IA filtrar e apresentar instantaneamente janelas de atendimento com o barbeiro Dino para períodos específicos (madrugada, noite, manhã ou tarde), informando com antecedência a tarifação (R$ 300 diurno e R$ 600 em horário extra noturno VIP).
+
+### 12.6 Painel Unificado de Benefícios, Pacotes e Clube (`consultar_beneficios_e_clube`)
+* **Visão 360° de Benefícios:** Responde de forma completa e consolidada em uma única resposta o saldo de sessões do Clube/Pacote (usadas e restantes), data de renovação, saldo de cashback acumulado e pontos do programa de fidelidade.
