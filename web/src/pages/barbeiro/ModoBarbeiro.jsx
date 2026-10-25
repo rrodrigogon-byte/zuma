@@ -290,13 +290,13 @@ export default function ModoBarbeiro() {
               {painel.gamificacao.config?.metasDiarias?.produtosAtivo && (
                 <div style={{ display: 'grid', gap: 4, fontSize: 12 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', color: t.cream }}>
-                    <span>🧴 Produtos hoje: <strong>{reais(painel.gamificacao.dia?.produtosValor || 0)} de {reais(painel.gamificacao.config.metasDiarias.produtosValor)}</strong></span>
+                    <span>🧴 Produtos hoje: <strong>{painel.gamificacao.dia?.produtosQtd || 0} de {painel.gamificacao.config.metasDiarias?.produtosQtd ?? 2} un</strong></span>
                     {painel.gamificacao.dia?.metaProdutosAtingida
                       ? <span style={{ color: t.green, fontWeight: 800 }}>✓ Meta batida!</span>
-                      : <span style={{ color: t.muted }}>Falta {reais(Math.max(0, (painel.gamificacao.config.metasDiarias.produtosValor || 0) - (painel.gamificacao.dia?.produtosValor || 0)))}</span>}
+                      : <span style={{ color: t.muted }}>Falta {Math.max(0, (painel.gamificacao.config.metasDiarias?.produtosQtd ?? 2) - (painel.gamificacao.dia?.produtosQtd || 0))} un</span>}
                   </div>
                   <div style={{ height: 6, background: 'rgba(255,255,255,0.1)', borderRadius: 10, overflow: 'hidden' }}>
-                    <div style={{ height: '100%', background: painel.gamificacao.dia?.metaProdutosAtingida ? t.green : '#10b981', width: `${Math.min(100, Math.round(((painel.gamificacao.dia?.produtosValor || 0) / (painel.gamificacao.config.metasDiarias.produtosValor || 1)) * 100))}%` }} />
+                    <div style={{ height: '100%', background: painel.gamificacao.dia?.metaProdutosAtingida ? t.green : '#10b981', width: `${painel.gamificacao.dia?.metaProdutosProgresso ?? 0}%` }} />
                   </div>
                 </div>
               )}

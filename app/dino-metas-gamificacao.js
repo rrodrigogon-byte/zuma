@@ -17,8 +17,8 @@ export const CONFIG_PADRAO = {
     servicosExtrasQtd: 6, // 6 serviços extras = 1 giro
     servicosExtrasGiros: 1,
     produtosAtivo: true,
-    produtosValor: 100, // R$ 100 em produtos = 1 giro
-    produtosQtd: 0,
+    produtosQtd: 2, // 2 unidades de produtos vendidas = 1 giro (meta diária por QUANTIDADE)
+    produtosValor: 0,
     produtosGiros: 1,
     faturamentoAtivo: false,
     faturamentoValor: 500,
@@ -86,8 +86,8 @@ export function salvarConfiguracao(empresaId, dados = {}, usuario = '') {
     servicosExtrasQtd: Math.max(1, Number(dados.metasDiarias?.servicosExtrasQtd || 6)),
     servicosExtrasGiros: Math.max(1, Number(dados.metasDiarias?.servicosExtrasGiros || 1)),
     produtosAtivo: dados.metasDiarias?.produtosAtivo !== false,
-    produtosValor: Math.max(0, Number(dados.metasDiarias?.produtosValor || 100)),
-    produtosQtd: Math.max(0, Number(dados.metasDiarias?.produtosQtd || 0)),
+    produtosQtd: Math.max(0, Number(dados.metasDiarias?.produtosQtd ?? 2)),
+    produtosValor: Math.max(0, Number(dados.metasDiarias?.produtosValor ?? 0)),
     produtosGiros: Math.max(1, Number(dados.metasDiarias?.produtosGiros || 1)),
     faturamentoAtivo: Boolean(dados.metasDiarias?.faturamentoAtivo),
     faturamentoValor: Math.max(0, Number(dados.metasDiarias?.faturamentoValor || 500)),
@@ -406,12 +406,19 @@ export function avaliarMetasESincronizarGiros(empresaId, { dataIso = dataIsoCuia
       }
     }
 
-    // 2. Meta Diária de Produtos (Valor R$)
-    if (config.metasDiarias.produtosAtivo && config.metasDiarias.produtosValor > 0) {
-      const bateuProdutos = prof.dia.produtosValor >= config.metasDiarias.produtosValor;
+    // 2. Meta Diária de Produtos (por QUANTIDADE de unidades)
+    if (config.metasDiarias.produtosAtivo) {
+      const alvoQtd = Number(config.metasDiarias.produtosQtd ?? (config.metasDiarias.produtosValor > 0 ? 0 : 2));
+      const alvoValor = Number(config.metasDiarias.produtosValor || 0);
+      const usaQtd = alvoQtd > 0 || alvoValor <= 0;
+      const alvo = usaQtd ? (alvoQtd || 2) : alvoValor;
+      const atual = usaQtd ? (prof.dia.produtosQtd || 0) : (prof.dia.produtosValor || 0);
+      const bateuProdutos = alvo > 0 && atual >= alvo;
+
       prof.dia.metaProdutosAtingida = bateuProdutos;
-      prof.dia.metaProdutosAlvo = config.metasDiarias.produtosValor;
-      prof.dia.metaProdutosProgresso = Math.min(100, Math.round((prof.dia.produtosValor / config.metasDiarias.produtosValor) * 100));
+      prof.dia.metaProdutosAlvo = alvo;
+      prof.dia.metaProdutosTipo = usaQtd ? 'quantidade' : 'valor';
+      prof.dia.metaProdutosProgresso = alvo > 0 ? Math.min(100, Math.round((atual / alvo) * 100)) : 0;
 
       if (bateuProdutos) {
         const chaveUnica = `meta_diaria_produtos:${profId}:${hoje}`;
@@ -426,7 +433,9 @@ export function avaliarMetasESincronizarGiros(empresaId, { dataIso = dataIsoCuia
             profissionalNome: nome,
             dataReferencia: hoje,
             tipoOrigem: 'meta_diaria_produtos',
-            motivo: `Meta diária de produtos batida: R$ ${prof.dia.produtosValor.toFixed(2)} vendidos (alvo: R$ ${config.metasDiarias.produtosValor.toFixed(2)})`,
+            motivo: usaQtd
+              ? `Meta diária de produtos batida: ${prof.dia.produtosQtd}/${alvo} produtos vendidos (${Number(prof.dia.produtosValor || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })})`
+              : `Meta diária de produtos batida: R$ ${prof.dia.produtosValor.toFixed(2)} vendidos (alvo: R$ ${alvo.toFixed(2)})`,
             quantidadeGiros: config.metasDiarias.produtosGiros || 1,
             status: 'pendente_giro',
             criadoEm: new Date().toISOString(),

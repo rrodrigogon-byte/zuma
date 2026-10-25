@@ -248,7 +248,7 @@ export function DinoMetasRoletaPanel() {
           <div className="dino-regra-info">
             <h4>Venda Diária de Produtos</h4>
             <p>
-              Meta: <strong>{fmtR(config.metasDiarias?.produtosValor || 100)} vendidos no dia</strong>
+              Meta: <strong>{config.metasDiarias?.produtosQtd ?? 2} produtos vendidos no dia</strong>
             </p>
             <span className="dino-regra-tag produtos">
               Ganhe {config.metasDiarias?.produtosGiros || 1} Giro na Roleta
@@ -369,7 +369,7 @@ export function DinoMetasRoletaPanel() {
                               🧴 Produtos Hoje {prof.dia.metaProdutosAtingida && <span className="dino-meta-batida-badge">✓ BATEU A META!</span>}
                             </span>
                             <span className="dino-meta-values">
-                              {fmtR(prof.dia.produtosValor)} de {fmtR(config.metasDiarias.produtosValor)}
+                              {prof.dia.produtosQtd || 0} de {config.metasDiarias?.produtosQtd ?? 2} produtos {prof.dia.produtosValor > 0 ? `(${fmtR(prof.dia.produtosValor)})` : ''}
                             </span>
                           </div>
                           <div className="dino-meta-prog-bar">

@@ -20,7 +20,8 @@ describe('Central Dino — Gamificação, Metas & Roleta', () => {
         servicosExtrasQtd: 6,
         servicosExtrasGiros: 1,
         produtosAtivo: true,
-        produtosValor: 100,
+        produtosQtd: 2,
+        produtosValor: 0,
         produtosGiros: 1,
       },
       metasSemanais: {

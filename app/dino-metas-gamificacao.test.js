@@ -9,7 +9,7 @@ test('Gamificação e Metas Dino: configuração autônoma, cálculo de extras/p
   // 1. Obter configuração inicial padrão
   const cfgInicial = gamificacao.obterConfiguracao(empresaId);
   assert.equal(cfgInicial.metasDiarias.servicosExtrasQtd, 6);
-  assert.equal(cfgInicial.metasDiarias.produtosValor, 100);
+  assert.equal(cfgInicial.metasDiarias.produtosQtd, 2);
   assert.ok(cfgInicial.premiosRoleta.length >= 8);
 
   // 2. Gestor altera metas e fatias da roleta autonomamente
@@ -18,7 +18,7 @@ test('Gamificação e Metas Dino: configuração autônoma, cálculo de extras/p
       servicosExtrasAtivo: true,
       servicosExtrasQtd: 5, // alterou para 5
       produtosAtivo: true,
-      produtosValor: 120, // alterou para 120
+      produtosQtd: 2, // meta por quantidade
       produtosGiros: 1,
     },
     metasSemanais: {
@@ -35,7 +35,7 @@ test('Gamificação e Metas Dino: configuração autônoma, cálculo de extras/p
   }, 'gestor@dino.com.br');
 
   assert.equal(novaCfg.metasDiarias.servicosExtrasQtd, 5);
-  assert.equal(novaCfg.metasDiarias.produtosValor, 120);
+  assert.equal(novaCfg.metasDiarias.produtosQtd, 2);
   assert.equal(novaCfg.metasSemanais.tituloDesafio, 'Desafio Máximo de Pomadas');
   assert.equal(novaCfg.premiosRoleta.length, 3);
   assert.equal(novaCfg.atualizadoPor, 'gestor@dino.com.br');

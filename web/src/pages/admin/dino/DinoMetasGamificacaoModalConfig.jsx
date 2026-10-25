@@ -191,15 +191,17 @@ export function DinoMetasGamificacaoModalConfig({
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                   <div className="form-group" style={{ margin: 0 }}>
-                    <label style={{ fontSize: 12 }}>Valor mínimo de produtos vendidos (R$):</label>
+                    <label style={{ fontSize: 12 }}>Quantidade mínima de produtos vendidos (unidades):</label>
                     <input
                       type="number"
-                      min="0"
-                      step="5"
+                      min="1"
+                      step="1"
                       className="form-control"
-                      value={form.metasDiarias?.produtosValor ?? 100}
-                      onChange={(e) => atualizarDiaria('produtosValor', Number(e.target.value))}
+                      value={form.metasDiarias?.produtosQtd ?? 2}
+                      onChange={(e) => atualizarDiaria('produtosQtd', Math.max(1, Math.floor(Number(e.target.value))))}
+                      placeholder="Ex: 2 unidades"
                     />
+                    <small style={{ color: 'var(--muted)', fontSize: 11 }}>Meta por quantidade (ex.: 2 produtos no dia dão direito a 1 giro)</small>
                   </div>
                   <div className="form-group" style={{ margin: 0 }}>
                     <label style={{ fontSize: 12 }}>Giros na roleta concedidos:</label>
