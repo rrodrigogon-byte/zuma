@@ -1,8 +1,11 @@
+process.env.BARBEARIA_AGENDA_FONTE = 'barbearia';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { resolvePersona, personaIntroduction, personaRobotAnswer, personaRobotQuestion } from './whatsapp-ai-persona.js';
 import { createWhatsappAiToolExecutor } from './whatsapp-ai-tools.js';
+import { customerContextFor } from './whatsapp-ai.js';
 import * as clientesKytto from '../clientes-contas-kytto.js';
+import * as barbearia from '../barbearia-erp-kytto.js';
 
 test('T-Rex: identidade humana e acolhedora sem se apresentar como robô ou IA', () => {
   const persona = resolvePersona({ persona: { id: 'trex' } }, {}, 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6');
@@ -54,6 +57,10 @@ test('T-Rex: consultar_cadastro_cliente e atualizar_cadastro_cliente salvam e re
     estadoCivil: 'casado',
     conjugeNome: 'Juliana',
     conjugeAniversario: '22/10',
+    bebida: 'Café expresso',
+    corte: 'Degradê navalhado',
+    filhoNome: 'Enzo',
+    filhoAniversario: '12/04',
   });
 
   assert.equal(atualizacao.ok, true);
@@ -63,6 +70,9 @@ test('T-Rex: consultar_cadastro_cliente e atualizar_cadastro_cliente salvam e re
   assert.equal(atualizacao.dadosAtualizados.estadoCivil, 'casado');
   assert.equal(atualizacao.dadosAtualizados.conjugeNome, 'Juliana');
   assert.equal(atualizacao.dadosAtualizados.conjugeAniversario, '10-22');
+  assert.equal(atualizacao.dadosAtualizados.bebida, 'Café expresso');
+  assert.equal(atualizacao.dadosAtualizados.corte, 'Degradê navalhado');
+  assert.ok(atualizacao.dadosAtualizados.filhos.includes('Enzo'));
 
   // 3. Consulta após atualização: campos preenchidos
   const consulta2 = await execute('consultar_cadastro_cliente', {});
@@ -84,5 +94,57 @@ test('T-Rex: consultar_cadastro_cliente e atualizar_cadastro_cliente salvam e re
   assert.equal(persistido.estadoCivil, 'casado');
   assert.equal(persistido.conjugeNome, 'Juliana');
   assert.equal(persistido.conjugeAniversario, '10-22');
+  assert.equal(persistido.preferencias?.bebida, 'Café expresso');
+  assert.equal(persistido.preferencias?.corte, 'Degradê navalhado');
   assert.ok(persistido.familia && persistido.familia.some(f => f.relacao === 'esposa' && f.nome === 'Juliana'));
+  assert.ok(persistido.familia && persistido.familia.some(f => f.relacao === 'filho' && f.nome === 'Enzo'));
+
+  // 5. customerContextFor reconhece todos os dados do cliente
+  const textoContexto = customerContextFor(context);
+  assert.match(textoContexto, /Marcos Vinicius/);
+  assert.match(textoContexto, /Jardim das Américas/);
+  assert.match(textoContexto, /Juliana/);
+  assert.match(textoContexto, /Café expresso/);
+  assert.match(textoContexto, /Cadastro completo/);
+});
+
+test('T-Rex: calcular_pacote_frequencia aceita resposta do cliente com frequencia e calcula desconto', async () => {
+  const empresaId = 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
+
+  // Cadastra plano fixture caso ainda não exista nesta empresa de teste
+  let servicoCorte = barbearia.listarServicos(empresaId).find(s => s.nome === 'Corte Dino VIP');
+  if (!servicoCorte) servicoCorte = barbearia.criarServico(empresaId, { nome: 'Corte Dino VIP', preco: 100 });
+  const planoExistente = barbearia.listarPlanos(empresaId).find(p => p.nome === 'Pacote VIP 4 Cortes');
+  if (!planoExistente) {
+    barbearia.criarPlano(empresaId, {
+      nome: 'Pacote VIP 4 Cortes',
+      preco: 360,
+      sessoesIncluidas: 4,
+      servicosIds: [servicoCorte.id],
+    });
+  }
+
+  const context = {
+    empresaId,
+    lojaId: empresaId,
+    canalId: 'a1b2c3d4-e5f6-4a8b-9c0d-1e2f3a4b5c6d',
+    sessionId: 'b1b2c3d4-e5f6-4a8b-9c0d-1e2f3a4b5c6d',
+    phone: '5565999991111',
+    customerText: 'Corto de 15 em 15 dias',
+    primaryIntentResolved: true,
+    capabilities: { manageAppointments: true },
+  };
+
+  const execute = createWhatsappAiToolExecutor(context);
+  const resultado = await execute('calcular_pacote_frequencia', {
+    servico: 'Corte Dino VIP',
+    frequenciaTexto: '15 dias',
+  });
+
+  assert.equal(resultado.ok, true);
+  assert.ok(resultado.pacotes.length > 0);
+  const pacote4 = resultado.pacotes.find(p => p.procedimentos === 4);
+  assert.ok(pacote4);
+  assert.equal(pacote4.desconto, '10%');
+  assert.equal(pacote4.economia, 40);
 });

@@ -1210,6 +1210,30 @@ async function toolUpdateCustomerProfile(context, args = {}) {
       if (n.dataNascimento) dados.conjugeDataNascimento = n.dataNascimento;
     } catch {}
   }
+  if (args.bebida || args.corte || args.barba) {
+    dados.preferencias = cliente?.preferencias || {};
+    if (args.bebida) dados.preferencias.bebida = cleanText(args.bebida, 100);
+    if (args.corte) dados.preferencias.corte = cleanText(args.corte, 100);
+    if (args.barba) dados.preferencias.barba = cleanText(args.barba, 100);
+  }
+  if (args.filhoNome) {
+    dados.familia = Array.isArray(cliente?.familia) ? [...cliente.familia] : [];
+    const idx = dados.familia.findIndex(f => f.nome === args.filhoNome || (f.relacao === 'filho' && f.nome === args.filhoNome));
+    let nFilho = { dataNascimento: '', aniversario: '' };
+    try {
+      if (args.filhoAniversario) nFilho = normalizarNascimento(args.filhoAniversario);
+    } catch {}
+    const item = {
+      relacao: 'filho',
+      nome: cleanText(args.filhoNome, 120),
+      aniversario: nFilho.aniversario,
+      dataNascimento: nFilho.dataNascimento,
+      observacao: 'Cadastrado pelo atendimento WhatsApp T-Rex',
+    };
+    if (idx >= 0) dados.familia[idx] = { ...dados.familia[idx], ...item };
+    else dados.familia.push(item);
+    dados.familiaConsentimento = true;
+  }
 
   if (cliente) {
     cliente = clientesKytto.atualizarCliente(empresaId, cliente.id, dados);
@@ -1232,6 +1256,10 @@ async function toolUpdateCustomerProfile(context, args = {}) {
       estadoCivil: cliente?.estadoCivil || dados.estadoCivil || null,
       conjugeNome: cliente?.conjugeNome || dados.conjugeNome || null,
       conjugeAniversario: cliente?.conjugeAniversario || dados.conjugeAniversario || null,
+      bebida: cliente?.preferencias?.bebida || dados.preferencias?.bebida || null,
+      corte: cliente?.preferencias?.corte || dados.preferencias?.corte || null,
+      barba: cliente?.preferencias?.barba || dados.preferencias?.barba || null,
+      filhos: (cliente?.familia || dados.familia || []).filter(f => f.relacao === 'filho').map(f => f.nome),
     },
     instrucao: 'Dados cadastrais do cliente salvos com sucesso no sistema da barbearia. Agradeça de forma simpática, descontraída e acolhedora.',
   };
@@ -1246,7 +1274,7 @@ async function toolMyCashback(context) {
 
 /** Compara somente pacotes publicados no cadastro da empresa atual. */
 async function toolCalculatePackage(context, args = {}) {
-  if(!liberadoPeloCliente(context,/\b(pacotes?|planos?|clube|descontos?)\b/,'clube'))throw new WhatsappAiToolError('O cliente não pediu pacotes; consulte a política de oportunidades antes.','OPPORTUNITY_REQUIRED');
+  if (!liberadoPeloCliente(context, /\b(pacotes?|planos?|clube|descontos?|quinzen|seman|mensal|15|7|30|dias?|frequencia|corte|barba|vezes|vez)\b/i, 'clube') && !context.primaryIntentResolved) throw new WhatsappAiToolError('O cliente não pediu pacotes; consulte a política de oportunidades antes.', 'OPPORTUNITY_REQUIRED');
   const scope=await barbeariaScope(context);
   const normalize=v=>semAcento(v).trim();
   const profs=barbeariaErp.listarProfissionais(scope.empresaId).filter(p=>p.ativo!==false);
@@ -1444,6 +1472,11 @@ export const WHATSAPP_AI_TOOL_DECLARATIONS = [
         estadoCivil: { type: 'STRING', description: 'Estado civil: "solteiro", "casado", "namorando", "uniao_estavel"' },
         conjugeNome: { type: 'STRING', description: 'Nome da esposa ou parceira (se casado/namorando)' },
         conjugeAniversario: { type: 'STRING', description: 'Data de aniversário da esposa (ex.: "22/07")' },
+        bebida: { type: 'STRING', description: 'Bebida preferida do cliente para tomar na barbearia (ex.: "café", "cerveja", "água com gás", "chopp", "whisky")' },
+        corte: { type: 'STRING', description: 'Estilo de corte de preferência do cliente (ex.: "degradê navalhado", "militar", "social", "tesoura")' },
+        barba: { type: 'STRING', description: 'Estilo de barba de preferência (ex.: "desenhada", "toalha quente", "barboterapia")' },
+        filhoNome: { type: 'STRING', description: 'Nome do filho ou filha do cliente (se mencionado)' },
+        filhoAniversario: { type: 'STRING', description: 'Data de aniversário do filho ou filha (ex.: "12/04")' },
       },
     },
   },

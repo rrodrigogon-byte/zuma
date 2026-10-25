@@ -19,6 +19,7 @@ import { ferramentasExtrasWhatsappAi, notificarMensagemWhatsappAi } from './what
 import { ensureWhatsappLead, updateWhatsappMarketingConsent } from './whatsapp-ai-crm.js';
 import { enviarFigurinha, enviarMensagem } from './whatsapp.js';
 import { enviarFigurinhaDoMomento } from './whatsapp-stickers.js';
+import { encontrarClientePorTelefone } from '../dino-clientes-vinculo.js';
 import { chatbotBackendConfig, chatbotBackendMode, providerSummary, registerInstanceWebhook, whatsappProviderConfigured, whatsappProviderName } from './whatsapp-provider.js';
 import { provisionWahaSession, validWahaGroupId, validWahaSession, wahaControlConfigured, wahaProviderSummary } from './whatsapp-waha.js';
 import {
@@ -269,7 +270,7 @@ Marketing exige consentimento e é uma finalidade separada do atendimento person
 
 ${MEDIA_SYSTEM_GUIDANCE}
 
-Não solicite dados desnecessários e não confirme disponibilidade sem consultar o sistema. Não faça cobrança nem pagamento pelo WhatsApp por conta própria: o único meio é link_pagamento_pedido, para pedido do próprio contato que aguarda pagamento e quando o cliente pedir para pagar; o pagamento acontece na página segura do gateway. Para compras no e-commerce, consulte consultar_pagamentos antes de informar meios de pagamento ou o link da loja. O checkout pode ter pagamentos habilitados: não diga que toda compra depende da equipe. Informe somente os métodos retornados, orientando o cliente a concluir na loja online pelo link verificado. Não invente chave Pix, link de cobrança, parcelamento, juros, desconto, frete ou prazo: frete e prazo só de cotar_frete; condições finais são as exibidas no checkout. Nunca peça CPF, dados de cartão, senha ou código de autenticação na conversa. Dúvidas comuns sobre como comprar ou pagar não exigem atendimento humano; estorno, cobrança divergente e exceções financeiras exigem. Os meios do e-commerce não comprovam os meios aceitos na barbearia presencial. Em reclamações, exceções financeiras, reembolso, dados sensíveis, erro operacional, ameaça, identidade ambígua, desconforto, dúvida sem resposta ou pedido de pessoa, use solicitar_humano. O handoff interrompe respostas automáticas até a equipe liberar a sessão. Reengajamento não faz parte deste atendimento reativo.${pendingAction ? `\n\nHá uma ação pendente: ${cleanText(pendingAction.summary, 600)}. Oriente o cliente a responder SIM para confirmar ou NÃO para desistir e não prepare outra ação enquanto ela existir.` : ''}${extraGuidance ? `\n\n${cleanText(extraGuidance, 400)}` : ''}${segmentBlock ? `\n\n${segmentBlock}` : ''}`;
+Não solicite dados desnecessários e não confirme disponibilidade sem consultar o sistema. Não faça cobrança nem pagamento pelo WhatsApp por conta própria: o único meio é link_pagamento_pedido, para pedido do próprio contato que aguarda pagamento e quando o cliente pedir para pagar; o pagamento acontece na página segura do gateway. Para compras no e-commerce, consulte consultar_pagamentos antes de informar meios de pagamento ou o link da loja. O checkout pode ter pagamentos habilitados: não diga que toda compra depende da equipe. Informe somente os métodos retornados, orientando o cliente a concluir na loja online pelo link verificado. Não invente chave Pix, link de cobrança, parcelamento, juros, desconto, frete ou prazo: frete e prazo só de cotar_frete; condições finais são as exibidas no checkout. Nunca peça CPF, dados de cartão, senha ou código de autenticação na conversa. Dúvidas comuns sobre como comprar ou pagar não exigem atendimento humano; estorno, cobrança divergente e exceções financeiras exigem. Os meios do e-commerce não comprovam os meios aceitos na barbearia presencial. Em reclamações, exceções financeiras, reembolso, dados sensíveis, erro operacional, ameaça, identidade ambígua, desconforto, dúvida sem resposta ou pedido de pessoa, use solicitar_humano. O handoff interrompe respostas automáticas até a equipe liberar a sessão. Reengajamento não faz parte deste atendimento reativo.${pendingAction ? `\n\nHá uma ação pendente: ${cleanText(pendingAction.summary, 600)}. Oriente o cliente a responder SIM para confirmar ou NÃO para desistir e não prepare outra ação enquanto ela existir.` : ''}${extraGuidance ? `\n\n${cleanText(extraGuidance, 4000)}` : ''}${segmentBlock ? `\n\n${segmentBlock}` : ''}`;
 }
 
 async function ensureSession(task, message) {
@@ -671,6 +672,38 @@ async function rememberQuotedPrices(session, toolResults = []) {
 // sem gastar 2 das 6 etapas listando (resposta mais rápida e sem estourar o limite de etapas).
 const agendaContextCache = new Map();
 const AGENDA_CONTEXT_TTL_MS = 5 * 60 * 1000;
+/** Retorna o perfil cadastrado do cliente para enriquecer o contexto da conversa. */
+export function customerContextFor(toolContext) {
+  if (!toolContext?.phone || !toolContext?.empresaId) return '';
+  const cliente = encontrarClientePorTelefone(toolContext.empresaId, toolContext.phone);
+  if (!cliente) {
+    return 'DADOS DO CLIENTE NESTA CONVERSA: Cliente novo ou ainda sem cadastro completo. Atenda com o calor humano do T-Rex, resolva o horário ou dúvida dele e, logo após, colete data de aniversário, bairro/cidade e estado civil para cadastrar com atualizar_cadastro_cliente.';
+  }
+  const pendentes = [];
+  if (!cliente.aniversario && !cliente.dataNascimento) pendentes.push('data de aniversário');
+  if (!cliente.bairro || !cliente.cidade) pendentes.push('bairro/cidade onde mora');
+  if (!cliente.estadoCivil) pendentes.push('se é solteiro ou casado');
+  if (cliente.estadoCivil === 'casado' && !cliente.conjugeNome) pendentes.push('nome e aniversário da esposa');
+  if (!cliente.preferencias?.bebida) pendentes.push('bebida preferida');
+
+  const conhecidos = [
+    `Nome: ${cliente.nome}`,
+    cliente.aniversario ? `Aniversário: ${cliente.aniversario}` : null,
+    (cliente.bairro || cliente.cidade) ? `Localização: ${[cliente.bairro, cliente.cidade].filter(Boolean).join(', ')}` : null,
+    cliente.estadoCivil ? `Estado civil: ${cliente.estadoCivil}` : null,
+    cliente.conjugeNome ? `Esposa: ${cliente.conjugeNome}${cliente.conjugeAniversario ? ` (aniversário ${cliente.conjugeAniversario})` : ''}` : null,
+    cliente.preferencias?.bebida ? `Bebida preferida: ${cliente.preferencias.bebida}` : null,
+    cliente.preferencias?.corte ? `Estilo de corte de costume: ${cliente.preferencias.corte}` : null,
+    cliente.preferencias?.barba ? `Estilo de barba de costume: ${cliente.preferencias.barba}` : null,
+  ].filter(Boolean).join(' | ');
+
+  const instrucaoPendentes = pendentes.length
+    ? `Campos pendentes no cadastro para você perguntar com simpatia após confirmar o agendamento: ${pendentes.join(', ')}.`
+    : 'Cadastro completo! Agradeça o cliente e chame pelo primeiro nome com calor humano.';
+
+  return `PERFIL DO CLIENTE CADASTRADO (${conhecidos}). ${instrucaoPendentes}`;
+}
+
 export async function agendaContextFor(toolContext, { now = Date.now() } = {}) {
   const key = `${toolContext?.empresaId}:${toolContext?.lojaId}`;
   const cached = agendaContextCache.get(key);
@@ -1418,6 +1451,8 @@ async function deterministicResponseCore(task, channel, session, message) {
   };
   // O modelo não sabia a data de hoje e deduzia o dia da semana ("Amanhã, sexta-feira" num sábado).
   extraGuidance = `${agendaCalendarText()} ${extraGuidance}`.trim();
+  const custCtx = customerContextFor(toolContext);
+  if (custCtx) extraGuidance = `${extraGuidance} ${custCtx}`.trim();
   const agenda = await agendaContextFor(toolContext);
   if (agenda.text) {
     extraGuidance = `${extraGuidance} ${agenda.text}`.trim();

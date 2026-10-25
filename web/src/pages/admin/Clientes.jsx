@@ -17,6 +17,8 @@ const EMPTY_FORM = {
   estadoCivil: 'solteiro',
   conjugeNome: '',
   conjugeAniversario: '',
+  bebida: '',
+  corte: '',
   limiteCreditoMensal: 0,
   diasVencimento: 30,
   observacao: ''
@@ -84,6 +86,8 @@ export default function Clientes() {
       estadoCivil: c.estadoCivil || 'solteiro',
       conjugeNome: c.conjugeNome || (c.familia?.find(f => f.relacao === 'esposa' || f.relacao === 'conjuge')?.nome) || '',
       conjugeAniversario: c.conjugeAniversario || (c.familia?.find(f => f.relacao === 'esposa' || f.relacao === 'conjuge')?.aniversario) || '',
+      bebida: c.preferencias?.bebida || c.bebida || '',
+      corte: c.preferencias?.corte || c.corte || '',
       limiteCreditoMensal: c.limiteCreditoMensal || 0,
       diasVencimento: c.diasVencimento || 30,
       observacao: c.observacao || ''
@@ -169,6 +173,11 @@ export default function Clientes() {
                   <div style={{ fontSize: 11, color: 'var(--muted)' }}>
                     {[c.bairro, c.cidade].filter(Boolean).join(', ') || '—'}
                   </div>
+                  {(c.preferencias?.bebida || c.bebida) ? (
+                    <div style={{ fontSize: 11, color: 'var(--primary, #FF6B2C)' }}>
+                      ☕ {c.preferencias?.bebida || c.bebida}
+                    </div>
+                  ) : null}
                 </td>
                 <td>
                   <div style={{ fontSize: 12 }}>
@@ -252,6 +261,16 @@ export default function Clientes() {
                     <option value="uniao_estavel">União Estável</option>
                     <option value="outro">Outro</option>
                   </select>
+                </div>
+              </div>
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Bebida Preferida (Cortesia da Casa)</label>
+                  <input value={form.bebida} onChange={e => setForm({ ...form, bebida: e.target.value })} placeholder="Ex: Café expresso, Cerveja gelada" />
+                </div>
+                <div className="form-group">
+                  <label>Estilo de Corte Preferido</label>
+                  <input value={form.corte} onChange={e => setForm({ ...form, corte: e.target.value })} placeholder="Ex: Degradê navalhado" />
                 </div>
               </div>
               <div className="form-row">
