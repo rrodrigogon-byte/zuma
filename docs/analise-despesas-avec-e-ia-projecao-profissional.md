@@ -122,3 +122,28 @@ Ao pesquisar qualquer profissional (ex.: Naty) no painel, o sistema exibe:
 | **Despesas do Mês** | **R$ 556,00** | Despesas com quitação registrada em `10/2026`. | **100% Exato** |
 | **Resultado do Mês** | **R$ 37.704,00** | $38.260,00 - 556,00 = 37.704,00$. Margem operacional de $98.5\%$. | **100% Exato** |
 | **Vencidos** | **71 (R$ 48.076,63)** | Lançamentos com status pendente e data de vencimento anterior à data atual. | **100% Exato** |
+
+---
+
+## 10.0 Agenda 24x7 Full de Dino, Horário Extra R$ 600,00 e Aprendizado com Padrão do Cliente
+
+### 10.1 Agenda 24x7 Full de Dino (Guilherme Cunha Martins)
+* **Disponibilidade Irrestrita:**
+  * O profissional Dino (`Guilherme Cunha Martins`) passa a operar com agenda **24 horas por dia, 7 dias por semana** (`atendimento24x7: true`, dias 0 a 6: domingo a sábado, horário `00:00` às `23:59`).
+  * Não é bloqueado por horários de funcionamento padrão da loja física, feriados ou pausas regulares, permitindo agendamentos VIP noturnos e de madrugada.
+  * O cadastro de qualquer profissional no ERP agora conta com a flag configurável **"Disponibilidade 24x7 (Dino / Plantão VIP)"**, permitindo habilitar este modo com 1 clique no modal do barbeiro.
+
+### 10.2 Tabela de Preços por Horário (Corte com Dino)
+* **Regra de Tarifação por Faixa de Horário:**
+  * **Horário Diurno / Comercial (06h00 às 18h09):** O corte com Dino segue o valor base de **R$ 300,00**.
+  * **Horário Extra Noturno e Madrugada VIP (após 18h09 até 06h00):** O corte com Dino passa automaticamente para o valor de **R$ 600,00**.
+  * Implementação centralizada nas funções `calcularPrecoServicoHorario(servico, profissional, horaLocal)` e `ehHorarioExtraDino(horaLocal)` em `app/barbearia-erp-kytto.js`.
+  * Integrado deterministicamente em `criarAgendamento`, `atualizarAgendamento`, `toolPrepareAppointment` do WhatsApp e nos prompts da IA.
+
+### 10.3 Aprendizado Contínuo com o Padrão do Cliente (`padraoCliente`)
+* **Memória Operacional e Personalização:**
+  * Ao consultar o histórico do cliente pelo telefone (`perfilDoTelefone` em `app/dino-captacao-kytto.js`), o sistema agora computa automaticamente o **padrão de comportamento**:
+    1. **Profissional Preferido:** Barbeiro com quem o cliente mais realiza serviços no histórico completo (ex.: Dino, Natani, Bruno, David).
+    2. **Período Habitual:** Faixa do dia mais frequentada (manhã, tarde, noite ou madrugada).
+    3. **Serviços Mais Frequentes:** Procedimentos mais executados.
+  * **Orientação para IA:** O WhatsApp e a IA recebem essa orientação para priorizar a sugestão de horários com o barbeiro preferido e no período habitual do cliente, aumentando a taxa de conversão e fidelização.

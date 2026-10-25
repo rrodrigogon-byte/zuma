@@ -4320,8 +4320,8 @@ app.get('/api/admin/barbearia/profissionais', (req, res) => {
     incluirInativos: gestor && String(req.query?.incluirInativos) === 'true',
   });
   // A agenda precisa de nome, id e jornada; salários/contatos do time não.
-  const operacionais = profissionais.map(({ id, nome, especialidade, horarioInicio, horarioFim, diasTrabalho, ativo, fotoUrl }) => (
-    { id, nome, especialidade, horarioInicio, horarioFim, diasTrabalho, ativo, fotoUrl }
+  const operacionais = profissionais.map(({ id, nome, especialidade, horarioInicio, horarioFim, diasTrabalho, ativo, fotoUrl, atendimento24x7 }) => (
+    { id, nome, especialidade, horarioInicio, horarioFim, diasTrabalho, ativo, fotoUrl, atendimento24x7 }
   ));
   res.json({ ok: true, profissionais: gestor ? profissionais : operacionais });
 });

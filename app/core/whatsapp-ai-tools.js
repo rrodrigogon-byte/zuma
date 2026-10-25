@@ -695,6 +695,11 @@ async function toolPrepareAppointment(context, args = {}) {
   const combo = [];
   let cursor = minutesOf(time) + Number(availability.service.duracaoMinutos || 30);
   let total = Number(availability.service.preco || 0);
+  const isDino = barbeariaErp.ehProfissionalDino(availability.professional) ||
+                 String(availability.service.nome || '').toLowerCase().includes('dino');
+  if (isDino) {
+    total = barbeariaErp.calcularPrecoServicoHorario(availability.service, availability.professional, time);
+  }
   // "qualquer profissional disponível" não informa nada ao cliente: a equipe sai na confirmação.
   const comQuem = availability.professional?.id === 'qualquer' ? '' : ` com ${availability.professional.nome}`;
   // "Corte e barba com Dino" + "com Dino" saía "com Dino com Dino".
@@ -742,9 +747,11 @@ async function toolPrepareAppointment(context, args = {}) {
     validarAgendamentoComPlano(scope.empresaId,{clienteTelefone:scope.phone,servicoId:serviceId,dataHora:`${date}T${time}:00-04:00`});
   }
   const para = customerName ? ` para ${customerName}` : '';
+  const precoPrincipal = isDino ? total : Number(availability.service.preco || 0);
+  const notaHorarioExtra = (isDino && barbeariaErp.ehHorarioExtraDino(time)) ? ' (horário extra noturno)' : '';
   const summary = combo.length
     ? `${friendlyWhen(date, time)}${para}: ${partes.join(' + ')}, total R$ ${total.toFixed(2).replace('.', ',')}`
-    : `${servicoComQuem}${para}, ${friendlyWhen(date, time)}, no valor de R$ ${availability.service.preco.toFixed(2).replace('.', ',')}`;
+    : `${servicoComQuem}${para}, ${friendlyWhen(date, time)}, no valor de R$ ${precoPrincipal.toFixed(2).replace('.', ',')}${notaHorarioExtra}`;
   return savePreparedAction(scope, 'agendamento', request, args.usePlan===true ? `${servicoComQuem}${para}, ${friendlyWhen(date,time)}, pelo pacote (saldo e validade revalidados na confirmação)` : summary);
 }
 
