@@ -57,8 +57,11 @@ function profissional(empresaId, profissionalId) {
 
 /**
  * Para cada plano com percentualPote, soma a parte das mensalidades pagas no
- * período e divide pelos pontos (valor de tabela dos serviços usados pelo plano
- * no período) de cada profissional. Pote sem uso no período fica "sem rateio".
+ * período e divide pelos pontos de cada profissional. Os pontos são o valor de
+ * tabela dos serviços usados pelo plano (rateioPote "valor_tabela", o padrão) ou
+ * um ponto por atendimento (rateioPote "atendimento", como o Avec dividia o pote
+ * do Club). Pote sem uso no período fica "sem rateio". Plano com valorFixoPorUso
+ * paga esse valor ao profissional por atendimento feito pelo plano, além do pote.
  */
 export function poteDosPlanos(empresaId, { inicio, fim, lojaId = '' }) {
   validarPeriodo(inicio, fim);
@@ -71,18 +74,21 @@ export function poteDosPlanos(empresaId, { inicio, fim, lojaId = '' }) {
   for (const assinatura of barbearia.listarAssinaturas(empresaId)) {
     const plano = planos.get(assinatura.planoId);
     const percentual = Number(plano?.percentualPote || 0);
-    if (!plano || percentual <= 0) continue;
+    const fixo = Number(plano?.valorFixoPorUso || 0);
+    if (!plano || (percentual <= 0 && fixo <= 0)) continue;
+    const rateio = plano.rateioPote === 'atendimento' ? 'atendimento' : 'valor_tabela';
     const { usos, pagamentos } = captacao.movimentosAssinatura(empresaId, assinatura.id);
-    const grupo = porPlano.get(plano.id) || { planoId: plano.id, plano: plano.nome, percentualPote: percentual, receita: 0, pote: 0, pontos: new Map(), pontosSemProfissional: 0 };
+    const grupo = porPlano.get(plano.id) || { planoId: plano.id, plano: plano.nome, percentualPote: percentual, rateioPote: rateio, valorFixoPorUso: fixo, receita: 0, pote: 0, pontos: new Map(), usos: new Map(), pontosSemProfissional: 0, usosSemProfissional: 0 };
     for (const pagamento of pagamentos) if (noPeriodo(pagamento.registradoEm)) grupo.receita += Number(pagamento.valor || 0);
     for (const uso of usos) {
       if (!noPeriodo(uso.registradoEm)) continue;
-      const pontos = Number(uso.valorAvulso || 0);
+      const pontos = rateio === 'atendimento' ? 1 : Number(uso.valorAvulso || 0);
       const agendamento = agendamentos.get(uso.agendamentoId);
       if (lojaId && uso.agendamentoId && !agendamento) continue;
       const profissionalId = agendamento?.profissionalId || uso.profissionalId || '';
-      if (!profissionalId) { grupo.pontosSemProfissional += pontos; continue; }
+      if (!profissionalId) { grupo.pontosSemProfissional += pontos; grupo.usosSemProfissional += 1; continue; }
       grupo.pontos.set(profissionalId, (grupo.pontos.get(profissionalId) || 0) + pontos);
+      grupo.usos.set(profissionalId, (grupo.usos.get(profissionalId) || 0) + 1);
     }
     porPlano.set(plano.id, grupo);
   }
@@ -92,15 +98,20 @@ export function poteDosPlanos(empresaId, { inicio, fim, lojaId = '' }) {
     grupo.pote = grupo.receita * grupo.percentualPote / 100;
     const totalPontos = [...grupo.pontos.values()].reduce((s, p) => s + p, 0);
     let distribuido = 0;
+    let totalFixo = 0;
     for (const [profissionalId, pontos] of grupo.pontos) {
-      const valor = totalPontos > 0 ? grupo.pote * pontos / totalPontos : 0;
-      distribuido += valor;
+      const valorPote = totalPontos > 0 ? grupo.pote * pontos / totalPontos : 0;
+      const usos = grupo.usos.get(profissionalId) || 0;
+      const valorFixo = grupo.valorFixoPorUso * usos;
+      distribuido += valorPote;
+      totalFixo += valorFixo;
       const atual = porProfissional.get(profissionalId) || { valor: 0, detalhes: [] };
-      atual.valor += valor;
-      atual.detalhes.push({ planoId: grupo.planoId, plano: grupo.plano, pontos: dinheiro(pontos), totalPontos: dinheiro(totalPontos), valor: dinheiro(valor) });
+      atual.valor += valorPote + valorFixo;
+      atual.detalhes.push({ planoId: grupo.planoId, plano: grupo.plano, rateioPote: grupo.rateioPote, pontos: dinheiro(pontos), totalPontos: dinheiro(totalPontos), usos, valorPote: dinheiro(valorPote), valorFixoPorUso: dinheiro(grupo.valorFixoPorUso), valorFixo: dinheiro(valorFixo), valor: dinheiro(valorPote + valorFixo) });
       porProfissional.set(profissionalId, atual);
     }
-    planosResumo.push({ planoId: grupo.planoId, plano: grupo.plano, percentualPote: grupo.percentualPote, receita: dinheiro(grupo.receita), pote: dinheiro(grupo.pote), distribuido: dinheiro(distribuido), semRateio: dinheiro(grupo.pote - distribuido) });
+    const totalUsos = [...grupo.usos.values()].reduce((s, u) => s + u, 0);
+    planosResumo.push({ planoId: grupo.planoId, plano: grupo.plano, percentualPote: grupo.percentualPote, rateioPote: grupo.rateioPote, valorFixoPorUso: dinheiro(grupo.valorFixoPorUso), receita: dinheiro(grupo.receita), pote: dinheiro(grupo.pote), distribuido: dinheiro(distribuido), semRateio: dinheiro(grupo.pote - distribuido), usos: totalUsos, usosSemProfissional: grupo.usosSemProfissional, valorPorPonto: totalPontos > 0 ? Number((grupo.pote / totalPontos).toFixed(4)) : 0, fixoPago: dinheiro(totalFixo) });
   }
   return { inicio, fim, planos: planosResumo, porProfissional };
 }
@@ -207,6 +218,14 @@ export function vinculosProfissionaisAvec(empresaId) {
   return vinculos;
 }
 
+// Atendimento do Club no Avec: sem valor na comanda e marcado como Club (no serviço,
+// "Barba Club"/"Corte Club", ou no nome do cliente, "(Club Combo - Asaas)") ou como pacote.
+const RE_CLUB = /\bclub\b/i;
+export function ehAtendimentoClubAvec(item, bruto = Number(item?.total ?? item?.valor ?? 0)) {
+  if (Number(bruto) > 0) return false;
+  return RE_CLUB.test(String(item?.servicoNome || '')) || RE_CLUB.test(String(item?.clienteNome || '')) || Boolean(String(item?.pacote || '').trim());
+}
+
 function historicoAvecDoProfissional(empresaId, prof, { inicio, fim, lojaId }) {
   const historico = barbearia.listarHistoricoAtendimentos(empresaId, {});
   const vinculos = vinculosProfissionaisAvec(empresaId);
@@ -223,18 +242,40 @@ function historicoAvecDoProfissional(empresaId, prof, { inicio, fim, lojaId }) {
     .filter((item) => item.profissionalId === prof.id || (!ehProfissionalAvec(prof.id) && vinculos.get(normalizarNome(item.profissionalNome))?.profissionalId === prof.id))
     .map((item) => {
       const bruto = dinheiro(item.total ?? item.valor ?? 0);
-      return { data: item.dataAgenda, descricao: item.servicoNome || 'Serviço', cliente: item.clienteNome || '', comanda: item.numeroComanda || '', profissionalAvec: item.profissionalNome || '', frente: item.frenteAtuacao || '', bruto, percentual, comissao: dinheiro(bruto * percentual / 100) };
+      return { data: item.dataAgenda, descricao: item.servicoNome || 'Serviço', cliente: item.clienteNome || '', comanda: item.numeroComanda || '', profissionalAvec: item.profissionalNome || '', frente: item.frenteAtuacao || '', bruto, percentual, comissao: dinheiro(bruto * percentual / 100), club: ehAtendimentoClubAvec(item, bruto) };
     })
     .sort((a, b) => String(b.data).localeCompare(String(a.data)));
   const nomesAvec = [...new Set(linhas.map((l) => l.profissionalAvec).filter(Boolean))];
   const pagamentos = pagamentosAvecDoProfissional(empresaId, prof, { inicio, fim, vinculos, kytto });
   const bruto = dinheiro(linhas.reduce((soma, l) => soma + l.bruto, 0));
+  const comissao = dinheiro(linhas.reduce((soma, l) => soma + l.comissao, 0));
+  const club = linhas.filter((l) => l.club);
+  // Conferência com o que o Avec pagou: no Avec o atendimento Club vem sem valor e a
+  // comissão dele saía de um pote mensal. A diferença entre o pago e o calculado,
+  // dividida pelos atendimentos Club, mostra quanto o pote rendeu por atendimento.
+  const temPagamento = Number(pagamentos.total || 0) > 0;
+  const diferenca = temPagamento ? dinheiro(pagamentos.total - comissao) : null;
+  const clubResumo = {
+    atendimentos: club.length,
+    porServico: Object.entries(club.reduce((acc, l) => { acc[l.descricao] = (acc[l.descricao] || 0) + 1; return acc; }, {})).map(([servico, quantidade]) => ({ servico, quantidade })).sort((a, b) => b.quantidade - a.quantidade),
+  };
+  const conferencia = {
+    calculado: comissao,
+    pago: dinheiro(pagamentos.total),
+    diferenca,
+    porAtendimentoClub: temPagamento && club.length > 0 ? dinheiro(diferenca / club.length) : null,
+    observacao: temPagamento
+      ? 'Pago no Avec (comissões e antecipações) menos a comissão calculada. A diferença é o que o Avec pagou além da regra de percentual, em geral o pote do Club.'
+      : 'Sem comissão ou antecipação do Avec lançada no período para comparar.',
+  };
   return {
     atendimentos: linhas.length,
     comValor: linhas.filter((l) => l.bruto > 0).length,
     bruto,
     percentual,
-    comissao: dinheiro(linhas.reduce((soma, l) => soma + l.comissao, 0)),
+    comissao,
+    club: clubResumo,
+    conferencia,
     nomesAvec,
     regraDe: regra.id !== prof.id ? regra.nome : null,
     linhas: linhas.slice(0, 2000),

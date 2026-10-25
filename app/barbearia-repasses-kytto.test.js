@@ -154,3 +154,71 @@ test('extrato mostra comissões e antecipações pagas no Avec para o profission
   assert.equal(ex.historicoAvec.pagamentos.total, 3500);
   assert.equal(ex.totais.aReceber, 0, 'pagamento do Avec não mexe no a receber do Kytto');
 });
+
+test('pote dividido por atendimento (como o Avec) e valor fixo por atendimento do plano', () => {
+  const a = barbearia.criarProfissional(EMP, { nome: 'Ana', percentualComissao: 50 });
+  const b = barbearia.criarProfissional(EMP, { nome: 'Beto', percentualComissao: 50 });
+  const corte = barbearia.criarServico(EMP, { nome: 'Corte Club', preco: 70, duracaoMinutos: 30 });
+  const barba = barbearia.criarServico(EMP, { nome: 'Barba Club', preco: 30, duracaoMinutos: 30 });
+  const plano = barbearia.criarPlano(EMP, { nome: 'Club Combo', preco: 200, sessoesIncluidas: 10, servicosIds: [corte.id, barba.id], percentualPote: 30, rateioPote: 'atendimento' });
+  assert.equal(plano.rateioPote, 'atendimento');
+  assert.equal(plano.valorFixoPorUso, 0);
+  const ass = barbearia.criarAssinatura(EMP, { lojaId: LOJA, planoId: plano.id, clienteNome: 'Cliente Club', inicio: new Date(Date.now() - 86400000).toISOString() });
+  barbearia.alterarStatusAssinatura(EMP, ass.id, 'ativa', { confirmadoSemCobranca: true, pagamentoConfirmado: false });
+  captacao.registrarPagamentoAssinatura(EMP, ass.id, { valor: 200, meio: 'pix' });
+  const ag = (profissionalId, servicoId, hora) => barbearia.criarAgendamento(EMP, { lojaId: LOJA, clienteNome: 'Cliente Club', profissionalId, servicoId, dataHora: `${hoje()}T${hora}:00-03:00` }, { permitirEncaixe: true });
+  captacao.registrarUsoAssinatura(EMP, ass.id, { servicoId: corte.id, agendamentoId: ag(a.id, corte.id, '09').id });
+  captacao.registrarUsoAssinatura(EMP, ass.id, { servicoId: barba.id, agendamentoId: ag(b.id, barba.id, '10').id });
+  captacao.registrarUsoAssinatura(EMP, ass.id, { servicoId: barba.id, agendamentoId: ag(b.id, barba.id, '11').id });
+  let pote = repasses.poteDosPlanos(EMP, { inicio: hoje(), fim: hoje(), lojaId: LOJA });
+  assert.equal(pote.planos[0].pote, 60, '30% de 200');
+  assert.equal(pote.planos[0].usos, 3);
+  assert.equal(pote.planos[0].valorPorPonto, 20, 'R$ 20 por atendimento, igual para corte e barba');
+  assert.equal(pote.porProfissional.get(a.id).valor, 20);
+  assert.equal(pote.porProfissional.get(b.id).valor, 40);
+
+  // Valor fixo por atendimento, sem pote.
+  barbearia.atualizarPlano(EMP, plano.id, { percentualPote: 0, valorFixoPorUso: 12.5 });
+  pote = repasses.poteDosPlanos(EMP, { inicio: hoje(), fim: hoje(), lojaId: LOJA });
+  assert.equal(pote.planos[0].pote, 0);
+  assert.equal(pote.planos[0].fixoPago, 37.5);
+  assert.equal(pote.porProfissional.get(b.id).valor, 25);
+  const ex = repasses.extratoProfissional(EMP, b.id, { inicio: hoje(), fim: hoje(), lojaId: LOJA });
+  assert.equal(ex.totais.comissaoPlanos, 25);
+  assert.equal(ex.pote[0].usos, 2);
+  assert.equal(ex.pote[0].valorFixo, 25);
+});
+
+test('histórico Avec: atendimentos Club sem valor e conferência entre o pago e o calculado', () => {
+  const c = cenario();
+  const estado = db().barbearias[EMP];
+  const avec = (n, servico, cliente, valor, extra = {}) => ({ id: `hist-avec-club-${n}`, empresaId: EMP, lojaId: LOJA, dataAgenda: '2026-09-10', clienteNome: cliente, profissionalId: 'prof-avec-hist-bruno', profissionalNome: 'Bruno Mendes pedroso', servicoNome: servico, status: 'concluido', valor, total: valor, numeroComanda: String(n), somenteHistorico: true, sourceSystem: 'avec', origem: 'avec-import-20261022', ...extra });
+  const itens = [
+    avec(1, 'Corte', 'Cliente 1', 100), avec(2, 'Corte', 'Cliente 2', 100), avec(3, 'Barba', 'Cliente 3', 100), avec(4, 'Barba', 'Cliente 4', 100),
+    avec(5, 'Barba Club', 'Assinante 1', 0), avec(6, 'Barba Club', 'Assinante 2', 0), avec(7, 'Corte Club', 'Assinante 3', 0, { pacote: 'Pacote' }),
+    avec(8, 'Corte', 'Fulano (Club Combo - Asaas)', 0),
+    avec(9, 'Corte Cortesia', 'Amigo', 0),
+  ];
+  for (const item of itens) estado.historicoAtendimentos[item.id] = item;
+  const raiz = db();
+  raiz.financeiroKytto ||= { empresas: {} };
+  raiz.financeiroKytto.empresas ||= {};
+  raiz.financeiroKytto.empresas[EMP] ||= { lancamentos: {} };
+  const store = raiz.financeiroKytto.empresas[EMP];
+  store.lancamentos ||= {};
+  const lanc = (id, descricao, categoria, valor, pagoEm) => { store.lancamentos[id] = { id, empresaId: EMP, lojaId: LOJA, tipo: 'despesa', status: 'pago', descricao, categoria, valor, pagoEm: `${pagoEm}T12:00:00.000Z`, vencimento: pagoEm, dataOperacao: `${pagoEm}T12:00:00.000Z`, origem: 'avec-import-financeiro-20261022', metadata: { historicoAvec: true } }; };
+  lanc('c1', 'Comissão Bruno Mendes pedroso - Barbeiro de 01/09/2026 a 30/09/2026', 'BRUNO1', 230, '2026-10-04');
+  lanc('c2', 'Antecipação de comissão - VALE PIX', 'BRUNO1', 10, '2026-09-15');
+  const ex = repasses.extratoProfissional(EMP, c.prof.id, { inicio: '2026-09-01', fim: '2026-09-30', lojaId: LOJA });
+  const h = ex.historicoAvec;
+  assert.equal(h.comissao, 200, '50% dos 400 com valor');
+  assert.equal(h.club.atendimentos, 4, 'Club pelo serviço, pelo pacote e pelo nome do cliente; a cortesia não entra');
+  assert.deepEqual(h.club.porServico[0], { servico: 'Barba Club', quantidade: 2 });
+  assert.equal(h.conferencia.pago, 240);
+  assert.equal(h.conferencia.diferenca, 40);
+  assert.equal(h.conferencia.porAtendimentoClub, 10);
+  assert.equal(ex.totais.aReceber, 0);
+  const semPagamento = repasses.extratoProfissional(EMP, c.prof.id, { inicio: '2026-08-01', fim: '2026-08-31', lojaId: LOJA }).historicoAvec;
+  assert.equal(semPagamento.conferencia.diferenca, null);
+  assert.equal(semPagamento.conferencia.porAtendimentoClub, null);
+});
