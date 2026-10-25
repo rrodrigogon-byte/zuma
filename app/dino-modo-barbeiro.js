@@ -1,4 +1,5 @@
 import { buildDinoCustomerAssistant } from './core/dino-customer-assistant.js';
+import * as dinoGamificacao from './dino-metas-gamificacao.js';
 
 // Modo barbeiro: a tela do celular de cada profissional.
 //
@@ -24,9 +25,23 @@ export function ehGestao(usuario = {}) {
 }
 
 export function profissionalDoUsuario(profissionais = [], usuario = {}) {
+  if (!usuario) return null;
   const email = String(usuario.email || '').trim().toLowerCase();
-  if (!email) return null;
-  return profissionais.find((p) => p.ativo !== false && String(p.email || '').trim().toLowerCase() === email) || null;
+  const username = String(usuario.username || (email ? email.split('@')[0] : '')).trim().toLowerCase();
+  const userId = String(usuario.id || '').trim();
+  const nome = String(usuario.nome || usuario.nome_completo || '').trim().toLowerCase();
+
+  return profissionais.find((p) => {
+    if (p.ativo === false) return false;
+    const pEmail = String(p.email || '').trim().toLowerCase();
+    if (email && pEmail && pEmail === email) return true;
+    if (username && pEmail && pEmail.split('@')[0] === username) return true;
+    if (userId && (p.usuarioId === userId || p.userId === userId)) return true;
+    const pNome = String(p.nome || '').trim().toLowerCase();
+    if (username && pNome && (pNome === username || pNome.split(' ')[0] === username)) return true;
+    if (nome && pNome && pNome === nome) return true;
+    return false;
+  }) || null;
 }
 
 function resumoComissao(comissoes, profissionalId) {
@@ -112,8 +127,26 @@ export function painelBarbeiro(erp, { empresaId, lojaId = '', usuario = {}, prof
   };
   const bloqueios = erp.listarBloqueios(empresaId, { data, profissionalId: escolhido.id, lojaId })
     .map((b) => ({ id: b.id, titulo: b.titulo, inicio: b.inicio, fim: b.fim, geral: !b.profissionalId }));
+
+  let gamificacao = null;
+  try {
+    const painelGamif = dinoGamificacao.avaliarMetasESincronizarGiros(empresaId, { dataIso: data, lojaId });
+    const meuDesempenho = (painelGamif.profissionais || []).find((p) => p.profissionalId === escolhido.id);
+    if (meuDesempenho) {
+      gamificacao = {
+        dia: meuDesempenho.dia,
+        semana: meuDesempenho.semana,
+        girosPendentes: meuDesempenho.girosPendentes || [],
+        config: painelGamif.config || null,
+      };
+    }
+  } catch {
+    // Não bloqueia a agenda se gamificação falhar
+  }
+
   return {
     ...base,
+    gamificacao,
     profissional: {
       id: escolhido.id, nome: escolhido.nome, especialidade: escolhido.especialidade, fotoUrl: escolhido.fotoUrl || '',
       horarioInicio: escolhido.horarioInicio, horarioFim: escolhido.horarioFim, diasTrabalho: escolhido.diasTrabalho,
