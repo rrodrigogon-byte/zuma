@@ -1,0 +1,38 @@
+{
+  "data": "2026-10-25",
+  "prioridade": "Dino primeiro, depois demais empresas",
+  "modo": "homologação local isolada com dados sintéticos",
+  "validacao": {
+    "testes_modulos_pg": 113,
+    "testes_http_e_protecao": 11,
+    "falhas": 0,
+    "ignorados": 0
+  },
+  "areas": [
+    "unidades",
+    "cadastros",
+    "bar/PDV",
+    "razão financeiro",
+    "escopo financeiro",
+    "compras/estoque/fichas",
+    "conciliação",
+    "salão",
+    "PDV offline",
+    "varejo",
+    "fiscal em homologação"
+  ],
+  "casos_reforcados": [
+    "Recebimento parcial e total de pedido",
+    "Reenvio sequencial e simultâneo sem duplicar estoque ou despesa",
+    "Bloqueio de recebimento por outra empresa",
+    "Consulta sem movimentações",
+    "Somatório das contas igual ao valor recebido"
+  ],
+  "ci": "Executor com banco efêmero próprio, migrações oficiais e servidor local; ambiente sem credenciais remotas. Toda PR passa a executar esta matriz.",
+  "limites": [
+    "Estes testes não equivalem a homologação integral de todos os módulos ou empresas",
+    "Receitas de serviços dependem de evidência real da origem",
+    "Fiscal permanece somente em homologação",
+    "Nenhuma carga ou movimentação de produção executada"
+  ]
+}

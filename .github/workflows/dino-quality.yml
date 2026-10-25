@@ -25,15 +25,15 @@ jobs:
             package-lock.json
             app/package-lock.json
             web/package-lock.json
-      - name: PostgreSQL local descartável
-        run: sudo apt-get update && sudo apt-get install -y postgresql-16
+      - name: PostgreSQL e validador XML locais
+        run: sudo apt-get update && sudo apt-get install -y postgresql-16 libxml2-utils
       - run: npm ci
       - run: npm ci --prefix app
       - run: npm ci --include=dev --prefix web
       - name: Testes seriais e fixture PostgreSQL isolada
         run: npm run test:node
-      - name: Suprimentos com PostgreSQL real isolado
-        run: node scripts/test-suprimentos-pg-local.mjs
+      - name: ERP com PostgreSQL real e servidor integrado isolados
+        run: node scripts/test-backoffice-pg-local.mjs --e2e
       - name: Interface de fichas técnicas
         run: cd web && ../node_modules/.bin/vitest --config vite.config.js run src/pages/admin/suprimentos/Suprimentos.test.jsx --no-cache
       - name: Build web

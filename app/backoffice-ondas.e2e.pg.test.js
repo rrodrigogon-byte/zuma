@@ -12,7 +12,28 @@ import { fileURLToPath } from 'node:url';
 import bcrypt from 'bcryptjs';
 import pg from 'pg';
 
-const DSN = process.env.BACKOFFICE_E2E_DATABASE_URL;
+function localDatabaseUrl(value) {
+  if (!value) return '';
+  try {
+    const url = new URL(value);
+    const loopback = host => ['localhost', '127.0.0.1', '::1', '[::1]'].includes(host);
+    const hosts = url.searchParams.getAll('host');
+    const host = hosts[0];
+    if (!['postgres:', 'postgresql:'].includes(url.protocol) || !loopback(url.hostname)
+      || !/^\/[a-zA-Z0-9_]+_test$/.test(url.pathname)
+      || [...url.searchParams.keys()].some(key => key !== 'host') || hosts.length > 1
+      || (host && !loopback(host) && !/^\/(?:private\/)?tmp\/kytto-pg-[^/]+\/socket$/.test(host))) throw new Error();
+    return value;
+  } catch { throw new Error('Backoffice E2E exige PostgreSQL local e banco *_test; conexão recusada antes de qualquer escrita.'); }
+}
+if (process.env.NODE_ENV === 'production' && process.env.BACKOFFICE_E2E_DATABASE_URL) throw new Error('Backoffice E2E proibido em produção');
+const DSN = localDatabaseUrl(process.env.BACKOFFICE_E2E_DATABASE_URL);
+test('backoffice E2E recusa destinos remotos e sobrescritas de conexão antes de conectar', () => {
+  assert.equal(localDatabaseUrl(''), '');
+  assert.ok(localDatabaseUrl('postgresql://fixture@localhost/audit_test'));
+  assert.ok(localDatabaseUrl('postgresql://fixture@localhost/audit_test?host=%2Ftmp%2Fkytto-pg-abc%2Fsocket'));
+  for (const value of ['postgresql://remote.example/audit_test', 'postgresql://localhost/producao', 'postgresql://localhost/audit_test?host=remote.example', 'postgresql://localhost/audit_test?database=producao', 'postgresql://localhost/audit_test?host=localhost&host=remote.example', 'invalid']) assert.throws(() => localDatabaseUrl(value), /conexão recusada/);
+});
 const APP = path.dirname(fileURLToPath(import.meta.url));
 const SENHA = 'Senha-Local-Forte-123!';
 const hojeCuiaba = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Cuiaba' });
@@ -29,7 +50,8 @@ test('backoffice integrado: Financeiro, estoque e compras, fiscal, conciliação
   fs.writeFileSync(path.join(dir, 'db.json'), JSON.stringify({ seq: 10, usuarios: [{ id: 1, nome: 'Administrador local', email: 'admin', senhaHash: bcrypt.hashSync(SENHA, 4), role: 'admin', ativo: true }] }));
   const porta = 36200 + crypto.randomInt(300); const base = `http://127.0.0.1:${porta}`;
   let log = '';
-  const filho = spawn(process.execPath, ['server.js'], { cwd: APP, env: { ...process.env, NODE_ENV: 'development', PORT: String(porta), DB_PATH: path.join(dir, 'db.json'), JWT_SECRET: 'backoffice-e2e-local', COMMERCE_CORE_ENABLED: '1', DATABASE_URL: DSN, DB_SSL: 'false', ADMIN_USER: 'admin', SEED_DEMO: '0', FINANCEIRO_RAZAO: '1', FISCAL_CERT_MASTER_KEY: crypto.randomBytes(32).toString('base64'), WHATSAPP_CONNECTION_WATCHDOG: 'false', WPP_BASE_URL: '', WPP_APIKEY: '', RESEND_API_KEY: '', OPERATIONAL_INVITE_RESEND_API_KEY: '', GEMINI_API_KEY: '', OPENAI_API_KEY: '', AI_AUTOMATION_SCHEDULER: 'false', AI_LEARNING_SCHEDULER: 'false', FISCAL_TRANSMITIR_HOMOLOGACAO: '' }, stdio: ['ignore', 'pipe', 'pipe'] });
+  const localEnv = Object.fromEntries(['PATH', 'HOME', 'LANG', 'TZ'].filter(key => process.env[key]).map(key => [key, process.env[key]]));
+  const filho = spawn(process.execPath, ['server.js'], { cwd: APP, env: { ...localEnv, NODE_ENV: 'development', PORT: String(porta), DB_PATH: path.join(dir, 'db.json'), JWT_SECRET: 'backoffice-e2e-local', COMMERCE_CORE_ENABLED: '1', DATABASE_URL: DSN, DB_SSL: 'false', ADMIN_USER: 'admin', SEED_DEMO: '0', FINANCEIRO_RAZAO: '1', FISCAL_CERT_MASTER_KEY: crypto.randomBytes(32).toString('base64'), WHATSAPP_CONNECTION_WATCHDOG: 'false', WPP_BASE_URL: '', WPP_APIKEY: '', RESEND_API_KEY: '', OPERATIONAL_INVITE_RESEND_API_KEY: '', GEMINI_API_KEY: '', OPENAI_API_KEY: '', AI_AUTOMATION_SCHEDULER: 'false', AI_LEARNING_SCHEDULER: 'false', FISCAL_TRANSMITIR_HOMOLOGACAO: '' }, stdio: ['ignore', 'pipe', 'pipe'] });
   filho.stdout.on('data', (d) => { log += d; }); filho.stderr.on('data', (d) => { log += d; });
   const req = async (url, method = 'GET', corpo = null, headers = {}) => {
     const r = await fetch(base + url, { method, headers: { 'content-type': 'application/json', ...headers }, ...(corpo ? { body: JSON.stringify(corpo) } : {}) });
@@ -125,11 +147,28 @@ test('backoffice integrado: Financeiro, estoque e compras, fiscal, conciliação
       itemId = (it.body.item || it.body).id;
       const ped = await req('/api/admin/suprimentos/pedidos', 'POST', { fornecedorNome: 'Distribuidora', lojaId: A1, condicaoPagamento: '30', itens: [{ itemId, quantidade: 24, custoUnitario: 4 }] }, dono); ok(ped, 201, 'pedido');
       const pedidoId = (ped.body.pedido || ped.body).id;
-      const rec = await req('/api/admin/suprimentos/recebimentos', 'POST', { pedidoId, lojaId: A1, idempotencia: `rec-${sufixo}`, itens: [{ itemId, quantidade: 24, custoUnitario: 4 }] }, dono); ok(rec, 201, 'recebimento');
+      const parcial = { pedidoId, lojaId: A1, idempotencia: `rec-${sufixo}`, itens: [{ itemId, quantidade: 10, custoUnitario: 4 }] };
+      ok(await req('/api/admin/suprimentos/recebimentos', 'POST', parcial, donoB), 404, 'B não recebe pedido de A');
+      ok(await req('/api/admin/suprimentos/recebimentos', 'POST', parcial, dono), 201, 'recebimento parcial');
+      ok(await req('/api/admin/suprimentos/recebimentos', 'POST', parcial, dono), 409, 'reenvio parcial não duplica');
+      const pedidoParcial = await req(`/api/admin/suprimentos/pedidos/${pedidoId}`, 'GET', null, dono); ok(pedidoParcial, 200, 'pedido parcial');
+      assert.equal(pedidoParcial.body.status, 'parcial');
+      assert.equal(pedidoParcial.body.itens[0].pendente, 14);
+      const restante = { ...parcial, idempotencia: `restante-${sufixo}`, itens: [{ itemId, quantidade: 14, custoUnitario: 4 }] };
+      const simultaneos = await Promise.all([req('/api/admin/suprimentos/recebimentos','POST',restante,dono),req('/api/admin/suprimentos/recebimentos','POST',restante,dono)]);
+      assert.deepEqual(simultaneos.map(r=>r.status).sort(),[201,409]);
+      const pedidoCompleto = await req(`/api/admin/suprimentos/pedidos/${pedidoId}`, 'GET', null, dono);
+      assert.equal(pedidoCompleto.body.status, 'recebido');
+      assert.equal(pedidoCompleto.body.itens[0].pendente, 0);
+      const antesConsulta = (await sql.query('SELECT (SELECT count(*) FROM est_movimentos WHERE empresa_id=$1) AS estoque, (SELECT count(*) FROM fin_lancamentos WHERE empresa_id=$1) AS financeiro',[A])).rows[0];
       const itens = await req(`/api/admin/suprimentos/itens?lojaId=${A1}`, 'GET', null, dono); ok(itens, 200, 'itens');
       assert.equal((itens.body.itens || itens.body).find((i) => i.id === itemId).saldo, 24);
+      const depoisConsulta = (await sql.query('SELECT (SELECT count(*) FROM est_movimentos WHERE empresa_id=$1) AS estoque, (SELECT count(*) FROM fin_lancamentos WHERE empresa_id=$1) AS financeiro',[A])).rows[0];
+      assert.deepEqual(depoisConsulta,antesConsulta,'consultar não cria movimentos nem despesas');
       const contas = await req('/api/admin/razao/lancamentos?tipo=despesa&status=pendente', 'GET', null, dono);
-      assert.ok((contas.body.lancamentos || contas.body.itens || contas.body).some((l) => l.valor === 96), 'conta a pagar de R$ 96');
+      const contasCompra = (contas.body.lancamentos || contas.body.itens || contas.body).filter(l=>l.origem==='compra');
+      assert.equal(contasCompra.length,2,'somente uma conta por recebimento');
+      assert.equal(contasCompra.reduce((s,l)=>s+l.valor,0),96,'total a pagar sem duplicar');
       const itensB = await req('/api/admin/suprimentos/itens', 'GET', null, donoB); ok(itensB, 200, 'B lista itens');
       assert.equal((itensB.body.itens || itensB.body).length, 0, 'B não vê os itens de A');
     });
