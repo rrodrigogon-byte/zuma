@@ -1,5 +1,6 @@
 /* ==========================================================================
    CENTRAL DINO — PAINEL DE METAS DIÁRIAS, SEMANAIS E ROLETA DE PREMIAÇÕES
+   Design System adaptado para tema claro e escuro com alto contraste WCAG
    ========================================================================== */
 
 .dino-metas-panel {
@@ -18,17 +19,18 @@
   align-items: flex-start;
   flex-wrap: wrap;
   gap: 16px;
-  background: var(--surface, #1e293b);
-  border: 1px solid var(--line, rgba(255, 255, 255, 0.08));
+  background: var(--surface, #ffffff);
+  border: 1px solid var(--line, #e2e8f0);
   border-radius: 16px;
   padding: 20px 24px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
 }
 
 .dino-metas-title-group h1 {
   margin: 0 0 6px 0;
   font-size: 22px;
-  font-weight: 700;
-  color: var(--text, #f8fafc);
+  font-weight: 800;
+  color: var(--text, #0f172a);
   display: flex;
   align-items: center;
   gap: 10px;
@@ -37,7 +39,7 @@
 .dino-metas-subtitle {
   margin: 0;
   font-size: 13px;
-  color: var(--muted, #94a3b8);
+  color: var(--muted, #64748b);
   line-height: 1.5;
 }
 
@@ -48,19 +50,30 @@
   flex-wrap: wrap;
 }
 
-/* Banner do Desafio Semanal */
+.dino-date-picker-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--surface-2, #f8fafc);
+  border: 1px solid var(--line, #e2e8f0);
+  padding: 6px 12px;
+  border-radius: 10px;
+}
+
+/* Banner do Desafio Semanal (Fundo Escuro Rico e Alto Contraste em Qualquer Tema) */
 .dino-desafio-banner {
-  background: linear-gradient(135deg, rgba(245, 158, 11, 0.15) 0%, rgba(239, 68, 68, 0.12) 100%);
-  border: 1px solid rgba(245, 158, 11, 0.35);
-  border-radius: 16px;
-  padding: 18px 24px;
+  background: linear-gradient(135deg, #0f172a 0%, #1e293b 60%, #334155 100%);
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  border-radius: 18px;
+  padding: 22px 26px;
   display: flex;
   justify-content: space-between;
   align-items: center;
   flex-wrap: wrap;
-  gap: 16px;
+  gap: 20px;
   position: relative;
   overflow: hidden;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.18);
 }
 
 .dino-desafio-badge {
@@ -68,120 +81,170 @@
   align-items: center;
   gap: 6px;
   background: #f59e0b;
-  color: #000;
+  color: #0f172a;
   font-weight: 800;
   font-size: 11px;
-  padding: 3px 10px;
+  padding: 4px 12px;
   border-radius: 20px;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
-  margin-bottom: 6px;
+  letter-spacing: 0.6px;
+  margin-bottom: 8px;
+  box-shadow: 0 2px 6px rgba(245, 158, 11, 0.4);
 }
 
 .dino-desafio-banner h3 {
-  margin: 0 0 4px 0;
-  font-size: 18px;
-  font-weight: 700;
-  color: #fbbf24;
+  margin: 0 0 6px 0;
+  font-size: 20px;
+  font-weight: 800;
+  color: #ffffff;
+  letter-spacing: -0.3px;
 }
 
 .dino-desafio-desc {
   margin: 0;
-  font-size: 13px;
-  color: var(--text, #f8fafc);
+  font-size: 13.5px;
+  color: #e2e8f0;
+  max-width: 680px;
+  line-height: 1.5;
+}
+
+.dino-desafio-metricas-grid {
+  display: flex;
+  gap: 10px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+
+.dino-desafio-metrica-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 12.5px;
+  color: #ffffff;
+  font-weight: 500;
+}
+
+.dino-desafio-metrica-pill strong {
+  color: #fbbf24;
+  font-weight: 700;
 }
 
 .dino-desafio-premiacao {
-  background: rgba(0, 0, 0, 0.3);
-  border: 1px solid rgba(245, 158, 11, 0.3);
-  border-radius: 12px;
-  padding: 12px 18px;
+  background: rgba(0, 0, 0, 0.45);
+  border: 1.5px solid rgba(245, 158, 11, 0.5);
+  border-radius: 14px;
+  padding: 14px 20px;
   text-align: right;
+  min-width: 220px;
 }
 
 .dino-desafio-premio-label {
   font-size: 11px;
   text-transform: uppercase;
-  color: #f59e0b;
-  font-weight: 700;
-  letter-spacing: 0.5px;
+  color: #fbbf24;
+  font-weight: 800;
+  letter-spacing: 0.8px;
 }
 
 .dino-desafio-premio-val {
-  font-size: 15px;
-  font-weight: 700;
+  font-size: 16px;
+  font-weight: 800;
   color: #ffffff;
-  margin-top: 2px;
+  margin-top: 4px;
 }
 
 /* Regras Rápidas das Metas */
 .dino-regras-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  gap: 14px;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
 }
 
 .dino-regra-card {
-  background: var(--surface, #1e293b);
-  border: 1px solid var(--line, rgba(255, 255, 255, 0.08));
-  border-radius: 14px;
-  padding: 16px;
+  background: var(--surface, #ffffff);
+  border: 1px solid var(--line, #e2e8f0);
+  border-radius: 16px;
+  padding: 18px;
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 16px;
   position: relative;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
 }
 
 .dino-regra-icon {
-  font-size: 28px;
+  font-size: 26px;
   width: 52px;
   height: 52px;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--surface-2, #f8fafc);
+  border: 1px solid var(--line, #e2e8f0);
   border-radius: 12px;
   flex-shrink: 0;
 }
 
 .dino-regra-info h4 {
-  margin: 0 0 2px 0;
-  font-size: 14px;
+  margin: 0 0 4px 0;
+  font-size: 15px;
   font-weight: 700;
-  color: var(--text, #f8fafc);
+  color: var(--text, #0f172a);
 }
 
 .dino-regra-info p {
-  margin: 0;
-  font-size: 12px;
-  color: var(--muted, #94a3b8);
+  margin: 0 0 6px 0;
+  font-size: 13px;
+  color: var(--muted, #64748b);
 }
 
 .dino-regra-tag {
-  margin-top: 4px;
   display: inline-block;
-  font-size: 11px;
-  font-weight: 600;
-  color: #10b981;
+  font-size: 11.5px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 20px;
+}
+
+.dino-regra-tag.extras {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+}
+
+.dino-regra-tag.produtos {
+  background: #ecfdf5;
+  color: #047857;
+  border: 1px solid #a7f3d0;
+}
+
+.dino-regra-tag.roleta {
+  background: #fef3c7;
+  color: #92400e;
+  border: 1px solid #fde68a;
 }
 
 /* Navegação por Abas */
 .dino-metas-tabs {
   display: flex;
-  gap: 8px;
-  border-bottom: 1px solid var(--line, rgba(255, 255, 255, 0.08));
-  padding-bottom: 10px;
+  gap: 10px;
+  border-bottom: 2px solid var(--line, #e2e8f0);
+  padding-bottom: 12px;
   overflow-x: auto;
 }
 
 .dino-metas-tab-btn {
-  background: transparent;
-  border: 1px solid transparent;
-  color: var(--muted, #94a3b8);
-  font-size: 13px;
+  background: var(--surface, #ffffff);
+  border: 1px solid var(--line, #e2e8f0);
+  color: var(--muted, #64748b);
+  font-size: 13.5px;
   font-weight: 600;
-  padding: 8px 16px;
-  border-radius: 10px;
+  padding: 9px 18px;
+  border-radius: 12px;
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -191,14 +254,16 @@
 }
 
 .dino-metas-tab-btn:hover {
-  color: var(--text, #f8fafc);
-  background: rgba(255, 255, 255, 0.04);
+  color: var(--text, #0f172a);
+  border-color: #cbd5e1;
 }
 
 .dino-metas-tab-btn.active {
-  background: var(--surface, #1e293b);
-  border-color: rgba(245, 158, 11, 0.4);
-  color: #f59e0b;
+  background: var(--orange, #4B57A6);
+  border-color: var(--orange, #4B57A6);
+  color: #ffffff;
+  font-weight: 700;
+  box-shadow: 0 4px 14px rgba(75, 87, 166, 0.25);
 }
 
 /* Grid de Barbeiros / Profissionais */
@@ -209,25 +274,26 @@
 }
 
 .dino-barbeiro-card {
-  background: var(--surface, #1e293b);
-  border: 1px solid var(--line, rgba(255, 255, 255, 0.08));
+  background: var(--surface, #ffffff);
+  border: 1px solid var(--line, #e2e8f0);
   border-radius: 16px;
   padding: 20px;
   display: flex;
   flex-direction: column;
   gap: 16px;
   position: relative;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.04);
   transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
 .dino-barbeiro-card:hover {
   transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
 }
 
 .dino-barbeiro-card.has-spins {
-  border-color: rgba(245, 158, 11, 0.6);
-  box-shadow: 0 0 15px rgba(245, 158, 11, 0.15);
+  border-color: #f59e0b;
+  box-shadow: 0 0 0 1px #f59e0b, 0 8px 24px rgba(245, 158, 11, 0.15);
 }
 
 .dino-barbeiro-top {
@@ -246,35 +312,36 @@
   width: 44px;
   height: 44px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
-  color: #000;
+  background: linear-gradient(135deg, #4f46e5 0%, #3730a3 100%);
+  color: #ffffff;
   font-weight: 800;
-  font-size: 16px;
+  font-size: 15px;
   display: flex;
   align-items: center;
   justify-content: center;
   text-transform: uppercase;
+  box-shadow: 0 2px 6px rgba(79, 70, 229, 0.3);
 }
 
 .dino-barbeiro-nome {
   margin: 0;
   font-size: 16px;
   font-weight: 700;
-  color: var(--text, #f8fafc);
+  color: var(--text, #0f172a);
 }
 
 .dino-barbeiro-cargo {
-  margin: 0;
-  font-size: 12px;
-  color: var(--muted, #94a3b8);
+  margin: 2px 0 0 0;
+  font-size: 12.5px;
+  color: var(--muted, #64748b);
 }
 
 .dino-spin-badge {
-  background: linear-gradient(135deg, #f59e0b 0%, #ea580c 100%);
-  color: #ffffff;
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  color: #0f172a;
   font-weight: 800;
-  font-size: 11px;
-  padding: 4px 10px;
+  font-size: 11.5px;
+  padding: 5px 12px;
   border-radius: 20px;
   box-shadow: 0 2px 8px rgba(245, 158, 11, 0.4);
   animation: pulse 2s infinite;
@@ -290,36 +357,49 @@
 .dino-metas-track-list {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
 }
 
 .dino-meta-item {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 5px;
 }
 
 .dino-meta-item-head {
   display: flex;
   justify-content: space-between;
-  font-size: 12px;
-  font-weight: 600;
+  align-items: center;
+  font-size: 12.5px;
 }
 
 .dino-meta-label {
-  color: var(--text, #f8fafc);
+  color: var(--text, #0f172a);
+  font-weight: 600;
   display: flex;
   align-items: center;
   gap: 6px;
 }
 
 .dino-meta-values {
-  color: var(--muted, #94a3b8);
+  color: var(--muted, #475569);
+  font-weight: 600;
+}
+
+.dino-meta-batida-badge {
+  background: #ecfdf5;
+  color: #047857;
+  border: 1px solid #6ee7b7;
+  font-weight: 800;
+  font-size: 10px;
+  padding: 1px 7px;
+  border-radius: 12px;
+  letter-spacing: 0.3px;
 }
 
 .dino-meta-prog-bar {
-  height: 8px;
-  background: rgba(255, 255, 255, 0.08);
+  height: 9px;
+  background: var(--surface-2, #e2e8f0);
   border-radius: 10px;
   overflow: hidden;
   position: relative;
@@ -332,39 +412,39 @@
 }
 
 .dino-meta-prog-fill.extras {
-  background: linear-gradient(90deg, #3b82f6 0%, #6366f1 100%);
+  background: linear-gradient(90deg, #3b82f6 0%, #2563eb 100%);
 }
 
 .dino-meta-prog-fill.produtos {
-  background: linear-gradient(90deg, #10b981 0%, #14b8a6 100%);
+  background: linear-gradient(90deg, #10b981 0%, #059669 100%);
 }
 
 .dino-meta-prog-fill.desafio {
-  background: linear-gradient(90deg, #f59e0b 0%, #ef4444 100%);
+  background: linear-gradient(90deg, #8b5cf6 0%, #7c3aed 100%);
 }
 
 .dino-meta-prog-fill.batida {
-  background: #10b981 !important;
+  background: linear-gradient(90deg, #10b981 0%, #047857 100%) !important;
   box-shadow: 0 0 10px rgba(16, 185, 129, 0.5);
 }
 
 /* Ações e Roleta no Card */
 .dino-barbeiro-footer {
-  border-top: 1px solid var(--line, rgba(255, 255, 255, 0.08));
+  border-top: 1px solid var(--line, #e2e8f0);
   padding-top: 14px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
 }
 
 .dino-btn-girar-roleta {
   width: 100%;
-  padding: 10px;
-  background: linear-gradient(135deg, #f59e0b 0%, #ea580c 100%);
-  color: #ffffff;
-  border: none;
+  padding: 11px;
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  color: #0f172a;
+  border: 1px solid #f59e0b;
   border-radius: 12px;
-  font-size: 13px;
+  font-size: 13.5px;
   font-weight: 800;
   display: flex;
   align-items: center;
@@ -377,14 +457,14 @@
 
 .dino-btn-girar-roleta:hover {
   transform: translateY(-1px);
-  box-shadow: 0 6px 16px rgba(245, 158, 11, 0.45);
+  box-shadow: 0 6px 18px rgba(245, 158, 11, 0.45);
 }
 
 .dino-premio-ganho-card {
-  background: rgba(16, 185, 129, 0.12);
-  border: 1px solid rgba(16, 185, 129, 0.3);
-  border-radius: 10px;
-  padding: 10px 12px;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  border-radius: 12px;
+  padding: 10px 14px;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -397,21 +477,21 @@
 }
 
 .dino-premio-nome {
-  font-size: 12px;
-  font-weight: 700;
-  color: #10b981;
+  font-size: 12.5px;
+  font-weight: 800;
+  color: #065f46;
 }
 
 .dino-premio-status {
-  font-size: 11px;
-  color: var(--muted, #94a3b8);
+  font-size: 11.5px;
+  color: #047857;
 }
 
 /* Modal da Roleta */
 .dino-roleta-modal-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.85);
+  background: rgba(15, 23, 42, 0.85);
   backdrop-filter: blur(8px);
   z-index: 10000;
   display: flex;
@@ -422,13 +502,34 @@
 
 .dino-roleta-modal-content {
   background: #0f172a;
-  border: 1px solid rgba(245, 158, 11, 0.4);
+  border: 1.5px solid rgba(245, 158, 11, 0.4);
   border-radius: 24px;
   width: 100%;
   max-width: 520px;
   box-shadow: 0 24px 60px rgba(0, 0, 0, 0.8), 0 0 40px rgba(245, 158, 11, 0.2);
   overflow: hidden;
   animation: modalEnter 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  color: #ffffff;
+}
+
+/* Elementos dentro do modal de configuração e roleta */
+.dino-roleta-modal-content label {
+  color: #e2e8f0;
+}
+
+.dino-roleta-modal-content strong {
+  color: #ffffff;
+}
+
+.dino-roleta-modal-content .form-control {
+  background: #1e293b !important;
+  color: #ffffff !important;
+  border: 1px solid #475569 !important;
+}
+
+.dino-roleta-modal-content .form-control:focus {
+  border-color: #f59e0b !important;
+  outline: none;
 }
 
 @keyframes modalEnter {
@@ -441,32 +542,32 @@
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .dino-roleta-header h2 {
   margin: 4px 0 2px 0;
   font-size: 18px;
-  font-weight: 700;
+  font-weight: 800;
   color: #ffffff;
 }
 
 .dino-roleta-badge {
   font-size: 11px;
-  font-weight: 700;
-  color: #f59e0b;
+  font-weight: 800;
+  color: #fbbf24;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.6px;
 }
 
 .dino-roleta-motivo {
   margin: 0;
-  font-size: 12px;
-  color: var(--muted, #94a3b8);
+  font-size: 12.5px;
+  color: #cbd5e1;
 }
 
 .dino-roleta-close-btn {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.1);
   border: none;
   color: #fff;
   width: 32px;
@@ -515,7 +616,7 @@
   width: 320px;
   height: 320px;
   border-radius: 50%;
-  box-shadow: 0 0 30px rgba(245, 158, 11, 0.3);
+  box-shadow: 0 0 30px rgba(245, 158, 11, 0.35);
 }
 
 .dino-roleta-svg {
@@ -532,9 +633,9 @@
   width: 72px;
   height: 72px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #f59e0b 0%, #ea580c 100%);
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
   border: 4px solid #0f172a;
-  color: #ffffff;
+  color: #0f172a;
   font-size: 14px;
   font-weight: 900;
   letter-spacing: 0.5px;
@@ -551,7 +652,7 @@
 /* Box do Ganhador */
 .dino-roleta-winner-box {
   width: 100%;
-  background: linear-gradient(135deg, rgba(16, 185, 129, 0.2) 0%, rgba(5, 150, 105, 0.1) 100%);
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.25) 0%, rgba(5, 150, 105, 0.15) 100%);
   border: 2px solid #10b981;
   border-radius: 16px;
   padding: 20px;
@@ -584,8 +685,8 @@
 
 .dino-roleta-winner-sub {
   margin: 6px 0 0 0;
-  font-size: 12px;
-  color: var(--muted, #94a3b8);
+  font-size: 12.5px;
+  color: #cbd5e1;
 }
 
 /* Modo Manual */
@@ -593,21 +694,22 @@
   width: 100%;
   text-align: center;
   padding-top: 10px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .dino-roleta-manual-form {
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(255, 255, 255, 0.06);
   border-radius: 12px;
   padding: 12px;
 }
 
 /* Tabela de Histórico e Auditoria */
 .dino-historico-table-wrap {
-  background: var(--surface, #1e293b);
-  border: 1px solid var(--line, rgba(255, 255, 255, 0.08));
+  background: var(--surface, #ffffff);
+  border: 1px solid var(--line, #e2e8f0);
   border-radius: 16px;
   overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
 }
 
 .dino-historico-table {
@@ -617,24 +719,24 @@
 }
 
 .dino-historico-table th {
-  background: rgba(0, 0, 0, 0.2);
+  background: var(--surface-2, #f8fafc);
   text-align: left;
-  padding: 12px 16px;
-  color: var(--muted, #94a3b8);
-  font-weight: 600;
+  padding: 14px 18px;
+  color: var(--muted, #64748b);
+  font-weight: 700;
   font-size: 12px;
   text-transform: uppercase;
-  border-bottom: 1px solid var(--line, rgba(255, 255, 255, 0.08));
+  border-bottom: 1px solid var(--line, #e2e8f0);
 }
 
 .dino-historico-table td {
-  padding: 14px 16px;
-  border-bottom: 1px solid var(--line, rgba(255, 255, 255, 0.05));
-  color: var(--text, #f8fafc);
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--line, #e2e8f0);
+  color: var(--text, #0f172a);
 }
 
 .dino-historico-table tr:hover td {
-  background: rgba(255, 255, 255, 0.02);
+  background: rgba(0, 0, 0, 0.015);
 }
 
 .dino-status-pill {
@@ -643,23 +745,26 @@
   gap: 5px;
   font-size: 11px;
   font-weight: 700;
-  padding: 3px 8px;
+  padding: 3px 9px;
   border-radius: 20px;
 }
 
 .dino-status-pill.pendente {
-  background: rgba(245, 158, 11, 0.15);
-  color: #f59e0b;
+  background: #fef3c7;
+  color: #92400e;
+  border: 1px solid #fde68a;
 }
 
 .dino-status-pill.girado {
-  background: rgba(59, 130, 246, 0.15);
-  color: #60a5fa;
+  background: #eff6ff;
+  color: #1e40af;
+  border: 1px solid #bfdbfe;
 }
 
 .dino-status-pill.entregue {
-  background: rgba(16, 185, 129, 0.15);
-  color: #10b981;
+  background: #ecfdf5;
+  color: #065f46;
+  border: 1px solid #a7f3d0;
 }
 
 /* Responsividade Mobile */

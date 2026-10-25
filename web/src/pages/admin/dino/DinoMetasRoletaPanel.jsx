@@ -158,20 +158,20 @@ export function DinoMetasRoletaPanel() {
 
         <div className="dino-metas-actions">
           {/* Seletor de Data */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.05)', padding: '6px 12px', borderRadius: 10 }}>
-            <span style={{ fontSize: 12, color: 'var(--muted)' }}>Dia:</span>
+          <div className="dino-date-picker-box">
+            <span style={{ fontSize: 12, color: 'var(--muted, #64748b)', fontWeight: 600 }}>Dia:</span>
             <input
               type="date"
               className="form-control form-control-sm"
               value={dataSel}
               onChange={(e) => setDataSel(e.target.value)}
-              style={{ padding: '2px 8px', fontSize: 12 }}
+              style={{ padding: '2px 8px', fontSize: 12, border: '1px solid var(--line, #e2e8f0)', background: 'var(--surface, #ffffff)', color: 'var(--text, #0f172a)' }}
             />
             {dataSel !== dataHojeIso() && (
               <button
                 type="button"
                 className="btn btn-sm btn-outline"
-                style={{ fontSize: 11, padding: '2px 6px' }}
+                style={{ fontSize: 11, padding: '2px 8px' }}
                 onClick={() => setDataSel(dataHojeIso())}
               >
                 Hoje
@@ -206,15 +206,15 @@ export function DinoMetasRoletaPanel() {
             <p className="dino-desafio-desc">
               {config.metasSemanais.descricaoDesafio || 'Atinja a meta de produtos ou faturamento e ganhe prêmios exclusivos!'}
             </p>
-            <div style={{ display: 'flex', gap: 14, marginTop: 8, fontSize: 12, color: '#fef08a' }}>
+            <div className="dino-desafio-metricas-grid">
               {config.metasSemanais.produtosValor > 0 && (
-                <span>🧴 Meta Produtos: <strong>{fmtR(config.metasSemanais.produtosValor)}</strong></span>
+                <span className="dino-desafio-metrica-pill">🧴 Meta Produtos: <strong>{fmtR(config.metasSemanais.produtosValor)}</strong></span>
               )}
               {config.metasSemanais.produtosQtd > 0 && (
-                <span>📦 Unidades: <strong>{config.metasSemanais.produtosQtd} un</strong></span>
+                <span className="dino-desafio-metrica-pill">📦 Unidades: <strong>{config.metasSemanais.produtosQtd} un</strong></span>
               )}
               {config.metasSemanais.faturamentoValor > 0 && (
-                <span>💰 Meta Faturamento: <strong>{fmtR(config.metasSemanais.faturamentoValor)}</strong></span>
+                <span className="dino-desafio-metrica-pill">💰 Meta Faturamento: <strong>{fmtR(config.metasSemanais.faturamentoValor)}</strong></span>
               )}
             </div>
           </div>
@@ -237,7 +237,7 @@ export function DinoMetasRoletaPanel() {
             <p>
               Meta: <strong>{config.metasDiarias?.servicosExtrasQtd || 6} extras no dia</strong>
             </p>
-            <span className="dino-regra-tag">
+            <span className="dino-regra-tag extras">
               Ganhe {config.metasDiarias?.servicosExtrasGiros || 1} Giro na Roleta
             </span>
           </div>
@@ -250,7 +250,7 @@ export function DinoMetasRoletaPanel() {
             <p>
               Meta: <strong>{fmtR(config.metasDiarias?.produtosValor || 100)} vendidos no dia</strong>
             </p>
-            <span className="dino-regra-tag">
+            <span className="dino-regra-tag produtos">
               Ganhe {config.metasDiarias?.produtosGiros || 1} Giro na Roleta
             </span>
           </div>
@@ -263,7 +263,7 @@ export function DinoMetasRoletaPanel() {
             <p>
               {resumoGiros.totalPendentesGiro || 0} giros pendentes · {resumoGiros.totalAguardandoEntrega || 0} aguardando entrega
             </p>
-            <span className="dino-regra-tag" style={{ color: '#f59e0b' }}>
+            <span className="dino-regra-tag roleta">
               {config.premiosRoleta?.length || 8} prêmios cadastrados
             </span>
           </div>
@@ -346,7 +346,7 @@ export function DinoMetasRoletaPanel() {
                         <div className="dino-meta-item">
                           <div className="dino-meta-item-head">
                             <span className="dino-meta-label">
-                              ✂️ Extras Hoje {prof.dia.metaExtrasAtingida && '✓'}
+                              ✂️ Extras Hoje {prof.dia.metaExtrasAtingida && <span className="dino-meta-batida-badge">✓ BATEU A META!</span>}
                             </span>
                             <span className="dino-meta-values">
                               {prof.dia.servicosExtras} de {config.metasDiarias.servicosExtrasQtd} extras
@@ -366,7 +366,7 @@ export function DinoMetasRoletaPanel() {
                         <div className="dino-meta-item">
                           <div className="dino-meta-item-head">
                             <span className="dino-meta-label">
-                              🧴 Produtos Hoje {prof.dia.metaProdutosAtingida && '✓'}
+                              🧴 Produtos Hoje {prof.dia.metaProdutosAtingida && <span className="dino-meta-batida-badge">✓ BATEU A META!</span>}
                             </span>
                             <span className="dino-meta-values">
                               {fmtR(prof.dia.produtosValor)} de {fmtR(config.metasDiarias.produtosValor)}
@@ -386,7 +386,7 @@ export function DinoMetasRoletaPanel() {
                         <div className="dino-meta-item">
                           <div className="dino-meta-item-head">
                             <span className="dino-meta-label">
-                              🔥 Desafio Semanal {prof.semana.metaDesafioAtingida && '✓'}
+                              🔥 Desafio Semanal {prof.semana.metaDesafioAtingida && <span className="dino-meta-batida-badge">✓ DESAFIO BATIDO!</span>}
                             </span>
                             <span className="dino-meta-values">
                               {fmtR(prof.semana.produtosValor)} ({prof.semana.produtosQtd} un)
