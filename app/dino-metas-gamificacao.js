@@ -457,10 +457,14 @@ export function avaliarMetasESincronizarGiros(empresaId, { dataIso = dataIsoCuia
 
       prof.semana.metaProdutosAtingida = bateuSemanalProd;
       prof.semana.metaDesafioAtingida = bateuDesafio;
-      prof.semana.metaProdutosAlvo = config.metasSemanais.produtosValor;
-      prof.semana.progressoProdutos = config.metasSemanais.produtosValor > 0
-        ? Math.min(100, Math.round((prof.semana.produtosValor / config.metasSemanais.produtosValor) * 100))
-        : 0;
+      const usaQtdSemanal = Number(config.metasSemanais.produtosQtd || 0) > 0;
+      prof.semana.metaProdutosAlvo = usaQtdSemanal ? config.metasSemanais.produtosQtd : config.metasSemanais.produtosValor;
+      prof.semana.metaProdutosTipo = usaQtdSemanal ? 'quantidade' : 'valor';
+      prof.semana.progressoProdutos = usaQtdSemanal
+        ? Math.min(100, Math.round((prof.semana.produtosQtd / config.metasSemanais.produtosQtd) * 100))
+        : (config.metasSemanais.produtosValor > 0
+          ? Math.min(100, Math.round((prof.semana.produtosValor / config.metasSemanais.produtosValor) * 100))
+          : 0);
 
       if (bateuDesafio && config.metasSemanais.girosDesafio > 0) {
         const chaveUnica = `meta_semanal_desafio:${profId}:${semanaChave}`;

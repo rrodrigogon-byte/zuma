@@ -264,24 +264,24 @@ export function DinoMetasGamificacaoModalConfig({
 
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 10 }}>
                     <div className="form-group" style={{ margin: 0 }}>
-                      <label style={{ fontSize: 12 }}>Meta Produtos (R$):</label>
-                      <input
-                        type="number"
-                        min="0"
-                        step="50"
-                        className="form-control"
-                        value={form.metasSemanais?.produtosValor ?? 500}
-                        onChange={(e) => atualizarSemanal('produtosValor', Number(e.target.value))}
-                      />
-                    </div>
-                    <div className="form-group" style={{ margin: 0 }}>
-                      <label style={{ fontSize: 12 }}>Meta Produtos (Qtd):</label>
+                      <label style={{ fontSize: 12 }}>Meta Produtos (Qtd un):</label>
                       <input
                         type="number"
                         min="0"
                         className="form-control"
                         value={form.metasSemanais?.produtosQtd ?? 10}
                         onChange={(e) => atualizarSemanal('produtosQtd', Number(e.target.value))}
+                      />
+                    </div>
+                    <div className="form-group" style={{ margin: 0 }}>
+                      <label style={{ fontSize: 12 }}>Meta Produtos (R$ opcional):</label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="50"
+                        className="form-control"
+                        value={form.metasSemanais?.produtosValor ?? 0}
+                        onChange={(e) => atualizarSemanal('produtosValor', Number(e.target.value))}
                       />
                     </div>
                     <div className="form-group" style={{ margin: 0 }}>

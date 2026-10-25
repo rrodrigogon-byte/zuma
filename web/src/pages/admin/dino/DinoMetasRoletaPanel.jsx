@@ -207,11 +207,11 @@ export function DinoMetasRoletaPanel() {
               {config.metasSemanais.descricaoDesafio || 'Atinja a meta de produtos ou faturamento e ganhe prêmios exclusivos!'}
             </p>
             <div className="dino-desafio-metricas-grid">
-              {config.metasSemanais.produtosValor > 0 && (
-                <span className="dino-desafio-metrica-pill">🧴 Meta Produtos: <strong>{fmtR(config.metasSemanais.produtosValor)}</strong></span>
-              )}
               {config.metasSemanais.produtosQtd > 0 && (
-                <span className="dino-desafio-metrica-pill">📦 Unidades: <strong>{config.metasSemanais.produtosQtd} un</strong></span>
+                <span className="dino-desafio-metrica-pill">🧴 Meta Produtos: <strong>{config.metasSemanais.produtosQtd} un</strong></span>
+              )}
+              {config.metasSemanais.produtosValor > 0 && (
+                <span className="dino-desafio-metrica-pill">💰 Valor Produtos: <strong>{fmtR(config.metasSemanais.produtosValor)}</strong></span>
               )}
               {config.metasSemanais.faturamentoValor > 0 && (
                 <span className="dino-desafio-metrica-pill">💰 Meta Faturamento: <strong>{fmtR(config.metasSemanais.faturamentoValor)}</strong></span>
