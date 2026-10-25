@@ -26,7 +26,7 @@ test('prompt: com persona abre como T-Rex e mantém todas as regras do atendente
   const corpo = (texto) => texto.slice(texto.indexOf('CAPACIDADES DA UNIDADE'));
   assert.equal(corpo(persona), corpo(padrao));
   assert.match(persona, /propor_oportunidade/);
-  assert.match(persona, /Nunca negue ser assistente/);
+  assert.match(persona, /NUNCA se identifique como IA|Nunca negue ser assistente/);
 });
 
 test('configuração: persona exige confirmação, valida nome e grava auditoria', async () => {

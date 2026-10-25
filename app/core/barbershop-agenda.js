@@ -326,22 +326,26 @@ export async function listServices(scope) {
   const nomes = new Map(barbearia.listarProfissionais(empresa).map((item) => [item.id, item.nome]));
   return barbearia.listarServicos(empresa)
     .filter((item) => item.ativo !== false && item.permiteAgendamentoOnline !== false)
-    .map((item) => ({
-      id: item.id,
-      nome: item.nome,
-      descricao: item.descricao || '',
-      categoria: item.categoria || 'Geral',
-      grupoServico: item.grupoServico || 'nao_classificado',
-      duracaoMinutos: Number(item.duracaoMinutos || 30),
-      preco: Number(item.preco || 0),
-      // A IA deve dizer "a partir de" ou "sob consulta" em vez de prometer valor fechado.
-      tipoPreco: item.tipoPreco || 'fixo',
-      precoTexto: barbearia.rotuloPrecoServico(item),
-      // Quem faz: a IA só oferece estes profissionais para o serviço.
-      profissionais: Array.isArray(item.profissionaisIds) && item.profissionaisIds.length
-        ? item.profissionaisIds.map((id) => nomes.get(id)).filter(Boolean)
-        : 'qualquer profissional',
-    }));
+    .map((item) => {
+      const isDinoService = String(item.nome || '').toLowerCase().includes('dino');
+      return {
+        id: item.id,
+        nome: item.nome,
+        descricao: item.descricao || '',
+        categoria: item.categoria || 'Geral',
+        grupoServico: item.grupoServico || 'nao_classificado',
+        duracaoMinutos: Number(item.duracaoMinutos || 30),
+        preco: Number(item.preco || 0),
+        tipoPreco: item.tipoPreco || 'fixo',
+        precoTexto: isDinoService ? 'R$ 300,00 (R$ 600,00 após as 18h09)' : barbearia.rotuloPrecoServico(item),
+        avisoValorHumano: isDinoService
+          ? 'Corte com Dino: R$ 300 diurno (06h às 18h09) e R$ 600 em horário extra noturno/madrugada (após 18h09). Alerte sempre o cliente com calor humano e transparência.'
+          : `Valor R$ ${Number(item.preco || 0).toFixed(2).replace('.', ',')}. Alerte sempre o cliente com transparência e empatia.`,
+        profissionais: Array.isArray(item.profissionaisIds) && item.profissionaisIds.length
+          ? item.profissionaisIds.map((id) => nomes.get(id)).filter(Boolean)
+          : 'qualquer profissional',
+      };
+    });
 }
 
 export async function listProfessionals(scope) {
@@ -368,11 +372,24 @@ export async function availability(scope, input = {}) {
   } catch (erro) {
     throw traduzirErro(erro);
   }
+  const ehDino = barbearia.ehProfissionalDino(profissional) || String(servico?.nome || '').toLowerCase().includes('dino');
+  const tabelaValores = ehDino ? {
+    tipo: 'dino_24x7',
+    diurno: 'R$ 300,00 (06h00 às 18h09)',
+    noturnoExtra: 'R$ 600,00 (após 18h09 até as 06h00 da manhã)',
+    orientacaoHumana: 'Sempre alerte o cliente com simpatia e transparência sobre o valor do corte com Dino (R$ 300 diurno ou R$ 600 em horário extra noturno/madrugada) antes de fechar o agendamento.',
+  } : {
+    tipo: 'padrao',
+    valor: `R$ ${Number(servico.preco || 0).toFixed(2).replace('.', ',')}`,
+    orientacaoHumana: `Alerte o cliente de maneira acolhedora e transparente sobre o valor de R$ ${Number(servico.preco || 0).toFixed(2).replace('.', ',')} para este atendimento.`,
+  };
+
   return {
     date,
     service: { id: servico.id, nome: servico.nome, duracaoMinutos: Number(servico.duracaoMinutos || 30), preco: Number(servico.preco || 0) },
     professional: profissional ? { id: profissional.id, nome: profissional.nome } : { id: 'qualquer', nome: 'qualquer profissional disponível' },
     slots: horarios.filter((item) => item.disponivel).map((item) => item.horario),
+    tabelaValores,
   };
 }
 

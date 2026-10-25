@@ -90,3 +90,70 @@ test('cálculo de pacotes exige intenção ou oportunidade aprovada, sem inventa
  assert.equal(WHATSAPP_AI_TOOL_DECLARATIONS.some(t=>t.name==='calcular_pacote_frequencia'),true);
  await assert.rejects(()=>createWhatsappAiToolExecutor(CONTEXT)('calcular_pacote_frequencia',{profissional:'Nati'}),error=>error.code==='OPPORTUNITY_REQUIRED');
 });
+
+test('agendamento whats: alerta sempre os valores e regras de forma humana e transparente', async () => {
+  const { listServices, availability } = await import('./barbershop-agenda.js');
+  const barbearia = await import('../barbearia-erp-kytto.js');
+
+  const EMPRESA = 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
+  const dino = barbearia.listarProfissionais(EMPRESA).find((p) => barbearia.ehProfissionalDino(p)) || barbearia.criarProfissional(EMPRESA, {
+    nome: 'Guilherme Cunha Martins (Dino)',
+    apelido: 'Dino',
+    atendimento24x7: true,
+  });
+
+  const servicosExistentes = barbearia.listarServicos(EMPRESA);
+  const servicoDino = servicosExistentes.find((s) => s.nome.toLowerCase().includes('dino')) || barbearia.criarServico(EMPRESA, {
+    nome: 'Corte VIP Dino',
+    duracaoMinutos: 30,
+    preco: 300,
+    profissionaisIds: [dino.id],
+  });
+
+  const bruno = barbearia.listarProfissionais(EMPRESA).find((p) => p.nome.toLowerCase().includes('bruno')) || barbearia.criarProfissional(EMPRESA, {
+    nome: 'Bruno Mendes',
+    apelido: 'Bruno',
+  });
+
+  const servicoBruno = servicosExistentes.find((s) => !s.nome.toLowerCase().includes('dino') && s.preco > 0) || barbearia.criarServico(EMPRESA, {
+    nome: 'Corte Tradicional Equipe',
+    duracaoMinutos: 30,
+    preco: 50,
+    profissionaisIds: [bruno.id],
+  });
+
+  const scope = { empresaId: EMPRESA, lojaId: 'dino-matriz' };
+
+  const originalQueryRead = db.queryRead;
+  db.queryRead = async () => ({ rows: [] });
+  try {
+    // Verifica listServices com avisoValorHumano
+    const servicos = await listServices(scope);
+    const sDino = servicos.find((s) => s.id === servicoDino.id);
+    const sBruno = servicos.find((s) => s.id === servicoBruno.id);
+
+    assert.ok(sDino, 'Serviço do Dino encontrado');
+    assert.match(sDino.avisoValorHumano, /R\$ 300 diurno.*R\$ 600 em horário extra/);
+    assert.ok(sBruno, 'Serviço do Bruno encontrado');
+    assert.match(sBruno.avisoValorHumano, /Valor R\$/);
+
+    // Verifica availability com tabelaValores
+    const dispDino = await availability(scope, {
+      serviceId: servicoDino.id,
+      professionalId: dino.id,
+      date: '2030-06-15',
+    });
+    assert.equal(dispDino.tabelaValores.tipo, 'dino_24x7');
+    assert.match(dispDino.tabelaValores.orientacaoHumana, /Sempre alerte o cliente com simpatia e transparência/);
+
+    const dispBruno = await availability(scope, {
+      serviceId: servicoBruno.id,
+      professionalId: bruno.id,
+      date: '2030-06-15',
+    });
+    assert.equal(dispBruno.tabelaValores.tipo, 'padrao');
+    assert.match(dispBruno.tabelaValores.valor, /R\$/);
+  } finally {
+    db.queryRead = originalQueryRead;
+  }
+});

@@ -748,7 +748,7 @@ async function toolPrepareAppointment(context, args = {}) {
   }
   const para = customerName ? ` para ${customerName}` : '';
   const precoPrincipal = isDino ? total : Number(availability.service.preco || 0);
-  const notaHorarioExtra = (isDino && barbeariaErp.ehHorarioExtraDino(time)) ? ' (horário extra noturno)' : '';
+  const notaHorarioExtra = (isDino && barbeariaErp.ehHorarioExtraDino(time)) ? ' (atendimento exclusivo noturno em horário extra com Dino: R$ 600,00)' : '';
   const summary = combo.length
     ? `${friendlyWhen(date, time)}${para}: ${partes.join(' + ')}, total R$ ${total.toFixed(2).replace('.', ',')}`
     : `${servicoComQuem}${para}, ${friendlyWhen(date, time)}, no valor de R$ ${precoPrincipal.toFixed(2).replace('.', ',')}${notaHorarioExtra}`;

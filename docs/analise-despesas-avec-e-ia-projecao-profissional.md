@@ -147,3 +147,17 @@ Ao pesquisar qualquer profissional (ex.: Naty) no painel, o sistema exibe:
     2. **Período Habitual:** Faixa do dia mais frequentada (manhã, tarde, noite ou madrugada).
     3. **Serviços Mais Frequentes:** Procedimentos mais executados.
   * **Orientação para IA:** O WhatsApp e a IA recebem essa orientação para priorizar a sugestão de horários com o barbeiro preferido e no período habitual do cliente, aumentando a taxa de conversão e fidelização.
+---
+
+## 11.0 Alerta Humanizado e Transparente de Valores no Agendamento do WhatsApp
+
+### 11.1 Diretriz Humanizada de Valores no Atendimento
+* **Comunicação Acolhedora:** O atendente do WhatsApp (T-Rex) agora alerta previamente todos os clientes sobre os valores dos serviços e profissionais de maneira calorosa, respeitosa e natural, garantindo que o cliente se sinta bem cuidado e informado antes de concluir o agendamento.
+* **Valores Diferenciados do Dino (Agenda 24x7):**
+  * **Diurno (06h00 às 18h09):** O corte com Dino é informado a **R$ 300,00**.
+  * **Noturno / Madrugada (após 18h09 às 06h00):** O atendimento exclusivo em horário extra é apresentado com cordialidade a **R$ 600,00** (ex.: *"Com o Dino nesse horário noturno após as 18h09 temos o atendimento exclusivo em horário extra, no valor de R$ 600,00. Tudo certinho pra você?"*).
+* **Valores dos Demais Barbeiros (Nat, Bruno, David, etc.):**
+  * O valor individual de cada serviço e profissional é comunicado com transparência e acolhimento (ex.: *"O corte com o Bruno sai por R$ 50,00, show?"*).
+* **Metadados Estruturados em Ferramentas da IA:**
+  * Em `barbershop-agenda.js` (`listServices` e `availability`), os objetos retornados para a IA agora contam com os campos `avisoValorHumano` e `tabelaValores`, instruindo deterministicamente o modelo com a fraseologia acolhedora e as faixas de valores exatas.
+  * O resumo de preparação da ação (`toolPrepareAppointment`) destaca com clareza o valor e a nota explicativa de horário extra noturno.
