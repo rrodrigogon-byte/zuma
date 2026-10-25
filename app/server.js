@@ -46,6 +46,7 @@ import { enviarWhatsappClube } from './modules/clube/whatsapp-agro-open.js';
 import { extensaoIaClube } from './modules/clube/ia-agro-open.js';
 import { lerSociosTtc, importarAlunos } from './modules/clube/importar-legado.js';
 import { createA2AdminRouter } from './modules/a2/rotas.js';
+import * as a2Svc from './modules/a2/servico.js';
 import { createUnidadesAdminRouter } from './modules/unidades/rotas.js';
 import { createRazaoAdminRouter, createRazaoPlataformaRouter } from './modules/razao/rotas.js';
 import { iniciarRotina as iniciarRotinaBackoffice } from './modules/razao/rotina.js';
@@ -735,8 +736,8 @@ async function empresaDoClube(req) {
     throw Object.assign(new Error(error.message), { status: CLUBE_STATUS_ESCOPO[error.code] || 403, code: error.code });
   }
 }
-const A2_FINANCEIRO = /^\/api\/admin\/a2\/(?:contas-receber|alertas-vencimento|fechamento-diario)(?:\/|$)/;
-const A2_CADASTRO = /^\/api\/admin\/a2\/(?:funcionarios|fornecedores|usuarios-mestres)(?:\/|$)/;
+const A2_FINANCEIRO = /^\/api\/admin\/(?:a2\/)?(?:contas-receber|alertas-vencimento|fechamento-diario)(?:\/|$)/;
+const A2_CADASTRO = /^\/api\/admin\/(?:a2\/)?(?:funcionarios|fornecedores|usuarios-mestres)(?:\/|$)/;
 function permissaoDoA2(req) {
   const caminho = String(req.originalUrl || '').split('?')[0];
   if (A2_FINANCEIRO.test(caminho)) return req.method === 'GET' ? 'payments.read' : 'payments.write';
@@ -749,6 +750,16 @@ async function empresaDoA2(req) {
     return contexto.empresaId;
   } catch (error) {
     if (error?.name !== 'CommerceError') throw error;
+    if (error.code === 'TENANT_SELECTION_REQUIRED' || error.code === 'TENANT_CONTEXT_REQUIRED') {
+      const fallback = req.headers['x-empresa-id'] || req.user?.empresaId || (Array.isArray(error.details?.tenants) ? error.details.tenants[0] : null);
+      if (fallback) {
+        req.headers['x-empresa-id'] = fallback;
+        try {
+          const contextoRecuperado = await requireCommercePermission(req, permissaoDoA2(req));
+          return contextoRecuperado.empresaId;
+        } catch { /* segue com o erro original */ }
+      }
+    }
     throw Object.assign(new Error(error.message), { status: CLUBE_STATUS_ESCOPO[error.code] || 403, code: error.code });
   }
 }
@@ -1342,11 +1353,39 @@ if(process.env.COMMERCE_CORE_ENABLED === '1'){
     urlPublica: process.env.PUBLIC_BASE_URL || '',
   });
   // [kytto-a2] Financeiro, contas a receber, fechamento e cadastros mestres por empresa.
-  app.use('/api/admin/a2', auth, requireStaff, createA2AdminRouter({
+  const a2RouterInstance = createA2AdminRouter({
     db: clubeDb,
     empresaDaRequisicao: empresaDoA2,
     operadorDaRequisicao: (req) => String(req.user?.id || req.user?.email || 'sistema'),
-  }));
+  });
+  app.use('/api/admin/a2', auth, requireStaff, a2RouterInstance);
+
+  // [kytto-a2-aliases] Rotas diretas em /api/admin/* para retrocompatibilidade com telas sem /a2
+  app.use('/api/admin', auth, requireStaff, (req, res, next) => {
+    const subPath = req.path;
+    const rotasA2 = [
+      '/contas-receber',
+      '/alertas-vencimento',
+      '/fechamento-diario',
+      '/clientes',
+      '/funcionarios',
+      '/fornecedores',
+      '/usuarios-mestres',
+    ];
+    if (rotasA2.some((r) => subPath === r || subPath.startsWith(`${r}/`))) {
+      return a2RouterInstance(req, res, next);
+    }
+    next();
+  });
+
+  // Sincronização inicial em segundo plano de pedidos pendentes para contas a receber
+  if (clubeDb) {
+    clubeDb.query(`SELECT id FROM empresas WHERE ativo = true`).then((res) => {
+      for (const row of res.rows || []) {
+        a2Svc.sincronizarPedidosPendentes(clubeDb, row.id).catch((err) => console.warn('[a2] sync inicial:', err.message));
+      }
+    }).catch((err) => console.warn('[a2] sync inicial empresas:', err.message));
+  }
   // [kytto-permissoes] O que a pessoa pode fazer na empresa e na unidade ativas, para o menu e as telas do
   // backoffice esconderem o que ela não acessa. Só orienta a interface: cada rota continua
   // conferindo a permissão. Administração da plataforma e sessão sem empresa não filtram nada.
@@ -3053,6 +3092,25 @@ app.post('/api/comanda/:id/pagar', auth, requireStaff, (req,res)=>{
   const total = totalFinal != null ? Number(totalFinal) : Math.max(0, subtotal - descVal + servicoVal);
   c.status='fechada';
   c.pagamento=meio;
+  if (meio === 'conta' && clubeDb) {
+    try {
+      const empresaAlvo = req.headers['x-empresa-id'] || req.user?.empresaId || DINO_COMMERCE_EMPRESA_ID;
+      const clienteNome = req.body?.clienteNome || c.nome || 'Cliente Comanda';
+      clubeDb.query(`
+        SELECT id FROM commerce_customers WHERE empresa_id = $1 AND (lower(nome) = lower($2) OR lower(nome) LIKE lower($3)) LIMIT 1
+      `, [empresaAlvo, clienteNome, `%${clienteNome}%`]).then(cliRes => {
+        const clienteId = cliRes.rows[0]?.id;
+        if (clienteId) {
+          clubeDb.query(`
+            INSERT INTO a2_contas_receber (empresa_id, cliente_id, mesa_numero, descricao, valor, data_vencimento, observacao)
+            VALUES ($1, $2, $3, $4, $5, (CURRENT_DATE + INTERVAL '30 days')::date, $6)
+          `, [empresaAlvo, clienteId, c.mesaNum || 0, `Comanda ${c.id} — ${clienteNome}`, total, `Comanda fechada em conta`]).catch(e => console.warn('[a2] aviso comanda conta:', e.message));
+        }
+      }).catch(e => console.warn('[a2] aviso lookup cliente:', e.message));
+    } catch (e) {
+      console.warn('[a2] aviso comanda conta:', e.message);
+    }
+  }
   // Cartão via maquininha (TEF): registra o comprovante da captura (NSU/autorização/
   // bandeira/parcelas) vindo do agente local e loga a transação para conciliação.
   if(meio==='tef' && tef){

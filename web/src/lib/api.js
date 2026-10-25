@@ -9,7 +9,11 @@ function getToken() {
 function getEmpresaAtivaId() {
   try {
     const empresa = JSON.parse(localStorage.getItem('sp_empresa_ativa') || 'null')
-    return empresa?.id || ''
+    if (empresa?.id) return empresa.id
+    const acessiveis = JSON.parse(localStorage.getItem('sp_empresas_acessiveis') || 'null')
+    if (Array.isArray(acessiveis) && acessiveis[0]?.id) return acessiveis[0].id
+    const user = JSON.parse(localStorage.getItem('sp_user') || 'null')
+    return user?.empresaId || ''
   } catch {
     return ''
   }
