@@ -7,11 +7,13 @@
 // 4. Relatório de serviços extras (hidratações, sobrancelhas, pigmentações, selagens, etc.) com clientes que fizeram;
 // 5. Relatório de produtos com quantidades, faturamento e comissão separada;
 // 6. Evolução de metas e bonificações progressivas em tempo real (faixas, bônus, quanto falta);
-// 7. Filtros ágeis por dia, semana, quinzena, mês ou personalizado, para profissional individual ou equipe inteira.
+// 7. Filtros ágeis por todo o histórico, mês, quinzena, semana, dia ou personalizado;
+// 8. Integração completa: dados operacionais ao vivo do Kytto + histórico completo do banco (Avec/legado).
 
 import * as barbearia from './barbearia-erp-kytto.js';
 import * as repassesKytto from './barbearia-repasses-kytto.js';
 import * as captacao from './dino-captacao-kytto.js';
+import { normalizarNomeProfissional, profissionalKyttoDoAvec } from './dino-vinculos-avec.js';
 
 const dinheiro = (v) => Number((Number(v) || 0).toFixed(2));
 const texto = (v, max = 200) => String(v ?? '').trim().slice(0, max);
@@ -25,7 +27,7 @@ export function hojeOperacional(data = new Date()) {
 
 /**
  * Calcula início e fim para os períodos rápidos da barbearia:
- * 'dia' (hoje), 'semana' (segunda a domingo), 'quinzena' (1 a 15 ou 16 ao fim do mês), 'mes' (1 ao fim do mês).
+ * 'tudo' (todo o histórico), 'dia' (hoje), 'semana' (segunda a domingo), 'quinzena' (1 a 15 ou 16 ao fim do mês), 'mes' (1 ao fim do mês).
  */
 export function resolverPeriodo(tipo = 'mes', { inicio: customInicio = '', fim: customFim = '', dataReferencia = new Date() } = {}) {
   const refStr = hojeOperacional(dataReferencia);
@@ -37,6 +39,10 @@ export function resolverPeriodo(tipo = 'mes', { inicio: customInicio = '', fim: 
   const ultimoDiaMes = new Date(Date.UTC(ano, mes, 0)).getUTCDate();
   const ultimoDiaFormatado = `${anoStr}-${mesStr}-${String(ultimoDiaMes).padStart(2, '0')}`;
   const primeiroDiaFormatado = `${anoStr}-${mesStr}-01`;
+
+  if (tipo === 'tudo' || tipo === 'historico' || tipo === 'completo' || tipo === 'total') {
+    return { tipo: 'tudo', inicio: '1900-01-01', fim: '2099-12-31', label: 'Todo o Histórico Completo' };
+  }
 
   if (tipo === 'custom' && customInicio && customFim) {
     const ini = String(customInicio).slice(0, 10);
@@ -91,9 +97,16 @@ export function ehServicoExtra(servicoNome = '', categoria = '') {
   return PALAVRAS_EXTRAS.some((palavra) => nomeNorm.includes(palavra));
 }
 
+export function ehProduto(nomeItem = '', frenteAtuacao = '') {
+  const frente = String(frenteAtuacao || '').toLowerCase();
+  if (frente.includes('revenda') || frente.includes('produto')) return true;
+  const n = String(nomeItem || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  return ['pomada', 'oleo', 'óleo', 'shampoo', 'condicionador', 'tonico', 'tônico', 'cera', 'balm', 'gel', 'creme', 'minoxidil', 'pasta', 'loção', 'locao', 'spray', 'pente', 'escova de madeira'].some((p) => n.includes(p));
+}
+
 export function categorizarServico(servicoNome = '', categoriaCadastrada = '') {
   const cat = String(categoriaCadastrada || '').trim();
-  if (cat && cat !== 'Geral' && cat !== 'Padrão' && cat !== 'Outros') return cat;
+  if (cat && cat !== 'Geral' && cat !== 'Padrão' && cat !== 'Padrao' && cat !== 'Outros') return cat;
 
   if (ehServicoExtra(servicoNome, categoriaCadastrada)) {
     return 'Procedimentos & Extras';
@@ -109,7 +122,35 @@ export function categorizarServico(servicoNome = '', categoriaCadastrada = '') {
 }
 
 /**
- * Gera o relatório individual completo do profissional para o período especificado.
+ * Encontra o profissional correspondente no cadastro do Kytto, resolvendo vínculos do histórico Avec,
+ * nome social, alias (ex.: Naty -> Natani) ou primeiro nome único.
+ */
+export function encontrarProfissionalCorrespondente(nome, profissionais = []) {
+  if (!nome || !profissionais.length) return null;
+  const porVinculo = profissionalKyttoDoAvec(nome, profissionais);
+  if (porVinculo) return porVinculo;
+
+  const norm = normalizarNomeProfissional(nome);
+  const porNomeExato = profissionais.find((p) => normalizarNomeProfissional(p.nome) === norm);
+  if (porNomeExato) return porNomeExato;
+
+  if (norm === 'naty' || norm.startsWith('naty ') || norm.includes('natani') || norm.includes('dobler')) {
+    const natani = profissionais.find((p) => normalizarNomeProfissional(p.nome).startsWith('natan') || normalizarNomeProfissional(p.nome) === 'naty');
+    if (natani) return natani;
+  }
+
+  const primeiro = norm.split(' ')[0];
+  if (primeiro.length >= 3) {
+    const candidatos = profissionais.filter((p) => normalizarNomeProfissional(p.nome).split(' ')[0] === primeiro);
+    if (candidatos.length === 1) return candidatos[0];
+  }
+
+  return null;
+}
+
+/**
+ * Gera o relatório individual completo do profissional para o período especificado,
+ * integrando a operação ao vivo do Kytto com todo o histórico persistido do banco (Avec).
  */
 export function relatorioIndividualProfissional(empresaId, profissionalId, opcoes = {}) {
   const profId = String(profissionalId || '');
@@ -122,7 +163,7 @@ export function relatorioIndividualProfissional(empresaId, profissionalId, opcoe
   const periodo = resolverPeriodo(opcoes.periodo || 'mes', opcoes);
   const { inicio, fim } = periodo;
 
-  // Comissões com detalhamento e aplicação automática de bonificações de metas
+  // 1. DADOS AO VIVO DO KYTTO (Comandas e Agendamentos concluidos)
   const comissoesResultado = barbearia.obterComissoes(empresaId, {
     inicio,
     fim,
@@ -141,121 +182,179 @@ export function relatorioIndividualProfissional(empresaId, profissionalId, opcoe
     materiais: 0,
     comissaoServicos: 0,
     comissaoProdutos: 0,
-    repasse: 0,
-    atendimentos: 0,
-    vendasProdutos: 0,
-    metasServico: barbearia.calcularFaixaBonificacao(0, prof.percentualComissao, prof.faixasComissaoServico),
-    metasProduto: barbearia.calcularFaixaBonificacao(0, prof.percentualComissaoProduto, prof.faixasComissaoProduto),
   };
 
-  // Pote dos planos
-  const poteInfo = repassesKytto.poteDosPlanos(empresaId, { inicio, fim, lojaId: opcoes.lojaId || '' });
-  const poteProf = poteInfo.porProfissional.get(prof.id) || { valor: 0, detalhes: [] };
+  const chavesAoVivo = new Set(linhaProf.linhas.map((l) => `${l.data}|${l.cliente}|${l.descricao}`));
 
-  // Vales abertos e repasses
-  const valesAbertos = repassesKytto.listarVales(empresaId, { profissionalId: prof.id, status: 'aberto', lojaId: opcoes.lojaId || '' });
-  const totalVales = dinheiro(valesAbertos.reduce((soma, v) => soma + Number(v.valor || 0), 0));
+  // 2. HISTÓRICO COMPLETO DA BASE (AVEC / IMPORTADO / LEGADO)
+  const linhasHistorico = [];
+  try {
+    const historicoAtendimentos = barbearia.listarHistoricoAtendimentos(empresaId, {});
+    for (const item of historicoAtendimentos) {
+      const dataAgenda = String(item.dataAgenda || item.dataHora || '').slice(0, 10);
+      if (inicio && dataAgenda < inicio) continue;
+      if (fim && dataAgenda > fim) continue;
+      if (opcoes.lojaId && item.lojaId && String(item.lojaId) !== String(opcoes.lojaId)) continue;
 
-  // Separar linhas de serviços e produtos
-  const linhasServicos = (linhaProf.linhas || []).filter((l) => l.tipo === 'servico');
-  const linhasProdutos = (linhaProf.linhas || []).filter((l) => l.tipo === 'produto');
+      // Verifica se o registro pertence a este profissional
+      const corresp = item.profissionalId === prof.id
+        ? prof
+        : encontrarProfissionalCorrespondente(item.profissionalNome || item.nome, profissionais);
 
-  // 1. FATURAMENTO TOTAL BRUTO & COMISSÕES SEPARADAS
-  const brutoServicos = dinheiro(linhaProf.brutoServicos);
-  const brutoProdutos = dinheiro(linhaProf.brutoProdutos);
-  const brutoPlanos = dinheiro(poteProf.valor);
+      if (corresp?.id !== prof.id) continue;
+
+      const valorBruto = dinheiro(item.total ?? item.valor ?? 0);
+      const descItem = item.servicoNome || item.descricao || 'Atendimento';
+      const clienteNome = item.clienteNome || 'Cliente Eventual';
+
+      // Evita duplicidade se o mesmo atendimento já estiver na comanda ao vivo
+      if (chavesAoVivo.has(`${dataAgenda}|${clienteNome}|${descItem}`)) continue;
+
+      const isProd = ehProduto(descItem, item.frenteAtuacao);
+
+      linhasHistorico.push({
+        tipo: isProd ? 'produto' : 'servico',
+        data: dataAgenda,
+        origemTipo: 'historico_avec',
+        origemId: item.id || item.numeroComanda || '',
+        cliente: clienteNome,
+        descricao: descItem,
+        servicoId: item.servicoId || null,
+        quantidade: Number(item.quantidade || 1),
+        bruto: valorBruto,
+        taxa: 0,
+        material: 0,
+        base: valorBruto,
+        percentual: isProd ? Number(prof.percentualComissaoProduto || 10) : Number(prof.percentualComissao || 40),
+        comissao: dinheiro(valorBruto * (isProd ? Number(prof.percentualComissaoProduto || 10) : Number(prof.percentualComissao || 40)) / 100),
+      });
+    }
+  } catch (e) {
+    console.warn('[RelatorioIndividual] Aviso ao carregar histórico Avec:', e.message);
+  }
+
+  // Consolidação de todas as linhas de produção (ao vivo + histórico completo)
+  const todasAsLinhas = [...(linhaProf.linhas || []), ...linhasHistorico];
+  todasAsLinhas.sort((a, b) => String(b.data).localeCompare(String(a.data)));
+
+  const linhasServicos = todasAsLinhas.filter((l) => l.tipo === 'servico');
+  const linhasProdutos = todasAsLinhas.filter((l) => l.tipo === 'produto');
+
+  const brutoServicos = dinheiro(linhasServicos.reduce((s, l) => s + Number(l.bruto || 0), 0));
+  const brutoProdutos = dinheiro(linhasProdutos.reduce((s, l) => s + Number(l.bruto || 0), 0));
+
+  // 3. PACOTES E PLANOS (POTE)
+  let brutoPlanos = 0;
+  let atendimentosPeloPlano = [];
+  try {
+    const pote = repassesKytto.poteDosPlanos(empresaId, { inicio, fim, lojaId: opcoes.lojaId });
+    const detalheProf = pote.porProfissional.get(prof.id);
+    if (detalheProf) {
+      brutoPlanos = dinheiro(detalheProf.valor);
+      atendimentosPeloPlano = detalheProf.detalhes || [];
+    }
+  } catch (e) {
+    brutoPlanos = 0;
+  }
+
+  // 4. EVOLUÇÃO DE METAS E BONIFICAÇÕES EM TEMPO REAL
+  const metasServico = barbearia.calcularFaixaBonificacao(
+    brutoServicos,
+    prof.percentualComissao,
+    prof.faixasComissaoServico
+  );
+
+  const metasProduto = barbearia.calcularFaixaBonificacao(
+    brutoProdutos,
+    prof.percentualComissaoProduto,
+    prof.faixasComissaoProduto
+  );
+
+  // Recalcula comissões efetivas aplicando os bônus conquistados por metas
+  const comissaoServicos = dinheiro(brutoServicos * metasServico.percentualEfetivo / 100);
+  const comissaoProdutos = dinheiro(brutoProdutos * metasProduto.percentualEfetivo / 100);
+  const comissaoPlanos = brutoPlanos;
+
   const faturamentoBrutoTotal = dinheiro(brutoServicos + brutoProdutos + brutoPlanos);
-
-  const comissaoServicos = dinheiro(linhaProf.comissaoServicos);
-  const comissaoProdutos = dinheiro(linhaProf.comissaoProdutos);
-  const comissaoPlanos = dinheiro(poteProf.valor);
   const comissaoTotal = dinheiro(comissaoServicos + comissaoProdutos + comissaoPlanos);
 
-  // Diferença do bônus (quanto o bônus gerou a mais para o profissional)
-  const metasServico = linhaProf.metasServico || barbearia.calcularFaixaBonificacao(brutoServicos, prof.percentualComissao, prof.faixasComissaoServico);
-  const metasProduto = linhaProf.metasProduto || barbearia.calcularFaixaBonificacao(brutoProdutos, prof.percentualComissaoProduto, prof.faixasComissaoProduto);
+  const bonusServicosValor = dinheiro(brutoServicos * metasServico.bonusPercentual / 100);
+  const bonusProdutosValor = dinheiro(brutoProdutos * metasProduto.bonusPercentual / 100);
 
-  const baseCalculoServicos = dinheiro(Math.max(0, brutoServicos - Number(linhaProf.taxas || 0) - Number(linhaProf.materiais || 0)));
-  const baseCalculoProdutos = dinheiro(Math.max(0, brutoProdutos - Number(linhaProf.taxas || 0)));
-
-  const bonusServicosValor = metasServico.bonusPercentual > 0 ? dinheiro(baseCalculoServicos * metasServico.bonusPercentual / 100) : 0;
-  const bonusProdutosValor = metasProduto.bonusPercentual > 0 ? dinheiro(baseCalculoProdutos * metasProduto.bonusPercentual / 100) : 0;
-
-  // 2. RELATÓRIO DE SERVIÇOS AGRUPADO POR CATEGORIA
-  const mapaCategorias = new Map();
-  for (const item of linhasServicos) {
-    const cat = categorizarServico(item.descricao, item.categoria);
-    const grupo = mapaCategorias.get(cat) || { categoria: cat, quantidade: 0, faturamento: 0, itens: new Map() };
-    grupo.quantidade += Number(item.quantidade || 1);
-    grupo.faturamento = dinheiro(grupo.faturamento + Number(item.bruto || 0));
-
-    const itemNome = item.descricao || 'Serviço';
-    const sub = grupo.itens.get(itemNome) || { nome: itemNome, quantidade: 0, faturamento: 0 };
-    sub.quantidade += Number(item.quantidade || 1);
-    sub.faturamento = dinheiro(sub.faturamento + Number(item.bruto || 0));
-    grupo.itens.set(itemNome, sub);
-
-    mapaCategorias.set(cat, grupo);
+  // Vales abertos e repasse líquido
+  let totalVales = 0;
+  try {
+    const valesAbertos = repassesKytto.listarVales(empresaId, { profissionalId: prof.id, status: 'aberto', lojaId: opcoes.lojaId });
+    totalVales = dinheiro(valesAbertos.reduce((s, v) => s + v.valor, 0));
+  } catch {
+    totalVales = 0;
   }
 
-  const relatorioServicosPorCategoria = Array.from(mapaCategorias.values())
-    .map((g) => ({
-      categoria: g.categoria,
-      quantidade: g.quantidade,
-      faturamento: g.faturamento,
-      ticketMedio: g.quantidade > 0 ? dinheiro(g.faturamento / g.quantidade) : 0,
-      itens: Array.from(g.itens.values())
-        .map((it) => ({ ...it, ticketMedio: it.quantidade > 0 ? dinheiro(it.faturamento / it.quantidade) : 0 }))
-        .sort((a, b) => b.faturamento - a.faturamento),
-    }))
-    .sort((a, b) => b.faturamento - a.faturamento);
+  // 5. RELATÓRIO DE SERVIÇOS POR CATEGORIA
+  const servicosCatalogo = barbearia.listarServicos(empresaId, { incluirInativos: true });
+  const mapaServicosCatalogo = new Map(servicosCatalogo.map((s) => [s.id, s]));
 
-  // 3. RELATÓRIO DE PACOTES E PLANOS
-  // Coleta assinaturas ativas na empresa e usos pelo plano no período
-  const planosCatalogo = barbearia.listarPlanos(empresaId, { incluirInativos: true });
-  const assinaturasEmpresa = barbearia.listarAssinaturas(empresaId);
+  const categoriasMap = new Map();
+  for (const item of linhasServicos) {
+    const servicoCadastrado = item.servicoId ? mapaServicosCatalogo.get(item.servicoId) : null;
+    const cat = categorizarServico(item.descricao, servicoCadastrado?.categoria);
+    const dadosCat = categoriasMap.get(cat) || { categoria: cat, quantidade: 0, faturamento: 0, itens: new Map() };
 
-  const atendimentosPeloPlano = [];
-  for (const det of poteProf.detalhes || []) {
-    atendimentosPeloPlano.push({
-      planoId: det.planoId,
-      planoNome: det.plano,
-      pontos: det.pontos,
-      usos: det.usos,
-      valorFixo: det.valorFixo,
-      valorTotal: det.valor,
-    });
+    dadosCat.quantidade += Number(item.quantidade || 1);
+    dadosCat.faturamento = dinheiro(dadosCat.faturamento + Number(item.bruto || 0));
+
+    const nomeServico = item.descricao;
+    const dadoItem = dadosCat.itens.get(nomeServico) || { nome: nomeServico, quantidade: 0, faturamento: 0 };
+    dadoItem.quantidade += Number(item.quantidade || 1);
+    dadoItem.faturamento = dinheiro(dadoItem.faturamento + Number(item.bruto || 0));
+    dadosCat.itens.set(nomeServico, dadoItem);
+
+    categoriasMap.set(cat, dadosCat);
   }
 
-  // 4. RELATÓRIO DE SERVIÇOS EXTRAS COM CLIENTES NOMINAIS
-  const listaServicosExtras = [];
-  const resumoExtras = new Map();
+  const relatorioServicosPorCategoria = Array.from(categoriasMap.values()).map((cat) => ({
+    categoria: cat.categoria,
+    quantidade: cat.quantidade,
+    faturamento: cat.faturamento,
+    ticketMedio: cat.quantidade > 0 ? dinheiro(cat.faturamento / cat.quantidade) : 0,
+    itens: Array.from(cat.itens.values()).map((it) => ({
+      nome: it.nome,
+      quantidade: it.quantidade,
+      faturamento: it.faturamento,
+      ticketMedio: it.quantidade > 0 ? dinheiro(it.faturamento / it.quantidade) : 0,
+    })).sort((a, b) => b.faturamento - a.faturamento),
+  })).sort((a, b) => b.faturamento - a.faturamento);
+
+  // 6. RELATÓRIO DE SERVIÇOS EXTRAS COM CLIENTES NOMINAIS
+  const itensExtrasNominais = [];
+  const resumoExtrasMap = new Map();
   for (const item of linhasServicos) {
-    if (ehServicoExtra(item.descricao, item.categoria)) {
-      listaServicosExtras.push({
+    const servicoCadastrado = item.servicoId ? mapaServicosCatalogo.get(item.servicoId) : null;
+    if (ehServicoExtra(item.descricao, servicoCadastrado?.categoria)) {
+      itensExtrasNominais.push({
         data: item.data,
+        cliente: item.cliente || 'Cliente',
         servico: item.descricao,
-        cliente: item.cliente || 'Cliente avulso',
-        comandaId: item.origemId || '',
         valor: item.bruto,
         comissao: item.comissao,
+        comandaId: item.origemId || null,
       });
 
-      const ex = resumoExtras.get(item.descricao) || { nome: item.descricao, quantidade: 0, faturamento: 0 };
-      ex.quantidade += Number(item.quantidade || 1);
-      ex.faturamento = dinheiro(ex.faturamento + Number(item.bruto || 0));
-      resumoExtras.set(item.descricao, ex);
+      const res = resumoExtrasMap.get(item.descricao) || { nome: item.descricao, quantidade: 0, faturamento: 0 };
+      res.quantidade += Number(item.quantidade || 1);
+      res.faturamento = dinheiro(res.faturamento + Number(item.bruto || 0));
+      resumoExtrasMap.set(item.descricao, res);
     }
   }
 
   const relatorioServicosExtras = {
-    quantidadeTotal: listaServicosExtras.length,
-    faturamentoTotal: dinheiro(listaServicosExtras.reduce((s, it) => s + it.valor, 0)),
-    resumo: Array.from(resumoExtras.values()).sort((a, b) => b.faturamento - a.faturamento),
-    clientesAtendidos: listaServicosExtras.sort((a, b) => String(b.data).localeCompare(String(a.data))),
+    quantidadeTotal: itensExtrasNominais.length,
+    faturamentoTotal: dinheiro(itensExtrasNominais.reduce((s, it) => s + it.valor, 0)),
+    resumo: Array.from(resumoExtrasMap.values()).sort((a, b) => b.faturamento - a.faturamento),
+    clientesAtendidos: itensExtrasNominais,
   };
 
-  // 5. RELATÓRIO DE PRODUTOS VENDIDOS COM COMISSÃO SEPARADA
+  // 7. RELATÓRIO DE PRODUTOS VENDIDOS COM COMISSÃO SEPARADA
   const mapaProdutos = new Map();
   for (const linha of linhasProdutos) {
     const itens = Array.isArray(linha.itens) && linha.itens.length > 0
@@ -292,6 +391,10 @@ export function relatorioIndividualProfissional(empresaId, profissionalId, opcoe
       clientes: Array.from(p.clientes).sort(),
     })).sort((a, b) => b.faturamentoBruto - a.faturamentoBruto),
   };
+
+  // Planos e assinaturas da unidade
+  const planosCatalogo = barbearia.listarPlanos(empresaId, { incluirInativos: true });
+  const assinaturasEmpresa = barbearia.listarAssinaturas(empresaId);
 
   // Resumo Geral Consolidado
   return {
@@ -342,7 +445,7 @@ export function relatorioIndividualProfissional(empresaId, profissionalId, opcoe
     },
     servicosExtras: relatorioServicosExtras,
     produtos: relatorioProdutos,
-    extratoLinhas: linhaProf.linhas || [],
+    extratoLinhas: todasAsLinhas,
   };
 }
 

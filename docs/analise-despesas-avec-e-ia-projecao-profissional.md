@@ -12,6 +12,20 @@
 
 ---
 
+## 1.0 Integração Completa do Histórico da Base de Dados (Avec e Operacional)
+
+Para que os relatórios analíticos individuais e o ranking de metas da equipe reflitam imediatamente todo o histórico faturado no sistema (evitando valores zerados ao consultar profissionais ou períodos):
+* **Integração das Fontes de Dados:**
+  * `barbearia.obterComissoes`: comandas e agendamentos concluídos no Kytto ao vivo.
+  * `barbearia.listarHistoricoAtendimentos`: atendimentos históricos completos importados do Avec.
+  * `dino-vinculos-avec.js`: resolução de nomes históricos (ex.: "Natani Minanis Dobler" para "Natani", "Bruno Mendes Pedroso" para "Bruno", "Guilherme Cunha Martins" para "Dino", "David Kaua Araujo Moraes" para "David", etc.).
+  * Deduplicação inteligente entre atendimentos ao vivo e legados.
+  * Detecção de revenda e produtos do histórico (`ehProduto` e `frenteAtuacao === 'revenda'`).
+* **Filtro 'Todo o Histórico Completo':**
+  * Novo filtro ágil no cabeçalho: **[Todo o Histórico]**, permitindo consolidar todo o faturamento da história do negócio com 1 clique, além de **[Este Mês]**, **[Esta Quinzena]**, **[Esta Semana]** e **[Hoje]**.
+
+---
+
 ## 1. Módulo de Metas, Comissões e Bonificações Progressivas Individuais
 
 ### 1.1 Objetivo e Regras de Negócio Implementadas
