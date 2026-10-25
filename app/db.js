@@ -473,7 +473,7 @@ function gravarAgora(){
   const inicio = Date.now();
   try {
     ensureDir();
-    const tmp = DB_PATH + '.tmp';
+    const tmp = `${DB_PATH}.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2, 6)}.tmp`;
     const tamanhoBytes = escreverArquivo(tmp, _cache);
     if(inicio - _metricas.ultimoBakEm >= BAK_INTERVALO_MS && fs.existsSync(DB_PATH)){
       try { renovarBackup(); _metricas.ultimoBakEm = inicio; }

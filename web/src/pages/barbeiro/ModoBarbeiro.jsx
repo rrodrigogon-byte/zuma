@@ -259,6 +259,57 @@ export default function ModoBarbeiro() {
               <div style={{ fontSize: 12, color: t.muted }}>{sub}</div>
             </div>)}
           </section>
+
+          {painel.gamificacao && (
+            <div style={{ ...card, padding: 14, background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.9) 0%, rgba(15, 23, 42, 0.95) 100%)', border: '1px solid rgba(245, 158, 11, 0.35)', display: 'grid', gap: 10 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 800, fontSize: 14, color: '#fbbf24' }}>
+                  <span>🎯</span> Minhas Metas & Roleta
+                </div>
+                {(painel.gamificacao.girosPendentes?.length > 0) && (
+                  <span style={{ background: '#f59e0b', color: '#000', fontWeight: 800, fontSize: 11, padding: '2px 8px', borderRadius: 20 }}>
+                    🎡 {painel.gamificacao.girosPendentes.length} {painel.gamificacao.girosPendentes.length > 1 ? 'Giros Ganhos' : 'Giro Ganho'}!
+                  </span>
+                )}
+              </div>
+
+              {painel.gamificacao.config?.metasDiarias?.servicosExtrasAtivo && (
+                <div style={{ display: 'grid', gap: 4, fontSize: 12 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', color: t.cream }}>
+                    <span>✂️ Extras hoje: <strong>{painel.gamificacao.dia?.servicosExtras || 0} de {painel.gamificacao.config.metasDiarias.servicosExtrasQtd}</strong></span>
+                    {painel.gamificacao.dia?.metaExtrasAtingida
+                      ? <span style={{ color: t.green, fontWeight: 800 }}>✓ Meta batida!</span>
+                      : <span style={{ color: t.muted }}>Faltam {Math.max(0, painel.gamificacao.config.metasDiarias.servicosExtrasQtd - (painel.gamificacao.dia?.servicosExtras || 0))}</span>}
+                  </div>
+                  <div style={{ height: 6, background: 'rgba(255,255,255,0.1)', borderRadius: 10, overflow: 'hidden' }}>
+                    <div style={{ height: '100%', background: painel.gamificacao.dia?.metaExtrasAtingida ? t.green : t.accent, width: `${Math.min(100, Math.round(((painel.gamificacao.dia?.servicosExtras || 0) / (painel.gamificacao.config.metasDiarias.servicosExtrasQtd || 1)) * 100))}%` }} />
+                  </div>
+                </div>
+              )}
+
+              {painel.gamificacao.config?.metasDiarias?.produtosAtivo && (
+                <div style={{ display: 'grid', gap: 4, fontSize: 12 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', color: t.cream }}>
+                    <span>🧴 Produtos hoje: <strong>{reais(painel.gamificacao.dia?.produtosValor || 0)} de {reais(painel.gamificacao.config.metasDiarias.produtosValor)}</strong></span>
+                    {painel.gamificacao.dia?.metaProdutosAtingida
+                      ? <span style={{ color: t.green, fontWeight: 800 }}>✓ Meta batida!</span>
+                      : <span style={{ color: t.muted }}>Falta {reais(Math.max(0, (painel.gamificacao.config.metasDiarias.produtosValor || 0) - (painel.gamificacao.dia?.produtosValor || 0)))}</span>}
+                  </div>
+                  <div style={{ height: 6, background: 'rgba(255,255,255,0.1)', borderRadius: 10, overflow: 'hidden' }}>
+                    <div style={{ height: '100%', background: painel.gamificacao.dia?.metaProdutosAtingida ? t.green : '#10b981', width: `${Math.min(100, Math.round(((painel.gamificacao.dia?.produtosValor || 0) / (painel.gamificacao.config.metasDiarias.produtosValor || 1)) * 100))}%` }} />
+                  </div>
+                </div>
+              )}
+
+              {painel.gamificacao.config?.metasSemanais?.ativo && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.05)', padding: '6px 10px', borderRadius: 8, fontSize: 12 }}>
+                  <span style={{ color: '#e2e8f0' }}>🔥 {painel.gamificacao.config.metasSemanais.tituloDesafio || 'Desafio da Semana'}:</span>
+                  <strong style={{ color: '#fbbf24' }}>{reais(painel.gamificacao.semana?.produtosValor || 0)} ({painel.gamificacao.semana?.produtosQtd || 0} un)</strong>
+                </div>
+              )}
+            </div>
+          )}
+
           <button type="button" style={btn2} onClick={() => setFolha('extrato')}>Meu extrato e repasses</button>
 
           <section aria-label="Agenda" style={{ display: 'grid', gap: 10 }}>

@@ -149,6 +149,7 @@ import { registerDinoAdminRoutes, loadCommerceSalesDetail } from './dino-admin-r
 import { buildCurrentMaterials, previewTaxMaterialPlan, PreviewConflictError, PreviewValidationError } from './comandas-caixa-previa.js';
 import { perfilDoUsuario, profissionalPode, operadorPodeNaBarbearia, respostaParaOperador, papelLegadoDoRole, permissoesDoPerfil, MODULOS_FECHADOS_AO_OPERADOR, MENSAGEM_PERFIL } from './core/perfis-acesso.js';
 import { profissionalDoUsuario } from './dino-modo-barbeiro.js';
+import { provisionarEquipeDino } from './dino-equipe-seed.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -315,7 +316,16 @@ function seedUsuarios(){
   }
 }
 seedUsuarios();
-const findUser = login => db().usuarios.find(u=>u.email===norm(login));
+try { provisionarEquipeDino({ commerceDb }); } catch (err) { console.warn('Aviso ao provisionar equipe Dino:', err.message); }
+const findUser = login => {
+  const n = norm(login);
+  if (!n) return null;
+  return (db().usuarios || []).find(u =>
+    norm(u.email) === n ||
+    norm(u.username) === n ||
+    (u.email && norm(u.email.split('@')[0]) === n)
+  );
+};
 function senhaConfere(senha, hash){
   if(typeof senha !== 'string' || typeof hash !== 'string' || !hash) return false;
   try { return bcrypt.compareSync(senha, hash); } catch { return false; }
@@ -1795,7 +1805,16 @@ app.post('/api/admin/login', async (req,res)=>{
     audit({user:{nome:u.nome,role:u.role}, ip:req.ip}, 'LOGIN painel', undefined, { persistSequence: false });
     save();
   }
-  res.json({ token: tokenFor({ ...u, empresaId, lojaId }), user: publicUser(u), role: u.role, sessao: { ...sessao, empresaId, lojaId } });
+  const sessaoFinal = {
+    ...sessao,
+    empresaId,
+    lojaId,
+    empresa: sessao.empresa || (empresaId ? { id: empresaId, nome: 'Barbearia Dino' } : null),
+    loja: sessao.loja || (lojaId ? { id: lojaId, nome: 'Barbearia Dino' } : null),
+    empresas_acessiveis: (sessao.empresas_acessiveis && sessao.empresas_acessiveis.length > 0) ? sessao.empresas_acessiveis : (empresaId ? [{ id: empresaId, nome: 'Barbearia Dino' }] : []),
+    lojas_acessiveis: (sessao.lojas_acessiveis && sessao.lojas_acessiveis.length > 0) ? sessao.lojas_acessiveis : (lojaId ? [{ id: lojaId, nome: 'Barbearia Dino', empresaId }] : []),
+  };
+  res.json({ token: tokenFor({ ...u, empresaId, lojaId }), user: publicUser(u), role: u.role, sessao: sessaoFinal });
 });
 
 // ---- AUTH unificada (site + sistema) ----
