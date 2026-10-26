@@ -667,7 +667,14 @@ function periodoNps(dias) {
 export function NpsPanel() {
   const { toast } = useToast()
   const [periodo, setPeriodo] = useState('90')
-  const { dados, erro, carregando, carregar } = useCarregar(`/api/admin/barbearia/captacao/nps${periodoNps(periodo)}`)
+  const [customNpsInicio, setCustomNpsInicio] = useState('')
+  const [customNpsFim, setCustomNpsFim] = useState('')
+  
+  const queryPeriodo = periodo === 'custom' && customNpsInicio && customNpsFim 
+    ? `?inicio=${customNpsInicio}&fim=${customNpsFim}` 
+    : periodoNps(periodo)
+    
+  const { dados, erro, carregando, carregar } = useCarregar(`/api/admin/barbearia/captacao/nps${queryPeriodo}`)
   const config = useCarregar('/api/admin/barbearia/captacao/configuracao')
   const [atraso, setAtraso] = useState('0')
   useEffect(() => {
@@ -691,11 +698,23 @@ export function NpsPanel() {
     <div style={card}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: 12 }}>
         <div><h2 style={h2}>Avaliações da Barbearia (NPS)</h2><p style={sub}>Questionário da própria Dino. Após a conclusão, o convite é programado somente com consentimento de WhatsApp e canal ativo. Nota e comentário ficam no sistema.</p></div>
-        <label style={{ display: 'grid', gap: 4, color: 'var(--muted)', fontSize: 12 }}>Período dos atendimentos
-          <select style={input} value={periodo} onChange={(e) => setPeriodo(e.target.value)}>
-            <option value="30">Últimos 30 dias</option><option value="90">Últimos 90 dias</option><option value="todos">Todo o histórico</option>
-          </select>
-        </label>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'end' }}>
+          <label style={{ display: 'grid', gap: 4, color: 'var(--muted)', fontSize: 12 }}>Período
+            <select style={input} value={periodo} onChange={(e) => { setPeriodo(e.target.value); if(e.target.value !== 'custom') { setCustomNpsInicio(''); setCustomNpsFim(''); } }}>
+              <option value="30">Últimos 30 dias</option><option value="90">Últimos 90 dias</option><option value="todos">Todo o histórico</option><option value="custom">Personalizado</option>
+            </select>
+          </label>
+          {periodo === 'custom' && (
+            <>
+              <label style={{ display: 'grid', gap: 4, color: 'var(--muted)', fontSize: 12 }}>De
+                <input type="date" style={input} value={customNpsInicio} onChange={(e) => setCustomNpsInicio(e.target.value)} />
+              </label>
+              <label style={{ display: 'grid', gap: 4, color: 'var(--muted)', fontSize: 12 }}>Até
+                <input type="date" style={input} value={customNpsFim} onChange={(e) => setCustomNpsFim(e.target.value)} />
+              </label>
+            </>
+          )}
+        </div>
       </div>
       <div style={{ ...grid(150), marginTop: 14 }}>
         <div style={kpi}><div style={kpiLabel}>NPS</div><div style={{ ...kpiValue, color: cores[tomNps] }}>{dados?.nps ?? '—'}</div></div>
