@@ -420,3 +420,19 @@ Ao pesquisar qualquer profissional (ex.: Naty) no painel, o sistema exibe:
 * **Seletor Popover no Cabeçalho:** Botão `[ 🎨 Ícone + Nome do Modelo ▾ ]` que abre catálogo visual com cards explicativos, ícones, subtítulos, badges de destaque e indicação de modelo ativo.
 * **Fixar como Modelo Padrão:** Botão `⭐ Definir atual como padrão` que salva a escolha no navegador do usuário (`dino_agenda_modelo_padrao`).
 * **Botões Rápidos Preservados:** Botões de alternância rápida na barra (`💈 Diário`, `⏱️ Família`, `📅 Seg–Sáb`, `🗓️ 7 Dias`, `📆 Mês`, `📋 Lista`) para agilidade no dia a dia.
+
+
+---
+
+## 21.0 Busca Inteligente de Clientes por Nome ou Telefone, Eliminação da Lista Aberta e Cadastro Rápido
+
+### 21.1 Demanda e Diagnóstico Operacional
+Ao clicar no campo de busca de cliente no modal de agendamento, o sistema abria de imediato uma lista suspensa com dezenas de clientes cadastrados, poluindo visualmente a tela e tornando a navegação pesada. Além disso, a busca exigia que o usuário alternasse manualmente entre modos de busca separados por nome ou por telefone. O operador da barbearia necessita de um campo limpo e imediato que não despeje todos os clientes na tela, mas que permita pesquisar simultaneamente por nome ou por dígitos do telefone, oferecendo ainda o cadastro instantâneo de um novo cliente no CRM caso ele não exista, bem como a opção de atendimento eventual.
+
+### 21.2 Solução Implementada
+A lógica de filtragem foi aprimorada em `web/src/pages/admin/BarbeariaNovoAgendamentoModal.jsx` para que o estado vazio não retorne a lista de clientes, mantendo o campo limpo até que o operador digite pelo menos um caractere ou dígito. O seletor de busca foi configurado com o modo padrão unificado "Nome ou Telefone", permitindo que termos numéricos encontrem os telefones cadastrados e termos textuais filtrem os nomes sem necessidade de troca prévia de filtro.
+
+Quando nenhum cliente cadastrado é encontrado com o termo digitado, o modal exibe imediatamente um botão destacado para cadastrar o novo cliente diretamente no CRM com preenchimento inteligente dos campos, além de uma alternativa de atendimento eventual sem cadastro. Caso o operador queira abrir o cadastro rápido a qualquer momento, o botão de cadastro permanente permanece disponível no cabeçalho do campo.
+
+### 21.3 Validação e Testes Automatizados
+A suíte de testes de componentes em `web/src/pages/admin/BarbeariaNovoAgendamentoModal.test.jsx` foi atualizada para validar o novo comportamento, garantindo que o foco no campo vazio não exiba a lista de clientes e que a busca por telefone funcione diretamente no modo simultâneo padrão. Todos os 6 testes do componente e os 51 testes automatizados do backend foram executados com 100% de aprovação, juntamente com o build de produção do frontend (`npm run build`).

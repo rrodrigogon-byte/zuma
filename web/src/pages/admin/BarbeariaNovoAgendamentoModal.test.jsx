@@ -59,7 +59,7 @@ describe('Central Dino — Modal Novo Agendamento Dinâmico', () => {
     expect(text).toContain('Adicionar serviço')
   })
 
-  it('abre todos os clientes ao focar no campo de busca', () => {
+  it('não abre lista de todos os clientes ao focar no campo vazio, mantendo tela limpa', () => {
     let renderer
     act(() => {
       renderer = create(
@@ -85,11 +85,39 @@ describe('Central Dino — Modal Novo Agendamento Dinâmico', () => {
     })
 
     const textAposFocus = allText(renderer.toJSON())
-    // Deve mostrar todos os clientes cadastrados imediatamente
-    expect(textAposFocus).toContain('Dino (Guilherme) Cunha')
-    expect(textAposFocus).toContain('Rodrigo S')
-    expect(textAposFocus).toContain('Rodrigo LG')
-    expect(textAposFocus).toContain('Rodrigo Gorla')
+    // NÃO deve mostrar todos os clientes cadastrados imediatamente
+    expect(textAposFocus).not.toContain('Dino (Guilherme) Cunha')
+    expect(textAposFocus).toContain('Digite o nome ou telefone para pesquisar o cliente')
+  })
+
+  it('permite buscar por telefone diretamente no modo padrão simultâneo', () => {
+    let renderer
+    act(() => {
+      renderer = create(
+        <BarbeariaNovoAgendamentoModal
+          aberto={true}
+          onClose={vi.fn()}
+          dataInicial="2026-10-24"
+          horaInicial="16:00"
+          clientes={clientesMock}
+          profissionais={profissionaisMock}
+          servicos={servicosMock}
+          onSalvar={vi.fn()}
+        />
+      )
+    })
+
+    const root = renderer.root
+    const inputBusca = root.findByProps({ className: 'bna-search-input' })
+
+    // Digita telefone do Dino direto no campo padrão sem precisar alternar seletor
+    act(() => {
+      inputBusca.props.onChange({ target: { value: '996722055' } })
+    })
+
+    const text = allText(renderer.toJSON())
+    expect(text).toContain('Dino (Guilherme) Cunha')
+    expect(text).not.toContain('Rodrigo S')
   })
 
   it('permite filtrar por nome e selecionar cliente', () => {
@@ -183,7 +211,7 @@ describe('Central Dino — Modal Novo Agendamento Dinâmico', () => {
     // Seleciona primeiro cliente da lista
     const inputBusca = root.findByProps({ className: 'bna-search-input' })
     act(() => {
-      inputBusca.props.onFocus()
+      inputBusca.props.onChange({ target: { value: 'Dino' } })
     })
     const itensCli = root.findAll((el) => el.props.className && el.props.className.includes('bna-cliente-item'))
     const itemCli = itensCli[0]

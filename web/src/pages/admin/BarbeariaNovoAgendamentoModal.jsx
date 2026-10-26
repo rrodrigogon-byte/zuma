@@ -57,7 +57,7 @@ export default function BarbeariaNovoAgendamentoModal({
   const [recorrencia, setRecorrencia] = useState('nenhuma') // 'nenhuma', 'semanal', 'quinzenal', 'mensal'
 
   // Busca e seleção de cliente
-  const [tipoBusca, setTipoBusca] = useState('nome') // 'nome' ou 'telefone'
+  const [tipoBusca, setTipoBusca] = useState('todos') // 'todos', 'nome' ou 'telefone'
   const [termoBusca, setTermoBusca] = useState('')
   const [dropdownAberto, setDropdownAberto] = useState(false)
   const [indiceAtivo, setIndiceAtivo] = useState(0)
@@ -120,8 +120,8 @@ export default function BarbeariaNovoAgendamentoModal({
     const lista = Array.isArray(clientes) ? clientes : []
     const termo = termoBusca.trim()
     if (!termo) {
-      // Quando não há termo digitado: exibe os primeiros 60 clientes ordenados alfabeticamente
-      return lista.slice(0, 60)
+      // Quando não há termo digitado: NÃO abre a lista de todos os clientes, mantendo a tela limpa e rápida
+      return []
     }
 
     const digitos = soDigitos(termo)
@@ -145,9 +145,16 @@ export default function BarbeariaNovoAgendamentoModal({
           // Busca inteligente: achou dígitos mesmo no modo nome
           matches.push(c)
         }
+      } else {
+        // 'todos' (padrão inteligente): busca por nome ou dígitos de telefone simultaneamente
+        if (digitos.length >= 2 && telDigitos.includes(digitos)) {
+          matches.push(c)
+        } else if (palavras.length && palavras.every((p) => nomeNorm.includes(p))) {
+          matches.push(c)
+        }
       }
 
-      if (matches.length >= 60) break
+      if (matches.length >= 25) break
     }
     return matches
   }, [clientes, termoBusca, tipoBusca])
@@ -367,10 +374,12 @@ export default function BarbeariaNovoAgendamentoModal({
                     value={tipoBusca}
                     onChange={(e) => {
                       setTipoBusca(e.target.value)
-                      setDropdownAberto(true)
+                      if (termoBusca.trim()) setDropdownAberto(true)
                       inputBuscaRef.current?.focus()
                     }}
+                    aria-label="Tipo de busca"
                   >
+                    <option value="todos">Nome ou Telefone ▾</option>
                     <option value="nome">Nome ▾</option>
                     <option value="telefone">Telefone ▾</option>
                   </select>
@@ -381,15 +390,24 @@ export default function BarbeariaNovoAgendamentoModal({
                       ref={inputBuscaRef}
                       type="text"
                       className="bna-search-input"
-                      placeholder={tipoBusca === 'nome' ? 'Pesquisar Cliente...' : 'Digite o telefone...'}
+                      placeholder={
+                        tipoBusca === 'telefone'
+                          ? 'Digite os dígitos do telefone...'
+                          : tipoBusca === 'nome'
+                          ? 'Pesquisar pelo nome do cliente...'
+                          : 'Buscar por nome ou número do telefone (ex: Karine ou 65 99200...)'
+                      }
                       value={termoBusca}
                       onChange={(e) => {
-                        setTermoBusca(e.target.value)
-                        setDropdownAberto(true)
+                        const val = e.target.value
+                        setTermoBusca(val)
+                        setDropdownAberto(val.trim().length > 0)
                       }}
-                      onFocus={() => setDropdownAberto(true)}
+                      onFocus={() => {
+                        if (termoBusca.trim().length > 0) setDropdownAberto(true)
+                      }}
                       onKeyDown={(e) => {
-                        if (!dropdownAberto && ['ArrowDown', 'ArrowUp'].includes(e.key)) {
+                        if (!dropdownAberto && ['ArrowDown', 'ArrowUp'].includes(e.key) && termoBusca.trim()) {
                           setDropdownAberto(true)
                         }
                         if (e.key === 'ArrowDown') {
@@ -420,52 +438,135 @@ export default function BarbeariaNovoAgendamentoModal({
                   </button>
                 </div>
 
-                {/* DROPDOWN DINÂMICO QUE ABRE IMEDIATAMENTE */}
-                {dropdownAberto && (
+                {/* DROPDOWN DINÂMICO QUE ABRE APENAS AO PESQUISAR */}
+                {dropdownAberto && termoBusca.trim().length > 0 && (
                   <div className="bna-dropdown-clientes">
                     <div className="bna-dropdown-header">
-                      {termoBusca.trim()
-                        ? `${clientesFiltrados.length} cliente(s) encontrado(s)`
-                        : `Clientes cadastrados (${clientes.length || 0}) — selecione na lista ou digite:`}
+                      <span>Resultados para "{termoBusca.trim()}"</span>
+                      <span>{clientesFiltrados.length} encontrado(s)</span>
                     </div>
 
                     {clientesFiltrados.length === 0 ? (
                       <div style={{ padding: '14px', fontSize: 13, color: '#94a3b8', textAlign: 'center' }}>
-                        Nenhum cliente encontrado para "{termoBusca}".
-                        <button
-                          type="button"
-                          style={{ display: 'block', margin: '8px auto 0', background: 'none', border: 'none', color: '#3b82f6', fontWeight: 700, cursor: 'pointer' }}
-                          onClick={() => {
-                            if (tipoBusca === 'nome') setNovoClienteNome(termoBusca)
-                            else setNovoClienteTelefone(termoBusca)
-                            setFormCadastroAberto(true)
-                            setDropdownAberto(false)
-                          }}
-                        >
-                          + Cadastrar "{termoBusca}" agora
-                        </button>
+                        Nenhum cliente cadastrado encontrado para "{termoBusca.trim()}".
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 10 }}>
+                          <button
+                            type="button"
+                            style={{
+                              background: 'rgba(16, 185, 129, 0.15)',
+                              border: '1px solid #10b981',
+                              color: '#34d399',
+                              padding: '8px 12px',
+                              borderRadius: 8,
+                              fontWeight: 700,
+                              cursor: 'pointer',
+                            }}
+                            onClick={() => {
+                              const dig = soDigitos(termoBusca)
+                              if (dig.length >= 8) {
+                                setNovoClienteTelefone(formatarTelefoneBR(dig))
+                                setNovoClienteNome('')
+                              } else {
+                                setNovoClienteNome(termoBusca.trim())
+                                setNovoClienteTelefone('')
+                              }
+                              setFormCadastroAberto(true)
+                              setDropdownAberto(false)
+                            }}
+                          >
+                            ➕ Cadastrar novo cliente: "{termoBusca.trim()}"
+                          </button>
+                          <button
+                            type="button"
+                            style={{
+                              background: 'rgba(59, 130, 246, 0.12)',
+                              border: '1px solid #3b82f6',
+                              color: '#60a5fa',
+                              padding: '8px 12px',
+                              borderRadius: 8,
+                              fontWeight: 700,
+                              cursor: 'pointer',
+                            }}
+                            onClick={() => {
+                              const dig = soDigitos(termoBusca)
+                              const ehTel = dig.length >= 8
+                              setClienteSelecionado({
+                                id: '',
+                                nome: ehTel ? 'Cliente eventual' : termoBusca.trim(),
+                                telefone: ehTel ? dig : '',
+                              })
+                              setDropdownAberto(false)
+                              setTermoBusca('')
+                            }}
+                          >
+                            👤 Usar "{termoBusca.trim()}" como atendimento eventual (sem cadastro)
+                          </button>
+                        </div>
                       </div>
                     ) : (
-                      clientesFiltrados.map((cli, idx) => (
-                        <button
-                          key={cli.id}
-                          type="button"
-                          className={`bna-cliente-item ${idx === indiceAtivo ? 'ativo' : ''}`}
-                          onMouseDown={(e) => e.preventDefault()}
-                          onClick={() => {
-                            setClienteSelecionado(cli)
-                            setDropdownAberto(false)
-                            setTermoBusca('')
-                          }}
-                        >
-                          <span className="bna-cliente-item-nome">{cli.nome}</span>
-                          <span className="bna-cliente-item-fone">
-                            {cli.telefone ? formatarTelefoneBR(cli.telefone) : '—'}
-                          </span>
-                        </button>
-                      ))
+                      <>
+                        {clientesFiltrados.map((cli, idx) => (
+                          <button
+                            key={cli.id}
+                            type="button"
+                            className={`bna-cliente-item ${idx === indiceAtivo ? 'ativo' : ''}`}
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => {
+                              setClienteSelecionado(cli)
+                              setDropdownAberto(false)
+                              setTermoBusca('')
+                            }}
+                          >
+                            <span className="bna-cliente-item-nome">{cli.nome}</span>
+                            <span className="bna-cliente-item-fone">
+                              {cli.telefone ? formatarTelefoneBR(cli.telefone) : '—'}
+                            </span>
+                          </button>
+                        ))}
+                        <div style={{ padding: '8px 10px', borderTop: '1px solid rgba(255,255,255,0.08)', display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+                          <button
+                            type="button"
+                            style={{ background: 'none', border: 'none', color: '#10b981', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}
+                            onClick={() => {
+                              const dig = soDigitos(termoBusca)
+                              if (dig.length >= 8) {
+                                setNovoClienteTelefone(formatarTelefoneBR(dig))
+                                setNovoClienteNome('')
+                              } else {
+                                setNovoClienteNome(termoBusca.trim())
+                                setNovoClienteTelefone('')
+                              }
+                              setFormCadastroAberto(true)
+                              setDropdownAberto(false)
+                            }}
+                          >
+                            ➕ Cadastrar novo cliente "{termoBusca.trim()}"
+                          </button>
+                          <button
+                            type="button"
+                            style={{ background: 'none', border: 'none', color: '#60a5fa', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}
+                            onClick={() => {
+                              setClienteSelecionado({
+                                id: '',
+                                nome: termoBusca.trim(),
+                                telefone: soDigitos(termoBusca),
+                              })
+                              setDropdownAberto(false)
+                              setTermoBusca('')
+                            }}
+                          >
+                            👤 Usar como eventual
+                          </button>
+                        </div>
+                      </>
                     )}
                   </div>
+                )}
+
+                {!termoBusca && (
+                  <span style={{ fontSize: 11.5, color: '#94a3b8', marginTop: 4, display: 'block' }}>
+                    💡 Digite o nome ou telefone para pesquisar o cliente. A lista não abre de cara para deixar a tela limpa e rápida.
+                  </span>
                 )}
               </>
             )}
