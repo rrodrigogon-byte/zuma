@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="420" viewBox="0 0 1400 420">
+  <defs>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@800&family=Work+Sans:wght@600&display=swap');
+    </style>
+  </defs>
+
+  <rect width="1400" height="420" fill="#FFFFFF"/>
+  <rect x="108" y="103" width="214" height="214" rx="54" fill="#FF6B2C"/>
+
+  <path d="M 215.0 136.0 L 271.0 204.0 L 215.0 266.0 L 159.0 204.0 Z" fill="#FFFFFF"/>
+  <line x1="215.0" y1="136.0" x2="215.0" y2="266.0" stroke="#FF6B2C" stroke-width="7"/>
+  <line x1="159.0" y1="204.0" x2="271.0" y2="204.0" stroke="#FF6B2C" stroke-width="7"/>
+  <path d="M 215.0 266.0 q 26 20 -3 33" fill="none" stroke="#FFFFFF"
+        stroke-width="9" stroke-linecap="round"/>
+  <circle cx="212.0" cy="302.0" r="7" fill="#FFFFFF" opacity="0.8"/>
+
+
+  <text x="392" y="228" font-family="Outfit" font-size="106" font-weight="700"
+        letter-spacing="1" fill="#12283F">KYTTO</text>
+  <text class="subtext" x="396" y="284" font-family="Work Sans" font-size="25" font-weight="500"
+        letter-spacing="6" fill="#FF6B2C">SISTEMAS QUE FAZEM O NEGÓCIO SUBIR</text>
+
+</svg>

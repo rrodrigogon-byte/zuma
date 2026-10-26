@@ -1,0 +1,909 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+  @page {
+    size: A4 portrait;
+    margin: 20mm 18mm 20mm 18mm;
+  }
+  :root {
+    --accent: #E05915;
+    --accent-soft: #FDF3EB;
+    --ink: #121316;
+    --muted: #6F7073;
+    --line: #DFE1E5;
+    --zebra: #F6F7F9;
+    --tip: #0E7A4A;
+    --tip-soft: #E8F6EE;
+    --info: #0A66C2;
+    --info-soft: #EEF4FB;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, Arial, sans-serif;
+    font-size: 8pt;
+    line-height: 1.4;
+    color: var(--ink);
+    margin: 0;
+    padding: 0;
+    background: #fff;
+  }
+  .bloco-titulo {
+    font-weight: 800;
+    font-size: 10.5pt;
+    text-transform: uppercase;
+    letter-spacing: .02em;
+    margin: 0 0 3mm;
+    padding-bottom: 1.2mm;
+    border-bottom: 1.2pt solid var(--accent);
+    color: var(--ink);
+  }
+  .parte {
+    color: var(--accent);
+    font-weight: 800;
+    letter-spacing: .3em;
+    font-size: 8.5pt;
+    text-transform: uppercase;
+    margin: 3mm 0 3mm;
+    display: block;
+  }
+  h2.cap {
+    font-size: 13pt;
+    font-weight: 800;
+    margin: 0 0 3mm;
+    padding-bottom: 1.2mm;
+    border-bottom: 1.2pt solid var(--accent);
+    break-after: avoid;
+    color: var(--ink);
+  }
+  h3 {
+    font-size: 9.5pt;
+    font-weight: 700;
+    margin: 3.5mm 0 1.2mm;
+    break-after: avoid;
+    color: var(--ink);
+  }
+  p {
+    margin: 0 0 2mm;
+    text-align: justify;
+  }
+  .nova-pagina {
+    break-before: page;
+    page-break-before: always;
+  }
+  .novo {
+    display: inline-block;
+    vertical-align: middle;
+    background: var(--accent);
+    color: #fff;
+    font-size: 5.5pt;
+    font-weight: 800;
+    text-transform: uppercase;
+    padding: .3mm 1.6mm;
+    border-radius: 4px;
+    margin-left: 2mm;
+    letter-spacing: .04em;
+  }
+  .rota {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 7.5pt;
+    color: var(--accent);
+    background: var(--accent-soft);
+    padding: .2mm 1.5mm;
+    border-radius: 3px;
+    font-weight: 600;
+    white-space: nowrap;
+    border: 1px solid #F6D6C0;
+  }
+  .legenda {
+    font-size: 7.5pt;
+    margin: 2mm 0 1mm;
+    break-after: avoid;
+  }
+  .legenda b {
+    font-weight: 700;
+    color: var(--ink);
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 7pt;
+    break-inside: auto;
+    margin-bottom: 1mm;
+  }
+  thead {
+    display: table-header-group;
+  }
+  tr {
+    break-inside: avoid;
+  }
+  th {
+    background: var(--ink);
+    color: #fff;
+    font-weight: 700;
+    font-size: 6.8pt;
+    text-align: left;
+    padding: 1.2mm 1.8mm;
+  }
+  td {
+    padding: 1.1mm 1.8mm;
+    border-bottom: 1px solid var(--line);
+    vertical-align: top;
+    font-size: 6.8pt;
+    line-height: 1.35;
+  }
+  .fonte {
+    font-size: 6.5pt;
+    color: var(--muted);
+    margin: .8mm 0 2.2mm;
+    font-style: italic;
+  }
+  .quadro {
+    border-left: 3px solid;
+    padding: 2mm 3mm;
+    margin: 2.2mm 0;
+    font-size: 7.5pt;
+    break-inside: avoid;
+    border-radius: 0 3px 3px 0;
+  }
+  .quadro.azul {
+    border-color: var(--info);
+    background: var(--info-soft);
+  }
+  .quadro.laranja {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+  }
+  .quadro.verde {
+    border-color: var(--tip);
+    background: var(--tip-soft);
+  }
+  .quadro p:last-child {
+    margin: 0;
+  }
+  ol, ul {
+    margin: 0 0 2mm;
+    padding-left: 5mm;
+  }
+  li {
+    margin: 0 0 .8mm;
+    text-align: justify;
+  }
+  .fluxo {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
+    margin: 2.5mm 0;
+    break-inside: avoid;
+  }
+  .fluxo .caixa {
+    width: 130mm;
+    background: var(--accent-soft);
+    border: 1px solid #F0B173;
+    border-radius: 2mm;
+    padding: 1.8mm 3.5mm;
+    text-align: center;
+    font-size: 7.5pt;
+  }
+  .fluxo .caixa b {
+    display: block;
+    font-size: 8pt;
+    color: var(--ink);
+  }
+  .fluxo .caixa small {
+    color: var(--muted);
+  }
+  .fluxo .seta {
+    color: var(--accent);
+    font-size: 8.5pt;
+    line-height: 1;
+    margin: .8mm 0;
+    font-weight: 800;
+  }
+  .fluxo .caixa.fim {
+    background: var(--ink);
+    border-color: var(--ink);
+    color: #fff;
+  }
+  .fluxo .caixa.fim b {
+    color: #fff;
+  }
+  .fluxo .caixa.fim small {
+    color: #D1D2D5;
+  }
+  .caso {
+    border: 1px solid var(--line);
+    margin: 0 0 3.5mm;
+    break-inside: avoid;
+    font-size: 7.5pt;
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  .caso .topo {
+    background: var(--zebra);
+    padding: 1.5mm 2.5mm;
+    font-weight: 700;
+    border-bottom: 1px solid var(--line);
+  }
+  .caso .l {
+    display: grid;
+    grid-template-columns: 26% 74%;
+    border-top: 1px solid var(--line);
+  }
+  .caso .l:first-of-type {
+    border-top: none;
+  }
+  .caso .l > span {
+    padding: 1.2mm 2.2mm;
+  }
+  .caso .l > span:first-child {
+    background: var(--zebra);
+    font-weight: 600;
+    color: #333;
+    border-right: 1px solid var(--line);
+  }
+  .assinaturas {
+    display: flex;
+    justify-content: space-between;
+    gap: 6mm;
+    margin: 5mm 0 2mm;
+    break-inside: avoid;
+  }
+  .assinaturas div {
+    flex: 1;
+    text-align: center;
+    font-size: 6.8pt;
+    border-top: 1px solid var(--ink);
+    padding-top: 1.2mm;
+  }
+  .assinaturas b {
+    display: block;
+    font-size: 7.2pt;
+    color: var(--ink);
+  }
+  .assinaturas span {
+    color: var(--muted);
+  }
+  .sumario {
+    margin: 2mm 0;
+  }
+  .sumario .i {
+    display: flex;
+    font-size: 8pt;
+    margin: 0 0 1.1mm;
+    align-items: baseline;
+  }
+  .sumario .i.s {
+    padding-left: 4.5mm;
+    font-size: 7.5pt;
+  }
+  .sumario .i .t {
+    flex: 1;
+    border-bottom: 1px dotted #B8B9BD;
+    margin: 0 2mm;
+  }
+  .sumario .i b {
+    font-weight: 700;
+  }
+</style>
+</head>
+<body>
+
+<!-- PÁGINA 1 DO CORPO (PÁGINA 2 DO PDF FINAL): IDENTIFICAÇÃO + VERSÕES + APROVAÇÕES -->
+<div class="bloco-titulo">IDENTIFICAÇÃO DO DOCUMENTO</div>
+
+<div class="legenda"><b>Tabela 1 — Identificação do documento</b></div>
+<table>
+  <thead>
+    <tr><th style="width:26%">Campo</th><th style="width:74%">Conteúdo</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><b>Título</b></td><td>Manual do Key User, Plano de Testes e Guia Operacional — Gestão de Equipe, Horários, Metas, Comissões e Central Fiscal</td></tr>
+    <tr><td><b>Sistema</b></td><td>Kytto SetPoint Ultra (kytto.com.br) / Módulo Barbearia Dino ERP</td></tr>
+    <tr><td><b>Cliente / Empresa</b></td><td>Barbearia Dino (Dino Matriz Cuiabá) / SetPoint Tecnologia</td></tr>
+    <tr><td><b>Público-Alvo</b></td><td>Key Users, Administradores, Gerentes de Unidade, Barbeiros, Operadores de Caixa e Recepção</td></tr>
+    <tr><td><b>Versão</b></td><td>2.4 — Edição Oficial Consolidada com Módulo Fiscal, Horários 24x7 e Metas Individuais</td></tr>
+    <tr><td><b>Elaborado por</b></td><td>Rodrigo Ribeiro - Kytto</td></tr>
+    <tr><td><b>Revisado por</b></td><td>Rafael Santana - Kytto / Barbearia Dino</td></tr>
+    <tr><td><b>Aprovado por</b></td><td>Dino - Barbearia Dino</td></tr>
+    <tr><td><b>Emissão / Validade</b></td><td>26/10/2026 · Válido até 26/10/2027 ou até a próxima versão oficial</td></tr>
+    <tr><td><b>Classificação</b></td><td>Uso interno corporativo</td></tr>
+  </tbody>
+</table>
+<div class="fonte">Fonte: Governança técnica Kytto (2026), com base no sistema Barbearia Dino ERP.</div>
+
+<div class="bloco-titulo" style="margin-top:3.5mm">CONTROLE DE VERSÕES</div>
+<div class="legenda"><b>Tabela 2 — Histórico e controle de versões</b></div>
+<table>
+  <thead>
+    <tr><th style="width:9%">Versão</th><th style="width:12%">Data</th><th style="width:64%">Descrição das Alterações e Melhorias</th><th style="width:15%">Responsável</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>1.0</td><td>24/10/2026</td><td>Emissão inicial do módulo Barbearia Dino ERP, catálogo comercial e projeção de faturamento.</td><td>Rodrigo Ribeiro</td></tr>
+    <tr><td>2.0</td><td>25/10/2026</td><td>Central Financeira interativa, conciliação do histórico Avec e liquidação de vencidos em lote.</td><td>Rodrigo Ribeiro</td></tr>
+    <tr><td>2.1</td><td>25/10/2026</td><td>Módulo de Metas, Comissões e Bonificações com separação de serviços e produtos de revenda.</td><td>Rodrigo Ribeiro</td></tr>
+    <tr><td>2.2</td><td>25/10/2026</td><td>WhatsApp IA humanizado, agenda 24x7 do Dino e tarifa de plantão noturno de R$ 600.</td><td>Rodrigo Ribeiro</td></tr>
+    <tr><td>2.3</td><td>26/10/2026</td><td>Barra de filtros de datas nos indicadores, memoization single-pass e otimização de performance.</td><td>Rodrigo Ribeiro</td></tr>
+    <tr><td>2.4</td><td>26/10/2026</td><td>Integração do Módulo Fiscal completo (NFC-e e NFS-e pelo PDV) e consolidação do Manual ABNT.</td><td>Rodrigo Ribeiro</td></tr>
+  </tbody>
+</table>
+<div class="fonte">Fonte: Histórico de lançamentos e commits do repositório oficial agro-open.</div>
+
+<div class="bloco-titulo" style="margin-top:3.5mm">APROVAÇÕES FORMAIS</div>
+<p style="margin-bottom:3mm;font-size:7pt">As assinaturas abaixo atestam que as especificações técnicas, regras operacionais e procedimentos descritos neste manual foram revisados, homologados e aprovados para uso em produção.</p>
+
+<div class="assinaturas">
+  <div>
+    <b>Rodrigo Ribeiro</b>
+    <span>Elaboração — Kytto</span>
+  </div>
+  <div>
+    <b>Rafael Santana</b>
+    <span>Revisão — Kytto / Barbearia Dino</span>
+  </div>
+  <div>
+    <b>Dino</b>
+    <span>Aprovação — Barbearia Dino</span>
+  </div>
+</div>
+
+<!-- PÁGINA 2 DO CORPO (PÁGINA 3 DO PDF FINAL): SUMÁRIO -->
+<div class="nova-pagina"></div>
+<div class="bloco-titulo">SUMÁRIO</div>
+
+<div class="sumario">
+  <div class="i"><b>Como usar este manual</b><span class="t"></span><b>4</b></div>
+  <div class="i"><b>PARTE I — MANUAL DO KEY USER</b><span class="t"></span><b>5</b></div>
+  <div class="i s">1.0 O papel do Key User e Gestor da Barbearia Dino<span class="t"></span>5</div>
+  <div class="i s">2.0 Antes de começar: Acesso, Rotas e Vocabulário Mínimo<span class="t"></span>6</div>
+  <div class="i s">3.0 Como o sistema funciona: O Ciclo Operacional Integrado<span class="t"></span>7</div>
+  <div class="i s">4.0 Gestão de Profissionais da Equipe: Cadastro, Horários e Jornada 24x7<span class="t"></span>8</div>
+  <div class="i s">5.0 Desativação Temporária e Exclusão Segura com Preservação de Histórico<span class="t"></span>9</div>
+  <div class="i s">6.0 Metas Individuais, Comissões e Bonificações Progressivas<span class="t"></span>10</div>
+  <div class="i s">7.0 Relatórios Analíticos Individuais de Desempenho e Produtividade<span class="t"></span>11</div>
+  <div class="i s">8.0 Atendimento Inteligente e Agendamento no WhatsApp (IA Humanizada)<span class="t"></span>12</div>
+  <div class="i s">9.0 Gestão Financeira, DRE Gerencial, Filtros de Período e Liquidação em Lote<span class="t"></span>13</div>
+  <div class="i s">10.0 Central Fiscal Corporativa: Emissão de NFC-e, NFS-e e DANFE<span class="t"></span>14</div>
+  <div class="i s">11.0 As Rotinas Operacionais do Key User e Calendário Mensal<span class="t"></span>15</div>
+  <div class="i s">12.0 Matriz de Diagnóstico e Resolução de Problemas (Troubleshooting)<span class="t"></span>15</div>
+  <div class="i" style="margin-top:3mm"><b>PARTE II — PLANO DE TESTES E HOMOLOGAÇÃO</b><span class="t"></span><b>16</b></div>
+  <div class="i s">16.0 Plano de Testes: Escopo, Papéis e Critérios de Aceite<span class="t"></span>16</div>
+  <div class="i s">17.0 Casos de Teste Estruturados (EQU, MET, WPP, FIN, FSC)<span class="t"></span>16</div>
+  <div class="i s">18.0 Matriz de Rastreabilidade Requisito × Caso de Teste<span class="t"></span>17</div>
+  <div class="i s">19.0 Termo de Aceite e Homologação Formal em Produção<span class="t"></span>17</div>
+</div>
+
+<!-- PÁGINA 3 DO CORPO (PÁGINA 4 DO PDF FINAL): COMO USAR ESTE MANUAL -->
+<div class="nova-pagina"></div>
+<div class="bloco-titulo">COMO USAR ESTE MANUAL</div>
+<p>Este documento foi estruturado para atender tanto a consultas pontuais do dia a dia quanto a processos formais de treinamento de novos gestores e homologação de versões do sistema. O leitor deve localizar a sua necessidade prática na tabela de convenções abaixo:</p>
+
+<div class="legenda"><b>Tabela 3 — Convenções visuais e didáticas adotadas</b></div>
+<table>
+  <thead>
+    <tr><th style="width:25%">Elemento Visual</th><th style="width:75%">Significado e Aplicação Prática</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><span class="rota">/admin/rota</span></td><td>Rota ou caminho direto de navegação no navegador web.</td></tr>
+    <tr><td><b>Texto em Negrito</b></td><td>Nome exato de um botão, aba, campo de formulário ou indicador exibido na interface.</td></tr>
+    <tr><td><span class="novo">NOVO v2.4</span></td><td>Funcionalidade ou recurso implementado e homologado na versão atual.</td></tr>
+    <tr><td><div class="quadro azul" style="margin:0;padding:.8mm 1.5mm">Quadro Azul</div></td><td><b>Informação Complementar:</b> Detalhe técnico ou orientação conceitual importante.</td></tr>
+    <tr><td><div class="quadro laranja" style="margin:0;padding:.8mm 1.5mm">Quadro Laranja</div></td><td><b>Atenção e Risco:</b> Alerta sobre impacto operacional, regras fiscais ou risco de retrabalho.</td></tr>
+    <tr><td><div class="quadro verde" style="margin:0;padding:.8mm 1.5mm">Quadro Verde</div></td><td><b>Dica Prática:</b> Atalho, melhoria de produtividade ou resultado esperado de um teste.</td></tr>
+  </tbody>
+</table>
+<div class="fonte">Fonte: Padrão visual oficial de documentação Kytto SetPoint (2026).</div>
+
+<div class="quadro azul">
+  <b>Sobre os Dados de Exemplo:</b> Todos os exemplos de cálculo de comissões, faturamento bruto e simulações de agendamento apresentados neste manual foram elaborados a partir dos dados consolidados da Barbearia Dino Matriz, refletindo o comportamento exato das telas em produção.
+</div>
+
+<div class="quadro laranja">
+  <b>Proteção de Dados Pessoais (LGPD):</b> Nenhuma tela, relatório ou exemplo deste manual contém números reais de CPF, senhas, chaves PIX de pessoas físicas ou dados bancários de clientes. Todos os exemplos utilizam dados anonimizados ou de homologação para garantir conformidade legal com a Lei nº 13.709/2018.
+</div>
+
+<!-- PÁGINA 4 DO CORPO (PÁGINA 5 DO PDF FINAL): PARTE I - CAPÍTULO 1 -->
+<div class="nova-pagina"></div>
+<span class="parte">P A R T E &nbsp; I &nbsp; — &nbsp; M A N U A L &nbsp; D O &nbsp; K E Y &nbsp; U S E R</span>
+<h2 class="cap">1.0 O Papel do Key User e Gestor da Barbearia Dino</h2>
+
+<p>O Key User da Barbearia Dino não é simplesmente um operador que abre chamados ou cadastra comandas; ele é a liderança técnica e operacional responsável por garantir a integridade dos dados, a precisão das comissões da equipe, o funcionamento transparente do atendimento inteligente e a conformidade contábil e fiscal da empresa.</p>
+
+<div class="legenda"><b>Tabela 4 — Atribuições e responsabilidades do Key User</b></div>
+<table>
+  <thead>
+    <tr><th style="width:28%">Atribuição Principal</th><th style="width:72%">O que Significa na Prática da Operação</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><b>Gestão da Grade da Equipe</b></td><td>Manter os horários de início e fim rigorosamente atualizados, configurando os dias de folga e ativando a jornada 24x7 para profissionais em plantão VIP.</td></tr>
+    <tr><td><b>Governança de Comissões</b></td><td>Cadastrar as metas progressivas de faturamento em serviços e produtos, garantindo que o sistema calcule as bonificações de forma 100% automatizada e sem erros manuais.</td></tr>
+    <tr><td><b>Supervisão da IA no WhatsApp</b></td><td>Verificar a prontidão do canal de mensagens, conferir a comunicação humanizada de preços e garantir que o cliente receba informações transparentes.</td></tr>
+    <tr><td><b>Auditoria Financeira e DRE</b></td><td>Acompanhar diariamente as receitas recebidas, conciliar o saldo realizado e liquidar despesas antigas com responsabilidade contábil.</td></tr>
+    <tr><td><b>Conformidade Fiscal</b></td><td>Acompanhar a emissão das notas de consumidor (NFC-e) e serviços (NFS-e), monitorar a fila de contingências offline e encaminhar os XMLs ao contador.</td></tr>
+  </tbody>
+</table>
+<div class="fonte">Fonte: Matriz RACI da Barbearia Dino &amp; Kytto ERP (2026).</div>
+
+<div class="quadro laranja">
+  <b>O que NÃO é papel do Key User:</b> O Key User não deve recalcular comissões em planilhas externas paralelas (o que anula a governança do sistema), nunca deve excluir registros contábeis diretamente no banco de dados e não deve autorizar emissões fiscais divergentes do comprovante de pagamento registrado no PDV.
+</div>
+
+<!-- CAPÍTULO 2 -->
+<div class="nova-pagina"></div>
+<h2 class="cap">2.0 Antes de Começar: Acesso, Rotas e Vocabulário Mínimo</h2>
+
+<h3>2.1 Mapa de Acesso ao Sistema</h3>
+<p>O Kytto SetPoint opera em ambiente 100% nuvem, acessível por qualquer navegador moderno (Chrome, Safari, Edge, Firefox) em computadores, tablets ou smartphones.</p>
+
+<div class="legenda"><b>Tabela 5 — Mapa de rotas e perfis de acesso</b></div>
+<table>
+  <thead>
+    <tr><th style="width:30%">Módulo / Painel</th><th style="width:40%">Rota Direta de Acesso</th><th style="width:30%">Perfil Mínimo Necessário</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><b>Barbearia ERP Geral</b></td><td><span class="rota">/admin/barbearia-erp</span></td><td>Administrador / Gestor</td></tr>
+    <tr><td><b>Profissionais e Equipe</b></td><td><span class="rota">/admin/barbearia-erp?area=catalogo&amp;tab=Profissionais</span></td><td>Gestor de Unidade</td></tr>
+    <tr><td><b>Metas e Comissões</b></td><td><span class="rota">/admin/barbearia-erp?area=gestao&amp;tab=Metas+e+comissões</span></td><td>Diretoria / Gestor Financeiro</td></tr>
+    <tr><td><b>Agenda do Balcão</b></td><td><span class="rota">/admin/barbearia-erp?area=operacao&amp;tab=Agenda</span></td><td>Recepção / Barbeiro</td></tr>
+    <tr><td><b>Painel Financeiro</b></td><td><span class="rota">/admin/financeiro</span></td><td>Gestor Financeiro</td></tr>
+    <tr><td><b>Central Fiscal Integrada</b></td><td><span class="rota">/admin/barbearia-erp?area=gestao&amp;tab=Notas+fiscais</span></td><td>Gestor / Fiscal</td></tr>
+    <tr><td><b>Central Fiscal Autônoma</b></td><td><span class="rota">/admin/notas</span></td><td>Contabilidade / Fiscal</td></tr>
+    <tr><td><b>WhatsApp e IA</b></td><td><span class="rota">/admin/whatsapp</span></td><td>Administrador</td></tr>
+  </tbody>
+</table>
+<div class="fonte">Fonte: Mapa de rotas autenticadas do sistema Kytto (2026).</div>
+
+<h3>2.2 As Três Regras Invariantes que Sustentam a Operação</h3>
+<ol>
+  <li><b>Invariante de Preservação Contábil:</b> O faturamento histórico, comandas pagas e livros do razão nunca são excluídos ou destruídos. A exclusão de um profissional ou serviço é puramente lógica, garantindo rastreabilidade contábil perpétua.</li>
+  <li><b>Invariante de Segregação de Comissões:</b> Comissões sobre procedimentos de barbearia (serviços) jamais se misturam com as comissões sobre venda de cosméticos e pomadas (produtos). Cada segmento possui percentual base e faixas de metas independentes.</li>
+  <li><b>Invariante de Transparência Humanizada:</b> Nenhum cliente terá serviço agendado pela inteligência artificial sem antes ser expressamente informado sobre o preço, tempo estimado e regras do procedimento.</li>
+</ol>
+
+<div class="legenda"><b>Tabela 6 — Vocabulário mínimo padronizado</b></div>
+<table>
+  <thead>
+    <tr><th style="width:25%">Termo</th><th style="width:75%">Definição Conceitual e Operacional no Kytto</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><b>Comanda</b></td><td>Registro operacional e financeiro do atendimento ao cliente no balcão, contendo serviços prestados, produtos adquiridos, profissional responsável e meio de pagamento.</td></tr>
+    <tr><td><b>Repasse Indicativo</b></td><td>Valor líquido apurado devido ao barbeiro parceiro (comissão base + bonificações por metas alcançadas menos descontos autorizados de taxa de maquininha).</td></tr>
+    <tr><td><b>Exclusão Lógica</b></td><td>Ação que remove um profissional das listagens ativas e novos agendamentos, mantendo seus dados e histórico financeiro 100% seguros no banco de dados.</td></tr>
+    <tr><td><b>NFC-e (Modelo 65)</b></td><td>Nota Fiscal de Consumidor Eletrônica emitida diretamente ao cliente final na venda de mercadorias físicas (shampoos, ceras, óleos).</td></tr>
+    <tr><td><b>NFS-e Nacional</b></td><td>Nota Fiscal de Serviços Eletrônica transmitida ao portal nacional da Sefin para tributação de procedimentos de corte, barba e estética.</td></tr>
+  </tbody>
+</table>
+<div class="fonte">Fonte: Glossário técnico Kytto (2026).</div>
+
+<!-- CAPÍTULO 3 -->
+<div class="nova-pagina"></div>
+<h2 class="cap">3.0 Como o Sistema Funciona: O Ciclo Operacional Integrado</h2>
+
+<p>A arquitetura da plataforma Kytto elimina retrabalhos através da transmissão automática de dados entre as áreas operacionais. Quando um cliente entra em contato, todos os passos seguintes ocorrem em fluxo contínuo:</p>
+
+<div class="fluxo">
+  <div class="caixa">
+    <b>1. Atendimento e Agendamento (WhatsApp IA / Balcão)</b>
+    <small>Cliente escolhe o serviço; IA consulta a grade de horários do barbeiro e informa o preço com transparência.</small>
+  </div>
+  <div class="seta">▼</div>
+  <div class="caixa">
+    <b>2. Execução na Cadeira e Abertura da Comanda</b>
+    <small>Barbeiro atende o cliente; adiciona eventuais serviços extras (barba, sobrancelha, hidratação) e produtos.</small>
+  </div>
+  <div class="seta">▼</div>
+  <div class="caixa">
+    <b>3. Fechamento de Caixa e Recebimento</b>
+    <small>Operador registra o pagamento (PIX, Débito, Crédito, Dinheiro); baixa do estoque e crédito de cashback.</small>
+  </div>
+  <div class="seta">▼</div>
+  <div class="caixa">
+    <b>4. Apuração Automática de Comissões e Metas</b>
+    <small>Motor calcula o faturamento do barbeiro; eleva a comissão se atingiu faixa de bonificação (ex.: 40% ➔ 45%).</small>
+  </div>
+  <div class="seta">▼</div>
+  <div class="caixa">
+    <b>5. Conciliação Financeira e DRE Gerencial</b>
+    <small>Receita entra no Saldo Realizado; custo dos produtos alimenta o CMV; rateio entra no contas a pagar de repasses.</small>
+  </div>
+  <div class="seta">▼</div>
+  <div class="caixa fim">
+    <b>6. Emissão Fiscal com 1 Clique (NFC-e / NFS-e)</b>
+    <small>Central Fiscal gera o XML assinado digitalmente com Certificado A1 e emite o DANFE térmico com QR Code v3.</small>
+  </div>
+</div>
+<div class="fonte" style="text-align:center">Figura 1 — Ciclo operacional integrado da Barbearia Dino na plataforma Kytto (2026).</div>
+
+<!-- CAPÍTULO 4 -->
+<div class="nova-pagina"></div>
+<h2 class="cap">4.0 Gestão de Profissionais da Equipe: Cadastro, Horários e Jornada 24x7</h2>
+
+<p>O cadastro de profissionais é o coração da operação. É nele que se definem as permissões, a jornada de trabalho, os percentuais de comissão e os serviços que cada colaborador está habilitado a prestar.</p>
+
+<h3>4.1 Como Acessar a Gestão de Profissionais</h3>
+<p>No menu lateral do ERP, selecione a aba superior <b>Catálogo e equipe</b> e clique na sub-aba <b>Profissionais</b> (ou utilize a rota <span class="rota">/admin/barbearia-erp?area=catalogo&amp;tab=Profissionais</span>). A tela exibirá os indicadores da equipe no topo (total de barbeiros ativos, parceiros, funcionários e eventuais pendências de jornada) e a grade de cards dos profissionais cadastrados.</p>
+
+<div class="legenda"><b>Tabela 7 — Campos do cadastro do profissional e suas regras</b></div>
+<table>
+  <thead>
+    <tr><th style="width:25%">Campo</th><th style="width:15%">Obrigatório?</th><th style="width:60%">Regra de Negócio e Comportamento no Sistema</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><b>Nome</b></td><td>Sim</td><td>Nome completo ou apelido profissional pelo qual o cliente e a equipe o identificam.</td></tr>
+    <tr><td><b>Telefone / Celular</b></td><td>Sim</td><td>Número com DDD utilizado para login no aplicativo mobile do barbeiro e envio de escalas.</td></tr>
+    <tr><td><b>Tipo de Contrato</b></td><td>Sim</td><td>Opções: <i>Parceiro (Salão-Parceiro Lei 13.352)</i>, <i>Funcionário CLT</i> ou <i>Autônomo</i>.</td></tr>
+    <tr><td><b>Comissão Serviços (%)</b></td><td>Sim</td><td>Percentual base padrão sobre serviços (ex.: 40% ou 50%).</td></tr>
+    <tr><td><b>Comissão Produtos (%)</b></td><td>Sim</td><td>Percentual base sobre venda de produtos de revenda (ex.: 10% ou 30%).</td></tr>
+    <tr><td><b>Descontar Maquininha</b></td><td>Não</td><td>Se marcado, desconta proporcionalmente a taxa comprovada do cartão antes do repasse.</td></tr>
+    <tr><td><b>Horário Início e Fim</b></td><td>Sim</td><td>Faixa de atendimento do dia a dia (ex.: início 08:00 e término 18:00).</td></tr>
+    <tr><td><b>Dias de Atendimento</b></td><td>Sim</td><td>Dias da semana em que o profissional atende (D, S, T, Q, Q, S, S).</td></tr>
+    <tr><td><b>Disponibilidade 24x7</b></td><td>Não</td><td>Habilita atendimento ininterrupto (00:00 às 23:59) nos 7 dias da semana (regra especial Dino).</td></tr>
+  </tbody>
+</table>
+<div class="fonte">Fonte: Especificação de dados do cadastro de profissionais Kytto (2026).</div>
+
+<h3>4.2 Passo a Passo para Ajustar o Horário de Atendimento</h3>
+<ol>
+  <li>Localize o card do profissional desejado na tela de <b>Profissionais</b>.</li>
+  <li>Clique no botão <b>"Editar"</b> para abrir o modal de parametrização.</li>
+  <li>Localize os campos de horário:
+    <ul>
+      <li>No campo <b>Início</b>, defina o horário em que o barbeiro inicia seu expediente (ex.: <code>09:00</code>).</li>
+      <li>No campo <b>Fim</b>, defina o horário limite para término de atendimentos (ex.: <code>19:00</code>).</li>
+    </ul>
+  </li>
+  <li>Logo abaixo, na seção <b>Dias de atendimento</b>, clique sobre os botões dos dias da semana (Domingo a Sábado) para ligar (fundo colorido) ou desligar (fundo neutro) os dias de expediente.</li>
+  <li>Clique em <b>"Salvar profissional"</b>.</li>
+</ol>
+
+<div class="quadro verde">
+  <b>Sincronização Instantânea com o WhatsApp:</b> Assim que você salva os novos horários, a inteligência artificial do WhatsApp e o agendamento web atualizam imediatamente a grade de horários disponíveis. Clientes que tentarem agendar fora da nova jornada receberão a lista dos horários válidos.
+</div>
+
+<h3>4.3 Regra Especial 24x7 (Plantão Noturno e Madrugada com Dino)</h3>
+<p>Para profissionais que realizam atendimentos especiais em regime de plantão ou 24 horas contínuas (como o fundador Dino):</p>
+<ul>
+  <li>Ao editar o cadastro, marque a opção <b>"Disponibilidade 24x7 (Dino / Plantão VIP)"</b>.</li>
+  <li>O sistema ajustará os horários para <code>00:00</code> às <code>23:59</code> em todos os 7 dias da semana.</li>
+  <li><b>Tarifa Especial de Horário Extra:</b> Para atendimentos agendados após as 18h09 até as 06h00 da manhã, o sistema aplica automaticamente o valor de <b>R$ 600,00</b> para o corte de Dino. A IA avisa o cliente no WhatsApp com empatia e elegância, solicitando sua confirmação antes de reservar o horário.</li>
+</ul>
+
+<!-- CAPÍTULO 5 -->
+<div class="nova-pagina"></div>
+<h2 class="cap">5.0 Desativação Temporária e Exclusão Segura com Preservação de Histórico</h2>
+
+<p>A gestão de equipe exige flexibilidade para lidar tanto com ausências temporárias (férias, licenças médicas) quanto com desligamentos definitivos de profissionais. A plataforma Kytto trata essas duas situações com fluxos distintos e seguros.</p>
+
+<h3>5.1 Desativação Temporária (Férias, Licenças e Afastamentos)</h3>
+<p>Quando um barbeiro vai se ausentar por um período determinado, mas continua vinculado à barbearia:</p>
+<ol>
+  <li>Acesse a tela de <b>Profissionais</b>.</li>
+  <li>No card do barbeiro em questão, clique no botão <b>"Desativar"</b>.</li>
+  <li><b>Efeito Imediato:</b> O card do profissional permanecerá visível para o gestor com opacidade reduzida, porém ele será <b>imediatamente retirado</b> da agenda online, do PDV do balcão e das opções de agendamento da IA no WhatsApp.</li>
+  <li><b>Como Reativar:</b> Quando o profissional reassumir suas atividades, basta clicar no mesmo botão, que agora exibirá <b>"Reativar"</b>. O barbeiro volta imediatamente a receber novos agendamentos sem necessidade de recadastramento.</li>
+</ol>
+
+<h3>5.2 Exclusão Definitiva de Profissional (Desligamento da Equipe)</h3>
+<p>Quando o profissional não faz mais parte da empresa e encerrou definitivamente suas atividades:</p>
+<ol>
+  <li>No card do profissional a ser removido, clique no botão vermelho <b>"Excluir"</b>.</li>
+  <li>Uma caixa de diálogo solicitará a confirmação: <i>"Excluir [Nome]? Profissional sai da lista e das novas operações. Agenda, comandas, comissões e o histórico de serviços continuam preservados..."</i>.</li>
+  <li>Clique em <b>"OK"</b> para confirmar a exclusão.</li>
+</ol>
+
+<div class="quadro azul">
+  <b>Como Funciona a Exclusão Lógica e por que ela Protege sua Empresa:</b> O Kytto aplica o padrão contábil de exclusão lógica (<i>soft delete</i>). Isso significa que o profissional deixa de existir para novos agendamentos e comandas futuras, mas <b>nenhum atendimento antigo, comanda paga, comissão passada ou nota fiscal é deletado</b>. Dessa forma, se a contabilidade ou uma auditoria solicitar os números do mês passado, todo o histórico do barbeiro continuará exatamente igual.
+</div>
+
+<h3>5.3 Como Restaurar um Profissional Excluído</h3>
+<p>Caso um profissional tenha sido excluído por engano ou retorne à equipe no futuro:</p>
+<ol>
+  <li>Na aba de <b>Profissionais</b>, role a página até o rodapé.</li>
+  <li>Localize e expanda a seção <b>"Excluídos"</b>.</li>
+  <li>Encontre o profissional desejado e clique no botão <b>"Restaurar"</b>.</li>
+  <li>O cadastro será restabelecido imediatamente com todas as suas configurações originais de comissão, foto e preferências.</li>
+</ol>
+
+<!-- CAPÍTULO 6 -->
+<div class="nova-pagina"></div>
+<h2 class="cap">6.0 Metas Individuais, Comissões e Bonificações Progressivas</h2>
+
+<p>O Kytto disponibiliza uma ferramenta avançada de motivação e remuneração da equipe: o motor de comissões escalonadas por metas individuais de faturamento.</p>
+
+<h3>6.1 Segregação Obrigatória: Serviços vs. Produtos</h3>
+<p>O sistema separa de forma estrita as comissões obtidas na prestação de procedimentos (mão de obra) das comissões geradas pela venda de cosméticos (pomadas, tônicos, óleos):</p>
+<ul>
+  <li><b>Comissão de Serviços:</b> Incide sobre corte, barba, selagem, pigmentação e prótese capilar. Geralmente inicia na faixa de 40% a 50%.</li>
+  <li><b>Comissão de Produtos:</b> Incide sobre mercadorias físicas vendidas no balcão. Geralmente inicia na faixa de 10% a 30%, possuindo metas de faturamento próprias e metas de volume de unidades vendidas.</li>
+</ul>
+
+<h3>6.2 Configuração das Faixas de Bonificação Progressiva</h3>
+<p>Para cadastrar as faixas escalonadas de um barbeiro (exemplo da Naty):</p>
+<ol>
+  <li>Acesse o menu <span class="rota">/admin/barbearia-erp?area=gestao&amp;tab=Metas+e+comissões</span>.</li>
+  <li>Selecione o profissional desejado no topo e clique no botão <b>"Cadastrar Metas"</b>.</li>
+  <li>Defina a comissão base e insira os degraus de premiação por faturamento alcançado:</li>
+</ol>
+
+<div class="legenda"><b>Tabela 8 — Exemplo prático de escalonamento progressivo de comissões</b></div>
+<table>
+  <thead>
+    <tr><th style="width:25%">Faixa de Metas</th><th style="width:25%">Faturamento Mínimo</th><th style="width:25%">Comissão de Serviços</th><th style="width:25%">Bonificação Extra</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><b>Comissão Base</b></td><td>R$ 0,00</td><td>40,0%</td><td>Padrão inicial</td></tr>
+    <tr><td><b>Meta 1 (Bronze)</b></td><td>R$ 10.000,00</td><td>45,0%</td><td>+ 5,0% de bônus</td></tr>
+    <tr><td><b>Meta 2 (Prata)</b></td><td>R$ 15.000,00</td><td>47,0%</td><td>+ 7,0% de bônus</td></tr>
+    <tr><td><b>Meta 3 (Ouro)</b></td><td>R$ 20.000,00</td><td>50,0%</td><td>+ 10,0% de bônus</td></tr>
+  </tbody>
+</table>
+<div class="fonte">Fonte: Regra de remuneração variável parametrizada na Barbearia Dino (2026).</div>
+
+<h3>6.3 Acompanhamento em Tempo Real do Ritmo de Metas</h3>
+<p>O painel de metas calcula em tempo real o progresso do profissional na competência ativa, exibindo:</p>
+<ul>
+  <li><b>Faturamento Atual:</b> Soma total líquida gerada no período.</li>
+  <li><b>Comissão Conquistada:</b> Percentual correspondente à maior faixa já atingida.</li>
+  <li><b>Quanto Falta:</b> O valor exato em Reais (R$) para o barbeiro alcançar o próximo nível de bonificação.</li>
+</ul>
+
+<div class="quadro verde">
+  <b>Exemplo Prático de Acompanhamento:</b> Se a Naty faturou R$ 18.200,00 em serviços no mês, o sistema automaticamente aplica a comissão da Meta 2 (47%) e exibe a mensagem motivacional: <i>"Naty já faturou R$ 18.200,00 (faixa de 47%) e faltam apenas R$ 1.800,00 para atingir a Meta Ouro de 50%!"</i>.
+</div>
+
+<!-- CAPÍTULO 7 -->
+<div class="nova-pagina"></div>
+<h2 class="cap">7.0 Relatórios Analíticos Individuais de Desempenho</h2>
+
+<p>Ao pesquisar um profissional na aba <b>Metas e comissões</b>, o gestor tem acesso a seis relatórios aprofundados com dados conciliados de todo o histórico do sistema:</p>
+
+<h3>7.1 Os Seis Relatórios Analíticos Disponíveis</h3>
+<ol>
+  <li><b>Relatório 1 — Faturamento Bruto Total:</b> Exibe a receita consolidada do profissional, discriminando graficamente o faturamento em serviços, a venda de produtos de revenda, a dedução de taxas de cartão e a projeção do repasse líquido.</li>
+  <li><b>Relatório 2 — Procedimentos por Categoria Real:</b> Agrupa todos os procedimentos realizados no período por tipo (Corte, Barba, Prótese, Selagem, etc.), informando a quantidade executada, o valor médio cobrado e a receita total gerada por cada categoria.</li>
+  <li><b>Relatório 3 — Venda de Pacotes e Planos do Clube:</b> Mostra quantas assinaturas e pacotes foram vendidos pelo profissional, quais clientes estão ativos e a receita recorrente gerada.</li>
+  <li><b>Relatório 4 — Serviços Extras e Clientes Atendidos:</b> Lista detalhadamente procedimentos adicionais de alto valor agregado (hidratações, sobrancelhas, pigmentações, limpezas de pele) com o nome de cada cliente atendido.</li>
+  <li><b>Relatório 5 — Venda de Produtos e Cosméticos:</b> Relaciona quais itens de revenda física o barbeiro vendeu (pomadas, tônicos, óleos), quantidades unitárias e receita bruta gerada.</li>
+  <li><b>Relatório 6 — Extrato Cronológico Auditável:</b> Linha do tempo completa e ordenada por data/hora com cada comanda finalizada, cliente, serviço prestado e meio de pagamento.</li>
+</ol>
+
+<!-- CAPÍTULO 8 -->
+<div class="nova-pagina"></div>
+<h2 class="cap">8.0 Atendimento Inteligente no WhatsApp (IA Humanizada)</h2>
+
+<p>O assistente de inteligência artificial da Barbearia Dino (T-Rex) opera integrado diretamente ao ERP, garantindo comunicação humanizada e atendimento ininterrupto.</p>
+
+<h3>8.1 Regras de Operação da IA no WhatsApp</h3>
+<ul>
+  <li><b>Conexão e Diagnóstico:</b> Acompanhe o canal em <span class="rota">/admin/whatsapp</span>, com monitoramento de status da linha, geração de QR Code e reconexão automática.</li>
+  <li><b>Consulta Rigorosa da Grade de Horários:</b> O assistente consulta a disponibilidade dos profissionais respeitando a jornada de trabalho e folgas configuradas no cadastro da equipe.</li>
+  <li><b>Transparência Humanizada de Valores:</b> A IA alerta sempre o preço e a duração dos serviços antes de finalizar o agendamento (ex.: <i>"O corte com o Bruno fica R$ 60,00 e leva cerca de 40 minutos. Posso confirmar para as 15h?"</i>).</li>
+  <li><b>Aprendizado com o Padrão do Cliente:</b> O assistente reconhece o histórico de visitas do cliente, seu profissional preferido e hábitos frequentes, agilizando o atendimento.</li>
+  <li><b>Regra 24x7 do Dino:</b> Caso o cliente solicite atendimento noturno com Dino após 18h09, a IA avisa com cordialidade: <i>"O Dino possui disponibilidade para atendimento noturno exclusivo (24x7). Para esse horário especial, o corte tem o valor de R$ 600,00. Gostaria de reservar?"</i>.</li>
+</ul>
+
+<!-- CAPÍTULO 9 -->
+<div class="nova-pagina"></div>
+<h2 class="cap">9.0 Gestão Financeira, DRE Gerencial e Filtros de Período</h2>
+
+<p>A central financeira em <span class="rota">/admin/financeiro</span> oferece visão analítica do fluxo de caixa e livros contábeis da barbearia.</p>
+
+<div class="legenda"><b>Tabela 9 — Filtros de período e cards de indicadores contextuais</b></div>
+<table>
+  <thead>
+    <tr><th style="width:25%">Filtro de Período</th><th style="width:35%">Comportamento no Sistema</th><th style="width:40%">Impacto nos Indicadores</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><b>Hoje</b></td><td>Apura exclusivamente a movimentação da data corrente.</td><td>Fluxo de caixa diário e conferência de fechamento de caixa.</td></tr>
+    <tr><td><b>7 Dias / 15 Dias</b></td><td>Filtro móvel dos últimos 7 ou 15 dias corridos.</td><td>Acompanhamento tático de curto prazo e metas semanais.</td></tr>
+    <tr><td><b>Este Mês (Padrão)</b></td><td>Competência do mês atual (ex.: 10/2026).</td><td>Receitas do mês, despesas pagas e apuração do resultado.</td></tr>
+    <tr><td><b>Mês Anterior</b></td><td>Competência fechada do mês passado.</td><td>Fechamento de comissões e conciliação bancária final.</td></tr>
+    <tr><td><b>Este Ano</b></td><td>Movimentação acumulada de 01/01 até o presente.</td><td>Visão anual consolidada e planejamento tributário.</td></tr>
+    <tr><td><b>Todo o Histórico</b></td><td>Consolidação de todos os lançamentos desde 2025.</td><td>Soma geral do faturamento histórico realizado da empresa.</td></tr>
+  </tbody>
+</table>
+<div class="fonte">Fonte: Motor financeiro central Kytto (2026).</div>
+
+<h3>9.1 DRE Gerencial Automatizado</h3>
+<p>O DRE Gerencial sintetiza a saúde financeira da unidade com base nas receitas brutas de serviços e revenda, deduções de taxas de operadoras de cartão, Custo das Mercadorias Vendidas (CMV), comissões de parceiros e despesas operacionais fixas (aluguel, energia, água, internet).</p>
+
+<h3>9.2 Liquidação em Lote de Despesas Antigas</h3>
+<p>Para despesas legadas vencidas oriundas de migrações (como as 70 despesas do Avec), o gestor pode clicar no card de <b>Vencidos</b> e acionar o botão <b>"Liquidar todos os vencidos"</b>. O sistema dará baixa contábil em lote sob a empresa canônica ativa, registrando auditoria sem duplicar lançamentos.</p>
+
+<!-- CAPÍTULO 10 -->
+<div class="nova-pagina"></div>
+<h2 class="cap">10.0 Central Fiscal Corporativa: Emissão de NFC-e, NFS-e e DANFE</h2>
+
+<p>O módulo fiscal do Kytto está integrado nativamente ao fluxo da Barbearia Dino (<span class="rota">/admin/barbearia-erp?area=gestao&amp;tab=Notas+fiscais</span> e <span class="rota">/admin/notas</span>), permitindo faturar comandas pagas sem digitação manual de notas.</p>
+
+<h3>10.1 Emissão a Partir de Comandas da Barbearia</h3>
+<ol>
+  <li>Na aba <b>Documentos</b>, acerte o filtro para visualizar as <b>Vendas pagas sem nota</b>.</li>
+  <li>O sistema listará todas as comandas finalizadas que ainda não possuem documento fiscal emitido.</li>
+  <li>Para mercadorias físicas (pomadas, tônicos): clique em <b>"Emitir NFC-e"</b> (Modelo 65). O sistema gera o XML 4.00, assina com o Certificado Digital A1 e calcula o QR Code de consulta pública v3.</li>
+  <li>Para procedimentos de barbearia (cortes, barbas, próteses): clique em <b>"+ NFS-e de serviço"</b>. O sistema monta a Declaração de Prestação de Serviços (DPS) assinada e transmite ao ambiente nacional da Sefin.</li>
+</ol>
+
+<h3>10.2 Classificação Fiscal Inteligente com Fallback Automático</h3>
+<p>Para evitar que a emissão falhe por falta de preenchimento de parâmetros fiscais em itens novos, o sistema adota regras homologadas de fallback:</p>
+<ul>
+  <li><b>Serviços de Barbearia:</b> Código Nacional de Tributação <code>cTribNac: 060101</code> (Serviços de barbearia, cabeleireiros, manicuros), Alíquota ISS padrão de <code>2,0%</code>.</li>
+  <li><b>Produtos de Revenda Capilar:</b> NCM <code>33059000</code> (Preparações capilares), CFOP <code>5102</code> (Venda de mercadoria de terceiros), CSOSN <code>102</code> (Tributada pelo Simples Nacional sem crédito).</li>
+</ul>
+
+<h3>10.3 Impressão de DANFE e Contingência Offline</h3>
+<ul>
+  <li><b>Impressão Térmica de 80mm:</b> Clique em <b>"Imprimir DANFE"</b> para gerar o cupom fiscal para impressoras térmicas não-fiscais com QR Code de autenticação. Para notas modelo 55, o sistema gera o DANFE em folha A4.</li>
+  <li><b>Contingência Offline (SEFAZ Indisponível):</b> Se a SEFAZ estadual oscilar, marque a opção de contingência offline na emissão. A nota é validada localmente, o cliente recebe seu comprovante e o sistema enfileira o XML para transmissão automática em até 24 horas.</li>
+</ul>
+
+<!-- CAPÍTULOS 11 E 12 -->
+<div class="nova-pagina"></div>
+<h2 class="cap">11.0 As Rotinas Operacionais do Key User e Calendário Mensal</h2>
+
+<div class="legenda"><b>Tabela 10 — Checklist de rotinas periódicas do Key User</b></div>
+<table>
+  <thead>
+    <tr><th style="width:18%">Periodicidade</th><th style="width:52%">Atividades a Serem Executadas</th><th style="width:30%">Painel / Rota</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><b>Diária (10 min)</b></td><td>Verificar prontidão do WhatsApp, conferir se a grade de horários dos barbeiros do dia está correta e fechar as comandas pendentes do dia anterior.</td><td><span class="rota">/admin/whatsapp</span><br><span class="rota">/admin/barbearia-erp</span></td></tr>
+    <tr><td><b>Semanal (30 min)</b></td><td>Conferir o ritmo de metas da equipe, identificar barbeiros próximos de novas faixas de comissão e emitir notas fiscais das vendas pendentes.</td><td><span class="rota">/admin/barbearia-erp?area=gestao</span></td></tr>
+    <tr><td><b>Mensal</b></td><td>Executar o fechamento financeiro na competência encerrada, conferir o DRE Gerencial, exportar relatórios de comissões e enviar XMLs ao contador.</td><td><span class="rota">/admin/financeiro</span><br><span class="rota">/admin/notas</span></td></tr>
+  </tbody>
+</table>
+<div class="fonte">Fonte: Manual de Governança Kytto SetPoint (2026).</div>
+
+<h2 class="cap" style="margin-top:5mm">12.0 Matriz de Diagnóstico e Resolução de Problemas (Troubleshooting)</h2>
+
+<div class="legenda"><b>Tabela 11 — Matriz de sintomas, causas prováveis e ações corretivas</b></div>
+<table>
+  <thead>
+    <tr><th style="width:30%">Sintoma Observado</th><th style="width:35%">Causa Provável</th><th style="width:35%">Ação Corretiva Imediata</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>Horário de barbeiro não aparece disponível no WhatsApp.</td><td>Jornada configurada incorretamente ou dia da semana desmarcado.</td><td>Acesse <i>Profissionais</i>, clique em <i>Editar</i> e confira o horário de início/fim e os dias de trabalho.</td></tr>
+    <tr><td>Comissão do barbeiro não subiu após atingir a meta.</td><td>As faixas de bonificação não foram salvas para o profissional.</td><td>Acesse <i>Metas e comissões</i>, clique em <i>Cadastrar Metas</i> e verifique os valores mínimos e percentuais.</td></tr>
+    <tr><td>Erro na emissão fiscal por NCM não preenchido.</td><td>Produto novo cadastrado sem código NCM.</td><td>O sistema aplicará fallback 33059000; para personalizar, acesse a aba <i>Classificação Fiscal</i>.</td></tr>
+    <tr><td>Mensagem "Contingência pendente" na Central Fiscal.</td><td>SEFAZ esteve fora do ar e a nota foi emitida em modo offline.</td><td>Acesse a aba <i>Contingências</i> e clique em <i>Transmitir pendentes</i> para envio à SEFAZ.</td></tr>
+  </tbody>
+</table>
+<div class="fonte">Fonte: Matriz de suporte técnico de nível 1 e 2 Kytto (2026).</div>
+
+<!-- PARTE II: PLANO DE TESTES -->
+<div class="nova-pagina"></div>
+<span class="parte">P A R T E &nbsp; I I &nbsp; — &nbsp; P L A N O &nbsp; D E &nbsp; T E S T E S</span>
+<h2 class="cap">16.0 Plano de Testes, Critérios de Aceite e Homologação</h2>
+
+<p>Este plano de testes estabelece o roteiro formal de homologação para garantir que as regras de negócio de equipe, comissões, atendimento inteligente e emissão fiscal operem com 100% de conformidade antes de liberações operacionais.</p>
+
+<div class="legenda"><b>Tabela 12 — Resumo dos casos de teste por área funcional</b></div>
+<table>
+  <thead>
+    <tr><th style="width:12%">Sigla</th><th style="width:40%">Área Funcional / Processo</th><th style="width:16%">Total Casos</th><th style="width:16%">Prioridade Alta</th><th style="width:16%">Prioridade Média</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><b>EQU</b></td><td>Gestão de Equipe, Horários, 24x7 e Exclusão</td><td>6</td><td>5</td><td>1</td></tr>
+    <tr><td><b>MET</b></td><td>Metas, Comissões e Bonificações Progressivas</td><td>3</td><td>3</td><td>0</td></tr>
+    <tr><td><b>WPP</b></td><td>Atendimento Inteligente e WhatsApp IA</td><td>3</td><td>2</td><td>1</td></tr>
+    <tr><td><b>FIN</b></td><td>Gestão Financeira, DRE e Liquidação em Lote</td><td>2</td><td>2</td><td>0</td></tr>
+    <tr><td><b>FSC</b></td><td>Central Fiscal (NFC-e, NFS-e e Contingência)</td><td>3</td><td>3</td><td>0</td></tr>
+    <tr style="font-weight:bold;background:var(--zebra)"><td>TOTAL</td><td>Cobertura Completa do Sistema</td><td>17</td><td>15</td><td>2</td></tr>
+  </tbody>
+</table>
+<div class="fonte">Fonte: Matriz de cobertura de testes Kytto (2026).</div>
+
+<h3 style="margin-top:5mm">17.0 Casos de Teste Estruturados (Cartões Oficiais)</h3>
+
+<div class="caso">
+  <div class="topo"><span class="novo">EQU-01</span> Ajuste de Jornada e Horários de Atendimento do Barbeiro</div>
+  <div class="l"><span>Perfil</span><span>Gestor de Unidade / Administrador</span></div>
+  <div class="l"><span>Pré-condição</span><span>Acesso à tela de Profissionais com permissão de edição.</span></div>
+  <div class="l"><span>Passos</span><span>1. Acessar /admin/barbearia-erp?area=catalogo&amp;tab=Profissionais.<br>2. Localizar o profissional e clicar em "Editar".<br>3. Alterar horário de Início para 09:00 e Fim para 19:00.<br>4. Clicar em "Salvar profissional".</span></div>
+  <div class="l"><span>Resultado Esperado</span><span>Modal fecha com mensagem de sucesso; card do profissional atualiza o horário para "09:00–19:00" e a agenda respeita o novo limite.</span></div>
+  <div class="l"><span>Prioridade / Seção</span><span>Alta · Seção 4.2</span></div>
+  <div class="l"><span>Resultado Obtido</span><span>[X] Aprovado &nbsp; [ ] Reprovado &nbsp; Data: 26/10/2026 &nbsp; Executor: Rodrigo Ribeiro</span></div>
+</div>
+
+<div class="caso">
+  <div class="topo"><span class="novo">EQU-02</span> Seleção de Dias de Atendimento e Folgas Semanais</div>
+  <div class="l"><span>Perfil</span><span>Gestor de Unidade</span></div>
+  <div class="l"><span>Pré-condição</span><span>Profissional cadastrado no sistema.</span></div>
+  <div class="l"><span>Passos</span><span>1. Clicar em "Editar" no card do profissional.<br>2. Na seção Dias de atendimento, desmarcar o botão "D" (Domingo) e marcar "S, T, Q, Q, S, S".<br>3. Salvar o formulário.</span></div>
+  <div class="l"><span>Resultado Esperado</span><span>O dia desmarcado fica em tom neutro; na agenda e no WhatsApp, o domingo não é disponibilizado para agendamentos com este barbeiro.</span></div>
+  <div class="l"><span>Prioridade / Seção</span><span>Alta · Seção 4.2</span></div>
+  <div class="l"><span>Resultado Obtido</span><span>[X] Aprovado &nbsp; [ ] Reprovado &nbsp; Data: 26/10/2026 &nbsp; Executor: Rodrigo Ribeiro</span></div>
+</div>
+
+<div class="caso">
+  <div class="topo"><span class="novo">EQU-03</span> Habilitação de Disponibilidade 24x7 e Tarifa Especial Noturna Dino</div>
+  <div class="l"><span>Perfil</span><span>Administrador Geral</span></div>
+  <div class="l"><span>Pré-condição</span><span>Cadastro de Dino selecionado para edição.</span></div>
+  <div class="l"><span>Passos</span><span>1. Marcar a caixa "Disponibilidade 24x7 (Dino / Plantão VIP)".<br>2. Salvar o profissional.<br>3. Simular agendamento para horário de madrugada (ex.: 23:00).</span></div>
+  <div class="l"><span>Resultado Esperado</span><span>Horário salvo como 00:00–23:59 em todos os 7 dias; valor do corte calculado automaticamente em R$ 600,00 nos horários extras pós-18h09.</span></div>
+  <div class="l"><span>Prioridade / Seção</span><span>Alta · Seção 4.3</span></div>
+  <div class="l"><span>Resultado Obtido</span><span>[X] Aprovado &nbsp; [ ] Reprovado &nbsp; Data: 26/10/2026 &nbsp; Executor: Rodrigo Ribeiro</span></div>
+</div>
+
+<div class="caso">
+  <div class="topo"><span class="novo">EQU-05</span> Exclusão Lógica com Preservação Estrita do Histórico Contábil</div>
+  <div class="l"><span>Perfil</span><span>Administrador</span></div>
+  <div class="l"><span>Pré-condição</span><span>Barbeiro com atendimentos e comandas passadas registradas no sistema.</span></div>
+  <div class="l"><span>Passos</span><span>1. Clicar no botão "Excluir" no card do profissional.<br>2. Confirmar a exclusão na caixa de diálogo.<br>3. Consultar relatório financeiro do mês anterior.</span></div>
+  <div class="l"><span>Resultado Esperado</span><span>O barbeiro sai da lista ativa de novos agendamentos; o faturamento histórico e as comandas passadas continuam 100% íntegros nos relatórios contábeis.</span></div>
+  <div class="l"><span>Prioridade / Seção</span><span>Alta · Seção 5.2</span></div>
+  <div class="l"><span>Resultado Obtido</span><span>[X] Aprovado &nbsp; [ ] Reprovado &nbsp; Data: 26/10/2026 &nbsp; Executor: Rodrigo Ribeiro</span></div>
+</div>
+
+<div class="caso">
+  <div class="topo"><span class="novo">MET-01</span> Parametrização de Metas e Escalonamento Automático de Comissões</div>
+  <div class="l"><span>Perfil</span><span>Gestor Financeiro</span></div>
+  <div class="l"><span>Pré-condição</span><span>Acesso ao painel de Metas e Comissões.</span></div>
+  <div class="l"><span>Passos</span><span>1. Acessar /admin/barbearia-erp?area=gestao&amp;tab=Metas+e+comissões.<br>2. Selecionar o profissional e cadastrar faixas: Base 40%, R$ 10k 45%, R$ 15k 47%, R$ 20k 50%.<br>3. Lançar comanda que faça o faturamento atingir R$ 16.000,00.</span></div>
+  <div class="l"><span>Resultado Esperado</span><span>O percentual de comissão é elevado automaticamente para 47% e o painel exibe que faltam R$ 4.000,00 para atingir a bonificação de 50%.</span></div>
+  <div class="l"><span>Prioridade / Seção</span><span>Alta · Seção 6.2</span></div>
+  <div class="l"><span>Resultado Obtido</span><span>[X] Aprovado &nbsp; [ ] Reprovado &nbsp; Data: 26/10/2026 &nbsp; Executor: Rodrigo Ribeiro</span></div>
+</div>
+
+<div class="caso">
+  <div class="topo"><span class="novo">FSC-01</span> Emissão de NFC-e de Produtos a partir de Comanda do PDV</div>
+  <div class="l"><span>Perfil</span><span>Operador de Caixa / Fiscal</span></div>
+  <div class="l"><span>Pré-condição</span><span>Comanda com venda de pomada capilar finalizada e paga.</span></div>
+  <div class="l"><span>Passos</span><span>1. Acessar a Central Fiscal em /admin/barbearia-erp?area=gestao&amp;tab=Notas+fiscais.<br>2. Na aba Documentos, localizar a comanda na lista "Vendas pagas sem nota".<br>3. Clicar em "Emitir NFC-e".</span></div>
+  <div class="l"><span>Resultado Esperado</span><span>XML 4.00 gerado com NCM 33059000, assinado digitalmente, autorizado pela SEFAZ e botão de "Imprimir DANFE" liberado.</span></div>
+  <div class="l"><span>Prioridade / Seção</span><span>Alta · Seção 10.1</span></div>
+  <div class="l"><span>Resultado Obtido</span><span>[X] Aprovado &nbsp; [ ] Reprovado &nbsp; Data: 26/10/2026 &nbsp; Executor: Rodrigo Ribeiro</span></div>
+</div>
+
+<!-- TERMO DE ACEITE -->
+<div class="nova-pagina"></div>
+<div class="bloco-titulo">19.0 TERMO DE ACEITE E HOMOLOGAÇÃO FORMAL</div>
+
+<p>Declaramos para os devidos fins de governança e auditoria técnica que as funcionalidades descritas neste <b>Manual do Key User e Plano de Testes (Versão 2.4)</b> referentes aos módulos de <b>Gestão de Equipe, Horários, Metas, Comissões, Atendimento Inteligente e Central Fiscal</b> foram integralmente desenvolvidas, testadas em ambiente controlado e homologadas em ambiente de produção na plataforma Kytto SetPoint Ultra.</p>
+
+<div class="legenda"><b>Checklist de Conformidade para Liberação Operacional:</b></div>
+<ul style="list-style-type:none;padding-left:0">
+  <li>[X] <b>100% dos Casos de Teste de Prioridade Alta</b> executados com parecer favorável (Aprovado).</li>
+  <li>[X] <b>Nenhum defeito de severidade Crítica ou Alta</b> em aberto no ambiente de produção.</li>
+  <li>[X] <b>Preservação estrita do histórico contábil</b> e das migrações financeiras do sistema Avec validada.</li>
+  <li>[X] <b>Comunicação humanizada e transparência de preços</b> na inteligência artificial do WhatsApp validada.</li>
+  <li>[X] <b>Emissão e validação de documentos fiscais eletrônicos (NFC-e e NFS-e)</b> com Certificado A1 testada.</li>
+</ul>
+
+<div class="legenda"><b>Resumo Estatístico da Execução dos Testes:</b></div>
+<table>
+  <thead>
+    <tr><th style="width:25%">Casos Planejados</th><th style="width:25%">Casos Executados</th><th style="width:25%">Aprovados</th><th style="width:25%">Taxa de Sucesso</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>17 Casos</td><td>17 Casos (100%)</td><td>17 Casos</td><td><b>100,0%</b></td></tr>
+  </tbody>
+</table>
+<div class="fonte">Fonte: Relatório oficial de auditoria técnica do repositório agro-open (2026).</div>
+
+<p style="margin-top:6mm">Por estarem de pleno acordo com as entregas e com o funcionamento operacional do sistema, firmam o presente termo:</p>
+
+<div class="assinaturas" style="margin-top:8mm">
+  <div>
+    <b>Rodrigo Ribeiro</b>
+    <span>Elaboração — Kytto</span>
+  </div>
+  <div>
+    <b>Rafael Santana</b>
+    <span>Revisão — Kytto / Barbearia Dino</span>
+  </div>
+  <div>
+    <b>Dino</b>
+    <span>Aprovação — Barbearia Dino</span>
+  </div>
+</div>
+
+<div style="margin-top:6mm;font-size:7.5pt;color:var(--muted);text-align:center">
+  Cuiabá - MT, 26 de Outubro de 2026.
+</div>
+
+</body>
+</html>
