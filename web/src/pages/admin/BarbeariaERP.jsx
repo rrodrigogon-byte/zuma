@@ -229,7 +229,7 @@ function rotuloPreco(servico) {
 }
 
 // Abas que não dependem da visão geral da barbearia (cada uma busca seus próprios dados).
-const TABS_AUTONOMAS = new Set(['Desempenho da equipe', 'Retorno previsto', 'Lista de espera', 'Saúde do clube', 'Curva ABC', 'Metas & Roleta', 'Projeção inteligente', 'Ocupação e metas', 'Avaliações (NPS)', 'Origem dos clientes', 'Cobranças e cashback', 'Receita da IA', 'Resumo diário', 'Vale-presente'])
+const TABS_AUTONOMAS = new Set(['Desempenho da equipe', 'Retorno previsto', 'Lista de espera', 'Saúde do clube', 'Curva ABC', 'Metas & Roleta', 'Projeção inteligente', 'Ocupação e metas', 'Avaliações (NPS)', 'Origem dos clientes', 'Cobranças e cashback', 'Receita da IA', 'Resumo diário', 'Vale-presente', 'Metas e comissões'])
 
 export default function BarbeariaERP() {
   const { toast } = useToast()

@@ -1,3 +1,13 @@
+
+// ── Cache de Performance para Consultas Financeiras (Resumo e DRE) ───────────
+let _cacheVersaoFinanceiro = 1;
+const _cacheMemoriaFinanceiro = new Map();
+const TTL_CACHE_FINANCEIRO_MS = 30_000; // 30 segundos
+
+export function invalidarCacheFinanceiro() {
+  _cacheVersaoFinanceiro += 1;
+  _cacheMemoriaFinanceiro.clear();
+}
 // ============================================================================
 // FINANCEIRO CENTRAL KYTTO
 // Livro-caixa multientidade com rastreabilidade de eventos operacionais.
@@ -288,6 +298,8 @@ export function obterLancamento(empresaId, id, opcoes = {}) {
   return serializado;
 }
 
+// Invalida cache ao registrar novo lançamento
+invalidarCacheFinanceiro();
 export function registrarLancamento(empresaOuDados, dadosOuOpcoes = {}, opcoes = {}) {
   const parsed = parseRegistrar(empresaOuDados, dadosOuOpcoes, opcoes);
   const dados = parsed.dados || {};
@@ -355,6 +367,7 @@ export function registrarLancamento(empresaOuDados, dadosOuOpcoes = {}, opcoes =
   };
   return persistir(store, snapshot, () => {
     store.lancamentos[id] = lancamento;
+  invalidarCacheFinanceiro();
     return serializar(lancamento);
   });
 }
@@ -424,6 +437,8 @@ export function listarLancamentosPorOrigem(empresaOuOpcoes, origemOuLoja, origem
     .map(serializar);
 }
 
+// Invalida cache ao atualizar lançamento
+invalidarCacheFinanceiro();
 export function atualizarLancamento(empresaId, id, dados = {}, opcoes = {}) {
   const empresa = idEscopo(empresaId);
   let store = storeEmpresa(empresa);
@@ -503,6 +518,7 @@ export function atualizarLancamento(empresaId, id, dados = {}, opcoes = {}) {
   });
 }
 
+invalidarCacheFinanceiro();
 export function reverterLancamento({ empresaId, lojaId, lancamentoId, actionId, idempotencyKey, chaveIdempotencia, motivo, usuarioId, correlationId, confirmado, metadata } = {}) {
   const escopo = contexto(empresaId, lojaId, {}, {}, { lojaObrigatoria: true });
   const idOriginal = texto(lancamentoId, 180);
@@ -571,6 +587,7 @@ export function reverterLancamento({ empresaId, lojaId, lancamentoId, actionId, 
   };
   return persistir(store, snapshot, () => {
     store.lancamentos[id] = reversao;
+  invalidarCacheFinanceiro();
     return serializar(reversao);
   });
 }
@@ -691,17 +708,33 @@ export function resumoFinanceiro(empresaOuOpcoes, opcoes = {}) {
   const parsed = parseResumo(empresaOuOpcoes, opcoes);
   const filtros = parsed.opcoes || {};
   const escopo = exigeLeituraLoja(parsed.empresaId, filtros.lojaId, filtros, 'resumo financeiro');
-  const lancamentos = listarLancamentos(escopo.empresaId, { ...filtros, lojaId: escopo.lojaId });
   const hoje = dataCurta(filtros.hoje || agora());
   const mesAtual = String(hoje).slice(0, 7);
+
+  const dataInicio = filtros.dataInicio ? dataCurta(filtros.dataInicio) : (filtros.de ? dataCurta(filtros.de) : null);
+  const dataFim = filtros.dataFim ? dataCurta(filtros.dataFim) : (filtros.ate ? dataCurta(filtros.ate) : null);
+
+  // Verificação de cache rápido em memória
+  const cacheKey = `res:${_cacheVersaoFinanceiro}:${escopo.empresaId}:${escopo.lojaId || ''}:${dataInicio || ''}:${dataFim || ''}:${hoje}`;
+  const cached = _cacheMemoriaFinanceiro.get(cacheKey);
+  const agoraMs = Date.now();
+  if (cached && agoraMs - cached.ts < TTL_CACHE_FINANCEIRO_MS) {
+    return { ...cached.data };
+  }
+
+  const lancamentos = listarLancamentos(escopo.empresaId, { ...filtros, lojaId: escopo.lojaId });
 
   // Single-pass O(N) aggregation sem arrays intermediários (alta performance e economia de memória no Render)
   let totalReceitas = 0;
   let totalDespesas = 0;
   let recMes = 0;
   let despMes = 0;
+  let recPeriodo = 0;
+  let despPeriodo = 0;
   let aReceber = 0;
   let aPagar = 0;
+  let aReceberPeriodo = 0;
+  let aPagarPeriodo = 0;
   let recBar = 0;
   let inadimplentes = 0;
 
@@ -709,18 +742,34 @@ export function resumoFinanceiro(empresaOuOpcoes, opcoes = {}) {
     const item = lancamentos[i];
     if (item.status === 'cancelado') continue;
     const valor = Number(item.valor || 0);
+    const refDataPago = String(item.pagoEm || item.dataOperacao || item.vencimento || '').slice(0, 10);
+    const refDataVenc = String(item.vencimento || '').slice(0, 10);
+
+    const noPeriodoPago = dataInicio && dataFim
+      ? (refDataPago >= dataInicio && refDataPago <= dataFim)
+      : (refDataPago.slice(0, 7) === mesAtual);
+
+    const noPeriodoVenc = dataInicio && dataFim
+      ? (refDataVenc >= dataInicio && refDataVenc <= dataFim)
+      : (refDataVenc.slice(0, 7) === mesAtual);
 
     if (item.tipo === 'receita') {
       if (item.status === 'pago') {
         totalReceitas += valor;
-        if (item.pagoEm && item.pagoEm.slice(0, 7) === mesAtual) {
+        if (refDataPago.slice(0, 7) === mesAtual) {
           recMes += valor;
+        }
+        if (noPeriodoPago) {
+          recPeriodo += valor;
         }
         if (item.origem === 'comanda' || item.origem === 'barbearia_cobranca') {
           recBar += valor;
         }
       } else if (item.status === 'pendente') {
         aReceber += valor;
+        if (noPeriodoVenc) {
+          aReceberPeriodo += valor;
+        }
         if (item.vencimento < hoje) {
           inadimplentes += 1;
         }
@@ -728,25 +777,59 @@ export function resumoFinanceiro(empresaOuOpcoes, opcoes = {}) {
     } else if (item.tipo === 'despesa') {
       if (item.status === 'pago') {
         totalDespesas += valor;
-        if (item.pagoEm && item.pagoEm.slice(0, 7) === mesAtual) {
+        if (refDataPago.slice(0, 7) === mesAtual) {
           despMes += valor;
+        }
+        if (noPeriodoPago) {
+          despPeriodo += valor;
         }
       } else if (item.status === 'pendente') {
         aPagar += valor;
+        if (noPeriodoVenc) {
+          aPagarPeriodo += valor;
+        }
       }
     }
   }
 
-  return {
-    empresaId: escopo.empresaId, lojaId: escopo.lojaId || null, hoje, mesAtual,
-    saldo: valorMonetario(totalReceitas - totalDespesas), totalReceitas: valorMonetario(totalReceitas), totalDespesas: valorMonetario(totalDespesas), recBar: valorMonetario(recBar),
-    recMes: valorMonetario(recMes), despMes: valorMonetario(despMes),
-    aReceber: valorMonetario(aReceber), aPagar: valorMonetario(aPagar), inadimplentes,
-    mensRecebidas: 0, mensPendentes: 0, mensVencidas: 0, inscRec: 0,
+  const recFinal = dataInicio && dataFim ? recPeriodo : recMes;
+  const despFinal = dataInicio && dataFim ? despPeriodo : despMes;
+  const resultadoPeriodo = valorMonetario(recFinal - despFinal);
+  const margemPeriodo = recFinal > 0 ? Number(((resultadoPeriodo / recFinal) * 100).toFixed(1)) : 0;
+
+  const resultado = {
+    empresaId: escopo.empresaId,
+    lojaId: escopo.lojaId || null,
+    hoje,
+    mesAtual,
+    dataInicio: dataInicio || null,
+    dataFim: dataFim || null,
+    saldo: valorMonetario(totalReceitas - totalDespesas),
+    totalReceitas: valorMonetario(totalReceitas),
+    totalDespesas: valorMonetario(totalDespesas),
+    recBar: valorMonetario(recBar),
+    recMes: valorMonetario(recMes),
+    despMes: valorMonetario(despMes),
+    // Valores específicos do período filtrado:
+    recPeriodo: valorMonetario(recFinal),
+    despPeriodo: valorMonetario(despFinal),
+    resultadoPeriodo,
+    margemPeriodo,
+    aReceberPeriodo: valorMonetario(dataInicio && dataFim ? aReceberPeriodo : aReceber),
+    aPagarPeriodo: valorMonetario(dataInicio && dataFim ? aPagarPeriodo : aPagar),
+    aReceber: valorMonetario(aReceber),
+    aPagar: valorMonetario(aPagar),
+    inadimplentes,
+    mensRecebidas: 0,
+    mensPendentes: 0,
+    mensVencidas: 0,
+    inscRec: 0,
     quarentenaCount: contagemQuarentena(escopo.empresaId),
   };
-}
 
+  _cacheMemoriaFinanceiro.set(cacheKey, { ts: agoraMs, data: resultado });
+  return resultado;
+}
 function parseFechamento(empresaOuOpcoes, data, usuario, opcoes) {
   if (empresaOuOpcoes && typeof empresaOuOpcoes === 'object') return { empresaId: empresaOuOpcoes.empresaId, data: empresaOuOpcoes.data || empresaOuOpcoes.hoje, usuario: empresaOuOpcoes.usuario || empresaOuOpcoes.usuarioId, opcoes: empresaOuOpcoes };
   if (data && typeof data === 'object') return { empresaId: empresaOuOpcoes, data: data.data || data.hoje, usuario: data.usuario || data.usuarioId, opcoes: data };
@@ -828,29 +911,42 @@ export function dreGerencial(empresaOuOpcoes, opcoes = {}) {
   const parsed = parseResumo(empresaOuOpcoes, opcoes);
   const filtros = parsed.opcoes || {};
   const escopo = exigeLeituraLoja(parsed.empresaId, filtros.lojaId, filtros, 'DRE gerencial');
-  const lancamentos = listarLancamentos(escopo.empresaId, { ...filtros, lojaId: escopo.lojaId });
   const hoje = dataCurta(filtros.hoje || agora());
   const mesAlvo = String(filtros.mes || hoje).slice(0, 7);
+  const dataInicio = filtros.dataInicio ? dataCurta(filtros.dataInicio) : (filtros.de ? dataCurta(filtros.de) : null);
+  const dataFim = filtros.dataFim ? dataCurta(filtros.dataFim) : (filtros.ate ? dataCurta(filtros.ate) : null);
+
+  // Verificação de cache para DRE
+  const cacheKey = `dre:${_cacheVersaoFinanceiro}:${escopo.empresaId}:${escopo.lojaId || ''}:${dataInicio || ''}:${dataFim || ''}:${mesAlvo}`;
+  const cached = _cacheMemoriaFinanceiro.get(cacheKey);
+  const agoraMs = Date.now();
+  if (cached && agoraMs - cached.ts < TTL_CACHE_FINANCEIRO_MS) {
+    return { ...cached.data };
+  }
+
+  const lancamentos = listarLancamentos(escopo.empresaId, { ...filtros, lojaId: escopo.lojaId });
 
   let receitaServicos = 0;
   let receitaPlanos = 0;
   let receitaRevenda = 0;
   let receitaOutras = 0;
-
   let deducoesTaxas = 0;
   let deducoesEstornos = 0;
-
   let custoComissoes = 0;
   let custoInsumos = 0;
-
   const despesasOperacionaisPorCategoria = Object.create(null);
   let totalDespesasFixas = 0;
 
   for (let i = 0; i < lancamentos.length; i++) {
     const item = lancamentos[i];
     if (item.status === 'cancelado') continue;
-    const refData = item.pagoEm || item.dataOperacao || item.vencimento;
-    if (!refData || !refData.startsWith(mesAlvo)) continue;
+    const refData = String(item.pagoEm || item.dataOperacao || item.vencimento || '').slice(0, 10);
+    if (!refData) continue;
+    if (dataInicio && dataFim) {
+      if (refData < dataInicio || refData > dataFim) continue;
+    } else {
+      if (!refData.startsWith(mesAlvo)) continue;
+    }
 
     const valor = Number(item.valor || 0);
 
@@ -871,7 +967,6 @@ export function dreGerencial(empresaOuOpcoes, opcoes = {}) {
       if (item.status !== 'pago') continue;
       const cat = item.categoria || 'Outros';
       const catLower = cat.toLowerCase();
-
       if (catLower.includes('taxa') || catLower.includes('cartão') || catLower.includes('maquininha')) {
         deducoesTaxas += valor;
       } else if (catLower.includes('comissão') || catLower.includes('repasse') || catLower.includes('barbeiro')) {
@@ -891,40 +986,31 @@ export function dreGerencial(empresaOuOpcoes, opcoes = {}) {
   const totalCustosVariaveis = valorMonetario(custoComissoes + custoInsumos);
   const margemContribuicao = valorMonetario(receitaLiquida - totalCustosVariaveis);
   const margemContribuicaoPercentual = receitaBruta > 0 ? Number(((margemContribuicao / receitaBruta) * 100).toFixed(1)) : 0;
-
   const totalDespesasOperacionais = valorMonetario(totalDespesasFixas);
   const ebitda = valorMonetario(margemContribuicao - totalDespesasOperacionais);
   const resultadoLiquido = ebitda;
   const margemLiquidaPercentual = receitaBruta > 0 ? Number(((resultadoLiquido / receitaBruta) * 100).toFixed(1)) : 0;
 
   const rankingCategorias = Object.entries(despesasOperacionaisPorCategoria)
-    .map(([categoria, total]) => ({
+    .map(([categoria, valor]) => ({
       categoria,
-      valor: valorMonetario(total),
-      percentual: totalDespesasOperacionais > 0 ? Number(((total / totalDespesasOperacionais) * 100).toFixed(1)) : 0,
+      valor: valorMonetario(valor),
+      percentual: totalDespesasOperacionais > 0 ? Number(((valor / totalDespesasOperacionais) * 100).toFixed(1)) : 0,
     }))
     .sort((a, b) => b.valor - a.valor);
 
-  return {
+  const resultado = {
+    empresaId: escopo.empresaId,
+    lojaId: escopo.lojaId || null,
     mes: mesAlvo,
+    hoje,
+    dataInicio: dataInicio || `${mesAlvo}-01`,
+    dataFim: dataFim || `${mesAlvo}-31`,
+    customizado: Boolean(dataInicio && dataFim),
     receitaBruta,
-    detalhesReceita: {
-      servicos: valorMonetario(receitaServicos),
-      planos: valorMonetario(receitaPlanos),
-      revenda: valorMonetario(receitaRevenda),
-      outras: valorMonetario(receitaOutras),
-    },
     totalDeducoes,
-    detalhesDeducoes: {
-      taxasCartao: valorMonetario(deducoesTaxas),
-      estornos: valorMonetario(deducoesEstornos),
-    },
     receitaLiquida,
     totalCustosVariaveis,
-    detalhesCustos: {
-      comissoes: valorMonetario(custoComissoes),
-      insumos: valorMonetario(custoInsumos),
-    },
     margemContribuicao,
     margemContribuicaoPercentual,
     totalDespesasOperacionais,
@@ -932,12 +1018,19 @@ export function dreGerencial(empresaOuOpcoes, opcoes = {}) {
     resultadoLiquido,
     margemLiquidaPercentual,
     rankingCategorias,
+    detalhesReceita: {
+      servicos: valorMonetario(receitaServicos),
+      planos: valorMonetario(receitaPlanos),
+      revenda: valorMonetario(receitaRevenda),
+      outras: valorMonetario(receitaOutras),
+    },
+    detalhesCustos: {
+      comissoes: valorMonetario(custoComissoes),
+      insumos: valorMonetario(custoInsumos),
+      taxas: valorMonetario(deducoesTaxas),
+    },
   };
+
+  _cacheMemoriaFinanceiro.set(cacheKey, { ts: agoraMs, data: resultado });
+  return resultado;
 }
-
-export const CATEGORIAS_FINANCEIRAS = {
-  receita: ['Mensalidade', 'Inscrição Torneio', 'Ingresso Evento', 'Bar/Lanchonete', 'Loja', 'Aula/Escola', 'Patrocínio', 'Aluguel de Quadra', 'Outros'],
-  despesa: ['Pessoal/RH', 'Manutenção', 'Utilities (Água/Luz)', 'Material Esportivo', 'Alimentação/Bebidas', 'Marketing', 'Equipamentos', 'Impostos/Taxas', 'Serviços Terceiros', 'Outros'],
-};
-
-export { dataCurta };

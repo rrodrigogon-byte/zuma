@@ -258,6 +258,48 @@ function DespesasCategoriaPanel({ dre, onSelectCategoria }) {
   </div>
 }
 
+function calcularDatasPeriodo(tipo, refHoje = localDay()) {
+  const [anoStr, mesStr, diaStr] = refHoje.split('-')
+  const ano = Number(anoStr)
+  const mes = Number(mesStr)
+  const dia = Number(diaStr)
+  if (tipo === 'hoje') {
+    return { de: refHoje, ate: refHoje, label: `Hoje (${diaStr}/${mesStr}/${anoStr})` }
+  }
+  if (tipo === '7d') {
+    const d = new Date(ano, mes - 1, dia - 6)
+    const deStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    return { de: deStr, ate: refHoje, label: `Últimos 7 dias (${deStr.split('-').reverse().join('/')} a ${refHoje.split('-').reverse().join('/')})` }
+  }
+  if (tipo === '15d') {
+    const d = new Date(ano, mes - 1, dia - 14)
+    const deStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    return { de: deStr, ate: refHoje, label: `Últimos 15 dias (${deStr.split('-').reverse().join('/')} a ${refHoje.split('-').reverse().join('/')})` }
+  }
+  if (tipo === 'mes') {
+    const ultimoDia = new Date(ano, mes, 0).getDate()
+    const deStr = `${anoStr}-${mesStr}-01`
+    const ateStr = `${anoStr}-${mesStr}-${String(ultimoDia).padStart(2, '0')}`
+    return { de: deStr, ate: ateStr, label: `Este Mês (${mesStr}/${anoStr})` }
+  }
+  if (tipo === 'mesAnterior') {
+    const dAnt = new Date(ano, mes - 2, 1)
+    const anoAnt = dAnt.getFullYear()
+    const mesAnt = String(dAnt.getMonth() + 1).padStart(2, '0')
+    const ultDiaAnt = new Date(anoAnt, dAnt.getMonth() + 1, 0).getDate()
+    const deStr = `${anoAnt}-${mesAnt}-01`
+    const ateStr = `${anoAnt}-${mesAnt}-${String(ultDiaAnt).padStart(2, '0')}`
+    return { de: deStr, ate: ateStr, label: `Mês Anterior (${mesAnt}/${anoAnt})` }
+  }
+  if (tipo === 'ano') {
+    return { de: `${anoStr}-01-01`, ate: `${anoStr}-12-31`, label: `Ano de ${anoStr}` }
+  }
+  if (tipo === 'tudo') {
+    return { de: '', ate: '', label: 'Todo o Histórico' }
+  }
+  return { de: '', ate: '', label: 'Personalizado' }
+}
+
 export default function FinanceiroEmpresa() {
   const { toast } = useToast()
   const { empresaAtiva, perfil } = useAuth()
@@ -287,6 +329,10 @@ export default function FinanceiroEmpresa() {
     }
     return { tipo: '', status: '', categoria: '', q: '', de: '', ate: '' }
   })
+  const hoje = localDay()
+  const mesAtual = resumo?.mesAtual || hoje.slice(0, 7)
+  const [periodoFiltro, setPeriodoFiltro] = useState('mes') // 'mes' | 'hoje' | '7d' | '15d' | 'mesAnterior' | 'ano' | 'tudo' | 'custom'
+  const [periodoDatas, setPeriodoDatas] = useState(() => calcularDatasPeriodo('mes', localDay()))
   const [cardFiltroAtivo, setCardFiltroAtivo] = useState(() => {
     if (typeof window !== 'undefined') {
       const sp = new URLSearchParams(window.location.search)
@@ -298,20 +344,43 @@ export default function FinanceiroEmpresa() {
   })
   const [mesSelecionado, setMesSelecionado] = useState(null)
   const [abaAnalitica, setAbaAnalitica] = useState('fluxo') // 'fluxo' | 'dre' | 'categorias'
-
   const [ordenacao, setOrdenacao] = useState({ campo: 'vencimento', direcao: 'desc' })
   const [itensPorPagina, setItensPorPagina] = useState(50)
   const [paginaAtual, setPaginaAtual] = useState(1)
   const [selecionados, setSelecionados] = useState(new Set())
   const [executandoLote, setExecutandoLote] = useState(false)
   const [modalLiquidarVencidos, setModalLiquidarVencidos] = useState(false)
-
   const [form, setForm] = useState(null)
   const [cancelando, setCancelando] = useState(null)
   const firstField = useRef(null)
-  const hoje = localDay()
-  const mesAtual = resumo?.mesAtual || hoje.slice(0, 7)
   const [mesDre, setMesDre] = useState(mesAtual)
+
+  const tituloReceitas = periodoFiltro === 'mes' ? 'Receitas do mês' : periodoFiltro === 'hoje' ? 'Receitas de hoje' : periodoFiltro === '7d' ? 'Receitas (7 dias)' : periodoFiltro === '15d' ? 'Receitas (15 dias)' : periodoFiltro === 'ano' ? 'Receitas do ano' : periodoFiltro === 'tudo' ? 'Receitas totais' : 'Receitas do período'
+  const tituloDespesas = periodoFiltro === 'mes' ? 'Despesas do mês' : periodoFiltro === 'hoje' ? 'Despesas de hoje' : periodoFiltro === '7d' ? 'Despesas (7 dias)' : periodoFiltro === '15d' ? 'Despesas (15 dias)' : periodoFiltro === 'ano' ? 'Despesas do ano' : periodoFiltro === 'tudo' ? 'Despesas totais' : 'Despesas do período'
+  const tituloResultado = periodoFiltro === 'mes' ? 'Resultado do mês' : periodoFiltro === 'hoje' ? 'Resultado de hoje' : periodoFiltro === '7d' ? 'Resultado (7 dias)' : periodoFiltro === '15d' ? 'Resultado (15 dias)' : periodoFiltro === 'ano' ? 'Resultado do ano' : periodoFiltro === 'tudo' ? 'Resultado histórico' : 'Resultado do período'
+
+  function aplicarPeriodo(tipo) {
+    setPeriodoFiltro(tipo)
+    if (tipo !== 'custom') {
+      const datas = calcularDatasPeriodo(tipo, hoje)
+      setPeriodoDatas(datas)
+      setFiltros((prev) => ({ ...prev, de: datas.de, ate: datas.ate }))
+      setCardFiltroAtivo(null)
+      setPaginaAtual(1)
+    }
+  }
+
+  function alterarDatasCustomizadas(de, ate) {
+    setPeriodoFiltro('custom')
+    setPeriodoDatas({
+      de,
+      ate,
+      label: de && ate ? `${de.split('-').reverse().join('/')} a ${ate.split('-').reverse().join('/')}` : 'Personalizado'
+    })
+    setFiltros((prev) => ({ ...prev, de, ate }))
+    setCardFiltroAtivo(null)
+    setPaginaAtual(1)
+  }
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -355,40 +424,97 @@ export default function FinanceiroEmpresa() {
     return lancamentos.filter((item) => item.status === 'pendente' && item.vencimento >= hoje && item.vencimento <= daqui3dias)
   }, [lancamentos, hoje])
 
-  const resultadoMes = resumo ? resumo.recMes - resumo.despMes : 0
-  const margemMes = resumo?.recMes > 0 ? ((resultadoMes / resumo.recMes) * 100).toFixed(1) : 0
+  // Agregação dos indicadores em O(N) com base no período ativo
+  const indicadoresPeriodo = useMemo(() => {
+    const { de, ate } = periodoDatas
+    let recPeriodo = 0
+    let despPeriodo = 0
+    let aReceberPeriodo = 0
+    let aPagarPeriodo = 0
+    let recGlobal = 0
+    let despGlobal = 0
+    let aReceberGlobal = 0
+    let aPagarGlobal = 0
 
-  // Manipular clique nos Cards de KPI
+    for (let i = 0; i < lancamentos.length; i++) {
+      const item = lancamentos[i]
+      if (item.status === 'cancelado') continue
+      const valor = Number(item.valor || 0)
+      const dataRef = String(item.pagoEm || item.dataOperacao || item.vencimento || '').slice(0, 10)
+      const dataVenc = String(item.vencimento || '').slice(0, 10)
+
+      const noPeriodo = !de || !ate ? true : (dataRef >= de && dataRef <= ate)
+      const noPeriodoVenc = !de || !ate ? true : (dataVenc >= de && dataVenc <= ate)
+
+      if (item.tipo === 'receita') {
+        if (item.status === 'pago') {
+          recGlobal += valor
+          if (noPeriodo) recPeriodo += valor
+        } else if (item.status === 'pendente') {
+          aReceberGlobal += valor
+          if (noPeriodoVenc) aReceberPeriodo += valor
+        }
+      } else if (item.tipo === 'despesa') {
+        if (item.status === 'pago') {
+          despGlobal += valor
+          if (noPeriodo) despPeriodo += valor
+        } else if (item.status === 'pendente') {
+          aPagarGlobal += valor
+          if (noPeriodoVenc) aPagarPeriodo += valor
+        }
+      }
+    }
+
+    const resultadoPeriodo = recPeriodo - despPeriodo
+    const margemPeriodo = recPeriodo > 0 ? Number(((resultadoPeriodo / recPeriodo) * 100).toFixed(1)) : 0
+    const saldoGlobal = recGlobal - despGlobal
+
+    return {
+      recPeriodo,
+      despPeriodo,
+      resultadoPeriodo,
+      margemPeriodo,
+      aReceberPeriodo,
+      aPagarPeriodo,
+      saldoGlobal,
+      recGlobal,
+      despGlobal,
+      aReceberGlobal,
+      aPagarGlobal,
+    }
+  }, [lancamentos, periodoDatas])
+
+  // Manipular clique nos Cards de KPI com filtro contextual do período
   function toggleCardFiltro(tipoCard) {
     if (cardFiltroAtivo === tipoCard) {
       setCardFiltroAtivo(null)
-      setFiltros({ tipo: '', status: '', categoria: '', q: '', de: '', ate: '' })
+      setFiltros((prev) => ({
+        ...prev,
+        tipo: '',
+        status: '',
+        de: periodoDatas.de,
+        ate: periodoDatas.ate,
+      }))
+      setPaginaAtual(1)
       return
     }
     setCardFiltroAtivo(tipoCard)
     setMesSelecionado(null)
     setPaginaAtual(1)
-
     if (tipoCard === 'saldo') {
-      setFiltros({ tipo: '', status: 'pago', categoria: '', q: '', de: '', ate: '' })
+      setFiltros((prev) => ({ ...prev, tipo: '', status: 'pago', de: '', ate: '' }))
     } else if (tipoCard === 'aReceber') {
-      setFiltros({ tipo: 'receita', status: 'pendente', categoria: '', q: '', de: '', ate: '' })
+      setFiltros((prev) => ({ ...prev, tipo: 'receita', status: 'pendente', de: periodoDatas.de, ate: periodoDatas.ate }))
     } else if (tipoCard === 'aPagar') {
-      setFiltros({ tipo: 'despesa', status: 'pendente', categoria: '', q: '', de: '', ate: '' })
-    } else if (tipoCard === 'recMes') {
-      const inicioMes = `${mesAtual}-01`
-      const fimMes = `${mesAtual}-31`
-      setFiltros({ tipo: 'receita', status: 'pago', categoria: '', q: '', de: inicioMes, ate: fimMes })
-    } else if (tipoCard === 'despMes') {
-      const inicioMes = `${mesAtual}-01`
-      const fimMes = `${mesAtual}-31`
-      setFiltros({ tipo: 'despesa', status: 'pago', categoria: '', q: '', de: inicioMes, ate: fimMes })
-    } else if (tipoCard === 'resultadoMes') {
-      const inicioMes = `${mesAtual}-01`
-      const fimMes = `${mesAtual}-31`
-      setFiltros({ tipo: '', status: 'pago', categoria: '', q: '', de: inicioMes, ate: fimMes })
+      setFiltros((prev) => ({ ...prev, tipo: 'despesa', status: 'pendente', de: periodoDatas.de, ate: periodoDatas.ate }))
+    } else if (tipoCard === 'recPeriodo' || tipoCard === 'recMes') {
+      setFiltros((prev) => ({ ...prev, tipo: 'receita', status: 'pago', de: periodoDatas.de, ate: periodoDatas.ate }))
+    } else if (tipoCard === 'despPeriodo' || tipoCard === 'despMes') {
+      setFiltros((prev) => ({ ...prev, tipo: 'despesa', status: 'pago', de: periodoDatas.de, ate: periodoDatas.ate }))
+    } else if (tipoCard === 'resultadoPeriodo' || tipoCard === 'resultadoMes') {
+      setFiltros((prev) => ({ ...prev, tipo: '', status: 'pago', de: periodoDatas.de, ate: periodoDatas.ate }))
     } else if (tipoCard === 'vencidos') {
-      setFiltros({ tipo: '', status: 'pendente', categoria: '', q: '', de: '', ate: '' })
+      setFiltros((prev) => ({ ...prev, tipo: '', status: 'pendente', de: '', ate: '' }))
     }
   }
 
@@ -667,6 +793,129 @@ export default function FinanceiroEmpresa() {
     {operador && <p className="dadm-note">Seu perfil é de operador: aqui você lança as despesas do dia. Saldo, contas e relatórios ficam com a administração.</p>}
 
     {operador ? null : loading && !resumo ? <p className="dadm-muted">Carregando indicadores financeiros…</p> : resumo && <>
+      {/* ── BARRA DE CONTROLE DE PERÍODO DOS INDICADORES FINANCEIROS ── */}
+      <div style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        flexWrap: 'wrap',
+        gap: 12,
+        padding: '12px 16px',
+        background: 'var(--card)',
+        border: '1px solid var(--line)',
+        borderRadius: 12,
+        marginBottom: 12
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontSize: 14 }}>📅</span>
+            <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+              Período dos Indicadores:
+            </span>
+          </div>
+          {/* Atalhos Rápidos */}
+          <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              className={`c360-btn ${periodoFiltro === 'hoje' ? 'primary' : 'ghost'}`}
+              style={{ fontSize: 12, padding: '4px 10px', borderRadius: 20 }}
+              onClick={() => aplicarPeriodo('hoje')}
+            >
+              Hoje
+            </button>
+            <button
+              type="button"
+              className={`c360-btn ${periodoFiltro === '7d' ? 'primary' : 'ghost'}`}
+              style={{ fontSize: 12, padding: '4px 10px', borderRadius: 20 }}
+              onClick={() => aplicarPeriodo('7d')}
+            >
+              7 Dias
+            </button>
+            <button
+              type="button"
+              className={`c360-btn ${periodoFiltro === '15d' ? 'primary' : 'ghost'}`}
+              style={{ fontSize: 12, padding: '4px 10px', borderRadius: 20 }}
+              onClick={() => aplicarPeriodo('15d')}
+            >
+              15 Dias
+            </button>
+            <button
+              type="button"
+              className={`c360-btn ${periodoFiltro === 'mes' ? 'primary' : 'ghost'}`}
+              style={{ fontSize: 12, padding: '4px 10px', borderRadius: 20 }}
+              onClick={() => aplicarPeriodo('mes')}
+            >
+              Este Mês
+            </button>
+            <button
+              type="button"
+              className={`c360-btn ${periodoFiltro === 'mesAnterior' ? 'primary' : 'ghost'}`}
+              style={{ fontSize: 12, padding: '4px 10px', borderRadius: 20 }}
+              onClick={() => aplicarPeriodo('mesAnterior')}
+            >
+              Mês Anterior
+            </button>
+            <button
+              type="button"
+              className={`c360-btn ${periodoFiltro === 'ano' ? 'primary' : 'ghost'}`}
+              style={{ fontSize: 12, padding: '4px 10px', borderRadius: 20 }}
+              onClick={() => aplicarPeriodo('ano')}
+            >
+              Este Ano
+            </button>
+            <button
+              type="button"
+              className={`c360-btn ${periodoFiltro === 'tudo' ? 'primary' : 'ghost'}`}
+              style={{ fontSize: 12, padding: '4px 10px', borderRadius: 20 }}
+              onClick={() => aplicarPeriodo('tudo')}
+            >
+              Todo o Histórico
+            </button>
+            <button
+              type="button"
+              className={`c360-btn ${periodoFiltro === 'custom' ? 'primary' : 'ghost'}`}
+              style={{ fontSize: 12, padding: '4px 10px', borderRadius: 20 }}
+              onClick={() => aplicarPeriodo('custom')}
+            >
+              Personalizado
+            </button>
+          </div>
+        </div>
+
+        {/* Seletores de Data Início / Fim e Resetar */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <label style={{ fontSize: 12, color: 'var(--muted)', display: 'flex', alignItems: 'center', gap: 4 }}>
+            De:
+            <input
+              type="date"
+              value={periodoDatas.de}
+              onChange={(e) => alterarDatasCustomizadas(e.target.value, periodoDatas.ate)}
+              style={{ padding: '4px 8px', borderRadius: 6, border: '1px solid var(--line)', background: 'var(--card2)', color: 'var(--fg)', fontSize: 12 }}
+            />
+          </label>
+          <label style={{ fontSize: 12, color: 'var(--muted)', display: 'flex', alignItems: 'center', gap: 4 }}>
+            Até:
+            <input
+              type="date"
+              value={periodoDatas.ate}
+              onChange={(e) => alterarDatasCustomizadas(periodoDatas.de, e.target.value)}
+              style={{ padding: '4px 8px', borderRadius: 6, border: '1px solid var(--line)', background: 'var(--card2)', color: 'var(--fg)', fontSize: 12 }}
+            />
+          </label>
+          {periodoFiltro !== 'mes' && (
+            <button
+              type="button"
+              className="c360-btn ghost"
+              style={{ fontSize: 11, padding: '4px 8px' }}
+              onClick={() => aplicarPeriodo('mes')}
+              title="Voltar para a competência do mês corrente"
+            >
+              Resetar (Este Mês)
+            </button>
+          )}
+        </div>
+      </div>
+
       {/* Cards de KPI Interativos com Filtro Imediato ao Clicar */}
       <section className="dadm-kpis" aria-label="Resumo financeiro e filtros rápidos">
         <article
@@ -677,71 +926,65 @@ export default function FinanceiroEmpresa() {
           title="Clique para filtrar todos os lançamentos pagos"
         >
           <span>Saldo realizado</span>
-          <strong className={resumo.saldo >= 0 ? '' : 'dadm-neg'}>{money(resumo.saldo)}</strong>
-          <small>Receitas − despesas pagas</small>
+          <strong className={indicadoresPeriodo.saldoGlobal >= 0 ? '' : 'dadm-neg'}>{money(indicadoresPeriodo.saldoGlobal)}</strong>
+          <small>Receitas − despesas pagas (acumulado)</small>
         </article>
-
         <article
           role="button"
           tabIndex={0}
           onClick={() => toggleCardFiltro('aReceber')}
           style={cardStyle(cardFiltroAtivo === 'aReceber')}
-          title="Clique para filtrar contas a receber pendentes"
+          title="Clique para filtrar contas a receber pendentes do período"
         >
           <span>A receber</span>
-          <strong>{money(resumo.aReceber)}</strong>
-          <small>Pendentes</small>
+          <strong>{money(indicadoresPeriodo.aReceberPeriodo)}</strong>
+          <small>{periodoFiltro === 'tudo' ? 'Pendentes totais' : 'Vencendo no período'}</small>
         </article>
-
         <article
           role="button"
           tabIndex={0}
           onClick={() => toggleCardFiltro('aPagar')}
           style={cardStyle(cardFiltroAtivo === 'aPagar')}
-          title="Clique para filtrar contas a pagar pendentes"
+          title="Clique para filtrar contas a pagar pendentes do período"
         >
           <span>A pagar</span>
-          <strong>{money(resumo.aPagar)}</strong>
-          <small>Pendentes</small>
+          <strong>{money(indicadoresPeriodo.aPagarPeriodo)}</strong>
+          <small>{periodoFiltro === 'tudo' ? 'Pendentes totais' : 'Vencendo no período'}</small>
         </article>
-
         <article
           role="button"
           tabIndex={0}
-          onClick={() => toggleCardFiltro('recMes')}
-          style={cardStyle(cardFiltroAtivo === 'recMes')}
-          title={`Clique para filtrar receitas pagas em ${mesAtual.slice(5)}/${mesAtual.slice(0, 4)}`}
+          onClick={() => toggleCardFiltro('recPeriodo')}
+          style={cardStyle(cardFiltroAtivo === 'recPeriodo' || cardFiltroAtivo === 'recMes')}
+          title={`Clique para filtrar receitas pagas em ${periodoDatas.label}`}
         >
-          <span>Receitas do mês</span>
-          <strong>{money(resumo.recMes)}</strong>
-          <small>Pagas em {mesAtual.slice(5)}/{mesAtual.slice(0, 4)}</small>
+          <span>{tituloReceitas}</span>
+          <strong>{money(indicadoresPeriodo.recPeriodo)}</strong>
+          <small>Pagas em {periodoDatas.label}</small>
         </article>
-
         <article
           role="button"
           tabIndex={0}
-          onClick={() => toggleCardFiltro('despMes')}
-          style={cardStyle(cardFiltroAtivo === 'despMes')}
-          title="Clique para filtrar despesas pagas no mês"
+          onClick={() => toggleCardFiltro('despPeriodo')}
+          style={cardStyle(cardFiltroAtivo === 'despPeriodo' || cardFiltroAtivo === 'despMes')}
+          title={`Clique para filtrar despesas pagas em ${periodoDatas.label}`}
         >
-          <span>Despesas do mês</span>
-          <strong>{money(resumo.despMes)}</strong>
-          <small>Pagas no mês</small>
+          <span>{tituloDespesas}</span>
+          <strong>{money(indicadoresPeriodo.despPeriodo)}</strong>
+          <small>Pagas no período</small>
         </article>
-
         <article
           role="button"
           tabIndex={0}
-          onClick={() => toggleCardFiltro('resultadoMes')}
-          className={resultadoMes < 0 ? 'is-alert' : ''}
-          style={cardStyle(cardFiltroAtivo === 'resultadoMes')}
-          title="Clique para filtrar receitas e despesas pagas do mês"
+          onClick={() => toggleCardFiltro('resultadoPeriodo')}
+          className={indicadoresPeriodo.resultadoPeriodo < 0 ? 'is-alert' : ''}
+          style={cardStyle(cardFiltroAtivo === 'resultadoPeriodo' || cardFiltroAtivo === 'resultadoMes')}
+          title={`Clique para filtrar movimentações do período (${periodoDatas.label})`}
         >
-          <span>Resultado do mês</span>
-          <strong>{money(resultadoMes)}</strong>
-          <small>{resumo.recMes > 0 ? `Margem ${margemMes}%` : 'Sem receitas pagas'}</small>
+          <span>{tituloResultado}</span>
+          <strong className={indicadoresPeriodo.resultadoPeriodo >= 0 ? '' : 'dadm-neg'}>{money(indicadoresPeriodo.resultadoPeriodo)}</strong>
+          <small>{indicadoresPeriodo.recPeriodo > 0 ? `Margem ${indicadoresPeriodo.margemPeriodo}%` : 'Sem receitas no período'}</small>
         </article>
-
         <article
           role="button"
           tabIndex={0}
@@ -758,7 +1001,6 @@ export default function FinanceiroEmpresa() {
           <small>{vencidos.length ? money(totalVencidos) : 'Nada atrasado'}</small>
         </article>
       </section>
-
       {/* Banner de Aviso de Vencimento Próximo */}
       {vencendo.length > 0 && <p className="dadm-note warn">
         {vencendo.length} lançamento(s) vencem nos próximos 3 dias: {vencendo.slice(0, 3).map((item) => `${item.descricao} (${money(item.valor)})`).join(', ')}{vencendo.length > 3 ? '…' : ''}

@@ -219,9 +219,11 @@ export function MetasComissoesPanel({ onOpenTab }) {
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
             <button type="button" style={periodoTipo === 'tudo' ? btnActive : btn} onClick={() => setPeriodoTipo('tudo')}>📅 Todo o Histórico</button>
             <button type="button" style={periodoTipo === 'mes' ? btnActive : btn} onClick={() => setPeriodoTipo('mes')}>📅 Este Mês</button>
+            <button type="button" style={periodoTipo === 'mesAnterior' ? btnActive : btn} onClick={() => setPeriodoTipo('mesAnterior')}>📅 Mês Anterior</button>
             <button type="button" style={periodoTipo === 'quinzena' ? btnActive : btn} onClick={() => setPeriodoTipo('quinzena')}>📅 Esta Quinzena</button>
             <button type="button" style={periodoTipo === 'semana' ? btnActive : btn} onClick={() => setPeriodoTipo('semana')}>📅 Esta Semana</button>
             <button type="button" style={periodoTipo === 'dia' ? btnActive : btn} onClick={() => setPeriodoTipo('dia')}>📅 Hoje (Dia)</button>
+            <button type="button" style={periodoTipo === 'ano' ? btnActive : btn} onClick={() => setPeriodoTipo('ano')}>📅 Este Ano</button>
             <button type="button" style={periodoTipo === 'custom' ? btnActive : btn} onClick={() => setPeriodoTipo('custom')}>⚙ Personalizado</button>
             <button type="button" style={btn} onClick={() => window.print()} title="Imprimir relatório">🖨 Imprimir</button>
           </div>
