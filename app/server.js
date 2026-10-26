@@ -3775,11 +3775,27 @@ function sanitizarClienteBarbearia(cliente) {
 // Collator único: localeCompare com locale cria um comparador a cada chamada e,
 // com a base real da Dino (3,3 mil clientes), deixava a ordenação lenta.
 const COLLATOR_PT_BR = new Intl.Collator('pt-BR');
+const EQUIVALENCIAS_DINO_CLIENTES = new Set([
+  'd0d0ac01-8e50-4b61-8c79-de4aaa916da6',
+  'emp-kytto-001',
+  'dino',
+]);
 
 function clientesBarbeariaSomenteLeitura(empresaId) {
-  const clientes = db().clientesKytto?.empresas?.[String(empresaId)]?.clientes || {};
-  return Object.values(clientes)
-    .filter(cliente => cliente.empresaId === String(empresaId) && cliente.status !== 'deletado')
+  const root = db();
+  const empresas = EQUIVALENCIAS_DINO_CLIENTES.has(String(empresaId))
+    ? Array.from(EQUIVALENCIAS_DINO_CLIENTES)
+    : [String(empresaId)];
+  const mapa = new Map();
+  for (const emp of empresas) {
+    const clientes = root.clientesKytto?.empresas?.[emp]?.clientes || {};
+    for (const cliente of Object.values(clientes)) {
+      if (cliente && cliente.status !== 'deletado' && !mapa.has(cliente.id)) {
+        mapa.set(cliente.id, cliente);
+      }
+    }
+  }
+  return Array.from(mapa.values())
     .sort((a, b) => COLLATOR_PT_BR.compare(String(a.nome || ''), String(b.nome || '')))
     .map(sanitizarClienteBarbearia);
 }
@@ -5682,6 +5698,52 @@ app.get('/api/admin/barbearia/clientes/aniversariantes', (req, res) => {
   res.json({ ok: true, dias, aniversariantes });
 });
 app.get('/api/admin/barbearia/clientes', (req, res) => res.json({ ok: true, clientes: clientesBarbeariaSomenteLeitura(legacyEmpresaId(req)) }));
+
+app.get('/api/admin/barbearia/clientes/busca', (req, res) => {
+  try {
+    const empresaId = legacyEmpresaId(req);
+    const todos = clientesBarbeariaSomenteLeitura(empresaId);
+    const termo = String(req.query?.termo || '').trim();
+    const tipo = String(req.query?.tipo || 'todos').toLowerCase(); // 'nome', 'telefone', 'todos'
+    const limite = Math.min(200, Math.max(1, Number(req.query?.limite) || 50));
+
+    if (!termo) {
+      return res.json({
+        ok: true,
+        totalGeral: todos.length,
+        clientes: todos.slice(0, limite),
+      });
+    }
+
+    const digitos = termo.replace(/\D/g, '');
+    const termoNorm = termo.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    const palavras = termoNorm.split(/\s+/).filter(Boolean);
+
+    const filtrados = todos.filter((cli) => {
+      const nomeNorm = String(cli.nome || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+      const telDigitos = String(cli.telefone || '').replace(/\D/g, '');
+
+      if (tipo === 'telefone') {
+        return digitos ? telDigitos.includes(digitos) : true;
+      }
+      if (tipo === 'nome') {
+        return palavras.every((p) => nomeNorm.includes(p));
+      }
+      // 'todos' (híbrido inteligente)
+      if (digitos.length >= 3 && telDigitos.includes(digitos)) return true;
+      return palavras.every((p) => nomeNorm.includes(p));
+    });
+
+    res.json({
+      ok: true,
+      totalGeral: todos.length,
+      totalEncontrados: filtrados.length,
+      clientes: filtrados.slice(0, limite),
+    });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
 
 app.get('/api/admin/barbearia/carteira-clientes', (req, res) => {
   try {
