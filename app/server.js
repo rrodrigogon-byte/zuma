@@ -8849,7 +8849,7 @@ try {
   const { default: agendamentoPublico, metaPublicaDoSlug } = await import('./modules/barbearia/routes-publico.js');
   metaAgendamentoPublico = metaPublicaDoSlug;
   // Limite por slug normalizado + rota: "DINO", "dino-" e "%64ino" contam juntos.
-  app.use('/api/publico/agendamento', (req, res, next) => {
+  app.use(['/api/publico/agendamento', '/api/publico/barbearia'], (req, res, next) => {
     const [slugCru = '', ...resto] = String(req.path || '').split('/').filter(Boolean);
     let slugDecodificado = slugCru;
     try { slugDecodificado = decodeURIComponent(slugCru); } catch (_) { /* slug malformado: usa o texto cru */ }

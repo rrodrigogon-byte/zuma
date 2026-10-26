@@ -49,7 +49,7 @@ export default function BarbeariaClubeVip() {
     async function carregar() {
       try {
         setLoading(true)
-        const res = await fetch(`/api/publico/barbearia/${encodeURIComponent(slug)}/planos`)
+        const res = await fetch(`/api/publico/agendamento/${encodeURIComponent(slug)}/planos`)
         const data = await res.json()
         if (data.ok) {
           setEstabelecimento(data.estabelecimento)
@@ -63,7 +63,7 @@ export default function BarbeariaClubeVip() {
         }
 
         // Carrega também profissionais da unidade
-        const resUnidade = await fetch(`/api/publico/barbearia/${encodeURIComponent(slug)}`)
+        const resUnidade = await fetch(`/api/publico/agendamento/${encodeURIComponent(slug)}`)
         const dataUnidade = await resUnidade.json()
         if (dataUnidade.ok) {
           setProfissionais(dataUnidade.profissionais || [])
@@ -95,7 +95,7 @@ export default function BarbeariaClubeVip() {
     setEnviando(true)
     setErro('')
     try {
-      const res = await fetch(`/api/publico/barbearia/${encodeURIComponent(slug)}/assinatura`, {
+      const res = await fetch(`/api/publico/agendamento/${encodeURIComponent(slug)}/assinatura`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
