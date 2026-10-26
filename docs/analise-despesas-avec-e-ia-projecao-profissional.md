@@ -399,3 +399,24 @@ Ao pesquisar qualquer profissional (ex.: Naty) no painel, o sistema exibe:
 * `web/src/pages/admin/BarbeariaAgendaPeriodo.css`: Estilização das colunas de barbeiro, tags de disponibilidade e matriz responsiva.
 * Build do frontend (`npm run build`) validado com sucesso.
 * Suíte de testes automatizados (`node --test`) executada com 100% de aprovação (51/51 testes).
+
+---
+
+## 20.0 Catálogo Interativo de Modelos de Agenda, Seletor Visual com Popover e Persistência de Modelo Padrão
+
+### 20.1 Demanda e Objetivo
+* Disponibilizar ao usuário a liberdade de escolher entre múltiplos modelos de layout para a agenda conforme a preferência e rotina da barbearia (ex.: recepção, balcão, gestão de equipe multi-cadeira ou planejamento mensal).
+* Permitir fixar o modelo preferido como padrão ao abrir a agenda, gravando a preferência localmente (`localStorage`).
+
+### 20.2 Os 6 Modelos de Agenda Disponíveis
+1. **💈 Avec Multi-Cadeira (Colunas Diárias por Barbeiro):** Cada profissional ativo/visível ganha sua própria coluna lado a lado no dia, com avatar, total de atendimentos e cards cronológicos. Ideal para remanejamento de clientes e visualização da equipe ao vivo.
+2. **⏱️ Horários Simultâneos (Família / Pais & Filhos):** Matriz linha a linha por horário com detecção automática de múltiplas cadeiras livres juntas (`👨‍👦 X livres juntos`) para agendar pais e filhos no mesmo instante.
+3. **📅 Google Agenda Comercial (Segunda a Sábado):** Grade semanal clássica de 6 dias úteis sem cortes laterais, cabeçalho sticky e cartões coloridos.
+4. **🗓️ Semana Completa (7 Dias Corridos):** Inclui domingos para acompanhamento de escalas ampliadas e plantões 24x7.
+5. **📆 Visão Mensal Panorâmica (30 Dias):** Calendário macro mensal completo com volume diário para planejamento de escalas, folgas e tendências do mês.
+6. **📋 Fluxo de Balcão & Check-in (Lista Operacional):** Lista compacta por ordem de chegada com filtros de status para recepção e balcão.
+
+### 20.3 Funcionalidades de Interface
+* **Seletor Popover no Cabeçalho:** Botão `[ 🎨 Ícone + Nome do Modelo ▾ ]` que abre catálogo visual com cards explicativos, ícones, subtítulos, badges de destaque e indicação de modelo ativo.
+* **Fixar como Modelo Padrão:** Botão `⭐ Definir atual como padrão` que salva a escolha no navegador do usuário (`dino_agenda_modelo_padrao`).
+* **Botões Rápidos Preservados:** Botões de alternância rápida na barra (`💈 Diário`, `⏱️ Família`, `📅 Seg–Sáb`, `🗓️ 7 Dias`, `📆 Mês`, `📋 Lista`) para agilidade no dia a dia.

@@ -53,6 +53,69 @@ function formatarMoeda(val) {
   return n > 0 ? n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : ''
 }
 
+export const MODELOS_AGENDA = [
+  {
+    id: 'avec_colunas',
+    nome: 'Avec Multi-Cadeira',
+    subtitulo: 'Colunas diárias por barbeiro lado a lado',
+    icone: '💈',
+    badge: 'Popular',
+    modo: 'dia',
+    submodoDia: 'colunas',
+    descricao: 'Cada barbeiro em sua própria coluna. Ideal para remanejar clientes e visualizar a equipe ao vivo.'
+  },
+  {
+    id: 'simultaneos',
+    nome: 'Horários Simultâneos',
+    subtitulo: 'Matriz por hora para pais e filhos / famílias',
+    icone: '⏱️',
+    badge: 'Família',
+    modo: 'dia',
+    submodoDia: 'simultaneos',
+    descricao: 'Destaque instantâneo de horários com múltiplas cadeiras livres juntas (ex.: 3 livres juntos).'
+  },
+  {
+    id: 'semana_util',
+    nome: 'Google Agenda Comercial',
+    subtitulo: 'Segunda a Sábado (6 dias úteis)',
+    icone: '📅',
+    badge: 'Padrão',
+    modo: 'semana_util',
+    submodoDia: 'colunas',
+    descricao: 'Grade semanal ampla estilo Google Calendar sem cortes, com cabeçalho sticky e cartões coloridos.'
+  },
+  {
+    id: 'semana',
+    nome: 'Semana Completa',
+    subtitulo: 'Segunda a Domingo (7 dias corridos)',
+    icone: '🗓️',
+    badge: '7 Dias',
+    modo: 'semana',
+    submodoDia: 'colunas',
+    descricao: 'Inclui domingos para acompanhamento de escalas ampliadas e plantões 24x7.'
+  },
+  {
+    id: 'mes',
+    nome: 'Visão Mensal Panorâmica',
+    subtitulo: 'Calendário de 30 dias com volume de clientes',
+    icone: '📆',
+    badge: 'Mensal',
+    modo: 'mes',
+    submodoDia: 'colunas',
+    descricao: 'Visão macro para planejamento mensal, folgas e tendências de ocupação por dia.'
+  },
+  {
+    id: 'lista',
+    nome: 'Fluxo de Balcão & Check-in',
+    subtitulo: 'Lista cronológica por ordem de chegada',
+    icone: '📋',
+    badge: 'Recepção',
+    modo: 'lista',
+    submodoDia: 'colunas',
+    descricao: 'Visualização compacta para recepção, balcão e atendimento sequencial.'
+  }
+]
+
 export default function BarbeariaAgendaPeriodo({
   profissionais = [],
   servicos = [],
@@ -67,13 +130,37 @@ export default function BarbeariaAgendaPeriodo({
   onNewAppointment
 }) {
   const hoje = hojeAgenda()
-  // Modo padrão: 'semana_util' = Segunda a Sábado (6 dias úteis da barbearia, conforme solicitado)
-  const [modo, setModo] = useState('semana_util')
+  const STORAGE_KEY_MODELO = 'dino_agenda_modelo_padrao'
+  const [modeloPadrao, setModeloPadrao] = useState(() => {
+    try {
+      return localStorage.getItem(STORAGE_KEY_MODELO) || 'semana_util'
+    } catch {
+      return 'semana_util'
+    }
+  })
+
+  // Modo e submodo inicial respeitam o modelo salvo nas preferências do usuário
+  const [modo, setModo] = useState(() => {
+    if (modeloPadrao === 'avec_colunas' || modeloPadrao === 'simultaneos') return 'dia'
+    if (['semana_util', 'semana', 'mes', 'lista', 'dia'].includes(modeloPadrao)) return modeloPadrao
+    return 'semana_util'
+  })
+
+  const [submodoDia, setSubmodoDia] = useState(() => {
+    if (modeloPadrao === 'simultaneos') return 'simultaneos'
+    return 'colunas'
+  })
 
   // Inicializa com Segunda a Sábado da semana de dataSelecionada ou hoje
   const semanaInicial = useMemo(() => semanaSegundaSabado(dataSelecionada || hoje), [])
-  const [de, setDe] = useState(semanaInicial.de)
-  const [ate, setAte] = useState(semanaInicial.ate)
+  const [de, setDe] = useState(() => {
+    if (modeloPadrao === 'avec_colunas' || modeloPadrao === 'simultaneos') return dataSelecionada || hoje
+    return semanaInicial.de
+  })
+  const [ate, setAte] = useState(() => {
+    if (modeloPadrao === 'avec_colunas' || modeloPadrao === 'simultaneos') return dataSelecionada || hoje
+    return semanaInicial.ate
+  })
 
   const [busca, setBusca] = useState('')
   const [consulta, setConsulta] = useState(null)
@@ -154,8 +241,6 @@ export default function BarbeariaAgendaPeriodo({
     }
     return mapa
   }, [dias, visiveis])
-
-  const [submodoDia, setSubmodoDia] = useState('colunas') // 'colunas' ou 'simultaneos'
 
   // Barbeiros ativos a exibir na visão diária (respeita profissionalId selecionado e filtro de visíveis)
   const barbeirosDoDia = useMemo(() => {
@@ -328,6 +413,63 @@ export default function BarbeariaAgendaPeriodo({
     }
   }
 
+  const [popoverModelosAberto, setPopoverModelosAberto] = useState(false)
+  const popoverModelosRef = useRef(null)
+
+  // Fecha o popover de modelos ao clicar fora
+  useEffect(() => {
+    function handleClickFora(e) {
+      if (popoverModelosRef.current && !popoverModelosRef.current.contains(e.target)) {
+        setPopoverModelosAberto(false)
+      }
+    }
+    if (popoverModelosAberto) {
+      document.addEventListener('mousedown', handleClickFora)
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickFora)
+    }
+  }, [popoverModelosAberto])
+
+  function selecionarModelo(modeloId) {
+    const mod = MODELOS_AGENDA.find(m => m.id === modeloId)
+    if (!mod) return
+    if (mod.modo === 'dia') {
+      escolherPeriodo(foco, foco, 'dia')
+      setSubmodoDia(mod.submodoDia || 'colunas')
+    } else if (mod.modo === 'semana_util') {
+      const s = semanaSegundaSabado(foco)
+      escolherPeriodo(s.de, s.ate, 'semana_util')
+    } else if (mod.modo === 'semana') {
+      const s = semanaCompleta(foco)
+      escolherPeriodo(s.de, s.ate, 'semana')
+    } else if (mod.modo === 'mes') {
+      const p = periodoMes(foco)
+      escolherPeriodo(p.de, p.ate, 'mes')
+    } else if (mod.modo === 'lista') {
+      escolherPeriodo(de, ate, 'lista')
+    }
+    setPopoverModelosAberto(false)
+  }
+
+  function salvarComoModeloPadrao(modeloId) {
+    try {
+      localStorage.setItem(STORAGE_KEY_MODELO, modeloId)
+      setModeloPadrao(modeloId)
+    } catch (_) {}
+  }
+
+  const modeloAtualId = useMemo(() => {
+    if (modo === 'dia') {
+      return submodoDia === 'simultaneos' ? 'simultaneos' : 'avec_colunas'
+    }
+    return modo
+  }, [modo, submodoDia])
+
+  const modeloAtual = useMemo(() => {
+    return MODELOS_AGENDA.find(m => m.id === modeloAtualId) || MODELOS_AGENDA[2]
+  }, [modeloAtualId])
+
   function irParaHoje() {
     if (modo === 'semana_util') {
       const s = semanaSegundaSabado(hoje)
@@ -481,49 +623,133 @@ export default function BarbeariaAgendaPeriodo({
 
         {/* Ações da Direita: Seleção de Modo + Botão Novo Agendamento */}
         <div className="dino-cal-right-actions">
+          {/* Seletor Popover com Catálogo de Modelos de Agenda */}
+          <div style={{ position: 'relative' }} ref={popoverModelosRef}>
+            <button
+              type="button"
+              className="dino-cal-btn-modelos"
+              onClick={() => setPopoverModelosAberto(v => !v)}
+              aria-expanded={popoverModelosAberto}
+              title="Escolha o modelo de layout desejado para a agenda"
+            >
+              <span>{modeloAtual.icone}</span>
+              <span className="dino-cal-btn-modelos-label">{modeloAtual.nome}</span>
+              <span style={{ fontSize: 10, opacity: 0.7 }}>▾</span>
+            </button>
+
+            {popoverModelosAberto && (
+              <div className="dino-cal-modelos-popover" role="dialog" aria-label="Modelos de visualização da agenda">
+                <div className="dino-cal-modelos-header">
+                  <div>
+                    <div className="dino-cal-modelos-title">🎨 Modelos de Agenda</div>
+                    <div className="dino-cal-modelos-sub">Escolha a visualização mais adequada para a sua rotina</div>
+                  </div>
+                  <button
+                    type="button"
+                    className="dino-cal-filter-close-btn"
+                    onClick={() => setPopoverModelosAberto(false)}
+                    title="Fechar"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                <div className="dino-cal-modelos-list">
+                  {MODELOS_AGENDA.map(mod => {
+                    const ativo = mod.id === modeloAtualId
+
+                    return (
+                      <button
+                        type="button"
+                        key={mod.id}
+                        className="dino-cal-modelo-card"
+                        data-ativo={ativo}
+                        onClick={() => selecionarModelo(mod.id)}
+                      >
+                        <div className="dino-cal-modelo-icon-box">{mod.icone}</div>
+                        <div className="dino-cal-modelo-content">
+                          <div className="dino-cal-modelo-title-row">
+                            <span className="dino-cal-modelo-name">{mod.nome}</span>
+                            {mod.badge && <span className="dino-cal-modelo-badge">{mod.badge}</span>}
+                            {ativo && <span style={{ marginLeft: 'auto', color: 'var(--accent)', fontWeight: 800, fontSize: 13 }}>✓</span>}
+                          </div>
+                          <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text)' }}>{mod.subtitulo}</span>
+                          <span className="dino-cal-modelo-desc">{mod.descricao}</span>
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
+
+                <div className="dino-cal-modelos-footer">
+                  <span>Padrão ao abrir: <strong>{MODELOS_AGENDA.find(m => m.id === modeloPadrao)?.nome || 'Semana'}</strong></span>
+                  <button
+                    type="button"
+                    className="dino-cal-modelo-default-btn"
+                    data-is-default={modeloAtualId === modeloPadrao}
+                    onClick={() => salvarComoModeloPadrao(modeloAtualId)}
+                    title="Salvar o modelo atualmente selecionado como preferido"
+                  >
+                    {modeloAtualId === modeloPadrao ? '⭐ É o seu padrão' : 'Definir atual como padrão'}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Botões Rápidos de Alternância de Layout */}
           <div className="dino-cal-view-selector" role="group" aria-label="Modo de visualização da agenda">
             <button
               type="button"
               className="dino-cal-view-btn"
-              aria-pressed={modo === 'semana_util'}
-              onClick={() => mudarModo('semana_util')}
-              title="Segunda a Sábado (6 dias úteis da barbearia)"
+              aria-pressed={modeloAtualId === 'avec_colunas'}
+              onClick={() => selecionarModelo('avec_colunas')}
+              title="Colunas diárias separadas por barbeiro (Estilo Avec / Multi-cadeira)"
+            >
+              💈 Diário
+            </button>
+            <button
+              type="button"
+              className="dino-cal-view-btn"
+              aria-pressed={modeloAtualId === 'simultaneos'}
+              onClick={() => selecionarModelo('simultaneos')}
+              title="Matriz de horários simultâneos (Famílias / Pais e Filhos)"
+            >
+              ⏱️ Família
+            </button>
+            <button
+              type="button"
+              className="dino-cal-view-btn"
+              aria-pressed={modeloAtualId === 'semana_util'}
+              onClick={() => selecionarModelo('semana_util')}
+              title="Segunda a Sábado (6 dias úteis da barbearia - Estilo Google Calendar)"
             >
               Seg–Sáb
             </button>
             <button
               type="button"
               className="dino-cal-view-btn"
-              aria-pressed={modo === 'semana'}
-              onClick={() => mudarModo('semana')}
+              aria-pressed={modeloAtualId === 'semana'}
+              onClick={() => selecionarModelo('semana')}
               title="Semana completa (Segunda a Domingo)"
             >
-              Semana
+              7 Dias
             </button>
             <button
               type="button"
               className="dino-cal-view-btn"
-              aria-pressed={modo === 'dia'}
-              onClick={() => mudarModo('dia')}
-              title="Visualização diária detalhada"
-            >
-              Dia
-            </button>
-            <button
-              type="button"
-              className="dino-cal-view-btn"
-              aria-pressed={modo === 'mes'}
-              onClick={() => mudarModo('mes')}
-              title="Visualização mensal"
+              aria-pressed={modeloAtualId === 'mes'}
+              onClick={() => selecionarModelo('mes')}
+              title="Visualização mensal (30 dias)"
             >
               Mês
             </button>
             <button
               type="button"
               className="dino-cal-view-btn"
-              aria-pressed={modo === 'lista'}
-              onClick={() => mudarModo('lista')}
-              title="Lista cronológica por período"
+              aria-pressed={modeloAtualId === 'lista'}
+              onClick={() => selecionarModelo('lista')}
+              title="Lista cronológica de balcão e check-in"
             >
               Lista
             </button>
