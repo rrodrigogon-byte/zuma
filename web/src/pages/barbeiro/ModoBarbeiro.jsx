@@ -645,8 +645,29 @@ export default function ModoBarbeiro() {
           <section aria-label="Agenda" style={{ display: 'grid', gap: 10 }}>
             {agendaFiltrada.length === 0 && <div style={{ ...card, textAlign: 'center', color: t.muted }}>Nenhum atendimento neste filtro.</div>}
             {agendaFiltrada.map((item) => item.tipo === 'bloqueio'
-              ? <div key={`b-${item.b.id}`} style={{ ...card, borderStyle: 'dashed', color: t.muted, display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-                <span><strong style={{ color: t.cream }}>{hora(item.b.inicio)}–{hora(item.b.fim)}</strong> · {item.b.titulo}{item.b.geral ? ' (toda a equipe)' : ''}</span>
+              ? <div key={`b-${item.b.id}`} style={{ ...card, borderStyle: 'dashed', color: t.muted, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, background: 'rgba(239, 68, 68, 0.06)', borderColor: 'rgba(239, 68, 68, 0.3)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: 16 }}>🔒</span>
+                  <span><strong style={{ color: t.cream }}>{hora(item.b.inicio)}–{hora(item.b.fim)}</strong> · {item.b.titulo}{item.b.geral ? ' (toda a equipe)' : ''}</span>
+                </div>
+                {podeOperar && (
+                  <button
+                    type="button"
+                    style={{ background: 'rgba(239, 68, 68, 0.15)', border: '1px solid rgba(239, 68, 68, 0.4)', color: '#f87171', padding: '4px 10px', borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: 'pointer' }}
+                    onClick={async () => {
+                      if (!window.confirm(`Liberar este horário bloqueado (${item.b.titulo})?`)) return
+                      try {
+                        await api.delete(`/api/admin/barbearia/bloqueios/${item.b.id}`)
+                        tocarSom('concluir')
+                        await carregar()
+                      } catch (e) {
+                        alert('Não foi possível desativar o bloqueio.')
+                      }
+                    }}
+                  >
+                    Liberar
+                  </button>
+                )}
               </div>
               : (() => {
                 const a = item.a
@@ -786,9 +807,10 @@ export default function ModoBarbeiro() {
           pointerEvents: 'none',
         }}
       >
-        <div style={{ maxWidth: 560, margin: '0 auto', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, pointerEvents: 'auto' }}>
-          <button type="button" style={{ ...btn, boxShadow: '0 4px 14px rgba(0,0,0,0.4)' }} onClick={() => setFolha('encaixe')}>+ Encaixe</button>
-          <button type="button" style={{ ...btn2, background: t.surface, boxShadow: '0 4px 14px rgba(0,0,0,0.4)' }} onClick={() => { setVendaAtendimento(null); setFolha('venda') }}>+ Venda / serviços</button>
+        <div style={{ maxWidth: 560, margin: '0 auto', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, pointerEvents: 'auto' }}>
+          <button type="button" style={{ ...btn, padding: '12px 6px', fontSize: 13, boxShadow: '0 4px 14px rgba(0,0,0,0.4)' }} onClick={() => setFolha('encaixe')}>+ Encaixe</button>
+          <button type="button" style={{ ...btn2, padding: '12px 6px', fontSize: 13, background: t.surface, boxShadow: '0 4px 14px rgba(0,0,0,0.4)' }} onClick={() => { setVendaAtendimento(null); setFolha('venda') }}>+ Venda</button>
+          <button type="button" style={{ ...btn2, padding: '12px 6px', fontSize: 13, background: 'rgba(245, 158, 11, 0.15)', borderColor: '#f59e0b', color: '#fbbf24', boxShadow: '0 4px 14px rgba(0,0,0,0.4)' }} onClick={() => setFolha('bloqueio')}>🔒 Bloquear</button>
         </div>
       </div>
     )}
@@ -844,10 +866,32 @@ function FolhaBloqueio({ painel, dia, onFechar, onPronto }) {
       await onPronto(); onFechar()
     } catch (error) { setErro(error.message || 'Não foi possível bloquear.') } finally { setEnviando(false) }
   }
-  return <Folha titulo="Bloquear horário" onFechar={onFechar}>
-    <form onSubmit={salvar} style={{ display: 'grid', gap: 12 }}>
-      <label style={label}>Motivo<select style={input} value={form.titulo} onChange={(e) => setForm({ ...form, titulo: e.target.value })}>
-        {['Almoço', 'Pausa', 'Compromisso', 'Folga'].map((m) => <option key={m}>{m}</option>)}
+  const atalhosBarbeiro = [
+    { label: '🥪 Almoço 12h-13h', titulo: 'Almoço', ini: '12:00', fim: '13:00' },
+    { label: '🥗 Almoço 13h-14h', titulo: 'Almoço', ini: '13:00', fim: '14:00' },
+    { label: '☕ Pausa 30 min', titulo: 'Pausa', ini: '16:00', fim: '16:30' },
+    { label: '🏥 Compromisso', titulo: 'Compromisso', ini: '16:30', fim: '17:30' },
+    { label: '🏖️ Folga Hoje', titulo: 'Folga', ini: '08:00', fim: '19:00' },
+  ]
+  return <Folha titulo="Bloquear horário na agenda" onFechar={onFechar}>
+    <form onSubmit={salvar} style={{ display: 'grid', gap: 14 }}>
+      <div>
+        <span style={{ display: 'block', fontSize: 12, fontWeight: 700, color: t.muted, marginBottom: 8 }}>Atalhos rápidos de 1 toque:</span>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          {atalhosBarbeiro.map(at => (
+            <button
+              key={at.label}
+              type="button"
+              style={{ ...btn2, padding: '5px 10px', fontSize: 12, borderRadius: 8, background: form.titulo === at.titulo && form.inicio === at.ini ? '#f59e0b' : t.surface, color: form.titulo === at.titulo && form.inicio === at.ini ? '#000000' : t.cream, fontWeight: 700 }}
+              onClick={() => setForm({ titulo: at.titulo, inicio: at.ini, fim: at.fim })}
+            >
+              {at.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      <label style={label}>Motivo do bloqueio<select style={input} value={form.titulo} onChange={(e) => setForm({ ...form, titulo: e.target.value })}>
+        {['Almoço', 'Pausa', 'Compromisso', 'Folga', 'Outro'].map((m) => <option key={m}>{m}</option>)}
       </select></label>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
         <label style={label}>Das<input style={input} type="time" value={form.inicio} onChange={(e) => setForm({ ...form, inicio: e.target.value })} required /></label>

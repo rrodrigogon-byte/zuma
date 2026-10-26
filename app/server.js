@@ -140,6 +140,7 @@ import { vincularClienteAoAtendimento } from './dino-clientes-vinculo.js';
 import * as dinoBi from './dino-bi.js';
 import * as dinoMetas from './dino-metas.js';
 import * as dinoGamificacao from './dino-metas-gamificacao.js';
+import * as dinoCarteiraClientes from './dino-carteira-clientes.js';
 import { funnelSummary } from './storefront-funnel.js';
 import { whatsappProviderConfigured, whatsappProviderName } from './core/whatsapp-provider.js';
 import { enviarMensagem as enviarWhatsappCore } from './core/whatsapp.js';
@@ -3766,6 +3767,8 @@ function sanitizarClienteBarbearia(cliente) {
      familiaConsentimento: cliente.familiaConsentimento || null,
      preferencias: cliente.preferencias || null,
      redesSociais: cliente.redesSociais || { instagram: '', linkedin: '' },
+    barbeiroId: cliente.barbeiroId || cliente.preferencias?.barbeiroId || '',
+    barbeiroNome: cliente.barbeiroNome || cliente.preferencias?.barbeiroNome || '',
   };
 }
 
@@ -5679,6 +5682,48 @@ app.get('/api/admin/barbearia/clientes/aniversariantes', (req, res) => {
   res.json({ ok: true, dias, aniversariantes });
 });
 app.get('/api/admin/barbearia/clientes', (req, res) => res.json({ ok: true, clientes: clientesBarbeariaSomenteLeitura(legacyEmpresaId(req)) }));
+
+app.get('/api/admin/barbearia/carteira-clientes', (req, res) => {
+  try {
+    const empresaId = legacyEmpresaId(req);
+    const resultado = dinoCarteiraClientes.listarCarteiraClientes(empresaId, {
+      profissionalId: req.query?.profissionalId || '',
+      lojaId: legacyLojaId(req),
+      busca: req.query?.busca || '',
+      filtroRetorno: req.query?.filtroRetorno || 'todos',
+      limite: Number(req.query?.limite) || 300,
+    });
+    res.json({ ok: true, ...resultado });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+app.get('/api/admin/barbearia/carteira-clientes/resumo', (req, res) => {
+  try {
+    const empresaId = legacyEmpresaId(req);
+    const resumo = dinoCarteiraClientes.resumoCarteirasProfissionais(empresaId, {
+      lojaId: legacyLojaId(req),
+    });
+    res.json({ ok: true, ...resumo });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+app.patch('/api/admin/barbearia/clientes/:id/vincular-barbeiro', (req, res) => {
+  try {
+    const empresaId = legacyEmpresaId(req);
+    const cliente = dinoCarteiraClientes.vincularClienteBarbeiro(empresaId, req.params.id, {
+      profissionalId: req.body?.profissionalId,
+      profissionalNome: req.body?.profissionalNome,
+      usuario: req.user?.email || req.user?.nome || '',
+    });
+    res.json({ ok: true, cliente });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
 app.post('/api/admin/barbearia/clientes', (req, res) => {
   try { res.status(201).json({ ok: true, cliente: sanitizarClienteBarbearia(clientesKytto.criarCliente(legacyEmpresaId(req), req.body || {})) }); }
   catch (error) { res.status(400).json({ error: error.message }); }
