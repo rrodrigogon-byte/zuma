@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { api, fmtR } from '../../../lib/api'
 import { useToast } from '../../../hooks/useToast'
 import { API, Avatar, Badge, daysLabel, Dialog, EmptyLine, profilePath, REASONS, SEGMENTS } from './shared'
+import DinoRecuperacaoAvecPanel from '../dino/DinoRecuperacaoAvecPanel'
 
 const SEGMENT_ORDER = ['vip', 'recorrente', 'novo', 'em_risco', 'inativo', 'sem_historico']
 const SORTS = [
@@ -564,6 +565,7 @@ export default function Portfolio() {
         {[
           ['carteira', 'Carteira'],
           ['duplicados', 'Possíveis duplicados'],
+          ['recuperacao', '⚡ Recuperação e Histórico Avec'],
         ].map(([key, label]) => (
           <button
             key={key}
@@ -578,7 +580,9 @@ export default function Portfolio() {
         ))}
       </div>
 
-      {view === 'duplicados' ? (
+      {view === 'recuperacao' ? (
+        <DinoRecuperacaoAvecPanel onAbrirAgenda={() => navigate('/admin/barbearia?tab=Agenda')} />
+      ) : view === 'duplicados' ? (
         <DuplicateQueue />
       ) : (
         <>

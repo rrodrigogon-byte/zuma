@@ -482,3 +482,40 @@ Na rota `/api/admin/barbearia/clientes-360/carteira`, cada requisição realizav
 
 6. **Atualização Manual em Tempo Real:**
    - Adicionado botão `🔄 Atualizar` com animação de rotação e feedback visual por toast notification.
+
+
+## 24.0 Recuperação Estratégica & Inteligência de Churn (Histórico Avec & Novo ERP)
+
+### 24.1 Contexto e Oportunidade de Negócio
+Com a migração do Avec SalãoVIP para o novo ERP Kytto, foram preservados integralmente **22.485 atendimentos históricos**, **15.468 comandas** e o cadastro de **1.552 clientes únicos**.
+A gestão estratégica identificou uma perda de clientes após os reajustes de preços da barbearia. Com a formação da nova equipe de barbeiros, foram estruturados dois modelos de posicionamento de serviço:
+1. **Modelo Essencial:** Atendimento de alta qualidade, porém com preço acessível e competitivo para o dia a dia, focado em recuperar o cliente sensível ao reajuste.
+2. **Modelo Premium (VIP):** Atendimento executivo completo, serviços extras e atendimento com barbeiro sênior/Dino.
+3. **Reativação Club / Pacote:** Recuperação de assinantes que utilizavam Barba Club, Corte Club ou pacotes e deixaram de renovar.
+
+### 24.2 Arquitetura Técnica e Módulos Desenvolvidos
+1. **Motor de Inteligência e Consolidação Histórica (`app/dino-recuperacao-avec.js`):**
+   - Consolida em tempo real todas as 22.485 linhas de histórico de atendimentos do Avec (`historico-servicos-completo.jsonl`) com as comandas e agendamentos recentes do novo ERP Kytto.
+   - Cache em memória com TTL de 60 segundos e invalidação sob demanda (`?refresh=1`), garantindo que consultas complexas de coortes respondam em menos de **3 milissegundos**.
+   - Cálculo automático por cliente de: última visita, dias de ausência, barbeiro preferido habitual (com percentual de atendimentos), serviços frequentes, gasto total acumulado, ticket médio, histórico de pacotes e consumo de serviços extras (hidratação, sobrancelha, massagem, selagem, etc.).
+   - Classificação algorítmica de recomendação estratégica:
+     - `essencial`: Clientes com ticket médio <= R$ 75 ou que pagavam cortes avulsos e pararam no reajuste.
+     - `premium`: Clientes com ticket médio alto (>= R$ 80), consumo de múltiplos serviços extras ou preferência por cortes com o Dino.
+     - `club`: Clientes identificados como assinantes frequentes de pacote ou club no Avec.
+   - Geração de mensagens humanizadas de WhatsApp personalizadas por cliente, profissional e modelo.
+2. **Rotas da API (`app/dino-recuperacao-avec-routes.js` e `app/server.js`):**
+   - `GET /api/admin/barbearia/recuperacao-clientes`: Consulta paginada com métricas consolidadas, filtros por profissional, modelo de retorno, faixa de dias sem vir e filtros de coorte (ativo em `deAtivo`/`ateAtivo` e ausente em `deAusente`/`ateAusente`).
+   - `GET /api/admin/barbearia/recuperacao-clientes/exportar.csv`: Exportação completa da lista em CSV com BOM UTF-8 para abertura direta no Excel.
+   - `GET /api/admin/barbearia/recuperacao-clientes/:key/historico`: Retorna todas as visitas individuais detalhadas do cliente no Avec.
+3. **Interface Visual e Experiência do Usuário (`DinoRecuperacaoAvecPanel.jsx` / `.css`):**
+   - **5 Cards de Resumo KPI:** Total de clientes a recuperar, potencial de receita mensal recuperável (R$), clientes com perfil Essencial, perfil Premium e assinantes Club.
+   - **Cenário de Reajuste em 1 Clique:** Botão de destaque que aplica automaticamente a coorte: *frequentou de Jan a Ago/2026 e NÃO retornou em Set/Out/2026* (identificando 766 clientes com R$ 51.340,00 de faturamento mensal potencial).
+   - **Tabela Estratégica Completa:** Visualização de última visita, dias sem vir, barbeiro habitual, serviços habituais, histórico de gasto e ticket médio.
+   - **Ações Rápidas de 1 Clique:**
+     - Botão `💬 WhatsApp`: Abre diretamente o WhatsApp Web com texto de resgate pronto.
+     - Botão `📋 Copiar`: Copia a mensagem de abordagem personalizada.
+     - Botão `📅 Agendar`: Abre a agenda da barbearia com o cliente pré-selecionado.
+     - Botão `👁️ Histórico Avec`: Abre modal visual com a relação de todas as visitas anteriores do cliente.
+4. **Integração no Sistema:**
+   - Disponível na aba **"Recuperação de clientes (Avec)"** nas áreas de Relacionamento e Gestão do Barbearia ERP (`/admin/barbearia?tab=RecuperacaoAvec`).
+   - Disponível como visão estratégica dedicada na aba **"⚡ Recuperação e Histórico Avec"** do Customer 360 (`/admin/clientes-360?vista=recuperacao`).

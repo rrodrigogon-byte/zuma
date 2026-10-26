@@ -1,5 +1,6 @@
 import BarbeariaNovoAgendamentoModal from './BarbeariaNovoAgendamentoModal'
 import DinoCarteiraClientesPanel from './dino/DinoCarteiraClientesPanel'
+import DinoRecuperacaoAvecPanel from './dino/DinoRecuperacaoAvecPanel'
 import BarbeariaComandasAbertas from './BarbeariaComandasAbertas'
 import BarbeariaAtendimentoBoard from './BarbeariaAtendimentoBoard'
 import BarbeariaPlanosAssinaturasPanel from './BarbeariaPlanosAssinaturasPanel'
@@ -44,6 +45,7 @@ const TABS = [
   ['Caixa e fechamento', 'Abertura, movimentos e encerramento'],
   ['Prévia taxas e materiais', 'Simulação somente leitura antes de gravar'],
   ['Carteira por barbeiro', 'Base de clientes exclusiva por profissional (Dino, Nat, Bruno, etc.)'],
+  ['Recuperação de clientes (Avec)', 'Resgate estratégico de clientes inativos, coorte de reajuste e modelos Essencial/Premium'],
   ['Clientes', 'CRM da unidade'],
   ['Profissionais', 'Equipe e repasse'],
   ['Serviços', 'Catálogo de serviços'],
@@ -80,9 +82,9 @@ const TABS = [
 
 const AREAS = [
   { id: 'operacao', label: 'Operação', short: 'Hoje, agenda, atendimento e caixa', tabs: ['Visão geral', 'Agenda', 'Atendimento', 'Caixa e fechamento', 'Prévia taxas e materiais', 'Fila e bloqueios'] },
-  { id: 'relacionamento', label: 'Relacionamento', short: 'Clientes, retorno e indicação', tabs: ['Carteira por barbeiro', 'Clientes', 'Retorno previsto', 'Lista de espera', 'Indicações', 'Avaliações (NPS)', 'Origem dos clientes', 'Fidelidade'] },
+  { id: 'relacionamento', label: 'Relacionamento', short: 'Clientes, retorno e indicação', tabs: ['Carteira por barbeiro', 'Recuperação de clientes (Avec)', 'Clientes', 'Retorno previsto', 'Lista de espera', 'Indicações', 'Avaliações (NPS)', 'Origem dos clientes', 'Fidelidade'] },
   { id: 'catalogo', label: 'Catálogo e equipe', short: 'Serviços, planos e revenda', tabs: ['Profissionais', 'Serviços', 'Planos e assinaturas', 'Saúde do clube', 'Estoque de revenda', 'Compras e fornecedores', 'Curva ABC', 'Vendas de revenda'] },
-  { id: 'gestao', label: 'Gestão', short: 'Comissões, metas e regras', tabs: ['Metas & Roleta', 'Metas e comissões', 'Notas fiscais', 'Desempenho da equipe', 'Comissões', 'Extrato e repasses', 'Projeção inteligente', 'Ocupação e metas', 'Cobranças e cashback', 'Vale-presente', 'Receita da IA', 'Resumo diário', 'Unidades', 'Relatórios', 'Configuração'] },
+  { id: 'gestao', label: 'Gestão', short: 'Comissões, metas e regras', tabs: ['Recuperação de clientes (Avec)', 'Metas & Roleta', 'Metas e comissões', 'Notas fiscais', 'Desempenho da equipe', 'Comissões', 'Extrato e repasses', 'Projeção inteligente', 'Ocupação e metas', 'Cobranças e cashback', 'Vale-presente', 'Receita da IA', 'Resumo diário', 'Unidades', 'Relatórios', 'Configuração'] },
   { id: 'integracoes', label: 'Integrações', short: 'WhatsApp e IA controlados', tabs: ['Integrações'] },
 ]
 
@@ -2264,6 +2266,26 @@ export default function BarbeariaERP() {
     if (tab === 'Caixa e fechamento') return renderOperacao()
     if (tab === 'Prévia taxas e materiais') return renderPreviaTaxasMateriais()
     if (tab === 'Carteira por barbeiro') return <DinoCarteiraClientesPanel onNovoCliente={() => { setFormCliente({ nome: '', telefone: '', email: '', dataNascimento: '', limiteCreditoMensal: 0, diasVencimento: 30, observacao: '' }); setModal('cliente') }} />
+    if (tab === 'Recuperação de clientes (Avec)') {
+      return (
+        <DinoRecuperacaoAvecPanel
+          onAbrirAgenda={(cli) => {
+            setTab('Agenda')
+            setFormAgenda({
+              clienteId: cli.key || '',
+              clienteNome: cli.nome || '',
+              clienteTelefone: cli.telefone || '',
+              profissionalId: '',
+              servicoId: servicos[0]?.id || '',
+              data: dataSelecionada || new Date().toISOString().slice(0, 10),
+              hora: '10:00',
+              observacoes: `Resgate Avec: Cliente preferia ${cli.profissionalPreferido || 'equipe'} (${cli.modeloRotulo || ''})`,
+            })
+            setModal('agenda')
+          }}
+        />
+      )
+    }
     if (tab === 'Clientes') return renderClientes()
     if (tab === 'Profissionais') return renderProfissionais()
     if (tab === 'Serviços') return renderServicos()
