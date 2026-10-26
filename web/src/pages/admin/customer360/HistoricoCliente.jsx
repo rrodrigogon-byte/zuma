@@ -91,28 +91,30 @@ export function ConsumoCliente({ historico }) {
   const c = historico.consumo
   const maximo = Math.max(1, ...c.meses.map((m) => m.valor + m.abatido))
   return <div className="c360-stack">
-    <div className="c360-kpis">
+    <div className="c360-kpis" style={{ gridTemplateColumns: 'repeat(5, minmax(0, 1fr))' }}>
       <article><span>Total consumido</span><strong>{fmtR(c.total)}</strong><small>{c.compras} comanda(s)/compra(s) pagas</small></article>
       <article><span>Ticket médio</span><strong>{fmtR(c.ticketMedio)}</strong><small>por comanda ou compra no balcão</small></article>
       <article><span>Últimos 12 meses</span><strong>{fmtR(c.ultimos12Meses)}</strong><small>média {fmtR(c.mediaMensal12)}/mês</small></article>
       <article><span>Serviços</span><strong>{fmtR(c.porTipo.servicos)}</strong><small>{c.abatidoPlano > 0 ? `+ ${fmtR(c.abatidoPlano)} cobertos pelo plano` : 'sem uso de plano'}</small></article>
       <article><span>Revenda da barbearia</span><strong>{fmtR(c.porTipo.revenda)}</strong><small>produtos no balcão e na comanda</small></article>
-      <article><span>Loja Dino</span><strong>{fmtR(c.porTipo.lojaDino)}</strong><small>itens da loja lançados na comanda</small></article>
     </div>
     {c.comandasAbertas > 0 && <p className="c360-note">{c.comandasAbertas} comanda(s) ainda aberta(s): entram no consumo quando forem pagas.</p>}
 
-    <section className="c360-h-bloco" aria-labelledby="c360-h-meses">
-      <h3 id="c360-h-meses">Consumo mês a mês</h3>
-      <div className="c360-h-barras" role="img" aria-label={`Consumo dos últimos 12 meses: ${c.meses.map((m) => `${MESES[Number(m.mes.slice(5)) - 1]} ${fmtR(m.valor)}`).join(', ')}`}>
-        {c.meses.map((m) => <div key={m.mes} className="c360-h-barra" title={`${MESES[Number(m.mes.slice(5)) - 1]}/${m.mes.slice(2, 4)}: ${fmtR(m.valor)}${m.abatido ? ` + ${fmtR(m.abatido)} pelo plano` : ''}`}>
-          <div className="c360-h-coluna">
-            {m.abatido > 0 && <span className="plano" style={{ height: `${(m.abatido / maximo) * 100}%` }} />}
-            <span className="pago" style={{ height: `${(m.valor / maximo) * 100}%` }} />
+    <section className="c360-h-bloco" aria-labelledby="c360-h-meses" style={{ background: 'var(--card)', padding: '24px', borderRadius: '12px', border: '1px solid var(--line)' }}>
+      <h3 id="c360-h-meses" style={{ marginTop: 0, marginBottom: '24px' }}>Consumo mês a mês</h3>
+      <div className="c360-h-barras" role="img" aria-label={`Consumo dos últimos 12 meses: ${c.meses.map((m) => `${MESES[Number(m.mes.slice(5)) - 1]} ${fmtR(m.valor)}`).join(', ')}`} style={{ display: 'flex', gap: '8px', height: '200px', borderBottom: '1px solid var(--line)', paddingBottom: '12px', marginBottom: '16px' }}>
+        {c.meses.map((m) => <div key={m.mes} className="c360-h-barra" title={`${MESES[Number(m.mes.slice(5)) - 1]}/${m.mes.slice(2, 4)}: ${fmtR(m.valor)}${m.abatido ? ` + ${fmtR(m.abatido)} pelo plano` : ''}`} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end', height: '100%' }}>
+          <div className="c360-h-coluna" style={{ width: '40px', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', height: '100%', position: 'relative' }}>
+            {m.abatido > 0 && <span className="plano" style={{ position: 'relative', width: '100%', height: `${(m.abatido / maximo) * 100}%`, background: '#10b981', minHeight: '4px', borderTopLeftRadius: '4px', borderTopRightRadius: '4px', transition: 'height 0.3s' }} />}
+            <span className="pago" style={{ position: 'relative', width: '100%', height: `${(m.valor / maximo) * 100}%`, background: '#3b82f6', minHeight: '4px', borderTopLeftRadius: m.abatido > 0 ? 0 : '4px', borderTopRightRadius: m.abatido > 0 ? 0 : '4px', transition: 'height 0.3s' }} />
           </div>
-          <small>{MESES[Number(m.mes.slice(5)) - 1]}</small>
+          <small style={{ marginTop: '12px', color: 'var(--muted)', fontSize: '12px' }}>{MESES[Number(m.mes.slice(5)) - 1].toLowerCase()}</small>
         </div>)}
       </div>
-      <div className="c360-h-legenda"><span><i className="pago" /> Pago</span><span><i className="plano" /> Coberto pelo plano</span></div>
+      <div className="c360-h-legenda" style={{ display: 'flex', gap: '16px', fontSize: '13px', color: 'var(--muted)' }}>
+        <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><i className="pago" style={{ width: '12px', height: '12px', borderRadius: '3px', background: '#3b82f6' }} /> Pago</span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><i className="plano" style={{ width: '12px', height: '12px', borderRadius: '3px', background: '#10b981' }} /> Coberto pelo plano</span>
+      </div>
     </section>
 
     <h3>Mais consumidos</h3>
