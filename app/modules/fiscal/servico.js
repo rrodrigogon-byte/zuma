@@ -1,3 +1,4 @@
+import { db as getJsonDb } from '../../db.js';
 // Fiscal por empresa (migração 092): emitente, certificado A1 no cofre, classificação fiscal,
 // numeração, documentos (NFC-e 65, NF-e 55, NFS-e Nacional) e eventos.
 //
@@ -223,6 +224,33 @@ export async function listarClassificaveis(db, empresaId) {
     }
   }
   for (const [k, c] of cls) if (c.fonte === 'servico' || c.fonte === 'categoria') saida.push({ fonte: c.fonte, fonteId: c.fonteId, nome: c.fonteId, grupo: c.fonte === 'servico' ? 'Serviço' : 'Padrão de categoria', classificacao: c, herdada: false, chave: k });
+  // Barbearia Dino comandas pagas
+  try {
+    const jsonDb = getJsonDb();
+    const bStore = jsonDb?.barbearias?.[empresa] || jsonDb?.barbearias?.['principal'] || Object.values(jsonDb?.barbearias || {})[0];
+    if (bStore?.comandas) {
+      for (const [cmdId, c] of Object.entries(bStore.comandas)) {
+        if (['paga', 'em_conta'].includes(c.status) && Number(c.total || 0) > 0) {
+          const jaTem = await db.query(
+            "SELECT 1 FROM fis_documentos WHERE empresa_id = $1 AND origem = 'barbearia_comanda' AND origem_id = $2 AND status IN ('autorizado', 'validado_localmente', 'enviando', 'contingencia') LIMIT 1",
+            [empresa, cmdId]
+          ).catch(() => ({ rows: [] }));
+          if (!jaTem.rows?.length) {
+            saida.push({
+              origem: 'barbearia_comanda',
+              origemId: cmdId,
+              descricao: `Comanda Barbearia · ${c.clienteNome || c.codigoVisual || cmdId}`,
+              valor: Number(c.total || 0),
+              data: c.faturadaEm || c.criadoEm || new Date().toISOString(),
+            });
+            if (saida.length >= lim) break;
+          }
+        }
+      }
+    }
+  } catch {
+    // resiliência
+  }
   return saida;
 }
 
@@ -233,6 +261,45 @@ async function classificacaoDe(q, empresa, fonte, fonteId, categoria = null) {
 
 // ── venda → itens do documento ───────────────────────────────────────────────
 async function vendaDaOrigem(q, empresa, { origem, origemId, itens = [], pagamentos = [] }) {
+  if (origem === 'barbearia_comanda') {
+    let c = null;
+    try {
+      const jsonDb = getJsonDb();
+      const bStore = jsonDb?.barbearias?.[empresa] || jsonDb?.barbearias?.['principal'] || Object.values(jsonDb?.barbearias || {})[0];
+      c = bStore?.comandas?.[origemId] || Object.values(bStore?.comandas || {}).find((cmd) => cmd.id === origemId || cmd.codigoVisual === origemId);
+    } catch { /* json db indisponivel */ }
+    if (!c) {
+      try {
+        const row = (await q('SELECT * FROM bar_comandas WHERE empresa_id = $1 AND id = $2', [empresa, exigirUuid(origemId, 'comanda')])).rows[0];
+        if (row) c = row;
+      } catch { /* nao eh uuid da tabela */ }
+    }
+    if (!c) throw new ErroDominio('NOT_FOUND', 'Comanda não encontrada', 404);
+    const itensComanda = (c.itens || []).map((i, idx) => {
+      const isServico = i.tipo === 'servico' || (!i.tipo && !i.produtoId);
+      return {
+        fonte: isServico ? 'servico' : 'est_item',
+        fonteId: String(i.servicoId || i.produtoId || `item-${idx}`),
+        descricao: i.nome || i.descricao || 'Item Barbearia',
+        quantidade: Number(i.quantidade || 1),
+        valorUnitario: Number(i.precoUnitario || i.preco || 0),
+        categoria: i.categoria || (isServico ? 'servicos' : 'revenda'),
+        classificacao: isServico
+          ? { tipo: 'servico', cTribNac: '060101', aliquotaIss: 2.0 }
+          : { tipo: 'produto', ncm: '33059000', cfop: '5102', csosn: '102', cstIcms: '00', aliquotaIcms: 0 },
+      };
+    });
+    return {
+      loja: c.lojaId || null,
+      cpf: soDigitos(c.cpf || c.clienteCpf).length === 11 ? soDigitos(c.cpf || c.clienteCpf) : null,
+      desconto: dinheiro(c.desconto || 0),
+      itens: itensComanda.length ? itensComanda : [{ fonte: 'servico', fonteId: 'srv-1', descricao: 'Atendimento Barbearia', quantidade: 1, valorUnitario: Number(c.total || 0), classificacao: { tipo: 'servico', cTribNac: '060101', aliquotaIss: 2.0 } }],
+      pagamentos: (c.pagamentos || []).map((p) => ({
+        meio: p.meio === 'pix' ? 'pix' : p.meio === 'dinheiro' ? 'dinheiro' : p.meio === 'debito' ? 'debito' : 'credito',
+        valor: Number(p.valor || 0),
+      })),
+    };
+  }
   if (origem === 'bar_comanda') {
     const c = (await q('SELECT * FROM bar_comandas WHERE empresa_id = $1 AND id = $2', [empresa, exigirUuid(origemId, 'comanda')])).rows[0];
     if (!c) throw new ErroDominio('NOT_FOUND', 'Comanda não encontrada', 404);
@@ -271,7 +338,7 @@ async function vendaDaOrigem(q, empresa, { origem, origemId, itens = [], pagamen
       pagamentos: Array.isArray(pagamentos) ? pagamentos : [],
     };
   }
-  throw new ErroDominio('VALIDATION_ERROR', 'origem deve ser bar_comanda, loja_pedido ou manual');
+  throw new ErroDominio('VALIDATION_ERROR', 'origem deve ser bar_comanda, barbearia_comanda, loja_pedido ou manual');
 }
 
 /** Distribui o desconto no valor dos itens (vProd = qCom × vUnCom, sem vDesc por item). */

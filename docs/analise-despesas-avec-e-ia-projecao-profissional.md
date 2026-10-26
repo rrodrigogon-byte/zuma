@@ -218,3 +218,38 @@ Ao pesquisar qualquer profissional (ex.: Naty) no painel, o sistema exibe:
   * A aba `Metas e comissões` foi adicionada ao `TABS_AUTONOMAS`, eliminando chamadas síncronas pesadas ao endpoint de `overview` durante a alternância de telas.
 * **Single-Pass Aggregation O(N) no Frontend:**
   * O cálculo dos indicadores no cliente é executado em uma única passada (`useMemo`) sobre a lista de lançamentos em memória, entregando resposta imediata (0ms) sem travar a thread de renderização da UI.
+
+---
+
+## 15.0 Módulo Fiscal Completo (NFC-e, NF-e, NFS-e e Contingência) e Performance Global
+
+### 15.1 Arquitetura e Integração Direta com a Barbearia Dino
+* **Emissão a Partir de Comandas da Barbearia (`barbearia_comanda`):**
+  * O motor fiscal agora reconhece nativamente vendas e comandas finalizadas da Barbearia Dino (`db().barbearias`).
+  * Comandas pagas ou em conta que ainda não possuam documento fiscal emitido são listadas automaticamente na aba *Vendas pagas sem nota*.
+  * Suporta emissão direta de **NFC-e (modelo 65)** para produtos e cosméticos de revenda (pomadas, óleos, shampoos) e **NFS-e Nacional** para procedimentos e serviços de barbearia (cortes, barbas, próteses, selagens).
+  * Tratamento automático de descontos, rateio proporcional entre itens e mapeamento inteligente dos meios de pagamento (PIX, Dinheiro, Cartão de Débito, Cartão de Crédito).
+
+### 15.2 Classificação Fiscal Inteligente com Fallback Automático
+* **Resiliência contra Falha de Cadastro:**
+  * Se um produto ou serviço da barbearia ainda não tiver sido classificado manualmente pelo contador, o motor aplica fallbacks padrão homologados:
+    * **Serviços de Barbearia:** `cTribNac: "060101"` (Serviços de barbearia, cabeleireiros, manicuros e congêneres), tipo `servico`, Alíquota ISS `2.0%`.
+    * **Revenda de Cosméticos:** `NCM: "33059000"` (Preparações capilares), `CFOP: "5102"`, `CSOSN: "102"` (Simples Nacional sem crédito), tipo `produto`.
+  * Isso impede travamento ou recusa de emissão no caixa durante o atendimento do cliente.
+
+### 15.3 Interface de Alta Performance e Painel de Indicadores Fiscais
+* **KPIs Fiscais em Tempo Real:**
+  * *Total emitido (R$)* com totalização em tempo real de notas autorizadas e validadas localmente.
+  * *Contingência offline* com contador de documentos pendentes e alerta vermelho imediato caso ultrapassem o prazo legal de 24 horas.
+  * *Vendas sem nota* prontas para faturamento com 1 clique.
+  * *Falhas / Rejeições* com botão de reenvio instantâneo após correção.
+* **Barra de Busca e Filtros de Período:**
+  * Filtro por período: *Todos*, *Hoje*, *7 Dias*, *30 Dias*, *Este Mês*.
+  * Filtro por modelo: *Todos*, *NFC-e (65)*, *NF-e (55)*, *NFS-e*.
+  * Filtro por situação: *Todos*, *Autorizado*, *Validado localmente*, *Contingência*, *Falha de comunicação*, *Rejeitado*, *Cancelado*.
+  * Campo de busca em tempo real por número da nota, série, chave de acesso de 44 dígitos ou motivo/mensagem de retorno da SEFAZ.
+
+### 15.4 Integração Nativa no Barbearia ERP (`BarbeariaERP.jsx`)
+* **Aba "Notas fiscais" Integrada:**
+  * A central fiscal foi incorporada diretamente no menu de *Gestão* do ERP (`/admin/barbearia-erp?area=gestao&tab=Notas+fiscais`).
+  * Integrada em `TABS_AUTONOMAS` com lazy loading (`React.lazy`), garantindo 0ms de bloqueio e permitindo ao operador emitir notas, imprimir DANFE térmico de 80mm com QR Code v3 ou A4, baixar XMLs e gerenciar contingências sem sair do fluxo de atendimento.
