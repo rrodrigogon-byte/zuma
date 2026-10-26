@@ -4241,7 +4241,8 @@ app.get('/api/admin/barbearia/agenda-periodo', (req, res) => {
       profissionalId: req.query?.profissionalId || '',
       antesDe: barbeariaErpKytto.listarAgendamentos(empresaId, { lojaId }).reduce((menor, item) => { const dia = String(item?.dataAgenda || item?.dataHora || '').slice(0, 10); return /^\d{4}-\d{2}-\d{2}$/.test(dia) && (!menor || dia < menor) ? dia : menor; }, ''),
     });
-    res.json({ ok: true, de, ate, total: itens.length, itens, totalHistorico: historico.length, historico });
+    const bloqueios = barbeariaErpKytto.listarBloqueios(empresaId, { de, ate, lojaId, profissionalId: req.query?.profissionalId });
+    res.json({ ok: true, de, ate, total: itens.length, itens, totalHistorico: historico.length, historico, bloqueios });
   } catch (error) {
     res.status(400).json({ error: error.message || 'Não foi possível carregar a agenda do período.' });
   }

@@ -92,5 +92,9 @@ export function diaNumero(iso) {
 
 export function filtrarAgenda(itens, { busca = '', status = '' } = {}) {
   const normalizar = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
-  return itens.filter(item => (!status || item.status === status) && normalizar([item.clienteNome, item.cliente_nome, item.servicoNome, item.servico_nome, item.profissionalNome, item.profissional_nome, item.codigo].join(' ')).includes(normalizar(busca).trim()))
+  return itens.filter(item => {
+    if (status && item.status !== status) return false;
+    if (!status && (item.status === 'cancelado' || item.status === 'cancelado_falta_confirmacao')) return false;
+    return normalizar([item.clienteNome, item.cliente_nome, item.servicoNome, item.servico_nome, item.profissionalNome, item.profissional_nome, item.codigo].join(' ')).includes(normalizar(busca).trim());
+  })
 }

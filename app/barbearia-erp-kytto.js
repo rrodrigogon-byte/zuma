@@ -1177,7 +1177,13 @@ function bloqueioNormalizado(dados = {}, anterior = {}) {
 export function listarBloqueios(empresaId, filtros = {}) {
   return Object.values(estadoEmpresa(empresaId, false).bloqueios)
     .filter((item) => filtros.incluirInativos || item.ativo !== false)
-    .filter((item) => !filtros.data || chaveDia(item.inicio) <= String(filtros.data).slice(0, 10) && chaveDia(item.fim) >= String(filtros.data).slice(0, 10))
+    .filter((item) => {
+      const dataInicio = chaveDia(item.inicio);
+      const dataFim = chaveDia(item.fim);
+      if (filtros.data) return dataInicio <= String(filtros.data).slice(0, 10) && dataFim >= String(filtros.data).slice(0, 10);
+      if (filtros.de && filtros.ate) return dataInicio <= String(filtros.ate).slice(0, 10) && dataFim >= String(filtros.de).slice(0, 10);
+      return true;
+    })
     .filter((item) => !filtros.profissionalId || !item.profissionalId || String(filtros.profissionalId).split(',').map(id => id.trim()).includes(item.profissionalId))
     .filter((item) => !filtros.lojaId || !item.lojaId || item.lojaId === String(filtros.lojaId))
     .sort((a, b) => new Date(a.inicio).valueOf() - new Date(b.inicio).valueOf())

@@ -27,6 +27,7 @@ const STATUS = {
   em_atendimento: 'Em atendimento',
   concluido: 'Concluído',
   cancelado: 'Cancelado',
+  bloqueado: 'Bloqueado',
   nao_compareceu: 'Não compareceu'
 }
 
@@ -213,7 +214,44 @@ export default function BarbeariaAgendaPeriodo({
   const contextoAtual = useRef(chaveLivres)
   contextoAtual.current = chaveLivres
   const carregando = dias.length > 0 && consulta?.chave !== chave && !erro
-  const itens = consulta?.chave === chave ? consulta.itens : []
+  const itens = useMemo(() => {
+    if (consulta?.chave !== chave) return []
+    const _itens = consulta.itens || []
+    const _bloqueios = []
+    for (const b of (consulta.bloqueios || [])) {
+      const ini = new Date(b.inicio)
+      const fim = new Date(b.fim)
+      const h1 = ini.toLocaleTimeString('pt-BR', {timeZone: 'America/Cuiaba', hour: '2-digit', minute: '2-digit'})
+      const mIni = parseInt(h1.split(':')[0], 10) * 60 + parseInt(h1.split(':')[1], 10)
+      const h2 = fim.toLocaleTimeString('pt-BR', {timeZone: 'America/Cuiaba', hour: '2-digit', minute: '2-digit'})
+      let mFim = parseInt(h2.split(':')[0], 10) * 60 + parseInt(h2.split(':')[1], 10)
+      if (mFim <= mIni) mFim = mIni + 60
+      
+      const baseItem = {
+        id: b.id,
+        isBloqueio: true,
+        dataHora: b.inicio,
+        horaLocal: h1,
+        duracao: mFim - mIni,
+        status: 'bloqueado',
+        clienteNome: '🔒 ' + (b.titulo || 'Bloqueio'),
+        servicoNome: b.motivo || 'Horário indisponível',
+        profissionalId: b.profissionalId
+      }
+      
+      if (!b.profissionalId && profissionais && profissionais.length > 0) {
+         // Bloqueio geral: multiplica para todos os ativos
+         for (const prof of profissionais) {
+            if (prof.ativo !== false) {
+               _bloqueios.push({ ...baseItem, id: b.id + '_' + prof.id, profissionalId: prof.id })
+            }
+         }
+      } else {
+         _bloqueios.push(baseItem)
+      }
+    }
+    return [..._itens, ..._bloqueios]
+  }, [consulta, chave])
 
   // Filtra itens por busca, status e APENAS os profissionais marcados para exibição na tela!
   const visiveis = useMemo(() => {
@@ -373,6 +411,7 @@ export default function BarbeariaAgendaPeriodo({
         setConsulta({
           chave,
           itens: [...(r.itens || []), ...historico],
+          bloqueios: r.bloqueios || [],
           horario: new Date().toLocaleTimeString('pt-BR', { timeZone: 'America/Cuiaba' })
         })
       }
@@ -927,7 +966,7 @@ export default function BarbeariaAgendaPeriodo({
                               key={item.id}
                               className="dino-cal-event-card"
                               data-status={item.status}
-                              onClick={() => onOpenAppointment?.(item)}
+                              onClick={() => item.isBloqueio ? null : onOpenAppointment?.(item)}
                               title={`Abrir agendamento: ${item.clienteNome || 'Cliente'} às ${hora}`}
                             >
                               <div className="dino-cal-event-time">
@@ -1121,7 +1160,7 @@ export default function BarbeariaAgendaPeriodo({
                                 key={item.id}
                                 className="dino-cal-event-card"
                                 data-status={item.status}
-                                onClick={() => onOpenAppointment?.(item)}
+                                onClick={() => item.isBloqueio ? null : onOpenAppointment?.(item)}
                                 title={`Clique para gerenciar ou remanejar o agendamento de ${item.clienteNome || item.cliente_nome}`}
                               >
                                 <div className="dino-cal-event-time">
@@ -1188,7 +1227,7 @@ export default function BarbeariaAgendaPeriodo({
                               key={item.id}
                               className="dino-cal-event-card"
                               data-status={item.status}
-                              onClick={() => onOpenAppointment?.(item)}
+                              onClick={() => item.isBloqueio ? null : onOpenAppointment?.(item)}
                               title="Clique para designar um barbeiro ou remanejar"
                             >
                               <div className="dino-cal-event-time">
@@ -1252,7 +1291,7 @@ export default function BarbeariaAgendaPeriodo({
                                   <button
                                     type="button"
                                     className="dino-cal-slot-busy-pill"
-                                    onClick={() => onOpenAppointment?.(stat.item)}
+                                    onClick={() => stat.item.isBloqueio ? null : onOpenAppointment?.(stat.item)}
                                     title={`Ocupado: ${stat.item.clienteNome || stat.item.cliente_nome} - ${stat.item.servicoNome || stat.item.servico_nome} (Clique para detalhes ou remanejamento)`}
                                   >
                                     <span className="dino-cal-slot-busy-pill-name">
@@ -1360,7 +1399,7 @@ export default function BarbeariaAgendaPeriodo({
                             key={item.id}
                             className="dino-cal-event-card"
                             data-status={item.status}
-                            onClick={() => onOpenAppointment?.(item)}
+                            onClick={() => item.isBloqueio ? null : onOpenAppointment?.(item)}
                           >
                             <div className="dino-cal-event-time">
                               <span>{horaDoItem(item)}</span>
