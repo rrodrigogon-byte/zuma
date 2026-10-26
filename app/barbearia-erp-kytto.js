@@ -145,7 +145,8 @@ function estadoVazio() {
     configuracao: {
       horarioAbertura: '08:00',
       horarioFechamento: '20:00',
-      intervaloMinutos: 30,
+      intervaloMinutos: 15,
+      tempoAtendimentoDinoMinutos: null,
       diasFuncionamento: [1, 2, 3, 4, 5, 6],
       antecedenciaMinutos: 60,
       janelaReservaDias: 60,
@@ -726,6 +727,9 @@ function profissionalNormalizado(dados = {}, anterior = {}) {
     descontaTaxaMaquininha: dados.descontaTaxaMaquininha ?? dados.desconta_taxa_maquininha ?? anterior.descontaTaxaMaquininha ?? true,
     // Desconta da base da comissão o custo do material usado no serviço (padrão: não).
     descontaMaterial: Boolean(dados.descontaMaterial ?? dados.desconta_material ?? anterior.descontaMaterial ?? false),
+    duracaoAtendimentoMinutos: dados.duracaoAtendimentoMinutos !== undefined
+      ? (Number(dados.duracaoAtendimentoMinutos) > 0 ? Math.max(5, Math.min(480, Math.round(Number(dados.duracaoAtendimentoMinutos)))) : null)
+      : (anterior.duracaoAtendimentoMinutos || null),
     atendimento24x7,
     horarioInicio: texto(dados.horarioInicio ?? dados.horario_inicio ?? anterior.horarioInicio, 5) || (atendimento24x7 ? '00:00' : '08:00'),
     horarioFim: texto(dados.horarioFim ?? dados.horario_fim ?? anterior.horarioFim, 5) || (atendimento24x7 ? '23:59' : '18:00'),
@@ -855,16 +859,33 @@ function calendarioNormalizado(dados = {}, anterior = {}) {
   const horarioAbertura = texto(dados.horarioAbertura ?? dados.horario_abertura ?? anterior.horarioAbertura, 5) || '08:00';
   const horarioFechamento = texto(dados.horarioFechamento ?? dados.horario_fechamento ?? anterior.horarioFechamento, 5) || '20:00';
   if (!horaValida(horarioAbertura) || !horaValida(horarioFechamento) || horarioFechamento <= horarioAbertura) throw new Error('Horário de funcionamento inválido.');
+  const tempoAtendimentoDinoMinutos = dados.tempoAtendimentoDinoMinutos !== undefined
+    ? (Number(dados.tempoAtendimentoDinoMinutos) > 0 ? Math.max(5, Math.min(480, Math.round(Number(dados.tempoAtendimentoDinoMinutos)))) : null)
+    : (anterior.tempoAtendimentoDinoMinutos || null);
   return {
     horarioAbertura,
     horarioFechamento,
-    intervaloMinutos: Math.max(5, Math.min(240, Math.round(numero(dados.intervaloMinutos ?? dados.intervalo_minutos ?? anterior.intervaloMinutos, 30)))),
+    intervaloMinutos: Math.max(5, Math.min(240, Math.round(numero(dados.intervaloMinutos ?? dados.intervalo_minutos ?? anterior.intervaloMinutos, 15)))),
+    tempoAtendimentoDinoMinutos,
     diasFuncionamento: diasNormalizados(dados.diasFuncionamento ?? dados.dias_funcionamento, anterior.diasFuncionamento),
     feriados: feriadosNormalizados(dados.feriados, anterior.feriados),
     antecedenciaMinutos: Math.max(0, Math.min(10080, Math.round(numero(dados.antecedenciaMinutos ?? dados.antecedencia_minutos ?? anterior.antecedenciaMinutos, 60)))),
     janelaReservaDias: Math.max(1, Math.min(365, Math.round(numero(dados.janelaReservaDias ?? dados.janela_reserva_dias ?? anterior.janelaReservaDias, 60)))),
     politicaCancelamentoHoras: Math.max(0, Math.min(168, Math.round(numero(dados.politicaCancelamentoHoras ?? dados.politica_cancelamento_horas ?? anterior.politicaCancelamentoHoras, 4)))),
   };
+}
+
+export function duracaoAtendimentoProfissional(servico, profissional, calendario = {}) {
+  if (profissional && Number(profissional.duracaoAtendimentoMinutos) > 0) {
+    return Number(profissional.duracaoAtendimentoMinutos);
+  }
+  if (ehProfissionalDino(profissional) && Number(calendario?.tempoAtendimentoDinoMinutos) > 0) {
+    return Number(calendario.tempoAtendimentoDinoMinutos);
+  }
+  if (servico && Number(servico.duracaoMinutos) > 0) {
+    return Number(servico.duracaoMinutos);
+  }
+  return Number(calendario?.intervaloMinutos) || 15;
 }
 
 function agendamentoNormalizado(dados = {}, anterior = {}, opcoes = {}) {
@@ -2933,18 +2954,19 @@ function disponibilidadeNoHorario(contexto, horaLocal, utcOffset) {
   const dataHora = dataHoraPublica(dataAgenda, horaLocal, utcOffset);
   if (new Date(dataHora).valueOf() < Date.now() + Number(calendario.antecedenciaMinutos || 0) * 60000) return null;
   for (const profissional of profissionais) {
+    const duracaoMinutos = duracaoAtendimentoProfissional(servico, profissional, calendario);
     const candidato = {
       dataAgenda,
       horaLocal,
       dataHora,
-      duracaoMinutos: servico.duracaoMinutos,
+      duracaoMinutos,
       servicoId: servico.id,
       profissionalId: profissional.id,
       lojaId,
     };
     try {
       validarCalendarioAgendamento(estado, candidato, profissional);
-      if (!verificarConflito(estado, candidato)) return { profissional, dataHora };
+      if (!verificarConflito(estado, candidato)) return { profissional, dataHora, duracaoMinutos };
     } catch (_) {}
   }
   return null;
@@ -2956,10 +2978,13 @@ export function listarHorariosDisponiveis(empresaId, dados = {}) {
   const ehDino = contexto.profissionais.length === 1 && ehProfissionalDino(contexto.profissionais[0]);
   const abertura = ehDino ? 0 : minutosHoraPublica(contexto.calendario.horarioAbertura);
   const fechamento = ehDino ? 1440 : minutosHoraPublica(contexto.calendario.horarioFechamento);
-  const intervalo = Math.max(5, Number(contexto.calendario.intervaloMinutos || 30));
+  const intervalo = Math.max(5, Number(contexto.calendario.intervaloMinutos || 15));
   if (!Number.isFinite(abertura) || !Number.isFinite(fechamento) || fechamento <= abertura) throw new Error('Horário de funcionamento inválido.');
+  const duracao = contexto.profissionais.length === 1
+    ? duracaoAtendimentoProfissional(contexto.servico, contexto.profissionais[0], contexto.calendario)
+    : (contexto.servico.duracaoMinutos || 15);
   const horarios = [];
-  for (let minuto = abertura; minuto + contexto.servico.duracaoMinutos <= fechamento; minuto += intervalo) {
+  for (let minuto = abertura; minuto + duracao <= fechamento; minuto += intervalo) {
     const horario = horaPublica(minuto);
     const livre = disponibilidadeNoHorario(contexto, horario, dados.utcOffset ?? dados.utc_offset);
     horarios.push({ horario, disponivel: Boolean(livre) });
@@ -2991,7 +3016,9 @@ export function criarAgendamento(empresaId, dados = {}, opcoes = {}) {
   if (agendamento.profissionalId && (!estado.profissionais[agendamento.profissionalId] || estado.profissionais[agendamento.profissionalId].ativo === false)) throw new Error('Profissional não encontrado ou inativo.');
   const profissional = agendamento.profissionalId ? estado.profissionais[agendamento.profissionalId] : null;
   const servico = estado.servicos[agendamento.servicoId];
-  agendamento.duracaoMinutos = servico.duracaoMinutos;
+  agendamento.duracaoMinutos = dados.duracaoMinutos
+    ? Math.max(5, Math.min(480, Math.round(Number(dados.duracaoMinutos))))
+    : duracaoAtendimentoProfissional(servico, profissional, obterCalendarioLoja(estado, agendamento.lojaId));
   const precoCalculado = calcularPrecoServicoHorario(servico, profissional, agendamento.horaLocal);
   if (dados.valor !== undefined && Math.round(Number(dados.valor) * 100) !== Math.round(Number(precoCalculado) * 100) && Math.round(Number(dados.valor) * 100) !== Math.round(Number(servico.preco) * 100)) {
     throw new Error('O valor do agendamento deve corresponder ao preço cadastrado do serviço. Use a comanda para ajustes auditados.');
@@ -3023,7 +3050,9 @@ export function atualizarAgendamento(empresaId, agendamentoId, dados = {}, opcoe
   if (!agendamento.servicoId || !estado.servicos[agendamento.servicoId] || estado.servicos[agendamento.servicoId].ativo === false) throw new Error('Serviço ativo é obrigatório.');
   const profissional = agendamento.profissionalId ? estado.profissionais[agendamento.profissionalId] : null;
   const servico = estado.servicos[agendamento.servicoId];
-  agendamento.duracaoMinutos = servico.duracaoMinutos;
+  agendamento.duracaoMinutos = dados.duracaoMinutos
+    ? Math.max(5, Math.min(480, Math.round(Number(dados.duracaoMinutos))))
+    : duracaoAtendimentoProfissional(servico, profissional, obterCalendarioLoja(estado, agendamento.lojaId));
   const precoCalculado = calcularPrecoServicoHorario(servico, profissional, agendamento.horaLocal);
   const valorEsperado = agendamento.servicoId === atual.servicoId && Number(atual.valor) > 0 ? atual.valor : precoCalculado;
   if (dados.valor !== undefined && Math.round(Number(dados.valor) * 100) !== Math.round(Number(valorEsperado) * 100) && Math.round(Number(dados.valor) * 100) !== Math.round(Number(servico.preco) * 100)) {

@@ -140,7 +140,7 @@ test('server.js efetivo expõe Barbearia no contrato administrativo', async () =
 
     const configuracoes = await request(base, '/api/admin/barbearia/configuracoes', { headers });
     assert.equal(configuracoes.response.status, 200);
-    assert.equal(configuracoes.body.configuracao.intervaloMinutos, 30);
+    assert.equal(configuracoes.body.configuracao.intervaloMinutos, 15);
     const unidade = await request(base, '/api/admin/barbearia/configuracoes/unidade-ativa', { headers });
     assert.equal(unidade.response.status, 200);
     assert.equal(unidade.body.lojaId, 'loja-runtime');

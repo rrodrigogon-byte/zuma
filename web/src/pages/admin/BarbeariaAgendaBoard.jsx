@@ -1,7 +1,7 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { hojeAgenda } from '../../lib/barbearia-calendar'
 
-const PADRAO_GRADE = { inicio: 8 * 60, fim: 20 * 60, intervalo: 30 }
+const PADRAO_GRADE = { inicio: 8 * 60, fim: 20 * 60, intervalo: 15 }
 const ALTURA_SLOT = 48
 
 const STATUS = {
@@ -44,10 +44,11 @@ function minutosHorario(value, fallback) {
   return hora * 60 + minuto
 }
 
-function gradeDaUnidade(configuracao = {}) {
+function gradeDaUnidade(configuracao = {}, overrideIntervalo = null) {
   const inicio = minutosHorario(configuracao.horarioAbertura, PADRAO_GRADE.inicio)
   const fim = minutosHorario(configuracao.horarioFechamento, PADRAO_GRADE.fim)
-  const intervalo = Math.min(120, Math.max(5, Number(configuracao.intervaloMinutos || PADRAO_GRADE.intervalo)))
+  const intv = overrideIntervalo || configuracao.intervaloMinutos || PADRAO_GRADE.intervalo
+  const intervalo = Math.min(120, Math.max(5, Number(intv)))
   return { inicio, fim: Math.max(inicio + intervalo, fim), intervalo }
 }
 
@@ -59,16 +60,18 @@ function moeda(value) {
   return Number(value || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 }
 
-function eventoPosicao(item, grade) {
+function eventoPosicao(item, grade, alturaSlot) {
   const inicio = Math.max(grade.inicio, Math.min(grade.fim - grade.intervalo, minutosDoDia(item.dataHora)))
   const duracao = Math.max(grade.intervalo, Number(item.duracaoMinutos || item.duracao_minutos || grade.intervalo))
   const fim = Math.min(grade.fim, inicio + duracao)
-  return { top: ((inicio - grade.inicio) / grade.intervalo) * ALTURA_SLOT, height: Math.max(36, ((fim - inicio) / grade.intervalo) * ALTURA_SLOT - 6) }
+  return { top: ((inicio - grade.inicio) / grade.intervalo) * alturaSlot, height: Math.max(26, ((fim - inicio) / grade.intervalo) * alturaSlot - 4) }
 }
 
 export default function BarbeariaAgendaBoard({ data, configuracao = {}, agendamentos = [], profissionais = [], bloqueios = [], onDateChange, onNew, onOpenAppointment }) {
+  const [intervaloManual, setIntervaloManual] = useState(null)
   const profissionaisAtivos = useMemo(() => profissionais.filter((item) => item.ativo !== false), [profissionais])
-  const grade = useMemo(() => gradeDaUnidade(configuracao), [configuracao])
+  const grade = useMemo(() => gradeDaUnidade(configuracao, intervaloManual), [configuracao, intervaloManual])
+  const alturaSlot = grade.intervalo <= 15 ? 36 : grade.intervalo <= 30 ? 46 : 56
   const colunas = useMemo(() => {
     const base = profissionaisAtivos.map((item) => ({ id: item.id, nome: item.nome, especialidade: item.especialidade, avatar: iniciais(item.nome), horarioInicio: item.horarioInicio, horarioFim: item.horarioFim, diasTrabalho: item.diasTrabalho || [] }))
     if (agendamentos.some((item) => !item.profissionalId)) base.push({ id: '__sem_profissional__', nome: 'Sem atendente', especialidade: 'A definir', avatar: '?' })
@@ -98,6 +101,29 @@ export default function BarbeariaAgendaBoard({ data, configuracao = {}, agendame
         <p style={styles.sub}>Agenda diária da unidade ativa, organizada por atendente e intervalo de serviço.</p>
       </div>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'var(--card)', padding: '3px 6px', borderRadius: 10, border: '1px solid var(--line)' }} role="group" aria-label="Intervalo de exibição da agenda">
+          <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', paddingRight: 4 }}>Grade:</span>
+          {[15, 30, 45, 60].map((intv) => (
+            <button
+              key={intv}
+              type="button"
+              onClick={() => setIntervaloManual(intv)}
+              style={{
+                border: 0,
+                borderRadius: 7,
+                padding: '5px 9px',
+                fontSize: 11,
+                fontWeight: grade.intervalo === intv ? 800 : 600,
+                background: grade.intervalo === intv ? 'var(--accent)' : 'transparent',
+                color: grade.intervalo === intv ? '#fff' : 'var(--fg)',
+                cursor: 'pointer',
+                transition: 'all .15s',
+              }}
+            >
+              {intv} min
+            </button>
+          ))}
+        </div>
         <label style={styles.dateLabel}>Escolher data<input type="date" value={data} onChange={(event) => event.target.value && onDateChange(event.target.value)} style={styles.dateInput} /></label>
         <button type="button" onClick={onNew} style={styles.primary}>+ Novo atendimento</button>
       </div>
@@ -110,13 +136,26 @@ export default function BarbeariaAgendaBoard({ data, configuracao = {}, agendame
       <div style={{ minWidth: Math.max(760, 170 + colunas.length * 230) }}>
         <div style={styles.boardHeader}><div style={styles.timeHeader}>Horário</div>{colunas.map((coluna) => <div key={coluna.id} style={styles.columnHeader}><div style={{ ...styles.avatar, width: 30, height: 30, fontSize: 11, background: coluna.id === '__sem_profissional__' ? '#e6edf5' : 'var(--accent)', color: coluna.id === '__sem_profissional__' ? 'var(--muted)' : '#fff' }}>{coluna.avatar}</div><div><strong>{coluna.nome}</strong><small style={styles.sub}>{coluna.especialidade || 'Equipe'} · {coluna.horarioInicio && coluna.horarioFim ? `${coluna.horarioInicio}–${coluna.horarioFim}` : 'jornada não definida'}</small></div></div>)}</div>
         <div style={styles.boardBody}>
-          <div style={styles.timeColumn}>            {linhas.slice(0, -1).map((minutos) => <div key={minutos} style={{ height: ALTURA_SLOT, position: 'relative' }}><span style={styles.timeText}>{horaLabel(minutos)}</span></div>)}
-</div>
+          <div style={styles.timeColumn}>
+            {linhas.slice(0, -1).map((minutos) => (
+              <div key={minutos} style={{ height: alturaSlot, position: 'relative' }}>
+                <span style={{
+                  ...styles.timeText,
+                  fontWeight: minutos % 60 === 0 ? 800 : 500,
+                  fontSize: minutos % 60 === 0 ? 12 : 10,
+                  color: minutos % 60 === 0 ? 'var(--fg)' : 'var(--muted)',
+                  opacity: minutos % 60 === 0 ? 1 : 0.8,
+                }}>
+                  {horaLabel(minutos)}
+                </span>
+              </div>
+            ))}
+          </div>
           {colunas.map((coluna) => { const trabalhaHoje = coluna.id === '__sem_profissional__' || !coluna.diasTrabalho.length || coluna.diasTrabalho.includes(diaDaSemana); return <div key={coluna.id} style={{ ...styles.timelineColumn, opacity: trabalhaHoje ? 1 : .68 }}>
-            {linhas.slice(0, -1).map((minutos) => <div key={minutos} style={{ height: ALTURA_SLOT, borderBottom: '1px solid var(--line)', borderTop: minutos % 60 === 0 ? '1px solid var(--line)' : undefined }} />)}
-            {bloqueios.filter((item) => !item.profissionalId || item.profissionalId === coluna.id).map((bloqueio) => { const posicao = eventoPosicao({ dataHora: bloqueio.inicio, duracaoMinutos: (new Date(bloqueio.fim).valueOf() - new Date(bloqueio.inicio).valueOf()) / 60000 }, grade); return <div key={bloqueio.id} style={{ ...styles.blocked, top: posicao.top, height: posicao.height }} title={bloqueio.titulo}>{bloqueio.titulo}</div> })}
+            {linhas.slice(0, -1).map((minutos) => <div key={minutos} style={{ height: alturaSlot, borderBottom: '1px solid var(--line)', borderTop: minutos % 60 === 0 ? '2px solid var(--line)' : '1px dashed color-mix(in srgb, var(--line) 40%, transparent)' }} />)}
+            {bloqueios.filter((item) => !item.profissionalId || item.profissionalId === coluna.id).map((bloqueio) => { const posicao = eventoPosicao({ dataHora: bloqueio.inicio, duracaoMinutos: (new Date(bloqueio.fim).valueOf() - new Date(bloqueio.inicio).valueOf()) / 60000 }, grade, alturaSlot); return <div key={bloqueio.id} style={{ ...styles.blocked, top: posicao.top, height: posicao.height }} title={bloqueio.titulo}>{bloqueio.titulo}</div> })}
             {!trabalhaHoje && <div style={styles.offDayOverlay}>Folga do atendente<br /><small>{dataLonga(data)}</small></div>}
-            {(porColuna.get(coluna.id) || []).map((item) => { const posicao = eventoPosicao(item, grade); const status = STATUS[item.statusVisual] || STATUS[item.status] || STATUS.agendado; return <button key={item.id} type="button" onClick={() => onOpenAppointment(item)} style={{ ...styles.event, top: posicao.top, height: posicao.height, borderLeftColor: status.color, background: `${status.color}18` }} title={`${item.clienteNome || 'Cliente'} · ${item.servicoNome || 'Serviço'}`}><strong>{item.clienteNome || 'Cliente sem nome'}</strong><span>{item.servicoNome || 'Serviço não informado'}</span><small>{horaLabel(minutosDoDia(item.dataHora))} · {item.duracaoMinutos || grade.intervalo} min · {moeda(item.valor)}</small><small style={{ fontWeight: 800, color: status.color }}>{status.label}</small></button> })}
+            {(porColuna.get(coluna.id) || []).map((item) => { const posicao = eventoPosicao(item, grade, alturaSlot); const status = STATUS[item.statusVisual] || STATUS[item.status] || STATUS.agendado; return <button key={item.id} type="button" onClick={() => onOpenAppointment(item)} style={{ ...styles.event, top: posicao.top, height: posicao.height, borderLeftColor: status.color, background: `${status.color}18` }} title={`${item.clienteNome || 'Cliente'} · ${item.servicoNome || 'Serviço'}`}><strong>{item.clienteNome || 'Cliente sem nome'}</strong><span>{item.servicoNome || 'Serviço não informado'}</span><small>{horaLabel(minutosDoDia(item.dataHora))} · {item.duracaoMinutos || grade.intervalo} min · {moeda(item.valor)}</small><small style={{ fontWeight: 800, color: status.color }}>{status.label}</small></button> })}
           </div> })}
         </div>
       </div>

@@ -386,8 +386,8 @@ export async function availability(scope, input = {}) {
 
   return {
     date,
-    service: { id: servico.id, nome: servico.nome, duracaoMinutos: Number(servico.duracaoMinutos || 30), preco: Number(servico.preco || 0) },
-    professional: profissional ? { id: profissional.id, nome: profissional.nome } : { id: 'qualquer', nome: 'qualquer profissional disponível' },
+    service: { id: servico.id, nome: servico.nome, duracaoMinutos: barbearia.duracaoAtendimentoProfissional ? barbearia.duracaoAtendimentoProfissional(servico, profissional, barbearia.obterConfiguracao(empresa)) : Number(servico.duracaoMinutos || 15), preco: Number(servico.preco || 0) },
+    professional: profissional ? { id: profissional.id, nome: profissional.nome, duracaoAtendimentoMinutos: profissional.duracaoAtendimentoMinutos || null } : { id: 'qualquer', nome: 'qualquer profissional disponível' },
     slots: horarios.filter((item) => item.disponivel).map((item) => item.horario),
     tabelaValores,
   };

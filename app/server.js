@@ -1430,6 +1430,23 @@ if(process.env.COMMERCE_CORE_ENABLED === '1'){
       }
     }).catch((err) => console.warn('[a2] sync inicial empresas:', err.message));
   }
+
+  // Configuração da agenda com intervalo de 15 minutos e tempo configurável para o Dino
+  for (const empId of ['d0d0ac01-8e50-4b61-8c79-de4aaa916da6', 'emp-kytto-001', 'dino']) {
+    try {
+      const cfg = barbeariaErpKytto.obterConfiguracao(empId);
+      if (cfg && (!cfg.intervaloMinutos || cfg.intervaloMinutos === 30)) {
+        barbeariaErpKytto.atualizarConfiguracao(empId, {
+          ...cfg,
+          intervaloMinutos: 15,
+          tempoAtendimentoDinoMinutos: cfg.tempoAtendimentoDinoMinutos || 30,
+        });
+        console.log(`[agenda] Intervalo de 15 minutos e tempo Dino configurados para ${empId}`);
+      }
+    } catch (err) {
+      // Ignorar se a empresa ainda não existir no runtime
+    }
+  }
   // [kytto-permissoes] O que a pessoa pode fazer na empresa e na unidade ativas, para o menu e as telas do
   // backoffice esconderem o que ela não acessa. Só orienta a interface: cada rota continua
   // conferindo a permissão. Administração da plataforma e sessão sem empresa não filtram nada.
