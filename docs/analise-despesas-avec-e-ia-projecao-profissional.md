@@ -355,3 +355,47 @@ Ao pesquisar qualquer profissional (ex.: Naty) no painel, o sistema exibe:
 * `web/src/pages/admin/BarbeariaAgendaPeriodo.jsx`: IDs de âncora nas colunas e strip de navegação responsiva.
 * Build do frontend (`vite build`) executado com sucesso (`✓ built in 9.32s`).
 * Suíte de 61 testes automatizados executada com 100% de aprovação.
+
+
+---
+
+## 19.0 Visão Diária Multi-Cadeira Separada por Barbeiro e Matriz de Horários Simultâneos (Família / Atendimento Pai e Filho)
+
+### 19.1 Contexto e Demanda Operacional
+* **Limitação Anterior:**
+  * Na visualização de um único dia com todos os barbeiros juntos, os agendamentos eram exibidos em uma lista corrida cronológica mista. Isso dificultava discernir a carga de cada profissional, identificar cadeiras livres e remanejar clientes entre barbeiros.
+* **Necessidade de Atendimento Simultâneo Familiar:**
+  * Pais frequentemente agendam atendimentos para si e seus filhos no mesmo horário. Para tanto, a recepção precisa verificar instantaneamente quais horários possuem 2 ou mais barbeiros disponíveis ao mesmo tempo.
+
+### 19.2 Funcionalidades Desenvolvidas
+* **1. Visão Diária em Colunas Individuais por Barbeiro (Multi-Cadeira):**
+  * Ao selecionar o modo "Dia" na agenda para toda a equipe, cada profissional ativo/visível ganha sua própria coluna vertical lado a lado.
+  * Cada coluna conta com:
+    * Avatar com iniciais/foto e cor identificadora do profissional.
+    * Nome do barbeiro e badge com a quantidade exata de agendamentos no dia.
+    * Botão de ação rápida `+ Agendar` preenchendo automaticamente a data e o barbeiro selecionado.
+    * Lista cronológica de agendamentos com horário, valor, cliente, serviço, origem (ex.: WhatsApp IA) e status.
+    * Card de "Cadeira livre no dia" quando o barbeiro não possui atendimentos na data.
+    * Coluna complementar para atendimentos gerais não alocados a barbeiro específico (evitando perda de dados).
+* **2. Matriz de Horários Simultâneos (Atendimento de Pais e Filhos):**
+  * Alternador de submodo na barra superior: `💈 Colunas por Barbeiro` vs `⏱️ Horários Simultâneos (Família)`.
+  * Apresenta uma matriz com linhas por horário (`08:00`, `08:30`, `09:00`, etc.) e colunas por barbeiro.
+  * Identificação visual instantânea:
+    * `👨‍👦 X livres juntos` (destaque verde suave quando 2 ou mais cadeiras estão disponíveis simultaneamente).
+    * `🟡 1 cadeira livre` (quando apenas 1 barbeiro está vago).
+    * `⚪ Lotação máxima` (quando todos os barbeiros estão ocupados).
+    * Clique no botão `+ Livre` agenda instantaneamente no horário e com o profissional correspondente.
+    * Clique em agendamento ocupado abre detalhes para visualização ou remanejamento ágil.
+* **3. Navegação Diária Fluida e Retorno à Semana:**
+  * Botão de retorno direto `← Voltar para a Semana` (retorna imediatamente para Segunda–Sábado).
+  * Controles de data `‹`, `Hoje`, `›` com título por extenso (`diaExtenso(iso)`: ex. "Terça-feira, 27 de Outubro de 2026").
+  * Totalmente responsivo com rolagem horizontal suave em telas menores e sem quebras visuais.
+
+### 19.3 Validação e Integridade
+* `web/src/lib/barbearia-calendar.js`: Adição da função `diaExtenso(iso)`.
+* `web/src/lib/barbearia-calendar.test.js`: Testes unitários para `diaExtenso` aprovados.
+* `web/src/pages/admin/AgendaProfissionais.jsx`: Exportação de utilitários `iniciais` e `CORES_AVATAR`.
+* `web/src/pages/admin/BarbeariaAgendaPeriodo.jsx`: Implementação dos modos de coluna por barbeiro e matriz simultânea.
+* `web/src/pages/admin/BarbeariaAgendaPeriodo.css`: Estilização das colunas de barbeiro, tags de disponibilidade e matriz responsiva.
+* Build do frontend (`npm run build`) validado com sucesso.
+* Suíte de testes automatizados (`node --test`) executada com 100% de aprovação (51/51 testes).

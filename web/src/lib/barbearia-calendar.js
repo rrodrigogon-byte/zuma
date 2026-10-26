@@ -58,6 +58,18 @@ export function diaLegivel(iso) {
   return new Date(`${iso}T12:00:00Z`).toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit', timeZone: 'UTC' })
 }
 
+export function diaExtenso(iso) {
+  if (!dataValida(iso)) return ''
+  const d = new Date(`${iso}T12:00:00Z`)
+  const diaSemana = d.toLocaleDateString('pt-BR', { weekday: 'long', timeZone: 'UTC' })
+  const dia = d.getUTCDate()
+  const mes = d.toLocaleDateString('pt-BR', { month: 'long', timeZone: 'UTC' })
+  const ano = d.getUTCFullYear()
+  const capital = diaSemana.charAt(0).toUpperCase() + diaSemana.slice(1)
+  const capitalMes = mes.charAt(0).toUpperCase() + mes.slice(1)
+  return `${capital}, ${dia} de ${capitalMes} de ${ano}`
+}
+
 export function mesAnoLegivel(iso) {
   if (!dataValida(iso)) return ''
   const d = new Date(`${iso}T12:00:00Z`)

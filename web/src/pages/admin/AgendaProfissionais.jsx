@@ -9,7 +9,7 @@ export function alternarProfissional(valor, id) {
   return (ids.includes(id) ? ids.filter(i => i !== id) : [...ids, id]).join(',')
 }
 
-function iniciais(nome = '') {
+export function iniciais(nome = '') {
   return String(nome || '?')
     .trim()
     .split(/\s+/)
@@ -20,7 +20,7 @@ function iniciais(nome = '') {
 }
 
 // Cores para os avatares inspiradas no Google Calendar
-const CORES_AVATAR = [
+export const CORES_AVATAR = [
   '#1a73e8', // Azul Google
   '#E05915', // Laranja Kytto
   '#0d9488', // Teal

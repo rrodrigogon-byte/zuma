@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { hojeAgenda, diasEntre, somarDias, periodoMes, diaDoItem, horaDoItem, filtrarAgenda, inicioDaSemana, semanaSegundaSabado, semanaCompleta, mesAnoLegivel, diaSemanaCurto, diaNumero } from './barbearia-calendar.js'
+import { hojeAgenda, diasEntre, somarDias, periodoMes, diaDoItem, horaDoItem, filtrarAgenda, inicioDaSemana, semanaSegundaSabado, semanaCompleta, mesAnoLegivel, diaSemanaCurto, diaNumero, diaExtenso } from './barbearia-calendar.js'
 test('dia operacional usa Cuiabá mesmo após meia-noite UTC', () => {
   assert.equal(hojeAgenda(new Date('2026-10-06T02:30:00Z')), '2026-10-05')
   assert.equal(diaDoItem({ dataHora: '2026-10-06T02:30:00Z' }), '2026-10-05')
@@ -30,4 +30,5 @@ test('helpers de semana comercial (Segunda a Sábado) e Google Agenda', () => {
   assert.equal(mesAnoLegivel('2026-10-28'), 'Outubro de 2026')
   assert.equal(diaSemanaCurto('2026-10-26'), 'SEG')
   assert.equal(diaNumero('2026-10-26'), '26')
+  assert.equal(diaExtenso('2026-10-27'), 'Terça-feira, 27 de Outubro de 2026')
 })

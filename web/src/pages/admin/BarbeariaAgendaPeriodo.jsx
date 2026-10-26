@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '../../lib/api'
 import { lerAgenda, erroAgenda } from '../../lib/agenda-read'
-import AgendaProfissionais from './AgendaProfissionais'
+import AgendaProfissionais, { iniciais, CORES_AVATAR } from './AgendaProfissionais'
 import {
   hojeAgenda,
   somarDias,
@@ -10,6 +10,7 @@ import {
   diaDoItem,
   horaDoItem,
   diaLegivel,
+  diaExtenso,
   filtrarAgenda,
   inicioDaSemana,
   semanaSegundaSabado,
@@ -153,6 +154,108 @@ export default function BarbeariaAgendaPeriodo({
     }
     return mapa
   }, [dias, visiveis])
+
+  const [submodoDia, setSubmodoDia] = useState('colunas') // 'colunas' ou 'simultaneos'
+
+  // Barbeiros ativos a exibir na visão diária (respeita profissionalId selecionado e filtro de visíveis)
+  const barbeirosDoDia = useMemo(() => {
+    if (!barbeirosAtivos || barbeirosAtivos.length === 0) return []
+    if (profissionalId) {
+      const ids = profissionalId.split(',').map(s => s.trim())
+      return barbeirosAtivos.filter(b => ids.includes(b.id))
+    }
+    if (Array.isArray(visiveisIds) && visiveisIds.length > 0) {
+      const setVis = new Set(visiveisIds)
+      return barbeirosAtivos.filter(b => setVis.has(b.id))
+    }
+    return barbeirosAtivos
+  }, [barbeirosAtivos, profissionalId, visiveisIds])
+
+  // Agrupa os agendamentos do dia por barbeiro
+  const agendamentosPorBarbeiroNoDia = useMemo(() => {
+    const itensDoDia = porDia.get(de) || []
+    const mapa = new Map()
+    for (const b of barbeirosDoDia) {
+      mapa.set(b.id, [])
+    }
+    const semBarbeiro = []
+
+    for (const item of itensDoDia) {
+      const bId = item.profissionalId || item.profissional_id
+      if (bId && mapa.has(bId)) {
+        mapa.get(bId).push(item)
+      } else {
+        const bNome = (item.profissionalNome || item.profissional_nome || '').trim().toLowerCase()
+        const match = barbeirosDoDia.find(b => (b.nome || '').trim().toLowerCase() === bNome)
+        if (match) {
+          mapa.get(match.id).push(item)
+        } else {
+          semBarbeiro.push(item)
+        }
+      }
+    }
+
+    for (const lista of mapa.values()) {
+      lista.sort((a, b) => horaDoItem(a).localeCompare(horaDoItem(b)))
+    }
+    semBarbeiro.sort((a, b) => horaDoItem(a).localeCompare(horaDoItem(b)))
+
+    return { mapa, semBarbeiro }
+  }, [barbeirosDoDia, porDia, de])
+
+  // Matriz de horários para ver disponibilidades simultâneas (ex.: pais com filhos juntos)
+  const gradeHorariosSimultaneos = useMemo(() => {
+    const PADRAO = [
+      '08:00', '08:30', '09:00', '09:30', '10:00', '10:30',
+      '11:00', '11:30', '12:00', '12:30', '13:00', '13:30',
+      '14:00', '14:30', '15:00', '15:30', '16:00', '16:30',
+      '17:00', '17:30', '18:00', '18:30', '19:00', '19:30', '20:00'
+    ]
+    const itensDoDia = porDia.get(de) || []
+    const horasSet = new Set(PADRAO)
+    for (const item of itensDoDia) {
+      const h = horaDoItem(item)
+      if (h && /^\d{2}:\d{2}$/.test(h)) horasSet.add(h)
+    }
+    const todasHoras = Array.from(horasSet).sort()
+
+    function toMins(hhmm) {
+      if (!hhmm) return 0
+      const [h, m] = hhmm.split(':').map(Number)
+      return (h || 0) * 60 + (m || 0)
+    }
+
+    return todasHoras.map(horaSlot => {
+      const slotM = toMins(horaSlot)
+      let livresJuntosCount = 0
+      const statusPorBarbeiro = barbeirosDoDia.map(b => {
+        const ags = agendamentosPorBarbeiroNoDia.mapa.get(b.id) || []
+        const itemOcupando = ags.find(item => {
+          const h = horaDoItem(item)
+          if (h === horaSlot) return true
+          const dur = Number(item.duracao || item.duracaoMinutos || 35)
+          const iniM = toMins(h)
+          const fimM = iniM + dur
+          return slotM >= iniM && slotM < fimM
+        })
+
+        if (!itemOcupando) livresJuntosCount++
+
+        return {
+          barbeiro: b,
+          ocupado: Boolean(itemOcupando),
+          item: itemOcupando || null
+        }
+      })
+
+      return {
+        hora: horaSlot,
+        livresCount: livresJuntosCount,
+        totalBarbeiros: barbeirosDoDia.length,
+        statusPorBarbeiro
+      }
+    })
+  }, [barbeirosDoDia, agendamentosPorBarbeiroNoDia, porDia, de])
 
   // Sincroniza quando dataSelecionada muda externamente
   useEffect(() => {
@@ -653,64 +756,305 @@ export default function BarbeariaAgendaPeriodo({
 
           {/* MODO DIA */}
           {modo === 'dia' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', background: 'var(--card2)', borderRadius: 12, border: '1px solid var(--line)' }}>
-                <div>
-                  <h3 style={{ margin: 0, fontSize: 18 }}>{diaLegivel(de)}</h3>
-                  <small style={{ color: 'var(--muted)' }}>{(porDia.get(de) || []).length} atendimentos registrados para este dia</small>
-                </div>
-                <button
-                  type="button"
-                  className="dino-cal-btn-novo"
-                  onClick={() => onPickSlot ? onPickSlot({ data: de, hora: '09:00' }) : onNewAppointment?.()}
-                >
-                  + Agendar neste dia
-                </button>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12 }}>
-                {(porDia.get(de) || []).map(item => (
+            <div className="dino-cal-day-view-container">
+              {/* Barra de Controle e Submodo da Visão do Dia */}
+              <div className="dino-cal-day-header-bar">
+                <div className="dino-cal-day-header-left">
                   <button
                     type="button"
-                    key={item.id}
-                    className="dino-cal-event-card"
-                    data-status={item.status}
-                    style={{ padding: 14 }}
-                    onClick={() => onOpenAppointment?.(item)}
+                    className="dino-cal-btn-back-week"
+                    onClick={() => mudarModo('semana_util')}
+                    title="Retornar à visão semanal (Segunda a Sábado)"
                   >
-                    <div className="dino-cal-event-time" style={{ fontSize: 13 }}>
-                      <span>{horaDoItem(item)}</span>
-                      <span>{formatarMoeda(item.valor)}</span>
-                    </div>
-                    <div className="dino-cal-event-client" style={{ fontSize: 15, marginTop: 4 }}>
-                      {item.clienteNome || item.cliente_nome || 'Cliente sem nome'}
-                    </div>
-                    <div className="dino-cal-event-service" style={{ fontSize: 13, marginTop: 2 }}>
-                      {item.servicoNome || item.servico_nome || 'Serviço'}
-                    </div>
-                    <div className="dino-cal-event-footer" style={{ marginTop: 8 }}>
-                      <span className="dino-cal-event-prof-pill">💈 {item.profissionalNome || item.profissional_nome || 'Barbeiro'}</span>
-                      {item.origem === 'whatsapp_ia' && <span className="dino-cal-event-wpp-badge">🤖 WhatsApp IA</span>}
-                      <span className="dino-cal-event-status-badge">{STATUS[item.status] || item.status}</span>
-                    </div>
+                    ← Voltar para a Semana
                   </button>
-                ))}
-                {!(porDia.get(de) || []).length && (
-                  <div className="dino-cal-day-empty" style={{ padding: 48, background: 'var(--card2)', borderRadius: 12, border: '1px solid var(--line)' }}>
-                    <span className="dino-cal-day-empty-icon" style={{ fontSize: 36 }}>📅</span>
-                    <strong style={{ fontSize: 15, marginTop: 8 }}>Nenhum atendimento para {diaLegivel(de)}</strong>
-                    <p style={{ color: 'var(--muted)', fontSize: 13 }}>Clique abaixo para agendar um atendimento para este dia.</p>
+
+                  <div className="dino-cal-nav-arrows">
                     <button
                       type="button"
-                      className="dino-cal-btn-novo"
-                      style={{ marginTop: 12 }}
-                      onClick={() => onPickSlot ? onPickSlot({ data: de, hora: '09:00' }) : onNewAppointment?.()}
+                      className="dino-cal-arrow-btn"
+                      onClick={() => navegar(-1)}
+                      title="Dia anterior"
                     >
-                      + Novo agendamento
+                      ‹
+                    </button>
+                    <button
+                      type="button"
+                      className="dino-cal-today-btn"
+                      onClick={() => abrirDia(hoje)}
+                      title="Ir para hoje"
+                    >
+                      Hoje
+                    </button>
+                    <button
+                      type="button"
+                      className="dino-cal-arrow-btn"
+                      onClick={() => navegar(1)}
+                      title="Próximo dia"
+                    >
+                      ›
                     </button>
                   </div>
-                )}
+
+                  <div className="dino-cal-day-title-box">
+                    <span className="dino-cal-day-title-main">
+                      {diaExtenso(de) || diaLegivel(de)}
+                    </span>
+                    <span className="dino-cal-day-title-sub">
+                      {(porDia.get(de) || []).length} atendimentos no dia · {barbeirosDoDia.length} barbeiro{barbeirosDoDia.length === 1 ? '' : 's'} na tela
+                    </span>
+                  </div>
+                </div>
+
+                <div className="dino-cal-day-header-right">
+                  {/* Alternador de Visão Diária: Colunas por Barbeiro vs Horários Simultâneos */}
+                  <div style={{ display: 'inline-flex', gap: 4, background: 'var(--card)', padding: 3, borderRadius: 8, border: '1px solid var(--line)' }}>
+                    <button
+                      type="button"
+                      className="dino-cal-day-submode-btn"
+                      data-active={submodoDia === 'colunas'}
+                      onClick={() => setSubmodoDia('colunas')}
+                      title="Ver cada barbeiro em sua própria coluna lado a lado"
+                    >
+                      💈 Colunas por Barbeiro
+                    </button>
+                    <button
+                      type="button"
+                      className="dino-cal-day-submode-btn"
+                      data-active={submodoDia === 'simultaneos'}
+                      onClick={() => setSubmodoDia('simultaneos')}
+                      title="Ver matriz horária para identificar disponibilidades simultâneas (pais e filhos / família)"
+                    >
+                      ⏱️ Horários Simultâneos (Família)
+                    </button>
+                  </div>
+
+                  <button
+                    type="button"
+                    className="dino-cal-btn-novo"
+                    onClick={() => onPickSlot ? onPickSlot({ data: de, hora: '09:00' }) : onNewAppointment?.()}
+                  >
+                    + Novo agendamento
+                  </button>
+                </div>
               </div>
+
+              {/* 1. VISÃO EM COLUNAS SEPARADAS POR BARBEIRO */}
+              {submodoDia === 'colunas' && (
+                <div className="dino-cal-day-barbers-container">
+                  <div
+                    className="dino-cal-day-barbers-grid"
+                    style={{
+                      '--colunas-barbeiros': Math.max(1, barbeirosDoDia.length + (agendamentosPorBarbeiroNoDia.semBarbeiro.length ? 1 : 0))
+                    }}
+                  >
+                    {barbeirosDoDia.map((barbeiro, idx) => {
+                      const itensBarbeiro = agendamentosPorBarbeiroNoDia.mapa.get(barbeiro.id) || []
+                      const cor = CORES_AVATAR[idx % CORES_AVATAR.length]
+
+                      return (
+                        <div key={barbeiro.id} className="dino-cal-barber-column">
+                          {/* Cabeçalho da Coluna do Barbeiro */}
+                          <div className="dino-cal-barber-header">
+                            <div className="dino-cal-barber-profile">
+                              <span
+                                className="dino-cal-barber-avatar"
+                                style={{ backgroundColor: cor }}
+                              >
+                                {barbeiro.fotoUrl ? (
+                                  <img src={barbeiro.fotoUrl} alt={barbeiro.nome} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+                                ) : (
+                                  iniciais(barbeiro.nome)
+                                )}
+                              </span>
+                              <div className="dino-cal-barber-info">
+                                <span className="dino-cal-barber-name" title={barbeiro.nome}>
+                                  {barbeiro.apelido || barbeiro.nome}
+                                </span>
+                                <span className="dino-cal-barber-badge">
+                                  {itensBarbeiro.length} agendamento{itensBarbeiro.length === 1 ? '' : 's'}
+                                </span>
+                              </div>
+                            </div>
+
+                            <button
+                              type="button"
+                              className="dino-cal-barber-add-mini"
+                              onClick={() => onPickSlot ? onPickSlot({ data: de, hora: '10:00', profissionalId: barbeiro.id }) : onNewAppointment?.()}
+                              title={`Agendar diretamente com ${barbeiro.nome}`}
+                            >
+                              + Agendar
+                            </button>
+                          </div>
+
+                          {/* Corpo da Coluna: Agendamentos do Barbeiro */}
+                          <div className="dino-cal-barber-body">
+                            {itensBarbeiro.map(item => (
+                              <button
+                                type="button"
+                                key={item.id}
+                                className="dino-cal-event-card"
+                                data-status={item.status}
+                                onClick={() => onOpenAppointment?.(item)}
+                                title={`Clique para gerenciar ou remanejar o agendamento de ${item.clienteNome || item.cliente_nome}`}
+                              >
+                                <div className="dino-cal-event-time">
+                                  <span>{horaDoItem(item)}</span>
+                                  <span>{formatarMoeda(item.valor)}</span>
+                                </div>
+                                <div className="dino-cal-event-client">
+                                  {item.clienteNome || item.cliente_nome || 'Cliente sem nome'}
+                                </div>
+                                <div className="dino-cal-event-service">
+                                  {item.servicoNome || item.servico_nome || 'Serviço'}
+                                </div>
+                                <div className="dino-cal-event-footer">
+                                  {item.origem === 'whatsapp_ia' && (
+                                    <span className="dino-cal-event-wpp-badge">🤖 WhatsApp IA</span>
+                                  )}
+                                  <span className="dino-cal-event-status-badge">
+                                    {STATUS[item.status] || item.status}
+                                  </span>
+                                </div>
+                              </button>
+                            ))}
+
+                            {itensBarbeiro.length === 0 && (
+                              <div className="dino-cal-barber-empty">
+                                <span style={{ fontSize: 28 }}>💈</span>
+                                <strong>Cadeira livre no dia</strong>
+                                <p style={{ margin: 0 }}>Nenhum atendimento marcado para {barbeiro.nome} nesta data.</p>
+                                <button
+                                  type="button"
+                                  className="dino-cal-free-slot-btn"
+                                  style={{ marginTop: 8 }}
+                                  onClick={() => onPickSlot ? onPickSlot({ data: de, hora: '09:00', profissionalId: barbeiro.id }) : onNewAppointment?.()}
+                                >
+                                  + Agendar horário
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    })}
+
+                    {/* Coluna de Atendimentos Sem Barbeiro Especificado (se houver) */}
+                    {agendamentosPorBarbeiroNoDia.semBarbeiro.length > 0 && (
+                      <div className="dino-cal-barber-column" style={{ borderColor: '#f59e0b' }}>
+                        <div className="dino-cal-barber-header" style={{ background: 'color-mix(in srgb, #f59e0b 12%, var(--card))' }}>
+                          <div className="dino-cal-barber-profile">
+                            <span className="dino-cal-barber-avatar" style={{ backgroundColor: '#f59e0b' }}>
+                              ✂️
+                            </span>
+                            <div className="dino-cal-barber-info">
+                              <span className="dino-cal-barber-name">Geral / Sem Barbeiro</span>
+                              <span className="dino-cal-barber-badge">
+                                {agendamentosPorBarbeiroNoDia.semBarbeiro.length} para alocar
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="dino-cal-barber-body">
+                          {agendamentosPorBarbeiroNoDia.semBarbeiro.map(item => (
+                            <button
+                              type="button"
+                              key={item.id}
+                              className="dino-cal-event-card"
+                              data-status={item.status}
+                              onClick={() => onOpenAppointment?.(item)}
+                              title="Clique para designar um barbeiro ou remanejar"
+                            >
+                              <div className="dino-cal-event-time">
+                                <span>{horaDoItem(item)}</span>
+                                <span>{formatarMoeda(item.valor)}</span>
+                              </div>
+                              <div className="dino-cal-event-client">
+                                {item.clienteNome || item.cliente_nome || 'Cliente sem nome'}
+                              </div>
+                              <div className="dino-cal-event-service">
+                                {item.servicoNome || item.servico_nome || 'Serviço'}
+                              </div>
+                              <div className="dino-cal-event-footer">
+                                <span className="dino-cal-event-status-badge">
+                                  {STATUS[item.status] || item.status}
+                                </span>
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* 2. VISÃO EM MATRIZ DE HORÁRIOS SIMULTÂNEOS (FAMÍLIA / PAIS E FILHOS) */}
+              {submodoDia === 'simultaneos' && (
+                <div className="dino-cal-simultaneous-container">
+                  <table className="dino-cal-simultaneous-table">
+                    <thead>
+                      <tr>
+                        <th style={{ width: 80, textAlign: 'center' }}>Horário</th>
+                        <th style={{ width: 170 }}>Disponibilidade</th>
+                        {barbeirosDoDia.map(b => (
+                          <th key={b.id} style={{ minWidth: 160 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                              <span style={{ fontSize: 13 }}>💈</span>
+                              <span>{b.apelido || b.nome}</span>
+                            </div>
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {gradeHorariosSimultaneos.map(linha => {
+                        const nivel = linha.livresCount >= 2 ? 'high' : linha.livresCount === 1 ? 'medium' : 'low'
+                        return (
+                          <tr key={linha.hora}>
+                            <td className="dino-cal-slot-time-cell">{linha.hora}</td>
+                            <td className="dino-cal-slot-avail-cell">
+                              <span className="dino-cal-avail-tag" data-level={nivel}>
+                                {linha.livresCount >= 2 && `👨‍👦 ${linha.livresCount} livres juntos`}
+                                {linha.livresCount === 1 && `🟡 1 cadeira livre`}
+                                {linha.livresCount === 0 && `⚪ Lotação máxima`}
+                              </span>
+                            </td>
+                            {linha.statusPorBarbeiro.map(stat => (
+                              <td key={stat.barbeiro.id}>
+                                {stat.ocupado && stat.item ? (
+                                  <button
+                                    type="button"
+                                    className="dino-cal-slot-busy-pill"
+                                    onClick={() => onOpenAppointment?.(stat.item)}
+                                    title={`Ocupado: ${stat.item.clienteNome || stat.item.cliente_nome} - ${stat.item.servicoNome || stat.item.servico_nome} (Clique para detalhes ou remanejamento)`}
+                                  >
+                                    <span className="dino-cal-slot-busy-pill-name">
+                                      👤 {stat.item.clienteNome || stat.item.cliente_nome || 'Cliente'}
+                                    </span>
+                                    <span className="dino-cal-slot-busy-pill-srv">
+                                      {stat.item.servicoNome || stat.item.servico_nome || 'Serviço'} · {horaDoItem(stat.item)}
+                                    </span>
+                                  </button>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    className="dino-cal-free-slot-btn"
+                                    onClick={() => onPickSlot ? onPickSlot({ data: de, hora: linha.hora, profissionalId: stat.barbeiro.id }) : onNewAppointment?.()}
+                                    title={`Livre às ${linha.hora} para ${stat.barbeiro.nome}. Clique para agendar!`}
+                                  >
+                                    + Livre
+                                  </button>
+                                )}
+                              </td>
+                            ))}
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           )}
 

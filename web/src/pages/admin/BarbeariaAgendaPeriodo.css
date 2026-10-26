@@ -1254,3 +1254,371 @@
     max-height: calc(100vh - 250px);
   }
 }
+
+/* ==========================================================================
+   6. VISÃO DO DIA: SEPARADO POR BARBEIRO & HORÁRIOS SIMULTÂNEOS (PAIS E FILHOS)
+   ========================================================================== */
+.dino-cal-day-view-container {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+}
+
+.dino-cal-day-header-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  background: var(--card2);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+.dino-cal-day-header-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.dino-cal-btn-back-week {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  color: var(--text);
+  font-weight: 700;
+  font-size: 12.5px;
+  padding: 6px 14px;
+  border-radius: 20px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.dino-cal-btn-back-week:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.dino-cal-day-title-box {
+  display: flex;
+  flex-direction: column;
+}
+
+.dino-cal-day-title-main {
+  font-size: 17px;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.dino-cal-day-title-sub {
+  font-size: 11.5px;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.dino-cal-day-header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.dino-cal-day-submode-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  color: var(--muted);
+  font-weight: 700;
+  font-size: 12px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.dino-cal-day-submode-btn[data-active="true"] {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+
+/* Colunas por Barbeiro */
+.dino-cal-day-barbers-container {
+  width: 100%;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  padding-bottom: 8px;
+}
+
+.dino-cal-day-barbers-grid {
+  display: grid;
+  grid-template-columns: repeat(var(--colunas-barbeiros, 4), minmax(230px, 1fr));
+  gap: 12px;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.dino-cal-barber-column {
+  display: flex;
+  flex-direction: column;
+  background: var(--card2);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+  transition: all 0.15s ease;
+  min-width: 0;
+}
+
+.dino-cal-barber-column:hover {
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--line));
+}
+
+.dino-cal-barber-header {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--card);
+  border-bottom: 1px solid var(--line);
+  border-top-left-radius: 11px;
+  border-top-right-radius: 11px;
+}
+
+.dino-cal-barber-profile {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.dino-cal-barber-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+
+.dino-cal-barber-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.dino-cal-barber-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dino-cal-barber-badge {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.dino-cal-barber-add-mini {
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 7px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.dino-cal-barber-add-mini:hover {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+
+.dino-cal-barber-body {
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+  max-height: calc(100vh - 240px);
+  min-height: 360px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.dino-cal-barber-empty {
+  padding: 30px 14px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+/* Matriz de Horários Simultâneos (Família e Horários Livres Juntos) */
+.dino-cal-simultaneous-container {
+  width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--card);
+  scrollbar-width: thin;
+  max-height: calc(100vh - 240px);
+}
+
+.dino-cal-simultaneous-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 800px;
+}
+
+.dino-cal-simultaneous-table th {
+  background: var(--card2);
+  border-bottom: 2px solid var(--line);
+  border-right: 1px solid var(--line);
+  padding: 10px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+  text-align: left;
+  position: sticky;
+  top: 0;
+  z-index: 4;
+}
+
+.dino-cal-simultaneous-table td {
+  border-bottom: 1px solid var(--line);
+  border-right: 1px solid var(--line);
+  padding: 6px 10px;
+  vertical-align: middle;
+}
+
+.dino-cal-slot-time-cell {
+  font-size: 12.5px;
+  font-weight: 800;
+  color: var(--text);
+  white-space: nowrap;
+  background: var(--card2);
+  width: 70px;
+  text-align: center;
+  position: sticky;
+  left: 0;
+  z-index: 2;
+}
+
+.dino-cal-slot-avail-cell {
+  width: 160px;
+  white-space: nowrap;
+}
+
+.dino-cal-avail-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.dino-cal-avail-tag[data-level="high"] {
+  background: #dcfce7;
+  color: #15803d;
+  border: 1px solid #86efac;
+}
+
+.dino-cal-avail-tag[data-level="medium"] {
+  background: #fef9c3;
+  color: #a16207;
+  border: 1px solid #fde047;
+}
+
+.dino-cal-avail-tag[data-level="low"] {
+  background: #f1f5f9;
+  color: #64748b;
+  border: 1px solid #cbd5e1;
+}
+
+.dino-cal-free-slot-btn {
+  width: 100%;
+  background: rgba(16, 185, 129, 0.05);
+  border: 1px dashed rgba(16, 185, 129, 0.4);
+  color: #059669;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 6px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+.dino-cal-free-slot-btn:hover {
+  background: rgba(16, 185, 129, 0.15);
+  border-color: #059669;
+}
+
+.dino-cal-slot-busy-pill {
+  width: 100%;
+  background: var(--card2);
+  border: 1px solid var(--line);
+  border-left: 3.5px solid #2563eb;
+  border-radius: 6px;
+  padding: 5px 8px;
+  text-align: left;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  transition: all 0.15s ease;
+  font: inherit;
+}
+
+.dino-cal-slot-busy-pill:hover {
+  border-color: var(--accent);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+
+.dino-cal-slot-busy-pill-name {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #0f172a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dino-cal-slot-busy-pill-srv {
+  font-size: 10px;
+  color: #64748b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
