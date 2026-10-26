@@ -422,17 +422,20 @@
    4. GRADE PRINCIPAL DA SEMANA (ESTILO GOOGLE AGENDAR - 6 OU 7 COLUNAS)
    ========================================================================== */
 .dino-cal-week-container {
+  width: 100%;
+  box-sizing: border-box;
   overflow-x: auto;
-  padding-bottom: 6px;
+  scrollbar-width: thin;
+  padding-bottom: 4px;
 }
-
 .dino-cal-week-grid {
   display: grid;
-  grid-template-columns: repeat(var(--colunas-semana, 6), minmax(160px, 1fr));
-  gap: 10px;
-  min-width: 980px;
+  grid-template-columns: repeat(var(--colunas-semana, 6), minmax(0, 1fr));
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
 }
-
 .dino-cal-day-column {
   display: flex;
   flex-direction: column;
@@ -441,8 +444,8 @@
   border-radius: 12px;
   overflow: hidden;
   transition: all 0.15s ease;
+  min-width: 0;
 }
-
 .dino-cal-day-column[data-today="true"] {
   border-color: color-mix(in srgb, #1a73e8 40%, var(--line));
   background: color-mix(in srgb, #1a73e8 3%, var(--card2));
@@ -452,12 +455,15 @@
   box-shadow: 0 0 0 2px var(--accent);
 }
 
-/* Cabeçalho do Dia (SEG 26) */
+/* Cabeçalho do Dia (SEG 26) - Sticky */
 .dino-cal-day-header {
+  position: sticky;
+  top: 0;
+  z-index: 4;
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 10px 8px 8px;
+  padding: 8px 4px 6px;
   background: var(--card);
   border-bottom: 1px solid var(--line);
   cursor: pointer;
@@ -504,14 +510,17 @@
   margin-top: 3px;
 }
 
-/* Corpo da Coluna: Lista de Atendimentos */
+/* Corpo da Coluna: Lista de Atendimentos com Rolagem Suave Interna */
 .dino-cal-day-body {
-  padding: 8px;
+  padding: 6px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
   flex: 1;
-  min-height: 280px;
+  max-height: calc(100vh - 215px);
+  min-height: 380px;
+  overflow-y: auto;
+  scrollbar-width: thin;
 }
 
 /* ==========================================================================
@@ -1150,4 +1159,98 @@
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: #64748b;
+}
+
+/* Seletor rápido de dias em tela compacta / split screen */
+.dino-cal-mobile-days-strip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow-x: auto;
+  padding: 2px 2px 6px;
+  scrollbar-width: thin;
+}
+
+.dino-cal-mobile-day-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--card2);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text);
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: all 0.15s ease;
+}
+
+.dino-cal-mobile-day-pill:hover {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, var(--card2));
+}
+
+.dino-cal-mobile-day-pill[data-today="true"] {
+  border-color: #1a73e8;
+  color: #1a73e8;
+  background: rgba(26, 115, 232, 0.08);
+}
+
+.dino-cal-mobile-day-name {
+  font-size: 10.5px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.dino-cal-mobile-day-num {
+  font-size: 11.5px;
+  font-weight: 800;
+}
+
+.dino-cal-mobile-day-count {
+  font-size: 9.5px;
+  font-weight: 700;
+  background: var(--card);
+  padding: 1px 5px;
+  border-radius: 10px;
+  color: var(--muted);
+}
+
+/* Regras de Adaptação Automática por Largura de Tela */
+@media (min-width: 1025px) {
+  .dino-cal-mobile-days-strip {
+    display: none;
+  }
+}
+
+@media (max-width: 1024px) {
+  .dino-cal-week-container {
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+  }
+  .dino-cal-week-grid {
+    grid-template-columns: repeat(var(--colunas-semana, 6), minmax(170px, 1fr));
+    min-width: calc(6 * 170px + 5 * 8px);
+  }
+  .dino-cal-day-column {
+    scroll-snap-align: start;
+  }
+}
+
+@media (max-width: 640px) {
+  .dino-cal {
+    padding: 8px;
+    gap: 8px;
+  }
+  .dino-cal-week-grid {
+    grid-template-columns: repeat(var(--colunas-semana, 6), minmax(82vw, 1fr));
+    min-width: calc(6 * 82vw + 5 * 8px);
+  }
+  .dino-cal-day-body {
+    max-height: calc(100vh - 250px);
+  }
 }

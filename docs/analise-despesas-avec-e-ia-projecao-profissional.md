@@ -327,3 +327,31 @@ Ao pesquisar qualquer profissional (ex.: Naty) no painel, o sistema exibe:
 * `web/src/pages/admin/BarbeariaAgendaPeriodo.css`: Estilização dos cards, animação de entrada do popover e layout responsivo.
 * Build do frontend (`vite build`) executado com sucesso sem erros (`✓ built in 9.35s`).
 * Suíte de 61 testes automatizados do sistema executada com 100% de aprovação.
+
+---
+## 18.0 Adequação Automática da Agenda: Eliminação de Cortes de Dias (Sábado), Cabeçalho Fixo e Responsividade Inteligente
+### 18.1 Diagnóstico do Problema Visual
+* **Corte da Coluna de Sábado no Desktop:**
+  * O CSS anterior da grade (`.dino-cal-week-grid`) utilizava `min-width: 980px` com `minmax(160px, 1fr)` fixo. Em notebooks com resolução padrão (1366px ou 1280px) ou quando janelas do navegador não estavam maximizadas, a sexta coluna (Sábado) ultrapassava a margem da tela e ficava cortada horizontalmente.
+* **Corte/Rolagem do Cabeçalho Superior:**
+  * As colunas de atendimento expandiam-se verticalmente sem limite, fazendo com que a rolagem da página escondesse o cabeçalho superior (`Hoje`, `< >`, mês e filtros), obrigando o usuário a rolar até o topo para mudar de data.
+* **Comportamento em Janelas Divididas (Split-Screen / Telas Estreitas):**
+  * Quando a janela era redimensionada para meia tela, a grade quebrava e exibia apenas a primeira coluna, sem navegação rápida entre os outros dias.
+
+### 18.2 Solução Implementada
+* **1. Adaptação Fluida 100% Automática da Grade (Sem Cortes):**
+  * A grade foi ajustada para `grid-template-columns: repeat(var(--colunas-semana, 6), minmax(0, 1fr))` com `min-width: 0` e `width: 100%`.
+  * Todas as 6 colunas comerciais (Segunda a Sábado) se adaptam automaticamente ao espaço disponível, garantindo que o Sábado e todos os dias permaneçam 100% visíveis em qualquer tela de desktop ou notebook.
+* **2. Cabeçalho do Dia Sticky e Rolagem Interna dos Atendimentos:**
+  * O cabeçalho de cada dia (`SEG 26`, `TER 27`, etc.) passa a ter posicionamento `sticky: top: 0; z-index: 4;`.
+  * O corpo da coluna (`.dino-cal-day-body`) recebeu `max-height: calc(100vh - 215px)` com rolagem interna suave (`overflow-y: auto`).
+  * Com isso, o cabeçalho superior (`Hoje`, controles de mês, busca e barra de barbeiros) **nunca mais é cortado ou empurrado para fora da tela**.
+* **3. Faixa de Navegação Rápida para Telas Compactas / Split-View:**
+  * Em telas menores ou janelas divididas (`<= 1024px`), uma faixa horizontal elegante com pílulas para cada dia (`SEG 26`, `TER 27`, ..., `SÁB 31`) exibe a contagem de atendimentos e, com um toque ou clique, desliza suavemente até o dia selecionado (`scrollIntoView`).
+  * Em telas convencionais (`> 1024px`), a faixa oculta-se automaticamente, mantendo a tela ampla e limpa.
+
+### 18.3 Validação e Integridade
+* `web/src/pages/admin/BarbeariaAgendaPeriodo.css`: Grade fluida sem cortes, cabeçalho sticky, rolagem interna dos atendimentos e media queries responsivas.
+* `web/src/pages/admin/BarbeariaAgendaPeriodo.jsx`: IDs de âncora nas colunas e strip de navegação responsiva.
+* Build do frontend (`vite build`) executado com sucesso (`✓ built in 9.32s`).
+* Suíte de 61 testes automatizados executada com 100% de aprovação.

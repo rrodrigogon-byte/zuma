@@ -488,6 +488,38 @@ export default function BarbeariaAgendaPeriodo({
       {/* 4. GRADE PRINCIPAL DO CALENDÁRIO */}
       {!carregando && !erro && (
         <>
+          {/* Seletor rápido de dias para telas compactas / split view */}
+          {(modo === 'semana_util' || modo === 'semana') && (
+            <div className="dino-cal-mobile-days-strip">
+              {dias.map(d => {
+                const itensCount = (porDia.get(d) || []).length
+                const dt = new Date(`${d}T12:00:00Z`)
+                const label = WEEK_NAMES[dt.getUTCDay()] || diaSemanaCurto(d)
+                const num = diaNumero(d)
+                const isToday = d === hoje
+                const isSelected = foco === d
+                return (
+                  <button
+                    key={d}
+                    type="button"
+                    className="dino-cal-mobile-day-pill"
+                    data-today={isToday}
+                    data-selected={isSelected}
+                    onClick={() => {
+                      const colEl = document.getElementById(`col-dia-${d}`)
+                      if (colEl) colEl.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' })
+                    }}
+                    title={`Ver atendimentos de ${label} ${num}`}
+                  >
+                    <span className="dino-cal-mobile-day-name">{label}</span>
+                    <span className="dino-cal-mobile-day-num">{num}</span>
+                    <span className="dino-cal-mobile-day-count">{itensCount}</span>
+                  </button>
+                )
+              })}
+            </div>
+          )}
+
           {/* MODO SEMANA (SEG–SÁB OU SEG–DOM) */}
           {(modo === 'semana_util' || modo === 'semana') && (
             <div className="dino-cal-week-container">
@@ -506,6 +538,7 @@ export default function BarbeariaAgendaPeriodo({
                   return (
                     <div
                       key={dia}
+                      id={`col-dia-${dia}`}
                       className="dino-cal-day-column"
                       data-today={eHoje}
                       data-selected={selecionado}
