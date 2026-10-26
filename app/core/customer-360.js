@@ -311,9 +311,12 @@ export function buildCustomer360(identity, { local = {}, commerce = {}, now = ne
 
   const doneVisits = appointments.filter((item) => item.status === 'concluido');
   const upcoming = appointments.filter((item) => !['cancelado', 'concluido', 'nao_compareceu', 'faltou'].includes(item.status) && time(item.dataHora) >= nowMs);
+  const historicalAppointments = local.historicalAppointments || [];
   const noShows = appointments.filter((item) => ['nao_compareceu', 'faltou', 'ausente'].includes(item.status)).length;
+  const historicalRevenue = historicalAppointments.reduce((sum, item) => sum + Number(item.valor || 0), 0);
   const barberRevenue = comandas.filter((item) => item.status === 'paga').reduce((sum, item) => sum + Number(item.totalPago || item.total || 0), 0)
-    + retail.filter((item) => item.status === 'pago').reduce((sum, item) => sum + Number(item.total || 0), 0);
+    + retail.filter((item) => item.status === 'pago').reduce((sum, item) => sum + Number(item.total || 0), 0)
+    + historicalRevenue;
   const paidOrders = orders.filter((item) => PAID_ORDER.has(item.status));
   const storeRevenue = paidOrders.reduce((sum, item) => sum + Number(item.total || 0), 0);
   const openReceivables = receivables.filter((item) => item.status !== 'paga');
@@ -328,19 +331,20 @@ export function buildCustomer360(identity, { local = {}, commerce = {}, now = ne
     ...appointments.map((item) => item.dataHora), ...comandas.map((item) => item.atualizadoEm || item.criadoEm),
     ...retail.map((item) => item.criadoEm), ...orders.map((item) => item.criado_em),
     ...(commerce.whatsapp?.items || []).map((item) => item.ultima_interacao_em),
+    ...historicalAppointments.map((item) => item.dataAgenda),
   ].map(time).filter((ms) => ms && ms <= nowMs + 86400000);
   const lastActivity = activityDates.length ? Math.max(...activityDates) : 0;
   const firstActivity = activityDates.length ? Math.min(...activityDates) : 0;
-  const lastVisit = doneVisits.length ? time(doneVisits[0].dataHora) : 0;
-  const visitTimes = doneVisits.map((item) => time(item.dataHora)).filter(Boolean).sort((a, b) => a - b);
+  const visitTimes = [...doneVisits.map((item) => time(item.dataHora)), ...historicalAppointments.map((item) => time(item.dataAgenda))].filter(Boolean).sort((a, b) => a - b);
+  const lastVisit = visitTimes.length ? visitTimes[visitTimes.length - 1] : 0;
   const visitGaps = visitTimes.slice(1).map((ms, index) => ms - visitTimes[index]);
   const averageReturnDays = visitGaps.length ? Math.round(visitGaps.reduce((a, b) => a + b, 0) / visitGaps.length / 86400000) : null;
   const daysSinceLast = lastActivity ? Math.max(0, Math.floor((nowMs - lastActivity) / 86400000)) : null; // agendamento de hoje ainda por vir conta como "hoje", não "há -1 dias"
 
   const lifetimeValue = money(barberRevenue + storeRevenue);
-  const totalTickets = comandas.filter((item) => item.status === 'paga').length + retail.filter((item) => item.status === 'pago').length + paidOrders.length;
+  const totalTickets = comandas.filter((item) => item.status === 'paga').length + retail.filter((item) => item.status === 'pago').length + paidOrders.length + historicalAppointments.length;
   // visitas concluídas também contam como relacionamento (comanda nem sempre é aberta para o atendimento)
-  const engagements = Math.max(totalTickets, doneVisits.length + paidOrders.length)
+  const engagements = Math.max(totalTickets, doneVisits.length + paidOrders.length + historicalAppointments.length);
   const segment = customerSegment({ lastActivityMs: lastActivity, lifetimeValue, engagements, nowMs });
   const identityRef = String(identity.ref || '');
   const assistant = buildDinoCustomerAssistant({
@@ -379,6 +383,7 @@ export function buildCustomer360(identity, { local = {}, commerce = {}, now = ne
     ...(commerce.whatsapp?.items || []).map((item) => ({ tipo: 'whatsapp', em: item.ultima_interacao_em, titulo: 'Conversa no WhatsApp', detalhe: `${item.status} · ${Number(item.mensagens || 0)} mensagens`, valor: null })),
     ...(commerce.campaigns?.items || []).map((item) => ({ tipo: 'campanha', em: item.enviado_em || item.criado_em, titulo: item.campanha_nome || 'Campanha WhatsApp', detalhe: item.status, valor: item.receita_atribuida ? money(item.receita_atribuida) : null })),
     ...loyaltyMoves.map((item) => ({ tipo: 'pontos', em: item.criadoEm, titulo: `+${item.pontos} pontos`, detalhe: item.origem, valor: null })),
+    ...historicalAppointments.map((item) => ({ tipo: 'historico_legado', em: item.dataAgenda, titulo: item.servicoNome || 'Serviço Histórico', detalhe: [item.profissionalNome, 'AVEC'].filter(Boolean).join(' · '), valor: money(item.valor) })),
   ].filter((item) => time(item.em)).sort((a, b) => time(b.em) - time(a.em)).slice(0, 60);
 
   const sourceStatus = (name, facet) => ({ fonte: name, disponivel: !facet?.unavailable, motivo: facet?.unavailable ? (facet.reason || 'indisponível') : null });
@@ -397,7 +402,7 @@ export function buildCustomer360(identity, { local = {}, commerce = {}, now = ne
       receitaBarbearia: money(barberRevenue),
       receitaLoja: money(storeRevenue),
       ticketMedio: totalTickets ? money(lifetimeValue / totalTickets) : 0,
-      visitas: doneVisits.length,
+      visitas: doneVisits.length + historicalAppointments.length,
       faltas: noShows,
       pedidos: orders.length,
       pedidosPagos: paidOrders.length,

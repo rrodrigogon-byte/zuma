@@ -191,6 +191,37 @@ export function registerCustomer360Routes(app, deps) {
     const data = localData(req, { includeHistorical: Boolean(singleLocalId), customerId: singleLocalId });
     const localIds = new Set(identity.local.map((item) => String(item.id)));
     const phones = new Set(identity.phones);
+    
+    // Injeta histórico do Avec se a base JSON estiver vazia para esse cliente
+    if (!data.historicalAppointments.length) {
+      try {
+        const { carregarBaseConsolidada } = await import('./dino-recuperacao-avec.js');
+        const base = await carregarBaseConsolidada();
+        const qTel = identity.phones[0] ? identity.phones[0].slice(-8) : '';
+        const qNome = identity.names?.[0] ? identity.names[0] : (identity.local[0]?.nome || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+        const cli = base.find((c) => {
+          if (singleLocalId && (c.key === singleLocalId || c.key.includes(singleLocalId))) return true;
+          if (qTel && c.telefone && c.telefone.includes(qTel)) return true;
+          if (qNome && c.nome && c.nome.toLowerCase().includes(qNome)) return true;
+          return false;
+        });
+        if (cli && cli.historicoItens?.length) {
+          data.historicalAppointments = cli.historicoItens.map((h, i) => ({
+            id: `avec-${cli.key}-${i}`,
+            clienteId: singleLocalId || '',
+            clienteTelefone: cli.telefone,
+            clienteNome: cli.nome,
+            dataAgenda: h.data,
+            hora: h.hora || '10:00',
+            servicoNome: h.servico,
+            profissionalNome: h.profissional,
+            valor: h.total,
+            comandaId: h.comanda,
+            origem: 'avec',
+          }));
+        }
+      } catch (e) { console.error('Erro ao injetar histórico Avec no C360:', e); }
+    }
     const belongs = (item) => (item.clienteId && localIds.has(String(item.clienteId))) || (!item.clienteId && item.clienteTelefone && phones.has(normalizePhone(item.clienteTelefone)));
     const member = data.fidelidade.membros.find((item) => localIds.has(String(item.clienteId))) || data.fidelidade.membros.find((item) => item.telefone && phones.has(normalizePhone(item.telefone))) || null;
     const planos = barbeariaErpKytto.listarPlanos(empresaId, { incluirInativos: true });
@@ -233,6 +264,7 @@ export function registerCustomer360Routes(app, deps) {
         produtos: loaded.local.products,
         planosAtivos: barbeariaErpKytto.listarPlanos(empresaId, {}),
         coberturas,
+        historicoAvec: loaded.local.historicalAppointments || [],
         perfil360: profile,
         maskPhone,
       });

@@ -541,3 +541,8 @@ A gestão estratégica identificou uma perda de clientes após os reajustes de p
      - **Relação Cronológica Completa:** Tabela com todas as visitas históricas registradas tanto no Avec quanto no Kytto ERP.
 2. **Resolução de Identidade por Múltiplos Campos (`app/server.js`):**
    - A rota `/api/admin/barbearia/historico` agora localiza o cliente por `clienteId`, `telefone` ou `nome`, garantindo que cadastros migrados ou sem ID estático recebam imediatamente todo o histórico histórico de atendimentos sem necessidade de intervenção manual.
+
+### 24.5 Inteligência de Consumo 360 Unificada (Avec + Novo ERP)
+- O **Customer 360** foi refatorado para absorver dinamicamente o histórico de 22.485 serviços do Avec dentro do motor central do CRM (`customer-360.js`).
+- Os indicadores primários exibidos na ficha de cada cliente (**Total Consumido, Ticket Médio, Receita na Barbearia e Visitas Concluídas**) agora representam a somatória do legado Avec com as novas transações (Comandas Kytto, Balcão e Loja Online).
+- O motor `cliente-historico-kytto.js` injeta o passado diretamente nas linhas de consumo globais. Com isso, os módulos analíticos da ficha (como o gráfico de **Consumo mês a mês** nos últimos 12 meses e a tabela **Mais Consumidos**) operam sem distinção de fronteiras sistêmicas, consolidando 100% da vida útil do cliente.

@@ -58,7 +58,7 @@ function chaveItem(item) {
 }
 
 /** Linhas de consumo do cliente: comandas faturadas e vendas de balcão pagas. */
-export function linhasDeConsumo({ comandas = [], vendas = [], profissionais = [] } = {}) {
+export function linhasDeConsumo({ comandas = [], vendas = [], profissionais = [], historicoAvec = [] } = {}) {
   const nomeProf = new Map(profissionais.map((p) => [String(p.id), p.nome]));
   const linhas = [];
   for (const comanda of comandas) {
@@ -83,6 +83,12 @@ export function linhasDeConsumo({ comandas = [], vendas = [], profissionais = []
         abatidoPlano: 0, plano: '', profissional: nomeProf.get(String(venda.profissionalId || '')) || '',
       });
     }
+  }
+  for (const h of historicoAvec) {
+    linhas.push({
+      em: h.dataAgenda || '', origem: 'comanda', origemId: h.id || 'avec', tipo: 'servico', chave: `servico:${h.servicoNome || 'Serviço'}`, nome: h.servicoNome || 'Serviço',
+      quantidade: 1, valor: dinheiro(h.valor), abatidoPlano: 0, plano: '', profissional: h.profissionalNome || '',
+    });
   }
   return linhas.sort((a, b) => String(b.em).localeCompare(String(a.em)));
 }
@@ -177,10 +183,10 @@ const quandoDias = (dias) => (dias === 0 ? 'hoje' : dias === 1 ? 'amanhã' : `em
  */
 export function montarHistoricoCliente({
   cliente = null, comandas = [], vendas = [], comandasEmpresa = [], profissionais = [], produtos = [], planosAtivos = [],
-  coberturas = [], perfil360 = {}, agora = new Date(), fuso = FUSO_PADRAO, maskPhone = (v) => v,
+  coberturas = [], historicoAvec = [], perfil360 = {}, agora = new Date(), fuso = FUSO_PADRAO, maskPhone = (v) => v,
 } = {}) {
   const hoje = diaLocal(agora, fuso);
-  const linhas = linhasDeConsumo({ comandas, vendas, profissionais });
+  const linhas = linhasDeConsumo({ comandas, vendas, profissionais, historicoAvec });
   const consumo = resumoConsumo(linhas, { hoje, fuso, comandasAbertas: comandas.filter((c) => !FATURADAS.has(c.status) && c.status !== 'cancelada').length });
   const familia = cliente ? familiaParaFicha(cliente, hoje, maskPhone) : [];
   const preferencias = cliente ? preferenciasParaFicha(cliente, profissionais) : null;
