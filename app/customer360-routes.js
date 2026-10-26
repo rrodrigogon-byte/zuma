@@ -216,27 +216,63 @@ export function registerCustomer360Routes(app, deps) {
     } catch (error) { return sendError(res, error, 'Não foi possível buscar clientes.'); }
   });
 
+  // Cache em memória de alta performance para a carteira (TTL 45s)
+  const portfolioCache = new Map();
+  function invalidatePortfolioCache(empresaId) {
+    if (!empresaId) {
+      portfolioCache.clear();
+      return;
+    }
+    const prefix = `${String(empresaId)}:`;
+    for (const key of portfolioCache.keys()) {
+      if (key.startsWith(prefix) || key === String(empresaId)) {
+        portfolioCache.delete(key);
+      }
+    }
+  }
+
   // ─────────────── carteira ───────────────
   app.get(`${BASE}/carteira`, async (req, res) => {
     try {
-      const { context, commerceCustomers, commerceStatus, locals, rules } = await sourcesFor(req, { limit: 5000 });
-      const data = localData(req);
-      const localMetrics = localMetricsByClient({ clients: locals, appointments: data.appointments, comandas: data.comandas, retailSales: data.retailSales, receivables: data.receivables, loyaltyMembers: data.fidelidade.membros });
-      const commerceMetrics = context ? await loadCommercePortfolioMetrics(context) : undefined;
-      const directory = mergeCustomerDirectory({ localClients: locals, commerceCustomers, ...rules });
-      const tagsByRef = customerStore.tagsByRef(legacyEmpresaId(req));
-      const rows = buildPortfolio(directory, { localMetrics, commerceMetrics, tagsByRef });
-      const active = rows.filter((row) => !row.anonimizado);
+      const empresaId = String(legacyEmpresaId(req) || '');
+      const lojaId = String(legacyLojaId(req) || '');
+      const cacheKey = `${empresaId}:${lojaId}`;
+      const forceRefresh = req.query?.refresh === '1' || req.query?.force === '1';
+      const now = Date.now();
+      const TTL = 45000;
+
+      let cached = forceRefresh ? null : portfolioCache.get(cacheKey);
+      if (!cached || (now - cached.timestamp > TTL)) {
+        const { context, commerceCustomers, commerceStatus, locals, rules } = await sourcesFor(req, { limit: 5000 });
+        const data = localData(req);
+        const localMetrics = localMetricsByClient({ clients: locals, appointments: data.appointments, comandas: data.comandas, retailSales: data.retailSales, receivables: data.receivables, loyaltyMembers: data.fidelidade.membros });
+        const commerceMetrics = context ? await loadCommercePortfolioMetrics(context) : undefined;
+        const directory = mergeCustomerDirectory({ localClients: locals, commerceCustomers, ...rules });
+        const tagsByRef = customerStore.tagsByRef(legacyEmpresaId(req));
+        const rows = buildPortfolio(directory, { localMetrics, commerceMetrics, tagsByRef });
+        const active = rows.filter((row) => !row.anonimizado);
+        const resumo = summarizePortfolio(active);
+        const etiquetas = customerStore.allTags(legacyEmpresaId(req));
+        const metricsStatus = commerceMetrics
+          ? ['orders', 'carts', 'credit'].filter((key) => commerceMetrics[key].unavailable).map((key) => ({ fonte: key, motivo: commerceMetrics[key].reason }))
+          : [];
+        cached = {
+          active,
+          resumo,
+          etiquetas,
+          fontes: { barbearia: { disponivel: true }, loja: commerceStatus, metricasIndisponiveis: metricsStatus },
+          timestamp: now,
+        };
+        portfolioCache.set(cacheKey, cached);
+      }
+
       const q = req.query || {};
-      const page = queryPortfolio(active, {
+      const page = queryPortfolio(cached.active, {
         q: String(q.q || '').slice(0, 80), segmento: String(q.segmento || ''), fonte: String(q.fonte || ''),
         saldo: q.saldo === '1' || q.saldo === 'true', carrinho: q.carrinho === '1' || q.carrinho === 'true',
         etiqueta: String(q.etiqueta || '').slice(0, 32), ordem: String(q.ordem || 'valor'), pagina: q.pagina, tamanho: q.tamanho,
       });
-      const metricsStatus = commerceMetrics
-        ? ['orders', 'carts', 'credit'].filter((key) => commerceMetrics[key].unavailable).map((key) => ({ fonte: key, motivo: commerceMetrics[key].reason }))
-        : [];
-      res.json({ ok: true, resumo: summarizePortfolio(active), ...page, etiquetas: customerStore.allTags(legacyEmpresaId(req)), fontes: { barbearia: { disponivel: true }, loja: commerceStatus, metricasIndisponiveis: metricsStatus } });
+      res.json({ ok: true, resumo: cached.resumo, ...page, etiquetas: cached.etiquetas, fontes: cached.fontes });
     } catch (error) { return sendError(res, error, 'Não foi possível montar a carteira de clientes.'); }
   });
 
@@ -264,6 +300,7 @@ export function registerCustomer360Routes(app, deps) {
       const pair = pairFromBody(req);
       customerStore.linkRecords(legacyEmpresaId(req), { ...pair, operador: operatorLabel(req.user) });
       registerJsonAudit(req, 'LINK CUSTOMER360', `ref=${pair.a}; com=${pair.b}${pair.motivo ? `; motivo=${pair.motivo}` : ''}`);
+      invalidatePortfolioCache(legacyEmpresaId(req));
       res.json({ ok: true, ...pair });
     } catch (error) { return sendError(res, error, 'Não foi possível vincular os cadastros.'); }
   });
@@ -276,6 +313,7 @@ export function registerCustomer360Routes(app, deps) {
       const pair = pairFromBody(req);
       customerStore.separateRecords(legacyEmpresaId(req), { ...pair, operador: operatorLabel(req.user) });
       registerJsonAudit(req, 'SPLIT CUSTOMER360', `ref=${pair.a}; de=${pair.b}${pair.motivo ? `; motivo=${pair.motivo}` : ''}`);
+      invalidatePortfolioCache(legacyEmpresaId(req));
       res.json({ ok: true, ...pair });
     } catch (error) { return sendError(res, error, 'Não foi possível separar os cadastros.'); }
   });
@@ -356,6 +394,7 @@ export function registerCustomer360Routes(app, deps) {
       if (loaded.status) return res.status(loaded.status).json(loaded.body);
       const nota = customerStore.addNote(legacyEmpresaId(req), { refs: loaded.allRefs, texto: req.body?.texto, autor: operatorLabel(req.user), fixada: req.body?.fixada === true });
       registerJsonAudit(req, 'NOTE CUSTOMER360', `ref=${loaded.identity.ref}; nota=${nota.id}`);
+      invalidatePortfolioCache(legacyEmpresaId(req));
       res.status(201).json({ ok: true, nota });
     } catch (error) { return sendError(res, error, 'Não foi possível salvar a anotação.'); }
   });
@@ -366,6 +405,7 @@ export function registerCustomer360Routes(app, deps) {
       if (loaded.status) return res.status(loaded.status).json(loaded.body);
       customerStore.removeNote(legacyEmpresaId(req), { refs: loaded.allRefs, noteId: String(req.params.notaId), autor: operatorLabel(req.user), isAdmin: canExport(req.user) });
       registerJsonAudit(req, 'NOTE-DELETE CUSTOMER360', `ref=${loaded.identity.ref}; nota=${req.params.notaId}`);
+      invalidatePortfolioCache(legacyEmpresaId(req));
       res.json({ ok: true });
     } catch (error) { return sendError(res, error, 'Não foi possível remover a anotação.'); }
   });
@@ -376,6 +416,7 @@ export function registerCustomer360Routes(app, deps) {
       if (loaded.status) return res.status(loaded.status).json(loaded.body);
       const etiquetas = customerStore.setTags(legacyEmpresaId(req), { refs: loaded.allRefs, canonicalRef: loaded.identity.canonicalRef, tags: req.body?.etiquetas });
       registerJsonAudit(req, 'TAGS CUSTOMER360', `ref=${loaded.identity.ref}; etiquetas=${etiquetas.join(',')}`);
+      invalidatePortfolioCache(legacyEmpresaId(req));
       res.json({ ok: true, etiquetas });
     } catch (error) { return sendError(res, error, 'Não foi possível salvar as etiquetas.'); }
   });
@@ -413,6 +454,7 @@ export function registerCustomer360Routes(app, deps) {
       }
       await trail(req, loaded, 'anonymize', { motivo });
       const localResult = customerStore.anonymizeLocalCustomer(legacyEmpresaId(req), { clientIds: identity.local.map((item) => item.id), phones: identity.phones, refs: loaded.allRefs, operador: operatorLabel(req.user) });
+      invalidatePortfolioCache(legacyEmpresaId(req));
       res.json({ ok: true, barbearia: localResult, loja: commerceResult, preservado: 'Valores, datas e status de atendimentos, comandas, pedidos e pagamentos foram mantidos por obrigação legal/fiscal, sem dados pessoais.' });
     } catch (error) { return sendError(res, error, 'Não foi possível anonimizar o titular.'); }
   });

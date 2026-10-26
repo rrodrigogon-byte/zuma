@@ -278,3 +278,136 @@ select.c360-input { padding: 0 12px; }
   .c360-h-sugestoes li { grid-template-columns: 1fr; }
   .c360-h-dl div { grid-template-columns: 1fr; gap: 0; }
 }
+
+/* ── MELHORIAS DE PERFORMANCE, UX E SKELETON (CUSTOMER 360) ── */
+.c360-toolbar-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-left: auto;
+}
+
+.c360-btn-sm {
+  min-height: 38px !important;
+  padding: 0 14px !important;
+  font-size: 13px !important;
+  font-weight: 700 !important;
+  border-radius: 8px !important;
+}
+
+.c360-spin {
+  display: inline-block;
+  animation: c360-spin 0.8s linear infinite;
+}
+@keyframes c360-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* AÇÕES RÁPIDAS POR CLIENTE NA TABELA */
+.c360-row-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  justify-content: center;
+}
+
+.c360-action-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  cursor: pointer;
+  text-decoration: none;
+  background: var(--surface-2, rgba(255, 255, 255, 0.05));
+  border: 1px solid var(--line);
+  color: var(--fg);
+  transition: all 0.15s ease;
+}
+
+.c360-action-btn:hover {
+  transform: translateY(-1px);
+}
+
+.c360-action-btn.wa:hover {
+  background: rgba(37, 211, 102, 0.18);
+  border-color: #25d366;
+}
+
+.c360-action-btn.cal:hover {
+  background: rgba(59, 130, 246, 0.18);
+  border-color: #3b82f6;
+}
+
+.c360-action-btn.view:hover {
+  background: rgba(168, 85, 247, 0.18);
+  border-color: #a855f7;
+}
+
+/* SKELETON LOADERS DE ALTA PERFORMANCE (ANTI-CLS) */
+.c360-kpis-skeleton {
+  pointer-events: none;
+}
+
+.c360-skeleton-kpi {
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--card);
+  display: grid;
+  gap: 10px;
+}
+
+.c360-sk-line {
+  height: 12px;
+  border-radius: 6px;
+  background: linear-gradient(90deg, var(--surface-2), var(--card), var(--surface-2));
+  background-size: 200% 100%;
+  animation: c360-shimmer 1.2s linear infinite;
+}
+
+.c360-sk-line.short { width: 45%; }
+.c360-sk-line.medium { width: 75%; }
+.c360-sk-line.big { height: 24px; width: 60%; }
+.c360-sk-line.tiny { width: 25px; }
+
+.c360-sk-circle {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: linear-gradient(90deg, var(--surface-2), var(--card), var(--surface-2));
+  background-size: 200% 100%;
+  animation: c360-shimmer 1.2s linear infinite;
+}
+
+.c360-sk-badge {
+  height: 22px;
+  width: 65px;
+  border-radius: 6px;
+  background: linear-gradient(90deg, var(--surface-2), var(--card), var(--surface-2));
+  background-size: 200% 100%;
+  animation: c360-shimmer 1.2s linear infinite;
+}
+
+.c360-table-skeleton {
+  pointer-events: none;
+}
+
+.c360-table-skeleton td {
+  padding: 12px 14px;
+}
+
+.c360-row-hoverable:hover td {
+  background: color-mix(in srgb, var(--accent) 6%, var(--card)) !important;
+}
+
+@media (max-width: 900px) {
+  .c360-toolbar-actions {
+    margin-left: 0;
+    width: 100%;
+    justify-content: flex-end;
+  }
+}

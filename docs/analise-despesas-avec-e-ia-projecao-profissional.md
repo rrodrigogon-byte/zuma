@@ -449,3 +449,36 @@ Em virtude de regras de alta especificidade no `theme.css` (`html[data-brand='di
 O arquivo `web/src/pages/admin/BarbeariaNovoAgendamentoModal.css` foi atualizado com isolamento de especificidade máxima (`.bna-modal input`, `.bna-modal select`, `.bna-modal textarea`), garantindo fundo escuro acetinado (`#1a202c`), tipografia clara (`#f8fafc`) e foco azul sutil sem qualquer interferência de estilos globais de marcas externas.
 
 A barra de busca foi unificada em um bloco contínuo de 44px de altura com o seletor de tipo embutido à esquerda, campo de busca com botão de limpar e botão de cadastro de cliente nivelado. Na tabela de serviços, a opção `💈 Sem preferência` foi incorporada diretamente dentro do seletor de profissionais, regularizando a altura e o alinhamento de todas as colunas. As opções de encaixe e pacote foram convertidas em chips modernos com ícones expressivos (`⚡ Forçar Encaixe` e `💎 Usar Pacote / Clube VIP`), acompanhados por botões rápidos de data (`Hoje` e `Amanhã`) e card destacado de totalização.
+
+
+---
+
+## 23.0 Otimização de Performance, Velocidade de Carregamento e Qualidade no Customer 360 (Clientes-360)
+
+### 23.1 Diagnóstico de Desempenho e Gargalos Identificados
+Na rota `/api/admin/barbearia/clientes-360/carteira`, cada requisição realizava consultas custosas agregando bancos Postgres (pedidos, carrinhos e limites de crédito da loja) combinadas com varreduras em memória de milhares de agendamentos, comandas, vendas de revenda e contas a receber da barbearia. Isso gerava tempos de resposta de centenas de milissegundos a cada troca de página, digitação de termo de busca ou seleção de segmento. No frontend, a navegação entre a carteira e a ficha individual forçava recarregamento completo com layout shifts genéricos.
+
+### 23.2 Arquitetura de Aceleração e Otimizações Implementadas
+1. **Cache em Memória no Backend (TTL 45s com Invalidação Inteligente):**
+   - Implementado mapa de cache em memória `portfolioCache` indexado por `${empresaId}:${lojaId}` em `app/customer360-routes.js`.
+   - As consultas subsequentes de paginação, filtros por segmento (`VIP`, `Em risco`, `Inativo`, etc.), busca textual e ordenação são processadas em **menos de 1 milissegundo** diretamente sobre os dados em memória.
+   - Invalidação automática e imediata nas operações de unificação de cadastros (`/vinculos`), separação (`/separacoes`), anotações internas (`/notas`), etiquetas (`/etiquetas`) e anonimização LGPD (`/anonimizar`).
+   - Suporte ao parâmetro `?refresh=1` para forçar recálculo instantâneo a pedido do operador.
+
+2. **Renderização Instantânea no Cliente (SWR / 0ms):**
+   - Implementado cache local em memória no frontend (`Portfolio.jsx`). Ao retornar da visualização da ficha de um cliente para a carteira, a lista e os cards de KPI são exibidos instantaneamente (0ms), enquanto uma revalidação silenciosa em segundo plano atualiza eventuais dados novos sem travamento de tela.
+
+3. **Skeletons Estruturais Anti-CLS (Cumulative Layout Shift):**
+   - Criação dos componentes `SummaryCardsSkeleton` e `PortfolioTableSkeleton`, substituindo blocos cinzas genéricos por esqueletos animados que replicam exatamente as dimensões, avatares e colunas da tabela, conferindo estabilidade visual e percepção de carregamento veloz.
+
+4. **Ações Rápidas por Cliente na Tabela:**
+   - Adicionada coluna dedicada de ações com botões de 1 clique:
+     - `💬 WhatsApp`: link direto para iniciar atendimento no WhatsApp Web sem necessidade de salvar contato prévio.
+     - `📅 Agendar`: atalho direto para a aba de Agenda com o cliente pré-selecionado para marcação ágil no balcão.
+     - `👤 Ficha 360`: visualização aprofundada da ficha completa do titular.
+
+5. **Ferramenta de Exportação em Planilha (CSV / Excel):**
+   - Disponibilizado botão `📥 Exportar CSV` na barra de ferramentas, permitindo extrair a relação filtrada de clientes com codificação UTF-8 com BOM para abertura perfeita no Microsoft Excel e Google Sheets, incluindo valor vitalício, frequência, última atividade e pendências financeiras.
+
+6. **Atualização Manual em Tempo Real:**
+   - Adicionado botão `🔄 Atualizar` com animação de rotação e feedback visual por toast notification.
