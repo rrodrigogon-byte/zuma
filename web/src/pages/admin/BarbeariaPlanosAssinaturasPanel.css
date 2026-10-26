@@ -1,0 +1,285 @@
+/* Painel de Planos VIP e Assinaturas por Profissional */
+
+.planos-container {
+  display: grid;
+  gap: 20px;
+}
+
+.planos-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 16px;
+}
+
+.plano-card {
+  position: relative;
+  background: var(--card, #1c202b);
+  border: 1.5px solid var(--line, #2b3140);
+  border-radius: 16px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 16px;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.plano-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.2);
+}
+
+.plano-card.vip {
+  border: 1.5px solid #d4af37;
+  background: linear-gradient(145deg, rgba(212, 175, 55, 0.09) 0%, rgba(28, 32, 43, 0.95) 60%);
+  box-shadow: 0 6px 20px rgba(212, 175, 55, 0.12);
+}
+
+.plano-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.plano-titulo-box {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.plano-nome {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 800;
+  color: var(--fg, #e8eaf2);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.vip-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  background: linear-gradient(135deg, #ffd700 0%, #d4af37 100%);
+  color: #121212;
+  font-size: 11px;
+  font-weight: 800;
+  border-radius: 20px;
+  letter-spacing: 0.5px;
+  box-shadow: 0 2px 8px rgba(212, 175, 55, 0.35);
+}
+
+.prof-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  background: var(--card2, #242938);
+  border: 1px solid var(--line, #2b3140);
+  color: var(--fg, #e8eaf2);
+}
+
+.prof-badge.dino {
+  background: rgba(212, 175, 55, 0.15);
+  border-color: rgba(212, 175, 55, 0.4);
+  color: #f5cf53;
+}
+
+.plano-preco-box {
+  text-align: right;
+}
+
+.plano-preco-valor {
+  font-size: 20px;
+  font-weight: 800;
+  color: #14b87a;
+}
+
+.plano-preco-ciclo {
+  font-size: 11px;
+  color: var(--muted, #a4aabe);
+  text-transform: uppercase;
+}
+
+.plano-detalhes {
+  display: grid;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--muted, #a4aabe);
+  border-top: 1px solid var(--line, #2b3140);
+  padding-top: 12px;
+}
+
+.tabela-precos-box {
+  background: var(--card2, #161922);
+  border: 1px solid var(--line, #2b3140);
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-top: 6px;
+}
+
+.tabela-precos-titulo {
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  color: var(--muted, #a4aabe);
+  margin-bottom: 6px;
+}
+
+.tabela-precos-lista {
+  display: grid;
+  gap: 4px;
+}
+
+.tabela-precos-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+}
+
+.tabela-precos-item.dino {
+  font-weight: 700;
+  color: #f5cf53;
+}
+
+.plano-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+  padding-top: 12px;
+  border-top: 1px solid var(--line, #2b3140);
+}
+
+.btn-link-adesao {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  background: var(--card2, #242938);
+  border: 1px solid var(--line, #2b3140);
+  border-radius: 8px;
+  color: var(--fg, #e8eaf2);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-link-adesao:hover {
+  background: rgba(110, 124, 224, 0.15);
+  border-color: #6e7ce0;
+  color: #fff;
+}
+
+.btn-whatsapp-share {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  background: rgba(37, 211, 102, 0.12);
+  border: 1px solid rgba(37, 211, 102, 0.35);
+  border-radius: 8px;
+  color: #25d366;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-whatsapp-share:hover {
+  background: #25d366;
+  color: #121212;
+}
+
+/* Modal de Link / Vínculo */
+.modal-link-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 16px;
+  backdrop-filter: blur(4px);
+}
+
+.modal-link-box {
+  background: var(--card, #1c202b);
+  border: 1.5px solid var(--line, #2b3140);
+  border-radius: 20px;
+  padding: 24px;
+  width: 100%;
+  max-width: 500px;
+  display: grid;
+  gap: 18px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+}
+
+.modal-link-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.modal-link-titulo {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--fg, #e8eaf2);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.input-link-readonly {
+  width: 100%;
+  padding: 10px 14px;
+  background: var(--surface, #161922);
+  border: 1px solid var(--line, #2b3140);
+  border-radius: 10px;
+  color: var(--fg, #e8eaf2);
+  font-family: monospace;
+  font-size: 13px;
+  box-sizing: border-box;
+}
+
+/* Seção de Preços Diferenciados no Modal de Criação */
+.secao-precos-prof {
+  background: var(--card2, #161922);
+  border: 1px solid var(--line, #2b3140);
+  border-radius: 12px;
+  padding: 14px;
+  display: grid;
+  gap: 12px;
+}
+
+.grid-precos-prof {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 10px;
+}
+
+.card-preco-prof {
+  background: var(--card, #1c202b);
+  border: 1px solid var(--line, #2b3140);
+  border-radius: 8px;
+  padding: 8px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.card-preco-prof.dino {
+  border-color: rgba(212, 175, 55, 0.5);
+  background: rgba(212, 175, 55, 0.06);
+}

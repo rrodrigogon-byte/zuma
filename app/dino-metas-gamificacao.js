@@ -221,11 +221,14 @@ export function apurarDesempenhoEquipe(empresaId, { dataIso = dataIsoCuiaba(), i
 
     for (const cmd of comandas) {
       if (cmd.status === 'cancelada') continue;
-      const dataCmd = (cmd.fechadaEm || cmd.atualizadoEm || cmd.criadoEm || '').slice(0, 10);
-      if (!dataCmd) continue;
+      const rawCmd = cmd.fechadaEm || cmd.atualizadoEm || cmd.criadoEm || '';
+      if (!rawCmd) continue;
+      const dataCmd = rawCmd.slice(0, 10);
+      let dataCmdCuiaba = '';
+      try { dataCmdCuiaba = dataIsoCuiaba(rawCmd); } catch {}
 
-      const noDia = dataCmd === dataIso;
-      const naSemana = dataCmd >= semana.inicioIso && dataCmd <= semana.fimIso;
+      const noDia = dataCmd === dataIso || dataCmdCuiaba === dataIso;
+      const naSemana = (dataCmd >= semana.inicioIso && dataCmd <= semana.fimIso) || (dataCmdCuiaba && dataCmdCuiaba >= semana.inicioIso && dataCmdCuiaba <= semana.fimIso);
       if (!noDia && !naSemana) continue;
 
       // Serviços e produtos da comanda
@@ -311,14 +314,17 @@ export function apurarDesempenhoEquipe(empresaId, { dataIso = dataIsoCuiaba(), i
 
     for (const venda of vendasRevenda) {
       if (venda.status === 'cancelado') continue;
-      const dataVenda = (venda.criadoEm || '').slice(0, 10);
-      if (!dataVenda) continue;
+      const rawVenda = venda.criadoEm || '';
+      if (!rawVenda) continue;
+      const dataVenda = rawVenda.slice(0, 10);
+      let dataVendaCuiaba = '';
+      try { dataVendaCuiaba = dataIsoCuiaba(rawVenda); } catch {}
 
       const profId = venda.profissionalId;
       if (!profId || !stats[profId]) continue;
 
-      const noDia = dataVenda === dataIso;
-      const naSemana = dataVenda >= semana.inicioIso && dataVenda <= semana.fimIso;
+      const noDia = dataVenda === dataIso || dataVendaCuiaba === dataIso;
+      const naSemana = (dataVenda >= semana.inicioIso && dataVenda <= semana.fimIso) || (dataVendaCuiaba && dataVendaCuiaba >= semana.inicioIso && dataVendaCuiaba <= semana.fimIso);
       if (!noDia && !naSemana) continue;
 
       const valor = Number(venda.total || 0);

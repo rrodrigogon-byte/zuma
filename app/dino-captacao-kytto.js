@@ -975,16 +975,26 @@ export function registrarPagamentoAssinatura(empresaId, assinaturaId, dados = {}
 }
 
 /** Assinatura ativa e em dia que cobre o serviço, para o cliente informado. */
-export function assinaturaQueCobre(empresaId, { clienteId, clienteTelefone, servicoId } = {}, opcoes = {}) {
+export function assinaturaQueCobre(empresaId, { clienteId, clienteTelefone, servicoId, profissionalId } = {}, opcoes = {}) {
   const chave = telefoneChave(clienteTelefone);
   const clientes = clienteId ? null : (chave ? clientesKytto.listarClientes(String(empresaId)).filter((item) => telefoneChave(item.telefone) === chave).map((item) => item.id) : []);
   if (!clienteId && clientes.length !== 1) return null;
   const candidatas = barbearia.listarAssinaturas(empresaId, { status: 'ativa' })
-    .filter((item) => (clienteId ? item.clienteId === String(clienteId) : clientes.includes(item.clienteId)));
-  const resumos=candidatas.map(assinatura=>resumoAssinatura(empresaId,assinatura.id,opcoes)).filter(resumo=>{
-    const servicos=resumo.plano?.servicosIds||[];return !servicos.length||servicos.includes(String(servicoId));
+    .filter((item) => (clienteId ? item.clienteId === String(clienteId) : clientes.includes(item.clienteId)))
+    .filter((assinatura) => {
+      if (!profissionalId) return true;
+      const profId = String(profissionalId);
+      if (assinatura.profissionalId && String(assinatura.profissionalId) !== profId) return false;
+      const plano = barbearia.obterPlano(empresaId, assinatura.planoId) || assinatura.condicoesContratadas;
+      if (plano?.profissionalId && String(plano.profissionalId) !== profId) return false;
+      if (plano?.profissionaisIds?.length && !plano.profissionaisIds.includes(profId)) return false;
+      return true;
+    });
+  const resumos = candidatas.map((assinatura) => resumoAssinatura(empresaId, assinatura.id, opcoes)).filter((resumo) => {
+    const servicos = resumo.plano?.servicosIds || [];
+    return !servicos.length || servicos.includes(String(servicoId));
   });
-  return resumos.find(r=>r.situacaoPagamento==='em_dia'&&r.sessoesRestantes>0)||resumos[0]||null;
+  return resumos.find((r) => r.situacaoPagamento === 'em_dia' && r.sessoesRestantes > 0) || resumos[0] || null;
 }
 
 export function registrarUsoAssinatura(empresaId, assinaturaId, dados = {}, opcoes = {}) {

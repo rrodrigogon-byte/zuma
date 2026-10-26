@@ -1,5 +1,6 @@
 import BarbeariaComandasAbertas from './BarbeariaComandasAbertas'
 import BarbeariaAtendimentoBoard from './BarbeariaAtendimentoBoard'
+import BarbeariaPlanosAssinaturasPanel from './BarbeariaPlanosAssinaturasPanel'
 import BarbeariaHistoricoCliente from './BarbeariaHistoricoCliente'
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { api, fmtDate, fmtDateOnly, fmtR } from '../../lib/api'
@@ -1604,28 +1605,36 @@ export default function BarbeariaERP() {
 
   function renderPlanosAssinaturas() {
     return <div style={{ display: 'grid', gap: 16 }}>
-      <div style={styles.twoColumns}>
-        <Card style={{ padding: 18 }}>
-          <div style={styles.sectionTitle}>
-            <div><h2 style={styles.h2}>Planos de recorrência</h2><p style={styles.sub}>Definições comerciais sem cobrança automática.</p></div>
-            <button type="button" style={styles.primary} onClick={() => abrirPlano()}>+ Novo plano</button>
-          </div>
-          {planos.filter((plano) => !plano.removidoEm).length === 0 ? <div style={styles.empty}>Nenhum plano cadastrado.</div> : <div style={{ display: 'grid', gap: 8 }}>{planos.filter((plano) => !plano.removidoEm).map((plano) => <div key={plano.id} style={{ ...styles.listRow, display: 'block', opacity: plano.ativo === false ? .62 : 1 }}><div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'start' }}><div><strong>{plano.nome}</strong><div style={styles.sub}>{plano.sessoesIncluidas} sessões · ciclo {plano.ciclo} · {plano.regraRenovacao==='aniversario'?'renovação no aniversário da contratação':`validade de ${plano.validadeDias} dias`} · {assinaturas.filter((assinatura) => assinatura.planoId === plano.id).length} assinatura(s)</div></div><div style={{ display: 'flex', gap: 8, alignItems: 'center' }}><Badge status={plano.ativo === false ? 'cancelado' : 'concluido'} /><strong>{moeda(plano.preco)}</strong></div></div>{botoesCadastro({ item: plano, rota: 'planos', rotulo: 'Plano', historico: 'as assinaturas já vendidas, sessões usadas e pagamentos', onEditar: () => abrirPlano(plano) })}</div>)}</div>}
-        </Card>
-        <Card style={{ padding: 18 }}>
-          <div style={styles.sectionTitle}><div><h2 style={styles.h2}>Nova assinatura</h2><p style={styles.sub}>Fica pendente de ativação até uma confirmação operacional externa.</p></div></div>
-          <form onSubmit={salvarAssinatura} style={{ display: 'grid', gap: 14 }}>
-            <Field label="Cliente cadastrado"><select required value={formAssinatura.clienteId} onChange={(event) => setFormAssinatura((atual) => ({ ...atual, clienteId: event.target.value, clienteNome: '' }))} style={inputStyle}><option value="">Selecionar cliente</option>{clientes.map((cliente) => <option key={cliente.id} value={cliente.id}>{cliente.nome}</option>)}</select></Field>
-            <Field label="Renovação do contrato"><select value={formAssinatura.regraRenovacao || 'aniversario'} onChange={e=>setFormAssinatura(atual=>({...atual,regraRenovacao:e.target.value}))} style={inputStyle}><option value="aniversario">Mesmo dia da contratação em cada ciclo</option><option value="dias">Validade em dias do catálogo</option></select></Field><Field label="Data de contratação"><input type="date" required value={formAssinatura.inicio || ''} onChange={e=>setFormAssinatura(atual=>({...atual,inicio:e.target.value}))} style={inputStyle} /></Field><Field label="Plano"><select required value={formAssinatura.planoId} onChange={(event) => setFormAssinatura((atual) => ({ ...atual, planoId: event.target.value }))} style={inputStyle}><option value="">Selecionar plano</option>{planos.filter((plano) => plano.ativo !== false && !plano.removidoEm).map((plano) => <option key={plano.id} value={plano.id}>{plano.nome} · {moeda(plano.preco)}</option>)}</select></Field>
-            <Field label="Observações" full><textarea rows={3} value={formAssinatura.observacoes} onChange={(event) => setFormAssinatura((atual) => ({ ...atual, observacoes: event.target.value }))} style={{ ...inputStyle, resize: 'vertical' }} /></Field>
-            <button type="submit" style={styles.primary} disabled={salvando || !planos.some((plano) => plano.ativo !== false && !plano.removidoEm)}>Criar assinatura pendente</button>
-          </form>
-        </Card>
-      </div>
-      <Card style={{ padding: 18 }}>
-        <div style={styles.sectionTitle}><div><h2 style={styles.h2}>Assinaturas da empresa</h2><p style={styles.sub}>Status operacional; não representa pagamento aprovado.</p></div></div>
-        {assinaturas.length === 0 ? <div style={styles.empty}>Nenhuma assinatura cadastrada.</div> : <div style={{ display: 'grid', gap: 8 }}>{assinaturas.map((assinatura) => <div key={assinatura.id} style={styles.listRow}><div><strong>{assinatura.clienteNome || 'Cliente'}</strong><div style={styles.sub}>{planos.find((plano) => plano.id === assinatura.planoId)?.nome || 'Plano'} · {assinatura.sessoesUsadas}/{assinatura.sessoesContratadas} sessões usadas</div></div><div style={{ display: 'flex', gap: 8, alignItems: 'center' }}><Badge status={assinatura.status === 'ativa' ? 'concluido' : assinatura.status} />{assinatura.status === 'pendente_ativacao' && <button type="button" style={styles.small} disabled={salvando} onClick={() => ativarAssinatura(assinatura)}>Ativar sem cobrança</button>}{assinatura.status === 'ativa' && <button type="button" style={styles.small} disabled={salvando} onClick={() => alterarStatusAssinatura(assinatura, 'pausada')}>Pausar</button>}{assinatura.status === 'pausada' && <button type="button" style={styles.small} disabled={salvando} onClick={() => alterarStatusAssinatura(assinatura, 'ativa')}>Retomar</button>}{['pendente_ativacao', 'ativa', 'pausada'].includes(assinatura.status) && <button type="button" style={{ ...styles.small, color: '#e05c5c', borderColor: 'color-mix(in srgb, #e05c5c 45%, var(--line))' }} disabled={salvando} onClick={() => alterarStatusAssinatura(assinatura, 'cancelada')}>Cancelar</button>}</div></div>)}</div>}
-      </Card>
+      <BarbeariaPlanosAssinaturasPanel
+        planos={planos}
+        assinaturas={assinaturas}
+        profissionais={profissionais}
+        clientes={clientes}
+        servicos={servicos}
+        salvando={salvando}
+        onSalvarPlano={async (corpo) => {
+          const payload = corpo.id
+            ? api.patch(`/api/admin/barbearia/planos/${corpo.id}`, corpo)
+            : api.post('/api/admin/barbearia/planos', corpo)
+          await executar(() => payload, corpo.id ? 'Plano atualizado com sucesso.' : 'Plano VIP/Recorrência criado com sucesso.')
+        }}
+        onSalvarAssinatura={async (dados) => {
+          const conteudo = JSON.stringify(dados)
+          if (pedidoAssinatura.current?.conteudo !== conteudo) {
+            pedidoAssinatura.current = { conteudo, chave: crypto.randomUUID() }
+          }
+          const chaveIdempotencia = pedidoAssinatura.current.chave
+          await executar(async () => {
+            const resposta = await api.post('/api/admin/barbearia/assinaturas', { ...dados, chaveIdempotencia })
+            pedidoAssinatura.current = null
+            return resposta
+          }, 'Assinatura criada e vinculada ao profissional com sucesso.')
+        }}
+        onAlterarStatusAssinatura={alterarStatusAssinatura}
+        onAtivarAssinatura={ativarAssinatura}
+        onExcluirPlano={(plano) => excluirCadastro('planos', plano, 'Plano', 'as assinaturas já vendidas, sessões usadas e pagamentos')}
+        onReativarPlano={(plano) => restaurarCadastro('planos', plano, 'Plano')}
+      />
       {renderExcluidos(planos, 'planos', 'Plano')}
     </div>
   }

@@ -105,6 +105,25 @@ router.get('/:slug', (req, res) => {
     const servicos = barbearia.listarServicos(identidade.empresaId)
       .filter((item) => item.ativo !== false && item.permiteAgendamentoOnline !== false)
       .map(servicoPublico);
+    const planos = barbearia.listarPlanos(identidade.empresaId)
+      .filter((p) => p.ativo !== false)
+      .map((p) => ({
+        id: p.id,
+        nome: p.nome,
+        descricao: p.descricao,
+        preco: p.preco,
+        ciclo: p.ciclo,
+        sessoesIncluidas: p.sessoesIncluidas,
+        ehVip: Boolean(p.ehVip),
+        categoriaPlano: p.categoriaPlano,
+        tipoProfissional: p.tipoProfissional,
+        profissionalId: p.profissionalId,
+        profissionalNome: p.profissionalNome,
+        profissionaisIds: p.profissionaisIds || [],
+        precosPorProfissional: p.precosPorProfissional || {},
+        linkAdesao: p.linkAdesao,
+        linkAdesaoCompleto: p.linkAdesaoCompleto,
+      }));
     const configuracao = barbearia.obterConfiguracao(identidade.empresaId);
     res.setHeader('Cache-Control', 'public, max-age=30, stale-while-revalidate=60');
     return res.json({
@@ -112,12 +131,35 @@ router.get('/:slug', (req, res) => {
       estabelecimento: identidade.estabelecimento,
       profissionais,
       servicos,
+      planos,
       politicas: {
         cancelamentoHoras: Math.max(0, Number(configuracao.politicaCancelamentoHoras ?? 4)),
         sinal: (() => { const c = cobranca.obterConfiguracaoCobranca(identidade.empresaId); return cobranca.sinalExigido(identidade.empresaId) ? { tipo: c.sinal.tipo, valor: c.sinal.valor, prazoMinutos: c.sinal.prazoMinutos } : null; })(),
         valePresente: (() => { const c = cobranca.obterConfiguracaoCobranca(identidade.empresaId); return Boolean(c.vale?.ativo && c.provedor); })(),
       },
     });
+  } catch (erro) {
+    return erroHttp(res, erro);
+  }
+});
+
+router.get('/:slug/planos', (req, res) => {
+  try {
+    const identidade = identidadePublica(req.params.slug);
+    if (!identidade) return res.status(404).json({ ok: false, error: 'Estabelecimento não encontrado.' });
+    const profissionais = barbearia.listarProfissionais(identidade.empresaId).filter((p) => p.ativo !== false);
+    const profsMap = new Map(profissionais.map((p) => [p.id, p.nome]));
+    const planos = barbearia.listarPlanos(identidade.empresaId)
+      .filter((p) => p.ativo !== false)
+      .map((p) => {
+        const item = { ...p };
+        if (item.profissionalId && !item.profissionalNome) {
+          item.profissionalNome = profsMap.get(item.profissionalId) || '';
+        }
+        return item;
+      });
+    res.setHeader('Cache-Control', 'public, max-age=30, stale-while-revalidate=60');
+    return res.json({ ok: true, estabelecimento: identidade.estabelecimento, planos });
   } catch (erro) {
     return erroHttp(res, erro);
   }
@@ -137,6 +179,62 @@ router.get('/:slug/horarios', (req, res) => {
     });
     res.setHeader('Cache-Control', 'no-store');
     return res.json({ ok: true, horarios });
+  } catch (erro) {
+    return erroHttp(res, erro);
+  }
+});
+
+router.post('/:slug/assinatura', async (req, res) => {
+  try {
+    const identidade = identidadePublica(req.params.slug);
+    if (!identidade) return res.status(404).json({ ok: false, error: 'Estabelecimento não encontrado.' });
+    const corpo = req.body || {};
+    const nome = texto(corpo.cliente_nome || corpo.clienteNome, 160);
+    const telefone = String(corpo.cliente_telefone || corpo.clienteTelefone || '').replace(/\D/g, '').slice(0, 13);
+    const planoId = texto(corpo.plano_id || corpo.planoId, 100);
+    const profissionalId = texto(corpo.profissional_id || corpo.profissionalId, 100);
+    const observacoes = texto(corpo.observacoes, 500);
+
+    if (nome.length < 2) return res.status(400).json({ ok: false, error: 'Informe seu nome completo.' });
+    if (telefone.length < 10) return res.status(400).json({ ok: false, error: 'Informe um telefone WhatsApp válido com DDD.' });
+    if (!planoId) return res.status(400).json({ ok: false, error: 'Plano é obrigatório.' });
+
+    const plano = barbearia.obterPlano(identidade.empresaId, planoId);
+    if (!plano) return res.status(404).json({ ok: false, error: 'Plano não encontrado.' });
+
+    const vinculo = vincularClienteAoAtendimento(identidade.empresaId, { clienteNome: nome, clienteTelefone: telefone }, { origem: 'clube_vip_online' });
+    const clienteId = vinculo.clienteId || `cli-${crypto.randomUUID()}`;
+
+    const prof = profissionalId ? barbearia.listarProfissionais(identidade.empresaId).find((p) => p.id === profissionalId) : null;
+    const precoFinal = (profissionalId && plano.precosPorProfissional?.[profissionalId])
+      ? Number(plano.precosPorProfissional[profissionalId])
+      : Number(plano.preco);
+
+    const assinatura = barbearia.criarAssinatura(identidade.empresaId, {
+      clienteId,
+      clienteNome: nome,
+      clienteTelefone: telefone,
+      planoId: plano.id,
+      profissionalId: prof?.id || plano.profissionalId || null,
+      profissionalNome: prof?.nome || plano.profissionalNome || null,
+      precoContratado: precoFinal,
+      ehVip: Boolean(plano.ehVip),
+      regraRenovacao: plano.regraRenovacao || 'aniversario',
+      inicio: new Date().toISOString().slice(0, 10),
+      observacoes: observacoes || 'Adesão online pelo Clube VIP',
+    });
+
+    const linkVinculo = `https://kytto.com.br/admin/barbearia-erp?area=catalogo&tab=Planos+e+assinaturas&assinaturaId=${assinatura.id}`;
+    const linkExtrato = `https://kytto.com.br/perfil?aba=pacotes&assinatura=${assinatura.id}`;
+
+    return res.status(201).json({
+      ok: true,
+      assinatura,
+      plano,
+      precoFinal,
+      linkVinculo,
+      linkExtrato,
+    });
   } catch (erro) {
     return erroHttp(res, erro);
   }
