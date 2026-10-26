@@ -1,6 +1,4 @@
 import BarbeariaNovoAgendamentoModal from './BarbeariaNovoAgendamentoModal'
-import DinoCarteiraClientesPanel from './dino/DinoCarteiraClientesPanel'
-import DinoRecuperacaoAvecPanel from './dino/DinoRecuperacaoAvecPanel'
 import BarbeariaComandasAbertas from './BarbeariaComandasAbertas'
 import BarbeariaAtendimentoBoard from './BarbeariaAtendimentoBoard'
 import BarbeariaPlanosAssinaturasPanel from './BarbeariaPlanosAssinaturasPanel'
@@ -26,6 +24,8 @@ import { RepassesPanel, ReguaClubePanel } from './dino/RepassesPanel'
 
 // Lazy loading dos módulos analíticos e relatórios para acelerar o carregamento inicial da Barbearia
 const MetasComissoesPanel = lazy(() => import('./dino/MetasComissoesPanel'))
+const DinoCarteiraClientesPanel = lazy(() => import('./dino/DinoCarteiraClientesPanel'))
+const DinoRecuperacaoAvecPanel = lazy(() => import('./dino/DinoRecuperacaoAvecPanel'))
 const FiscalPanel = lazy(() => import('./fiscal/Fiscal'))
 const DinoBusinessDashboard = lazy(() => import('./DinoBusinessDashboard'))
 const DinoCampaignsPanel = lazy(() => import('./DinoCampaignsPanel'))
@@ -1638,7 +1638,9 @@ export default function BarbeariaERP() {
       </div>
 
       {subAbaClientes === 'carteira' ? (
-        <DinoCarteiraClientesPanel onNovoCliente={() => { setFormCliente({ nome: '', telefone: '', email: '', dataNascimento: '', limiteCreditoMensal: 0, diasVencimento: 30, observacao: '' }); setModal('cliente') }} />
+        <Suspense fallback={<Card style={{ padding: 40, textAlign: 'center', color: 'var(--muted)' }}>Carregando carteira de clientes…</Card>}>
+          <DinoCarteiraClientesPanel onNovoCliente={() => { setFormCliente({ nome: '', telefone: '', email: '', dataNascimento: '', limiteCreditoMensal: 0, diasVencimento: 30, observacao: '' }); setModal('cliente') }} />
+        </Suspense>
       ) : (
       <>
       <Card style={{ padding: 16 }}>
@@ -2265,9 +2267,16 @@ export default function BarbeariaERP() {
     if (tab === 'Atendimento') return renderAtendimento()
     if (tab === 'Caixa e fechamento') return renderOperacao()
     if (tab === 'Prévia taxas e materiais') return renderPreviaTaxasMateriais()
-    if (tab === 'Carteira por barbeiro') return <DinoCarteiraClientesPanel onNovoCliente={() => { setFormCliente({ nome: '', telefone: '', email: '', dataNascimento: '', limiteCreditoMensal: 0, diasVencimento: 30, observacao: '' }); setModal('cliente') }} />
+    if (tab === 'Carteira por barbeiro') {
+      return (
+        <Suspense fallback={<Card style={{ padding: 40, textAlign: 'center', color: 'var(--muted)' }}>Carregando carteira de clientes…</Card>}>
+          <DinoCarteiraClientesPanel onNovoCliente={() => { setFormCliente({ nome: '', telefone: '', email: '', dataNascimento: '', limiteCreditoMensal: 0, diasVencimento: 30, observacao: '' }); setModal('cliente') }} />
+        </Suspense>
+      )
+    }
     if (tab === 'Recuperação de clientes (Avec)') {
       return (
+        <Suspense fallback={<Card style={{ padding: 40, textAlign: 'center', color: 'var(--muted)' }}>Carregando análise e recuperação Avec…</Card>}>
         <DinoRecuperacaoAvecPanel
           onAbrirAgenda={(cli) => {
             setTab('Agenda')
@@ -2284,6 +2293,7 @@ export default function BarbeariaERP() {
             setModal('agenda')
           }}
         />
+        </Suspense>
       )
     }
     if (tab === 'Clientes') return renderClientes()

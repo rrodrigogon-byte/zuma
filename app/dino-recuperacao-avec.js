@@ -391,7 +391,10 @@ export function consultarClientesRecuperacao(todosClientes = [], filtros = {}) {
   const pag = Math.max(1, Number(pagina) || 1);
   const lim = Math.max(1, Math.min(200, Number(limite) || 25));
   const paginas = Math.ceil(total / lim) || 1;
-  const itens = filtrados.slice((pag - 1) * lim, pag * lim);
+  const itens = filtrados.slice((pag - 1) * lim, pag * lim).map((c) => {
+    const { historicoItens, datasVisitas, mesesAtivo, ...sanitized } = c;
+    return sanitized;
+  });
 
   return {
     total,

@@ -21,6 +21,17 @@ import './DinoRecuperacaoAvecPanel.css'
 const moeda = (v) => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 const dataBR = (v) => (v ? String(v).slice(0, 10).split('-').reverse().join('/') : '—')
 
+const clientRecupCache = new Map()
+
+function useDebounced(value, delay = 250) {
+  const [debounced, setDebounced] = useState(value)
+  useEffect(() => {
+    const timer = setTimeout(() => setDebounced(value), delay)
+    return () => clearTimeout(timer)
+  }, [value, delay])
+  return debounced
+}
+
 export default function DinoRecuperacaoAvecPanel({ onAbrirAgenda }) {
   const [loading, setLoading] = useState(true)
   const [dados, setDados] = useState({
@@ -40,6 +51,7 @@ export default function DinoRecuperacaoAvecPanel({ onAbrirAgenda }) {
 
   // Filtros
   const [busca, setBusca] = useState('')
+  const debouncedBusca = useDebounced(busca, 250)
   const [deAtivo, setDeAtivo] = useState('')
   const [ateAtivo, setAteAtivo] = useState('')
   const [deAusente, setDeAusente] = useState('')
@@ -65,24 +77,32 @@ export default function DinoRecuperacaoAvecPanel({ onAbrirAgenda }) {
 
   // Carregar dados da API
   const carregar = useCallback(async (force = false) => {
-    setLoading(true)
-    try {
-      const params = new URLSearchParams()
-      if (busca) params.set('busca', busca)
-      if (deAtivo) params.set('deAtivo', deAtivo)
-      if (ateAtivo) params.set('ateAtivo', ateAtivo)
-      if (deAusente) params.set('deAusente', deAusente)
-      if (ateAusente) params.set('ateAusente', ateAusente)
-      if (diasSemVir && diasSemVir !== 'todos') params.set('diasSemVir', diasSemVir)
-      if (profissional && profissional !== 'todos') params.set('profissional', profissional)
-      if (modelo && modelo !== 'todos') params.set('modelo', modelo)
-      if (ordem) params.set('ordem', ordem)
-      params.set('pagina', String(pagina))
-      params.set('limite', '25')
-      if (force) params.set('refresh', '1')
+    const params = new URLSearchParams()
+    if (debouncedBusca) params.set('busca', debouncedBusca)
+    if (deAtivo) params.set('deAtivo', deAtivo)
+    if (ateAtivo) params.set('ateAtivo', ateAtivo)
+    if (deAusente) params.set('deAusente', deAusente)
+    if (ateAusente) params.set('ateAusente', ateAusente)
+    if (diasSemVir && diasSemVir !== 'todos') params.set('diasSemVir', diasSemVir)
+    if (profissional && profissional !== 'todos') params.set('profissional', profissional)
+    if (modelo && modelo !== 'todos') params.set('modelo', modelo)
+    if (ordem) params.set('ordem', ordem)
+    params.set('pagina', String(pagina))
+    params.set('limite', '25')
+    if (force) params.set('refresh', '1')
 
+    const cacheKey = params.toString()
+    if (!force && clientRecupCache.has(cacheKey)) {
+      setDados(clientRecupCache.get(cacheKey))
+      setLoading(false)
+    } else {
+      setLoading(true)
+    }
+
+    try {
       const res = await api.get(`/api/admin/barbearia/recuperacao-clientes?${params.toString()}`)
       if (res.ok) {
+        clientRecupCache.set(cacheKey, res)
         setDados(res)
       }
     } catch (err) {
@@ -90,7 +110,7 @@ export default function DinoRecuperacaoAvecPanel({ onAbrirAgenda }) {
     } finally {
       setLoading(false)
     }
-  }, [busca, deAtivo, ateAtivo, deAusente, ateAusente, diasSemVir, profissional, modelo, ordem, pagina])
+  }, [debouncedBusca, deAtivo, ateAtivo, deAusente, ateAusente, diasSemVir, profissional, modelo, ordem, pagina])
 
   useEffect(() => {
     carregar()
