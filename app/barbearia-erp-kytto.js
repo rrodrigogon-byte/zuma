@@ -1252,12 +1252,49 @@ export function chamarFila(empresaId, filaId, dados = {}) {
 
 function condicoesDoPlano(plano) {
   plano=planoNormalizado({},plano);
-  return {...Object.fromEntries(['nome','preco','ciclo','regraRenovacao','validadeDias','sessoesIncluidas','percentualPote','rateioPote','valorFixoPorUso'].map(key=>[key,plano[key]])),servicosIds:[...(plano.servicosIds||[])]};
+  return {
+    ...Object.fromEntries(['nome','preco','ciclo','regraRenovacao','validadeDias','sessoesIncluidas','percentualPote','rateioPote','valorFixoPorUso','ehVip','categoriaPlano','tipoProfissional','profissionalId','profissionalNome'].map(key=>[key,plano[key]])),
+    servicosIds:[...(plano.servicosIds||[])],
+    profissionaisIds:[...(plano.profissionaisIds||[])],
+    precosPorProfissional:{...(plano.precosPorProfissional||{})},
+  };
 }
 
 function planoNormalizado(dados = {}, anterior = {}) {
   const ciclo = ['mensal', 'trimestral', 'anual'].includes(String(dados.ciclo ?? anterior.ciclo)) ? String(dados.ciclo ?? anterior.ciclo) : 'mensal';
   const servicosIds = Array.isArray(dados.servicosIds ?? dados.servicos_ids ?? anterior.servicosIds) ? [...new Set((dados.servicosIds ?? dados.servicos_ids ?? anterior.servicosIds).map((id) => texto(id, 100)).filter(Boolean))] : [];
+
+  const tipoProfissional = ['todos', 'especifico', 'selecionados'].includes(String(dados.tipoProfissional ?? anterior.tipoProfissional))
+    ? String(dados.tipoProfissional ?? anterior.tipoProfissional)
+    : ((dados.profissionalId ?? anterior.profissionalId) ? 'especifico' : 'todos');
+
+  const profissionalId = tipoProfissional === 'especifico'
+    ? texto(dados.profissionalId ?? anterior.profissionalId, 100)
+    : '';
+
+  const profissionalNome = tipoProfissional === 'especifico'
+    ? texto(dados.profissionalNome ?? anterior.profissionalNome, 160)
+    : '';
+
+  const profissionaisIds = tipoProfissional === 'selecionados'
+    ? (Array.isArray(dados.profissionaisIds ?? anterior.profissionaisIds)
+        ? [...new Set((dados.profissionaisIds ?? anterior.profissionaisIds).map((id) => texto(id, 100)).filter(Boolean))]
+        : [])
+    : (tipoProfissional === 'especifico' && profissionalId ? [profissionalId] : []);
+
+  const precosPorProfissional = (typeof (dados.precosPorProfissional ?? anterior.precosPorProfissional) === 'object' && (dados.precosPorProfissional ?? anterior.precosPorProfissional) !== null)
+    ? Object.fromEntries(
+        Object.entries(dados.precosPorProfissional ?? anterior.precosPorProfissional)
+          .filter(([k, v]) => k && Number(v) > 0)
+          .map(([k, v]) => [texto(k, 100), dinheiro(v)])
+      )
+    : {};
+
+  const ehVip = Boolean(dados.ehVip ?? anterior.ehVip ?? (dados.nome && /vip/i.test(dados.nome)));
+  const categoriaPlano = ['vip', 'recorrencia', 'pacote', 'padrao'].includes(String(dados.categoriaPlano ?? anterior.categoriaPlano))
+    ? String(dados.categoriaPlano ?? anterior.categoriaPlano)
+    : (ehVip ? 'vip' : 'recorrencia');
+
   return {
     nome: texto(dados.nome ?? anterior.nome, 140),
     descricao: texto(dados.descricao ?? anterior.descricao, 500),
@@ -1267,6 +1304,13 @@ function planoNormalizado(dados = {}, anterior = {}) {
     sessoesIncluidas: Math.max(1, Math.min(100, Math.round(numero(dados.sessoesIncluidas ?? dados.sessoes_incluidas ?? anterior.sessoesIncluidas, 1)))),
     validadeDias: Math.max(1, Math.min(730, Math.round(numero(dados.validadeDias ?? dados.validade_dias ?? anterior.validadeDias, ciclo === 'anual' ? 365 : ciclo === 'trimestral' ? 90 : 30)))),
     servicosIds,
+    tipoProfissional,
+    profissionalId,
+    profissionalNome,
+    profissionaisIds,
+    precosPorProfissional,
+    ehVip,
+    categoriaPlano,
     // Parte da mensalidade (%) que vai para o pote de comissão dos profissionais.
     percentualPote: Math.min(100, Math.max(0, numero(dados.percentualPote ?? dados.percentual_pote ?? anterior.percentualPote, 0))),
     // Como o pote é dividido: pelo valor de tabela dos serviços usados ("valor_tabela")
@@ -1279,10 +1323,29 @@ function planoNormalizado(dados = {}, anterior = {}) {
 }
 
 export function listarPlanos(empresaId, { incluirInativos = false } = {}) {
-  return Object.values(estadoEmpresa(empresaId, false).planos)
+  const estado = estadoEmpresa(empresaId, false);
+  return Object.values(estado.planos || {})
     .filter((item) => incluirInativos || item.ativo !== false)
     .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
-    .map((item) => ({ ...item }));
+    .map((item) => {
+      const plano = { ...item };
+      const profParam = plano.profissionalId ? `&prof=${encodeURIComponent(plano.profissionalId)}` : '';
+      plano.linkAdesao = `/clube?plano=${encodeURIComponent(plano.id)}${profParam}`;
+      plano.linkAdesaoCompleto = `https://kytto.com.br/clube?plano=${encodeURIComponent(plano.id)}${profParam}`;
+      plano.linkAdmin = `https://kytto.com.br/admin/barbearia-erp?area=catalogo&tab=Planos+e+assinaturas&planoId=${encodeURIComponent(plano.id)}`;
+      return plano;
+    });
+}
+
+export function obterPlano(empresaId, planoId) {
+  const plano = estadoEmpresa(empresaId, false).planos[String(planoId)];
+  if (!plano) return null;
+  const p = { ...plano };
+  const profParam = p.profissionalId ? `&prof=${encodeURIComponent(p.profissionalId)}` : '';
+  p.linkAdesao = `/clube?plano=${encodeURIComponent(p.id)}${profParam}`;
+  p.linkAdesaoCompleto = `https://kytto.com.br/clube?plano=${encodeURIComponent(p.id)}${profParam}`;
+  p.linkAdmin = `https://kytto.com.br/admin/barbearia-erp?area=catalogo&tab=Planos+e+assinaturas&planoId=${encodeURIComponent(p.id)}`;
+  return p;
 }
 
 export function criarPlano(empresaId, dados = {}) {
@@ -1406,10 +1469,113 @@ export function semearPacotesPadrao(empresaId) {
   return adicionou;
 }
 
+export function semearPlanosVipDino(empresaId) {
+  const estado = estadoEmpresa(empresaId, false);
+  if (!estado) return false;
+  const planosExistentes = Object.values(estado.planos || {});
+  const nomesExistentes = new Set(planosExistentes.map((p) => p.nome.toLowerCase()));
+
+  const profs = Object.values(estado.profissionais || {});
+  const profDino = profs.find((p) => p.ativo !== false && (p.nome.toLowerCase().includes('guilherme') || p.nome.toLowerCase().includes('dino')));
+  const profBruno = profs.find((p) => p.ativo !== false && p.nome.toLowerCase().includes('bruno'));
+  const profDavid = profs.find((p) => p.ativo !== false && p.nome.toLowerCase().includes('david'));
+  const profsEquipe = profs.filter((p) => p.ativo !== false && p.id !== profDino?.id);
+
+  const servicos = Object.values(estado.servicos || {}).filter((s) => s.ativo !== false);
+  const srvCorte = servicos.find((s) => s.nome.toLowerCase().includes('corte'))?.id;
+  const srvBarba = servicos.find((s) => s.nome.toLowerCase().includes('barba'))?.id;
+  let servicosIds = [srvCorte, srvBarba].filter(Boolean);
+  if (!servicosIds.length) {
+    if (servicos.length) {
+      servicosIds = [servicos[0].id];
+    } else {
+      try {
+        const srvCriado = criarServico(empresaId, {
+          nome: 'Corte de Cabelo Tradicional',
+          preco: 60,
+          duracaoMinutos: 30,
+        });
+        servicosIds = [srvCriado.id];
+      } catch (_) {
+        servicosIds = [];
+      }
+    }
+  }
+
+  const pacotesVip = [
+    {
+      nome: 'Plano VIP Gold — Exclusivo Dino',
+      preco: 600,
+      sessoesIncluidas: 4,
+      ciclo: 'mensal',
+      validadeDias: 30,
+      servicosIds,
+      ehVip: true,
+      categoriaPlano: 'vip',
+      tipoProfissional: 'especifico',
+      profissionalId: profDino?.id || '',
+      profissionalNome: profDino?.nome || 'Dino (Guilherme Cunha Martins)',
+      profissionaisIds: profDino ? [profDino.id] : [],
+      descricao: 'Atendimento VIP e prioritário exclusivo com o Mestre Barbeiro Dino. 4 procedimentos mensais (Corte, Barba e Visagismo), flexibilidade de horários e padrão executivo.',
+    },
+    {
+      nome: 'Plano VIP Silver — Equipe Barbearia Dino',
+      preco: 250,
+      sessoesIncluidas: 4,
+      ciclo: 'mensal',
+      validadeDias: 30,
+      servicosIds,
+      ehVip: true,
+      categoriaPlano: 'vip',
+      tipoProfissional: 'selecionados',
+      profissionaisIds: profsEquipe.map((p) => p.id),
+      precosPorProfissional: Object.fromEntries(profsEquipe.map((p) => [p.id, 250])),
+      descricao: 'Plano VIP com a equipe de barbeiros especialistas da Dino (Bruno, David, Amanda, Gabi, Pacheco, Denis e Kauan). 4 procedimentos mensais com desconto especial.',
+    },
+    {
+      nome: 'Clube Recorrência Barbearia Dino',
+      preco: 220,
+      sessoesIncluidas: 4,
+      ciclo: 'mensal',
+      validadeDias: 30,
+      servicosIds,
+      ehVip: false,
+      categoriaPlano: 'recorrencia',
+      tipoProfissional: 'todos',
+      precosPorProfissional: {
+        ...(profDino ? { [profDino.id]: 500 } : {}),
+        ...(profBruno ? { [profBruno.id]: 220 } : {}),
+        ...(profDavid ? { [profDavid.id]: 200 } : {}),
+      },
+      descricao: 'Assinatura mensal para manter o visual em dia. Preço diferenciado conforme o profissional escolhido: Dino R$ 500,00 | Equipe a partir de R$ 200,00.',
+    },
+  ];
+
+  const resultado = [];
+  for (const pct of pacotesVip) {
+    let pExistente = planosExistentes.find((p) => p.nome.toLowerCase() === pct.nome.toLowerCase());
+    if (!pExistente) {
+      try {
+        pExistente = criarPlano(empresaId, pct);
+      } catch (err) {
+        console.warn(`[barbearia] semear plano VIP ${pct.nome}:`, err.message);
+      }
+    }
+    if (pExistente) resultado.push(pExistente);
+  }
+  return resultado;
+}
+
 function assinaturaNormalizada(dados = {}, anterior = {}, plano = {}) {
   const inicio = texto(dados.inicio ?? dados.inicioEm ?? anterior.inicio, 40) || dataAtual();
   const fim = texto(dados.fim ?? dados.fimEm ?? anterior.fim, 40);
   if (fim) intervaloValido(inicio, fim);
+  const profissionalId = texto(dados.profissionalId ?? dados.profissional_id ?? anterior.profissionalId ?? plano.profissionalId, 100);
+  const profissionalNome = texto(dados.profissionalNome ?? dados.profissional_nome ?? anterior.profissionalNome ?? plano.profissionalNome, 160);
+  const precoContratado = (profissionalId && plano.precosPorProfissional?.[profissionalId])
+    ? dinheiro(plano.precosPorProfissional[profissionalId])
+    : dinheiro(dados.precoContratado ?? dados.preco ?? anterior.precoContratado ?? plano.preco);
+  const ehVip = Boolean(dados.ehVip ?? anterior.ehVip ?? plano.ehVip);
   return {
     clienteId: texto(dados.clienteId ?? dados.cliente_id ?? anterior.clienteId, 100),
     clienteNome: texto(dados.clienteNome ?? dados.cliente_nome ?? anterior.clienteNome, 160),
@@ -1423,19 +1589,39 @@ function assinaturaNormalizada(dados = {}, anterior = {}, plano = {}) {
     cobrancaAutomatica: false,
     pagamentoConfirmado: Boolean(dados.pagamentoConfirmado ?? anterior.pagamentoConfirmado ?? false),
     observacoes: texto(dados.observacoes ?? anterior.observacoes, 500),
+    profissionalId,
+    profissionalNome,
+    precoContratado,
+    ehVip,
   };
 }
 
 export function listarAssinaturas(empresaId, filtros = {}) {
-  return Object.values(estadoEmpresa(empresaId, false).assinaturas)
+  const estado = estadoEmpresa(empresaId, false);
+  return Object.values(estado.assinaturas || {})
     .filter((item) => !filtros.status || item.status === String(filtros.status))
     .filter((item) => !filtros.clienteId || item.clienteId === String(filtros.clienteId))
     .sort((a, b) => String(b.criadoEm).localeCompare(String(a.criadoEm)))
-    .map((item) => ({ ...item }));
+    .map((item) => {
+      const ass = { ...item };
+      ass.linkVinculo = `https://kytto.com.br/admin/barbearia-erp?area=catalogo&tab=Planos+e+assinaturas&assinaturaId=${encodeURIComponent(ass.id)}`;
+      ass.linkExtrato = `https://kytto.com.br/perfil?aba=pacotes&assinatura=${encodeURIComponent(ass.id)}`;
+      return ass;
+    });
+}
+
+export function obterAssinatura(empresaId, assinaturaId) {
+  const estado = estadoEmpresa(empresaId, false);
+  const assinatura = estado.assinaturas?.[String(assinaturaId)];
+  if (!assinatura) return null;
+  const ass = { ...assinatura };
+  ass.linkVinculo = `https://kytto.com.br/admin/barbearia-erp?area=catalogo&tab=Planos+e+assinaturas&assinaturaId=${encodeURIComponent(ass.id)}`;
+  ass.linkExtrato = `https://kytto.com.br/perfil?aba=pacotes&assinatura=${encodeURIComponent(ass.id)}`;
+  return ass;
 }
 
 function assinaturaHash(item) {
-  return crypto.createHash('sha256').update(JSON.stringify(['clienteId','clienteNome','planoId','inicio','fim','sessoesContratadas','observacoes','regraRenovacao'].map(k=>item[k]??null))).digest('hex');
+  return crypto.createHash('sha256').update(JSON.stringify(['clienteId','clienteNome','planoId','inicio','fim','sessoesContratadas','observacoes','regraRenovacao','profissionalId'].map(k=>item[k]??null))).digest('hex');
 }
 
 export function criarAssinatura(empresaId, dados = {}) {

@@ -50,13 +50,25 @@ export function coberturasDoCliente(empresaId, clienteId, opcoes = {}) {
         pagoAte: resumo.pagoAte,
         utilizavel,
         motivo: utilizavel ? null : (MOTIVOS[situacao] || (restantes <= 0 ? 'sessões do ciclo esgotadas' : 'plano indisponível')),
+        profissionalId: assinatura.profissionalId || resumo.plano?.profissionalId || null,
+        profissionalNome: assinatura.profissionalNome || resumo.plano?.profissionalNome || null,
+        profissionaisIds: resumo.plano?.profissionaisIds || [],
+        ehVip: Boolean(resumo.plano?.ehVip || assinatura.ehVip),
+        tipoProfissional: resumo.plano?.tipoProfissional || (resumo.plano?.profissionalId ? 'especifico' : 'todos'),
       };
     })
     .filter(Boolean);
 }
 
-function cobre(cobertura, servicoId) {
-  return cobertura.todosOsServicos || cobertura.servicosIds.includes(String(servicoId));
+function cobre(cobertura, servicoId, profissionalId = null) {
+  const servicoOk = cobertura.todosOsServicos || cobertura.servicosIds.includes(String(servicoId));
+  if (!servicoOk) return false;
+  if (profissionalId) {
+    const profId = String(profissionalId);
+    if (cobertura.profissionalId && String(cobertura.profissionalId) !== profId) return false;
+    if (cobertura.profissionaisIds?.length && !cobertura.profissionaisIds.includes(profId)) return false;
+  }
+  return true;
 }
 
 /** Remove do corpo campos que só o servidor pode preencher. */
@@ -71,7 +83,21 @@ export function limparItensRecebidos(itens = []) {
  * Aplica o plano aos serviços da entrada. Serviço com quantidade maior que o
  * saldo vira uma linha por sessão coberta e uma linha avulsa com o restante.
  */
-export function aplicarPlanoAosItens(empresaId, { clienteId, itens = [], comandaId = '', agendamentoId = '' } = {}, opcoes = {}) {
+export function aplicarPlanoAosItens(empresaId, arg2 = {}, arg3 = {}) {
+  let clienteId, itens, comandaId, agendamentoId, opcoes;
+  if (typeof arg2 === 'string') {
+    clienteId = arg2;
+    itens = Array.isArray(arg3) ? arg3 : (arg3.itens || []);
+    comandaId = arg3.comandaId || '';
+    agendamentoId = arg3.agendamentoId || '';
+    opcoes = Array.isArray(arg3) ? {} : arg3;
+  } else {
+    clienteId = arg2.clienteId;
+    itens = arg2.itens || [];
+    comandaId = arg2.comandaId || '';
+    agendamentoId = arg2.agendamentoId || '';
+    opcoes = arg3;
+  }
   const entrada = limparItensRecebidos(itens);
   const avisos = [];
   if (!clienteId) return { itens: entrada, cobertos: 0, avisos };
@@ -84,7 +110,8 @@ export function aplicarPlanoAosItens(empresaId, { clienteId, itens = [], comanda
     const tipo = String(item.tipo || (item.servicoId ? 'servico' : 'produto')).toLowerCase();
     if (tipo !== 'servico' || item.usarPlano === false) { saida.push(item); continue; }
     const servicoId = String(item.servicoId || item.itemId || '');
-    const candidatas = coberturas.filter((c) => cobre(c, servicoId));
+    const itemProfId = item.profissionalId || null;
+    const candidatas = coberturas.filter((c) => cobre(c, servicoId, itemProfId));
     if (!candidatas.length) { saida.push(item); continue; }
     let restante = Math.max(1, Math.round(Number(item.quantidade || 1)));
     for (const cobertura of candidatas) {

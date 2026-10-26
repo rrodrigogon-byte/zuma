@@ -214,6 +214,15 @@ export function provisionarEquipeDino({ commerceDb = null } = {}) {
     }
   }
 
+  // 2.5 Semeia os planos VIP e tabela de preços por profissional para a Barbearia Dino
+  for (const empId of empresasAlvo) {
+    try {
+      barbeariaErpKytto.semearPlanosVipDino(empId);
+    } catch (e) {
+      console.warn(`[dino-equipe-seed] Aviso ao semear planos VIP para ${empId}:`, e.message);
+    }
+  }
+
   save();
 
   // 3. Opcionalmente sincroniza no PostgreSQL (se database fornecido)

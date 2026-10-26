@@ -5744,6 +5744,19 @@ app.delete('/api/admin/barbearia/bloqueios/:id', (req, res) => {
 });
 
 app.get('/api/admin/barbearia/planos', (req, res) => res.json({ ok: true, planos: barbeariaErpKytto.listarPlanos(legacyEmpresaId(req), { incluirInativos: String(req.query?.incluirInativos) === 'true' }) }));
+app.get('/api/admin/barbearia/planos/:id/link', (req, res) => {
+  try {
+    const plano = barbeariaErpKytto.obterPlano(legacyEmpresaId(req), req.params.id);
+    if (!plano) return res.status(404).json({ error: 'Plano não encontrado.' });
+    const profParam = plano.profissionalId ? `&prof=${encodeURIComponent(plano.profissionalId)}` : '';
+    const linkAdesao = `/clube?plano=${encodeURIComponent(plano.id)}${profParam}`;
+    const linkAdesaoCompleto = `https://kytto.com.br/clube?plano=${encodeURIComponent(plano.id)}${profParam}`;
+    const linkAdmin = `https://kytto.com.br/admin/barbearia-erp?area=catalogo&tab=Planos+e+assinaturas&planoId=${encodeURIComponent(plano.id)}`;
+    const msg = `Olá! Conheça nosso ${plano.ehVip ? '👑 Plano VIP' : 'Plano de Recorrência'} na Barbearia Dino:\n\n*${plano.nome}*\n${plano.sessoesIncluidas} procedimentos por ciclo ${plano.ciclo}\n${plano.profissionalNome ? `Profissional: ${plano.profissionalNome}\n` : ''}Valor: R$ ${Number(plano.preco).toFixed(2).replace('.', ',')}\n\nAssine agora e garanta seus benefícios exclusivos: ${linkAdesaoCompleto}`;
+    const linkWhatsapp = `https://wa.me/?text=${encodeURIComponent(msg)}`;
+    res.json({ ok: true, plano, linkAdesao, linkAdesaoCompleto, linkAdmin, linkWhatsapp });
+  } catch (error) { res.status(400).json({ error: error.message }); }
+});
 app.post('/api/admin/barbearia/planos', (req, res) => {
   try { res.status(201).json({ ok: true, plano: barbeariaErpKytto.criarPlano(legacyEmpresaId(req), req.body || {}) }); }
   catch (error) { res.status(400).json({ error: error.message }); }
@@ -5766,6 +5779,17 @@ app.delete('/api/admin/barbearia/planos/:id', (req, res) => {
 });
 
 app.get('/api/admin/barbearia/assinaturas', (req, res) => res.json({ ok: true, assinaturas: barbeariaErpKytto.listarAssinaturas(legacyEmpresaId(req), { status: req.query?.status, clienteId: req.query?.clienteId }) }));
+app.get('/api/admin/barbearia/assinaturas/:id/link', (req, res) => {
+  try {
+    const assinatura = barbeariaErpKytto.obterAssinatura(legacyEmpresaId(req), req.params.id);
+    if (!assinatura) return res.status(404).json({ error: 'Assinatura não encontrada.' });
+    const linkVinculo = `https://kytto.com.br/admin/barbearia-erp?area=catalogo&tab=Planos+e+assinaturas&assinaturaId=${encodeURIComponent(assinatura.id)}`;
+    const linkExtrato = `https://kytto.com.br/perfil?aba=pacotes&assinatura=${encodeURIComponent(assinatura.id)}`;
+    const msg = `Olá ${assinatura.clienteNome || 'Cliente'}! Segue o link de acompanhamento do seu *Plano / Vínculo* na Barbearia Dino${assinatura.profissionalNome ? ` com o profissional *${assinatura.profissionalNome}*` : ''}:\n\nConsulte suas sessões no link: ${linkExtrato}`;
+    const linkWhatsapp = `https://wa.me/?text=${encodeURIComponent(msg)}`;
+    res.json({ ok: true, assinatura, linkVinculo, linkExtrato, linkWhatsapp });
+  } catch (error) { res.status(400).json({ error: error.message }); }
+});
 app.post('/api/admin/barbearia/assinaturas', (req, res) => {
   try { res.status(201).json({ ok: true, assinatura: barbeariaErpKytto.criarAssinatura(legacyEmpresaId(req), req.body || {}) }); }
   catch (error) { res.status(400).json({ error: error.message }); }

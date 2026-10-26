@@ -169,6 +169,15 @@ const ModoBarbeiro = lazy(() => import('./pages/barbeiro/ModoBarbeiro'))
 const NoticiasPublic  = lazy(() => import('./pages/public/Noticias'))
 const MeuPainel       = lazy(() => import('./pages/atleta/MeuPainel'))
 const Clube           = lazy(() => import('./pages/public/Clube'))
+const BarbeariaClubeVip = lazy(() => import('./pages/public/BarbeariaClubeVip'))
+
+function ClubeSmartRoute() {
+  const [params] = useSearchParams()
+  if (params.get('plano') || params.get('prof') || params.get('barbearia') || params.get('slug') === 'dino') {
+    return <BarbeariaClubeVip />
+  }
+  return <Clube />
+}
 const Liga            = lazy(() => import('./pages/public/Liga'))
 const PerfilAtleta    = lazy(() => import('./pages/public/PerfilAtleta'))
 const CardapioMesaPublico = lazy(() => import('./pages/public/CardapioMesaPublico'))
@@ -361,7 +370,10 @@ export default function App() {
         <Route path="/contato"    element={<Layout><Contato /></Layout>} />
         <Route path="/noticias"   element={<Layout><NoticiasPublic /></Layout>} />
         <Route path="/quadras"    element={<Layout><AgendaQuadras /></Layout>} />
-        <Route path="/clube"      element={<Layout marketing><Clube /></Layout>} />
+        <Route path="/clube"      element={<Layout marketing><ClubeSmartRoute /></Layout>} />
+        <Route path="/clube/:slug" element={<BarbeariaClubeVip />} />
+        <Route path="/planos/:slug" element={<BarbeariaClubeVip />} />
+        <Route path="/clube-vip"  element={<BarbeariaClubeVip />} />
         <Route path="/liga"          element={<Layout><Liga /></Layout>} />
         <Route path="/liga/:id"      element={<Layout><Liga /></Layout>} />
         <Route path="/atleta/:nome"  element={<Layout><PerfilAtleta /></Layout>} />
