@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import { api } from '../../../lib/api'
-import { Scissors, Users, Clock, MessageSquare, AlertCircle, RefreshCw, UserCheck, PhoneCall, ChevronRight } from 'lucide-react'
+import { Scissors, Users, Clock, MessageSquare, AlertCircle, RefreshCw, UserCheck, PhoneCall, ChevronRight, ExternalLink } from 'lucide-react'
+import { refHistoricoCliente, urlHistoricoCliente, abrirHistoricoEmNovaGuia } from './historico-cliente'
 import './DinoCarteiraClientesPanel.css'
 
 const moeda = (v) => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
@@ -270,11 +271,23 @@ export default function DinoCarteiraClientesPanel({ onNovoCliente }) {
             ) : (
               clientes.map((c) => {
                 const linkWpp = gerarLinkWhatsapp(c)
+                const urlHistorico = urlHistoricoCliente(refHistoricoCliente(c))
                 return (
                   <tr key={c.clienteId} className="carteira-row">
                     <td className="carteira-td">
-                      <div style={{ fontWeight: 700, color: '#ffffff', fontSize: 14 }}>{c.nome}</div>
-                      <div style={{ fontSize: 12, color: '#94a3b8' }}>{c.telefone || 'Sem telefone'}</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <a
+                          href={urlHistorico}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="carteira-cliente-link"
+                          title="Abrir ficha completa 360° e histórico do cliente em nova guia"
+                        >
+                          <span className="carteira-cliente-nome">{c.nome}</span>
+                          <ExternalLink size={13} className="carteira-link-icon" />
+                        </a>
+                      </div>
+                      <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 2 }}>{c.telefone || 'Sem telefone'}</div>
                     </td>
 
                     <td className="carteira-td">
@@ -323,20 +336,32 @@ export default function DinoCarteiraClientesPanel({ onNovoCliente }) {
                     </td>
 
                     <td className="carteira-td">
-                      {linkWpp !== '#' ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                         <a
-                          href={linkWpp}
+                          href={urlHistorico}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="btn-whatsapp-carteira"
-                          title="Enviar mensagem personalizada pelo WhatsApp"
+                          className="btn-ficha-carteira"
+                          title="Abrir ficha completa 360° com histórico de atendimentos, consumos, preferências e dados do cliente em nova guia"
                         >
-                          <MessageSquare size={14} />
-                          WhatsApp
+                          <ExternalLink size={13} />
+                          Ficha 360°
                         </a>
-                      ) : (
-                        <span style={{ fontSize: 12, color: '#64748b' }}>Sem WhatsApp</span>
-                      )}
+                        {linkWpp !== '#' ? (
+                          <a
+                            href={linkWpp}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="btn-whatsapp-carteira"
+                            title="Enviar mensagem personalizada pelo WhatsApp"
+                          >
+                            <MessageSquare size={13} />
+                            WhatsApp
+                          </a>
+                        ) : (
+                          <span style={{ fontSize: 12, color: '#64748b' }}>Sem WhatsApp</span>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 )

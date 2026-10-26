@@ -34,7 +34,7 @@ const BIBarbearia = lazy(() => import('./dino/BIBarbearia'))
 const ProjecaoFaturamentoPanel = lazy(() => import('./dino/ProjecaoFaturamentoPanel'))
 const DinoMetasRoletaPanel = lazy(() => import('./dino/DinoMetasRoletaPanel'))
 import ComandaNova, { AdicionarItensComanda, BuscaCliente } from './dino/ComandaNova'
-import { abrirHistoricoEmNovaGuia } from './dino/historico-cliente'
+import { abrirHistoricoEmNovaGuia, refHistoricoCliente, urlHistoricoCliente } from './dino/historico-cliente'
 import ClienteRelacionamento, { RELACIONAMENTO_VAZIO, relacionamentoDoCliente, relacionamentoParaApi } from './dino/ClienteRelacionamento'
 import { CanaisPanel, ClubeSaudePanel, CobrancasPanel, IndicacoesPanel, ListaEsperaPanel, NpsPanel, OcupacaoMetasPanel, ReceitaIaPanel, ResumoDiarioPanel, RetornosPanel, UnidadesPanel, ValesPanel } from './dino/CaptacaoPanels'
 
@@ -1669,13 +1669,13 @@ export default function BarbeariaERP() {
               const consentimentos = cliente.consentimentos || {}
               const concedidos = ['whatsapp', 'email'].flatMap((canal) => ['atendimento', 'marketing'].map((finalidade) => consentimentos[canal]?.[finalidade]?.concedido === true)).filter(Boolean).length
               return <tr key={cliente.id} style={{ borderTop: '1px solid var(--line)' }}>
-                <td style={styles.td}><button type="button" onClick={() => navigate(`/admin/clientes-360/${encodeURIComponent(`dino:${cliente.id}`)}`)} style={{ padding: 0, border: 0, background: 'transparent', color: 'inherit', font: 'inherit', fontWeight: 800, cursor: 'pointer', textAlign: 'left', textDecoration: 'underline', textUnderlineOffset: 3, textDecorationColor: 'var(--line)' }} title="Abrir Customer 360">{cliente.nome}</button><div style={styles.sub}>{cliente.tipo === 'pj' ? 'Pessoa jurídica' : 'Pessoa física'}</div></td>
+                <td style={styles.td}><a href={urlHistoricoCliente(refHistoricoCliente(cliente))} target="_blank" rel="noopener noreferrer" style={{ padding: 0, border: 0, background: 'transparent', color: '#38bdf8', font: 'inherit', fontWeight: 800, cursor: 'pointer', textAlign: 'left', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 4 }} title="Abrir Customer 360 e histórico em nova guia">{cliente.nome} ↗</a><div style={styles.sub}>{cliente.tipo === 'pj' ? 'Pessoa jurídica' : 'Pessoa física'}</div></td>
                 <td style={styles.td}>{cliente.telefone || '—'}<div style={styles.sub}>{cliente.email || '—'}</div></td>
                 <td style={{ ...styles.td, fontWeight: 800 }}>{resumo.visitas || 0}<div style={styles.sub}>{resumo.agendamentos || 0} agendamento(s)</div></td>
                 <td style={{ ...styles.td, fontWeight: 800 }}>{moeda(resumo.receitaRecebida || 0)}</td>
                 <td style={{ ...styles.td, fontWeight: 800, color: Number(resumo.aReceber || cliente.saldoDevedor || 0) > 0 ? '#f59e0b' : 'inherit' }}>{moeda(resumo.aReceber ?? cliente.saldoDevedor ?? 0)}</td>
                 <td style={styles.td}><strong>{concedidos}/4</strong><div style={styles.sub}>{concedidos ? 'Permissões ativas' : 'Nenhuma permissão'}</div></td>
-                <td style={styles.td}>{resumo.ultimaAtividadeEm ? fmtDate(resumo.ultimaAtividadeEm) : 'Sem atividade'}<div style={styles.tableActions}><button type="button" style={styles.small} onClick={() => navigate(`/admin/clientes-360/${encodeURIComponent(`dino:${cliente.id}`)}`)}>Ficha 360</button><button type="button" style={styles.small} onClick={() => abrirCliente(cliente)}>Editar</button><button type="button" style={{ ...styles.small, color: 'var(--accent)' }} onClick={() => agendarParaCliente(cliente)}>Agendar</button></div></td>
+                <td style={styles.td}>{resumo.ultimaAtividadeEm ? fmtDate(resumo.ultimaAtividadeEm) : 'Sem atividade'}<div style={styles.tableActions}><a href={urlHistoricoCliente(refHistoricoCliente(cliente))} target="_blank" rel="noopener noreferrer" style={{ ...styles.small, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 4 }} title="Abrir Ficha 360 e histórico em nova guia">Ficha 360 ↗</a><button type="button" style={styles.small} onClick={() => abrirCliente(cliente)}>Editar</button><button type="button" style={{ ...styles.small, color: 'var(--accent)' }} onClick={() => agendarParaCliente(cliente)}>Agendar</button></div></td>
               </tr>
             })}
           </tbody>

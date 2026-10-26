@@ -29,6 +29,18 @@ import * as store from './customer360-store.js';
 import { montarHistoricoCliente } from './cliente-historico-kytto.js';
 
 const MANAGE_ROLES = new Set(['admin', 'organizador']);
+
+const EQUIVALENCIAS_DINO = new Set([
+  'd0d0ac01-8e50-4b61-8c79-de4aaa916da6',
+  'emp-kytto-001',
+  'dino',
+]);
+
+function empresasEquivalentes(empresaId) {
+  const chave = String(empresaId || '');
+  if (EQUIVALENCIAS_DINO.has(chave)) return Array.from(EQUIVALENCIAS_DINO);
+  return [chave];
+}
 const EXPORT_ROLES = new Set(['admin']);
 const REVEAL_FIELDS = new Set(['telefone', 'email', 'documento', 'endereco']);
 const ANON_CONFIRMATION = 'ANONIMIZAR';
@@ -75,8 +87,19 @@ export function registerCustomer360Routes(app, deps) {
 
   function localClients(req) {
     const empresaId = legacyEmpresaId(req);
-    // o cadastro genérico "Cliente Balcão" (padrao) não é uma pessoa e fica fora da 360
-    return clientesKytto.listarClientes(empresaId).filter((cliente) => !cliente.padrao && cliente.id !== 'cli-padrao-balcao').map((cliente) => clientesKytto.obterCliente(empresaId, cliente.id) || cliente);
+    const empresas = empresasEquivalentes(empresaId);
+    const map = new Map();
+    for (const emp of empresas) {
+      try {
+        const lista = clientesKytto.listarClientes(emp);
+        for (const cliente of lista) {
+          if (!cliente.padrao && cliente.id !== 'cli-padrao-balcao' && !map.has(cliente.id)) {
+            map.set(cliente.id, clientesKytto.obterCliente(emp, cliente.id) || cliente);
+          }
+        }
+      } catch {}
+    }
+    return Array.from(map.values());
   }
 
   async function sourcesFor(req, { query = '', limit = 500 } = {}) {
@@ -98,18 +121,49 @@ export function registerCustomer360Routes(app, deps) {
 
   function localData(req, { includeHistorical = false, customerId = '' } = {}) {
     const empresaId = legacyEmpresaId(req);
+    const empresas = empresasEquivalentes(empresaId);
     const lojaId = legacyLojaId(req);
     const fidelidade = canaisFidelidadeKytto.obterFidelidade(empresaId);
+
+    const appointments = [];
+    const comandas = [];
+    const retailSales = [];
+    const historicalAppointments = [];
+    const servicesMap = new Map();
+    const productsMap = new Map();
+    const receivables = [];
+
+    for (const emp of empresas) {
+      try { appointments.push(...listarAgendamentosBarbearia(emp, { lojaId })); } catch {}
+      try { comandas.push(...barbeariaErpKytto.listarComandasBarbearia(emp, { lojaId })); } catch {}
+      try { retailSales.push(...barbeariaErpKytto.listarVendasRevenda(emp, { lojaId })); } catch {}
+      if (includeHistorical && customerId) {
+        try { historicalAppointments.push(...(barbeariaErpKytto.listarHistoricoAtendimentos?.(emp, { lojaId, clienteId: customerId, limite: 50000 }) || [])); } catch {}
+      }
+      try {
+        for (const s of (barbeariaErpKytto.listarServicos?.(emp, { incluirInativos: true }) || [])) {
+          if (!servicesMap.has(s.id)) servicesMap.set(s.id, s);
+        }
+      } catch {}
+      try {
+        for (const p of (barbeariaErpKytto.listarProdutosRevenda?.(emp, { incluirInativos: true }) || [])) {
+          if (!lojaId || !p.lojaId || String(p.lojaId) === String(lojaId)) {
+            if (!productsMap.has(p.id)) productsMap.set(p.id, p);
+          }
+        }
+      } catch {}
+      try { receivables.push(...clientesKytto.listarContasReceber(emp)); } catch {}
+    }
+
     return {
-      appointments: listarAgendamentosBarbearia(empresaId, { lojaId }),
-      comandas: barbeariaErpKytto.listarComandasBarbearia(empresaId, { lojaId }),
-      retailSales: barbeariaErpKytto.listarVendasRevenda(empresaId, { lojaId }),
-      historicalAppointments: includeHistorical && customerId ? (barbeariaErpKytto.listarHistoricoAtendimentos?.(empresaId, { lojaId, clienteId: customerId, limite: 50000 }) || []) : [],
-      services: barbeariaErpKytto.listarServicos?.(empresaId, { incluirInativos: true }) || [],
-      products: (barbeariaErpKytto.listarProdutosRevenda?.(empresaId, { incluirInativos: true }) || [])
-        .filter((item) => !lojaId || !item.lojaId || String(item.lojaId) === String(lojaId)),
+      appointments,
+      comandas,
+      retailSales,
+      historicalAppointments,
+      services: Array.from(servicesMap.values()),
+      products: Array.from(productsMap.values()),
       storeId: lojaId,
-      receivables: clientesKytto.listarContasReceber(empresaId),
+      receivables,
       fidelidade,
     };
   }
@@ -122,7 +176,14 @@ export function registerCustomer360Routes(app, deps) {
     if (context && parsed.kind === 'loja' && !commerceList.some((item) => item.id === parsed.id)) {
       try { commerceList = [...commerceList, ...(await loadCommerceDirectory(context, { query: parsed.id, limit: 5 })).filter((item) => item.id === parsed.id)]; } catch { /* segue degradado */ }
     }
-    const identity = resolveIdentity(parsed, { localClients: locals, commerceCustomers: commerceList, ...rules });
+    let identity = resolveIdentity(parsed, { localClients: locals, commerceCustomers: commerceList, ...rules });
+    if (!identity && parsed.kind === 'dino') {
+      const matchLocal = locals.find((item) => String(item.id) === parsed.id || String(item.clienteId) === parsed.id);
+      if (matchLocal?.telefone) {
+        const phoneParsed = parseRef(`tel:${matchLocal.telefone}`);
+        if (phoneParsed) identity = resolveIdentity(phoneParsed, { localClients: locals, commerceCustomers: commerceList, ...rules });
+      }
+    }
     if (!identity) return { status: 404, body: { error: 'Cliente não encontrado nesta empresa.', code: 'CUSTOMER360_NOT_FOUND' } };
 
     const empresaId = legacyEmpresaId(req);
