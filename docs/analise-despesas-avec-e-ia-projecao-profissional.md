@@ -253,3 +253,39 @@ Ao pesquisar qualquer profissional (ex.: Naty) no painel, o sistema exibe:
 * **Aba "Notas fiscais" Integrada:**
   * A central fiscal foi incorporada diretamente no menu de *Gestão* do ERP (`/admin/barbearia-erp?area=gestao&tab=Notas+fiscais`).
   * Integrada em `TABS_AUTONOMAS` com lazy loading (`React.lazy`), garantindo 0ms de bloqueio e permitindo ao operador emitir notas, imprimir DANFE térmico de 80mm com QR Code v3 ou A4, baixar XMLs e gerenciar contingências sem sair do fluxo de atendimento.
+
+---
+
+## 16.0 Redesenho Completo da Agenda: Padrão Google Agenda, Visão Segunda a Sábado e Gestão de Barbeiros Ativos
+
+### 16.1 Contexto e Problema Identificado
+* **Poluição Visual e Lista Desordenada de Profissionais:**
+  * A versão anterior exibia uma nuvem desordenada com mais de 35 botões ("chips") contendo nomes duplicados e de profissionais excluídos ou inativos com o sufixo `(inativo)`, poluindo o topo da página e dificultando a navegação operacional rápida pela equipe.
+  * O layout da grade não seguia a rotina de trabalho da barbearia (segunda a sábado), misturando seletores redundantes de data e de linha do tempo.
+
+### 16.2 Arquitetura e Implementação da Solução
+* **1. Padrão Google Agenda (Google Calendar Modern UI):**
+  * **Cabeçalho de Navegação Intuitivo:** Botão "Hoje" para retorno imediato à semana corrente, botões de avanço e retrocesso (`‹` e `›`) que saltam exatamente de 7 em 7 dias (mantendo a segunda-feira alinhada), título de destaque em caixa alta e fonte moderna com o mês/ano (`Outubro de 2026`) e subtítulo legível com as datas e barbeiro selecionado.
+  * **Visualização Padrão Segunda a Sábado (`semana_util`):** Abertura padrão de 6 colunas comerciais correspondendo aos dias de funcionamento da Barbearia Dino (Segunda, Terça, Quarta, Quinta, Sexta e Sábado). Modos alternativos disponíveis com 1 clique: *Semana completa (7 dias)*, *Dia*, *Mês* e *Lista*.
+  * **Destaque Visual do Dia Atual ("Hoje"):** A coluna de hoje é realçada com círculo azul preenchido no número do dia (`#1a73e8`), fundo sutilmente destacado e badge de contagem de atendimentos, idêntico à experiência do Google Agenda.
+  * **Cards de Eventos Refinados:** Cada atendimento é exibido com barra lateral colorida por status (Confirmado: azul `#2563eb`; Em atendimento: âmbar `#f59e0b`; Concluído: verde `#10b981`; Agendado: roxo `#8b5cf6`; Cancelado: vermelho `#ef4444`), horário de início e término em destaque, valor monetário formatado, nome do cliente em negrito, serviço realizado, etiqueta do barbeiro e badge `🤖 IA` para agendamentos feitos pela assistente de WhatsApp.
+  * **Busca em Tempo Real:** Campo de busca rápida integrado no cabeçalho com limpeza instantânea (`✕`) para localizar clientes e serviços em milissegundos sem recarregar a tela.
+
+* **2. Barra Superior de Barbeiros Ativos (Top Bar):**
+  * Componente `AgendaProfissionais.jsx` totalmente reestruturado com layout horizontal elegante:
+    * Chip de destaque "Toda a equipe" com avatar coletivo e contador de barbeiros ativos.
+    * Chips individuais para cada barbeiro ativo (`Dino`, `Bruno Mendes`, `Guilherme`, `David`, `Naty`, `João Victor`, etc.) com avatares circulares coloridos, iniciais e checkmark animado quando selecionado.
+    * **Eliminação Total de Inativos/Excluídos:** Profissionais que não fazem mais parte da equipe (`ativo === false`, `removidoEm` ou `excluido`) são rigorosamente filtrados e **não aparecem** na grade da agenda nem na barra superior.
+    * Acesso rápido via tecla ou clique único para isolar instantaneamente a agenda do barbeiro desejado.
+
+* **3. Resumo Operacional e Linha do Tempo Complementar:**
+  * Resumo com KPIs no topo: *Atendimentos no dia*, *Confirmados*, *Em atendimento*, *Avisos na fila do WhatsApp*, *Bloqueios* e *Barbeiros ativos*.
+  * Gaveta inferior rápida para *Consulta de Vagas Livres* por serviço e jornada de trabalho dos barbeiros.
+  * Grade horária por cadeira disponível de forma limpa em seção expansível abaixo do calendário principal.
+
+### 16.3 Arquivos Modificados e Testes Automatizados
+* `web/src/pages/admin/BarbeariaAgendaPeriodo.jsx`: Redesenhado no padrão Google Agenda com visão Segunda a Sábado, busca rápida, cabeçalho de períodos e cards modernos.
+* `web/src/pages/admin/BarbeariaAgendaPeriodo.css`: Estilização completa Google Calendar com variáveis CSS fluidas, responsividade, grids adaptáveis e badges de status.
+* `web/src/pages/admin/AgendaProfissionais.jsx`: Barra superior horizontal com avatares coloridos, seleção rápida e filtro restrito aos profissionais ativos.
+* `web/src/pages/admin/BarbeariaERP.jsx`: Limpeza do container de agenda, remoção de controles redundantes e injeção dos barbeiros ativos na visualização.
+* `web/src/lib/barbearia-calendar.js` e `.test.js`: Funções utilitárias `semanaSegundaSabado`, `semanaCompleta`, `mesAnoLegivel`, `diaSemanaCurto` e `diaNumero` cobertas por testes automatizados (100% de aprovação).

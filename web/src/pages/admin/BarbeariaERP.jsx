@@ -1468,18 +1468,65 @@ export default function BarbeariaERP() {
 
   function renderAgenda() {
     const unidade = configuracaoUnidade?.calendario
-    const atendentesAtivos = profissionais.filter((item) => item.ativo !== false)
-    return <div style={{ display: 'grid', gap: 18 }}>
-      <Card style={{ padding: 18, background: 'linear-gradient(135deg, color-mix(in srgb, var(--accent) 12%, var(--card)), var(--card))' }}>
-        <div style={styles.sectionTitle}><div><div style={styles.kicker}>Agenda operacional</div><h2 style={{ ...styles.h2, fontSize: 22, marginTop: 5 }}>Dia da barbearia e dos atendentes</h2><p style={styles.sub}>Acompanhe horários, duração, serviço, cliente e status em uma única visão. A unidade da sessão é aplicada automaticamente.</p></div><div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}><button type="button" style={styles.secondary} onClick={carregar}>Atualizar agenda</button><button type="button" style={styles.secondary} onClick={() => setModal({ tipo: 'buscarHistorico' })} title="Abre a ficha completa do cliente em uma nova guia">Histórico do cliente ↗</button><button type="button" style={styles.primary} onClick={abrirNovoAgendamento}>+ Agendar atendimento</button></div></div>
-        <div style={styles.agendaToolbar}><Field label="Data"><input type="date" value={dataSelecionada} onChange={(event) => event.target.value && setDataSelecionada(event.target.value)} style={inputStyle} /></Field><Field label="Status"><select value={statusFiltro} onChange={(event) => setStatusFiltro(event.target.value)} style={inputStyle}><option value="">Todos os status</option>{['agendado', 'confirmado', 'em_atendimento', 'concluido', 'cancelado', 'nao_compareceu'].map(valor => <option key={valor} value={valor}>{STATUS[valor].label}</option>)}</select></Field><AgendaProfissionais profissionais={profissionais.filter(p => p.ativo !== false)} value={profissionalFiltro} onChange={setProfissionalFiltro} label="Atendentes na linha do tempo" /><div style={styles.agendaMeta}><strong>{atendentesAtivos.length}</strong><span>atendentes ativos</span><small>{unidade ? `${unidade.horarioAbertura}–${unidade.horarioFechamento}` : 'Horário corporativo'} · {agendamentos.length} registros no dia</small></div><div style={styles.viewToggle} role="group" aria-label="Modo de agenda"><span>Visualização</span><div><button type="button" onClick={() => setAgendaModo('timeline')} aria-pressed={agendaModo === 'timeline'} style={{ ...styles.viewToggleButton, ...(agendaModo === 'timeline' ? styles.viewToggleButtonActive : {}) }}>Linha do tempo</button><button type="button" onClick={() => setAgendaModo('lista')} aria-pressed={agendaModo === 'lista'} style={{ ...styles.viewToggleButton, ...(agendaModo === 'lista' ? styles.viewToggleButtonActive : {}) }}>Lista</button></div></div></div>
-      </Card>
-      <Card style={styles.agendaSummary}>
-        {[['Atendimentos', agendamentos.length, 'Agenda do dia', 'var(--accent)'], ['Confirmados', agendamentos.filter((item) => item.status === 'confirmado').length, 'Prontos para receber', '#8b5cf6'], ['Em atendimento', agendamentos.filter((item) => item.status === 'em_atendimento').length, 'Em execução agora', '#f59e0b'], ['Avisos na fila', Number(notificacoesAgenda.queued || 0), `${Number(notificacoesAgenda.sent || 0)} enviados · opt-in obrigatório`, '#2563eb'], ['Bloqueios', bloqueios.length, 'Horários indisponíveis', '#e05c5c'], ['Equipe', atendentesAtivos.length, 'Atendentes ativos', '#14b87a']].map(([label, value, note, color]) => <div key={label} style={styles.agendaSummaryItem}><strong style={{ color }}>{value}</strong><span>{label}</span><small>{note}</small></div>)}
-      </Card>
-      <BarbeariaAgendaPeriodo profissionais={profissionais} servicos={servicos} profissionalId={profissionalFiltro} onProfissionalChange={setProfissionalFiltro} onOpenAppointment={(item) => setModal({ tipo: 'detalheAgenda', agendamento: item })} onPickSlot={abrirAgendamentoNoHorario} refreshKey={agendaRevisao} dataSelecionada={dataSelecionada} onDateChange={setDataSelecionada} statusFiltro={statusFiltro} />
-      {agendaModo === 'timeline' ? <BarbeariaAgendaBoard data={dataSelecionada} configuracao={unidade || configuracao || {}} agendamentos={agendamentos.map((item) => ({ ...item, statusVisual: statusVisualAgendamento(item, configuracao?.confirmacaoAutomaticaAtiva === true) }))} profissionais={profissionalFiltro ? atendentesAtivos.filter((item) => profissionaisSelecionados(profissionalFiltro).includes(item.id)) : atendentesAtivos} bloqueios={bloqueios} onDateChange={(novaData) => { setStatusFiltro(''); setDataSelecionada(novaData) }} onNew={abrirNovoAgendamento} onOpenAppointment={(item) => setModal({ tipo: 'detalheAgenda', agendamento: item })} /> : <div><div style={{ ...styles.sectionTitle, marginBottom: 10 }}><div><h2 style={styles.h2}>Lista detalhada do dia</h2><p style={styles.sub}>Use a lista para visualizar dados completos e executar transições permitidas.</p></div></div>{renderAgendaTabela()}</div>}
-    </div>
+    // Filtra APENAS profissionais ativos (elimina inativos e excluídos da visão de agenda)
+    const atendentesAtivos = profissionais.filter((item) => item && item.ativo !== false && !item.removidoEm && !item.excluido)
+    const avisosEnviados = Number(notificacoesAgenda.sent || 0)
+    const avisosFila = Number(notificacoesAgenda.queued || 0)
+    return (
+      <div style={{ display: 'grid', gap: 18 }}>
+        {/* Resumo de Indicadores da Operação */}
+        <Card style={styles.agendaSummary}>
+          {[
+            ['Atendimentos', agendamentos.length, 'Agenda do dia', 'var(--accent)'],
+            ['Confirmados', agendamentos.filter((item) => item.status === 'confirmado').length, 'Prontos para receber', '#8b5cf6'],
+            ['Em atendimento', agendamentos.filter((item) => item.status === 'em_atendimento').length, 'Em execução agora', '#f59e0b'],
+            ['Avisos na fila', avisosFila, `${avisosEnviados} enviados · WhatsApp`, '#2563eb'],
+            ['Bloqueios', bloqueios.length, 'Horários indisponíveis', '#e05c5c'],
+            ['Barbeiros ativos', atendentesAtivos.length, 'Equipe em operação', '#14b87a']
+          ].map(([label, value, note, color]) => (
+            <div key={label} style={styles.agendaSummaryItem}>
+              <strong style={{ color }}>{value}</strong>
+              <span>{label}</span>
+              <small>{note}</small>
+            </div>
+          ))}
+        </Card>
+
+        {/* Agenda Visual Estilo Google Calendar com Barbeiros no Topo e visual Segunda a Sábado */}
+        <BarbeariaAgendaPeriodo
+          profissionais={atendentesAtivos}
+          servicos={servicos}
+          profissionalId={profissionalFiltro}
+          onProfissionalChange={setProfissionalFiltro}
+          onOpenAppointment={(item) => setModal({ tipo: 'detalheAgenda', agendamento: item })}
+          onPickSlot={abrirAgendamentoNoHorario}
+          refreshKey={agendaRevisao}
+          dataSelecionada={dataSelecionada}
+          onDateChange={setDataSelecionada}
+          statusFiltro={statusFiltro}
+          onNewAppointment={abrirNovoAgendamento}
+        />
+
+        {/* Grade horária diária por cadeira (Linha do tempo complementar expansível) */}
+        <details style={{ background: 'var(--card)', borderRadius: 14, border: '1px solid var(--line)', padding: 14 }}>
+          <summary style={{ cursor: 'pointer', fontWeight: 700, fontSize: 14, color: 'var(--text)' }}>
+            ⏱️ Grade horária por cadeira — {fmtDateOnly(dataSelecionada)} (Linha do tempo diária)
+          </summary>
+          <div style={{ marginTop: 14 }}>
+            <BarbeariaAgendaBoard
+              data={dataSelecionada}
+              configuracao={unidade || configuracao || {}}
+              agendamentos={agendamentos.map((item) => ({ ...item, statusVisual: statusVisualAgendamento(item, configuracao?.confirmacaoAutomaticaAtiva === true) }))}
+              profissionais={profissionalFiltro ? atendentesAtivos.filter((item) => profissionaisSelecionados(profissionalFiltro).includes(item.id)) : atendentesAtivos}
+              bloqueios={bloqueios}
+              onDateChange={(novaData) => { setStatusFiltro(''); setDataSelecionada(novaData) }}
+              onNew={abrirNovoAgendamento}
+              onOpenAppointment={(item) => setModal({ tipo: 'detalheAgenda', agendamento: item })}
+            />
+          </div>
+        </details>
+      </div>
+    )
   }
 
   function renderAtendimento() {
