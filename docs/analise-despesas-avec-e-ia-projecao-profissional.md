@@ -436,3 +436,16 @@ Quando nenhum cliente cadastrado é encontrado com o termo digitado, o modal exi
 
 ### 21.3 Validação e Testes Automatizados
 A suíte de testes de componentes em `web/src/pages/admin/BarbeariaNovoAgendamentoModal.test.jsx` foi atualizada para validar o novo comportamento, garantindo que o foco no campo vazio não exiba a lista de clientes e que a busca por telefone funcione diretamente no modo simultâneo padrão. Todos os 6 testes do componente e os 51 testes automatizados do backend foram executados com 100% de aprovação, juntamente com o build de produção do frontend (`npm run build`).
+
+
+---
+
+## 22.0 Redesign de UX e Alinhamento Visual do Modal de Novo Agendamento: Isolamento contra Estilos Globais, Barra Integrada e Linhas Otimizadas
+
+### 22.1 Diagnóstico Visual e Problemas Corrigidos
+Em virtude de regras de alta especificidade no `theme.css` (`html[data-brand='dino'] input`, `input, textarea, select { background: #fff }`), os controles de formulário estavam sendo renderizados com fundo branco puro, texto escuro e bordas cinzas claras, contrastando bruscamente com o modal escuro (`#131722`) e quebrando a estética visual do sistema. Além disso, o seletor de tipo de busca e o campo de pesquisa possuíam alturas e bordas divergentes com um espaço visual quebrado, o seletor de profissional continha um checkbox secundário espremido logo abaixo que desregulava a altura das linhas, e os botões de encaixe e pacote VIP utilizavam checkboxes nativos desalinhados.
+
+### 22.2 Soluções de Design e UX Aplicadas
+O arquivo `web/src/pages/admin/BarbeariaNovoAgendamentoModal.css` foi atualizado com isolamento de especificidade máxima (`.bna-modal input`, `.bna-modal select`, `.bna-modal textarea`), garantindo fundo escuro acetinado (`#1a202c`), tipografia clara (`#f8fafc`) e foco azul sutil sem qualquer interferência de estilos globais de marcas externas.
+
+A barra de busca foi unificada em um bloco contínuo de 44px de altura com o seletor de tipo embutido à esquerda, campo de busca com botão de limpar e botão de cadastro de cliente nivelado. Na tabela de serviços, a opção `💈 Sem preferência` foi incorporada diretamente dentro do seletor de profissionais, regularizando a altura e o alinhamento de todas as colunas. As opções de encaixe e pacote foram convertidas em chips modernos com ícones expressivos (`⚡ Forçar Encaixe` e `💎 Usar Pacote / Clube VIP`), acompanhados por botões rápidos de data (`Hoje` e `Amanhã`) e card destacado de totalização.

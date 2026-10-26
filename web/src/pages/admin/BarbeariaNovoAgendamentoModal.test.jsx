@@ -53,7 +53,7 @@ describe('Central Dino — Modal Novo Agendamento Dinâmico', () => {
     expect(text).toContain('Nome')
     expect(text).toContain('Cadastrar Cliente')
     expect(text).toContain('Data:')
-    expect(text).toContain('Recorrência...')
+    expect(text).toContain('Recorrência')
     expect(text).toContain('Barba Club')
     expect(text).toContain('Forçar Encaixe')
     expect(text).toContain('Adicionar serviço')

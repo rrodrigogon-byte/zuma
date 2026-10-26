@@ -368,6 +368,7 @@ export default function BarbeariaNovoAgendamentoModal({
             ) : (
               <>
                 <div className="bna-cliente-bar">
+                  <div className="bna-search-unified">
                   {/* Seletor Nome / Telefone (idêntico ao print) */}
                   <select
                     className="bna-tipo-select"
@@ -426,6 +427,29 @@ export default function BarbeariaNovoAgendamentoModal({
                         if (e.key === 'Escape') setDropdownAberto(false)
                       }}
                     />
+                    {termoBusca && (
+                      <button
+                        type="button"
+                        style={{
+                          background: 'transparent',
+                          border: 'none',
+                          color: '#94a3b8',
+                          cursor: 'pointer',
+                          padding: '0 12px',
+                          fontSize: 14,
+                          fontWeight: 700,
+                        }}
+                        onClick={() => {
+                          setTermoBusca('')
+                          setDropdownAberto(false)
+                          inputBuscaRef.current?.focus()
+                        }}
+                        title="Limpar busca"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
                   </div>
 
                   {/* Botão Cadastrar Cliente */}
@@ -614,10 +638,10 @@ export default function BarbeariaNovoAgendamentoModal({
           {/* 2. DATA E RECORRÊNCIA */}
           <div className="bna-data-bar">
             <div className="bna-data-field">
-              <span style={{ fontSize: 13, fontWeight: 700, color: '#94a3b8' }}>Data:</span>
+              <span>📅 Data:</span>
               <input
                 type="date"
-                className="bna-input-data"
+                className="bna-input-data bna-input-data-clean"
                 value={dataAgenda}
                 onChange={(e) => setDataAgenda(e.target.value)}
                 required
@@ -626,23 +650,45 @@ export default function BarbeariaNovoAgendamentoModal({
 
             <button
               type="button"
-              className="bna-recorrencia-link"
+              className="bna-chip-btn"
+              onClick={() => setDataAgenda(new Date().toISOString().slice(0, 10))}
+            >
+              Hoje
+            </button>
+            <button
+              type="button"
+              className="bna-chip-btn"
+              onClick={() => {
+                const d = new Date()
+                d.setDate(d.getDate() + 1)
+                setDataAgenda(d.toISOString().slice(0, 10))
+              }}
+            >
+              Amanhã
+            </button>
+
+            <button
+              type="button"
+              className="bna-recorrencia-btn"
               onClick={() => setRecorrenciaAberta((v) => !v)}
             >
-              Recorrência...
+              🔁 Recorrência: {recorrencia === 'nenhuma' ? 'Sem repetição' : recorrencia.charAt(0).toUpperCase() + recorrencia.slice(1)} ▾
             </button>
 
             {recorrenciaAberta && (
               <select
-                className="bna-input-data"
-                style={{ fontSize: 13, padding: '6px 10px' }}
+                className="bna-input-data bna-input-data-clean"
+                style={{ fontSize: 13, padding: '6px 10px', marginLeft: 8 }}
                 value={recorrencia}
-                onChange={(e) => setRecorrencia(e.target.value)}
+                onChange={(e) => {
+                  setRecorrencia(e.target.value)
+                  setRecorrenciaAberta(false)
+                }}
               >
-                <option value="nenhuma">Sem repetição (único)</option>
+                <option value="nenhuma">Sem repetição (atendimento único)</option>
                 <option value="semanal">Semanal (toda semana neste horário)</option>
                 <option value="quinzenal">Quinzenal (a cada 15 dias)</option>
-                <option value="mensal">Mensal (todo mês)</option>
+                <option value="mensal">Mensal (todo mês neste dia)</option>
               </select>
             )}
           </div>
@@ -652,13 +698,13 @@ export default function BarbeariaNovoAgendamentoModal({
             <table className="bna-servicos-table">
               <thead>
                 <tr>
-                  <th style={{ width: '28%' }}>Serviço</th>
+                  <th style={{ width: '32%' }}>Serviço</th>
                   <th style={{ width: '28%' }}>Profissional</th>
-                  <th style={{ width: '10%' }}>Tempo</th>
-                  <th style={{ width: '12%' }}>Início</th>
-                  <th style={{ width: '12%' }}>Fim</th>
-                  <th style={{ width: '10%' }}>Valor (R$)</th>
-                  {linhasServicos.length > 1 && <th style={{ width: '5%' }}></th>}
+                  <th style={{ width: '10%', textAlign: 'center' }}>Duração</th>
+                  <th style={{ width: '11%', textAlign: 'center' }}>Início</th>
+                  <th style={{ width: '11%', textAlign: 'center' }}>Término</th>
+                  <th style={{ width: '14%', textAlign: 'right' }}>Valor</th>
+                  {linhasServicos.length > 1 && <th style={{ width: '4%' }}></th>}
                 </tr>
               </thead>
               <tbody>
@@ -668,7 +714,7 @@ export default function BarbeariaNovoAgendamentoModal({
                       {/* SERVIÇO */}
                       <td>
                         <select
-                          className="bna-input-table"
+                          className="bna-input-table bna-table-select"
                           value={linha.servicoId}
                           onChange={(e) => atualizarLinha(index, { servicoId: e.target.value })}
                           required
@@ -684,86 +730,74 @@ export default function BarbeariaNovoAgendamentoModal({
                         </select>
                       </td>
 
-                      {/* PROFISSIONAL + SEM PREFERÊNCIA */}
+                      {/* PROFISSIONAL INTEGRADO (SEM PREFERÊNCIA OU BARBEIRO) */}
                       <td>
-                        <div style={{ display: 'grid', gap: 4 }}>
-                          <select
-                            className="bna-input-table"
-                            disabled={linha.semPreferencia}
-                            value={linha.profissionalId}
-                            onChange={(e) => atualizarLinha(index, { profissionalId: e.target.value })}
-                          >
-                            <option value="">Sem profissional definido</option>
-                            {profissionais
-                              .filter((p) => p.ativo !== false)
-                              .map((p) => (
-                                <option key={p.id} value={p.id}>
-                                  {p.nome}
-                                </option>
-                              ))}
-                          </select>
-                          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#94a3b8', cursor: 'pointer' }}>
-                            <input
-                              type="checkbox"
-                              checked={linha.semPreferencia}
-                              onChange={(e) => {
-                                const checked = e.target.checked
-                                atualizarLinha(index, {
-                                  semPreferencia: checked,
-                                  profissionalId: checked ? '' : linha.profissionalId,
-                                })
-                              }}
-                            />
-                            Sem Preferência
-                          </label>
-                        </div>
+                        <select
+                          className="bna-input-table bna-table-select"
+                          value={linha.semPreferencia ? '' : linha.profissionalId}
+                          onChange={(e) => {
+                            const val = e.target.value
+                            atualizarLinha(index, {
+                              profissionalId: val,
+                              semPreferencia: !val,
+                            })
+                          }}
+                        >
+                          <option value="">💈 Sem preferência</option>
+                          {profissionais
+                            .filter((p) => p.ativo !== false)
+                            .map((p) => (
+                              <option key={p.id} value={p.id}>
+                                👤 {p.nome}
+                              </option>
+                            ))}
+                        </select>
                       </td>
 
-                      {/* TEMPO (MINUTOS) */}
-                      <td>
+                      {/* DURAÇÃO */}
+                      <td style={{ textAlign: 'center' }}>
                         <input
                           type="number"
                           min="5"
                           step="5"
-                          className="bna-input-table"
+                          className="bna-input-table bna-table-input"
+                          style={{ textAlign: 'center' }}
                           value={linha.tempo}
                           onChange={(e) => atualizarLinha(index, { tempo: Number(e.target.value) || 30 })}
                           required
+                          title="Duração em minutos"
                         />
                       </td>
 
                       {/* INÍCIO */}
-                      <td>
+                      <td style={{ textAlign: 'center' }}>
                         <input
                           type="time"
-                          className="bna-input-table"
+                          className="bna-input-table bna-table-input"
+                          style={{ textAlign: 'center' }}
                           value={linha.inicio}
                           onChange={(e) => atualizarLinha(index, { inicio: e.target.value })}
                           required
                         />
                       </td>
 
-                      {/* FIM (CALCULADO AUTOMATICAMENTE) */}
-                      <td>
-                        <input
-                          type="time"
-                          className="bna-input-table"
-                          value={linha.fim}
-                          readOnly
-                          style={{ background: '#13161f', color: '#94a3b8', cursor: 'default' }}
-                        />
+                      {/* TÉRMINO (FIM CALCULADO AUTOMATICAMENTE) */}
+                      <td style={{ textAlign: 'center' }}>
+                        <div className="bna-table-time-ro">{linha.fim || '00:00'}</div>
                       </td>
 
-                      {/* VALOR (R$) */}
+                      {/* VALOR */}
                       <td>
-                        <input
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          className="bna-input-table"
-                          value={linha.valor}
-                          onChange={(e) => atualizarLinha(index, { valor: Number(e.target.value) || 0 })}
-                        />
+                        <div className="bna-table-val-wrap">
+                          <span>R$</span>
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={linha.valor}
+                            onChange={(e) => atualizarLinha(index, { valor: Number(e.target.value) || 0 })}
+                          />
+                        </div>
                       </td>
 
                       {/* EXCLUIR LINHA (SE HOUVER MAIS DE UMA) */}
@@ -788,7 +822,7 @@ export default function BarbeariaNovoAgendamentoModal({
 
           {/* 4. AÇÕES DA TABELA: ADICIONAR SERVIÇO, FORÇAR ENCAIXE E TOTAL */}
           <div className="bna-servicos-bottom">
-            <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
+            <div className="bna-actions-left">
               <button
                 type="button"
                 className="bna-btn-adicionar-servico"
@@ -797,27 +831,27 @@ export default function BarbeariaNovoAgendamentoModal({
                 <Plus size={16} /> Adicionar serviço
               </button>
 
-              <label className="bna-encaixe-check">
+              <label className={`bna-encaixe-check ${forcarEncaixe ? 'encaixe-ativo' : ''}`}>
                 <input
                   type="checkbox"
                   checked={forcarEncaixe}
                   onChange={(e) => setForcarEncaixe(e.target.checked)}
                 />
-                Forçar Encaixe
+                ⚡ Forçar Encaixe
               </label>
 
-              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#94a3b8', cursor: 'pointer' }}>
+              <label className={`bna-toggle-chip ${usarPlano ? 'plano-ativo' : ''}`}>
                 <input
                   type="checkbox"
                   checked={usarPlano}
                   onChange={(e) => setUsarPlano(e.target.checked)}
                 />
-                Agendar pelo Pacote / Clube VIP
+                💎 Usar Pacote / Clube VIP
               </label>
             </div>
 
             <div className="bna-total-box">
-              <span>Total (R$):</span>
+              <span className="bna-total-label">Total do Agendamento:</span>
               <strong className="bna-total-valor">
                 {Number(totalGeral || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
               </strong>
@@ -825,15 +859,14 @@ export default function BarbeariaNovoAgendamentoModal({
           </div>
 
           {/* 5. OBSERVAÇÕES OPCIONAIS */}
-          <div>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#94a3b8', marginBottom: 4 }}>
-              Observações do atendimento:
+          <div className="bna-obs-section">
+            <label className="bna-obs-label">
+              📝 Observações do atendimento (opcional):
             </label>
             <textarea
               rows={2}
-              className="bna-input-table"
-              style={{ resize: 'vertical' }}
-              placeholder="Ex: Cliente prefere barba mais baixa, café expresso, etc."
+              className="bna-obs-textarea"
+              placeholder="Ex: Cliente prefere barba mais baixa, café expresso, atendimento rápido, etc."
               value={observacoes}
               onChange={(e) => setObservacoes(e.target.value)}
             />
