@@ -282,24 +282,43 @@ export default function DinoRecuperacaoAvecPanel({ onAbrirAgenda }) {
         </div>
       </div>
 
-      {/* BANNER DE CENÁRIO DO REAJUSTE DE PREÇOS */}
-      <div className="dino-recup-cohort-box">
-        <div className="dino-recup-cohort-info">
-          <span className="dino-recup-cohort-icon">⚡</span>
-          <div className="dino-recup-cohort-text">
-            <strong>Cenário Estratégico: Abandono Pós-Reajuste de Preços</strong>
-            <p>
-              Filtra automaticamente quem frequentava a barbearia entre <strong>Janeiro e Agosto/2026</strong>, mas <strong>NÃO retornou em Setembro e Outubro/2026</strong>.
-            </p>
+      {/* BANNER DE CENÁRIO DO REAJUSTE DE PREÇOS E FILTROS MANUAIS DE DATA */}
+      <div className="dino-recup-cohort-box" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
+          <div className="dino-recup-cohort-info">
+            <span className="dino-recup-cohort-icon">⚡</span>
+            <div className="dino-recup-cohort-text">
+              <strong>Cenário Estratégico: Abandono Pós-Reajuste de Preços</strong>
+              <p>
+                Filtra automaticamente quem frequentava a barbearia entre <strong>Janeiro e Agosto/2026</strong>, mas <strong>NÃO retornou em Setembro e Outubro/2026</strong>.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            className={`dino-recup-cohort-btn${isCenarioReajuste ? ' active' : ''}`}
+            onClick={toggleCenarioReajuste}
+          >
+            {isCenarioReajuste ? '✓ Cenário Aplicado (Limpar)' : 'Aplicar Cenário do Reajuste (766 Clientes)'}
+          </button>
+        </div>
+        
+        {/* Filtros customizados de período de presença e ausência */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, padding: '12px 16px', background: 'var(--card2)', borderRadius: 8, border: '1px solid var(--line)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 13, fontWeight: 600 }}>Frequentou entre:</span>
+            <input type="date" value={deAtivo} onChange={e => { setDeAtivo(e.target.value); setPagina(1); }} style={{ padding: '4px 8px', borderRadius: 6, border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--fg)', fontSize: 13 }} />
+            <span style={{ fontSize: 13, color: 'var(--muted)' }}>e</span>
+            <input type="date" value={ateAtivo} onChange={e => { setAteAtivo(e.target.value); setPagina(1); }} style={{ padding: '4px 8px', borderRadius: 6, border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--fg)', fontSize: 13 }} />
+          </div>
+          <div style={{ width: '1px', background: 'var(--line)', minHeight: 24, margin: '0 8px' }} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 13, fontWeight: 600 }}>Ausente entre:</span>
+            <input type="date" value={deAusente} onChange={e => { setDeAusente(e.target.value); setPagina(1); }} style={{ padding: '4px 8px', borderRadius: 6, border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--fg)', fontSize: 13 }} />
+            <span style={{ fontSize: 13, color: 'var(--muted)' }}>e</span>
+            <input type="date" value={ateAusente} onChange={e => { setAteAusente(e.target.value); setPagina(1); }} style={{ padding: '4px 8px', borderRadius: 6, border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--fg)', fontSize: 13 }} />
           </div>
         </div>
-        <button
-          type="button"
-          className={`dino-recup-cohort-btn${isCenarioReajuste ? ' active' : ''}`}
-          onClick={toggleCenarioReajuste}
-        >
-          {isCenarioReajuste ? '✓ Cenário Aplicado (Limpar)' : 'Aplicar Cenário do Reajuste (766 Clientes)'}
-        </button>
       </div>
 
       {/* BOX DE FILTROS */}

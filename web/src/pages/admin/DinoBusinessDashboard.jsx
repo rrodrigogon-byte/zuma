@@ -247,6 +247,7 @@ export default function DinoBusinessDashboard() {
   const { user } = useAuth()
   const canEditGoals = ['admin', 'organizador'].includes(String(user?.role || ''))
   const [period, setPeriod] = useState(30)
+  const [customRange, setCustomRange] = useState({ active: false, de: '', ate: '' })
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -257,13 +258,14 @@ export default function DinoBusinessDashboard() {
 
   const load = useCallback(async ({ force = false } = {}) => {
     const startedAt = Date.now()
-    if (!force && lastRequest.current.period === period && startedAt - lastRequest.current.at < 1000) return
-    lastRequest.current = { period, at: startedAt }
+    if (!force && lastRequest.current.period === period && lastRequest.current.active === customRange.active && lastRequest.current.de === customRange.de && lastRequest.current.ate === customRange.ate && startedAt - lastRequest.current.at < 1000) return
+    lastRequest.current = { period, active: customRange.active, de: customRange.de, ate: customRange.ate, at: startedAt }
     const currentRequest = ++requestId.current
     setLoading(true)
     setError('')
     try {
-      const result = await api.get(`/api/admin/barbearia/analytics?period=${period}`)
+      const query = customRange.active && customRange.de && customRange.ate ? `inicio=${customRange.de}&fim=${customRange.ate}` : `period=${period}`
+      const result = await api.get(`/api/admin/barbearia/analytics?${query}`)
       if (currentRequest !== requestId.current) return
       setData(result)
       const loadedAt = new Date()
@@ -280,7 +282,7 @@ export default function DinoBusinessDashboard() {
     } finally {
       if (currentRequest === requestId.current) setLoading(false)
     }
-  }, [period])
+  }, [period, customRange])
 
   useEffect(() => {
     load()
@@ -312,7 +314,20 @@ export default function DinoBusinessDashboard() {
   if (loading && !data) return <section className="dino-dashboard-loading" aria-busy="true">Carregando indicadores reais…</section>
 
   return <section className="dino-business-dashboard" aria-label="Dashboard do negócio Dino" aria-busy={loading}>
-    <header className="dino-dashboard-header"><div><span>Visão do negócio</span><h2>Central Dino</h2><p>Barbearia, perfumaria e relacionamento no mesmo recorte operacional.</p></div><div className="dino-period-switch" aria-label="Período do dashboard">{PERIODS.map(([value, label]) => <button type="button" key={value} className={period === value ? 'active' : ''} onClick={() => setPeriod(value)} aria-pressed={period === value}>{label}</button>)}<button type="button" onClick={() => load({ force: true })} disabled={loading}>Atualizar</button></div></header>
+    <header className="dino-dashboard-header"><div><span>Visão do negócio</span><h2>Central Dino</h2><p>Barbearia, perfumaria e relacionamento no mesmo recorte operacional.</p></div><div className="dino-period-switch" aria-label="Período do dashboard" style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+      {PERIODS.map(([value, label]) => (
+        <button type="button" key={value} className={period === value && !customRange.active ? 'active' : ''} onClick={() => { setCustomRange(v => ({ ...v, active: false })); setPeriod(value); }} aria-pressed={period === value && !customRange.active}>{label}</button>
+      ))}
+      <label style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'var(--card)', padding: '2px 8px', borderRadius: 6, border: '1px solid var(--line)', opacity: customRange.active ? 1 : 0.6 }}>
+        <input type="checkbox" checked={customRange.active} onChange={(e) => setCustomRange(v => ({ ...v, active: e.target.checked }))} style={{ margin: 0 }} /> Personalizado
+      </label>
+      {customRange.active && <>
+        <input type="date" value={customRange.de} onChange={e => setCustomRange(v => ({ ...v, de: e.target.value }))} className="form-control" style={{ padding: '4px 8px', height: 32, fontSize: 13, background: 'var(--surface)' }} />
+        <span style={{ color: 'var(--muted)' }}>a</span>
+        <input type="date" value={customRange.ate} onChange={e => setCustomRange(v => ({ ...v, ate: e.target.value }))} className="form-control" style={{ padding: '4px 8px', height: 32, fontSize: 13, background: 'var(--surface)' }} />
+      </>}
+      <button type="button" onClick={() => load({ force: true })} disabled={loading}>Atualizar ↻</button>
+    </div></header>
     <p className="dino-dashboard-status" role="status">{loading ? 'Atualizando indicadores…' : updatedAt ? `Última atualização bem-sucedida: ${updatedLabel} · ${PERIODS.find(([value]) => value === period)?.[1] || 'período selecionado'}.` : 'Indicadores ainda não foram atualizados.'}</p>
     {error && (
       <div className="dino-dashboard-error" role="alert" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
