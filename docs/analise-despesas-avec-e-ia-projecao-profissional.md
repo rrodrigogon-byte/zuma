@@ -529,3 +529,15 @@ A gestão estratégica identificou uma perda de clientes após os reajustes de p
    - Implementação do hook `useDebounced(busca, 250)` para evitar disparos concorrentes a cada caractere digitado na pesquisa de clientes.
 3. **Code Splitting Dinâmico no ERP (`BarbeariaERP.jsx`):**
    - Os módulos `DinoRecuperacaoAvecPanel` e `DinoCarteiraClientesPanel` foram convertidos para carregamento tardio (`React.lazy` com `Suspense`), diminuindo o tamanho do bundle principal de entrada em produção.
+
+### 24.4 Histórico Completo de Todos os Clientes na Operação (CRM, Caixa e Agenda)
+1. **Atendimento Operacional no Balcão (Jhe):**
+   - No modal de detalhes do agendamento (`detalheAgenda`) e na ficha do cliente no CRM (`detalheCliente`), o componente `BarbeariaHistoricoCliente.jsx` foi totalmente modernizado para expor os indicadores consolidados do histórico:
+     - **Total Gasto Acumulado** (R$) e **Ticket Médio** por visita.
+     - **Barbeiro habitual** (com contagem de vezes atendido).
+     - **Serviço mais frequente** e última data de visita.
+     - **Identificador de Tipo:** Assinante Club / Pacote ou Cliente Avulso.
+     - **Serviços Extras Consumidos:** Destaque para hidratações, sobrancelhas, massagens, etc.
+     - **Relação Cronológica Completa:** Tabela com todas as visitas históricas registradas tanto no Avec quanto no Kytto ERP.
+2. **Resolução de Identidade por Múltiplos Campos (`app/server.js`):**
+   - A rota `/api/admin/barbearia/historico` agora localiza o cliente por `clienteId`, `telefone` ou `nome`, garantindo que cadastros migrados ou sem ID estático recebam imediatamente todo o histórico histórico de atendimentos sem necessidade de intervenção manual.

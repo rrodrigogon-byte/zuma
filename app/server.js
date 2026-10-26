@@ -5507,10 +5507,37 @@ app.post('/api/admin/barbearia/historico/importar', (req, res) => {
     res.json({ ok: true, ...resultado });
   } catch (error) { res.status(400).json({ error: error.message }); }
 });
-app.get('/api/admin/barbearia/historico', (req, res) => {
+app.get('/api/admin/barbearia/historico', async (req, res) => {
   try {
-    const itens = barbeariaErpKytto.listarHistoricoAtendimentos(legacyEmpresaId(req), { clienteId: req.query?.clienteId, de: req.query?.de, ate: req.query?.ate, limite: req.query?.limite || 200 });
-    res.json({ ok: true, itens, total: itens.length });
+    let itens = barbeariaErpKytto.listarHistoricoAtendimentos(legacyEmpresaId(req), { clienteId: req.query?.clienteId, de: req.query?.de, ate: req.query?.ate, limite: req.query?.limite || 200 });
+    if (!itens || itens.length === 0) {
+      const { carregarBaseConsolidada } = await import('./dino-recuperacao-avec.js');
+      const base = await carregarBaseConsolidada();
+      const qTel = String(req.query?.telefone || req.query?.clienteId || '').replace(/\D/g, '').slice(-8);
+      const qNome = String(req.query?.nome || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+      const qId = String(req.query?.clienteId || '');
+      const cli = base.find((c) => {
+        if (qId && (c.key === qId || c.key.includes(qId))) return true;
+        if (qTel && c.telefone && c.telefone.includes(qTel)) return true;
+        if (qNome && c.nome && c.nome.toLowerCase().includes(qNome)) return true;
+        return false;
+      });
+      if (cli && cli.historicoItens?.length) {
+        itens = cli.historicoItens.map((h, i) => ({
+          id: `avec-${cli.key}-${i}`,
+          clienteId: req.query?.clienteId || cli.key,
+          clienteNome: cli.nome,
+          dataAgenda: h.data,
+          hora: h.hora || '10:00',
+          servicoNome: h.servico,
+          profissionalNome: h.profissional,
+          valor: h.total,
+          comandaId: h.comanda,
+          origem: 'avec',
+        }));
+      }
+    }
+    res.json({ ok: true, itens: itens || [], total: (itens || []).length });
   } catch (error) { res.status(400).json({ error: error.message }); }
 });
 app.get('/api/admin/barbearia/historico-comandas', (req, res) => {
