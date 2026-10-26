@@ -17,6 +17,25 @@ export function diasEntre(de, ate) {
   const n = Math.round((Date.parse(`${ate}T12:00:00Z`) - Date.parse(`${de}T12:00:00Z`)) / 86400000) + 1
   return n > 62 ? [] : Array.from({ length: n }, (_, i) => somarDias(de, i))
 }
+
+export function inicioDaSemana(iso) {
+  if (!dataValida(iso)) return hojeAgenda()
+  const d = new Date(`${iso}T12:00:00Z`)
+  const diaSemana = d.getUTCDay()
+  const recuo = diaSemana === 0 ? 6 : diaSemana - 1
+  return somarDias(iso, -recuo)
+}
+
+export function semanaSegundaSabado(iso) {
+  const seg = inicioDaSemana(iso)
+  return { de: seg, ate: somarDias(seg, 5) }
+}
+
+export function semanaCompleta(iso) {
+  const seg = inicioDaSemana(iso)
+  return { de: seg, ate: somarDias(seg, 6) }
+}
+
 export function periodoMes(iso, deslocamento = 0) {
   const d = new Date(`${iso}T12:00:00Z`)
   d.setUTCDate(1); d.setUTCMonth(d.getUTCMonth() + deslocamento)
@@ -38,6 +57,27 @@ export function diaLegivel(iso) {
   if (!dataValida(iso)) return 'Data inválida'
   return new Date(`${iso}T12:00:00Z`).toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit', timeZone: 'UTC' })
 }
+
+export function mesAnoLegivel(iso) {
+  if (!dataValida(iso)) return ''
+  const d = new Date(`${iso}T12:00:00Z`)
+  const nomeMes = d.toLocaleDateString('pt-BR', { month: 'long', timeZone: 'UTC' })
+  const ano = d.getUTCFullYear()
+  return `${nomeMes.charAt(0).toUpperCase() + nomeMes.slice(1)} de ${ano}`
+}
+
+export function diaSemanaCurto(iso) {
+  if (!dataValida(iso)) return ''
+  const d = new Date(`${iso}T12:00:00Z`)
+  const abrev = d.toLocaleDateString('pt-BR', { weekday: 'short', timeZone: 'UTC' })
+  return abrev.replace('.', '').toUpperCase()
+}
+
+export function diaNumero(iso) {
+  if (!dataValida(iso)) return ''
+  return String(iso).slice(8, 10)
+}
+
 export function filtrarAgenda(itens, { busca = '', status = '' } = {}) {
   const normalizar = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
   return itens.filter(item => (!status || item.status === status) && normalizar([item.clienteNome, item.cliente_nome, item.servicoNome, item.servico_nome, item.profissionalNome, item.profissional_nome, item.codigo].join(' ')).includes(normalizar(busca).trim()))

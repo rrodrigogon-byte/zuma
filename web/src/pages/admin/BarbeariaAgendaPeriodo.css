@@ -1,10 +1,912 @@
-.dino-cal{background:var(--card);border:1px solid var(--border);border-radius:20px;padding:clamp(12px,2vw,24px);display:grid;gap:18px;color:var(--text);min-width:0}
-.dino-cal *{box-sizing:border-box}.dino-cal h2,.dino-cal h3,.dino-cal p{margin:0}.dino-cal h2{font-size:clamp(20px,2vw,27px);letter-spacing:-.6px}.dino-cal h3{font-size:18px}.dino-cal p{color:var(--muted);font-size:13px;line-height:1.6}.dino-cal .dino-cal-eyebrow{font-size:10px;letter-spacing:1.5px;font-weight:700;color:var(--accent);margin-bottom:6px}
-.dino-cal-header,.dino-cal-toolbar,.dino-cal-meta{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.dino-cal-header{justify-content:space-between}.dino-cal-toolbar{align-items:flex-end}.dino-cal-toolbar>strong{align-self:center;margin-right:auto;font-size:14px}.dino-cal label{display:grid;gap:5px;color:var(--muted);font-size:12px}.dino-cal-search{flex:1;min-width:180px}.dino-cal input,.dino-cal select,.dino-cal button{font:inherit;color:var(--text);border:1px solid var(--border);border-radius:9px;background:var(--bg);padding:9px 11px;min-height:40px}.dino-cal input,.dino-cal select{max-width:100%;font-size:14px}.dino-cal button{cursor:pointer;font-size:13px}.dino-cal button:hover{border-color:var(--accent)}.dino-cal button:focus-visible,.dino-cal summary:focus-visible{outline:3px solid var(--accent);outline-offset:3px}.dino-cal button:disabled{opacity:.5;cursor:not-allowed}.dino-cal-segment{display:flex;gap:3px;background:var(--bg);padding:4px;border-radius:12px}.dino-cal-segment button{border:0;background:transparent}.dino-cal-segment button[aria-pressed=true],.dino-cal .dino-cal-primary{background:var(--accent);color:white}.dino-cal-meta{font-size:13px;background:color-mix(in srgb,var(--accent) 8%,transparent);border-radius:10px;padding:12px}.dino-cal-meta small{margin-left:auto;color:var(--muted)}
-.dino-cal-scroll{overflow:auto;padding:2px}.dino-cal-grid{display:grid;grid-template-columns:repeat(7,minmax(140px,1fr));gap:8px;min-width:1040px}.dino-cal-day{border:1px solid var(--border);border-radius:12px;min-height:150px;padding:6px;display:flex;flex-direction:column;gap:7px;background:var(--bg)}.dino-cal-day[data-selected=true]{outline:2px solid var(--accent);outline-offset:-1px}.dino-cal-day[data-today=true] .dino-cal-date{color:var(--accent)}.dino-cal .dino-cal-date{display:flex;justify-content:space-between;align-items:center;gap:4px;border:0;background:transparent;text-align:left;font-size:12px;padding:5px}.dino-cal-date b{border-radius:50%;background:var(--card);padding:4px 7px}.dino-cal-weekday{font-size:12px;color:var(--muted);padding:8px}.dino-cal .dino-cal-event{display:grid;gap:5px;text-align:left;border-left:3px solid #4a9eff;background:var(--card);padding:9px;min-width:0;overflow-wrap:anywhere}.dino-cal-event strong{font-size:12px}.dino-cal-event span,.dino-cal-event small{font-size:11px;line-height:1.4}.dino-cal-event small{color:var(--muted)}.dino-cal .dino-cal-event[data-status=confirmado]{border-left-color:#8b5cf6}.dino-cal .dino-cal-event[data-status=em_atendimento]{border-left-color:#f59e0b}.dino-cal .dino-cal-event[data-status=concluido]{border-left-color:#14b87a}.dino-cal .dino-cal-event[data-status=cancelado]{border-left-color:#e05c5c}.dino-cal-empty{padding:10px 5px;color:var(--muted);font-size:12px}.dino-cal-list{display:grid;gap:14px;max-height:600px;overflow:auto}.dino-cal-list>div{display:grid;gap:7px}.dino-cal .dino-cal-list-date{text-align:left;font-weight:700;border:0}.dino-cal-availability{display:grid;gap:14px;border-top:1px solid var(--border);padding-top:18px}.dino-cal-slots{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(300px,100%),1fr));gap:10px;max-height:450px;overflow:auto}.dino-cal-slots details{border:1px solid var(--border);border-radius:10px;padding:10px}.dino-cal-slots summary{cursor:pointer;font-size:13px;line-height:1.6}.dino-cal-slots details>div{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}.dino-cal-slots button{font-variant-numeric:tabular-nums}
-@media(max-width:700px){.dino-cal-grid:not(.dino-cal-month){grid-template-columns:repeat(7,220px);min-width:0}.dino-cal-month{grid-template-columns:repeat(7,minmax(110px,1fr));min-width:820px}.dino-cal-header{align-items:flex-start}.dino-cal-segment{width:100%}.dino-cal-segment button{flex:1}.dino-cal-meta small{margin-left:0;width:100%}.dino-cal-toolbar label{flex:1;min-width:130px}.dino-cal-toolbar select{width:100%}}
-@media(prefers-reduced-motion:reduce){.dino-cal *{scroll-behavior:auto}}
-.dino-cal-professionals{display:grid;gap:7px;min-width:0;font-size:12px;color:var(--muted)}.dino-cal-professionals>div{display:flex;flex-wrap:wrap;gap:6px}.dino-cal-professionals button{font:inherit;min-height:40px;padding:8px 12px;border-radius:20px;background:var(--card);color:var(--text);border:1px solid var(--border);cursor:pointer}.dino-cal-professionals button[aria-pressed=true]{background:var(--accent);color:white}.dino-cal-professionals button:focus-visible{outline:3px solid var(--accent);outline-offset:3px}.dino-cal .dino-cal-grid.dino-cal-single{grid-template-columns:1fr;min-width:0}.dino-cal-single .dino-cal-day{min-height:200px}.dino-cal-single .dino-cal-event{grid-template-columns:minmax(150px,1fr) 2fr 1fr;align-items:center}@media(max-width:700px){.dino-cal-single .dino-cal-event{grid-template-columns:1fr}.dino-cal-segment{flex-wrap:wrap}}
+/* ==========================================================================
+   KYTTO DINO ERP — AGENDA VISUAL ESTILO GOOGLE CALENDAR
+   ========================================================================== */
 
-/* Histórico Avec: somente leitura, visualmente distinto dos atendimentos operacionais. */
-.dino-cal .dino-cal-event[data-historico=avec]{border-left-color:var(--muted);border-left-style:dashed;opacity:.9}
+.dino-cal {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius, 14px);
+  padding: 20px;
+  box-shadow: 0 4px 20px rgba(18, 40, 63, 0.04);
+  color: var(--text);
+  font-family: var(--font, 'Inter', -apple-system, BlinkMacSystemFont, sans-serif);
+}
+
+/* ==========================================================================
+   1. CABEÇALHO SUPERIOR (ESTILO GOOGLE CALENDAR)
+   ========================================================================== */
+.dino-cal-google-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.dino-cal-left-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.dino-cal-today-btn {
+  background: var(--card);
+  border: 1px solid var(--line);
+  color: var(--text);
+  font-weight: 700;
+  font-size: 13px;
+  padding: 8px 16px;
+  border-radius: 20px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.dino-cal-today-btn:hover {
+  background: var(--card2);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.dino-cal-nav-arrows {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.dino-cal-arrow-btn {
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+  color: var(--text);
+  transition: all 0.15s ease;
+}
+
+.dino-cal-arrow-btn:hover:not(:disabled) {
+  background: var(--card2);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.dino-cal-arrow-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.dino-cal-date-headline {
+  display: flex;
+  flex-direction: column;
+  margin-left: 6px;
+}
+
+.dino-cal-headline-main {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--text);
+  line-height: 1.2;
+}
+
+.dino-cal-headline-sub {
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+/* Centro: Campo de Busca Rápida */
+.dino-cal-center-search {
+  flex: 1;
+  max-width: 320px;
+  min-width: 200px;
+  position: relative;
+}
+
+.dino-cal-search-input {
+  width: 100%;
+  padding: 8px 14px 8px 34px;
+  border-radius: 20px;
+  border: 1px solid var(--line);
+  background: var(--card2);
+  color: var(--text);
+  font-size: 13px;
+  outline: none;
+  transition: all 0.15s ease;
+}
+
+.dino-cal-search-input:focus {
+  border-color: var(--accent);
+  background: var(--card);
+  box-shadow: 0 0 0 3px rgba(224, 89, 21, 0.15);
+}
+
+.dino-cal-search-icon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--muted);
+  font-size: 14px;
+  pointer-events: none;
+}
+
+.dino-cal-search-clear {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 0;
+}
+
+/* Lado Direito: Modos de visualização + Botão Novo */
+.dino-cal-right-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.dino-cal-view-selector {
+  display: inline-flex;
+  background: var(--card2);
+  padding: 3px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+}
+
+.dino-cal-view-btn {
+  background: transparent;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 9px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.dino-cal-view-btn:hover {
+  color: var(--text);
+}
+
+.dino-cal-view-btn[aria-pressed="true"] {
+  background: var(--card);
+  color: var(--accent);
+  font-weight: 800;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.dino-cal-btn-novo {
+  background: var(--accent);
+  color: #ffffff;
+  border: none;
+  font-weight: 700;
+  font-size: 13px;
+  padding: 8px 16px;
+  border-radius: 20px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  box-shadow: 0 4px 12px rgba(224, 89, 21, 0.25);
+  transition: all 0.15s ease;
+}
+
+.dino-cal-btn-novo:hover {
+  filter: brightness(1.08);
+  transform: translateY(-1px);
+}
+
+.dino-cal-btn-refresh {
+  background: var(--card);
+  border: 1px solid var(--line);
+  color: var(--muted);
+  border-radius: 50%;
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 16px;
+  transition: all 0.15s ease;
+}
+
+.dino-cal-btn-refresh:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+/* ==========================================================================
+   2. BARRA SUPERIOR DE BARBEIROS (TOP BAR COM AVATARES E CHIPS)
+   ========================================================================== */
+.dino-cal-professionals-top {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 14px;
+  background: var(--card2);
+  border-radius: 12px;
+  border: 1px solid var(--line);
+}
+
+.dino-cal-profs-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.dino-cal-profs-count {
+  background: var(--card);
+  padding: 2px 8px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  font-size: 10.5px;
+  color: var(--accent);
+}
+
+.dino-cal-profs-chips {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  scrollbar-width: thin;
+}
+
+.dino-cal-prof-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  padding: 4px 12px 4px 5px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text);
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: all 0.15s ease;
+}
+
+.dino-cal-prof-chip:hover {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 5%, var(--card));
+}
+
+.dino-cal-prof-chip[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, var(--card));
+  color: var(--accent);
+  font-weight: 800;
+  box-shadow: 0 2px 8px rgba(224, 89, 21, 0.15);
+}
+
+.dino-cal-prof-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 800;
+  border: 1.5px solid transparent;
+  flex-shrink: 0;
+}
+
+.dino-cal-prof-avatar-team {
+  background: color-mix(in srgb, var(--navy) 10%, var(--card));
+  font-size: 13px;
+}
+
+.dino-cal-prof-avatar-img {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.dino-cal-prof-avatar-muted {
+  background: var(--line);
+  color: var(--muted);
+}
+
+.dino-cal-prof-name {
+  font-size: 12.5px;
+}
+
+.dino-cal-prof-badge {
+  background: var(--card2);
+  color: var(--muted);
+  border-radius: 10px;
+  padding: 1px 6px;
+  font-size: 10.5px;
+  font-weight: 700;
+}
+
+.dino-cal-prof-check {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--accent);
+}
+
+.dino-cal-inativos-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 6px;
+  border-left: 1px solid var(--line);
+  padding-left: 8px;
+}
+
+.dino-cal-prof-chip-inativos {
+  background: transparent;
+  border: 1px dashed var(--line);
+  color: var(--muted);
+  font-size: 11.5px;
+  padding: 4px 10px;
+}
+
+.dino-cal-prof-chip-inativo {
+  opacity: 0.75;
+  font-size: 11.5px;
+}
+
+.dino-cal-prof-chip-inativo small {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+/* ==========================================================================
+   3. STATUS E METADADOS DO PERÍODO
+   ========================================================================== */
+.dino-cal-summary-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 14px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--accent) 6%, var(--card));
+  border: 1px solid color-mix(in srgb, var(--accent) 18%, var(--line));
+  font-size: 12px;
+}
+
+.dino-cal-summary-counters {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.dino-cal-summary-counters strong {
+  color: var(--text);
+  font-weight: 800;
+}
+
+.dino-cal-summary-counters span {
+  color: var(--muted);
+}
+
+.dino-cal-summary-meta {
+  color: var(--muted);
+  font-size: 11.5px;
+}
+
+/* ==========================================================================
+   4. GRADE PRINCIPAL DA SEMANA (ESTILO GOOGLE AGENDAR - 6 OU 7 COLUNAS)
+   ========================================================================== */
+.dino-cal-week-container {
+  overflow-x: auto;
+  padding-bottom: 6px;
+}
+
+.dino-cal-week-grid {
+  display: grid;
+  grid-template-columns: repeat(var(--colunas-semana, 6), minmax(160px, 1fr));
+  gap: 10px;
+  min-width: 980px;
+}
+
+.dino-cal-day-column {
+  display: flex;
+  flex-direction: column;
+  background: var(--card2);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+  transition: all 0.15s ease;
+}
+
+.dino-cal-day-column[data-today="true"] {
+  border-color: color-mix(in srgb, #1a73e8 40%, var(--line));
+  background: color-mix(in srgb, #1a73e8 3%, var(--card2));
+}
+
+.dino-cal-day-column[data-selected="true"] {
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+/* Cabeçalho do Dia (SEG 26) */
+.dino-cal-day-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 10px 8px 8px;
+  background: var(--card);
+  border-bottom: 1px solid var(--line);
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.dino-cal-day-header:hover {
+  background: color-mix(in srgb, var(--accent) 8%, var(--card));
+}
+
+.dino-cal-day-weekday {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--muted);
+  letter-spacing: 0.05em;
+}
+
+.dino-cal-day-number {
+  font-size: 19px;
+  font-weight: 800;
+  color: var(--text);
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 3px;
+  transition: all 0.15s ease;
+}
+
+/* Badge de Hoje estilo Google Calendar */
+.dino-cal-day-column[data-today="true"] .dino-cal-day-number {
+  background: #1a73e8;
+  color: #ffffff;
+  box-shadow: 0 2px 6px rgba(26, 115, 232, 0.35);
+}
+
+.dino-cal-day-count-badge {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--muted);
+  margin-top: 3px;
+}
+
+/* Corpo da Coluna: Lista de Atendimentos */
+.dino-cal-day-body {
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+  min-height: 280px;
+}
+
+/* ==========================================================================
+   5. CARDS DE AGENDAMENTO (EVENT BLOCKS ESTILO GOOGLE AGENDAR)
+   ========================================================================== */
+.dino-cal-event-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 9px 10px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-left: 4.5px solid #2563eb;
+  border-radius: 8px;
+  text-align: left;
+  cursor: pointer;
+  position: relative;
+  transition: all 0.15s ease;
+  font: inherit;
+  color: var(--text);
+}
+
+.dino-cal-event-card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(18, 40, 63, 0.09);
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--line));
+}
+
+/* Cores por Status */
+.dino-cal-event-card[data-status="confirmado"] {
+  border-left-color: #2563eb;
+  background: color-mix(in srgb, #2563eb 6%, var(--card));
+}
+
+.dino-cal-event-card[data-status="em_atendimento"] {
+  border-left-color: #f59e0b;
+  background: color-mix(in srgb, #f59e0b 8%, var(--card));
+}
+
+.dino-cal-event-card[data-status="concluido"] {
+  border-left-color: #10b981;
+  background: color-mix(in srgb, #10b981 6%, var(--card));
+}
+
+.dino-cal-event-card[data-status="agendado"] {
+  border-left-color: #8b5cf6;
+  background: color-mix(in srgb, #8b5cf6 6%, var(--card));
+}
+
+.dino-cal-event-card[data-status="cancelado"],
+.dino-cal-event-card[data-status="nao_compareceu"] {
+  border-left-color: #ef4444;
+  background: color-mix(in srgb, #ef4444 5%, var(--card));
+  opacity: 0.8;
+}
+
+/* Histórico Avec */
+.dino-cal-event-card[data-historico="avec"] {
+  border-left-color: var(--muted);
+  border-left-style: dashed;
+  background: color-mix(in srgb, var(--muted) 6%, var(--card));
+  cursor: default;
+}
+
+.dino-cal-event-time {
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.dino-cal-event-val {
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.dino-cal-event-client {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dino-cal-event-service {
+  font-size: 11.5px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dino-cal-event-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  margin-top: 2px;
+  font-size: 10.5px;
+}
+
+.dino-cal-event-prof-pill {
+  background: var(--card2);
+  border: 1px solid var(--line);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 1px 6px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100px;
+}
+
+.dino-cal-event-wpp-badge {
+  color: #10b981;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.dino-cal-event-status-badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 4px;
+  text-transform: uppercase;
+}
+
+/* Dia Vazio */
+.dino-cal-day-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 24px 8px;
+  color: var(--muted);
+  font-size: 12px;
+  flex: 1;
+}
+
+.dino-cal-day-empty-icon {
+  font-size: 22px;
+  opacity: 0.4;
+  margin-bottom: 6px;
+}
+
+.dino-cal-day-add-btn {
+  margin-top: 10px;
+  background: transparent;
+  border: 1px dashed var(--line);
+  color: var(--accent);
+  padding: 6px 12px;
+  border-radius: 14px;
+  font-size: 11.5px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.dino-cal-day-add-btn:hover {
+  background: color-mix(in srgb, var(--accent) 8%, var(--card));
+  border-color: var(--accent);
+}
+
+/* ==========================================================================
+   6. VISÃO MÊS (MONTH GRID)
+   ========================================================================== */
+.dino-cal-month-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(130px, 1fr));
+  gap: 8px;
+  min-width: 910px;
+}
+
+.dino-cal-month-weekday-header {
+  font-size: 11.5px;
+  font-weight: 800;
+  text-transform: uppercase;
+  color: var(--muted);
+  text-align: center;
+  padding: 8px;
+  background: var(--card2);
+  border-radius: 8px;
+}
+
+.dino-cal-month-cell {
+  background: var(--card2);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  min-height: 130px;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.dino-cal-month-cell[data-today="true"] {
+  border-color: #1a73e8;
+  background: color-mix(in srgb, #1a73e8 4%, var(--card2));
+}
+
+.dino-cal-month-cell-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--line);
+}
+
+.dino-cal-month-date-num {
+  font-size: 13px;
+  font-weight: 800;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+}
+
+.dino-cal-month-cell[data-today="true"] .dino-cal-month-date-num {
+  background: #1a73e8;
+  color: #fff;
+}
+
+/* ==========================================================================
+   7. GAVETA DE DISPONIBILIDADE E VAGAS LIVRES
+   ========================================================================== */
+.dino-cal-availability-drawer {
+  background: var(--card2);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.dino-cal-avail-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.dino-cal-avail-title {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--text);
+  margin: 0;
+}
+
+.dino-cal-avail-subtitle {
+  font-size: 11.5px;
+  color: var(--muted);
+  margin: 2px 0 0;
+}
+
+.dino-cal-avail-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.dino-cal-avail-select {
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--card);
+  color: var(--text);
+  font-size: 12.5px;
+}
+
+.dino-cal-avail-search-btn {
+  background: var(--navy);
+  color: #ffffff;
+  border: none;
+  font-weight: 700;
+  font-size: 12.5px;
+  padding: 8px 16px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+
+.dino-cal-avail-search-btn:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.dino-cal-avail-search-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.dino-cal-slots-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 10px;
+  max-height: 360px;
+  overflow-y: auto;
+}
+
+.dino-cal-slot-group {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dino-cal-slot-group-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.dino-cal-slot-chips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.dino-cal-slot-chip {
+  background: color-mix(in srgb, var(--accent) 10%, var(--card));
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--line));
+  color: var(--accent);
+  border-radius: 8px;
+  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.dino-cal-slot-chip:hover {
+  background: var(--accent);
+  color: #fff;
+}
+
+/* ==========================================================================
+   8. VISÃO EM LISTA
+   ========================================================================== */
+.dino-cal-list-container {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-height: 600px;
+  overflow-y: auto;
+}
+
+.dino-cal-list-day-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: var(--card2);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px;
+}
+
+.dino-cal-list-day-title {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--text);
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 6px;
+}
+
+/* ==========================================================================
+   RESPONSIVIDADE
+   ========================================================================== */
+@media (max-width: 768px) {
+  .dino-cal {
+    padding: 12px;
+  }
+  .dino-cal-google-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .dino-cal-center-search {
+    max-width: 100%;
+  }
+  .dino-cal-right-actions {
+    justify-content: space-between;
+  }
+}
