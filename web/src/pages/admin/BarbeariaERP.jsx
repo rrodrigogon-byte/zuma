@@ -1473,101 +1473,64 @@ export default function BarbeariaERP() {
 
   function renderAgenda() {
     const unidade = configuracaoUnidade?.calendario
-    // Filtra APENAS profissionais ativos (elimina inativos e excluídos da visão de agenda)
     const atendentesAtivos = profissionais.filter((item) => item && item.ativo !== false && !item.removidoEm && !item.excluido)
-    const avisosEnviados = Number(notificacoesAgenda.sent || 0)
-    const avisosFila = Number(notificacoesAgenda.queued || 0)
-    return (
-      <div style={{ display: 'grid', gap: 18 }}>
-        {/* Resumo de Indicadores da Operação */}
-        <Card style={styles.agendaSummary}>
-          {[
-            ['Atendimentos', agendamentos.length, 'Agenda do dia', 'var(--accent)'],
-            ['Confirmados', agendamentos.filter((item) => item.status === 'confirmado').length, 'Prontos para receber', '#8b5cf6'],
-            ['Em atendimento', agendamentos.filter((item) => item.status === 'em_atendimento').length, 'Em execução agora', '#f59e0b'],
-            ['Avisos na fila', avisosFila, `${avisosEnviados} enviados · WhatsApp`, '#2563eb'],
-            ['Bloqueios', bloqueios.length, 'Horários indisponíveis', '#e05c5c'],
-            ['Barbeiros ativos', atendentesAtivos.length, 'Equipe em operação', '#14b87a']
-          ].map(([label, value, note, color]) => (
-            <div key={label} style={styles.agendaSummaryItem}>
-              <strong style={{ color }}>{value}</strong>
-              <span>{label}</span>
-              <small>{note}</small>
-            </div>
-          ))}
-        </Card>
 
-        {/* Notificação de Bloqueios no Dia (Almoço, Pausas) */}
+    return (
+      <div style={{ display: 'grid', gap: 12 }}>
         {bloqueios.length > 0 && (
-          <Card style={{ padding: '14px 18px', background: 'rgba(245, 158, 11, 0.05)', borderColor: 'rgba(245, 158, 11, 0.3)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10, marginBottom: 10 }}>
-              <div>
-                <strong style={{ color: '#f59e0b', fontSize: 14, display: 'flex', alignItems: 'center', gap: 6 }}>
-                  🔒 Horários Bloqueados no Dia ({bloqueios.length})
+          <Card style={{ padding: '10px 14px', background: 'rgba(245, 158, 11, 0.05)', borderColor: 'rgba(245, 158, 11, 0.3)', borderRadius: 10 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <strong style={{ color: '#f59e0b', fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  🔒 {bloqueios.length} horário(s) bloqueado(s) no dia
                 </strong>
-                <small style={{ color: 'var(--muted)', display: 'block', marginTop: 2 }}>
-                  Profissionais indisponíveis para almoço, compromissos ou pausas (bloqueia marcação interna e online).
-                </small>
+                <span style={{ color: 'var(--muted)', fontSize: 12 }}>(almoços e pausas na unidade)</span>
               </div>
-              <button
-                type="button"
-                style={{ ...styles.secondary, padding: '4px 10px', fontSize: 12 }}
-                onClick={() => {
-                  setFormBloqueio({ titulo: 'Almoço', motivo: 'Horário de almoço', inicioHora: '12:00', fimHora: '13:00', profissionalId: profissionalFiltro || '', data: dataSelecionada })
-                  setModal('bloqueioAgenda')
-                }}
-              >
-                + Novo bloqueio
-              </button>
-            </div>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              {bloqueios.map((b) => {
-                const profNome = b.profissionalId ? profissionais.find(p => p.id === b.profissionalId)?.nome || 'Profissional' : 'Toda a unidade'
-                return (
-                  <div
-                    key={b.id}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 10,
-                      background: 'var(--surface)',
-                      border: '1px solid var(--border)',
-                      padding: '8px 12px',
-                      borderRadius: 10,
-                    }}
-                  >
-                    <span style={{ fontWeight: 800, color: '#f59e0b', fontSize: 13 }}>
-                      {horario(b.inicio)}–{horario(b.fim)}
-                    </span>
-                    <div style={{ fontSize: 12.5 }}>
-                      <strong>{b.titulo}</strong>
-                      <span style={{ color: 'var(--muted)', marginLeft: 6 }}>· {profNome}</span>
-                    </div>
-                    <button
-                      type="button"
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {bloqueios.map((b) => {
+                  const profNome = b.profissionalId ? profissionais.find(p => p.id === b.profissionalId)?.nome || 'Profissional' : 'Toda a unidade'
+                  return (
+                    <span
+                      key={b.id}
                       style={{
-                        background: 'rgba(239, 68, 68, 0.1)',
-                        border: '1px solid rgba(239, 68, 68, 0.3)',
-                        color: '#ef4444',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        background: 'var(--surface)',
+                        border: '1px solid var(--border)',
                         padding: '3px 8px',
                         borderRadius: 6,
-                        fontSize: 11,
-                        fontWeight: 700,
-                        cursor: 'pointer',
+                        fontSize: 11.5,
                       }}
-                      onClick={() => desativarBloqueio(b)}
-                      title="Liberar este horário"
                     >
-                      Liberar
-                    </button>
-                  </div>
-                )
-              })}
+                      <strong>{horario(b.inicio)}–{horario(b.fim)}</strong> {profNome}
+                      <button
+                        type="button"
+                        style={{ background: 'transparent', border: 0, color: '#ef4444', cursor: 'pointer', padding: 0, fontSize: 11 }}
+                        onClick={() => desativarBloqueio(b)}
+                        title="Liberar este horário"
+                      >
+                        ✕
+                      </button>
+                    </span>
+                  )
+                })}
+                <button
+                  type="button"
+                  style={{ ...styles.secondary, padding: '3px 8px', fontSize: 11.5 }}
+                  onClick={() => {
+                    setFormBloqueio({ titulo: 'Almoço', motivo: 'Horário de almoço', inicioHora: '12:00', fimHora: '13:00', profissionalId: profissionalFiltro || '', data: dataSelecionada })
+                    setModal('bloqueioAgenda')
+                  }}
+                >
+                  + Bloqueio
+                </button>
+              </div>
             </div>
           </Card>
         )}
 
-        {/* Agenda Visual Estilo Google Calendar com Barbeiros no Topo e visual Segunda a Sábado */}
+        {/* Agenda Visual Clean e Independente no Padrão Google Agenda / Avec */}
         <BarbeariaAgendaPeriodo
           profissionais={atendentesAtivos}
           servicos={servicos}
@@ -1581,25 +1544,6 @@ export default function BarbeariaERP() {
           statusFiltro={statusFiltro}
           onNewAppointment={abrirNovoAgendamento}
         />
-
-        {/* Grade horária diária por cadeira (Linha do tempo complementar expansível) */}
-        <details style={{ background: 'var(--card)', borderRadius: 14, border: '1px solid var(--line)', padding: 14 }}>
-          <summary style={{ cursor: 'pointer', fontWeight: 700, fontSize: 14, color: 'var(--text)' }}>
-            ⏱️ Grade horária por cadeira — {fmtDateOnly(dataSelecionada)} (Linha do tempo diária)
-          </summary>
-          <div style={{ marginTop: 14 }}>
-            <BarbeariaAgendaBoard
-              data={dataSelecionada}
-              configuracao={unidade || configuracao || {}}
-              agendamentos={agendamentos.map((item) => ({ ...item, statusVisual: statusVisualAgendamento(item, configuracao?.confirmacaoAutomaticaAtiva === true) }))}
-              profissionais={profissionalFiltro ? atendentesAtivos.filter((item) => profissionaisSelecionados(profissionalFiltro).includes(item.id)) : atendentesAtivos}
-              bloqueios={bloqueios}
-              onDateChange={(novaData) => { setStatusFiltro(''); setDataSelecionada(novaData) }}
-              onNew={abrirNovoAgendamento}
-              onOpenAppointment={(item) => setModal({ tipo: 'detalheAgenda', agendamento: item })}
-            />
-          </div>
-        </details>
       </div>
     )
   }
@@ -2283,11 +2227,14 @@ export default function BarbeariaERP() {
 
   // Tela cheia (aberta pelo menu em nova guia): só a seção pedida, na largura toda, sem menus.
   if (searchParams.get('tela') === 'cheia') {
-    return <div style={{ padding: '16px clamp(12px, 2vw, 28px)' }}>
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 14, flexWrap: 'wrap', marginBottom: 14 }}>
-        <div><div style={{ color: 'var(--accent)', fontSize: 12, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.08em' }}>Dino · {unidadeLabel || 'Dino Matriz'} · visão completa</div><h1 style={{ margin: '5px 0 0', fontSize: 'clamp(22px, 3vw, 30px)', fontFamily: 'var(--font-display)' }}>{tab}</h1></div>
-        <div style={styles.headerActions}><button type="button" style={styles.secondary} onClick={carregar}>Atualizar</button>{tab === 'Agenda' && <button type="button" style={styles.primary} onClick={abrirNovoAgendamento}>+ Agendamento</button>}<a href={`/admin/barbearia-erp?area=${encodeURIComponent(TAB_AREA[tab] || 'operacao')}&tab=${encodeURIComponent(tab)}`} style={{ ...styles.secondary, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>Abrir com o menu</a></div>
-      </header>
+    const ehAgenda = tab === 'Agenda'
+    return <div style={{ padding: ehAgenda ? '10px 16px' : '16px clamp(12px, 2vw, 28px)', maxWidth: 'none', margin: 0 }}>
+      {!ehAgenda && (
+        <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 14, flexWrap: 'wrap', marginBottom: 14 }}>
+          <div><div style={{ color: 'var(--accent)', fontSize: 12, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.08em' }}>Dino · {unidadeLabel || 'Dino Matriz'} · visão completa</div><h1 style={{ margin: '5px 0 0', fontSize: 'clamp(22px, 3vw, 30px)', fontFamily: 'var(--font-display)' }}>{tab}</h1></div>
+          <div style={styles.headerActions}><button type="button" style={styles.secondary} onClick={carregar}>Atualizar</button>{tab === 'Agenda' && <button type="button" style={styles.primary} onClick={abrirNovoAgendamento}>+ Agendamento</button>}<a href={`/admin/barbearia-erp?area=${encodeURIComponent(TAB_AREA[tab] || 'operacao')}&tab=${encodeURIComponent(tab)}`} style={{ ...styles.secondary, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>Abrir com o menu</a></div>
+        </header>
+      )}
       {erro && <Card style={{ padding: 16, marginBottom: 18, borderColor: '#e05c5c' }}><strong role="status" aria-live="polite">Atenção no carregamento</strong><div style={{ color: 'var(--muted)', marginTop: 5 }}>{erro}</div></Card>}
       {loading && !dadosCarregados && !tabAutonoma ? <Card style={{ padding: 60, textAlign: 'center', color: 'var(--muted)' }} role="status" aria-live="polite" aria-busy="true">Carregando a agenda…</Card> : <div aria-busy={loading && !tabAutonoma}>{renderConteudo()}</div>}
       {renderModal()}
@@ -2295,14 +2242,21 @@ export default function BarbeariaERP() {
   }
 
   // Painéis analíticos usam 100% da largura; os demais mantêm leitura confortável.
-  return <div style={{ padding: '24px clamp(16px, 3vw, 36px)', maxWidth: tab === 'Desempenho da equipe' ? 'none' : 1440, margin: '0 auto' }}>
-    <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 20, flexWrap: 'wrap', marginBottom: 14 }}>
-      <div><div style={{ color: 'var(--accent)', fontSize: 12, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.08em' }}>Dino · ERP operacional · empresa ativa</div><h1 style={{ margin: '7px 0 5px', fontSize: 'clamp(25px, 4vw, 34px)', fontFamily: 'var(--font-display)' }}>{configuracao?.nomePublico || 'Dino'} · Barbearia & Salão</h1><p style={{ margin: 0, color: 'var(--muted)', maxWidth: 720 }}>A operação da unidade em um fluxo único: agenda, atendimento, relacionamento, catálogo e gestão.</p></div><div style={styles.headerActions}><div style={styles.globalSearch}><input aria-label="Buscar na Barbearia" aria-expanded={Boolean(buscaGlobal.trim())} aria-controls="barbearia-global-search-results" value={buscaGlobal} onChange={(event) => setBuscaGlobal(event.target.value)} onKeyDown={(event) => { if (event.key === 'Escape') setBuscaGlobal(''); if (event.key === 'Enter' && resultadosBuscaGlobal[0]) abrirResultadoBusca(resultadosBuscaGlobal[0]) }} placeholder="Buscar cliente, serviço ou agenda…" style={{ ...inputStyle, paddingRight: 40 }} /><span aria-hidden="true" style={styles.searchIcon}>⌕</span>{buscaGlobal.trim() && <div id="barbearia-global-search-results" role="listbox" aria-label="Resultados da busca" style={styles.globalSearchResults}>{resultadosBuscaGlobal.length === 0 ? <div style={styles.globalSearchEmpty}>Nenhum registro encontrado no overview carregado.</div> : resultadosBuscaGlobal.map((resultado) => <button key={resultado.id} type="button" role="option" style={styles.globalSearchItem} onClick={() => abrirResultadoBusca(resultado)}><span><strong>{resultado.nome}</strong><small>{resultado.tipo} · {resultado.meta}</small></span><span aria-hidden="true">›</span></button>)}</div>}</div><button type="button" style={styles.secondary} onClick={carregar}>Atualizar</button><button type="button" style={styles.primary} onClick={() => navegarParaTab('Atendimento')}>Atender agora</button><Link to={`/barbeiro/${encodeURIComponent(formConfig.slugPublico || "dino")}`} style={{ ...styles.secondary, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }} title="Agenda do dia de cada profissional no celular (instalável)">App do barbeiro</Link>{tab === 'Agenda' && <button type="button" style={styles.primary} onClick={abrirNovoAgendamento}>+ Agendamento</button>}</div>
-    </header>
-    <div style={styles.contextBar} aria-label="Contexto operacional"><div style={styles.contextBarItem}><span>Área ativa</span><strong>{areaAtual.label}</strong></div><div style={styles.contextBarItem}><span>Unidade</span><strong>{unidadeLabel}</strong></div><div style={styles.contextBarItem}><span>Data operacional</span><strong>{fmtDateOnly(dataSelecionada)}</strong></div><div style={styles.contextBarItem}><span>Estado</span><strong>{loading ? 'Atualizando…' : erro ? 'Revisar dados' : 'Dados sincronizados'}</strong></div></div>
-    <nav aria-label="Áreas da Barbearia" style={styles.areaNav}>
-      {areasVisiveis.map((area) => <button key={area.id} type="button" aria-current={area.id === areaAtual.id ? 'page' : undefined} onClick={() => navegarParaTab(area.tabs[0])} style={{ ...styles.areaNavItem, ...(area.id === areaAtual.id ? styles.areaNavItemActive : {}) }}><strong>{area.label}</strong><small>{area.short}</small></button>)}
-    </nav>
+  const ehAgenda = tab === 'Agenda'
+
+  // Na aba Agenda, removemos o cabeçalho gigante do print 2 para proporcionar tela 100% limpa, ampla e independente
+  return <div style={{ padding: ehAgenda ? '10px clamp(10px, 1.5vw, 20px)' : '24px clamp(16px, 3vw, 36px)', maxWidth: (tab === 'Desempenho da equipe' || ehAgenda) ? 'none' : 1440, margin: '0 auto' }}>
+    {!ehAgenda && (
+      <>
+        <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 20, flexWrap: 'wrap', marginBottom: 14 }}>
+          <div><div style={{ color: 'var(--accent)', fontSize: 12, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.08em' }}>Dino · ERP operacional · empresa ativa</div><h1 style={{ margin: '7px 0 5px', fontSize: 'clamp(25px, 4vw, 34px)', fontFamily: 'var(--font-display)' }}>{configuracao?.nomePublico || 'Dino'} · Barbearia & Salão</h1><p style={{ margin: 0, color: 'var(--muted)', maxWidth: 720 }}>A operação da unidade em um fluxo único: agenda, atendimento, relacionamento, catálogo e gestão.</p></div><div style={styles.headerActions}><div style={styles.globalSearch}><input aria-label="Buscar na Barbearia" aria-expanded={Boolean(buscaGlobal.trim())} aria-controls="barbearia-global-search-results" value={buscaGlobal} onChange={(event) => setBuscaGlobal(event.target.value)} onKeyDown={(event) => { if (event.key === 'Escape') setBuscaGlobal(''); if (event.key === 'Enter' && resultadosBuscaGlobal[0]) abrirResultadoBusca(resultadosBuscaGlobal[0]) }} placeholder="Buscar cliente, serviço ou agenda…" style={{ ...inputStyle, paddingRight: 40 }} /><span aria-hidden="true" style={styles.searchIcon}>⌕</span>{buscaGlobal.trim() && <div id="barbearia-global-search-results" role="listbox" aria-label="Resultados da busca" style={styles.globalSearchResults}>{resultadosBuscaGlobal.length === 0 ? <div style={styles.globalSearchEmpty}>Nenhum registro encontrado no overview carregado.</div> : resultadosBuscaGlobal.map((resultado) => <button key={resultado.id} type="button" role="option" style={styles.globalSearchItem} onClick={() => abrirResultadoBusca(resultado)}><span><strong>{resultado.nome}</strong><small>{resultado.tipo} · {resultado.meta}</small></span><span aria-hidden="true">›</span></button>)}</div>}</div><button type="button" style={styles.secondary} onClick={carregar}>Atualizar</button><button type="button" style={styles.primary} onClick={() => navegarParaTab('Atendimento')}>Atender agora</button><Link to={`/barbeiro/${encodeURIComponent(formConfig.slugPublico || "dino")}`} style={{ ...styles.secondary, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }} title="Agenda do dia de cada profissional no celular (instalável)">App do barbeiro</Link></div>
+        </header>
+        <div style={styles.contextBar} aria-label="Contexto operacional"><div style={styles.contextBarItem}><span>Área ativa</span><strong>{areaAtual.label}</strong></div><div style={styles.contextBarItem}><span>Unidade</span><strong>{unidadeLabel}</strong></div><div style={styles.contextBarItem}><span>Data operacional</span><strong>{fmtDateOnly(dataSelecionada)}</strong></div><div style={styles.contextBarItem}><span>Estado</span><strong>{loading ? 'Atualizando…' : erro ? 'Revisar dados' : 'Dados sincronizados'}</strong></div></div>
+        <nav aria-label="Áreas da Barbearia" style={styles.areaNav}>
+          {areasVisiveis.map((area) => <button key={area.id} type="button" aria-current={area.id === areaAtual.id ? 'page' : undefined} onClick={() => navegarParaTab(area.tabs[0])} style={{ ...styles.areaNavItem, ...(area.id === areaAtual.id ? styles.areaNavItemActive : {}) }}><strong>{area.label}</strong><small>{area.short}</small></button>)}
+        </nav>
+      </>
+    )}
     <nav aria-label={`Seções de ${areaAtual.label}`} style={styles.tabNav}>
       {areaAtual.tabs.map((nome) => <button key={nome} type="button" title={TAB_DESCRICAO[nome]} aria-current={tab === nome ? 'page' : undefined} onClick={() => navegarParaTab(nome)} style={{ ...styles.tabNavItem, ...(tab === nome ? styles.tabNavItemActive : {}) }}>{nome}</button>)}
     </nav>

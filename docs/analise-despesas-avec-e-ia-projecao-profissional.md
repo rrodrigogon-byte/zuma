@@ -289,3 +289,41 @@ Ao pesquisar qualquer profissional (ex.: Naty) no painel, o sistema exibe:
 * `web/src/pages/admin/AgendaProfissionais.jsx`: Barra superior horizontal com avatares coloridos, seleção rápida e filtro restrito aos profissionais ativos.
 * `web/src/pages/admin/BarbeariaERP.jsx`: Limpeza do container de agenda, remoção de controles redundantes e injeção dos barbeiros ativos na visualização.
 * `web/src/lib/barbearia-calendar.js` e `.test.js`: Funções utilitárias `semanaSegundaSabado`, `semanaCompleta`, `mesAnoLegivel`, `diaSemanaCurto` e `diaNumero` cobertas por testes automatizados (100% de aprovação).
+
+---
+## 17.0 Refinamento de UX da Agenda: Remoção de Cabeçalhos Redundantes, Filtro de Exibição de Profissionais e Visual Clean Independente (Padrão Avec)
+### 17.1 Diagnóstico das Demandas e Ajustes Solicitados
+* **1. Eliminação do Cabeçalho Gigante e Redundâncias:**
+  * No print do ERP (`Barbearia & Salão`), o topo da página era ocupado pelo cabeçalho institucional (`Dino · ERP operacional`), seguido pela barra de contexto de 4 caixas (`Área ativa`, `Unidade`, `Data`, `Estado`), abas de áreas de navegação e um card de 6 indicadores de sumário (`Atendimentos`, `Confirmados`, `Em atendimento`, etc.).
+  * Esse empilhamento consumia mais de 50% da altura visível da tela antes mesmo de exibir o primeiro horário da agenda, gerando sensação de tela poluída e pesada em comparação à visualização independente e ampla do Avec.
+* **2. Filtro de Profissionais para Exibição na Tela:**
+  * Necessidade de permitir que o gestor escolha exatamente quais barbeiros devem ser exibidos na tela da agenda, ocultando profissionais sem necessidade no momento ou focando em grupos de cadeiras específicas.
+* **3. Padrão Visual Clean Inspirado no Avec:**
+  * Visual limpo em tela cheia/independente, com chips circulares e minimalistas dos barbeiros no topo, cards de agendamento claros, com horário e valor em evidência no topo, nome do cliente em negrito destacado, serviço realizado e barbeiro/status discretos na base do card.
+
+### 17.2 Solução Implementada
+* **1. Limpeza Radical do Topo na Aba Agenda:**
+  * Em `BarbeariaERP.jsx`, quando `tab === 'Agenda'`, os cabeçalhos institucionais volumosos, a barra de contexto e os cards duplicados de sumário são completamente omitidos. A tela inicia de forma limpa, direta e dedicada 100% à operação da agenda, com aproveitamento total da largura da janela (`padding` reduzido e `maxWidth: none`).
+* **2. Componente de Filtro de Exibição de Profissionais (`AgendaProfissionais.jsx`):**
+  * Adicionado botão com ícone de engrenagem e contador: `⚙️ Filtrar exibição (X/Y)`.
+  * Menu popover moderno e flutuante contendo:
+    * Cabeçalho com título `Exibir na agenda` e botão para fechar (`✕`).
+    * Ações rápidas `Marcar todos` e `Limpar`.
+    * Lista interativa de todos os barbeiros ativos com checkboxes customizados.
+    * Persistência automática no `localStorage` do navegador (`dino_agenda_profissionais_visiveis`), para que as preferências de visualização do gestor permaneçam salvas entre acessos.
+    * Botão de confirmação `Aplicar filtro`.
+  * Na grade de horários, os agendamentos são filtrados dinamicamente em memória com base nos barbeiros marcados, mantendo a performance de renderização instantânea.
+* **3. Cards de Agendamento Estilo Avec / Minimalista:**
+  * Cards com fundo branco limpo, cantos arredondados (`10px`), borda suave com indicador colorido discreto na lateral esquerda por status e sombra suave.
+  * Linha superior com Horário (`08:00`) em negrito escuro e Valor (`R$ 160,00` ou `R$ 0,01`) no canto direito.
+  * Nome do cliente em destaque (`13px, font-weight: 700`).
+  * Serviço realizado em tom suave (`color: #64748b`).
+  * Rodapé com indicação do barbeiro (`✂ Natani`, `✂ Dino`, etc.) e badge de status em caixa alta (`AGENDADO`, `CONFIRMADO`).
+
+### 17.3 Validação e Integridade
+* `web/src/pages/admin/BarbeariaERP.jsx`: Cabeçalhos redundantes removidos na exibição de agenda; integridade de JSX e chaves 100% balanceada (`Diff: 0`).
+* `web/src/pages/admin/AgendaProfissionais.jsx`: Dropdown popover de filtro de exibição com persistência e chips circulares dos profissionais ativos.
+* `web/src/pages/admin/BarbeariaAgendaPeriodo.jsx`: Integração do filtro de exibição no cálculo de itens visíveis e refinamento da régua de período.
+* `web/src/pages/admin/BarbeariaAgendaPeriodo.css`: Estilização dos cards, animação de entrada do popover e layout responsivo.
+* Build do frontend (`vite build`) executado com sucesso sem erros (`✓ built in 9.35s`).
+* Suíte de 61 testes automatizados do sistema executada com 100% de aprovação.
