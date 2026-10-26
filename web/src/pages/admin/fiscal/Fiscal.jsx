@@ -257,6 +257,62 @@ function Documentos({ toast }) {
       carregar()
     } catch (error) { toast(error.message, 'error') } finally { setEnviando('') }
   }
+  const [periodo, setPeriodo] = useState('todos')
+  const [filtroModelo, setFiltroModelo] = useState('todos')
+  const [filtroStatus, setFiltroStatus] = useState('todos')
+  const [busca, setBusca] = useState('')
+
+  const docsFiltrados = useMemo(() => {
+    return docs.filter((d) => {
+      if (filtroModelo !== 'todos' && String(d.modelo) !== String(filtroModelo)) return false
+      if (filtroStatus !== 'todos' && d.status !== filtroStatus) return false
+      if (busca) {
+        const termo = busca.toLowerCase()
+        const matchNum = String(d.numero || '').includes(termo)
+        const matchSerie = String(d.serie || '').includes(termo)
+        const matchChave = String(d.chave || '').toLowerCase().includes(termo)
+        const matchMsg = (d.mensagens || []).some((m) => (m.mensagem || '').toLowerCase().includes(termo))
+        if (!matchNum && !matchSerie && !matchChave && !matchMsg) return false
+      }
+      if (periodo !== 'todos' && d.criadoEm) {
+        const dataDoc = new Date(d.criadoEm)
+        const agora = new Date()
+        if (periodo === 'hoje') {
+          if (dataDoc.toDateString() !== agora.toDateString()) return false
+        } else if (periodo === '7d') {
+          if (agora - dataDoc > 7 * 864e5) return false
+        } else if (periodo === '30d') {
+          if (agora - dataDoc > 30 * 864e5) return false
+        } else if (periodo === 'mes') {
+          if (dataDoc.getMonth() !== agora.getMonth() || dataDoc.getFullYear() !== agora.getFullYear()) return false
+        }
+      }
+      return true
+    })
+  }, [docs, filtroModelo, filtroStatus, busca, periodo])
+
+  const kpis = useMemo(() => {
+    let totalEmitido = 0
+    let autorizados = 0
+    let contingenciasCount = 0
+    let atrasadasCount = 0
+    let falhasCount = 0
+    for (const d of docs) {
+      if (['autorizado', 'validado_localmente'].includes(d.status)) {
+        totalEmitido += Number(d.valorTotal || 0)
+        autorizados += 1
+      }
+      if (d.status === 'contingencia') {
+        contingenciasCount += 1
+        if (d.contingenciaAtrasada) atrasadasCount += 1
+      }
+      if (['rejeitado', 'falha_comunicacao'].includes(d.status)) {
+        falhasCount += 1
+      }
+    }
+    return { totalEmitido, autorizados, contingenciasCount, atrasadasCount, falhasCount }
+  }, [docs])
+
   const contingencias = docs.filter((d) => d.status === 'contingencia')
   const atrasadas = contingencias.filter((d) => d.contingenciaAtrasada).length
   async function cancelar() {
@@ -279,8 +335,77 @@ function Documentos({ toast }) {
       <div className="dadm-actions"><button type="button" className="c360-btn primary" disabled={Boolean(enviando)} onClick={transmitirContingencias}>Transmitir contingências</button></div>
     </section>}
     <section className="dadm-card">
-      <h2>Documentos emitidos</h2>
-      <Table caption="Documentos fiscais" rows={docs} empty="Nenhum documento ainda." columns={[
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 16 }}>
+        <div>
+          <h2>Documentos emitidos</h2>
+          <p className="dadm-muted" style={{ margin: '4px 0 0' }}>Histórico completo de notas fiscais autorizadas, em contingência e validadas.</p>
+        </div>
+        <button type="button" className="c360-btn ghost" onClick={carregar}>Atualizar lista</button>
+      </div>
+
+      <div className="dadm-kpis" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 12, marginBottom: 18 }}>
+        <div className="dadm-kpi" style={{ padding: 14, background: 'var(--surface, rgba(255,255,255,0.03))', borderRadius: 10, border: '1px solid var(--border)' }}>
+          <div className="dadm-kpi-sub" style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600 }}>Total emitido</div>
+          <div className="dadm-kpi-val" style={{ fontSize: 20, fontWeight: 800, color: '#14b87a', margin: '4px 0' }}>{money(kpis.totalEmitido)}</div>
+          <div className="dadm-muted" style={{ fontSize: 12 }}>{kpis.autorizados} nota(s) válida(s)</div>
+        </div>
+        <div className="dadm-kpi" style={{ padding: 14, background: 'var(--surface, rgba(255,255,255,0.03))', borderRadius: 10, border: '1px solid var(--border)' }}>
+          <div className="dadm-kpi-sub" style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600 }}>Contingência offline</div>
+          <div className="dadm-kpi-val" style={{ fontSize: 20, fontWeight: 800, color: kpis.contingenciasCount > 0 ? (kpis.atrasadasCount > 0 ? '#e05c5c' : '#f59e0b') : 'inherit', margin: '4px 0' }}>{kpis.contingenciasCount}</div>
+          <div className="dadm-muted" style={{ fontSize: 12 }}>{kpis.atrasadasCount > 0 ? `${kpis.atrasadasCount} > 24h vencida(s)` : 'Prazo legal 24h'}</div>
+        </div>
+        <div className="dadm-kpi" style={{ padding: 14, background: 'var(--surface, rgba(255,255,255,0.03))', borderRadius: 10, border: '1px solid var(--border)' }}>
+          <div className="dadm-kpi-sub" style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600 }}>Vendas sem nota</div>
+          <div className="dadm-kpi-val" style={{ fontSize: 20, fontWeight: 800, margin: '4px 0' }}>{vendas.length}</div>
+          <div className="dadm-muted" style={{ fontSize: 12 }}>Prontas para emissão</div>
+        </div>
+        <div className="dadm-kpi" style={{ padding: 14, background: 'var(--surface, rgba(255,255,255,0.03))', borderRadius: 10, border: '1px solid var(--border)' }}>
+          <div className="dadm-kpi-sub" style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600 }}>Rejeições / Falhas</div>
+          <div className="dadm-kpi-val" style={{ fontSize: 20, fontWeight: 800, color: kpis.falhasCount > 0 ? '#e05c5c' : 'inherit', margin: '4px 0' }}>{kpis.falhasCount}</div>
+          <div className="dadm-muted" style={{ fontSize: 12 }}>{kpis.falhasCount > 0 ? 'Exige reenvio' : 'Nenhuma falha'}</div>
+        </div>
+      </div>
+
+      <div className="dadm-filters" style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginBottom: 16 }}>
+        <input
+          type="search"
+          className="c360-input"
+          style={{ minWidth: 200, flex: 1 }}
+          placeholder="Buscar por número, série, chave, motivo..."
+          value={busca}
+          onChange={(e) => setBusca(e.target.value)}
+        />
+        <select className="c360-input" value={filtroModelo} onChange={(e) => setFiltroModelo(e.target.value)} style={{ width: 'auto' }}>
+          <option value="todos">Todos os modelos</option>
+          <option value="65">NFC-e (Consumidor 65)</option>
+          <option value="55">NF-e (Mercadoria 55)</option>
+          <option value="nfse">NFS-e (Serviço)</option>
+        </select>
+        <select className="c360-input" value={filtroStatus} onChange={(e) => setFiltroStatus(e.target.value)} style={{ width: 'auto' }}>
+          <option value="todos">Todas as situações</option>
+          <option value="autorizado">Autorizado</option>
+          <option value="validado_localmente">Validado localmente</option>
+          <option value="contingencia">Contingência</option>
+          <option value="falha_comunicacao">Falha comunicação</option>
+          <option value="rejeitado">Rejeitado</option>
+          <option value="cancelado">Cancelado</option>
+        </select>
+        <div style={{ display: 'flex', gap: 4 }}>
+          {[['todos', 'Todos'], ['hoje', 'Hoje'], ['7d', '7D'], ['30d', '30D'], ['mes', 'Este mês']].map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              className={`c360-btn ${periodo === id ? 'primary' : 'ghost'}`}
+              style={{ padding: '6px 10px', fontSize: 12 }}
+              onClick={() => setPeriodo(id)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <Table caption="Documentos fiscais" rows={docsFiltrados} empty="Nenhum documento ainda." columns={[
         { key: 'n', label: 'Documento', render: (d) => <div><strong>{MODELO[d.modelo]} {d.serie}/{d.numero}</strong><div className="dadm-muted">{dateTime(d.criadoEm)}{d.chave ? ` · ${d.chave}` : ''}</div></div> },
         { key: 'v', label: 'Valor', align: 'right', render: (d) => money(d.valorTotal) },
         { key: 's', label: 'Situação', render: (d) => <div><Badge tone={STATUS[d.status]?.[1]}>{STATUS[d.status]?.[0] || d.status}</Badge>{d.contingenciaAtrasada && <> <Badge tone="danger">prazo de 24 h vencido</Badge></>}{d.mensagens?.length > 0 && <div className="dadm-muted">{d.mensagens.map((m) => m.mensagem).join(' · ')}</div>}</div> },
