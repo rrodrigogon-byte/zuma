@@ -409,7 +409,7 @@ export function MetasComissoesPanel({ onOpenTab }) {
                     <div>
                       <span style={kpiLabel}>Metas de Faturamento em Produtos</span>
                       <div style={{ fontSize: 22, fontWeight: 800, marginTop: 4 }}>
-                        {moeda(mp.faturamento)} <span style={{ fontSize: 13, color: 'var(--muted)', fontWeight: 600 }}>vendidos</span>
+                        {moeda(mp.faturamento)} <span style={{ fontSize: 13, color: 'var(--muted)', fontWeight: 600 }}>vendidos ({relatorioIndividual.produtos?.unidadesVendidas || 0} un)</span>
                       </div>
                     </div>
                     <div style={{ textAlign: 'right' }}>

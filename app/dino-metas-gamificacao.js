@@ -221,7 +221,7 @@ export function apurarDesempenhoEquipe(empresaId, { dataIso = dataIsoCuiaba(), i
 
     for (const cmd of comandas) {
       if (cmd.status === 'cancelada') continue;
-      const rawCmd = cmd.fechadaEm || cmd.atualizadoEm || cmd.criadoEm || '';
+const rawCmd = cmd.fechadaEm || cmd.atualizadoEm || cmd.criadoEm || '';
       if (!rawCmd) continue;
       const dataCmd = rawCmd.slice(0, 10);
       let dataCmdCuiaba = '';
@@ -314,7 +314,7 @@ export function apurarDesempenhoEquipe(empresaId, { dataIso = dataIsoCuiaba(), i
 
     for (const venda of vendasRevenda) {
       if (venda.status === 'cancelado') continue;
-      const rawVenda = venda.criadoEm || '';
+const rawVenda = venda.criadoEm || '';
       if (!rawVenda) continue;
       const dataVenda = rawVenda.slice(0, 10);
       let dataVendaCuiaba = '';
