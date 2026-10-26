@@ -88,19 +88,60 @@ export default function BarbeariaAgendaPeriodo({
   const dias = useMemo(() => diasEntre(de, ate), [de, ate])
 
   // Filtra APENAS profissionais ativos (elimina inativos e excluídos da visão da agenda)
+    // Filtra APENAS profissionais ativos (elimina inativos e excluídos da visão da agenda)
   const barbeirosAtivos = useMemo(() => {
     return (profissionais || []).filter(p => p && p.ativo !== false && !p.removidoEm && !p.excluido)
   }, [profissionais])
+
+  // Filtro de profissionais que queremos exibir na tela (com persistência no localStorage)
+  const STORAGE_KEY_VISIVEIS = 'dino_agenda_profissionais_visiveis'
+  const [visiveisIds, setVisiveisIds] = useState(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY_VISIVEIS)
+      if (saved) {
+        const parsed = JSON.parse(saved)
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed
+      }
+    } catch (_) {}
+    return []
+  })
+
+  // Sincroniza quando os barbeiros ativos carregam
+  useEffect(() => {
+    if ((!visiveisIds || visiveisIds.length === 0) && barbeirosAtivos.length > 0) {
+      setVisiveisIds(barbeirosAtivos.map(p => p.id))
+    }
+  }, [barbeirosAtivos])
+
+  function handleVisiveisChange(novosIds) {
+    setVisiveisIds(novosIds)
+    try {
+      localStorage.setItem(STORAGE_KEY_VISIVEIS, JSON.stringify(novosIds))
+    } catch (_) {}
+  }
 
   const chave = JSON.stringify([de, ate, profissionalId, refreshKey, atualizacao])
   const chaveLivres = JSON.stringify([de, ate, profissionalId, servicoId, refreshKey, atualizacao])
   const contextoAtual = useRef(chaveLivres)
   contextoAtual.current = chaveLivres
-
   const carregando = dias.length > 0 && consulta?.chave !== chave && !erro
   const itens = consulta?.chave === chave ? consulta.itens : []
-  const visiveis = useMemo(() => filtrarAgenda(itens, { busca, status: statusFiltro }), [itens, busca, statusFiltro])
 
+  // Filtra itens por busca, status e APENAS os profissionais marcados para exibição na tela!
+  const visiveis = useMemo(() => {
+    let filtrados = itens
+    if (profissionalId) {
+      const idsFiltro = profissionalId.split(',').map(s => s.trim())
+      filtrados = filtrados.filter(item => !item.profissionalId || idsFiltro.includes(item.profissionalId))
+    } else if (Array.isArray(visiveisIds) && visiveisIds.length > 0) {
+      const setVisiveis = new Set(visiveisIds)
+      filtrados = filtrados.filter(item => {
+        if (!item.profissionalId) return true
+        return setVisiveis.has(item.profissionalId)
+      })
+    }
+    return filtrarAgenda(filtrados, { busca, status: statusFiltro })
+  }, [itens, profissionalId, visiveisIds, busca, statusFiltro])
   const porDia = useMemo(() => {
     const mapa = new Map(dias.map(d => [d, []]))
     for (const item of visiveis) {
@@ -405,12 +446,14 @@ export default function BarbeariaAgendaPeriodo({
         </div>
       </header>
 
-      {/* 2. BARRA SUPERIOR DE BARBEIROS (TOP BAR - APENAS PROFISSIONAIS ATIVOS) */}
+      {/* 2. BARRA SUPERIOR DE BARBEIROS (TOP BAR COM FILTRO DE PROFISSIONAIS NA TELA) */}
       <AgendaProfissionais
         profissionais={barbeirosAtivos}
         value={profissionalId}
         onChange={onProfissionalChange}
-        label="Barbeiros da equipe (ativos)"
+        visiveisIds={visiveisIds}
+        onVisiveisIdsChange={handleVisiveisChange}
+        label="Barbeiros na agenda"
         mostrarContador={true}
       />
 
