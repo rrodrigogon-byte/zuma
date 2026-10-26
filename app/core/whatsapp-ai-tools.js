@@ -31,6 +31,7 @@ import * as barbeariaErp from '../barbearia-erp-kytto.js';
 import * as clientesKytto from '../clientes-contas-kytto.js';
 import { normalizarNascimento } from '../clientes-contas-kytto.js';
 import { encontrarClientePorTelefone, telefoneChave } from '../dino-clientes-vinculo.js';
+import { DINO_GESTAO_TOOLS, executarFerramentaGestao } from '../dino-gestao-ia.js';
 import { actionTtlMinutes, isGenericCustomerName } from './whatsapp-ai-intents.js';
 import {
   ensureWhatsappLead,
@@ -1735,6 +1736,8 @@ export const WHATSAPP_AI_TOOL_DECLARATIONS = [
   { name: 'solicitar_humano', description: 'Encaminha a conversa para atendimento humano em dúvidas sensíveis, exceções, reclamações ou pedido explícito.', parameters: { type: 'OBJECT', properties: { reason: { type: 'STRING' } }, required: ['reason'] } },
 ];
 
+export { DINO_GESTAO_TOOLS };
+
 const TOOL_MAP = {
   apresentar_produto: toolPresentProduct,
   consultar_pagamentos: toolPayments,
@@ -1798,11 +1801,24 @@ export function createWhatsappAiToolExecutor(context) {
   let preparedAction = false;
   let primaryIntentResolved = false;
   return async (name, args) => {
-    const tool = TOOL_MAP[name];
-    if (!tool) throw new WhatsappAiToolError('ferramenta não permitida', 'TOOL_NOT_ALLOWED');
-    if (context.channelType === 'gestao' && name !== 'solicitar_humano') {
+    if (context.channelType === 'gestao') {
+      if (name === 'solicitar_humano') {
+        const tool = TOOL_MAP[name];
+        const result = await tool(context, args || {});
+        collectToolOutput(context, result);
+        return result;
+      }
+      const isManagementTool = DINO_GESTAO_TOOLS.some((t) => t.name === name);
+      if (isManagementTool) {
+        const result = await executarFerramentaGestao(name, args || {}, context);
+        collectToolOutput(context, result);
+        primaryIntentResolved = true;
+        return result;
+      }
       throw new WhatsappAiToolError('esta ferramenta não está disponível no canal interno de gestão', 'MANAGEMENT_TOOL_DISABLED');
     }
+    const tool = TOOL_MAP[name];
+    if (!tool) throw new WhatsappAiToolError('ferramenta não permitida', 'TOOL_NOT_ALLOWED');
     if (context.channelType === 'lancamentos' && !['preparar_despesa', 'solicitar_humano'].includes(name)) {
       throw new WhatsappAiToolError('esta ferramenta não está disponível no canal interno de lançamentos', 'LAUNCH_TOOL_DISABLED');
     }

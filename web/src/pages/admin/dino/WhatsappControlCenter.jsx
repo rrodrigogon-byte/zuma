@@ -21,7 +21,7 @@ const CHANNELS = [
   {
     key: 'gestao',
     label: 'Gestão',
-    description: 'Perguntas gerais e rotinas operacionais em canal separado.',
+    description: 'Copiloto executivo do Dino: faturamento, agenda, equipe, metas diárias, roleta, comissões e clientes via texto e áudio.',
     route: '/admin/whatsapp-gestao',
     api: '/api/admin/barbearia/whatsapp-conexao-gestao',
     icon: Workflow,
