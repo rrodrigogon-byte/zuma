@@ -189,6 +189,7 @@ const NAV_DINO_GROUPS = [
     label: 'Clientes & WhatsApp',
     items: [
       { to: '/admin/clientes-360', icon: '◉', label: 'Clientes 360' },
+      { to: '/admin/barbearia-erp?area=relacionamento&tab=Carteira+por+barbeiro', icon: '✂', label: 'Carteira de Clientes' },
       { to: '/admin/barbearia-erp?area=relacionamento&tab=Clientes', icon: '↻', label: 'CRM e campanhas' },
       { to: '/admin/barbearia-erp?area=relacionamento&tab=Retorno+previsto', icon: '↺', label: 'Retorno previsto' },
       { to: '/admin/barbearia-erp?area=relacionamento&tab=Lista+de+espera', icon: '⧗', label: 'Lista de espera' },

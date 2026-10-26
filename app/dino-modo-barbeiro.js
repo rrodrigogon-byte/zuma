@@ -1,3 +1,4 @@
+import { listarCarteiraClientes } from './dino-carteira-clientes.js';
 import { buildDinoCustomerAssistant } from './core/dino-customer-assistant.js';
 import * as dinoGamificacao from './dino-metas-gamificacao.js';
 
@@ -78,6 +79,9 @@ export function profissionalDoUsuario(profissionais = [], usuario = {}) {
     if (username && pEmail && pEmail.split('@')[0] === username) return true;
     if (userId && (p.usuarioId === userId || p.userId === userId)) return true;
     const pNome = String(p.nome || '').trim().toLowerCase();
+    const pApelido = String(p.apelido || '').trim().toLowerCase();
+    if (username && pApelido && (pApelido === username || username.startsWith(pApelido) || pApelido.startsWith(username))) return true;
+    if (nome && pApelido && (pApelido === nome || nome.startsWith(pApelido) || pApelido.startsWith(nome))) return true;
     if (username && pNome && (pNome === username || pNome.split(' ')[0] === username)) return true;
     if (nome && pNome && pNome === nome) return true;
     return false;
@@ -234,7 +238,13 @@ export function painelBarbeiro(erp, { empresaId, lojaId = '', usuario = {}, prof
   return {
     ...base,
     gamificacao,
-    clientesRecentes: clientesRecentesDoBarbeiro(erp, { empresaId, lojaId, profissionalId: escolhido.id, agora }),
+    clientesRecentes: (() => {
+      try {
+        const cart = listarCarteiraClientes(empresaId, { profissionalId: escolhido.id, lojaId });
+        if (cart && cart.clientes && cart.clientes.length > 0) return cart.clientes;
+      } catch {}
+      return clientesRecentesDoBarbeiro(erp, { empresaId, lojaId, profissionalId: escolhido.id, agora });
+    })(),
     profissional: {
       id: escolhido.id, nome: escolhido.nome, especialidade: escolhido.especialidade, fotoUrl: escolhido.fotoUrl || '',
       horarioInicio: escolhido.horarioInicio, horarioFim: escolhido.horarioFim, diasTrabalho: escolhido.diasTrabalho,
