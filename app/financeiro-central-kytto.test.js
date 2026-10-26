@@ -215,3 +215,67 @@ test('permite baixar contas legadas Avec e contas gerais sem unidade, liquidando
   delete estado.financeiroKytto.empresas[UUID];
   delete estado.financeiroKytto.empresas['emp-kytto-001'];
 });
+
+test('resumoFinanceiro e dreGerencial suportam filtro por intervalo de datas e cache em memória', () => {
+  const { registrarLancamento, resumoFinanceiro, dreGerencial } = financeiro;
+  const empresaId = 'emp-filtro-datas-teste';
+  const lojaId = 'loja-filtro-datas-teste';
+
+  // Lança receita no dia 2026-10-05 e despesa no dia 2026-10-20
+  registrarLancamento(empresaId, {
+    lojaId,
+    tipo: 'receita',
+    descricao: 'Corte e barba VIP',
+    categoria: 'Serviços',
+    valor: 200,
+    vencimento: '2026-10-05',
+    status: 'pago',
+    pagoEm: '2026-10-05T10:00:00Z',
+  });
+
+  registrarLancamento(empresaId, {
+    lojaId,
+    tipo: 'despesa',
+    descricao: 'Insumos de barbearia',
+    categoria: 'Insumos',
+    valor: 50,
+    vencimento: '2026-10-20',
+    status: 'pago',
+    pagoEm: '2026-10-20T14:00:00Z',
+  });
+
+  // Filtra apenas o intervalo 01 a 10 de outubro (só a receita deve entrar no recPeriodo)
+  const resumo1 = resumoFinanceiro(empresaId, {
+    lojaId,
+    dataInicio: '2026-10-01',
+    dataFim: '2026-10-10',
+  });
+
+  assert.equal(resumo1.recPeriodo, 200);
+  assert.equal(resumo1.despPeriodo, 0);
+  assert.equal(resumo1.resultadoPeriodo, 200);
+  assert.equal(resumo1.margemPeriodo, 100);
+
+  // Filtra apenas o intervalo 15 a 25 de outubro (só a despesa deve entrar no despPeriodo)
+  const resumo2 = resumoFinanceiro(empresaId, {
+    lojaId,
+    dataInicio: '2026-10-15',
+    dataFim: '2026-10-25',
+  });
+
+  assert.equal(resumo2.recPeriodo, 0);
+  assert.equal(resumo2.despPeriodo, 50);
+  assert.equal(resumo2.resultadoPeriodo, -50);
+
+  // DRE Gerencial no intervalo customizado
+  const dre = dreGerencial(empresaId, {
+    lojaId,
+    dataInicio: '2026-10-01',
+    dataFim: '2026-10-10',
+  });
+
+  assert.equal(dre.receitaBruta, 200);
+  assert.equal(dre.customizado, true);
+  assert.equal(dre.dataInicio, '2026-10-01');
+  assert.equal(dre.dataFim, '2026-10-10');
+});

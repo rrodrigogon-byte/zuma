@@ -1,3 +1,7 @@
+
+// Cache em memória de alta performance para relatórios individuais e equipe (TTL: 30s)
+const _cacheRelatorios = new Map();
+const TTL_CACHE_RELATORIOS_MS = 30_000;
 // KYTTO — Relatórios Individuais de Produtividade, Metas, Comissões e Bonificações.
 //
 // Suporta:
@@ -74,6 +78,18 @@ export function resolverPeriodo(tipo = 'mes', { inicio: customInicio = '', fim: 
       const inicioQuinzena = `${anoStr}-${mesStr}-16`;
       return { tipo: 'quinzena', quinzenaNumero: 2, inicio: inicioQuinzena, fim: ultimoDiaFormatado, label: `2ª Quinzena (16/${mesStr}/${anoStr} a ${ultimoDiaFormatado.split('-').reverse().join('/')})` };
     }
+  }
+  if (tipo === 'mesAnterior' || tipo === 'mes_anterior') {
+    const dAnt = new Date(ano, mes - 2, 1);
+    const anoAnt = dAnt.getFullYear();
+    const mesAnt = String(dAnt.getMonth() + 1).padStart(2, '0');
+    const ultDiaAnt = new Date(anoAnt, dAnt.getMonth() + 1, 0).getDate();
+    const deStr = `${anoAnt}-${mesAnt}-01`;
+    const ateStr = `${anoAnt}-${mesAnt}-${String(ultDiaAnt).padStart(2, '0')}`;
+    return { tipo: 'mesAnterior', inicio: deStr, fim: ateStr, label: `Mês Anterior (${mesAnt}/${anoAnt})` };
+  }
+  if (tipo === 'ano' || tipo === 'esteAno') {
+    return { tipo: 'ano', inicio: `${anoStr}-01-01`, fim: `${anoStr}-12-31`, label: `Ano de ${anoStr}` };
   }
 
   // Padrão: 'mes'
@@ -185,14 +201,22 @@ export function encontrarProfissionalCorrespondente(nome, profissionais = []) {
  */
 export function relatorioIndividualProfissional(empresaId, profissionalId, opcoes = {}) {
   const profId = String(profissionalId || '');
+  const periodo = resolverPeriodo(opcoes.periodo || 'mes', opcoes);
+  const { inicio, fim } = periodo;
+
+  // Cache check para navegação instantânea
+  const cacheKey = `rel_ind:${empresaId}:${profId}:${opcoes.lojaId || ''}:${periodo.tipo}:${inicio}:${fim}`;
+  const cached = _cacheRelatorios.get(cacheKey);
+  const agoraMs = Date.now();
+  if (cached && agoraMs - cached.ts < TTL_CACHE_RELATORIOS_MS) {
+    return { ...cached.data };
+  }
+
   const profissionais = barbearia.listarProfissionais(empresaId, { incluirInativos: true });
   const prof = profissionais.find((p) => p.id === profId);
   if (!prof) {
     throw new Error(`Profissional com ID "${profId}" não encontrado.`);
   }
-
-  const periodo = resolverPeriodo(opcoes.periodo || 'mes', opcoes);
-  const { inicio, fim } = periodo;
 
   // 1. DADOS AO VIVO DO KYTTO (Comandas e Agendamentos concluidos)
   const comissoesResultado = barbearia.obterComissoes(empresaId, {

@@ -184,3 +184,37 @@ Ao pesquisar qualquer profissional (ex.: Naty) no painel, o sistema exibe:
 
 ### 12.6 Painel Unificado de Benefícios, Pacotes e Clube (`consultar_beneficios_e_clube`)
 * **Visão 360° de Benefícios:** Responde de forma completa e consolidada em uma única resposta o saldo de sessões do Clube/Pacote (usadas e restantes), data de renovação, saldo de cashback acumulado e pontos do programa de fidelidade.
+
+---
+
+## 14.0 Filtro de Datas nos Painéis de Indicadores e Otimização Global de Performance
+
+### 14.1 Barra de Controle de Período dos Indicadores Financeiros
+* **Atalhos Rápidos com 1 Clique:**
+  * **Hoje:** Apura o fluxo de caixa, receitas e despesas pagas exclusivamente na data corrente.
+  * **7 Dias / 15 Dias:** Recorte móvel para monitoramento tático de curto prazo.
+  * **Este Mês (Padrão):** Competência do mês corrente (ex.: 10/2026).
+  * **Mês Anterior:** Permite fechar a conciliação do mês anterior sem precisar digitar datas.
+  * **Este Ano:** Visão anual consolidada da unidade e do negócio.
+  * **Todo o Histórico:** Consolida todas as movimentações desde 2025 até o presente, totalizando os R$ 581k+ faturados.
+  * **Personalizado:** Permite escolher qualquer intervalo de datas inicial (`De:`) e final (`Até:`), com aplicação instantânea.
+* **KPIs Dinâmicos e Contextuais:**
+  * Os títulos e valores dos cards adaptam-se imediatamente ao período selecionado:
+    * *Receitas do período*
+    * *Despesas do período*
+    * *Resultado do período* (com cálculo em tempo real da Margem %)
+    * *Saldo Realizado acumulado*
+    * *A Receber e A Pagar no período*
+    * *Vencidos e Liquidação em Lote*
+* **Sincronização Bidirecional com a Tabela e Abas Analíticas:**
+  * Clicar em qualquer card filtra a tabela abaixo pelos lançamentos exatos daquele total.
+  * O DRE Gerencial sincroniza com a competência ou intervalo de datas selecionado.
+
+### 14.2 Otimização de Performance e Velocidade de Navegação
+* **In-Memory Caching de 30 Segundos no Backend:**
+  * As rotas de agregação (`/api/admin/barbearia/financeiro/resumo`, `/api/admin/barbearia/financeiro/dre` e relatórios individuais de metas) possuem agora um cache em memória leve com TTL de 30s.
+  * O cache é invalidado automaticamente e de forma síncrona a cada mutação (`registrarLancamento`, `atualizarLancamento`, `reverterLancamento`, liquidação em lote, etc.), garantindo consistência estrita sem sobrecarregar a CPU.
+* **Isolamento de Abas Autônomas no BarbeariaERP:**
+  * A aba `Metas e comissões` foi adicionada ao `TABS_AUTONOMAS`, eliminando chamadas síncronas pesadas ao endpoint de `overview` durante a alternância de telas.
+* **Single-Pass Aggregation O(N) no Frontend:**
+  * O cálculo dos indicadores no cliente é executado em uma única passada (`useMemo`) sobre a lista de lançamentos em memória, entregando resposta imediata (0ms) sem travar a thread de renderização da UI.

@@ -118,7 +118,7 @@ export function registerDinoAdminRoutes(app, deps) {
 
   app.get(`${BASE}/financeiro/resumo`, (req, res) => {
     if (!gestor(req, res)) return;
-    try { res.json(financeiroKytto.resumoFinanceiro(legacyEmpresaId(req), { lojaId: legacyLojaId(req) })); }
+    try { res.json(financeiroKytto.resumoFinanceiro(legacyEmpresaId(req), { ...(req.query || {}), lojaId: legacyLojaId(req) })); }
     catch (error) { respondFinanceError(res, error); }
   });
 
@@ -132,7 +132,7 @@ export function registerDinoAdminRoutes(app, deps) {
     if (!gestor(req, res)) return;
     try {
       const mes = req.query?.mes || new Date().toISOString().slice(0, 7);
-      res.json(financeiroKytto.dreGerencial(legacyEmpresaId(req), { mes, lojaId: legacyLojaId(req) }));
+      res.json(financeiroKytto.dreGerencial(legacyEmpresaId(req), { ...(req.query || {}), mes, lojaId: legacyLojaId(req) }));
     } catch (error) { respondFinanceError(res, error); }
   });
 
