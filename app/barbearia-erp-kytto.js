@@ -3257,7 +3257,10 @@ export function calcularComissoesEstado(estado, empresaId, { data = '', lojaId =
     .filter((item) => noFiltro(item.dataAgenda || diaOperacional(item.dataHora)))
     .map((item) => {
       const lancamento = recebido(item);
-      return lancamento ? { ...item, valorRecebido: Number(lancamento.valor), meioPagamento: lancamento.meioPagamento, origemTipo: 'agendamento', origemId: item.id, dataRef: item.dataAgenda || diaOperacional(item.dataHora), nomeItem: item.servicoNome || '', quantidade: 1 } : null;
+      // Inclui todos os serviços concluídos, mesmo se não tiver lançamento no ledger ainda.
+      const valor = lancamento ? Number(lancamento.valor) : Number(item.servicoPreco || item.valor || 0);
+      const meioPagamento = lancamento ? lancamento.meioPagamento : 'nao_informado';
+      return { ...item, valorRecebido: valor, meioPagamento, origemTipo: 'agendamento', origemId: item.id, dataRef: item.dataAgenda || diaOperacional(item.dataHora), nomeItem: item.servicoNome || '', quantidade: 1 };
     }).filter(Boolean);
   const vendasLegadas = Object.values(estado.vendasRevenda || {})
     .filter(filtrarLoja)

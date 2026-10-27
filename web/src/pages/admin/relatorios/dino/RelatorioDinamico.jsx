@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { Search, Filter, Download, Sparkles, ChevronLeft, Calendar, FileText } from 'lucide-react';
+import { apiFetch } from '../../../../lib/api';
 import { todosRelatorios } from './relatoriosData';
 
 const RelatorioDinamico = () => {
@@ -14,9 +15,70 @@ const RelatorioDinamico = () => {
     if (found) setRelatorio(found);
   }, [codigo]);
 
+  
+  const [loading, setLoading] = useState(true);
+  const [historicoData, setHistoricoData] = useState([]);
+  
+  useEffect(() => {
+    if (!relatorio) return;
+    setLoading(true);
+    // Fetch generic history
+    apiFetch(`/api/admin/barbearia/historico?de=${dataAnaliseInicio}&ate=${dataAnaliseFim}&limite=5000`)
+      .then(res => {
+        if (res.ok) setHistoricoData(res.itens || []);
+      })
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, [relatorio, dataAnaliseInicio, dataAnaliseFim]);
+
   if (!relatorio) {
     return <div style={{ padding: '40px', textAlign: 'center' }}>Carregando relatório...</div>;
   }
+
+  // Mapear histórico baseado na categoria
+  let mockData = [];
+  if (historicoData.length > 0) {
+    if (relatorio.categoria === 'Clientes') {
+      mockData = historicoData.map(item => [
+        item.clienteNome || 'Desconhecido',
+        item.clienteTelefone || '-',
+        '-',
+        new Date(item.dataAgenda || item.dataOriginal || item.dataHora).toLocaleDateString('pt-BR'),
+        'R$ ' + Number(item.valor || 0).toFixed(2),
+        'Ver'
+      ]);
+    } else if (relatorio.categoria === 'Financeiro' || relatorio.categoria === 'Caixas') {
+      mockData = historicoData.map(item => [
+        new Date(item.dataAgenda || item.dataOriginal || item.dataHora).toLocaleDateString('pt-BR'),
+        item.id.slice(0,8),
+        item.servicoNome || 'Serviço',
+        'R$ ' + Number(item.valor || 0).toFixed(2),
+        '-',
+        item.status
+      ]);
+    } else if (relatorio.categoria === 'Profissionais') {
+      mockData = historicoData.map(item => [
+        item.profissionalNome || 'Desconhecido',
+        item.servicoNome || '-',
+        '-',
+        '-',
+        'R$ ' + Number(item.valor || 0).toFixed(2),
+        'Ver'
+      ]);
+    } else {
+      mockData = historicoData.map(item => [
+        item.id.slice(0,8),
+        new Date(item.dataAgenda || item.dataOriginal || item.dataHora).toLocaleDateString('pt-BR'),
+        item.servicoNome || '-',
+        'R$ ' + Number(item.valor || 0).toFixed(2),
+        item.status,
+        'Ver'
+      ]);
+    }
+  } else if (!loading) {
+    mockData = [['Nenhum dado encontrado para o período', '-', '-', '-', '-', '-']];
+  }
+
 
   // Gera colunas dinâmicas baseadas na categoria
   const colunas = relatorio.categoria === 'Clientes' 
@@ -29,22 +91,7 @@ const RelatorioDinamico = () => {
     ? ['Produto', 'Marca', 'Estoque Atual', 'Estoque Mínimo', 'Custo', 'Valor Venda']
     : ['ID', 'Data', 'Descrição', 'Valor', 'Status', 'Ação'];
 
-  // Gera dados mockados
-  const mockData = Array.from({ length: 7 }).map((_, i) => {
-    if (relatorio.categoria === 'Clientes') {
-      return ['Cliente VIP ' + (i+1), '(65) 99999-00' + i, `cliente${i}@email.com`, '2026-10-' + (10+i), 'R$ 150,00', 'Ver Ficha'];
-    }
-    if (relatorio.categoria === 'Financeiro' || relatorio.categoria === 'Caixas') {
-      return ['26/10/2026', 'TRX-' + (1000+i), 'Recebimento de Serviço', 'R$ 80,00', 'PIX', 'Concluído'];
-    }
-    if (relatorio.categoria === 'Produtos') {
-      return ['Produto Exemplo ' + (i+1), 'Marca X', (50 - i*5).toString(), '10', 'R$ 20,00', 'R$ 55,00'];
-    }
-    if (relatorio.categoria === 'Profissionais') {
-      return ['Profissional ' + (i+1), (15+i).toString(), 'R$ ' + (300+i*10) + ',00', 'R$ 0,00', 'R$ ' + (300+i*10) + ',00', 'Ver Ficha'];
-    }
-    return ['#' + (1000+i), '26/10/2026', 'Registro Automático', 'R$ 0,00', 'Ativo', 'Detalhes'];
-  });
+  
 
   const styles = {
     container: { padding: '24px', maxWidth: '1200px', margin: '0 auto', fontFamily: 'var(--font)' },
