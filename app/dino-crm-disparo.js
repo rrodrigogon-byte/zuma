@@ -1,4 +1,4 @@
-import { db } from './database.js'
+import { db } from './core/database.js'
 import { v4 as uuid } from 'uuid'
 import { enviarMensagem } from './core/whatsapp.js'
 
