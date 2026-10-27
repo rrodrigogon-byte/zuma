@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ExternalLink, RefreshCw, Calendar, Download, Sparkles, User, Filter } from 'lucide-react';
+import { Calendar, ExternalLink, Sparkles, Filter, User, RefreshCw, Download } from 'lucide-react';
 const RelatorioClientesAtendidos = () => {
   const [dataInicio, setDataInicio] = useState('2026-09-01');
   const [dataFim, setDataFim] = useState('2026-10-26');

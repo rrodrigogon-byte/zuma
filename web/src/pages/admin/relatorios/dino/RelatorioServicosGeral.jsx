@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Star, RefreshCw, Search, Download, Sparkles, Filter } from 'lucide-react';
+import { Sparkles, Filter, Star, RefreshCw, Search, Download } from 'lucide-react';
 
 const RelatorioServicosGeral = () => {
   const [dataAnaliseInicio, setDataAnaliseInicio] = useState('2026-09-01');
