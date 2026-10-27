@@ -8,7 +8,7 @@ export const todosRelatorios = [
   {
     "codigo": "0002",
     "categoria": "Clientes",
-    "nome": "Clientes atendidos",
+    "nome": "Clientes Atendidos (Ticket Médio)",
     "descricao": "Exibir todos os clientes que foram atendidos, a quantidade de visitas feitas por cliente e o que foi consumido por cada cliente durante algum período definido"
   },
   {
@@ -120,12 +120,6 @@ export const todosRelatorios = [
     "descricao": "Exibir clientes que fizeram algum serviço que tinha \"dias para retorno\" cadastrado, passaram-se os dias e não retornaram e calcular em quantos dias de atraso cada cliente está"
   },
   {
-    "codigo": "0021",
-    "categoria": "Profissionais",
-    "nome": "Faturamento, nº de comandas e ticket médio por profissional no período",
-    "descricao": "Exibir qual é o faturamento total, qual a quantidade de comandas geradas e qual é o faturamento (ou ticket) médio gerado por cada profissional do estabelecimento no período definido. Observação: Os faturamentos exibidos neste relatório não diferenciam qual foi a forma de pagamento dos itens lançados nas comandas (ex.: dinheiro, voucher, dívida, cortesia, outros...) e consideram todasCom gráfico"
-  },
-  {
     "codigo": "0022",
     "categoria": "Profissionais",
     "nome": "Profissional e as comissões dos seus assistentes por período (comissionamento antigo)",
@@ -184,12 +178,6 @@ export const todosRelatorios = [
     "categoria": "Serviços",
     "nome": "Serviços realizados no período",
     "descricao": "Exibir todos os serviços realizados no período com informações detalhadas"
-  },
-  {
-    "codigo": "0032",
-    "categoria": "Serviços",
-    "nome": "Serviços mais vendidos",
-    "descricao": "Exibir as categorias dos serviços e as quantidades vendidas, o faturamento de cada serviço e os serviços durante um período definido. Observação: este relatório não diferencia se a forma de pagamento foi cortesia, voucher, dívida ou outros, ele olha apenas para os itens lançados na comandaCom gráfico"
   },
   {
     "codigo": "0033",
@@ -1372,5 +1360,17 @@ export const todosRelatorios = [
     "categoria": "Produtos",
     "nome": "Produtos e seus respectivos lucros, quando fabricados",
     "descricao": "Exibir todos os produtos com seus respectivos lucros, por meio do valor e custos, quando fabricados"
+  },
+  {
+    "codigo": "0021",
+    "categoria": "Profissionais",
+    "nome": "Desempenho e Faturamento da Equipe",
+    "descricao": "Visão detalhada de comandas, faturamento e ticket médio por profissional. (Com insights da IA Dino T-Rex)"
+  },
+  {
+    "codigo": "0032",
+    "categoria": "Serviços",
+    "nome": "Curva ABC: Serviços Mais Vendidos",
+    "descricao": "Identifique o que traz mais volume, faturamento e margem de lucro para a barbearia. (Com insights da IA Dino T-Rex)"
   }
 ];
