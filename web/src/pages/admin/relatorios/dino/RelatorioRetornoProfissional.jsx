@@ -105,7 +105,7 @@ Te esperamos!`);
       <div style={styles.headerBox}>
         <div>
           <span style={styles.sup}>DINO · DINO-MATRIZ — BARBEARIA DINO</span>
-          <h1 style={styles.h1}>0011 - Retorno por Profissional</h1>
+          <h1 style={styles.h1}>Retorno por Profissional</h1>
         </div>
         <div style={styles.actions}>
           <button style={styles.btnOutline}><RefreshCw size={16} /> Atualizar</button>

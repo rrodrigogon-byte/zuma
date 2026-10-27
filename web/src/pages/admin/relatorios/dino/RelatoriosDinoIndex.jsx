@@ -17,6 +17,8 @@ const RelatoriosDinoIndex = () => {
   const linkRelatorio = (codigo) => {
     if (codigo === '0011') return '/admin/relatorios/dino/retorno';
     if (codigo === '0002') return '/admin/relatorios/dino/clientes-atendidos';
+    if (codigo === '0021') return '/admin/relatorios/dino/desempenho-profissional';
+    if (codigo === '0032') return '/admin/relatorios/dino/servicos-vendidos';
     return '#'; 
   };
   
@@ -70,7 +72,7 @@ const RelatoriosDinoIndex = () => {
         <table style={styles.table}>
           <thead>
             <tr>
-              <th style={styles.th}>Código</th>
+              
               <th style={styles.th}>Categoria</th>
               <th style={styles.th}>Relatório & Descrição</th>
               <th style={styles.th}>Ação</th>
@@ -78,16 +80,16 @@ const RelatoriosDinoIndex = () => {
           </thead>
           <tbody>
             {relatoriosFiltrados.map((r, idx) => {
-              const isMigrated = r.codigo === '0011' || r.codigo === '0002';
+              const isMigrated = ['0011', '0002', '0021', '0032'].includes(r.codigo);
               return (
                 <tr key={idx} style={styles.tr}>
-                  <td style={styles.td}><span style={styles.code}>{r.codigo}</span></td>
+                  
                   <td style={styles.td}><span style={styles.categoryBadge}>{r.categoria}</span></td>
                   <td style={styles.td}>
                     <div style={styles.reportName}>
                       {isMigrated ? <BarChart3 size={16} color="var(--accent)" /> : <FileText size={16} color="var(--muted)" />}
                       {r.nome}
-                      {isMigrated && <span style={styles.aiBadge}>Novo Dino IA</span>}
+                      {isMigrated && <span style={styles.aiBadge}>IA Dino T-Rex</span>}
                     </div>
                     <p style={styles.desc}>{r.descricao}</p>
                   </td>
