@@ -154,7 +154,7 @@ export function provisionarEquipeDino({ commerceDb = null } = {}) {
           horarioInicio: '08:00',
           horarioFim: '20:00',
           diasTrabalho: [1, 2, 3, 4, 5, 6], // Seg a Sáb
-          ativo: true,
+          ativo: prof ? prof.ativo : true,
           lojaId: DINO_LOJA_CANONICA,
         };
 
@@ -198,7 +198,7 @@ export function provisionarEquipeDino({ commerceDb = null } = {}) {
         telefone: membro.telefone,
         empresaId: DINO_EMPRESA_CANONICA,
         lojaId: DINO_LOJA_CANONICA,
-        ativo: true,
+        ativo: prof ? prof.ativo : true,
         criadoEm: new Date().toISOString(),
       };
       d.usuarios.push(novoUsuario);
