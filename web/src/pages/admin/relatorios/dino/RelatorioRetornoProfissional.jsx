@@ -15,17 +15,17 @@ const RelatorioRetornoProfissional = () => {
   ];
   
   const styles = {
-    container: { padding: '24px', maxWidth: '1200px', margin: '0 auto', fontFamily: 'var(--font)' },
+    container: { padding: '0', maxWidth: '100%', margin: '0 auto', fontFamily: 'var(--font)' },
     headerBox: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' },
     sup: { fontSize: '11px', fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px', display: 'block' },
     h1: { fontSize: '28px', fontWeight: 800, color: 'var(--text)', margin: '0 0 8px 0' },
     actions: { display: 'flex', gap: '12px' },
-    btnOutline: { display: 'flex', alignItems: 'center', gap: '6px', padding: '10px 16px', background: 'var(--surface)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: '8px', cursor: 'pointer', fontWeight: 600, fontSize: '13px' },
-    btnPrimary: { display: 'flex', alignItems: 'center', gap: '6px', padding: '10px 16px', background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 600, fontSize: '13px' },
+    btnOutline: { display: 'flex', alignItems: 'center', gap: '6px', padding: '10px 16px', background: 'var(--card)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: '8px', cursor: 'pointer', fontWeight: 600, fontSize: '13px' },
+    btnPrimary: { display: 'flex', alignItems: 'center', gap: '6px', padding: '10px 16px', background: 'var(--accent)', color: 'var(--text)', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 600, fontSize: '13px' },
     
     // AI Insight Card
     aiCard: { background: 'var(--card2)', borderRadius: '12px', border: '1px solid var(--border)', borderLeft: '4px solid var(--accent)', padding: '20px', marginBottom: '24px', position: 'relative', overflow: 'hidden', display: 'flex', gap: '20px', alignItems: 'flex-start' },
-    aiIconBox: { background: '#F4EBFA', padding: '12px', borderRadius: '12px', display: 'flex' },
+    aiIconBox: { background: 'var(--accent-soft)', padding: '12px', borderRadius: '12px', display: 'flex' },
     aiContent: { flex: 1 },
     aiTitle: { fontSize: '16px', fontWeight: 700, margin: '0 0 8px 0', color: 'var(--text)' },
     aiText: { fontSize: '14px', lineHeight: '1.6', margin: '0 0 16px 0', color: 'var(--text)' },
@@ -33,27 +33,27 @@ const RelatorioRetornoProfissional = () => {
     aiBtnPrimary: { display: 'flex', alignItems: 'center', gap: '6px', padding: '0', background: 'transparent', color: 'var(--accent)', border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: '13px' },
     
     // Filter Card
-    filterCard: { background: 'var(--surface)', borderRadius: '12px', padding: '24px', marginBottom: '24px', border: '1px solid var(--border)' },
+    filterCard: { background: 'var(--card)', borderRadius: '12px', padding: '0', marginBottom: '24px', border: '1px solid var(--border)' },
     filterTitle: { fontSize: '16px', fontWeight: 700, margin: '0 0 20px 0', display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text)' },
     filterGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '24px' },
     filterGroup: { background: 'var(--bg)', padding: '16px', borderRadius: '8px', border: '1px solid var(--border)' },
     label: { fontSize: '13px', fontWeight: 700, color: 'var(--text)', marginBottom: '12px', display: 'block' },
     inputRow: { display: 'flex', alignItems: 'center', gap: '12px' },
-    input: { flex: 1, padding: '10px 12px', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text)', fontSize: '14px', outline: 'none' },
+    input: { flex: 1, padding: '10px 12px', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--text)', fontSize: '14px', outline: 'none' },
     filterSub: { fontSize: '12px', color: 'var(--muted)', marginTop: '8px', display: 'block' },
     
     // KPI Cards
     kpiGrid: { display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', marginBottom: '24px' },
-    kpiCard: { background: 'var(--surface)', padding: '20px', borderRadius: '12px', border: '1px solid var(--border)' },
+    kpiCard: { background: 'var(--card)', padding: '20px', borderRadius: '12px', border: '1px solid var(--border)' },
     kpiLabel: { fontSize: '12px', fontWeight: 600, color: 'var(--muted)', marginBottom: '8px', display: 'block' },
     kpiValue: { fontSize: '28px', fontWeight: 800, color: 'var(--text)', margin: 0 },
-    kpiValueGreen: { fontSize: '28px', fontWeight: 800, color: '#10B981', margin: 0 },
+    kpiValueGreen: { fontSize: '28px', fontWeight: 800, color: 'var(--success)', margin: 0 },
     kpiValueRed: { fontSize: '28px', fontWeight: 800, color: 'var(--danger)', margin: 0 },
     kpiValueOrange: { fontSize: '28px', fontWeight: 800, color: 'var(--accent)', margin: 0 },
     kpiSub: { fontSize: '12px', color: 'var(--muted)', marginLeft: '6px', fontWeight: 600 },
     
     // Table
-    tableCard: { background: 'var(--surface)', borderRadius: '12px', border: '1px solid var(--border)', overflow: 'hidden' },
+    tableCard: { background: 'var(--card)', borderRadius: '12px', border: '1px solid var(--border)', overflow: 'hidden' },
     table: { width: '100%', borderCollapse: 'collapse', textAlign: 'left' },
     th: { padding: '16px 20px', borderBottom: '1px solid var(--border)', fontSize: '11px', fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px' },
     tr: { borderBottom: '1px solid var(--border)', transition: 'background 0.2s', cursor: 'pointer' },
@@ -64,10 +64,10 @@ const RelatorioRetornoProfissional = () => {
     profProfile: { margin: 0, fontSize: '12px', color: 'var(--muted)' },
     metricTitle: { fontSize: '16px', fontWeight: 700, margin: '0 0 4px 0', color: 'var(--text)' },
     metricSub: { fontSize: '12px', color: 'var(--muted)', margin: 0 },
-    expandedBox: { background: 'var(--bg)', padding: '24px', borderBottom: '1px solid var(--border)' },
+    expandedBox: { background: 'var(--bg)', padding: '0', borderBottom: '1px solid var(--border)' },
     expandedTitle: { fontSize: '14px', fontWeight: 700, margin: '0 0 12px 0', color: 'var(--text)' },
     clienteList: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: '12px' },
-    clienteCard: { background: 'var(--surface)', padding: '12px', borderRadius: '8px', border: '1px solid var(--border)' },
+    clienteCard: { background: 'var(--card)', padding: '12px', borderRadius: '8px', border: '1px solid var(--border)' },
     clienteName: { margin: '0 0 4px 0', fontWeight: 600, fontSize: '13px', color: 'var(--text)' }
   };
   return (
