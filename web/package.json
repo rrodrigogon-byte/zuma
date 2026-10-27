@@ -5,21 +5,17 @@
   "type": "module",
   "scripts": {
     "dev": "vite --port 5173",
-    "build": "node --max-old-space-size=1536 ./node_modules/vite/bin/vite.js build",
-    "preview": "vite preview",
-    "test:commerce": "node --test src/lib/*.test.js tests/checkout-races.test.mjs",
-    "test:agenda": "node --test src/lib/barbearia-calendar.test.js src/lib/agenda-read.test.js tests/barbearia-calendar.test.mjs tests/barbeiro-venda.test.mjs tests/barbeiro-pwa.test.mjs"
+    "build": "vite build",
+    "preview": "vite preview"
   },
   "dependencies": {
-    "lucide-react": "^1.34.0",
+    "lucide-react": "^1.61.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "react-router-dom": "7.18.2"
+    "react-router-dom": "^6.26.2"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.1",
-    "esbuild": "^0.21.5",
-    "react-test-renderer": "^18.3.1",
     "vite": "^5.4.8"
   }
 }

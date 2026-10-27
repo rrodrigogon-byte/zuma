@@ -1,0 +1,1376 @@
+export const todosRelatorios = [
+  {
+    "codigo": "0001",
+    "categoria": "Clientes",
+    "nome": "Clientes aniversariantes",
+    "descricao": "Exibir todos os clientes que fazem aniversário em algum período definido"
+  },
+  {
+    "codigo": "0002",
+    "categoria": "Clientes",
+    "nome": "Clientes atendidos",
+    "descricao": "Exibir todos os clientes que foram atendidos, a quantidade de visitas feitas por cliente e o que foi consumido por cada cliente durante algum período definido"
+  },
+  {
+    "codigo": "0003",
+    "categoria": "Clientes",
+    "nome": "Como clientes nos conheceram no período",
+    "descricao": "Exibir os novos clientes de algum período definido, classificados pelo que foi cadastrado no campo \"Como conheceu?\"Com gráfico"
+  },
+  {
+    "codigo": "0004",
+    "categoria": "Clientes",
+    "nome": "Lista de dados de todos os clientes",
+    "descricao": "Exibir os dados: e-mail, telefone, celular e aniversário; de todos os clientes"
+  },
+  {
+    "codigo": "0005",
+    "categoria": "Clientes",
+    "nome": "Clientes que fizeram um serviço de alguma categoria de serviços e não de outra",
+    "descricao": "Exibir todos os clientes que fizeram um serviço existente dentro de alguma categoria de serviços, mas ainda não fizeram um outro serviço existente dentro de alguma outra categoria de serviços; em algum período definido"
+  },
+  {
+    "codigo": "0006",
+    "categoria": "Clientes",
+    "nome": "Clientes com crédito e/ou débito",
+    "descricao": "Exibir todos os clientes que possuam créditos e/ou débitos"
+  },
+  {
+    "codigo": "0007",
+    "categoria": "Clientes",
+    "nome": "Taxa de retorno dos clientes do estabelecimento",
+    "descricao": "Exibir qual o % de clientes que após realizarem algum primeiro serviço retornaram em seu estabelecimento, e assim saber como está a retenção de clientes em algum determinado período. Para visualizar corretamente, selecione na Data de Início 1 e Data Fim 1 o intervalo de datas onde foi realizado o serviço e da Data de início 2 e Data Fim 2 o período que você quer verificar se os clientes retornaram. Na listagem abaixo, nós mostramos os clientes que NÃO RETORNARAM e o % à direita significa quantos porcentos dos clientes que vieram no Período 1 continuaram vindo no Período 2"
+  },
+  {
+    "codigo": "0008",
+    "categoria": "Clientes",
+    "nome": "Clientes que fizeram um serviço em específico",
+    "descricao": "Exibir todos os clientes atendidos no período exibindo informações cadastrais e dados complementares de visitas ao estabelecimento"
+  },
+  {
+    "codigo": "0009",
+    "categoria": "Clientes",
+    "nome": "Clientes classificados por faixa etária",
+    "descricao": "Exibir os clientes classificados por faixas de idades: 0-15 anos, 16-25 anos, 26-35 anos, 36-45 anos, 45-60 anos, acima de 60 anosCom gráfico"
+  },
+  {
+    "codigo": "0010",
+    "categoria": "Clientes",
+    "nome": "Clientes com celulares duplicados",
+    "descricao": "Exibir todos os clientes que possuam o mesmo número de celular cadastrado em comum"
+  },
+  {
+    "codigo": "0011",
+    "categoria": "Clientes",
+    "nome": "Retorno de Clientes por Profissional",
+    "descricao": "Este painel apresenta a taxa de retorno dos clientes por profissional ao se comparar a data anterior com a data atual. Além disso, o painel apresenta a lista de clientes que não retornaram. A atualização do painel é realizada com o prazo de 1 dia."
+  },
+  {
+    "codigo": "0012",
+    "categoria": "Clientes",
+    "nome": "Clientes cadastrados no período",
+    "descricao": "Exibir todos os clientes que foram cadastrados em um período definido"
+  },
+  {
+    "codigo": "0013",
+    "categoria": "Clientes",
+    "nome": "Clientes com crédito e/ou débito por período",
+    "descricao": "Exibir todos os clientes que possuem créditos e/ou débitos em algum período definido"
+  },
+  {
+    "codigo": "0014",
+    "categoria": "Clientes",
+    "nome": "Clientes que não informaram dados básicos",
+    "descricao": "Exibir quais clientes não possuem no cadastro: telefone ou e-mail, data de nascimento"
+  },
+  {
+    "codigo": "0015",
+    "categoria": "Clientes",
+    "nome": "Clientes classificados por perfil de compra",
+    "descricao": "Exibir o perfil de compras dos clientes. O período que deve ser selecionado serve apenas para filtrar os clientes que estiveram no estabelecimento durante ele, mas é analisado todo o histórico do cliente para determinar qual o perfil de compra deleCom gráfico"
+  },
+  {
+    "codigo": "0016",
+    "categoria": "Clientes",
+    "nome": "Clientes por bairro",
+    "descricao": "Exibir relação de quantidade de clientes agrupados por bairros"
+  },
+  {
+    "codigo": "0017",
+    "categoria": "Clientes",
+    "nome": "Clientes novos que fizeram serviço no período",
+    "descricao": "Exibir os clientes que foram atendidos pela primeira vez no período definido, as datas do primeiro serviço, os valores faturados e como eles conheceram o estabelecimento. O totalizador do relatório é referente a clientes cadastrados no período definido que finalizaram uma comanda."
+  },
+  {
+    "codigo": "0018",
+    "categoria": "Clientes",
+    "nome": "Clientes com e-mails duplicados",
+    "descricao": "Exibir todos os clientes que possuam o mesmo e-mail cadastrado em comum"
+  },
+  {
+    "codigo": "0019",
+    "categoria": "Clientes",
+    "nome": "Clientes cadastrados por \"Como conheceu\" no período",
+    "descricao": "Exibir clientes classificados pelo que foi cadastrado no campo \"Como conheceu?\""
+  },
+  {
+    "codigo": "0020",
+    "categoria": "Clientes",
+    "nome": "Clientes que fizeram serviço com retorno recomendado e não retornaram",
+    "descricao": "Exibir clientes que fizeram algum serviço que tinha \"dias para retorno\" cadastrado, passaram-se os dias e não retornaram e calcular em quantos dias de atraso cada cliente está"
+  },
+  {
+    "codigo": "0021",
+    "categoria": "Profissionais",
+    "nome": "Faturamento, nº de comandas e ticket médio por profissional no período",
+    "descricao": "Exibir qual é o faturamento total, qual a quantidade de comandas geradas e qual é o faturamento (ou ticket) médio gerado por cada profissional do estabelecimento no período definido. Observação: Os faturamentos exibidos neste relatório não diferenciam qual foi a forma de pagamento dos itens lançados nas comandas (ex.: dinheiro, voucher, dívida, cortesia, outros...) e consideram todasCom gráfico"
+  },
+  {
+    "codigo": "0022",
+    "categoria": "Profissionais",
+    "nome": "Profissional e as comissões dos seus assistentes por período (comissionamento antigo)",
+    "descricao": "Exibir os assistentes, as comissões dos assistentes e o número de comandas com serviços com a participação dos assistentes, filtrados por profissional e no período definido. Observação: este é um relatório antigo, o utilize apenas se o seu modelo de comissionamento for o antigo"
+  },
+  {
+    "codigo": "0023",
+    "categoria": "Profissionais",
+    "nome": "Profissionais e caixinhas recebidas por período",
+    "descricao": "Exibir qual o nome dos clientes que deixaram e o valor total recebido como caixinha, por profissional selecionado no período definido"
+  },
+  {
+    "codigo": "0024",
+    "categoria": "Profissionais",
+    "nome": "Serviços por profissional",
+    "descricao": "Exibir todos os serviços com a categoria de serviços, a quantidade de vezes realizados, o faturamento total por serviço e também seus valores médios faturados, filtrados por profissional selecionado no período definidoCom gráfico"
+  },
+  {
+    "codigo": "0025",
+    "categoria": "Profissionais",
+    "nome": "Profissionais por serviço",
+    "descricao": "Exibir todos os profissionais com a quantidade de vezes que os profissionais realizaram algum serviço e o faturamento total com os serviços, filtrados por serviço selecionado no período definidoCom gráfico"
+  },
+  {
+    "codigo": "0026",
+    "categoria": "Profissionais",
+    "nome": "Profissionais e desconto de produtos no período",
+    "descricao": "Exibir as marcas e os produtos descontados, as datas e os códigos (números) das comandas que geraram os descontos, os valores que foram descontados e as quantidades de produtos que saíram do estoque, filtrados por profissional e no período definido. Observação: os valores exibidos neste relatório mostram os dois valores, antes e depois, se alterações acontecerem nas configurações de descontos de produtos"
+  },
+  {
+    "codigo": "0027",
+    "categoria": "Profissionais",
+    "nome": "Profissionais e os clientes atendidos por período",
+    "descricao": "Exibir todos os clientes atendidos com os seus e-mails, telefones, celulares e valores totais gastos em serviços, por profissional selecionado e por período definido"
+  },
+  {
+    "codigo": "0028",
+    "categoria": "Profissionais",
+    "nome": "Todas as comissões pagas no período",
+    "descricao": "Exibir todas as comissões pagas no período definido com as datas dos pagamentos, os valores pagos, quais foram as formas de pagamento escolhidas e os nomes dos profissionais pagos detalhados pelo método de efetuar os pagamentos: pagar todos os profissionais de uma só vez ou pagar por categorias de profissionais"
+  },
+  {
+    "codigo": "0029",
+    "categoria": "Profissionais",
+    "nome": "Todos os descontos para um profissional no período",
+    "descricao": "Exibir todos os descontos do profissional selecionado em um período definido, com as datas e os códigos (números) das comandas que geraram descontos, as datas em que foram lançados os descontos para os profissionais, as categoria dos descontos, quais os ítens e os valores que foram descontados"
+  },
+  {
+    "codigo": "0030",
+    "categoria": "Auditoria",
+    "nome": "Itens que não geraram comissão",
+    "descricao": "Exibir todos os itens lançados para algum profissional que não geraram comissão"
+  },
+  {
+    "codigo": "0031",
+    "categoria": "Serviços",
+    "nome": "Serviços realizados no período",
+    "descricao": "Exibir todos os serviços realizados no período com informações detalhadas"
+  },
+  {
+    "codigo": "0032",
+    "categoria": "Serviços",
+    "nome": "Serviços mais vendidos",
+    "descricao": "Exibir as categorias dos serviços e as quantidades vendidas, o faturamento de cada serviço e os serviços durante um período definido. Observação: este relatório não diferencia se a forma de pagamento foi cortesia, voucher, dívida ou outros, ele olha apenas para os itens lançados na comandaCom gráfico"
+  },
+  {
+    "codigo": "0033",
+    "categoria": "Serviços",
+    "nome": "Tabela de preços dos serviços",
+    "descricao": "Exibir todos os serviços do estabelecimento, suas categorias e os seus respectivos valores"
+  },
+  {
+    "codigo": "0034",
+    "categoria": "Serviços",
+    "nome": "Total faturado pelas categorias de serviços",
+    "descricao": "Exibir os totais faturados por cada categoria de serviços no período definidoCom gráfico"
+  },
+  {
+    "codigo": "0036",
+    "categoria": "Serviços",
+    "nome": "Serviços/Produtos com descontos",
+    "descricao": "Exibir todos os serviços ou produtos no período que tiveram descontos aplicados nas comandas. Observação: Esse relatório foi unificado com o 0035."
+  },
+  {
+    "codigo": "0037",
+    "categoria": "Produtos",
+    "nome": "Vendas de produtos por marca",
+    "descricao": "Exibir o total vendido no período pela marca dos produtosCom gráfico"
+  },
+  {
+    "codigo": "0038",
+    "categoria": "Serviços",
+    "nome": "Diferença entre serviços agendados e realizados no período",
+    "descricao": "Exibir a lista de clientes que agendaram serviços com quais foram os serviços agendados e a lista de clientes que realizaram serviços com quais foram os serviços realizados e lançados nas comandas, no período definido"
+  },
+  {
+    "codigo": "0039",
+    "categoria": "Clientes",
+    "nome": "Clientes por gênero",
+    "descricao": "Filtrar o cadastros de clientes de acordo com a informação de gênero preenchida"
+  },
+  {
+    "codigo": "0040",
+    "categoria": "Auditoria",
+    "nome": "Comandas alteradas no período",
+    "descricao": "Exibir o responsável que fez e quando fez uma determinada alteração em uma comanda"
+  },
+  {
+    "codigo": "0041",
+    "categoria": "Produtos",
+    "nome": "Produtos vendidos",
+    "descricao": "Exibir todos os produtos vendidos em um período definido"
+  },
+  {
+    "codigo": "0042",
+    "categoria": "Produtos",
+    "nome": "Produtos mais vendidos",
+    "descricao": "Exibir todos os produtos vendidos em um período definidoCom gráfico"
+  },
+  {
+    "codigo": "0043",
+    "categoria": "Produtos",
+    "nome": "Valores dos produtos",
+    "descricao": "Exibir todos os produtos com seus respectivos valores"
+  },
+  {
+    "codigo": "0044",
+    "categoria": "Produtos",
+    "nome": "Produtos com entradas e saídas, por motivos",
+    "descricao": "Exibir todos os produtos com entradas e saídas, por motivos, em um período definido. O campo custo quando se trata de uma entrada informa o valor da compra, quando se trata de uma saída trazemos o custo médio anquela época"
+  },
+  {
+    "codigo": "0045",
+    "categoria": "Produtos",
+    "nome": "Produtos no estoque, com custo total",
+    "descricao": "Exibir todos os produtos no estoque, com custo total."
+  },
+  {
+    "codigo": "0046",
+    "categoria": "Produtos",
+    "nome": "Produtos abaixo do estoque mínimo",
+    "descricao": "Exibir todos os produtos que estão abaixo do estoque mínimo e uma sugestão de reposição com base no consumo do mês anterior"
+  },
+  {
+    "codigo": "0047",
+    "categoria": "Produtos",
+    "nome": "Produtos e seus respectivos lucros",
+    "descricao": "Exibir todos os produtos com seus respectivos lucros, por meio do valor, custo e percentual de comissão"
+  },
+  {
+    "codigo": "0049",
+    "categoria": "Produtos",
+    "nome": "Produtos com o custo médio",
+    "descricao": "Exibir todos os produtos com seus custos médios, o campo custo médio é calculado pela soma de todos os valores pagos no período selecionado dividido pela quantidade em estoque de acordo com pedidos de compras e lançamentos manuais de entrada."
+  },
+  {
+    "codigo": "0050",
+    "categoria": "Clientes",
+    "nome": "Retorno de Clientes por Categoria e serviços",
+    "descricao": "Este painel apresenta a taxa de retorno dos clientes por categoria e serviço ao se comparar a data anterior com a data atual. Além disso, o painel apresenta a lista de clientes que não retornaram. A atualização do painel é realizada com o prazo de 1 dia."
+  },
+  {
+    "codigo": "0051",
+    "categoria": "Agenda",
+    "nome": "Clientes com agendamentos",
+    "descricao": "Exibir todos os clientes com agendamentos em um período definido. No campo \"Total\" não são considerados os agendamentos cancelados"
+  },
+  {
+    "codigo": "0052",
+    "categoria": "Agenda",
+    "nome": "Clientes com agendamentos cancelados",
+    "descricao": "Exibir todos os clientes com agendamentos cancelados em um período definido"
+  },
+  {
+    "codigo": "0053",
+    "categoria": "Agenda",
+    "nome": "Valor total dos agendamentos",
+    "descricao": "Exibir valor total dos agendamentos em um período definido (todos os agendamentos, menos os cancelados)"
+  },
+  {
+    "codigo": "0056",
+    "categoria": "Agenda",
+    "nome": "Agendamentos e o meio pelo qual este foi feito",
+    "descricao": "Exibir todos agendamentos e o meio pelo qual este foi feito, a origem da reserva, em um período definido: Atendimento, Aplicativo Personalizado e SiteCom gráfico"
+  },
+  {
+    "codigo": "0057",
+    "categoria": "Agenda",
+    "nome": "Clientes que não retornaram ao estabelecimento, comparado ao mês anterior",
+    "descricao": "Exibir todos os clientes que realizaram procedimentos no mês anterior e não retornaram no mês atual, e % de clientes que realizaram procedimentos no mês anterior e retornaram no mês atual, em um período definido"
+  },
+  {
+    "codigo": "0058",
+    "categoria": "Agenda",
+    "nome": "Agendamentos com filtro por serviço",
+    "descricao": "Exibir todos os clientes com agendamentos para um determinado serviço."
+  },
+  {
+    "codigo": "0059",
+    "categoria": "Agenda",
+    "nome": "Clientes com agendamentos que não retornaram ao estabelecimento, comparado ao mês anterior, por prof",
+    "descricao": "Exibir todos os clientes com agendamentos feitos que não retornaram ao estabelecimento, comparado ao mês anterior, por profissional, e o % de todos os clientes com agendamentos feitos que retornaram ao estabelecimento, comparado ao mês anterior, por profissional, em um período definido"
+  },
+  {
+    "codigo": "0060",
+    "categoria": "Agenda",
+    "nome": "Profissionais com agendamentos",
+    "descricao": "Exibir todos os profissionais com agendamentos, em um período definido"
+  },
+  {
+    "codigo": "0061",
+    "categoria": "Pacotes",
+    "nome": "Pacotes mais vendidos",
+    "descricao": "Exibir todos os pacotes vendidos e as respectivas quantidades, em um período específico"
+  },
+  {
+    "codigo": "0062",
+    "categoria": "Pacotes",
+    "nome": "Pacotes e pré-vendas vendidas",
+    "descricao": "Exibir todos os pacotes vendidos, para qual cliente e a comanda"
+  },
+  {
+    "codigo": "0063",
+    "categoria": "Pacotes",
+    "nome": "Clientes que possuem pacotes ativos",
+    "descricao": "Exibir todos os clientes que ainda possuem pacotes ou pré venda dentro do prazo de validade"
+  },
+  {
+    "codigo": "0064",
+    "categoria": "Pacotes",
+    "nome": "Pacotes utilizados",
+    "descricao": "Exibir todos os itens consumidos, em um período específico"
+  },
+  {
+    "codigo": "0065",
+    "categoria": "Pacotes",
+    "nome": "Pacotes vendidos por profissional",
+    "descricao": "Exibir todos os pacotes vendidos para um determinado profissional"
+  },
+  {
+    "codigo": "0066",
+    "categoria": "Pacotes",
+    "nome": "Pacotes utilizados por profissional",
+    "descricao": "Exibir todos os pacotes ou pré-vendas que o profissional realizou, em um período específico"
+  },
+  {
+    "codigo": "0067",
+    "categoria": "Pacotes",
+    "nome": "Clientes que possuem pacotes ativos",
+    "descricao": "Exibir todos os clientes que ainda possuem pacotes ou pré venda dentro do prazo de validade, valores unitários de serviços por pacote e somatória de valores pendentes de faturamento."
+  },
+  {
+    "codigo": "0070",
+    "categoria": "Auditoria",
+    "nome": "Auditoria das comissões",
+    "descricao": "Exibir quem cadastrou ou excluiu um bônus ou desconto nas comissões dos profissionais"
+  },
+  {
+    "codigo": "0071",
+    "categoria": "Integração",
+    "nome": "Integração ZeroPaper",
+    "descricao": "Gera excel no formato de leitura do aplicativo ZeroPaper, para facilitar a importação de dados, conforme o link a seguir: Importação Excel"
+  },
+  {
+    "codigo": "0072",
+    "categoria": "Integração",
+    "nome": "Integração ContaAzul",
+    "descricao": "Gera o excel necessário para importar os dados financeiros na ferramenta ContaAzul. O tutorial para importação segue no link abaixo: Importação Excel"
+  },
+  {
+    "codigo": "0073",
+    "categoria": "Integração",
+    "nome": "Consulta cliente pelo código de importação",
+    "descricao": "Se você migrou de sistema para a Avec e importou uma lista de clientes de outro sistema, é possível que você precise consultar o cadastro de um cliente pelo campo importação ID."
+  },
+  {
+    "codigo": "0080",
+    "categoria": "Auditoria",
+    "nome": "Auditoria de uma comanda",
+    "descricao": "Exibir todos os itens de uma comanda e o horário de alteração ou exclusão do item"
+  },
+  {
+    "codigo": "0081",
+    "categoria": "Financeiro",
+    "nome": "Entradas por formas de pagamento",
+    "descricao": "Exibir todas as entradas financeiras classificadas de acordo com as formas que foram pagas no período definidoCom gráfico"
+  },
+  {
+    "codigo": "0082",
+    "categoria": "Financeiro",
+    "nome": "Saídas por centro de custos",
+    "descricao": "Exibir todas as saídas financeiras classificadas de acordo com os seus centros de custos no período definidoCom gráfico"
+  },
+  {
+    "codigo": "0083",
+    "categoria": "Financeiro",
+    "nome": "Faturamento e ticket médio por clientes",
+    "descricao": "Exibir os faturamentos totais e os faturamentos (tickets) médios dos serviços vendidos aos clientes no período definido. Não contabilizamos as caixinhas nesse relatório. Neste relatório é contabilizado o valor total da comanda, mesmo se a comanda for parcelada em mais de 1x, ele contará o preço cheio"
+  },
+  {
+    "codigo": "0084",
+    "categoria": "Financeiro",
+    "nome": "Ítens das comandas sem profissionais",
+    "descricao": "Exibir os itens de comandas que não tiveram nenhum profissional atrelado por tipo de ítem no período definido"
+  },
+  {
+    "codigo": "0085",
+    "categoria": "Financeiro",
+    "nome": "Evolução do faturamento mensal",
+    "descricao": "Exibir a evolução do faturamento mensal do estabelecimento por período definido. Exibir os faturamentos totais e os faturamentos (tickets) médios dos serviços vendidos aos clientes no período definido. Não contabilizamos as caixinhas nesse relatório.Com gráfico"
+  },
+  {
+    "codigo": "0086",
+    "categoria": "Financeiro",
+    "nome": "Emissão de nota fiscal eletrônica",
+    "descricao": "Exibir informações para facilitar a emissão de nota fiscal eletrônica de serviços no período definido"
+  },
+  {
+    "codigo": "0087",
+    "categoria": "Financeiro",
+    "nome": "Vales-presentes vendidos por período",
+    "descricao": "Exibir informações sobre os vales-presentes que foram vendidos em um período definido"
+  },
+  {
+    "codigo": "0088",
+    "categoria": "Financeiro",
+    "nome": "Faturamento do estabelecimento por dia do mês",
+    "descricao": "Exibir a evolução do faturamento diário do estabelecimento por período definido. Observação: este relatório considera os valores dos ítens registrados nas comandas e não as formas de pagamentos dos ítensCom gráfico"
+  },
+  {
+    "codigo": "0089",
+    "categoria": "Financeiro",
+    "nome": "Comandas com serviços e/ou produtos",
+    "descricao": "Exibir lista de comandas, classificadas pelos tipos de ítens (serviço e/ou produto) que foram lançados nelas no período"
+  },
+  {
+    "codigo": "0090",
+    "categoria": "Auditoria",
+    "nome": "Comandas deletadas",
+    "descricao": "Exibir todas as comandas deletadas em um período definido"
+  },
+  {
+    "codigo": "0091",
+    "categoria": "Caixas",
+    "nome": "Detalhamento dos caixas do período",
+    "descricao": "Exibir os registros de abertura e fechamento de caixa no período, e também os e-mails dos responsável pelo caixas"
+  },
+  {
+    "codigo": "0092",
+    "categoria": "Financeiro",
+    "nome": "Faturamento por ítens",
+    "descricao": "Exibir os faturamentos classificados de acordo com os ítens das comandas no período definido"
+  },
+  {
+    "codigo": "0093",
+    "categoria": "Auditoria",
+    "nome": "Itens excluídos de uma comanda",
+    "descricao": "Exibir todas as comandas que tiveram itens excluídos, em um período definido"
+  },
+  {
+    "codigo": "0094",
+    "categoria": "Financeiro",
+    "nome": "Despesas por sub-categorias financeiras",
+    "descricao": "Exibir os totais gastos, classificados por subcategorias financeiras de DESPESAS, no período definidoCom gráfico"
+  },
+  {
+    "codigo": "0097",
+    "categoria": "Financeiro",
+    "nome": "Taxas de cartões geradas no período",
+    "descricao": "Exibir quanto é pago de taxa de cartão de crédito e de débito ao pagar comissão dos profissionais em algum determinado período. Observação: este relatório não considera em seu cálculo as taxas (individuais) por bandeira de cartões"
+  },
+  {
+    "codigo": "0098",
+    "categoria": "Financeiro",
+    "nome": "Evolução do faturamento por dias da semana",
+    "descricao": "Exibir a evolução do faturamento diário (dias da semana) do estabelecimento por período definidoCom gráfico"
+  },
+  {
+    "codigo": "0099",
+    "categoria": "Financeiro",
+    "nome": "Comandas por tipos de consumo",
+    "descricao": "Exibir os % de comandas por tipos de consumo (serviços e/ou produtos) no período definido"
+  },
+  {
+    "codigo": "0100",
+    "categoria": "Auditoria",
+    "nome": "Auditoria de comanda, sobre formas de recebimento",
+    "descricao": "Exibir auditoria de comanda, sobre formas de recebimento, em um período definido"
+  },
+  {
+    "codigo": "0102",
+    "categoria": "Clientes",
+    "nome": "Cortesias dadas no período",
+    "descricao": "Exibir todas as comandas de clientes que ganharam cortesia em um período definido"
+  },
+  {
+    "codigo": "0103",
+    "categoria": "Clientes",
+    "nome": "Clientes que não informaram celular",
+    "descricao": "Exibir quais clientes não possuem no cadastro: celular"
+  },
+  {
+    "codigo": "0104",
+    "categoria": "Clientes",
+    "nome": "Avaliações dos clientes no app",
+    "descricao": "Exibir todas as avaliações dos clientes do salão dadas pelo aplicativo"
+  },
+  {
+    "codigo": "0105",
+    "categoria": "Auditoria",
+    "nome": "Clientes deletados",
+    "descricao": "Exibir todos os clientes que foram excluídos e o responsável por excluí-los"
+  },
+  {
+    "codigo": "0107",
+    "categoria": "Clientes",
+    "nome": "Clientes que não retornam há dias",
+    "descricao": "Lista de clientes que não voltaram ao estabelecimento nos últimos dias. Defina a quantidade de dias no campo abaixo."
+  },
+  {
+    "codigo": "0108",
+    "categoria": "Campanhas",
+    "nome": "Lista de Promoções",
+    "descricao": "Exibe todas as promoções que já foram cadastradas para o estabelecimento"
+  },
+  {
+    "codigo": "0111",
+    "categoria": "Clientes",
+    "nome": "Clientes que já fizeram algum agendamento online",
+    "descricao": "Exibir todos os clientes que já fizeram pelo menos um agendamento online"
+  },
+  {
+    "codigo": "0112",
+    "categoria": "Fidelidade",
+    "nome": "Premiações de fidelidade",
+    "descricao": "Exibir todos os pontos utilizados nas trocas de programas de fidelidade"
+  },
+  {
+    "codigo": "0113",
+    "categoria": "Fidelidade",
+    "nome": "Pontos de fidelidade acumulados por cliente",
+    "descricao": "Exibir todos pontos que foram gerados para cada cliente de forma acumulada, em período específico"
+  },
+  {
+    "codigo": "0114",
+    "categoria": "Clientes",
+    "nome": "Clientes que visitaram no período sem cadastro completo",
+    "descricao": "Exibe os clientes com dados incompletos que tiveram pelo menos uma comanda aberta no período"
+  },
+  {
+    "codigo": "0115",
+    "categoria": "Clientes",
+    "nome": "Ficha de Anamnese por Cliente",
+    "descricao": "Exibe os campos preenchidos da ficha de anamnese para cada cliente"
+  },
+  {
+    "codigo": "0116",
+    "categoria": "Clientes",
+    "nome": "Fichas de Prontuário por data",
+    "descricao": "Exibe os campos preenchidos na ficha de prontuário para cada cliente no período"
+  },
+  {
+    "codigo": "0120",
+    "categoria": "Profissionais",
+    "nome": "Caixinhas recebidas por período",
+    "descricao": "Exibir todos os profissionais que receberam caixinha e os valores totais da caixinha que os profissionais receberam no período definido"
+  },
+  {
+    "codigo": "0121",
+    "categoria": "Profissionais",
+    "nome": "Profissional e produtos vendidos no período",
+    "descricao": "Exibir os produtos vendidos, as quantidades vendidas, os faturamentos com as vendas dos produtos e os valores médios faturados nas vendas dos produtos, por profissional selecionado e no período definidoCom gráfico"
+  },
+  {
+    "codigo": "0122",
+    "categoria": "Profissionais",
+    "nome": "Profissional e custos dos serviços por período",
+    "descricao": "Exibir todos os custos lançados para o profissional selecionado no período definido, detalhando quais os serviços que geraram custos, as quantidades de vezes que foram realizados com os valores e os custos por serviço, os códigos (números) e as datas das comandas com os serviços que geraram custos, os nomes dos clientes que realizaram tais serviços"
+  },
+  {
+    "codigo": "0123",
+    "categoria": "Profissionais",
+    "nome": "Profissionais e todas as comissões por período",
+    "descricao": "Exibe todas as comissões geradas para todos os profissionais em um período definido com as informações de cadastro e os dados bancários dos profissionais, se você encontrou diferença entre o valor faturado desse relatório com outros é provavelmente porque aqui só mostramos itens que geraram comissão e consideramos a data da comissão, além disso comandas com dívida devem ser observadas aqui com a data de geração da comissão. Observação: Descontos recorrentes só entram neste relatório após fechamento da comissão."
+  },
+  {
+    "codigo": "0124",
+    "categoria": "Profissionais",
+    "nome": "Profissionais aniversariantes",
+    "descricao": "Exibir todos os profissionais que fazem aniversário em algum período definido"
+  },
+  {
+    "codigo": "0125",
+    "categoria": "Profissionais",
+    "nome": "Profissionais e a realização de serviços como assistente por período",
+    "descricao": "Exibir todos os serviços realizados em um período definido por profissional que atua como assistente, detalhando informações dos serviços e das comandas vinculadas, dos profissionais e dos clientes"
+  },
+  {
+    "codigo": "0126",
+    "categoria": "Profissionais",
+    "nome": "Profissionais e suas taxas de ocupação no período (Produtividade)",
+    "descricao": "Exibir informações da eficiência e as taxas de ocupação dos profissionais em algum período definido, calculadas por base nos totais de tempo disponíveis por profissionais (horários das jornadas de trabalho configuradas, dias úteis para os profissionais em que houve ao menos um agendamento realizado) e nos totais de tempo agendados por profissionais (soma dos tempos dos agendamentos realizados). Observação: este relatório não leva em conta pontuais bloqueios de horários de profissionais ao efetuar os cálculos"
+  },
+  {
+    "codigo": "0127",
+    "categoria": "Profissionais",
+    "nome": "Profissionais e desconto de produtos no período",
+    "descricao": "Exibir as marcas e os produtos descontados, as datas e os códigos (números) das comandas que geraram os descontos, os valores que foram descontados e as quantidades de produtos que saíram do estoque no período definido. Observação: Os valores exibidos neste relatório mostram os dois valores, antes e depois, se alterações acontecerem nas configurações de descontos de produtos"
+  },
+  {
+    "codigo": "0129",
+    "categoria": "Profissionais",
+    "nome": "Clientes atendidos por profissional",
+    "descricao": "Exibir informações dos clientes que foram atendidos por determinado profissional no período definido, detalhando por nomes, e-mails, telefones e celulares, os valores totais que foram gastos, as datas de cadastros dos clientes, as datas de últimas visitas e os números totais de visitas"
+  },
+  {
+    "codigo": "0132",
+    "categoria": "Serviços",
+    "nome": "Serviços mais vendidos somando pré-venda",
+    "descricao": "Semelhante ao relatório 0032 esse relatório trás a lista de serviços mais vendidos, porém quando você faz uma venda de uma pré-venda esse item também é contabilizado na venda e quando você faz uma utilização do serviço (descontando de um pacote comprado) ele não é contabilizadoCom gráfico"
+  },
+  {
+    "codigo": "0137",
+    "categoria": "Serviços",
+    "nome": "Lucratividade dos serviços item a item",
+    "descricao": "Esse relatório mostra por cada item da comanda, quanto aquele serviço deu de lucro, cosniderando o valor cadastrado no serviço como custo, os produtos adicionados a comanda e o total de comissões pagas naquele item. Se você já desconta o custo de serviço vamos calcular no seu lucro só a sua parte do desconto, basta preencher o parâmetro abaixo corretamente o mesmo vale para o desconto de produto. Esse relatório não cruza os itens com as formas de pagamento então não usa as taxas de cartão no cálculo."
+  },
+  {
+    "codigo": "0141",
+    "categoria": "Produtos",
+    "nome": "Produtos e seus respectivos lucros",
+    "descricao": "Exibir todos os produtos com seus respectivos lucros, por meio do valor, custo e percentual de comissão. OBS: considera produtos inativos"
+  },
+  {
+    "codigo": "0142",
+    "categoria": "Produtos",
+    "nome": "Categorias de produtos, com custos em valor e percentual",
+    "descricao": "Exibir todos os produtos por categoria, com custos em valor e percentual, em um período definido"
+  },
+  {
+    "codigo": "0143",
+    "categoria": "Produtos",
+    "nome": "Produtos com informações de nota fiscal",
+    "descricao": "Exibir todos os produtos com informações de suas respectivas notas fiscais"
+  },
+  {
+    "codigo": "0144",
+    "categoria": "Produtos",
+    "nome": "Produtos vendidos por categorias, e seus respectivos lucros",
+    "descricao": "Exibir todos os produtos vendidos por categorias, com seus respectivos lucros, por meio do custo e comissãoCom gráfico"
+  },
+  {
+    "codigo": "0146",
+    "categoria": "Produtos",
+    "nome": "Produtos com maior representatividade no faturamento",
+    "descricao": "Exibir todos os produtos com maior representatividade no faturamento"
+  },
+  {
+    "codigo": "0147",
+    "categoria": "Produtos",
+    "nome": "Profissional e seus respectivos usos de produto, por comanda",
+    "descricao": "Exibir um profissional com seus respectivos usos de produto, por comanda"
+  },
+  {
+    "codigo": "0148",
+    "categoria": "Produtos",
+    "nome": "Faturamento por dia por local estoque",
+    "descricao": "Exibir funcionalidade customizada de local estoqueCom gráfico"
+  },
+  {
+    "codigo": "0149",
+    "categoria": "Produtos",
+    "nome": "Posição de Estoque",
+    "descricao": "Exibir todos os produtos e suas respectivas quantidades no estoque, em uma data definida"
+  },
+  {
+    "codigo": "0151",
+    "categoria": "Agenda",
+    "nome": "Clientes com agendamentos, com filtro para um determinado profissional",
+    "descricao": "Exibir todos os clientes com agendamentos, em um período definido"
+  },
+  {
+    "codigo": "0152",
+    "categoria": "Auditoria",
+    "nome": "Serviços com profissionais diferentes na comanda e na agenda",
+    "descricao": "Exibir quais serviços foram lançados na comanda com profissionais diferentes dos profissionais originais do agendamento"
+  },
+  {
+    "codigo": "0153",
+    "categoria": "Agenda",
+    "nome": "Quantidade de agendamentos por profissionais",
+    "descricao": "Exibir a quantidade de agendamentos por profissional, em um período definido"
+  },
+  {
+    "codigo": "0154",
+    "categoria": "Profissionais",
+    "nome": "Quantidade de dias trabalhados por profissional",
+    "descricao": "Exibir os dias trabalhados, total de reservas e média de reservas por dia, por profissional"
+  },
+  {
+    "codigo": "0155",
+    "categoria": "Agenda",
+    "nome": "Agendamentos, por quem os agendou e data de cadastro",
+    "descricao": "Exibir os agendamentos, por quem foi agendado e período definido"
+  },
+  {
+    "codigo": "0156",
+    "categoria": "Agenda",
+    "nome": "Agendamentos feitos pelo Avec+",
+    "descricao": "Exibir os agendamentos feitos pelo Avec+ em um período definido"
+  },
+  {
+    "codigo": "0157",
+    "categoria": "Agenda",
+    "nome": "Número de agendamentos por dia",
+    "descricao": "Exibe a evolução do número de agendamentos online que o estabelecimento recebeu.Com gráfico"
+  },
+  {
+    "codigo": "0158",
+    "categoria": "Agenda",
+    "nome": "Agendamentos com filtro por categoria",
+    "descricao": "Exibir todos os clientes com agendamentos para uma determinada categoria."
+  },
+  {
+    "codigo": "0159",
+    "categoria": "Agenda",
+    "nome": "Bloqueios da agenda",
+    "descricao": "Exibe os bloqueios ativos na agenda do estabelecimento"
+  },
+  {
+    "codigo": "0162",
+    "categoria": "Pacotes",
+    "nome": "Pacotes e pré-vendas vendidas agrupado por comanda",
+    "descricao": "Exibir todos os pacotes vendidos, para qual cliente e a comanda, diferente do 0062, caso você tenha vendido mais de um pacote ou pré-venda, vamos agrupar e somar o valor total"
+  },
+  {
+    "codigo": "0163",
+    "categoria": "Pacotes",
+    "nome": "Tabela de preços dos pacotes",
+    "descricao": "Exibir todos os pacotes do estabelecimento e os seus respectivos valores"
+  },
+  {
+    "codigo": "0175",
+    "categoria": "Financeiro",
+    "nome": "Faturamentos de serviço por profissional",
+    "descricao": "Exibir os faturamentos brutos para o estabelecimento e para os profissionais no período definido, descontamos no faturamento do profissional apenas o valor bruto dos assistentes, o faturamento total só é contabilizado quando o profissional é profissional principal da comanda, quando ele é assistente não é contabilizado para evitar que o valor seja somado duas vezes.\n\nA função customizada \"Desconto de assistente controlado nas comissões\" pode alterar os valores do relatório."
+  },
+  {
+    "codigo": "0180",
+    "categoria": "Financeiro",
+    "nome": "Todos os serviços e produtos vendidos",
+    "descricao": "Exibir todas as vendas de serviços e produtos no período definido"
+  },
+  {
+    "codigo": "0181",
+    "categoria": "Financeiro",
+    "nome": "Vales-presentes consumidos no período",
+    "descricao": "Exibir todos os vales-presentes consumidos e em quais as comandas foram registrados, no período definido"
+  },
+  {
+    "codigo": "0182",
+    "categoria": "Financeiro",
+    "nome": "Observações nas comandas do período",
+    "descricao": "Exibir tudo que foi registrado como observações nas comandas do período definido"
+  },
+  {
+    "codigo": "0183",
+    "categoria": "Financeiro",
+    "nome": "Comandas com diferenças nas entradas e itens",
+    "descricao": "Exibe todas as situações em que existem discrepâncias entre o valor de um ítem na comanda e o valor pago pelo mesmo item no período definido"
+  },
+  {
+    "codigo": "0184",
+    "categoria": "Financeiro",
+    "nome": "Faturamento por tipos de venda",
+    "descricao": "Exibir o faturamento total do período definido por tipos de vendaCom gráfico"
+  },
+  {
+    "codigo": "0185",
+    "categoria": "Financeiro",
+    "nome": "Serviços vendidos com promoção",
+    "descricao": "Exibir todos os serviços que foram adquiridos pelos clientes por meio de promoções no período definido. Observação: este relatório não considera para cálculos quando a promoção oferecida não está cadastrada na aba Marketing > Promoções ou se ao lançar algum serviço na comanda esquecerem de vincular a promoção"
+  },
+  {
+    "codigo": "0186",
+    "categoria": "Financeiro",
+    "nome": "Todos os ítens das comandas e comissões do período",
+    "descricao": "Exibir as comissões geradas a partir de todos os ítens que foram lançados em comandas no período definido. Observação: este relatório não considera descontos de taxas de cartões, descontos de produtos e nem descontos de comissões para os assistentes, então caso seu estabelecimento opere com estes descontos, utilizar relatório da categoria \"Comissões\"."
+  },
+  {
+    "codigo": "0187",
+    "categoria": "Caixas",
+    "nome": "Entradas por caixa",
+    "descricao": "Exibir todas as entradas de pagamentos para o caixa no período definido, no total o campo FATURAMENTO não soma os valores de cortesia, crédito cliente, permuta, voucher e vale presente e o campo total soma todos os itens."
+  },
+  {
+    "codigo": "0188",
+    "categoria": "Financeiro",
+    "nome": "Bandeiras de cartões, faturamentos e taxas no período",
+    "descricao": "Exibir o faturamento por cada bandeira de cartão configurada e os totais descontados como taxas, no período definido"
+  },
+  {
+    "codigo": "01889",
+    "categoria": "Clientes",
+    "nome": "Dia da semana preferido e número de visitas de cliente específico",
+    "descricao": "Exibir o número de visitas por dia da semana e o número total das visitas de um cliente específico no período definido"
+  },
+  {
+    "codigo": "0189",
+    "categoria": "Caixas",
+    "nome": "Movimentações do caixa",
+    "descricao": "Exibir todos os suprimentos e as sangrias do caixa no período definido"
+  },
+  {
+    "codigo": "0201",
+    "categoria": "Clientes",
+    "nome": "Vales presentes ainda válidos e não utilizados",
+    "descricao": "Exibir os vale presentes que ainda não venceram e estão disponíveis para uso (troca)"
+  },
+  {
+    "codigo": "0202",
+    "categoria": "Clientes",
+    "nome": "Vales presentes vencidos e não utilizados",
+    "descricao": "Exibir os vale presentes que venceram e já não estão mais disponíveis para uso (troca)"
+  },
+  {
+    "codigo": "0203",
+    "categoria": "Clientes",
+    "nome": "Todos os clientes por gênero",
+    "descricao": "Exibir todos os clientes agrupados pelo gêneroCom gráfico"
+  },
+  {
+    "codigo": "0204",
+    "categoria": "Clientes",
+    "nome": "Avaliações por nota total",
+    "descricao": "Exibe um totalizador por nota de todas as avaliações que o salão já recebeuCom gráfico"
+  },
+  {
+    "codigo": "0208",
+    "categoria": "Profissionais",
+    "nome": "Profissional e faturamentos diários",
+    "descricao": "Exibir a evolução diária do faturamento do profissional selecionado no período definidoCom gráfico"
+  },
+  {
+    "codigo": "0209",
+    "categoria": "Profissionais",
+    "nome": "Cargo de profissionais e evolução dos faturamentos diários",
+    "descricao": "Exibir a evolução diária do faturamento de um (categoria) cargo de profissionais selecionado no período definidoCom gráfico"
+  },
+  {
+    "codigo": "0210",
+    "categoria": "Clientes",
+    "nome": "Clientes com CPF duplicados",
+    "descricao": "Exibir todos os clientes que possuam o mesmo CPF cadastrado em comum"
+  },
+  {
+    "codigo": "0213",
+    "categoria": "Financeiro",
+    "nome": "Comandas do período com detalhamento de dívidas acumuladas",
+    "descricao": "Lista todas as comandas do período trazer o valor da comanda, valor total das formas de pagamento e em caso de dívida ou geração de crédito quanto foi ajustado no cadastro do cliente."
+  },
+  {
+    "codigo": "0220",
+    "categoria": "Profissionais",
+    "nome": "Cargos de profissionais e totais vendidos em atendimentos no período",
+    "descricao": "Exibir os totais vendidos por cargos de profissionais na realização de serviços durante um período definidoCom gráfico"
+  },
+  {
+    "codigo": "0221",
+    "categoria": "Profissionais",
+    "nome": "Ranking de profissionais por venda de produtos no período",
+    "descricao": "Exibir em ranking quais profissionais mais faturaram com as vendas de produtos em um período definidoCom gráfico"
+  },
+  {
+    "codigo": "0222",
+    "categoria": "Profissionais",
+    "nome": "Profissional e as comissões dos seus assistentes por período",
+    "descricao": "Exibir os assistentes, as comissões dos assistentes e o número de comandas com serviços com a participação dos assistentes, filtrado por profissional e no período definido"
+  },
+  {
+    "codigo": "0223",
+    "categoria": "Profissionais",
+    "nome": "Profissional e comissões detalhadas",
+    "descricao": "Exibir por profissional selecionado quais os serviços que geraram comissões (para profissionais e para assistentes) detalhando os tempos de duração da realização dos serviços"
+  },
+  {
+    "codigo": "0224",
+    "categoria": "Profissionais",
+    "nome": "Profissionais e as avaliações de clientes no período",
+    "descricao": "Exibir uma relação das avaliações dos profissionais, com as quantidades de avaliações recebidas por cada profissional e as médias das avaliações"
+  },
+  {
+    "codigo": "0225",
+    "categoria": "Profissionais",
+    "nome": "Ranking de vendas de pacotes de serviços dos profissionais no período",
+    "descricao": "Exibir em ranking os profissionais que venderam mais pacotes de serviços em um período definido, detalhando as informações de nomes dos profissionais, quantidades de pacotes de serviços vendidos, faturamentos totais obtidos, faturamentos (ticket) médios obtidos e as comissões geradas pelas vendasCom gráfico"
+  },
+  {
+    "codigo": "0226",
+    "categoria": "Profissionais",
+    "nome": "Recibos das comissões pagas aos profissionais no período",
+    "descricao": "Exibir todas as informações de recibos das comissões pagas aos profissionais do estabelecimento no período definido"
+  },
+  {
+    "codigo": "0227",
+    "categoria": "Profissionais",
+    "nome": "Ranking de realização de serviços como assistente por período",
+    "descricao": "Exibir as informações de todos os serviços realizados pelos assistentes e um ranking dos faturamentos dos assistentes por um período definidoCom gráfico"
+  },
+  {
+    "codigo": "0228",
+    "categoria": "Profissionais",
+    "nome": "Comissões líquidas por dia da semana no período definido",
+    "descricao": "Exibir as comissões líquidas totais que o profissional selecionado recebeu por dia da semana, no período definidoCom gráfico"
+  },
+  {
+    "codigo": "0229",
+    "categoria": "Profissionais",
+    "nome": "Lista de Profissionais",
+    "descricao": "Exibe todos os profissionais cadastrados"
+  },
+  {
+    "codigo": "0231",
+    "categoria": "Auditoria",
+    "nome": "Reservas estornadas",
+    "descricao": "Exibir todas as reservas estornadas em um período definido"
+  },
+  {
+    "codigo": "0237",
+    "categoria": "Serviços",
+    "nome": "Lucratividade dos serviços por categoria",
+    "descricao": "Esse relatório mostra por categoria de serviço, quanto aquele serviço deu de lucro, cosniderando o valor cadastrado no serviço como custo, os produtos adicionados a comanda e o total de comissões pagas naquele item. Se você já desconta o custo de serviço vamos calcular no seu lucro só a sua parte do desconto, basta preencher o parâmetro abaixo corretamente o mesmo vale para o desconto de produto. Esse relatório não cruza os itens com as formas de pagamento então não usa as taxas de cartão no cálculo."
+  },
+  {
+    "codigo": "0241",
+    "categoria": "Produtos",
+    "nome": "Produtos vendidos por categorias, por meio de gráfico",
+    "descricao": "Exibir todos os produtos vendidos por categorias, por meio de gráficos, em um período definidoCom gráfico"
+  },
+  {
+    "codigo": "0242",
+    "categoria": "Produtos",
+    "nome": "Custo de estoque por marcas",
+    "descricao": "Exibir o custo total dos produtos em estoque atualmente, classificando os produtos por marcasCom gráfico"
+  },
+  {
+    "codigo": "0243",
+    "categoria": "Produtos",
+    "nome": "Custo de estoque por categorias",
+    "descricao": "Exibir o custo total dos produtos em estoque atualmente, classificando os produtos por categoriasCom gráfico"
+  },
+  {
+    "codigo": "0244",
+    "categoria": "Produtos",
+    "nome": "Produtos com entradas, por motivos",
+    "descricao": "Exibir todos os produtos com entradas, por motivos, em um período definido. Totalizador representa as colunas de (quantidade * custo), gerando o total."
+  },
+  {
+    "codigo": "0245",
+    "categoria": "Produtos",
+    "nome": "Produtos com saídas, pelo estoque, por usos pessoais dos profissionais",
+    "descricao": "Exibir todos os produtos com saídas, pelo estoque, por usos pessoais dos profissionais, em um período definido"
+  },
+  {
+    "codigo": "0246",
+    "categoria": "Produtos",
+    "nome": "Produtos utilizados em serviços com os respectivos gastos",
+    "descricao": "Exibir todos os produtos utilizados em serviços com os respectivos gastos, registros feitos na comanda, em um período definido"
+  },
+  {
+    "codigo": "0247",
+    "categoria": "Produtos",
+    "nome": "Produtos deletados",
+    "descricao": "Exibir todos os produtos deletados, com informações detalhadas, em um período definido"
+  },
+  {
+    "codigo": "0248",
+    "categoria": "Agenda",
+    "nome": "Agendamentos por status",
+    "descricao": "Exibir os agendamentos com status escolhido no período definido"
+  },
+  {
+    "codigo": "0249",
+    "categoria": "Produtos",
+    "nome": "Gerar etiquetas por base em pedido de compras",
+    "descricao": "Exibir uma relação, para uma data definida, com os códigos internos dos produtos listados em pedidos de compras especificados, também com os nomes dos produtos, os valores e as quantidades solicitadas, para poder exportar em formato de Excel e importar possibilitando a geração de etiquetas no programa da PIMACO"
+  },
+  {
+    "codigo": "0251",
+    "categoria": "Agenda",
+    "nome": "Clientes únicos com agendamento",
+    "descricao": "Semelhante ao 0051, mas aqui exibimos apeans uma única vez cada cliente, se tiver pelo menos um agendamento no período definido."
+  },
+  {
+    "codigo": "0280",
+    "categoria": "Financeiro",
+    "nome": "Comandas com valores diferentes entre comissões e NF por cada empresa do \"Multiempresas\"",
+    "descricao": "Exibir as comandas com diferenças entre os valores que foram lançados de comissão e os valores que foram lançados na nota fiscal, por profissional selecionado e no período definido"
+  },
+  {
+    "codigo": "0281",
+    "categoria": "Financeiro",
+    "nome": "Entradas por formas de pagamento que geram caixa",
+    "descricao": "Exibir para um período definido as formas de pagamentos e os respectivos faturamentos que entraram para o caixa via cada uma delas, além de exibir também o faturamento total segmentado pelas formas de pagamento. Observação: este relatório não considera \"cortesia\" como forma de pagamento e nem \"cortesia, permuta, voucher, dívida ou crédito\" para calcular o faturamento totalCom gráfico"
+  },
+  {
+    "codigo": "0282",
+    "categoria": "Financeiro",
+    "nome": "Pagamentos recebidos pelo aplicativo",
+    "descricao": "Exibir informações de todos os pagamentos que foram recebidos através do pagamento online"
+  },
+  {
+    "codigo": "0283",
+    "categoria": "Financeiro",
+    "nome": "Cheques recebidos no período",
+    "descricao": "Exibir todos os cheques recebidos no período definido, com informações dos clientes, das datas das comandas e das datas dos vencimentos das comandas"
+  },
+  {
+    "codigo": "0284",
+    "categoria": "Financeiro",
+    "nome": "Valor total de NF por cada empresa do \"Multiempresas\"",
+    "descricao": "Exibir os valores totais gerados de notas fiscais, emitidas ou não, por cada empresa cadastrada no \"Multiempresas\" e no período definido"
+  },
+  {
+    "codigo": "0285",
+    "categoria": "Financeiro",
+    "nome": "Notas Fiscais emitidas no período por empresa",
+    "descricao": "Semelhante a visão do Financeiro > Notas Fiscais, esse relatório trás todas as notas, emitidas ou não por empresa e período"
+  },
+  {
+    "codigo": "0286",
+    "categoria": "Financeiro",
+    "nome": "Informações detalhadas para emissão de nota fiscal do profissional parceiro",
+    "descricao": "Listagem de informações necessárias para emissão da nota fiscal do profissional para o estabelecimento de acordo com a lei do salão parceiro."
+  },
+  {
+    "codigo": "0308",
+    "categoria": "Clientes",
+    "nome": "Faturamento por \"Como Conheceu?\"",
+    "descricao": "Esse relatório agrupa os clientes do período pelo campo \"Como conheceu?\" e mostra o faturamento de cada grupoCom gráfico"
+  },
+  {
+    "codigo": "0320",
+    "categoria": "Clientes",
+    "nome": "Clientes com retorno recomendado e não retornaram",
+    "descricao": "Exibir clientes que fizeram algum serviço que tinha \"dias para retorno\" cadastrado, passaram-se os dias e não retornaram e calcular em quantos dias de atraso cada cliente está"
+  },
+  {
+    "codigo": "0321",
+    "categoria": "Profissionais",
+    "nome": "Ranking de venda de produtos por marca",
+    "descricao": "Exibe em lista os profissionais que fizeram vendas de produtos e o total vendido. Podendo filtrar pela marca de produto desejada.Com gráfico"
+  },
+  {
+    "codigo": "0322",
+    "categoria": "Profissionais",
+    "nome": "Custos e valores dos serviços realizados por cargo no período",
+    "descricao": "Exibir relação dos cargos dos profissionais com os valores e os custos totais dos serviços realizados em um período definido"
+  },
+  {
+    "codigo": "0323",
+    "categoria": "Produtos",
+    "nome": "Produtos que deram entrada pelos pedidos de compra no período",
+    "descricao": "Exibe todos os produtos que deram entrada por pedido de compras no período"
+  },
+  {
+    "codigo": "0324",
+    "categoria": "Profissionais",
+    "nome": "Ranking de Avaliações por Profissional",
+    "descricao": "Exibe o total acumulado de avaliações por profissional e as melhores médias"
+  },
+  {
+    "codigo": "0326",
+    "categoria": "Profissionais",
+    "nome": "Percentual de agendamentos preferenciais",
+    "descricao": "Mostra o numero de agendamentos com e sem preferência por profissional"
+  },
+  {
+    "codigo": "0341",
+    "categoria": "Produtos",
+    "nome": "Produtos com seus respectivos preços",
+    "descricao": "Exibir todos os produtos com seus respectivos preços"
+  },
+  {
+    "codigo": "0344",
+    "categoria": "Produtos",
+    "nome": "Produtos com saídas, por motivos",
+    "descricao": "Exibir todos os produtos com saídas, por motivos, em um período definido"
+  },
+  {
+    "codigo": "0345",
+    "categoria": "Produtos",
+    "nome": "Produtos e seus respectivos custos no estoque",
+    "descricao": "Exibir todos os produtos com seus respectivos custos no estoque"
+  },
+  {
+    "codigo": "0346",
+    "categoria": "Produtos",
+    "nome": "Comissão de Produto de Consumo por Profissional",
+    "descricao": "Esse relatório calcula a comissão de venda de um produto, com base no campo comissão do cadastro de produto, mesmo que esse produto não seja lançado como item de venda, seja lançado como item de consumo em um serviço. A comissão calculada é um valor bruto sem desconto de nenhuma taxa."
+  },
+  {
+    "codigo": "0347",
+    "categoria": "Produtos",
+    "nome": "Comissão de Produto de Consumo",
+    "descricao": "Esse relatório calcula a comissão de venda de um produto, com base no campo comissão do cadastro de produto, mesmo que esse produto não seja lançado como item de venda, seja lançado como item de consumo em um serviço. A comissão calculada é um valor bruto sem desconto de nenhuma taxa."
+  },
+  {
+    "codigo": "0348",
+    "categoria": "Agenda",
+    "nome": "Número de reservas por status com filtro por serviço",
+    "descricao": "Selecione um período e um serviço e veja quantas reservas foram canceladas, agendadas, finalizadas e outros status"
+  },
+  {
+    "codigo": "0349",
+    "categoria": "Produtos",
+    "nome": "Custo médio ponderado dos produtos utilizados no período",
+    "descricao": "Exibir todos os produtos utilizados no período com seus custos médios ponderados, o campo custo médio ponderado considera a ordem de saída dos produtos do estoque ou seja o custo médio atual em estoque de acordo com pedidos de compras e lançamentos manuais de entrada e saída."
+  },
+  {
+    "codigo": "0383",
+    "categoria": "Clientes",
+    "nome": "Faturamento e ticket médio por clientes (pelos pagamentos)",
+    "descricao": "Semelhante ao relatório 0083 a diferença desse relatório é que não visualiza comandas que foram pagas como dívida, cortesia ou permuta e faz a soma pela forma de pagamento utilizada e não pelos itens consumidos."
+  },
+  {
+    "codigo": "0384",
+    "categoria": "Financeiro",
+    "nome": "NF acumuladas dos profissionais por cada empresa do \"Multiempresas\"",
+    "descricao": "Exibir os valores totais acumulados das notas fiscais realizadas pelos profissionais por cada empresa cadastrada no \"Multiempresas\", em um período definido. Os valores das notas fiscais só são somados ao campo \"Valor Total\" do profissional quando a cota-parte da nota fiscal do salão já estiver emitida."
+  },
+  {
+    "codigo": "0385",
+    "categoria": "Financeiro",
+    "nome": "Todas as entradas e saídas das comandas por período",
+    "descricao": "Exibir todas as informações de entradas e saídas financeiras registradas nas comandas, em um período definido, por datas de competência (datas em que os ítens das comandas foram realizados)"
+  },
+  {
+    "codigo": "0386",
+    "categoria": "Financeiro",
+    "nome": "Despesas do entradas e saídas",
+    "descricao": "Mostra todas as despesas do entradas e saídas"
+  },
+  {
+    "codigo": "0387",
+    "categoria": "Financeiro",
+    "nome": "Entradas e Saídas Analítico",
+    "descricao": "Detalha todas as informações das entradas e saídas"
+  },
+  {
+    "codigo": "0388",
+    "categoria": "Financeiro",
+    "nome": "Entrada por forma de pagamento e cliente",
+    "descricao": "Exibir todos os valores pagos por cliente no período definido, no total o campo FATURAMENTO não soma os valores de cortesia e crédito cliente e o campo total soma todos os itens"
+  },
+  {
+    "codigo": "0441",
+    "categoria": "Produtos",
+    "nome": "Lucratividade dos produtos vendidos no período",
+    "descricao": "Mostra agrupado por produto vendido, o total vendido e o total de lucro em cada produto, considerando sempre a comissão e o custo cadastrado no produto."
+  },
+  {
+    "codigo": "0485",
+    "categoria": "Financeiro",
+    "nome": "Notas Fiscais emitidas no período",
+    "descricao": "Semelhante a visão do Financeiro > Notas Fiscais, esse relatório trás todas as notas, emitidas ou não por empresa e período"
+  },
+  {
+    "codigo": "1041",
+    "categoria": "Produtos",
+    "nome": "Produtos vendidos por estoque",
+    "descricao": "Exibir todos os produtos vendidos por estoque"
+  },
+  {
+    "codigo": "1083",
+    "categoria": "Financeiro",
+    "nome": "Faturamento e ticket médio de vendas que foram utilizadas pelos clientes",
+    "descricao": "Exibir os faturamentos totais e os faturamentos (tickets) médios dos serviços vendidos e utilizados pelos clientes no período definido"
+  },
+  {
+    "codigo": "1088",
+    "categoria": "Financeiro",
+    "nome": "Faturamento diario por categoria de serviço",
+    "descricao": "Exibe a evolução diaria do faturamento de uma determinada categoria de serviço no período.Com gráfico"
+  },
+  {
+    "codigo": "1127",
+    "categoria": "Profissionais",
+    "nome": "Vendas totais dos profissionais por categoria de serviços",
+    "descricao": "Exibir os profissionais, os faturamentos totais e as quantidades vendidas por categoria de serviços em um período definido"
+  },
+  {
+    "codigo": "1128",
+    "categoria": "Profissionais",
+    "nome": "Vendas totais de um profissional por categorias de serviço",
+    "descricao": "Exibir as categorias dos serviços vendidos, os faturamentos totais, as quantidades vendidas e os % de faturamento das categorias em relação ao faturamento total, por profissional selecionado no período definidoCom gráfico"
+  },
+  {
+    "codigo": "1186",
+    "categoria": "Financeiro",
+    "nome": "Todos os ítens das comandas por profissional",
+    "descricao": "Semelhante ao relatório 0186 com filtro por profissional"
+  },
+  {
+    "codigo": "1280",
+    "categoria": "Financeiro",
+    "nome": "Comandas com valores diferentes entre comissões e NF",
+    "descricao": "Exibir as comandas com diferenças entre os valores que foram lançados de comissão e os valores que foram lançados na nota fiscal, por tipo de NF selecionado e no período definido"
+  },
+  {
+    "codigo": "1281",
+    "categoria": "Financeiro",
+    "nome": "Comparar valores das comandas, das NF dos profissionais e das NF do estabelecimento",
+    "descricao": "Exibir para todas as comandas de um período definido os valores dos ítens lançados nelas, os valores dos ítens nas notas fiscais dos profissionais e os valores dos ítens nas notas fiscais do estabelecimento"
+  },
+  {
+    "codigo": "2033",
+    "categoria": "Serviços",
+    "nome": "Tabela de preço dos serviços com custos detalhados",
+    "descricao": "Exibir todos os serviços do estabelecimento, suas categorias e os seus respectivos valores"
+  },
+  {
+    "codigo": "2034",
+    "categoria": "Serviços",
+    "nome": "Lucratividade por taxa de conveniência",
+    "descricao": "Esse relatório lista as comandas que o estabelecimento recebeu valores relacionados a \"taxa de conveniência\" cobrada pelo atendimento realizado ao cliente"
+  },
+  {
+    "codigo": "2115",
+    "categoria": "Clientes",
+    "nome": "Ficha de Anamnese por data de atualização do campo",
+    "descricao": "Exibe os campos preenchidos da ficha de anamnese para cada cliente pela data de cadastro do cliente"
+  },
+  {
+    "codigo": "2148",
+    "categoria": "Produtos",
+    "nome": "Clientes atendidos por local estoque",
+    "descricao": "Exibir funcionalidade customizada de local estoque"
+  },
+  {
+    "codigo": "2386",
+    "categoria": "Financeiro",
+    "nome": "Entradas do entradas e saídas",
+    "descricao": "Mostra todas as entradas do entradas e saídas"
+  },
+  {
+    "codigo": "3123",
+    "categoria": "Profissionais",
+    "nome": "Itens que geram comissões para profissional no período",
+    "descricao": "Exibir todos os ítens das comandas que geram comissões para um profissional específico no período definido. Observação: este relatório leva em consideração a data de realização dos serviços nas comandas, independente de quaisquer datas futuras em que possam ser lançadas as comissões"
+  },
+  {
+    "codigo": "4123",
+    "categoria": "Profissionais",
+    "nome": "Todas as comissões geradas via cartão e via outros",
+    "descricao": "Exibir os profissionais e seus cargos, seus dados bancários, quanto de comissão líquida foi gerada através da realização de serviços pagos via cartões de crédito e quanto foi gerado via pagamentos com outras formas de pagamento no período definido"
+  },
+  {
+    "codigo": "5123",
+    "categoria": "Profissionais",
+    "nome": "Profissional e comissões brutas no período",
+    "descricao": "Exibir todos os ítens das comandas que geraram comissões brutas para o profissional selecionado no período definido"
+  },
+  {
+    "codigo": "6123",
+    "categoria": "Profissionais",
+    "nome": "Todas as comissões brutas geradas via cartão, via dinheiro e via outros",
+    "descricao": "Exibir os profissionais e seus cargos, seus dados bancários, quanto de comissão bruta foi gerada através da realização de serviços pagos via cartões de crédito, quanto foi gerado via pagamentos em dinheiro e quanto foi gerado via pagamentos com outras formas de pagamento no período definido"
+  },
+  {
+    "codigo": "7123",
+    "categoria": "Profissionais",
+    "nome": "Comissão Líquida por Profissional",
+    "descricao": "Exibir todos os ítens das comandas que geram comissões para um profissional específico no período definido. Observação 1: este relatório leva em consideração a data de realização dos serviços nas comandas, independente de quaisquer datas futuras em que possam ser lançadas as comissões. Observação 2: este relatório não leva em consideração os descontos referentes os uso de produtos"
+  },
+  {
+    "codigo": "8123",
+    "categoria": "Profissionais",
+    "nome": "Profissionais e todas as comissões por período DETALHADO",
+    "descricao": "Exibe todas as comissões geradas para todos os profissionais em um período definido com as informações de cadastro e os dados bancários dos profissionais, se você encontrou diferença entre o valor faturado desse relatório com outros é provavelmente porque aqui só mostramos itens que geraram comissão e consideramos a data da comissão, além disso comandas com dívida devem ser observadas aqui com a data de geração da comissão. Observação: Descontos recorrentes só enntram nesse relatório após fechamento da comissão."
+  },
+  {
+    "codigo": "9123",
+    "categoria": "Profissionais",
+    "nome": "Comissões individuais de profissional com split ativado",
+    "descricao": "Exibir todos os itens comissionados, puxando pela data da comanda e visualizando em que data vai cair"
+  },
+  {
+    "codigo": "9224",
+    "categoria": "Financeiro",
+    "nome": "Histórico de Solicitações de Recálculo de Comissões",
+    "descricao": "Exibe o histórico de solicitações de recálculo criadas pelo salão, contendo período solicitado, usuário responsável, status, progresso e as opções selecionadas para o recálculo."
+  },
+  {
+    "codigo": "9323",
+    "categoria": "Profissionais",
+    "nome": "Localizando Comissões por data da comanda",
+    "descricao": "Caso você costume pagar comissões pela data que recebe os pagamentos da maquininha, ou utiliza split, as vezes pode se perder a data que essa comissão será paga. Esse relatório filtra pela data da comanda todos os profissionais comissionados e em qual data eles receberam as comissões"
+  },
+  {
+    "codigo": "B048",
+    "categoria": "Produtos",
+    "nome": "Produtos com entradas e saídas, por valores absolutos",
+    "descricao": "Exibir todos os produtos com entradas e saídas, por valores absolutos. Relatório leva em conta apenas produtos de vendas diretas. Não é levado em conta produtos de consumo vinculado em serviços."
+  },
+  {
+    "codigo": "N186",
+    "categoria": "Financeiro",
+    "nome": "Notas Fiscais emitidas separadas por itens",
+    "descricao": "Exibe todos os itens vendidos de comandas finalizadas, com notas emitidas no período selecionado"
+  },
+  {
+    "codigo": "S024",
+    "categoria": "Clientes",
+    "nome": "Clientes que fizeram serviço com retorno recomendado e não retornaram",
+    "descricao": "Exibir clientes que fizeram algum serviço que tinha \"dias para retorno\" cadastrado, passaram-se os dias e não retornaram e calcular em quantos dias de atraso cada cliente está"
+  },
+  {
+    "codigo": "S044",
+    "categoria": "Clientes",
+    "nome": "Lista de dados de todos os clientes",
+    "descricao": "Exibir os dados: e-mail, telefone, celular e aniversário; de todos os clientes"
+  },
+  {
+    "codigo": "S048",
+    "categoria": "Produtos",
+    "nome": "Produtos com saídas",
+    "descricao": "Exibir todos os produtos ativos apresentando suas saídas, por venda ou consumo, em um período definido"
+  },
+  {
+    "codigo": "X126",
+    "categoria": "Profissionais",
+    "nome": "Tipo de reservas dos agendamentos do profissional (Função Customizada)",
+    "descricao": "Exibir os números de agendamentos classificados pelos tipos das reservas, por profissional selecionado no período definidoCom gráfico"
+  },
+  {
+    "codigo": "X226",
+    "categoria": "Profissionais",
+    "nome": "Tipos de agendamentos dos profissionais no período (Função Customizada)",
+    "descricao": "Exibir quantas vezes ocorreram serviços contabilizados por tipos de agendamento (Exemplo: primeiro agendamento) no período definido"
+  },
+  {
+    "codigo": "X326",
+    "categoria": "Produtos",
+    "nome": "Produtos e seus respectivos lucros, quando fabricados",
+    "descricao": "Exibir todos os produtos com seus respectivos lucros, por meio do valor e custos, quando fabricados"
+  }
+];

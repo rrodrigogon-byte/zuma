@@ -79,6 +79,11 @@ const GarcomView = lazy(() => import('./pages/GarcomView'))
 const LojaAtendimento = lazy(() => import('./pages/admin/LojaAtendimento'))
 const EcommerceAdmin = lazy(() => import('./pages/admin/EcommerceAdmin'))
 
+const Relatorios = lazy(() => import('./pages/admin/relatorios/dino/RelatoriosDinoIndex'))
+const RelatoriosDinoIndex = lazy(() => import('./pages/admin/relatorios/dino/RelatoriosDinoIndex'))
+const RelatorioRetornoProfissional = lazy(() => import('./pages/admin/relatorios/dino/RelatorioRetornoProfissional'))
+const RelatorioClientesAtendidos = lazy(() => import('./pages/admin/relatorios/dino/RelatorioClientesAtendidos'))
+
 const Home       = lazy(() => import('./pages/public/Home'))
 const Inscricao  = lazy(() => import('./pages/public/Inscricao'))
 const Ranking    = lazy(() => import('./pages/public/Ranking'))
@@ -117,7 +122,6 @@ const BI         = lazy(() => import('./pages/admin/BI'))
 const Auditoria     = lazy(() => import('./pages/admin/Auditoria'))
 const Configuracoes = lazy(() => import('./pages/admin/Configuracoes'))
 const Cupons        = lazy(() => import('./pages/admin/Cupons'))
-const Relatorios    = lazy(() => import('./pages/admin/Relatorios'))
 const RelatoriosOperacionais = lazy(() => import('./pages/admin/RelatoriosOperacionais'))
 const Noticias      = lazy(() => import('./pages/admin/Noticias'))
 const Sumula        = lazy(() => import('./pages/admin/Sumula'))
@@ -292,6 +296,8 @@ export default function App() {
           <Route path="/admin/configuracoes"  element={<TenantAware stallone={<Navigate to="/admin/ecommerce?tab=stores" replace />} clube={<Navigate to="/admin/clube/ajustes" replace />} tenant={<Navigate to="/admin/barbearia-erp?area=gestao&tab=Configura%C3%A7%C3%A3o" replace />} legacy={<Layout><Configuracoes /></Layout>} />} />
           <Route path="/admin/cupons"         element={<Layout><Cupons /></Layout>} />
           <Route path="/admin/relatorios"     element={<Layout><Relatorios /></Layout>} />
+          <Route path="/admin/relatorios/dino/retorno" element={<Layout><RelatorioRetornoProfissional /></Layout>} />
+          <Route path="/admin/relatorios/dino/clientes-atendidos" element={<Layout><RelatorioClientesAtendidos /></Layout>} />
           <Route path="/admin/relatorios-operacionais" element={<TenantAware stallone={<Navigate to="/admin/ecommerce?tab=reports" replace />} clube={<Navigate to="/admin" replace />} tenant={<Navigate to="/admin/barbearia-erp?area=gestao&tab=Relat%C3%B3rios" replace />} legacy={<Layout><RelatoriosOperacionais /></Layout>} />} />
           <Route path="/admin/noticias"       element={<Layout><Noticias /></Layout>} />
           <Route path="/admin/sumula"         element={<Layout><Sumula /></Layout>} />
