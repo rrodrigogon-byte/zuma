@@ -160,7 +160,7 @@ export function parseEvolutionMessage(payload = {}) {
   if (data.isGroupMsg === true) return { ignored: true, reason: 'group', event, externalId, remoteJid };
   if (event !== 'MESSAGES_UPSERT') return { ignored: true, reason: 'unsupported_event', event, externalId };
   if (!externalId) return { ignored: true, reason: 'missing_message_id', event };
-  if (key.fromMe === true || data.fromMe === true) return { ignored: true, reason: 'from_me', event, externalId };
+  const fromMe = key.fromMe === true || data.fromMe === true;
   if (remoteJid.endsWith('@g.us')) return { ignored: true, reason: 'group', event, externalId, remoteJid };
   // Endereço @lid (identificador interno do WhatsApp) não é telefone: usa o número real
   // que o provedor manda junto (senderPn/remoteJidAlt/participantPn); sem ele, ignora
@@ -178,7 +178,7 @@ export function parseEvolutionMessage(payload = {}) {
     phone,
     name: cleanText(data.pushName || payload.pushName || data.notifyName || data.sender?.pushname, 160),
     text,
-    timestamp: Number(data.messageTimestamp || payload.messageTimestamp || 0) || null,
+    timestamp: Number(data.messageTimestamp || payload.messageTimestamp || 0) || null, fromMe,
   };
 }
 
@@ -194,7 +194,7 @@ export function parseWahaMessage(payload = {}, { groupId = '', sessionName = '' 
   const text = messageText(data) || cleanText(data.body || data.text || '', 4000);
   if (event && !['message', 'messages_upsert', 'message_received'].includes(event.replaceAll('.', '_'))) return { ignored: true, reason: 'unsupported_event', event, externalId };
   if (!externalId) return { ignored: true, reason: 'missing_message_id', event: 'message' };
-  if (data.fromMe === true || data.key?.fromMe === true) return { ignored: true, reason: 'from_me', event: 'message', externalId };
+  const fromMe = data.fromMe === true || data.key?.fromMe === true;
   if (receivedSession && expectedSession && receivedSession !== expectedSession) return { ignored: true, reason: 'session_mismatch', event: 'message', externalId, remoteJid };
   if (!remoteJid.endsWith('@g.us')) return { ignored: true, reason: 'not_group', event: 'message', externalId, remoteJid };
   if (!allowedGroup) return { ignored: true, reason: 'waha_group_not_configured', event: 'message', externalId, remoteJid };
@@ -208,7 +208,7 @@ export function parseWahaMessage(payload = {}, { groupId = '', sessionName = '' 
     phone: '',
     name: cleanText(data.participant || data.pushName || data.notifyName || '', 160),
     text,
-    timestamp: Number(data.timestamp || data.messageTimestamp || 0) || null,
+    timestamp: Number(data.timestamp || data.messageTimestamp || 0) || null, fromMe,
   };
 }
 
@@ -1700,6 +1700,30 @@ export async function processWhatsappConversationTask(task) {
   }
 
   const session = await ensureSession(record, message);
+  
+  if (message.fromMe) {
+    if (message.text) {
+      await db.query(
+        `INSERT INTO whatsapp_ai_messages
+          (empresa_id, loja_id, canal_id, sessao_id, direcao, papel, evento_externo_id, conteudo, metadados, delivery_status, delivered_at)
+         VALUES ($1, $2, $3, $4, 'saida', 'assistant', $5, $6, $7::jsonb, 'sent', CURRENT_TIMESTAMP)
+         ON CONFLICT (canal_id, evento_externo_id) WHERE evento_externo_id IS NOT NULL DO NOTHING`,
+        [record.empresa_id, record.loja_id, record.canal_id, session.id, `${message.externalId}:out`, message.text, JSON.stringify({ interactionType: 'organic' })]
+      );
+    }
+    
+    // Anota o horário e marca a pausa para staff (se a IA for o bot, pausa a IA)
+    if (record.tipo_canal !== 'gestao' && record.tipo_canal !== 'lancamentos') {
+      const RemoteStaffModule = await import('./whatsapp-staff-takeover.js');
+      await RemoteStaffModule.pauseForStaff({ id: record.canal_id, empresa_id: record.empresa_id, loja_id: record.loja_id }, { phone: message.phone, at: new Date() });
+    }
+    
+    await db.query(
+      `UPDATE eventos_integracao_canais SET status_processamento = 'ignorado', processado_em = CURRENT_TIMESTAMP, erro_processamento = 'from_me' WHERE id = $1`,
+      [record.evento_integracao_id]
+    );
+    return { ignored: true, reason: 'from_me' };
+  }
   if (!['gestao', 'lancamentos'].includes(record.tipo_canal)) try {
     await ensureWhatsappLead({
       empresaId: record.empresa_id,
