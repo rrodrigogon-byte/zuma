@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Download, RefreshCw, Sparkles, Filter, ChevronDown, ChevronUp, DollarSign, Activity, Search, TrendingUp, TrendingDown } from 'lucide-react';
+import { Download, RefreshCw, Sparkles, Filter, Search, ChevronDown, ChevronUp } from 'lucide-react';
 
 const RelatorioDesempenhoProfissional = () => {
   const [dataAnaliseInicio, setDataAnaliseInicio] = useState('2026-09-01');
@@ -118,7 +118,7 @@ const RelatorioDesempenhoProfissional = () => {
           <h2 style={styles.kpiValue}>{totalComandas} <span style={styles.kpiSub}>comandas pagas</span></h2>
         </div>
         <div style={styles.kpiCard}>
-          <span style={styles.kpiLabel}><TrendingUp size={16} /> Ticket Médio Global</span>
+          <span style={styles.kpiLabel}><ChevronUp size={16} /> Ticket Médio Global</span>
           <h2 style={styles.kpiValue}>R$ {ticketGlobal.toFixed(2)}</h2>
         </div>
       </div>
@@ -162,7 +162,7 @@ const RelatorioDesempenhoProfissional = () => {
                   </td>
                   <td style={styles.td}>
                     <div style={{display: 'flex', alignItems: 'center', gap: '4px', color: p.crescimento >= 0 ? '#059669' : '#DC2626'}}>
-                      {p.crescimento >= 0 ? <TrendingUp size={16} /> : <TrendingDown size={16} />}
+                      {p.crescimento >= 0 ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                       <span style={{fontWeight: 700}}>{Math.abs(p.crescimento)}%</span>
                     </div>
                     <p style={styles.metricSub}>vs. mês anterior</p>

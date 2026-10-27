@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { Search, FileText, ChevronRight, BarChart3, Filter } from 'lucide-react';
+import { Download, RefreshCw, Sparkles, Filter, Search, ChevronDown, ChevronUp } from 'lucide-react';
 import { todosRelatorios } from './relatoriosData';
 const RelatoriosDinoIndex = () => {
   const [busca, setBusca] = useState('');
