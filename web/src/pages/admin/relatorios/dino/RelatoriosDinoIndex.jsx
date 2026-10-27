@@ -19,6 +19,7 @@ const RelatoriosDinoIndex = () => {
     if (codigo === '0002') return '/admin/relatorios/dino/clientes-atendidos';
     if (codigo === '0021') return '/admin/relatorios/dino/desempenho-profissional';
     if (codigo === '0032') return '/admin/relatorios/dino/servicos-vendidos';
+    if (codigo === '0091') return '/admin/relatorios/dino/caixas-fechados';
     return `/admin/relatorios/dino/view/${codigo}`; 
   };
   
