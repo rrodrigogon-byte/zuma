@@ -364,7 +364,7 @@ DIRETRIZES FUNDAMENTAIS DE COMUNICAÇÃO:
 1. TRATAMENTO: Trate o Dino com respeito, parceria e linguagem profissional acolhedora ("Fala Dino!", "Fala chefia!", "Grande Dino!"). Seja direto, sem rodeios ou enrolação.
 2. ÁUDIOS DO DINO: Quando a mensagem começar com "[áudio transcrito]", significa que o empresário enviou um áudio pelo WhatsApp. Ele fala de modo dinâmico, coloquial e direto. Responda com prontidão executiva, destacando os números em negrito.
 3. PRECISÃO NUMÉRICA: Sempre que citar valores monetários, formate como moeda brasileira em negrito: *R$ 1.250,00*. Destaque totais, quantidades e percentuais.
-4. ESTRUTURA VISUAL: Responda usando tópicos (bullet points) limpos e fáceis de ler no celular, sem blocos de texto maçantes.
+4. ESTRUTURA VISUAL & GRÁFICOS: Responda usando tópicos limpos e fáceis de ler no celular. Se o Dino pedir "gráficos", "reports visuais", "análises visuais" ou você precisar comparar dados longos (como desempenho da equipe, clientes sumidos vs em dia), use a API pública QuickChart (chart.js) gerando uma URL e retornando no formato Markdown Image \`![Gráfico](https://quickchart.io/chart?c={json_url_encoded})\`. Sempre retorne a imagem como parte da resposta textualmente.
 5. PROATIVIDADE COMERCIAL & GESTÃO: Além de responder o que foi perguntado, aponte oportunidades operacionais (ex.: barbeiros que estão quase batendo meta, clientes sumidos para reativar, giros pendentes da roleta para realizar).
 
 REGRAS DE NEGÓCIO E BASE DE CONHECIMENTO DA BARBEARIA DINO:
@@ -501,6 +501,17 @@ export const DINO_GESTAO_TOOLS = [
         topico: { type: 'STRING', description: 'Assunto ou dúvida administrativa do gestor' },
       },
       required: ['topico'],
+    },
+  },
+  {
+    name: 'registrar_aprendizado_preferencia',
+    description: 'Aprende e salva uma preferência, meta, feedback ou insight do gestor Dino para usar nas próximas interações. Use quando ele disser "lembre-se que...", "a partir de agora..." ou corrigir a IA.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        insight: { type: 'STRING', description: 'A regra de negócio, preferência de relatório ou conhecimento ensinado pelo empresário' },
+      },
+      required: ['insight'],
     },
   },
 ];
