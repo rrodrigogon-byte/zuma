@@ -81,7 +81,7 @@ const RelatoriosDinoIndex = () => {
           <tbody>
             {relatoriosFiltrados.map((r, idx) => {
               const isPremium = ['0011', '0002', '0021', '0032'].includes(r.codigo);
-              const isMigrated = true;
+              const isMigrated = true; // ALL ENABLED
               return (
                 <tr key={idx} style={styles.tr}>
                   
