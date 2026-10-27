@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Download, RefreshCw, Sparkles, Filter, Search, TrendingUp, Star } from 'lucide-react';
 
-const RelatorioServicosVendidos = () => {
+const RelatorioServicosGeral = () => {
   const [dataAnaliseInicio, setDataAnaliseInicio] = useState('2026-09-01');
   const [dataAnaliseFim, setDataAnaliseFim] = useState('2026-10-26');
 
@@ -155,4 +155,4 @@ const RelatorioServicosVendidos = () => {
     </div>
   );
 };
-export default RelatorioServicosVendidos;
+export default RelatorioServicosGeral;

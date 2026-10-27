@@ -83,7 +83,7 @@ const RelatoriosDinoIndex = lazy(() => import('./pages/admin/relatorios/dino/Rel
 const RelatorioRetornoProfissional = lazy(() => import('./pages/admin/relatorios/dino/RelatorioRetornoProfissional'))
 const RelatorioClientesAtendidos = lazy(() => import('./pages/admin/relatorios/dino/RelatorioClientesAtendidos'))
 const RelatorioDesempenhoProfissional = lazy(() => import('./pages/admin/relatorios/dino/RelatorioDesempenhoProfissional'))
-const RelatorioServicosVendidos = lazy(() => import('./pages/admin/relatorios/dino/RelatorioServicosVendidos'))
+const RelatorioServicosGeral = lazy(() => import('./pages/admin/relatorios/dino/RelatorioServicosGeral'))
 
 const Home       = lazy(() => import('./pages/public/Home'))
 const Inscricao  = lazy(() => import('./pages/public/Inscricao'))
@@ -302,7 +302,7 @@ export default function App() {
           <Route path="/admin/relatorios/dino/clientes-atendidos" element={<Layout><RelatorioClientesAtendidos /></Layout>} />
 
           <Route path="/admin/relatorios/dino/desempenho-profissional" element={<Layout><RelatorioDesempenhoProfissional /></Layout>} />
-          <Route path="/admin/relatorios/dino/servicos-vendidos" element={<Layout><RelatorioServicosVendidos /></Layout>} />
+          <Route path="/admin/relatorios/dino/servicos-vendidos" element={<Layout><RelatorioServicosGeral /></Layout>} />
           <Route path="/admin/relatorios-operacionais" element={<TenantAware stallone={<Navigate to="/admin/ecommerce?tab=reports" replace />} clube={<Navigate to="/admin" replace />} tenant={<Navigate to="/admin/barbearia-erp?area=gestao&tab=Relat%C3%B3rios" replace />} legacy={<Layout><RelatoriosOperacionais /></Layout>} />} />
           <Route path="/admin/noticias"       element={<Layout><Noticias /></Layout>} />
           <Route path="/admin/sumula"         element={<Layout><Sumula /></Layout>} />
