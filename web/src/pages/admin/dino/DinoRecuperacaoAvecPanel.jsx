@@ -71,6 +71,10 @@ export default function DinoRecuperacaoAvecPanel({ onAbrirAgenda }) {
 
   // Modal de histórico detalhado
   const [modalCliente, setModalCliente] = useState(null)
+  const [modalCampanhaCRM, setModalCampanhaCRM] = useState(false)
+  const [msgCampanha, setMsgCampanha] = useState('Oi {Nome do Cliente}! Notei que faz um tempinho que você não vem aqui. Para celebrar sua volta, preparei um horário especial com o {Profissional}. Posso agendar para essa semana?\n\n👉 {Link Agendamento}')
+  const [resgatandoCRM, setResgatandoCRM] = useState(false)
+
   const [historicoModal, setHistoricoModal] = useState([])
   const [loadingHistorico, setLoadingHistorico] = useState(false)
   const [copiadoKey, setCopiadoKey] = useState(null)
@@ -152,6 +156,21 @@ export default function DinoRecuperacaoAvecPanel({ onAbrirAgenda }) {
   }
 
   // Abrir modal de histórico Avec
+  async 
+  async function dispararCampanha() {
+    try {
+       setResgatandoCRM(true)
+       const clientesIds = dadosFiltrados.map(c => c.key)
+       await api.post('/api/admin/dino/crm/disparo', { mensagem: msgCampanha, clientesIds })
+       alert('Campanha de Resgate (WhatsApp) iniciada para ' + clientesIds.length + ' clientes!')
+       setModalCampanhaCRM(false)
+    } catch(err) {
+       alert('Erro ao disparar campanha: ' + err.message)
+    } finally {
+       setResgatandoCRM(false)
+    }
+  }
+
   async function abrirHistorico(cliente) {
     setModalCliente(cliente)
     setLoadingHistorico(true)
@@ -300,6 +319,16 @@ export default function DinoRecuperacaoAvecPanel({ onAbrirAgenda }) {
             onClick={toggleCenarioReajuste}
           >
             {isCenarioReajuste ? '✓ Cenário Aplicado (Limpar)' : 'Aplicar Cenário do Reajuste (766 Clientes)'}
+          </button>
+
+          <button
+            type="button"
+            className="dino-recup-cohort-btn"
+            style={{ marginLeft: 8, background: '#059669', color: '#fff', borderColor: '#059669' }}
+            onClick={() => setModalCampanhaCRM(true)}
+          >
+            <Sparkles size={14} style={{ marginRight: 4 }} /> 
+            Disparar Campanha CRM ({dadosFiltrados.length})
           </button>
         </div>
         

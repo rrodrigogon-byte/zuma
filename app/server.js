@@ -119,6 +119,7 @@ import { catalogoEquipe, agendaPeriodoEquipe, lancarComandaEquipe } from './dino
 import * as pushEquipe from './dino-push-equipe.js';
 import { avisarListaEspera } from './core/barbershop-agenda.js';
 import * as captacaoKytto from './dino-captacao-kytto.js';
+import { dispararCampanhaCRM } from './dino-crm-disparo.js';
 import * as clientesKytto from './clientes-contas-kytto.js';
 import * as financeiroKytto from './financeiro-central-kytto.js';
 import * as caixaKytto from './caixa-diario-kytto.js';
@@ -7402,6 +7403,23 @@ function destinatariosSegmento(seg){
   if(seg==='aniversariantes') return atletas.filter(u=>u.nasc && (new Date(u.nasc).getMonth()+1)===mes).map(u=>({nome:u.nome,email:u.email}));
   return atletas.map(u=>({nome:u.nome,email:email(u)})); // 'todos'
 }
+
+app.post('/api/admin/dino/crm/disparo', auth, requireStaff, async (req, res) => {
+  try {
+    const { mensagem, clientesIds } = req.body;
+    const result = await dispararCampanhaCRM({ 
+       empresaId: legacyEmpresaId(req), 
+       lojaId: legacyLojaId(req), 
+       mensagem, 
+       clientesIds 
+    });
+    if (!result.ok) return res.status(400).json(result);
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.get('/api/admin/comunicacao', auth, requireStaff, (req,res)=> res.json((db().campanhas||[]).slice().reverse()));
 app.post('/api/admin/comunicacao', auth, requireStaff, (req,res)=>{
   const { segmento='todos', canal='email', assunto, mensagem } = req.body||{};
