@@ -19,7 +19,7 @@ const RelatoriosDinoIndex = () => {
     if (codigo === '0002') return '/admin/relatorios/dino/clientes-atendidos';
     if (codigo === '0021') return '/admin/relatorios/dino/desempenho-profissional';
     if (codigo === '0032') return '/admin/relatorios/dino/servicos-vendidos';
-    return '#'; 
+    return `/admin/relatorios/dino/view/${codigo}`; 
   };
   
   const styles = {
@@ -80,7 +80,8 @@ const RelatoriosDinoIndex = () => {
           </thead>
           <tbody>
             {relatoriosFiltrados.map((r, idx) => {
-              const isMigrated = ['0011', '0002', '0021', '0032'].includes(r.codigo);
+              const isPremium = ['0011', '0002', '0021', '0032'].includes(r.codigo);
+              const isMigrated = true;
               return (
                 <tr key={idx} style={styles.tr}>
                   
@@ -89,7 +90,7 @@ const RelatoriosDinoIndex = () => {
                     <div style={styles.reportName}>
                       {isMigrated ? <Search size={16} color="var(--accent)" /> : <Search size={16} color="var(--muted)" />}
                       {r.nome}
-                      {isMigrated && <span style={styles.aiBadge}>IA Dino T-Rex</span>}
+                      {isPremium && <span style={styles.aiBadge}>IA Dino T-Rex</span>}
                     </div>
                     <p style={styles.desc}>{r.descricao}</p>
                   </td>

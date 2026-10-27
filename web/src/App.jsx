@@ -84,6 +84,7 @@ const RelatorioRetornoProfissional = lazy(() => import('./pages/admin/relatorios
 const RelatorioClientesAtendidos = lazy(() => import('./pages/admin/relatorios/dino/RelatorioClientesAtendidos'))
 const RelatorioDesempenhoProfissional = lazy(() => import('./pages/admin/relatorios/dino/RelatorioDesempenhoProfissional'))
 const RelatorioServicosGeral = lazy(() => import('./pages/admin/relatorios/dino/RelatorioServicosGeral'))
+const RelatorioDinamico = lazy(() => import('./pages/admin/relatorios/dino/RelatorioDinamico'))
 
 const Home       = lazy(() => import('./pages/public/Home'))
 const Inscricao  = lazy(() => import('./pages/public/Inscricao'))
@@ -303,6 +304,7 @@ export default function App() {
 
           <Route path="/admin/relatorios/dino/desempenho-profissional" element={<Layout><RelatorioDesempenhoProfissional /></Layout>} />
           <Route path="/admin/relatorios/dino/servicos-vendidos" element={<Layout><RelatorioServicosGeral /></Layout>} />
+          <Route path="/admin/relatorios/dino/view/:codigo" element={<Layout><RelatorioDinamico /></Layout>} />
           <Route path="/admin/relatorios-operacionais" element={<TenantAware stallone={<Navigate to="/admin/ecommerce?tab=reports" replace />} clube={<Navigate to="/admin" replace />} tenant={<Navigate to="/admin/barbearia-erp?area=gestao&tab=Relat%C3%B3rios" replace />} legacy={<Layout><RelatoriosOperacionais /></Layout>} />} />
           <Route path="/admin/noticias"       element={<Layout><Noticias /></Layout>} />
           <Route path="/admin/sumula"         element={<Layout><Sumula /></Layout>} />
