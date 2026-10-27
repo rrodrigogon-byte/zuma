@@ -2308,7 +2308,7 @@ export default function BarbeariaERP() {
     if (tab === 'Fidelidade') return renderFidelidade()
     if (tab === 'Estoque de revenda') return renderEstoqueRevenda()
     if (tab === 'Vendas de revenda') return renderVendasRevenda()
-    if (tab === 'Relatórios') return renderRelatorios()
+    if (tab === 'Relatórios') { window.location.href = '/admin/relatorios/dino'; return null; }
     if (tab === 'Integrações') return renderIntegracoes()
     if (tab === 'Retorno previsto') return <RetornosPanel />
     if (tab === 'Lista de espera') return <ListaEsperaPanel />
