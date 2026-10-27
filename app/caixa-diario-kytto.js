@@ -76,10 +76,14 @@ export function obterCaixa(empresaId, caixaId) {
 
 export function listarCaixas(empresaId, filtros = {}) {
   const data = filtros.data ? dataDia(filtros.data) : '';
+  const dataInicio = filtros.dataInicio ? dataDia(filtros.dataInicio) : '';
+  const dataFim = filtros.dataFim ? dataDia(filtros.dataFim) : '';
   const status = texto(filtros.status, 20).toLowerCase();
   return Object.values(storeEmpresa(empresaId, false).caixas)
     .filter((item) => item.empresaId === String(empresaId))
     .filter((item) => !data || item.data === data)
+    .filter((item) => !dataInicio || item.data >= dataInicio)
+    .filter((item) => !dataFim || item.data <= dataFim)
     .filter((item) => !status || item.status === status)
     .filter((item) => !filtros.lojaId || item.lojaId === String(filtros.lojaId))
     .sort((a, b) => String(b.abertoEm).localeCompare(String(a.abertoEm)))

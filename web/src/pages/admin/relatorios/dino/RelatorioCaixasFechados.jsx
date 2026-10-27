@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { RefreshCw, Download, Calendar, DollarSign, Archive, User } from 'lucide-react';
+import { RefreshCw, Download, Calendar, DollarSign, Archive, User, Filter } from 'lucide-react';
 const Card = ({ children, style }) => <div style={{ background: 'var(--card)', borderRadius: '12px', ...style }}>{children}</div>;
 import { api } from '../../../../lib/api';
 import { useToast } from '../../../../hooks/useToast';
@@ -8,12 +8,14 @@ const RelatorioCaixasFechados = () => {
   const toast = useToast();
   const [caixas, setCaixas] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [dataInicio, setDataInicio] = useState(new Date(new Date().setDate(1)).toISOString().slice(0, 10)); // 1st day of month
+  const [dataFim, setDataFim] = useState(new Date().toISOString().slice(0, 10)); // today
 
   const fetchCaixas = async () => {
     setLoading(true);
     try {
       // Busca todos os caixas com status 'fechado'
-      const res = await api.get('/api/admin/barbearia/operacao/caixas?status=fechado');
+      const res = await api.get(`/api/admin/barbearia/operacao/caixas?status=fechado&dataInicio=${dataInicio}&dataFim=${dataFim}`);
       setCaixas(res.data?.caixas || []);
     } catch (error) {
       console.error(error);
@@ -25,7 +27,7 @@ const RelatorioCaixasFechados = () => {
 
   useEffect(() => {
     fetchCaixas();
-  }, []);
+  }, [dataInicio, dataFim]);
 
   const styles = {
     container: { padding: '24px', maxWidth: '1200px', margin: '0 auto', fontFamily: 'var(--font)' },
@@ -34,6 +36,12 @@ const RelatorioCaixasFechados = () => {
     h1: { fontSize: '28px', fontWeight: 800, color: 'var(--text)', margin: '0 0 8px 0' },
     sub: { fontSize: '15px', color: 'var(--muted)', margin: 0 },
     actions: { display: 'flex', gap: '12px', flexWrap: 'wrap' },
+    filterCard: { background: 'var(--card)', borderRadius: '12px', padding: '20px', marginBottom: '24px', border: '1px solid var(--border)' },
+    filterTitle: { fontSize: '16px', fontWeight: 700, margin: '0 0 16px 0', display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text)' },
+    filterGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' },
+    filterGroup: { display: 'flex', flexDirection: 'column', gap: '8px' },
+    label: { fontSize: '12px', fontWeight: 600, color: 'var(--muted)' },
+    input: { padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text)', fontSize: '14px', outline: 'none' },
     btnOutline: { display: 'flex', alignItems: 'center', gap: '6px', padding: '10px 16px', background: 'var(--card)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: '8px', cursor: 'pointer', fontWeight: 600, fontSize: '13px' },
     tableWrapper: { background: 'var(--card)', borderRadius: '12px', border: '1px solid var(--border)', overflowX: 'auto' },
     table: { width: '100%', borderCollapse: 'collapse', textAlign: 'left' },
@@ -75,6 +83,21 @@ const RelatorioCaixasFechados = () => {
           <button style={styles.btnOutline}>
             <Download size={16} /> Exportar CSV
           </button>
+        </div>
+      </div>
+
+      
+      <div style={styles.filterCard}>
+        <h3 style={styles.filterTitle}><Filter size={16} /> Filtros de Período</h3>
+        <div style={styles.filterGrid}>
+          <div style={styles.filterGroup}>
+            <span style={styles.label}>Data Início</span>
+            <input type="date" value={dataInicio} onChange={e => setDataInicio(e.target.value)} style={styles.input} />
+          </div>
+          <div style={styles.filterGroup}>
+            <span style={styles.label}>Data Fim</span>
+            <input type="date" value={dataFim} onChange={e => setDataFim(e.target.value)} style={styles.input} />
+          </div>
         </div>
       </div>
 

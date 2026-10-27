@@ -4902,7 +4902,7 @@ app.post('/api/admin/barbearia/captacao/nps/canonico/processar', async (req, res
 });
 app.get('/api/admin/barbearia/captacao/lista-espera', (req, res) => {
   try {
-    const itens = captacaoKytto.listarListaEspera(legacyEmpresaId(req), { data: req.query?.data, status: req.query?.status, lojaId: legacyLojaId(req) });
+    const itens = captacaoKytto.listarListaEspera(legacyEmpresaId(req), { data: req.query?.data, dataInicio: req.query?.dataInicio, dataFim: req.query?.dataFim, status: req.query?.status, lojaId: legacyLojaId(req) });
     res.json({ ok: true, itens, total: itens.length });
   } catch (error) { respostaCaptacao(res, error); }
 });
@@ -5456,7 +5456,7 @@ app.get('/api/admin/barbearia/operacao/resumo', (req, res) => {
   catch (error) { res.status(400).json({ error: error.message }); }
 });
 app.get('/api/admin/barbearia/operacao/caixas', (req, res) => {
-  try { res.json({ ok: true, caixas: caixaKytto.listarCaixas(legacyEmpresaId(req), { data: req.query?.data, status: req.query?.status, lojaId: legacyLojaId(req) }) }); }
+  try { res.json({ ok: true, caixas: caixaKytto.listarCaixas(legacyEmpresaId(req), { data: req.query?.data, dataInicio: req.query?.dataInicio, dataFim: req.query?.dataFim, status: req.query?.status, lojaId: legacyLojaId(req) }) }); }
   catch (error) { res.status(400).json({ error: error.message }); }
 });
 app.post('/api/admin/barbearia/operacao/caixas', (req, res) => {
@@ -5864,7 +5864,7 @@ app.get('/api/admin/barbearia/crm/resumo', (req, res) => {
 });
 app.get('/api/admin/barbearia/fila', (req, res) => {
   const empresaId = legacyEmpresaId(req);
-  res.json({ ok: true, fila: barbeariaErpKytto.listarFilaEspera(empresaId, { data: req.query?.data, status: req.query?.status, lojaId: legacyLojaId(req) }) });
+  res.json({ ok: true, fila: barbeariaErpKytto.listarFilaEspera(empresaId, { data: req.query?.data, dataInicio: req.query?.dataInicio, dataFim: req.query?.dataFim, status: req.query?.status, lojaId: legacyLojaId(req) }) });
 });
 app.post('/api/admin/barbearia/fila', (req, res) => {
   try { res.status(201).json({ ok: true, item: barbeariaErpKytto.criarFilaEspera(legacyEmpresaId(req), { ...(req.body || {}), lojaId: legacyLojaId(req) }) }); }
