@@ -151,7 +151,7 @@ async function toolProducts(context, args = {}) {
         nome: sanitizeUntrustedBusinessText(variant.nome || product.nome, 160),
         preco: productPrice(variant),
         estoque: Number(variant.estoque || 0),
-      })).filter(variant => variant.preco > 0 && variant.estoque > 0),
+      })).filter(variant => variant.preco > 0),
     })).filter(product => product.variantes.length > 0),
   };
 }
@@ -466,7 +466,7 @@ async function toolHuman(context, args = {}) {
 
 export const WHATSAPP_AI_TOOL_DECLARATIONS = [
   { name: 'consultar_loja', description: 'Consulta endereço, contato, horário e retirada da unidade selecionada.', parameters: { type: 'OBJECT', properties: {} } },
-  { name: 'buscar_produtos', description: 'Busca produtos realmente publicados e com preço/estoque no catálogo da unidade selecionada.', parameters: { type: 'OBJECT', properties: { query: { type: 'STRING', description: 'Nome, marca ou característica do produto' }, limit: { type: 'INTEGER', description: 'Máximo de resultados, entre 1 e 8' } } } },
+  { name: 'buscar_produtos', description: 'Busca produtos realmente publicados e com preço no catálogo da unidade selecionada.', parameters: { type: 'OBJECT', properties: { query: { type: 'STRING', description: 'Nome, marca ou característica do produto' }, limit: { type: 'INTEGER', description: 'Máximo de resultados, entre 1 e 8' } } } },
   { name: 'listar_servicos', description: 'Lista serviços de barbearia ativos e seus valores/duração.', parameters: { type: 'OBJECT', properties: {} } },
   { name: 'listar_profissionais', description: 'Lista profissionais ativos da unidade.', parameters: { type: 'OBJECT', properties: {} } },
   { name: 'consultar_disponibilidade', description: 'Consulta horários disponíveis para serviço, profissional e data.', parameters: { type: 'OBJECT', properties: { serviceId: { type: 'STRING' }, professionalId: { type: 'STRING' }, date: { type: 'STRING', description: 'Data ISO AAAA-MM-DD' } }, required: ['serviceId', 'professionalId', 'date'] } },
