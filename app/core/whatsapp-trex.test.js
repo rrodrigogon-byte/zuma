@@ -74,7 +74,7 @@ test('lembrete de 24 h: voz do T-Rex com os mesmos comandos; sem persona, texto 
 test('toque de retomada: T-Rex curto, com o mesmo resumo e a mesma dica de confirmação', () => {
   const sessao = { nome: 'Paulo Lima', configuracao: { persona: { id: 'trex' } }, acao_pendente: { summary: 'Corte Masculino com Bruno, amanhã às 15:00.' } };
   const texto = followUpText(sessao);
-  assert.match(texto, /^Opa, Paulo! Só falta você confirmar: Corte Masculino com Bruno, amanhã às 15:00\.\nResponda SIM para confirmar ou NÃO para desistir\.$/);
+  assert.equal(texto, "Opa, Paulo! Dá uma olhada no seu horário: Corte Masculino com Bruno, amanhã às 15:00.\n👉 Responda *SIM* para confirmar, ou *NÃO* para mudar.");
   assert.match(followUpText({ ...sessao, configuracao: {} }), /^Oi, Paulo! Ficou faltando só sua confirmação/);
 });
 

@@ -45,7 +45,7 @@ export function followUpText(session = {}) {
   const resumo = formatActionSummary(clean(session.acao_pendente?.summary, 400));
   // Persona (ex.: T-Rex): mesmo resumo e a mesma dica de confirmação, em tom curto.
   if (resolvePersona(session.configuracao, process.env, session.empresa_id)) {
-    return `${nome ? `Opa, ${nome}!` : 'Opa!'} Só falta você confirmar: ${resumo}.\n${CONFIRMATION_HINT}`;
+    return `${nome ? `Opa, ${nome}!` : 'Opa!'} Dá uma olhada no seu horário: ${resumo}.\n${CONFIRMATION_HINT}`;
   }
   return `${nome ? `Oi, ${nome}!` : 'Oi!'} Ficou faltando só sua confirmação: ${resumo}.\n${CONFIRMATION_HINT} Se preferir outro horário ou produto, é só me dizer.`;
 }
