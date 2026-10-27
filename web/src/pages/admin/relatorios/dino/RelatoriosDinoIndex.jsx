@@ -87,7 +87,7 @@ const RelatoriosDinoIndex = () => {
                   <td style={styles.td}><span style={styles.categoryBadge}>{r.categoria}</span></td>
                   <td style={styles.td}>
                     <div style={styles.reportName}>
-                      {isMigrated ? <BarChart3 size={16} color="var(--accent)" /> : <FileText size={16} color="var(--muted)" />}
+                      {isMigrated ? <BarChart3 size={16} color="var(--accent)" /> : <Search size={16} color="var(--muted)" />}
                       {r.nome}
                       {isMigrated && <span style={styles.aiBadge}>IA Dino T-Rex</span>}
                     </div>
