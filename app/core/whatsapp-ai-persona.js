@@ -196,11 +196,12 @@ export function isPersonaGreeting(text) {
 }
 
 /** Resposta da saudação isolada ("oi", "boa tarde"). */
-export function personaGreeting(persona, { text = '', seed = '' } = {}) {
+export function personaGreeting(persona, { text = '', seed = '', customerName = '' } = {}) {
   const periodo = saudacaoDoTexto(text);
+  const nome = customerName ? customerName.split(' ')[0] : '';
   const abre = periodo
-    ? pick([`Opa, ${periodo}!`, `${periodo[0].toUpperCase()}${periodo.slice(1)}!`, `E aí, ${periodo}!`], seed)
-    : pick(['Opa, tudo bem?', 'E aí, beleza?', 'Fala, tudo certo?'], seed);
+    ? pick(nome ? [`Opa, ${nome}, ${periodo}!`, `${periodo[0].toUpperCase()}${periodo.slice(1)}, ${nome}!`, `E aí, ${nome}, ${periodo}!`] : [`Opa, ${periodo}!`, `${periodo[0].toUpperCase()}${periodo.slice(1)}!`, `E aí, ${periodo}!`], seed)
+    : pick(nome ? [`Opa, ${nome}, tudo bem?`, `E aí, ${nome}, beleza?`, `Fala, ${nome}, tudo certo?`] : ['Opa, tudo bem?', 'E aí, beleza?', 'Fala, tudo certo?'], seed);
   const intro = persona?.id === 'trex' ? 'Aqui é o T-Rex da Dino!' : '';
   const perguntas = persona?.segmento === 'suplementos'
     ? ['Tá procurando algum suplemento hoje?', 'Whey, creatina ou outra coisa? Me fala que eu vejo aqui.', 'Em que posso te ajudar no treino hoje?']

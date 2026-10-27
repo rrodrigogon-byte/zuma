@@ -207,7 +207,7 @@ export function parseWahaMessage(payload = {}, { groupId = '', sessionName = '' 
     remoteJid,
     phone: '',
     name: cleanText(data.participant || data.pushName || data.notifyName || '', 160),
-    text,
+    text, fromMe,
     timestamp: Number(data.timestamp || data.messageTimestamp || 0) || null, fromMe,
   };
 }
@@ -1298,10 +1298,10 @@ async function deterministicResponseCore(task, channel, session, message) {
     session.estado = { ...(session.estado || {}), retomadaPorInatividade: true };
   }
   if (session.status === 'humano') return { text: null, kind: 'human_queue' };
-  const greeting = standaloneGreetingReply(message.text, { pendingAction: Boolean(session.acao_pendente) });
+  const greeting = standaloneGreetingReply(message.text, { pendingAction: Boolean(session.acao_pendente), customerName: context.customerName });
   const consentQuestionOpen = Boolean(session.personalization_prompted_at) && session.estado?.personalizacaoRespondida !== true;
   if (greeting || (persona && !session.acao_pendente && !consentQuestionOpen && isPersonaGreeting(message.text))) {
-    return { text: persona ? personaGreeting(persona, { text: message.text, seed: message.externalId }) : greeting, kind: 'greeting' };
+    return { text: persona ? personaGreeting(persona, { text: message.text, seed: message.externalId, customerName: context.customerName }) : greeting, kind: 'greeting' };
   }
   if (resumeIntent(message.text) && !prefersSelfService(message.text)) return { text: 'A automação só pode ser retomada pela equipe após concluir o atendimento humano.', kind: 'resume_blocked' };
   if (session.opportunity_offered_at && opportunityDeclineIntent(message.text)) {

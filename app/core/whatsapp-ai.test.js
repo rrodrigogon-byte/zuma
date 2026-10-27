@@ -42,13 +42,14 @@ test('parseEvolutionMessage extrai mensagem individual recebida da Evolution', (
     name: 'Cliente Dino',
     text: 'Quero agendar um corte',
     timestamp: 123456,
+    fromMe: false,
   });
 });
 
 test('parseEvolutionMessage ignora mensagens enviadas pela própria instância', () => {
   const parsed = parseEvolutionMessage({ event: 'MESSAGES_UPSERT', data: { key: { id: 'MSG-2', remoteJid: '5565999999999@s.whatsapp.net', fromMe: true }, message: { conversation: 'eco' } } });
-  assert.equal(parsed.ignored, true);
-  assert.equal(parsed.reason, 'from_me');
+  assert.equal(parsed.ignored, false);
+  assert.equal(parsed.fromMe, true);
 });
 
 test('parseEvolutionMessage ignora grupos e conteúdo sem texto', () => {
@@ -66,7 +67,7 @@ test('parseWahaMessage aceita somente o grupo Admin allowlisted', () => {
   assert.equal(parsed.phone, '');
   assert.equal(parsed.text, 'quais são os ativos?');
   assert.equal(parseWahaMessage({ ...base, payload: { ...base.payload, from: '120363099999999999@g.us' } }, { sessionName: 'kytto-gestao-rm', groupId: '120363012345678901@g.us' }).reason, 'waha_group_not_allowlisted');
-  assert.equal(parseWahaMessage({ ...base, payload: { ...base.payload, fromMe: true } }, { sessionName: 'kytto-gestao-rm', groupId: '120363012345678901@g.us' }).reason, 'from_me');
+  assert.equal(parseWahaMessage({ ...base, payload: { ...base.payload, fromMe: true } }, { sessionName: 'kytto-gestao-rm', groupId: '120363012345678901@g.us' }).fromMe, true);
   assert.equal(parseWahaMessage({ ...base, payload: { ...base.payload, from: '5511999999999@s.whatsapp.net' } }, { sessionName: 'kytto-gestao-rm', groupId: '120363012345678901@g.us' }).reason, 'not_group');
 });
 
@@ -334,7 +335,7 @@ test('parser aceita os formatos do backend NossaGente (Baileys e wppconnect) sem
   assert.equal(wpp.ignored, false);
   assert.equal(wpp.name, 'Beto');
   assert.equal(parseEvolutionMessage({ event: 'message', data: { id: 'G1', from: '123@g.us', body: 'x', isGroupMsg: true } }).reason, 'group');
-  assert.equal(parseEvolutionMessage({ event: 'message', data: { id: 'M1', from: '5565988887777@c.us', body: 'eco', fromMe: true } }).reason, 'from_me');
+  assert.equal(parseEvolutionMessage({ event: 'message', data: { id: 'M1', from: '5565988887777@c.us', body: 'eco', fromMe: true } }).fromMe, true);
   assert.equal(parseEvolutionMessage({ event: 'connection.update', data: { state: 'open' } }).reason, 'unsupported_event');
 });
 
