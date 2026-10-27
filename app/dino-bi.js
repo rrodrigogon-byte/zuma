@@ -324,7 +324,7 @@ export function professionalRanking({ services = [], retail = [], professionals 
 const EXCLUDED_EXPENSE_CATEGORIES = new Set(['comissões', 'comissoes']);
 
 function isHistoricalAvecFinance(item = {}) {
-  return item.metadata?.historicoAvec === true || item.origem === 'avec-import-financeiro-20261022';
+  return item.metadata?.historicoAvec === true || item.origem === 'avec-import-financeiro-20261022' || item.origem === 'avec-import-20261022';
 }
 
 /**
@@ -346,7 +346,8 @@ export function estimateResult({ services = [], retail = [], professionals = [],
   const despesasPagas = despesas.reduce((s, item) => s + num(item.valor), 0);
   const historicoPago = list(financeEntries).filter((item) => isHistoricalAvecFinance(item) && item.status === 'pago' && inWindow(item.pagoEm || item.dataOperacao, window));
   const receitaHistoricaAvec = includeHistoricalFinance ? historicoPago.filter((item) => item.tipo === 'receita').reduce((s, item) => s + num(item.valor), 0) : 0;
-  const despesasHistoricasAvec = includeHistoricalFinance ? historicoPago.filter((item) => item.tipo === 'despesa').reduce((s, item) => s + num(item.valor), 0) : 0;
+  const historicoDespesaPago = list(financeEntries).filter((item) => isHistoricalAvecFinance(item) && item.status === 'pago' && inWindow(item.pagoEm || item.dataOperacao, window));
+  const despesasHistoricasAvec = includeHistoricalFinance ? historicoDespesaPago.filter((item) => item.tipo === 'despesa').reduce((s, item) => s + num(item.valor), 0) : 0;
   const commerceRevenue = num(commerce?.revenue);
   const commerceCost = commerce?.cost == null ? null : num(commerce.cost);
   const incluiLoja = commerceRevenue > 0 && commerceCost != null;
@@ -492,11 +493,11 @@ export function buildBarbershopBi(input = {}, window) {
     { id: 'ecommerce', nome: 'E-commerce confirmado', receita: money(commerceRevenue), quantidade: commerceOrders, origem: input.commerce ? 'commerce' : 'indisponivel' },
     { id: 'historico-avec', nome: 'Histórico financeiro Avec', receita: result.receitaHistoricaAvec, quantidade: historicalRevenueEntries.length, origem: 'historico' },
   ];
-  const financeiroPeriodo = list(input.financeEntries).filter((item) => item.status === 'pago' && inWindow(item.pagoEm || item.dataOperacao, window));
+  const financeiroPeriodo = list(input.financeEntries).filter((item) => item.status === 'pago' && inWindow(item.pagoEm || item.dataOperacao, window) && (item.origem !== 'avec-import-financeiro-20261022' && item.origem !== 'avec-import-20261022' || true));
   const receitasLancadas = financeiroPeriodo.filter((item) => item.tipo === 'receita').reduce((s, item) => s + num(item.valor), 0);
-  const despesasLancadas = financeiroPeriodo.filter((item) => item.tipo === 'despesa').reduce((s, item) => s + num(item.valor), 0);
+  const despesasLancadas = financeiroPeriodo.filter((item) => item.tipo === 'despesa' || (isHistoricalAvecFinance(item) && item.tipo === 'despesa')).reduce((s, item) => s + num(item.valor), 0);
   const despesasPorCategoria = new Map();
-  financeiroPeriodo.filter((item) => item.tipo === 'despesa').forEach((item) => {
+  financeiroPeriodo.filter((item) => item.tipo === 'despesa' || (isHistoricalAvecFinance(item) && item.tipo === 'despesa')).forEach((item) => {
     const key = item.categoria || 'Outros';
     despesasPorCategoria.set(key, num(despesasPorCategoria.get(key)) + num(item.valor));
   });
