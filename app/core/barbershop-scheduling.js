@@ -139,8 +139,9 @@ export async function listSchedulingAvailability(context, input = {}) {
   if (!professional.rows[0]) throw new SchedulingError('profissional não encontrado na unidade', 'PROFESSIONAL_NOT_FOUND');
 
   const duration = Math.max(15, Number(service.rows[0].duracao_minutos) || 30);
-  const openingMinutes = 8 * 60;
-  const closingMinutes = 20 * 60;
+  const isDino = String(professional.rows[0].nome_completo || '').toLowerCase().includes('dino') || String(service.rows[0].nome || '').toLowerCase().includes('dino');
+  const openingMinutes = isDino ? 0 : (8 * 60);
+  const closingMinutes = isDino ? (24 * 60) : (20 * 60);
   const occupiedRanges = occupied.rows.map(row => ({ start: new Date(row.inicio).getTime(), end: new Date(row.fim).getTime() }));
   const slots = [];
   for (let minute = openingMinutes; minute + duration <= closingMinutes; minute += 30) {
