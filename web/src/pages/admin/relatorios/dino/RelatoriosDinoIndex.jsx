@@ -35,7 +35,7 @@ const RelatoriosDinoIndex = () => {
     input: { width: '100%', padding: '12px 16px 12px 40px', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text)', fontSize: '14px', outline: 'none' },
     selectWrapper: { display: 'flex', gap: '12px', alignItems: 'center', flex: '1 1 200px' },
     select: { width: '100%', padding: '12px 16px', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text)', fontSize: '14px', outline: 'none', cursor: 'pointer' },
-    tableCard: { background: 'var(--surface)', borderRadius: 'var(--radius)', border: '1px solid var(--border)', overflow: 'hidden' },
+    tableCard: { background: 'var(--surface)', borderRadius: 'var(--radius)', border: '1px solid var(--border)', overflowX: 'auto' },
     table: { width: '100%', borderCollapse: 'collapse', textAlign: 'left' },
     th: { padding: '16px 20px', borderBottom: '1px solid var(--border)', fontSize: '11px', fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px' },
     tr: { borderBottom: '1px solid var(--border)', transition: 'background 0.2s' },

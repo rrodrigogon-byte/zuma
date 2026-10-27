@@ -83,7 +83,7 @@ Te esperamos!`);
     kpiSub: { fontSize: '15px', color: '#6B7280', marginLeft: '6px', fontWeight: 700 },
     
     // Table
-    tableCard: { background: '#FFFFFF', borderRadius: '12px', border: '1px solid #E5E7EB', overflow: 'hidden', boxShadow: '0 4px 6px rgba(0,0,0,0.02)' },
+    tableCard: { background: '#FFFFFF', borderRadius: '12px', border: '1px solid #E5E7EB', overflowX: 'auto', boxShadow: '0 4px 6px rgba(0,0,0,0.02)' },
     table: { width: '100%', borderCollapse: 'collapse', textAlign: 'left' },
     th: { padding: '20px 24px', borderBottom: '1px solid #E5E7EB', fontSize: '12px', fontWeight: 800, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.5px' },
     tr: { borderBottom: '1px solid #F3F4F6', transition: 'background 0.2s', cursor: 'pointer' },
@@ -235,7 +235,7 @@ Te esperamos!`);
 
       {modalCampanha && (
         <div style={{position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(17, 24, 39, 0.7)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px', backdropFilter: 'blur(4px)'}}>
-          <div style={{background: '#FFF', borderRadius: '16px', width: '100%', maxWidth: '680px', overflow: 'hidden', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)'}}>
+          <div style={{background: '#FFF', borderRadius: '16px', width: '100%', maxWidth: '680px', overflowX: 'auto', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)'}}>
             <div style={{padding: '24px', borderBottom: '1px solid #E5E7EB', display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
               <div>
                 <h2 style={{fontSize: '20px', fontWeight: 800, color: '#111827', margin: '0 0 4px 0'}}>Campanha de Resgate IA</h2>

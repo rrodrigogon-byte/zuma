@@ -71,7 +71,7 @@ const RelatorioDinamico = () => {
     insightText: { fontSize: '14px', color: 'var(--muted)', lineHeight: '1.5', margin: 0, maxWidth: '90%' },
     
     // Tabela
-    tableCard: { background: 'var(--surface)', borderRadius: 'var(--radius)', border: '1px solid var(--border)', overflow: 'hidden' },
+    tableCard: { background: 'var(--surface)', borderRadius: 'var(--radius)', border: '1px solid var(--border)', overflowX: 'auto' },
     table: { width: '100%', borderCollapse: 'collapse', textAlign: 'left' },
     th: { padding: '16px 20px', borderBottom: '1px solid var(--border)', fontSize: '11px', fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px' },
     tr: { borderBottom: '1px solid var(--border)' },

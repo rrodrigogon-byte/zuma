@@ -45,7 +45,7 @@ const RelatorioServicosGeral = () => {
     input: { padding: '10px 16px', borderRadius: '8px', border: '1px solid #D1D5DB', background: '#FFFFFF', color: '#111827', fontSize: '15px', outline: 'none' },
     
     // Table
-    tableCard: { background: '#FFFFFF', borderRadius: '12px', border: '1px solid #E5E7EB', overflow: 'hidden', boxShadow: '0 4px 6px rgba(0,0,0,0.02)' },
+    tableCard: { background: '#FFFFFF', borderRadius: '12px', border: '1px solid #E5E7EB', overflowX: 'auto', boxShadow: '0 4px 6px rgba(0,0,0,0.02)' },
     table: { width: '100%', borderCollapse: 'collapse', textAlign: 'left' },
     th: { padding: '20px 24px', borderBottom: '1px solid #E5E7EB', fontSize: '12px', fontWeight: 800, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.5px' },
     tr: { borderBottom: '1px solid #F3F4F6', transition: 'background 0.2s' },
@@ -132,7 +132,7 @@ const RelatorioServicosGeral = () => {
                 </td>
                 <td style={styles.td}>
                   <p style={styles.metricTitle}>R$ {s.faturamento.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</p>
-                  <div style={{width: '100%', background: '#E5E7EB', height: '6px', borderRadius: '3px', marginTop: '8px', overflow: 'hidden'}}>
+                  <div style={{width: '100%', background: '#E5E7EB', height: '6px', borderRadius: '3px', marginTop: '8px', overflowX: 'auto'}}>
                     <div style={{width: `${percentBar}%`, background: idx < 2 ? '#6D5BBA' : '#9CA3AF', height: '100%'}}></div>
                   </div>
                 </td>
