@@ -296,6 +296,7 @@ export default function App() {
           <Route path="/admin/configuracoes"  element={<TenantAware stallone={<Navigate to="/admin/ecommerce?tab=stores" replace />} clube={<Navigate to="/admin/clube/ajustes" replace />} tenant={<Navigate to="/admin/barbearia-erp?area=gestao&tab=Configura%C3%A7%C3%A3o" replace />} legacy={<Layout><Configuracoes /></Layout>} />} />
           <Route path="/admin/cupons"         element={<Layout><Cupons /></Layout>} />
           <Route path="/admin/relatorios"     element={<Layout><Relatorios /></Layout>} />
+          <Route path="/admin/relatorios/dino" element={<Layout><RelatoriosDinoIndex /></Layout>} />
           <Route path="/admin/relatorios/dino/retorno" element={<Layout><RelatorioRetornoProfissional /></Layout>} />
           <Route path="/admin/relatorios/dino/clientes-atendidos" element={<Layout><RelatorioClientesAtendidos /></Layout>} />
           <Route path="/admin/relatorios-operacionais" element={<TenantAware stallone={<Navigate to="/admin/ecommerce?tab=reports" replace />} clube={<Navigate to="/admin" replace />} tenant={<Navigate to="/admin/barbearia-erp?area=gestao&tab=Relat%C3%B3rios" replace />} legacy={<Layout><RelatoriosOperacionais /></Layout>} />} />
