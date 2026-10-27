@@ -390,18 +390,31 @@ function Documentos({ toast }) {
           <option value="rejeitado">Rejeitado</option>
           <option value="cancelado">Cancelado</option>
         </select>
-        <div style={{ display: 'flex', gap: 4 }}>
-          {[['todos', 'Todos'], ['hoje', 'Hoje'], ['7d', '7D'], ['30d', '30D'], ['mes', 'Este mês']].map(([id, label]) => (
+        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center' }}>
+          {[['todos', 'Todos'], ['hoje', 'Hoje'], ['7d', '7D'], ['30d', '30D'], ['mes', 'Este mês'], ['custom', 'Personalizado']].map(([id, label]) => (
             <button
               key={id}
               type="button"
               className={`c360-btn ${periodo === id ? 'primary' : 'ghost'}`}
               style={{ padding: '6px 10px', fontSize: 12 }}
-              onClick={() => setPeriodo(id)}
+              onClick={() => {
+                setPeriodo(id);
+                if (id !== 'custom') {
+                  setCustomInicio('');
+                  setCustomFim('');
+                }
+              }}
             >
               {label}
             </button>
           ))}
+          {periodo === 'custom' && (
+            <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+              <input type="date" value={customInicio} onChange={e => setCustomInicio(e.target.value)} className="c360-input" style={{ width: 'auto', padding: '4px 8px' }} />
+              <span className="dadm-muted" style={{ fontSize: 11 }}>a</span>
+              <input type="date" value={customFim} onChange={e => setCustomFim(e.target.value)} className="c360-input" style={{ width: 'auto', padding: '4px 8px' }} />
+            </div>
+          )}
         </div>
       </div>
 

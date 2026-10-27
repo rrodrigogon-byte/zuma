@@ -193,20 +193,34 @@ export default function BIDashboard() {
           <h1 style={{ fontSize: 22, fontWeight: 900, margin: 0 }}>📊 Business Intelligence</h1>
           <div style={{ color: T.muted, fontSize: 13, marginTop: 4 }}>Análise completa do negócio em tempo real</div>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          {['hoje', 'semana', 'mes_atual', 'mes_anterior', 'trimestre', 'ano'].map(p => (
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+          {['hoje', 'semana', 'mes_atual', 'mes_anterior', 'trimestre', 'ano', 'custom'].map(p => (
             <button
               key={p}
-              onClick={() => setPeriodo(p)}
+              onClick={() => {
+                if (p !== 'custom') {
+                  setPeriodo(p)
+                } else {
+                  setPeriodo('custom')
+                }
+              }}
               style={{
                 padding: '6px 12px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 11, fontWeight: 700,
                 background: periodo === p ? T.green : T.card,
                 color: periodo === p ? '#fff' : T.muted,
               }}
             >
-              {{ hoje: 'Hoje', semana: '7 dias', mes_atual: 'Este mês', mes_anterior: 'Mês ant.', trimestre: 'Trimestre', ano: 'Ano' }[p]}
+              {{ hoje: 'Hoje', semana: '7 dias', mes_atual: 'Este mês', mes_anterior: 'Mês ant.', trimestre: 'Trimestre', ano: 'Ano', custom: 'Personalizado' }[p]}
             </button>
           ))}
+          
+          {periodo === 'custom' && (
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center', background: T.card, padding: '4px 8px', borderRadius: 8 }}>
+              <input type="date" value={customInicio} onChange={e => setCustomInicio(e.target.value)} style={{ background: T.surface, color: '#fff', border: 'none', borderRadius: 4, padding: '2px 6px', fontSize: 11 }} />
+              <span style={{ color: T.muted, fontSize: 11 }}>a</span>
+              <input type="date" value={customFim} onChange={e => setCustomFim(e.target.value)} style={{ background: T.surface, color: '#fff', border: 'none', borderRadius: 4, padding: '2px 6px', fontSize: 11 }} />
+            </div>
+          )}
         </div>
       </div>
 

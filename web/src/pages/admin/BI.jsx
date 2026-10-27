@@ -292,16 +292,30 @@ export default function BI() {
           { key:'semana', label:'7 dias' },
           { key:'mes', label:'30 dias' },
           { key:'ano', label:'12 meses' },
+          { key:'custom', label:'Personalizado' },
         ].map(p => (
-          <button key={p.key} onClick={() => setPeriodoAtivo(p.key)} style={{
+          <button key={p.key} onClick={() => {
+            setPeriodoAtivo(p.key)
+            if (p.key !== 'custom') {
+              setCustomInicio('')
+              setCustomFim('')
+            }
+          }} style={{
             padding:'4px 14px', borderRadius:20, border:`1.5px solid ${periodoAtivo===p.key ? 'var(--green)' : 'var(--line)'}`,
             background: periodoAtivo===p.key ? 'rgba(255,107,44,.15)' : 'transparent',
             color: periodoAtivo===p.key ? 'var(--green)' : 'var(--muted)',
             cursor:'pointer', fontSize:12, fontWeight:700,
           }}>{p.label}</button>
         ))}
+        {periodoAtivo === 'custom' && (
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            <input type="date" value={customInicio} onChange={e => setCustomInicio(e.target.value)} style={{ background: 'var(--surface2)', color: 'var(--fg)', border: '1px solid var(--line)', borderRadius: 6, padding: '2px 8px', fontSize: 11 }} />
+            <span style={{ color: 'var(--muted)', fontSize: 11 }}>a</span>
+            <input type="date" value={customFim} onChange={e => setCustomFim(e.target.value)} style={{ background: 'var(--surface2)', color: 'var(--fg)', border: '1px solid var(--line)', borderRadius: 6, padding: '2px 8px', fontSize: 11 }} />
+          </div>
+        )}
         <span style={{ fontSize:11, color:'var(--muted)', marginLeft:6 }}>
-          {periodoAtivo==='hoje' ? 'Dados do dia atual' : periodoAtivo==='semana' ? 'Últimos 7 dias' : periodoAtivo==='mes' ? 'Últimos 30 dias' : 'Últimos 12 meses'}
+          {periodoAtivo==='hoje' ? 'Dados do dia atual' : periodoAtivo==='semana' ? 'Últimos 7 dias' : periodoAtivo==='mes' ? 'Últimos 30 dias' : periodoAtivo==='ano' ? 'Últimos 12 meses' : 'Intervalo específico'}
         </span>
       </div>
 

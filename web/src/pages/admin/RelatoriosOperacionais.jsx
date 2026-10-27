@@ -21,6 +21,8 @@ function exportCsv(report) {
 export default function RelatoriosOperacionais() {
   const { toast } = useToast()
   const [days, setDays] = useState('30')
+  const [customInicio, setCustomInicio] = useState('')
+  const [customFim, setCustomFim] = useState('')
   const [report, setReport] = useState(null)
   const [metricas, setMetricas] = useState(null)
   const [analise, setAnalise] = useState(null)
@@ -29,13 +31,22 @@ export default function RelatoriosOperacionais() {
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const end = new Date(); const start = new Date(end)
-      start.setDate(start.getDate() - Number(days) + 1); start.setHours(0, 0, 0, 0)
-      const periodo = Number(days) === 7 ? 'semana' : 'mes'
+      let start, end;
+      if (days === 'custom' && customInicio && customFim) {
+        start = new Date(`${customInicio}T00:00:00`)
+        end = new Date(`${customFim}T23:59:59`)
+      } else {
+        end = new Date(); start = new Date(end)
+        start.setDate(start.getDate() - (days === 'custom' ? 30 : Number(days)) + 1); start.setHours(0, 0, 0, 0)
+      }
+      const periodo = days === '7' ? 'semana' : (days === 'custom' ? 'custom' : 'mes')
+      
+      const pUrl = days === 'custom' ? `custom&inicio=${customInicio}&fim=${customFim}` : periodo
+      
       const [result, metricasRes, analiseRes] = await Promise.all([
         api.get(`/api/admin/relatorios/operacional?dataInicio=${encodeURIComponent(start.toISOString())}&dataFim=${encodeURIComponent(end.toISOString())}`),
-        api.get(`/api/admin/metricas/operacional?periodo=${periodo}`),
-        api.get(`/api/admin/analytics/vendas?periodo=${periodo}`),
+        api.get(`/api/admin/metricas/operacional?periodo=${pUrl}`),
+        api.get(`/api/admin/analytics/vendas?periodo=${pUrl}`),
       ])
       setReport(result.relatorio)
       setMetricas(metricasRes?.ok ? metricasRes : null)
@@ -52,7 +63,22 @@ export default function RelatoriosOperacionais() {
   return <div className="page">
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap', marginBottom: 20 }}>
       <div><h1 className="page-title" style={{ marginBottom: 5 }}>Relatórios Operacionais</h1><p style={{ margin: 0, color: 'var(--muted)' }}>Dados de vendas, estoque e financeiro exclusivamente da empresa ativa.</p></div>
-      <div style={{ display: 'flex', gap: 8 }}><select className="btn btn-secondary btn-sm" value={days} onChange={(e) => setDays(e.target.value)}><option value="7">7 dias</option><option value="30">30 dias</option></select><button className="btn btn-secondary btn-sm" onClick={load}>↺ Atualizar</button><button className="btn btn-primary btn-sm" disabled={!report} onClick={() => exportCsv(report)}>⇩ CSV</button></div>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <select className="btn btn-secondary btn-sm" value={days} onChange={(e) => setDays(e.target.value)}>
+          <option value="7">7 dias</option>
+          <option value="30">30 dias</option>
+          <option value="custom">Personalizado</option>
+        </select>
+        {days === 'custom' && (
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            <input type="date" value={customInicio} onChange={e => setCustomInicio(e.target.value)} className="input" style={{ padding: '4px 8px', fontSize: 13, height: 32 }} />
+            <span style={{ fontSize: 13, color: 'var(--muted)' }}>a</span>
+            <input type="date" value={customFim} onChange={e => setCustomFim(e.target.value)} className="input" style={{ padding: '4px 8px', fontSize: 13, height: 32 }} />
+          </div>
+        )}
+        <button className="btn btn-secondary btn-sm" onClick={load}>↺ Atualizar</button>
+        <button className="btn btn-primary btn-sm" disabled={!report} onClick={() => exportCsv(report)}>⇩ CSV</button>
+      </div>
     </div>
     {loading ? <div className="card" style={{ color: 'var(--muted)' }}>Gerando os indicadores reais da empresa ativa…</div> : !report ? <div className="card">Relatório indisponível.</div> : <>
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 18 }}>
