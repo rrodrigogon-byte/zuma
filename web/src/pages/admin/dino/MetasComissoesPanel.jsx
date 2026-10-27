@@ -26,7 +26,7 @@ const azul = '#0ea5e9'
 const moeda = (v) => fmtR(Number(v || 0))
 const dataBR = (v) => (v ? String(v).slice(0, 10).split('-').reverse().join('/') : '—')
 
-export function MetasComissoesPanel({ onOpenTab }) {
+export default function MetasComissoesPanel({ onOpenTab }) {
   const [profissionais, setProfissionais] = useState([])
   const [profissionalId, setProfissionalId] = useState('') // '' = Equipe inteira
   const [buscaNome, setBuscaNome] = useState('')
@@ -1323,4 +1323,3 @@ export function MetasComissoesPanel({ onOpenTab }) {
   )
 }
 
-export default MetasComissoesPanel
