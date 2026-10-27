@@ -153,7 +153,11 @@ export function coOcorrencias(comandasEmpresa = [], { desdeDia = '', fuso = FUSO
 }
 
 function familiaParaFicha(cliente, hoje, maskPhone) {
-  return (cliente.familia || []).map((membro) => {
+  const membros = [...(cliente.familia || [])];
+  if (cliente.conjugeNome && !membros.some(m => m.nome === cliente.conjugeNome)) {
+    membros.push({ relacao: 'conjuge', nome: cliente.conjugeNome, aniversario: cliente.conjugeAniversario || '', observacao: cliente.estadoCivil ? `Estado civil: ${cliente.estadoCivil}` : '' });
+  }
+  return membros.map((membro) => {
     const aniversario = proximoAniversario(membro, hoje);
     return {
       id: membro.id, relacao: membro.relacao, relacaoNome: RELACAO[membro.relacao] || 'Familiar', nome: membro.nome,
@@ -171,6 +175,7 @@ function preferenciasParaFicha(cliente, profissionais) {
     corte: pref.corte || '', barba: pref.barba || '', bebida: pref.bebida || '', perfumes: pref.perfumes || '', produtos: pref.produtos || '',
     horario: pref.horario || '', atendimento: pref.atendimento || '', observacoes: pref.observacoes || '', tags: pref.tags || [],
     profissionalPreferido: preferido ? { id: preferido.id, nome: preferido.nome } : null,
+    bairro: cliente.bairro || '', cidade: cliente.cidade || '',
   };
 }
 

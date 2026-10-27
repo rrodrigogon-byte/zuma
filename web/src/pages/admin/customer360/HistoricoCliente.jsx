@@ -23,6 +23,7 @@ export function VisaoCliente({ historico, agendarHref }) {
   const gostos = preferencias ? [
     ['Corte', preferencias.corte], ['Barba', preferencias.barba], ['Bebida', preferencias.bebida], ['Perfumes', preferencias.perfumes],
     ['Produtos que usa', preferencias.produtos], ['Melhor horário', preferencias.horario], ['Atendimento', preferencias.atendimento],
+    ['Bairro/Região', preferencias.bairro], ['Cidade', preferencias.cidade],
     ['Profissional preferido', preferencias.profissionalPreferido?.nome],
   ].filter(([, valor]) => valor) : []
 

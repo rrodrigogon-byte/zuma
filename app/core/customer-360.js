@@ -371,6 +371,12 @@ export function buildCustomer360(identity, { local = {}, commerce = {}, now = ne
     bloqueadoNaLoja: Boolean(commerceCustomer?.bloqueado),
     clienteDesde: firstActivity ? new Date(Math.min(firstActivity, time(localClient?.criadoEm) || Infinity, time(commerceCustomer?.criado_em) || Infinity)).toISOString() : (localClient?.criadoEm || commerceCustomer?.criado_em || null),
     mascarado: !reveal,
+    bairro: localClient?.bairro || '',
+    cidade: localClient?.cidade || '',
+    estadoCivil: localClient?.estadoCivil || '',
+    conjugeNome: localClient?.conjugeNome || '',
+    familia: localClient?.familia || [],
+    preferencias: localClient?.preferencias || {},
     camposRevelaveis: [phone && 'telefone', email && 'email', document && 'documento', localClient?.endereco && 'endereco'].filter(Boolean),
   };
 
