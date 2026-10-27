@@ -55,6 +55,8 @@ export default function DinoMetasRoletaPanel() {
 
   useEffect(() => {
     carregarDados()
+    const interval = setInterval(carregarDados, 30000)
+    return () => clearInterval(interval)
   }, [dataSel])
 
   async function salvarConfig(novaConfig) {
@@ -311,7 +313,7 @@ export default function DinoMetasRoletaPanel() {
                 const temGiros = (prof.girosPendentes || []).length > 0
                 const extrasProg = prof.dia.metaExtrasProgresso || 0
                 const prodProg = prof.dia.metaProdutosProgresso || 0
-                const desafioProg = prof.semana.progressoProdutos || 0
+                const desafioProg = prof.semana.progressoDesafio || prof.semana.progressoProdutos || 0
 
                 return (
                   <article
@@ -389,7 +391,7 @@ export default function DinoMetasRoletaPanel() {
                               🔥 Desafio Semanal {prof.semana.metaDesafioAtingida && <span className="dino-meta-batida-badge">✓ DESAFIO BATIDO!</span>}
                             </span>
                             <span className="dino-meta-values">
-                              {fmtR(prof.semana.produtosValor)} ({prof.semana.produtosQtd} un)
+                              {fmtR(prof.semana.faturamentoTotal)} / {prof.semana.produtosQtd} un prod.
                             </span>
                           </div>
                           <div className="dino-meta-prog-bar">
