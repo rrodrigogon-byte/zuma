@@ -1323,4 +1323,3 @@ export default function MetasComissoesPanel({ onOpenTab }) {
   )
 }
 
-export default MetasComissoesPanel
