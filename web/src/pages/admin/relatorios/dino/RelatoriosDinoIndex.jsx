@@ -116,4 +116,4 @@ const RelatoriosDinoIndex = () => {
     </div>
   );
 };
-export default RelatoriosDinoIndex;
+export default RelatoriosDinoIndex;export default RelatoriosDinoIndex;
