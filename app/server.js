@@ -69,6 +69,7 @@ import { canCheckWhatsappConnection, safeWhatsappConnection } from './core/whats
 import { getInstanceStatus } from './core/whatsapp-provider.js';
 import { startWhatsappAiWorker } from './workers/whatsapp-ai-worker.js';
 import { startIsaPollWorker } from './core/whatsapp-isa-poll.js';
+import { startDinoDailyConfirmationWorker } from './core/dino-confirmacao-diaria.js';
 import { configuracaoResumo, configuracaoResumoPublica, diaLocal as diaLocalResumo, enviarResumo, lojaDoCanal as lojaDoCanalResumo, montarResumoDiario, startResumoDiarioWorker } from './core/dino-resumo-diario.js';
 import { startPendingFollowUpWorker } from './core/whatsapp-ai-followup.js';
 import { db as commerceDb, getPool as getCommercePool } from './core/database.js';
@@ -9361,6 +9362,7 @@ process.on('uncaughtException', (e)=> console.error('uncaughtException:', e?.mes
 
   // Fechamento do dia no WhatsApp do dono (DINO_RESUMO_DIARIO=on).
   startResumoDiarioWorker();
+  startDinoDailyConfirmationWorker();
   startAiBrainSchedulers();
   // Cobranças da barbearia: sinal vencido libera o horário (e avisa a lista de
   // espera); a cobrança do clube é gerada e enviada uma vez por hora.
