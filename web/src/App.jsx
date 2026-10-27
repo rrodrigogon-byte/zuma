@@ -83,7 +83,7 @@ const RelatoriosDinoIndex = lazy(() => import('./pages/admin/relatorios/dino/Rel
 const RelatorioRetornoProfissional = lazy(() => import('./pages/admin/relatorios/dino/RelatorioRetornoProfissional'))
 const RelatorioClientesAtendidos = lazy(() => import('./pages/admin/relatorios/dino/RelatorioClientesAtendidos'))
 const RelatorioDesempenhoProfissional = lazy(() => import('./pages/admin/relatorios/dino/RelatorioDesempenhoProfissional'))
-const RelatorioServicosVendidos = lazy(() => import('./pages/admin/relatorios/dino/RelatorioServicosVendidosABC'))
+const RelatorioServicosVendidos = lazy(() => import('./pages/admin/relatorios/dino/RelatorioServicosVendidos'))
 
 const Home       = lazy(() => import('./pages/public/Home'))
 const Inscricao  = lazy(() => import('./pages/public/Inscricao'))
