@@ -7,7 +7,7 @@
 // (atendimento, não marketing), ainda dentro da validade da ação:
 //
 //   "Oi, Rafael! Ficou faltando só sua confirmação: Corte com Bruno amanhã às 15h.
-//    Responda SIM para confirmar ou NÃO para desistir. Se preferir outro horário,
+//    Para confirmar, responda SIM ou NÃO. Se preferir outro horário,
 //    é só me dizer."
 //
 // Travas: no máximo 1 toque por ação; nunca em conversa com a equipe (humano);

@@ -37,7 +37,7 @@ import './BarbeariaAtendimentoBoard.css'
 
 const COLUNAS_KANBAN = [
   { id: 'agendado', label: 'Agendado', color: '#3b82f6', bgDot: '#3b82f6', icon: Calendar, hint: 'Horários marcados aguardando' },
-  { id: 'confirmado', label: 'Confirmado', color: '#8b5cf6', bgDot: '#8b5cf6', icon: CheckCircle2, hint: 'Cliente confirmou presença' },
+  { id: 'confirmado', label: 'Confirmado', color: '#10b981', bgDot: '#10b981', icon: CheckCircle2, hint: 'Cliente confirmou presença' },
   { id: 'em_atendimento', label: 'Em Atendimento', color: '#f59e0b', bgDot: '#f59e0b', icon: Scissors, hint: 'Cliente na cadeira agora' },
   { id: 'concluido', label: 'Concluído', color: '#10b981', bgDot: '#10b981', icon: Check, hint: 'Serviço finalizado' },
 ]

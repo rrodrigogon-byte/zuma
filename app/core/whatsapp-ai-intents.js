@@ -82,7 +82,7 @@ export function confirmIntent(text, { actionType = '' } = {}) {
   return null;
 }
 
-export const CONFIRMATION_HINT = 'Responda SIM para confirmar ou NÃO para desistir.';
+export const CONFIRMATION_HINT = 'Para confirmar, responda SIM ou NÃO.';
 
 // Palavras explícitas: valem a qualquer momento enquanto a ação está pendente
 // (comportamento anterior). As respostas naturais acima só valem quando a ÚLTIMA

@@ -551,8 +551,8 @@
 
 /* Cores por Status */
 .dino-cal-event-card[data-status="confirmado"] {
-  border-left-color: #2563eb;
-  background: color-mix(in srgb, #2563eb 6%, var(--card));
+  border-left-color: #10b981;
+  background: color-mix(in srgb, #10b981 6%, var(--card));
 }
 
 .dino-cal-event-card[data-status="em_atendimento"] {

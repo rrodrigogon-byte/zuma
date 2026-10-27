@@ -35,10 +35,10 @@ test('estilo: frase gigante é quebrada em vírgula ou espaço', () => {
 });
 
 test('estilo: envio separa parágrafos e preserva resumo e marcadores', () => {
-  const conteudo = 'Opa! Aqui é o T-Rex, da Barbearia Dino.\n\nConfere aí: Corte Masculino com Bruno em sáb 10/10 às 09:00, R$ 45,00, Barbearia Dino.\nResponda SIM para confirmar ou NÃO para desistir.';
+  const conteudo = 'Opa! Aqui é o T-Rex, da Barbearia Dino.\n\nConfere aí: Corte Masculino com Bruno em sáb 10/10 às 09:00, R$ 45,00, Barbearia Dino.\nPara confirmar, responda SIM ou NÃO.';
   const bolhas = splitBubbles(conteudo, { max: 120 });
   assert.equal(bolhas.length, 2);
-  assert.match(bolhas[1], /Responda SIM para confirmar ou NÃO para desistir\./, 'dica de confirmação intacta');
+  assert.match(bolhas[1], /Para confirmar, responda SIM ou NÃO\./, 'dica de confirmação intacta');
   assert.equal(splitBubbles('Só uma frase.').length, 1);
   const muitos = splitBubbles(['a', 'b', 'c', 'd', 'e', 'f'].join('\n\n'), { hardMax: 4 });
   assert.equal(muitos.length, 4);
