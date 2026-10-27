@@ -86,7 +86,7 @@ export async function pauseForStaff(canal, { phone, at }, { pauseMin = staffPaus
     if (s.status === 'humano' && s.handoff_reason && s.handoff_reason !== STAFF_REASON) {
       await trx.query(
         `UPDATE whatsapp_ai_sessions
-            SET estado = estado || jsonb_build_object('staffLastAt', $2::text), atualizado_em = CURRENT_TIMESTAMP
+            SET estado = COALESCE(estado, '{}'::jsonb) || jsonb_build_object('staffLastAt', $2::text), atualizado_em = CURRENT_TIMESTAMP
           WHERE id = $1`,
         [s.id, at.toISOString()],
       );
@@ -108,7 +108,7 @@ export async function pauseForStaff(canal, { phone, at }, { pauseMin = staffPaus
               priority = GREATEST(priority, 1::smallint),
               acao_pendente = NULL,
               closed_at = NULL,
-              estado = estado || jsonb_build_object('handoffReason', $2::text, 'staffLastAt', $3::text, 'staffPauseUntil', $4::text),
+              estado = COALESCE(estado, '{}'::jsonb) || jsonb_build_object('handoffReason', $2::text, 'staffLastAt', $3::text, 'staffPauseUntil', $4::text),
               atualizado_em = CURRENT_TIMESTAMP
         WHERE id = $1`,
       [s.id, STAFF_REASON, at.toISOString(), ate.toISOString()],

@@ -1,5 +1,5 @@
 import * as cadastrosMestres from '../cadastros-mestres-kytto.js';
-import * as barbearia from './barbearia-erp-kytto.js';
+import * as barbearia from '../barbearia-erp-kytto.js';
 import { queueAppointmentNotifications } from './barbershop-appointment-notifications.js';
 
 export function startDinoDailyConfirmationWorker() {
