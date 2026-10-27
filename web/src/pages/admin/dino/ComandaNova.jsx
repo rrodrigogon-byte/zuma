@@ -216,7 +216,25 @@ export function SeletorItens({ servicos, produtosRevenda, planos, carrinho, setC
                 <span>{linha.quantidade}</span>
                 <button type="button" aria-label="Aumentar" disabled={coberto || (linha.estoque && linha.quantidade >= linha.estoque)} onClick={() => alterar(linha, { quantidade: linha.quantidade + 1 })}>+</button>
               </div>
-              <div className="cn-valor">{coberto ? <><s>{moeda(linha.preco)}</s><strong>Plano</strong></> : <strong>{moeda(linha.preco * linha.quantidade)}</strong>}</div>
+              <div className="cn-valor" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                {coberto ? (
+                  <><s>{moeda(linha.preco)}</s><strong>Plano</strong></>
+                ) : (
+                  <>
+                    <span style={{ color: 'var(--muted)', fontSize: 13 }}>R$</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      className="cn-input cn-mini"
+                      style={{ width: 70, textAlign: 'right', padding: '4px 6px', height: 28 }}
+                      value={linha.precoEditado !== undefined ? linha.precoEditado : linha.preco}
+                      onChange={(event) => alterar(linha, { precoEditado: event.target.value, preco: Number(event.target.value || 0) })}
+                      aria-label={`Preço unitário para ${linha.nome}`}
+                    />
+                  </>
+                )}
+              </div>
               <button type="button" className="cn-remover" aria-label={`Remover ${linha.nome}`} onClick={() => setCarrinho((atual) => aplicarPreviaPlanos(planos, atual.filter((l) => l !== linha)))}>×</button>
             </div>
           )
