@@ -17,7 +17,7 @@ function dataHojeIso() {
   return `${ano}-${mes}-${dia}`
 }
 
-export function DinoMetasRoletaPanel() {
+export default function DinoMetasRoletaPanel() {
   const { toast } = useToast()
 
   const [dataSel, setDataSel] = useState(dataHojeIso())
