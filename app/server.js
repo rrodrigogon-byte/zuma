@@ -1898,7 +1898,7 @@ const usuarioGerenciavel = (req,res) => {
   if(!u || !canManageUser(req.user, u)){ res.status(404).json({error:'não encontrado'}); return null; }
   return u;
 };
-app.get('/api/admin/usuarios', auth, requireStaff, (req,res)=> res.json((db().usuarios||[]).filter(u => canManageUser(req.user, u) || u.id == req.user.id).map(publicUser)));
+app.get('/api/admin/usuarios', auth, requireStaff, (req,res)=> res.json((db().usuarios||[]).filter(u => !u.removidoEm).filter(u => canManageUser(req.user, u) || u.id == req.user.id).map(publicUser)));
 // Diretório de leitura do runtime real. Contas JSON e SQL são identidades
 // distintas; nunca editar uma conta Commerce pelo editor legado.
 app.get('/api/admin/usuarios-diretorio', auth, requireRole('admin', 'organizador'), async (req, res) => {
@@ -2022,7 +2022,7 @@ app.delete('/api/admin/usuarios/:id', auth, requireRole('admin'), (req,res)=>{
   const d=db(); const u = usuarioGerenciavel(req,res); if(!u) return;
   if(u.id == req.user.id) return res.status(400).json({error:'não é possível excluir a própria conta'});
   if(u && u.email===norm(process.env.ADMIN_USER||'admin')) return res.status(400).json({error:'não é possível excluir o admin principal'});
-  d.usuarios=d.usuarios.filter(x=>x.id!=req.params.id); save(); res.json({ok:true});
+  u.ativo = false; u.removidoEm = new Date().toISOString(); save(); res.json({ok:true});
 });
 
 app.get('/api/admin/inscricoes', auth, (req,res)=>{

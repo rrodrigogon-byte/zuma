@@ -154,16 +154,16 @@ export function provisionarEquipeDino({ commerceDb = null } = {}) {
           horarioInicio: '08:00',
           horarioFim: '20:00',
           diasTrabalho: [1, 2, 3, 4, 5, 6], // Seg a Sáb
-          ativo: prof ? prof.ativo : true,
+          ativo: true,
           lojaId: DINO_LOJA_CANONICA,
         };
 
         if (prof) {
           // Atualiza dados e garante e-mail e comissões corretas
-          barbeariaErpKytto.atualizarProfissional(empId, prof.id, dadosProf);
+          if (prof.removidoEm || prof.ativo === false) { console.warn(`[dino-equipe-seed] Ignorando recriacao/update de ${membro.nome} pois ja foi desligado.`); } else { barbeariaErpKytto.atualizarProfissional(empId, prof.id, dadosProf); }
         } else {
           // Cria novo profissional no ERP
-          barbeariaErpKytto.criarProfissional(empId, dadosProf);
+          if (!profissionaisAtuais.some(p => p.removidoEm && p.email === membro.email)) { barbeariaErpKytto.criarProfissional(empId, dadosProf); }
         }
       }
     } catch (e) {
@@ -185,6 +185,9 @@ export function provisionarEquipeDino({ commerceDb = null } = {}) {
     );
 
     if (!u) {
+      const foiRemovido = ['d0d0ac01-8e50-4b61-8c79-de4aaa916da6', 'emp-kytto-001', 'dino'].some(e => { const p = barbeariaErpKytto.listarProfissionais(e, { incluirInativos: true }).find(p => p.email === membro.email); return p && p.removidoEm; });
+      if (foiRemovido) continue;
+
       const id = `usr-dino-${usernameNorm}`;
       const senhaHash = bcrypt.hashSync(membro.senhaPadrao, 10);
       const novoUsuario = {
@@ -198,7 +201,7 @@ export function provisionarEquipeDino({ commerceDb = null } = {}) {
         telefone: membro.telefone,
         empresaId: DINO_EMPRESA_CANONICA,
         lojaId: DINO_LOJA_CANONICA,
-        ativo: prof ? prof.ativo : true,
+        ativo: true,
         criadoEm: new Date().toISOString(),
       };
       d.usuarios.push(novoUsuario);
@@ -210,7 +213,7 @@ export function provisionarEquipeDino({ commerceDb = null } = {}) {
       u.perfil ||= membro.role;
       u.empresaId ||= DINO_EMPRESA_CANONICA;
       u.lojaId ||= DINO_LOJA_CANONICA;
-      u.ativo = true;
+      if (u.ativo === undefined) u.ativo = true;
     }
   }
 
@@ -259,7 +262,7 @@ async function sincronizarEquipePostgres(commerceDb) {
       if (r.rows && r.rows.length > 0) {
         userId = r.rows[0].id;
         await commerceDb.query(
-          `UPDATE usuarios SET ativo = true, nome_completo = $1, role = $2, senha_hash = COALESCE(NULLIF(senha_hash, ''), $3) WHERE id = $4`,
+          `UPDATE usuarios SET nome_completo = $1, role = $2, senha_hash = COALESCE(NULLIF(senha_hash, ''), $3) WHERE id = $4`,
           [membro.nome, pgRole, senhaHash, userId]
         );
       } else {
