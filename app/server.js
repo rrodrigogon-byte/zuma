@@ -9321,6 +9321,44 @@ process.on('uncaughtException', (e)=> console.error('uncaughtException:', e?.mes
   // Entrada do WhatsApp igual à da Isa: consulta periódica ao backend (sem webhook).
   startIsaPollWorker();
   startPendingFollowUpWorker();
+  // Rotina de Confirmação de Agenda do T-Rex
+  setInterval(async () => {
+    try {
+      const h = new Date().getHours();
+      // Executa apenas às 08h da manhã para não incomodar de madrugada
+      if (h === 8 && global.disparouConfirmacoesHoje !== new Date().toISOString().slice(0, 10)) {
+        global.disparouConfirmacoesHoje = new Date().toISOString().slice(0, 10);
+        const agora = new Date();
+        const hojeLocal = localMidnightUtc(agora, 'America/Cuiaba');
+        const amanhaLocal = new Date(hojeLocal.getTime() + 24 * 60 * 60 * 1000);
+        
+        const dataHoje = hojeLocal.toISOString().slice(0, 10);
+        const dataAmanha = amanhaLocal.toISOString().slice(0, 10);
+
+        const empresasIds = Object.keys(db().empresas || {});
+        for (const empresaId of empresasIds) {
+          const tenant = { whatsapp_api_url: process.env.EVOLUTION_API_URL, whatsapp_api_key: process.env.EVOLUTION_API_KEY, whatsapp_instance: process.env.EVOLUTION_INSTANCE || 'setpoint' };
+          const agendamentos = Object.values(db().barbeariaKytto?.[empresaId]?.agendamentos || {});
+          
+          for (const ag of agendamentos) {
+             if (ag.status !== 'pendente') continue; // Só confirma pendentes
+             if (ag.dataAgenda === dataHoje || ag.dataAgenda === dataAmanha) {
+                const isAmanha = ag.dataAgenda === dataAmanha;
+                const cliente = db().empresas[empresaId]?.clientes?.[ag.clienteId];
+                if (!cliente || !cliente.telefone) continue;
+                
+                const nomeCliente = (cliente.nome || 'Cliente').split(' ')[0];
+                const msg = `Olá, ${nomeCliente}!\n\nConfirma o seu agendamento de ${isAmanha ? 'amanhã' : 'hoje'} ${ag.dataAgenda.split('-').reverse().join('/')}, às ${ag.horaLocal}?\n\nResponda CONFIRMO, REMARCAR ou CANCELO.`;
+                import('./core/whatsapp.js').then(wa => {
+                   wa.enviarMensagem(tenant, cliente.telefone, msg).catch(() => null);
+                });
+             }
+          }
+        }
+      }
+    } catch (e) {}
+  }, 10 * 60 * 1000).unref(); // A cada 10 min
+
   // Fechamento do dia no WhatsApp do dono (DINO_RESUMO_DIARIO=on).
   startResumoDiarioWorker();
   startAiBrainSchedulers();
