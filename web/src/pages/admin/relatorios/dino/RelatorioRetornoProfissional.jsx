@@ -69,7 +69,7 @@ Te esperamos!`);
     filterGroup: { background: '#FFFFFF', padding: '24px', borderRadius: '12px', border: '1px solid #E5E7EB', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' },
     label: { fontSize: '14px', fontWeight: 700, color: '#111827', marginBottom: '16px', display: 'block' },
     inputRow: { display: 'flex', alignItems: 'center', gap: '16px' },
-    input: { flex: 1, padding: '12px 16px', borderRadius: '8px', border: '1px solid #D1D5DB', background: '#FFFFFF', color: '#111827', fontSize: '15px', outline: 'none' },
+    input: { flex: 1, padding: '12px 16px', borderRadius: '8px', border: '1px solid #D1D5DB', backgroundColor: '#FFFFFF', color: '#111827', fontSize: '15px', outline: 'none' },
     filterSub: { fontSize: '13px', color: '#6B7280', marginTop: '12px', display: 'block' },
     
     // KPI Cards
@@ -249,7 +249,7 @@ Te esperamos!`);
               <textarea 
                 value={mensagemCampanha}
                 onChange={(e) => setMensagemCampanha(e.target.value)}
-                style={{width: '100%', height: '180px', padding: '16px', borderRadius: '12px', border: '1px solid #D1D5DB', fontSize: '15px', color: '#111827', lineHeight: '1.5', outline: 'none', resize: 'none', boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.02)'}}
+                style={{width: '100%', height: '180px', padding: '16px', borderRadius: '12px', border: '1px solid #D1D5DB', fontSize: '15px', color: '#111827', lineHeight: '1.5', outline: 'none', resize: 'none', backgroundColor: '#FFFFFF', boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.02)'}}
               />
               <div style={{marginTop: '12px', display: 'flex', gap: '8px', flexWrap: 'wrap'}}>
                 <span style={{fontSize: '11px', fontWeight: 700, color: '#6D5BBA', background: '#F5F3FA', padding: '4px 10px', borderRadius: '100px'}}>Váriaveis disponíveis:</span>
