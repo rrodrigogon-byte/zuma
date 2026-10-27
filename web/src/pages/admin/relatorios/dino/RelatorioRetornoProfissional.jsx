@@ -24,14 +24,24 @@ const RelatorioRetornoProfissional = () => {
     { id: 5, iniciais: 'DI', nome: 'Dino', analisados: 53, retencao: 96, perdidos: 2, receitaRisco: 480.00, perfil: '⭐ Premium', clientesPerdidos: [] }
   ]);
   
-  const [resgatando, setResgatando] = useState(false);
+    const [resgatando, setResgatando] = useState(false);
+  const [modalCampanha, setModalCampanha] = useState(false);
+  const [mensagemCampanha, setMensagemCampanha] = useState(`Olá {Nome do Cliente}! 👋
+
+Sentimos sua falta aqui na Barbearia Dino.
+
+O Gustavo comentou que já faz um tempo desde o seu último corte VIP. Que tal agendar um horário essa semana para dar aquele trato?
+
+👉 Clique aqui para agendar: {Link Agendamento}
+
+Te esperamos!`);
   
   const dispararResgate = () => {
     setResgatando(true);
     setTimeout(() => {
-      alert("A IA Dino T-Rex preparou a campanha de resgate para os 15 clientes VIPs do Gustavo! A campanha será enviada via WhatsApp.");
       setResgatando(false);
-    }, 1500);
+      setModalCampanha(true);
+    }, 800);
   };
   
   // Forçar o modo Claro (protótipo) independentemente do thema do Kytto usando cores CSS explícitas e não variáveis root
@@ -222,7 +232,44 @@ const RelatorioRetornoProfissional = () => {
           </tbody>
         </table>
       </div>
+
+      {modalCampanha && (
+        <div style={{position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(17, 24, 39, 0.7)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px', backdropFilter: 'blur(4px)'}}>
+          <div style={{background: '#FFF', borderRadius: '16px', width: '100%', maxWidth: '680px', overflow: 'hidden', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)'}}>
+            <div style={{padding: '24px', borderBottom: '1px solid #E5E7EB', display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
+              <div>
+                <h2 style={{fontSize: '20px', fontWeight: 800, color: '#111827', margin: '0 0 4px 0'}}>Campanha de Resgate IA</h2>
+                <p style={{fontSize: '14px', color: '#6B7280', margin: 0}}>Edite a mensagem antes de disparar para os 15 clientes VIPs do Gustavo.</p>
+              </div>
+              <button onClick={() => setModalCampanha(false)} style={{background: 'transparent', border: 'none', cursor: 'pointer', padding: '8px', color: '#6B7280'}}><span style={{fontSize: '24px', lineHeight: 1}}>&times;</span></button>
+            </div>
+            
+            <div style={{padding: '24px', background: '#F9FAFB'}}>
+              <label style={{display: 'block', fontSize: '13px', fontWeight: 700, color: '#374151', marginBottom: '8px'}}>Mensagem Personalizada</label>
+              <textarea 
+                value={mensagemCampanha}
+                onChange={(e) => setMensagemCampanha(e.target.value)}
+                style={{width: '100%', height: '180px', padding: '16px', borderRadius: '12px', border: '1px solid #D1D5DB', fontSize: '15px', color: '#111827', lineHeight: '1.5', outline: 'none', resize: 'none', boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.02)'}}
+              />
+              <div style={{marginTop: '12px', display: 'flex', gap: '8px', flexWrap: 'wrap'}}>
+                <span style={{fontSize: '11px', fontWeight: 700, color: '#6D5BBA', background: '#F5F3FA', padding: '4px 10px', borderRadius: '100px'}}>Váriaveis disponíveis:</span>
+                <span style={{fontSize: '11px', fontWeight: 600, color: '#4B5563', background: '#E5E7EB', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer'}} onClick={() => setMensagemCampanha(m => m + " {Nome do Cliente}")}>{'{Nome do Cliente}'}</span>
+                <span style={{fontSize: '11px', fontWeight: 600, color: '#4B5563', background: '#E5E7EB', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer'}} onClick={() => setMensagemCampanha(m => m + " {Profissional}")}>{'{Profissional}'}</span>
+                <span style={{fontSize: '11px', fontWeight: 600, color: '#4B5563', background: '#E5E7EB', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer'}} onClick={() => setMensagemCampanha(m => m + " {Link Agendamento}")}>{'{Link Agendamento}'}</span>
+              </div>
+            </div>
+            
+            <div style={{padding: '20px 24px', borderTop: '1px solid #E5E7EB', display: 'flex', justifyContent: 'flex-end', gap: '12px', background: '#FFF'}}>
+              <button onClick={() => setModalCampanha(false)} style={{padding: '10px 20px', background: '#F3F4F6', color: '#374151', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 700, fontSize: '14px'}}>Cancelar</button>
+              <button onClick={() => { alert('Campanha disparada com sucesso para 15 clientes!'); setModalCampanha(false); }} style={{display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 24px', background: '#059669', color: '#FFF', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 700, fontSize: '14px', boxShadow: '0 4px 6px rgba(5, 150, 105, 0.25)'}}>
+                <Sparkles size={16} /> Disparar WhatsApp
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
+
   );
 };
 export default RelatorioRetornoProfissional;
