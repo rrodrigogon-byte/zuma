@@ -2,7 +2,7 @@ import { recordAutomationOptOut } from './ai-memory.js';
 import crypto from 'node:crypto';
 import express from 'express';
 import { db } from './database.js';
-import { parseEvolutionMessage, parseWahaMessage, whatsappAiReady } from './whatsapp-ai.js';
+import { parseEvolutionMessage, whatsappAiReady } from './whatsapp-ai.js';
 import { inboundMediaToText, locateInboundMedia } from './whatsapp-ai-media.js';
 import { campaignOptOutRequested, recordCampaignOptOut, recordCampaignProviderEvent } from './commerce-campaigns.js';
 import { recordCartRecoveryOptOut } from './commerce-abandoned-carts.js';
@@ -232,9 +232,9 @@ export function createWhatsappAiWebhookRouter({ rateLimit = consumeWhatsappWebho
       if (rawEvent !== 'message' && rawEvent !== 'message_received' && rawEvent !== 'messages_upsert') {
         return res.status(202).json({ accepted: true, ignored: true, reason: 'unsupported_event' });
       }
-      const parsedBase = parseWahaMessage(req.body || {}, { groupId: channel.configuracao?.waha_group_id, sessionName });
+      // const parsedBase = parseWahaMessage(req.body || {}, { groupId: channel.configuracao?.waha_group_id, sessionName });
       const externalId = parsedBase.externalId || String(req.get('x-webhook-request-id') || '').slice(0, 200);
-      let parsed = parsedBase;
+      let parsed = { ignored: true, reason: 'waha_disabled' };
       const mediaAllowed = parsed.remoteJid === channel.configuracao?.waha_group_id
         && !['from_me', 'not_group', 'waha_group_not_allowlisted', 'session_mismatch'].includes(parsed.reason);
       if (externalId && mediaAllowed && locateInboundMedia(req.body?.payload || req.body || {})) {
