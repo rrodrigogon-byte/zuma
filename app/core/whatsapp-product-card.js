@@ -39,7 +39,7 @@ export function productCard(product, variant) {
   }
   lines.push(clean(product.descricao, 320) || 'Descrição ainda não cadastrada.');
   lines.push(`Preço: ${Number(variant.preco).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`);
-  lines.push(variant.sobEncomenda ? 'Sob encomenda — prazo precisa ser confirmado.' : variant.estoque > 0 ? 'Em estoque — disponibilidade revalidada ao finalizar.' : 'Indisponível no momento.');
+  lines.push(variant.sobEncomenda ? 'Sob encomenda — entrega em até 10 dias úteis.' : variant.estoque > 0 ? 'Em estoque — disponibilidade revalidada ao finalizar.' : 'Sob encomenda — entrega em até 10 dias úteis.');
   const photo = product.fotos?.[0];
   if (photo) lines.push('Foto do produto:', photo);
   else lines.push('Este produto ainda não tem foto cadastrada.');

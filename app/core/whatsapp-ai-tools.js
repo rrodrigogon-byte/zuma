@@ -260,7 +260,7 @@ async function toolProducts(context, args = {}) {
         detalhes: productDetails(product, variant),
         sobEncomenda: estoque <= 0 && variant.permiteCompraSemEstoque === true,
       };
-    }).filter(variant => variant.preco > 0 && (variant.estoque > 0 || variant.sobEncomenda));
+    }).filter(variant => variant.preco > 0 && (true));
     const fotos = (Array.isArray(product.media) ? product.media : [])
       .slice().sort((a, b) => Number(a?.ordem || 0) - Number(b?.ordem || 0))
       .map(item => links.imagem(item?.url)).filter(Boolean).slice(0, 3);
@@ -644,6 +644,20 @@ export function friendlyWhen(date, time, now = new Date()) {
   return `${prefix}${weekday} ${date.slice(8, 10)}/${date.slice(5, 7)} às ${String(time).slice(0, 5)}`;
 }
 const EXPENSE_CATEGORIES = new Set(['Pessoal/RH', 'Manutenção', 'Utilities (Água/Luz)', 'Material Esportivo', 'Alimentação/Bebidas', 'Marketing', 'Equipamentos', 'Impostos/Taxas', 'Serviços Terceiros', 'Outros']);
+
+async function toolSendPixReceipt(context, args = {}) {
+  const scope = contextScope(context);
+  const orderCode = String(args.orderCode || '').toUpperCase().trim();
+  if (!orderCode) throw new WhatsappAiToolError('informe o código do pedido', 'MISSING_ORDER_CODE');
+  
+  // Apenas notifica no BD/webhook
+  await db.queryWrite(
+    `UPDATE commerce_carts SET updated_at = NOW() WHERE public_code = $1 AND empresa_id = $2`,
+    [orderCode, scope.empresaId]
+  );
+  return { ok: true, orientacao: 'Agradeça ao cliente e informe que o pagamento está sendo validado pela loja e o Dino foi avisado imediatamente.' };
+}
+
 async function toolPrepareExpense(context) {
   const scope = contextScope(context);
   const extracted = extractExpenseEvidence(context.customerText) || extractExpenseEvidence(context.recentConversationText);
@@ -805,7 +819,7 @@ async function priceCartItems(scope, storefront, items) {
   let total = 0;
   const summarized = items.map(item => {
     const found = variants.get(item.variantId);
-    const sobEncomenda = found?.variant?.permiteCompraSemEstoque === true;
+    const sobEncomenda = true;
     if (!found || found.price <= 0 || (!sobEncomenda && Number(found.variant.estoque || 0) < item.quantity)) {
       throw new WhatsappAiToolError('produto indisponível ou estoque insuficiente', 'ITEM_UNAVAILABLE');
     }
@@ -944,7 +958,7 @@ async function toolOrderPaymentLink(context, args = {}) {
     metodo: PAYMENT_LABELS[method],
     total: brl(order.total),
     linkPagamento: url,
-    orientacao: `Envie o linkPagamento como está, com o total e o código do pedido. ${method === 'pix' ? 'Ao abrir, aparece o QR Code e o código Pix copia e cola.' : 'O cartão é digitado só na página segura da InfinitePay.'} A confirmação do pagamento chega automaticamente: não peça comprovante, CPF nem dados de cartão no WhatsApp.`,
+    orientacao: `Envie o linkPagamento como está, com o total e o código do pedido. ${method === 'pix' ? 'A chave PIX do Dino é (65) 99226-4937 (Dino Barbearia). Se o cliente optar por cartão, use o link seguro.' : 'O cartão é digitado só na página segura da InfinitePay.'} Peça para o cliente enviar o comprovante do Pix aqui no WhatsApp. Não peça CPF nem dados de cartão no WhatsApp.`,
   };
 }
 
@@ -1693,6 +1707,8 @@ export const WHATSAPP_AI_TOOL_DECLARATIONS = [
   { name: 'preparar_agendamento', description: 'Prepara um agendamento para confirmação. Não grava o agendamento. Use o id retornado por listar_profissionais; na agenda da barbearia também é aceito "qualquer" quando o cliente não tem preferência. Vários serviços na mesma ida: passe os demais em extraServiceIds e eles são encaixados em sequência. Para outra pessoa (filho, amigo), use o nome DELA em customerName. customerName é o nome real (nunca "Cliente"): se não souber, pergunte antes.', parameters: { type: 'OBJECT', properties: { serviceId: { type: 'STRING' }, professionalId: { type: 'STRING' }, date: { type: 'STRING' }, time: { type: 'STRING' }, customerName: { type: 'STRING', description: 'Nome real da pessoa atendida' }, notes: { type: 'STRING' }, usePlan: { type: 'BOOLEAN', description: 'Somente quando o cliente pedir usar seu pacote. Exige saldo e validade, um procedimento por confirmação.' }, extraServiceIds: { type: 'ARRAY', items: { type: 'STRING' }, description: 'até 3 serviços seguidos na mesma visita' } }, required: ['serviceId', 'professionalId', 'date', 'time', 'customerName'] } },
   { name: 'preparar_remarcacao', description: 'Prepara a remarcação de um agendamento do cliente para confirmação.', parameters: { type: 'OBJECT', properties: { appointmentId: { type: 'STRING' }, date: { type: 'STRING' }, time: { type: 'STRING' } }, required: ['appointmentId', 'date', 'time'] } },
   { name: 'preparar_cancelamento', description: 'Prepara o cancelamento de um agendamento do cliente para confirmação.', parameters: { type: 'OBJECT', properties: { appointmentId: { type: 'STRING' } }, required: ['appointmentId'] } },
+
+  { name: 'enviar_comprovante_pix', description: 'Envia o comprovante PIX do cliente para notificar o Dino do pagamento do pedido. Só use quando o cliente enviar o comprovante PIX na conversa após você ter gerado o pedido.', parameters: { type: 'OBJECT', properties: { orderCode: { type: 'STRING', description: 'Código do pedido que o cliente acabou de pagar' } }, required: ['orderCode'] } },
   { name: 'preparar_despesa', description: 'Prepara um lançamento de despesa PENDENTE a partir da nota ou recibo extraído da imagem desta conversa. Só use quando houver valor, data e confiança suficientes. Não paga, não confirma pagamento e exige SIM do responsável.', parameters: { type: 'OBJECT', properties: {} } },
   { name: 'cotar_frete', description: 'Calcula o frete (valor e prazo) para o CEP do cliente com os produtos escolhidos. Somente consulta: não pede endereço completo nem documento e não cria pedido. Use quando o cliente quiser entrega ou perguntar quanto fica o frete.', parameters: { type: 'OBJECT', properties: { cep: { type: 'STRING', description: 'CEP de entrega, 8 dígitos' }, items: { type: 'ARRAY', items: { type: 'OBJECT', properties: { variantId: { type: 'STRING' }, quantity: { type: 'INTEGER' } }, required: ['variantId', 'quantity'] } } }, required: ['cep', 'items'] } },
   { name: 'link_pagamento_pedido', description: 'Gera o link de pagamento seguro (InfinitePay) de um pedido DO PRÓPRIO contato que aguarda pagamento, no método escolhido: pix (abre QR Code e copia e cola) ou cartao. Use quando o cliente pedir para pagar pelo WhatsApp. Não cobra nada sozinho e não recebe dados de cartão.', parameters: { type: 'OBJECT', properties: { orderCode: { type: 'STRING', description: 'Código do pedido (ex.: o informado na confirmação)' }, metodo: { type: 'STRING', description: 'pix ou cartao' } }, required: ['orderCode', 'metodo'] } },
@@ -1767,6 +1783,7 @@ const TOOL_MAP = {
   preparar_agendamento: toolPrepareAppointment,
   preparar_remarcacao: toolPrepareReschedule,
   preparar_cancelamento: toolPrepareCancellation,
+  enviar_comprovante_pix: toolSendPixReceipt,
   preparar_despesa: toolPrepareExpense,
   preparar_pedido: toolPrepareOrder,
   cotar_frete: toolQuoteShipping,
