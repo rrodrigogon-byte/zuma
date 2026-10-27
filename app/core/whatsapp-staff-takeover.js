@@ -130,7 +130,7 @@ export async function releaseExpiredStaffPauses(executor = db, { canalId = null,
             atualizado_em = CURRENT_TIMESTAMP
       WHERE status = 'humano' AND handoff_reason = $1
         AND (estado->>'staffPauseUntil') IS NOT NULL
-        AND (estado->>'staffPauseUntil')::timestamptz <= CURRENT_TIMESTAMP
+        AND ((estado->>'staffPauseUntil')::timestamptz <= CURRENT_TIMESTAMP OR (estado->>'staffPauseUntil') IS NULL)
         AND ($2::uuid IS NULL OR canal_id = $2::uuid)
         AND ($3::text IS NULL OR remote_jid = $3::text)
       RETURNING id`,
