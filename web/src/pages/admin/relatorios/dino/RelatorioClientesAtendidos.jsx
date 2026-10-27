@@ -12,27 +12,27 @@ const RelatorioClientesAtendidos = () => {
     { id: 5, nome: 'Pedro Henrique', telefone: '(65) 9999-5555', ultimaVisita: '25/10/2026', visitas: 1, ticket: 60, perfil: '🔄 Club' }
   ];
   const styles = {
-    container: { padding: '24px', maxWidth: '1200px', margin: '0 auto', fontFamily: 'var(--font)' },
+    container: { padding: '0', maxWidth: '100%', margin: '0 auto', fontFamily: 'var(--font)' },
     header: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '16px', marginBottom: '24px' },
     sup: { fontSize: '11px', fontWeight: 800, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '4px', display: 'block' },
     h1: { fontSize: '28px', fontWeight: 800, color: 'var(--text)', margin: '0 0 8px 0' },
     sub: { fontSize: '15px', color: 'var(--muted)', margin: 0 },
     actions: { display: 'flex', gap: '12px', flexWrap: 'wrap' },
-    btnOutline: { display: 'flex', alignItems: 'center', gap: '6px', padding: '10px 16px', background: 'var(--surface)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: '8px', cursor: 'pointer', fontWeight: 600, fontSize: '13px' },
-    aiCard: { background: 'linear-gradient(135deg, var(--accent) 0%, var(--accent-strong) 100%)', borderRadius: '16px', padding: '24px', marginBottom: '32px', color: '#fff', position: 'relative', overflow: 'hidden', display: 'flex', gap: '20px', alignItems: 'flex-start' },
-    aiIconBox: { background: 'rgba(255,255,255,0.2)', padding: '12px', borderRadius: '12px', display: 'flex' },
+    btnOutline: { display: 'flex', alignItems: 'center', gap: '6px', padding: '10px 16px', background: 'var(--card)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: '8px', cursor: 'pointer', fontWeight: 600, fontSize: '13px' },
+    aiCard: { background: 'var(--card)', border: '1px solid var(--border)', borderLeft: '4px solid var(--accent)', borderRadius: '16px', padding: '0', marginBottom: '32px', color: 'var(--text)', position: 'relative', overflow: 'hidden', display: 'flex', gap: '20px', alignItems: 'flex-start' },
+    aiIconBox: { background: 'var(--accent-soft)', padding: '12px', borderRadius: '12px', display: 'flex' },
     aiContent: { flex: 1 },
-    aiTitle: { fontSize: '18px', fontWeight: 700, margin: '0 0 12px 0', display: 'flex', alignItems: 'center', gap: '12px', color: '#fff' },
-    aiBadge: { background: 'var(--navy)', color: '#fff', fontSize: '11px', padding: '2px 8px', borderRadius: '4px', fontWeight: 700, textTransform: 'uppercase' },
-    aiText: { fontSize: '15px', lineHeight: '1.5', margin: 0, color: 'rgba(255,255,255,0.9)' },
-    aiStrong: { color: '#fff', fontWeight: 800 },
-    filterCard: { background: 'var(--surface)', borderRadius: '12px', padding: '20px', marginBottom: '24px', border: '1px solid var(--border)' },
+    aiTitle: { fontSize: '18px', fontWeight: 700, margin: '0 0 12px 0', display: 'flex', alignItems: 'center', gap: '12px', color: 'var(--text)' },
+    aiBadge: { background: 'var(--text)', color: 'var(--text)', fontSize: '11px', padding: '2px 8px', borderRadius: '4px', fontWeight: 700, textTransform: 'uppercase' },
+    aiText: { fontSize: '15px', lineHeight: '1.5', margin: 0, color: 'var(--text)' },
+    aiStrong: { color: 'var(--text)', fontWeight: 800 },
+    filterCard: { background: 'var(--card)', borderRadius: '12px', padding: '20px', marginBottom: '24px', border: '1px solid var(--border)' },
     filterTitle: { fontSize: '16px', fontWeight: 700, margin: '0 0 16px 0', display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text)' },
     filterGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' },
     filterGroup: { display: 'flex', flexDirection: 'column', gap: '8px' },
     label: { fontSize: '12px', fontWeight: 600, color: 'var(--muted)' },
     input: { padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text)', fontSize: '14px', outline: 'none' },
-    tableCard: { background: 'var(--surface)', borderRadius: '12px', border: '1px solid var(--border)', overflow: 'hidden' },
+    tableCard: { background: 'var(--card)', borderRadius: '12px', border: '1px solid var(--border)', overflow: 'hidden' },
     table: { width: '100%', borderCollapse: 'collapse', textAlign: 'left' },
     th: { padding: '16px 20px', borderBottom: '1px solid var(--border)', fontSize: '11px', fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px' },
     tr: { borderBottom: '1px solid var(--border)', transition: 'background 0.2s', cursor: 'pointer' },
@@ -60,7 +60,7 @@ const RelatorioClientesAtendidos = () => {
         </div>
       </div>
       <div style={styles.aiCard}>
-        <div style={styles.aiIconBox}><Sparkles size={24} color="#fff" /></div>
+        <div style={styles.aiIconBox}><Sparkles size={24} color="var(--accent)" /></div>
         <div style={styles.aiContent}>
           <h3 style={styles.aiTitle}>Insights da IA de Dino T-Rex <span style={styles.aiBadge}>Público Alvo</span></h3>
           <p style={styles.aiText}>
