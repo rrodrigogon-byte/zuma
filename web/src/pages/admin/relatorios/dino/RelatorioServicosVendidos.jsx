@@ -1,14 +1,14 @@
 import React, { useState } from 'react';
-import { Download, RefreshCw, Sparkles, Filter, Search, TrendingUp, Star, Heart, Target } from 'lucide-react';
+import { Download, RefreshCw, Sparkles, Filter, Search, TrendingUp, Star } from 'lucide-react';
 
 const RelatorioServicosVendidos = () => {
   const [dataAnaliseInicio, setDataAnaliseInicio] = useState('2026-09-01');
   const [dataAnaliseFim, setDataAnaliseFim] = useState('2026-10-26');
 
   const servicos = [
-    { id: 1, nome: 'Corte Degradê (Fade)', categoria: 'Cabelo', quantidade: 480, faturamento: 28800.00, margem: 85, icon: <Target size={18} /> },
-    { id: 2, nome: 'Barboterapia Premium', categoria: 'Barba', quantidade: 310, faturamento: 15500.00, margem: 92, icon: <Heart size={18} /> },
-    { id: 3, nome: 'Corte Tradicional', categoria: 'Cabelo', quantidade: 180, faturamento: 9000.00, margem: 85, icon: <Target size={18} /> },
+    { id: 1, nome: 'Corte Degradê (Fade)', categoria: 'Cabelo', quantidade: 480, faturamento: 28800.00, margem: 85, icon: <Star size={18} /> },
+    { id: 2, nome: 'Barboterapia Premium', categoria: 'Barba', quantidade: 310, faturamento: 15500.00, margem: 92, icon: <Star size={18} /> },
+    { id: 3, nome: 'Corte Tradicional', categoria: 'Cabelo', quantidade: 180, faturamento: 9000.00, margem: 85, icon: <Star size={18} /> },
     { id: 4, nome: 'Sobrancelha Navalha', categoria: 'Estética', quantidade: 215, faturamento: 4300.00, margem: 95, icon: <Star size={18} /> },
     { id: 5, nome: 'Selagem / Progressiva', categoria: 'Química', quantidade: 45, faturamento: 6750.00, margem: 70, icon: <Star size={18} /> }
   ];
