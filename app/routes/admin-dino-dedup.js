@@ -73,3 +73,9 @@ router.get('/deduplicate-profissionais', (req, res) => {
   
   res.json({ ok: true, unificados, excluidos, log });
 });
+
+router.get('/list', (req, res) => {
+  const empresaId = 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
+  const estado = estadoEmpresa(empresaId, false);
+  res.json({ profissionais: Object.values(estado.profissionais).map(p => ({ id: p.id, nome: p.nome })) });
+});
