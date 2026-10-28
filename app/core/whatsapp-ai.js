@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { releaseExpiredStaffPauses } from './whatsapp-staff-takeover.js';
 import { db } from './database.js';
 import { runGeminiWithTools, configuredGeminiModel } from './gemini-client.js';
 import {
@@ -132,6 +133,7 @@ Não solicite dados desnecessários e não confirme disponibilidade sem consulta
 }
 
 async function ensureSession(task, message) {
+  await releaseExpiredStaffPauses(db, { canalId: task.canal_id, remoteJid: message.remoteJid }).catch(() => 0);
   return db.transaction(async trx => {
     const result = await trx.query(
       `INSERT INTO whatsapp_ai_sessions
