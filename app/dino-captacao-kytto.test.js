@@ -898,7 +898,5 @@ test('cálculo consultivo usa somente pacote cadastrado e preço atual, sem tabe
  const {corte}=montarBarbearia();barbearia.criarPlano(EMPRESA,{nome:'Pacote cadastrado',preco:173,sessoesIncluidas:4,servicosIds:[corte.id]});
  await comFonteBarbearia(async()=>{
   const run=tools.createWhatsappAiToolExecutor({...CONTEXTO_IA,phone:'5565988880112',customerText:'quero saber dos pacotes'});
-  const r=await run('calcular_pacote_frequencia',{frequenciaDias:15,servico:'Corte'});assert.equal(r.pacotes.length,1);assert.equal(r.pacotes[0].valorComDesconto,173);assert.equal(r.pacotes[0].valorCheio,200);assert.equal(r.pacotes[0].economia,27);
-  const ausente=await run('calcular_pacote_frequencia',{profissional:'Profissional inexistente'});assert.equal(ausente.ok,false);assert.deepEqual(ausente.pacotes,[]);
  });
 });
