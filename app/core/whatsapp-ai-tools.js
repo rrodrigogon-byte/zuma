@@ -2,22 +2,24 @@ import crypto from 'node:crypto';
 import { db } from './database.js';
 import { createPendingOrder, listPublishedProducts } from './commerce-core.js';
 import {
-  createScheduledAppointment,
-  listSchedulingAvailability,
-  listSchedulingProfessionals,
-  listSchedulingServices,
+  createAppointment as createScheduledAppointment,
+  availability as listSchedulingAvailability,
+  listProfessionals as listSchedulingProfessionals,
+  listServices as listSchedulingServices,
   SchedulingError,
-} from './barbershop-scheduling.js';
+} from './barbershop-agenda.js';
 import {
   ensureWhatsappLead,
   getWhatsappLeadProfile,
   updateWhatsappMarketingConsent,
-  listWhatsappCustomerAppointments,
   listActiveWhatsappPromotions,
   queueWhatsappPromotion,
-  rescheduleWhatsappAppointment,
-  cancelWhatsappAppointment,
 } from './whatsapp-ai-crm.js';
+import {
+  listCustomerAppointments as listWhatsappCustomerAppointments,
+  rescheduleAppointment as rescheduleWhatsappAppointment,
+  cancelAppointment as cancelWhatsappAppointment,
+} from './barbershop-agenda.js';
 import {
   opportunityGate,
   registerOpportunityDecision,
