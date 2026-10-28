@@ -298,6 +298,9 @@ export async function gerarQr(empresaId, { usuario = '', fetchImpl, registrarHis
       const provisioned = await provisionWahaSession(conexao.instance);
       const state = normalizarEstadoWaha(provisioned?.status);
       const qr = state === 'open' ? '' : (await getWahaSessionQr(conexao.instance)).dataUrl;
+      if (!qr && state !== 'open') {
+        return { ok: false, error: 'A instância está iniciando. Aguarde 10 segundos e clique em Gerar QR novamente.', code: 'WAHA_STARTING', conexao: visaoPublica(conexao) };
+      }
       conexao.ativo = true;
       conexao.state = state === 'open' ? 'open' : (qr ? 'qr' : 'connecting');
       conexao.phone = '';
