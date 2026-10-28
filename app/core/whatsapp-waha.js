@@ -102,7 +102,7 @@ export async function provisionWahaSession(sessionName) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ session: validWahaSession(sessionName) }),
   }).catch(error => {
-    if (error.status === 404) return { status: 'STARTING' };
+    if (error.status === 404 || error.status === 409 || error.status === 422) return { status: 'STARTING' };
     throw error;
   });
 }
@@ -110,6 +110,7 @@ export async function provisionWahaSession(sessionName) {
 export async function getWahaSessionStatus(sessionName) {
   return jsonRequest(`/v1/sessions/${encodedSession(sessionName)}/status`).catch(error => {
     if (error.status === 404) return { status: 'UNKNOWN' };
+    if (error.status === 409 || error.status === 422) return { status: 'STARTING' };
     throw error;
   });
 }
@@ -119,7 +120,7 @@ export async function getWahaSessionQr(sessionName) {
   try {
     response = await request(`/v1/sessions/${encodedSession(sessionName)}/qr`);
   } catch (error) {
-    if (error.status === 404) return { contentType: 'image/png', dataUrl: '' };
+    if (error.status === 404 || error.status === 409 || error.status === 422) return { contentType: 'image/png', dataUrl: '' };
     throw error;
   }
   const contentType = response.headers.get('content-type')?.split(';', 1)[0] || 'image/png';
