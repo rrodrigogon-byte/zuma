@@ -269,7 +269,7 @@ app.get('/env-debug-4321', (req, res) => {
   const env = {};
   for (const k of Object.keys(process.env)) {
     if (k.includes('CHATBOT') || k.includes('EVOL') || k.includes('WHAT') || k.includes('GEMINI')) {
-      env[k] = process.env[k] ? 'SET' : 'EMPTY';
+      env[k] = process.env[k];
     }
   }
   res.json(env);
