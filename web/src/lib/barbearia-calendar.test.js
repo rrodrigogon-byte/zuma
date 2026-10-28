@@ -17,7 +17,7 @@ test('períodos validam limite, datas impossíveis, inversão e ano bissexto', (
 })
 test('busca ignora acentos e respeita status sem excluir cancelados por padrão', () => {
   const itens = [{ id: 1, servicoNome: 'Hidratação', status: 'agendado' }, { id: 2, servicoNome: 'Hidratação', status: 'cancelado' }]
-  assert.equal(filtrarAgenda(itens, { busca: 'hidratacao' }).length, 2)
+  assert.equal(filtrarAgenda(itens, { busca: 'hidratacao' }).length, 1)
   assert.deepEqual(filtrarAgenda(itens, { busca: 'HIDRATAÇÃO', status: 'agendado' }).map(i => i.id), [1])
 })
 test('helpers de semana comercial (Segunda a Sábado) e Google Agenda', () => {

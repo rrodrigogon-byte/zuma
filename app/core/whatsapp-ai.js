@@ -841,20 +841,46 @@ export async function whatsappAiOperationalStatus(context = {}) {
   };
 }
 
-export async function listWhatsappAiSessions(context = {}, { limit = 50 } = {}) {
+
+function sessionFilter(value, field, allowed) {
+  if (value == null || value === '') return null;
+  const normalized = typeof value === 'string' ? value.trim() : '';
+  if (typeof value !== 'string' || !allowed.includes(normalized)) {
+    const error = new Error(`filtro ${field} inválido`);
+    error.code = 'WHATSAPP_AI_SESSION_FILTER_INVALID';
+    throw error;
+  }
+  return normalized;
+}
+
+export async function listWhatsappAiSessions(context = {}, { limit = 50, status, assignment } = {}) {
+  const empresaId = requiredTenantUuid(context.empresaId, 'empresaId');
+  const lojaId = requiredTenantUuid(context.lojaId, 'lojaId');
+  const statusFilter = sessionFilter(status === 'all' ? null : status, 'status', ['humano', 'ativo', 'all']);
+  const assignmentFilter = sessionFilter(assignment, 'assignment', ['unassigned', 'all']);
+  const values = [empresaId, lojaId];
+  const predicates = ['empresa_id = $1', 'loja_id = $2'];
+  if (statusFilter) {
+    values.push(statusFilter);
+    predicates.push(`status = $${values.length}`);
+  }
+  if (assignmentFilter === 'unassigned') predicates.push('assigned_to IS NULL');
+  const safeLimit = Math.min(100, Math.max(1, Math.trunc(Number(limit)) || 50));
+  values.push(safeLimit);
   const result = await db.queryRead(
     `SELECT id, telefone, nome, status, (acao_pendente IS NOT NULL) AS has_pending_action,
             (estado->>'marketingOptOut' = 'true') AS marketing_opt_out,
             ultima_interacao_em, atualizado_em, handoff_requested_at, handoff_reason,
             assigned_to, assigned_at, closed_at, priority, privacy_notice_at,
             personalization_prompted_at, opportunity_offered_at,
-            opportunity_declined_at, opportunity_count
+            opportunity_declined_at, opportunity_count,
+            estado->>'staffPauseUntil' AS staff_pause_until
        FROM whatsapp_ai_sessions
-      WHERE empresa_id = $1 AND loja_id = $2
+      WHERE ${predicates.join(' AND ')}
       ORDER BY CASE WHEN status = 'humano' THEN 0 ELSE 1 END,
                priority DESC, handoff_requested_at ASC NULLS LAST, ultima_interacao_em DESC
-      LIMIT $3`,
-    [requiredTenantUuid(context.empresaId, 'empresaId'), requiredTenantUuid(context.lojaId, 'lojaId'), Math.min(100, Math.max(1, Number(limit) || 50))],
+      LIMIT $${values.length}`,
+    values,
   );
   return result.rows.map(row => ({
     id: row.id,
@@ -867,7 +893,11 @@ export async function listWhatsappAiSessions(context = {}, { limit = 50 } = {}) 
     atualizado_em: row.atualizado_em,
     handoff_requested_at: row.handoff_requested_at,
     handoff_reason: row.handoff_reason,
+    handoff_label: motivoLegivel(row.handoff_reason),
+    // Equipe respondendo pelo celular: até quando a IA fica pausada nesta conversa.
+    staff_pause_until: row.handoff_reason === STAFF_REASON && row.staff_pause_until ? row.staff_pause_until : null,
     assigned: Boolean(row.assigned_to),
+    isMine: Boolean(row.assigned_to && context.usuarioId && String(row.assigned_to) === String(context.usuarioId)),
     assigned_at: row.assigned_at,
     closed_at: row.closed_at,
     priority: Number(row.priority || 0),
@@ -891,17 +921,49 @@ async function auditHandoff(trx, context, sessionId, action, after = {}) {
 export async function claimWhatsappAiHandoff(context = {}, sessionId) {
   const empresaId = requiredTenantUuid(context.empresaId, 'empresaId');
   const lojaId = requiredTenantUuid(context.lojaId, 'lojaId');
-  if (!UUID_PATTERN.test(String(context.usuarioId || ''))) throw new Error('usuário autenticado é obrigatório');
+  if (!UUID_PATTERN.test(String(context.usuarioId || ''))) {
+    const error = new Error('usuário autenticado é obrigatório');
+    error.code = 'AUTHENTICATED_USER_REQUIRED';
+    throw error;
+  }
+  const normalizedSessionId = cleanText(sessionId, 60);
+  if (!UUID_PATTERN.test(normalizedSessionId)) {
+    const error = new Error('sessão inválida');
+    error.code = 'WHATSAPP_AI_SESSION_INVALID';
+    throw error;
+  }
   return db.transaction(async trx => {
+    const selected = await trx.query(
+      `SELECT id, status, assigned_to, assigned_at, priority, handoff_reason
+         FROM whatsapp_ai_sessions
+        WHERE id = $1 AND empresa_id = $2 AND loja_id = $3 AND status = 'humano'
+        FOR UPDATE`,
+      [normalizedSessionId, empresaId, lojaId],
+    );
+    const current = selected.rows[0];
+    if (!current) {
+      const error = new Error('sessão humana não encontrada neste contexto');
+      error.code = 'WHATSAPP_AI_SESSION_NOT_FOUND';
+      throw error;
+    }
+    if (current.assigned_to && String(current.assigned_to) !== String(context.usuarioId)) {
+      const error = new Error('sessão já foi assumida por outro atendente');
+      error.code = 'WHATSAPP_AI_SESSION_CONFLICT';
+      throw error;
+    }
+    if (current.assigned_to && String(current.assigned_to) === String(context.usuarioId)) return current;
     const result = await trx.query(
       `UPDATE whatsapp_ai_sessions
           SET assigned_to = $4, assigned_at = CURRENT_TIMESTAMP, atualizado_em = CURRENT_TIMESTAMP
-        WHERE id = $1 AND empresa_id = $2 AND loja_id = $3 AND status = 'humano'
-          AND (assigned_to IS NULL OR assigned_to = $4)
+        WHERE id = $1 AND empresa_id = $2 AND loja_id = $3 AND status = 'humano' AND assigned_to IS NULL
         RETURNING id, status, assigned_to, assigned_at, priority, handoff_reason`,
-      [cleanText(sessionId, 60), empresaId, lojaId, context.usuarioId],
+      [normalizedSessionId, empresaId, lojaId, context.usuarioId],
     );
-    if (!result.rows[0]) throw new Error('sessão indisponível para atribuição');
+    if (!result.rows[0]) {
+      const error = new Error('sessão já foi assumida por outro atendente');
+      error.code = 'WHATSAPP_AI_SESSION_CONFLICT';
+      throw error;
+    }
     await auditHandoff(trx, context, result.rows[0].id, 'claimed', { priority: result.rows[0].priority });
     return result.rows[0];
   });
@@ -916,6 +978,7 @@ export async function releaseWhatsappAiHandoff(context = {}, sessionId) {
           SET status = 'ativo', estado = estado - 'handoffReason',
               handoff_requested_at = NULL, handoff_reason = NULL,
               assigned_to = NULL, assigned_at = NULL, priority = 0, closed_at = NULL,
+              acao_pendente = NULL,
               atualizado_em = CURRENT_TIMESTAMP
         WHERE id = $1 AND empresa_id = $2 AND loja_id = $3 AND status = 'humano'
         RETURNING id, status, atualizado_em`,
@@ -989,6 +1052,7 @@ function safeChannelView(row) {
     webhookHeader: row.cabecalho_assinatura || 'x-setpoint-webhook-token',
     webhookUrl: `/api/webhooks/whatsapp/${row.codigo_publico}`,
     capabilities: safeCapabilities(row.configuracao?.capabilities),
+    segmento: SEGMENTOS.includes(row.configuracao?.segmento) ? row.configuracao.segmento : '',
     lastEventAt: row.ultimo_evento_em,
     lastSyncAt: row.ultima_sincronizacao_em,
     lastError: row.ultimo_erro,
@@ -996,7 +1060,26 @@ function safeChannelView(row) {
     aiConsecutiveFailures: Number(row.ai_consecutive_failures || 0),
     aiLastErrorCode: row.ai_last_error_code || null,
     policy: whatsappAiPolicy(row),
+    persona: { ...personaView(row.configuracao, process.env, row.empresa_id), figurinhasNoProvedor: figurinhaSuportada() },
+    handoff: safeHandoffView(row.configuracao?.handoff),
   };
+}
+
+// Config de notificação de handoff (e-mail de histórico + WhatsApp do atendente).
+function safeHandoffView(value = {}) {
+  return {
+    notifyEmail: cleanText(value?.notify_email, 320),
+    attendantPhone: String(value?.attendant_phone || '').replace(/\D/g, '').slice(0, 15),
+  };
+}
+
+function safeHandoffInput(input = {}) {
+  const email = cleanText(input.notifyEmail ?? input.notify_email, 320).toLowerCase();
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error('e-mail de notificação inválido');
+  const rawPhone = String(input.attendantPhone ?? input.attendant_phone ?? '').trim();
+  const attendantPhone = canonicalWhatsappPhone(rawPhone);
+  if (rawPhone && !attendantPhone) throw new Error('telefone do atendente inválido');
+  return { notify_email: email, attendant_phone: attendantPhone };
 }
 
 function safeWhatsappAiPolicyInput(input = {}) {
@@ -1046,28 +1129,115 @@ export async function configureWhatsappAiPolicy(context = {}, input = {}) {
   });
 }
 
+/**
+ * Persona do atendente (nome, mensagens curtas, figurinhas, como revela que é
+ * assistente). Só muda o tom: ferramentas, confirmações e travas seguem iguais.
+ */
+export async function configureWhatsappAiPersona(context = {}, input = {}) {
+  if (input.confirmed !== true) throw new Error('confirmação humana obrigatória para alterar a persona');
+  const empresaId = requiredTenantUuid(context.empresaId, 'empresaId');
+  const lojaId = requiredTenantUuid(context.lojaId, 'lojaId');
+  const persona = sanitizePersonaInput(input);
+  return db.transaction(async trx => {
+    const result = await trx.query(
+      `UPDATE canais_integracao
+          SET configuracao = jsonb_set(COALESCE(configuracao, '{}'::jsonb), '{persona}', $3::jsonb, true),
+              data_atualizacao = CURRENT_TIMESTAMP
+        WHERE empresa_id = $1 AND loja_id = $2 AND provedor = 'whatsapp'
+        RETURNING *`,
+      [empresaId, lojaId, JSON.stringify(persona)],
+    );
+    if (!result.rows[0]) throw new Error('salve primeiro o canal WhatsApp em rascunho');
+    await trx.query(
+      `INSERT INTO commerce_audit_logs
+        (empresa_id, loja_id, usuario_id, entidade, entidade_id, acao, depois)
+       VALUES ($1, $2, $3, 'whatsapp_ai_channel', $4, 'persona_configured', $5::jsonb)`,
+      [empresaId, lojaId, context.usuarioId || null, result.rows[0].id, JSON.stringify(persona)],
+    );
+    return { ok: true, persona: personaView(result.rows[0].configuracao), channel: safeChannelView(result.rows[0]) };
+  });
+}
+
+/**
+ * Notificação de handoff: quando o atendimento vai para humano, para onde avisar.
+ * - notifyEmail: recebe o histórico da conversa por e-mail.
+ * - attendantPhone: WhatsApp do atendente humano (número diferente do cliente),
+ *   onde a conversa é iniciada para a pessoa assumir pelo telefone.
+ * Só muda para onde notificar; não ativa o canal nem altera travas.
+ */
+export async function configureWhatsappAiHandoff(context = {}, input = {}) {
+  if (input.confirmed !== true) throw new Error('confirmação humana obrigatória para alterar a notificação de handoff');
+  const empresaId = requiredTenantUuid(context.empresaId, 'empresaId');
+  const lojaId = requiredTenantUuid(context.lojaId, 'lojaId');
+  const handoff = safeHandoffInput(input);
+  return db.transaction(async trx => {
+    const result = await trx.query(
+      `UPDATE canais_integracao
+          SET configuracao = jsonb_set(COALESCE(configuracao, '{}'::jsonb), '{handoff}', $3::jsonb, true),
+              data_atualizacao = CURRENT_TIMESTAMP
+        WHERE empresa_id = $1 AND loja_id = $2 AND provedor = 'whatsapp'
+        RETURNING *`,
+      [empresaId, lojaId, JSON.stringify(handoff)],
+    );
+    if (!result.rows[0]) throw new Error('salve primeiro o canal WhatsApp em rascunho');
+    await trx.query(
+      `INSERT INTO commerce_audit_logs
+        (empresa_id, loja_id, usuario_id, entidade, entidade_id, acao, depois)
+       VALUES ($1, $2, $3, 'whatsapp_ai_channel', $4, 'handoff_configured', $5::jsonb)`,
+      [empresaId, lojaId, context.usuarioId || null, result.rows[0].id, JSON.stringify({
+        notifyEmailSet: Boolean(handoff.notify_email),
+        attendantPhoneSet: Boolean(handoff.attendant_phone),
+      })],
+    );
+    return { ok: true, handoff: safeHandoffView(result.rows[0].configuracao?.handoff), channel: safeChannelView(result.rows[0]) };
+  });
+}
+
 export async function configureWhatsappAiChannel(context = {}, input = {}) {
   const empresaId = requiredTenantUuid(context.empresaId, 'empresaId');
   const lojaId = requiredTenantUuid(context.lojaId, 'lojaId');
   const usuarioId = context.usuarioId || null;
   const status = safeChannelStatus(input.status);
   const secretEnv = envReference(input.webhookSecretEnv || 'WHATSAPP_AI_WEBHOOK_SECRET');
-  const instance = cleanText(input.instance || (process.env.EVOLUTION_INSTANCE || process.env.CHATBOT_BACKEND_INSTANCE), 120);
+  // Só variáveis próprias de segredo de webhook: outra variável (JWT_SECRET, DATABASE_URL…)
+  // seria enviada ao provedor como cabeçalho do webhook.
+  if (!/^WHATSAPP_AI_WEBHOOK_SECRET(_[A-Z0-9]+)?$/.test(secretEnv)) throw new Error('use uma variável WHATSAPP_AI_WEBHOOK_SECRET ou WHATSAPP_AI_WEBHOOK_SECRET_<SUFIXO> para o segredo do webhook');
+  const chatbotBackend = whatsappProviderName() === 'chatbot_backend';
+  const instance = cleanText(input.instance || (chatbotBackend ? chatbotBackendConfig().instance : process.env.EVOLUTION_INSTANCE), 120);
   const displayName = cleanText(input.displayName || 'Atendimento WhatsApp', 120);
   const capabilities = safeCapabilities(input.capabilities);
   const header = cleanText(input.webhookHeader || 'x-setpoint-webhook-token', 100).toLowerCase();
-  if (!instance) throw new Error('instância Evolution é obrigatória');
-  if (!/^[a-z0-9][a-z0-9_-]{1,99}$/i.test(instance)) throw new Error('instância Evolution inválida');
+  if (!instance) throw new Error('instância do WhatsApp é obrigatória');
+  if (!/^[a-z0-9][a-z0-9_-]{1,99}$/i.test(instance)) throw new Error('instância do WhatsApp inválida');
   if (!/^[a-z0-9-]{3,100}$/i.test(header)) throw new Error('cabeçalho de webhook inválido');
   if (status === 'ativo') {
     if (input.confirmed !== true) throw new Error('confirmação humana obrigatória para ativar o atendente');
     if (process.env.FEATURE_WHATSAPP_AI !== 'true') throw new Error('feature flag da IA WhatsApp não está ativa');
-    if (!process.env[secretEnv]) throw new Error(`segredo ${secretEnv} não configurado no ambiente`);
+    // Igual à Isa, a entrada pelo backend próprio é por consulta: o segredo do webhook
+    // só é exigido quando o canal recebe webhook (Evolution ou modo de instâncias).
+    const entradaPorConsulta = chatbotBackend && chatbotBackendMode() === 'isa';
+    if (!entradaPorConsulta && !process.env[secretEnv]) throw new Error(`segredo ${secretEnv} não configurado no ambiente`);
     if (!process.env.GEMINI_API_KEY) throw new Error('Gemini não configurado no ambiente');
-    if (!(process.env.EVOLUTION_API_URL || process.env.CHATBOT_BACKEND_URL) || !(process.env.EVOLUTION_API_KEY || process.env.CHATBOT_BACKEND_KEY)) throw new Error('Evolution não configurada no ambiente');
+    if (!whatsappProviderConfigured()) throw new Error(chatbotBackend ? 'backend WhatsApp (NossaGente) não configurado no ambiente: CHATBOT_BACKEND_KEY' : 'Evolution não configurada no ambiente');
   }
 
   return db.transaction(async trx => {
+    // Cada empresa usa um segredo de webhook próprio: se outra empresa já usa esta variável,
+    // quem tiver um segredo conseguiria mandar eventos falsos para a outra.
+    const shared = await trx.query(
+      `SELECT 1 FROM canais_integracao
+        WHERE provedor = 'whatsapp' AND empresa_id <> $1 AND credencial_referencia = $2 AND status <> 'desativado' LIMIT 1`,
+      [empresaId, `ENV:${secretEnv}`],
+    );
+    if (shared.rows[0]) throw new Error(`o segredo ${secretEnv} já é usado por outra empresa; crie uma variável própria (ex.: ${secretEnv}_${empresaId.slice(0, 8).toUpperCase()}) e informe-a aqui`);
+    // A instância (número de WhatsApp no backend) pertence a uma só empresa.
+    const sameInstance = await trx.query(
+      `SELECT 1 FROM canais_integracao
+        WHERE provedor = 'whatsapp' AND empresa_id <> $1 AND status <> 'desativado'
+          AND lower(configuracao->>'instance') = lower($2) LIMIT 1`,
+      [empresaId, instance],
+    );
+    if (sameInstance.rows[0]) throw new Error('esta instância do WhatsApp já pertence a outra empresa');
     const result = await trx.query(
       `INSERT INTO canais_integracao
         (empresa_id, loja_id, provedor, nome, status, modo_operacao, cabecalho_assinatura,
@@ -1083,8 +1253,8 @@ export async function configureWhatsappAiChannel(context = {}, input = {}) {
          configuracao = canais_integracao.configuracao || EXCLUDED.configuracao,
          data_atualizacao = CURRENT_TIMESTAMP
        RETURNING *`,
-      [empresaId, lojaId, displayName, status, header, `ENV:${secretEnv}`, (process.env.EVOLUTION_API_URL || process.env.CHATBOT_BACKEND_URL) || null,
-        JSON.stringify({ instance, display_name: displayName, segredo_env: secretEnv, capabilities }), usuarioId],
+      [empresaId, lojaId, displayName, status, header, `ENV:${secretEnv}`, chatbotBackend ? chatbotBackendConfig().baseUrl : (process.env.EVOLUTION_API_URL || null),
+        JSON.stringify({ instance, display_name: displayName, segredo_env: secretEnv, capabilities, provider: whatsappProviderName(), segmento: SEGMENTOS.includes(String(input.segmento || '').toLowerCase()) ? String(input.segmento).toLowerCase() : undefined }), usuarioId],
     );
     const channel = result.rows[0];
     await trx.query(
@@ -1110,9 +1280,10 @@ export async function syncWhatsappAiWebhook(context = {}, { publicBaseUrl, confi
   if (!channel) throw new Error('canal WhatsApp ativo não encontrado');
   if (!whatsappAiReady()) throw new Error('IA WhatsApp ainda não está pronta no ambiente');
   const secret = referencedChannelSecret(channel);
-  const apiKey = cleanText((process.env.EVOLUTION_API_KEY || process.env.CHATBOT_BACKEND_KEY), 500);
-  const baseUrl = cleanText((process.env.EVOLUTION_API_URL || process.env.CHATBOT_BACKEND_URL) || channel.api_base_url, 1000).replace(/\/$/, '');
-  const instance = cleanText(channel.configuracao?.instance || (process.env.EVOLUTION_INSTANCE || process.env.CHATBOT_BACKEND_INSTANCE), 120);
+  if (whatsappProviderName() === 'chatbot_backend') return syncChatbotBackendWebhook(context, channel, { secret, publicBaseUrl });
+  const apiKey = cleanText(process.env.EVOLUTION_API_KEY, 500);
+  const baseUrl = cleanText(process.env.EVOLUTION_API_URL || channel.api_base_url, 1000).replace(/\/$/, '');
+  const instance = cleanText(channel.configuracao?.instance || process.env.EVOLUTION_INSTANCE, 120);
   const externalBase = cleanText(publicBaseUrl || process.env.SERVER_URL, 1000).replace(/\/$/, '');
   if (!secret || !apiKey || !baseUrl || !instance || !externalBase) throw new Error('configuração Evolution/webhook incompleta');
   if (process.env.NODE_ENV === 'production' && (!baseUrl.startsWith('https://') || !externalBase.startsWith('https://'))) {
@@ -1127,7 +1298,8 @@ export async function syncWhatsappAiWebhook(context = {}, { publicBaseUrl, confi
         enabled: true,
         url: webhookUrl,
         byEvents: false,
-        events: ['MESSAGES_UPSERT'],
+        // MESSAGES_UPDATE traz entregue/lido: sem ele as métricas das campanhas nunca mudam.
+        events: ['MESSAGES_UPSERT', 'MESSAGES_UPDATE'],
         headers: { [channel.cabecalho_assinatura || 'x-setpoint-webhook-token']: secret },
       },
     }),
@@ -1156,6 +1328,59 @@ export async function syncWhatsappAiWebhook(context = {}, { publicBaseUrl, confi
     return saved.rows[0];
   });
   return { ok: true, webhookUrl, channel: safeChannelView(updated), provider: { configured: true, status: response.status, response: body?.webhook ? { enabled: body.webhook.enabled } : {} } };
+}
+
+async function syncChatbotBackendWebhook(context, channel, { secret, publicBaseUrl }) {
+  if (chatbotBackendMode() === 'isa') {
+    return {
+      ok: true,
+      polling: true,
+      manual: false,
+      instructions: 'Igual à Isa: não há webhook para sincronizar. O sistema consulta as mensagens recebidas a cada poucos segundos; basta o número estar pareado e a instância estar registrada para esta empresa no servidor (CHATBOT_BACKEND_INSTANCES, ou CHATBOT_BACKEND_EMPRESA_ID para uma única linha).',
+      channel: safeChannelView(channel),
+      provider: { configured: whatsappProviderConfigured(), name: 'chatbot_backend', mode: 'isa' },
+    };
+  }
+  const empresaId = channel.empresa_id;
+  const lojaId = channel.loja_id;
+  const instance = cleanText(channel.configuracao?.instance || chatbotBackendConfig().instance, 120);
+  const externalBase = cleanText(publicBaseUrl || process.env.SERVER_URL, 1000).replace(/\/$/, '') || 'https://dino.kytto.com.br';
+  if (!secret || !instance) throw new Error('configuração do webhook incompleta (segredo ou instância)');
+  const header = channel.cabecalho_assinatura || 'x-setpoint-webhook-token';
+  const webhookUrl = `${externalBase}/api/webhooks/whatsapp/${channel.codigo_publico}`;
+  const result = await registerInstanceWebhook({ instance, url: webhookUrl, headers: { [header]: secret } });
+  if (result.authError) throw new Error('backend WhatsApp recusou a chave (HTTP 401/403)');
+  const manual = Boolean(result.unsupported);
+  if (!result.ok && !manual) throw new Error(`backend WhatsApp recusou o webhook: HTTP ${result.status || 'sem resposta'}`);
+  const polling = Boolean(result.polling || manual);
+  const updated = await db.transaction(async trx => {
+    const saved = await trx.query(
+      `UPDATE canais_integracao
+          SET configuracao = configuracao || $2::jsonb, ultimo_erro = NULL,
+              ultima_sincronizacao_em = CURRENT_TIMESTAMP, data_atualizacao = CURRENT_TIMESTAMP
+        WHERE id = $1 AND empresa_id = $3 AND loja_id = $4
+        RETURNING *`,
+      [channel.id, JSON.stringify({ webhook_url: webhookUrl, webhook_synced_at: manual ? null : new Date().toISOString(), webhook_manual: manual }), empresaId, lojaId],
+    );
+    await trx.query(
+      `INSERT INTO commerce_audit_logs
+        (empresa_id, loja_id, usuario_id, entidade, entidade_id, acao, depois)
+       VALUES ($1, $2, $3, 'whatsapp_ai_channel', $4, 'webhook_synced', $5::jsonb)`,
+      [empresaId, lojaId, context.usuarioId || null, channel.id, JSON.stringify({ instance, webhookUrl, provider: 'chatbot_backend', manual })],
+    );
+    return saved.rows[0];
+  });
+  return {
+    ok: true,
+    webhookUrl,
+    manual,
+    polling,
+    instructions: polling
+      ? 'Igual à Isa: o backend não envia webhook de mensagens. O sistema consulta as mensagens recebidas a cada poucos segundos; basta o número estar pareado e a instância estar registrada para esta empresa no servidor (CHATBOT_BACKEND_INSTANCES, ou CHATBOT_BACKEND_EMPRESA_ID para uma única linha).'
+      : null,
+    channel: safeChannelView(updated),
+    provider: { configured: true, status: result.status || null, name: 'chatbot_backend' },
+  };
 }
 
 function referencedChannelSecret(channel) {
@@ -1204,35 +1429,4 @@ export async function testWhatsappAiGemini(context = {}, { confirmed = false } =
     ).catch(() => null);
     throw error;
   }
-}
-
-export async function configureWhatsappAiHandoff(context = {}, input = {}) {
-  if (input.confirmed !== true) throw new Error('confirmação humana obrigatória para alterar a notificação de handoff');
-  const empresaId = context.empresaId;
-  const lojaId = context.lojaId;
-  const notify_email = (input.notifyEmail || '').trim().toLowerCase();
-  if (notify_email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(notify_email)) throw new Error('e-mail de notificação inválido');
-  let attendant_phone = String(input.attendantPhone || '').replace(/\D/g, '');
-  if (attendant_phone && attendant_phone.length >= 10 && attendant_phone.length <= 11 && !attendant_phone.startsWith('55')) attendant_phone = `55${attendant_phone}`;
-  if (attendant_phone && (attendant_phone.length < 12 || attendant_phone.length > 15)) throw new Error('telefone do atendente inválido');
-
-  const handoff = { notify_email, attendant_phone };
-  const { db } = await import('./database.js');
-  return db.transaction(async trx => {
-    const result = await trx.query(
-      `UPDATE canais_integracao
-          SET configuracao = jsonb_set(COALESCE(configuracao, '{}'::jsonb), '{handoff}', $3::jsonb, true),
-              data_atualizacao = CURRENT_TIMESTAMP
-        WHERE empresa_id = $1 AND loja_id = $2 AND provedor = 'whatsapp'
-        RETURNING *`,
-      [empresaId, lojaId, JSON.stringify(handoff)],
-    );
-    if (!result.rows[0]) throw new Error('salve primeiro o canal WhatsApp em rascunho');
-    await trx.query(
-      `INSERT INTO commerce_audit_logs (empresa_id, loja_id, usuario_id, entidade, entidade_id, acao, depois)
-       VALUES ($1, $2, $3, 'whatsapp_ai_channel', $4, 'handoff_configured', $5::jsonb)`,
-      [empresaId, lojaId, context.usuarioId || null, result.rows[0].id, JSON.stringify({ notifyEmailSet: Boolean(handoff.notify_email), attendantPhoneSet: Boolean(handoff.attendant_phone) })],
-    );
-    return { ok: true };
-  });
 }

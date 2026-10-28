@@ -113,7 +113,7 @@ export default function WhatsappHumanQueue({
     setCanClaim(false)
     setClaimDialog(null)
     try {
-      const payload = await api.get(queueUrl(assignmentRef.current, tipoCanal), {
+      const payload = await api.get(queueUrl('all', tipoCanal, true), {
         headers: { 'X-Empresa-Id': snapshot.empresaId, 'X-Loja-Id': snapshot.lojaId },
         signal: controller.signal,
       })
@@ -188,6 +188,44 @@ export default function WhatsappHumanQueue({
     setError('')
     setErrorContextKey('')
     setClaimDialog({ item, selection, contextKey })
+  }
+
+  async function requestRelease(item) {
+    if (!canClaim || !item.assigned || !item.isMine || claimingId) return
+    setError('')
+    setErrorContextKey('')
+    
+    const controller = new AbortController()
+    claimLockRef.current = controller
+    const sessionId = item.id
+    claimControllerRef.current = controller
+    setClaimingId(sessionId)
+    setNotice('')
+    setNoticeContextKey('')
+    try {
+      const canalQuery = tipoCanal === 'cliente' ? '' : `?canal=${tipoCanal}`
+      await api.post(`${HUMAN_QUEUE_PATH}/${encodeURIComponent(sessionId)}/release${canalQuery}`, {}, {
+        headers: { 'X-Empresa-Id': selection?.empresaId || '', 'X-Loja-Id': selection?.canonicalLojaId || '' },
+        signal: controller.signal,
+      })
+      if (!mountedRef.current || claimLockRef.current !== controller || contextKeyRef.current !== contextKey || !openRef.current) return
+      const refreshed = await loadQueue()
+      if (refreshed && mountedRef.current && contextKeyRef.current === contextKey) {
+        setNotice('Atendimento devolvido para a IA. A fila foi atualizada.')
+        setNoticeContextKey(contextKey)
+        if (typeof onChanged === 'function') await onChanged()
+      }
+    } catch (caught) {
+      if (!mountedRef.current || claimLockRef.current !== controller || caught?.name === 'AbortError' || contextKeyRef.current !== contextKey || !openRef.current) return
+      setError(queueErrorMessage(caught))
+      setErrorContextKey(contextKey)
+    } finally {
+      if (claimControllerRef.current === controller) claimControllerRef.current = null
+      if (claimLockRef.current === controller) {
+        claimLockRef.current = null
+        if (mountedRef.current && contextKeyRef.current === contextKey) setClaimingId('')
+      }
+    }
   }
 
   async function confirmClaim() {
@@ -286,18 +324,57 @@ export default function WhatsappHumanQueue({
       <div aria-live="polite">
         {!visibleError && !loading && loadedContextKey === contextKey && displayedRows.length === 0 && <EmptyQueue loading={loading} error={visibleError} />}
         {loading && <EmptyQueue loading={loading} error={visibleError} />}
-        {!visibleError && displayedRows.length > 0 && <div className="wa-human-queue__table-wrap">
-          <table className="c360-table wa-human-queue__table">
-            <caption className="sr-only">Conversas aguardando atendimento humano</caption>
-            <thead><tr><th scope="col">Conversa</th><th scope="col">Motivo</th><th scope="col">Espera</th><th scope="col">Responsável</th><th scope="col"><span className="sr-only">Ação</span></th></tr></thead>
-            <tbody>{displayedRows.map((item) => <tr key={item.id}>
-              <td data-label="Conversa"><strong>{item.telefone}</strong><small>Última interação: {queueDateLabel(item.ultima_interacao_em)}</small></td>
-              <td data-label="Motivo"><span className="c360-badge tone-muted">{item.handoff_label}</span></td>
-              <td data-label="Espera">{queueWaitLabel(item.handoff_requested_at)}</td>
-              <td data-label="Responsável">{item.assigned ? (item.isMine ? 'Você' : 'Outro atendente') : 'Sem responsável'}</td>
-              <td data-label="Ação"><button type="button" className="c360-btn primary wa-human-queue__claim" disabled={!canClaim || item.assigned || Boolean(claimingId)} onClick={() => requestClaim(item)}>{item.assigned ? (item.isMine ? 'Assumida por você' : 'Já assumida') : 'Assumir atendimento'}</button></td>
-            </tr>)}</tbody>
-          </table>
+        {!visibleError && displayedRows.length > 0 && <div className="wa-human-queue__grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '16px', marginTop: '16px' }}>
+          {displayedRows.map((item) => {
+            const isHumano = item.status === 'humano';
+            const hasPendingAction = item.hasPendingAction === true;
+            const needsSupport = isHumano || hasPendingAction;
+            
+            return (
+              <div key={item.id} className="wa-human-queue-card" style={{
+                border: `2px solid ${needsSupport ? '#e74c3c' : '#2ecc71'}`,
+                borderRadius: '8px',
+                padding: '16px',
+                backgroundColor: '#fff',
+                boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '8px'
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <strong style={{ fontSize: '1.1em' }}>{item.telefone || item.nome || 'Conversa'}</strong>
+                  <span className="c360-badge" style={{ backgroundColor: needsSupport ? '#fdf2f2' : '#f0fdf4', color: needsSupport ? '#c0392b' : '#27ae60' }}>
+                    {isHumano ? item.handoff_label : 'Fluindo com IA'}
+                  </span>
+                </div>
+                
+                <div style={{ fontSize: '0.9em', color: '#666' }}>
+                  <p style={{ margin: '4px 0' }}>Última interação: <strong>{queueDateLabel(item.ultima_interacao_em)}</strong></p>
+                  {isHumano && <p style={{ margin: '4px 0' }}>Espera: <strong>{queueWaitLabel(item.handoff_requested_at)}</strong></p>}
+                  <p style={{ margin: '4px 0' }}>Responsável: <strong>{item.assigned ? (item.isMine ? 'Você' : 'Outro atendente') : (isHumano ? 'Sem responsável' : 'T-Rex')}</strong></p>
+                </div>
+
+                <div style={{ marginTop: 'auto', paddingTop: '12px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                  {isHumano ? (
+                    <>
+                      <button type="button" className="c360-btn primary" style={{ flex: 1 }} disabled={!canClaim || item.assigned || Boolean(claimingId)} onClick={() => requestClaim(item)}>
+                        {item.assigned ? (item.isMine ? 'Assumida por você' : 'Já assumida') : 'Assumir atendimento'}
+                      </button>
+                      {item.assigned && item.isMine && (
+                        <button type="button" className="c360-btn ghost" style={{ flex: 1 }} disabled={Boolean(claimingId)} onClick={() => requestRelease(item)}>
+                          Devolver p/ IA
+                        </button>
+                      )}
+                    </>
+                  ) : (
+                    <button type="button" className="c360-btn ghost" style={{ flex: 1, borderColor: '#2ecc71', color: '#2ecc71' }} disabled={!canClaim || Boolean(claimingId)} onClick={() => requestClaim(item)}>
+                      Intervir
+                    </button>
+                  )}
+                </div>
+              </div>
+            )
+          })}
         </div>}
       </div>
     </>}
