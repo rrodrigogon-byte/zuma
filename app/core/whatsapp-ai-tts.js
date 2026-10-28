@@ -26,6 +26,25 @@ export async function generateSpeech(text) {
     return Buffer.from(buffer).toString('base64');
   }
 
+  const gcpKey = process.env.GOOGLE_TTS_API_KEY;
+  if (gcpKey) {
+    const url = `https://texttospeech.googleapis.com/v1/text:synthesize?key=${gcpKey}`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        input: { text },
+        voice: { languageCode: 'pt-BR', name: 'pt-BR-Journey-D' },
+        audioConfig: { audioEncoding: 'OGG_OPUS', speakingRate: 1.1 }
+      })
+    });
+    if (!response.ok) throw new Error(`GCP TTS falhou: ${response.status}`);
+    const data = await response.json();
+    return data.audioContent;
+  }
+
   const openAiKey = process.env.OPENAI_API_KEY;
   if (openAiKey) {
     const response = await fetch('https://api.openai.com/v1/audio/speech', {
