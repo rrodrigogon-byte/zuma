@@ -276,6 +276,8 @@ app.get('/env-debug-4321', (req, res) => {
   res.json(env);
 });
 
+import { router as dedupRouter } from './routes/admin-dino-dedup.js';
+app.use('/api/publico/dino', dedupRouter);
 app.get('/health', async (req, res) => {
   // O estado da persistência é informativo aqui: o health principal não reinicia o
   // serviço por causa de uma cópia atrasada (use /health/persistencia para alertar).
