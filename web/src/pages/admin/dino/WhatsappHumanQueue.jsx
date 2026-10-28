@@ -32,9 +32,10 @@ export default function WhatsappHumanQueue({
   lojaNome = 'unidade atual',
   operatorLabel = 'operador logado',
   onChanged,
+  standalone = false,
 }) {
   const contextKey = `${String(empresaId || '')}\u0000${String(lojaId || '')}\u0000${['gestao', 'lancamentos'].includes(tipoCanal) ? tipoCanal : 'cliente'}`
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(standalone ? true : false)
   const [assignment, setAssignment] = useState('unassigned')
   const [rows, setRows] = useState([])
   const [loadedContextKey, setLoadedContextKey] = useState('')

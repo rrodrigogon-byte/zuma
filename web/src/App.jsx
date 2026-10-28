@@ -152,6 +152,7 @@ const FinanceiroAuto = lazy(() => import('./pages/admin/financeiro/FinanceiroAut
 const AuditoriaEmpresa = lazy(() => import('./pages/admin/dino/AuditoriaEmpresa'))
 const BIBarbearia = lazy(() => import('./pages/admin/dino/BIBarbearia'))
 const WhatsappConexao = lazy(() => import('./pages/admin/dino/WhatsappConexao'))
+const WhatsappFilaPage = lazy(() => import('./pages/admin/dino/WhatsappFilaPage'))
 const WhatsappControlCenter = lazy(() => import('./pages/admin/dino/WhatsappControlCenter'))
 const CerebroIA = lazy(() => import('./pages/admin/dino/CerebroIA'))
 const ContasReceber = lazy(() => import('./pages/admin/ContasReceber'))
@@ -319,6 +320,7 @@ export default function App() {
           <Route path="/admin/whatsapp"       element={<Layout><WhatsappConexao /></Layout>} />
           <Route path="/admin/whatsapp-gestao" element={<Layout><WhatsappConexao /></Layout>} />
           <Route path="/admin/whatsapp-lancamentos" element={<Layout><WhatsappConexao /></Layout>} />
+          <Route path="/admin/whatsapp-fila" element={<WhatsappFilaPage />} />
           <Route path="/admin/cerebro-ia"     element={<Layout><CerebroIA /></Layout>} />
           <Route path="/admin/quadras"        element={<Layout><Quadras /></Layout>} />
           <Route path="/admin/pontos"         element={<Layout><Pontos /></Layout>} />

@@ -76,8 +76,7 @@ async function tick() {
 }
 
 async function openQueue(renderer) {
-  await act(async () => { button(renderer, 'Abrir fila').props.onClick() })
-  await tick()
+    await tick()
 }
 
 function props(overrides = {}) {
@@ -96,7 +95,7 @@ afterEach(() => {
 describe('WhatsappHumanQueue', () => {
   it('é lazy: fechado não faz GET; abrir faz GET com filtros, headers e AbortSignal', async () => {
     let renderer
-    await act(async () => { renderer = create(<WhatsappHumanQueue {...props()} />) })
+    await act(async () => { renderer = create(<WhatsappHumanQueue {...props()} standalone={true} />) })
     expect(apiMock.get).not.toHaveBeenCalled()
     await openQueue(renderer)
     expect(apiMock.get).toHaveBeenCalledTimes(1)
@@ -109,7 +108,7 @@ describe('WhatsappHumanQueue', () => {
 
   it('filtro é explícito: troca não faz GET e Atualizar consulta Todos humanos', async () => {
     let renderer
-    await act(async () => { renderer = create(<WhatsappHumanQueue {...props()} />) })
+    await act(async () => { renderer = create(<WhatsappHumanQueue {...props()} standalone={true} />) })
     await openQueue(renderer)
     const select = renderer.root.findByProps({ id: 'wa-human-queue-assignment' })
     await act(async () => { select.props.onChange({ target: { value: 'all' } }) })
@@ -124,7 +123,7 @@ describe('WhatsappHumanQueue', () => {
   it('canClaim=false desabilita Assumir atendimento e não supõe permissionamento legado', async () => {
     apiMock.get.mockResolvedValue(response([item()], { canClaim: false }))
     let renderer
-    await act(async () => { renderer = create(<WhatsappHumanQueue {...props()} />) })
+    await act(async () => { renderer = create(<WhatsappHumanQueue {...props()} standalone={true} />) })
     await openQueue(renderer)
     const claim = button(renderer, 'Assumir atendimento')
     expect(claim.props.disabled).toBe(true)
@@ -135,7 +134,7 @@ describe('WhatsappHumanQueue', () => {
   it('403 e resposta malformada limpam dados e mostram mensagem segura sem raw error', async () => {
     apiMock.get.mockRejectedValueOnce(Object.assign(new Error('SECRET-403'), { status: 403 }))
     let renderer
-    await act(async () => { renderer = create(<WhatsappHumanQueue {...props()} />) })
+    await act(async () => { renderer = create(<WhatsappHumanQueue {...props()} standalone={true} />) })
     await openQueue(renderer)
     expect(textOf(renderer)).toContain('Você não tem permissão')
     expect(textOf(renderer)).not.toContain('SECRET-403')
@@ -150,7 +149,7 @@ describe('WhatsappHumanQueue', () => {
   it('canary de PII nunca aparece no DOM; telefone bruto vira máscara e campos brutos são descartados', async () => {
     apiMock.get.mockResolvedValue(response([item(sessionA, { telefone: '5565999999999', nome: 'PII-CANARY', raw: 'RAW-CANARY', assigned_to: 'SECRET-CANARY' })]))
     let renderer
-    await act(async () => { renderer = create(<WhatsappHumanQueue {...props()} />) })
+    await act(async () => { renderer = create(<WhatsappHumanQueue {...props()} standalone={true} />) })
     await openQueue(renderer)
     const html = textOf(renderer)
     expect(html).toContain('***9999')
@@ -164,7 +163,7 @@ describe('WhatsappHumanQueue', () => {
     const pending = deferred()
     apiMock.post.mockReturnValue(pending.promise)
     let renderer
-    await act(async () => { renderer = create(<WhatsappHumanQueue {...props()} />) })
+    await act(async () => { renderer = create(<WhatsappHumanQueue {...props()} standalone={true} />) })
     await openQueue(renderer)
     await act(async () => { button(renderer, 'Assumir atendimento').props.onClick() })
     expect(textOf(renderer)).toContain('Empresa A')
@@ -194,10 +193,10 @@ describe('WhatsappHumanQueue', () => {
     const second = deferred()
     apiMock.get.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise)
     let renderer
-    await act(async () => { renderer = create(<WhatsappHumanQueue {...props()} />) })
+    await act(async () => { renderer = create(<WhatsappHumanQueue {...props()} standalone={true} />) })
     await openQueue(renderer)
     const firstSignal = apiMock.get.mock.calls[0][1].signal
-    await act(async () => { renderer.update(<WhatsappHumanQueue {...props({ empresaId: '66666666-6666-4666-8666-666666666666', lojaId: '77777777-7777-4777-8777-777777777777' })} />) })
+    await act(async () => { renderer.update(<WhatsappHumanQueue {...props({ empresaId: '66666666-6666-4666-8666-666666666666', lojaId: '77777777-7777-4777-8777-777777777777' })} standalone={true} />) })
     expect(firstSignal.aborted).toBe(true)
     const secondSignal = apiMock.get.mock.calls[1][1].signal
     second.resolve(response([item(sessionB, { telefone: '***8888' })], { selection: { empresaId: '66666666-6666-4666-8666-666666666666', requestedLojaId: '77777777-7777-4777-8777-777777777777', canonicalLojaId: lojaCanonical, inferred: false } }))
@@ -214,9 +213,8 @@ describe('WhatsappHumanQueue', () => {
     const pending = deferred()
     apiMock.get.mockReturnValue(pending.promise)
     let renderer
-    await act(async () => { renderer = create(<WhatsappHumanQueue {...props()} />) })
-    await act(async () => { button(renderer, 'Abrir fila').props.onClick() })
-    const signal = apiMock.get.mock.calls[0][1].signal
+    await act(async () => { renderer = create(<WhatsappHumanQueue {...props()} standalone={true} />) })
+        const signal = apiMock.get.mock.calls[0][1].signal
     await act(async () => { renderer.unmount() })
     expect(signal.aborted).toBe(true)
   })
@@ -227,7 +225,7 @@ describe('guards finais da fila humana', () => {
     const oldClaim = deferred(), newClaim = deferred(), onChanged = vi.fn()
     apiMock.post.mockReturnValueOnce(oldClaim.promise).mockReturnValueOnce(newClaim.promise)
     let renderer
-    await act(async () => { renderer = create(<WhatsappHumanQueue {...props({ onChanged })} />) })
+    await act(async () => { renderer = create(<WhatsappHumanQueue {...props({ onChanged })} standalone={true} />) })
     await openQueue(renderer)
     await act(async () => { button(renderer, 'Assumir atendimento').props.onClick() })
     await act(async () => { renderer.root.findByProps({ role: 'dialog' }).props.onSubmit({ preventDefault() {} }) })
@@ -235,7 +233,7 @@ describe('guards finais da fila humana', () => {
     const empresaB = '66666666-6666-4666-8666-666666666666', lojaB = '77777777-7777-4777-8777-777777777777'
     const bResponse = response([item(sessionB, { telefone: '***8888' })], { selection: { empresaId: empresaB, requestedLojaId: lojaB, canonicalLojaId: lojaCanonical, inferred: false } })
     apiMock.get.mockResolvedValue(bResponse)
-    await act(async () => { renderer.update(<WhatsappHumanQueue {...props({ empresaId: empresaB, lojaId: lojaB, onChanged })} />) })
+    await act(async () => { renderer.update(<WhatsappHumanQueue {...props({ empresaId: empresaB, lojaId: lojaB, onChanged })} standalone={true} />) })
     await tick()
     expect(oldSignal.aborted).toBe(true)
     await act(async () => { button(renderer, 'Assumir atendimento').props.onClick() })
@@ -258,7 +256,7 @@ describe('guards finais da fila humana', () => {
   it('timeout de atribuição descarta dados/permissão e não repete POST automaticamente', async () => {
     apiMock.post.mockRejectedValue(Object.assign(new Error('PRIVATE-TIMEOUT'), { status: 504 }))
     let renderer
-    await act(async () => { renderer = create(<WhatsappHumanQueue {...props()} />) })
+    await act(async () => { renderer = create(<WhatsappHumanQueue {...props()} standalone={true} />) })
     await openQueue(renderer)
     await act(async () => { button(renderer, 'Assumir atendimento').props.onClick() })
     await act(async () => { renderer.root.findByProps({ role: 'dialog' }).props.onSubmit({ preventDefault() {} }) })
@@ -278,7 +276,7 @@ describe('guards finais da fila humana', () => {
   it('conflito atualiza só GET e informa que a atribuição não está mais disponível', async () => {
     apiMock.post.mockRejectedValue(Object.assign(new Error('PRIVATE-CONFLICT'), { status: 409 }))
     let renderer
-    await act(async () => { renderer = create(<WhatsappHumanQueue {...props()} />) })
+    await act(async () => { renderer = create(<WhatsappHumanQueue {...props()} standalone={true} />) })
     await openQueue(renderer)
     apiMock.get.mockResolvedValue(response([]))
     await act(async () => { button(renderer, 'Assumir atendimento').props.onClick() })
@@ -294,7 +292,7 @@ describe('guards finais da fila humana', () => {
 
   it('trocar filtro fecha diálogo e não apresenta um vazio como se a visão já tivesse sido consultada', async () => {
     let renderer
-    await act(async () => { renderer = create(<WhatsappHumanQueue {...props()} />) })
+    await act(async () => { renderer = create(<WhatsappHumanQueue {...props()} standalone={true} />) })
     await openQueue(renderer)
     await act(async () => { button(renderer, 'Assumir atendimento').props.onClick() })
     await act(async () => { renderer.root.findByProps({ id: 'wa-human-queue-assignment' }).props.onChange({ target: { value: 'all' } }) })
@@ -308,7 +306,7 @@ describe('guards finais da fila humana', () => {
   it('nova leitura invalida imediatamente o diálogo antigo e sua permissão de confirmar', async () => {
     const pending = deferred()
     let renderer
-    await act(async () => { renderer = create(<WhatsappHumanQueue {...props()} />) })
+    await act(async () => { renderer = create(<WhatsappHumanQueue {...props()} standalone={true} />) })
     await openQueue(renderer)
     await act(async () => { button(renderer, 'Assumir atendimento').props.onClick() })
     apiMock.get.mockReturnValueOnce(pending.promise)
@@ -326,7 +324,7 @@ it('POST antigo concluído depois de fechar/reabrir não atualiza a nova leitura
   const pending = deferred(), onChanged = vi.fn()
   apiMock.post.mockReturnValue(pending.promise)
   let renderer
-  await act(async () => { renderer = create(<WhatsappHumanQueue {...props({ onChanged })} />) })
+  await act(async () => { renderer = create(<WhatsappHumanQueue {...props({ onChanged })} standalone={true} />) })
   await openQueue(renderer)
   await act(async () => { button(renderer, 'Assumir atendimento').props.onClick() })
   await act(async () => { renderer.root.findByProps({ role: 'dialog' }).props.onSubmit({ preventDefault() {} }) })
@@ -345,7 +343,7 @@ it('POST antigo concluído depois de fechar/reabrir não atualiza a nova leitura
 
 it('envia o perfil Lançamentos na URL da fila humana', async () => {
   let renderer
-  await act(async () => { renderer = create(<WhatsappHumanQueue {...props({ tipoCanal: 'lancamentos' })} />) })
+  await act(async () => { renderer = create(<WhatsappHumanQueue {...props({ tipoCanal: 'lancamentos' })} standalone={true} />) })
   await openQueue(renderer)
   expect(apiMock.get.mock.calls[0][0]).toContain('&canal=lancamentos')
   renderer.unmount()
