@@ -67,7 +67,7 @@ function validItem(item, index, ids) {
   return Object.freeze({
     id: item.id,
     telefone: maskQueuePhone(item.telefone, item.id),
-    status: 'humano',
+    status: item.status,
     assigned: item.assigned,
     isMine: item.isMine,
     assigned_at: item.assigned_at,
@@ -75,6 +75,7 @@ function validItem(item, index, ids) {
     ultima_interacao_em: item.ultima_interacao_em,
     handoff_label: safeHandoffLabel(item.handoff_label),
     priority: item.priority,
+    hasPendingAction: Boolean(item.hasPendingAction),
   })
 }
 
@@ -110,11 +111,11 @@ export function validateClaimResponse(payload, sessionId) {
   return Object.freeze({ id: sessionId, status: 'humano' })
 }
 
-export function queueUrl(assignment, tipoCanal = 'cliente') {
+export function queueUrl(assignment, tipoCanal = 'cliente', allStatus = false) {
   const value = assignment === 'all' ? 'all' : 'unassigned'
   const canal = ['gestao', 'lancamentos'].includes(tipoCanal) ? tipoCanal : 'cliente'
   const canalQuery = canal === 'cliente' ? '' : `&canal=${canal}`
-  return `${HUMAN_QUEUE_PATH}?status=humano&assignment=${value}&limit=${HUMAN_QUEUE_LIMIT}${canalQuery}`
+  return `${HUMAN_QUEUE_PATH}?status=${allStatus ? 'all' : 'humano'}&assignment=${value}&limit=${HUMAN_QUEUE_LIMIT}${canalQuery}`
 }
 
 export function queueWaitLabel(value, now = Date.now()) {
