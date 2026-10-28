@@ -18,6 +18,7 @@ import { lerAgenda, erroAgenda } from '../../lib/agenda-read'
 import { hojeAgenda } from '../../lib/barbearia-calendar'
 import BarbeariaOperacaoPanel from './BarbeariaOperacaoPanel'
 import BarbeariaCaixaPrevia from './BarbeariaCaixaPrevia'
+function Card({ children, style = {} }) { return <div style={{ background: 'var(--surface)', borderRadius: 'var(--radius)', border: '1px solid var(--border)', ...style }}>{children}</div>; }
 import { NfseComandaAcoes, NfseConfigCard } from './BarbeariaNfsePanel'
 import { ComprasPanel, CurvaAbcPanel } from './dino/ComprasPanels'
 import { RepassesPanel, ReguaClubePanel } from './dino/RepassesPanel'
@@ -187,9 +188,6 @@ function Badge({ status }) {
   return <span style={{ background: `${item.color}20`, color: item.color, padding: '5px 10px', borderRadius: 999, fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap' }}>{item.label}</span>
 }
 
-function Card({ children, style = {} }) {
-  return <div style={{ background: 'var(--card)', border: '1px solid var(--line)', borderRadius: 14, ...style }}>{children}</div>
-}
 
 function Kpi({ label, value, note, color = 'var(--accent)' }) {
   return <Card style={{ padding: 18, minHeight: 112 }}>
