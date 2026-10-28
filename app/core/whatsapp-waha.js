@@ -109,7 +109,13 @@ export async function getWahaSessionStatus(sessionName) {
 }
 
 export async function getWahaSessionQr(sessionName) {
-  const response = await request(`/v1/sessions/${encodedSession(sessionName)}/qr`);
+  let response;
+  try {
+    response = await request(`/v1/sessions/${encodedSession(sessionName)}/qr`);
+  } catch (error) {
+    if (error.status === 404) return { contentType: 'image/png', dataUrl: '' };
+    throw error;
+  }
   const contentType = response.headers.get('content-type')?.split(';', 1)[0] || 'image/png';
   const base64 = Buffer.from(await response.arrayBuffer()).toString('base64');
   if (!base64 || !contentType.startsWith('image/')) throw new Error('A instância WAHA não retornou um QR Code válido.');
