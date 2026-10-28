@@ -548,7 +548,7 @@ export default function BarbeariaERP() {
     try {
       setSalvando(true)
       const res = await api.post('/api/admin/barbearia/operacao/fechar-dia', { data, confirmado: true })
-      setFechamentoDetalhado(res.data.fechamento)
+      setFechamentoDetalhado(res.fechamento)
       setModal('fechamentoDia')
       carregar()
       if (toast) toast('Fechamento financeiro diário concluído com sucesso!', 'success')
