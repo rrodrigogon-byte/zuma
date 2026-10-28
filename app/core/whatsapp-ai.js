@@ -8,7 +8,8 @@ import {
   WHATSAPP_AI_TOOL_DECLARATIONS,
 } from './whatsapp-ai-tools.js';
 import { ensureWhatsappLead, updateWhatsappMarketingConsent } from './whatsapp-ai-crm.js';
-import { enviarMensagem } from './whatsapp.js';
+import { enviarMensagem, enviarAudio } from './whatsapp.js';
+import { generateSpeech } from './whatsapp-ai-tts.js';
 import {
   applyWhatsappPersonalizationConsent,
   markPersonalizationPrompted,
@@ -281,11 +282,29 @@ async function sendOutput(channel, session, output) {
   if (!claimed) {
     throw await deliveryError(session, output, 'unknown', 'WHATSAPP_DELIVERY_RACE', 'estado de entrega alterado por outro worker; revisão humana obrigatória');
   }
-  const result = await enviarMensagem({
-    nome: channel.configuracao?.display_name || channel.nome || 'Atendimento da unidade',
-    whatsapp_api_url: channel.api_base_url || undefined,
-    whatsapp_instance: channel.configuracao?.instance || undefined,
-  }, session.telefone, claimed.conteudo);
+  let result;
+  if (output.metadados?.isAudio) {
+    try {
+      const base64Audio = await generateSpeech(claimed.conteudo);
+      result = await enviarAudio({
+        whatsapp_api_url: channel.api_base_url || undefined,
+        whatsapp_instance: channel.configuracao?.instance || undefined,
+      }, session.telefone, base64Audio);
+    } catch (e) {
+      console.error('Falha ao gerar audio, enviando texto:', e);
+      result = await enviarMensagem({
+        nome: channel.configuracao?.display_name || channel.nome || 'Atendimento da unidade',
+        whatsapp_api_url: channel.api_base_url || undefined,
+        whatsapp_instance: channel.configuracao?.instance || undefined,
+      }, session.telefone, claimed.conteudo);
+    }
+  } else {
+    result = await enviarMensagem({
+      nome: channel.configuracao?.display_name || channel.nome || 'Atendimento da unidade',
+      whatsapp_api_url: channel.api_base_url || undefined,
+      whatsapp_instance: channel.configuracao?.instance || undefined,
+    }, session.telefone, claimed.conteudo);
+  }
   if (result?.uncertain) {
     throw await deliveryError(session, claimed, 'unknown', 'WHATSAPP_DELIVERY_UNKNOWN', 'Evolution não confirmou se a mensagem foi aceita');
   }
@@ -667,11 +686,13 @@ export async function processWhatsappConversationTask(task) {
   }
 
   const responseText = priorOutput ? priorOutput.conteudo : await withPrivacyNotice(session, channel, response.text);
+  const isAudio = message.text && message.text.includes('[áudio transcrito]');
   const output = priorOutput || await saveOutput(record, session, message, responseText, {
     delivered: false,
     kind: response.kind,
     model: response.model || null,
     traces: response.traces || [],
+    isAudio
   });
   try {
     await sendOutput(channel, session, output);

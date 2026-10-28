@@ -28,6 +28,42 @@ function formatarTelefone(tel) {
   return digits;
 }
 
+export async function enviarAudio(tenant, telefone, base64Audio) {
+  const numero = formatarTelefone(String(telefone || ''));
+  if (whatsappProviderName() === 'chatbot_backend') {
+     // Evolution Backend (not natively supported by standard wrapper without extension)
+     // Evolution API uses /message/sendWhatsAppAudio
+     const cfg = chatbotBackendConfig();
+     const body = {
+       number: numero,
+       audio: base64Audio,
+       delay: 1200
+     };
+     const res = await fetch(`${cfg.baseUrl.replace(/\/$/, '')}/message/sendWhatsAppAudio/${encodeURIComponent(cfg.instance)}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: cfg.key,
+      },
+      body: JSON.stringify(body),
+    });
+    return { ok: res.ok, status: res.status };
+  } else {
+    // Evolution standard
+    const cfg = getConfig(tenant);
+    const body = { number: numero, audio: base64Audio, delay: 1200 };
+    const res = await fetch(`${cfg.baseUrl.replace(/\/$/, '')}/message/sendWhatsAppAudio/${encodeURIComponent(cfg.instance)}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: cfg.apiKey,
+      },
+      body: JSON.stringify(body),
+    });
+    return { ok: res.ok, status: res.status };
+  }
+}
+
 export async function enviarMensagem(tenant, telefone, mensagem) {
   if (tenant?.transport === 'waha') {
     const session = validWahaSession(tenant?.waha_session || tenant?.whatsapp_instance);
