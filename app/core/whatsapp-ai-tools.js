@@ -204,11 +204,16 @@ async function toolAvailability(context, args = {}) {
   return {
     ok: true,
     dataClassification: 'untrusted_business_data',
-    disponibilidade: sanitizeToolData(await listSchedulingAvailability(scope, {
-      serviceId: sId,
-      professionalId: pId,
-      date: args.date,
-    })),
+    disponibilidade: sanitizeToolData(await (async () => {
+      try {
+        return await listSchedulingAvailability(scope, { serviceId: sId, professionalId: pId, date: args.date });
+      } catch (err) {
+        if (err.code === 'INVALID_DATE' || err.code === 'DATE_OUT_OF_RANGE') {
+          throw new WhatsappAiToolError(`A data informada (${args.date}) é inválida ou fora do limite. O formato OBRIGATÓRIO é AAAA-MM-DD. Se o usuário não forneceu o dia ou mês exato, PARE de chamar a ferramenta, NÃO retente, e envie uma mensagem pedindo para ele confirmar a data desejada.`, err.code);
+        }
+        throw err;
+      }
+    })()),
   };
 }
 
@@ -317,7 +322,15 @@ async function toolPrepareAppointment(context, args = {}) {
   }
   const date = cleanText(args.date, 10);
   const time = cleanText(args.time, 5);
-  const availability = await listSchedulingAvailability(scope, { serviceId, professionalId, date });
+  let availability;
+  try {
+    availability = await listSchedulingAvailability(scope, { serviceId, professionalId, date });
+  } catch (err) {
+    if (err.code === 'INVALID_DATE' || err.code === 'DATE_OUT_OF_RANGE') {
+      return { ok: false, erro: `A data informada (${date}) é inválida ou fora do limite. O formato OBRIGATÓRIO é AAAA-MM-DD. Se o usuário não forneceu o dia ou mês exato, PARE de chamar a ferramenta, NÃO retente, e envie uma mensagem pedindo para ele confirmar o dia e mês desejados.` };
+    }
+    throw err;
+  }
   if (!availability.slots.includes(time)) throw new SchedulingError('horário indisponível', 'SLOT_UNAVAILABLE');
   const request = {
     serviceId,
