@@ -712,7 +712,7 @@ export async function processWhatsappConversationTask(task) {
   }
 
   const responseText = priorOutput ? priorOutput.conteudo : await withPrivacyNotice(session, channel, response.text);
-  const isAudio = message.text && message.text.includes('[áudio transcrito]');
+  const isAudio = message.text && (message.text.includes('[áudio transcrito]') || /áudio|audio|mandar voz|mande voz/i.test(message.text) || /áudio|audio/i.test(responseText));
   const output = priorOutput || await saveOutput(record, session, message, responseText, {
     delivered: false,
     kind: response.kind,
