@@ -271,11 +271,11 @@ app.get('/health', async (req, res) => {
   const persistencia = protecaoDados.situacao().status;
   const assets = staticAssetReadiness();
   if (!assets.ready) return res.status(503).json({ status: 'not_ready', code: 'STATIC_ASSETS_INCOMPLETE', missingAssets: assets.missing });
-  if (process.env.COMMERCE_CORE_ENABLED !== '1') return res.status(200).json({ status: 'ready', persistencia });
+  if (process.env.COMMERCE_CORE_ENABLED !== '1') return res.status(200).json({ status: 'ready', persistencia, ai: process.env.FEATURE_WHATSAPP_AI, gemini: !!process.env.GEMINI_API_KEY, evolution: !!process.env.EVOLUTION_API_KEY });
   try {
     const schema = await checkCommerceSchemaReadiness(commerceDb);
     if (!schema.ready) return res.status(503).json({ status: 'not_ready', code: schema.code });
-    return res.status(200).json({ status: 'ready', persistencia });
+    return res.status(200).json({ status: 'ready', persistencia, ai: process.env.FEATURE_WHATSAPP_AI, gemini: !!process.env.GEMINI_API_KEY, evolution: !!process.env.EVOLUTION_API_KEY });
   } catch {
     return res.status(503).json({ status: 'not_ready', code: 'COMMERCE_DATABASE_UNAVAILABLE' });
   }
