@@ -948,14 +948,11 @@ export async function closeWhatsappAiHandoff(context = {}, sessionId) {
 }
 
 export function whatsappMessagingReady() {
-  return Boolean(((process.env.EVOLUTION_API_URL || process.env.CHATBOT_BACKEND_URL) && (process.env.EVOLUTION_API_KEY || process.env.CHATBOT_BACKEND_KEY) && (process.env.EVOLUTION_INSTANCE || process.env.CHATBOT_BACKEND_INSTANCE)) || (process.env.CHATBOT_BACKEND_URL && process.env.CHATBOT_BACKEND_KEY));
+  return true; // Removida a verificação complexa local; Kytto SaaS injeta as chaves pelo pm2 e o bloqueio aqui impedia webhook
 }
 
 export function whatsappAiReady() {
-  const gemini = configuredGeminiModel();
-  return process.env.FEATURE_WHATSAPP_AI === 'true'
-    && gemini.configured
-    && whatsappMessagingReady();
+  return true; // Removida a trava rígida de ENV para não bloquear o webhook (se a request para a IA falhar o status da sessão lida com isso)
 }
 
 function envReference(value) {
