@@ -1,13 +1,13 @@
 {
-  "name": "SetPoint — 4ª Agro Open de Tênis",
-  "short_name": "SetPoint",
-  "description": "Gestão esportiva do 4ª Agro Open de Tênis",
+  "name": "Kytto — Sistemas inteligentes para negócios",
+  "short_name": "Kytto",
+  "description": "Sistemas de gestão, vendas, operações e automação para comércio, alimentação, agro, clubes e serviços.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#091a0f",
-  "theme_color": "#5FB335",
+  "background_color": "#FFF4EC",
+  "theme_color": "#FF6B2C",
   "icons": [
-    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
-    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+    { "src": "/icon-192.png", "sizes": "1024x1024", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/icon-512.png", "sizes": "1024x1024", "type": "image/png", "purpose": "any maskable" }
   ]
 }
