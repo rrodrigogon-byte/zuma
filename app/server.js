@@ -5919,8 +5919,6 @@ app.post('/api/admin/barbearia/bloqueios', (req, res) => {
     res.status(201).json({ ok: true, bloqueio: barbeariaErpKytto.criarBloqueio(empresaId, { ...(req.body || {}), lojaId }) });
   }
   catch (error) { res.status(400).json({ error: error.message }); }
-}); }
-  catch (error) { res.status(400).json({ error: error.message }); }
 });
 app.patch('/api/admin/barbearia/bloqueios/:id', (req, res) => {
   try {
