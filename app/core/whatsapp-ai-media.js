@@ -23,7 +23,7 @@
 // ============================================================================
 
 import { config } from '../config.js';
-import { chatbotBackendConfig } from './whatsapp-provider.js';
+import { chatbotBackendConfig, chatbotBackendMode } from './whatsapp-provider.js';
 import crypto from 'node:crypto';
 
 const DEFAULT_MAX_MB = 12;
