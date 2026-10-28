@@ -305,7 +305,10 @@ export default function WhatsappHumanQueue({
         <h2 id="wa-human-queue-title">{queueTitle}</h2>
         <p className="wa-human-queue__intro">Conversas encaminhadas para atendimento humano. Esta tela não envia mensagens nem retoma a automação. Fechar e reabrir descarta a leitura e consulta novamente.</p>
       </div>
-      <button type="button" className="c360-btn ghost" onClick={open ? closeQueue : openQueue} aria-expanded={open}>{open ? 'Fechar fila' : 'Abrir fila'}</button>
+      <div style={{ display: 'flex', gap: '8px' }}>
+        {!standalone && <button type="button" className="c360-btn ghost" onClick={() => window.open('/admin/whatsapp-fila' + (tipoCanal !== 'cliente' ? '?canal=' + tipoCanal : ''), '_blank')}>Abrir fila em nova janela</button>}
+        {!standalone && <button type="button" className="c360-btn ghost" onClick={open ? closeQueue : openQueue} aria-expanded={open}>{open ? 'Fechar fila' : 'Abrir fila aqui'}</button>}
+      </div>
     </div>
 
     {open && <>
