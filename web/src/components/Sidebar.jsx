@@ -640,6 +640,7 @@ export default function Sidebar({ collapsed = false, onToggleCollapse = () => {}
   const { user, logout, isOrg, isStaff, isAtleta, isPlatformAdmin, empresaAtiva, empresasAcessiveis, lojaAtiva, lojasAcessiveis, trocarEmpresa, trocarLoja, permissoes, modulosOcultos, atualizarContextoLojas } = useAuth()
   const navigate = useNavigate()
   const [open, setOpen] = useState(false)
+  const [hovered, setHovered] = useState(false)
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
   const pendentes = usePendingOrders(isStaff)
   const isDino = isDinoDedicatedHost() || isDinoBrandContext(empresaAtiva)
@@ -697,7 +698,7 @@ export default function Sidebar({ collapsed = false, onToggleCollapse = () => {}
   }
 
   const sidebarStyle = {
-    width: collapsed && !isMobile ? 78 : 256,
+    width: collapsed && !isMobile && !hovered ? 78 : 256,
     background: 'var(--surface)',
     borderRight: '1px solid var(--line)',
     height: '100vh',
@@ -732,16 +733,16 @@ export default function Sidebar({ collapsed = false, onToggleCollapse = () => {}
         onClick={() => setOpen(false)}
       />
 
-      <nav style={sidebarStyle}>
+      <nav style={sidebarStyle} onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}>
         {/* Logo + close button (mobile) */}
-        <div className={`sidebar-brand-header${collapsed && !isMobile ? ' is-collapsed' : ''}`} style={{
-          padding: collapsed && !isMobile ? '14px 10px' : '20px 18px 18px',
+        <div className={`sidebar-brand-header${collapsed && !isMobile && !hovered ? ' is-collapsed' : ''}`} style={{
+          padding: collapsed && !isMobile && !hovered ? '14px 10px' : '20px 18px 18px',
           background: 'var(--brand-header)',
           borderBottom: '4px solid var(--brand-header-accent)',
           display: 'flex', alignItems: 'center', gap: 10,
           boxShadow: '0 8px 20px rgba(18,40,63,.14)',
         }}>
-          <div style={{ flex: 1, minWidth: 0, display: collapsed && !isMobile ? 'none' : 'block' }}>
+          <div style={{ flex: 1, minWidth: 0, display: collapsed && !isMobile && !hovered ? 'none' : 'block' }}>
             <img
               src="/brand/kytto-negativo.svg"
               alt="Kytto — Sistemas inteligentes para negócios"
@@ -771,7 +772,7 @@ export default function Sidebar({ collapsed = false, onToggleCollapse = () => {}
                 color: 'var(--brand-header-text)', fontSize: 17, cursor: 'pointer',
               }}
               aria-label={collapsed ? 'Expandir menu lateral' : 'Recolher menu lateral'}
-              aria-expanded={!collapsed}
+              aria-expanded={(!collapsed || hovered)}
               title={collapsed ? 'Expandir menu' : 'Recolher menu'}
             >
               {collapsed ? '›' : '‹'}
@@ -791,7 +792,7 @@ export default function Sidebar({ collapsed = false, onToggleCollapse = () => {}
           )}
         </div>
 
-        {user && !collapsed && (
+        {user && (!collapsed || hovered) && (
           <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--line)', display: 'grid', gap: 10 }}>
             {empresasAcessiveis.length > 1 && <label htmlFor="empresa-ativa" style={{ display: 'grid', gap: 6, fontSize: 10, fontWeight: 800, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.8px' }}>
               Empresa ativa
@@ -828,12 +829,12 @@ export default function Sidebar({ collapsed = false, onToggleCollapse = () => {}
           </div>
         )}
 
-        {isStallone && !collapsed && (
+        {isStallone && (!collapsed || hovered) && (
           <div className="sidebar-brand-logo" style={{ padding: '10px 14px 4px' }}>
             <img src={STALLONE_LOGO} alt="Stallone Nutre Sport" style={{ width: '100%', maxWidth: 200, display: 'block', background: '#141416', borderRadius: 10 }} />
           </div>
         )}
-        {(isDino || isStallone) && !collapsed && (
+        {(isDino || isStallone) && (!collapsed || hovered) && (
           <div className="sidebar-theme-switch" aria-label={isDino ? 'Tema do painel Dino' : 'Tema do painel Stallone'}>
             <span>Tema</span>
             {[
@@ -845,18 +846,18 @@ export default function Sidebar({ collapsed = false, onToggleCollapse = () => {}
             ))}
           </div>
         )}
-        {isStaff && !isDino && !isStallone && <Section label={isClube ? 'Balcão, bar e portaria' : 'Operações'} items={opVisiveis(isClube ? NAV_OP.filter((item) => item.to !== '/loja-atendimento') : NAV_OP)} onNavClick={handleNavClick} badgesMap={badgesMap} sidebarCollapsed={collapsed && !isMobile} />}
-        {isOrg && <AdminGroups groups={isDino ? NAV_DINO_GROUPS : isStallone ? NAV_STALLONE_GROUPS : isClube ? NAV_CLUBE_GROUPS : NAV_ADMIN_GROUPS} onNavClick={handleNavClick} isPlatformAdmin={isPlatformAdmin} empresa={empresaDoMenu} usuarioDeEmpresa={usuarioDeEmpresa} sidebarCollapsed={collapsed && !isMobile} compacto={isClube} />}
-        {isPlatformAdmin && <Section label="Administração da Plataforma" items={NAV_PLATFORM} onNavClick={handleNavClick} sidebarCollapsed={collapsed && !isMobile} />}
-        {isPlatformAdmin && <BackofficePlataforma empresa={empresaDoMenu} onNavClick={handleNavClick} sidebarCollapsed={collapsed && !isMobile} />}
-        {isAtleta && <Section label="Portal do Atleta" items={NAV_ATLETA} onNavClick={handleNavClick} sidebarCollapsed={collapsed && !isMobile} />}
-        <Section label={isDino ? 'Dino público' : isStallone ? 'Stallone público' : 'Site Público'} items={isDino ? NAV_DINO_PUBLIC : isStallone ? NAV_STALLONE_PUBLIC : NAV_PUBLIC} onNavClick={handleNavClick} sidebarCollapsed={collapsed && !isMobile} />
+        {isStaff && !isDino && !isStallone && <Section label={isClube ? 'Balcão, bar e portaria' : 'Operações'} items={opVisiveis(isClube ? NAV_OP.filter((item) => item.to !== '/loja-atendimento') : NAV_OP)} onNavClick={handleNavClick} badgesMap={badgesMap} sidebarCollapsed={collapsed && !isMobile && !hovered} />}
+        {isOrg && <AdminGroups groups={isDino ? NAV_DINO_GROUPS : isStallone ? NAV_STALLONE_GROUPS : isClube ? NAV_CLUBE_GROUPS : NAV_ADMIN_GROUPS} onNavClick={handleNavClick} isPlatformAdmin={isPlatformAdmin} empresa={empresaDoMenu} usuarioDeEmpresa={usuarioDeEmpresa} sidebarCollapsed={collapsed && !isMobile && !hovered} compacto={isClube} />}
+        {isPlatformAdmin && <Section label="Administração da Plataforma" items={NAV_PLATFORM} onNavClick={handleNavClick} sidebarCollapsed={collapsed && !isMobile && !hovered} />}
+        {isPlatformAdmin && <BackofficePlataforma empresa={empresaDoMenu} onNavClick={handleNavClick} sidebarCollapsed={collapsed && !isMobile && !hovered} />}
+        {isAtleta && <Section label="Portal do Atleta" items={NAV_ATLETA} onNavClick={handleNavClick} sidebarCollapsed={collapsed && !isMobile && !hovered} />}
+        <Section label={isDino ? 'Dino público' : isStallone ? 'Stallone público' : 'Site Público'} items={isDino ? NAV_DINO_PUBLIC : isStallone ? NAV_STALLONE_PUBLIC : NAV_PUBLIC} onNavClick={handleNavClick} sidebarCollapsed={collapsed && !isMobile && !hovered} />
 
         {/* Bottom user area */}
-        <div style={{ marginTop: 'auto', padding: collapsed && !isMobile ? '10px 8px' : '12px 16px', borderTop: '1px solid var(--line)' }}>
+        <div style={{ marginTop: 'auto', padding: collapsed && !isMobile && !hovered ? '10px 8px' : '12px 16px', borderTop: '1px solid var(--line)' }}>
           {user ? (
             <>
-              {!collapsed && <div style={{ marginBottom: 10 }}>
+              {(!collapsed || hovered) && <div style={{ marginBottom: 10 }}>
                 <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--cream)' }}>
                   {user.nome || user.user}
                 </div>
@@ -864,7 +865,7 @@ export default function Sidebar({ collapsed = false, onToggleCollapse = () => {}
                   {user.role}
                 </div>
               </div>}
-              {isAtleta && !collapsed && (
+              {isAtleta && (!collapsed || hovered) && (
                 <NavLink
                   to="/meu-painel"
                   style={({ isActive }) => ({
@@ -901,7 +902,7 @@ export default function Sidebar({ collapsed = false, onToggleCollapse = () => {}
                 aria-label="Sair do sistema"
                 title={collapsed ? 'Sair' : undefined}
               >
-                {collapsed && !isMobile ? '↪' : 'Sair'}
+                {collapsed && !isMobile && !hovered ? '↪' : 'Sair'}
               </button>
             </>
           ) : (

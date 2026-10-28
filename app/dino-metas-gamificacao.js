@@ -212,6 +212,20 @@ export function apurarDesempenhoEquipe(empresaId, { dataIso = dataIsoCuiaba(), i
     };
   }
 
+  // Varre agendamentos do dia para contar como atendimentos realizados (conforme regra de meta/roleta)
+  for (const emp of equivalentes) {
+    let agendamentos = [];
+    try { agendamentos = barbeariaErpKytto.listarAgendamentos(emp, { lojaId }); } catch {}
+    for (const ag of agendamentos) {
+      if (ag.status === 'cancelado' || ag.status === 'falhou' || ag.status === 'bloqueio') continue;
+      const dataAg = ag.data;
+      const noDia = dataAg === dataIso || dataAg === dataIsoCuiaba(new Date().toISOString());
+      if (noDia && ag.profissionalId && stats[ag.profissionalId]) {
+        stats[ag.profissionalId].dia.comandasAtendidas += 1; // Contabiliza agendamento do dia como atendimento
+      }
+    }
+  }
+
   // Varre comandas
   for (const emp of equivalentes) {
     let comandas = [];
