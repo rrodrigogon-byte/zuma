@@ -289,12 +289,15 @@ async function sendOutput(channel, session, output) {
     try {
       const base64Audio = await generateSpeech(claimed.conteudo);
       result = await enviarAudio({
+        empresa_id: session.empresa_id, loja_id: session.loja_id, canal_id: session.canal_id,
         whatsapp_api_url: channel.api_base_url || undefined,
         whatsapp_instance: channel.configuracao?.instance || undefined,
       }, session.telefone, base64Audio);
+      if (!result.ok) throw new Error('Audio send rejected by Evolution');
     } catch (e) {
       console.error('Falha ao gerar audio, enviando texto:', e);
       result = await enviarMensagem({
+        empresa_id: session.empresa_id, loja_id: session.loja_id, canal_id: session.canal_id,
         nome: channel.configuracao?.display_name || channel.nome || 'Atendimento da unidade',
         whatsapp_api_url: channel.api_base_url || undefined,
         whatsapp_instance: channel.configuracao?.instance || undefined,
@@ -302,6 +305,7 @@ async function sendOutput(channel, session, output) {
     }
   } else {
     result = await enviarMensagem({
+      empresa_id: session.empresa_id, loja_id: session.loja_id, canal_id: session.canal_id,
       nome: channel.configuracao?.display_name || channel.nome || 'Atendimento da unidade',
       whatsapp_api_url: channel.api_base_url || undefined,
       whatsapp_instance: channel.configuracao?.instance || undefined,
