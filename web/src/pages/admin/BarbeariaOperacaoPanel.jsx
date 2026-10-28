@@ -17,8 +17,8 @@ function statusLabel(status) {
 
 export default function BarbeariaOperacaoPanel({ data, operacao = {}, onOpenCaixa, onMove, onClose, onCloseDay, onViewDay, salvando = false }) {
   const [formCaixa, setFormCaixa] = useState({ numeroCaixa: 1, valorAbertura: '', observacao: '', dataAbertura: '' })
-  const [formMovimento, setFormMovimento] = useState({ tipo: 'suprimento', valor: '', descricao: '' })
-  const [formFechamento, setFormFechamento] = useState({ valorInformado: '', observacao: '' })
+  const [formMovimento, setFormMovimento] = useState({ tipo: 'suprimento', valor: '', descricao: '', dataMovimento: '' })
+  const [formFechamento, setFormFechamento] = useState({ valorInformado: '', observacao: '', dataFechamento: '' })
   const caixaAberto = operacao.caixaAberto
   const caixas = operacao.caixas || []
   const movimentos = operacao.movimentos || []
@@ -38,8 +38,12 @@ export default function BarbeariaOperacaoPanel({ data, operacao = {}, onOpenCaix
     event.preventDefault()
     if (!caixaAberto) return
     if (!window.confirm(`Confirmar ${formMovimento.tipo === 'sangria' ? 'sangria' : 'suprimento'} de ${moeda(formMovimento.valor)}?`)) return
-    onMove(caixaAberto, { ...formMovimento, valor: Number(formMovimento.valor || 0), confirmado: true })
-    setFormMovimento({ tipo: 'suprimento', valor: '', descricao: '' })
+    let customDate = undefined;
+    if (formMovimento.dataMovimento) {
+      customDate = new Date(formMovimento.dataMovimento).toISOString();
+    }
+    onMove(caixaAberto, { ...formMovimento, valor: Number(formMovimento.valor || 0), criadoEm: customDate, confirmado: true })
+    setFormMovimento({ tipo: 'suprimento', valor: '', descricao: '', dataMovimento: '' })
   }
 
   function fecharCaixa(event) {
@@ -47,7 +51,11 @@ export default function BarbeariaOperacaoPanel({ data, operacao = {}, onOpenCaix
     if (!caixaAberto) return
     const valor = Number(formFechamento.valorInformado || 0)
     if (!window.confirm(`Confirmar fechamento do caixa ${caixaAberto.numeroCaixa} com valor contado de ${moeda(valor)}?`)) return
-    onClose(caixaAberto, { ...formFechamento, valorInformado: valor, confirmado: true })
+    let customDate = undefined;
+    if (formFechamento.dataFechamento) {
+      customDate = new Date(formFechamento.dataFechamento).toISOString();
+    }
+    onClose(caixaAberto, { ...formFechamento, valorInformado: valor, fechadoEm: customDate, confirmado: true })
   }
 
   return <div style={{ display: 'grid', gap: 18 }}>
@@ -83,13 +91,19 @@ export default function BarbeariaOperacaoPanel({ data, operacao = {}, onOpenCaix
         <h3 style={{ margin: 0 }}>Movimentar caixa</h3><p style={{ margin: '5px 0 14px', color: 'var(--muted)' }}>Use suprimento ou sangria para ajustar o numerário físico. Não registra receita.</p>
         <form onSubmit={registrarMovimento} style={{ display: 'grid', gap: 12 }}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 10 }}><label><span style={labelStyle}>Tipo</span><select value={formMovimento.tipo} onChange={(event) => setFormMovimento((atual) => ({ ...atual, tipo: event.target.value }))} style={inputStyle}><option value="suprimento">Suprimento</option><option value="sangria">Sangria</option></select></label><label><span style={labelStyle}>Valor (R$)</span><input required type="number" min="0.01" step="0.01" value={formMovimento.valor} onChange={(event) => setFormMovimento((atual) => ({ ...atual, valor: event.target.value }))} style={inputStyle} /></label></div>
-          <label><span style={labelStyle}>Descrição</span><input required value={formMovimento.descricao} onChange={(event) => setFormMovimento((atual) => ({ ...atual, descricao: event.target.value }))} style={inputStyle} placeholder="Motivo do movimento" /></label>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            <label><span style={labelStyle}>Descrição</span><input required value={formMovimento.descricao} onChange={(event) => setFormMovimento((atual) => ({ ...atual, descricao: event.target.value }))} style={inputStyle} placeholder="Motivo do movimento" /></label>
+            <label><span style={labelStyle}>Data/Hora</span><input type="datetime-local" value={formMovimento.dataMovimento} onChange={(event) => setFormMovimento((atual) => ({ ...atual, dataMovimento: event.target.value }))} style={inputStyle} /></label>
+          </div>
           <button type="submit" disabled={salvando} style={secondary}>Confirmar movimento</button>
         </form>
       </section>
       <section style={{ background: 'var(--card)', border: '1px solid var(--line)', borderRadius: 14, padding: 18 }}>
         <h3 style={{ margin: 0 }}>Fechar caixa</h3><p style={{ margin: '5px 0 14px', color: 'var(--muted)' }}>O esperado considera abertura, recebimentos em dinheiro, suprimentos e sangrias registrados.</p>
-        <form onSubmit={fecharCaixa} style={{ display: 'grid', gap: 12 }}><label><span style={labelStyle}>Valor contado (R$)</span><input required type="number" min="0" step="0.01" value={formFechamento.valorInformado} onChange={(event) => setFormFechamento((atual) => ({ ...atual, valorInformado: event.target.value }))} style={inputStyle} placeholder="Informe o numerário físico" /></label><label><span style={labelStyle}>Observação</span><input value={formFechamento.observacao} onChange={(event) => setFormFechamento((atual) => ({ ...atual, observacao: event.target.value }))} style={inputStyle} /></label><button type="submit" disabled={salvando} style={{ ...secondary, color: '#e05c5c' }}>Confirmar fechamento</button></form>
+        <form onSubmit={fecharCaixa} style={{ display: 'grid', gap: 12 }}><label><span style={labelStyle}>Valor contado (R$)</span><input required type="number" min="0" step="0.01" value={formFechamento.valorInformado} onChange={(event) => setFormFechamento((atual) => ({ ...atual, valorInformado: event.target.value }))} style={inputStyle} placeholder="Informe o numerário físico" /></label><div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            <label><span style={labelStyle}>Observação</span><input value={formFechamento.observacao} onChange={(event) => setFormFechamento((atual) => ({ ...atual, observacao: event.target.value }))} style={inputStyle} /></label>
+            <label><span style={labelStyle}>Data/Hora</span><input type="datetime-local" value={formFechamento.dataFechamento} onChange={(event) => setFormFechamento((atual) => ({ ...atual, dataFechamento: event.target.value }))} style={inputStyle} /></label>
+          </div><button type="submit" disabled={salvando} style={{ ...secondary, color: '#e05c5c' }}>Confirmar fechamento</button></form>
       </section>
     </div>}
 
