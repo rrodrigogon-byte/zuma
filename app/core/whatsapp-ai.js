@@ -452,7 +452,7 @@ async function withPrivacyNotice(session, channel, text) {
 async function deterministicResponse(task, channel, session, message) {
   const context = {
     empresaId: task.empresa_id || process.env.WHATSAPP_AI_PERSONA_EMPRESA_ID || process.env.CHATBOT_BACKEND_EMPRESA_ID || '9bd606df-2037-4f4d-862d-0b73c44238e8',
-    lojaId: task.loja_id,
+    lojaId: task.loja_id || channel?.loja_id || session?.loja_id || process.env.WHATSAPP_AI_PERSONA_LOJA_ID || process.env.CHATBOT_BACKEND_LOJA_ID || 'd2925b68-b7eb-4efd-b94d-1786c5598696',
     canalId: task.canal_id,
     sessionId: session.id,
     phone: session.telefone,

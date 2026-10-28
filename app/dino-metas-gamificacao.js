@@ -221,7 +221,21 @@ export function apurarDesempenhoEquipe(empresaId, { dataIso = dataIsoCuiaba(), i
       const dataAg = ag.data;
       const noDia = dataAg === dataIso || dataAg === dataIsoCuiaba(new Date().toISOString());
       if (noDia && ag.profissionalId && stats[ag.profissionalId]) {
-        stats[ag.profissionalId].dia.comandasAtendidas += 1; // Contabiliza agendamento do dia como atendimento
+        const profId = ag.profissionalId;
+        stats[profId].dia.comandasAtendidas += 1;
+        stats[profId].dia.servicosTotal += 1;
+        stats[profId].semana.servicosTotal += 1;
+        const valorAg = Number(ag.preco || ag.valor || 0);
+        stats[profId].dia.faturamentoServicos += valorAg;
+        stats[profId].dia.faturamentoTotal += valorAg;
+        stats[profId].semana.faturamentoServicos += valorAg;
+        stats[profId].semana.faturamentoTotal += valorAg;
+        const ehExtra = /extra|adicional|sobrancelha|pigmenta|spa|massagem|barboterapia|hidrata/i.test(ag.servicoNome || '');
+        if (ehExtra) {
+          stats[profId].dia.servicosExtras += 1;
+          stats[profId].dia.servicosExtrasLista.push({ nome: ag.servicoNome || 'Serviço Extra (Agendado)', valor: valorAg });
+          stats[profId].semana.servicosExtras += 1;
+        }
       }
     }
   }
