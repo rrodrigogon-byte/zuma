@@ -59,7 +59,7 @@ function validItem(item, index, ids) {
   if (ids.has(item.id)) throw new Error('itens duplicados na fila')
   ids.add(item.id)
   if (typeof item.telefone !== 'string') throw new Error(`telefone inválido na posição ${index}`)
-  if (item.status !== 'humano' && item.status !== 'ativo') throw new Error(`status inválido na posição ${index}`)
+  if (item.status !== 'humano' && item.status !== 'ativo' && item.status !== 'encerrado') throw new Error(`status inválido na posição ${index}`)
   if (typeof item.assigned !== 'boolean' || typeof item.isMine !== 'boolean') throw new Error(`atribuição inválida na posição ${index}`)
   if (!nullableTimestamp(item.assigned_at) || !nullableTimestamp(item.handoff_requested_at) || !nullableTimestamp(item.ultima_interacao_em)) throw new Error(`data inválida na posição ${index}`)
   if (typeof item.handoff_label !== 'string') throw new Error(`motivo inválido na posição ${index}`)
