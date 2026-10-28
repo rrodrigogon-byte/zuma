@@ -3,8 +3,8 @@ export function addDumpEnv(app) {
     if (req.path === '/dump') {
       try {
         const m = await import('./core/whatsapp-waha.js');
-        const qr = await m.getWahaSessionQr('barbearia-dino-gestao');
-        res.json({ ok: true, qrLength: qr.dataUrl.length, dataUrl: qr.dataUrl.slice(0, 50) });
+        const r = await m.getWahaSessionQr('barbearia-dino-gestao');
+        res.json({ ok: true, qr: !!r });
       } catch (e) {
         res.json({ error: e.message, stack: e.stack });
       }
