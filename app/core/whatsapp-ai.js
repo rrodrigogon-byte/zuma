@@ -371,9 +371,9 @@ async function putSessionInHandoff(session, reason, priority = 2) {
   await db.query(
     `UPDATE whatsapp_ai_sessions
         SET status = 'humano', handoff_requested_at = COALESCE(handoff_requested_at, CURRENT_TIMESTAMP),
-            handoff_reason = $4, priority = GREATEST(priority, $5),
+            handoff_reason = $4::varchar, priority = GREATEST(priority, $5),
             assigned_to = NULL, assigned_at = NULL,
-            estado = jsonb_set(estado, '{handoffReason}', to_jsonb($4::text), true),
+            estado = jsonb_set(estado, '{handoffReason}', to_jsonb($4::varchar), true),
             atualizado_em = CURRENT_TIMESTAMP
       WHERE id = $1 AND empresa_id = $2 AND loja_id = $3`,
     [session.id, session.empresa_id, session.loja_id, cleanText(reason, 500), Math.min(5, Math.max(0, Number(priority) || 0))],
