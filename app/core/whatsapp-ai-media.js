@@ -161,12 +161,12 @@ export async function loadMediaBase64(media, { fetchImpl = fetch, chatId } = {})
   try {
     // Com a chave no cabeçalho, nunca seguir redirecionamento automático: o fetch
     // levaria o X-API-KEY para a outra origem (ex.: URL assinada de bucket).
-    response = await fetchImpl(url, { method: 'GET', headers, redirect: headers['X-API-KEY'] ? 'manual' : 'follow', signal: AbortSignal.timeout(TIMEOUT_MS) });
+    response = await fetchImpl(url, { method: 'GET', headers, redirect: (headers['X-API-KEY'] || headers['apikey']) ? 'manual' : 'follow', signal: AbortSignal.timeout(TIMEOUT_MS) });
     const status = Number(response?.status || 0);
     const location = response?.headers?.get?.('location');
-    if (headers['X-API-KEY'] && status >= 300 && status < 400 && location) {
+    if ((headers['X-API-KEY'] || headers['apikey']) && status >= 300 && status < 400 && location) {
       const next = new URL(location, url).toString();
-      response = await fetchImpl(next, { method: 'GET', headers: sameOrigin(next, cfg.baseUrl) ? headers : {}, redirect: 'follow', signal: AbortSignal.timeout(TIMEOUT_MS) });
+      response = await fetchImpl(next, { method: 'GET', headers: sameOrigin(next, cfg.baseUrl) || sameOrigin(next, evoUrl) ? headers : {}, redirect: 'follow', signal: AbortSignal.timeout(TIMEOUT_MS) });
     }
   } catch {
     throw new MediaError('Falha ao baixar a mídia', 'MEDIA_DOWNLOAD_FAILED');
