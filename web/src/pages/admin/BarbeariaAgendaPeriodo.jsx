@@ -329,10 +329,10 @@ export default function BarbeariaAgendaPeriodo({
   // Matriz de horários para ver disponibilidades simultâneas (ex.: pais com filhos juntos)
   const gradeHorariosSimultaneos = useMemo(() => {
     const PADRAO = [
-      '08:00', '08:30', '09:00', '09:30', '10:00', '10:30',
-      '11:00', '11:30', '12:00', '12:30', '13:00', '13:30',
-      '14:00', '14:30', '15:00', '15:30', '16:00', '16:30',
-      '17:00', '17:30', '18:00', '18:30', '19:00', '19:30', '20:00'
+      '08:00', '08:15', '08:30', '08:45', '09:00', '09:15', '09:30', '09:45', '10:00', '10:15', '10:30', '10:45',
+      '11:00', '11:15', '11:30', '11:45', '12:00', '12:15', '12:30', '12:45', '13:00', '13:15', '13:30', '13:45',
+      '14:00', '14:15', '14:30', '14:45', '15:00', '15:15', '15:30', '15:45', '16:00', '16:15', '16:30', '16:45',
+      '17:00', '17:15', '17:30', '17:45', '18:00', '18:15', '18:30', '18:45', '19:00', '19:15', '19:30', '19:45', '20:00'
     ]
     const itensDoDia = porDia.get(de) || []
     const horasSet = new Set(PADRAO)
@@ -1256,7 +1256,7 @@ export default function BarbeariaAgendaPeriodo({
 
               {/* 2. VISÃO EM MATRIZ DE HORÁRIOS SIMULTÂNEOS (FAMÍLIA / PAIS E FILHOS) */}
               {submodoDia === 'simultaneos' && (
-                <div className="dino-cal-simultaneous-container">
+                <div className="dino-cal-simultaneous-container" style={{ position: 'relative' }}>
                   <table className="dino-cal-simultaneous-table">
                     <thead>
                       <tr>
@@ -1277,7 +1277,12 @@ export default function BarbeariaAgendaPeriodo({
                         const nivel = linha.livresCount >= 2 ? 'high' : linha.livresCount === 1 ? 'medium' : 'low'
                         return (
                           <tr key={linha.hora}>
-                            <td className="dino-cal-slot-time-cell">{linha.hora}</td>
+                            <td className="dino-cal-slot-time-cell">
+                              {linha.hora === horarioAtualStr && (
+                                 <div className="dino-cal-current-time-line" style={{ top: `${topPercentOffset}%`, width: 'calc(100vw - 40px)' }} />
+                              )}
+                              {linha.hora}
+                            </td>
                             <td className="dino-cal-slot-avail-cell">
                               <span className="dino-cal-avail-tag" data-level={nivel}>
                                 {linha.livresCount >= 2 && `👨‍👦 ${linha.livresCount} livres juntos`}
