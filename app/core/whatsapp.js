@@ -14,7 +14,7 @@ function getConfig(tenant) {
   return {
     baseUrl: tenant?.whatsapp_api_url || process.env.EVOLUTION_API_URL || process.env.CHATBOT_BACKEND_URL || 'http://localhost:8080',
     apiKey: tenant?.whatsapp_api_key || process.env.EVOLUTION_API_KEY || process.env.CHATBOT_BACKEND_KEY || '',
-    instance: tenant?.whatsapp_instance || process.env.EVOLUTION_INSTANCE || 'setpoint',
+    instance: tenant?.whatsapp_instance || process.env.EVOLUTION_INSTANCE || process.env.CHATBOT_BACKEND_INSTANCE || 'setpoint',
     payloadVersion: String(process.env.EVOLUTION_SEND_PAYLOAD_VERSION || 'current').trim().toLowerCase(),
   };
 }
