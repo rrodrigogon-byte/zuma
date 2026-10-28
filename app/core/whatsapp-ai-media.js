@@ -103,7 +103,8 @@ export function locateInboundMedia(item = {}) {
 
   const inlineCandidates = [media.base64, media.data, item.mediaBase64, item.base64, message.base64, item.mediaData];
   const inline = inlineCandidates.find((value) => typeof value === 'string' && (value.startsWith('data:') || looksBase64(value)));
-  const url = clean(media.url || media.downloadUrl || item.mediaUrl || item.media_url || item.fileUrl, 2000);
+  const url = clean(media.url || media.downloadUrl || item.mediaUrl || item.media_url || item.fileUrl || audioMsg?.url || imageMsg?.url || documentMsg?.url, 2000);
+  console.log('[locateInboundMedia] found URL:', url);
   const parsed = inline ? stripDataUrl(inline) : null;
   const mimeType = clean(parsed?.mimeType || declaredMime || (kind === 'audio' ? 'audio/ogg' : 'image/jpeg'), 100).split(';')[0];
   return {
@@ -119,7 +120,7 @@ export function locateInboundMedia(item = {}) {
 }
 
 function backendMediaUrl(media, { chatId } = {}) {
-  const template = clean(process.env.CHATBOT_BACKEND_MEDIA_PATH, 300);
+  const template = clean(process.env.CHATBOT_BACKEND_MEDIA_PATH || '/instances/{instance}/messages/{id}/media', 300);
   if (!template || !media.id) return '';
   const cfg = chatbotBackendConfig();
   if (!cfg.baseUrl) return '';
