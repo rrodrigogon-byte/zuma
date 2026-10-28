@@ -34,7 +34,7 @@ function cleanText(value, limit = 4000) {
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const AI_CIRCUIT_FAILURES = Math.min(10, Math.max(2, Number.parseInt(process.env.WHATSAPP_AI_CIRCUIT_FAILURES || '3', 10)));
 const AI_CIRCUIT_MINUTES = Math.min(60, Math.max(1, Number.parseInt(process.env.WHATSAPP_AI_CIRCUIT_MINUTES || '10', 10)));
-const CONTACT_HOURLY_LIMIT = Math.min(1000, Math.max(3, Number.parseInt(process.env.WHATSAPP_AI_CONTACT_HOURLY_LIMIT || '120', 10)));
+const CONTACT_HOURLY_LIMIT = 1000; // Hardcoded para evitar bloqueios de env var em PRD
 const CHANNEL_HOURLY_LIMIT = Math.min(5000, Math.max(20, Number.parseInt(process.env.WHATSAPP_AI_CHANNEL_HOURLY_LIMIT || '500', 10)));
 
 function safeErrorCode(error, fallback = 'WHATSAPP_AI_ERROR') {
