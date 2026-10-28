@@ -121,7 +121,7 @@ async function mediaFromWebhook(channel, parsed, body, externalId, { waha = fals
     chatId: parsed.phone,
     mediaLoader: waha ? (media) => downloadWahaMedia(channel.configuracao?.waha_session || channel.configuracao?.instance, media.url).then(({ buffer, contentType }) => ({ base64: buffer.toString('base64'), mimeType: contentType })) : undefined,
   }).catch(() => ({ ok: false }));
-  if (!lido?.ok) return { ...parsed, reason: `media_${String(lido?.code || 'error').toLowerCase()}`.slice(0, 60) };
+  if (!lido?.ok) return { ...parsed, ignored: false, reason: undefined, text: '[Falha ao baixar ou transcrever ' + parsed.reason + ']' };
   // Normaliza como o caminho de texto: remetente @lid vira o número real.
   const ts = Number(data.messageTimestamp || body.messageTimestamp || 0) || null;
   return {
