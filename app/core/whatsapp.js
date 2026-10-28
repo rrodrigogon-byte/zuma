@@ -34,16 +34,19 @@ export async function enviarAudio(tenant, telefone, base64Audio) {
      // Evolution Backend (not natively supported by standard wrapper without extension)
      // Evolution API uses /message/sendWhatsAppAudio
      const cfg = getConfig(tenant);
+     const evoUrl = process.env.EVOLUTION_API_URL || cfg.baseUrl;
+     const evoKey = process.env.EVOLUTION_API_KEY || cfg.apiKey;
+     const evoInstance = process.env.EVOLUTION_INSTANCE || cfg.instance;
      const body = {
        number: numero,
        audio: base64Audio,
        delay: 1200
      };
-     const res = await fetch(`${cfg.baseUrl.replace(/\/$/, '')}/message/sendWhatsAppAudio/${encodeURIComponent(cfg.instance)}`, {
+     const res = await fetch(`${evoUrl.replace(/\/$/, '')}/message/sendWhatsAppAudio/${encodeURIComponent(evoInstance)}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        apikey: cfg.apiKey,
+        apikey: evoKey,
       },
       body: JSON.stringify(body),
     });
