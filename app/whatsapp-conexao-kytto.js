@@ -294,18 +294,22 @@ export async function gerarQr(empresaId, { usuario = '', fetchImpl, registrarHis
   if (canalInterno(tipoCanal)) {
     if (!wahaControlConfigured()) return { ok: false, error: 'Controle privado WAHA não configurado no servidor.', code: 'WAHA_NOT_CONFIGURED', conexao: visaoPublica(conexao) };
     if (!validWahaSession(conexao.instance)) return { ok: false, error: 'Esta empresa ainda não tem uma sessão WAHA atribuída.', code: 'WHATSAPP_INSTANCE_UNASSIGNED', conexao: visaoPublica(conexao) };
-    const provisioned = await provisionWahaSession(conexao.instance);
-    const state = normalizarEstadoWaha(provisioned?.status);
-    const qr = state === 'open' ? '' : (await getWahaSessionQr(conexao.instance)).dataUrl;
-    conexao.ativo = true;
-    conexao.state = state === 'open' ? 'open' : (qr ? 'qr' : 'connecting');
-    conexao.phone = '';
-    conexao.lastCheckAt = new Date().toISOString();
-    conexao.lastQrAt = qr ? conexao.lastCheckAt : conexao.lastQrAt;
-    conexao.lastError = null;
-    if (registrarHistorico) registrar(conexao, qr ? 'qr_gerado' : 'reconexao_solicitada', usuario ? `por ${usuario}` : '');
-    save();
-    return { ok: true, qr, pairingCode: '', conexao: visaoPublica(conexao) };
+    try {
+      const provisioned = await provisionWahaSession(conexao.instance);
+      const state = normalizarEstadoWaha(provisioned?.status);
+      const qr = state === 'open' ? '' : (await getWahaSessionQr(conexao.instance)).dataUrl;
+      conexao.ativo = true;
+      conexao.state = state === 'open' ? 'open' : (qr ? 'qr' : 'connecting');
+      conexao.phone = '';
+      conexao.lastCheckAt = new Date().toISOString();
+      conexao.lastQrAt = qr ? conexao.lastCheckAt : conexao.lastQrAt;
+      conexao.lastError = null;
+      if (registrarHistorico) registrar(conexao, qr ? 'qr_gerado' : 'reconexao_solicitada', usuario ? `por ${usuario}` : '');
+      save();
+      return { ok: true, qr, pairingCode: '', conexao: visaoPublica(conexao) };
+    } catch (error) {
+      return { ok: false, error: String(error?.message || 'Erro ao gerar QR Code'), code: 'WAHA_ERROR', conexao: visaoPublica(conexao) };
+    }
   }
   const bloqueio = semInstancia(conexao);
   if (bloqueio) return { ...bloqueio, conexao: visaoPublica(conexao) };
@@ -503,11 +507,18 @@ export async function vigiarConexao(empresaId, { now = Date.now(), fetchImpl, ti
       salvarSeEstadoMudou(antes, conexao);
       return { action: 'status_unavailable' };
     }
-    const status = await getWahaSessionStatus(conexao.instance);
-    const antes = estadoPersistivel(conexao);
-    aplicarEstado(conexao, { ok: true, state: normalizarEstadoWaha(status?.status) });
-    salvarSeEstadoMudou(antes, conexao);
-    return { action: 'none', state: conexao.state };
+    try {
+      const status = await getWahaSessionStatus(conexao.instance);
+      const antes = estadoPersistivel(conexao);
+      aplicarEstado(conexao, { ok: true, state: normalizarEstadoWaha(status?.status) });
+      salvarSeEstadoMudou(antes, conexao);
+      return { action: 'none', state: conexao.state };
+    } catch (error) {
+      const antes = estadoPersistivel(conexao);
+      conexao.lastError = String(error?.message || 'waha_error').slice(0, 180);
+      salvarSeEstadoMudou(antes, conexao);
+      return { action: 'status_unavailable' };
+    }
   }
   const epoch = disconnectEpoch.get(key) || 0;
   const instance = conexao.instance;
