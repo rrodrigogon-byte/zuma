@@ -24,7 +24,7 @@ router.get('/deduplicate-profissionais', (req, res) => {
   // 1. Unificar duplicados
   const profissionaisPorNome = {};
   for (const p of profissionais) {
-    const nome = p.nome.trim().toLowerCase();
+    const nome = p.nome.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
     if (!profissionaisPorNome[nome]) profissionaisPorNome[nome] = [];
     profissionaisPorNome[nome].push(p);
   }
