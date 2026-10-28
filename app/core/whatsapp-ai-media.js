@@ -104,6 +104,7 @@ export function locateInboundMedia(item = {}) {
   const inlineCandidates = [media.base64, media.data, item.mediaBase64, item.base64, message.base64, item.mediaData];
   const inline = inlineCandidates.find((value) => typeof value === 'string' && (value.startsWith('data:') || looksBase64(value)));
   const url = clean(media.url || media.downloadUrl || item.mediaUrl || item.media_url || item.fileUrl || audioMsg?.url || imageMsg?.url || documentMsg?.url, 2000);
+  console.log('[locateInboundMedia] item keys:', Object.keys(item).join(', '), 'id:', item.whatsappMessageId, item.id, item._id);
   console.log('[locateInboundMedia] found URL:', url);
   const parsed = inline ? stripDataUrl(inline) : null;
   const mimeType = clean(parsed?.mimeType || declaredMime || (kind === 'audio' ? 'audio/ogg' : 'image/jpeg'), 100).split(';')[0];
