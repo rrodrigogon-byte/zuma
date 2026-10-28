@@ -335,8 +335,8 @@
 }
 
 .atendimento-filter-chip.active-warning {
-  background: #f59e0b;
-  border-color: #f59e0b;
+  background: #8b5cf6;
+  border-color: #8b5cf6;
   color: #fff;
 }
 
@@ -713,14 +713,14 @@
   gap: 5px;
   font-size: 11px;
   font-weight: 700;
-  color: #f59e0b;
+  color: #8b5cf6;
 }
 
 .atendimento-pulse-dot {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: #f59e0b;
+  background: #8b5cf6;
   box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.6);
   animation: pulseLive 1.8s infinite;
 }
@@ -847,7 +847,7 @@
 
 .atendimento-progress-fill {
   height: 100%;
-  background: #f59e0b;
+  background: #8b5cf6;
   border-radius: 999px;
   transition: width 0.3s ease;
 }
@@ -881,9 +881,9 @@
 }
 
 .atendimento-comanda-chip.aguardando {
-  background: #f59e0b18;
+  background: #8b5cf618;
   color: #d97706;
-  border-color: #f59e0b35;
+  border-color: #8b5cf635;
 }
 
 .atendimento-comanda-chip.paga {

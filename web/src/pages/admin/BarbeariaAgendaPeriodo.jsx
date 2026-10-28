@@ -1018,7 +1018,7 @@ export default function BarbeariaAgendaPeriodo({
                               key={item.id}
                               className="dino-cal-event-card"
                               data-status={item.status}
-                              onClick={() => item.isBloqueio ? null : onOpenAppointment?.(item)}
+                              onClick={() => item.isBloqueio ? null : (item.status === 'em_atendimento' || item.status === 'concluido' ? onConferirComanda?.(item) : onOpenAppointment?.(item))}
                               title={`Abrir agendamento: ${item.clienteNome || 'Cliente'} às ${hora}`}
                             >
                               <div className="dino-cal-event-time">
@@ -1229,7 +1229,7 @@ export default function BarbeariaAgendaPeriodo({
                                 key={item.id}
                                 className="dino-cal-event-card"
                                 data-status={item.status}
-                                onClick={() => item.isBloqueio ? null : onOpenAppointment?.(item)}
+                                onClick={() => item.isBloqueio ? null : (item.status === 'em_atendimento' || item.status === 'concluido' ? onConferirComanda?.(item) : onOpenAppointment?.(item))}
                                 title={`Clique para gerenciar ou remanejar o agendamento de ${item.clienteNome || item.cliente_nome}`}
                               >
                                 <div className="dino-cal-event-time">
@@ -1296,7 +1296,7 @@ export default function BarbeariaAgendaPeriodo({
                               key={item.id}
                               className="dino-cal-event-card"
                               data-status={item.status}
-                              onClick={() => item.isBloqueio ? null : onOpenAppointment?.(item)}
+                              onClick={() => item.isBloqueio ? null : (item.status === 'em_atendimento' || item.status === 'concluido' ? onConferirComanda?.(item) : onOpenAppointment?.(item))}
                               title="Clique para designar um barbeiro ou remanejar"
                             >
                               <div className="dino-cal-event-time">
@@ -1473,7 +1473,7 @@ export default function BarbeariaAgendaPeriodo({
                             key={item.id}
                             className="dino-cal-event-card"
                             data-status={item.status}
-                            onClick={() => item.isBloqueio ? null : onOpenAppointment?.(item)}
+                            onClick={() => item.isBloqueio ? null : (item.status === 'em_atendimento' || item.status === 'concluido' ? onConferirComanda?.(item) : onOpenAppointment?.(item))}
                           >
                             <div className="dino-cal-event-time">
                               <span>{horaDoItem(item)}</span>

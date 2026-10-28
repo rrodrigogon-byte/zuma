@@ -38,7 +38,7 @@ import './BarbeariaAtendimentoBoard.css'
 const COLUNAS_KANBAN = [
   { id: 'agendado', label: 'Agendado', color: '#3b82f6', bgDot: '#3b82f6', icon: Calendar, hint: 'Horários marcados aguardando' },
   { id: 'confirmado', label: 'Confirmado', color: '#10b981', bgDot: '#10b981', icon: CheckCircle2, hint: 'Cliente confirmou presença' },
-  { id: 'em_atendimento', label: 'Em Atendimento', color: '#f59e0b', bgDot: '#f59e0b', icon: Scissors, hint: 'Cliente na cadeira agora' },
+  { id: 'em_atendimento', label: 'Em Atendimento', color: '#8b5cf6', bgDot: '#8b5cf6', icon: Scissors, hint: 'Cliente na cadeira agora' },
   { id: 'concluido', label: 'Concluído', color: '#10b981', bgDot: '#10b981', icon: Check, hint: 'Serviço finalizado' },
 ]
 
@@ -188,6 +188,7 @@ export default function BarbeariaAtendimentoBoard({
   produtosRevenda = [],
   comandas = [],
   onStatusChange,
+  onConferirComanda,
   onOpenAppointment,
   onOpenComanda,
   onCreateComanda,
@@ -270,7 +271,7 @@ export default function BarbeariaAtendimentoBoard({
   // Disparar celebração de confetti
   function dispararCelebracao() {
     tocarSomInterativo('concluido', somAtivo)
-    const cores = ['#10b981', '#3b82f6', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4']
+    const cores = ['#10b981', '#3b82f6', '#8b5cf6', '#8b5cf6', '#ec4899', '#06b6d4']
     const pieces = Array.from({ length: 32 }).map((_, idx) => ({
       id: idx,
       left: `${Math.random() * 96}%`,
@@ -737,7 +738,7 @@ export default function BarbeariaAtendimentoBoard({
           </div>
 
           <div className="atendimento-kpi-item">
-            <div className="atendimento-kpi-icon" style={{ background: '#f59e0b18', color: '#f59e0b' }}>
+            <div className="atendimento-kpi-icon" style={{ background: '#8b5cf618', color: '#8b5cf6' }}>
               <Scissors size={18} />
             </div>
             <div className="atendimento-kpi-info">
@@ -989,7 +990,7 @@ export default function BarbeariaAtendimentoBoard({
                           onDragStart={(e) => handleDragStart(e, item)}
                           onDragEnd={handleDragEnd}
                           onTouchStart={(e) => handleTouchStart(e, item)}
-                          onClick={() => onOpenAppointment && onOpenAppointment(item)}
+                          onClick={() => (item.status === 'em_atendimento' || item.status === 'concluido' ? onConferirComanda?.(item) : onOpenAppointment?.(item))}
                           onStatusChange={executarTransicaoComEfeitos}
                           onReassignBarber={onReassignBarber}
                           onOpenComanda={onOpenComanda}
@@ -1107,7 +1108,7 @@ export default function BarbeariaAtendimentoBoard({
                       <button
                         type="button"
                         className="atendimento-pill"
-                        onClick={() => onOpenAppointment && onOpenAppointment(item)}
+                        onClick={() => (item.status === 'em_atendimento' || item.status === 'concluido' ? onConferirComanda?.(item) : onOpenAppointment?.(item))}
                       >
                         Detalhes
                       </button>
@@ -1630,12 +1631,12 @@ function CardAtendimentoSwipeable({
             {tempoDecorrido && (
               <span
                 className="atendimento-timer-live"
-                style={{ color: tempoDecorrido.excedeu ? '#dc2626' : '#f59e0b' }}
+                style={{ color: tempoDecorrido.excedeu ? '#dc2626' : '#8b5cf6' }}
                 title={tempoDecorrido.excedeu ? 'Tempo previsto de serviço excedido' : 'Tempo na cadeira'}
               >
                 <span
                   className="atendimento-pulse-dot"
-                  style={{ background: tempoDecorrido.excedeu ? '#dc2626' : '#f59e0b' }}
+                  style={{ background: tempoDecorrido.excedeu ? '#dc2626' : '#8b5cf6' }}
                 />
                 {tempoDecorrido.minutos} min {tempoDecorrido.excedeu ? '(+)' : ''}
               </span>
@@ -1748,7 +1749,7 @@ function CardAtendimentoSwipeable({
                 className="atendimento-progress-fill"
                 style={{
                   width: `${tempoDecorrido.progresso}%`,
-                  background: tempoDecorrido.excedeu ? '#dc2626' : '#f59e0b',
+                  background: tempoDecorrido.excedeu ? '#dc2626' : '#8b5cf6',
                 }}
               />
             </div>
