@@ -93,15 +93,15 @@ const TAB_AREA = Object.fromEntries(AREAS.flatMap((area) => area.tabs.map((tab) 
 const TAB_DESCRICAO = Object.fromEntries(TABS)
 
 const STATUS = {
-  agendado: { label: 'Agendado', color: '#4a9eff' },
+  agendado: { label: 'Agendado', color: '#8b5cf6' },
   confirmado: { label: 'Confirmado', color: '#8b5cf6' },
   aguardando_confirmacao: { label: 'Aguardando confirmação', color: '#e0b24b' },
   cancelado_falta_confirmacao: { label: 'Cancelado por falta de confirmação', color: '#e05c5c' },
-  em_atendimento: { label: 'Em atendimento', color: '#f59e0b' },
+  em_atendimento: { label: 'Em atendimento', color: '#8b5cf6' },
   concluido: { label: 'Concluído', color: '#14b87a' },
   cancelado: { label: 'Cancelado', color: '#e05c5c' },
   nao_compareceu: { label: 'Não compareceu', color: '#888' },
-  aguardando: { label: 'Aguardando', color: '#4a9eff' },
+  aguardando: { label: 'Aguardando', color: '#8b5cf6' },
   chamado: { label: 'Chamado', color: '#f59e0b' },
   atendido: { label: 'Atendido', color: '#14b87a' },
   ausente: { label: 'Ausente', color: '#888' },
@@ -111,7 +111,7 @@ const STATUS = {
   pendente_ativacao: { label: 'Pendente de ativação', color: '#f59e0b' },
   pausada: { label: 'Pausada', color: '#888' },
   expirada: { label: 'Expirada', color: '#e05c5c' },
-  aberta: { label: 'Aberta', color: '#4a9eff' },
+  aberta: { label: 'Aberta', color: '#8b5cf6' },
   aguardando_pagamento: { label: 'Aguardando pagamento', color: '#f59e0b' },
   parcialmente_paga: { label: 'Parcialmente paga', color: '#f59e0b' },
   em_conta: { label: 'Em conta', color: '#8b5cf6' },
