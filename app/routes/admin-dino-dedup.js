@@ -1,11 +1,12 @@
 import express from 'express';
-import * as barbeariaErpKytto from '../barbearia-erp-kytto.js';
+import { estadoEmpresa } from '../barbearia-erp-kytto.js';
+import { save } from '../db.js';
 
 export const router = express.Router();
 
 router.get('/deduplicate-profissionais', (req, res) => {
   const empresaId = 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
-  const estado = barbeariaErpKytto.estadoEmpresa(empresaId, false);
+  const estado = estadoEmpresa(empresaId, false);
   const profissionais = Object.values(estado.profissionais);
   
   const agendamentos = Object.values(estado.agendamentos || {});
@@ -68,7 +69,7 @@ router.get('/deduplicate-profissionais', (req, res) => {
     }
   }
   
-  barbeariaErpKytto.save();
+  save();
   
   res.json({ ok: true, unificados, excluidos, log });
 });
