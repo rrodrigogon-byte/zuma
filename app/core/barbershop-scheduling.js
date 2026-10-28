@@ -135,8 +135,8 @@ export async function listSchedulingAvailability(context, input = {}) {
     ),
   ]);
 
-  if (!service.rows[0]) throw new SchedulingError('serviço não encontrado', 'SERVICE_NOT_FOUND');
-  if (!professional.rows[0]) throw new SchedulingError('profissional não encontrado na unidade', 'PROFESSIONAL_NOT_FOUND');
+  if (!service.rows[0]) throw new SchedulingError('O ID do serviço é inválido ou não foi encontrado. Você deve chamar listar_servicos para consultar o ID exato.', 'SERVICE_NOT_FOUND');
+  if (!professional.rows[0]) throw new SchedulingError('O ID do profissional é inválido ou não foi encontrado. Você deve chamar listar_profissionais para consultar o ID exato.', 'PROFESSIONAL_NOT_FOUND');
 
   const duration = Math.max(15, Number(service.rows[0].duracao_minutos) || 30);
   const isDino = String(professional.rows[0].nome_completo || '').toLowerCase().includes('dino') || String(service.rows[0].nome || '').toLowerCase().includes('dino');
