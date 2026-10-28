@@ -326,9 +326,9 @@ async function sendOutput(channel, session, output) {
 }
 
 function confirmIntent(text) {
-  const value = plain(text).replace(/[^a-z0-9 ]/g, '').trim();
-  if (['confirmar', 'confirmo', 'sim confirmar', 'pode confirmar', 'pode concluir'].includes(value)) return 'confirm';
-  if (['cancelar', 'cancela', 'nao confirmar', 'desistir'].includes(value)) return 'cancel';
+  const value = plain(text).replace(/[^a-z0-9 ]/g, ' ').trim();
+  if (/\b(confirmar|confirmo|confirmado|confirmada|sim|ss|s|ok|blz|beleza|pode confirmar|pode prosseguir|pode concluir|pode mandar|manda|bora)\b/i.test(value)) return 'confirm';
+  if (/\b(cancelar|cancela|nao|não|n|nao confirmar|desistir|deixa pra la|deixa queto|desisto)\b/i.test(value)) return 'cancel';
   return null;
 }
 
