@@ -191,41 +191,46 @@ async function consentForCustomer(empresaId, customerId) {
 }
 
 async function commerceProfile(empresaId, lojaId, phone) {
-  const result = await db.queryRead(
-    `WITH matching_customers AS (
-       SELECT id, nome
-         FROM commerce_customers
-        WHERE empresa_id = $1 AND bloqueado = false
-          AND ${phoneMatchKeySql('telefone')} = ${phoneMatchKeySql('$3')}
-     ), scoped_orders AS (
-       SELECT o.id, o.customer_id, o.criado_em
-         FROM commerce_orders o
-         JOIN commerce_storefronts s ON s.empresa_id = o.empresa_id AND s.id = o.storefront_id
-        WHERE o.empresa_id = $1 AND s.loja_id = $2
-          AND o.customer_id IN (SELECT id FROM matching_customers)
-          AND o.status NOT IN ('draft','cancelled','refunded','returned')
-          AND o.criado_em >= CURRENT_TIMESTAMP - INTERVAL '365 days'
-     ), ranked_categories AS (
-       SELECT COALESCE(NULLIF(c.nome, ''), 'Outros') AS category_name, COUNT(*)::int AS frequency
-         FROM scoped_orders o
-         JOIN commerce_order_items oi ON oi.empresa_id = $1 AND oi.order_id = o.id
-         LEFT JOIN commerce_product_variants v ON v.empresa_id = $1 AND v.id = oi.variant_id
-         LEFT JOIN commerce_products p ON p.empresa_id = $1 AND p.id = v.product_id
-         LEFT JOIN commerce_categories c ON c.empresa_id = $1 AND c.id = p.category_id
-        GROUP BY COALESCE(NULLIF(c.nome, ''), 'Outros')
-        ORDER BY frequency DESC, category_name ASC
-        LIMIT 3
-     )
-     SELECT
-       (SELECT COUNT(*)::int FROM matching_customers) AS customer_count,
-       (SELECT COUNT(DISTINCT lower(trim(nome)))::int FROM matching_customers) AS distinct_name_count,
-       (SELECT min(nome) FROM matching_customers) AS customer_name,
-       (SELECT COUNT(*)::int FROM scoped_orders) AS order_count,
-       (SELECT max(criado_em) FROM scoped_orders) AS last_order_at,
-       COALESCE((SELECT jsonb_agg(jsonb_build_object('name', category_name, 'frequency', frequency)) FROM ranked_categories), '[]'::jsonb) AS categories`,
-    [empresaId, lojaId, phone],
-  );
-  return result.rows[0] || { customer_count: 0, distinct_name_count: 0, order_count: 0, categories: [] };
+  try {
+    const result = await db.queryRead(
+      `WITH matching_customers AS (
+         SELECT id, nome
+           FROM commerce_customers
+          WHERE empresa_id = $1 AND bloqueado = false
+            AND ${phoneMatchKeySql('telefone')} = ${phoneMatchKeySql('$3')}
+       ), scoped_orders AS (
+         SELECT o.id, o.customer_id, o.criado_em
+           FROM commerce_orders o
+           JOIN commerce_storefronts s ON s.empresa_id = o.empresa_id AND s.id = o.storefront_id
+          WHERE o.empresa_id = $1 AND s.loja_id = $2
+            AND o.customer_id IN (SELECT id FROM matching_customers)
+            AND o.status NOT IN ('draft','cancelled','refunded','returned')
+            AND o.criado_em >= CURRENT_TIMESTAMP - INTERVAL '365 days'
+       ), ranked_categories AS (
+         SELECT COALESCE(NULLIF(c.nome, ''), 'Outros') AS category_name, COUNT(*)::int AS frequency
+           FROM scoped_orders o
+           JOIN commerce_order_items oi ON oi.empresa_id = $1 AND oi.order_id = o.id
+           LEFT JOIN commerce_product_variants v ON v.empresa_id = $1 AND v.id = oi.variant_id
+           LEFT JOIN commerce_products p ON p.empresa_id = $1 AND p.id = v.product_id
+           LEFT JOIN commerce_categories c ON c.empresa_id = $1 AND c.id = p.category_id
+          GROUP BY COALESCE(NULLIF(c.nome, ''), 'Outros')
+          ORDER BY frequency DESC, category_name ASC
+          LIMIT 3
+       )
+       SELECT
+         (SELECT COUNT(*)::int FROM matching_customers) AS customer_count,
+         (SELECT COUNT(DISTINCT lower(trim(nome)))::int FROM matching_customers) AS distinct_name_count,
+         (SELECT min(nome) FROM matching_customers) AS customer_name,
+         (SELECT COUNT(*)::int FROM scoped_orders) AS order_count,
+         (SELECT max(criado_em) FROM scoped_orders) AS last_order_at,
+         COALESCE((SELECT jsonb_agg(jsonb_build_object('name', category_name, 'frequency', frequency)) FROM ranked_categories), '[]'::jsonb) AS categories`,
+      [empresaId, lojaId, phone],
+    );
+    return result.rows[0] || { customer_count: 0, distinct_name_count: 0, order_count: 0, categories: [] };
+  } catch (error) {
+    if (error?.code === '42P01') return { customer_count: 0, distinct_name_count: 0, order_count: 0, categories: [] };
+    throw error;
+  }
 }
 
 async function barbershopProfile(empresaId, phone) {
