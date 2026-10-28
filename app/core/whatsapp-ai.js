@@ -68,7 +68,7 @@ function normalizedPhone(remoteJid) {
 }
 
 function messageText(message = {}) {
-  return cleanText(
+  const text = cleanText(
     message.conversation
       || message.extendedTextMessage?.text
       || message.imageMessage?.caption
@@ -79,6 +79,8 @@ function messageText(message = {}) {
       || message.templateButtonReplyMessage?.selectedDisplayText,
     4000,
   );
+  if (!text && message.imageMessage) return '[imagem recebida - comprovante]';
+  return text;
 }
 
 export function parseEvolutionMessage(payload = {}) {
@@ -369,7 +371,7 @@ function confirmationReply(result) {
   }
   const order = result.result;
   return `Pedido confirmado para entrega! Código ${order.publicCode}; total R$ ${Number(order.total).toFixed(2).replace('.', ',')}.
-Para pagamento, utilize a chave PIX do Dino (CNPJ ou telefone da Barbearia Dino, ou solicite a chave caso não possua). 
+Para pagamento, utilize nossa chave PIX Celular: (65) 99905-6008 (Barbearia Dino). 
 Por favor, envie o comprovante de pagamento aqui mesmo para que seja anexado à sua compra.`;
 }
 
