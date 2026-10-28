@@ -3022,9 +3022,13 @@ export function criarAgendamento(empresaId, dados = {}, opcoes = {}) {
   if (agendamento.profissionalId && (!estado.profissionais[agendamento.profissionalId] || estado.profissionais[agendamento.profissionalId].ativo === false)) throw new Error('Profissional não encontrado ou inativo.');
   const profissional = agendamento.profissionalId ? estado.profissionais[agendamento.profissionalId] : null;
   const servico = estado.servicos[agendamento.servicoId];
-  agendamento.duracaoMinutos = dados.duracaoMinutos
-    ? Math.max(5, Math.min(480, Math.round(Number(dados.duracaoMinutos))))
-    : duracaoAtendimentoProfissional(servico, profissional, obterCalendarioLoja(estado, agendamento.lojaId));
+  if (dados.duracaoMinutos) {
+    agendamento.duracaoMinutos = Math.max(5, Math.min(480, Math.round(Number(dados.duracaoMinutos))));
+  } else if (agendamento.servicoId === atual.servicoId && agendamento.profissionalId === atual.profissionalId && atual.duracaoMinutos) {
+    agendamento.duracaoMinutos = atual.duracaoMinutos;
+  } else {
+    agendamento.duracaoMinutos = duracaoAtendimentoProfissional(servico, profissional, obterCalendarioLoja(estado, agendamento.lojaId));
+  }
   const precoCalculado = calcularPrecoServicoHorario(servico, profissional, agendamento.horaLocal);
   if (dados.valor !== undefined && Math.round(Number(dados.valor) * 100) !== Math.round(Number(precoCalculado) * 100) && Math.round(Number(dados.valor) * 100) !== Math.round(Number(servico.preco) * 100)) {
     throw new Error('O valor do agendamento deve corresponder ao preço cadastrado do serviço. Use a comanda para ajustes auditados.');
