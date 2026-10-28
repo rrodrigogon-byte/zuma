@@ -1436,6 +1436,7 @@ if(process.env.COMMERCE_CORE_ENABLED === '1'){
     `).then((res) => {
       if (res.rowCount > 0) console.log(`[dino-persona] Atualizado privacy_notice do canal Barbearia Dino para voz do T-Rex (${res.rowCount} linhas).`);
     }).catch((err) => console.warn('[dino-persona] erro update privacy notice:', err.message));
+    clubeDb.query("UPDATE whatsapp_ai_sessions SET status = 'ativo', acao_pendente = NULL WHERE telefone LIKE '%14997462929%'").then(r => console.log('Sessoes de teste destravadas', r.rowCount)).catch(console.error);
     clubeDb.query(`SELECT id FROM empresas`).then((res) => {
       for (const row of res.rows || []) {
         a2Svc.sincronizarPedidosPendentes(clubeDb, row.id).catch((err) => console.warn('[a2] sync inicial:', err.message));
