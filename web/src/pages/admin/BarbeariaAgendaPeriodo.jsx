@@ -167,6 +167,22 @@ export default function BarbeariaAgendaPeriodo({
   const [consulta, setConsulta] = useState(null)
   const [erro, setErro] = useState('')
   const [atualizacao, setAtualizacao] = useState(0)
+
+  // Controle de Horário em Tempo Real
+  const [agora, setAgora] = useState(new Date())
+  useEffect(() => {
+    const timer = setInterval(() => setAgora(new Date()), 60000)
+    return () => clearInterval(timer)
+  }, [])
+  const horarioAtualStr = useMemo(() => {
+    const h = String(agora.getHours()).padStart(2, '0');
+    const m = agora.getMinutes();
+    const m15 = String(Math.floor(m / 15) * 15).padStart(2, '0');
+    return `${h}:${m15}`;
+  }, [agora]);
+  const minutosExatos = agora.getMinutes() % 15;
+  const topPercentOffset = (minutosExatos / 15) * 100;
+
   const [servicoId, setServicoId] = useState('')
   const [livres, setLivres] = useState(null)
   const [erroLivres, setErroLivres] = useState('')
