@@ -2088,23 +2088,23 @@ export default function BarbeariaERP() {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16, marginBottom: 24 }}>
               <Card style={{ padding: 16 }}>
                 <small style={{ color: 'var(--muted)', display: 'block', marginBottom: 4, fontWeight: 700 }}>Comandas Pagas / Faturadas</small>
-                <strong style={{ fontSize: 20 }}>{operacao?.comandasPagas || 0} pagas / {operacao?.emConta || 0} em conta</strong>
+                <strong style={{ fontSize: 20 }}>{fechamentoDetalhado.resumoOperacao?.comandasPagas || 0} pagas / {fechamentoDetalhado.resumoOperacao?.emConta || 0} em conta</strong>
               </Card>
               <Card style={{ padding: 16 }}>
                 <small style={{ color: 'var(--muted)', display: 'block', marginBottom: 4, fontWeight: 700 }}>Faturamento de Comandas</small>
-                <strong style={{ fontSize: 20 }}>{fmtR(operacao?.faturamentoComandas || 0)}</strong>
+                <strong style={{ fontSize: 20 }}>{fmtR(fechamentoDetalhado.resumoOperacao?.faturamentoComandas || 0)}</strong>
               </Card>
               <Card style={{ padding: 16 }}>
                 <small style={{ color: 'var(--muted)', display: 'block', marginBottom: 4, fontWeight: 700 }}>Faturado em Conta (Prazo)</small>
-                <strong style={{ fontSize: 20 }}>{fmtR(operacao?.faturadoEmConta || 0)}</strong>
+                <strong style={{ fontSize: 20 }}>{fmtR(fechamentoDetalhado.resumoOperacao?.faturadoEmConta || 0)}</strong>
               </Card>
             </div>
             
-            {operacao?.porMeio && Object.keys(operacao.porMeio).length > 0 && (
+            {fechamentoDetalhado.resumoOperacao?.porMeio && Object.keys(fechamentoDetalhado.resumoOperacao?.porMeio).length > 0 && (
               <div style={{ marginBottom: 24 }}>
                 <h4 style={{ margin: '0 0 12px 0', color: 'var(--muted)', fontSize: 13, textTransform: 'uppercase' }}>Receita por Meio de Pagamento</h4>
                 <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-                  {Object.entries(operacao.porMeio).map(([meio, valor]) => (
+                  {Object.entries(fechamentoDetalhado.resumoOperacao?.porMeio).map(([meio, valor]) => (
                     <div key={meio} style={{ background: 'var(--bg)', border: '1px solid var(--line)', borderRadius: 6, padding: '8px 12px' }}>
                       <strong style={{ display: 'block', fontSize: 14 }}>{String(meio).toUpperCase()}</strong>
                       <span>{fmtR(valor)}</span>

@@ -412,3 +412,8 @@ select.c360-input { padding: 0 12px; }
   }
 }
 .c360-h-barra { position: relative; } .c360-h-barra:hover::after { content: attr(title); position: absolute; top: -30px; left: 50%; transform: translateX(-50%); background: #000; padding: 4px 8px; border-radius: 4px; font-size: 12px; white-space: nowrap; z-index: 10; color: #fff; pointer-events: none; }
+.c360-btn[aria-current="page"] {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-soft);
+}

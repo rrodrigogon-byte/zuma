@@ -5517,7 +5517,8 @@ app.post('/api/admin/barbearia/operacao/fechar-dia', (req, res) => {
   try {
     if (req.body?.confirmado !== true) return res.status(400).json({ error: 'A confirmação explícita do fechamento diário é obrigatória.' });
     const dia = String(req.body?.data || new Date().toISOString().slice(0, 10)).slice(0, 10);
-    res.json({ ok: true, fechamento: financeiroKytto.fecharDia(legacyEmpresaId(req), dia, req.user?.email || req.user?.nome, { lojaId: legacyLojaId(req) }) });
+    const resumo = resumoOperacaoBarbearia({ ...req, query: { data: dia } });
+    res.json({ ok: true, fechamento: financeiroKytto.fecharDia(legacyEmpresaId(req), dia, req.user?.email || req.user?.nome, { lojaId: legacyLojaId(req), resumoOperacao: resumo }) });
   } catch (error) { res.status(400).json({ error: error.message }); }
 });
 

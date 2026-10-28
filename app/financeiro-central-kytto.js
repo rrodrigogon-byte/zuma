@@ -845,7 +845,7 @@ export function fecharDia(empresaOuOpcoes, data, usuario = 'sistema@kytto.local'
   const chaveFechamento = `${escopo.lojaId || '__legacy__'}:${dia}`;
   const existente = store.fechamentos[chaveFechamento] || (escopo.legacy ? store.fechamentos[dia] : null);
   if (existente) return { ...clone(existente), criadoAgora: false, quarentenaCount: contagemQuarentena(escopo.empresaId) };
-  const lancamentos = listarLancamentos(escopo.empresaId, { lojaId: escopo.lojaId, incluirQuarentena: false }).filter((item) => item.dataOperacao.slice(0, 10) === dia && item.status !== 'cancelado');
+  const lancamentos = listarLancamentos(escopo.empresaId, { lojaId: escopo.lojaId, incluirQuarentena: false }).filter((item) => new Date(item.dataOperacao).toLocaleString("sv", { timeZone: process.env.KYTTO_TIMEZONE || "America/Cuiaba" }).slice(0, 10) === dia && item.status !== 'cancelado');
   const recebimentos = lancamentos.filter((item) => item.tipo === 'receita' && item.status === 'pago').reduce((soma, item) => soma + item.valor, 0);
   const pagamentos = lancamentos.filter((item) => item.tipo === 'despesa' && item.status === 'pago').reduce((soma, item) => soma + item.valor, 0);
   const pendenteReceber = lancamentos.filter((item) => item.tipo === 'receita' && item.status === 'pendente').reduce((soma, item) => soma + item.valor, 0);
@@ -854,6 +854,7 @@ export function fecharDia(empresaOuOpcoes, data, usuario = 'sistema@kytto.local'
     id: `fin-fec-${escopo.empresaId}-${escopo.lojaId || 'legacy'}-${dia}`, empresaId: escopo.empresaId, lojaId: escopo.lojaId || null, data: dia,
     recebimentos: valorMonetario(recebimentos), pagamentos: valorMonetario(pagamentos), pendenteReceber: valorMonetario(pendenteReceber), pendentePagar: valorMonetario(pendentePagar), saldoDia: valorMonetario(recebimentos - pagamentos),
     totalLancamentos: lancamentos.length, quarentenaCount: contagemQuarentena(escopo.empresaId), responsavel: texto(parsed.usuario || 'sistema@kytto.local', 120), criadoEm: agora(),
+    ...(filtros.resumoOperacao ? { resumoOperacao: filtros.resumoOperacao } : {}),
   };
   const snapshot = snapshotStore(store);
   return persistir(store, snapshot, () => {

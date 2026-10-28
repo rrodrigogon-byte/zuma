@@ -60,7 +60,7 @@ function encodedSession(value) {
 async function request(path, init = {}) {
   const { baseUrl, secret } = config();
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 25_000);
+  const timer = setTimeout(() => controller.abort(), 15_000);
   try {
     const response = await fetch(`${baseUrl}${path}`, {
       ...init,
