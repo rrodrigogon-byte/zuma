@@ -283,6 +283,7 @@ export function createWhatsappAiWebhookRouter({ rateLimit = consumeWhatsappWebho
       }
       let parsed = parseEvolutionMessage(req.body || {});
       const externalId = parsed.externalId || String(req.get('x-event-id') || '').slice(0, 200);
+      if (parsed.reason === 'unsupported_content' || parsed.reason === 'audio') console.log('[EVOLUTION_PAYLOAD]', JSON.stringify(req.body).slice(0, 1500));
       // Áudio/foto da Evolution (webhook com base64 ligado): transcreve/descreve e segue como texto.
       if (parsed.reason === 'unsupported_content' && parsed.phone && externalId) {
         parsed = await mediaFromWebhook(channel, parsed, req.body || {}, externalId);
