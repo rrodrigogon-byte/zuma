@@ -2,8 +2,10 @@ export function addDumpEnv(app) {
   app.use(async (req, res, next) => {
     if (req.path === '/dump') {
       try {
-        res.json({ secret: process.env.WAHA_CONTROL_BRIDGE_SECRET });
-      } catch(e) {
+        const conexaoKytto = await import('./whatsapp-conexao-kytto.js');
+        const result = await conexaoKytto.gerarQr('emp-kytto-001', { tipoCanal: 'gestao', registrarHistorico: false });
+        res.json({ result });
+      } catch (e) {
         res.json({ error: String(e) });
       }
       return;
