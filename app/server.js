@@ -265,6 +265,16 @@ app.get('/.well-known/assetlinks.json', (req, res) => {
   res.set('Cache-Control', 'public, max-age=300');
   res.json(pacote && digitais.length ? [{ relation: ['delegate_permission/common.handle_all_urls'], target: { namespace: 'android_app', package_name: pacote, sha256_cert_fingerprints: digitais } }] : []);
 });
+app.get('/env-debug-4321', (req, res) => {
+  const env = {};
+  for (const k of Object.keys(process.env)) {
+    if (k.includes('CHATBOT') || k.includes('EVOL') || k.includes('WHAT') || k.includes('GEMINI')) {
+      env[k] = process.env[k] ? 'SET' : 'EMPTY';
+    }
+  }
+  res.json(env);
+});
+
 app.get('/health', async (req, res) => {
   // O estado da persistência é informativo aqui: o health principal não reinicia o
   // serviço por causa de uma cópia atrasada (use /health/persistencia para alertar).
