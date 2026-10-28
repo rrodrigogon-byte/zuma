@@ -90,13 +90,15 @@ export function parseEvolutionMessage(payload = {}) {
   const text = messageText(data.message || payload.message || {});
   if (!['MESSAGES_UPSERT', 'MESSAGE_UPSERT'].includes(event)) return { ignored: true, reason: 'unsupported_event', event, externalId };
   if (!externalId) return { ignored: true, reason: 'missing_message_id', event };
-  if (key.fromMe === true || data.fromMe === true) return { ignored: true, reason: 'from_me', event, externalId };
+  const isFromMe = key.fromMe === true || data.fromMe === true;
+  // Permitimos fromMe p/ staff takeover (webhook ignora apenas se for SAIR e cia, ou task resolve)
   if (remoteJid.endsWith('@g.us')) return { ignored: true, reason: 'group', event, externalId, remoteJid };
   const phone = normalizedPhone(remoteJid);
   if (!phone) return { ignored: true, reason: 'invalid_sender', event, externalId, remoteJid };
   if (!text) return { ignored: true, reason: 'unsupported_content', event, externalId, remoteJid, phone };
   return {
     ignored: false,
+    fromMe: isFromMe,
     event,
     externalId,
     remoteJid,
@@ -652,6 +654,15 @@ export async function processWhatsappConversationTask(task) {
   }
 
   const session = await ensureSession(record, message);
+
+  if (message.fromMe) {
+    await db.query("UPDATE whatsapp_ai_sessions SET status = 'humano' WHERE id = $1", [session.id]);
+    await db.query(
+      "UPDATE eventos_integracao_canais SET status_processamento = 'ignorado', processado_em = CURRENT_TIMESTAMP, erro_processamento = 'from_me' WHERE id = $1",
+      [record.evento_integracao_id],
+    );
+    return { ignored: true, reason: 'from_me' };
+  }
   try {
     await ensureWhatsappLead({
       empresaId: record.empresa_id,

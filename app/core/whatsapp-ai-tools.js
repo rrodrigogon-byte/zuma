@@ -38,7 +38,8 @@ function cleanText(value, limit = 240) {
   return String(value || '').trim().replace(/\s+/g, ' ').slice(0, limit);
 }
 
-function ensureUuid(value, field) {
+function ensureUuid(value, field, { allowAny = false } = {}) {
+  if (allowAny && (String(value).toLowerCase() === 'qualquer' || String(value).toLowerCase() === 'indiferente' || !value)) return null;
   const normalized = cleanText(value, 60);
   if (!UUID_REGEX.test(normalized)) throw new WhatsappAiToolError(`${field} inválido`, 'INVALID_ID');
   return normalized;
@@ -170,8 +171,8 @@ async function toolAvailability(context, args = {}) {
     ok: true,
     dataClassification: 'untrusted_business_data',
     disponibilidade: sanitizeToolData(await listSchedulingAvailability(scope, {
-      serviceId: args.serviceId,
-      professionalId: args.professionalId,
+      serviceId: String(args.serviceId).toLowerCase() === 'qualquer' ? null : args.serviceId,
+      professionalId: String(args.professionalId).toLowerCase() === 'qualquer' || String(args.professionalId).toLowerCase() === 'indiferente' ? null : args.professionalId,
       date: args.date,
     })),
   };
@@ -254,7 +255,7 @@ async function savePreparedAction(context, type, request, summary) {
 async function toolPrepareAppointment(context, args = {}) {
   const scope = contextScope(context);
   const serviceId = ensureUuid(args.serviceId, 'serviceId');
-  const professionalId = ensureUuid(args.professionalId, 'professionalId');
+  const professionalId = ensureUuid(args.professionalId, 'professionalId', { allowAny: true });
   const date = cleanText(args.date, 10);
   const time = cleanText(args.time, 5);
   const availability = await listSchedulingAvailability(scope, { serviceId, professionalId, date });
