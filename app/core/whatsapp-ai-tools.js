@@ -170,12 +170,25 @@ async function toolProfessionals(context) {
 
 async function toolAvailability(context, args = {}) {
   const scope = contextScope(context);
+  const sId = ensureUuid(args.serviceId, 'serviceId', { allowAny: true });
+  const pId = ensureUuid(args.professionalId, 'professionalId', { allowAny: true });
+  if (!sId || (!pId && args.professionalId && args.professionalId !== 'qualquer' && args.professionalId !== 'indiferente')) {
+     const { listSchedulingServices, listSchedulingProfessionals } = await import('./barbershop-scheduling.js');
+     const servicos = sanitizeToolData(await listSchedulingServices(scope));
+     const profissionais = sanitizeToolData(await listSchedulingProfessionals(scope));
+     return {
+       ok: false,
+       erro: "ID de serviço ou profissional fornecido não é um UUID Válido. Por favor, use os IDs exatos fornecidos abaixo. Consulte as listas para refazer o comando.",
+       servicosDisponiveis: servicos,
+       profissionaisDisponiveis: profissionais
+     };
+  }
   return {
     ok: true,
     dataClassification: 'untrusted_business_data',
     disponibilidade: sanitizeToolData(await listSchedulingAvailability(scope, {
-      serviceId: ensureUuid(args.serviceId, 'serviceId', { allowAny: false }),
-      professionalId: ensureUuid(args.professionalId, 'professionalId', { allowAny: false }),
+      serviceId: sId,
+      professionalId: pId,
       date: args.date,
     })),
   };
