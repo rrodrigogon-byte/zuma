@@ -172,7 +172,23 @@ async function toolAvailability(context, args = {}) {
   const scope = contextScope(context);
   const sId = ensureUuid(args.serviceId, 'serviceId', { allowAny: true });
   const pId = ensureUuid(args.professionalId, 'professionalId', { allowAny: true });
-  if (!sId || (!pId && args.professionalId && args.professionalId !== 'qualquer' && args.professionalId !== 'indiferente')) {
+  
+  // No Kytto os IDs podem ser strings genéricas, então precisamos verificar se o ID fornecido realmente existe
+  // Caso contrário, forçamos o !sId para que ele retorne a lista de serviços correta para a IA tentar de novo
+  let serviceExists = true;
+  let professionalExists = true;
+  if (sId) {
+    const { listServices, listProfessionals } = await import('./barbershop-agenda.js');
+    const servicos = await listServices(scope);
+    if (!servicos.find(s => s.id === sId)) serviceExists = false;
+    
+    if (pId && pId !== 'qualquer' && pId !== 'indiferente') {
+      const profissionais = await listProfessionals(scope);
+      if (!profissionais.find(p => p.id === pId)) professionalExists = false;
+    }
+  }
+
+  if (!sId || !serviceExists || !professionalExists || (!pId && args.professionalId && args.professionalId !== 'qualquer' && args.professionalId !== 'indiferente')) {
      const { listServices, listProfessionals } = await import('./barbershop-agenda.js');
      const listSchedulingServices = listServices;
      const listSchedulingProfessionals = listProfessionals;
@@ -274,8 +290,24 @@ async function toolPrepareAppointment(context, args = {}) {
   const scope = contextScope(context);
   const serviceId = ensureUuid(args.serviceId, 'serviceId', { allowAny: true });
   const professionalId = ensureUuid(args.professionalId, 'professionalId', { allowAny: true });
-  if (!serviceId || (!professionalId && args.professionalId && args.professionalId !== 'qualquer' && args.professionalId !== 'indiferente')) {
-     const { listSchedulingServices, listSchedulingProfessionals } = await import('./barbershop-scheduling.js');
+  
+  let serviceExists = true;
+  let professionalExists = true;
+  if (serviceId) {
+    const { listServices, listProfessionals } = await import('./barbershop-agenda.js');
+    const servicos = await listServices(scope);
+    if (!servicos.find(s => s.id === serviceId)) serviceExists = false;
+    
+    if (professionalId && professionalId !== 'qualquer' && professionalId !== 'indiferente') {
+      const profissionais = await listProfessionals(scope);
+      if (!profissionais.find(p => p.id === professionalId)) professionalExists = false;
+    }
+  }
+
+  if (!serviceId || !serviceExists || !professionalExists || (!professionalId && args.professionalId && args.professionalId !== 'qualquer' && args.professionalId !== 'indiferente')) {
+     const { listServices, listProfessionals } = await import('./barbershop-agenda.js');
+     const listSchedulingServices = listServices;
+     const listSchedulingProfessionals = listProfessionals;
      return {
        ok: false,
        erro: "Você forneceu um nome de serviço/profissional em vez de um UUID. Isso causou um erro! Você DEVE usar o id exato (UUID) retornado nestas listas. Chame esta ferramenta NOVAMENTE AGORA MESMO usando os IDs corretos listados abaixo em 'servicosDisponiveis' e 'profissionaisDisponiveis'.",
