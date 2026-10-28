@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { apiFetch, fmtMoney } from '../../../../lib/api';
+import { api } from '../../../../lib/api';
+const fmtMoney = (v) => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 import { Link } from 'react-router-dom';
 import { Sparkles, ChevronLeft, TrendingUp, Users, Target, Calendar, User, Search, AlertCircle, CheckCircle, BarChart3, Briefcase } from 'lucide-react';
 
@@ -21,7 +22,7 @@ const GestaoSalaoAvancada = () => {
   const fetchGeral = () => {
     setLoading(true);
     // Fetch global team performance
-    apiFetch(`/api/admin/dino/equipe/desempenho?inicio=${inicio}&fim=${fim}`)
+    api.get(`/api/admin/dino/equipe/desempenho?inicio=${inicio}&fim=${fim}`)
       .then(res => {
         if (res.ok) setData(res);
       })
@@ -37,7 +38,7 @@ const GestaoSalaoAvancada = () => {
     }
     setLoading(true);
     setSelectedProfId(id);
-    apiFetch(`/api/admin/dino/equipe/desempenho?inicio=${inicio}&fim=${fim}&profissionalId=${id}`)
+    api.get(`/api/admin/dino/equipe/desempenho?inicio=${inicio}&fim=${fim}&profissionalId=${id}`)
       .then(res => {
         if (res.ok && res.employees && res.employees.length > 0) {
           setProfDetails(res.employees[0]);
@@ -228,7 +229,7 @@ const GestaoSalaoAvancada = () => {
             <Sparkles size={24} color="var(--accent)" />
             <div>
               <div style={styles.aiTitle}>Análise do Profissional (Dino T-Rex)</div>
-              <p style={styles.aiText} style={{ marginBottom: '12px' }}>
+              <p style={{ ...styles.aiText, marginBottom: '12px' }}>
                 <strong>Metas:</strong> {getMetasInsight(profDetails)}<br/>
                 <strong>Taxa de Retorno & Retenção:</strong> A taxa de comparecimento (Attendance Rate) foi de {profDetails.attendanceRate || 'N/A'}%.
               </p>

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { Search, Filter, Download, Sparkles, ChevronLeft, Calendar, FileText } from 'lucide-react';
-import { apiFetch } from '../../../../lib/api';
+import { api } from '../../../../lib/api';
 import { todosRelatorios } from './relatoriosData';
 
 const RelatorioDinamico = () => {
@@ -23,7 +23,7 @@ const RelatorioDinamico = () => {
     if (!relatorio) return;
     setLoading(true);
     // Fetch generic history
-    apiFetch(`/api/admin/barbearia/historico?de=${dataAnaliseInicio}&ate=${dataAnaliseFim}&limite=5000`)
+    api.get(`/api/admin/barbearia/historico?de=${dataAnaliseInicio}&ate=${dataAnaliseFim}&limite=5000`)
       .then(res => {
         if (res.ok) setHistoricoData(res.itens || []);
       })
