@@ -5909,7 +5909,17 @@ app.patch('/api/admin/barbearia/fila/:id/status', (req, res) => {
 
 app.get('/api/admin/barbearia/bloqueios', (req, res) => res.json({ ok: true, bloqueios: barbeariaErpKytto.listarBloqueios(legacyEmpresaId(req), { data: req.query?.data, profissionalId: req.query?.profissionalId, lojaId: legacyLojaId(req), incluirInativos: String(req.query?.incluirInativos) === 'true' }) }));
 app.post('/api/admin/barbearia/bloqueios', (req, res) => {
-  try { res.status(201).json({ ok: true, bloqueio: barbeariaErpKytto.criarBloqueio(legacyEmpresaId(req), { ...(req.body || {}), lojaId: legacyLojaId(req) }) }); }
+  try {
+    const empresaId = legacyEmpresaId(req);
+    const lojaId = legacyLojaId(req);
+    if (Array.isArray(req.body.lote)) {
+      const bloqueios = req.body.lote.map(b => barbeariaErpKytto.criarBloqueio(empresaId, { ...b, lojaId }));
+      return res.status(201).json({ ok: true, bloqueios });
+    }
+    res.status(201).json({ ok: true, bloqueio: barbeariaErpKytto.criarBloqueio(empresaId, { ...(req.body || {}), lojaId }) });
+  }
+  catch (error) { res.status(400).json({ error: error.message }); }
+}); }
   catch (error) { res.status(400).json({ error: error.message }); }
 });
 app.patch('/api/admin/barbearia/bloqueios/:id', (req, res) => {
