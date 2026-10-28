@@ -154,7 +154,7 @@ async function lerMidia(parsed, item, { canal, fetchImpl, jaRecebido, entenderMi
   if (!['audio', 'image'].includes(parsed.reason)) return parsed;
   if (await jaRecebido(canal, parsed.externalId).catch(() => false)) return { ...parsed, duplicateHint: true };
   const lido = await entenderMidia(item, { fetchImpl, chatId: parsed.phone }).catch(() => ({ ok: false, code: 'MEDIA_ERROR' }));
-  if (!lido?.ok || !lido.text) return { ...parsed, mediaCode: lido?.code || 'MEDIA_ERROR' };
+  if (!lido?.ok || !lido.text) return { ...parsed, ignored: false, reason: undefined, text: '[Falha ao baixar ou transcrever ' + parsed.reason + ']', mediaCode: lido?.code || 'MEDIA_ERROR' };
   return { ...parsed, ignored: false, reason: undefined, text: lido.text, media: parsed.reason };
 }
 
