@@ -101,11 +101,17 @@ export async function provisionWahaSession(sessionName) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ session: validWahaSession(sessionName) }),
+  }).catch(error => {
+    if (error.status === 404) return { status: 'STARTING' };
+    throw error;
   });
 }
 
 export async function getWahaSessionStatus(sessionName) {
-  return jsonRequest(`/v1/sessions/${encodedSession(sessionName)}/status`);
+  return jsonRequest(`/v1/sessions/${encodedSession(sessionName)}/status`).catch(error => {
+    if (error.status === 404) return { status: 'UNKNOWN' };
+    throw error;
+  });
 }
 
 export async function getWahaSessionQr(sessionName) {
