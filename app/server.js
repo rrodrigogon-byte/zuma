@@ -5429,6 +5429,9 @@ function resumoOperacaoBarbearia(req) {
   const data = caixaKytto.dataDia(req.query?.data);
   const lojaId = legacyLojaId(req);
   const caixas = caixaKytto.listarCaixas(empresaId, { data, lojaId });
+  const fechamentos = financeiroKytto.listarFechamentos(empresaId, { lojaId });
+  const fechamentoDia = fechamentos.find((f) => String(f.data).slice(0, 10) === data) || null;
+
   const caixaAberto = caixas.find((item) => item.status === 'aberto') || null;
   const movimentos = caixas.flatMap((caixa) => caixaKytto.movimentosDoCaixa(empresaId, caixa.id));
   const comandas = barbeariaErpKytto.listarComandasBarbearia(empresaId, { data, lojaId });
@@ -5449,6 +5452,8 @@ function resumoOperacaoBarbearia(req) {
     recebimentosDinheiro: Number(movimentos.filter((item) => item.tipo === 'recebimento').reduce((soma, item) => soma + Number(item.valor || 0), 0).toFixed(2)),
     sangrias: Number(movimentos.filter((item) => item.tipo === 'sangria').reduce((soma, item) => soma + Number(item.valor || 0), 0).toFixed(2)),
     suprimentos: Number(movimentos.filter((item) => item.tipo === 'suprimento').reduce((soma, item) => soma + Number(item.valor || 0), 0).toFixed(2)),
+    fechamentoDia,
+
   };
 }
 
@@ -5490,11 +5495,18 @@ app.post('/api/admin/barbearia/operacao/caixas/:id/fechamento', (req, res) => {
     res.json({ ok: true, ...fechamento });
   } catch (error) { res.status(400).json({ error: error.message }); }
 });
+app.get('/api/admin/barbearia/operacao/fechamentos', (req, res) => {
+  try {
+    const fechamentos = financeiroKytto.listarFechamentos(legacyEmpresaId(req), { lojaId: legacyLojaId(req) });
+    res.json({ ok: true, fechamentos });
+  } catch (error) { res.status(400).json({ error: error.message }); }
+});
+
 app.post('/api/admin/barbearia/operacao/fechar-dia', (req, res) => {
   try {
     if (req.body?.confirmado !== true) return res.status(400).json({ error: 'A confirmação explícita do fechamento diário é obrigatória.' });
     const dia = String(req.body?.data || new Date().toISOString().slice(0, 10)).slice(0, 10);
-    res.json({ ok: true, fechamento: financeiroKytto.fecharDia(legacyEmpresaId(req), dia, req.user?.email || req.user?.nome) });
+    res.json({ ok: true, fechamento: financeiroKytto.fecharDia(legacyEmpresaId(req), dia, req.user?.email || req.user?.nome, { lojaId: legacyLojaId(req) }) });
   } catch (error) { res.status(400).json({ error: error.message }); }
 });
 
@@ -6042,6 +6054,9 @@ app.post('/api/admin/barbearia/ia/assistente', requireRole('admin', 'organizador
   const profissionais = barbeariaErpKytto.listarProfissionais(empresaId).map((item) => ({ nome: item.nome, especialidade: item.especialidade, horarioInicio: item.horarioInicio, horarioFim: item.horarioFim, diasTrabalho: item.diasTrabalho, ativo: item.ativo }));
   const financeiro = financeiroKytto.resumoFinanceiro(empresaId, { hoje: data, lojaId });
   const caixas = caixaKytto.listarCaixas(empresaId, { data, lojaId });
+  const fechamentos = financeiroKytto.listarFechamentos(empresaId, { lojaId });
+  const fechamentoDia = fechamentos.find((f) => String(f.data).slice(0, 10) === data) || null;
+
   let commerce = {};
   if (process.env.COMMERCE_CORE_ENABLED === '1') {
     try {

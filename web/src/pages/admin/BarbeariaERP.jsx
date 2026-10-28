@@ -309,6 +309,8 @@ export default function BarbeariaERP() {
   const [loading, setLoading] = useState(true)
   const [erro, setErro] = useState('')
   const [modal, setModal] = useState(null)
+  const [fechamentoDetalhado, setFechamentoDetalhado] = useState(null)
+
   // Id do cadastro em edição nos modais de serviço, plano e produto (null = novo cadastro).
   const [edicaoId, setEdicaoId] = useState(null)
   const [salvando, setSalvando] = useState(false)
@@ -541,9 +543,20 @@ export default function BarbeariaERP() {
     return executar(() => api.post(`/api/admin/barbearia/operacao/caixas/${caixa.id}/fechamento`, dados), 'Caixa fechado com resumo de conferência.')
   }
 
-  function fecharDiaOperacao(data) {
+  async function fecharDiaOperacao(data) {
     if (!window.confirm(`Confirmar fechamento financeiro do dia ${fmtDateOnly(data)}? Esta ação consolida o livro financeiro e não cria pagamentos.`)) return
-    return executar(() => api.post('/api/admin/barbearia/operacao/fechar-dia', { data, confirmado: true }), 'Fechamento financeiro diário concluído.')
+    try {
+      setSalvando(true)
+      const res = await api.post('/api/admin/barbearia/operacao/fechar-dia', { data, confirmado: true })
+      setFechamentoDetalhado(res.data.fechamento)
+      setModal('fechamentoDia')
+      carregar()
+      if (toast) toast('Fechamento financeiro diário concluído com sucesso!', 'success')
+    } catch (error) {
+      if (toast) toast(error.response?.data?.error || error.message || 'Erro', 'error')
+    } finally {
+      setSalvando(false)
+    }
   }
 
   function abrirNovoAgendamento() {
@@ -1582,7 +1595,7 @@ export default function BarbeariaERP() {
     }
 
   function renderOperacao() {
-    return <div style={{ display: 'grid', gap: 20 }}><BarbeariaComandasAbertas key={scopeKey} profissionais={profissionais} onOpen={abrirComanda} refreshKey={agendaRevisao} /><BarbeariaOperacaoPanel data={dataSelecionada} operacao={operacao || {}} onOpenCaixa={abrirCaixaOperacao} onMove={movimentarCaixaOperacao} onClose={fecharCaixaOperacao} onCloseDay={fecharDiaOperacao} salvando={salvando} /></div>
+    return <div style={{ display: 'grid', gap: 20 }}><BarbeariaComandasAbertas key={scopeKey} profissionais={profissionais} onOpen={abrirComanda} refreshKey={agendaRevisao} /><BarbeariaOperacaoPanel data={dataSelecionada} operacao={operacao || {}} onOpenCaixa={abrirCaixaOperacao} onMove={movimentarCaixaOperacao} onClose={fecharCaixaOperacao} onCloseDay={fecharDiaOperacao} onViewDay={(fechamento) => { setFechamentoDetalhado(fechamento); setModal('fechamentoDia'); }} salvando={salvando} /></div>
   }
 
   function renderPreviaTaxasMateriais() {
@@ -2027,6 +2040,103 @@ export default function BarbeariaERP() {
         <div style={styles.modalActions}>{!['concluido', 'cancelado', 'nao_compareceu'].includes(agendamento.status) && <button type="button" style={styles.primary} onClick={() => abrirEdicaoAgendamento(agendamento)}>Trocar profissional ou Remarcar</button>}{proximas.map((proximo) => <button key={proximo} type="button" style={styles.secondary} onClick={() => { setModal(null); mudarStatus(agendamento, proximo) }}>{STATUS[proximo]?.label}</button>)}{agendamento.status === 'concluido' && !agendamento.financeiroLancamentoId && <button type="button" style={styles.primary} onClick={() => { abrirRecebimento(agendamento) }}>Registrar recebimento</button>}<button type="button" style={styles.secondary} onClick={() => conferirComandaDoAtendimento(agendamento)}>Conferir / abrir comanda</button><button type="button" style={styles.secondary} onClick={() => abrirHistoricoCliente(agendamento)} title="Abre em nova guia">Histórico do cliente ↗</button></div></div></Modal>
     }
     if (modal === 'plano') return <Modal title={edicaoId ? 'Editar plano de recorrência' : 'Novo plano de recorrência'} onClose={() => setModal(null)} wide><form onSubmit={salvarPlano} style={{ display: 'grid', gap: 16 }}><div style={styles.formGrid}><Field label="Nome *" full><input required value={formPlano.nome} onChange={(event) => setFormPlano((atual) => ({ ...atual, nome: event.target.value }))} style={inputStyle} placeholder="Pacote 4 procedimentos" /></Field><Field label="Preço do ciclo (R$) *"><input required type="number" min="0.01" step="0.01" value={formPlano.preco} onChange={(event) => setFormPlano((atual) => ({ ...atual, preco: event.target.value }))} style={inputStyle} /></Field><Field label="Ciclo"><select value={formPlano.ciclo} onChange={(event) => setFormPlano((atual) => ({ ...atual, ciclo: event.target.value }))} style={inputStyle}><option value="mensal">Mensal</option><option value="trimestral">Trimestral</option><option value="anual">Anual</option></select></Field><Field label="Procedimentos por ciclo (4, 6, 8 ou mais)"><div style={{display:'flex',flexWrap:'wrap',gap:6,marginBottom:6}}>{[4,6,8].map(q=><button key={q} type="button" style={styles.small} onClick={()=>setFormPlano(atual=>({...atual,sessoesIncluidas:q}))}>{q} procedimentos</button>)}</div><input required type="number" min="1" max="100" value={formPlano.sessoesIncluidas} onChange={(event) => setFormPlano((atual) => ({ ...atual, sessoesIncluidas: event.target.value }))} style={inputStyle} /></Field><Field label="Pote de comissão (% da mensalidade)"><input type="number" min="0" max="100" value={formPlano.percentualPote ?? 0} onChange={(event) => setFormPlano((atual) => ({ ...atual, percentualPote: event.target.value }))} style={inputStyle} /></Field><Field label="Rateio do pote"><select value={formPlano.rateioPote || 'valor_tabela'} onChange={(event) => setFormPlano((atual) => ({ ...atual, rateioPote: event.target.value }))} style={inputStyle}><option value="valor_tabela">Por valor de tabela dos serviços</option><option value="atendimento">Por atendimento (partes iguais)</option></select></Field><Field label="Valor fixo por atendimento (R$)"><input type="number" min="0" step="0.01" value={formPlano.valorFixoPorUso ?? 0} onChange={(event) => setFormPlano((atual) => ({ ...atual, valorFixoPorUso: event.target.value }))} style={inputStyle} /></Field><Field label="Regra de renovação"><select value={formPlano.regraRenovacao || 'dias'} onChange={e=>setFormPlano(atual=>({...atual,regraRenovacao:e.target.value}))} style={inputStyle}><option value="aniversario">Mesmo dia da contratação em cada ciclo</option><option value="dias">Período fixo em dias</option></select><small style={styles.sub}>Contratou dia 10: renova dia 10. Nos meses sem o dia 29, 30 ou 31, vence no último dia; o aniversário original é mantido.</small></Field><Field label="Validade em dias (somente período fixo)"><input disabled={formPlano.regraRenovacao==='aniversario'} required type="number" min="1" value={formPlano.validadeDias} onChange={(event) => setFormPlano((atual) => ({ ...atual, validadeDias: event.target.value }))} style={inputStyle} /></Field><Field label="Serviços cobertos" full><select required={formPlano.regraRenovacao==='aniversario'} multiple value={formPlano.servicosIds} onChange={(event) => setFormPlano((atual) => ({ ...atual, servicosIds: Array.from(event.target.selectedOptions).map((option) => option.value) }))} style={{ ...inputStyle, minHeight: 110 }}>{servicos.filter((item) => item.ativo !== false).map((servico) => <option key={servico.id} value={servico.id}>{servico.nome}</option>)}</select><small style={styles.sub}>Use Ctrl/Cmd para selecionar mais de um serviço.</small></Field><Field label="Descrição" full><textarea rows={3} value={formPlano.descricao} onChange={(event) => setFormPlano((atual) => ({ ...atual, descricao: event.target.value }))} style={{ ...inputStyle, resize: 'vertical' }} /></Field></div><div style={styles.modalActions}><button type="button" style={styles.secondary} onClick={() => setModal(null)}>Cancelar</button><button type="submit" style={styles.primary} disabled={salvando}>{salvando ? 'Salvando…' : 'Salvar plano'}</button></div></form></Modal>
+
+    if (modal === 'fechamentoDia' && fechamentoDetalhado) {
+      return (
+        <Modal title={`Fechamento Diário — ${fmtDateOnly(fechamentoDetalhado.data)}`} onClose={() => setModal(null)} wide>
+          <div id="print-fechamento" style={{ background: 'var(--card)', color: 'var(--text)', padding: 24, borderRadius: 8 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+              <h2 style={{ margin: 0 }}>Relatório Consolidado de Fechamento</h2>
+              <div className="dadm-no-print">
+                <button type="button" onClick={() => window.print()} style={styles.primary}>🖨️ Imprimir / PDF</button>
+              </div>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16, marginBottom: 24 }}>
+              <Card style={{ padding: 16 }}>
+                <small style={{ color: 'var(--muted)', display: 'block', marginBottom: 4, fontWeight: 700 }}>Data do Movimento</small>
+                <strong style={{ fontSize: 18 }}>{fmtDateOnly(fechamentoDetalhado.data)}</strong>
+              </Card>
+              <Card style={{ padding: 16 }}>
+                <small style={{ color: 'var(--muted)', display: 'block', marginBottom: 4, fontWeight: 700 }}>Responsável</small>
+                <strong style={{ fontSize: 18 }}>{fechamentoDetalhado.responsavel || 'Sistema'}</strong>
+              </Card>
+              <Card style={{ padding: 16 }}>
+                <small style={{ color: 'var(--muted)', display: 'block', marginBottom: 4, fontWeight: 700 }}>Data/Hora de Fechamento</small>
+                <strong style={{ fontSize: 18 }}>{new Date(fechamentoDetalhado.criadoEm).toLocaleString('pt-BR')}</strong>
+              </Card>
+            </div>
+            <h3 style={{ margin: '0 0 16px 0', paddingBottom: 8, borderBottom: '1px solid var(--border)' }}>Resumo Financeiro</h3>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16, marginBottom: 24 }}>
+              <Card style={{ padding: 16, borderLeft: '4px solid #14b87a' }}>
+                <small style={{ color: 'var(--muted)', display: 'block', marginBottom: 4, fontWeight: 700 }}>Total Recebimentos</small>
+                <strong style={{ fontSize: 24, color: '#14b87a' }}>{fmtR(fechamentoDetalhado.recebimentos)}</strong>
+              </Card>
+              <Card style={{ padding: 16, borderLeft: '4px solid #e05c5c' }}>
+                <small style={{ color: 'var(--muted)', display: 'block', marginBottom: 4, fontWeight: 700 }}>Total Pagamentos</small>
+                <strong style={{ fontSize: 24, color: '#e05c5c' }}>{fmtR(fechamentoDetalhado.pagamentos)}</strong>
+              </Card>
+              <Card style={{ padding: 16, borderLeft: '4px solid #f59e0b' }}>
+                <small style={{ color: 'var(--muted)', display: 'block', marginBottom: 4, fontWeight: 700 }}>Pendente a Receber</small>
+                <strong style={{ fontSize: 24, color: '#f59e0b' }}>{fmtR(fechamentoDetalhado.pendenteReceber)}</strong>
+              </Card>
+              <Card style={{ padding: 16, borderLeft: '4px solid #3b82f6' }}>
+                <small style={{ color: 'var(--muted)', display: 'block', marginBottom: 4, fontWeight: 700 }}>Saldo Líquido do Dia</small>
+                <strong style={{ fontSize: 24, color: '#3b82f6' }}>{fmtR(fechamentoDetalhado.saldoDia)}</strong>
+              </Card>
+            </div>
+            <h3 style={{ margin: '0 0 16px 0', paddingBottom: 8, borderBottom: '1px solid var(--border)' }}>Movimento de Atividades e Vendas Consolidadas</h3>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16, marginBottom: 24 }}>
+              <Card style={{ padding: 16 }}>
+                <small style={{ color: 'var(--muted)', display: 'block', marginBottom: 4, fontWeight: 700 }}>Comandas Pagas / Faturadas</small>
+                <strong style={{ fontSize: 20 }}>{operacao?.comandasPagas || 0} pagas / {operacao?.emConta || 0} em conta</strong>
+              </Card>
+              <Card style={{ padding: 16 }}>
+                <small style={{ color: 'var(--muted)', display: 'block', marginBottom: 4, fontWeight: 700 }}>Faturamento de Comandas</small>
+                <strong style={{ fontSize: 20 }}>{fmtR(operacao?.faturamentoComandas || 0)}</strong>
+              </Card>
+              <Card style={{ padding: 16 }}>
+                <small style={{ color: 'var(--muted)', display: 'block', marginBottom: 4, fontWeight: 700 }}>Faturado em Conta (Prazo)</small>
+                <strong style={{ fontSize: 20 }}>{fmtR(operacao?.faturadoEmConta || 0)}</strong>
+              </Card>
+            </div>
+            
+            {operacao?.porMeio && Object.keys(operacao.porMeio).length > 0 && (
+              <div style={{ marginBottom: 24 }}>
+                <h4 style={{ margin: '0 0 12px 0', color: 'var(--muted)', fontSize: 13, textTransform: 'uppercase' }}>Receita por Meio de Pagamento</h4>
+                <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                  {Object.entries(operacao.porMeio).map(([meio, valor]) => (
+                    <div key={meio} style={{ background: 'var(--bg)', border: '1px solid var(--line)', borderRadius: 6, padding: '8px 12px' }}>
+                      <strong style={{ display: 'block', fontSize: 14 }}>{String(meio).toUpperCase()}</strong>
+                      <span>{fmtR(valor)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: 20, marginBottom: 10 }}>
+              <div style={{ flex: 1 }}>
+                <h3 style={{ margin: '0 0 16px 0', paddingBottom: 8, borderBottom: '1px solid var(--border)' }}>Auditoria Financeira e Lacres</h3>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                    <p><strong>Total de lançamentos validados:</strong> {fechamentoDetalhado.totalLancamentos}</p>
+                    <p><strong>Operações em quarentena (análise pendente):</strong> {fechamentoDetalhado.quarentenaCount}</p>
+                    <p><strong>Situação do arquivo:</strong> <span style={{ color: '#14b87a', fontWeight: 'bold' }}>Fechado e lacrado (imutável)</span></p>
+                    <p><strong>ID do Fechamento:</strong> <span style={{ fontFamily: 'monospace', fontSize: 11 }}>{fechamentoDetalhado.id}</span></p>
+                </div>
+              </div>
+            </div>
+            <style dangerouslySetInnerHTML={{__html: `
+              @media print {
+                body * { visibility: hidden; }
+                #print-fechamento, #print-fechamento * { visibility: visible; }
+                #print-fechamento { position: absolute; left: 0; top: 0; width: 100%; margin: 0; padding: 0; }
+                .dadm-no-print { display: none !important; }
+              }
+            `}} />
+          </div>
+        </Modal>
+      )
+    }
     if (modal === 'produtoRevenda') return <Modal title={edicaoId ? 'Editar produto de revenda' : 'Novo produto de revenda'} onClose={() => setModal(null)} wide><form onSubmit={salvarProdutoRevenda} style={{ display: 'grid', gap: 16 }}><div style={styles.formGrid}><Field label="Nome *" full><input required value={formProdutoRevenda.nome} onChange={(event) => setFormProdutoRevenda((atual) => ({ ...atual, nome: event.target.value }))} style={inputStyle} placeholder="Pomada modeladora" /></Field><Field label="Código de barras (EAN)"><input inputMode="numeric" value={formProdutoRevenda.ean || ''} onChange={(event) => setFormProdutoRevenda((atual) => ({ ...atual, ean: event.target.value }))} style={inputStyle} /></Field><Field label="SKU"><input value={formProdutoRevenda.sku} onChange={(event) => setFormProdutoRevenda((atual) => ({ ...atual, sku: event.target.value }))} style={inputStyle} /></Field><Field label="Categoria"><input value={formProdutoRevenda.categoria} onChange={(event) => setFormProdutoRevenda((atual) => ({ ...atual, categoria: event.target.value }))} style={inputStyle} /></Field><Field label="Unidade"><input value={formProdutoRevenda.unidade} onChange={(event) => setFormProdutoRevenda((atual) => ({ ...atual, unidade: event.target.value }))} style={inputStyle} /></Field><Field label="Preço de venda (R$) *"><input required type="number" min="0.01" step="0.01" value={formProdutoRevenda.precoVenda} onChange={(event) => setFormProdutoRevenda((atual) => ({ ...atual, precoVenda: event.target.value }))} style={inputStyle} /></Field><Field label="Custo unitário (R$)"><input type="number" min="0" step="0.01" value={formProdutoRevenda.custoUnitario} onChange={(event) => setFormProdutoRevenda((atual) => ({ ...atual, custoUnitario: event.target.value }))} style={inputStyle} /></Field><Field label={edicaoId ? 'Saldo atual (altere por Entrada/Saída)' : 'Estoque inicial'}><input type="number" min="0" step="1" disabled={Boolean(edicaoId)} value={formProdutoRevenda.estoqueAtual} onChange={(event) => setFormProdutoRevenda((atual) => ({ ...atual, estoqueAtual: event.target.value }))} style={inputStyle} /></Field><Field label="Estoque mínimo"><input type="number" min="0" step="1" value={formProdutoRevenda.estoqueMinimo} onChange={(event) => setFormProdutoRevenda((atual) => ({ ...atual, estoqueMinimo: event.target.value }))} style={inputStyle} /></Field><Field label="Intervalo de recompra (dias)" hint="Usado só como sugestão; 0 desativa recompra automática."><input type="number" min="0" max="3650" step="1" value={formProdutoRevenda.intervaloRecompraDias ?? 30} onChange={(event) => setFormProdutoRevenda((atual) => ({ ...atual, intervaloRecompraDias: event.target.value }))} style={inputStyle} /></Field></div><p style={styles.sub}>O estoque inicial gera apenas um movimento de entrada inicial; nenhum financeiro é criado.</p><div style={styles.modalActions}><button type="button" style={styles.secondary} onClick={() => setModal(null)}>Cancelar</button><button type="submit" style={styles.primary} disabled={salvando}>{salvando ? 'Salvando…' : edicaoId ? 'Salvar produto' : 'Cadastrar produto'}</button></div></form></Modal>
     return null
   }
