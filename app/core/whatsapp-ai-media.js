@@ -152,7 +152,11 @@ export async function loadMediaBase64(media, { fetchImpl = fetch, chatId } = {})
   if (!url) throw new MediaError('Provedor não entregou a mídia', 'MEDIA_UNAVAILABLE');
   const cfg = chatbotBackendConfig();
   // A chave do backend só vai para o próprio backend, nunca para outra origem.
-  const headers = cfg.baseUrl && cfg.key && sameOrigin(url, cfg.baseUrl) ? { 'X-API-KEY': cfg.key } : {};
+  const evoUrl = process.env.EVOLUTION_API_URL;
+  const evoKey = process.env.EVOLUTION_API_KEY;
+  const headers = {};
+  if (cfg.baseUrl && cfg.key && sameOrigin(url, cfg.baseUrl)) headers['X-API-KEY'] = cfg.key;
+  else if (evoUrl && evoKey && sameOrigin(url, evoUrl)) headers['apikey'] = evoKey;
   let response;
   try {
     // Com a chave no cabeçalho, nunca seguir redirecionamento automático: o fetch
