@@ -600,9 +600,9 @@ export async function confirmPendingAction(context) {
         const myFetch = global.fetch;
         const tenantRes = await trx.query(`SELECT api_base_url, configuracao FROM canais_integracao WHERE id = $1`, [scope.canalId]);
         const tenant = tenantRes.rows[0];
-        const apiUrl = tenant?.api_base_url || process.env.EVOLUTION_API_URL || 'http://localhost:8080';
-        const apiKey = tenant?.configuracao?.segredo_env ? process.env[tenant.configuracao.segredo_env.replace('ENV:', '')] : process.env.EVOLUTION_API_KEY || '';
-        const instance = tenant?.configuracao?.instance || process.env.EVOLUTION_INSTANCE || 'dino';
+        const apiUrl = tenant?.api_base_url || (process.env.EVOLUTION_API_URL || process.env.CHATBOT_BACKEND_URL) || 'http://localhost:8080';
+        const apiKey = tenant?.configuracao?.segredo_env ? process.env[tenant.configuracao.segredo_env.replace('ENV:', '')] : (process.env.EVOLUTION_API_KEY || process.env.CHATBOT_BACKEND_KEY) || '';
+        const instance = tenant?.configuracao?.instance || (process.env.EVOLUTION_INSTANCE || process.env.CHATBOT_BACKEND_INSTANCE) || 'dino';
         const dinoPhone = process.env.GESTOR_TELEFONE || '65999999999';
         const msg = `🛍️ *Nova Venda Fechada pelo IA!*
 Pedido: ${response.publicCode}

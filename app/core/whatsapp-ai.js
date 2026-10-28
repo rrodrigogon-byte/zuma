@@ -787,7 +787,7 @@ export async function whatsappAiOperationalStatus(context = {}) {
   return {
     featureEnabled: process.env.FEATURE_WHATSAPP_AI === 'true',
     gemini: configuredGeminiModel(),
-    evolutionConfigured: Boolean(process.env.EVOLUTION_API_URL && process.env.EVOLUTION_API_KEY && process.env.EVOLUTION_INSTANCE),
+    evolutionConfigured: Boolean((process.env.EVOLUTION_API_URL || process.env.CHATBOT_BACKEND_URL) && (process.env.EVOLUTION_API_KEY || process.env.CHATBOT_BACKEND_KEY) && (process.env.EVOLUTION_INSTANCE || process.env.CHATBOT_BACKEND_INSTANCE)),
     policy: whatsappAiPolicy(channelRow || {}),
     policy24h: policyMetrics,
     channel: channelRow ? {
@@ -933,7 +933,7 @@ export async function closeWhatsappAiHandoff(context = {}, sessionId) {
 }
 
 export function whatsappMessagingReady() {
-  return Boolean(process.env.EVOLUTION_API_URL && process.env.EVOLUTION_API_KEY && process.env.EVOLUTION_INSTANCE);
+  return Boolean(((process.env.EVOLUTION_API_URL || process.env.CHATBOT_BACKEND_URL) && (process.env.EVOLUTION_API_KEY || process.env.CHATBOT_BACKEND_KEY) && (process.env.EVOLUTION_INSTANCE || process.env.CHATBOT_BACKEND_INSTANCE)) || (process.env.CHATBOT_BACKEND_URL && process.env.CHATBOT_BACKEND_KEY));
 }
 
 export function whatsappAiReady() {
@@ -1040,7 +1040,7 @@ export async function configureWhatsappAiChannel(context = {}, input = {}) {
   const usuarioId = context.usuarioId || null;
   const status = safeChannelStatus(input.status);
   const secretEnv = envReference(input.webhookSecretEnv || 'WHATSAPP_AI_WEBHOOK_SECRET');
-  const instance = cleanText(input.instance || process.env.EVOLUTION_INSTANCE, 120);
+  const instance = cleanText(input.instance || (process.env.EVOLUTION_INSTANCE || process.env.CHATBOT_BACKEND_INSTANCE), 120);
   const displayName = cleanText(input.displayName || 'Atendimento WhatsApp', 120);
   const capabilities = safeCapabilities(input.capabilities);
   const header = cleanText(input.webhookHeader || 'x-setpoint-webhook-token', 100).toLowerCase();
@@ -1052,7 +1052,7 @@ export async function configureWhatsappAiChannel(context = {}, input = {}) {
     if (process.env.FEATURE_WHATSAPP_AI !== 'true') throw new Error('feature flag da IA WhatsApp não está ativa');
     if (!process.env[secretEnv]) throw new Error(`segredo ${secretEnv} não configurado no ambiente`);
     if (!process.env.GEMINI_API_KEY) throw new Error('Gemini não configurado no ambiente');
-    if (!process.env.EVOLUTION_API_URL || !process.env.EVOLUTION_API_KEY) throw new Error('Evolution não configurada no ambiente');
+    if (!(process.env.EVOLUTION_API_URL || process.env.CHATBOT_BACKEND_URL) || !(process.env.EVOLUTION_API_KEY || process.env.CHATBOT_BACKEND_KEY)) throw new Error('Evolution não configurada no ambiente');
   }
 
   return db.transaction(async trx => {
@@ -1071,7 +1071,7 @@ export async function configureWhatsappAiChannel(context = {}, input = {}) {
          configuracao = canais_integracao.configuracao || EXCLUDED.configuracao,
          data_atualizacao = CURRENT_TIMESTAMP
        RETURNING *`,
-      [empresaId, lojaId, displayName, status, header, `ENV:${secretEnv}`, process.env.EVOLUTION_API_URL || null,
+      [empresaId, lojaId, displayName, status, header, `ENV:${secretEnv}`, (process.env.EVOLUTION_API_URL || process.env.CHATBOT_BACKEND_URL) || null,
         JSON.stringify({ instance, display_name: displayName, segredo_env: secretEnv, capabilities }), usuarioId],
     );
     const channel = result.rows[0];
@@ -1098,9 +1098,9 @@ export async function syncWhatsappAiWebhook(context = {}, { publicBaseUrl, confi
   if (!channel) throw new Error('canal WhatsApp ativo não encontrado');
   if (!whatsappAiReady()) throw new Error('IA WhatsApp ainda não está pronta no ambiente');
   const secret = referencedChannelSecret(channel);
-  const apiKey = cleanText(process.env.EVOLUTION_API_KEY, 500);
-  const baseUrl = cleanText(process.env.EVOLUTION_API_URL || channel.api_base_url, 1000).replace(/\/$/, '');
-  const instance = cleanText(channel.configuracao?.instance || process.env.EVOLUTION_INSTANCE, 120);
+  const apiKey = cleanText((process.env.EVOLUTION_API_KEY || process.env.CHATBOT_BACKEND_KEY), 500);
+  const baseUrl = cleanText((process.env.EVOLUTION_API_URL || process.env.CHATBOT_BACKEND_URL) || channel.api_base_url, 1000).replace(/\/$/, '');
+  const instance = cleanText(channel.configuracao?.instance || (process.env.EVOLUTION_INSTANCE || process.env.CHATBOT_BACKEND_INSTANCE), 120);
   const externalBase = cleanText(publicBaseUrl || process.env.SERVER_URL, 1000).replace(/\/$/, '');
   if (!secret || !apiKey || !baseUrl || !instance || !externalBase) throw new Error('configuração Evolution/webhook incompleta');
   if (process.env.NODE_ENV === 'production' && (!baseUrl.startsWith('https://') || !externalBase.startsWith('https://'))) {
