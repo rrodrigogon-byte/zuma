@@ -91,8 +91,8 @@ export async function listSchedulingProfessionals(context) {
 
 export async function listSchedulingAvailability(context, input = {}) {
   const { empresaId, lojaId } = tenantScope(context);
-  const professionalId = uuid(input.professionalId, 'professionalId');
-  const serviceId = uuid(input.serviceId, 'serviceId');
+  const professionalId = input.professionalId ? uuid(input.professionalId, 'professionalId') : null;
+  const serviceId = input.serviceId ? uuid(input.serviceId, 'serviceId') : null;
   const date = validDate(input.date);
   const dateValue = new Date(`${date}T12:00:00Z`);
   const today = new Date();

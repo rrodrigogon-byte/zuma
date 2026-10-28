@@ -39,9 +39,12 @@ function cleanText(value, limit = 240) {
 }
 
 function ensureUuid(value, field, { allowAny = false } = {}) {
-  if (allowAny && (String(value).toLowerCase() === 'qualquer' || String(value).toLowerCase() === 'indiferente' || !value)) return null;
   const normalized = cleanText(value, 60);
-  if (!UUID_REGEX.test(normalized)) throw new WhatsappAiToolError(`${field} inválido`, 'INVALID_ID');
+  if (!normalized) return allowAny ? null : '';
+  if (!UUID_REGEX.test(normalized)) {
+    if (allowAny) return null; // Resiliência: o modelo às vezes injeta o nome no ID; no caso de agendamentos, o null instrui o backend a aceitar a falha e consultar todos.
+    throw new WhatsappAiToolError(`${field} inválido`, 'INVALID_ID');
+  }
   return normalized;
 }
 
@@ -171,8 +174,8 @@ async function toolAvailability(context, args = {}) {
     ok: true,
     dataClassification: 'untrusted_business_data',
     disponibilidade: sanitizeToolData(await listSchedulingAvailability(scope, {
-      serviceId: String(args.serviceId).toLowerCase() === 'qualquer' ? null : args.serviceId,
-      professionalId: String(args.professionalId).toLowerCase() === 'qualquer' || String(args.professionalId).toLowerCase() === 'indiferente' ? null : args.professionalId,
+      serviceId: ensureUuid(args.serviceId, 'serviceId', { allowAny: true }),
+      professionalId: ensureUuid(args.professionalId, 'professionalId', { allowAny: true }),
       date: args.date,
     })),
   };
