@@ -79,3 +79,102 @@ router.get('/list', (req, res) => {
   const estado = estadoEmpresa(empresaId, false);
   res.json({ profissionais: Object.values(estado.profissionais).map(p => ({ id: p.id, nome: p.nome })) });
 });
+
+router.get('/custom', (req, res) => {
+  const empresaId = 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
+  const estado = estadoEmpresa(empresaId, false);
+  const log = [];
+  
+  const agendamentos = Object.values(estado.agendamentos || {});
+  const historico = Object.values(estado.historicoAtendimentos || {});
+  const comissoes = Object.values(estado.movimentosComissao || {});
+  
+  const unificar = (idDuplicado, idPrincipal) => {
+    agendamentos.filter(a => a.profissionalId === idDuplicado).forEach(a => { a.profissionalId = idPrincipal; });
+    historico.filter(h => h.profissionalId === idDuplicado).forEach(h => { h.profissionalId = idPrincipal; });
+    comissoes.filter(c => c.profissionalId === idDuplicado).forEach(c => { c.profissionalId = idPrincipal; });
+    const nomeDup = estado.profissionais[idDuplicado]?.nome;
+    const nomePrin = estado.profissionais[idPrincipal]?.nome;
+    log.push(`Unificado: ${nomeDup} (${idDuplicado}) -> ${nomePrin} (${idPrincipal})`);
+    delete estado.profissionais[idDuplicado];
+  };
+
+  const excluir = (id) => {
+    const nome = estado.profissionais[id]?.nome;
+    log.push(`Excluído: ${nome} (${id})`);
+    delete estado.profissionais[id];
+  };
+
+  // Bruno duplicado: "Bruno" (prof-mtj69hhx-002) vs "bruno rafael dos santos", "Bruno Mendes Pedroso", "bruno celso pereira"
+  // Wait, let's keep "prof-mtj69hhx-002" (Bruno) and unify the AVEC ones that are exactly "Bruno" or just keep the ones that are his duplicates.
+  // Actually, I can just use a JS file locally and POST the exact IDs I want to delete! But Kytto doesn't have an endpoint for unifying! It only has DELETE which throws if there are appointments!
+  
+  res.json({ ok: true, log });
+});
+
+router.get('/exact', (req, res) => {
+  const empresaId = 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
+  const estado = estadoEmpresa(empresaId, false);
+  const log = [];
+  
+  const agendamentos = Object.values(estado.agendamentos || {});
+  const historico = Object.values(estado.historicoAtendimentos || {});
+  const comissoes = Object.values(estado.movimentosComissao || {});
+  
+  const unificar = (idDuplicado, idPrincipal) => {
+    agendamentos.filter(a => a.profissionalId === idDuplicado).forEach(a => { a.profissionalId = idPrincipal; });
+    historico.filter(h => h.profissionalId === idDuplicado).forEach(h => { h.profissionalId = idPrincipal; });
+    comissoes.filter(c => c.profissionalId === idDuplicado).forEach(c => { c.profissionalId = idPrincipal; });
+    const nomeDup = estado.profissionais[idDuplicado]?.nome;
+    const nomePrin = estado.profissionais[idPrincipal]?.nome;
+    log.push(`Unificado: ${nomeDup} (${idDuplicado}) -> ${nomePrin} (${idPrincipal})`);
+    delete estado.profissionais[idDuplicado];
+  };
+
+  const excluir = (id) => {
+    const nome = estado.profissionais[id]?.nome;
+    log.push(`Excluído: ${nome} (${id})`);
+    delete estado.profissionais[id];
+  };
+
+  // Excluir Amanda e David
+  const profs = Object.values(estado.profissionais);
+  const findByName = (str) => profs.filter(p => p.nome.toLowerCase().includes(str.toLowerCase()));
+  
+  const amandas = findByName('amanda');
+  amandas.forEach(p => excluir(p.id));
+
+  const davids = findByName('david');
+  davids.forEach(p => excluir(p.id));
+
+  // João duplicado
+  const joaos = findByName('joão').concat(findByName('joao'));
+  const principalJoao = joaos.find(p => p.nome === 'João Victor Domingos Ruedel') || joaos[0];
+  if (principalJoao) {
+    joaos.forEach(p => {
+      if (p.id !== principalJoao.id) unificar(p.id, principalJoao.id);
+    });
+  }
+
+  // Steffany duplicado
+  const steffanys = findByName('steffany');
+  if (steffanys.length > 0) {
+    const principalSteffany = steffanys[0];
+    steffanys.forEach(p => {
+      if (p.id !== principalSteffany.id) unificar(p.id, principalSteffany.id);
+    });
+  }
+
+  // Bruno duplicado
+  // O usuário diz que Bruno está duplicado. Vamos manter o Bruno original 'prof-mtj69hhx-002'.
+  const brunos = findByName('bruno');
+  const principalBruno = brunos.find(p => p.id === 'prof-mtj69hhx-002') || brunos[0];
+  if (principalBruno) {
+    brunos.forEach(p => {
+      if (p.id !== principalBruno.id) unificar(p.id, principalBruno.id);
+    });
+  }
+
+  save();
+  res.json({ ok: true, log });
+});
