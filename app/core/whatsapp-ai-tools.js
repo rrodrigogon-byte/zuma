@@ -43,7 +43,7 @@ function ensureUuid(value, field, { allowAny = false } = {}) {
   if (!normalized) return allowAny ? null : '';
   if (!UUID_REGEX.test(normalized)) {
     if (allowAny) return null; // Resiliência: o modelo às vezes injeta o nome no ID; no caso de agendamentos, o null instrui o backend a aceitar a falha e consultar todos.
-    throw new WhatsappAiToolError(`${field} inválido`, 'INVALID_ID');
+    throw new WhatsappAiToolError(`${field} inválido (você deve usar o UUID exato fornecido por listar_servicos ou listar_profissionais)`, 'INVALID_ID');
   }
   return normalized;
 }
@@ -174,8 +174,8 @@ async function toolAvailability(context, args = {}) {
     ok: true,
     dataClassification: 'untrusted_business_data',
     disponibilidade: sanitizeToolData(await listSchedulingAvailability(scope, {
-      serviceId: ensureUuid(args.serviceId, 'serviceId', { allowAny: true }),
-      professionalId: ensureUuid(args.professionalId, 'professionalId', { allowAny: true }),
+      serviceId: ensureUuid(args.serviceId, 'serviceId', { allowAny: false }),
+      professionalId: ensureUuid(args.professionalId, 'professionalId', { allowAny: false }),
       date: args.date,
     })),
   };
@@ -523,7 +523,15 @@ export function createWhatsappAiToolExecutor(context) {
       preparedAction = true;
     }
     context.primaryIntentResolved = primaryIntentResolved;
-    const result = await tool(context, args || {});
+    let result;
+    try {
+      result = await tool(context, args || {});
+    } catch (error) {
+      if (error.name === 'WhatsappAiToolError') {
+        return { ok: false, erro: error.message, codigoErro: error.errorCode };
+      }
+      throw error;
+    }
     if (!['propor_oportunidade', 'solicitar_humano'].includes(name)) primaryIntentResolved = true;
     return result;
   };
