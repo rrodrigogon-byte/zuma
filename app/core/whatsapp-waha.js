@@ -57,18 +57,12 @@ function encodedSession(value) {
   return encodeURIComponent(session);
 }
 
-import fetch from 'node-fetch';
-import https from 'https';
-const customAgent = new https.Agent({ rejectUnauthorized: false });
-
 async function request(path, init = {}) {
   const { baseUrl, secret } = config();
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 15_000);
   try {
-    const urlStr = `${baseUrl}${path}`;
-    let fetchUrl = urlStr;
-    const fetchInit = {
+    const response = await fetch(`${baseUrl}${path}`, {
       ...init,
       signal: controller.signal,
       headers: {
@@ -76,13 +70,7 @@ async function request(path, init = {}) {
         'X-Kytto-Waha-Bridge-Secret': secret,
         ...(init.headers || {}),
       },
-    };
-    if (urlStr.includes('waha.kytto.com.br')) {
-      fetchUrl = urlStr.replace('waha.kytto.com.br', '136.113.26.166');
-      fetchInit.headers['Host'] = 'waha.kytto.com.br';
-      fetchInit.agent = customAgent;
-    }
-    const response = await fetch(fetchUrl, fetchInit);
+    });
     if (!response.ok) {
       let message = 'A ponte privada WAHA não respondeu corretamente.';
       try {
