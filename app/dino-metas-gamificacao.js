@@ -218,8 +218,10 @@ export function apurarDesempenhoEquipe(empresaId, { dataIso = dataIsoCuiaba(), i
     try { agendamentos = barbeariaErpKytto.listarAgendamentos(emp, { lojaId }); } catch {}
     for (const ag of agendamentos) {
       if (ag.status === 'cancelado' || ag.status === 'falhou' || ag.status === 'bloqueio') continue;
-      const dataAg = ag.data;
-      const noDia = dataAg === dataIso || dataAg === dataIsoCuiaba(new Date().toISOString());
+      const dataAg = ag.data || ag.dataAgenda || (ag.dataHora ? String(ag.dataHora).slice(0, 10) : '');
+      let dataAgCuiaba = '';
+      try { dataAgCuiaba = ag.dataHora ? dataIsoCuiaba(ag.dataHora) : ''; } catch {}
+      const noDia = dataAg === dataIso || dataAg === dataIsoCuiaba(new Date().toISOString()) || dataAgCuiaba === dataIso;
       if (noDia && ag.profissionalId && stats[ag.profissionalId]) {
         const profId = ag.profissionalId;
         stats[profId].dia.comandasAtendidas += 1;
@@ -230,10 +232,19 @@ export function apurarDesempenhoEquipe(empresaId, { dataIso = dataIsoCuiaba(), i
         stats[profId].dia.faturamentoTotal += valorAg;
         stats[profId].semana.faturamentoServicos += valorAg;
         stats[profId].semana.faturamentoTotal += valorAg;
-        const ehExtra = /extra|adicional|sobrancelha|pigmenta|spa|massagem|barboterapia|hidrata/i.test(ag.servicoNome || '');
+        let servicoNomeAtual = ag.servicoNome || '';
+        if (!servicoNomeAtual && ag.servicoId) {
+          try {
+            const estadoSrv = require('./barbearia-erp-kytto.js').estadoEmpresa(emp, false);
+            if (estadoSrv.servicos && estadoSrv.servicos[ag.servicoId]) {
+              servicoNomeAtual = estadoSrv.servicos[ag.servicoId].nome || '';
+            }
+          } catch (err) {}
+        }
+        const ehExtra = /extra|adicional|sobrancelha|pigmenta|spa|massagem|barboterapia|hidrata/i.test(servicoNomeAtual || '');
         if (ehExtra) {
           stats[profId].dia.servicosExtras += 1;
-          stats[profId].dia.servicosExtrasLista.push({ nome: ag.servicoNome || 'Serviço Extra (Agendado)', valor: valorAg });
+          stats[profId].dia.servicosExtrasLista.push({ nome: servicoNomeAtual || 'Serviço Extra (Agendado)', valor: valorAg });
           stats[profId].semana.servicosExtras += 1;
         }
       }
@@ -347,6 +358,9 @@ const rawVenda = venda.criadoEm || '';
       const dataVenda = rawVenda.slice(0, 10);
       let dataVendaCuiaba = '';
       try { dataVendaCuiaba = dataIsoCuiaba(rawVenda); } catch {}
+      // Ajuste para vendas legadas
+      const dataRef = venda.dataRef || '';
+      if (dataRef && dataRef === dataIso) dataVendaCuiaba = dataIso;
 
       const profId = venda.profissionalId;
       if (!profId || !stats[profId]) continue;
