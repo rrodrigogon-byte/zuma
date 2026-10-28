@@ -248,7 +248,7 @@ export async function loadBrainSources(scope = {}, deps = {}) {
     if (agendaFonte !== 'postgres') throw new Error('Fonte canônica de agenda indisponível.');
     const result = await queryRead(
       `SELECT a.id::text AS id, a.empresa_id::text AS empresa_id, a.loja_id::text AS loja_id,
-              a.cliente_id::text AS cliente_id, a.cliente_nome, a.cliente_telefone,
+              NULL AS cliente_id, a.cliente_nome, a.cliente_telefone,
               a.servico_id::text AS servico_id, s.nome AS servico_nome, s.preco::float AS servico_preco,
               a.usuario_profissional_id::text AS profissional_id, u.nome_completo AS profissional_nome,
               a.data_agendamento AS data_hora, a.status, a.duracao_minutos, a.valor::float AS valor, a.observacoes
@@ -470,7 +470,7 @@ export async function loadBrainExecutiveSources({ scope = {}, from, to, graphSou
        LEFT JOIN commerce_inventory_levels il ON il.empresa_id = p.empresa_id AND il.variant_id = v.id AND il.location_id = loc.id
       WHERE p.empresa_id = $1 AND p.tipo = 'physical' AND p.status <> 'archived'
       GROUP BY p.id, p.nome
-      ORDER BY (available <= minimum) DESC NULLS LAST, p.nome
+      ORDER BY p.nome
       LIMIT ${MAX_INVENTORY_ROWS}`;
 
   let ordersResult = { value: [], quality: state('orders', 'indisponivel', null) };

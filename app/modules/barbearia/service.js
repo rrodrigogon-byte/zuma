@@ -175,13 +175,13 @@ export async function gerarExtratoRepasse(tenantId, profissionalId, dataInicio, 
     `SELECT
        a.id, a.data_hora, a.valor AS valor_bruto,
        s.nome AS servico_nome,
-       c.nome AS cliente_nome,
+       a.cliente_nome,
        a.forma_pagamento,
        a.valor_profissional,
        a.valor_taxa
      FROM agendamentos a
      LEFT JOIN servicos s ON s.id = a.servico_id
-     LEFT JOIN clientes c ON c.id = a.cliente_id
+     -- LEFT JOIN clientes c
      WHERE a.tenant_id = $1
        AND a.profissional_id = $2
        AND a.status = 'finalizado'
