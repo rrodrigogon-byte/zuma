@@ -321,7 +321,7 @@ export function mediaAsCustomerText(kind, understood, caption) {
  * Nunca lança: devolve { ok:false, code } para quem chamou manter o fallback.
  */
 export async function inboundMediaToText(item, { fetchImpl = fetch, chatId, mediaLoader } = {}) {
-  if (!mediaEnabled()) return { ok: false, code: 'MEDIA_DISABLED' };
+  if (!mediaEnabled()) { console.error('[WhatsApp Media] Falha: MEDIA_DISABLED'); return { ok: false, code: 'MEDIA_DISABLED' }; }
   const media = locateInboundMedia(item);
   if (!media) return { ok: false, code: 'MEDIA_MISSING' };
   try {
@@ -330,10 +330,10 @@ export async function inboundMediaToText(item, { fetchImpl = fetch, chatId, medi
       : await loadMediaBase64(media, { fetchImpl, chatId });
     const understood = await understandMedia({ kind: media.kind, base64: loaded.base64, mimeType: loaded.mimeType || media.mimeType, caption: media.caption }, { fetchImpl });
     const text = mediaAsCustomerText(media.kind, understood, media.caption);
-    if (!text) return { ok: false, kind: media.kind, code: 'MEDIA_NO_SPEECH' };
+    if (!text) { console.error('[WhatsApp Media] Falha: MEDIA_NO_SPEECH'); return { ok: false, kind: media.kind, code: 'MEDIA_NO_SPEECH' }; }
     return { ok: true, kind: media.kind, text, model: understood.model, expense: understood.expense || null };
   } catch (error) {
-    return { ok: false, kind: media.kind, code: error?.code || 'MEDIA_ERROR' };
+    console.error('[WhatsApp Media] Erro ao processar:', error); return { ok: false, kind: media.kind, code: error?.code || 'MEDIA_ERROR' };
   }
 }
 
