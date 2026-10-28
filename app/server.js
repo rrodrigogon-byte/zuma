@@ -9125,7 +9125,6 @@ app.use('/assets', express.static(path.join(publicDir, 'assets'), {
   setHeaders: setStaticCacheHeaders,
 }));
 app.use('/assets', (req, res) => res.status(404).json({ error: 'asset not found', code: 'STATIC_ASSET_NOT_FOUND' }));
-app.get('/api/env', (req, res) => res.json({ CHATBOT_BACKEND_URL: process.env.CHATBOT_BACKEND_URL || 'NONE', CHATBOT_BACKEND_KEY: process.env.CHATBOT_BACKEND_KEY ? 'OK' : 'MISSING', CHATBOT_BACKEND_MEDIA_PATH: process.env.CHATBOT_BACKEND_MEDIA_PATH || 'NONE' }));
 app.use(express.static(publicDir, { setHeaders: setStaticCacheHeaders }));
 
 // Meta tags do link de agendamento/avaliação: quem compartilha o link no WhatsApp
