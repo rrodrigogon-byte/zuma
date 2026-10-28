@@ -3,18 +3,16 @@ export function addDumpEnv(app) {
     if (req.path === '/dump') {
       try {
         const fetch = (await import('node-fetch')).default || globalThis.fetch;
-        const response = await fetch(process.env.WAHA_CONTROL_URL + '/v1/sessions/provision', {
-          method: 'POST',
+        const response = await fetch(process.env.WAHA_CONTROL_URL + '/v1/sessions/barbearia-dino-gestao/qr', {
           headers: {
-            'Content-Type': 'application/json',
-            'X-Api-Key': process.env.WAHA_CONTROL_BRIDGE_SECRET
-          },
-          body: JSON.stringify({ session: 'barbearia-dino-gestao' })
+            'X-Kytto-Waha-Bridge-Secret': process.env.WAHA_CONTROL_BRIDGE_SECRET
+          }
         });
-        const text = await response.text();
-        res.json({ status: response.status, text });
+        const contentType = response.headers.get('content-type');
+        const buffer = await response.arrayBuffer();
+        res.json({ status: response.status, contentType, length: buffer.byteLength });
       } catch (e) {
-        res.json({ error: e.message });
+        res.json({ error: e.message, stack: e.stack });
       }
       return;
     }
