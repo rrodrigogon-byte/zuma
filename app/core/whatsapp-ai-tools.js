@@ -99,7 +99,7 @@ async function activeStorefront({ empresaId, lojaId }) {
       ORDER BY s.criado_em ASC LIMIT 1`,
     [empresaId, lojaId],
   );
-  if (!result.rows[0]) throw new WhatsappAiToolError('loja virtual não configurada para esta unidade', 'STOREFRONT_NOT_READY');
+  if (!result.rows[0]) throw new WhatsappAiToolError('O catálogo online ou loja virtual (commerce) ainda não está ativo para a unidade. Informe ao cliente que as vendas online por enquanto estão indisponíveis e ofereça os serviços normais.', 'STOREFRONT_NOT_READY');
   return result.rows[0];
 }
 
