@@ -465,7 +465,7 @@ async function deterministicResponse(task, channel, session, message) {
       return { text: 'A ação pendente foi cancelada. Posso ajudar com outra coisa.', kind: 'cancelled' };
     }
   }
-    if (message.text && message.text.toLowerCase().trim() === 'dino, voltar ia') {
+    if (message.text && message.text.toLowerCase().includes('voltar ia') || message.text.toLowerCase().includes('voltar já') || message.text.toLowerCase().includes('voltar ja')) {
     await db.query(`UPDATE whatsapp_ai_sessions SET status = 'ativo', handoff_reason = NULL WHERE id = $1`, [session.id]);
     return { text: 'Estou de volta! Como posso ajudar?', kind: 'bypass_human' };
   }
