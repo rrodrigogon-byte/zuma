@@ -453,6 +453,22 @@ async function deterministicResponse(task, channel, session, message) {
     capabilities: channel.configuracao?.capabilities || {},
   };
 
+    if (session.acao_pendente) {
+    const intent = confirmIntent(message.text);
+    if (intent === 'confirm') {
+      await db.query(`UPDATE whatsapp_ai_sessions SET status = 'ativo', handoff_reason = NULL WHERE id = $1`, [session.id]);
+      return { text: confirmationReply(await confirmPendingAction(context)), kind: 'confirmed' };
+    }
+    if (intent === 'cancel') {
+      await db.query(`UPDATE whatsapp_ai_sessions SET status = 'ativo', handoff_reason = NULL WHERE id = $1`, [session.id]);
+      await cancelPendingAction(context);
+      return { text: 'A ação pendente foi cancelada. Posso ajudar com outra coisa.', kind: 'cancelled' };
+    }
+  }
+    if (message.text && message.text.toLowerCase().trim() === 'dino, voltar ia') {
+    await db.query(`UPDATE whatsapp_ai_sessions SET status = 'ativo', handoff_reason = NULL WHERE id = $1`, [session.id]);
+    return { text: 'Estou de volta! Como posso ajudar?', kind: 'bypass_human' };
+  }
   if (session.status === 'humano') return { text: null, kind: 'human_queue' };
   if (resumeIntent(message.text)) return { text: 'A automação só pode ser retomada pela equipe após concluir o atendimento humano.', kind: 'resume_blocked' };
   if (optOutIntent(message.text)) {
@@ -486,14 +502,7 @@ async function deterministicResponse(task, channel, session, message) {
     const storeName = cleanText(channel.configuracao?.display_name || channel.nome || 'esta unidade', 120);
     return { text: `Certo. Encaminhei sua conversa para a equipe humana da ${storeName}.`, kind: 'handoff' };
   }
-  if (session.acao_pendente) {
-    const intent = confirmIntent(message.text);
-    if (intent === 'confirm') return { text: confirmationReply(await confirmPendingAction(context)), kind: 'confirmed' };
-    if (intent === 'cancel') {
-      await cancelPendingAction(context);
-      return { text: 'A ação pendente foi cancelada. Posso ajudar com outra coisa.', kind: 'cancelled' };
-    }
-  }
+
 
   const sensitiveInput = sensitiveCustomerData(message.text);
   if (sensitiveInput) {
