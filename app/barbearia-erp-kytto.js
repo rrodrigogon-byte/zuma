@@ -158,7 +158,7 @@ function estadoVazio() {
   };
 }
 
-function estadoEmpresa(empresaId, criar = true) {
+export function estadoEmpresa(empresaId, criar = true) {
   const raiz = db();
   const key = String(empresaId || '');
   const existente = raiz.barbearias?.[key];
