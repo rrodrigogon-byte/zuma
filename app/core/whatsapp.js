@@ -12,8 +12,8 @@ import { sendWahaText, validWahaGroupId, validWahaSession } from './whatsapp-wah
 // ─── Configuração ─────────────────────────────────────────────────────────────
 function getConfig(tenant) {
   return {
-    baseUrl: tenant?.whatsapp_api_url || process.env.EVOLUTION_API_URL || 'http://localhost:8080',
-    apiKey: tenant?.whatsapp_api_key || process.env.EVOLUTION_API_KEY || '',
+    baseUrl: tenant?.whatsapp_api_url || process.env.EVOLUTION_API_URL || process.env.CHATBOT_BACKEND_URL || 'http://localhost:8080',
+    apiKey: tenant?.whatsapp_api_key || process.env.EVOLUTION_API_KEY || process.env.CHATBOT_BACKEND_KEY || '',
     instance: tenant?.whatsapp_instance || process.env.EVOLUTION_INSTANCE || 'setpoint',
     payloadVersion: String(process.env.EVOLUTION_SEND_PAYLOAD_VERSION || 'current').trim().toLowerCase(),
   };
@@ -33,7 +33,7 @@ export async function enviarAudio(tenant, telefone, base64Audio) {
   if (whatsappProviderName() === 'chatbot_backend') {
      // Evolution Backend (not natively supported by standard wrapper without extension)
      // Evolution API uses /message/sendWhatsAppAudio
-     const cfg = chatbotBackendConfig();
+     const cfg = getConfig(tenant);
      const body = {
        number: numero,
        audio: base64Audio,
@@ -43,7 +43,7 @@ export async function enviarAudio(tenant, telefone, base64Audio) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        apikey: cfg.key,
+        apikey: cfg.apiKey,
       },
       body: JSON.stringify(body),
     });
