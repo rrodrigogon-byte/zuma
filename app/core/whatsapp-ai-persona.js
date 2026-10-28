@@ -134,6 +134,7 @@ export function resolvePersona(configuracao = {}, env = process.env, empresaId =
   if (!salvo && env.WHATSAPP_AI_PERSONA) {
     const dona = clean(env.WHATSAPP_AI_PERSONA_EMPRESA_ID || env.CHATBOT_BACKEND_EMPRESA_ID || '', 60);
     // Sem empresa dona definida, a variável não liga persona nenhuma (só o canal liga).
+    if (!empresaId) empresaId = dona;
     if (!empresaId || !dona || dona !== String(empresaId)) return null;
   }
   const id = clean(salvo?.id || env.WHATSAPP_AI_PERSONA || '', 20).toLowerCase();
