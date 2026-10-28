@@ -120,7 +120,7 @@ export function locateInboundMedia(item = {}) {
 }
 
 function backendMediaUrl(media, { chatId } = {}) {
-  const template = clean(process.env.CHATBOT_BACKEND_MEDIA_PATH || '/instances/{instance}/messages/{id}/media', 300);
+  const template = clean(process.env.CHATBOT_BACKEND_MEDIA_PATH || (chatbotBackendMode() === 'instancias' ? '/instances/{instance}/messages/{id}/media' : '/messages/{id}/media'), 300);
   if (!template || !media.id) return '';
   const cfg = chatbotBackendConfig();
   if (!cfg.baseUrl) return '';
