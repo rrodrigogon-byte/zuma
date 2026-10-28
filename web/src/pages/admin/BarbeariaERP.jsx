@@ -326,7 +326,7 @@ export default function BarbeariaERP() {
   const [formConfig, setFormConfig] = useState({})
   const [formFila, setFormFila] = useState({ clienteId: '', clienteNome: '', clienteTelefone: '', servicoId: '', preferenciaProfissionalId: '', previsaoMinutos: 30, observacoes: '' })
   const [formFilaChamada, setFormFilaChamada] = useState({ mesaOuPosicao: '' })
-  const [formBloqueio, setFormBloqueio] = useState({ titulo: '', motivo: '', inicioHora: '08:00', fimHora: '20:00', profissionalId: '' })
+  const [formBloqueio, setFormBloqueio] = useState({ titulo: '', motivo: '', inicioHora: '08:00', fimHora: '20:00', profissionalId: '', periodo: 'apenas_dia', dataFimRepeticao: '', diasSemana: [1, 2, 3, 4, 5, 6] })
   const [grupoServicos, setGrupoServicos] = useState('todos')
   const [formPlano, setFormPlano] = useState({ nome: '', descricao: '', ciclo: 'mensal', regraRenovacao: 'aniversario', preco: '', sessoesIncluidas: 4, validadeDias: 30, servicosIds: [] })
   const pedidoAssinatura=useRef(null)
@@ -1139,9 +1139,39 @@ export default function BarbeariaERP() {
   async function salvarBloqueio(event) {
     if (event?.preventDefault) event.preventDefault()
     const dataAlvo = formBloqueio.data || dataSelecionada
-    const inicio = new Date(`${dataAlvo}T${formBloqueio.inicioHora}:00`).toISOString()
-    const fim = new Date(`${dataAlvo}T${formBloqueio.fimHora}:00`).toISOString()
-    await executar(() => api.post('/api/admin/barbearia/bloqueios', { titulo: formBloqueio.titulo || 'Bloqueio de agenda', motivo: formBloqueio.motivo, inicio, fim, profissionalId: formBloqueio.profissionalId }), 'Bloqueio criado com sucesso.')
+    if (formBloqueio.periodo === 'apenas_dia') {
+      const inicio = new Date(`${dataAlvo}T${formBloqueio.inicioHora}:00`).toISOString()
+      const fim = new Date(`${dataAlvo}T${formBloqueio.fimHora}:00`).toISOString()
+      await executar(() => api.post('/api/admin/barbearia/bloqueios', { titulo: formBloqueio.titulo || 'Bloqueio de agenda', motivo: formBloqueio.motivo, inicio, fim, profissionalId: formBloqueio.profissionalId }), 'Bloqueio criado com sucesso.')
+    } else {
+      let diasLimite = 0;
+      if (formBloqueio.periodo === 'uma_semana') diasLimite = 7;
+      else if (formBloqueio.periodo === '15_dias') diasLimite = 15;
+      else if (formBloqueio.periodo === '30_dias') diasLimite = 30;
+      else if (formBloqueio.periodo === '60_dias') diasLimite = 60;
+      else if (formBloqueio.periodo === '1_ano') diasLimite = 365;
+      else if (formBloqueio.periodo === 'indeterminado') diasLimite = 1825; // 5 anos
+      const lote = [];
+      let dataCursor = new Date(`${dataAlvo}T12:00:00`);
+      let count = 0;
+      let dataFim = null;
+      if (formBloqueio.periodo === 'escolher_data' && formBloqueio.dataFimRepeticao) dataFim = new Date(`${formBloqueio.dataFimRepeticao}T12:00:00`);
+      while (true) {
+        if (dataFim) { if (dataCursor > dataFim) break; }
+        else { if (count >= diasLimite) break; }
+        if (formBloqueio.diasSemana.includes(dataCursor.getDay())) {
+          const isoDia = dataCursor.toISOString().slice(0, 10);
+          const inicio = new Date(`${isoDia}T${formBloqueio.inicioHora}:00`).toISOString();
+          const fim = new Date(`${isoDia}T${formBloqueio.fimHora}:00`).toISOString();
+          lote.push({ titulo: formBloqueio.titulo || 'Bloqueio de agenda', motivo: formBloqueio.motivo, inicio, fim, profissionalId: formBloqueio.profissionalId });
+        }
+        dataCursor.setDate(dataCursor.getDate() + 1);
+        count++;
+      }
+      if (lote.length === 0) { alert('Nenhuma data coincide com os dias da semana selecionados.'); return; }
+      if (lote.length > 300 && !window.confirm(`Você está prestes a criar ${lote.length} bloqueios. Continuar?`)) return;
+      await executar(() => api.post('/api/admin/barbearia/bloqueios', { lote }), `Foram criados ${lote.length} bloqueios na agenda com sucesso.`)
+    }
     setModal(null)
   }
 
@@ -1887,7 +1917,7 @@ export default function BarbeariaERP() {
                 ))}
               </select>
             </Field>
-            <Field label="Data do Bloqueio">
+            <Field label="Data de Início *">
               <input
                 type="date"
                 required
@@ -1900,6 +1930,54 @@ export default function BarbeariaERP() {
                 style={inputStyle}
               />
             </Field>
+            <Field label="Período de Bloqueio">
+              <select
+                value={formBloqueio.periodo}
+                onChange={e => setFormBloqueio(atual => ({ ...atual, periodo: e.target.value }))}
+                style={inputStyle}
+              >
+                <option value="apenas_dia">Apenas este dia</option>
+                <option value="uma_semana">Uma semana</option>
+                <option value="15_dias">15 dias</option>
+                <option value="30_dias">30 dias</option>
+                <option value="60_dias">60 dias</option>
+                <option value="1_ano">1 ano</option>
+                <option value="indeterminado">Tempo indeterminado</option>
+                <option value="escolher_data">Escolher uma data final</option>
+              </select>
+            </Field>
+            {formBloqueio.periodo === 'escolher_data' && (
+              <Field label="Data Final *">
+                <input
+                  type="date"
+                  required
+                  value={formBloqueio.dataFimRepeticao}
+                  onChange={e => setFormBloqueio(atual => ({ ...atual, dataFimRepeticao: e.target.value }))}
+                  style={inputStyle}
+                />
+              </Field>
+            )}
+            {formBloqueio.periodo !== 'apenas_dia' && (
+              <Field label="Dias da semana" full>
+                <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 4 }}>
+                  {[{ id: 1, label: 'Seg' }, { id: 2, label: 'Ter' }, { id: 3, label: 'Qua' }, { id: 4, label: 'Qui' }, { id: 5, label: 'Sex' }, { id: 6, label: 'Sáb' }, { id: 0, label: 'Dom' }].map(d => (
+                    <label key={d.id} style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer', fontSize: 14 }}>
+                      <input
+                        type="checkbox"
+                        checked={formBloqueio.diasSemana.includes(d.id)}
+                        onChange={(e) => {
+                          const val = e.target.checked
+                            ? [...formBloqueio.diasSemana, d.id]
+                            : formBloqueio.diasSemana.filter(id => id !== d.id)
+                          setFormBloqueio(atual => ({ ...atual, diasSemana: val }))
+                        }}
+                      />
+                      {d.label}
+                    </label>
+                  ))}
+                </div>
+              </Field>
+            )}
             <Field label="Início *">
               <input
                 type="time"
