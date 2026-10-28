@@ -1193,3 +1193,34 @@ export async function testWhatsappAiGemini(context = {}, { confirmed = false } =
     throw error;
   }
 }
+
+export async function configureWhatsappAiHandoff(context = {}, input = {}) {
+  if (input.confirmed !== true) throw new Error('confirmação humana obrigatória para alterar a notificação de handoff');
+  const empresaId = context.empresaId;
+  const lojaId = context.lojaId;
+  const notify_email = (input.notifyEmail || '').trim().toLowerCase();
+  if (notify_email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(notify_email)) throw new Error('e-mail de notificação inválido');
+  let attendant_phone = String(input.attendantPhone || '').replace(/\D/g, '');
+  if (attendant_phone && attendant_phone.length >= 10 && attendant_phone.length <= 11 && !attendant_phone.startsWith('55')) attendant_phone = `55${attendant_phone}`;
+  if (attendant_phone && (attendant_phone.length < 12 || attendant_phone.length > 15)) throw new Error('telefone do atendente inválido');
+
+  const handoff = { notify_email, attendant_phone };
+  const { db } = await import('./database.js');
+  return db.transaction(async trx => {
+    const result = await trx.query(
+      `UPDATE canais_integracao
+          SET configuracao = jsonb_set(COALESCE(configuracao, '{}'::jsonb), '{handoff}', $3::jsonb, true),
+              data_atualizacao = CURRENT_TIMESTAMP
+        WHERE empresa_id = $1 AND loja_id = $2 AND provedor = 'whatsapp'
+        RETURNING *`,
+      [empresaId, lojaId, JSON.stringify(handoff)],
+    );
+    if (!result.rows[0]) throw new Error('salve primeiro o canal WhatsApp em rascunho');
+    await trx.query(
+      `INSERT INTO commerce_audit_logs (empresa_id, loja_id, usuario_id, entidade, entidade_id, acao, depois)
+       VALUES ($1, $2, $3, 'whatsapp_ai_channel', $4, 'handoff_configured', $5::jsonb)`,
+      [empresaId, lojaId, context.usuarioId || null, result.rows[0].id, JSON.stringify({ notifyEmailSet: Boolean(handoff.notify_email), attendantPhoneSet: Boolean(handoff.attendant_phone) })],
+    );
+    return { ok: true };
+  });
+}
