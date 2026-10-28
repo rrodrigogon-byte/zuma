@@ -117,11 +117,20 @@ export async function getWahaSessionStatus(sessionName) {
 
 export async function getWahaSessionQr(sessionName) {
   let response;
-  try {
-    response = await request(`/v1/sessions/${encodedSession(sessionName)}/qr`);
-  } catch (error) {
-    if (error.status === 404 || error.status === 409 || error.status === 422) return { contentType: 'image/png', dataUrl: '' };
-    throw error;
+  let attempts = 0;
+  while (attempts < 6) {
+    attempts++;
+    try {
+      response = await request(`/v1/sessions/${encodedSession(sessionName)}/qr`);
+      break;
+    } catch (error) {
+      if ((error.status === 404 || error.status === 409 || error.status === 422) && attempts < 6) {
+        await new Promise(r => setTimeout(r, 2500));
+        continue;
+      }
+      if (error.status === 404 || error.status === 409 || error.status === 422) return { contentType: 'image/png', dataUrl: '' };
+      throw error;
+    }
   }
   const contentType = response.headers.get('content-type')?.split(';', 1)[0] || 'image/png';
   const base64 = Buffer.from(await response.arrayBuffer()).toString('base64');
@@ -131,11 +140,25 @@ export async function getWahaSessionQr(sessionName) {
 
 export async function requestWahaPairingCode(sessionName, phoneNumber) {
   const phone = normalizeWahaPhone(phoneNumber);
-  const body = await jsonRequest(`/v1/sessions/${encodedSession(sessionName)}/pairing-code`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ phoneNumber: phone }),
-  });
+  let body;
+  let attempts = 0;
+  while (attempts < 6) {
+    attempts++;
+    try {
+      body = await jsonRequest(`/v1/sessions/${encodedSession(sessionName)}/pairing-code`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phoneNumber: phone }),
+      });
+      break;
+    } catch (error) {
+      if ((error.status === 404 || error.status === 409 || error.status === 422) && attempts < 6) {
+        await new Promise(r => setTimeout(r, 2500));
+        continue;
+      }
+      throw error;
+    }
+  }
   const code = clean(body?.code, 64);
   if (!code) throw new Error('A ponte WAHA não retornou um código de pareamento.');
   return code;
