@@ -180,7 +180,7 @@ async function toolAvailability(context, args = {}) {
      const profissionais = sanitizeToolData(await listSchedulingProfessionals(scope));
      return {
        ok: false,
-       erro: "ID de serviço ou profissional fornecido não é um UUID Válido. Por favor, use os IDs exatos fornecidos abaixo. Consulte as listas para refazer o comando.",
+       erro: "Você forneceu um nome de serviço/profissional em vez de um UUID. Isso causou um erro! Você DEVE usar o id exato (UUID) retornado nestas listas. Chame esta ferramenta NOVAMENTE AGORA MESMO usando os IDs corretos listados abaixo em 'servicosDisponiveis' e 'profissionaisDisponiveis' e não diga nada ao usuário até consultar a disponibilidade correta.",
        servicosDisponiveis: servicos,
        profissionaisDisponiveis: profissionais
      };
@@ -272,8 +272,17 @@ async function savePreparedAction(context, type, request, summary) {
 
 async function toolPrepareAppointment(context, args = {}) {
   const scope = contextScope(context);
-  const serviceId = ensureUuid(args.serviceId, 'serviceId');
+  const serviceId = ensureUuid(args.serviceId, 'serviceId', { allowAny: true });
   const professionalId = ensureUuid(args.professionalId, 'professionalId', { allowAny: true });
+  if (!serviceId || (!professionalId && args.professionalId && args.professionalId !== 'qualquer' && args.professionalId !== 'indiferente')) {
+     const { listSchedulingServices, listSchedulingProfessionals } = await import('./barbershop-scheduling.js');
+     return {
+       ok: false,
+       erro: "Você forneceu um nome de serviço/profissional em vez de um UUID. Isso causou um erro! Você DEVE usar o id exato (UUID) retornado nestas listas. Chame esta ferramenta NOVAMENTE AGORA MESMO usando os IDs corretos listados abaixo em 'servicosDisponiveis' e 'profissionaisDisponiveis'.",
+       servicosDisponiveis: sanitizeToolData(await listSchedulingServices(scope)),
+       profissionaisDisponiveis: sanitizeToolData(await listSchedulingProfessionals(scope))
+     };
+  }
   const date = cleanText(args.date, 10);
   const time = cleanText(args.time, 5);
   const availability = await listSchedulingAvailability(scope, { serviceId, professionalId, date });
@@ -295,10 +304,16 @@ async function toolPrepareOrder(context, args = {}) {
   const scope = contextScope(context);
   const storefront = await activeStorefront(scope);
   const items = Array.isArray(args.items) ? args.items.slice(0, 20).map(item => ({
-    variantId: ensureUuid(item.variantId, 'variantId'),
+    variantId: ensureUuid(item.variantId, 'variantId', { allowAny: true }),
     quantity: Math.min(99, Math.max(1, Number.parseInt(String(item.quantity || 1), 10) || 1)),
   })) : [];
   if (!items.length) throw new WhatsappAiToolError('informe ao menos um produto', 'EMPTY_CART');
+  if (items.some(i => !i.variantId)) {
+    return {
+      ok: false,
+      erro: "Você forneceu um nome de produto em vez de um UUID. Isso causou um erro! Você DEVE usar o id exato (UUID) retornado pela busca. Refaça a chamada usando o id correto."
+    };
+  }
   const products = await listPublishedProducts({ empresaId: scope.empresaId }, { storefrontId: storefront.id, limit: 100 });
   const variants = new Map();
   for (const product of products) {
