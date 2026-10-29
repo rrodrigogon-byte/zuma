@@ -140,6 +140,7 @@ const TABS = [
   ["Saúde do clube", "Uso, margem e candidatos ao clube"],
   ["Metas & Roleta", "Metas diárias, semanais de produtos e roleta de prêmios"],
   ["Projeção inteligente", "Cenários, tendências e ações para faturamento"],
+  ["Painel de gestão", "Painel executivo de resultados"],
   ["Ocupação e metas", "Ocupação da agenda e metas por barbeiro"],
   ["Avaliações (NPS)", "Notas e indicadores no próprio sistema"],
   ["Origem dos clientes", "Agendamentos e clientes novos por canal"],
