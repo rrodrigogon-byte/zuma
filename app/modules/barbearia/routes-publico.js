@@ -89,7 +89,7 @@ function profissionalPublico(item) {
 function erroHttp(res, erro) {
   const mensagem = texto(erro?.message || 'Não foi possível concluir o agendamento.', 240);
   const indisponivel = /indisponível|indisponivel|conflito/i.test(mensagem);
-  const entradaInvalida = /obrigatóri|inválid|indisponível para agendamento online|não funciona|fora do funcionamento|não trabalha/i.test(mensagem);
+  const entradaInvalida = /obrigatóri|inválid|indisponível para agendamento online|não funciona|fora do funcionamento|não trabalha|não realiza/i.test(mensagem);
   const status = indisponivel ? 409 : entradaInvalida ? 400 : 500;
   if (status === 500) console.error('[Agendamento público]', erro);
   return res.status(status).json({ ok: false, error: status === 500 ? 'Não foi possível concluir o agendamento.' : mensagem });
