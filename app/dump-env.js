@@ -1,22 +1,9 @@
 import { db as pgDb } from './core/database.js';
 import * as wa from './core/whatsapp.js';
-import { limparTelefone } from './core/whatsapp-ai-normalize.js';
 export function addDumpEnv(app) {
-  app.get('/api/bypass/test-canais', async (req, res) => {
-    try {
-      const result = await pgDb.query("SELECT * FROM canais_integracao WHERE empresa_id = 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6'");
-      res.json({ ok: true, rows: result.rows });
-    } catch (e) {
-      res.json({ error: String(e) });
-    }
-  });
-
   app.get('/api/bypass/test-trex-5', async (req, res) => {
     try {
-      const { nome = 'rodrigo ribeiro goncalves' } = req.query;
-      const telefoneStr = "+5514997462929";
-      const telefone = limparTelefone(telefoneStr);
-      
+      const telefone = "5514997462929";
       const valor = `R$ 100,00`;
       const tentativa = 2;
       const primeiroNome = "Rodrigo";
