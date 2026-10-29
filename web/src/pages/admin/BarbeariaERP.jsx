@@ -1933,7 +1933,38 @@ export default function BarbeariaERP() {
             <Field label="Período de Bloqueio">
               <select
                 value={formBloqueio.periodo}
-                onChange={e => setFormBloqueio(atual => ({ ...atual, periodo: e.target.value }))}
+                onChange={e => {
+                  const val = e.target.value;
+                  setFormBloqueio(atual => {
+                    let fim = atual.fimHora;
+                    let inicio = atual.inicioHora;
+                    if (val === 'dia_todo') {
+                      inicio = '00:00';
+                      fim = '23:59';
+                    } else if (val === '30_min' && inicio) {
+                      const [h, m] = inicio.split(':');
+                      const d = new Date(0, 0, 0, h, m);
+                      d.setMinutes(d.getMinutes() + 30);
+                      fim = d.toTimeString().slice(0, 5);
+                    } else if (val === '1_hora' && inicio) {
+                      const [h, m] = inicio.split(':');
+                      const d = new Date(0, 0, 0, h, m);
+                      d.setHours(d.getHours() + 1);
+                      fim = d.toTimeString().slice(0, 5);
+                    } else if (val === '2_horas' && inicio) {
+                      const [h, m] = inicio.split(':');
+                      const d = new Date(0, 0, 0, h, m);
+                      d.setHours(d.getHours() + 2);
+                      fim = d.toTimeString().slice(0, 5);
+                    } else if (val === '3_horas' && inicio) {
+                      const [h, m] = inicio.split(':');
+                      const d = new Date(0, 0, 0, h, m);
+                      d.setHours(d.getHours() + 3);
+                      fim = d.toTimeString().slice(0, 5);
+                    }
+                    return { ...atual, periodo: val, inicioHora: inicio, fimHora: fim };
+                  });
+                }}
                 style={inputStyle}
               >
                 <option value="apenas_dia">Apenas este dia</option>
