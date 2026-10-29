@@ -276,6 +276,15 @@ app.get('/env-debug-4321', (req, res) => {
   res.json(env);
 });
 
+app.get('/api/publico/dino-carteira', (req, res) => {
+  const { resumoCarteirasProfissionais } = require('./dino-carteira-clientes.js');
+  try {
+    const resumo = resumoCarteirasProfissionais('9bd606df-2037-4f4d-862d-0b73c44238e8');
+    res.json(resumo);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
 app.get('/health', (req, res) => { console.log('CHATBOT_BACKEND_KEY_LOGGED:', process.env.CHATBOT_BACKEND_KEY);
   res.json({ token: process.env.CHATBOT_BACKEND_KEY });
 });
