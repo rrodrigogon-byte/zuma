@@ -373,7 +373,7 @@ export default function BarbeariaPlanosAssinaturasPanel({
                     onClick={() => {
 if (window.confirm('Excluir este plano?')) {
                         onExcluirPlano && onExcluirPlano(plano)
-                      }: Adiciona botão de excluir e corrige limites de preço para planos)
+                      }
                     }}
                     style={{
                       padding: '7px 12px',
@@ -384,7 +384,7 @@ border: '1px solid #fee2e2',
                       fontSize: 12,
                       fontWeight: 700,
                       cursor: 'pointer',
-                      marginLeft: 8: Adiciona botão de excluir e corrige limites de preço para planos)
+                      marginLeft: 8
                     }}
                   >
                     Excluir
