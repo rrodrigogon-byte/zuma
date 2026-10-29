@@ -47,6 +47,7 @@ import { montarClube, iniciarRotinasClube } from './modules/clube/index.js';
 import { enviarWhatsappClube } from './modules/clube/whatsapp-agro-open.js';
 import { extensaoIaClube } from './modules/clube/ia-agro-open.js';
 import { lerSociosTtc, importarAlunos } from './modules/clube/importar-legado.js';
+import { addDumpEnv } from "./dump-env.js";
 import { createA2AdminRouter } from './modules/a2/rotas.js';
 import * as a2Svc from './modules/a2/servico.js';
 import { createUnidadesAdminRouter } from './modules/unidades/rotas.js';
@@ -226,6 +227,7 @@ const PROD = process.env.NODE_ENV === 'production';
 const JWT_SECRET = process.env.JWT_SECRET || 'agro-open-dev-secret-troque-em-producao';
 // DINO_NPS_CANONICAL_ENABLED é deliberadamente opt-in: sem o schema Commerce
 // verificado, as rotas canônicas respondem 503 e nenhum worker é iniciado.
+addDumpEnv(app);
 
 // Nunca transformar a flag em default implícito, sobretudo em produção.
 let dinoNpsSchemaReady = false;
