@@ -3982,20 +3982,33 @@ export default function BarbeariaERP() {
         )}
 
         {/* Agenda Visual Clean e Independente no Padrão Google Agenda / Avec */}
-        <BarbeariaAgendaPeriodo
-          profissionais={atendentesAtivos}
-          servicos={servicos}
-          profissionalId={profissionalFiltro}
-          onProfissionalChange={setProfissionalFiltro}
-          onConferirComanda={conferirComandaDoAtendimento}
-          onOpenAppointment={conferirComandaDoAtendimento}
-          onPickSlot={abrirAgendamentoNoHorario}
-          refreshKey={agendaRevisao}
-          dataSelecionada={dataSelecionada}
-          onDateChange={setDataSelecionada}
-          statusFiltro={statusFiltro}
-          onNewAppointment={abrirNovoAgendamento}
-        />
+        {!profissionalFiltro ? (
+          <BarbeariaAgendaBoard
+            data={dataSelecionada}
+            configuracao={configuracao}
+            agendamentos={agendamentos}
+            profissionais={atendentesAtivos}
+            bloqueios={bloqueios}
+            onDateChange={setDataSelecionada}
+            onNew={abrirNovoAgendamento}
+            onOpenAppointment={conferirComandaDoAtendimento}
+          />
+        ) : (
+          <BarbeariaAgendaPeriodo
+            profissionais={atendentesAtivos}
+            servicos={servicos}
+            profissionalId={profissionalFiltro}
+            onProfissionalChange={setProfissionalFiltro}
+            onConferirComanda={conferirComandaDoAtendimento}
+            onOpenAppointment={conferirComandaDoAtendimento}
+            onPickSlot={abrirAgendamentoNoHorario}
+            refreshKey={agendaRevisao}
+            dataSelecionada={dataSelecionada}
+            onDateChange={setDataSelecionada}
+            statusFiltro={statusFiltro}
+            onNewAppointment={abrirNovoAgendamento}
+          />
+        )}
       </div>
     );
   }

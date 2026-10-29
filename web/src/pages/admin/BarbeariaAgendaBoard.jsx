@@ -69,7 +69,7 @@ function eventoPosicao(item, grade, alturaSlot) {
 
 export default function BarbeariaAgendaBoard({ data, configuracao = {}, agendamentos = [], profissionais = [], bloqueios = [], onDateChange, onNew, onOpenAppointment }) {
   const [intervaloManual, setIntervaloManual] = useState(null)
-  const profissionaisAtivos = useMemo(() => profissionais.filter((item) => item.ativo !== false), [profissionais])
+  const profissionaisAtivos = useMemo(() => profissionais.filter((item) => item.ativo !== false && !item.removidoEm && !item.excluido), [profissionais])
   const grade = useMemo(() => gradeDaUnidade(configuracao, intervaloManual), [configuracao, intervaloManual])
   const alturaSlot = grade.intervalo <= 15 ? 36 : grade.intervalo <= 30 ? 46 : 56
   const colunas = useMemo(() => {
