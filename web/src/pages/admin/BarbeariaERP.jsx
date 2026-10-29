@@ -561,6 +561,7 @@ function rotuloPreco(servico) {
 
 // Abas que não dependem da visão geral da barbearia (cada uma busca seus próprios dados).
 const TABS_AUTONOMAS = new Set([
+  "Painel de gestão",
   "Desempenho da equipe",
   "Retorno previsto",
   "Lista de espera",
@@ -12524,7 +12525,7 @@ export default function BarbeariaERP() {
             </Card>
           }
         >
-          <DinoDashboardKytto />
+          <DinoDashboardKytto onOpenTab={navegarParaTab} />
         </Suspense>
       );
 

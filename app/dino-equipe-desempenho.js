@@ -915,3 +915,11 @@ export function buildEquipeDesempenho(root, options = {}) {
 export const EQUIPE_DESEMPENHO_TIME_ZONE = TIME_ZONE;
 export const EQUIPE_DESEMPENHO_MAX_DAYS = MAX_DAYS;
 export const EQUIPE_DESEMPENHO_MAX_DAYS_HISTORY = MAX_DAYS_HISTORY;
+
+// Linhas canônicas de um período (mesma apuração do Desempenho da equipe), para
+// outros painéis de leitura reaproveitarem os números sem recalcular regras próprias.
+export function linhasCanonicasDoPeriodo(root, options = {}) {
+  const ctx = prepareContext(root, options);
+  const current = buildPeriodData(ctx.snapshot, ctx.period, ctx.previousPeriod, { skipPrevious: true });
+  return { ...ctx, current };
+}
