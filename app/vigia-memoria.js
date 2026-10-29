@@ -8,6 +8,7 @@
 // deve ser trocado (AGENTS.md). Então esta vigia liga a coleta manual do V8 e a
 // dispara quando a memória residente passa de uma fração do limite, com intervalo
 // mínimo entre coletas. Não toca em dados: só libera o que já é lixo.
+import fs from 'node:fs';
 import v8 from 'node:v8';
 import vm from 'node:vm';
 
@@ -16,6 +17,27 @@ const numeroEnv = (nome, padrao) => {
   const valor = Number.parseFloat(process.env[nome] ?? '');
   return Number.isFinite(valor) && valor > 0 ? valor : padrao;
 };
+
+// Limite real do contêiner (cgroup v2 ou v1). Quando o plano do Render muda (ex.: 512 MB
+// para 2 GB), a vigia acompanha sozinha, sem ficar forçando coleta abaixo de um teto antigo.
+export function limiteDoConteinerMb(leitor = (caminho) => fs.readFileSync(caminho, 'utf8')) {
+  for (const caminho of ['/sys/fs/cgroup/memory.max', '/sys/fs/cgroup/memory/memory.limit_in_bytes']) {
+    try {
+      const bruto = String(leitor(caminho)).trim();
+      if (!/^\d+$/.test(bruto)) continue;
+      const mb = Number(bruto) / MB;
+      // Valores gigantes significam "sem limite" no cgroup v1.
+      if (mb >= 64 && mb < 1024 * 1024) return Math.round(mb);
+    } catch { /* sem cgroup: segue para o próximo */ }
+  }
+  return 0;
+}
+
+function limitePadraoMb() {
+  const doConteiner = limiteDoConteinerMb();
+  if (doConteiner) return doConteiner;
+  return process.env.RENDER || process.env.NODE_ENV === 'production' ? 512 : 0;
+}
 
 const estado = {
   ativa: false,
@@ -41,7 +63,7 @@ function obterColetor() {
 }
 
 export function iniciarVigiaMemoria({
-  limiteMb = numeroEnv('KYTTO_MEMORIA_LIMITE_MB', process.env.RENDER || process.env.NODE_ENV === 'production' ? 512 : 0),
+  limiteMb = numeroEnv('KYTTO_MEMORIA_LIMITE_MB', limitePadraoMb()),
   fracao = numeroEnv('KYTTO_MEMORIA_GATILHO', 0.62),
   intervaloMs = 1000,
   minimoEntreColetasMs = 2000,

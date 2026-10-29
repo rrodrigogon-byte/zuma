@@ -23,3 +23,11 @@ test('com limite e memória acima do gatilho a vigia coleta e respeita o interva
   // chamar de novo não cria um segundo relógio
   assert.equal(iniciarVigiaMemoria({ limiteMb: 1 }).limiteMb, 512);
 });
+
+test('limite do contêiner vem do cgroup (v2, v1) e ignora "sem limite"', async () => {
+  const { limiteDoConteinerMb } = await import('./vigia-memoria.js');
+  assert.equal(limiteDoConteinerMb(() => '2147483648\n'), 2048);
+  assert.equal(limiteDoConteinerMb((c) => { if (c.endsWith('memory.max')) return 'max'; return '536870912'; }), 512);
+  assert.equal(limiteDoConteinerMb(() => '9223372036854771712'), 0);
+  assert.equal(limiteDoConteinerMb(() => { throw new Error('sem cgroup'); }), 0);
+});
