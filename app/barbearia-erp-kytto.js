@@ -3024,7 +3024,7 @@ export function criarAgendamento(empresaId, dados = {}, opcoes = {}) {
   const servico = estado.servicos[agendamento.servicoId];
   if (dados.duracaoMinutos) {
     agendamento.duracaoMinutos = Math.max(5, Math.min(480, Math.round(Number(dados.duracaoMinutos))));
-  } else if (agendamento.servicoId === atual.servicoId && agendamento.profissionalId === atual.profissionalId && atual.duracaoMinutos) {
+  } else if (false) {
     agendamento.duracaoMinutos = atual.duracaoMinutos;
   } else {
     agendamento.duracaoMinutos = duracaoAtendimentoProfissional(servico, profissional, obterCalendarioLoja(estado, agendamento.lojaId));

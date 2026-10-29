@@ -3,7 +3,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { formatForWhatsapp, formatActionSummary, isGenericCustomerName, actionTtlMinutes, CONFIRMATION_HINT } from './whatsapp-ai-intents.js';
-import { composeReplyWithNewAction, withPendingReminder, PENDING_REMINDER_HINT } from './whatsapp-ai.js';
+import { composeReplyWithNewAction, withPendingReminder } from './whatsapp-ai.js';
+import { PENDING_REMINDER_HINT } from './whatsapp-ai-intents.js';
 import { resolveConfirmation } from './whatsapp-ai-intents.js';
 import { followUpText } from './whatsapp-ai-followup.js';
 
@@ -34,7 +35,7 @@ test('resumo de vários serviços sai em linhas', () => {
 test('ação nova: o texto do modelo que repete o resumo vira só uma abertura', () => {
   const pending = { actionId: 'a1', type: 'agendamento', summary: 'hoje às 17:00 para Rodrigo: Corte com Dino às 17:00 + Barba às 17:30, total R$ 85,00' };
   const texto = composeReplyWithNewAction('Perfeito! Seu agendamento para *hoje às 17:00* está preparado. Responda **SIM* ou CONFIRMAR.', pending);
-  assert.match(texto, /^Perfeito! Confere pra mim:\n\nResumo para confirmar: hoje às 17:00 para Rodrigo:\n• Corte com Dino às 17:00\n• Barba às 17:30\nTotal: R\$ 85,00\n/);
+  assert.match(texto, /^Perfeito! Confere pra mim:\n\nConfere aí: hoje às 17:00 para Rodrigo:\n• Corte com Dino às 17:00\n• Barba às 17:30\nTotal: R\$ 85,00\n/);
   assert.equal(texto.match(/SIM/g).length, 1);
   // texto útil que não repete o resumo é mantido
   assert.match(composeReplyWithNewAction('A barba fica com o Léo, que faz esse serviço.', pending), /^A barba fica com o Léo/);

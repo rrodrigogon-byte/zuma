@@ -1673,3 +1673,95 @@ export async function testWhatsappAiGemini(context = {}, { confirmed = false } =
     throw error;
   }
 }
+
+import { actionTtlMinutes, CONFIRMATION_HINT, PENDING_REMINDER_HINT, formatActionSummary } from './whatsapp-ai-intents.js';
+
+const RESTATES_ACTION = /^(perfeito|combinado|fechado|ótimo|certo|ok)[!.]*(?:s*(?:seu (agendamento|horário|pedido)|a (remarcação|reserva|agenda)))?(?:s*(?:está|foi)s*(?:preparado|iniciado|reservado))?/i;
+
+export function pendingActionPrompt(pending, persona = null) {
+  const summary = formatActionSummary(pending.summary || '');
+  const verb = pending.type === 'pedido' ? 'concluir' : pending.type === 'cancelamento' ? 'cancelar o agendamento' : 'confirmar';
+  return `Confere aí: ${summary}
+👉 Responda SIM para ${verb}, ou NÃO para mudar.`;
+}
+
+export function composeReplyWithNewAction(modelText, pending, persona = null) {
+  const text = String(modelText || '').trim();
+  const lead = !text || RESTATES_ACTION.test(text) ? 'Perfeito! Confere pra mim:' : text;
+  return `${lead}
+
+${pendingActionPrompt(pending, persona)}`.trim();
+}
+
+export function withPendingReminder(replyText, pending, now = Date.now()) {
+  const text = String(replyText || '').trim();
+  if (!pending?.actionId || pending.mostrado !== true) return text;
+  const preparedAt = new Date(pending.preparadoEm || 0).valueOf();
+  if (preparedAt && now - preparedAt > actionTtlMinutes() * 60000) return text;
+  if (text.includes(CONFIRMATION_HINT) || text.includes(PENDING_REMINDER_HINT)) return text;
+  const tipo = pending.type === 'pedido' ? 'seu pedido' : pending.type === 'cancelamento' ? 'o cancelamento' : pending.type === 'remarcacao' ? 'a remarcação' : 'seu agendamento';
+  return `${text}
+
+Ah, ${tipo} ainda está esperando sua confirmação: ${formatActionSummary(String(pending.summary || '').substring(0, 600).trim())}
+${PENDING_REMINDER_HINT}`.trim();
+}
+
+export function claimsCompletion(text) {
+  const COMPLETION_CLAIM = /\b(est[aá]|foi|ficou|j[aá] est[aá])\s+(confirmad[oa]|agendad[oa]|marcad[oa]|reservad[oa]|realizad[oa]|registrad[oa]|feit[oa]|conclu[ií]d[oa])\b|\b(pedido|agendamento|hor[aá]rio|compra)\s+(confirmad[oa]|conclu[ií]d[oa]|agendad[oa]|marcad[oa]|reservad[oa])\b/i;
+  return COMPLETION_CLAIM.test(String(text || ''));
+}
+
+export function splitBurst(items = [], windowMs = 5 * 60000, max = 5) {
+  if (!items.length) return { prior: [], burst: [] };
+  let start = items.length - 1;
+  if (items[start].role !== 'user') return { prior: items, burst: [] };
+  const lastAt = new Date(items[start].at || 0).valueOf();
+  while (start > 0 && items.length - start < max) {
+    const candidate = items[start - 1];
+    if (candidate.role !== 'user') break;
+    const at = new Date(candidate.at || 0).valueOf();
+    if (!Number.isFinite(at) || !Number.isFinite(lastAt) || lastAt - at > windowMs) break;
+    start -= 1;
+  }
+  return { prior: items.slice(0, start), burst: items.slice(start) };
+}
+
+export function burstUserText(burst = [], fallback = '') {
+  const texts = burst.map(item => String(item.text || '').substring(0, 1500).trim()).filter(Boolean);
+  if (texts.length <= 1) return fallback || texts[0] || '';
+  return String(texts.join('\n')).substring(0, 4000).trim();
+}
+
+const CONFIRMATION_BUSINESS_ERRORS = new Set([
+  'PLANO_VENCIDO','PLANO_INDISPONIVEL','LIMITE_DO_CICLO',
+  'ACTION_EXPIRED', 'ACTION_NOT_CONFIRMABLE', 'ACTION_NOT_FOUND', 'NO_PENDING_ACTION',
+  'SLOT_UNAVAILABLE', 'PHONE_LIMIT', 'ALREADY_BOOKED', 'APPOINTMENT_NOT_FOUND', 'APPOINTMENT_NOT_ACTIVE', 'APPOINTMENT_PAST',
+  'SERVICE_NOT_FOUND', 'PROFESSIONAL_NOT_FOUND', 'DATE_OUT_OF_RANGE', 'INSUFFICIENT_STOCK', 'OUT_OF_STOCK', 'PRODUCT_UNAVAILABLE',
+]);
+
+export function confirmationFailureReply(code, type = '') {
+  const oQue = type === 'pedido' ? 'o pedido' : type === 'cancelamento' ? 'o cancelamento' : type === 'remarcacao' ? 'a remarcação' : type === 'despesa_financeira' ? 'a despesa' : 'o horário';
+  switch (code) {
+    case 'ACTION_EXPIRED':
+      return `Essa confirmação passou do prazo e eu não concluí ${oQue}. Quer que eu veja de novo agora? É só me dizer o dia e o período.`;
+    case 'SLOT_UNAVAILABLE':
+      return 'Poxa, esse horário acabou de ser ocupado. Quer que eu te mostre os próximos horários livres?';
+    case 'PLANO_VENCIDO':
+    case 'PLANO_INDISPONIVEL':
+      return 'O pacote não está disponível para este horário. Confira a renovação com a equipe para usar os benefícios; posso consultar um atendimento avulso.';
+    case 'LIMITE_DO_CICLO':
+      return 'As sessões deste ciclo já foram usadas ou reservadas. Posso consultar um atendimento avulso ou orientar você a falar com a equipe.';
+    case 'PHONE_LIMIT':
+      return 'Você já tem horários marcados por este número. Para marcar outro, posso remarcar ou cancelar um deles. Quer ver seus horários?';
+    case 'ALREADY_BOOKED':
+      return 'Você já tem esse serviço marcado nesse dia, então não dupliquei. Quer ver ou mudar o horário que já está marcado?';
+    case 'APPOINTMENT_PAST':
+      return 'Esse horário já passou. Quer marcar um novo?';
+    case 'INSUFFICIENT_STOCK':
+    case 'OUT_OF_STOCK':
+    case 'PRODUCT_UNAVAILABLE':
+      return 'Esse produto acabou de sair do estoque e não consegui separar. Quer que eu veja uma alternativa?';
+    default:
+      return `Não consegui concluir ${oQue} porque algo mudou desde o resumo. Posso preparar de novo para você?`;
+  }
+}

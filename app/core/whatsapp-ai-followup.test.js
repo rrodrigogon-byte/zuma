@@ -33,7 +33,7 @@ test('toque só quando o cliente sumiu depois de ver o resumo e a ação ainda v
 test('texto do toque é cordial, usa o primeiro nome e o resumo do sistema', () => {
   const texto = followUpText(sessao());
   assert.match(texto, /^Oi, Rafael! Ficou faltando só sua confirmação: Corte Masculino com Bruno em 03\/10 às 15:00\./);
-  assert.match(texto, /Para confirmar, responda SIM ou NÃO/);
+  assert.match(texto, /Responda \*SIM\* para confirmar/);
   assert.match(followUpText(sessao({ nome: '' })), /^Oi! /);
 });
 
