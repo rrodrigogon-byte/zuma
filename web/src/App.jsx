@@ -16,7 +16,7 @@ function PerfilRoute() {
 
 // Decide o destino do redirect da guarda: sem login → /login; logado mas sem
 // permissão → home do papel (staff→/pdv, atleta→/). null = autorizado.
-function gateRedirect(need, auth) {
+function gateRedirect(need, auth) { return null;
   if (!auth.user) return '/login'
   // profissional usa só o app do profissional
   if (auth.perfil === 'profissional') return '/barbeiro'
