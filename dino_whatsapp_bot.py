@@ -88,40 +88,11 @@ def get_available_slots():
 def send_whatsapp_message(client, slots):
     """Gera o payload da mensagem interativa e dispara para a API Kytto/WhatsApp."""
     payload = {
-        "messaging_product": "whatsapp",
-        "to": client["phone"],
-        "type": "interactive",
-        "interactive": {
-            "type": "button",
-            "body": {
-                "text": f"Olá, {client['name']}! 👋\n\nAqui é do *Dino Barbearia*. Tudo bem?\nSentimos a sua falta! Notamos que já faz uns dias que você não vem dar aquele trato no visual e adoraríamos te receber novamente. 😊\n\nPara facilitar a sua vida, demos uma olhada na nossa agenda e separamos 3 sugestões de horários exclusivos para você:\n\n✅ Opção 1: {slots[0]}\n✅ Opção 2: {slots[1]}\n✅ Opção 3: {slots[2]}\n\nQual desses horários fica melhor para você? É só clicar em um dos botões abaixo para confirmar.\n\n*(Caso prefira outro horário, basta responder a esta mensagem!)* ✨"
-            },
-            "action": {
-                "buttons": [
-                    {
-                        "type": "reply",
-                        "reply": {
-                            "id": "opt_1",
-                            "title": "Opção 1"
-                        }
-                    },
-                    {
-                        "type": "reply",
-                        "reply": {
-                            "id": "opt_2",
-                            "title": "Opção 2"
-                        }
-                    },
-                    {
-                        "type": "reply",
-                        "reply": {
-                            "id": "opt_3",
-                            "title": "Opção 3"
-                        }
-                    }
-                ]
-            }
-        }
+        "instanceName": "dino",
+        "chat_id": client["phone"].replace("+", ""),
+        "message": f"Olá, {client['name']}! 👋\n\nAqui é do *Dino Barbearia*. Tudo bem?\nSentimos a sua falta! Notamos que já faz uns dias que você não vem dar aquele trato no visual e adoraríamos te receber novamente. 😊\n\nPara facilitar a sua vida, separamos 3 sugestões de horários exclusivos:\n\n✅ Amanhã às 10:00\n✅ Amanhã às 14:30\n✅ Sábado às 09:00\n\nQual desses horários fica melhor para você? Basta responder esta mensagem com a opção desejada! ✨",
+        "simulateTyping": True,
+        "delaySeconds": 2
     }
 
     print(f"[{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 🚀 DISPARANDO API DO WHATSAPP")
@@ -135,9 +106,9 @@ def send_whatsapp_message(client, slots):
     if api_token:
         try:
             response = requests.post(
-                f"{os.environ.get('WHATSAPP_API_URL', '').rstrip('/')}/messages/send",
+                f"{os.environ.get('WHATSAPP_API_URL', '').rstrip('/')}/api/v1/whats-app/send",
                 json=payload,
-                headers={"Authorization": f"Bearer {api_token}"}
+                headers={"X-API-KEY": api_token}
             )
             response.raise_for_status()
             print("✅ Enviado com sucesso via API Kytto/WhatsApp!")
