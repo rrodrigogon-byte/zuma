@@ -1,7 +1,6 @@
 // Compras e estoque da revenda: fornecedores, pedidos de compra com recebimento,
 // entrada por XML de NF-e (prévia antes de lançar), sugestão de reposição e curva ABC.
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useConfiguracoesComerciais } from '../../../contexts/ConfiguracoesComerciaisContext'
 import { useToast } from '../../../hooks/useToast'
 import { api, fmtR } from '../../../lib/api'
 
