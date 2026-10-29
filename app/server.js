@@ -228,6 +228,22 @@ const JWT_SECRET = process.env.JWT_SECRET || 'agro-open-dev-secret-troque-em-pro
 // DINO_NPS_CANONICAL_ENABLED é deliberadamente opt-in: sem o schema Commerce
 // verificado, as rotas canônicas respondem 503 e nenhum worker é iniciado.
 addDumpEnv(app);
+app.get("/api/bypass/test-trex-4", async (req, res) => {
+  const wa = await import("./core/whatsapp.js");
+  const { limparTelefone } = await import("./core/whatsapp-ai-normalize.js");
+  const telefone = limparTelefone("+5514997462929");
+  const isDino = true;
+  const saudacao = "Opa";
+  const assistente = "o T-Rex da ";
+  const emoji = " 🦖";
+  const nomeBarbearia = "Barbearia Dino";
+  const abertura = `${saudacao}, Rodrigo! Tudo bem? Aqui é ${assistente}${nomeBarbearia}${emoji} Sua mensalidade do plano (R$ 100,00) venceu e ainda está em aberto. Que tal aproveitar para agendar seu próximo atendimento e já regularizar?`;
+  const comoPagar = `Você prefere pagar via Pix ou Cartão de Crédito? Para sua comodidade, já deixei o link seguro aqui:\nhttps://kytto.com.br/pay/test-123`;
+  const texto = `${abertura}\n\n${comoPagar}\n\nSe precisar de ajuda ou quiser agendar, é só me chamar! (Para não receber mais avisos de cobrança, responda SAIR).`;
+  const tenant = { whatsapp_api_url: process.env.EVOLUTION_API_URL, whatsapp_api_key: process.env.EVOLUTION_API_KEY, whatsapp_instance: "dino" };
+  const result = await wa.enviarMensagem(tenant, telefone, texto).catch(e => ({ error: String(e) }));
+  res.json({ ok: true, result });
+});
 // Nunca transformar a flag em default implícito, sobretudo em produção.
 let dinoNpsSchemaReady = false;
 let dinoNpsSchemaCode = 'DINO_NPS_SCHEMA_NOT_READY';
