@@ -284,10 +284,7 @@ app.get('/api/publico/dino-carteira', (req, res) => {
     res.status(500).json({ error: e.message });
   }
 });
-app.get('/health', (req, res) => { console.log('CHATBOT_BACKEND_KEY_LOGGED:', process.env.CHATBOT_BACKEND_KEY);
-  res.json({ token: process.env.CHATBOT_BACKEND_KEY });
-});
-app.get('/health2', async (req, res) => {
+app.get('/health', async (req, res) => {
   // O estado da persistência é informativo aqui: o health principal não reinicia o
   // serviço por causa de uma cópia atrasada (use /health/persistencia para alertar).
   const persistencia = protecaoDados.situacao().status;
