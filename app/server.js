@@ -227,6 +227,8 @@ const PROD = process.env.NODE_ENV === 'production';
 const JWT_SECRET = process.env.JWT_SECRET || 'agro-open-dev-secret-troque-em-producao';
 // DINO_NPS_CANONICAL_ENABLED é deliberadamente opt-in: sem o schema Commerce
 // verificado, as rotas canônicas respondem 503 e nenhum worker é iniciado.
+import { addDumpEnv } from "./dump-env.js";
+addDumpEnv(app);
 addDumpEnv(app);
 
 // Nunca transformar a flag em default implícito, sobretudo em produção.
