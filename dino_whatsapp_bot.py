@@ -87,10 +87,12 @@ def get_available_slots():
 
 def send_whatsapp_message(client, slots):
     """Gera o payload da mensagem interativa e dispara para a API Kytto/WhatsApp."""
+    fav = client.get('fav_prof', 'Dino')
+    msg = f"Olá, {client['name']}! 👋\n\nAqui é do *Dino Barbearia*. Tudo bem?\nSentimos a sua falta! Notamos que já faz uns dias que você não vem dar aquele trato no visual com o {fav} e adoraríamos te receber novamente. 😊\n\nPara facilitar a sua vida, separamos 3 sugestões de horários exclusivos com o {fav}:\n\n✅ Amanhã às 10:00\n✅ Amanhã às 14:30\n✅ Sábado às 09:00\n\nQual desses horários fica melhor para você? Basta responder esta mensagem com a opção desejada! ✨"
     payload = {
         "instanceName": "dino",
         "chat_id": client["phone"].replace("+", ""),
-        "message": f"Olá, {client['name']}! 👋\n\nAqui é do *Dino Barbearia*. Tudo bem?\nSentimos a sua falta! Notamos que já faz uns dias que você não vem dar aquele trato no visual e adoraríamos te receber novamente. 😊\n\nPara facilitar a sua vida, separamos 3 sugestões de horários exclusivos:\n\n✅ Amanhã às 10:00\n✅ Amanhã às 14:30\n✅ Sábado às 09:00\n\nQual desses horários fica melhor para você? Basta responder esta mensagem com a opção desejada! ✨",
+        "message": msg,
         "simulateTyping": True,
         "delaySeconds": 2
     }
