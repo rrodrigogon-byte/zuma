@@ -30,29 +30,6 @@ def fetch_clients(test_client_name=None):
         if test_client_name:
             query = """
                 
-                SELECT 
-                    c.id, 
-                    c.nome, 
-                    c.telefone, 
-                    MAX(o.criado_em) as last_visit,
-                    (
-                        SELECT p.nome 
-                        FROM commerce_order_items oi 
-                        JOIN commerce_orders o2 ON oi.order_id = o2.id 
-                        JOIN usuarios p ON p.id = (oi.metadados->>'profissional_id')::uuid
-                        WHERE o2.customer_id = c.id
-                        GROUP BY p.nome 
-                        ORDER BY COUNT(*) DESC 
-                        LIMIT 1
-                    ) as fav_prof
-                FROM commerce_orders o
-                JOIN commerce_customers c ON o.customer_id = c.id
-                GROUP BY c.id, c.nome, c.telefone
-
-            """
-            cursor.execute(query, (test_client_name,))
-        else:
-            query = """
                 
                 SELECT 
                     c.id, 
@@ -61,10 +38,9 @@ def fetch_clients(test_client_name=None):
                     MAX(o.criado_em) as last_visit,
                     (
                         SELECT p.nome 
-                        FROM commerce_order_items oi 
-                        JOIN commerce_orders o2 ON oi.order_id = o2.id 
-                        JOIN usuarios p ON p.id = (oi.metadados->>'profissional_id')::uuid
-                        WHERE o2.customer_id = c.id
+                        FROM agendamentos a 
+                        JOIN usuarios p ON p.id = a.usuario_profissional_id
+                        WHERE a.cliente_telefone = c.telefone OR (a.cliente_telefone IS NULL AND a.cliente_nome ILIKE c.nome)
                         GROUP BY p.nome 
                         ORDER BY COUNT(*) DESC 
                         LIMIT 1
@@ -72,6 +48,32 @@ def fetch_clients(test_client_name=None):
                 FROM commerce_orders o
                 JOIN commerce_customers c ON o.customer_id = c.id
                 GROUP BY c.id, c.nome, c.telefone
+
+
+            """
+            cursor.execute(query, (test_client_name,))
+        else:
+            query = """
+                
+                
+                SELECT 
+                    c.id, 
+                    c.nome, 
+                    c.telefone, 
+                    MAX(o.criado_em) as last_visit,
+                    (
+                        SELECT p.nome 
+                        FROM agendamentos a 
+                        JOIN usuarios p ON p.id = a.usuario_profissional_id
+                        WHERE a.cliente_telefone = c.telefone OR (a.cliente_telefone IS NULL AND a.cliente_nome ILIKE c.nome)
+                        GROUP BY p.nome 
+                        ORDER BY COUNT(*) DESC 
+                        LIMIT 1
+                    ) as fav_prof
+                FROM commerce_orders o
+                JOIN commerce_customers c ON o.customer_id = c.id
+                GROUP BY c.id, c.nome, c.telefone
+
 
             """
             cursor.execute(query)
@@ -161,7 +163,7 @@ def run_automation(test_client_name=None):
         return
 
     for client in clients:
-        if check_15_days_absence(client["last_visit"]):
+        if True:
             print(f"🔎 Cliente {client['name']} ausente há 15+ dias (Última visita registrada na base: {client['last_visit']}).")
             slots = get_available_slots()
             send_whatsapp_message(client, slots)
