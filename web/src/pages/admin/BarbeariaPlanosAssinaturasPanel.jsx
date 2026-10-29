@@ -368,6 +368,26 @@ export default function BarbeariaPlanosAssinaturasPanel({
                   >
                     Editar
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      
+                        onExcluirPlano && onExcluirPlano(plano);
+                    }}
+                    style={{
+                      padding: '7px 12px',
+                      borderRadius: 8,
+                      border: '1px solid #fee2e2',
+                      background: 'transparent',
+                      color: '#ef4444',
+                      fontSize: 12,
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      marginLeft: 8
+                    }}
+                  >
+                    Excluir
+                  </button>
                 </div>
               </div>
             )
