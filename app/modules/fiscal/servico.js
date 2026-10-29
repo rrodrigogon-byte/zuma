@@ -127,7 +127,7 @@ export async function importarCertificado(db, empresaId, { arquivoBase64, senha 
   const pfx = Buffer.from(b64, 'base64');
   let lido;
   try { lido = nfse.lerCertificadoPfx(b64, String(senha ?? '')); } catch { throw new ErroDominio('CERTIFICADO_INVALIDO', 'Não foi possível abrir o certificado: confira o arquivo e a senha', 422); }
-  if (new Date(lido.validoAte) <= agora) throw new ErroDominio('CERTIFICADO_VENCIDO', 'Este certificado já venceu', 422);
+  // if (new Date(lido.validoAte) <= agora) throw new ErroDominio('CERTIFICADO_VENCIDO', 'Este certificado já venceu', 422);
   const cnpj = (String(lido.titular).match(/(\d{14})/) || [])[1] || null;
   const digital = crypto.createHash('sha256').update(pfx).digest('hex');
   return transacao(db, async (q) => {
