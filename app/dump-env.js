@@ -1,7 +1,7 @@
+import * as dinoCarteiraClientes from './dino-carteira-clientes.js';
 export function addDumpEnv(app) {
-  app.get('/api/bypass/carteira-clientes', async (req, res) => {
+  app.get('/api/bypass/carteira-clientes', (req, res) => {
     try {
-      const dinoCarteiraClientes = await import('./dino-carteira-clientes.js');
       const resultado = dinoCarteiraClientes.listarCarteiraClientes("dino-barbearia", {
         profissionalId: req.query.profissionalId || '',
         lojaId: null,
@@ -14,9 +14,8 @@ export function addDumpEnv(app) {
       res.status(400).json({ error: String(error) });
     }
   });
-  app.get('/api/bypass/carteira-clientes/resumo', async (req, res) => {
+  app.get('/api/bypass/carteira-clientes/resumo', (req, res) => {
     try {
-      const dinoCarteiraClientes = await import('./dino-carteira-clientes.js');
       const resumo = dinoCarteiraClientes.resumoCarteirasProfissionais("dino-barbearia", { lojaId: null });
       res.json({ result: resumo });
     } catch(error) {
