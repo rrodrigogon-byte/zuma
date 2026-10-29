@@ -3,6 +3,7 @@ import { api } from '../../../lib/api'
 import { useToast } from '../../../hooks/useToast'
 import { DinoRoletaModal } from './DinoRoletaModal'
 import { DinoMetasGamificacaoModalConfig } from './DinoMetasGamificacaoModalConfig'
+import Modal from '../../../components/Modal'
 import './DinoMetasRoletaPanel.css'
 
 function fmtR(valor) {
