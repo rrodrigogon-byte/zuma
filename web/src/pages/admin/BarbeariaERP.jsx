@@ -59,6 +59,7 @@ const DinoRecuperacaoAvecPanel = lazy(
 );
 const FiscalPanel = lazy(() => import("./fiscal/Fiscal"));
 const DinoBusinessDashboard = lazy(() => import("./DinoBusinessDashboard"));
+const DinoDashboardKytto = lazy(() => import("./dino/DinoDashboardKytto"));
 const DinoCampaignsPanel = lazy(() => import("./DinoCampaignsPanel"));
 const DinoEquipeDesempenho = lazy(() => import("./DinoEquipeDesempenho"));
 const BIBarbearia = lazy(() => import("./dino/BIBarbearia"));
@@ -210,6 +211,7 @@ const AREAS = [
       "Comissões",
       "Extrato e repasses",
       "Projeção inteligente",
+      "Painel de gestão",
       "Ocupação e metas",
       "Cobranças e cashback",
       "Vale-presente",
@@ -12492,6 +12494,25 @@ export default function BarbeariaERP() {
           <ProjecaoFaturamentoPanel onOpenTab={navegarParaTab} />
         </Suspense>
       );
+    if (tab === "Painel de gestão")
+      return (
+        <Suspense
+          fallback={
+            <Card
+              style={{
+                padding: 40,
+                textAlign: "center",
+                color: "var(--muted)",
+              }}
+            >
+              Carregando painel de gestão…
+            </Card>
+          }
+        >
+          <DinoDashboardKytto />
+        </Suspense>
+      );
+
     if (tab === "Ocupação e metas") return <OcupacaoMetasPanel />;
     if (tab === "Desempenho da equipe")
       return (
