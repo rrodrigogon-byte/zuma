@@ -8754,7 +8754,15 @@ export default function BarbeariaERP() {
                     : "comanda avulsa"}
                 </div>
               </div>
-              <Badge status={comanda.status} />
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
+    <Badge status={comanda.status} />
+    {comanda.status === "aberta" && (comanda.itens?.length > 0 || totalPago > 0) && (
+      <button type="button" style={{ ...styles.primary, padding: '4px 12px', fontSize: 12 }} disabled={salvando} onClick={aguardarPagamentoComanda}>Enviar p/ pagamento</button>
+    )}
+    {["aguardando_pagamento", "parcialmente_paga"].includes(comanda.status) && saldoPendente > 0 && (
+      <button type="button" style={{ ...styles.primary, padding: '4px 12px', fontSize: 12 }} disabled={salvando || !contaPermitida} onClick={pagarComanda}>Receber e fechar</button>
+    )}
+  </div>
             </div>
             {agendamentoComanda && proximasAg.length > 0 && (
               <div
