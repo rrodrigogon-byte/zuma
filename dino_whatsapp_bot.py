@@ -31,6 +31,7 @@ def fetch_clients(test_client_name=None):
             query = """
                 
                 
+                
                 SELECT 
                     c.id, 
                     c.nome, 
@@ -48,6 +49,7 @@ def fetch_clients(test_client_name=None):
                 FROM commerce_orders o
                 JOIN commerce_customers c ON o.customer_id = c.id
                 GROUP BY c.id, c.nome, c.telefone
+
 
 
             """
@@ -56,6 +58,7 @@ def fetch_clients(test_client_name=None):
             query = """
                 
                 
+                
                 SELECT 
                     c.id, 
                     c.nome, 
@@ -73,6 +76,7 @@ def fetch_clients(test_client_name=None):
                 FROM commerce_orders o
                 JOIN commerce_customers c ON o.customer_id = c.id
                 GROUP BY c.id, c.nome, c.telefone
+
 
 
             """
