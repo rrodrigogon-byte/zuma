@@ -1,4 +1,5 @@
 import { CommerceError, assertUuid, tenantContext } from './commerce-core.js';
+import bcrypt from 'bcryptjs';
 
 function text(value, max = 120) { return String(value || '').trim().slice(0, max); }
 
@@ -306,7 +307,6 @@ export async function updateMembership(trx, contextInput, membershipId, input = 
     if (input.nome) { userValues.push(input.nome); userSets.push(`nome_completo = $${userValues.length}`); }
     if (input.email) { userValues.push(input.email); userSets.push(`email = $${userValues.length}`); }
     if (input.senha) {
-      const bcrypt = require('bcrypt');
       userValues.push(await bcrypt.hash(input.senha, 10));
       userSets.push(`senha_hash = $${userValues.length}`);
     }
