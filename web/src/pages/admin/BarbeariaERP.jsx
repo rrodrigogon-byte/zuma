@@ -9140,6 +9140,28 @@ export default function BarbeariaERP() {
                 </div>
               </form>
             )}
+            
+            {!["paga", "cancelada", "em_conta"].includes(comanda.status) && saldoPendente <= 0 && comanda.itens?.length > 0 && (
+                <div style={{ ...styles.modalActions, marginTop: 12, padding: 20, background: '#f8fafc', borderRadius: 12, border: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
+                  <div style={{ fontWeight: 600, color: '#334155' }}>A comanda não possui pendências financeiras.</div>
+                  <button
+                    type="button"
+                    style={{ ...styles.primary, width: '100%', maxWidth: 300, background: '#10b981', borderColor: '#059669' }}
+                    disabled={salvando}
+                    onClick={() => {
+                      if (window.confirm("Finalizar comanda sem recebimento?")) {
+                        atualizarComandaNaTela(
+                          () => api.post(`/api/admin/barbearia/comandas/${comanda.id}/fechar-plano`, { confirmado: true }),
+                          "Comanda finalizada."
+                        );
+                      }
+                    }}
+                  >
+                    Finalizar comanda (R$ 0,00)
+                  </button>
+                </div>
+            )}
+            
             {!["paga", "cancelada", "em_conta"].includes(comanda.status) &&
               saldoPendente > 0 && (
                 <Card style={styles.paymentPanel}>

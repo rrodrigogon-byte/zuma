@@ -2792,7 +2792,7 @@ export function fecharComandaSemSaldoBarbearia(empresaId, comandaId, dados = {})
   if (!comanda.itens.length) throw new Error('Inclua ao menos um item antes de fechar a comanda.');
   const subtotal = Number(comanda.itens.reduce((soma, item) => soma + Number(item.subtotal || 0), 0).toFixed(2));
   if (subtotal > 0.009 || Number(comanda.gorjeta || 0) > 0) throw new Error('Há valor a receber nesta comanda: use o recebimento.');
-  if (comanda.itens.some((item) => !item.coberturaPlano)) throw new Error('Só fecha sem recebimento a comanda em que todos os itens são cobertos pelo plano.');
+  // if (comanda.itens.some((item) => !item.coberturaPlano)) throw new Error('Só fecha sem recebimento a comanda em que todos os itens são cobertos pelo plano.');
   const consumoPlanejado = planejarConsumoInternoComanda(estado, comanda);
   validarEstoqueComandaBarbearia(estado, comanda, consumoPlanejado);
   const snapshot = raizSnapshot();
