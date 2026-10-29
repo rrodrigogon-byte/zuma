@@ -3982,7 +3982,7 @@ export default function BarbeariaERP() {
         )}
 
         {/* Agenda Visual Clean e Independente no Padrão Google Agenda / Avec */}
-        {!profissionalFiltro ? (
+        {agendaModo === "board" && !profissionalFiltro ? (
           <BarbeariaAgendaBoard
             data={dataSelecionada}
             configuracao={configuracao}
@@ -3992,6 +3992,13 @@ export default function BarbeariaERP() {
             onDateChange={setDataSelecionada}
             onNew={abrirNovoAgendamento}
             onOpenAppointment={conferirComandaDoAtendimento}
+            onPickSlot={(profId, minutos) => {
+              // Converte minutos para string HH:MM local
+              const dataFormat = new Date(dataSelecionada + 'T00:00:00-04:00'); // Fixo MT para montar string local
+              const hora = String(Math.floor(minutos / 60)).padStart(2, '0') + ':' + String(minutos % 60).padStart(2, '0');
+              setFormAgenda(prev => ({ ...prev, profissionalId: profId, hora, data: dataSelecionada }));
+              setModal({ tipo: 'novoAgendamento' });
+            }}
           />
         ) : (
           <BarbeariaAgendaPeriodo
