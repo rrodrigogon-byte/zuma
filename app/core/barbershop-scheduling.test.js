@@ -28,7 +28,7 @@ test('listSchedulingAvailability retorna somente horários futuros não ocupados
   db.queryRead = async sql => {
     if (sql.includes('FROM servicos')) return { rows: [{ id: SERVICO, nome: 'Corte', duracao_minutos: 30, preco: 50 }] };
     if (sql.includes('FROM usuarios')) return { rows: [{ id: PROF, nome_completo: 'Barbeiro Dino' }] };
-    return { rows: [{ inicio: `${future}T08:00:00`, fim: `${future}T08:30:00` }] };
+    return { rows: [{ profissional_id: PROF, inicio: `${future}T08:00:00`, fim: `${future}T08:30:00` }] };
   };
   try {
     const result = await listSchedulingAvailability({ empresaId: EMPRESA, lojaId: LOJA }, { professionalId: PROF, serviceId: SERVICO, date: future });

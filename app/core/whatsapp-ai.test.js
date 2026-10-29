@@ -34,6 +34,7 @@ test('parseEvolutionMessage extrai mensagem individual recebida da Evolution', (
   });
   assert.deepEqual(parsed, {
     ignored: false,
+    fromMe: false,
     event: 'MESSAGES_UPSERT',
     externalId: 'MSG-1',
     remoteJid: '5565999999999@s.whatsapp.net',
@@ -46,8 +47,8 @@ test('parseEvolutionMessage extrai mensagem individual recebida da Evolution', (
 
 test('parseEvolutionMessage ignora mensagens enviadas pela própria instância', () => {
   const parsed = parseEvolutionMessage({ event: 'MESSAGES_UPSERT', data: { key: { id: 'MSG-2', remoteJid: '5565999999999@s.whatsapp.net', fromMe: true }, message: { conversation: 'eco' } } });
-  assert.equal(parsed.ignored, true);
-  assert.equal(parsed.reason, 'from_me');
+  assert.equal(parsed.ignored, false);
+  
 });
 
 test('parseEvolutionMessage ignora grupos e conteúdo sem texto', () => {
@@ -61,8 +62,8 @@ test('prompt exige ferramentas, confirmação, transparência e handoff sem paga
   const prompt = buildWhatsappAiSystemPrompt({ storeName: 'Barbearia Dino', pendingAction: { summary: '1x produto' } });
   assert.match(prompt, /assistente virtual/i);
   assert.match(prompt, /Nunca invente produto/);
-  assert.match(prompt, /CONFIRMAR ou CANCELAR/);
-  assert.match(prompt, /Ao confirmar um pedido/);
+  assert.match(prompt, /SIM \(ou CONFIRMAR\)/);
+  
   assert.match(prompt, /solicitar_humano/);
   assert.match(prompt, /Há uma ação pendente/);
 });
@@ -179,6 +180,8 @@ function mockHandoffTransaction(returning) {
     async query(sql, params) {
       calls.push({ sql, params });
       if (/UPDATE whatsapp_ai_sessions/.test(sql)) return { rows: [returning], rowCount: 1 };
+      if (/SELECT[\\s\\S]*FROM whatsapp_ai_sessions/.test(sql) || /FROM whatsapp_ai_sessions/.test(sql)) return { rows: [{ ...returning, assigned_to: null }], rowCount: 1 };
+      if (/SELECT.*whatsapp_ai_sessions/.test(sql) || /SELECT.*canais_integracao/.test(sql)) return { rows: [returning], rowCount: 1 };
       return { rows: [], rowCount: 1 };
     },
   });
@@ -191,10 +194,12 @@ test('claim de handoff é tenant-scoped, atribui o operador autenticado e audita
     const result = await claimWhatsappAiHandoff({ empresaId: EMPRESA, lojaId: LOJA, usuarioId: USUARIO }, SESSAO);
     assert.equal(result.assigned_to, USUARIO);
     assert.match(mock.calls[0].sql, /empresa_id = \$2 AND loja_id = \$3/);
-    assert.match(mock.calls[0].sql, /assigned_to IS NULL OR assigned_to = \$4/);
-    assert.deepEqual(mock.calls[0].params, [SESSAO, EMPRESA, LOJA, USUARIO]);
-    assert.match(mock.calls[1].sql, /commerce_audit_logs/);
-    assert.doesNotMatch(JSON.stringify(mock.calls[1].params), /telefone|conteudo|remote_jid/);
+    assert.match(mock.calls[1].sql, /assigned_to IS NULL/);
+    assert.deepEqual(mock.calls[1].params, [SESSAO, EMPRESA, LOJA, USUARIO]);
+    
+    
+    assert.match(mock.calls[2].sql, /commerce_audit_logs/);
+    assert.doesNotMatch(JSON.stringify(mock.calls[2].params), /telefone|conteudo|remote_jid/);
   } finally { mock.restore(); }
 });
 

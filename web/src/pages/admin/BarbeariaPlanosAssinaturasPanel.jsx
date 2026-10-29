@@ -1042,6 +1042,49 @@ export default function BarbeariaPlanosAssinaturasPanel({
                 </div>
               </div>
 
+              
+              {/* SERVIÇOS INCLUSOS */}
+              <div style={{ background: 'var(--card2, #161922)', padding: 12, borderRadius: 12, border: '1px solid var(--line)' }}>
+                <label style={{ fontSize: 12, fontWeight: 800, textTransform: 'uppercase', color: 'var(--muted)', display: 'block', marginBottom: 8 }}>
+                  Serviços Cobertos
+                </label>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 8 }}>
+                  {servicos
+                    .filter((s) => s.ativo !== false)
+                    .map((s) => {
+                      const checked = formPlano.servicosIds.includes(s.id)
+                      return (
+                        <label
+                          key={s.id}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 6,
+                            padding: '6px 8px',
+                            background: checked ? 'rgba(110, 124, 224, 0.15)' : 'var(--card)',
+                            border: '1px solid var(--line)',
+                            borderRadius: 8,
+                            fontSize: 12,
+                            cursor: 'pointer',
+                          }}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={(e) => {
+                              const ids = e.target.checked
+                                ? [...formPlano.servicosIds, s.id]
+                                : formPlano.servicosIds.filter((id) => id !== s.id)
+                              setFormPlano((prev) => ({ ...prev, servicosIds: ids }))
+                            }}
+                          />
+                          {s.nome}
+                        </label>
+                      )
+                    })}
+                </div>
+              </div>
+
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <div>
                   <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)', display: 'block', marginBottom: 4 }}>

@@ -91,7 +91,8 @@ export async function listSchedulingProfessionals(context) {
 
 export async function listSchedulingAvailability(context, input = {}) {
   const { empresaId, lojaId } = tenantScope(context);
-  const professionalId = input.professionalId ? uuid(input.professionalId, 'professionalId') : null;
+  const isAnyProfessional = !input.professionalId || input.professionalId === 'qualquer' || input.professionalId === 'indiferente';
+  const professionalId = isAnyProfessional ? null : uuid(input.professionalId, 'professionalId');
   const serviceId = input.serviceId ? uuid(input.serviceId, 'serviceId') : null;
   const date = validDate(input.date);
   const dateValue = new Date(`${date}T12:00:00Z`);
@@ -101,14 +102,13 @@ export async function listSchedulingAvailability(context, input = {}) {
   if (dateValue.getTime() < minimum || dateValue.getTime() > maximum) {
     throw new SchedulingError('a data deve estar entre hoje e os próximos 90 dias', 'DATE_OUT_OF_RANGE');
   }
-
-  const [service, professional, occupied] = await Promise.all([
+  const [service, professional, occupied, allProfs] = await Promise.all([
     db.queryRead(
       `SELECT id, nome, duracao_minutos, preco FROM servicos
         WHERE id = $1 AND empresa_id = $2 AND loja_id = $3 AND ativo = true LIMIT 1`,
       [serviceId, empresaId, lojaId],
     ),
-    db.queryRead(
+    isAnyProfessional ? Promise.resolve({ rows: [{ id: 'qualquer', nome_completo: 'Qualquer Profissional Disponível' }] }) : db.queryRead(
       `SELECT u.id, u.nome_completo
          FROM usuarios u
          JOIN usuarios_lojas ul ON ul.usuario_id = u.id AND ul.loja_id = $3 AND ul.ativo = true
@@ -118,42 +118,59 @@ export async function listSchedulingAvailability(context, input = {}) {
       [professionalId, empresaId, lojaId],
     ),
     db.queryRead(
-      `SELECT data_agendamento AS inicio,
+      `SELECT usuario_profissional_id AS profissional_id, data_agendamento AS inicio,
               data_agendamento + (COALESCE(duracao_minutos, 30)::text || ' minutes')::interval AS fim
          FROM agendamentos
-        WHERE empresa_id = $1 AND loja_id = $2 AND usuario_profissional_id = $3
+        WHERE empresa_id = $1 AND loja_id = $2 AND ($3::uuid IS NULL OR usuario_profissional_id = $3::uuid)
           AND data_agendamento >= $4::date
           AND data_agendamento < ($4::date + INTERVAL '1 day')
           AND status NOT IN ('cancelado', 'nao_compareceu')
        UNION ALL
-       SELECT data_inicio AS inicio, data_fim AS fim
+       SELECT usuario_profissional_id AS profissional_id, data_inicio AS inicio, data_fim AS fim
          FROM agendamentos_bloqueios
         WHERE empresa_id = $1 AND (loja_id = $2 OR loja_id IS NULL)
-          AND usuario_profissional_id = $3 AND ativo = true
+          AND ($3::uuid IS NULL OR usuario_profissional_id = $3::uuid) AND ativo = true
           AND data_inicio < ($4::date + INTERVAL '1 day') AND data_fim > $4::date`,
       [empresaId, lojaId, professionalId, date],
     ),
+    isAnyProfessional ? db.queryRead(
+      `SELECT u.id
+         FROM usuarios u
+         JOIN usuarios_lojas ul ON ul.usuario_id = u.id AND ul.loja_id = $2 AND ul.ativo = true
+        WHERE u.empresa_id = $1 AND u.ativo = true
+          AND COALESCE(NULLIF(ul.role_loja, ''), u.role) = 'barbeiro'`,
+      [empresaId, lojaId],
+    ) : Promise.resolve({ rows: [{ id: professionalId }] })
   ]);
-
   if (!service.rows[0]) throw new SchedulingError('O ID do serviço é inválido ou não foi encontrado. Você deve chamar listar_servicos para consultar o ID exato.', 'SERVICE_NOT_FOUND');
   if (!professional.rows[0]) throw new SchedulingError('O ID do profissional é inválido ou não foi encontrado. Você deve chamar listar_profissionais para consultar o ID exato.', 'PROFESSIONAL_NOT_FOUND');
-
   const duration = Math.max(15, Number(service.rows[0].duracao_minutos) || 30);
   const isDino = String(professional.rows[0].nome_completo || '').toLowerCase().includes('dino') || String(service.rows[0].nome || '').toLowerCase().includes('dino');
   const openingMinutes = isDino ? 0 : (8 * 60);
   const closingMinutes = isDino ? (24 * 60) : (20 * 60);
-  const occupiedRanges = occupied.rows.map(row => ({ start: new Date(row.inicio).getTime(), end: new Date(row.fim).getTime() }));
+  
+  const occupiedRanges = occupied.rows.map(row => ({ 
+    profId: row.profissional_id, 
+    start: new Date(row.inicio).getTime(), 
+    end: new Date(row.fim).getTime() 
+  }));
+  const availableProfIds = allProfs.rows.map(r => r.id);
+  
   const slots = [];
   for (let minute = openingMinutes; minute + duration <= closingMinutes; minute += 30) {
     const hour = String(Math.floor(minute / 60)).padStart(2, '0');
     const min = String(minute % 60).padStart(2, '0');
     const timestamp = new Date(`${date}T${hour}:${min}:00`).getTime();
     const end = timestamp + duration * 60 * 1000;
-    const available = !occupiedRanges.some(range => timestamp < range.end && end > range.start)
-      && timestamp > Date.now();
+    if (timestamp <= Date.now()) continue;
+    
+    // Para ser disponível em um horário, ao menos UM dos profissionais ativos precisa estar livre
+    const available = availableProfIds.some(profId => {
+      return !occupiedRanges.some(range => range.profId === profId && timestamp < range.end && end > range.start);
+    });
+    
     if (available) slots.push(`${hour}:${min}`);
   }
-
   return {
     date,
     service: {

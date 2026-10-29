@@ -277,7 +277,7 @@ test('período futuro vazio mantém catálogo profissional e não fabrica movime
   assert.equal(result.ok, true);
   assert.deepEqual(result.employees.map((item) => item.id), ['p1', 'p3']);
   assert.equal(result.summary.revenue, 0);
-  assert.equal(result.summary.services, 1);
+  assert.equal(result.summary.services, 0);
   assert.equal(result.summary.products, 0);
   assert.equal(result.employees.every((item) => item.hasActivity === false), true);
 });

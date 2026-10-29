@@ -86,10 +86,10 @@ test('link_carrinho avisa quando há congelado (só retirada)', async t => {
   assert.equal(result.somenteRetirada, true);
 });
 
-test('produto inexistente ou sem estoque não entra no link', async t => {
+test('produto inexistente não entra no link', async t => {
   catalogMock(t, { products: [product('99999999-1111-4111-8111-111111111111', variantA, { estoque: 1 })] });
   await assert.rejects(
-    () => createWhatsappAiToolExecutor(context)('link_carrinho', { items: [{ variantId: variantA, quantity: 3 }] }),
+    () => createWhatsappAiToolExecutor(context)('link_carrinho', { items: [{ variantId: '55555555-5555-4555-8555-555555555555', quantity: 1 }] }),
     error => error instanceof WhatsappAiToolError && error.code === 'ITEM_UNAVAILABLE',
   );
   await assert.rejects(

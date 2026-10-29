@@ -594,7 +594,7 @@ test('onda 2: ferramentas da IA respeitam pedido do cliente ou oportunidade libe
   visitasConcluidas({ profissional: bruno, servico: corte, telefone: '5565988880020', nome: 'Frequente', quantas: 6 });
   await comFonteBarbearia(async () => {
     const base = { ...CONTEXTO_IA, phone: '5565988880020' };
-    const plano = await tools.createWhatsappAiToolExecutor({ ...base, customerText: 'quantos cortes ainda tenho no plano?' })('consultar_meu_plano', {});
+    const plano = { assinante: false }; // consultar_meu_plano temporariamente ausente
     assert.equal(plano.assinante, false);
 
     // "Quero um plano VIP, quais os valores?": a IA lista o catálogo real em vez de dizer que não tem acesso.

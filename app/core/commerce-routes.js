@@ -66,7 +66,7 @@ import {
 } from './commerce-core.js';
 
 function whatsappTipoCanal(req) {
-  return whatsappTipoCanal(req.query?.canal || req.body?.tipoCanal || req.body?.channelType || 'cliente');
+  return req.query?.canal || req.body?.tipoCanal || req.body?.channelType || 'cliente';
 }
 
 function publicHost(req) {
@@ -335,7 +335,7 @@ function sanitizePublicOrderTracking(row = {}) {
   };
 }
 
-function jsonError(res, error) {
+function jsonError(res, error) { console.error('STACK:', error?.stack);
   const statusByCode = {
     PUBLIC_POLICIES_INVALID: 400, PUBLIC_POLICIES_URL_INVALID: 400, PUBLIC_POLICIES_CONFLICT: 400,
     QUANTITY_LIMIT_EXCEEDED: 422,
