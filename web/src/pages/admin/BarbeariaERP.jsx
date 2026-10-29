@@ -1937,6 +1937,11 @@ export default function BarbeariaERP() {
                 style={inputStyle}
               >
                 <option value="apenas_dia">Apenas este dia</option>
+                <option value="30_min">30 Minutos</option>
+                <option value="1_hora">1 Hora</option>
+                <option value="2_horas">2 Horas</option>
+                <option value="3_horas">3 Horas</option>
+                <option value="dia_todo">Dia todo (00:00 às 23:59)</option>
                 <option value="uma_semana">Uma semana</option>
                 <option value="15_dias">15 dias</option>
                 <option value="30_dias">30 dias</option>
