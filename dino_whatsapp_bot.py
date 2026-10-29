@@ -1,3 +1,4 @@
+import requests
 import os
 import datetime
 import json
@@ -132,8 +133,18 @@ def send_whatsapp_message(client, slots):
     
     api_token = os.environ.get("WHATSAPP_API_TOKEN")
     if api_token:
-        # Aqui a requisição real de envio
-        print("✅ Enviado com sucesso via API Kytto/WhatsApp!")
+        try:
+            response = requests.post(
+                f"{os.environ.get('WHATSAPP_API_URL', '').rstrip('/')}/messages/send",
+                json=payload,
+                headers={"Authorization": f"Bearer {api_token}"}
+            )
+            response.raise_for_status()
+            print("✅ Enviado com sucesso via API Kytto/WhatsApp!")
+        except Exception as e:
+            print(f"❌ Erro ao enviar mensagem para {client['name']}: {e}")
+            if hasattr(e, 'response') and e.response is not None:
+                print(e.response.text)
     else:
         print("⚠️ AVISO: WHATSAPP_API_TOKEN não está configurado. O Payload foi gerado com os dados reais, mas não foi transmitido à API externa.")
     print("=" * 60, "\n")
