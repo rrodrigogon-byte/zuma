@@ -515,7 +515,47 @@ function DetalheProfissional({ prof, ehHoje, horaAtual }) {
             <div style={{ ...card, padding: 12, display: 'flex', gap: 10, alignItems: 'center' }}><span style={{ fontSize: 22 }}>✂️</span><div><div style={rotulo}>Serviços</div><div style={{ fontWeight: 800, fontSize: 18 }}>{rs(prof.servicos)}</div></div></div>
             <div style={{ ...card, padding: 12, display: 'flex', gap: 10, alignItems: 'center' }}><span style={{ fontSize: 22 }}>🧴</span><div><div style={rotulo}>Produtos</div><div style={{ fontWeight: 800, fontSize: 18 }}>{rs(prof.produtos)}</div></div></div>
           </div>
-          <div>
+          
+          {(prof.metasServico?.faixaAtual || prof.metasProduto?.faixaAtual) && (
+            <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: 12 }}>
+              <div style={{ fontWeight: 800, marginBottom: 8, color: '#334155' }}>Bonificações progressivas</div>
+              <div style={{ display: 'grid', gap: 10, fontSize: 13 }}>
+                {prof.metasServico?.faixaAtual && (
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                      <span style={{ fontWeight: 600 }}>Serviços ({prof.metasServico.percentualEfetivo}%)</span>
+                      <span style={{ color: prof.metasServico.faltaParaProxima > 0 ? '#f59e0b' : COR.verde, fontWeight: 700 }}>
+                        {prof.metasServico.faltaParaProxima > 0 ? `Falta ${rs(prof.metasServico.faltaParaProxima)}` : 'Meta máxima!'}
+                      </span>
+                    </div>
+                    {prof.metasServico.proximaFaixa && (
+                      <div style={{ height: 6, background: COR.trilho, borderRadius: 3, overflow: 'hidden' }}>
+                        <div style={{ width: `${Math.min(100, prof.metasServico.progressoPct)}%`, height: '100%', background: '#f59e0b' }} />
+                      </div>
+                    )}
+                    <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>{prof.metasServico.mensagemStatus}</div>
+                  </div>
+                )}
+                {prof.metasProduto?.faixaAtual && (
+                  <div style={{ borderTop: prof.metasServico?.faixaAtual ? '1px dashed #cbd5e1' : 'none', paddingTop: prof.metasServico?.faixaAtual ? 8 : 0 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                      <span style={{ fontWeight: 600 }}>Produtos ({prof.metasProduto.percentualEfetivo}%)</span>
+                      <span style={{ color: prof.metasProduto.faltaParaProxima > 0 ? '#f59e0b' : COR.verde, fontWeight: 700 }}>
+                        {prof.metasProduto.faltaParaProxima > 0 ? `Falta ${rs(prof.metasProduto.faltaParaProxima)}` : 'Meta máxima!'}
+                      </span>
+                    </div>
+                    {prof.metasProduto.proximaFaixa && (
+                      <div style={{ height: 6, background: COR.trilho, borderRadius: 3, overflow: 'hidden' }}>
+                        <div style={{ width: `${Math.min(100, prof.metasProduto.progressoPct)}%`, height: '100%', background: '#f59e0b' }} />
+                      </div>
+                    )}
+                    <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>{prof.metasProduto.mensagemStatus}</div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+<div>
             <div style={{ fontWeight: 800, marginBottom: 8 }}>Produção por categoria</div>
             {prof.categorias.length ? <Categorias categorias={prof.categorias} por="valor" /> : <div style={{ fontSize: 13, color: 'var(--muted)' }}>Sem produção registrada.</div>}
           </div>

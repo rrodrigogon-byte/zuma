@@ -816,6 +816,8 @@ export function buildEquipeDesempenho(root, options = {}) {
       commission: money(commission.repasse),
       serviceCommission: money(commission.comissaoServicos),
       productCommission: money(commission.comissaoProdutos),
+      metasServico: commission.metasServico || null,
+      metasProduto: commission.metasProduto || null,
       paidTransfers: identity.synthetic || !current.transfers.available ? null : money(current.transfers.byProfessional.get(id) || 0),
       services: servicesQuantity,
       historicalServices: services.filter((item) => item.kind === 'historico_avec').reduce((sum, item) => sum + item.quantity, 0),

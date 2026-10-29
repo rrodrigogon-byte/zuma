@@ -434,10 +434,14 @@ export function buildPainelGestao(root, { empresaId, lojaId, data, agoraMs = Dat
     const faltas = agendaPropria.filter((item) => item.status === 'nao_compareceu').map((item) => ({ agendamentoId: texto(item.id), horario: horaTexto(inicioDoAgendamento(item)), cliente: texto(item.clienteNome) }));
     const livre = futuro || ehHoje ? proximoHorarioLivre(profissional, agendamentos, calendario, futuro ? calendario.abertura : minutoReferencia) : { primeiro: null, livresMinutos: 0 };
     const trabalhaHoje = trabalhaNoDia(profissional, calendario, dia) && profissional.ativo !== false;
+    const refComissao = current.commissions.porProfissional.find(p => p.profissionalId === id) || {};
+
     return {
       profissionalId: id,
       nome: texto(profissional.apelido || profissional.nome) || 'Profissional',
       nomeCompleto: texto(profissional.nome),
+      metasServico: refComissao.metasServico || null,
+      metasProduto: refComissao.metasProduto || null,
       total,
       servicos,
       produtos,
