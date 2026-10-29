@@ -199,51 +199,6 @@ function Inventario({ qs, unidade, precisaUnidade, toast, onMudou }) {
   const [erro, setErro] = useState('')
   const [enviando, setEnviando] = useState(false)
   
-  const [importandoIA, setImportandoIA] = useState(false);
-  const fileInputRef = useRef(null);
-
-  const handleImportNF = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    
-    setImportandoIA(true);
-    toast('Analisando a Nota Fiscal com Inteligência Artificial... isso pode levar alguns segundos.', 'info');
-    
-    try {
-      const reader = new FileReader();
-      reader.readAsDataURL(file);
-      reader.onload = async () => {
-        const base64Data = reader.result.split(',')[1];
-        const isXml = file.name.toLowerCase().endsWith('.xml');
-        
-        try {
-          // We call the newly created AI endpoint
-          const res = await api.post('/api/v1/compras/importar-nf', {
-            base64: base64Data,
-            mimeType: file.type || 'application/octet-stream',
-            isXml
-          });
-          
-          if (res.sucesso) {
-            toast(`Nota Fiscal importada via IA! ${res.result.itensImportados} itens registrados, pedido gerado e dados inseridos no estoque.`, 'success');
-            carregar();
-            if (onRecebido) onRecebido();
-          } else {
-            toast(res.erro || 'Falha ao processar nota.', 'error');
-          }
-        } catch (err) {
-          toast(err.message || 'Erro ao comunicar com a IA.', 'error');
-        } finally {
-          setImportandoIA(false);
-          if (fileInputRef.current) fileInputRef.current.value = '';
-        }
-      };
-    } catch (err) {
-      toast('Falha ao ler arquivo', 'error');
-      setImportandoIA(false);
-    }
-  };
-
   
   const [sincronizandoSEFAZ, setSincronizandoSEFAZ] = useState(false);
   const [importandoIA, setImportandoIA] = useState(false);
