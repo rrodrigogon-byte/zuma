@@ -473,9 +473,7 @@ async function processChargeTask(task, payload, legacyEmpresaId) {
     : tentativa === 2
       ? `${saudacao}, ${primeiroNome}! Tudo bem? Aqui é ${assistente}${nome}${emoji} Sua mensalidade do plano (${valor}) venceu e ainda está em aberto. Que tal aproveitar para agendar seu próximo atendimento e já regularizar?`
       : `${saudacao}, ${primeiroNome}! Tudo bem? Aqui é ${assistente}${nome}${emoji} Sua mensalidade do plano (${valor}) vence em breve! Vamos agendar seu próximo retorno para você aproveitar seus serviços?`;
-  const comoPagar = cobranca.url
-    ? `Você prefere pagar via Pix ou Cartão de Crédito? Para sua comodidade, já deixei o link seguro aqui:\n${cobranca.url}`
-    : `Você gostaria de pagar via Pix? Para sua comodidade, já deixei o código Pix copia e cola abaixo:\n${cobranca.pixCopiaECola}\n\nAssim que efetuar o pagamento, é só me mandar o comprovante por aqui!`;
+  const comoPagar = `Você prefere pagar via Pix ou Cartão de Crédito? Para sua comodidade, já deixei o link seguro aqui:\nhttps://kytto.com.br/pay/${cobranca.id}`; 
   const texto = `${abertura}\n\n${comoPagar}\n\nSe precisar de ajuda ou quiser agendar, é só me chamar! (Para não receber mais avisos de cobrança, responda SAIR).`;
   await db.query(
     `UPDATE tarefas_integracao_canais SET delivery_started_at = CURRENT_TIMESTAMP

@@ -285,6 +285,92 @@ app.get('/api/publico/dino-carteira', (req, res) => {
     res.status(500).json({ error: e.message });
   }
 });
+
+app.get('/pay/:id', async (req, res) => {
+  const cobrancaId = String(req.params.id || '').trim();
+  const dados = db().barbeariaCobranca || {};
+  let cobranca = null;
+  let empresa = null;
+  for (const [empresaId, estado] of Object.entries(dados)) {
+    if (estado.cobrancas && estado.cobrancas[cobrancaId]) {
+      cobranca = estado.cobrancas[cobrancaId];
+      empresa = db().empresas?.[empresaId] || {};
+      break;
+    }
+  }
+  
+  if (!cobranca || cobranca.status === 'cancelada') {
+    return res.status(404).send(`
+      <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Kytto | Pagamento</title></head>
+      <body style="font-family:sans-serif;text-align:center;padding:50px;background:#f9f9f9;color:#333;">
+        <div style="max-width:500px;margin:0 auto;background:#fff;padding:40px 20px;border-radius:12px;box-shadow:0 4px 6px rgba(0,0,0,0.1);">
+          <h1 style="color:#f97316;font-size:64px;margin:0;line-height:1;">404</h1>
+          <h2>Página não encontrada</h2>
+          <p style="color:#6b7280;line-height:1.5;">O endereço que você tentou acessar não existe, ou a cobrança já foi cancelada ou substituída.</p>
+          <a href="/" style="display:inline-block;margin-top:20px;padding:12px 24px;background:#f97316;color:#fff;text-decoration:none;border-radius:8px;font-weight:bold;">Voltar à home</a>
+        </div>
+      </body></html>
+    `);
+  }
+  
+  if (cobranca.status === 'paga') {
+    return res.send(`
+      <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Kytto | Pagamento Concluído</title></head>
+      <body style="font-family:sans-serif;text-align:center;padding:50px;background:#f9f9f9;color:#333;">
+        <div style="max-width:500px;margin:0 auto;background:#fff;padding:40px 20px;border-radius:12px;box-shadow:0 4px 6px rgba(0,0,0,0.1);">
+          <div style="font-size:60px;margin-bottom:10px;">✅</div>
+          <h2 style="color:#10b981;margin-bottom:10px;margin-top:0;">Pagamento Confirmado!</h2>
+          <p style="color:#6b7280;line-height:1.5;">Esta cobrança já foi quitada. Muito obrigado!</p>
+          <p style="margin-top:30px;color:#9ca3af;font-size:14px;">Você já pode fechar esta página.</p>
+        </div>
+      </body></html>
+    `);
+  }
+  
+  if (cobranca.url && !cobranca.url.includes('kytto.com.br/pay/')) {
+    return res.redirect(302, cobranca.url);
+  }
+  
+  if (cobranca.pixCopiaECola) {
+    let qrDataUrl = '';
+    try {
+       qrDataUrl = await QRCode.toDataURL(cobranca.pixCopiaECola, { margin: 1, width: 250, color: { dark: '#000000', light: '#ffffff' } });
+    } catch (e) { console.error('Erro QRCode', e); }
+    return res.send(`
+      <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Kytto | Pagamento via Pix</title>
+      <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background:#f3f4f6; color:#1f2937; text-align:center; padding: 20px; margin:0; }
+        .card { max-width:400px; margin: 20px auto; background:#fff; padding:30px 20px; border-radius:16px; box-shadow:0 10px 15px -3px rgba(0,0,0,0.1); }
+        .valor { font-size: 32px; font-weight: 800; color: #111827; margin: 10px 0; }
+        .desc { color: #6b7280; margin-bottom: 20px; font-size: 15px; line-height: 1.4; }
+        textarea { width:100%; box-sizing:border-box; height:80px; padding:12px; border:2px dashed #d1d5db; border-radius:8px; resize:none; font-family:monospace; font-size:12px; margin-bottom:15px; color:#4b5563; background:#f9fafb; outline:none; }
+        button { width:100%; padding:14px; background:#f97316; color:#fff; border:none; border-radius:8px; font-size:16px; font-weight:bold; cursor:pointer; box-shadow:0 4px 6px -1px rgba(249, 115, 22, 0.3); transition:background 0.2s; }
+        button:hover { background:#ea580c; }
+        button:active { transform:scale(0.98); }
+        .qr-wrapper { background: #fff; padding: 10px; border-radius: 12px; border: 1px solid #e5e7eb; display: inline-block; margin-bottom: 15px; }
+      </style>
+      </head>
+      <body>
+        <div class="card">
+          ${empresa?.nome ? `<div style="text-transform:uppercase;font-size:12px;font-weight:700;letter-spacing:1px;color:#9ca3af;margin-bottom:5px;">${empresa.nome}</div>` : ''}
+          <div class="valor">R$ ${Number(cobranca.valor).toFixed(2).replace('.',',')}</div>
+          <div class="desc">${cobranca.descricao || 'Pagamento pendente'}</div>
+          
+          ${qrDataUrl ? `<div class="qr-wrapper"><img src="${qrDataUrl}" alt="QR Code Pix" style="display:block;max-width:100%;"></div>` : ''}
+          
+          <div style="font-size:14px;font-weight:600;margin-bottom:10px;color:#374151;">Pague com o código Pix copia e cola</div>
+          <textarea readonly id="pixCode">${cobranca.pixCopiaECola}</textarea>
+          <button onclick="navigator.clipboard.writeText(document.getElementById('pixCode').value);const btn=this;btn.innerText='Código Copiado!';setTimeout(()=>btn.innerText='Copiar Código Pix',3000)">Copiar Código Pix</button>
+          
+          <div style="margin-top:20px;font-size:13px;color:#9ca3af;">O pagamento será reconhecido automaticamente.</div>
+        </div>
+      </body></html>
+    `);
+  }
+  
+  res.status(500).send('Método de pagamento não configurado para esta cobrança.');
+});
+
 app.get('/health', async (req, res) => {
   // O estado da persistência é informativo aqui: o health principal não reinicia o
   // serviço por causa de uma cópia atrasada (use /health/persistencia para alertar).
