@@ -156,7 +156,7 @@ export default function DinoRecuperacaoAvecPanel({ onAbrirAgenda }) {
   }
 
   // Abrir modal de histórico Avec
-  async 
+  
   async function dispararCampanha() {
     try {
        setResgatandoCRM(true)
