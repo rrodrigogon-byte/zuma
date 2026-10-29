@@ -298,6 +298,7 @@ export default function ComandaNova({ clientes, profissionais, servicos, produto
 
   return (
     <form onSubmit={salvar} className="cn-form">
+      {carrinho.length > 0 && <div className="cn-acoes" style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '-10px' }}><button type="button" className="cn-botao" disabled={salvando} onClick={salvar} style={{ background: 'var(--accent)', color: '#fff' }}>{salvando ? 'Salvando...' : 'Conferir comanda e receber'}</button></div>}
       <div className="cn-aviso"><strong>Fluxo seguro</strong><span>Abrir a comanda não recebe pagamento nem baixa estoque. Serviços do plano do cliente entram abatidos; o uso do plano só é registrado no fechamento.</span></div>
       <div className="cn-topo">
         {/* div (e não label): um label repassaria o clique para o botão "Trocar" e desfaria a escolha. */}
