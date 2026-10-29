@@ -148,7 +148,6 @@ import { funnelSummary } from './storefront-funnel.js';
 import { whatsappProviderConfigured, whatsappProviderName } from './core/whatsapp-provider.js';
 import { enviarMensagem as enviarWhatsappCore } from './core/whatsapp.js';
 import { registerWhatsappConexaoRoutes } from './whatsapp-conexao-routes.js';
-import { addDumpEnv } from './dump-env.js';
 import { vigiarTodas as vigiarConexoesWhatsapp } from './whatsapp-conexao-kytto.js';
 import { registerDinoAdminRoutes, loadCommerceSalesDetail } from './dino-admin-routes.js';
 import { buildCurrentMaterials, previewTaxMaterialPlan, PreviewConflictError, PreviewValidationError } from './comandas-caixa-previa.js';
@@ -3504,11 +3503,8 @@ app.get('/api/admin/platform/financeiro-diagnostico', auth, requirePlatformAdmin
 registerDinoAdminRoutes(app, { db, legacyEmpresaId, legacyLojaId, financeiroKytto, barbeariaErpKytto, clientesKytto, commerceDb, requireCommercePermission, dashboardPeriod, audit, save, salesReport });
 registerAiBrainRoutes(app, { legacyEmpresaId, legacyLojaId, requireCommercePermission, audit, clientesKytto, commerceDb, listarAgendamentosBarbearia });
 registerAtivacaoRoutes(app, { legacyEmpresaId, requireCommercePermission, barbeariaErpKytto, audit });
-addDumpEnv(app);
 registerWhatsappConexaoRoutes(app, { legacyEmpresaId: whatsappEmpresaId, legacyLojaId: whatsappLojaId, audit, save, enviarMensagem: enviarWhatsappCore, isPlatformAdmin: user => isPlatformAdminUser(user) || isMainAdminUser(user) });
-addDumpEnv(app);
 registerWhatsappConexaoRoutes(app, { legacyEmpresaId: whatsappEmpresaId, legacyLojaId: whatsappLojaId, audit, save, enviarMensagem: enviarWhatsappCore, isPlatformAdmin: user => isPlatformAdminUser(user) || isMainAdminUser(user), basePath: '/api/admin/barbearia/whatsapp-conexao-gestao', tipoCanal: 'gestao' });
-addDumpEnv(app);
 registerWhatsappConexaoRoutes(app, { legacyEmpresaId: whatsappEmpresaId, legacyLojaId: whatsappLojaId, audit, save, enviarMensagem: enviarWhatsappCore, isPlatformAdmin: user => isPlatformAdminUser(user) || isMainAdminUser(user), basePath: '/api/admin/barbearia/whatsapp-conexao-lancamentos', tipoCanal: 'lancamentos' });
 // Prévia integrada de taxas/materiais: POST por ser um cálculo de payload, nunca uma mutação.
 // Não há rota de aplicar neste recorte; o plano só devolve hash, divergências e pendências.
