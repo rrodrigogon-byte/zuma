@@ -462,17 +462,21 @@ async function processChargeTask(task, payload, legacyEmpresaId) {
   if (!canal) return { skipped: true, reason: 'whatsapp_channel_inactive' };
   const nome = limpo(barbearia.obterConfiguracao(legacyEmpresaId).nomePublico || 'barbearia', 120);
   const valor = `R$ ${Number(cobranca.valor).toFixed(2).replace('.', ',')}`;
-  const comoPagar = cobranca.url
-    ? `Para pagar (Pix ou cartão): ${cobranca.url}`
-    : `Pix copia e cola:\n${cobranca.pixCopiaECola}\nDepois de pagar, é só responder esta mensagem com o comprovante.`;
   const tentativa = Math.max(1, Number(payload.attempt) || 1);
   const primeiroNome = limpo(elegibilidade.cliente.nome, 80).split(' ')[0];
+  const isDino = nome.toLowerCase().includes('dino');
+  const saudacao = isDino ? 'Opa' : 'Olá';
+  const assistente = isDino ? 'o T-Rex da ' : 'a equipe da ';
+  const emoji = isDino ? ' 🦖' : '';
   const abertura = tentativa >= 3
-    ? `Olá, ${primeiroNome}! Ainda não identificamos a mensalidade do seu clube na ${nome} (${valor}). Este é o último aviso antes de o plano ser pausado.`
+    ? `${saudacao}, ${primeiroNome}! Tudo bem? Aqui é ${assistente}${nome}${emoji} Viemos lembrar que a mensalidade do seu plano (${valor}) está em aberto e o plano será pausado. Vamos agendar seu retorno e manter seus benefícios?`
     : tentativa === 2
-      ? `Olá, ${primeiroNome}! A mensalidade do seu clube na ${nome} (${valor}) venceu e ainda está em aberto.`
-      : `Olá, ${primeiroNome}! A mensalidade do seu clube na ${nome} (${valor}) vence em breve.`;
-  const texto = `${abertura} ${comoPagar}\nPara não receber estes avisos, responda SAIR.`;
+      ? `${saudacao}, ${primeiroNome}! Tudo bem? Aqui é ${assistente}${nome}${emoji} Sua mensalidade do plano (${valor}) venceu e ainda está em aberto. Que tal aproveitar para agendar seu próximo atendimento e já regularizar?`
+      : `${saudacao}, ${primeiroNome}! Tudo bem? Aqui é ${assistente}${nome}${emoji} Sua mensalidade do plano (${valor}) vence em breve! Vamos agendar seu próximo retorno para você aproveitar seus serviços?`;
+  const comoPagar = cobranca.url
+    ? `Você prefere pagar via Pix ou Cartão de Crédito? Para sua comodidade, já deixei o link seguro aqui:\n${cobranca.url}`
+    : `Você gostaria de pagar via Pix? Para sua comodidade, já deixei o código Pix copia e cola abaixo:\n${cobranca.pixCopiaECola}\n\nAssim que efetuar o pagamento, é só me mandar o comprovante por aqui!`;
+  const texto = `${abertura}\n\n${comoPagar}\n\nSe precisar de ajuda ou quiser agendar, é só me chamar! (Para não receber mais avisos de cobrança, responda SAIR).`;
   await db.query(
     `UPDATE tarefas_integracao_canais SET delivery_started_at = CURRENT_TIMESTAMP
       WHERE id = $1 AND status = 'processando' AND lease_token = $2::uuid`,

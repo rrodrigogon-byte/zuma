@@ -32,7 +32,8 @@ export function coberturasDoCliente(empresaId, clienteId, opcoes = {}) {
       const reservadas = captacao.reservasAssinatura(empresaId,assinatura.id,resumo,opcoes);
       const restantes = Math.max(0, resumo.sessoesRestantes - reservadas);
       const situacao = assinatura.status === 'pausada' ? 'pausada' : resumo.situacaoPagamento;
-      const utilizavel = assinatura.status === 'ativa' && situacao === 'em_dia' && restantes > 0;
+      const isPacote = resumo.plano?.categoriaPlano === 'pacote' || (resumo.plano?.nome || '').toLowerCase().includes('pacote');
+      const utilizavel = assinatura.status === 'ativa' && (situacao === 'em_dia' || isPacote) && restantes > 0;
       const servicosIds = resumo.plano?.servicosIds || [];
       return {
         assinaturaId: assinatura.id,
@@ -142,7 +143,8 @@ export function validarCoberturasDaComanda(empresaId, comanda, opcoes = {}) {
     const cobertura = coberturas.get(assinaturaId);
     const nome = lista[0].coberturaPlano.planoNome || 'Plano';
     if (!cobertura) throw Object.assign(new Error(`O ${nome} não está mais ativo para este cliente. Remova o item coberto e lance como avulso.`), { code: 'PLANO_INDISPONIVEL' });
-    if (cobertura.situacaoPagamento !== 'em_dia') throw Object.assign(new Error(`O ${nome} está com ${MOTIVOS[cobertura.situacaoPagamento] || 'pendência'}. Remova o item coberto e lance como avulso, ou regularize o plano.`), { code: 'PLANO_INDISPONIVEL' });
+    const isPacote = cobertura.categoriaPlano === 'pacote' || (cobertura.planoNome || '').toLowerCase().includes('pacote');
+    if (cobertura.situacaoPagamento !== 'em_dia' && !isPacote) throw Object.assign(new Error(`O ${nome} está com ${MOTIVOS[cobertura.situacaoPagamento] || 'pendência'}. Remova o item coberto e lance como avulso, ou regularize o plano.`), { code: 'PLANO_INDISPONIVEL' });
     if (cobertura.sessoesRestantes < lista.length) throw Object.assign(new Error(`O ${nome} tem ${cobertura.sessoesRestantes} sessão(ões) disponível(is) e a comanda usa ${lista.length}. Remova um item coberto e lance como avulso.`), { code: 'PLANO_SEM_SESSAO' });
   }
   return true;
