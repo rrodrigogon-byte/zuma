@@ -417,7 +417,7 @@ export default function DinoMetasRoletaPanel() {
                         <button
                           type="button"
                           className="dino-btn-girar-roleta"
-                          onClick={() => abrirRoletaParaProfissional(prof)}
+                          onClick={(e) => { e.stopPropagation(); abrirRoletaParaProfissional(prof); }}
                         >
                           🎡 GIRAR ROLETA ({prof.girosPendentes.length} disponível)
                         </button>
