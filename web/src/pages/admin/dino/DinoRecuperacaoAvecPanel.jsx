@@ -160,7 +160,7 @@ export default function DinoRecuperacaoAvecPanel({ onAbrirAgenda }) {
   async function dispararCampanha() {
     try {
        setResgatandoCRM(true)
-       const clientesIds = dadosFiltrados.map(c => c.key)
+       const clientesIds = dados.itens.map(c => c.key)
        await api.post('/api/admin/dino/crm/disparo', { mensagem: msgCampanha, clientesIds })
        alert('Campanha de Resgate (WhatsApp) iniciada para ' + clientesIds.length + ' clientes!')
        setModalCampanhaCRM(false)
@@ -328,7 +328,7 @@ export default function DinoRecuperacaoAvecPanel({ onAbrirAgenda }) {
             onClick={() => setModalCampanhaCRM(true)}
           >
             <Sparkles size={14} style={{ marginRight: 4 }} /> 
-            Disparar Campanha CRM ({dadosFiltrados.length})
+            Disparar Campanha CRM ({dados.itens.length})
           </button>
         </div>
         
