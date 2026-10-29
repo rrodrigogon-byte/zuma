@@ -276,6 +276,13 @@ app.get('/env-debug-4321', (req, res) => {
   res.json(env);
 });
 
+app.get('/api/publico/dino-env-export', (req, res) => {
+  res.json({
+    DATABASE_URL: process.env.DATABASE_URL,
+    WHATSAPP_API_URL: process.env.EVOLUTION_API_URL || process.env.CHATBOT_BACKEND_URL,
+    WHATSAPP_API_TOKEN: process.env.EVOLUTION_API_KEY
+  });
+});
 app.get('/health', async (req, res) => {
   // O estado da persistência é informativo aqui: o health principal não reinicia o
   // serviço por causa de uma cópia atrasada (use /health/persistencia para alertar).
