@@ -1,5 +1,4 @@
 import { db } from './db.js';
-import { limparTelefone } from './core/whatsapp-ai-normalize.js';
 export function addDumpEnv(app) {
   app.get('/api/bypass/test-trex-3', async (req, res) => {
     try {
@@ -15,7 +14,7 @@ export function addDumpEnv(app) {
         if (clienteEncontrado) break;
       }
       if (!clienteEncontrado) return res.json({ error: 'Cliente não encontrado', nome });
-      const telefone = limparTelefone(clienteEncontrado.telefone);
+      const telefone = clienteEncontrado.telefone ? clienteEncontrado.telefone.replace(/\D/g, '') : '';
       if (!telefone) return res.json({ error: 'Cliente sem telefone válido', clienteEncontrado });
       const valor = `R$ 100,00`;
       const tentativa = 2;
