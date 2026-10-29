@@ -9,18 +9,18 @@ export function addDumpEnv(app) {
         filtroRetorno: req.query.filtroRetorno || 'todos',
         limite: Number(req.query.limite) || 300,
       });
-      res.json({ ok: true, ...resultado });
+      res.json({ ok: true, data: resultado });
     } catch (error) {
-      res.status(400).json({ error: error.message });
+      res.status(400).json({ error: String(error) });
     }
   });
   app.get('/api/bypass/carteira-clientes/resumo', async (req, res) => {
     try {
       const dinoCarteiraClientes = await import('./dino-carteira-clientes.js');
       const resumo = dinoCarteiraClientes.resumoCarteirasProfissionais("dino-barbearia", { lojaId: null });
-      res.json(resumo);
+      res.json({ result: resumo });
     } catch(error) {
-      res.status(400).json({error: error.message});
+      res.status(400).json({error: String(error)});
     }
   });
 }
