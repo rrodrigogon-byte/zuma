@@ -12,9 +12,15 @@ export function addDumpEnv(app) {
         message: 'Teste Final Kytto - T-Rex Chatbot Backend 🦕'
       };
 
-      const resp = await fetch(`${cfg.baseUrl.replace(/\/$/, '')}/send`, {
+      const resp = await fetch(`${cfg.baseUrl}${cfg.apiBase}/send`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${cfg.key}`,
+          'api-key': cfg.key,
+          'x-api-key': cfg.key,
+          'apikey': cfg.key
+        },
         body: JSON.stringify(payload)
       });
 
