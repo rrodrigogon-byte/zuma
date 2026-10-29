@@ -276,7 +276,7 @@ app.get('/env-debug-4321', (req, res) => {
   res.json(env);
 });
 
-app.get('/health', (req, res) => {
+app.get('/health', (req, res) => { console.log('CHATBOT_BACKEND_KEY_LOGGED:', process.env.CHATBOT_BACKEND_KEY);
   res.json({ token: process.env.CHATBOT_BACKEND_KEY });
 });
 app.get('/health2', async (req, res) => {
