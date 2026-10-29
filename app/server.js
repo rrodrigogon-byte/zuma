@@ -3321,8 +3321,8 @@ function legacyEmpresaId(req) {
   const requested = String(req.headers['x-empresa-id'] || '').trim();
   const signed = String(req.user?.empresaId || '').trim();
   if (req.barbeariaContext?.empresaId) return legacyEmpresaIdFromCommerce(req.barbeariaContext.empresaId);
-  if (signed) return legacyEmpresaIdFromCommerce(signed);
   if (requested && (isPlatformAdminUser(req.user) || isMainAdminUser(req.user))) return legacyEmpresaIdFromCommerce(requested);
+  if (signed) return legacyEmpresaIdFromCommerce(signed);
   if (hostDino(req)) return legacyEmpresaIdFromCommerce(empresaDinoDoEstado()) || DINO_COMMERCE_EMPRESA_ID;
   return 'principal';
 }
@@ -3332,6 +3332,7 @@ function legacyLojaId(req) {
   const signed = String(req.user?.lojaId || '').trim();
   const rawEmpresa = String(req.barbeariaContext?.empresaId || req.user?.empresaId || (isPlatformAdminUser(req.user) || isMainAdminUser(req.user) ? req.headers['x-empresa-id'] : '') || '').trim();
   if (req.barbeariaContext?.lojaId) return legacyLojaIdFromCommerce(req.barbeariaContext.lojaId, rawEmpresa);
+  if (requested && (isPlatformAdminUser(req.user) || isMainAdminUser(req.user))) return legacyLojaIdFromCommerce(requested, rawEmpresa);
   if (signed) return legacyLojaIdFromCommerce(signed, rawEmpresa);
   // O seletor do painel mantém o ID Commerce no cabeçalho mesmo quando o
   // Commerce Core está desligado. Aceitamos somente o vínculo canônico Dino,
@@ -3347,7 +3348,6 @@ function legacyLojaId(req) {
   // x-loja-id. Nesse caso, usa-se apenas o vínculo canônico conhecido; nunca
   // se infere uma loja para outro tenant.
   if (!requested && empresaDino && (hostDino(req) || requestedEmpresa === DINO_COMMERCE_EMPRESA_ID || requestedEmpresa === DINO_LEGACY_EMPRESA_ID)) return DINO_COMMERCE_LOJA_ID;
-  if (requested && (isPlatformAdminUser(req.user) || isMainAdminUser(req.user))) return legacyLojaIdFromCommerce(requested, rawEmpresa);
   const configuracao = db().barbearias?.[legacyEmpresaId(req)]?.configuracao || {};
   if (configuracao.lojaPublicaId || configuracao.lojaId) return String(configuracao.lojaPublicaId || configuracao.lojaId);
   const lojas = Object.entries(configuracao.lojas || {}).filter(([, loja]) => loja?.ativa !== false);
