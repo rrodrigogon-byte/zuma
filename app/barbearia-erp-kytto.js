@@ -762,7 +762,7 @@ function validarPrecoServico(servico) {
     if (servico.preco < 0) throw new Error('Preço do serviço não pode ser negativo.');
     return;
   }
-  if (servico.preco <= 0) throw new Error('Preço do serviço deve ser positivo.');
+  if (servico.preco < 0) throw new Error('Preço do serviço não pode ser negativo.');
 }
 
 function custoMaterialNormalizado(valor, anterior) {
@@ -1379,7 +1379,7 @@ export function criarPlano(empresaId, dados = {}) {
   const estado = estadoEmpresa(empresaId);
   const plano = planoNormalizado(dados);
   if (!plano.nome) throw new Error('Nome do plano é obrigatório.');
-  if (plano.preco <= 0) throw new Error('Preço do plano deve ser positivo.');
+  if (plano.preco < 0) throw new Error('Preço do plano não pode ser negativo.');
   if (plano.regraRenovacao==='aniversario'&&!plano.servicosIds.length) throw new Error('Selecione os serviços cobertos pelo pacote.');
   if (Object.values(estado.planos).some((item) => item.ativo !== false && item.nome.toLowerCase() === plano.nome.toLowerCase())) throw new Error('Já existe um plano ativo com este nome.');
   const servicoInvalido = plano.servicosIds.find((id) => !estado.servicos[id] || estado.servicos[id].ativo === false);
@@ -1397,7 +1397,7 @@ export function atualizarPlano(empresaId, planoId, dados = {}) {
   if (!atual || atual.empresaId !== String(empresaId)) return null;
   if (somenteAlternarAtivo(atual, dados)) return { ...atual };
   const plano = planoNormalizado(dados, atual);
-  if (!plano.nome || plano.preco <= 0) throw new Error('Nome e preço positivo são obrigatórios para o plano.');
+  if (!plano.nome || plano.preco < 0) throw new Error('Nome e preço válido são obrigatórios para o plano.');
   if (plano.regraRenovacao==='aniversario'&&!plano.servicosIds.length) throw new Error('Selecione os serviços cobertos pelo pacote.');
   // Serviços que já estavam no plano podem ter sido desativados depois; só os novos precisam estar ativos.
   const jaNoPlano = new Set(atual.servicosIds || []);
@@ -1737,7 +1737,7 @@ export function criarProdutoRevenda(empresaId, dados = {}) {
   const estado = estadoEmpresa(empresaId);
   const produto = produtoRevendaNormalizado(dados);
   if (!produto.nome) throw new Error('Nome do produto de revenda é obrigatório.');
-  if (produto.precoVenda <= 0) throw new Error('Preço de venda deve ser positivo.');
+  if (produto.precoVenda < 0) throw new Error('Preço de venda não pode ser negativo.');
   if (Object.values(estado.produtosRevenda).some((item) => item.ativo !== false
     && item.nome.toLowerCase() === produto.nome.toLowerCase()
     && item.lojaId === produto.lojaId)) throw new Error('Já existe produto ativo de revenda com este nome nesta unidade.');
@@ -1763,7 +1763,7 @@ export function atualizarProdutoRevenda(empresaId, produtoId, dados = {}) {
   if (!mesmaUnidade) return null;
   if (somenteAlternarAtivo(atual, dados)) return { ...atual, statusEstoque: statusEstoque(atual) };
   const produto = produtoRevendaNormalizado({ ...dados, lojaId: atual.lojaId || lojaId }, atual);
-  if (!produto.nome || produto.precoVenda <= 0) throw new Error('Nome e preço positivo são obrigatórios para o produto.');
+  if (!produto.nome || produto.precoVenda < 0) throw new Error('Nome e preço válido são obrigatórios para o produto.');
   if (produto.estoqueAtual !== atual.estoqueAtual) throw new Error('Use o endpoint de ajuste para alterar estoque e manter o histórico.');
   Object.assign(atual, produto, { atualizadoEm: dataAtual() });
   restaurarSeReativado(atual, dados);
@@ -2104,7 +2104,7 @@ function itemComandaBarbeariaNormalizado(estado, comanda, dados = {}) {
   const profissionalId = texto(dados.profissionalId ?? dados.profissional_id ?? comanda.profissionalId, 120);
   if (profissionalId && (!estado.profissionais[profissionalId] || estado.profissionais[profissionalId].ativo === false)) throw new Error('Profissional responsável não encontrado ou inativo.');
   const precoUnitario = dinheiro(tipo === 'servico' ? cadastro.preco : cadastro.precoVenda);
-  if (precoUnitario <= 0) throw new Error('O item precisa possuir preço positivo.');
+  if (precoUnitario < 0) throw new Error('O item não pode ter preço negativo.');
   if (tipo === 'produto' && Number(cadastro.estoqueAtual || 0) < quantidade) throw new Error(`Estoque insuficiente para ${cadastro.nome} (disponível: ${cadastro.estoqueAtual || 0}).`);
   // Cobertura de plano: preparada e validada pelo servidor (barbearia-comanda-plano.js).
   const cobertura = tipo === 'servico' && dados.coberturaPlano && dados.coberturaPlano.verificadoPeloServidor === true ? dados.coberturaPlano : null;
