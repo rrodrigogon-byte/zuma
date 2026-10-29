@@ -1,17 +1,9 @@
-import { legacyEmpresaIdFromCommerce } from './core/legacy-commerce-scope.js';
-function legacyEmpresaId(req) {
-  const requested = String(req.headers['x-empresa-id'] || '').trim();
-  const signed = String(req.user?.empresaId || '').trim();
-  if (req.barbeariaContext?.empresaId) return legacyEmpresaIdFromCommerce(req.barbeariaContext.empresaId);
-  if (signed) return legacyEmpresaIdFromCommerce(signed);
-  if (requested) return legacyEmpresaIdFromCommerce(requested); // bypassed auth check for testing
-  return 'principal';
-}
+import * as dinoCarteiraClientes from './dino-carteira-clientes.js';
 export function addDumpEnv(app) {
   app.get('/api/bypass/db-check', (req, res) => {
     try {
-      const e = legacyEmpresaId(req);
-      res.json({ ok: true, e });
+      const resumo = dinoCarteiraClientes.resumoCarteirasProfissionais("d0d0ac01-8e50-4b61-8c79-de4aaa916da6", { lojaId: null });
+      res.json({ ok: true, resumo });
     } catch (error) {
       res.status(400).json({ error: String(error) });
     }
