@@ -101,6 +101,7 @@ const AcompanharPedido = lazy(() => import('./pages/public/AcompanharPedido'))
 const Perfil      = lazy(() => import('./pages/public/Perfil'))
 const Contato     = lazy(() => import('./pages/public/Contato'))
 
+const PaymentRedirect = lazy(() => import('./pages/public/PaymentRedirect'))
 const NotFound   = lazy(() => import('./pages/NotFound'))
 
 const Dashboard  = lazy(() => import('./pages/admin/Dashboard'))
@@ -398,6 +399,7 @@ export default function App() {
         <Route path="/liga/:id"      element={<Layout><Liga /></Layout>} />
         <Route path="/atleta/:nome"  element={<Layout><PerfilAtleta /></Layout>} />
 
+        <Route path="/pay/:id" element={<PaymentRedirect />} />
         <Route path="*" element={<Layout><NotFound /></Layout>} />
       </Routes>
     </Suspense>
