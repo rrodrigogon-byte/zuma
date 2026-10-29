@@ -241,8 +241,19 @@ export function apurarDesempenhoEquipe(empresaId, { dataIso = dataIsoCuiaba(), i
             }
           } catch (err) {}
         }
+        
         const ehExtra = /extra|adicional|sobrancelha|pigmenta|spa|massagem|barboterapia|hidrata/i.test(servicoNomeAtual || '');
+        
+        stats[profId].dia.servicosLista = stats[profId].dia.servicosLista || [];
+        stats[profId].dia.servicosLista.push({ 
+          nome: servicoNomeAtual || 'Serviço Agendado', 
+          valor: valorAg, 
+          extra: ehExtra, 
+          cliente: ag.clienteNome || ag.clienteTelefone || 'Cliente não identificado' 
+        });
+
         if (ehExtra) {
+
           stats[profId].dia.servicosExtras += 1;
           stats[profId].dia.servicosExtrasLista.push({ nome: servicoNomeAtual || 'Serviço Extra (Agendado)', valor: valorAg });
           stats[profId].semana.servicosExtras += 1;
@@ -289,8 +300,18 @@ const rawCmd = cmd.fechadaEm || cmd.atualizadoEm || cmd.criadoEm || '';
 
         const valor = Number(item.subtotal || item.valor || 0);
 
+        
         if (noDia) {
+          stats[profId].dia.servicosLista = stats[profId].dia.servicosLista || [];
+          stats[profId].dia.servicosLista.push({
+            nome: item.nome,
+            valor,
+            extra: ehExtra,
+            cliente: cmd.clienteNome || cmd.clienteTelefone || 'Cliente não identificado'
+          });
+
           stats[profId].dia.servicosTotal += 1;
+
           stats[profId].dia.faturamentoServicos += valor;
           stats[profId].dia.faturamentoTotal += valor;
           if (ehExtra) {

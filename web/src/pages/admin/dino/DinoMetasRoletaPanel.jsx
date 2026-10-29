@@ -37,6 +37,8 @@ export default function DinoMetasRoletaPanel() {
   const [modalBonusAberto, setModalBonusAberto] = useState(false)
   const [formBonus, setFormBonus] = useState({ profissionalId: '', motivo: 'Destaque no atendimento e vendas' })
   const [salvandoBonus, setSalvandoBonus] = useState(false)
+  const [profSelecionadoDetalhes, setProfSelecionadoDetalhes] = useState(null)
+  const [modalProfAberto, setModalProfAberto] = useState(false)
 
   async function carregarDados() {
     setCarregando(true)
@@ -319,6 +321,11 @@ export default function DinoMetasRoletaPanel() {
                   <article
                     key={prof.profissionalId}
                     className={`dino-barbeiro-card ${temGiros ? 'has-spins' : ''}`}
+                    onClick={() => {
+                      setProfSelecionadoDetalhes(prof);
+                      setModalProfAberto(true);
+                    }}
+                    style={{ cursor: 'pointer' }}
                   >
                     {/* Topo do Card */}
                     <div className="dino-barbeiro-top">
@@ -649,6 +656,38 @@ export default function DinoMetasRoletaPanel() {
             </form>
           </div>
         </div>
+      )}
+
+      {modalProfAberto && profSelecionadoDetalhes && (
+        <Modal title={`Detalhes - ${profSelecionadoDetalhes.nome}`} onClose={() => setModalProfAberto(false)} wide>
+          <div style={{ padding: 20 }}>
+            <h4 style={{ marginBottom: 12 }}>Serviços Realizados Hoje ({profSelecionadoDetalhes.dia.servicosLista?.length || 0})</h4>
+            {(!profSelecionadoDetalhes.dia.servicosLista || profSelecionadoDetalhes.dia.servicosLista.length === 0) ? (
+              <p style={{ color: 'var(--muted)' }}>Nenhum serviço realizado hoje.</p>
+            ) : (
+              <table className="dino-historico-table" style={{ marginBottom: 24 }}>
+                <thead>
+                  <tr>
+                    <th>Cliente</th>
+                    <th>Serviço</th>
+                    <th>Valor</th>
+                    <th>Tipo</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {profSelecionadoDetalhes.dia.servicosLista.map((srv, idx) => (
+                    <tr key={idx}>
+                      <td>{srv.cliente}</td>
+                      <td>{srv.nome}</td>
+                      <td>{fmtR(srv.valor)}</td>
+                      <td>{srv.extra ? <span className="dino-status-pill girado">Extra</span> : <span className="dino-status-pill entregue">Padrão</span>}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </Modal>
       )}
     </div>
   )
