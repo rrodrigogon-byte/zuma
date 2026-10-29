@@ -9,6 +9,7 @@ import {
   dataHoraCuiaba,
 } from './dino-gestao-ia.js';
 import { createWhatsappAiToolExecutor } from './core/whatsapp-ai-tools.js';
+import * as barbeariaErpKytto from './barbearia-erp-kytto.js';
 import { managementSnapshot, managementSystemPrompt } from './core/whatsapp-ai.js';
 
 const EMPRESA_DINO = 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
@@ -86,6 +87,11 @@ test('executarFerramentaGestao - consultar_faturamento_periodo apura faturamento
 });
 
 test('executarFerramentaGestao - consultar_desempenho_equipe filtra e lista profissionais', async () => {
+  // O teste monta a própria equipe: não depende de dados de produção no banco de teste.
+  const existentes = barbeariaErpKytto.listarProfissionais(EMPRESA_DINO).map((item) => item.nome);
+  for (const nome of ['Natani', 'Bruno']) {
+    if (!existentes.some((atual) => atual.includes(nome))) barbeariaErpKytto.criarProfissional(EMPRESA_DINO, { nome, ativo: true, percentualComissao: 45 });
+  }
   const resToda = await executarFerramentaGestao('consultar_desempenho_equipe', {}, {
     empresaId: EMPRESA_DINO,
     lojaId: LOJA_MATRIZ,

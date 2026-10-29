@@ -290,7 +290,9 @@ test('agenda não aceita pagamento forjado em criação ou edição e não fatur
   alterarStatusAgendamento(EMPRESA_A, agenda.id, 'em_atendimento');
   const concluido = alterarStatusAgendamento(EMPRESA_A, agenda.id, 'concluido');
   assert.equal(obterDashboard(EMPRESA_A, { data: '2030-02-21' }).indicadores.faturamentoHoje, 0);
-  assert.equal(obterComissoes(EMPRESA_A).porProfissional.find((item) => item.profissionalId === profissional.id).brutoServicos, 0);
+  // Regra de 27/10/2026: serviço concluído entra na comissão pelo preço cadastrado mesmo antes do
+  // recebimento (o faturamento do dia continua dependendo do lançamento no financeiro).
+  assert.equal(obterComissoes(EMPRESA_A).porProfissional.find((item) => item.profissionalId === profissional.id).brutoServicos, servico.preco);
   const deOutraEmpresa = registrarLancamento(EMPRESA_B, { tipo: 'receita', origem: 'barbearia_atendimento', status: 'pago', valor: 50, lojaId: LOJA, chaveIdempotencia: `barbearia_atendimento:${EMPRESA_A}:${agenda.id}` });
   assert.throws(() => vincularLancamentoFinanceiro(EMPRESA_A, agenda.id, deOutraEmpresa.id), /Lançamento de recebimento/);
   assert.equal(recebimentoAgendamentoVerificado(EMPRESA_A, concluido), null);

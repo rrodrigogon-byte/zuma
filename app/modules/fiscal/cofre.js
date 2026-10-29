@@ -11,12 +11,17 @@ const VERSAO = 'v1';
 
 export function chaveMestra(env = process.env) {
   const bruto = String(env.FISCAL_CERT_MASTER_KEY || '').trim();
-  if (bruto) {
-    const chave = /^[0-9a-f]{64}$/i.test(bruto) ? Buffer.from(bruto, 'hex') : Buffer.from(bruto, 'base64');
-    if (chave.length === 32) return chave;
-  }
-  const fallback = String(env.DATABASE_URL || env.JWT_SECRET || 'kytto-fallback-master-key-2026');
-  return crypto.createHash('sha256').update(fallback).digest();
+  if (!bruto) return null;
+  const chave = /^[0-9a-f]{64}$/i.test(bruto) ? Buffer.from(bruto, 'hex') : Buffer.from(bruto, 'base64');
+  return chave.length === 32 ? chave : null;
+}
+
+// Somente leitura: em 29/10/2026 o cofre chegou a gravar segredos com uma chave derivada
+// das variáveis do servidor (sem FISCAL_CERT_MASTER_KEY). Esses segredos continuam
+// abrindo, mas nada novo é gravado sem a chave mestra.
+function chaveLegadaDerivada(env = process.env) {
+  const origem = String(env.DATABASE_URL || env.JWT_SECRET || '').trim();
+  return origem ? crypto.createHash('sha256').update(origem).digest() : null;
 }
 
 export function cofreDisponivel(env = process.env) {
@@ -38,17 +43,24 @@ export function cifrar(conteudo, empresaId, env = process.env) {
   return `${VERSAO}:${iv.toString('base64')}:${c.getAuthTag().toString('base64')}:${dados.toString('base64')}`;
 }
 
+function abrir(chave, iv, tag, dados, empresaId) {
+  const d = crypto.createDecipheriv('aes-256-gcm', chave, Buffer.from(iv, 'base64'), { authTagLength: 16 });
+  d.setAAD(Buffer.from(String(empresaId)));
+  d.setAuthTag(Buffer.from(tag, 'base64'));
+  return Buffer.concat([d.update(Buffer.from(dados, 'base64')), d.final()]);
+}
+
 export function decifrar(guardado, empresaId, env = process.env, { comoTexto = true } = {}) {
-  const chave = exigirChave(env);
+  const principal = chaveMestra(env);
+  const legada = chaveLegadaDerivada(env);
+  if (!principal && !legada) exigirChave(env);
   const [versao, iv, tag, dados] = String(guardado || '').split(':');
   if (versao !== VERSAO || !iv || !tag || !dados) throw new ErroDominio('COFRE_CORROMPIDO', 'Segredo fiscal em formato desconhecido', 500);
-  try {
-    const d = crypto.createDecipheriv('aes-256-gcm', chave, Buffer.from(iv, 'base64'), { authTagLength: 16 });
-    d.setAAD(Buffer.from(String(empresaId)));
-    d.setAuthTag(Buffer.from(tag, 'base64'));
-    const saida = Buffer.concat([d.update(Buffer.from(dados, 'base64')), d.final()]);
-    return comoTexto ? saida.toString('utf8') : saida;
-  } catch {
-    throw new ErroDominio('COFRE_CHAVE_INVALIDA', 'Não foi possível abrir o segredo fiscal (chave mestra trocada ou dado de outra empresa).', 500);
+  for (const chave of [principal, legada].filter(Boolean)) {
+    try {
+      const saida = abrir(chave, iv, tag, dados, empresaId);
+      return comoTexto ? saida.toString('utf8') : saida;
+    } catch { /* tenta a próxima chave */ }
   }
+  throw new ErroDominio('COFRE_CHAVE_INVALIDA', 'Não foi possível abrir o segredo fiscal (chave mestra trocada ou dado de outra empresa).', 500);
 }

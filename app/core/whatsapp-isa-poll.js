@@ -154,7 +154,7 @@ async function lerMidia(parsed, item, { canal, fetchImpl, jaRecebido, entenderMi
   if (!['audio', 'image'].includes(parsed.reason)) return parsed;
   if (await jaRecebido(canal, parsed.externalId).catch(() => false)) return { ...parsed, duplicateHint: true };
   const lido = await entenderMidia(item, { fetchImpl, chatId: parsed.phone }).catch(() => ({ ok: false, code: 'MEDIA_ERROR' }));
-  if (!lido?.ok || !lido.text) return { ...parsed, ignored: false, reason: undefined, text: '[Falha ao baixar ou transcrever ' + parsed.reason + ']', mediaCode: lido?.code || 'MEDIA_ERROR' };
+  if (!lido?.ok || !lido.text) return { ...parsed, ignored: false, reason: undefined, midiaComFalha: parsed.reason, text: '[Falha ao baixar ou transcrever ' + parsed.reason + ']', mediaCode: lido?.code || 'MEDIA_ERROR' };
   return { ...parsed, ignored: false, reason: undefined, text: lido.text, media: parsed.reason };
 }
 
@@ -180,8 +180,9 @@ export async function runIsaPollPass({ fetchImpl, agora = Date.now(), instance: 
     if (resultado?.duplicate) { resumo.duplicadas += 1; return; }
     if (parsed.ignored) resumo.ignoradas += 1; else resumo.novas += 1;
     if (parsed.media) resumo.midiasLidas += 1;
-    if (parsed.media === 'audio' || parsed.reason === 'audio') resumo.audios += 1;
-    if (parsed.media === 'image' || parsed.reason === 'image') resumo.fotos += 1;
+    // Mídia que falhou ao baixar/transcrever segue para a IA, mas continua contando como áudio/foto.
+    if (parsed.media === 'audio' || parsed.reason === 'audio' || parsed.midiaComFalha === 'audio') resumo.audios += 1;
+    if (parsed.media === 'image' || parsed.reason === 'image' || parsed.midiaComFalha === 'image') resumo.fotos += 1;
     if (midiaLiberada && parsed.ignored && ['audio', 'image'].includes(parsed.reason)) {
       const access = chatbotBackendMode() === 'instancias'
         ? await autorizarSaida({ empresaId: canalDaPassada.empresa_id, lojaId: canalDaPassada.loja_id, canalId: canalDaPassada.id, instance: canalDaPassada.configuracao?.instance, number: parsed.phone })

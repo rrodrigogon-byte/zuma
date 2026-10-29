@@ -56,12 +56,15 @@ test('preço "a partir de"/"sob consulta", encaixe explícito e agenda sem aviso
     const login = await request(base, '/api/admin/login', { method: 'POST', body: JSON.stringify({ user: 'gestao@example.com', pass: senha }) });
     const headers = { Authorization: `Bearer ${login.body.token}` };
 
-    // Sob consulta pode ter preço zero; fixo continua exigindo preço positivo.
+    // Sob consulta e fixo podem ter preço zero (serviço/brinde gratuito, regra de 29/10/2026); negativo não.
     const consulta = await request(base, '/api/admin/barbearia/servicos', { method: 'POST', headers, body: JSON.stringify({ nome: 'Coloração', preco: 0, tipoPreco: 'sob_consulta', duracaoMinutos: 30 }) });
     assert.equal(consulta.response.status, 201, JSON.stringify(consulta.body));
     assert.equal(consulta.body.servico.tipoPreco, 'sob_consulta');
     const fixoZero = await request(base, '/api/admin/barbearia/servicos', { method: 'POST', headers, body: JSON.stringify({ nome: 'Corte zero', preco: 0 }) });
-    assert.equal(fixoZero.response.status, 400);
+    assert.equal(fixoZero.response.status, 201, JSON.stringify(fixoZero.body));
+    const negativo = await request(base, '/api/admin/barbearia/servicos', { method: 'POST', headers, body: JSON.stringify({ nome: 'Corte negativo', preco: -1 }) });
+    // Valor negativo nunca fica gravado (é normalizado para zero).
+    assert.ok(negativo.response.status === 400 || Number(negativo.body?.servico?.preco) === 0, JSON.stringify(negativo.body));
     const tipoErrado = await request(base, '/api/admin/barbearia/servicos', { method: 'POST', headers, body: JSON.stringify({ nome: 'Corte X', preco: 10, tipoPreco: 'promocional' }) });
     assert.equal(tipoErrado.response.status, 400);
     const aPartir = await request(base, '/api/admin/barbearia/servicos', { method: 'POST', headers, body: JSON.stringify({ nome: 'Prótese Capilar', preco: 1850, tipoPreco: 'a partir de', duracaoMinutos: 30 }) });
@@ -96,7 +99,7 @@ test('preço "a partir de"/"sob consulta", encaixe explícito e agenda sem aviso
     const publico = await request(base, '/api/publico/agendamento/pe-teste');
     assert.equal(publico.response.status, 200);
     const rotulos = Object.fromEntries((publico.body.servicos || []).map((item) => [item.nome, item.preco_rotulo.replace(/\s/g, ' ')]));
-    assert.deepEqual(rotulos, { 'Coloração': 'Sob consulta', Corte: 'R$ 50,00', 'Prótese Capilar': 'A partir de R$ 1.850,00' });
+    assert.deepEqual(rotulos, { 'Coloração': 'Sob consulta', Corte: 'R$ 50,00', 'Corte negativo': 'R$ 0,00', 'Corte zero': 'R$ 0,00', 'Prótese Capilar': 'A partir de R$ 1.850,00' });
 
     // Quem não é gestão não pode silenciar o aviso ao cliente.
     const loginStaff = await request(base, '/api/admin/login', { method: 'POST', body: JSON.stringify({ user: 'staff@example.com', pass: senha }) });

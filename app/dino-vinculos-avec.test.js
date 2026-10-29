@@ -13,3 +13,18 @@ test('nome do Avec liga ao cadastro do Kytto pelo nome social, com acento e caix
   assert.equal(profissionalKyttoDoAvec('Joao Victor Domingos Ruedel', equipe).id, 'prof-avec-20a2');
   assert.equal(profissionalKyttoDoAvec('Natani Minanis Dobler', equipe), null, 'sem cadastro correspondente, sem vínculo');
 });
+
+test('vínculo continua quando o cadastro do Kytto é renomeado (apelido ou nome completo)', () => {
+  const equipe = [
+    { id: 'p-nati', nome: 'Nati' },
+    { id: 'p-joao', nome: 'João Victor Domingos Ruedel' },
+    { id: 'p-dino', nome: 'Dino' },
+    { id: 'prof-avec-hist-y', nome: 'Natani Minanis Dobler' },
+  ];
+  assert.equal(profissionalKyttoDoAvec('NATANI MINANIS DOBLER', equipe).id, 'p-nati');
+  assert.equal(profissionalKyttoDoAvec('Joao Victor Domingos Ruedel', equipe).id, 'p-joao');
+  assert.equal(profissionalKyttoDoAvec('Guilherme Cunha Martins', equipe).id, 'p-dino');
+  // Nome social tem prioridade sobre apelido; ambiguidade não liga.
+  assert.equal(profissionalKyttoDoAvec('Natani Minanis Dobler', [...equipe, { id: 'p-natani', nome: 'Natani' }]).id, 'p-natani');
+  assert.equal(profissionalKyttoDoAvec('Natani Minanis Dobler', [{ id: 'a', nome: 'Nati' }, { id: 'b', nome: 'Naty' }]), null);
+});

@@ -81,7 +81,8 @@ export function listarCaixas(empresaId, filtros = {}) {
   const status = texto(filtros.status, 20).toLowerCase();
   return Object.values(storeEmpresa(empresaId, false).caixas)
     .filter((item) => item.empresaId === String(empresaId))
-    .filter((item) => !data || item.data === data || item.status === 'aberto')
+    // Caixa esquecido aberto aparece nos dias seguintes até ser fechado (nunca em dias antes da abertura).
+    .filter((item) => !data || item.data === data || (item.status === 'aberto' && String(item.data || '') <= data))
     .filter((item) => !dataInicio || item.data >= dataInicio)
     .filter((item) => !dataFim || item.data <= dataFim)
     .filter((item) => !status || item.status === status)

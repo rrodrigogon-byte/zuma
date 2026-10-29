@@ -141,7 +141,8 @@ test('polling: áudio novo vira texto transcrito na fila; repetido não paga Gem
     const canal = { id: 'canal-dino', empresa_id: 'e', loja_id: 'l' };
 
     const primeira = await runIsaPollPass({ fetchImpl, agora: AGORA, canal, ingest, enviar, autorizarSaida: async () => ({ ok: true }), comTrava: false, jaRecebido, entenderMidia });
-    assert.equal(primeira.novas, 2);
+    // Regra de 28/10/2026: mídia que falhou também segue para a IA (como aviso de falha), em vez de resposta fixa.
+    assert.equal(primeira.novas, 3);
     assert.equal(primeira.midiasLidas, 2);
     assert.equal(primeira.audios, 2);
     assert.equal(primeira.fotos, 1);
@@ -151,13 +152,16 @@ test('polling: áudio novo vira texto transcrito na fila; repetido não paga Gem
     assert.equal(voz.media, 'audio');
     assert.match(voz.externalId, /^api:5565999990010:wa-voz:/);
     assert.equal(recebidos.find((r) => r.phone === '5565999990011').text, `${MEDIA_PREFIX.image} Degradê alto com topete.`);
-    assert.deepEqual(enviados, [{ number: '5565999990012', text: AUDIO_REPLY }], 'só o áudio ilegível recebe a resposta fixa');
+    const ruim = recebidos.find((r) => r.phone === '5565999990012');
+    assert.equal(ruim.ignored, false);
+    assert.match(ruim.text, /Falha ao baixar ou transcrever audio/);
+    assert.deepEqual(enviados, [], 'a IA responde o áudio ilegível; não há mais resposta fixa');
 
     const segunda = await runIsaPollPass({ fetchImpl, agora: AGORA + 5000, canal, ingest, enviar, autorizarSaida: async () => ({ ok: true }), comTrava: false, jaRecebido, entenderMidia });
     assert.equal(segunda.novas, 0);
     assert.equal(segunda.duplicadas, 3);
     assert.equal(chamadasMidia, 3, 'nenhuma nova chamada ao Gemini para mensagens já recebidas');
-    assert.equal(enviados.length, 1);
+    assert.equal(enviados.length, 0);
   });
 });
 

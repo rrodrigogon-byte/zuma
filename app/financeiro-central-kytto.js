@@ -866,7 +866,9 @@ export function fecharDia(empresaOuOpcoes, data, usuario = 'sistema@kytto.local'
 export function listarFechamentos(empresaId, opcoes = {}) {
   const empresa = idEscopo(empresaId);
   const lojaId = idEscopo(opcoes.lojaId);
-  return Object.values(storeEmpresa(empresa).fechamentos)
+  // Leitura não cria a estrutura da empresa (consultas não devem gravar nada).
+  const existente = db().financeiroKytto?.empresas?.[empresa || EMPRESA_LEGADO];
+  return Object.values(existente?.fechamentos || {})
     .filter((item) => item.empresaId === empresa && (!lojaId || item.lojaId === lojaId))
     .sort((a, b) => String(b.data).localeCompare(String(a.data)))
     .map((item) => clone(item));

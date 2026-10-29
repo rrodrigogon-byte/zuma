@@ -175,7 +175,10 @@ export function apurarDesempenhoEquipe(empresaId, { dataIso = dataIsoCuiaba(), i
   for (const emp of equivalentes) {
     try {
       const profs = barbeariaErpKytto.listarProfissionais(emp, { incluirInativos: false });
-      for (const p of profs) {
+      // listarProfissionais devolve os registros do banco: trabalha numa cópia para o
+      // nome de exibição (Nati, Ester, Dino…) nunca renomear o cadastro gravado.
+      for (const original of profs) {
+        const p = { ...original };
         
         const nomeChave = (p.nome || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
         if (!nomeChave) continue;

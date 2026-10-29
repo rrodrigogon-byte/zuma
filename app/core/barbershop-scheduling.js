@@ -166,7 +166,8 @@ export async function listSchedulingAvailability(context, input = {}) {
     
     // Para ser disponível em um horário, ao menos UM dos profissionais ativos precisa estar livre
     const available = availableProfIds.some(profId => {
-      return !occupiedRanges.some(range => range.profId === profId && timestamp < range.end && end > range.start);
+      // Bloqueio sem profissional (loja inteira) ocupa todos; os demais só o próprio profissional.
+      return !occupiedRanges.some(range => (!range.profId || String(range.profId) === String(profId)) && timestamp < range.end && end > range.start);
     });
     
     if (available) slots.push(`${hour}:${min}`);

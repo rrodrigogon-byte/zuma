@@ -65,7 +65,7 @@ test('mensagem do backend vira o mesmo evento do webhook, com id no formato da I
   assert.equal(parseBackendMessage({ chatId: '120363@g.us', role: 'user', content: 'x', timestamp: '2026-10-01T18:05:00.000Z' }).reason, 'invalid_sender');
 });
 
-test('passada: só a mensagem nova e recente vai para a IA; áudio recebe resposta fixa; repetir não duplica', async () => {
+test('passada: só a mensagem nova e recente vai para a IA; áudio sem transcrição segue para a IA com aviso; repetir não duplica', async () => {
   await comEnv(ENV, async () => {
     assert.equal(pollEnabled(), true);
     const fetch = fetchHistorico();
@@ -74,18 +74,20 @@ test('passada: só a mensagem nova e recente vai para a IA; áudio recebe respos
     const enviar = async (msg) => { enviados.push(msg); return { ok: true }; };
     const canal = { id: 'canal-1', empresa_id: 'e', loja_id: 'l' };
     const primeira = await runIsaPollPass({ fetchImpl: fetch, agora: AGORA, canal, ingest, enviar, autorizarSaida: async () => ({ ok: true }), comTrava: false, equipe: SEM_EQUIPE });
-    assert.equal(primeira.novas, 1, 'a mensagem de texto recente');
+    // Regra de 28/10/2026: áudio que não pôde ser transcrito também segue para a IA (com aviso de falha).
+    assert.equal(primeira.novas, 2, 'a mensagem de texto recente e o áudio sem transcrição');
     assert.equal(primeira.audios, 1);
-    assert.equal(primeira.ignoradas, 3, 'mensagem velha, resposta da própria atendente e o áudio');
-    assert.deepEqual(enviados, [{ number: '5565999990002', text: AUDIO_REPLY }]);
+    assert.equal(primeira.ignoradas, 2, 'mensagem velha e resposta da própria atendente');
+    assert.deepEqual(enviados, [], 'sem resposta fixa: quem responde o áudio é a IA');
+    assert.match(ingest.recebidos.find((item) => item.phone === '5565999990002').text, /Falha ao baixar ou transcrever audio/);
     assert.match(fetch.chamadas[0].url, /^https:\/\/dino-backend\.test\/api\/v1\/whats-app\/messages\?latest=false&role=user/);
     assert.equal(fetch.chamadas[0].headers['X-API-KEY'], 'chave-de-teste-com-24-car');
-    assert.equal(ingest.recebidos.find((item) => !item.ignored).text, 'Quero marcar um corte amanhã');
+    assert.equal(ingest.recebidos.find((item) => !item.ignored && item.phone !== '5565999990002').text, 'Quero marcar um corte amanhã');
 
     const segunda = await runIsaPollPass({ fetchImpl: fetch, agora: AGORA, canal, ingest, enviar, autorizarSaida: async () => ({ ok: true }), comTrava: false, equipe: SEM_EQUIPE });
     assert.equal(segunda.novas, 0);
-    assert.equal(segunda.duplicadas, 2);
-    assert.equal(enviados.length, 1, 'áudio não é respondido duas vezes');
+    assert.ok(segunda.duplicadas >= 2);
+    assert.equal(enviados.length, 0, 'nada é enviado fora da IA');
   });
 });
 

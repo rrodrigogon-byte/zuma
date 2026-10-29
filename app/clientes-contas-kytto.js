@@ -226,10 +226,14 @@ function camposRelacionamento(payload = {}, atual = {}) {
     const redes = payload.redesSociais && typeof payload.redesSociais === 'object' ? payload.redesSociais : {};
     const instagram = tem('instagram') ? payload.instagram : (Object.prototype.hasOwnProperty.call(redes, 'instagram') ? redes.instagram : atual.redesSociais?.instagram || atual.instagram);
     const linkedin = tem('linkedin') ? payload.linkedin : (Object.prototype.hasOwnProperty.call(redes, 'linkedin') ? redes.linkedin : atual.redesSociais?.linkedin || atual.linkedin);
+    // Valor digitado agora e inválido: avisa quem está editando (não apaga em silêncio).
+    // Valor antigo já gravado e inválido: não bloqueia a edição de outros campos.
+    const informouInstagram = tem('instagram') || Object.prototype.hasOwnProperty.call(redes, 'instagram');
+    const informouLinkedin = tem('linkedin') || Object.prototype.hasOwnProperty.call(redes, 'linkedin');
     let igNorm = '';
     let liNorm = '';
-    try { igNorm = normalizarInstagram(instagram); } catch {}
-    try { liNorm = normalizarLinkedin(linkedin); } catch {}
+    try { igNorm = normalizarInstagram(instagram); } catch (error) { if (informouInstagram) throw error; }
+    try { liNorm = normalizarLinkedin(linkedin); } catch (error) { if (informouLinkedin) throw error; }
     resultado.redesSociais = { instagram: igNorm, linkedin: liNorm };
     resultado.instagram = igNorm;
     resultado.linkedin = liNorm;
