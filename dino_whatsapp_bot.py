@@ -37,11 +37,11 @@ def fetch_clients(test_client_name=None):
                     c.telefone, 
                     MAX(o.criado_em) as last_visit,
                     (
-                        SELECT p.nome 
+                        SELECT p.nome_completo 
                         FROM agendamentos a 
                         JOIN usuarios p ON p.id = a.usuario_profissional_id
                         WHERE a.cliente_telefone = c.telefone OR (a.cliente_telefone IS NULL AND a.cliente_nome ILIKE c.nome)
-                        GROUP BY p.nome 
+                        GROUP BY p.nome_completo 
                         ORDER BY COUNT(*) DESC 
                         LIMIT 1
                     ) as fav_prof
@@ -62,11 +62,11 @@ def fetch_clients(test_client_name=None):
                     c.telefone, 
                     MAX(o.criado_em) as last_visit,
                     (
-                        SELECT p.nome 
+                        SELECT p.nome_completo 
                         FROM agendamentos a 
                         JOIN usuarios p ON p.id = a.usuario_profissional_id
                         WHERE a.cliente_telefone = c.telefone OR (a.cliente_telefone IS NULL AND a.cliente_nome ILIKE c.nome)
-                        GROUP BY p.nome 
+                        GROUP BY p.nome_completo 
                         ORDER BY COUNT(*) DESC 
                         LIMIT 1
                     ) as fav_prof
