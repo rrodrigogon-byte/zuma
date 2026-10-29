@@ -165,18 +165,38 @@ export function apurarDesempenhoEquipe(empresaId, { dataIso = dataIsoCuiaba(), i
 
   const semana = inicioSemanaIso && fimSemanaIso ? { inicioIso: inicioSemanaIso, fimIso: fimSemanaIso } : janelaSemana(dataIso);
 
+  
+  
   // Busca lista unificada de profissionais
   const profissionaisMap = new Map();
+  const nomesMap = new Map();
+  const profAlias = new Map(); // Mapa de ID real -> ID principal
+  
   for (const emp of equivalentes) {
     try {
       const profs = barbeariaErpKytto.listarProfissionais(emp, { incluirInativos: false });
       for (const p of profs) {
-        if (!profissionaisMap.has(p.id)) profissionaisMap.set(p.id, p);
+        const nomeChave = (p.nome || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        if (!nomeChave) continue;
+        
+        let targetId = p.id;
+        if (nomesMap.has(nomeChave)) {
+          targetId = nomesMap.get(nomeChave);
+        } else {
+          nomesMap.set(nomeChave, targetId);
+          profissionaisMap.set(targetId, p);
+        }
+        profAlias.set(p.id, targetId);
       }
     } catch {}
   }
 
+  // Helper para resolver o ID
+  const resolverProfId = (id) => profAlias.get(id) || id;
+
   // Estrutura de acumulação por profissional
+
+
   const stats = {};
   for (const [id, prof] of profissionaisMap.entries()) {
     stats[id] = {
@@ -222,8 +242,8 @@ export function apurarDesempenhoEquipe(empresaId, { dataIso = dataIsoCuiaba(), i
       let dataAgCuiaba = '';
       try { dataAgCuiaba = ag.dataHora ? dataIsoCuiaba(ag.dataHora) : ''; } catch {}
       const noDia = dataAg === dataIso || dataAg === dataIsoCuiaba(new Date().toISOString()) || dataAgCuiaba === dataIso;
-      if (noDia && ag.profissionalId && stats[ag.profissionalId]) {
-        const profId = ag.profissionalId;
+      if (noDia && ag.profissionalId && stats[resolverProfId(ag.profissionalId)]) {
+        const profId = resolverProfId(ag.profissionalId);
         stats[profId].dia.comandasAtendidas += 1;
         stats[profId].dia.servicosTotal += 1;
         stats[profId].semana.servicosTotal += 1;
@@ -288,7 +308,7 @@ const rawCmd = cmd.fechadaEm || cmd.atualizadoEm || cmd.criadoEm || '';
       // Se há mais de 1 serviço na comanda, do 2º em diante é extra
       // OU se item.extra === true OU categoria/nome indica adicional
       itensServico.forEach((item, index) => {
-        const profId = item.profissionalId || cmd.profissionalId;
+        const profId = resolverProfId(item.profissionalId || cmd.profissionalId);
         if (!profId || !stats[profId]) return;
 
         const ehExtra = Boolean(
