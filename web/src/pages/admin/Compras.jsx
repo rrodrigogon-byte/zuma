@@ -47,6 +47,27 @@ export default function Compras() {
   const [importandoIA, setImportandoIA] = useState(false)
   const fileInputRef = useRef(null)
 
+  
+  const [sincronizandoSEFAZ, setSincronizandoSEFAZ] = useState(false);
+
+  const handleSincronizarSefaz = async () => {
+    setSincronizandoSEFAZ(true);
+    toast('Conectando ao webservice da SEFAZ Nacional... isso pode levar alguns segundos.', 'info');
+    try {
+      const res = await api.post('/api/v1/compras/sincronizar-sefaz');
+      if (res.sucesso) {
+        toast(`Sincronização concluída! ${res.result.mensagem}`, 'success');
+        carregar();
+      } else {
+        toast(res.erro || 'Falha ao sincronizar com SEFAZ.', 'error');
+      }
+    } catch (err) {
+      toast(err.message || 'Erro ao comunicar com o servidor.', 'error');
+    } finally {
+      setSincronizandoSEFAZ(false);
+    }
+  };
+
   const handleImportNF = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;

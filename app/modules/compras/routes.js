@@ -4,6 +4,8 @@
  */
 import { processarNFAi } from './importador-nf.js';
 import express from 'express';
+import { sincronizarDFeSefaz } from '../fiscal/dist-dfe.js';
+
 
 import { authMiddleware, requirePermission } from '../../core/auth.js';
 import { tenantMiddleware } from '../../core/tenant.js';
@@ -42,6 +44,16 @@ router.post('/importar-nf', express.json({ limit: '10mb' }), requirePermission('
     if (!base64) return res.status(400).json({ sucesso: false, erro: 'Arquivo não fornecido.' });
     
     const result = await processarNFAi(req.tenantId, req.user.id, base64, mimeType, isXml);
+    res.json({ sucesso: true, result });
+  } catch (e) {
+    res.status(400).json({ sucesso: false, erro: e.message });
+  }
+});
+
+
+router.post('/sincronizar-sefaz', requirePermission('compras:edit'), async (req, res) => {
+  try {
+    const result = await sincronizarDFeSefaz(req.tenantId, req.user.id);
     res.json({ sucesso: true, result });
   } catch (e) {
     res.status(400).json({ sucesso: false, erro: e.message });
