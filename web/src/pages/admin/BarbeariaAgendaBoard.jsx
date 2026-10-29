@@ -69,7 +69,7 @@ function eventoPosicao(item, grade, alturaSlot) {
 
 export default function BarbeariaAgendaBoard({ data, configuracao = {}, agendamentos = [], profissionais = [], bloqueios = [], onDateChange, onNew, onOpenAppointment }) {
   const [intervaloManual, setIntervaloManual] = useState(null)
-  const profissionaisAtivos = useMemo(() => profissionais.filter((item) => item.ativo !== false && !item.removidoEm && !item.excluido), [profissionais])
+  const profissionaisAtivos = useMemo(() => profissionais.filter((item) => item.ativo !== false), [profissionais])
   const grade = useMemo(() => gradeDaUnidade(configuracao, intervaloManual), [configuracao, intervaloManual])
   const alturaSlot = grade.intervalo <= 15 ? 36 : grade.intervalo <= 30 ? 46 : 56
   const colunas = useMemo(() => {
@@ -152,7 +152,7 @@ export default function BarbeariaAgendaBoard({ data, configuracao = {}, agendame
             ))}
           </div>
           {colunas.map((coluna) => { const trabalhaHoje = coluna.id === '__sem_profissional__' || !coluna.diasTrabalho.length || coluna.diasTrabalho.includes(diaDaSemana); return <div key={coluna.id} style={{ ...styles.timelineColumn, opacity: trabalhaHoje ? 1 : .68 }}>
-            {linhas.slice(0, -1).map((minutos) => <button key={minutos} type="button" onClick={() => onPickSlot ? onPickSlot(coluna.id, minutos) : null} style={{ height: alturaSlot, borderBottom: '1px solid var(--line)', borderTop: minutos % 60 === 0 ? '2px solid var(--line)' : '1px dashed color-mix(in srgb, var(--line) 40%, transparent)', display: 'block', width: '100%', background: 'transparent', cursor: onPickSlot ? 'pointer' : 'default', textAlign: 'left' }} />)}
+            {linhas.slice(0, -1).map((minutos) => <div key={minutos} style={{ height: alturaSlot, borderBottom: '1px solid var(--line)', borderTop: minutos % 60 === 0 ? '2px solid var(--line)' : '1px dashed color-mix(in srgb, var(--line) 40%, transparent)' }} />)}
             {bloqueios.filter((item) => !item.profissionalId || item.profissionalId === coluna.id).map((bloqueio) => { const posicao = eventoPosicao({ dataHora: bloqueio.inicio, duracaoMinutos: (new Date(bloqueio.fim).valueOf() - new Date(bloqueio.inicio).valueOf()) / 60000 }, grade, alturaSlot); return <div key={bloqueio.id} style={{ ...styles.blocked, top: posicao.top, height: posicao.height }} title={bloqueio.titulo}>{bloqueio.titulo}</div> })}
             {!trabalhaHoje && <div style={styles.offDayOverlay}>Folga do atendente<br /><small>{dataLonga(data)}</small></div>}
             {(porColuna.get(coluna.id) || []).map((item) => { const posicao = eventoPosicao(item, grade, alturaSlot); const status = STATUS[item.statusVisual] || STATUS[item.status] || STATUS.agendado; return <button key={item.id} type="button" onClick={() => onOpenAppointment(item)} style={{ ...styles.event, top: posicao.top, height: posicao.height, borderLeftColor: status.color, background: `${status.color}18` }} title={`${item.clienteNome || 'Cliente'} · ${item.servicoNome || 'Serviço'}`}><strong>{item.clienteNome || 'Cliente sem nome'}</strong><span>{item.servicoNome || 'Serviço não informado'}</span><small>{horaLabel(minutosDoDia(item.dataHora))} · {item.duracaoMinutos || grade.intervalo} min · {moeda(item.valor)}</small><small style={{ fontWeight: 800, color: status.color }}>{status.label}</small></button> })}

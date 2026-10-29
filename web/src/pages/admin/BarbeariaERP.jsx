@@ -3982,40 +3982,20 @@ export default function BarbeariaERP() {
         )}
 
         {/* Agenda Visual Clean e Independente no Padrão Google Agenda / Avec */}
-        {agendaModo === "board" && !profissionalFiltro ? (
-          <BarbeariaAgendaBoard
-            data={dataSelecionada}
-            configuracao={configuracao}
-            agendamentos={agendamentos}
-            profissionais={atendentesAtivos}
-            bloqueios={bloqueios}
-            onDateChange={setDataSelecionada}
-            onNew={abrirNovoAgendamento}
-            onOpenAppointment={conferirComandaDoAtendimento}
-            onPickSlot={(profId, minutos) => {
-              // Converte minutos para string HH:MM local
-              const dataFormat = new Date(dataSelecionada + 'T00:00:00-04:00'); // Fixo MT para montar string local
-              const hora = String(Math.floor(minutos / 60)).padStart(2, '0') + ':' + String(minutos % 60).padStart(2, '0');
-              setFormAgenda(prev => ({ ...prev, profissionalId: profId, hora, data: dataSelecionada }));
-              setModal({ tipo: 'novoAgendamento' });
-            }}
-          />
-        ) : (
-          <BarbeariaAgendaPeriodo
-            profissionais={atendentesAtivos}
-            servicos={servicos}
-            profissionalId={profissionalFiltro}
-            onProfissionalChange={setProfissionalFiltro}
-            onConferirComanda={conferirComandaDoAtendimento}
-            onOpenAppointment={conferirComandaDoAtendimento}
-            onPickSlot={abrirAgendamentoNoHorario}
-            refreshKey={agendaRevisao}
-            dataSelecionada={dataSelecionada}
-            onDateChange={setDataSelecionada}
-            statusFiltro={statusFiltro}
-            onNewAppointment={abrirNovoAgendamento}
-          />
-        )}
+        <BarbeariaAgendaPeriodo
+          profissionais={atendentesAtivos}
+          servicos={servicos}
+          profissionalId={profissionalFiltro}
+          onProfissionalChange={setProfissionalFiltro}
+          onConferirComanda={conferirComandaDoAtendimento}
+          onOpenAppointment={conferirComandaDoAtendimento}
+          onPickSlot={abrirAgendamentoNoHorario}
+          refreshKey={agendaRevisao}
+          dataSelecionada={dataSelecionada}
+          onDateChange={setDataSelecionada}
+          statusFiltro={statusFiltro}
+          onNewAppointment={abrirNovoAgendamento}
+        />
       </div>
     );
   }
