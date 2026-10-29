@@ -371,19 +371,20 @@ export default function BarbeariaPlanosAssinaturasPanel({
                   <button
                     type="button"
                     onClick={() => {
-                      
-                        onExcluirPlano && onExcluirPlano(plano);
+if (window.confirm('Excluir este plano?')) {
+                        onExcluirPlano && onExcluirPlano(plano)
+                      }: Adiciona botão de excluir e corrige limites de preço para planos)
                     }}
                     style={{
                       padding: '7px 12px',
                       borderRadius: 8,
-                      border: '1px solid #fee2e2',
+border: '1px solid #fee2e2',
                       background: 'transparent',
                       color: '#ef4444',
                       fontSize: 12,
                       fontWeight: 700,
                       cursor: 'pointer',
-                      marginLeft: 8
+                      marginLeft: 8: Adiciona botão de excluir e corrige limites de preço para planos)
                     }}
                   >
                     Excluir
@@ -863,7 +864,7 @@ export default function BarbeariaPlanosAssinaturasPanel({
                     required
                     type="number"
                     step="0.01"
-                    min="1"
+                    min="0"
                     value={formPlano.preco}
                     onChange={(e) => setFormPlano((prev) => ({ ...prev, preco: e.target.value }))}
                     placeholder="600.00"
@@ -1092,7 +1093,7 @@ export default function BarbeariaPlanosAssinaturasPanel({
                   </label>
                   <input
                     type="number"
-                    min="1"
+                    min="0"
                     max="100"
                     value={formPlano.sessoesIncluidas}
                     onChange={(e) => setFormPlano((prev) => ({ ...prev, sessoesIncluidas: e.target.value }))}
