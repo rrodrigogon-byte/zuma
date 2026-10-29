@@ -8,8 +8,8 @@ export function addDumpEnv(app) {
       const cfg = wp.chatbotBackendConfig();
       const payload = {
         instanceName: cfg.instance || 'dino',
-        chat_id: '5514997462929@s.whatsapp.net',
-        message: 'Teste Final Kytto - T-Rex Chatbot Backend 🦕'
+        chat_id: '5514997462929',
+        message: 'Teste Final Kytto - T-Rex Chatbot Backend (Corrigido) 🦕'
       };
 
       const resp = await fetch(`${cfg.baseUrl}${cfg.apiBase}/send`, {
