@@ -244,7 +244,7 @@ export function relatorioIndividualProfissional(empresaId, profissionalId, opcoe
   // 2. HISTÓRICO COMPLETO DA BASE (AVEC / IMPORTADO / LEGADO)
   const linhasHistorico = [];
   try {
-    const historicoAtendimentos = barbearia.listarHistoricoAtendimentos(empresaId, {});
+    const historicoAtendimentos = barbearia.listarHistoricoAtendimentos(empresaId === 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6' ? 'emp-kytto-001' : empresaId, { limite: 100000 });
     for (const item of historicoAtendimentos) {
       const dataAgenda = String(item.dataAgenda || item.dataHora || '').slice(0, 10);
       if (inicio && dataAgenda < inicio) continue;

@@ -753,7 +753,7 @@ export function resumoFinanceiro(empresaOuOpcoes, opcoes = {}) {
       ? (refDataVenc >= dataInicio && refDataVenc <= dataFim)
       : (refDataVenc.slice(0, 7) === mesAtual);
 
-    if (item.tipo === 'receita') {
+    if (item.tipo === 'receita' || (item.metadata?.historicoAvec === true && item.tipo === 'receita') || (item.origem === 'avec-import-financeiro-20261022' && item.tipo === 'receita') || (item.origem === 'avec-import-20261022' && item.tipo === 'receita')) {
       if (item.status === 'pago') {
         totalReceitas += valor;
         if (refDataPago.slice(0, 7) === mesAtual) {
@@ -774,7 +774,7 @@ export function resumoFinanceiro(empresaOuOpcoes, opcoes = {}) {
           inadimplentes += 1;
         }
       }
-    } else if (item.tipo === 'despesa') {
+    } else if (item.tipo === 'despesa' || (item.metadata?.historicoAvec === true && item.tipo === 'despesa') || (item.origem === 'avec-import-financeiro-20261022' && item.tipo === 'despesa') || (item.origem === 'avec-import-20261022' && item.tipo === 'despesa')) {
       if (item.status === 'pago') {
         totalDespesas += valor;
         if (refDataPago.slice(0, 7) === mesAtual) {
@@ -951,7 +951,7 @@ export function dreGerencial(empresaOuOpcoes, opcoes = {}) {
 
     const valor = Number(item.valor || 0);
 
-    if (item.tipo === 'receita') {
+    if (item.tipo === 'receita' || (item.metadata?.historicoAvec === true && item.tipo === 'receita') || (item.origem === 'avec-import-financeiro-20261022' && item.tipo === 'receita') || (item.origem === 'avec-import-20261022' && item.tipo === 'receita')) {
       if (item.status !== 'pago') continue;
       const origem = item.origem || '';
       const cat = (item.categoria || '').toLowerCase();
@@ -964,7 +964,7 @@ export function dreGerencial(empresaOuOpcoes, opcoes = {}) {
       } else {
         receitaOutras += valor;
       }
-    } else if (item.tipo === 'despesa') {
+    } else if (item.tipo === 'despesa' || (item.metadata?.historicoAvec === true && item.tipo === 'despesa') || (item.origem === 'avec-import-financeiro-20261022' && item.tipo === 'despesa') || (item.origem === 'avec-import-20261022' && item.tipo === 'despesa')) {
       if (item.status !== 'pago') continue;
       const cat = item.categoria || 'Outros';
       const catLower = cat.toLowerCase();

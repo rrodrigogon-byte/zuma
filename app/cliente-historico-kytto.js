@@ -86,15 +86,15 @@ export function linhasDeConsumo({ comandas = [], vendas = [], profissionais = []
   }
   for (const h of historicoAvec) {
     linhas.push({
-      em: h.dataAgenda || '', origem: 'comanda', origemId: h.id || 'avec', tipo: 'servico', chave: `servico:${h.servicoNome || 'Serviço'}`, nome: h.servicoNome || 'Serviço',
-      quantidade: 1, valor: dinheiro(h.valor), abatidoPlano: 0, plano: '', profissional: h.profissionalNome || '',
+      em: h.dataAgenda || h.data || '', origem: 'comanda', origemId: h.id || h.comanda || 'avec', tipo: h.frenteAtuacao === 'Loja' || h.frenteAtuacao === 'Revenda' || h.frenteAtuacao === 'Produtos' || String(h.frenteAtuacao).toLowerCase().includes('produto') || String(h.frenteAtuacao).toLowerCase().includes('revenda') || String(h.servicoNome || h.servico || '').toLowerCase().includes('produto') ? 'produto' : 'servico', chave: `${h.frenteAtuacao === 'Loja' || h.frenteAtuacao === 'Revenda' || h.frenteAtuacao === 'Produtos' || String(h.frenteAtuacao).toLowerCase().includes('produto') || String(h.frenteAtuacao).toLowerCase().includes('revenda') || String(h.servicoNome || h.servico || '').toLowerCase().includes('produto') ? 'produto' : 'servico'}:${h.servicoNome || h.servico || 'Serviço'}`, nome: h.servicoNome || h.servico || 'Serviço',
+      quantidade: 1, valor: dinheiro(h.valor), abatidoPlano: 0, plano: h.pacote ? 'Pacote' : '', profissional: h.profissionalNome || h.profissional || '',
     });
   }
   return linhas.sort((a, b) => String(b.em).localeCompare(String(a.em)));
 }
 
 /** Resumo do consumo: totais por tipo, últimos 12 meses mês a mês e itens mais consumidos. */
-export function resumoConsumo(linhas, { hoje, fuso = FUSO_PADRAO, comandasAbertas = 0 } = {}) {
+export function resumoConsumo(linhas, { hoje, fuso = FUSO_PADRAO, comandasAbertas = 0, overrideVisitas = null } = {}) {
   const porTipo = { servico: 0, produto: 0, loja: 0 };
   let abatido = 0;
   const visitas = new Set();
@@ -120,8 +120,8 @@ export function resumoConsumo(linhas, { hoje, fuso = FUSO_PADRAO, comandasAberta
   const total = dinheiro(porTipo.servico + porTipo.produto + porTipo.loja);
   const doze = dinheiro(meses.reduce((s, m) => s + m.valor, 0));
   return {
-    total, abatidoPlano: dinheiro(abatido), compras: visitas.size,
-    ticketMedio: visitas.size ? dinheiro(total / visitas.size) : 0,
+    total, abatidoPlano: dinheiro(abatido), compras: overrideVisitas || visitas.size,
+    ticketMedio: overrideVisitas ? dinheiro(total / overrideVisitas) : (visitas.size ? dinheiro(total / visitas.size) : 0),
     ultimos12Meses: doze, mediaMensal12: dinheiro(doze / 12),
     porTipo: { servicos: dinheiro(porTipo.servico), revenda: dinheiro(porTipo.produto), lojaDino: dinheiro(porTipo.loja) },
     meses, comandasAbertas,
@@ -188,11 +188,13 @@ const quandoDias = (dias) => (dias === 0 ? 'hoje' : dias === 1 ? 'amanhã' : `em
  */
 export function montarHistoricoCliente({
   cliente = null, comandas = [], vendas = [], comandasEmpresa = [], profissionais = [], produtos = [], planosAtivos = [],
-  coberturas = [], historicoAvec = [], perfil360 = {}, agora = new Date(), fuso = FUSO_PADRAO, maskPhone = (v) => v,
+  coberturas = [], historicoAvec = [], overrideVisitas = null, perfil360 = {}, agora = new Date(), fuso = FUSO_PADRAO, maskPhone = (v) => v,
 } = {}) {
   const hoje = diaLocal(agora, fuso);
   const linhas = linhasDeConsumo({ comandas, vendas, profissionais, historicoAvec });
-  const consumo = resumoConsumo(linhas, { hoje, fuso, comandasAbertas: comandas.filter((c) => !FATURADAS.has(c.status) && c.status !== 'cancelada').length });
+  const ovVisitas = overrideVisitas || ((historicoAvec || []).length > 0 && typeof historicoAvec[0] === 'object' && historicoAvec[0].totalVisitas ? historicoAvec[0].totalVisitas : null);
+  const countVisitasAvec = historicoAvec.length;
+  const consumo = resumoConsumo(linhas, { hoje, fuso, comandasAbertas: comandas.filter((c) => !FATURADAS.has(c.status) && c.status !== 'cancelada').length, overrideVisitas: ovVisitas || countVisitasAvec });
   const familia = cliente ? familiaParaFicha(cliente, hoje, maskPhone) : [];
   const preferencias = cliente ? preferenciasParaFicha(cliente, profissionais) : null;
   const redes = cliente?.redesSociais || {};

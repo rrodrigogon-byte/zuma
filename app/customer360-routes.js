@@ -128,6 +128,7 @@ export function registerCustomer360Routes(app, deps) {
     const appointments = [];
     const comandas = [];
     const retailSales = [];
+    let historicalCustomer = null;
     const historicalAppointments = [];
     const servicesMap = new Map();
     const productsMap = new Map();
@@ -160,6 +161,7 @@ export function registerCustomer360Routes(app, deps) {
       comandas,
       retailSales,
       historicalAppointments,
+      historicalCustomer,
       services: Array.from(servicesMap.values()),
       products: Array.from(productsMap.values()),
       storeId: lojaId,
@@ -264,7 +266,7 @@ export function registerCustomer360Routes(app, deps) {
         produtos: loaded.local.products,
         planosAtivos: barbeariaErpKytto.listarPlanos(empresaId, {}),
         coberturas,
-        historicoAvec: loaded.local.historicalAppointments || [],
+        historicoAvec: loaded.local.historicalAppointments || [], overrideVisitas: loaded.local.historicalCustomer ? loaded.local.historicalCustomer.totalVisitas : null,
         perfil360: profile,
         maskPhone,
       });
