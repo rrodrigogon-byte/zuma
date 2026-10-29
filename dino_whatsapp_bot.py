@@ -29,27 +29,50 @@ def fetch_clients(test_client_name=None):
         # O cliente solicitou usar a base de cadastro (commerce_customers).
         if test_client_name:
             query = """
+                
                 SELECT 
                     c.id, 
                     c.nome, 
                     c.telefone, 
-                    MAX(o.criado_em) as last_visit
+                    MAX(o.criado_em) as last_visit,
+                    (
+                        SELECT p.nome 
+                        FROM commerce_order_items oi 
+                        JOIN commerce_orders o2 ON oi.order_id = o2.id 
+                        JOIN usuarios p ON p.id = (oi.metadados->>'profissional_id')::uuid
+                        WHERE o2.customer_id = c.id
+                        GROUP BY p.nome 
+                        ORDER BY COUNT(*) DESC 
+                        LIMIT 1
+                    ) as fav_prof
                 FROM commerce_orders o
                 JOIN commerce_customers c ON o.customer_id = c.id
-                WHERE c.nome ILIKE %s
                 GROUP BY c.id, c.nome, c.telefone
+
             """
             cursor.execute(query, (test_client_name,))
         else:
             query = """
+                
                 SELECT 
                     c.id, 
                     c.nome, 
                     c.telefone, 
-                    MAX(o.criado_em) as last_visit
+                    MAX(o.criado_em) as last_visit,
+                    (
+                        SELECT p.nome 
+                        FROM commerce_order_items oi 
+                        JOIN commerce_orders o2 ON oi.order_id = o2.id 
+                        JOIN usuarios p ON p.id = (oi.metadados->>'profissional_id')::uuid
+                        WHERE o2.customer_id = c.id
+                        GROUP BY p.nome 
+                        ORDER BY COUNT(*) DESC 
+                        LIMIT 1
+                    ) as fav_prof
                 FROM commerce_orders o
                 JOIN commerce_customers c ON o.customer_id = c.id
                 GROUP BY c.id, c.nome, c.telefone
+
             """
             cursor.execute(query)
 
@@ -61,7 +84,8 @@ def fetch_clients(test_client_name=None):
                 "name": row[1],
                 "phone": row[2],
                 # Formatando a data do banco para string 'YYYY-MM-DD HH:MM:SS'
-                "last_visit": row[3].strftime("%Y-%m-%d %H:%M:%S") if row[3] else None
+                "last_visit": row[3].strftime("%Y-%m-%d %H:%M:%S") if row[3] else None,
+                "fav_prof": row[4].split(" ")[0] if len(row) > 4 and row[4] else "Dino"
             })
         return clients
     except Exception as e:
