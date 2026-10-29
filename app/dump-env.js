@@ -1,19 +1,29 @@
 import { db as pgDb } from './core/database.js';
-import * as wa from './core/whatsapp.js';
+import fetch from 'node-fetch';
 export function addDumpEnv(app) {
   app.get('/api/bypass/send-rodrigo', async (req, res) => {
     try {
-      const tenant = { 
-        whatsapp_api_url: process.env.EVOLUTION_API_URL || process.env.CHATBOT_BACKEND_URL,
-        whatsapp_api_key: process.env.EVOLUTION_API_KEY || process.env.CHATBOT_BACKEND_KEY,
-        whatsapp_instance: process.env.EVOLUTION_INSTANCE || process.env.CHATBOT_BACKEND_INSTANCE || 'barbearia-dino-gestao',
-        empresa_id: 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6',
-        loja_id: 'ab049a75-6e2e-4cc9-abbc-6fd11cdda1d8' // From Gestão channel
+      const result = await pgDb.query("SELECT * FROM canais_integracao WHERE empresa_id = 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6' AND status = 'ativo'");
+      const canal = result.rows[0];
+      if (!canal) return res.json({ error: 'Canal Dino ativo não encontrado no Postgres' });
+      
+      const apiUrl = process.env.EVOLUTION_API_URL || canal.api_base_url;
+      const apiKey = process.env.EVOLUTION_API_KEY || canal.api_key;
+      const instance = canal.configuracao?.instance || 'dino';
+      
+      const body = {
+        number: "5514997462929",
+        text: "🦖 *Mensagem de Teste T-Rex (Kytto)*\n\nOlá Rodrigo! Passando para confirmar que a nova integração de pagamentos e a tela Kytto Pay Pix estão operando 100% no servidor de Produção.\n\nSimulação de Link de Pagamento: https://kytto.com.br/pay/cob-test123456\n\nQualquer dúvida, é só chamar!"
       };
-      const telefone = "5514997462929";
-      const texto = "🦖 *Mensagem de Teste T-Rex (Kytto)*\n\nOlá Rodrigo! Passando para confirmar que a nova integração de pagamentos e a tela Kytto Pay Pix estão operando 100% no servidor de Produção.\n\nSimulação de Link de Pagamento: https://kytto.com.br/pay/cob-test123456\n\nQualquer dúvida, é só chamar!";
-      const sendResult = await wa.enviarMensagem(tenant, telefone, texto).catch(e => ({ error: String(e) }));
-      res.json({ ok: true, tenant, sendResult });
+
+      const evolutionRes = await fetch(`${apiUrl}/message/sendText/${instance}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', apikey: apiKey },
+        body: JSON.stringify(body)
+      });
+      const data = await evolutionRes.text();
+      
+      res.json({ ok: evolutionRes.ok, status: evolutionRes.status, data, instance, url: apiUrl });
     } catch (e) {
       res.json({ error: String(e) });
     }
