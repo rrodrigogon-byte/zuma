@@ -1,7 +1,7 @@
 import { db } from './db.js';
 import { limparTelefone } from './core/whatsapp-ai-normalize.js';
 export function addDumpEnv(app) {
-  app.get('/api/bypass/test-trex', async (req, res) => {
+  app.get('/api/bypass/test-trex-3', async (req, res) => {
     try {
       const { empresaId = 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6', nome = 'rodrigo ribeiro goncalves' } = req.query;
       let clienteEncontrado = null;
@@ -32,7 +32,7 @@ export function addDumpEnv(app) {
       const tenant = {
          whatsapp_api_url: process.env.EVOLUTION_API_URL,
          whatsapp_api_key: process.env.EVOLUTION_API_KEY,
-         whatsapp_instance: 'dino' // USE THE ACTUAL ACTIVE INSTANCE!
+         whatsapp_instance: 'dino'
       };
       const sendResult = await wa.enviarMensagem(tenant, telefone, texto).catch(e => ({ error: e.message }));
       res.json({ ok: true, clienteEncontrado, telefone, texto, sendResult });
