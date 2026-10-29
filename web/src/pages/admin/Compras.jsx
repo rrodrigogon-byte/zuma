@@ -2,7 +2,7 @@
  * Compras & Fornecedores — KYTTO Clube
  * Pedidos de Compra, Cotações, Fornecedores, Recebimento
  */
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { api, fmtR, fmtDate } from '../../lib/api'
 import { useToast } from '../../hooks/useToast'
 
@@ -42,6 +42,50 @@ export default function Compras() {
     } catch (e) { toast(e.message, 'error') }
     finally { setLoading(false) }
   }, [])
+
+  
+  const [importandoIA, setImportandoIA] = useState(false)
+  const fileInputRef = useRef(null)
+
+  const handleImportNF = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    setImportandoIA(true);
+    toast('Analisando a Nota Fiscal com Inteligência Artificial... isso pode levar alguns segundos.', 'info');
+    
+    try {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = async () => {
+        const base64Data = reader.result.split(',')[1];
+        const isXml = file.name.toLowerCase().endsWith('.xml');
+        
+        try {
+          const res = await api.post('/api/v1/compras/importar-nf', {
+            base64: base64Data,
+            mimeType: file.type || 'application/octet-stream',
+            isXml
+          });
+          
+          if (res.sucesso) {
+            toast(`Nota Fiscal importada! ${res.result.itensImportados} itens registrados e lançados no estoque.`, 'success');
+            carregar();
+          } else {
+            toast(res.erro || 'Falha ao processar nota.', 'error');
+          }
+        } catch (err) {
+          toast(err.message || 'Erro ao comunicar com a IA.', 'error');
+        } finally {
+          setImportandoIA(false);
+          if (fileInputRef.current) fileInputRef.current.value = '';
+        }
+      };
+    } catch (err) {
+      toast('Falha ao ler arquivo', 'error');
+      setImportandoIA(false);
+    }
+  }
 
   useEffect(() => { carregar() }, [carregar])
 

@@ -2,7 +2,9 @@
  * Rotas: Compras e Gestão de Fornecedores
  * SetPoint Ultra
  */
+import { processarNFAi } from './importador-nf.js';
 import express from 'express';
+
 import { authMiddleware, requirePermission } from '../../core/auth.js';
 import { tenantMiddleware } from '../../core/tenant.js';
 import * as svc from './service.js';
@@ -31,6 +33,19 @@ router.put('/fornecedores/:id', requirePermission('compras:edit'), async (req, r
     const fornecedor = await svc.atualizarFornecedor(req.params.id, req.tenantId, req.body);
     res.json({ sucesso: true, fornecedor });
   } catch (e) { res.status(400).json({ sucesso: false, erro: e.message }); }
+});
+
+
+router.post('/importar-nf', express.json({ limit: '10mb' }), requirePermission('compras:edit'), async (req, res) => {
+  try {
+    const { base64, mimeType, isXml } = req.body;
+    if (!base64) return res.status(400).json({ sucesso: false, erro: 'Arquivo não fornecido.' });
+    
+    const result = await processarNFAi(req.tenantId, req.user.id, base64, mimeType, isXml);
+    res.json({ sucesso: true, result });
+  } catch (e) {
+    res.status(400).json({ sucesso: false, erro: e.message });
+  }
 });
 
 // ── PEDIDOS DE COMPRA ─────────────────────────────────────────────────────────
