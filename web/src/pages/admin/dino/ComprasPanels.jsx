@@ -1,6 +1,8 @@
 // Compras e estoque da revenda: fornecedores, pedidos de compra com recebimento,
 // entrada por XML de NF-e (prévia antes de lançar), sugestão de reposição e curva ABC.
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useConfiguracoesComerciais } from '../../../contexts/ConfiguracoesComerciaisContext'
+import { useToast } from '../../../hooks/useToast'
 import { api, fmtR } from '../../../lib/api'
 
 const card = { background: 'var(--card)', border: '1px solid var(--line)', borderRadius: 14, padding: 20 }
@@ -116,6 +118,8 @@ function NotaEntrada({ produtos, pedidosAbertos, onLancada }) {
       {ocupado ? 'Lendo…' : 'Escolher XML da NF-e'}
       <input type="file" accept=".xml,text/xml,application/xml" onChange={lerArquivo} style={{ display: 'none' }} />
     </label>
+    <button type="button" style={{ ...btn, display: 'inline-flex', marginTop: 12, marginLeft: 10, alignItems: 'center', gap: 6 }} onClick={handleImportNF}>Importar NF Automática (IA)</button>
+    <button type="button" style={{ ...btn, display: 'inline-flex', marginTop: 12, marginLeft: 10, alignItems: 'center', gap: 6 }} onClick={handleSefazSync}>Sincronizar com SEFAZ</button>
     {arquivo && <span style={{ ...sub, marginLeft: 10 }}>{arquivo}</span>}
     <Aviso texto={erro} />
     {resultado && <div style={{ marginTop: 12, color: tons.bom, fontSize: 13 }}><strong>NF-e {resultado.numero} lançada.</strong> {resultado.entradas.length} item(ns) no estoque{resultado.ignorados.length ? `, ${resultado.ignorados.length} ignorado(s)` : ''}{resultado.repetida ? ' (já tinha sido lançada antes)' : ''}.</div>}
