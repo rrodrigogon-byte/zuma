@@ -297,9 +297,26 @@ export async function updateMembership(trx, contextInput, membershipId, input = 
   if (input.mfaObrigatorio !== undefined) { values.push(input.mfaObrigatorio === true); sets.push(`mfa_obrigatorio = $${values.length}`); }
   if (input.roleId !== undefined) { values.push(role.id); sets.push(`role_id = $${values.length}`); }
   if (expiration.provided) { values.push(expiration.value); sets.push(`expires_at = $${values.length}::timestamptz`); }
-  if (!sets.length) throw new CommerceError('nenhum campo de membership informado', 'NO_CHANGES');
+  if (!sets.length && !input.nome && !input.email && !input.senha) throw new CommerceError('nenhum campo informado', 'NO_CHANGES');
 
-  const result = await trx.query(`UPDATE commerce_memberships SET ${sets.join(', ')}, atualizado_em = CURRENT_TIMESTAMP WHERE empresa_id = $1 AND id = $2 RETURNING *`, values);
+  
+  if (input.nome || input.email || input.senha) {
+    const userSets = [];
+    const userValues = [current.usuario_id];
+    if (input.nome) { userValues.push(input.nome); userSets.push(`nome_completo = $${userValues.length}`); }
+    if (input.email) { userValues.push(input.email); userSets.push(`email = $${userValues.length}`); }
+    if (input.senha) {
+      const bcrypt = require('bcrypt');
+      userValues.push(await bcrypt.hash(input.senha, 10));
+      userSets.push(`senha_hash = $${userValues.length}`);
+    }
+    if (userSets.length) {
+      await trx.query(`UPDATE usuarios SET ${userSets.join(', ')}, data_atualizacao = CURRENT_TIMESTAMP WHERE id = $1`, userValues);
+    }
+  }
+
+  const result = sets.length ? await trx.query(`UPDATE commerce_memberships SET ${sets.join(', ')}, atualizado_em = CURRENT_TIMESTAMP WHERE empresa_id = $1 AND id = $2 RETURNING *`, values) : currentResult;
+
   await trx.query(
     `INSERT INTO commerce_audit_logs (empresa_id, loja_id, usuario_id, entidade, entidade_id, acao, antes, depois)
      VALUES ($1, $2, $3, 'membership', $4, 'updated', $5::jsonb, $6::jsonb)`,

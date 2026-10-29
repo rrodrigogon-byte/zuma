@@ -176,16 +176,32 @@ export function apurarDesempenhoEquipe(empresaId, { dataIso = dataIsoCuiaba(), i
     try {
       const profs = barbeariaErpKytto.listarProfissionais(emp, { incluirInativos: false });
       for (const p of profs) {
+        
         const nomeChave = (p.nome || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
         if (!nomeChave) continue;
         
+        let aliasManual = nomeChave;
+        if (aliasManual.includes('ester') || aliasManual.includes('steffany')) aliasManual = 'ester';
+        if (aliasManual.includes('natani') || aliasManual.includes('nati')) aliasManual = 'natani';
+        if (aliasManual.includes('bruno')) aliasManual = 'bruno';
+        if (aliasManual.includes('joao')) aliasManual = 'joao';
+        if (aliasManual.includes('guilherme') || aliasManual.includes('dino')) aliasManual = 'dino';
+
         let targetId = p.id;
-        if (nomesMap.has(nomeChave)) {
-          targetId = nomesMap.get(nomeChave);
+        if (nomesMap.has(aliasManual)) {
+          targetId = nomesMap.get(aliasManual);
         } else {
-          nomesMap.set(nomeChave, targetId);
+          nomesMap.set(aliasManual, targetId);
+          // Substitui o nome de exibição pelo "preferido" se for um desses
+          if (aliasManual === 'dino') p.nome = 'Dino';
+          if (aliasManual === 'ester') p.nome = 'Ester';
+          if (aliasManual === 'natani') p.nome = 'Nati';
+          if (aliasManual === 'bruno') p.nome = 'Bruno';
+          if (aliasManual === 'joao') p.nome = 'João';
+          
           profissionaisMap.set(targetId, p);
         }
+
         profAlias.set(p.id, targetId);
       }
     } catch {}
@@ -355,7 +371,7 @@ const rawCmd = cmd.fechadaEm || cmd.atualizadoEm || cmd.criadoEm || '';
 
       // Produtos na comanda
       for (const prod of itensProduto) {
-        const profId = prod.profissionalId || cmd.profissionalId;
+        const profId = resolverProfId(prod.profissionalId || cmd.profissionalId);
         if (!profId || !stats[profId]) continue;
 
         const qtd = Math.max(1, Number(prod.quantidade || 1));

@@ -118,7 +118,8 @@ export default function CommerceUsersPanel({ memberships = [], roles = [], store
   function beginEdit(item) {
     setInviting(false); setCreating(false); setEditing(item); setError(''); setNotice('')
     setForm({ usuarioId: item.usuario_id, roleId: item.role_id, lojaId: item.loja_id || '', ativo: item.ativo,
-      expiresAt: localDateTimeInputValue(item.expires_at) })
+      expiresAt: localDateTimeInputValue(item.expires_at),
+      nome: item.nome_completo || '', email: item.email || '', senha: '' })
   }
   function update(key, value) { setForm(previous => ({ ...previous, [key]: value })) }
   function expiresAtValue() {
@@ -134,7 +135,7 @@ export default function CommerceUsersPanel({ memberships = [], roles = [], store
     if (!empresaId || !storefrontId) { setError('Selecione uma empresa e uma vitrine para salvar o acesso.'); return }
     submitting.current = true; submittingScope.current = requestScope; setError(''); setBusy(true)
     try {
-      const payload = { empresaId, storefrontId, roleId: form.roleId, ativo: form.ativo, expiresAt: expiresAtValue() }
+      const payload = { empresaId, storefrontId, roleId: form.roleId, ativo: form.ativo, expiresAt: expiresAtValue(), nome: form.nome, email: form.email, senha: form.senha }
       if (editing) await api.patch(`/api/admin/commerce/users/memberships/${editing.id}${scope}`, payload)
       else await api.post(`/api/admin/commerce/users/memberships${scope}`, { ...payload, usuarioId: form.usuarioId, lojaId: form.lojaId || null })
       if (currentScope.current !== requestScope) return
@@ -193,7 +194,23 @@ export default function CommerceUsersPanel({ memberships = [], roles = [], store
     {(creating || editing) && <div className="ecommerce-admin-overlay" role="dialog" aria-modal="true" aria-label={editing ? 'Editar acesso' : 'Adicionar acesso'}><form className="ecommerce-admin-modal commerce-users-editor" onSubmit={save}><button type="button" className="ecommerce-admin-close" disabled={busy} onClick={() => { setCreating(false); setEditing(null); setError('') }} aria-label="Fechar">×</button><h2>{editing ? 'Editar acesso' : 'Adicionar usuário Commerce existente'}</h2><p className="commerce-admin-help">Este formulário só lista identidades Commerce já pertencentes à empresa selecionada; contas do painel legado não aparecem. Para um novo usuário ou operador, use o convite nominal e aguarde o titular criar sua senha. Não compartilhe senhas pelo painel.</p>
       {error && <p role="alert" className="commerce-users-error">{error}</p>}
       {creating && <><label>Buscar usuário Commerce desta empresa<input type="search" minLength={3} disabled={busy} value={query} onChange={event => { setQuery(event.target.value); update('usuarioId', ''); setError('') }} placeholder="Nome ou e-mail (mínimo 3 caracteres)" /></label>{searching && <p role="status">Buscando usuários…</p>}{!searching && query.trim().length >= 3 && !candidates.length && !error && <p role="status">Nenhum usuário Commerce encontrado nesta empresa. Uma conta criada no painel legado não pode ser vinculada por esta busca.</p>}<label>Usuário existente<select required disabled={busy || searching} value={form.usuarioId} onChange={event => update('usuarioId', event.target.value)}><option value="">Selecione um usuário</option>{candidates.map(candidate => <option key={candidate.id} value={candidate.id}>{candidate.nome || candidate.nome_completo || 'Usuário'} · {candidate.email}</option>)}</select></label><label>Unidade<select disabled={busy} value={form.lojaId} onChange={event => update('lojaId', event.target.value)}><option value="">Todas as unidades desta empresa</option>{stores.map(store => <option key={store.id} value={store.id}>{store.nome}</option>)}</select></label></>}
-      <label>Papel<select required disabled={busy} value={form.roleId} onChange={event => update('roleId', event.target.value)}><option value="">Selecione um papel</option>{roleOptions.map(role => <option key={role.id} value={role.id}>{role.nome}</option>)}</select></label><label>Validade do acesso<input type="datetime-local" disabled={busy} value={form.expiresAt} onChange={event => update('expiresAt', event.target.value)} /><small>Deixe vazio para não expirar; o servidor bloqueia acessos vencidos.</small></label><label><input type="checkbox" disabled={busy} checked={form.ativo} onChange={event => update('ativo', event.target.checked)} /> Acesso ativo</label>
+      
+      {editing && (
+        <fieldset style={{ border: '1px solid #dce7e2', borderRadius: '9px', padding: '12px', marginTop: '12px', marginBottom: '12px' }}>
+          <legend style={{ fontSize: '13px', fontWeight: 'bold', color: '#17312c', padding: '0 6px' }}>Perfil do Usuário</legend>
+          <p style={{ fontSize: '11px', color: '#50635e', marginBottom: '8px' }}>As alterações abaixo afetarão o acesso deste usuário em todas as empresas onde ele estiver vinculado.</p>
+          <label style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '12px', color: '#50635e' }}>Nome Completo
+            <input type="text" disabled={busy} value={form.nome || ''} onChange={e => update('nome', e.target.value)} />
+          </label>
+          <label style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '8px', fontSize: '12px', color: '#50635e' }}>E-mail
+            <input type="email" disabled={busy} value={form.email || ''} onChange={e => update('email', e.target.value)} />
+          </label>
+          <label style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '8px', fontSize: '12px', color: '#50635e' }}>Nova Senha
+            <input type="password" disabled={busy} value={form.senha || ''} onChange={e => update('senha', e.target.value)} placeholder="Deixe em branco para não alterar" />
+          </label>
+        </fieldset>
+      )}
+<label>Papel<select required disabled={busy} value={form.roleId} onChange={event => update('roleId', event.target.value)}><option value="">Selecione um papel</option>{roleOptions.map(role => <option key={role.id} value={role.id}>{role.nome}</option>)}</select></label><label>Validade do acesso<input type="datetime-local" disabled={busy} value={form.expiresAt} onChange={event => update('expiresAt', event.target.value)} /><small>Deixe vazio para não expirar; o servidor bloqueia acessos vencidos.</small></label><label><input type="checkbox" disabled={busy} checked={form.ativo} onChange={event => update('ativo', event.target.checked)} /> Acesso ativo</label>
       <div className="ecommerce-admin-modal-actions"><button type="button" disabled={busy} onClick={() => { setCreating(false); setEditing(null); setError('') }}>Cancelar</button><button type="submit" className="ecommerce-admin-button primary" disabled={busy || (creating && !form.usuarioId)}>{busy ? 'Salvando…' : 'Salvar acesso'}</button></div></form></div>}
   </section>
 }
