@@ -59,7 +59,7 @@ const DinoRecuperacaoAvecPanel = lazy(
 );
 const FiscalPanel = lazy(() => import("./fiscal/Fiscal"));
 const DinoBusinessDashboard = lazy(() => import("./DinoBusinessDashboard"));
-const DinoDashboardKytto = lazy(() => import("./dino/DinoDashboardKytto"));
+const DinoDashboardKytto = lazy(() => import("./dino/DinoDashboardKytto?v=2"));
 const DinoCampaignsPanel = lazy(() => import("./DinoCampaignsPanel"));
 const DinoEquipeDesempenho = lazy(() => import("./DinoEquipeDesempenho"));
 const BIBarbearia = lazy(() => import("./dino/BIBarbearia"));
@@ -13487,3 +13487,4 @@ const styles = {
     whiteSpace: "nowrap",
   },
 };
+// Force Cache Invalidation V2
