@@ -1846,3 +1846,21 @@
   border-radius: 50%;
   background-color: #ef4444;
 }
+
+.dino-cal-slot-busy-pill[data-color="purple"] {
+  border-left-color: #8e44ad;
+  background: #f3e8ff;
+}
+.dino-cal-slot-busy-pill[data-color="green"] {
+  border-left-color: #14b87a;
+  background: #dcfce7;
+}
+.dino-cal-slot-busy-pill[data-color="red"] {
+  border-left-color: #e05c5c;
+  background: #fee2e2;
+}
+
+.dino-cal-event-card[data-status="comanda_aberta"] {
+  border-left-color: #e05c5c;
+  background: color-mix(in srgb, #e05c5c 5%, var(--card));
+}
