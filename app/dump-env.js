@@ -1,25 +1,20 @@
-import * as dinoCarteiraClientes from './dino-carteira-clientes.js';
+import { db } from './db.js';
+import * as barbeariaErpKytto from './barbearia-erp-kytto.js';
+import { empresasEquivalentes } from './core/legacy-commerce-scope.js';
 export function addDumpEnv(app) {
-  app.get('/api/bypass/carteira-clientes', (req, res) => {
+  app.get('/api/bypass/db-check', (req, res) => {
     try {
-      const resultado = dinoCarteiraClientes.listarCarteiraClientes("dino-barbearia", {
-        profissionalId: req.query.profissionalId || '',
-        lojaId: null,
-        busca: req.query.busca || '',
-        filtroRetorno: req.query.filtroRetorno || 'todos',
-        limite: Number(req.query.limite) || 300,
-      });
-      res.json({ ok: true, data: resultado });
+      const root = db();
+      const empresas = empresasEquivalentes("dino-barbearia");
+      let count = 0;
+      const counts = {};
+      for (const emp of empresas) {
+         counts[emp] = Object.keys(root.clientesKytto?.empresas?.[emp]?.clientes || {}).length;
+         count += counts[emp];
+      }
+      res.json({ ok: true, empresas, count, counts });
     } catch (error) {
       res.status(400).json({ error: String(error) });
-    }
-  });
-  app.get('/api/bypass/carteira-clientes/resumo', (req, res) => {
-    try {
-      const resumo = dinoCarteiraClientes.resumoCarteirasProfissionais("dino-barbearia", { lojaId: null });
-      res.json({ result: resumo });
-    } catch(error) {
-      res.status(400).json({error: String(error)});
     }
   });
 }
