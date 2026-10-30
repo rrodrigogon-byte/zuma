@@ -1902,3 +1902,5 @@ export function friendlyWhen(date, time, now = new Date()) {
   const prefix = date === today ? 'hoje, ' : date === addDaysIso(today, 1) ? 'amanhã, ' : '';
   return `${prefix}${weekday} ${date.slice(8, 10)}/${date.slice(5, 7)} às ${String(time).slice(0, 5)}`;
 }
+
+export { toolProducts };

@@ -3,7 +3,7 @@ import { estadoEmpresa } from '../barbearia-erp-kytto.js';
 import { save } from '../db.js';
 import { Router } from 'express';
 export const router = Router();
-router.get('/rename-prof', (req, res) => {
+router.get('/rename-prof', async (req, res) => {
   try {
     const estado = estadoEmpresa('dino', false);
     let count = 0;
