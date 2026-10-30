@@ -735,7 +735,8 @@ export default function Sidebar() {
   return (
     <>
       {/* Hamburger button — mobile only */}
-      {isMobile && (
+      {/* Com a gaveta aberta o ☰ some: o ✕ da própria gaveta fecha, e o botão não cobre a logo. */}
+      {isMobile && !open && (
         <button
           className="hamburger"
           style={{ display: 'flex' }}
