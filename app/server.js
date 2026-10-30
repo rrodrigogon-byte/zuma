@@ -1409,33 +1409,6 @@ if(process.env.COMMERCE_CORE_ENABLED === '1'){
     }
   });
 
-  
-
-    
-    // Obter um servico valido
-    const servicos = await listServices(scope);
-    const servico = servicos.find(s => s.nome.toLowerCase().includes('corte')) || servicos[0];
-    
-    // Testar sugerir_proximos_horarios
-    const resultHorarios = await executor('sugerir_proximos_horarios', { serviceId: servico.id, professionalId: 'qualquer', period: 'qualquer', days: 2 });
-    
-    // Testar buscar_produtos (comprar perfume)
-    const resultProdutos = await executor('buscar_produtos', { query: 'perfume' });
-    
-    // Pegar o agendador de lembretes
-    const { db } = await import('./core/database.js');
-    const logs = null;
-    
-    res.json({
-      ok: true,
-      servicoId: servico.id,
-      resultadoHorarios: resultHorarios,
-      resultadoProdutos: resultProdutos
-    });
-  } catch(e) {
-    res.json({ error: e.message, stack: e.stack });
-  }
-});
 
 app.use('/api/webhooks', createWhatsappAiWebhookRouter());
   app.use('/api/webhooks', createCommerceWebhookRouter());
