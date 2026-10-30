@@ -52,7 +52,8 @@ test('produto único consultado já inclui ficha; repetir apresentação não du
 });
 test('rejeita produto não consultado e exige escolher variante quando há mais de uma', async t => {
   catalog(t, [{ ...product, variants: [...product.variants, { ...product.variants[0], id: 'v2' }] }]);
-  const execute = createWhatsappAiToolExecutor({ ...context });
+  // Conversa nova: nada buscado antes (o catálogo da conversa vale entre mensagens da mesma sessão).
+  const execute = createWhatsappAiToolExecutor({ ...context, sessionId: '44444444-4444-4444-8444-000000000260' });
   await assert.rejects(execute('apresentar_produto', { productId: 'p1' }), { code: 'PRODUCT_NOT_CONSULTED' });
   await execute('buscar_produtos', { query: 'Perfume' });
   await assert.rejects(execute('apresentar_produto', { productId: 'p1' }), { code: 'VARIANT_REQUIRED' });
@@ -70,8 +71,11 @@ test('novo executor/reserva não reutiliza fichas de tentativa anterior', async 
   const reserve = { ...ctx };
   const execute = createWhatsappAiToolExecutor(reserve);
   assert.equal(reserve.productCards.size, 0);
-  await assert.rejects(execute('apresentar_produto', { productId: 'p1' }), { code: 'PRODUCT_NOT_CONSULTED' });
+  // O catálogo consultado continua valendo na mesma conversa; as fichas da tentativa anterior não.
+  await execute('apresentar_produto', { productId: 'p1' });
+  assert.equal(reserve.productCards.size, 1);
   assert.equal(ctx.productCards.size, 1);
+  assert.notEqual(reserve.productCards, ctx.productCards);
 });
 
 test('limita fichas por resposta sem descartar as já preparadas', async t => {

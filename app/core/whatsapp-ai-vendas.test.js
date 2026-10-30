@@ -93,8 +93,12 @@ test('produto inexistente ou sem estoque não entra no link', async t => {
     error => error instanceof WhatsappAiToolError && error.code === 'ITEM_UNAVAILABLE',
   );
   await assert.rejects(
+    () => createWhatsappAiToolExecutor(context)('link_carrinho', { items: [{ variantId: '55555555-5555-4555-8555-555555555555', quantity: 1 }] }),
+    error => error instanceof WhatsappAiToolError && error.code === 'ITEM_NOT_IDENTIFIED' && /NÃO é falta de estoque/.test(error.message),
+  );
+  await assert.rejects(
     () => createWhatsappAiToolExecutor(context)('link_carrinho', { items: [{ variantId: variantFrozen, quantity: 1 }] }),
-    error => error.code === 'ITEM_UNAVAILABLE',
+    error => error.code === 'ITEM_NOT_IDENTIFIED',
   );
 });
 
@@ -169,4 +173,74 @@ test('prompt permite pagar pelo WhatsApp só com o link do próprio pedido', () 
   const prompt = buildWhatsappAiSystemPrompt({ storeName: 'Stallone Nutre Sport' });
   assert.match(prompt, /pergunte Pix ou cartão e use link_pagamento_pedido/);
   assert.match(prompt, /o pagamento acontece na página segura do gateway/);
+});
+
+// 30/10 (Stallone): "Whey Protein Isolado 450g - Chocolate Branco" com 8 unidades. O cliente disse
+// "somente isso" e a IA respondeu "indisponível ou com estoque insuficiente": o id do produto não
+// fica no histórico e o modelo mandou o UUID da foto (o único visível no link).
+const produtoWhey = 'a2961324-a098-4485-8e55-52e1d5030734';
+const varianteWhey = '8b389565-83bb-4216-8e4f-5ecf3d7057dd';
+const fotoWhey = '49df14e4-08ff-5667-a2f5-c69d7fdc843f';
+
+function catalogoStallone(t, seen = []) {
+  process.env.WHATSAPP_AI_PUBLIC_URL = 'https://kytto.example.com';
+  t.after(() => { delete process.env.WHATSAPP_AI_PUBLIC_URL; });
+  const whey = product(produtoWhey, varianteWhey, { nome: 'Whey Protein Isolado 450g - Chocolate Branco', categoria: 'Whey', preco: 329, estoque: 8 });
+  const sache = product('c0f9a2de-3574-451a-8c08-09f3fae100b0', 'd71f3a4c-135c-478d-b15a-681d1512b211', { nome: 'Whey Protein Isolado Sache 4 Cx - Chocolate Branco', preco: 89, estoque: 8 });
+  t.mock.method(db, 'queryRead', async (sql, params) => {
+    seen.push({ sql, params });
+    if (sql.includes('FROM commerce_storefronts s') && sql.includes('JOIN lojas')) return { rows: [{ id: storefrontId, nome: 'Stallone', alias: 'stallone' }] };
+    if (sql.includes('FROM commerce_product_variants') && !sql.includes('jsonb_agg') && !sql.includes('commerce_product_media')) {
+      const ids = params[1];
+      return { rows: [whey, sache].flatMap(p => p.variants.filter(v => ids.includes(v.id) || ids.includes(p.id)).map(v => ({ id: v.id, product_id: p.id }))) };
+    }
+    if (sql.includes('FROM commerce_product_media m')) return { rows: params[1].includes(fotoWhey) ? [{ id: fotoWhey, variant_id: null, variantes: [varianteWhey] }] : [] };
+    if (sql.includes('COUNT(*)')) return { rows: [{ total: 2 }] };
+    if (sql.includes('jsonb_agg')) {
+      const wanted = sql.includes('fv.id = ANY(') ? params.find(Array.isArray) : null;
+      const termos = params.filter(v => typeof v === 'string' && v.startsWith('%')).map(v => v.slice(1, -1));
+      let rows = [whey, sache];
+      if (wanted) rows = rows.filter(p => p.variants.some(v => wanted.includes(v.id)));
+      for (const termo of termos) rows = rows.filter(p => p.nome.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').includes(termo));
+      return { rows };
+    }
+    throw new Error(`consulta inesperada: ${sql.slice(0, 80)}`);
+  });
+  t.mock.method(db, 'query', () => { throw new Error('não deve escrever'); });
+}
+
+test('id da foto no lugar da variante leva ao produto certo (não diz que está sem estoque)', async t => {
+  catalogoStallone(t);
+  const result = await createWhatsappAiToolExecutor(context)('link_carrinho', { items: [{ variantId: fotoWhey, quantity: 1 }] });
+  assert.equal(result.totalProdutos, 'R$ 329,00');
+  assert.match(result.linkCarrinho, new RegExp(varianteWhey));
+});
+
+test('nome do produto resolve a variante quando o id não vem', async t => {
+  catalogoStallone(t);
+  const result = await createWhatsappAiToolExecutor(context)('link_carrinho', { items: [{ productName: 'Whey Protein Isolado 450g - Chocolate Branco', quantity: 1 }] });
+  assert.equal(result.totalProdutos, 'R$ 329,00');
+  assert.match(result.linkCarrinho, new RegExp(varianteWhey));
+  // O modelo às vezes põe o nome no próprio campo do id.
+  const noId = await createWhatsappAiToolExecutor(context)('link_carrinho', { items: [{ variantId: 'Whey Protein Isolado 450g - Chocolate Branco', quantity: 1 }] });
+  assert.match(noId.linkCarrinho, new RegExp(varianteWhey));
+});
+
+test('nome ambíguo não escolhe sozinho e pede para buscar de novo', async t => {
+  catalogoStallone(t);
+  await assert.rejects(
+    () => createWhatsappAiToolExecutor(context)('link_carrinho', { items: [{ productName: 'chocolate branco', quantity: 1 }] }),
+    error => error.code === 'ITEM_NOT_IDENTIFIED',
+  );
+});
+
+test('o que foi buscado numa mensagem continua valendo na seguinte', async t => {
+  catalogoStallone(t);
+  const conversa = { ...context, sessionId: '99999999-0000-4000-8000-000000000030' };
+  await createWhatsappAiToolExecutor(conversa)('buscar_produtos', { query: 'whey chocolate branco' });
+  // Mensagem seguinte: executor novo, sem buscar de novo.
+  const ficha = await createWhatsappAiToolExecutor(conversa)('apresentar_produto', { productId: produtoWhey });
+  assert.equal(ficha.ok, true);
+  const outraConversa = { ...context, sessionId: '99999999-0000-4000-8000-000000000031' };
+  await assert.rejects(() => createWhatsappAiToolExecutor(outraConversa)('apresentar_produto', { productId: produtoWhey }), error => error.code === 'PRODUCT_NOT_CONSULTED');
 });

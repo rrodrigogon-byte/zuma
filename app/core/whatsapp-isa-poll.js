@@ -87,9 +87,30 @@ function sha(valor) {
 }
 
 /** Converte uma mensagem do histórico do backend no formato interno (o mesmo do webhook). */
+/**
+ * Voto numa enquete (a IA manda as opções como enquete, igual à Isa). O backend pode entregar
+ * o voto em campos próprios ou como conteúdo JSON; vira o texto da(s) opção(ões) escolhida(s).
+ */
+export function votoDaEnquete(item = {}) {
+  const nomes = (lista) => (Array.isArray(lista) ? lista : [])
+    .map((opcao) => texto(typeof opcao === 'string' ? opcao : (opcao?.name || opcao?.optionName || opcao?.text), 100))
+    .filter(Boolean);
+  let votos = nomes(item.selectedOptions || item.pollVote?.selectedOptions || item.vote?.selectedOptions || item.poll?.selectedOptions);
+  const tipo = String(item.messageType || '').toLowerCase().replace(/[^a-z]/g, '');
+  if (!votos.length && ['pollvote', 'voteupdate', 'pollupdate', 'pollresponse'].includes(tipo)) {
+    try {
+      const corpo = JSON.parse(String(item.content || ''));
+      votos = nomes(corpo?.selectedOptions || corpo?.votes || corpo?.options);
+    } catch {
+      // conteúdo já é o texto da opção
+    }
+  }
+  return votos.join(', ').slice(0, 300);
+}
+
 export function parseBackendMessage(item = {}, { agora = Date.now() } = {}) {
   const chatId = isaChatId(item.chatId);
-  const conteudo = texto(item.content);
+  const conteudo = votoDaEnquete(item) || texto(item.content);
   const quando = new Date(item.timestamp).valueOf();
   const base = { event: 'MESSAGES_UPSERT' };
   if (String(item.role || '').toLowerCase() !== 'user') return { ...base, ignored: true, reason: 'from_me' };

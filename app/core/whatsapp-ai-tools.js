@@ -336,6 +336,7 @@ async function toolProducts(context, args = {}) {
   const proximoOffset = offset + consumidos;
   const haMais = proximoOffset < totalCatalogo;
   for (const product of pagina) context.productCatalog?.set(product.id, product);
+  lembrarProdutos(context, pagina);
   if (query && offset === 0 && pagina.length === 1 && !haMais && pagina[0]?.variantes.length === 1) {
     const product = pagina[0];
     const variant = product.variantes[0];
@@ -376,6 +377,45 @@ async function toolPresentProduct(context, args = {}) {
   return { ok: true, fichaIncluidaPeloSistema: true, fotoDisponivel: Boolean(product.fotos?.length),
     formatoFoto: product.fotos?.length ? 'link_publico' : 'ausente',
     instruction: 'O sistema incluirá a ficha completa ao final da resposta. Não repita ficha, preço, descrição nem foto; responda apenas outras dúvidas do cliente. Não diga que enviou anexo.' };
+}
+
+/**
+ * Enquete do WhatsApp (o cliente toca na opção), como a Isa faz nas aprovações.
+ * 2 a 12 opções curtas e distintas; a pergunta vai no título da enquete.
+ */
+export function normalizarEnquete(raw = {}) {
+  const pergunta = sanitizeUntrustedBusinessText(cleanText(raw.pergunta || raw.question || raw.name, 255), 255);
+  const vistas = new Set();
+  const opcoes = [];
+  for (const item of Array.isArray(raw.opcoes || raw.options) ? (raw.opcoes || raw.options) : []) {
+    const texto = sanitizeUntrustedBusinessText(cleanText(item, 100), 100);
+    const chave = texto.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+    if (!texto || !chave || vistas.has(chave)) continue;
+    vistas.add(chave);
+    opcoes.push(texto);
+    if (opcoes.length === 12) break;
+  }
+  if (!pergunta || opcoes.length < 2) return null;
+  return { pergunta, opcoes };
+}
+
+/** Opções numeradas em texto: vale quando a linha não manda enquete (ou o envio falha). */
+export function enqueteEmTexto(enquete) {
+  const numeros = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟', '11.', '12.'];
+  return `${enquete.pergunta}\n${enquete.opcoes.map((opcao, i) => `${numeros[i]} ${opcao}`).join('\n')}\n_Responda com o número ou o nome da opção._`;
+}
+
+async function toolSendPoll(context, args = {}) {
+  contextScope(context);
+  const enquete = normalizarEnquete(args);
+  if (!enquete) throw new WhatsappAiToolError('a enquete precisa de uma pergunta e de 2 a 12 opções diferentes', 'POLL_INVALID');
+  if (context.poll) throw new WhatsappAiToolError('apenas uma enquete por resposta', 'POLL_LIMIT');
+  context.poll = enquete;
+  return {
+    ok: true,
+    opcoes: enquete.opcoes.length,
+    instruction: 'O sistema envia a enquete logo depois do seu texto. No texto, escreva só uma frase curta (sem repetir as opções nem numerar). Quando o cliente responder com o nome ou o número de uma opção, siga com essa escolha.',
+  };
 }
 
 async function toolServices(context) {
@@ -1012,11 +1052,69 @@ async function listSchedulingAvailability(scope, input = {}) {
   }
 }
 
+// O id interno do produto só aparece nos resultados das ferramentas, que não ficam no histórico
+// da conversa. Na mensagem seguinte o modelo pode mandar o NOME do produto ou um UUID que viu no
+// texto (ex.: o id da foto no link). O item aceita os dois e a resolução acontece em priceCartItems.
 function cartItemsFromArgs(rawItems) {
-  return Array.isArray(rawItems) ? rawItems.slice(0, 20).map(item => ({
-    variantId: ensureUuid(item?.variantId, 'variantId'),
-    quantity: Math.min(99, Math.max(1, Number.parseInt(String(item?.quantity || 1), 10) || 1)),
-  })) : [];
+  return Array.isArray(rawItems) ? rawItems.slice(0, 20).map(item => {
+    const raw = cleanText(item?.variantId, 160);
+    const temUuid = UUID_REGEX.test(raw);
+    const productName = cleanText(item?.productName || item?.nome || (temUuid ? '' : raw), 160);
+    if (!temUuid && productName.length < 3) throw new WhatsappAiToolError('variantId inválido', 'INVALID_ID');
+    return {
+      variantId: temUuid ? raw : '',
+      ...(productName ? { productName } : {}),
+      quantity: Math.min(99, Math.max(1, Number.parseInt(String(item?.quantity || 1), 10) || 1)),
+    };
+  }) : [];
+}
+
+// Memória curta do catálogo por conversa: o que buscar_produtos devolveu continua valendo nas
+// próximas mensagens (até 6 h), para apresentar_produto e o carrinho acharem o mesmo produto.
+const CATALOGO_CONVERSA_TTL_MS = 6 * 3600000;
+const CATALOGO_CONVERSA_MAX = 2000;
+const catalogoPorConversa = new Map();
+
+function chaveConversa(context = {}) {
+  const empresa = cleanText(context.empresaId, 60);
+  const conversa = cleanText(context.sessionId, 60) || cleanText(context.phone, 20).replace(/\D/g, '');
+  return empresa && conversa ? `${empresa}:${conversa}` : '';
+}
+
+function lembrarProdutos(context, produtos = []) {
+  const chave = chaveConversa(context);
+  if (!chave || !produtos.length) return;
+  const atual = catalogoPorConversa.get(chave);
+  const mapa = atual && Date.now() - atual.at < CATALOGO_CONVERSA_TTL_MS ? atual.produtos : new Map();
+  for (const produto of produtos) if (produto?.id) { mapa.delete(produto.id); mapa.set(produto.id, produto); }
+  while (mapa.size > 60) mapa.delete(mapa.keys().next().value);
+  catalogoPorConversa.delete(chave);
+  catalogoPorConversa.set(chave, { at: Date.now(), produtos: mapa });
+  while (catalogoPorConversa.size > CATALOGO_CONVERSA_MAX) catalogoPorConversa.delete(catalogoPorConversa.keys().next().value);
+}
+
+function produtosLembrados(context) {
+  const chave = chaveConversa(context);
+  const atual = chave ? catalogoPorConversa.get(chave) : null;
+  if (!atual || Date.now() - atual.at >= CATALOGO_CONVERSA_TTL_MS) return [];
+  return [...atual.produtos.entries()];
+}
+
+function nomeDeProduto(value) {
+  return String(value || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+}
+
+/** Uma única variante clara para o nome pedido (nome exato primeiro; senão, um só candidato). */
+function varianteDoNome(produtos, nome) {
+  const alvo = nomeDeProduto(nome);
+  if (!alvo) return '';
+  const variantesDe = (p) => (p.variantes || p.variants || []);
+  const exatos = produtos.filter(p => nomeDeProduto(p.nome) === alvo && variantesDe(p).length === 1);
+  if (exatos.length === 1) return variantesDe(exatos[0])[0].id;
+  const contem = produtos.filter(p => nomeDeProduto(p.nome).includes(alvo) && variantesDe(p).length === 1);
+  if (contem.length === 1) return variantesDe(contem[0])[0].id;
+  if (produtos.length === 1 && variantesDe(produtos[0]).length === 1) return variantesDe(produtos[0])[0].id;
+  return '';
 }
 
 /**
@@ -1024,21 +1122,58 @@ function cartItemsFromArgs(rawItems) {
  * aqui com o ID do produto"). Produto com uma única variante ativa: troca pelo id dela.
  * Altera os itens recebidos (o pedido grava o id certo).
  */
-async function resolveProductIdsToVariants(scope, items) {
-  const ids = [...new Set(items.map(item => item.variantId))];
-  if (!ids.length) return items;
-  const found = await db.queryRead(
-    `SELECT id, product_id FROM commerce_product_variants
-      WHERE empresa_id = $1 AND (id = ANY($2::uuid[]) OR product_id = ANY($2::uuid[])) AND ativo = true`,
-    [scope.empresaId, ids],
-  ).catch(() => ({ rows: [] }));
-  const variantIds = new Set(found.rows.map(row => row.id));
+async function resolveProductIdsToVariants(scope, items, { storefront = null, context = null } = {}) {
+  const ids = [...new Set(items.map(item => item.variantId).filter(Boolean))];
+  const variantIds = new Set();
   const byProduct = new Map();
-  for (const row of found.rows) byProduct.set(row.product_id, [...(byProduct.get(row.product_id) || []), row.id]);
+  if (ids.length) {
+    const found = await db.queryRead(
+      `SELECT id, product_id FROM commerce_product_variants
+        WHERE empresa_id = $1 AND (id = ANY($2::uuid[]) OR product_id = ANY($2::uuid[])) AND ativo = true`,
+      [scope.empresaId, ids],
+    ).catch(() => ({ rows: [] }));
+    for (const row of found.rows) {
+      variantIds.add(row.id);
+      byProduct.set(row.product_id, [...(byProduct.get(row.product_id) || []), row.id]);
+    }
+  }
   for (const item of items) {
-    if (variantIds.has(item.variantId)) continue;
+    if (!item.variantId || variantIds.has(item.variantId)) continue;
     const variants = byProduct.get(item.variantId) || [];
     if (variants.length === 1) item.variantId = variants[0];
+  }
+  // 30/10 (Stallone): o modelo mandou o id da FOTO (o único UUID visível no texto do link) e a
+  // venda travou com "indisponível". O id de mídia leva ao produto dela.
+  const semVariante = items.filter(item => item.variantId && !variantIds.has(item.variantId) && !byProduct.has(item.variantId));
+  if (semVariante.length) {
+    const midias = await db.queryRead(
+      `SELECT m.id, m.variant_id,
+              (SELECT array_agg(v.id) FROM commerce_product_variants v
+                WHERE v.empresa_id = m.empresa_id AND v.product_id = m.product_id AND v.ativo = true) AS variantes
+         FROM commerce_product_media m
+        WHERE m.empresa_id = $1 AND m.id = ANY($2::uuid[])`,
+      [scope.empresaId, [...new Set(semVariante.map(item => item.variantId))]],
+    ).catch(() => ({ rows: [] }));
+    const porMidia = new Map(midias.rows.map(row => [row.id, row]));
+    for (const item of semVariante) {
+      const midia = porMidia.get(item.variantId);
+      if (!midia) continue;
+      const ativas = Array.isArray(midia.variantes) ? midia.variantes : [];
+      if (midia.variant_id && ativas.includes(midia.variant_id)) item.variantId = midia.variant_id;
+      else if (ativas.length === 1) item.variantId = ativas[0];
+    }
+  }
+  // Sem id válido: o nome do produto, primeiro no que a conversa já viu, depois no catálogo.
+  const lembrados = context ? [...(context.productCatalog?.values() || [])] : [];
+  for (const item of items) {
+    const resolvido = item.variantId && (variantIds.has(item.variantId) || lembrados.some(p => (p.variantes || []).some(v => v.id === item.variantId)));
+    if (resolvido || !item.productName) continue;
+    const daConversa = varianteDoNome(lembrados, item.productName);
+    if (daConversa) { item.variantId = daConversa; continue; }
+    if (!storefront?.id) continue;
+    const achados = await listPublishedProducts({ empresaId: scope.empresaId }, { storefrontId: storefront.id, query: item.productName, limit: 8 }).catch(() => []);
+    const doCatalogo = varianteDoNome(achados, item.productName);
+    if (doCatalogo) item.variantId = doCatalogo;
   }
   return items;
 }
@@ -1047,10 +1182,12 @@ async function resolveProductIdsToVariants(scope, items) {
  * Preço e estoque reais dos itens pedidos, buscando exatamente as variantes do
  * carrinho (o catálogo pode ter centenas de produtos; não depende da 1ª página).
  */
-async function priceCartItems(scope, storefront, items) {
-  await resolveProductIdsToVariants(scope, items);
-  const variantIds = [...new Set(items.map(item => item.variantId))];
-  const products = await listPublishedProducts({ empresaId: scope.empresaId }, { storefrontId: storefront.id, variantIds, limit: 100 });
+async function priceCartItems(scope, storefront, items, context = null) {
+  await resolveProductIdsToVariants(scope, items, { storefront, context });
+  const variantIds = [...new Set(items.map(item => item.variantId).filter(id => UUID_REGEX.test(id)))];
+  const products = variantIds.length
+    ? await listPublishedProducts({ empresaId: scope.empresaId }, { storefrontId: storefront.id, variantIds, limit: 100 })
+    : [];
   const variants = new Map();
   for (const product of products) {
     for (const variant of product.variants || []) variants.set(variant.id, { product, variant, price: productPrice(variant) });
@@ -1061,9 +1198,19 @@ async function priceCartItems(scope, storefront, items) {
     // Encomenda só quando o produto permite compra sem estoque: é a mesma regra que o
     // commerce-core aplica ao criar o pedido (senão o SIM do cliente falharia depois).
     const sobEncomenda = found?.variant?.permiteCompraSemEstoque === true;
-    if (!found || found.price <= 0 || (!sobEncomenda && Number(found.variant.estoque || 0) < item.quantity)) {
-      throw new WhatsappAiToolError('produto indisponível ou estoque insuficiente', 'ITEM_UNAVAILABLE');
+    // Cada motivo com o próprio código: "não achei o id" não é falta de estoque e o cliente
+    // não pode ouvir "indisponível" de um produto com estoque (30/10, Stallone).
+    if (!found) {
+      throw new WhatsappAiToolError(
+        `não identifiquei o produto${item.productName ? ` "${item.productName}"` : ''} pelo id informado. Isto NÃO é falta de estoque: chame buscar_produtos com o nome do produto e use o id de variantes[], ou informe productName com o nome exato. Não diga ao cliente que está indisponível.`,
+        'ITEM_NOT_IDENTIFIED',
+      );
     }
+    if (found.price <= 0) throw new WhatsappAiToolError(`${found.product.nome} está sem preço de venda cadastrado na loja: ofereça falar com a equipe.`, 'ITEM_NO_PRICE');
+    if (!sobEncomenda && Number(found.variant.estoque || 0) < item.quantity) {
+      throw new WhatsappAiToolError(`estoque insuficiente de ${found.product.nome} (disponível: ${Math.max(0, Number(found.variant.estoque || 0))})`, 'ITEM_UNAVAILABLE');
+    }
+    delete item.productName;
     const subtotal = Number((found.price * item.quantity).toFixed(2));
     total += subtotal;
     return { ...item, nome: found.product.nome, categoria: found.product.category_name || '', preco: found.price, subtotal, ...(sobEncomenda && Number(found.variant.estoque || 0) < item.quantity ? { sobEncomenda: true } : {}) };
@@ -1086,7 +1233,7 @@ async function toolQuoteShipping(context, args = {}) {
   if (!items.length) throw new WhatsappAiToolError('informe ao menos um produto', 'EMPTY_CART');
   const cep = String(args.cep || '').replace(/\D/g, '');
   if (cep.length !== 8) throw new WhatsappAiToolError('CEP deve ter 8 dígitos', 'SHIPPING_CEP_INVALID');
-  await priceCartItems(scope, storefront, items);
+  await priceCartItems(scope, storefront, items, context);
   let quote;
   try {
     quote = await quoteAvailableShipping(db, { empresaId: scope.empresaId, lojaId: scope.lojaId }, { storefrontId: storefront.id, destinationCep: cep, items });
@@ -1123,7 +1270,7 @@ async function toolCartLink(context, args = {}) {
   const storefront = await activeStorefront(scope);
   const items = cartItemsFromArgs(args.items);
   if (!items.length) throw new WhatsappAiToolError('informe ao menos um produto', 'EMPTY_CART');
-  const { summarized, total } = await priceCartItems(scope, storefront, items);
+  const { summarized, total } = await priceCartItems(scope, storefront, items, context);
   const vitrine = storeLinks(storefront).vitrine;
   if (!vitrine) throw new WhatsappAiToolError('link da loja indisponível', 'STORE_LINK_NOT_READY');
   const carrinho = summarized.map(item => `${item.variantId}:${item.quantity}`).join(',');
@@ -1206,17 +1353,14 @@ async function toolOrderPaymentLink(context, args = {}) {
 async function toolPrepareOrder(context, args = {}) {
   const scope = contextScope(context);
   const storefront = await activeStorefront(scope);
-  const items = Array.isArray(args.items) ? args.items.slice(0, 20).map(item => ({
-    variantId: ensureUuid(item.variantId, 'variantId'),
-    quantity: Math.min(99, Math.max(1, Number.parseInt(String(item.quantity || 1), 10) || 1)),
-  })) : [];
+  const items = cartItemsFromArgs(args.items);
   if (!items.length) throw new WhatsappAiToolError('informe ao menos um produto', 'EMPTY_CART');
   // Entrega precisa de endereço e frete reais: vai pelo checkout (cotar_frete + link_carrinho).
   // Em 28/10 o pedido saiu "entrega no seu endereço" sem endereço, sem frete e sem pedido criado.
   if (args.entrega === true) {
     return { ok: false, code: 'DELIVERY_VIA_CHECKOUT', orientacao: 'Para entrega: peça o CEP, use cotar_frete para informar valor e prazo reais e depois link_carrinho; o cliente informa o endereço e paga no checkout seguro.' };
   }
-  const { summarized, total } = await priceCartItems(scope, storefront, items);
+  const { summarized, total } = await priceCartItems(scope, storefront, items, context);
   const method = await db.queryRead(
     `SELECT id, nome, tipo FROM commerce_shipping_methods
       WHERE empresa_id = $1 AND storefront_id = $2 AND ativo = true AND tipo = 'pickup'
@@ -1934,10 +2078,10 @@ export const WHATSAPP_AI_TOOL_DECLARATIONS = [
 
   { name: 'enviar_comprovante_pix', description: 'Envia o comprovante PIX do cliente para notificar o Dino do pagamento do pedido. Só use quando o cliente enviar o comprovante PIX na conversa após você ter gerado o pedido.', parameters: { type: 'OBJECT', properties: { orderCode: { type: 'STRING', description: 'Código do pedido que o cliente acabou de pagar' } }, required: ['orderCode'] } },
   { name: 'preparar_despesa', description: 'Prepara um lançamento de despesa PENDENTE a partir da nota ou recibo extraído da imagem desta conversa. Só use quando houver valor, data e confiança suficientes. Não paga, não confirma pagamento e exige SIM do responsável.', parameters: { type: 'OBJECT', properties: {} } },
-  { name: 'cotar_frete', description: 'Calcula o frete (valor e prazo) para o CEP do cliente com os produtos escolhidos. Somente consulta: não pede endereço completo nem documento e não cria pedido. Use quando o cliente quiser entrega ou perguntar quanto fica o frete.', parameters: { type: 'OBJECT', properties: { cep: { type: 'STRING', description: 'CEP de entrega, 8 dígitos' }, items: { type: 'ARRAY', items: { type: 'OBJECT', properties: { variantId: { type: 'STRING' }, quantity: { type: 'INTEGER' } }, required: ['variantId', 'quantity'] } } }, required: ['cep', 'items'] } },
+  { name: 'cotar_frete', description: 'Calcula o frete (valor e prazo) para o CEP do cliente com os produtos escolhidos. Somente consulta: não pede endereço completo nem documento e não cria pedido. Use quando o cliente quiser entrega ou perguntar quanto fica o frete.', parameters: { type: 'OBJECT', properties: { cep: { type: 'STRING', description: 'CEP de entrega, 8 dígitos' }, items: { type: 'ARRAY', items: { type: 'OBJECT', properties: { variantId: { type: 'STRING', description: 'id de variantes[] retornado por buscar_produtos (não use o id da foto)' }, productName: { type: 'STRING', description: 'nome exato do produto, como veio do catálogo (usado se o id não for reconhecido)' }, quantity: { type: 'INTEGER' } }, required: ['quantity'] } } }, required: ['cep', 'items'] } },
   { name: 'link_pagamento_pedido', description: 'Gera o link de pagamento seguro (InfinitePay) de um pedido DO PRÓPRIO contato que aguarda pagamento, no método escolhido: pix (abre QR Code e copia e cola) ou cartao. Use quando o cliente pedir para pagar pelo WhatsApp. Não cobra nada sozinho e não recebe dados de cartão.', parameters: { type: 'OBJECT', properties: { orderCode: { type: 'STRING', description: 'Código do pedido (ex.: o informado na confirmação)' }, metodo: { type: 'STRING', description: 'pix ou cartao' } }, required: ['orderCode', 'metodo'] } },
-  { name: 'link_carrinho', description: 'Gera o link da loja com o carrinho já montado com os produtos escolhidos. Use para compra com ENTREGA (o cliente informa endereço e CPF e paga no checkout seguro) ou quando o cliente preferir finalizar e pagar no site. Não cria pedido nem cobrança.', parameters: { type: 'OBJECT', properties: { items: { type: 'ARRAY', items: { type: 'OBJECT', properties: { variantId: { type: 'STRING' }, quantity: { type: 'INTEGER' } }, required: ['variantId', 'quantity'] } } }, required: ['items'] } },
-  { name: 'preparar_pedido', description: 'Prepara um pedido para RETIRADA na loja, para confirmação. Não cria o pedido. Para entrega use cotar_frete e link_carrinho (endereço e pagamento no checkout).', parameters: { type: 'OBJECT', properties: { customerName: { type: 'STRING' }, items: { type: 'ARRAY', items: { type: 'OBJECT', properties: { variantId: { type: 'STRING' }, quantity: { type: 'INTEGER' } }, required: ['variantId', 'quantity'] } } }, required: ['customerName', 'items'] } },
+  { name: 'link_carrinho', description: 'Gera o link da loja com o carrinho já montado com os produtos escolhidos. Use para compra com ENTREGA (o cliente informa endereço e CPF e paga no checkout seguro) ou quando o cliente preferir finalizar e pagar no site. Não cria pedido nem cobrança.', parameters: { type: 'OBJECT', properties: { items: { type: 'ARRAY', items: { type: 'OBJECT', properties: { variantId: { type: 'STRING', description: 'id de variantes[] retornado por buscar_produtos (não use o id da foto)' }, productName: { type: 'STRING', description: 'nome exato do produto, como veio do catálogo (usado se o id não for reconhecido)' }, quantity: { type: 'INTEGER' } }, required: ['quantity'] } } }, required: ['items'] } },
+  { name: 'preparar_pedido', description: 'Prepara um pedido para RETIRADA na loja, para confirmação. Não cria o pedido. Para entrega use cotar_frete e link_carrinho (endereço e pagamento no checkout).', parameters: { type: 'OBJECT', properties: { customerName: { type: 'STRING' }, items: { type: 'ARRAY', items: { type: 'OBJECT', properties: { variantId: { type: 'STRING', description: 'id de variantes[] retornado por buscar_produtos (não use o id da foto)' }, productName: { type: 'STRING', description: 'nome exato do produto, como veio do catálogo (usado se o id não for reconhecido)' }, quantity: { type: 'INTEGER' } }, required: ['quantity'] } } }, required: ['customerName', 'items'] } },
   { name: 'consultar_meu_plano', description: 'Mostra o plano/clube do próprio contato: sessões usadas e restantes no ciclo, fim do ciclo e serviços incluídos. Use quando o cliente perguntar do plano dele.', parameters: { type: 'OBJECT', properties: {} } },
   { name: 'listar_planos', description: 'Lista os planos/clubes de assinatura ATIVOS da unidade com valor, ciclo, sessões e serviços incluídos. Use sempre que o cliente perguntar quais planos existem, valores, "plano VIP", clube ou mensalidade.', parameters: { type: 'OBJECT', properties: {} } },
   { name: 'consultar_meu_cashback', description: 'Mostra o saldo de cashback do próprio contato e quando vence. Use quando o cliente perguntar do cashback ou do saldo dele.', parameters: { type: 'OBJECT', properties: {} } },
@@ -1980,12 +2124,14 @@ export const WHATSAPP_AI_TOOL_DECLARATIONS = [
   { name: 'consultar_agenda_dino_vip', description: 'Horários livres do Dino num dia, com o valor de cada horário (R$ 300 até 18h09, R$ 600 depois). Use quando o cliente quer marcar com o Dino.', parameters: { type: 'OBJECT', properties: { data: { type: 'STRING', description: 'AAAA-MM-DD; padrão hoje' }, periodo: { type: 'STRING', description: 'manha, tarde, noite ou qualquer' }, servico: { type: 'STRING', description: 'Nome do serviço com o Dino, ex.: corte e barba' } } } },
   { name: 'consultar_beneficios_e_clube', description: 'Mostra todos os benefícios de assinatura ou clube que a unidade tem.', parameters: { type: 'OBJECT', properties: {} } },
   { name: 'calcular_pacote_frequencia', description: 'Compara pacotes mensais cadastrados na empresa atual, com seus preços, cobertura e economia quando comparável. Use quando o cliente perguntar de pacotes ou após autorização da política de oportunidades. Não inventa tabela por profissional nem percentuais de desconto.', parameters: { type: 'OBJECT', properties: { profissional: { type: 'STRING', description: 'Nome do profissional agendado ou preferido (ex.: Nati, Bruno, David, Dino)' }, servico: { type: 'STRING', description: 'Serviço de referência (corte, barba, corte e barba)' }, frequenciaDias: { type: 'INTEGER', description: 'Dias entre visitas (ex.: 15 para quinzenal, 7 para semanal, 30 para mensal)' }, frequenciaTexto: { type: 'STRING', description: 'Frequência informada pelo cliente (ex.: "a cada 15 dias", "uma vez por semana")' }, procedimentosDesejados: { type: 'STRING', description: 'cabelo, barba ou ambos' } } } },
+  { name: 'enviar_enquete', description: 'Manda as opções como ENQUETE do WhatsApp (o cliente só toca na desejada). Use sempre que o cliente precisar escolher entre 2 a 12 opções reais: produtos/sabores/tamanhos devolvidos por buscar_produtos (nome curto + preço), retirada ou entrega, Pix ou cartão, horários de sugerir_proximos_horarios, serviços ou profissionais. Não use para confirmar ação preparada (o sistema já manda a de confirmação) nem para opções inventadas. Uma por resposta.', parameters: { type: 'OBJECT', properties: { pergunta: { type: 'STRING', description: 'Pergunta curta, até 255 caracteres (ex.: "Qual sabor você prefere?")' }, opcoes: { type: 'ARRAY', items: { type: 'STRING' }, description: '2 a 12 opções curtas e diferentes, até 100 caracteres cada (ex.: "Isolado 450g Chocolate Branco — R$ 329")' } }, required: ['pergunta', 'opcoes'] } },
   { name: 'solicitar_humano', description: 'Encaminha a conversa para atendimento humano em dúvidas sensíveis, exceções, reclamações ou pedido explícito.', parameters: { type: 'OBJECT', properties: { reason: { type: 'STRING' } }, required: ['reason'] } },
 ];
 
 export { DINO_GESTAO_TOOLS };
 
 const TOOL_MAP = {
+  enviar_enquete: toolSendPoll,
   apresentar_produto: toolPresentProduct,
   consultar_pagamentos: toolPayments,
   consultar_loja: toolStore,
@@ -2044,7 +2190,8 @@ function collectToolOutput(context, result) {
 }
 
 export function createWhatsappAiToolExecutor(context) {
-  context.productCatalog = new Map();
+  // O que a conversa já buscou nas mensagens anteriores continua valendo (memória curta).
+  context.productCatalog = new Map(produtosLembrados(context));
   context.productCards = new Map();
   let preparedAction = false;
   let primaryIntentResolved = false;

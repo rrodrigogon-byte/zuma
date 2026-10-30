@@ -612,3 +612,42 @@ export function chatbotBackendStickerPath(env = process.env) {
   const value = clean(env.CHATBOT_BACKEND_STICKER_PATH || '', 120);
   return /^\/[a-z0-9/_{}.-]+$/i.test(value) ? value : '';
 }
+
+/**
+ * Enquete (poll) pelo backend, como a Isa faz nas aprovações: o cliente toca na opção.
+ * Rota POST /send-poll do chatbot-backend-nestjs (CHATBOT_BACKEND_POLL_PATH muda ou desliga com "off"). Contrato:
+ *   POST {BASE}{path} { instanceName, chat_id, poll: { name, options: [..2-12], selectableCount: 1 } }
+ *   → 2xx { success: true, messageId }
+ * Sem a rota, devolve { ok:false, unsupported:true } e o atendimento manda as opções numeradas.
+ * Ver docs/operations/WHATSAPP-BACKEND-ENQUETE.md.
+ */
+// Padrão /send-poll (rota do chatbot-backend-nestjs). "off" desliga; backend sem a rota
+// responde 404 e o atendimento manda as opções numeradas em texto.
+export const DEFAULT_POLL_PATH = '/send-poll';
+export function chatbotBackendPollPath(env = process.env) {
+  const raw = clean(env.CHATBOT_BACKEND_POLL_PATH ?? '', 120);
+  if (/^(off|0|false|nao|não)$/i.test(raw)) return '';
+  const value = raw || DEFAULT_POLL_PATH;
+  return /^\/[a-z0-9/_{}.-]+$/i.test(value) ? value : '';
+}
+
+export async function sendPollViaChatbotBackend({ instance, number, name = '', options = [], selectableCount = 1 } = {}, fetchImpl) {
+  const cfg = chatbotBackendConfig();
+  const pollPath = chatbotBackendPollPath();
+  if (!pollPath) return { ok: false, unsupported: true, status: null, retryable: false, uncertain: false, error: 'POLL_ROUTE_NOT_CONFIGURED' };
+  if (!cfg.baseUrl || cfg.key.length < 20) return { ok: false, status: null, retryable: false, uncertain: false, error: 'CHATBOT_BACKEND_NOT_CONFIGURED' };
+  const instanceName = chatbotBackendMode() === 'instancias' ? validInstance(instance || '') : '';
+  if (chatbotBackendMode() === 'instancias' && !instanciaPermitida(instanceName, cfg)) return { ok: false, status: null, retryable: false, uncertain: false, error: 'INSTANCE_SCOPE_MISMATCH' };
+  const chatId = isaChatId(number);
+  if (!chatId) return { ok: false, status: null, retryable: false, uncertain: false, error: 'INVALID_CHAT_ID' };
+  const pergunta = clean(name, 255);
+  const opcoes = (Array.isArray(options) ? options : []).map((item) => clean(item, 100)).filter(Boolean).slice(0, 12);
+  if (!pergunta || opcoes.length < 2) return { ok: false, status: null, retryable: false, uncertain: false, error: 'POLL_INVALID' };
+  const result = await call(cfg, 'POST', pollPath.replace('{instance}', encodeURIComponent(instanceName || cfg.instance)), {
+    ...(instanceName ? { instanceName } : {}),
+    chat_id: chatId,
+    poll: { name: pergunta, options: opcoes, selectableCount: Math.max(1, Math.min(opcoes.length, Number(selectableCount) || 1)) },
+  }, fetchImpl);
+  const aceito = result.ok && result.data?.success !== false && result.data?.accepted !== false;
+  return { ok: aceito, status: result.status, unsupported: result.status === 404 || result.status === 405, retryable: false, uncertain: result.status === null || result.status >= 500, error: aceito ? undefined : (result.error || result.data?.error || `HTTP_${result.status}`) };
+}

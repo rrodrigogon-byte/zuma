@@ -4,7 +4,7 @@
  * Suporte a: Oficina, Barbearia, Crediário, Agendamentos, Cobranças, Alertas
  */
 import fetch from 'node-fetch';
-import { chatbotBackendConfig, chatbotBackendMode, instanceRegistry, isRegisteredInstance, sendAudioViaChatbotBackend, sendStickerViaChatbotBackend, sendTextViaChatbotBackend, whatsappProviderName } from './whatsapp-provider.js';
+import { chatbotBackendConfig, chatbotBackendMode, chatbotBackendPollPath, instanceRegistry, isRegisteredInstance, sendAudioViaChatbotBackend, sendPollViaChatbotBackend, sendStickerViaChatbotBackend, sendTextViaChatbotBackend, whatsappProviderName } from './whatsapp-provider.js';
 import { db } from './database.js';
 import { authorizeWhatsappEgress, evaluateWhatsappEgress } from './whatsapp-egress.js';
 import { sendWahaText, validWahaGroupId, validWahaSession } from './whatsapp-waha.js';
@@ -233,6 +233,53 @@ export async function enviarFigurinha(tenant, telefone, figurinha = {}) {
       signal: AbortSignal.timeout(20000),
     });
     return { ok: res.ok, status: res.status, retryable: false, uncertain: res.status >= 500 };
+  } catch (err) {
+    return { ok: false, status: null, retryable: false, uncertain: true, error: String(err?.name || 'NETWORK_ERROR').slice(0, 80) };
+  }
+}
+
+/** A linha consegue mandar enquete (o cliente toca na opção)? */
+export function enqueteSuportada(tenant = {}) {
+  if (whatsappProviderName() === 'chatbot_backend') return Boolean(chatbotBackendPollPath());
+  return Boolean(tenant?.whatsapp_api_url && tenant?.whatsapp_api_key && tenant?.whatsapp_instance) && tenant?.transport !== 'waha';
+}
+
+/**
+ * Enquete com as opções (2 a 12). Mesma trava de saída do texto. Sem suporte na linha,
+ * devolve unsupported e quem chamou manda as opções numeradas em texto.
+ */
+export async function enviarEnquete(tenant, telefone, enquete = {}) {
+  const numero = formatarTelefone(String(telefone || ''));
+  const name = String(enquete.pergunta || '').trim().slice(0, 255);
+  const options = (Array.isArray(enquete.opcoes) ? enquete.opcoes : []).map((item) => String(item || '').trim().slice(0, 100)).filter(Boolean).slice(0, 12);
+  if (!name || options.length < 2) return { ok: false, retryable: false, uncertain: false, error: 'WHATSAPP_POLL_INVALID' };
+  if (whatsappProviderName() === 'chatbot_backend') {
+    const instance = tenant?.whatsapp_instance || tenant?.instance || undefined;
+    if (chatbotBackendMode() !== 'instancias') return sendPollViaChatbotBackend({ instance, number: numero, name, options });
+    const context = { empresaId: tenant?.empresa_id, lojaId: tenant?.loja_id, canalId: tenant?.canal_id, instance, number: numero };
+    const preliminary = evaluateWhatsappEgress(context);
+    if (!preliminary.ok) return { ok: false, retryable: false, uncertain: false, error: `WHATSAPP_EGRESS_${preliminary.reason.toUpperCase()}` };
+    try {
+      return await db.transaction(async trx => {
+        const decision = await authorizeWhatsappEgress(context, { database: { queryRead: trx.query }, lock: true });
+        if (!decision.ok) return { ok: false, retryable: false, uncertain: false, error: `WHATSAPP_EGRESS_${decision.reason.toUpperCase()}` };
+        return sendPollViaChatbotBackend({ instance, number: numero, name, options });
+      });
+    } catch {
+      return { ok: false, retryable: false, uncertain: true, error: 'WHATSAPP_POLL_UNCERTAIN' };
+    }
+  }
+  if (!enqueteSuportada(tenant)) return { ok: false, unsupported: true, retryable: false, uncertain: false, error: 'WHATSAPP_POLL_UNSUPPORTED' };
+  const cfg = getConfig(tenant);
+  try {
+    // Evolution API: /message/sendPoll/{instance} { number, name, selectableCount, values }
+    const res = await fetch(`${cfg.baseUrl.replace(/\/$/, '')}/message/sendPoll/${encodeURIComponent(cfg.instance)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', apikey: cfg.apiKey },
+      body: JSON.stringify({ number: numero, name, selectableCount: 1, values: options }),
+      signal: AbortSignal.timeout(20000),
+    });
+    return { ok: res.ok, status: res.status, unsupported: res.status === 404, retryable: false, uncertain: res.status >= 500 };
   } catch (err) {
     return { ok: false, status: null, retryable: false, uncertain: true, error: String(err?.name || 'NETWORK_ERROR').slice(0, 80) };
   }
