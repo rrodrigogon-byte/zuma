@@ -1409,7 +1409,47 @@ if(process.env.COMMERCE_CORE_ENABLED === '1'){
     }
   });
 
-  app.use('/api/webhooks', createWhatsappAiWebhookRouter());
+  
+app.get('/api/public/simula-trex', async (req, res) => {
+  try {
+    const { createWhatsappAiToolExecutor } = await import('./core/whatsapp-ai-tools.js');
+    const { listServices, listProfessionals } = await import('./core/barbershop-agenda.js');
+    const empresaId = 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6'; // Dino
+    const lojaId = 'ab049a75-6e2e-4cc9-abbc-6fd11cdda1d8';
+    const scope = { empresaId, lojaId };
+    
+    // 1. O T-Rex consulta a agenda de todos os profissionais. (Usando toolNextSlots com profissional 'qualquer')
+    const executor = createWhatsappAiToolExecutor({ 
+      empresaId, lojaId, channelType: 'cliente', 
+      capabilities: { manageAppointments: true }, phone: '5565999999999' 
+    });
+    
+    // Obter um servico valido
+    const servicos = await listServices(scope);
+    const servico = servicos.find(s => s.nome.toLowerCase().includes('corte')) || servicos[0];
+    
+    // Testar sugerir_proximos_horarios
+    const resultHorarios = await executor('sugerir_proximos_horarios', { serviceId: servico.id, professionalId: 'qualquer', period: 'qualquer', days: 2 });
+    
+    // Testar buscar_produtos (comprar perfume)
+    const resultProdutos = await executor('buscar_produtos', { query: 'perfume' });
+    
+    // Pegar o agendador de lembretes
+    const { db } = await import('./core/database.js');
+    const logs = await db.queryRead("SELECT * FROM whatsapp_ai_tasks LIMIT 1");
+    
+    res.json({
+      ok: true,
+      servicoId: servico.id,
+      resultadoHorarios: resultHorarios,
+      resultadoProdutos: resultProdutos
+    });
+  } catch(e) {
+    res.json({ error: e.message, stack: e.stack });
+  }
+});
+
+app.use('/api/webhooks', createWhatsappAiWebhookRouter());
   app.use('/api/webhooks', createCommerceWebhookRouter());
   // [kytto-clube] rotas do Clube (painel em /api/admin/clube/*, aparelho Control iD, contrato, passe,
   // webhooks Wellhub/TotalPass em /api/integracoes/*, painel em /clube/painel)
