@@ -227,9 +227,13 @@ export function personaIntroduction(persona, storeName) {
  * Barbearia Dino. Quer marcar…"), ou antes do texto quando não há saudação.
  */
 export function mergeIntroduction(intro, text) {
-  const value = String(text || '').trim();
+  // A saudação da persona já traz "Aqui é o T-Rex da Dino!": com a apresentação completa
+  // na frente, essa frase sairia duas vezes na mesma mensagem.
+  const quem = String(intro || '').match(/^Aqui é o ([^,!.]+?) d[ao] /i);
+  const semRepetir = quem ? String(text || '').replace(new RegExp(`\\s*Aqui é o ${quem[1].replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} d[ao] [^!.\\n]+[!.]`, 'i'), '') : String(text || '');
+  const value = semRepetir.trim();
   if (!value) return intro;
-  const match = value.match(/^((?:opa|oi|ola|olá|e a[ií]|fala|bom dia|boa tarde|boa noite)\b[^.!?\n]{0,40}[.!?])\s+/i);
+  const match = value.match(/^((?:opa|oi|ola|olá|e a[ií]|fala|bom dia|boa tarde|boa noite)(?=[\s,.!?])[^.!?\n]{0,40}[.!?])\s+/i);
   if (match) return `${match[1]} ${intro} ${value.slice(match[0].length)}`.trim();
   // Sem saudação: "Opa! Aqui é o T-Rex…" na mesma mensagem, se couber; senão, antes.
   const [primeiro, ...resto] = value.split(/\n{2,}/);

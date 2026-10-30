@@ -624,13 +624,14 @@ test('simulação ponta a ponta do atendente da Dino', { skip, timeout: Number(p
     assert.ok(out.length >= 1, 'o cliente recebe retorno');
   });
 
-  await cena(t, '13 · Sem vaga no pedido ("só com o Dino no sábado") → lista de espera', async () => {
+  // O Dino atende 24x7 (regra da casa); sem vaga real é o Bruno no domingo (unidade fechada).
+  await cena(t, '13 · Sem vaga no pedido ("só com o Bruno no domingo") → lista de espera', async () => {
     const tel = telefoneNovo();
     const mem = (mundo.atual = tel, memoria());
-    mem.profissionalId = PROF.dino.id;
-    mem.dataDesejada = proximoDiaSemana(6);
+    mem.profissionalId = PROF.bruno.id;
+    mem.dataDesejada = proximoDiaSemana(0);
     mem.dias = 1;
-    cliente(tel, 'Quero cortar com o Dino no sábado, meu nome é Caio');
+    cliente(tel, 'Quero cortar com o Bruno no domingo, meu nome é Caio');
     let out = await ciclo();
     assert.match(ultima(out), /lista de espera/);
     cliente(tel, 'pode me avisar sim');

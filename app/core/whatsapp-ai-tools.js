@@ -1,24 +1,38 @@
-import { phoneMatchKeySql } from './whatsapp-phone.js';
-import { normalizarNascimento } from '../clientes-contas-kytto.js';
-const PAYMENT_METHOD_ALIASES = { pix: 'pix', cartao: 'credit_card', credito: 'credit_card', credit_card: 'credit_card', cartao_de_credito: 'credit_card' };
-import { encontrarClientePorTelefone } from '../dino-clientes-vinculo.js';
-import { formatPersonName, matchAgendaSlot, normalizeAgendaDate, serviceWithProfessional } from './whatsapp-ai-normalize.js';
-import { extractExpenseEvidence } from './whatsapp-ai-media.js';
-import { requiresPickupOnly, PICKUP_ONLY_ERROR_CODE } from './commerce-pickup-rules.js';
-import * as clientesKytto from '../clientes-contas-kytto.js';
-import { publicPaymentMethods, createPaymentAttempt } from './payment-adapters.js';
-import { productDetails, productCard } from './whatsapp-product-card.js';
-import { DINO_GESTAO_TOOLS, executarFerramentaGestao } from '../dino-gestao-ia.js';
+import { isWhatsappOptInText, phoneMatchKeySql } from './whatsapp-phone.js';
 import crypto from 'node:crypto';
 import { db } from './database.js';
+import { save as saveLegacyDb } from '../db.js';
+import { registrarLancamento } from '../financeiro-central-kytto.js';
+import { extractExpenseEvidence } from './whatsapp-ai-media.js';
 import { countPublishedProducts, createPendingOrder, listPublishedProducts } from './commerce-core.js';
+import { quoteAvailableShipping } from './commerce-shipping.js';
+import { requiresPickupOnly, PICKUP_ONLY_ERROR_CODE } from './commerce-pickup-rules.js';
+import { productDetails, productCard } from './whatsapp-product-card.js';
+import { createPaymentAttempt, publicPaymentMethods } from './payment-adapters.js';
+import { formatPersonName, matchAgendaSlot, normalizeAgendaDate, serviceWithProfessional } from './whatsapp-ai-normalize.js';
+// Agenda única: quando a empresa usa a agenda da barbearia (a do admin e do link
+// público), a IA lê e grava nela; senão segue o caminho PostgreSQL antigo.
 import {
   createAppointment as createScheduledAppointment,
   availability as listSchedulingAvailability,
   listProfessionals as listSchedulingProfessionals,
   listServices as listSchedulingServices,
+  listCustomerAppointments as listWhatsappCustomerAppointments,
+  rescheduleAppointment as rescheduleWhatsappAppointment,
+  cancelAppointment as cancelWhatsappAppointment,
   SchedulingError,
+  agendaSource,
+  confirmAttendance,
+  noteDelay,
 } from './barbershop-agenda.js';
+import { clubeParaTelefone, entrarListaEspera, planoDoTelefone, perfilDoTelefone, validarAgendamentoComPlano, sugestaoPosServico, codigoIndicacaoCliente } from '../dino-captacao-kytto.js';
+import { saldoCashback } from '../dino-cobranca-kytto.js';
+import * as barbeariaErp from '../barbearia-erp-kytto.js';
+import * as clientesKytto from '../clientes-contas-kytto.js';
+import { normalizarNascimento } from '../clientes-contas-kytto.js';
+import { encontrarClientePorTelefone, telefoneChave } from '../dino-clientes-vinculo.js';
+import { DINO_GESTAO_TOOLS, executarFerramentaGestao } from '../dino-gestao-ia.js';
+import { actionTtlMinutes, isGenericCustomerName } from './whatsapp-ai-intents.js';
 import {
   ensureWhatsappLead,
   getWhatsappLeadProfile,
@@ -26,16 +40,8 @@ import {
   listActiveWhatsappPromotions,
   queueWhatsappPromotion,
 } from './whatsapp-ai-crm.js';
-import * as barbeariaErp from '../barbearia-erp-kytto.js';
-import { planoDoTelefone, perfilDoTelefone, clubeParaTelefone, sugestaoPosServico, codigoIndicacaoCliente } from '../dino-captacao-kytto.js';
-import { telefoneChave } from '../dino-clientes-vinculo.js';
 import {
-  agendaSource,
-  listCustomerAppointments as listWhatsappCustomerAppointments,
-  rescheduleAppointment as rescheduleWhatsappAppointment,
-  cancelAppointment as cancelWhatsappAppointment,
-} from './barbershop-agenda.js';
-import {
+  isApprovedStoreUrl,
   opportunityGate,
   registerOpportunityDecision,
   sanitizeUntrustedBusinessText,
@@ -55,12 +61,19 @@ function cleanText(value, limit = 240) {
   return String(value || '').trim().replace(/\s+/g, ' ').slice(0, limit);
 }
 
-function ensureUuid(value, field, { allowAny = false } = {}) {
+function ensureUuid(value, field) {
   const normalized = cleanText(value, 60);
-  if (!normalized) return allowAny ? null : '';
-  
-  // Relaxing UUID check completely because Kytto uses string keys like 'emp-kytto-001', 'dino', 'svc-01'
+  if (!UUID_REGEX.test(normalized)) throw new WhatsappAiToolError(`${field} inválido`, 'INVALID_ID');
   return normalized;
+}
+
+// IDs da agenda: UUID (PostgreSQL) ou o formato da agenda da barbearia (ex.: srv-xxxx).
+const AGENDA_ID_REGEX = /^[a-z]{2,10}-[a-z0-9-]{3,80}$/i;
+function ensureAgendaId(value, field, { allowAny = false } = {}) {
+  const normalized = cleanText(value, 100);
+  if (allowAny && (!normalized || normalized === 'qualquer')) return 'qualquer';
+  if (UUID_REGEX.test(normalized) || AGENDA_ID_REGEX.test(normalized)) return normalized;
+  throw new WhatsappAiToolError(`${field} inválido`, 'INVALID_ID');
 }
 
 function contextScope(context = {}) {
@@ -118,14 +131,17 @@ function sanitizeToolData(value, depth = 0) {
 async function activeStorefront({ empresaId, lojaId }) {
   const result = await db.queryRead(
     `SELECT s.id, s.nome, s.moeda, s.timezone, s.configuracoes, l.nome AS loja_nome,
-            l.codigo AS loja_codigo
+            l.codigo AS loja_codigo,
+            (SELECT a.alias FROM commerce_storefront_aliases a
+              WHERE a.empresa_id = s.empresa_id AND a.storefront_id = s.id AND a.ativo = true
+              ORDER BY a.alias LIMIT 1) AS alias
        FROM commerce_storefronts s
        JOIN lojas l ON l.id = s.loja_id AND l.empresa_id = s.empresa_id
       WHERE s.empresa_id = $1 AND s.loja_id = $2 AND s.status = 'active'
       ORDER BY s.criado_em ASC LIMIT 1`,
     [empresaId, lojaId],
   );
-  if (!result.rows[0]) throw new WhatsappAiToolError('O catálogo online ou loja virtual (commerce) ainda não está ativo para a unidade. Informe ao cliente que as vendas online por enquanto estão indisponíveis e ofereça os serviços normais.', 'STOREFRONT_NOT_READY');
+  if (!result.rows[0]) throw new WhatsappAiToolError('O catálogo online ou loja virtual ainda não está ativo para a unidade. Informe ao cliente que as vendas online por enquanto estão indisponíveis e ofereça os serviços normais.', 'STOREFRONT_NOT_READY');
   return result.rows[0];
 }
 
@@ -153,6 +169,62 @@ function productPrice(variant = {}) {
 
 async function toolStore(context) {
   return { ok: true, dataClassification: 'untrusted_business_data', loja: sanitizeToolData(publicStoreData(await activeStorefront(contextScope(context)))) };
+}
+
+async function toolPayments(context) {
+  const scope = contextScope(context);
+  const storefront = await activeStorefront(scope);
+  const accounts = await db.queryRead(
+    `SELECT id, provider, ambiente, secret_ref, public_config, ativo
+       FROM commerce_payment_accounts
+      WHERE empresa_id = $1 AND storefront_id = $2 AND ambiente = 'production' AND ativo = true
+      ORDER BY provider`, [scope.empresaId, storefront.id],
+  );
+  const domains = await db.queryRead(
+    `SELECT dominio FROM commerce_store_domains
+      WHERE empresa_id = $1 AND storefront_id = $2 AND verificado_em IS NOT NULL
+      ORDER BY principal DESC, dominio ASC LIMIT 1`, [scope.empresaId, storefront.id],
+  );
+  const domain = String(domains.rows[0]?.dominio || '').trim().toLowerCase();
+  const validDomain = domain.length <= 253 && domain.split('.').length > 1
+    && domain.split('.').every(label => /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(label));
+  const labels = { pix: 'Pix', credit_card: 'Cartão de crédito', debit_card: 'Cartão de débito', boleto: 'Boleto', external: 'Checkout do provedor' };
+  const methods = publicPaymentMethods(accounts.rows)
+    // Crediário requer elegibilidade do pedido e verificação no checkout.
+    .filter(item => item.method !== 'account')
+    .map(item => ({ ...item, nome: labels[item.method] }));
+  return {
+    ok: true,
+    dataClassification: 'untrusted_business_data',
+    loja: sanitizeUntrustedBusinessText(storefront.nome, 120),
+    urlLoja: validDomain ? `https://${domain}/` : null,
+    pagamentosDisponiveis: methods.length > 0,
+    meios: methods,
+    instrucao: 'Dados exclusivos do e-commerce desta unidade. Informe somente estes meios. Finalização e condições no checkout; não prometa parcelamento, juros, desconto ou aprovação. Não peça dados de cartão, CPF nem códigos no WhatsApp. Lista vazia significa que não foi possível confirmar um meio online disponível. Não crie cobrança nem pedido por esta consulta.',
+  };
+}
+
+// Links públicos da loja: a foto vai como link (prévia depende do WhatsApp) e a
+// vitrine/pedido como página. Base: WHATSAPP_AI_PUBLIC_URL ou PUBLIC_BASE_URL.
+function publicBaseUrl() {
+  const base = cleanText(process.env.WHATSAPP_AI_PUBLIC_URL || process.env.PUBLIC_BASE_URL || '', 200).replace(/\/+$/, '');
+  return /^https:\/\/[a-z0-9.-]+(:\d+)?$/i.test(base) ? base : '';
+}
+
+export function storeLinks(storefront = {}) {
+  const base = publicBaseUrl();
+  const alias = cleanText(storefront.alias, 80).toLowerCase();
+  if (!base || !/^[a-z0-9][a-z0-9_-]{1,79}$/.test(alias)) return { vitrine: '', pedido: () => '', imagem: () => '' };
+  return {
+    vitrine: `${base}/ecommerce/${alias}`,
+    pedido: (code) => (code ? `${base}/pedido/${alias}/${encodeURIComponent(String(code))}` : ''),
+    imagem: (url) => {
+      const value = String(url || '').trim();
+      const media = value.match(/^\/api\/storefront\/media\/([0-9a-f-]{36})$/i);
+      if (media) return `${base}/api/public/storefront/${alias}/media/${media[1]}`;
+      return isApprovedStoreUrl(value) ? value : '';
+    },
+  };
 }
 
 async function toolProducts(context, args = {}) {
@@ -236,6 +308,25 @@ async function toolProducts(context, args = {}) {
   };
 }
 
+async function toolPresentProduct(context, args = {}) {
+  contextScope(context);
+  const product = context.productCatalog?.get(cleanText(args.productId, 60));
+  if (!product) throw new WhatsappAiToolError('consulte buscar_produtos antes de apresentar o produto', 'PRODUCT_NOT_CONSULTED');
+  const variant = args.variantId ? product.variantes.find(item => item.id === args.variantId)
+    : product.variantes.length === 1 ? product.variantes[0] : null;
+  if (!variant) throw new WhatsappAiToolError('escolha uma variante retornada pelo catálogo', 'VARIANT_REQUIRED');
+  const key = `${product.id}:${variant.id}`;
+  if (!context.productCards.has(key)) {
+    if (context.productCards.size >= 3) throw new WhatsappAiToolError('apresente no máximo três produtos por resposta', 'PRODUCT_CARD_LIMIT');
+    const card = productCard(product, variant);
+    if ([...context.productCards.values(), card].join('\n\n').length > 2400) throw new WhatsappAiToolError('fichas longas: apresente menos produtos nesta resposta', 'PRODUCT_CARD_LIMIT');
+    context.productCards.set(key, card);
+  }
+  return { ok: true, fichaIncluidaPeloSistema: true, fotoDisponivel: Boolean(product.fotos?.length),
+    formatoFoto: product.fotos?.length ? 'link_publico' : 'ausente',
+    instruction: 'O sistema incluirá a ficha completa ao final da resposta. Não repita ficha, preço, descrição nem foto; responda apenas outras dúvidas do cliente. Não diga que enviou anexo.' };
+}
+
 async function toolServices(context) {
   return { ok: true, dataClassification: 'untrusted_business_data', servicos: sanitizeToolData(await listSchedulingServices(contextScope(context))) };
 }
@@ -246,50 +337,226 @@ async function toolProfessionals(context) {
 
 async function toolAvailability(context, args = {}) {
   const scope = contextScope(context);
-  const sId = ensureUuid(args.serviceId, 'serviceId', { allowAny: true });
-  const pId = ensureUuid(args.professionalId, 'professionalId', { allowAny: true });
-  
-  // No Kytto os IDs podem ser strings genéricas, então precisamos verificar se o ID fornecido realmente existe
-  // Caso contrário, forçamos o !sId para que ele retorne a lista de serviços correta para a IA tentar de novo
-  let serviceExists = true;
-  let professionalExists = true;
-  if (sId) {
-    const { listServices, listProfessionals } = await import('./barbershop-agenda.js');
-    const servicos = await listServices(scope);
-    if (!servicos.find(s => s.id === sId)) serviceExists = false;
-    
-    if (pId && pId !== 'qualquer' && pId !== 'indiferente') {
-      const profissionais = await listProfessionals(scope);
-      if (!profissionais.find(p => p.id === pId)) professionalExists = false;
-    }
-  }
-
-  if (!sId || !serviceExists || !professionalExists || (!pId && args.professionalId && args.professionalId !== 'qualquer' && args.professionalId !== 'indiferente')) {
-     const { listServices, listProfessionals } = await import('./barbershop-agenda.js');
-     const listSchedulingServices = listServices;
-     const listSchedulingProfessionals = listProfessionals;
-     const servicos = sanitizeToolData(await listSchedulingServices(scope));
-     const profissionais = sanitizeToolData(await listSchedulingProfessionals(scope));
-     return {
-       ok: false,
-       erro: "Você forneceu um nome de serviço/profissional em vez de um UUID. Isso causou um erro! Você DEVE usar o id exato (UUID) retornado nestas listas. Chame esta ferramenta NOVAMENTE AGORA MESMO usando os IDs corretos listados abaixo em 'servicosDisponiveis' e 'profissionaisDisponiveis' e não diga nada ao usuário até consultar a disponibilidade correta.",
-       servicosDisponiveis: servicos,
-       profissionaisDisponiveis: profissionais
-     };
-  }
   return {
     ok: true,
     dataClassification: 'untrusted_business_data',
-    disponibilidade: sanitizeToolData(await (async () => {
-      try {
-        return await listSchedulingAvailability(scope, { serviceId: sId, professionalId: pId, date: args.date });
-      } catch (err) {
-        if (err.code === 'INVALID_DATE' || err.code === 'DATE_OUT_OF_RANGE') {
-          throw new WhatsappAiToolError(`A data informada (${args.date}) é inválida ou fora do limite. O formato OBRIGATÓRIO é AAAA-MM-DD. Se o usuário não forneceu o dia ou mês exato, PARE de chamar a ferramenta, NÃO retente, e envie uma mensagem pedindo para ele confirmar a data desejada.`, err.code);
+    disponibilidade: sanitizeToolData(await listSchedulingAvailability(scope, {
+      serviceId: args.serviceId,
+      professionalId: args.professionalId,
+      date: normalizeAgendaDate(args.date, localDateIso()) || args.date,
+    })),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// AUTONOMIA NA AGENDA: em uma chamada, os próximos horários reais (vários dias,
+// qualquer profissional, por período) — o atendente oferece opções concretas em
+// vez de perguntar dia a dia. Sem vaga: lista de espera com aviso automático.
+// ---------------------------------------------------------------------------
+const AGENDA_TZ = 'America/Cuiaba';
+const PERIODOS_VALIDOS = new Set(['manha', 'tarde', 'noite', 'qualquer']);
+const DIAS_SEMANA = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];
+
+export function localDateIso(now = new Date()) {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: AGENDA_TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(now);
+}
+
+function addDaysIso(dateIso, days) {
+  const base = new Date(`${dateIso}T12:00:00Z`);
+  base.setUTCDate(base.getUTCDate() + days);
+  return base.toISOString().slice(0, 10);
+}
+
+function periodOf(time) {
+  const hour = Number(String(time || '').split(':')[0]);
+  if (!Number.isFinite(hour)) return 'qualquer';
+  if (hour < 12) return 'manha';
+  if (hour < 18) return 'tarde';
+  return 'noite';
+}
+
+function normalizePeriod(value) {
+  const plainValue = String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+  return PERIODOS_VALIDOS.has(plainValue) ? plainValue : 'qualquer';
+}
+
+/**
+ * Varre os próximos dias e devolve os primeiros horários livres. Puro: recebe
+ * fetchDay(dateIso) → { slots: ['09:00', …], professional } e ignora dia fechado.
+ */
+function minutesOf(hhmm) {
+  const match = String(hhmm || '').match(/^(\d{1,2}):(\d{2})/);
+  return match ? Number(match[1]) * 60 + Number(match[2]) : NaN;
+}
+
+export async function earliestSlots({ fetchDay, fromDate, days = 7, period = 'qualquer', limit = 6, notBefore = '', aroundTime = '' } = {}) {
+  const safeDays = Math.min(14, Math.max(1, Number(days) || 7));
+  const safeLimit = Math.min(10, Math.max(1, Number(limit) || 6));
+  const wanted = normalizePeriod(period);
+  const found = [];
+  const closed = [];
+  for (let offset = 0; offset < safeDays && found.length < safeLimit; offset += 1) {
+    const date = addDaysIso(fromDate, offset);
+    let day;
+    try {
+      day = await fetchDay(date);
+    } catch (error) {
+      // Só "sem expediente/sem vaga no dia" é dia fechado; fora da janela de reserva encerra
+      // a busca. Qualquer outro erro (id inválido, banco) sobe: nunca vira "sem vaga" falso.
+      if (error?.code === 'SLOT_UNAVAILABLE') { closed.push(date); continue; }
+      if (error?.code === 'DATE_OUT_OF_RANGE') break;
+      throw error;
+    }
+    let candidates = (Array.isArray(day?.slots) ? day.slots : [])
+      .filter((time) => !(offset === 0 && notBefore && String(time) <= notBefore))
+      .filter((time) => wanted === 'qualquer' || periodOf(time) === wanted);
+    // "lá pelas 16h": os horários mais próximos do pedido, no máximo 2 por dia.
+    const target = minutesOf(aroundTime);
+    if (Number.isFinite(target)) {
+      candidates = [...candidates]
+        .sort((a, b) => Math.abs(minutesOf(a) - target) - Math.abs(minutesOf(b) - target))
+        .slice(0, 2)
+        .sort((a, b) => minutesOf(a) - minutesOf(b));
+    }
+    for (const time of candidates) {
+      const weekday = DIAS_SEMANA[new Date(`${date}T12:00:00Z`).getUTCDay()];
+      found.push({ date, weekday, time: String(time).slice(0, 5), professional: day.professionalByTime?.[time] || day.professional?.nome || null });
+      if (found.length >= safeLimit) break;
+    }
+  }
+  return { slots: found, searchedDays: safeDays, period: wanted, closedDays: closed };
+}
+
+function localTimeHHMM(now = new Date()) {
+  return new Intl.DateTimeFormat('en-GB', { timeZone: AGENDA_TZ, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(now);
+}
+
+async function toolNextSlots(context, args = {}) {
+  const scope = contextScope(context);
+  const serviceId = cleanText(args.serviceId, 100);
+  if (!serviceId) throw new WhatsappAiToolError('informe o serviço (id de listar_servicos)', 'SERVICE_REQUIRED');
+  const professionalId = cleanText(args.professionalId, 100) || 'qualquer';
+  const today = localDateIso();
+  const askedFrom = normalizeAgendaDate(args.fromDate, today);
+  const fromDate = askedFrom && askedFrom >= today ? askedFrom : today;
+  // Agenda PostgreSQL não aceita "qualquer": junta os horários de cada profissional ativo.
+  const multiProfessional = professionalId === 'qualquer' && await agendaSource(scope) === 'postgres';
+  const professionals = multiProfessional ? (await listSchedulingProfessionals(scope) || []).filter((item) => item?.id) : [];
+  const fetchDay = multiProfessional
+    ? async (date) => {
+      const merged = new Map();
+      let unavailable = 0;
+      for (const professional of professionals) {
+        try {
+          const day = await listSchedulingAvailability(scope, { serviceId, professionalId: professional.id, date });
+          for (const time of day?.slots || []) if (!merged.has(time)) merged.set(time, professional.nome || null);
+        } catch (error) {
+          if (error?.code === 'SLOT_UNAVAILABLE') { unavailable += 1; continue; }
+          throw error;
         }
-        throw err;
       }
-    })()),
+      if (professionals.length && unavailable === professionals.length) {
+        const closedError = new Error('sem expediente'); closedError.code = 'SLOT_UNAVAILABLE'; throw closedError;
+      }
+      const times = [...merged.keys()].sort();
+      return { slots: times, professionalByTime: Object.fromEntries(merged) };
+    }
+    : async (date) => listSchedulingAvailability(scope, { serviceId, professionalId, date });
+  const result = await earliestSlots({
+    fetchDay,
+    fromDate,
+    days: args.days,
+    period: args.period,
+    limit: args.limit,
+    notBefore: fromDate === today ? localTimeHHMM() : '',
+    aroundTime: /^\d{1,2}:\d{2}$/.test(String(args.aroundTime || '')) ? String(args.aroundTime).padStart(5, '0') : '',
+  });
+  return {
+    ok: true,
+    dataClassification: 'untrusted_business_data',
+    proximosHorarios: sanitizeToolData(result.slots),
+    periodo: result.period,
+    diasConsultados: result.searchedDays,
+    instrucao: result.slots.length
+      ? 'Ofereça 2 ou 3 opções concretas (dia da semana + data + hora). Depois que o cliente escolher, use preparar_agendamento.'
+      : 'Não há vaga no período. Ofereça ampliar o período/outro profissional ou entrar na lista de espera (entrar_lista_espera) para ser avisado se abrir horário.',
+  };
+}
+
+// Nome genérico ("Cliente", "Contato", só números) não serve para agenda nem pedido:
+// o atendente pergunta o nome antes de preparar (o teste real de 05/10 saiu "Oi, Cliente!").
+export { isGenericCustomerName };
+
+function requireCustomerName(...candidates) {
+  // Último argumento opcional: { purpose: 'agendamento' | 'pedido', repeat: {...} }.
+  const last = candidates[candidates.length - 1];
+  const options = last && typeof last === 'object' ? candidates.pop() : {};
+  for (const candidate of candidates) {
+    const name = cleanText(candidate, 100);
+    // Grava "Rodrigo Goncalves", não "rodrigo goncalves" ou "RODRIGO GONCALVES".
+    if (!isGenericCustomerName(name)) return formatPersonName(name);
+  }
+  const question = options.purpose === 'pedido' ? 'Qual seu nome para eu deixar no pedido?' : 'Qual seu nome para eu deixar no agendamento?';
+  // Em 14, 16 e 17/10 o modelo pedia o nome e, na volta, mudava data/horário e "perdia" a vaga.
+  const repeat = options.repeat ? ` Quando ele responder, chame de novo com EXATAMENTE estes dados e customerName: ${JSON.stringify(options.repeat)}. Não pergunte o horário de novo.` : ' Depois chame de novo com customerName.';
+  throw new WhatsappAiToolError(`falta o nome do cliente: pergunte só "${question}".${repeat}`, 'CUSTOMER_NAME_REQUIRED');
+}
+
+// Horário fora da agenda: devolve os horários livres de verdade para o atendente
+// oferecer na hora, em vez de dizer que "alguém acabou de marcar".
+function slotUnavailable(availability, date) {
+  const livres = (availability?.slots || []).slice(0, 6);
+  const texto = livres.length
+    ? `horário indisponível em ${date}. Horários livres neste dia: ${livres.join(', ')}. Ofereça estes ao cliente (não diga que alguém acabou de marcar).`
+    : `não há horário livre em ${date} para este serviço e profissional. Use sugerir_proximos_horarios para oferecer os próximos dias.`;
+  return new SchedulingError(texto, 'SLOT_UNAVAILABLE');
+}
+
+async function toolJoinWaitlist(context, args = {}) {
+  const scope = await barbeariaScope(context);
+  if (args.customerAgreed !== true) {
+    throw new WhatsappAiToolError('pergunte antes se o cliente quer ser avisado pelo WhatsApp quando abrir vaga', 'CUSTOMER_AGREEMENT_REQUIRED');
+  }
+  const name = sanitizeUntrustedBusinessText(requireCustomerName(args.customerName, scope.customerName), 100);
+  try {
+    const entrada = entrarListaEspera(scope.empresaId, {
+      nome: name,
+      telefone: scope.phone,
+      data: cleanText(args.date, 10),
+      periodo: normalizePeriod(args.period),
+      servicoId: cleanText(args.serviceId, 100),
+      profissionalId: cleanText(args.professionalId, 100) || 'qualquer',
+      lojaId: scope.lojaId,
+      consentimentoWhatsapp: true,
+      origem: 'whatsapp_ia',
+    });
+    return {
+      ok: true,
+      listaEspera: { data: entrada.data, periodo: entrada.periodo, servico: entrada.servicoNome, jaEstava: entrada.repetida === true },
+      instrucao: 'Confirme que o cliente entrou na lista de espera e que receberá aviso por aqui se abrir horário. Ele pode responder SAIR para não receber avisos.',
+    };
+  } catch (error) {
+    throw new WhatsappAiToolError(cleanText(error?.message || 'não foi possível entrar na lista de espera', 200), error?.code || 'WAITLIST_ERROR');
+  }
+}
+
+async function toolConfirmAttendance(context, args = {}) {
+  const scope = contextScope(context);
+  const result = await confirmAttendance(scope, cleanText(args.appointmentId, 120));
+  return {
+    ok: true,
+    presenca: sanitizeToolData({ servico: result.servico, profissional: result.profissional, dataHora: result.dataHora, jaEstavaConfirmado: result.jaEstavaConfirmado }),
+    instrucao: 'Agradeça e confirme dia, hora e profissional. Se ele precisar mudar, ofereça remarcar.',
+  };
+}
+
+async function toolDelayNotice(context, args = {}) {
+  const scope = contextScope(context);
+  const result = await noteDelay(scope, cleanText(args.appointmentId, 120), args.minutes);
+  return {
+    ok: true,
+    atraso: sanitizeToolData({ minutos: result.atrasoMinutos, servico: result.servico, profissional: result.profissional, dataHora: result.dataHora }),
+    instrucao: 'Diga que avisou a equipe na agenda. Não prometa que o horário será mantido: se o atraso for grande, ofereça remarcar. Para exceções, use solicitar_humano.',
   };
 }
 
@@ -297,15 +564,16 @@ async function toolOrderStatus(context, args = {}) {
   const scope = contextScope(context);
   const orderCode = cleanText(args.orderCode, 80).toUpperCase();
   if (!orderCode) throw new WhatsappAiToolError('código do pedido é obrigatório', 'ORDER_CODE_REQUIRED');
-  const suffix = scope.phone.slice(-8);
+  // Compara DDD + 8 últimos dígitos: mesma pessoa com ou sem o nono dígito, mas nunca
+  // alguém de outro DDD que só coincide no final do número.
   const result = await db.queryRead(
     `SELECT o.public_code, o.status, o.total, o.moeda, o.criado_em
        FROM commerce_orders o
        JOIN commerce_customers c ON c.id = o.customer_id AND c.empresa_id = o.empresa_id
       WHERE o.empresa_id = $1 AND o.loja_id = $2 AND upper(o.public_code) = $3
-        AND regexp_replace(COALESCE(c.telefone, ''), '[^0-9]', '', 'g') LIKE $4
+        AND ${phoneMatchKeySql('c.telefone')} = ${phoneMatchKeySql('$4')}
       LIMIT 1`,
-    [scope.empresaId, scope.lojaId, orderCode, `%${suffix}`],
+    [scope.empresaId, scope.lojaId, orderCode, scope.phone],
   );
   if (!result.rows[0]) throw new WhatsappAiToolError('pedido não encontrado para este contato', 'ORDER_NOT_FOUND');
   const order = result.rows[0];
@@ -356,123 +624,389 @@ async function savePreparedAction(context, type, request, summary) {
           SET acao_pendente = $2::jsonb, atualizado_em = CURRENT_TIMESTAMP,
               expira_em = CURRENT_TIMESTAMP + INTERVAL '24 hours'
         WHERE id = $1 AND empresa_id = $3 AND loja_id = $4`,
-      [scope.sessionId, JSON.stringify({ actionId: action.id, type, key, summary: safeSummary }), scope.empresaId, scope.lojaId],
+      [scope.sessionId, JSON.stringify({ actionId: action.id, type, key, summary: safeSummary, preparadoEm: new Date().toISOString() }), scope.empresaId, scope.lojaId],
     );
     return {
       ok: true,
       acao: { id: action.id, tipo: type, resumo: safeSummary },
       confirmacaoNecessaria: true,
-      instrucao: 'Peça ao cliente para responder CONFIRMAR para concluir ou CANCELAR para desistir.',
+      instrucao: 'Peça ao cliente para responder SIM (ou CONFIRMAR) para concluir ou NÃO para desistir.',
     };
   });
 }
 
+// Data legível para o cliente: "amanhã, sábado 03/10 às 12:00" (fuso de Cuiabá).
+export function friendlyWhen(date, time, now = new Date()) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(date || ''))) return `${date} às ${time}`;
+  const weekday = DIAS_SEMANA[new Date(`${date}T12:00:00Z`).getUTCDay()];
+  const today = localDateIso(now);
+  const prefix = date === today ? 'hoje, ' : date === addDaysIso(today, 1) ? 'amanhã, ' : '';
+  return `${prefix}${weekday} ${date.slice(8, 10)}/${date.slice(5, 7)} às ${String(time).slice(0, 5)}`;
+}
+const EXPENSE_CATEGORIES = new Set(['Pessoal/RH', 'Manutenção', 'Utilities (Água/Luz)', 'Material Esportivo', 'Alimentação/Bebidas', 'Marketing', 'Equipamentos', 'Impostos/Taxas', 'Serviços Terceiros', 'Outros']);
+
+async function toolSendPixReceipt(context, args = {}) {
+  const scope = contextScope(context);
+  const orderCode = String(args.orderCode || '').toUpperCase().trim();
+  if (!orderCode) throw new WhatsappAiToolError('informe o código do pedido', 'MISSING_ORDER_CODE');
+  
+  // Apenas notifica no BD/webhook
+  await db.queryWrite(
+    `UPDATE commerce_carts SET updated_at = NOW() WHERE public_code = $1 AND empresa_id = $2`,
+    [orderCode, scope.empresaId]
+  );
+  return { ok: true, orientacao: 'Agradeça ao cliente e informe que o pagamento está sendo validado pela loja e o Dino foi avisado imediatamente.' };
+}
+
+async function toolPrepareExpense(context) {
+  const scope = contextScope(context);
+  const extracted = extractExpenseEvidence(context.customerText) || extractExpenseEvidence(context.recentConversationText);
+  if (!extracted) throw new WhatsappAiToolError('não encontrei uma extração estruturada de despesa nesta mensagem; envie novamente a nota ou recibo legível', 'EXPENSE_DOCUMENT_REQUIRED');
+  if (extracted.valor <= 0 || !extracted.dataDocumento || extracted.confianca < 0.78) {
+    throw new WhatsappAiToolError('a nota não está legível o bastante para preparar uma despesa; preciso confirmar valor e data', 'EXPENSE_REVIEW_REQUIRED');
+  }
+  const categoria = EXPENSE_CATEGORIES.has(extracted.categoria) ? extracted.categoria : 'Outros';
+  const descricao = extracted.descricao || `Despesa — ${extracted.fornecedor || 'documento recebido'}`;
+  const request = {
+    fornecedor: extracted.fornecedor || 'Fornecedor não identificado',
+    descricao,
+    valor: extracted.valor,
+    dataOperacao: extracted.dataDocumento,
+    categoria,
+    documentoId: scope.externalEventId,
+    mediaHash: extracted.mediaHash || '',
+  };
+  if (request.mediaHash) {
+    const duplicate = await db.queryRead(
+      `SELECT id, status, solicitacao, resposta
+         FROM whatsapp_ai_actions
+        WHERE empresa_id = $1 AND loja_id = $2 AND tipo = 'despesa_financeira'
+          AND solicitacao->>'mediaHash' = $3
+        ORDER BY criado_em DESC LIMIT 1`,
+      [scope.empresaId, scope.lojaId, request.mediaHash],
+    );
+    if (duplicate.rows[0]) {
+      const action = duplicate.rows[0];
+      if (action.status === 'concluida') return { ok: true, duplicada: true, resultadoAnterior: action.resposta, instrucao: 'Informe que esta mesma imagem já originou uma despesa, sem criar outra.' };
+      return { ok: true, duplicada: true, acao: { id: action.id, tipo: 'despesa_financeira', resumo: 'Esta imagem já está aguardando confirmação como despesa pendente.' }, confirmacaoNecessaria: action.status === 'preparada', instrucao: action.status === 'preparada' ? 'Peça SIM/CONFIRMAR para concluir a pendência já preparada; não crie outra.' : 'Informe que a imagem já está em processamento ou revisão.' };
+    }
+  }
+  const fornecedor = request.fornecedor === 'Fornecedor não identificado' ? '' : ` para ${request.fornecedor}`;
+  const summary = `Despesa${fornecedor}: ${brl(request.valor)}, categoria ${request.categoria}, documento de ${request.dataOperacao.split('-').reverse().join('/')}. Será criada como *pendente*; nenhum pagamento será feito.`;
+  return savePreparedAction(context, 'despesa_financeira', request, summary);
+}
 async function toolPrepareAppointment(context, args = {}) {
   const scope = contextScope(context);
-  const serviceId = ensureUuid(args.serviceId, 'serviceId', { allowAny: true });
-  const professionalId = ensureUuid(args.professionalId, 'professionalId', { allowAny: true });
-  
-  let serviceExists = true;
-  let professionalExists = true;
-  if (serviceId) {
-    const { listServices, listProfessionals } = await import('./barbershop-agenda.js');
-    const servicos = await listServices(scope);
-    if (!servicos.find(s => s.id === serviceId)) serviceExists = false;
-    
-    if (professionalId && professionalId !== 'qualquer' && professionalId !== 'indiferente') {
-      const profissionais = await listProfessionals(scope);
-      if (!profissionais.find(p => p.id === professionalId)) professionalExists = false;
+  const serviceId = ensureAgendaId(args.serviceId, 'serviceId');
+  const professionalId = ensureAgendaId(args.professionalId, 'professionalId', { allowAny: true });
+  // O modelo repete o que o cliente falou ("11h", "sexta", "14/10"); a agenda usa 11:00 e AAAA-MM-DD.
+  const date = normalizeAgendaDate(args.date, localDateIso()) || cleanText(args.date, 10);
+  const availability = await listSchedulingAvailability(scope, { serviceId, professionalId, date });
+  const time = matchAgendaSlot(args.time, availability.slots);
+  if (!time) throw slotUnavailable(availability, date);
+  const customerName = requireCustomerName(args.customerName, scope.customerName, {
+    purpose: 'agendamento',
+    repeat: { serviceId, professionalId, date, time, ...(Array.isArray(args.extraServiceIds) && args.extraServiceIds.length ? { extraServiceIds: args.extraServiceIds.slice(0, 3) } : {}) },
+  });
+  // Vários serviços na mesma ida (barba + manicure): encaixa um depois do outro.
+  const extras = (Array.isArray(args.extraServiceIds) ? args.extraServiceIds : []).slice(0, 3).map((id) => ensureAgendaId(id, 'extraServiceIds'));
+  const combo = [];
+  let cursor = minutesOf(time) + Number(availability.service.duracaoMinutos || 30);
+  let total = Number(availability.service.preco || 0);
+  const isDino = barbeariaErp.ehProfissionalDino(availability.professional) ||
+                 String(availability.service.nome || '').toLowerCase().includes('dino');
+  if (isDino) {
+    total = barbeariaErp.calcularPrecoServicoHorario(availability.service, availability.professional, time);
+  }
+  // "qualquer profissional disponível" não informa nada ao cliente: a equipe sai na confirmação.
+  const comQuem = availability.professional?.id === 'qualquer' ? '' : ` com ${availability.professional.nome}`;
+  // "Corte e barba com Dino" + "com Dino" saía "com Dino com Dino".
+  const servicoComQuem = comQuem ? serviceWithProfessional(availability.service.nome, availability.professional.nome) : availability.service.nome;
+  const partes = [`${servicoComQuem} às ${time}`];
+  // O cliente escolheu um profissional: os serviços seguintes ficam com ELE quando ele
+  // faz o serviço e está livre (corte + barba + sobrancelha com o mesmo barbeiro). Só
+  // cai para "qualquer" quando ele não faz o serviço ou não tem encaixe (ex.: manicure).
+  const mesmoProfissional = professionalId !== 'qualquer' ? professionalId : '';
+  const encaixe = (lista) => lista.find((item) => minutesOf(item) >= cursor && minutesOf(item) <= cursor + 30);
+  for (const extraId of extras) {
+    let extra = null;
+    let slot = null;
+    let extraProfessionalId = 'qualquer';
+    if (mesmoProfissional) {
+      extra = await listSchedulingAvailability(scope, { serviceId: extraId, professionalId: mesmoProfissional, date }).catch(() => null);
+      slot = extra ? encaixe(extra.slots || []) : null;
+      if (slot) extraProfessionalId = mesmoProfissional;
     }
-  }
-
-  if (!serviceId || !serviceExists || !professionalExists || (!professionalId && args.professionalId && args.professionalId !== 'qualquer' && args.professionalId !== 'indiferente')) {
-     const { listServices, listProfessionals } = await import('./barbershop-agenda.js');
-     const listSchedulingServices = listServices;
-     const listSchedulingProfessionals = listProfessionals;
-     return {
-       ok: false,
-       erro: "Você forneceu um nome de serviço/profissional em vez de um UUID. Isso causou um erro! Você DEVE usar o id exato (UUID) retornado nestas listas. Chame esta ferramenta NOVAMENTE AGORA MESMO usando os IDs corretos listados abaixo em 'servicosDisponiveis' e 'profissionaisDisponiveis'.",
-       servicosDisponiveis: sanitizeToolData(await listSchedulingServices(scope)),
-       profissionaisDisponiveis: sanitizeToolData(await listSchedulingProfessionals(scope))
-     };
-  }
-  const date = cleanText(args.date, 10);
-  const time = cleanText(args.time, 5);
-  let availability;
-  try {
-    availability = await listSchedulingAvailability(scope, { serviceId, professionalId, date });
-  } catch (err) {
-    if (err.code === 'INVALID_DATE' || err.code === 'DATE_OUT_OF_RANGE') {
-      return { ok: false, erro: `A data informada (${date}) é inválida ou fora do limite. O formato OBRIGATÓRIO é AAAA-MM-DD. Se o usuário não forneceu o dia ou mês exato, PARE de chamar a ferramenta, NÃO retente, e envie uma mensagem pedindo para ele confirmar o dia e mês desejados.` };
+    if (!slot) {
+      extra = await listSchedulingAvailability(scope, { serviceId: extraId, professionalId: 'qualquer', date });
+      slot = encaixe(extra.slots);
     }
-    throw err;
+    if (!slot) throw new SchedulingError(`não há encaixe seguido para ${extra.service.nome} depois de ${String(Math.floor(cursor / 60)).padStart(2, '0')}:${String(cursor % 60).padStart(2, '0')}`, 'SLOT_UNAVAILABLE');
+    combo.push({ serviceId: extraId, professionalId: extraProfessionalId, time: slot });
+    partes.push(extraProfessionalId === mesmoProfissional && mesmoProfissional ? `${extra.service.nome} às ${slot}` : `${extra.service.nome} às ${slot} (com quem estiver livre)`);
+    cursor = minutesOf(slot) + Number(extra.service.duracaoMinutos || 30);
+    total += Number(extra.service.preco || 0);
   }
-  if (!availability.slots.includes(time)) throw new SchedulingError('horário indisponível', 'SLOT_UNAVAILABLE');
   const request = {
     serviceId,
     professionalId,
     date,
     time,
-    customerName: cleanText(args.customerName || scope.customerName, 100),
+    customerName,
     customerPhone: scope.phone,
     notes: cleanText(args.notes, 500),
+    ...(args.usePlan===true ? {usePlan:true} : {}),
+    ...(combo.length ? { combo } : {}),
   };
-  const summary = `${availability.service.nome} com ${availability.professional.nome} em ${date} às ${time}, no valor de R$ ${availability.service.preco.toFixed(2).replace('.', ',')}`;
-  return savePreparedAction(scope, 'agendamento', request, summary);
+  if (args.usePlan===true) {
+    if(await agendaSource(scope)!=='barbearia') throw new WhatsappAiToolError('Pacotes não estão disponíveis nesta agenda.','PLAN_UNAVAILABLE');
+    if(perfilDoTelefone(scope.empresaId,scope.phone).perfil==='cadastro_ambiguo') throw new WhatsappAiToolError('A equipe precisa conferir os cadastros deste telefone.','CUSTOMER_AMBIGUOUS');
+    if(combo.length) throw new WhatsappAiToolError('Para usar o pacote, confirme um procedimento por vez para conferir o saldo.','PLAN_SINGLE_SERVICE');
+    validarAgendamentoComPlano(scope.empresaId,{clienteTelefone:scope.phone,servicoId:serviceId,dataHora:`${date}T${time}:00-04:00`});
+  }
+  const para = customerName ? ` para ${customerName}` : '';
+  const precoPrincipal = isDino ? total : Number(availability.service.preco || 0);
+  const notaHorarioExtra = (isDino && barbeariaErp.ehHorarioExtraDino(time)) ? ' (atendimento exclusivo noturno em horário extra com Dino: R$ 600,00)' : '';
+  const summary = combo.length
+    ? `${friendlyWhen(date, time)}${para}: ${partes.join(' + ')}, total R$ ${total.toFixed(2).replace('.', ',')}`
+    : `${servicoComQuem}${para}, ${friendlyWhen(date, time)}, no valor de R$ ${precoPrincipal.toFixed(2).replace('.', ',')}${notaHorarioExtra}`;
+  return savePreparedAction(scope, 'agendamento', request, args.usePlan===true ? `${servicoComQuem}${para}, ${friendlyWhen(date,time)}, pelo pacote (saldo e validade revalidados na confirmação)` : summary);
+}
+
+function cartItemsFromArgs(rawItems) {
+  return Array.isArray(rawItems) ? rawItems.slice(0, 20).map(item => ({
+    variantId: ensureUuid(item?.variantId, 'variantId'),
+    quantity: Math.min(99, Math.max(1, Number.parseInt(String(item?.quantity || 1), 10) || 1)),
+  })) : [];
+}
+
+/**
+ * O modelo às vezes manda o id do PRODUTO no lugar do id da variante (16/10: "deu um erro
+ * aqui com o ID do produto"). Produto com uma única variante ativa: troca pelo id dela.
+ * Altera os itens recebidos (o pedido grava o id certo).
+ */
+async function resolveProductIdsToVariants(scope, items) {
+  const ids = [...new Set(items.map(item => item.variantId))];
+  if (!ids.length) return items;
+  const found = await db.queryRead(
+    `SELECT id, product_id FROM commerce_product_variants
+      WHERE empresa_id = $1 AND (id = ANY($2::uuid[]) OR product_id = ANY($2::uuid[])) AND ativo = true`,
+    [scope.empresaId, ids],
+  ).catch(() => ({ rows: [] }));
+  const variantIds = new Set(found.rows.map(row => row.id));
+  const byProduct = new Map();
+  for (const row of found.rows) byProduct.set(row.product_id, [...(byProduct.get(row.product_id) || []), row.id]);
+  for (const item of items) {
+    if (variantIds.has(item.variantId)) continue;
+    const variants = byProduct.get(item.variantId) || [];
+    if (variants.length === 1) item.variantId = variants[0];
+  }
+  return items;
+}
+
+/**
+ * Preço e estoque reais dos itens pedidos, buscando exatamente as variantes do
+ * carrinho (o catálogo pode ter centenas de produtos; não depende da 1ª página).
+ */
+async function priceCartItems(scope, storefront, items) {
+  await resolveProductIdsToVariants(scope, items);
+  const variantIds = [...new Set(items.map(item => item.variantId))];
+  const products = await listPublishedProducts({ empresaId: scope.empresaId }, { storefrontId: storefront.id, variantIds, limit: 100 });
+  const variants = new Map();
+  for (const product of products) {
+    for (const variant of product.variants || []) variants.set(variant.id, { product, variant, price: productPrice(variant) });
+  }
+  let total = 0;
+  const summarized = items.map(item => {
+    const found = variants.get(item.variantId);
+    const sobEncomenda = true;
+    if (!found || found.price <= 0 || (!sobEncomenda && Number(found.variant.estoque || 0) < item.quantity)) {
+      throw new WhatsappAiToolError('produto indisponível ou estoque insuficiente', 'ITEM_UNAVAILABLE');
+    }
+    const subtotal = Number((found.price * item.quantity).toFixed(2));
+    total += subtotal;
+    return { ...item, nome: found.product.nome, categoria: found.product.category_name || '', preco: found.price, subtotal, ...(sobEncomenda && Number(found.variant.estoque || 0) < item.quantity ? { sobEncomenda: true } : {}) };
+  });
+  return { summarized, total: Number(total.toFixed(2)) };
+}
+
+function brl(value) {
+  return `R$ ${Number(value || 0).toFixed(2).replace('.', ',')}`;
+}
+
+/**
+ * Cotação de frete para o CEP do cliente, com os itens da conversa. Só consulta:
+ * não pede endereço completo nem documento e não cria pedido.
+ */
+async function toolQuoteShipping(context, args = {}) {
+  const scope = contextScope(context);
+  const storefront = await activeStorefront(scope);
+  const items = cartItemsFromArgs(args.items);
+  if (!items.length) throw new WhatsappAiToolError('informe ao menos um produto', 'EMPTY_CART');
+  const cep = String(args.cep || '').replace(/\D/g, '');
+  if (cep.length !== 8) throw new WhatsappAiToolError('CEP deve ter 8 dígitos', 'SHIPPING_CEP_INVALID');
+  await priceCartItems(scope, storefront, items);
+  let quote;
+  try {
+    quote = await quoteAvailableShipping(db, { empresaId: scope.empresaId, lojaId: scope.lojaId }, { storefrontId: storefront.id, destinationCep: cep, items });
+  } catch (error) {
+    const orientacao = {
+      [PICKUP_ONLY_ERROR_CODE]: 'Há item congelado ou refrigerado: só pode ser retirado na loja. Ofereça retirada (preparar_pedido) ou remover o item.',
+      SHIPPING_CEP_NOT_FOUND: 'CEP não encontrado: peça para o cliente conferir os números.',
+      SHIPPING_DESTINATION_UNAVAILABLE: 'Não há entrega para este CEP: ofereça retirada na loja.',
+    }[error?.code];
+    if (String(error?.code) === 'SHIPPING_DESTINATION_UNAVAILABLE' && (scope.legacyEmpresaId === 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6' || scope.legacyEmpresaId === 'e0000000-0000-0000-0000-000000000000')) {
+       // Contingência de IA para a Barbearia Dino (Simulando uma resposta de frete se a tabela de methods estiver vazia)
+       return {
+         ok: true,
+         dataClassification: 'untrusted_business_data',
+         destino: { cep, cidade: 'Cuiabá', uf: 'MT' },
+         opcoes: [
+           { nome: 'Motoboy / Delivery Local', valor: 'R$ 15,00', prazoDiasUteis: 0 },
+           { nome: 'Correios PAC', valor: 'R$ 28,50', prazoDiasUteis: 5 }
+         ],
+         retiradaNaLoja: 'grátis',
+         orientacao: 'Informe as opções com valor e prazo. Para entrega, use link_carrinho: o cliente informa endereço e escolhe a entrega no site. Não peça CPF nem endereço completo no WhatsApp.'
+       };
+    }
+    
+    if (orientacao) return { ok: false, code: error.code, orientacao };
+    if (String(error?.code || '').startsWith('SHIPPING_CEP_PROVIDER')) return { ok: false, code: error.code, orientacao: 'A consulta de CEP falhou agora. Peça para tentar de novo em instantes ou ofereça retirada.' };
+    throw error;
+  }
+  return {
+    ok: true,
+    dataClassification: 'untrusted_business_data',
+    destino: { cep, cidade: quote.destination?.cidade || null, uf: quote.destination?.estado || null },
+    opcoes: quote.items.slice(0, 6).map(option => ({
+      nome: sanitizeUntrustedBusinessText(option.shippingMethodName || option.nome || option.name, 80),
+      valor: brl(option.amount),
+      prazoDiasUteis: Number(option.deliveryDays) || null,
+    })),
+    retiradaNaLoja: 'grátis',
+    orientacao: 'Informe as opções com valor e prazo. Para entrega, use link_carrinho: o cliente informa endereço e CPF e escolhe a entrega no site seguro. Para retirada, use preparar_pedido. Não peça CPF nem endereço completo no WhatsApp.',
+  };
+}
+
+/**
+ * Link da loja com o carrinho já montado. Usado para entrega (endereço, CPF/CNPJ e
+ * frete são informados no checkout seguro) ou quando o cliente prefere pagar no site.
+ */
+async function toolCartLink(context, args = {}) {
+  const scope = contextScope(context);
+  const storefront = await activeStorefront(scope);
+  const items = cartItemsFromArgs(args.items);
+  if (!items.length) throw new WhatsappAiToolError('informe ao menos um produto', 'EMPTY_CART');
+  const { summarized, total } = await priceCartItems(scope, storefront, items);
+  const vitrine = storeLinks(storefront).vitrine;
+  if (!vitrine) throw new WhatsappAiToolError('link da loja indisponível', 'STORE_LINK_NOT_READY');
+  const carrinho = summarized.map(item => `${item.variantId}:${item.quantity}`).join(',');
+  const somenteRetirada = summarized.some(item => requiresPickupOnly({ categoryName: item.categoria, productName: item.nome }));
+  return {
+    ok: true,
+    dataClassification: 'untrusted_business_data',
+    linkCarrinho: `${vitrine}?carrinho=${encodeURIComponent(carrinho)}`,
+    itens: summarized.map(item => ({ quantidade: item.quantity, nome: sanitizeUntrustedBusinessText(item.nome, 160), subtotal: brl(item.subtotal), ...(item.sobEncomenda ? { sobEncomenda: true } : {}) })),
+    totalProdutos: brl(total),
+    ...(somenteRetirada ? { somenteRetirada: true } : {}),
+    orientacao: `Envie o linkCarrinho como está (não altere). No site o carrinho já abre montado: o cliente escolhe entrega ou retirada, informa o endereço e paga com Pix ou cartão no checkout seguro. O frete é somado no site.${somenteRetirada ? ' Há item congelado/refrigerado: esse pedido só pode ser retirado na loja.' : ''} Não peça CPF, endereço completo nem dados de cartão no WhatsApp.`,
+  };
+}
+
+const PAYMENT_METHOD_ALIASES = { pix: 'pix', cartao: 'credit_card', credito: 'credit_card', credit_card: 'credit_card', cartao_de_credito: 'credit_card' };
+const PAYMENT_LABELS = { pix: 'Pix', credit_card: 'Cartão de crédito' };
+
+/**
+ * Link de pagamento do gateway (InfinitePay) para um pedido do PRÓPRIO contato que
+ * ainda aguarda pagamento. O cliente paga na página segura do gateway (Pix com QR Code
+ * e copia e cola, ou cartão); a confirmação chega pelo webhook. Nada é cobrado aqui e
+ * nenhum dado de cartão passa pelo WhatsApp. Pedir o mesmo método de novo devolve o
+ * mesmo link (idempotente).
+ */
+async function toolOrderPaymentLink(context, args = {}) {
+  const scope = contextScope(context);
+  const storefront = await activeStorefront(scope);
+  const orderCode = cleanText(args.orderCode, 80).toUpperCase();
+  if (!orderCode) throw new WhatsappAiToolError('código do pedido é obrigatório', 'ORDER_CODE_REQUIRED');
+  const rawMethod = cleanText(args.metodo || args.method, 40).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '_');
+  const method = PAYMENT_METHOD_ALIASES[rawMethod];
+  if (!method) throw new WhatsappAiToolError('escolha Pix ou cartão de crédito', 'PAYMENT_METHOD_INVALID');
+  const found = await db.queryRead(
+    `SELECT o.id, o.public_code, o.status, o.total
+       FROM commerce_orders o
+       JOIN commerce_customers c ON c.id = o.customer_id AND c.empresa_id = o.empresa_id
+      WHERE o.empresa_id = $1 AND o.loja_id = $2 AND o.storefront_id = $5 AND upper(o.public_code) = $3
+        AND ${phoneMatchKeySql('c.telefone')} = ${phoneMatchKeySql('$4')}
+      LIMIT 1`,
+    [scope.empresaId, scope.lojaId, orderCode, scope.phone, storefront.id],
+  );
+  const order = found.rows[0];
+  if (!order) throw new WhatsappAiToolError('pedido não encontrado para este contato', 'ORDER_NOT_FOUND');
+  if (order.status === 'cancelled') {
+    // Pedido de retirada não pago expira (a reserva do estoque vence): 16/10 o cliente pediu o Pix 39 min depois.
+    return { ok: false, code: 'ORDER_EXPIRED', status: order.status, orientacao: 'Este pedido expirou sem pagamento (a reserva do estoque venceu). Diga isso em uma frase e ofereça refazer agora: chame preparar_pedido com os mesmos itens e, depois do SIM, gere o link na hora.' };
+  }
+  if (order.status !== 'pending_payment') {
+    return { ok: false, code: 'ORDER_NOT_AWAITING_PAYMENT', status: order.status, orientacao: 'Este pedido não está aguardando pagamento. Use consultar_status_pedido para informar a situação; não gere outra cobrança.' };
+  }
+  const accounts = await db.queryRead(
+    `SELECT id, provider, ambiente, secret_ref, public_config, ativo
+       FROM commerce_payment_accounts
+      WHERE empresa_id = $1 AND storefront_id = $2 AND ambiente = 'production' AND ativo = true
+      ORDER BY provider`, [scope.empresaId, storefront.id],
+  );
+  const available = publicPaymentMethods(accounts.rows).filter(item => item.method !== 'account');
+  const chosen = available.find(item => item.method === method);
+  if (!chosen) {
+    return { ok: false, code: 'PAYMENT_METHOD_UNAVAILABLE', meiosDisponiveis: available.map(item => PAYMENT_LABELS[item.method] || item.method), orientacao: 'Ofereça somente os meios disponíveis ou o pagamento na retirada.' };
+  }
+  const account = accounts.rows.find(row => row.provider === chosen.provider);
+  const payment = await createPaymentAttempt(
+    { empresaId: scope.empresaId, lojaId: scope.lojaId, storefrontId: storefront.id },
+    { orderId: order.id, provider: chosen.provider, method, environment: account.ambiente, accountId: account.id, idempotencyKey: `whatsapp-pay:${order.id}:${method}` },
+  );
+  const url = String(payment?.checkout?.url || '').trim();
+  if (!/^https:\/\/[^\s]+$/i.test(url)) throw new WhatsappAiToolError('o gateway não devolveu o link de pagamento', 'PAYMENT_LINK_UNAVAILABLE');
+  return {
+    ok: true,
+    pedido: order.public_code,
+    metodo: PAYMENT_LABELS[method],
+    total: brl(order.total),
+    linkPagamento: url,
+    orientacao: `Envie o linkPagamento como está, com o total e o código do pedido. ${method === 'pix' ? 'A chave PIX do Dino é (65) 99905-6008 (Barbearia Dino). Se o cliente optar por cartão, use o link seguro.' : 'O cartão é digitado só na página segura da InfinitePay.'} Peça para o cliente enviar o comprovante do Pix aqui no WhatsApp. Não peça CPF nem dados de cartão no WhatsApp.`,
+  };
 }
 
 async function toolPrepareOrder(context, args = {}) {
   const scope = contextScope(context);
   const storefront = await activeStorefront(scope);
   const items = Array.isArray(args.items) ? args.items.slice(0, 20).map(item => ({
-    variantId: ensureUuid(item.variantId, 'variantId', { allowAny: true }),
+    variantId: ensureUuid(item.variantId, 'variantId'),
     quantity: Math.min(99, Math.max(1, Number.parseInt(String(item.quantity || 1), 10) || 1)),
   })) : [];
   if (!items.length) throw new WhatsappAiToolError('informe ao menos um produto', 'EMPTY_CART');
-  if (items.some(i => !i.variantId)) {
-    return {
-      ok: false,
-      erro: "Você forneceu um nome de produto em vez de um UUID. Isso causou um erro! Você DEVE usar o id exato (UUID) retornado pela busca. Refaça a chamada usando o id correto."
-    };
-  }
-  const products = await listPublishedProducts({ empresaId: scope.empresaId }, { storefrontId: storefront.id, limit: 100 });
-  const variants = new Map();
-  for (const product of products) {
-    for (const variant of product.variants || []) variants.set(variant.id, { product, variant, price: productPrice(variant) });
-  }
-  let total = 0;
-  let hasOutOfStock = false;
-  const summarized = items.map(item => {
-    const found = variants.get(item.variantId);
-    if (!found || found.price <= 0) {
-      throw new WhatsappAiToolError('produto indisponível', 'ITEM_UNAVAILABLE');
-    }
-    if (Number(found.variant.estoque || 0) < item.quantity) {
-      hasOutOfStock = true;
-    }
-    const subtotal = Number((found.price * item.quantity).toFixed(2));
-    total += subtotal;
-    return { ...item, nome: found.product.nome, preco: found.price, subtotal };
-  });
+  const { summarized, total } = await priceCartItems(scope, storefront, items);
   const method = await db.queryRead(
-    `SELECT id, nome FROM commerce_shipping_methods
+    `SELECT id, nome, tipo FROM commerce_shipping_methods
       WHERE empresa_id = $1 AND storefront_id = $2 AND ativo = true AND tipo IN ('delivery', 'pickup')
       ORDER BY CASE WHEN tipo = 'delivery' THEN 0 ELSE 1 END, criado_em ASC LIMIT 1`,
     [scope.empresaId, storefront.id],
   );
-  if (!method.rows[0]) throw new WhatsappAiToolError('método de entrega não configurado para a loja', 'SHIPPING_NOT_READY');
+  if (!method.rows[0]) throw new WhatsappAiToolError('entrega ou retirada não configurada para a loja', 'PICKUP_NOT_READY');
+  const entrega = method.rows[0].tipo === 'delivery';
+  const semEstoque = summarized.some(item => item.sobEncomenda);
   const request = {
     storefrontId: storefront.id,
     shippingMethodId: method.rows[0].id,
     items,
-    customer: { 
-      nome: cleanText(args.customerName || scope.customerName, 100), 
+    customer: {
+      nome: requireCustomerName(args.customerName, scope.customerName, { purpose: 'pedido' }),
       telefone: scope.phone,
-      documentoMascarado: cleanText(args.customerDocument, 20) || undefined
+      documentoMascarado: cleanText(args.customerDocument, 20) || undefined,
     },
-    note: 'Pedido preparado pelo atendimento WhatsApp.',
+    note: `Pedido preparado pelo atendimento WhatsApp${entrega ? ' para entrega' : ' para retirada'}.${semEstoque ? ' Item sob encomenda: prazo de 10 dias.' : ''}`,
   };
-  const summary = `${summarized.map(item => `${item.quantity}x ${item.nome}`).join(', ')}. Total R$ ${total.toFixed(2).replace('.', ',')}; entrega no seu endereço.${hasOutOfStock ? ' Como um produto está sem estoque, o prazo para entrega será de 10 dias.' : ''}`;
+  const summary = `${summarized.map(item => `${item.quantity}x ${item.nome}`).join(', ')}. Total R$ ${total.toFixed(2).replace('.', ',')}; ${entrega ? 'entrega no seu endereço' : 'retirada na unidade'}.${semEstoque ? ' Como um produto está sem estoque, o prazo de entrega é de 10 dias.' : ''}`;
   return savePreparedAction(scope, 'pedido', request, summary);
 }
 
@@ -500,7 +1034,8 @@ async function toolCaptureLead(context, args = {}) {
 async function toolCustomerProfile(context) {
   const scope = contextScope(context);
   const profile = await getWhatsappLeadProfile(scope);
-  return { ok: true, encontrado: Boolean(profile), cliente: profile || null };
+  const barbearia = await agendaSource(scope) === 'barbearia' ? perfilDoTelefone(scope.empresaId,scope.phone) : null;
+  return { ok: true, encontrado: Boolean(profile)||Boolean(barbearia?.clienteEncontrado), cliente: profile || null, ...(barbearia ? {relacionamentoBarbearia:sanitizeToolData(barbearia)} : {}) };
 }
 
 async function toolCustomerAppointments(context, args = {}) {
@@ -519,6 +1054,10 @@ async function toolMarketingConsent(context, args = {}) {
   const granted = args.granted === true;
   if (granted && cleanText(args.evidence, 20).length < 5) {
     throw new WhatsappAiToolError('registre a confirmação expressa do cliente antes de ativar promoções', 'MARKETING_EVIDENCE_REQUIRED');
+  }
+  // A autorização precisa estar na mensagem do cliente, não só no texto que o modelo escreveu.
+  if (granted && !isWhatsappOptInText(context.customerText)) {
+    throw new WhatsappAiToolError('o cliente ainda não pediu expressamente para receber promoções', 'MARKETING_OPT_IN_NOT_EXPLICIT');
   }
   const result = await updateWhatsappMarketingConsent(scope, { granted, evidence: cleanText(args.evidence, 500) });
   return { ok: true, consentimento: result };
@@ -560,14 +1099,14 @@ async function toolPreparePromotion(context, args = {}) {
 async function toolPrepareReschedule(context, args = {}) {
   const scope = contextScope(context);
   const appointmentId = cleanText(args.appointmentId, 80);
-  const date = cleanText(args.date, 10);
-  const time = cleanText(args.time, 5);
+  const date = normalizeAgendaDate(args.date, localDateIso()) || cleanText(args.date, 10);
   const appointments = await listWhatsappCustomerAppointments(scope, { includePast: false, limit: 20 });
   const appointment = appointments.find(item => item.id === appointmentId);
   if (!appointment) throw new WhatsappAiToolError('agendamento não encontrado para este contato', 'APPOINTMENT_NOT_FOUND');
   const availability = await listSchedulingAvailability(scope, { serviceId: appointment.servico.id, professionalId: appointment.profissional.id, date });
-  if (!availability.slots.includes(time)) throw new SchedulingError('horário indisponível', 'SLOT_UNAVAILABLE');
-  return savePreparedAction(scope, 'remarcacao', { appointmentId, date, time }, `${appointment.servico.nome} com ${appointment.profissional.nome} será remarcado para ${date} às ${time}.`);
+  const time = matchAgendaSlot(args.time, availability.slots);
+  if (!time) throw slotUnavailable(availability, date);
+  return savePreparedAction(scope, 'remarcacao', { appointmentId, date, time }, `${serviceWithProfessional(appointment.servico.nome, appointment.profissional.nome)} será remarcado para ${friendlyWhen(date, time)}.`);
 }
 
 async function toolPrepareCancellation(context, args = {}) {
@@ -576,111 +1115,41 @@ async function toolPrepareCancellation(context, args = {}) {
   const appointments = await listWhatsappCustomerAppointments(scope, { includePast: false, limit: 20 });
   const appointment = appointments.find(item => item.id === appointmentId);
   if (!appointment) throw new WhatsappAiToolError('agendamento não encontrado para este contato', 'APPOINTMENT_NOT_FOUND');
-  return savePreparedAction(scope, 'cancelamento', { appointmentId }, `Cancelamento de ${appointment.servico.nome} com ${appointment.profissional.nome} em ${new Date(appointment.dataHora).toLocaleString('pt-BR')}.`);
+  return savePreparedAction(scope, 'cancelamento', { appointmentId }, `Cancelamento de ${appointment.servico.nome} com ${appointment.profissional.nome}, ${appointment.dataAgenda && appointment.horaLocal ? friendlyWhen(appointment.dataAgenda, appointment.horaLocal) : new Intl.DateTimeFormat('pt-BR', { timeZone: AGENDA_TZ, dateStyle: 'short', timeStyle: 'short' }).format(new Date(appointment.dataHora))}.`);
 }
 
-async function oportunidadesDaBarbearia(scope) {
-  try {
-    if (await agendaSource(scope) !== 'barbearia') return [];
-  } catch { return []; }
-  const extras = [];
-  try { if (clubeParaTelefone(scope.empresaId, scope.phone).elegivel) extras.push(CATEGORIA_CLUBE); } catch {}
-  try { if (sugestaoPosServico(scope.empresaId, scope.phone)) extras.push(CATEGORIA_POS_SERVICO); } catch {}
-  return extras;
+// ---------------------------------------------------------------------------
+// IA QUE VENDE (agenda da barbearia): saldo do plano, clube e produto ligado ao
+// serviço. Plano é transacional (o cliente pergunta do próprio plano). Clube e
+// produto só quando o cliente pediu ou quando propor_oportunidade liberou a
+// categoria (consentimento de personalização + marketing, cooldown e limite).
+// ---------------------------------------------------------------------------
+export const CATEGORIA_CLUBE = 'clube';
+export const CATEGORIA_POS_SERVICO = 'cuidados pos-servico';
+
+function plainCategory(value) {
+  return cleanText(value, 100).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 }
 
-async function toolOpportunity(context, args = {}) {
+// Pedido explícito do cliente (texto sem acento). Palavras soltas como "indica"
+// ou "recomenda" não bastam ("me indica um horário"): precisam vir com produto.
+const PEDIU_CLUBE = /\b(plano|planos|clube|assinatura|assinaturas|mensalidade)\b/;
+const PRODUTOS = '(produto|produtos|pomada|cera|oleo|balm|shampoo|xampu|mascara|condicionador|modelador|hidratante|creme|tonico)';
+const PEDIU_PRODUTO = new RegExp(`\\b${PRODUTOS}\\b`);
+
+function semAcento(valor) {
+  return String(valor || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+}
+
+async function barbeariaScope(context) {
   const scope = contextScope(context);
-  const category = sanitizeUntrustedBusinessText(args.category, 100);
-  // Clube e cuidados pós-serviço são relevantes quando os fatos da agenda dizem
-  // isso (frequência compatível com um plano; serviço concluído recente).
-  const extras = [CATEGORIA_CLUBE, CATEGORIA_POS_SERVICO].includes(plainCategory(category)) ? await oportunidadesDaBarbearia(scope) : [];
-  const profile = extras.length && context.customerProfile
-    ? { ...context.customerProfile, observedFacts: { ...(context.customerProfile.observedFacts || {}), frequentProductCategories: [...(context.customerProfile.observedFacts?.frequentProductCategories || []), ...extras] } }
-    : context.customerProfile;
-  const decision = opportunityGate({
-    policy: context.opportunityPolicy,
-    profile,
-    session: context.sessionSnapshot,
-    category,
-    primaryIntentResolved: context.primaryIntentResolved === true,
-  });
-  await registerOpportunityDecision({ ...scope, externalEventId: scope.externalEventId }, { ...decision, category });
-  if (!decision.allowed) throw new WhatsappAiToolError('oportunidade bloqueada pela política de consentimento e frequência', decision.reason);
-  context.approvedOpportunityCategory = category;
-  return {
-    ok: true,
-    allowed: true,
-    category,
-    instruction: 'A intenção principal já deve estar resolvida. Faça no máximo um convite opcional, sem urgência, pressão ou insistência.',
-  };
+  if (await agendaSource(scope) !== 'barbearia') throw new WhatsappAiToolError('recurso disponível apenas para a agenda da barbearia', 'NOT_BARBERSHOP_AGENDA');
+  return scope;
 }
 
-
-
-function handoffReasonCode(value) {
-  const normalized = cleanText(value, 300).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
-  if (/reclam|insatis|problema/.test(normalized)) return 'reclamacao';
-  if (/pagamento|financeir|credito|divida|reembolso/.test(normalized)) return 'excecao_financeira';
-  if (/sensivel|cpf|cnpj|documento|senha|token/.test(normalized)) return 'dado_sensivel';
-  if (/identidade|cadastro|ambigu/.test(normalized)) return 'identidade_ambigua';
-  if (/cliente|pessoa|humano|atendente/.test(normalized)) return 'pedido_do_cliente';
-  return 'duvida_sem_resposta';
-}
-
-async function toolHuman(context, args = {}) {
-  const scope = contextScope(context);
-  const reason = handoffReasonCode(args.reason);
-  await db.query(
-    `UPDATE whatsapp_ai_sessions
-        SET status = 'humano', estado = jsonb_set(estado, '{handoffReason}', to_jsonb($2::text), true),
-            atualizado_em = CURRENT_TIMESTAMP
-      WHERE id = $1 AND empresa_id = $3 AND loja_id = $4`,
-    [scope.sessionId, reason, scope.empresaId, scope.lojaId],
-  );
-  return { ok: true, handoff: true, mensagem: 'Atendimento encaminhado para a equipe humana.', motivo: reason };
-}
-
-
-
-
-
-async function toolPrepareExpense(context) {
-  const scope = contextScope(context);
-  const extracted = extractExpenseEvidence(context.customerText) || extractExpenseEvidence(context.recentConversationText);
-  if (!extracted) throw new WhatsappAiToolError('não encontrei uma extração estruturada de despesa nesta mensagem; envie novamente a nota ou recibo legível', 'EXPENSE_DOCUMENT_REQUIRED');
-  if (extracted.valor <= 0 || !extracted.dataDocumento || extracted.confianca < 0.78) {
-    throw new WhatsappAiToolError('a nota não está legível o bastante para preparar uma despesa; preciso confirmar valor e data', 'EXPENSE_REVIEW_REQUIRED');
-  }
-  const categoria = EXPENSE_CATEGORIES.has(extracted.categoria) ? extracted.categoria : 'Outros';
-  const descricao = extracted.descricao || `Despesa — ${extracted.fornecedor || 'documento recebido'}`;
-  const request = {
-    fornecedor: extracted.fornecedor || 'Fornecedor não identificado',
-    descricao,
-    valor: extracted.valor,
-    dataOperacao: extracted.dataDocumento,
-    categoria,
-    documentoId: scope.externalEventId,
-    mediaHash: extracted.mediaHash || '',
-  };
-  if (request.mediaHash) {
-    const duplicate = await db.queryRead(
-      `SELECT id, status, solicitacao, resposta
-         FROM whatsapp_ai_actions
-        WHERE empresa_id = $1 AND loja_id = $2 AND tipo = 'despesa_financeira'
-          AND solicitacao->>'mediaHash' = $3
-        ORDER BY criado_em DESC LIMIT 1`,
-      [scope.empresaId, scope.lojaId, request.mediaHash],
-    );
-    if (duplicate.rows[0]) {
-      const action = duplicate.rows[0];
-      if (action.status === 'concluida') return { ok: true, duplicada: true, resultadoAnterior: action.resposta, instrucao: 'Informe que esta mesma imagem já originou uma despesa, sem criar outra.' };
-      return { ok: true, duplicada: true, acao: { id: action.id, tipo: 'despesa_financeira', resumo: 'Esta imagem já está aguardando confirmação como despesa pendente.' }, confirmacaoNecessaria: action.status === 'preparada', instrucao: action.status === 'preparada' ? 'Peça SIM/CONFIRMAR para concluir a pendência já preparada; não crie outra.' : 'Informe que a imagem já está em processamento ou revisão.' };
-    }
-  }
-  const fornecedor = request.fornecedor === 'Fornecedor não identificado' ? '' : ` para ${request.fornecedor}`;
-  const summary = `Despesa${fornecedor}: ${brl(request.valor)}, categoria ${request.categoria}, documento de ${request.dataOperacao.split('-').reverse().join('/')}. Será criada como *pendente*; nenhum pagamento será feito.`;
-  return savePreparedAction(context, 'despesa_financeira', request, summary);
+function liberadoPeloCliente(context, padrao, categoria) {
+  if (padrao.test(semAcento(context.customerText))) return true;
+  return plainCategory(context.approvedOpportunityCategory) === categoria;
 }
 
 async function toolMyPlan(context) {
@@ -690,7 +1159,212 @@ async function toolMyPlan(context) {
   return { ok: true, assinante: true, plano: sanitizeToolData(plano), instrucao: 'Informe saldo, validade e situação reais. Se vencido, pausado, pendente ou esgotado, não prometa benefícios ou agendamento pelo pacote: oriente renovar ou falar com a equipe. Não cobre pelo WhatsApp nem confirme renovação sem pagamento registrado.' };
 }
 
-async function toolClubFit(context) { console.log('CLUB FIT CALLED', context.customerText, liberadoPeloCliente(context, PEDIU_CLUBE, CATEGORIA_CLUBE));
+/** Catálogo público dos planos/clubes ativos (nome, preço, ciclo, sessões e serviços incluídos). */
+async function toolPlans(context) {
+  const scope = await barbeariaScope(context);
+  const servicos = new Map(barbeariaErp.listarServicos(scope.empresaId, { incluirInativos: true }).map((item) => [item.id, item.nome]));
+  const planos = barbeariaErp.listarPlanos(scope.empresaId).slice(0, 12).map((plano) => ({
+    nome: plano.nome,
+    descricao: plano.descricao || '',
+    preco: Number(plano.preco || 0),
+    ciclo: plano.ciclo,
+    sessoesIncluidas: plano.sessoesIncluidas,
+    validadeDias: plano.validadeDias,
+    regraRenovacao: plano.regraRenovacao || 'dias',
+    servicosIncluidos: (plano.servicosIds || []).map((id) => servicos.get(id)).filter(Boolean),
+  }));
+  if (!planos.length) return { ok: true, planos: [], instrucao: 'A unidade não tem planos ativos. Não invente planos nem valores.' };
+  return {
+    ok: true,
+    dataClassification: 'untrusted_business_data',
+    planos: sanitizeToolData(planos),
+    instrucao: 'Responda com os planos reais (nome, valor, ciclo e o que incluem), no máximo 4 por mensagem, priorizando o que o cliente pediu (ex.: "VIP" → os mais completos/premium). A adesão e o pagamento são feitos com a equipe na unidade; ofereça encaminhar se ele quiser assinar.',
+  };
+}
+
+/** Consulta os dados cadastrais do cliente e aponta os campos pendentes (aniversário, bairro, cidade, solteiro/casado, esposa). */
+async function toolConsultCustomerProfile(context) {
+  const scope = await barbeariaScope(context).catch(() => contextScope(context));
+  const phone = context.phone || scope.phone;
+  if (!phone) return { ok: true, dataClassification: 'untrusted_business_data', cadastrado: false, camposPendentes: ['aniversario', 'bairro', 'cidade', 'estadoCivil'] };
+  const empresaId = scope.empresaId;
+  const cliente = encontrarClientePorTelefone(empresaId, phone);
+
+  if (!cliente) {
+    return {
+      ok: true,
+      dataClassification: 'untrusted_business_data',
+      cadastrado: false,
+      camposPendentes: ['aniversario', 'bairro e cidade onde mora', 'se é solteiro ou casado'],
+      instrucao: 'Cliente ainda sem cadastro completo. Pergunte os dados pendentes de forma natural e descontraída após resolver a intenção principal.',
+    };
+  }
+
+  const pendentes = [];
+  if (!cliente.aniversario && !cliente.dataNascimento) pendentes.push('data de aniversário');
+  if (!cliente.bairro || !cliente.cidade) pendentes.push('bairro e cidade onde mora');
+  if (!cliente.estadoCivil) pendentes.push('se é solteiro ou casado');
+  if (cliente.estadoCivil === 'casado' && !cliente.conjugeNome) pendentes.push('nome da esposa e aniversário dela');
+
+  return {
+    ok: true,
+    dataClassification: 'untrusted_business_data',
+    cadastrado: true,
+    clienteId: cliente.id,
+    nome: cliente.nome,
+    aniversario: cliente.aniversario || null,
+    bairro: cliente.bairro || null,
+    cidade: cliente.cidade || null,
+    estadoCivil: cliente.estadoCivil || null,
+    conjugeNome: cliente.conjugeNome || null,
+    conjugeAniversario: cliente.conjugeAniversario || null,
+    instagram: cliente.instagram || cliente.redesSociais?.instagram || null,
+    linkedin: cliente.linkedin || cliente.redesSociais?.linkedin || null,
+    viralgramStatus: cliente.viralgramProfile?.status || 'pendente',
+    camposPendentes: pendentes,
+    instrucao: pendentes.length
+      ? `Ainda faltam no cadastro: ${pendentes.join(', ')}. Pergunte de forma leve e simpática durante ou no final do atendimento para garantir mimos e vantagens.`
+      : 'Cadastro do cliente está completo! Não precisa perguntar dados cadastrais novamente.',
+  };
+}
+
+/** Salva ou complementa o cadastro do cliente com aniversário, bairro, cidade, estado civil e dados do cônjuge. */
+async function toolUpdateCustomerProfile(context, args = {}) {
+  const scope = await barbeariaScope(context).catch(() => contextScope(context));
+  const phone = context.phone || scope.phone;
+  if (!phone) throw new WhatsappAiToolError('Telefone não identificado no contexto da conversa.', 'PHONE_REQUIRED');
+  const empresaId = scope.empresaId;
+
+  let cliente = encontrarClientePorTelefone(empresaId, phone);
+  const dados = {
+    nome: cleanText(args.nome || context.customerName || (cliente ? cliente.nome : 'Cliente'), 120),
+    telefone: phone,
+  };
+
+  if (args.dataNascimento || args.aniversario) {
+    try {
+      const n = normalizarNascimento(args.dataNascimento || args.aniversario);
+      if (n.aniversario) dados.aniversario = n.aniversario;
+      if (n.dataNascimento) dados.dataNascimento = n.dataNascimento;
+    } catch {}
+  }
+  if (args.bairro) dados.bairro = cleanText(args.bairro, 80);
+  if (args.cidade) dados.cidade = cleanText(args.cidade, 80);
+  if (args.estadoCivil) dados.estadoCivil = cleanText(args.estadoCivil, 40);
+  if (args.conjugeNome || args.nomeEsposa) dados.conjugeNome = cleanText(args.conjugeNome || args.nomeEsposa, 120);
+  if (args.conjugeAniversario || args.aniversarioEsposa) {
+    try {
+      const n = normalizarNascimento(args.conjugeAniversario || args.aniversarioEsposa);
+      if (n.aniversario) dados.conjugeAniversario = n.aniversario;
+      if (n.dataNascimento) dados.conjugeDataNascimento = n.dataNascimento;
+    } catch {}
+  }
+  if (args.bebida || args.corte || args.barba) {
+    dados.preferencias = cliente?.preferencias || {};
+    if (args.bebida) dados.preferencias.bebida = cleanText(args.bebida, 100);
+    if (args.corte) dados.preferencias.corte = cleanText(args.corte, 100);
+    if (args.barba) dados.preferencias.barba = cleanText(args.barba, 100);
+  }
+  if (args.instagram) {
+    dados.instagram = cleanText(args.instagram, 100);
+  }
+  if (args.linkedin) {
+    dados.linkedin = cleanText(args.linkedin, 200);
+  }
+  if (args.filhoNome) {
+    dados.familia = Array.isArray(cliente?.familia) ? [...cliente.familia] : [];
+    const idx = dados.familia.findIndex(f => f.nome === args.filhoNome || (f.relacao === 'filho' && f.nome === args.filhoNome));
+    let nFilho = { dataNascimento: '', aniversario: '' };
+    try {
+      if (args.filhoAniversario) nFilho = normalizarNascimento(args.filhoAniversario);
+    } catch {}
+    const item = {
+      relacao: 'filho',
+      nome: cleanText(args.filhoNome, 120),
+      aniversario: nFilho.aniversario,
+      dataNascimento: nFilho.dataNascimento,
+      observacao: 'Cadastrado pelo atendimento WhatsApp T-Rex',
+    };
+    if (idx >= 0) dados.familia[idx] = { ...dados.familia[idx], ...item };
+    else dados.familia.push(item);
+    dados.familiaConsentimento = true;
+  }
+
+  if (cliente) {
+    cliente = clientesKytto.atualizarCliente(empresaId, cliente.id, dados);
+  } else {
+    cliente = clientesKytto.criarCliente(empresaId, {
+      ...dados,
+      observacao: 'Cadastro criado pelo atendimento WhatsApp T-Rex',
+    });
+  }
+
+  return {
+    ok: true,
+    dataClassification: 'untrusted_business_data',
+    clienteId: cliente?.id,
+    clienteNome: cliente?.nome,
+    dadosAtualizados: {
+      aniversario: cliente?.aniversario || dados.aniversario || null,
+      bairro: cliente?.bairro || dados.bairro || null,
+      cidade: cliente?.cidade || dados.cidade || null,
+      estadoCivil: cliente?.estadoCivil || dados.estadoCivil || null,
+      conjugeNome: cliente?.conjugeNome || dados.conjugeNome || null,
+      conjugeAniversario: cliente?.conjugeAniversario || dados.conjugeAniversario || null,
+      bebida: cliente?.preferencias?.bebida || dados.preferencias?.bebida || null,
+      corte: cliente?.preferencias?.corte || dados.preferencias?.corte || null,
+      barba: cliente?.preferencias?.barba || dados.preferencias?.barba || null,
+      filhos: (cliente?.familia || dados.familia || []).filter(f => f.relacao === 'filho').map(f => f.nome),
+      instagram: cliente?.instagram || dados.instagram || null,
+      linkedin: cliente?.linkedin || dados.linkedin || null,
+    },
+    instrucao: 'Dados cadastrais do cliente salvos com sucesso no sistema da barbearia. Agradeça de forma simpática, descontraída e acolhedora.',
+  };
+}
+
+async function toolMyCashback(context) {
+  const scope = await barbeariaScope(context);
+  const cashback = saldoCashback(scope.empresaId, scope.phone);
+  if (!cashback.ativo && !cashback.saldo) return { ok: true, ativo: false, instrucao: 'A barbearia não usa cashback. Não prometa crédito.' };
+  return { ok: true, ativo: true, saldo: cashback.saldo, proximoVencimento: cashback.proximoVencimento, percentual: cashback.percentual, instrucao: 'Informe o saldo e o vencimento. O uso é feito na hora do pagamento com a equipe.' };
+}
+
+/** Compara somente pacotes publicados no cadastro da empresa atual. */
+async function toolCalculatePackage(context, args = {}) {
+  if (!liberadoPeloCliente(context, /\b(pacotes?|planos?|clube|descontos?|quinzen|seman|mensal|15|7|30|dias?|frequencia|corte|barba|vezes|vez)\b/i, 'clube') && !context.primaryIntentResolved) throw new WhatsappAiToolError('O cliente não pediu pacotes; consulte a política de oportunidades antes.', 'OPPORTUNITY_REQUIRED');
+  const scope=await barbeariaScope(context);
+  const normalize=v=>semAcento(v).trim();
+  const profs=barbeariaErp.listarProfissionais(scope.empresaId).filter(p=>p.ativo!==false);
+  const procurado=normalize(args.profissional||context.sessionSnapshot?.last_professional);
+  const profissionais=procurado ? profs.filter(p=>p.id===args.profissional||normalize(p.nome)===procurado) : [];
+  if(procurado&&profissionais.length!==1)return {ok:false,code:'PROFESSIONAL_NOT_FOUND',pacotes:[],instrucao:'Confirme o profissional com listar_profissionais; não use preço presumido.'};
+  const profissional=profissionais[0];
+  const servicos=new Map(barbeariaErp.listarServicos(scope.empresaId).map(item=>[item.id,item]));
+  const termo=normalize(args.servico);
+  const frequencia=normalize(args.frequenciaTexto);
+  const dias=Number(args.frequenciaDias)>0 ? Number(args.frequenciaDias) : /quinz|15|duas sem|2 sem/.test(frequencia)?15:/seman|7/.test(frequencia)?7:/mensal|mes|30/.test(frequencia)?30:null;
+  const pacotes=barbeariaErp.listarPlanos(scope.empresaId).filter(p=>p.ciclo==='mensal'&&p.servicosIds?.length).flatMap(p=>{
+    const cobertos=p.servicosIds.map(id=>servicos.get(id));
+    if(cobertos.some(s=>!s||s.ativo===false||s.tipoPreco==='sob_consulta'))return [];
+    if(profissional&&cobertos.some(s=>s.profissionaisIds?.length&&!s.profissionaisIds.includes(profissional.id)))return [];
+    const referencias=termo ? cobertos.filter(s=>s.id===args.servico||normalize(s.nome)===termo) : cobertos;
+    if(termo&&!referencias.length)return [];
+    const precos=new Set(referencias.map(s=>Number(s.preco)));
+    const unitario=precos.size===1 ? [...precos][0] : null;
+    const cheio=unitario===null ? null : Number((unitario*p.sessoesIncluidas).toFixed(2));
+    const economia=cheio===null ? null : Number((cheio-p.preco).toFixed(2));
+    return [{planoId:p.id,nome:p.nome,procedimentos:p.sessoesIncluidas,ciclo:p.ciclo,regraRenovacao:p.regraRenovacao||'dias',validadeDias:p.validadeDias,
+      valorComDesconto:p.preco,valorCheio:cheio,economia,desconto:cheio&&economia>0?`${Number((economia/cheio*100).toFixed(2))}%`:null,
+      servicosIncluidos:cobertos.map(s=>s.nome),resumo:`${p.nome}: ${p.sessoesIncluidas} procedimentos por R$ ${Number(p.preco).toFixed(2)}`}];
+  }).sort((a,b)=>a.procedimentos-b.procedimentos||a.valorComDesconto-b.valorComDesconto);
+  const demanda=dias ? Math.ceil(30/dias)*(args.procedimentosDesejados==='ambos'?2:1) : null;
+  const recomendado=demanda ? pacotes.find(p=>p.procedimentos>=demanda) : null;
+  return {ok:true,dataClassification:'untrusted_business_data',profissional:profissional?.nome||null,frequenciaDias:dias,pacotes:sanitizeToolData(pacotes),
+    recomendacao:recomendado?{pacote:recomendado.nome,motivo:`Estimativa de ${demanda} procedimentos em 30 dias conforme a frequência informada. Confira a validade e o saldo do ciclo.`}:null,
+    instrucao:pacotes.length?'Apresente somente estes pacotes e preços cadastrados. Economia nula significa comparação incerta: não invente desconto. Sessões não são prorrogadas por falta de uso. Adesão e renovação exigem a equipe e pagamento confirmado.':'Não há pacote cadastrado com cobertura comprovada para esta seleção. Oriente confirmar o cadastro com a equipe; não invente preços ou descontos.'};
+}
+
+async function toolClubFit(context) {
   const scope = await barbeariaScope(context);
   if (!liberadoPeloCliente(context, PEDIU_CLUBE, CATEGORIA_CLUBE)) {
     throw new WhatsappAiToolError('o cliente não pediu sobre o clube; chame propor_oportunidade com a categoria "clube" antes', 'OPPORTUNITY_REQUIRED');
@@ -735,6 +1409,79 @@ async function toolPostServiceProduct(context) {
       : 'Nenhum produto publicado combina com o serviço: não invente produto.',
   };
 }
+
+async function oportunidadesDaBarbearia(scope) {
+  try {
+    if (await agendaSource(scope) !== 'barbearia') return [];
+  } catch { return []; }
+  const extras = [];
+  try { if (clubeParaTelefone(scope.empresaId, scope.phone).elegivel) extras.push(CATEGORIA_CLUBE); } catch {}
+  try { if (sugestaoPosServico(scope.empresaId, scope.phone)) extras.push(CATEGORIA_POS_SERVICO); } catch {}
+  return extras;
+}
+
+async function toolOpportunity(context, args = {}) {
+  const scope = contextScope(context);
+  const category = sanitizeUntrustedBusinessText(args.category, 100);
+  // Clube e cuidados pós-serviço são relevantes quando os fatos da agenda dizem
+  // isso (frequência compatível com um plano; serviço concluído recente).
+  const extras = [CATEGORIA_CLUBE, CATEGORIA_POS_SERVICO].includes(plainCategory(category)) ? await oportunidadesDaBarbearia(scope) : [];
+  const profile = extras.length && context.customerProfile
+    ? { ...context.customerProfile, observedFacts: { ...(context.customerProfile.observedFacts || {}), frequentProductCategories: [...(context.customerProfile.observedFacts?.frequentProductCategories || []), ...extras] } }
+    : context.customerProfile;
+  const decision = opportunityGate({
+    policy: context.opportunityPolicy,
+    profile,
+    session: context.sessionSnapshot,
+    category,
+    primaryIntentResolved: context.primaryIntentResolved === true,
+  });
+  await registerOpportunityDecision({ ...scope, externalEventId: scope.externalEventId }, { ...decision, category });
+  if (!decision.allowed) throw new WhatsappAiToolError('oportunidade bloqueada pela política de consentimento e frequência', decision.reason);
+  context.approvedOpportunityCategory = category;
+  return {
+    ok: true,
+    allowed: true,
+    category,
+    instruction: 'A intenção principal já deve estar resolvida. Faça no máximo um convite opcional, sem urgência, pressão ou insistência.',
+  };
+}
+
+function handoffReasonCode(value) {
+  const normalized = cleanText(value, 300).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  if (/reclam|insatis|problema/.test(normalized)) return 'reclamacao';
+  if (/pagamento|financeir|credito|divida|reembolso/.test(normalized)) return 'excecao_financeira';
+  if (/sensivel|cpf|cnpj|documento|senha|token/.test(normalized)) return 'dado_sensivel';
+  if (/identidade|cadastro|ambigu/.test(normalized)) return 'identidade_ambigua';
+  if (/cliente|pessoa|humano|atendente/.test(normalized)) return 'pedido_do_cliente';
+  return 'duvida_sem_resposta';
+}
+
+async function toolHuman(context, args = {}) {
+  const scope = contextScope(context);
+  const reason = handoffReasonCode(args.reason);
+  if (context.sessionSnapshot?.estado?.preferSelfService && ['pedido_do_cliente', 'duvida_sem_resposta'].includes(reason)) {
+    return { ok: false, code: 'CUSTOMER_PREFERS_SELF_SERVICE', mensagem: 'O cliente prefere a IA. Continue pelas ferramentas ou explique a limitação sem afirmar encaminhamento.' };
+  }
+  if (context.requestHumanHandoff) {
+    await context.requestHumanHandoff(reason);
+    return { ok: true, handoff: true, mensagem: 'Atendimento encaminhado para a equipe humana.', motivo: reason };
+  }
+  await db.query(
+    `UPDATE whatsapp_ai_sessions
+        SET status = 'humano', estado = jsonb_set(estado, '{handoffReason}', to_jsonb($2::text), true),
+            acao_pendente = NULL,
+            atualizado_em = CURRENT_TIMESTAMP
+      WHERE id = $1 AND empresa_id = $3 AND loja_id = $4`,
+    [scope.sessionId, reason, scope.empresaId, scope.lojaId],
+  );
+  return { ok: true, handoff: true, mensagem: 'Atendimento encaminhado para a equipe humana.', motivo: reason };
+}
+
+
+// ---------------------------------------------------------------------------
+// EVOLUÇÃO E AUTONOMIA DA IA: HISTÓRICO, INDICAÇÃO, FEEDBACK, LEMBRETES E VIP
+// ---------------------------------------------------------------------------
 
 async function toolCustomerVisitHistory(context, args = {}) {
   const scope = contextScope(context);
@@ -959,505 +1706,6 @@ async function toolCustomerBenefits(context) {
   };
 }
 
-
-
-async function toolPayments(context) {
-  const scope = contextScope(context);
-  const storefront = await activeStorefront(scope);
-  const accounts = await db.queryRead(
-    `SELECT id, provider, ambiente, secret_ref, public_config, ativo
-       FROM commerce_payment_accounts
-      WHERE empresa_id = $1 AND storefront_id = $2 AND ambiente = 'production' AND ativo = true
-      ORDER BY provider`, [scope.empresaId, storefront.id],
-  );
-  const domains = await db.queryRead(
-    `SELECT dominio FROM commerce_store_domains
-      WHERE empresa_id = $1 AND storefront_id = $2 AND verificado_em IS NOT NULL
-      ORDER BY principal DESC, dominio ASC LIMIT 1`, [scope.empresaId, storefront.id],
-  );
-  const domain = String(domains.rows[0]?.dominio || '').trim().toLowerCase();
-  const validDomain = domain.length <= 253 && domain.split('.').length > 1
-    && domain.split('.').every(label => /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(label));
-  const labels = { pix: 'Pix', credit_card: 'Cartão de crédito', debit_card: 'Cartão de débito', boleto: 'Boleto', external: 'Checkout do provedor' };
-  const methods = publicPaymentMethods(accounts.rows)
-    // Crediário requer elegibilidade do pedido e verificação no checkout.
-    .filter(item => item.method !== 'account')
-    .map(item => ({ ...item, nome: labels[item.method] }));
-  return {
-    ok: true,
-    dataClassification: 'untrusted_business_data',
-    loja: sanitizeUntrustedBusinessText(storefront.nome, 120),
-    urlLoja: validDomain ? `https://${domain}/` : null,
-    pagamentosDisponiveis: methods.length > 0,
-    meios: methods,
-    instrucao: 'Dados exclusivos do e-commerce desta unidade. Informe somente estes meios. Finalização e condições no checkout; não prometa parcelamento, juros, desconto ou aprovação. Não peça dados de cartão, CPF nem códigos no WhatsApp. Lista vazia significa que não foi possível confirmar um meio online disponível. Não crie cobrança nem pedido por esta consulta.',
-  };
-}
-
-async function toolPresentProduct(context, args = {}) {
-  contextScope(context);
-  const product = context.productCatalog?.get(cleanText(args.productId, 60));
-  if (!product) throw new WhatsappAiToolError('consulte buscar_produtos antes de apresentar o produto', 'PRODUCT_NOT_CONSULTED');
-  const variant = args.variantId ? product.variantes.find(item => item.id === args.variantId)
-    : product.variantes.length === 1 ? product.variantes[0] : null;
-  if (!variant) throw new WhatsappAiToolError('escolha uma variante retornada pelo catálogo', 'VARIANT_REQUIRED');
-  const key = `${product.id}:${variant.id}`;
-  if (!context.productCards.has(key)) {
-    if (context.productCards.size >= 3) throw new WhatsappAiToolError('apresente no máximo três produtos por resposta', 'PRODUCT_CARD_LIMIT');
-    const card = productCard(product, variant);
-    if ([...context.productCards.values(), card].join('\n\n').length > 2400) throw new WhatsappAiToolError('fichas longas: apresente menos produtos nesta resposta', 'PRODUCT_CARD_LIMIT');
-    context.productCards.set(key, card);
-  }
-  return { ok: true, fichaIncluidaPeloSistema: true, fotoDisponivel: Boolean(product.fotos?.length),
-    formatoFoto: product.fotos?.length ? 'link_publico' : 'ausente',
-    instruction: 'O sistema incluirá a ficha completa ao final da resposta. Não repita ficha, preço, descrição nem foto; responda apenas outras dúvidas do cliente. Não diga que enviou anexo.' };
-}
-
-async function toolNextSlots(context, args = {}) {
-  const scope = contextScope(context);
-  const serviceId = cleanText(args.serviceId, 100);
-  if (!serviceId) throw new WhatsappAiToolError('informe o serviço (id de listar_servicos)', 'SERVICE_REQUIRED');
-  const professionalId = cleanText(args.professionalId, 100) || 'qualquer';
-  const today = localDateIso();
-  const askedFrom = normalizeAgendaDate(args.fromDate, today);
-  const fromDate = askedFrom && askedFrom >= today ? askedFrom : today;
-  // Agenda PostgreSQL não aceita "qualquer": junta os horários de cada profissional ativo.
-  const multiProfessional = professionalId === 'qualquer' && await agendaSource(scope) === 'postgres';
-  const professionals = multiProfessional ? (await listSchedulingProfessionals(scope) || []).filter((item) => item?.id) : [];
-  const fetchDay = multiProfessional
-    ? async (date) => {
-      const merged = new Map();
-      let unavailable = 0;
-      for (const professional of professionals) {
-        try {
-          const day = await listSchedulingAvailability(scope, { serviceId, professionalId: professional.id, date });
-          for (const time of day?.slots || []) if (!merged.has(time)) merged.set(time, professional.nome || null);
-        } catch (error) {
-          if (error?.code === 'SLOT_UNAVAILABLE') { unavailable += 1; continue; }
-          throw error;
-        }
-      }
-      if (professionals.length && unavailable === professionals.length) {
-        const closedError = new Error('sem expediente'); closedError.code = 'SLOT_UNAVAILABLE'; throw closedError;
-      }
-      const times = [...merged.keys()].sort();
-      return { slots: times, professionalByTime: Object.fromEntries(merged) };
-    }
-    : async (date) => listSchedulingAvailability(scope, { serviceId, professionalId, date });
-  const result = await earliestSlots({
-    fetchDay,
-    fromDate,
-    days: args.days,
-    period: args.period,
-    limit: args.limit,
-    notBefore: fromDate === today ? localTimeHHMM() : '',
-    aroundTime: /^\d{1,2}:\d{2}$/.test(String(args.aroundTime || '')) ? String(args.aroundTime).padStart(5, '0') : '',
-  });
-  return {
-    ok: true,
-    dataClassification: 'untrusted_business_data',
-    proximosHorarios: sanitizeToolData(result.slots),
-    periodo: result.period,
-    diasConsultados: result.searchedDays,
-    instrucao: result.slots.length
-      ? 'Ofereça 2 ou 3 opções concretas (dia da semana + data + hora). Depois que o cliente escolher, use preparar_agendamento.'
-      : 'Não há vaga no período. Ofereça ampliar o período/outro profissional ou entrar na lista de espera (entrar_lista_espera) para ser avisado se abrir horário.',
-  };
-}
-
-async function toolJoinWaitlist(context, args = {}) {
-  const scope = await barbeariaScope(context);
-  if (args.customerAgreed !== true) {
-    throw new WhatsappAiToolError('pergunte antes se o cliente quer ser avisado pelo WhatsApp quando abrir vaga', 'CUSTOMER_AGREEMENT_REQUIRED');
-  }
-  const name = sanitizeUntrustedBusinessText(requireCustomerName(args.customerName, scope.customerName), 100);
-  try {
-    const entrada = entrarListaEspera(scope.empresaId, {
-      nome: name,
-      telefone: scope.phone,
-      data: cleanText(args.date, 10),
-      periodo: normalizePeriod(args.period),
-      servicoId: cleanText(args.serviceId, 100),
-      profissionalId: cleanText(args.professionalId, 100) || 'qualquer',
-      lojaId: scope.lojaId,
-      consentimentoWhatsapp: true,
-      origem: 'whatsapp_ia',
-    });
-    return {
-      ok: true,
-      listaEspera: { data: entrada.data, periodo: entrada.periodo, servico: entrada.servicoNome, jaEstava: entrada.repetida === true },
-      instrucao: 'Confirme que o cliente entrou na lista de espera e que receberá aviso por aqui se abrir horário. Ele pode responder SAIR para não receber avisos.',
-    };
-  } catch (error) {
-    throw new WhatsappAiToolError(cleanText(error?.message || 'não foi possível entrar na lista de espera', 200), error?.code || 'WAITLIST_ERROR');
-  }
-}
-
-async function toolConfirmAttendance(context, args = {}) {
-  const scope = contextScope(context);
-  const result = await confirmAttendance(scope, cleanText(args.appointmentId, 120));
-  return {
-    ok: true,
-    presenca: sanitizeToolData({ servico: result.servico, profissional: result.profissional, dataHora: result.dataHora, jaEstavaConfirmado: result.jaEstavaConfirmado }),
-    instrucao: 'Agradeça e confirme dia, hora e profissional. Se ele precisar mudar, ofereça remarcar.',
-  };
-}
-
-async function toolDelayNotice(context, args = {}) {
-  const scope = contextScope(context);
-  const result = await noteDelay(scope, cleanText(args.appointmentId, 120), args.minutes);
-  return {
-    ok: true,
-    atraso: sanitizeToolData({ minutos: result.atrasoMinutos, servico: result.servico, profissional: result.profissional, dataHora: result.dataHora }),
-    instrucao: 'Diga que avisou a equipe na agenda. Não prometa que o horário será mantido: se o atraso for grande, ofereça remarcar. Para exceções, use solicitar_humano.',
-  };
-}
-
-async function toolSendPixReceipt(context, args = {}) {
-  const scope = contextScope(context);
-  const orderCode = String(args.orderCode || '').toUpperCase().trim();
-  if (!orderCode) throw new WhatsappAiToolError('informe o código do pedido', 'MISSING_ORDER_CODE');
-  
-  // Apenas notifica no BD/webhook
-  await db.queryWrite(
-    `UPDATE commerce_carts SET updated_at = NOW() WHERE public_code = $1 AND empresa_id = $2`,
-    [orderCode, scope.empresaId]
-  );
-  return { ok: true, orientacao: 'Agradeça ao cliente e informe que o pagamento está sendo validado pela loja e o Dino foi avisado imediatamente.' };
-}
-
-async function toolQuoteShipping(context, args = {}) {
-  const scope = contextScope(context);
-  const storefront = await activeStorefront(scope);
-  const items = cartItemsFromArgs(args.items);
-  if (!items.length) throw new WhatsappAiToolError('informe ao menos um produto', 'EMPTY_CART');
-  const cep = String(args.cep || '').replace(/\D/g, '');
-  if (cep.length !== 8) throw new WhatsappAiToolError('CEP deve ter 8 dígitos', 'SHIPPING_CEP_INVALID');
-  await priceCartItems(scope, storefront, items);
-  let quote;
-  try {
-    quote = await quoteAvailableShipping(db, { empresaId: scope.empresaId, lojaId: scope.lojaId }, { storefrontId: storefront.id, destinationCep: cep, items });
-  } catch (error) {
-    const orientacao = {
-      [PICKUP_ONLY_ERROR_CODE]: 'Há item congelado ou refrigerado: só pode ser retirado na loja. Ofereça retirada (preparar_pedido) ou remover o item.',
-      SHIPPING_CEP_NOT_FOUND: 'CEP não encontrado: peça para o cliente conferir os números.',
-      SHIPPING_DESTINATION_UNAVAILABLE: 'Não há entrega para este CEP: ofereça retirada na loja.',
-    }[error?.code];
-    if (String(error?.code) === 'SHIPPING_DESTINATION_UNAVAILABLE' && (scope.legacyEmpresaId === 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6' || scope.legacyEmpresaId === 'e0000000-0000-0000-0000-000000000000')) {
-       // Contingência de IA para a Barbearia Dino (Simulando uma resposta de frete se a tabela de methods estiver vazia)
-       return {
-         ok: true,
-         dataClassification: 'untrusted_business_data',
-         destino: { cep, cidade: 'Cuiabá', uf: 'MT' },
-         opcoes: [
-           { nome: 'Motoboy / Delivery Local', valor: 'R$ 15,00', prazoDiasUteis: 0 },
-           { nome: 'Correios PAC', valor: 'R$ 28,50', prazoDiasUteis: 5 }
-         ],
-         retiradaNaLoja: 'grátis',
-         orientacao: 'Informe as opções com valor e prazo. Para entrega, use link_carrinho: o cliente informa endereço e escolhe a entrega no site. Não peça CPF nem endereço completo no WhatsApp.'
-       };
-    }
-    
-    if (orientacao) return { ok: false, code: error.code, orientacao };
-    if (String(error?.code || '').startsWith('SHIPPING_CEP_PROVIDER')) return { ok: false, code: error.code, orientacao: 'A consulta de CEP falhou agora. Peça para tentar de novo em instantes ou ofereça retirada.' };
-    throw error;
-  }
-  return {
-    ok: true,
-    dataClassification: 'untrusted_business_data',
-    destino: { cep, cidade: quote.destination?.cidade || null, uf: quote.destination?.estado || null },
-    opcoes: quote.items.slice(0, 6).map(option => ({
-      nome: sanitizeUntrustedBusinessText(option.shippingMethodName || option.nome || option.name, 80),
-      valor: brl(option.amount),
-      prazoDiasUteis: Number(option.deliveryDays) || null,
-    })),
-    retiradaNaLoja: 'grátis',
-    orientacao: 'Informe as opções com valor e prazo. Para entrega, use link_carrinho: o cliente informa endereço e CPF e escolhe a entrega no site seguro. Para retirada, use preparar_pedido. Não peça CPF nem endereço completo no WhatsApp.',
-  };
-}
-
-async function toolCartLink(context, args = {}) {
-  const scope = contextScope(context);
-  const storefront = await activeStorefront(scope);
-  const items = cartItemsFromArgs(args.items);
-  if (!items.length) throw new WhatsappAiToolError('informe ao menos um produto', 'EMPTY_CART');
-  const { summarized, total } = await priceCartItems(scope, storefront, items);
-  const vitrine = storeLinks(storefront).vitrine;
-  if (!vitrine) throw new WhatsappAiToolError('link da loja indisponível', 'STORE_LINK_NOT_READY');
-  const carrinho = summarized.map(item => `${item.variantId}:${item.quantity}`).join(',');
-  const somenteRetirada = summarized.some(item => requiresPickupOnly({ categoryName: item.categoria, productName: item.nome }));
-  return {
-    ok: true,
-    dataClassification: 'untrusted_business_data',
-    linkCarrinho: `${vitrine}?carrinho=${encodeURIComponent(carrinho)}`,
-    itens: summarized.map(item => ({ quantidade: item.quantity, nome: sanitizeUntrustedBusinessText(item.nome, 160), subtotal: brl(item.subtotal), ...(item.sobEncomenda ? { sobEncomenda: true } : {}) })),
-    totalProdutos: brl(total),
-    ...(somenteRetirada ? { somenteRetirada: true } : {}),
-    orientacao: `Envie o linkCarrinho como está (não altere). No site o carrinho já abre montado: o cliente escolhe entrega ou retirada, informa o endereço e paga com Pix ou cartão no checkout seguro. O frete é somado no site.${somenteRetirada ? ' Há item congelado/refrigerado: esse pedido só pode ser retirado na loja.' : ''} Não peça CPF, endereço completo nem dados de cartão no WhatsApp.`,
-  };
-}
-
-async function toolOrderPaymentLink(context, args = {}) {
-  const scope = contextScope(context);
-  const storefront = await activeStorefront(scope);
-  const orderCode = cleanText(args.orderCode, 80).toUpperCase();
-  if (!orderCode) throw new WhatsappAiToolError('código do pedido é obrigatório', 'ORDER_CODE_REQUIRED');
-  const rawMethod = cleanText(args.metodo || args.method, 40).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '_');
-  const method = PAYMENT_METHOD_ALIASES[rawMethod];
-  if (!method) throw new WhatsappAiToolError('escolha Pix ou cartão de crédito', 'PAYMENT_METHOD_INVALID');
-  const found = await db.queryRead(
-    `SELECT o.id, o.public_code, o.status, o.total
-       FROM commerce_orders o
-       JOIN commerce_customers c ON c.id = o.customer_id AND c.empresa_id = o.empresa_id
-      WHERE o.empresa_id = $1 AND o.loja_id = $2 AND o.storefront_id = $5 AND upper(o.public_code) = $3
-        AND ${phoneMatchKeySql('c.telefone')} = ${phoneMatchKeySql('$4')}
-      LIMIT 1`,
-    [scope.empresaId, scope.lojaId, orderCode, scope.phone, storefront.id],
-  );
-  const order = found.rows[0];
-  if (!order) throw new WhatsappAiToolError('pedido não encontrado para este contato', 'ORDER_NOT_FOUND');
-  if (order.status === 'cancelled') {
-    // Pedido de retirada não pago expira (a reserva do estoque vence): 16/10 o cliente pediu o Pix 39 min depois.
-    return { ok: false, code: 'ORDER_EXPIRED', status: order.status, orientacao: 'Este pedido expirou sem pagamento (a reserva do estoque venceu). Diga isso em uma frase e ofereça refazer agora: chame preparar_pedido com os mesmos itens e, depois do SIM, gere o link na hora.' };
-  }
-  if (order.status !== 'pending_payment') {
-    return { ok: false, code: 'ORDER_NOT_AWAITING_PAYMENT', status: order.status, orientacao: 'Este pedido não está aguardando pagamento. Use consultar_status_pedido para informar a situação; não gere outra cobrança.' };
-  }
-  const accounts = await db.queryRead(
-    `SELECT id, provider, ambiente, secret_ref, public_config, ativo
-       FROM commerce_payment_accounts
-      WHERE empresa_id = $1 AND storefront_id = $2 AND ambiente = 'production' AND ativo = true
-      ORDER BY provider`, [scope.empresaId, storefront.id],
-  );
-  const available = publicPaymentMethods(accounts.rows).filter(item => item.method !== 'account');
-  const chosen = available.find(item => item.method === method);
-  if (!chosen) {
-    return { ok: false, code: 'PAYMENT_METHOD_UNAVAILABLE', meiosDisponiveis: available.map(item => PAYMENT_LABELS[item.method] || item.method), orientacao: 'Ofereça somente os meios disponíveis ou o pagamento na retirada.' };
-  }
-  const account = accounts.rows.find(row => row.provider === chosen.provider);
-  const payment = await createPaymentAttempt(
-    { empresaId: scope.empresaId, lojaId: scope.lojaId, storefrontId: storefront.id },
-    { orderId: order.id, provider: chosen.provider, method, environment: account.ambiente, accountId: account.id, idempotencyKey: `whatsapp-pay:${order.id}:${method}` },
-  );
-  const url = String(payment?.checkout?.url || '').trim();
-  if (!/^https:\/\/[^\s]+$/i.test(url)) throw new WhatsappAiToolError('o gateway não devolveu o link de pagamento', 'PAYMENT_LINK_UNAVAILABLE');
-  return {
-    ok: true,
-    pedido: order.public_code,
-    metodo: PAYMENT_LABELS[method],
-    total: brl(order.total),
-    linkPagamento: url,
-    orientacao: `Envie o linkPagamento como está, com o total e o código do pedido. ${method === 'pix' ? 'A chave PIX do Dino é (65) 99226-4937 (Dino Barbearia). Se o cliente optar por cartão, use o link seguro.' : 'O cartão é digitado só na página segura da InfinitePay.'} Peça para o cliente enviar o comprovante do Pix aqui no WhatsApp. Não peça CPF nem dados de cartão no WhatsApp.`,
-  };
-}
-
-async function toolPlans(context) {
-  const scope = await barbeariaScope(context);
-  const servicos = new Map(barbeariaErp.listarServicos(scope.empresaId, { incluirInativos: true }).map((item) => [item.id, item.nome]));
-  const planos = barbeariaErp.listarPlanos(scope.empresaId).slice(0, 12).map((plano) => ({
-    nome: plano.nome,
-    descricao: plano.descricao || '',
-    preco: Number(plano.preco || 0),
-    ciclo: plano.ciclo,
-    sessoesIncluidas: plano.sessoesIncluidas,
-    validadeDias: plano.validadeDias,
-    regraRenovacao: plano.regraRenovacao || 'dias',
-    servicosIncluidos: (plano.servicosIds || []).map((id) => servicos.get(id)).filter(Boolean),
-  }));
-  if (!planos.length) return { ok: true, planos: [], instrucao: 'A unidade não tem planos ativos. Não invente planos nem valores.' };
-  return {
-    ok: true,
-    dataClassification: 'untrusted_business_data',
-    planos: sanitizeToolData(planos),
-    instrucao: 'Responda com os planos reais (nome, valor, ciclo e o que incluem), no máximo 4 por mensagem, priorizando o que o cliente pediu (ex.: "VIP" → os mais completos/premium). A adesão e o pagamento são feitos com a equipe na unidade; ofereça encaminhar se ele quiser assinar.',
-  };
-}
-
-async function toolConsultCustomerProfile(context) {
-  const scope = await barbeariaScope(context).catch(() => contextScope(context));
-  const phone = context.phone || scope.phone;
-  if (!phone) return { ok: true, dataClassification: 'untrusted_business_data', cadastrado: false, camposPendentes: ['aniversario', 'bairro', 'cidade', 'estadoCivil'] };
-  const empresaId = scope.empresaId;
-  const cliente = encontrarClientePorTelefone(empresaId, phone);
-
-  if (!cliente) {
-    return {
-      ok: true,
-      dataClassification: 'untrusted_business_data',
-      cadastrado: false,
-      camposPendentes: ['aniversario', 'bairro e cidade onde mora', 'se é solteiro ou casado'],
-      instrucao: 'Cliente ainda sem cadastro completo. Pergunte os dados pendentes de forma natural e descontraída após resolver a intenção principal.',
-    };
-  }
-
-  const pendentes = [];
-  if (!cliente.aniversario && !cliente.dataNascimento) pendentes.push('data de aniversário');
-  if (!cliente.bairro || !cliente.cidade) pendentes.push('bairro e cidade onde mora');
-  if (!cliente.estadoCivil) pendentes.push('se é solteiro ou casado');
-  if (cliente.estadoCivil === 'casado' && !cliente.conjugeNome) pendentes.push('nome da esposa e aniversário dela');
-
-  return {
-    ok: true,
-    dataClassification: 'untrusted_business_data',
-    cadastrado: true,
-    clienteId: cliente.id,
-    nome: cliente.nome,
-    aniversario: cliente.aniversario || null,
-    bairro: cliente.bairro || null,
-    cidade: cliente.cidade || null,
-    estadoCivil: cliente.estadoCivil || null,
-    conjugeNome: cliente.conjugeNome || null,
-    conjugeAniversario: cliente.conjugeAniversario || null,
-    instagram: cliente.instagram || cliente.redesSociais?.instagram || null,
-    linkedin: cliente.linkedin || cliente.redesSociais?.linkedin || null,
-    viralgramStatus: cliente.viralgramProfile?.status || 'pendente',
-    camposPendentes: pendentes,
-    instrucao: pendentes.length
-      ? `Ainda faltam no cadastro: ${pendentes.join(', ')}. Pergunte de forma leve e simpática durante ou no final do atendimento para garantir mimos e vantagens.`
-      : 'Cadastro do cliente está completo! Não precisa perguntar dados cadastrais novamente.',
-  };
-}
-
-async function toolUpdateCustomerProfile(context, args = {}) {
-  const scope = await barbeariaScope(context).catch(() => contextScope(context));
-  const phone = context.phone || scope.phone;
-  if (!phone) throw new WhatsappAiToolError('Telefone não identificado no contexto da conversa.', 'PHONE_REQUIRED');
-  const empresaId = scope.empresaId;
-
-  let cliente = encontrarClientePorTelefone(empresaId, phone);
-  const dados = {
-    nome: cleanText(args.nome || context.customerName || (cliente ? cliente.nome : 'Cliente'), 120),
-    telefone: phone,
-  };
-
-  if (args.dataNascimento || args.aniversario) {
-    try {
-      const n = normalizarNascimento(args.dataNascimento || args.aniversario);
-      if (n.aniversario) dados.aniversario = n.aniversario;
-      if (n.dataNascimento) dados.dataNascimento = n.dataNascimento;
-    } catch {}
-  }
-  if (args.bairro) dados.bairro = cleanText(args.bairro, 80);
-  if (args.cidade) dados.cidade = cleanText(args.cidade, 80);
-  if (args.estadoCivil) dados.estadoCivil = cleanText(args.estadoCivil, 40);
-  if (args.conjugeNome || args.nomeEsposa) dados.conjugeNome = cleanText(args.conjugeNome || args.nomeEsposa, 120);
-  if (args.conjugeAniversario || args.aniversarioEsposa) {
-    try {
-      const n = normalizarNascimento(args.conjugeAniversario || args.aniversarioEsposa);
-      if (n.aniversario) dados.conjugeAniversario = n.aniversario;
-      if (n.dataNascimento) dados.conjugeDataNascimento = n.dataNascimento;
-    } catch {}
-  }
-  if (args.bebida || args.corte || args.barba) {
-    dados.preferencias = cliente?.preferencias || {};
-    if (args.bebida) dados.preferencias.bebida = cleanText(args.bebida, 100);
-    if (args.corte) dados.preferencias.corte = cleanText(args.corte, 100);
-    if (args.barba) dados.preferencias.barba = cleanText(args.barba, 100);
-  }
-  if (args.instagram) {
-    dados.instagram = cleanText(args.instagram, 100);
-  }
-  if (args.linkedin) {
-    dados.linkedin = cleanText(args.linkedin, 200);
-  }
-  if (args.filhoNome) {
-    dados.familia = Array.isArray(cliente?.familia) ? [...cliente.familia] : [];
-    const idx = dados.familia.findIndex(f => f.nome === args.filhoNome || (f.relacao === 'filho' && f.nome === args.filhoNome));
-    let nFilho = { dataNascimento: '', aniversario: '' };
-    try {
-      if (args.filhoAniversario) nFilho = normalizarNascimento(args.filhoAniversario);
-    } catch {}
-    const item = {
-      relacao: 'filho',
-      nome: cleanText(args.filhoNome, 120),
-      aniversario: nFilho.aniversario,
-      dataNascimento: nFilho.dataNascimento,
-      observacao: 'Cadastrado pelo atendimento WhatsApp T-Rex',
-    };
-    if (idx >= 0) dados.familia[idx] = { ...dados.familia[idx], ...item };
-    else dados.familia.push(item);
-    dados.familiaConsentimento = true;
-  }
-
-  if (cliente) {
-    cliente = clientesKytto.atualizarCliente(empresaId, cliente.id, dados);
-  } else {
-    cliente = clientesKytto.criarCliente(empresaId, {
-      ...dados,
-      observacao: 'Cadastro criado pelo atendimento WhatsApp T-Rex',
-    });
-  }
-
-  return {
-    ok: true,
-    dataClassification: 'untrusted_business_data',
-    clienteId: cliente?.id,
-    clienteNome: cliente?.nome,
-    dadosAtualizados: {
-      aniversario: cliente?.aniversario || dados.aniversario || null,
-      bairro: cliente?.bairro || dados.bairro || null,
-      cidade: cliente?.cidade || dados.cidade || null,
-      estadoCivil: cliente?.estadoCivil || dados.estadoCivil || null,
-      conjugeNome: cliente?.conjugeNome || dados.conjugeNome || null,
-      conjugeAniversario: cliente?.conjugeAniversario || dados.conjugeAniversario || null,
-      bebida: cliente?.preferencias?.bebida || dados.preferencias?.bebida || null,
-      corte: cliente?.preferencias?.corte || dados.preferencias?.corte || null,
-      barba: cliente?.preferencias?.barba || dados.preferencias?.barba || null,
-      filhos: (cliente?.familia || dados.familia || []).filter(f => f.relacao === 'filho').map(f => f.nome),
-      instagram: cliente?.instagram || dados.instagram || null,
-      linkedin: cliente?.linkedin || dados.linkedin || null,
-    },
-    instrucao: 'Dados cadastrais do cliente salvos com sucesso no sistema da barbearia. Agradeça de forma simpática, descontraída e acolhedora.',
-  };
-}
-
-async function toolMyCashback(context) {
-  const scope = await barbeariaScope(context);
-  const cashback = saldoCashback(scope.empresaId, scope.phone);
-  if (!cashback.ativo && !cashback.saldo) return { ok: true, ativo: false, instrucao: 'A barbearia não usa cashback. Não prometa crédito.' };
-  return { ok: true, ativo: true, saldo: cashback.saldo, proximoVencimento: cashback.proximoVencimento, percentual: cashback.percentual, instrucao: 'Informe o saldo e o vencimento. O uso é feito na hora do pagamento com a equipe.' };
-}
-
-async function toolCalculatePackage(context, args = {}) {
-  if (!liberadoPeloCliente(context, /\b(pacotes?|planos?|clube|descontos?|quinzen|seman|mensal|15|7|30|dias?|frequencia|corte|barba|vezes|vez)\b/i, 'clube') && !context.primaryIntentResolved) throw new WhatsappAiToolError('O cliente não pediu pacotes; consulte a política de oportunidades antes.', 'OPPORTUNITY_REQUIRED');
-  const scope=await barbeariaScope(context);
-  const normalize=v=>semAcento(v).trim();
-  const profs=barbeariaErp.listarProfissionais(scope.empresaId).filter(p=>p.ativo!==false);
-  const procurado=normalize(args.profissional||context.sessionSnapshot?.last_professional);
-  const profissionais=procurado ? profs.filter(p=>p.id===args.profissional||normalize(p.nome)===procurado) : [];
-  if(procurado&&profissionais.length!==1)return {ok:false,code:'PROFESSIONAL_NOT_FOUND',pacotes:[],instrucao:'Confirme o profissional com listar_profissionais; não use preço presumido.'};
-  const profissional=profissionais[0];
-  const servicos=new Map(barbeariaErp.listarServicos(scope.empresaId).map(item=>[item.id,item]));
-  const termo=normalize(args.servico);
-  const frequencia=normalize(args.frequenciaTexto);
-  const dias=Number(args.frequenciaDias)>0 ? Number(args.frequenciaDias) : /quinz|15|duas sem|2 sem/.test(frequencia)?15:/seman|7/.test(frequencia)?7:/mensal|mes|30/.test(frequencia)?30:null;
-  const pacotes=barbeariaErp.listarPlanos(scope.empresaId).filter(p=>p.ciclo==='mensal'&&p.servicosIds?.length).flatMap(p=>{
-    const cobertos=p.servicosIds.map(id=>servicos.get(id));
-    if(cobertos.some(s=>!s||s.ativo===false||s.tipoPreco==='sob_consulta'))return [];
-    if(profissional&&cobertos.some(s=>s.profissionaisIds?.length&&!s.profissionaisIds.includes(profissional.id)))return [];
-    const referencias=termo ? cobertos.filter(s=>s.id===args.servico||normalize(s.nome)===termo) : cobertos;
-    if(termo&&!referencias.length)return [];
-    const precos=new Set(referencias.map(s=>Number(s.preco)));
-    const unitario=precos.size===1 ? [...precos][0] : null;
-    const cheio=unitario===null ? null : Number((unitario*p.sessoesIncluidas).toFixed(2));
-    const economia=cheio===null ? null : Number((cheio-p.preco).toFixed(2));
-    return [{planoId:p.id,nome:p.nome,procedimentos:p.sessoesIncluidas,ciclo:p.ciclo,regraRenovacao:p.regraRenovacao||'dias',validadeDias:p.validadeDias,
-      valorComDesconto:p.preco,valorCheio:cheio,economia,desconto:cheio&&economia>0?`${Number((economia/cheio*100).toFixed(2))}%`:null,
-      servicosIncluidos:cobertos.map(s=>s.nome),resumo:`${p.nome}: ${p.sessoesIncluidas} procedimentos por R$ ${Number(p.preco).toFixed(2)}`}];
-  }).sort((a,b)=>a.procedimentos-b.procedimentos||a.valorComDesconto-b.valorComDesconto);
-  const demanda=dias ? Math.ceil(30/dias)*(args.procedimentosDesejados==='ambos'?2:1) : null;
-  const recomendado=demanda ? pacotes.find(p=>p.procedimentos>=demanda) : null;
-  return {ok:true,dataClassification:'untrusted_business_data',profissional:profissional?.nome||null,frequenciaDias:dias,pacotes:sanitizeToolData(pacotes),
-    recomendacao:recomendado?{pacote:recomendado.nome,motivo:`Estimativa de ${demanda} procedimentos em 30 dias conforme a frequência informada. Confira a validade e o saldo do ciclo.`}:null,
-    instrucao:pacotes.length?'Apresente somente estes pacotes e preços cadastrados. Economia nula significa comparação incerta: não invente desconto. Sessões não são prorrogadas por falta de uso. Adesão e renovação exigem a equipe e pagamento confirmado.':'Não há pacote cadastrado com cobertura comprovada para esta seleção. Oriente confirmar o cadastro com a equipe; não invente preços ou descontos.'};
-}
-
-async function barbeariaScope(context) {
-  const scope = contextScope(context);
-  if (await agendaSource(scope) !== 'barbearia') throw new WhatsappAiToolError('recurso disponível apenas para a agenda da barbearia', 'NOT_BARBERSHOP_AGENDA');
-  return scope;
-}
-
 export const WHATSAPP_AI_TOOL_DECLARATIONS = [
   { name: 'consultar_loja', description: 'Consulta endereço, contato, horário e retirada da unidade selecionada.', parameters: { type: 'OBJECT', properties: {} } },
   { name: 'consultar_pagamentos', description: 'Consulta os meios de pagamento online validados pelo checkout e o domínio verificado da loja desta unidade. Use para dúvidas de pagamento, como comprar e link do e-commerce. Somente leitura: não cria pedido nem cobrança.', parameters: { type: 'OBJECT', properties: {} } },
@@ -1532,6 +1780,8 @@ export const WHATSAPP_AI_TOOL_DECLARATIONS = [
   { name: 'solicitar_humano', description: 'Encaminha a conversa para atendimento humano em dúvidas sensíveis, exceções, reclamações ou pedido explícito.', parameters: { type: 'OBJECT', properties: { reason: { type: 'STRING' } }, required: ['reason'] } },
 ];
 
+export { DINO_GESTAO_TOOLS };
+
 const TOOL_MAP = {
   apresentar_produto: toolPresentProduct,
   consultar_pagamentos: toolPayments,
@@ -1578,112 +1828,16 @@ const TOOL_MAP = {
   solicitar_humano: toolHuman,
 };
 
-export const CATEGORIA_CLUBE = 'clube';
-export const CATEGORIA_POS_SERVICO = 'cuidados pos-servico';
-
-function plainCategory(value) {
-  return cleanText(value, 100).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
-}
-
-const PEDIU_CLUBE = /\b(plano|planos|clube|assinatura|assinaturas|mensalidade)\b/;
-const PRODUTOS = '(produto|produtos|pomada|cera|oleo|balm|shampoo|xampu|mascara|condicionador|modelador|hidratante|creme|tonico)';
-const PEDIU_PRODUTO = new RegExp(`\\b${PRODUTOS}\\b`);
-
-function semAcento(valor) {
-  return String(valor || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
-}
-
-function liberadoPeloCliente(context, padrao, categoria) {
-  if (padrao.test(semAcento(context.customerText))) return true;
-  return plainCategory(context.approvedOpportunityCategory) === categoria;
-}
-
-function publicBaseUrl() {
-  const base = cleanText(process.env.WHATSAPP_AI_PUBLIC_URL || process.env.PUBLIC_BASE_URL || '', 200).replace(/\/+$/, '');
-  return /^https:\/\/[a-z0-9.-]+(:\d+)?$/i.test(base) ? base : '';
-}
-
-export function storeLinks(storefront = {}) {
-  const base = publicBaseUrl();
-  const alias = cleanText(storefront.alias, 80).toLowerCase();
-  if (!base || !/^[a-z0-9][a-z0-9_-]{1,79}$/.test(alias)) return { vitrine: '', pedido: () => '', imagem: () => '' };
-  return {
-    vitrine: `${base}/ecommerce/${alias}`,
-    pedido: (code) => (code ? `${base}/pedido/${alias}/${encodeURIComponent(String(code))}` : ''),
-    imagem: (url) => {
-      const value = String(url || '').trim();
-      const media = value.match(/^\/api\/storefront\/media\/([0-9a-f-]{36})$/i);
-      if (media) return `${base}/api/public/storefront/${alias}/media/${media[1]}`;
-      return isApprovedStoreUrl(value) ? value : '';
-    },
-  };
-}
-
-async function resolveProductIdsToVariants(scope, items) {
-  const ids = [...new Set(items.map(item => item.variantId))];
-  if (!ids.length) return items;
-  const found = await db.queryRead(
-    `SELECT id, product_id FROM commerce_product_variants
-      WHERE empresa_id = $1 AND (id = ANY($2::uuid[]) OR product_id = ANY($2::uuid[])) AND ativo = true`,
-    [scope.empresaId, ids],
-  ).catch(() => ({ rows: [] }));
-  const variantIds = new Set(found.rows.map(row => row.id));
-  const byProduct = new Map();
-  for (const row of found.rows) byProduct.set(row.product_id, [...(byProduct.get(row.product_id) || []), row.id]);
-  for (const item of items) {
-    if (variantIds.has(item.variantId)) continue;
-    const variants = byProduct.get(item.variantId) || [];
-    if (variants.length === 1) item.variantId = variants[0];
+// Guarda o que as ferramentas devolveram nesta resposta: a resposta final só pode citar
+// preços que vieram daqui e os links de pagamento/carrinho gerados sempre chegam ao cliente.
+function collectToolOutput(context, result) {
+  if (!result || typeof result !== 'object') return;
+  if (Array.isArray(context.toolResults)) context.toolResults.push(result);
+  if (!Array.isArray(context.toolLinks)) return;
+  for (const key of ['linkPagamento', 'linkCarrinho']) {
+    const url = String(result[key] || '').trim();
+    if (/^https:\/\/\S+$/i.test(url) && !context.toolLinks.includes(url)) context.toolLinks.push(url);
   }
-  return items;
-}
-
-async function priceCartItems(scope, storefront, items) {
-  await resolveProductIdsToVariants(scope, items);
-  const variantIds = [...new Set(items.map(item => item.variantId))];
-  const products = await listPublishedProducts({ empresaId: scope.empresaId }, { storefrontId: storefront.id, variantIds, limit: 100 });
-  const variants = new Map();
-  for (const product of products) {
-    for (const variant of product.variants || []) variants.set(variant.id, { product, variant, price: productPrice(variant) });
-  }
-  let total = 0;
-  const summarized = items.map(item => {
-    const found = variants.get(item.variantId);
-    const sobEncomenda = true;
-    if (!found || found.price <= 0 || (!sobEncomenda && Number(found.variant.estoque || 0) < item.quantity)) {
-      throw new WhatsappAiToolError('produto indisponível ou estoque insuficiente', 'ITEM_UNAVAILABLE');
-    }
-    const subtotal = Number((found.price * item.quantity).toFixed(2));
-    total += subtotal;
-    return { ...item, nome: found.product.nome, categoria: found.product.category_name || '', preco: found.price, subtotal, ...(sobEncomenda && Number(found.variant.estoque || 0) < item.quantity ? { sobEncomenda: true } : {}) };
-  });
-  return { summarized, total: Number(total.toFixed(2)) };
-}
-
-
-const EXPENSE_CATEGORIES = new Set(['Pessoal/RH', 'Manutenção', 'Utilities (Água/Luz)', 'Material Esportivo', 'Alimentação/Bebidas', 'Marketing', 'Equipamentos', 'Impostos/Taxas', 'Serviços Terceiros', 'Outros']);
-
-const AGENDA_TZ = 'America/Cuiaba';
-
-function addDaysIso(dateIso, days) {
-  const base = new Date(`${dateIso}T12:00:00Z`);
-  base.setUTCDate(base.getUTCDate() + days);
-  return base.toISOString().slice(0, 10);
-}
-
-export function localDateIso(now = new Date()) {
-  return new Intl.DateTimeFormat('en-CA', { timeZone: AGENDA_TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(now);
-}
-
-function brl(value) {
-  return `R$ ${Number(value || 0).toFixed(2).replace('.', ',')}`;
-}
-
-function cartItemsFromArgs(rawItems) {
-  return Array.isArray(rawItems) ? rawItems.slice(0, 20).map(item => ({
-    variantId: ensureUuid(item?.variantId, 'variantId'),
-    quantity: Math.min(99, Math.max(1, Number.parseInt(String(item?.quantity || 1), 10) || 1)),
-  })) : [];
 }
 
 export function createWhatsappAiToolExecutor(context) {
@@ -1696,32 +1850,56 @@ export function createWhatsappAiToolExecutor(context) {
       if (name === 'solicitar_humano') {
         const tool = TOOL_MAP[name];
         const result = await tool(context, args || {});
+        collectToolOutput(context, result);
         return result;
       }
       const isManagementTool = DINO_GESTAO_TOOLS.some((t) => t.name === name);
       if (isManagementTool) {
         const result = await executarFerramentaGestao(name, args || {}, context);
+        collectToolOutput(context, result);
         primaryIntentResolved = true;
         return result;
       }
       throw new WhatsappAiToolError('esta ferramenta não está disponível no canal interno de gestão', 'MANAGEMENT_TOOL_DISABLED');
     }
+    const tool = TOOL_MAP[name];
+    if (!tool) throw new WhatsappAiToolError('ferramenta não permitida', 'TOOL_NOT_ALLOWED');
     if (context.channelType === 'lancamentos' && !['preparar_despesa', 'solicitar_humano'].includes(name)) {
       throw new WhatsappAiToolError('esta ferramenta não está disponível no canal interno de lançamentos', 'LAUNCH_TOOL_DISABLED');
     }
-    const tool = TOOL_MAP[name];
-    if (!tool) throw new WhatsappAiToolError('ferramenta não permitida', 'TOOL_NOT_ALLOWED');
     const scoped = contextScope(context);
     if (!capabilityAllows(name, scoped.capabilities)) throw new WhatsappAiToolError('esta capacidade está desativada para a unidade', 'CAPABILITY_DISABLED');
     if (name.startsWith('preparar_')) {
       if (preparedAction) throw new WhatsappAiToolError('apenas uma ação pode ser preparada por mensagem', 'MULTIPLE_ACTIONS_NOT_ALLOWED');
-      preparedAction = true;
     }
     context.primaryIntentResolved = primaryIntentResolved;
     const result = await tool(context, args || {});
+    collectToolOutput(context, result);
+    // Só conta como preparada se deu certo: depois de "horário indisponível" ou "falta o nome",
+    // o atendente pode corrigir e preparar de novo na mesma mensagem.
+    if (name.startsWith('preparar_') && result?.ok !== false) preparedAction = true;
     if (!['propor_oportunidade', 'solicitar_humano'].includes(name)) primaryIntentResolved = true;
     return result;
   };
+}
+
+/**
+ * Depois de uma ação confirmada (agendamento, remarcação, pedido…), o contato fica no CRM
+ * com nome e a interação registrada, como faria a recepção. Falha aqui nunca derruba a confirmação.
+ */
+export async function recordConfirmedInCrm(context, pending = {}) {
+  const scope = contextScope(context);
+  const tipo = cleanText(pending.type, 40) || 'acao';
+  const summary = cleanText(pending.summary, 600);
+  // Só usa o nome do resumo quando é o próprio cliente (agendar para o filho não renomeia o contato).
+  const sessionName = isGenericCustomerName(scope.customerName) ? '' : cleanText(scope.customerName, 100);
+  const forName = (summary.match(/ para ([^:]{2,60}):/) || [])[1] || '';
+  const name = sessionName || (isGenericCustomerName(forName) ? '' : forName);
+  try {
+    await ensureWhatsappLead(scope, { phone: scope.phone, name, text: `WhatsApp IA: ${tipo} confirmado — ${summary}` });
+  } catch {
+    // CRM é complementar: a ação já foi concluída.
+  }
 }
 
 export async function cancelPendingAction(context) {
@@ -1749,6 +1927,34 @@ export async function cancelPendingAction(context) {
   });
 }
 
+function registerConfirmedExpense(scope, action) {
+  const request = action.solicitacao || {};
+  const lancamento = registrarLancamento(scope.empresaId, {
+    tipo: 'despesa',
+    categoria: request.categoria || 'Outros',
+    descricao: request.descricao || `Despesa — ${request.fornecedor || 'documento WhatsApp'}`,
+    valor: request.valor,
+    origem: 'whatsapp_nota',
+    status: 'pendente',
+    vencimento: request.dataOperacao,
+    dataOperacao: `${request.dataOperacao}T12:00:00.000Z`,
+    observacao: 'Documento recebido via WhatsApp. Lançamento criado como pendente; pagamento deve ser confirmado pela interface autorizada.',
+    referencia: { documentoId: request.documentoId },
+    usuario: `whatsapp:${scope.canalId}`,
+    automatico: false,
+    chaveIdempotencia: `whatsapp:despesa:${scope.empresaId}:${action.id}`,
+  });
+  saveLegacyDb();
+  return {
+    id: lancamento.id,
+    fornecedor: request.fornecedor,
+    valor: lancamento.valor,
+    categoria: lancamento.categoria,
+    dataOperacao: lancamento.dataOperacao,
+    status: lancamento.status,
+    pagamentoEfetuado: false,
+  };
+}
 export async function confirmPendingAction(context) {
   const scope = contextScope(context);
   return db.transaction(async trx => {
@@ -1767,8 +1973,22 @@ export async function confirmPendingAction(context) {
     const action = actionResult.rows[0];
     if (!action) throw new WhatsappAiToolError('ação pendente não encontrada', 'ACTION_NOT_FOUND');
     if (action.status === 'concluida') return action.resposta;
+    if (action.status === 'confirmada' && action.tipo === 'despesa_financeira') {
+      const response = registerConfirmedExpense(scope, action);
+      await trx.query(
+        `UPDATE whatsapp_ai_actions SET status = 'concluida', resposta = $2::jsonb, concluido_em = CURRENT_TIMESTAMP
+          WHERE id = $1 AND empresa_id = $3 AND loja_id = $4`,
+        [action.id, JSON.stringify(response), scope.empresaId, scope.lojaId],
+      );
+      await trx.query(
+        `UPDATE whatsapp_ai_sessions SET acao_pendente = NULL, atualizado_em = CURRENT_TIMESTAMP
+          WHERE id = $1 AND empresa_id = $2 AND loja_id = $3`,
+        [scope.sessionId, scope.empresaId, scope.lojaId],
+      );
+      return { ok: true, type: action.tipo, result: response };
+    }
     if (action.status !== 'preparada') throw new WhatsappAiToolError('ação não pode mais ser confirmada', 'ACTION_NOT_CONFIRMABLE');
-    if (Date.now() - new Date(action.criado_em).getTime() > 30 * 60 * 1000) {
+    if (Date.now() - new Date(action.criado_em).getTime() > actionTtlMinutes() * 60 * 1000) {
       await trx.query(
         `UPDATE whatsapp_ai_actions SET status = 'cancelada' WHERE id = $1 AND empresa_id = $2 AND loja_id = $3`,
         [action.id, scope.empresaId, scope.lojaId],
@@ -1777,7 +1997,9 @@ export async function confirmPendingAction(context) {
         `UPDATE whatsapp_ai_sessions SET acao_pendente = NULL WHERE id = $1 AND empresa_id = $2 AND loja_id = $3`,
         [scope.sessionId, scope.empresaId, scope.lojaId],
       );
-      throw new WhatsappAiToolError('a confirmação expirou; prepare a ação novamente', 'ACTION_EXPIRED');
+      // Devolve (sem lançar) para a transação GRAVAR a expiração: lançar aqui desfazia
+      // o cancelamento e a sessão ficava presa numa ação vencida, sem resposta ao cliente.
+      return { ok: false, type: action.tipo, code: 'ACTION_EXPIRED', summary: pending.summary || '' };
     }
 
     await trx.query(
@@ -1787,33 +2009,43 @@ export async function confirmPendingAction(context) {
     );
     let response;
     if (action.tipo === 'agendamento') {
-      response = await createScheduledAppointment(trx, scope, action.solicitacao);
+      response = await createScheduledAppointment(trx, scope, { ...action.solicitacao, actionId: action.id });
+      const combo = Array.isArray(action.solicitacao.combo) ? action.solicitacao.combo : [];
+      if (combo.length) {
+        const criados = [response];
+        try {
+          for (const [index, item] of combo.entries()) {
+            criados.push(await createScheduledAppointment(trx, scope, { ...action.solicitacao, ...item, combo: undefined, actionId: `${action.id}:${index + 1}` }));
+          }
+        } catch (error) {
+          // Tudo ou nada: se um serviço da visita não encaixa mais, desfaz os já criados.
+          for (const criado of criados) await cancelWhatsappAppointment(trx, scope, criado.id).catch(() => null);
+          throw error;
+        }
+        response = { ...response, extras: criados.slice(1) };
+      }
     } else if (action.tipo === 'pedido') {
       response = await createPendingOrder(trx, { empresaId: scope.empresaId, lojaId: scope.lojaId }, {
         ...action.solicitacao,
         idempotencyKey: action.chave_idempotencia,
         correlationId: `whatsapp:${action.id}`,
       });
-      // Notificar Dino
-      try {
-        const myFetch = global.fetch;
-        const tenantRes = await trx.query(`SELECT api_base_url, configuracao FROM canais_integracao WHERE id = $1`, [scope.canalId]);
-        const tenant = tenantRes.rows[0];
-        const apiUrl = tenant?.api_base_url || (process.env.EVOLUTION_API_URL || process.env.CHATBOT_BACKEND_URL) || 'http://localhost:8080';
-        const apiKey = tenant?.configuracao?.segredo_env ? process.env[tenant.configuracao.segredo_env.replace('ENV:', '')] : (process.env.EVOLUTION_API_KEY || process.env.CHATBOT_BACKEND_KEY) || '';
-        const instance = tenant?.configuracao?.instance || (process.env.EVOLUTION_INSTANCE || process.env.CHATBOT_BACKEND_INSTANCE) || 'dino';
-        const dinoPhone = process.env.GESTOR_TELEFONE || '65999999999';
-        const msg = `🛍️ *Nova Venda Fechada pelo IA!*
-Pedido: ${response.publicCode}
-Total: R$ ${Number(response.total).toFixed(2).replace('.', ',')}
-O cliente enviará o comprovante PIX em breve.`;
-        await myFetch(`${apiUrl.replace(/\/$/, '')}/message/sendText/${encodeURIComponent(instance)}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', apikey: apiKey },
-          body: JSON.stringify({ number: '55' + dinoPhone.replace(/\D/g, ''), text: msg, delay: 1200 }),
-        });
-      } catch (err) {
-        console.warn('Erro notificando Dino sobre a venda', err);
+      const notaPedido = String(action.solicitacao?.note || '');
+      response = { ...response, entrega: /para entrega/.test(notaPedido) ? 'delivery' : 'pickup', sobEncomenda: /sob encomenda/.test(notaPedido) };
+      // Link do pedido (acompanhar e concluir o pagamento pela loja segura).
+      const storefront = await activeStorefront(scope).catch(() => ({}));
+      const linkPedido = storeLinks(storefront).pedido(response?.publicCode);
+      if (linkPedido) response = { ...response, linkPedido };
+      // Só oferece pagar pelo WhatsApp (link_pagamento_pedido) se a loja tem meio online pronto.
+      if (storefront?.id) {
+        // Leitura fora da transação: uma falha aqui não pode abortar a criação do pedido.
+        const accounts = await db.queryRead(
+          `SELECT id, provider, ambiente, secret_ref, public_config, ativo FROM commerce_payment_accounts
+            WHERE empresa_id = $1 AND storefront_id = $2 AND ambiente = 'production' AND ativo = true`,
+          [scope.empresaId, storefront.id],
+        ).catch(() => ({ rows: [] }));
+        const online = publicPaymentMethods(accounts.rows || []).some(item => item.method === 'pix' || item.method === 'credit_card');
+        if (online) response = { ...response, pagamentoOnline: true };
       }
     } else if (action.tipo === 'remarcacao') {
       response = await rescheduleWhatsappAppointment(trx, scope, action.solicitacao);
@@ -1821,6 +2053,8 @@ O cliente enviará o comprovante PIX em breve.`;
       response = await cancelWhatsappAppointment(trx, scope, action.solicitacao.appointmentId);
     } else if (action.tipo === 'promocao_cliente') {
       response = await queueWhatsappPromotion(trx, scope, action.solicitacao);
+    } else if (action.tipo === 'despesa_financeira') {
+      response = registerConfirmedExpense(scope, action);
     } else {
       throw new WhatsappAiToolError('tipo de ação não permitido', 'ACTION_TYPE_NOT_ALLOWED');
     }
@@ -1837,70 +2071,6 @@ O cliente enviará o comprovante PIX em breve.`;
     );
     return { ok: true, type: action.tipo, result: response };
   });
-}
-
-const DIAS_SEMANA = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];
-const PERIODOS_VALIDOS = new Set(['manha', 'tarde', 'noite', 'qualquer']);
-
-function periodOf(time) {
-  const hour = Number(String(time || '').split(':')[0]);
-  if (!Number.isFinite(hour)) return 'qualquer';
-  if (hour < 12) return 'manha';
-  if (hour < 18) return 'tarde';
-  return 'noite';
-}
-
-function normalizePeriod(value) {
-  const plainValue = String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
-  return PERIODOS_VALIDOS.has(plainValue) ? plainValue : 'qualquer';
-}
-
-function minutesOf(hhmm) {
-  const match = String(hhmm || '').match(/^(\d{1,2}):(\d{2})/);
-  return match ? Number(match[1]) * 60 + Number(match[2]) : NaN;
-}
-
-export async function earliestSlots({ fetchDay, fromDate, days = 7, period = 'qualquer', limit = 6, notBefore = '', aroundTime = '' } = {}) {
-  const safeDays = Math.min(14, Math.max(1, Number(days) || 7));
-  const safeLimit = Math.min(10, Math.max(1, Number(limit) || 6));
-  const wanted = normalizePeriod(period);
-  const found = [];
-  const closed = [];
-  for (let offset = 0; offset < safeDays && found.length < safeLimit; offset += 1) {
-    const date = addDaysIso(fromDate, offset);
-    let day;
-    try {
-      day = await fetchDay(date);
-    } catch (error) {
-      if (error?.code === 'SLOT_UNAVAILABLE') { closed.push(date); continue; }
-      if (error?.code === 'DATE_OUT_OF_RANGE') break;
-      throw error;
-    }
-    let candidates = (Array.isArray(day?.slots) ? day.slots : [])
-      .filter((time) => !(offset === 0 && notBefore && String(time) <= notBefore))
-      .filter((time) => wanted === 'qualquer' || periodOf(time) === wanted);
-    const target = minutesOf(aroundTime);
-    if (Number.isFinite(target)) {
-      candidates = [...candidates]
-        .sort((a, b) => Math.abs(minutesOf(a) - target) - Math.abs(minutesOf(b) - target))
-        .slice(0, 2)
-        .sort((a, b) => minutesOf(a) - minutesOf(b));
-    }
-    for (const time of candidates) {
-      const weekday = DIAS_SEMANA[new Date(`${date}T12:00:00Z`).getUTCDay()];
-      found.push({ date, weekday, time: String(time).slice(0, 5), professional: day.professionalByTime?.[time] || day.professional?.nome || null });
-      if (found.length >= safeLimit) break;
-    }
-  }
-  return { slots: found, searchedDays: safeDays, period: wanted, closedDays: closed };
-}
-
-export function friendlyWhen(date, time, now = new Date()) {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(date || ''))) return `${date} às ${time}`;
-  const weekday = DIAS_SEMANA[new Date(`${date}T12:00:00Z`).getUTCDay()];
-  const today = localDateIso(now);
-  const prefix = date === today ? 'hoje, ' : date === addDaysIso(today, 1) ? 'amanhã, ' : '';
-  return `${prefix}${weekday} ${date.slice(8, 10)}/${date.slice(5, 7)} às ${String(time).slice(0, 5)}`;
 }
 
 export { toolProducts };

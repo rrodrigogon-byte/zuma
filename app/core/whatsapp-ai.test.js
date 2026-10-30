@@ -10,6 +10,7 @@ import {
   configureWhatsappAiPolicy,
   listWhatsappAiSessions,
   parseEvolutionMessage,
+  parseWahaMessage,
   processWhatsappConversationTask,
   releaseWhatsappAiHandoff,
   syncWhatsappAiWebhook,
@@ -34,7 +35,6 @@ test('parseEvolutionMessage extrai mensagem individual recebida da Evolution', (
   });
   assert.deepEqual(parsed, {
     ignored: false,
-    fromMe: false,
     event: 'MESSAGES_UPSERT',
     externalId: 'MSG-1',
     remoteJid: '5565999999999@s.whatsapp.net',
@@ -42,13 +42,14 @@ test('parseEvolutionMessage extrai mensagem individual recebida da Evolution', (
     name: 'Cliente Dino',
     text: 'Quero agendar um corte',
     timestamp: 123456,
+    fromMe: false,
   });
 });
 
 test('parseEvolutionMessage ignora mensagens enviadas pela própria instância', () => {
   const parsed = parseEvolutionMessage({ event: 'MESSAGES_UPSERT', data: { key: { id: 'MSG-2', remoteJid: '5565999999999@s.whatsapp.net', fromMe: true }, message: { conversation: 'eco' } } });
   assert.equal(parsed.ignored, false);
-  
+  assert.equal(parsed.fromMe, true);
 });
 
 test('parseEvolutionMessage ignora grupos e conteúdo sem texto', () => {
@@ -58,12 +59,28 @@ test('parseEvolutionMessage ignora grupos e conteúdo sem texto', () => {
   assert.equal(media.reason, 'unsupported_content');
 });
 
+test('parseWahaMessage aceita somente o grupo Admin allowlisted', () => {
+  const base = { event: 'message', session: 'kytto-gestao-rm', payload: { id: { _serialized: 'WAHA-1' }, from: '120363012345678901@g.us', fromMe: false, body: 'quais são os ativos?' } };
+  const parsed = parseWahaMessage(base, { sessionName: 'kytto-gestao-rm', groupId: '120363012345678901@g.us' });
+  assert.equal(parsed.ignored, false);
+  assert.equal(parsed.remoteJid, '120363012345678901@g.us');
+  assert.equal(parsed.phone, '');
+  assert.equal(parsed.text, 'quais são os ativos?');
+  assert.equal(parseWahaMessage({ ...base, payload: { ...base.payload, from: '120363099999999999@g.us' } }, { sessionName: 'kytto-gestao-rm', groupId: '120363012345678901@g.us' }).reason, 'waha_group_not_allowlisted');
+  assert.equal(parseWahaMessage({ ...base, payload: { ...base.payload, fromMe: true } }, { sessionName: 'kytto-gestao-rm', groupId: '120363012345678901@g.us' }).fromMe, true);
+  assert.equal(parseWahaMessage({ ...base, payload: { ...base.payload, from: '5511999999999@s.whatsapp.net' } }, { sessionName: 'kytto-gestao-rm', groupId: '120363012345678901@g.us' }).reason, 'not_group');
+});
+
 test('prompt exige ferramentas, confirmação, transparência e handoff sem pagamento externo', () => {
   const prompt = buildWhatsappAiSystemPrompt({ storeName: 'Barbearia Dino', pendingAction: { summary: '1x produto' } });
   assert.match(prompt, /assistente virtual/i);
   assert.match(prompt, /Nunca invente produto/);
-  assert.match(prompt, /SIM \(ou CONFIRMAR\)/);
-  
+  assert.match(prompt, /SIM \(ou CONFIRMAR\) para concluir ou NÃO para desistir/);
+  assert.match(prompt, /responder SIM para confirmar ou NÃO para desistir/);
+  assert.match(prompt, /áudio do cliente transcrito/);
+  assert.match(prompt, /consulte consultar_pagamentos/);
+  assert.match(prompt, /Não faça cobrança nem pagamento pelo WhatsApp por conta própria/);
+  assert.match(prompt, /link_pagamento_pedido, para pedido do próprio contato/);
   assert.match(prompt, /solicitar_humano/);
   assert.match(prompt, /Há uma ação pendente/);
 });
@@ -150,12 +167,14 @@ test('lista de sessões expõe somente DTO operacional mascarado', async () => {
 
 test('status operacional retorna apenas readiness e métricas agregadas, sem URL de API ou segredo', async () => {
   const original = db.queryRead;
+  const queries = [];
   db.queryRead = async (sql) => {
-    if (/FROM canais_integracao/.test(sql)) return { rows: [{ id: SESSAO, codigo_publico: SESSAO, nome: 'Dino', status: 'pausado', api_base_url: 'https://secret.invalid', configuracao: { instance: 'dino', segredo_env: 'SECRET' }, ai_consecutive_failures: 2 }] };
+    queries.push(sql);
     if (/FROM whatsapp_ai_sessions/.test(sql)) return { rows: [{ status: 'humano', total: 2, unassigned: 1 }] };
+    if (/SELECT id, codigo_publico/.test(sql)) return { rows: [{ id: SESSAO, codigo_publico: SESSAO, nome: 'Dino', status: 'pausado', api_base_url: 'https://secret.invalid', configuracao: { instance: 'dino', segredo_env: 'SECRET' }, ai_consecutive_failures: 2 }] };
     if (/FROM tarefas_integracao_canais/.test(sql)) return { rows: [{ status: 'falha', total: 3, dead_letter: 1 }] };
     if (/FROM whatsapp_ai_messages/.test(sql)) return { rows: [{ status: 'unknown', total: 1 }, { status: 'sent', total: 4 }] };
-    if (/FROM whatsapp_ai_provider_runs/.test(sql)) return { rows: [{ total: 5, success: 4, failed: 1, avg_latency_ms: 800, tool_calls: 2 }] };
+    if (/FROM whatsapp_ai_provider_runs/.test(sql)) return { rows: [{ total: 5, success: 4, failed: 1, avg_latency_ms: 800, tool_calls: 2, latency_sample_size: 4, p50_latency_ms: 812.5, p95_latency_ms: 1400.25 }] };
     if (/FROM whatsapp_ai_worker_leases/.test(sql)) return { rows: [{ titular: 'host-private', active: false, expira_em: null, atualizado_em: '2026-09-02T20:00:00Z' }] };
     return { rows: [] };
   };
@@ -168,6 +187,15 @@ test('status operacional retorna apenas readiness e métricas agregadas, sem URL
     assert.equal(status.tasks.deadLetter, 1);
     assert.equal(status.deliveries.unknown, 1);
     assert.equal(status.provider24h.avgLatencyMs, 800);
+    assert.deepEqual(status.provider24h.latency24h, { window: '24h', scope: 'unit', sampleSize: 4, p50Ms: 812.5, p95Ms: 1400.25 });
+    const providerQuery = queries.find(sql => /FROM whatsapp_ai_provider_runs/.test(sql));
+    assert.match(providerQuery, /^\s*SELECT\b/i);
+    assert.match(providerQuery, /empresa_id = \$1 AND loja_id = \$2/);
+    assert.match(providerQuery, /criado_em >= CURRENT_TIMESTAMP - INTERVAL '24 hours'/);
+    assert.match(providerQuery, /percentile_cont\(0\.5\)/);
+    assert.match(providerQuery, /percentile_cont\(0\.95\)/);
+    assert.match(providerQuery, /latency_ms IS NOT NULL AND latency_ms > 0/);
+    assert.doesNotMatch(providerQuery, /\b(INSERT|UPDATE|DELETE|ALTER|DROP)\b/i);
     assert.equal(status.worker.titular, undefined);
     assert.doesNotMatch(JSON.stringify(status), /secret\.invalid|SECRET|host-private/);
   } finally { db.queryRead = original; }
@@ -179,9 +207,8 @@ function mockHandoffTransaction(returning) {
   db.transaction = async callback => callback({
     async query(sql, params) {
       calls.push({ sql, params });
+      if (/SELECT id, status, assigned_to/.test(sql)) return { rows: [{ ...returning, assigned_to: null }], rowCount: 1 };
       if (/UPDATE whatsapp_ai_sessions/.test(sql)) return { rows: [returning], rowCount: 1 };
-      if (/SELECT[\\s\\S]*FROM whatsapp_ai_sessions/.test(sql) || /FROM whatsapp_ai_sessions/.test(sql)) return { rows: [{ ...returning, assigned_to: null }], rowCount: 1 };
-      if (/SELECT.*whatsapp_ai_sessions/.test(sql) || /SELECT.*canais_integracao/.test(sql)) return { rows: [returning], rowCount: 1 };
       return { rows: [], rowCount: 1 };
     },
   });
@@ -194,10 +221,10 @@ test('claim de handoff é tenant-scoped, atribui o operador autenticado e audita
     const result = await claimWhatsappAiHandoff({ empresaId: EMPRESA, lojaId: LOJA, usuarioId: USUARIO }, SESSAO);
     assert.equal(result.assigned_to, USUARIO);
     assert.match(mock.calls[0].sql, /empresa_id = \$2 AND loja_id = \$3/);
+    assert.match(mock.calls[0].sql, /FOR UPDATE/);
+    assert.deepEqual(mock.calls[0].params, [SESSAO, EMPRESA, LOJA, 'cliente']);
     assert.match(mock.calls[1].sql, /assigned_to IS NULL/);
-    assert.deepEqual(mock.calls[1].params, [SESSAO, EMPRESA, LOJA, USUARIO]);
-    
-    
+    assert.deepEqual(mock.calls[1].params, [SESSAO, EMPRESA, LOJA, USUARIO, 'cliente']);
     assert.match(mock.calls[2].sql, /commerce_audit_logs/);
     assert.doesNotMatch(JSON.stringify(mock.calls[2].params), /telefone|conteudo|remote_jid/);
   } finally { mock.restore(); }
@@ -276,17 +303,13 @@ function mockConversationDatabase({ baseUrl, priorOutput = null } = {}) {
   };
 }
 
-test('processamento local informa privacidade, envia uma vez e mantém handoff humano', async () => {
+test('processamento local não usa Evolution global sem credenciais escopadas ao canal', async () => {
   await withEvolutionServer(async (baseUrl, requestBody) => {
     const mock = mockConversationDatabase({ baseUrl });
     try {
-      const result = await processWhatsappConversationTask(mock.record);
-      assert.equal(result.delivered, true);
-      assert.equal(result.kind, 'handoff');
-      assert.match(requestBody().text, /assistente virtual/i);
-      assert.match(requestBody().text, /equipe humana/i);
-      assert.equal(mock.calls.some(sql => /handoff_requested_at/.test(sql)), true);
-      assert.equal(mock.calls.some(sql => /delivery_status = 'sent'/.test(sql)), true);
+      await assert.rejects(() => processWhatsappConversationTask(mock.record), { code: 'WHATSAPP_PROVIDER_REJECTED' });
+      assert.equal(requestBody(), undefined, 'nenhum POST ao provider global sem escopo');
+      assert.equal(mock.calls.some(sql => /delivery_status = 'sent'/.test(sql)), false);
     } finally { mock.restore(); }
   });
 });
@@ -301,4 +324,59 @@ test('saída anterior incerta nunca chama Evolution novamente e força revisão 
     assert.equal(mock.calls.some(sql => /handoff_requested_at/.test(sql)), true);
     assert.equal(mock.calls.some(sql => /delivery_status = 'sending'/.test(sql)), false);
   } finally { mock.restore(); }
+});
+
+test('parser aceita os formatos do backend NossaGente (Baileys e wppconnect) sem afrouxar filtros', () => {
+  const baileys = parseEvolutionMessage({ event: 'messages.upsert', data: { messages: [{ key: { id: 'B1', remoteJid: '5565999990000@s.whatsapp.net', fromMe: false }, pushName: 'Ana', message: { conversation: 'Quero agendar' } }] } });
+  assert.equal(baileys.ignored, false);
+  assert.equal(baileys.phone, '5565999990000');
+  assert.equal(baileys.text, 'Quero agendar');
+  const wpp = parseEvolutionMessage({ event: 'onmessage', data: { id: 'W1', from: '5565988887777@c.us', body: 'Oi', type: 'chat', notifyName: 'Beto' } });
+  assert.equal(wpp.ignored, false);
+  assert.equal(wpp.name, 'Beto');
+  assert.equal(parseEvolutionMessage({ event: 'message', data: { id: 'G1', from: '123@g.us', body: 'x', isGroupMsg: true } }).reason, 'group');
+  assert.equal(parseEvolutionMessage({ event: 'message', data: { id: 'M1', from: '5565988887777@c.us', body: 'eco', fromMe: true } }).fromMe, true);
+  assert.equal(parseEvolutionMessage({ event: 'connection.update', data: { state: 'open' } }).reason, 'unsupported_event');
+});
+
+test('mensagem com endereço @lid usa o número real enviado pelo provedor, ou é ignorada', () => {
+  const comNumero = parseEvolutionMessage({ event: 'messages.upsert', data: { key: { id: 'LID-1', remoteJid: '123456789012345@lid', senderPn: '5565999990001@s.whatsapp.net', fromMe: false }, message: { conversation: 'SAIR' } } });
+  assert.equal(comNumero.ignored, false);
+  assert.equal(comNumero.phone, '5565999990001');
+  assert.equal(comNumero.remoteJid, '5565999990001@s.whatsapp.net', 'resposta vai para o número, não para o LID');
+  const semNumero = parseEvolutionMessage({ event: 'messages.upsert', data: { key: { id: 'LID-2', remoteJid: '123456789012345@lid', fromMe: false }, message: { conversation: 'oi' } } });
+  assert.equal(semNumero.ignored, true);
+  assert.equal(semNumero.reason, 'lid_without_phone');
+});
+
+test('segredo do webhook só pode vir de variável própria de webhook (nunca JWT_SECRET, DATABASE_URL…)', async () => {
+  for (const name of ['JWT_SECRET', 'DATABASE_URL', 'EVOLUTION_API_KEY', 'NODE_ENV']) {
+    await assert.rejects(
+      () => configureWhatsappAiChannel({ empresaId: EMPRESA, lojaId: LOJA }, { status: 'rascunho', instance: 'dino', webhookSecretEnv: name }),
+      /WHATSAPP_AI_WEBHOOK_SECRET/,
+      name,
+    );
+  }
+});
+
+
+test('pergunta de personalização no primeiro contato: uma vez e nunca com ação pendente', async () => {
+  const { shouldAskPersonalization } = await import('./whatsapp-ai.js');
+  const policy = { personalizationEnabled: true };
+  const consent = { personalization: false };
+  assert.equal(shouldAskPersonalization({ policy, consent, session: {} }), true);
+  assert.equal(shouldAskPersonalization({ policy: {}, consent, session: {} }), false, 'unidade sem personalização não pergunta');
+  assert.equal(shouldAskPersonalization({ policy, consent: { personalization: true }, session: {} }), false);
+  assert.equal(shouldAskPersonalization({ policy, consent, session: { personalization_prompted_at: new Date() } }), false);
+  assert.equal(shouldAskPersonalization({ policy, consent, session: { estado: { personalizacaoRespondida: true } } }), false, 'quem respondeu NÃO não é perguntado de novo');
+  assert.equal(shouldAskPersonalization({ policy, consent, session: {}, pendingAction: true }), false);
+});
+
+test('prompt: segmento suplementos acrescenta as travas mesmo sem persona; Dino não muda', async () => {
+  const { buildWhatsappAiSystemPrompt: build } = await import('./whatsapp-ai.js');
+  const stallone = build({ storeName: 'Stallone Nutre Sport', segment: 'suplementos' });
+  assert.match(stallone, /Suplemento não é medicamento/);
+  assert.match(stallone, /NÃO é barbearia/);
+  const dino = build({ storeName: 'Barbearia Dino' });
+  assert.doesNotMatch(dino, /Suplemento não é medicamento/);
 });
