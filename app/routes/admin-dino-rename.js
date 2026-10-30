@@ -1,8 +1,8 @@
-import { estadoEmpresa, db } from '../barbearia-erp-kytto.js';
+
+import { estadoEmpresa } from '../barbearia-erp-kytto.js';
+import { save } from '../db.js';
 import { Router } from 'express';
-
 export const router = Router();
-
 router.get('/rename-prof', (req, res) => {
   try {
     const estado = estadoEmpresa('dino', false);
@@ -13,12 +13,10 @@ router.get('/rename-prof', (req, res) => {
         count++;
       }
     }
-    // trigger save
-    const r = db();
-    if (r.save) r.save();
-    
+    save();
     res.json({ success: true, count });
   } catch (error) {
-    console.error(error); res.status(500).json({ error: error.message, stack: error.stack });
+    console.error(error);
+    res.status(500).json({ error: error.message, stack: error.stack });
   }
 });
