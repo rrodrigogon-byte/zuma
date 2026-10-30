@@ -1410,19 +1410,7 @@ if(process.env.COMMERCE_CORE_ENABLED === '1'){
   });
 
   
-app.get('/api/public/simula-trex', async (req, res) => {
-  try {
-    const { createWhatsappAiToolExecutor } = await import('./core/whatsapp-ai-tools.js');
-    const { listServices, listProfessionals } = await import('./core/barbershop-agenda.js');
-    const empresaId = 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6'; // Dino
-    const lojaId = 'ab049a75-6e2e-4cc9-abbc-6fd11cdda1d8';
-    const scope = { empresaId, lojaId };
-    
-    // 1. O T-Rex consulta a agenda de todos os profissionais. (Usando toolNextSlots com profissional 'qualquer')
-    const executor = createWhatsappAiToolExecutor({ 
-      empresaId, lojaId, channelType: 'cliente', canalId: '123e4567-e89b-12d3-a456-426614174000', sessionId: '123e4567-e89b-12d3-a456-426614174000', 
-      capabilities: { manageAppointments: true }, phone: '5565999999999' 
-    });
+
     
     // Obter um servico valido
     const servicos = await listServices(scope);
