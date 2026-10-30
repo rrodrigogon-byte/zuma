@@ -85,24 +85,52 @@ function validarData(valor, nome = 'data') {
 // "Serviços extras" (o que se oferece além do corte e da barba).
 export const CATEGORIAS = ['Cabelo', 'Barba', 'Cabelo e barba', 'Serviços extras', 'Club', 'Outros serviços', 'Produtos'];
 
-export function categoriaDoServico(servico = {}, nomeLinha = '', grupoLinha = '') {
-  const nome = texto(nomeLinha || servico?.nome);
-  const categoria = normalizar(servico?.categoria || grupoLinha);
-  if (/\b(club|clube)\b/.test(categoria) || /\b(club|clube)\b/.test(normalizar(nome))) return 'Club';
-  if (serviceGroup({ nome, categoria: '' }) === 'extras') return 'Serviços extras';
-  const corteNaCategoria = /\b(cabelo|corte)\b/.test(categoria);
-  const barbaNaCategoria = /\bbarba\b/.test(categoria);
-  if (corteNaCategoria && barbaNaCategoria) return 'Cabelo e barba';
-  if (corteNaCategoria) return 'Cabelo';
-  if (barbaNaCategoria) return 'Barba';
-  if (categoria) return 'Serviços extras';
+// Categorias que não dizem o que o serviço é (cadastro genérico ou importado).
+const CATEGORIAS_GENERICAS = new Set(['', 'geral', 'historico avec', 'especial', 'outros', 'servicos', 'servico', 'nao classificado', 'sem categoria']);
+const CATEGORIA_POR_NOME = new Map([
+  ['cabelo', 'Cabelo'], ['cortes', 'Cabelo'], ['corte', 'Cabelo'],
+  ['barba', 'Barba'], ['barbas', 'Barba'],
+  ['cabelo e barba', 'Cabelo e barba'], ['combos', 'Cabelo e barba'], ['combo', 'Cabelo e barba'],
+  ['club', 'Club'], ['clube', 'Club'],
+]);
+
+function categoriaPeloNome(nome) {
   const textoNome = normalizar(nome);
+  if (/\b(club|clube)\b/.test(textoNome)) return 'Club';
+  if (serviceGroup({ nome, categoria: '' }) === 'extras') return 'Serviços extras';
   const corte = /\b(corte|cabelo|pezinho|acabamento|degrade|social|tesoura|maquina)\b/.test(textoNome);
   const barba = /\b(barba|barbear|barboterapia)\b/.test(textoNome);
   if (corte && barba) return 'Cabelo e barba';
   if (corte) return 'Cabelo';
   if (barba) return 'Barba';
-  return 'Outros serviços';
+  return null;
+}
+
+function categoriaPeloCadastro(valor) {
+  const categoria = normalizar(valor);
+  if (CATEGORIAS_GENERICAS.has(categoria)) return null;
+  if (CATEGORIA_POR_NOME.has(categoria)) return CATEGORIA_POR_NOME.get(categoria);
+  const corte = /\b(cabelo|corte|cortes)\b/.test(categoria);
+  const barba = /\bbarba\b/.test(categoria);
+  if (corte && barba) return 'Cabelo e barba';
+  if (corte) return 'Cabelo';
+  if (barba) return 'Barba';
+  // Estética, SPA, química, tintura, sobrancelha, depilação, unhas, prótese, consultoria…
+  return 'Serviços extras';
+}
+
+// Ordem: Club pelo nome; extras pelo nome (hidratação, selagem…); a categoria da própria
+// linha (frente de atuação do Avec); a categoria do cadastro do Kytto; por fim o nome.
+// Categoria genérica ("Geral", "Histórico Avec") nunca decide sozinha.
+export function categoriaDoServico(servico = {}, nomeLinha = '', grupoLinha = '') {
+  const nome = texto(nomeLinha || servico?.nome);
+  const textoNome = normalizar(nome);
+  if (/\b(club|clube)\b/.test(textoNome) || /\b(club|clube)\b/.test(normalizar(servico?.categoria))) return 'Club';
+  if (serviceGroup({ nome, categoria: '' }) === 'extras') return 'Serviços extras';
+  return categoriaPeloCadastro(grupoLinha)
+    || categoriaPeloCadastro(servico?.categoria)
+    || categoriaPeloNome(nome)
+    || 'Outros serviços';
 }
 
 // ── Metas diárias definidas pelo gestor ──────────────────────────────────────
@@ -565,39 +593,78 @@ function pacotesVendidos(root, empresaId, dia) {
 }
 
 // ── Comparativo de períodos ───────────────────────────────────────────────────
+export const NAO_DETALHADO_AVEC = 'Não detalhado no Avec';
+export const ID_NAO_DETALHADO = '__nao_detalhado_avec__';
+
+function diaDoLancamento(valor) {
+  const bruto = texto(valor);
+  if (DATA_RE.test(bruto)) return bruto;
+  const ms = new Date(bruto).valueOf();
+  return Number.isFinite(ms) ? diaLocal(ms) : '';
+}
+
+// Recebimentos pagos do extrato do Avec, por dia (é o realizado oficial até a virada).
+function extratoAvecPorDia(snapshot, inicio, fim) {
+  const porDia = new Map();
+  for (const item of snapshot.financial || []) {
+    const avec = item?.metadata?.historicoAvec === true || String(item?.origem || '').startsWith('avec-import-financeiro');
+    if (!avec || item.tipo !== 'receita' || item.status !== 'pago') continue;
+    const dia = diaDoLancamento(item.pagoEm || item.dataOperacao);
+    if (!dia || dia < inicio || dia > fim) continue;
+    porDia.set(dia, (porDia.get(dia) || 0) + num(item.valor));
+  }
+  return porDia;
+}
+
 function resumoDoPeriodo(root, { empresaId, lojaId, inicio, fim, profissionalId = '' }) {
-  const { snapshot, current, linhas, profissionais } = linhasDoPeriodo(root, { empresaId, lojaId, inicio, fim });
+  const { snapshot, linhas, profissionais } = linhasDoPeriodo(root, { empresaId, lojaId, inicio, fim });
   const calendario = calendarioDaLoja(snapshot);
   const filtro = (item) => !profissionalId || item.profissionalId === profissionalId;
-  const historicoFinanceiro = num(current.historicalFinance?.revenue);
+  const extratoPorDia = extratoAvecPorDia(snapshot, inicio, fim);
+  const historicoFinanceiro = dinheiro([...extratoPorDia.values()].reduce((soma, valor) => soma + valor, 0));
   const operacionais = linhas.filter((item) => item.origem !== 'historico_avec');
   const avec = linhas.filter((item) => item.origem === 'historico_avec');
+  const atribuidoAvec = dinheiro(avec.reduce((soma, item) => soma + item.valor, 0));
+  // O extrato pago do Avec inclui o que o relatório de serviços não detalha (mensalidade do
+  // clube, pacotes, produtos, vale-presente). Essa diferença entra como linha própria, para
+  // categorias, profissionais e curva fecharem com o faturamento.
+  const naoDetalhado = dinheiro(Math.max(0, historicoFinanceiro - atribuidoAvec));
   const agendamentos = lista(snapshot.strict.agendamentos).filter((item) => { const d = texto(item.dataAgenda || '').slice(0, 10) || (item.dataHora ? diaLocal(new Date(item.dataHora).valueOf()) : ''); return d >= inicio && d <= fim; });
   const agendaFiltrada = agendamentos.filter((item) => !profissionalId || texto(item.profissionalId) === profissionalId);
   const linhasFiltradas = linhas.filter(filtro);
-  // Total da equipe: operação + extrato pago do Avec (as linhas Avec só atribuem).
+  const somaOperacional = dinheiro(operacionais.reduce((soma, item) => soma + item.valor, 0));
   const faturamento = profissionalId
     ? dinheiro(linhasFiltradas.reduce((soma, item) => soma + item.valor, 0))
-    : dinheiro(operacionais.reduce((soma, item) => soma + item.valor, 0) + (historicoFinanceiro || avec.reduce((soma, item) => soma + item.valor, 0)));
+    : dinheiro(somaOperacional + Math.max(historicoFinanceiro, atribuidoAvec));
   const atendimentos = atendimentosConcluidos(agendaFiltrada, linhasFiltradas);
   const servicos = dinheiro(linhasFiltradas.filter((item) => item.tipo === 'servico').reduce((soma, item) => soma + item.valor, 0));
+  const clientes = new Set(linhasFiltradas.map((item) => normalizar(item.cliente)).filter(Boolean)).size;
   const dias = Math.round((new Date(`${fim}T12:00:00Z`) - new Date(`${inicio}T12:00:00Z`)) / DIA_MS) + 1;
+
+  // Curva acumulada: dia com extrato do Avec usa o extrato; os demais, a operação do Kytto.
+  const porDia = new Map();
+  for (const linha of linhasFiltradas) {
+    if (!profissionalId && linha.origem === 'historico_avec' && extratoPorDia.has(linha.data)) continue;
+    porDia.set(linha.data, (porDia.get(linha.data) || 0) + linha.valor);
+  }
+  if (!profissionalId) for (const [dia, valor] of extratoPorDia) porDia.set(dia, (porDia.get(dia) || 0) + valor);
   const serie = [];
   let acumulado = 0;
-  const porDia = new Map();
-  for (const linha of linhasFiltradas) porDia.set(linha.data, (porDia.get(linha.data) || 0) + linha.valor);
   for (let i = 0; i < dias; i += 1) {
     acumulado += porDia.get(somarDias(inicio, i)) || 0;
     serie.push({ dia: i + 1, data: somarDias(inicio, i), acumulado: dinheiro(acumulado) });
   }
-  // Ocupação: minutos agendados (sem cancelados/faltas) sobre a jornada dos dias de trabalho.
-  const ocupacaoDe = (lista) => {
+
+  // Ocupação: minutos agendados sobre a jornada. Sem nenhum agendamento no período (agenda
+  // do Avec não importada), fica "sem dado" em vez de 0%.
+  const ocupacaoDe = (equipe, agenda) => {
+    if (!agenda.length) return null;
     let capacidade = 0;
     let ocupados = 0;
-    for (const prof of lista) {
+    for (const prof of equipe) {
       const jornada = jornadaDoProfissional(prof, calendario);
       for (let i = 0; i < dias; i += 1) if (prof.ativo !== false && trabalhaNoDia(prof, calendario, somarDias(inicio, i))) capacidade += jornada.ate - jornada.de;
-      ocupados += agendamentos.filter((item) => texto(item.profissionalId) === texto(prof.id) && !FORA_DA_AGENDA.has(item.status)).reduce((soma, item) => soma + Math.max(5, num(item.duracaoMinutos) || 30), 0);
+      ocupados += agenda.filter((item) => texto(item.profissionalId) === texto(prof.id) && !FORA_DA_AGENDA.has(item.status)).reduce((soma, item) => soma + Math.max(5, num(item.duracaoMinutos) || 30), 0);
     }
     return capacidade > 0 ? Number(Math.min(100, (ocupados / capacidade) * 100).toFixed(1)) : null;
   };
@@ -614,21 +681,38 @@ function resumoDoPeriodo(root, { empresaId, lojaId, inicio, fim, profissionalId 
       servicos: dinheiro(proprias.filter((item) => item.tipo === 'servico').reduce((soma, item) => soma + item.valor, 0)),
       produtos: dinheiro(proprias.filter((item) => item.tipo === 'produto').reduce((soma, item) => soma + item.valor, 0)),
       extras: dinheiro(proprias.filter((item) => item.categoria === 'Serviços extras').reduce((soma, item) => soma + item.valor, 0)),
-      ocupacao: ocupacaoDe([prof]),
+      clientes: new Set(proprias.map((item) => normalizar(item.cliente)).filter(Boolean)).size,
+      ocupacao: ocupacaoDe([prof], agendaPropria),
     };
   });
+  // Valor das linhas sem profissional da equipe + o que o Avec não detalha.
+  const semProfissional = dinheiro(linhas.filter((item) => !item.profissionalId).reduce((soma, item) => soma + item.valor, 0));
+  if (!profissionalId && (naoDetalhado > 0 || semProfissional > 0)) {
+    porProfissional.push({ profissionalId: ID_NAO_DETALHADO, nome: 'Não atribuído a profissional', ativo: true, sintetico: true, faturamento: dinheiro(naoDetalhado + semProfissional), atendimentos: 0, servicos: semProfissional, produtos: 0, extras: 0, clientes: 0, ocupacao: null });
+  }
+  const categorias = agruparCategorias(linhasFiltradas);
+  if (!profissionalId && naoDetalhado > 0) {
+    categorias.push({ categoria: NAO_DETALHADO_AVEC, valor: naoDetalhado, quantidade: 0, participacao: null });
+    const total = categorias.reduce((soma, item) => soma + item.valor, 0);
+    for (const item of categorias) item.participacao = pct(item.valor, total);
+  }
   const usaAvec = avec.length > 0 || historicoFinanceiro > 0;
+  const produtosValor = dinheiro(linhasFiltradas.filter((item) => item.tipo === 'produto').reduce((soma, item) => soma + item.valor, 0));
   return {
     inicio,
     fim,
     dias,
     faturamento,
     atendimentos,
+    clientes,
     ticketMedio: atendimentos ? dinheiro(servicos / atendimentos) : null,
-    ocupacao: profissionalId ? ocupacaoDe(profissionais.filter((item) => texto(item.id) === profissionalId)) : ocupacaoDe(profissionais),
-    produtos: dinheiro(linhasFiltradas.filter((item) => item.tipo === 'produto').reduce((soma, item) => soma + item.valor, 0)),
+    ocupacao: profissionalId ? ocupacaoDe(profissionais.filter((item) => texto(item.id) === profissionalId), agendaFiltrada) : ocupacaoDe(profissionais, agendamentos),
+    // No histórico do Avec as vendas de produto não vêm detalhadas: sem dado em vez de zero.
+    produtos: usaAvec && !operacionais.length && produtosValor === 0 ? null : produtosValor,
     extras: dinheiro(linhasFiltradas.filter((item) => item.categoria === 'Serviços extras').reduce((soma, item) => soma + item.valor, 0)),
-    categorias: agruparCategorias(linhasFiltradas),
+    naoDetalhado: profissionalId ? 0 : naoDetalhado,
+    extratoAvec: historicoFinanceiro,
+    categorias,
     serie,
     porProfissional,
     fonte: usaAvec ? (operacionais.length ? 'avec_e_kytto' : 'avec') : 'kytto',
@@ -654,12 +738,14 @@ export function buildComparativo(root, { empresaId, lojaId, inicioA, fimA, inici
   const B = resumoDoPeriodo(root, { empresaId, lojaId, ...b, profissionalId: prof });
   if (prof && !A.porProfissional.some((item) => item.profissionalId === prof)) throw new PainelGestaoError('Profissional não encontrado.', 'PROFISSIONAL_NAO_ENCONTRADO', 404);
   const categorias = [...new Set([...A.categorias, ...B.categorias].map((item) => item.categoria))]
-    .sort((x, y) => CATEGORIAS.indexOf(x) - CATEGORIAS.indexOf(y))
+    .sort((x, y) => (CATEGORIAS.indexOf(x) < 0 ? 99 : CATEGORIAS.indexOf(x)) - (CATEGORIAS.indexOf(y) < 0 ? 99 : CATEGORIAS.indexOf(y)))
     .map((categoria) => {
       const va = A.categorias.find((item) => item.categoria === categoria)?.valor || 0;
       const vb = B.categorias.find((item) => item.categoria === categoria)?.valor || 0;
       return { categoria, a: va, b: vb, variacao: variacao(va, vb) };
     });
+  // Inclui quem só aparece no período B (ex.: profissional que saiu) e a linha "não atribuído".
+  for (const item of B.porProfissional) if (!A.porProfissional.some((outro) => outro.profissionalId === item.profissionalId)) A.porProfissional.push({ ...item, faturamento: 0, atendimentos: 0, servicos: 0, produtos: 0, extras: 0, clientes: 0, ocupacao: null });
   const profissionais = A.porProfissional.map((item) => {
     const anterior = B.porProfissional.find((outro) => outro.profissionalId === item.profissionalId) || {};
     return {
@@ -667,11 +753,12 @@ export function buildComparativo(root, { empresaId, lojaId, inicioA, fimA, inici
       nome: item.nome,
       ativo: item.ativo,
       a: item,
-      b: { faturamento: anterior.faturamento || 0, atendimentos: anterior.atendimentos || 0, produtos: anterior.produtos || 0, extras: anterior.extras || 0, servicos: anterior.servicos || 0, ocupacao: anterior.ocupacao ?? null },
+      sintetico: item.sintetico === true,
+      b: { faturamento: anterior.faturamento || 0, atendimentos: anterior.atendimentos || 0, produtos: anterior.produtos || 0, extras: anterior.extras || 0, servicos: anterior.servicos || 0, clientes: anterior.clientes || 0, ocupacao: anterior.ocupacao ?? null },
       variacao: variacao(item.faturamento, anterior.faturamento || 0),
     };
   }).filter((item) => item.a.faturamento > 0 || item.b.faturamento > 0 || item.a.atendimentos > 0 || item.b.atendimentos > 0)
-    .sort((x, y) => y.a.faturamento - x.a.faturamento);
+    .sort((x, y) => Number(x.sintetico === true) - Number(y.sintetico === true) || y.a.faturamento - x.a.faturamento || y.b.faturamento - x.b.faturamento);
   const mudancas = [];
   const comparar = (rotulo, va, vb) => { const v = variacao(va, vb); if (v !== null && Math.abs(v) >= 5) mudancas.push({ rotulo, variacao: v }); };
   comparar('Faturamento', A.faturamento, B.faturamento);
@@ -696,6 +783,10 @@ export function buildComparativo(root, { empresaId, lojaId, inicioA, fimA, inici
       atendimentos: { a: A.atendimentos, b: B.atendimentos, variacao: variacao(A.atendimentos, B.atendimentos), diferenca: A.atendimentos - B.atendimentos },
       ticketMedio: { a: A.ticketMedio, b: B.ticketMedio, variacao: variacao(A.ticketMedio, B.ticketMedio), diferenca: A.ticketMedio !== null && B.ticketMedio !== null ? dinheiro(A.ticketMedio - B.ticketMedio) : null },
       ocupacao: { a: A.ocupacao, b: B.ocupacao, diferencaPontos: A.ocupacao !== null && B.ocupacao !== null ? Number((A.ocupacao - B.ocupacao).toFixed(1)) : null },
+      clientes: { a: A.clientes, b: B.clientes, variacao: variacao(A.clientes, B.clientes), diferenca: A.clientes - B.clientes },
+      extras: { a: A.extras, b: B.extras, variacao: variacao(A.extras, B.extras), diferenca: dinheiro(A.extras - B.extras) },
+      produtos: { a: A.produtos, b: B.produtos, variacao: variacao(A.produtos, B.produtos), diferenca: A.produtos !== null && B.produtos !== null ? dinheiro(A.produtos - B.produtos) : null },
+      naoDetalhado: { a: A.naoDetalhado, b: B.naoDetalhado },
     },
     categorias,
     profissionais,
@@ -703,7 +794,9 @@ export function buildComparativo(root, { empresaId, lojaId, inicioA, fimA, inici
     definicoes: [
       'Mesma apuração do Desempenho da equipe. Em dias anteriores à virada para o Kytto (até 22/10/2026), o total vem do extrato pago do Avec e as categorias e profissionais vêm dos serviços do histórico Avec.',
       'Atendimentos: agendamentos concluídos, comandas pagas sem agendamento e, no histórico Avec, cada cliente atendido por profissional no dia.',
-      'Ocupação: minutos agendados (sem cancelamentos e faltas) sobre a jornada dos dias de trabalho. No período do Avec a agenda não foi importada, então a ocupação fica baixa ou indisponível.',
+      'Ocupação: minutos agendados (sem cancelamentos e faltas) sobre a jornada dos dias de trabalho. Período sem agenda registrada (antes da virada do Avec) aparece como "sem dado".',
+      '"Não detalhado no Avec": diferença entre o extrato pago do Avec e o relatório de serviços (mensalidade do clube, pacotes, produtos e vale-presente). Entra no total, nas categorias e em "Não atribuído a profissional", para tudo fechar com o faturamento.',
+      'Categorias: a frente de atuação do Avec ou a categoria do cadastro; "Geral" e "Histórico Avec" não contam como categoria e o serviço é classificado pelo nome.',
     ],
   };
 }

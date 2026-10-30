@@ -11,7 +11,7 @@ const COR = {
   verde: '#16a34a', verdeClaro: '#dcfce7', azul: '#3b82f6', laranja: '#f59e0b', laranjaEscuro: '#ea580c',
   vermelho: '#dc2626', dourado: '#c99a2e', douradoClaro: '#fdf3dc', cinza: '#94a3b8', trilho: '#e5e7eb',
 }
-const CORES_CATEGORIA = { Cabelo: '#16a34a', Barba: '#22c55e', 'Cabelo e barba': '#15803d', 'Serviços extras': '#4ade80', Club: '#86efac', 'Outros serviços': '#a3e635', Produtos: '#65a30d' }
+const CORES_CATEGORIA = { 'Não detalhado no Avec': '#94a3b8', Cabelo: '#16a34a', Barba: '#22c55e', 'Cabelo e barba': '#15803d', 'Serviços extras': '#4ade80', Club: '#86efac', 'Outros serviços': '#a3e635', Produtos: '#65a30d' }
 
 const card = { background: 'var(--card, #fff)', border: '1px solid var(--line, #e5e7eb)', borderRadius: 14, padding: 18, minWidth: 0 }
 const rotulo = { fontSize: 12, color: 'var(--muted, #64748b)', fontWeight: 600 }
@@ -31,10 +31,11 @@ const CSS = `
 .pgk-cmp-2{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:18px}
 .pgk-filtros{display:grid;grid-template-columns:repeat(3,minmax(0,1fr)) auto;gap:12px;align-items:end}
 .pgk-linha{cursor:pointer;transition:background .15s}
+.pgk-rank{grid-template-columns:28px minmax(70px,1fr) 90px minmax(80px,1fr) 92px}
 .pgk-linha:hover{background:rgba(201,154,46,.08)}
 @media (max-width:1180px){.pgk-grid{grid-template-columns:minmax(0,1fr)}}
 @media (max-width:900px){.pgk-kpis,.pgk-cmp-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.pgk-meio,.pgk-cmp-2{grid-template-columns:minmax(0,1fr)}.pgk-filtros{grid-template-columns:minmax(0,1fr)}}
-@media (max-width:620px){.pgk-meta{grid-template-columns:minmax(0,1fr)}.pgk-rodape{grid-template-columns:minmax(0,1fr)}.pgk-kpis,.pgk-cmp-kpis{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:620px){.pgk-rank{grid-template-columns:28px minmax(0,1fr) auto auto}.pgk-rank-barra{display:none}.pgk-meta{grid-template-columns:minmax(0,1fr)}.pgk-rodape{grid-template-columns:minmax(0,1fr)}.pgk-kpis,.pgk-cmp-kpis{grid-template-columns:minmax(0,1fr)}}
 `
 
 function hojeCuiaba() {
@@ -456,12 +457,12 @@ function LinhaRanking({ posicao, item, por, selecionado, onClick }) {
   const medalha = posicao === 1 ? COR.laranja : posicao === 2 ? '#94a3b8' : posicao === 3 ? '#c2410c' : '#64748b'
   const percentual = item.percentualMeta
   return (
-    <div className="pgk-linha" role="button" tabIndex={0} onClick={onClick} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onClick() }}
-      style={{ display: 'grid', gridTemplateColumns: '28px minmax(70px,1fr) 90px minmax(80px,1fr) 92px', gap: 10, alignItems: 'center', padding: '9px 10px', borderRadius: 10, background: selecionado ? 'rgba(245,158,11,.12)' : undefined, border: selecionado ? '1px solid rgba(245,158,11,.4)' : '1px solid transparent' }}>
+    <div className="pgk-linha pgk-rank" role="button" tabIndex={0} onClick={onClick} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onClick() }}
+      style={{ display: 'grid', gap: 10, alignItems: 'center', padding: '9px 10px', borderRadius: 10, background: selecionado ? 'rgba(245,158,11,.12)' : undefined, border: selecionado ? '1px solid rgba(245,158,11,.4)' : '1px solid transparent' }}>
       <div style={{ width: 24, height: 24, borderRadius: '50%', background: medalha, color: '#fff', display: 'grid', placeItems: 'center', fontSize: 12, fontWeight: 800 }}>{posicao}</div>
       <div style={{ fontWeight: 800, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.nome}</div>
       <div style={{ fontWeight: 800 }}>{rs(valor)}</div>
-      <div style={{ height: 9, background: COR.trilho, borderRadius: 5, overflow: 'hidden' }}>
+      <div className="pgk-rank-barra" style={{ height: 9, background: COR.trilho, borderRadius: 5, overflow: 'hidden' }}>
         <div style={{ width: `${Math.min(100, percentual || 0)}%`, height: '100%', background: COR.verde }} />
       </div>
       <div style={{ fontSize: 12, color: percentual !== null ? COR.verde : 'var(--muted)', fontWeight: 700, textAlign: 'right' }}>
@@ -739,7 +740,8 @@ function VisaoComparativo() {
 
   const profissionais = useMemo(() => dados?.profissionais || [], [dados])
   useEffect(() => {
-    if (profissionais.length && !profissionais.some((item) => item.profissionalId === selecionado)) setSelecionado(profissionais[0].profissionalId)
+    const reais = profissionais.filter((item) => !item.sintetico)
+    if (reais.length && !reais.some((item) => item.profissionalId === selecionado)) setSelecionado(reais[0].profissionalId)
   }, [profissionais, selecionado])
 
   const escolherPreset = (tipo) => {
@@ -750,7 +752,7 @@ function VisaoComparativo() {
   }
   const rotA = dados ? nomePeriodo(dados.a.inicio, dados.a.fim) : ''
   const rotB = dados ? nomePeriodo(dados.b.inicio, dados.b.fim) : ''
-  const individual = profissionais.find((item) => item.profissionalId === selecionado)
+  const individual = profissionais.find((item) => item.profissionalId === selecionado && !item.sintetico)
   const listaEquipe = dados?.a?.porProfissional || []
 
   return (
@@ -802,8 +804,15 @@ function VisaoComparativo() {
           <div className="pgk-cmp-kpis" style={{ opacity: carregando ? 0.6 : 1 }}>
             <KpiComparativo icone="📊" titulo="Faturamento" a={rs(dados.kpis.faturamento.a)} b={rs(dados.kpis.faturamento.b)} variacao={dados.kpis.faturamento.variacao} diferenca={`${dados.kpis.faturamento.diferenca >= 0 ? '+' : '−'} ${rs(Math.abs(dados.kpis.faturamento.diferenca))}`} rotA={rotA} rotB={rotB} />
             <KpiComparativo icone="👥" titulo="Atendimentos" a={qtd(dados.kpis.atendimentos.a)} b={qtd(dados.kpis.atendimentos.b)} variacao={dados.kpis.atendimentos.variacao} diferenca={`${dados.kpis.atendimentos.diferenca >= 0 ? '+' : '−'} ${qtd(Math.abs(dados.kpis.atendimentos.diferenca))} atendimentos`} rotA={rotA} rotB={rotB} />
-            <KpiComparativo icone="📈" titulo="Ticket médio" a={rs(dados.kpis.ticketMedio.a)} b={rs(dados.kpis.ticketMedio.b)} variacao={dados.kpis.ticketMedio.variacao} diferenca={dados.kpis.ticketMedio.diferenca !== null ? `${dados.kpis.ticketMedio.diferenca >= 0 ? '+' : '−'} ${fmtR(Math.abs(dados.kpis.ticketMedio.diferenca))}` : ''} rotA={rotA} rotB={rotB} />
-            <KpiComparativo icone="🕒" titulo="Ocupação" a={pctTexto(dados.kpis.ocupacao.a)} b={pctTexto(dados.kpis.ocupacao.b)} variacaoTexto={dados.kpis.ocupacao.diferencaPontos !== null ? `${dados.kpis.ocupacao.diferencaPontos >= 0 ? '+' : ''}${dados.kpis.ocupacao.diferencaPontos.toLocaleString('pt-BR')} p.p.` : '—'} positivo={dados.kpis.ocupacao.diferencaPontos >= 0} rotA={rotA} rotB={rotB} />
+            <KpiComparativo icone="📈" titulo="Ticket médio (serviços)" a={rs(dados.kpis.ticketMedio.a)} b={rs(dados.kpis.ticketMedio.b)} variacao={dados.kpis.ticketMedio.variacao} diferenca={dados.kpis.ticketMedio.diferenca !== null ? `${dados.kpis.ticketMedio.diferenca >= 0 ? '+' : '−'} ${fmtR(Math.abs(dados.kpis.ticketMedio.diferenca))}` : ''} rotA={rotA} rotB={rotB} />
+            <KpiComparativo icone="🕒" titulo="Ocupação da agenda" a={dados.kpis.ocupacao.a === null ? 'Sem dado' : pctTexto(dados.kpis.ocupacao.a)} b={dados.kpis.ocupacao.b === null ? 'Sem dado' : pctTexto(dados.kpis.ocupacao.b)} variacaoTexto={dados.kpis.ocupacao.diferencaPontos !== null ? `${dados.kpis.ocupacao.diferencaPontos >= 0 ? '+' : ''}${dados.kpis.ocupacao.diferencaPontos.toLocaleString('pt-BR')} p.p.` : '—'} positivo={dados.kpis.ocupacao.diferencaPontos >= 0} rotA={rotA} rotB={rotB} />
+          </div>
+
+          <div className="pgk-cmp-kpis" style={{ opacity: carregando ? 0.6 : 1 }}>
+            <KpiComparativo icone="🙋" titulo="Clientes atendidos" a={qtd(dados.kpis.clientes?.a)} b={qtd(dados.kpis.clientes?.b)} variacao={dados.kpis.clientes?.variacao} diferenca={dados.kpis.clientes ? `${dados.kpis.clientes.diferenca >= 0 ? '+' : '−'} ${qtd(Math.abs(dados.kpis.clientes.diferenca))} clientes` : ''} rotA={rotA} rotB={rotB} />
+            <KpiComparativo icone="➕" titulo="Serviços extras" a={rs(dados.kpis.extras?.a)} b={rs(dados.kpis.extras?.b)} variacao={dados.kpis.extras?.variacao} diferenca={dados.kpis.extras ? `${dados.kpis.extras.diferenca >= 0 ? '+' : '−'} ${rs(Math.abs(dados.kpis.extras.diferenca))}` : ''} rotA={rotA} rotB={rotB} />
+            <KpiComparativo icone="🧴" titulo="Produtos" a={dados.kpis.produtos?.a === null ? 'Sem dado' : rs(dados.kpis.produtos?.a)} b={dados.kpis.produtos?.b === null ? 'Sem dado' : rs(dados.kpis.produtos?.b)} variacao={dados.kpis.produtos?.variacao} diferenca={dados.kpis.produtos?.diferenca !== null && dados.kpis.produtos?.diferenca !== undefined ? `${dados.kpis.produtos.diferenca >= 0 ? '+' : '−'} ${rs(Math.abs(dados.kpis.produtos.diferenca))}` : 'Avec não detalha produto'} rotA={rotA} rotB={rotB} />
+            <KpiComparativo icone="🧾" titulo="Não detalhado no Avec" a={rs(dados.kpis.naoDetalhado?.a || 0)} b={rs(dados.kpis.naoDetalhado?.b || 0)} variacaoTexto="planos, pacotes e produtos" positivo diferenca="entra no faturamento" rotA={rotA} rotB={rotB} />
           </div>
 
           <div className="pgk-cmp-2">
@@ -836,8 +845,8 @@ function VisaoComparativo() {
                       const maximo = Math.max(...profissionais.map((p) => Math.max(p.a.faturamento, p.b.faturamento)), 1)
                       const ativo = item.profissionalId === selecionado
                       return (
-                        <tr key={item.profissionalId} className="pgk-linha" onClick={() => setSelecionado(item.profissionalId)} style={{ borderBottom: '1px solid var(--line, #e5e7eb)', background: ativo ? 'rgba(245,158,11,.1)' : undefined }}>
-                          <td style={{ padding: '10px 0', fontWeight: ativo ? 800 : 600 }}>{item.nome}</td>
+                        <tr key={item.profissionalId} className={item.sintetico ? undefined : 'pgk-linha'} onClick={() => { if (!item.sintetico) setSelecionado(item.profissionalId) }} style={{ borderBottom: '1px solid var(--line, #e5e7eb)', background: ativo ? 'rgba(245,158,11,.1)' : undefined, color: item.sintetico ? 'var(--muted)' : undefined, fontStyle: item.sintetico ? 'italic' : undefined }}>
+                          <td style={{ padding: '10px 0', fontWeight: ativo ? 800 : 600 }} title={item.sintetico ? 'Extrato do Avec não detalhado por profissional (planos, pacotes, produtos) e vendas sem profissional' : undefined}>{item.nome}</td>
                           <td><div style={{ fontWeight: 700 }}>{rs(item.a.faturamento)}</div><div style={{ height: 6, width: `${(item.a.faturamento / maximo) * 100}%`, background: COR.verde, borderRadius: 3, marginTop: 3 }} /></td>
                           <td><div>{rs(item.b.faturamento)}</div><div style={{ height: 6, width: `${(item.b.faturamento / maximo) * 100}%`, background: COR.azul, borderRadius: 3, marginTop: 3 }} /></td>
                           <td style={{ textAlign: 'right', fontWeight: 800, color: item.variacao === null ? 'var(--muted)' : item.variacao >= 0 ? COR.verde : COR.vermelho }}>{variacaoTexto(item.variacao)}</td>
@@ -955,7 +964,7 @@ function ComparacaoIndividual({ item, rotA, rotB }) {
   const linhas = {
     faturamento: [['📊', 'Faturamento', rs(item.a.faturamento), rs(item.b.faturamento), v(item.a.faturamento, item.b.faturamento)], ['🧴', 'Produtos', rs(item.a.produtos), rs(item.b.produtos), v(item.a.produtos, item.b.produtos)], ['➕', 'Extras', rs(item.a.extras), rs(item.b.extras), v(item.a.extras, item.b.extras)]],
     servicos: [['✂️', 'Serviços (R$)', rs(item.a.servicos), rs(item.b.servicos), v(item.a.servicos, item.b.servicos)], ['👥', 'Atendimentos', qtd(item.a.atendimentos), qtd(item.b.atendimentos), v(item.a.atendimentos, item.b.atendimentos)], ['🎟️', 'Ticket médio', rs(item.a.atendimentos ? item.a.servicos / item.a.atendimentos : null), rs(item.b.atendimentos ? item.b.servicos / item.b.atendimentos : null), v(item.a.atendimentos ? item.a.servicos / item.a.atendimentos : 0, item.b.atendimentos ? item.b.servicos / item.b.atendimentos : 0)]],
-    agenda: [['👥', 'Atendimentos', qtd(item.a.atendimentos), qtd(item.b.atendimentos), v(item.a.atendimentos, item.b.atendimentos)], ['🕒', 'Ocupação', pctTexto(item.a.ocupacao), pctTexto(item.b.ocupacao), null]],
+    agenda: [['👥', 'Atendimentos', qtd(item.a.atendimentos), qtd(item.b.atendimentos), v(item.a.atendimentos, item.b.atendimentos)], ['🙋', 'Clientes atendidos', qtd(item.a.clientes), qtd(item.b.clientes), v(item.a.clientes || 0, item.b.clientes || 0)], ['🕒', 'Ocupação', item.a.ocupacao === null ? 'Sem dado' : pctTexto(item.a.ocupacao), item.b.ocupacao === null ? 'Sem dado' : pctTexto(item.b.ocupacao), null]],
   }[aba]
   const mudou = []
   const cmp = (rot, a, b) => { const x = v(a, b); if (x !== null && Math.abs(x) >= 5) mudou.push(`${rot} ${x > 0 ? 'cresceu' : 'caiu'} ${variacaoTexto(x)}`) }
@@ -996,7 +1005,7 @@ function ComparacaoIndividual({ item, rotA, rotB }) {
             <div key={rot} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
               <div style={{ fontSize: 11, width: 18 }}>{rot}</div>
               <div style={{ flex: 1, background: COR.trilho, height: 12, borderRadius: 3, overflow: 'hidden' }}><div style={{ width: `${Math.min(100, valor || 0)}%`, height: '100%', background: cor }} /></div>
-              <div style={{ fontSize: 12, fontWeight: 800, width: 46, textAlign: 'right' }}>{pctTexto(valor)}</div>
+              <div style={{ fontSize: 12, fontWeight: 800, width: 64, textAlign: 'right' }}>{valor === null || valor === undefined ? 'Sem dado' : pctTexto(valor)}</div>
             </div>
           ))}
         </div>

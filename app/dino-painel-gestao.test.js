@@ -161,3 +161,26 @@ test('comparativo entre dois dias', () => {
   assert.equal(soBruno.kpis.faturamento.a, 130);
   assert.throws(() => buildComparativo(root, { empresaId: EMP, lojaId: LOJA, inicioA: '2026-01-01', fimA: '2026-06-01', inicioB: '2026-10-28', fimB: '2026-10-28' }), /93 dias/);
 });
+
+test('comparativo: período do Avec fecha com o extrato pago (categorias, não atribuído e curva)', () => {
+  const root = raiz();
+  root.financeiroKytto.empresas[EMP].lancamentos = {
+    f1: { id: 'f1', empresaId: EMP, lojaId: LOJA, tipo: 'receita', status: 'pago', valor: 300, pagoEm: '2026-09-10', origem: 'avec-import-financeiro-20261022', metadata: { historicoAvec: true } },
+    f2: { id: 'f2', empresaId: EMP, lojaId: LOJA, tipo: 'receita', status: 'pago', valor: 200, pagoEm: '2026-09-12T15:00:00.000Z', origem: 'avec-import-financeiro-20261022', metadata: { historicoAvec: true } },
+    f3: { id: 'f3', empresaId: EMP, lojaId: LOJA, tipo: 'despesa', status: 'pago', valor: 999, pagoEm: '2026-09-12', origem: 'avec-import-financeiro-20261022', metadata: { historicoAvec: true } },
+  };
+  const cmp = buildComparativo(root, { empresaId: EMP, lojaId: LOJA, inicioA: '2026-10-28', fimA: '2026-10-29', inicioB: '2026-09-01', fimB: '2026-09-30' });
+  assert.equal(cmp.b.faturamento, 500, 'só receitas pagas do extrato');
+  assert.equal(cmp.b.naoDetalhado, 500);
+  assert.equal(cmp.b.serie.at(-1).acumulado, 500, 'a curva fecha com o faturamento');
+  assert.equal(cmp.b.serie.find((p) => p.data === '2026-09-10').acumulado, 300);
+  assert.equal(cmp.b.ocupacao, null, 'sem agenda no período: sem dado');
+  assert.equal(cmp.b.produtos, null, 'produto do Avec não detalhado: sem dado');
+  const categoria = cmp.categorias.find((item) => item.categoria === 'Não detalhado no Avec');
+  assert.equal(categoria.b, 500);
+  const naoAtribuido = cmp.profissionais.find((item) => item.sintetico);
+  assert.equal(naoAtribuido.b.faturamento, 500);
+  assert.equal(cmp.profissionais.at(-1).sintetico, true, 'linha sintética fica por último');
+  assert.equal(cmp.a.serie.at(-1).acumulado, cmp.a.faturamento);
+  assert.ok(cmp.kpis.clientes);
+});

@@ -13,11 +13,15 @@ import './theme.css'
 // uma única vez para buscar o index e os assets consistentes da revisão atual.
 const RECOVERY_KEY = 'kytto_asset_recovery_at'
 function recuperarAssetsAtualizados(event) {
-  event?.preventDefault?.()
-  const ultimaTentativa = Number(sessionStorage.getItem(RECOVERY_KEY) || 0)
+  let ultimaTentativa = 0
+  try { ultimaTentativa = Number(sessionStorage.getItem(RECOVERY_KEY) || 0) } catch { /* armazenamento opcional */ }
   const agora = Date.now()
+  // Já recarregou há pouco: deixa o erro seguir para a tela de erro (com botão Recarregar).
+  // Cancelar o erro sem recarregar fazia o lazy() receber "undefined" e o painel quebrar
+  // com "Cannot read properties of undefined (reading 'default')".
   if (agora - ultimaTentativa < 30_000) return
-  sessionStorage.setItem(RECOVERY_KEY, String(agora))
+  event?.preventDefault?.()
+  try { sessionStorage.setItem(RECOVERY_KEY, String(agora)) } catch { /* armazenamento opcional */ }
   window.location.reload()
 }
 window.addEventListener('vite:preloadError', recuperarAssetsAtualizados)
