@@ -17,6 +17,9 @@ const ALLOWED_HANDOFF_LABELS = new Set([
   'falha de envio',
   'revisão humana',
   'atendente assumiu',
+  'T-Rex não soube responder',
+  'reclamação',
+  'exceção financeira',
 ])
 
 function isRecord(value) {

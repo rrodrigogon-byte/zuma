@@ -9,6 +9,11 @@ export const MOTIVOS_EQUIPE = {
   whatsapp_delivery_skipped: 'mensagem não enviada',
   gemini_circuit_open: 'IA indisponível',
   equipe_assumiu: 'atendente assumiu',
+  duvida_sem_resposta: 'T-Rex não soube responder',
+  reclamacao: 'reclamação',
+  excecao_financeira: 'exceção financeira',
+  dado_sensivel: 'dado sensível enviado',
+  identidade_ambigua: 'cadastro a confirmar',
 };
 
 /** Rótulo legível do motivo de handoff (códigos com prefixo viram a família). */

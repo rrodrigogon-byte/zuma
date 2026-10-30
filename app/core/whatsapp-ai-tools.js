@@ -1536,6 +1536,9 @@ async function toolHuman(context, args = {}) {
   await db.query(
     `UPDATE whatsapp_ai_sessions
         SET status = 'humano', estado = jsonb_set(estado, '{handoffReason}', to_jsonb($2::text), true),
+            -- Sem motivo e hora o quadro mostrava "revisão humana" sem tempo de espera.
+            handoff_reason = $2::text, handoff_requested_at = COALESCE(handoff_requested_at, CURRENT_TIMESTAMP),
+            priority = GREATEST(priority, 2::smallint), assigned_to = NULL, assigned_at = NULL,
             acao_pendente = NULL,
             atualizado_em = CURRENT_TIMESTAMP
       WHERE id = $1 AND empresa_id = $3 AND loja_id = $4`,
