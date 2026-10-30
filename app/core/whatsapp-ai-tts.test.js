@@ -4,7 +4,10 @@ import { generateSpeechWithType, textoParaFala, VOZ_GOOGLE_PADRAO } from './what
 import { chatbotBackendAudioPath, sendAudioViaChatbotBackend } from './whatsapp-provider.js';
 
 test('texto falado sem emoji, marcação, link nem quebra de linha', () => {
-  assert.equal(textoParaFala('Fechado! 😄\n*Corte com Dino* sábado às 12:00\n👉 Responda *SIM* https://kytto.com.br/x'), 'Fechado!. Corte com Dino sábado às 12:00. Responda SIM');
+  assert.equal(textoParaFala('Fechado! 😄\n*Corte com Dino* sábado às 12:00\n👉 Responda *SIM* https://kytto.com.br/x'), 'Fechado! Corte com Dino sábado ao meio-dia. Responda SIM');
+  assert.equal(textoParaFala('Pra quarta, 04/11, tenho às 06h00, 06h15 ou 06h30. Sai por R$ 300,00.'), 'Pra quarta, 4 de novembro, tenho às 6 horas, 6 e 15 ou 6 e meia. Sai por 300 reais.');
+  assert.equal(textoParaFala('Feito! BARBA (Bruno ou Nati), seg 2/11 às 14h. Código B7C4ECDC.'), 'Feito! barba (Bruno ou Nati), segunda 2 de novembro às 14 horas.');
+  assert.equal(textoParaFala('Total R$ 1.250,50 às 18:30.'), 'Total 1250 reais e 50 centavos às 18 e meia.');
   assert.equal(textoParaFala('a'.repeat(2000)).length, 900);
 });
 
