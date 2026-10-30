@@ -497,7 +497,7 @@ export async function nearestAlternatives(scope, { serviceId, professionalId, da
 // vez de perguntar dia a dia. Sem vaga: lista de espera com aviso automático.
 // ---------------------------------------------------------------------------
 const AGENDA_TZ = 'America/Cuiaba';
-const PERIODOS_VALIDOS = new Set(['manha', 'tarde', 'noite', 'qualquer']);
+const PERIODOS_VALIDOS = new Set(['manha', 'tarde', 'noite', 'madrugada', 'qualquer']);
 const DIAS_SEMANA = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];
 
 export function localDateIso(now = new Date()) {
@@ -513,9 +513,22 @@ function addDaysIso(dateIso, days) {
 function periodOf(time) {
   const hour = Number(String(time || '').split(':')[0]);
   if (!Number.isFinite(hour)) return 'qualquer';
+  // 0h às 5h59 é madrugada: "de manhã" não pode virar meia-noite (o Dino atende 24x7).
+  if (hour < 6) return 'madrugada';
   if (hour < 12) return 'manha';
   if (hour < 18) return 'tarde';
   return 'noite';
+}
+
+// Sem período pedido, oferece primeiro o horário comercial (6h às 18h), depois a noite e
+// por último a madrugada. Em 30/10 o T-Rex ofereceu "terça às 0h, 0h15 ou 0h30" para
+// quem só pediu o dia, porque a agenda 24x7 do Dino começa à meia-noite.
+const ORDEM_PERIODO = { manha: 0, tarde: 0, noite: 1, madrugada: 2, qualquer: 3 };
+export function priorizarHorarioComercial(slots = []) {
+  return [...slots]
+    .map((time, index) => ({ time, index, peso: ORDEM_PERIODO[periodOf(time)] ?? 3 }))
+    .sort((a, b) => a.peso - b.peso || a.index - b.index)
+    .map((item) => item.time);
 }
 
 function normalizePeriod(value) {
@@ -553,6 +566,12 @@ export async function earliestSlots({ fetchDay, fromDate, days = 7, period = 'qu
     let candidates = (Array.isArray(day?.slots) ? day.slots : [])
       .filter((time) => !(offset === 0 && notBefore && String(time) <= notBefore))
       .filter((time) => wanted === 'qualquer' || periodOf(time) === wanted);
+    if (wanted === 'qualquer') {
+      // Madrugada só entra no dia se não houver horário comercial nem noturno.
+      const comerciais = priorizarHorarioComercial(candidates);
+      const temDiurnoOuNoite = comerciais.some((time) => periodOf(time) !== 'madrugada');
+      candidates = temDiurnoOuNoite ? comerciais.filter((time) => periodOf(time) !== 'madrugada') : comerciais;
+    }
     // "lá pelas 16h": os horários mais próximos do pedido, no máximo 3 por dia.
     const target = minutesOf(aroundTime);
     if (Number.isFinite(target)) {
@@ -978,6 +997,11 @@ async function toolPrepareAppointment(context, args = {}) {
     validarAgendamentoComPlano(scope.empresaId,{clienteTelefone:scope.phone,servicoId:availability.service?.id || serviceId,dataHora:`${date}T${time}:00-04:00`});
   }
   const para = customerName ? ` para ${customerName}` : '';
+  // Em 30/10 "isDino" era usado sem existir: todo preparar_agendamento caía em
+  // ReferenceError (TOOL_ERROR) e o T-Rex respondia "Não consegui concluir".
+  const profPrincipal = availability.professional && availability.professional.id !== 'qualquer' ? availability.professional : null;
+  const isDino = Boolean((profPrincipal && barbeariaErp.ehProfissionalDino(profPrincipal))
+    || /\bdino\b/i.test(String(availability.service?.nome || '')));
   const precoPrincipal = isDino ? total : Number(availability.service.preco || 0);
   const notaHorarioExtra = (isDino && barbeariaErp.ehHorarioExtraDino(time)) ? ' (atendimento exclusivo noturno em horário extra com Dino: R$ 600,00)' : '';
   const summary = combo.length
@@ -2003,7 +2027,8 @@ async function toolDinoVipAgenda(context, args = {}) {
   const periodo = normalizePeriod(args.periodo);
   const disp = await listSchedulingAvailability(scope, { serviceId: servicoDino.id, professionalId: dino.id, date });
   const agora = date === localDateIso() ? localTimeHHMM() : '';
-  const slots = (disp.slots || []).filter((slot) => (!agora || slot > agora) && (periodo === 'qualquer' || periodOf(slot) === periodo));
+  const livres = (disp.slots || []).filter((slot) => (!agora || slot > agora) && (periodo === 'qualquer' || periodOf(slot) === periodo));
+  const slots = periodo === 'qualquer' ? priorizarHorarioComercial(livres) : livres;
   return {
     ok: true,
     dataClassification: 'untrusted_business_data',
@@ -2061,7 +2086,7 @@ export const WHATSAPP_AI_TOOL_DECLARATIONS = [
   { name: 'listar_servicos', description: 'Lista serviços de barbearia ativos e seus valores/duração.', parameters: { type: 'OBJECT', properties: {} } },
   { name: 'listar_profissionais', description: 'Lista profissionais ativos da unidade.', parameters: { type: 'OBJECT', properties: {} } },
   { name: 'consultar_disponibilidade', description: 'Consulta horários disponíveis para serviço, profissional e data.', parameters: { type: 'OBJECT', properties: { serviceId: { type: 'STRING' }, professionalId: { type: 'STRING' }, date: { type: 'STRING', description: 'Data ISO AAAA-MM-DD' } }, required: ['serviceId', 'professionalId', 'date'] } },
-  { name: 'sugerir_proximos_horarios', description: 'Em UMA chamada, busca os próximos horários livres de um serviço em vários dias (padrão 7), com profissional específico ou "qualquer", filtrando por período (manha, tarde, noite). Prefira esta ferramenta quando o cliente quer "o primeiro horário", "essa semana", "amanhã à tarde" etc.', parameters: { type: 'OBJECT', properties: { serviceId: { type: 'STRING' }, professionalId: { type: 'STRING', description: 'id de listar_profissionais ou "qualquer"' }, fromDate: { type: 'STRING', description: 'Data ISO AAAA-MM-DD inicial (padrão hoje)' }, days: { type: 'INTEGER', description: '1 a 14' }, period: { type: 'STRING', description: 'manha, tarde, noite ou qualquer' }, aroundTime: { type: 'STRING', description: 'HH:MM preferido pelo cliente ("lá pelas 16h" → 16:00): devolve os horários mais próximos' }, limit: { type: 'INTEGER', description: '1 a 10' } }, required: ['serviceId'] } },
+  { name: 'sugerir_proximos_horarios', description: 'Em UMA chamada, busca os próximos horários livres de um serviço em vários dias (padrão 7), com profissional específico ou "qualquer", filtrando por período (manha, tarde, noite, madrugada). Sem período pedido, o horário comercial vem primeiro e a madrugada só aparece se o dia não tiver outro horário. Prefira esta ferramenta quando o cliente quer "o primeiro horário", "essa semana", "amanhã à tarde" etc.', parameters: { type: 'OBJECT', properties: { serviceId: { type: 'STRING' }, professionalId: { type: 'STRING', description: 'id de listar_profissionais ou "qualquer"' }, fromDate: { type: 'STRING', description: 'Data ISO AAAA-MM-DD inicial (padrão hoje)' }, days: { type: 'INTEGER', description: '1 a 14' }, period: { type: 'STRING', description: 'manha (6h-12h), tarde, noite (18h-24h), madrugada (0h-6h) ou qualquer' }, aroundTime: { type: 'STRING', description: 'HH:MM preferido pelo cliente ("lá pelas 16h" → 16:00): devolve os horários mais próximos' }, limit: { type: 'INTEGER', description: '1 a 10' } }, required: ['serviceId'] } },
   { name: 'entrar_lista_espera', description: 'Coloca o cliente na lista de espera de um dia quando não há horário, para ser avisado automaticamente pelo WhatsApp se abrir vaga. Só use depois que o cliente disser que quer ser avisado (customerAgreed=true).', parameters: { type: 'OBJECT', properties: { serviceId: { type: 'STRING' }, date: { type: 'STRING', description: 'Data ISO AAAA-MM-DD' }, period: { type: 'STRING', description: 'manha, tarde, noite ou qualquer' }, professionalId: { type: 'STRING' }, customerName: { type: 'STRING' }, customerAgreed: { type: 'BOOLEAN' } }, required: ['serviceId', 'date', 'customerName', 'customerAgreed'] } },
   { name: 'confirmar_presenca', description: 'Confirma a presença do cliente num agendamento dele (ex.: resposta ao lembrete da véspera: "confirmo", "estarei aí"). Use consultar_meus_agendamentos para achar o id.', parameters: { type: 'OBJECT', properties: { appointmentId: { type: 'STRING' } }, required: ['appointmentId'] } },
   { name: 'avisar_atraso', description: 'Registra na agenda que o cliente vai se atrasar X minutos para o horário dele, para a equipe ver. Não remarca.', parameters: { type: 'OBJECT', properties: { appointmentId: { type: 'STRING' }, minutes: { type: 'INTEGER', description: '1 a 120' } }, required: ['appointmentId', 'minutes'] } },
@@ -2121,7 +2146,7 @@ export const WHATSAPP_AI_TOOL_DECLARATIONS = [
   { name: 'consultar_codigo_indicacao', description: 'Gera e mostra o código/link exclusivo de indicação de amigos para o cliente ganhar pontos/mimos.', parameters: { type: 'OBJECT', properties: {} } },
   { name: 'agendar_lembrete_retorno', description: 'Programa um lembrete para que a equipe ou a automação chame o cliente daqui a X dias ou em uma data específica. Use quando ele pedir "me lembra daqui a 15 dias" ou "avisa semana que vem".', parameters: { type: 'OBJECT', properties: { dias: { type: 'INTEGER', description: 'Quantidade de dias até o lembrete' }, data: { type: 'STRING', description: 'Opcional. Data específica AAAA-MM-DD' }, servico: { type: 'STRING', description: 'Serviço que ele vai querer' } }, required: ['dias'] } },
   { name: 'registrar_feedback_atendimento', description: 'Registra nota/avaliação que o cliente deu para o último atendimento ou profissional. Use quando ele elogiar espontaneamente ou der nota.', parameters: { type: 'OBJECT', properties: { nota: { type: 'INTEGER', description: '1 a 5' }, feedback: { type: 'STRING' }, profissionalNome: { type: 'STRING' } }, required: ['nota'] } },
-  { name: 'consultar_agenda_dino_vip', description: 'Horários livres do Dino num dia, com o valor de cada horário (R$ 300 até 18h09, R$ 600 depois). Use quando o cliente quer marcar com o Dino.', parameters: { type: 'OBJECT', properties: { data: { type: 'STRING', description: 'AAAA-MM-DD; padrão hoje' }, periodo: { type: 'STRING', description: 'manha, tarde, noite ou qualquer' }, servico: { type: 'STRING', description: 'Nome do serviço com o Dino, ex.: corte e barba' } } } },
+  { name: 'consultar_agenda_dino_vip', description: 'Horários livres do Dino num dia, com o valor de cada horário (R$ 300 até 18h09, R$ 600 depois). Use quando o cliente quer marcar com o Dino.', parameters: { type: 'OBJECT', properties: { data: { type: 'STRING', description: 'AAAA-MM-DD; padrão hoje' }, periodo: { type: 'STRING', description: 'manha (6h-12h), tarde, noite (18h-24h), madrugada (0h-6h) ou qualquer; sem pedido do cliente use qualquer (o horário comercial vem primeiro)' }, servico: { type: 'STRING', description: 'Nome do serviço com o Dino, ex.: corte e barba' } } } },
   { name: 'consultar_beneficios_e_clube', description: 'Mostra todos os benefícios de assinatura ou clube que a unidade tem.', parameters: { type: 'OBJECT', properties: {} } },
   { name: 'calcular_pacote_frequencia', description: 'Compara pacotes mensais cadastrados na empresa atual, com seus preços, cobertura e economia quando comparável. Use quando o cliente perguntar de pacotes ou após autorização da política de oportunidades. Não inventa tabela por profissional nem percentuais de desconto.', parameters: { type: 'OBJECT', properties: { profissional: { type: 'STRING', description: 'Nome do profissional agendado ou preferido (ex.: Nati, Bruno, David, Dino)' }, servico: { type: 'STRING', description: 'Serviço de referência (corte, barba, corte e barba)' }, frequenciaDias: { type: 'INTEGER', description: 'Dias entre visitas (ex.: 15 para quinzenal, 7 para semanal, 30 para mensal)' }, frequenciaTexto: { type: 'STRING', description: 'Frequência informada pelo cliente (ex.: "a cada 15 dias", "uma vez por semana")' }, procedimentosDesejados: { type: 'STRING', description: 'cabelo, barba ou ambos' } } } },
   { name: 'enviar_enquete', description: 'Manda as opções como ENQUETE do WhatsApp (o cliente só toca na desejada). Use sempre que o cliente precisar escolher entre 2 a 12 opções reais: produtos/sabores/tamanhos devolvidos por buscar_produtos (nome curto + preço), retirada ou entrega, Pix ou cartão, horários de sugerir_proximos_horarios, serviços ou profissionais. Não use para confirmar ação preparada (o sistema já manda a de confirmação) nem para opções inventadas. Uma por resposta.', parameters: { type: 'OBJECT', properties: { pergunta: { type: 'STRING', description: 'Pergunta curta, até 255 caracteres (ex.: "Qual sabor você prefere?")' }, opcoes: { type: 'ARRAY', items: { type: 'STRING' }, description: '2 a 12 opções curtas e diferentes, até 100 caracteres cada (ex.: "Isolado 450g Chocolate Branco — R$ 329")' } }, required: ['pergunta', 'opcoes'] } },

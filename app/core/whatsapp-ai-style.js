@@ -181,7 +181,9 @@ function splitLongSentence(sentence, max) {
  * juntadas na última (melhor uma bolha mais longa do que uma terceira).
  */
 export function packBubbles(text, { max = 120, maxBubbles = 2 } = {}) {
-  const pieces = sentences(text).flatMap((s) => splitLongSentence(s, max));
+  // Uma frase só é cortada se passar do dobro da bolha: em 30/10 "tenho esses horários
+  // disponíveis," / "todos por R$ 600: terça às..." saiu partido em duas mensagens.
+  const pieces = sentences(text).flatMap((s) => (s.length <= max * 2 ? [s] : splitLongSentence(s, max)));
   const bubbles = [];
   for (const piece of pieces) {
     const last = bubbles[bubbles.length - 1];
