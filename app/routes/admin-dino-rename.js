@@ -14,7 +14,7 @@ router.get('/rename-prof', async (req, res) => {
       }
     }
     save();
-    res.json({ success: true, storefronts: (await import('../core/database.js')).db.queryRead(`SELECT * FROM commerce_storefronts`).then(r => r.rows).catch(e => e.message) });
+    res.json({ success: true, storefronts: (await import('../core/database.js')).db.queryRead(`SELECT * FROM commerce_storefronts WHERE empresa_id = 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6'`).then(r => r.rows).catch(e => e.message) });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: error.message, stack: error.stack });
