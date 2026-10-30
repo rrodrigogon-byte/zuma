@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '../../../lib/api'
 import { Dialog } from '../customer360/shared'
 import {
+  FILTROS_QUADRO,
   HUMAN_QUEUE_LIMIT,
   HUMAN_QUEUE_PATH,
   isUncertainClaimError,
@@ -47,6 +48,8 @@ export default function WhatsappHumanQueue({
   const [notice, setNotice] = useState('')
   const [noticeContextKey, setNoticeContextKey] = useState('')
   const [claimDialog, setClaimDialog] = useState(null)
+  // Encerradas ficam fora do quadro: só aparecem escolhendo o filtro.
+  const [filtro, setFiltro] = useState('em_andamento')
   const [claimingId, setClaimingId] = useState('')
   const mountedRef = useRef(true)
   const contextKeyRef = useRef(contextKey)
@@ -118,7 +121,7 @@ export default function WhatsappHumanQueue({
       setClaimDialog(null)
     }
     try {
-      const payload = await api.get(queueUrl('all', tipoCanal, true), {
+      const payload = await api.get(queueUrl('all', tipoCanal, filtro), {
         headers: { 'X-Empresa-Id': snapshot.empresaId, 'X-Loja-Id': snapshot.lojaId },
         signal: controller.signal,
       })
@@ -142,7 +145,7 @@ export default function WhatsappHumanQueue({
       if (flightRef.current === controller) flightRef.current = null
       if (mountedRef.current && sequence === sequenceRef.current && contextKeyRef.current === snapshot.contextKey) setLoading(false)
     }
-  }, [assignment, contextKey, empresaId, lojaId, tipoCanal])
+  }, [assignment, contextKey, empresaId, lojaId, tipoCanal, filtro])
 
   useEffect(() => {
     mountedRef.current = true
@@ -159,6 +162,14 @@ export default function WhatsappHumanQueue({
       claimControllerRef.current = null
     }
   }, [open, contextKey, clearQueue]) // loadQueue intentionally runs only on open/context or explicit update
+
+  // Trocou o filtro: consulta de novo (o primeiro carregamento é do efeito de abertura).
+  const filtroAnterior = useRef(filtro)
+  useEffect(() => {
+    if (filtroAnterior.current === filtro) return
+    filtroAnterior.current = filtro
+    if (openRef.current) loadQueue()
+  }, [filtro, loadQueue])
 
   // Quadro aberto: atualiza sozinho a cada 30 s (pausa enquanto há uma ação em andamento).
   useEffect(() => {
@@ -190,6 +201,15 @@ export default function WhatsappHumanQueue({
     setError('')
     setErrorContextKey('')
     setClaimDialog({ item, selection, contextKey })
+  }
+
+  function requestClose(item) {
+    if (!canClaim || item.status === 'encerrado' || !selection || claimingId) return
+    setNotice('')
+    setNoticeContextKey('')
+    setError('')
+    setErrorContextKey('')
+    setClaimDialog({ item, selection, contextKey, acao: 'encerrar' })
   }
 
   async function requestRelease(item) {
@@ -232,7 +252,9 @@ export default function WhatsappHumanQueue({
 
   async function confirmClaim() {
     const dialog = claimDialog
-    if (!dialog || dialog.contextKey !== contextKey || !canClaim || (dialog.item.assigned && !dialog.item.isMine) || claimLockRef.current || claimingId) return
+    if (!dialog || dialog.contextKey !== contextKey || !canClaim || claimLockRef.current || claimingId) return
+    const encerrar = dialog.acao === 'encerrar'
+    if (!encerrar && dialog.item.assigned && !dialog.item.isMine) return
     // Ref locka sincronicamente antes do primeiro await: dois cliques não geram dois POSTs.
     const controller = new AbortController()
     claimLockRef.current = controller
@@ -246,11 +268,21 @@ export default function WhatsappHumanQueue({
     setNoticeContextKey('')
     try {
       const canalQuery = tipoCanal === 'cliente' ? '' : `?canal=${tipoCanal}`
-      const response = await api.post(`${HUMAN_QUEUE_PATH}/${encodeURIComponent(sessionId)}/claim${canalQuery}`, {}, {
+      const response = await api.post(`${HUMAN_QUEUE_PATH}/${encodeURIComponent(sessionId)}/${encerrar ? 'close' : 'claim'}${canalQuery}`, {}, {
         headers: { 'X-Empresa-Id': snapshot.empresaId, 'X-Loja-Id': snapshot.canonicalLojaId },
         signal: controller.signal,
       })
       if (!mountedRef.current || claimLockRef.current !== controller || contextKeyRef.current !== contextKey || !openRef.current) return
+      if (encerrar) {
+        setClaimDialog(null)
+        const atualizado = await loadQueue()
+        if (atualizado && mountedRef.current && contextKeyRef.current === contextKey) {
+          setNotice('Conversa encerrada e enviada ao histórico (filtro "Encerradas"). Se o cliente escrever de novo, o T-Rex volta a atender.')
+          setNoticeContextKey(contextKey)
+          if (typeof onChanged === 'function') await onChanged()
+        }
+        return
+      }
       validateClaimResponse(response, sessionId)
       setClaimDialog(null)
       const refreshed = await loadQueue()
@@ -304,7 +336,7 @@ export default function WhatsappHumanQueue({
     <div className="c360-card-head wa-human-queue__head">
       <div>
         <h2 id="wa-human-queue-title">{queueTitle}</h2>
-        <p className="wa-human-queue__intro">Todas as conversas em andamento com o T-Rex. Em vermelho, as que ele não conseguiu resolver: o atendente deve assumir e responder pelo WhatsApp do T-Rex. A tela atualiza sozinha a cada 30 segundos.</p>
+        <p className="wa-human-queue__intro">Todas as conversas em andamento com o T-Rex. Em vermelho, as que ele não conseguiu resolver: o atendente deve assumir e responder pelo WhatsApp do T-Rex. Conversas encerradas ficam no histórico e só aparecem pelo filtro. A tela atualiza sozinha a cada 30 segundos.</p>
       </div>
       <div style={{ display: 'flex', gap: '8px' }}>
         {!standalone && <button type="button" className="c360-btn ghost" onClick={() => window.open('/admin/whatsapp-fila' + (tipoCanal !== 'cliente' ? '?canal=' + tipoCanal : ''), '_blank')}>Abrir fila em nova janela</button>}
@@ -314,6 +346,11 @@ export default function WhatsappHumanQueue({
 
     {open && <>
       <div className="wa-human-queue__toolbar" aria-label="Filtros da fila humana">
+        <label className="wa-trex-filtro" htmlFor="wa-trex-filtro">Mostrar
+          <select id="wa-trex-filtro" value={filtro} onChange={(event) => setFiltro(event.target.value)} disabled={loading || Boolean(claimingId)}>
+            {FILTROS_QUADRO.map((item) => <option key={item.valor} value={item.valor}>{item.rotulo}</option>)}
+          </select>
+        </label>
         <button type="button" className="c360-btn ghost" onClick={loadQueue} disabled={loading || Boolean(claimingId)}>{loading ? 'Atualizando…' : 'Atualizar'}</button>
       </div>
       <p className="wa-human-queue__scope">Escopo: {safeText(empresaNome, 'empresa atual')} · {safeText(lojaNome, 'unidade atual')} · até {HUMAN_QUEUE_LIMIT} conversas por leitura.</p>
@@ -326,9 +363,10 @@ export default function WhatsappHumanQueue({
         {!visibleError && displayedRows.length > 0 && <div className="wa-trex-board">
           {displayedRows.map((item) => {
             const comEquipe = item.status === 'humano'
-            const tom = item.precisaAtendente ? 'alerta' : comEquipe ? 'equipe' : 'ia'
+            const encerrada = item.status === 'encerrado'
+            const tom = encerrada ? 'encerrada' : item.precisaAtendente ? 'alerta' : comEquipe ? 'equipe' : 'ia'
             const titulo = item.nome || item.telefone
-            const situacao = item.precisaAtendente
+            const situacao = encerrada ? 'Encerrada' : item.precisaAtendente
               ? `T-Rex não resolveu · ${item.handoff_label}`
               : comEquipe ? (item.assigned ? (item.isMine ? 'Com você' : 'Com outro atendente') : `Com a equipe · ${item.handoff_label}`) : 'Em conversa com o T-Rex'
             return (
@@ -346,15 +384,19 @@ export default function WhatsappHumanQueue({
                 <p className="wa-trex-card__meta">
                   Última mensagem: <strong>{queueDateLabel(item.ultima_interacao_em)}</strong>
                   {comEquipe && <> · Esperando: <strong>{queueWaitLabel(item.handoff_requested_at)}</strong></>}
+                  {encerrada && item.closed_at && <> · Encerrada: <strong>{queueDateLabel(item.closed_at)}</strong></>}
                 </p>
-                <div className="wa-trex-card__acoes">
+                {encerrada ? <p className="wa-trex-card__meta">No histórico. Se o cliente escrever de novo, o T-Rex volta a atender.</p> : <div className="wa-trex-card__acoes">
                   <button type="button" className="c360-btn primary" disabled={!canClaim || (item.assigned && !item.isMine) || item.isMine || Boolean(claimingId)} onClick={() => requestClaim(item)}>
                     {item.isMine ? 'Assumida por você' : item.assigned ? 'Já assumida' : 'Assumir conversa'}
                   </button>
                   <button type="button" className="c360-btn ghost" disabled={!canClaim || !comEquipe || Boolean(claimingId)} onClick={() => requestRelease(item)} title={comEquipe ? 'O T-Rex volta a responder este contato' : 'Esta conversa já está com o T-Rex'}>
                     Devolver ao T-Rex
                   </button>
-                </div>
+                  <button type="button" className="c360-btn ghost wa-trex-card__encerrar" disabled={!canClaim || Boolean(claimingId)} onClick={() => requestClose(item)} title="Tira do quadro e guarda no histórico">
+                    Encerrar conversa
+                  </button>
+                </div>}
               </article>
             )
           })}
@@ -362,11 +404,16 @@ export default function WhatsappHumanQueue({
       </div>
     </>}
 
-    <Dialog open={Boolean(activeClaimDialog)} title="Assumir conversa?" labelId="wa-human-queue-claim" onClose={() => { if (!claimingId) setClaimDialog(null) }} onSubmit={confirmClaim}
-      actions={<><button type="button" className="c360-btn ghost" onClick={() => setClaimDialog(null)} disabled={Boolean(claimingId)}>Cancelar</button><button type="submit" className="c360-btn primary" disabled={Boolean(claimingId)}>{claimingId ? 'Assumindo…' : 'Assumir conversa'}</button></>}>
-      <p>Esta conversa será atribuída ao operador logado: <strong>{operator}</strong>.</p>
-      <p>Empresa: <strong>{safeText(empresaNome)}</strong><br />Unidade: <strong>{safeText(lojaNome)}</strong></p>
-      <p>O T-Rex para de responder este contato até a conversa ser devolvida a ele. Responda o cliente pelo WhatsApp do T-Rex.</p>
+    <Dialog open={Boolean(activeClaimDialog)} title={activeClaimDialog?.acao === 'encerrar' ? 'Encerrar conversa?' : 'Assumir conversa?'} labelId="wa-human-queue-claim" onClose={() => { if (!claimingId) setClaimDialog(null) }} onSubmit={confirmClaim}
+      actions={<><button type="button" className="c360-btn ghost" onClick={() => setClaimDialog(null)} disabled={Boolean(claimingId)}>Cancelar</button><button type="submit" className="c360-btn primary" disabled={Boolean(claimingId)}>{activeClaimDialog?.acao === 'encerrar' ? (claimingId ? 'Encerrando…' : 'Encerrar conversa') : (claimingId ? 'Assumindo…' : 'Assumir conversa')}</button></>}>
+      {activeClaimDialog?.acao === 'encerrar' ? <>
+        <p>A conversa sai do quadro e fica no histórico (filtro <strong>Encerradas</strong>). Nenhuma mensagem é enviada ao cliente.</p>
+        <p>Se o cliente escrever de novo, o T-Rex volta a atender.</p>
+      </> : <>
+        <p>Esta conversa será atribuída ao operador logado: <strong>{operator}</strong>.</p>
+        <p>Empresa: <strong>{safeText(empresaNome)}</strong><br />Unidade: <strong>{safeText(lojaNome)}</strong></p>
+        <p>O T-Rex para de responder este contato até a conversa ser devolvida a ele. Responda o cliente pelo WhatsApp do T-Rex.</p>
+      </>}
     </Dialog>
   </section>
 }

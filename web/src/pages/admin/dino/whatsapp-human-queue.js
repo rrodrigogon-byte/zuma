@@ -80,6 +80,7 @@ function validItem(item, index, ids) {
     handoff_label: safeHandoffLabel(item.handoff_label),
     priority: item.priority,
     hasPendingAction: Boolean(item.hasPendingAction),
+    closed_at: nullableTimestamp(item.closed_at ?? null) ? (item.closed_at ?? null) : null,
     nome: typeof item.nome === 'string' ? item.nome.trim().slice(0, 80) : '',
     ultimaMensagemCliente: typeof item.ultima_mensagem_cliente === 'string' ? item.ultima_mensagem_cliente.slice(0, 160) : '',
     ultimaRespostaIa: typeof item.ultima_resposta_ia === 'string' ? item.ultima_resposta_ia.slice(0, 160) : '',
@@ -120,11 +121,20 @@ export function validateClaimResponse(payload, sessionId) {
   return Object.freeze({ id: sessionId, status: 'humano' })
 }
 
-export function queueUrl(assignment, tipoCanal = 'cliente', allStatus = false) {
+// Filtros do quadro: em andamento (padrão), encerradas (histórico) ou todas.
+export const FILTROS_QUADRO = Object.freeze([
+  { valor: 'em_andamento', rotulo: 'Em andamento' },
+  { valor: 'encerrado', rotulo: 'Encerradas (histórico)' },
+  { valor: 'todas', rotulo: 'Todas' },
+])
+
+/** `status`: true (legado) = em andamento; ou um valor de FILTROS_QUADRO; false = só humanas. */
+export function queueUrl(assignment, tipoCanal = 'cliente', status = false) {
   const value = assignment === 'all' ? 'all' : 'unassigned'
   const canal = ['gestao', 'lancamentos'].includes(tipoCanal) ? tipoCanal : 'cliente'
   const canalQuery = canal === 'cliente' ? '' : `&canal=${canal}`
-  return `${HUMAN_QUEUE_PATH}?status=${allStatus ? 'all' : 'humano'}&assignment=${value}&limit=${HUMAN_QUEUE_LIMIT}${canalQuery}`
+  const filtro = status === true ? 'all' : FILTROS_QUADRO.some((item) => item.valor === status) ? status : 'humano'
+  return `${HUMAN_QUEUE_PATH}?status=${filtro}&assignment=${value}&limit=${HUMAN_QUEUE_LIMIT}${canalQuery}`
 }
 
 export function queueWaitLabel(value, now = Date.now()) {

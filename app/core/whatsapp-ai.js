@@ -302,11 +302,19 @@ async function ensureSession(task, message) {
          ultima_interacao_em = CURRENT_TIMESTAMP,
          expira_em = CURRENT_TIMESTAMP + INTERVAL '24 hours',
          atualizado_em = CURRENT_TIMESTAMP,
+         -- Conversa encerrada (histórico) que recebe mensagem nova volta a ser atendida pelo T-Rex.
          status = CASE
+           WHEN whatsapp_ai_sessions.status = 'encerrado' THEN 'ativo'
            WHEN whatsapp_ai_sessions.expira_em < CURRENT_TIMESTAMP AND whatsapp_ai_sessions.status <> 'humano' THEN 'ativo'
            ELSE whatsapp_ai_sessions.status
          END,
-         closed_at = CASE WHEN whatsapp_ai_sessions.expira_em < CURRENT_TIMESTAMP AND whatsapp_ai_sessions.status <> 'humano' THEN NULL ELSE whatsapp_ai_sessions.closed_at END,
+         closed_at = CASE WHEN whatsapp_ai_sessions.status = 'encerrado' OR (whatsapp_ai_sessions.expira_em < CURRENT_TIMESTAMP AND whatsapp_ai_sessions.status <> 'humano') THEN NULL ELSE whatsapp_ai_sessions.closed_at END,
+         assigned_to = CASE WHEN whatsapp_ai_sessions.status = 'encerrado' THEN NULL ELSE whatsapp_ai_sessions.assigned_to END,
+         assigned_at = CASE WHEN whatsapp_ai_sessions.status = 'encerrado' THEN NULL ELSE whatsapp_ai_sessions.assigned_at END,
+         handoff_reason = CASE WHEN whatsapp_ai_sessions.status = 'encerrado' THEN NULL ELSE whatsapp_ai_sessions.handoff_reason END,
+         handoff_requested_at = CASE WHEN whatsapp_ai_sessions.status = 'encerrado' THEN NULL ELSE whatsapp_ai_sessions.handoff_requested_at END,
+         priority = CASE WHEN whatsapp_ai_sessions.status = 'encerrado' THEN 0 ELSE whatsapp_ai_sessions.priority END,
+         estado = CASE WHEN whatsapp_ai_sessions.status = 'encerrado' THEN whatsapp_ai_sessions.estado - 'handoffReason' ELSE whatsapp_ai_sessions.estado END,
          personalization_prompted_at = CASE WHEN whatsapp_ai_sessions.expira_em < CURRENT_TIMESTAMP AND whatsapp_ai_sessions.status <> 'humano' THEN NULL ELSE whatsapp_ai_sessions.personalization_prompted_at END,
          opportunity_offered_at = CASE WHEN whatsapp_ai_sessions.expira_em < CURRENT_TIMESTAMP AND whatsapp_ai_sessions.status <> 'humano' THEN NULL ELSE whatsapp_ai_sessions.opportunity_offered_at END,
          opportunity_count = CASE WHEN whatsapp_ai_sessions.expira_em < CURRENT_TIMESTAMP AND whatsapp_ai_sessions.status <> 'humano' THEN 0 ELSE whatsapp_ai_sessions.opportunity_count END
@@ -2039,12 +2047,15 @@ export async function listWhatsappAiSessions(context = {}, { limit = 50, status,
   const empresaId = requiredTenantUuid(context.empresaId, 'empresaId');
   const lojaId = requiredTenantUuid(context.lojaId, 'lojaId');
   // "em_andamento" (alias antigo "all"): conversas com o T-Rex nas últimas 24 h e todas as que esperam a equipe.
-  const statusFilter = sessionFilter(status === 'all' ? 'em_andamento' : status, 'status', ['humano', 'em_andamento']);
+  // "encerrado": histórico (só pelo filtro); "todas": em andamento + encerradas.
+  const statusFilter = sessionFilter(status === 'all' ? 'em_andamento' : status, 'status', ['humano', 'em_andamento', 'encerrado', 'todas']);
   const assignmentFilter = sessionFilter(assignment, 'assignment', ['unassigned', 'all']);
   const values = [empresaId, lojaId, perfil];
   const predicates = ['empresa_id = $1', 'loja_id = $2', "canal_id IN (SELECT id FROM canais_integracao WHERE empresa_id = $1 AND loja_id = $2 AND provedor = 'whatsapp' AND tipo_canal = $3)"];
   if (statusFilter === 'em_andamento') {
     predicates.push("(status = 'humano' OR (status = 'ativo' AND ultima_interacao_em >= CURRENT_TIMESTAMP - INTERVAL '24 hours'))");
+  } else if (statusFilter === 'todas') {
+    predicates.push("(status IN ('humano', 'encerrado') OR (status = 'ativo' AND ultima_interacao_em >= CURRENT_TIMESTAMP - INTERVAL '24 hours'))");
   } else if (statusFilter) {
     values.push(statusFilter);
     predicates.push(`status = $${values.length}`);
@@ -2068,7 +2079,8 @@ export async function listWhatsappAiSessions(context = {}, { limit = 50, status,
               ORDER BY m.criado_em DESC LIMIT 1) AS ultima_resposta_ia
        FROM whatsapp_ai_sessions s
       WHERE ${predicates.join(' AND ')}
-      ORDER BY CASE WHEN status = 'humano' THEN 0 ELSE 1 END,
+      ORDER BY CASE WHEN status = 'humano' THEN 0 WHEN status = 'ativo' THEN 1 ELSE 2 END,
+               CASE WHEN status = 'encerrado' THEN closed_at END DESC NULLS LAST,
                priority DESC, handoff_requested_at ASC NULLS LAST, ultima_interacao_em DESC
       LIMIT $${values.length}`,
     values,
@@ -2227,12 +2239,16 @@ export async function closeWhatsappAiHandoff(context = {}, sessionId) {
               assigned_to = COALESCE(assigned_to, $4),
               assigned_at = COALESCE(assigned_at, CURRENT_TIMESTAMP),
               acao_pendente = NULL, atualizado_em = CURRENT_TIMESTAMP
-        WHERE id = $1 AND empresa_id = $2 AND loja_id = $3 AND status = 'humano'
+        WHERE id = $1 AND empresa_id = $2 AND loja_id = $3 AND status IN ('humano', 'ativo')
           AND canal_id IN (SELECT id FROM canais_integracao WHERE empresa_id = $2 AND loja_id = $3 AND provedor = 'whatsapp' AND tipo_canal = $5)
         RETURNING id, status, closed_at`,
       [cleanText(sessionId, 60), empresaId, lojaId, context.usuarioId || null, tipoCanal],
     );
-    if (!result.rows[0]) throw new Error('sessão em handoff não encontrada');
+    if (!result.rows[0]) {
+      const error = new Error('conversa já encerrada ou fora desta unidade');
+      error.code = 'WHATSAPP_AI_SESSION_NOT_FOUND';
+      throw error;
+    }
     await auditHandoff(trx, context, result.rows[0].id, 'closed');
     return result.rows[0];
   });

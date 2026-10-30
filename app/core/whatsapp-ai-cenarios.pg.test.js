@@ -1207,6 +1207,32 @@ test('simulação ponta a ponta do atendente da Dino', { skip, timeout: Number(p
     assert.equal(mundo.enviados.length, antes, 'diagnóstico não envia mensagem');
   });
 
+  await cena(t, '56 · Encerrar conversa: sai do quadro, fica no histórico e reabre com o T-Rex', async () => {
+    const { listWhatsappAiSessions: listar, closeWhatsappAiHandoff: encerrar } = await import('./whatsapp-ai.js');
+    const atendente = crypto.randomUUID();
+    await db.query(`INSERT INTO usuarios (id, empresa_id, email, senha_hash, nome_completo, role) VALUES ($1, $2, $3, 'x', 'Atendente Histórico', 'admin')`, [atendente, IDS.empresa, `hist-${atendente.slice(0, 8)}@dino.sim`]);
+    const contexto = { empresaId: IDS.empresa, lojaId: IDS.loja, usuarioId: atendente };
+    const tel = telefoneNovo();
+    cliente(tel, 'quero falar com um atendente'); await ciclo();
+    const row = await sessao(tel);
+    assert.equal(row.status, 'humano');
+    await encerrar(contexto, row.id);
+    const emAndamento = await listar(contexto, { status: 'em_andamento', assignment: 'all' });
+    assert.ok(!emAndamento.some((item) => item.id === row.id), 'encerrada não aparece no quadro');
+    const historico = await listar(contexto, { status: 'encerrado', assignment: 'all' });
+    const box = historico.find((item) => item.id === row.id);
+    assert.ok(box, 'encerrada aparece no filtro de histórico');
+    assert.ok(box.closed_at);
+    assert.ok((await listar(contexto, { status: 'todas', assignment: 'all' })).some((item) => item.id === row.id));
+    // Cliente volta a escrever: o T-Rex atende de novo, sem responsável nem motivo antigo.
+    cliente(tel, 'quanto custa o corte?');
+    assert.match(ultima(await ciclo()), T.preco('Corte Masculino', 45));
+    const reaberta = await sessao(tel);
+    assert.equal(reaberta.status, 'ativo');
+    assert.equal(reaberta.assigned_to, null);
+    assert.equal(reaberta.handoff_reason, null);
+  });
+
   // ---- T-Rex (persona): só rodam com WHATSAPP_AI_PERSONA=trex ----
   if (PERSONA) {
     await cena(t, '43 · T-Rex: "vc é robô?" recebe a verdade e a conversa segue (sem handoff)', async () => {

@@ -533,3 +533,9 @@
 .wa-human-queue .c360-btn.primary:hover:not(:disabled) { filter: brightness(1.08); }
 .wa-human-queue .c360-btn:disabled { opacity: .5; cursor: not-allowed; }
 .wa-trex-card--alerta .c360-btn.primary { background: #d93025; border-color: #d93025; }
+.wa-trex-card--encerrada { border-color: var(--line, #d0d5dd); opacity: .85; }
+.wa-trex-card--encerrada .wa-trex-card__selo { background: color-mix(in srgb, #667085 14%, transparent); color: #475467; }
+.wa-human-queue__toolbar { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; }
+.wa-trex-filtro { display: grid; gap: 4px; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); }
+.wa-trex-filtro select { min-height: 38px; padding: 6px 10px; border-radius: 10px; border: 1px solid var(--line, #d0d5dd); background: var(--card, #fff); color: var(--fg, #12283f); font: inherit; font-size: 13px; text-transform: none; letter-spacing: 0; }
+.wa-trex-card__acoes .wa-trex-card__encerrar { flex-basis: 100%; }
