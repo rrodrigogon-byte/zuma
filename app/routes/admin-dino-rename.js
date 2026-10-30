@@ -19,6 +19,6 @@ router.get('/rename-prof', (req, res) => {
     
     res.json({ success: true, count });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error(error); res.status(500).json({ error: error.message, stack: error.stack });
   }
 });
