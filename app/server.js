@@ -1420,7 +1420,7 @@ app.get('/api/public/simula-trex', async (req, res) => {
     
     // 1. O T-Rex consulta a agenda de todos os profissionais. (Usando toolNextSlots com profissional 'qualquer')
     const executor = createWhatsappAiToolExecutor({ 
-      empresaId, lojaId, channelType: 'cliente', 
+      empresaId, lojaId, channelType: 'cliente', canalId: '123e4567-e89b-12d3-a456-426614174000', sessionId: '123e4567-e89b-12d3-a456-426614174000', 
       capabilities: { manageAppointments: true }, phone: '5565999999999' 
     });
     
