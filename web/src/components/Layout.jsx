@@ -7,9 +7,12 @@ import { aguardandoPermissoes, moduloOculto, permissaoQueFalta } from '../lib/pe
 import { moduloEmImplantacao } from '../lib/disponibilidade'
 import NotifBell from './NotifBell'
 import { useAuth } from '../lib/auth'
-import { readSidebarCollapsed, writeSidebarCollapsed } from '../lib/layout-preferences'
+import { useMenuEmGaveta } from '../lib/modo-menu'
 
-function TopBar({ sidebarCollapsed = false }) {
+// Largura do menu recolhido (computador). Aberto no hover ele passa por cima do conteúdo.
+const MENU_RECOLHIDO = 78
+
+function TopBar({ gaveta = false }) {
   const { user, isStaff, isAtleta, logout } = useAuth()
   const navigate = useNavigate()
 
@@ -17,12 +20,13 @@ function TopBar({ sidebarCollapsed = false }) {
 
   return (
     <div style={{
-      position: 'fixed', top: 0, right: 0, left: sidebarCollapsed ? 78 : 256,
+      position: 'fixed', top: 0, right: 0, left: gaveta ? 0 : MENU_RECOLHIDO,
       height: 50, background: 'var(--surface)',
       borderBottom: '1px solid var(--line)',
       display: 'flex', alignItems: 'center',
       justifyContent: 'flex-end',
-      padding: '0 20px', gap: 10, zIndex: 40,
+      // Na gaveta (iPad) o botão ☰ fica no canto esquerdo da barra.
+      padding: gaveta ? '0 12px 0 64px' : '0 20px', gap: 10, zIndex: 40,
       transition: 'left .2s ease',
     }} className="topbar">
       {/* Atleta: botão painel */}
@@ -72,22 +76,16 @@ export default function Layout({ children: conteudo, noSidebar = false, marketin
       // não monta a tela antes de saber se a pessoa pode (evita disparar leituras que dariam 403)
       : aguardandoPermissoes(location.pathname, permissoes) ? <div className="page" aria-busy="true" style={{ color: 'var(--muted)' }}>Carregando…</div>
         : conteudo
-  const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(readSidebarCollapsed)
+  // Gaveta: celular, iPad e telas de toque ou estreitas. Senão, menu recolhido que abre no hover.
+  const gaveta = useMenuEmGaveta()
+  // Celular: sem a barra superior (o sino e o usuário ficam no menu).
+  const [celular, setCelular] = useState(() => window.innerWidth < 768)
 
   useEffect(() => {
-    const handler = () => setIsMobile(window.innerWidth < 768)
+    const handler = () => setCelular(window.innerWidth < 768)
     window.addEventListener('resize', handler)
     return () => window.removeEventListener('resize', handler)
   }, [])
-
-  const toggleSidebar = () => {
-    setSidebarCollapsed((current) => {
-      const next = !current
-      writeSidebarCollapsed(next)
-      return next
-    })
-  }
 
   // Páginas públicas "premium" (Home/Clube/Regulamento) têm header/hero próprios.
   // Sempre renderizam em full-bleed, inclusive para usuários autenticados; a Home
@@ -103,14 +101,14 @@ export default function Layout({ children: conteudo, noSidebar = false, marketin
 
   return (
     <div style={{ display: 'flex' }}>
-      <Sidebar collapsed={sidebarCollapsed} onToggleCollapse={toggleSidebar} />
-      {hasTopBar && !isMobile && <TopBar sidebarCollapsed={sidebarCollapsed} />}
-      <main style={{
-        marginLeft: isMobile ? 0 : (sidebarCollapsed ? 78 : 256),
-        marginTop: hasTopBar && !isMobile ? topBarH : 0,
+      <Sidebar />
+      {hasTopBar && !celular && <TopBar gaveta={gaveta} />}
+      <main className={gaveta ? 'layout-main layout-main-gaveta' : 'layout-main'} style={{
+        marginLeft: gaveta ? 0 : MENU_RECOLHIDO,
+        marginTop: hasTopBar && !celular ? topBarH : 0,
         // No celular o botão de menu (☰) fica fixo no canto: o conteúdo começa abaixo dele
         // e respeita a área do notch/ilha do iPhone.
-        paddingTop: isMobile ? 'calc(58px + env(safe-area-inset-top))' : 0,
+        paddingTop: celular ? 'calc(58px + env(safe-area-inset-top))' : 0,
         flex: 1, minWidth: 0, minHeight: '100vh',
         background: 'var(--bg)',
         color: 'var(--fg)',
@@ -121,6 +119,8 @@ export default function Layout({ children: conteudo, noSidebar = false, marketin
 
       <style>{`
         @media (max-width: 767px) { .topbar { display: none !important; } }
+        /* Gaveta com a barra superior (iPad): o ☰ entra na própria barra. */
+        @media (min-width: 768px) { .hamburger { top: calc(5px + env(safe-area-inset-top)); } }
       `}</style>
     </div>
   )

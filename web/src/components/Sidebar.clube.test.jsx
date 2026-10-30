@@ -20,7 +20,9 @@ vi.mock('react-router-dom', () => ({
   useNavigate: () => vi.fn(),
 }))
 
-function render(empresa, { platform = true, empresaId = null } = {}) {
+// Largura padrão de tablet: o menu é gaveta e mostra tudo. No computador ele começa recolhido.
+function render(empresa, { platform = true, empresaId = null, largura = 900 } = {}) {
+  globalThis.window.innerWidth = largura
   authMock.useAuth.mockReturnValue({
     user: { nome: 'Rodrigo', role: 'admin', ...(empresaId ? { empresaId } : {}) }, logout: vi.fn(), isOrg: true, isStaff: true, isAtleta: false, isPlatformAdmin: platform,
     empresaAtiva: empresa, empresasAcessiveis: [empresa], lojaAtiva: null, lojasAcessiveis: [], trocarEmpresa: vi.fn(), trocarLoja: vi.fn(),
@@ -32,6 +34,14 @@ function render(empresa, { platform = true, empresaId = null } = {}) {
   tree.root.findAll((n) => typeof n.type === 'string').forEach((n) => n.children.forEach((c) => { if (typeof c === 'string') textos.push(c) }))
   return { links, textos }
 }
+
+describe('menu lateral no computador', () => {
+  it('começa recolhido (só ícones) e só abre ao passar o mouse', () => {
+    const { textos } = render({ id: 'ttc', nome: 'AGRO OPEN TTC' }, { largura: 1440 })
+    expect(textos).not.toContain('Hoje no clube')
+    expect(textos).not.toContain('Recolher menu')
+  })
+})
 
 describe('menu do clube (AGRO OPEN TTC)', () => {
   it('abre com recepção, sócios e aulas do Clube no topo e esconde varejo que não se aplica', () => {
@@ -68,7 +78,8 @@ describe('menu do clube (AGRO OPEN TTC)', () => {
   })
 })
 
-function renderArvore(empresa, { platform = true, empresaId = null } = {}) {
+function renderArvore(empresa, { platform = true, empresaId = null, largura = 900 } = {}) {
+  globalThis.window.innerWidth = largura
   authMock.useAuth.mockReturnValue({
     user: { nome: 'Rodrigo', role: 'admin', ...(empresaId ? { empresaId } : {}) }, logout: vi.fn(), isOrg: true, isStaff: true, isAtleta: false, isPlatformAdmin: platform,
     empresaAtiva: empresa, empresasAcessiveis: [empresa], lojaAtiva: null, lojasAcessiveis: [], trocarEmpresa: vi.fn(), trocarLoja: vi.fn(),

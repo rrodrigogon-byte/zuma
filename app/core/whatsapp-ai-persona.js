@@ -226,12 +226,19 @@ export function personaIntroduction(persona, storeName) {
  * Coloca a apresentação depois da saudação ("Opa, boa tarde! Aqui é o T-Rex, da
  * Barbearia Dino. Quer marcar…"), ou antes do texto quando não há saudação.
  */
+/**
+ * A saudação da persona já traz "Aqui é o T-Rex da Dino!". Com a apresentação do primeiro
+ * contato na frente, essa frase sairia duas vezes na mesma mensagem: tira a repetida do texto.
+ */
+export function withoutRepeatedIntroduction(intro, text) {
+  const quem = String(intro || '').match(/Aqui é o ([^,!.]+?) d[ao] /i);
+  if (!quem) return String(text || '');
+  const nome = quem[1].replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return String(text || '').replace(new RegExp(`\\s*Aqui é o ${nome} d[ao] [^!.\\n]+[!.]`, 'i'), '');
+}
+
 export function mergeIntroduction(intro, text) {
-  // A saudação da persona já traz "Aqui é o T-Rex da Dino!": com a apresentação completa
-  // na frente, essa frase sairia duas vezes na mesma mensagem.
-  const quem = String(intro || '').match(/^Aqui é o ([^,!.]+?) d[ao] /i);
-  const semRepetir = quem ? String(text || '').replace(new RegExp(`\\s*Aqui é o ${quem[1].replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} d[ao] [^!.\\n]+[!.]`, 'i'), '') : String(text || '');
-  const value = semRepetir.trim();
+  const value = withoutRepeatedIntroduction(intro, text).trim();
   if (!value) return intro;
   const match = value.match(/^((?:opa|oi|ola|olá|e a[ií]|fala|bom dia|boa tarde|boa noite)(?=[\s,.!?])[^.!?\n]{0,40}[.!?])\s+/i);
   if (match) return `${match[1]} ${intro} ${value.slice(match[0].length)}`.trim();

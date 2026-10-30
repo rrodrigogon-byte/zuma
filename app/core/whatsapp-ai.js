@@ -50,7 +50,7 @@ import { notifyHumanHandoff } from './whatsapp-handoff-notify.js';
 import {
   isPersonaGreeting,
   mentionsBotIdentity,
-  mergeIntroduction,
+  mergeIntroduction, withoutRepeatedIntroduction,
   PERSONA_PERSONALIZATION_QUESTION,
   SUPPLEMENTS_PERSONALIZATION_QUESTION,
   channelSegment,
@@ -1006,7 +1006,8 @@ async function withPrivacyNotice(session, channel, text) {
   );
   if (!result.rows[0]) return text;
   // Persona sem aviso robótico: a apresentação entra fluidamente na mensagem
-  return persona && (isRobotic || !rawNotice) ? mergeIntroduction(notice, text) : `${notice}\n\n${text}`;
+  if (persona && (isRobotic || !rawNotice)) return mergeIntroduction(notice, text);
+  return `${notice}\n\n${persona ? withoutRepeatedIntroduction(notice, text).trim() || text : text}`;
 }
 
 

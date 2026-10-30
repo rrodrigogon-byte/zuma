@@ -10,6 +10,7 @@ import { api } from '../lib/api'
 import { applyThemeMode, DINO_BARBERSHOP_LOGO, isClubeBrandContext, isDinoBrandContext, isStalloneBrandContext, STALLONE_LOGO, storedThemeMode } from '../lib/brand'
 import { DINO_STORE, isDinoDedicatedHost } from '../lib/dino-scope'
 import { empresaSemUnidade, sincronizarContextoComercial } from '../lib/contexto-comercial'
+import { useMenuEmGaveta } from '../lib/modo-menu'
 
 // ── Badge de pedidos pendentes ─────────────────────────────────────────────────
 function usePendingOrders(isStaff) {
@@ -637,12 +638,17 @@ function BackofficePlataforma({ empresa, onNavClick, sidebarCollapsed = false })
   )
 }
 
-export default function Sidebar({ collapsed = false, onToggleCollapse = () => {} }) {
+export default function Sidebar() {
   const { user, logout, isOrg, isStaff, isAtleta, isPlatformAdmin, empresaAtiva, empresasAcessiveis, lojaAtiva, lojasAcessiveis, trocarEmpresa, trocarLoja, permissoes, modulosOcultos, atualizarContextoLojas } = useAuth()
   const navigate = useNavigate()
   const [open, setOpen] = useState(false)
+  // Computador: o menu fica sempre recolhido e abre por cima da tela só enquanto o mouse está
+  // nele (ou enquanto um seletor dele está em uso). Toque/tela estreita: gaveta pelo botão ☰.
   const [hovered, setHovered] = useState(false)
-  const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
+  const [focado, setFocado] = useState(false)
+  const timerAbrir = useRef(null)
+  const isMobile = useMenuEmGaveta()
+  const recolhido = !isMobile && !hovered && !focado
   const pendentes = usePendingOrders(isStaff)
   const isDino = isDinoDedicatedHost() || isDinoBrandContext(empresaAtiva)
   const isStallone = !isDino && isStalloneBrandContext(empresaAtiva)
@@ -680,18 +686,28 @@ export default function Sidebar({ collapsed = false, onToggleCollapse = () => {}
   ]
 
   useEffect(() => {
-    const handler = () => {
-      const mobile = window.innerWidth < 768
-      setIsMobile(mobile)
-      if (!mobile) setOpen(false)
-    }
-    window.addEventListener('resize', handler)
-    return () => window.removeEventListener('resize', handler)
-  }, [])
+    if (!isMobile) setOpen(false)
+  }, [isMobile])
+  useEffect(() => () => clearTimeout(timerAbrir.current), [])
 
-  // Close sidebar on nav (mobile)
+  const abrirNoHover = () => {
+    clearTimeout(timerAbrir.current)
+    // Pequena espera: passar o mouse de raspão pela borda não abre o menu.
+    timerAbrir.current = setTimeout(() => setHovered(true), 120)
+  }
+  const fecharNoHover = () => {
+    clearTimeout(timerAbrir.current)
+    setHovered(false)
+  }
+
+  // Escolheu um item: fecha a gaveta (toque) ou recolhe o menu (computador).
   const handleNavClick = () => {
     if (isMobile) setOpen(false)
+    else {
+      fecharNoHover()
+      setFocado(false)
+      if (typeof document !== 'undefined') document.activeElement?.blur?.()
+    }
   }
 
   const changeThemeMode = (mode) => {
@@ -699,7 +715,7 @@ export default function Sidebar({ collapsed = false, onToggleCollapse = () => {}
   }
 
   const sidebarStyle = {
-    width: collapsed && !isMobile && !hovered ? 78 : 256,
+    width: recolhido ? 78 : 256,
     background: 'var(--surface)',
     borderRight: '1px solid var(--line)',
     height: '100vh',
@@ -711,7 +727,8 @@ export default function Sidebar({ collapsed = false, onToggleCollapse = () => {}
     zIndex: 50,
     overflowY: 'auto',
     overflowX: 'hidden',
-    transition: 'transform .25s ease, width .2s ease',
+    transition: 'transform .25s ease, width .2s ease, box-shadow .2s ease',
+    boxShadow: (!isMobile && !recolhido) || (isMobile && open) ? '12px 0 32px rgba(18,40,63,.18)' : 'none',
     ...(isMobile && !open ? { transform: 'translateX(-100%)' } : { transform: 'translateX(0)' }),
   }
 
@@ -721,8 +738,10 @@ export default function Sidebar({ collapsed = false, onToggleCollapse = () => {}
       {isMobile && (
         <button
           className="hamburger"
+          style={{ display: 'flex' }}
           onClick={() => setOpen(true)}
           aria-label="Abrir menu"
+          aria-expanded={open}
         >
           ☰
         </button>
@@ -731,19 +750,28 @@ export default function Sidebar({ collapsed = false, onToggleCollapse = () => {}
       {/* Overlay */}
       <div
         className={`sidebar-overlay${open ? ' open' : ''}`}
+        style={isMobile && open ? { display: 'block' } : undefined}
         onClick={() => setOpen(false)}
       />
 
-      <nav style={sidebarStyle} onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}>
+      <nav
+        style={sidebarStyle}
+        aria-label="Menu principal"
+        onMouseEnter={isMobile ? undefined : abrirNoHover}
+        onMouseLeave={isMobile ? undefined : fecharNoHover}
+        // Seletor de empresa/unidade aberto: a lista nativa sai da área do menu e não pode recolhê-lo.
+        onFocus={(event) => { if (!isMobile && event.target?.tagName === 'SELECT') setFocado(true) }}
+        onBlur={(event) => { if (!isMobile && event.target?.tagName === 'SELECT') setFocado(false) }}
+      >
         {/* Logo + close button (mobile) */}
-        <div className={`sidebar-brand-header${collapsed && !isMobile && !hovered ? ' is-collapsed' : ''}`} style={{
-          padding: collapsed && !isMobile && !hovered ? '14px 10px' : '20px 18px 18px',
+        <div className={`sidebar-brand-header${recolhido ? ' is-collapsed' : ''}`} style={{
+          padding: recolhido ? '14px 10px' : '20px 18px 18px',
           background: 'var(--brand-header)',
           borderBottom: '4px solid var(--brand-header-accent)',
           display: 'flex', alignItems: 'center', gap: 10,
           boxShadow: '0 8px 20px rgba(18,40,63,.14)',
         }}>
-          <div style={{ flex: 1, minWidth: 0, display: collapsed && !isMobile && !hovered ? 'none' : 'block' }}>
+          <div style={{ flex: 1, minWidth: 0, display: recolhido ? 'none' : 'block' }}>
             <img
               src="/brand/kytto-negativo.svg"
               alt="Kytto — Sistemas inteligentes para negócios"
@@ -762,23 +790,6 @@ export default function Sidebar({ collapsed = false, onToggleCollapse = () => {}
               Plataforma multinegócio
             </div>
           </div>
-          {!isMobile && (
-            <button
-              type="button"
-              onClick={onToggleCollapse}
-              style={{
-                width: 36, height: 36, flex: '0 0 36px', display: 'grid', placeItems: 'center',
-                margin: collapsed ? '0 auto' : 0, background: 'rgba(255,255,255,.08)',
-                border: '1px solid rgba(255,255,255,.18)', borderRadius: 10,
-                color: 'var(--brand-header-text)', fontSize: 17, cursor: 'pointer',
-              }}
-              aria-label={collapsed ? 'Expandir menu lateral' : 'Recolher menu lateral'}
-              aria-expanded={(!collapsed || hovered)}
-              title={collapsed ? 'Expandir menu' : 'Recolher menu'}
-            >
-              {collapsed ? '›' : '‹'}
-            </button>
-          )}
           {isMobile && (
             <button
               onClick={() => setOpen(false)}
@@ -793,7 +804,7 @@ export default function Sidebar({ collapsed = false, onToggleCollapse = () => {}
           )}
         </div>
 
-        {user && (!collapsed || hovered) && (
+        {user && !recolhido && (
           <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--line)', display: 'grid', gap: 10 }}>
             {empresasAcessiveis.length > 1 && <label htmlFor="empresa-ativa" style={{ display: 'grid', gap: 6, fontSize: 10, fontWeight: 800, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.8px' }}>
               Empresa ativa
@@ -830,12 +841,12 @@ export default function Sidebar({ collapsed = false, onToggleCollapse = () => {}
           </div>
         )}
 
-        {isStallone && (!collapsed || hovered) && (
+        {isStallone && !recolhido && (
           <div className="sidebar-brand-logo" style={{ padding: '10px 14px 4px' }}>
             <img src={STALLONE_LOGO} alt="Stallone Nutre Sport" style={{ width: '100%', maxWidth: 200, display: 'block', background: '#141416', borderRadius: 10 }} />
           </div>
         )}
-        {(isDino || isStallone) && (!collapsed || hovered) && (
+        {(isDino || isStallone) && !recolhido && (
           <div className="sidebar-theme-switch" aria-label={isDino ? 'Tema do painel Dino' : 'Tema do painel Stallone'}>
             <span>Tema</span>
             {[
@@ -847,18 +858,18 @@ export default function Sidebar({ collapsed = false, onToggleCollapse = () => {}
             ))}
           </div>
         )}
-        {isStaff && !isDino && !isStallone && <Section label={isClube ? 'Balcão, bar e portaria' : 'Operações'} items={opVisiveis(isClube ? NAV_OP.filter((item) => item.to !== '/loja-atendimento') : NAV_OP)} onNavClick={handleNavClick} badgesMap={badgesMap} sidebarCollapsed={collapsed && !isMobile && !hovered} />}
-        {isOrg && <AdminGroups groups={isDino ? NAV_DINO_GROUPS : isStallone ? NAV_STALLONE_GROUPS : isClube ? NAV_CLUBE_GROUPS : NAV_ADMIN_GROUPS} onNavClick={handleNavClick} isPlatformAdmin={isPlatformAdmin} empresa={empresaDoMenu} usuarioDeEmpresa={usuarioDeEmpresa} sidebarCollapsed={collapsed && !isMobile && !hovered} compacto={isClube} />}
-        {isPlatformAdmin && <Section label="Administração da Plataforma" items={NAV_PLATFORM} onNavClick={handleNavClick} sidebarCollapsed={collapsed && !isMobile && !hovered} />}
-        {isPlatformAdmin && <BackofficePlataforma empresa={empresaDoMenu} onNavClick={handleNavClick} sidebarCollapsed={collapsed && !isMobile && !hovered} />}
-        {isAtleta && <Section label="Portal do Atleta" items={NAV_ATLETA} onNavClick={handleNavClick} sidebarCollapsed={collapsed && !isMobile && !hovered} />}
-        <Section label={isDino ? 'Dino público' : isStallone ? 'Stallone público' : 'Site Público'} items={isDino ? NAV_DINO_PUBLIC : isStallone ? NAV_STALLONE_PUBLIC : NAV_PUBLIC} onNavClick={handleNavClick} sidebarCollapsed={collapsed && !isMobile && !hovered} />
+        {isStaff && !isDino && !isStallone && <Section label={isClube ? 'Balcão, bar e portaria' : 'Operações'} items={opVisiveis(isClube ? NAV_OP.filter((item) => item.to !== '/loja-atendimento') : NAV_OP)} onNavClick={handleNavClick} badgesMap={badgesMap} sidebarCollapsed={recolhido} />}
+        {isOrg && <AdminGroups groups={isDino ? NAV_DINO_GROUPS : isStallone ? NAV_STALLONE_GROUPS : isClube ? NAV_CLUBE_GROUPS : NAV_ADMIN_GROUPS} onNavClick={handleNavClick} isPlatformAdmin={isPlatformAdmin} empresa={empresaDoMenu} usuarioDeEmpresa={usuarioDeEmpresa} sidebarCollapsed={recolhido} compacto={isClube} />}
+        {isPlatformAdmin && <Section label="Administração da Plataforma" items={NAV_PLATFORM} onNavClick={handleNavClick} sidebarCollapsed={recolhido} />}
+        {isPlatformAdmin && <BackofficePlataforma empresa={empresaDoMenu} onNavClick={handleNavClick} sidebarCollapsed={recolhido} />}
+        {isAtleta && <Section label="Portal do Atleta" items={NAV_ATLETA} onNavClick={handleNavClick} sidebarCollapsed={recolhido} />}
+        <Section label={isDino ? 'Dino público' : isStallone ? 'Stallone público' : 'Site Público'} items={isDino ? NAV_DINO_PUBLIC : isStallone ? NAV_STALLONE_PUBLIC : NAV_PUBLIC} onNavClick={handleNavClick} sidebarCollapsed={recolhido} />
 
         {/* Bottom user area */}
-        <div style={{ marginTop: 'auto', padding: collapsed && !isMobile && !hovered ? '10px 8px' : '12px 16px', borderTop: '1px solid var(--line)' }}>
+        <div style={{ marginTop: 'auto', padding: recolhido ? '10px 8px' : '12px 16px', borderTop: '1px solid var(--line)' }}>
           {user ? (
             <>
-              {(!collapsed || hovered) && <div style={{ marginBottom: 10 }}>
+              {!recolhido && <div style={{ marginBottom: 10 }}>
                 <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--cream)' }}>
                   {user.nome || user.user}
                 </div>
@@ -866,7 +877,7 @@ export default function Sidebar({ collapsed = false, onToggleCollapse = () => {}
                   {user.role}
                 </div>
               </div>}
-              {isAtleta && (!collapsed || hovered) && (
+              {isAtleta && !recolhido && (
                 <NavLink
                   to="/meu-painel"
                   style={({ isActive }) => ({
@@ -901,9 +912,9 @@ export default function Sidebar({ collapsed = false, onToggleCollapse = () => {}
                   navigate('/login')
                 }}
                 aria-label="Sair do sistema"
-                title={collapsed ? 'Sair' : undefined}
+                title={recolhido ? 'Sair' : undefined}
               >
-                {collapsed && !isMobile && !hovered ? '↪' : 'Sair'}
+                {recolhido ? '↪' : 'Sair'}
               </button>
             </>
           ) : (
