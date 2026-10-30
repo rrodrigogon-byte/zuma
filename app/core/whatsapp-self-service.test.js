@@ -9,7 +9,9 @@ test('só falhas recuperáveis sem responsável permitem retomada', () => {
   const session = { status: 'humano', handoff_reason: 'gemini:GEMINI_TOOL_LIMIT' };
   assert.equal(canResumeSelfService(session), true);
   assert.equal(canResumeSelfService({ ...session, assigned_to: 'staff' }), false);
-  for (const reason of ['security:output_policy', 'identity_ambiguous', 'whatsapp_delivery_unknown', 'equipe_no_celular', 'gemini:GEMINI_BLOCKED']) assert.equal(canResumeSelfService({ ...session, handoff_reason: reason }), false);
+  // Bloqueio só de estilo da resposta (palavra de oferta, link) não prende o cliente na fila.
+  assert.equal(canResumeSelfService({ ...session, handoff_reason: 'security:UNGOVERNED_OPPORTUNITY' }), true);
+  for (const reason of ['security:SECRET_OR_PROMPT_REFERENCE', 'security:POSSIBLE_PAYMENT_CARD', 'identity_ambiguous', 'whatsapp_delivery_unknown', 'equipe_no_celular', 'gemini:GEMINI_BLOCKED']) assert.equal(canResumeSelfService({ ...session, handoff_reason: reason }), false);
   assert.equal(recoverableModelFailure('GEMINI_HTTP_TEMPORARY'), true);
   assert.equal(recoverableModelFailure('GEMINI_AUTH_ERROR'), false);
 });

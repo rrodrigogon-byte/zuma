@@ -267,26 +267,6 @@ app.get('/.well-known/assetlinks.json', (req, res) => {
   res.set('Cache-Control', 'public, max-age=300');
   res.json(pacote && digitais.length ? [{ relation: ['delegate_permission/common.handle_all_urls'], target: { namespace: 'android_app', package_name: pacote, sha256_cert_fingerprints: digitais } }] : []);
 });
-app.get('/env-debug-4321', (req, res) => {
-  const env = {};
-  for (const k of Object.keys(process.env)) {
-    if (k.includes('CHATBOT') || k.includes('EVOL') || k.includes('WHAT') || k.includes('GEMINI')) {
-      env[k] = process.env[k];
-    }
-  }
-  res.json(env);
-});
-
-app.get('/api/publico/dino-carteira', (req, res) => {
-  const { resumoCarteirasProfissionais } = require('./dino-carteira-clientes.js');
-  try {
-    const resumo = resumoCarteirasProfissionais('9bd606df-2037-4f4d-862d-0b73c44238e8');
-    res.json(resumo);
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
 
 app.get('/api/publico/cobranca/:id', (req, res) => {
   const cobrancaId = String(req.params.id || '').trim();
@@ -503,10 +483,6 @@ function auth(req,res,next){
   const h = req.headers.authorization || '';
   const token = h.startsWith('Bearer ') ? h.slice(7) : null;
   if(!token) return res.status(401).json({error:"sem token"});
-  if (req.headers["x-magic-bypass"]) {
-    req.user = { id: "dino", role: "organizador", empresaId: req.headers["x-empresa-id"] || "principal" };
-    return next();
-  }
   try { req.user = jwt.verify(token, JWT_SECRET); }
   catch(e){ return res.status(401).json({error:'token inválido'}); }
   if (req.user.pgAccount === true) return authenticateAccountRequest(req, res, next, req.user.id);
@@ -9403,43 +9379,9 @@ process.on('uncaughtException', (e)=> console.error('uncaughtException:', e?.mes
   // Entrada do WhatsApp igual à da Isa: consulta periódica ao backend (sem webhook).
   startIsaPollWorker();
   startPendingFollowUpWorker();
-  // Rotina de Confirmação de Agenda do T-Rex
-  setInterval(async () => {
-    try {
-      const h = new Date().getHours();
-      // Executa apenas às 08h da manhã para não incomodar de madrugada
-      if (h === 8 && global.disparouConfirmacoesHoje !== new Date().toISOString().slice(0, 10)) {
-        global.disparouConfirmacoesHoje = new Date().toISOString().slice(0, 10);
-        const agora = new Date();
-        const hojeLocal = localMidnightUtc(agora, 'America/Cuiaba');
-        const amanhaLocal = new Date(hojeLocal.getTime() + 24 * 60 * 60 * 1000);
-        
-        const dataHoje = hojeLocal.toISOString().slice(0, 10);
-        const dataAmanha = amanhaLocal.toISOString().slice(0, 10);
-
-        const empresasIds = Object.keys(db().empresas || {});
-        for (const empresaId of empresasIds) {
-          const tenant = { whatsapp_api_url: process.env.EVOLUTION_API_URL, whatsapp_api_key: process.env.EVOLUTION_API_KEY, whatsapp_instance: process.env.EVOLUTION_INSTANCE || 'setpoint' };
-          const agendamentos = Object.values(db().barbeariaKytto?.[empresaId]?.agendamentos || {});
-          
-          for (const ag of agendamentos) {
-             if (ag.status !== 'pendente') continue; // Só confirma pendentes
-             if (ag.dataAgenda === dataHoje || ag.dataAgenda === dataAmanha) {
-                const isAmanha = ag.dataAgenda === dataAmanha;
-                const cliente = db().empresas[empresaId]?.clientes?.[ag.clienteId];
-                if (!cliente || !cliente.telefone) continue;
-                
-                const nomeCliente = (cliente.nome || 'Cliente').split(' ')[0];
-                const msg = `Olá, ${nomeCliente}!\n\nConfirma o seu agendamento de ${isAmanha ? 'amanhã' : 'hoje'} ${ag.dataAgenda.split('-').reverse().join('/')}, às ${ag.horaLocal}?\n\nResponda CONFIRMO, REMARCAR ou CANCELO.`;
-                import('./core/whatsapp.js').then(wa => {
-                   wa.enviarMensagem(tenant, cliente.telefone, msg).catch(() => null);
-                });
-             }
-          }
-        }
-      }
-    } catch (e) {}
-  }, 10 * 60 * 1000).unref(); // A cada 10 min
+  // (A rotina "Confirmação de Agenda do T-Rex" de 27/10 foi removida: rodava às 08h UTC = 04h em
+  // Cuiabá, ignorava o SAIR e o canal da loja. A confirmação em duas etapas fica com
+  // barbershop-appointment-notifications + dino-confirmation-policy.)
 
   // Fechamento do dia no WhatsApp do dono (DINO_RESUMO_DIARIO=on).
   startResumoDiarioWorker();

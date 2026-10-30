@@ -1,3 +1,6 @@
+// Violações de estilo da resposta do modelo: reescreve-se a resposta, não se chama a equipe.
+export const OUTPUT_STYLE_VIOLATIONS = ['UNGOVERNED_OPPORTUNITY', 'PRESSURE_LANGUAGE', 'UNAPPROVED_URL', 'EMPTY_OUTPUT', 'output_policy'];
+
 const normalize = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 
 export function prefersSelfService(text) {
@@ -16,7 +19,14 @@ export const RECOVERABLE_HANDOFF_REASONS = [
   'gemini:GEMINI_EMPTY_RESPONSE', 'gemini:GEMINI_NETWORK_ERROR',
   'gemini:GEMINI_HTTP_TEMPORARY', 'gemini:GEMINI_RATE_LIMIT',
   'gemini_circuit_open', 'cliente_confuso', 'pedido_do_cliente', 'duvida_sem_resposta',
+  // Bloqueio de ESTILO da resposta (palavra de oferta, link, texto vazio): não é risco ao
+  // cliente. Em 27/10 um "quero este perfume" travou a conversa por horas por isso.
+  ...OUTPUT_STYLE_HANDOFF_REASONS_LIST(),
 ];
+
+function OUTPUT_STYLE_HANDOFF_REASONS_LIST() {
+  return OUTPUT_STYLE_VIOLATIONS.map((code) => `security:${code}`);
+}
 
 export function canResumeSelfService(session = {}) {
   return session.status === 'humano' && !session.assigned_to

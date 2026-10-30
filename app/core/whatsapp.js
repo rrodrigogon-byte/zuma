@@ -68,7 +68,40 @@ export async function enviarAudio(tenant, telefone, base64Audio, mimetype = 'aud
   }
 }
 
+// Textos enviados pela própria plataforma nos últimos 30 min (lembrete, campanha, IA).
+// O provedor devolve esses envios como fromMe; sem este registro eles pareceriam
+// mensagem da equipe no celular e pausariam a IA. Um processo só (numInstances 1).
+const ENVIADOS_RECENTES = new Map();
+const ECO_TTL_MS = 30 * 60 * 1000;
+function chaveEco(telefone) {
+  return String(telefone || '').replace(/\D/g, '').slice(-10);
+}
+function textoEco(texto) {
+  return String(texto || '').replace(/\s+/g, ' ').trim();
+}
+export function registrarEnvioDaPlataforma(telefone, texto, agora = Date.now()) {
+  const chave = chaveEco(telefone);
+  const valor = textoEco(texto);
+  if (!chave || !valor) return;
+  const lista = (ENVIADOS_RECENTES.get(chave) || []).filter((item) => agora - item.em < ECO_TTL_MS);
+  lista.push({ texto: valor, em: agora });
+  ENVIADOS_RECENTES.set(chave, lista.slice(-30));
+  if (ENVIADOS_RECENTES.size > 5000) ENVIADOS_RECENTES.delete(ENVIADOS_RECENTES.keys().next().value);
+}
+export function foiEnviadoPelaPlataforma(telefone, texto, agora = Date.now()) {
+  const valor = textoEco(texto);
+  if (!valor) return false;
+  return (ENVIADOS_RECENTES.get(chaveEco(telefone)) || [])
+    .some((item) => agora - item.em < ECO_TTL_MS && (item.texto === valor || item.texto.includes(valor) || valor.includes(item.texto)));
+}
+
 export async function enviarMensagem(tenant, telefone, mensagem) {
+  const resultado = await enviarMensagemProvedor(tenant, telefone, mensagem);
+  if (resultado?.ok) registrarEnvioDaPlataforma(telefone, mensagem);
+  return resultado;
+}
+
+async function enviarMensagemProvedor(tenant, telefone, mensagem) {
   if (tenant?.transport === 'waha') {
     const session = validWahaSession(tenant?.waha_session || tenant?.whatsapp_instance);
     const groupId = validWahaGroupId(tenant?.waha_group_id || telefone);

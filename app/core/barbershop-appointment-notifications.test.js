@@ -84,8 +84,7 @@ test('opt-in enfileira as duas etapas e uma mensagem inicial com prazo explícit
   const mock = mockQueueDatabase();
   try {
     const resultado = await queueAppointmentNotifications({ empresaId: EMPRESA, lojaId: LOJA }, agendamento, 'criado');
-    assert.equal(resultado.queued, 1);
-    return; // Tests after this assume 3 events
+    assert.equal(resultado.queued, 3);
     const inserts = mock.captured.filter((item) => /INSERT INTO tarefas_integracao_canais/.test(item.sql));
     const payloads = inserts.map((item) => ({ row: item, payload: JSON.parse(item.params[4]) }));
     assert.deepEqual(new Set(payloads.map(({ payload }) => payload.eventType)), new Set(['criado', 'lembrete', 'confirmacao_dia']));

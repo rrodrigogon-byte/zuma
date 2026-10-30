@@ -1,3 +1,4 @@
+import { SYSTEM_MAX_CHARS } from './gemini-client.js';
 // Roteador de IAs do cérebro do atendente.
 // Cada tarefa tem uma cadeia de provedores (principal → reservas). Se um provedor não
 // está configurado, falha ou estoura o tempo, o próximo assume. Toda chamada é registrada
@@ -298,7 +299,7 @@ export async function runAiTask(task, {
     }
   }
   const userText = String(user || '').slice(0, 24000);
-  const systemText = String(system || '').slice(0, 12000);
+  const systemText = String(system || '').slice(0, SYSTEM_MAX_CHARS);
   let index = 0;
   for (const step of chain) {
     const key = providerKey(step.provider);

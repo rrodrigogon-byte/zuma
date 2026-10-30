@@ -2,7 +2,10 @@ import { config } from '../config.js';
 
 const DEFAULT_TIMEOUT_MS = 20000;
 // 6 passos: listar serviço → próximos horários → preparar cabe numa resposta só.
-const DEFAULT_MAX_STEPS = Math.min(8, Math.max(3, Number.parseInt(process.env.GEMINI_MAX_TOOL_STEPS || '6', 10) || 6));
+const DEFAULT_MAX_STEPS = Math.min(10, Math.max(3, Number.parseInt(process.env.GEMINI_MAX_TOOL_STEPS || '8', 10) || 8));
+// As instruções do T-Rex (persona + regras + agenda + cliente) passam de 20 mil caracteres.
+// O corte antigo em 12 mil tirava justamente as regras do fim (pagamento, ação pendente).
+export const SYSTEM_MAX_CHARS = Math.min(60000, Math.max(12000, Number.parseInt(process.env.WHATSAPP_AI_SYSTEM_MAX_CHARS || '40000', 10) || 40000));
 const DEFAULT_MAX_HISTORY_CHARS = Math.min(32000, Math.max(4000, Number.parseInt(process.env.WHATSAPP_AI_HISTORY_MAX_CHARS || '16000', 10)));
 const DEFAULT_REQUEST_ATTEMPTS = Math.min(3, Math.max(1, Number.parseInt(process.env.GEMINI_REQUEST_ATTEMPTS || '2', 10)));
 
@@ -99,8 +102,11 @@ async function geminiRequest(endpoint, request, { fetchImpl, timeoutMs, attempts
 // plano depois que esta função retorna. Perguntas de esclarecimento continuam válidas.
 export function unfinishedToolReply(text) {
   const value = String(text || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  // 30/10 15:21: "Deixa eu ver aqui os horários... Um instante!" e nada depois.
   return value.length <= 500 && !value.includes('?')
-    && /\b(?:vou|estou|estamos|vamos)\s+(?:verificar|verificando|consultar|consultando|buscar|buscando|checar|checando)\b/.test(value);
+    && (/\b(?:vou|estou|estamos|vamos)\s+(?:verificar|verificando|consultar|consultando|buscar|buscando|checar|checando|ver|vendo|olhar|olhando)\b/.test(value)
+      || /\b(?:deixa|deixe|me deixa)\s+eu\s+(?:ver|verificar|consultar|olhar|checar|buscar)\b/.test(value)
+      || /\b(?:um instante|so um instante|um momento|so um momento|um minutinho|ja te falo|ja volto|aguarde)\b/.test(value));
 }
 
 export async function runGeminiWithTools({
@@ -120,7 +126,7 @@ export async function runGeminiWithTools({
   if (typeof executeTool !== 'function') throw new GeminiError('Executor de ferramentas ausente', 'TOOL_EXECUTOR_REQUIRED', { retryable: false });
   const model = modelName();
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
-  const systemText = String(systemInstruction || '').slice(0, 12000);
+  const systemText = String(systemInstruction || '').slice(0, SYSTEM_MAX_CHARS);
   const contents = [...normalizedGeminiHistory(history), { role: 'user', parts: [{ text: String(userText || '').slice(0, 4000) }] }];
   const traces = [];
   const startedAt = Date.now();

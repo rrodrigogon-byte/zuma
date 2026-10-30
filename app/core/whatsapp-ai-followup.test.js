@@ -33,7 +33,7 @@ test('toque só quando o cliente sumiu depois de ver o resumo e a ação ainda v
 test('texto do toque é cordial, usa o primeiro nome e o resumo do sistema', () => {
   const texto = followUpText(sessao());
   assert.match(texto, /^Oi, Rafael! Ficou faltando só sua confirmação: Corte Masculino com Bruno em 03\/10 às 15:00\./);
-  assert.match(texto, /Responda \*SIM\* para confirmar/);
+  assert.match(texto, /Responda \*SIM\* para confirmar, ou \*NÃO\*/);
   assert.match(followUpText(sessao({ nome: '' })), /^Oi! /);
 });
 
@@ -148,8 +148,8 @@ test('pergunta educada não é "linguagem de pressão"; pressão real continua b
   assert.equal(validateWhatsappAiOutput('Você precisa garantir o seu hoje.').ok, false);
 });
 
-test('aroundTime: "lá pelas 16h" devolve os 2 horários mais próximos por dia', async () => {
+test('aroundTime: "lá pelas 16h" devolve os 3 horários mais próximos por dia', async () => {
   const fetchDay = async (date) => ({ slots: date === '2026-10-05' ? ['09:00', '13:00', '15:30', '16:15', '19:00'] : ['10:00', '16:00', '16:30', '17:00'] });
   const r = await earliestSlots({ fetchDay, fromDate: '2026-10-05', days: 2, limit: 4, aroundTime: '16:00' });
-  assert.deepEqual(r.slots.map((s) => `${s.date.slice(8)} ${s.time}`), ['05 15:30', '05 16:15', '06 16:00', '06 16:30']);
+  assert.deepEqual(r.slots.map((s) => `${s.date.slice(8)} ${s.time}`), ['05 13:00', '05 15:30', '05 16:15', '06 16:00']);
 });

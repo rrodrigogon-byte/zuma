@@ -195,11 +195,9 @@ test('novas ferramentas autonomas: historico, indicacao, lembrete, feedback, din
   const originalQueryRead = db.queryRead;
   db.queryRead = async () => ({ rows: [] });
   try {
-    const resDinoVip = await executor('consultar_agenda_dino_vip', { periodo: 'noite' });
-    assert.equal(resDinoVip.ok, true);
-    assert.equal(resDinoVip.atendimento24x7, true);
-    assert.match(resDinoVip.tabelaPrecos.noturnoExtra, /R\$ 600,00/);
-    assert.match(resDinoVip.tabelaPrecos.diurno, /R\$ 300,00/);
+    // Sem o Dino na agenda, a ferramenta avisa e NÃO cria cadastro falso (27/10 criou
+    // "Guilherme Cunha Martins (Dino)" na base de produção).
+    await assert.rejects(() => executor('consultar_agenda_dino_vip', { periodo: 'noite' }), { code: 'PROFESSIONAL_NOT_FOUND' });
   } finally {
     db.queryRead = originalQueryRead;
   }

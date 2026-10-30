@@ -2,7 +2,7 @@ import { recordAutomationOptOut } from './ai-memory.js';
 import crypto from 'node:crypto';
 import express from 'express';
 import { db } from './database.js';
-import { parseEvolutionMessage, whatsappAiReady } from './whatsapp-ai.js';
+import { parseEvolutionMessage, parseWahaMessage, whatsappAiReady } from './whatsapp-ai.js';
 import { inboundMediaToText, locateInboundMedia } from './whatsapp-ai-media.js';
 import { campaignOptOutRequested, recordCampaignOptOut, recordCampaignProviderEvent } from './commerce-campaigns.js';
 import { recordCartRecoveryOptOut } from './commerce-abandoned-carts.js';
@@ -121,7 +121,11 @@ async function mediaFromWebhook(channel, parsed, body, externalId, { waha = fals
     chatId: parsed.phone,
     mediaLoader: waha ? (media) => downloadWahaMedia(channel.configuracao?.waha_session || channel.configuracao?.instance, media.url).then(({ buffer, contentType }) => ({ base64: buffer.toString('base64'), mimeType: contentType })) : undefined,
   }).catch(() => ({ ok: false }));
-  if (!lido?.ok) return { ...parsed, ignored: false, reason: undefined, text: '[Falha ao baixar ou transcrever ' + parsed.reason + ']' };
+  // Falha ao baixar/transcrever: segue como texto para o atendente pedir que o cliente escreva,
+  // em vez de ignorar a mensagem em silêncio.
+  const tipoMidia = String(locateInboundMedia(data)?.kind || '').toLowerCase() === 'image' ? 'image' : 'audio';
+  // Mesmo texto do polling: o atendente responde com a mensagem fixa pedindo para escrever.
+  if (!lido?.ok) return { ...parsed, ignored: false, reason: undefined, text: `[Falha ao baixar ou transcrever ${tipoMidia}]` };
   // Normaliza como o caminho de texto: remetente @lid vira o número real.
   const ts = Number(data.messageTimestamp || body.messageTimestamp || 0) || null;
   return {
@@ -232,9 +236,9 @@ export function createWhatsappAiWebhookRouter({ rateLimit = consumeWhatsappWebho
       if (rawEvent !== 'message' && rawEvent !== 'message_received' && rawEvent !== 'messages_upsert') {
         return res.status(202).json({ accepted: true, ignored: true, reason: 'unsupported_event' });
       }
-      // const parsedBase = parseWahaMessage(req.body || {}, { groupId: channel.configuracao?.waha_group_id, sessionName });
+      const parsedBase = parseWahaMessage(req.body || {}, { groupId: channel.configuracao?.waha_group_id, sessionName });
       const externalId = parsedBase.externalId || String(req.get('x-webhook-request-id') || '').slice(0, 200);
-      let parsed = { ignored: true, reason: 'waha_disabled' };
+      let parsed = parsedBase;
       const mediaAllowed = parsed.remoteJid === channel.configuracao?.waha_group_id
         && !['from_me', 'not_group', 'waha_group_not_allowlisted', 'session_mismatch'].includes(parsed.reason);
       if (externalId && mediaAllowed && locateInboundMedia(req.body?.payload || req.body || {})) {
@@ -283,7 +287,6 @@ export function createWhatsappAiWebhookRouter({ rateLimit = consumeWhatsappWebho
       }
       let parsed = parseEvolutionMessage(req.body || {});
       const externalId = parsed.externalId || String(req.get('x-event-id') || '').slice(0, 200);
-      if (parsed.reason === 'unsupported_content' || parsed.reason === 'audio') console.log('[EVOLUTION_PAYLOAD]', JSON.stringify(req.body).slice(0, 1500));
       // Áudio/foto da Evolution (webhook com base64 ligado): transcreve/descreve e segue como texto.
       if (parsed.reason === 'unsupported_content' && parsed.phone && externalId) {
         parsed = await mediaFromWebhook(channel, parsed, req.body || {}, externalId);

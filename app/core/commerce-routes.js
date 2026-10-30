@@ -25,7 +25,7 @@ import { createShippingAccount, failShippingLabel, finalizeShippingCancellation,
 import { shippingProviders } from './shipping-adapters.js';
 import { recordStorefrontEvent } from '../storefront-funnel.js';
 import { commerceMediaIdForIdempotencyKey, deleteCommerceImage, newCommerceMediaId, streamCommerceImage, uploadCommerceImage } from './commerce-media.js';
-import { claimWhatsappAiHandoff, closeWhatsappAiHandoff, configureWhatsappAiChannel, configureWhatsappAiPolicy, listWhatsappAiSessions, releaseWhatsappAiHandoff, syncWhatsappAiWebhook, testWhatsappAiGemini, whatsappAiOperationalStatus, configureWhatsappAiHandoff, diagnosticoAgendaVendaWhatsappAi } from './whatsapp-ai.js';
+import { claimWhatsappAiHandoff, closeWhatsappAiHandoff, configureWhatsappAiChannel, configureWhatsappAiPolicy, listWhatsappAiSessions, releaseWhatsappAiHandoff, syncWhatsappAiWebhook, testWhatsappAiGemini, whatsappAiOperationalStatus, configureWhatsappAiHandoff, diagnosticoAgendaVendaWhatsappAi, whatsappChannelType } from './whatsapp-ai.js';
 import { campaignMetrics, cancelCampaign, confirmCampaign, createCampaign, listCampaignAudience, listCampaigns, previewCampaign, updateCampaignConsent } from './commerce-campaigns.js';
 import { cartRecoveryMetrics, listAbandonedCarts, syncPublicCart } from './commerce-abandoned-carts.js';
 import { consumePublicRateLimit, consumeWebhookRateLimit, createWebhookAuditAdapter, publicRequestFingerprint, webhookPayloadHash, webhookRequestId } from './commerce-public-rate-limit.js';
@@ -66,7 +66,8 @@ import {
 } from './commerce-core.js';
 
 function whatsappTipoCanal(req) {
-  return req.query?.canal || req.body?.tipoCanal || req.body?.channelType || 'cliente';
+  // Só aceita cliente/gestao/lancamentos; valor fora disso responde erro em vez de virar filtro livre.
+  return whatsappChannelType(req.query?.canal || req.body?.tipoCanal || req.body?.channelType || 'cliente');
 }
 
 function publicHost(req) {
@@ -335,7 +336,7 @@ function sanitizePublicOrderTracking(row = {}) {
   };
 }
 
-function jsonError(res, error) { console.error('STACK:', error?.stack);
+function jsonError(res, error) {
   const statusByCode = {
     PUBLIC_POLICIES_INVALID: 400, PUBLIC_POLICIES_URL_INVALID: 400, PUBLIC_POLICIES_CONFLICT: 400,
     QUANTITY_LIMIT_EXCEEDED: 422,

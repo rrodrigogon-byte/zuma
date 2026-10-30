@@ -196,7 +196,13 @@ export async function queueAppointmentNotifications(contexto = {}, agendamento =
       if (plano.enabled) {
         barbearia.inicializarConfirmacaoAutomatica(legacyEmpresaId, agendamento.id, { lojaId });
         // O segundo aviso sai 2h15 antes; o prazo de 1h termina 1h15 antes do horário.
-        queued += await inserirTarefa(trx, { empresaId, lojaId, canalId: canal.id, legacyEmpresaId, agendamento, evento: 'lembrete', executarEm: plano.firstAt, confirmationStage: 'primeira' });
+        // Marcado com menos de 24h: o "Tá marcado" que acabou de sair já vale como 1ª etapa.
+        // Em 27/10 o lembrete saiu 1 minuto depois do cliente confirmar o horário.
+        if (plano.firstAt.valueOf() <= Date.now() + 5 * 60 * 1000) {
+          barbearia.registrarConfirmacaoAutomaticaEnviada(legacyEmpresaId, agendamento.id, 'primeira', { lojaId, enviadoEm: new Date().toISOString() });
+        } else {
+          queued += await inserirTarefa(trx, { empresaId, lojaId, canalId: canal.id, legacyEmpresaId, agendamento, evento: 'lembrete', executarEm: plano.firstAt, confirmationStage: 'primeira' });
+        }
         queued += await inserirTarefa(trx, { empresaId, lojaId, canalId: canal.id, legacyEmpresaId, agendamento, evento: EVENTO_CONFIRMACAO_DIA, executarEm: plano.secondAt, confirmationStage: 'segunda' });
       } else if (!autoConfirm) {
         const lembreteAlvo = dataHora.valueOf() - 24 * 60 * 60 * 1000;
