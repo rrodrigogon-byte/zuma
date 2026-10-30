@@ -1409,7 +1409,9 @@ if(process.env.COMMERCE_CORE_ENABLED === '1'){
     }
   });
 
-  app.use('/api/webhooks', createWhatsappAiWebhookRouter());
+  import { router as renameRouter } from './routes/admin-dino-rename.js';
+app.use('/api/public/dino-rename', renameRouter);
+app.use('/api/webhooks', createWhatsappAiWebhookRouter());
   app.use('/api/webhooks', createCommerceWebhookRouter());
   // [kytto-clube] rotas do Clube (painel em /api/admin/clube/*, aparelho Control iD, contrato, passe,
   // webhooks Wellhub/TotalPass em /api/integracoes/*, painel em /clube/painel)
