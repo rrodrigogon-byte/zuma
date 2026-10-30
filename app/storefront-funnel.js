@@ -34,7 +34,25 @@ function prune(bucket, today) {
   const limit = new Date(`${today}T12:00:00Z`);
   limit.setUTCDate(limit.getUTCDate() - RETENTION_DAYS);
   const cutoff = limit.toISOString().slice(0, 10);
-  for (const day of Object.keys(bucket.dias)) if (day < cutoff) delete bucket.dias[day];
+  for (const day of Object.keys(bucket.dias)) {
+    if (day < cutoff) delete bucket.dias[day];
+    // os hashes de sessão só evitam contar a mesma pessoa duas vezes NO DIA:
+    // dos dias passados ficam só as contagens
+    else if (day < today && bucket.dias[day]?.sessoes) delete bucket.dias[day].sessoes;
+  }
+}
+
+// Uma visita não justifica reescrever o banco inteiro na hora: o funil é gravado
+// junto da próxima gravação de qualquer outra coisa ou, no máximo, em 60 s.
+const ATRASO_GRAVACAO_MS = 60_000;
+let gravacaoAgendada = null;
+function gravarDepois() {
+  if (gravacaoAgendada) return;
+  gravacaoAgendada = setTimeout(() => {
+    gravacaoAgendada = null;
+    try { save(); } catch (error) { console.error('[funil] falha ao gravar:', error?.message || error); }
+  }, ATRASO_GRAVACAO_MS);
+  gravacaoAgendada.unref?.();
 }
 
 /**
@@ -58,7 +76,8 @@ export function recordStorefrontEvent(empresaId, { event, sessionKey, at = new D
   seen.push(hash);
   day[event] = Number(day[event] || 0) + 1;
   prune(bucket, today);
-  if (persist) save();
+  if (persist === 'agora') save();
+  else if (persist) gravarDepois();
   return { recorded: true };
 }
 

@@ -45,3 +45,18 @@ test('painel mostra lucro estimado e conversão quando os dados existem', () => 
   assert.equal(vazio.kpis.find((kpi) => kpi.id === 'profit').available, false);
   assert.equal(vazio.kpis.find((kpi) => kpi.id === 'conversion').available, false);
 });
+
+test('dos dias passados ficam só as contagens; o dia atual mantém as sessões para não contar duas vezes', () => {
+  const ontem = new Date('2026-05-10T15:00:00Z');
+  const hoje = new Date('2026-05-11T15:00:00Z');
+  recordStorefrontEvent('emp-poda', { event: 'visit', sessionKey: 'sessao-poda-1', at: ontem, persist: false });
+  recordStorefrontEvent('emp-poda', { event: 'cart', sessionKey: 'sessao-poda-1', at: ontem, persist: false });
+  recordStorefrontEvent('emp-poda', { event: 'visit', sessionKey: 'sessao-poda-2', at: hoje, persist: false });
+  assert.equal(recordStorefrontEvent('emp-poda', { event: 'visit', sessionKey: 'sessao-poda-2', at: hoje, persist: false }).reason, 'duplicate');
+  const dias = db().storefrontFunnelKytto.empresas['emp-poda'].dias;
+  assert.equal(dias['2026-05-10'].sessoes, undefined);
+  assert.deepEqual([dias['2026-05-10'].visit, dias['2026-05-10'].cart], [1, 1]);
+  assert.equal(dias['2026-05-11'].sessoes.visit.length, 1);
+  const total = funnelSummary('emp-poda', new Date('2026-05-10T04:00:00Z'), new Date('2026-05-12T04:00:00Z'));
+  assert.deepEqual([total.visit, total.cart], [2, 1]);
+});

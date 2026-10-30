@@ -74,14 +74,15 @@ test('loja selecionada é enviada ao SQL e ao legado; registros sem loja são ex
 test('fontes legadas aplicam limites de linhas antes de construir o grafo', async () => {
   const d = deps();
   d.agendaSource = async () => 'barbearia';
-  d.listarAgendamentos = () => Array.from({ length: 5001 }, (_, index) => ({ id: `appointment-${index}`, lojaId, status: 'cancelado', dataHora: '2026-10-01T10:00:00Z' }));
+  const recente = new Date(Date.now() - 10 * 86400000).toISOString();
+  d.listarAgendamentos = () => Array.from({ length: 20001 }, (_, index) => ({ id: `appointment-${index}`, lojaId, status: 'cancelado', dataHora: recente }));
   d.listarComandasBarbearia = () => Array.from({ length: 5001 }, (_, index) => ({ id: `command-${index}`, lojaId, status: 'rascunho' }));
   d.listarVendasRevenda = () => Array.from({ length: 5001 }, (_, index) => ({ id: `sale-${index}`, lojaId, status: 'cancelado' }));
   d.listarProdutosRevenda = () => Array.from({ length: 2001 }, (_, index) => ({ id: `product-${index}`, lojaId, nome: `Produto ${index}`, estoqueAtual: 1 }));
   d.listarServicos = () => Array.from({ length: 1001 }, (_, index) => ({ id: `service-${index}`, nome: `Serviço ${index}`, ativo: true }));
   d.listarProfissionais = () => Array.from({ length: 1001 }, (_, index) => ({ id: `professional-${index}`, nome: `Profissional ${index}`, ativo: true }));
   const sources = await loadBrainSources({ empresaId, legacyEmpresaId: empresaId, commerceLojaId: lojaId, legacyLojaId: lojaId, legacyScopeVerified: true }, d);
-  assert.equal(sources.appointments.length, 5000);
+  assert.equal(sources.appointments.length, 20000);
   assert.equal(sources.commands.length, 5000);
   assert.equal(sources.retailSales.length, 5000);
   assert.equal(sources.catalog.filter((item) => item.id.startsWith('local:')).length, 2000);
@@ -91,6 +92,20 @@ test('fontes legadas aplicam limites de linhas antes de construir o grafo', asyn
   assert.equal(sources.quality.fontes.produtosLocais.status, 'limitado');
   assert.equal(sources.quality.fontes.services.status, 'limitado');
   assert.equal(sources.quality.fontes.professionals.status, 'limitado');
+});
+
+test('agenda local entra na janela do grafo (400 dias para trás e todo o futuro) e não passa do limite', async () => {
+  const d = deps();
+  d.agendaSource = async () => 'barbearia';
+  const dia = 86400000; const agora = Date.now();
+  d.listarAgendamentos = () => [
+    ...Array.from({ length: 6000 }, (_, index) => ({ id: `antigo-${index}`, lojaId, status: 'concluido', dataHora: new Date(agora - 500 * dia).toISOString() })),
+    { id: 'recente', lojaId, status: 'concluido', dataHora: new Date(agora - 30 * dia).toISOString() },
+    { id: 'futuro', lojaId, status: 'agendado', dataHora: new Date(agora + 30 * dia).toISOString() },
+  ];
+  const sources = await loadBrainSources({ empresaId, legacyEmpresaId: empresaId, commerceLojaId: lojaId, legacyLojaId: lojaId, legacyScopeVerified: true }, d);
+  assert.deepEqual(sources.appointments.map((item) => item.id).sort(), ['futuro', 'recente']);
+  assert.equal(sources.quality.fontes.appointments.status, 'ok');
 });
 
 test('revenda local é carregada somente para a loja legada explicitamente vinculada', async () => {
@@ -137,7 +152,7 @@ test('agenda PostgreSQL canônica é lida por empresa+loja e mapeada sem usar JS
   };
   const sources = await loadBrainSources({ legacyEmpresaId: empresaId, empresaId, legacyLojaId: lojaId, commerceLojaId: lojaId, legacyScopeVerified: true }, d);
   assert.equal(queries.length, 1);
-  assert.deepEqual(queries[0].params, [empresaId, lojaId, 5000]);
+  assert.deepEqual(queries[0].params, [empresaId, lojaId, 20000]);
   assert.match(queries[0].sql, /a\.empresa_id = \$1 AND a\.loja_id = \$2/);
   assert.equal(sources.appointments[0].id, 'appointment-pg');
   assert.equal(sources.appointments[0].clienteTelefone, '556599998877');
@@ -162,7 +177,7 @@ test('sem vínculo assinado, legado não é consultado e agenda PostgreSQL é so
     empresaId, commerceLojaId: lojaId,
   }, d);
   assert.equal(queries.length, 1);
-  assert.deepEqual(queries[0].params, [empresaId, lojaId, 5000]);
+  assert.deepEqual(queries[0].params, [empresaId, lojaId, 20000]);
   assert.equal(sources.quality.fontes.appointments.status, 'limitado');
   assert.equal(sources.quality.fontes.appointments.fonte, 'postgres');
   assert.match(sources.quality.fontes.appointments.detail, /não foi associada sem vínculo assinado/);

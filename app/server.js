@@ -360,9 +360,10 @@ const findUser = login => {
     (u.email && norm(u.email.split('@')[0]) === n)
   );
 };
-function senhaConfere(senha, hash){
+// Assíncrono: o bcryptjs calcula em partes e não para o servidor durante o login.
+async function senhaConfere(senha, hash){
   if(typeof senha !== 'string' || typeof hash !== 'string' || !hash) return false;
-  try { return bcrypt.compareSync(senha, hash); } catch { return false; }
+  try { return await bcrypt.compare(senha, hash); } catch { return false; }
 }
 const publicUser = u => ({ id:u.id, nome:u.nome, email:u.email, role:u.role, telefone:u.telefone, ativo:u.ativo, platformAdmin:isPlatformAdminUser(u), ...(u.pgAccount ? { pgAccount:true, tenantBound:u.tenantBound !== false, commerceUserId:u.commerceUserId || null } : {}) });
 
@@ -479,7 +480,21 @@ async function authenticateAccountRequest(req, res, next, accountId) {
     return res.status(scope ? 403 : 503).json({ error:scope ? 'selecione uma empresa e unidade autorizadas' : 'não foi possível confirmar a sessão', code:scope ? error.code : 'SCOPE_UNAVAILABLE' });
   }
 }
+// O middleware global de /api/admin já autentica, e muitas rotas chamam auth de novo:
+// na segunda chamada do mesmo pedido (mesmo token) devolve o mesmo usuário já resolvido,
+// sem repetir as consultas ao Postgres. O resultado é o mesmo de recalcular.
 function auth(req,res,next){
+  const h = req.headers.authorization || '';
+  const anterior = req._authResolvido;
+  if (anterior && anterior.header === h && h) {
+    try { req.user = structuredClone(anterior.user); return next(); } catch { /* cai no cálculo completo */ }
+  }
+  return authCompleto(req,res,()=>{
+    try { req._authResolvido = { header: h, user: structuredClone(req.user) }; } catch { req._authResolvido = null; }
+    return next();
+  });
+}
+function authCompleto(req,res,next){
   const h = req.headers.authorization || '';
   const token = h.startsWith('Bearer ') ? h.slice(7) : null;
   if(!token) return res.status(401).json({error:"sem token"});
@@ -1795,7 +1810,7 @@ async function tryAccountLogin(email, password, res, panelOnly, rateKey) {
   const account = await findAccountByEmail(email);
   if (!account) return false;
   const credential = accountCredential(account, db().usuarios || []);
-  if (!account.ativo || !senhaConfere(String(password || ''), credential)) {
+  if (!account.ativo || !(await senhaConfere(String(password || ''), credential))) {
     res.status(401).json({ error:'usuário ou senha inválidos', code:'INVALID_CREDENTIALS' });
     return true;
   }
@@ -1827,7 +1842,7 @@ app.post('/api/admin/login', async (req,res)=>{
   if (!u && process.env.COMMERCE_CORE_ENABLED === '1') {
     try {
       const owner = await findOperationalByEmail(user);
-      if (owner?.ativo && senhaConfere(String(senhaInformada || ''), owner.senhaHash)) {
+      if (owner?.ativo && await senhaConfere(String(senhaInformada || ''), owner.senhaHash)) {
         if (isReservedEmail(owner.email)) return res.status(403).json({ error: 'acesso não autorizado' });
         limparTentativas(chave);
         const sessao = await commerceSessionFor(owner);
@@ -1841,7 +1856,7 @@ app.post('/api/admin/login', async (req,res)=>{
       return res.status(503).json({ error: 'acesso temporariamente indisponível', code: 'SCOPE_UNAVAILABLE' });
     }
   }
-  if(!u || !u.ativo || !senhaConfere(String(senhaInformada || ''), u.senhaHash)) return res.status(401).json({error:'usuário ou senha inválidos', code:'INVALID_CREDENTIALS'});
+  if(!u || !u.ativo || !(await senhaConfere(String(senhaInformada || ''), u.senhaHash))) return res.status(401).json({error:'usuário ou senha inválidos', code:'INVALID_CREDENTIALS'});
   if(!STAFF.includes(u.role)) return res.status(403).json({error:'esta conta não tem acesso ao painel'});
   limparTentativas(chave);
   const sessao = await commerceSessionFor(u);
@@ -1903,7 +1918,7 @@ app.post('/api/auth/login', async (req,res)=>{
   try { if (await tryAccountLogin(email, senha, res, false, chave)) return; }
   catch { return res.status(503).json({ error:'acesso temporariamente indisponível', code:'SCOPE_UNAVAILABLE' }); }
   const u = findUser(email);
-  if(!u || !u.ativo || !senhaConfere(String(senha || ''), u.senhaHash)) return res.status(401).json({error:'e-mail ou senha inválidos'});
+  if(!u || !u.ativo || !(await senhaConfere(String(senha || ''), u.senhaHash))) return res.status(401).json({error:'e-mail ou senha inválidos'});
   limparTentativas(chave);
   res.json({ token: tokenFor(u), user: publicUser(u) });
 });
@@ -3857,12 +3872,12 @@ function clientesBarbeariaSomenteLeitura(empresaId) {
 // Índices de profissionais, serviços e clientes montados uma vez por requisição.
 // Antes cada agendamento listava (e ordenava) todos os clientes de novo: com ~1 mil
 // agendamentos e 3,3 mil clientes a visão geral passava de 20 s.
-function indicesAgendaBarbearia(empresaId) {
+function indicesAgendaBarbearia(empresaId, clientesJaListados = null) {
   const porId = (lista) => new Map(lista.map(item => [item.id, item]));
   return {
     profissionais: porId(barbeariaErpKytto.listarProfissionais(empresaId, { incluirInativos: true })),
     servicos: porId(barbeariaErpKytto.listarServicos(empresaId, { incluirInativos: true })),
-    clientes: porId(clientesBarbeariaSomenteLeitura(empresaId)),
+    clientes: porId(clientesJaListados || clientesBarbeariaSomenteLeitura(empresaId)),
   };
 }
 
@@ -3904,10 +3919,10 @@ function agruparPorCliente(lista) {
   return mapa;
 }
 
-function resumoRelacionamentoBarbearia(req) {
+function resumoRelacionamentoBarbearia(req, clientesJaListados = null) {
   const empresaId = legacyEmpresaId(req);
   const lojaId = legacyLojaId(req);
-  const clientes = clientesBarbeariaSomenteLeitura(empresaId);
+  const clientes = clientesJaListados || clientesBarbeariaSomenteLeitura(empresaId);
   // Só os campos de cliente/status/data são usados aqui: dispensa o enriquecimento.
   const agenda = barbeariaErpKytto.listarAgendamentos(empresaId, { lojaId });
   const comandas = barbeariaErpKytto.listarComandasBarbearia(empresaId, { lojaId });
@@ -3963,6 +3978,8 @@ function resumoRelacionamentoBarbearia(req) {
 }
 
 function relatorioOperacionalBarbearia(empresaId, { data, lojaId } = {}) {
+  // um formatador por relatório (antes era um por recebimento)
+  const formatoDiaRelatorio = new Intl.DateTimeFormat('en-CA', { timeZone: process.env.KYTTO_TIMEZONE || 'America/Cuiaba', year: 'numeric', month: '2-digit', day: '2-digit' });
   // O relatório usa só ids, status e valores: lê a agenda sem enriquecer.
   const agenda = barbeariaErpKytto.listarAgendamentos(empresaId, { data, lojaId });
   const recebimentos = barbeariaErpKytto.listarAgendamentos(empresaId, { lojaId });
@@ -3974,7 +3991,7 @@ function relatorioOperacionalBarbearia(empresaId, { data, lojaId } = {}) {
       concluidos: itens.filter(item => item.status === 'concluido').length,
       faturamento: Number(recebimentos.filter(item => item.profissionalId === profissional.id).reduce((soma, item) => {
         const lancamento = barbeariaErpKytto.recebimentoAgendamentoVerificado(empresaId, item);
-        const diaPagamento = lancamento?.pagoEm ? new Intl.DateTimeFormat('en-CA', { timeZone: process.env.KYTTO_TIMEZONE || 'America/Cuiaba', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(lancamento.pagoEm)) : '';
+        const diaPagamento = lancamento?.pagoEm ? formatoDiaRelatorio.format(new Date(lancamento.pagoEm)) : '';
         return soma + (lancamento && (!data || diaPagamento === String(data).slice(0, 10)) ? Number(lancamento.valor) : 0);
       }, 0).toFixed(2)) };
   });
@@ -4125,6 +4142,19 @@ async function metasDoMes({ empresaId, now, barbershopInput, commerceContext, pr
 }
 
 registerAvecMixRoutes(app, { jsonParser: express.json({ limit: '12mb' }), requirePlatformAdmin, empresaIdFor: legacyEmpresaId, lojaIdFor: legacyLojaId, acquireClient: loyaltyDb.acquireClient, releaseClient: loyaltyDb.releaseClient });
+// Cache curto de respostas pesadas de leitura: vale por pessoa e escopo, some quando o JSON
+// muda (contador de alterações) e dura no máximo o TTL (dados do Commerce).
+const cacheRespostasCurtas = new Map();
+function respostaCurtaGuardada(chave, ttlMs) {
+  const item = cacheRespostasCurtas.get(chave);
+  if (!item) return null;
+  if (item.versao !== (estadoGravacao()?.alteracoes ?? null) || Date.now() - item.em >= ttlMs) { cacheRespostasCurtas.delete(chave); return null; }
+  return item.valor;
+}
+function guardarRespostaCurta(chave, valor) {
+  if (cacheRespostasCurtas.size >= 200) cacheRespostasCurtas.delete(cacheRespostasCurtas.keys().next().value);
+  cacheRespostasCurtas.set(chave, { versao: estadoGravacao()?.alteracoes ?? null, em: Date.now(), valor });
+}
 
 app.get('/api/admin/barbearia/analytics', async (req, res) => {
   try {
@@ -4133,6 +4163,10 @@ app.get('/api/admin/barbearia/analytics', async (req, res) => {
     const now = new Date();
     const inicio = req.query?.inicio || req.query?.de;
     const fim = req.query?.fim || req.query?.ate;
+    // 60 s por pessoa, escopo, período e hora (a janela "últimos N dias" anda com o relógio)
+    const chaveCache = JSON.stringify(['analytics', empresaId, lojaId || '', String(req.query?.period || ''), String(inicio || ''), String(fim || ''), req.user?.id ?? '', req.user?.email || '', String(req.headers['x-empresa-id'] || ''), String(req.headers['x-loja-id'] || ''), now.toISOString().slice(0, 13)]);
+    const guardada = respostaCurtaGuardada(chaveCache, 60_000);
+    if (guardada) return res.json(guardada);
     // Para deep-links do BI, a janela precisa ser idêntica à de seus cards.
     // Sem datas explícitas, os atalhos 1/7/30/90 continuam no contrato atual.
     const range = inicio || fim
@@ -4235,7 +4269,10 @@ app.get('/api/admin/barbearia/analytics', async (req, res) => {
       goals: await metasDoMes({ empresaId, now, barbershopInput, commerceContext, profitFor, scopeLevel: lojaId ? 'unit' : 'company', unidadeUnica: await empresaComUnidadeUnica(commerceContext) }),
       funnel: commerceAvailable ? { current: funnelSummary(empresaId, range.fromDate, range.toDate), previous: funnelSummary(empresaId, range.previousFromDate, range.previousToDate) } : null,
     }, { period: range.days, now, window: range });
-    res.json({ ok: true, ...analytics });
+    const resposta = { ok: true, ...analytics };
+    // resultado incompleto por falha passageira do Commerce não fica guardado
+    if (commerceAvailable || process.env.COMMERCE_CORE_ENABLED !== '1') guardarRespostaCurta(chaveCache, resposta);
+    res.json(resposta);
   } catch (error) {
     res.status(400).json({ error: error.message || 'Não foi possível carregar os indicadores.', code: error.code || 'DINO_ANALYTICS_UNAVAILABLE' });
   }
@@ -4323,7 +4360,9 @@ app.get('/api/admin/barbearia/overview', async (req, res) => {
       financeiro: financeiroKytto.resumoFinanceiro(empresaId, { hoje: data, lojaId }),
       caixa: { data, caixas, aberto: caixas.find(item => item.status === 'aberto') || null },
     });
-    { const idx = indicesAgendaBarbearia(empresaId); dashboard.proximosAgendamentos = dashboard.proximosAgendamentos.map(item => enriquecerAgendamentoBarbearia(empresaId, item, idx)); }
+    // a lista de clientes e os índices da agenda são montados uma vez só por pedido
+    const indicesOverview = indicesAgendaBarbearia(empresaId, clientes);
+    dashboard.proximosAgendamentos = dashboard.proximosAgendamentos.map(item => enriquecerAgendamentoBarbearia(empresaId, item, indicesOverview));
     let configuracaoUnidade = null;
     try { configuracaoUnidade = barbeariaErpKytto.obterConfiguracaoLoja(empresaId, lojaId); } catch (_) { configuracaoUnidade = null; }
     const comandas = barbeariaErpKytto.listarComandasBarbearia(empresaId, { data, lojaId });
@@ -4345,7 +4384,7 @@ app.get('/api/admin/barbearia/overview', async (req, res) => {
     res.json({
       ok: true,
       dashboard,
-      agendamentos: listarAgendamentosBarbearia(empresaId, { data, status: req.query?.status, profissionalId: req.query?.profissionalId, lojaId }),
+      agendamentos: listarAgendamentosBarbearia(empresaId, { data, status: req.query?.status, profissionalId: req.query?.profissionalId, lojaId }, indicesOverview),
       profissionais: barbeariaErpKytto.listarProfissionais(empresaId, { incluirInativos: true }),
       servicos: barbeariaErpKytto.listarServicos(empresaId, { incluirInativos: true }),
       clientes,
@@ -4364,7 +4403,7 @@ app.get('/api/admin/barbearia/overview', async (req, res) => {
       comandas,
       documentosFiscais: barbeariaFiscalKytto.listarDocumentosFiscais(empresaId, { lojaId }).slice(0, 50).map(barbeariaNfseKytto.documentoParaPainel),
              resumoComandas,
-       relacionamento: resumoRelacionamentoBarbearia(req),
+       relacionamento: resumoRelacionamentoBarbearia(req, clientes),
        operacao: resumoOperacaoBarbearia(req),
        notificacoesAgenda,
 
@@ -7376,6 +7415,8 @@ const SOCIO_PLANOS = [
 app.get('/api/socio-planos', (req,res)=> res.json(SOCIO_PLANOS));
 
 const refMes = (d=new Date()) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+// Recalcula e grava o banco só se o sócio mudou (consultar a carteirinha não reescreve o JSON inteiro).
+function recomputeSocioESalvar(s){ const antes=JSON.stringify(s); recomputeSocio(s); if(JSON.stringify(s)!==antes) save(); }
 function recomputeSocio(s){
   const hoje=new Date().toISOString().slice(0,10);
   const vencida = (s.faturas||[]).some(f=>f.status==='aberta' && f.venc < hoje);
@@ -7439,7 +7480,7 @@ app.get('/api/auth/carteirinha', auth, async (req,res)=>{
   const u=db().usuarios.find(x=>x.id===req.user.id); if(!u) return res.status(404).json({error:'usuário não encontrado'});
   const s=(db().socios||[]).find(x=>x.email===u.email || x.usuarioId===u.id);
   if(!s) return res.json({ socio:false, message:'Você ainda não é sócio. Procure a recepção para aderir.' });
-  recomputeSocio(s); save();
+  recomputeSocioESalvar(s);
   const qrSvg=await QRCode.toString(s.cardCode, { type:'svg', margin:1, color:{ dark:'#0B2415', light:'#00000000' } });
   res.json({ socio:true, nome:s.nome, plano:s.planoNome, status:s.status, cardCode:s.cardCode, desde:s.desde, qrSvg });
 });
@@ -7447,7 +7488,7 @@ app.get('/api/auth/carteirinha', auth, async (req,res)=>{
 app.post('/api/admin/validar-carteirinha', auth, requireStaff, (req,res)=>{
   const s=(db().socios||[]).find(x=>x.cardCode===(req.body.code||'').trim());
   if(!s) return res.status(404).json({ ok:false, resultado:'INVALIDA', message:'Carteirinha não encontrada' });
-  recomputeSocio(s); save();
+  recomputeSocioESalvar(s);
   if(s.status==='inadimplente') return res.status(200).json({ ok:false, resultado:'INADIMPLENTE', message:'Sócio com mensalidade em atraso', socio:pubSocio(s) });
   res.json({ ok:true, resultado:'LIBERADO', message:'Sócio em dia', socio:pubSocio(s) });
 });

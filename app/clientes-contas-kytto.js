@@ -130,17 +130,24 @@ function migrarEstruturaLegada(estado) {
   // Algumas instalações podem ter recebido a estrutura intermediária antes do
   // campo empresaId existir. Completar esse campo torna a migração retroativa e
   // evita que registros legítimos desapareçam do filtro da empresa padrão.
+  // A varredura roda uma vez por coleção (e de novo se a coleção for trocada, ex.: restauração
+  // de cópia): todo registro criado depois já nasce com empresaId. Antes ela rodava a cada
+  // obterCliente e, com milhares de clientes, a carteira do Customer 360 levava ~10 s.
   const legadoPadrao = store.empresas[EMPRESA_PADRAO_ID];
   if (legadoPadrao) {
     for (const tipo of ['clientes', 'contasReceber', 'alertas', 'fechamentoDiario']) {
       legadoPadrao[tipo] ||= {};
-      for (const registro of Object.values(legadoPadrao[tipo])) {
+      const registros = legadoPadrao[tipo];
+      if (colecoesJaCompletadas.has(registros)) continue;
+      for (const registro of Object.values(registros)) {
         if (registro && !registro.empresaId) registro.empresaId = EMPRESA_PADRAO_ID;
       }
+      colecoesJaCompletadas.add(registros);
     }
   }
   return store;
 }
+const colecoesJaCompletadas = new WeakSet();
 
 // ── Relacionamento: família, preferências e redes sociais ──────────────────
 // Só muda o que vier no corpo da requisição. Os perfis sociais são apenas
@@ -355,11 +362,14 @@ export function atualizarConsentimentoCliente(empresaId, clienteId, dados = {}) 
   return cliente;
 }
 
+// Mesmo critério de localeCompare(…, 'pt-BR'), sem criar um collator a cada comparação.
+const COLLATOR_PT_BR = new Intl.Collator('pt-BR');
+
 export function listarClientes(empresaId) {
   garantirClientePadrao(empresaId);
   return Object.values(clientesPersistidos(empresaId).clientes)
     .filter((cliente) => cliente.status !== 'deletado' && cliente.empresaId === empresaId)
-    .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+    .sort((a, b) => COLLATOR_PT_BR.compare(a.nome, b.nome));
 }
 
 export function obterCliente(empresaId, clienteId) {

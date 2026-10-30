@@ -252,13 +252,15 @@ export function visaoPublica(conexao, { numeroCompleto = false } = {}) {
 
 export async function verificarConexao(empresaId, { fetchImpl, tipoCanal = 'cliente' } = {}) {
   const conexao = obterConexao(empresaId, tipoCanal);
+  // mesma regra do watchdog: só grava o banco quando algo além de lastCheckAt mudou
+  const antes = estadoPersistivel(conexao);
   if (canalInterno(tipoCanal)) {
     if (!wahaControlConfigured()) { conexao.lastError = 'waha_nao_configurado'; return visaoPublica(conexao); }
     if (!validWahaSession(conexao.instance)) { conexao.lastError = 'instancia_nao_atribuida'; return visaoPublica(conexao); }
     const status = await getWahaSessionStatus(conexao.instance);
     aplicarEstado(conexao, { ok: true, state: normalizarEstadoWaha(status?.status), phone: '' });
     if (conexao.state === 'open' && conexao.autoReconnect !== false) conexao.ativo = true;
-    save();
+    salvarSeEstadoMudou(antes, conexao);
     return visaoPublica(conexao);
   }
   if (whatsappProviderName() !== 'chatbot_backend') {
@@ -276,7 +278,7 @@ export async function verificarConexao(empresaId, { fetchImpl, tipoCanal = 'clie
   // mesmo quando uma tentativa anterior de logout falhou depois de persistir
   // apenas o estado local.
   if (resultado.ok && resultado.state === 'open' && conexao.autoReconnect !== false) conexao.ativo = true;
-  save();
+  salvarSeEstadoMudou(antes, conexao);
   return visaoPublica(conexao);
 }
 

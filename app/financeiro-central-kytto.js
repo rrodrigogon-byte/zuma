@@ -628,7 +628,21 @@ function lancamentosLegadosDaDino(proprios) {
     }));
 }
 
+// Mesma ordem de String(b.x).localeCompare(String(a.x)) (localeCompare sem locale = Intl.Collator
+// padrão), com as chaves montadas uma vez por item.
+const COLLATOR_PADRAO = new Intl.Collator();
+function ordenarLancamentos(itens) {
+  const chaves = new Map(itens.map((item) => [item, [String(item.dataOperacao), String(item.criadoEm)]]));
+  return itens.sort((a, b) => { const ka = chaves.get(a); const kb = chaves.get(b); return COLLATOR_PADRAO.compare(kb[0], ka[0]) || COLLATOR_PADRAO.compare(kb[1], ka[1]); });
+}
+
 export function listarLancamentos(empresaId, filtros = {}) {
+  return listarLancamentosSemCopia(empresaId, filtros).map(serializar);
+}
+
+// Mesma lista (filtros e ordem) sem a cópia profunda de cada lançamento: só para leitura interna
+// (resumos). Quem recebe NÃO pode alterar os itens.
+function listarLancamentosSemCopia(empresaId, filtros = {}) {
   const empresa = idEscopo(empresaId);
   const store = storeEmpresa(empresa);
   const proprios = Object.values(store.lancamentos).filter((item) => item.empresaId === empresa);
@@ -641,7 +655,7 @@ export function listarLancamentos(empresaId, filtros = {}) {
   const ate = texto(filtros.ate, 10);
   const lojaId = idEscopo(filtros.lojaId);
   const incluirQuarentena = filtros.incluirQuarentena === true || filtros.quarantine === true || filtros.quarentena === true;
-  return base
+  const itens = base
     .filter((item) => incluirQuarentena || !semLoja(item))
     .filter((item) => !lojaId || saoLojasEquivalentes(lojaId, item.lojaId) || (incluirQuarentena && semLoja(item)))
     .filter((item) => !tipo || item.tipo === tipo)
@@ -649,9 +663,8 @@ export function listarLancamentos(empresaId, filtros = {}) {
     .filter((item) => !origem || item.origem === origem)
     .filter((item) => !categoria || item.categoria === categoria)
     .filter((item) => !de || item.vencimento >= de)
-    .filter((item) => !ate || item.vencimento <= ate)
-    .sort((a, b) => String(b.dataOperacao).localeCompare(String(a.dataOperacao)) || String(b.criadoEm).localeCompare(String(a.criadoEm)))
-    .map(serializar);
+    .filter((item) => !ate || item.vencimento <= ate);
+  return ordenarLancamentos(itens);
 }
 
 export function registrarVendaComanda(empresaId, { comanda, pagamentos = [], contasReceber = [], usuario, dataOperacao, lojaId, legacy = false, quarantine = false } = {}) {
@@ -722,7 +735,8 @@ export function resumoFinanceiro(empresaOuOpcoes, opcoes = {}) {
     return { ...cached.data };
   }
 
-  const lancamentos = listarLancamentos(escopo.empresaId, { ...filtros, lojaId: escopo.lojaId });
+  // o resumo só lê e soma: usa a lista sem cópia (mesma ordem, mesmas somas)
+  const lancamentos = listarLancamentosSemCopia(escopo.empresaId, { ...filtros, lojaId: escopo.lojaId });
 
   // Single-pass O(N) aggregation sem arrays intermediários (alta performance e economia de memória no Render)
   let totalReceitas = 0;

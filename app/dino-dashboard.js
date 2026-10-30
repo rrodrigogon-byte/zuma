@@ -43,7 +43,23 @@ function zoneOffset(date, timeZone = TIME_ZONE) {
   return Date.UTC(value.year, value.month - 1, value.day, value.hour, value.minute, value.second) - date.getTime();
 }
 
+// Hora local → instante UTC. O histórico Avec repete os mesmos dias milhares de vezes e cada
+// conversão consulta o fuso pelo Intl: o resultado (número ou null) fica guardado por
+// (dia, hora, fuso) e cada chamada recebe um Date novo, como antes.
+const wallTimeCache = new Map();
 function localWallTimeToUtc(day, time, timeZone = TIME_ZONE) {
+  const chave = `${day}|${time}|${timeZone}`;
+  if (wallTimeCache.has(chave)) {
+    const guardado = wallTimeCache.get(chave);
+    return guardado === null ? null : new Date(guardado);
+  }
+  const resultado = localWallTimeToUtcSemCache(day, time, timeZone);
+  if (wallTimeCache.size >= 50_000) wallTimeCache.clear();
+  wallTimeCache.set(chave, resultado ? resultado.getTime() : null);
+  return resultado;
+}
+
+function localWallTimeToUtcSemCache(day, time, timeZone = TIME_ZONE) {
   const dateMatch = String(day || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
   const timeMatch = String(time || '').match(/^(\d{2}):(\d{2})(?::(\d{2}))?$/);
   if (!dateMatch || !timeMatch) return null;

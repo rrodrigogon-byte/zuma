@@ -440,7 +440,8 @@ function snapshotEscopo(empresaId) {
   const chave = String(empresaId || '');
   return {
     compras: raiz.barbeariaCompras?.[chave] === undefined ? undefined : structuredClone(raiz.barbeariaCompras[chave]),
-    erp: raiz.barbearias?.[chave] === undefined ? undefined : structuredClone(raiz.barbearias[chave]),
+    // o histórico importado da empresa não muda no recebimento de NF-e: segue por referência
+    erp: raiz.barbearias?.[chave] === undefined ? undefined : barbearia.copiarEstadoEmpresaSemHistorico(raiz.barbearias[chave]),
   };
 }
 
@@ -452,7 +453,7 @@ function restaurarEscopo(empresaId, snapshot) {
   if (snapshot.compras === undefined) delete raiz.barbeariaCompras[chave];
   else raiz.barbeariaCompras[chave] = structuredClone(snapshot.compras);
   if (snapshot.erp === undefined) delete raiz.barbearias[chave];
-  else raiz.barbearias[chave] = structuredClone(snapshot.erp);
+  else raiz.barbearias[chave] = barbearia.copiarEstadoEmpresaSemHistorico(snapshot.erp);
   if (!Object.keys(raiz.barbeariaCompras).length) delete raiz.barbeariaCompras;
   if (!Object.keys(raiz.barbearias).length) delete raiz.barbearias;
 }

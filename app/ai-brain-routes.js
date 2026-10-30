@@ -18,6 +18,7 @@ import { buildExecutiveGraph } from './dino-grafo-executivo.js';
 import { redactNetworkText, scopedCustomerRef } from './dino-grafo-rede.js';
 import { runAiTask as defaultRunAiTask } from './core/ai-router.js';
 import { matchesLegacyStoreScope } from './core/legacy-store-scope.js';
+import { commerceEmpresaIdFromLegacy, commerceLojaIdFromLegacy } from './core/legacy-commerce-scope.js';
 
 const BASE = '/api/admin/barbearia/cerebro-ia';
 const GESTORES = new Set(['admin', 'organizador']);
@@ -158,15 +159,27 @@ function safeAnalysis(value) {
   return { summary: text(value?.summary, 900), actions: array(value?.actions), caveats: array(value?.caveats) };
 }
 
-function verifiedLegacyScope(req, context) {
+export function verifiedLegacyScope(req, context) {
   const user = req?.user || {};
   if (user.pgAccount === true || user.pgOperational === true) return null;
   const signedCompany = String(user.empresaId || '').trim();
   const commerceCompany = String(context?.empresaId || '').trim();
   const signedStore = String(user.lojaId || '').trim();
   const commerceStore = String(context?.lojaId || '').trim();
-  if (!matchesLegacyStoreScope({ legacyEmpresaId: signedCompany, legacyLojaId: signedStore, empresaId: commerceCompany, commerceLojaId: commerceStore })) return null;
-  return { empresaId: signedCompany, lojaId: signedStore };
+  if (matchesLegacyStoreScope({ legacyEmpresaId: signedCompany, legacyLojaId: signedStore, empresaId: commerceCompany, commerceLojaId: commerceStore })) {
+    return { empresaId: signedCompany, lojaId: signedStore };
+  }
+  // O ERP da empresa fica sob o mesmo UUID do Commerce (convenção usada também pelo agendador
+  // das automações). Valem ainda: a ponte explícita da Dino (id legado emp-kytto-001 / loja
+  // dino-web-estoque) e o administrador da plataforma, cujo acesso à empresa e à unidade já foi
+  // conferido pelo Commerce (requireCommercePermission) antes desta função.
+  const bridgedCompany = commerceEmpresaIdFromLegacy(signedCompany);
+  const bridgedStore = commerceLojaIdFromLegacy(signedStore, signedCompany);
+  const sameAsCommerce = { legacyEmpresaId: commerceCompany, legacyLojaId: commerceStore, empresaId: commerceCompany, commerceLojaId: commerceStore };
+  if (!matchesLegacyStoreScope(sameAsCommerce)) return null;
+  const bridged = bridgedCompany === commerceCompany && bridgedStore === commerceStore;
+  if (bridged || user.platformAdmin === true) return { empresaId: commerceCompany, lojaId: commerceStore };
+  return null;
 }
 
 export function registerAiBrainRoutes(app, deps) {

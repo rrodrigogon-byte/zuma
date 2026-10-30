@@ -239,15 +239,73 @@ function erroEstoqueReserva(message, code, status = 400) {
   return Object.assign(new Error(message), { code, status });
 }
 
-function raizSnapshot() {
-  return structuredClone(db());
+// Histórico importado (Avec e afins): é o grosso do banco e nenhuma operação que usa o
+// snapshot o altera — só a importação (importarHistoricoAtendimentos/migração), que não
+// passa por aqui. Ele entra no snapshot por referência, sem cópia. Todo o resto é copiado
+// num único structuredClone, como antes, para manter os apelidos internos
+// (ex.: reservasEstoque === inventoryReservations).
+const CHAVES_HISTORICO_SO_LEITURA = Object.freeze(['historicoAtendimentos', 'historicoComandas']);
+const metricasSnapshot = { snapshots: 0, restauracoes: 0, ultimaDuracaoMs: 0, maiorDuracaoMs: 0 };
+
+export function estadoSnapshotsBarbearia() { return { ...metricasSnapshot }; }
+
+/** Cópia do estado de uma empresa sem copiar o histórico importado (que segue por referência). */
+export function copiarEstadoEmpresaSemHistorico(estado) {
+  if (!estado || typeof estado !== 'object') return structuredClone(estado);
+  const resto = { ...estado };
+  for (const chave of CHAVES_HISTORICO_SO_LEITURA) delete resto[chave];
+  const copia = structuredClone(resto);
+  const ordenado = {};
+  for (const chave of Object.keys(estado)) ordenado[chave] = CHAVES_HISTORICO_SO_LEITURA.includes(chave) ? estado[chave] : copia[chave];
+  return ordenado;
 }
 
+function raizSnapshot() {
+  const inicio = Date.now();
+  const raiz = db();
+  const barbearias = raiz.barbearias && typeof raiz.barbearias === 'object' ? raiz.barbearias : null;
+  let copia;
+  if (!barbearias) copia = structuredClone(raiz);
+  else {
+    const historicos = {};
+    const semHistorico = {};
+    for (const [empresa, estado] of Object.entries(barbearias)) {
+      if (!estado || typeof estado !== 'object') { semHistorico[empresa] = estado; continue; }
+      const resto = { ...estado };
+      for (const chave of CHAVES_HISTORICO_SO_LEITURA) {
+        if (!(chave in resto)) continue;
+        (historicos[empresa] ||= {})[chave] = resto[chave];
+        delete resto[chave];
+      }
+      semHistorico[empresa] = resto;
+    }
+    copia = structuredClone({ ...raiz, barbearias: semHistorico });
+    for (const [empresa, chaves] of Object.entries(historicos)) {
+      const estado = copia.barbearias[empresa];
+      // mantém a ordem original das chaves do estado (o arquivo gravado não muda)
+      const ordenado = {};
+      for (const chave of Object.keys(barbearias[empresa])) ordenado[chave] = chave in chaves ? chaves[chave] : estado[chave];
+      copia.barbearias[empresa] = ordenado;
+    }
+  }
+  const duracao = Date.now() - inicio;
+  metricasSnapshot.snapshots += 1;
+  metricasSnapshot.ultimaDuracaoMs = duracao;
+  metricasSnapshot.maiorDuracaoMs = Math.max(metricasSnapshot.maiorDuracaoMs, duracao);
+  return copia;
+}
+
+// O snapshot é privado de quem o tirou e não é reutilizado depois da restauração:
+// volta para o banco como está, sem nova cópia (o histórico continua o mesmo objeto).
 function restaurarRaiz(snapshot) {
   const raiz = db();
   for (const chave of Object.keys(raiz)) delete raiz[chave];
-  Object.assign(raiz, structuredClone(snapshot));
+  Object.assign(raiz, snapshot);
+  metricasSnapshot.restauracoes += 1;
 }
+
+// só para os testes de snapshot (barbearia-snapshot.test.js)
+export const _snapshotBarbeariaParaTeste = Object.freeze({ raizSnapshot, restaurarRaiz });
 
 function validarEscopoInventario(empresaId, lojaId) {
   const empresa = texto(empresaId, 120);
@@ -3519,13 +3577,32 @@ export function importarHistoricoAtendimentos(empresaId, itens = [], opcoes = {}
   return resultado;
 }
 
+// Mesma ordem de `${b}`.localeCompare(`${a}`) (localeCompare sem locale = Intl.Collator padrão),
+// mas com a chave montada uma vez por item e um collator só: o histórico tem dezenas de milhares
+// de registros e a ordenação antiga montava duas strings a cada comparação.
+const COLLATOR_PADRAO = new Intl.Collator();
+// Chaves no formato fixo "AAAA-MM-DD HH:MM": entre duas delas a primeira diferença é sempre
+// dígito × dígito, e aí a comparação direta dá o mesmo resultado do collator. Qualquer outro
+// formato (hora vazia, data em outro padrão) continua indo para o collator.
+const CHAVE_DATA_HORA = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/;
+export function compararChavesDecrescente(a, b) {
+  if (a.rapida && b.rapida) return b.chave < a.chave ? -1 : b.chave > a.chave ? 1 : 0;
+  return COLLATOR_PADRAO.compare(b.chave, a.chave);
+}
+function ordenarDecrescentePorChave(itens, chaveDe) {
+  const pares = itens.map((item) => { const chave = chaveDe(item); return { chave, rapida: CHAVE_DATA_HORA.test(chave), item }; });
+  pares.sort(compararChavesDecrescente);
+  for (let i = 0; i < pares.length; i += 1) itens[i] = pares[i].item;
+  return itens;
+}
+
 export function listarHistoricoAtendimentos(empresaId, filtros = {}) {
   const itens = historicoAvecVigente(estadoEmpresa(empresaId, false).historicoAtendimentos || {})
     .filter((item) => !filtros.lojaId || !item.lojaId || String(item.lojaId) === String(filtros.lojaId))
     .filter((item) => !filtros.clienteId || item.clienteId === String(filtros.clienteId))
     .filter((item) => !filtros.de || item.dataAgenda >= String(filtros.de).slice(0, 10))
-    .filter((item) => !filtros.ate || item.dataAgenda <= String(filtros.ate).slice(0, 10))
-    .sort((a, b) => `${b.dataAgenda} ${b.hora}`.localeCompare(`${a.dataAgenda} ${a.hora}`));
+    .filter((item) => !filtros.ate || item.dataAgenda <= String(filtros.ate).slice(0, 10));
+  ordenarDecrescentePorChave(itens, (item) => `${item.dataAgenda} ${item.hora}`);
   return filtros.limite ? itens.slice(0, Math.max(1, Math.min(50000, Number(filtros.limite) || 50))) : itens;
 }
 
@@ -3537,8 +3614,8 @@ export function listarHistoricoComandas(empresaId, filtros = {}) {
     .filter((item) => !filtros.clienteId || item.clienteId === String(filtros.clienteId))
     .filter((item) => !filtros.numeroComanda || item.numeroComanda === String(filtros.numeroComanda))
     .filter((item) => !filtros.de || String(item.dataComandaIso || '').slice(0, 10) >= String(filtros.de).slice(0, 10))
-    .filter((item) => !filtros.ate || String(item.dataComandaIso || '').slice(0, 10) <= String(filtros.ate).slice(0, 10))
-    .sort((a, b) => `${b.dataFinalizacaoOriginal} ${b.numeroComanda}`.localeCompare(`${a.dataFinalizacaoOriginal} ${a.numeroComanda}`));
+    .filter((item) => !filtros.ate || String(item.dataComandaIso || '').slice(0, 10) <= String(filtros.ate).slice(0, 10));
+  ordenarDecrescentePorChave(itens, (item) => `${item.dataFinalizacaoOriginal} ${item.numeroComanda}`);
   return filtros.limite ? itens.slice(0, Math.max(1, Math.min(5000, Number(filtros.limite) || 50))) : itens;
 }
 

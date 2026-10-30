@@ -19,7 +19,18 @@ const MAX_FINANCE_ROWS = 5000;
 const MAX_CASH_ROWS = 500;
 const MAX_INVENTORY_ROWS = 2000;
 const MAX_ORDER_STATUS_ROWS = 100;
-const MAX_APPOINTMENT_ROWS = 5000;
+const MAX_APPOINTMENT_ROWS = 20000;
+// O grafo usa histórico relacional de até 365 dias; a agenda local é lida nessa janela (com folga)
+// mais todo o futuro. Sem o corte, a agenda inteira da Dino passava do limite e a cobertura ficava
+// parcial, o que bloqueava as automações.
+const APPOINTMENT_LOOKBACK_DAYS = 400;
+function inAppointmentWindow(rows, now = Date.now()) {
+  const since = now - APPOINTMENT_LOOKBACK_DAYS * 86400000;
+  return (Array.isArray(rows) ? rows : []).filter((row) => {
+    const ms = new Date(row?.dataHora || row?.data_hora || 0).valueOf();
+    return !Number.isFinite(ms) || ms === 0 || ms >= since;
+  });
+}
 const MAX_CLIENT_ROWS = 5000;
 const MAX_COMMAND_ROWS = 5000;
 const MAX_RETAIL_SALE_ROWS = 5000;
@@ -236,14 +247,14 @@ export async function loadBrainSources(scope = {}, deps = {}) {
     if (!commerceLojaId) {
       if (!legacyScopeVerified || !legacy) throw new Error('Escopo legado não validado para consultar a agenda.');
       agendaFonte = 'barbearia';
-      return listarAgendamentos(legacy, legacyLojaId ? { lojaId: legacyLojaId } : {});
+      return inAppointmentWindow(await listarAgendamentos(legacy, legacyLojaId ? { lojaId: legacyLojaId } : {}));
     }
     agendaFonte = await (deps.agendaSource || resolverFonteAgenda)({
       legacyEmpresaId: legacy, legacyLojaId, empresaId: scope.empresaId, lojaId: commerceLojaId,
     }, { strictStoreMapping: true });
     if (agendaFonte === 'barbearia') {
       if (!legacyLojaId) throw new Error('Unidade ativa sem vínculo Kytto para ler a agenda legada.');
-      return listarAgendamentos(legacy, { lojaId: legacyLojaId });
+      return inAppointmentWindow(await listarAgendamentos(legacy, { lojaId: legacyLojaId }));
     }
     if (agendaFonte !== 'postgres') throw new Error('Fonte canônica de agenda indisponível.');
     const result = await queryRead(

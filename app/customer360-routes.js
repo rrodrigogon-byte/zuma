@@ -311,6 +311,29 @@ export function registerCustomer360Routes(app, deps) {
     } catch (error) { return sendError(res, error, 'Não foi possível buscar clientes.'); }
   });
 
+  // Histórico de atendimentos da Avec (somente leitura), da empresa e da unidade ativa. Vem dos
+  // registros importados no banco; se a Dino ainda não tiver nenhum lá, usa o arquivo completo da
+  // Avec — a mesma reserva que a ficha do cliente já usa —, então nada é contado duas vezes.
+  async function historicoAvecDaEmpresa(req) {
+    const empresaId = String(legacyEmpresaId(req) || '');
+    const lojaId = legacyLojaId(req);
+    const itens = [];
+    for (const emp of empresasEquivalentes(empresaId)) {
+      try { itens.push(...(barbeariaErpKytto.listarHistoricoAtendimentos?.(emp, { lojaId }) || [])); } catch {}
+    }
+    if (itens.length || !EQUIVALENCIAS_DINO.has(empresaId)) return itens;
+    try {
+      const { carregarBaseConsolidada } = await import('./dino-recuperacao-avec.js');
+      for (const cliente of await carregarBaseConsolidada()) {
+        for (const h of cliente.historicoItens || []) {
+          if (h.origem !== 'avec' || !h.data) continue;
+          itens.push({ clienteTelefone: cliente.telefone, clienteNome: cliente.nome, dataAgenda: h.data, servicoNome: h.servico, valor: h.valor, status: 'concluido', origem: 'avec' });
+        }
+      }
+    } catch (error) { console.error('Histórico Avec indisponível para a carteira:', error?.message); }
+    return itens;
+  }
+
   // Cache em memória de alta performance para a carteira (TTL 45s)
   const portfolioCache = new Map();
   function invalidatePortfolioCache(empresaId) {
@@ -340,7 +363,7 @@ export function registerCustomer360Routes(app, deps) {
       if (!cached || (now - cached.timestamp > TTL)) {
         const { context, commerceCustomers, commerceStatus, locals, rules } = await sourcesFor(req, { limit: 5000 });
         const data = localData(req);
-        const localMetrics = localMetricsByClient({ clients: locals, appointments: data.appointments, comandas: data.comandas, retailSales: data.retailSales, receivables: data.receivables, loyaltyMembers: data.fidelidade.membros });
+        const localMetrics = localMetricsByClient({ clients: locals, appointments: data.appointments, comandas: data.comandas, retailSales: data.retailSales, receivables: data.receivables, loyaltyMembers: data.fidelidade.membros, historicalAppointments: await historicoAvecDaEmpresa(req) });
         const commerceMetrics = context ? await loadCommercePortfolioMetrics(context) : undefined;
         const directory = mergeCustomerDirectory({ localClients: locals, commerceCustomers, ...rules });
         const tagsByRef = customerStore.tagsByRef(legacyEmpresaId(req));

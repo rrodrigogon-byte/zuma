@@ -10,6 +10,8 @@
 
 import { db } from './database.js';
 import { buildDinoCustomerAssistant } from './dino-customer-assistant.js';
+// Mesmo critério de localeCompare(…, 'pt-BR'), sem criar um collator a cada comparação.
+const COLLATOR_PT_BR = new Intl.Collator('pt-BR');
 
 // ───────────────────────── identidade e mascaramento ─────────────────────────
 
@@ -223,7 +225,7 @@ export function searchCustomerDirectory(directory = [], query = '', { limit = 20
   return {
     total: matches.length,
     items: matches
-      .sort((a, b) => b.fontes.length - a.fontes.length || a.nome.localeCompare(b.nome, 'pt-BR'))
+      .sort((a, b) => b.fontes.length - a.fontes.length || COLLATOR_PT_BR.compare(a.nome, b.nome))
       .slice(0, Math.max(1, Math.min(50, Number(limit) || 20)))
       .map(publicDirectoryItem),
   };
@@ -598,7 +600,7 @@ export async function auditCustomerAccess(context, { acao, ref, campo = null, mo
 // ───────────────────────── carteira (portfolio) ─────────────────────────
 
 /** Métricas por cliente da barbearia a partir dos dados já carregados do store JSON. */
-export function localMetricsByClient({ clients = [], appointments = [], comandas = [], retailSales = [], receivables = [], loyaltyMembers = [] } = {}) {
+export function localMetricsByClient({ clients = [], appointments = [], comandas = [], retailSales = [], receivables = [], loyaltyMembers = [], historicalAppointments = [] } = {}) {
   const metrics = new Map(clients.map((client) => [String(client.id), { visitas: 0, faltas: 0, receita: 0, tickets: 0, aReceber: 0, pontos: 0, ultimaAtividade: 0, proximo: 0 }]));
   const phoneToId = new Map();
   for (const client of clients) { const phone = normalizePhone(client.telefone); if (phone && !phoneToId.has(phone)) phoneToId.set(phone, String(client.id)); }
@@ -628,7 +630,38 @@ export function localMetricsByClient({ clients = [], appointments = [], comandas
   for (const member of loyaltyMembers) {
     const entry = metrics.get(String(member.clienteId || '')); if (entry) entry.pontos += Number(member.pontos || 0);
   }
+  addHistoricalAppointments(metrics, clients, phoneToId, historicalAppointments, touch);
   return metrics;
+}
+
+// Histórico importado da Avec (um registro por serviço realizado). Liga ao cadastro pelo
+// clienteId; sem ele, pelo telefone (completo ou, se único, pelos 8 últimos dígitos). Cada dia
+// com atendimento conta uma visita e um ticket; o valor dos serviços entra na receita.
+function addHistoricalAppointments(metrics, clients, phoneToId, historical, touch) {
+  if (!historical?.length) return;
+  const tail8 = new Map();
+  for (const client of clients) {
+    const digits = onlyDigits(client.telefone);
+    if (digits.length < 8) continue;
+    const key = digits.slice(-8);
+    tail8.set(key, tail8.has(key) && tail8.get(key) !== String(client.id) ? null : String(client.id));
+  }
+  const days = new Map();
+  for (const item of historical) {
+    if (item.status && item.status !== 'concluido') continue;
+    let id = item.clienteId && metrics.has(String(item.clienteId)) ? String(item.clienteId) : '';
+    if (!id && item.clienteTelefone) {
+      id = phoneToId.get(normalizePhone(item.clienteTelefone)) || '';
+      if (!id) { const digits = onlyDigits(item.clienteTelefone); if (digits.length >= 8) id = tail8.get(digits.slice(-8)) || ''; }
+    }
+    const entry = id && metrics.get(id); if (!entry) continue;
+    entry.receita += Number(item.valor || 0);
+    const day = String(item.dataAgenda || '').slice(0, 10);
+    if (!day) continue;
+    let seen = days.get(id); if (!seen) { seen = new Set(); days.set(id, seen); }
+    if (!seen.has(day)) { seen.add(day); entry.visitas += 1; entry.tickets += 1; }
+    touch(entry, `${day}T${/^\d{2}:\d{2}$/.test(String(item.hora || '')) ? item.hora : '12:00'}:00`);
+  }
 }
 
 /** Agregados da loja por customer_id (pedidos, carrinhos abertos, saldo do crediário). */
@@ -705,7 +738,7 @@ const SORTS = {
   sumidos: (a, b) => (b.metricas.diasSemAtividade ?? -1) - (a.metricas.diasSemAtividade ?? -1),
   saldo: (a, b) => b.metricas.aReceber - a.metricas.aReceber,
   visitas: (a, b) => b.metricas.visitas - a.metricas.visitas,
-  nome: (a, b) => a.nome.localeCompare(b.nome, 'pt-BR'),
+  nome: (a, b) => COLLATOR_PT_BR.compare(a.nome, b.nome),
 };
 
 export function summarizePortfolio(rows = []) {
@@ -737,7 +770,7 @@ export function queryPortfolio(rows = [], { q = '', segmento = '', fonte = '', s
   const size = Math.max(5, Math.min(100, Number(tamanho) || 25));
   const pages = Math.max(1, Math.ceil(filtered.length / size));
   const page = Math.max(1, Math.min(pages, Number(pagina) || 1));
-  const sorted = filtered.slice().sort((a, b) => (SORTS[ordem] || SORTS.valor)(a, b) || a.nome.localeCompare(b.nome, 'pt-BR'));
+  const sorted = filtered.slice().sort((a, b) => (SORTS[ordem] || SORTS.valor)(a, b) || COLLATOR_PT_BR.compare(a.nome, b.nome));
   return { total: filtered.length, pagina: page, paginas: pages, tamanho: size, items: sorted.slice((page - 1) * size, page * size).map(publicDirectoryItem) };
 }
 

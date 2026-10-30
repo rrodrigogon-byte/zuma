@@ -69,7 +69,8 @@ export function createRazaoAdminRouter({ db, escopoDaRequisicao, fonteJson = nul
   };
 
   // Quem só tem acesso a uma unidade não vê as contagens das fontes da empresa toda.
-  router.get('/estado', rota('payments.read', async ({ empresaId, lojaRestrita }) => ({ ativo: ativo() === true, hoje: svc.hojeNoFuso(new Date(), fuso), lojaRestrita, fontes: lojaRestrita ? [] : await fontes.saudeDasFontes(db, empresaId) })));
+  // Com o Financeiro novo desligado, nenhuma tela usa a saúde das fontes: não consulta o banco.
+  router.get('/estado', rota('payments.read', async ({ empresaId, lojaRestrita }) => ({ ativo: ativo() === true, hoje: svc.hojeNoFuso(new Date(), fuso), lojaRestrita, fontes: lojaRestrita || ativo() !== true ? [] : await fontes.saudeDasFontes(db, empresaId) })));
 
   router.post('/sincronizar', rota('payments.write', async ({ empresaId, lojaRestrita }) => {
     const resultado = await lerFontes(empresaId, { forcar: true });
