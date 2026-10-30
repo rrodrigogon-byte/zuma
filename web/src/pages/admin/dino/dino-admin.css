@@ -526,3 +526,10 @@
 .wa-trex-card__meta { margin: 0; font-size: 12px; color: var(--muted); }
 .wa-trex-card__acoes { margin-top: auto; padding-top: 8px; display: flex; gap: 8px; flex-wrap: wrap; }
 .wa-trex-card__acoes .c360-btn { flex: 1 1 130px; min-height: 40px; }
+/* Botões do quadro: a tela avulsa não carrega o CSS do Cliente 360. */
+.wa-human-queue .c360-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 38px; padding: 8px 14px; border-radius: 10px; border: 1px solid var(--line, #d0d5dd); background: var(--card, #fff); color: var(--fg, #12283f); font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; transition: background .15s ease, border-color .15s ease; }
+.wa-human-queue .c360-btn:hover:not(:disabled) { border-color: var(--accent, #4a56a6); }
+.wa-human-queue .c360-btn.primary { background: var(--accent, #4a56a6); border-color: var(--accent, #4a56a6); color: #fff; }
+.wa-human-queue .c360-btn.primary:hover:not(:disabled) { filter: brightness(1.08); }
+.wa-human-queue .c360-btn:disabled { opacity: .5; cursor: not-allowed; }
+.wa-trex-card--alerta .c360-btn.primary { background: #d93025; border-color: #d93025; }
