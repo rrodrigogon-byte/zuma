@@ -12,6 +12,8 @@ import {
 const INSTANCE_RE = /^[a-z0-9][a-z0-9_-]{1,63}$/;
 const DEFAULT_HOSTS = ['setpoint.kytto.com.br', 'dino.kytto.com.br'];
 const MAX_STICKER_B64 = 700_000; // ~512 KB; as figurinhas do T-Rex têm < 30 KB
+// Até ~2 MB de áudio (respostas curtas de voz).
+const MAX_AUDIO_B64 = 2_800_000;
 const MAX_PICTURE_B64 = 3_000_000; // ~2,2 MB
 
 export interface MediaPayload { base64?: string; url?: string; mimetype?: string }
@@ -130,6 +132,36 @@ export class WhatsappExtrasService {
     }
     if (isBaileys(client)) {
       const sent = await client.sendMessage(`${number}@s.whatsapp.net`, { sticker: buffer });
+      return { success: true, messageId: sent?.key?.id ?? null };
+    }
+    return fail(HttpStatus.NOT_IMPLEMENTED, 'cliente de WhatsApp não reconhecido');
+  }
+
+  // ---------- POST /send-audio ----------
+
+  /** Voz do T-Rex: OGG/Opus (Google Text-to-Speech) enviado como áudio gravado (PTT). */
+  async sendAudio(body: { instanceName?: string; chat_id?: string; audio?: MediaPayload }) {
+    const number = normalizeNumber(body?.chat_id);
+    if (!number) fail(HttpStatus.BAD_REQUEST, 'chat_id inválido');
+    const b64 = cleanBase64(body?.audio?.base64 || '');
+    if (!b64) fail(HttpStatus.BAD_REQUEST, 'áudio vazio');
+    if (b64.length > MAX_AUDIO_B64) fail(HttpStatus.PAYLOAD_TOO_LARGE, 'áudio acima do limite');
+    if (!isBase64(b64)) fail(HttpStatus.BAD_REQUEST, 'base64 inválido');
+    const buffer = Buffer.from(b64, 'base64');
+    // OGG começa com "OggS"; MP3 com "ID3" ou 0xFFEx. Só esses dois formatos.
+    const ogg = buffer.subarray(0, 4).toString('latin1') === 'OggS';
+    const mp3 = buffer.subarray(0, 3).toString('latin1') === 'ID3' || (buffer[0] === 0xff && (buffer[1] & 0xe0) === 0xe0);
+    if (!ogg && !mp3) fail(HttpStatus.UNSUPPORTED_MEDIA_TYPE, 'áudio precisa ser OGG/Opus ou MP3');
+    const mimetype = ogg ? 'audio/ogg; codecs=opus' : 'audio/mpeg';
+    const client = await this.client(body?.instanceName);
+
+    if (isWwebjs(client)) {
+      const media = this.messageMedia(mimetype, b64, ogg ? 'resposta.ogg' : 'resposta.mp3');
+      const sent: any = await client.sendMessage(`${number}@c.us`, media, { sendAudioAsVoice: true });
+      return { success: true, messageId: sent?.id?._serialized ?? sent?.id?.id ?? null };
+    }
+    if (isBaileys(client)) {
+      const sent = await client.sendMessage(`${number}@s.whatsapp.net`, { audio: buffer, mimetype, ptt: ogg });
       return { success: true, messageId: sent?.key?.id ?? null };
     }
     return fail(HttpStatus.NOT_IMPLEMENTED, 'cliente de WhatsApp não reconhecido');

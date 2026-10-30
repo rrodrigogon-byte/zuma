@@ -4,7 +4,7 @@
  * Suporte a: Oficina, Barbearia, Crediário, Agendamentos, Cobranças, Alertas
  */
 import fetch from 'node-fetch';
-import { chatbotBackendConfig, chatbotBackendMode, instanceRegistry, isRegisteredInstance, sendStickerViaChatbotBackend, sendTextViaChatbotBackend, whatsappProviderName } from './whatsapp-provider.js';
+import { chatbotBackendConfig, chatbotBackendMode, instanceRegistry, isRegisteredInstance, sendAudioViaChatbotBackend, sendStickerViaChatbotBackend, sendTextViaChatbotBackend, whatsappProviderName } from './whatsapp-provider.js';
 import { db } from './database.js';
 import { authorizeWhatsappEgress, evaluateWhatsappEgress } from './whatsapp-egress.js';
 import { sendWahaText, validWahaGroupId, validWahaSession } from './whatsapp-waha.js';
@@ -28,42 +28,43 @@ function formatarTelefone(tel) {
   return digits;
 }
 
-export async function enviarAudio(tenant, telefone, base64Audio) {
+/**
+ * Resposta em voz (áudio gravado). Backend próprio: rota CHATBOT_BACKEND_AUDIO_PATH, com a
+ * MESMA trava de saída do texto. Evolution: /message/sendWhatsAppAudio da instância do tenant.
+ */
+export async function enviarAudio(tenant, telefone, base64Audio, mimetype = 'audio/ogg; codecs=opus') {
   const numero = formatarTelefone(String(telefone || ''));
+  const base64 = String(base64Audio || '');
   if (whatsappProviderName() === 'chatbot_backend') {
-     // Evolution Backend (not natively supported by standard wrapper without extension)
-     // Evolution API uses /message/sendWhatsAppAudio
-     const cfg = getConfig(tenant);
-     const evoUrl = process.env.EVOLUTION_API_URL || cfg.baseUrl;
-     const evoKey = process.env.EVOLUTION_API_KEY || cfg.apiKey;
-     const evoInstance = process.env.EVOLUTION_INSTANCE || cfg.instance;
-     const body = {
-       number: numero,
-       audio: base64Audio,
-       delay: 1200
-     };
-     const res = await fetch(`${evoUrl.replace(/\/$/, '')}/message/sendWhatsAppAudio/${encodeURIComponent(evoInstance)}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        apikey: evoKey,
-      },
-      body: JSON.stringify(body),
-    });
-    return { ok: res.ok, status: res.status };
-  } else {
-    // Evolution standard
-    const cfg = getConfig(tenant);
-    const body = { number: numero, audio: base64Audio, delay: 1200 };
+    const instance = tenant?.whatsapp_instance || tenant?.instance || undefined;
+    if (chatbotBackendMode() !== 'instancias') return sendAudioViaChatbotBackend({ instance, number: numero, base64, mimetype });
+    const context = { empresaId: tenant?.empresa_id, lojaId: tenant?.loja_id, canalId: tenant?.canal_id, instance, number: numero };
+    const preliminary = evaluateWhatsappEgress(context);
+    if (!preliminary.ok) return { ok: false, retryable: false, uncertain: false, error: `WHATSAPP_EGRESS_${preliminary.reason.toUpperCase()}` };
+    try {
+      return await db.transaction(async trx => {
+        const decision = await authorizeWhatsappEgress(context, { database: { queryRead: trx.query }, lock: true });
+        if (!decision.ok) return { ok: false, retryable: false, uncertain: false, error: `WHATSAPP_EGRESS_${decision.reason.toUpperCase()}` };
+        return sendAudioViaChatbotBackend({ instance, number: numero, base64, mimetype });
+      });
+    } catch {
+      return { ok: false, retryable: false, uncertain: true, error: 'WHATSAPP_AUDIO_UNCERTAIN' };
+    }
+  }
+  if (!(tenant?.whatsapp_api_url && tenant?.whatsapp_api_key && tenant?.whatsapp_instance)) {
+    return { ok: false, retryable: false, uncertain: false, error: 'WHATSAPP_AUDIO_UNSUPPORTED' };
+  }
+  const cfg = getConfig(tenant);
+  try {
     const res = await fetch(`${cfg.baseUrl.replace(/\/$/, '')}/message/sendWhatsAppAudio/${encodeURIComponent(cfg.instance)}`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        apikey: cfg.apiKey,
-      },
-      body: JSON.stringify(body),
+      headers: { 'Content-Type': 'application/json', apikey: cfg.apiKey },
+      body: JSON.stringify({ number: numero, audio: base64, delay: 1200 }),
+      signal: AbortSignal.timeout(30000),
     });
-    return { ok: res.ok, status: res.status };
+    return { ok: res.ok, status: res.status, retryable: false, uncertain: res.status >= 500 };
+  } catch (err) {
+    return { ok: false, status: null, retryable: false, uncertain: true, error: String(err?.name || 'NETWORK_ERROR').slice(0, 80) };
   }
 }
 

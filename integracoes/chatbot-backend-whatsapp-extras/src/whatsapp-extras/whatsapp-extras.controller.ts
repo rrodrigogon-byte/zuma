@@ -20,6 +20,16 @@ export class WhatsappExtrasController {
     return this.service.sendSticker(body);
   }
 
+  /**
+   * Resposta do T-Rex em voz (mensagem de áudio "gravada", PTT).
+   * Corpo: { instanceName, chat_id, audio: { base64, mimetype: 'audio/ogg; codecs=opus' } }
+   */
+  @Post('send-audio')
+  @HttpCode(200)
+  sendAudio(@Body() body: { instanceName?: string; chat_id?: string; audio?: MediaPayload }) {
+    return this.service.sendAudio(body);
+  }
+
   /** Áudio/foto recebidos do cliente. Resposta: { base64, mimetype } — nada é gravado nem logado. */
   @Get('messages/:id/media')
   @Header('Cache-Control', 'no-store')

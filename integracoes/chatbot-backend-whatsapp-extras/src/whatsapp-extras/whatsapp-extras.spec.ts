@@ -124,6 +124,45 @@ describe('POST /send-sticker', () => {
   });
 });
 
+const OGG = Buffer.concat([Buffer.from('OggS'), Buffer.alloc(60, 4)]);
+
+describe('POST /send-audio', () => {
+  test('whatsapp-web.js: envia OGG como áudio gravado (sendAudioAsVoice)', async () => {
+    const client = wwebjsClient();
+    const { app: a } = await app(client);
+    const res = await request(a.getHttpServer()).post('/api/v1/whats-app/send-audio').set(auth)
+      .send({ instanceName: 'dino', chat_id: '5565999990001', audio: { base64: OGG.toString('base64'), mimetype: 'audio/ogg; codecs=opus' } }).expect(200);
+    expect(res.body.success).toBe(true);
+    const [chatId, media, opts] = client.sendMessage.mock.calls[0] as any[];
+    expect(chatId).toBe('5565999990001@c.us');
+    expect(media).toBeInstanceOf(FakeMessageMedia);
+    expect((media as FakeMessageMedia).mimetype).toBe('audio/ogg; codecs=opus');
+    expect(opts).toMatchObject({ sendAudioAsVoice: true });
+    await a.close();
+  });
+
+  test('Baileys: envia { audio, mimetype, ptt: true } para @s.whatsapp.net', async () => {
+    const sock = baileysSocket();
+    const { app: a } = await app(sock);
+    await request(a.getHttpServer()).post('/api/v1/whats-app/send-audio').set(auth)
+      .send({ instanceName: 'dino', chat_id: '65999990001', audio: { base64: OGG.toString('base64') } }).expect(200);
+    const [jid, content] = sock.sendMessage.mock.calls[0] as any[];
+    expect(jid).toBe('5565999990001@s.whatsapp.net');
+    expect(Buffer.isBuffer(content.audio)).toBe(true);
+    expect(content).toMatchObject({ mimetype: 'audio/ogg; codecs=opus', ptt: true });
+    await a.close();
+  });
+
+  test('recusas: formato estranho 415, vazio 400, sem chave 401', async () => {
+    const { app: a } = await app(wwebjsClient());
+    const s = a.getHttpServer();
+    await request(s).post('/api/v1/whats-app/send-audio').set(auth).send({ instanceName: 'dino', chat_id: '5565999990001', audio: { base64: PNG.toString('base64') } }).expect(415);
+    await request(s).post('/api/v1/whats-app/send-audio').set(auth).send({ instanceName: 'dino', chat_id: '5565999990001', audio: {} }).expect(400);
+    await request(s).post('/api/v1/whats-app/send-audio').send({ instanceName: 'dino', chat_id: '5565999990001', audio: { base64: OGG.toString('base64') } }).expect(401);
+    await a.close();
+  });
+});
+
 describe('GET /messages/:id/media', () => {
   test('whatsapp-web.js: devolve base64 + mimetype, sem cache', async () => {
     const { app: a } = await app(wwebjsClient());

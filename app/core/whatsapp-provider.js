@@ -560,6 +560,31 @@ export async function sendStickerViaChatbotBackend({ instance, number, url = '',
   return { ok: aceito, status: result.status, unsupported: result.status === 404 || result.status === 405, retryable: false, uncertain: result.status === null || result.status >= 500, error: aceito ? undefined : (result.error || result.data?.error || `HTTP_${result.status}`) };
 }
 
+/**
+ * Resposta em voz (áudio gravado/PTT) pelo backend: rota ligada por ambiente,
+ * CHATBOT_BACKEND_AUDIO_PATH=/send-audio (ver integracoes/chatbot-backend-whatsapp-extras).
+ * Sem a variável nada é enviado e o T-Rex responde em texto.
+ */
+export function chatbotBackendAudioPath(env = process.env) {
+  const value = clean(env.CHATBOT_BACKEND_AUDIO_PATH || '', 120);
+  return /^\/[a-z0-9/_{}.-]+$/i.test(value) ? value : '';
+}
+
+export async function sendAudioViaChatbotBackend({ instance, number, base64 = '', mimetype = 'audio/ogg; codecs=opus' } = {}, fetchImpl) {
+  const cfg = chatbotBackendConfig();
+  const audioPath = chatbotBackendAudioPath();
+  if (!audioPath) return { ok: false, unsupported: true, status: null, retryable: false, uncertain: false, error: 'AUDIO_ROUTE_NOT_CONFIGURED' };
+  if (!cfg.baseUrl || cfg.key.length < 20) return { ok: false, status: null, retryable: false, uncertain: false, error: 'CHATBOT_BACKEND_NOT_CONFIGURED' };
+  const instanceName = chatbotBackendMode() === 'instancias' ? validInstance(instance || '') : '';
+  if (chatbotBackendMode() === 'instancias' && !instanciaPermitida(instanceName, cfg)) return { ok: false, status: null, retryable: false, uncertain: false, error: 'INSTANCE_SCOPE_MISMATCH' };
+  const chatId = isaChatId(number);
+  if (!chatId) return { ok: false, status: null, retryable: false, uncertain: false, error: 'INVALID_CHAT_ID' };
+  if (!base64 || base64.length > 2_800_000) return { ok: false, retryable: false, uncertain: false, error: 'AUDIO_INVALID' };
+  const result = await call(cfg, 'POST', audioPath.replace('{instance}', encodeURIComponent(instanceName || cfg.instance)), { ...(instanceName ? { instanceName } : {}), chat_id: chatId, audio: { base64, mimetype } }, fetchImpl);
+  const aceito = result.ok && result.data?.success !== false && result.data?.accepted !== false;
+  return { ok: aceito, status: result.status, unsupported: result.status === 404 || result.status === 405, retryable: false, uncertain: result.status === null || result.status >= 500, error: aceito ? undefined : (result.error || result.data?.error || `HTTP_${result.status}`) };
+}
+
 /** Tenta registrar o webhook de entrada no backend (se a rota existir). */
 export async function registerInstanceWebhook({ instance, url, headers = {} }, fetchImpl) {
   // Como na Isa, o backend não chama webhook de mensagens: a entrada é por consulta.

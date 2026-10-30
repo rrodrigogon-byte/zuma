@@ -19,10 +19,10 @@ import {
 import { ferramentasExtrasWhatsappAi, notificarMensagemWhatsappAi } from './whatsapp-ai-extensoes.js';
 import { ensureWhatsappLead, updateWhatsappMarketingConsent } from './whatsapp-ai-crm.js';
 import { enviarAudio, enviarFigurinha, enviarMensagem } from './whatsapp.js';
-import { generateSpeech } from './whatsapp-ai-tts.js';
+import { generateSpeechWithType } from './whatsapp-ai-tts.js';
 import { enviarFigurinhaDoMomento } from './whatsapp-stickers.js';
 import { encontrarClientePorTelefone } from '../dino-clientes-vinculo.js';
-import { chatbotBackendConfig, chatbotBackendMode, providerSummary, registerInstanceWebhook, whatsappProviderConfigured, whatsappProviderName } from './whatsapp-provider.js';
+import { chatbotBackendAudioPath, chatbotBackendConfig, chatbotBackendMode, providerSummary, registerInstanceWebhook, whatsappProviderConfigured, whatsappProviderName } from './whatsapp-provider.js';
 import { provisionWahaSession, validWahaGroupId, validWahaSession, wahaControlConfigured, wahaProviderSummary } from './whatsapp-waha.js';
 import {
   applyWhatsappPersonalizationConsent,
@@ -354,8 +354,12 @@ async function existingOutput(task, message) {
   return result.rows[0] || null;
 }
 
+// Voz só quando há quem gere (Google TTS ou ElevenLabs) e por onde enviar (rota de áudio do
+// backend próprio ou Evolution da instância). Sem os dois, o T-Rex responde em texto.
 function ttsConfigurado() {
-  return Boolean(process.env.ELEVENLABS_API_KEY || process.env.GOOGLE_TTS_API_KEY);
+  const gera = Boolean(process.env.GOOGLE_TTS_API_KEY || process.env.ELEVENLABS_API_KEY || process.env.OPENAI_API_KEY);
+  const envia = whatsappProviderName() === 'chatbot_backend' ? Boolean(chatbotBackendAudioPath()) : true;
+  return gera && envia;
 }
 
 // Responde em áudio quando o cliente falou por áudio ou pediu explicitamente uma resposta em áudio.
@@ -491,8 +495,8 @@ async function sendOutput(channel, session, output) {
   // Qualquer falha cai no texto normal abaixo.
   if (sent === 0 && claimed.metadados?.isAudio === true && ttsConfigurado()) {
     try {
-      const audio = await generateSpeech(claimed.conteudo);
-      const enviado = await enviarAudio(tenant, session.telefone, audio);
+      const audio = await generateSpeechWithType(claimed.conteudo);
+      const enviado = await enviarAudio(tenant, session.telefone, audio.base64, audio.mimetype);
       if (enviado?.ok) {
         await markOutputDelivered(session, claimed, enviado);
         return enviado;
