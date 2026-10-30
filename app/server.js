@@ -1436,7 +1436,7 @@ app.get('/api/public/simula-trex', async (req, res) => {
     
     // Pegar o agendador de lembretes
     const { db } = await import('./core/database.js');
-    const logs = await db.queryRead("SELECT * FROM whatsapp_ai_tasks LIMIT 1");
+    const logs = null;
     
     res.json({
       ok: true,
