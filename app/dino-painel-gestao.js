@@ -429,7 +429,7 @@ export function buildPainelGestao(root, { empresaId, lojaId, data, agoraMs = Dat
       .map((item) => ({ item, inicio: inicioDoAgendamento(item) }))
       .filter(({ inicio }) => Number.isFinite(inicio) && minutoAgora - inicio > TOLERANCIA_ATRASO_MIN)
       .map(({ item, inicio }) => ({ agendamentoId: texto(item.id), horario: horaTexto(inicio), minutos: Math.round(minutoAgora - inicio), cliente: texto(item.clienteNome) })) : [];
-    const proximos = pendentesProprios.filter((item) => { const inicio = inicioDoAgendamento(item); return !ehHoje || !Number.isFinite(inicio) || inicio >= minutoAgora - TOLERANCIA_ATRASO_MIN || item.status === 'em_atendimento'; });
+    const proximos = dia < hoje ? [] : pendentesProprios.filter((item) => { const inicio = inicioDoAgendamento(item); return !ehHoje || !Number.isFinite(inicio) || inicio >= minutoAgora - TOLERANCIA_ATRASO_MIN || item.status === 'em_atendimento'; });
     const cancelamentos = agendaPropria.filter((item) => item.status === 'cancelado').map((item) => ({ agendamentoId: texto(item.id), horario: horaTexto(inicioDoAgendamento(item)), cliente: texto(item.clienteNome) }));
     const faltas = agendaPropria.filter((item) => item.status === 'nao_compareceu').map((item) => ({ agendamentoId: texto(item.id), horario: horaTexto(inicioDoAgendamento(item)), cliente: texto(item.clienteNome) }));
     const livre = futuro || ehHoje ? proximoHorarioLivre(profissional, agendamentos, calendario, futuro ? calendario.abertura : minutoReferencia) : { primeiro: null, livresMinutos: 0 };
