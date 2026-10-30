@@ -14,7 +14,7 @@ router.get('/rename-prof', (req, res) => {
       }
     }
     save();
-    res.json({ success: true, count });
+    res.json({ success: true, count, names: Object.values(estado.profissionais).map(p => p.nome) });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: error.message, stack: error.stack });
