@@ -444,6 +444,14 @@ async function toolAvailability(context, args = {}) {
   };
 }
 
+// Horário extra do Dino (após 18h09 até 6h): só nesses o T-Rex fala em "atendimento
+// exclusivo". Em 30/10 ele chamou 6h de "horário extra" porque o combo custa R$ 600.
+export function horarioExtraDoDino(service = {}, professional = {}, time = '') {
+  const prof = professional && professional.id !== 'qualquer' ? professional : null;
+  const doDino = (prof && barbeariaErp.ehProfissionalDino(prof)) || /\bdino\b/i.test(String(service?.nome || ''));
+  return Boolean(doDino && barbeariaErp.ehHorarioExtraDino(time));
+}
+
 // Preço do serviço no horário escolhido. Para o Dino vale a tabela por horário do ERP
 // (R$ 300 até 18h09, R$ 600 depois); para os demais, o preço do cadastro.
 export function precoNoHorario(service = {}, professional = {}, time = '') {
@@ -642,12 +650,15 @@ async function toolNextSlots(context, args = {}) {
       const servico = (servicos || []).find((item) => item.id === serviceId) || {};
       const profs = professionalId === 'qualquer' ? [] : await listSchedulingProfessionals(scope).catch(() => []);
       const prof = (profs || []).find((item) => item.id === professionalId) || null;
-      return result.slots.map((slot) => ({ ...slot, quando: friendlyWhen(slot.date, slot.time), valor: brl(precoNoHorario(servico, prof || (slot.professional ? { nome: slot.professional } : null), slot.time)) }));
+      return result.slots.map((slot) => {
+        const profSlot = prof || (slot.professional ? { nome: slot.professional } : null);
+        return { ...slot, quando: friendlyWhen(slot.date, slot.time), valor: brl(precoNoHorario(servico, profSlot, slot.time)), horarioExtra: horarioExtraDoDino(servico, profSlot, slot.time) };
+      });
     })()),
     periodo: result.period,
     diasConsultados: result.searchedDays,
     instrucao: result.slots.length
-      ? 'Ofereça exatamente 3 opções concretas (dia da semana + data + hora + valor) numa mensagem só. Depois que o cliente escolher, use preparar_agendamento.'
+      ? 'Ofereça exatamente 3 opções concretas (dia da semana + data + hora + valor) numa mensagem só. Fale em "horário extra"/"atendimento exclusivo noturno" só para opções com horarioExtra=true. Depois que o cliente escolher, use preparar_agendamento.'
       : 'Não há vaga no período. Ofereça ampliar o período/outro profissional ou entrar na lista de espera (entrar_lista_espera) para ser avisado se abrir horário.',
   };
 }
@@ -1494,13 +1505,37 @@ async function toolPreparePromotion(context, args = {}) {
   }, `${promotion.nome}: ${value}${code ? ` · cupom ${code}` : ''}. Envio pelo WhatsApp após confirmação.`);
 }
 
+// O cliente (e o modelo) usa o "Código" da confirmação (ex.: 5D0FDE32), não o id interno
+// (age-...). Em 30/10 "pode cancelar esse corte de amanhã" voltou "não encontrei" logo depois
+// de marcar. Aceita id, código ou, se o contato tem um único horário futuro, esse horário.
+export function findOwnAppointment(appointments = [], ref = '') {
+  const lista = (appointments || []).filter((item) => !['cancelado', 'concluido', 'nao_compareceu'].includes(String(item?.status)));
+  const alvo = String(ref || '').trim();
+  if (alvo) {
+    const norm = alvo.replace(/^#/, '').toLowerCase();
+    const achado = lista.find((item) => item.id === alvo)
+      || lista.find((item) => String(item.codigo || '').toLowerCase() === norm)
+      || lista.find((item) => String(item.id || '').toLowerCase().endsWith(norm) && norm.length >= 4);
+    if (achado) return achado;
+  }
+  return lista.length === 1 ? lista[0] : null;
+}
+
+function appointmentNotFound(appointments = []) {
+  const futuros = (appointments || []).filter((item) => !['cancelado', 'concluido', 'nao_compareceu'].includes(String(item?.status)));
+  if (futuros.length > 1) {
+    return new WhatsappAiToolError(`o contato tem ${futuros.length} agendamentos: use consultar_meus_agendamentos e pergunte qual (dia, hora e serviço); depois chame de novo com o id`, 'APPOINTMENT_AMBIGUOUS');
+  }
+  return new WhatsappAiToolError('agendamento não encontrado para este contato', 'APPOINTMENT_NOT_FOUND');
+}
+
 async function toolPrepareReschedule(context, args = {}) {
   const scope = contextScope(context);
-  const appointmentId = cleanText(args.appointmentId, 80);
   const date = normalizeAgendaDate(args.date, localDateIso()) || cleanText(args.date, 10);
   const appointments = await listWhatsappCustomerAppointments(scope, { includePast: false, limit: 20 });
-  const appointment = appointments.find(item => item.id === appointmentId);
-  if (!appointment) throw new WhatsappAiToolError('agendamento não encontrado para este contato', 'APPOINTMENT_NOT_FOUND');
+  const appointment = findOwnAppointment(appointments, cleanText(args.appointmentId, 80));
+  if (!appointment) throw appointmentNotFound(appointments);
+  const appointmentId = appointment.id;
   const availability = await listSchedulingAvailability(scope, { serviceId: appointment.servico.id, professionalId: appointment.profissional.id, date });
   const time = matchAgendaSlot(args.time, availability.slots);
   if (!time) {
@@ -1514,10 +1549,10 @@ async function toolPrepareReschedule(context, args = {}) {
 
 async function toolPrepareCancellation(context, args = {}) {
   const scope = contextScope(context);
-  const appointmentId = cleanText(args.appointmentId, 80);
   const appointments = await listWhatsappCustomerAppointments(scope, { includePast: false, limit: 20 });
-  const appointment = appointments.find(item => item.id === appointmentId);
-  if (!appointment) throw new WhatsappAiToolError('agendamento não encontrado para este contato', 'APPOINTMENT_NOT_FOUND');
+  const appointment = findOwnAppointment(appointments, cleanText(args.appointmentId, 80));
+  if (!appointment) throw appointmentNotFound(appointments);
+  const appointmentId = appointment.id;
   return savePreparedAction(scope, 'cancelamento', { appointmentId }, `Cancelamento de ${appointment.servico.nome} com ${appointment.profissional.nome}, ${appointment.dataAgenda && appointment.horaLocal ? friendlyWhen(appointment.dataAgenda, appointment.horaLocal) : new Intl.DateTimeFormat('pt-BR', { timeZone: AGENDA_TZ, dateStyle: 'short', timeStyle: 'short' }).format(new Date(appointment.dataHora))}.`);
 }
 
@@ -2036,9 +2071,9 @@ async function toolDinoVipAgenda(context, args = {}) {
     servico: servicoDino.nome,
     data: date,
     periodo,
-    horariosDisponiveis: slots.slice(0, 8).map((time) => ({ quando: friendlyWhen(date, time), time, valor: brl(precoNoHorario(servicoDino, dino, time)) })),
+    horariosDisponiveis: slots.slice(0, 8).map((time) => ({ quando: friendlyWhen(date, time), time, valor: brl(precoNoHorario(servicoDino, dino, time)), horarioExtra: barbeariaErp.ehHorarioExtraDino(time) })),
     regraDeValor: 'Com o Dino: R$ 300,00 das 06h00 às 18h09; depois das 18h09, atendimento exclusivo por R$ 600,00. Os horários vêm da agenda real.',
-    instrucao: 'Ofereça até 3 horários com o valor de cada um. Se o cliente pediu um horário que não está na lista, diga que não está livre e ofereça os 3 mais próximos.',
+    instrucao: 'Ofereça até 3 horários com o valor de cada um. Fale em "horário extra"/"atendimento exclusivo noturno" só para opções com horarioExtra=true; no horário comercial diga apenas o valor. Se o cliente pediu um horário que não está na lista, diga que não está livre e ofereça os 3 mais próximos.',
   };
 }
 
@@ -2099,7 +2134,7 @@ export const WHATSAPP_AI_TOOL_DECLARATIONS = [
   { name: 'preparar_promocao_cliente', description: 'Prepara o envio de uma promoção ao cliente com opt-in. O envio só ocorre após CONFIRMAR.', parameters: { type: 'OBJECT', properties: { promotionId: { type: 'STRING' }, code: { type: 'STRING' }, message: { type: 'STRING' } }, required: ['promotionId', 'message'] } },
   { name: 'preparar_agendamento', description: 'Prepara um agendamento para confirmação. Não grava o agendamento. Use o id retornado por listar_profissionais; na agenda da barbearia também é aceito "qualquer" quando o cliente não tem preferência. Vários serviços na mesma ida: passe os demais em extraServiceIds e eles são encaixados em sequência. Para outra pessoa (filho, amigo), use o nome DELA em customerName. customerName é o nome real (nunca "Cliente"): se não souber, pergunte antes.', parameters: { type: 'OBJECT', properties: { confirmarOutroHorario: { type: 'BOOLEAN', description: 'true só depois que o cliente disse que quer mais um horário no mesmo dia' }, serviceId: { type: 'STRING' }, professionalId: { type: 'STRING' }, date: { type: 'STRING' }, time: { type: 'STRING' }, customerName: { type: 'STRING', description: 'Nome real da pessoa atendida' }, notes: { type: 'STRING' }, usePlan: { type: 'BOOLEAN', description: 'Somente quando o cliente pedir usar seu pacote. Exige saldo e validade, um procedimento por confirmação.' }, extraServiceIds: { type: 'ARRAY', items: { type: 'STRING' }, description: 'até 3 serviços seguidos na mesma visita' } }, required: ['serviceId', 'professionalId', 'date', 'time', 'customerName'] } },
   { name: 'preparar_remarcacao', description: 'Prepara a remarcação de um agendamento do cliente para confirmação.', parameters: { type: 'OBJECT', properties: { appointmentId: { type: 'STRING' }, date: { type: 'STRING' }, time: { type: 'STRING' } }, required: ['appointmentId', 'date', 'time'] } },
-  { name: 'preparar_cancelamento', description: 'Prepara o cancelamento de um agendamento do cliente para confirmação.', parameters: { type: 'OBJECT', properties: { appointmentId: { type: 'STRING' } }, required: ['appointmentId'] } },
+  { name: 'preparar_cancelamento', description: 'Prepara o cancelamento de um agendamento do cliente para confirmação. Aceita o id (consultar_meus_agendamentos) ou o código da confirmação; se o contato tiver um só horário futuro, pode mandar vazio.', parameters: { type: 'OBJECT', properties: { appointmentId: { type: 'STRING', description: 'id, código da confirmação (ex.: 5D0FDE32) ou vazio' } } } },
 
   { name: 'enviar_comprovante_pix', description: 'Envia o comprovante PIX do cliente para notificar o Dino do pagamento do pedido. Só use quando o cliente enviar o comprovante PIX na conversa após você ter gerado o pedido.', parameters: { type: 'OBJECT', properties: { orderCode: { type: 'STRING', description: 'Código do pedido que o cliente acabou de pagar' } }, required: ['orderCode'] } },
   { name: 'preparar_despesa', description: 'Prepara um lançamento de despesa PENDENTE a partir da nota ou recibo extraído da imagem desta conversa. Só use quando houver valor, data e confiança suficientes. Não paga, não confirma pagamento e exige SIM do responsável.', parameters: { type: 'OBJECT', properties: {} } },

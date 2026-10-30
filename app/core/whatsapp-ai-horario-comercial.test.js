@@ -34,3 +34,25 @@ test('uma frase com a lista de horários não é partida em duas bolhas', () => 
   assert.ok(bolhas.every((b) => !/disponíveis,$/.test(b)), JSON.stringify(bolhas));
   assert.ok(bolhas.some((b) => b.includes('às 9h, terça 03/11 às 9h15 ou terça 03/11 às 9h30')));
 });
+
+test('horário extra do Dino só depois das 18h09 ou antes das 6h, mesmo quando o combo custa R$ 600', async () => {
+  const { horarioExtraDoDino } = await import('./whatsapp-ai-tools.js');
+  const combo = { nome: 'Corte e barba com Dino', preco: 600 };
+  assert.equal(horarioExtraDoDino(combo, null, '06:00'), false);
+  assert.equal(horarioExtraDoDino(combo, null, '18:15'), true);
+  assert.equal(horarioExtraDoDino(combo, null, '05:45'), true);
+  assert.equal(horarioExtraDoDino({ nome: 'Corte', preco: 45 }, { nome: 'Bruno' }, '19:00'), false);
+});
+
+test('cancelar/remarcar acha o agendamento pelo código da confirmação ou pelo único horário futuro', async () => {
+  const { findOwnAppointment } = await import('./whatsapp-ai-tools.js');
+  const ag = [{ id: 'age-mvvi7z17-1801', codigo: '5D0FDE32', status: 'agendado' }];
+  assert.equal(findOwnAppointment(ag, '5D0FDE32')?.id, 'age-mvvi7z17-1801');
+  assert.equal(findOwnAppointment(ag, '5d0fde32')?.id, 'age-mvvi7z17-1801');
+  assert.equal(findOwnAppointment(ag, 'age-mvvi7z17-1801')?.id, 'age-mvvi7z17-1801');
+  assert.equal(findOwnAppointment(ag, '')?.id, 'age-mvvi7z17-1801', 'único horário futuro');
+  const dois = [...ag, { id: 'age-x', codigo: 'AAAA1111', status: 'agendado' }];
+  assert.equal(findOwnAppointment(dois, ''), null, 'com dois horários pergunta qual');
+  assert.equal(findOwnAppointment(dois, 'AAAA1111')?.id, 'age-x');
+  assert.equal(findOwnAppointment([{ id: 'c', codigo: 'X1', status: 'cancelado' }], 'X1'), null);
+});

@@ -546,6 +546,8 @@ export async function listCustomerAppointments(scope, { includePast = false, lim
     .slice(0, Math.min(20, Math.max(1, Number(limit) || 8)))
     .map((item) => ({
       id: item.id,
+      // Código mostrado na confirmação ("Código 5D0FDE32"): o cliente cancela por ele.
+      codigo: item.codigoConfirmacao || null,
       dataHora: item.dataHora,
       dataAgenda: item.dataAgenda,
       horaLocal: item.horaLocal,
