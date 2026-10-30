@@ -8,6 +8,7 @@ export const MOTIVOS_EQUIPE = {
   whatsapp_delivery_unknown: 'entrega incerta',
   whatsapp_delivery_skipped: 'mensagem não enviada',
   gemini_circuit_open: 'IA indisponível',
+  equipe_assumiu: 'atendente assumiu',
 };
 
 /** Rótulo legível do motivo de handoff (códigos com prefixo viram a família). */

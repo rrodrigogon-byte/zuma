@@ -25,7 +25,7 @@ import { createShippingAccount, failShippingLabel, finalizeShippingCancellation,
 import { shippingProviders } from './shipping-adapters.js';
 import { recordStorefrontEvent } from '../storefront-funnel.js';
 import { commerceMediaIdForIdempotencyKey, deleteCommerceImage, newCommerceMediaId, streamCommerceImage, uploadCommerceImage } from './commerce-media.js';
-import { claimWhatsappAiHandoff, closeWhatsappAiHandoff, configureWhatsappAiChannel, configureWhatsappAiPolicy, listWhatsappAiSessions, releaseWhatsappAiHandoff, syncWhatsappAiWebhook, testWhatsappAiGemini, whatsappAiOperationalStatus, configureWhatsappAiHandoff } from './whatsapp-ai.js';
+import { claimWhatsappAiHandoff, closeWhatsappAiHandoff, configureWhatsappAiChannel, configureWhatsappAiPolicy, listWhatsappAiSessions, releaseWhatsappAiHandoff, syncWhatsappAiWebhook, testWhatsappAiGemini, whatsappAiOperationalStatus, configureWhatsappAiHandoff, diagnosticoAgendaVendaWhatsappAi } from './whatsapp-ai.js';
 import { campaignMetrics, cancelCampaign, confirmCampaign, createCampaign, listCampaignAudience, listCampaigns, previewCampaign, updateCampaignConsent } from './commerce-campaigns.js';
 import { cartRecoveryMetrics, listAbandonedCarts, syncPublicCart } from './commerce-abandoned-carts.js';
 import { consumePublicRateLimit, consumeWebhookRateLimit, createWebhookAuditAdapter, publicRequestFingerprint, webhookPayloadHash, webhookRequestId } from './commerce-public-rate-limit.js';
@@ -2353,6 +2353,13 @@ export function createCommerceAdminRouter() {
       const context = await withWhatsappLoja(await requirePermission(req, 'settings.write'));
       const tipoCanal = whatsappTipoCanal(req);
       res.json(await testWhatsappAiGemini({ ...context, tipoCanal }, { confirmed: req.body?.confirmed === true }));
+    } catch (error) { jsonError(res, error); }
+  });
+  // Validação do T-Rex em produção: só ferramentas de leitura (agenda e catálogo).
+  router.post('/whatsapp-ai/diagnostics/agenda-venda', async (req, res) => {
+    try {
+      const context = await withWhatsappLoja(await requirePermission(req, 'settings.write'));
+      res.json(await diagnosticoAgendaVendaWhatsappAi(context));
     } catch (error) { jsonError(res, error); }
   });
   router.post('/whatsapp-ai/channel/sync-webhook', async (req, res) => {

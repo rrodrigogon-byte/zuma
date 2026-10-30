@@ -16,6 +16,7 @@ const ALLOWED_HANDOFF_LABELS = new Set([
   'segurança',
   'falha de envio',
   'revisão humana',
+  'atendente assumiu',
 ])
 
 function isRecord(value) {
@@ -76,6 +77,11 @@ function validItem(item, index, ids) {
     handoff_label: safeHandoffLabel(item.handoff_label),
     priority: item.priority,
     hasPendingAction: Boolean(item.hasPendingAction),
+    nome: typeof item.nome === 'string' ? item.nome.trim().slice(0, 80) : '',
+    ultimaMensagemCliente: typeof item.ultima_mensagem_cliente === 'string' ? item.ultima_mensagem_cliente.slice(0, 160) : '',
+    ultimaRespostaIa: typeof item.ultima_resposta_ia === 'string' ? item.ultima_resposta_ia.slice(0, 160) : '',
+    // Vermelho: o T-Rex não resolveu e ninguém assumiu. Sem o campo (API antiga), vale o status.
+    precisaAtendente: typeof item.precisa_atendente === 'boolean' ? item.precisa_atendente : (item.status === 'humano' && !item.assigned),
   })
 }
 

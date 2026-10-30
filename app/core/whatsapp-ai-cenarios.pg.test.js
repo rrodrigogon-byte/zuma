@@ -1158,6 +1158,55 @@ test('simulação ponta a ponta do atendente da Dino', { skip, timeout: Number(p
     assert.equal((await sessao(tel)).status, 'ativo');
   });
 
+  await cena(t, '54 · Quadro do T-Rex: atendente assume conversa em andamento e devolve', async () => {
+    const { listWhatsappAiSessions: listar, claimWhatsappAiHandoff: assumir, releaseWhatsappAiHandoff: devolver } = await import('./whatsapp-ai.js');
+    const atendente = crypto.randomUUID();
+    await db.query(`INSERT INTO usuarios (id, empresa_id, email, senha_hash, nome_completo, role) VALUES ($1, $2, $3, 'x', 'Atendente Quadro', 'admin')`, [atendente, IDS.empresa, `quadro-${atendente.slice(0, 8)}@dino.sim`]);
+    const contexto = { empresaId: IDS.empresa, lojaId: IDS.loja, usuarioId: atendente };
+    const tel = telefoneNovo();
+    cliente(tel, 'quanto custa o corte?'); await ciclo();
+    const row = await sessao(tel);
+    let quadro = await listar(contexto, { status: 'all', assignment: 'all' });
+    let box = quadro.find((item) => item.id === row.id);
+    assert.ok(box, 'conversa em andamento aparece no quadro');
+    assert.equal(box.status, 'ativo');
+    assert.equal(box.precisa_atendente, false);
+    assert.match(box.ultima_mensagem_cliente, /quanto custa o corte/);
+    assert.ok(box.ultima_resposta_ia.length > 0);
+    // Assumir tira a conversa do T-Rex: ele para de responder este contato.
+    const assumida = await assumir(contexto, row.id);
+    assert.equal(assumida.status, 'humano');
+    assert.equal(assumida.handoff_reason, 'equipe_assumiu');
+    cliente(tel, 'e a barba?');
+    assert.equal((await ciclo()).length, 0, 'T-Rex não responde conversa assumida');
+    quadro = await listar(contexto, { status: 'all', assignment: 'all' });
+    box = quadro.find((item) => item.id === row.id);
+    assert.equal(box.isMine, true);
+    assert.equal(box.precisa_atendente, false, 'assumida não fica vermelha');
+    // Devolver: o T-Rex volta a responder.
+    await devolver(contexto, row.id);
+    cliente(tel, 'quanto custa a barba?');
+    assert.match(ultima(await ciclo()), T.preco('Barba Completa', 40));
+    // Conversa que o T-Rex não resolveu fica vermelha.
+    cliente(tel, 'quero falar com um atendente'); await ciclo();
+    box = (await listar(contexto, { status: 'all', assignment: 'all' })).find((item) => item.id === row.id);
+    assert.equal(box.precisa_atendente, true);
+  });
+
+  await cena(t, '55 · Diagnóstico de agenda e venda (só leitura) enxerga o Dino e os horários', async () => {
+    const { diagnosticoAgendaVendaWhatsappAi } = await import('./whatsapp-ai.js');
+    const antes = mundo.enviados.length;
+    const r = await diagnosticoAgendaVendaWhatsappAi({ empresaId: IDS.empresa, lojaId: IDS.loja });
+    const por = (nome) => r.passos.filter((p) => p.ferramenta === nome);
+    assert.equal(por('listar_profissionais')[0].ok, true);
+    assert.ok(por('listar_profissionais')[0].nomes.includes('Dino'));
+    const [comDino, qualquer] = por('sugerir_proximos_horarios');
+    assert.equal(comDino.ok, true, JSON.stringify(comDino));
+    assert.match(comDino.pedido, /com Dino, amanhã à tarde/);
+    assert.ok(qualquer.horarios.length > 0, 'há horários com qualquer profissional');
+    assert.equal(mundo.enviados.length, antes, 'diagnóstico não envia mensagem');
+  });
+
   // ---- T-Rex (persona): só rodam com WHATSAPP_AI_PERSONA=trex ----
   if (PERSONA) {
     await cena(t, '43 · T-Rex: "vc é robô?" recebe a verdade e a conversa segue (sem handoff)', async () => {

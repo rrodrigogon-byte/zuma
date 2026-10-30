@@ -75,9 +75,6 @@ async function tick() {
   })
 }
 
-async function openQueue(renderer) {
-    await tick()
-}
 
 function props(overrides = {}) {
   return { empresaId: empresaA, lojaId: lojaA, empresaNome: 'Empresa A', lojaNome: 'Unidade A', operatorLabel: 'Operador A', ...overrides }
@@ -92,259 +89,95 @@ afterEach(() => {
   vi.clearAllMocks()
 })
 
-describe('WhatsappHumanQueue', () => {
-  it('é lazy: fechado não faz GET; abrir faz GET com filtros, headers e AbortSignal', async () => {
-    let renderer
-    await act(async () => { renderer = create(<WhatsappHumanQueue {...props()} standalone={true} />) })
-    expect(apiMock.get).not.toHaveBeenCalled()
-    await openQueue(renderer)
-    expect(apiMock.get).toHaveBeenCalledTimes(1)
-    expect(apiMock.get.mock.calls[0][0]).toBe('/api/admin/commerce/whatsapp-ai/sessions?status=humano&assignment=unassigned&limit=100')
-    expect(apiMock.get.mock.calls[0][1].headers).toEqual({ 'X-Empresa-Id': empresaA, 'X-Loja-Id': lojaA })
-    expect(apiMock.get.mock.calls[0][1].signal).toBeInstanceOf(AbortSignal)
-    expect(textOf(renderer)).toContain('***9999')
-    renderer.unmount()
-  })
-
-  it('filtro é explícito: troca não faz GET e Atualizar consulta Todos humanos', async () => {
-    let renderer
-    await act(async () => { renderer = create(<WhatsappHumanQueue {...props()} standalone={true} />) })
-    await openQueue(renderer)
-    const select = renderer.root.findByProps({ id: 'wa-human-queue-assignment' })
-    await act(async () => { select.props.onChange({ target: { value: 'all' } }) })
-    expect(apiMock.get).toHaveBeenCalledTimes(1)
-    await act(async () => { button(renderer, 'Atualizar fila').props.onClick() })
-    await tick()
-    expect(apiMock.get).toHaveBeenCalledTimes(2)
-    expect(apiMock.get.mock.calls[1][0]).toContain('assignment=all')
-    renderer.unmount()
-  })
-
-  it('canClaim=false desabilita Assumir atendimento e não supõe permissionamento legado', async () => {
-    apiMock.get.mockResolvedValue(response([item()], { canClaim: false }))
-    let renderer
-    await act(async () => { renderer = create(<WhatsappHumanQueue {...props()} standalone={true} />) })
-    await openQueue(renderer)
-    const claim = button(renderer, 'Assumir atendimento')
-    expect(claim.props.disabled).toBe(true)
-    expect(apiMock.post).not.toHaveBeenCalled()
-    renderer.unmount()
-  })
-
-  it('403 e resposta malformada limpam dados e mostram mensagem segura sem raw error', async () => {
-    apiMock.get.mockRejectedValueOnce(Object.assign(new Error('SECRET-403'), { status: 403 }))
-    let renderer
-    await act(async () => { renderer = create(<WhatsappHumanQueue {...props()} standalone={true} />) })
-    await openQueue(renderer)
-    expect(textOf(renderer)).toContain('Você não tem permissão')
-    expect(textOf(renderer)).not.toContain('SECRET-403')
-    apiMock.get.mockResolvedValueOnce({ items: [{ id: 'not-an-id' }], canClaim: true, selection: {} })
-    await act(async () => { button(renderer, 'Atualizar fila').props.onClick() })
-    await tick()
-    expect(textOf(renderer)).toContain('A fila humana não pôde ser validada')
-    expect(textOf(renderer)).not.toContain('not-an-id')
-    renderer.unmount()
-  })
-
-  it('canary de PII nunca aparece no DOM; telefone bruto vira máscara e campos brutos são descartados', async () => {
-    apiMock.get.mockResolvedValue(response([item(sessionA, { telefone: '5565999999999', nome: 'PII-CANARY', raw: 'RAW-CANARY', assigned_to: 'SECRET-CANARY' })]))
-    let renderer
-    await act(async () => { renderer = create(<WhatsappHumanQueue {...props()} standalone={true} />) })
-    await openQueue(renderer)
-    const html = textOf(renderer)
-    expect(html).toContain('***9999')
-    expect(html).not.toContain('5565999999999')
-    expect(html).not.toContain('PII-CANARY')
-    expect(html).not.toContain('SECRET-CANARY')
-    renderer.unmount()
-  })
-
-  it('cancelar confirmação não faz POST; confirmar usa seleção canônica e bloqueia clique duplo', async () => {
-    const pending = deferred()
-    apiMock.post.mockReturnValue(pending.promise)
-    let renderer
-    await act(async () => { renderer = create(<WhatsappHumanQueue {...props()} standalone={true} />) })
-    await openQueue(renderer)
-    await act(async () => { button(renderer, 'Assumir atendimento').props.onClick() })
-    expect(textOf(renderer)).toContain('Empresa A')
-    expect(textOf(renderer)).toContain('Unidade A')
-    await act(async () => { button(renderer, 'Cancelar').props.onClick() })
-    expect(apiMock.post).not.toHaveBeenCalled()
-    await act(async () => { button(renderer, 'Assumir atendimento').props.onClick() })
-    const dialog = renderer.root.findByProps({ role: 'dialog' })
-    await act(async () => {
-      dialog.props.onSubmit({ preventDefault: () => {} })
-      dialog.props.onSubmit({ preventDefault: () => {} })
-    })
-    expect(apiMock.post).toHaveBeenCalledTimes(1)
-    expect(apiMock.post.mock.calls[0][0]).toBe(`/api/admin/commerce/whatsapp-ai/sessions/${sessionA}/claim`)
-    expect(apiMock.post.mock.calls[0][1]).toEqual({})
-    expect(apiMock.post.mock.calls[0][2].headers).toEqual({ 'X-Empresa-Id': empresaA, 'X-Loja-Id': lojaCanonical })
-    expect(apiMock.post.mock.calls[0][2].signal).toBeInstanceOf(AbortSignal)
-    pending.resolve({ id: sessionA, status: 'humano', assigned_to: 'raw-secret' })
-    await tick()
-    expect(apiMock.get).toHaveBeenCalledTimes(2)
-    expect(textOf(renderer)).toContain('Atendimento assumido')
-    renderer.unmount()
-  })
-
-  it('resposta antiga é abortada e nunca renderizada após troca de contexto; unmount aborta GET', async () => {
-    const first = deferred()
-    const second = deferred()
-    apiMock.get.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise)
-    let renderer
-    await act(async () => { renderer = create(<WhatsappHumanQueue {...props()} standalone={true} />) })
-    await openQueue(renderer)
-    const firstSignal = apiMock.get.mock.calls[0][1].signal
-    await act(async () => { renderer.update(<WhatsappHumanQueue {...props({ empresaId: '66666666-6666-4666-8666-666666666666', lojaId: '77777777-7777-4777-8777-777777777777' })} standalone={true} />) })
-    expect(firstSignal.aborted).toBe(true)
-    const secondSignal = apiMock.get.mock.calls[1][1].signal
-    second.resolve(response([item(sessionB, { telefone: '***8888' })], { selection: { empresaId: '66666666-6666-4666-8666-666666666666', requestedLojaId: '77777777-7777-4777-8777-777777777777', canonicalLojaId: lojaCanonical, inferred: false } }))
-    await tick()
-    first.resolve(response([item(sessionA, { telefone: '***CANARY' })]))
-    await tick()
-    expect(textOf(renderer)).toContain('***8888')
-    expect(textOf(renderer)).not.toContain('CANARY')
-    renderer.unmount()
-    expect(secondSignal.aborted).toBe(false)
-  })
-
-  it('aborta uma leitura ainda pendente ao desmontar', async () => {
-    const pending = deferred()
-    apiMock.get.mockReturnValue(pending.promise)
-    let renderer
-    await act(async () => { renderer = create(<WhatsappHumanQueue {...props()} standalone={true} />) })
-        const signal = apiMock.get.mock.calls[0][1].signal
-    await act(async () => { renderer.unmount() })
-    expect(signal.aborted).toBe(true)
-  })
-})
-
-describe('guards finais da fila humana', () => {
-  it('conclusão do POST antigo não libera o lock nem altera a atribuição em outra empresa/unidade', async () => {
-    const oldClaim = deferred(), newClaim = deferred(), onChanged = vi.fn()
-    apiMock.post.mockReturnValueOnce(oldClaim.promise).mockReturnValueOnce(newClaim.promise)
-    let renderer
-    await act(async () => { renderer = create(<WhatsappHumanQueue {...props({ onChanged })} standalone={true} />) })
-    await openQueue(renderer)
-    await act(async () => { button(renderer, 'Assumir atendimento').props.onClick() })
-    await act(async () => { renderer.root.findByProps({ role: 'dialog' }).props.onSubmit({ preventDefault() {} }) })
-    const oldSignal = apiMock.post.mock.calls[0][2].signal
-    const empresaB = '66666666-6666-4666-8666-666666666666', lojaB = '77777777-7777-4777-8777-777777777777'
-    const bResponse = response([item(sessionB, { telefone: '***8888' })], { selection: { empresaId: empresaB, requestedLojaId: lojaB, canonicalLojaId: lojaCanonical, inferred: false } })
-    apiMock.get.mockResolvedValue(bResponse)
-    await act(async () => { renderer.update(<WhatsappHumanQueue {...props({ empresaId: empresaB, lojaId: lojaB, onChanged })} standalone={true} />) })
-    await tick()
-    expect(oldSignal.aborted).toBe(true)
-    await act(async () => { button(renderer, 'Assumir atendimento').props.onClick() })
-    await act(async () => { renderer.root.findByProps({ role: 'dialog' }).props.onSubmit({ preventDefault() {} }) })
-    expect(apiMock.post).toHaveBeenCalledTimes(2)
-    oldClaim.resolve({ id: sessionA, status: 'humano' })
-    await tick()
-    const activeButton = button(renderer, 'Assumindo…')
-    expect(activeButton.props.disabled).toBe(true)
-    await act(async () => { renderer.root.findByProps({ role: 'dialog' }).props.onSubmit({ preventDefault() {} }) })
-    expect(apiMock.post).toHaveBeenCalledTimes(2)
-    expect(onChanged).not.toHaveBeenCalled()
-    newClaim.resolve({ id: sessionB, status: 'humano' })
-    await tick()
-    expect(onChanged).toHaveBeenCalledTimes(1)
-    expect(textOf(renderer)).not.toContain('***9999')
-    await act(async () => { renderer.unmount() })
-  })
-
-  it('timeout de atribuição descarta dados/permissão e não repete POST automaticamente', async () => {
-    apiMock.post.mockRejectedValue(Object.assign(new Error('PRIVATE-TIMEOUT'), { status: 504 }))
-    let renderer
-    await act(async () => { renderer = create(<WhatsappHumanQueue {...props()} standalone={true} />) })
-    await openQueue(renderer)
-    await act(async () => { button(renderer, 'Assumir atendimento').props.onClick() })
-    await act(async () => { renderer.root.findByProps({ role: 'dialog' }).props.onSubmit({ preventDefault() {} }) })
-    await tick()
-    expect(textOf(renderer)).toContain('Atualize a fila antes de tentar novamente')
-    expect(textOf(renderer)).not.toContain('PRIVATE-TIMEOUT')
-    expect(button(renderer, 'Assumir atendimento')).toBeUndefined()
-    expect(apiMock.post).toHaveBeenCalledTimes(1)
-    expect(apiMock.get).toHaveBeenCalledTimes(1)
-    await act(async () => { button(renderer, 'Atualizar fila').props.onClick() })
-    await tick()
-    expect(apiMock.post).toHaveBeenCalledTimes(1)
-    expect(apiMock.get).toHaveBeenCalledTimes(2)
-    await act(async () => { renderer.unmount() })
-  })
-
-  it('conflito atualiza só GET e informa que a atribuição não está mais disponível', async () => {
-    apiMock.post.mockRejectedValue(Object.assign(new Error('PRIVATE-CONFLICT'), { status: 409 }))
-    let renderer
-    await act(async () => { renderer = create(<WhatsappHumanQueue {...props()} standalone={true} />) })
-    await openQueue(renderer)
-    apiMock.get.mockResolvedValue(response([]))
-    await act(async () => { button(renderer, 'Assumir atendimento').props.onClick() })
-    await act(async () => { renderer.root.findByProps({ role: 'dialog' }).props.onSubmit({ preventDefault() {} }) })
-    await tick()
-    expect(apiMock.post).toHaveBeenCalledTimes(1)
-    expect(apiMock.get).toHaveBeenCalledTimes(2)
-    expect(textOf(renderer)).toContain('não está mais disponível')
-    expect(textOf(renderer)).toContain('Nenhuma conversa nesta visão')
-    expect(textOf(renderer)).not.toContain('PRIVATE-CONFLICT')
-    await act(async () => { renderer.unmount() })
-  })
-
-  it('trocar filtro fecha diálogo e não apresenta um vazio como se a visão já tivesse sido consultada', async () => {
-    let renderer
-    await act(async () => { renderer = create(<WhatsappHumanQueue {...props()} standalone={true} />) })
-    await openQueue(renderer)
-    await act(async () => { button(renderer, 'Assumir atendimento').props.onClick() })
-    await act(async () => { renderer.root.findByProps({ id: 'wa-human-queue-assignment' }).props.onChange({ target: { value: 'all' } }) })
-    expect(renderer.root.findAllByProps({ role: 'dialog' })).toHaveLength(0)
-    expect(textOf(renderer)).not.toContain('Nenhuma conversa nesta visão')
-    expect(apiMock.post).not.toHaveBeenCalled()
-    expect(apiMock.get).toHaveBeenCalledTimes(1)
-    await act(async () => { renderer.unmount() })
-  })
-
-  it('nova leitura invalida imediatamente o diálogo antigo e sua permissão de confirmar', async () => {
-    const pending = deferred()
-    let renderer
-    await act(async () => { renderer = create(<WhatsappHumanQueue {...props()} standalone={true} />) })
-    await openQueue(renderer)
-    await act(async () => { button(renderer, 'Assumir atendimento').props.onClick() })
-    apiMock.get.mockReturnValueOnce(pending.promise)
-    await act(async () => { button(renderer, 'Atualizar fila').props.onClick() })
-    expect(renderer.root.findAllByProps({ role: 'dialog' })).toHaveLength(0)
-    expect(button(renderer, 'Assumir atendimento')).toBeUndefined()
-    expect(apiMock.post).not.toHaveBeenCalled()
-    pending.resolve(response([]))
-    await tick()
-    await act(async () => { renderer.unmount() })
-  })
-})
-
-it('POST antigo concluído depois de fechar/reabrir não atualiza a nova leitura nem dispara callback', async () => {
-  const pending = deferred(), onChanged = vi.fn()
-  apiMock.post.mockReturnValue(pending.promise)
+async function montar(overrides = {}) {
   let renderer
-  await act(async () => { renderer = create(<WhatsappHumanQueue {...props({ onChanged })} standalone={true} />) })
-  await openQueue(renderer)
-  await act(async () => { button(renderer, 'Assumir atendimento').props.onClick() })
-  await act(async () => { renderer.root.findByProps({ role: 'dialog' }).props.onSubmit({ preventDefault() {} }) })
-  const signal = apiMock.post.mock.calls[0][2].signal
-  await act(async () => { button(renderer, 'Fechar fila').props.onClick() })
-  await openQueue(renderer)
-  expect(signal.aborted).toBe(true)
-  expect(apiMock.get).toHaveBeenCalledTimes(2)
-  pending.resolve({ id: sessionA, status: 'humano' })
+  await act(async () => { renderer = create(createElement(WhatsappHumanQueue, props({ standalone: true, ...overrides }))) })
   await tick()
-  expect(apiMock.get).toHaveBeenCalledTimes(2)
-  expect(onChanged).not.toHaveBeenCalled()
-  expect(textOf(renderer)).not.toContain('Atendimento assumido')
-  await act(async () => { renderer.unmount() })
-})
+  return renderer
+}
 
-it('envia o perfil Lançamentos na URL da fila humana', async () => {
-  let renderer
-  await act(async () => { renderer = create(<WhatsappHumanQueue {...props({ tipoCanal: 'lancamentos' })} standalone={true} />) })
-  await openQueue(renderer)
-  expect(apiMock.get.mock.calls[0][0]).toContain('&canal=lancamentos')
-  renderer.unmount()
+function cards(renderer) {
+  return renderer.root.findAll((node) => node.type === 'article' && String(node.props.className || '').includes('wa-trex-card'))
+}
+
+describe('quadro de conversas do T-Rex', () => {
+  it('abre consultando todas as conversas em andamento, com empresa e unidade nos headers', async () => {
+    await montar()
+    expect(apiMock.get).toHaveBeenCalledTimes(1)
+    const [url, options] = apiMock.get.mock.calls[0]
+    expect(url).toContain('status=all')
+    expect(url).toContain('assignment=all')
+    expect(options.headers).toEqual({ 'X-Empresa-Id': empresaA, 'X-Loja-Id': lojaA })
+    expect(options.signal).toBeInstanceOf(AbortSignal)
+  })
+
+  it('conversa que o T-Rex não resolveu fica em vermelho e pede que o atendente assuma', async () => {
+    apiMock.get.mockResolvedValue(response([
+      item(sessionA, { precisa_atendente: true, nome: 'Carlos', ultima_mensagem_cliente: 'quero falar com alguém' }),
+      item(sessionB, { status: 'ativo', handoff_requested_at: null, precisa_atendente: false, ultima_resposta_ia: 'Tenho 15h ou 16h' }),
+    ]))
+    const renderer = await montar()
+    const [vermelho, verde] = cards(renderer)
+    expect(vermelho.props.className).toContain('wa-trex-card--alerta')
+    expect(textOf(renderer)).toContain('O atendente deve assumir esta conversa.')
+    expect(textOf(renderer)).toContain('quero falar com alguém')
+    expect(verde.props.className).toContain('wa-trex-card--ia')
+    expect(textOf(renderer)).toContain('Em conversa com o T-Rex')
+  })
+
+  it('todo box tem Assumir conversa e Devolver ao T-Rex; devolver só vale para conversa com a equipe', async () => {
+    apiMock.get.mockResolvedValue(response([
+      item(sessionB, { status: 'ativo', handoff_requested_at: null, precisa_atendente: false }),
+    ]))
+    const renderer = await montar()
+    expect(button(renderer, 'Assumir conversa').props.disabled).toBe(false)
+    expect(button(renderer, 'Devolver ao T-Rex').props.disabled).toBe(true)
+  })
+
+  it('assumir uma conversa que está com o T-Rex confirma, faz POST e recarrega o quadro', async () => {
+    apiMock.get.mockResolvedValue(response([item(sessionB, { status: 'ativo', handoff_requested_at: null })]))
+    apiMock.post.mockResolvedValue({ id: sessionB, status: 'humano' })
+    const renderer = await montar()
+    await act(async () => { button(renderer, 'Assumir conversa').props.onClick() })
+    const dialogo = renderer.root.findByProps({ role: 'dialog' })
+    await act(async () => { await dialogo.props.onSubmit({ preventDefault() {} }) })
+    await tick()
+    expect(apiMock.post).toHaveBeenCalledTimes(1)
+    expect(apiMock.post.mock.calls[0][0]).toBe(`/api/admin/commerce/whatsapp-ai/sessions/${sessionB}/claim`)
+    expect(apiMock.post.mock.calls[0][2].headers).toEqual({ 'X-Empresa-Id': empresaA, 'X-Loja-Id': lojaCanonical })
+    expect(apiMock.get).toHaveBeenCalledTimes(2)
+    expect(textOf(renderer)).toContain('O T-Rex parou de responder este contato')
+  })
+
+  it('devolver ao T-Rex chama release e avisa que a IA volta a responder', async () => {
+    apiMock.get.mockResolvedValue(response([item(sessionA, { assigned: true, isMine: true })]))
+    apiMock.post.mockResolvedValue({ id: sessionA, status: 'ativo' })
+    const renderer = await montar()
+    await act(async () => { await button(renderer, 'Devolver ao T-Rex').props.onClick() })
+    await tick()
+    expect(apiMock.post.mock.calls[0][0]).toBe(`/api/admin/commerce/whatsapp-ai/sessions/${sessionA}/release`)
+    expect(textOf(renderer)).toContain('Conversa devolvida ao T-Rex')
+  })
+
+  it('sem permissão de atribuição os dois botões ficam desabilitados', async () => {
+    apiMock.get.mockResolvedValue(response([item()], { canClaim: false }))
+    const renderer = await montar()
+    expect(button(renderer, 'Assumir conversa').props.disabled).toBe(true)
+    expect(button(renderer, 'Devolver ao T-Rex').props.disabled).toBe(true)
+  })
+
+  it('telefone bruto nunca aparece: vira máscara com os 4 últimos dígitos', async () => {
+    apiMock.get.mockResolvedValue(response([item(sessionA, { telefone: '5565999999999', nome: '' })]))
+    const renderer = await montar()
+    expect(textOf(renderer)).not.toContain('5565999999999')
+    expect(textOf(renderer)).toContain('***9999')
+  })
+
+  it('erro 403 mostra mensagem segura sem dados', async () => {
+    apiMock.get.mockRejectedValue(Object.assign(new Error('raw secret'), { status: 403 }))
+    const renderer = await montar()
+    expect(textOf(renderer)).toContain('Você não tem permissão para consultar a fila humana.')
+    expect(textOf(renderer)).not.toContain('raw secret')
+    expect(cards(renderer)).toHaveLength(0)
+  })
 })

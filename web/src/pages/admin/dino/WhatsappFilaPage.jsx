@@ -9,7 +9,7 @@ export default function WhatsappFilaPage() {
   const tipoCanal = searchParams.get('canal') || 'cliente'
 
   return (
-    <div style={{ padding: '24px', backgroundColor: '#f5f5f5', minHeight: '100vh' }}>
+    <div className="page" style={{ minHeight: '100vh' }}>
       <WhatsappHumanQueue
         empresaId={empresaAtiva?.id}
         lojaId={lojaAtiva?.id}

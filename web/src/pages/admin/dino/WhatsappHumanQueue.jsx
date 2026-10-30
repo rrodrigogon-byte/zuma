@@ -87,7 +87,9 @@ export default function WhatsappHumanQueue({
     claimLockRef.current = null
   }, [])
 
-  const loadQueue = useCallback(async () => {
+  const loadQueue = useCallback(async (opcoes = {}) => {
+    // Atualização automática: troca a lista sem piscar a tela.
+    const silencioso = opcoes?.silencioso === true
     if (!mountedRef.current || !openRef.current) return false
     const snapshot = { empresaId: String(empresaId || ''), lojaId: String(lojaId || ''), contextKey: String(contextKey) }
     if (!snapshot.empresaId || !snapshot.lojaId) {
@@ -103,16 +105,18 @@ export default function WhatsappHumanQueue({
     const sequence = ++sequenceRef.current
     flightRef.current?.abort()
     flightRef.current = controller
-    setLoading(true)
-    setError('')
-    setErrorContextKey('')
-    setNotice('')
-    setNoticeContextKey('')
-    setRows([])
-    setLoadedContextKey('')
-    setSelection(null)
-    setCanClaim(false)
-    setClaimDialog(null)
+    if (!silencioso) {
+      setLoading(true)
+      setError('')
+      setErrorContextKey('')
+      setNotice('')
+      setNoticeContextKey('')
+      setRows([])
+      setLoadedContextKey('')
+      setSelection(null)
+      setCanClaim(false)
+      setClaimDialog(null)
+    }
     try {
       const payload = await api.get(queueUrl('all', tipoCanal, true), {
         headers: { 'X-Empresa-Id': snapshot.empresaId, 'X-Loja-Id': snapshot.lojaId },
@@ -156,6 +160,15 @@ export default function WhatsappHumanQueue({
     }
   }, [open, contextKey, clearQueue]) // loadQueue intentionally runs only on open/context or explicit update
 
+  // Quadro aberto: atualiza sozinho a cada 30 s (pausa enquanto há uma ação em andamento).
+  useEffect(() => {
+    if (!open) return undefined
+    const timer = setInterval(() => {
+      if (!claimLockRef.current && !flightRef.current) loadQueue({ silencioso: true })
+    }, 30000)
+    return () => clearInterval(timer)
+  }, [open, loadQueue])
+
   const displayedRows = useMemo(() => loadedContextKey === contextKey ? rows : [], [contextKey, loadedContextKey, rows])
 
   function openQueue() {
@@ -169,21 +182,9 @@ export default function WhatsappHumanQueue({
     clearQueue()
   }
 
-  function chooseAssignment(event) {
-    const value = event.target.value === 'all' ? 'all' : 'unassigned'
-    clearQueue()
-    assignmentRef.current = value
-    setAssignment(value)
-    setRows([])
-    setLoadedContextKey('')
-    setSelection(null)
-    setCanClaim(false)
-    setNotice('Filtro alterado. Toque em Atualizar fila para consultar esta visão.')
-    setNoticeContextKey(contextKey)
-  }
 
   function requestClaim(item) {
-    if (!canClaim || item.assigned !== false || !selection || claimingId) return
+    if (!canClaim || (item.assigned && !item.isMine) || !selection || claimingId) return
     setNotice('')
     setNoticeContextKey('')
     setError('')
@@ -192,7 +193,7 @@ export default function WhatsappHumanQueue({
   }
 
   async function requestRelease(item) {
-    if (!canClaim || !item.assigned || !item.isMine || claimingId) return
+    if (!canClaim || item.status !== 'humano' || claimingId) return
     setError('')
     setErrorContextKey('')
     
@@ -212,7 +213,7 @@ export default function WhatsappHumanQueue({
       if (!mountedRef.current || claimLockRef.current !== controller || contextKeyRef.current !== contextKey || !openRef.current) return
       const refreshed = await loadQueue()
       if (refreshed && mountedRef.current && contextKeyRef.current === contextKey) {
-        setNotice('Atendimento devolvido para a IA. A fila foi atualizada.')
+        setNotice('Conversa devolvida ao T-Rex. Ele volta a responder este contato.')
         setNoticeContextKey(contextKey)
         if (typeof onChanged === 'function') await onChanged()
       }
@@ -231,7 +232,7 @@ export default function WhatsappHumanQueue({
 
   async function confirmClaim() {
     const dialog = claimDialog
-    if (!dialog || dialog.contextKey !== contextKey || !canClaim || dialog.item.assigned !== false || claimLockRef.current || claimingId) return
+    if (!dialog || dialog.contextKey !== contextKey || !canClaim || (dialog.item.assigned && !dialog.item.isMine) || claimLockRef.current || claimingId) return
     // Ref locka sincronicamente antes do primeiro await: dois cliques não geram dois POSTs.
     const controller = new AbortController()
     claimLockRef.current = controller
@@ -254,7 +255,7 @@ export default function WhatsappHumanQueue({
       setClaimDialog(null)
       const refreshed = await loadQueue()
       if (refreshed && mountedRef.current && contextKeyRef.current === contextKey) {
-        setNotice('Atendimento assumido. A fila foi atualizada.')
+        setNotice('Conversa assumida. O T-Rex parou de responder este contato até você devolver.')
         setNoticeContextKey(contextKey)
         if (typeof onChanged === 'function') await onChanged()
       }
@@ -293,7 +294,7 @@ export default function WhatsappHumanQueue({
     }
   }
 
-  const queueTitle = open ? 'Fila humana do WhatsApp' : 'Atendimento humano'
+  const queueTitle = open ? 'Conversas do T-Rex no WhatsApp' : 'Atendimento humano'
   const operator = safeText(operatorLabel)
   const activeClaimDialog = claimDialog?.contextKey === contextKey ? claimDialog : null
   const visibleError = errorContextKey === contextKey ? error : ''
@@ -303,7 +304,7 @@ export default function WhatsappHumanQueue({
     <div className="c360-card-head wa-human-queue__head">
       <div>
         <h2 id="wa-human-queue-title">{queueTitle}</h2>
-        <p className="wa-human-queue__intro">Conversas encaminhadas para atendimento humano. Esta tela não envia mensagens nem retoma a automação. Fechar e reabrir descarta a leitura e consulta novamente.</p>
+        <p className="wa-human-queue__intro">Todas as conversas em andamento com o T-Rex. Em vermelho, as que ele não conseguiu resolver: o atendente deve assumir e responder pelo WhatsApp do T-Rex. A tela atualiza sozinha a cada 30 segundos.</p>
       </div>
       <div style={{ display: 'flex', gap: '8px' }}>
         {!standalone && <button type="button" className="c360-btn ghost" onClick={() => window.open('/admin/whatsapp-fila' + (tipoCanal !== 'cliente' ? '?canal=' + tipoCanal : ''), '_blank')}>Abrir fila em nova janela</button>}
@@ -313,13 +314,7 @@ export default function WhatsappHumanQueue({
 
     {open && <>
       <div className="wa-human-queue__toolbar" aria-label="Filtros da fila humana">
-        <label className="c360-field" htmlFor="wa-human-queue-assignment">Conversas
-          <select id="wa-human-queue-assignment" className="c360-input" value={assignment} onChange={chooseAssignment} disabled={loading || Boolean(claimingId)}>
-            <option value="unassigned">Sem responsável</option>
-            <option value="all">Todos humanos</option>
-          </select>
-        </label>
-        <button type="button" className="c360-btn ghost" onClick={loadQueue} disabled={loading || Boolean(claimingId)}>{loading ? 'Atualizando…' : 'Atualizar fila'}</button>
+        <button type="button" className="c360-btn ghost" onClick={loadQueue} disabled={loading || Boolean(claimingId)}>{loading ? 'Atualizando…' : 'Atualizar'}</button>
       </div>
       <p className="wa-human-queue__scope">Escopo: {safeText(empresaNome, 'empresa atual')} · {safeText(lojaNome, 'unidade atual')} · até {HUMAN_QUEUE_LIMIT} conversas por leitura.</p>
       {visibleError && <p className="dadm-note danger" role="alert">{visibleError}</p>}
@@ -328,66 +323,50 @@ export default function WhatsappHumanQueue({
       <div aria-live="polite">
         {!visibleError && !loading && loadedContextKey === contextKey && displayedRows.length === 0 && <EmptyQueue loading={loading} error={visibleError} />}
         {loading && <EmptyQueue loading={loading} error={visibleError} />}
-        {!visibleError && displayedRows.length > 0 && <div className="wa-human-queue__grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '16px', marginTop: '16px' }}>
+        {!visibleError && displayedRows.length > 0 && <div className="wa-trex-board">
           {displayedRows.map((item) => {
-            const isHumano = item.status === 'humano';
-            const hasPendingAction = item.hasPendingAction === true;
-            const needsSupport = isHumano || hasPendingAction;
-            
+            const comEquipe = item.status === 'humano'
+            const tom = item.precisaAtendente ? 'alerta' : comEquipe ? 'equipe' : 'ia'
+            const titulo = item.nome || item.telefone
+            const situacao = item.precisaAtendente
+              ? `T-Rex não resolveu · ${item.handoff_label}`
+              : comEquipe ? (item.assigned ? (item.isMine ? 'Com você' : 'Com outro atendente') : `Com a equipe · ${item.handoff_label}`) : 'Em conversa com o T-Rex'
             return (
-              <div key={item.id} className="wa-human-queue-card" style={{
-                border: `2px solid ${needsSupport ? '#e74c3c' : '#2ecc71'}`,
-                borderRadius: '8px',
-                padding: '16px',
-                backgroundColor: '#fff',
-                boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '8px'
-              }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <strong style={{ fontSize: '1.1em' }}>{item.telefone || item.nome || 'Conversa'}</strong>
-                  <span className="c360-badge" style={{ backgroundColor: needsSupport ? '#fdf2f2' : '#f0fdf4', color: needsSupport ? '#c0392b' : '#27ae60' }}>
-                    {isHumano ? item.handoff_label : 'Fluindo com IA'}
-                  </span>
+              <article key={item.id} className={`wa-trex-card wa-trex-card--${tom}`} aria-label={`Conversa ${titulo}: ${situacao}`}>
+                <header className="wa-trex-card__head">
+                  <div>
+                    <strong className="wa-trex-card__nome">{titulo}</strong>
+                    {item.nome && <span className="wa-trex-card__fone">{item.telefone}</span>}
+                  </div>
+                  <span className="wa-trex-card__selo">{situacao}</span>
+                </header>
+                {item.precisaAtendente && <p className="wa-trex-card__aviso" role="alert">O atendente deve assumir esta conversa.</p>}
+                {item.ultimaMensagemCliente && <p className="wa-trex-card__msg"><b>Cliente:</b> {item.ultimaMensagemCliente}</p>}
+                {item.ultimaRespostaIa && <p className="wa-trex-card__msg wa-trex-card__msg--ia"><b>T-Rex:</b> {item.ultimaRespostaIa}</p>}
+                <p className="wa-trex-card__meta">
+                  Última mensagem: <strong>{queueDateLabel(item.ultima_interacao_em)}</strong>
+                  {comEquipe && <> · Esperando: <strong>{queueWaitLabel(item.handoff_requested_at)}</strong></>}
+                </p>
+                <div className="wa-trex-card__acoes">
+                  <button type="button" className="c360-btn primary" disabled={!canClaim || (item.assigned && !item.isMine) || item.isMine || Boolean(claimingId)} onClick={() => requestClaim(item)}>
+                    {item.isMine ? 'Assumida por você' : item.assigned ? 'Já assumida' : 'Assumir conversa'}
+                  </button>
+                  <button type="button" className="c360-btn ghost" disabled={!canClaim || !comEquipe || Boolean(claimingId)} onClick={() => requestRelease(item)} title={comEquipe ? 'O T-Rex volta a responder este contato' : 'Esta conversa já está com o T-Rex'}>
+                    Devolver ao T-Rex
+                  </button>
                 </div>
-                
-                <div style={{ fontSize: '0.9em', color: '#666' }}>
-                  <p style={{ margin: '4px 0' }}>Última interação: <strong>{queueDateLabel(item.ultima_interacao_em)}</strong></p>
-                  {isHumano && <p style={{ margin: '4px 0' }}>Espera: <strong>{queueWaitLabel(item.handoff_requested_at)}</strong></p>}
-                  <p style={{ margin: '4px 0' }}>Responsável: <strong>{item.assigned ? (item.isMine ? 'Você' : 'Outro atendente') : (isHumano ? 'Sem responsável' : 'T-Rex')}</strong></p>
-                </div>
-
-                <div style={{ marginTop: 'auto', paddingTop: '12px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                  {isHumano ? (
-                    <>
-                      <button type="button" className="c360-btn primary" style={{ flex: 1 }} disabled={!canClaim || item.assigned || Boolean(claimingId)} onClick={() => requestClaim(item)}>
-                        {item.assigned ? (item.isMine ? 'Assumida por você' : 'Já assumida') : 'Assumir atendimento'}
-                      </button>
-                      {item.assigned && item.isMine && (
-                        <button type="button" className="c360-btn ghost" style={{ flex: 1 }} disabled={Boolean(claimingId)} onClick={() => requestRelease(item)}>
-                          Devolver p/ IA
-                        </button>
-                      )}
-                    </>
-                  ) : (
-                    <button type="button" className="c360-btn ghost" style={{ flex: 1, borderColor: '#2ecc71', color: '#2ecc71' }} disabled={!canClaim || Boolean(claimingId)} onClick={() => requestClaim(item)}>
-                      Intervir
-                    </button>
-                  )}
-                </div>
-              </div>
+              </article>
             )
           })}
         </div>}
       </div>
     </>}
 
-    <Dialog open={Boolean(activeClaimDialog)} title="Assumir atendimento?" labelId="wa-human-queue-claim" onClose={() => { if (!claimingId) setClaimDialog(null) }} onSubmit={confirmClaim}
-      actions={<><button type="button" className="c360-btn ghost" onClick={() => setClaimDialog(null)} disabled={Boolean(claimingId)}>Cancelar</button><button type="submit" className="c360-btn primary" disabled={Boolean(claimingId)}>{claimingId ? 'Assumindo…' : 'Confirmar atribuição'}</button></>}>
+    <Dialog open={Boolean(activeClaimDialog)} title="Assumir conversa?" labelId="wa-human-queue-claim" onClose={() => { if (!claimingId) setClaimDialog(null) }} onSubmit={confirmClaim}
+      actions={<><button type="button" className="c360-btn ghost" onClick={() => setClaimDialog(null)} disabled={Boolean(claimingId)}>Cancelar</button><button type="submit" className="c360-btn primary" disabled={Boolean(claimingId)}>{claimingId ? 'Assumindo…' : 'Assumir conversa'}</button></>}>
       <p>Esta conversa será atribuída ao operador logado: <strong>{operator}</strong>.</p>
       <p>Empresa: <strong>{safeText(empresaNome)}</strong><br />Unidade: <strong>{safeText(lojaNome)}</strong></p>
-      <p>Não haverá envio de mensagem nem retomada da automação.</p>
+      <p>O T-Rex para de responder este contato até a conversa ser devolvida a ele. Responda o cliente pelo WhatsApp do T-Rex.</p>
     </Dialog>
   </section>
 }

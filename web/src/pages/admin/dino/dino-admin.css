@@ -507,3 +507,22 @@
   .dadm-bi .dadm-grid, .dadm-bi .dadm-kpis { margin-bottom: 14px; }
   .dadm-bi .dadm-series { height: 150px; }
 }
+
+/* Quadro de conversas do T-Rex (/admin/whatsapp-fila): um box por conversa. */
+.wa-trex-board { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 290px), 1fr)); gap: 14px; margin-top: 14px; }
+.wa-trex-card { display: flex; flex-direction: column; gap: 8px; padding: 14px; border-radius: 12px; background: var(--card, #fff); border: 2px solid var(--line, #e5e7eb); box-shadow: 0 2px 6px rgba(18,40,63,.06); min-width: 0; }
+.wa-trex-card--ia { border-color: #22a35a; }
+.wa-trex-card--equipe { border-color: #3b6fd8; }
+.wa-trex-card--alerta { border-color: #d93025; background: color-mix(in srgb, #d93025 7%, var(--card, #fff)); box-shadow: 0 0 0 3px color-mix(in srgb, #d93025 18%, transparent); }
+.wa-trex-card__head { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+.wa-trex-card__nome { display: block; font-size: 15px; overflow-wrap: anywhere; }
+.wa-trex-card__fone { display: block; font-size: 12px; color: var(--muted); }
+.wa-trex-card__selo { flex: 0 1 auto; font-size: 11px; font-weight: 800; padding: 3px 8px; border-radius: 999px; text-align: right; background: color-mix(in srgb, #22a35a 14%, transparent); color: #1b7f46; }
+.wa-trex-card--equipe .wa-trex-card__selo { background: color-mix(in srgb, #3b6fd8 14%, transparent); color: #2c55aa; }
+.wa-trex-card--alerta .wa-trex-card__selo { background: #d93025; color: #fff; }
+.wa-trex-card__aviso { margin: 0; font-weight: 800; color: #b3261e; font-size: 13px; }
+.wa-trex-card__msg { margin: 0; font-size: 12.5px; line-height: 1.4; color: var(--fg); overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.wa-trex-card__msg--ia { color: var(--muted); }
+.wa-trex-card__meta { margin: 0; font-size: 12px; color: var(--muted); }
+.wa-trex-card__acoes { margin-top: auto; padding-top: 8px; display: flex; gap: 8px; flex-wrap: wrap; }
+.wa-trex-card__acoes .c360-btn { flex: 1 1 130px; min-height: 40px; }

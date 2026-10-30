@@ -93,7 +93,10 @@ export function whatsappChannelType(value = 'cliente') {
 }
 
 // Bloqueios que eram falso positivo (link da loja / id de foto): retomam a IA sozinhos.
-const AUTO_RESUME_HANDOFF_REASONS = ['security:UNAPPROVED_URL', 'security:POSSIBLE_PAYMENT_CARD'];
+// security:UNGOVERNED_OPPORTUNITY: falso positivo da política antiga de oferta (27-29/10).
+const AUTO_RESUME_HANDOFF_REASONS = ['security:UNAPPROVED_URL', 'security:POSSIBLE_PAYMENT_CARD', 'security:UNGOVERNED_OPPORTUNITY'];
+// Conversa que a equipe assumiu pelo quadro do T-Rex: só volta para a IA pelo botão "Devolver".
+const EQUIPE_ASSUMIU = 'equipe_assumiu';
 const PIX_DINO = process.env.WHATSAPP_AI_PIX_CHAVE || '(65) 99905-6008 (Barbearia Dino)';
 // Mesmos textos do polling (whatsapp-isa-poll.js) para mídia que não deu para ler.
 const MEDIA_AUDIO_PREFIX = '[áudio transcrito]';
@@ -2035,11 +2038,14 @@ export async function listWhatsappAiSessions(context = {}, { limit = 50, status,
   const perfil = whatsappChannelType(tipoCanal);
   const empresaId = requiredTenantUuid(context.empresaId, 'empresaId');
   const lojaId = requiredTenantUuid(context.lojaId, 'lojaId');
-  const statusFilter = sessionFilter(status, 'status', ['humano']);
+  // "em_andamento" (alias antigo "all"): conversas com o T-Rex nas últimas 24 h e todas as que esperam a equipe.
+  const statusFilter = sessionFilter(status === 'all' ? 'em_andamento' : status, 'status', ['humano', 'em_andamento']);
   const assignmentFilter = sessionFilter(assignment, 'assignment', ['unassigned', 'all']);
   const values = [empresaId, lojaId, perfil];
   const predicates = ['empresa_id = $1', 'loja_id = $2', "canal_id IN (SELECT id FROM canais_integracao WHERE empresa_id = $1 AND loja_id = $2 AND provedor = 'whatsapp' AND tipo_canal = $3)"];
-  if (statusFilter) {
+  if (statusFilter === 'em_andamento') {
+    predicates.push("(status = 'humano' OR (status = 'ativo' AND ultima_interacao_em >= CURRENT_TIMESTAMP - INTERVAL '24 hours'))");
+  } else if (statusFilter) {
     values.push(statusFilter);
     predicates.push(`status = $${values.length}`);
   }
@@ -2053,8 +2059,14 @@ export async function listWhatsappAiSessions(context = {}, { limit = 50, status,
             assigned_to, assigned_at, closed_at, priority, privacy_notice_at,
             personalization_prompted_at, opportunity_offered_at,
             opportunity_declined_at, opportunity_count,
-            estado->>'staffPauseUntil' AS staff_pause_until
-       FROM whatsapp_ai_sessions
+            estado->>'staffPauseUntil' AS staff_pause_until,
+            (SELECT LEFT(m.conteudo, 160) FROM whatsapp_ai_messages m
+              WHERE m.sessao_id = s.id AND m.empresa_id = s.empresa_id AND m.papel = 'user'
+              ORDER BY m.criado_em DESC LIMIT 1) AS ultima_mensagem_cliente,
+            (SELECT LEFT(m.conteudo, 160) FROM whatsapp_ai_messages m
+              WHERE m.sessao_id = s.id AND m.empresa_id = s.empresa_id AND m.papel = 'assistant'
+              ORDER BY m.criado_em DESC LIMIT 1) AS ultima_resposta_ia
+       FROM whatsapp_ai_sessions s
       WHERE ${predicates.join(' AND ')}
       ORDER BY CASE WHEN status = 'humano' THEN 0 ELSE 1 END,
                priority DESC, handoff_requested_at ASC NULLS LAST, ultima_interacao_em DESC
@@ -2085,6 +2097,10 @@ export async function listWhatsappAiSessions(context = {}, { limit = 50, status,
     opportunity_offered_at: row.opportunity_offered_at,
     opportunity_declined_at: row.opportunity_declined_at,
     opportunity_count: Number(row.opportunity_count || 0),
+    ultima_mensagem_cliente: row.ultima_mensagem_cliente || '',
+    ultima_resposta_ia: row.ultima_resposta_ia || '',
+    // Vermelho no quadro: a IA não resolveu e ninguém da equipe assumiu ainda.
+    precisa_atendente: row.status === 'humano' && !row.assigned_to && row.handoff_reason !== STAFF_REASON,
   }));
 }
 
@@ -2116,7 +2132,7 @@ export async function claimWhatsappAiHandoff(context = {}, sessionId) {
     const selected = await trx.query(
       `SELECT id, status, assigned_to, assigned_at, priority, handoff_reason
          FROM whatsapp_ai_sessions
-        WHERE id = $1 AND empresa_id = $2 AND loja_id = $3 AND status = 'humano'
+        WHERE id = $1 AND empresa_id = $2 AND loja_id = $3 AND status IN ('humano', 'ativo')
           AND canal_id IN (SELECT id FROM canais_integracao WHERE empresa_id = $2 AND loja_id = $3 AND provedor = 'whatsapp' AND tipo_canal = $4)
         FOR UPDATE`,
       [normalizedSessionId, empresaId, lojaId, tipoCanal],
@@ -2133,6 +2149,32 @@ export async function claimWhatsappAiHandoff(context = {}, sessionId) {
       throw error;
     }
     if (current.assigned_to && String(current.assigned_to) === String(context.usuarioId)) return current;
+    if (current.status === 'ativo') {
+      // Conversa ainda com o T-Rex: o atendente assume e a IA para de responder este contato.
+      await trx.query(
+        `UPDATE whatsapp_ai_actions SET status = 'cancelada'
+          WHERE empresa_id = $2 AND status = 'preparada'
+            AND id::text = (SELECT acao_pendente->>'actionId' FROM whatsapp_ai_sessions WHERE id = $1 AND empresa_id = $2)`,
+        [normalizedSessionId, empresaId],
+      );
+      const taken = await trx.query(
+        `UPDATE whatsapp_ai_sessions
+            SET status = 'humano', handoff_requested_at = CURRENT_TIMESTAMP, handoff_reason = $5::text,
+                estado = jsonb_set(estado, '{handoffReason}', to_jsonb($5::text), true),
+                acao_pendente = NULL, priority = GREATEST(priority, 2),
+                assigned_to = $4, assigned_at = CURRENT_TIMESTAMP, atualizado_em = CURRENT_TIMESTAMP
+          WHERE id = $1 AND empresa_id = $2 AND loja_id = $3 AND status = 'ativo'
+          RETURNING id, status, assigned_to, assigned_at, priority, handoff_reason`,
+        [normalizedSessionId, empresaId, lojaId, context.usuarioId, EQUIPE_ASSUMIU],
+      );
+      if (!taken.rows[0]) {
+        const error = new Error('a conversa mudou de estado; atualize o quadro');
+        error.code = 'WHATSAPP_AI_SESSION_CONFLICT';
+        throw error;
+      }
+      await auditHandoff(trx, context, taken.rows[0].id, 'taken_from_ai', { priority: taken.rows[0].priority });
+      return taken.rows[0];
+    }
     const result = await trx.query(
       `UPDATE whatsapp_ai_sessions
           SET assigned_to = $4, assigned_at = CURRENT_TIMESTAMP, atualizado_em = CURRENT_TIMESTAMP
@@ -2194,6 +2236,61 @@ export async function closeWhatsappAiHandoff(context = {}, sessionId) {
     await auditHandoff(trx, context, result.rows[0].id, 'closed');
     return result.rows[0];
   });
+}
+
+/**
+ * Validação em produção do que o T-Rex enxerga para agendar e vender, só com ferramentas de
+ * leitura (não prepara agendamento nem pedido e não envia mensagem). Substitui a rota pública
+ * de simulação removida em 30/10.
+ */
+export async function diagnosticoAgendaVendaWhatsappAi(context = {}) {
+  const empresaId = requiredTenantUuid(context.empresaId, 'empresaId');
+  const lojaId = requiredTenantUuid(context.lojaId, 'lojaId');
+  const canal = (await db.queryRead(
+    `SELECT id, nome, configuracao FROM canais_integracao
+      WHERE empresa_id = $1 AND loja_id = $2 AND provedor = 'whatsapp' AND tipo_canal = 'cliente'
+      ORDER BY (status = 'ativo') DESC LIMIT 1`,
+    [empresaId, lojaId],
+  )).rows[0];
+  if (!canal) {
+    const error = new Error('canal de WhatsApp do cliente não configurado nesta unidade');
+    error.code = 'WHATSAPP_AI_CHANNEL_NOT_FOUND';
+    throw error;
+  }
+  const executar = createWhatsappAiToolExecutor({
+    empresaId, lojaId, canalId: canal.id, sessionId: crypto.randomUUID(), phone: '5565900000000',
+    customerName: 'Validação Kytto', channelType: 'cliente', capabilities: canal.configuracao?.capabilities || {},
+  });
+  const passos = [];
+  const passo = async (nome, args, resumir) => {
+    const inicio = Date.now();
+    try {
+      const resultado = await executar(nome, args);
+      const item = { ferramenta: nome, ok: resultado?.ok !== false, ms: Date.now() - inicio, ...resumir(resultado || {}) };
+      passos.push(item);
+      return resultado;
+    } catch (error) {
+      passos.push({ ferramenta: nome, ok: false, ms: Date.now() - inicio, erro: safeErrorCode(error), mensagem: cleanText(error?.message, 200) });
+      return null;
+    }
+  };
+  const servicos = await passo('listar_servicos', {}, (r) => ({ total: (r.servicos || []).length, nomes: (r.servicos || []).slice(0, 12).map((s) => s.nome) }));
+  const profissionais = await passo('listar_profissionais', {}, (r) => ({ total: (r.profissionais || []).length, nomes: (r.profissionais || []).map((p) => p.nome) }));
+  const corte = (servicos?.servicos || []).find((s) => /corte/i.test(String(s.nome || ''))) || (servicos?.servicos || [])[0];
+  const dino = (profissionais?.profissionais || []).find((p) => /\bdino\b/i.test(String(p.nome || '')));
+  const amanha = new Date(Date.now() + 86400000).toLocaleDateString('en-CA', { timeZone: 'America/Cuiaba' });
+  const horarios = (r) => ({ horarios: (r.proximosHorarios || []).map((h) => `${h.weekday || ''} ${h.date} ${h.time}${h.professional ? ` (${h.professional})` : ''}`.trim()) });
+  if (corte && dino) {
+    await passo('sugerir_proximos_horarios', { serviceId: corte.id, professionalId: dino.id, period: 'tarde', fromDate: amanha, limit: 3 }, (r) => ({ pedido: `${corte.nome} com ${dino.nome}, amanhã à tarde`, ...horarios(r) }));
+  } else {
+    passos.push({ ferramenta: 'sugerir_proximos_horarios', ok: false, erro: corte ? 'DINO_NAO_ENCONTRADO' : 'SERVICO_CORTE_NAO_ENCONTRADO' });
+  }
+  if (corte) await passo('sugerir_proximos_horarios', { serviceId: corte.id, professionalId: 'qualquer', limit: 3 }, (r) => ({ pedido: `${corte.nome} com qualquer profissional`, ...horarios(r) }));
+  await passo('buscar_produtos', { query: 'perfume', limit: 5 }, (r) => ({
+    total: r.totalCatalogo ?? r.total ?? (r.produtos || []).length,
+    produtos: (r.produtos || []).slice(0, 5).map((p) => `${p.nome} — ${(p.variantes || []).map((v) => `R$ ${Number(v.preco || 0).toFixed(2).replace('.', ',')}${v.estoque > 0 ? '' : ' (sob encomenda, 10 dias)'}`).join(' / ')}`),
+  }));
+  return { canal: { id: canal.id, nome: canal.nome }, aprovado: passos.every((item) => item.ok), passos };
 }
 
 export function whatsappMessagingReady() {

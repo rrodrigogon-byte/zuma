@@ -44,7 +44,8 @@ function payload(overrides = {}) {
 test('valida allowlist, selection, limite e reduz sem carregar campos brutos', () => {
   const result = validateHumanQueueResponse(payload({ items: [item({ telefone: '5565999999999', nome: 'PII-CANARY', assigned_to: 'secret' })] }), { empresaId: EMPRESA, lojaId: LOJA })
   assert.equal(result.items[0].telefone, '***9999')
-  assert.equal('nome' in result.items[0], false)
+  // O nome do WhatsApp aparece no box para o atendente achar a conversa; o resto bruto fica de fora.
+  assert.equal(result.items[0].nome, 'PII-CANARY')
   assert.equal('assigned_to' in result.items[0], false)
   assert.equal(result.selection.canonicalLojaId, CANONICAL)
   assert.equal(result.items.length, 1)
@@ -53,13 +54,20 @@ test('valida allowlist, selection, limite e reduz sem carregar campos brutos', (
 test('rejeita UUID/status/selection/duplicata/campos temporais inválidos e mais de 100', () => {
   for (const bad of [
     payload({ items: [item({ id: 'not-uuid' })] }),
-    payload({ items: [item({ status: 'ativo' })] }),
+    payload({ items: [item({ status: 'qualquer' })] }),
     payload({ selection: { empresaId: EMPRESA, requestedLojaId: 'outra', canonicalLojaId: CANONICAL, inferred: false } }),
     payload({ items: [item(), item()] }),
     payload({ items: [item({ handoff_requested_at: 123 })] }),
     payload({ items: Array.from({ length: HUMAN_QUEUE_LIMIT + 1 }, (_, index) => item({ id: `44444444-4444-4444-8444-${String(index).padStart(12, '0')}` })) }),
   ]) assert.throws(() => validateHumanQueueResponse(bad, { empresaId: EMPRESA, lojaId: LOJA }))
   assert.throws(() => validateHumanQueueResponse(payload({ selection: { empresaId: EMPRESA, requestedLojaId: LOJA, canonicalLojaId: CANONICAL, inferred: true } }), { empresaId: EMPRESA, lojaId: LOJA }))
+})
+
+test('box vermelho: usa precisa_atendente da API e, sem ele, conversa humana sem responsável', () => {
+  const contexto = { empresaId: EMPRESA, lojaId: LOJA }
+  assert.equal(validateHumanQueueResponse(payload({ items: [item({ precisa_atendente: false })] }), contexto).items[0].precisaAtendente, false)
+  assert.equal(validateHumanQueueResponse(payload(), contexto).items[0].precisaAtendente, true)
+  assert.equal(validateHumanQueueResponse(payload({ items: [item({ status: 'ativo' })] }), contexto).items[0].precisaAtendente, false)
 })
 
 test('nunca expõe telefone bruto e usa fallback de conversa', () => {
