@@ -14,7 +14,7 @@ import { formatPersonName, matchAgendaSlot, normalizeAgendaDate, serviceWithProf
 // público), a IA lê e grava nela; senão segue o caminho PostgreSQL antigo.
 import {
   createAppointment as createScheduledAppointment,
-  availability as listSchedulingAvailability,
+  availability as agendaAvailability,
   listProfessionals as listSchedulingProfessionals,
   listServices as listSchedulingServices,
   listCustomerAppointments as listWhatsappCustomerAppointments,
@@ -742,13 +742,13 @@ async function toolPrepareAppointment(context, args = {}) {
       slot = encaixe(extra.slots);
     }
     if (!slot) throw new SchedulingError(`não há encaixe seguido para ${extra.service.nome} depois de ${String(Math.floor(cursor / 60)).padStart(2, '0')}:${String(cursor % 60).padStart(2, '0')}`, 'SLOT_UNAVAILABLE');
-    combo.push({ serviceId: extraId, professionalId: extraProfessionalId, time: slot });
+    combo.push({ serviceId: extra.service?.id || extraId, professionalId: extraProfessionalId, time: slot });
     partes.push(extraProfessionalId === mesmoProfissional && mesmoProfissional ? `${extra.service.nome} às ${slot}` : `${extra.service.nome} às ${slot} (com quem estiver livre)`);
     cursor = minutesOf(slot) + Number(extra.service.duracaoMinutos || 30);
     total += Number(extra.service.preco || 0);
   }
   const request = {
-    serviceId,
+    serviceId: availability.service?.id || serviceId,
     professionalId,
     date,
     time,
@@ -762,7 +762,7 @@ async function toolPrepareAppointment(context, args = {}) {
     if(await agendaSource(scope)!=='barbearia') throw new WhatsappAiToolError('Pacotes não estão disponíveis nesta agenda.','PLAN_UNAVAILABLE');
     if(perfilDoTelefone(scope.empresaId,scope.phone).perfil==='cadastro_ambiguo') throw new WhatsappAiToolError('A equipe precisa conferir os cadastros deste telefone.','CUSTOMER_AMBIGUOUS');
     if(combo.length) throw new WhatsappAiToolError('Para usar o pacote, confirme um procedimento por vez para conferir o saldo.','PLAN_SINGLE_SERVICE');
-    validarAgendamentoComPlano(scope.empresaId,{clienteTelefone:scope.phone,servicoId:serviceId,dataHora:`${date}T${time}:00-04:00`});
+    validarAgendamentoComPlano(scope.empresaId,{clienteTelefone:scope.phone,servicoId:availability.service?.id || serviceId,dataHora:`${date}T${time}:00-04:00`});
   }
   const para = customerName ? ` para ${customerName}` : '';
   const precoPrincipal = isDino ? total : Number(availability.service.preco || 0);
@@ -771,6 +771,72 @@ async function toolPrepareAppointment(context, args = {}) {
     ? `${friendlyWhen(date, time)}${para}: ${partes.join(' + ')}, total R$ ${total.toFixed(2).replace('.', ',')}`
     : `${servicoComQuem}${para}, ${friendlyWhen(date, time)}, no valor de R$ ${precoPrincipal.toFixed(2).replace('.', ',')}${notaHorarioExtra}`;
   return savePreparedAction(scope, 'agendamento', request, args.usePlan===true ? `${servicoComQuem}${para}, ${friendlyWhen(date,time)}, pelo pacote (saldo e validade revalidados na confirmação)` : summary);
+}
+
+// ---------------------------------------------------------------------------
+// Serviço "do profissional": a Dino cadastra o mesmo serviço por profissional ("Corte",
+// "Corte com Dino", "CORTE (Bruno ou Nati)"). Quando o cliente pede "corte com o Dino" e o
+// modelo manda o id de "Corte", a agenda respondia "Este profissional não realiza este
+// serviço" e o T-Rex travava. Aqui o serviço equivalente que o profissional faz entra no lugar.
+// ---------------------------------------------------------------------------
+function textoPlano(valor) {
+  return String(valor || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+}
+
+export function nomeBaseDoServico(nome) {
+  return textoPlano(nome)
+    .replace(/\([^)]*\)/g, ' ')
+    .replace(/\s+com\s+(o|a)?\s*[a-z]+.*$/, ' ')
+    .replace(/[^a-z0-9 ]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function apelidosDoProfissional(nome) {
+  const plano = textoPlano(nome);
+  const entreParenteses = [...plano.matchAll(/\(([^)]+)\)/g)].map((m) => m[1].trim());
+  const palavras = plano.replace(/\([^)]*\)/g, ' ').split(/[^a-z]+/).filter((p) => p.length >= 3);
+  return [...new Set([...entreParenteses, ...palavras])];
+}
+
+/** Serviços com o mesmo nome base, primeiro os que citam o profissional no nome. */
+export function servicosEquivalentes(servicos = [], servicoId, profissional) {
+  const atual = servicos.find((item) => item.id === servicoId);
+  if (!atual || !profissional) return [];
+  const base = nomeBaseDoServico(atual.nome);
+  if (!base) return [];
+  const apelidos = apelidosDoProfissional(profissional.nome);
+  const citaProfissional = (item) => apelidos.some((apelido) => new RegExp(`\\b${apelido.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`).test(textoPlano(item.nome)));
+  return servicos
+    .filter((item) => item.id !== servicoId && nomeBaseDoServico(item.nome) === base)
+    .sort((a, b) => Number(citaProfissional(b)) - Number(citaProfissional(a)));
+}
+
+function profissionalNaoFazServico(error) {
+  return /n[aã]o realiza (este|esse) servi[cç]o/i.test(String(error?.message || ''));
+}
+
+async function listSchedulingAvailability(scope, input = {}) {
+  try {
+    return await agendaAvailability(scope, input);
+  } catch (error) {
+    const professionalId = String(input.professionalId || '');
+    if (!profissionalNaoFazServico(error) || !professionalId || professionalId === 'qualquer') throw error;
+    const [servicos, profissionais] = await Promise.all([
+      listSchedulingServices(scope).catch(() => []),
+      listSchedulingProfessionals(scope).catch(() => []),
+    ]);
+    const profissional = (profissionais || []).find((item) => item.id === professionalId);
+    for (const candidato of servicosEquivalentes(servicos || [], input.serviceId, profissional)) {
+      try {
+        const resultado = await agendaAvailability(scope, { ...input, serviceId: candidato.id });
+        return { ...resultado, servicoAjustado: true, instrucaoServico: `Para ${profissional.nome} o serviço é "${resultado.service?.nome}". Use serviceId ${resultado.service?.id} nas próximas ferramentas.` };
+      } catch (outro) {
+        if (!profissionalNaoFazServico(outro)) throw outro;
+      }
+    }
+    throw error;
+  }
 }
 
 function cartItemsFromArgs(rawItems) {
