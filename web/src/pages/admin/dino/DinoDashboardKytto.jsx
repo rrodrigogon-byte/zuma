@@ -53,11 +53,11 @@ function dataBR(data) {
 }
 function rs(valor) {
   if (valor === null || valor === undefined) return '—'
-  return fmtR(valor).replace(',00', '')
+  return fmtKpi(valor).replace(',00', '')
 }
 function rsCurto(valor) {
   const n = Number(valor || 0)
-  if (Math.abs(n) >= 1000) return `${(n / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} mil`
+  if (Math.abs(n) >= 1000) return `${(n / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}K`
   return n.toLocaleString('pt-BR', { maximumFractionDigits: 0 })
 }
 function pctTexto(valor) {

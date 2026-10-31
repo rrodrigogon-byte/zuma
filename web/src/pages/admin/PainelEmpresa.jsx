@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../../lib/api'
 import { useAuth } from '../../lib/auth'
-import { money } from './dino/format'
+import { money } from './dino/format';
+import { fmtKpi } from '../../lib/api.js'
 import './customer360.css'
 import './dino/dino-admin.css'
 
@@ -46,10 +47,10 @@ export default function PainelEmpresa() {
     {!dados && <p className="dadm-muted">Carregando…</p>}
 
     {r && <section className="dadm-kpis" aria-label="Financeiro">
-      <article><span>Recebido no mês</span><strong>{money(r.recMes)}</strong><small><Link to="/admin/financeiro">Abrir o Financeiro</Link></small></article>
-      <article className={r.resultadoMes < 0 ? 'is-alert' : ''}><span>Resultado do mês</span><strong>{money(r.resultadoMes)}</strong><small>Recebido − pago</small></article>
-      <article className={r.receberVencidos ? 'is-alert' : ''}><span>A receber</span><strong>{money(r.aReceber)}</strong><small>{r.receberVencidos ? `${r.receberVencidos} vencida(s)` : 'Nada vencido'}</small></article>
-      <article className={r.pagarVencidos ? 'is-alert' : ''}><span>A pagar</span><strong>{money(r.aPagar)}</strong><small>{r.pagarVencidos ? `${r.pagarVencidos} vencida(s)` : r.vencendo3Dias ? `${r.vencendo3Dias} vencem em 3 dias` : 'Nada vencido'}</small></article>
+      <article><span>Recebido no mês</span><strong>{fmtKpi(r.recMes)}</strong><small><Link to="/admin/financeiro">Abrir o Financeiro</Link></small></article>
+      <article className={r.resultadoMes < 0 ? 'is-alert' : ''}><span>Resultado do mês</span><strong>{fmtKpi(r.resultadoMes)}</strong><small>Recebido − pago</small></article>
+      <article className={r.receberVencidos ? 'is-alert' : ''}><span>A receber</span><strong>{fmtKpi(r.aReceber)}</strong><small>{r.receberVencidos ? `${r.receberVencidos} vencida(s)` : 'Nada vencido'}</small></article>
+      <article className={r.pagarVencidos ? 'is-alert' : ''}><span>A pagar</span><strong>{fmtKpi(r.aPagar)}</strong><small>{r.pagarVencidos ? `${r.pagarVencidos} vencida(s)` : r.vencendo3Dias ? `${r.vencendo3Dias} vencem em 3 dias` : 'Nada vencido'}</small></article>
     </section>}
     {dados?.estado && !dados.estado.ativo && <p className="dadm-note">Recebimentos, contas e resultado do mês estão no Financeiro. <Link to="/admin/financeiro">Abrir o Financeiro</Link></p>}
 

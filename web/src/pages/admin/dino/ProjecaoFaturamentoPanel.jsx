@@ -209,11 +209,11 @@ function ModalAnaliseProfissional({ profissional, mes, onClose, onSalvo }) {
       </div>
 
       <div style={grid(150)}>
-        <div style={kpi}><div style={label}>Realizado</div><div style={{ ...value, fontSize: 20 }}>{fmtR(m.realizado)}</div><small style={{ color: 'var(--muted)' }}>{m.atendimentosConcluidos || 0} concluídos</small></div>
-        <div style={kpi}><div style={label}>Agenda futura</div><div style={{ ...value, fontSize: 20 }}>{fmtR(m.agendaFutura)}</div><small style={{ color: 'var(--muted)' }}>{m.atendimentosAgendados || 0} agendados</small></div>
-        <div style={kpi}><div style={label}>Projeção final</div><div style={{ ...value, fontSize: 20, color: 'var(--accent)' }}>{fmtR(m.projecao)}</div><small style={{ color: 'var(--muted)' }}>Estimativa do mês</small></div>
-        <div style={kpi}><div style={label}>Meta cadastrada</div><div style={{ ...value, fontSize: 20 }}>{form.receita ? fmtR(form.receita) : '—'}</div><small style={{ color: 'var(--muted)' }}>{form.atendimentos ? `${form.atendimentos} atendimentos` : 'Sem meta de qtd'}</small></div>
-        <div style={kpi}><div style={label}>Ticket médio</div><div style={{ ...value, fontSize: 20 }}>{m.ticketMedio ? fmtR(m.ticketMedio) : '—'}</div><small style={{ color: 'var(--muted)' }}>Por atendimento</small></div>
+        <div style={kpi}><div style={label}>Realizado</div><div style={{ ...value, fontSize: 20 }}>{fmtKpi(m.realizado)}</div><small style={{ color: 'var(--muted)' }}>{m.atendimentosConcluidos || 0} concluídos</small></div>
+        <div style={kpi}><div style={label}>Agenda futura</div><div style={{ ...value, fontSize: 20 }}>{fmtKpi(m.agendaFutura)}</div><small style={{ color: 'var(--muted)' }}>{m.atendimentosAgendados || 0} agendados</small></div>
+        <div style={kpi}><div style={label}>Projeção final</div><div style={{ ...value, fontSize: 20, color: 'var(--accent)' }}>{fmtKpi(m.projecao)}</div><small style={{ color: 'var(--muted)' }}>Estimativa do mês</small></div>
+        <div style={kpi}><div style={label}>Meta cadastrada</div><div style={{ ...value, fontSize: 20 }}>{form.receita ? fmtKpi(form.receita) : '—'}</div><small style={{ color: 'var(--muted)' }}>{form.atendimentos ? `${form.atendimentos} atendimentos` : 'Sem meta de qtd'}</small></div>
+        <div style={kpi}><div style={label}>Ticket médio</div><div style={{ ...value, fontSize: 20 }}>{m.ticketMedio ? fmtKpi(m.ticketMedio) : '—'}</div><small style={{ color: 'var(--muted)' }}>Por atendimento</small></div>
         <div style={kpi}><div style={label}>Taxa de ocupação</div><div style={{ ...value, fontSize: 20 }}>{porcentagem(m.ocupacao)}</div><small style={{ color: 'var(--muted)' }}>{horas(m.minutosAgendados)} de {horas(m.capacidadeMinutos)}</small></div>
       </div>
 
@@ -363,10 +363,10 @@ export default function ProjecaoFaturamentoPanel({ onOpenTab }) {
         </div>
       </div>
       <div style={{ ...grid(190), marginTop: 16 }}>
-        <div style={kpi}><div style={label}>Faturamento realizado</div><div style={value}>{fmtR(atual.realizado)}</div><small style={{ color: 'var(--muted)' }}>Serviços {fmtR(atual.servicos)} · Revenda {fmtR(atual.revenda)}</small></div>
-        <div style={kpi}><div style={label}>Receita já reservada na agenda</div><div style={value}>{fmtR(atual.agendaFutura)}</div><small style={{ color: 'var(--muted)' }}>{atual.atendimentosAgendados || 0} agendamentos futuros no mês</small></div>
-        <div style={kpi}><div style={label}>Projeção de fechamento</div><div style={{ ...value, color: 'var(--accent)' }}>{fmtR(atual.projecao)}</div><small style={{ color: 'var(--muted)' }}>Cenário conservador: {fmtR(atual.conservador)} · favorável: {fmtR(atual.favoravel)}</small></div>
-        <div style={kpi}><div style={label}>Meta da equipe</div><div style={value}>{atual.metaReceita ? fmtR(atual.metaReceita) : '—'}</div><small style={{ color: 'var(--muted)' }}>{atual.diferencaMeta == null ? 'Sem meta configurada' : atual.diferencaMeta >= 0 ? `+${fmtR(atual.diferencaMeta)} acima da meta` : `${fmtR(atual.diferencaMeta)} para atingir a meta`}</small></div>
+        <div style={kpi}><div style={label}>Faturamento realizado</div><div style={value}>{fmtKpi(atual.realizado)}</div><small style={{ color: 'var(--muted)' }}>Serviços {fmtKpi(atual.servicos)} · Revenda {fmtKpi(atual.revenda)}</small></div>
+        <div style={kpi}><div style={label}>Receita já reservada na agenda</div><div style={value}>{fmtKpi(atual.agendaFutura)}</div><small style={{ color: 'var(--muted)' }}>{atual.atendimentosAgendados || 0} agendamentos futuros no mês</small></div>
+        <div style={kpi}><div style={label}>Projeção de fechamento</div><div style={{ ...value, color: 'var(--accent)' }}>{fmtKpi(atual.projecao)}</div><small style={{ color: 'var(--muted)' }}>Cenário conservador: {fmtKpi(atual.conservador)} · favorável: {fmtKpi(atual.favoravel)}</small></div>
+        <div style={kpi}><div style={label}>Meta da equipe</div><div style={value}>{atual.metaReceita ? fmtKpi(atual.metaReceita) : '—'}</div><small style={{ color: 'var(--muted)' }}>{atual.diferencaMeta == null ? 'Sem meta configurada' : atual.diferencaMeta >= 0 ? `+${fmtKpi(atual.diferencaMeta)} acima da meta` : `${fmtKpi(atual.diferencaMeta)} para atingir a meta`}</small></div>
       </div>
     </section>
 

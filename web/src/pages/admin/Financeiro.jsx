@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { api } from '../../lib/api'
 import { useToast } from '../../hooks/useToast'
 
+const fmtKpi = (v) => { if (v == null) return '—'; const n = Number(v || 0); const abs = Math.abs(n); const sign = n < 0 ? '-' : ''; if (abs >= 1000000) return `${sign}R$ ${(abs / 1000000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}M`; if (abs >= 1000) return `${sign}R$ ${(abs / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}K`; return `${sign}R$ ${abs.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`; }
 const fmtR = v => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(v || 0))
 const fmtData = s => s ? new Date(s + 'T12:00:00').toLocaleDateString('pt-BR') : '—'
 const mesLabel = s => { const [y, m] = s.split('-'); return `${m}/${y}` }
@@ -120,7 +121,7 @@ function DRE({ resumo }) {
   const linha = (label, val, color, bold) => (
     <div style={{ display:'flex', justifyContent:'space-between', padding:'8px 0', borderBottom:'1px solid var(--line)', fontSize:13 }}>
       <span style={{ color: bold ? 'var(--cream)' : 'var(--muted)', fontWeight: bold ? 700 : 400 }}>{label}</span>
-      <span style={{ fontWeight:700, color: color || 'var(--cream)' }}>{fmtR(val)}</span>
+      <span style={{ fontWeight:700, color: color || 'var(--cream)' }}>{fmtKpi(val)}</span>
     </div>
   )
 
@@ -135,7 +136,7 @@ function DRE({ resumo }) {
       {linha('Mensalidades Pendentes', resumo.mensPendentes, '#fbbf24', false)}
       <div style={{ display:'flex', justifyContent:'space-between', padding:'12px 0', fontSize:15 }}>
         <span style={{ fontWeight:800, color:'var(--cream)' }}>= Resultado Líquido</span>
-        <span style={{ fontWeight:900, fontSize:17, color: resultado >= 0 ? 'var(--green)' : '#ef4444' }}>{fmtR(resultado)}</span>
+        <span style={{ fontWeight:900, fontSize:17, color: resultado >= 0 ? 'var(--green)' : '#ef4444' }}>{fmtKpi(resultado)}</span>
       </div>
       <div style={{ marginTop:8, padding:'8px 12px', borderRadius:8, background: margem >= 0 ? 'rgba(255,107,44,.1)' : 'rgba(239,68,68,.1)', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
         <span style={{ fontSize:12, color:'var(--muted)' }}>Margem operacional</span>
@@ -279,12 +280,12 @@ export default function Financeiro() {
         return (
           <>
             <div style={{ display:'flex', gap:10, flexWrap:'wrap', marginBottom:12 }}>
-              <KpiCard label="Saldo Total" value={fmtR(resumo.saldo)} color={resumo.saldo >= 0 ? 'var(--green)' : '#ef4444'} icon="💰" />
-              <KpiCard label="A Receber" value={fmtR(resumo.aReceber)} color='var(--green)' icon="📥" />
-              <KpiCard label="A Pagar" value={fmtR(resumo.aPagar)} color='#ef4444' icon="📤" />
-              <KpiCard label="Rec. Mês" value={fmtR(resumo.recMes)} color='var(--green)' icon="↑" />
-              <KpiCard label="Desp. Mês" value={fmtR(resumo.despMes)} color='#ef4444' icon="↓" />
-              <KpiCard label="Resultado Mês" value={fmtR(resultado)} color={resultado >= 0 ? 'var(--lime)' : '#ef4444'}
+              <KpiCard label="Saldo Total" value={fmtKpi(resumo.saldo)} color={resumo.saldo >= 0 ? 'var(--green)' : '#ef4444'} icon="💰" />
+              <KpiCard label="A Receber" value={fmtKpi(resumo.aReceber)} color='var(--green)' icon="📥" />
+              <KpiCard label="A Pagar" value={fmtKpi(resumo.aPagar)} color='#ef4444' icon="📤" />
+              <KpiCard label="Rec. Mês" value={fmtKpi(resumo.recMes)} color='var(--green)' icon="↑" />
+              <KpiCard label="Desp. Mês" value={fmtKpi(resumo.despMes)} color='#ef4444' icon="↓" />
+              <KpiCard label="Resultado Mês" value={fmtKpi(resultado)} color={resultado >= 0 ? 'var(--lime)' : '#ef4444'}
                 sub={`Margem: ${margem}%`} icon={resultado >= 0 ? '📈' : '📉'} />
               <KpiCard label="Inadimplentes" value={resumo.inadimplentes} color={resumo.inadimplentes > 0 ? '#ef4444' : 'var(--green)'} icon="⚠️" />
             </div>
@@ -352,7 +353,7 @@ export default function Financeiro() {
                     <div style={{ fontSize:14, fontWeight:800, color:'var(--cream)' }}>
                       {resultado >= 0 ? '📈' : '📉'} Resultado do Mês Atual
                     </div>
-                    <div style={{ fontSize:22, fontWeight:900, color:margemColor }}>{fmtR(resultado)}</div>
+                    <div style={{ fontSize:22, fontWeight:900, color:margemColor }}>{fmtKpi(resultado)}</div>
                   </div>
                   <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:10, marginBottom:12 }}>
                     {[
@@ -362,7 +363,7 @@ export default function Financeiro() {
                     ].map(k => (
                       <div key={k.label} style={{ textAlign:'center', padding:'8px', background:'rgba(0,0,0,.12)', borderRadius:8 }}>
                         <div style={{ fontSize:11, color:'var(--muted)', marginBottom:4 }}>{k.label}</div>
-                        <div style={{ fontSize:16, fontWeight:800, color:k.color }}>{k.isStr ? k.val : fmtR(k.val)}</div>
+                        <div style={{ fontSize:16, fontWeight:800, color:k.color }}>{k.isStr ? k.val : fmtKpi(k.val)}</div>
                       </div>
                     ))}
                   </div>
@@ -394,7 +395,7 @@ export default function Financeiro() {
                   ].map(r => (
                     <div key={r.label} style={{ display:'flex', justifyContent:'space-between', padding:'7px 0', borderBottom:'1px solid var(--line)', fontSize:13 }}>
                       <span style={{ color:'var(--muted)' }}>{r.label}</span>
-                      <span style={{ fontWeight:700, color:'var(--green)' }}>{fmtR(r.val)}</span>
+                      <span style={{ fontWeight:700, color:'var(--green)' }}>{fmtKpi(r.val)}</span>
                     </div>
                   ))}
                 </div>
@@ -407,7 +408,7 @@ export default function Financeiro() {
                   ].map(r => (
                     <div key={r.label} style={{ display:'flex', justifyContent:'space-between', padding:'7px 0', borderBottom:'1px solid var(--line)', fontSize:13 }}>
                       <span style={{ color:'var(--muted)' }}>{r.label}</span>
-                      <span style={{ fontWeight:700, color:r.color }}>{fmtR(r.val)}</span>
+                      <span style={{ fontWeight:700, color:r.color }}>{fmtKpi(r.val)}</span>
                     </div>
                   ))}
                 </div>
@@ -475,7 +476,7 @@ export default function Financeiro() {
               ].filter(Boolean).map(k => (
                 <div key={k.label} style={{ ...S.card, padding:'10px 14px', flex:1, minWidth:120 }}>
                   <div style={{ fontSize:11, color:'var(--muted)', marginBottom:3 }}>{k.label}</div>
-                  <div style={{ fontSize:16, fontWeight:800, color:k.color }}>{fmtR(k.val)}</div>
+                  <div style={{ fontSize:16, fontWeight:800, color:k.color }}>{fmtKpi(k.val)}</div>
                 </div>
               ))
             })()}

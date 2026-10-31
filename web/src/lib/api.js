@@ -186,3 +186,13 @@ export function fmtDateOnly(iso) {
   if (!iso) return '—'
   return new Date(iso + 'T12:00:00').toLocaleDateString('pt-BR')
 }
+
+export function fmtKpi(v) {
+  if (v === null || v === undefined) return '—'
+  const n = Number(v || 0)
+  const abs = Math.abs(n)
+  const sign = n < 0 ? '-' : ''
+  if (abs >= 1000000) return `${sign}R$ ${(abs / 1000000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}M`
+  if (abs >= 1000) return `${sign}R$ ${(abs / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}K`
+  return `${sign}R$ ${abs.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+}
