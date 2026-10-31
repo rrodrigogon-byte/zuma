@@ -751,16 +751,6 @@ export function ehHorarioExtraDino(horaLocal) {
 }
 
 export function calcularPrecoServicoHorario(servico, profissional, horaLocal) {
-  const nomeProf = String(profissional?.nome || profissional?.apelido || '').toLowerCase();
-  const nomeServico = String(servico?.nome || '').toLowerCase();
-  const ehBrunoOuNati = nomeProf.includes('bruno') || nomeProf.includes('nati');
-  
-  if (ehBrunoOuNati && servico) {
-    if (nomeServico === 'corte') return 100;
-    if (nomeServico === 'barba') return 100;
-    if (nomeServico === 'corte e barba' || nomeServico === 'corte + barba') return 200;
-  }
-
   const precoBase = Number(servico?.preco || 0);
   if (ehProfissionalDino(profissional)) {
     if (ehHorarioExtraDino(horaLocal)) {

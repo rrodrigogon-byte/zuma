@@ -494,13 +494,14 @@ async function toolAvailability(context, args = {}) {
   const professionalId = await resolveAgendaId(scope, args.professionalId, 'professionalId', { allowAny: true });
   const date = normalizeAgendaDate(args.date, localDateIso()) || cleanText(args.date, 10);
   const disponibilidade = await listSchedulingAvailability(scope, { serviceId, professionalId, date });
+  const servicesList = await listSchedulingServices(scope).catch(() => []);
   return {
     ok: true,
     dataClassification: 'untrusted_business_data',
     disponibilidade: sanitizeToolData({
       ...disponibilidade,
       // Valor por horário calculado pelo sistema (regra do Dino: diurno x após 18h09).
-      valoresPorHorario: Object.fromEntries((disponibilidade?.slots || []).slice(0, 40).map((time) => [time, brl(precoNoHorario(disponibilidade.service, disponibilidade.professional, time))])),
+      valoresPorHorario: Object.fromEntries((disponibilidade?.slots || []).slice(0, 40).map((time) => [time, brl(precoNoHorario(disponibilidade.service, disponibilidade.professional, time, servicesList))])),
     }),
     instrucao: 'Se o horário pedido não estiver em slots, ofereça os 3 horários livres mais próximos dele, com o valor de cada um. Não pergunte período.',
   };
@@ -516,12 +517,24 @@ export function horarioExtraDoDino(service = {}, professional = {}, time = '') {
 
 // Preço do serviço no horário escolhido. Para o Dino vale a tabela por horário do ERP
 // (R$ 300 até 18h09, R$ 600 depois); para os demais, o preço do cadastro.
-export function precoNoHorario(service = {}, professional = {}, time = '') {
+export function precoNoHorario(service = {}, professional = {}, time = '', servicesList = []) {
   const base = Number(service?.preco || 0);
   const servicoDoDino = String(service?.nome || '').toLowerCase().includes('dino');
   const prof = professional && professional.id !== 'qualquer' ? professional : null;
   if (prof && barbeariaErp.ehProfissionalDino(prof)) return barbeariaErp.calcularPrecoServicoHorario(service, prof, time);
   if (servicoDoDino) return barbeariaErp.calcularPrecoServicoHorario(service, { nome: 'Dino', apelido: 'Dino', atendimento24x7: true }, time);
+  
+  // Se existir um serviço específico para este profissional (ex: "Corte (Bruno ou Nati)")
+  if (prof && service && servicesList.length) {
+    const nomeProf = String(prof.nome || '').toLowerCase();
+    const nomeServicoLimpo = String(service.nome || '').split('(')[0].trim().toLowerCase();
+    const especifico = servicesList.find(s => 
+      s.id !== service.id &&
+      String(s.nome).toLowerCase().includes(nomeServicoLimpo) && 
+      String(s.nome).toLowerCase().includes(nomeProf.split(' ')[0])
+    );
+    if (especifico) return Number(especifico.preco || 0);
+  }
   return base;
 }
 
@@ -529,6 +542,7 @@ export function precoNoHorario(service = {}, professional = {}, time = '') {
 // próximas (mesmo dia; se faltar, os dias seguintes), com valor. Em 27/10 o atendente
 // perguntava "manhã, tarde ou noite?" em vez de oferecer horários.
 export async function nearestAlternatives(scope, { serviceId, professionalId, date, time, availability = null, limit = 3, fetchDay = null, today = localDateIso(), now = localTimeHHMM() }) {
+  const servicesList = await listSchedulingServices(scope).catch(() => []);
   const lerDia = fetchDay || ((data) => listSchedulingAvailability(scope, { serviceId, professionalId, date: data }));
   const target = minutesOf(time);
   const pick = (day, data) => {
@@ -557,7 +571,7 @@ export async function nearestAlternatives(scope, { serviceId, professionalId, da
     date: item.date,
     time: item.time,
     ...(item.professional ? { profissional: item.professional } : {}),
-    valor: brl(precoNoHorario(item.service, item.prof, item.time)),
+    valor: brl(precoNoHorario(item.service, item.prof, item.time, servicesList)),
   }));
 }
 
@@ -710,11 +724,12 @@ async function toolNextSlots(context, args = {}) {
       // Valor de cada opção (o Dino muda de preço depois das 18h09).
       const servicos = await listSchedulingServices(scope).catch(() => []);
       const servico = (servicos || []).find((item) => item.id === serviceId) || {};
+      // O nearestAlternatives pode receber a lista para não precisar buscar dnv
       const profs = professionalId === 'qualquer' ? [] : await listSchedulingProfessionals(scope).catch(() => []);
       const prof = (profs || []).find((item) => item.id === professionalId) || null;
       return result.slots.map((slot) => {
         const profSlot = prof || (slot.professional ? { nome: slot.professional } : null);
-        return { ...slot, quando: friendlyWhen(slot.date, slot.time), valor: brl(precoNoHorario(servico, profSlot, slot.time)), horarioExtra: horarioExtraDoDino(servico, profSlot, slot.time) };
+        return { ...slot, quando: friendlyWhen(slot.date, slot.time), valor: brl(precoNoHorario(servico, profSlot, slot.time, servicos)), horarioExtra: horarioExtraDoDino(servico, profSlot, slot.time) };
       });
     })()),
     periodo: result.period,
@@ -1068,7 +1083,8 @@ async function toolPrepareAppointment(context, args = {}) {
   for (const id of (Array.isArray(args.extraServiceIds) ? args.extraServiceIds : []).slice(0, 3)) extras.push(await resolveAgendaId(scope, id, 'extraServiceIds'));
   const combo = [];
   let cursor = minutesOf(time) + Number(availability.service.duracaoMinutos || 30);
-  let total = precoNoHorario(availability.service, availability.professional, time);
+  const servicesList = await listSchedulingServices(scope).catch(() => []);
+  let total = precoNoHorario(availability.service, availability.professional, time, servicesList);
   // "qualquer profissional disponível" não informa nada ao cliente: a equipe sai na confirmação.
   const comQuem = availability.professional?.id === 'qualquer' ? '' : ` com ${availability.professional.nome}`;
   // "Corte e barba com Dino" + "com Dino" saía "com Dino com Dino".
@@ -1096,7 +1112,7 @@ async function toolPrepareAppointment(context, args = {}) {
     combo.push({ serviceId: extra.service?.id || extraId, professionalId: extraProfessionalId, time: slot });
     partes.push(extraProfessionalId === mesmoProfissional && mesmoProfissional ? `${extra.service.nome} às ${slot}` : `${extra.service.nome} às ${slot} (com quem estiver livre)`);
     cursor = minutesOf(slot) + Number(extra.service.duracaoMinutos || 30);
-    total += Number(extra.service.preco || 0);
+    total += precoNoHorario(extra.service, extra.professional || (extraProfessionalId === 'qualquer' ? null : { id: extraProfessionalId, nome: (await listSchedulingProfessionals(scope).catch(()=>[])).find(p=>p.id===extraProfessionalId)?.nome }), slot, servicesList);
   }
   const request = {
     serviceId: availability.service?.id || serviceId,
