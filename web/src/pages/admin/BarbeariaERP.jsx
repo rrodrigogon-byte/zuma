@@ -749,7 +749,7 @@ export default function BarbeariaERP() {
     telefone: "",
     email: "",
     dataNascimento: "",
-    limiteCreditoMensal: 0,
+    limiteCreditoMensal: 500,
     diasVencimento: 30,
     observacao: "",
   });
@@ -4179,7 +4179,7 @@ export default function BarbeariaERP() {
                   telefone: "",
                   email: "",
                   dataNascimento: "",
-                  limiteCreditoMensal: 0,
+                  limiteCreditoMensal: 500,
                   diasVencimento: 30,
                   observacao: "",
                 });
@@ -4210,7 +4210,7 @@ export default function BarbeariaERP() {
                         telefone: "",
                         email: "",
                         dataNascimento: "",
-                        limiteCreditoMensal: 0,
+                        limiteCreditoMensal: 500,
                         diasVencimento: 30,
                         observacao: "",
                       });
@@ -8732,7 +8732,8 @@ export default function BarbeariaERP() {
         (cliente) =>
           cliente.id === (formPagamentoComanda.clienteId || comanda.clienteId),
       );
-      const limiteCredito = Number(clienteCredito?.limiteCreditoMensal || 0);
+      const _lim = Number(clienteCredito?.limiteCreditoMensal || 0);
+      const limiteCredito = _lim > 0 ? _lim : 500;
       const saldoDevedor = Number(clienteCredito?.saldoDevedor || 0);
       const creditoDisponivel = Math.max(0, limiteCredito - saldoDevedor);
       const valorConta = Number(
@@ -12450,7 +12451,7 @@ export default function BarbeariaERP() {
                 telefone: "",
                 email: "",
                 dataNascimento: "",
-                limiteCreditoMensal: 0,
+                limiteCreditoMensal: 500,
                 diasVencimento: 30,
                 observacao: "",
               });

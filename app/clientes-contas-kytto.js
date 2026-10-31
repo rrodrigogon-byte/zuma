@@ -380,7 +380,7 @@ export function obterCliente(empresaId, clienteId) {
 export function obterSituacaoCredito(empresaId, clienteId, valorSolicitado = 0) {
   const cliente = obterCliente(empresaId, clienteId);
   if (!cliente || cliente.padrao) return null;
-  const limite = Math.max(0, numero(cliente.limiteCreditoMensal));
+  const limite = Math.max(0, numero(cliente.limiteCreditoMensal > 0 ? cliente.limiteCreditoMensal : 500));
   const saldoDevedor = Math.max(0, numero(cliente.saldoDevedor));
   const disponivel = Math.max(0, limite - saldoDevedor);
   const solicitado = Math.max(0, numero(valorSolicitado));
@@ -395,8 +395,7 @@ export function obterSituacaoCredito(empresaId, clienteId, valorSolicitado = 0) 
     solicitado: Number(solicitado.toFixed(2)),
     diasVencimento,
     dataVencimento: vencimento.toISOString(),
-    permitido: solicitado > 0, // Ignora limite até o crediário ser finalizado
-    _desativado_permitido_futuro: limite > 0 && solicitado > 0 && solicitado - disponivel <= 0.005,
+    permitido: limite > 0 && solicitado > 0 && solicitado - disponivel <= 0.005,
   };
 }
 

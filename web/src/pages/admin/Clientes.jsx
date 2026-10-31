@@ -21,7 +21,7 @@ const EMPTY_FORM = {
   corte: '',
   instagram: '',
   linkedin: '',
-  limiteCreditoMensal: 0,
+  limiteCreditoMensal: 500,
   diasVencimento: 30,
   observacao: ''
 }
