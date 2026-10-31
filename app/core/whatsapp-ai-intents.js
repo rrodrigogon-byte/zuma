@@ -67,7 +67,7 @@ export function confirmIntent(text, { actionType = '' } = {}) {
   if (!value) return null;
   const words = value.split(' ');
   if (words.length > 6) return null;
-  if (actionType === 'cancelamento') {
+  if (actionType === 'cancelamento' || actionType === 'cancelamento_pedido') {
     if (CANCELLATION_CONFIRM.has(value)) return 'confirm';
     if (value === 'cancelar' || value === 'cancelado') return null;
   }
@@ -93,7 +93,7 @@ const STRICT_CANCEL = new Set(['cancelar', 'cancela', 'nao confirmar', 'desistir
 export function strictConfirmIntent(text, { actionType = '' } = {}) {
   const value = normalize(text).replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim();
   // Num cancelamento de horário, "cancela" é ambíguo: decide a regra natural (ou o modelo).
-  if (actionType === 'cancelamento' && (value === 'cancela' || value === 'cancelar')) return null;
+  if ((actionType === 'cancelamento' || actionType === 'cancelamento_pedido') && (value === 'cancela' || value === 'cancelar')) return null;
   if (STRICT_CONFIRM.has(value)) return 'confirm';
   if (STRICT_CANCEL.has(value)) return 'cancel';
   return null;
@@ -186,4 +186,20 @@ export function isGenericCustomerName(value) {
   if (!name || name.length < 2) return true;
   if (!/\p{L}/u.test(name)) return true;
   return GENERIC_NAMES.has(name) || /^cliente\s*\d*$/.test(name);
+}
+
+/**
+ * Recusa no começo da frase seguida de outro assunto ("NÃO, era só teste. Quero ver os
+ * perfumes"). Não vale quando o resto ajusta a mesma ação (dia, hora, profissional, serviço):
+ * "não, prefiro às 15h" ou "não, com o Bruno" continuam com o modelo.
+ */
+const RECUSA_INICIO = /^(?:nao|n|negativo|nao quero|nao precisa|desisto|esquece|deixa|cancela|cancelar)\b[\s,.!;:-]+(.+)$/;
+const AJUSTE_DA_ACAO = /\b(?:\d{1,2}\s*(?:h|:|horas?)|as \d|prefiro|outro (?:dia|horario|barbeiro|profissional)|outra (?:hora|data)|troca|muda|mudar|em vez|ao inves|amanha|hoje|segunda|terca|quarta|quinta|sexta|sabado|domingo|manha|tarde|noite|com o |com a |dia \d|\d{1,2}\/\d{1,2})/;
+export function declineWithNewRequest(text) {
+  const value = normalize(text).replace(/\s+/g, ' ').trim();
+  const match = value.match(RECUSA_INICIO);
+  if (!match) return false;
+  const resto = match[1].trim();
+  if (resto.length < 4) return false;
+  return !AJUSTE_DA_ACAO.test(resto);
 }

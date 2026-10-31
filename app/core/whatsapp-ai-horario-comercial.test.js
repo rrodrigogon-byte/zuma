@@ -67,3 +67,21 @@ test('horário de funcionamento sai do expediente da equipe, sem o Dino 24x7', a
   assert.equal(horarioFuncionamentoTexto(equipe), 'segunda a sábado, das 6h às 21h; domingo: fechado');
   assert.equal(horarioFuncionamentoTexto([{ nome: 'Dino', atendimento24x7: true }]), '');
 });
+
+test('"NÃO, era só teste. Quero ver os perfumes" desiste; "não, prefiro às 15h" ajusta', async () => {
+  const { declineWithNewRequest } = await import('./whatsapp-ai-intents.js');
+  assert.equal(declineWithNewRequest('NÃO, era só teste. Quero ver os perfumes que vocês têm'), true);
+  assert.equal(declineWithNewRequest('não, deixa pra lá. tem perfume da Dior?'), true);
+  assert.equal(declineWithNewRequest('não, prefiro às 15h'), false);
+  assert.equal(declineWithNewRequest('não, com o Bruno'), false);
+  assert.equal(declineWithNewRequest('não, amanhã de manhã'), false);
+  assert.equal(declineWithNewRequest('não'), false, '"não" sozinho já é tratado pela confirmação');
+  assert.equal(declineWithNewRequest('sim, pode marcar'), false);
+});
+
+test('preparar_cancelamento_pedido está declarada para o modelo', async () => {
+  const { WHATSAPP_AI_TOOL_DECLARATIONS } = await import('./whatsapp-ai-tools.js');
+  const tool = WHATSAPP_AI_TOOL_DECLARATIONS.find((item) => item.name === 'preparar_cancelamento_pedido');
+  assert.ok(tool);
+  assert.match(tool.description, /aguarda pagamento/);
+});

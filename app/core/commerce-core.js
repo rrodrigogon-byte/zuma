@@ -942,14 +942,16 @@ export async function createPendingOrder(trx, context, input = {}) {
   const taxes = 0;
   const total = Number((subtotal + shipping + taxes - discount).toFixed(2));
   const status = 'pending_payment';
+  // Canal de origem: site (padrão) ou integração ("api", ex.: atendente do WhatsApp).
+  const origem = input.origem === 'api' ? 'api' : 'web';
 
   await trx.query(
     `INSERT INTO commerce_orders
       (id, empresa_id, storefront_id, loja_id, customer_id, customer_snapshot, public_code, status, origem, moeda,
        subtotal, desconto, frete, impostos, total, endereco_entrega, endereco_cobranca, observacao, shipping_method_id, shipping_quote_id)
-     VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, 'web', $9, $10, $11, $12, $13, $14, $15::jsonb, $16::jsonb, $17, $18, $19)`,
+     VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, $20, $9, $10, $11, $12, $13, $14, $15::jsonb, $16::jsonb, $17, $18, $19)`,
     [orderId, empresaId, storefront.id, storefront.loja_id || null, customerId, '{}', publicCode, status, storefront.moeda || 'BRL', subtotal, discount, shipping, taxes, total,
-      JSON.stringify(shippingSelection?.address || input.shippingAddress || null), JSON.stringify(input.billingAddress || null), String(input.note || '').slice(0, 1000) || null, shippingMethodId, shippingSelection?.quote.id || null],
+      JSON.stringify(shippingSelection?.address || input.shippingAddress || null), JSON.stringify(input.billingAddress || null), String(input.note || '').slice(0, 1000) || null, shippingMethodId, shippingSelection?.quote.id || null, origem],
   );
   for (const line of normalizedLines) {
     await trx.query(

@@ -345,6 +345,9 @@ export function personaConfirmationReply(persona, result = {}, seed = '') {
   if (result.type === 'cancelamento') {
     return `Cancelado${item.servico ? `: ${item.servico}${item.profissional ? ` com ${item.profissional}` : ''}` : ''}. Quer que eu já deixe outro dia marcado?`;
   }
+  if (result.type === 'cancelamento_pedido') {
+    return `Cancelado: pedido ${item.publicCode || ''}. Nada foi cobrado. Quer que eu monte outro?`.replace('  ', ' ');
+  }
   if (result.type === 'promocao_cliente') {
     return 'Feito! A oferta vai chegar por aqui.';
   }
@@ -353,7 +356,7 @@ export function personaConfirmationReply(persona, result = {}, seed = '') {
 }
 
 export function personaConfirmationFailure(code, type = '') {
-  const oQue = type === 'pedido' ? 'o pedido' : type === 'cancelamento' ? 'o cancelamento' : type === 'remarcacao' ? 'a remarcação' : 'o horário';
+  const oQue = type === 'pedido' ? 'o pedido' : type === 'cancelamento_pedido' ? 'o cancelamento do pedido' : type === 'cancelamento' ? 'o cancelamento' : type === 'remarcacao' ? 'a remarcação' : 'o horário';
   switch (code) {
     case 'ACTION_EXPIRED': return `Demorou um pouco e ${oQue} não foi concluído. Vejo de novo? Me fala o dia.`;
     case 'PLANO_VENCIDO':

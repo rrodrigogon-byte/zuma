@@ -4,7 +4,7 @@ import { db } from './database.js';
 import { save as saveLegacyDb } from '../db.js';
 import { registrarLancamento } from '../financeiro-central-kytto.js';
 import { extractExpenseEvidence } from './whatsapp-ai-media.js';
-import { countPublishedProducts, createPendingOrder, listPublishedProducts } from './commerce-core.js';
+import { countPublishedProducts, createPendingOrder, listPublishedProducts, transitionOrder } from './commerce-core.js';
 import { quoteAvailableShipping } from './commerce-shipping.js';
 import { requiresPickupOnly, PICKUP_ONLY_ERROR_CODE } from './commerce-pickup-rules.js';
 import { productDetails, productCard } from './whatsapp-product-card.js';
@@ -831,6 +831,38 @@ async function toolOrderStatus(context, args = {}) {
   return { ok: true, pedido: { codigo: order.public_code, status: order.status, total: Number(order.total), moeda: order.moeda, criadoEm: order.criado_em } };
 }
 
+// O cliente pode desistir de um pedido que ainda não foi pago (30/10: "pode cancelar o pedido"
+// voltava "não consigo cancelar pedidos"). Só o pedido DELE, só aguardando pagamento, sempre
+// com resumo e SIM; pedido pago ou em separação continua com a equipe.
+async function toolPrepareOrderCancellation(context, args = {}) {
+  const scope = contextScope(context);
+  const orderCode = cleanText(args.orderCode, 80).toUpperCase();
+  const result = await db.queryRead(
+    `SELECT o.id, o.public_code, o.status, o.total
+       FROM commerce_orders o
+       JOIN commerce_customers c ON c.id = o.customer_id AND c.empresa_id = o.empresa_id
+      WHERE o.empresa_id = $1 AND o.loja_id = $2
+        AND ${phoneMatchKeySql('c.telefone')} = ${phoneMatchKeySql('$3')}
+        AND ($4 = '' OR upper(o.public_code) = $4)
+        AND o.criado_em > CURRENT_TIMESTAMP - INTERVAL '30 days'
+      ORDER BY o.criado_em DESC
+      LIMIT 5`,
+    [scope.empresaId, scope.lojaId, scope.phone, orderCode],
+  );
+  const pedidos = result.rows || [];
+  const abertos = pedidos.filter((item) => item.status === 'pending_payment');
+  if (!pedidos.length) throw new WhatsappAiToolError('pedido não encontrado para este contato; peça o código do pedido (começa com KC-)', 'ORDER_NOT_FOUND');
+  if (orderCode && !abertos.length) {
+    return { ok: false, code: 'ORDER_NOT_CANCELLABLE', status: pedidos[0].status, instrucao: 'Este pedido já foi pago, separado ou cancelado: não dá para cancelar por aqui. Ofereça falar com a equipe (solicitar_humano) para cancelar ou trocar.' };
+  }
+  if (abertos.length !== 1) {
+    if (!abertos.length) return { ok: false, code: 'ORDER_NOT_CANCELLABLE', instrucao: 'Não há pedido aguardando pagamento deste contato. Para pedido pago ou em separação, ofereça falar com a equipe (solicitar_humano).' };
+    return { ok: false, code: 'ORDER_AMBIGUOUS', pedidos: abertos.map((item) => item.public_code), instrucao: 'O contato tem mais de um pedido aguardando pagamento: pergunte o código de qual quer cancelar.' };
+  }
+  const pedido = abertos[0];
+  return savePreparedAction(scope, 'cancelamento_pedido', { orderId: pedido.id, publicCode: pedido.public_code }, `Cancelamento do pedido ${pedido.public_code}, total ${brl(pedido.total)}. O pedido ainda não foi pago.`);
+}
+
 function stableJson(value) {
   if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`;
   if (value && typeof value === 'object') return `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${stableJson(value[key])}`).join(',')}}`;
@@ -1009,9 +1041,14 @@ async function toolPrepareAppointment(context, args = {}) {
   // atendente marcou outro às 18h45 sem perceber. Antes de preparar, confere a agenda
   // do próprio contato naquele dia; para outra pessoa (filho, esposa) o modelo confirma.
   if (args.confirmarOutroHorario !== true) {
+    // Horário para OUTRA pessoa no mesmo número ("eu e o Pedro") não é duplicidade: só conta
+    // agendamento do mesmo nome (ou sem nome) naquele dia.
+    const nomePedido = semAcento(cleanText(args.customerName, 100)).trim();
+    const mesmaPessoa = (item) => !nomePedido || !item?.cliente || semAcento(String(item.cliente)).trim() === nomePedido
+      || semAcento(String(item.cliente)).trim().split(' ')[0] === nomePedido.split(' ')[0];
     const doDia = await listWhatsappCustomerAppointments(scope, { includePast: false, limit: 10 })
       .then((lista) => (lista || []).filter((item) => !['cancelado', 'concluido', 'nao_compareceu'].includes(String(item?.status))
-        && localDateIso(new Date(item.dataHora)) === date))
+        && localDateIso(new Date(item.dataHora)) === date && mesmaPessoa(item)))
       .catch(() => []);
     if (doDia.length) {
       return {
@@ -1361,9 +1398,12 @@ async function toolQuoteShipping(context, args = {}) {
       nome: sanitizeUntrustedBusinessText(option.shippingMethodName || option.nome || option.name, 80),
       valor: brl(option.amount),
       prazoDiasUteis: Number(option.deliveryDays) || null,
+      // Ex.: "+ 10 dias úteis por item sob encomenda". Em 30/10 o T-Rex disse "11 dias úteis"
+      // para entrega em Tangará sem explicar que o perfume era sob encomenda.
+      observacao: option.deliveryNote ? sanitizeUntrustedBusinessText(option.deliveryNote, 160) : null,
     })),
     retiradaNaLoja: 'grátis',
-    orientacao: 'Informe as opções com valor e prazo. Para entrega, use link_carrinho: o cliente informa endereço e CPF e escolhe a entrega no site seguro. Para retirada, use preparar_pedido. Não peça CPF nem endereço completo no WhatsApp.',
+    orientacao: 'Informe as opções com valor e prazo; se houver observacao (ex.: item sob encomenda), explique o motivo do prazo. Para entrega, use link_carrinho: o cliente informa endereço e CPF e escolhe a entrega no site seguro. Para retirada, use preparar_pedido. Não peça CPF nem endereço completo no WhatsApp.',
   };
 }
 
@@ -2207,6 +2247,7 @@ export const WHATSAPP_AI_TOOL_DECLARATIONS = [
   { name: 'preparar_promocao_cliente', description: 'Prepara o envio de uma promoção ao cliente com opt-in. O envio só ocorre após CONFIRMAR.', parameters: { type: 'OBJECT', properties: { promotionId: { type: 'STRING' }, code: { type: 'STRING' }, message: { type: 'STRING' } }, required: ['promotionId', 'message'] } },
   { name: 'preparar_agendamento', description: 'Prepara um agendamento para confirmação. Não grava o agendamento. Use o id retornado por listar_profissionais; na agenda da barbearia também é aceito "qualquer" quando o cliente não tem preferência. Vários serviços na mesma ida: passe os demais em extraServiceIds e eles são encaixados em sequência. Para outra pessoa (filho, amigo), use o nome DELA em customerName. customerName é o nome real (nunca "Cliente"): se não souber, pergunte antes.', parameters: { type: 'OBJECT', properties: { confirmarOutroHorario: { type: 'BOOLEAN', description: 'true só depois que o cliente disse que quer mais um horário no mesmo dia' }, serviceId: { type: 'STRING' }, professionalId: { type: 'STRING' }, date: { type: 'STRING' }, time: { type: 'STRING' }, customerName: { type: 'STRING', description: 'Nome real da pessoa atendida' }, notes: { type: 'STRING' }, usePlan: { type: 'BOOLEAN', description: 'Somente quando o cliente pedir usar seu pacote. Exige saldo e validade, um procedimento por confirmação.' }, extraServiceIds: { type: 'ARRAY', items: { type: 'STRING' }, description: 'até 3 serviços seguidos na mesma visita' } }, required: ['serviceId', 'professionalId', 'date', 'time', 'customerName'] } },
   { name: 'preparar_remarcacao', description: 'Prepara a remarcação de um agendamento do cliente para confirmação.', parameters: { type: 'OBJECT', properties: { appointmentId: { type: 'STRING' }, date: { type: 'STRING' }, time: { type: 'STRING' } }, required: ['appointmentId', 'date', 'time'] } },
+  { name: 'preparar_cancelamento_pedido', description: 'Prepara o cancelamento de um pedido DO PRÓPRIO contato que ainda aguarda pagamento, para o cliente confirmar com SIM. Pedido pago, em separação ou entregue não cancela por aqui: ofereça a equipe.', parameters: { type: 'OBJECT', properties: { orderCode: { type: 'STRING', description: 'Código do pedido (KC-...); vazio se o contato tem um só pedido aguardando pagamento' } } } },
   { name: 'preparar_cancelamento', description: 'Prepara o cancelamento de um agendamento do cliente para confirmação. Aceita o id (consultar_meus_agendamentos) ou o código da confirmação; se o contato tiver um só horário futuro, pode mandar vazio.', parameters: { type: 'OBJECT', properties: { appointmentId: { type: 'STRING', description: 'id, código da confirmação (ex.: 5D0FDE32) ou vazio' } } } },
 
   { name: 'enviar_comprovante_pix', description: 'Envia o comprovante PIX do cliente para notificar o Dino do pagamento do pedido. Só use quando o cliente enviar o comprovante PIX na conversa após você ter gerado o pedido.', parameters: { type: 'OBJECT', properties: { orderCode: { type: 'STRING', description: 'Código do pedido que o cliente acabou de pagar' } }, required: ['orderCode'] } },
@@ -2286,6 +2327,7 @@ const TOOL_MAP = {
   preparar_agendamento: toolPrepareAppointment,
   preparar_remarcacao: toolPrepareReschedule,
   preparar_cancelamento: toolPrepareCancellation,
+  preparar_cancelamento_pedido: toolPrepareOrderCancellation,
   enviar_comprovante_pix: toolSendPixReceipt,
   preparar_despesa: toolPrepareExpense,
   preparar_pedido: toolPrepareOrder,
@@ -2510,6 +2552,8 @@ export async function confirmPendingAction(context) {
     } else if (action.tipo === 'pedido') {
       response = await createPendingOrder(trx, { empresaId: scope.empresaId, lojaId: scope.lojaId }, {
         ...action.solicitacao,
+        // Pedido do WhatsApp não é venda do site: entra como canal "api" (integração).
+        origem: 'api',
         idempotencyKey: action.chave_idempotencia,
         correlationId: `whatsapp:${action.id}`,
       });
@@ -2534,6 +2578,15 @@ export async function confirmPendingAction(context) {
       response = await rescheduleWhatsappAppointment(trx, scope, action.solicitacao);
     } else if (action.tipo === 'cancelamento') {
       response = await cancelWhatsappAppointment(trx, scope, action.solicitacao.appointmentId);
+    } else if (action.tipo === 'cancelamento_pedido') {
+      const cancelado = await transitionOrder(trx, { empresaId: scope.empresaId, lojaId: scope.lojaId }, {
+        status: 'cancelled',
+        orderId: action.solicitacao.orderId,
+        origin: 'whatsapp_ia',
+        correlationId: `whatsapp:${action.id}`,
+        payload: { motivo: 'Cancelado pelo cliente no WhatsApp (pedido não pago)' },
+      });
+      response = { publicCode: action.solicitacao.publicCode, status: cancelado?.status || 'cancelled' };
     } else if (action.tipo === 'promocao_cliente') {
       response = await queueWhatsappPromotion(trx, scope, action.solicitacao);
     } else if (action.tipo === 'despesa_financeira') {

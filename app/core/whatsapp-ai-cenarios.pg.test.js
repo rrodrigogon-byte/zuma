@@ -804,7 +804,9 @@ test('simulação ponta a ponta do atendente da Dino', { skip, timeout: Number(p
     }
     const ativos = agendamentosDe(tel).filter((a) => ['agendado', 'confirmado'].includes(a.status));
     assert.equal(ativos.length, 1, 'o mesmo corte no mesmo dia não é duplicado');
-    assert.ok(mundo.transcricoes.at(-1).conversa.some((m) => /já tem esse serviço marcado nesse dia/.test(m.texto)));
+    // Desde 27/10 o aviso vem de preparar_agendamento (CUSTOMER_ALREADY_BOOKED) antes do resumo,
+    // e o atendente pergunta se o cliente quer manter, trocar ou se é para outra pessoa.
+    assert.ok(mundo.transcricoes.at(-1).conversa.some((m) => /já tem esse serviço marcado nesse dia|CUSTOMER_ALREADY_BOOKED|já tem horário/i.test(m.texto)));
   });
 
   await cena(t, '26 · Mensagem velha (celular offline > 30 min) não é respondida fora de hora', async () => {
@@ -1143,7 +1145,9 @@ test('simulação ponta a ponta do atendente da Dino', { skip, timeout: Number(p
   await cena(t, '51 · Preferência pela IA não remove bloqueio de segurança', async () => {
     const tel = telefoneNovo(); cliente(tel, 'oi'); await ciclo();
     const row = await sessao(tel);
-    await db.query(`UPDATE whatsapp_ai_sessions SET status='humano', handoff_reason='security:output_policy' WHERE id=$1`, [row.id]);
+    // output_policy virou violação de estilo (volta sozinha para a IA); bloqueio de segurança de
+    // verdade, como injeção de prompt, continua exigindo a equipe.
+    await db.query(`UPDATE whatsapp_ai_sessions SET status='humano', handoff_reason='security:prompt_injection' WHERE id=$1`, [row.id]);
     cliente(tel, 'não quero falar com ninguém');
     const out = await ciclo();
     assert.match(ultima(out), /revisão da equipe/);
@@ -1368,10 +1372,11 @@ test('simulação ponta a ponta do atendente da Dino', { skip, timeout: Number(p
     assert.notEqual(preparado.ok, false);
     assert.doesNotMatch(JSON.stringify(preparado), /com (\p{L}+) com \1/u);
     // Horário que não existe: devolve os horários livres de verdade para oferecer.
-    await assert.rejects(
-      () => createWhatsappAiToolExecutor({ ...ctx })('preparar_agendamento', { serviceId: servico.id, professionalId: 'qualquer', date: slot.date, time: '03:00', customerName: 'Rodrigo' }),
-      (error) => error.code === 'SLOT_UNAVAILABLE' && new RegExp(`Horários livres neste dia: ${slot.time}`).test(error.message),
-    );
+    // Desde 27/10 o próprio sistema devolve as 3 alternativas mais próximas, sem erro.
+    const indisponivel = await createWhatsappAiToolExecutor({ ...ctx })('preparar_agendamento', { serviceId: servico.id, professionalId: 'qualquer', date: slot.date, time: '03:00', customerName: 'Rodrigo', confirmarOutroHorario: true });
+    assert.equal(indisponivel.ok, false);
+    assert.equal(indisponivel.code, 'SLOT_UNAVAILABLE');
+    assert.ok(Array.isArray(indisponivel.alternativas) && indisponivel.alternativas.length > 0, 'oferece horários livres de verdade');
   });
 
   await cena(t, '48 · Fila humana parada há mais de 20 min volta a responder o cliente', async () => {
