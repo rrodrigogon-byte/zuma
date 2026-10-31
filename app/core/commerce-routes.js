@@ -25,7 +25,7 @@ import { createShippingAccount, failShippingLabel, finalizeShippingCancellation,
 import { shippingProviders } from './shipping-adapters.js';
 import { recordStorefrontEvent } from '../storefront-funnel.js';
 import { commerceMediaIdForIdempotencyKey, deleteCommerceImage, newCommerceMediaId, streamCommerceImage, uploadCommerceImage } from './commerce-media.js';
-import { claimWhatsappAiHandoff, closeWhatsappAiHandoff, configureWhatsappAiChannel, configureWhatsappAiPolicy, listWhatsappAiSessions, releaseWhatsappAiHandoff, syncWhatsappAiWebhook, testWhatsappAiGemini, whatsappAiOperationalStatus, configureWhatsappAiHandoff, diagnosticoAgendaVendaWhatsappAi, whatsappChannelType } from './whatsapp-ai.js';
+import { claimWhatsappAiHandoff, closeWhatsappAiHandoff, getWhatsappAiConversation, sendWhatsappAiStaffMessage, configureWhatsappAiChannel, configureWhatsappAiPolicy, listWhatsappAiSessions, releaseWhatsappAiHandoff, syncWhatsappAiWebhook, testWhatsappAiGemini, whatsappAiOperationalStatus, configureWhatsappAiHandoff, diagnosticoAgendaVendaWhatsappAi, whatsappChannelType } from './whatsapp-ai.js';
 import { campaignMetrics, cancelCampaign, confirmCampaign, createCampaign, listCampaignAudience, listCampaigns, previewCampaign, updateCampaignConsent } from './commerce-campaigns.js';
 import { cartRecoveryMetrics, listAbandonedCarts, syncPublicCart } from './commerce-abandoned-carts.js';
 import { consumePublicRateLimit, consumeWebhookRateLimit, createWebhookAuditAdapter, publicRequestFingerprint, webhookPayloadHash, webhookRequestId } from './commerce-public-rate-limit.js';
@@ -652,6 +652,10 @@ function jsonError(res, error) {
     AUTHENTICATED_USER_REQUIRED: 400,
     WHATSAPP_AI_SESSION_NOT_FOUND: 404,
     WHATSAPP_AI_SESSION_CONFLICT: 409,
+    WHATSAPP_AI_EMPTY_MESSAGE: 400,
+    WHATSAPP_AI_SESSION_NOT_WITH_STAFF: 409,
+    WHATSAPP_DELIVERY_UNKNOWN: 502,
+    WHATSAPP_PROVIDER_REJECTED: 502,
   };
   const status = statusByCode[error?.code] || 500;
   const publicMessages = {
@@ -662,6 +666,8 @@ function jsonError(res, error) {
     PAYMENT_PROVIDER_ERROR: 'Não foi possível comunicar com o gateway. Tente novamente em instantes.',
     SHIPPING_CEP_PROVIDER_ERROR: 'Não foi possível confirmar o CEP agora. Tente novamente em instantes ou preencha o endereço manualmente.',
     SHIPPING_CEP_PROVIDER_TIMEOUT: 'A consulta de CEP demorou para responder. Tente novamente em instantes.',
+    WHATSAPP_DELIVERY_UNKNOWN: 'O WhatsApp não confirmou o envio. Confira no celular antes de reenviar.',
+    WHATSAPP_PROVIDER_REJECTED: 'O WhatsApp recusou o envio. Confira a conexão do número e tente de novo.',
   };
   const publicMessage = publicMessages[error?.code] || (status >= 500 ? 'erro interno do Commerce Core' : error.message);
   return res.status(status).json({ error: publicMessage, code: error?.code || 'COMMERCE_ERROR', details: error?.details || {} });
@@ -2381,7 +2387,23 @@ export function createCommerceAdminRouter() {
     try {
       const context = await withWhatsappLoja(await requirePermission(req, 'settings.write'));
       const tipoCanal = whatsappTipoCanal(req);
-      res.json(await releaseWhatsappAiHandoff({ ...context, tipoCanal }, req.params.id));
+      res.json(await releaseWhatsappAiHandoff({ ...context, tipoCanal }, req.params.id, { retomar: req.body?.retomar !== false }));
+    } catch (error) { jsonError(res, error); }
+  });
+  // Painel da conversa: histórico completo (cliente, T-Rex e equipe) e resposta do atendente.
+  router.get('/whatsapp-ai/sessions/:id/messages', async (req, res) => {
+    try {
+      const context = await withWhatsappLoja(await requirePermission(req, 'reports.read'));
+      const tipoCanal = whatsappTipoCanal(req);
+      res.set('Cache-Control', 'no-store');
+      res.json(await getWhatsappAiConversation({ ...context, tipoCanal }, req.params.id, { limit: req.query.limit }));
+    } catch (error) { jsonError(res, error); }
+  });
+  router.post('/whatsapp-ai/sessions/:id/messages', async (req, res) => {
+    try {
+      const context = await withWhatsappLoja(await requirePermission(req, 'settings.write'));
+      const tipoCanal = whatsappTipoCanal(req);
+      res.json(await sendWhatsappAiStaffMessage({ ...context, tipoCanal, usuarioNome: req.user?.nome || '' }, req.params.id, req.body || {}));
     } catch (error) { jsonError(res, error); }
   });
   router.post('/whatsapp-ai/sessions/:id/close', async (req, res) => {

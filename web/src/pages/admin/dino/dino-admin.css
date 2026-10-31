@@ -539,3 +539,27 @@
 .wa-trex-filtro { display: grid; gap: 4px; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); }
 .wa-trex-filtro select { min-height: 38px; padding: 6px 10px; border-radius: 10px; border: 1px solid var(--line, #d0d5dd); background: var(--card, #fff); color: var(--fg, #12283f); font: inherit; font-size: 13px; text-transform: none; letter-spacing: 0; }
 .wa-trex-card__acoes .wa-trex-card__encerrar { flex-basis: 100%; }
+
+/* Painel da conversa do T-Rex (histórico completo + resposta do atendente) */
+.wa-trex-card__ver { width: 100%; }
+.wa-conv-backdrop { position: fixed; inset: 0; z-index: 60; display: flex; justify-content: flex-end; background: color-mix(in srgb, #000 35%, transparent); }
+.wa-conv { width: min(560px, 100vw); height: 100%; display: grid; grid-template-rows: auto auto auto 1fr auto auto; gap: 10px; padding: 16px; background: var(--card); border-left: 1px solid var(--line); box-shadow: -12px 0 32px rgba(0,0,0,.18); }
+.wa-conv__head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.wa-conv__head h2 { margin: 0; font: 800 18px var(--font-display); color: var(--fg); }
+.wa-conv__sub { margin: 2px 0 0; color: var(--muted); font-size: 13px; }
+.wa-conv__lista { overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding: 8px; border: 1px solid var(--line); border-radius: 12px; background: color-mix(in srgb, var(--accent-soft) 35%, var(--card)); min-height: 0; }
+.wa-conv__msg { max-width: 82%; display: grid; gap: 2px; padding: 8px 10px; border-radius: 12px; border: 1px solid var(--line); background: var(--card); }
+.wa-conv__msg--cliente { align-self: flex-start; border-bottom-left-radius: 4px; }
+.wa-conv__msg--trex { align-self: flex-end; border-bottom-right-radius: 4px; background: color-mix(in srgb, #25D366 14%, var(--card)); }
+.wa-conv__msg--equipe { align-self: flex-end; border-bottom-right-radius: 4px; background: color-mix(in srgb, #3B82F6 14%, var(--card)); }
+.wa-conv__autor { font-size: 11px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.wa-conv__texto { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14px; line-height: 1.45; color: var(--fg); }
+.wa-conv__enquete { margin: 4px 0 0; padding-left: 16px; font-size: 13px; color: var(--fg); }
+.wa-conv__hora { font-size: 11px; color: var(--muted); justify-self: end; }
+.wa-conv__composer { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: end; }
+.wa-conv__composer textarea { width: 100%; resize: vertical; min-height: 64px; padding: 10px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); color: var(--fg); font: inherit; }
+.wa-conv__acoes { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.wa-conv__retomar { display: flex; gap: 6px; align-items: center; font-size: 12.5px; color: var(--muted); flex-basis: 100%; }
+.wa-conv__confirma { display: inline-flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 13px; color: var(--fg); }
+.wa-conv__rodape { margin: 0; color: var(--muted); font-size: 13px; }
+@media (max-width: 600px) { .wa-conv { width: 100vw; padding: 12px; } .wa-conv__msg { max-width: 92%; } }

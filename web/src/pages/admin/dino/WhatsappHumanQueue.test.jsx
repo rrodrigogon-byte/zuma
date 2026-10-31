@@ -145,8 +145,38 @@ describe('quadro de conversas do T-Rex', () => {
     expect(apiMock.post).toHaveBeenCalledTimes(1)
     expect(apiMock.post.mock.calls[0][0]).toBe(`/api/admin/commerce/whatsapp-ai/sessions/${sessionB}/claim`)
     expect(apiMock.post.mock.calls[0][2].headers).toEqual({ 'X-Empresa-Id': empresaA, 'X-Loja-Id': lojaCanonical })
-    expect(apiMock.get).toHaveBeenCalledTimes(2)
+    const leiturasDoQuadro = apiMock.get.mock.calls.filter(([url]) => !url.includes('/messages'))
+    expect(leiturasDoQuadro).toHaveLength(2)
     expect(textOf(renderer)).toContain('O T-Rex parou de responder este contato')
+    // Assumiu: a conversa abre com o histórico completo.
+    expect(apiMock.get.mock.calls.some(([url]) => url === `/api/admin/commerce/whatsapp-ai/sessions/${sessionB}/messages`)).toBe(true)
+  })
+
+  it('painel da conversa mostra cliente, T-Rex e equipe e envia a resposta do atendente', async () => {
+    const conversa = {
+      sessao: { id: sessionA, telefone: '***9999', nome: 'Bruno', status: 'humano', motivo: 'cliente pediu uma pessoa', assumida: true, minha: true },
+      mensagens: [
+        { id: 'm1', autor: 'cliente', texto: 'Quero falar com alguém', em: '2026-10-13T11:00:00.000Z', entrega: null, enquete: null },
+        { id: 'm2', autor: 'trex', texto: 'Já chamei a equipe!', em: '2026-10-13T11:00:05.000Z', entrega: 'sent', enquete: null },
+        { id: 'm3', autor: 'equipe', autorNome: 'Nati', texto: 'Oi Bruno, aqui é a Nati', em: '2026-10-13T11:02:00.000Z', entrega: 'sent', enquete: null },
+      ],
+    }
+    apiMock.get.mockImplementation(async (url) => url.includes('/messages') ? conversa : response([item(sessionA, { assigned: true, isMine: true })]))
+    apiMock.post.mockResolvedValue({ ok: true, id: 'm4' })
+    const renderer = await montar()
+    await act(async () => { button(renderer, 'Ver conversa completa').props.onClick() })
+    await tick()
+    const texto = textOf(renderer)
+    expect(texto).toContain('Quero falar com alguém')
+    expect(texto).toContain('Já chamei a equipe!')
+    expect(texto).toContain('Oi Bruno, aqui é a Nati')
+    const campo = renderer.root.findByType('textarea')
+    await act(async () => { campo.props.onChange({ target: { value: 'Seu horário está confirmado' } }) })
+    const form = campo.parent
+    await act(async () => { await form.props.onSubmit({ preventDefault() {} }) })
+    await tick()
+    const envio = apiMock.post.mock.calls.find(([url]) => url.endsWith(`/sessions/${sessionA}/messages`))
+    expect(envio[1]).toEqual({ texto: 'Seu horário está confirmado' })
   })
 
   it('devolver ao T-Rex chama release e avisa que a IA volta a responder', async () => {
@@ -156,6 +186,7 @@ describe('quadro de conversas do T-Rex', () => {
     await act(async () => { await button(renderer, 'Devolver ao T-Rex').props.onClick() })
     await tick()
     expect(apiMock.post.mock.calls[0][0]).toBe(`/api/admin/commerce/whatsapp-ai/sessions/${sessionA}/release`)
+    expect(apiMock.post.mock.calls[0][1]).toEqual({ retomar: true })
     expect(textOf(renderer)).toContain('Conversa devolvida ao T-Rex')
   })
 

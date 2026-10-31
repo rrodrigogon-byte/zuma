@@ -29,7 +29,7 @@ import { authorizeWhatsappEgress } from './whatsapp-egress.js';
 import { enviarMensagem } from './whatsapp.js';
 import { ingestInboundWhatsappMessage } from './whatsapp-ai-routes.js';
 import { inboundMediaToText } from './whatsapp-ai-media.js';
-import { latestStaffMessages, pauseForStaff, releaseExpiredStaffPauses, staffTakeoverEnabled } from './whatsapp-staff-takeover.js';
+import { latestStaffMessages, pauseForStaff, recordStaffMessages, releaseExpiredStaffPauses, staffTakeoverEnabled } from './whatsapp-staff-takeover.js';
 
 const LOCK_KEY = 'dino_whatsapp_isa_poll';
 const AUDIO_MARKERS = new Set(['[ÁUDIO RECEBIDO]', '[AUDIO RECEBIDO]']);
@@ -241,6 +241,8 @@ export async function runIsaPollPass({ fetchImpl, agora = Date.now(), instance: 
       resumo.iaRetomada += await equipe.liberar(db, { canalId: canal.id }).catch(() => 0);
       const saidas = await buscarSaidas({ instance, from: agora - maxAgeMs(), limit: 100 }, fetchImpl).catch(() => ({ ok: false, messages: [] }));
       if (saidas?.ok) {
+        // O que a equipe escreveu no celular vai para o histórico da conversa (painel e T-Rex).
+        await (equipe.registrar || recordStaffMessages)(canal, saidas.messages).catch(() => 0);
         for (const contato of latestStaffMessages(saidas.messages)) {
           const r = await equipe.pausar(canal, contato).catch((error) => {
             console.warn('[WhatsApp] pausa por mensagem da equipe:', String(error?.message || error).slice(0, 200));

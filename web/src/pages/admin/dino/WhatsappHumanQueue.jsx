@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '../../../lib/api'
 import { Dialog } from '../customer360/shared'
+import WhatsappConversationPanel from './WhatsappConversationPanel'
 import {
   FILTROS_QUADRO,
   HUMAN_QUEUE_LIMIT,
@@ -51,6 +52,8 @@ export default function WhatsappHumanQueue({
   // Encerradas ficam fora do quadro: só aparecem escolhendo o filtro.
   const [filtro, setFiltro] = useState('em_andamento')
   const [claimingId, setClaimingId] = useState('')
+  // Conversa aberta no painel lateral (histórico completo + resposta do atendente).
+  const [conversaId, setConversaId] = useState('')
   const mountedRef = useRef(true)
   const contextKeyRef = useRef(contextKey)
   const assignmentRef = useRef(assignment)
@@ -226,14 +229,16 @@ export default function WhatsappHumanQueue({
     setNoticeContextKey('')
     try {
       const canalQuery = tipoCanal === 'cliente' ? '' : `?canal=${tipoCanal}`
-      await api.post(`${HUMAN_QUEUE_PATH}/${encodeURIComponent(sessionId)}/release${canalQuery}`, {}, {
+      const devolvida = await api.post(`${HUMAN_QUEUE_PATH}/${encodeURIComponent(sessionId)}/release${canalQuery}`, { retomar: true }, {
         headers: { 'X-Empresa-Id': selection?.empresaId || '', 'X-Loja-Id': selection?.canonicalLojaId || '' },
         signal: controller.signal,
       })
       if (!mountedRef.current || claimLockRef.current !== controller || contextKeyRef.current !== contextKey || !openRef.current) return
       const refreshed = await loadQueue()
       if (refreshed && mountedRef.current && contextKeyRef.current === contextKey) {
-        setNotice('Conversa devolvida ao T-Rex. Ele volta a responder este contato.')
+        setNotice(devolvida?.retomou
+          ? 'Conversa devolvida ao T-Rex: ele já está respondendo a última mensagem do cliente, com todo o histórico.'
+          : 'Conversa devolvida ao T-Rex: ele continua de onde parou na próxima mensagem do cliente.')
         setNoticeContextKey(contextKey)
         if (typeof onChanged === 'function') await onChanged()
       }
@@ -289,6 +294,7 @@ export default function WhatsappHumanQueue({
       if (refreshed && mountedRef.current && contextKeyRef.current === contextKey) {
         setNotice('Conversa assumida. O T-Rex parou de responder este contato até você devolver.')
         setNoticeContextKey(contextKey)
+        setConversaId(sessionId)
         if (typeof onChanged === 'function') await onChanged()
       }
     } catch (caught) {
@@ -336,7 +342,7 @@ export default function WhatsappHumanQueue({
     <div className="c360-card-head wa-human-queue__head">
       <div>
         <h2 id="wa-human-queue-title">{queueTitle}</h2>
-        <p className="wa-human-queue__intro">Todas as conversas em andamento com o T-Rex. Em vermelho, as que ele não conseguiu resolver: o atendente deve assumir e responder pelo WhatsApp do T-Rex. Conversas encerradas ficam no histórico e só aparecem pelo filtro. A tela atualiza sozinha a cada 30 segundos.</p>
+        <p className="wa-human-queue__intro">Todas as conversas em andamento com o T-Rex. Em vermelho, as que ele não conseguiu resolver: o atendente deve assumir: a conversa abre com todo o histórico e ele responde por ali. Conversas encerradas ficam no histórico e só aparecem pelo filtro. A tela atualiza sozinha a cada 30 segundos.</p>
       </div>
       <div style={{ display: 'flex', gap: '8px' }}>
         {!standalone && <button type="button" className="c360-btn ghost" onClick={() => window.open('/admin/whatsapp-fila' + (tipoCanal !== 'cliente' ? '?canal=' + tipoCanal : ''), '_blank')}>Abrir fila em nova janela</button>}
@@ -386,6 +392,7 @@ export default function WhatsappHumanQueue({
                   {comEquipe && <> · Esperando: <strong>{queueWaitLabel(item.handoff_requested_at)}</strong></>}
                   {encerrada && item.closed_at && <> · Encerrada: <strong>{queueDateLabel(item.closed_at)}</strong></>}
                 </p>
+                <button type="button" className="c360-btn ghost wa-trex-card__ver" onClick={() => setConversaId(item.id)}>Ver conversa completa</button>
                 {encerrada ? <p className="wa-trex-card__meta">No histórico. Se o cliente escrever de novo, o T-Rex volta a atender.</p> : <div className="wa-trex-card__acoes">
                   <button type="button" className="c360-btn primary" disabled={!canClaim || (item.assigned && !item.isMine) || item.isMine || Boolean(claimingId)} onClick={() => requestClaim(item)}>
                     {item.isMine ? 'Assumida por você' : item.assigned ? 'Já assumida' : 'Assumir conversa'}
@@ -404,6 +411,16 @@ export default function WhatsappHumanQueue({
       </div>
     </>}
 
+    {conversaId && selection && <WhatsappConversationPanel
+      sessionId={conversaId}
+      empresaId={selection.empresaId}
+      lojaId={selection.canonicalLojaId}
+      tipoCanal={tipoCanal}
+      canAct={canClaim}
+      onClose={() => { setConversaId(''); loadQueue({ silencioso: true }) }}
+      onChanged={async () => { await loadQueue({ silencioso: true }); if (typeof onChanged === 'function') await onChanged() }}
+    />}
+
     <Dialog open={Boolean(activeClaimDialog)} title={activeClaimDialog?.acao === 'encerrar' ? 'Encerrar conversa?' : 'Assumir conversa?'} labelId="wa-human-queue-claim" onClose={() => { if (!claimingId) setClaimDialog(null) }} onSubmit={confirmClaim}
       actions={<><button type="button" className="c360-btn ghost" onClick={() => setClaimDialog(null)} disabled={Boolean(claimingId)}>Cancelar</button><button type="submit" className="c360-btn primary" disabled={Boolean(claimingId)}>{activeClaimDialog?.acao === 'encerrar' ? (claimingId ? 'Encerrando…' : 'Encerrar conversa') : (claimingId ? 'Assumindo…' : 'Assumir conversa')}</button></>}>
       {activeClaimDialog?.acao === 'encerrar' ? <>
@@ -412,7 +429,7 @@ export default function WhatsappHumanQueue({
       </> : <>
         <p>Esta conversa será atribuída ao operador logado: <strong>{operator}</strong>.</p>
         <p>Empresa: <strong>{safeText(empresaNome)}</strong><br />Unidade: <strong>{safeText(lojaNome)}</strong></p>
-        <p>O T-Rex para de responder este contato até a conversa ser devolvida a ele. Responda o cliente pelo WhatsApp do T-Rex.</p>
+        <p>O T-Rex para de responder este contato até a conversa ser devolvida a ele. A conversa abre ao lado com todo o histórico, e você responde por ali.</p>
       </>}
     </Dialog>
   </section>

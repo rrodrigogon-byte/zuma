@@ -337,7 +337,8 @@ async function ensureSession(task, message) {
 
 async function historyForSession(session) {
   const result = await db.queryRead(
-    `SELECT papel, conteudo, criado_em, metadados->'enquete' AS enquete
+    `SELECT papel, conteudo, criado_em, metadados->'enquete' AS enquete, metadados->>'autor' AS autor,
+            metadados->>'interactionType' AS interacao
        FROM whatsapp_ai_messages
       WHERE empresa_id = $1 AND loja_id = $2 AND sessao_id = $3
         AND papel IN ('user', 'assistant') AND conteudo IS NOT NULL
@@ -347,7 +348,8 @@ async function historyForSession(session) {
   // A enquete enviada entra no histórico com as opções numeradas: o voto ("2" ou o nome) faz sentido.
   return result.rows.reverse().map(row => ({
     role: row.papel === 'assistant' ? 'assistant' : 'user',
-    text: row.papel === 'assistant' && row.enquete?.opcoes?.length ? `${row.conteudo}\n\n[Enquete enviada] ${enqueteNoHistorico(row.enquete)}` : row.conteudo,
+    // Mensagem da equipe (painel ou celular) entra marcada: ao retomar, o T-Rex sabe o que já foi dito.
+    text: `${row.papel === 'assistant' && (row.autor === 'equipe' || row.interacao === 'organic') ? '[Equipe da loja] ' : ''}${row.papel === 'assistant' && row.enquete?.opcoes?.length ? `${row.conteudo}\n\n[Enquete enviada] ${enqueteNoHistorico(row.enquete)}` : row.conteudo}`,
     at: row.criado_em,
   }));
 }
@@ -2446,27 +2448,191 @@ export async function claimWhatsappAiHandoff(context = {}, sessionId) {
   });
 }
 
-export async function releaseWhatsappAiHandoff(context = {}, sessionId) {
+export async function releaseWhatsappAiHandoff(context = {}, sessionId, { retomar = true } = {}) {
   const empresaId = requiredTenantUuid(context.empresaId, 'empresaId');
   const lojaId = requiredTenantUuid(context.lojaId, 'lojaId');
   const tipoCanal = whatsappChannelType(context.tipoCanal || 'cliente');
-  return db.transaction(async trx => {
+  const released = await db.transaction(async trx => {
     const result = await trx.query(
       `UPDATE whatsapp_ai_sessions
-          SET status = 'ativo', estado = estado - 'handoffReason',
+          SET status = 'ativo', estado = estado - 'handoffReason' - 'staffPauseUntil',
               handoff_requested_at = NULL, handoff_reason = NULL,
               assigned_to = NULL, assigned_at = NULL, priority = 0, closed_at = NULL,
               acao_pendente = NULL,
               atualizado_em = CURRENT_TIMESTAMP
         WHERE id = $1 AND empresa_id = $2 AND loja_id = $3 AND status = 'humano'
           AND canal_id IN (SELECT id FROM canais_integracao WHERE empresa_id = $2 AND loja_id = $3 AND provedor = 'whatsapp' AND tipo_canal = $4)
-        RETURNING id, status, atualizado_em`,
+        RETURNING id, status, atualizado_em, canal_id`,
       [cleanText(sessionId, 60), empresaId, lojaId, tipoCanal],
     );
     if (!result.rows[0]) throw new Error('sessão em handoff não encontrada');
-    await auditHandoff(trx, context, result.rows[0].id, 'automation_resumed');
+    await auditHandoff(trx, context, result.rows[0].id, 'automation_resumed', { retomar: retomar !== false });
     return result.rows[0];
   });
+  // O T-Rex continua de onde parou: se a última mensagem da conversa é do cliente e ninguém
+  // respondeu, ele responde agora, com todo o histórico (inclusive o que a equipe escreveu).
+  let retomada = { retomou: false, motivo: retomar === false ? 'desligado' : 'sem_mensagem_pendente' };
+  if (retomar !== false) retomada = await requeueLastCustomerMessage({ empresaId, lojaId, sessionId: released.id, canalId: released.canal_id }).catch(() => ({ retomou: false, motivo: 'falha' }));
+  return { id: released.id, status: released.status, atualizado_em: released.atualizado_em, ...retomada };
+}
+
+async function requeueLastCustomerMessage({ empresaId, lojaId, sessionId, canalId }) {
+  const ultima = await db.queryRead(
+    `SELECT papel, evento_externo_id FROM whatsapp_ai_messages
+      WHERE empresa_id = $1 AND loja_id = $2 AND sessao_id = $3 AND papel IN ('user', 'assistant')
+      ORDER BY criado_em DESC LIMIT 1`,
+    [empresaId, lojaId, sessionId],
+  );
+  const msg = ultima.rows[0];
+  if (!msg || msg.papel !== 'user' || !msg.evento_externo_id) return { retomou: false, motivo: 'sem_mensagem_pendente' };
+  const evento = await db.queryRead(
+    `SELECT id FROM eventos_integracao_canais WHERE empresa_id = $1 AND loja_id = $2 AND canal_id = $3 AND evento_externo_id = $4 LIMIT 1`,
+    [empresaId, lojaId, canalId, msg.evento_externo_id],
+  );
+  if (!evento.rows[0]) return { retomou: false, motivo: 'evento_nao_encontrado' };
+  await db.query(
+    `INSERT INTO tarefas_integracao_canais (empresa_id, loja_id, canal_id, evento_integracao_id, tipo, referencia_externa, payload)
+     VALUES ($1, $2, $3, $4, 'processar_conversa', $5, $6::jsonb)`,
+    [empresaId, lojaId, canalId, evento.rows[0].id, `retomada:${sessionId}`, JSON.stringify({ messageId: msg.evento_externo_id, retomada: true })],
+  );
+  try { (await import('./whatsapp-ai-wake.js')).wakeWhatsappAiWorker?.(); } catch { /* o worker pega na próxima volta */ }
+  return { retomou: true, motivo: 'respondendo_ultima_mensagem' };
+}
+
+/**
+ * Conversa completa para o painel do atendente: mensagens do cliente, do T-Rex e da equipe,
+ * em ordem, com a situação atual. Telefone mascarado; nada de metadados internos.
+ */
+export async function getWhatsappAiConversation(context = {}, sessionId, { limit = 300 } = {}) {
+  const empresaId = requiredTenantUuid(context.empresaId, 'empresaId');
+  const lojaId = requiredTenantUuid(context.lojaId, 'lojaId');
+  const tipoCanal = whatsappChannelType(context.tipoCanal || 'cliente');
+  const sess = await db.queryRead(
+    `SELECT id, telefone, nome, status, handoff_reason, handoff_requested_at, assigned_to, assigned_at, closed_at, ultima_interacao_em
+       FROM whatsapp_ai_sessions
+      WHERE id = $1 AND empresa_id = $2 AND loja_id = $3
+        AND canal_id IN (SELECT id FROM canais_integracao WHERE empresa_id = $2 AND loja_id = $3 AND provedor = 'whatsapp' AND tipo_canal = $4)`,
+    [cleanText(sessionId, 60), empresaId, lojaId, tipoCanal],
+  );
+  const s = sess.rows[0];
+  if (!s) {
+    const error = new Error('conversa não encontrada nesta unidade');
+    error.code = 'WHATSAPP_AI_SESSION_NOT_FOUND';
+    throw error;
+  }
+  const safeLimit = Math.min(500, Math.max(20, Math.trunc(Number(limit)) || 300));
+  const rows = (await db.queryRead(
+    `SELECT id, papel, conteudo, criado_em, delivery_status,
+            metadados->>'autor' AS autor, metadados->>'autorNome' AS autor_nome,
+            metadados->>'interactionType' AS interacao, metadados->'enquete' AS enquete
+       FROM whatsapp_ai_messages
+      WHERE empresa_id = $1 AND loja_id = $2 AND sessao_id = $3 AND papel IN ('user', 'assistant') AND conteudo IS NOT NULL
+      ORDER BY criado_em DESC LIMIT $4`,
+    [empresaId, lojaId, s.id, safeLimit],
+  )).rows.reverse();
+  const digits = String(s.telefone || '').replace(/\D/g, '');
+  return {
+    sessao: {
+      id: s.id,
+      telefone: digits.length >= 4 ? `***${digits.slice(-4)}` : 'contato',
+      nome: cleanText(s.nome, 80) || null,
+      status: s.status,
+      motivo: s.handoff_reason ? cleanText(s.handoff_reason, 80) : null,
+      assumida: Boolean(s.assigned_to),
+      minha: Boolean(s.assigned_to && context.usuarioId && String(s.assigned_to) === String(context.usuarioId)),
+      assumidaEm: s.assigned_at, encerradaEm: s.closed_at, ultimaInteracao: s.ultima_interacao_em,
+    },
+    mensagens: rows.map((row) => ({
+      id: row.id,
+      autor: row.papel === 'user' ? 'cliente' : (row.autor === 'equipe' || row.interacao === 'organic') ? 'equipe' : 'trex',
+      autorNome: row.autor === 'equipe' ? cleanText(row.autor_nome, 60) || null : null,
+      texto: cleanText(row.conteudo, 4000),
+      enquete: Array.isArray(row.enquete?.opcoes) ? { pergunta: cleanText(row.enquete.pergunta, 255), opcoes: row.enquete.opcoes.slice(0, 12).map((o) => cleanText(o, 100)) } : null,
+      em: row.criado_em,
+      entrega: row.papel === 'assistant' ? (row.delivery_status || null) : null,
+    })),
+  };
+}
+
+/**
+ * O atendente responde pelo painel: a mensagem sai pelo WhatsApp da loja (mesma trava de saída)
+ * e fica no histórico marcada como da equipe. Só com a conversa na equipe; assume se estiver livre.
+ */
+export async function sendWhatsappAiStaffMessage(context = {}, sessionId, input = {}) {
+  const empresaId = requiredTenantUuid(context.empresaId, 'empresaId');
+  const lojaId = requiredTenantUuid(context.lojaId, 'lojaId');
+  const tipoCanal = whatsappChannelType(context.tipoCanal || 'cliente');
+  const texto = String(input.texto || input.text || '').replace(/\u0000/g, '').trim().slice(0, 4000);
+  if (!texto) {
+    const error = new Error('escreva a mensagem');
+    error.code = 'WHATSAPP_AI_EMPTY_MESSAGE';
+    throw error;
+  }
+  const row = (await db.queryRead(
+    `SELECT s.id, s.telefone, s.status, s.assigned_to, s.canal_id, s.empresa_id, s.loja_id,
+            c.api_base_url, c.configuracao, c.nome AS canal_nome, c.status AS canal_status
+       FROM whatsapp_ai_sessions s
+       JOIN canais_integracao c ON c.id = s.canal_id AND c.empresa_id = s.empresa_id AND c.loja_id = s.loja_id
+      WHERE s.id = $1 AND s.empresa_id = $2 AND s.loja_id = $3 AND c.provedor = 'whatsapp' AND c.tipo_canal = $4`,
+    [cleanText(sessionId, 60), empresaId, lojaId, tipoCanal],
+  )).rows[0];
+  if (!row) {
+    const error = new Error('conversa não encontrada nesta unidade');
+    error.code = 'WHATSAPP_AI_SESSION_NOT_FOUND';
+    throw error;
+  }
+  if (row.status !== 'humano') {
+    const error = new Error('assuma a conversa antes de responder (o T-Rex está atendendo)');
+    error.code = 'WHATSAPP_AI_SESSION_NOT_WITH_STAFF';
+    throw error;
+  }
+  if (row.assigned_to && context.usuarioId && String(row.assigned_to) !== String(context.usuarioId)) {
+    const error = new Error('conversa assumida por outro atendente');
+    error.code = 'WHATSAPP_AI_SESSION_CONFLICT';
+    throw error;
+  }
+  if (!row.assigned_to && context.usuarioId) {
+    await db.query(
+      `UPDATE whatsapp_ai_sessions SET assigned_to = $4, assigned_at = CURRENT_TIMESTAMP, atualizado_em = CURRENT_TIMESTAMP
+        WHERE id = $1 AND empresa_id = $2 AND loja_id = $3 AND assigned_to IS NULL`,
+      [row.id, empresaId, lojaId, context.usuarioId],
+    );
+  }
+  const tenant = {
+    nome: row.configuracao?.display_name || row.canal_nome || 'Atendimento da unidade',
+    whatsapp_api_url: row.api_base_url || undefined,
+    whatsapp_instance: row.configuracao?.instance || undefined,
+    transport: row.configuracao?.transporte === 'waha' || row.configuracao?.provider === 'waha' ? 'waha' : undefined,
+    waha_session: row.configuracao?.waha_session || row.configuracao?.instance || undefined,
+    waha_group_id: row.configuracao?.waha_group_id || undefined,
+    empresa_id: empresaId, loja_id: lojaId, canal_id: row.canal_id,
+  };
+  const externalId = `equipe:${row.id}:${crypto.randomUUID()}`;
+  const autorNome = cleanText(context.usuarioNome || context.nome || '', 60);
+  const salvo = await db.query(
+    `INSERT INTO whatsapp_ai_messages
+      (empresa_id, loja_id, canal_id, sessao_id, direcao, papel, evento_externo_id, conteudo, metadados, delivery_status)
+     VALUES ($1, $2, $3, $4, 'saida', 'assistant', $5, $6, $7::jsonb, 'sending')
+     RETURNING id, criado_em`,
+    [empresaId, lojaId, row.canal_id, row.id, externalId, texto, JSON.stringify({ autor: 'equipe', autorNome, usuarioId: context.usuarioId || null, interactionType: 'staff_panel' })],
+  );
+  const resultado = await enviarMensagem(tenant, row.telefone, texto).catch((error) => ({ ok: false, error: safeErrorCode(error) }));
+  const status = resultado?.ok ? 'sent' : resultado?.uncertain ? 'unknown' : 'failed';
+  await db.query(
+    `UPDATE whatsapp_ai_messages SET delivery_status = $5, delivered_at = CASE WHEN $5 = 'sent' THEN CURRENT_TIMESTAMP ELSE delivered_at END
+      WHERE id = $1 AND empresa_id = $2 AND loja_id = $3 AND sessao_id = $4`,
+    [salvo.rows[0].id, empresaId, lojaId, row.id, status],
+  );
+  await db.query(
+    `UPDATE whatsapp_ai_sessions SET ultima_interacao_em = CURRENT_TIMESTAMP, atualizado_em = CURRENT_TIMESTAMP WHERE id = $1 AND empresa_id = $2`,
+    [row.id, empresaId],
+  ).catch(() => null);
+  if (!resultado?.ok) {
+    const error = new Error(resultado?.uncertain ? 'o WhatsApp não confirmou o envio; confira no celular antes de reenviar' : 'o WhatsApp recusou o envio');
+    error.code = resultado?.uncertain ? 'WHATSAPP_DELIVERY_UNKNOWN' : 'WHATSAPP_PROVIDER_REJECTED';
+    throw error;
+  }
+  return { ok: true, id: salvo.rows[0].id, em: salvo.rows[0].criado_em };
 }
 
 export async function closeWhatsappAiHandoff(context = {}, sessionId) {

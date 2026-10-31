@@ -138,3 +138,33 @@ export async function releaseExpiredStaffPauses(executor = db, { canalId = null,
   );
   return resultado.rows.length;
 }
+
+/**
+ * Mensagens que a equipe digitou no celular entram no histórico da conversa (marcadas como
+ * da equipe): o painel do atendente mostra tudo o que aconteceu e o T-Rex, ao retomar, sabe o
+ * que já foi dito. Só anota em conversa que já existe; idempotente pelo id da mensagem.
+ */
+export async function recordStaffMessages(canal, items = [], { database = db } = {}) {
+  if (!canal?.id) return 0;
+  let gravadas = 0;
+  for (const item of Array.isArray(items) ? items : []) {
+    if (!isStaffTyped(item)) continue;
+    const phone = isaChatId(item.chatId);
+    const texto = String(item.content || '').replace(/\u0000/g, '').trim().slice(0, 4000);
+    const at = new Date(item.timestamp);
+    if (!phone || !texto || !Number.isFinite(at.valueOf())) continue;
+    const id = `staff:${String(item.whatsappMessageId || item.questionId || at.toISOString()).slice(0, 150)}`;
+    const r = await database.query(
+      `INSERT INTO whatsapp_ai_messages
+        (empresa_id, loja_id, canal_id, sessao_id, direcao, papel, evento_externo_id, conteudo, metadados, delivery_status, delivered_at, criado_em)
+       SELECT s.empresa_id, s.loja_id, s.canal_id, s.id, 'saida', 'assistant', $3, $4, $5::jsonb, 'sent', $6::timestamptz, $6::timestamptz
+         FROM whatsapp_ai_sessions s
+        WHERE s.canal_id = $1 AND s.remote_jid = $2
+       ON CONFLICT (canal_id, evento_externo_id) WHERE evento_externo_id IS NOT NULL DO NOTHING
+       RETURNING id`,
+      [canal.id, `${phone}@s.whatsapp.net`, id, texto, JSON.stringify({ autor: 'equipe', interactionType: 'organic', origem: 'celular' }), at.toISOString()],
+    ).catch(() => ({ rows: [] }));
+    if (r.rows?.[0]) gravadas += 1;
+  }
+  return gravadas;
+}
