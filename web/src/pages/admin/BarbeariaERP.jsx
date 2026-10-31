@@ -61,6 +61,9 @@ const FiscalPanel = lazy(() => import("./fiscal/Fiscal"));
 const DinoBusinessDashboard = lazy(() => import("./DinoBusinessDashboard"));
 const DinoDashboardKytto = lazy(() => import("./dino/DinoDashboardKytto?v=2"));
 const DinoCampaignsPanel = lazy(() => import("./DinoCampaignsPanel"));
+const DinoCRMPreditivo = lazy(() => import("./dino/DinoCRMPreditivo"));
+const DinoPrecoDinamico = lazy(() => import("./dino/DinoPrecoDinamico"));
+const DinoSplitPagamento = lazy(() => import("./dino/DinoSplitPagamento"));
 const DinoEquipeDesempenho = lazy(() => import("./DinoEquipeDesempenho"));
 const BIBarbearia = lazy(() => import("./dino/BIBarbearia"));
 const ProjecaoFaturamentoPanel = lazy(
@@ -4306,6 +4309,7 @@ export default function BarbeariaERP() {
                 </label>
               </div>
             </Card>
+            {isDinoBrand && <DinoCRMPreditivo />}
             {isDinoBrand && <DinoCampaignsPanel />}
             <Card style={{ overflowX: "auto" }}>
               <table
@@ -4481,6 +4485,15 @@ export default function BarbeariaERP() {
 
   function renderProfissionais() {
     const equipeAtual = profissionais.filter((item) => !item.removidoEm);
+    return (
+      <div style={{ display: "grid", gap: 16 }}>
+        {isDinoBrand && <DinoSplitPagamento />}
+        {renderProfissionaisTabela(equipeAtual)}
+      </div>
+    );
+  }
+
+  function renderProfissionaisTabela(equipeAtual) {
     return (
       <div style={{ display: "grid", gap: 16 }}>
         <Card style={{ padding: 16 }}>
@@ -4684,6 +4697,15 @@ export default function BarbeariaERP() {
   }
 
   function renderServicos() {
+    return (
+      <div style={{ display: 'grid', gap: 16 }}>
+        {isDinoBrand && <DinoPrecoDinamico />}
+        {renderServicosTabela()}
+      </div>
+    );
+  }
+
+  function renderServicosTabela() {
     const servicosDoGrupo = listaBuscaServicos.filter(
       (s) =>
         grupoServicos === "todos" ||

@@ -7541,6 +7541,45 @@ function destinatariosSegmento(seg){
   return atletas.map(u=>({nome:u.nome,email:email(u)})); // 'todos'
 }
 
+
+app.get('/api/admin/dino/crm/preditivo', auth, requireStaff, (req, res) => {
+  try {
+    const empresaId = legacyEmpresaId(req);
+    const lojaId = legacyLojaId(req);
+    const clientes = clientesBarbeariaSomenteLeitura(empresaId);
+    const comandas = barbeariaErpKytto.listarComandasBarbearia(empresaId, { lojaId });
+    
+    // Agrupar comandas por cliente para achar a última visita
+    const ultimasVisitas = {};
+    for (const c of comandas) {
+       if (c.status === 'cancelada') continue;
+       const data = c.dataAtendimento || c.criadoEm;
+       if (!ultimasVisitas[c.clienteId] || data > ultimasVisitas[c.clienteId]) {
+          ultimasVisitas[c.clienteId] = data;
+       }
+    }
+
+    const hoje = new Date();
+    const churn = [];
+    const retorno = [];
+
+    for (const cli of clientes) {
+       const ultima = ultimasVisitas[cli.id];
+       if (!ultima) continue;
+       const dias = Math.floor((hoje - new Date(ultima)) / (1000 * 60 * 60 * 24));
+       if (dias >= 45) {
+          churn.push({ ...cli, diasDesdeUltimaVisita: dias });
+       } else if (dias >= 20 && dias < 45) {
+          retorno.push({ ...cli, diasDesdeUltimaVisita: dias });
+       }
+    }
+
+    res.json({ ok: true, churn, retorno });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
 app.post('/api/admin/dino/crm/disparo', auth, requireStaff, async (req, res) => {
   try {
     const { mensagem, clientesIds } = req.body;
