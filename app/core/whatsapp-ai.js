@@ -16,6 +16,7 @@ import {
   createWhatsappAiToolExecutor,
   enqueteEmTexto,
   normalizarEnquete,
+  storeFactsText,
   WHATSAPP_AI_TOOL_DECLARATIONS,
 } from './whatsapp-ai-tools.js';
 import { ferramentasExtrasWhatsappAi, notificarMensagemWhatsappAi } from './whatsapp-ai-extensoes.js';
@@ -1661,6 +1662,8 @@ async function deterministicResponseCore(task, channel, session, message) {
   extraGuidance = `${agendaCalendarText()} ${extraGuidance}`.trim();
   const custCtx = customerContextFor(toolContext);
   if (custCtx) extraGuidance = `${extraGuidance} ${custCtx}`.trim();
+  const fatosLoja = await storeFactsText(toolContext).catch(() => '');
+  if (fatosLoja) extraGuidance = `${extraGuidance} ${fatosLoja}`.trim();
   const agenda = await agendaContextFor(toolContext);
   if (agenda.text) {
     extraGuidance = `${extraGuidance} ${agenda.text}`.trim();

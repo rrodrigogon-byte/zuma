@@ -56,3 +56,14 @@ test('cancelar/remarcar acha o agendamento pelo código da confirmação ou pelo
   assert.equal(findOwnAppointment(dois, 'AAAA1111')?.id, 'age-x');
   assert.equal(findOwnAppointment([{ id: 'c', codigo: 'X1', status: 'cancelado' }], 'X1'), null);
 });
+
+test('horário de funcionamento sai do expediente da equipe, sem o Dino 24x7', async () => {
+  const { horarioFuncionamentoTexto } = await import('./whatsapp-ai-tools.js');
+  const equipe = [
+    { nome: 'Bruno', diasTrabalho: [1, 2, 3, 4, 5, 6], horarioInicio: '06:00', horarioFim: '21:00' },
+    { nome: 'Nati', diasTrabalho: [1, 2, 3, 4, 5, 6], horarioInicio: '08:00', horarioFim: '19:00' },
+    { nome: 'Dino', atendimento24x7: true, diasTrabalho: [0, 1, 2, 3, 4, 5, 6], horarioInicio: '00:00', horarioFim: '23:59' },
+  ];
+  assert.equal(horarioFuncionamentoTexto(equipe), 'segunda a sábado, das 6h às 21h; domingo: fechado');
+  assert.equal(horarioFuncionamentoTexto([{ nome: 'Dino', atendimento24x7: true }]), '');
+});

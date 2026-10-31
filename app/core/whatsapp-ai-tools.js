@@ -216,6 +216,68 @@ function productPrice(variant = {}) {
   return Number(current.precoPromocional ?? current.preco ?? 0);
 }
 
+// Horário de funcionamento a partir do expediente da equipe (sem o Dino, que atende 24x7
+// com hora marcada). Agrupa dias seguidos com a mesma janela: "segunda a sábado, das 6h às 21h".
+const DIAS_LONGOS = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];
+function horaCurta(hhmm) {
+  const [h, m] = String(hhmm || '').split(':').map(Number);
+  if (!Number.isFinite(h)) return '';
+  return m ? `${h}h${String(m).padStart(2, '0')}` : `${h}h`;
+}
+export function horarioFuncionamentoTexto(profissionais = []) {
+  const equipe = (profissionais || []).filter((p) => p && p.ativo !== false && !barbeariaErp.ehProfissionalDino(p));
+  if (!equipe.length) return '';
+  const janela = DIAS_LONGOS.map((_, dia) => {
+    const doDia = equipe.filter((p) => (Array.isArray(p.diasTrabalho) ? p.diasTrabalho : [1, 2, 3, 4, 5, 6]).includes(dia));
+    if (!doDia.length) return null;
+    const ini = doDia.map((p) => String(p.horarioInicio || '08:00')).sort()[0];
+    const fim = doDia.map((p) => String(p.horarioFim || '18:00')).sort().slice(-1)[0];
+    return `${ini}-${fim}`;
+  });
+  const ordem = [1, 2, 3, 4, 5, 6, 0];
+  const grupos = [];
+  for (const dia of ordem) {
+    const ultimo = grupos[grupos.length - 1];
+    if (ultimo && ultimo.janela === janela[dia]) ultimo.dias.push(dia);
+    else grupos.push({ janela: janela[dia], dias: [dia] });
+  }
+  return grupos.map((g) => {
+    const nome = g.dias.length > 1 ? `${DIAS_LONGOS[g.dias[0]]} a ${DIAS_LONGOS[g.dias[g.dias.length - 1]]}` : DIAS_LONGOS[g.dias[0]];
+    if (!g.janela) return `${nome}: fechado`;
+    const [ini, fim] = g.janela.split('-');
+    return `${nome}, das ${horaCurta(ini)} às ${horaCurta(fim)}`;
+  }).join('; ');
+}
+
+function enderecoTexto(endereco = {}) {
+  const rua = [cleanText(endereco.street, 120), cleanText(endereco.number, 20)].filter(Boolean).join(', ');
+  const cep = String(endereco.postalCode || '').replace(/\D/g, '');
+  const partes = [rua, cleanText(endereco.neighborhood, 80), [cleanText(endereco.city, 80), cleanText(endereco.state, 2)].filter(Boolean).join(' - '), cep.length === 8 ? `CEP ${cep.slice(0, 5)}-${cep.slice(5)}` : ''];
+  return partes.filter(Boolean).join(', ');
+}
+
+/**
+ * Fatos fixos da unidade para o prompt (endereço, telefone e horário). Em 30/10 o T-Rex
+ * respondeu "Rua das Palmeiras, 123, Cuiabá" e "sábado até 20h" sem consultar nada; o
+ * endereço certo estava cadastrado. Com os fatos no prompt, ele não precisa adivinhar.
+ */
+export async function storeFactsText(context) {
+  const scope = contextScope(context);
+  const partes = [];
+  try {
+    const loja = publicStoreData(await activeStorefront(scope));
+    const endereco = enderecoTexto(loja.endereco);
+    if (endereco) partes.push(`Endereço: ${endereco}`);
+    if (loja.contato?.telefone) partes.push(`Telefone: ${loja.contato.telefone}`);
+  } catch { /* sem loja online: segue só com o horário */ }
+  try {
+    const horario = horarioFuncionamentoTexto(barbeariaErp.listarProfissionais(scope.legacyEmpresaId || scope.empresaId));
+    if (horario) partes.push(`Horário de atendimento da equipe: ${horario}`);
+  } catch { /* agenda indisponível */ }
+  if (!partes.length) return '';
+  return `DADOS DA UNIDADE (use exatamente estes; nunca invente endereço, telefone ou horário, e o que não estiver aqui diga que vai confirmar com a equipe): ${sanitizeUntrustedBusinessText(partes.join('. '), 600)}.`;
+}
+
 async function toolStore(context) {
   return { ok: true, dataClassification: 'untrusted_business_data', loja: sanitizeToolData(publicStoreData(await activeStorefront(contextScope(context)))) };
 }
@@ -720,9 +782,18 @@ async function toolJoinWaitlist(context, args = {}) {
   }
 }
 
+// Confirmar presença e avisar atraso também aceitam o código da confirmação ou o único
+// horário futuro (30/10: "vou chegar 10 minutos atrasado" voltava "não encontrei").
+async function resolveOwnAppointmentId(scope, ref) {
+  const appointments = await listWhatsappCustomerAppointments(scope, { includePast: false, limit: 20 });
+  const appointment = findOwnAppointment(appointments, ref);
+  if (!appointment) throw appointmentNotFound(appointments);
+  return appointment.id;
+}
+
 async function toolConfirmAttendance(context, args = {}) {
   const scope = contextScope(context);
-  const result = await confirmAttendance(scope, cleanText(args.appointmentId, 120));
+  const result = await confirmAttendance(scope, await resolveOwnAppointmentId(scope, cleanText(args.appointmentId, 120)));
   return {
     ok: true,
     presenca: sanitizeToolData({ servico: result.servico, profissional: result.profissional, dataHora: result.dataHora, jaEstavaConfirmado: result.jaEstavaConfirmado }),
@@ -732,7 +803,7 @@ async function toolConfirmAttendance(context, args = {}) {
 
 async function toolDelayNotice(context, args = {}) {
   const scope = contextScope(context);
-  const result = await noteDelay(scope, cleanText(args.appointmentId, 120), args.minutes);
+  const result = await noteDelay(scope, await resolveOwnAppointmentId(scope, cleanText(args.appointmentId, 120)), args.minutes);
   return {
     ok: true,
     atraso: sanitizeToolData({ minutos: result.atrasoMinutos, servico: result.servico, profissional: result.profissional, dataHora: result.dataHora }),
@@ -1762,7 +1833,9 @@ async function toolUpdateCustomerProfile(context, args = {}) {
 
 async function toolMyCashback(context) {
   const scope = await barbeariaScope(context);
-  const cashback = saldoCashback(scope.empresaId, scope.phone);
+  // Em 30/10 "quanto tá meu cashback?" voltava "não consegui ver agora": saldoCashback exige a
+  // loja (LOJA_OBRIGATORIA) e a ferramenta não mandava.
+  const cashback = saldoCashback(scope.empresaId, scope.phone, { lojaId: scope.lojaId });
   if (!cashback.ativo && !cashback.saldo) return { ok: true, ativo: false, instrucao: 'A barbearia não usa cashback. Não prometa crédito.' };
   return { ok: true, ativo: true, saldo: cashback.saldo, proximoVencimento: cashback.proximoVencimento, percentual: cashback.percentual, instrucao: 'Informe o saldo e o vencimento. O uso é feito na hora do pagamento com a equipe.' };
 }
@@ -2123,8 +2196,8 @@ export const WHATSAPP_AI_TOOL_DECLARATIONS = [
   { name: 'consultar_disponibilidade', description: 'Consulta horários disponíveis para serviço, profissional e data.', parameters: { type: 'OBJECT', properties: { serviceId: { type: 'STRING' }, professionalId: { type: 'STRING' }, date: { type: 'STRING', description: 'Data ISO AAAA-MM-DD' } }, required: ['serviceId', 'professionalId', 'date'] } },
   { name: 'sugerir_proximos_horarios', description: 'Em UMA chamada, busca os próximos horários livres de um serviço em vários dias (padrão 7), com profissional específico ou "qualquer", filtrando por período (manha, tarde, noite, madrugada). Sem período pedido, o horário comercial vem primeiro e a madrugada só aparece se o dia não tiver outro horário. Prefira esta ferramenta quando o cliente quer "o primeiro horário", "essa semana", "amanhã à tarde" etc.', parameters: { type: 'OBJECT', properties: { serviceId: { type: 'STRING' }, professionalId: { type: 'STRING', description: 'id de listar_profissionais ou "qualquer"' }, fromDate: { type: 'STRING', description: 'Data ISO AAAA-MM-DD inicial (padrão hoje)' }, days: { type: 'INTEGER', description: '1 a 14' }, period: { type: 'STRING', description: 'manha (6h-12h), tarde, noite (18h-24h), madrugada (0h-6h) ou qualquer' }, aroundTime: { type: 'STRING', description: 'HH:MM preferido pelo cliente ("lá pelas 16h" → 16:00): devolve os horários mais próximos' }, limit: { type: 'INTEGER', description: '1 a 10' } }, required: ['serviceId'] } },
   { name: 'entrar_lista_espera', description: 'Coloca o cliente na lista de espera de um dia quando não há horário, para ser avisado automaticamente pelo WhatsApp se abrir vaga. Só use depois que o cliente disser que quer ser avisado (customerAgreed=true).', parameters: { type: 'OBJECT', properties: { serviceId: { type: 'STRING' }, date: { type: 'STRING', description: 'Data ISO AAAA-MM-DD' }, period: { type: 'STRING', description: 'manha, tarde, noite ou qualquer' }, professionalId: { type: 'STRING' }, customerName: { type: 'STRING' }, customerAgreed: { type: 'BOOLEAN' } }, required: ['serviceId', 'date', 'customerName', 'customerAgreed'] } },
-  { name: 'confirmar_presenca', description: 'Confirma a presença do cliente num agendamento dele (ex.: resposta ao lembrete da véspera: "confirmo", "estarei aí"). Use consultar_meus_agendamentos para achar o id.', parameters: { type: 'OBJECT', properties: { appointmentId: { type: 'STRING' } }, required: ['appointmentId'] } },
-  { name: 'avisar_atraso', description: 'Registra na agenda que o cliente vai se atrasar X minutos para o horário dele, para a equipe ver. Não remarca.', parameters: { type: 'OBJECT', properties: { appointmentId: { type: 'STRING' }, minutes: { type: 'INTEGER', description: '1 a 120' } }, required: ['appointmentId', 'minutes'] } },
+  { name: 'confirmar_presenca', description: 'Confirma a presença do cliente num agendamento dele (ex.: resposta ao lembrete da véspera: "confirmo", "estarei aí"). Aceita o id, o código da confirmação ou vazio quando o contato tem um só horário futuro.', parameters: { type: 'OBJECT', properties: { appointmentId: { type: 'STRING', description: 'id, código da confirmação ou vazio' } } } },
+  { name: 'avisar_atraso', description: 'Registra na agenda que o cliente vai se atrasar X minutos para o horário dele, para a equipe ver. Não remarca. appointmentId aceita o id, o código da confirmação ou vazio quando o contato tem um só horário futuro.', parameters: { type: 'OBJECT', properties: { appointmentId: { type: 'STRING' }, minutes: { type: 'INTEGER', description: '1 a 120' } }, required: ['minutes'] } },
   { name: 'consultar_status_pedido', description: 'Consulta um pedido somente quando pertence ao telefone desta conversa.', parameters: { type: 'OBJECT', properties: { orderCode: { type: 'STRING' } }, required: ['orderCode'] } },
   { name: 'captar_cliente', description: 'Registra ou atualiza o lead que iniciou a conversa e anota a interação no CRM da empresa.', parameters: { type: 'OBJECT', properties: { name: { type: 'STRING' }, notes: { type: 'STRING' } } } },
   { name: 'consultar_perfil_cliente', description: 'Consulta o perfil, consentimento de marketing, interações e quantidade de agendamentos do contato atual.', parameters: { type: 'OBJECT', properties: {} } },
