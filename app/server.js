@@ -1406,7 +1406,7 @@ app.use('/api/webhooks', createWhatsappAiWebhookRouter());
   app.post('/api/test/audio', async (req, res) => {
     try {
       const w = await import('./core/whatsapp.js');
-      await w.enviarAudio('d0d0ac01-8e50-4b61-8c79-de4aaa916da6', '5514997462929', (await import('fs')).readFileSync('/home/ubuntu/trex_aniversario.wav').toString('base64'));
+      await w.enviarAudio('d0d0ac01-8e50-4b61-8c79-de4aaa916da6', '5514997462929', (await import('fs')).readFileSync((await import('path')).resolve(process.cwd(), '../trex_aniversario.wav')).toString('base64'));
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: error.message });
@@ -1416,7 +1416,7 @@ app.use('/api/webhooks', createWhatsappAiWebhookRouter());
   app.post('/api/test/audio-promo', async (req, res) => {
     try {
       const w = await import('./core/whatsapp.js');
-      await w.enviarAudio('d0d0ac01-8e50-4b61-8c79-de4aaa916da6', '5514997462929', (await import('fs')).readFileSync('/home/ubuntu/trex_promo.wav').toString('base64'));
+      await w.enviarAudio('d0d0ac01-8e50-4b61-8c79-de4aaa916da6', '5514997462929', (await import('fs')).readFileSync((await import('path')).resolve(process.cwd(), '../trex_promo.wav')).toString('base64'));
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: error.message });
