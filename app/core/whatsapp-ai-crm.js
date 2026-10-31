@@ -281,6 +281,28 @@ export async function listActiveWhatsappPromotions(context = {}, { limit = 8 } =
   return result.rows.map(row => ({ id: row.id, nome: row.nome, tipo: row.tipo, valor: Number(row.valor || 0), inicio: row.inicio, fim: row.fim, codigos: Array.isArray(row.codigos) ? row.codigos.filter(code => code?.codigo) : [] }));
 }
 
+/**
+ * Promoções de preço por produto vigentes agora (regras.produto + regras.precoPor), para o
+ * atendimento anunciar na primeira resposta do dia a quem escreveu. Não é disparo: só vale
+ * em resposta a uma mensagem do próprio cliente.
+ */
+export async function listPromotionsToAnnounce(context = {}, { limit = 12 } = {}) {
+  const scope = tenant(context);
+  const result = await db.queryRead(
+    `SELECT p.id, p.nome, p.regras, p.inicio, p.fim
+       FROM commerce_promotions p
+      WHERE p.empresa_id = $1 AND p.ativo = true AND p.inicio <= CURRENT_TIMESTAMP
+        AND (p.fim IS NULL OR p.fim > CURRENT_TIMESTAMP)
+        AND (p.limite_uso IS NULL OR p.usos < p.limite_uso)
+        AND COALESCE(p.regras->>'produto', '') <> '' AND (p.regras->>'precoPor') IS NOT NULL
+        AND COALESCE(p.regras->>'anunciarNoAtendimento', 'true') <> 'false'
+      ORDER BY COALESCE((p.regras->>'ordem')::int, 999), p.nome
+      LIMIT $2`,
+    [scope.empresaId, Math.min(20, Math.max(1, Number(limit) || 12))],
+  );
+  return result.rows.map(row => ({ id: row.id, nome: row.nome, regras: row.regras || {}, inicio: row.inicio, fim: row.fim }));
+}
+
 export async function marketingConsentFor(context = {}) {
   const profile = await getWhatsappLeadProfile(context);
   return profile?.marketingConsent === true;

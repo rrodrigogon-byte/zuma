@@ -20,7 +20,7 @@ import {
   WHATSAPP_AI_TOOL_DECLARATIONS,
 } from './whatsapp-ai-tools.js';
 import { ferramentasExtrasWhatsappAi, notificarMensagemWhatsappAi } from './whatsapp-ai-extensoes.js';
-import { ensureWhatsappLead, updateWhatsappMarketingConsent } from './whatsapp-ai-crm.js';
+import { ensureWhatsappLead, listPromotionsToAnnounce, updateWhatsappMarketingConsent } from './whatsapp-ai-crm.js';
 import { enviarAudio, enviarEnquete, enviarFigurinha, enviarMensagem, enqueteSuportada, foiEnviadoPelaPlataforma } from './whatsapp.js';
 import { generateSpeechWithType } from './whatsapp-ai-tts.js';
 import { enviarFigurinhaDoMomento } from './whatsapp-stickers.js';
@@ -1061,6 +1061,86 @@ export function shouldAskPersonalization({ policy = {}, consent = {}, session = 
     && !pendingAction;
 }
 
+// ---------------------------------------------------------------------------
+// PROMOÇÕES DO DIA: promoção de preço por produto cadastrada pela loja (regras.produto e
+// regras.precoPor) entra no atendimento enquanto estiver vigente. A primeira resposta do dia
+// a cada cliente que escreveu leva a lista; o modelo recebe os valores para responder certo.
+// É resposta a quem escreveu, nunca disparo.
+// ---------------------------------------------------------------------------
+const PROMO_KINDS = new Set(['greeting', 'gemini', 'reserve_ai', 'gemini_fallback', 'robot_question', 'presence_confirmed', 'self_service_resumed', 'personalization_prompt']);
+
+function diaCuiaba(value = Date.now()) {
+  try { return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Cuiaba' }).format(new Date(value)); } catch { return ''; }
+}
+
+function brlPromo(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return '';
+  return `R$ ${n.toFixed(2).replace('.', ',').replace(/,00$/, '')}`;
+}
+
+export function promotionCondition(promos = []) {
+  const regras = promos[0]?.regras || {};
+  const partes = [];
+  const fim = promos[0]?.fim ? new Date(promos[0].fim) : null;
+  if (fim && Number.isFinite(fim.valueOf())) {
+    const ultimoDia = new Date(fim.valueOf() - 1000);
+    const dia = new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Cuiaba', day: '2-digit', month: '2-digit' }).format(ultimoDia);
+    partes.push(diaCuiaba(ultimoDia) === diaCuiaba() ? `só hoje, ${dia}` : `até ${dia}`);
+  }
+  if (regras.somenteNaLoja === true || regras.canal === 'loja_fisica') partes.push('na loja');
+  const pagamentos = Array.isArray(regras.pagamento) ? regras.pagamento.map((item) => ({ debito: 'débito', credito: 'crédito', dinheiro: 'dinheiro', pix: 'Pix' }[item] || cleanText(item, 20))).filter(Boolean) : [];
+  if (pagamentos.length) partes.push(pagamentos.length > 1 ? `${pagamentos.slice(0, -1).join(', ')} ou ${pagamentos.at(-1)}` : pagamentos[0]);
+  return partes.join(' · ');
+}
+
+export function promotionTitle(promos = []) {
+  const prefixo = cleanText(String(promos[0]?.nome || '').split(' · ')[0], 60);
+  return prefixo && promos.every((item) => String(item.nome || '').startsWith(prefixo)) ? prefixo : 'Promoções de hoje';
+}
+
+export function promotionBlock(promos = []) {
+  if (!promos.length) return '';
+  const condicao = promotionCondition(promos);
+  const linhas = promos.map((item) => {
+    const r = item.regras || {};
+    const de = Number(r.precoDe) > Number(r.precoPor) ? `de ${brlPromo(r.precoDe)} por ` : '';
+    return `• ${cleanText(r.produto, 90)}: ${de}*${brlPromo(r.precoPor)}*`;
+  });
+  return `🔥 *${promotionTitle(promos).toUpperCase()}*${condicao ? ` (${condicao})` : ''}\n${linhas.join('\n')}`;
+}
+
+async function activePromotions(session, channel) {
+  if (['gestao', 'lancamentos'].includes(channel?.tipo_canal) || channel?.configuracao?.anunciarPromocoes === false) return [];
+  return listPromotionsToAnnounce({ empresaId: session.empresa_id, lojaId: session.loja_id }).catch(() => []);
+}
+
+export function promotionGuidance(promos = []) {
+  if (!promos.length) return '';
+  const condicao = promotionCondition(promos);
+  const linhas = promos.map((item) => `${cleanText(item.regras?.produto, 90)} de ${brlPromo(item.regras?.precoDe)} por ${brlPromo(item.regras?.precoPor)}`);
+  const soLoja = promos.some((item) => item.regras?.somenteNaLoja === true || item.regras?.canal === 'loja_fisica');
+  return `PROMOÇÕES VIGENTES (cadastradas pela loja; use exatamente estes valores): ${linhas.join('; ')}.${condicao ? ` Condição: ${condicao}.` : ''} Quando o cliente falar de um desses produtos, de preço ou de promoção, informe o preço promocional e a condição.${soLoja ? ' O desconto vale só na loja física: não aplique em pedido online, link de carrinho nem pagamento pelo WhatsApp; ofereça separar o produto para retirada na loja.' : ''}`;
+}
+
+async function withPromotionNotice(session, channel, text, kind) {
+  if (!text || !PROMO_KINDS.has(kind) || session.estado?.marketingOptOut === true) return text;
+  const hoje = diaCuiaba();
+  if (!hoje || session.estado?.promocaoAnunciadaDia === hoje) return text;
+  const promos = await activePromotions(session, channel);
+  if (!promos.length) return text;
+  const marcado = await db.query(
+    `UPDATE whatsapp_ai_sessions
+        SET estado = COALESCE(estado, '{}'::jsonb) || jsonb_build_object('promocaoAnunciadaDia', $4::text)
+      WHERE id = $1 AND empresa_id = $2 AND loja_id = $3
+        AND COALESCE(estado->>'promocaoAnunciadaDia', '') <> $4
+      RETURNING id`,
+    [session.id, session.empresa_id, session.loja_id, hoje],
+  ).catch(() => ({ rows: [] }));
+  if (!marcado.rows?.[0]) return text;
+  return `${String(text).trim()}\n\n${promotionBlock(promos)}`;
+}
+
 async function withPrivacyNotice(session, channel, text) {
   if (!text || session.privacy_notice_at) return text;
   const policy = whatsappAiPolicy(channel);
@@ -1674,6 +1754,11 @@ async function deterministicResponseCore(task, channel, session, message) {
   if (custCtx) extraGuidance = `${extraGuidance} ${custCtx}`.trim();
   const fatosLoja = await storeFactsText(toolContext).catch(() => '');
   if (fatosLoja) extraGuidance = `${extraGuidance} ${fatosLoja}`.trim();
+  const promocoes = await activePromotions(session, channel);
+  if (promocoes.length) {
+    extraGuidance = `${extraGuidance} ${promotionGuidance(promocoes)}`.trim();
+    toolContext.toolResults.push({ promocoesVigentes: promocoes.map((item) => ({ produto: item.regras?.produto, precoDe: Number(item.regras?.precoDe), precoPor: Number(item.regras?.precoPor) })) });
+  }
   const agenda = await agendaContextFor(toolContext);
   if (agenda.text) {
     extraGuidance = `${extraGuidance} ${agenda.text}`.trim();
@@ -2036,7 +2121,7 @@ export async function processWhatsappConversationTask(task) {
     return { delivered: false, handoff: true, sessionId: session.id };
   }
 
-  const responseText = priorOutput ? priorOutput.conteudo : await withPrivacyNotice(session, channel, response.text);
+  const responseText = priorOutput ? priorOutput.conteudo : await withPromotionNotice(session, channel, await withPrivacyNotice(session, channel, response.text), response.kind);
   const output = priorOutput || await saveOutput(record, session, message, responseText, {
     delivered: false,
     kind: response.kind,
