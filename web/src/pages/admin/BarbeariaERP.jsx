@@ -862,6 +862,7 @@ export default function BarbeariaERP() {
   const [formWhatsappAiHandoff, setFormWhatsappAiHandoff] = useState({
     notifyEmail: "",
     attendantPhone: "",
+    salesPhone: "",
   });
   const [formPersona, setFormPersona] = useState({
     ativo: true,
@@ -979,6 +980,7 @@ export default function BarbeariaERP() {
         setFormWhatsappAiHandoff({
           notifyEmail: whatsappAi.channel.handoff.notifyEmail || "",
           attendantPhone: whatsappAi.channel.handoff.attendantPhone || "",
+          salesPhone: whatsappAi.channel.handoff.salesPhone || "",
         });
     } catch (error) {
       if (!isCurrent()) return;
@@ -3029,6 +3031,7 @@ export default function BarbeariaERP() {
         api.patch("/api/admin/commerce/whatsapp-ai/handoff", {
           notifyEmail: email,
           attendantPhone: telefone,
+          salesPhone: formWhatsappAiHandoff.salesPhone.trim(),
           confirmed: true,
         }),
       "Notificação de handoff salva e auditada.",
@@ -11728,6 +11731,20 @@ export default function BarbeariaERP() {
                         }))
                       }
                       placeholder="Ex.: 65 99999-0000 (número diferente do cliente)"
+                      style={inputStyle}
+                    />
+                  </Field>
+                  <Field label="WhatsApp para aviso de venda fechada">
+                    <input
+                      type="tel"
+                      value={formWhatsappAiHandoff.salesPhone}
+                      onChange={(event) =>
+                        setFormWhatsappAiHandoff((atual) => ({
+                          ...atual,
+                          salesPhone: event.target.value,
+                        }))
+                      }
+                      placeholder="Ex.: 65 99999-0000 (em branco usa o do atendente)"
                       style={inputStyle}
                     />
                   </Field>

@@ -5,7 +5,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { db } from './database.js';
-import { buildWhatsappAiSystemPrompt, configureWhatsappAiPersona, whatsappAiOperationalStatus } from './whatsapp-ai.js';
+import { buildWhatsappAiSystemPrompt, configureWhatsappAiHandoff, configureWhatsappAiPersona, whatsappAiOperationalStatus } from './whatsapp-ai.js';
 import { resolvePersona } from './whatsapp-ai-persona.js';
 import { followUpText } from './whatsapp-ai-followup.js';
 import { mensagem } from './barbershop-appointment-notifications.js';
@@ -51,6 +51,31 @@ test('configuração: persona exige confirmação, valida nome e grava auditoria
     assert.equal(result.persona.figurinhas, false);
     assert.equal(result.channel.persona.origem, 'canal');
     assert.ok(queries.some((q) => /persona_configured/.test(q.sql)), 'auditoria gravada');
+  } finally {
+    db.transaction = originalTransaction;
+  }
+});
+
+test('aviso de venda: telefone próprio salvo no handoff e preservado quando a tela antiga não envia', async () => {
+  const originalTransaction = db.transaction;
+  const updates = [];
+  db.transaction = async (fn) => fn({
+    query: async (sql, params) => {
+      if (/UPDATE canais_integracao/.test(sql)) {
+        updates.push({ sql, handoff: JSON.parse(params[2]) });
+        return { rows: [{ id: 'canal-1', codigo_publico: 'pub', nome: 'Barbearia Dino', status: 'ativo', configuracao: { instance: 'dino', handoff: { notify_email: '', attendant_phone: '5565999990002', sales_phone: '5565999056008' } } }] };
+      }
+      return { rows: [] };
+    },
+  });
+  try {
+    const result = await configureWhatsappAiHandoff({ empresaId: EMPRESA, lojaId: LOJA, usuarioId: null }, { notifyEmail: '', attendantPhone: '65 99999-0002', salesPhone: '+55 65 99905-6008', confirmed: true });
+    assert.equal(updates[0].handoff.sales_phone, '5565999056008');
+    assert.match(updates[0].sql, /configuracao->'handoff', '\{\}'::jsonb\) \|\| \$3::jsonb/, 'mescla com o handoff salvo');
+    assert.equal(result.handoff.salesPhone, '5565999056008');
+    await configureWhatsappAiHandoff({ empresaId: EMPRESA, lojaId: LOJA, usuarioId: null }, { notifyEmail: '', attendantPhone: '65 99999-0002', confirmed: true });
+    assert.equal('sales_phone' in updates[1].handoff, false, 'sem o campo, o telefone de venda salvo fica como está');
+    await assert.rejects(configureWhatsappAiHandoff({ empresaId: EMPRESA, lojaId: LOJA }, { salesPhone: '123', confirmed: true }), /aviso de venda inválido/);
   } finally {
     db.transaction = originalTransaction;
   }

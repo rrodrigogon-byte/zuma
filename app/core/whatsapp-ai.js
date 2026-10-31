@@ -2529,11 +2529,12 @@ function safeChannelView(row) {
   };
 }
 
-// Config de notificação de handoff (e-mail de histórico + WhatsApp do atendente).
+// Config de notificação de handoff (e-mail de histórico + WhatsApp do atendente) e do aviso de venda fechada.
 function safeHandoffView(value = {}) {
   return {
     notifyEmail: cleanText(value?.notify_email, 320),
     attendantPhone: String(value?.attendant_phone || '').replace(/\D/g, '').slice(0, 15),
+    salesPhone: String(value?.sales_phone || '').replace(/\D/g, '').slice(0, 15),
   };
 }
 
@@ -2543,7 +2544,15 @@ function safeHandoffInput(input = {}) {
   const rawPhone = String(input.attendantPhone ?? input.attendant_phone ?? '').trim();
   const attendantPhone = canonicalWhatsappPhone(rawPhone);
   if (rawPhone && !attendantPhone) throw new Error('telefone do atendente inválido');
-  return { notify_email: email, attendant_phone: attendantPhone };
+  const handoff = { notify_email: email, attendant_phone: attendantPhone };
+  // Telefone do aviso de venda fechada: só muda quando vem no pedido; tela antiga não apaga o valor salvo.
+  if (input.salesPhone !== undefined || input.sales_phone !== undefined) {
+    const rawSales = String(input.salesPhone ?? input.sales_phone ?? '').trim();
+    const salesPhone = canonicalWhatsappPhone(rawSales);
+    if (rawSales && !salesPhone) throw new Error('telefone do aviso de venda inválido');
+    handoff.sales_phone = salesPhone;
+  }
+  return handoff;
 }
 
 function safeWhatsappAiPolicyInput(input = {}) {
@@ -2637,7 +2646,7 @@ export async function configureWhatsappAiHandoff(context = {}, input = {}) {
   return db.transaction(async trx => {
     const result = await trx.query(
       `UPDATE canais_integracao
-          SET configuracao = jsonb_set(COALESCE(configuracao, '{}'::jsonb), '{handoff}', $3::jsonb, true),
+          SET configuracao = jsonb_set(COALESCE(configuracao, '{}'::jsonb), '{handoff}', COALESCE(configuracao->'handoff', '{}'::jsonb) || $3::jsonb, true),
               data_atualizacao = CURRENT_TIMESTAMP
         WHERE empresa_id = $1 AND loja_id = $2 AND provedor = 'whatsapp' AND tipo_canal = $4
         RETURNING *`,
