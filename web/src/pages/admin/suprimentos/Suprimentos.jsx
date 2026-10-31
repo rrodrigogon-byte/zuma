@@ -198,57 +198,6 @@ function Inventario({ qs, unidade, precisaUnidade, toast, onMudou }) {
   const [contagens, setContagens] = useState({})
   const [erro, setErro] = useState('')
   const [enviando, setEnviando] = useState(false)
-  
-  
-  const [sincronizandoSEFAZ, setSincronizandoSEFAZ] = useState(false);
-  const [importandoIA, setImportandoIA] = useState(false);
-  const fileInputRef = useRef(null);
-
-  const handleSincronizarSefaz = async () => {
-    setSincronizandoSEFAZ(true);
-    toast('Conectando ao webservice da SEFAZ Nacional... isso pode levar alguns segundos.', 'info');
-    try {
-      const res = await api.post('/api/v1/compras/sincronizar-sefaz');
-      if (res.sucesso) {
-        toast(`Sincronização concluída! ${res.result.mensagem}`, 'success');
-        carregar();
-      } else {
-        toast(res.erro || 'Falha ao sincronizar com SEFAZ.', 'error');
-      }
-    } catch (err) {
-      toast(err.message || 'Erro ao comunicar com o servidor.', 'error');
-    } finally {
-      setSincronizandoSEFAZ(false);
-    }
-  };
-
-  const handleImportNF = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setImportandoIA(true);
-    toast('Analisando a Nota Fiscal com Inteligência Artificial... isso pode levar alguns segundos.', 'info');
-    try {
-      const reader = new FileReader();
-      reader.readAsDataURL(file);
-      reader.onload = async () => {
-        const base64Data = reader.result.split(',')[1];
-        const isXml = file.name.toLowerCase().endsWith('.xml');
-        try {
-          const res = await api.post('/api/v1/compras/importar-nf', {
-            base64: base64Data, mimeType: file.type || 'application/octet-stream', isXml
-          });
-          if (res.sucesso) {
-            toast(`Nota Fiscal importada via IA! ${res.result.itensImportados} itens registrados, pedido gerado e dados inseridos no estoque.`, 'success');
-            carregar();
-          } else {
-            toast(res.erro || 'Falha ao processar nota.', 'error');
-          }
-        } catch (err) { toast(err.message || 'Erro ao comunicar com a IA.', 'error');
-        } finally { setImportandoIA(false); if (fileInputRef.current) fileInputRef.current.value = ''; }
-      };
-    } catch (err) { toast('Falha ao ler arquivo', 'error'); setImportandoIA(false); }
-  };
-
   const carregar = useCallback(async () => { try { setLista(await api.get(`/api/admin/suprimentos/inventarios${qs()}`)); setErro('') } catch (e) { setLista([]); setErro(e.message || 'Não foi possível carregar os inventários.') } }, [qs])
   useEffect(() => { carregar() }, [carregar])
   async function abrir() {
@@ -377,6 +326,56 @@ function Pedidos({ itens, unidade, qs, toast, onRecebido }) {
     try { setFornecedores((await api.get('/api/admin/a2/fornecedores')).fornecedores || []) } catch { setFornecedores([]) }
   }, [qs, toast])
   useEffect(() => { carregar() }, [carregar])
+  // Importação de NF por IA e sincronização com a SEFAZ: os botões ficam nesta aba, então o estado também.
+  const [sincronizandoSEFAZ, setSincronizandoSEFAZ] = useState(false);
+  const [importandoIA, setImportandoIA] = useState(false);
+  const fileInputRef = useRef(null);
+
+  const handleSincronizarSefaz = async () => {
+    setSincronizandoSEFAZ(true);
+    toast('Conectando ao webservice da SEFAZ Nacional... isso pode levar alguns segundos.', 'info');
+    try {
+      const res = await api.post('/api/v1/compras/sincronizar-sefaz');
+      if (res.sucesso) {
+        toast(`Sincronização concluída! ${res.result.mensagem}`, 'success');
+        carregar();
+      } else {
+        toast(res.erro || 'Falha ao sincronizar com SEFAZ.', 'error');
+      }
+    } catch (err) {
+      toast(err.message || 'Erro ao comunicar com o servidor.', 'error');
+    } finally {
+      setSincronizandoSEFAZ(false);
+    }
+  };
+
+  const handleImportNF = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImportandoIA(true);
+    toast('Analisando a Nota Fiscal com Inteligência Artificial... isso pode levar alguns segundos.', 'info');
+    try {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = async () => {
+        const base64Data = reader.result.split(',')[1];
+        const isXml = file.name.toLowerCase().endsWith('.xml');
+        try {
+          const res = await api.post('/api/v1/compras/importar-nf', {
+            base64: base64Data, mimeType: file.type || 'application/octet-stream', isXml
+          });
+          if (res.sucesso) {
+            toast(`Nota Fiscal importada via IA! ${res.result.itensImportados} itens registrados, pedido gerado e dados inseridos no estoque.`, 'success');
+            carregar();
+          } else {
+            toast(res.erro || 'Falha ao processar nota.', 'error');
+          }
+        } catch (err) { toast(err.message || 'Erro ao comunicar com a IA.', 'error');
+        } finally { setImportandoIA(false); if (fileInputRef.current) fileInputRef.current.value = ''; }
+      };
+    } catch (err) { toast('Falha ao ler arquivo', 'error'); setImportandoIA(false); }
+  };
+
   async function criar() {
     try {
       await api.post('/api/admin/suprimentos/pedidos', { lojaId: unidade || null, fornecedorId: novo.fornecedorId || null, fornecedorNome: novo.fornecedorNome, condicaoPagamento: novo.condicao, previsao: novo.previsao || null, itens: novo.linhas.filter((l) => l.itemId && l.quantidade).map((l) => ({ itemId: l.itemId, quantidade: l.quantidade, custoUnitario: l.custo || 0 })) })
@@ -398,7 +397,6 @@ function Pedidos({ itens, unidade, qs, toast, onRecebido }) {
   }
   return <section className="dadm-card">
     <h2>Pedidos de compra</h2>
-    
     <div className="dadm-actions">
       <input type="file" accept=".xml, .pdf, image/*" style={{ display: 'none' }} ref={fileInputRef} onChange={handleImportNF} />
       <button type="button" className="c360-btn secondary" disabled={importandoIA} onClick={() => fileInputRef.current?.click()}>

@@ -594,12 +594,18 @@ test('simulação ponta a ponta do atendente da Dino', { skip, timeout: Number(p
     cliente(tel, 'o primeiro');
     await ciclo();
     const s = await sessao(tel);
-    // envelhece a conversa 14 min (ação ainda válida por 30)
-    await db.query(`UPDATE whatsapp_ai_sessions SET ultima_interacao_em = CURRENT_TIMESTAMP - INTERVAL '14 minutes', acao_pendente = acao_pendente || jsonb_build_object('preparadoEm', to_char((CURRENT_TIMESTAMP - INTERVAL '14 minutes') AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"')) WHERE id = $1`, [s.id]);
+    // O toque respeita o silêncio noturno (21h–8h em Cuiabá). Fora desse horário o relógio do
+    // lembrete fica nas 15h de hoje e a conversa é envelhecida em relação a ele; depois o preparo
+    // volta ao relógio real para o "sim" encontrar a ação válida. Antes o cenário falhava à noite.
     const agoraDia = diurno();
+    const relogio = agoraDia.diurno ? agoraDia.now : ultimasQuinzeHoras();
+    const envelhecer = (ref) => db.query(`UPDATE whatsapp_ai_sessions SET ultima_interacao_em = $2::timestamptz - INTERVAL '14 minutes', acao_pendente = acao_pendente || jsonb_build_object('preparadoEm', to_char(($2::timestamptz - INTERVAL '14 minutes') AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"')) WHERE id = $1`, [s.id, ref.toISOString()]);
+    // envelhece a conversa 14 min (ação ainda válida por 30)
+    await envelhecer(relogio);
     const antes = mundo.enviados.length;
-    const r1 = await runPendingFollowUpRound({ now: agoraDia.now });
-    const r2 = await runPendingFollowUpRound({ now: agoraDia.now });
+    const r1 = await runPendingFollowUpRound({ now: relogio });
+    const r2 = await runPendingFollowUpRound({ now: relogio });
+    await envelhecer(new Date());
     const toques = mundo.enviados.slice(antes).filter((m) => m.para === tel);
     toques.forEach((m) => registrar(tel, 'atendente', m.texto));
     assert.equal(r1.enviadas >= 1, true);
@@ -1451,6 +1457,12 @@ function diurno() {
   // Mantém o relógio real se for dia em Cuiabá; à noite, usa o "agora" apenas para a regra de horário.
   const hora = Number(new Intl.DateTimeFormat('en-US', { timeZone: 'America/Cuiaba', hour: 'numeric', hourCycle: 'h23' }).format(new Date()));
   return { now: hora >= 8 && hora < 21 ? new Date() : new Date(Date.now()), diurno: hora >= 8 && hora < 21 };
+}
+function ultimasQuinzeHoras() {
+  // As 15h mais recentes já passadas em Cuiabá: na madrugada, as de ontem.
+  const hoje = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Cuiaba' }).format(new Date());
+  const ref = new Date(`${hoje}T15:00:00-04:00`);
+  return ref > new Date() ? new Date(ref.valueOf() - 86400000) : ref;
 }
 function noturno() {
   const d = new Date();

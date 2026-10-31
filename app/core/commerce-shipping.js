@@ -502,10 +502,19 @@ async function loadQuoteContext(client, contextInput, input = {}) {
   const variants = await client.query(
     `SELECT v.id, v.sku, COALESCE(v.nome, p.nome) AS nome, v.peso_gramas, v.largura_cm, v.altura_cm, v.comprimento_cm,
             v.permite_compra_sem_estoque, p.nome AS product_name, cat.nome AS category_name,
-            COALESCE(vp.preco_promocional, vp.preco) AS price
+            COALESCE(vp.preco_promocional, vp.preco) AS price, COALESCE(estoque.disponivel, 0) AS disponivel
        FROM commerce_product_variants v
        JOIN commerce_products p ON p.empresa_id = v.empresa_id AND p.id = v.product_id AND p.status = 'active'
        LEFT JOIN commerce_categories cat ON cat.empresa_id = p.empresa_id AND cat.id = p.category_id
+       LEFT JOIN LATERAL (
+         SELECT MAX(il.disponivel) AS disponivel
+           FROM commerce_inventory_levels il
+           JOIN commerce_inventory_locations l ON l.empresa_id = il.empresa_id AND l.id = il.location_id AND l.ativo = true
+           JOIN commerce_storefronts sf ON sf.empresa_id = v.empresa_id AND sf.id = $3
+          WHERE il.empresa_id = v.empresa_id AND il.variant_id = v.id
+            AND (l.loja_id IS NULL OR l.loja_id = sf.loja_id)
+            AND (NULLIF(sf.configuracoes->>'inventoryLocationId', '') IS NULL OR l.id::text = sf.configuracoes->>'inventoryLocationId')
+       ) estoque ON true
        JOIN commerce_product_channels pc ON pc.empresa_id = p.empresa_id AND pc.product_id = p.id AND pc.storefront_id = $3 AND pc.publicado = true
        JOIN commerce_variant_prices vp ON vp.empresa_id = v.empresa_id AND vp.variant_id = v.id AND vp.price_list_id = pc.price_list_id
       WHERE v.empresa_id = $1 AND v.id = ANY($2::uuid[]) AND v.ativo = true
@@ -517,7 +526,12 @@ async function loadQuoteContext(client, contextInput, input = {}) {
   // Congelados/refrigerados não seguem por entrega comum: só retirada na loja.
   const coldItems = pickupOnlyItems(variants.rows.map(row => ({ categoryName: row.category_name, productName: row.product_name || row.nome })));
   if (coldItems.length) throw new CommerceError(PICKUP_ONLY_MESSAGE, PICKUP_ONLY_ERROR_CODE);
-  const backorderLeadDays = lines.some(line => variantMap.get(line.variantId)?.permite_compra_sem_estoque === true) ? BACKORDER_LEAD_DAYS : 0;
+  // Prazo de encomenda só quando falta estoque para a quantidade pedida. Em 30/10 o CK Be 100ml,
+  // com estoque, saía "11 dias úteis" em Tangará só porque a variante aceita venda sem estoque.
+  const backorderLeadDays = lines.some((line) => {
+    const variant = variantMap.get(line.variantId);
+    return variant?.permite_compra_sem_estoque === true && Number(variant.disponivel || 0) < Number(line.quantity || line.quantidade || 1);
+  }) ? BACKORDER_LEAD_DAYS : 0;
   const products = lines.map(line => {
     const variant = variantMap.get(line.variantId);
     const dimensions = [variant.largura_cm, variant.altura_cm, variant.comprimento_cm].map(value => number(value));
