@@ -259,15 +259,26 @@ export function usePlanosDoCliente(clienteId) {
 }
 
 /** Tela completa de abertura da comanda. */
-export default function ComandaNova({ clientes, profissionais, servicos, produtosRevenda, agendamentoId = '', clienteInicial = '', nomeInicial = '', telefoneInicial = '', profissionalInicial = '', servicoInicialId = '', observacoesIniciais = '', onCancelar, onCriada, toast }) {
+export default function ComandaNova({ clientes, profissionais, servicos, produtosRevenda, agendamentos = [], agendamentoId = '', clienteInicial = '', nomeInicial = '', telefoneInicial = '', profissionalInicial = '', servicoInicialId = '', observacoesIniciais = '', onCancelar, onCriada, toast }) {
   const [clienteId, setClienteId] = useState(clienteInicial)
   const [nomeEventual, setNomeEventual] = useState(clienteInicial ? '' : nomeInicial)
   const [telefoneEventual, setTelefoneEventual] = useState(clienteInicial ? '' : telefoneInicial)
   const [profissionalId, setProfissionalId] = useState(profissionalInicial)
   // Vindo de um agendamento, o serviço agendado já entra na comanda.
   const [carrinho, setCarrinho] = useState(() => {
-    const servico = agendamentoId && servicoInicialId ? (servicos || []).find((s) => s.id === servicoInicialId) : null
-    return servico ? [{ chave: `servico-${servico.id}-inicial`, tipo: 'servico', itemId: servico.id, nome: servico.nome, preco: Number(servico.preco || 0), quantidade: 1, usarPlano: true, profissionalId: profissionalInicial }] : []
+    const itens = [];
+    const servico = agendamentoId && servicoInicialId ? (servicos || []).find((s) => s.id === servicoInicialId) : null;
+    if (servico) {
+      itens.push({ chave: `servico-${servico.id}-${agendamentoId}-inicial`, tipo: 'servico', itemId: servico.id, nome: servico.nome, preco: Number(servico.preco || 0), quantidade: 1, usarPlano: true, profissionalId: profissionalInicial, agendamentoId });
+    }
+    if (clienteInicial && agendamentos?.length) {
+      const outros = agendamentos.filter((a) => a.clienteId === clienteInicial && a.id !== agendamentoId && ['pendente', 'atrasado', 'em_atendimento'].includes(a.status));
+      for (const a of outros) {
+        const s = (servicos || []).find((x) => x.id === a.servicoId);
+        if (s) itens.push({ chave: `servico-${s.id}-${a.id}-auto`, tipo: 'servico', itemId: s.id, nome: s.nome, preco: Number(a.valor || s.preco || 0), quantidade: 1, usarPlano: true, profissionalId: a.profissionalId, agendamentoId: a.id });
+      }
+    }
+    return itens;
   })
   const [extras, setExtras] = useState({ gorjeta: '', desconto: '', descontoMotivo: '', observacoes: observacoesIniciais })
   const [salvando, setSalvando] = useState(false)
@@ -339,8 +350,21 @@ export default function ComandaNova({ clientes, profissionais, servicos, produto
 }
 
 /** Adicionar itens a uma comanda já aberta, com a mesma busca e o mesmo plano. */
-export function AdicionarItensComanda({ comanda, clientes, profissionais, servicos, produtosRevenda, onAdicionados, toast }) {
-  const [carrinho, setCarrinho] = useState([])
+export function AdicionarItensComanda({ comanda, clientes, profissionais, servicos, produtosRevenda, agendamentos = [], onAdicionados, toast }) {
+  const [carrinho, setCarrinho] = useState(() => {
+    const itens = [];
+    if (comanda?.clienteId && agendamentos?.length) {
+      const naComanda = new Set((comanda.itens || []).map(i => i.agendamentoId).filter(Boolean));
+      if (comanda.agendamentoId) naComanda.add(comanda.agendamentoId);
+      
+      const outros = agendamentos.filter((a) => a.clienteId === comanda.clienteId && !naComanda.has(a.id) && ['pendente', 'atrasado', 'em_atendimento'].includes(a.status));
+      for (const a of outros) {
+        const s = (servicos || []).find((x) => x.id === a.servicoId);
+        if (s) itens.push({ chave: `servico-${s.id}-${a.id}-auto`, tipo: 'servico', itemId: s.id, nome: s.nome, preco: Number(a.valor || s.preco || 0), quantidade: 1, usarPlano: true, profissionalId: a.profissionalId, agendamentoId: a.id });
+      }
+    }
+    return itens;
+  })
   const [salvando, setSalvando] = useState(false)
   const { planos } = usePlanosDoCliente(comanda?.clienteId || '')
   useEffect(() => { setCarrinho((atual) => aplicarPreviaPlanos(planos, atual)) }, [planos])

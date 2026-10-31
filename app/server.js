@@ -5214,6 +5214,23 @@ function erroComanda(res, error) {
 async function posFaturamentoComanda(req, comanda) {
   const empresaId = legacyEmpresaId(req);
   if (!comanda || !['paga', 'em_conta'].includes(comanda.status)) return { planos: [], loja: [] };
+  
+  const agIds = new Set((comanda.itens || []).map(i => i.agendamentoId).filter(Boolean));
+  if (comanda.agendamentoId) agIds.add(comanda.agendamentoId);
+  if (agIds.size > 0) {
+    for (const id of agIds) {
+      try {
+        barbeariaErpKytto.alterarStatusAgendamento(empresaId, id, 'concluido', { lojaId: comanda.lojaId, usuario: req.user?.email || 'Sistema' });
+      } catch (e) {
+        if (e.message.includes('permitida')) {
+          try {
+            barbeariaErpKytto.alterarStatusAgendamento(empresaId, id, 'em_atendimento', { lojaId: comanda.lojaId, usuario: req.user?.email || 'Sistema' });
+            barbeariaErpKytto.alterarStatusAgendamento(empresaId, id, 'concluido', { lojaId: comanda.lojaId, usuario: req.user?.email || 'Sistema' });
+          } catch (e2) {}
+        }
+      }
+    }
+  }
   const planos = comandaPlanoKytto.consumirPlanosDaComanda(empresaId, comanda);
   const loja = [];
   const itensLoja = (comanda.itens || []).filter((item) => item.tipo === 'loja' && item.estoqueLoja?.status !== 'baixado');

@@ -93,7 +93,7 @@ export function totaisCarrinho(carrinho, { desconto = 0, gorjeta = 0 } = {}) {
 /** Corpo dos itens para a API (o servidor confere preço, estoque e plano). */
 export function itensParaApi(carrinho, profissionalPadrao = '') {
   return (carrinho || []).map((linha) => {
-    const base = { tipo: linha.tipo, quantidade: Number(linha.quantidade || 1), profissionalId: linha.profissionalId || profissionalPadrao || undefined }
+    const base = { tipo: linha.tipo, quantidade: Number(linha.quantidade || 1), profissionalId: linha.profissionalId || profissionalPadrao || undefined, agendamentoId: linha.agendamentoId || undefined }
     if (linha.tipo === 'servico') return { ...base, servicoId: linha.itemId, usarPlano: linha.usarPlano !== false }
     if (linha.tipo === 'produto') return { ...base, produtoId: linha.itemId }
     return { ...base, variantId: linha.itemId }

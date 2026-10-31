@@ -2188,6 +2188,7 @@ function itemComandaBarbeariaNormalizado(estado, comanda, dados = {}) {
         consumidoEm: null,
       },
     } : {}),
+    agendamentoId: texto(dados.agendamentoId ?? dados.agendamento_id, 120) || null,
     duracaoMinutos: tipo === 'servico' ? Number(cadastro.duracaoMinutos || 0) : 0,
     profissionalId: profissionalId || null,
     observacao: texto(dados.observacao ?? dados.obs, 400),
@@ -2392,7 +2393,7 @@ export function registrarConsumoInternoComandaBarbearia(empresaId, comandaId, da
 
 export function listarComandasBarbearia(empresaId, filtros = {}) {
   return Object.values(estadoEmpresa(empresaId, false).comandas)
-    .filter((item) => !filtros.agendamentoId || item.agendamentoId === String(filtros.agendamentoId))
+    .filter((item) => !filtros.agendamentoId || item.agendamentoId === String(filtros.agendamentoId) || (item.itens || []).some(i => i.agendamentoId === String(filtros.agendamentoId)))
     .filter((item) => !filtros.pendentes || ['aberta', 'aguardando_pagamento', 'parcialmente_paga'].includes(item.status))
     .filter((item) => !filtros.status || item.status === String(filtros.status))
     .filter((item) => !filtros.lojaId || item.lojaId === String(filtros.lojaId))
@@ -3290,7 +3291,7 @@ export function calcularComissoesEstado(estado, empresaId, { data = '', lojaId =
   const comandasPagas = comandasTodas
     .filter((item) => noFiltro(diaOperacional(item.fechadaEm || item.atualizadoEm)));
   // Atendimento que virou comanda conta só pela comanda, mesmo que ela seja paga em outro dia.
-  const agendamentosEmComanda = new Set(comandasTodas.map((item) => item.agendamentoId).filter(Boolean));
+  const agendamentosEmComanda = new Set(comandasTodas.flatMap((item) => [item.agendamentoId, ...(item.itens || []).map(i => i.agendamentoId)]).filter(Boolean));
   // Desconto da comanda reduz a base de comissão proporcionalmente em cada item.
   const fatorDesconto = (comanda) => {
     const subtotal = (comanda.itens || []).reduce((soma, item) => soma + Number(item.subtotal || 0), 0);

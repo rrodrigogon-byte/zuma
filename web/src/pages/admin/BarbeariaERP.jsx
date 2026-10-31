@@ -1498,13 +1498,17 @@ export default function BarbeariaERP() {
   async function conferirComandaDoAtendimento(agendamento) {
     const escopo = scopeKey;
     try {
-      const resposta = await api.get(
-        `/api/admin/barbearia/comandas?agendamentoId=${encodeURIComponent(agendamento.id)}`,
-      );
-      if (activeScopeRef.current !== escopo) return;
-      const comanda = (resposta?.comandas || []).find(
-        (c) => c.agendamentoId === agendamento.id && c.status !== "cancelada",
-      );
+      let comanda = null;
+      if (agendamento.clienteId) {
+        const resp = await api.get(`/api/admin/barbearia/comandas?clienteId=${encodeURIComponent(agendamento.clienteId)}&pendentes=1`);
+        if (activeScopeRef.current !== escopo) return;
+        comanda = (resp?.comandas || []).find((c) => c.status !== "cancelada" && (c.status === "aberta" || c.status === "aguardando_pagamento"));
+      }
+      if (!comanda) {
+        const resposta = await api.get(`/api/admin/barbearia/comandas?agendamentoId=${encodeURIComponent(agendamento.id)}`);
+        if (activeScopeRef.current !== escopo) return;
+        comanda = (resposta?.comandas || []).find((c) => c.agendamentoId === agendamento.id && c.status !== "cancelada");
+      }
       if (comanda) await abrirComanda(comanda);
       else abrirNovaComanda(agendamento);
     } catch (error) {
@@ -8645,6 +8649,7 @@ export default function BarbeariaERP() {
             profissionais={profissionais}
             servicos={servicos}
             produtosRevenda={produtosRevenda}
+            agendamentos={agendamentos}
             agendamentoId={formComanda.agendamentoId}
             clienteInicial={formComanda.clienteId}
             nomeInicial={formComanda.clienteNome}
@@ -8969,6 +8974,7 @@ export default function BarbeariaERP() {
                   profissionais={profissionais}
                   servicos={servicos}
                   produtosRevenda={produtosRevenda}
+                  agendamentos={agendamentos}
                   toast={toast}
                   onAdicionados={async (atualizada, avisos) => {
                     toast(
