@@ -864,6 +864,7 @@ export default function BarbeariaERP() {
     attendantPhone: "",
     salesPhone: "",
   });
+  const [confirmandoHandoff, setConfirmandoHandoff] = useState(false);
   const [formPersona, setFormPersona] = useState({
     ativo: true,
     nome: "T-Rex",
@@ -3024,12 +3025,13 @@ export default function BarbeariaERP() {
       toast("E-mail de notificação inválido.", "error");
       return;
     }
-    if (
-      !window.confirm(
-        "Confirmar a notificação de handoff? Quando o atendimento for para uma pessoa, o histórico da conversa será enviado por e-mail e o atendente receberá a conversa no WhatsApp informado. Isso não ativa o canal.",
-      )
-    )
+    // Confirmação na própria tela: com as caixas de diálogo bloqueadas no navegador, o window.confirm
+    // devolvia "não" sem aparecer e o botão parecia não fazer nada.
+    if (!confirmandoHandoff) {
+      setConfirmandoHandoff(true);
       return;
+    }
+    setConfirmandoHandoff(false);
     await executar(
       () =>
         api.patch("/api/admin/commerce/whatsapp-ai/handoff", {
@@ -11760,14 +11762,36 @@ export default function BarbeariaERP() {
                   a chave, o e-mail não é enviado. O WhatsApp para o atendente
                   respeita a mesma trava de envio do canal.
                 </small>
-                <button
-                  type="button"
-                  style={styles.secondary}
-                  disabled={salvando || !whatsappAi.channel}
-                  onClick={salvarHandoffWhatsappAi}
-                >
-                  Salvar notificação de handoff
-                </button>
+                {confirmandoHandoff && (
+                  <div role="alert" style={styles.sub}>
+                    Confirmar? Quando o atendimento for para uma pessoa, o
+                    histórico vai por e-mail e o atendente recebe a conversa no
+                    WhatsApp informado. As vendas fechadas pelo T-Rex avisam o
+                    WhatsApp de venda (ou o do atendente, se ficar em branco).
+                    Isso não ativa o canal.
+                  </div>
+                )}
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <button
+                    type="button"
+                    style={confirmandoHandoff ? styles.primary : styles.secondary}
+                    disabled={salvando || !whatsappAi.channel}
+                    onClick={salvarHandoffWhatsappAi}
+                  >
+                    {confirmandoHandoff
+                      ? "Confirmar e salvar"
+                      : "Salvar notificação de handoff"}
+                  </button>
+                  {confirmandoHandoff && (
+                    <button
+                      type="button"
+                      style={styles.secondary}
+                      onClick={() => setConfirmandoHandoff(false)}
+                    >
+                      Cancelar
+                    </button>
+                  )}
+                </div>
               </div>
               <div
                 style={{
@@ -12431,7 +12455,7 @@ export default function BarbeariaERP() {
         >
           <DinoRecuperacaoAvecPanel
             onAbrirAgenda={(cli) => {
-              setTab("Agenda");
+              navegarParaTab("Agenda");
               setFormAgenda({
                 clienteId: cli.key || "",
                 clienteNome: cli.nome || "",
