@@ -1,7 +1,7 @@
 import { avecMixReportLink } from '../../lib/avec-mix-report'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { api, fmtR } from '../../lib/api'
+import { api, fmtR, fmtKpi } from '../../lib/api'
 import { useAuth } from '../../lib/auth'
 import { GoalsPanel, WhatsappAlert } from './dino/GoalsPanel'
 import StrategicRevenueMix from './dino/StrategicRevenueMix'
