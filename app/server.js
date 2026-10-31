@@ -1412,6 +1412,16 @@ app.use('/api/webhooks', createWhatsappAiWebhookRouter());
       res.status(500).json({ error: error.message });
     }
   });
+
+  app.post('/api/test/audio-promo', async (req, res) => {
+    try {
+      const w = await import('./core/whatsapp.js');
+      await w.enviarAudio('d0d0ac01-8e50-4b61-8c79-de4aaa916da6', '5514997462929', (await import('fs')).readFileSync('/home/ubuntu/trex_promo.wav').toString('base64'));
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  });
   app.use('/api/webhooks', createCommerceWebhookRouter());
   // [kytto-clube] rotas do Clube (painel em /api/admin/clube/*, aparelho Control iD, contrato, passe,
   // webhooks Wellhub/TotalPass em /api/integracoes/*, painel em /clube/painel)
