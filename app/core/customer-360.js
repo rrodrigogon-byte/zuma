@@ -194,7 +194,7 @@ export function mergeCustomerDirectory({ localClients = [], commerceCustomers = 
     return {
       ref: person.ref,
       refs: person.refs,
-      nome: primary?.nome || 'Cliente sem nome',
+      nome: [...person.local, ...person.commerce].map(r => String(r?.nome || '').trim()).find(n => n && !n.includes('Cliente Avec') && !n.startsWith('Cel:')) || primary?.nome || 'Cliente sem nome',
       telefone: maskPhone(person.phones[0] || primary?.telefone),
       email: maskEmail(person.emails[0] || primary?.email),
       fontes: [...(person.local.length ? ['barbearia'] : []), ...(person.commerce.length ? ['loja'] : [])],
@@ -363,7 +363,7 @@ export function buildCustomer360(identity, { local = {}, commerce = {}, now = ne
   const email = identity.emails[0] || normalizeEmail(localClient?.email || commerceCustomer?.email);
   const document = localClient?.cpfCnpj || '';
   const profile = {
-    nome: localClient?.nome || commerceCustomer?.nome || 'Cliente',
+    nome: [...identity.local, ...identity.commerce].map(r => String(r?.nome || '').trim()).find(n => n && !n.includes('Cliente Avec') && !n.startsWith('Cel:')) || localClient?.nome || commerceCustomer?.nome || 'Cliente',
     tipo: localClient?.tipo || 'pf',
     telefone: reveal ? phone : maskPhone(phone),
     email: reveal ? email : maskEmail(email),
