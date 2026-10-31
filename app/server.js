@@ -7549,14 +7549,15 @@ app.get('/api/admin/dino/crm/preditivo', auth, requireStaff, (req, res) => {
     const clientes = clientesBarbeariaSomenteLeitura(empresaId);
     const comandas = barbeariaErpKytto.listarComandasBarbearia(empresaId, { lojaId });
     
-    // Agrupar comandas por cliente para achar a última visita
-    const ultimasVisitas = {};
+        // Agrupar comandas por cliente para achar histórico de visitas
+    const historicoVisitas = {};
     for (const c of comandas) {
-       if (c.status === 'cancelada') continue;
-       const data = c.dataAtendimento || c.criadoEm;
-       if (!ultimasVisitas[c.clienteId] || data > ultimasVisitas[c.clienteId]) {
-          ultimasVisitas[c.clienteId] = data;
-       }
+       if (c.status === 'cancelada' || c.valorInformado === 0) continue;
+       if (!c.clienteId) continue;
+       const data = new Date(c.dataAtendimento || c.criadoEm);
+       if (isNaN(data)) continue;
+       if (!historicoVisitas[c.clienteId]) historicoVisitas[c.clienteId] = [];
+       historicoVisitas[c.clienteId].push(data);
     }
 
     const hoje = new Date();
@@ -7564,15 +7565,36 @@ app.get('/api/admin/dino/crm/preditivo', auth, requireStaff, (req, res) => {
     const retorno = [];
 
     for (const cli of clientes) {
-       const ultima = ultimasVisitas[cli.id];
-       if (!ultima) continue;
-       const dias = Math.floor((hoje - new Date(ultima)) / (1000 * 60 * 60 * 24));
-       if (dias >= 45) {
-          churn.push({ ...cli, diasDesdeUltimaVisita: dias });
-       } else if (dias >= 20 && dias < 45) {
-          retorno.push({ ...cli, diasDesdeUltimaVisita: dias });
+       const visitas = historicoVisitas[cli.id];
+       if (!visitas || visitas.length === 0) continue;
+       
+       visitas.sort((a, b) => b - a); // descending
+       const ultima = visitas[0];
+       const dias = Math.floor((hoje - ultima) / (1000 * 60 * 60 * 24));
+       
+       let frequenciaMedia = 30; // default
+       if (visitas.length > 1) {
+           let totalDias = 0;
+           for(let i = 0; i < visitas.length - 1; i++) {
+               totalDias += (visitas[i] - visitas[i+1]) / (1000 * 60 * 60 * 24);
+           }
+           frequenciaMedia = totalDias / (visitas.length - 1);
+       }
+       
+       // Thresholds baseados na frequência do cliente! 
+       const limiteRetorno = Math.max(15, frequenciaMedia + 5);
+       const limiteChurn = Math.max(40, frequenciaMedia * 1.8);
+       
+       if (dias >= limiteChurn) {
+          churn.push({ ...cli, diasDesdeUltimaVisita: dias, frequenciaMedia: Math.round(frequenciaMedia) });
+       } else if (dias >= limiteRetorno && dias < limiteChurn) {
+          retorno.push({ ...cli, diasDesdeUltimaVisita: dias, frequenciaMedia: Math.round(frequenciaMedia) });
        }
     }
+
+    // ordenar por quem está mais atrasado em relação à própria frequência
+    churn.sort((a, b) => (b.diasDesdeUltimaVisita / b.frequenciaMedia) - (a.diasDesdeUltimaVisita / a.frequenciaMedia));
+    retorno.sort((a, b) => (b.diasDesdeUltimaVisita / b.frequenciaMedia) - (a.diasDesdeUltimaVisita / a.frequenciaMedia));
 
     res.json({ ok: true, churn, retorno });
   } catch (error) {

@@ -23,32 +23,45 @@ export default function DinoPrecoDinamico() {
       </div>
 
       {ativo && (
-        <div style={{ display: 'flex', gap: 16, alignItems: 'flex-end', flexWrap: 'wrap', background: 'var(--surface)', padding: 16, borderRadius: 8 }}>
-          <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12, fontWeight: 'bold' }}>
-            Dia da semana
-            <select style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid var(--line)', background: 'var(--card)', color: 'var(--fg)' }} value={regra.diaSemana} onChange={e => setRegra({...regra, diaSemana: e.target.value})}>
-              <option value="1">Segunda-feira</option>
-              <option value="2">Terça-feira</option>
-              <option value="3">Quarta-feira</option>
-              <option value="4">Quinta-feira</option>
-              <option value="5">Sexta-feira</option>
-            </select>
-          </label>
-          <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12, fontWeight: 'bold' }}>
-            Das (Horário)
-            <input type="time" style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid var(--line)', background: 'var(--card)', color: 'var(--fg)' }} value={regra.horaInicio} onChange={e => setRegra({...regra, horaInicio: e.target.value})} />
-          </label>
-          <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12, fontWeight: 'bold' }}>
-            Até (Horário)
-            <input type="time" style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid var(--line)', background: 'var(--card)', color: 'var(--fg)' }} value={regra.horaFim} onChange={e => setRegra({...regra, horaFim: e.target.value})} />
-          </label>
-          <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12, fontWeight: 'bold' }}>
-            Desconto Automático (%)
-            <input type="number" min="0" max="100" style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid var(--line)', background: 'var(--card)', color: 'var(--fg)', width: 100 }} value={regra.descontoPerc} onChange={e => setRegra({...regra, descontoPerc: e.target.value})} />
-          </label>
-          <button onClick={salvar} style={{ background: 'var(--accent)', color: '#fff', padding: '10px 16px', border: 0, borderRadius: 8, cursor: 'pointer', fontWeight: 'bold' }}>
-            Salvar Regra
-          </button>
+        <div style={{ display: 'grid', gap: 16 }}>
+          <div style={{ display: 'flex', gap: 16, alignItems: 'flex-end', flexWrap: 'wrap', background: 'var(--surface)', padding: 16, borderRadius: 8 }}>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12, fontWeight: 'bold' }}>
+              Serviços aplicáveis
+              <select style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid var(--line)', background: 'var(--card)', color: 'var(--fg)' }}>
+                <option value="todos">Todos os serviços</option>
+                <option value="corte">Apenas Cortes</option>
+                <option value="barba">Apenas Barba</option>
+              </select>
+            </label>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12, fontWeight: 'bold' }}>
+              Dia da semana
+              <select style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid var(--line)', background: 'var(--card)', color: 'var(--fg)' }} value={regra.diaSemana} onChange={e => setRegra({...regra, diaSemana: e.target.value})}>
+                <option value="1">Segunda-feira</option>
+                <option value="2">Terça-feira</option>
+                <option value="3">Quarta-feira</option>
+                <option value="4">Quinta-feira</option>
+                <option value="5">Sexta-feira</option>
+              </select>
+            </label>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12, fontWeight: 'bold' }}>
+              Das (Horário)
+              <input type="time" style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid var(--line)', background: 'var(--card)', color: 'var(--fg)' }} value={regra.horaInicio} onChange={e => setRegra({...regra, horaInicio: e.target.value})} />
+            </label>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12, fontWeight: 'bold' }}>
+              Até (Horário)
+              <input type="time" style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid var(--line)', background: 'var(--card)', color: 'var(--fg)' }} value={regra.horaFim} onChange={e => setRegra({...regra, horaFim: e.target.value})} />
+            </label>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12, fontWeight: 'bold' }}>
+              Desconto Automático (%)
+              <input type="number" min="0" max="100" style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid var(--line)', background: 'var(--card)', color: 'var(--fg)', width: 100 }} value={regra.descontoPerc} onChange={e => setRegra({...regra, descontoPerc: e.target.value})} />
+            </label>
+            <button onClick={salvar} style={{ background: 'var(--accent)', color: '#fff', padding: '10px 16px', border: 0, borderRadius: 8, cursor: 'pointer', fontWeight: 'bold' }}>
+              Salvar Regra
+            </button>
+          </div>
+          <div style={{ padding: 12, background: 'rgba(139, 92, 246, 0.1)', color: 'var(--accent)', borderRadius: 8, fontSize: 13, border: '1px solid var(--accent)' }}>
+            <strong>Visualização no agendamento:</strong> Os horários correspondentes mostrarão uma tag verde de "Horário OFF" com o desconto para atrair os clientes e fechar os buracos da agenda.
+          </div>
         </div>
       )}
     </div>
