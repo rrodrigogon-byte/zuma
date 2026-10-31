@@ -395,7 +395,8 @@ export function obterSituacaoCredito(empresaId, clienteId, valorSolicitado = 0) 
     solicitado: Number(solicitado.toFixed(2)),
     diasVencimento,
     dataVencimento: vencimento.toISOString(),
-    permitido: limite > 0 && solicitado > 0 && solicitado - disponivel <= 0.005,
+    permitido: solicitado > 0, // Ignora limite até o crediário ser finalizado
+    _desativado_permitido_futuro: limite > 0 && solicitado > 0 && solicitado - disponivel <= 0.005,
   };
 }
 

@@ -2692,7 +2692,7 @@ export function registrarPagamentoComandaBarbearia(empresaId, comandaId, dados =
   if (valorEmConta > 0) {
     const credito = clienteId ? clientesKytto.obterSituacaoCredito(empresaId, clienteId, valorEmConta) : null;
     if (!credito) throw new Error('Para lançar em conta, selecione um cliente cadastrado da empresa ativa.');
-    if (!credito.permitido) {
+    if (!credito.permitido) { // Ignorado atualmente pela modelagem em clientes-contas
       if (!credito.limite) throw new Error('O cliente não possui limite de crédito configurado para pagar na conta.');
       throw new Error(`Limite de crédito insuficiente. Disponível: R$ ${credito.disponivel.toFixed(2)}.`);
     }
