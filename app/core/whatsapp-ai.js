@@ -2619,7 +2619,7 @@ export async function sendWhatsappAiStaffMessage(context = {}, sessionId, input 
   const resultado = await enviarMensagem(tenant, row.telefone, texto).catch((error) => ({ ok: false, error: safeErrorCode(error) }));
   const status = resultado?.ok ? 'sent' : resultado?.uncertain ? 'unknown' : 'failed';
   await db.query(
-    `UPDATE whatsapp_ai_messages SET delivery_status = $5, delivered_at = CASE WHEN $5 = 'sent' THEN CURRENT_TIMESTAMP ELSE delivered_at END
+    `UPDATE whatsapp_ai_messages SET delivery_status = $5::text, delivered_at = CASE WHEN $5::text = 'sent' THEN CURRENT_TIMESTAMP ELSE delivered_at END
       WHERE id = $1 AND empresa_id = $2 AND loja_id = $3 AND sessao_id = $4`,
     [salvo.rows[0].id, empresaId, lojaId, row.id, status],
   );

@@ -92,3 +92,13 @@ test('mensagem digitada pela equipe no celular vai para o histórico (só as org
   assert.equal(calls[0][2], 'staff:W1');
   assert.equal(calls[0][3], 'Oi, aqui é a Nati');
 });
+
+test('atualização da entrega da mensagem da equipe tipa o parâmetro (PostgreSQL 42P08)', async () => {
+  // O mesmo parâmetro aparece na coluna VARCHAR e na comparação do CASE: sem o cast o
+  // PostgreSQL deduz tipos diferentes e recusa a consulta depois do envio ao WhatsApp.
+  const { readFile } = await import('node:fs/promises');
+  const fonte = await readFile(new URL('./whatsapp-ai.js', import.meta.url), 'utf8');
+  const trecho = fonte.slice(fonte.indexOf('export async function sendWhatsappAiStaffMessage'), fonte.indexOf('export async function closeWhatsappAiHandoff'));
+  assert.match(trecho, /delivery_status = \$5::text/);
+  assert.match(trecho, /WHEN \$5::text = 'sent'/);
+});
