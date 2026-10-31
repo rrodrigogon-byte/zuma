@@ -41,10 +41,12 @@ export function createA2AdminRouter({ db, empresaDaRequisicao, operadorDaRequisi
     router.get(`/${tipo}`, executar(({ empresaId }) => svc.listarCadastros(db, empresaId, tipo).then((registros) => ({ [tipo]: registros }))));
     router.post(`/${tipo}`, executar(({ empresaId, req }) => svc.salvarCadastro(db, empresaId, tipo, req.body || {}), 201));
     router.patch(`/${tipo}/:id`, executar(({ empresaId, req }) => svc.salvarCadastro(db, empresaId, tipo, req.body || {}, req.params.id)));
+    router.delete(`/${tipo}/:id`, executar(({ empresaId, req }) => svc.excluirCadastro(db, empresaId, tipo, req.params.id)));
   }
   router.get('/usuarios-mestres', executar(({ empresaId }) => svc.listarUsuariosMestres(db, empresaId).then((usuarios) => ({ usuarios }))));
   router.post('/usuarios-mestres', executar(({ empresaId, req }) => svc.salvarUsuarioMestre(db, empresaId, req.body || {}), 201));
   router.patch('/usuarios-mestres/:id', executar(({ empresaId, req }) => svc.salvarUsuarioMestre(db, empresaId, req.body || {}, req.params.id)));
+  router.delete('/usuarios-mestres/:id', executar(({ empresaId, req }) => svc.excluirUsuarioMestre(db, empresaId, req.params.id)));
 
   return router;
 }

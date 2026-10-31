@@ -147,6 +147,18 @@ export default function CadastrosMestres() {
     }
   }
 
+  
+  const excluir = async (registro) => {
+    if (!window.confirm(`Tem certeza que deseja excluir ${registro.nome}?`)) return
+    try {
+      await api.delete(a2Path(`${aba.endpoint}/${registro.id}`))
+      toast(`${SINGULARES[tab]} excluído com sucesso.`)
+      carregar()
+    } catch (error) {
+      toast(error.message || 'Erro ao excluir cadastro.', true)
+    }
+  }
+
   const registros = dados[tab] || []
 
   return (
@@ -215,7 +227,7 @@ export default function CadastrosMestres() {
                   <td>{registro.telefone || '—'}</td>
                   <td><span className="badge" style={{ color: statusColor(registro.ativo), background: `${statusColor(registro.ativo)}18` }}>{registro.ativo === false ? 'inativo' : 'ativo'}</span></td>
                 </>}
-                <td style={{ textAlign: 'right' }}><button className="btn btn-ghost btn-sm" onClick={() => abrirEditar(registro)}>Editar</button></td>
+                <td style={{ textAlign: 'right' }}><button className="btn btn-ghost btn-sm" onClick={() => abrirEditar(registro)}>Editar</button> <button className="btn btn-ghost btn-sm" style={{ color: '#e74c3c' }} onClick={() => excluir(registro)}>Excluir</button></td>
               </tr>
             ))}
           </tbody>

@@ -1,3 +1,4 @@
+import { barramentoA2 } from "./eventos.js";
 import { ErroDominio, exigirData, exigirTexto, exigirUuid } from '../acesso/banco.js';
 import * as clientesKytto from '../../clientes-contas-kytto.js';
 import * as financeiroKytto from '../../financeiro-central-kytto.js';
@@ -645,10 +646,14 @@ export async function salvarCadastro(db, empresaId, tipo, corpo = {}, registroId
     const sets = cfg.campos.map((campo, index) => (campo === 'status' ? `${campo}=COALESCE($${index + 1}, ${campo})` : `${campo}=$${index + 1}`)).join(', ');
     const result = await db.query(`UPDATE ${cfg.tabela} SET ${sets}, atualizado_em=CURRENT_TIMESTAMP WHERE empresa_id=$${valores.length + 1} AND id=$${valores.length + 2} RETURNING *`, [...valores, empresa, id(registroId, 'registro')]);
     if (!result.rows[0]) throw new ErroDominio('NOT_FOUND', 'Cadastro não encontrado', 404);
-    return cadastroDto(tipo, result.rows[0]);
+    const dto = cadastroDto(tipo, result.rows[0]);
+    barramentoA2.emit('cadastro_atualizado', { empresaId: empresa, tipo, acao: 'atualizar', id: dto.id, payload: dto });
+    return dto;
   }
   const result = await db.query(`INSERT INTO ${cfg.tabela} (empresa_id, ${cfg.campos.join(',')}) VALUES ($1, ${cfg.campos.map((_, index) => `$${index + 2}`).join(',')}) RETURNING *`, [empresa, ...valores]);
-  return cadastroDto(tipo, result.rows[0]);
+  const dto = cadastroDto(tipo, result.rows[0]);
+  barramentoA2.emit('cadastro_atualizado', { empresaId: empresa, tipo, acao: 'inserir', id: dto.id, payload: dto });
+  return dto;
 }
 
 export async function listarUsuariosMestres(db, empresaId) {
@@ -685,11 +690,15 @@ export async function salvarUsuarioMestre(db, empresaId, corpo = {}, registroId 
   if (registroId) {
     const result = await db.query('UPDATE a2_usuarios_mestres SET nome=$1,email=$2,telefone=$3,tipo_usuario=$4,perfis=$5::jsonb,senha_inicial_configurada=senha_inicial_configurada OR $6,ativo=$7,atualizado_em=CURRENT_TIMESTAMP WHERE empresa_id=$8 AND id=$9 RETURNING *', [nome, email, telefone, tipo, json(perfis, []), temSenha, ativo, empresa, id(registroId, 'registro')]);
     if (!result.rows[0]) throw new ErroDominio('NOT_FOUND', 'Usuário mestre não encontrado', 404);
-    return usuarioMestreDto(result.rows[0], perfis);
+    const dto = usuarioMestreDto(result.rows[0], perfis);
+    barramentoA2.emit('cadastro_atualizado', { empresaId: empresa, tipo: 'usuarios', acao: 'atualizar', id: dto.id, payload: dto });
+    return dto;
   }
   if (!temSenha || String(corpo.senhaInicial).length < 8) throw new ErroDominio('VALIDATION_ERROR', 'A senha inicial deve ter ao menos 8 caracteres.');
   const result = await db.query('INSERT INTO a2_usuarios_mestres (empresa_id,nome,email,telefone,tipo_usuario,perfis,senha_inicial_configurada,ativo) VALUES ($1,$2,$3,$4,$5,$6::jsonb,true,$7) RETURNING *', [empresa, nome, email, telefone, tipo, json(perfis, []), ativo]);
-  return usuarioMestreDto(result.rows[0], perfis);
+  const dto = usuarioMestreDto(result.rows[0], perfis);
+  barramentoA2.emit('cadastro_atualizado', { empresaId: empresa, tipo: 'usuarios', acao: 'inserir', id: dto.id, payload: dto });
+  return dto;
 }
 
 export async function obterEmpresa(db, empresaId) {
@@ -697,6 +706,25 @@ export async function obterEmpresa(db, empresaId) {
   if (!result.rows[0]) throw new ErroDominio('NOT_FOUND', 'Empresa não encontrada', 404);
   const row = result.rows[0];
   return { id: row.id, nome: row.nome, nomeFantasia: row.nome_fantasia || row.nome, cnpj: row.cnpj || '', tipoNegocio: row.tipo_negocio || 'outro', ativa: row.ativa !== false };
+}
+
+
+export async function excluirCadastro(db, empresaId, tipo, registroId) {
+  const cfg = CONFIG_CADASTRO[tipo];
+  if (!cfg) throw new ErroDominio('VALIDATION_ERROR', 'Tipo de cadastro inválido');
+  const empresa = id(empresaId, 'empresa');
+  const result = await db.query(`DELETE FROM ${cfg.tabela} WHERE empresa_id=$1 AND id=$2 RETURNING id`, [empresa, id(registroId, 'registro')]);
+  if (!result.rows[0]) throw new ErroDominio('NOT_FOUND', 'Cadastro não encontrado', 404);
+  barramentoA2.emit('cadastro_atualizado', { empresaId: empresa, tipo, acao: 'excluir', id: registroId });
+  return { sucesso: true };
+}
+
+export async function excluirUsuarioMestre(db, empresaId, registroId) {
+  const empresa = id(empresaId, 'empresa');
+  const result = await db.query('DELETE FROM a2_usuarios_mestres WHERE empresa_id=$1 AND id=$2 RETURNING id', [empresa, id(registroId, 'registro')]);
+  if (!result.rows[0]) throw new ErroDominio('NOT_FOUND', 'Usuário não encontrado', 404);
+  barramentoA2.emit('cadastro_atualizado', { empresaId: empresa, tipo: 'usuarios', acao: 'excluir', id: registroId });
+  return { sucesso: true };
 }
 
 export { clienteDto, contaDto, resumo };
