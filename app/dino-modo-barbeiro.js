@@ -26,7 +26,7 @@ export function clientesRecentesDoBarbeiro(erp, { empresaId, lojaId = '', profis
     const todosAgendamentos = erp.listarAgendamentos(empresaId, { profissionalId, lojaId });
     const mapa = new Map();
     for (const a of todosAgendamentos) {
-      if (a.status !== 'concluido' && a.status !== 'agendado') continue;
+      if (!['concluido', 'agendado', 'confirmado', 'em_atendimento'].includes(a.status)) continue;
       const chave = String(a.clienteTelefone || a.clienteNome || '').trim();
       if (!chave) continue;
       const dataIso = String(a.dataAgenda || a.dataHora || '').slice(0, 10);
@@ -38,9 +38,11 @@ export function clientesRecentesDoBarbeiro(erp, { empresaId, lojaId = '', profis
         ultimoServico: a.servicoNome || 'Serviço',
         ultimaData: dataIso,
         totalAtendimentos: 0,
+        totalGasto: 0,
         status: a.status,
       };
       item.totalAtendimentos += 1;
+      item.totalGasto = dinheiro((item.totalGasto || 0) + Number(a.valor || 0));
       if (!item.clienteId && a.clienteId) {
         item.id = a.clienteId;
         item.clienteId = a.clienteId;
@@ -321,6 +323,22 @@ export function painelBarbeiro(erp, { empresaId, lojaId = '', usuario = {}, prof
       metaProdutosTipo: 'quantidade',
       metaProdutosProgresso: Math.min(100, Math.round((produtosQtdHoje / Math.max(1, alvoProdutosDia)) * 100)),
     };
+    if (Array.isArray(diaObj.servicosExtrasLista)) {
+      diaObj.servicosExtrasLista = diaObj.servicosExtrasLista.map((it) => ({
+        quantidade: Number(it.quantidade || it.qtd || 1),
+        nome: it.nome || it.servicoNome || 'Serviço extra',
+        cliente: it.cliente || it.clienteNome || 'Atendimento',
+        valor: dinheiro(it.valor ?? it.subtotal ?? 0),
+      }));
+    }
+    if (Array.isArray(diaObj.produtosLista)) {
+      diaObj.produtosLista = diaObj.produtosLista.map((it) => ({
+        quantidade: Number(it.quantidade || it.qtd || 1),
+        nome: it.nome || it.produtoNome || 'Produto',
+        cliente: it.cliente || it.clienteNome || 'Venda',
+        valor: dinheiro(it.valor ?? it.subtotal ?? 0),
+      }));
+    }
 
     const alvoFatSemana = Number(configGamif?.metasSemanais?.faturamentoValor || 2500);
     const alvoProdQtdSemana = Number(configGamif?.metasSemanais?.produtosQtd || 10);
@@ -462,11 +480,38 @@ export function painelBarbeiro(erp, { empresaId, lojaId = '', usuario = {}, prof
     visaoGeralEquipe,
     gamificacao,
     clientesRecentes: (() => {
+      const recentes = clientesRecentesDoBarbeiro(erp, { empresaId, lojaId, profissionalId: escolhido.id, agora });
       try {
         const cart = listarCarteiraClientes(empresaId, { profissionalId: escolhido.id, lojaId });
-        if (cart && cart.clientes && cart.clientes.length > 0) return cart.clientes;
+        if (cart && Array.isArray(cart.clientes) && cart.clientes.length > 0) {
+          const normalizados = cart.clientes.map((c) => {
+            const dias = Number(c.diasDesdeUltimo ?? c.diasSemRetorno ?? 0);
+            return {
+              ...c,
+              id: c.id || c.clienteId || null,
+              clienteId: c.clienteId || c.id || null,
+              nome: c.nome || 'Cliente',
+              telefone: c.telefone || '',
+              ultimoServico: c.ultimoServico || c.servicoFavorito || 'Corte Masculino',
+              ultimaData: c.ultimaData || c.ultimaVisita || '',
+              diasDesdeUltimo: dias,
+              totalAtendimentos: Number(c.totalAtendimentos || c.totalAtendimentosComBarbeiro || 1),
+              totalGasto: Number(c.totalGasto || c.totalGastoComBarbeiro || 0),
+              statusRetorno: c.statusRetorno === 'sumido' ? 'atrasado' : (c.statusRetorno || (dias <= 15 ? 'em_dia' : dias <= 30 ? 'ideal_retorno' : 'atrasado')),
+            };
+          });
+          const vistos = new Set(normalizados.map((c) => String(c.telefone || c.nome || '').toLowerCase()));
+          for (const r of recentes) {
+            const ch = String(r.telefone || r.nome || '').toLowerCase();
+            if (ch && !vistos.has(ch)) {
+              vistos.add(ch);
+              normalizados.push(r);
+            }
+          }
+          return normalizados;
+        }
       } catch {}
-      return clientesRecentesDoBarbeiro(erp, { empresaId, lojaId, profissionalId: escolhido.id, agora });
+      return recentes;
     })(),
     profissional: {
       id: escolhido.id, nome: escolhido.nome, especialidade: escolhido.especialidade, fotoUrl: escolhido.fotoUrl || '',

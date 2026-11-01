@@ -171,6 +171,10 @@ export default function BarbeiroMetasPanel({ painel, onLancarVenda, onAtualizar,
   const [premioSorteado, setPremioSorteado] = useState(null)
   const [erroGiro, setErroGiro] = useState('')
 
+  // Sliders do Simulador Mensal Interativo
+  const [simCortesDia, setSimCortesDia] = useState(6)
+  const [simTicketMedio, setSimTicketMedio] = useState(115)
+
   const g = painel?.gamificacao || {}
   const config = g.config || {}
   const dia = g.dia || {}
@@ -191,6 +195,16 @@ export default function BarbeiroMetasPanel({ painel, onLancarVenda, onAtualizar,
   const prodAlvo = config.metasDiarias?.produtosQtd || dia.metaProdutosAlvo || 2
   const prodPct = Math.min(100, Math.round((prodHoje / Math.max(1, prodAlvo)) * 100))
   const faltamProd = Math.max(0, prodAlvo - prodHoje)
+
+  // Cálculos do Simulador Mensal Interativo
+  const metaMensalAlvo = Number(mes.metaFaturamentoMensal || 7000)
+  const realizadoMes = Number(mes.faturamentoRealizado || 0)
+  const faltaParaMeta = Math.max(0, metaMensalAlvo - realizadoMes)
+  const producaoDiariaSimulada = simCortesDia * simTicketMedio
+  const diasParaBaterMeta = producaoDiariaSimulada > 0 ? Math.ceil(faltaParaMeta / producaoDiariaSimulada) : 0
+  const percComissao = Number(painel?.comissao?.percentualServicos || 50) / 100
+  const faturamentoMensalSimulado = realizadoMes + producaoDiariaSimulada * Math.max(1, mes.diasRestantesMes || 20)
+  const comissaoMensalSimulada = faturamentoMensalSimulado * percComissao
 
   async function girarRoletaReal() {
     if (girando) return
@@ -339,7 +353,6 @@ export default function BarbeiroMetasPanel({ painel, onLancarVenda, onAtualizar,
       {/* ABA 1: METAS DE HOJE & DESAFIO DA SEMANA */}
       {subAba === 'hoje' && (
         <div style={{ display: 'grid', gap: 12 }}>
-          {/* CARD 1: META DIÁRIA DE SERVIÇOS EXTRAS */}
           <div style={{ ...card, display: 'grid', gap: 10, borderLeft: `4px solid ${dia.metaExtrasAtingida ? t.green : t.accent}` }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
@@ -376,12 +389,16 @@ export default function BarbeiroMetasPanel({ painel, onLancarVenda, onAtualizar,
             {Array.isArray(dia.servicosExtrasLista) && dia.servicosExtrasLista.length > 0 && (
               <div style={{ background: t.surface, padding: 10, borderRadius: 10, display: 'grid', gap: 4 }}>
                 <div style={{ fontSize: 11, fontWeight: 800, color: t.muted }}>Extras contabilizados hoje:</div>
-                {dia.servicosExtrasLista.map((item, idx) => (
-                  <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
-                    <span>{item.quantidade}x {item.nome} ({item.cliente})</span>
-                    <strong style={{ color: t.green }}>{reais(item.valor)}</strong>
-                  </div>
-                ))}
+                {dia.servicosExtrasLista.map((item, idx) => {
+                  const qtd = item.quantidade || item.qtd || 1
+                  const cliTxt = item.cliente || item.clienteNome || ''
+                  return (
+                    <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+                      <span>{qtd}x {item.nome || 'Serviço extra'}{cliTxt ? ` · ${cliTxt}` : ''}</span>
+                      <strong style={{ color: t.green }}>{reais(item.valor || 0)}</strong>
+                    </div>
+                  )
+                })}
               </div>
             )}
 
@@ -427,12 +444,16 @@ export default function BarbeiroMetasPanel({ painel, onLancarVenda, onAtualizar,
             {Array.isArray(dia.produtosLista) && dia.produtosLista.length > 0 && (
               <div style={{ background: t.surface, padding: 10, borderRadius: 10, display: 'grid', gap: 4 }}>
                 <div style={{ fontSize: 11, fontWeight: 800, color: t.muted }}>Produtos vendidos hoje:</div>
-                {dia.produtosLista.map((item, idx) => (
-                  <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
-                    <span>{item.quantidade}x {item.nome} ({item.cliente})</span>
-                    <strong style={{ color: t.green }}>{reais(item.valor)}</strong>
-                  </div>
-                ))}
+                {dia.produtosLista.map((item, idx) => {
+                  const qtd = item.quantidade || item.qtd || 1
+                  const cliTxt = item.cliente || item.clienteNome || ''
+                  return (
+                    <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+                      <span>{qtd}x {item.nome || 'Produto'}{cliTxt ? ` · ${cliTxt}` : ''}</span>
+                      <strong style={{ color: t.green }}>{reais(item.valor || 0)}</strong>
+                    </div>
+                  )
+                })}
               </div>
             )}
 
@@ -492,7 +513,7 @@ export default function BarbeiroMetasPanel({ painel, onLancarVenda, onAtualizar,
         </div>
       )}
 
-      {/* ABA 2: METAS DO MÊS & SIMULADOR "O QUE FALTA PARA BATER A META" */}
+      {/* ABA 2: METAS DO MÊS & SIMULADOR INTERATIVO */}
       {subAba === 'mes' && (
         <div style={{ display: 'grid', gap: 12 }}>
           <div style={{ ...card, display: 'grid', gap: 12 }}>
@@ -563,6 +584,82 @@ export default function BarbeiroMetasPanel({ painel, onLancarVenda, onAtualizar,
               </div>
               <div style={{ fontSize: 12, color: t.muted }}>
                 Projeção no ritmo atual: <strong style={{ color: '#fff' }}>{reais(mes.projecaoFechamentoMes || 0)}</strong> até o fim do mês.
+              </div>
+            </div>
+          </div>
+
+          {/* SIMULADOR INTERATIVO DE RITMO MENSAL */}
+          <div style={{
+            ...card,
+            background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(15, 23, 42, 0.95) 100%)',
+            borderColor: 'rgba(16, 185, 129, 0.4)',
+            display: 'grid',
+            gap: 12,
+          }}>
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 800, color: t.green, textTransform: 'uppercase' }}>
+                🎛️ Simulador Interativo de Meta Mensal
+              </div>
+              <div style={{ fontSize: 14, fontWeight: 800, color: '#fff', marginTop: 2 }}>
+                Ajuste seu ritmo diário e veja quando bate a meta:
+              </div>
+            </div>
+
+            <div style={{ display: 'grid', gap: 10 }}>
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 4 }}>
+                  <span>✂️ Atendimentos por dia:</span>
+                  <strong style={{ color: '#fff' }}>{simCortesDia} clientes/dia</strong>
+                </div>
+                <input
+                  type="range"
+                  min="2"
+                  max="16"
+                  value={simCortesDia}
+                  onChange={(e) => setSimCortesDia(Number(e.target.value))}
+                  style={{ width: '100%', accentColor: t.green }}
+                />
+              </div>
+
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 4 }}>
+                  <span>💎 Ticket Médio por cliente (Corte + Extra/Produto):</span>
+                  <strong style={{ color: '#fbbf24' }}>{reais(simTicketMedio)}</strong>
+                </div>
+                <input
+                  type="range"
+                  min="60"
+                  max="260"
+                  step="5"
+                  value={simTicketMedio}
+                  onChange={(e) => setSimTicketMedio(Number(e.target.value))}
+                  style={{ width: '100%', accentColor: '#f59e0b' }}
+                />
+              </div>
+            </div>
+
+            <div style={{
+              background: 'rgba(0,0,0,0.35)',
+              borderRadius: 12,
+              padding: 12,
+              display: 'grid',
+              gridTemplateColumns: 'repeat(3, 1fr)',
+              gap: 8,
+              textAlign: 'center',
+            }}>
+              <div>
+                <div style={{ fontSize: 10, color: t.muted }}>PRODUÇÃO / DIA</div>
+                <div style={{ fontSize: 14, fontWeight: 900, color: '#fff', marginTop: 2 }}>{reais(producaoDiariaSimulada)}</div>
+              </div>
+              <div>
+                <div style={{ fontSize: 10, color: t.muted }}>BATE A META EM</div>
+                <div style={{ fontSize: 14, fontWeight: 900, color: '#fbbf24', marginTop: 2 }}>
+                  {faltaParaMeta <= 0 ? 'Meta Batida!' : `${diasParaBaterMeta} dia(s)`}
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: 10, color: t.muted }}>SUA COMISSÃO MÊS</div>
+                <div style={{ fontSize: 14, fontWeight: 900, color: t.green, marginTop: 2 }}>{reais(comissaoMensalSimulada)}</div>
               </div>
             </div>
           </div>
@@ -711,11 +808,42 @@ export default function BarbeiroMetasPanel({ painel, onLancarVenda, onAtualizar,
 
       {/* ABA 4: RANKING DA EQUIPE NA SEMANA */}
       {subAba === 'ranking' && (
-        <div style={{ ...card, display: 'grid', gap: 10 }}>
+        <div style={{ ...card, display: 'grid', gap: 12 }}>
           <div>
-            <div style={{ fontSize: 15, fontWeight: 900, color: '#fff' }}>🏆 Ranking da Equipe na Semana</div>
-            <div style={{ fontSize: 12, color: t.muted }}>Classificação por produção semanal, extras e produtos</div>
+            <div style={{ fontSize: 15, fontWeight: 900, color: '#fff' }}>🏆 Ranking Oficial da Equipe na Semana</div>
+            <div style={{ fontSize: 12, color: t.muted }}>Classificação ao vivo por produção semanal, extras e produtos</div>
           </div>
+
+          {ranking.length >= 3 && (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.15fr 1fr', gap: 8, alignItems: 'end', marginTop: 4 }}>
+              {[
+                { item: ranking[1], pos: '🥈 2º', cor: '#94a3b8', altura: 92 },
+                { item: ranking[0], pos: '🥇 1º', cor: '#fbbf24', altura: 112 },
+                { item: ranking[2], pos: '🥉 3º', cor: '#d97706', altura: 84 },
+              ].map(({ item, pos, cor, altura }) => (
+                <div
+                  key={item.profissionalId || item.nome}
+                  style={{
+                    background: 'rgba(255,255,255,0.04)',
+                    border: `1.5px solid ${cor}`,
+                    borderRadius: 14,
+                    padding: 10,
+                    minHeight: altura,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'space-between',
+                    textAlign: 'center',
+                  }}
+                >
+                  <div style={{ fontSize: 13, fontWeight: 900, color: cor }}>{pos}</div>
+                  <div style={{ fontSize: 13, fontWeight: 800, color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {item.apelido || item.nome}
+                  </div>
+                  <div style={{ fontSize: 12, fontWeight: 900, color: t.green }}>{reais(item.faturamentoSemana || 0)}</div>
+                </div>
+              ))}
+            </div>
+          )}
 
           {ranking.length === 0 ? (
             <div style={{ color: t.muted, fontSize: 13, padding: 12, textAlign: 'center' }}>
@@ -730,20 +858,21 @@ export default function BarbeiroMetasPanel({ painel, onLancarVenda, onAtualizar,
                   <div
                     key={item.profissionalId || idx}
                     style={{
+                      background: ehAtual ? 'rgba(110, 124, 224, 0.2)' : t.surface,
+                      border: ehAtual ? `1.5px solid ${t.accent}` : `1px solid ${t.line}`,
+                      borderRadius: 12,
+                      padding: 12,
                       display: 'flex',
                       justifyContent: 'space-between',
                       alignItems: 'center',
-                      background: ehAtual ? 'rgba(110, 124, 224, 0.18)' : t.surface,
-                      border: `1px solid ${ehAtual ? t.accent : t.line}`,
-                      borderRadius: 12,
-                      padding: '10px 12px',
+                      gap: 10,
                     }}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <span style={{ fontSize: 18, fontWeight: 900, minWidth: 26 }}>{medalha}</span>
+                      <span style={{ fontSize: 18, fontWeight: 900, minWidth: 28 }}>{medalha}</span>
                       <div>
                         <div style={{ fontWeight: 800, fontSize: 14, color: '#fff' }}>
-                          {item.nome} {ehAtual ? '(Selecionado)' : ''}
+                          {item.nome} {ehAtual ? '(Você)' : ''}
                         </div>
                         <div style={{ fontSize: 11, color: t.muted }}>
                           ✂️ {item.servicosExtrasSemana || 0} extras · 🧴 {reais(item.produtosValorSemana || 0)} prod.
@@ -751,8 +880,12 @@ export default function BarbeiroMetasPanel({ painel, onLancarVenda, onAtualizar,
                       </div>
                     </div>
                     <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontWeight: 900, fontSize: 14, color: t.green }}>{reais(item.faturamentoSemana || 0)}</div>
-                      <div style={{ fontSize: 10, color: '#fbbf24' }}>{item.progressoDesafio || 0}% desafio</div>
+                      <div style={{ fontWeight: 900, fontSize: 14, color: t.green }}>
+                        {reais(item.faturamentoSemana || 0)}
+                      </div>
+                      <div style={{ fontSize: 10, color: '#fbbf24', fontWeight: 800 }}>
+                        {item.progressoDesafio || 0}% do desafio
+                      </div>
                     </div>
                   </div>
                 )

@@ -285,6 +285,7 @@ export default function ModoBarbeiro() {
   const { user, logout, empresaAtiva, lojaAtiva } = useAuth()
   const [abaAtiva, setAbaAtiva] = useState('agenda') // 'agenda', 'ganhos', 'metas', 'clientes'
   const [filtroStatus, setFiltroStatus] = useState('todos')
+  const [buscaAgenda, setBuscaAgenda] = useState('')
   const [painelRecebido, setPainel] = useState(null)
   const [erro, setErro] = useState('')
   const [carregando, setCarregando] = useState(false)
@@ -294,6 +295,8 @@ export default function ModoBarbeiro() {
   const [profissionalId, setProfissionalId] = useState('')
   const [vendaAtendimento, setVendaAtendimento] = useState(null)
   const [clienteDetalheId, setClienteDetalheId] = useState(null)
+  const [clienteDetalheObj, setClienteDetalheObj] = useState(null)
+  const [clienteEncaixeInicial, setClienteEncaixeInicial] = useState(null)
   const [vendaPendente, setVendaPendente] = useState(false)
   const [atualizadoEm, setAtualizadoEm] = useState(null)
   const data = /^\d{4}-\d{2}-\d{2}$/.test(params.get('data') || '') ? params.get('data') : ''
@@ -367,12 +370,22 @@ export default function ModoBarbeiro() {
   }, [painel])
 
   const agendaFiltrada = useMemo(() => {
-    if (filtroStatus === 'todos') return agenda
-    if (filtroStatus === 'pendentes') return agenda.filter((i) => i.tipo === 'bloqueio' || ['agendado', 'confirmado'].includes(i.a.status))
-    if (filtroStatus === 'na_cadeira') return agenda.filter((i) => i.tipo === 'atendimento' && i.a.status === 'em_atendimento')
-    if (filtroStatus === 'concluidos') return agenda.filter((i) => i.tipo === 'atendimento' && i.a.status === 'concluido')
-    return agenda
-  }, [agenda, filtroStatus])
+    let base = agenda
+    if (filtroStatus === 'pendentes') base = base.filter((i) => i.tipo === 'bloqueio' || ['agendado', 'confirmado'].includes(i.a.status))
+    else if (filtroStatus === 'na_cadeira') base = base.filter((i) => i.tipo === 'atendimento' && i.a.status === 'em_atendimento')
+    else if (filtroStatus === 'concluidos') base = base.filter((i) => i.tipo === 'atendimento' && i.a.status === 'concluido')
+    if (buscaAgenda.trim()) {
+      const q = buscaAgenda.trim().toLowerCase()
+      base = base.filter((i) =>
+        i.tipo === 'bloqueio'
+          ? (i.b.titulo || '').toLowerCase().includes(q)
+          : (i.a.clienteNome || '').toLowerCase().includes(q) ||
+            (i.a.servicoNome || '').toLowerCase().includes(q) ||
+            (i.a.clienteTelefone || '').includes(q)
+      )
+    }
+    return base
+  }, [agenda, filtroStatus, buscaAgenda])
 
   const cabecalho = <header style={{ position: 'sticky', top: 0, zIndex: 20, background: t.surface, borderBottom: `1px solid ${t.line}`, padding: 'calc(10px + env(safe-area-inset-top)) 16px 10px' }}>
     <div style={{ display: 'flex', alignItems: 'center', gap: 10, maxWidth: 560, margin: '0 auto' }}>
@@ -436,11 +449,27 @@ export default function ModoBarbeiro() {
         )}
 
         {abaAtiva === 'ganhos' && painel?.profissional && (
-          <BarbeiroGanhos painel={painel} onAtualizar={carregar} />
+          <BarbeiroGanhos
+            painel={painel}
+            onAtualizar={carregar}
+            onAbrirExtrato={() => setFolha('extrato')}
+          />
         )}
 
         {abaAtiva === 'clientes' && painel?.profissional && (
-          <BarbeiroClientes clientes={painel.clientesRecentes || []} profissionalNome={painel.profissional?.nome} />
+          <BarbeiroClientes
+            clientes={painel.clientesRecentes || []}
+            profissionalNome={painel.profissional?.nome}
+            onAbrirProntuario={(c) => {
+              setClienteDetalheId(c.clienteId || c.id || null)
+              setClienteDetalheObj(c)
+              setFolha('cliente_detalhe')
+            }}
+            onEncaixarCliente={(c) => {
+              setClienteEncaixeInicial({ nome: c.nome || '', telefone: c.telefone || '' })
+              setFolha('encaixe')
+            }}
+          />
         )}
 
         {abaAtiva === 'metas' && painel?.profissional && (
@@ -453,6 +482,7 @@ export default function ModoBarbeiro() {
         )}
 
         {abaAtiva === 'agenda' && <>
+        {/* CARROSSEL INTERATIVO DE 7 DIAS + SELETOR DE DATA */}
         <nav aria-label="Escolher dia" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0,1fr))', gap: 8 }}>
           {[['Ontem', -1], ['Hoje', 0], ['Amanhã', 1]].map(([rotulo, n]) => {
             const alvo = hoje ? somarDias(hoje, n) : ''
@@ -461,6 +491,41 @@ export default function ModoBarbeiro() {
           })}
           <input type="date" aria-label="Outro dia" value={dia} onChange={(e) => irPara(e.target.value)} style={{ ...input, gridColumn: '1 / -1' }} />
         </nav>
+        {dia && (
+          <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 2, scrollbarWidth: 'none' }}>
+            {[-3, -2, -1, 0, 1, 2, 3].map((offset) => {
+              const dIso = somarDias(dia, offset)
+              const dObj = new Date(`${dIso}T12:00:00`)
+              const semCurto = dObj.toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', '')
+              const diaNum = dIso.slice(8, 10)
+              const ehSelecionado = dIso === dia
+              const ehHojePill = hoje && dIso === hoje
+              return (
+                <button
+                  key={dIso}
+                  type="button"
+                  onClick={() => irPara(dIso)}
+                  style={{
+                    flex: '1 0 46px',
+                    background: ehSelecionado ? t.accent : t.card,
+                    border: `1.5px solid ${ehSelecionado ? t.accent : ehHojePill ? '#38bdf8' : t.line}`,
+                    borderRadius: 12,
+                    padding: '6px 4px',
+                    color: ehSelecionado ? '#fff' : t.cream,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: 2,
+                  }}
+                >
+                  <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: ehSelecionado ? '#e0e7ff' : t.muted }}>{semCurto}</span>
+                  <span style={{ fontSize: 14, fontWeight: 900 }}>{diaNum}</span>
+                </button>
+              )
+            })}
+          </div>
+        )}
         {dia && <div style={{ fontSize: 14, color: t.muted }}>{dataLonga(dia)}</div>}
 
         
@@ -647,6 +712,15 @@ export default function ModoBarbeiro() {
 
           <button type="button" style={btn2} onClick={() => setFolha('extrato')}>Meu extrato e repasses</button>
 
+          {/* BUSCA RÁPIDA NA AGENDA DO DIA */}
+          <input
+            type="search"
+            placeholder="🔍 Filtrar cliente ou serviço na agenda do dia…"
+            value={buscaAgenda}
+            onChange={(e) => setBuscaAgenda(e.target.value)}
+            style={{ ...input, minHeight: 40, fontSize: 13.5, borderRadius: 12 }}
+          />
+
           <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 4, scrollbarWidth: 'none' }}>
             {[
               ['todos', `Todos (${agenda.filter((i) => i.tipo === 'atendimento').length})`],
@@ -749,8 +823,8 @@ export default function ModoBarbeiro() {
                     {a.status === 'concluido' && <span style={{ fontSize: 13, color: t.muted, alignSelf: 'center' }}>Pagamento no caixa.</span>}
                   </div>}
                   {!['cancelado', 'nao_compareceu'].includes(a.status) && <DinoSalesAssistantPanel key={a.id} appointmentId={a.id} currentServiceId={a.servicoId} compact />}
-                  {(a.clienteId && !['cancelado'].includes(a.status)) && (
-                      <button type="button" disabled={ocupado} style={{ ...btn2, width: '100%', marginBottom: 8, display: 'flex', justifyContent: 'center', gap: 6 }} onClick={() => { setClienteDetalheId(a.clienteId); setFolha('cliente_detalhe'); }}>
+                  {(!['cancelado'].includes(a.status)) && (
+                      <button type="button" disabled={ocupado} style={{ ...btn2, width: '100%', marginBottom: 8, display: 'flex', justifyContent: 'center', gap: 6 }} onClick={() => { setClienteDetalheId(a.clienteId || null); setClienteDetalheObj({ id: a.clienteId, nome: a.clienteNome, telefone: a.clienteTelefone, ultimoServico: a.servicoNome, ultimaData: dia, valor: a.valor, observacao: a.observacoes }); setFolha('cliente_detalhe'); }}>
                         👤 Ver Prontuário do Cliente
                       </button>
                     )}
@@ -771,7 +845,7 @@ export default function ModoBarbeiro() {
 
   return <div style={{ minHeight: '100vh', background: t.bg, color: t.cream, fontFamily: "'Plus Jakarta Sans', 'Inter', system-ui, sans-serif" }}>
     {cabecalho}
-    <main style={{ maxWidth: 560, margin: '0 auto', padding: `14px 16px calc(${painel?.profissional && !offline ? 110 : 24}px + env(safe-area-inset-bottom))`, display: 'grid', gap: 12, boxSizing: 'border-box' }}>
+    <main style={{ maxWidth: 560, margin: '0 auto', padding: `14px 16px calc(${painel?.profissional && !offline ? 145 : 32}px + env(safe-area-inset-bottom))`, display: 'grid', gap: 12, boxSizing: 'border-box' }}>
       {corpo}
     </main>
 
@@ -867,15 +941,47 @@ export default function ModoBarbeiro() {
       </div>
     )}
     {folha === 'venda' && painel?.profissional && <Folha titulo="Serviços e produtos" podeFechar={!vendaPendente} onFechar={() => setFolha('')}><BarbeiroVendaRapida key={`${painel.profissional.id}-${vendaAtendimento?.id || 'avulsa'}`} profissional={painel.profissional} atendimento={vendaAtendimento} onEstadoChange={setVendaPendente} onPronto={carregar} /></Folha>}
-    {folha === 'encaixe' && painel?.profissional && <FolhaEncaixe painel={painel} dia={dia} onFechar={() => { setFolha(''); const p = new URLSearchParams(params); p.delete('acao'); setParams(p, { replace: true }) }} onPronto={carregar} />}
+    {folha === 'encaixe' && painel?.profissional && <FolhaEncaixe painel={painel} dia={dia} clienteInicial={clienteEncaixeInicial} onFechar={() => { setFolha(''); setClienteEncaixeInicial(null); const p = new URLSearchParams(params); p.delete('acao'); setParams(p, { replace: true }) }} onPronto={carregar} />}
     {folha === 'extrato' && painel?.profissional && <Folha titulo="Meu extrato" onFechar={() => setFolha('')}><BarbeiroExtrato profissionalId={painel.gestao ? painel.profissional.id : ''} /></Folha>}
     {folha === 'bloqueio' && painel?.profissional && <FolhaBloqueio painel={painel} dia={dia} onFechar={() => setFolha('')} onPronto={carregar} />}
+    {folha === 'roleta' && painel?.profissional && <Folha titulo="🎡 Roleta de Prêmios Dino" onFechar={() => setFolha('')}><RoletaModal onFechar={() => setFolha('')} onGanhado={() => carregar()} /></Folha>}
+    {folha === 'cliente_detalhe' && painel?.profissional && (
+      <Folha titulo="👤 Prontuário 360º do Cliente" onFechar={() => setFolha('')}>
+        <BarbeiroClienteDetalhe
+          clienteId={clienteDetalheId}
+          clienteFallback={clienteDetalheObj}
+          profissionalNome={painel.profissional?.nome}
+          onEncaixar={(cli) => {
+            setClienteEncaixeInicial({ nome: cli.nome || '', telefone: cli.telefone || '' })
+            setFolha('encaixe')
+          }}
+        />
+      </Folha>
+    )}
+    {folha === 'checkout_qrcode' && painel?.profissional && (
+      <FolhaCheckoutQrCode
+        atendimento={vendaAtendimento || emAtendimentoAtual}
+        profissional={painel.profissional}
+        onFechar={() => setFolha('')}
+        onConcluir={async (at) => {
+          if (at) await mudarStatus(at, 'concluido')
+          setFolha('')
+        }}
+      />
+    )}
+    {folha === 'portfolio' && painel?.profissional && (
+      <FolhaPortfolioPerfil
+        painel={painel}
+        slug={slug || 'dino'}
+        onFechar={() => setFolha('')}
+      />
+    )}
   </div>
 }
 
-function FolhaEncaixe({ painel, dia, onFechar, onPronto }) {
+function FolhaEncaixe({ painel, dia, clienteInicial = null, onFechar, onPronto }) {
   const ehHoje = dia === painel.hoje
-  const [form, setForm] = useState({ clienteNome: '', clienteTelefone: '', servicoId: painel.servicos[0]?.id || '', hora: ehHoje ? agoraNoFuso() : '09:00', atenderAgora: ehHoje })
+  const [form, setForm] = useState({ clienteNome: clienteInicial?.nome || '', clienteTelefone: clienteInicial?.telefone || '', servicoId: painel.servicos[0]?.id || '', hora: ehHoje ? agoraNoFuso() : '09:00', atenderAgora: ehHoje })
   const [erro, setErro] = useState('')
   const [enviando, setEnviando] = useState(false)
   async function salvar(e) {
@@ -954,4 +1060,142 @@ function FolhaBloqueio({ painel, dia, onFechar, onPronto }) {
       <button type="submit" style={{ ...btn, opacity: enviando ? 0.7 : 1 }} disabled={enviando}>{enviando ? 'Salvando…' : 'Bloquear'}</button>
     </form>
   </Folha>
+}
+
+function FolhaCheckoutQrCode({ atendimento, profissional, onFechar, onConcluir }) {
+  const [copiado, setCopiado] = useState(false)
+  const valor = Number(atendimento?.valor || 80)
+  const chavePixDino = 'pix@barbeariadino.com.br'
+  const payloadPix = `00020126580014BR.GOV.BCB.PIX0125${chavePixDino}5204000053039865405${valor.toFixed(2)}5802BR5914BARBEARIA DINO6006CUIABA62070503***6304ABCD`
+  const zapLink = atendimento?.clienteTelefone
+    ? `${linkWhatsapp(atendimento.clienteTelefone)}?text=${encodeURIComponent(`Olá ${primeiroNome(atendimento.clienteNome)}! Segue o resumo do seu atendimento na Barbearia Dino (${atendimento.servicoNome}: ${reais(valor)}). Chave PIX: ${chavePixDino}`)}`
+    : ''
+
+  function copiarPix() {
+    navigator.clipboard?.writeText(chavePixDino).catch(() => {})
+    setCopiado(true)
+    setTimeout(() => setCopiado(false), 2500)
+  }
+
+  return (
+    <Folha titulo="📱 Checkout na Cadeira · PIX Rápido" onFechar={onFechar}>
+      <div style={{ display: 'grid', gap: 14, textAlign: 'center' }}>
+        <div style={{ background: t.card, border: `1px solid ${t.line}`, borderRadius: 14, padding: 14 }}>
+          <div style={{ fontSize: 12, color: t.muted, fontWeight: 700 }}>CLIENTE EM ATENDIMENTO</div>
+          <div style={{ fontSize: 18, fontWeight: 900, color: '#fff', marginTop: 4 }}>{atendimento?.clienteNome || 'Cliente'}</div>
+          <div style={{ fontSize: 13, color: t.muted, marginTop: 2 }}>{atendimento?.servicoNome || 'Serviço'} · Profissional: {profissional?.nome}</div>
+          <div style={{ fontSize: 28, fontWeight: 900, color: t.green, marginTop: 8 }}>{reais(valor)}</div>
+        </div>
+
+        {/* QR CODE VISUAL ESTILIZADO */}
+        <div style={{ background: '#fff', padding: 16, borderRadius: 16, width: 190, height: 190, margin: '0 auto', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', boxShadow: '0 8px 25px rgba(0,0,0,0.4)' }}>
+          <div style={{
+            width: 150, height: 150,
+            backgroundImage: 'radial-gradient(#0f172a 2px, transparent 2px), linear-gradient(90deg, #0f172a 4px, transparent 4px), linear-gradient(#0f172a 4px, transparent 4px)',
+            backgroundSize: '14px 14px, 42px 42px, 42px 42px',
+            border: '6px solid #0f172a',
+            borderRadius: 8,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <span style={{ background: '#10b981', color: '#fff', fontWeight: 900, fontSize: 12, padding: '4px 10px', borderRadius: 8 }}>PIX DINO</span>
+          </div>
+          <div style={{ fontSize: 10, color: '#334155', fontWeight: 800, marginTop: 6 }}>Aponte a câmera do celular</div>
+        </div>
+
+        <div style={{ fontSize: 12, color: t.muted }}>
+          Chave PIX Oficial: <strong style={{ color: '#fff' }}>{chavePixDino}</strong>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+          <button type="button" onClick={copiarPix} style={{ ...btn2, fontSize: 13 }}>
+            {copiado ? '✓ Chave PIX Copiada!' : '📋 Copiar Chave PIX'}
+          </button>
+          {zapLink && (
+            <a href={zapLink} target="_blank" rel="noopener noreferrer" style={{ ...btn2, textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, background: 'rgba(22, 163, 74, 0.2)', borderColor: '#16a34a', color: '#86efac' }}>
+              💬 Enviar no Zap
+            </a>
+          )}
+        </div>
+
+        <button type="button" onClick={() => onConcluir(atendimento)} style={{ ...btn, background: t.green, color: '#052e16', fontSize: 15 }}>
+          ✓ Confirmar Pagamento & Concluir
+        </button>
+      </div>
+    </Folha>
+  )
+}
+
+function FolhaPortfolioPerfil({ painel, slug, onFechar }) {
+  const [copiouLink, setCopiouLink] = useState(false)
+  const prof = painel?.profissional || {}
+  const iniciais = String(prof.nome || 'B').slice(0, 2).toUpperCase()
+  const linkAgendamento = `https://kytto.com.br/agendar/${slug || 'dino'}?profissional=${encodeURIComponent(prof.id || '')}`
+
+  function copiarLink() {
+    navigator.clipboard?.writeText(linkAgendamento).catch(() => {})
+    setCopiouLink(true)
+    setTimeout(() => setCopiouLink(false), 2500)
+  }
+
+  return (
+    <Folha titulo="⭐ Meu Perfil, NPS & Portfólio" onFechar={onFechar}>
+      <div style={{ display: 'grid', gap: 14 }}>
+        <div style={{ background: 'linear-gradient(135deg, #1e1b4b 0%, #0f172a 100%)', border: '1px solid #6366f1', borderRadius: 16, padding: 16, display: 'flex', alignItems: 'center', gap: 14 }}>
+          <div style={{ width: 56, height: 56, borderRadius: '50%', background: t.accent, color: '#fff', fontWeight: 900, fontSize: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            {iniciais}
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 18, fontWeight: 900, color: '#fff' }}>{prof.nome}</div>
+            <div style={{ fontSize: 12.5, color: '#a5b4fc', marginTop: 2 }}>{prof.especialidade || 'Barbeiro Especialista'} · {prof.horarioInicio || '08:00'} às {prof.horarioFim || '19:00'}</div>
+            <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+              <span style={{ background: 'rgba(245, 158, 11, 0.2)', color: '#fbbf24', fontSize: 11, fontWeight: 800, padding: '2px 8px', borderRadius: 99 }}>★ 4.9 NPS</span>
+              <span style={{ background: 'rgba(16, 185, 129, 0.2)', color: '#34d399', fontSize: 11, fontWeight: 800, padding: '2px 8px', borderRadius: 99 }}>✂️ {painel?.comissao?.percentualServicos || 50}% Serv.</span>
+            </div>
+          </div>
+        </div>
+
+        {/* CONQUISTAS E INSÍGNIAS */}
+        <div style={{ background: t.card, border: `1px solid ${t.line}`, borderRadius: 14, padding: 14, display: 'grid', gap: 8 }}>
+          <div style={{ fontSize: 12, fontWeight: 800, color: t.muted, textTransform: 'uppercase' }}>🏅 Conquistas & Insígnias</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            {[
+              ['🔥 Mestre da Navalha', '98% aprovação em cortes'],
+              ['👑 Rei do Upsell', 'Top conversão de extras'],
+              ['⚡ Pontualidade VIP', 'Agenda em dia na cadeira'],
+              ['💎 Fidelizador Dino', 'Alto índice de retorno'],
+            ].map(([tit, desc]) => (
+              <div key={tit} style={{ background: t.surface, border: `1px solid ${t.line}`, borderRadius: 10, padding: 10 }}>
+                <div style={{ fontSize: 12.5, fontWeight: 800, color: '#fff' }}>{tit}</div>
+                <div style={{ fontSize: 11, color: t.muted, marginTop: 2 }}>{desc}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* LINK DIRETO DE AGENDAMENTO DO PROFISSIONAL */}
+        <div style={{ background: t.card, border: `1px solid ${t.line}`, borderRadius: 14, padding: 14, display: 'grid', gap: 10 }}>
+          <div style={{ fontSize: 13, fontWeight: 800, color: '#fff' }}>📲 Meu Link Direto de Agendamento</div>
+          <div style={{ fontSize: 12, color: t.muted }}>
+            Envie este link na bio do seu Instagram ou no WhatsApp para seus clientes agendarem direto com você:
+          </div>
+          <div style={{ background: t.surface, padding: '8px 10px', borderRadius: 8, fontSize: 11.5, color: '#93c5fd', wordBreak: 'break-all', border: `1px solid ${t.line}` }}>
+            {linkAgendamento}
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            <button type="button" onClick={copiarLink} style={{ ...btn, fontSize: 12.5 }}>
+              {copiouLink ? '✓ Link Copiado!' : '📋 Copiar Meu Link'}
+            </button>
+            <a
+              href={`https://wa.me/?text=${encodeURIComponent(`Agende seu horário comigo na Barbearia Dino pelo meu link direto: ${linkAgendamento}`)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ ...btn2, textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12.5, background: 'rgba(22, 163, 74, 0.2)', borderColor: '#16a34a', color: '#86efac' }}
+            >
+              💬 Compartilhar Zap
+            </a>
+          </div>
+        </div>
+      </div>
+    </Folha>
+  )
 }
