@@ -380,6 +380,8 @@ export default function ModoBarbeiro() {
         <div style={{ fontSize: 12, color: offline ? t.yellow : t.muted }}>{offline ? `${painel?._offline?.motivo === 'servidor' ? 'Servidor indisponível · cópia de' : 'Sem internet · agenda de'} ${atualizadoEm ? atualizadoEm.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '—'}` : carregando ? 'Atualizando…' : atualizadoEm ? `Atualizado às ${atualizadoEm.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}` : ''}</div>
       </div>
       {user && <button type="button" onClick={carregar} aria-label="Atualizar agenda" style={{ ...btn2, minHeight: 40, padding: '6px 12px' }}>↻</button>}
+      {user && <button type="button" onClick={() => setFolha('portfolio')} aria-label="Meu Portfólio e Avaliações" style={{ ...btn2, minHeight: 40, padding: '6px 12px', background: 'rgba(139, 92, 246, 0.1)', color: '#a78bfa', borderColor: '#8b5cf6' }}>⭐</button>}
+      {user && <button type="button" onClick={() => setFolha('portfolio')} aria-label="Meu Portfólio e Avaliações" style={{ ...btn2, minHeight: 40, padding: '6px 12px', background: 'rgba(139, 92, 246, 0.1)', color: '#a78bfa', borderColor: '#8b5cf6' }}>⭐ Perfil</button>}
       {user && <button type="button" onClick={() => { if (window.confirm('Sair do app neste aparelho?')) logout() }} style={{ ...btn2, minHeight: 40, padding: '6px 12px' }}>Sair</button>}
     </div>
   </header>
