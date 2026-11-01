@@ -19,7 +19,10 @@ const t = {
 const reais = (v) => `R$\u00a0${Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 const dataBR = (v) => (v ? String(v).slice(0, 10).split('-').reverse().join('/') : '')
 
+import { useToast } from '../../hooks/useToast';
 export default function BarbeiroGanhos({ painel, onAtualizar }) {
+  const { toast } = useToast();
+  const [solicitandoSaque, setSolicitandoSaque] = useState(false);
   const [periodoSel, setPeriodoSel] = useState('dia') // 'dia', 'semana', 'mes'
   const comissao = painel?.comissao || {}
   const dadosPeriodo = periodoSel === 'dia' ? comissao.dia : periodoSel === 'semana' ? comissao.semana : comissao.mes
