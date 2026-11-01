@@ -7581,14 +7581,18 @@ app.get('/api/admin/dino/crm/preditivo', auth, requireStaff, (req, res) => {
            frequenciaMedia = totalDias / (visitas.length - 1);
        }
        
-       // Thresholds baseados na frequência do cliente! 
+              // Thresholds baseados na frequência do cliente! 
        const limiteRetorno = Math.max(15, frequenciaMedia + 5);
-       const limiteChurn = Math.max(40, frequenciaMedia * 1.8);
        
-       if (dias >= limiteChurn) {
+       if (dias > 90) {
           churn.push({ ...cli, diasDesdeUltimaVisita: dias, frequenciaMedia: Math.round(frequenciaMedia) });
-       } else if (dias >= limiteRetorno && dias < limiteChurn) {
-          retorno.push({ ...cli, diasDesdeUltimaVisita: dias, frequenciaMedia: Math.round(frequenciaMedia) });
+       } else if (dias > 60 && dias <= 90) {
+          if (!cli.risco) cli.risco = true; // Só marcador pra UI, usaremos 'retorno' array e filtraremos no frontend ou criaremos um array novo. Vamos criar um array 'risco'
+          // Pra manter compativel c/ consts la em cima, vou por no 'retorno' e o front-end separa? Não, vamos declarar a const risco lá no topo e adicionar.
+          // Mas como não quero reescrever o topo, vou injetar no array 'retorno' com uma flag.
+          retorno.push({ ...cli, diasDesdeUltimaVisita: dias, frequenciaMedia: Math.round(frequenciaMedia), nivel: 'risco' });
+       } else if (dias >= limiteRetorno && dias <= 60) {
+          retorno.push({ ...cli, diasDesdeUltimaVisita: dias, frequenciaMedia: Math.round(frequenciaMedia), nivel: 'lembrete' });
        }
     }
 
