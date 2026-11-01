@@ -475,12 +475,11 @@ async function processChargeTask(task, payload, legacyEmpresaId) {
   const assistente = isDino ? 'o T-Rex da ' : 'a equipe da ';
   const emoji = isDino ? ' 🦖' : '';
   const abertura = tentativa >= 3
-    ? `${saudacao}, ${primeiroNome}! Tudo bem? Aqui é ${assistente}${nome}${emoji} Viemos lembrar que a mensalidade do seu plano (${valor}) está em aberto e o plano será pausado. Vamos agendar seu retorno e manter seus benefícios?`
+    ? `${saudacao}, ${primeiroNome}! Tudo bem? Aqui é ${assistente}${nome}${emoji} Viemos lembrar que a mensalidade do seu plano (${valor}) está em aberto e o plano será pausado. Gostaria que eu te enviasse a chave PIX ou o link do cartão de crédito para ficar mais confortável para você pagar?`
     : tentativa === 2
-      ? `${saudacao}, ${primeiroNome}! Tudo bem? Aqui é ${assistente}${nome}${emoji} Sua mensalidade do plano (${valor}) venceu e ainda está em aberto. Que tal aproveitar para agendar seu próximo atendimento e já regularizar?`
-      : `${saudacao}, ${primeiroNome}! Tudo bem? Aqui é ${assistente}${nome}${emoji} Sua mensalidade do plano (${valor}) vence em breve! Vamos agendar seu próximo retorno para você aproveitar seus serviços?`;
-  const comoPagar = `Você prefere pagar via Pix ou Cartão de Crédito? Para sua comodidade, já deixei o link seguro aqui:\nhttps://kytto.com.br/pay/${cobranca.id}`; 
-  const texto = `${abertura}\n\n${comoPagar}\n\nSe precisar de ajuda ou quiser agendar, é só me chamar! (Para não receber mais avisos de cobrança, responda SAIR).`;
+      ? `${saudacao}, ${primeiroNome}! Tudo bem? Aqui é ${assistente}${nome}${emoji} Sua mensalidade do plano (${valor}) venceu. Gostaria de receber a chave PIX ou o link do cartão para pagamento? E aproveitando, quer já agendar seu próximo horário?`
+      : `${saudacao}, ${primeiroNome}! Tudo bem? Aqui é ${assistente}${nome}${emoji} Sua mensalidade do plano (${valor}) vence hoje. Quer que eu te envie o PIX ou o link do cartão para facilitar o pagamento? Vamos também já agendar o seu retorno?`;
+  const texto = `${abertura}\n\nSe precisar de ajuda ou agendar, é só me chamar! (Para não receber avisos, responda SAIR).`;
   await db.query(
     `UPDATE tarefas_integracao_canais SET delivery_started_at = CURRENT_TIMESTAMP
       WHERE id = $1 AND status = 'processando' AND lease_token = $2::uuid`,

@@ -28,6 +28,7 @@ import {
 import { clubeParaTelefone, entrarListaEspera, planoDoTelefone, perfilDoTelefone, validarAgendamentoComPlano, sugestaoPosServico, codigoIndicacaoCliente } from '../dino-captacao-kytto.js';
 import { saldoCashback } from '../dino-cobranca-kytto.js';
 import * as barbeariaErp from '../barbearia-erp-kytto.js';
+import * as cobrancaKytto from '../dino-cobranca-kytto.js';
 import * as clientesKytto from '../clientes-contas-kytto.js';
 import { normalizarNascimento } from '../clientes-contas-kytto.js';
 import { encontrarClientePorTelefone, telefoneChave } from '../dino-clientes-vinculo.js';
@@ -1721,7 +1722,13 @@ async function toolMyPlan(context) {
   const scope = await barbeariaScope(context);
   const plano = planoDoTelefone(scope.empresaId, scope.phone);
   if (!plano) return { ok: true, assinante: false, instrucao: 'O contato não tem plano ativo. Não ofereça o clube sem o cliente pedir ou sem propor_oportunidade.' };
-  return { ok: true, assinante: true, plano: sanitizeToolData(plano), instrucao: 'Informe saldo, validade e situação reais. Se vencido, pausado, pendente ou esgotado, não prometa benefícios ou agendamento pelo pacote: oriente renovar ou falar com a equipe. Não cobre pelo WhatsApp nem confirme renovação sem pagamento registrado.' };
+  
+  // Buscar cobranças pendentes para gerar o link de pagamento
+  const cobrancas = cobrancaKytto.listarCobrancas(scope.empresaId).filter(c => c.clienteId === plano.clienteId && c.status === 'pendente') : [];
+  const linkPagamento = cobrancas.length > 0 ? `https://kytto.com.br/pay/${cobrancas[0].id}` : null;
+  if (linkPagamento) plano.linkPagamento = linkPagamento;
+  
+  return { ok: true, assinante: true, plano: sanitizeToolData(plano), instrucao: 'Informe saldo, validade e situação reais. Se vencido ou pausado, ofereça o linkPagamento se houver (para Pix ou cartão). Não prometa benefícios ou agendamento sem pagamento registrado.' };
 }
 
 /** Catálogo público dos planos/clubes ativos (nome, preço, ciclo, sessões e serviços incluídos). */
