@@ -181,12 +181,22 @@ function xmlIcms(item, regime) {
   const origem = fiscal.origem || icms.origem || '0';
   if (regime === 'simples') {
     const csosn = fiscal.csosn || icms.csosn || '102';
-    return `<ICMS><ICMSSN${csosn}>${tag('orig', origem)}${tag('CSOSN', csosn)}</ICMSSN${csosn}></ICMS>`;
+    // leiaute 4.00: 102, 103, 300 e 400 usam todos o grupo ICMSSN102; 500 tem grupo próprio
+    if (['102', '103', '300', '400'].includes(csosn)) return `<ICMS><ICMSSN102>${tag('orig', origem)}${tag('CSOSN', csosn)}</ICMSSN102></ICMS>`;
+    if (csosn === '500') return `<ICMS><ICMSSN500>${tag('orig', origem)}${tag('CSOSN', csosn)}</ICMSSN500></ICMS>`;
+    throw new Error(`CSOSN ${csosn} não suportado na montagem do XML.`);
   }
   const cst = fiscal.cstIcms || icms.cst || '00';
-  if (['40', '41', '50'].includes(cst)) return `<ICMS><ICMS${cst}>${tag('orig', origem)}${tag('CST', cst)}</ICMS${cst}></ICMS>`;
+  // 40, 41 e 50 usam o grupo ICMS40; 60 (ST cobrada antes) só origem e CST
+  if (['40', '41', '50'].includes(cst)) return `<ICMS><ICMS40>${tag('orig', origem)}${tag('CST', cst)}</ICMS40></ICMS>`;
+  if (cst === '60') return `<ICMS><ICMS60>${tag('orig', origem)}${tag('CST', cst)}</ICMS60></ICMS>`;
+  if (cst === '20') {
+    const body = `${tag('orig', origem)}${tag('CST', cst)}${tag('modBC', '3')}${tag('pRedBC', decimal(icms.reducaoBase ?? fiscal.reducaoBaseIcms, 4))}${tag('vBC', decimal(icms.baseCalculo, 2))}${tag('pICMS', decimal(icms.aliquota, 2))}${tag('vICMS', decimal(icms.valor, 2))}`;
+    return `<ICMS><ICMS20>${body}</ICMS20></ICMS>`;
+  }
+  if (cst !== '00') throw new Error(`CST ${cst} não suportado na montagem do XML.`);
   const body = `${tag('orig', origem)}${tag('CST', cst)}${tag('modBC', '3')}${tag('vBC', decimal(icms.baseCalculo, 2))}${tag('pICMS', decimal(icms.aliquota, 2))}${tag('vICMS', decimal(icms.valor, 2))}`;
-  return `<ICMS><ICMS${cst}>${body}</ICMS${cst}></ICMS>`;
+  return `<ICMS><ICMS00>${body}</ICMS00></ICMS>`;
 }
 
 function xmlPis(item) {
@@ -205,6 +215,13 @@ function xmlCofins(item) {
   return ['01', '02'].includes(cst) ? `<COFINS><COFINSAliq>${calculo}</COFINSAliq></COFINS>` : `<COFINS><COFINSOutr>${calculo}</COFINSOutr></COFINS>`;
 }
 
+// DIFAL (EC 87/2015): venda interestadual a consumidor final não contribuinte (grupo ICMSUFDest)
+function xmlDifal(d) {
+  if (!d) return '';
+  return `<ICMSUFDest>${tag('vBCUFDest', decimal(d.base, 2))}${tag('vBCFCPUFDest', decimal(d.base, 2))}${tag('pFCPUFDest', decimal(d.pFcp, 4))}${tag('pICMSUFDest', decimal(d.pDestino, 4))}`
+    + `${tag('pICMSInter', decimal(d.pInter, 2))}${tag('pICMSInterPart', decimal(100, 4))}${tag('vFCPUFDest', decimal(d.vFcp, 2))}${tag('vICMSUFDest', decimal(d.vDestino, 2))}${tag('vICMSUFRemet', decimal(0, 2))}</ICMSUFDest>`;
+}
+
 function xmlItens(itens, regime) {
   return itens.map((item, index) => {
     const fiscal = item.fiscal || {};
@@ -219,7 +236,7 @@ function xmlItens(itens, regime) {
       + `${tag('NCM', ncm)}${fiscal.cest ? tag('CEST', digits(fiscal.cest, 7)) : ''}${tag('CFOP', digits(fiscal.cfop, 4) || '5102')}`
       + `${tag('uCom', fiscal.unidadeTributavel || item.unidade || 'UN')}${tag('qCom', decimal(qCom, 4))}${tag('vUnCom', decimal(vUn, 10))}${tag('vProd', decimal(vProd, 2))}`
       + `${tag('cEANTrib', text(item.gtin || 'SEM GTIN', 14))}${tag('uTrib', fiscal.unidadeTributavel || item.unidade || 'UN')}${tag('qTrib', decimal(qCom, 4))}${tag('vUnTrib', decimal(vUn, 10))}${tag('indTot', '1')}`
-      + `</prod><imposto>${item.vTotTrib !== undefined && item.vTotTrib !== null ? tag('vTotTrib', decimal(item.vTotTrib, 2)) : ''}${xmlIcms(item, regime)}${xmlPis(item)}${xmlCofins(item)}</imposto></det>`;
+      + `</prod><imposto>${item.vTotTrib !== undefined && item.vTotTrib !== null ? tag('vTotTrib', decimal(item.vTotTrib, 2)) : ''}${xmlIcms(item, regime)}${xmlPis(item)}${xmlCofins(item)}${xmlDifal(item.difal)}</imposto></det>`;
   }).join('');
 }
 
@@ -237,6 +254,9 @@ function xmlPagamentos(pagamentos, valorTotal) {
       const autorizacao = text(pagamento.codigoAutorizacao, 128);
       if (cnpj.length !== 14 || !autorizacao) throw new Error('Pagamento integrado por cartão ou PIX exige CNPJ da credenciadora e código de autorização.');
       card = `<card>${tag('tpIntegra', '1')}${tag('CNPJ', cnpj)}${pagamento.bandeira ? tag('tBand', digits(pagamento.bandeira, 2)) : ''}${tag('cAut', autorizacao)}</card>`;
+    } else if (['03', '04', '17'].includes(meio)) {
+      // cartão/PIX sem integração com a automação (maquininha à parte): grupo card com tpIntegra=2
+      card = `<card>${tag('tpIntegra', '2')}</card>`;
     }
     return `<detPag>${tag('tPag', meio)}${tag('vPag', decimal(valor, 2))}${card}</detPag>`;
   }).join('');
@@ -264,13 +284,16 @@ function xmlDestinatario(destinatario) {
   const documento = cnpj ? tag('CNPJ', cnpj) : tag('CPF', cpf);
   const end = destinatario.endereco || destinatario;
   const possuiEndereco = text(end.logradouro) && text(end.numero) && text(end.bairro) && text(end.cidade) && text(end.uf) && digits(end.codigoMunicipio, 7) && digits(end.cep, 8);
-  const indIe = destinatario.indIEDest || (destinatario.ie ? '1' : '9');
-  return `<dest>${documento}${tag('xNome', destinatario.nome || 'CONSUMIDOR FINAL')}${possuiEndereco ? `<enderDest>${tag('xLgr', end.logradouro)}${tag('nro', end.numero)}${end.complemento ? tag('xCpl', end.complemento) : ''}${tag('xBairro', end.bairro)}${tag('cMun', digits(end.codigoMunicipio, 7))}${tag('xMun', end.cidade)}${tag('UF', end.uf)}${tag('CEP', digits(end.cep, 8))}${tag('cPais', '1058')}${tag('xPais', 'BRASIL')}</enderDest>` : ''}${tag('indIEDest', indIe)}${indIe === '1' && destinatario.ie ? tag('IE', destinatario.ie) : ''}${destinatario.email ? tag('email', destinatario.email) : ''}</dest>`;
+  // 1 = contribuinte com IE; 2 = isento de IE (sem a tag IE); 9 = não contribuinte
+  const ieTexto = String(destinatario.ie || '').trim();
+  const indIe = String(destinatario.indIEDest || (ieTexto ? (ieTexto.toUpperCase() === 'ISENTO' ? '2' : '1') : '9'));
+  return `<dest>${documento}${tag('xNome', destinatario.nome || 'CONSUMIDOR FINAL')}${possuiEndereco ? `<enderDest>${tag('xLgr', end.logradouro)}${tag('nro', end.numero)}${end.complemento ? tag('xCpl', end.complemento) : ''}${tag('xBairro', end.bairro)}${tag('cMun', digits(end.codigoMunicipio, 7))}${tag('xMun', end.cidade)}${tag('UF', end.uf)}${tag('CEP', digits(end.cep, 8))}${tag('cPais', '1058')}${tag('xPais', 'BRASIL')}</enderDest>` : ''}${tag('indIEDest', indIe)}${indIe === '1' && digits(ieTexto) ? tag('IE', digits(ieTexto, 14)) : ''}${destinatario.email ? tag('email', destinatario.email) : ''}</dest>`;
 }
 
 function xmlTotais(totais = {}) {
   return `<total><ICMSTot>`
-    + `${tag('vBC', decimal(totais.baseIcms, 2))}${tag('vICMS', decimal(totais.valorIcms, 2))}${tag('vICMSDeson', '0.00')}${tag('vFCP', decimal(totais.valorFcp, 2))}`
+    + `${tag('vBC', decimal(totais.baseIcms, 2))}${tag('vICMS', decimal(totais.valorIcms, 2))}${tag('vICMSDeson', '0.00')}`
+    + `${totais.difal ? `${tag('vFCPUFDest', decimal(totais.difal.vFcp, 2))}${tag('vICMSUFDest', decimal(totais.difal.vDestino, 2))}${tag('vICMSUFRemet', '0.00')}` : ''}${tag('vFCP', decimal(totais.valorFcp, 2))}`
     + `${tag('vBCST', decimal(totais.baseSt, 2))}${tag('vST', decimal(totais.valorSt, 2))}${tag('vFCPST', '0.00')}${tag('vFCPSTRet', '0.00')}`
     + `${tag('vProd', decimal(totais.valorProdutos, 2))}${tag('vFrete', '0.00')}${tag('vSeg', '0.00')}${tag('vDesc', decimal(totais.desconto, 2))}${tag('vII', '0.00')}${tag('vIPI', '0.00')}${tag('vIPIDevol', '0.00')}`
     + `${tag('vPIS', decimal(totais.valorPis, 2))}${tag('vCOFINS', decimal(totais.valorCofins, 2))}${tag('vOutro', '0.00')}${tag('vNF', decimal(totais.valorTotal, 2))}${totais.vTotTrib !== undefined && totais.vTotTrib !== null ? tag('vTotTrib', decimal(totais.vTotTrib, 2)) : ''}`
@@ -281,7 +304,7 @@ function xmlTotais(totais = {}) {
  * Gera um XML de NF-e/NFC-e v4.00 sem assinatura. A função nunca transmite.
  * O chamador deve validar o resultado e somente depois assinar, em etapa separada.
  */
-export function montarXmlFiscalV400({ config, modelo = '65', numero, serie, chaveAcesso, codigoNumerico, dataEmissao = agoraFiscalCuiaba(), itens = [], totais, pagamentos = [], destinatario = null, contingencia = false, justificativaContingencia = '', qrCodeUrl, urlChave, qrCodeVersao = QR_VERSAO_ATUAL, qrCodeOfflineAssinatura = '' } = {}) {
+export function montarXmlFiscalV400({ config, modelo = '65', numero, serie, chaveAcesso, codigoNumerico, dataEmissao = agoraFiscalCuiaba(), itens = [], totais, pagamentos = [], destinatario = null, contingencia = false, justificativaContingencia = '', qrCodeUrl, urlChave, qrCodeVersao = QR_VERSAO_ATUAL, qrCodeOfflineAssinatura = '', tpEmis: tpEmisInformado = null } = {}) {
   const model = normalizarModelo(modelo);
   const chave = digits(chaveAcesso);
   if (!validarChaveAcessoFiscal(chave)) throw new Error('Chave fiscal inválida para montagem do XML.');
@@ -289,7 +312,12 @@ export function montarXmlFiscalV400({ config, modelo = '65', numero, serie, chav
   const total = totais || {};
   const regime = config?.regimeTributario || 'simples';
   const tpAmb = config?.ambiente === 'producao' ? '1' : '2';
-  const tpEmis = contingencia ? '9' : '1';
+  // 9 = contingência offline da NFC-e; 7 = SVC-RS / 6 = SVC-AN (contingência da NF-e na autorizadora virtual)
+  const tpEmis = tpEmisInformado ? String(tpEmisInformado) : (contingencia ? '9' : '1');
+  if (['6', '7'].includes(tpEmis) && model !== '55') throw new Error('SVC (tpEmis 6/7) é só da NF-e (55).');
+  // presença do comprador: NFC-e só aceita 1 (presencial) ou 4 (entrega em domicílio)
+  const indPresInformado = String(config?.indPres || '1');
+  const indPres = model === '65' ? (indPresInformado === '4' ? '4' : '1') : (['0', '1', '2', '3', '4', '5', '9'].includes(indPresInformado) ? indPresInformado : '1');
   const natOp = model === '65' ? (config?.naturezaOperacaoNfce || 'VENDA DE MERCADORIA') : (config?.naturezaOperacaoNfe || 'VENDA DE MERCADORIA');
   const qr = model === '65' ? construirQrCodeNfce({
     chaveAcesso: chave, ambiente: config?.ambiente, urlBase: qrCodeUrl, versao: qrCodeVersao, contingencia,
@@ -297,7 +325,7 @@ export function montarXmlFiscalV400({ config, modelo = '65', numero, serie, chav
     assinaturaOfflineBase64: qrCodeOfflineAssinatura, cscId: config?.cscId, csc: config?.csc,
   }) : null;
   const pagamentosXml = xmlPagamentos(pagamentos, total.valorTotal);
-  const ide = `<ide>${tag('cUF', chave.slice(0, 2))}${tag('cNF', String(codigoNumerico ?? chave.slice(35, 43)).padStart(8, '0'))}${tag('natOp', natOp)}${tag('mod', model)}${tag('serie', serie)}${tag('nNF', numero)}${tag('dhEmi', dataEmissao)}${tag('tpNF', '1')}${tag('idDest', '1')}${tag('cMunFG', digits(config?.endereco?.codigoMunicipio, 7))}${tag('tpImp', model === '65' ? '4' : '1')}${tag('tpEmis', tpEmis)}${tag('cDV', chave.slice(-1))}${tag('tpAmb', tpAmb)}${tag('finNFe', '1')}${tag('indFinal', '1')}${tag('indPres', '1')}${tag('procEmi', '0')}${tag('verProc', 'Kytto Fiscal 1.0')}${contingencia ? `${tag('dhCont', dataEmissao)}${tag('xJust', text(justificativaContingencia, 256) || 'Contingência offline')}` : ''}</ide>`;
+  const ide = `<ide>${tag('cUF', chave.slice(0, 2))}${tag('cNF', String(codigoNumerico ?? chave.slice(35, 43)).padStart(8, '0'))}${tag('natOp', natOp)}${tag('mod', model)}${tag('serie', serie)}${tag('nNF', numero)}${tag('dhEmi', dataEmissao)}${tag('tpNF', '1')}${tag('idDest', model === '55' && config?.idDest === '2' ? '2' : '1')}${tag('cMunFG', digits(config?.endereco?.codigoMunicipio, 7))}${tag('tpImp', model === '65' ? '4' : '1')}${tag('tpEmis', tpEmis)}${tag('cDV', chave.slice(-1))}${tag('tpAmb', tpAmb)}${tag('finNFe', '1')}${tag('indFinal', model === '55' && config?.indFinal === '0' ? '0' : '1')}${tag('indPres', indPres)}${['2', '3', '4', '9'].includes(indPres) ? tag('indIntermed', '0') : ''}${tag('procEmi', '0')}${tag('verProc', 'Kytto Fiscal 1.0')}${tpEmis !== '1' ? `${tag('dhCont', dataEmissao)}${tag('xJust', text(justificativaContingencia, 256) || 'Contingência offline')}` : ''}</ide>`;
   const suplementar = model === '65' ? `<infNFeSupl>${tag('qrCode', qr)}${tag('urlChave', urlChave)}</infNFeSupl>` : '';
   // TNFe exige a sequência raiz: infNFe, infNFeSupl (opcional), Signature.
   const infNFe = `<infNFe versao="4.00" Id="NFe${chave}">${ide}${xmlEmitente(config)}${xmlDestinatario(destinatario)}${xmlItens(itens, regime)}${xmlTotais(total)}<transp>${tag('modFrete', '9')}</transp>${pagamentosXml.xml}</infNFe>`;

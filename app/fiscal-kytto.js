@@ -60,7 +60,10 @@ export function gerarChaveAcessoFiscal({ uf = 'MT', dhEmi, cnpj, modelo = '65', 
   const cUf = String(CODIGOS_UF[String(uf).toUpperCase()] || CODIGOS_UF.MT).padStart(2, '0');
   const emissao = new Date(dhEmi || new Date().toISOString());
   if (Number.isNaN(emissao.valueOf())) throw new Error('Data de emissão inválida para gerar chave de acesso.');
-  const aamm = `${String(emissao.getUTCFullYear()).slice(-2)}${String(emissao.getUTCMonth() + 1).padStart(2, '0')}`;
+  // AAMM do horário local da emissão (o dhEmi já vem com o fuso, ex.: 2026-10-31T21:00:00-04:00);
+  // pelo UTC, a noite do último dia do mês viraria o mês seguinte e a chave não bateria com o dhEmi
+  const local = String(dhEmi || '').match(/^(\d{4})-(\d{2})-\d{2}T/);
+  const aamm = local ? `${local[1].slice(-2)}${local[2]}` : `${String(emissao.getUTCFullYear()).slice(-2)}${String(emissao.getUTCMonth() + 1).padStart(2, '0')}`;
   const cnpjNormalizado = somenteDigitos(cnpj);
   if (cnpjNormalizado.length !== 14) throw new Error('CNPJ inválido para gerar chave de acesso.');
   const mod = String(modelo).padStart(2, '0');

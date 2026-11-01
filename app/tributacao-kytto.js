@@ -55,6 +55,7 @@ export function normalizarClassificacaoFiscalProduto(raw = {}) {
     cstPis: CST_PIS_COFINS.has(cstPis) ? cstPis : '49',
     cstCofins: CST_PIS_COFINS.has(cstCofins) ? cstCofins : '49',
     aliquotaIcms: percentual(raw.aliquotaIcms ?? raw.pIcms),
+    reducaoBaseIcms: percentual(raw.reducaoBaseIcms ?? raw.pRedBC),
     aliquotaIcmsSt: percentual(raw.aliquotaIcmsSt ?? raw.pIcmsSt),
     margemValorAgregadoSt: percentual(raw.margemValorAgregadoSt ?? raw.pMvaSt),
     aliquotaFcp: percentual(raw.aliquotaFcp ?? raw.pFcp),
@@ -82,19 +83,24 @@ function regraAplicada(fiscal, contexto) {
 }
 
 function calcularIcms(base, fiscal, regime) {
-  const st = ['10', '30', '60', '70', '90'].includes(fiscal.cstIcms) || ['201', '202', '203', '500', '900'].includes(fiscal.csosn);
-  const isento = ['40', '41', '50'].includes(fiscal.cstIcms) || ['103', '300', '400'].includes(fiscal.csosn);
+  // ST calculada NESTA nota só quando o emitente é o substituto (CST 10/30/70/90, CSOSN 201/202/203).
+  // CST 60 / CSOSN 500 = ICMS já retido antes: sem base nem valor de ST no documento.
+  const st = regime === 'simples' ? ['201', '202', '203'].includes(fiscal.csosn) : ['10', '30', '70', '90'].includes(fiscal.cstIcms);
+  // base própria do ICMS só no regime normal com ICMS destacado; no Simples o item não tem vBC
+  // (e o total vBC precisa ser a soma dos itens, senão a SEFAZ rejeita)
   const tributadoNormal = regime !== 'simples' && ['00', '10', '20', '51', '70', '90'].includes(fiscal.cstIcms);
-  const baseIcms = isento ? 0 : base;
+  const reducao = ['20', '70'].includes(fiscal.cstIcms) ? fiscal.reducaoBaseIcms : 0;
+  const baseIcms = tributadoNormal ? arredondarFiscal(base * (1 - reducao / 100)) : 0;
   const valorIcms = tributadoNormal ? arredondarFiscal(baseIcms * fiscal.aliquotaIcms / 100) : 0;
   const baseSt = st && fiscal.aliquotaIcmsSt > 0 ? arredondarFiscal(base * (1 + fiscal.margemValorAgregadoSt / 100)) : 0;
   const valorSt = baseSt > 0 ? arredondarFiscal(Math.max(0, baseSt * fiscal.aliquotaIcmsSt / 100 - valorIcms)) : 0;
-  const valorFcp = fiscal.aliquotaFcp > 0 ? arredondarFiscal(baseIcms * fiscal.aliquotaFcp / 100) : 0;
+  const valorFcp = tributadoNormal && fiscal.aliquotaFcp > 0 ? arredondarFiscal(baseIcms * fiscal.aliquotaFcp / 100) : 0;
   return {
     origem: fiscal.origem,
     cst: regime === 'simples' ? null : fiscal.cstIcms,
     csosn: regime === 'simples' ? fiscal.csosn : null,
     baseCalculo: baseIcms,
+    reducaoBase: reducao,
     aliquota: tributadoNormal ? fiscal.aliquotaIcms : 0,
     valor: valorIcms,
     baseSt,
