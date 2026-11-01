@@ -44,7 +44,7 @@ describe('Fiscal por empresa — homologação (PostgreSQL)', { skip: pgDeTeste 
   before(async () => {
     ctx = await criarBancoTeste();
     await ctx.db.query(STUBS);
-    for (const m of ['081_bar_pdv_multiempresa.sql', '092_fiscal_multiempresa.sql', '100_fiscal_completo.sql']) await ctx.db.query(sql(m));
+    for (const m of ['081_bar_pdv_multiempresa.sql', '092_fiscal_multiempresa.sql', '100_fiscal_completo.sql', '106_fiscal_producao.sql']) await ctx.db.query(sql(m));
     await ctx.db.query('INSERT INTO empresas (id) VALUES ($1), ($2)', [A, B]);
     loja = (await ctx.db.query("INSERT INTO lojas (empresa_id, nome) VALUES ($1, 'Sede') RETURNING id", [A])).rows[0].id;
   });
@@ -66,7 +66,7 @@ describe('Fiscal por empresa — homologação (PostgreSQL)', { skip: pgDeTeste 
     assert.throws(() => cifrar('x', A, {}), (e) => e.code === 'COFRE_INDISPONIVEL');
   });
 
-  test('emitente: só homologação, CSC guardado cifrado e nunca devolvido', async () => {
+  test('emitente: produção só com liberação, CSC guardado cifrado e nunca devolvido', async () => {
     await assert.rejects(() => fiscal.salvarEmitente(ctx.db, A, { ...EMITENTE, ambiente: 'producao' }, { env: ENV }), (e) => e.code === 'AMBIENTE_PROIBIDO');
     await assert.rejects(() => fiscal.salvarEmitente(ctx.db, A, { ...EMITENTE, codigoMunicipio: '3550308' }, { env: ENV }), (e) => e.code === 'VALIDATION_ERROR');
     const e = await fiscal.salvarEmitente(ctx.db, A, EMITENTE, { env: ENV });
@@ -78,7 +78,9 @@ describe('Fiscal por empresa — homologação (PostgreSQL)', { skip: pgDeTeste 
     // salvar de novo sem CSC mantém o atual
     await fiscal.salvarEmitente(ctx.db, A, { ...EMITENTE, csc: '' }, { env: ENV });
     assert.equal((await ctx.db.query('SELECT csc_cifrado FROM fis_emitentes WHERE empresa_id = $1', [A])).rows[0].csc_cifrado, bruto);
-    await assert.rejects(() => ctx.db.query("UPDATE fis_emitentes SET ambiente = 'producao' WHERE empresa_id = $1", [A]), /chk_fis_emit_ambiente/);
+    // o banco só aceita homologação ou produção (106); produção depende da liberação no servidor
+    await assert.rejects(() => ctx.db.query("UPDATE fis_emitentes SET ambiente = 'teste' WHERE empresa_id = $1", [A]), /chk_fis_emit_ambiente/);
+    assert.equal((await fiscal.listarEmitentes(ctx.db, A))[0].ambiente, 'homologacao');
   });
 
   test('certificado: senha errada recusada; aceito fica cifrado e a API não devolve segredo', async () => {
@@ -123,12 +125,21 @@ describe('Fiscal por empresa — homologação (PostgreSQL)', { skip: pgDeTeste 
     assert.equal(ok.protocolo, '151260000000123');
     assert.equal(ok.chave.length, 44);
     const c2 = await comandaPaga('Mesa 9');
-    const rej = await fiscal.emitir(ctx.db, A, { modelo: '65', origem: 'bar_comanda', origemId: c2 }, { env: ENV_TX, transporte: sefazFalsa('539'), agora });
+    const rej = await fiscal.emitir(ctx.db, A, { modelo: '65', origem: 'bar_comanda', origemId: c2 }, { env: ENV_TX, transporte: sefazFalsa('225'), agora });
     assert.equal(rej.status, 'rejeitado');
     const ok2 = await fiscal.emitir(ctx.db, A, { modelo: '65', origem: 'bar_comanda', origemId: c2 }, { env: ENV_TX, transporte: sefazFalsa('100'), agora });
     assert.equal(ok2.id, rej.id);
     assert.equal(ok2.numero, rej.numero, 'rejeitado não consome número');
     assert.equal(ok2.status, 'autorizado');
+    // 539 = número já usado por outra nota (emissor anterior): a nova tentativa pega outro número
+    const c3 = await comandaPaga('Mesa 10');
+    const dup = await fiscal.emitir(ctx.db, A, { modelo: '65', origem: 'bar_comanda', origemId: c3 }, { env: ENV_TX, transporte: sefazFalsa('539'), agora });
+    assert.equal(dup.status, 'rejeitado');
+    assert.ok(dup.mensagens.some((m) => m.codigo === 'NUMERO_EM_USO'));
+    const ok3 = await fiscal.emitir(ctx.db, A, { modelo: '65', origem: 'bar_comanda', origemId: c3 }, { env: ENV_TX, transporte: sefazFalsa('100'), agora });
+    assert.equal(ok3.id, dup.id);
+    assert.ok(ok3.numero > dup.numero, 'número em uso é trocado pelo próximo livre');
+    assert.equal(ok3.status, 'autorizado');
     await assert.rejects(() => fiscal.cancelar(ctx.db, A, ok.id, { justificativa: 'curta' }), (e) => e.code === 'VALIDATION_ERROR');
     const canc = await fiscal.cancelar(ctx.db, A, ok.id, { justificativa: 'Cliente desistiu da compra no caixa', env: ENV_TX, transporte: sefazFalsa() });
     assert.equal(canc.status, 'cancelado');

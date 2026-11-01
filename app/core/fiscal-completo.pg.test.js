@@ -60,7 +60,7 @@ describe('Fiscal completo — homologação (PostgreSQL)', { skip: pgDeTeste }, 
   before(async () => {
     ctx = await criarBancoTeste();
     await ctx.db.query(STUBS);
-    for (const m of ['081_bar_pdv_multiempresa.sql', '092_fiscal_multiempresa.sql', '100_fiscal_completo.sql']) await ctx.db.query(sql(m));
+    for (const m of ['081_bar_pdv_multiempresa.sql', '092_fiscal_multiempresa.sql', '100_fiscal_completo.sql', '106_fiscal_producao.sql']) await ctx.db.query(sql(m));
     // a 100 é idempotente (o runner pode reaplicar)
     await ctx.db.query(sql('100_fiscal_completo.sql'));
     await ctx.db.query('INSERT INTO empresas (id) VALUES ($1), ($2)', [A, B]);
@@ -204,8 +204,8 @@ describe('Fiscal completo — homologação (PostgreSQL)', { skip: pgDeTeste }, 
     const n2 = await fiscal.emitir(ctx.db, A, { modelo: '65', origem: 'bar_comanda', origemId: await comandaPaga(A, 'Mesa I2') }, { env: ENV, agora });
     assert.equal(n1.numero, prox);
     assert.equal(n2.numero, prox + 4, 'pulou os números inutilizados');
-    // nada vai para produção: o banco recusa ambiente diferente de homologação
-    await assert.rejects(() => ctx.db.query("UPDATE fis_inutilizacoes SET ambiente = 'producao' WHERE id = $1", [inut.id]), /chk_fis_inut_ambiente/);
+    // o banco só aceita homologação ou produção
+    await assert.rejects(() => ctx.db.query("UPDATE fis_inutilizacoes SET ambiente = 'teste' WHERE id = $1", [inut.id]), /chk_fis_inut_ambiente/);
     // isolamento entre empresas
     assert.equal((await fiscal.listarInutilizacoes(ctx.db, B)).length, 0);
     assert.equal((await fiscal.listarInutilizacoes(ctx.db, A)).length, 1);
@@ -356,8 +356,8 @@ describe('Fiscal completo — homologação (PostgreSQL)', { skip: pgDeTeste }, 
     assert.equal((await fiscal.obterDocumento(ctx.db, A, d3.id)).status, 'contingencia');
   });
 
-  test('nada vai para produção: CHECKs da 100 e endereços de inutilização só de homologação', async () => {
-    await assert.rejects(() => ctx.db.query("UPDATE fis_documentos SET ambiente = 'producao' WHERE empresa_id = $1", [A]), /chk_fis_doc_ambiente/);
+  test('ambientes: CHECKs, endereços de homologação só com host de homologação', async () => {
+    await assert.rejects(() => ctx.db.query("UPDATE fis_documentos SET ambiente = 'teste' WHERE empresa_id = $1", [A]), /chk_fis_doc_ambiente/);
     await assert.rejects(() => ctx.db.query("UPDATE fis_documentos SET tp_emis = '9' WHERE empresa_id = $1 AND modelo = '55'", [A]), /chk_fis_doc_tp_emis/);
     await assert.rejects(() => ctx.db.query("UPDATE fis_documentos SET status = 'autorizado_producao' WHERE empresa_id = $1", [A]), /chk_fis_doc_status/);
     for (const [uf, modelo] of [['MT', '65'], ['MT', '55'], ['SC', '65'], ['SC', '55']]) {
