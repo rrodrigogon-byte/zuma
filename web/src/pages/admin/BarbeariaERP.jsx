@@ -718,6 +718,7 @@ export default function BarbeariaERP() {
   // Id do cadastro em edição nos modais de serviço, plano e produto (null = novo cadastro).
   const [edicaoId, setEdicaoId] = useState(null);
   const [salvando, setSalvando] = useState(false);
+  const [nfceConfirmando, setNfceConfirmando] = useState(null);
   const [formProf, setFormProf] = useState({
     nome: "",
     telefone: "",
@@ -9369,7 +9370,7 @@ export default function BarbeariaERP() {
                   {documentoFiscal.nfceEmitida && documentoFiscal.nfce ? (
                     <div style={{ marginTop: 10, padding: 10, borderRadius: 8, background: "rgba(20, 184, 122, 0.08)", border: "1px solid rgba(20, 184, 122, 0.25)" }}>
                       <strong style={{ color: "#14b87a", fontSize: 13 }}>
-                        NFC-e (65) {documentoFiscal.nfce.serie || 1}/{documentoFiscal.nfce.numero} · {documentoFiscal.nfce.status === "autorizado" ? "Autorizada" : "XML Validado (Homologação)"}
+                        NFC-e (65) {documentoFiscal.nfce.serie || 1}/{documentoFiscal.nfce.numero} · {{ autorizado: "Autorizada", validado_localmente: "XML validado (homologação, não enviado)", contingencia: "Em contingência (transmitir em até 24 h)", enviando: "Enviando" }[documentoFiscal.nfce.status] || documentoFiscal.nfce.status}{documentoFiscal.nfce.ambiente === "producao" ? "" : " · homologação"}
                       </strong>
                       {documentoFiscal.nfce.chaveAcesso && (
                         <div style={{ ...styles.sub, fontFamily: "monospace", fontSize: 11, marginTop: 4, wordBreak: "break-all" }}>
@@ -9378,18 +9379,23 @@ export default function BarbeariaERP() {
                       )}
                     </div>
                   ) : (
-                    <div style={{ marginTop: 10 }}>
-                       <button type="button" style={styles.secondary} disabled={salvando} onClick={async () => {
-                           if (!window.confirm("Deseja emitir a NFC-e desta comanda agora?")) return;
-                           try {
-                               const r = await api.post(`/api/admin/barbearia/comandas/${comanda.id}/fiscal/nfce`, { confirmado: true });
-                               toast(`NFC-e ${r?.nfce?.serie || 1}/${r?.nfce?.numero || 1} emitida com sucesso!`, "success");
-                               carregar();
-                           } catch(e) {
-                               toast(e.response?.data?.error || e.message, "error");
-                           }
-                       }}>Emitir NFC-e (Cupom Fiscal 65)</button>
-                    </div>
+                  <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    {/* confirmação na própria tela (window.confirm pode ser bloqueado pelo navegador) */}
+                    <button type="button" style={styles.secondary} disabled={salvando} onClick={async () => {
+                      if (nfceConfirmando !== comanda.id) { setNfceConfirmando(comanda.id); return; }
+                      setNfceConfirmando(null);
+                      try {
+                        const r = await api.post(`/api/admin/barbearia/comandas/${comanda.id}/fiscal/nfce`, { confirmado: true });
+                        const d = r?.resultado || {};
+                        const situacao = { autorizado: "autorizada", validado_localmente: "validada (homologação, não enviada)", contingencia: "em contingência (transmitir em até 24 h)", rejeitado: "rejeitada" }[d.status] || d.status;
+                        toast(`NFC-e ${d.numero || ""}: ${situacao}${d.status === "rejeitado" && d.mensagens?.length ? ` — ${d.mensagens.map((m) => m.mensagem).join(" · ")}` : ""}`, d.status === "rejeitado" ? "error" : "success");
+                        carregar();
+                      } catch (e) {
+                        toast(e.message, "error");
+                      }
+                    }}>{nfceConfirmando === comanda.id ? "Confirmar emissão da NFC-e" : "Emitir NFC-e (produtos)"}</button>
+                    {nfceConfirmando === comanda.id && <button type="button" style={styles.secondary} onClick={() => setNfceConfirmando(null)}>Voltar</button>}
+                  </div>
                   )}
                   </>
                 )}
