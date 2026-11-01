@@ -103,5 +103,7 @@
  "102_perfis_acesso.sql": "bce1bd8e1730a4479539bb94ccb5afbd73e248e01e37bc2df929158dd627c35c",
  "103_barbershop_history_archive.sql": "c62491b79598cd5d8bacb4b86e703b1dc3e7723ffa0d0f6a18a968096932eafb",
  "104_avec_revenue_mix.sql": "11315b615ad834a9e95f90cd6bd9d4d6210992ce9e0d0f35c01efc8a6b64d010",
- "105_account_password_recovery.sql": "5fdac486cdd86df7189ed3774ba68e685b166bbdac530329864ed8cf642bd9a7"
+ "105_account_password_recovery.sql": "5fdac486cdd86df7189ed3774ba68e685b166bbdac530329864ed8cf642bd9a7",
+ "106_fiscal_producao.sql": "1ab53f4cf2ea1d3cf9a2bcb3d83eb62848dfcbcfdc8fcd9f01ea6e8ce1aff880",
+ "107_fiscal_automatica.sql": "2336a658abdbda78e476d5ac0676a79dbd9fabccee95b6cfc55f93c6c678ea48"
 }

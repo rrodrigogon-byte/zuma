@@ -90,6 +90,8 @@ const migrationFiles = [
   '103_barbershop_history_archive.sql',
   '104_avec_revenue_mix.sql',
   '105_account_password_recovery.sql',
+  '106_fiscal_producao.sql',
+  '107_fiscal_automatica.sql',
 ];
 const advisoryLockKey = 825410732;
 
