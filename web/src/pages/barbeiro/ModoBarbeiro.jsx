@@ -131,14 +131,45 @@ function LoginEquipe({ isDino }) {
       login(data.token, usuario, false, data.sessao || {})
     } catch (error) { setErro(error.message || 'Não foi possível entrar.') } finally { setEnviando(false) }
   }
-  return <form onSubmit={entrar} style={{ ...card, display: 'grid', gap: 12 }}>
-    <div style={{ fontSize: 17, fontWeight: 800 }}>Entrar no app da equipe</div>
-    <div style={{ fontSize: 14, color: t.muted }}>Use o mesmo login do sistema{isDino ? ' da Dino' : ''}.</div>
-    <label style={label}>E-mail ou usuário<input style={input} value={form.user} onChange={(e) => setForm({ ...form, user: e.target.value })} autoComplete="username" required /></label>
-    <label style={label}>Senha<input style={input} type="password" value={form.senha} onChange={(e) => setForm({ ...form, senha: e.target.value })} autoComplete="current-password" required /></label>
-    {erro && <div role="alert" style={{ color: t.red, fontWeight: 600, fontSize: 14 }}>{erro}</div>}
-    <button type="submit" style={{ ...btn, opacity: enviando ? 0.7 : 1 }} disabled={enviando}>{enviando ? 'Entrando…' : 'Entrar'}</button>
-  </form>
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '40px 20px', minHeight: '80vh' }}>
+      <div style={{ background: t.card, padding: 30, borderRadius: 24, border: `1px solid ${t.line}`, width: '100%', maxWidth: 400, boxShadow: '0 20px 40px rgba(0,0,0,0.5)', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+        <img src={isDino ? '/brand/dino-equipe-192.png' : '/favicon.svg'} alt="Logo" style={{ width: 80, height: 80, borderRadius: 20, marginBottom: 20, objectFit: 'cover' }} />
+        <h1 style={{ fontSize: 24, fontWeight: 900, color: t.cream, margin: '0 0 8px' }}>{isDino ? 'Barbearia Dino' : 'Equipe App'}</h1>
+        <p style={{ color: t.muted, fontSize: 14, margin: '0 0 30px', textAlign: 'center' }}>Acesse com seu e-mail de profissional para carregar sua agenda.</p>
+        
+        <form onSubmit={entrar} style={{ width: '100%', display: 'grid', gap: 16 }}>
+          <label style={{ ...label, fontSize: 14 }}>
+            E-mail ou usuário
+            <input 
+              style={{ ...input, height: 50, borderRadius: 14, fontSize: 16, background: '#10131A', border: `1px solid ${t.line}` }} 
+              value={form.user} 
+              onChange={(e) => setForm({ ...form, user: e.target.value })} 
+              autoComplete="username" 
+              placeholder="barbeiro@dino.com.br"
+              required 
+            />
+          </label>
+          <label style={{ ...label, fontSize: 14 }}>
+            Senha
+            <input 
+              style={{ ...input, height: 50, borderRadius: 14, fontSize: 16, background: '#10131A', border: `1px solid ${t.line}` }} 
+              type="password" 
+              value={form.senha} 
+              onChange={(e) => setForm({ ...form, senha: e.target.value })} 
+              autoComplete="current-password" 
+              placeholder="••••••••"
+              required 
+            />
+          </label>
+          {erro && <div style={{ color: t.red, fontWeight: 700, fontSize: 14, textAlign: 'center', background: 'rgba(242, 122, 137, 0.1)', padding: 10, borderRadius: 10 }}>{erro}</div>}
+          <button type="submit" style={{ ...btn, background: t.accent, color: '#fff', fontSize: 17, height: 50, borderRadius: 14, marginTop: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: enviando ? 0.7 : 1 }} disabled={enviando}>
+            {enviando ? 'Autenticando...' : 'Entrar no App'}
+          </button>
+        </form>
+      </div>
+    </div>
+  )
 }
 
 export function Avisos({ gestao, contexto = '' }) {
