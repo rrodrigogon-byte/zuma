@@ -10348,6 +10348,30 @@ export default function BarbeariaERP() {
                 </strong>
               </Card>
             </div>
+            <h3 style={{ margin: "0 0 16px 0", paddingBottom: 8, borderBottom: "1px solid var(--border)" }}>
+              Produção do Dia
+            </h3>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 16, marginBottom: 24 }}>
+              <Card style={{ padding: 16 }}>
+                <small style={{ color: "var(--muted)", display: "block", marginBottom: 4, fontWeight: 700 }}>
+                  Serviços Realizados
+                </small>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
+                  <strong style={{ fontSize: 24 }}>{fechamentoDetalhado.resumoOperacao?.quantidadeServicos || 0}</strong>
+                  <span style={{ fontSize: 16, fontWeight: 600, color: 'var(--fg)' }}>{fmtR(fechamentoDetalhado.resumoOperacao?.valorServicos || 0)}</span>
+                </div>
+              </Card>
+              <Card style={{ padding: 16 }}>
+                <small style={{ color: "var(--muted)", display: "block", marginBottom: 4, fontWeight: 700 }}>
+                  Produtos Vendidos
+                </small>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
+                  <strong style={{ fontSize: 24 }}>{fechamentoDetalhado.resumoOperacao?.quantidadeProdutos || 0}</strong>
+                  <span style={{ fontSize: 16, fontWeight: 600, color: 'var(--fg)' }}>{fmtR(fechamentoDetalhado.resumoOperacao?.valorProdutos || 0)}</span>
+                </div>
+              </Card>
+            </div>
+
             <h3
               style={{
                 margin: "0 0 16px 0",

@@ -5550,6 +5550,13 @@ function resumoOperacaoBarbearia(req) {
   const receitaRecebida = pagamentos.filter((item) => item.meio !== 'conta').reduce((soma, item) => soma + Number(item.valor || 0), 0);
   const faturadoEmConta = pagamentos.filter((item) => item.meio === 'conta').reduce((soma, item) => soma + Number(item.valor || 0), 0);
   const porMeio = Object.fromEntries([...new Set(pagamentos.map((item) => item.meio).filter(Boolean))].map((meio) => [meio, Number(pagamentos.filter((item) => item.meio === meio).reduce((soma, item) => soma + Number(item.valor || 0), 0).toFixed(2))]));
+  const servicosRealizados = comandas.filter(c => c.status !== 'cancelada').flatMap(c => c.itens || []).filter(i => i.tipo === 'servico' || i.tipo === 'pacote');
+  const produtosVendidos = comandas.filter(c => c.status !== 'cancelada').flatMap(c => c.itens || []).filter(i => i.tipo === 'produto');
+  const quantidadeServicos = servicosRealizados.length;
+  const valorServicos = Number(servicosRealizados.reduce((soma, item) => soma + Number(item.preco || 0), 0).toFixed(2));
+  const quantidadeProdutos = produtosVendidos.reduce((soma, item) => soma + Number(item.quantidade || 1), 0);
+  const valorProdutos = Number(produtosVendidos.reduce((soma, item) => soma + (Number(item.preco || 0) * Number(item.quantidade || 1)), 0).toFixed(2));
+  
   return {
     data, lojaId: lojaId || null, caixas, caixaAberto,
     movimentos, comandasAbertas: comandas.filter((item) => ['aberta', 'aguardando_pagamento', 'parcialmente_paga'].includes(item.status)).length,
@@ -5562,8 +5569,11 @@ function resumoOperacaoBarbearia(req) {
     recebimentosDinheiro: Number(movimentos.filter((item) => item.tipo === 'recebimento').reduce((soma, item) => soma + Number(item.valor || 0), 0).toFixed(2)),
     sangrias: Number(movimentos.filter((item) => item.tipo === 'sangria').reduce((soma, item) => soma + Number(item.valor || 0), 0).toFixed(2)),
     suprimentos: Number(movimentos.filter((item) => item.tipo === 'suprimento').reduce((soma, item) => soma + Number(item.valor || 0), 0).toFixed(2)),
+    quantidadeServicos,
+    valorServicos,
+    quantidadeProdutos,
+    valorProdutos,
     fechamentoDia,
-
   };
 }
 
