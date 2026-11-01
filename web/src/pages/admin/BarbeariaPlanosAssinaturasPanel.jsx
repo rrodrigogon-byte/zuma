@@ -60,6 +60,7 @@ export default function BarbeariaPlanosAssinaturasPanel({
     profissionalId: '',
     profissionaisIds: [],
     precosPorProfissional: {},
+    recorrenteAutomatica: false,
   })
 
   // Formulário de Nova Assinatura
@@ -1121,6 +1122,25 @@ border: '1px solid #fee2e2',
                     <option value="trimestral">Trimestral</option>
                     <option value="anual">Anual</option>
                   </select>
+                </div>
+                
+                <div style={{ gridColumn: '1 / -1', marginTop: 8, padding: 16, borderRadius: 12, background: 'rgba(139, 92, 246, 0.1)', border: '1px solid var(--accent, #8b5cf6)' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                    <input 
+                      type="checkbox" 
+                      checked={formPlano.recorrenteAutomatica}
+                      onChange={e => setFormPlano(prev => ({ ...prev, recorrenteAutomatica: e.target.checked }))}
+                      style={{ width: 18, height: 18 }}
+                    />
+                    <strong style={{ color: 'var(--accent, #8b5cf6)' }}>Cobrança Automática Recorrente (Estilo Netflix)</strong>
+                  </label>
+                  {formPlano.recorrenteAutomatica && (
+                    <div style={{ marginTop: 10, fontSize: 13, color: 'var(--fg, #e8eaf2)' }}>
+                      <p style={{ margin: '0 0 6px 0' }}>✅ O cliente assina com o Cartão de Crédito via Gateway Integrado.</p>
+                      <p style={{ margin: '0 0 6px 0' }}>✅ A cada ciclo ({formPlano.ciclo}), o sistema cobra automaticamente.</p>
+                      <p style={{ margin: 0 }}>✅ Inadimplentes são bloqueados na agenda sem intervenção humana.</p>
+                    </div>
+                  )}
                 </div>
               </div>
 

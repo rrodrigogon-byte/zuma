@@ -187,6 +187,65 @@ export function Avisos({ gestao, contexto = '' }) {
   </div>
 }
 
+
+function RoletaModal({ onFechar, onGanhado }) {
+  const [girando, setGirando] = useState(false);
+  const [premio, setPremio] = useState(null);
+  
+  const premios = [
+    { nome: 'Pix R$ 20,00', cor: '#10b981' },
+    { nome: 'Pix R$ 10,00', cor: '#3b82f6' },
+    { nome: 'Kit Cerveja', cor: '#f59e0b' },
+    { nome: 'Corte Grátis', cor: '#8b5cf6' },
+    { nome: 'Pix R$ 50,00', cor: '#ec4899' },
+    { nome: 'Tente Novamente', cor: '#64748b' }
+  ];
+
+  function girar() {
+    if (girando) return;
+    setGirando(true);
+    setPremio(null);
+    tocarSom('iniciar');
+    
+    setTimeout(() => {
+      const p = premios[Math.floor(Math.random() * (premios.length - 1))];
+      setPremio(p);
+      setGirando(false);
+      tocarSom('meta');
+      setTimeout(() => onGanhado?.(p), 3000);
+    }, 4000);
+  }
+
+  return (
+    <div style={{ textAlign: 'center', padding: '20px 0' }}>
+      {!premio ? (
+        <>
+          <div style={{ fontSize: 60, marginBottom: 20, animation: girando ? 'spin 0.2s linear infinite' : 'none', display: 'inline-block' }}>
+            🎡
+          </div>
+          <h3 style={{ margin: '0 0 10px', fontSize: 20, color: t.cream }}>Sua vez de girar!</h3>
+          <p style={{ margin: '0 0 20px', color: t.muted, fontSize: 14 }}>Você bateu a meta e ganhou o direito de rodar a Roleta de Prêmios do Salão.</p>
+          <button disabled={girando} onClick={girar} style={{ ...btn, background: '#f59e0b', color: '#000', fontSize: 18, padding: '14px 30px', borderRadius: 30, textTransform: 'uppercase' }}>
+            {girando ? 'Girando...' : 'Girar Roleta Agora!'}
+          </button>
+          
+          <style>{`
+            @keyframes spin { 100% { transform: rotate(360deg); } }
+            @keyframes pulsePrize { 0% { transform: scale(1); } 50% { transform: scale(1.1); } 100% { transform: scale(1); } }
+          `}</style>
+        </>
+      ) : (
+        <div style={{ animation: 'pulsePrize 1s ease-in-out infinite' }}>
+          <div style={{ fontSize: 60, marginBottom: 10 }}>🎉</div>
+          <h2 style={{ margin: 0, color: premio.cor, fontSize: 28, fontWeight: 900, textTransform: 'uppercase' }}>{premio.nome}</h2>
+          <p style={{ margin: '10px 0 20px', color: t.cream, fontSize: 16 }}>Parabéns! Apresente esta tela na gerência para resgatar.</p>
+          <button onClick={onFechar} style={{ ...btn2, width: '100%' }}>Voltar</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function ModoBarbeiro() {
   const { slug = '' } = useParams()
   const [params, setParams] = useSearchParams()
@@ -348,9 +407,9 @@ export default function ModoBarbeiro() {
                     <span style={{ fontSize: 20 }}>🎡</span> Metas Diárias & Roleta de Prêmios
                   </div>
                   {painel.gamificacao.girosPendentes?.length > 0 && (
-                    <span style={{ background: '#f59e0b', color: '#000', fontWeight: 800, fontSize: 11.5, padding: '3px 10px', borderRadius: 20 }}>
-                      {painel.gamificacao.girosPendentes.length} {painel.gamificacao.girosPendentes.length > 1 ? 'Giros Ganhos' : 'Giro Ganho'}!
-                    </span>
+                    <button type="button" onClick={() => setFolha('roleta')} style={{ background: '#f59e0b', color: '#000', border: 'none', cursor: 'pointer', fontWeight: 800, fontSize: 11.5, padding: '6px 12px', borderRadius: 20, display: 'flex', alignItems: 'center', gap: 4 }}>
+                      🎡 Girar Roleta ({painel.gamificacao.girosPendentes.length})
+                    </button>
                   )}
                 </div>
 
@@ -566,9 +625,9 @@ export default function ModoBarbeiro() {
                   <span>🎯</span> Minhas Metas & Roleta
                 </div>
                 {(painel.gamificacao.girosPendentes?.length > 0) && (
-                  <span style={{ background: '#f59e0b', color: '#000', fontWeight: 800, fontSize: 11, padding: '2px 8px', borderRadius: 20 }}>
-                    🎡 {painel.gamificacao.girosPendentes.length} {painel.gamificacao.girosPendentes.length > 1 ? 'Giros Ganhos' : 'Giro Ganho'}!
-                  </span>
+                  <button type="button" onClick={() => { setAbaAtiva('metas'); setFolha('roleta'); window.scrollTo({ top: 0, behavior: 'smooth' }); }} style={{ background: '#f59e0b', color: '#000', border: 'none', cursor: 'pointer', fontWeight: 800, fontSize: 11, padding: '4px 10px', borderRadius: 20, display: 'flex', alignItems: 'center', gap: 4 }}>
+                    🎡 Girar ({painel.gamificacao.girosPendentes.length})
+                  </button>
                 )}
               </div>
 
