@@ -4,6 +4,9 @@
 import QRCode from 'qrcode';
 
 export const TEXTO_HOMOLOGACAO_DANFE = 'EMITIDA EM AMBIENTE DE HOMOLOGAÇÃO - SEM VALOR FISCAL';
+// o aviso de "sem valor fiscal" só vale para documento de homologação
+const ehHomologacao = (doc) => doc?.ambiente !== 'producao';
+const tituloAmbiente = (doc) => (ehHomologacao(doc) ? ' (homologação)' : '');
 
 const esc = (v) => String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 const desescaparXml = (v) => String(v ?? '').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, '&');
@@ -77,14 +80,14 @@ export async function danfeNfceHtml({ doc, emitente }) {
   const linhasItens = itens.map((i, idx) => `<tr><td>${idx + 1}</td><td>${esc(i.produtoId || i.fonteId || '')}</td><td colspan="4">${esc(i.descricaoOriginal || i.descricao)}</td></tr>`
     + `<tr><td></td><td></td><td class="r">${qtd(i.quantidade)}</td><td>${esc(i.unidade || 'UN')}</td><td class="r">x ${brl(i.valorUnitario)}</td><td class="r">${brl(i.valorProduto)}</td></tr>`).join('');
   return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>DANFE NFC-e ${esc(doc.serie)}/${esc(doc.numero)} (homologação)</title><style>${CSS_CUPOM}</style></head><body>
+<title>DANFE NFC-e ${esc(doc.serie)}/${esc(doc.numero)}${tituloAmbiente(doc)}</title><style>${CSS_CUPOM}</style></head><body>
 <h1>${esc(emitente.razao_social)}</h1>
 ${emitente.nome_fantasia ? `<p class="c">${esc(emitente.nome_fantasia)}</p>` : ''}
 <p class="c pequeno">CNPJ ${esc(formatarCnpjCpf(emitente.cnpj))}${emitente.ie ? ` · IE ${esc(emitente.ie)}` : ''}</p>
 <p class="c pequeno">${esc(enderecoEmitente(emitente))}</p>
 <div class="sep"></div>
 <p class="c b pequeno">DOCUMENTO AUXILIAR DA NOTA FISCAL DE CONSUMIDOR ELETRÔNICA</p>
-<p class="aviso">${TEXTO_HOMOLOGACAO_DANFE}</p>
+${ehHomologacao(doc) ? `<p class="aviso">${TEXTO_HOMOLOGACAO_DANFE}</p>` : ''}
 ${avisosSituacao(doc).map((a) => `<p class="aviso">${esc(a)}</p>`).join('')}
 <table><thead><tr><th>#</th><th>Código</th><th class="r">Qtde</th><th>Un</th><th class="r">Vl unit</th><th class="r">Vl total</th></tr></thead><tbody>${linhasItens}</tbody></table>
 <div class="sep"></div>
@@ -106,7 +109,7 @@ ${pago > total ? `<tr><td>Troco R$</td><td class="r">${brl(pago - total)}</td></
 ${doc.protocolo ? `<p class="c pequeno">Protocolo de autorização: ${esc(doc.protocolo)}</p><p class="c pequeno">Data de autorização: ${esc(dataHora(doc.autorizado_em))}</p>` : ''}
 ${qrSvg ? `<div class="qr" aria-label="QR Code de consulta">${qrSvg}</div>` : ''}
 ${linhaTributos(dados.tributos)}
-<p class="c pequeno">${TEXTO_HOMOLOGACAO_DANFE}</p>
+${ehHomologacao(doc) ? `<p class="c pequeno">${TEXTO_HOMOLOGACAO_DANFE}</p>` : ''}
 </body></html>`;
 }
 
@@ -123,8 +126,8 @@ export function danfeNfeHtml({ doc, emitente }) {
   const natOp = pegar(xml, 'natOp') || emitente.natureza_operacao;
   const campo = (rot, val) => `<div><div class="rot">${esc(rot)}</div><div class="v">${val}</div></div>`;
   return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>DANFE NF-e ${esc(doc.serie)}/${esc(doc.numero)} (homologação)</title><style>${CSS_A4}</style></head><body>
-<p class="aviso">${TEXTO_HOMOLOGACAO_DANFE}</p>
+<title>DANFE NF-e ${esc(doc.serie)}/${esc(doc.numero)}${tituloAmbiente(doc)}</title><style>${CSS_A4}</style></head><body>
+${ehHomologacao(doc) ? `<p class="aviso">${TEXTO_HOMOLOGACAO_DANFE}</p>` : ''}
 ${avisosSituacao(doc).map((a) => `<p class="aviso">${esc(a)}</p>`).join('')}
 <div class="grade g2">
   <div class="caixa"><div class="v" style="font-size:14px">${esc(emitente.razao_social)}</div><div>${esc(enderecoEmitente(emitente))}</div>
@@ -146,6 +149,6 @@ ${dados.tributos ? `<div class="caixa">${campo('Valor aproximado dos tributos', 
 ${itens.map((i) => `<tr><td>${esc(i.produtoId || i.fonteId || '')}</td><td>${esc(i.descricaoOriginal || i.descricao)}</td><td>${esc(i.ncm || '')}</td><td>${esc(i.cfop || '')}</td><td>${esc(i.unidade || 'UN')}</td><td class="r">${qtd(i.quantidade)}</td><td class="r">${brl(i.valorUnitario)}</td><td class="r">${brl(i.valorProduto)}</td></tr>`).join('')}
 </tbody></table>
 <h2>Dados adicionais</h2>
-<div class="caixa"><p>${TEXTO_HOMOLOGACAO_DANFE}.</p>${dados.tributos ? `<p>Tributos aproximados: R$ ${brl(dados.tributos.total)} (Fonte: ${esc(dados.tributos.fonte || 'IBPT')})</p>` : ''}</div>
+<div class="caixa">${ehHomologacao(doc) ? `<p>${TEXTO_HOMOLOGACAO_DANFE}.</p>` : ''}${dados.tributos ? `<p>Tributos aproximados: R$ ${brl(dados.tributos.total)} (Fonte: ${esc(dados.tributos.fonte || 'IBPT')})</p>` : ''}</div>
 </body></html>`;
 }

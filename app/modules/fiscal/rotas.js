@@ -1,10 +1,11 @@
 import express from 'express';
 import * as svc from './servico.js';
+import * as lote from './lote.js';
 import { ErroDominio, responderErro } from '../acesso/banco.js';
 
 /**
  * /api/admin/fiscal — emitente, certificado A1, classificação, documentos, inutilização,
- * contingência da NFC-e, DANFE e tabela IBPT (SÓ HOMOLOGAÇÃO).
+ * contingência da NFC-e, DANFE e tabela IBPT. Ambiente por emitente (homologação ou produção liberada).
  * `escopoDaRequisicao(req, permissao)` → { empresaId, lojaRestrita } (ver server.js).
  */
 export function createFiscalAdminRouter({ db, escopoDaRequisicao, env = process.env, transporte = null }) {
@@ -29,17 +30,39 @@ export function createFiscalAdminRouter({ db, escopoDaRequisicao, env = process.
 
   router.get('/emitentes', rota('settings.write', ({ empresaId }) => svc.listarEmitentes(db, empresaId)));
   router.put('/emitentes', rota('settings.write', ({ req, empresaId, lojaRestrita }) => { empresaToda(lojaRestrita, 'Configurar o emitente'); return svc.salvarEmitente(db, empresaId, req.body || {}, { env }); }));
+  router.delete('/emitentes/:id', rota('settings.write', ({ req, empresaId, lojaRestrita }) => { empresaToda(lojaRestrita, 'Excluir o emitente'); return svc.excluirEmitente(db, empresaId, req.params.id); }));
+  router.post('/emitentes/:id/reativar', rota('settings.write', ({ req, empresaId, lojaRestrita }) => { empresaToda(lojaRestrita, 'Reativar o emitente'); return svc.reativarEmitente(db, empresaId, req.params.id); }));
 
   router.get('/certificados', rota('settings.write', ({ empresaId }) => svc.listarCertificados(db, empresaId)));
   router.post('/certificados', rota('settings.write', ({ req, empresaId, lojaRestrita, usuario }) => {
     empresaToda(lojaRestrita, 'Enviar o certificado');
     return svc.importarCertificado(db, empresaId, { arquivoBase64: req.body?.arquivoBase64, senha: req.body?.senha }, { usuario, env });
   }, 201));
+  router.delete('/certificados/:id', rota('settings.write', ({ req, empresaId, lojaRestrita }) => { empresaToda(lojaRestrita, 'Excluir o certificado'); return svc.excluirCertificado(db, empresaId, req.params.id); }));
+  router.post('/certificados/:id/ativar', rota('settings.write', ({ req, empresaId, lojaRestrita }) => { empresaToda(lojaRestrita, 'Ativar o certificado'); return svc.ativarCertificado(db, empresaId, req.params.id); }));
 
-  router.get('/classificacoes', rota('catalog.read', ({ empresaId }) => svc.listarClassificaveis(db, empresaId)));
+  // sem classificação, cada item traz a sugestão de NCM/CEST pelo nome (o contador confere)
+  router.get('/classificacoes', rota('catalog.read', async ({ empresaId }) => (await svc.listarClassificaveis(db, empresaId))
+    .map((i) => (i.classificacao ? i : { ...i, sugestao: lote.sugerirClassificacao(i.nome) }))));
+  router.get('/classificacoes/perfis', rota('catalog.read', () => lote.PERFIS));
+  router.get('/classificacoes/planilha', async (req, res) => {
+    try {
+      const { empresaId } = await escopoDaRequisicao(req, 'catalog.read');
+      const csv = await lote.exportarClassificacoesCsv(db, empresaId);
+      res.set('Cache-Control', 'private, no-store');
+      res.type('text/csv; charset=utf-8').attachment('classificacao-fiscal.csv').send(csv);
+    } catch (error) { responderErro(res, error); }
+  });
+  router.post('/classificacoes/planilha', csvCru, rota('catalog.write', ({ req, empresaId, lojaRestrita }) => {
+    empresaToda(lojaRestrita, 'Importar a classificação');
+    const arquivo = Buffer.isBuffer(req.body) ? req.body : req.body?.arquivoBase64 ? Buffer.from(String(req.body.arquivoBase64).replace(/^data:[^,]*,/, ''), 'base64') : req.body?.csv;
+    return lote.importarClassificacoesCsv(db, empresaId, { arquivo, aplicar: req.query.aplicar === '1' });
+  }));
+  router.post('/classificacoes/lote', rota('catalog.write', ({ req, empresaId, lojaRestrita }) => { empresaToda(lojaRestrita, 'Classificar em lote'); return lote.classificarEmLote(db, empresaId, req.body || {}); }));
   router.put('/classificacoes', rota('catalog.write', ({ req, empresaId, lojaRestrita }) => { empresaToda(lojaRestrita, 'Classificar produtos'); return svc.salvarClassificacao(db, empresaId, req.body || {}); }));
+  router.delete('/classificacoes', rota('catalog.write', ({ req, empresaId, lojaRestrita }) => { empresaToda(lojaRestrita, 'Excluir a classificação'); return svc.excluirClassificacao(db, empresaId, { fonte: req.query.fonte || req.body?.fonte, fonteId: req.query.fonteId || req.body?.fonteId }); }));
 
-  router.get('/vendas-sem-nota', rota('payments.read', ({ empresaId }) => svc.vendasSemNota(db, empresaId)));
+  router.get('/vendas-sem-nota', rota('payments.read', ({ empresaId, lojaRestrita }) => svc.vendasSemNota(db, empresaId, { lojaRestrita })));
   router.get('/documentos', rota('payments.read', ({ req, empresaId, lojaRestrita }) => svc.listarDocumentos(db, empresaId, { lojaId: lojaRestrita || req.query.lojaId || null, status: req.query.status || null, modelo: req.query.modelo || null })));
   router.get('/documentos/:id/danfe', async (req, res) => {
     try {
@@ -59,14 +82,27 @@ export function createFiscalAdminRouter({ db, escopoDaRequisicao, env = process.
       const xml = d.xmlAutorizado || d.xmlAssinado;
       if (!xml) throw new ErroDominio('NOT_FOUND', 'Documento sem XML', 404);
       res.set('Cache-Control', 'private, no-store');
-      res.type('application/xml').attachment(`${d.modelo === 'nfse' ? 'nfse' : d.modelo === '55' ? 'nfe' : 'nfce'}-${d.serie}-${d.numero}-homologacao.xml`).send(xml);
+      res.type('application/xml').attachment(`${d.modelo === 'nfse' ? 'nfse' : d.modelo === '55' ? 'nfe' : 'nfce'}-${d.serie}-${d.numero}${d.ambiente === 'producao' ? '' : '-homologacao'}.xml`).send(xml);
     } catch (error) { responderErro(res, error); }
   });
   router.post('/documentos', rota('payments.write', ({ req, empresaId, lojaRestrita, usuario }) => svc.emitir(db, empresaId, req.body || {}, { usuario, env, transporte, lojaRestrita }), 201));
+  router.post('/documentos/lote', rota('payments.write', ({ req, empresaId, lojaRestrita, usuario }) => lote.emitirEmLote(db, empresaId, req.body || {}, { usuario, env, transporte, lojaRestrita })));
+  router.get('/automatica', rota('payments.read', ({ empresaId }) => lote.obterConfigAutomatica(db, empresaId)));
+  router.put('/automatica', rota('settings.write', ({ req, empresaId, lojaRestrita }) => { empresaToda(lojaRestrita, 'Configurar a emissão automática'); return lote.salvarConfigAutomatica(db, empresaId, req.body || {}); }));
   router.post('/documentos/:id/cancelar', rota('payments.write', ({ req, empresaId, lojaRestrita, usuario }) => svc.cancelar(db, empresaId, req.params.id, { justificativa: req.body?.justificativa, usuario, env, transporte, lojaRestrita })));
+  router.post('/documentos/:id/svc', rota('payments.write', ({ req, empresaId, lojaRestrita, usuario }) => svc.emitirEmSvc(db, empresaId, req.params.id, { justificativa: req.body?.justificativa, usuario, env, transporte, lojaRestrita })));
+  router.post('/documentos/:id/carta-correcao', rota('payments.write', ({ req, empresaId, lojaRestrita, usuario }) => svc.cartaCorrecao(db, empresaId, req.params.id, { texto: req.body?.texto, usuario, env, transporte, lojaRestrita })));
   router.post('/documentos/:id/contingencia', rota('payments.write', ({ req, empresaId, lojaRestrita, usuario }) => svc.entrarEmContingencia(db, empresaId, req.params.id, { justificativa: req.body?.justificativa, usuario, env, lojaRestrita })));
   router.get('/contingencias', rota('payments.read', ({ empresaId, lojaRestrita }) => svc.listarContingencias(db, empresaId, { lojaRestrita })));
   router.post('/contingencias/transmitir', rota('payments.write', ({ empresaId, lojaRestrita, usuario }) => svc.transmitirContingencias(db, empresaId, { usuario, env, transporte, lojaRestrita })));
+
+  router.get('/numeracao', rota('settings.write', ({ empresaId }) => svc.listarNumeracao(db, empresaId)));
+  router.put('/numeracao', rota('settings.write', ({ req, empresaId, lojaRestrita, usuario }) => { empresaToda(lojaRestrita, 'Configurar a numeração'); return svc.salvarNumeracao(db, empresaId, req.body || {}, { usuario }); }));
+  router.delete('/numeracao', rota('settings.write', ({ req, empresaId, lojaRestrita }) => {
+    empresaToda(lojaRestrita, 'Excluir a série');
+    const p = { ...(req.body || {}), ...req.query };
+    return svc.excluirNumeracao(db, empresaId, { emitenteId: p.emitenteId, modelo: p.modelo, serie: p.serie, ambiente: p.ambiente });
+  }));
 
   router.get('/inutilizacoes', rota('settings.write', ({ empresaId, lojaRestrita }) => svc.listarInutilizacoes(db, empresaId, { lojaRestrita })));
   router.post('/inutilizacoes', rota('settings.write', ({ req, empresaId, lojaRestrita, usuario }) => svc.inutilizarNumeracao(db, empresaId, req.body || {}, { usuario, env, transporte, lojaRestrita }), 201));
@@ -78,6 +114,7 @@ export function createFiscalAdminRouter({ db, escopoDaRequisicao, env = process.
       : req.body?.arquivoBase64 ? Buffer.from(String(req.body.arquivoBase64).replace(/^data:[^,]*,/, ''), 'base64') : req.body?.csv;
     return svc.importarIbpt(db, empresaId, { uf: req.query.uf || req.body?.uf || null, arquivo });
   }, 201));
+  router.delete('/ibpt/:uf', rota('settings.write', ({ req, empresaId, lojaRestrita }) => { empresaToda(lojaRestrita, 'Excluir a tabela do IBPT'); return svc.excluirIbpt(db, empresaId, req.params.uf); }));
 
   router.post('/testar-comunicacao', rota('settings.write', ({ req, empresaId }) => svc.testarComunicacao(db, empresaId, { modelo: req.body?.modelo === '55' ? '55' : '65', env, transporte })));
 
