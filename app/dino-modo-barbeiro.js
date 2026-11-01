@@ -168,6 +168,7 @@ export function painelBarbeiro(erp, { empresaId, lojaId = '', usuario = {}, prof
         confirmacaoAutomatica: automaticoAtivo && a.confirmacaoAutomatica?.ativa === true ? { ativa: true, status: a.confirmacaoAutomatica.status } : null,
         clienteNome: a.clienteNome || '',
         clienteTelefone: a.clienteTelefone || '',
+        clienteId: a.clienteId || null,
         servicoId: a.servicoId,
         servicoNome: servico?.nome || 'Serviço',
         valor: dinheiro(a.valor ?? servico?.preco),

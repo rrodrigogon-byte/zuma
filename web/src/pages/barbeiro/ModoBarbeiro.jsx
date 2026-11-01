@@ -13,6 +13,7 @@ import BarbeiroPeriodo from './BarbeiroPeriodo'
 import BarbeiroExtrato from './BarbeiroExtrato'
 import BarbeiroGanhos from './BarbeiroGanhos'
 import BarbeiroClientes from './BarbeiroClientes'
+import BarbeiroClienteDetalhe from './BarbeiroClienteDetalhe'
 import DinoSalesAssistantPanel from '../../components/barbearia/DinoSalesAssistantPanel'
 import { useAuth } from '../../lib/auth'
 import { DINO_BARBERSHOP_LOGO } from '../../lib/brand'
@@ -260,6 +261,7 @@ export default function ModoBarbeiro() {
   const [folha, setFolha] = useState(params.get('acao') === 'encaixe' ? 'encaixe' : '')
   const [profissionalId, setProfissionalId] = useState('')
   const [vendaAtendimento, setVendaAtendimento] = useState(null)
+  const [clienteDetalheId, setClienteDetalheId] = useState(null)
   const [vendaPendente, setVendaPendente] = useState(false)
   const [atualizadoEm, setAtualizadoEm] = useState(null)
   const data = /^\d{4}-\d{2}-\d{2}$/.test(params.get('data') || '') ? params.get('data') : ''
@@ -772,7 +774,12 @@ export default function ModoBarbeiro() {
                     {a.status === 'concluido' && <span style={{ fontSize: 13, color: t.muted, alignSelf: 'center' }}>Pagamento no caixa.</span>}
                   </div>}
                   {!['cancelado', 'nao_compareceu'].includes(a.status) && <DinoSalesAssistantPanel key={a.id} appointmentId={a.id} currentServiceId={a.servicoId} compact />}
-                  {(a.clienteTelefone && !['cancelado'].includes(a.status)) && <div style={{ display: 'flex', gap: 8 }}>
+                  {(a.clienteId && !['cancelado'].includes(a.status)) && (
+                      <button type="button" disabled={ocupado} style={{ ...btn2, width: '100%', marginBottom: 8, display: 'flex', justifyContent: 'center', gap: 6 }} onClick={() => { setClienteDetalheId(a.clienteId); setFolha('cliente_detalhe'); }}>
+                        👤 Ver Prontuário do Cliente
+                      </button>
+                    )}
+                    {(a.clienteTelefone && !['cancelado'].includes(a.status)) && <div style={{ display: 'flex', gap: 8 }}>
                     <a href={`tel:${soDigitos(a.clienteTelefone)}`} style={{ ...btn2, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>Ligar</a>
                     {zap && <a href={linkWhatsappAgendamento(a.clienteTelefone, a.clienteNome, painel.profissional?.nome, hora(a.dataHora), a.servicoNome)} target="_blank" rel="noopener noreferrer" style={{ ...btn2, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 4 }}>💬 WhatsApp</a>}
                   </div>}
