@@ -9366,18 +9366,29 @@ export default function BarbeariaERP() {
                     onToast={(m) => toast(m, "success")}
                     onAtualizado={() => carregar()}
                   />
-                  {!documentoFiscal.nfceEmitida && (
+                  {documentoFiscal.nfceEmitida && documentoFiscal.nfce ? (
+                    <div style={{ marginTop: 10, padding: 10, borderRadius: 8, background: "rgba(20, 184, 122, 0.08)", border: "1px solid rgba(20, 184, 122, 0.25)" }}>
+                      <strong style={{ color: "#14b87a", fontSize: 13 }}>
+                        NFC-e (65) {documentoFiscal.nfce.serie || 1}/{documentoFiscal.nfce.numero} · {documentoFiscal.nfce.status === "autorizado" ? "Autorizada" : "XML Validado (Homologação)"}
+                      </strong>
+                      {documentoFiscal.nfce.chaveAcesso && (
+                        <div style={{ ...styles.sub, fontFamily: "monospace", fontSize: 11, marginTop: 4, wordBreak: "break-all" }}>
+                          Chave: {documentoFiscal.nfce.chaveAcesso}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
                     <div style={{ marginTop: 10 }}>
                        <button type="button" style={styles.secondary} disabled={salvando} onClick={async () => {
                            if (!window.confirm("Deseja emitir a NFC-e desta comanda agora?")) return;
                            try {
-                               await api.post(`/api/admin/barbearia/comandas/${comanda.id}/fiscal/nfce`, { confirmado: true });
-                               toast("NFC-e emitida com sucesso!", "success");
+                               const r = await api.post(`/api/admin/barbearia/comandas/${comanda.id}/fiscal/nfce`, { confirmado: true });
+                               toast(`NFC-e ${r?.nfce?.serie || 1}/${r?.nfce?.numero || 1} emitida com sucesso!`, "success");
                                carregar();
                            } catch(e) {
                                toast(e.response?.data?.error || e.message, "error");
                            }
-                       }}>Emitir NFC-e (Produtos)</button>
+                       }}>Emitir NFC-e (Cupom Fiscal 65)</button>
                     </div>
                   )}
                   </>

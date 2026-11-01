@@ -211,6 +211,7 @@ function Documentos({ toast }) {
   const [vendas, setVendas] = useState([])
   const [cancelando, setCancelando] = useState(null)
   const [nfse, setNfse] = useState(null)
+  const [nfeAvulsa, setNfeAvulsa] = useState(null)
   const [enviando, setEnviando] = useState('')
   const [contingenciaAuto, setContingenciaAuto] = useState(false)
   const carregar = useCallback(async () => {
@@ -220,7 +221,7 @@ function Documentos({ toast }) {
   async function emitir(corpo, rotulo) {
     if (enviando) return
     setEnviando(rotulo)
-    try { const d = await api.post(`${BASE}/documentos`, corpo); toast(`${MODELO[d.modelo]} ${d.numero}: ${STATUS[d.status]?.[0] || d.status}.`, d.status === 'rejeitado' ? 'error' : 'success'); setNfse(null); carregar() }
+    try { const d = await api.post(`${BASE}/documentos`, corpo); toast(`${MODELO[d.modelo]} ${d.numero}: ${STATUS[d.status]?.[0] || d.status}.`, d.status === 'rejeitado' ? 'error' : 'success'); setNfse(null); setNfeAvulsa(null); carregar() }
     catch (error) { toast(error.message, 'error') } finally { setEnviando('') }
   }
   async function baixarXml(d) {
@@ -258,6 +259,8 @@ function Documentos({ toast }) {
     } catch (error) { toast(error.message, 'error') } finally { setEnviando('') }
   }
   const [periodo, setPeriodo] = useState('todos')
+  const [customInicio, setCustomInicio] = useState('')
+  const [customFim, setCustomFim] = useState('')
   const [filtroModelo, setFiltroModelo] = useState('todos')
   const [filtroStatus, setFiltroStatus] = useState('todos')
   const [busca, setBusca] = useState('')
@@ -285,11 +288,14 @@ function Documentos({ toast }) {
           if (agora - dataDoc > 30 * 864e5) return false
         } else if (periodo === 'mes') {
           if (dataDoc.getMonth() !== agora.getMonth() || dataDoc.getFullYear() !== agora.getFullYear()) return false
+        } else if (periodo === 'custom') {
+          if (customInicio && dataDoc < new Date(`${customInicio}T00:00:00`)) return false
+          if (customFim && dataDoc > new Date(`${customFim}T23:59:59`)) return false
         }
       }
       return true
     })
-  }, [docs, filtroModelo, filtroStatus, busca, periodo])
+  }, [docs, filtroModelo, filtroStatus, busca, periodo, customInicio, customFim])
 
   const kpis = useMemo(() => {
     let totalEmitido = 0
@@ -322,12 +328,18 @@ function Documentos({ toast }) {
     <section className="dadm-card">
       <h2>Vendas pagas sem nota</h2>
       <Table caption="Vendas sem nota" rows={vendas.map((v) => ({ ...v, id: `${v.origem}:${v.origemId}` }))} empty="Nenhuma venda pendente de nota." columns={[
-        { key: 'd', label: 'Venda', render: (v) => <div><strong>{v.descricao}</strong><div className="dadm-muted">{v.origem === 'bar_comanda' ? 'Bar' : 'Loja online'}{v.data ? ` · ${dateTime(v.data)}` : ''}</div></div> },
+        { key: 'd', label: 'Venda', render: (v) => <div><strong>{v.descricao}</strong><div className="dadm-muted">{v.origem === 'bar_comanda' ? 'Bar' : v.origem === 'barbearia_comanda' ? 'Barbearia' : 'Loja online'}{v.data ? ` · ${dateTime(v.data)}` : ''}</div></div> },
         { key: 'v', label: 'Valor', align: 'right', render: (v) => (v.valor == null ? '—' : money(v.valor)) },
-        { key: 'a', label: '', render: (v) => <button type="button" className="c360-btn ghost" disabled={Boolean(enviando)} onClick={() => emitir({ modelo: '65', origem: v.origem, origemId: v.origemId, ...(contingenciaAuto ? { contingenciaOffline: true } : {}) }, v.id)}>Emitir NFC-e</button> },
+        { key: 'a', label: '', render: (v) => <div className="dadm-actions" style={{ justifyContent: 'flex-end' }}>
+          <button type="button" className="c360-btn ghost" disabled={Boolean(enviando)} onClick={() => emitir({ modelo: '65', origem: v.origem, origemId: v.origemId, ...(contingenciaAuto ? { contingenciaOffline: true } : {}) }, v.id)}>Emitir NFC-e</button>
+          {v.origem === 'barbearia_comanda' && <button type="button" className="c360-btn ghost" disabled={Boolean(enviando)} onClick={() => emitir({ modelo: 'nfse', origem: v.origem, origemId: v.origemId }, `${v.id}:nfse`)}>Emitir NFS-e</button>}
+        </div> },
       ]} />
       <label className="dadm-muted"><input type="checkbox" checked={contingenciaAuto} onChange={(e) => setContingenciaAuto(e.target.checked)} /> Se a SEFAZ não responder, emitir a NFC-e em contingência offline (transmitir depois, em até 24 h)</label>
-      <div className="dadm-actions"><button type="button" className="c360-btn ghost" onClick={() => setNfse({ descricao: '', fonteId: '', valor: '', cpf: '', nome: '', chave: chave() })}>+ NFS-e de serviço</button></div>
+      <div className="dadm-actions">
+        <button type="button" className="c360-btn ghost" onClick={() => setNfeAvulsa({ modelo: '65', descricao: '', ncm: '33059000', cfop: '5102', csosn: '102', quantidade: '1', valorUnitario: '', cpf: '', nome: '', chave: chave() })}>+ NFC-e / NF-e avulsa</button>
+        <button type="button" className="c360-btn ghost" onClick={() => setNfse({ descricao: '', fonteId: '', valor: '', cpf: '', nome: '', chave: chave() })}>+ NFS-e de serviço</button>
+      </div>
     </section>
     {contingencias.length > 0 && <section className="dadm-card">
       <h2>Contingência offline</h2>
@@ -445,6 +457,43 @@ function Documentos({ toast }) {
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 10 }}>
           <label className="c360-field">CPF do tomador (opcional)<input className="c360-input" inputMode="numeric" value={nfse.cpf} onChange={(e) => setNfse({ ...nfse, cpf: e.target.value })} /></label>
           <label className="c360-field">Nome do tomador<input className="c360-input" value={nfse.nome} onChange={(e) => setNfse({ ...nfse, nome: e.target.value })} /></label>
+        </div>
+      </div>}
+    </Dialog>
+    <Dialog open={Boolean(nfeAvulsa)} title="Emitir NFC-e / NF-e avulsa" labelId="fis-nfe-avulsa" onClose={() => setNfeAvulsa(null)}
+      onSubmit={() => emitir({
+        modelo: nfeAvulsa.modelo,
+        origem: 'manual',
+        idempotencia: `manual:${nfeAvulsa.chave}`,
+        ...(contingenciaAuto && nfeAvulsa.modelo === '65' ? { contingenciaOffline: true } : {}),
+        itens: [{
+          fonte: 'est_item',
+          fonteId: 'avulso-1',
+          descricao: nfeAvulsa.descricao,
+          quantidade: Number(nfeAvulsa.quantidade) || 1,
+          valorUnitario: Number(String(nfeAvulsa.valorUnitario).replace(',', '.')),
+          classificacao: { tipo: 'produto', ncm: nfeAvulsa.ncm || '33059000', cfop: nfeAvulsa.cfop || '5102', csosn: nfeAvulsa.csosn || '102', cstIcms: '00', aliquotaIcms: 0 },
+        }],
+        destinatario: nfeAvulsa.cpf ? { cpf: nfeAvulsa.cpf, nome: nfeAvulsa.nome || 'CONSUMIDOR' } : null,
+      }, 'nfe-avulsa')}
+      actions={<><button type="button" className="c360-btn ghost" onClick={() => setNfeAvulsa(null)}>Voltar</button><button type="submit" className="c360-btn primary" disabled={Boolean(enviando)}>Emitir {nfeAvulsa?.modelo === '55' ? 'NF-e' : 'NFC-e'}</button></>}>
+      {nfeAvulsa && <div style={{ display: 'grid', gap: 10 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 10 }}>
+          <label className="c360-field">Modelo<select className="c360-input" value={nfeAvulsa.modelo} onChange={(e) => setNfeAvulsa({ ...nfeAvulsa, modelo: e.target.value })}><option value="65">NFC-e (65 · Consumidor)</option><option value="55">NF-e (55 · Completa)</option></select></label>
+          <label className="c360-field">Descrição do produto/item<input className="c360-input" required minLength={2} value={nfeAvulsa.descricao} onChange={(e) => setNfeAvulsa({ ...nfeAvulsa, descricao: e.target.value })} placeholder="ex.: Pomada Modeladora Matte" /></label>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+          <label className="c360-field">NCM (8 dígitos)<input className="c360-input" required inputMode="numeric" maxLength={8} value={nfeAvulsa.ncm} onChange={(e) => setNfeAvulsa({ ...nfeAvulsa, ncm: e.target.value })} /></label>
+          <label className="c360-field">CFOP<input className="c360-input" required inputMode="numeric" maxLength={4} value={nfeAvulsa.cfop} onChange={(e) => setNfeAvulsa({ ...nfeAvulsa, cfop: e.target.value })} /></label>
+          <label className="c360-field">CSOSN<select className="c360-input" value={nfeAvulsa.csosn} onChange={(e) => setNfeAvulsa({ ...nfeAvulsa, csosn: e.target.value })}><option value="102">102 · sem crédito</option><option value="103">103 · isenção</option><option value="300">300 · imune</option><option value="400">400 · não tributada</option></select></label>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 10 }}>
+          <label className="c360-field">Quantidade<input className="c360-input" required inputMode="numeric" value={nfeAvulsa.quantidade} onChange={(e) => setNfeAvulsa({ ...nfeAvulsa, quantidade: e.target.value })} /></label>
+          <label className="c360-field">Valor unitário (R$)<input className="c360-input" required inputMode="decimal" value={nfeAvulsa.valorUnitario} onChange={(e) => setNfeAvulsa({ ...nfeAvulsa, valorUnitario: e.target.value })} /></label>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 10 }}>
+          <label className="c360-field">CPF/CNPJ do destinatário (opcional na NFC-e)<input className="c360-input" inputMode="numeric" value={nfeAvulsa.cpf} onChange={(e) => setNfeAvulsa({ ...nfeAvulsa, cpf: e.target.value })} /></label>
+          <label className="c360-field">Nome do destinatário<input className="c360-input" value={nfeAvulsa.nome} onChange={(e) => setNfeAvulsa({ ...nfeAvulsa, nome: e.target.value })} /></label>
         </div>
       </div>}
     </Dialog>

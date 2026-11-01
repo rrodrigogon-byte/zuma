@@ -224,27 +224,22 @@ export async function listarClassificaveis(db, empresaId) {
     }
   }
   for (const [k, c] of cls) if (c.fonte === 'servico' || c.fonte === 'categoria') saida.push({ fonte: c.fonte, fonteId: c.fonteId, nome: c.fonteId, grupo: c.fonte === 'servico' ? 'Serviço' : 'Padrão de categoria', classificacao: c, herdada: false, chave: k });
-  // Barbearia Dino comandas pagas
+  // Produtos e serviços da Barbearia (JSON store) para classificação fiscal
   try {
     const jsonDb = getJsonDb();
     const bStore = jsonDb?.barbearias?.[empresa] || jsonDb?.barbearias?.['principal'] || Object.values(jsonDb?.barbearias || {})[0];
-    if (bStore?.comandas) {
-      for (const [cmdId, c] of Object.entries(bStore.comandas)) {
-        if (['paga', 'em_conta'].includes(c.status) && Number(c.total || 0) > 0) {
-          const jaTem = await db.query(
-            "SELECT 1 FROM fis_documentos WHERE empresa_id = $1 AND origem = 'barbearia_comanda' AND origem_id = $2 AND status IN ('autorizado', 'validado_localmente', 'enviando', 'contingencia') LIMIT 1",
-            [empresa, cmdId]
-          ).catch(() => ({ rows: [] }));
-          if (!jaTem.rows?.length) {
-            saida.push({
-              origem: 'barbearia_comanda',
-              origemId: cmdId,
-              descricao: `Comanda Barbearia · ${c.clienteNome || c.codigoVisual || cmdId}`,
-              valor: Number(c.total || 0),
-              data: c.faturadaEm || c.criadoEm || new Date().toISOString(),
-            });
-            if (saida.length >= lim) break;
-          }
+    if (bStore?.produtos) {
+      for (const p of Object.values(bStore.produtos)) {
+        if (p && p.ativo !== false && !saida.some((s) => s.fonte === 'est_item' && String(s.fonteId) === String(p.id))) {
+          const ncm = soDigitos(p.ncm);
+          saida.push({ fonte: 'est_item', fonteId: String(p.id), nome: p.nome, grupo: `Barbearia · ${p.categoria || 'Produtos'}`, classificacao: cls.get(`est_item:${p.id}`) || null, herdada: false, ncmSugerido: ncm.length === 8 ? ncm : '33059000' });
+        }
+      }
+    }
+    if (bStore?.servicos) {
+      for (const s of Object.values(bStore.servicos)) {
+        if (s && s.ativo !== false && !saida.some((item) => item.fonte === 'servico' && String(item.fonteId) === String(s.id))) {
+          saida.push({ fonte: 'servico', fonteId: String(s.id), nome: s.nome, grupo: 'Barbearia · Serviços', classificacao: cls.get(`servico:${s.id}`) || null, herdada: false });
         }
       }
     }
@@ -260,7 +255,7 @@ async function classificacaoDe(q, empresa, fonte, fonteId, categoria = null) {
 }
 
 // ── venda → itens do documento ───────────────────────────────────────────────
-async function vendaDaOrigem(q, empresa, { origem, origemId, itens = [], pagamentos = [] }) {
+async function vendaDaOrigem(q, empresa, { origem, origemId, modelo = '65', itens = [], pagamentos = [] }) {
   if (origem === 'barbearia_comanda') {
     let c = null;
     try {
@@ -275,8 +270,12 @@ async function vendaDaOrigem(q, empresa, { origem, origemId, itens = [], pagamen
       } catch { /* nao eh uuid da tabela */ }
     }
     if (!c) throw new ErroDominio('NOT_FOUND', 'Comanda não encontrada', 404);
-    const itensComanda = (c.itens || []).map((i, idx) => {
-      const isServico = i.tipo === 'servico' || (!i.tipo && !i.produtoId);
+    const todosItens = (c.itens || []).filter((i) => !i.coberturaPlano && Number(i.subtotal ?? i.precoUnitario ?? i.preco ?? 0) > 0);
+    const itensFiltrados = modelo === 'nfse'
+      ? (todosItens.filter((i) => i.tipo === 'servico' || (!i.tipo && !i.produtoId)).length ? todosItens.filter((i) => i.tipo === 'servico' || (!i.tipo && !i.produtoId)) : todosItens)
+      : (todosItens.filter((i) => i.tipo === 'produto' || i.tipo === 'loja' || Boolean(i.produtoId)).length ? todosItens.filter((i) => i.tipo === 'produto' || i.tipo === 'loja' || Boolean(i.produtoId)) : todosItens);
+    const itensComanda = itensFiltrados.map((i, idx) => {
+      const isServico = modelo === 'nfse';
       return {
         fonte: isServico ? 'servico' : 'est_item',
         fonteId: String(i.servicoId || i.produtoId || `item-${idx}`),
@@ -293,7 +292,16 @@ async function vendaDaOrigem(q, empresa, { origem, origemId, itens = [], pagamen
       loja: c.lojaId || null,
       cpf: soDigitos(c.cpf || c.clienteCpf).length === 11 ? soDigitos(c.cpf || c.clienteCpf) : null,
       desconto: dinheiro(c.desconto || 0),
-      itens: itensComanda.length ? itensComanda : [{ fonte: 'servico', fonteId: 'srv-1', descricao: 'Atendimento Barbearia', quantidade: 1, valorUnitario: Number(c.total || 0), classificacao: { tipo: 'servico', cTribNac: '060101', aliquotaIss: 2.0 } }],
+      itens: itensComanda.length ? itensComanda : [{
+        fonte: modelo === 'nfse' ? 'servico' : 'est_item',
+        fonteId: modelo === 'nfse' ? 'srv-1' : 'prd-1',
+        descricao: modelo === 'nfse' ? 'Atendimento Barbearia' : 'Produtos / Consumo Barbearia',
+        quantidade: 1,
+        valorUnitario: Number(c.total || 0),
+        classificacao: modelo === 'nfse'
+          ? { tipo: 'servico', cTribNac: '060101', aliquotaIss: 2.0 }
+          : { tipo: 'produto', ncm: '33059000', cfop: '5102', csosn: '102', cstIcms: '00', aliquotaIcms: 0 },
+      }],
       pagamentos: (c.pagamentos || []).map((p) => ({
         meio: p.meio === 'pix' ? 'pix' : p.meio === 'dinheiro' ? 'dinheiro' : p.meio === 'debito' ? 'debito' : 'credito',
         valor: Number(p.valor || 0),
@@ -480,8 +488,8 @@ export async function emitir(db, empresaId, entrada = {}, { usuario = null, env 
     }
     // venda (num reenvio de documento manual, os itens guardados valem)
     const entradaVenda = existente && origem === 'manual' && !entrada.itens
-      ? { origem, itens: (existente.dados?.itens || []).map((i) => ({ fonte: i.fonte, fonteId: i.fonteId, descricao: i.descricaoOriginal || i.descricao, quantidade: i.quantidade, valorUnitario: i.valorUnitarioOriginal ?? i.valorUnitario })), pagamentos: existente.dados?.pagamentos || [] }
-      : { origem, origemId: entrada.origemId, itens: entrada.itens, pagamentos: entrada.pagamentos };
+      ? { origem, modelo, itens: (existente.dados?.itens || []).map((i) => ({ fonte: i.fonte, fonteId: i.fonteId, descricao: i.descricaoOriginal || i.descricao, quantidade: i.quantidade, valorUnitario: i.valorUnitarioOriginal ?? i.valorUnitario })), pagamentos: existente.dados?.pagamentos || [] }
+      : { origem, modelo, origemId: entrada.origemId, itens: entrada.itens, pagamentos: entrada.pagamentos };
     const venda = await vendaDaOrigem(q, empresa, entradaVenda);
     if (origem === 'bar_comanda') venda.loja = await unidadeDoBar(q, empresa);
     if (lojaRestrita && venda.loja && venda.loja !== lojaRestrita) throw new ErroDominio('NOT_FOUND', 'Venda não encontrada', 404);
@@ -494,7 +502,8 @@ export async function emitir(db, empresaId, entrada = {}, { usuario = null, env 
     const pendencias = [];
     const itens = [];
     for (const [idx, i] of aplicarDesconto(venda.itens, venda.desconto).entries()) {
-      const c = i.classificacao ? { tipo: modelo === 'nfse' ? 'servico' : 'produto', ...i.classificacao } : await classificacaoDe(q, empresa, i.fonte, i.fonteId, i.categoria);
+      const clsBanco = await classificacaoDe(q, empresa, i.fonte, i.fonteId, i.categoria);
+      const c = clsBanco || (i.classificacao ? { tipo: modelo === 'nfse' ? 'servico' : 'produto', ...i.classificacao } : null);
       if (!c) { pendencias.push(`Item ${idx + 1} (${i.descricao}) sem classificação fiscal`); continue; }
       if (modelo === 'nfse') {
         const ct = soDigitos(c.cTribNac || emit.c_trib_nac_padrao);
@@ -795,6 +804,32 @@ export async function vendasSemNota(db, empresaId, { limite = 100 } = {}) {
       AND NOT EXISTS (SELECT 1 FROM fis_documentos d WHERE d.empresa_id = o.empresa_id AND d.origem = 'loja_pedido' AND d.origem_id = o.id::text AND d.status IN ('autorizado', 'validado_localmente', 'enviando', 'contingencia'))
       ORDER BY o.criado_em DESC LIMIT ${lim}`, [empresa]).catch(() => ({ rows: [] }));
     saida.push(...r.rows.map((o) => ({ origem: 'loja_pedido', origemId: o.id, descricao: `Pedido ${o.public_code}`, valor: null, data: o.criado_em })));
+  }
+  try {
+    const jsonDb = getJsonDb();
+    const bStore = jsonDb?.barbearias?.[empresa] || jsonDb?.barbearias?.['principal'] || Object.values(jsonDb?.barbearias || {})[0];
+    if (bStore?.comandas) {
+      for (const [cmdId, c] of Object.entries(bStore.comandas)) {
+        if (saida.length >= lim) break;
+        if (['paga', 'em_conta'].includes(c.status) && Number(c.total || 0) > 0) {
+          const jaTem = await db.query(
+            "SELECT 1 FROM fis_documentos WHERE empresa_id = $1 AND origem = 'barbearia_comanda' AND origem_id = $2 AND status IN ('autorizado', 'validado_localmente', 'enviando', 'contingencia') LIMIT 1",
+            [empresa, String(cmdId)]
+          ).catch(() => ({ rows: [] }));
+          if (!jaTem.rows?.length) {
+            saida.push({
+              origem: 'barbearia_comanda',
+              origemId: String(cmdId),
+              descricao: `Comanda Barbearia · ${c.clienteNome || c.codigoVisual || cmdId}`,
+              valor: Number(c.total || 0),
+              data: c.faturadaEm || c.fechadaEm || c.criadoEm || new Date().toISOString(),
+            });
+          }
+        }
+      }
+    }
+  } catch {
+    // resiliência
   }
   return saida;
 }
