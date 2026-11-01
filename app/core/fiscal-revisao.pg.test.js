@@ -180,6 +180,17 @@ describe('Fiscal — correções da revisão (PostgreSQL)', { skip: pgDeTeste },
       ],
       pagamentos: [{ meio: 'pix', valor: 90 }],
     } } } };
+    jsonDb().barbearias[A].produtos = { 'p-gel': { id: 'p-gel', nome: 'Gel', categoria: 'Finalizadores', ncm: '3305.90.00' }, 'p-off': { id: 'p-off', nome: 'Inativo', ativo: false } };
+    jsonDb().barbearias[A].servicos = { corte: { id: 'corte', nome: 'Corte' }, sobrancelha: { id: 'sobrancelha', nome: 'Sobrancelha' } };
+    const classificaveis = await fiscal.listarClassificaveis(ctx.db, A);
+    const gel = classificaveis.find((c) => c.fonte === 'est_item' && c.fonteId === 'p-gel');
+    assert.equal(gel.grupo, 'Barbearia · Finalizadores');
+    assert.equal(gel.ncmSugerido, '33059000');
+    assert.equal(classificaveis.some((c) => c.fonteId === 'p-off'), false);
+    assert.equal(classificaveis.filter((c) => c.fonte === 'servico' && c.fonteId === 'corte').length, 1, 'serviço já classificado não aparece duas vezes');
+    assert.ok(classificaveis.some((c) => c.fonte === 'servico' && c.fonteId === 'sobrancelha' && c.classificacao === null));
+    const outra = await fiscal.listarClassificaveis(ctx.db, C);
+    assert.equal(outra.some((c) => c.fonteId === 'p-gel'), false, 'cadastro da barbearia de outra empresa nunca aparece');
     const lista = await fiscal.vendasSemNota(ctx.db, A);
     const venda = lista.find((v) => v.origem === 'barbearia_comanda' && v.origemId === id);
     assert.ok(venda, 'comanda com produto cobrado aparece');
