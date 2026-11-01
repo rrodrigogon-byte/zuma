@@ -14,6 +14,7 @@ import BarbeiroExtrato from './BarbeiroExtrato'
 import BarbeiroGanhos from './BarbeiroGanhos'
 import BarbeiroClientes from './BarbeiroClientes'
 import BarbeiroClienteDetalhe from './BarbeiroClienteDetalhe'
+import BarbeiroMetasPanel, { PainelVisaoEquipeAdmin } from './BarbeiroMetasPanel'
 import DinoSalesAssistantPanel from '../../components/barbearia/DinoSalesAssistantPanel'
 import { useAuth } from '../../lib/auth'
 import { DINO_BARBERSHOP_LOGO } from '../../lib/brand'
@@ -308,14 +309,15 @@ export default function ModoBarbeiro() {
       const qs = new URLSearchParams()
       if (data) qs.set('data', data)
       if (profissionalId) qs.set('profissionalId', profissionalId)
-      const resposta = await lerAgenda(() => api(`/api/admin/barbearia/modo-barbeiro${qs.toString() ? `?${qs}` : ''}`, { headers: { 'X-Kytto-Usuario': String(user.id ?? user.email ?? '') } }), { ativo: () => id === pedido.current })
+      if (slug) qs.set('slug', slug)
+      const resposta = await lerAgenda(() => api(`/api/admin/barbearia/modo-barbeiro${qs.toString() ? `?${qs}` : ''}`, { headers: { 'X-Kytto-Usuario': String(user.id ?? user.email ?? ''), ...(slug ? { 'X-Barbearia-Slug': String(slug) } : {}) } }), { ativo: () => id === pedido.current })
       if (!resposta || id !== pedido.current) return
       if (resposta?.fuso) FUSO = resposta.fuso
       setPainel({ ...resposta, _contexto: contextoPainel }); setErro(''); setAtualizadoEm(resposta._offline?.salvoEm ? new Date(resposta._offline.salvoEm) : new Date())
     } catch (error) {
       if (id === pedido.current) setErro(error.code === 'EMPRESA_REQUIRED' ? 'Escolha a empresa no painel administrativo e volte para cá.' : erroAgenda(error))
     } finally { if (id === pedido.current) setCarregando(false) }
-  }, [user, data, profissionalId, contextoPainel])
+  }, [user, data, profissionalId, slug, contextoPainel])
 
   useEffect(() => { carregar() }, [carregar])
   useEffect(() => {
@@ -380,7 +382,6 @@ export default function ModoBarbeiro() {
         <div style={{ fontSize: 12, color: offline ? t.yellow : t.muted }}>{offline ? `${painel?._offline?.motivo === 'servidor' ? 'Servidor indisponível · cópia de' : 'Sem internet · agenda de'} ${atualizadoEm ? atualizadoEm.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '—'}` : carregando ? 'Atualizando…' : atualizadoEm ? `Atualizado às ${atualizadoEm.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}` : ''}</div>
       </div>
       {user && <button type="button" onClick={carregar} aria-label="Atualizar agenda" style={{ ...btn2, minHeight: 40, padding: '6px 12px' }}>↻</button>}
-      {user && <button type="button" onClick={() => setFolha('portfolio')} aria-label="Meu Portfólio e Avaliações" style={{ ...btn2, minHeight: 40, padding: '6px 12px', background: 'rgba(139, 92, 246, 0.1)', color: '#a78bfa', borderColor: '#8b5cf6' }}>⭐</button>}
       {user && <button type="button" onClick={() => setFolha('portfolio')} aria-label="Meu Portfólio e Avaliações" style={{ ...btn2, minHeight: 40, padding: '6px 12px', background: 'rgba(139, 92, 246, 0.1)', color: '#a78bfa', borderColor: '#8b5cf6' }}>⭐ Perfil</button>}
       {user && <button type="button" onClick={() => { if (window.confirm('Sair do app neste aparelho?')) logout() }} style={{ ...btn2, minHeight: 40, padding: '6px 12px' }}>Sair</button>}
     </div>
@@ -389,12 +390,15 @@ export default function ModoBarbeiro() {
   const corpo = !user
     ? <><LoginEquipe isDino={isDino} /><InstalarApp nomeApp={isDino ? 'o app Dino Equipe' : 'o app da equipe'} tema={t} /></>
     : <>
-        {painel?.gestao && painel.profissionais?.length > 0 && <div style={{ padding: '0 16px', marginBottom: 12 }}><label style={{...label, color: '#fff'}}>Consultar agenda do barbeiro:
-          <select style={{...input, marginTop: 4, background: t.card, borderColor: t.accent }} value={profissionalId || painel.profissional?.id || ''} onChange={(e) => setProfissionalId(e.target.value)}>
-            {!painel.profissional && <option value="">Selecione na lista...</option>}
-            {painel.profissionais.map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}
-          </select>
-        </label></div>}
+        {painel?.gestao && (painel.profissionais?.length > 0 || painel.visaoGeralEquipe?.profissionais?.length > 0) && (
+          <PainelVisaoEquipeAdmin
+            visaoGeralEquipe={painel.visaoGeralEquipe}
+            profissionais={painel.profissionais}
+            profissionalSelecionadoId={profissionalId || painel.profissional?.id || ''}
+            onSelectProfissional={setProfissionalId}
+            onIrMetas={() => setAbaAtiva('metas')}
+          />
+        )}
         {painel?.profissional && (
           <nav aria-label="Abas do app" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6, marginBottom: 4 }}>
             {[
@@ -440,93 +444,12 @@ export default function ModoBarbeiro() {
         )}
 
         {abaAtiva === 'metas' && painel?.profissional && (
-          <div style={{ display: 'grid', gap: 12 }}>
-            {painel.gamificacao ? (
-              <div style={{ ...card, padding: 16, background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.95) 0%, rgba(15, 23, 42, 1) 100%)', border: '1.5px solid rgba(245, 158, 11, 0.45)', display: 'grid', gap: 14 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 800, fontSize: 16, color: '#fbbf24' }}>
-                    <span style={{ fontSize: 20 }}>🎡</span> Metas Diárias & Roleta de Prêmios
-                  </div>
-                  {painel.gamificacao.girosPendentes?.length > 0 && (
-                    <button type="button" onClick={() => setFolha('roleta')} style={{ background: '#f59e0b', color: '#000', border: 'none', cursor: 'pointer', fontWeight: 800, fontSize: 11.5, padding: '6px 12px', borderRadius: 20, display: 'flex', alignItems: 'center', gap: 4 }}>
-                      🎡 Girar Roleta ({painel.gamificacao.girosPendentes.length})
-                    </button>
-                  )}
-                </div>
-
-                {painel.gamificacao.config?.metasDiarias?.servicosExtrasAtivo && (
-                  <div style={{ background: t.surface, border: `1px solid ${t.line}`, borderRadius: 12, padding: 12, display: 'grid', gap: 6 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontWeight: 700, color: t.cream, fontSize: 13 }}>✂️ Serviços Extras Diários</span>
-                      <span style={{ fontSize: 12, fontWeight: 800, color: painel.gamificacao.dia?.metaExtrasAtingida ? t.green : t.accent }}>
-                        {painel.gamificacao.dia?.servicosExtras || 0} de {painel.gamificacao.config.metasDiarias.servicosExtrasQtd} extras
-                      </span>
-                    </div>
-                    <div style={{ height: 8, background: 'rgba(255,255,255,0.08)', borderRadius: 10, overflow: 'hidden' }}>
-                      <div style={{ height: '100%', background: painel.gamificacao.dia?.metaExtrasAtingida ? t.green : t.accent, width: `${Math.min(100, Math.round(((painel.gamificacao.dia?.servicosExtras || 0) / (painel.gamificacao.config.metasDiarias.servicosExtrasQtd || 1)) * 100))}%` }} />
-                    </div>
-                    <div style={{ fontSize: 11.5, color: painel.gamificacao.dia?.metaExtrasAtingida ? t.green : t.muted }}>
-                      {painel.gamificacao.dia?.metaExtrasAtingida ? '✓ Parabéns! Meta de extras atingida hoje!' : `Faltam ${Math.max(0, painel.gamificacao.config.metasDiarias.servicosExtrasQtd - (painel.gamificacao.dia?.servicosExtras || 0))} extras para ganhar 1 giro na Roleta!`}
-                    </div>
-                  </div>
-                )}
-
-                {painel.gamificacao.config?.metasDiarias?.produtosAtivo && (
-                  <div style={{ background: t.surface, border: `1px solid ${t.line}`, borderRadius: 12, padding: 12, display: 'grid', gap: 6 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontWeight: 700, color: t.cream, fontSize: 13 }}>🧴 Venda Diária de Produtos</span>
-                      <span style={{ fontSize: 12, fontWeight: 800, color: painel.gamificacao.dia?.metaProdutosAtingida ? t.green : '#10b981' }}>
-                        {painel.gamificacao.dia?.produtosQtd || 0} de {painel.gamificacao.config.metasDiarias?.produtosQtd ?? 2} un
-                      </span>
-                    </div>
-                    <div style={{ height: 8, background: 'rgba(255,255,255,0.08)', borderRadius: 10, overflow: 'hidden' }}>
-                      <div style={{ height: '100%', background: painel.gamificacao.dia?.metaProdutosAtingida ? t.green : '#10b981', width: `${painel.gamificacao.dia?.metaProdutosProgresso ?? 0}%` }} />
-                    </div>
-                    <div style={{ fontSize: 11.5, color: painel.gamificacao.dia?.metaProdutosAtingida ? t.green : t.muted }}>
-                      {painel.gamificacao.dia?.metaProdutosAtingida ? '✓ Parabéns! Meta de produtos atingida hoje!' : `Falta ${Math.max(0, (painel.gamificacao.config.metasDiarias?.produtosQtd ?? 2) - (painel.gamificacao.dia?.produtosQtd || 0))} un para ganhar 1 giro na Roleta!`}
-                    </div>
-                  </div>
-                )}
-
-                {painel.gamificacao.config?.metasSemanais?.ativo && (
-                  <div style={{ background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.15) 0%, rgba(217, 119, 6, 0.25) 100%)', border: '1px solid rgba(245, 158, 11, 0.4)', padding: 14, borderRadius: 12, display: 'grid', gap: 6 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontWeight: 800, fontSize: 13, color: '#fbbf24' }}>
-                        🔥 {painel.gamificacao.config.metasSemanais.tituloDesafio || 'Desafio Semanal de Vendas'}
-                      </span>
-                      <span style={{ background: '#0f172a', color: '#fbbf24', fontSize: 10.5, fontWeight: 800, padding: '2px 8px', borderRadius: 10 }}>
-                        Semana
-                      </span>
-                    </div>
-                    <div style={{ fontSize: 12, color: '#fef3c7' }}>
-                      Vendas acumuladas na semana: <strong>{reais(painel.gamificacao.semana?.produtosValor || 0)} ({painel.gamificacao.semana?.produtosQtd || 0} un)</strong>
-                    </div>
-                    <div style={{ fontSize: 11.5, color: '#fed7aa', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: 6 }}>
-                      🎁 Premiação: <strong>{painel.gamificacao.config.metasSemanais.premiacaoDescricao || 'Super Bônus'}</strong>
-                    </div>
-                  </div>
-                )}
-
-                {/* TABELA DE PRÊMIOS DA ROLETA */}
-                <div style={{ background: t.surface, border: `1px solid ${t.line}`, borderRadius: 12, padding: 12, display: 'grid', gap: 8 }}>
-                  <span style={{ fontWeight: 800, fontSize: 13, color: t.cream }}>🎁 Prêmios Disponíveis na Roleta Dino</span>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, fontSize: 11.5 }}>
-                    <div style={{ background: t.card, padding: '6px 8px', borderRadius: 8 }}>💵 R$ 50 no Pix</div>
-                    <div style={{ background: t.card, padding: '6px 8px', borderRadius: 8 }}>💰 R$ 100 no Pix</div>
-                    <div style={{ background: t.card, padding: '6px 8px', borderRadius: 8 }}>🏖️ Folga Bônus</div>
-                    <div style={{ background: t.card, padding: '6px 8px', borderRadius: 8 }}>🍔 Almoço Completo</div>
-                    <div style={{ background: t.card, padding: '6px 8px', borderRadius: 8 }}>🧴 Kit de Produtos</div>
-                    <div style={{ background: t.card, padding: '6px 8px', borderRadius: 8 }}>☕ Café Especial</div>
-                  </div>
-                  <div style={{ fontSize: 11, color: t.muted, textAlign: 'center', marginTop: 4 }}>
-                    Ao atingir as metas diárias, o Dino aciona a Roleta no painel para você girar ao vivo!
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div style={card}>Gamificação não disponível no momento.</div>
-            )}
-          </div>
+          <BarbeiroMetasPanel
+            painel={painel}
+            onLancarVenda={() => { setVendaAtendimento(null); setFolha('venda') }}
+            onAtualizar={carregar}
+            tocarSom={tocarSom}
+          />
         )}
 
         {abaAtiva === 'agenda' && <>
@@ -712,6 +635,13 @@ export default function ModoBarbeiro() {
                   <strong style={{ color: '#fbbf24' }}>{reais(painel.gamificacao.semana?.produtosValor || 0)} ({painel.gamificacao.semana?.produtosQtd || 0} un)</strong>
                 </div>
               )}
+              <button
+                type="button"
+                onClick={() => { setAbaAtiva('metas'); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
+                style={{ ...btn2, minHeight: 36, padding: '6px 12px', fontSize: 12, borderColor: 'rgba(245, 158, 11, 0.45)', color: '#fbbf24' }}
+              >
+                🎯 Abrir Painel Completo de Metas, Simulador & Roleta →
+              </button>
             </div>
           )}
 

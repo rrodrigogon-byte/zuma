@@ -220,6 +220,7 @@ export function apurarDesempenhoEquipe(empresaId, { dataIso = dataIsoCuiaba(), i
   for (const [id, prof] of profissionaisMap.entries()) {
     stats[id] = {
       profissionalId: id,
+      aliasesIds: Array.from(profAlias.entries()).filter(([, tId]) => tId === id).map(([origId]) => origId),
       nome: prof.nome,
       apelido: prof.apelido || prof.nome.split(' ')[0],
       ativo: prof.ativo !== false,
@@ -274,10 +275,8 @@ export function apurarDesempenhoEquipe(empresaId, { dataIso = dataIsoCuiaba(), i
         let servicoNomeAtual = ag.servicoNome || '';
         if (!servicoNomeAtual && ag.servicoId) {
           try {
-            const estadoSrv = require('./barbearia-erp-kytto.js').estadoEmpresa(emp, false);
-            if (estadoSrv.servicos && estadoSrv.servicos[ag.servicoId]) {
-              servicoNomeAtual = estadoSrv.servicos[ag.servicoId].nome || '';
-            }
+            const srvEncontrado = barbeariaErpKytto.listarServicos(emp, { incluirInativos: true }).find(s => s.id === ag.servicoId);
+            if (srvEncontrado) servicoNomeAtual = srvEncontrado.nome || '';
           } catch (err) {}
         }
         

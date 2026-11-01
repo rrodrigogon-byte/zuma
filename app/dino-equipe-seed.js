@@ -132,15 +132,23 @@ export function provisionarEquipeDino({ commerceDb = null } = {}) {
   for (const empId of empresasAlvo) {
     try {
       const profissionaisAtuais = barbeariaErpKytto.listarProfissionais(empId, { incluirInativos: true });
+      const ativosAtuais = profissionaisAtuais.filter((p) => p.ativo !== false && !p.removidoEm);
+      const poucosAtivos = ativosAtuais.length < 2;
 
       for (const membro of PROFISSIONAIS_DINO_OFICIAIS) {
-        let prof = profissionaisAtuais.find(
-          (p) =>
+        const casaMembro = (p) => {
+          const pNome = String(p.nome || '').trim().toLowerCase();
+          const pApelido = String(p.apelido || '').trim().toLowerCase();
+          const mApelido = membro.apelido.trim().toLowerCase();
+          return (
             (p.email && p.email.toLowerCase() === membro.email.toLowerCase()) ||
             (membro.emailAlternativo && p.email && p.email.toLowerCase() === membro.emailAlternativo.toLowerCase()) ||
-            (p.nome && p.nome.trim().toLowerCase() === membro.nome.trim().toLowerCase()) ||
-            (p.apelido && p.apelido.trim().toLowerCase() === membro.apelido.trim().toLowerCase())
-        );
+            (pNome && pNome === membro.nome.trim().toLowerCase()) ||
+            (pApelido && pApelido === mApelido) ||
+            (pNome && (pNome === mApelido || pNome.split(' ')[0] === mApelido))
+          );
+        };
+        let prof = ativosAtuais.find(casaMembro) || profissionaisAtuais.find(casaMembro);
 
         const dadosProf = {
           nome: membro.nome,
@@ -160,7 +168,15 @@ export function provisionarEquipeDino({ commerceDb = null } = {}) {
 
         if (prof) {
           // Atualiza dados e garante e-mail e comissões corretas
-          if (prof.removidoEm || prof.ativo === false) { console.warn(`[dino-equipe-seed] Ignorando recriacao/update de ${membro.nome} pois ja foi desligado.`); } else { barbeariaErpKytto.atualizarProfissional(empId, prof.id, dadosProf); }
+          if ((prof.removidoEm || prof.ativo === false) && !poucosAtivos) {
+            console.warn(`[dino-equipe-seed] Ignorando recriacao/update de ${membro.nome} pois ja foi desligado.`);
+          } else {
+            barbeariaErpKytto.atualizarProfissional(empId, prof.id, {
+              ...dadosProf,
+              nome: prof.nome || dadosProf.nome,
+              ativo: true,
+            });
+          }
         } else {
           // Cria novo profissional no ERP
           const isMatch = (p) => (p.email && p.email.toLowerCase() === membro.email.toLowerCase()) || (membro.emailAlternativo && p.email && p.email.toLowerCase() === membro.emailAlternativo.toLowerCase()) || (p.nome && p.nome.trim().toLowerCase() === membro.nome.trim().toLowerCase()) || (p.apelido && p.apelido.trim().toLowerCase() === membro.apelido.trim().toLowerCase());

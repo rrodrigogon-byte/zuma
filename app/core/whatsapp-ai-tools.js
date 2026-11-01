@@ -1724,7 +1724,7 @@ async function toolMyPlan(context) {
   if (!plano) return { ok: true, assinante: false, instrucao: 'O contato não tem plano ativo. Não ofereça o clube sem o cliente pedir ou sem propor_oportunidade.' };
   
   // Buscar cobranças pendentes para gerar o link de pagamento
-  const cobrancas = cobrancaKytto.listarCobrancas(scope.empresaId).filter(c => c.clienteId === plano.clienteId && c.status === 'pendente') : [];
+  const cobrancas = cobrancaKytto?.listarCobrancas ? cobrancaKytto.listarCobrancas(scope.empresaId).filter(c => c.clienteId === plano.clienteId && c.status === 'pendente') : [];
   const linkPagamento = cobrancas.length > 0 ? `https://kytto.com.br/pay/${cobrancas[0].id}` : null;
   if (linkPagamento) plano.linkPagamento = linkPagamento;
   

@@ -3345,7 +3345,12 @@ app.delete('/api/admin/cardapio/:id', auth, requireLegacyGlobalScope, requireSta
 // recuperada da configuração da empresa já resolvida, sem cair em outra empresa.
 function hostDino(req) {
   const host = String(req.hostname || req.headers.host || '').split(':')[0].toLowerCase();
-  return host === 'dino.kytto.com.br' || host.endsWith('.dino.kytto.com.br');
+  if (host === 'dino.kytto.com.br' || host.endsWith('.dino.kytto.com.br')) return true;
+  const slug = String(req.query?.slug || req.headers?.['x-barbearia-slug'] || '').trim().toLowerCase();
+  if (slug === 'dino') return true;
+  const ref = String(req.headers?.referer || '').toLowerCase();
+  if (ref.includes('/barbeiro/dino')) return true;
+  return false;
 }
 
 function empresaDinoDoEstado() {
@@ -3417,6 +3422,12 @@ async function resolverEscopoBarbearia(req, res, next) {
   const requestedLoja = String(req.headers['x-loja-id'] || '').trim();
   const signedEmpresa = String(req.user?.empresaId || '').trim();
   const signedLoja = String(req.user?.lojaId || '').trim();
+  const explicitDinoApp = String(req.query?.slug || req.headers['x-barbearia-slug'] || '').trim().toLowerCase() === 'dino'
+    || String(req.headers.referer || '').toLowerCase().includes('/barbeiro/dino');
+  if (explicitDinoApp && (isPlatformAdminUser(req.user) || isMainAdminUser(req.user) || !signedEmpresa)) {
+    req.barbeariaContext = { empresaId: DINO_COMMERCE_EMPRESA_ID, lojaId: DINO_COMMERCE_LOJA_ID };
+    return next();
+  }
   // O domínio dedicado da Dino também é uma entrada válida para a conta
   // administrativa legada quando o navegador ainda não persistiu os
   // seletores no localStorage. Nesse caso, não deixe o contexto sintético
