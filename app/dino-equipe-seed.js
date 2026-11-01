@@ -163,7 +163,8 @@ export function provisionarEquipeDino({ commerceDb = null } = {}) {
           if (prof.removidoEm || prof.ativo === false) { console.warn(`[dino-equipe-seed] Ignorando recriacao/update de ${membro.nome} pois ja foi desligado.`); } else { barbeariaErpKytto.atualizarProfissional(empId, prof.id, dadosProf); }
         } else {
           // Cria novo profissional no ERP
-          if (!profissionaisAtuais.some(p => p.removidoEm && p.email === membro.email)) { barbeariaErpKytto.criarProfissional(empId, dadosProf); }
+          const isMatch = (p) => (p.email && p.email.toLowerCase() === membro.email.toLowerCase()) || (membro.emailAlternativo && p.email && p.email.toLowerCase() === membro.emailAlternativo.toLowerCase()) || (p.nome && p.nome.trim().toLowerCase() === membro.nome.trim().toLowerCase()) || (p.apelido && p.apelido.trim().toLowerCase() === membro.apelido.trim().toLowerCase());
+          if (!profissionaisAtuais.some(p => p.removidoEm && isMatch(p))) { barbeariaErpKytto.criarProfissional(empId, dadosProf); }
         }
       }
     } catch (e) {
