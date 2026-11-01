@@ -54,6 +54,7 @@ import { createRazaoAdminRouter, createRazaoPlataformaRouter } from './modules/r
 import { iniciarRotina as iniciarRotinaBackoffice } from './modules/razao/rotina.js';
 import { createSuprimentosAdminRouter } from './modules/suprimentos/rotas.js';
 import { createFiscalAdminRouter } from './modules/fiscal/rotas.js';
+import { iniciarRotinaFiscal } from './modules/fiscal/lote.js';
 import { createSalaoAdminRouter } from './modules/salao/rotas.js';
 import { createPdvOfflineRouter } from './modules/pdv-offline/rotas.js';
 import { createVarejoAdminRouter } from './modules/varejo/rotas.js';
@@ -1564,9 +1565,11 @@ app.use('/api/webhooks', createWhatsappAiWebhookRouter());
   iniciarRotinaBackoffice(clubeDb, { minutos: process.env.BACKOFFICE_ROTINA_MINUTOS ?? (process.env.FINANCEIRO_RAZAO === '1' ? 5 : 0), fonteJson: fonteJsonDoRazao, fuso: FUSO_KYTTO, razaoAtivo: () => process.env.FINANCEIRO_RAZAO === '1', estoqueAtivo: () => !modulosOcultos().has('compras') });
   // [kytto-suprimentos] Estoque por unidade, inventário, ficha técnica e compras (geram contas a pagar no razão).
   app.use('/api/admin/suprimentos', auth, requireStaff, createSuprimentosAdminRouter({ db: clubeDb, escopoDaRequisicao: escopoComercial, fuso: FUSO_KYTTO }));
-  // [kytto-fiscal] Emitente, certificado A1 no cofre, classificação e documentos — SÓ HOMOLOGAÇÃO
-  // (transmissão só com FISCAL_TRANSMITIR_HOMOLOGACAO=1; produção exige migração nova).
+  // [kytto-fiscal] Emitente, certificado A1 no cofre, classificação e documentos. Ambiente por emitente:
+  // homologação (transmite com FISCAL_TRANSMITIR_HOMOLOGACAO=1) ou produção (empresa em FISCAL_PRODUCAO_EMPRESAS).
   app.use('/api/admin/fiscal', auth, requireStaff, createFiscalAdminRouter({ db: clubeDb, escopoDaRequisicao: escopoComercial }));
+  // Emissão automática das vendas pagas: só age nas empresas que ligaram na tela (FISCAL_ROTINA_AUTOMATICA=0 desliga a rotina).
+  iniciarRotinaFiscal(clubeDb);
   // [kytto-salao] Reservas de mesa e lista de espera, ligadas às mesas e comandas do bar.
   app.use('/api/admin/salao', auth, requireStaff, createSalaoAdminRouter({ db: clubeDb, escopoDaRequisicao: escopoComercial, fuso: FUSO_KYTTO }));
   // [kytto-pdv-offline] Terminais e periféricos por unidade; o agente local sincroniza as vendas feitas sem internet (viram comandas pagas do bar).
@@ -5438,73 +5441,25 @@ app.post('/api/admin/barbearia/comandas/:id/fiscal/nfce', async (req, res) => {
     if (!comanda) return res.status(404).json({ error: 'Comanda não encontrada.' });
     if (!['paga', 'em_conta'].includes(comanda.status)) return res.status(409).json({ error: 'Somente comandas faturadas podem emitir NFC-e.' });
     if (req.body?.confirmado !== true) return res.status(400).json({ error: 'Confirmação necessária' });
-    const empresaId = legacyEmpresaId(req);
-    const lojaId = legacyLojaId(req);
-    let docFiscal = barbeariaFiscalKytto.listarDocumentosFiscais(empresaId, { lojaId }).find((d) => String(d.origemId) === String(comanda.id));
-    if (!docFiscal) {
-      docFiscal = barbeariaFiscalKytto.prepararDocumentoFiscal(empresaId, {
-        lojaId,
-        comanda,
-        idempotencyKey: `nfce:${comanda.id}`,
-      }).documento;
-    }
-    if (docFiscal?.nfceEmitida && docFiscal?.nfce) {
-      return res.json({ ok: true, idempotente: true, documento: barbeariaNfse.documentoParaPainel(docFiscal), nfce: docFiscal.nfce });
-    }
-    const nfcePayload = {
-      modelo: '65',
-      origem: 'barbearia_comanda',
-      origemId: comanda.id,
-      lojaId: lojaId || null,
-    };
-    let nfceResult = null;
-    if (clubeDb?.query) {
-      try {
-        const fiscalSvc = await import('./modules/fiscal/servico.js');
-        const resultado = await fiscalSvc.emitir(clubeDb, empresaId, nfcePayload, { env: process.env, usuario: req.user?.username || 'gestao' });
-        nfceResult = {
-          id: resultado.id,
-          modelo: '65',
-          serie: resultado.serie || 1,
-          numero: resultado.numero,
-          chaveAcesso: resultado.chave,
-          status: resultado.status,
-          ambiente: resultado.ambiente || 'homologacao',
-          emitidoEm: new Date().toISOString(),
-        };
-      } catch {
-        // Fallback controlado para rascunho/validação local na barbearia quando o emitente PG ainda não estiver parametrizado
+    // NFC-e dos PRODUTOS da comanda pelo motor fiscal (PostgreSQL); os serviços seguem na NFS-e.
+    // Nada de status simulado: a resposta é a situação real do documento.
+    const fiscalSvc = await import('./modules/fiscal/servico.js');
+    const resultado = await fiscalSvc.emitir(clubeDb, legacyEmpresaId(req), { modelo: '65', origem: 'barbearia_comanda', origemId: comanda.id }, {
+      env: process.env, usuario: String(req.user?.nome || req.user?.email || 'equipe'),
+    });
+    // o painel da comanda mostra a NFC-e real (número, chave e situação) — nunca um status simulado
+    if (['autorizado', 'validado_localmente', 'contingencia', 'enviando'].includes(resultado.status)) {
+      const docFiscal = barbeariaFiscalKytto.listarDocumentosFiscais(legacyEmpresaId(req)).find((d) => String(d.origemId) === String(comanda.id));
+      if (docFiscal) {
+        docFiscal.nfceEmitida = true;
+        docFiscal.nfce = { id: resultado.id, modelo: '65', serie: resultado.serie, numero: resultado.numero, chaveAcesso: resultado.chave || null, status: resultado.status, ambiente: resultado.ambiente, emitidoEm: new Date().toISOString() };
+        save();
       }
     }
-    if (!nfceResult) {
-      const { gerarChaveAcessoFiscal } = await import('./fiscal-kytto.js');
-      const cfgNfse = barbeariaFiscalKytto.obterConfigNfse(empresaId);
-      const cnpjBase = String(cfgNfse?.cnpj || '50073355000260').replace(/\D/g, '').padStart(14, '0').slice(0, 14);
-      const docsEmpresa = barbeariaFiscalKytto.listarDocumentosFiscais(empresaId);
-      const maiorNum = docsEmpresa.reduce((m, d) => Math.max(m, Number(d?.nfce?.numero || 0)), 0);
-      const numero = maiorNum + 1;
-      const agoraIso = new Date().toISOString();
-      const chaveAcesso = gerarChaveAcessoFiscal({ uf: 'MT', dhEmi: agoraIso, cnpj: cnpjBase, modelo: '65', serie: 1, numero, tpEmis: 1 });
-      nfceResult = {
-        id: `nfce-${comanda.id}`,
-        modelo: '65',
-        serie: 1,
-        numero,
-        chaveAcesso,
-        status: 'validado_localmente',
-        ambiente: 'homologacao',
-        emitidoEm: agoraIso,
-      };
-    }
-    const docRef = barbeariaFiscalKytto.obterDocumentoFiscal(empresaId, docFiscal.id);
-    if (docRef) {
-      docRef.nfceEmitida = true;
-      docRef.nfce = nfceResult;
-      save();
-    }
-    res.json({ ok: true, documento: barbeariaNfse.documentoParaPainel(docRef || docFiscal), nfce: nfceResult });
-  } catch(e) {
-     res.status(400).json({ error: e.message });
+    res.json({ ok: true, resultado, nfce: { serie: resultado.serie, numero: resultado.numero, status: resultado.status, ambiente: resultado.ambiente, chaveAcesso: resultado.chave || null } });
+  } catch (e) {
+    const status = Number(e?.status) >= 400 && Number(e?.status) < 600 ? Number(e.status) : 400;
+    res.status(status).json({ error: e.message, code: e.code || null });
   }
 });
 
