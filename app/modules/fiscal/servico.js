@@ -282,6 +282,22 @@ export async function listarClassificaveis(db, empresaId) {
       if (cls.get(`categoria:${id}`)) continue; // já listado acima
       saida.push({ fonte: 'categoria', fonteId: id, nome, grupo: 'Padrão de categoria', classificacao: null, herdada: false, tipo });
     }
+    // produtos e serviços do cadastro da barbearia (podem ter classificação própria, que vale sobre o padrão)
+    const b = estadoBarbearia(empresa);
+    const padraoRevenda = cls.get(`categoria:${CATEGORIA_BARBEARIA_REVENDA}`) || null;
+    const padraoServicos = cls.get(`categoria:${CATEGORIA_BARBEARIA_SERVICOS}`) || null;
+    const ja = new Set(saida.map((x) => `${x.fonte}:${x.fonteId}`));
+    for (const p of Object.values(b.produtos || {})) {
+      if (!p?.id || p.ativo === false || ja.has(`est_item:${p.id}`)) continue;
+      const ncm = soDigitos(p.ncm);
+      const propria = cls.get(`est_item:${p.id}`) || null;
+      saida.push({ fonte: 'est_item', fonteId: String(p.id), nome: p.nome, grupo: `Barbearia · ${p.categoria || 'Produtos'}`, classificacao: propria || padraoRevenda, herdada: !propria && Boolean(padraoRevenda), ncmSugerido: ncm.length === 8 ? ncm : null });
+    }
+    for (const sv of Object.values(b.servicos || {})) {
+      if (!sv?.id || sv.ativo === false || ja.has(`servico:${sv.id}`)) continue;
+      const propria = cls.get(`servico:${sv.id}`) || null;
+      saida.push({ fonte: 'servico', fonteId: String(sv.id), nome: sv.nome, grupo: 'Barbearia · Serviços', classificacao: propria || padraoServicos, herdada: !propria && Boolean(padraoServicos), tipo: 'servico' });
+    }
   }
   return saida;
 }
