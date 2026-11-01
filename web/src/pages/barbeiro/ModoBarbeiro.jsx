@@ -538,9 +538,20 @@ export default function ModoBarbeiro() {
             {painel.profissionais.map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}
           </select>
         </label>}
+        {painel && !painel.profissional && !painel.gestao && (
+           <div style={{ ...card, background: 'rgba(242, 122, 137, 0.1)', borderColor: t.red, color: t.red, textAlign: 'center' }}>
+             <strong>Opa!</strong> Seu usuário não está amarrado a nenhum barbeiro. 
+             <br/><br/>
+             Peça para o gerente ir no menu <strong>"Equipe"</strong> do Kytto e colocar seu e-mail de acesso no seu cadastro de profissional.
+             
+             <button type="button" onClick={logout} style={{ ...btn, background: t.red, color: '#fff', width: '100%', marginTop: 20 }}>
+                Sair desta conta
+             </button>
+           </div>
+        )}
 
         {erro && <div role="alert" style={{ ...card, borderColor: t.red, color: t.red, fontWeight: 600 }}>{erro}</div>}
-        {painel && !painel.profissional && <div style={card}>{painel.mensagem}</div>}
+        {painel && !painel.profissional && painel.gestao && <div style={card}>{painel.mensagem}</div>}
 
         {painel?.profissional && dia && <BarbeiroPeriodo dia={dia} profissionalId={profissionalId || painel.profissional.id} onDateChange={irPara} refreshKey={atualizadoEm?.valueOf()} />}
         {painel?.profissional && <>
