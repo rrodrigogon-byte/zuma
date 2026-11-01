@@ -9377,6 +9377,47 @@ export default function BarbeariaERP() {
                           Chave: {documentoFiscal.nfce.chaveAcesso}
                         </div>
                       )}
+                      {documentoFiscal.nfce.id && (
+                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
+                          <button
+                            type="button"
+                            style={styles.secondary}
+                            onClick={async () => {
+                              const w = window.open("", "_blank");
+                              try {
+                                const b = await api.blob(`/api/admin/fiscal/documentos/${documentoFiscal.nfce.id}/danfe`);
+                                const u = URL.createObjectURL(b);
+                                if (w) w.location.href = u;
+                                else window.location.assign(u);
+                              } catch (e) {
+                                w?.close();
+                                toast(e.message, "error");
+                              }
+                            }}
+                          >
+                            Imprimir DANFE (NFC-e)
+                          </button>
+                          <button
+                            type="button"
+                            style={styles.secondary}
+                            onClick={async () => {
+                              try {
+                                const b = await api.blob(`/api/admin/fiscal/documentos/${documentoFiscal.nfce.id}/xml`);
+                                const u = URL.createObjectURL(b);
+                                const a = document.createElement("a");
+                                a.href = u;
+                                a.download = `NFCe-${documentoFiscal.nfce.serie || 1}-${documentoFiscal.nfce.numero || 1}.xml`;
+                                a.click();
+                                setTimeout(() => URL.revokeObjectURL(u), 30000);
+                              } catch (e) {
+                                toast(e.message, "error");
+                              }
+                            }}
+                          >
+                            Baixar XML (NFC-e)
+                          </button>
+                        </div>
+                      )}
                     </div>
                   ) : (
                   <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
