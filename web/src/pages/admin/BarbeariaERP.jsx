@@ -9360,11 +9360,27 @@ export default function BarbeariaERP() {
                   </button>
                 )}
                 {documentoFiscal && (
+                  <>
                   <NfseComandaAcoes
                     documento={documentoFiscal}
                     onToast={(m) => toast(m, "success")}
                     onAtualizado={() => carregar()}
                   />
+                  {!documentoFiscal.nfceEmitida && (
+                    <div style={{ marginTop: 10 }}>
+                       <button type="button" style={styles.secondary} disabled={salvando} onClick={async () => {
+                           if (!window.confirm("Deseja emitir a NFC-e desta comanda agora?")) return;
+                           try {
+                               await api.post(`/api/admin/barbearia/comandas/${comanda.id}/fiscal/nfce`, { confirmado: true });
+                               toast("NFC-e emitida com sucesso!", "success");
+                               carregar();
+                           } catch(e) {
+                               toast(e.response?.data?.error || e.message, "error");
+                           }
+                       }}>Emitir NFC-e (Produtos)</button>
+                    </div>
+                  )}
+                  </>
                 )}
               </div>
             )}
