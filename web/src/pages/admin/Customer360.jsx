@@ -147,6 +147,7 @@ function CustomerProfile({ reference }) {
       </div>
       <div className="c360-hero-actions">
         {!data.anonimizado && <Link className="c360-btn primary" to={`/admin/barbearia-erp?area=operacao&tab=Agenda${data.clienteBarbeariaId ? `&agendarCliente=${encodeURIComponent(data.clienteBarbeariaId)}` : ''}`}>Agendar</Link>}
+        {!data.anonimizado && data.clienteBarbeariaId && <Link className="c360-btn ghost" to={`/admin/barbearia-erp?area=gestao&tab=Clientes&editarCliente=${encodeURIComponent(data.clienteBarbeariaId)}`}>Editar Cadastro</Link>}
         {data.permissoes?.exportar && <button type="button" className="c360-btn ghost" onClick={exportData} disabled={exporting} title="Exporta todos os dados deste titular (LGPD, art. 18)">{exporting ? 'Gerando…' : 'Exportar dados (LGPD)'}</button>}
       </div>
     </header>

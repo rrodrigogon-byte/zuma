@@ -1404,7 +1404,19 @@ export default function BarbeariaERP() {
 
   // Vindo da ficha Customer 360: abre a agenda já com o cliente selecionado.
   const agendarClienteParam = searchParams.get("agendarCliente");
+  const editarClienteParam = searchParams.get("editarCliente");
   useEffect(() => {
+    if (editarClienteParam && clientes.length) {
+      const cliente = clientes.find((item) => item.id === editarClienteParam);
+      if (cliente) {
+        abrirEdicaoCliente(cliente);
+        setSearchParams((current) => {
+          const next = new URLSearchParams(current);
+          next.delete("editarCliente");
+          return next;
+        }, { replace: true });
+      }
+    }
     if (!agendarClienteParam || !clientes.length) return;
     const cliente = clientes.find((item) => item.id === agendarClienteParam);
     setSearchParams(
