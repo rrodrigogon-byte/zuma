@@ -102,3 +102,25 @@ test('atualização da entrega da mensagem da equipe tipa o parâmetro (PostgreS
   assert.match(trecho, /delivery_status = \$5::text/);
   assert.match(trecho, /WHEN \$5::text = 'sent'/);
 });
+
+test('assumir conversa que voltou ao T-Rex com assigned_to antigo efetivamente assume (status humano)', async () => {
+  const { claimWhatsappAiHandoff } = await import('./whatsapp-ai.js');
+  const original = db.transaction;
+  const updates = [];
+  db.transaction = async (fn) => fn({
+    query: async (sql, params) => {
+      if (/^\s*SELECT id, status, assigned_to/.test(sql)) return { rows: [{ id: S, status: 'ativo', assigned_to: U, assigned_at: '2026-10-31T16:28:55Z', priority: 2 }] };
+      if (/UPDATE whatsapp_ai_sessions/.test(sql)) { updates.push(sql); return { rows: [{ id: S, status: 'humano', assigned_to: U, priority: 2 }] }; }
+      return { rows: [] };
+    },
+  });
+  try {
+    const r = await claimWhatsappAiHandoff({ empresaId: E, lojaId: L, usuarioId: U }, S);
+    assert.equal(r.status, 'humano');
+    assert.ok(updates.some((sql) => /SET status = 'humano'/.test(sql)), 'precisa tirar do T-Rex');
+    // Outro atendente com assigned_to antigo também não é conflito enquanto está com o T-Rex.
+    const outro = '55555555-5555-4555-8555-555555555555';
+    const r2 = await claimWhatsappAiHandoff({ empresaId: E, lojaId: L, usuarioId: outro }, S);
+    assert.equal(r2.status, 'humano');
+  } finally { db.transaction = original; }
+});

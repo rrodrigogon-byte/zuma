@@ -2398,12 +2398,15 @@ export async function claimWhatsappAiHandoff(context = {}, sessionId) {
       error.code = 'WHATSAPP_AI_SESSION_NOT_FOUND';
       throw error;
     }
-    if (current.assigned_to && String(current.assigned_to) !== String(context.usuarioId)) {
+    // Conversa com o T-Rex ('ativo') não tem dono: um assigned_to que sobrou de um
+    // atendimento anterior não pode bloquear nem tornar o "Assumir" um clique sem efeito.
+    const comEquipe = current.status === 'humano';
+    if (comEquipe && current.assigned_to && String(current.assigned_to) !== String(context.usuarioId)) {
       const error = new Error('sessão já foi assumida por outro atendente');
       error.code = 'WHATSAPP_AI_SESSION_CONFLICT';
       throw error;
     }
-    if (current.assigned_to && String(current.assigned_to) === String(context.usuarioId)) return current;
+    if (comEquipe && current.assigned_to && String(current.assigned_to) === String(context.usuarioId)) return current;
     if (current.status === 'ativo') {
       // Conversa ainda com o T-Rex: o atendente assume e a IA para de responder este contato.
       await trx.query(
@@ -2465,7 +2468,11 @@ export async function releaseWhatsappAiHandoff(context = {}, sessionId, { retoma
         RETURNING id, status, atualizado_em, canal_id`,
       [cleanText(sessionId, 60), empresaId, lojaId, tipoCanal],
     );
-    if (!result.rows[0]) throw new Error('sessão em handoff não encontrada');
+    if (!result.rows[0]) {
+      const error = new Error('a conversa já está com o T-Rex ou foi encerrada; atualize o quadro');
+      error.code = 'WHATSAPP_AI_SESSION_NOT_FOUND';
+      throw error;
+    }
     await auditHandoff(trx, context, result.rows[0].id, 'automation_resumed', { retomar: retomar !== false });
     return result.rows[0];
   });
