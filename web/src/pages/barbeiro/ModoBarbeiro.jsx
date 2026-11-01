@@ -387,6 +387,12 @@ export default function ModoBarbeiro() {
   const corpo = !user
     ? <><LoginEquipe isDino={isDino} /><InstalarApp nomeApp={isDino ? 'o app Dino Equipe' : 'o app da equipe'} tema={t} /></>
     : <>
+        {painel?.gestao && painel.profissionais?.length > 0 && <div style={{ padding: '0 16px', marginBottom: 12 }}><label style={{...label, color: '#fff'}}>Consultar agenda do barbeiro:
+          <select style={{...input, marginTop: 4, background: t.card, borderColor: t.accent }} value={profissionalId || painel.profissional?.id || ''} onChange={(e) => setProfissionalId(e.target.value)}>
+            {!painel.profissional && <option value="">Selecione na lista...</option>}
+            {painel.profissionais.map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}
+          </select>
+        </label></div>}
         {painel?.profissional && (
           <nav aria-label="Abas do app" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6, marginBottom: 4 }}>
             {[
@@ -532,12 +538,7 @@ export default function ModoBarbeiro() {
         </nav>
         {dia && <div style={{ fontSize: 14, color: t.muted }}>{dataLonga(dia)}</div>}
 
-        {painel?.gestao && painel.profissionais?.length > 0 && <label style={label}>Ver a agenda de
-          <select style={input} value={profissionalId || painel.profissional?.id || ''} onChange={(e) => setProfissionalId(e.target.value)}>
-            {!painel.profissional && <option value="">Escolha…</option>}
-            {painel.profissionais.map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}
-          </select>
-        </label>}
+        
         {painel && !painel.profissional && !painel.gestao && (
            <div style={{ ...card, background: 'rgba(242, 122, 137, 0.1)', borderColor: t.red, color: t.red, textAlign: 'center' }}>
              <strong>Opa!</strong> Seu usuário não está amarrado a nenhum barbeiro. 
@@ -551,7 +552,7 @@ export default function ModoBarbeiro() {
         )}
 
         {erro && <div role="alert" style={{ ...card, borderColor: t.red, color: t.red, fontWeight: 600 }}>{erro}</div>}
-        {painel && !painel.profissional && painel.gestao && <div style={card}>{painel.mensagem}</div>}
+        {painel && !painel.profissional && painel.gestao && <div style={{...card, margin: 16, background: 'rgba(224, 178, 75, 0.1)', borderColor: t.yellow, color: t.yellow, textAlign: 'center' }}>👆 {painel.mensagem}</div>}
 
         {painel?.profissional && dia && <BarbeiroPeriodo dia={dia} profissionalId={profissionalId || painel.profissional.id} onDateChange={irPara} refreshKey={atualizadoEm?.valueOf()} />}
         {painel?.profissional && <>
