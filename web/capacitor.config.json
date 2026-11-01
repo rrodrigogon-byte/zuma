@@ -1,0 +1,6 @@
+{
+  "appId": "br.com.kytto.dinoequipe",
+  "appName": "Equipe Dino",
+  "webDir": "dist",
+  "bundledWebRuntime": false
+}
