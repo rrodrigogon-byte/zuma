@@ -754,7 +754,18 @@ export default function ModoBarbeiro() {
                   {podeOperar && <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                     {a.status === 'agendado' && <button type="button" disabled={ocupado} style={btn2} onClick={() => mudarStatus(a, 'confirmado')}>Confirmar</button>}
                     {['agendado', 'confirmado'].includes(a.status) && <button type="button" disabled={ocupado} style={btn} onClick={() => mudarStatus(a, 'em_atendimento')}>Iniciar</button>}
-                    {a.status === 'em_atendimento' && <button type="button" disabled={ocupado} style={{ ...btn, background: t.green, color: '#0E1014' }} onClick={() => mudarStatus(a, 'concluido', `Concluir o atendimento de ${primeiroNome(a.clienteNome) || 'cliente'}? O pagamento é recebido no caixa.`)}>Concluir</button>}
+                    {a.status === 'em_atendimento' && (
+                      <>
+                        <button type="button" disabled={ocupado} style={{ ...btn, background: t.green, color: '#0E1014' }} onClick={() => mudarStatus(a, 'concluido', `Concluir o atendimento de ${primeiroNome(a.clienteNome) || 'cliente'}? O pagamento será recebido no caixa.`)}>Concluir</button>
+                        
+                        <button type="button" disabled={ocupado} style={{ ...btn, background: '#8b5cf6', color: '#fff', display: 'flex', alignItems: 'center', gap: 6 }} onClick={() => {
+                          setVendaAtendimento(a); 
+                          setFolha('checkout_qrcode');
+                        }}>
+                          📱 Cobrar na Cadeira (QR)
+                        </button>
+                      </>
+                    )}
                     {['agendado', 'confirmado', 'em_atendimento'].includes(a.status) && <button type="button" disabled={ocupado} style={btn2} onClick={() => mudarStatus(a, 'nao_compareceu', 'Marcar que o cliente não veio?')}>Não veio</button>}
                     {['agendado', 'confirmado'].includes(a.status) && <button type="button" disabled={ocupado} style={{ ...btn2, color: t.red }} onClick={() => mudarStatus(a, 'cancelado', 'Cancelar este agendamento? O cliente será avisado se autorizou o WhatsApp.')}>Cancelar</button>}
                     {!['cancelado', 'nao_compareceu'].includes(a.status) && <button type="button" disabled={ocupado} style={btn} onClick={() => { setVendaAtendimento(a); setFolha('venda') }}>+ Serviços / produtos</button>}
