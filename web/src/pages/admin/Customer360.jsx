@@ -65,7 +65,50 @@ function CustomerProfile({ reference }) {
   const [revealField, setRevealField] = useState('')
   const [exporting, setExporting] = useState(false)
 
-  const load = useCallback(() => {
+  
+  const [modalEditar, setModalEditar] = useState(null);
+  const [formEditar, setFormEditar] = useState({});
+  const [salvando, setSalvando] = useState(false);
+
+  function abrirModalEditar(cliente) {
+    const barbearia = cliente.fontes?.includes('barbearia') || Boolean(cliente.clienteBarbeariaId);
+    setFormEditar({
+      nome: cliente.nome || cliente.perfil?.nome || '',
+      telefone: cliente.telefone || cliente.perfil?.telefone || '',
+      limiteCreditoMensal: barbearia ? Number(cliente.limiteCreditoMensal || cliente.perfil?.limiteCreditoMensal || 0) : 0,
+      diasVencimento: barbearia ? Number(cliente.diasVencimento || cliente.perfil?.diasVencimento || 30) : 30,
+      clienteBarbeariaId: cliente.clienteBarbeariaId || cliente.ref || cliente.id,
+      original: cliente
+    });
+    setModalEditar(cliente);
+  }
+
+  async function salvarEdicao(event) {
+    event.preventDefault();
+    if (!formEditar.clienteBarbeariaId) {
+      alert("Edição no CRM 360 disponível apenas para clientes com cadastro na barbearia ativa.");
+      return;
+    }
+    setSalvando(true);
+    try {
+      await api.patch(`/api/admin/barbearia/clientes/${formEditar.clienteBarbeariaId}`, {
+        nome: formEditar.nome,
+        telefone: formEditar.telefone,
+        limiteCreditoMensal: Number(formEditar.limiteCreditoMensal || 0),
+        diasVencimento: Number(formEditar.diasVencimento || 30)
+      });
+      setModalEditar(null);
+      if (typeof window !== 'undefined' && window.confirm("Cadastro salvo com sucesso. Recarregar CRM para ver alterações?")) {
+        window.location.reload();
+      }
+    } catch (e) {
+      alert(e.response?.data?.error || e.message || "Falha ao salvar");
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+const load = useCallback(() => {
     setState((current) => ({ ...current, loading: true, error: '' }))
     setRevealed({})
     api.get(`${API}/${encodeURIComponent(reference)}`)
@@ -128,7 +171,38 @@ function CustomerProfile({ reference }) {
     </div>
   }
 
+
   return <section className="c360" aria-labelledby="c360-name">
+    {modalEditar && (
+      <div className="c360-dialog-backdrop" onMouseDown={(event) => event.target === event.currentTarget && setModalEditar(null)}>
+        <form className="c360-dialog" role="dialog" aria-modal="true" style={{ maxWidth: 500 }} onSubmit={salvarEdicao}>
+          <h2>Editar Cliente</h2>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+            <label style={{ display: 'block', gridColumn: 'span 2' }}>
+              <span style={{ display: 'block', fontSize: 12, color: 'var(--muted)', fontWeight: 700, marginBottom: 6 }}>Nome completo</span>
+              <input required value={formEditar.nome} onChange={(e) => setFormEditar(c => ({...c, nome: e.target.value}))} className="c360-input" />
+            </label>
+            <label style={{ display: 'block', gridColumn: 'span 2' }}>
+              <span style={{ display: 'block', fontSize: 12, color: 'var(--muted)', fontWeight: 700, marginBottom: 6 }}>Celular</span>
+              <input required type="tel" value={formEditar.telefone} onChange={(e) => setFormEditar(c => ({...c, telefone: e.target.value}))} className="c360-input" />
+            </label>
+            <label style={{ display: 'block' }}>
+              <span style={{ display: 'block', fontSize: 12, color: 'var(--muted)', fontWeight: 700, marginBottom: 6 }}>Limite de Crédito Mensal (R$)</span>
+              <input type="number" min="0" step="0.01" value={formEditar.limiteCreditoMensal} onChange={(e) => setFormEditar(c => ({...c, limiteCreditoMensal: e.target.value}))} className="c360-input" />
+            </label>
+            <label style={{ display: 'block' }}>
+              <span style={{ display: 'block', fontSize: 12, color: 'var(--muted)', fontWeight: 700, marginBottom: 6 }}>Prazo Padrão (Dias)</span>
+              <input type="number" min="1" step="1" value={formEditar.diasVencimento} onChange={(e) => setFormEditar(c => ({...c, diasVencimento: e.target.value}))} className="c360-input" />
+            </label>
+          </div>
+          <div className="c360-dialog-actions">
+            <button type="button" className="c360-btn ghost" onClick={() => setModalEditar(null)}>Cancelar</button>
+            <button type="submit" className="c360-btn primary" disabled={salvando}>{salvando ? 'Salvando...' : 'Salvar Cadastro'}</button>
+          </div>
+        </form>
+      </div>
+    )}
+
     <Link className="c360-back" to="/admin/clientes-360">‹ Carteira de clientes</Link>
     <header className="c360-hero">
       <span className="c360-avatar big" aria-hidden="true">{String(profile.nome || '?').trim().charAt(0).toUpperCase()}</span>
@@ -147,7 +221,7 @@ function CustomerProfile({ reference }) {
       </div>
       <div className="c360-hero-actions">
         {!data.anonimizado && <Link className="c360-btn primary" to={`/admin/barbearia-erp?area=operacao&tab=Agenda${data.clienteBarbeariaId ? `&agendarCliente=${encodeURIComponent(data.clienteBarbeariaId)}` : ''}`}>Agendar</Link>}
-        {!data.anonimizado && data.clienteBarbeariaId && <Link className="c360-btn ghost" to={`/admin/barbearia-erp?area=gestao&tab=Clientes&editarCliente=${encodeURIComponent(data.clienteBarbeariaId)}`}>Editar Cadastro</Link>}
+        {!data.anonimizado && data.clienteBarbeariaId && <button type="button" className="c360-btn ghost" onClick={() => onEdit(data)}>Editar Cadastro</button>}
         {data.permissoes?.exportar && <button type="button" className="c360-btn ghost" onClick={exportData} disabled={exporting} title="Exporta todos os dados deste titular (LGPD, art. 18)">{exporting ? 'Gerando…' : 'Exportar dados (LGPD)'}</button>}
       </div>
     </header>
