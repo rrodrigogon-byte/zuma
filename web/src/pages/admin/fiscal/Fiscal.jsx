@@ -8,21 +8,28 @@ import { money, dateTime } from '../dino/format'
 import '../customer360.css'
 import '../dino/dino-admin.css'
 
-// Fiscal da empresa — SOMENTE HOMOLOGAÇÃO: emitente, certificado A1, tabela IBPT, classificação dos
-// produtos, documentos (NFC-e, NF-e, NFS-e, com DANFE e contingência offline da NFC-e) e
-// inutilização de numeração. Nada aqui tem valor fiscal até a produção ser liberada.
+// Fiscal da empresa: emitente, certificado A1, tabela IBPT, classificação dos produtos, documentos
+// (NFC-e, NF-e, NFS-e, com DANFE e contingência offline da NFC-e) e inutilização de numeração.
+// O ambiente é do emitente: homologação (sem valor fiscal) ou produção, só depois que o servidor
+// libera a empresa (FISCAL_PRODUCAO_EMPRESAS).
 const BASE = '/api/admin/fiscal'
-const ABAS = [['situacao', 'Emitente e certificado'], ['classificacao', 'Classificação'], ['documentos', 'Documentos'], ['inutilizacao', 'Inutilização']]
+const ABAS = [['situacao', 'Emitente e certificado'], ['classificacao', 'Classificação'], ['documentos', 'Documentos'], ['numeracao', 'Numeração'], ['inutilizacao', 'Inutilização']]
 const STATUS = {
-  rascunho: ['Rascunho', 'muted'], enviando: ['Enviando', 'info'], autorizado: ['Autorizado (homologação)', 'success'], rejeitado: ['Rejeitado', 'danger'],
+  rascunho: ['Rascunho', 'muted'], enviando: ['Enviando', 'info'], autorizado: ['Autorizado', 'success'], rejeitado: ['Rejeitado', 'danger'],
   falha_comunicacao: ['Falha de comunicação', 'warning'], validado_localmente: ['XML validado (não enviado)', 'info'], cancelado: ['Cancelado', 'muted'],
   contingencia: ['Contingência offline (a transmitir)', 'warning'],
 }
 const STATUS_INUT = {
-  validado_localmente: ['Bloqueada aqui (não enviada)', 'info'], enviando: ['Enviando', 'info'], homologada: ['Homologada (homologação)', 'success'],
+  validado_localmente: ['Bloqueada aqui (não enviada)', 'info'], enviando: ['Enviando', 'info'], homologada: ['Inutilizada na SEFAZ', 'success'],
   rejeitada: ['Rejeitada', 'danger'], falha_comunicacao: ['Falha de comunicação', 'warning'],
 }
 const MODELO = { 65: 'NFC-e', 55: 'NF-e', nfse: 'NFS-e' }
+const ORIGEM = { bar_comanda: 'Bar', loja_pedido: 'Loja online', barbearia_comanda: 'Barbearia', manual: 'Manual' }
+// rótulo da situação com o ambiente (documento de homologação nunca parece nota de verdade)
+const rotuloStatus = (d) => `${STATUS[d.status]?.[0] || d.status}${d.status === 'autorizado' ? (d.ambiente === 'producao' ? ' (produção)' : ' (homologação)') : ''}`
+const CSOSN = [['102', '102 · tributada sem crédito'], ['103', '103 · isenção (faixa)'], ['300', '300 · imune'], ['400', '400 · não tributada'], ['500', '500 · ICMS cobrado por ST']]
+const CST = [['00', '00 · tributada integralmente'], ['20', '20 · com redução de base'], ['40', '40 · isenta'], ['41', '41 · não tributada'], ['50', '50 · suspensão'], ['60', '60 · ICMS cobrado por ST']]
+const ehST = (f) => f?.csosn === '500' || f?.cstIcms === '60'
 const UFS = ['AC', 'AL', 'AM', 'AP', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MG', 'MS', 'MT', 'PA', 'PB', 'PE', 'PI', 'PR', 'RJ', 'RN', 'RO', 'RR', 'RS', 'SC', 'SE', 'SP', 'TO']
 const chave = () => `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
 const lerBase64 = (file) => new Promise((ok, falha) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(',').pop()); r.onerror = falha; r.readAsDataURL(file) })
@@ -40,19 +47,38 @@ export default function Fiscal({ abaInicial = 'situacao' }) {
       <div><div className="dadm-eyebrow">Fiscal · {empresaAtiva?.nome || 'Empresa'}</div><h1>Notas fiscais</h1>
         <p>NFC-e, NF-e e NFS-e emitidas com o certificado da própria empresa.</p></div>
     </header>
-    <p className="dadm-note warn" role="status"><strong>Ambiente de homologação.</strong> As notas daqui são de teste e não têm valor fiscal{estado?.transmissao === 'homologacao' ? '; elas são enviadas à SEFAZ de homologação.' : '. O XML é montado, assinado e validado, mas o envio à SEFAZ está desligado neste servidor.'}</p>
+    {estado?.ambiente === 'producao'
+      ? <p className={`dadm-note ${estado.transmissao === 'producao' ? 'success' : 'danger'}`} role="status"><strong>Ambiente de produção.</strong> {estado.transmissao === 'producao' ? 'As notas emitidas aqui têm valor fiscal e vão direto para a SEFAZ.' : 'A emissão em produção não está liberada neste servidor: nenhuma nota sai até a liberação.'}</p>
+      : <p className="dadm-note warn" role="status"><strong>Ambiente de homologação.</strong> As notas daqui são de teste e não têm valor fiscal{estado?.transmissao === 'homologacao' ? '; elas são enviadas à SEFAZ de homologação.' : '. O XML é montado, assinado e validado, mas o envio à SEFAZ está desligado neste servidor.'}</p>}
     {estado && !estado.pronto && <p className="dadm-note danger">Falta para emitir: {estado.pendencias.join(' · ')}.</p>}
+    {(estado?.avisos || []).map((a) => <p key={a} className="dadm-note warn">{a}</p>)}
     <div className="dadm-tabs" role="tablist" aria-label="Seções do fiscal">
       {ABAS.map(([id, rotulo]) => <button key={id} type="button" role="tab" aria-selected={aba === id} onClick={() => setAba(id)}>{rotulo}</button>)}
     </div>
-    {aba === 'situacao' && <Situacao toast={toast} onMudou={carregarEstado} />}
+    {aba === 'situacao' && <Situacao toast={toast} onMudou={carregarEstado} producaoLiberada={Boolean(estado?.producaoLiberada)} />}
     {aba === 'classificacao' && <Classificacao toast={toast} />}
     {aba === 'documentos' && <Documentos toast={toast} />}
+    {aba === 'numeracao' && <Numeracao toast={toast} />}
     {aba === 'inutilizacao' && <Inutilizacao toast={toast} />}
   </div>
 }
 
-function Situacao({ toast, onMudou }) {
+// confirmação de exclusão (Dialog da casa, sem window.confirm, que o navegador pode bloquear)
+function Confirmar({ pedido, onFechar }) {
+  const [enviando, setEnviando] = useState(false)
+  if (!pedido) return null
+  async function confirmar() {
+    if (enviando) return
+    setEnviando(true)
+    try { await pedido.acao(); onFechar() } finally { setEnviando(false) }
+  }
+  return <Dialog open title={pedido.titulo} labelId="fis-confirmar" danger onClose={onFechar} onSubmit={confirmar}
+    actions={<><button type="button" className="c360-btn ghost" onClick={onFechar}>Voltar</button><button type="submit" className="c360-btn primary" disabled={enviando}>{pedido.botao || 'Excluir'}</button></>}>
+    <p>{pedido.texto}</p>
+  </Dialog>
+}
+
+function Situacao({ toast, onMudou, producaoLiberada = false }) {
   const { empresaAtiva, lojasAcessiveis } = useAuth()
   const lojas = useMemo(() => lojasDaEmpresa(lojasAcessiveis, empresaAtiva?.id), [lojasAcessiveis, empresaAtiva?.id])
   const [emitentes, setEmitentes] = useState([])
@@ -62,15 +88,27 @@ function Situacao({ toast, onMudou }) {
   const [ibpt, setIbpt] = useState([])
   const [arqIbpt, setArqIbpt] = useState({ arquivo: null, uf: '' })
   const [enviando, setEnviando] = useState(false)
+  const [confirmar, setConfirmar] = useState(null)
   const carregar = useCallback(async () => {
     try { const [e, c, t] = await Promise.all([api.get(`${BASE}/emitentes`), api.get(`${BASE}/certificados`), api.get(`${BASE}/ibpt`)]); setEmitentes(e); setCerts(c); setIbpt(Array.isArray(t) ? t : []) } catch (error) { toast(error.message, 'error') }
   }, [toast])
   useEffect(() => { carregar() }, [carregar])
-  const novo = (e = {}) => setForm({ lojaId: e.lojaId || '', cnpj: e.cnpj || '', razaoSocial: e.razaoSocial || '', nomeFantasia: e.nomeFantasia || '', ie: e.ie || '', im: e.im || '', crt: e.crt || '1', uf: e.uf || 'MT', codigoMunicipio: e.codigoMunicipio || '', endereco: { logradouro: '', numero: '', bairro: '', cidade: '', cep: '', ...(e.endereco || {}) }, cscId: e.cscId || '', csc: '', cscConfigurado: e.cscConfigurado, cTribNacPadrao: e.cTribNacPadrao || '' })
+  const novo = (e = {}) => setForm({ ambiente: e.ambiente || 'homologacao', ambienteAtual: e.ambiente || 'homologacao', lojaId: e.lojaId || '', cnpj: e.cnpj || '', razaoSocial: e.razaoSocial || '', nomeFantasia: e.nomeFantasia || '', ie: e.ie || '', im: e.im || '', crt: e.crt || '1', uf: e.uf || 'MT', codigoMunicipio: e.codigoMunicipio || '', endereco: { logradouro: '', numero: '', bairro: '', cidade: '', cep: '', ...(e.endereco || {}) }, cscId: e.cscId || '', csc: '', cscConfigurado: e.cscConfigurado, cTribNacPadrao: e.cTribNacPadrao || '' })
   async function salvar() {
     if (enviando) return
     setEnviando(true)
-    try { await api.put(`${BASE}/emitentes`, { ...form, lojaId: form.lojaId || null }); toast('Emitente salvo.', 'success'); setForm(null); carregar(); onMudou() } catch (error) { toast(error.message, 'error') } finally { setEnviando(false) }
+    const { ambienteAtual, cscConfigurado, ...corpo } = form
+    void ambienteAtual; void cscConfigurado
+    try { await api.put(`${BASE}/emitentes`, { ...corpo, lojaId: form.lojaId || null }); toast('Emitente salvo.', 'success'); setForm(null); carregar(); onMudou() } catch (error) { toast(error.message, 'error') } finally { setEnviando(false) }
+  }
+  const pedirExclusao = (titulo, texto, acao, botao) => setConfirmar({ titulo, texto, botao, acao: async () => {
+    try { const r = await acao(); toast(r?.mensagem || 'Feito.', 'success'); carregar(); onMudou() } catch (error) { toast(error.message, 'error') }
+  } })
+  async function reativar(e) {
+    try { await api.post(`${BASE}/emitentes/${e.id}/reativar`, {}); toast('Emitente reativado.', 'success'); carregar(); onMudou() } catch (error) { toast(error.message, 'error') }
+  }
+  async function usarCertificado(c) {
+    try { await api.post(`${BASE}/certificados/${c.id}/ativar`, {}); toast('Certificado em uso.', 'success'); carregar(); onMudou() } catch (error) { toast(error.message, 'error') }
   }
   async function enviarCertificado(ev) {
     ev.preventDefault()
@@ -97,8 +135,14 @@ function Situacao({ toast, onMudou }) {
       <Table caption="Emitentes" rows={emitentes} empty="Nenhum emitente. Cadastre o CNPJ da empresa (e de cada unidade com CNPJ próprio)." columns={[
         { key: 'quem', label: 'Emitente', render: (e) => <div><strong>{e.razaoSocial}</strong><div className="dadm-muted">CNPJ {e.cnpj} · {e.lojaId ? lojas.find((l) => l.id === e.lojaId)?.nome || 'Unidade' : 'Empresa toda'} · {e.uf}</div></div> },
         { key: 'ie', label: 'IE / IM', render: (e) => `${e.ie || '—'} / ${e.im || '—'}` },
+        { key: 'amb', label: 'Ambiente', render: (e) => <div>{e.ambiente === 'producao' ? <Badge tone="success">produção</Badge> : <Badge tone="info">homologação</Badge>}{e.ativo === false && <> <Badge tone="muted">desativado</Badge></>}</div> },
         { key: 'csc', label: 'CSC', render: (e) => (e.cscConfigurado ? <Badge tone="success">guardado</Badge> : <Badge tone="warning">falta</Badge>) },
-        { key: 'acao', label: '', render: (e) => <button type="button" className="c360-btn ghost" onClick={() => novo(e)}>Editar</button> },
+        { key: 'acao', label: '', render: (e) => <div className="dadm-actions">
+          {e.ativo === false
+            ? <button type="button" className="c360-btn ghost" onClick={() => reativar(e)}>Reativar</button>
+            : <button type="button" className="c360-btn ghost" onClick={() => novo(e)}>Editar</button>}
+          {e.ativo !== false && <button type="button" className="c360-btn ghost" onClick={() => pedirExclusao('Excluir emitente', `Excluir o emitente ${e.razaoSocial}? Se ele já tiver notas, fica desativado e o histórico continua disponível.`, () => api.delete(`${BASE}/emitentes/${e.id}`))}>Excluir</button>}
+        </div> },
       ]} />
       <div className="dadm-actions"><button type="button" className="c360-btn primary" onClick={() => novo()}>+ Emitente</button></div>
     </section>
@@ -109,6 +153,10 @@ function Situacao({ toast, onMudou }) {
         { key: 't', label: 'Titular', render: (c) => <div><strong>{c.titular}</strong>{c.cnpj && <div className="dadm-muted">CNPJ {c.cnpj}</div>}</div> },
         { key: 'v', label: 'Válido até', render: (c) => <span className={new Date(c.validoAte) < new Date(Date.now() + 30 * 864e5) ? 'dadm-neg' : ''}>{dateTime(c.validoAte)}</span> },
         { key: 'a', label: 'Situação', render: (c) => (c.ativo ? <Badge tone="success">em uso</Badge> : <Badge tone="muted">substituído</Badge>) },
+        { key: 'x', label: '', render: (c) => (c.ativo ? null : <div className="dadm-actions">
+          {new Date(c.validoAte) > new Date() && <button type="button" className="c360-btn ghost" onClick={() => usarCertificado(c)}>Usar este</button>}
+          <button type="button" className="c360-btn ghost" onClick={() => pedirExclusao('Excluir certificado', `Apagar do cofre o certificado de ${c.titular}? Ele não está em uso.`, () => api.delete(`${BASE}/certificados/${c.id}`))}>Excluir</button>
+        </div>) },
       ]} />
       <form className="dadm-filters" onSubmit={enviarCertificado}>
         <input type="file" accept=".pfx,.p12" aria-label="Arquivo do certificado A1" onChange={(e) => setCert({ ...cert, arquivo: e.target.files?.[0] || null })} />
@@ -124,6 +172,7 @@ function Situacao({ toast, onMudou }) {
         { key: 'v', label: 'Versão', render: (t) => t.versao || '—' },
         { key: 'l', label: 'Códigos', align: 'right', render: (t) => t.linhas },
         { key: 'vig', label: 'Vigência até', render: (t) => (t.vigenciaFim ? <span className={new Date(t.vigenciaFim) < new Date() ? 'dadm-neg' : ''}>{dateTime(t.vigenciaFim)}</span> : '—') },
+        { key: 'x', label: '', render: (t) => <button type="button" className="c360-btn ghost" onClick={() => pedirExclusao('Excluir tabela do IBPT', `Apagar a tabela do IBPT de ${t.uf}? As notas novas saem sem o valor aproximado dos tributos até importar outra.`, () => api.delete(`${BASE}/ibpt/${t.uf}`))}>Excluir</button> },
       ]} />
       <form className="dadm-filters" onSubmit={enviarIbpt}>
         <input type="file" accept=".csv,text/csv" aria-label="Arquivo CSV do IBPT" onChange={(e) => setArqIbpt({ ...arqIbpt, arquivo: e.target.files?.[0] || null })} />
@@ -134,6 +183,11 @@ function Situacao({ toast, onMudou }) {
     <Dialog open={Boolean(form)} title="Emitente" labelId="fis-emit" onClose={() => setForm(null)} onSubmit={salvar}
       actions={<><button type="button" className="c360-btn ghost" onClick={() => setForm(null)}>Voltar</button><button type="submit" className="c360-btn primary" disabled={enviando}>Salvar</button></>}>
       {form && <div style={{ display: 'grid', gap: 10 }}>
+        <label className="c360-field">Ambiente<select className="c360-input" value={form.ambiente} onChange={(e) => setForm({ ...form, ambiente: e.target.value })}>
+          <option value="homologacao">Homologação (teste, sem valor fiscal)</option>
+          <option value="producao" disabled={!producaoLiberada && form.ambienteAtual !== 'producao'}>Produção (nota com valor fiscal){!producaoLiberada && form.ambienteAtual !== 'producao' ? ' · não liberada neste servidor' : ''}</option>
+        </select></label>
+        {form.ambiente !== form.ambienteAtual && <p className="dadm-note warn">{form.ambiente === 'producao' ? 'Ao passar para produção, as notas passam a ter valor fiscal e a numeração recomeça do 1 na produção. Informe o CSC de PRODUÇÃO abaixo.' : 'Voltar para homologação: as próximas notas não terão valor fiscal. Informe o CSC de homologação.'}</p>}
         <label className="c360-field">Vale para<select className="c360-input" value={form.lojaId} onChange={(e) => setForm({ ...form, lojaId: e.target.value })}><option value="">Empresa toda</option>{lojas.map((l) => <option key={l.id} value={l.id}>{l.nome} (CNPJ próprio)</option>)}</select></label>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 10 }}>{campo('CNPJ', 'cnpj', { required: true, inputMode: 'numeric' })}{campo('Razão social', 'razaoSocial', { required: true })}</div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>{campo('Nome fantasia', 'nomeFantasia')}{campo('Inscrição estadual', 'ie')}{campo('Inscrição municipal', 'im')}</div>
@@ -146,64 +200,177 @@ function Situacao({ toast, onMudou }) {
         <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 10 }}>{campoEnd('Cidade', 'cidade')}{campoEnd('CEP', 'cep', { inputMode: 'numeric' })}</div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr 1fr', gap: 10 }}>
           {campo('ID do CSC', 'cscId')}
-          {campo(form.cscConfigurado ? 'CSC de homologação (vazio mantém o atual)' : 'CSC de homologação', 'csc', { type: 'password', autoComplete: 'off' })}
+          {campo(`CSC de ${form.ambiente === 'producao' ? 'produção' : 'homologação'}${form.cscConfigurado && form.ambiente === form.ambienteAtual ? ' (vazio mantém o atual)' : ''}`, 'csc', { type: 'password', autoComplete: 'off', required: form.ambiente !== form.ambienteAtual })}
           {campo('cTribNac padrão (NFS-e)', 'cTribNacPadrao', { inputMode: 'numeric', maxLength: 6 })}
         </div>
       </div>}
     </Dialog>
+    <Confirmar pedido={confirmar} onFechar={() => setConfirmar(null)} />
   </div>
 }
 
-const VAZIO = { ncm: '', cfop: '5102', csosn: '102', cstIcms: '', aliquotaIcms: '', cest: '', origem: '0', cTribNac: '' }
+const VAZIO = { ncm: '', cfop: '5102', csosn: '102', cstIcms: '', aliquotaIcms: '', reducaoBaseIcms: '', cest: '', origem: '0', cTribNac: '', aliquotaIss: '', cstPis: '', cstCofins: '', aliquotaPis: '', aliquotaCofins: '' }
+const ORIGENS = [['0', '0 · nacional'], ['1', '1 · estrangeira (importação direta)'], ['2', '2 · estrangeira (mercado interno)'], ['3', '3 · nacional, conteúdo importado > 40%'], ['4', '4 · nacional (processo produtivo básico)'], ['5', '5 · nacional, conteúdo importado ≤ 40%'], ['6', '6 · estrangeira sem similar (importação direta)'], ['7', '7 · estrangeira sem similar (mercado interno)'], ['8', '8 · nacional, conteúdo importado > 70%']]
+const rotuloCategoria = (fonteId) => (fonteId === 'barbearia:revenda' ? 'Revenda da barbearia (padrão dos produtos da comanda)' : fonteId === 'barbearia:servicos' ? 'Serviços da barbearia (padrão da NFS-e da comanda)' : null)
+
+// campos fiscais do formulário (um item ou vários de uma vez)
+function CamposClassificacao({ form, setForm, perfis = [] }) {
+  const aplicarPerfil = (id) => { const p = perfis.find((x) => x.id === id); if (p) setForm({ ...form, ...Object.fromEntries(Object.entries(p.valores).map(([k, v]) => [k, String(v)])) }) }
+  if (form.tipo === 'servico') {
+    return <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 10 }}>
+      <label className="c360-field">Código de tributação nacional (cTribNac, 6 dígitos)<input className="c360-input" required inputMode="numeric" maxLength={6} value={form.cTribNac || ''} onChange={(e) => setForm({ ...form, cTribNac: e.target.value })} /></label>
+      <label className="c360-field">Alíquota do ISS (%)<input className="c360-input" inputMode="decimal" value={form.aliquotaIss ?? ''} onChange={(e) => setForm({ ...form, aliquotaIss: e.target.value })} /></label>
+    </div>
+  }
+  return <>
+    {perfis.length > 0 && <label className="c360-field">Perfil pronto (preenche CFOP, CSOSN/CST e PIS/COFINS)<select className="c360-input" aria-label="Perfil fiscal" value="" onChange={(e) => aplicarPerfil(e.target.value)}><option value="">— escolher —</option>{perfis.map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}</select></label>}
+    {form.sugestao && <p className="dadm-note">Sugestão pelo nome: NCM {form.sugestao.ncm}{form.sugestao.cest ? ` · CEST ${form.sugestao.cest}` : ''} ({form.sugestao.descricao}). <button type="button" className="c360-btn ghost" onClick={() => setForm({ ...form, ncm: form.sugestao.ncm, ...(form.sugestao.cest ? { cest: form.sugestao.cest } : {}) })}>Usar sugestão</button></p>}
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+      <label className="c360-field">NCM{form.ncmSugerido ? ` (cadastro do estoque: ${form.ncmSugerido})` : ''}<input className="c360-input" required inputMode="numeric" maxLength={8} value={form.ncm || ''} onChange={(e) => setForm({ ...form, ncm: e.target.value })} /></label>
+      <label className="c360-field">CFOP<input className="c360-input" required inputMode="numeric" maxLength={4} value={form.cfop || ''} onChange={(e) => setForm({ ...form, cfop: e.target.value })} /></label>
+      <label className="c360-field">CEST{ehST(form) ? ' (obrigatório com ST)' : ' (se houver ST)'}<input className="c360-input" inputMode="numeric" maxLength={7} required={ehST(form)} value={form.cest || ''} onChange={(e) => setForm({ ...form, cest: e.target.value })} /></label>
+    </div>
+    <label className="c360-field">Origem da mercadoria<select className="c360-input" value={form.origem || '0'} onChange={(e) => setForm({ ...form, origem: e.target.value })}>{ORIGENS.map(([v, r]) => <option key={v} value={v}>{r}</option>)}</select></label>
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+      <label className="c360-field">CSOSN (Simples)<select className="c360-input" value={form.csosn || ''} onChange={(e) => setForm({ ...form, csosn: e.target.value })}><option value="">—</option>{CSOSN.map(([v, r]) => <option key={v} value={v}>{r}</option>)}</select></label>
+      <label className="c360-field">CST ICMS (regime normal)<select className="c360-input" value={form.cstIcms || ''} onChange={(e) => setForm({ ...form, cstIcms: e.target.value })}><option value="">—</option>{CST.map(([v, r]) => <option key={v} value={v}>{r}</option>)}</select></label>
+      <label className="c360-field">Alíquota ICMS (%)<input className="c360-input" inputMode="decimal" value={form.aliquotaIcms ?? ''} onChange={(e) => setForm({ ...form, aliquotaIcms: e.target.value })} /></label>
+    </div>
+    {form.cstIcms === '20' && <label className="c360-field">Redução da base do ICMS (%)<input className="c360-input" required inputMode="decimal" value={form.reducaoBaseIcms ?? ''} onChange={(e) => setForm({ ...form, reducaoBaseIcms: e.target.value })} /></label>}
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 10 }}>
+      <label className="c360-field">CST PIS<input className="c360-input" inputMode="numeric" maxLength={2} placeholder="49" value={form.cstPis || ''} onChange={(e) => setForm({ ...form, cstPis: e.target.value })} /></label>
+      <label className="c360-field">PIS (%)<input className="c360-input" inputMode="decimal" value={form.aliquotaPis ?? ''} onChange={(e) => setForm({ ...form, aliquotaPis: e.target.value })} /></label>
+      <label className="c360-field">CST COFINS<input className="c360-input" inputMode="numeric" maxLength={2} placeholder="49" value={form.cstCofins || ''} onChange={(e) => setForm({ ...form, cstCofins: e.target.value })} /></label>
+      <label className="c360-field">COFINS (%)<input className="c360-input" inputMode="decimal" value={form.aliquotaCofins ?? ''} onChange={(e) => setForm({ ...form, aliquotaCofins: e.target.value })} /></label>
+    </div>
+    <p className="dadm-muted">Confirme com o contador. Simples Nacional: CSOSN 102, 103, 300, 400 e 500 (ST). Regime normal: CST 00, 20, 40, 41, 50 e 60 (ST). Perfumaria em MT costuma ter ST (CSOSN 500 / CST 60, com CEST).</p>
+  </>
+}
+
+const chaveItem = (i) => `${i.fonte}:${i.fonteId}`
 
 function Classificacao({ toast }) {
   const [lista, setLista] = useState([])
+  const [perfis, setPerfis] = useState([])
   const [busca, setBusca] = useState('')
+  const [soPendentes, setSoPendentes] = useState(false)
   const [form, setForm] = useState(null)
-  const carregar = useCallback(() => api.get(`${BASE}/classificacoes`).then(setLista).catch((e) => toast(e.message, 'error')), [toast])
+  const [emLote, setEmLote] = useState(null)
+  const [selecionados, setSelecionados] = useState(() => new Set())
+  const [confirmar, setConfirmar] = useState(null)
+  const [planilha, setPlanilha] = useState({ arquivo: null, previa: null })
+  const [enviando, setEnviando] = useState(false)
+  const carregar = useCallback(() => api.get(`${BASE}/classificacoes`).then((l) => setLista(Array.isArray(l) ? l : [])).catch((e) => toast(e.message, 'error')), [toast])
   useEffect(() => { carregar() }, [carregar])
-  const visiveis = lista.filter((i) => !busca || `${i.nome} ${i.grupo}`.toLowerCase().includes(busca.toLowerCase()))
+  useEffect(() => { api.get(`${BASE}/classificacoes/perfis`).then((p) => setPerfis(Array.isArray(p) ? p : [])).catch(() => setPerfis([])) }, [])
+  const visiveis = lista.filter((i) => (!busca || `${i.nome} ${i.grupo}`.toLowerCase().includes(busca.toLowerCase())) && (!soPendentes || !i.classificacao))
   const semClassificacao = lista.filter((i) => !i.classificacao).length
+  const selecionaveis = visiveis.filter((i) => i.fonte !== 'servico' && (i.classificacao?.tipo || i.tipo || 'produto') !== 'servico')
+  const todosMarcados = selecionaveis.length > 0 && selecionaveis.every((i) => selecionados.has(chaveItem(i)))
+  const alternar = (i) => setSelecionados((atual) => { const n = new Set(atual); if (n.has(chaveItem(i))) n.delete(chaveItem(i)); else n.add(chaveItem(i)); return n })
+  const alternarTodos = () => setSelecionados(todosMarcados ? new Set() : new Set(selecionaveis.map(chaveItem)))
   async function salvar() {
-    const { ncmSugerido, ...corpo } = form
-    void ncmSugerido
+    const { ncmSugerido, sugestao, ...corpo } = form
+    void ncmSugerido; void sugestao
     try { await api.put(`${BASE}/classificacoes`, corpo); toast('Classificação salva.', 'success'); setForm(null); carregar() } catch (error) { toast(error.message, 'error') }
   }
+  async function salvarLote() {
+    if (enviando) return
+    setEnviando(true)
+    const itens = lista.filter((i) => selecionados.has(chaveItem(i))).map((i) => ({ fonte: i.fonte, fonteId: i.fonteId }))
+    try {
+      const r = await api.post(`${BASE}/classificacoes/lote`, { itens, classificacao: emLote })
+      toast(`${r.aplicadas} item(ns) classificado(s).`, 'success'); setEmLote(null); setSelecionados(new Set()); carregar()
+    } catch (error) { toast(error.message, 'error') } finally { setEnviando(false) }
+  }
+  async function baixarPlanilha() {
+    try {
+      const blob = await api.blob(`${BASE}/classificacoes/planilha`)
+      const url = URL.createObjectURL(blob instanceof Blob ? blob : new Blob([blob], { type: 'text/csv' }))
+      const a = document.createElement('a'); a.href = url; a.download = 'classificacao-fiscal.csv'; a.click()
+      setTimeout(() => URL.revokeObjectURL(url), 1000)
+    } catch (error) { toast(error.message, 'error') }
+  }
+  async function importarPlanilha(aplicar) {
+    if (!planilha.arquivo || enviando) return
+    setEnviando(true)
+    try {
+      const r = await api.upload(`${BASE}/classificacoes/planilha${aplicar ? '?aplicar=1' : ''}`, planilha.arquivo)
+      if (aplicar) { toast(`Planilha aplicada: ${r.aplicadas} item(ns) classificado(s)${r.erros.length ? `; ${r.erros.length} linha(s) com erro` : ''}.`, r.erros.length ? 'error' : 'success'); setPlanilha({ arquivo: null, previa: aplicar ? r : null }); carregar() }
+      else setPlanilha({ ...planilha, previa: r })
+    } catch (error) { toast(error.message, 'error') } finally { setEnviando(false) }
+  }
+  const pedirExclusao = (i) => setConfirmar({
+    titulo: 'Excluir classificação',
+    texto: `Excluir a classificação de "${i.nome}"? ${i.fonte === 'bar_produto' ? 'Volta a valer a da categoria, se houver.' : 'O item fica sem classificação até classificar de novo.'}`,
+    acao: async () => {
+      try { await api.delete(`${BASE}/classificacoes?fonte=${encodeURIComponent(i.fonte)}&fonteId=${encodeURIComponent(i.fonteId)}`); toast('Classificação excluída.', 'success'); carregar() } catch (error) { toast(error.message, 'error') }
+    },
+  })
+  const abrir = (i) => setForm({ fonte: i.fonte, fonteId: i.fonteId, tipo: i.classificacao?.tipo || i.tipo || 'produto', ...VAZIO, ...(i.ncmSugerido ? { ncm: i.ncmSugerido } : {}), ...(i.herdada ? {} : limpar(i.classificacao)), ncmSugerido: i.ncmSugerido || null, sugestao: i.classificacao ? null : (i.sugestao || null) })
   return <section className="dadm-card">
     <h2>Classificação fiscal</h2>
-    <p className="dadm-muted">NCM, CFOP e CSOSN/CST de cada produto vendido (bar, loja online e itens do estoque). No bar, dá para classificar a categoria inteira de uma vez (ex.: Bebidas) e só ajustar as exceções. Nos itens do estoque, o NCM do cadastro vem como sugestão. {semClassificacao ? <strong>{semClassificacao} sem classificação.</strong> : null}</p>
+    <p className="dadm-muted">NCM, CFOP e CSOSN/CST de cada produto vendido (bar, loja online, barbearia e itens do estoque). Marque vários itens para classificar de uma vez, ou baixe a planilha, preencha no Excel e importe de volta. {semClassificacao ? <strong>{semClassificacao} sem classificação.</strong> : null}</p>
     <div className="dadm-filters">
       <input className="c360-input" type="search" placeholder="Buscar produto" aria-label="Buscar produto" value={busca} onChange={(e) => setBusca(e.target.value)} />
+      <label className="dadm-muted"><input type="checkbox" checked={soPendentes} onChange={(e) => setSoPendentes(e.target.checked)} /> Só sem classificação</label>
       <button type="button" className="c360-btn ghost" onClick={() => setForm({ fonte: 'categoria', fonteId: 'bar:', tipo: 'produto', ...VAZIO })}>Padrão de categoria do bar</button>
       <button type="button" className="c360-btn ghost" onClick={() => setForm({ fonte: 'servico', fonteId: '', tipo: 'servico', ...VAZIO })}>+ Serviço (NFS-e)</button>
     </div>
-    <Table caption="Produtos e classificação" rows={visiveis.map((i) => ({ ...i, id: `${i.fonte}:${i.fonteId}` }))} empty="Nada para classificar." columns={[
-      { key: 'nome', label: 'Produto / serviço', render: (i) => <div><strong>{i.nome}</strong><div className="dadm-muted">{i.grupo}{i.ncmSugerido && !i.classificacao ? ` · NCM do cadastro ${i.ncmSugerido}` : ''}</div></div> },
-      { key: 'cls', label: 'Classificação', render: (i) => (i.classificacao ? `${i.classificacao.tipo === 'servico' ? `cTribNac ${i.classificacao.cTribNac}` : `NCM ${i.classificacao.ncm} · CFOP ${i.classificacao.cfop} · ${i.classificacao.csosn ? `CSOSN ${i.classificacao.csosn}` : `CST ${i.classificacao.cstIcms}`}`}${i.herdada ? ' (da categoria)' : ''}` : <Badge tone="warning">sem classificação</Badge>) },
-      { key: 'a', label: '', render: (i) => <button type="button" className="c360-btn ghost" onClick={() => setForm({ fonte: i.fonte, fonteId: i.fonteId, tipo: i.classificacao?.tipo || 'produto', ...VAZIO, ...(i.ncmSugerido ? { ncm: i.ncmSugerido } : {}), ...(i.herdada ? {} : i.classificacao || {}), ncmSugerido: i.ncmSugerido || null })}>Classificar</button> },
+    <div className="dadm-actions" style={{ marginBottom: 10 }}>
+      <button type="button" className="c360-btn primary" disabled={!selecionados.size} onClick={() => setEmLote({ tipo: 'produto', ...VAZIO })}>Classificar selecionados ({selecionados.size})</button>
+      {selecionados.size > 0 && <button type="button" className="c360-btn ghost" onClick={() => setSelecionados(new Set())}>Limpar seleção</button>}
+    </div>
+    <Table caption="Produtos e classificação" rows={visiveis.map((i) => ({ ...i, id: chaveItem(i) }))} empty="Nada para classificar." columns={[
+      { key: 'sel', label: <input type="checkbox" aria-label="Marcar todos" checked={todosMarcados} onChange={alternarTodos} />, render: (i) => (selecionaveis.includes(i) || selecionaveis.some((x) => chaveItem(x) === chaveItem(i)) ? <input type="checkbox" aria-label={`Marcar ${i.nome}`} checked={selecionados.has(chaveItem(i))} onChange={() => alternar(i)} /> : null) },
+      { key: 'nome', label: 'Produto / serviço', render: (i) => <div><strong>{i.nome}</strong><div className="dadm-muted">{i.grupo}{i.ncmSugerido && !i.classificacao ? ` · NCM do cadastro ${i.ncmSugerido}` : ''}{!i.classificacao && i.sugestao ? ` · sugestão NCM ${i.sugestao.ncm}${i.sugestao.cest ? ` / CEST ${i.sugestao.cest}` : ''}` : ''}</div></div> },
+      { key: 'cls', label: 'Classificação', render: (i) => (i.classificacao ? `${i.classificacao.tipo === 'servico' ? `cTribNac ${i.classificacao.cTribNac}` : `NCM ${i.classificacao.ncm} · CFOP ${i.classificacao.cfop} · ${i.classificacao.csosn ? `CSOSN ${i.classificacao.csosn}` : `CST ${i.classificacao.cstIcms}`}${i.classificacao.cest ? ` · CEST ${i.classificacao.cest}` : ''}`}${i.herdada ? ' (da categoria)' : ''}` : <Badge tone="warning">sem classificação</Badge>) },
+      { key: 'a', label: '', render: (i) => <div className="dadm-actions">
+        <button type="button" className="c360-btn ghost" onClick={() => abrir(i)}>{i.classificacao && !i.herdada ? 'Editar' : 'Classificar'}</button>
+        {i.classificacao && !i.herdada && <button type="button" className="c360-btn ghost" onClick={() => pedirExclusao(i)}>Excluir</button>}
+      </div> },
     ]} />
+    <section className="dadm-card" style={{ marginTop: 16 }}>
+      <h3>Planilha</h3>
+      <p className="dadm-muted">Baixe a planilha com todos os itens (e as sugestões de NCM/CEST), preencha no Excel e importe. Primeiro sai a prévia, sem gravar nada; depois aplique. Linhas sem NCM ficam como estão.</p>
+      <div className="dadm-filters">
+        <button type="button" className="c360-btn ghost" onClick={baixarPlanilha}>Baixar planilha</button>
+        <input type="file" accept=".csv,text/csv" aria-label="Planilha de classificação (CSV)" onChange={(e) => setPlanilha({ arquivo: e.target.files?.[0] || null, previa: null })} />
+        <button type="button" className="c360-btn ghost" disabled={!planilha.arquivo || enviando} onClick={() => importarPlanilha(false)}>Ver prévia</button>
+        <button type="button" className="c360-btn primary" disabled={!planilha.arquivo || !planilha.previa || planilha.previa.prevista === false || !planilha.previa.validas || enviando} onClick={() => importarPlanilha(true)}>Aplicar planilha</button>
+      </div>
+      {planilha.previa && <div role="status">
+        <p className={`dadm-note ${planilha.previa.erros.length ? 'warn' : 'success'}`}>{planilha.previa.prevista ? 'Prévia' : 'Aplicada'}: {planilha.previa.linhas} linha(s), {planilha.previa.prevista ? `${planilha.previa.validas} válida(s)` : `${planilha.previa.aplicadas} gravada(s)`}, {planilha.previa.ignoradas} sem NCM (ignoradas), {planilha.previa.erros.length} com erro.</p>
+        {planilha.previa.erros.length > 0 && <Table caption="Linhas com erro" rows={planilha.previa.erros.map((e) => ({ ...e, id: `l${e.linha}` }))} columns={[
+          { key: 'l', label: 'Linha', render: (e) => e.linha }, { key: 'i', label: 'Item', render: (e) => e.item }, { key: 'm', label: 'Erro', render: (e) => e.mensagem },
+        ]} />}
+      </div>}
+    </section>
     <Dialog open={Boolean(form)} title="Classificação fiscal" labelId="fis-cls" onClose={() => setForm(null)} onSubmit={salvar}
       actions={<><button type="button" className="c360-btn ghost" onClick={() => setForm(null)}>Voltar</button><button type="submit" className="c360-btn primary">Salvar</button></>}>
       {form && <div style={{ display: 'grid', gap: 10 }}>
-        {form.fonte === 'categoria' && <label className="c360-field">Categoria do bar (como no cardápio)<input className="c360-input" required value={form.fonteId.replace(/^bar:/, '')} onChange={(e) => setForm({ ...form, fonteId: `bar:${e.target.value}` })} /></label>}
+        {form.fonte === 'categoria' && (rotuloCategoria(form.fonteId)
+          ? <p className="dadm-muted"><strong>{rotuloCategoria(form.fonteId)}</strong></p>
+          : <label className="c360-field">Categoria do bar (como no cardápio)<input className="c360-input" required value={form.fonteId.replace(/^bar:/, '')} onChange={(e) => setForm({ ...form, fonteId: `bar:${e.target.value}` })} /></label>)}
         {form.fonte === 'servico' && <label className="c360-field">Código interno do serviço<input className="c360-input" required value={form.fonteId} onChange={(e) => setForm({ ...form, fonteId: e.target.value })} placeholder="ex.: aula-tenis" /></label>}
-        {form.tipo === 'servico' ? <label className="c360-field">Código de tributação nacional (cTribNac, 6 dígitos)<input className="c360-input" required inputMode="numeric" maxLength={6} value={form.cTribNac || ''} onChange={(e) => setForm({ ...form, cTribNac: e.target.value })} /></label>
-          : <>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
-              <label className="c360-field">NCM{form.ncmSugerido ? ` (cadastro do estoque: ${form.ncmSugerido})` : ''}<input className="c360-input" required inputMode="numeric" maxLength={8} value={form.ncm || ''} onChange={(e) => setForm({ ...form, ncm: e.target.value })} /></label>
-              <label className="c360-field">CFOP<input className="c360-input" required inputMode="numeric" maxLength={4} value={form.cfop || ''} onChange={(e) => setForm({ ...form, cfop: e.target.value })} /></label>
-              <label className="c360-field">CEST (se houver ST)<input className="c360-input" inputMode="numeric" maxLength={7} value={form.cest || ''} onChange={(e) => setForm({ ...form, cest: e.target.value })} /></label>
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
-              <label className="c360-field">CSOSN (Simples)<select className="c360-input" value={form.csosn || ''} onChange={(e) => setForm({ ...form, csosn: e.target.value })}><option value="">—</option><option value="102">102 · sem crédito</option><option value="103">103 · isenção</option><option value="300">300 · imune</option><option value="400">400 · não tributada</option></select></label>
-              <label className="c360-field">CST ICMS (regime normal)<select className="c360-input" value={form.cstIcms || ''} onChange={(e) => setForm({ ...form, cstIcms: e.target.value })}><option value="">—</option><option value="00">00 · tributada</option><option value="40">40 · isenta</option><option value="41">41 · não tributada</option></select></label>
-              <label className="c360-field">Alíquota ICMS (%)<input className="c360-input" inputMode="decimal" value={form.aliquotaIcms ?? ''} onChange={(e) => setForm({ ...form, aliquotaIcms: e.target.value })} /></label>
-            </div>
-            <p className="dadm-muted">Confirme com o contador. Esta versão emite CSOSN 102/103/300/400 e CST 00/40/41; substituição tributária fica para depois.</p>
-          </>}
+        <CamposClassificacao form={form} setForm={setForm} perfis={perfis} />
       </div>}
     </Dialog>
+    <Dialog open={Boolean(emLote)} title={`Classificar ${selecionados.size} item(ns) de uma vez`} labelId="fis-cls-lote" onClose={() => setEmLote(null)} onSubmit={salvarLote}
+      actions={<><button type="button" className="c360-btn ghost" onClick={() => setEmLote(null)}>Voltar</button><button type="submit" className="c360-btn primary" disabled={enviando}>Aplicar a {selecionados.size}</button></>}>
+      {emLote && <div style={{ display: 'grid', gap: 10 }}>
+        <p className="dadm-note warn">A mesma classificação vai para todos os itens marcados e substitui a que eles já tiverem. Se algum item der erro, nenhum é gravado.</p>
+        <CamposClassificacao form={emLote} setForm={setEmLote} perfis={perfis} />
+      </div>}
+    </Dialog>
+    <Confirmar pedido={confirmar} onFechar={() => setConfirmar(null)} />
   </section>
+}
+
+// campos da classificação que voltam para o formulário (sem nulos, que viram "null" nos inputs)
+function limpar(c) {
+  if (!c) return {}
+  return Object.fromEntries(Object.entries(c).filter(([, v]) => v !== null && v !== undefined).map(([k, v]) => [k, typeof v === 'number' ? String(v) : v]))
 }
 
 function Documentos({ toast }) {
@@ -211,24 +378,76 @@ function Documentos({ toast }) {
   const [vendas, setVendas] = useState([])
   const [cancelando, setCancelando] = useState(null)
   const [nfse, setNfse] = useState(null)
-  const [nfeAvulsa, setNfeAvulsa] = useState(null)
   const [enviando, setEnviando] = useState('')
   const [contingenciaAuto, setContingenciaAuto] = useState(false)
+  const [marcadas, setMarcadas] = useState(() => new Set())
+  const [resultadoLote, setResultadoLote] = useState(null)
+  const [automatica, setAutomatica] = useState(null)
+  const [cce, setCce] = useState(null)
+  const [svcDoc, setSvcDoc] = useState(null)
+  const [nfe, setNfe] = useState(null)
+  const [avulsa, setAvulsa] = useState(null)
   const carregar = useCallback(async () => {
-    try { const [d, v] = await Promise.all([api.get(`${BASE}/documentos`), api.get(`${BASE}/vendas-sem-nota`)]); setDocs(d); setVendas(v) } catch (error) { toast(error.message, 'error') }
+    try { const [d, v] = await Promise.all([api.get(`${BASE}/documentos`), api.get(`${BASE}/vendas-sem-nota`)]); setDocs(Array.isArray(d) ? d : []); setVendas(Array.isArray(v) ? v : []) } catch (error) { toast(error.message, 'error') }
+    api.get(`${BASE}/automatica`).then((a) => setAutomatica(a && typeof a === 'object' && !Array.isArray(a) ? a : null)).catch(() => setAutomatica(null))
   }, [toast])
+  const idVenda = (v) => `${v.origem}:${v.origemId}`
+  async function emitirLote(lista) {
+    if (enviando || !lista.length) return
+    setEnviando('lote')
+    try {
+      const r = await api.post(`${BASE}/documentos/lote`, { modelo: '65', vendas: lista.slice(0, 50).map((v) => ({ origem: v.origem, origemId: v.origemId })), ...(contingenciaAuto ? { contingenciaOffline: true } : {}) })
+      setResultadoLote(r); setMarcadas(new Set())
+      toast(`Lote: ${r.emitidas} nota(s) emitida(s)${r.falhas ? `, ${r.falhas} com problema (veja abaixo)` : ''}.`, r.falhas ? 'error' : 'success')
+      carregar()
+    } catch (error) { toast(error.message, 'error') } finally { setEnviando('') }
+  }
+  async function salvarAutomatica(mudanca) {
+    try { setAutomatica(await api.put(`${BASE}/automatica`, { ...automatica, ...mudanca })); toast(mudanca.emissaoAutomatica === false ? 'Emissão automática desligada.' : 'Emissão automática salva.', 'success') } catch (error) { toast(error.message, 'error') }
+  }
   useEffect(() => { carregar() }, [carregar])
   async function emitir(corpo, rotulo) {
     if (enviando) return
     setEnviando(rotulo)
-    try { const d = await api.post(`${BASE}/documentos`, corpo); toast(`${MODELO[d.modelo]} ${d.numero}: ${STATUS[d.status]?.[0] || d.status}.`, d.status === 'rejeitado' ? 'error' : 'success'); setNfse(null); setNfeAvulsa(null); carregar() }
+    try { const d = await api.post(`${BASE}/documentos`, corpo); toast(`${MODELO[d.modelo]} ${d.numero}: ${rotuloStatus(d)}.`, d.status === 'rejeitado' ? 'error' : 'success'); setNfse(null); setNfe(null); setAvulsa(null); carregar() }
     catch (error) { toast(error.message, 'error') } finally { setEnviando('') }
+  }
+  async function enviarCce() {
+    if (enviando || !cce) return
+    setEnviando('cce')
+    try { const r = await api.post(`${BASE}/documentos/${cce.doc.id}/carta-correcao`, { texto: cce.texto.trim() }); toast(`Carta de correção nº ${r.sequencia} registrada (protocolo ${r.protocolo}).`, 'success'); setCce(null); carregar() }
+    catch (error) { toast(error.message, 'error') } finally { setEnviando('') }
+  }
+  async function enviarSvc() {
+    if (enviando || !svcDoc) return
+    setEnviando('svc')
+    try { const d = await api.post(`${BASE}/documentos/${svcDoc.doc.id}/svc`, { justificativa: svcDoc.justificativa.trim() }); toast(`NF-e ${d.numero} em contingência SVC: ${rotuloStatus(d)}.`, d.status === 'rejeitado' ? 'error' : 'success'); setSvcDoc(null); carregar() }
+    catch (error) { toast(error.message, 'error') } finally { setEnviando('') }
+  }
+  function enviarNfe() {
+    const n = nfe
+    const doc = soDig(n.documento)
+    const destinatario = {
+      ...(doc.length === 14 ? { cnpj: doc } : { cpf: doc }), nome: n.nome.trim(),
+      ...(n.indIEDest === '1' ? { ie: soDig(n.ie), indIEDest: '1' } : { indIEDest: n.indIEDest }),
+      ...(n.email.trim() ? { email: n.email.trim() } : {}),
+      endereco: { logradouro: n.logradouro.trim(), numero: n.numero.trim(), complemento: n.complemento.trim() || undefined, bairro: n.bairro.trim(), cidade: n.cidade.trim(), uf: n.uf, codigoMunicipio: soDig(n.codigoMunicipio), cep: soDig(n.cep) },
+    }
+    const fora = n.uf !== 'MT'
+    const corpo = {
+      modelo: '55', destinatario, consumidorFinal: n.consumidorFinal,
+      ...(fora && n.consumidorFinal && n.indIEDest === '9' ? { difal: { aliquotaInternaDestino: Number(String(n.aliquotaDestino).replace(',', '.')), fcpDestino: Number(String(n.fcpDestino || '0').replace(',', '.')) } } : {}),
+      ...(n.venda
+        ? { origem: n.venda.split('|')[0], origemId: n.venda.split('|')[1] }
+        : { origem: 'manual', idempotencia: `manual:${n.chave}`, itens: n.itens.map((i) => ({ fonte: i.fonte, fonteId: i.fonteId.trim(), descricao: i.descricao.trim(), quantidade: Number(String(i.quantidade).replace(',', '.')) || 1, valorUnitario: Number(String(i.valor).replace(',', '.')) })) }),
+    }
+    emitir(corpo, 'nfe')
   }
   async function baixarXml(d) {
     try {
       const c = await api.get(`${BASE}/documentos/${d.id}?xml=1`)
       const url = URL.createObjectURL(new Blob([c.xmlAutorizado || c.xmlAssinado || ''], { type: 'application/xml' }))
-      const a = document.createElement('a'); a.href = url; a.download = `${MODELO[d.modelo].toLowerCase().replace('-', '')}-${d.serie}-${d.numero}-homologacao.xml`; a.click()
+      const a = document.createElement('a'); a.href = url; a.download = `${MODELO[d.modelo].toLowerCase().replace('-', '')}-${d.serie}-${d.numero}${d.ambiente === 'producao' ? '' : '-homologacao'}.xml`; a.click()
       setTimeout(() => URL.revokeObjectURL(url), 1000)
     } catch (error) { toast(error.message, 'error') }
   }
@@ -289,8 +508,9 @@ function Documentos({ toast }) {
         } else if (periodo === 'mes') {
           if (dataDoc.getMonth() !== agora.getMonth() || dataDoc.getFullYear() !== agora.getFullYear()) return false
         } else if (periodo === 'custom') {
+          // datas do campo são locais (AAAA-MM-DD): o fim vale o dia inteiro
           if (customInicio && dataDoc < new Date(`${customInicio}T00:00:00`)) return false
-          if (customFim && dataDoc > new Date(`${customFim}T23:59:59`)) return false
+          if (customFim && dataDoc > new Date(`${customFim}T23:59:59.999`)) return false
         }
       }
       return true
@@ -300,14 +520,16 @@ function Documentos({ toast }) {
   const kpis = useMemo(() => {
     let totalEmitido = 0
     let autorizados = 0
+    let testes = 0
     let contingenciasCount = 0
     let atrasadasCount = 0
     let falhasCount = 0
     for (const d of docs) {
-      if (['autorizado', 'validado_localmente'].includes(d.status)) {
+      // nota de homologação não soma no faturamento fiscal
+      if (d.status === 'autorizado' && d.ambiente === 'producao') {
         totalEmitido += Number(d.valorTotal || 0)
         autorizados += 1
-      }
+      } else if (['autorizado', 'validado_localmente'].includes(d.status)) testes += 1
       if (d.status === 'contingencia') {
         contingenciasCount += 1
         if (d.contingenciaAtrasada) atrasadasCount += 1
@@ -316,7 +538,7 @@ function Documentos({ toast }) {
         falhasCount += 1
       }
     }
-    return { totalEmitido, autorizados, contingenciasCount, atrasadasCount, falhasCount }
+    return { totalEmitido, autorizados, testes, contingenciasCount, atrasadasCount, falhasCount }
   }, [docs])
 
   const contingencias = docs.filter((d) => d.status === 'contingencia')
@@ -327,20 +549,46 @@ function Documentos({ toast }) {
   return <div style={{ display: 'grid', gap: 16 }}>
     <section className="dadm-card">
       <h2>Vendas pagas sem nota</h2>
-      <Table caption="Vendas sem nota" rows={vendas.map((v) => ({ ...v, id: `${v.origem}:${v.origemId}` }))} empty="Nenhuma venda pendente de nota." columns={[
-        { key: 'd', label: 'Venda', render: (v) => <div><strong>{v.descricao}</strong><div className="dadm-muted">{v.origem === 'bar_comanda' ? 'Bar' : v.origem === 'barbearia_comanda' ? 'Barbearia' : 'Loja online'}{v.data ? ` · ${dateTime(v.data)}` : ''}</div></div> },
+      {vendas.length > 0 && <div className="dadm-actions" style={{ marginBottom: 10 }}>
+        <button type="button" className="c360-btn primary" disabled={Boolean(enviando) || !marcadas.size} onClick={() => emitirLote(vendas.filter((v) => marcadas.has(idVenda(v))))}>Emitir marcadas ({marcadas.size})</button>
+        <button type="button" className="c360-btn ghost" disabled={Boolean(enviando)} onClick={() => emitirLote(vendas)}>Emitir todas ({Math.min(vendas.length, 50)})</button>
+      </div>}
+      <Table caption="Vendas sem nota" rows={vendas.map((v) => ({ ...v, id: idVenda(v) }))} empty="Nenhuma venda pendente de nota." columns={[
+        { key: 'm', label: <input type="checkbox" aria-label="Marcar todas as vendas" checked={vendas.length > 0 && vendas.every((v) => marcadas.has(idVenda(v)))} onChange={(e) => setMarcadas(e.target.checked ? new Set(vendas.map(idVenda)) : new Set())} />, render: (v) => <input type="checkbox" aria-label={`Marcar ${v.descricao}`} checked={marcadas.has(idVenda(v))} onChange={() => setMarcadas((atual) => { const n = new Set(atual); if (n.has(idVenda(v))) n.delete(idVenda(v)); else n.add(idVenda(v)); return n })} /> },
+        { key: 'd', label: 'Venda', render: (v) => <div><strong>{v.descricao}</strong><div className="dadm-muted">{ORIGEM[v.origem] || v.origem}{v.data ? ` · ${dateTime(v.data)}` : ''}</div></div> },
         { key: 'v', label: 'Valor', align: 'right', render: (v) => (v.valor == null ? '—' : money(v.valor)) },
         { key: 'a', label: '', render: (v) => <div className="dadm-actions" style={{ justifyContent: 'flex-end' }}>
           <button type="button" className="c360-btn ghost" disabled={Boolean(enviando)} onClick={() => emitir({ modelo: '65', origem: v.origem, origemId: v.origemId, ...(contingenciaAuto ? { contingenciaOffline: true } : {}) }, v.id)}>Emitir NFC-e</button>
-          {v.origem === 'barbearia_comanda' && <button type="button" className="c360-btn ghost" disabled={Boolean(enviando)} onClick={() => emitir({ modelo: 'nfse', origem: v.origem, origemId: v.origemId }, `${v.id}:nfse`)}>Emitir NFS-e</button>}
+          {v.origem === 'barbearia_comanda' && <button type="button" className="c360-btn ghost" disabled={Boolean(enviando)} onClick={() => emitir({ modelo: 'nfse', origem: v.origem, origemId: v.origemId }, `${v.id}:nfse`)}>Emitir NFS-e (serviços)</button>}
         </div> },
       ]} />
       <label className="dadm-muted"><input type="checkbox" checked={contingenciaAuto} onChange={(e) => setContingenciaAuto(e.target.checked)} /> Se a SEFAZ não responder, emitir a NFC-e em contingência offline (transmitir depois, em até 24 h)</label>
+      {resultadoLote && resultadoLote.falhas > 0 && <div role="status">
+        <p className="dadm-note warn">Vendas do último lote que não saíram:</p>
+        <Table caption="Falhas do lote" rows={resultadoLote.resultados.filter((r) => !r.ok).map((r) => ({ ...r, id: `${r.origem}:${r.origemId}` }))} columns={[
+          { key: 'v', label: 'Venda', render: (r) => `${ORIGEM[r.origem] || r.origem} · ${String(r.origemId).slice(0, 8)}` },
+          { key: 'e', label: 'Motivo', render: (r) => r.erro || (r.mensagens || []).map((m) => m.mensagem).join(' · ') || r.status },
+        ]} />
+      </div>}
       <div className="dadm-actions">
-        <button type="button" className="c360-btn ghost" onClick={() => setNfeAvulsa({ modelo: '65', descricao: '', ncm: '33059000', cfop: '5102', csosn: '102', quantidade: '1', valorUnitario: '', cpf: '', nome: '', chave: chave() })}>+ NFC-e / NF-e avulsa</button>
         <button type="button" className="c360-btn ghost" onClick={() => setNfse({ descricao: '', fonteId: '', valor: '', cpf: '', nome: '', chave: chave() })}>+ NFS-e de serviço</button>
+        <button type="button" className="c360-btn ghost" onClick={() => setAvulsa({ descricao: '', ncm: '', cfop: '5102', csosn: '102', quantidade: '1', valorUnitario: '', cpf: '', chave: chave() })}>+ NFC-e avulsa</button>
+        <button type="button" className="c360-btn ghost" onClick={() => setNfe(nfeVazia())}>+ NF-e (com destinatário)</button>
       </div>
     </section>
+    {automatica && <section className="dadm-card">
+      <h2>Emissão automática</h2>
+      <p className="dadm-muted">Ligada, o sistema emite a NFC-e sozinho a cada poucos minutos para as vendas pagas a partir de agora (as anteriores continuam na lista acima) e transmite as contingências pendentes.</p>
+      <div className="dadm-filters">
+        <label className="dadm-muted"><input type="checkbox" aria-label="Emissão automática ligada" checked={automatica.emissaoAutomatica} onChange={(e) => salvarAutomatica({ emissaoAutomatica: e.target.checked })} /> Emitir automaticamente</label>
+        {[['loja_pedido', 'Loja online'], ['barbearia_comanda', 'Produtos das comandas da barbearia'], ['bar_comanda', 'Bar']].map(([id, rotulo]) => <label key={id} className="dadm-muted"><input type="checkbox" aria-label={`Origem ${rotulo}`} checked={(automatica.origens || []).includes(id)} onChange={(e) => {
+          const origens = e.target.checked ? [...new Set([...(automatica.origens || []), id])] : (automatica.origens || []).filter((o) => o !== id)
+          if (origens.length) salvarAutomatica({ origens })
+        }} /> {rotulo}</label>)}
+      </div>
+      {automatica.emissaoAutomatica && automatica.desde && <p className="dadm-muted">Valendo para vendas desde {dateTime(automatica.desde)}.</p>}
+      {automatica.ultimaRodada && <p className={`dadm-note ${automatica.ultimoResumo?.erros?.length ? 'warn' : ''}`}>Última rodada {dateTime(automatica.ultimaRodada)}: {automatica.ultimoResumo?.emitidas || 0} emitida(s), {automatica.ultimoResumo?.falhas || 0} com problema.{automatica.ultimoResumo?.erros?.length ? ` ${automatica.ultimoResumo.erros.slice(0, 3).join(' · ')}` : ''}</p>}
+    </section>}
     {contingencias.length > 0 && <section className="dadm-card">
       <h2>Contingência offline</h2>
       <p className={`dadm-note ${atrasadas ? 'danger' : 'warn'}`}>{contingencias.length} NFC-e em contingência aguardando transmissão{atrasadas ? `; ${atrasadas} passaram do prazo de 24 horas` : ''}.</p>
@@ -357,9 +605,9 @@ function Documentos({ toast }) {
 
       <div className="dadm-kpis" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 12, marginBottom: 18 }}>
         <div className="dadm-kpi" style={{ padding: 14, background: 'var(--surface, rgba(255,255,255,0.03))', borderRadius: 10, border: '1px solid var(--border)' }}>
-          <div className="dadm-kpi-sub" style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600 }}>Total emitido</div>
+          <div className="dadm-kpi-sub" style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600 }}>Total emitido (produção)</div>
           <div className="dadm-kpi-val" style={{ fontSize: 20, fontWeight: 800, color: '#14b87a', margin: '4px 0' }}>{money(kpis.totalEmitido)}</div>
-          <div className="dadm-muted" style={{ fontSize: 12 }}>{kpis.autorizados} nota(s) válida(s)</div>
+          <div className="dadm-muted" style={{ fontSize: 12 }}>{kpis.autorizados} nota(s) válida(s){kpis.testes ? ` · ${kpis.testes} de homologação` : ''}</div>
         </div>
         <div className="dadm-kpi" style={{ padding: 14, background: 'var(--surface, rgba(255,255,255,0.03))', borderRadius: 10, border: '1px solid var(--border)' }}>
           <div className="dadm-kpi-sub" style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600 }}>Contingência offline</div>
@@ -433,12 +681,14 @@ function Documentos({ toast }) {
       <Table caption="Documentos fiscais" rows={docsFiltrados} empty="Nenhum documento ainda." columns={[
         { key: 'n', label: 'Documento', render: (d) => <div><strong>{MODELO[d.modelo]} {d.serie}/{d.numero}</strong><div className="dadm-muted">{dateTime(d.criadoEm)}{d.chave ? ` · ${d.chave}` : ''}</div></div> },
         { key: 'v', label: 'Valor', align: 'right', render: (d) => money(d.valorTotal) },
-        { key: 's', label: 'Situação', render: (d) => <div><Badge tone={STATUS[d.status]?.[1]}>{STATUS[d.status]?.[0] || d.status}</Badge>{d.contingenciaAtrasada && <> <Badge tone="danger">prazo de 24 h vencido</Badge></>}{d.mensagens?.length > 0 && <div className="dadm-muted">{d.mensagens.map((m) => m.mensagem).join(' · ')}</div>}</div> },
+        { key: 's', label: 'Situação', render: (d) => <div><Badge tone={STATUS[d.status]?.[1]}>{rotuloStatus(d)}</Badge>{d.contingenciaAtrasada && <> <Badge tone="danger">prazo de 24 h vencido</Badge></>}{d.mensagens?.length > 0 && <div className="dadm-muted">{d.mensagens.map((m) => m.mensagem).join(' · ')}</div>}</div> },
         { key: 'a', label: '', render: (d) => <div className="dadm-actions">
           {d.temXml && <button type="button" className="c360-btn ghost" onClick={() => baixarXml(d)}>XML</button>}
           {d.temXml && d.modelo !== 'nfse' && <button type="button" className="c360-btn ghost" onClick={() => imprimirDanfe(d)}>Imprimir DANFE</button>}
           {d.modelo === '65' && d.status === 'falha_comunicacao' && <button type="button" className="c360-btn ghost" disabled={Boolean(enviando)} onClick={() => emContingencia(d)}>Emitir em contingência</button>}
-          {['autorizado', 'validado_localmente'].includes(d.status) && <button type="button" className="c360-btn ghost" onClick={() => setCancelando({ doc: d, justificativa: '' })}>Cancelar</button>}
+          {d.modelo === '55' && d.status === 'falha_comunicacao' && <button type="button" className="c360-btn ghost" disabled={Boolean(enviando)} onClick={() => setSvcDoc({ doc: d, justificativa: 'SEFAZ de origem sem resposta: falha de comunicação na autorização da NF-e' })}>Emitir em SVC</button>}
+          {d.modelo === '55' && d.status === 'autorizado' && <button type="button" className="c360-btn ghost" onClick={() => setCce({ doc: d, texto: '' })}>Carta de correção</button>}
+          {['autorizado', 'validado_localmente'].includes(d.status) && <button type="button" className="c360-btn ghost" onClick={() => setCancelando({ doc: d, justificativa: '' })}>Cancelar nota</button>}
           {['rejeitado', 'falha_comunicacao', 'enviando'].includes(d.status) && <button type="button" className="c360-btn ghost" disabled={Boolean(enviando)} onClick={() => emitir({ modelo: d.modelo, origem: d.origem, ...(d.origemId ? { origemId: d.origemId } : {}), idempotencia: d.idempotencia }, d.id)}>Tentar de novo</button>}
         </div> },
       ]} />
@@ -447,6 +697,44 @@ function Documentos({ toast }) {
       actions={<><button type="button" className="c360-btn ghost" onClick={() => setCancelando(null)}>Voltar</button><button type="submit" className="c360-btn primary" disabled={(cancelando?.justificativa || '').trim().length < 15}>Cancelar documento</button></>}>
       {cancelando && <label className="c360-field">Justificativa (mínimo 15 caracteres)<textarea className="c360-input" rows={3} maxLength={255} value={cancelando.justificativa} onChange={(e) => setCancelando({ ...cancelando, justificativa: e.target.value })} /></label>}
     </Dialog>
+    <Dialog open={Boolean(cce)} title="Carta de correção (CC-e)" labelId="fis-cce" onClose={() => setCce(null)} onSubmit={enviarCce}
+      actions={<><button type="button" className="c360-btn ghost" onClick={() => setCce(null)}>Voltar</button><button type="submit" className="c360-btn primary" disabled={Boolean(enviando) || (cce?.texto || '').trim().length < 15}>Registrar carta</button></>}>
+      {cce && <div style={{ display: 'grid', gap: 10 }}>
+        <p className="dadm-muted">NF-e {cce.doc.serie}/{cce.doc.numero}. A carta corrige dados que não mudam o imposto, o valor, a quantidade, as partes nem a data. Cada nova carta substitui a anterior: escreva a correção completa.</p>
+        <label className="c360-field">Correção (15 a 1000 caracteres)<textarea className="c360-input" rows={4} maxLength={1000} value={cce.texto} onChange={(e) => setCce({ ...cce, texto: e.target.value })} /></label>
+      </div>}
+    </Dialog>
+    <Dialog open={Boolean(svcDoc)} title="Emitir em contingência SVC" labelId="fis-svc" onClose={() => setSvcDoc(null)} onSubmit={enviarSvc}
+      actions={<><button type="button" className="c360-btn ghost" onClick={() => setSvcDoc(null)}>Voltar</button><button type="submit" className="c360-btn primary" disabled={Boolean(enviando) || (svcDoc?.justificativa || '').trim().length < 15}>Emitir em SVC</button></>}>
+      {svcDoc && <div style={{ display: 'grid', gap: 10 }}>
+        <p className="dadm-muted">A NF-e {svcDoc.doc.serie}/{svcDoc.doc.numero} será assinada de novo e enviada à SEFAZ Virtual de Contingência (MT usa a SVC-RS). Se a emissão normal chegou a ser autorizada, ela prevalece.</p>
+        <label className="c360-field">Justificativa (15 a 256 caracteres)<textarea className="c360-input" rows={2} maxLength={256} value={svcDoc.justificativa} onChange={(e) => setSvcDoc({ ...svcDoc, justificativa: e.target.value })} /></label>
+      </div>}
+    </Dialog>
+    <Dialog open={Boolean(avulsa)} title="NFC-e avulsa" labelId="fis-avulsa" onClose={() => setAvulsa(null)}
+      onSubmit={() => emitir({
+        modelo: '65', origem: 'manual', idempotencia: `manual:${avulsa.chave}`, ...(contingenciaAuto ? { contingenciaOffline: true } : {}),
+        itens: [{ fonte: 'est_item', fonteId: `avulso-${avulsa.chave}`, descricao: avulsa.descricao.trim(), quantidade: Number(String(avulsa.quantidade).replace(',', '.')) || 1, valorUnitario: Number(String(avulsa.valorUnitario).replace(',', '.')),
+          classificacao: { tipo: 'produto', ncm: soDig(avulsa.ncm), cfop: soDig(avulsa.cfop), csosn: avulsa.csosn } }],
+        destinatario: soDig(avulsa.cpf).length === 11 ? { cpf: soDig(avulsa.cpf), nome: 'CONSUMIDOR' } : null,
+      }, 'avulsa')}
+      actions={<><button type="button" className="c360-btn ghost" onClick={() => setAvulsa(null)}>Voltar</button><button type="submit" className="c360-btn primary" disabled={Boolean(enviando) || !avulsa || avulsa.descricao.trim().length < 2 || soDig(avulsa.ncm).length !== 8 || soDig(avulsa.cfop).length !== 4 || !(Number(String(avulsa.valorUnitario).replace(',', '.')) > 0)}>Emitir NFC-e</button></>}>
+      {avulsa && <div style={{ display: 'grid', gap: 10 }}>
+        <p className="dadm-muted">Venda de balcão sem venda no sistema. A classificação vai informada aqui (para o Simples Nacional; no regime normal, classifique o item na aba Classificação e emita pela venda).</p>
+        <label className="c360-field">Descrição do produto<input className="c360-input" aria-label="Descrição da NFC-e avulsa" value={avulsa.descricao} onChange={(e) => setAvulsa({ ...avulsa, descricao: e.target.value })} /></label>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.4fr', gap: 10 }}>
+          <label className="c360-field">NCM (8 dígitos)<input className="c360-input" aria-label="NCM da NFC-e avulsa" inputMode="numeric" value={avulsa.ncm} onChange={(e) => setAvulsa({ ...avulsa, ncm: e.target.value })} /></label>
+          <label className="c360-field">CFOP<input className="c360-input" aria-label="CFOP da NFC-e avulsa" inputMode="numeric" value={avulsa.cfop} onChange={(e) => setAvulsa({ ...avulsa, cfop: e.target.value })} /></label>
+          <label className="c360-field">CSOSN<select className="c360-input" aria-label="CSOSN da NFC-e avulsa" value={avulsa.csosn} onChange={(e) => setAvulsa({ ...avulsa, csosn: e.target.value })}>{CSOSN.filter(([c]) => c !== '500').map(([c, r]) => <option key={c} value={c}>{r}</option>)}</select></label>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.4fr', gap: 10 }}>
+          <label className="c360-field">Quantidade<input className="c360-input" aria-label="Quantidade da NFC-e avulsa" inputMode="decimal" value={avulsa.quantidade} onChange={(e) => setAvulsa({ ...avulsa, quantidade: e.target.value })} /></label>
+          <label className="c360-field">Valor unitário (R$)<input className="c360-input" aria-label="Valor da NFC-e avulsa" inputMode="decimal" value={avulsa.valorUnitario} onChange={(e) => setAvulsa({ ...avulsa, valorUnitario: e.target.value })} /></label>
+          <label className="c360-field">CPF na nota (opcional)<input className="c360-input" aria-label="CPF da NFC-e avulsa" inputMode="numeric" value={avulsa.cpf} onChange={(e) => setAvulsa({ ...avulsa, cpf: e.target.value })} /></label>
+        </div>
+      </div>}
+    </Dialog>
+    <NfeDialog nfe={nfe} setNfe={setNfe} vendas={vendas} enviando={enviando} onEnviar={enviarNfe} />
     <Dialog open={Boolean(nfse)} title="NFS-e de serviço" labelId="fis-nfse" onClose={() => setNfse(null)}
       onSubmit={() => emitir({ modelo: 'nfse', origem: 'manual', idempotencia: `manual:${nfse.chave}`, itens: [{ fonte: 'servico', fonteId: nfse.fonteId, descricao: nfse.descricao, quantidade: 1, valorUnitario: Number(String(nfse.valor).replace(',', '.')) }], destinatario: nfse.cpf ? { cpf: nfse.cpf, nome: nfse.nome } : null }, 'nfse')}
       actions={<><button type="button" className="c360-btn ghost" onClick={() => setNfse(null)}>Voltar</button><button type="submit" className="c360-btn primary" disabled={Boolean(enviando)}>Emitir NFS-e</button></>}>
@@ -460,44 +748,138 @@ function Documentos({ toast }) {
         </div>
       </div>}
     </Dialog>
-    <Dialog open={Boolean(nfeAvulsa)} title="Emitir NFC-e / NF-e avulsa" labelId="fis-nfe-avulsa" onClose={() => setNfeAvulsa(null)}
-      onSubmit={() => emitir({
-        modelo: nfeAvulsa.modelo,
-        origem: 'manual',
-        idempotencia: `manual:${nfeAvulsa.chave}`,
-        ...(contingenciaAuto && nfeAvulsa.modelo === '65' ? { contingenciaOffline: true } : {}),
-        itens: [{
-          fonte: 'est_item',
-          fonteId: 'avulso-1',
-          descricao: nfeAvulsa.descricao,
-          quantidade: Number(nfeAvulsa.quantidade) || 1,
-          valorUnitario: Number(String(nfeAvulsa.valorUnitario).replace(',', '.')),
-          classificacao: { tipo: 'produto', ncm: nfeAvulsa.ncm || '33059000', cfop: nfeAvulsa.cfop || '5102', csosn: nfeAvulsa.csosn || '102', cstIcms: '00', aliquotaIcms: 0 },
-        }],
-        destinatario: nfeAvulsa.cpf ? { cpf: nfeAvulsa.cpf, nome: nfeAvulsa.nome || 'CONSUMIDOR' } : null,
-      }, 'nfe-avulsa')}
-      actions={<><button type="button" className="c360-btn ghost" onClick={() => setNfeAvulsa(null)}>Voltar</button><button type="submit" className="c360-btn primary" disabled={Boolean(enviando)}>Emitir {nfeAvulsa?.modelo === '55' ? 'NF-e' : 'NFC-e'}</button></>}>
-      {nfeAvulsa && <div style={{ display: 'grid', gap: 10 }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 10 }}>
-          <label className="c360-field">Modelo<select className="c360-input" value={nfeAvulsa.modelo} onChange={(e) => setNfeAvulsa({ ...nfeAvulsa, modelo: e.target.value })}><option value="65">NFC-e (65 · Consumidor)</option><option value="55">NF-e (55 · Completa)</option></select></label>
-          <label className="c360-field">Descrição do produto/item<input className="c360-input" required minLength={2} value={nfeAvulsa.descricao} onChange={(e) => setNfeAvulsa({ ...nfeAvulsa, descricao: e.target.value })} placeholder="ex.: Pomada Modeladora Matte" /></label>
+  </div>
+}
+
+const soDig = (v) => String(v || '').replace(/\D/g, '')
+const itemNfeVazio = () => ({ fonte: 'loja_variante', fonteId: '', descricao: '', quantidade: '1', valor: '' })
+const nfeVazia = () => ({
+  chave: chave(), venda: '', itens: [itemNfeVazio()], documento: '', nome: '', indIEDest: '9', ie: '', email: '', consumidorFinal: true,
+  logradouro: '', numero: '', complemento: '', bairro: '', cidade: '', uf: 'MT', codigoMunicipio: '', cep: '', aliquotaDestino: '', fcpDestino: '',
+})
+function nfeValida(n) {
+  if (!n) return false
+  const doc = soDig(n.documento)
+  if (![11, 14].includes(doc.length) || n.nome.trim().length < 2) return false
+  if (!(n.logradouro.trim() && n.numero.trim() && n.bairro.trim() && n.cidade.trim() && soDig(n.codigoMunicipio).length === 7 && soDig(n.cep).length === 8)) return false
+  if (n.indIEDest === '1' && !soDig(n.ie)) return false
+  if (!n.venda && !n.itens.every((i) => i.descricao.trim().length >= 2 && Number(String(i.valor).replace(',', '.')) > 0)) return false
+  if (n.uf !== 'MT' && n.consumidorFinal && n.indIEDest === '9' && !(Number(String(n.aliquotaDestino).replace(',', '.')) > 0)) return false
+  return true
+}
+
+function NfeDialog({ nfe, setNfe, vendas, enviando, onEnviar }) {
+  const n = nfe
+  const set = (k, v) => setNfe({ ...n, [k]: v })
+  const setItem = (idx, k, v) => setNfe({ ...n, itens: n.itens.map((i, j) => (j === idx ? { ...i, [k]: v } : i)) })
+  const campo = (rotulo, k, extra = {}) => <label className="c360-field">{rotulo}<input className="c360-input" value={n[k]} onChange={(e) => set(k, e.target.value)} {...extra} /></label>
+  return <Dialog open={Boolean(n)} title="NF-e (modelo 55)" labelId="fis-nfe" onClose={() => setNfe(null)} onSubmit={onEnviar}
+    actions={<><button type="button" className="c360-btn ghost" onClick={() => setNfe(null)}>Voltar</button><button type="submit" className="c360-btn primary" disabled={Boolean(enviando) || !nfeValida(n)}>Emitir NF-e</button></>}>
+    {n && <div style={{ display: 'grid', gap: 10 }}>
+      <label className="c360-field">Venda<select className="c360-input" aria-label="Venda da NF-e" value={n.venda} onChange={(e) => set('venda', e.target.value)}>
+        <option value="">Itens informados aqui (sem venda)</option>
+        {vendas.map((v) => <option key={`${v.origem}|${v.origemId}`} value={`${v.origem}|${v.origemId}`}>{v.descricao} · {money(v.valor)}</option>)}
+      </select></label>
+      {!n.venda && <fieldset className="c360-field" style={{ border: 0, padding: 0, display: 'grid', gap: 8 }}>
+        <legend>Itens</legend>
+        {n.itens.map((i, idx) => <div key={idx} style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 2fr .6fr 1fr auto', gap: 6, alignItems: 'end' }}>
+          <label className="c360-field">Cadastro<select className="c360-input" value={i.fonte} onChange={(e) => setItem(idx, 'fonte', e.target.value)}><option value="loja_variante">Loja (variante)</option><option value="est_item">Estoque</option><option value="bar_produto">Bar</option></select></label>
+          <label className="c360-field">Código<input className="c360-input" aria-label={`Código do item ${idx + 1}`} value={i.fonteId} onChange={(e) => setItem(idx, 'fonteId', e.target.value)} /></label>
+          <label className="c360-field">Descrição<input className="c360-input" aria-label={`Descrição do item ${idx + 1}`} value={i.descricao} onChange={(e) => setItem(idx, 'descricao', e.target.value)} /></label>
+          <label className="c360-field">Qtd.<input className="c360-input" inputMode="decimal" aria-label={`Quantidade do item ${idx + 1}`} value={i.quantidade} onChange={(e) => setItem(idx, 'quantidade', e.target.value)} /></label>
+          <label className="c360-field">Valor unit. (R$)<input className="c360-input" inputMode="decimal" aria-label={`Valor do item ${idx + 1}`} value={i.valor} onChange={(e) => setItem(idx, 'valor', e.target.value)} /></label>
+          <button type="button" className="c360-btn ghost" disabled={n.itens.length === 1} aria-label={`Remover item ${idx + 1}`} onClick={() => setNfe({ ...n, itens: n.itens.filter((_, j) => j !== idx) })}>Remover</button>
+        </div>)}
+        <div><button type="button" className="c360-btn ghost" onClick={() => setNfe({ ...n, itens: [...n.itens, itemNfeVazio()] })}>+ Item</button></div>
+        <p className="dadm-muted">A classificação fiscal vem do cadastro (aba Classificação), pelo código do item.</p>
+      </fieldset>}
+      <h3 style={{ margin: '6px 0 0' }}>Destinatário</h3>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 10 }}>
+        {campo('CPF ou CNPJ', 'documento', { inputMode: 'numeric', required: true })}
+        {campo('Nome / razão social', 'nome', { required: true })}
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr 1.4fr', gap: 10 }}>
+        <label className="c360-field">Contribuinte do ICMS<select className="c360-input" aria-label="Contribuinte do ICMS" value={n.indIEDest} onChange={(e) => set('indIEDest', e.target.value)}>
+          <option value="9">Não contribuinte</option><option value="1">Contribuinte (com IE)</option><option value="2">Contribuinte isento de IE</option>
+        </select></label>
+        {n.indIEDest === '1' ? campo('Inscrição estadual', 'ie', { inputMode: 'numeric', required: true }) : <span />}
+        {campo('E-mail (opcional)', 'email', { type: 'email' })}
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '2fr .7fr 1.3fr', gap: 10 }}>
+        {campo('Logradouro', 'logradouro', { required: true })}
+        {campo('Número', 'numero', { required: true })}
+        {campo('Complemento', 'complemento')}
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 1.3fr .6fr 1fr 1fr', gap: 10 }}>
+        {campo('Bairro', 'bairro', { required: true })}
+        {campo('Cidade', 'cidade', { required: true })}
+        <label className="c360-field">UF<select className="c360-input" aria-label="UF do destinatário" value={n.uf} onChange={(e) => set('uf', e.target.value)}>{UFS.map((u) => <option key={u}>{u}</option>)}</select></label>
+        {campo('Código IBGE', 'codigoMunicipio', { inputMode: 'numeric', required: true, placeholder: '7 dígitos' })}
+        {campo('CEP', 'cep', { inputMode: 'numeric', required: true })}
+      </div>
+      <label className="dadm-muted"><input type="checkbox" checked={n.consumidorFinal} onChange={(e) => set('consumidorFinal', e.target.checked)} /> Consumidor final (não vai revender)</label>
+      {n.uf !== 'MT' && <p className="dadm-note warn">Venda para fora de MT: o CFOP vira interestadual (6xxx){n.consumidorFinal && n.indIEDest === '9' ? ' e, no regime normal, a nota leva o DIFAL da UF de destino.' : '.'}</p>}
+      {n.uf !== 'MT' && n.consumidorFinal && n.indIEDest === '9' && <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+        {campo(`Alíquota interna do ICMS em ${n.uf} (%)`, 'aliquotaDestino', { inputMode: 'decimal', required: true })}
+        {campo(`FCP de ${n.uf} (%)`, 'fcpDestino', { inputMode: 'decimal', placeholder: '0' })}
+      </div>}
+    </div>}
+  </Dialog>
+}
+
+const numeracaoVazia = () => ({ novo: true, emitenteId: '', modelo: '65', serie: '1', ambiente: 'homologacao', proximo: '', padrao: true })
+function Numeracao({ toast }) {
+  const [lista, setLista] = useState([])
+  const [emitentes, setEmitentes] = useState([])
+  const [form, setForm] = useState(null)
+  const [confirmar, setConfirmar] = useState(null)
+  const [enviando, setEnviando] = useState(false)
+  const carregar = useCallback(async () => {
+    try { const [n, e] = await Promise.all([api.get(`${BASE}/numeracao`), api.get(`${BASE}/emitentes`)]); setLista(Array.isArray(n) ? n : []); setEmitentes(Array.isArray(e) ? e : []) } catch (error) { toast(error.message, 'error') }
+  }, [toast])
+  useEffect(() => { carregar() }, [carregar])
+  const idLinha = (l) => `${l.emitenteId}:${l.ambiente}:${l.modelo}:${l.serie}`
+  async function salvar() {
+    if (enviando || !form) return
+    setEnviando(true)
+    try {
+      await api.put(`${BASE}/numeracao`, { emitenteId: form.emitenteId || emitentes[0]?.id, modelo: form.modelo, serie: Number(form.serie), ambiente: form.ambiente, ...(String(form.proximo).trim() ? { proximo: Number(form.proximo) } : {}), padrao: Boolean(form.padrao) })
+      toast('Numeração salva.', 'success'); setForm(null); carregar()
+    } catch (error) { toast(error.message, 'error') } finally { setEnviando(false) }
+  }
+  const excluir = (l) => setConfirmar({
+    titulo: 'Excluir série', texto: `Excluir a série ${l.serie} de ${MODELO[l.modelo]} (${l.ambiente === 'producao' ? 'produção' : 'homologação'})? Só série sem nenhum documento pode ser excluída.`,
+    acao: async () => { try { await api.delete(`${BASE}/numeracao?${new URLSearchParams({ emitenteId: l.emitenteId, modelo: l.modelo, serie: String(l.serie), ambiente: l.ambiente })}`); toast('Série excluída.', 'success'); carregar() } catch (error) { toast(error.message, 'error') } },
+  })
+  return <section className="dadm-card">
+    <h2>Numeração das notas</h2>
+    <p className="dadm-muted">Série e próximo número de cada modelo, por ambiente. Ao entrar em produção vindo de outro emissor (ou da NFS-e antiga da barbearia), continue a numeração de onde ele parou: a SEFAZ e a Sefin recusam número repetido. O número só anda para a frente.</p>
+    <div className="dadm-actions" style={{ marginBottom: 10 }}><button type="button" className="c360-btn primary" disabled={!emitentes.length} onClick={() => setForm({ ...numeracaoVazia(), emitenteId: emitentes[0]?.id || '' })}>+ Série</button></div>
+    {!emitentes.length && <p className="dadm-note warn">Cadastre o emitente antes de configurar a numeração.</p>}
+    <Table caption="Numeração" rows={lista.map((l) => ({ ...l, id: idLinha(l) }))} empty="Nenhuma série configurada: a primeira nota usa a série 1, a partir do número 1." columns={[
+      { key: 'm', label: 'Série', render: (l) => <div><strong>{MODELO[l.modelo]} série {l.serie}</strong>{l.padrao && <> <Badge tone="info">padrão</Badge></>}<div className="dadm-muted">{l.emitente || ''}{l.cnpj ? ` · ${l.cnpj}` : ''}</div></div> },
+      { key: 'a', label: 'Ambiente', render: (l) => <Badge tone={l.ambiente === 'producao' ? 'success' : 'warning'}>{l.ambiente === 'producao' ? 'Produção' : 'Homologação'}</Badge> },
+      { key: 'p', label: 'Próximo número', align: 'right', render: (l) => <div><strong>{l.proximo}</strong><div className="dadm-muted">{l.ultimoUsado ? `último usado: ${l.ultimoUsado}` : 'nenhum usado'}</div></div> },
+      { key: 'x', label: '', render: (l) => <div className="dadm-actions">
+        <button type="button" className="c360-btn ghost" onClick={() => setForm({ novo: false, emitenteId: l.emitenteId, modelo: l.modelo, serie: String(l.serie), ambiente: l.ambiente, proximo: String(l.proximo), padrao: l.padrao })}>Editar</button>
+        {!l.ultimoUsado && <button type="button" className="c360-btn ghost" onClick={() => excluir(l)}>Excluir</button>}
+      </div> },
+    ]} />
+    <Dialog open={Boolean(form)} title={form?.novo ? 'Nova série' : 'Editar série'} labelId="fis-num" onClose={() => setForm(null)} onSubmit={salvar}
+      actions={<><button type="button" className="c360-btn ghost" onClick={() => setForm(null)}>Voltar</button><button type="submit" className="c360-btn primary" disabled={enviando || !/^\d{1,3}$/.test(String(form?.serie || ''))}>Salvar</button></>}>
+      {form && <div style={{ display: 'grid', gap: 10 }}>
+        {emitentes.length > 1 && <label className="c360-field">Emitente<select className="c360-input" aria-label="Emitente da série" disabled={!form.novo} value={form.emitenteId} onChange={(e) => setForm({ ...form, emitenteId: e.target.value })}>{emitentes.map((e) => <option key={e.id} value={e.id}>{e.razaoSocial} · {e.cnpj}</option>)}</select></label>}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 10 }}>
+          <label className="c360-field">Modelo<select className="c360-input" aria-label="Modelo da série" disabled={!form.novo} value={form.modelo} onChange={(e) => setForm({ ...form, modelo: e.target.value })}><option value="65">NFC-e (65)</option><option value="55">NF-e (55)</option><option value="nfse">NFS-e</option></select></label>
+          <label className="c360-field">Ambiente<select className="c360-input" aria-label="Ambiente da série" disabled={!form.novo} value={form.ambiente} onChange={(e) => setForm({ ...form, ambiente: e.target.value })}><option value="homologacao">Homologação</option><option value="producao">Produção</option></select></label>
+          <label className="c360-field">Série<input className="c360-input" aria-label="Número da série" inputMode="numeric" disabled={!form.novo} value={form.serie} onChange={(e) => setForm({ ...form, serie: e.target.value })} /></label>
+          <label className="c360-field">Próximo número<input className="c360-input" aria-label="Próximo número" inputMode="numeric" value={form.proximo} placeholder="1" onChange={(e) => setForm({ ...form, proximo: e.target.value })} /></label>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
-          <label className="c360-field">NCM (8 dígitos)<input className="c360-input" required inputMode="numeric" maxLength={8} value={nfeAvulsa.ncm} onChange={(e) => setNfeAvulsa({ ...nfeAvulsa, ncm: e.target.value })} /></label>
-          <label className="c360-field">CFOP<input className="c360-input" required inputMode="numeric" maxLength={4} value={nfeAvulsa.cfop} onChange={(e) => setNfeAvulsa({ ...nfeAvulsa, cfop: e.target.value })} /></label>
-          <label className="c360-field">CSOSN<select className="c360-input" value={nfeAvulsa.csosn} onChange={(e) => setNfeAvulsa({ ...nfeAvulsa, csosn: e.target.value })}><option value="102">102 · sem crédito</option><option value="103">103 · isenção</option><option value="300">300 · imune</option><option value="400">400 · não tributada</option></select></label>
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 10 }}>
-          <label className="c360-field">Quantidade<input className="c360-input" required inputMode="numeric" value={nfeAvulsa.quantidade} onChange={(e) => setNfeAvulsa({ ...nfeAvulsa, quantidade: e.target.value })} /></label>
-          <label className="c360-field">Valor unitário (R$)<input className="c360-input" required inputMode="decimal" value={nfeAvulsa.valorUnitario} onChange={(e) => setNfeAvulsa({ ...nfeAvulsa, valorUnitario: e.target.value })} /></label>
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 10 }}>
-          <label className="c360-field">CPF/CNPJ do destinatário (opcional na NFC-e)<input className="c360-input" inputMode="numeric" value={nfeAvulsa.cpf} onChange={(e) => setNfeAvulsa({ ...nfeAvulsa, cpf: e.target.value })} /></label>
-          <label className="c360-field">Nome do destinatário<input className="c360-input" value={nfeAvulsa.nome} onChange={(e) => setNfeAvulsa({ ...nfeAvulsa, nome: e.target.value })} /></label>
-        </div>
+        <label className="dadm-muted"><input type="checkbox" checked={Boolean(form.padrao)} onChange={(e) => setForm({ ...form, padrao: e.target.checked })} /> Série padrão deste modelo neste ambiente</label>
       </div>}
     </Dialog>
-  </div>
+    <Confirmar pedido={confirmar} onFechar={() => setConfirmar(null)} />
+  </section>
 }
 
 function Inutilizacao({ toast }) {
@@ -532,7 +914,7 @@ function Inutilizacao({ toast }) {
       <div className="dadm-actions"><button type="submit" className="c360-btn primary" disabled={enviando || !justificativaOk || !form.numeroInicial}>Inutilizar números</button></div>
     </form>
     <Table caption="Inutilizações" rows={lista} empty="Nenhuma numeração inutilizada." columns={[
-      { key: 'f', label: 'Faixa', render: (i) => <div><strong>{MODELO[i.modelo]} série {i.serie}: {i.numeroInicial === i.numeroFinal ? i.numeroInicial : `${i.numeroInicial} a ${i.numeroFinal}`}</strong><div className="dadm-muted">{dateTime(i.criadoEm)}{i.criadoPor ? ` · ${i.criadoPor}` : ''}</div></div> },
+      { key: 'f', label: 'Faixa', render: (i) => <div><strong>{MODELO[i.modelo]} série {i.serie}: {i.numeroInicial === i.numeroFinal ? i.numeroInicial : `${i.numeroInicial} a ${i.numeroFinal}`}</strong><div className="dadm-muted">{i.ambiente === 'producao' ? 'Produção' : 'Homologação'} · {dateTime(i.criadoEm)}{i.criadoPor ? ` · ${i.criadoPor}` : ''}</div></div> },
       { key: 'j', label: 'Justificativa', render: (i) => i.justificativa },
       { key: 's', label: 'Situação', render: (i) => <div><Badge tone={STATUS_INUT[i.status]?.[1]}>{STATUS_INUT[i.status]?.[0] || i.status}</Badge>{i.protocolo && <div className="dadm-muted">Protocolo {i.protocolo}</div>}{i.mensagens?.length > 0 && <div className="dadm-muted">{i.mensagens.map((m) => m.mensagem).join(' · ')}</div>}</div> },
     ]} />
