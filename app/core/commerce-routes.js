@@ -695,7 +695,7 @@ async function normalizeWhatsappQueueStoreSelector(req) {
   if (!requestedLojaId) {
     if (isUuid(requestedEmpresaId)) {
       const firstStore = await db.queryRead(
-        `SELECT id, codigo FROM lojas WHERE empresa_id = $1 AND COALESCE(ativa, true) = true ORDER BY criado_em ASC LIMIT 1`,
+        `SELECT id, codigo FROM lojas WHERE empresa_id = $1 AND COALESCE(ativa, true) = true ORDER BY data_criacao ASC LIMIT 1`,
         [requestedEmpresaId]
       );
       if (firstStore.rows[0]) {
@@ -724,7 +724,7 @@ async function normalizeWhatsappQueueStoreSelector(req) {
   );
   if (!result.rows[0]) {
     const fallback = await db.queryRead(
-      `SELECT id FROM lojas WHERE empresa_id = $1 AND COALESCE(ativa, true) = true ORDER BY criado_em ASC LIMIT 1`,
+      `SELECT id FROM lojas WHERE empresa_id = $1 AND COALESCE(ativa, true) = true ORDER BY data_criacao ASC LIMIT 1`,
       [requestedEmpresaId]
     );
     if (fallback.rows[0]) {
