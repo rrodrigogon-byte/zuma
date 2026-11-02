@@ -1520,6 +1520,7 @@ app.use('/api/webhooks', createWhatsappAiWebhookRouter());
       if (res.rowCount > 0) console.log(`[dino-persona] Atualizado privacy_notice do canal Barbearia Dino para voz do T-Rex (${res.rowCount} linhas).`);
     }).catch((err) => console.warn('[dino-persona] erro update privacy notice:', err.message));
     clubeDb.query("UPDATE whatsapp_ai_sessions SET status = 'ativo', acao_pendente = NULL WHERE telefone LIKE '%14997462929%'").then(r => console.log('Sessoes de teste destravadas', r.rowCount)).catch(console.error);
+    clubeDb.query("UPDATE canais_integracao SET status = 'ativo', data_atualizacao = CURRENT_TIMESTAMP WHERE id = '1537d84b-2d5b-481e-9122-61284736cfc6' AND status = 'rascunho'").then(r => { if (r.rowCount > 0) console.log('[waha-gestao] Canal de Gestão da Barbearia Dino ativado com sucesso.'); }).catch(console.error);
     clubeDb.query(`SELECT id FROM empresas`).then((res) => {
       for (const row of res.rows || []) {
         a2Svc.sincronizarPedidosPendentes(clubeDb, row.id).catch((err) => console.warn('[a2] sync inicial:', err.message));

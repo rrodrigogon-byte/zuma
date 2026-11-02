@@ -209,16 +209,22 @@ export function parseWahaMessage(payload = {}, { groupId = '', sessionName = '' 
   if (!externalId) return { ignored: true, reason: 'missing_message_id', event: 'message' };
   const fromMe = data.fromMe === true || data.key?.fromMe === true;
   if (receivedSession && expectedSession && receivedSession !== expectedSession) return { ignored: true, reason: 'session_mismatch', event: 'message', externalId, remoteJid };
-  if (!remoteJid.endsWith('@g.us')) return { ignored: true, reason: 'not_group', event: 'message', externalId, remoteJid };
-  if (!allowedGroup) return { ignored: true, reason: 'waha_group_not_configured', event: 'message', externalId, remoteJid };
-  if (remoteJid !== allowedGroup) return { ignored: true, reason: 'waha_group_not_allowlisted', event: 'message', externalId, remoteJid };
+  const isGroup = remoteJid.endsWith('@g.us');
+  let phone = '';
+  if (isGroup) {
+    if (!allowedGroup) return { ignored: true, reason: 'waha_group_not_configured', event: 'message', externalId, remoteJid };
+    if (remoteJid !== allowedGroup) return { ignored: true, reason: 'waha_group_not_allowlisted', event: 'message', externalId, remoteJid };
+  } else {
+    if (allowedGroup) return { ignored: true, reason: 'not_group', event: 'message', externalId, remoteJid };
+    phone = cleanText(remoteJid.replace(/@(c\.us|s\.whatsapp\.net|lid)$/, ''), 30).replace(/\D/g, '');
+  }
   if (!text) return { ignored: true, reason: 'unsupported_content', event: 'message', externalId, remoteJid };
   return {
     ignored: false,
     event: 'MESSAGE',
     externalId,
     remoteJid,
-    phone: '',
+    phone,
     name: cleanText(data.participant || data.pushName || data.notifyName || '', 160),
     text, fromMe,
     timestamp: Number(data.timestamp || data.messageTimestamp || 0) || null, fromMe,

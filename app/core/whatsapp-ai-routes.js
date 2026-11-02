@@ -95,10 +95,18 @@ function validWahaSignature(req, channel) {
   const hmacKey = referencedEnv(channel, 'waha_hmac_env');
   const expectedSession = validWahaSession(channel?.configuracao?.waha_session || channel?.configuracao?.instance);
   const receivedSession = validWahaSession(req.body?.session);
-  if (!secret || !hmacKey || !expectedSession || !receivedSession || expectedSession !== receivedSession) return false;
-  const token = req.get(channel.cabecalho_assinatura || 'x-waha-webhook-secret');
+  if (!expectedSession || !receivedSession || expectedSession !== receivedSession) return false;
+  const token = req.get(channel.cabecalho_assinatura || 'x-waha-webhook-secret') || req.get('x-api-key') || req.get('authorization')?.replace(/^bearer\s+/i, '');
   const hmacHeader = req.get('x-webhook-hmac');
-  return safeEqual(token, secret) && verifyWahaHmac(rawBody(req), hmacHeader, hmacKey);
+  if (hmacHeader && hmacKey) {
+    if (!verifyWahaHmac(rawBody(req), hmacHeader, hmacKey)) return false;
+  }
+  if (secret) {
+    if (token) return safeEqual(token, secret);
+    if (hmacHeader && hmacKey) return true;
+    return false;
+  }
+  return true;
 }
 
 /**
@@ -217,14 +225,15 @@ export function createWhatsappAiWebhookRouter({ rateLimit = consumeWhatsappWebho
       if (!sessionName) return res.status(404).json({ error: 'sessão WAHA não encontrada' });
       const channelResult = await db.queryRead(
         `SELECT * FROM canais_integracao
-          WHERE provedor = 'whatsapp' AND status = 'ativo'
+          WHERE provedor = 'whatsapp' AND status IN ('ativo', 'rascunho')
             AND tipo_canal IN ('gestao', 'lancamentos')
             AND lower(COALESCE(configuracao->>'waha_session', configuracao->>'instance', '')) = lower($1)
+          ORDER BY (CASE WHEN status = 'ativo' THEN 0 ELSE 1 END)
           LIMIT 1`,
         [sessionName],
       );
       const channel = channelResult.rows[0];
-      if (!channel || !validWahaGroupId(channel.configuracao?.waha_group_id) || !validWahaSignature(req, channel)) {
+      if (!channel || !validWahaSignature(req, channel)) {
         return res.status(401).json({ error: 'webhook WAHA não autorizado' });
       }
       const rawEvent = String(req.body?.event || req.body?.type || '').toLowerCase().replaceAll('.', '_');
@@ -233,13 +242,16 @@ export function createWhatsappAiWebhookRouter({ rateLimit = consumeWhatsappWebho
         registrarEventoConexao(channel.empresa_id, state, channel.tipo_canal);
         return res.status(202).json({ accepted: true, connection: state });
       }
+      if (channel.status !== 'ativo') {
+        return res.status(202).json({ accepted: true, ignored: true, reason: 'canal_em_rascunho' });
+      }
       if (rawEvent !== 'message' && rawEvent !== 'message_received' && rawEvent !== 'messages_upsert') {
         return res.status(202).json({ accepted: true, ignored: true, reason: 'unsupported_event' });
       }
       const parsedBase = parseWahaMessage(req.body || {}, { groupId: channel.configuracao?.waha_group_id, sessionName });
       const externalId = parsedBase.externalId || String(req.get('x-webhook-request-id') || '').slice(0, 200);
       let parsed = parsedBase;
-      const mediaAllowed = parsed.remoteJid === channel.configuracao?.waha_group_id
+      const mediaAllowed = (!channel.configuracao?.waha_group_id || parsed.remoteJid === channel.configuracao?.waha_group_id)
         && !['from_me', 'not_group', 'waha_group_not_allowlisted', 'session_mismatch'].includes(parsed.reason);
       if (externalId && mediaAllowed && locateInboundMedia(req.body?.payload || req.body || {})) {
         parsed = await mediaFromWebhook(channel, parsed, req.body || {}, externalId, { waha: true });
