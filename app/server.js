@@ -1587,6 +1587,10 @@ app.use('/api/webhooks', createWhatsappAiWebhookRouter());
     }
     return varejoRouter(req, res, next);
   });
+  app.use(['/api/pdv/venda', '/api/pdv/vendas'], auth, requireStaff, (req, res, next) => {
+    req.url = '/venda';
+    return varejoRouter(req, res, next);
+  });
   // [kytto-bar] Bar, PDV, comandas, estoque fracionado, KDS e caixa por empresa.
   // O prefixo continua sob a trava /api/admin e a empresa é resolvida exclusivamente
   // pela membership SQL; nenhum empresaId do corpo da requisição é aceito.

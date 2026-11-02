@@ -7,6 +7,7 @@ import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import { db, save } from './db.js';
 import * as barbeariaErpKytto from './barbearia-erp-kytto.js';
+import { CATALOGO_OFICIAL_SUPERMERCADO } from './modules/varejo/servico.js';
 
 export const DINO_EMPRESA_CANONICA = 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
 export const DINO_LOJA_CANONICA = 'ab049a75-6e2e-4cc9-abbc-6fd11cdda1d8';
@@ -319,13 +320,6 @@ async function sincronizarEquipePostgres(commerceDb) {
 
 export async function provisionarVarejoDino(commerceDb) {
   try {
-    const r = await commerceDb.query(
-      `SELECT count(*) FROM est_itens WHERE empresa_id = $1`,
-      [DINO_EMPRESA_CANONICA]
-    );
-    const total = Number(r.rows?.[0]?.count || 0);
-    if (total > 0) return;
-
     const produtos = [
       { nome: 'Pomada Modeladora Efeito Matte 120g', sku: 'POM-001', ean: '7891234560012', plu: '1001', preco: 65.00, custo: 25.00, depto: 'Finalizadores', estoque: 48, pesavel: false, lote: false },
       { nome: 'Óleo para Barba Premium Hidratante 30ml', sku: 'OLE-002', ean: '7891234560029', plu: '1002', preco: 55.00, custo: 20.00, depto: 'Barba', estoque: 32, pesavel: false, lote: false },
@@ -337,17 +331,28 @@ export async function provisionarVarejoDino(commerceDb) {
       { nome: 'Perfume Masculino Dino Signature Amadeirado 100ml', sku: 'PRF-008', ean: '7891234560081', plu: '1008', preco: 180.00, custo: 70.00, depto: 'Perfumaria', estoque: 18, pesavel: false, lote: true },
       { nome: 'Café Espresso Gourmet Moído na Hora (Dose)', sku: 'CAF-009', ean: '7891234560098', plu: '1009', preco: 8.00, custo: 2.50, depto: 'Conveniência', estoque: 120, pesavel: false, lote: false },
       { nome: 'Mix de Castanhas Nobres e Frutas Secas 100g', sku: 'SNC-010', ean: '7891234560104', plu: '1010', preco: 15.00, custo: 6.50, depto: 'Conveniência', estoque: 80, pesavel: true, lote: true }
+      ,
+      ...CATALOGO_OFICIAL_SUPERMERCADO.map(c => ({
+        nome: c.nome, sku: c.sku, ean: c.ean, plu: c.plu, preco: c.precoVenda, custo: c.custoMedio,
+        depto: c.departamento, estoque: c.saldoInicial || 50, pesavel: Boolean(c.pesavel), lote: false, unidade: c.unidade || 'UN'
+      }))
     ];
 
     for (const p of produtos) {
-      const ins = await commerceDb.query(
-        `INSERT INTO est_itens (empresa_id, nome, sku, ean, plu, unidade, preco_venda, custo_medio, departamento, categoria, pesavel, controla_lote, ativo, criado_em, atualizado_em)
-         VALUES ($1, $2, $3, $4, $5, 'UN', $6, $7, $8, $8, $9, $10, true, NOW(), NOW())
-         ON CONFLICT (empresa_id, id) DO NOTHING
-         RETURNING id`,
-        [DINO_EMPRESA_CANONICA, p.nome, p.sku, p.ean, p.plu, p.preco, p.custo, p.depto, p.pesavel, p.lote]
+      const existe = await commerceDb.query(
+        `SELECT id FROM est_itens WHERE empresa_id = $1 AND (sku = $2 OR (ean IS NOT NULL AND ean = $3)) LIMIT 1`,
+        [DINO_EMPRESA_CANONICA, p.sku, p.ean]
       );
-      const itemId = ins.rows?.[0]?.id;
+      let itemId = existe.rows?.[0]?.id;
+      if (!itemId) {
+        const ins = await commerceDb.query(
+          `INSERT INTO est_itens (empresa_id, nome, sku, ean, plu, unidade, preco_venda, custo_medio, departamento, categoria, pesavel, controla_lote, ativo, criado_em, atualizado_em)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9, $10, $11, true, NOW(), NOW())
+           RETURNING id`,
+          [DINO_EMPRESA_CANONICA, p.nome, p.sku, p.ean, p.plu, p.unidade || 'UN', p.preco, p.custo, p.depto, p.pesavel, p.lote]
+        );
+        itemId = ins.rows?.[0]?.id;
+      }
       if (itemId) {
         await commerceDb.query(
           `INSERT INTO est_saldos (empresa_id, loja_id, item_id, quantidade, atualizado_em)

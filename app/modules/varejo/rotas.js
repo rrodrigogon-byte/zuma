@@ -2,6 +2,8 @@ import express from 'express';
 import * as svc from './servico.js';
 import { ErroDominio, responderErro } from '../acesso/banco.js';
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 /** /api/admin/varejo — preços por unidade, promoções, lotes, etiquetas e transferências. */
 export function createVarejoAdminRouter({ db, escopoDaRequisicao, fuso = 'America/Cuiaba' }) {
   if (!db || typeof escopoDaRequisicao !== 'function') throw new Error('createVarejoAdminRouter: db e escopoDaRequisicao são obrigatórios');
@@ -11,22 +13,39 @@ export function createVarejoAdminRouter({ db, escopoDaRequisicao, fuso = 'Americ
   const rota = (permissao, fn, status = 200) => async (req, res) => {
     try {
       const { empresaId, lojaRestrita = null } = await escopoDaRequisicao(req, permissao);
-      const pedida = String(req.query.lojaId ?? req.body?.lojaId ?? '').trim() || null;
+      let pedida = String(req.query.lojaId ?? req.query.loja_id ?? req.body?.lojaId ?? req.headers['x-loja-id'] ?? '').trim() || null;
+      if (pedida && !UUID_RE.test(pedida)) {
+        const store = await db.query(
+          `SELECT id FROM lojas WHERE empresa_id = $1 AND (lower(codigo) = lower($2) OR lower(id::text) = lower($2) OR lower(nome) = lower($2) OR lower(nome) ILIKE '%' || lower($2) || '%') AND COALESCE(ativa, true) = true LIMIT 1`,
+          [empresaId, pedida]
+        );
+        pedida = store.rows[0]?.id || null;
+      }
       if (lojaRestrita && pedida && pedida !== lojaRestrita) throw new ErroDominio('STORE_SCOPE_MISMATCH', 'Unidade fora do seu acesso', 403);
-      const lojaId = lojaRestrita || pedida;
+      let lojaId = lojaRestrita || pedida;
+      if (lojaId && !UUID_RE.test(lojaId)) lojaId = null;
       return res.status(status).json(await fn({ req, empresaId, lojaRestrita, lojaId, usuario: String(req.user?.nome || req.user?.email || 'equipe') }));
     } catch (error) { return responderErro(res, error); }
   };
   const empresaToda = (lojaRestrita, acao) => { if (lojaRestrita) throw new ErroDominio('PERMISSION_DENIED', `${acao} exige permissão na empresa toda`, 403); };
 
-  router.get('/produtos', rota('catalog.read', async ({ req, empresaId, lojaId }) => ({ produtos: await svc.listarProdutos(db, empresaId, { lojaId, q: req.query.q || '' }) })));
+  router.get('/produtos', rota('catalog.read', async ({ req, empresaId, lojaId }) => ({ produtos: await svc.listarProdutos(db, empresaId, { lojaId, q: req.query.q || req.query.busca || req.query.termo || '' }) })));
+  router.post('/produtos', rota('catalog.write', ({ req, empresaId, lojaRestrita, lojaId, usuario }) => svc.criarProduto(db, empresaId, req.body || {}, { usuario, lojaId: lojaRestrita || lojaId }), 201));
+  router.post('/catalogo/popular-oficial', rota('catalog.write', ({ empresaId, lojaId, usuario }) => svc.carregarCatalogoOficialSupermercado(db, empresaId, { lojaId, usuario })));
   // balança: como a etiqueta é montada e o arquivo de PLU para carregar nela
   router.get('/balanca/config', rota('catalog.read', ({ empresaId }) => svc.configBalanca(db, empresaId)));
   router.put('/balanca/config', rota('settings.write', ({ req, empresaId, lojaRestrita }) => { empresaToda(lojaRestrita, 'Configurar a balança'); return svc.salvarConfigBalanca(db, empresaId, req.body || {}); }));
   router.get('/balanca/exportar', async (req, res) => {
     try {
       const { empresaId, lojaRestrita = null } = await escopoDaRequisicao(req, 'catalog.read');
-      const pedida = String(req.query.lojaId || '').trim() || null;
+      let pedida = String(req.query.lojaId || req.headers['x-loja-id'] || '').trim() || null;
+      if (pedida && !UUID_RE.test(pedida)) {
+        const store = await db.query(
+          `SELECT id FROM lojas WHERE empresa_id = $1 AND (lower(codigo) = lower($2) OR lower(id::text) = lower($2) OR lower(nome) = lower($2)) LIMIT 1`,
+          [empresaId, pedida]
+        );
+        pedida = store.rows[0]?.id || null;
+      }
       if (lojaRestrita && pedida && pedida !== lojaRestrita) throw new ErroDominio('STORE_SCOPE_MISMATCH', 'Unidade fora do seu acesso', 403);
       const { arquivo } = await svc.exportarPluBalanca(db, empresaId, { lojaId: lojaRestrita || pedida });
       res.set('Content-Type', 'text/csv; charset=utf-8');
@@ -34,7 +53,10 @@ export function createVarejoAdminRouter({ db, escopoDaRequisicao, fuso = 'Americ
       return res.send(arquivo);
     } catch (error) { return responderErro(res, error); }
   });
-  router.get('/produtos/codigo/:codigo', rota('catalog.read', ({ req, empresaId, lojaId }) => svc.buscarPorCodigo(db, empresaId, req.params.codigo, { lojaId })));
+  router.get('/produtos/codigo/:codigo', rota('catalog.read', async ({ req, empresaId, lojaId }) => {
+    const p = await svc.buscarPorCodigo(db, empresaId, req.params.codigo, { lojaId });
+    return { produto: p, ...p };
+  }));
   router.patch('/produtos/:id', rota('catalog.write', ({ req, empresaId, lojaRestrita, lojaId }) => {
     const corpo = { ...(req.body || {}) };
     // preço base, departamento, PLU etc. valem para a empresa toda; usuário de unidade só mexe no preço da unidade
@@ -51,5 +73,7 @@ export function createVarejoAdminRouter({ db, escopoDaRequisicao, fuso = 'Americ
   router.get('/transferencias', rota('inventory.read', async ({ empresaId, lojaId }) => ({ transferencias: await svc.listarTransferencias(db, empresaId, { lojaId }) })));
   router.post('/transferencias', rota('inventory.write', ({ req, empresaId, lojaRestrita, usuario }) => svc.criarTransferencia(db, empresaId, req.body || {}, { usuario, lojaRestrita }), 201));
   router.post('/transferencias/:id/:acao(enviar|receber|cancelar)', rota('inventory.write', ({ req, empresaId, lojaRestrita, usuario }) => svc.acaoTransferencia(db, empresaId, req.params.id, req.params.acao, { recebidos: req.body?.recebidos, motivoFalta: req.body?.motivoFalta, usuario, lojaRestrita })));
+  router.post('/venda', rota('sales.write', ({ req, empresaId, lojaRestrita, lojaId, usuario }) => svc.registrarVenda(db, empresaId, req.body || {}, { usuario, lojaId: lojaRestrita || lojaId }), 201));
+  router.post('/vendas', rota('sales.write', ({ req, empresaId, lojaRestrita, lojaId, usuario }) => svc.registrarVenda(db, empresaId, req.body || {}, { usuario, lojaId: lojaRestrita || lojaId }), 201));
   return router;
 }

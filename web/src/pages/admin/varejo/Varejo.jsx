@@ -17,6 +17,14 @@ const STATUS_PROMO = { rascunho: ['Rascunho', 'muted'], ativa: ['Ativa', 'succes
 const STATUS_TRANSF = { rascunho: ['Rascunho', 'muted'], em_transito: ['Em trânsito', 'info'], recebida: ['Recebida', 'success'], recebida_parcial: ['Recebida em parte', 'warning'], cancelada: ['Cancelada', 'muted'] }
 const SITUACAO = { vencido: ['Vencido', 'danger'], critico: ['Vence em até 7 dias', 'danger'], atencao: ['Vence em até 30 dias', 'warning'], normal: ['No prazo', 'success'], sem_validade: ['Sem validade', 'muted'] }
 const num = (v) => Number(v || 0).toLocaleString('pt-BR', { maximumFractionDigits: 3 })
+const DEPARTAMENTOS_SUPERMERCADO = ['Todos', 'Hortifrúti', 'Padaria', 'Açougue e Carnes', 'Bebidas', 'Mercearia', 'Laticínios e Frios', 'Limpeza', 'Higiene e Perfumaria', 'Conveniência', 'Finalizadores']
+
+function gerarEan13Aleatorio() {
+  const prefixo = '789' + Math.floor(100000000 + Math.random() * 900000000).toString().slice(0, 9);
+  const soma = [...prefixo].reduce((t, d, i) => t + Number(d) * (i % 2 ? 3 : 1), 0);
+  const digito = (10 - (soma % 10)) % 10;
+  return `${prefixo}${digito}`;
+}
 
 export default function Varejo({ abaInicial = 'produtos' }) {
   const { toast } = useToast()
@@ -28,6 +36,7 @@ export default function Varejo({ abaInicial = 'produtos' }) {
   const [unidade, setUnidade] = useState(() => lojaAtiva?.id || (lojas.length === 1 ? lojas[0].id : ''))
   const [produtos, setProdutos] = useState([])
   const [busca, setBusca] = useState('')
+  const [deptoFiltro, setDeptoFiltro] = useState('Todos')
   const [erro, setErro] = useState('')
   const trava = useRef(false)
   const qs = useCallback((extra = {}) => { const p = new URLSearchParams(); if (unidade) p.set('lojaId', unidade); if (empresaIdEfetivo) p.set('empresaId', empresaIdEfetivo); for (const [k, v] of Object.entries(extra)) if (v) p.set(k, v); const s = p.toString(); return s ? `?${s}` : '' }, [unidade, empresaIdEfetivo])
@@ -40,7 +49,18 @@ export default function Varejo({ abaInicial = 'produtos' }) {
     trava.current = true
     try { const r = await fn(); if (sucesso) toast(typeof sucesso === 'function' ? sucesso(r) : sucesso, 'success'); return r || true } catch (e) { toast(e.message, 'error'); return false } finally { trava.current = false }
   }
-  const visiveis = produtos.filter((p) => !busca || `${p.nome} ${p.ean || ''} ${p.plu || ''} ${p.sku || ''}`.toLowerCase().includes(busca.toLowerCase()))
+  const visiveis = produtos.filter((p) => {
+    const matchBusca = !busca || `${p.nome} ${p.ean || ''} ${p.plu || ''} ${p.sku || ''} ${p.departamento || ''}`.toLowerCase().includes(busca.toLowerCase());
+    const matchDepto = deptoFiltro === 'Todos' || (p.departamento || '').toLowerCase().includes(deptoFiltro.toLowerCase());
+    return matchBusca && matchDepto;
+  })
+
+  const totalItens = produtos.length
+  const totalSaldo = produtos.reduce((acc, p) => acc + (Number(p.saldo) || 0), 0)
+  const valorCusto = produtos.reduce((acc, p) => acc + (Number(p.saldo || 0) * Number(p.custoMedio || 0)), 0)
+  const valorVenda = produtos.reduce((acc, p) => acc + (Number(p.saldo || 0) * Number(p.precoFinal || p.precoBase || 0)), 0)
+  const margemMedia = valorVenda > 0 ? Math.round(((valorVenda - valorCusto) / valorVenda) * 1000) / 10 : 0
+  const totalPesaveis = produtos.filter(p => p.pesavel).length
   const nomeLoja = (id) => lojas.find((l) => l.id === id)?.nome || 'Unidade'
 
   return <div className="dadm-page">
@@ -49,9 +69,52 @@ export default function Varejo({ abaInicial = 'produtos' }) {
         <p>Preço por unidade, promoções com período, lotes e validade, etiquetas e transferências — tudo sobre o mesmo estoque de Estoque e compras.</p></div>
       <div className="dadm-actions"><label className="dadm-muted">Unidade{' '}<select className="c360-input" aria-label="Unidade" value={unidade} onChange={(e) => setUnidade(e.target.value)}><option value="">Empresa toda</option>{lojas.map((l) => <option key={l.id} value={l.id}>{l.nome}</option>)}</select></label></div>
     </header>
+
+    {/* KPIs Operacionais do Supermercado */}
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, marginBottom: 16 }}>
+      <div style={{ background: 'var(--card, #1a1d27)', border: '1px solid var(--line, #2e3248)', borderRadius: 12, padding: '14px 16px' }}>
+        <div style={{ fontSize: 11, color: 'var(--muted, #8a8fa8)', fontWeight: 600, textTransform: 'uppercase' }}>Sortimento Ativo</div>
+        <div style={{ fontSize: 24, fontWeight: 900, marginTop: 4, color: '#fff' }}>{totalItens} <span style={{ fontSize: 13, color: 'var(--muted)' }}>produtos</span></div>
+      </div>
+      <div style={{ background: 'var(--card, #1a1d27)', border: '1px solid var(--line, #2e3248)', borderRadius: 12, padding: '14px 16px' }}>
+        <div style={{ fontSize: 11, color: 'var(--muted, #8a8fa8)', fontWeight: 600, textTransform: 'uppercase' }}>Saldo em Estoque</div>
+        <div style={{ fontSize: 24, fontWeight: 900, marginTop: 4, color: '#4a9eff' }}>{num(totalSaldo)} <span style={{ fontSize: 13, color: 'var(--muted)' }}>unid/kg</span></div>
+      </div>
+      <div style={{ background: 'var(--card, #1a1d27)', border: '1px solid var(--line, #2e3248)', borderRadius: 12, padding: '14px 16px' }}>
+        <div style={{ fontSize: 11, color: 'var(--muted, #8a8fa8)', fontWeight: 600, textTransform: 'uppercase' }}>Valor Estoque (Venda)</div>
+        <div style={{ fontSize: 24, fontWeight: 900, marginTop: 4, color: '#10b981' }}>{money(valorVenda)}</div>
+      </div>
+      <div style={{ background: 'var(--card, #1a1d27)', border: '1px solid var(--line, #2e3248)', borderRadius: 12, padding: '14px 16px' }}>
+        <div style={{ fontSize: 11, color: 'var(--muted, #8a8fa8)', fontWeight: 600, textTransform: 'uppercase' }}>Margem Média</div>
+        <div style={{ fontSize: 24, fontWeight: 900, marginTop: 4, color: margemMedia < 20 ? '#f59e0b' : '#10b981' }}>{margemMedia}%</div>
+      </div>
+      <div style={{ background: 'var(--card, #1a1d27)', border: '1px solid var(--line, #2e3248)', borderRadius: 12, padding: '14px 16px' }}>
+        <div style={{ fontSize: 11, color: 'var(--muted, #8a8fa8)', fontWeight: 600, textTransform: 'uppercase' }}>Pesáveis (Balança)</div>
+        <div style={{ fontSize: 24, fontWeight: 900, marginTop: 4, color: '#a855f7' }}>{totalPesaveis} <span style={{ fontSize: 13, color: 'var(--muted)' }}>itens PLU</span></div>
+      </div>
+    </div>
+
     <div className="dadm-tabs" role="tablist" aria-label="Seções do varejo">{ABAS.map(([id, r]) => <button key={id} type="button" role="tab" aria-selected={aba === id} onClick={() => setAba(id)}>{r}</button>)}</div>
     {erro && <p className="dadm-note danger" role="alert">{erro}</p>}
-    {['produtos', 'etiquetas'].includes(aba) && <div className="dadm-filters"><input className="c360-input" type="search" placeholder="Buscar por nome, EAN, PLU ou SKU" aria-label="Buscar produto" value={busca} onChange={(e) => setBusca(e.target.value)} /></div>}
+    {['produtos', 'etiquetas'].includes(aba) && (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, margin: '14px 0' }}>
+        <div className="dadm-filters" style={{ margin: 0 }}>
+          <input className="c360-input" type="search" placeholder="Buscar por nome, EAN, PLU, SKU ou departamento" aria-label="Buscar produto" value={busca} onChange={(e) => setBusca(e.target.value)} />
+        </div>
+        <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 4 }}>
+          {DEPARTAMENTOS_SUPERMERCADO.map(dep => (
+            <button key={dep} type="button" onClick={() => setDeptoFiltro(dep)} style={{
+              padding: '5px 12px', borderRadius: 20, border: '1px solid var(--line, #2e3248)',
+              background: deptoFiltro === dep ? '#FF6B2C' : 'var(--card, #1a1d27)',
+              color: deptoFiltro === dep ? '#fff' : 'var(--muted, #8a8fa8)',
+              fontSize: 12, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap'
+            }}>
+              {dep}
+            </button>
+          ))}
+        </div>
+      </div>
+    )}
     {aba === 'produtos' && <Produtos produtos={visiveis} unidade={unidade} acao={acao} onMudou={carregarProdutos} />}
     {aba === 'promocoes' && <Promocoes produtos={produtos} unidade={unidade} qs={qs} acao={acao} onMudou={carregarProdutos} />}
     {aba === 'lotes' && <Lotes produtos={produtos} unidade={unidade} qs={qs} acao={acao} />}
@@ -63,12 +126,67 @@ export default function Varejo({ abaInicial = 'produtos' }) {
 
 function Produtos({ produtos, unidade, acao, onMudou }) {
   const [form, setForm] = useState(null)
+  const [formNovo, setFormNovo] = useState(null)
+  const [populando, setPopulando] = useState(false)
+
+  async function popularOficial() {
+    if (!window.confirm('Deseja carregar o catálogo oficial completo de supermercado (Hortifrúti, Padaria, Carnes, Bebidas, Mercearia e Limpeza)?')) return;
+    setPopulando(true)
+    await acao(async () => {
+      const r = await api.post(`${BASE}/catalogo/popular-oficial${unidade ? `?lojaId=${unidade}` : ''}`, {})
+      return r
+    }, (r) => `Catálogo oficial carregado com sucesso! (${r?.adicionados || 0} produtos adicionados)`)
+    setPopulando(false)
+    onMudou()
+  }
+
+  async function criarNovo() {
+    const corpo = {
+      nome: formNovo.nome,
+      sku: formNovo.sku || null,
+      ean: formNovo.ean || null,
+      plu: formNovo.plu || null,
+      unidade: formNovo.unidade || 'UN',
+      departamento: formNovo.departamento || 'Geral',
+      precoVenda: formNovo.precoVenda === '' ? 0 : formNovo.precoVenda,
+      precoCusto: formNovo.precoCusto === '' ? 0 : formNovo.precoCusto,
+      precoUnidade: formNovo.precoUnidade === '' ? null : formNovo.precoUnidade,
+      saldoInicial: formNovo.saldoInicial === '' ? 0 : formNovo.saldoInicial,
+      estoqueMinimo: formNovo.estoqueMinimo === '' ? 0 : formNovo.estoqueMinimo,
+      pesavel: Boolean(formNovo.pesavel),
+      controlaLote: Boolean(formNovo.controlaLote)
+    }
+    if (await acao(() => api.post(`${BASE}/produtos${unidade ? `?lojaId=${unidade}` : ''}`, corpo), 'Produto cadastrado com sucesso!')) {
+      setFormNovo(null)
+      onMudou()
+    }
+  }
+
   async function salvar() {
     const corpo = { precoBase: form.precoBase === '' ? null : form.precoBase, departamento: form.departamento, plu: form.plu, pesavel: form.pesavel, controlaLote: form.controlaLote }
     if (unidade) corpo.precoUnidade = form.precoUnidade === '' ? null : form.precoUnidade
     if (await acao(() => api.patch(`${BASE}/produtos/${form.id}${unidade ? `?lojaId=${unidade}` : ''}`, corpo), 'Produto atualizado.')) { setForm(null); onMudou() }
   }
+
+  const margemEstimada = formNovo?.precoVenda > 0 && formNovo?.precoCusto >= 0
+    ? Math.round(((Number(formNovo.precoVenda) - Number(formNovo.precoCusto)) / Number(formNovo.precoVenda)) * 1000) / 10
+    : null
+
   return <section className="dadm-card">
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10, padding: '12px 16px', borderBottom: '1px solid var(--line, #2e3248)', background: 'var(--card2, rgba(255,255,255,0.02))' }}>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <button type="button" className="c360-btn primary" onClick={() => setFormNovo({ nome: '', sku: '', ean: gerarEan13Aleatorio(), plu: '', unidade: 'UN', departamento: 'Mercearia', precoCusto: '', precoVenda: '', precoUnidade: '', saldoInicial: '50', estoqueMinimo: '10', pesavel: false, controlaLote: false })}>
+          + Novo Produto
+        </button>
+        <button type="button" className="c360-btn ghost" onClick={popularOficial} disabled={populando}>
+          {populando ? 'Carregando itens...' : '📦 Carregar Catálogo Oficial de Supermercado'}
+        </button>
+      </div>
+      <a href="/admin/pdv-erp?segmento=supermercado" target="_blank" rel="noreferrer" className="c360-btn primary" style={{ background: '#FF6B2C', color: '#fff', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 6, fontWeight: 700 }}>
+        🖥️ Abrir PDV Supermercado (Caixa)
+      </a>
+    </div>
+
     <Table caption="Produtos" rows={produtos} empty="Nenhum produto. Cadastre os itens em Estoque e compras (ou lance uma NF-e)." columns={[
       { key: 'n', label: 'Produto', render: (p) => <div><strong>{p.nome}</strong><div className="dadm-muted">{[p.departamento, p.ean && `EAN ${p.ean}`, p.plu && `PLU ${p.plu}`].filter(Boolean).join(' · ')}</div></div> },
       { key: 's', label: 'Saldo', align: 'right', render: (p) => <span className={p.saldo < p.estoqueMinimo ? 'dadm-neg' : ''}>{num(p.saldo)} {p.unidade}</span> },
@@ -90,6 +208,77 @@ function Produtos({ produtos, unidade, acao, onMudou }) {
         </div>
         <label className="dadm-muted"><input type="checkbox" checked={form.pesavel} onChange={(e) => setForm({ ...form, pesavel: e.target.checked })} /> Vendido por peso</label>
         <label className="dadm-muted"><input type="checkbox" checked={form.controlaLote} onChange={(e) => setForm({ ...form, controlaLote: e.target.checked })} /> Controla lote e validade</label>
+      </div>}
+    </Dialog>
+
+    {/* Dialog: Cadastrar Novo Produto */}
+    <Dialog open={Boolean(formNovo)} title="Cadastrar Novo Produto de Supermercado" labelId="var-novo-prod" onClose={() => setFormNovo(null)} onSubmit={criarNovo}
+      actions={<><button type="button" className="c360-btn ghost" onClick={() => setFormNovo(null)}>Cancelar</button><button type="submit" className="c360-btn primary" disabled={!formNovo?.nome}>Salvar Produto</button></>}>
+      {formNovo && <div style={{ display: 'grid', gap: 12 }}>
+        <label className="c360-field">Nome do Produto *
+          <input className="c360-input" required minLength={2} maxLength={200} placeholder="Ex: Arroz Nobre Tipo 1 5kg" value={formNovo.nome} onChange={(e) => setFormNovo({ ...formNovo, nome: e.target.value })} />
+        </label>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: 10 }}>
+          <label className="c360-field">Código de Barras (EAN-13)
+            <div style={{ display: 'flex', gap: 4 }}>
+              <input className="c360-input" placeholder="789..." maxLength={14} value={formNovo.ean} onChange={(e) => setFormNovo({ ...formNovo, ean: e.target.value })} />
+              <button type="button" className="c360-btn ghost" style={{ fontSize: 11, padding: '4px 8px' }} onClick={() => setFormNovo({ ...formNovo, ean: gerarEan13Aleatorio() })}>Gerar</button>
+            </div>
+          </label>
+          <label className="c360-field">PLU (Balança)
+            <input className="c360-input" inputMode="numeric" maxLength={6} placeholder="Ex: 1001" value={formNovo.plu} onChange={(e) => setFormNovo({ ...formNovo, plu: e.target.value })} />
+          </label>
+          <label className="c360-field">Unidade
+            <select className="c360-input" value={formNovo.unidade} onChange={(e) => setFormNovo({ ...formNovo, unidade: e.target.value })}>
+              {['UN', 'KG', 'G', 'L', 'ML', 'CX', 'PCT'].map(u => <option key={u} value={u}>{u}</option>)}
+            </select>
+          </label>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+          <label className="c360-field">Departamento
+            <select className="c360-input" value={formNovo.departamento} onChange={(e) => setFormNovo({ ...formNovo, departamento: e.target.value })}>
+              {DEPARTAMENTOS_SUPERMERCADO.filter(d => d !== 'Todos').map(d => <option key={d} value={d}>{d}</option>)}
+            </select>
+          </label>
+          <label className="c360-field">SKU / Código Interno (opcional)
+            <input className="c360-input" placeholder="Ex: MER-001" value={formNovo.sku} onChange={(e) => setFormNovo({ ...formNovo, sku: e.target.value })} />
+          </label>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, background: 'var(--card2, rgba(255,255,255,0.02))', padding: 10, borderRadius: 8 }}>
+          <label className="c360-field">Preço de Custo (R$)
+            <input className="c360-input" inputMode="decimal" placeholder="0,00" value={formNovo.precoCusto} onChange={(e) => setFormNovo({ ...formNovo, precoCusto: e.target.value })} />
+          </label>
+          <label className="c360-field">Preço de Venda (R$) *
+            <input className="c360-input" required inputMode="decimal" placeholder="0,00" value={formNovo.precoVenda} onChange={(e) => setFormNovo({ ...formNovo, precoVenda: e.target.value })} />
+          </label>
+          <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+            <span style={{ fontSize: 11, color: 'var(--muted)' }}>Margem Estimada</span>
+            <strong style={{ fontSize: 16, marginTop: 4, color: margemEstimada != null ? (margemEstimada < 20 ? '#f59e0b' : '#10b981') : 'var(--muted)' }}>
+              {margemEstimada != null ? `${margemEstimada}%` : '—'}
+            </strong>
+          </div>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+          <label className="c360-field">Estoque Inicial
+            <input className="c360-input" inputMode="decimal" value={formNovo.saldoInicial} onChange={(e) => setFormNovo({ ...formNovo, saldoInicial: e.target.value })} />
+          </label>
+          <label className="c360-field">Estoque Mínimo (Alerta)
+            <input className="c360-input" inputMode="decimal" value={formNovo.estoqueMinimo} onChange={(e) => setFormNovo({ ...formNovo, estoqueMinimo: e.target.value })} />
+          </label>
+        </div>
+
+        <div style={{ display: 'flex', gap: 20, marginTop: 4 }}>
+          <label className="dadm-muted" style={{ cursor: 'pointer' }}>
+            <input type="checkbox" checked={formNovo.pesavel} onChange={(e) => setFormNovo({ ...formNovo, pesavel: e.target.checked, unidade: e.target.checked ? 'KG' : formNovo.unidade })} /> Produto pesável (Balança)
+          </label>
+          <label className="dadm-muted" style={{ cursor: 'pointer' }}>
+            <input type="checkbox" checked={formNovo.controlaLote} onChange={(e) => setFormNovo({ ...formNovo, controlaLote: e.target.checked })} /> Controla lote e validade
+          </label>
+        </div>
       </div>}
     </Dialog>
   </section>

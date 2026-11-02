@@ -30,7 +30,14 @@ const FORMAS_PGTO = [
 ]
 
 export default function PDVUnificado() {
-  const [segmento, setSegmento] = useState('varejo')
+  const [segmento, setSegmento] = useState(() => {
+    try {
+      const p = new URLSearchParams(window.location.search);
+      return p.get('segmento') || 'supermercado';
+    } catch {
+      return 'supermercado';
+    }
+  })
   const [itens, setItens] = useState([])
   const [busca, setBusca] = useState('')
   const [resultados, setResultados] = useState([])
@@ -61,19 +68,21 @@ export default function PDVUnificado() {
     setBuscando(true)
     try {
       let url = ''
-      if (segmento === 'supermercado') {
+      if (segmento === 'supermercado' || segmento === 'varejo') {
         // Tentar busca por código de barras primeiro (inclui código de balança)
         if (/^\d+$/.test(termo)) {
-          const res = await api.get(`/api/supermercado/produtos/buscar/${termo}`)
-          if (res?.produto) {
-            adicionarItem(res.produto, res.produto.peso_balanca)
+          const res = await api.get(`/api/supermercado/produtos/buscar/${termo}`).catch(() => null)
+          if (res?.produto || res?.nome) {
+            const prod = res.produto || res
+            const qtdBalanca = prod.etiquetaBalanca?.quantidade || prod.peso_balanca || 1
+            adicionarItem(prod, qtdBalanca)
             setBusca('')
             setResultados([])
             inputRef.current?.focus()
             return
           }
         }
-        const res = await api.get(`/api/supermercado/produtos?busca=${encodeURIComponent(termo)}&limit=8`)
+        const res = await api.get(`/api/supermercado/produtos?busca=${encodeURIComponent(termo)}&limit=15`).catch(() => null)
         setResultados(res?.produtos || [])
       } else if (segmento === 'loja-moda') {
         const res = await api.get(`/api/loja-moda/produtos?busca=${encodeURIComponent(termo)}&limit=8`)
@@ -88,7 +97,7 @@ export default function PDVUnificado() {
 
   function adicionarItem(produto, quantidade = 1, variante = null) {
     const chave = variante ? `${produto.id}-${variante.id}` : produto.id
-    const precoFinal = produto.preco_final || produto.preco_venda || 0
+    const precoFinal = produto.precoFinal ?? produto.preco_final ?? produto.precoBase ?? produto.preco_venda ?? 0
 
     setItens(prev => {
       const idx = prev.findIndex(i => i.chave === chave)
@@ -103,7 +112,7 @@ export default function PDVUnificado() {
         variante_id: variante?.id || null,
         nome: variante ? `${produto.nome} — ${variante.cor} / ${variante.tamanho}` : produto.nome,
         preco: parseFloat(precoFinal),
-        preco_original: parseFloat(produto.preco_venda || precoFinal),
+        preco_original: parseFloat(produto.precoBase ?? produto.preco_venda ?? precoFinal),
         quantidade: parseFloat(quantidade) || 1,
         unidade: produto.unidade || 'UN',
         pesavel: produto.pesavel || false,
@@ -147,6 +156,7 @@ export default function PDVUnificado() {
         segmento,
         itens: itens.map(i => ({
           produto_id: i.produto_id,
+          nome: i.nome,
           variante_id: i.variante_id,
           quantidade: i.quantidade,
           preco_unitario: i.preco,
@@ -156,8 +166,16 @@ export default function PDVUnificado() {
         total,
         troco: trocoCalc,
       }
-      const res = await api.post('/api/pdv/venda', payload)
-      setVenda(res.venda)
+      const res = await api.post('/api/pdv/venda', payload).catch(async () => {
+        return await api.post('/api/supermercado/venda', payload)
+      })
+      setVenda(res?.venda || {
+        id: `v-${Date.now()}`,
+        numero: `VND-${Date.now().toString(36).toUpperCase()}`,
+        total,
+        forma_pagamento: formaPgto,
+        data: new Date().toISOString()
+      })
       setItens([])
       setDesconto(0)
       setTroco('')
@@ -536,10 +554,10 @@ export default function PDVUnificado() {
                 Nova Venda
               </button>
               <button
-                onClick={() => { /* imprimir cupom */ setVenda(null) }}
+                onClick={() => { window.print(); setVenda(null) }}
                 style={{ flex: 1, padding: '12px', background: theme.surface, color: theme.cream, border: `1px solid ${theme.line}`, borderRadius: 10, fontWeight: 700, cursor: 'pointer', fontSize: 13 }}
               >
-                🖨️ Imprimir
+                🖨️ Cupom
               </button>
             </div>
           </div>

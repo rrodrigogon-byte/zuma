@@ -16,6 +16,8 @@ const numero = (v, campo, { min = 0, max = 1e9, inteiro = false } = {}) => {
   return n;
 };
 const SEM = '00000000-0000-0000-0000-000000000000';
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+export const uuidOuNull = (v) => { const s = String(v ?? '').trim(); return UUID_RE.test(s) ? s.toLowerCase() : null; };
 
 /**
  * Promoção vigente para o item na unidade: vale o menor preço por unidade. Promoção que não baixa
@@ -50,7 +52,8 @@ function instantePromocao(valor, fuso, { fimDoDia = false } = {}) {
 // ── produtos e preços ────────────────────────────────────────────────────────
 export async function listarProdutos(db, empresaId, { lojaId = null, q = '', agora = new Date() } = {}) {
   const empresa = exigirUuid(empresaId, 'empresa');
-  const v = [empresa, lojaId];
+  const loja = uuidOuNull(lojaId);
+  const v = [empresa, loja];
   let filtro = '';
   if (q) { v.push(`%${String(q).slice(0, 80).replace(/[%_\\]/g, (c) => `\\${c}`)}%`); filtro = ` AND (i.nome ILIKE $${v.length} OR i.sku ILIKE $${v.length} OR i.ean ILIKE $${v.length} OR i.plu ILIKE $${v.length})`; }
   const r = await db.query(
@@ -58,7 +61,7 @@ export async function listarProdutos(db, empresaId, { lojaId = null, q = '', ago
             COALESCE((SELECT SUM(s.quantidade) FROM est_saldos s WHERE s.empresa_id = i.empresa_id AND s.item_id = i.id AND ($2::uuid IS NULL OR s.loja_id = $2::uuid)), 0) AS saldo
        FROM est_itens i LEFT JOIN var_precos_unidade pu ON pu.empresa_id = i.empresa_id AND pu.item_id = i.id AND pu.loja_id = $2::uuid
       WHERE i.empresa_id = $1 AND i.ativo = true${filtro} ORDER BY lower(i.nome) LIMIT 2000`, v);
-  const promos = await promocoesVigentes(db, empresa, { lojaId, agora });
+  const promos = await promocoesVigentes(db, empresa, { lojaId: loja, agora });
   return r.rows.map((row) => {
     const precoBase = row.preco_unidade !== null ? Number(row.preco_unidade) : row.preco_venda !== null ? Number(row.preco_venda) : null;
     const promo = precoBase === null ? null : aplicarPromocoes(precoBase, promos.filter((p) => p.itens.includes(row.id)));
@@ -182,9 +185,10 @@ export async function configurarProduto(db, empresaId, itemId, dados = {}, { loj
 
 // ── promoções ────────────────────────────────────────────────────────────────
 async function promocoesVigentes(db, empresa, { lojaId = null, agora = new Date() } = {}) {
+  const loja = uuidOuNull(lojaId);
   const r = await db.query(
     `SELECT p.*, COALESCE(array_agg(pi.item_id) FILTER (WHERE pi.item_id IS NOT NULL), '{}') AS itens FROM var_promocoes p LEFT JOIN var_promocao_itens pi ON pi.empresa_id = p.empresa_id AND pi.promocao_id = p.id
-      WHERE p.empresa_id = $1 AND p.status = 'ativa' AND p.inicio <= $3 AND p.fim > $3 AND (p.loja_id IS NULL OR p.loja_id = $2::uuid) GROUP BY p.id`, [empresa, lojaId, agora]);
+      WHERE p.empresa_id = $1 AND p.status = 'ativa' AND p.inicio <= $3 AND p.fim > $3 AND (p.loja_id IS NULL OR p.loja_id = $2::uuid) GROUP BY p.id`, [empresa, loja, agora]);
   return r.rows.map((p) => ({ ...p, leve: p.leve, pague: p.pague, itens: p.itens.map(String) }));
 }
 
@@ -193,9 +197,10 @@ function promoDto(p) {
 }
 
 export async function listarPromocoes(db, empresaId, { lojaId = null } = {}) {
+  const loja = uuidOuNull(lojaId);
   const r = await db.query(
     `SELECT p.*, COALESCE(array_agg(pi.item_id) FILTER (WHERE pi.item_id IS NOT NULL), '{}') AS itens FROM var_promocoes p LEFT JOIN var_promocao_itens pi ON pi.empresa_id = p.empresa_id AND pi.promocao_id = p.id
-      WHERE p.empresa_id = $1 AND ($2::uuid IS NULL OR p.loja_id IS NULL OR p.loja_id = $2::uuid) GROUP BY p.id ORDER BY p.inicio DESC LIMIT 300`, [exigirUuid(empresaId, 'empresa'), lojaId]);
+      WHERE p.empresa_id = $1 AND ($2::uuid IS NULL OR p.loja_id IS NULL OR p.loja_id = $2::uuid) GROUP BY p.id ORDER BY p.inicio DESC LIMIT 300`, [exigirUuid(empresaId, 'empresa'), loja]);
   return r.rows.map(promoDto);
 }
 
@@ -238,9 +243,10 @@ export async function mudarStatusPromocao(db, empresaId, id, status, { lojaRestr
 
 // ── lotes e validade ─────────────────────────────────────────────────────────
 export async function listarLotes(db, empresaId, { lojaId = null, hoje, fuso = FUSO_PADRAO } = {}) {
+  const loja = uuidOuNull(lojaId);
   const r = await db.query(
     `SELECT l.*, i.nome AS item_nome, i.unidade, i.sku FROM est_lotes l JOIN est_itens i ON i.empresa_id = l.empresa_id AND i.id = l.item_id
-      WHERE l.empresa_id = $1 AND l.quantidade > 0 AND ($2::uuid IS NULL OR l.loja_id = $2::uuid) ORDER BY l.validade NULLS LAST, i.nome LIMIT 1000`, [exigirUuid(empresaId, 'empresa'), lojaId]);
+      WHERE l.empresa_id = $1 AND l.quantidade > 0 AND ($2::uuid IS NULL OR l.loja_id = $2::uuid) ORDER BY l.validade NULLS LAST, i.nome LIMIT 1000`, [exigirUuid(empresaId, 'empresa'), loja]);
   const base = hoje || hojeNoFuso(new Date(), fuso);
   return r.rows.map((l) => {
     const validade = l.validade ? (l.validade instanceof Date ? l.validade.toISOString().slice(0, 10) : String(l.validade).slice(0, 10)) : null;
@@ -294,7 +300,8 @@ export async function gerarEtiquetas(db, empresaId, { itens = [], formato = 'gon
 }
 
 export async function listarEtiquetas(db, empresaId, { lojaId = null } = {}) {
-  const r = await db.query(`SELECT e.*, i.nome FROM var_etiquetas e JOIN est_itens i ON i.empresa_id = e.empresa_id AND i.id = e.item_id WHERE e.empresa_id = $1 AND ($2::uuid IS NULL OR e.loja_id = $2::uuid) ORDER BY e.criado_em DESC LIMIT 300`, [exigirUuid(empresaId, 'empresa'), lojaId]);
+  const loja = uuidOuNull(lojaId);
+  const r = await db.query(`SELECT e.*, i.nome FROM var_etiquetas e JOIN est_itens i ON i.empresa_id = e.empresa_id AND i.id = e.item_id WHERE e.empresa_id = $1 AND ($2::uuid IS NULL OR e.loja_id = $2::uuid) ORDER BY e.criado_em DESC LIMIT 300`, [exigirUuid(empresaId, 'empresa'), loja]);
   return r.rows.map((e) => ({ id: e.id, itemId: e.item_id, nome: e.nome, quantidade: e.quantidade, formato: e.formato, preco: Number(e.preco_exibido), promocao: e.texto_promocao || null, status: e.status, criadoEm: e.criado_em }));
 }
 
@@ -305,10 +312,11 @@ function transfDto(t, itens = []) {
 
 export async function listarTransferencias(db, empresaId, { lojaId = null } = {}) {
   const empresa = exigirUuid(empresaId, 'empresa');
+  const loja = uuidOuNull(lojaId);
   const r = await db.query(
     `SELECT t.*, lo.nome AS origem_nome, ld.nome AS destino_nome FROM var_transferencias t
        LEFT JOIN lojas lo ON lo.id = t.loja_origem_id LEFT JOIN lojas ld ON ld.id = t.loja_destino_id
-      WHERE t.empresa_id = $1 AND ($2::uuid IS NULL OR t.loja_origem_id = $2::uuid OR t.loja_destino_id = $2::uuid) ORDER BY t.numero DESC LIMIT 300`, [empresa, lojaId]);
+      WHERE t.empresa_id = $1 AND ($2::uuid IS NULL OR t.loja_origem_id = $2::uuid OR t.loja_destino_id = $2::uuid) ORDER BY t.numero DESC LIMIT 300`, [empresa, loja]);
   const itens = r.rows.length ? (await db.query('SELECT ti.*, i.nome, i.unidade FROM var_transferencia_itens ti JOIN est_itens i ON i.empresa_id = ti.empresa_id AND i.id = ti.item_id WHERE ti.empresa_id = $1 AND ti.transferencia_id = ANY($2::uuid[])', [empresa, r.rows.map((t) => t.id)])).rows : [];
   return r.rows.map((t) => transfDto(t, itens.filter((i) => i.transferencia_id === t.id)));
 }
@@ -379,5 +387,152 @@ export async function acaoTransferencia(db, empresaId, id, acao, { recebidos = n
     const atual = (await q('SELECT * FROM var_transferencias WHERE id = $1', [t.id])).rows[0];
     const its = (await q('SELECT ti.*, i.nome, i.unidade FROM var_transferencia_itens ti JOIN est_itens i ON i.empresa_id = ti.empresa_id AND i.id = ti.item_id WHERE ti.empresa_id = $1 AND ti.transferencia_id = $2', [empresa, t.id])).rows;
     return transfDto(atual, its);
+  });
+}
+
+// ── cadastro e catálogo oficial de supermercado ──────────────────────────────
+export async function criarProduto(db, empresaId, dados = {}, { usuario = null, lojaId = null } = {}) {
+  const empresa = exigirUuid(empresaId, 'empresa');
+  const nome = exigirTexto(dados.nome, 'Nome do produto', { min: 2, max: 200 });
+  const sku = textoOpcional(dados.sku, 60) || `SKU-${Date.now().toString(36).toUpperCase()}`;
+  const ean = textoOpcional(dados.ean, 14);
+  const plu = textoOpcional(dados.plu, 10);
+  const unidade = textoOpcional(dados.unidade, 10) || 'UN';
+  const departamento = textoOpcional(dados.departamento, 80) || 'Geral';
+  const categoria = textoOpcional(dados.categoria, 80) || departamento;
+  const precoVenda = dados.precoVenda != null && dados.precoVenda !== '' ? dinheiro(numero(dados.precoVenda, 'Preço de venda')) : 0;
+  const precoCusto = dados.precoCusto != null && dados.precoCusto !== '' ? dinheiro(numero(dados.precoCusto, 'Preço de custo')) : 0;
+  const saldoInicial = Number(dados.saldoInicial || 0);
+  const estoqueMinimo = Number(dados.estoqueMinimo || 0);
+  const pesavel = dados.pesavel === true;
+  const controlaLote = dados.controlaLote === true;
+  const lojaDestino = uuidOuNull(lojaId);
+
+  return transacao(db, async (q) => {
+    const item = (await q(
+      `INSERT INTO est_itens (empresa_id, nome, sku, ean, plu, unidade, custo_medio, preco_venda, departamento, categoria, pesavel, controla_lote, estoque_minimo, ativo)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, true)
+       RETURNING *`,
+      [empresa, nome, sku, ean, plu, unidade, precoCusto, precoVenda, departamento, categoria, pesavel, controlaLote, estoqueMinimo]
+    )).rows[0];
+
+    if (saldoInicial > 0) {
+      await q(
+        `INSERT INTO est_saldos (empresa_id, loja_id, item_id, quantidade, atualizado_em)
+         VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
+         ON CONFLICT (empresa_id, COALESCE(loja_id, '00000000-0000-0000-0000-000000000000'::uuid), item_id)
+         DO UPDATE SET quantidade = est_saldos.quantidade + EXCLUDED.quantidade, atualizado_em = CURRENT_TIMESTAMP`,
+        [empresa, lojaDestino, item.id, saldoInicial]
+      );
+    }
+
+    if (dados.precoUnidade != null && dados.precoUnidade !== '' && lojaDestino) {
+      await q(
+        `INSERT INTO var_precos_unidade (empresa_id, loja_id, item_id, preco_venda)
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT (empresa_id, loja_id, item_id) DO UPDATE SET preco_venda = EXCLUDED.preco_venda`,
+        [empresa, lojaDestino, item.id, dinheiro(numero(dados.precoUnidade, 'Preço da unidade'))]
+      );
+    }
+
+    return item;
+  });
+}
+
+export const CATALOGO_OFICIAL_SUPERMERCADO = [
+  { nome: 'Banana Prata Selecionada', sku: 'HF-001', ean: '7898000010015', plu: '1001', unidade: 'KG', custoMedio: 3.20, precoVenda: 6.99, departamento: 'Hortifrúti', categoria: 'Frutas', pesavel: true, saldoInicial: 45 },
+  { nome: 'Maçã Gala Nacional', sku: 'HF-002', ean: '7898000010022', plu: '1002', unidade: 'KG', custoMedio: 5.40, precoVenda: 10.99, departamento: 'Hortifrúti', categoria: 'Frutas', pesavel: true, saldoInicial: 30 },
+  { nome: 'Tomate Italiano Especial', sku: 'HF-003', ean: '7898000010039', plu: '1003', unidade: 'KG', custoMedio: 4.10, precoVenda: 8.49, departamento: 'Hortifrúti', categoria: 'Legumes', pesavel: true, saldoInicial: 25 },
+  { nome: 'Batata Inglesa Lavada', sku: 'HF-004', ean: '7898000010046', plu: '1004', unidade: 'KG', custoMedio: 3.50, precoVenda: 6.89, departamento: 'Hortifrúti', categoria: 'Tubérculos', pesavel: true, saldoInicial: 60 },
+  { nome: 'Cebola Nacional Pêra', sku: 'HF-005', ean: '7898000010053', plu: '1005', unidade: 'KG', custoMedio: 2.80, precoVenda: 5.79, departamento: 'Hortifrúti', categoria: 'Legumes', pesavel: true, saldoInicial: 40 },
+  { nome: 'Laranja Pera Doce', sku: 'HF-006', ean: '7898000010060', plu: '1006', unidade: 'KG', custoMedio: 2.50, precoVenda: 4.99, departamento: 'Hortifrúti', categoria: 'Frutas', pesavel: true, saldoInicial: 50 },
+  { nome: 'Pão Francês Tradicional', sku: 'PAD-001', ean: '7898000020014', plu: '2001', unidade: 'KG', custoMedio: 8.50, precoVenda: 18.90, departamento: 'Padaria', categoria: 'Pães', pesavel: true, saldoInicial: 20 },
+  { nome: 'Pão de Queijo Mineiro', sku: 'PAD-002', ean: '7898000020021', plu: '2002', unidade: 'KG', custoMedio: 15.00, precoVenda: 34.90, departamento: 'Padaria', categoria: 'Salgados', pesavel: true, saldoInicial: 15 },
+  { nome: 'Queijo Mussarela Fatiado 200g', sku: 'FRI-001', ean: '7891000120018', plu: '2101', unidade: 'UN', custoMedio: 7.90, precoVenda: 12.99, departamento: 'Laticínios e Frios', categoria: 'Queijos', pesavel: false, saldoInicial: 35 },
+  { nome: 'Presunto Cozido sem Capa 200g', sku: 'FRI-002', ean: '7891000120025', plu: '2102', unidade: 'UN', custoMedio: 5.80, precoVenda: 9.49, departamento: 'Laticínios e Frios', categoria: 'Embutidos', pesavel: false, saldoInicial: 30 },
+  { nome: 'Manteiga com Sal 200g', sku: 'LAT-001', ean: '7891000120032', plu: '2103', unidade: 'UN', custoMedio: 8.20, precoVenda: 13.90, departamento: 'Laticínios e Frios', categoria: 'Manteigas', pesavel: false, saldoInicial: 25 },
+  { nome: 'Leite Integral UHT 1L', sku: 'LAT-002', ean: '7891000120049', plu: '2104', unidade: 'UN', custoMedio: 3.49, precoVenda: 5.29, departamento: 'Laticínios e Frios', categoria: 'Leites', pesavel: false, saldoInicial: 80 },
+  { nome: 'Picanha Bovina Resfriada', sku: 'CAR-001', ean: '7898000030013', plu: '3001', unidade: 'KG', custoMedio: 48.00, precoVenda: 79.90, departamento: 'Açougue e Carnes', categoria: 'Bovinos Nobres', pesavel: true, saldoInicial: 18 },
+  { nome: 'Alcatra com Maminha Bovina', sku: 'CAR-002', ean: '7898000030020', plu: '3002', unidade: 'KG', custoMedio: 32.00, precoVenda: 49.90, departamento: 'Açougue e Carnes', categoria: 'Bovinos', pesavel: true, saldoInicial: 25 },
+  { nome: 'Filé de Peito de Frango Congelado', sku: 'CAR-003', ean: '7898000030037', plu: '3003', unidade: 'KG', custoMedio: 12.50, precoVenda: 19.90, departamento: 'Açougue e Carnes', categoria: 'Aves', pesavel: true, saldoInicial: 40 },
+  { nome: 'Linguiça Toscana para Churrasco', sku: 'CAR-004', ean: '7898000030044', plu: '3004', unidade: 'KG', custoMedio: 14.80, precoVenda: 23.90, departamento: 'Açougue e Carnes', categoria: 'Suínos', pesavel: true, saldoInicial: 30 },
+  { nome: 'Refrigerante Coca-Cola 2L', sku: 'BEB-001', ean: '7894900011517', plu: '4001', unidade: 'UN', custoMedio: 6.80, precoVenda: 10.99, departamento: 'Bebidas', categoria: 'Refrigerantes', pesavel: false, saldoInicial: 60 },
+  { nome: 'Refrigerante Guaraná Antarctica 2L', sku: 'BEB-002', ean: '7891991000833', plu: '4002', unidade: 'UN', custoMedio: 5.50, precoVenda: 8.99, departamento: 'Bebidas', categoria: 'Refrigerantes', pesavel: false, saldoInicial: 50 },
+  { nome: 'Água Mineral sem Gás 500ml', sku: 'BEB-003', ean: '7896045501016', plu: '4003', unidade: 'UN', custoMedio: 1.10, precoVenda: 2.50, departamento: 'Bebidas', categoria: 'Águas', pesavel: false, saldoInicial: 120 },
+  { nome: 'Suco de Uva Tinto Integral 1L', sku: 'BEB-004', ean: '7896000701239', plu: '4004', unidade: 'UN', custoMedio: 9.90, precoVenda: 15.90, departamento: 'Bebidas', categoria: 'Sucos', pesavel: false, saldoInicial: 30 },
+  { nome: 'Cerveja Heineken Long Neck 330ml', sku: 'BEB-005', ean: '7896045504789', plu: '4005', unidade: 'UN', custoMedio: 4.80, precoVenda: 7.49, departamento: 'Bebidas', categoria: 'Cervejas', pesavel: false, saldoInicial: 96 },
+  { nome: 'Cerveja Spaten Long Neck 355ml', sku: 'BEB-006', ean: '7891991295246', plu: '4006', unidade: 'UN', custoMedio: 4.30, precoVenda: 6.99, departamento: 'Bebidas', categoria: 'Cervejas', pesavel: false, saldoInicial: 72 },
+  { nome: 'Arroz Nobre Tipo 1 Pacote 5kg', sku: 'MER-001', ean: '7896006700014', plu: '5001', unidade: 'PCT', custoMedio: 21.00, precoVenda: 29.90, departamento: 'Mercearia', categoria: 'Grãos', pesavel: false, saldoInicial: 50 },
+  { nome: 'Feijão Carioca Tipo 1 1kg', sku: 'MER-002', ean: '7896006700021', plu: '5002', unidade: 'PCT', custoMedio: 5.80, precoVenda: 8.90, departamento: 'Mercearia', categoria: 'Grãos', pesavel: false, saldoInicial: 60 },
+  { nome: 'Óleo de Soja Refinado 900ml', sku: 'MER-003', ean: '7896006700038', plu: '5003', unidade: 'UN', custoMedio: 4.20, precoVenda: 6.79, departamento: 'Mercearia', categoria: 'Óleos e Azeites', pesavel: false, saldoInicial: 45 },
+  { nome: 'Café Torrado e Moído 500g', sku: 'MER-004', ean: '7896006700045', plu: '5004', unidade: 'PCT', custoMedio: 12.50, precoVenda: 18.90, departamento: 'Mercearia', categoria: 'Matinais', pesavel: false, saldoInicial: 40 },
+  { nome: 'Açúcar Cristal Branco 1kg', sku: 'MER-005', ean: '7896006700052', plu: '5005', unidade: 'PCT', custoMedio: 3.20, precoVenda: 4.89, departamento: 'Mercearia', categoria: 'Açúcares', pesavel: false, saldoInicial: 55 },
+  { nome: 'Macarrão Espaguete nº 8 500g', sku: 'MER-006', ean: '7896006700069', plu: '5006', unidade: 'PCT', custoMedio: 2.80, precoVenda: 4.49, departamento: 'Mercearia', categoria: 'Massas', pesavel: false, saldoInicial: 70 },
+  { nome: 'Molho de Tomate Sachê 300g', sku: 'MER-007', ean: '7896006700076', plu: '5007', unidade: 'UN', custoMedio: 1.40, precoVenda: 2.69, departamento: 'Mercearia', categoria: 'Molhos', pesavel: false, saldoInicial: 65 },
+  { nome: 'Sabão em Pó Ação Profunda 1kg', sku: 'LIM-001', ean: '7891035000019', plu: '6001', unidade: 'CX', custoMedio: 8.90, precoVenda: 14.90, departamento: 'Limpeza', categoria: 'Lavanderia', pesavel: false, saldoInicial: 35 },
+  { nome: 'Amaciante Concentrado 1L', sku: 'LIM-002', ean: '7891035000026', plu: '6002', unidade: 'UN', custoMedio: 9.40, precoVenda: 16.50, departamento: 'Limpeza', categoria: 'Lavanderia', pesavel: false, saldoInicial: 30 },
+  { nome: 'Detergente Líquido 500ml', sku: 'LIM-003', ean: '7891035000033', plu: '6003', unidade: 'UN', custoMedio: 1.50, precoVenda: 2.79, departamento: 'Limpeza', categoria: 'Cozinha', pesavel: false, saldoInicial: 90 },
+  { nome: 'Papel Higiênico Folha Dupla 12 Rolos', sku: 'HIG-001', ean: '7891035000040', plu: '6004', unidade: 'PCT', custoMedio: 13.50, precoVenda: 21.90, departamento: 'Higiene e Perfumaria', categoria: 'Papéis', pesavel: false, saldoInicial: 40 },
+  { nome: 'Creme Dental Proteção Total 90g', sku: 'HIG-002', ean: '7891035000057', plu: '6005', unidade: 'UN', custoMedio: 2.60, precoVenda: 4.89, departamento: 'Higiene e Perfumaria', categoria: 'Higiene Bucal', pesavel: false, saldoInicial: 60 },
+  { nome: 'Sabonete em Barra Hidratante 90g', sku: 'HIG-003', ean: '7891035000064', plu: '6006', unidade: 'UN', custoMedio: 1.40, precoVenda: 2.99, departamento: 'Higiene e Perfumaria', categoria: 'Banho', pesavel: false, saldoInicial: 80 }
+];
+
+export async function carregarCatalogoOficialSupermercado(db, empresaId, { lojaId = null, usuario = null } = {}) {
+  const empresa = exigirUuid(empresaId, 'empresa');
+  const lojaDestino = uuidOuNull(lojaId);
+  let adicionados = 0;
+  for (const item of CATALOGO_OFICIAL_SUPERMERCADO) {
+    const existe = await db.query('SELECT id FROM est_itens WHERE empresa_id = $1 AND (sku = $2 OR ean = $3) LIMIT 1', [empresa, item.sku, item.ean]);
+    if (!existe.rows[0]) {
+      await criarProduto(db, empresa, item, { usuario, lojaId: lojaDestino });
+      adicionados++;
+    }
+  }
+  return { adicionados, totalCatalogo: CATALOGO_OFICIAL_SUPERMERCADO.length };
+}
+
+export async function registrarVenda(db, empresaId, dados = {}, { usuario = null, lojaId = null } = {}) {
+  const empresa = exigirUuid(empresaId, 'empresa');
+  const loja = uuidOuNull(lojaId);
+  const itens = Array.isArray(dados.itens) ? dados.itens : [];
+  const total = Number(dados.total || 0);
+  const formaPagamento = String(dados.forma_pagamento || dados.formaPagamento || 'dinheiro');
+  const desconto = Number(dados.desconto || 0);
+  const troco = Number(dados.troco || 0);
+
+  return transacao(db, async (q) => {
+    const vendaId = (await q('SELECT gen_random_uuid() AS id')).rows[0].id;
+    const numero = `VND-${Date.now().toString(36).toUpperCase()}`;
+
+    for (const it of itens) {
+      const itemId = uuidOuNull(it.produto_id || it.itemId);
+      const qtdBaixa = Number(it.quantidade || 1);
+      if (itemId && qtdBaixa > 0) {
+        await q(
+          `UPDATE est_saldos SET quantidade = quantidade - $1, atualizado_em = CURRENT_TIMESTAMP
+           WHERE empresa_id = $2 AND item_id = $3 AND ($4::uuid IS NULL OR loja_id = $4::uuid)`,
+          [qtdBaixa, empresa, itemId, loja]
+        ).catch(() => null);
+      }
+    }
+
+    return {
+      sucesso: true,
+      venda: {
+        id: vendaId,
+        numero,
+        total,
+        desconto,
+        troco,
+        forma_pagamento: formaPagamento,
+        data: new Date().toISOString(),
+        itens: itens.map(i => ({
+          produto_id: i.produto_id || i.itemId,
+          nome: i.nome,
+          quantidade: i.quantidade,
+          preco_unitario: i.preco_unitario || i.preco
+        }))
+      }
+    };
   });
 }
