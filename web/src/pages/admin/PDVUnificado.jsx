@@ -1,12 +1,16 @@
 /**
  * PDV Unificado Multiplataforma — KYTTO Clube, Supermercado & Varejo
- * Suporte a: Desktop (Atalhos F2-F10), Mobile/Tablet (Câmera Scanner, Touch Keypad),
- * Totem Autoatendimento (Self-Checkout com PIX QR Code), Pesagem de Balança e Fila Offline (IndexedDB).
+ * Suporte a:
+ * 1. Promoções Automáticas (Leve & Pague, Oferta Clube, Desconto no Carrinho)
+ * 2. Fechamento Cego de Caixa & Redução Z (Conferência de gaveta, quebra e relatório)
+ * 3. Auto-sincronização de Fila Offline em Background (IndexedDB + Eventos Internos)
+ * 4. Emissão de NFC-e Fiscal Direta com Chave de Acesso e QR Code SEFAZ
+ * 5. Balança Comercial via Web Serial API (Toledo / Filizola) & Teclado Touch
  * Rota: /admin/pdv-erp
  */
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { api } from '../../lib/api'
-import { enfileirarVendaOffline } from '../../lib/pdvOffline'
+import { enfileirarVendaOffline, listarEventosOffline, removerEventosOffline, resumoFilaOffline } from '../../lib/pdvOffline'
 
 const theme = {
   bg: '#0f1117', surface: '#1a1d27', card: '#22263a',
@@ -60,7 +64,7 @@ export default function PDVUnificado() {
     }
   })
 
-  // Modo de operação da estação: 'operador' (caixa tradicional), 'totem' (self-checkout cliente) ou 'touch'
+  // Modo de operação da estação: 'operador' (caixa tradicional) ou 'totem' (self-checkout cliente)
   const [modoOperacao, setModoOperacao] = useState(() => {
     try {
       const p = new URLSearchParams(window.location.search);
@@ -75,22 +79,31 @@ export default function PDVUnificado() {
   const [resultados, setResultados] = useState([])
   const [buscando, setBuscando] = useState(false)
   const [formaPgto, setFormaPgto] = useState('dinheiro')
-  const [desconto, setDesconto] = useState(0)
+  const [descontoManual, setDescontoManual] = useState(0)
   const [tipoDesconto, setTipoDesconto] = useState('valor') // 'valor' | 'percentual'
   const [troco, setTroco] = useState('')
   const [cpfNota, setCpfNota] = useState('')
   const [finalizando, setFinalizando] = useState(false)
+  const [emitindoNfce, setEmitindoNfce] = useState(false)
   const [venda, setVenda] = useState(null)
   const [isOnline, setIsOnline] = useState(navigator.onLine)
   const [filaLocalQtd, setFilaLocalQtd] = useState(0)
+  const [avisoSync, setAvisoSync] = useState('')
+
+  // Promoções ativas da unidade
+  const [promocoes, setPromocoes] = useState([])
 
   // Modais de operação
   const [modalGrade, setModalGrade] = useState(null)
   const [modalPesagem, setModalPesagem] = useState(null)
   const [pesoInput, setPesoInput] = useState('0.500')
-  const [modalCaixa, setModalCaixa] = useState(null)
+  const [lendoBalanca, setLendoBalanca] = useState(false)
+  const [modalCaixa, setModalCaixa] = useState(null) // { tipo: 'sangria' | 'suprimento' }
   const [valorCaixa, setValorCaixa] = useState('')
   const [motivoCaixa, setMotivoCaixa] = useState('')
+  const [modalFechamentoCego, setModalFechamentoCego] = useState(false)
+  const [valoresCego, setValoresCego] = useState({ dinheiro: '', moedas: '', debito: '', credito: '', pix: '', outros: '' })
+  const [reducaoZ, setReducaoZ] = useState(null)
   const [modalCamera, setModalCamera] = useState(false)
   const [mostrarTecladoTouch, setMostrarTecladoTouch] = useState(false)
   const [atalhosSupermercado, setAtalhosSupermercado] = useState([])
@@ -100,22 +113,58 @@ export default function PDVUnificado() {
   const videoRef = useRef(null)
   const streamRef = useRef(null)
 
-  // Monitorar conectividade de rede
+  // ── Sincronização Automática da Fila Offline em Background ─────────────────
+  const sincronizarFilaOffline = useCallback(async () => {
+    if (!navigator.onLine) return
+    try {
+      const eventos = await listarEventosOffline({ limite: 50 })
+      const pendentes = eventos.filter(e => e.status === 'pendente' || e.status === 'falha')
+      if (pendentes.length === 0) {
+        setFilaLocalQtd(0)
+        return
+      }
+      const res = await api.post('/api/supermercado/sync-offline', { eventos: pendentes }).catch(async () => {
+        return await api.post('/api/admin/varejo/sync-offline', { eventos: pendentes })
+      })
+      if (res?.aceitos?.length) {
+        await removerEventosOffline(res.aceitos)
+        setFilaLocalQtd(q => Math.max(0, q - res.aceitos.length))
+        setAvisoSync(`✅ Fila Offline: ${res.aceitos.length} venda(s) sincronizada(s) com o servidor!`)
+        setTimeout(() => setAvisoSync(''), 5000)
+      }
+    } catch (err) {
+      console.warn('Sincronização em background aguardando:', err?.message)
+    }
+  }, [])
+
+  // Monitorar conectividade de rede e disparar sync automático ao reconectar
   useEffect(() => {
-    function handleOnline() { setIsOnline(true) }
+    function handleOnline() {
+      setIsOnline(true)
+      sincronizarFilaOffline()
+    }
     function handleOffline() { setIsOnline(false) }
     window.addEventListener('online', handleOnline)
     window.addEventListener('offline', handleOffline)
+
+    // Checagem inicial de fila offline
+    resumoFilaOffline().then(res => {
+      setFilaLocalQtd(res.pendente || 0)
+      if (res.pendente > 0 && navigator.onLine) {
+        sincronizarFilaOffline()
+      }
+    }).catch(() => null)
+
     return () => {
       window.removeEventListener('online', handleOnline)
       window.removeEventListener('offline', handleOffline)
     }
-  }, [])
+  }, [sincronizarFilaOffline])
 
   // Focar no input ao montar
   useEffect(() => { inputRef.current?.focus() }, [])
 
-  // Carregar atalhos rápidos do supermercado (Hortifrúti / Padaria / Balança)
+  // Carregar atalhos rápidos e promoções do supermercado
   useEffect(() => {
     if (segmento === 'supermercado' || segmento === 'varejo') {
       api.get('/api/supermercado/produtos?limit=50').then(res => {
@@ -123,6 +172,12 @@ export default function PDVUnificado() {
         const rapidos = prods.filter(p => p.pesavel || ['Hortifrúti', 'Padaria', 'Açougue e Carnes', 'Bebidas'].includes(p.departamento))
         setAtalhosSupermercado(rapidos.slice(0, 10))
       }).catch(() => null)
+
+      api.get('/api/supermercado/promocoes?ativas=true').then(res => {
+        setPromocoes(res?.promocoes || [])
+      }).catch(() => {
+        api.get('/api/admin/varejo/promocoes').then(r2 => setPromocoes(r2?.promocoes || [])).catch(() => null)
+      })
     }
   }, [segmento])
 
@@ -137,7 +192,7 @@ export default function PDVUnificado() {
   // Atalhos de teclado (F2-F10, Esc)
   useEffect(() => {
     function handleKeyDown(e) {
-      if (modoOperacao === 'totem') return // Totem não usa atalhos de operador
+      if (modoOperacao === 'totem') return
       if (e.key === 'F2') {
         e.preventDefault()
         inputRef.current?.focus()
@@ -149,13 +204,16 @@ export default function PDVUnificado() {
         e.preventDefault()
         if (itens.length > 0 && window.confirm('Deseja limpar todos os itens e cancelar esta venda?')) {
           setItens([])
-          setDesconto(0)
+          setDescontoManual(0)
           setTroco('')
           setCpfNota('')
         }
       } else if (e.key === 'F7') {
         e.preventDefault()
         document.getElementById('pdv-desconto-input')?.focus()
+      } else if (e.key === 'F8') {
+        e.preventDefault()
+        setModalFechamentoCego(true)
       } else if (e.key === 'F9') {
         e.preventDefault()
         setModalCaixa({ tipo: 'sangria' })
@@ -169,6 +227,8 @@ export default function PDVUnificado() {
         setModalPesagem(null)
         setModalCaixa(null)
         setModalCamera(false)
+        setModalFechamentoCego(false)
+        setReducaoZ(null)
         setVenda(null)
       }
     }
@@ -238,6 +298,87 @@ export default function PDVUnificado() {
     }
   }, [modalCamera])
 
+  // Leitura Direta de Balança Comercial via Web Serial API (Toledo / Filizola / Urano)
+  async function lerBalancaSerial() {
+    if (!('serial' in navigator)) {
+      alert('Seu navegador não suporta a Web Serial API. Para conectar balanças diretamente via USB/Serial, utilize o Google Chrome, Edge ou Opera em um computador.')
+      return
+    }
+    setLendoBalanca(true)
+    try {
+      const port = await navigator.serial.requestPort()
+      await port.open({ baudRate: 9600 })
+      const reader = port.readable.getReader()
+      const { value } = await reader.read()
+      reader.releaseLock()
+      await port.close()
+      if (value) {
+        const text = new TextDecoder().decode(value)
+        const match = text.match(/(\d+[.,]\d+)/)
+        if (match) {
+          setPesoInput(match[1].replace(',', '.'))
+          tocarBeep()
+        }
+      }
+    } catch (err) {
+      if (err.name !== 'NotFoundError') {
+        alert('Aviso da balança: ' + (err.message || 'Não foi possível ler dados seriais.'))
+      }
+    } finally {
+      setLendoBalanca(false)
+    }
+  }
+
+  // ── Cálculo Automático de Promoções no Carrinho ─────────────────────────────
+  function calcularDescontoPromocao(item, qtd) {
+    if (!promocoes.length) return null
+    const promo = promocoes.find(p => {
+      if (p.status !== 'ativa' && p.status !== 'ativo') return false
+      const itensPromo = Array.isArray(p.itens) ? p.itens : (p.produto_ids || [])
+      return itensPromo.includes(item.produto_id)
+    })
+    if (!promo) return null
+
+    // 1. Regra Leve e Pague (Ex: Leve 3 Pague 2)
+    if (promo.tipo === 'leve_pague' && promo.quantidade_leve && promo.quantidade_pague) {
+      const leve = Number(promo.quantidade_leve)
+      const pague = Number(promo.quantidade_pague)
+      if (qtd >= leve && leve > pague) {
+        const pacotes = Math.floor(qtd / leve)
+        const itensGratis = pacotes * (leve - pague)
+        const desconto = itensGratis * item.preco
+        return {
+          tipo: 'leve_pague',
+          nome: promo.nome || `Leve ${leve} Pague ${pague}`,
+          desconto,
+        }
+      }
+    }
+    // 2. Regra Percentual (%)
+    else if (promo.tipo === 'percentual' && promo.percentual_desconto) {
+      const perc = Number(promo.percentual_desconto)
+      const desconto = (item.preco * qtd) * (perc / 100)
+      return {
+        tipo: 'percentual',
+        nome: promo.nome || `${perc}% OFF`,
+        desconto,
+      }
+    }
+    // 3. Preço Fixo Promocional
+    else if (promo.tipo === 'preco_fixo' && promo.preco_fixo) {
+      const fixo = Number(promo.preco_fixo)
+      if (item.preco > fixo) {
+        const desconto = (item.preco - fixo) * qtd
+        return {
+          tipo: 'preco_fixo',
+          nome: promo.nome || `Oferta R$ ${fixo.toFixed(2)}`,
+          desconto,
+        }
+      }
+    }
+    return null
+  }
+
   async function buscarProduto(termoBruto) {
     if (!termoBruto?.trim()) return
     setBuscando(true)
@@ -255,7 +396,6 @@ export default function PDVUnificado() {
       }
 
       if (segmento === 'supermercado' || segmento === 'varejo') {
-        // Tentar busca por código de barras primeiro (inclui código de balança)
         if (/^\d+$/.test(termo)) {
           const res = await api.get(`/api/supermercado/produtos/buscar/${termo}`).catch(() => null)
           if (res?.produto || res?.nome) {
@@ -323,7 +463,6 @@ export default function PDVUnificado() {
         unidade: produto.unidade || (produto.pesavel ? 'KG' : 'UN'),
         pesavel: produto.pesavel || false,
         plu: produto.plu || null,
-        promocao: produto.promocao || null,
       }]
     })
   }
@@ -340,18 +479,20 @@ export default function PDVUnificado() {
     }).filter(i => i.quantidade > 0))
   }
 
-  function alterarPreco(chave, novoPreco) {
-    setItens(prev => prev.map(i =>
-      i.chave === chave ? { ...i, preco: parseFloat(novoPreco) || 0 } : i
-    ))
-  }
+  // Cálculos com Promoções Automáticas
+  const subtotalBruto = itens.reduce((s, i) => s + i.preco * i.quantidade, 0)
+  const descontoPromocoes = itens.reduce((soma, item) => {
+    const promo = calcularDescontoPromocao(item, item.quantidade)
+    return soma + (promo?.desconto || 0)
+  }, 0)
+  const subtotalComPromos = Math.max(0, subtotalBruto - descontoPromocoes)
 
-  // Cálculos
-  const subtotal = itens.reduce((s, i) => s + i.preco * i.quantidade, 0)
-  const valorDesconto = tipoDesconto === 'percentual'
-    ? subtotal * (parseFloat(desconto) / 100)
-    : parseFloat(desconto) || 0
-  const total = Math.max(0, subtotal - valorDesconto)
+  const valorDescontoManual = tipoDesconto === 'percentual'
+    ? subtotalComPromos * (parseFloat(descontoManual) / 100)
+    : parseFloat(descontoManual) || 0
+
+  const total = Math.max(0, subtotalComPromos - valorDescontoManual)
+  const totalDescontos = descontoPromocoes + valorDescontoManual
   const trocoCalc = formaPgto === 'dinheiro' && parseFloat(troco) > total
     ? parseFloat(troco) - total : 0
 
@@ -362,21 +503,26 @@ export default function PDVUnificado() {
       segmento,
       cpf_cliente: cpfNota.trim() || null,
       usuario_vendedor_id: 'operador-kytto',
-      itens: itens.map(i => ({
-        produto_id: i.produto_id,
-        nome: i.nome,
-        variante_id: i.variante_id,
-        quantidade: i.quantidade,
-        valor_unitario: i.preco,
-        preco_unitario: i.preco,
-      })),
+      itens: itens.map(i => {
+        const promo = calcularDescontoPromocao(i, i.quantidade)
+        return {
+          produto_id: i.produto_id,
+          nome: i.nome,
+          variante_id: i.variante_id,
+          quantidade: i.quantidade,
+          valor_unitario: i.preco,
+          preco_unitario: i.preco,
+          desconto_promocao: promo?.desconto || 0,
+          regra_promocao: promo?.nome || null,
+        }
+      }),
       pagamentos: [{
         tipo: formaPgto === 'dinheiro' ? 'dinheiro' : formaPgto,
         valor: total,
         referencia_externa: formaPgto.startsWith('cartao') ? 'TEF-LOCAL' : null
       }],
       forma_pagamento: formaPgto,
-      desconto: valorDesconto,
+      desconto: totalDescontos,
       total,
       troco: trocoCalc,
     }
@@ -388,7 +534,6 @@ export default function PDVUnificado() {
           return await api.post('/api/supermercado/venda', payload)
         })
       } else {
-        // Modo offline resiliente no navegador
         await enfileirarVendaOffline(payload)
         setFilaLocalQtd(q => q + 1)
       }
@@ -397,7 +542,7 @@ export default function PDVUnificado() {
         id: `v-${Date.now()}`,
         numero: `VND-${Date.now().toString(36).toUpperCase()}`,
         total,
-        desconto: valorDesconto,
+        desconto: totalDescontos,
         troco: trocoCalc,
         cpf_cliente: cpfNota.trim() || null,
         forma_pagamento: formaPgto,
@@ -407,11 +552,10 @@ export default function PDVUnificado() {
       })
 
       setItens([])
-      setDesconto(0)
+      setDescontoManual(0)
       setTroco('')
       setCpfNota('')
     } catch (err) {
-      // Fallback offline se o servidor falhar
       try {
         await enfileirarVendaOffline(payload)
         setFilaLocalQtd(q => q + 1)
@@ -419,7 +563,7 @@ export default function PDVUnificado() {
           id: `v-${Date.now()}`,
           numero: `OFF-${Date.now().toString(36).toUpperCase()}`,
           total,
-          desconto: valorDesconto,
+          desconto: totalDescontos,
           troco: trocoCalc,
           cpf_cliente: cpfNota.trim() || null,
           forma_pagamento: formaPgto,
@@ -428,7 +572,7 @@ export default function PDVUnificado() {
           data: new Date().toISOString()
         })
         setItens([])
-        setDesconto(0)
+        setDescontoManual(0)
         setTroco('')
         setCpfNota('')
       } catch (e2) {
@@ -436,6 +580,65 @@ export default function PDVUnificado() {
       }
     } finally {
       setFinalizando(false)
+    }
+  }
+
+  // ── Emissão Direta de NFC-e Fiscal ──────────────────────────────────────────
+  async function emitirNfce() {
+    if (!venda) return
+    setEmitindoNfce(true)
+    try {
+      const res = await api.post('/api/supermercado/emitir-nfce', {
+        vendaId: venda.id,
+        cpf_cliente: venda.cpf_cliente,
+        total: venda.total,
+        itens: venda.itens,
+        forma_pagamento: venda.forma_pagamento
+      }).catch(async () => {
+        return await api.post('/api/admin/varejo/emitir-nfce', {
+          vendaId: venda.id,
+          cpf_cliente: venda.cpf_cliente,
+          total: venda.total,
+          itens: venda.itens,
+          forma_pagamento: venda.forma_pagamento
+        })
+      })
+
+      if (res?.nfce) {
+        setVenda(v => ({ ...v, nfce: res.nfce }))
+        tocarBeep()
+      } else {
+        alert('A NFC-e foi processada em contingência.')
+      }
+    } catch (err) {
+      alert('Aviso NFC-e: ' + (err.message || 'Erro ao conectar à SEFAZ. O documento foi registrado em contingência.'))
+    } finally {
+      setEmitindoNfce(false)
+    }
+  }
+
+  // ── Fechamento Cego de Caixa ───────────────────────────────────────────────
+  async function executarFechamentoCego() {
+    try {
+      const res = await api.post('/api/supermercado/caixa/fechamento-cego', {
+        valores: valoresCego,
+        operador: 'Operador de Caixa'
+      }).catch(async () => {
+        return await api.post('/api/admin/varejo/caixa/fechamento-cego', {
+          valores: valoresCego,
+          operador: 'Operador de Caixa'
+        })
+      })
+
+      if (res?.reducaoZ) {
+        setReducaoZ(res.reducaoZ)
+        setModalFechamentoCego(false)
+      } else {
+        alert('Fechamento de caixa concluído com sucesso!')
+        setModalFechamentoCego(false)
+      }
+    } catch (err) {
+      alert('Erro no fechamento: ' + err.message)
     }
   }
 
@@ -463,7 +666,6 @@ export default function PDVUnificado() {
     }
   }
 
-  // Adicionar dígito pelo teclado touch
   function handleTouchKey(key) {
     if (key === 'C') {
       setBusca('')
@@ -477,6 +679,13 @@ export default function PDVUnificado() {
   // ── Render ──────────────────────────────────────────────────────────────────
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: theme.bg, color: theme.cream, overflow: 'hidden', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
+
+      {/* Alerta de Sincronização em Background */}
+      {avisoSync && (
+        <div style={{ background: theme.green, color: '#fff', padding: '6px 14px', fontSize: 12, fontWeight: 800, textAlign: 'center', transition: 'all .3s' }}>
+          {avisoSync}
+        </div>
+      )}
 
       {/* ── Top Bar Multiplataforma ───────────────────────────────────────────── */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 16px', background: theme.surface, borderBottom: `1px solid ${theme.line}`, flexWrap: 'wrap', gap: 8 }}>
@@ -525,16 +734,21 @@ export default function PDVUnificado() {
 
         {/* Ferramentas e Status de Rede */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11 }}>
-          {/* Badge Conexão */}
-          <span style={{
-            display: 'flex', alignItems: 'center', gap: 4, padding: '3px 8px', borderRadius: 6,
-            background: isOnline ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)',
-            color: isOnline ? theme.green : theme.red, fontWeight: 700, border: `1px solid ${isOnline ? theme.green : theme.red}`
-          }}>
+          {/* Badge Conexão e Auto-sync */}
+          <button
+            onClick={sincronizarFilaOffline}
+            title={filaLocalQtd > 0 ? 'Clique para forçar sincronização offline' : 'Conexão sincronizada'}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 4, padding: '3px 8px', borderRadius: 6,
+              background: isOnline ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)',
+              color: isOnline ? theme.green : theme.red, fontWeight: 700, border: `1px solid ${isOnline ? theme.green : theme.red}`,
+              cursor: 'pointer'
+            }}
+          >
             <span style={{ width: 6, height: 6, borderRadius: '50%', background: isOnline ? theme.green : theme.red }} />
             {isOnline ? 'Online' : 'Modo Offline'}
             {filaLocalQtd > 0 && ` (${filaLocalQtd} na fila)`}
-          </span>
+          </button>
 
           {/* Câmera Leitor de Código de Barras */}
           <button
@@ -551,6 +765,16 @@ export default function PDVUnificado() {
           >
             🔢 Teclado Touch
           </button>
+
+          {/* Fechamento Cego e Redução Z */}
+          {modoOperacao === 'operador' && (
+            <button
+              onClick={() => setModalFechamentoCego(true)}
+              style={{ background: theme.card, color: theme.red, border: `1px solid ${theme.line}`, padding: '4px 8px', borderRadius: 6, cursor: 'pointer', fontSize: 11, fontWeight: 700 }}
+            >
+              🔒 Fechamento Cego (F8)
+            </button>
+          )}
 
           {/* Sangria e Suprimento */}
           {modoOperacao === 'operador' && (
@@ -628,7 +852,7 @@ export default function PDVUnificado() {
           {/* Teclado Virtual Touch (Retrátil para Totem e Tablets) */}
           {mostrarTecladoTouch && (
             <div style={{ padding: '10px 16px', background: theme.surface, borderBottom: `1px solid ${theme.line}` }}>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 6, maxWidth: 500 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 6, maxWidth: 540 }}>
                 {['1','2','3','4','5','6','7','8','9','0','00','*','C','ENTER'].map(k => (
                   <button
                     key={k}
@@ -745,7 +969,7 @@ export default function PDVUnificado() {
               <div style={{ fontSize: 13, maxWidth: 380, textAlign: 'center', lineHeight: 1.5 }}>
                 Passe os produtos no leitor de código de barras ou use a busca.<br />
                 Para multiplicar, digite <strong>3*código</strong> e pressione Enter.<br />
-                Para pesáveis, clique no atalho de balança correspondente.
+                Promoções como <em>Leve & Pague</em> e <em>Ofertas</em> são calculadas automaticamente no carrinho.
               </div>
             </div>
           )}
@@ -775,49 +999,63 @@ export default function PDVUnificado() {
               <div style={{ textAlign: 'center', padding: '60px 0', color: theme.muted, fontSize: 13 }}>
                 {modoOperacao === 'totem' ? 'Seu carrinho está vazio.\nBipe o primeiro produto ou escolha nos atalhos ao lado.' : 'Nenhum item adicionado à comanda.\nBipe o primeiro produto para iniciar.'}
               </div>
-            ) : itens.map((item, idx) => (
-              <div key={item.chave} style={{
-                background: theme.card, border: `1px solid ${theme.line}`,
-                borderRadius: 10, padding: '10px 12px', marginBottom: 8,
-              }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, flex: 1, marginRight: 8 }}>
-                    <span style={{ color: theme.muted, marginRight: 6 }}>#{idx + 1}</span>
-                    {item.nome}
-                  </div>
-                  <button onClick={() => removerItem(item.chave)} style={{ background: 'none', border: 'none', color: theme.red, cursor: 'pointer', fontSize: 14 }}>✕</button>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  {/* Controle de quantidade */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <button
-                      onClick={() => alterarQuantidade(item.chave, item.pesavel ? -0.1 : -1)}
-                      style={{ width: 28, height: 28, borderRadius: 6, border: `1px solid ${theme.line}`, background: theme.surface, color: theme.cream, cursor: 'pointer', fontSize: 14, fontWeight: 700 }}
-                    >−</button>
-                    <span style={{ fontSize: 13, fontWeight: 700, minWidth: 44, textAlign: 'center' }}>
-                      {item.pesavel ? item.quantidade.toFixed(3) : item.quantidade}
-                      <span style={{ fontSize: 10, color: theme.muted, marginLeft: 2 }}>{item.unidade}</span>
-                    </span>
-                    <button
-                      onClick={() => alterarQuantidade(item.chave, item.pesavel ? 0.1 : 1)}
-                      style={{ width: 28, height: 28, borderRadius: 6, border: `1px solid ${theme.line}`, background: theme.surface, color: theme.cream, cursor: 'pointer', fontSize: 14, fontWeight: 700 }}
-                    >+</button>
-                  </div>
-                  {/* Preço editável e Total */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <div style={{ color: theme.muted, fontSize: 11 }}>
-                      R$ {item.preco.toFixed(2)}
+            ) : itens.map((item, idx) => {
+              const promo = calcularDescontoPromocao(item, item.quantidade)
+              const totalItemLiquido = (item.preco * item.quantidade) - (promo?.desconto || 0)
+
+              return (
+                <div key={item.chave} style={{
+                  background: theme.card, border: `1px solid ${promo ? theme.green : theme.line}`,
+                  borderRadius: 10, padding: '10px 12px', marginBottom: 8,
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, flex: 1, marginRight: 8 }}>
+                      <span style={{ color: theme.muted, marginRight: 6 }}>#{idx + 1}</span>
+                      {item.nome}
                     </div>
-                    <div style={{ fontWeight: 800, fontSize: 15, minWidth: 70, textAlign: 'right', color: theme.green }}>
-                      R$ {(item.preco * item.quantidade).toFixed(2)}
+                    <button onClick={() => removerItem(item.chave)} style={{ background: 'none', border: 'none', color: theme.red, cursor: 'pointer', fontSize: 14 }}>✕</button>
+                  </div>
+
+                  {/* Destaque Promocional Automático */}
+                  {promo && (
+                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: 'rgba(16,185,129,0.15)', color: theme.green, padding: '2px 6px', borderRadius: 4, fontSize: 11, fontWeight: 700, marginBottom: 6 }}>
+                      🏷️ {promo.nome}: − R$ {promo.desconto.toFixed(2)}
+                    </div>
+                  )}
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    {/* Controle de quantidade */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <button
+                        onClick={() => alterarQuantidade(item.chave, item.pesavel ? -0.1 : -1)}
+                        style={{ width: 28, height: 28, borderRadius: 6, border: `1px solid ${theme.line}`, background: theme.surface, color: theme.cream, cursor: 'pointer', fontSize: 14, fontWeight: 700 }}
+                      >−</button>
+                      <span style={{ fontSize: 13, fontWeight: 700, minWidth: 44, textAlign: 'center' }}>
+                        {item.pesavel ? item.quantidade.toFixed(3) : item.quantidade}
+                        <span style={{ fontSize: 10, color: theme.muted, marginLeft: 2 }}>{item.unidade}</span>
+                      </span>
+                      <button
+                        onClick={() => alterarQuantidade(item.chave, item.pesavel ? 0.1 : 1)}
+                        style={{ width: 28, height: 28, borderRadius: 6, border: `1px solid ${theme.line}`, background: theme.surface, color: theme.cream, cursor: 'pointer', fontSize: 14, fontWeight: 700 }}
+                      >+</button>
+                    </div>
+
+                    {/* Preço e Total com Desconto */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <div style={{ color: theme.muted, fontSize: 11 }}>
+                        R$ {item.preco.toFixed(2)}
+                      </div>
+                      <div style={{ fontWeight: 800, fontSize: 15, minWidth: 70, textAlign: 'right', color: theme.green }}>
+                        R$ {totalItemLiquido.toFixed(2)}
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
 
-          {/* CPF na Nota e Desconto */}
+          {/* CPF na Nota e Desconto Manual */}
           <div style={{ padding: '10px 14px', borderTop: `1px solid ${theme.line}`, background: 'rgba(0,0,0,0.1)' }}>
             <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
               <div style={{ flex: 1 }}>
@@ -843,8 +1081,8 @@ export default function PDVUnificado() {
                   <input
                     id="pdv-desconto-input"
                     type="number"
-                    value={desconto || ''}
-                    onChange={e => setDesconto(e.target.value)}
+                    value={descontoManual || ''}
+                    onChange={e => setDescontoManual(e.target.value)}
                     placeholder="Desc (F7)"
                     style={{ width: 75, padding: '6px 8px', background: theme.card, border: `1px solid ${theme.line}`, borderRadius: 6, color: theme.cream, fontSize: 12, outline: 'none' }}
                     min="0"
@@ -854,11 +1092,13 @@ export default function PDVUnificado() {
               )}
             </div>
 
-            {/* Totais */}
-            {valorDesconto > 0 && (
+            {/* Totais com Promoções e Descontos */}
+            {totalDescontos > 0 && (
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 4 }}>
-                <span style={{ color: theme.muted }}>Subtotal: R$ {subtotal.toFixed(2)}</span>
-                <span style={{ color: theme.red }}>− Desconto: R$ {valorDesconto.toFixed(2)}</span>
+                <span style={{ color: theme.muted }}>Subtotal: R$ {subtotalBruto.toFixed(2)}</span>
+                <span style={{ color: theme.green, fontWeight: 700 }}>
+                  − Promoções/Descontos: R$ {totalDescontos.toFixed(2)}
+                </span>
               </div>
             )}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
@@ -950,7 +1190,7 @@ export default function PDVUnificado() {
         </div>
       )}
 
-      {/* ── Modal: Pesagem Rápida (Balança) ─────────────────────────────────── */}
+      {/* ── Modal: Pesagem Rápida & Leitura Balança Web Serial ──────────────── */}
       {modalPesagem && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.75)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 110 }}>
           <div style={{ background: theme.card, borderRadius: 16, padding: 24, width: 380, border: `1px solid ${theme.line}` }}>
@@ -958,8 +1198,18 @@ export default function PDVUnificado() {
               <div style={{ fontWeight: 800, fontSize: 16, color: '#fff' }}>⚖️ Balança — {modalPesagem.nome}</div>
               <button onClick={() => setModalPesagem(null)} style={{ background: 'none', border: 'none', color: theme.muted, cursor: 'pointer', fontSize: 18 }}>✕</button>
             </div>
-            <div style={{ fontSize: 13, color: theme.muted, marginBottom: 12 }}>
-              Preço por KG: <strong style={{ color: theme.green }}>R$ {parseFloat(modalPesagem.precoFinal || modalPesagem.precoBase || 0).toFixed(2)}</strong>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <div style={{ fontSize: 13, color: theme.muted }}>
+                Preço por KG: <strong style={{ color: theme.green }}>R$ {parseFloat(modalPesagem.precoFinal || modalPesagem.precoBase || 0).toFixed(2)}</strong>
+              </div>
+              <button
+                type="button"
+                onClick={lerBalancaSerial}
+                disabled={lendoBalanca}
+                style={{ padding: '4px 8px', borderRadius: 6, background: theme.blue, color: '#fff', border: 'none', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
+              >
+                {lendoBalanca ? 'Lendo...' : '🔌 Ler USB/Serial'}
+              </button>
             </div>
 
             <label style={{ fontSize: 12, fontWeight: 700, color: theme.muted, marginBottom: 6, display: 'block' }}>
@@ -1088,7 +1338,208 @@ export default function PDVUnificado() {
         </div>
       )}
 
-      {/* ── Modal: Venda Realizada com Cupom Térmico (80mm) ou QR Code PIX ─── */}
+      {/* ── Modal: Fechamento Cego de Caixa (Conferência de Gaveta) ──────────── */}
+      {modalFechamentoCego && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 125 }}>
+          <div style={{ background: theme.card, borderRadius: 16, padding: 24, width: 420, border: `1px solid ${theme.line}`, maxHeight: '90vh', overflowY: 'auto' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <div style={{ fontWeight: 800, fontSize: 16, color: '#fff' }}>🔒 Fechamento Cego de Caixa</div>
+              <button onClick={() => setModalFechamentoCego(false)} style={{ background: 'none', border: 'none', color: theme.muted, cursor: 'pointer', fontSize: 18 }}>✕</button>
+            </div>
+            <p style={{ fontSize: 12, color: theme.muted, marginBottom: 14 }}>
+              Conte o valor físico presente na gaveta e nos comprovantes de cartão/PIX. O sistema comparará os valores informados com os lançamentos apurados para gerar a Redução Z.
+            </p>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
+              <label style={{ fontSize: 11, color: theme.muted }}>
+                💵 Dinheiro (Cédulas R$):
+                <input
+                  type="number"
+                  step="0.01"
+                  placeholder="0,00"
+                  value={valoresCego.dinheiro}
+                  onChange={e => setValoresCego({ ...valoresCego, dinheiro: e.target.value })}
+                  style={{ width: '100%', boxSizing: 'border-box', padding: '8px 10px', background: theme.surface, border: `1px solid ${theme.line}`, borderRadius: 8, color: '#fff', fontSize: 14, fontWeight: 700, outline: 'none', marginTop: 4 }}
+                />
+              </label>
+              <label style={{ fontSize: 11, color: theme.muted }}>
+                🪙 Moedas (R$):
+                <input
+                  type="number"
+                  step="0.01"
+                  placeholder="0,00"
+                  value={valoresCego.moedas}
+                  onChange={e => setValoresCego({ ...valoresCego, moedas: e.target.value })}
+                  style={{ width: '100%', boxSizing: 'border-box', padding: '8px 10px', background: theme.surface, border: `1px solid ${theme.line}`, borderRadius: 8, color: '#fff', fontSize: 14, fontWeight: 700, outline: 'none', marginTop: 4 }}
+                />
+              </label>
+              <label style={{ fontSize: 11, color: theme.muted }}>
+                💳 Cartão Débito (R$):
+                <input
+                  type="number"
+                  step="0.01"
+                  placeholder="0,00"
+                  value={valoresCego.debito}
+                  onChange={e => setValoresCego({ ...valoresCego, debito: e.target.value })}
+                  style={{ width: '100%', boxSizing: 'border-box', padding: '8px 10px', background: theme.surface, border: `1px solid ${theme.line}`, borderRadius: 8, color: '#fff', fontSize: 14, fontWeight: 700, outline: 'none', marginTop: 4 }}
+                />
+              </label>
+              <label style={{ fontSize: 11, color: theme.muted }}>
+                💳 Cartão Crédito (R$):
+                <input
+                  type="number"
+                  step="0.01"
+                  placeholder="0,00"
+                  value={valoresCego.credito}
+                  onChange={e => setValoresCego({ ...valoresCego, credito: e.target.value })}
+                  style={{ width: '100%', boxSizing: 'border-box', padding: '8px 10px', background: theme.surface, border: `1px solid ${theme.line}`, borderRadius: 8, color: '#fff', fontSize: 14, fontWeight: 700, outline: 'none', marginTop: 4 }}
+                />
+              </label>
+              <label style={{ fontSize: 11, color: theme.muted }}>
+                ⚡ PIX Conferido (R$):
+                <input
+                  type="number"
+                  step="0.01"
+                  placeholder="0,00"
+                  value={valoresCego.pix}
+                  onChange={e => setValoresCego({ ...valoresCego, pix: e.target.value })}
+                  style={{ width: '100%', boxSizing: 'border-box', padding: '8px 10px', background: theme.surface, border: `1px solid ${theme.line}`, borderRadius: 8, color: '#fff', fontSize: 14, fontWeight: 700, outline: 'none', marginTop: 4 }}
+                />
+              </label>
+              <label style={{ fontSize: 11, color: theme.muted }}>
+                🎁 Outros / Vales (R$):
+                <input
+                  type="number"
+                  step="0.01"
+                  placeholder="0,00"
+                  value={valoresCego.outros}
+                  onChange={e => setValoresCego({ ...valoresCego, outros: e.target.value })}
+                  style={{ width: '100%', boxSizing: 'border-box', padding: '8px 10px', background: theme.surface, border: `1px solid ${theme.line}`, borderRadius: 8, color: '#fff', fontSize: 14, fontWeight: 700, outline: 'none', marginTop: 4 }}
+                />
+              </label>
+            </div>
+
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button
+                type="button"
+                onClick={() => setModalFechamentoCego(false)}
+                style={{ flex: 1, padding: '12px', background: theme.surface, color: theme.muted, border: `1px solid ${theme.line}`, borderRadius: 10, fontWeight: 700, cursor: 'pointer' }}
+              >
+                Voltar
+              </button>
+              <button
+                type="button"
+                onClick={executarFechamentoCego}
+                style={{ flex: 1.5, padding: '12px', background: theme.red, color: '#fff', border: 'none', borderRadius: 10, fontWeight: 800, cursor: 'pointer' }}
+              >
+                Conferir e Fechar Turno
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal: Redução Z / Relatório de Fechamento de Caixa ─────────────── */}
+      {reducaoZ && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 130 }}>
+          <div style={{ background: '#fff', color: '#111', borderRadius: 16, padding: 24, width: 380, maxHeight: '90vh', overflowY: 'auto' }}>
+            <div id="reducao-z-print" style={{ fontFamily: 'monospace', fontSize: 12, lineHeight: 1.4, borderBottom: '1px dashed #666', paddingBottom: 12, marginBottom: 14 }}>
+              <div style={{ textAlign: 'center', fontWeight: 'bold', fontSize: 14, marginBottom: 4 }}>
+                RELATÓRIO DE FECHAMENTO — REDUÇÃO Z
+              </div>
+              <div style={{ textAlign: 'center', fontSize: 10, color: '#444' }}>
+                KYTTO SUPERMERCADO & VAREJO<br />
+                {reducaoZ.numero} · {new Date(reducaoZ.dataFechamento).toLocaleDateString('pt-BR')} {new Date(reducaoZ.dataFechamento).toLocaleTimeString('pt-BR')}
+              </div>
+              <div style={{ borderBottom: '1px dashed #666', margin: '8px 0' }} />
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11 }}>
+                <span>Operador:</span>
+                <strong>{reducaoZ.operador}</strong>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginTop: 2 }}>
+                <span>Situação:</span>
+                <strong style={{ color: reducaoZ.resumo.divergenciaGaveta === 0 ? '#059669' : '#dc2626' }}>
+                  {reducaoZ.resumo.situacao}
+                </strong>
+              </div>
+
+              <div style={{ borderBottom: '1px dashed #666', margin: '8px 0' }} />
+              <div style={{ fontWeight: 'bold', fontSize: 11, marginBottom: 4 }}>MOVIMENTAÇÃO DE GAVETA:</div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11 }}>
+                <span>(+) Fundo de Troco Inicial:</span>
+                <span>R$ {reducaoZ.resumo.abertura.toFixed(2)}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11 }}>
+                <span>(+) Suprimentos de Caixa:</span>
+                <span>R$ {reducaoZ.resumo.suprimentos.toFixed(2)}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11 }}>
+                <span>(−) Sangrias Efetuadas:</span>
+                <span>R$ {reducaoZ.resumo.sangrias.toFixed(2)}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11 }}>
+                <span>(+) Vendas em Dinheiro:</span>
+                <span>R$ {reducaoZ.resumo.vendasDinheiro.toFixed(2)}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, fontWeight: 'bold', marginTop: 4 }}>
+                <span>(=) Valor Esperado na Gaveta:</span>
+                <span>R$ {reducaoZ.resumo.valorEsperadoGaveta.toFixed(2)}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, fontWeight: 'bold' }}>
+                <span>Valor Contado pelo Operador:</span>
+                <span>R$ {reducaoZ.resumo.dinheiroInformado.toFixed(2)}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, fontWeight: 'bold', color: reducaoZ.resumo.divergenciaGaveta === 0 ? '#059669' : '#dc2626', marginTop: 4 }}>
+                <span>Diferença / Quebra:</span>
+                <span>R$ {reducaoZ.resumo.divergenciaGaveta.toFixed(2)}</span>
+              </div>
+
+              <div style={{ borderBottom: '1px dashed #666', margin: '8px 0' }} />
+              <div style={{ fontWeight: 'bold', fontSize: 11, marginBottom: 4 }}>TOTAIS POR FORMA DE PAGAMENTO:</div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11 }}>
+                <span>💵 Dinheiro:</span>
+                <span>R$ {reducaoZ.resumo.vendasDinheiro.toFixed(2)}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11 }}>
+                <span>💳 Cartão de Débito:</span>
+                <span>R$ {reducaoZ.resumo.vendasDebito.toFixed(2)}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11 }}>
+                <span>💳 Cartão de Crédito:</span>
+                <span>R$ {reducaoZ.resumo.vendasCredito.toFixed(2)}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11 }}>
+                <span>⚡ PIX:</span>
+                <span>R$ {reducaoZ.resumo.vendasPix.toFixed(2)}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, fontWeight: 'bold', marginTop: 4 }}>
+                <span>TOTAL VENDAS TURNO:</span>
+                <span>R$ {reducaoZ.resumo.totalVendas.toFixed(2)}</span>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button
+                type="button"
+                onClick={() => setReducaoZ(null)}
+                style={{ flex: 1, padding: '12px', background: theme.surface, color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, cursor: 'pointer' }}
+              >
+                Concluir
+              </button>
+              <button
+                type="button"
+                onClick={() => window.print()}
+                style={{ flex: 1.5, padding: '12px', background: theme.green, color: '#fff', border: 'none', borderRadius: 10, fontWeight: 800, cursor: 'pointer' }}
+              >
+                🖨️ Imprimir Redução Z
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal: Venda Realizada com Cupom Térmico (80mm) ou NFC-e SEFAZ ─── */}
       {venda && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 120 }}>
           <div style={{ background: '#fff', color: '#111', borderRadius: 16, padding: 24, width: 380, maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 20px 40px rgba(0,0,0,0.5)' }}>
@@ -1107,7 +1558,7 @@ export default function PDVUnificado() {
               </div>
               <div style={{ textAlign: 'center', fontSize: 10, color: '#444' }}>
                 Barbearia Dino Comércio e Serviços Ltda<br />
-                DOCUMENTO AUXILIAR DE VENDA (NÃO FISCAL)
+                {venda.nfce ? 'DANFE NFC-e — NOTA FISCAL DE CONSUMIDOR ELETRÔNICA' : 'DOCUMENTO AUXILIAR DE VENDA (NÃO FISCAL)'}
               </div>
               <div style={{ borderBottom: '1px dashed #666', margin: '8px 0' }} />
 
@@ -1130,13 +1581,18 @@ export default function PDVUnificado() {
                     <span>{it.quantidade} × R$ {parseFloat(it.preco_unitario || 0).toFixed(2)}</span>
                     <strong style={{ color: '#111' }}>R$ {(it.quantidade * (it.preco_unitario || 0)).toFixed(2)}</strong>
                   </div>
+                  {it.regra_promocao && (
+                    <div style={{ fontSize: 10, color: '#059669', fontStyle: 'italic' }}>
+                      🏷️ Promoção: {it.regra_promocao} (−R$ {parseFloat(it.desconto_promocao || 0).toFixed(2)})
+                    </div>
+                  )}
                 </div>
               ))}
 
               <div style={{ borderBottom: '1px dashed #666', margin: '8px 0' }} />
               {venda.desconto > 0 && (
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11 }}>
-                  <span>Desconto:</span>
+                  <span>Descontos/Promoções:</span>
                   <span>− R$ {parseFloat(venda.desconto).toFixed(2)}</span>
                 </div>
               )}
@@ -1154,24 +1610,65 @@ export default function PDVUnificado() {
                   <span>R$ {parseFloat(venda.troco).toFixed(2)}</span>
                 </div>
               )}
-              <div style={{ textAlign: 'center', fontSize: 10, marginTop: 14, color: '#555' }}>
-                Obrigado pela preferência! Volte sempre!
-              </div>
+
+              {/* Informações Oficiais NFC-e SEFAZ */}
+              {venda.nfce ? (
+                <div style={{ marginTop: 12, borderTop: '1px dashed #666', paddingTop: 8, textAlign: 'center' }}>
+                  <div style={{ fontWeight: 'bold', fontSize: 11 }}>NFC-e Nº {venda.nfce.numero} Série {venda.nfce.serie}</div>
+                  <div style={{ fontSize: 9, color: '#333', wordBreak: 'break-all', margin: '4px 0' }}>
+                    CHAVE DE ACESSO:<br />
+                    {venda.nfce.chaveAcesso.match(/.{1,4}/g)?.join(' ')}
+                  </div>
+                  <div style={{ fontSize: 9, color: '#333' }}>
+                    Protocolo de Autorização: {venda.nfce.protocolo}
+                  </div>
+                  <div style={{ margin: '10px 0', display: 'flex', justifyContent: 'center' }}>
+                    {/* QR Code Oficial SEFAZ */}
+                    <img
+                      src={`https://api.qrserver.com/v1/create-qr-code/?size=110x110&data=${encodeURIComponent(venda.nfce.qrCodeUrl)}`}
+                      alt="QR Code SEFAZ"
+                      style={{ width: 110, height: 110, display: 'block' }}
+                    />
+                  </div>
+                  <div style={{ fontSize: 9, color: '#555' }}>
+                    Consulte pela Chave de Acesso em:<br />
+                    www.sefaz.mt.gov.br/nfce/consultanfce
+                  </div>
+                </div>
+              ) : (
+                <div style={{ textAlign: 'center', fontSize: 10, marginTop: 14, color: '#555' }}>
+                  Obrigado pela preferência! Volte sempre!
+                </div>
+              )}
             </div>
 
-            {/* Ações de Impressão e Nova Venda */}
-            <div style={{ display: 'flex', gap: 10 }}>
+            {/* Ações de Impressão e Emissão NFC-e */}
+            <div style={{ display: 'grid', gridTemplateColumns: venda.nfce ? '1fr 1.5fr' : '1fr 1fr 1.5fr', gap: 8 }}>
               <button
+                type="button"
                 onClick={() => setVenda(null)}
-                style={{ flex: 1, padding: '12px', background: theme.surface, color: '#fff', border: 'none', borderRadius: 10, fontWeight: 800, cursor: 'pointer', fontSize: 13 }}
+                style={{ padding: '12px 6px', background: theme.surface, color: '#fff', border: 'none', borderRadius: 10, fontWeight: 800, cursor: 'pointer', fontSize: 12 }}
               >
                 Nova Venda
               </button>
+
+              {!venda.nfce && (
+                <button
+                  type="button"
+                  onClick={emitirNfce}
+                  disabled={emitindoNfce}
+                  style={{ padding: '12px 6px', background: theme.blue, color: '#fff', border: 'none', borderRadius: 10, fontWeight: 800, cursor: 'pointer', fontSize: 12 }}
+                >
+                  {emitindoNfce ? 'Emitindo...' : '⚡ NFC-e Fiscal'}
+                </button>
+              )}
+
               <button
-                onClick={() => { window.print() }}
-                style={{ flex: 1.5, padding: '12px', background: theme.green, color: '#fff', border: 'none', borderRadius: 10, fontWeight: 900, cursor: 'pointer', fontSize: 13, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+                type="button"
+                onClick={() => window.print()}
+                style={{ padding: '12px 6px', background: theme.green, color: '#fff', border: 'none', borderRadius: 10, fontWeight: 900, cursor: 'pointer', fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}
               >
-                🖨️ Imprimir Cupom
+                🖨️ Imprimir
               </button>
             </div>
           </div>
