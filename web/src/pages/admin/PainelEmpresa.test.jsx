@@ -4,7 +4,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest'
 
 const mocks = vi.hoisted(() => ({ useAuth: vi.fn(), api: { get: vi.fn() } }))
 vi.mock('../../lib/auth', () => ({ useAuth: mocks.useAuth }))
-vi.mock('../../lib/api', () => ({ api: mocks.api }))
+vi.mock('../../lib/api', () => ({ api: mocks.api, fmtKpi: (v) => String(v ?? '') }))
 vi.mock('react-router-dom', () => ({ Link: ({ to, children }) => createElement('a', { href: to }, children) }))
 vi.mock('./customer360.css', () => ({}))
 vi.mock('./dino/dino-admin.css', () => ({}))

@@ -1483,6 +1483,7 @@ export default function BarbeariaERP() {
           ? profissionalFiltro
           : ""),
       agendamentoId: agendamento?.id || "",
+      agendamentoObj: agendamento || null,
       itemTipo: "servico",
       itemId:
         agendamento?.servicoId ||
@@ -8639,7 +8640,9 @@ export default function BarbeariaERP() {
       );
     if (modal === "novaComanda") {
       const agendamentoComanda = formComanda.agendamentoId
-        ? agendamentos.find((a) => a.id === formComanda.agendamentoId)
+        ? agendamentos.find((a) => a.id === formComanda.agendamentoId) ||
+          formComanda.agendamentoObj ||
+          null
         : null;
       const proximasAg = agendamentoComanda
         ? TRANSICOES[agendamentoComanda.status] || []
@@ -8650,7 +8653,7 @@ export default function BarbeariaERP() {
           onClose={() => setModal(null)}
           xl
         >
-          {agendamentoComanda && proximasAg.length > 0 && (
+          {agendamentoComanda && (
             <div
               style={{
                 display: "flex",
@@ -8679,6 +8682,37 @@ export default function BarbeariaERP() {
                   Mudar para {STATUS[proximo]?.label}
                 </button>
               ))}
+              {!["concluido", "cancelado", "nao_compareceu"].includes(
+                agendamentoComanda.status,
+              ) && (
+                <button
+                  type="button"
+                  style={{
+                    ...styles.secondary,
+                    padding: "4px 10px",
+                    fontSize: 12,
+                  }}
+                  onClick={() => abrirEdicaoAgendamento(agendamentoComanda)}
+                >
+                  📅 Alterar horário / Trocar profissional
+                </button>
+              )}
+              <button
+                type="button"
+                style={{
+                  ...styles.secondary,
+                  padding: "4px 10px",
+                  fontSize: 12,
+                }}
+                onClick={() =>
+                  setModal({
+                    tipo: "detalheAgenda",
+                    agendamento: agendamentoComanda,
+                  })
+                }
+              >
+                📋 Detalhes do atendimento
+              </button>
             </div>
           )}
           <ComandaNova
@@ -8713,7 +8747,10 @@ export default function BarbeariaERP() {
     if (modal?.tipo === "comanda") {
       const comanda = modal.comanda;
       const agendamentoComanda = comanda.agendamentoId
-        ? agendamentos.find((a) => a.id === comanda.agendamentoId)
+        ? agendamentos.find((a) => a.id === comanda.agendamentoId) ||
+          modal.agendamento ||
+          formComanda.agendamentoObj ||
+          null
         : null;
       const proximasAg = agendamentoComanda
         ? TRANSICOES[agendamentoComanda.status] || []
@@ -8797,7 +8834,7 @@ export default function BarbeariaERP() {
     )}
   </div>
             </div>
-            {agendamentoComanda && proximasAg.length > 0 && (
+            {agendamentoComanda && (
               <div
                 style={{
                   display: "flex",
@@ -8825,6 +8862,37 @@ export default function BarbeariaERP() {
                     Mudar para {STATUS[proximo]?.label}
                   </button>
                 ))}
+                {!["concluido", "cancelado", "nao_compareceu"].includes(
+                  agendamentoComanda.status,
+                ) && (
+                  <button
+                    type="button"
+                    style={{
+                      ...styles.secondary,
+                      padding: "4px 10px",
+                      fontSize: 12,
+                    }}
+                    onClick={() => abrirEdicaoAgendamento(agendamentoComanda)}
+                  >
+                    📅 Alterar horário / Trocar profissional
+                  </button>
+                )}
+                <button
+                  type="button"
+                  style={{
+                    ...styles.secondary,
+                    padding: "4px 10px",
+                    fontSize: 12,
+                  }}
+                  onClick={() =>
+                    setModal({
+                      tipo: "detalheAgenda",
+                      agendamento: agendamentoComanda,
+                    })
+                  }
+                >
+                  📋 Detalhes do atendimento
+                </button>
               </div>
             )}
             <div style={styles.comandaMetrics}>

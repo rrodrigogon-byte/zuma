@@ -56,11 +56,11 @@ test('troca de serviço invalida vaga antiga e a seleção preserva o serviço c
 test('calendário mantém filtro ao atualizar, mostra dias vazios e sincroniza o dia clicado', async () => {
   const f=await fixture(); try {
     await f.finish(0,{itens:[]})
-    assert.equal(f.render.root.findAll(n=>n.props.className==='dino-cal-day').length,7)
-    await f.click('Ver sex., 09/10 na linha do tempo'); assert.equal(f.dates.at(-1),'2026-10-09')
-    await f.click('Mês'); await f.finish(1,{itens:[]})
-    assert.equal(f.render.root.findAll(n=>n.props.className==='dino-cal-day').length,31)
-    await f.update({refreshKey:1}); await f.finish(2,{itens:[]})
+    assert.equal(f.render.root.findAll(n=>n.props.className==='dino-cal-day-column').length,6)
+    await act(async () => { f.render.root.findAll(n=>n.props.className==='dino-cal-day-header')[4].props.onClick() }); assert.equal(f.dates.at(-1),'2026-10-09')
+    await f.click('Mês'); await f.finish(2,{itens:[]})
+    assert.equal(f.render.root.findAll(n=>n.props.className==='dino-cal-month-cell').length,31)
+    await f.update({refreshKey:1}); await f.finish(3,{itens:[]})
     assert.equal(f.button('Mês').props['aria-pressed'],true)
     await f.change('select',0,'s1'); assert.equal(f.button('Ver horários livres').props.disabled,true)
     assert.match(text(f.render.toJSON()),/até 14 dias/)
@@ -70,9 +70,9 @@ test('falha de consulta não mostra agenda vazia como sucesso e permite nova ten
   const f=await fixture(); try {
     await act(async()=>f.calls[0].reject(new Error('Falha de conexão')))
     assert.match(text(f.render.toJSON()),/Falha de conexão/)
-    assert.equal(f.render.root.findAll(n=>n.props.className==='dino-cal-day').length,0)
+    assert.equal(f.render.root.findAll(n=>n.props.className==='dino-cal-day-column').length,0)
     await f.click('Atualizar calendário'); await f.finish(1,{itens:[]})
-    assert.equal(f.render.root.findAll(n=>n.props.className==='dino-cal-day').length,7)
+    assert.equal(f.render.root.findAll(n=>n.props.className==='dino-cal-day-column').length,6)
   } finally {f.close()}
 })
 test('Hoje da linha do tempo volta à data de Cuiabá e data inválida não derruba a tela', async () => {
@@ -89,6 +89,6 @@ test('seleção de vários profissionais acompanha a consulta e o modo diário',
     assert.equal(f.button('Bruno').props['aria-pressed'],true)
     assert.equal(f.button('Dino').props['aria-pressed'],true)
     await f.click('Dia');await f.finish(2,{itens:[]})
-    assert.equal(f.render.root.findAll(n=>n.props.className==='dino-cal-day').length,1)
+    assert.equal(f.render.root.findAll(n=>n.props.className==='dino-cal-day-view-container').length,1)
   }finally{f.close()}
 })

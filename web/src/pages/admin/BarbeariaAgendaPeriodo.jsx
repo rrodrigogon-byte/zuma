@@ -143,6 +143,7 @@ export default function BarbeariaAgendaPeriodo({
   servicos = [],
   profissionalId = "",
   onProfissionalChange,
+  onConferirComanda,
   onOpenAppointment,
   onPickSlot,
   refreshKey = 0,
@@ -223,21 +224,7 @@ export default function BarbeariaAgendaPeriodo({
   const dias = useMemo(() => diasEntre(de, ate), [de, ate]);
 
   useEffect(() => {
-    function handleClickOutside(e) {
-      if (
-        refHojeDatePicker.current &&
-        !refHojeDatePicker.current.contains(e.target)
-      ) {
-        setHojeDatePicker(false);
-      }
-    }
-    if (hojeDatePicker)
-      document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [hojeDatePicker]);
-  // Filtra APENAS profissionais ativos (elimina inativos e excluídos da visão da agenda)
-
-  useEffect(() => {
+    if (typeof document === "undefined") return;
     function handleClickOutside(e) {
       if (
         refHojeDatePicker.current &&
@@ -680,6 +667,7 @@ export default function BarbeariaAgendaPeriodo({
 
   // Fecha o popover de modelos ao clicar fora
   useEffect(() => {
+    if (typeof document === "undefined") return;
     function handleClickFora(e) {
       if (
         popoverModelosRef.current &&
@@ -1064,6 +1052,7 @@ export default function BarbeariaAgendaPeriodo({
             <button
               type="button"
               className="dino-cal-view-btn"
+              aria-label="Dia"
               aria-pressed={modeloAtualId === "avec_colunas"}
               onClick={() => selecionarModelo("avec_colunas")}
               title="Colunas diárias separadas por barbeiro (Estilo Avec / Multi-cadeira)"
@@ -1133,6 +1122,7 @@ export default function BarbeariaAgendaPeriodo({
           <button
             type="button"
             className="dino-cal-btn-refresh"
+            aria-label="Atualizar calendário"
             onClick={() => {
               setErro("");
               setAtualizacao((n) => n + 1);
@@ -2081,6 +2071,7 @@ export default function BarbeariaAgendaPeriodo({
             <button
               type="button"
               className="dino-cal-avail-search-btn"
+              aria-label="Ver horários livres"
               disabled={
                 buscando || !servicoId || !dias.length || dias.length > 14
               }

@@ -69,6 +69,7 @@ export default function AgendaProfissionais({
 
   // Fecha o popover ao clicar fora
   useEffect(() => {
+    if (typeof document === 'undefined') return
     function handleClickFora(e) {
       if (popoverRef.current && !popoverRef.current.contains(e.target)) {
         setPopoverFiltroAberto(false)
@@ -254,6 +255,7 @@ export default function AgendaProfissionais({
               key={p.id}
               className="dino-cal-prof-chip"
               data-ativo="true"
+              aria-label={p.nome}
               aria-pressed={selecionado}
               onClick={(e) => {
                 if (e.shiftKey || e.ctrlKey || e.metaKey) {
