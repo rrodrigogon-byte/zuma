@@ -1,6 +1,7 @@
 import express from 'express';
 import * as svc from './servico.js';
 import * as lote from './lote.js';
+import * as sped from './sped.js';
 import { ErroDominio, responderErro } from '../acesso/banco.js';
 
 /**
@@ -96,6 +97,17 @@ export function createFiscalAdminRouter({ db, escopoDaRequisicao, env = process.
   router.post('/documentos/:id/contingencia', rota('payments.write', ({ req, empresaId, lojaRestrita, usuario }) => svc.entrarEmContingencia(db, empresaId, req.params.id, { justificativa: req.body?.justificativa, usuario, env, lojaRestrita })));
   router.get('/contingencias', rota('payments.read', ({ empresaId, lojaRestrita }) => svc.listarContingencias(db, empresaId, { lojaRestrita })));
   router.post('/contingencias/transmitir', rota('payments.write', ({ empresaId, lojaRestrita, usuario }) => svc.transmitirContingencias(db, empresaId, { usuario, env, transporte, lojaRestrita })));
+
+  // SPED (EFD ICMS/IPI e EFD-Contribuições) gerado das notas emitidas aqui
+  router.get('/sped/config', rota('payments.read', ({ empresaId }) => sped.obterConfigSped(db, empresaId)));
+  router.put('/sped/config', rota('settings.write', ({ req, empresaId, lojaRestrita }) => { empresaToda(lojaRestrita, 'Configurar o SPED'); return sped.salvarConfigSped(db, empresaId, req.body || {}); }));
+  router.post('/sped/:tipo', rota('payments.read', async ({ req, empresaId, lojaRestrita }) => {
+    empresaToda(lojaRestrita, 'Gerar o SPED');
+    const p = { ano: req.body?.ano, mes: req.body?.mes, emitenteId: req.body?.emitenteId || null, ambiente: req.body?.ambiente === 'homologacao' ? 'homologacao' : 'producao' };
+    if (req.params.tipo === 'efd-icms-ipi') return sped.arquivoParaDownload(await sped.gerarEfdIcmsIpi(db, empresaId, p));
+    if (req.params.tipo === 'efd-contribuicoes') return sped.arquivoParaDownload(await sped.gerarEfdContribuicoes(db, empresaId, p));
+    throw new ErroDominio('NOT_FOUND', 'Tipo de SPED desconhecido', 404);
+  }));
 
   router.get('/numeracao', rota('settings.write', ({ empresaId }) => svc.listarNumeracao(db, empresaId)));
   router.put('/numeracao', rota('settings.write', ({ req, empresaId, lojaRestrita, usuario }) => { empresaToda(lojaRestrita, 'Configurar a numeração'); return svc.salvarNumeracao(db, empresaId, req.body || {}, { usuario }); }));

@@ -44,7 +44,7 @@ describe('Fiscal por empresa — homologação (PostgreSQL)', { skip: pgDeTeste 
   before(async () => {
     ctx = await criarBancoTeste();
     await ctx.db.query(STUBS);
-    for (const m of ['081_bar_pdv_multiempresa.sql', '092_fiscal_multiempresa.sql', '100_fiscal_completo.sql', '106_fiscal_producao.sql']) await ctx.db.query(sql(m));
+    for (const m of ['081_bar_pdv_multiempresa.sql', '092_fiscal_multiempresa.sql', '100_fiscal_completo.sql', '106_fiscal_producao.sql', '108_fiscal_ibs_cbs.sql']) await ctx.db.query(sql(m));
     await ctx.db.query('INSERT INTO empresas (id) VALUES ($1), ($2)', [A, B]);
     loja = (await ctx.db.query("INSERT INTO lojas (empresa_id, nome) VALUES ($1, 'Sede') RETURNING id", [A])).rows[0].id;
   });

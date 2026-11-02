@@ -346,6 +346,7 @@ export default function App() {
           <Route path="/admin/fiscal" element={<TenantAware tenant={<Layout><Fiscal abaInicial="documentos" /></Layout>} legacy={<Layout><EmImplantacao modulo="Notas fiscais" /></Layout>} />} />
           <Route path="/admin/fiscal/documentos" element={<TenantAware tenant={<Layout><Fiscal abaInicial="documentos" /></Layout>} legacy={<Layout><EmImplantacao modulo="Notas fiscais" /></Layout>} />} />
           <Route path="/admin/fiscal/numeracao" element={<TenantAware tenant={<Layout><Fiscal abaInicial="numeracao" /></Layout>} legacy={<Layout><EmImplantacao modulo="Numeração fiscal" /></Layout>} />} />
+          <Route path="/admin/fiscal/sped" element={<TenantAware tenant={<Layout><Fiscal abaInicial="sped" /></Layout>} legacy={<Layout><EmImplantacao modulo="SPED fiscal" /></Layout>} />} />
           <Route path="/admin/fiscal/inutilizacao" element={<TenantAware tenant={<Layout><Fiscal abaInicial="inutilizacao" /></Layout>} legacy={<Layout><EmImplantacao modulo="Inutilização de numeração" /></Layout>} />} />
           <Route path="/admin/fiscal/config" element={<TenantAware tenant={<Layout><Fiscal abaInicial="situacao" /></Layout>} legacy={<Layout><EmImplantacao modulo="Configuração de NF-e e NFC-e" /></Layout>} />} />
           <Route path="/admin/fiscal/classificacao" element={<TenantAware tenant={<Layout><Fiscal abaInicial="classificacao" /></Layout>} legacy={<Layout><EmImplantacao modulo="Classificação fiscal" /></Layout>} />} />

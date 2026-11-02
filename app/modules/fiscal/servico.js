@@ -217,6 +217,7 @@ function classificacaoDto(row) {
     aliquotaPis: Number(row.aliquota_pis), aliquotaCofins: Number(row.aliquota_cofins), unidadeTributavel: row.unidade_tributavel || null,
     cTribNac: row.c_trib_nac || null, aliquotaIss: row.aliquota_iss === null ? null : Number(row.aliquota_iss),
     reducaoBaseIcms: row.p_red_bc === null || row.p_red_bc === undefined ? null : Number(row.p_red_bc),
+    cstIbsCbs: row.cst_ibscbs || null, cClassTrib: row.c_class_trib || null,
   };
 }
 
@@ -237,18 +238,25 @@ export async function salvarClassificacao(db, empresaId, dados = {}) {
   const pRedBc = dados.reducaoBaseIcms === undefined || dados.reducaoBaseIcms === '' || dados.reducaoBaseIcms === null ? null : Number(String(dados.reducaoBaseIcms).replace(',', '.'));
   if (pRedBc !== null && !(pRedBc > 0 && pRedBc < 100)) throw new ErroDominio('VALIDATION_ERROR', 'Redução da base do ICMS entre 0 e 100%');
   if (tipo === 'produto' && cstIcms === '20' && pRedBc === null) throw new ErroDominio('VALIDATION_ERROR', 'CST 20 exige o percentual de redução da base do ICMS');
+  // IBS/CBS (reforma tributária): CST e cClassTrib andam juntos; vazio = tributação integral (000/000001)
+  const cstIbsCbs = soDigitos(dados.cstIbsCbs); const cClassTrib = soDigitos(dados.cClassTrib);
+  if ((cstIbsCbs || cClassTrib) && !(cstIbsCbs.length === 3 && cClassTrib.length === 6)) throw new ErroDominio('VALIDATION_ERROR', 'IBS/CBS: informe o CST (3 dígitos) e o cClassTrib (6 dígitos) juntos');
+  if (cstIbsCbs && !CST_IBSCBS_SUPORTADOS.includes(cstIbsCbs)) throw new ErroDominio('VALIDATION_ERROR', `CST do IBS/CBS ${cstIbsCbs} ainda não suportado (use ${CST_IBSCBS_SUPORTADOS.join(' ou ')})`);
+  if (cstIbsCbs && cClassTrib.slice(0, 3) !== cstIbsCbs) throw new ErroDominio('VALIDATION_ERROR', `O cClassTrib ${cClassTrib} não é do CST ${cstIbsCbs} (os 3 primeiros dígitos do cClassTrib são o CST)`);
   const r = await db.query(
-    `INSERT INTO fis_classificacoes (empresa_id, fonte, fonte_id, tipo, ncm, cest, cfop, origem, csosn, cst_icms, aliquota_icms, cst_pis, cst_cofins, aliquota_pis, aliquota_cofins, unidade_tributavel, c_trib_nac, aliquota_iss, p_red_bc)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
+    `INSERT INTO fis_classificacoes (empresa_id, fonte, fonte_id, tipo, ncm, cest, cfop, origem, csosn, cst_icms, aliquota_icms, cst_pis, cst_cofins, aliquota_pis, aliquota_cofins, unidade_tributavel, c_trib_nac, aliquota_iss, p_red_bc, cst_ibscbs, c_class_trib)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
      ON CONFLICT (empresa_id, fonte, fonte_id) DO UPDATE SET tipo = EXCLUDED.tipo, ncm = EXCLUDED.ncm, cest = EXCLUDED.cest, cfop = EXCLUDED.cfop, origem = EXCLUDED.origem,
        csosn = EXCLUDED.csosn, cst_icms = EXCLUDED.cst_icms, aliquota_icms = EXCLUDED.aliquota_icms, cst_pis = EXCLUDED.cst_pis, cst_cofins = EXCLUDED.cst_cofins,
        aliquota_pis = EXCLUDED.aliquota_pis, aliquota_cofins = EXCLUDED.aliquota_cofins, unidade_tributavel = EXCLUDED.unidade_tributavel,
-       c_trib_nac = EXCLUDED.c_trib_nac, aliquota_iss = EXCLUDED.aliquota_iss, p_red_bc = EXCLUDED.p_red_bc, atualizado_em = CURRENT_TIMESTAMP
+       c_trib_nac = EXCLUDED.c_trib_nac, aliquota_iss = EXCLUDED.aliquota_iss, p_red_bc = EXCLUDED.p_red_bc,
+       cst_ibscbs = EXCLUDED.cst_ibscbs, c_class_trib = EXCLUDED.c_class_trib, atualizado_em = CURRENT_TIMESTAMP
      RETURNING *`,
     [empresa, dados.fonte, fonteId, tipo, ncm || null, cest || null, cfop || null, /^[0-8]$/.test(String(dados.origem)) ? String(dados.origem) : '0',
       csosn, cstIcms, Number(dados.aliquotaIcms) || 0, textoOpcional(dados.cstPis, 2) || '49', textoOpcional(dados.cstCofins, 2) || '49',
       Number(dados.aliquotaPis) || 0, Number(dados.aliquotaCofins) || 0, textoOpcional(String(dados.unidadeTributavel || '').toUpperCase(), 6), ctrib || null,
-      dados.aliquotaIss === undefined || dados.aliquotaIss === '' || dados.aliquotaIss === null ? null : Number(dados.aliquotaIss), pRedBc]);
+      dados.aliquotaIss === undefined || dados.aliquotaIss === '' || dados.aliquotaIss === null ? null : Number(dados.aliquotaIss), pRedBc,
+      cstIbsCbs || null, cClassTrib || null]);
   return classificacaoDto(r.rows[0]);
 }
 
@@ -716,7 +724,7 @@ export async function emitir(db, empresaId, entrada = {}, { usuario = null, env 
       if (!simples && ['00', '20'].includes(c.cstIcms || '00') && !(Number(c.aliquotaIcms) > 0)) pendencias.push(`Item ${idx + 1} (${i.descricao}): CST ${c.cstIcms || '00'} exige alíquota de ICMS`);
       itens.push({
         ...i, descricaoOriginal: i.descricao, produtoId: i.fonteId || String(idx + 1), descricao: homologacao && modelo === '65' && idx === 0 ? TEXTO_HOMOLOGACAO : i.descricao,
-        fiscal: { ncm: c.ncm, cest: c.cest, cfop: c.cfop, origem: c.origem, csosn: c.csosn || '102', cstIcms: c.cstIcms || '00', aliquotaIcms: c.aliquotaIcms, reducaoBaseIcms: c.reducaoBaseIcms || 0, cstPis: c.cstPis, cstCofins: c.cstCofins, aliquotaPis: c.aliquotaPis, aliquotaCofins: c.aliquotaCofins, unidadeTributavel: c.unidadeTributavel || 'UN' },
+        fiscal: { ncm: c.ncm, cest: c.cest, cfop: c.cfop, origem: c.origem, csosn: c.csosn || '102', cstIcms: c.cstIcms || '00', aliquotaIcms: c.aliquotaIcms, reducaoBaseIcms: c.reducaoBaseIcms || 0, cstPis: c.cstPis, cstCofins: c.cstCofins, aliquotaPis: c.aliquotaPis, aliquotaCofins: c.aliquotaCofins, unidadeTributavel: c.unidadeTributavel || 'UN', cstIbsCbs: c.cstIbsCbs || null, cClassTrib: c.cClassTrib || null },
       });
     }
     let operacao = { idDest: '1', indFinal: '1' };
@@ -829,6 +837,39 @@ function gravarResultado(db, empresa, docId, resultado) {
       resultado.xmlAssinado || null, resultado.tpEmis || null]);
 }
 
+export const CST_IBSCBS_SUPORTADOS = ['000', '410'];
+/**
+ * Alíquotas do IBS/CBS. 2026 é o ano de teste: CBS 0,9% e IBS 0,1% (UF) + 0% (município), sem
+ * recolhimento e fora do total da nota. FISCAL_IBSCBS_ALIQUOTAS ({"cbs":..,"ibsUf":..,"ibsMun":..}) troca.
+ */
+export function aliquotasIbsCbs(env = process.env) {
+  let cfg = {};
+  try { cfg = env.FISCAL_IBSCBS_ALIQUOTAS ? JSON.parse(env.FISCAL_IBSCBS_ALIQUOTAS) : {}; } catch { cfg = {}; }
+  const n = (v, d) => (Number.isFinite(Number(v)) && Number(v) >= 0 && Number(v) < 100 ? Number(v) : d);
+  return { cbs: n(cfg.cbs, 0.9), ibsUf: n(cfg.ibsUf, 0.1), ibsMun: n(cfg.ibsMun, 0) };
+}
+/**
+ * Grupo IBSCBS de cada item. Base = valor do item menos ICMS, FCP, PIS e COFINS destacados
+ * (LC 214/2025, art. 12, § 2º, na transição). CST 410 (imunidade/não incidência) vai sem valores.
+ */
+function calcularIbsCbs(calcItens, itens, env) {
+  const al = aliquotasIbsCbs(env);
+  const lista = calcItens.map((c, idx) => {
+    const f = itens[idx]?.fiscal || {};
+    const cst = f.cstIbsCbs || '000';
+    const cClassTrib = f.cClassTrib || '000001';
+    if (cst !== '000') return { cst, cClassTrib, semValores: true, vBC: 0, vIBSUF: 0, vIBSMun: 0, vIBS: 0, vCBS: 0 };
+    const difal = itens[idx]?.difal;
+    const deducoes = Number(c.icms?.valor || 0) + Number(c.icms?.valorFcp || 0) + Number(c.pis?.valor || 0) + Number(c.cofins?.valor || 0)
+      + Number(difal?.vDestino || 0) + Number(difal?.vFcp || 0);
+    const vBC = dinheiro(Math.max(0, Number(c.valorProduto || 0) - Number(c.desconto || 0) - deducoes));
+    const vIBSUF = dinheiro(vBC * al.ibsUf / 100); const vIBSMun = dinheiro(vBC * al.ibsMun / 100); const vCBS = dinheiro(vBC * al.cbs / 100);
+    return { cst, cClassTrib, vBC, pIBSUF: al.ibsUf, vIBSUF, pIBSMun: al.ibsMun, vIBSMun, vIBS: dinheiro(vIBSUF + vIBSMun), pCBS: al.cbs, vCBS };
+  });
+  const soma = (k) => dinheiro(lista.reduce((s, g) => s + Number(g[k] || 0), 0));
+  return { itens: lista, total: { vBC: soma('vBC'), vIBSUF: soma('vIBSUF'), vIBSMun: soma('vIBSMun'), vIBS: soma('vIBS'), vCBS: soma('vCBS') } };
+}
+
 function montarNfe({ doc, emit, itens, pagamentos, material, env, agora, destinatario, empresa, contingencia = null, tributos = null, indPres = '1', operacao = null, svc = null }) {
   const ambiente = ambienteDe(doc);
   const homologacao = ambiente === 'homologacao';
@@ -836,8 +877,12 @@ function montarNfe({ doc, emit, itens, pagamentos, material, env, agora, destina
   const regime = ['1', '4'].includes(emit.crt) ? 'simples' : 'lucro_presumido';
   const calc = totalizarDocumentoFiscal(itens.map((i) => ({ ...i, desconto: 0 })), { regimeTributario: regime });
   const totaisBase = tributos && Number.isFinite(Number(tributos.total)) ? { ...calc.totais, vTotTrib: Number(tributos.total) } : calc.totais;
+  // IBS/CBS (NT 2025.002): no regime normal (CRT 2 e 3) o grupo vai em cada item e no total
+  const ibscbs = ['2', '3'].includes(String(emit.crt)) ? calcularIbsCbs(calc.itens, itens, env) : null;
+  if (ibscbs) ibscbs.itens.forEach((g, idx) => { itens[idx].ibscbs = g; });
   const comDifal = itens.filter((i) => i.difal);
-  const totais = comDifal.length ? { ...totaisBase, difal: { vFcp: dinheiro(comDifal.reduce((s, i) => s + i.difal.vFcp, 0)), vDestino: dinheiro(comDifal.reduce((s, i) => s + i.difal.vDestino, 0)) } } : totaisBase;
+  const totaisDifal = comDifal.length ? { ...totaisBase, difal: { vFcp: dinheiro(comDifal.reduce((s, i) => s + i.difal.vFcp, 0)), vDestino: dinheiro(comDifal.reduce((s, i) => s + i.difal.vDestino, 0)) } } : totaisBase;
+  const totais = ibscbs ? { ...totaisDifal, ibscbs: ibscbs.total } : totaisDifal;
   if (contingencia && doc.modelo !== '65') throw new ErroDominio('CONTINGENCIA_SO_NFCE', 'Contingência offline é só da NFC-e (65)', 409);
   if (svc && doc.modelo !== '55') throw new ErroDominio('CONTINGENCIA_SO_NFE', 'SVC é só da NF-e (55)', 409);
   const tpEmis = svc ? sefaz.tpEmisSvc(emit.uf) : (contingencia ? '9' : '1');

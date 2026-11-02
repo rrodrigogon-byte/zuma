@@ -240,6 +240,30 @@ function xmlCofins(item) {
 }
 
 // DIFAL (EC 87/2015): venda interestadual a consumidor final não contribuinte (grupo ICMSUFDest)
+/** Decimal do leiaute RTC: inteiro sem casas ("0") ou com 2 casas. */
+const decRtc = (v) => (Number(v) === 0 ? '0' : decimal(v, 2));
+/** Percentual RTC: "0" ou de 2 a 4 casas. */
+const pctRtc = (v) => (Number(v) === 0 ? '0' : decimal(v, 4));
+/** Grupo IBSCBS do item (NT 2025.002, UB12). */
+function xmlIbsCbs(g) {
+  if (!g) return '';
+  if (!/^\d{3}$/.test(String(g.cst)) || !/^\d{6}$/.test(String(g.cClassTrib))) throw new Error('IBS/CBS: CST com 3 dígitos e cClassTrib com 6 dígitos.');
+  const grupo = g.semValores ? '' : `<gIBSCBS>${tag('vBC', decRtc(g.vBC))}`
+    + `<gIBSUF>${tag('pIBSUF', pctRtc(g.pIBSUF))}${tag('vIBSUF', decRtc(g.vIBSUF))}</gIBSUF>`
+    + `<gIBSMun>${tag('pIBSMun', pctRtc(g.pIBSMun))}${tag('vIBSMun', decRtc(g.vIBSMun))}</gIBSMun>`
+    + `${tag('vIBS', decRtc(g.vIBS))}<gCBS>${tag('pCBS', pctRtc(g.pCBS))}${tag('vCBS', decRtc(g.vCBS))}</gCBS></gIBSCBS>`;
+  return `<IBSCBS>${tag('CST', g.cst)}${tag('cClassTrib', g.cClassTrib)}${grupo}</IBSCBS>`;
+}
+/** Totais do IBS/CBS (IBSCBSTot). Em 2026 não entram no vNF. */
+function xmlIbsCbsTot(t) {
+  if (!t) return '';
+  return `<IBSCBSTot>${tag('vBCIBSCBS', decRtc(t.vBC))}`
+    + `<gIBS><gIBSUF>${tag('vDif', '0')}${tag('vDevTrib', '0')}${tag('vIBSUF', decRtc(t.vIBSUF))}</gIBSUF>`
+    + `<gIBSMun>${tag('vDif', '0')}${tag('vDevTrib', '0')}${tag('vIBSMun', decRtc(t.vIBSMun))}</gIBSMun>`
+    + `${tag('vIBS', decRtc(t.vIBS))}${tag('vCredPres', '0')}${tag('vCredPresCondSus', '0')}</gIBS>`
+    + `<gCBS>${tag('vDif', '0')}${tag('vDevTrib', '0')}${tag('vCBS', decRtc(t.vCBS))}${tag('vCredPres', '0')}${tag('vCredPresCondSus', '0')}</gCBS></IBSCBSTot>`;
+}
+
 function xmlDifal(d) {
   if (!d) return '';
   return `<ICMSUFDest>${tag('vBCUFDest', decimal(d.base, 2))}${tag('vBCFCPUFDest', decimal(d.base, 2))}${tag('pFCPUFDest', decimal(d.pFcp, 4))}${tag('pICMSUFDest', decimal(d.pDestino, 4))}`
@@ -260,7 +284,7 @@ function xmlItens(itens, regime) {
       + `${tag('NCM', ncm)}${fiscal.cest ? tag('CEST', digits(fiscal.cest, 7)) : ''}${tag('CFOP', digits(fiscal.cfop, 4) || '5102')}`
       + `${tag('uCom', fiscal.unidadeTributavel || item.unidade || 'UN')}${tag('qCom', decimal(qCom, 4))}${tag('vUnCom', decimal(vUn, 10))}${tag('vProd', decimal(vProd, 2))}`
       + `${tag('cEANTrib', text(item.gtin || 'SEM GTIN', 14))}${tag('uTrib', fiscal.unidadeTributavel || item.unidade || 'UN')}${tag('qTrib', decimal(qCom, 4))}${tag('vUnTrib', decimal(vUn, 10))}${tag('indTot', '1')}`
-      + `</prod><imposto>${item.vTotTrib !== undefined && item.vTotTrib !== null ? tag('vTotTrib', decimal(item.vTotTrib, 2)) : ''}${xmlIcms(item, regime)}${xmlPis(item)}${xmlCofins(item)}${xmlDifal(item.difal)}</imposto></det>`;
+      + `</prod><imposto>${item.vTotTrib !== undefined && item.vTotTrib !== null ? tag('vTotTrib', decimal(item.vTotTrib, 2)) : ''}${xmlIcms(item, regime)}${xmlPis(item)}${xmlCofins(item)}${xmlDifal(item.difal)}${xmlIbsCbs(item.ibscbs)}</imposto></det>`;
   }).join('');
 }
 
@@ -321,7 +345,7 @@ function xmlTotais(totais = {}) {
     + `${tag('vBCST', decimal(totais.baseSt, 2))}${tag('vST', decimal(totais.valorSt, 2))}${tag('vFCPST', '0.00')}${tag('vFCPSTRet', '0.00')}`
     + `${tag('vProd', decimal(totais.valorProdutos, 2))}${tag('vFrete', '0.00')}${tag('vSeg', '0.00')}${tag('vDesc', decimal(totais.desconto, 2))}${tag('vII', '0.00')}${tag('vIPI', '0.00')}${tag('vIPIDevol', '0.00')}`
     + `${tag('vPIS', decimal(totais.valorPis, 2))}${tag('vCOFINS', decimal(totais.valorCofins, 2))}${tag('vOutro', '0.00')}${tag('vNF', decimal(totais.valorTotal, 2))}${totais.vTotTrib !== undefined && totais.vTotTrib !== null ? tag('vTotTrib', decimal(totais.vTotTrib, 2)) : ''}`
-    + `</ICMSTot></total>`;
+    + `</ICMSTot>${xmlIbsCbsTot(totais.ibscbs)}</total>`;
 }
 
 /**

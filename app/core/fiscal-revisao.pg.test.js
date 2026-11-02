@@ -76,7 +76,7 @@ describe('Fiscal — correções da revisão (PostgreSQL)', { skip: pgDeTeste },
   before(async () => {
     ctx = await criarBancoTeste();
     await ctx.db.query(STUBS);
-    for (const m of ['081_bar_pdv_multiempresa.sql', '092_fiscal_multiempresa.sql', '100_fiscal_completo.sql', '106_fiscal_producao.sql']) await ctx.db.query(sql(m));
+    for (const m of ['081_bar_pdv_multiempresa.sql', '092_fiscal_multiempresa.sql', '100_fiscal_completo.sql', '106_fiscal_producao.sql', '108_fiscal_ibs_cbs.sql']) await ctx.db.query(sql(m));
     await ctx.db.query('INSERT INTO empresas (id) VALUES ($1), ($2), ($3)', [A, C, D]);
     loja = (await ctx.db.query("INSERT INTO lojas (empresa_id, nome) VALUES ($1, 'Unidade 2') RETURNING id", [A])).rows[0].id;
     await fiscal.salvarEmitente(ctx.db, A, { ...EMIT, ambiente: 'producao', csc: 'CSC-PRODUCAO-123456' }, { env: ENV_PROD }); // matriz em produção
@@ -268,6 +268,10 @@ describe('Fiscal — correções da revisão (PostgreSQL)', { skip: pgDeTeste },
     // 18% − 12% (MT → SP) sobre 200 = 12,00; FCP 2% = 4,00
     assert.match(xml, /<ICMSUFDest><vBCUFDest>200.00<\/vBCUFDest><vBCFCPUFDest>200.00<\/vBCFCPUFDest><pFCPUFDest>2.0000<\/pFCPUFDest><pICMSUFDest>18.0000<\/pICMSUFDest><pICMSInter>12.00<\/pICMSInter><pICMSInterPart>100.0000<\/pICMSInterPart><vFCPUFDest>4.00<\/vFCPUFDest><vICMSUFDest>12.00<\/vICMSUFDest><vICMSUFRemet>0.00<\/vICMSUFRemet><\/ICMSUFDest>/);
     assert.match(xml, /<vFCPUFDest>4.00<\/vFCPUFDest><vICMSUFDest>12.00<\/vICMSUFDest><vICMSUFRemet>0.00<\/vICMSUFRemet>/);
+    // IBS/CBS (regime normal, NT 2025.002): base = 200 − ICMS 34 − DIFAL 12 − FCP destino 4 = 150; IBS UF 0,1% e CBS 0,9%
+    assert.match(xml, /<IBSCBS><CST>000<\/CST><cClassTrib>000001<\/cClassTrib><gIBSCBS><vBC>150.00<\/vBC><gIBSUF><pIBSUF>0.1000<\/pIBSUF><vIBSUF>0.15<\/vIBSUF><\/gIBSUF><gIBSMun><pIBSMun>0<\/pIBSMun><vIBSMun>0<\/vIBSMun><\/gIBSMun><vIBS>0.15<\/vIBS><gCBS><pCBS>0.9000<\/pCBS><vCBS>1.35<\/vCBS><\/gCBS><\/gIBSCBS><\/IBSCBS>/);
+    assert.match(xml, /<\/ICMSTot><IBSCBSTot><vBCIBSCBS>150.00<\/vBCIBSCBS><gIBS><gIBSUF><vDif>0<\/vDif><vDevTrib>0<\/vDevTrib><vIBSUF>0.15<\/vIBSUF><\/gIBSUF>/);
+    assert.match(xml, /<vNF>200.00<\/vNF>/, 'em 2026 o IBS/CBS não entra no total da nota');
     // carta de correção
     await assert.rejects(() => fiscal.cartaCorrecao(ctx.db, D, d.id, { texto: 'curto', env: ENV_TX, transporte: s.transporte }), (e) => e.code === 'VALIDATION_ERROR');
     const cce = await fiscal.cartaCorrecao(ctx.db, D, d.id, { texto: 'Correção do complemento do endereço: apto 52', env: ENV_TX, transporte: s.transporte, agora });
@@ -279,6 +283,26 @@ describe('Fiscal — correções da revisão (PostgreSQL)', { skip: pgDeTeste },
     assert.equal((await fiscal.cartaCorrecao(ctx.db, D, d.id, { texto: 'Correção do complemento do endereço: apto 53', env: ENV_TX, transporte: s.transporte, agora })).sequencia, 2);
     const nfce = (await fiscal.listarDocumentos(ctx.db, D, { modelo: '65' }))[0];
     await assert.rejects(() => fiscal.cartaCorrecao(ctx.db, D, nfce.id, { texto: 'Correção qualquer de teste aqui', env: ENV_TX, transporte: s.transporte }), (e) => e.code === 'CCE_SO_NFE');
+  });
+
+  test('IBS/CBS: classificação com CST e cClassTrib; CST 410 sai sem valores; Simples não leva o grupo', async () => {
+    await assert.rejects(() => fiscal.salvarClassificacao(ctx.db, D, { fonte: 'est_item', fonteId: 'imune', ncm: '49019900', cfop: '5102', cstIcms: '41', cstIbsCbs: '410' }), (e) => /juntos/.test(e.message));
+    await assert.rejects(() => fiscal.salvarClassificacao(ctx.db, D, { fonte: 'est_item', fonteId: 'imune', ncm: '49019900', cfop: '5102', cstIcms: '41', cstIbsCbs: '410', cClassTrib: '000001' }), (e) => /não é do CST/.test(e.message));
+    await assert.rejects(() => fiscal.salvarClassificacao(ctx.db, D, { fonte: 'est_item', fonteId: 'imune', ncm: '49019900', cfop: '5102', cstIcms: '41', cstIbsCbs: '200', cClassTrib: '200001' }), (e) => /não suportado/.test(e.message));
+    const c = await fiscal.salvarClassificacao(ctx.db, D, { fonte: 'est_item', fonteId: 'imune', ncm: '49019900', cfop: '5102', cstIcms: '41', cstIbsCbs: '410', cClassTrib: '410001' });
+    assert.deepEqual([c.cstIbsCbs, c.cClassTrib], ['410', '410001']);
+    const s = sefaz(['100']);
+    const d = await fiscal.emitir(ctx.db, D, { modelo: '65', origem: 'manual', idempotencia: 'ibscbs-410', itens: [{ fonte: 'est_item', fonteId: 'imune', descricao: 'Livro', quantidade: 1, valorUnitario: 50 }] }, { env: ENV_TX, transporte: s.transporte, agora });
+    assert.equal(d.status, 'autorizado');
+    assert.match(s.enviados[0].xml, /<IBSCBS><CST>410<\/CST><cClassTrib>410001<\/cClassTrib><\/IBSCBS>/);
+    // Simples Nacional (empresa A): sem grupo IBS/CBS
+    const sA = sefaz(['100']);
+    const oA = await pedido(A);
+    await fiscal.emitir(ctx.db, A, { modelo: '65', origem: 'loja_pedido', origemId: oA }, { env: { ...ENV_PROD }, transporte: sA.transporte, agora });
+    assert.doesNotMatch(sA.enviados[0].xml, /IBSCBS/);
+    // alíquotas de teste trocáveis por variável
+    assert.deepEqual(fiscal.aliquotasIbsCbs({ FISCAL_IBSCBS_ALIQUOTAS: '{"cbs":8.8,"ibsUf":10.2,"ibsMun":7.5}' }), { cbs: 8.8, ibsUf: 10.2, ibsMun: 7.5 });
+    assert.deepEqual(fiscal.aliquotasIbsCbs({ FISCAL_IBSCBS_ALIQUOTAS: 'lixo' }), { cbs: 0.9, ibsUf: 0.1, ibsMun: 0 });
   });
 
   test('NF-e sem resposta vai para a SVC-RS (tpEmis 7) e é autorizada lá', async () => {

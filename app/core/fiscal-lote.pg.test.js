@@ -37,7 +37,7 @@ describe('Fiscal F2 — classificação em massa, emissão em lote e automática
   before(async () => {
     ctx = await criarBancoTeste();
     await ctx.db.query(STUBS);
-    for (const m of ['081_bar_pdv_multiempresa.sql', '092_fiscal_multiempresa.sql', '100_fiscal_completo.sql', '106_fiscal_producao.sql', '107_fiscal_automatica.sql']) await ctx.db.query(sql(m));
+    for (const m of ['081_bar_pdv_multiempresa.sql', '092_fiscal_multiempresa.sql', '100_fiscal_completo.sql', '106_fiscal_producao.sql', '107_fiscal_automatica.sql', '108_fiscal_ibs_cbs.sql']) await ctx.db.query(sql(m));
     await ctx.db.query(sql('107_fiscal_automatica.sql')); // reexecutável
     await ctx.db.query('INSERT INTO empresas (id) VALUES ($1), ($2)', [A, B]);
     await fiscal.salvarEmitente(ctx.db, A, EMITENTE, { env: ENV });

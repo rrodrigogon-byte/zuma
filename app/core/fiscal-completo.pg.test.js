@@ -60,7 +60,7 @@ describe('Fiscal completo — homologação (PostgreSQL)', { skip: pgDeTeste }, 
   before(async () => {
     ctx = await criarBancoTeste();
     await ctx.db.query(STUBS);
-    for (const m of ['081_bar_pdv_multiempresa.sql', '092_fiscal_multiempresa.sql', '100_fiscal_completo.sql', '106_fiscal_producao.sql']) await ctx.db.query(sql(m));
+    for (const m of ['081_bar_pdv_multiempresa.sql', '092_fiscal_multiempresa.sql', '100_fiscal_completo.sql', '106_fiscal_producao.sql', '108_fiscal_ibs_cbs.sql']) await ctx.db.query(sql(m));
     // a 100 é idempotente (o runner pode reaplicar)
     await ctx.db.query(sql('100_fiscal_completo.sql'));
     await ctx.db.query('INSERT INTO empresas (id) VALUES ($1), ($2)', [A, B]);

@@ -144,6 +144,19 @@ describe('Fiscal (homologação)', () => {
     expect(corpo).not.toHaveProperty('ncmSugerido')
   })
 
+  it('classificação: IBS/CBS com CST e cClassTrib (o cClassTrib começa pelo CST)', async () => {
+    mocks.api.put.mockResolvedValue({})
+    const tree = await montar('classificacao')
+    await act(async () => { botoes(tree, 'Classificar')[0].props.onClick() })
+    const cClass = () => tree.root.find((n) => n.type === 'input' && n.props['aria-label'] === 'cClassTrib')
+    expect(cClass().props.disabled).toBe(true)
+    const cst = tree.root.find((n) => n.type === 'select' && n.props['aria-label'] === 'CST do IBS/CBS')
+    await act(async () => { cst.props.onChange({ target: { value: '410' } }) })
+    expect(cClass().props.value).toBe('410001')
+    await act(async () => { await tree.root.find((n) => n.type === 'form').props.onSubmit({ preventDefault() {} }) })
+    expect(mocks.api.put.mock.calls[0][1]).toMatchObject({ cstIbsCbs: '410', cClassTrib: '410001' })
+  })
+
   it('produção: aviso de valor fiscal; liberada mas bloqueada avisa que nada sai', async () => {
     let tree = await montar('situacao', { '/api/admin/fiscal/estado': { ambiente: 'producao', transmissao: 'producao', producaoLiberada: true, pronto: true, pendencias: [], avisos: ['O certificado A1 vence em 10 dia(s): renove antes para não parar a emissão'] } })
     let s = texto(tree)
@@ -426,5 +439,27 @@ describe('Fiscal (homologação)', () => {
     await act(async () => { await formCom(tree, 'Emitir NFC-e').props.onSubmit({ preventDefault() {} }) })
     const [, corpo] = mocks.api.post.mock.calls.at(-1)
     expect(corpo).toMatchObject({ modelo: '65', origem: 'manual', destinatario: { cpf: '52998224725' }, itens: [{ descricao: 'Pomada Matte', quantidade: 1, valorUnitario: 45.9, classificacao: { tipo: 'produto', ncm: '33059000', cfop: '5102', csosn: '102' } }] })
+  })
+
+  it('SPED: salva o contador e gera os arquivos do período (download em ISO-8859-1)', async () => {
+    const criados = []
+    globalThis.document.createElement = (tag) => { const el = { tag, click: vi.fn() }; criados.push(el); return el }
+    globalThis.URL.createObjectURL = vi.fn(() => 'blob:sped')
+    globalThis.URL.revokeObjectURL = vi.fn()
+    mocks.api.put.mockImplementation(async (url, corpo) => corpo)
+    mocks.api.post.mockResolvedValue({ nomeArquivo: 'EFD-ICMS-IPI-x-202610.txt', base64: Buffer.from('|0000|020|', 'latin1').toString('base64'), resumo: { documentos: 3, cancelados: 1, linhas: 76, leiaute: '020', debitosIcms: 78 }, avisos: ['Só entram as saídas emitidas no Kytto'] })
+    const tree = await montar('sped', { '/api/admin/fiscal/sped/config': { perfil: 'A', contador: {} } })
+    await act(async () => { campoPor(tree, 'Nome do contador').props.onChange({ target: { value: 'Maria' } }) })
+    await act(async () => { campoPor(tree, 'Código de receita do ICMS').props.onChange({ target: { value: '1112' } }) })
+    await act(async () => { await formCom(tree, 'Salvar configuração').props.onSubmit({ preventDefault() {} }) })
+    expect(mocks.api.put).toHaveBeenCalledWith('/api/admin/fiscal/sped/config', expect.objectContaining({ codReceitaIcms: '1112', contador: expect.objectContaining({ nome: 'Maria' }) }))
+    await act(async () => { campoPor(tree, 'Ano do SPED').props.onChange({ target: { value: '2026' } }) })
+    await act(async () => { campoPor(tree, 'Mês do SPED').props.onChange({ target: { value: '10' } }) })
+    await act(async () => { await botoes(tree, 'Gerar EFD ICMS/IPI')[0].props.onClick() })
+    expect(mocks.api.post).toHaveBeenCalledWith('/api/admin/fiscal/sped/efd-icms-ipi', { ano: 2026, mes: 10 })
+    expect(criados.at(-1).download).toBe('EFD-ICMS-IPI-x-202610.txt')
+    expect(texto(tree)).toContain('Só entram as saídas emitidas no Kytto')
+    await act(async () => { await botoes(tree, 'Gerar EFD-Contribuições')[0].props.onClick() })
+    expect(mocks.api.post).toHaveBeenLastCalledWith('/api/admin/fiscal/sped/efd-contribuicoes', { ano: 2026, mes: 10 })
   })
 })

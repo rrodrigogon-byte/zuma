@@ -80,7 +80,7 @@ const COLUNAS = [
   ['ncm', 'ncm'], ['cest', 'cest'], ['cfop', 'cfop'], ['origem', 'origem'], ['csosn', 'csosn'], ['cst_icms', 'cstIcms'],
   ['aliquota_icms', 'aliquotaIcms'], ['reducao_base_icms', 'reducaoBaseIcms'], ['cst_pis', 'cstPis'], ['aliquota_pis', 'aliquotaPis'],
   ['cst_cofins', 'cstCofins'], ['aliquota_cofins', 'aliquotaCofins'], ['unidade', 'unidadeTributavel'], ['ctribnac', 'cTribNac'],
-  ['aliquota_iss', 'aliquotaIss'], ['ncm_sugerido', null], ['cest_sugerido', null],
+  ['aliquota_iss', 'aliquotaIss'], ['cst_ibscbs', 'cstIbsCbs'], ['cclasstrib', 'cClassTrib'], ['ncm_sugerido', null], ['cest_sugerido', null],
 ];
 const PONTO_E_VIRGULA = ';';
 const escaparCsv = (v) => {
@@ -102,7 +102,7 @@ export async function exportarClassificacoesCsv(db, empresaId) {
       ncm: c.ncm || '', cest: c.cest || '', cfop: c.cfop || '', origem: c.origem ?? '', csosn: c.csosn || '', cst_icms: c.cstIcms || '',
       aliquota_icms: numeroCsv(c.aliquotaIcms || ''), reducao_base_icms: numeroCsv(c.reducaoBaseIcms), cst_pis: c.cstPis || '', aliquota_pis: numeroCsv(c.aliquotaPis || ''),
       cst_cofins: c.cstCofins || '', aliquota_cofins: numeroCsv(c.aliquotaCofins || ''), unidade: c.unidadeTributavel || '', ctribnac: c.cTribNac || '',
-      aliquota_iss: numeroCsv(c.aliquotaIss), ncm_sugerido: i.ncmSugerido || sug?.ncm || '', cest_sugerido: sug?.cest || '',
+      aliquota_iss: numeroCsv(c.aliquotaIss), cst_ibscbs: c.cstIbsCbs || '', cclasstrib: c.cClassTrib || '', ncm_sugerido: i.ncmSugerido || sug?.ncm || '', cest_sugerido: sug?.cest || '',
     };
     linhas.push(COLUNAS.map(([col]) => escaparCsv(valores[col])).join(PONTO_E_VIRGULA));
   }

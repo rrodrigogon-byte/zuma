@@ -13,7 +13,7 @@ import '../dino/dino-admin.css'
 // O ambiente é do emitente: homologação (sem valor fiscal) ou produção, só depois que o servidor
 // libera a empresa (FISCAL_PRODUCAO_EMPRESAS).
 const BASE = '/api/admin/fiscal'
-const ABAS = [['situacao', 'Emitente e certificado'], ['classificacao', 'Classificação'], ['documentos', 'Documentos'], ['numeracao', 'Numeração'], ['inutilizacao', 'Inutilização']]
+const ABAS = [['situacao', 'Emitente e certificado'], ['classificacao', 'Classificação'], ['documentos', 'Documentos'], ['numeracao', 'Numeração'], ['inutilizacao', 'Inutilização'], ['sped', 'SPED']]
 const STATUS = {
   rascunho: ['Rascunho', 'muted'], enviando: ['Enviando', 'info'], autorizado: ['Autorizado', 'success'], rejeitado: ['Rejeitado', 'danger'],
   falha_comunicacao: ['Falha de comunicação', 'warning'], validado_localmente: ['XML validado (não enviado)', 'info'], cancelado: ['Cancelado', 'muted'],
@@ -60,6 +60,7 @@ export default function Fiscal({ abaInicial = 'situacao' }) {
     {aba === 'documentos' && <Documentos toast={toast} />}
     {aba === 'numeracao' && <Numeracao toast={toast} />}
     {aba === 'inutilizacao' && <Inutilizacao toast={toast} />}
+    {aba === 'sped' && <Sped toast={toast} />}
   </div>
 }
 
@@ -209,7 +210,9 @@ function Situacao({ toast, onMudou, producaoLiberada = false }) {
   </div>
 }
 
-const VAZIO = { ncm: '', cfop: '5102', csosn: '102', cstIcms: '', aliquotaIcms: '', reducaoBaseIcms: '', cest: '', origem: '0', cTribNac: '', aliquotaIss: '', cstPis: '', cstCofins: '', aliquotaPis: '', aliquotaCofins: '' }
+const VAZIO = { ncm: '', cfop: '5102', csosn: '102', cstIcms: '', aliquotaIcms: '', reducaoBaseIcms: '', cest: '', origem: '0', cTribNac: '', aliquotaIss: '', cstPis: '', cstCofins: '', aliquotaPis: '', aliquotaCofins: '', cstIbsCbs: '', cClassTrib: '' }
+// IBS/CBS (reforma tributária, NT 2025.002): CST de 3 dígitos e cClassTrib de 6 (começa pelo CST)
+const CST_IBSCBS = [['', '— padrão: 000 / 000001 (tributação integral)'], ['000', '000 · tributação integral'], ['410', '410 · imunidade e não incidência']]
 const ORIGENS = [['0', '0 · nacional'], ['1', '1 · estrangeira (importação direta)'], ['2', '2 · estrangeira (mercado interno)'], ['3', '3 · nacional, conteúdo importado > 40%'], ['4', '4 · nacional (processo produtivo básico)'], ['5', '5 · nacional, conteúdo importado ≤ 40%'], ['6', '6 · estrangeira sem similar (importação direta)'], ['7', '7 · estrangeira sem similar (mercado interno)'], ['8', '8 · nacional, conteúdo importado > 70%']]
 const rotuloCategoria = (fonteId) => (fonteId === 'barbearia:revenda' ? 'Revenda da barbearia (padrão dos produtos da comanda)' : fonteId === 'barbearia:servicos' ? 'Serviços da barbearia (padrão da NFS-e da comanda)' : null)
 
@@ -242,6 +245,10 @@ function CamposClassificacao({ form, setForm, perfis = [] }) {
       <label className="c360-field">PIS (%)<input className="c360-input" inputMode="decimal" value={form.aliquotaPis ?? ''} onChange={(e) => setForm({ ...form, aliquotaPis: e.target.value })} /></label>
       <label className="c360-field">CST COFINS<input className="c360-input" inputMode="numeric" maxLength={2} placeholder="49" value={form.cstCofins || ''} onChange={(e) => setForm({ ...form, cstCofins: e.target.value })} /></label>
       <label className="c360-field">COFINS (%)<input className="c360-input" inputMode="decimal" value={form.aliquotaCofins ?? ''} onChange={(e) => setForm({ ...form, aliquotaCofins: e.target.value })} /></label>
+    </div>
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+      <label className="c360-field">CST do IBS/CBS (regime normal)<select className="c360-input" aria-label="CST do IBS/CBS" value={form.cstIbsCbs || ''} onChange={(e) => setForm({ ...form, cstIbsCbs: e.target.value, cClassTrib: e.target.value ? (form.cClassTrib && form.cClassTrib.startsWith(e.target.value) ? form.cClassTrib : `${e.target.value}001`) : '' })}>{CST_IBSCBS.map(([v, r]) => <option key={v || 'padrao'} value={v}>{r}</option>)}</select></label>
+      <label className="c360-field">cClassTrib (6 dígitos)<input className="c360-input" aria-label="cClassTrib" inputMode="numeric" maxLength={6} disabled={!form.cstIbsCbs} value={form.cClassTrib || ''} placeholder="000001" onChange={(e) => setForm({ ...form, cClassTrib: e.target.value })} /></label>
     </div>
     <p className="dadm-muted">Confirme com o contador. Simples Nacional: CSOSN 102, 103, 300, 400 e 500 (ST). Regime normal: CST 00, 20, 40, 41, 50 e 60 (ST). Perfumaria em MT costuma ter ST (CSOSN 500 / CST 60, com CEST).</p>
   </>
@@ -891,6 +898,102 @@ function Numeracao({ toast }) {
     </Dialog>
     <Confirmar pedido={confirmar} onFechar={() => setConfirmar(null)} />
   </section>
+}
+
+const CONTADOR_VAZIO = { nome: '', cpf: '', crc: '', cnpj: '', cep: '', endereco: '', numero: '', complemento: '', bairro: '', fone: '', email: '', codigoMunicipio: '' }
+const MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
+function baixarBase64(nome, base64) {
+  const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0))
+  const url = URL.createObjectURL(new Blob([bytes], { type: 'text/plain;charset=iso-8859-1' }))
+  const a = document.createElement('a'); a.href = url; a.download = nome; a.click()
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+function Sped({ toast }) {
+  const hoje = new Date()
+  const anterior = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1)
+  const [cfg, setCfg] = useState(null)
+  const [emitentes, setEmitentes] = useState([])
+  const [periodo, setPeriodo] = useState({ ano: String(anterior.getFullYear()), mes: String(anterior.getMonth() + 1), emitenteId: '', teste: false })
+  const [resultado, setResultado] = useState(null)
+  const [enviando, setEnviando] = useState('')
+  useEffect(() => {
+    Promise.all([api.get(`${BASE}/sped/config`), api.get(`${BASE}/emitentes`)])
+      .then(([c, e]) => { setCfg({ ...c, contador: { ...CONTADOR_VAZIO, ...(c?.contador || {}) } }); setEmitentes(Array.isArray(e) ? e : []) })
+      .catch((error) => toast(error.message, 'error'))
+  }, [toast])
+  if (!cfg) return <section className="dadm-card"><p className="dadm-muted">Carregando…</p></section>
+  const setC = (k, v) => setCfg({ ...cfg, contador: { ...cfg.contador, [k]: v } })
+  const campoC = (rotulo, k, extra = {}) => <label className="c360-field">{rotulo}<input className="c360-input" aria-label={rotulo} value={cfg.contador[k] || ''} onChange={(e) => setC(k, e.target.value)} {...extra} /></label>
+  async function salvar(ev) {
+    ev?.preventDefault?.()
+    if (enviando) return
+    setEnviando('config')
+    try { const c = await api.put(`${BASE}/sped/config`, cfg); setCfg({ ...c, contador: { ...CONTADOR_VAZIO, ...c.contador } }); toast('Configuração do SPED salva.', 'success') }
+    catch (error) { toast(error.message, 'error') } finally { setEnviando('') }
+  }
+  async function gerar(tipo) {
+    if (enviando) return
+    setEnviando(tipo); setResultado(null)
+    try {
+      const r = await api.post(`${BASE}/sped/${tipo}`, { ano: Number(periodo.ano), mes: Number(periodo.mes), ...(periodo.emitenteId ? { emitenteId: periodo.emitenteId } : {}), ...(periodo.teste ? { ambiente: 'homologacao' } : {}) })
+      setResultado(r)
+      baixarBase64(r.nomeArquivo, r.base64)
+      toast(`${r.nomeArquivo} gerado: ${r.resumo.documentos} documento(s).`, 'success')
+    } catch (error) { toast(error.message, 'error') } finally { setEnviando('') }
+  }
+  return <div style={{ display: 'grid', gap: 16 }}>
+    <section className="dadm-card">
+      <h2>Gerar SPED</h2>
+      <p className="dadm-muted">EFD ICMS/IPI (leiaute 020) e EFD-Contribuições (leiaute 006, Lucro Presumido cumulativo), montadas a partir das notas autorizadas e canceladas emitidas aqui. Entradas, inventário e ajustes o contador completa no PVA antes de transmitir. Empresas do Simples Nacional são dispensadas.</p>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.4fr 2fr', gap: 10 }}>
+        <label className="c360-field">Ano<input className="c360-input" aria-label="Ano do SPED" inputMode="numeric" maxLength={4} value={periodo.ano} onChange={(e) => setPeriodo({ ...periodo, ano: e.target.value })} /></label>
+        <label className="c360-field">Mês<select className="c360-input" aria-label="Mês do SPED" value={periodo.mes} onChange={(e) => setPeriodo({ ...periodo, mes: e.target.value })}>{MESES.map((m, i) => <option key={m} value={String(i + 1)}>{m}</option>)}</select></label>
+        {emitentes.length > 1 ? <label className="c360-field">Emitente<select className="c360-input" aria-label="Emitente do SPED" value={periodo.emitenteId} onChange={(e) => setPeriodo({ ...periodo, emitenteId: e.target.value })}><option value="">Principal</option>{emitentes.map((e) => <option key={e.id} value={e.id}>{e.razaoSocial} · {e.cnpj}</option>)}</select></label> : <span />}
+      </div>
+      <label className="dadm-muted"><input type="checkbox" checked={periodo.teste} onChange={(e) => setPeriodo({ ...periodo, teste: e.target.checked })} /> Arquivo de teste com as notas de homologação (não transmitir)</label>
+      <div className="dadm-actions">
+        <button type="button" className="c360-btn primary" disabled={Boolean(enviando)} onClick={() => gerar('efd-icms-ipi')}>Gerar EFD ICMS/IPI</button>
+        <button type="button" className="c360-btn ghost" disabled={Boolean(enviando)} onClick={() => gerar('efd-contribuicoes')}>Gerar EFD-Contribuições</button>
+      </div>
+      {resultado && <div role="status">
+        <p className="dadm-note">{resultado.nomeArquivo}: {resultado.resumo.documentos} documento(s) ({resultado.resumo.cancelados} cancelado(s)), {resultado.resumo.linhas} linhas, leiaute {resultado.resumo.leiaute}{resultado.resumo.debitosIcms !== undefined ? ` · ICMS a recolher ${money(resultado.resumo.debitosIcms)}` : ''}{resultado.resumo.pis !== undefined ? ` · PIS ${money(resultado.resumo.pis)} · COFINS ${money(resultado.resumo.cofins)}` : ''}.</p>
+        {resultado.avisos.map((a) => <p key={a} className="dadm-note warn">{a}</p>)}
+        <div className="dadm-actions"><button type="button" className="c360-btn ghost" onClick={() => baixarBase64(resultado.nomeArquivo, resultado.base64)}>Baixar de novo</button></div>
+      </div>}
+    </section>
+    <section className="dadm-card">
+      <h2>Configuração do SPED</h2>
+      <form onSubmit={salvar} style={{ display: 'grid', gap: 10 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 10 }}>
+          <label className="c360-field">Perfil da EFD<select className="c360-input" aria-label="Perfil da EFD" value={cfg.perfil} onChange={(e) => setCfg({ ...cfg, perfil: e.target.value })}><option value="A">A</option><option value="B">B</option><option value="C">C</option></select></label>
+          <label className="c360-field">Código de receita do ICMS (E116)<input className="c360-input" aria-label="Código de receita do ICMS" value={cfg.codReceitaIcms || ''} onChange={(e) => setCfg({ ...cfg, codReceitaIcms: e.target.value })} /></label>
+          <label className="c360-field">Dia de vencimento do ICMS<input className="c360-input" aria-label="Dia de vencimento do ICMS" inputMode="numeric" maxLength={2} value={cfg.diaVencimentoIcms || ''} onChange={(e) => setCfg({ ...cfg, diaVencimentoIcms: e.target.value })} /></label>
+          <label className="c360-field">Código de receita do DIFAL/FCP (E316)<input className="c360-input" aria-label="Código de receita do DIFAL" value={cfg.codReceitaDifal || ''} onChange={(e) => setCfg({ ...cfg, codReceitaDifal: e.target.value })} /></label>
+        </div>
+        <label className="dadm-muted"><input type="checkbox" checked={Boolean(cfg.industrial)} onChange={(e) => setCfg({ ...cfg, industrial: e.target.checked })} /> Indústria ou equiparado a industrial</label>
+        <h3 style={{ margin: '6px 0 0' }}>Contador (registro 0100)</h3>
+        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1.2fr', gap: 10 }}>
+          {campoC('Nome do contador', 'nome', { required: true })}
+          {campoC('CPF do contador', 'cpf', { inputMode: 'numeric', required: true })}
+          {campoC('CRC', 'crc', { required: true })}
+          {campoC('CNPJ do escritório (opcional)', 'cnpj', { inputMode: 'numeric' })}
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '2fr .7fr 1.2fr 1.2fr', gap: 10 }}>
+          {campoC('Endereço', 'endereco')}
+          {campoC('Número', 'numero')}
+          {campoC('Complemento', 'complemento')}
+          {campoC('Bairro', 'bairro')}
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 2fr', gap: 10 }}>
+          {campoC('CEP', 'cep', { inputMode: 'numeric' })}
+          {campoC('Município (IBGE)', 'codigoMunicipio', { inputMode: 'numeric', required: true, placeholder: '7 dígitos' })}
+          {campoC('Telefone', 'fone', { inputMode: 'numeric' })}
+          {campoC('E-mail', 'email', { type: 'email' })}
+        </div>
+        <div className="dadm-actions"><button type="submit" className="c360-btn primary" disabled={Boolean(enviando)}>Salvar configuração</button></div>
+      </form>
+    </section>
+  </div>
 }
 
 function Inutilizacao({ toast }) {

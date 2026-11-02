@@ -92,6 +92,7 @@ const migrationFiles = [
   '105_account_password_recovery.sql',
   '106_fiscal_producao.sql',
   '107_fiscal_automatica.sql',
+  '108_fiscal_ibs_cbs.sql',
 ];
 const advisoryLockKey = 825410732;
 
