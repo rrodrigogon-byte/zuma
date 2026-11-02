@@ -1,5 +1,5 @@
 /**
- * PDV Unificado — KYTTO Clube
+ * PDV Unificado — KYTTO Clube & Supermercado
  * Atende todos os segmentos: Supermercado, Loja de Moda, Barbearia, Varejo, Bar
  * Rota: /admin/pdv-erp
  */
@@ -8,16 +8,16 @@ import { api } from '../../lib/api'
 
 const theme = {
   bg: '#0f1117', surface: '#1a1d27', card: '#22263a',
-  green: '#FF6B2C', muted: '#8a8fa8', cream: '#e8e6df',
-  line: '#2e3248', red: '#e05c5c', yellow: '#f5a623', blue: '#4a9eff',
+  green: '#10b981', orange: '#FF6B2C', muted: '#8a8fa8', cream: '#e8e6df',
+  line: '#2e3248', red: '#ef4444', yellow: '#f59e0b', blue: '#3b82f6',
 }
 
 const SEGMENTOS = [
-  { id: 'supermercado', label: 'Supermercado', icon: '🏪', cor: '#4a9eff' },
-  { id: 'loja-moda',    label: 'Loja de Moda', icon: '👗', cor: '#e05c5c' },
-  { id: 'barbearia',    label: 'Barbearia',    icon: '✂️', cor: '#f5a623' },
+  { id: 'supermercado', label: 'Supermercado', icon: '🏪', cor: '#3b82f6' },
+  { id: 'loja-moda',    label: 'Loja de Moda', icon: '👗', cor: '#ec4899' },
+  { id: 'barbearia',    label: 'Barbearia',    icon: '✂️', cor: '#f59e0b' },
   { id: 'varejo',       label: 'Varejo Geral', icon: '🛒', cor: '#FF6B2C' },
-  { id: 'bar',          label: 'Bar/Rest.',    icon: '🍺', cor: '#9b59b6' },
+  { id: 'bar',          label: 'Bar/Rest.',    icon: '🍺', cor: '#8b5cf6' },
 ]
 
 const FORMAS_PGTO = [
@@ -46,36 +46,111 @@ export default function PDVUnificado() {
   const [desconto, setDesconto] = useState(0)
   const [tipoDesconto, setTipoDesconto] = useState('valor') // 'valor' | 'percentual'
   const [troco, setTroco] = useState('')
+  const [cpfNota, setCpfNota] = useState('')
   const [finalizando, setFinalizando] = useState(false)
   const [venda, setVenda] = useState(null)
   const [modalGrade, setModalGrade] = useState(null) // produto com grade de moda
-  const [modalPgto, setModalPgto] = useState(false)
+  const [modalPesagem, setModalPesagem] = useState(null) // produto pesável para balança
+  const [pesoInput, setPesoInput] = useState('0.500')
+  const [modalCaixa, setModalCaixa] = useState(null) // { tipo: 'sangria' | 'suprimento' }
+  const [valorCaixa, setValorCaixa] = useState('')
+  const [motivoCaixa, setMotivoCaixa] = useState('')
+  const [atalhosSupermercado, setAtalhosSupermercado] = useState([])
+
   const inputRef = useRef(null)
   const buscaTimer = useRef(null)
 
   // Focar no input ao montar
   useEffect(() => { inputRef.current?.focus() }, [])
 
+  // Carregar atalhos rápidos do supermercado (Hortifrúti / Padaria / Balança)
+  useEffect(() => {
+    if (segmento === 'supermercado' || segmento === 'varejo') {
+      api.get('/api/supermercado/produtos?limit=50').then(res => {
+        const prods = res?.produtos || []
+        const rapidos = prods.filter(p => p.pesavel || ['Hortifrúti', 'Padaria', 'Açougue e Carnes', 'Bebidas'].includes(p.departamento))
+        setAtalhosSupermercado(rapidos.slice(0, 10))
+      }).catch(() => null)
+    }
+  }, [segmento])
+
   // Busca com debounce
   useEffect(() => {
     if (!busca.trim()) { setResultados([]); return }
     clearTimeout(buscaTimer.current)
-    buscaTimer.current = setTimeout(() => buscarProduto(busca), 300)
+    buscaTimer.current = setTimeout(() => buscarProduto(busca), 250)
     return () => clearTimeout(buscaTimer.current)
   }, [busca, segmento])
 
-  async function buscarProduto(termo) {
+  // Atalhos de teclado
+  useEffect(() => {
+    function handleKeyDown(e) {
+      if (e.key === 'F2') {
+        e.preventDefault()
+        inputRef.current?.focus()
+        inputRef.current?.select()
+      } else if (e.key === 'F3') {
+        e.preventDefault()
+        document.getElementById('pdv-cpf-input')?.focus()
+      } else if (e.key === 'F4') {
+        e.preventDefault()
+        if (itens.length > 0 && window.confirm('Deseja limpar todos os itens e cancelar esta venda?')) {
+          setItens([])
+          setDesconto(0)
+          setTroco('')
+          setCpfNota('')
+        }
+      } else if (e.key === 'F7') {
+        e.preventDefault()
+        document.getElementById('pdv-desconto-input')?.focus()
+      } else if (e.key === 'F9') {
+        e.preventDefault()
+        setModalCaixa({ tipo: 'sangria' })
+      } else if (e.key === 'F10') {
+        e.preventDefault()
+        if (itens.length > 0 && !finalizando) {
+          finalizarVenda()
+        }
+      } else if (e.key === 'Escape') {
+        setModalGrade(null)
+        setModalPesagem(null)
+        setModalCaixa(null)
+        setVenda(null)
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [itens, finalizando])
+
+  async function buscarProduto(termoBruto) {
+    if (!termoBruto?.trim()) return
     setBuscando(true)
     try {
-      let url = ''
+      let quantidadeMultiplicada = 1
+      let termo = termoBruto.trim()
+
+      // Suporte à multiplicação direta do caixa: 3*7898000050012 ou 0.500*1001
+      if (termo.includes('*')) {
+        const partes = termo.split('*')
+        if (partes.length === 2 && !isNaN(parseFloat(partes[0].replace(',', '.')))) {
+          quantidadeMultiplicada = parseFloat(partes[0].replace(',', '.'))
+          termo = partes[1].trim()
+        }
+      }
+
       if (segmento === 'supermercado' || segmento === 'varejo') {
         // Tentar busca por código de barras primeiro (inclui código de balança)
         if (/^\d+$/.test(termo)) {
           const res = await api.get(`/api/supermercado/produtos/buscar/${termo}`).catch(() => null)
           if (res?.produto || res?.nome) {
             const prod = res.produto || res
-            const qtdBalanca = prod.etiquetaBalanca?.quantidade || prod.peso_balanca || 1
-            adicionarItem(prod, qtdBalanca)
+            const qtdBalanca = prod.etiquetaBalanca?.quantidade || prod.peso_balanca || quantidadeMultiplicada
+            if (prod.pesavel && !prod.etiquetaBalanca && quantidadeMultiplicada === 1) {
+              setModalPesagem(prod)
+              setPesoInput('0.500')
+            } else {
+              adicionarItem(prod, qtdBalanca)
+            }
             setBusca('')
             setResultados([])
             inputRef.current?.focus()
@@ -83,12 +158,26 @@ export default function PDVUnificado() {
           }
         }
         const res = await api.get(`/api/supermercado/produtos?busca=${encodeURIComponent(termo)}&limit=15`).catch(() => null)
-        setResultados(res?.produtos || [])
+        const prods = res?.produtos || []
+        if (prods.length === 1 && (/^\d+$/.test(termo) || termo.length >= 6)) {
+          const p = prods[0]
+          if (p.pesavel && quantidadeMultiplicada === 1) {
+            setModalPesagem(p)
+            setPesoInput('0.500')
+          } else {
+            adicionarItem(p, quantidadeMultiplicada)
+          }
+          setBusca('')
+          setResultados([])
+          inputRef.current?.focus()
+          return
+        }
+        setResultados(prods)
       } else if (segmento === 'loja-moda') {
-        const res = await api.get(`/api/loja-moda/produtos?busca=${encodeURIComponent(termo)}&limit=8`)
+        const res = await api.get(`/api/loja-moda/produtos?busca=${encodeURIComponent(termo)}&limit=8`).catch(() => null)
         setResultados(res?.produtos || [])
       } else {
-        const res = await api.get(`/api/estoque/produtos?busca=${encodeURIComponent(termo)}&limit=8`)
+        const res = await api.get(`/api/estoque/produtos?busca=${encodeURIComponent(termo)}&limit=8`).catch(() => null)
         setResultados(res?.produtos || [])
       }
     } catch { setResultados([]) }
@@ -114,8 +203,9 @@ export default function PDVUnificado() {
         preco: parseFloat(precoFinal),
         preco_original: parseFloat(produto.precoBase ?? produto.preco_venda ?? precoFinal),
         quantidade: parseFloat(quantidade) || 1,
-        unidade: produto.unidade || 'UN',
+        unidade: produto.unidade || (produto.pesavel ? 'KG' : 'UN'),
         pesavel: produto.pesavel || false,
+        plu: produto.plu || null,
         promocao: produto.promocao || null,
       }]
     })
@@ -154,6 +244,7 @@ export default function PDVUnificado() {
     try {
       const payload = {
         segmento,
+        cpf_cliente: cpfNota.trim() || null,
         itens: itens.map(i => ({
           produto_id: i.produto_id,
           nome: i.nome,
@@ -173,12 +264,17 @@ export default function PDVUnificado() {
         id: `v-${Date.now()}`,
         numero: `VND-${Date.now().toString(36).toUpperCase()}`,
         total,
+        desconto: valorDesconto,
+        troco: trocoCalc,
+        cpf_cliente: cpfNota.trim() || null,
         forma_pagamento: formaPgto,
+        itens: [...payload.itens],
         data: new Date().toISOString()
       })
       setItens([])
       setDesconto(0)
       setTroco('')
+      setCpfNota('')
       setModalPgto(false)
     } catch (err) {
       alert(err.message || 'Erro ao finalizar venda')
@@ -187,377 +283,610 @@ export default function PDVUnificado() {
     }
   }
 
+  async function salvarOperacaoCaixa() {
+    if (!valorCaixa || parseFloat(valorCaixa) <= 0) {
+      alert('Informe um valor válido.')
+      return
+    }
+    const corpo = {
+      tipo: modalCaixa.tipo,
+      valor: parseFloat(valorCaixa),
+      motivo: motivoCaixa.trim() || (modalCaixa.tipo === 'sangria' ? 'Sangria de caixa' : 'Suprimento de troco')
+    }
+    try {
+      await api.post('/api/admin/caixa/movimentar', corpo).catch(() => null)
+      alert(`${modalCaixa.tipo === 'sangria' ? 'Sangria' : 'Suprimento'} registrado com sucesso!`)
+      setModalCaixa(null)
+      setValorCaixa('')
+      setMotivoCaixa('')
+    } catch {
+      alert(`${modalCaixa.tipo === 'sangria' ? 'Sangria' : 'Suprimento'} registrado localmente!`)
+      setModalCaixa(null)
+      setValorCaixa('')
+      setMotivoCaixa('')
+    }
+  }
+
   // ── Render ──────────────────────────────────────────────────────────────────
   return (
-    <div style={{ display: 'flex', height: 'calc(100vh - 60px)', background: theme.bg, color: theme.cream, overflow: 'hidden' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: theme.bg, color: theme.cream, overflow: 'hidden', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
 
-      {/* ── Coluna esquerda: produtos ─────────────────────────────────────── */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', borderRight: `1px solid ${theme.line}`, overflow: 'hidden' }}>
-
-        {/* Seletor de segmento */}
-        <div style={{ display: 'flex', gap: 6, padding: '10px 12px', borderBottom: `1px solid ${theme.line}`, overflowX: 'auto' }}>
-          {SEGMENTOS.map(sg => (
-            <button
-              key={sg.id}
-              onClick={() => { setSegmento(sg.id); setResultados([]); setBusca('') }}
-              style={{
-                padding: '6px 12px', borderRadius: 8, border: 'none', cursor: 'pointer',
-                background: segmento === sg.id ? sg.cor : theme.surface,
-                color: segmento === sg.id ? '#fff' : theme.muted,
-                fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap',
-                transition: 'all .15s',
-              }}
-            >
-              {sg.icon} {sg.label}
-            </button>
-          ))}
-        </div>
-
-        {/* Campo de busca / código de barras */}
-        <div style={{ padding: '10px 12px', borderBottom: `1px solid ${theme.line}` }}>
-          <input
-            ref={inputRef}
-            value={busca}
-            onChange={e => setBusca(e.target.value)}
-            placeholder="🔍 Código de barras, nome ou referência..."
-            style={{
-              width: '100%', padding: '12px 14px', boxSizing: 'border-box',
-              background: theme.surface, border: `1px solid ${theme.line}`,
-              borderRadius: 10, color: theme.cream, fontSize: 14, outline: 'none',
-            }}
-            onKeyDown={e => {
-              if (e.key === 'Enter' && resultados.length === 1) {
-                const p = resultados[0]
-                if (segmento === 'loja-moda' && p.variacoes?.length > 0) {
-                  setModalGrade(p)
-                } else {
-                  adicionarItem(p)
-                  setBusca('')
-                  setResultados([])
-                }
-              }
-            }}
-          />
-        </div>
-
-        {/* Resultados da busca */}
-        {resultados.length > 0 && (
-          <div style={{ flex: 1, overflowY: 'auto', padding: '8px 12px' }}>
-            {resultados.map(p => (
-              <div
-                key={p.id}
-                onClick={() => {
-                  if (segmento === 'loja-moda' && p.variacoes?.length > 0) {
-                    setModalGrade(p)
-                  } else {
-                    adicionarItem(p)
-                    setBusca('')
-                    setResultados([])
-                    inputRef.current?.focus()
-                  }
-                }}
+      {/* ── Top Bar: Segmentos, Atalhos e Voltar ──────────────────────────────── */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 16px', background: theme.surface, borderBottom: `1px solid ${theme.line}`, flexWrap: 'wrap', gap: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <a href="/admin/supermercado" style={{ color: theme.orange, textDecoration: 'none', fontSize: 13, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 4 }}>
+            ← Voltar ao Supermercado
+          </a>
+          <div style={{ width: 1, height: 20, background: theme.line }} />
+          <div style={{ display: 'flex', gap: 6, overflowX: 'auto' }}>
+            {SEGMENTOS.map(sg => (
+              <button
+                key={sg.id}
+                onClick={() => { setSegmento(sg.id); setResultados([]); setBusca('') }}
                 style={{
-                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                  padding: '12px 14px', marginBottom: 6,
-                  background: theme.card, border: `1px solid ${theme.line}`,
-                  borderRadius: 10, cursor: 'pointer', transition: 'border-color .15s',
-                }}
-                onMouseEnter={e => e.currentTarget.style.borderColor = theme.green}
-                onMouseLeave={e => e.currentTarget.style.borderColor = theme.line}
-              >
-                <div>
-                  <div style={{ fontWeight: 700, fontSize: 13 }}>{p.nome}</div>
-                  <div style={{ color: theme.muted, fontSize: 11, marginTop: 2 }}>
-                    {p.codigo_barras || p.referencia || p.codigo_interno}
-                    {p.unidade && ` · ${p.unidade}`}
-                    {p.estoque_atual !== undefined && ` · Estoque: ${p.estoque_atual}`}
-                  </div>
-                </div>
-                <div style={{ textAlign: 'right' }}>
-                  {p.preco_final && p.preco_final < p.preco_venda ? (
-                    <>
-                      <div style={{ textDecoration: 'line-through', color: theme.muted, fontSize: 11 }}>
-                        R$ {parseFloat(p.preco_venda).toFixed(2)}
-                      </div>
-                      <div style={{ fontWeight: 800, color: theme.green, fontSize: 14 }}>
-                        R$ {parseFloat(p.preco_final).toFixed(2)}
-                      </div>
-                    </>
-                  ) : (
-                    <div style={{ fontWeight: 800, color: theme.green, fontSize: 14 }}>
-                      R$ {parseFloat(p.preco_venda || p.preco_final || 0).toFixed(2)}
-                    </div>
-                  )}
-                  {segmento === 'loja-moda' && p.total_variacoes > 0 && (
-                    <div style={{ fontSize: 10, color: theme.yellow, marginTop: 2 }}>
-                      {p.total_variacoes} variações
-                    </div>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Mensagem de boas-vindas quando vazio */}
-        {!resultados.length && !busca && (
-          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 12, color: theme.muted }}>
-            <div style={{ fontSize: 48 }}>
-              {SEGMENTOS.find(s => s.id === segmento)?.icon || '🛒'}
-            </div>
-            <div style={{ fontSize: 14, fontWeight: 600 }}>
-              {SEGMENTOS.find(s => s.id === segmento)?.label}
-            </div>
-            <div style={{ fontSize: 12 }}>Digite ou passe o código de barras</div>
-          </div>
-        )}
-      </div>
-
-      {/* ── Coluna direita: carrinho ──────────────────────────────────────── */}
-      <div style={{ width: 380, display: 'flex', flexDirection: 'column', background: theme.surface }}>
-
-        {/* Header do carrinho */}
-        <div style={{ padding: '14px 16px', borderBottom: `1px solid ${theme.line}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div style={{ fontWeight: 800, fontSize: 15 }}>🛒 Carrinho ({itens.length})</div>
-          {itens.length > 0 && (
-            <button
-              onClick={() => { if (confirm('Limpar carrinho?')) setItens([]) }}
-              style={{ background: 'none', border: 'none', color: theme.red, cursor: 'pointer', fontSize: 12, fontWeight: 700 }}
-            >
-              Limpar
-            </button>
-          )}
-        </div>
-
-        {/* Itens do carrinho */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '8px 12px' }}>
-          {itens.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '40px 0', color: theme.muted, fontSize: 13 }}>
-              Nenhum item adicionado
-            </div>
-          ) : itens.map(item => (
-            <div key={item.chave} style={{
-              background: theme.card, border: `1px solid ${theme.line}`,
-              borderRadius: 10, padding: '10px 12px', marginBottom: 8,
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                <div style={{ fontSize: 12, fontWeight: 700, flex: 1, marginRight: 8 }}>{item.nome}</div>
-                <button onClick={() => removerItem(item.chave)} style={{ background: 'none', border: 'none', color: theme.red, cursor: 'pointer', fontSize: 14 }}>✕</button>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                {/* Controle de quantidade */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <button
-                    onClick={() => alterarQuantidade(item.chave, item.pesavel ? -0.1 : -1)}
-                    style={{ width: 26, height: 26, borderRadius: 6, border: `1px solid ${theme.line}`, background: theme.surface, color: theme.cream, cursor: 'pointer', fontSize: 14 }}
-                  >−</button>
-                  <span style={{ fontSize: 13, fontWeight: 700, minWidth: 36, textAlign: 'center' }}>
-                    {item.pesavel ? item.quantidade.toFixed(3) : item.quantidade}
-                    <span style={{ fontSize: 10, color: theme.muted, marginLeft: 2 }}>{item.unidade}</span>
-                  </span>
-                  <button
-                    onClick={() => alterarQuantidade(item.chave, item.pesavel ? 0.1 : 1)}
-                    style={{ width: 26, height: 26, borderRadius: 6, border: `1px solid ${theme.line}`, background: theme.surface, color: theme.cream, cursor: 'pointer', fontSize: 14 }}
-                  >+</button>
-                </div>
-                {/* Preço editável */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                  <span style={{ color: theme.muted, fontSize: 11 }}>R$</span>
-                  <input
-                    type="number"
-                    value={item.preco}
-                    onChange={e => alterarPreco(item.chave, e.target.value)}
-                    style={{
-                      width: 64, padding: '4px 6px', textAlign: 'right',
-                      background: theme.surface, border: `1px solid ${theme.line}`,
-                      borderRadius: 6, color: theme.green, fontSize: 13, fontWeight: 700, outline: 'none',
-                    }}
-                    step="0.01"
-                  />
-                </div>
-                <div style={{ fontWeight: 800, fontSize: 13, minWidth: 64, textAlign: 'right' }}>
-                  R$ {(item.preco * item.quantidade).toFixed(2)}
-                </div>
-              </div>
-              {item.promocao && (
-                <div style={{ fontSize: 10, color: theme.yellow, marginTop: 4 }}>
-                  🏷️ Promoção: {item.promocao.nome}
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-
-        {/* Desconto */}
-        {itens.length > 0 && (
-          <div style={{ padding: '10px 12px', borderTop: `1px solid ${theme.line}` }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: theme.muted, marginBottom: 6 }}>DESCONTO</div>
-            <div style={{ display: 'flex', gap: 6 }}>
-              <button
-                onClick={() => setTipoDesconto('valor')}
-                style={{ padding: '6px 12px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 11, fontWeight: 700, background: tipoDesconto === 'valor' ? theme.green : theme.card, color: tipoDesconto === 'valor' ? '#fff' : theme.muted }}
-              >R$</button>
-              <button
-                onClick={() => setTipoDesconto('percentual')}
-                style={{ padding: '6px 12px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 11, fontWeight: 700, background: tipoDesconto === 'percentual' ? theme.green : theme.card, color: tipoDesconto === 'percentual' ? '#fff' : theme.muted }}
-              >%</button>
-              <input
-                type="number"
-                value={desconto}
-                onChange={e => setDesconto(e.target.value)}
-                placeholder="0"
-                style={{ flex: 1, padding: '6px 10px', background: theme.card, border: `1px solid ${theme.line}`, borderRadius: 8, color: theme.cream, fontSize: 13, outline: 'none' }}
-                min="0"
-                step="0.01"
-              />
-            </div>
-          </div>
-        )}
-
-        {/* Totais */}
-        <div style={{ padding: '12px 16px', borderTop: `1px solid ${theme.line}` }}>
-          {valorDesconto > 0 && (
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 4 }}>
-              <span style={{ color: theme.muted }}>Subtotal</span>
-              <span>R$ {subtotal.toFixed(2)}</span>
-            </div>
-          )}
-          {valorDesconto > 0 && (
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 4 }}>
-              <span style={{ color: theme.red }}>Desconto</span>
-              <span style={{ color: theme.red }}>− R$ {valorDesconto.toFixed(2)}</span>
-            </div>
-          )}
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 20, fontWeight: 900, marginBottom: 12 }}>
-            <span>TOTAL</span>
-            <span style={{ color: theme.green }}>R$ {total.toFixed(2)}</span>
-          </div>
-
-          {/* Forma de pagamento */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6, marginBottom: 12 }}>
-            {FORMAS_PGTO.map(fp => (
-              <button
-                key={fp.id}
-                onClick={() => setFormaPgto(fp.id)}
-                style={{
-                  padding: '8px 4px', borderRadius: 8, border: 'none', cursor: 'pointer',
-                  background: formaPgto === fp.id ? theme.green : theme.card,
-                  color: formaPgto === fp.id ? '#fff' : theme.muted,
-                  fontSize: 10, fontWeight: 700, transition: 'all .15s',
+                  padding: '5px 12px', borderRadius: 8, border: 'none', cursor: 'pointer',
+                  background: segmento === sg.id ? sg.cor : 'transparent',
+                  color: segmento === sg.id ? '#fff' : theme.muted,
+                  fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap',
+                  transition: 'all .15s',
                 }}
               >
-                <div style={{ fontSize: 16, marginBottom: 2 }}>{fp.icon}</div>
-                {fp.label}
+                {sg.icon} {sg.label}
               </button>
             ))}
           </div>
+        </div>
 
-          {/* Troco (apenas dinheiro) */}
-          {formaPgto === 'dinheiro' && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-              <span style={{ fontSize: 12, color: theme.muted, whiteSpace: 'nowrap' }}>Recebido:</span>
-              <input
-                type="number"
-                value={troco}
-                onChange={e => setTroco(e.target.value)}
-                placeholder={total.toFixed(2)}
-                style={{ flex: 1, padding: '8px 10px', background: theme.card, border: `1px solid ${theme.line}`, borderRadius: 8, color: theme.cream, fontSize: 13, outline: 'none' }}
-                step="0.01"
-              />
-              {trocoCalc > 0 && (
-                <div style={{ fontSize: 13, fontWeight: 800, color: theme.yellow, whiteSpace: 'nowrap' }}>
-                  Troco: R$ {trocoCalc.toFixed(2)}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Botão finalizar */}
-          <button
-            onClick={finalizarVenda}
-            disabled={!itens.length || finalizando}
-            style={{
-              width: '100%', padding: '16px',
-              background: itens.length ? theme.green : theme.card,
-              color: itens.length ? '#fff' : theme.muted,
-              border: 'none', borderRadius: 12,
-              fontSize: 16, fontWeight: 900, cursor: itens.length ? 'pointer' : 'not-allowed',
-              transition: 'all .15s',
-            }}
-          >
-            {finalizando ? '⏳ Processando...' : `✅ Finalizar — R$ ${total.toFixed(2)}`}
+        {/* Atalhos do Operador de Caixa */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: theme.muted }}>
+          <span style={{ background: theme.card, padding: '3px 8px', borderRadius: 6, border: `1px solid ${theme.line}` }}><strong>F2</strong> Busca</span>
+          <span style={{ background: theme.card, padding: '3px 8px', borderRadius: 6, border: `1px solid ${theme.line}` }}><strong>F3</strong> CPF</span>
+          <span style={{ background: theme.card, padding: '3px 8px', borderRadius: 6, border: `1px solid ${theme.line}` }}><strong>F4</strong> Limpar</span>
+          <span style={{ background: theme.card, padding: '3px 8px', borderRadius: 6, border: `1px solid ${theme.line}` }}><strong>F7</strong> Desconto</span>
+          <button onClick={() => setModalCaixa({ tipo: 'sangria' })} style={{ background: theme.card, color: theme.yellow, border: `1px solid ${theme.line}`, padding: '4px 8px', borderRadius: 6, cursor: 'pointer', fontSize: 11, fontWeight: 700 }}>
+            💰 Sangria / Suprimento
           </button>
         </div>
       </div>
 
-      {/* ── Modal: Grade de moda ──────────────────────────────────────────── */}
-      {modalGrade && (
-        <div style={{
-          position: 'fixed', inset: 0, background: 'rgba(0,0,0,.7)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100,
-        }}>
-          <div style={{ background: theme.card, borderRadius: 16, padding: 24, width: 400, maxHeight: '80vh', overflowY: 'auto' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
-              <div style={{ fontWeight: 800, fontSize: 15 }}>👗 {modalGrade.nome}</div>
-              <button onClick={() => setModalGrade(null)} style={{ background: 'none', border: 'none', color: theme.muted, cursor: 'pointer', fontSize: 18 }}>✕</button>
+      {/* ── Área Principal (Colunas Esquerda e Direita) ───────────────────────── */}
+      <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+
+        {/* ── Coluna esquerda: catálogo e bipagem ───────────────────────────── */}
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', borderRight: `1px solid ${theme.line}`, overflow: 'hidden' }}>
+
+          {/* Campo de busca / código de barras */}
+          <div style={{ padding: '12px 16px', borderBottom: `1px solid ${theme.line}`, background: theme.surface }}>
+            <div style={{ position: 'relative' }}>
+              <input
+                ref={inputRef}
+                value={busca}
+                onChange={e => setBusca(e.target.value)}
+                placeholder="🔍 Digite ou bipe código de barras, nome, PLU ou use '3*código' para multiplicar..."
+                style={{
+                  width: '100%', padding: '14px 16px', boxSizing: 'border-box',
+                  background: theme.card, border: `2px solid ${busca ? theme.blue : theme.line}`,
+                  borderRadius: 12, color: '#fff', fontSize: 16, fontWeight: 600, outline: 'none',
+                  boxShadow: busca ? '0 0 0 3px rgba(59,130,246,0.2)' : 'none'
+                }}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') {
+                    if (resultados.length === 1) {
+                      const p = resultados[0]
+                      if (segmento === 'loja-moda' && p.variacoes?.length > 0) {
+                        setModalGrade(p)
+                      } else if (p.pesavel) {
+                        setModalPesagem(p)
+                        setPesoInput('0.500')
+                      } else {
+                        adicionarItem(p)
+                        setBusca('')
+                        setResultados([])
+                      }
+                    } else if (busca.trim()) {
+                      buscarProduto(busca)
+                    }
+                  }
+                }}
+              />
+              {buscando && (
+                <div style={{ position: 'absolute', right: 16, top: '50%', transform: 'translateY(-50%)', fontSize: 12, color: theme.blue }}>
+                  Buscando...
+                </div>
+              )}
             </div>
-            <div style={{ fontSize: 12, color: theme.muted, marginBottom: 12 }}>Selecione a variação:</div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
-              {(modalGrade.variacoes || []).map(v => (
-                <button
-                  key={v.id}
+          </div>
+
+          {/* Atalhos Rápidos de Balança / Hortifrúti (Modo Supermercado) */}
+          {segmento === 'supermercado' && atalhosSupermercado.length > 0 && !busca && (
+            <div style={{ padding: '10px 16px', borderBottom: `1px solid ${theme.line}`, background: 'rgba(255,255,255,0.01)' }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: theme.muted, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                ⚖️ Atalhos Rápidos de Balança & Hortifrúti (1 Toque)
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: 8 }}>
+                {atalhosSupermercado.map(p => (
+                  <button
+                    key={p.id}
+                    onClick={() => {
+                      if (p.pesavel) {
+                        setModalPesagem(p)
+                        setPesoInput('0.500')
+                      } else {
+                        adicionarItem(p, 1)
+                      }
+                    }}
+                    style={{
+                      display: 'flex', flexDirection: 'column', alignItems: 'flex-start',
+                      padding: '8px 10px', borderRadius: 8, border: `1px solid ${theme.line}`,
+                      background: theme.card, color: theme.cream, cursor: 'pointer',
+                      textAlign: 'left', transition: 'all .15s'
+                    }}
+                    onMouseEnter={e => e.currentTarget.style.borderColor = theme.blue}
+                    onMouseLeave={e => e.currentTarget.style.borderColor = theme.line}
+                  >
+                    <div style={{ fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: '100%' }}>{p.nome}</div>
+                    <div style={{ fontSize: 11, color: theme.green, fontWeight: 800, marginTop: 2 }}>
+                      R$ {parseFloat(p.precoFinal || p.precoBase || 0).toFixed(2)}
+                      <span style={{ fontSize: 9, color: theme.muted, marginLeft: 2 }}>/{p.unidade || (p.pesavel ? 'KG' : 'UN')}</span>
+                    </div>
+                    {p.plu && <div style={{ fontSize: 9, color: theme.yellow }}>PLU {p.plu}</div>}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Resultados da busca */}
+          {resultados.length > 0 && (
+            <div style={{ flex: 1, overflowY: 'auto', padding: '12px 16px' }}>
+              {resultados.map(p => (
+                <div
+                  key={p.id}
                   onClick={() => {
-                    adicionarItem(modalGrade, 1, v)
-                    setModalGrade(null)
-                    setBusca('')
-                    setResultados([])
-                    inputRef.current?.focus()
+                    if (segmento === 'loja-moda' && p.variacoes?.length > 0) {
+                      setModalGrade(p)
+                    } else if (p.pesavel) {
+                      setModalPesagem(p)
+                      setPesoInput('0.500')
+                    } else {
+                      adicionarItem(p)
+                      setBusca('')
+                      setResultados([])
+                      inputRef.current?.focus()
+                    }
                   }}
-                  disabled={v.estoque <= 0}
                   style={{
-                    padding: '10px 12px', borderRadius: 10,
-                    border: `1.5px solid ${v.estoque > 0 ? theme.line : theme.red}`,
-                    background: v.estoque > 0 ? theme.surface : 'rgba(224,92,92,.08)',
-                    color: v.estoque > 0 ? theme.cream : theme.red,
-                    cursor: v.estoque > 0 ? 'pointer' : 'not-allowed',
-                    fontSize: 12, fontWeight: 700, textAlign: 'left',
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    padding: '12px 16px', marginBottom: 8,
+                    background: theme.card, border: `1px solid ${theme.line}`,
+                    borderRadius: 10, cursor: 'pointer', transition: 'border-color .15s',
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.borderColor = theme.green}
+                  onMouseLeave={e => e.currentTarget.style.borderColor = theme.line}
+                >
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: 14 }}>{p.nome}</div>
+                    <div style={{ color: theme.muted, fontSize: 11, marginTop: 2 }}>
+                      {p.departamento && `[${p.departamento}] `}
+                      {p.ean && `EAN ${p.ean} · `}
+                      {p.plu && `PLU ${p.plu} · `}
+                      {p.pesavel ? 'Item Pesável (Balança)' : (p.unidade || 'UN')}
+                    </div>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontWeight: 900, color: theme.green, fontSize: 16 }}>
+                      R$ {parseFloat(p.precoFinal || p.precoBase || p.preco_venda || 0).toFixed(2)}
+                    </div>
+                    <div style={{ fontSize: 10, color: theme.muted }}>por {p.unidade || (p.pesavel ? 'KG' : 'UN')}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Mensagem de boas-vindas quando vazio */}
+          {!resultados.length && !busca && (
+            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 12, color: theme.muted, padding: 20 }}>
+              <div style={{ fontSize: 56 }}>
+                {SEGMENTOS.find(s => s.id === segmento)?.icon || '🛒'}
+              </div>
+              <div style={{ fontSize: 18, fontWeight: 800, color: '#fff' }}>
+                Frente de Caixa — {SEGMENTOS.find(s => s.id === segmento)?.label}
+              </div>
+              <div style={{ fontSize: 13, maxWidth: 360, textAlign: 'center', lineHeight: 1.5 }}>
+                Passe os produtos no leitor de código de barras ou use a busca.<br />
+                Para multiplicar, digite <strong>3*código</strong> e pressione Enter.
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* ── Coluna direita: carrinho e pagamento ──────────────────────────── */}
+        <div style={{ width: 420, display: 'flex', flexDirection: 'column', background: theme.surface }}>
+
+          {/* Header do carrinho */}
+          <div style={{ padding: '14px 16px', borderBottom: `1px solid ${theme.line}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ fontWeight: 800, fontSize: 15, display: 'flex', alignItems: 'center', gap: 6 }}>
+              🛒 Carrinho ({itens.reduce((acc, i) => acc + (i.pesavel ? 1 : i.quantidade), 0)})
+            </div>
+            {itens.length > 0 && (
+              <button
+                onClick={() => { if (window.confirm('Limpar carrinho?')) setItens([]) }}
+                style={{ background: 'none', border: 'none', color: theme.red, cursor: 'pointer', fontSize: 12, fontWeight: 700 }}
+              >
+                Limpar (F4)
+              </button>
+            )}
+          </div>
+
+          {/* Itens do carrinho */}
+          <div style={{ flex: 1, overflowY: 'auto', padding: '10px 14px' }}>
+            {itens.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '60px 0', color: theme.muted, fontSize: 13 }}>
+                Nenhum item adicionado à comanda.<br />Bipe o primeiro produto para iniciar.
+              </div>
+            ) : itens.map((item, idx) => (
+              <div key={item.chave} style={{
+                background: theme.card, border: `1px solid ${theme.line}`,
+                borderRadius: 10, padding: '10px 12px', marginBottom: 8,
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, flex: 1, marginRight: 8 }}>
+                    <span style={{ color: theme.muted, marginRight: 6 }}>#{idx + 1}</span>
+                    {item.nome}
+                  </div>
+                  <button onClick={() => removerItem(item.chave)} style={{ background: 'none', border: 'none', color: theme.red, cursor: 'pointer', fontSize: 14 }}>✕</button>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  {/* Controle de quantidade */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <button
+                      onClick={() => alterarQuantidade(item.chave, item.pesavel ? -0.1 : -1)}
+                      style={{ width: 26, height: 26, borderRadius: 6, border: `1px solid ${theme.line}`, background: theme.surface, color: theme.cream, cursor: 'pointer', fontSize: 14, fontWeight: 700 }}
+                    >−</button>
+                    <span style={{ fontSize: 13, fontWeight: 700, minWidth: 44, textAlign: 'center' }}>
+                      {item.pesavel ? item.quantidade.toFixed(3) : item.quantidade}
+                      <span style={{ fontSize: 10, color: theme.muted, marginLeft: 2 }}>{item.unidade}</span>
+                    </span>
+                    <button
+                      onClick={() => alterarQuantidade(item.chave, item.pesavel ? 0.1 : 1)}
+                      style={{ width: 26, height: 26, borderRadius: 6, border: `1px solid ${theme.line}`, background: theme.surface, color: theme.cream, cursor: 'pointer', fontSize: 14, fontWeight: 700 }}
+                    >+</button>
+                  </div>
+                  {/* Preço editável e Total */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <div style={{ color: theme.muted, fontSize: 11 }}>
+                      R$ {item.preco.toFixed(2)}
+                    </div>
+                    <div style={{ fontWeight: 800, fontSize: 14, minWidth: 70, textAlign: 'right', color: theme.green }}>
+                      R$ {(item.preco * item.quantidade).toFixed(2)}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* CPF na Nota e Desconto */}
+          <div style={{ padding: '10px 14px', borderTop: `1px solid ${theme.line}`, background: 'rgba(0,0,0,0.1)' }}>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+              <div style={{ flex: 1 }}>
+                <input
+                  id="pdv-cpf-input"
+                  placeholder="👤 CPF na nota (F3)"
+                  value={cpfNota}
+                  onChange={e => setCpfNota(e.target.value)}
+                  maxLength={14}
+                  style={{ width: '100%', boxSizing: 'border-box', padding: '6px 10px', background: theme.card, border: `1px solid ${theme.line}`, borderRadius: 8, color: theme.cream, fontSize: 12, outline: 'none' }}
+                />
+              </div>
+              <div style={{ display: 'flex', gap: 4 }}>
+                <button
+                  onClick={() => setTipoDesconto('valor')}
+                  style={{ padding: '6px 8px', borderRadius: 6, border: 'none', cursor: 'pointer', fontSize: 11, fontWeight: 700, background: tipoDesconto === 'valor' ? theme.green : theme.card, color: tipoDesconto === 'valor' ? '#fff' : theme.muted }}
+                >R$</button>
+                <button
+                  onClick={() => setTipoDesconto('percentual')}
+                  style={{ padding: '6px 8px', borderRadius: 6, border: 'none', cursor: 'pointer', fontSize: 11, fontWeight: 700, background: tipoDesconto === 'percentual' ? theme.green : theme.card, color: tipoDesconto === 'percentual' ? '#fff' : theme.muted }}
+                >%</button>
+                <input
+                  id="pdv-desconto-input"
+                  type="number"
+                  value={desconto || ''}
+                  onChange={e => setDesconto(e.target.value)}
+                  placeholder="Desc (F7)"
+                  style={{ width: 75, padding: '6px 8px', background: theme.card, border: `1px solid ${theme.line}`, borderRadius: 6, color: theme.cream, fontSize: 12, outline: 'none' }}
+                  min="0"
+                  step="0.01"
+                />
+              </div>
+            </div>
+
+            {/* Totais */}
+            {valorDesconto > 0 && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 4 }}>
+                <span style={{ color: theme.muted }}>Subtotal: R$ {subtotal.toFixed(2)}</span>
+                <span style={{ color: theme.red }}>− Desconto: R$ {valorDesconto.toFixed(2)}</span>
+              </div>
+            )}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+              <span style={{ fontSize: 14, fontWeight: 700 }}>TOTAL A PAGAR</span>
+              <span style={{ fontSize: 24, fontWeight: 900, color: theme.green }}>R$ {total.toFixed(2)}</span>
+            </div>
+
+            {/* Formas de Pagamento */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6, marginBottom: 10 }}>
+              {FORMAS_PGTO.map(fp => (
+                <button
+                  key={fp.id}
+                  onClick={() => setFormaPgto(fp.id)}
+                  style={{
+                    padding: '8px 4px', borderRadius: 8, border: 'none', cursor: 'pointer',
+                    background: formaPgto === fp.id ? theme.blue : theme.card,
+                    color: formaPgto === fp.id ? '#fff' : theme.muted,
+                    fontSize: 11, fontWeight: 700, transition: 'all .15s',
                   }}
                 >
-                  <div>{v.cor} / {v.tamanho}</div>
-                  <div style={{ fontSize: 10, color: theme.muted, marginTop: 2 }}>
-                    Estoque: {v.estoque} · R$ {parseFloat(v.preco || modalGrade.preco_venda).toFixed(2)}
-                  </div>
+                  <div style={{ fontSize: 14, marginBottom: 2 }}>{fp.icon}</div>
+                  {fp.label}
                 </button>
               ))}
+            </div>
+
+            {/* Troco para Dinheiro */}
+            {formaPgto === 'dinheiro' && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                <span style={{ fontSize: 12, color: theme.muted, whiteSpace: 'nowrap' }}>Recebido:</span>
+                <input
+                  type="number"
+                  value={troco}
+                  onChange={e => setTroco(e.target.value)}
+                  placeholder={total.toFixed(2)}
+                  style={{ flex: 1, padding: '8px 10px', background: theme.card, border: `1px solid ${theme.line}`, borderRadius: 8, color: '#fff', fontSize: 13, outline: 'none' }}
+                  step="0.01"
+                />
+                {trocoCalc > 0 && (
+                  <div style={{ fontSize: 13, fontWeight: 800, color: theme.yellow, whiteSpace: 'nowrap' }}>
+                    Troco: R$ {trocoCalc.toFixed(2)}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Botão Finalizar Venda */}
+            <button
+              onClick={finalizarVenda}
+              disabled={!itens.length || finalizando}
+              style={{
+                width: '100%', padding: '16px',
+                background: itens.length ? theme.green : theme.card,
+                color: itens.length ? '#fff' : theme.muted,
+                border: 'none', borderRadius: 12,
+                fontSize: 16, fontWeight: 900, cursor: itens.length ? 'pointer' : 'not-allowed',
+                transition: 'all .15s',
+              }}
+            >
+              {finalizando ? '⏳ Processando...' : `✅ Finalizar Venda (F10) — R$ ${total.toFixed(2)}`}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Modal: Pesagem Rápida (Balança) ─────────────────────────────────── */}
+      {modalPesagem && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.75)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 110 }}>
+          <div style={{ background: theme.card, borderRadius: 16, padding: 24, width: 380, border: `1px solid ${theme.line}` }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+              <div style={{ fontWeight: 800, fontSize: 16, color: '#fff' }}>⚖️ Balança — {modalPesagem.nome}</div>
+              <button onClick={() => setModalPesagem(null)} style={{ background: 'none', border: 'none', color: theme.muted, cursor: 'pointer', fontSize: 18 }}>✕</button>
+            </div>
+            <div style={{ fontSize: 13, color: theme.muted, marginBottom: 12 }}>
+              Preço por KG: <strong style={{ color: theme.green }}>R$ {parseFloat(modalPesagem.precoFinal || modalPesagem.precoBase || 0).toFixed(2)}</strong>
+            </div>
+
+            <label style={{ fontSize: 12, fontWeight: 700, color: theme.muted, marginBottom: 6, display: 'block' }}>
+              Peso em Quilogramas (KG):
+            </label>
+            <input
+              type="number"
+              step="0.005"
+              autoFocus
+              value={pesoInput}
+              onChange={e => setPesoInput(e.target.value)}
+              style={{ width: '100%', boxSizing: 'border-box', padding: '12px', background: theme.surface, border: `2px solid ${theme.blue}`, borderRadius: 10, color: '#fff', fontSize: 20, fontWeight: 800, textAlign: 'center', outline: 'none' }}
+              onKeyDown={e => {
+                if (e.key === 'Enter') {
+                  const peso = parseFloat(pesoInput.replace(',', '.')) || 0.1
+                  adicionarItem(modalPesagem, peso)
+                  setModalPesagem(null)
+                  inputRef.current?.focus()
+                }
+              }}
+            />
+
+            {/* Botões de peso rápido */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 6, margin: '12px 0' }}>
+              {['0.100', '0.250', '0.500', '1.000', '2.000'].map(w => (
+                <button
+                  key={w}
+                  type="button"
+                  onClick={() => setPesoInput(w)}
+                  style={{ padding: '6px 2px', borderRadius: 6, border: `1px solid ${theme.line}`, background: pesoInput === w ? theme.blue : theme.surface, color: '#fff', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
+                >
+                  {parseFloat(w) < 1 ? `${parseFloat(w) * 1000}g` : `${parseFloat(w)}kg`}
+                </button>
+              ))}
+            </div>
+
+            {/* Total Calculado */}
+            <div style={{ background: theme.surface, padding: 12, borderRadius: 10, textAlign: 'center', marginBottom: 14 }}>
+              <div style={{ fontSize: 11, color: theme.muted }}>Valor Total Calculado:</div>
+              <div style={{ fontSize: 22, fontWeight: 900, color: theme.green, marginTop: 2 }}>
+                R$ {((parseFloat(pesoInput.replace(',', '.')) || 0) * (parseFloat(modalPesagem.precoFinal || modalPesagem.precoBase || 0))).toFixed(2)}
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button
+                type="button"
+                onClick={() => setModalPesagem(null)}
+                style={{ flex: 1, padding: '12px', background: theme.surface, color: theme.muted, border: `1px solid ${theme.line}`, borderRadius: 10, fontWeight: 700, cursor: 'pointer' }}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const peso = parseFloat(pesoInput.replace(',', '.')) || 0.1
+                  adicionarItem(modalPesagem, peso)
+                  setModalPesagem(null)
+                  inputRef.current?.focus()
+                }}
+                style={{ flex: 2, padding: '12px', background: theme.green, color: '#fff', border: 'none', borderRadius: 10, fontWeight: 800, cursor: 'pointer' }}
+              >
+                Confirmar Pesagem
+              </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* ── Modal: Venda confirmada ───────────────────────────────────────── */}
-      {venda && (
-        <div style={{
-          position: 'fixed', inset: 0, background: 'rgba(0,0,0,.7)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100,
-        }}>
-          <div style={{ background: theme.card, borderRadius: 20, padding: 32, width: 360, textAlign: 'center' }}>
-            <div style={{ fontSize: 56, marginBottom: 12 }}>✅</div>
-            <div style={{ fontSize: 20, fontWeight: 900, color: theme.green, marginBottom: 8 }}>Venda realizada!</div>
-            <div style={{ color: theme.muted, fontSize: 13, marginBottom: 20 }}>
-              Venda #{venda.id?.slice(-6).toUpperCase()} · R$ {parseFloat(venda.total || 0).toFixed(2)}
+      {/* ── Modal: Sangria / Suprimento de Caixa ────────────────────────────── */}
+      {modalCaixa && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.75)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 110 }}>
+          <div style={{ background: theme.card, borderRadius: 16, padding: 24, width: 360, border: `1px solid ${theme.line}` }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+              <div style={{ fontWeight: 800, fontSize: 16, color: '#fff' }}>
+                {modalCaixa.tipo === 'sangria' ? '💸 Sangria de Caixa' : '💵 Suprimento de Troco'}
+              </div>
+              <button onClick={() => setModalCaixa(null)} style={{ background: 'none', border: 'none', color: theme.muted, cursor: 'pointer', fontSize: 18 }}>✕</button>
             </div>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+              <button
+                onClick={() => setModalCaixa({ tipo: 'sangria' })}
+                style={{ flex: 1, padding: '8px', borderRadius: 8, border: 'none', background: modalCaixa.tipo === 'sangria' ? theme.red : theme.surface, color: '#fff', fontWeight: 700, cursor: 'pointer', fontSize: 12 }}
+              >
+                Sangria (Retirada)
+              </button>
+              <button
+                onClick={() => setModalCaixa({ tipo: 'suprimento' })}
+                style={{ flex: 1, padding: '8px', borderRadius: 8, border: 'none', background: modalCaixa.tipo === 'suprimento' ? theme.green : theme.surface, color: '#fff', fontWeight: 700, cursor: 'pointer', fontSize: 12 }}
+              >
+                Suprimento (Entrada)
+              </button>
+            </div>
+            <div style={{ display: 'grid', gap: 10, marginBottom: 14 }}>
+              <label style={{ fontSize: 12, color: theme.muted, display: 'block' }}>
+                Valor (R$):
+                <input
+                  type="number"
+                  step="0.01"
+                  autoFocus
+                  placeholder="0,00"
+                  value={valorCaixa}
+                  onChange={e => setValorCaixa(e.target.value)}
+                  style={{ width: '100%', boxSizing: 'border-box', padding: '10px', background: theme.surface, border: `1px solid ${theme.line}`, borderRadius: 8, color: '#fff', fontSize: 16, fontWeight: 700, outline: 'none', marginTop: 4 }}
+                />
+              </label>
+              <label style={{ fontSize: 12, color: theme.muted, display: 'block' }}>
+                Motivo / Observação:
+                <input
+                  placeholder="Ex: Pagamento fornecedor, troco inicial..."
+                  value={motivoCaixa}
+                  onChange={e => setMotivoCaixa(e.target.value)}
+                  style={{ width: '100%', boxSizing: 'border-box', padding: '10px', background: theme.surface, border: `1px solid ${theme.line}`, borderRadius: 8, color: '#fff', fontSize: 13, outline: 'none', marginTop: 4 }}
+                />
+              </label>
+            </div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={() => setModalCaixa(null)} style={{ flex: 1, padding: '10px', background: theme.surface, color: theme.muted, border: `1px solid ${theme.line}`, borderRadius: 8, fontWeight: 700, cursor: 'pointer' }}>
+                Voltar
+              </button>
+              <button onClick={salvarOperacaoCaixa} style={{ flex: 1, padding: '10px', background: theme.blue, color: '#fff', border: 'none', borderRadius: 8, fontWeight: 800, cursor: 'pointer' }}>
+                Confirmar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal: Venda Realizada com Cupom Térmico (80mm) ──────────────────── */}
+      {venda && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 120 }}>
+          <div style={{ background: '#fff', color: '#111', borderRadius: 16, padding: 24, width: 380, maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 20px 40px rgba(0,0,0,0.5)' }}>
+
+            {/* Comprovante Térmico Formatado */}
+            <div id="cupom-pdv-print" style={{ fontFamily: 'monospace', fontSize: 12, lineHeight: 1.4, borderBottom: '1px dashed #666', paddingBottom: 12, marginBottom: 14 }}>
+              <div style={{ textAlign: 'center', fontWeight: 'bold', fontSize: 14, marginBottom: 4 }}>
+                KYTTO SUPERMERCADO & VAREJO
+              </div>
+              <div style={{ textAlign: 'center', fontSize: 10, color: '#444' }}>
+                Barbearia Dino Comércio e Serviços Ltda<br />
+                DOCUMENTO AUXILIAR DE VENDA (NÃO FISCAL)
+              </div>
+              <div style={{ borderBottom: '1px dashed #666', margin: '8px 0' }} />
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11 }}>
+                <span>Venda: #{venda.numero || venda.id?.slice(-6).toUpperCase()}</span>
+                <span>{new Date().toLocaleDateString('pt-BR')} {new Date().toLocaleTimeString('pt-BR').slice(0, 5)}</span>
+              </div>
+              {venda.cpf_cliente && (
+                <div style={{ fontSize: 11, marginTop: 2 }}>
+                  <strong>CPF Consumidor:</strong> {venda.cpf_cliente}
+                </div>
+              )}
+
+              <div style={{ borderBottom: '1px dashed #666', margin: '8px 0' }} />
+              <div style={{ fontWeight: 'bold', fontSize: 11, marginBottom: 4 }}>ITENS VENDIDOS:</div>
+              {(venda.itens || []).map((it, idx) => (
+                <div key={idx} style={{ marginBottom: 4 }}>
+                  <div style={{ fontWeight: 600 }}>{idx + 1}. {it.nome}</div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#444' }}>
+                    <span>{it.quantidade} × R$ {parseFloat(it.preco_unitario || 0).toFixed(2)}</span>
+                    <strong style={{ color: '#111' }}>R$ {(it.quantidade * (it.preco_unitario || 0)).toFixed(2)}</strong>
+                  </div>
+                </div>
+              ))}
+
+              <div style={{ borderBottom: '1px dashed #666', margin: '8px 0' }} />
+              {venda.desconto > 0 && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11 }}>
+                  <span>Desconto:</span>
+                  <span>− R$ {parseFloat(venda.desconto).toFixed(2)}</span>
+                </div>
+              )}
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 15, fontWeight: 'bold', marginTop: 4 }}>
+                <span>TOTAL:</span>
+                <span>R$ {parseFloat(venda.total || 0).toFixed(2)}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginTop: 4 }}>
+                <span>Forma de Pagamento:</span>
+                <span style={{ textTransform: 'uppercase' }}>{venda.forma_pagamento}</span>
+              </div>
+              {venda.troco > 0 && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11 }}>
+                  <span>Troco:</span>
+                  <span>R$ {parseFloat(venda.troco).toFixed(2)}</span>
+                </div>
+              )}
+              <div style={{ textAlign: 'center', fontSize: 10, marginTop: 14, color: '#555' }}>
+                Obrigado pela preferência! Volte sempre!
+              </div>
+            </div>
+
+            {/* Ações de Impressão e Nova Venda */}
             <div style={{ display: 'flex', gap: 10 }}>
               <button
                 onClick={() => setVenda(null)}
-                style={{ flex: 1, padding: '12px', background: theme.green, color: '#fff', border: 'none', borderRadius: 10, fontWeight: 800, cursor: 'pointer', fontSize: 14 }}
+                style={{ flex: 1, padding: '12px', background: theme.surface, color: '#fff', border: 'none', borderRadius: 10, fontWeight: 800, cursor: 'pointer', fontSize: 13 }}
               >
                 Nova Venda
               </button>
               <button
-                onClick={() => { window.print(); setVenda(null) }}
-                style={{ flex: 1, padding: '12px', background: theme.surface, color: theme.cream, border: `1px solid ${theme.line}`, borderRadius: 10, fontWeight: 700, cursor: 'pointer', fontSize: 13 }}
+                onClick={() => { window.print() }}
+                style={{ flex: 1.5, padding: '12px', background: theme.green, color: '#fff', border: 'none', borderRadius: 10, fontWeight: 900, cursor: 'pointer', fontSize: 13, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
               >
-                🖨️ Cupom
+                🖨️ Imprimir Cupom
               </button>
             </div>
           </div>

@@ -74,7 +74,7 @@ export default function Varejo({ abaInicial = 'produtos' }) {
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, marginBottom: 16 }}>
       <div style={{ background: 'var(--card, #1a1d27)', border: '1px solid var(--line, #2e3248)', borderRadius: 12, padding: '14px 16px' }}>
         <div style={{ fontSize: 11, color: 'var(--muted, #8a8fa8)', fontWeight: 600, textTransform: 'uppercase' }}>Sortimento Ativo</div>
-        <div style={{ fontSize: 24, fontWeight: 900, marginTop: 4, color: '#fff' }}>{totalItens} <span style={{ fontSize: 13, color: 'var(--muted)' }}>produtos</span></div>
+        <div style={{ fontSize: 24, fontWeight: 900, marginTop: 4, color: 'var(--text, #1e293b)' }}>{totalItens} <span style={{ fontSize: 13, color: 'var(--muted, #64748b)' }}>produtos</span></div>
       </div>
       <div style={{ background: 'var(--card, #1a1d27)', border: '1px solid var(--line, #2e3248)', borderRadius: 12, padding: '14px 16px' }}>
         <div style={{ fontSize: 11, color: 'var(--muted, #8a8fa8)', fontWeight: 600, textTransform: 'uppercase' }}>Saldo em Estoque</div>
