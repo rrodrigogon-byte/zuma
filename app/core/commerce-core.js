@@ -64,7 +64,7 @@ export function assertUuid(value, field = 'id') {
 export function tenantContext(input = {}) {
   const empresaId = assertUuid(input.empresaId, 'empresaId');
   const lojaId = input.lojaId ? assertUuid(input.lojaId, 'lojaId') : null;
-  const usuarioId = input.usuarioId ? assertUuid(input.usuarioId, 'usuarioId') : null;
+  const usuarioId = input.usuarioId && UUID.test(String(input.usuarioId)) ? String(input.usuarioId) : null;
   return { empresaId, lojaId, usuarioId };
 }
 

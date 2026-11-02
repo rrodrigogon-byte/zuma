@@ -33,7 +33,8 @@ export async function resolveCommerceIdentity(req) {
     const requested = requestedScope(req);
     const empresaId = requested.empresaId || clean(user?.empresaId) || 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
     const lojaId = requested.lojaId || clean(user?.lojaId) || null;
-    return tenantContext({ empresaId, lojaId, usuarioId: user?.id || 'usr-admin' });
+    const usuarioId = (user?.id && isUuid(user.id)) ? user.id : (isUuid(user?.usuarioId) ? user.usuarioId : null);
+    return tenantContext({ empresaId, lojaId, usuarioId });
   }
   if (user?.pgOperational === true) {
     const empresaId = clean(user.empresaId);
@@ -107,7 +108,8 @@ export async function resolveCommerceIdentity(req) {
   );
   if (!result.rows.length) {
     if (signedEmpresa && (user.role === 'organizador' || user.role === 'admin' || user.role === 'gerente')) {
-      return tenantContext({ empresaId: signedEmpresa, lojaId: signedLoja || lojaId || null, usuarioId: user.id });
+      const usuarioId = (user?.id && isUuid(user.id)) ? user.id : (isUuid(user?.usuarioId) ? user.usuarioId : null);
+      return tenantContext({ empresaId: signedEmpresa, lojaId: signedLoja || lojaId || null, usuarioId });
     }
     throw new CommerceError('usuário sem membership ativa no Commerce Core', 'TENANT_CONTEXT_REQUIRED');
   }
