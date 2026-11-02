@@ -50,7 +50,8 @@ function harness({ runAiTask, runAutomationRound: runRound, commerceQueryRead = 
       assert.equal(scope.lojaId, STORE); assert.equal(days, 30); assert.ok(from < to); assert.ok(graphSources);
       return {
         schedule: { total: 12, concluidos: 8, cancelados: 2, faltas: 2, taxaComparecimento: 80, taxaCancelamento: 16.7 },
-        finance: [{ tipo: 'receita', status: 'pago', valor: 120, pagoEm: '2026-10-02T12:00:00Z' }],
+        // Data relativa: a janela executiva é o mês corrente; data fixa de outubro zerava em 01/11.
+        finance: [{ tipo: 'receita', status: 'pago', valor: 120, pagoEm: new Date(Date.now() - 60_000).toISOString() }],
         cash: [],
         commerce: { ordersByStatus: [{ status: 'paid', total: 2 }], payments: { transactions: 2, amount: 120 }, inventory: [{ name: 'Pomada Premium', available: 2, minimum: 3, sold: 2 }] },
         quality: {

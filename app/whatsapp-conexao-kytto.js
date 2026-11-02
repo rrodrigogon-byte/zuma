@@ -7,6 +7,7 @@
 
 import QRCode from 'qrcode';
 import { db, save } from './db.js';
+import { mail as mailPadrao } from './email.js';
 import {
   disconnectInstance, getInstanceStatus, providerSummary, requestInstanceQr,
   validInstance, whatsappProviderName, chatbotBackendConfig, confirmedPhone, instancesOfCompany,
@@ -18,6 +19,11 @@ import {
 } from './core/whatsapp-waha.js';
 
 const HISTORY_LIMIT = 40;
+// Alerta de queda do canal Clientes: o atendente virtual para de receber e responder
+// sem que ninguém perceba (Stallone ficou de 30/10 17h44 a 01/11 sem atender).
+const ALERTA_APOS_MINUTOS = 10;
+const ALERTA_REPETIR_HORAS = 6;
+const EMAIL_RE = /^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/;
 const BACKOFF_MINUTES = [1, 2, 5, 10, 15, 30];
 const disconnecting = new Set();
 const disconnectEpoch = new Map();
@@ -246,6 +252,10 @@ export function visaoPublica(conexao, { numeroCompleto = false } = {}) {
     reconnectAttempts: conexao.reconnectAttempts || 0,
     nextReconnectAt: conexao.nextReconnectAt,
     lastError: conexao.lastError,
+    // Fora do ar = o atendente virtual não recebe nem responde mensagens deste número.
+    foraDoAr: Boolean(conexao.ativo && conexao.instance) && !['open', 'connecting'].includes(conexao.state),
+    emailAlerta: conexao.emailAlerta || '',
+    alertaEnviadoEm: conexao.alertaEnviadoEm || null,
     history: (conexao.history || []).slice(0, 20),
   };
 }
@@ -449,7 +459,15 @@ export async function desconectar(empresaId, { usuario = '', fetchImpl, tipoCana
   }
 }
 
-export function configurar(empresaId, { instance, autoReconnect, numeroExibicao } = {}, { podeTrocarInstancia = false, tipoCanal = 'cliente' } = {}) {
+export function normalizarEmailsAlerta(valor) {
+  const lista = String(valor || '').split(/[,;\s]+/).map((item) => item.trim().toLowerCase()).filter(Boolean);
+  const invalido = lista.find((item) => !EMAIL_RE.test(item) || item.length > 120);
+  if (invalido) throw new Error('E-mail de alerta inválido. Separe até 3 e-mails por vírgula.');
+  if (lista.length > 3) throw new Error('Informe no máximo 3 e-mails de alerta.');
+  return [...new Set(lista)].join(', ');
+}
+
+export function configurar(empresaId, { instance, autoReconnect, numeroExibicao, emailAlerta } = {}, { podeTrocarInstancia = false, tipoCanal = 'cliente' } = {}) {
   const perfil = normalizarTipoCanal(tipoCanal);
   const conexao = obterConexao(empresaId, perfil);
   conexao.transport = perfil === 'cliente' ? 'legado' : 'waha';
@@ -490,8 +508,66 @@ export function configurar(empresaId, { instance, autoReconnect, numeroExibicao 
   }
   if (autoReconnect !== undefined) conexao.autoReconnect = autoReconnect === true;
   if (reference !== undefined) conexao.numeroExibicao = reference;
+  if (emailAlerta !== undefined) conexao.emailAlerta = normalizarEmailsAlerta(emailAlerta);
   save();
   return visaoPublica(conexao);
+}
+
+function destinatariosAlerta(conexao, env = process.env) {
+  const lista = [conexao.emailAlerta, env.WHATSAPP_CONEXAO_ALERTA_EMAILS]
+    .flatMap((item) => String(item || '').split(/[,;\s]+/))
+    .map((item) => item.trim().toLowerCase())
+    .filter((item) => EMAIL_RE.test(item));
+  return [...new Set(lista)].slice(0, 5);
+}
+
+function horaBrasilia(iso) {
+  const data = new Date(iso);
+  if (Number.isNaN(data.getTime())) return '';
+  return data.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', dateStyle: 'short', timeStyle: 'short' });
+}
+
+/**
+ * Avisa por e-mail quando o canal Clientes fica fora do ar por mais de 10 minutos.
+ * Um aviso por queda, repetido a cada 6 h enquanto continuar fora. Best-effort: nunca lança.
+ */
+export async function alertarQuedaSeNecessario(conexao, { now = Date.now(), mailer = mailPadrao, env = process.env } = {}) {
+  try {
+    if (canalInterno(conexao.tipoCanal) || !conexao.ativo || !conexao.instance) return { alerta: 'nao_aplica' };
+    if (['open', 'connecting', 'unknown'].includes(conexao.state)) return { alerta: 'conectado' };
+    const queda = Date.parse(conexao.lastDisconnectAt || '');
+    if (!Number.isFinite(queda) || now - queda < ALERTA_APOS_MINUTOS * 60_000) return { alerta: 'aguardando' };
+    const ultimo = Date.parse(conexao.alertaEnviadoEm || '');
+    if (Number.isFinite(ultimo) && ultimo >= queda && now - ultimo < ALERTA_REPETIR_HORAS * 3_600_000) return { alerta: 'ja_avisado' };
+    const para = destinatariosAlerta(conexao, env);
+    conexao.alertaEnviadoEm = new Date(now).toISOString();
+    if (!para.length) {
+      registrar(conexao, 'alerta_sem_destinatario', 'Cadastre um e-mail de alerta na Conexão do WhatsApp');
+      return { alerta: 'sem_destinatario' };
+    }
+    const desde = horaBrasilia(conexao.lastDisconnectAt);
+    const numero = conexao.numeroExibicao ? mascararNumero(conexao.numeroExibicao) : conexao.instance;
+    const subject = `Kytto · WhatsApp da loja desconectado desde ${desde}: o atendente virtual parou`;
+    const text = `O WhatsApp ${numero} (instância ${conexao.instance}) está desconectado do Kytto desde ${desde} (horário de Brasília).
+
+Enquanto isso, o atendente virtual NÃO recebe nem responde as mensagens dos clientes.
+
+Para voltar:
+1. Abra kytto.com.br/admin/whatsapp, escolha a empresa e o canal Clientes e clique em "Gerar QR".
+2. No celular da loja: WhatsApp > Aparelhos conectados > Conectar aparelho, e leia o QR.
+
+Enviaremos um novo aviso a cada ${ALERTA_REPETIR_HORAS} horas enquanto continuar desconectado.`;
+    const html = `<p>O WhatsApp <b>${numero}</b> (instância <code>${conexao.instance}</code>) está <b>desconectado do Kytto desde ${desde}</b> (horário de Brasília).</p><p>Enquanto isso, o atendente virtual <b>não recebe nem responde</b> as mensagens dos clientes.</p><p><b>Para voltar:</b></p><ol><li>Abra <a href="https://kytto.com.br/admin/whatsapp">kytto.com.br/admin/whatsapp</a>, escolha a empresa e o canal Clientes e clique em <b>Gerar QR</b>.</li><li>No celular da loja: WhatsApp › Aparelhos conectados › Conectar aparelho, e leia o QR.</li></ol><p style="color:#666">Enviaremos um novo aviso a cada ${ALERTA_REPETIR_HORAS} horas enquanto continuar desconectado.</p>`;
+    let enviados = 0;
+    for (const to of para) {
+      const resultado = await mailer.enviar({ to, subject, html, text }).catch(() => ({ ok: false }));
+      if (resultado?.ok) enviados += 1;
+    }
+    registrar(conexao, 'alerta_queda', `${enviados}/${para.length} e-mail(s)`);
+    return { alerta: enviados ? 'enviado' : 'falhou', enviados, total: para.length };
+  } catch (error) {
+    return { alerta: 'erro', error: String(error?.message || error).slice(0, 120) };
+  }
 }
 
 /**
@@ -500,7 +576,8 @@ export function configurar(empresaId, { instance, autoReconnect, numeroExibicao 
  * válida o backend reabre sozinho; se o WhatsApp exigir, um novo QR fica
  * disponível na tela.
  */
-export async function vigiarConexao(empresaId, { now = Date.now(), fetchImpl, tipoCanal = 'cliente' } = {}) {
+export async function vigiarConexao(empresaId, options = {}) {
+  const { now = Date.now(), fetchImpl, tipoCanal = 'cliente' } = options;
   const conexao = obterConexao(empresaId, tipoCanal);
   const key = chaveConexao(empresaId, tipoCanal);
   if (disconnecting.has(key)) return { action: 'skip', reason: 'disconnect_in_progress' };
@@ -536,7 +613,11 @@ export async function vigiarConexao(empresaId, { now = Date.now(), fetchImpl, ti
   aplicarEstado(conexao, status);
   if (!status.ok || status.authError) { salvarSeEstadoMudou(antes, conexao); return { action: 'status_unavailable' }; }
   if (conexao.state === 'open' || conexao.state === 'connecting') { salvarSeEstadoMudou(antes, conexao); return { action: 'none', state: conexao.state }; }
-  if (conexao.nextReconnectAt && new Date(conexao.nextReconnectAt).getTime() > now) { salvarSeEstadoMudou(antes, conexao); return { action: 'waiting', until: conexao.nextReconnectAt }; }
+  if (conexao.nextReconnectAt && new Date(conexao.nextReconnectAt).getTime() > now) {
+    await alertarQuedaSeNecessario(conexao, { now, mailer: options.mailer, env: options.env });
+    salvarSeEstadoMudou(antes, conexao);
+    return { action: 'waiting', until: conexao.nextReconnectAt };
+  }
   const attempt = (conexao.reconnectAttempts || 0) + 1;
   const result = await requestInstanceQr(instance, fetchImpl);
   if (disconnecting.has(key)) return { action: 'skip', reason: 'disconnect_in_progress' };
@@ -546,6 +627,7 @@ export async function vigiarConexao(empresaId, { now = Date.now(), fetchImpl, ti
   conexao.nextReconnectAt = new Date(now + minutes * 60_000).toISOString();
   registrar(conexao, 'reconexao_automatica', `tentativa ${attempt}${result.ok ? '' : ' (backend indisponível)'}`);
   if (result.ok && result.state === 'open') { conexao.state = 'open'; conexao.reconnectAttempts = 0; conexao.nextReconnectAt = null; }
+  await alertarQuedaSeNecessario(conexao, { now, mailer: options.mailer, env: options.env });
   salvarSeEstadoMudou(antes, conexao);
   return { action: 'reconnect', attempt, ok: result.ok };
 }

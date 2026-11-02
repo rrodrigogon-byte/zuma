@@ -497,3 +497,39 @@ test('desconectar com forcar: true encerra localmente mesmo se a conexão estive
     for (const [key, value] of Object.entries(saved)) { if (value === undefined) delete process.env[key]; else process.env[key] = value; }
   }
 });
+
+test('canal Clientes fora do ar por mais de 10 min avisa por e-mail uma vez por queda e repete a cada 6 h', async () => {
+  const conexao = await import('./whatsapp-conexao-kytto.js');
+  const estado = conexao.obterConexao('emp-a');
+  estado.ativo = true;
+  estado.state = 'qr';
+  const queda = Date.parse('2026-10-30T20:44:00Z');
+  estado.lastDisconnectAt = new Date(queda).toISOString();
+  const enviados = [];
+  const mailer = { enviar: async (msg) => { enviados.push(msg); return { ok: true }; } };
+  // Ainda dentro dos 10 min: nada.
+  assert.equal((await conexao.alertarQuedaSeNecessario(estado, { now: queda + 5 * 60_000, mailer, env: {} })).alerta, 'aguardando');
+  // Sem e-mail cadastrado: registra no histórico, não envia.
+  assert.equal((await conexao.alertarQuedaSeNecessario(estado, { now: queda + 11 * 60_000, mailer, env: {} })).alerta, 'sem_destinatario');
+  assert.equal(enviados.length, 0);
+  assert.equal(estado.history[0].tipo, 'alerta_sem_destinatario');
+  // Com e-mail: avisa (depois de 6 h do registro anterior), com o passo a passo.
+  conexao.configurar('emp-a', { emailAlerta: 'Gerente@Loja.com.br, dono@loja.com.br' });
+  assert.equal(estado.emailAlerta, 'gerente@loja.com.br, dono@loja.com.br');
+  const r = await conexao.alertarQuedaSeNecessario(estado, { now: queda + 7 * 3_600_000, mailer, env: {} });
+  assert.equal(r.alerta, 'enviado');
+  assert.deepEqual(enviados.map((m) => m.to), ['gerente@loja.com.br', 'dono@loja.com.br']);
+  assert.match(enviados[0].subject, /desconectado desde 30\/10\/2026, 17:44/);
+  assert.match(enviados[0].text, /Gerar QR/);
+  // Logo depois: não repete.
+  assert.equal((await conexao.alertarQuedaSeNecessario(estado, { now: queda + 8 * 3_600_000, mailer, env: {} })).alerta, 'ja_avisado');
+  // 6 h depois do último aviso: repete.
+  assert.equal((await conexao.alertarQuedaSeNecessario(estado, { now: queda + 13.5 * 3_600_000, mailer, env: {} })).alerta, 'enviado');
+  // Conectado de novo: não avisa.
+  estado.state = 'open';
+  assert.equal((await conexao.alertarQuedaSeNecessario(estado, { now: queda + 30 * 3_600_000, mailer, env: {} })).alerta, 'conectado');
+  // Tela mostra o canal fora do ar.
+  estado.state = 'qr';
+  assert.equal(conexao.visaoPublica(estado).foraDoAr, true);
+  assert.throws(() => conexao.configurar('emp-a', { emailAlerta: 'nao-e-email' }), /E-mail de alerta inválido/);
+});

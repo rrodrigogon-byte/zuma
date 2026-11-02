@@ -261,7 +261,9 @@ test('Integração de histórico Avec/legado no relatório individual e equipe',
   assert.equal(relTudo.servicosExtras.clientesAtendidos[0].cliente, 'Roberto Histórico');
 
   // Consulta por mês de outubro (2026-10)
-  const relMes = relatorioIndividualProfissional(empresaId, profNaty.id, { periodo: 'mes', inicio: '2026-10-01', fim: '2026-10-31' });
+  // Período fechado e explícito: com 'mes' o relatório usa o mês corrente e o teste
+  // quebrava ao virar o mês (01/11).
+  const relMes = relatorioIndividualProfissional(empresaId, profNaty.id, { periodo: 'custom', inicio: '2026-10-01', fim: '2026-10-31' });
   assert.equal(relMes.faturamento.brutoServicos, 120); // Somente 10/10
   assert.equal(relMes.faturamento.brutoProdutos, 0);
 

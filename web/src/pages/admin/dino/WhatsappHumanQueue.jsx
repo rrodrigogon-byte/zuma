@@ -54,6 +54,8 @@ export default function WhatsappHumanQueue({
   const [claimingId, setClaimingId] = useState('')
   // Conversa aberta no painel lateral (histórico completo + resposta do atendente).
   const [conversaId, setConversaId] = useState('')
+  // WhatsApp da loja desconectado do Kytto: o T-Rex não recebe nem responde (Stallone, 30/10–01/11).
+  const [quedaWhatsapp, setQuedaWhatsapp] = useState(null)
   const mountedRef = useRef(true)
   const contextKeyRef = useRef(contextKey)
   const assignmentRef = useRef(assignment)
@@ -338,6 +340,23 @@ export default function WhatsappHumanQueue({
   const visibleError = errorContextKey === contextKey ? error : ''
   const visibleNotice = noticeContextKey === contextKey ? notice : ''
 
+  useEffect(() => {
+    const empresaId = selection?.empresaId
+    if (tipoCanal !== 'cliente' || !empresaId) { setQuedaWhatsapp(null); return undefined }
+    let vivo = true
+    const consultar = async () => {
+      try {
+        const data = await api.get('/api/admin/barbearia/whatsapp-conexao', { headers: { 'X-Empresa-Id': empresaId, 'X-Loja-Id': selection?.canonicalLojaId || '' } })
+        if (!vivo) return
+        const conexao = data && typeof data === 'object' ? data.conexao : null
+        setQuedaWhatsapp(conexao?.foraDoAr ? { desde: conexao.lastDisconnectAt || null } : null)
+      } catch { if (vivo) setQuedaWhatsapp(null) }
+    }
+    consultar()
+    const timer = setInterval(consultar, 60000)
+    return () => { vivo = false; clearInterval(timer) }
+  }, [selection?.empresaId, selection?.canonicalLojaId, tipoCanal])
+
   return <section className="dadm-card wa-human-queue" aria-labelledby="wa-human-queue-title">
     <div className="c360-card-head wa-human-queue__head">
       <div>
@@ -360,6 +379,7 @@ export default function WhatsappHumanQueue({
         <button type="button" className="c360-btn ghost" onClick={loadQueue} disabled={loading || Boolean(claimingId)}>{loading ? 'Atualizando…' : 'Atualizar'}</button>
       </div>
       <p className="wa-human-queue__scope">Escopo: {safeText(empresaNome, 'empresa atual')} · {safeText(lojaNome, 'unidade atual')} · até {HUMAN_QUEUE_LIMIT} conversas por leitura.</p>
+      {quedaWhatsapp && <p className="dadm-note danger" role="alert"><strong>O WhatsApp da loja está desconectado do Kytto{quedaWhatsapp.desde ? ` desde ${queueDateLabel(quedaWhatsapp.desde)}` : ''}.</strong> As mensagens dos clientes chegam no celular, mas o atendente virtual não recebe nem responde. <a href="/admin/whatsapp">Abra a Conexão do WhatsApp</a>, gere o QR e leia pelo celular da loja (WhatsApp › Aparelhos conectados).</p>}
       {visibleError && <p className="dadm-note danger" role="alert">{visibleError}</p>}
       {visibleNotice && <p className="dadm-note" role="status">{visibleNotice}</p>}
       {!loading && !visibleError && loadedContextKey === contextKey && !canClaim && <p className="dadm-note">A atribuição de conversas não está habilitada para o seu acesso.</p>}

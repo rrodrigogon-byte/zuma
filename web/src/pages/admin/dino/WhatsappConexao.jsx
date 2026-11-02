@@ -20,7 +20,7 @@ import './dino-admin.css'
 
 const BASE = '/api/admin/barbearia/whatsapp-conexao'
 const STATES = { open: 'Conectado', qr: 'Aguardando leitura do QR', connecting: 'Conectando…', close: 'Desconectado', unknown: 'Sem informação' }
-const HISTORY = { conectado: 'Conectou', desconectado: 'Caiu', desconectado_manual: 'Desconectado manualmente', qr_gerado: 'QR gerado', codigo_pareamento_gerado: 'Código de pareamento gerado', reconexao_solicitada: 'Reconexão solicitada', reconexao_automatica: 'Reconexão automática', instancia_alterada: 'Instância alterada', erro: 'Erro' }
+const HISTORY = { conectado: 'Conectou', desconectado: 'Caiu', desconectado_manual: 'Desconectado manualmente', qr_gerado: 'QR gerado', codigo_pareamento_gerado: 'Código de pareamento gerado', reconexao_solicitada: 'Reconexão solicitada', reconexao_automatica: 'Reconexão automática', instancia_alterada: 'Instância alterada', erro: 'Erro', alerta_queda: 'Alerta de queda enviado', alerta_sem_destinatario: 'Queda sem e-mail de alerta cadastrado', instancia_confirmada: 'Instância confirmada' }
 const ERRORS = {
   chave_invalida: 'O backend recusou a chave de API. Confira CHATBOT_BACKEND_KEY no servidor.',
   instance_not_enabled: 'Esta linha ainda não existe no servidor de WhatsApp. Peça para incluir a instância em WHATSAPP_INSTANCE_NAMES do backend (Cloud Run) e publicar; depois toque em Gerar QR.',
@@ -82,6 +82,8 @@ function WhatsappConexaoEmpresa() {
   const [diagBloqueado, setDiagBloqueado] = useState(false)
   const [grupos, setGrupos] = useState([])
   const [grupoSelecionado, setGrupoSelecionado] = useState('')
+  const [emailAlerta, setEmailAlerta] = useState('')
+  const emailAlertaSujoRef = useRef(false)
   const telefoneRef = useRef(null)
   const scopeRef = useRef(0)
   const statusSeqRef = useRef(0)
@@ -107,6 +109,7 @@ function WhatsappConexaoEmpresa() {
       setErro('')
       setInstancia((value) => value || data.conexao.instance || '')
       if (!referenceDirtyRef.current) setReferencia(data.conexao.phoneReference || '')
+      if (!emailAlertaSujoRef.current) setEmailAlerta(data.conexao.emailAlerta || '')
       if (data.conexao.state === 'open') setQr({ image: '', code: '' })
     } catch (error) {
       if (scope !== scopeRef.current || sequence !== statusSeqRef.current) return
@@ -251,6 +254,7 @@ function WhatsappConexaoEmpresa() {
       statusFlightRef.current = null
       setConexao(data.conexao)
       if ('numeroExibicao' in patch) { referenceDirtyRef.current = false; setReferencia(data.conexao.phoneReference || '') }
+      if ('emailAlerta' in patch) { emailAlertaSujoRef.current = false; setEmailAlerta(data.conexao.emailAlerta || '') }
       toast('Configuração salva.')
     } catch (error) { if (scope === scopeRef.current) toast(error.message, true) }
     finally { if (scope === scopeRef.current) setBusy('') }
@@ -496,6 +500,7 @@ function WhatsappConexaoEmpresa() {
       <p className="dadm-muted">{tipoCanal === 'lancamentos' ? 'Este é o canal interno exclusivo para receber notas e preparar despesas pendentes. Para perguntas gerais, use' : tipoCanal === 'gestao' ? 'Este é o canal interno executivo para o empresário Dino consultar faturamento, agenda, equipe, metas diárias, roleta, comissões e clientes por texto ou áudio. Para lançar notas, use' : 'Para configurar os canais internos sem remover o atendimento a clientes, use'}{' '}<Link to={tipoCanal === 'lancamentos' ? '/admin/whatsapp-gestao' : tipoCanal === 'gestao' ? '/admin/whatsapp-lancamentos' : '/admin/whatsapp-gestao'}>{tipoCanal === 'lancamentos' ? 'abrir o WhatsApp Gestão' : tipoCanal === 'gestao' ? 'abrir o WhatsApp Lançamentos' : 'abrir o WhatsApp Gestão'}</Link>.</p>
     </section>
     {erro && <p className="dadm-note danger dadm-wa-feedback" role="alert">{erro}</p>}
+    {tipoCanal === 'cliente' && conexao?.foraDoAr && <p className="dadm-note danger dadm-wa-feedback" role="alert"><strong>O atendente virtual está parado.</strong> Este WhatsApp está desconectado do Kytto{conexao.lastDisconnectAt ? ` desde ${dateTime(conexao.lastDisconnectAt)}` : ''}: as mensagens dos clientes chegam no celular, mas não chegam ao atendente, e nada é respondido. Toque em <strong>Gerar QR</strong> e leia pelo celular da loja (WhatsApp › Aparelhos conectados › Conectar aparelho).</p>}
     {!conexao && !erro && <section className="dadm-card dadm-wa-loading" role="status">{tenantId && lojaId ? 'Consultando o estado do WhatsApp…' : 'Selecione uma empresa e uma unidade para consultar os canais.'}</section>}
     <WhatsappAiOperationalSection status={iaOperational} readAt={iaReadAt} />
     <WhatsappHumanQueue
@@ -602,6 +607,13 @@ function WhatsappConexaoEmpresa() {
           <section className="dadm-card" aria-labelledby="wa-auto">
             <h2 id="wa-auto">Reconexão automática</h2>
             <label className="dadm-toggle"><input type="checkbox" checked={conexao.autoReconnect} disabled={!podeGerenciar || Boolean(busy)} onChange={(event) => salvarConfig({ autoReconnect: event.target.checked })} />Reconectar sozinho quando a conexão cair</label>
+            {tipoCanal === 'cliente' && <form className="dadm-filters" onSubmit={(event) => { event.preventDefault(); salvarConfig({ emailAlerta }) }}>
+              <label className="c360-field" style={{ flex: 1 }} htmlFor="wa-email-alerta">E-mail para alerta de queda (até 3, separados por vírgula)
+                <input id="wa-email-alerta" className="c360-input" type="text" inputMode="email" autoComplete="off" maxLength={380} value={emailAlerta} disabled={!podeGerenciar || Boolean(busy)} onChange={(event) => { emailAlertaSujoRef.current = true; setEmailAlerta(event.target.value) }} placeholder="gerente@loja.com.br" />
+              </label>
+              <button type="submit" className="c360-btn ghost" disabled={!podeGerenciar || Boolean(busy) || emailAlerta.trim() === (conexao.emailAlerta || '')}>{busy === 'config' ? 'Salvando…' : 'Salvar e-mail'}</button>
+            </form>}
+            {tipoCanal === 'cliente' && <small className="dadm-muted">Se a conexão ficar mais de 10 minutos fora, enviamos um e-mail com o passo a passo, e repetimos a cada 6 horas enquanto continuar fora.{conexao.alertaEnviadoEm ? ` Último alerta: ${dateTime(conexao.alertaEnviadoEm)}.` : ''}</small>}
             <p>{tipoCanal === 'cliente' ? 'O servidor verifica a conexão a cada minuto. Quando ela cair, tenta reconectar com espera crescente de 1 a 30 minutos; se necessário, um novo QR aparece nesta tela.' : 'O servidor consulta o estado da sessão interna. A reconexão depende da ponte WAHA e do pareamento; consulta de status não comprova reconexão nem entrega.'}</p>
             {podeGerenciar && user?.platformAdmin === true && <form className="dadm-filters" onSubmit={(event) => { event.preventDefault(); salvarConfig({ instance: instancia }) }}><label className="c360-field" style={{ flex: 1 }}>Instância no backend<input className="c360-input" value={instancia} onChange={(event) => setInstancia(event.target.value.toLowerCase())} pattern="[a-z0-9][a-z0-9_-]{1,63}" /></label><button type="submit" className="c360-btn ghost" disabled={Boolean(busy) || !instancia || (instancia === conexao.instance && (tipoCanal !== 'cliente' || conexao.donoRegistrado !== false))}>{instancia === conexao.instance && tipoCanal === 'cliente' && conexao.donoRegistrado === false ? 'Confirmar instância' : 'Salvar'}</button></form>}
             {tipoCanal === 'cliente' && conexao.instance && conexao.donoRegistrado === false && <p className="dadm-note warn" role="status">A instância {conexao.instance} ainda não está registrada como desta empresa no servidor: mensagens não entram nem saem. {user?.platformAdmin === true ? 'Toque em Confirmar instância para registrá-la.' : 'Peça à administração da plataforma para confirmar a instância.'}</p>}

@@ -96,6 +96,11 @@ async function montar(overrides = {}) {
   return renderer
 }
 
+// Leituras do quadro (sem o painel da conversa nem a consulta da conexão do WhatsApp).
+function leiturasDoQuadro() {
+  return apiMock.get.mock.calls.filter(([url]) => url.startsWith('/api/admin/commerce/whatsapp-ai/sessions?'))
+}
+
 function cards(renderer) {
   return renderer.root.findAll((node) => node.type === 'article' && String(node.props.className || '').includes('wa-trex-card'))
 }
@@ -103,8 +108,8 @@ function cards(renderer) {
 describe('quadro de conversas do T-Rex', () => {
   it('abre consultando todas as conversas em andamento, com empresa e unidade nos headers', async () => {
     await montar()
-    expect(apiMock.get).toHaveBeenCalledTimes(1)
-    const [url, options] = apiMock.get.mock.calls[0]
+    expect(leiturasDoQuadro()).toHaveLength(1)
+    const [url, options] = leiturasDoQuadro()[0]
     expect(url).toContain('status=em_andamento')
     expect(url).toContain('assignment=all')
     expect(options.headers).toEqual({ 'X-Empresa-Id': empresaA, 'X-Loja-Id': lojaA })
@@ -145,8 +150,8 @@ describe('quadro de conversas do T-Rex', () => {
     expect(apiMock.post).toHaveBeenCalledTimes(1)
     expect(apiMock.post.mock.calls[0][0]).toBe(`/api/admin/commerce/whatsapp-ai/sessions/${sessionB}/claim`)
     expect(apiMock.post.mock.calls[0][2].headers).toEqual({ 'X-Empresa-Id': empresaA, 'X-Loja-Id': lojaCanonical })
-    const leiturasDoQuadro = apiMock.get.mock.calls.filter(([url]) => !url.includes('/messages'))
-    expect(leiturasDoQuadro).toHaveLength(2)
+    const leituras = leiturasDoQuadro()
+    expect(leituras).toHaveLength(2)
     expect(textOf(renderer)).toContain('O T-Rex parou de responder este contato')
     // Assumiu: a conversa abre com o histórico completo.
     expect(apiMock.get.mock.calls.some(([url]) => url === `/api/admin/commerce/whatsapp-ai/sessions/${sessionB}/messages`)).toBe(true)
@@ -218,7 +223,7 @@ describe('quadro de conversas do T-Rex', () => {
     apiMock.get.mockResolvedValue(response([item(sessionA, { status: 'encerrado', closed_at: '2026-10-30T12:00:00.000Z', handoff_requested_at: null })]))
     await act(async () => { select.props.onChange({ target: { value: 'encerrado' } }) })
     await tick()
-    expect(apiMock.get.mock.calls.at(-1)[0]).toContain('status=encerrado')
+    expect(leiturasDoQuadro().at(-1)[0]).toContain('status=encerrado')
     expect(cards(renderer)[0].props.className).toContain('wa-trex-card--encerrada')
     expect(button(renderer, 'Assumir conversa')).toBeUndefined()
     expect(textOf(renderer)).toContain('No histórico')
@@ -233,8 +238,30 @@ describe('quadro de conversas do T-Rex', () => {
     await act(async () => { await dialogo.props.onSubmit({ preventDefault() {} }) })
     await tick()
     expect(apiMock.post.mock.calls[0][0]).toBe(`/api/admin/commerce/whatsapp-ai/sessions/${sessionA}/close`)
-    expect(apiMock.get).toHaveBeenCalledTimes(2)
+    expect(leiturasDoQuadro()).toHaveLength(2)
     expect(textOf(renderer)).toContain('enviada ao histórico')
   })
 })
 
+describe('aviso de WhatsApp desconectado', () => {
+  it('mostra que o atendente virtual parou quando a conexão do WhatsApp da loja está fora do ar', async () => {
+    apiMock.get.mockImplementation(async (url) => url === '/api/admin/barbearia/whatsapp-conexao'
+      ? { conexao: { foraDoAr: true, state: 'qr', lastDisconnectAt: '2026-10-30T20:44:42.097Z' } }
+      : response())
+    const renderer = await montar()
+    await tick()
+    const chamada = apiMock.get.mock.calls.find(([url]) => url === '/api/admin/barbearia/whatsapp-conexao')
+    expect(chamada[1].headers).toEqual({ 'X-Empresa-Id': empresaA, 'X-Loja-Id': lojaCanonical })
+    expect(textOf(renderer)).toContain('O WhatsApp da loja está desconectado do Kytto')
+    expect(textOf(renderer)).toContain('gere o QR')
+  })
+
+  it('não mostra aviso com o WhatsApp conectado', async () => {
+    apiMock.get.mockImplementation(async (url) => url === '/api/admin/barbearia/whatsapp-conexao'
+      ? { conexao: { foraDoAr: false, state: 'open' } }
+      : response())
+    const renderer = await montar()
+    await tick()
+    expect(textOf(renderer)).not.toContain('desconectado do Kytto')
+  })
+})

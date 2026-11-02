@@ -1724,11 +1724,18 @@ async function toolMyPlan(context) {
   if (!plano) return { ok: true, assinante: false, instrucao: 'O contato não tem plano ativo. Não ofereça o clube sem o cliente pedir ou sem propor_oportunidade.' };
   
   // Buscar cobranças pendentes para gerar o link de pagamento
-  const cobrancas = cobrancaKytto?.listarCobrancas ? cobrancaKytto.listarCobrancas(scope.empresaId).filter(c => c.clienteId === plano.clienteId && c.status === 'pendente') : [];
+  // Sem clienteId no plano não há como saber de quem é a cobrança: nunca mandar o link de
+  // outro cliente (undefined === undefined casava com qualquer cobrança sem cliente).
+  let cobrancas = [];
+  if (plano.clienteId && typeof cobrancaKytto?.listarCobrancas === 'function') {
+    try {
+      cobrancas = cobrancaKytto.listarCobrancas(scope.empresaId, { status: 'pendente' }).filter((c) => c.clienteId && c.clienteId === plano.clienteId && c.status === 'pendente');
+    } catch { cobrancas = []; }
+  }
   const linkPagamento = cobrancas.length > 0 ? `https://kytto.com.br/pay/${cobrancas[0].id}` : null;
   if (linkPagamento) plano.linkPagamento = linkPagamento;
   
-  return { ok: true, assinante: true, plano: sanitizeToolData(plano), instrucao: 'Informe saldo, validade e situação reais. Se vencido ou pausado, ofereça o linkPagamento se houver (para Pix ou cartão). Não prometa benefícios ou agendamento sem pagamento registrado.' };
+  return { ok: true, assinante: true, plano: sanitizeToolData(plano), instrucao: 'Informe saldo, validade e situação reais; não prometa benefícios ou agendamento sem pagamento registrado. Se vencido ou pausado, ofereça o linkPagamento se houver (Pix ou cartão).' };
 }
 
 /** Catálogo público dos planos/clubes ativos (nome, preço, ciclo, sessões e serviços incluídos). */
