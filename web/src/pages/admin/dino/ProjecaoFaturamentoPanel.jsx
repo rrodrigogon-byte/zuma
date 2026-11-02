@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { api, fmtR } from '../../../lib/api'
+import { api, fmtR, fmtKpi } from '../../../lib/api'
 
 const card = { background: 'var(--card)', border: '1px solid var(--line)', borderRadius: 14, padding: 20 }
 const grid = (min = 170) => ({ display: 'grid', gridTemplateColumns: `repeat(auto-fit, minmax(${min}px, 1fr))`, gap: 12 })

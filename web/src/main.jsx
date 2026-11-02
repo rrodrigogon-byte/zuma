@@ -4,9 +4,18 @@ import { BrowserRouter } from 'react-router-dom'
 import { AuthProvider } from './lib/auth'
 import { ToastProvider } from './hooks/useToast'
 import App from './App'
-import { api } from './lib/api'
+import { api, fmtKpi, fmtR } from './lib/api'
 import CookieConsent from './components/CookieConsent'
 import './theme.css'
+
+if (typeof globalThis !== 'undefined') {
+  globalThis.fmtKpi = fmtKpi
+  globalThis.fmtR = fmtR
+}
+if (typeof window !== 'undefined') {
+  window.fmtKpi = fmtKpi
+  window.fmtR = fmtR
+}
 
 // Quando uma nova revisão substitui os arquivos com hash, uma aba já aberta pode
 // tentar carregar um módulo que existia apenas na revisão anterior. Recarregamos

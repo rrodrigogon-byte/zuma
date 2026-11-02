@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAuth } from '../../../lib/auth'
-import { api, fmtR } from '../../../lib/api'
+import { api, fmtR, fmtKpi } from '../../../lib/api'
 
 // Painel de gestão da barbearia: meta do dia, realizado, projeção pela agenda,
 // produção por categoria, ranking e detalhe por profissional, e o comparativo
