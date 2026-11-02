@@ -1447,21 +1447,48 @@ async function deterministicResponse(task, channel, session, message) {
 
 export function presenceConfirmIntent(text) {
   const value = plain(text).replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
-  return /^(confirmo|confirmado|confirmada|confirmo presenca|confirmo sim|sim confirmo|estarei ai|estarei la|vou sim|confirmadissimo|ok confirmado)( obrigad[oa])?$/.test(value);
+  return /^(confirmo|confirmado|confirmada|confirmo presenca|confirmo sim|sim confirmo|estarei ai|estarei la|vou sim|confirmadissimo|ok confirmado|pode confirmar|ta confirmado|esta confirmado|confirmar)( obrigad[oa])?$/.test(value)
+    || /^(sim|ok|pode ser|com certeza|fechado|perfeito)$/.test(value);
 }
 
-async function confirmNextAppointment(context) {
+export async function confirmNextAppointment(context) {
   const run = createWhatsappAiToolExecutor({ ...context, toolResults: undefined, toolLinks: undefined });
-  const lista = await run('consultar_meus_agendamentos', { limit: 5 });
+  const lista = await run('consultar_meus_agendamentos', { limit: 10 });
   const agora = Date.now();
-  const proximo = (lista?.agendamentos || [])
-    .filter((item) => item?.id && new Date(item.dataHora).valueOf() > agora && !['cancelado', 'concluido', 'nao_compareceu'].includes(String(item.status)))
-    .sort((a, b) => new Date(a.dataHora) - new Date(b.dataHora))[0];
-  if (!proximo) return null;
-  const resultado = await run('confirmar_presenca', { appointmentId: proximo.id });
-  if (!resultado?.ok) return null;
-  const quando = new Date(proximo.dataHora).toLocaleString('pt-BR', { timeZone: 'America/Cuiaba', weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
-  return { text: `Confirmado! ${proximo.servico?.nome || 'Seu horário'} com ${proximo.profissional?.nome || 'a equipe'}, ${quando}. Te esperamos!`, kind: 'presence_confirmed' };
+  const diaHoje = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Cuiaba' }).format(new Date(agora));
+  const pendentes = (lista?.agendamentos || [])
+    .filter((item) => item?.id && (item.dataAgenda === diaHoje || new Date(item.dataHora).valueOf() > agora - 60 * 60 * 1000) && !['cancelado', 'concluido', 'nao_compareceu'].includes(String(item.status)))
+    .sort((a, b) => new Date(a.dataHora) - new Date(b.dataHora));
+  if (!pendentes.length) return null;
+
+  // Confirma todos os agendamentos do cliente no mesmo dia (ex.: barba + corte em sequência)
+  const primeiroDia = pendentes[0].dataAgenda || (new Date(pendentes[0].dataHora).toISOString().split('T')[0]);
+  const doDia = pendentes.filter((item) => (item.dataAgenda || new Date(item.dataHora).toISOString().split('T')[0]) === primeiroDia);
+
+  const confirmados = [];
+  for (const ag of doDia) {
+    const res = await run('confirmar_presenca', { appointmentId: ag.id }).catch(() => null);
+    if (res?.ok) confirmados.push(ag);
+  }
+  if (!confirmados.length) return null;
+
+  if (confirmados.length === 1) {
+    const proximo = confirmados[0];
+    const quando = new Date(proximo.dataHora).toLocaleString('pt-BR', { timeZone: 'America/Cuiaba', weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+    return { text: `Confirmado! ${proximo.servico?.nome || 'Seu horário'} com ${proximo.profissional?.nome || 'a equipe'}, ${quando}. Te esperamos!`, kind: 'presence_confirmed' };
+  }
+
+  const itensTexto = confirmados.map((item) => {
+    const hora = item.horaLocal || new Date(item.dataHora).toLocaleTimeString('pt-BR', { timeZone: 'America/Cuiaba', hour: '2-digit', minute: '2-digit' });
+    return `${item.servico?.nome || 'Serviço'} às ${hora}`;
+  }).join(' e ');
+  const primeiro = confirmados[0];
+  const diaTexto = new Date(primeiro.dataHora).toLocaleDateString('pt-BR', { timeZone: 'America/Cuiaba', weekday: 'short', day: '2-digit', month: '2-digit' });
+  const profNome = primeiro.profissional?.nome || 'a equipe';
+  return {
+    text: `Confirmados! Seus ${confirmados.length} horários com ${profNome}, ${diaTexto}: ${itensTexto}. Te esperamos!`,
+    kind: 'presence_confirmed',
+  };
 }
 
 function isCancellationRequest(text) {

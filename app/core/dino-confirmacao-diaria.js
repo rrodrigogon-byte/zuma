@@ -1,6 +1,7 @@
 import { db } from '../db.js';
 import * as cadastrosMestres from '../cadastros-mestres-kytto.js';
 import * as barbearia from '../barbearia-erp-kytto.js';
+import * as clientes from '../clientes-contas-kytto.js';
 import { queueAppointmentNotifications } from './barbershop-appointment-notifications.js';
 
 export function obterEmpresasBarbearia() {
@@ -22,6 +23,42 @@ export function obterEmpresasBarbearia() {
   return Array.from(ids);
 }
 
+function garantirConsentimentoAgendamento(empresaId, ag) {
+  try {
+    const clienteId = ag.clienteId;
+    if (clienteId) {
+      const cli = clientes.obterCliente(empresaId, clienteId);
+      if (cli && cli.consentimentos?.whatsapp?.atendimento?.origem !== 'opt_out' && cli.consentimentos?.whatsapp?.atendimento?.concedido !== true) {
+        clientes.atualizarConsentimentoCliente(empresaId, clienteId, {
+          canal: 'whatsapp',
+          finalidade: 'atendimento',
+          concedido: true,
+          origem: 'agendamento_barbearia',
+        });
+      }
+    } else if (ag.clienteTelefone) {
+      let cli = null;
+      try {
+        const todos = Object.values(clientes.clientesPersistidos?.(empresaId)?.clientes || {});
+        const digits = ag.clienteTelefone.replace(/\D/g, '').slice(-8);
+        cli = todos.find((c) => c.telefone && c.telefone.replace(/\D/g, '').endsWith(digits));
+      } catch {}
+      if (!cli) {
+        cli = clientes.criarCliente(empresaId, { nome: ag.clienteNome || 'Cliente', telefone: ag.clienteTelefone });
+      }
+      if (cli?.id) {
+        ag.clienteId = cli.id;
+        clientes.atualizarConsentimentoCliente(empresaId, cli.id, {
+          canal: 'whatsapp',
+          finalidade: 'atendimento',
+          concedido: true,
+          origem: 'agendamento_barbearia',
+        });
+      }
+    }
+  } catch {}
+}
+
 export async function processarConfirmacoesDiarias() {
   const now = new Date();
   const dateFormatter = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Cuiaba' });
@@ -36,6 +73,7 @@ export async function processarConfirmacoesDiarias() {
     const agendamentosHoje = barbearia.listarAgendamentos(empresaId, { de: hoje, ate: hoje });
     for (const ag of agendamentosHoje) {
       if (ag.status === 'agendado') {
+        garantirConsentimentoAgendamento(empresaId, ag);
         const res = await queueAppointmentNotifications(
           { empresaId, legacyEmpresaId: empresaId, lojaId: ag.lojaId },
           ag,
@@ -49,6 +87,7 @@ export async function processarConfirmacoesDiarias() {
     const agendamentosAmanha = barbearia.listarAgendamentos(empresaId, { de: amanha, ate: amanha });
     for (const ag of agendamentosAmanha) {
       if (ag.status === 'agendado') {
+        garantirConsentimentoAgendamento(empresaId, ag);
         const res = await queueAppointmentNotifications(
           { empresaId, legacyEmpresaId: empresaId, lojaId: ag.lojaId },
           ag,

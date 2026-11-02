@@ -175,7 +175,11 @@ export async function agendaSource(scope = {}, { strictStoreMapping = false } = 
     }
   } catch (erro) {
     if (erro instanceof SchedulingError) throw erro;
-    throw new SchedulingError('não foi possível verificar a fonte da agenda', 'AGENDA_SOURCE_UNVERIFIABLE');
+    if (['ECONNREFUSED', 'ENOTFOUND'].includes(erro?.code) || (Array.isArray(erro?.errors) && erro.errors.some((e) => ['ECONNREFUSED', 'ENOTFOUND'].includes(e?.code)))) {
+      fonte = 'barbearia';
+    } else {
+      throw new SchedulingError('não foi possível verificar a fonte da agenda', 'AGENDA_SOURCE_UNVERIFIABLE');
+    }
   }
   fonteCache.set(chave, { fonte, expira: Date.now() + 60 * 1000 });
   return fonte;
@@ -523,11 +527,12 @@ function agendamentosDoTelefone(empresa, phone, { includePast = false, lojaId } 
   const unidade = limpo(lojaId, 120);
   if (!chave || !unidade) return [];
   const agora = Date.now();
+  const diaHoje = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Cuiaba' }).format(new Date(agora));
   return barbearia.listarAgendamentos(empresa, {})
     .filter((item) => String(item.lojaId || '') === unidade)
     .filter((item) => phoneMatchKey(item.clienteTelefone) === chave)
     .filter((item) => !['cancelado', 'nao_compareceu'].includes(item.status))
-    .filter((item) => includePast || new Date(item.dataHora).valueOf() >= agora);
+    .filter((item) => includePast || item.dataAgenda === diaHoje || new Date(item.dataHora).valueOf() >= agora);
 }
 
 function horarioLocalLegivel(dataHora) {
@@ -581,11 +586,22 @@ export async function confirmAttendance(scope, appointmentId) {
   if (await agendaSource(scope) === 'postgres') throw new SchedulingError('confirmação de presença disponível apenas na agenda da barbearia', 'NOT_BARBERSHOP_AGENDA');
   const empresa = chaveEmpresa(scope);
   const agendamento = agendamentoDoContato(empresa, scope.phone, appointmentId, scope.lojaId);
-  if (new Date(agendamento.dataHora).valueOf() < Date.now() - 30 * 60 * 1000) throw new SchedulingError('este horário já passou', 'APPOINTMENT_PAST');
+  const diaHoje = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Cuiaba' }).format(new Date());
+  const ehHoje = agendamento.dataAgenda === diaHoje;
+  if (!ehHoje && new Date(agendamento.dataHora).valueOf() < Date.now() - 30 * 60 * 1000) throw new SchedulingError('este horário já passou', 'APPOINTMENT_PAST');
   const atualizado = agendamento.status === 'confirmado'
     ? agendamento
     : barbearia.alterarStatusAgendamento(empresa, agendamento.id, 'confirmado', { lojaId: scope.lojaId, observacoes: limpo(`${agendamento.observacoes || ''} · Presença confirmada pelo cliente no WhatsApp`.replace(/^ · /, ''), 600) });
   if (!atualizado) throw new SchedulingError('agendamento não encontrado para este contato', 'APPOINTMENT_NOT_FOUND');
+
+  // Se o cliente tem mais de um agendamento na mesma data (ex.: barba + corte), confirma todos
+  const diaAlvo = agendamento.dataAgenda || (new Date(agendamento.dataHora).toISOString().split('T')[0]);
+  const outrosDoMesmoDia = agendamentosDoTelefone(empresa, scope.phone, { includePast: true, lojaId: scope.lojaId })
+    .filter((outro) => outro.id !== agendamento.id && (outro.dataAgenda || new Date(outro.dataHora).toISOString().split('T')[0]) === diaAlvo && outro.status === 'agendado');
+  for (const outro of outrosDoMesmoDia) {
+    barbearia.alterarStatusAgendamento(empresa, outro.id, 'confirmado', { lojaId: scope.lojaId, observacoes: limpo(`${outro.observacoes || ''} · Presença confirmada pelo cliente no WhatsApp (serviço conjunto)`.replace(/^ · /, ''), 600) });
+  }
+
   return { ...respostaAgendamento(empresa, atualizado), jaEstavaConfirmado: agendamento.status === 'confirmado' };
 }
 

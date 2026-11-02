@@ -119,7 +119,61 @@ test('processarConfirmacoesDiarias enfileira confirmações de hoje e da vésper
 });
 
 test('presenceConfirmIntent reconhece variações de confirmação do cliente', () => {
-  for (const t of ['CONFIRMO', 'confirmo', 'confirmado', 'sim confirmo', 'confirmo presenca', 'vou sim', 'estarei ai']) {
+  for (const t of ['CONFIRMO', 'confirmo', 'confirmado', 'sim confirmo', 'confirmo presenca', 'vou sim', 'estarei ai', 'sim', 'ok', 'com certeza', 'pode confirmar']) {
     assert.equal(presenceConfirmIntent(t), true, `Deveria reconhecer "${t}" como confirmação de presença`);
   }
+});
+
+test('confirmAttendance confirma todos os agendamentos do cliente no mesmo dia (ex.: barba e corte sequenciais)', async () => {
+  reset();
+  const { confirmAttendance } = await import('./barbershop-agenda.js');
+  const cliente = criarCliente(EMPRESA_DINO, { nome: 'Jeferson Zucchi ( Dino )', telefone: '65999887766' });
+  const prof = criarProfissional(EMPRESA_DINO, { nome: 'Nati' });
+  const serv1 = criarServico(EMPRESA_DINO, { nome: 'Barba Club', duracaoMinutos: 30, preco: 0.01 });
+  const serv2 = criarServico(EMPRESA_DINO, { nome: 'Corte Club', duracaoMinutos: 30, preco: 0.01 });
+
+  const now = new Date();
+  const formatter = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Cuiaba' });
+  const hoje = formatter.format(now);
+
+  const ag1 = criarAgendamento(EMPRESA_DINO, {
+    lojaId: LOJA,
+    clienteId: cliente.id,
+    clienteNome: cliente.nome,
+    clienteTelefone: cliente.telefone,
+    profissionalId: prof.id,
+    servicoId: serv1.id,
+    dataHora: `${hoje}T11:00:00-04:00`,
+    dataAgenda: hoje,
+    horaLocal: '11:00',
+  });
+
+  const ag2 = criarAgendamento(EMPRESA_DINO, {
+    lojaId: LOJA,
+    clienteId: cliente.id,
+    clienteNome: cliente.nome,
+    clienteTelefone: cliente.telefone,
+    profissionalId: prof.id,
+    servicoId: serv2.id,
+    dataHora: `${hoje}T11:30:00-04:00`,
+    dataAgenda: hoje,
+    horaLocal: '11:30',
+  });
+
+  assert.equal(ag1.status, 'agendado');
+  assert.equal(ag2.status, 'agendado');
+
+  // Cliente confirma o agendamento ag1 (ex.: respondendo CONFIRMO)
+  const scope = { empresaId: EMPRESA_DINO, legacyEmpresaId: EMPRESA_DINO, lojaId: LOJA, phone: cliente.telefone };
+  const res = await confirmAttendance(scope, ag1.id);
+  assert.ok(res);
+
+  // Verifica se AMBOS os agendamentos foram atualizados para 'confirmado'
+  const { listarAgendamentos } = await import('../barbearia-erp-kytto.js');
+  const agsAtualizados = listarAgendamentos(EMPRESA_DINO, { de: hoje, ate: hoje });
+  const ag1Atualizado = agsAtualizados.find((a) => a.id === ag1.id);
+  const ag2Atualizado = agsAtualizados.find((a) => a.id === ag2.id);
+
+  assert.equal(ag1Atualizado.status, 'confirmado', 'Primeiro agendamento (Barba Club 11:00) deve estar confirmado');
+  assert.equal(ag2Atualizado.status, 'confirmado', 'Segundo agendamento (Corte Club 11:30) deve estar confirmado também');
 });
