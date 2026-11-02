@@ -182,9 +182,14 @@ function Produtos({ produtos, unidade, acao, onMudou }) {
           {populando ? 'Carregando itens...' : '📦 Carregar Catálogo Oficial de Supermercado'}
         </button>
       </div>
-      <a href="/admin/pdv-erp?segmento=supermercado" target="_blank" rel="noreferrer" className="c360-btn primary" style={{ background: '#FF6B2C', color: '#fff', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 6, fontWeight: 700 }}>
-        🖥️ Abrir PDV Supermercado (Caixa)
-      </a>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <a href="/admin/pdv-erp?segmento=supermercado" target="_blank" rel="noreferrer" className="c360-btn primary" style={{ background: '#FF6B2C', color: '#fff', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 6, fontWeight: 700 }}>
+          🖥️ Abrir PDV Supermercado (Caixa)
+        </a>
+        <a href="/admin/pdv-erp?segmento=supermercado&modo=totem" target="_blank" rel="noreferrer" className="c360-btn" style={{ background: '#10b981', color: '#fff', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 6, fontWeight: 700 }}>
+          🛒 Modo Totem Autoatendimento
+        </a>
+      </div>
     </div>
 
     <Table caption="Produtos" rows={produtos} empty="Nenhum produto. Cadastre os itens em Estoque e compras (ou lance uma NF-e)." columns={[

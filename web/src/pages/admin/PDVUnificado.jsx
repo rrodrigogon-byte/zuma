@@ -1,10 +1,12 @@
 /**
- * PDV Unificado — KYTTO Clube & Supermercado
- * Atende todos os segmentos: Supermercado, Loja de Moda, Barbearia, Varejo, Bar
+ * PDV Unificado Multiplataforma — KYTTO Clube, Supermercado & Varejo
+ * Suporte a: Desktop (Atalhos F2-F10), Mobile/Tablet (Câmera Scanner, Touch Keypad),
+ * Totem Autoatendimento (Self-Checkout com PIX QR Code), Pesagem de Balança e Fila Offline (IndexedDB).
  * Rota: /admin/pdv-erp
  */
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { api } from '../../lib/api'
+import { enfileirarVendaOffline } from '../../lib/pdvOffline'
 
 const theme = {
   bg: '#0f1117', surface: '#1a1d27', card: '#22263a',
@@ -29,6 +31,25 @@ const FORMAS_PGTO = [
   { id: 'vale_presente',label: 'Vale',        icon: '🎁' },
 ]
 
+// Feedback sonoro característico de caixa de supermercado (Web Audio API)
+function tocarBeep() {
+  try {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext
+    if (!AudioCtx) return
+    const ctx = new AudioCtx()
+    const osc = ctx.createOscillator()
+    const gain = ctx.createGain()
+    osc.type = 'sine'
+    osc.frequency.setValueAtTime(1400, ctx.currentTime)
+    gain.gain.setValueAtTime(0.18, ctx.currentTime)
+    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.08)
+    osc.connect(gain)
+    gain.connect(ctx.destination)
+    osc.start()
+    osc.stop(ctx.currentTime + 0.08)
+  } catch {}
+}
+
 export default function PDVUnificado() {
   const [segmento, setSegmento] = useState(() => {
     try {
@@ -38,6 +59,17 @@ export default function PDVUnificado() {
       return 'supermercado';
     }
   })
+
+  // Modo de operação da estação: 'operador' (caixa tradicional), 'totem' (self-checkout cliente) ou 'touch'
+  const [modoOperacao, setModoOperacao] = useState(() => {
+    try {
+      const p = new URLSearchParams(window.location.search);
+      return p.get('modo') === 'totem' ? 'totem' : 'operador';
+    } catch {
+      return 'operador';
+    }
+  })
+
   const [itens, setItens] = useState([])
   const [busca, setBusca] = useState('')
   const [resultados, setResultados] = useState([])
@@ -49,16 +81,36 @@ export default function PDVUnificado() {
   const [cpfNota, setCpfNota] = useState('')
   const [finalizando, setFinalizando] = useState(false)
   const [venda, setVenda] = useState(null)
-  const [modalGrade, setModalGrade] = useState(null) // produto com grade de moda
-  const [modalPesagem, setModalPesagem] = useState(null) // produto pesável para balança
+  const [isOnline, setIsOnline] = useState(navigator.onLine)
+  const [filaLocalQtd, setFilaLocalQtd] = useState(0)
+
+  // Modais de operação
+  const [modalGrade, setModalGrade] = useState(null)
+  const [modalPesagem, setModalPesagem] = useState(null)
   const [pesoInput, setPesoInput] = useState('0.500')
-  const [modalCaixa, setModalCaixa] = useState(null) // { tipo: 'sangria' | 'suprimento' }
+  const [modalCaixa, setModalCaixa] = useState(null)
   const [valorCaixa, setValorCaixa] = useState('')
   const [motivoCaixa, setMotivoCaixa] = useState('')
+  const [modalCamera, setModalCamera] = useState(false)
+  const [mostrarTecladoTouch, setMostrarTecladoTouch] = useState(false)
   const [atalhosSupermercado, setAtalhosSupermercado] = useState([])
 
   const inputRef = useRef(null)
   const buscaTimer = useRef(null)
+  const videoRef = useRef(null)
+  const streamRef = useRef(null)
+
+  // Monitorar conectividade de rede
+  useEffect(() => {
+    function handleOnline() { setIsOnline(true) }
+    function handleOffline() { setIsOnline(false) }
+    window.addEventListener('online', handleOnline)
+    window.addEventListener('offline', handleOffline)
+    return () => {
+      window.removeEventListener('online', handleOnline)
+      window.removeEventListener('offline', handleOffline)
+    }
+  }, [])
 
   // Focar no input ao montar
   useEffect(() => { inputRef.current?.focus() }, [])
@@ -82,9 +134,10 @@ export default function PDVUnificado() {
     return () => clearTimeout(buscaTimer.current)
   }, [busca, segmento])
 
-  // Atalhos de teclado
+  // Atalhos de teclado (F2-F10, Esc)
   useEffect(() => {
     function handleKeyDown(e) {
+      if (modoOperacao === 'totem') return // Totem não usa atalhos de operador
       if (e.key === 'F2') {
         e.preventDefault()
         inputRef.current?.focus()
@@ -115,12 +168,75 @@ export default function PDVUnificado() {
         setModalGrade(null)
         setModalPesagem(null)
         setModalCaixa(null)
+        setModalCamera(false)
         setVenda(null)
       }
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [itens, finalizando])
+  }, [itens, finalizando, modoOperacao])
+
+  // Scanner por Câmera (Mobile / Tablet / Notebook)
+  useEffect(() => {
+    let animId = null
+    let detector = null
+
+    if (modalCamera) {
+      if ('BarcodeDetector' in window) {
+        try {
+          detector = new window.BarcodeDetector({
+            formats: ['ean_13', 'ean_8', 'upc_a', 'code_128', 'code_39', 'qr_code']
+          })
+        } catch {}
+      }
+
+      navigator.mediaDevices?.getUserMedia({
+        video: { facingMode: { ideal: 'environment' } }
+      }).then(stream => {
+        streamRef.current = stream
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream
+          videoRef.current.play().catch(() => null)
+        }
+
+        const scanLoop = async () => {
+          if (videoRef.current && videoRef.current.readyState >= 2 && detector) {
+            try {
+              const barcodes = await detector.detect(videoRef.current)
+              if (barcodes.length > 0) {
+                const rawVal = barcodes[0].rawValue
+                if (rawVal) {
+                  tocarBeep()
+                  buscarProduto(rawVal)
+                  setModalCamera(false)
+                  return
+                }
+              }
+            } catch {}
+          }
+          animId = requestAnimationFrame(scanLoop)
+        }
+        animId = requestAnimationFrame(scanLoop)
+      }).catch(err => {
+        console.warn('Erro ao acessar câmera:', err)
+        alert('Não foi possível acessar a câmera do dispositivo.')
+        setModalCamera(false)
+      })
+    } else {
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(t => t.stop())
+        streamRef.current = null
+      }
+      if (animId) cancelAnimationFrame(animId)
+    }
+
+    return () => {
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(t => t.stop())
+      }
+      if (animId) cancelAnimationFrame(animId)
+    }
+  }, [modalCamera])
 
   async function buscarProduto(termoBruto) {
     if (!termoBruto?.trim()) return
@@ -185,6 +301,7 @@ export default function PDVUnificado() {
   }
 
   function adicionarItem(produto, quantidade = 1, variante = null) {
+    tocarBeep()
     const chave = variante ? `${produto.id}-${variante.id}` : produto.id
     const precoFinal = produto.precoFinal ?? produto.preco_final ?? produto.precoBase ?? produto.preco_venda ?? 0
 
@@ -241,25 +358,41 @@ export default function PDVUnificado() {
   async function finalizarVenda() {
     if (!itens.length) return
     setFinalizando(true)
+    const payload = {
+      segmento,
+      cpf_cliente: cpfNota.trim() || null,
+      usuario_vendedor_id: 'operador-kytto',
+      itens: itens.map(i => ({
+        produto_id: i.produto_id,
+        nome: i.nome,
+        variante_id: i.variante_id,
+        quantidade: i.quantidade,
+        valor_unitario: i.preco,
+        preco_unitario: i.preco,
+      })),
+      pagamentos: [{
+        tipo: formaPgto === 'dinheiro' ? 'dinheiro' : formaPgto,
+        valor: total,
+        referencia_externa: formaPgto.startsWith('cartao') ? 'TEF-LOCAL' : null
+      }],
+      forma_pagamento: formaPgto,
+      desconto: valorDesconto,
+      total,
+      troco: trocoCalc,
+    }
+
     try {
-      const payload = {
-        segmento,
-        cpf_cliente: cpfNota.trim() || null,
-        itens: itens.map(i => ({
-          produto_id: i.produto_id,
-          nome: i.nome,
-          variante_id: i.variante_id,
-          quantidade: i.quantidade,
-          preco_unitario: i.preco,
-        })),
-        forma_pagamento: formaPgto,
-        desconto: valorDesconto,
-        total,
-        troco: trocoCalc,
+      let res = null
+      if (isOnline) {
+        res = await api.post('/api/pdv/venda', payload).catch(async () => {
+          return await api.post('/api/supermercado/venda', payload)
+        })
+      } else {
+        // Modo offline resiliente no navegador
+        await enfileirarVendaOffline(payload)
+        setFilaLocalQtd(q => q + 1)
       }
-      const res = await api.post('/api/pdv/venda', payload).catch(async () => {
-        return await api.post('/api/supermercado/venda', payload)
-      })
+
       setVenda(res?.venda || {
         id: `v-${Date.now()}`,
         numero: `VND-${Date.now().toString(36).toUpperCase()}`,
@@ -269,15 +402,38 @@ export default function PDVUnificado() {
         cpf_cliente: cpfNota.trim() || null,
         forma_pagamento: formaPgto,
         itens: [...payload.itens],
+        offline: !isOnline,
         data: new Date().toISOString()
       })
+
       setItens([])
       setDesconto(0)
       setTroco('')
       setCpfNota('')
-      setModalPgto(false)
     } catch (err) {
-      alert(err.message || 'Erro ao finalizar venda')
+      // Fallback offline se o servidor falhar
+      try {
+        await enfileirarVendaOffline(payload)
+        setFilaLocalQtd(q => q + 1)
+        setVenda({
+          id: `v-${Date.now()}`,
+          numero: `OFF-${Date.now().toString(36).toUpperCase()}`,
+          total,
+          desconto: valorDesconto,
+          troco: trocoCalc,
+          cpf_cliente: cpfNota.trim() || null,
+          forma_pagamento: formaPgto,
+          itens: [...payload.itens],
+          offline: true,
+          data: new Date().toISOString()
+        })
+        setItens([])
+        setDesconto(0)
+        setTroco('')
+        setCpfNota('')
+      } catch (e2) {
+        alert(err.message || 'Erro ao finalizar venda')
+      }
     } finally {
       setFinalizando(false)
     }
@@ -307,28 +463,58 @@ export default function PDVUnificado() {
     }
   }
 
+  // Adicionar dígito pelo teclado touch
+  function handleTouchKey(key) {
+    if (key === 'C') {
+      setBusca('')
+    } else if (key === 'ENTER') {
+      buscarProduto(busca)
+    } else {
+      setBusca(prev => prev + key)
+    }
+  }
+
   // ── Render ──────────────────────────────────────────────────────────────────
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: theme.bg, color: theme.cream, overflow: 'hidden', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
 
-      {/* ── Top Bar: Segmentos, Atalhos e Voltar ──────────────────────────────── */}
+      {/* ── Top Bar Multiplataforma ───────────────────────────────────────────── */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 16px', background: theme.surface, borderBottom: `1px solid ${theme.line}`, flexWrap: 'wrap', gap: 8 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <a href="/admin/supermercado" style={{ color: theme.orange, textDecoration: 'none', fontSize: 13, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 4 }}>
-            ← Voltar ao Supermercado
+            ← Voltar
           </a>
-          <div style={{ width: 1, height: 20, background: theme.line }} />
-          <div style={{ display: 'flex', gap: 6, overflowX: 'auto' }}>
+          <div style={{ width: 1, height: 18, background: theme.line }} />
+
+          {/* Seletor de Modo Operacional (Operador vs Totem Autoatendimento) */}
+          <div style={{ display: 'flex', background: theme.card, borderRadius: 8, padding: 2, border: `1px solid ${theme.line}` }}>
+            <button
+              onClick={() => setModoOperacao('operador')}
+              style={{ padding: '4px 10px', borderRadius: 6, border: 'none', background: modoOperacao === 'operador' ? theme.blue : 'transparent', color: modoOperacao === 'operador' ? '#fff' : theme.muted, fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
+            >
+              🖥️ Caixa Operador
+            </button>
+            <button
+              onClick={() => setModoOperacao('totem')}
+              style={{ padding: '4px 10px', borderRadius: 6, border: 'none', background: modoOperacao === 'totem' ? theme.green : 'transparent', color: modoOperacao === 'totem' ? '#fff' : theme.muted, fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
+            >
+              🛒 Totem Autoatendimento
+            </button>
+          </div>
+
+          <div style={{ width: 1, height: 18, background: theme.line }} />
+
+          {/* Segmentos */}
+          <div style={{ display: 'flex', gap: 4, overflowX: 'auto' }}>
             {SEGMENTOS.map(sg => (
               <button
                 key={sg.id}
                 onClick={() => { setSegmento(sg.id); setResultados([]); setBusca('') }}
                 style={{
-                  padding: '5px 12px', borderRadius: 8, border: 'none', cursor: 'pointer',
+                  padding: '4px 10px', borderRadius: 6, border: 'none', cursor: 'pointer',
                   background: segmento === sg.id ? sg.cor : 'transparent',
                   color: segmento === sg.id ? '#fff' : theme.muted,
-                  fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap',
-                  transition: 'all .15s',
+                  fontSize: 11, fontWeight: 700, whiteSpace: 'nowrap',
                 }}
               >
                 {sg.icon} {sg.label}
@@ -337,17 +523,59 @@ export default function PDVUnificado() {
           </div>
         </div>
 
-        {/* Atalhos do Operador de Caixa */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: theme.muted }}>
-          <span style={{ background: theme.card, padding: '3px 8px', borderRadius: 6, border: `1px solid ${theme.line}` }}><strong>F2</strong> Busca</span>
-          <span style={{ background: theme.card, padding: '3px 8px', borderRadius: 6, border: `1px solid ${theme.line}` }}><strong>F3</strong> CPF</span>
-          <span style={{ background: theme.card, padding: '3px 8px', borderRadius: 6, border: `1px solid ${theme.line}` }}><strong>F4</strong> Limpar</span>
-          <span style={{ background: theme.card, padding: '3px 8px', borderRadius: 6, border: `1px solid ${theme.line}` }}><strong>F7</strong> Desconto</span>
-          <button onClick={() => setModalCaixa({ tipo: 'sangria' })} style={{ background: theme.card, color: theme.yellow, border: `1px solid ${theme.line}`, padding: '4px 8px', borderRadius: 6, cursor: 'pointer', fontSize: 11, fontWeight: 700 }}>
-            💰 Sangria / Suprimento
+        {/* Ferramentas e Status de Rede */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11 }}>
+          {/* Badge Conexão */}
+          <span style={{
+            display: 'flex', alignItems: 'center', gap: 4, padding: '3px 8px', borderRadius: 6,
+            background: isOnline ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)',
+            color: isOnline ? theme.green : theme.red, fontWeight: 700, border: `1px solid ${isOnline ? theme.green : theme.red}`
+          }}>
+            <span style={{ width: 6, height: 6, borderRadius: '50%', background: isOnline ? theme.green : theme.red }} />
+            {isOnline ? 'Online' : 'Modo Offline'}
+            {filaLocalQtd > 0 && ` (${filaLocalQtd} na fila)`}
+          </span>
+
+          {/* Câmera Leitor de Código de Barras */}
+          <button
+            onClick={() => setModalCamera(true)}
+            style={{ display: 'flex', alignItems: 'center', gap: 4, background: theme.card, color: theme.blue, border: `1px solid ${theme.line}`, padding: '4px 10px', borderRadius: 6, cursor: 'pointer', fontSize: 11, fontWeight: 700 }}
+          >
+            📷 Bipar Câmera
           </button>
+
+          {/* Teclado Touch */}
+          <button
+            onClick={() => setMostrarTecladoTouch(t => !t)}
+            style={{ background: mostrarTecladoTouch ? theme.orange : theme.card, color: mostrarTecladoTouch ? '#fff' : theme.cream, border: `1px solid ${theme.line}`, padding: '4px 8px', borderRadius: 6, cursor: 'pointer', fontSize: 11, fontWeight: 700 }}
+          >
+            🔢 Teclado Touch
+          </button>
+
+          {/* Sangria e Suprimento */}
+          {modoOperacao === 'operador' && (
+            <button onClick={() => setModalCaixa({ tipo: 'sangria' })} style={{ background: theme.card, color: theme.yellow, border: `1px solid ${theme.line}`, padding: '4px 8px', borderRadius: 6, cursor: 'pointer', fontSize: 11, fontWeight: 700 }}>
+              💰 Sangria / Suprimento (F9)
+            </button>
+          )}
         </div>
       </div>
+
+      {/* Banner Especial para Modo Totem / Autoatendimento */}
+      {modoOperacao === 'totem' && (
+        <div style={{ background: 'linear-gradient(90deg, #1e3a8a, #065f46)', padding: '10px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `1px solid ${theme.line}` }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ fontSize: 24 }}>🏪</span>
+            <div>
+              <div style={{ fontWeight: 900, fontSize: 15, color: '#fff' }}>Autoatendimento Express — Barbearia Dino Supermercado</div>
+              <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.85)' }}>1. Passe o código no leitor ou toque nos itens · 2. Confira seu carrinho · 3. Pague via PIX ou Cartão</div>
+            </div>
+          </div>
+          <div style={{ fontSize: 12, background: 'rgba(0,0,0,0.3)', padding: '4px 10px', borderRadius: 6 }}>
+            Toque nos produtos de hortifrúti/padaria para pesar
+          </div>
+        </div>
+      )}
 
       {/* ── Área Principal (Colunas Esquerda e Direita) ───────────────────────── */}
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
@@ -397,13 +625,34 @@ export default function PDVUnificado() {
             </div>
           </div>
 
+          {/* Teclado Virtual Touch (Retrátil para Totem e Tablets) */}
+          {mostrarTecladoTouch && (
+            <div style={{ padding: '10px 16px', background: theme.surface, borderBottom: `1px solid ${theme.line}` }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 6, maxWidth: 500 }}>
+                {['1','2','3','4','5','6','7','8','9','0','00','*','C','ENTER'].map(k => (
+                  <button
+                    key={k}
+                    onClick={() => handleTouchKey(k)}
+                    style={{
+                      padding: '12px 6px', borderRadius: 8, border: 'none', cursor: 'pointer',
+                      background: k === 'ENTER' ? theme.green : k === 'C' ? theme.red : theme.card,
+                      color: '#fff', fontSize: 15, fontWeight: 800
+                    }}
+                  >
+                    {k}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Atalhos Rápidos de Balança / Hortifrúti (Modo Supermercado) */}
           {segmento === 'supermercado' && atalhosSupermercado.length > 0 && !busca && (
             <div style={{ padding: '10px 16px', borderBottom: `1px solid ${theme.line}`, background: 'rgba(255,255,255,0.01)' }}>
               <div style={{ fontSize: 11, fontWeight: 700, color: theme.muted, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>
                 ⚖️ Atalhos Rápidos de Balança & Hortifrúti (1 Toque)
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: 8 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(135px, 1fr))', gap: 8 }}>
                 {atalhosSupermercado.map(p => (
                   <button
                     key={p.id}
@@ -491,18 +740,19 @@ export default function PDVUnificado() {
                 {SEGMENTOS.find(s => s.id === segmento)?.icon || '🛒'}
               </div>
               <div style={{ fontSize: 18, fontWeight: 800, color: '#fff' }}>
-                Frente de Caixa — {SEGMENTOS.find(s => s.id === segmento)?.label}
+                {modoOperacao === 'totem' ? 'Autoatendimento — Passe os Produtos' : `Frente de Caixa — ${SEGMENTOS.find(s => s.id === segmento)?.label}`}
               </div>
-              <div style={{ fontSize: 13, maxWidth: 360, textAlign: 'center', lineHeight: 1.5 }}>
+              <div style={{ fontSize: 13, maxWidth: 380, textAlign: 'center', lineHeight: 1.5 }}>
                 Passe os produtos no leitor de código de barras ou use a busca.<br />
-                Para multiplicar, digite <strong>3*código</strong> e pressione Enter.
+                Para multiplicar, digite <strong>3*código</strong> e pressione Enter.<br />
+                Para pesáveis, clique no atalho de balança correspondente.
               </div>
             </div>
           )}
         </div>
 
         {/* ── Coluna direita: carrinho e pagamento ──────────────────────────── */}
-        <div style={{ width: 420, display: 'flex', flexDirection: 'column', background: theme.surface }}>
+        <div style={{ width: modoOperacao === 'totem' ? 480 : 420, display: 'flex', flexDirection: 'column', background: theme.surface }}>
 
           {/* Header do carrinho */}
           <div style={{ padding: '14px 16px', borderBottom: `1px solid ${theme.line}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -523,7 +773,7 @@ export default function PDVUnificado() {
           <div style={{ flex: 1, overflowY: 'auto', padding: '10px 14px' }}>
             {itens.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '60px 0', color: theme.muted, fontSize: 13 }}>
-                Nenhum item adicionado à comanda.<br />Bipe o primeiro produto para iniciar.
+                {modoOperacao === 'totem' ? 'Seu carrinho está vazio.\nBipe o primeiro produto ou escolha nos atalhos ao lado.' : 'Nenhum item adicionado à comanda.\nBipe o primeiro produto para iniciar.'}
               </div>
             ) : itens.map((item, idx) => (
               <div key={item.chave} style={{
@@ -542,7 +792,7 @@ export default function PDVUnificado() {
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                     <button
                       onClick={() => alterarQuantidade(item.chave, item.pesavel ? -0.1 : -1)}
-                      style={{ width: 26, height: 26, borderRadius: 6, border: `1px solid ${theme.line}`, background: theme.surface, color: theme.cream, cursor: 'pointer', fontSize: 14, fontWeight: 700 }}
+                      style={{ width: 28, height: 28, borderRadius: 6, border: `1px solid ${theme.line}`, background: theme.surface, color: theme.cream, cursor: 'pointer', fontSize: 14, fontWeight: 700 }}
                     >−</button>
                     <span style={{ fontSize: 13, fontWeight: 700, minWidth: 44, textAlign: 'center' }}>
                       {item.pesavel ? item.quantidade.toFixed(3) : item.quantidade}
@@ -550,7 +800,7 @@ export default function PDVUnificado() {
                     </span>
                     <button
                       onClick={() => alterarQuantidade(item.chave, item.pesavel ? 0.1 : 1)}
-                      style={{ width: 26, height: 26, borderRadius: 6, border: `1px solid ${theme.line}`, background: theme.surface, color: theme.cream, cursor: 'pointer', fontSize: 14, fontWeight: 700 }}
+                      style={{ width: 28, height: 28, borderRadius: 6, border: `1px solid ${theme.line}`, background: theme.surface, color: theme.cream, cursor: 'pointer', fontSize: 14, fontWeight: 700 }}
                     >+</button>
                   </div>
                   {/* Preço editável e Total */}
@@ -558,7 +808,7 @@ export default function PDVUnificado() {
                     <div style={{ color: theme.muted, fontSize: 11 }}>
                       R$ {item.preco.toFixed(2)}
                     </div>
-                    <div style={{ fontWeight: 800, fontSize: 14, minWidth: 70, textAlign: 'right', color: theme.green }}>
+                    <div style={{ fontWeight: 800, fontSize: 15, minWidth: 70, textAlign: 'right', color: theme.green }}>
                       R$ {(item.preco * item.quantidade).toFixed(2)}
                     </div>
                   </div>
@@ -577,29 +827,31 @@ export default function PDVUnificado() {
                   value={cpfNota}
                   onChange={e => setCpfNota(e.target.value)}
                   maxLength={14}
-                  style={{ width: '100%', boxSizing: 'border-box', padding: '6px 10px', background: theme.card, border: `1px solid ${theme.line}`, borderRadius: 8, color: theme.cream, fontSize: 12, outline: 'none' }}
+                  style={{ width: '100%', boxSizing: 'border-box', padding: '7px 10px', background: theme.card, border: `1px solid ${theme.line}`, borderRadius: 8, color: theme.cream, fontSize: 12, outline: 'none' }}
                 />
               </div>
-              <div style={{ display: 'flex', gap: 4 }}>
-                <button
-                  onClick={() => setTipoDesconto('valor')}
-                  style={{ padding: '6px 8px', borderRadius: 6, border: 'none', cursor: 'pointer', fontSize: 11, fontWeight: 700, background: tipoDesconto === 'valor' ? theme.green : theme.card, color: tipoDesconto === 'valor' ? '#fff' : theme.muted }}
-                >R$</button>
-                <button
-                  onClick={() => setTipoDesconto('percentual')}
-                  style={{ padding: '6px 8px', borderRadius: 6, border: 'none', cursor: 'pointer', fontSize: 11, fontWeight: 700, background: tipoDesconto === 'percentual' ? theme.green : theme.card, color: tipoDesconto === 'percentual' ? '#fff' : theme.muted }}
-                >%</button>
-                <input
-                  id="pdv-desconto-input"
-                  type="number"
-                  value={desconto || ''}
-                  onChange={e => setDesconto(e.target.value)}
-                  placeholder="Desc (F7)"
-                  style={{ width: 75, padding: '6px 8px', background: theme.card, border: `1px solid ${theme.line}`, borderRadius: 6, color: theme.cream, fontSize: 12, outline: 'none' }}
-                  min="0"
-                  step="0.01"
-                />
-              </div>
+              {modoOperacao === 'operador' && (
+                <div style={{ display: 'flex', gap: 4 }}>
+                  <button
+                    onClick={() => setTipoDesconto('valor')}
+                    style={{ padding: '6px 8px', borderRadius: 6, border: 'none', cursor: 'pointer', fontSize: 11, fontWeight: 700, background: tipoDesconto === 'valor' ? theme.green : theme.card, color: tipoDesconto === 'valor' ? '#fff' : theme.muted }}
+                  >R$</button>
+                  <button
+                    onClick={() => setTipoDesconto('percentual')}
+                    style={{ padding: '6px 8px', borderRadius: 6, border: 'none', cursor: 'pointer', fontSize: 11, fontWeight: 700, background: tipoDesconto === 'percentual' ? theme.green : theme.card, color: tipoDesconto === 'percentual' ? '#fff' : theme.muted }}
+                  >%</button>
+                  <input
+                    id="pdv-desconto-input"
+                    type="number"
+                    value={desconto || ''}
+                    onChange={e => setDesconto(e.target.value)}
+                    placeholder="Desc (F7)"
+                    style={{ width: 75, padding: '6px 8px', background: theme.card, border: `1px solid ${theme.line}`, borderRadius: 6, color: theme.cream, fontSize: 12, outline: 'none' }}
+                    min="0"
+                    step="0.01"
+                  />
+                </div>
+              )}
             </div>
 
             {/* Totais */}
@@ -611,30 +863,30 @@ export default function PDVUnificado() {
             )}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
               <span style={{ fontSize: 14, fontWeight: 700 }}>TOTAL A PAGAR</span>
-              <span style={{ fontSize: 24, fontWeight: 900, color: theme.green }}>R$ {total.toFixed(2)}</span>
+              <span style={{ fontSize: 26, fontWeight: 900, color: theme.green }}>R$ {total.toFixed(2)}</span>
             </div>
 
             {/* Formas de Pagamento */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6, marginBottom: 10 }}>
-              {FORMAS_PGTO.map(fp => (
+            <div style={{ display: 'grid', gridTemplateColumns: modoOperacao === 'totem' ? 'repeat(2, 1fr)' : 'repeat(3, 1fr)', gap: 6, marginBottom: 10 }}>
+              {FORMAS_PGTO.filter(fp => modoOperacao === 'totem' ? ['pix', 'debito', 'credito', 'vale_presente'].includes(fp.id) : true).map(fp => (
                 <button
                   key={fp.id}
                   onClick={() => setFormaPgto(fp.id)}
                   style={{
-                    padding: '8px 4px', borderRadius: 8, border: 'none', cursor: 'pointer',
-                    background: formaPgto === fp.id ? theme.blue : theme.card,
+                    padding: modoOperacao === 'totem' ? '12px 6px' : '8px 4px', borderRadius: 8, border: 'none', cursor: 'pointer',
+                    background: formaPgto === fp.id ? (modoOperacao === 'totem' ? theme.green : theme.blue) : theme.card,
                     color: formaPgto === fp.id ? '#fff' : theme.muted,
-                    fontSize: 11, fontWeight: 700, transition: 'all .15s',
+                    fontSize: modoOperacao === 'totem' ? 13 : 11, fontWeight: 700, transition: 'all .15s',
                   }}
                 >
-                  <div style={{ fontSize: 14, marginBottom: 2 }}>{fp.icon}</div>
+                  <div style={{ fontSize: modoOperacao === 'totem' ? 18 : 14, marginBottom: 2 }}>{fp.icon}</div>
                   {fp.label}
                 </button>
               ))}
             </div>
 
-            {/* Troco para Dinheiro */}
-            {formaPgto === 'dinheiro' && (
+            {/* Troco para Dinheiro (Apenas Operador) */}
+            {formaPgto === 'dinheiro' && modoOperacao === 'operador' && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
                 <span style={{ fontSize: 12, color: theme.muted, whiteSpace: 'nowrap' }}>Recebido:</span>
                 <input
@@ -658,19 +910,45 @@ export default function PDVUnificado() {
               onClick={finalizarVenda}
               disabled={!itens.length || finalizando}
               style={{
-                width: '100%', padding: '16px',
+                width: '100%', padding: modoOperacao === 'totem' ? '18px' : '15px',
                 background: itens.length ? theme.green : theme.card,
                 color: itens.length ? '#fff' : theme.muted,
                 border: 'none', borderRadius: 12,
-                fontSize: 16, fontWeight: 900, cursor: itens.length ? 'pointer' : 'not-allowed',
+                fontSize: modoOperacao === 'totem' ? 18 : 15, fontWeight: 900, cursor: itens.length ? 'pointer' : 'not-allowed',
+                boxShadow: itens.length ? '0 8px 20px rgba(16,185,129,0.3)' : 'none',
                 transition: 'all .15s',
               }}
             >
-              {finalizando ? '⏳ Processando...' : `✅ Finalizar Venda (F10) — R$ ${total.toFixed(2)}`}
+              {finalizando ? '⏳ Processando...' : (modoOperacao === 'totem' ? `💳 Pagar e Concluir — R$ ${total.toFixed(2)}` : `✅ Finalizar Venda (F10) — R$ ${total.toFixed(2)}`)}
             </button>
           </div>
         </div>
       </div>
+
+      {/* ── Modal: Leitor por Câmera (Mobile / Tablet) ────────────────────────── */}
+      {modalCamera && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 130 }}>
+          <div style={{ background: theme.card, borderRadius: 16, padding: 20, width: 360, textAlign: 'center', border: `1px solid ${theme.line}` }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <div style={{ fontWeight: 800, fontSize: 15, color: '#fff' }}>📷 Bipar com Câmera</div>
+              <button onClick={() => setModalCamera(false)} style={{ background: 'none', border: 'none', color: theme.muted, cursor: 'pointer', fontSize: 18 }}>✕</button>
+            </div>
+            <div style={{ width: '100%', height: 260, background: '#000', borderRadius: 12, overflow: 'hidden', position: 'relative' }}>
+              <video ref={videoRef} style={{ width: '100%', height: '100%', objectFit: 'cover' }} autoPlay playsInline muted />
+              <div style={{ position: 'absolute', inset: '25% 15%', border: `2px dashed ${theme.green}`, borderRadius: 8, pointerEvents: 'none' }} />
+            </div>
+            <div style={{ fontSize: 12, color: theme.muted, marginTop: 12 }}>
+              Aponte a câmera para o código de barras ou QR Code do produto.
+            </div>
+            <button
+              onClick={() => setModalCamera(false)}
+              style={{ marginTop: 14, width: '100%', padding: '10px', background: theme.surface, color: theme.cream, border: `1px solid ${theme.line}`, borderRadius: 8, fontWeight: 700, cursor: 'pointer' }}
+            >
+              Fechar Câmera
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ── Modal: Pesagem Rápida (Balança) ─────────────────────────────────── */}
       {modalPesagem && (
@@ -810,10 +1088,17 @@ export default function PDVUnificado() {
         </div>
       )}
 
-      {/* ── Modal: Venda Realizada com Cupom Térmico (80mm) ──────────────────── */}
+      {/* ── Modal: Venda Realizada com Cupom Térmico (80mm) ou QR Code PIX ─── */}
       {venda && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 120 }}>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 120 }}>
           <div style={{ background: '#fff', color: '#111', borderRadius: 16, padding: 24, width: 380, maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 20px 40px rgba(0,0,0,0.5)' }}>
+
+            {/* Aviso especial se a venda foi gravada em modo offline */}
+            {venda.offline && (
+              <div style={{ background: '#fef3c7', border: '1px solid #f59e0b', color: '#92400e', padding: '8px 12px', borderRadius: 8, fontSize: 11, fontWeight: 700, marginBottom: 12, textAlign: 'center' }}>
+                ⚡ Venda gravada no Modo Offline! Sincronização automática quando a rede voltar.
+              </div>
+            )}
 
             {/* Comprovante Térmico Formatado */}
             <div id="cupom-pdv-print" style={{ fontFamily: 'monospace', fontSize: 12, lineHeight: 1.4, borderBottom: '1px dashed #666', paddingBottom: 12, marginBottom: 14 }}>
