@@ -252,3 +252,27 @@ export function formatPersonName(value) {
     return word.split('-').map((part) => part ? part.charAt(0).toUpperCase() + part.slice(1) : part).join('-')
   }).join(' ')
 }
+
+/**
+ * Remove anotações internas, parênteses (ex.: "(dino)", "(novo)", "(Club Combo)")
+ * e resíduos de data/hora ou vírgulas anexados por extração ("Juarez, amanhã...").
+ * Retorna o nome formatado de forma limpa e humana.
+ */
+export function cleanCustomerDisplayName(rawName, { firstNameOnly = false } = {}) {
+  let name = String(rawName ?? '').normalize('NFC').trim()
+  if (!name) return ''
+  name = name.replace(/\s*\([^)]*\)/g, ' ')
+  name = name.split(/[,;\-—]/)[0]
+  name = name.replace(/\b(novo|nova|lead\s+whatsapp\s*\d*|cliente\s+balc[aã]o|dino|barbearia)\b/gi, ' ')
+  name = name.replace(/\b(hoje|amanh[aã]|segunda|ter[cç]a|quarta|quinta|sexta|s[aá]bado|domingo|\d{1,2}\/\d{1,2}|\d{1,2}h|\d{1,2}:\d{2})\b/gi, ' ')
+  name = name.replace(/\s+/g, ' ').trim()
+  if (!name) return ''
+  if (firstNameOnly) {
+    const first = name.split(/\s+/)[0]
+    return first ? first.charAt(0).toUpperCase() + first.slice(1).toLowerCase() : ''
+  }
+  return name.toLowerCase().split(' ').map((word, index) => {
+    if (index > 0 && PARTICULAS.has(word)) return word
+    return word.split('-').map((part) => part ? part.charAt(0).toUpperCase() + part.slice(1) : part).join('-')
+  }).join(' ')
+}

@@ -4,6 +4,7 @@ import { registerAvecMixRoutes } from './avec-revenue-mix-routes.js';
 import { loadAvecMix } from './core/avec-revenue-mix.js';
 import express from 'express';
 import { createPerformanceMetrics, eventLoopMetrics } from './core/performance-metrics.js';
+import { cleanCustomerDisplayName } from './core/whatsapp-ai-normalize.js';
 import { stallonePageMeta } from './core/stallone-page-meta.js';
 import { stalloneDiscovery } from './core/stallone-discovery.js';
 import bcrypt from 'bcryptjs';
@@ -9650,7 +9651,23 @@ process.on('uncaughtException', (e)=> console.error('uncaughtException:', e?.mes
   // A fila WhatsApp usa tabelas Commerce até mesmo no modo de manutenção;
   // não iniciar o worker quando o Core está explicitamente desligado evita
   // conexões PostgreSQL inesperadas em instalações legadas e no smoke test.
-  if (process.env.COMMERCE_CORE_ENABLED === '1') startWhatsappAiWorker();
+  if (process.env.COMMERCE_CORE_ENABLED === '1') {
+    startWhatsappAiWorker();
+    void (async () => {
+      try {
+        const { db: pgDb } = await import('./core/database.js');
+        const dirty = await pgDb.query(`SELECT id, nome FROM clientes WHERE nome LIKE '%,%' OR nome LIKE '%(%'`);
+        for (const row of dirty.rows) {
+          const cleanName = cleanCustomerDisplayName(row.nome);
+          if (cleanName && cleanName !== row.nome) {
+            await pgDb.query(`UPDATE clientes SET nome = $1 WHERE id = $2`, [cleanName, row.id]);
+          }
+        }
+      } catch (e) {
+        console.warn('[Clientes] sanitização de nomes:', e?.message || e);
+      }
+    })();
+  }
   // Entrada do WhatsApp igual à da Isa: consulta periódica ao backend (sem webhook).
   startIsaPollWorker();
   startPendingFollowUpWorker();

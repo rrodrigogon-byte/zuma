@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import { db } from './database.js';
 import { canonicalWhatsappPhone, phoneMatchKeySql } from './whatsapp-phone.js';
 import { isGenericCustomerName } from './whatsapp-ai-intents.js';
+import { cleanCustomerDisplayName } from './whatsapp-ai-normalize.js';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -50,7 +51,7 @@ export async function ensureWhatsappLead(context = {}, input = {}) {
   const phone = normalizeWhatsappPhone(input.phone || context.phone);
   if (!phone) return null;
   // "Cliente"/"Contato" não é nome: cria como "Lead WhatsApp 1234" e completa quando souber.
-  const rawName = clean(input.name || context.customerName, 160);
+  const rawName = cleanCustomerDisplayName(clean(input.name || context.customerName, 160));
   const name = isGenericCustomerName(rawName) ? '' : rawName;
   const text = clean(input.text, 2000);
   return db.transaction(async trx => {

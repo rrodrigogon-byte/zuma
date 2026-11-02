@@ -7,6 +7,7 @@ import { db } from './database.js';
 import { enviarMensagem } from './whatsapp.js';
 import { notificarEquipe } from '../dino-push-equipe.js';
 import { personaAppointmentMessage, quandoCurto, resolvePersona } from './whatsapp-ai-persona.js';
+import { cleanCustomerDisplayName } from './whatsapp-ai-normalize.js';
 import * as captacao from '../dino-captacao-kytto.js';
 import { confirmationDeadlineExpired, confirmationPlan, secondConfirmationWindowOpen } from './dino-confirmation-policy.js';
 
@@ -192,7 +193,8 @@ export async function queueAppointmentNotifications(contexto = {}, agendamento =
     queued += await inserirTarefa(trx, { empresaId, lojaId, canalId: canal.id, legacyEmpresaId, agendamento, evento, executarEm: new Date() });
     if (['criado', 'remarcado'].includes(evento) && String(agendamento.status) === 'agendado') {
       const autoConfirm = barbearia.obterConfiguracao(legacyEmpresaId)?.confirmacaoAutomaticaAtiva === true;
-      const plano = autoConfirm ? confirmationPlan(dataHora, new Date()) : { enabled: false };
+      const ehOrigemWhatsapp = agendamento.origem === 'whatsapp_ia';
+      const plano = autoConfirm && !ehOrigemWhatsapp ? confirmationPlan(dataHora, new Date()) : { enabled: false };
       if (plano.enabled) {
         barbearia.inicializarConfirmacaoAutomatica(legacyEmpresaId, agendamento.id, { lojaId });
         // O segundo aviso sai 2h15 antes; o prazo de 1h termina 1h15 antes do horário.
@@ -571,21 +573,21 @@ export async function enqueueDueAppointmentReminders() {
 export function mensagem(snapshot, agendamento, cliente, evento, persona = null) {
   const servico = snapshot.servicos.find((item) => item.id === agendamento.servicoId)?.nome || 'atendimento';
   const profissional = snapshot.profissionais.find((item) => item.id === agendamento.profissionalId)?.nome || 'profissional da equipe';
-  if (evento === EVENTO_CONFIRMACAO_DIA) {
-    const quando = formatarQuando(agendamento);
-    return `Olá, ${limpo(cliente.nome, 80)}. Ainda não recebemos a confirmação do seu agendamento ${quando} (${servico}). Responda CONFIRMO em até 1 hora para manter o horário. Sem resposta, o agendamento será cancelado automaticamente e o horário liberado para outra pessoa. Para mudar, responda REMARCAR. Para não receber avisos de atendimento, responda SAIR.`;
-  }
+  const nomeLimpo = cleanCustomerDisplayName(cliente?.nome || '', { firstNameOnly: true }) || 'Amigo';
   if (persona) {
     // Mesma informação e os mesmos comandos (CONFIRMO, REMARCAR, CANCELO, SAIR), na voz curta da persona.
     return personaAppointmentMessage(persona, {
-      evento, nome: cliente.nome, servico, profissional,
+      evento, nome: nomeLimpo, servico, profissional,
       quando: quandoCurto(agendamento), quandoRelativo: quandoRelativo(agendamento),
       loja: snapshot.configuracao?.nomePublico,
     });
   }
   const quando = formatarQuando(agendamento);
-  const cabecalho = `Olá, ${limpo(cliente.nome, 80)}.`;
+  const cabecalho = `Olá, ${nomeLimpo}.`;
   const rodape = 'Esta é uma mensagem de atendimento. Para não receber estes avisos, responda SAIR.';
+  if (evento === EVENTO_CONFIRMACAO_DIA) {
+    return `${cabecalho} Ainda não recebemos a confirmação do seu agendamento ${quando} (${servico}). Responda CONFIRMO em até 1 hora para manter o horário. Sem resposta, o agendamento será cancelado automaticamente e o horário liberado para outra pessoa. Para mudar, responda REMARCAR. ${rodape}`;
+  }
   if (evento === 'cancelado' && agendamento.motivoCancelamento === 'falta_confirmacao') return `${cabecalho} Seu agendamento ${quando} foi cancelado automaticamente porque não recebemos a confirmação dentro de 1 hora. O horário foi liberado. Entre em contato com a equipe para escolher outro horário. ${rodape}`;
   if (evento === 'cancelado') return `${cabecalho} Seu agendamento na ${limpo(snapshot.configuracao.nomePublico || 'barbearia', 120)} foi cancelado. Se precisar, entre em contato para escolher outro horário. ${rodape}`;
   if (evento === 'remarcado') return `${cabecalho} Seu agendamento foi remarcado para ${quando}. Serviço: ${servico}. Profissional: ${profissional}. ${rodape}`;

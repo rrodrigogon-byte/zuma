@@ -1,4 +1,5 @@
 import { serviceWithProfessional } from './whatsapp-ai-normalize.js';
+import { cleanCustomerDisplayName } from './whatsapp-ai-normalize.js';
 // ============================================================================
 // PERSONA DO ATENDENTE (ex.: T-Rex, da Barbearia Dino)
 //
@@ -472,7 +473,7 @@ ${SUPPLEMENTS_SAFETY_BLOCK}`;
 // Lembretes de agenda na voz da persona (fila governada de notificações).
 // --------------------------------------------------------------------------
 export function personaAppointmentMessage(persona, { evento, nome, servico, profissional, quando, quandoRelativo, loja }) {
-  const primeiro = clean(nome, 80).split(' ')[0] || '';
+  const primeiro = cleanCustomerDisplayName(nome, { firstNameOnly: true }) || clean(nome, 80).split(' ')[0] || '';
   const oi = primeiro ? `Opa, ${primeiro}!` : 'Opa!';
   const rodape = 'Pra não receber avisos, responda SAIR.';
   // "Corte com Dino" + "Dino" saía "Corte com Dino com Dino" (lembrete de 15/10).

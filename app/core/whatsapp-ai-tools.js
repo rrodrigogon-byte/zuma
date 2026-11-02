@@ -9,7 +9,7 @@ import { quoteAvailableShipping } from './commerce-shipping.js';
 import { requiresPickupOnly, PICKUP_ONLY_ERROR_CODE } from './commerce-pickup-rules.js';
 import { productDetails, productCard } from './whatsapp-product-card.js';
 import { createPaymentAttempt, publicPaymentMethods } from './payment-adapters.js';
-import { formatPersonName, matchAgendaSlot, normalizeAgendaDate, serviceWithProfessional } from './whatsapp-ai-normalize.js';
+import { cleanCustomerDisplayName, formatPersonName, matchAgendaSlot, normalizeAgendaDate, serviceWithProfessional } from './whatsapp-ai-normalize.js';
 // Agenda única: quando a empresa usa a agenda da barbearia (a do admin e do link
 // público), a IA lê e grava nela; senão segue o caminho PostgreSQL antigo.
 import {
@@ -750,7 +750,8 @@ function requireCustomerName(...candidates) {
   const last = candidates[candidates.length - 1];
   const options = last && typeof last === 'object' ? candidates.pop() : {};
   for (const candidate of candidates) {
-    const name = cleanText(candidate, 100);
+    const raw = cleanText(candidate, 100);
+    const name = cleanCustomerDisplayName(raw);
     // Grava "Rodrigo Goncalves", não "rodrigo goncalves" ou "RODRIGO GONCALVES".
     if (!isGenericCustomerName(name)) return formatPersonName(name);
   }
@@ -1643,10 +1644,12 @@ export function findOwnAppointment(appointments = [], ref = '') {
     const norm = alvo.replace(/^#/, '').toLowerCase();
     const achado = lista.find((item) => item.id === alvo)
       || lista.find((item) => String(item.codigo || '').toLowerCase() === norm)
-      || lista.find((item) => String(item.id || '').toLowerCase().endsWith(norm) && norm.length >= 4);
+      || lista.find((item) => String(item.id || '').toLowerCase().endsWith(norm) && norm.length >= 4)
+      || lista.find((item) => String(item.servico?.nome || '').toLowerCase().includes(norm))
+      || lista.find((item) => String(item.profissional?.nome || '').toLowerCase().includes(norm));
     if (achado) return achado;
   }
-  return lista.length === 1 ? lista[0] : null;
+  return lista.length === 1 ? lista[0] : (lista.length > 0 && !alvo ? lista[0] : null);
 }
 
 function appointmentNotFound(appointments = []) {
@@ -1660,7 +1663,7 @@ function appointmentNotFound(appointments = []) {
 async function toolPrepareReschedule(context, args = {}) {
   const scope = contextScope(context);
   const date = normalizeAgendaDate(args.date, localDateIso()) || cleanText(args.date, 10);
-  const appointments = await listWhatsappCustomerAppointments(scope, { includePast: false, limit: 20 });
+  const appointments = await listWhatsappCustomerAppointments(scope, { includePast: false, limit: 20, toleranceHours: 6 });
   const appointment = findOwnAppointment(appointments, cleanText(args.appointmentId, 80));
   if (!appointment) throw appointmentNotFound(appointments);
   const appointmentId = appointment.id;
@@ -1677,12 +1680,14 @@ async function toolPrepareReschedule(context, args = {}) {
 
 async function toolPrepareCancellation(context, args = {}) {
   const scope = contextScope(context);
-  const appointments = await listWhatsappCustomerAppointments(scope, { includePast: false, limit: 20 });
+  const appointments = await listWhatsappCustomerAppointments(scope, { includePast: false, limit: 20, toleranceHours: 6 });
   const appointment = findOwnAppointment(appointments, cleanText(args.appointmentId, 80));
   if (!appointment) throw appointmentNotFound(appointments);
   const appointmentId = appointment.id;
   return savePreparedAction(scope, 'cancelamento', { appointmentId }, `Cancelamento de ${appointment.servico.nome} com ${appointment.profissional.nome}, ${appointment.dataAgenda && appointment.horaLocal ? friendlyWhen(appointment.dataAgenda, appointment.horaLocal) : new Intl.DateTimeFormat('pt-BR', { timeZone: AGENDA_TZ, dateStyle: 'short', timeStyle: 'short' }).format(new Date(appointment.dataHora))}.`);
 }
+
+export { toolPrepareCancellation };
 
 // ---------------------------------------------------------------------------
 // IA QUE VENDE (agenda da barbearia): saldo do plano, clube e produto ligado ao

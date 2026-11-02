@@ -17,6 +17,7 @@ import {
   enqueteEmTexto,
   normalizarEnquete,
   storeFactsText,
+  toolPrepareCancellation,
   WHATSAPP_AI_TOOL_DECLARATIONS,
 } from './whatsapp-ai-tools.js';
 import { ferramentasExtrasWhatsappAi, notificarMensagemWhatsappAi } from './whatsapp-ai-extensoes.js';
@@ -621,10 +622,11 @@ async function sendStickerAfterText(channel, session, output, tenant, persona) {
   }
 }
 
-function handoffIntent(text) {
+export function handoffIntent(text) {
   const value = plain(text);
   if (prefersSelfService(text)) return false;
-  return /\b(atendente|humano|pessoa|falar com alguem|reclamacao|reclamar)\b/.test(value);
+  if (/\b(?:qualquer|outra|outras)\s+pessoas?\b/.test(value)) return false;
+  return /\b(atendente|humano|falar com alguem|reclamacao|reclamar)\b|\b(?:uma\s+)?pessoa\s+de\s+verdade\b|\bfalar\s+com\s+(?:uma\s+)?pessoa\b/.test(value);
 }
 
 function resumeIntent(text) {
@@ -1680,6 +1682,21 @@ async function deterministicResponseCore(task, channel, session, message) {
     });
     await putSessionInHandoff(session, 'security:prompt_injection', 5);
     return { text: 'Não posso atender a esse pedido com segurança. Encaminhei a conversa para a equipe humana.', kind: 'security_handoff' };
+  }
+
+  if (!session.acao_pendente && isCancellationRequest(message.text) && session.status !== 'humano') {
+    try {
+      const prepared = await toolPrepareCancellation(context, {});
+      if (prepared?.ok && prepared.acao) {
+        session.acao_pendente = { actionId: prepared.acao.id, type: prepared.acao.tipo, summary: prepared.acao.resumo, mostrado: true, preparadoEm: new Date().toISOString() };
+        await db.query(`UPDATE whatsapp_ai_sessions SET acao_pendente = acao_pendente || '{"mostrado":true}'::jsonb WHERE id = $1 AND empresa_id = $2 AND loja_id = $3`, [session.id, session.empresa_id, session.loja_id]);
+        const lead = persona ? 'Tranquilo, acontece! Já preparei o cancelamento do seu horário:' : 'Foi mal pelo imprevisto! Já preparei o cancelamento do seu horário:';
+        return {
+          text: composeReplyWithNewAction(lead, session.acao_pendente, persona),
+          kind: 'cancellation_prepared',
+        };
+      }
+    } catch (_) {}
   }
 
   // "Vc é robô?": resposta verdadeira e determinística (não depende do modelo). Vem

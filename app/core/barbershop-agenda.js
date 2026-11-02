@@ -52,6 +52,22 @@ function chaveUnidade(scope = {}) {
   return limpo(scope.lojaId, 120);
 }
 
+function instanteAgendamento(item) {
+  if (item?.dataAgenda && item?.horaLocal) {
+    const dataAgenda = String(item.dataAgenda).slice(0, 10);
+    const horaLocal = String(item.horaLocal).slice(0, 5);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(dataAgenda) && /^\d{2}:\d{2}$/.test(horaLocal)) {
+      return new Date(`${dataAgenda}T${horaLocal}:00-04:00`).valueOf();
+    }
+  }
+  const raw = String(item?.dataHora || '');
+  if (/Z|[+-]\d{2}:\d{2}$/.test(raw)) return new Date(raw).valueOf();
+  if (/^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}/.test(raw)) {
+    return new Date(`${raw.replace(' ', 'T').slice(0, 19)}-04:00`).valueOf();
+  }
+  return new Date(raw).valueOf();
+}
+
 function exigirEscopoOperacional(scope = {}, input = {}, exigirServico = false) {
   const empresa = chaveEmpresa(scope);
   const loja = chaveUnidade(scope);
@@ -522,17 +538,18 @@ function criarNaAgendaDaBarbearia(scope, input = {}) {
   }
 }
 
-function agendamentosDoTelefone(empresa, phone, { includePast = false, lojaId } = {}) {
+function agendamentosDoTelefone(empresa, phone, { includePast = false, lojaId, toleranceHours = 4 } = {}) {
   const chave = phoneMatchKey(phone);
   const unidade = limpo(lojaId, 120);
   if (!chave || !unidade) return [];
   const agora = Date.now();
   const diaHoje = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Cuiaba' }).format(new Date(agora));
+  const limitePassado = includePast ? 0 : agora - (Number(toleranceHours) || 0) * 3600000;
   return barbearia.listarAgendamentos(empresa, {})
     .filter((item) => String(item.lojaId || '') === unidade)
     .filter((item) => phoneMatchKey(item.clienteTelefone) === chave)
     .filter((item) => !['cancelado', 'nao_compareceu'].includes(item.status))
-    .filter((item) => includePast || item.dataAgenda === diaHoje || new Date(item.dataHora).valueOf() >= agora);
+    .filter((item) => includePast || item.dataAgenda === diaHoje || instanteAgendamento(item) >= limitePassado);
 }
 
 function horarioLocalLegivel(dataHora) {
@@ -541,13 +558,13 @@ function horarioLocalLegivel(dataHora) {
   return new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Cuiaba', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(data).replace(',', ' às');
 }
 
-export async function listCustomerAppointments(scope, { includePast = false, limit = 8 } = {}) {
+export async function listCustomerAppointments(scope, { includePast = false, limit = 8, toleranceHours = 4 } = {}) {
   exigirEscopoOperacional(scope);
   if (await agendaSource(scope) === 'postgres') return pgCustomerAppointments(scope, { includePast, limit });
   const empresa = chaveEmpresa(scope);
   const servicos = new Map(barbearia.listarServicos(empresa, { incluirInativos: true }).map((item) => [item.id, item]));
   const profissionais = new Map(barbearia.listarProfissionais(empresa, { incluirInativos: true }).map((item) => [item.id, item]));
-  return agendamentosDoTelefone(empresa, scope.phone, { includePast, lojaId: scope.lojaId })
+  return agendamentosDoTelefone(empresa, scope.phone, { includePast, lojaId: scope.lojaId, toleranceHours })
     .slice(0, Math.min(20, Math.max(1, Number(limit) || 8)))
     .map((item) => ({
       id: item.id,
@@ -588,7 +605,7 @@ export async function confirmAttendance(scope, appointmentId) {
   const agendamento = agendamentoDoContato(empresa, scope.phone, appointmentId, scope.lojaId);
   const diaHoje = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Cuiaba' }).format(new Date());
   const ehHoje = agendamento.dataAgenda === diaHoje;
-  if (!ehHoje && new Date(agendamento.dataHora).valueOf() < Date.now() - 30 * 60 * 1000) throw new SchedulingError('este horário já passou', 'APPOINTMENT_PAST');
+  if (!ehHoje && instanteAgendamento(agendamento) < Date.now() - 30 * 60 * 1000) throw new SchedulingError('este horário já passou', 'APPOINTMENT_PAST');
   const atualizado = agendamento.status === 'confirmado'
     ? agendamento
     : barbearia.alterarStatusAgendamento(empresa, agendamento.id, 'confirmado', { lojaId: scope.lojaId, observacoes: limpo(`${agendamento.observacoes || ''} · Presença confirmada pelo cliente no WhatsApp`.replace(/^ · /, ''), 600) });
