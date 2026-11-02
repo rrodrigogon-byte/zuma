@@ -232,19 +232,21 @@ function Loading() {
 // `clube`: clubes e academias têm telas próprias (não as da barbearia nem as do evento).
 // Compras: Dino segue na revenda da barbearia; demais empresas usam Estoque e compras.
 function ComprasPorMarca() {
-  const { user, empresaAtiva } = useAuth()
-  if (isTenantScope(user, empresaAtiva) && isDinoBrandContext(empresaAtiva)) return <Navigate to="/admin/barbearia-erp?area=catalogo&tab=Estoque+de+revenda" replace />
+  const { user, empresaAtiva, empresasAcessiveis } = useAuth()
+  const empresaEfetiva = empresaAtiva || empresasAcessiveis?.[0] || null
+  if (isTenantScope(user, empresaEfetiva) && isDinoBrandContext(empresaEfetiva)) return <Navigate to="/admin/barbearia-erp?area=catalogo&tab=Estoque+de+revenda" replace />
   // sem empresa ativa não há estoque nem compras (a tela antiga chamava rotas que não existem mais)
-  return isTenantScope(user, empresaAtiva) ? <Layout><Suprimentos abaInicial="compras" /></Layout> : <Layout><EscolhaEmpresa modulo="Estoque e compras" /></Layout>
+  return isTenantScope(user, empresaEfetiva) ? <Layout><Suprimentos abaInicial="compras" /></Layout> : <Layout><EscolhaEmpresa modulo="Estoque e compras" /></Layout>
 }
 
 function TenantAware({ tenant, legacy, stallone, clube }) {
-  const { user, empresaAtiva } = useAuth()
+  const { user, empresaAtiva, empresasAcessiveis } = useAuth()
+  const empresaEfetiva = empresaAtiva || empresasAcessiveis?.[0] || null
   const hostDino = typeof window !== 'undefined' && ehHostDino(window.location.hostname)
-  if (stallone && brandFromContext(empresaAtiva) === 'stallone') return stallone
+  if (stallone && brandFromContext(empresaEfetiva) === 'stallone') return stallone
   if (tenant && hostDino) return tenant
-  if (clube && !isDinoBrandContext(empresaAtiva) && !isStalloneBrandContext(empresaAtiva) && isClubeBrandContext(empresaAtiva)) return clube
-  return isTenantScope(user, empresaAtiva) ? tenant : legacy
+  if (clube && !isDinoBrandContext(empresaEfetiva) && !isStalloneBrandContext(empresaEfetiva) && isClubeBrandContext(empresaEfetiva)) return clube
+  return isTenantScope(user, empresaEfetiva) ? tenant : legacy
 }
 
 export default function App() {
@@ -287,7 +289,7 @@ export default function App() {
           <Route path="/admin/fichas-tecnicas" element={<TenantAware tenant={<Layout><Suprimentos abaInicial="fichas" /></Layout>} legacy={<Layout><EscolhaEmpresa modulo="Fichas técnicas" /></Layout>} />} />
           <Route path="/admin/modificadores-combos" element={<Layout><ModificadoresCombos /></Layout>} />
           <Route path="/admin/mesas"        element={<Layout><Mesas /></Layout>} />
-          <Route path="/admin/reservas" element={<TenantAware tenant={<Layout><ReservasFilas /></Layout>} legacy={<Layout><EmImplantacao modulo="Reservas e fila de espera" /></Layout>} />} />
+          <Route path="/admin/reservas" element={<TenantAware tenant={<Layout><ReservasFilas /></Layout>} legacy={<Layout><EscolhaEmpresa modulo="Reservas e fila de espera" /></Layout>} />} />
           <Route path="/admin/kds"          element={<Layout><KDSConfiguracao /></Layout>} />
           <Route path="/admin/socios"       element={<Layout><Socios /></Layout>} />
           <Route path="/admin/clube"        element={<Navigate to="/admin/clube/recepcao" replace />} />
@@ -329,7 +331,7 @@ export default function App() {
           <Route path="/admin/ligas"          element={<Layout><AdminLigas /></Layout>} />
           <Route path="/admin/contatos"       element={<Layout><Contatos /></Layout>} />
           <Route path="/admin/lojas"          element={<Layout><Lojas /></Layout>} />
-          <Route path="/admin/notas" element={<TenantAware tenant={<Layout><Fiscal abaInicial="documentos" /></Layout>} legacy={<Layout><EmImplantacao modulo="Central fiscal (NF-e e NFC-e)" /></Layout>} />} />
+          <Route path="/admin/notas" element={<TenantAware tenant={<Layout><Fiscal abaInicial="documentos" /></Layout>} legacy={<Layout><EscolhaEmpresa modulo="Central fiscal (NF-e e NFC-e)" /></Layout>} />} />
           <Route path="/admin/clientes"       element={<Layout><Clientes /></Layout>} />
           <Route path="/admin/clientes-360"   element={<Layout><Customer360 /></Layout>} />
           <Route path="/admin/clientes-360/:ref" element={<Layout><Customer360 /></Layout>} />
@@ -337,24 +339,25 @@ export default function App() {
           <Route path="/admin/contas-receber" element={<Layout><FinanceiroAuto aba="receber" antigo={<ContasReceber />} /></Layout>} />
           <Route path="/admin/contas-pagar" element={<Layout><FinanceiroAuto aba="pagar" antigo={<Navigate to="/admin/financeiro" replace />} /></Layout>} />
           <Route path="/admin/fechamento-diario" element={<Layout><FinanceiroAuto aba="fechamento" antigo={<FechamentoDiario />} /></Layout>} />
-          <Route path="/admin/pdv-offline" element={<TenantAware tenant={<Layout><PDVOffline /></Layout>} legacy={<Layout><EmImplantacao modulo="PDV offline" /></Layout>} />} />
+          <Route path="/admin/pdv-offline" element={<TenantAware tenant={<Layout><PDVOffline /></Layout>} legacy={<Layout><EscolhaEmpresa modulo="PDV offline" /></Layout>} />} />
           <Route path="/admin/erp"            element={<Layout><ERP /></Layout>} />
           <Route path="/admin/oficina"         element={<Layout><Oficina /></Layout>} />
           <Route path="/admin/agropecuaria"    element={<Layout><Agropecuaria /></Layout>} />
           <Route path="/admin/varejo"          element={<Layout><Varejo /></Layout>} />
           <Route path="/admin/compras"         element={<ComprasPorMarca />} />
-          <Route path="/admin/fiscal" element={<TenantAware tenant={<Layout><Fiscal abaInicial="documentos" /></Layout>} legacy={<Layout><EmImplantacao modulo="Notas fiscais" /></Layout>} />} />
-          <Route path="/admin/fiscal/documentos" element={<TenantAware tenant={<Layout><Fiscal abaInicial="documentos" /></Layout>} legacy={<Layout><EmImplantacao modulo="Notas fiscais" /></Layout>} />} />
-          <Route path="/admin/fiscal/numeracao" element={<TenantAware tenant={<Layout><Fiscal abaInicial="numeracao" /></Layout>} legacy={<Layout><EmImplantacao modulo="Numeração fiscal" /></Layout>} />} />
-          <Route path="/admin/fiscal/sped" element={<TenantAware tenant={<Layout><Fiscal abaInicial="sped" /></Layout>} legacy={<Layout><EmImplantacao modulo="SPED fiscal" /></Layout>} />} />
-          <Route path="/admin/fiscal/inutilizacao" element={<TenantAware tenant={<Layout><Fiscal abaInicial="inutilizacao" /></Layout>} legacy={<Layout><EmImplantacao modulo="Inutilização de numeração" /></Layout>} />} />
-          <Route path="/admin/fiscal/config" element={<TenantAware tenant={<Layout><Fiscal abaInicial="situacao" /></Layout>} legacy={<Layout><EmImplantacao modulo="Configuração de NF-e e NFC-e" /></Layout>} />} />
-          <Route path="/admin/fiscal/classificacao" element={<TenantAware tenant={<Layout><Fiscal abaInicial="classificacao" /></Layout>} legacy={<Layout><EmImplantacao modulo="Classificação fiscal" /></Layout>} />} />
+          <Route path="/admin/fiscal" element={<TenantAware tenant={<Layout><Fiscal abaInicial="documentos" /></Layout>} legacy={<Layout><EscolhaEmpresa modulo="Notas fiscais" /></Layout>} />} />
+          <Route path="/admin/fiscal/documentos" element={<TenantAware tenant={<Layout><Fiscal abaInicial="documentos" /></Layout>} legacy={<Layout><EscolhaEmpresa modulo="Notas fiscais" /></Layout>} />} />
+          <Route path="/admin/fiscal/numeracao" element={<TenantAware tenant={<Layout><Fiscal abaInicial="numeracao" /></Layout>} legacy={<Layout><EscolhaEmpresa modulo="Numeração fiscal" /></Layout>} />} />
+          <Route path="/admin/fiscal/sped" element={<TenantAware tenant={<Layout><Fiscal abaInicial="sped" /></Layout>} legacy={<Layout><EscolhaEmpresa modulo="SPED fiscal" /></Layout>} />} />
+          <Route path="/admin/fiscal/contador" element={<TenantAware tenant={<Layout><Fiscal abaInicial="contador" /></Layout>} legacy={<Layout><EscolhaEmpresa modulo="Fechamento Contábil" /></Layout>} />} />
+          <Route path="/admin/fiscal/inutilizacao" element={<TenantAware tenant={<Layout><Fiscal abaInicial="inutilizacao" /></Layout>} legacy={<Layout><EscolhaEmpresa modulo="Inutilização de numeração" /></Layout>} />} />
+          <Route path="/admin/fiscal/config" element={<TenantAware tenant={<Layout><Fiscal abaInicial="situacao" /></Layout>} legacy={<Layout><EscolhaEmpresa modulo="Configuração de NF-e e NFC-e" /></Layout>} />} />
+          <Route path="/admin/fiscal/classificacao" element={<TenantAware tenant={<Layout><Fiscal abaInicial="classificacao" /></Layout>} legacy={<Layout><EscolhaEmpresa modulo="Classificação fiscal" /></Layout>} />} />
           <Route path="/admin/loja-moda"       element={<Layout><LojaModa /></Layout>} />
           <Route path="/admin/barbearia-erp"   element={<Layout><BarbeariaERP /></Layout>} />
           <Route path="/admin/barbearia"        element={<Layout><Barbearia /></Layout>} />
           <Route path="/admin/metas-roleta"    element={<Layout><DinoMetasRoletaPanel /></Layout>} />
-          <Route path="/admin/supermercado" element={<TenantAware tenant={<Layout><VarejoUnidade /></Layout>} legacy={<Layout><EmImplantacao modulo="Supermercado" /></Layout>} />} />
+          <Route path="/admin/supermercado" element={<TenantAware tenant={<Layout><VarejoUnidade /></Layout>} legacy={<Layout><EscolhaEmpresa modulo="Supermercado" /></Layout>} />} />
           <Route path="/admin/omnichannel"      element={<Layout><CanaisFidelidade /></Layout>} />
           <Route path="/admin/pdv-erp"         element={<PDVUnificado />} />
         </Route>

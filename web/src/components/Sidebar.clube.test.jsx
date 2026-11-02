@@ -62,8 +62,7 @@ describe('menu do clube (AGRO OPEN TTC)', () => {
     const { links } = render({ id: 'x', nome: 'Supermercado Bom Preço' })
     expect(links).toContain('/admin/ecommerce')
     expect(links).toContain('/admin/torneios')
-    // backend ainda não montado em produção: fora do menu para todos
-    expect(links).not.toContain('/admin/oficina')
+    expect(links).toContain('/admin/oficina') // onda 5: oficina ligada em produção
     expect(links).toContain('/admin/supermercado') // onda 5: varejo no ar
     expect(links).toContain('/admin/fiscal/config') // onda 3: fiscal no ar (homologação)
     expect(links).toContain('/admin/contas-receber')
@@ -107,7 +106,7 @@ describe('Backoffice da plataforma', () => {
     const { links, textos } = ler()
     expect(links).toContain('/admin/supermercado')
     expect(links).toContain('/admin/oficina')
-    expect(textos).toContain('em implantação')
+    expect(textos).toContain('Oficina mecânica')
   })
 
   it('usuário de empresa não vê a seção', () => {

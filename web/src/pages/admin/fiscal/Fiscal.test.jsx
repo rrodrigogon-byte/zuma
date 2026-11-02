@@ -462,4 +462,33 @@ describe('Fiscal (homologação)', () => {
     await act(async () => { await botoes(tree, 'Gerar EFD-Contribuições')[0].props.onClick() })
     expect(mocks.api.post).toHaveBeenLastCalledWith('/api/admin/fiscal/sped/efd-contribuicoes', { ano: 2026, mes: 10 })
   })
+
+  it('SPED e Contador: exibe apuração contábil por CFOP e baixa SPED Fiscal, SPED Contribuições, CSV e Pacote de XMLs', async () => {
+    mocks.api.blob.mockResolvedValue(new Blob(['|0000|'], { type: 'text/plain' }))
+    const tree = await montar('contador', {
+      '/api/admin/fiscal/contador/resumo': {
+        competencia: '2026-11',
+        totais: {
+          autorizados: 12,
+          valorAutorizado: 2450,
+          porModelo: { '65': { qtd: 10, valor: 1550, canceladas: 1 }, '55': { qtd: 1, valor: 600, canceladas: 0 }, nfse: { qtd: 1, valor: 300, canceladas: 0 } },
+          tributos: { baseIcms: 1550, valorIcms: 263.5, valorPis: 34.87, valorCofins: 160.55, valorIss: 15 },
+        },
+        porCfop: [
+          { cfop: '5102', cstOuCsosn: '102', qtdItens: 18, valorContabil: 1550, baseIcms: 1550, valorIcms: 263.5, valorPis: 25.57, valorCofins: 117.8 },
+        ],
+      },
+      '/api/admin/fiscal/contador/pacote': { competencia: '2026-11', totalXmls: 12, xmls: [] },
+    })
+    expect(texto(tree)).toContain('SPED Fiscal, EFD Contribuições e Fechamento para o Contador')
+    expect(texto(tree)).toContain('5102')
+    await act(async () => { await botoes(tree, 'Baixar SPED Fiscal (EFD ICMS/IPI)')[0].props.onClick() })
+    expect(mocks.api.blob).toHaveBeenCalledWith(expect.stringContaining('/api/admin/fiscal/contador/sped-fiscal?competencia='))
+    await act(async () => { await botoes(tree, 'Baixar SPED Contribuições (PIS/COFINS)')[0].props.onClick() })
+    expect(mocks.api.blob).toHaveBeenCalledWith(expect.stringContaining('/api/admin/fiscal/contador/sped-contribuicoes?competencia='))
+    await act(async () => { await botoes(tree, 'Exportar CSV (Domínio / Questor)')[0].props.onClick() })
+    expect(mocks.api.blob).toHaveBeenCalledWith(expect.stringContaining('/api/admin/fiscal/contador/csv?competencia='))
+    await act(async () => { await botoes(tree, 'Baixar Pacote de XMLs + Resumo')[0].props.onClick() })
+    expect(mocks.api.get).toHaveBeenCalledWith(expect.stringContaining('/api/admin/fiscal/contador/pacote?competencia='))
+  })
 })

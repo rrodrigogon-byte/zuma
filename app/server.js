@@ -58,6 +58,7 @@ import { iniciarRotinaFiscal } from './modules/fiscal/lote.js';
 import { createSalaoAdminRouter } from './modules/salao/rotas.js';
 import { createPdvOfflineRouter } from './modules/pdv-offline/rotas.js';
 import { createVarejoAdminRouter } from './modules/varejo/rotas.js';
+import { createVerticaisRouter } from './modules/verticais-kytto.js';
 import { createBarAdminRouter } from './modules/bar/rotas-multiempresa.js';
 import * as barService from './modules/bar/servico.js';
 import { responderErro as responderErroBarra } from './modules/acesso/banco.js';
@@ -1630,6 +1631,12 @@ app.use('/api/webhooks', createWhatsappAiWebhookRouter());
   });
   console.log('Commerce Core PostgreSQL habilitado (host, alias público e backoffice multiempresa)');
 }
+
+// Módulos verticais multi-empresa (Oficina, Varejo Geral, Loja de Moda, Agropecuária/Petshop)
+app.use('/api/v1', authMiddleware, createVerticaisRouter({
+  getDb: db,
+  saveDb: save,
+}));
 
 // ---- helpers de chave ----
 function clearDownstream(rounds, r, idx){

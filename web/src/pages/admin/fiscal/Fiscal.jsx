@@ -13,7 +13,7 @@ import '../dino/dino-admin.css'
 // O ambiente é do emitente: homologação (sem valor fiscal) ou produção, só depois que o servidor
 // libera a empresa (FISCAL_PRODUCAO_EMPRESAS).
 const BASE = '/api/admin/fiscal'
-const ABAS = [['situacao', 'Emitente e certificado'], ['classificacao', 'Classificação'], ['documentos', 'Documentos'], ['numeracao', 'Numeração'], ['inutilizacao', 'Inutilização'], ['sped', 'SPED']]
+const ABAS = [['situacao', 'Emitente e certificado'], ['classificacao', 'Classificação'], ['documentos', 'Documentos'], ['numeracao', 'Numeração'], ['inutilizacao', 'Inutilização'], ['sped', 'SPED'], ['contador', 'Fechamento Contábil']]
 const STATUS = {
   rascunho: ['Rascunho', 'muted'], enviando: ['Enviando', 'info'], autorizado: ['Autorizado', 'success'], rejeitado: ['Rejeitado', 'danger'],
   falha_comunicacao: ['Falha de comunicação', 'warning'], validado_localmente: ['XML validado (não enviado)', 'info'], cancelado: ['Cancelado', 'muted'],
@@ -61,6 +61,7 @@ export default function Fiscal({ abaInicial = 'situacao' }) {
     {aba === 'numeracao' && <Numeracao toast={toast} />}
     {aba === 'inutilizacao' && <Inutilizacao toast={toast} />}
     {aba === 'sped' && <Sped toast={toast} />}
+    {aba === 'contador' && <Contador toast={toast} />}
   </div>
 }
 
@@ -1033,4 +1034,152 @@ function Inutilizacao({ toast }) {
       { key: 's', label: 'Situação', render: (i) => <div><Badge tone={STATUS_INUT[i.status]?.[1]}>{STATUS_INUT[i.status]?.[0] || i.status}</Badge>{i.protocolo && <div className="dadm-muted">Protocolo {i.protocolo}</div>}{i.mensagens?.length > 0 && <div className="dadm-muted">{i.mensagens.map((m) => m.mensagem).join(' · ')}</div>}</div> },
     ]} />
   </section>
+}
+
+function Contador({ toast }) {
+  const competenciaPadrao = () => {
+    const d = new Date()
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+  }
+  const [competencia, setCompetencia] = useState(competenciaPadrao)
+  const [resumo, setResumo] = useState(null)
+  const [carregando, setCarregando] = useState(false)
+  const [baixando, setBaixando] = useState('')
+
+  const carregar = useCallback(async () => {
+    setCarregando(true)
+    try {
+      const r = await api.get(`${BASE}/contador/resumo?competencia=${encodeURIComponent(competencia)}`)
+      setResumo(r)
+    } catch (error) {
+      toast(error.message, 'error')
+    } finally {
+      setCarregando(false)
+    }
+  }, [competencia, toast])
+
+  useEffect(() => { carregar() }, [carregar])
+
+  async function baixarArquivo(rota, nomePadrao, mime = 'text/plain;charset=utf-8') {
+    if (baixando) return
+    setBaixando(rota)
+    try {
+      const blob = await api.blob(`${BASE}/contador/${rota}?competencia=${encodeURIComponent(competencia)}`)
+      const url = URL.createObjectURL(blob instanceof Blob ? blob : new Blob([blob], { type: mime }))
+      const a = document.createElement('a')
+      a.href = url
+      a.download = nomePadrao
+      a.click()
+      setTimeout(() => URL.revokeObjectURL(url), 1000)
+      toast(`Arquivo ${nomePadrao} gerado com sucesso.`, 'success')
+    } catch (error) {
+      toast(error.message, 'error')
+    } finally {
+      setBaixando('')
+    }
+  }
+
+  async function baixarPacoteXml() {
+    if (baixando) return
+    setBaixando('pacote')
+    try {
+      const p = await api.get(`${BASE}/contador/pacote?competencia=${encodeURIComponent(competencia)}`)
+      const url = URL.createObjectURL(new Blob([JSON.stringify(p, null, 2)], { type: 'application/json' }))
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `pacote-contabil-${competencia}.json`
+      a.click()
+      setTimeout(() => URL.revokeObjectURL(url), 1000)
+      toast(`Pacote contábil com ${p.totalXmls || 0} XML(s) exportado.`, 'success')
+    } catch (error) {
+      toast(error.message, 'error')
+    } finally {
+      setBaixando('')
+    }
+  }
+
+  const tot = resumo?.totais || {}
+  const trib = tot.tributos || {}
+  const mod = tot.porModelo || {}
+
+  return <div style={{ display: 'grid', gap: 16 }}>
+    <section className="dadm-card">
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 14 }}>
+        <div>
+          <h2>SPED Fiscal, EFD Contribuições e Fechamento para o Contador</h2>
+          <p className="dadm-muted" style={{ margin: '4px 0 0' }}>
+            Exporte os arquivos oficiais do SPED Fiscal (ICMS/IPI), EFD Contribuições (PIS/COFINS), planilha contábil (Domínio / Questor / Alterdata) e pacote de XMLs do mês.
+          </p>
+        </div>
+        <div className="dadm-filters" style={{ margin: 0 }}>
+          <label className="c360-field" style={{ margin: 0 }}>
+            Competência
+            <input type="month" aria-label="Competência contábil" className="c360-input" value={competencia} onChange={(e) => setCompetencia(e.target.value)} />
+          </label>
+          <button type="button" className="c360-btn ghost" disabled={carregando} onClick={carregar}>Atualizar apuração</button>
+        </div>
+      </div>
+
+      <div className="dadm-actions" style={{ flexWrap: 'wrap', gap: 10, marginBottom: 18 }}>
+        <button type="button" className="c360-btn primary" disabled={Boolean(baixando)} onClick={() => baixarArquivo('sped-fiscal', `SPED-FISCAL-${competencia}.txt`)}>
+          Baixar SPED Fiscal (EFD ICMS/IPI)
+        </button>
+        <button type="button" className="c360-btn primary" disabled={Boolean(baixando)} onClick={() => baixarArquivo('sped-contribuicoes', `SPED-CONTRIBUICOES-${competencia}.txt`)}>
+          Baixar SPED Contribuições (PIS/COFINS)
+        </button>
+        <button type="button" className="c360-btn ghost" disabled={Boolean(baixando)} onClick={() => baixarArquivo('csv', `fechamento-contabil-${competencia}.csv`, 'text/csv;charset=utf-8')}>
+          Exportar CSV (Domínio / Questor)
+        </button>
+        <button type="button" className="c360-btn ghost" disabled={Boolean(baixando)} onClick={baixarPacoteXml}>
+          Baixar Pacote de XMLs + Resumo
+        </button>
+      </div>
+
+      <div className="dadm-kpis" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(175px, 1fr))', gap: 12 }}>
+        <article>
+          <span>Total autorizado no mês</span>
+          <strong>{money(tot.valorAutorizado || 0)}</strong>
+          <small>{tot.autorizados || 0} documento(s) válido(s)</small>
+        </article>
+        <article>
+          <span>NFC-e (65) · Varejo/PDV</span>
+          <strong>{money(mod['65']?.valor || 0)}</strong>
+          <small>{mod['65']?.qtd || 0} emitida(s){mod['65']?.canceladas ? ` · ${mod['65'].canceladas} cancelada(s)` : ''}</small>
+        </article>
+        <article>
+          <span>NF-e (55) · B2B/Destinatário</span>
+          <strong>{money(mod['55']?.valor || 0)}</strong>
+          <small>{mod['55']?.qtd || 0} emitida(s){mod['55']?.canceladas ? ` · ${mod['55'].canceladas} cancelada(s)` : ''}</small>
+        </article>
+        <article>
+          <span>NFS-e · Serviços</span>
+          <strong>{money(mod.nfse?.valor || 0)}</strong>
+          <small>{mod.nfse?.qtd || 0} emitida(s){mod.nfse?.canceladas ? ` · ${mod.nfse.canceladas} cancelada(s)` : ''}</small>
+        </article>
+        <article>
+          <span>ICMS / ISS apurados</span>
+          <strong>{money((trib.valorIcms || 0) + (trib.valorIss || 0))}</strong>
+          <small>ICMS {money(trib.valorIcms || 0)} · ISS {money(trib.valorIss || 0)}</small>
+        </article>
+        <article>
+          <span>PIS / COFINS apurados</span>
+          <strong>{money((trib.valorPis || 0) + (trib.valorCofins || 0))}</strong>
+          <small>PIS {money(trib.valorPis || 0)} · COFINS {money(trib.valorCofins || 0)}</small>
+        </article>
+      </div>
+    </section>
+
+    <section className="dadm-card">
+      <h3>Resumo analítico por CFOP e CST/CSOSN (Bloco C190)</h3>
+      <Table caption="Apuração por CFOP" rows={(resumo?.porCfop || []).map((c) => ({ ...c, id: `${c.cfop}:${c.cstOuCsosn}` }))} empty="Nenhum item escriturado nesta competência." columns={[
+        { key: 'cfop', label: 'CFOP', render: (c) => <strong>{c.cfop}</strong> },
+        { key: 'cst', label: 'CST / CSOSN', render: (c) => <Badge tone="info">{c.cstOuCsosn}</Badge> },
+        { key: 'qtd', label: 'Itens', align: 'right', render: (c) => c.qtdItens },
+        { key: 'val', label: 'Valor contábil', align: 'right', render: (c) => money(c.valorContabil) },
+        { key: 'bc', label: 'Base ICMS', align: 'right', render: (c) => money(c.baseIcms) },
+        { key: 'icms', label: 'ICMS', align: 'right', render: (c) => money(c.valorIcms) },
+        { key: 'pis', label: 'PIS / COFINS', align: 'right', render: (c) => money((c.valorPis || 0) + (c.valorCofins || 0)) },
+      ]} />
+    </section>
+  </div>
 }

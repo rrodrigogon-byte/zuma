@@ -33,7 +33,8 @@ export default function Oficina() {
   const [formOS, setFormOS] = useState({
     placa: '', cliente_nome: '', cliente_telefone: '',
     marca: '', modelo: '', ano_fabricacao: '', km_entrada: '',
-    descricao_problema: '', mecanico_responsavel: ''
+    descricao_problema: '', mecanico_responsavel: '',
+    valor_pecas: '', valor_mao_obra: ''
   })
 
   const carregar = useCallback(async () => {
@@ -55,7 +56,7 @@ export default function Oficina() {
       await api.post('/api/v1/oficina/ordens', formOS)
       toast('Ordem de Serviço criada!', 'success')
       setModal(null)
-      setFormOS({ placa: '', cliente_nome: '', cliente_telefone: '', marca: '', modelo: '', ano_fabricacao: '', km_entrada: '', descricao_problema: '', mecanico_responsavel: '' })
+      setFormOS({ placa: '', cliente_nome: '', cliente_telefone: '', marca: '', modelo: '', ano_fabricacao: '', km_entrada: '', descricao_problema: '', mecanico_responsavel: '', valor_pecas: '', valor_mao_obra: '' })
       carregar()
     } catch (e) { toast(e.message, 'error') }
   }
@@ -172,6 +173,12 @@ export default function Oficina() {
                             style={{ padding: '4px 10px', borderRadius: 6, border: 'none', background: '#2D6F9E', color: '#fff', cursor: 'pointer', fontSize: 12 }}
                           >WhatsApp</button>
                         )}
+                        {os.status === 'orcamento_enviado' && (
+                          <button
+                            onClick={() => atualizarStatus(os.id, 'aprovado')}
+                            style={{ padding: '4px 10px', borderRadius: 6, border: 'none', background: '#14b87a', color: '#fff', cursor: 'pointer', fontSize: 12 }}
+                          >Aprovar</button>
+                        )}
                         {os.status === 'aprovado' && (
                           <button
                             onClick={() => atualizarStatus(os.id, 'em_execucao')}
@@ -209,6 +216,8 @@ export default function Oficina() {
                 { label: 'Nome do Cliente *', key: 'cliente_nome', placeholder: 'João Silva' },
                 { label: 'Telefone do Cliente', key: 'cliente_telefone', placeholder: '(65) 99999-9999' },
                 { label: 'Mecânico Responsável', key: 'mecanico_responsavel', placeholder: 'Carlos' },
+                { label: 'Valor Peças (R$)', key: 'valor_pecas', placeholder: '0.00', type: 'number' },
+                { label: 'Valor Mão de Obra (R$)', key: 'valor_mao_obra', placeholder: '0.00', type: 'number' },
               ].map(f => (
                 <div key={f.key}>
                   <label style={{ display: 'block', fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>{f.label}</label>

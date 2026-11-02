@@ -132,6 +132,30 @@ export default function LojaModa() {
     } catch (e) { toast(e.message, 'error') }
   }
 
+  async function receberParcelaCrediario(id) {
+    try {
+      await api.post(`/api/v1/loja-moda/crediario/${id}/pagar`, {})
+      toast('Parcela do crediário recebida!', 'success')
+      carregar()
+    } catch (e) { toast(e.message, 'error') }
+  }
+
+  async function finalizarCondicional(id, acao) {
+    try {
+      await api.post(`/api/v1/loja-moda/condicionais/${id}/finalizar`, { acao })
+      toast(acao === 'devolver' ? 'Devolução da malinha registrada!' : 'Condicional convertida em venda!', 'success')
+      carregar()
+    } catch (e) { toast(e.message, 'error') }
+  }
+
+  async function utilizarVale(id) {
+    try {
+      await api.post(`/api/v1/loja-moda/vales/${id}/utilizar`, {})
+      toast('Vale-presente utilizado!', 'success')
+      carregar()
+    } catch (e) { toast(e.message, 'error') }
+  }
+
   const valorEntrada = parseFloat(formCrediario.entrada) || 0
   const valorTotal = parseFloat(formCrediario.valor_total) || 0
   const saldoCrediario = valorTotal - valorEntrada
@@ -297,8 +321,13 @@ export default function LojaModa() {
                         </td>
                         <td style={{ padding: '12px 16px' }}>
                           <span style={{ background: atrasado ? '#e05c5c22' : '#FF6B2C22', color: atrasado ? '#e05c5c' : '#FF6B2C', padding: '3px 10px', borderRadius: 20, fontSize: 12, fontWeight: 600 }}>
-                            {atrasado ? 'Atrasado' : 'Em dia'}
+                            {saldo <= 0 ? 'Quitado' : atrasado ? 'Atrasado' : 'Em dia'}
                           </span>
+                          {saldo > 0 && (
+                            <button onClick={() => receberParcelaCrediario(c.id)} style={{ marginLeft: 8, padding: '3px 10px', borderRadius: 6, border: 'none', background: '#14b87a', color: '#fff', cursor: 'pointer', fontSize: 11, fontWeight: 600 }}>
+                              Receber Parcela
+                            </button>
+                          )}
                         </td>
                       </tr>
                     )
@@ -348,8 +377,14 @@ export default function LojaModa() {
                         <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 600 }}>{fmtR(c.valor_total || 0)}</td>
                         <td style={{ padding: '12px 16px' }}>
                           <span style={{ background: vencido ? '#e05c5c22' : '#f59e0b22', color: vencido ? '#e05c5c' : '#f59e0b', padding: '3px 10px', borderRadius: 20, fontSize: 12, fontWeight: 600 }}>
-                            {vencido ? 'Vencido' : 'Em aberto'}
+                            {c.status === 'convertido_venda' ? 'Convertido em venda' : c.status === 'devolvido' ? 'Devolvido' : vencido ? 'Vencido' : 'Em aberto'}
                           </span>
+                          {c.status === 'em_aberto' && (
+                            <>
+                              <button onClick={() => finalizarCondicional(c.id, 'converter_venda')} style={{ marginLeft: 8, padding: '3px 8px', borderRadius: 6, border: 'none', background: '#14b87a', color: '#fff', cursor: 'pointer', fontSize: 11, fontWeight: 600 }}>Converter Venda</button>
+                              <button onClick={() => finalizarCondicional(c.id, 'devolver')} style={{ marginLeft: 6, padding: '3px 8px', borderRadius: 6, border: '1px solid var(--line)', background: 'transparent', color: 'var(--fg)', cursor: 'pointer', fontSize: 11 }}>Devolver</button>
+                            </>
+                          )}
                         </td>
                       </tr>
                     )
@@ -378,6 +413,11 @@ export default function LojaModa() {
                   <div style={{ fontFamily: 'monospace', fontSize: 18, fontWeight: 700, letterSpacing: 2, marginBottom: 8 }}>{v.codigo}</div>
                   <div style={{ fontSize: 22, fontWeight: 800, color: '#FF6B2C' }}>{fmtR(v.valor || 0)}</div>
                   <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 8 }}>Emitido em {fmtDate(v.created_at)}</div>
+                  {v.status === 'ativo' && (
+                    <button onClick={() => utilizarVale(v.id)} style={{ marginTop: 10, padding: '6px 12px', borderRadius: 6, border: 'none', background: 'var(--accent)', color: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>
+                      Dar Baixa / Utilizar
+                    </button>
+                  )}
                 </div>
               ))}
             </div>

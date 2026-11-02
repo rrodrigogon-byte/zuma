@@ -12,12 +12,7 @@ import { moduloOculto, permissaoQueFalta } from './permissoes-rota.js'
 // as mostra para a administração da plataforma, sinalizadas. Ao migrar para o PostgreSQL por
 // empresa, remover daqui.
 
-export const EM_IMPLANTACAO = {
-  '/admin/agropecuaria': 'Agropecuária e petshop',
-  '/admin/loja-moda': 'Loja de moda',
-  '/admin/oficina': 'Oficina mecânica',
-  '/admin/varejo': 'Varejo geral',
-}
+export const EM_IMPLANTACAO = {}
 
 export const GLOBAIS_DO_EVENTO = [
   '/admin/torneios', '/admin/agenda', '/admin/sumula', '/admin/inscricoes', '/admin/quadras', '/admin/pontos',

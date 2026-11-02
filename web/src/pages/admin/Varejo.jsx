@@ -14,21 +14,26 @@ export default function Varejo() {
   const { toast } = useToast()
   const [tab, setTab] = useState('Orçamentos')
   const [orcamentos, setOrcamentos] = useState([])
+  const [pedidos, setPedidos] = useState([])
   const [estoques, setEstoques] = useState([])
   const [entregas, setEntregas] = useState([])
   const [loading, setLoading] = useState(true)
   const [modal, setModal] = useState(null)
   const [formOrc, setFormOrc] = useState({ cliente_nome: '', validade_dias: 7, observacoes: '', itens: [{ descricao: '', quantidade: 1, unidade: 'UN', valor_unitario: '' }] })
+  const [formEst, setFormEst] = useState({ nome: '', tipo: 'Varejo', responsavel: '' })
+  const [formEnt, setFormEnt] = useState({ cliente_nome: '', motorista_nome: '', endereco: '', data_entrega_prevista: '', valor_frete: '' })
 
   const carregar = useCallback(async () => {
     setLoading(true)
     try {
-      const [orcData, estData, entData] = await Promise.all([
+      const [orcData, pedData, estData, entData] = await Promise.all([
         api.get('/api/v1/varejo/orcamentos'),
+        api.get('/api/v1/varejo/pedidos').catch(() => ({ pedidos: [] })),
         api.get('/api/v1/varejo/estoques'),
         api.get('/api/v1/varejo/entregas')
       ])
       setOrcamentos(orcData.orcamentos || [])
+      setPedidos(pedData.pedidos || [])
       setEstoques(estData.estoques || [])
       setEntregas(entData.entregas || [])
     } catch (e) { toast(e.message, 'error') }
@@ -72,15 +77,45 @@ export default function Varejo() {
     } catch (e) { toast(e.message, 'error') }
   }
 
+  async function salvarEstoque() {
+    try {
+      await api.post('/api/v1/varejo/estoques', formEst)
+      toast('Depósito/estoque criado!', 'success')
+      setModal(null)
+      setFormEst({ nome: '', tipo: 'Varejo', responsavel: '' })
+      carregar()
+    } catch (e) { toast(e.message, 'error') }
+  }
+
+  async function salvarEntrega() {
+    try {
+      await api.post('/api/v1/varejo/entregas', formEnt)
+      toast('Entrega agendada!', 'success')
+      setModal(null)
+      setFormEnt({ cliente_nome: '', motorista_nome: '', endereco: '', data_entrega_prevista: '', valor_frete: '' })
+      carregar()
+    } catch (e) { toast(e.message, 'error') }
+  }
+
+  async function mudarStatusEntrega(id, status) {
+    try {
+      await api.patch(`/api/v1/varejo/entregas/${id}/status`, { status })
+      toast('Status da entrega atualizado!', 'success')
+      carregar()
+    } catch (e) { toast(e.message, 'error') }
+  }
+
   return (
     <div style={{ padding: 24, maxWidth: 1200, margin: '0 auto' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
         <div>
           <h1 style={{ margin: 0, fontSize: 24, fontWeight: 700 }}>🛒 Varejo Geral</h1>
-          <p style={{ margin: '4px 0 0', color: 'var(--muted)', fontSize: 14 }}>{orcamentos.length} orçamentos</p>
+          <p style={{ margin: '4px 0 0', color: 'var(--muted)', fontSize: 14 }}>{orcamentos.length} orçamentos · {pedidos.length} pedidos · {estoques.length} depósitos</p>
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
           {tab === 'Orçamentos' && <button className="btn-primary" onClick={() => setModal('novo-orc')}>+ Novo Orçamento</button>}
+          {tab === 'Estoques' && <button className="btn-primary" onClick={() => setModal('novo-est')}>+ Novo Depósito</button>}
+          {tab === 'Entregas' && <button className="btn-primary" onClick={() => setModal('nova-ent')}>+ Nova Entrega</button>}
         </div>
       </div>
 
@@ -116,7 +151,7 @@ export default function Varejo() {
                     const st = STATUS_ORC[o.status] || { label: o.status, color: '#888' }
                     return (
                       <tr key={o.id} style={{ borderTop: '1px solid var(--line)' }}>
-                        <td style={{ padding: '12px 16px', fontFamily: 'monospace', fontWeight: 600 }}>{o.numero}</td>
+                        <td style={{ padding: '12px 16px', fontFamily: 'monospace', fontWeight: 600 }}>{o.numero_orcamento || o.numero}</td>
                         <td style={{ padding: '12px 16px' }}>{o.cliente_nome}</td>
                         <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 600 }}>{fmtR(o.valor_total || 0)}</td>
                         <td style={{ padding: '12px 16px', fontSize: 13, color: 'var(--muted)' }}>{o.data_validade ? fmtDate(o.data_validade) : '-'}</td>
@@ -179,6 +214,12 @@ export default function Varejo() {
                         <td style={{ padding: '12px 16px', textAlign: 'right' }}>{fmtR(e.valor_frete || 0)}</td>
                         <td style={{ padding: '12px 16px' }}>
                           <span style={{ background: st.color + '22', color: st.color, padding: '3px 10px', borderRadius: 20, fontSize: 12, fontWeight: 600 }}>{st.label}</span>
+                          {e.status === 'pendente' && (
+                            <button onClick={() => mudarStatusEntrega(e.id, 'saiu_entrega')} style={{ marginLeft: 8, padding: '2px 8px', borderRadius: 6, border: 'none', background: '#4a9eff', color: '#fff', cursor: 'pointer', fontSize: 11 }}>Despachar</button>
+                          )}
+                          {e.status === 'saiu_entrega' && (
+                            <button onClick={() => mudarStatusEntrega(e.id, 'entregue')} style={{ marginLeft: 8, padding: '2px 8px', borderRadius: 6, border: 'none', background: '#14b87a', color: '#fff', cursor: 'pointer', fontSize: 11 }}>Confirmar entrega</button>
+                          )}
                         </td>
                       </tr>
                     )
@@ -189,11 +230,74 @@ export default function Varejo() {
           )}
 
           {tab === 'Pedidos' && (
-            <div style={{ textAlign: 'center', padding: 60, color: 'var(--muted)' }}>
-              Pedidos convertidos de orçamentos ou criados diretamente no PDV
+            <div style={{ background: 'var(--card)', borderRadius: 12, overflow: 'hidden', border: '1px solid var(--line)' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ background: 'var(--card2)', fontSize: 12, textTransform: 'uppercase', color: 'var(--muted)' }}>
+                    <th style={{ padding: '12px 16px', textAlign: 'left' }}>Nº Pedido</th>
+                    <th style={{ padding: '12px 16px', textAlign: 'left' }}>Origem</th>
+                    <th style={{ padding: '12px 16px', textAlign: 'left' }}>Cliente</th>
+                    <th style={{ padding: '12px 16px', textAlign: 'right' }}>Total</th>
+                    <th style={{ padding: '12px 16px', textAlign: 'left' }}>Data</th>
+                    <th style={{ padding: '12px 16px', textAlign: 'left' }}>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pedidos.length === 0 ? (
+                    <tr><td colSpan={6} style={{ textAlign: 'center', padding: 40, color: 'var(--muted)' }}>Nenhum pedido convertido ainda. Converta um orçamento na aba Orçamentos.</td></tr>
+                  ) : pedidos.map(p => (
+                    <tr key={p.id} style={{ borderTop: '1px solid var(--line)' }}>
+                      <td style={{ padding: '12px 16px', fontFamily: 'monospace', fontWeight: 600 }}>{p.numero_pedido}</td>
+                      <td style={{ padding: '12px 16px', fontSize: 13, color: 'var(--muted)' }}>{p.numero_orcamento || 'PDV'}</td>
+                      <td style={{ padding: '12px 16px' }}>{p.cliente_nome}</td>
+                      <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 600 }}>{fmtR(p.valor_total || 0)}</td>
+                      <td style={{ padding: '12px 16px', fontSize: 13, color: 'var(--muted)' }}>{p.created_at ? fmtDate(p.created_at) : '-'}</td>
+                      <td style={{ padding: '12px 16px' }}>
+                        <span style={{ background: '#14b87a22', color: '#14b87a', padding: '3px 10px', borderRadius: 20, fontSize: 12, fontWeight: 600 }}>{p.status || 'aprovado'}</span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
         </>
+      )}
+
+      {modal === 'novo-est' && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <div style={{ background: 'var(--bg)', borderRadius: 16, padding: 32, width: 460 }}>
+            <h2 style={{ margin: '0 0 20px' }}>📦 Novo Depósito / Estoque</h2>
+            <div style={{ display: 'grid', gap: 14, marginBottom: 20 }}>
+              <input placeholder="Nome do depósito (ex.: Filial Centro)" value={formEst.nome} onChange={e => setFormEst(p => ({ ...p, nome: e.target.value }))} style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid var(--line)', background: 'var(--card)', color: 'var(--fg)' }} />
+              <input placeholder="Tipo (Varejo, CD / Atacado, Trânsito)" value={formEst.tipo} onChange={e => setFormEst(p => ({ ...p, tipo: e.target.value }))} style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid var(--line)', background: 'var(--card)', color: 'var(--fg)' }} />
+              <input placeholder="Responsável" value={formEst.responsavel} onChange={e => setFormEst(p => ({ ...p, responsavel: e.target.value }))} style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid var(--line)', background: 'var(--card)', color: 'var(--fg)' }} />
+            </div>
+            <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
+              <button onClick={() => setModal(null)} style={{ padding: '10px 20px', borderRadius: 8, border: '1px solid var(--line)', background: 'transparent', color: 'var(--fg)', cursor: 'pointer' }}>Cancelar</button>
+              <button onClick={salvarEstoque} className="btn-primary">Salvar Depósito</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {modal === 'nova-ent' && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <div style={{ background: 'var(--bg)', borderRadius: 16, padding: 32, width: 480 }}>
+            <h2 style={{ margin: '0 0 20px' }}>🚚 Nova Entrega</h2>
+            <div style={{ display: 'grid', gap: 14, marginBottom: 20 }}>
+              <input placeholder="Cliente destinatário" value={formEnt.cliente_nome} onChange={e => setFormEnt(p => ({ ...p, cliente_nome: e.target.value }))} style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid var(--line)', background: 'var(--card)', color: 'var(--fg)' }} />
+              <input placeholder="Motorista / Entregador" value={formEnt.motorista_nome} onChange={e => setFormEnt(p => ({ ...p, motorista_nome: e.target.value }))} style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid var(--line)', background: 'var(--card)', color: 'var(--fg)' }} />
+              <input placeholder="Endereço de entrega" value={formEnt.endereco} onChange={e => setFormEnt(p => ({ ...p, endereco: e.target.value }))} style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid var(--line)', background: 'var(--card)', color: 'var(--fg)' }} />
+              <input type="date" value={formEnt.data_entrega_prevista} onChange={e => setFormEnt(p => ({ ...p, data_entrega_prevista: e.target.value }))} style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid var(--line)', background: 'var(--card)', color: 'var(--fg)' }} />
+              <input type="number" placeholder="Valor do frete (R$)" value={formEnt.valor_frete} onChange={e => setFormEnt(p => ({ ...p, valor_frete: e.target.value }))} style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid var(--line)', background: 'var(--card)', color: 'var(--fg)' }} />
+            </div>
+            <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
+              <button onClick={() => setModal(null)} style={{ padding: '10px 20px', borderRadius: 8, border: '1px solid var(--line)', background: 'transparent', color: 'var(--fg)', cursor: 'pointer' }}>Cancelar</button>
+              <button onClick={salvarEntrega} className="btn-primary">Agendar Entrega</button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Modal: Novo Orçamento */}

@@ -2,6 +2,7 @@ import express from 'express';
 import * as svc from './servico.js';
 import * as lote from './lote.js';
 import * as sped from './sped.js';
+import * as contador from './contador.js';
 import { ErroDominio, responderErro } from '../acesso/banco.js';
 
 /**
@@ -130,6 +131,64 @@ export function createFiscalAdminRouter({ db, escopoDaRequisicao, env = process.
   router.delete('/ibpt/:uf', rota('settings.write', ({ req, empresaId, lojaRestrita }) => { empresaToda(lojaRestrita, 'Excluir a tabela do IBPT'); return svc.excluirIbpt(db, empresaId, req.params.uf); }));
 
   router.post('/testar-comunicacao', rota('settings.write', ({ req, empresaId }) => svc.testarComunicacao(db, empresaId, { modelo: req.body?.modelo === '55' ? '55' : '65', env, transporte })));
+
+  // ── SPED Fiscal, SPED Contribuições e Exportação para o Contador ───────────
+  router.get('/contador/resumo', rota('payments.read', ({ req, empresaId, lojaRestrita }) => contador.resumoContabil(db, empresaId, {
+    competencia: req.query.competencia || null,
+    inicio: req.query.inicio || null,
+    fim: req.query.fim || null,
+    lojaId: req.query.lojaId || null,
+    lojaRestrita,
+  })));
+  router.get('/contador/sped-fiscal', async (req, res) => {
+    try {
+      const { empresaId, lojaRestrita = null } = await escopoDaRequisicao(req, 'payments.read');
+      const arq = await contador.gerarSpedFiscalTxt(db, empresaId, {
+        competencia: req.query.competencia || null,
+        inicio: req.query.inicio || null,
+        fim: req.query.fim || null,
+        lojaId: req.query.lojaId || null,
+        lojaRestrita,
+      });
+      res.set('Cache-Control', 'private, no-store');
+      res.type('text/plain; charset=utf-8').attachment(arq.nomeArquivo).send(arq.conteudo);
+    } catch (error) { responderErro(res, error); }
+  });
+  router.get('/contador/sped-contribuicoes', async (req, res) => {
+    try {
+      const { empresaId, lojaRestrita = null } = await escopoDaRequisicao(req, 'payments.read');
+      const arq = await contador.gerarSpedContribuicoesTxt(db, empresaId, {
+        competencia: req.query.competencia || null,
+        inicio: req.query.inicio || null,
+        fim: req.query.fim || null,
+        lojaId: req.query.lojaId || null,
+        lojaRestrita,
+      });
+      res.set('Cache-Control', 'private, no-store');
+      res.type('text/plain; charset=utf-8').attachment(arq.nomeArquivo).send(arq.conteudo);
+    } catch (error) { responderErro(res, error); }
+  });
+  router.get('/contador/csv', async (req, res) => {
+    try {
+      const { empresaId, lojaRestrita = null } = await escopoDaRequisicao(req, 'payments.read');
+      const arq = await contador.exportarCsvContador(db, empresaId, {
+        competencia: req.query.competencia || null,
+        inicio: req.query.inicio || null,
+        fim: req.query.fim || null,
+        lojaId: req.query.lojaId || null,
+        lojaRestrita,
+      });
+      res.set('Cache-Control', 'private, no-store');
+      res.type('text/csv; charset=utf-8').attachment(arq.nomeArquivo).send(arq.csv);
+    } catch (error) { responderErro(res, error); }
+  });
+  router.get('/contador/pacote', rota('payments.read', ({ req, empresaId, lojaRestrita }) => contador.exportarPacoteContador(db, empresaId, {
+    competencia: req.query.competencia || null,
+    inicio: req.query.inicio || null,
+    fim: req.query.fim || null,
+    lojaId: req.query.lojaId || null,
+    lojaRestrita,
+  })));
 
   return router;
 }

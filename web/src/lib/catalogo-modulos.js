@@ -23,13 +23,8 @@ export const AREAS = [
   'Plataforma',
 ]
 
-// Em que onda do plano cada tela em implantação entra e o que falta.
-export const PLANO_IMPLANTACAO = {
-  '/admin/varejo': { onda: 5, falta: 'orçamento, pedido e entrega; entra quando houver empresa de varejo' },
-  '/admin/loja-moda': { onda: 5, falta: 'grade, condicional, crediário e vale; entra quando houver loja de moda' },
-  '/admin/oficina': { onda: 5, falta: 'ordem de serviço com aprovação por WhatsApp; entra quando houver oficina' },
-  '/admin/agropecuaria': { onda: 5, falta: 'pets, receituário e fracionamento; entra quando houver loja agro' },
-}
+// Todas as ondas (1 a 5) foram ligadas em app/server.js.
+export const PLANO_IMPLANTACAO = {}
 
 const M = (to, label, icon, area, contrato = null, extra = {}) => ({ to, label, icon, area, contrato, ...extra })
 

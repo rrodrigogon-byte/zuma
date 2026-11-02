@@ -38,7 +38,10 @@ test('cada tela em implantação está no catálogo e tem onda e o que falta', (
 
 test('estado: em implantação, evento, fora do contrato e no ar', () => {
   const item = (to) => CATALOGO.find((m) => m.to === to)
-  assert.equal(estadoDoModulo(item('/admin/oficina')), 'em_implantacao')
+  assert.equal(estadoDoModulo(item('/admin/oficina')), 'no_ar')
+  assert.equal(estadoDoModulo(item('/admin/varejo')), 'no_ar')
+  assert.equal(estadoDoModulo(item('/admin/loja-moda')), 'no_ar')
+  assert.equal(estadoDoModulo(item('/admin/agropecuaria')), 'no_ar')
   assert.equal(estadoDoModulo(item('/admin/supermercado')), 'no_ar')
   assert.equal(estadoDoModulo(item('/admin/torneios')), 'evento')
   assert.equal(estadoDoModulo(item('/admin/financeiro')), 'no_ar')
@@ -55,5 +58,5 @@ test('agrupa por área na ordem das áreas e conta os estados', () => {
   assert.deepEqual(grupos.map((g) => g.area), AREAS.filter((a) => CATALOGO.some((i) => i.area === a)))
   const contagem = contagemPorEstado()
   assert.equal(Object.values(contagem).reduce((a, b) => a + b, 0), CATALOGO.length)
-  assert.equal(contagem.em_implantacao, Object.keys(EM_IMPLANTACAO).length)
+  assert.equal(contagem.em_implantacao || 0, Object.keys(EM_IMPLANTACAO).length)
 })

@@ -12,21 +12,29 @@ export default function Agropecuaria() {
   const { toast } = useToast()
   const [tab, setTab] = useState('Pets')
   const [pets, setPets] = useState([])
+  const [vacinas, setVacinas] = useState([])
+  const [prontuarios, setProntuarios] = useState([])
   const [receituarios, setReceituarios] = useState([])
   const [loading, setLoading] = useState(true)
   const [modal, setModal] = useState(null)
   const [petSelecionado, setPetSelecionado] = useState(null)
   const [formPet, setFormPet] = useState({ nome: '', especie: '', raca: '', sexo: 'macho', data_nascimento: '', peso_kg: '', cliente_nome: '', cliente_telefone: '', castrado: false })
+  const [formVacina, setFormVacina] = useState({ pet_nome: '', nome_vacina: '', veterinario: '', lote: '', data_aplicacao: '', proxima_dose: '' })
+  const [formPront, setFormPront] = useState({ pet_nome: '', veterinario: '', queixa: '', diagnostico: '', prescricao: '' })
   const [formReceita, setFormReceita] = useState({ tipo: 'agronomico', profissional_nome: '', profissional_registro: '', cliente_nome: '', propriedade: '', validade_dias: 30 })
 
   const carregar = useCallback(async () => {
     setLoading(true)
     try {
-      const [petsData, recData] = await Promise.all([
+      const [petsData, vacData, prontData, recData] = await Promise.all([
         api.get('/api/v1/agropecuaria/pets'),
+        api.get('/api/v1/agropecuaria/vacinas').catch(() => ({ vacinas: [] })),
+        api.get('/api/v1/agropecuaria/prontuarios').catch(() => ({ prontuarios: [] })),
         api.get('/api/v1/agropecuaria/receituarios')
       ])
       setPets(petsData.pets || [])
+      setVacinas(vacData.vacinas || [])
+      setProntuarios(prontData.prontuarios || [])
       setReceituarios(recData.receituarios || [])
     } catch (e) { toast(e.message, 'error') }
     finally { setLoading(false) }
@@ -52,15 +60,37 @@ export default function Agropecuaria() {
     } catch (e) { toast(e.message, 'error') }
   }
 
+  async function salvarVacina() {
+    try {
+      await api.post('/api/v1/agropecuaria/vacinas', formVacina)
+      toast('Vacina registrada!', 'success')
+      setModal(null)
+      setFormVacina({ pet_nome: '', nome_vacina: '', veterinario: '', lote: '', data_aplicacao: '', proxima_dose: '' })
+      carregar()
+    } catch (e) { toast(e.message, 'error') }
+  }
+
+  async function salvarProntuario() {
+    try {
+      await api.post('/api/v1/agropecuaria/prontuarios', formPront)
+      toast('Atendimento clínico registrado no prontuário!', 'success')
+      setModal(null)
+      setFormPront({ pet_nome: '', veterinario: '', queixa: '', diagnostico: '', prescricao: '' })
+      carregar()
+    } catch (e) { toast(e.message, 'error') }
+  }
+
   return (
     <div style={{ padding: 24, maxWidth: 1200, margin: '0 auto' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
         <div>
           <h1 style={{ margin: 0, fontSize: 24, fontWeight: 700 }}>🌾 Agropecuária & Petshop</h1>
-          <p style={{ margin: '4px 0 0', color: 'var(--muted)', fontSize: 14 }}>{pets.length} pets cadastrados</p>
+          <p style={{ margin: '4px 0 0', color: 'var(--muted)', fontSize: 14 }}>{pets.length} pets · {vacinas.length} vacinas · {receituarios.length} receituários</p>
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
           {tab === 'Pets' && <button className="btn-primary" onClick={() => setModal('novo-pet')}>+ Novo Pet</button>}
+          {tab === 'Vacinas' && <button className="btn-primary" onClick={() => setModal('nova-vacina')}>+ Registrar Vacina</button>}
+          {tab === 'Prontuários' && <button className="btn-primary" onClick={() => setModal('novo-prontuario')}>+ Novo Atendimento</button>}
           {tab === 'Receituários' && <button className="btn-primary" onClick={() => setModal('nova-receita')}>+ Emitir Receituário</button>}
         </div>
       </div>
@@ -147,12 +177,101 @@ export default function Agropecuaria() {
           )}
 
           {/* Tabs Vacinas e Prontuários — placeholder */}
-          {(tab === 'Vacinas' || tab === 'Prontuários') && (
-            <div style={{ textAlign: 'center', padding: 60, color: 'var(--muted)' }}>
-              {tab === 'Vacinas' ? '💉 Selecione um pet para ver o histórico de vacinas' : '📋 Selecione um pet para ver o prontuário'}
+          {tab === 'Vacinas' && (
+            <div style={{ background: 'var(--card)', borderRadius: 12, overflow: 'hidden', border: '1px solid var(--line)' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ background: 'var(--card2)', fontSize: 12, textTransform: 'uppercase', color: 'var(--muted)' }}>
+                    <th style={{ padding: '12px 16px', textAlign: 'left' }}>Pet</th>
+                    <th style={{ padding: '12px 16px', textAlign: 'left' }}>Vacina</th>
+                    <th style={{ padding: '12px 16px', textAlign: 'left' }}>Veterinário</th>
+                    <th style={{ padding: '12px 16px', textAlign: 'left' }}>Aplicação</th>
+                    <th style={{ padding: '12px 16px', textAlign: 'left' }}>Próxima dose</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {vacinas.length === 0 ? (
+                    <tr><td colSpan={5} style={{ textAlign: 'center', padding: 40, color: 'var(--muted)' }}>Nenhuma vacina registrada. Clique em + Registrar Vacina.</td></tr>
+                  ) : vacinas.map(v => (
+                    <tr key={v.id} style={{ borderTop: '1px solid var(--line)' }}>
+                      <td style={{ padding: '12px 16px', fontWeight: 600 }}>{v.pet_nome}</td>
+                      <td style={{ padding: '12px 16px' }}>{v.nome_vacina}{v.lote ? ` · Lote ${v.lote}` : ''}</td>
+                      <td style={{ padding: '12px 16px' }}>{v.veterinario || '-'}</td>
+                      <td style={{ padding: '12px 16px', fontSize: 13, color: 'var(--muted)' }}>{v.data_aplicacao ? fmtDate(v.data_aplicacao) : '-'}</td>
+                      <td style={{ padding: '12px 16px', fontSize: 13 }}>{v.proxima_dose ? fmtDate(v.proxima_dose) : '-'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          {tab === 'Prontuários' && (
+            <div style={{ background: 'var(--card)', borderRadius: 12, overflow: 'hidden', border: '1px solid var(--line)' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ background: 'var(--card2)', fontSize: 12, textTransform: 'uppercase', color: 'var(--muted)' }}>
+                    <th style={{ padding: '12px 16px', textAlign: 'left' }}>Pet</th>
+                    <th style={{ padding: '12px 16px', textAlign: 'left' }}>Veterinário</th>
+                    <th style={{ padding: '12px 16px', textAlign: 'left' }}>Queixa / Diagnóstico</th>
+                    <th style={{ padding: '12px 16px', textAlign: 'left' }}>Prescrição</th>
+                    <th style={{ padding: '12px 16px', textAlign: 'left' }}>Data</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {prontuarios.length === 0 ? (
+                    <tr><td colSpan={5} style={{ textAlign: 'center', padding: 40, color: 'var(--muted)' }}>Nenhum prontuário registrado. Clique em + Novo Atendimento.</td></tr>
+                  ) : prontuarios.map(p => (
+                    <tr key={p.id} style={{ borderTop: '1px solid var(--line)' }}>
+                      <td style={{ padding: '12px 16px', fontWeight: 600 }}>{p.pet_nome}</td>
+                      <td style={{ padding: '12px 16px' }}>{p.veterinario || '-'}</td>
+                      <td style={{ padding: '12px 16px' }}><div><strong>{p.diagnostico || p.queixa}</strong>{p.queixa && p.diagnostico && <div style={{ fontSize: 12, color: 'var(--muted)' }}>{p.queixa}</div>}</div></td>
+                      <td style={{ padding: '12px 16px', fontSize: 13 }}>{p.prescricao || '-'}</td>
+                      <td style={{ padding: '12px 16px', fontSize: 13, color: 'var(--muted)' }}>{p.data_atendimento ? fmtDate(p.data_atendimento) : '-'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
         </>
+      )}
+
+      {modal === 'nova-vacina' && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <div style={{ background: 'var(--bg)', borderRadius: 16, padding: 32, width: 480 }}>
+            <h2 style={{ margin: '0 0 20px' }}>💉 Registrar Vacina</h2>
+            <div style={{ display: 'grid', gap: 14, marginBottom: 20 }}>
+              <input placeholder="Nome do Pet *" value={formVacina.pet_nome} onChange={e => setFormVacina(p => ({ ...p, pet_nome: e.target.value }))} style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid var(--line)', background: 'var(--card)', color: 'var(--fg)' }} />
+              <input placeholder="Vacina (ex.: V10, Antirrábica) *" value={formVacina.nome_vacina} onChange={e => setFormVacina(p => ({ ...p, nome_vacina: e.target.value }))} style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid var(--line)', background: 'var(--card)', color: 'var(--fg)' }} />
+              <input placeholder="Veterinário responsável" value={formVacina.veterinario} onChange={e => setFormVacina(p => ({ ...p, veterinario: e.target.value }))} style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid var(--line)', background: 'var(--card)', color: 'var(--fg)' }} />
+              <input placeholder="Lote da vacina" value={formVacina.lote} onChange={e => setFormVacina(p => ({ ...p, lote: e.target.value }))} style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid var(--line)', background: 'var(--card)', color: 'var(--fg)' }} />
+              <label style={{ fontSize: 12, color: 'var(--muted)' }}>Próxima dose (reforço)<input type="date" value={formVacina.proxima_dose} onChange={e => setFormVacina(p => ({ ...p, proxima_dose: e.target.value }))} style={{ width: '100%', marginTop: 4, padding: '10px 12px', borderRadius: 8, border: '1px solid var(--line)', background: 'var(--card)', color: 'var(--fg)', boxSizing: 'border-box' }} /></label>
+            </div>
+            <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
+              <button onClick={() => setModal(null)} style={{ padding: '10px 20px', borderRadius: 8, border: '1px solid var(--line)', background: 'transparent', color: 'var(--fg)', cursor: 'pointer' }}>Cancelar</button>
+              <button onClick={salvarVacina} className="btn-primary">Salvar Vacina</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {modal === 'novo-prontuario' && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <div style={{ background: 'var(--bg)', borderRadius: 16, padding: 32, width: 500 }}>
+            <h2 style={{ margin: '0 0 20px' }}>🩺 Novo Atendimento Clínico</h2>
+            <div style={{ display: 'grid', gap: 14, marginBottom: 20 }}>
+              <input placeholder="Nome do Pet *" value={formPront.pet_nome} onChange={e => setFormPront(p => ({ ...p, pet_nome: e.target.value }))} style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid var(--line)', background: 'var(--card)', color: 'var(--fg)' }} />
+              <input placeholder="Veterinário responsável *" value={formPront.veterinario} onChange={e => setFormPront(p => ({ ...p, veterinario: e.target.value }))} style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid var(--line)', background: 'var(--card)', color: 'var(--fg)' }} />
+              <input placeholder="Queixa principal / Anamnese" value={formPront.queixa} onChange={e => setFormPront(p => ({ ...p, queixa: e.target.value }))} style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid var(--line)', background: 'var(--card)', color: 'var(--fg)' }} />
+              <input placeholder="Diagnóstico clínico" value={formPront.diagnostico} onChange={e => setFormPront(p => ({ ...p, diagnostico: e.target.value }))} style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid var(--line)', background: 'var(--card)', color: 'var(--fg)' }} />
+              <textarea rows={3} placeholder="Prescrição / Conduta terapêutica" value={formPront.prescricao} onChange={e => setFormPront(p => ({ ...p, prescricao: e.target.value }))} style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid var(--line)', background: 'var(--card)', color: 'var(--fg)' }} />
+            </div>
+            <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
+              <button onClick={() => setModal(null)} style={{ padding: '10px 20px', borderRadius: 8, border: '1px solid var(--line)', background: 'transparent', color: 'var(--fg)', cursor: 'pointer' }}>Cancelar</button>
+              <button onClick={salvarProntuario} className="btn-primary">Salvar Prontuário</button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Modal: Novo Pet */}
