@@ -1633,7 +1633,7 @@ app.use('/api/webhooks', createWhatsappAiWebhookRouter());
 }
 
 // Módulos verticais multi-empresa (Oficina, Varejo Geral, Loja de Moda, Agropecuária/Petshop)
-app.use('/api/v1', authMiddleware, createVerticaisRouter({
+app.use('/api/v1', auth, requireStaff, createVerticaisRouter({
   getDb: db,
   saveDb: save,
 }));
