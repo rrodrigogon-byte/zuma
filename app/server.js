@@ -757,7 +757,7 @@ app.use('/api/admin/commerce', (req, res, next) => {
 });
 
 // Módulos de /api/admin que separam dados por empresa e podem ser usados por tenant.
-const TENANT_ADMIN_MODULES = new Set(['a2', 'bar', 'barbearia', 'commerce', 'commerce-session', 'usuarios', 'usuarios-diretorio', 'platform', 'fidelidade', 'login', 'auditoria', 'modificadores', 'combos', 'clube', 'unidades', 'razao', 'suprimentos', 'fiscal', 'salao', 'varejo', 'minhas-permissoes']);
+const TENANT_ADMIN_MODULES = new Set(['a2', 'bar', 'barbearia', 'commerce', 'commerce-session', 'usuarios', 'usuarios-diretorio', 'platform', 'fidelidade', 'login', 'auditoria', 'modificadores', 'combos', 'clube', 'unidades', 'razao', 'suprimentos', 'fiscal', 'salao', 'varejo', 'supermercado', 'pdv-offline', 'minhas-permissoes']);
 
 // [kytto-clube] Kytto Clube & Academia (catraca, contrato digital, agenda, retenção, Wellhub/TotalPass).
 // Usa o pool do Commerce que já existe (não abre outro pool) e a mesma resolução de empresa e
@@ -1575,9 +1575,18 @@ app.use('/api/webhooks', createWhatsappAiWebhookRouter());
   app.use('/api/admin/salao', auth, requireStaff, createSalaoAdminRouter({ db: clubeDb, escopoDaRequisicao: escopoComercial, fuso: FUSO_KYTTO }));
   // [kytto-pdv-offline] Terminais e periféricos por unidade; o agente local sincroniza as vendas feitas sem internet (viram comandas pagas do bar).
   // limite por IP antes de ler o corpo (até 2 MB na sincronização): o agente consulta a fila de impressão a cada poucos segundos
-  app.use('/api/pdv-offline', (req, res, next) => (modulosOcultos().has('pdv-offline') ? respostaModuloOculto(res) : next()), publicLimit(3000, 10 * 60 * 1000), createPdvOfflineRouter({ db: clubeDb, escopoDaRequisicao: escopoComercial, auth, requireStaff, fuso: FUSO_KYTTO }));
+  const pdvOfflineRouter = createPdvOfflineRouter({ db: clubeDb, escopoDaRequisicao: escopoComercial, auth, requireStaff, fuso: FUSO_KYTTO });
+  app.use('/api/pdv-offline', (req, res, next) => (modulosOcultos().has('pdv-offline') ? respostaModuloOculto(res) : next()), publicLimit(3000, 10 * 60 * 1000), pdvOfflineRouter);
+  app.use('/api/admin/pdv-offline', (req, res, next) => (modulosOcultos().has('pdv-offline') ? respostaModuloOculto(res) : next()), pdvOfflineRouter);
   // [kytto-varejo] Supermercado/varejo sobre o estoque único: preço por unidade, promoções, lotes, etiquetas e transferências.
-  app.use('/api/admin/varejo', auth, requireStaff, createVarejoAdminRouter({ db: clubeDb, escopoDaRequisicao: escopoComercial, fuso: FUSO_KYTTO }));
+  const varejoRouter = createVarejoAdminRouter({ db: clubeDb, escopoDaRequisicao: escopoComercial, fuso: FUSO_KYTTO });
+  app.use('/api/admin/varejo', auth, requireStaff, varejoRouter);
+  app.use('/api/supermercado', auth, requireStaff, (req, res, next) => {
+    if (req.url.startsWith('/produtos/buscar/')) {
+      req.url = req.url.replace('/produtos/buscar/', '/produtos/codigo/');
+    }
+    return varejoRouter(req, res, next);
+  });
   // [kytto-bar] Bar, PDV, comandas, estoque fracionado, KDS e caixa por empresa.
   // O prefixo continua sob a trava /api/admin e a empresa é resolvida exclusivamente
   // pela membership SQL; nenhum empresaId do corpo da requisição é aceito.

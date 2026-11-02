@@ -79,10 +79,11 @@ export default function PDVOffline() {
   const carregar = useCallback(async () => {
     setCarregando(true)
     setErro('')
+    const lojaIdParam = lojaAtiva?.id || lojasAcessiveis?.[0]?.id || ''
     try {
       const [dadosTerminais, dadosDispositivos, dadosConflitos, fila] = await Promise.all([
         gerencia ? api.get('/api/pdv-offline/terminais') : Promise.resolve({ terminais: [] }),
-        gerencia && lojaAtiva?.id ? api.get(`/api/pdv-offline/dispositivos?loja_id=${lojaAtiva.id}`) : Promise.resolve({ dispositivos: [] }),
+        gerencia ? api.get(`/api/pdv-offline/dispositivos${lojaIdParam ? `?loja_id=${lojaIdParam}` : ''}`) : Promise.resolve({ dispositivos: [] }),
         resolve ? api.get('/api/pdv-offline/conflitos').catch(() => ({ conflitos: [] })) : Promise.resolve({ conflitos: [] }),
         resumoFilaOffline(),
       ])
@@ -95,7 +96,7 @@ export default function PDVOffline() {
     } finally {
       setCarregando(false)
     }
-  }, [lojaAtiva?.id, gerencia, resolve])
+  }, [lojaAtiva?.id, lojasAcessiveis, gerencia, resolve])
 
   useEffect(() => { carregar() }, [carregar])
 

@@ -4,6 +4,7 @@
 // Idempotente: atualiza sem duplicar e preserva senhas já alteradas.
 // ==========================================================================
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 import { db, save } from './db.js';
 import * as barbeariaErpKytto from './barbearia-erp-kytto.js';
 
@@ -250,6 +251,12 @@ export function provisionarEquipeDino({ commerceDb = null } = {}) {
     sincronizarEquipePostgres(commerceDb).catch((err) => {
       console.warn('[dino-equipe-seed] Aviso ao sincronizar Postgres:', err.message);
     });
+    provisionarVarejoDino(commerceDb).catch((err) => {
+      console.warn('[dino-equipe-seed] Aviso ao provisionar Varejo:', err.message);
+    });
+    provisionarPDVOfflineDino(commerceDb).catch((err) => {
+      console.warn('[dino-equipe-seed] Aviso ao provisionar PDV Offline:', err.message);
+    });
   }
 
   return {
@@ -294,15 +301,103 @@ async function sincronizarEquipePostgres(commerceDb) {
 
       // Garante membership na loja e empresa da Dino
       if (userId) {
+        const isDinoOwner = membro.username === 'dino';
+        const roleId = isDinoOwner ? 'b125e523-957d-4d12-a881-56b958ecec45' : DINO_ROLE_PROFISSIONAL_UUID;
+        const lojaId = isDinoOwner ? null : DINO_LOJA_CANONICA;
         await commerceDb.query(
           `INSERT INTO commerce_memberships (id, empresa_id, usuario_id, loja_id, role_id, ativo, criado_em, atualizado_em)
            VALUES (gen_random_uuid(), $1, $2, $3, $4, true, NOW(), NOW())
            ON CONFLICT DO NOTHING`,
-          [DINO_EMPRESA_CANONICA, userId, DINO_LOJA_CANONICA, DINO_ROLE_PROFISSIONAL_UUID]
+          [DINO_EMPRESA_CANONICA, userId, lojaId, roleId]
         ).catch(() => null);
       }
     } catch (e) {
       console.warn(`[dino-equipe-seed] Aviso ao salvar membro ${membro.username} no PG:`, e.message);
     }
+  }
+}
+
+export async function provisionarVarejoDino(commerceDb) {
+  try {
+    const r = await commerceDb.query(
+      `SELECT count(*) FROM est_itens WHERE empresa_id = $1`,
+      [DINO_EMPRESA_CANONICA]
+    );
+    const total = Number(r.rows?.[0]?.count || 0);
+    if (total > 0) return;
+
+    const produtos = [
+      { nome: 'Pomada Modeladora Efeito Matte 120g', sku: 'POM-001', ean: '7891234560012', plu: '1001', preco: 65.00, custo: 25.00, depto: 'Finalizadores', estoque: 48, pesavel: false, lote: false },
+      { nome: 'Óleo para Barba Premium Hidratante 30ml', sku: 'OLE-002', ean: '7891234560029', plu: '1002', preco: 55.00, custo: 20.00, depto: 'Barba', estoque: 32, pesavel: false, lote: false },
+      { nome: 'Balm Alinhador e Modelador de Barba 100g', sku: 'BLM-003', ean: '7891234560036', plu: '1003', preco: 50.00, custo: 18.00, depto: 'Barba', estoque: 40, pesavel: false, lote: false },
+      { nome: 'Shampoo Antiqueda & Fortalecedor Capilar 250ml', sku: 'SHP-004', ean: '7891234560043', plu: '1004', preco: 45.00, custo: 16.00, depto: 'Cabelo', estoque: 60, pesavel: false, lote: false },
+      { nome: 'Minoxidil 5% Loção Antiqueda e Crescimento 60ml', sku: 'MNX-005', ean: '7891234560050', plu: '1005', preco: 90.00, custo: 35.00, depto: 'Tratamento', estoque: 25, pesavel: false, lote: true },
+      { nome: 'Cera Modeladora Efeito Teia Alto Brilho 100g', sku: 'CER-006', ean: '7891234560067', plu: '1006', preco: 60.00, custo: 22.00, depto: 'Finalizadores', estoque: 30, pesavel: false, lote: false },
+      { nome: 'Loção Pós-Barba Refrescante Mentolada 150ml', sku: 'POS-007', ean: '7891234560074', plu: '1007', preco: 48.00, custo: 17.50, depto: 'Barba', estoque: 35, pesavel: false, lote: false },
+      { nome: 'Perfume Masculino Dino Signature Amadeirado 100ml', sku: 'PRF-008', ean: '7891234560081', plu: '1008', preco: 180.00, custo: 70.00, depto: 'Perfumaria', estoque: 18, pesavel: false, lote: true },
+      { nome: 'Café Espresso Gourmet Moído na Hora (Dose)', sku: 'CAF-009', ean: '7891234560098', plu: '1009', preco: 8.00, custo: 2.50, depto: 'Conveniência', estoque: 120, pesavel: false, lote: false },
+      { nome: 'Mix de Castanhas Nobres e Frutas Secas 100g', sku: 'SNC-010', ean: '7891234560104', plu: '1010', preco: 15.00, custo: 6.50, depto: 'Conveniência', estoque: 80, pesavel: true, lote: true }
+    ];
+
+    for (const p of produtos) {
+      const ins = await commerceDb.query(
+        `INSERT INTO est_itens (empresa_id, nome, sku, ean, plu, unidade, preco_venda, custo_medio, departamento, categoria, pesavel, controla_lote, ativo, criado_em, atualizado_em)
+         VALUES ($1, $2, $3, $4, $5, 'UN', $6, $7, $8, $8, $9, $10, true, NOW(), NOW())
+         ON CONFLICT (empresa_id, id) DO NOTHING
+         RETURNING id`,
+        [DINO_EMPRESA_CANONICA, p.nome, p.sku, p.ean, p.plu, p.preco, p.custo, p.depto, p.pesavel, p.lote]
+      );
+      const itemId = ins.rows?.[0]?.id;
+      if (itemId) {
+        await commerceDb.query(
+          `INSERT INTO est_saldos (empresa_id, loja_id, item_id, quantidade, atualizado_em)
+           VALUES ($1, $2, $3, $4, NOW())
+           ON CONFLICT DO NOTHING`,
+          [DINO_EMPRESA_CANONICA, DINO_LOJA_CANONICA, itemId, p.estoque]
+        ).catch(() => null);
+
+        await commerceDb.query(
+          `INSERT INTO var_precos_unidade (empresa_id, loja_id, item_id, preco_venda, atualizado_em)
+           VALUES ($1, $2, $3, $4, NOW())
+           ON CONFLICT DO NOTHING`,
+          [DINO_EMPRESA_CANONICA, DINO_LOJA_CANONICA, itemId, p.preco]
+        ).catch(() => null);
+      }
+    }
+    console.log('[dino-equipe-seed] Estoque e catálogo de supermercado/varejo da Barbearia Dino provisionado com sucesso.');
+  } catch (err) {
+    console.warn('[dino-equipe-seed] Aviso ao provisionar varejo Dino:', err.message);
+  }
+}
+
+export async function provisionarPDVOfflineDino(commerceDb) {
+  try {
+    const r = await commerceDb.query(
+      `SELECT count(*) FROM pdv_terminais WHERE empresa_id = $1`,
+      [DINO_EMPRESA_CANONICA]
+    );
+    const total = Number(r.rows?.[0]?.count || 0);
+    if (total > 0) return;
+
+    const token = crypto.randomBytes(24).toString('base64url');
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+    const insTerm = await commerceDb.query(
+      `INSERT INTO pdv_terminais (id, empresa_id, loja_id, codigo, nome, identificador_dispositivo, token_hash, modo_offline_habilitado, ativo, criado_em, atualizado_em)
+       VALUES (gen_random_uuid(), $1, $2, 'CAIXA-01', 'Caixa Principal 01 - Recepção', 'terminal-pos-dino-01', $3, true, true, NOW(), NOW())
+       RETURNING id`,
+      [DINO_EMPRESA_CANONICA, DINO_LOJA_CANONICA, tokenHash]
+    );
+    const terminalId = insTerm.rows?.[0]?.id;
+
+    if (terminalId) {
+      await commerceDb.query(
+        `INSERT INTO pdv_dispositivos (id, empresa_id, loja_id, terminal_id, tipo, nome, fabricante, modelo, endereco_conexao, configuracoes, ativo, criado_em, atualizado_em)
+         VALUES (gen_random_uuid(), $1, $2, $3, 'impressora_termica', 'Impressora Cupom Não Fiscal 80mm', 'Epson', 'TM-T20X', 'USB/TCP 192.168.1.200:9100', '{"modo":"rede","host":"192.168.1.200","porta":9100}'::jsonb, true, NOW(), NOW())`,
+        [DINO_EMPRESA_CANONICA, DINO_LOJA_CANONICA, terminalId]
+      ).catch(() => null);
+    }
+    console.log('[dino-equipe-seed] PDV Offline e periféricos da Barbearia Dino provisionados com sucesso.');
+  } catch (err) {
+    console.warn('[dino-equipe-seed] Aviso ao provisionar PDV Offline Dino:', err.message);
   }
 }

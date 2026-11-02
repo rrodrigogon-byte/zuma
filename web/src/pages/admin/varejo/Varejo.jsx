@@ -20,15 +20,17 @@ const num = (v) => Number(v || 0).toLocaleString('pt-BR', { maximumFractionDigit
 
 export default function Varejo({ abaInicial = 'produtos' }) {
   const { toast } = useToast()
-  const { empresaAtiva, lojaAtiva, lojasAcessiveis } = useAuth()
-  const lojas = useMemo(() => lojasDaEmpresa(lojasAcessiveis, empresaAtiva?.id), [lojasAcessiveis, empresaAtiva?.id])
+  const { empresaAtiva, lojaAtiva, lojasAcessiveis, empresasAcessiveis } = useAuth()
+  const empresaIdEfetivo = empresaAtiva?.id && empresaAtiva.id !== 'principal' ? empresaAtiva.id : (empresasAcessiveis?.[0]?.id || 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6')
+  const nomeEmpresa = empresaAtiva?.nome && empresaAtiva.id !== 'principal' ? empresaAtiva.nome : (empresasAcessiveis?.[0]?.nome || 'Barbearia Dino')
+  const lojas = useMemo(() => lojasDaEmpresa(lojasAcessiveis, empresaIdEfetivo), [lojasAcessiveis, empresaIdEfetivo])
   const [aba, setAba] = useState(abaInicial)
   const [unidade, setUnidade] = useState(() => lojaAtiva?.id || (lojas.length === 1 ? lojas[0].id : ''))
   const [produtos, setProdutos] = useState([])
   const [busca, setBusca] = useState('')
   const [erro, setErro] = useState('')
   const trava = useRef(false)
-  const qs = useCallback((extra = {}) => { const p = new URLSearchParams(); if (unidade) p.set('lojaId', unidade); for (const [k, v] of Object.entries(extra)) if (v) p.set(k, v); const s = p.toString(); return s ? `?${s}` : '' }, [unidade])
+  const qs = useCallback((extra = {}) => { const p = new URLSearchParams(); if (unidade) p.set('lojaId', unidade); if (empresaIdEfetivo) p.set('empresaId', empresaIdEfetivo); for (const [k, v] of Object.entries(extra)) if (v) p.set(k, v); const s = p.toString(); return s ? `?${s}` : '' }, [unidade, empresaIdEfetivo])
   const carregarProdutos = useCallback(async () => {
     try { setProdutos((await api.get(`${BASE}/produtos${qs()}`)).produtos || []); setErro('') } catch (e) { setErro(e.message || 'Não foi possível carregar os produtos.') }
   }, [qs])
@@ -43,7 +45,7 @@ export default function Varejo({ abaInicial = 'produtos' }) {
 
   return <div className="dadm-page">
     <header className="dadm-head">
-      <div><div className="dadm-eyebrow">Varejo · {empresaAtiva?.nome || 'Empresa'}</div><h1>Supermercado e varejo</h1>
+      <div><div className="dadm-eyebrow">Varejo · {nomeEmpresa}</div><h1>Supermercado e varejo</h1>
         <p>Preço por unidade, promoções com período, lotes e validade, etiquetas e transferências — tudo sobre o mesmo estoque de Estoque e compras.</p></div>
       <div className="dadm-actions"><label className="dadm-muted">Unidade{' '}<select className="c360-input" aria-label="Unidade" value={unidade} onChange={(e) => setUnidade(e.target.value)}><option value="">Empresa toda</option>{lojas.map((l) => <option key={l.id} value={l.id}>{l.nome}</option>)}</select></label></div>
     </header>

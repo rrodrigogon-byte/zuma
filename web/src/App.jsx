@@ -339,7 +339,9 @@ export default function App() {
           <Route path="/admin/contas-receber" element={<Layout><FinanceiroAuto aba="receber" antigo={<ContasReceber />} /></Layout>} />
           <Route path="/admin/contas-pagar" element={<Layout><FinanceiroAuto aba="pagar" antigo={<Navigate to="/admin/financeiro" replace />} /></Layout>} />
           <Route path="/admin/fechamento-diario" element={<Layout><FinanceiroAuto aba="fechamento" antigo={<FechamentoDiario />} /></Layout>} />
-          <Route path="/admin/pdv-offline" element={<TenantAware tenant={<Layout><PDVOffline /></Layout>} legacy={<Layout><EscolhaEmpresa modulo="PDV offline" /></Layout>} />} />
+
+          <Route path="/admin/pdv-offline" element={<TenantAware tenant={<Layout><PDVOffline /></Layout>} legacy={<Layout><PDVOffline /></Layout>} />} />
+
           <Route path="/admin/erp"            element={<Layout><ERP /></Layout>} />
           <Route path="/admin/oficina"         element={<Layout><Oficina /></Layout>} />
           <Route path="/admin/agropecuaria"    element={<Layout><Agropecuaria /></Layout>} />
@@ -357,7 +359,9 @@ export default function App() {
           <Route path="/admin/barbearia-erp"   element={<Layout><BarbeariaERP /></Layout>} />
           <Route path="/admin/barbearia"        element={<Layout><Barbearia /></Layout>} />
           <Route path="/admin/metas-roleta"    element={<Layout><DinoMetasRoletaPanel /></Layout>} />
-          <Route path="/admin/supermercado" element={<TenantAware tenant={<Layout><VarejoUnidade /></Layout>} legacy={<Layout><EscolhaEmpresa modulo="Supermercado" /></Layout>} />} />
+
+          <Route path="/admin/supermercado" element={<TenantAware tenant={<Layout><VarejoUnidade /></Layout>} legacy={<Layout><VarejoUnidade /></Layout>} />} />
+
           <Route path="/admin/omnichannel"      element={<Layout><CanaisFidelidade /></Layout>} />
           <Route path="/admin/pdv-erp"         element={<PDVUnificado />} />
         </Route>
