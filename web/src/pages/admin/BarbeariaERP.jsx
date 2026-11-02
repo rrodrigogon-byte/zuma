@@ -607,7 +607,8 @@ export default function BarbeariaERP() {
   );
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const requestedTab = searchParams.get("tab");
+  // apelidos de links antigos/externos (ex.: ?tab=Fiscal) para o nome real da aba
+  const requestedTab = { Fiscal: "Notas fiscais", fiscal: "Notas fiscais" }[searchParams.get("tab")] || searchParams.get("tab");
   const requestedArea = searchParams.get("area");
   const validRequestedTab =
     TABS.some(([name]) => name === requestedTab) &&

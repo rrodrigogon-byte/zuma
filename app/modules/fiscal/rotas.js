@@ -88,6 +88,7 @@ export function createFiscalAdminRouter({ db, escopoDaRequisicao, env = process.
   router.post('/documentos', rota('payments.write', ({ req, empresaId, lojaRestrita, usuario }) => svc.emitir(db, empresaId, req.body || {}, { usuario, env, transporte, lojaRestrita }), 201));
   router.post('/documentos/lote', rota('payments.write', ({ req, empresaId, lojaRestrita, usuario }) => lote.emitirEmLote(db, empresaId, req.body || {}, { usuario, env, transporte, lojaRestrita })));
   router.get('/automatica', rota('payments.read', ({ empresaId }) => lote.obterConfigAutomatica(db, empresaId)));
+  router.post('/automatica/rodar', rota('payments.write', ({ empresaId, lojaRestrita }) => { empresaToda(lojaRestrita, 'Emitir as pendentes da emissão automática'); return lote.emitirPendentesAgora(db, empresaId, { env, ...(transporte ? { transporte } : {}) }); }));
   router.put('/automatica', rota('settings.write', ({ req, empresaId, lojaRestrita }) => { empresaToda(lojaRestrita, 'Configurar a emissão automática'); return lote.salvarConfigAutomatica(db, empresaId, req.body || {}); }));
   router.post('/documentos/:id/cancelar', rota('payments.write', ({ req, empresaId, lojaRestrita, usuario }) => svc.cancelar(db, empresaId, req.params.id, { justificativa: req.body?.justificativa, usuario, env, transporte, lojaRestrita })));
   router.post('/documentos/:id/svc', rota('payments.write', ({ req, empresaId, lojaRestrita, usuario }) => svc.emitirEmSvc(db, empresaId, req.params.id, { justificativa: req.body?.justificativa, usuario, env, transporte, lojaRestrita })));

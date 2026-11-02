@@ -18,7 +18,7 @@ import { ErroDominio, exigirTexto, exigirUuid, transacao } from '../acesso/banco
 import { cifrar, decifrar, cofreDisponivel } from './cofre.js';
 import * as sefaz from './sefaz.js';
 import { gerarChaveAcessoFiscal } from '../../fiscal-kytto.js';
-import { montarXmlFiscalV400, assinarXmlFiscal, validarXmlFiscal, agoraFiscalCuiaba, conteudoQrCodeOfflineV3 } from '../../fiscal-xml-kytto.js';
+import { montarXmlFiscalV400, assinarXmlFiscal, validarXmlFiscal, agoraFiscalCuiaba, conteudoQrCodeOfflineV3, validadorXsdDisponivel as validadorXsd } from '../../fiscal-xml-kytto.js';
 import { totalizarDocumentoFiscal } from '../../tributacao-kytto.js';
 import * as nfse from '../../core/nfse-nacional.js';
 import { tributosAproximados, importarIbpt as importarTabelaIbpt, listarIbpt as listarTabelasIbpt } from './ibpt.js';
@@ -55,10 +55,10 @@ function exigirProducaoLiberada(env, empresa, ambiente) {
   }
 }
 let xsdDisponivelCache = null;
-/** O xmllint (validação do XSD oficial) existe neste servidor? (resposta guardada) */
+/** Há validador do XSD oficial neste servidor (binário xmllint ou xmllint em WebAssembly)? (resposta guardada) */
 export function validadorXsdDisponivel() {
   if (xsdDisponivelCache === null) {
-    try { xsdDisponivelCache = !spawnSync('xmllint', ['--version'], { encoding: 'utf8', timeout: 5000 }).error; } catch { xsdDisponivelCache = false; }
+    try { xsdDisponivelCache = Boolean(validadorXsd()); } catch { xsdDisponivelCache = false; }
   }
   return xsdDisponivelCache;
 }
@@ -487,7 +487,7 @@ export async function prontidao(db, empresaId, { lojaId = null, env = process.en
   const ambiente = ambienteDe(emit);
   if (ambiente === 'producao' && !producaoLiberada(env, empresa)) pendencias.push('Produção não liberada para esta empresa no servidor (FISCAL_PRODUCAO_EMPRESAS)');
   const xsd = validadorXsdDisponivel();
-  if (!xsd && ambiente === 'producao') pendencias.push('Validador do schema oficial (xmllint) indisponível no servidor');
+  if (!xsd && ambiente === 'producao') pendencias.push('Validador do schema oficial (xmllint ou xmllint-wasm) indisponível no servidor');
   const diasCertificado = cert ? Math.floor((new Date(cert.valido_ate) - Date.now()) / 86400000) : null;
   return {
     ambiente, transmissao: situacaoTransmissao(env, ambiente, empresa), producaoLiberada: producaoLiberada(env, empresa),

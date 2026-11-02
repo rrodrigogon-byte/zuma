@@ -246,12 +246,18 @@ export async function salvarConfigAutomatica(db, empresaId, { emissaoAutomatica,
  * automática ligada, emite NFC-e das vendas pagas desde que ela foi ligada e transmite as
  * contingências pendentes. Uma empresa com problema não para as outras.
  */
-export async function rodarEmissaoAutomatica(db, { env = process.env, agora = new Date(), limitePorEmpresa = 20, transporte = null, esperar = null } = {}) {
+export async function rodarEmissaoAutomatica(db, { env = process.env, agora = new Date(), limitePorEmpresa = 20, transporte = null, esperar = null, empresaId = null } = {}) {
   const tabela = (await db.query("SELECT to_regclass('fis_config') AS t")).rows[0]?.t;
   if (!tabela) return { empresas: 0, emitidas: 0, falhas: 0 };
-  const empresas = (await db.query('SELECT * FROM fis_config WHERE emissao_automatica = true ORDER BY empresa_id')).rows;
-  const total = { empresas: empresas.length, emitidas: 0, falhas: 0 };
+  const empresas = empresaId
+    ? (await db.query('SELECT * FROM fis_config WHERE empresa_id = $1 AND emissao_automatica = true', [exigirUuid(empresaId, 'empresa')])).rows
+    : (await db.query('SELECT * FROM fis_config WHERE emissao_automatica = true ORDER BY empresa_id')).rows;
+  const total = { empresas: empresas.length, emitidas: 0, falhas: 0, resumos: [] };
   for (const cfg of empresas) {
+    // a rotina do servidor e o botão "Emitir pendentes agora" não começam duas rodadas juntas
+    // (a emissão é idempotente por venda; isto só evita trabalho dobrado)
+    const trava = (await db.query("UPDATE fis_config SET ultima_rodada = $2 WHERE empresa_id = $1 AND (ultima_rodada IS NULL OR ultima_rodada < $2::timestamptz - interval '20 seconds') RETURNING 1", [cfg.empresa_id, agora])).rows[0];
+    if (!trava) { total.resumos.push({ empresaId: cfg.empresa_id, emitidas: 0, falhas: 0, erros: ['Já há uma rodada em andamento para esta empresa'] }); continue; }
     const resumo = { emitidas: 0, falhas: 0, erros: [] };
     try {
       const pronta = await svc.prontidao(db, cfg.empresa_id, { env });
@@ -275,11 +281,20 @@ export async function rodarEmissaoAutomatica(db, { env = process.env, agora = ne
       resumo.erros.push(String(error?.message || error).slice(0, 300));
     }
     total.emitidas += resumo.emitidas; total.falhas += resumo.falhas;
+    total.resumos.push({ empresaId: cfg.empresa_id, ...resumo });
     await db.query('UPDATE fis_config SET ultima_rodada = $2, ultimo_resumo = $3 WHERE empresa_id = $1', [cfg.empresa_id, agora, JSON.stringify(resumo)]);
   }
   return total;
 }
 
+/** "Emitir pendentes agora": a rodada da emissão automática só desta empresa, na hora. */
+export async function emitirPendentesAgora(db, empresaId, opcoes = {}) {
+  const empresa = exigirUuid(empresaId, 'empresa');
+  const cfg = (await db.query('SELECT emissao_automatica FROM fis_config WHERE empresa_id = $1', [empresa])).rows[0];
+  if (!cfg?.emissao_automatica) throw new ErroDominio('AUTOMATICA_DESLIGADA', 'Ligue a emissão automática para emitir as pendentes por aqui (ou use "Emitir marcadas"/"Emitir todas" na lista de vendas)', 409);
+  const r = await rodarEmissaoAutomatica(db, { ...opcoes, empresaId: empresa });
+  return { ...(r.resumos[0] || { emitidas: 0, falhas: 0, erros: [] }), config: await obterConfigAutomatica(db, empresa) };
+}
 let rodando = false;
 /** Liga a rotina no servidor (uma rodada por vez). FISCAL_ROTINA_AUTOMATICA=0 desliga. */
 export function iniciarRotinaFiscal(db, { env = process.env, intervaloMs = 120_000, log = console } = {}) {

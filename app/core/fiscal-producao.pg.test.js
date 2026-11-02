@@ -173,6 +173,16 @@ describe('Fiscal F1 — produção por empresa, ST, regimes e venda online (Post
     const assinado = assinarXmlFiscal(xml, { pfx: Buffer.from(PFX, 'base64'), password: SENHA }).xml;
     const validacao = validarXmlFiscal(assinado);
     assert.equal(validacao.valido, true, JSON.stringify(validacao.xsd?.erros || validacao.estrutura?.erros));
+    // servidor sem o binário xmllint (Render nativo): o mesmo schema validado pelo xmllint em WebAssembly
+    process.env.FISCAL_XSD_VALIDADOR = 'wasm';
+    try {
+      const wasm = validarXmlFiscal(assinado);
+      assert.equal(wasm.xsd.validador, 'wasm');
+      assert.equal(wasm.valido, true, JSON.stringify(wasm.xsd?.erros));
+      const ruim = validarXmlFiscal(assinado.replace(/<CFOP>5102<\/CFOP>/, '<CFOP>12</CFOP>'));
+      assert.equal(ruim.valido, false);
+      assert.match(ruim.xsd.erros.join(' '), /CFOP/);
+    } finally { delete process.env.FISCAL_XSD_VALIDADOR; }
     assert.match(xml, /<PISAliq><CST>01<\/CST><vBC>100.00<\/vBC><pPIS>0.6500<\/pPIS><vPIS>0.65<\/vPIS><\/PISAliq>/);
     assert.throws(() => montarXmlFiscalV400({ ...base, config: { ...base.config, regimeTributario: 'simples' }, itens: [{ descricao: 'X', produtoId: '1', quantidade: 1, valorUnitario: 1, valorProduto: 1, baseCalculo: 1, fiscal: { ncm: '33030010', cfop: '5102', csosn: '900' }, icms: {}, pis: {}, cofins: {} }], totais: { valorTotal: 1 }, pagamentos: [] }), /CSOSN 900/);
   });

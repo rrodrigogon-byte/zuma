@@ -12,6 +12,11 @@ export const PERMISSAO_DA_ROTA = {
   '/admin/notas': 'payments.read',
   '/admin/fiscal/config': 'settings.write',
   '/admin/fiscal/classificacao': 'catalog.read',
+  '/admin/fiscal': 'payments.read',
+  '/admin/fiscal/documentos': 'payments.read',
+  '/admin/fiscal/numeracao': 'settings.write',
+  '/admin/fiscal/inutilizacao': 'settings.write',
+  '/admin/fiscal/sped': 'payments.read',
   '/admin/reservas': 'customers.read',
   // terminais pedem configuração; a resolução dos conflitos de venda pede o financeiro
   '/admin/pdv-offline': ['settings.write', 'payments.read'],
@@ -22,6 +27,7 @@ export const PERMISSAO_DA_ROTA = {
 export const MODULO_DA_ROTA = {
   '/admin/compras': 'compras', '/admin/perdas-inventario': 'compras', '/admin/fichas-tecnicas': 'compras',
   '/admin/notas': 'fiscal', '/admin/fiscal/config': 'fiscal', '/admin/fiscal/classificacao': 'fiscal',
+  '/admin/fiscal': 'fiscal', '/admin/fiscal/documentos': 'fiscal', '/admin/fiscal/numeracao': 'fiscal', '/admin/fiscal/inutilizacao': 'fiscal', '/admin/fiscal/sped': 'fiscal',
   '/admin/reservas': 'reservas', '/admin/pdv-offline': 'pdv-offline', '/admin/supermercado': 'supermercado',
 }
 

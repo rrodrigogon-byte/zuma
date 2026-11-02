@@ -272,6 +272,16 @@ describe('Fiscal (homologação)', () => {
     expect(mocks.api.put).toHaveBeenLastCalledWith('/api/admin/fiscal/automatica', expect.objectContaining({ origens: ['loja_pedido', 'barbearia_comanda'] }))
   })
 
+  it('emissão automática ligada: "Emitir pendentes agora" roda na hora e mostra o resultado', async () => {
+    mocks.api.post.mockResolvedValue({ emitidas: 3, falhas: 0, erros: [], config: { emissaoAutomatica: true, origens: ['loja_pedido'], ultimaRodada: '2026-11-02T13:00:00Z', ultimoResumo: { emitidas: 3, falhas: 0, erros: [] } } })
+    const desligada = await montar('documentos', { '/api/admin/fiscal/automatica': { emissaoAutomatica: false, origens: ['loja_pedido'] } })
+    expect(botoes(desligada, 'Emitir pendentes agora')).toHaveLength(0)
+    const tree = await montar('documentos', { '/api/admin/fiscal/automatica': { emissaoAutomatica: true, origens: ['loja_pedido'], desde: '2026-11-01T19:00:00Z' } })
+    await act(async () => { await botoes(tree, 'Emitir pendentes agora')[0].props.onClick() })
+    expect(mocks.api.post).toHaveBeenCalledWith('/api/admin/fiscal/automatica/rodar', {})
+    expect(mocks.toast).toHaveBeenCalledWith(expect.stringContaining('3 nota(s) emitida(s)'), 'success')
+  })
+
   it('classificação: marcar vários, aplicar perfil e classificar em lote; usar a sugestão de NCM', async () => {
     mocks.api.post.mockResolvedValue({ ok: true, aplicadas: 2 })
     const perfis = [{ id: 'sn_revenda_st', nome: 'Simples · revenda com ST', valores: { cfop: '5405', csosn: '500', cstPis: '49', cstCofins: '49' } }]

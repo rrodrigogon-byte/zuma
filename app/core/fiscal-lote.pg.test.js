@@ -143,10 +143,20 @@ describe('Fiscal F2 — classificação em massa, emissão em lote e automática
     assert.ok(!docs.some((d) => d.origemId === antiga), 'a venda de antes de ligar continua para emissão manual');
     const depois = await lote.obterConfigAutomatica(ctx.db, A);
     assert.equal(depois.ultimoResumo.emitidas, 1);
-    // segunda rodada: nada novo
-    assert.equal((await lote.rodarEmissaoAutomatica(ctx.db, { env: ENV })).emitidas, 0);
+    // rodada logo em seguida não começa (a anterior acabou de rodar)
+    const colada = await lote.rodarEmissaoAutomatica(ctx.db, { env: ENV });
+    assert.match(colada.resumos[0].erros[0], /rodada em andamento/);
+    // segunda rodada depois do intervalo: nada novo
+    assert.equal((await lote.rodarEmissaoAutomatica(ctx.db, { env: ENV, agora: new Date(Date.now() + 60_000) })).emitidas, 0);
+    // "Emitir pendentes agora": a rodada só desta empresa, na hora
+    const outra = await pedidoPago(variantes['1 Million Parfum 100ml'], { criadoEm: new Date(agora.getTime() + 2000) });
+    const agoraBotao = await lote.emitirPendentesAgora(ctx.db, A, { env: ENV, agora: new Date(Date.now() + 120_000) });
+    assert.equal(agoraBotao.emitidas, 1);
+    assert.equal(agoraBotao.config.ultimoResumo.emitidas, 1);
+    assert.ok((await fiscal.listarDocumentos(ctx.db, A)).some((d) => d.origemId === outra));
     // desligar zera o "desde"
     assert.equal((await lote.salvarConfigAutomatica(ctx.db, A, { emissaoAutomatica: false })).desde, null);
+    await assert.rejects(() => lote.emitirPendentesAgora(ctx.db, A, { env: ENV }), (e) => e.code === 'AUTOMATICA_DESLIGADA');
   });
 
   test('emissão automática com o fiscal incompleto registra o motivo e não emite', async () => {

@@ -240,7 +240,7 @@ const NAV_DINO_GROUPS = [
     items: [
       { to: '/admin/compras', icon: '▤', label: 'Compras e fornecedores' },
       { to: '/admin/perdas-inventario', icon: '▤', label: 'Perdas e inventário' },
-      { to: '/admin/notas', icon: '◇', label: 'Notas fiscais (homologação)' },
+      { to: '/admin/notas', icon: '◇', label: 'Notas fiscais' },
       { to: '/admin/fiscal/config', icon: '⚙', label: 'Configuração fiscal' },
     ],
   },
@@ -398,7 +398,7 @@ const NAV_STALLONE_GROUPS = [
       { to: '/admin/compras', icon: '▤', label: 'Compras e fornecedores' },
       { to: '/admin/perdas-inventario', icon: '▤', label: 'Perdas e inventário' },
       { to: '/admin/pdv-offline', icon: '▱', label: 'PDV da loja e periféricos' },
-      { to: '/admin/notas', icon: '◇', label: 'Notas fiscais (homologação)' },
+      { to: '/admin/notas', icon: '◇', label: 'Notas fiscais' },
       { to: '/admin/fiscal/config', icon: '⚙', label: 'Configuração fiscal' },
       { to: '/admin/fiscal/classificacao', icon: '⚙', label: 'Classificação fiscal (NCM)' },
     ],

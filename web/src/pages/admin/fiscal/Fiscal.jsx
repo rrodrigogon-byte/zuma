@@ -402,6 +402,16 @@ function Documentos({ toast }) {
       carregar()
     } catch (error) { toast(error.message, 'error') } finally { setEnviando('') }
   }
+  async function emitirPendentesAgora() {
+    if (enviando) return
+    setEnviando('automatica')
+    try {
+      const r = await api.post(`${BASE}/automatica/rodar`, {})
+      if (r?.config) setAutomatica(r.config)
+      toast(`Emissão automática: ${r.emitidas || 0} nota(s) emitida(s)${r.falhas ? `, ${r.falhas} com problema` : ''}${r.erros?.length ? `. ${r.erros.slice(0, 2).join(' · ')}` : '.'}`, r.falhas || r.erros?.length ? 'error' : 'success')
+      carregar()
+    } catch (error) { toast(error.message, 'error') } finally { setEnviando('') }
+  }
   async function salvarAutomatica(mudanca) {
     try { setAutomatica(await api.put(`${BASE}/automatica`, { ...automatica, ...mudanca })); toast(mudanca.emissaoAutomatica === false ? 'Emissão automática desligada.' : 'Emissão automática salva.', 'success') } catch (error) { toast(error.message, 'error') }
   }
@@ -587,6 +597,7 @@ function Documentos({ toast }) {
         }} /> {rotulo}</label>)}
       </div>
       {automatica.emissaoAutomatica && automatica.desde && <p className="dadm-muted">Valendo para vendas desde {dateTime(automatica.desde)}.</p>}
+      {automatica.emissaoAutomatica && <div className="dadm-actions"><button type="button" className="c360-btn ghost" disabled={Boolean(enviando)} onClick={emitirPendentesAgora}>Emitir pendentes agora</button></div>}
       {automatica.ultimaRodada && <p className={`dadm-note ${automatica.ultimoResumo?.erros?.length ? 'warn' : ''}`}>Última rodada {dateTime(automatica.ultimaRodada)}: {automatica.ultimoResumo?.emitidas || 0} emitida(s), {automatica.ultimoResumo?.falhas || 0} com problema.{automatica.ultimoResumo?.erros?.length ? ` ${automatica.ultimoResumo.erros.slice(0, 3).join(' · ')}` : ''}</p>}
     </section>}
     {contingencias.length > 0 && <section className="dadm-card">

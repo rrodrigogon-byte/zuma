@@ -153,14 +153,38 @@ function validarEstruturaBasica(xmlFiscal) {
   return { valido: erros.length === 0, erros };
 }
 
+const VALIDADOR_WASM = path.join(__dirname, 'fiscal-xsd-wasm.js');
+/** Valida com o xmllint em WebAssembly; null quando nem ele está disponível (aí a nota não sai em produção). */
+function validarXsdWasm(schemaPath, xmlPath) {
+  try {
+    const r = spawnSync(process.execPath, [VALIDADOR_WASM, schemaPath, xmlPath], { encoding: 'utf8', timeout: 30000 });
+    const saida = JSON.parse(String(r.stdout || '').trim() || 'null');
+    if (!saida || saida.falhaValidador) return null;
+    return { valido: saida.valido === true, erros: Array.isArray(saida.erros) ? saida.erros : [] };
+  } catch { return null; }
+}
+
+/** Há validador do XSD neste servidor (binário xmllint ou o WebAssembly)? */
+export function validadorXsdDisponivel() {
+  if (process.env.FISCAL_XSD_VALIDADOR !== 'wasm' && !spawnSync('xmllint', ['--version'], { encoding: 'utf8', timeout: 5000 }).error) return 'xmllint';
+  try {
+    const r = spawnSync(process.execPath, ['--input-type=module', '-e', "await import('xmllint-wasm'); process.stdout.write('ok')"], { encoding: 'utf8', timeout: 20000, cwd: __dirname });
+    return String(r.stdout || '').includes('ok') ? 'wasm' : null;
+  } catch { return null; }
+}
+
 export function validarXmlComXsd(xmlFiscal, { schema = verificarSchemaOficial() } = {}) {
   if (!schema.instalado) return { valido: false, tipo: 'XSD', erros: [schema.motivo || 'Schema oficial indisponível.'], schema };
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'kytto-nfe-xsd-'));
   const xmlPath = path.join(tempDir, 'documento.xml');
   try {
     fs.writeFileSync(xmlPath, xmlFiscal, 'utf8');
-    const result = spawnSync('xmllint', ['--noout', '--schema', schema.schemaPath, xmlPath], { encoding: 'utf8', timeout: 15000 });
-    if (result.error?.code === 'ENOENT') return { valido: false, tipo: 'XSD', erros: ['Validador xmllint não está disponível na imagem de execução.'], schema };
+    const result = process.env.FISCAL_XSD_VALIDADOR === 'wasm' ? { error: { code: 'ENOENT' } } : spawnSync('xmllint', ['--noout', '--schema', schema.schemaPath, xmlPath], { encoding: 'utf8', timeout: 15000 });
+    if (result.error?.code === 'ENOENT') {
+      // sem o binário: o mesmo libxml2 em WebAssembly (pacote xmllint-wasm), num processo filho síncrono
+      const wasm = validarXsdWasm(schema.schemaPath, xmlPath);
+      return wasm ? { ...wasm, tipo: 'XSD', schema, validador: 'wasm' } : { valido: false, tipo: 'XSD', erros: ['Validador xmllint não está disponível na imagem de execução.'], schema };
+    }
     const output = `${result.stderr || ''}\n${result.stdout || ''}`.trim();
     return { valido: result.status === 0, tipo: 'XSD', erros: result.status === 0 ? [] : output.split('\n').filter(Boolean).slice(-12), schema };
   } finally {
