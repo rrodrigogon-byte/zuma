@@ -8721,6 +8721,7 @@ export default function BarbeariaERP() {
             profissionais={profissionais}
             servicos={servicos}
             produtosRevenda={produtosRevenda}
+            catalogoPlanos={planos}
             agendamentos={agendamentos}
             agendamentoId={formComanda.agendamentoId}
             clienteInicial={formComanda.clienteId}
@@ -9081,6 +9082,7 @@ export default function BarbeariaERP() {
                   profissionais={profissionais}
                   servicos={servicos}
                   produtosRevenda={produtosRevenda}
+                  catalogoPlanos={planos}
                   agendamentos={agendamentos}
                   toast={toast}
                   onAdicionados={async (atualizada, avisos) => {

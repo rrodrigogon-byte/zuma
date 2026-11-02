@@ -5269,6 +5269,30 @@ async function posFaturamentoComanda(req, comanda) {
     }
   }
   const planos = comandaPlanoKytto.consumirPlanosDaComanda(empresaId, comanda);
+  // Ativação automática de pacote/plano adquirido na comanda
+  const itensPacote = (comanda.itens || []).filter((item) => (item.tipo === 'pacote' || item.tipo === 'plano') && item.planoId);
+  for (const item of itensPacote) {
+    if (comanda.clienteId) {
+      try {
+        const assinaturaCriada = barbeariaErpKytto.criarAssinatura(empresaId, {
+          clienteId: comanda.clienteId,
+          clienteNome: comanda.clienteNome || '',
+          clienteTelefone: comanda.clienteTelefone || '',
+          planoId: item.planoId,
+          profissionalId: item.profissionalId || comanda.profissionalId || '',
+          origem: 'comanda',
+          comandaId: comanda.id,
+          valorContratado: item.precoUnitario,
+          chaveIdempotencia: `comanda-${comanda.id}-item-${item.id}`,
+        });
+        if (assinaturaCriada?.id) {
+          barbeariaErpKytto.alterarStatusAssinatura(empresaId, assinaturaCriada.id, 'ativa', { confirmadoSemCobranca: true });
+        }
+      } catch (errAssinatura) {
+        console.warn('[comanda] ativacao de pacote na comanda:', errAssinatura.message);
+      }
+    }
+  }
   const loja = [];
   const itensLoja = (comanda.itens || []).filter((item) => item.tipo === 'loja' && item.estoqueLoja?.status !== 'baixado');
   if (itensLoja.length) {

@@ -56,3 +56,14 @@ test('corpo para a API não leva preço nem cobertura (o servidor decide)', () =
   ])
   assert.equal(linkInstagram('@dino.barber'), 'https://www.instagram.com/dino.barber/')
 })
+
+test('corpo para a API aceita pacote de serviços e item avulso/outro', () => {
+  const corpo = itensParaApi([
+    { tipo: 'pacote', itemId: 'plano-vip-1', nome: 'Pacote 4 Procedimentos', preco: 250, quantidade: 1 },
+    { tipo: 'outro', itemId: 'outro-1', nome: 'Taxa de deslocamento', preco: 35, quantidade: 1, obs: 'Atendimento no hotel' },
+  ], 'prof-1')
+  assert.deepEqual(corpo, [
+    { tipo: 'pacote', quantidade: 1, profissionalId: 'prof-1', planoId: 'plano-vip-1', itemId: 'plano-vip-1', nome: 'Pacote 4 Procedimentos', preco: 250 },
+    { tipo: 'outro', quantidade: 1, profissionalId: 'prof-1', nome: 'Taxa de deslocamento', preco: 35, obs: 'Atendimento no hotel' },
+  ])
+})

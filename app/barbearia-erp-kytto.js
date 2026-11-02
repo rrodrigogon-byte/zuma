@@ -2152,6 +2152,61 @@ function itemLojaComandaNormalizado(estado, comanda, dados = {}) {
 function itemComandaBarbeariaNormalizado(estado, comanda, dados = {}) {
   const tipo = String(dados.tipo || (dados.servicoId || dados.servico_id ? 'servico' : 'produto')).toLowerCase();
   if (tipo === 'loja') return itemLojaComandaNormalizado(estado, comanda, dados);
+  // Suporte a Pacotes e Planos de Procedimentos na comanda
+  if (tipo === 'pacote' || tipo === 'plano') {
+    const id = String(dados.itemId || dados.planoId || dados.plano_id || dados.pacoteId || '').trim();
+    const quantidade = Math.max(1, Math.round(numero(dados.quantidade ?? dados.qtd, 1)));
+    const plano = estado.planos?.[id] || Object.values(estado.planos || {}).find((p) => p.id === id || p.nome === dados.nome);
+    const precoUnitario = dados.preco !== undefined ? dinheiro(dados.preco) : dinheiro(plano?.preco || 0);
+    if (precoUnitario < 0) throw new Error('O pacote não pode ter preço negativo.');
+    const profissionalId = texto(dados.profissionalId ?? dados.profissional_id ?? comanda.profissionalId, 120);
+    if (profissionalId && (!estado.profissionais[profissionalId] || estado.profissionais[profissionalId].ativo === false)) {
+      throw new Error('Profissional responsável não encontrado ou inativo.');
+    }
+    const nome = texto(dados.nome || plano?.nome || 'Pacote de Procedimentos', 160);
+    return {
+      id: novoIdItemComanda(),
+      tipo: 'pacote',
+      servicoId: null,
+      produtoId: null,
+      planoId: plano?.id || id || null,
+      nome,
+      categoria: texto(plano?.categoriaPlano || 'Pacotes e Planos', 100),
+      quantidade,
+      precoUnitario,
+      subtotal: dinheiro(precoUnitario * quantidade),
+      duracaoMinutos: 0,
+      profissionalId: profissionalId || null,
+      observacao: texto(dados.observacao ?? dados.obs ?? (plano?.descricao || ''), 400),
+      criadoEm: dataAtual(),
+    };
+  }
+  // Suporte a Outro item / Taxa / Serviço avulso na comanda
+  if (tipo === 'outro' || tipo === 'avulso') {
+    const quantidade = Math.max(1, Math.round(numero(dados.quantidade ?? dados.qtd, 1)));
+    const precoUnitario = dinheiro(dados.preco ?? dados.precoUnitario ?? dados.valor ?? 0);
+    if (precoUnitario < 0) throw new Error('O item não pode ter preço negativo.');
+    const nome = texto(dados.nome || dados.descricao || dados.detalhe || 'Outro item / Taxa', 160);
+    const profissionalId = texto(dados.profissionalId ?? dados.profissional_id ?? comanda.profissionalId, 120);
+    if (profissionalId && (!estado.profissionais[profissionalId] || estado.profissionais[profissionalId].ativo === false)) {
+      throw new Error('Profissional responsável não encontrado ou inativo.');
+    }
+    return {
+      id: novoIdItemComanda(),
+      tipo: 'outro',
+      servicoId: null,
+      produtoId: null,
+      nome,
+      categoria: texto(dados.categoria || 'Outros', 100),
+      quantidade,
+      precoUnitario,
+      subtotal: dinheiro(precoUnitario * quantidade),
+      duracaoMinutos: 0,
+      profissionalId: profissionalId || null,
+      observacao: texto(dados.observacao ?? dados.obs ?? dados.detalhe, 400),
+      criadoEm: dataAtual(),
+    };
+  }
   const id = String(dados.itemId || dados.servicoId || dados.servico_id || dados.produtoId || dados.produto_id || '').trim();
   const quantidade = Math.max(1, Math.round(numero(dados.quantidade ?? dados.qtd, 1)));
   if (!id) throw new Error('Informe o serviço ou produto do item.');
@@ -2546,15 +2601,17 @@ export function atualizarItemComandaBarbearia(empresaId, comandaId, itemId, dado
     const produto = estado.produtosRevenda[atual.produtoId];
     if (!produto || Number(produto.estoqueAtual || 0) < quantidade) throw new Error(`Estoque insuficiente para ${atual.nome}.`);
   }
+  const precoUnitario = (dados.preco !== undefined || dados.precoUnitario !== undefined) ? dinheiro(dados.preco ?? dados.precoUnitario) : atual.precoUnitario;
   const subtotalAtual = Number((comanda.itens || []).reduce((soma, item) => soma + Number(item.subtotal || 0), 0).toFixed(2));
-  const subtotalNovo = Number((subtotalAtual - Number(atual.subtotal || 0) + (atual.coberturaPlano ? 0 : dinheiro(atual.precoUnitario * quantidade))).toFixed(2));
+  const subtotalNovo = Number((subtotalAtual - Number(atual.subtotal || 0) + (atual.coberturaPlano ? 0 : dinheiro(precoUnitario * quantidade))).toFixed(2));
   const desconto = Number(Math.min(subtotalNovo, Math.max(0, Number(comanda.desconto || 0))).toFixed(2));
   const totalNovo = Number(Math.max(0, subtotalNovo - desconto + Math.max(0, Number(comanda.gorjeta || 0))).toFixed(2));
   if (totalNovo + 0.02 < Number(comanda.totalFaturado || 0)) throw erroEstoqueReserva('O total da comanda não pode ficar abaixo do total já faturado.', 'TOTAL_BELOW_BILLED', 409);
   const snapshot = raizSnapshot();
   try {
     atual.quantidade = quantidade;
-    atual.subtotal = atual.coberturaPlano ? 0 : dinheiro(atual.precoUnitario * quantidade);
+    atual.precoUnitario = precoUnitario;
+    atual.subtotal = atual.coberturaPlano ? 0 : dinheiro(precoUnitario * quantidade);
     if (dados.observacao !== undefined || dados.obs !== undefined) atual.observacao = texto(dados.observacao ?? dados.obs, 400);
     atual.atualizadoEm = dataAtual();
     sincronizarReservasOperacao(empresaId, comanda, estado, { origem: 'comanda_barbearia', expiresAt: comanda.reservaEstoqueExpiresAt });
@@ -3330,7 +3387,7 @@ export function calcularComissoesEstado(estado, empresaId, { data = '', lojaId =
     .filter((item) => item.status === 'pago')
     .filter((item) => noFiltro(diaOperacional(item.criadoEm)));
   const servicosComanda = comandasPagas.flatMap((comanda) => (comanda.itens || [])
-    .filter((item) => item.tipo === 'servico')
+    .filter((item) => ['servico', 'pacote', 'plano', 'outro', 'avulso'].includes(item.tipo))
     .map((item) => ({ ...item, origemTipo: 'comanda', origemId: comanda.id, clienteNome: comanda.clienteNome || '', dataRef: diaOperacional(comanda.fechadaEm || comanda.atualizadoEm), nomeItem: item.nome, profissionalId: item.profissionalId || comanda.profissionalId, valorRecebido: dinheiro(Number(item.subtotal || 0) * fatorDesconto(comanda)), valor: dinheiro(Number(item.subtotal || 0) * fatorDesconto(comanda)), pesoNaComanda: pesoNaComanda(comanda, Number(item.subtotal || 0)), rateio: rateioPagamentos(comanda), meioPagamento: comanda.pagamentos?.find((pagamento) => pagamento.meio !== 'conta')?.meio || comanda.pagamento })));
   const produtosComanda = comandasPagas.map((comanda) => {
     const itensProduto = (comanda.itens || []).filter((item) => item.tipo === 'produto');
