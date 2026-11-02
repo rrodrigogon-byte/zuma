@@ -9650,6 +9650,9 @@ process.on('uncaughtException', (e)=> console.error('uncaughtException:', e?.mes
 
   // Fechamento do dia no WhatsApp do dono (DINO_RESUMO_DIARIO=on).
   startResumoDiarioWorker();
+  for (const empId of ['d0d0ac01-8e50-4b61-8c79-de4aaa916da6', 'emp_dino', 'emp-kytto-001', 'dino']) {
+    try { barbeariaErpKytto.atualizarConfiguracao(empId, { confirmacaoAutomaticaAtiva: true }); } catch {}
+  }
   startDinoDailyConfirmationWorker();
   startDinoDailyBriefingWorker();
   startAiBrainSchedulers();

@@ -993,7 +993,9 @@ function ordenarPorData(a, b) {
 
 export function obterConfiguracao(empresaId) {
   const configuracao = estadoEmpresa(empresaId, false).configuracao;
-  return { ...configuracao, confirmacaoAutomaticaAtiva: configuracao.confirmacaoAutomaticaAtiva === true, lojas: { ...(configuracao.lojas || {}) } };
+  const isDino = ['d0d0ac01-8e50-4b61-8c79-de4aaa916da6', 'emp_dino', 'dino'].includes(String(empresaId || '').toLowerCase());
+  const ativa = isDino ? configuracao.confirmacaoAutomaticaAtiva !== false : configuracao.confirmacaoAutomaticaAtiva === true;
+  return { ...configuracao, confirmacaoAutomaticaAtiva: ativa, lojas: { ...(configuracao.lojas || {}) } };
 }
 
 function obterCalendarioLoja(estado, lojaId) {

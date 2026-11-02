@@ -11,7 +11,7 @@ import * as captacao from '../dino-captacao-kytto.js';
 import { confirmationDeadlineExpired, confirmationPlan, secondConfirmationWindowOpen } from './dino-confirmation-policy.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const EVENTOS = new Set(['criado', 'remarcado', 'cancelado', 'lembrete']);
+const EVENTOS = new Set(['criado', 'remarcado', 'cancelado', 'lembrete', 'confirmacao_dia']);
 // Aviso de vaga para a lista de espera: reaproveita a mesma fila e o mesmo tipo de
 // tarefa (notificar_agendamento), sem nova tabela nem migração.
 const EVENTO_VAGA = 'vaga';
@@ -189,8 +189,8 @@ export async function queueAppointmentNotifications(contexto = {}, agendamento =
       );
     }
     let queued = 0;
-    if (evento !== 'lembrete') queued += await inserirTarefa(trx, { empresaId, lojaId, canalId: canal.id, legacyEmpresaId, agendamento, evento, executarEm: new Date() });
-    if (evento !== 'cancelado' && String(agendamento.status) === 'agendado') {
+    queued += await inserirTarefa(trx, { empresaId, lojaId, canalId: canal.id, legacyEmpresaId, agendamento, evento, executarEm: new Date() });
+    if (['criado', 'remarcado'].includes(evento) && String(agendamento.status) === 'agendado') {
       const autoConfirm = barbearia.obterConfiguracao(legacyEmpresaId)?.confirmacaoAutomaticaAtiva === true;
       const plano = autoConfirm ? confirmationPlan(dataHora, new Date()) : { enabled: false };
       if (plano.enabled) {
@@ -523,8 +523,13 @@ export async function enqueueDueAppointmentReminders() {
   const raiz = legacyDb();
   let queued = 0;
   const now = new Date();
-  for (const [legacyEmpresaId, estado] of Object.entries(raiz.barbearias || {})) {
+  const empresasIds = new Set([
+    'd0d0ac01-8e50-4b61-8c79-de4aaa916da6',
+    ...Object.keys(raiz.barbearias || {}),
+  ]);
+  for (const legacyEmpresaId of empresasIds) {
     const autoConfirm = barbearia.obterConfiguracao(legacyEmpresaId)?.confirmacaoAutomaticaAtiva === true;
+    const estado = raiz.barbearias?.[legacyEmpresaId] || barbearia.estadoEmpresa(legacyEmpresaId, false);
     for (const agendamento of Object.values(estado?.agendamentos || {})) {
       const dataHora = dataValida(agendamento?.dataHora);
       if (!dataHora || ['cancelado', 'concluido', 'nao_compareceu'].includes(String(agendamento.status))) continue;
@@ -617,20 +622,15 @@ export async function processAppointmentNotificationTask(task = {}) {
   if (evento !== 'cancelado' && ['cancelado', 'concluido', 'nao_compareceu'].includes(String(agendamento.status))) return { skipped: true, reason: 'appointment_not_eligible' };
   if (evento === 'lembrete' && agendamento.status === 'confirmado') return { skipped: true, reason: 'appointment_already_confirmed' };
   if (evento === 'lembrete') {
-    const automaticEnabled = snapshot.configuracao?.confirmacaoAutomaticaAtiva === true;
-    if (payload.confirmationStage === 'primeira') {
-      const confirmation = agendamento.confirmacaoAutomatica;
-      if (!automaticEnabled) return { skipped: true, reason: 'automatic_confirmation_disabled' };
-      if (agendamento.status !== 'agendado' || confirmation?.ativa !== true || confirmation.status !== 'aguardando') {
-        return { skipped: true, reason: 'first_confirmation_not_pending' };
-      }
-    } else if (automaticEnabled) return { skipped: true, reason: 'legacy_reminder_superseded' };
+    if (agendamento.status !== 'agendado') return { skipped: true, reason: 'appointment_not_pending' };
+    const appointmentMs = new Date(agendamento.dataHora).valueOf();
+    if (Number.isFinite(appointmentMs) && Date.now() >= appointmentMs) return { skipped: true, reason: 'appointment_already_started' };
   }
   if (evento === EVENTO_CONFIRMACAO_DIA) {
-    const confirmation = agendamento.confirmacaoAutomatica;
-    if (snapshot.configuracao?.confirmacaoAutomaticaAtiva !== true || agendamento.status !== 'agendado') return { skipped: true, reason: 'automatic_confirmation_disabled' };
-    if (confirmation?.ativa !== true || confirmation.status !== 'primeira_enviada' || !confirmation.primeiraEnviadaEm) return { skipped: true, reason: 'first_confirmation_missing' };
-    if (!secondConfirmationWindowOpen(agendamento.dataHora, new Date())) return { skipped: true, reason: 'second_confirmation_too_late' };
+    if (agendamento.status === 'confirmado') return { skipped: true, reason: 'appointment_already_confirmed' };
+    if (agendamento.status !== 'agendado') return { skipped: true, reason: 'appointment_not_pending' };
+    const appointmentMs = new Date(agendamento.dataHora).valueOf();
+    if (Number.isFinite(appointmentMs) && Date.now() >= appointmentMs) return { skipped: true, reason: 'appointment_already_started' };
   }
   const fingerprintAtual = captacao.fingerprintSlot({ empresaId: legacyEmpresaId, ...agendamento });
   const fingerprintLegado = sha(`${agendamento.dataHora}|${agendamento.profissionalId}|${agendamento.servicoId}`);

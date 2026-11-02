@@ -1464,6 +1464,11 @@ async function confirmNextAppointment(context) {
   return { text: `Confirmado! ${proximo.servico?.nome || 'Seu horário'} com ${proximo.profissional?.nome || 'a equipe'}, ${quando}. Te esperamos!`, kind: 'presence_confirmed' };
 }
 
+function isCancellationRequest(text) {
+  const t = String(text ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+  return /\b(nao deu certo de (?:eu )?ir|nao vou (?:conseguir|poder) ir|nao poderei ir|nao vou mais conseguir|cancela|cancelar|cancelo|desmarca|desmarcar|desmarco|imprevisto nao vou)\b/i.test(t);
+}
+
 async function deterministicResponseCore(task, channel, session, message) {
   const persona = resolvePersona(channel.configuracao, process.env, task.empresa_id);
   const personaStore = cleanText(channel.configuracao?.display_name || channel.nome || 'esta unidade', 120);
@@ -1557,7 +1562,7 @@ async function deterministicResponseCore(task, channel, session, message) {
   // Resposta ao lembrete ("CONFIRMO", "confirmado!") vale mesmo com a conversa na fila,
   // desde que ninguém da equipe tenha assumido: em 27/10 o "confirmado!" ficou sem
   // registro e o horário corria risco de cancelamento automático por falta de confirmação.
-  if (session.status === 'humano' && !session.assigned_to && !session.acao_pendente && presenceConfirmIntent(message.text)) {
+  if (!session.assigned_to && !session.acao_pendente && presenceConfirmIntent(message.text)) {
     const confirmado = await confirmNextAppointment(context).catch(() => null);
     if (confirmado) return confirmado;
   }
