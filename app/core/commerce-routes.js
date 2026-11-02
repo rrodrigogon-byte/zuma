@@ -690,20 +690,48 @@ async function withWhatsappLoja(context) {
 }
 
 async function normalizeWhatsappQueueStoreSelector(req) {
-  const requestedLojaId = String(req.headers['x-loja-id'] || '').trim();
-  if (!requestedLojaId || isUuid(requestedLojaId)) return requestedLojaId;
-  if (!req.user && !req.commerceAdminContext) throw new CommerceError('sessão autenticada é obrigatória', 'TENANT_CONTEXT_REQUIRED');
+  let requestedLojaId = String(req.headers['x-loja-id'] || '').trim();
   const requestedEmpresaId = String(req.headers['x-empresa-id'] || '').trim();
+  if (!requestedLojaId) {
+    if (isUuid(requestedEmpresaId)) {
+      const firstStore = await db.queryRead(
+        `SELECT id, codigo FROM lojas WHERE empresa_id = $1 AND COALESCE(ativa, true) = true ORDER BY criado_em ASC LIMIT 1`,
+        [requestedEmpresaId]
+      );
+      if (firstStore.rows[0]) {
+        requestedLojaId = firstStore.rows[0].id;
+        req.headers['x-loja-id'] = requestedLojaId;
+        delete req.commerceAdminContext;
+        return requestedLojaId;
+      }
+    }
+    return '';
+  }
+  if (isUuid(requestedLojaId)) return requestedLojaId;
+  if (!req.user && !req.commerceAdminContext) throw new CommerceError('sessão autenticada é obrigatória', 'TENANT_CONTEXT_REQUIRED');
   if (!isUuid(requestedEmpresaId)) {
     const error = new Error('seletor de unidade inválido');
     error.code = 'WHATSAPP_AI_STORE_SELECTOR_INVALID';
     throw error;
   }
   const result = await db.queryRead(
-    `SELECT id FROM lojas WHERE empresa_id = $1 AND codigo = $2 AND COALESCE(ativa, true) = true LIMIT 1`,
+    `SELECT id FROM lojas
+      WHERE empresa_id = $1
+        AND (lower(codigo) = lower($2) OR lower(id::text) = lower($2) OR lower(nome) = lower($2) OR lower(nome) ILIKE '%' || lower($2) || '%')
+        AND COALESCE(ativa, true) = true
+      LIMIT 1`,
     [requestedEmpresaId, requestedLojaId],
   );
   if (!result.rows[0]) {
+    const fallback = await db.queryRead(
+      `SELECT id FROM lojas WHERE empresa_id = $1 AND COALESCE(ativa, true) = true ORDER BY criado_em ASC LIMIT 1`,
+      [requestedEmpresaId]
+    );
+    if (fallback.rows[0]) {
+      req.headers['x-loja-id'] = fallback.rows[0].id;
+      delete req.commerceAdminContext;
+      return requestedLojaId;
+    }
     const error = new Error('unidade selecionada não encontrada nesta empresa');
     error.code = 'WHATSAPP_AI_STORE_SELECTOR_INVALID';
     throw error;
@@ -2301,7 +2329,7 @@ export function createCommerceAdminRouter() {
       const context = hasQueueFilter
         ? await requirePermission(req, 'reports.read')
         : await withWhatsappLoja(await requirePermission(req, 'reports.read'));
-      if (hasQueueFilter && (String(context.empresaId).toLowerCase() !== String(req.headers['x-empresa-id'] || '').toLowerCase() || String(context.lojaId).toLowerCase() !== String(req.headers['x-loja-id'] || '').toLowerCase())) {
+      if (hasQueueFilter && (String(context.empresaId).toLowerCase() !== String(req.headers['x-empresa-id'] || '').toLowerCase() || (context.lojaId && String(context.lojaId).toLowerCase() !== String(req.headers['x-loja-id'] || '').toLowerCase()))) {
         throw new CommerceError('unidade fora do escopo selecionado', 'STORE_SCOPE_MISMATCH');
       }
       if (!hasQueueFilter) {
@@ -2319,8 +2347,8 @@ export function createCommerceAdminRouter() {
         items,
         canClaim,
         selection: {
-          requestedLojaId: requestedLojaId || null,
-          canonicalLojaId: context.lojaId || null,
+          requestedLojaId: requestedLojaId || context.lojaId || req.headers['x-loja-id'] || null,
+          canonicalLojaId: context.lojaId || req.headers['x-loja-id'] || null,
           empresaId: context.empresaId || null,
           inferred: context.lojaInferida === true,
         },

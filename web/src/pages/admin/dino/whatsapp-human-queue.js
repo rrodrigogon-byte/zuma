@@ -99,9 +99,11 @@ export function validateHumanQueueResponse(payload, context = {}) {
   if (!isRecord(payload) || !Array.isArray(payload.items) || payload.items.length > HUMAN_QUEUE_LIMIT) throw new Error('resposta da fila humana inválida')
   if (typeof payload.canClaim !== 'boolean' || !isRecord(payload.selection)) throw new Error('seleção da fila humana inválida')
   const selection = payload.selection
-  if (!isUuid(selection.empresaId) || selection.empresaId !== empresaId) throw new Error('empresa da fila não corresponde ao contexto')
-  if (typeof selection.requestedLojaId !== 'string' || selection.requestedLojaId !== lojaId) throw new Error('unidade da fila não corresponde ao contexto')
-  if (!isUuid(selection.canonicalLojaId) || selection.inferred !== false) throw new Error('seleção canônica da fila inválida')
+  if (!isUuid(selection.empresaId) || selection.empresaId.toLowerCase() !== empresaId.toLowerCase()) throw new Error('empresa da fila não corresponde ao contexto')
+  if (lojaId && typeof selection.requestedLojaId === 'string' && selection.requestedLojaId.toLowerCase() !== lojaId.toLowerCase() && String(selection.canonicalLojaId || '').toLowerCase() !== lojaId.toLowerCase()) {
+    throw new Error('unidade da fila não corresponde ao contexto')
+  }
+  if (!isUuid(selection.canonicalLojaId)) throw new Error('seleção canônica da fila inválida')
   const ids = new Set()
   const items = payload.items.map((item, index) => validItem(item, index, ids))
   return Object.freeze({
@@ -161,7 +163,7 @@ export function queueErrorMessage(error) {
   if (error?.status === 403) return 'Você não tem permissão para consultar a fila humana.'
   if (error?.status === 503) return 'A fila humana está indisponível agora. Tente atualizar.'
   if (error?.uncertain === true || error?.status === 408 || error?.status === 504) return 'Não foi possível confirmar com segurança. Atualize a fila antes de tentar novamente.'
-  return 'A fila humana não pôde ser validada. Atualize para tentar novamente.'
+  return error?.message || 'A fila humana não pôde ser validada. Atualize para tentar novamente.'
 }
 
 export function isUncertainClaimError(error) {

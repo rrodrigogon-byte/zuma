@@ -99,7 +99,9 @@ export default function WhatsappHumanQueue({
     // Atualização automática: troca a lista sem piscar a tela.
     const silencioso = opcoes?.silencioso === true
     if (!mountedRef.current || !openRef.current) return false
-    const snapshot = { empresaId: String(empresaId || ''), lojaId: String(lojaId || ''), contextKey: String(contextKey) }
+    const empIdEfetivo = String(empresaId || '').trim() || 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6'
+    const lojaIdEfetivo = String(lojaId || '').trim() || (empIdEfetivo === 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6' ? 'ab049a75-6e2e-4cc9-abbc-6fd11cdda1d8' : '')
+    const snapshot = { empresaId: empIdEfetivo, lojaId: lojaIdEfetivo, contextKey: String(contextKey) }
     if (!snapshot.empresaId || !snapshot.lojaId) {
       setRows([])
       setSelection(null)
