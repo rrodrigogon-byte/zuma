@@ -38,10 +38,14 @@ export function isDinoPath(pathname = typeof window === 'undefined' ? '' : windo
 
 export function scopeDinoAdminHeaders(path, headers = {}, host = typeof window === 'undefined' ? '' : window.location.hostname) {
   const route = String(path || '').split('?')[0]
-  if ((!isDinoDedicatedHost(host) && !isDinoPath()) || !/^\/api\/admin\/(?:barbearia|dino)(?:\/|$)/.test(route)) return headers
-  return {
-    ...headers,
-    'X-Empresa-Id': DINO_SCOPE.empresaId,
-    'X-Loja-Id': DINO_SCOPE.lojaId,
+  const isBarbeariaRoute = /^\/api\/admin\/(?:barbearia|dino)(?:\/|$)/.test(route)
+  if (!isBarbeariaRoute) return headers
+  if (isDinoDedicatedHost(host) || isDinoPath() || !headers['X-Empresa-Id']) {
+    return {
+      ...headers,
+      'X-Empresa-Id': headers['X-Empresa-Id'] || DINO_SCOPE.empresaId,
+      'X-Loja-Id': headers['X-Loja-Id'] || DINO_SCOPE.lojaId,
+    }
   }
+  return headers
 }

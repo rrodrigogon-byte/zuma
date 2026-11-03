@@ -1263,6 +1263,60 @@ export function retornosPrevistos(empresaId, { horizonteDias = 7, sugerirHorario
       servicoPreferido: servicos.get(servicoId) ? { id: servicoId, nome: servicos.get(servicoId).nome } : null,
     });
   }
+
+  // Integrar clientes históricos da base consolidada (Avec e Dino)
+  const isDinoContext = !empresaId || String(empresaId).toLowerCase().includes("dino") || empresaId === "d0d0ac01-8e50-4b61-8c79-de4aaa916da6" || empresaId === "emp-kytto-001" || empresaId === "principal";
+  const isDinoStore = !unidade || unidade === DINO_COMMERCE_LOJA_ID || unidade === DINO_LEGACY_LOJA_ID || String(unidade).toLowerCase().includes("dino") || unidade === "loja_dino";
+  if ((isDinoContext || itens.length === 0) && isDinoStore && baseConsolidadaRetornosCache && Array.isArray(baseConsolidadaRetornosCache)) {
+    for (const c of baseConsolidadaRetornosCache) {
+      if (!c.totalVisitas || !c.ultimaVisita) continue;
+      const chaveTel = telefoneChave(c.telefone);
+      const chaveNome = String(c.nome || '').trim().toLowerCase();
+      if (chaveTel && clientesProcessados.has(chaveTel)) continue;
+      if (chaveNome && clientesProcessados.has(chaveNome)) continue;
+      if (chaveTel) clientesProcessados.add(chaveTel);
+      if (chaveNome) clientesProcessados.add(chaveNome);
+
+      let intervalo = 25;
+      if (c.datasVisitas && c.datasVisitas.length >= 2) {
+        const sorted = [...new Set(c.datasVisitas)].sort();
+        const diffs = [];
+        for (let i = 1; i < sorted.length; i++) {
+          const d = (new Date(sorted[i]) - new Date(sorted[i - 1])) / DIA_MS;
+          if (d >= 5 && d <= 120) diffs.push(d);
+        }
+        if (diffs.length) {
+          diffs.sort((a, b) => a - b);
+          intervalo = diffs[Math.floor(diffs.length / 2)];
+        }
+      }
+      const msUltima = new Date(`${c.ultimaVisita}T12:00:00Z`).valueOf();
+      const previsto = msUltima + intervalo * DIA_MS;
+      const diasAtraso = Math.floor((ms - previsto) / DIA_MS);
+      const previstoData = new Date(previsto).toISOString().slice(0, 10);
+      const jaAgendado = (chaveTel && futurosCliente.has(chaveTel)) || (chaveNome && futurosCliente.has(chaveNome));
+      const situacao = jaAgendado
+        ? 'agendado'
+        : diasAtraso > 0 ? 'atrasado' : previsto - ms <= horizonte * DIA_MS ? 'esta_semana' : 'no_prazo';
+
+      itens.push({
+        clienteId: c.clienteId || c.telefone || '',
+        nome: c.nome,
+        telefone: c.telefone || '',
+        whatsappAutorizado: true,
+        temTelefone: Boolean(c.telefone),
+        visitas: c.totalVisitas,
+        intervaloHabitualDias: Math.round(intervalo),
+        ultimaVisita: c.ultimaVisita,
+        retornoPrevisto: previstoData,
+        diasAtraso: Math.max(0, diasAtraso),
+        situacao,
+        profissionalPreferido: c.profissionalPreferido ? { id: '', nome: c.profissionalPreferido } : null,
+        servicoPreferido: c.servicoPreferido ? { id: '', nome: c.servicoPreferido } : { id: '', nome: 'Corte / Barba' },
+      });
+    }
+  }
+
   const acionaveis = itens.filter((item) => item.situacao === 'atrasado' || item.situacao === 'esta_semana')
     .sort((a, b) => b.diasAtraso - a.diasAtraso || a.retornoPrevisto.localeCompare(b.retornoPrevisto));
   if (sugerirHorario) {

@@ -5109,10 +5109,19 @@ app.post('/api/admin/barbearia/captacao/assinaturas/:id/pagamentos', (req, res) 
 app.post('/api/admin/barbearia/captacao/assinaturas/:id/usos', (req, res) => {
   try { res.status(201).json({ ok: true, resumo: captacaoKytto.registrarUsoAssinatura(legacyEmpresaId(req), req.params.id, req.body || {}) }); } catch (error) { respostaCaptacao(res, error); }
 });
-app.get('/api/admin/barbearia/captacao/retornos', (req, res) => {
+app.get('/api/admin/barbearia/captacao/retornos', async (req, res) => {
   try {
     const dias = req.query?.dias === undefined ? 7 : Number(req.query.dias);
-    res.json({ ok: true, ...captacaoKytto.retornosPrevistos(legacyEmpresaId(req), { horizonteDias: dias, lojaId: legacyLojaId(req) }) });
+    const empresaId = legacyEmpresaId(req) || DINO_COMMERCE_EMPRESA_ID;
+    const lojaId = req.query?.lojaId || legacyLojaId(req) || req.headers['x-loja-id'] || DINO_COMMERCE_LOJA_ID;
+    if (!captacaoKytto.baseConsolidadaCarregada()) {
+      await captacaoKytto.inicializarBaseRetornos();
+    }
+    let resultado = captacaoKytto.retornosPrevistos(empresaId, { horizonteDias: dias, lojaId });
+    if ((!resultado?.acionaveis?.length && !resultado?.resumo?.clientesComHistorico) && lojaId !== DINO_COMMERCE_LOJA_ID) {
+      resultado = captacaoKytto.retornosPrevistos(empresaId, { horizonteDias: dias, lojaId: DINO_COMMERCE_LOJA_ID });
+    }
+    res.json({ ok: true, ...resultado });
   } catch (error) { respostaCaptacao(res, error); }
 });
 app.get('/api/admin/barbearia/captacao/ocupacao', (req, res) => {

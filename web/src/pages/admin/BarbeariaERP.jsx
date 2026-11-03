@@ -12814,7 +12814,7 @@ export default function BarbeariaERP() {
       return null;
     }
     if (tab === "Integrações") return renderIntegracoes();
-    if (tab === "Retorno previsto") return <RetornosPanel />;
+    if (tab === "Retorno previsto") return <RetornosPanel lojaId={lojaAtiva?.id || ""} />;
     if (tab === "Lista de espera") return <ListaEsperaPanel />;
     if (tab === "Indicações") return <IndicacoesPanel clientes={clientes} />;
     if (tab === "Saúde do clube")

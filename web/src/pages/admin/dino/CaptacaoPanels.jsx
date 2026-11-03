@@ -72,9 +72,10 @@ function conviteWhatsApp(item, textoPersonalizado) {
   return `https://wa.me/${destino}?text=${encodeURIComponent(texto)}`
 }
 
-export function RetornosPanel() {
+export function RetornosPanel({ lojaId = '' } = {}) {
   const { toast } = useToast()
-  const { dados, erro, carregando, carregar } = useCarregar('/api/admin/barbearia/captacao/retornos')
+  const urlRetornos = lojaId ? `/api/admin/barbearia/captacao/retornos?lojaId=${encodeURIComponent(lojaId)}` : '/api/admin/barbearia/captacao/retornos'
+  const { dados, erro, carregando, carregar } = useCarregar(urlRetornos)
   const [filtroBase, setFiltroBase] = useState('acionaveis') // 'acionaveis' | 'todos'
   const [situacaoFiltro, setSituacaoFiltro] = useState(null) // null | 'atrasado' | 'esta_semana' | 'agendado'
   const [busca, setBusca] = useState('')
