@@ -766,6 +766,17 @@
   align-items: center;
 }
 
+.dino-recup-modal input[type="radio"],
+.dino-recup-modal input[type="checkbox"] {
+  width: 16px !important;
+  min-width: 16px !important;
+  max-width: 16px !important;
+  height: 16px !important;
+  flex: 0 0 16px !important;
+  margin: 0 !important;
+  cursor: pointer;
+}
+
 .dino-recup-modal-header h3 {
   margin: 0;
   font-size: 18px;

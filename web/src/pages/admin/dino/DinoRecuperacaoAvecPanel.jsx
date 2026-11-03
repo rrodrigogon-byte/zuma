@@ -1447,7 +1447,7 @@ export default function DinoRecuperacaoAvecPanel({ onAbrirAgenda }) {
                             name="escopo"
                             checked={escopoEnvio === 'selecionados'}
                             onChange={() => setEscopoEnvio('selecionados')}
-                            style={{ margin: 0, cursor: 'pointer' }}
+                            style={{ width: '16px', minWidth: '16px', height: '16px', flex: '0 0 16px', margin: 0, cursor: 'pointer' }}
                           />
                           Apenas os Selecionados ({selecionados.size} clientes)
                         </label>
@@ -1458,7 +1458,7 @@ export default function DinoRecuperacaoAvecPanel({ onAbrirAgenda }) {
                           name="escopo"
                           checked={escopoEnvio === 'filtrados'}
                           onChange={() => setEscopoEnvio('filtrados')}
-                          style={{ margin: 0, cursor: 'pointer' }}
+                          style={{ width: '16px', minWidth: '16px', height: '16px', flex: '0 0 16px', margin: 0, cursor: 'pointer' }}
                         />
                         Clientes do Filtro Atual ({dados.total} clientes)
                       </label>
@@ -1468,7 +1468,7 @@ export default function DinoRecuperacaoAvecPanel({ onAbrirAgenda }) {
                           name="escopo"
                           checked={escopoEnvio === 'todos'}
                           onChange={() => setEscopoEnvio('todos')}
-                          style={{ margin: 0, cursor: 'pointer' }}
+                          style={{ width: '16px', minWidth: '16px', height: '16px', flex: '0 0 16px', margin: 0, cursor: 'pointer' }}
                         />
                         Toda a Base Histórica Avec ({dados.resumo?.totalAnalisados || 0} clientes)
                       </label>
@@ -1487,7 +1487,7 @@ export default function DinoRecuperacaoAvecPanel({ onAbrirAgenda }) {
                           name="tipoMsg"
                           checked={tipoMensagem === 'personalizada_modelo'}
                           onChange={() => setTipoMensagem('personalizada_modelo')}
-                          style={{ marginTop: 4, flexShrink: 0, cursor: 'pointer' }}
+                          style={{ width: '16px', minWidth: '16px', height: '16px', flex: '0 0 16px', marginTop: 3, cursor: 'pointer' }}
                         />
                         <div>
                           <strong>Mensagem Inteligente por Perfil do Cliente (Recomendado)</strong>
@@ -1503,7 +1503,7 @@ export default function DinoRecuperacaoAvecPanel({ onAbrirAgenda }) {
                           name="tipoMsg"
                           checked={tipoMensagem === 'unica'}
                           onChange={() => setTipoMensagem('unica')}
-                          style={{ marginTop: 4, flexShrink: 0, cursor: 'pointer' }}
+                          style={{ width: '16px', minWidth: '16px', height: '16px', flex: '0 0 16px', marginTop: 3, cursor: 'pointer' }}
                         />
                         <div>
                           <strong>Mensagem Personalizada Única para Todos</strong>
