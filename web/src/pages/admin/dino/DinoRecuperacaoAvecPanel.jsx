@@ -15,6 +15,13 @@ import {
   AlertTriangle,
   X,
   Filter,
+  CheckSquare,
+  Square,
+  Calculator,
+  Tag,
+  Flame,
+  ArrowRight,
+  Send,
 } from 'lucide-react'
 import './DinoRecuperacaoAvecPanel.css'
 
@@ -32,6 +39,34 @@ function useDebounced(value, delay = 250) {
   return debounced
 }
 
+const GATILHOS_CRM = [
+  {
+    id: 'desconto_15',
+    rotulo: '🏷️ 15% OFF de Boas-Vindas',
+    texto: '\n\n🎁 Preparamos um presente especial: 15% DE DESCONTO no seu retorno válido para este mês!',
+  },
+  {
+    id: 'essencial_45',
+    rotulo: '✂️ Modelo Essencial (R$ 45)',
+    texto: '\n\n💈 Temos novidade! Lançamos o Modelo Essencial com corte ágil e impecável por apenas R$ 45 com nossa equipe!',
+  },
+  {
+    id: 'cortesia_barba',
+    rotulo: '💆 Barboterapia / Hidratação Free',
+    texto: '\n\n✨ Ao agendar seu corte, você ganha uma Hidratação ou Barboterapia completa como cortesia da casa!',
+  },
+  {
+    id: 'chopp_cortesia',
+    rotulo: '🍻 Chopp Artesanal Gelado',
+    texto: '\n\n🍺 Sua cerveja ou chopp artesanal de cortesia já está no ponto esperando por você!',
+  },
+  {
+    id: 'condicao_club',
+    rotulo: '🦁 Condição Especial Club',
+    texto: '\n\n🔄 Para os membros históricos do nosso Club, preparamos uma taxa especial de reativação sem carência!',
+  },
+]
+
 export default function DinoRecuperacaoAvecPanel({ onAbrirAgenda }) {
   const [loading, setLoading] = useState(true)
   const [dados, setDados] = useState({
@@ -39,6 +74,7 @@ export default function DinoRecuperacaoAvecPanel({ onAbrirAgenda }) {
     total: 0,
     pagina: 1,
     paginas: 1,
+    limite: 25,
     resumo: {
       totalAnalisados: 0,
       totalNoFiltro: 0,
@@ -61,6 +97,14 @@ export default function DinoRecuperacaoAvecPanel({ onAbrirAgenda }) {
   const [modelo, setModelo] = useState('todos')
   const [ordem, setOrdem] = useState('diasSemVir')
   const [pagina, setPagina] = useState(1)
+  const [limite, setLimite] = useState(25)
+
+  // Seleção múltipla para ações em massa
+  const [selecionados, setSelecionados] = useState(new Set())
+
+  // Simulador de ROI
+  const [mostrarRoi, setMostrarRoi] = useState(true)
+  const [taxaConversao, setTaxaConversao] = useState(10)
 
   // Cenário de reajuste ativo?
   const isCenarioReajuste =
@@ -74,7 +118,9 @@ export default function DinoRecuperacaoAvecPanel({ onAbrirAgenda }) {
   const [modalCampanhaCRM, setModalCampanhaCRM] = useState(false)
   const [escopoEnvio, setEscopoEnvio] = useState('filtrados')
   const [tipoMensagem, setTipoMensagem] = useState('personalizada_modelo')
-  const [msgCampanha, setMsgCampanha] = useState('Oi {Nome}! Notei que faz um tempinho que você não vem aqui. Para celebrar sua volta, preparei um horário especial com o {Profissional}. Posso agendar para essa semana?\n\n👉 {Link Agendamento}')
+  const [msgCampanha, setMsgCampanha] = useState(
+    'Oi {Nome}! Notei que faz um tempinho que você não vem aqui na Barbearia Dino. Para celebrar sua volta, preparei um horário especial com o {Profissional}. Posso agendar para essa semana?\n\n👉 {Link Agendamento}'
+  )
   const [resgatandoCRM, setResgatandoCRM] = useState(false)
   const [campanhaDisparada, setCampanhaDisparada] = useState(null)
   const [testeTelefone, setTesteTelefone] = useState('')
@@ -84,43 +130,47 @@ export default function DinoRecuperacaoAvecPanel({ onAbrirAgenda }) {
   const [historicoModal, setHistoricoModal] = useState([])
   const [loadingHistorico, setLoadingHistorico] = useState(false)
   const [copiadoKey, setCopiadoKey] = useState(null)
+  const [copiadoTelefones, setCopiadoTelefones] = useState(false)
 
   // Carregar dados da API
-  const carregar = useCallback(async (force = false) => {
-    const params = new URLSearchParams()
-    if (debouncedBusca) params.set('busca', debouncedBusca)
-    if (deAtivo) params.set('deAtivo', deAtivo)
-    if (ateAtivo) params.set('ateAtivo', ateAtivo)
-    if (deAusente) params.set('deAusente', deAusente)
-    if (ateAusente) params.set('ateAusente', ateAusente)
-    if (diasSemVir && diasSemVir !== 'todos') params.set('diasSemVir', diasSemVir)
-    if (profissional && profissional !== 'todos') params.set('profissional', profissional)
-    if (modelo && modelo !== 'todos') params.set('modelo', modelo)
-    if (ordem) params.set('ordem', ordem)
-    params.set('pagina', String(pagina))
-    params.set('limite', '25')
-    if (force) params.set('refresh', '1')
+  const carregar = useCallback(
+    async (force = false) => {
+      const params = new URLSearchParams()
+      if (debouncedBusca) params.set('busca', debouncedBusca)
+      if (deAtivo) params.set('deAtivo', deAtivo)
+      if (ateAtivo) params.set('ateAtivo', ateAtivo)
+      if (deAusente) params.set('deAusente', deAusente)
+      if (ateAusente) params.set('ateAusente', ateAusente)
+      if (diasSemVir && diasSemVir !== 'todos') params.set('diasSemVir', diasSemVir)
+      if (profissional && profissional !== 'todos') params.set('profissional', profissional)
+      if (modelo && modelo !== 'todos') params.set('modelo', modelo)
+      if (ordem) params.set('ordem', ordem)
+      params.set('pagina', String(pagina))
+      params.set('limite', String(limite))
+      if (force) params.set('refresh', '1')
 
-    const cacheKey = params.toString()
-    if (!force && clientRecupCache.has(cacheKey)) {
-      setDados(clientRecupCache.get(cacheKey))
-      setLoading(false)
-    } else {
-      setLoading(true)
-    }
-
-    try {
-      const res = await api.get(`/api/admin/barbearia/recuperacao-clientes?${params.toString()}`)
-      if (res.ok) {
-        clientRecupCache.set(cacheKey, res)
-        setDados(res)
+      const cacheKey = params.toString()
+      if (!force && clientRecupCache.has(cacheKey)) {
+        setDados(clientRecupCache.get(cacheKey))
+        setLoading(false)
+      } else {
+        setLoading(true)
       }
-    } catch (err) {
-      console.error('Erro ao buscar clientes para recuperação:', err)
-    } finally {
-      setLoading(false)
-    }
-  }, [debouncedBusca, deAtivo, ateAtivo, deAusente, ateAusente, diasSemVir, profissional, modelo, ordem, pagina])
+
+      try {
+        const res = await api.get(`/api/admin/barbearia/recuperacao-clientes?${params.toString()}`)
+        if (res.ok) {
+          clientRecupCache.set(cacheKey, res)
+          setDados(res)
+        }
+      } catch (err) {
+        console.error('Erro ao buscar clientes para recuperação:', err)
+      } finally {
+        setLoading(false)
+      }
+    },
+    [debouncedBusca, deAtivo, ateAtivo, deAusente, ateAusente, diasSemVir, profissional, modelo, ordem, pagina, limite]
+  )
 
   useEffect(() => {
     carregar()
@@ -145,34 +195,92 @@ export default function DinoRecuperacaoAvecPanel({ onAbrirAgenda }) {
     }
   }
 
-  // Exportar CSV
-  function baixarCsv() {
-    const params = new URLSearchParams()
-    if (busca) params.set('busca', busca)
-    if (deAtivo) params.set('deAtivo', deAtivo)
-    if (ateAtivo) params.set('ateAtivo', ateAtivo)
-    if (deAusente) params.set('deAusente', deAusente)
-    if (ateAusente) params.set('ateAusente', ateAusente)
-    if (diasSemVir && diasSemVir !== 'todos') params.set('diasSemVir', diasSemVir)
-    if (profissional && profissional !== 'todos') params.set('profissional', profissional)
-    if (modelo && modelo !== 'todos') params.set('modelo', modelo)
-    if (ordem) params.set('ordem', ordem)
+  // Exportar CSV formatado
+  async function baixarCsv() {
+    try {
+      const params = new URLSearchParams()
+      if (debouncedBusca) params.set('busca', debouncedBusca)
+      if (deAtivo) params.set('deAtivo', deAtivo)
+      if (ateAtivo) params.set('ateAtivo', ateAtivo)
+      if (deAusente) params.set('deAusente', deAusente)
+      if (ateAusente) params.set('ateAusente', ateAusente)
+      if (diasSemVir && diasSemVir !== 'todos') params.set('diasSemVir', diasSemVir)
+      if (profissional && profissional !== 'todos') params.set('profissional', profissional)
+      if (modelo && modelo !== 'todos') params.set('modelo', modelo)
+      if (ordem) params.set('ordem', ordem)
+      params.set('format', 'csv')
 
-    window.open(`/api/admin/barbearia/recuperacao-clientes/exportar.csv?${params.toString()}`, '_blank')
+      const url = `/api/admin/barbearia/recuperacao-clientes/exportar-csv?${params.toString()}`
+      const res = await fetch(url, {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem('sp_token') || ''}`,
+          'X-Empresa-Id': 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6',
+        },
+      })
+      if (!res.ok) throw new Error('Falha ao exportar')
+
+      const blob = await res.blob()
+      const downloadUrl = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = downloadUrl
+      a.download = `recuperacao-clientes-dino-${new Date().toISOString().slice(0, 10)}.csv`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+    } catch (err) {
+      alert('Erro ao exportar CSV: ' + err.message)
+    }
   }
 
-  // Abrir modal de histórico Avec
-  
+  // Gerenciamento de seleção
+  const toggleSelecionarTodosPagina = () => {
+    const todosItensKeys = (dados.itens || []).map((c) => c.key)
+    const todosSelecionados = todosItensKeys.every((k) => selecionados.has(k))
+
+    setSelecionados((prev) => {
+      const proximo = new Set(prev)
+      if (todosSelecionados) {
+        todosItensKeys.forEach((k) => proximo.delete(k))
+      } else {
+        todosItensKeys.forEach((k) => proximo.add(k))
+      }
+      return proximo
+    })
+  }
+
+  const toggleCliente = (key) => {
+    setSelecionados((prev) => {
+      const proximo = new Set(prev)
+      if (proximo.has(key)) proximo.delete(key)
+      else proximo.add(key)
+      return proximo
+    })
+  }
+
+  const copiarTelefonesSelecionados = () => {
+    const tels = (dados.itens || [])
+      .filter((c) => selecionados.has(c.key))
+      .map((c) => c.telefone)
+      .filter(Boolean)
+    if (tels.length === 0) return
+    navigator.clipboard.writeText(tels.join(', '))
+    setCopiadoTelefones(true)
+    setTimeout(() => setCopiadoTelefones(false), 2500)
+  }
+
+  // Disparar campanha CRM
   async function dispararCampanha() {
     try {
       setResgatandoCRM(true)
       const payload = {
-        escopo: escopoEnvio,
-        usarMensagemPersonalizadaPorModelo: tipoMensagem === 'personalizada_modelo',
         mensagem: msgCampanha,
+        usarMensagemPersonalizadaPorModelo: tipoMensagem === 'personalizada_modelo',
+        escopo: escopoEnvio,
       }
 
-      if (escopoEnvio === 'filtrados') {
+      if (escopoEnvio === 'selecionados') {
+        payload.clientesIds = Array.from(selecionados)
+      } else if (escopoEnvio === 'filtrados') {
         payload.filtros = {
           busca: debouncedBusca,
           deAtivo,
@@ -186,7 +294,7 @@ export default function DinoRecuperacaoAvecPanel({ onAbrirAgenda }) {
         }
       } else {
         payload.clientes = dados.itens
-        payload.clientesIds = dados.itens.map(c => c.key)
+        payload.clientesIds = dados.itens.map((c) => c.key)
       }
 
       const res = await api.post('/api/admin/barbearia/recuperacao-clientes/disparar', payload)
@@ -244,7 +352,6 @@ export default function DinoRecuperacaoAvecPanel({ onAbrirAgenda }) {
     }
   }
 
-  // Copiar mensagem para clipboard
   function copiarMensagem(cliente) {
     if (!cliente?.mensagemWhatsapp) return
     navigator.clipboard.writeText(cliente.mensagemWhatsapp)
@@ -252,7 +359,6 @@ export default function DinoRecuperacaoAvecPanel({ onAbrirAgenda }) {
     setTimeout(() => setCopiadoKey(null), 2500)
   }
 
-  // Link do WhatsApp
   const linkWa = (cliente) => {
     const d = String(cliente.telefone || '').replace(/\D/g, '')
     if (!d) return '#'
@@ -260,11 +366,39 @@ export default function DinoRecuperacaoAvecPanel({ onAbrirAgenda }) {
     return `https://wa.me/${phone}?text=${encodeURIComponent(cliente.mensagemWhatsapp || '')}`
   }
 
-  // Lista de profissionais para o select
   const listaProfissionais = useMemo(() => {
     const profs = Object.keys(dados.resumo?.porProfissional || {})
     return profs.filter((p) => p && p !== 'Não informado').sort()
   }, [dados.resumo])
+
+  // Métricas do Simulador de ROI
+  const roiCalculado = useMemo(() => {
+    const totalAlvos = dados.resumo?.totalNoFiltro || 0
+    const potencialTotal = dados.resumo?.faturamentoPotencialRecuperavel || 0
+    const ticketMedioBase = totalAlvos > 0 ? potencialTotal / totalAlvos : 80
+    const clientesRecuperados = Math.round((totalAlvos * taxaConversao) / 100)
+    const receitaMensal = Math.round(clientesRecuperados * ticketMedioBase)
+    const ltvAnual = Math.round(receitaMensal * 12)
+    return {
+      clientesRecuperados,
+      receitaMensal,
+      ltvAnual,
+      ticketMedioBase,
+    }
+  }, [dados.resumo, taxaConversao])
+
+  // Totais das faixas de churn para a barra interativa
+  const faixas = dados.resumo?.porFaixa || {}
+  const totalFaixas =
+    (faixas.atencao_30_60 || 0) +
+    (faixas.alerta_60_90 || 0) +
+    (faixas.churn_90_180 || 0) +
+    (faixas.perdido_180_mais || 0) || 1
+
+  const pctAtencao = (((faixas.atencao_30_60 || 0) / totalFaixas) * 100).toFixed(1)
+  const pctAlerta = (((faixas.alerta_60_90 || 0) / totalFaixas) * 100).toFixed(1)
+  const pctChurn = (((faixas.churn_90_180 || 0) / totalFaixas) * 100).toFixed(1)
+  const pctCritico = (((faixas.perdido_180_mais || 0) / totalFaixas) * 100).toFixed(1)
 
   return (
     <div className="dino-recup-container">
@@ -327,9 +461,17 @@ export default function DinoRecuperacaoAvecPanel({ onAbrirAgenda }) {
           <span className="dino-recup-kpi-sub">estimativa de receita mensal</span>
         </div>
 
-        <div className="dino-recup-kpi-card">
+        <div
+          className="dino-recup-kpi-card"
+          style={{ cursor: 'pointer' }}
+          onClick={() => {
+            setModelo(modelo === 'essencial' ? 'todos' : 'essencial')
+            setPagina(1)
+          }}
+          title="Clique para filtrar apenas perfil Essencial"
+        >
           <span className="dino-recup-kpi-label">
-            🏷️ Perfil Modelo Essencial
+            🏷️ Perfil Modelo Essencial {modelo === 'essencial' && '✓'}
           </span>
           <span className="dino-recup-kpi-value" style={{ color: '#34d399' }}>
             {dados.resumo?.porModelo?.essencial?.toLocaleString('pt-BR') || 0}
@@ -337,9 +479,17 @@ export default function DinoRecuperacaoAvecPanel({ onAbrirAgenda }) {
           <span className="dino-recup-kpi-sub">foco em corte acessível com nova equipe</span>
         </div>
 
-        <div className="dino-recup-kpi-card">
+        <div
+          className="dino-recup-kpi-card"
+          style={{ cursor: 'pointer' }}
+          onClick={() => {
+            setModelo(modelo === 'premium' ? 'todos' : 'premium')
+            setPagina(1)
+          }}
+          title="Clique para filtrar apenas perfil Premium"
+        >
           <span className="dino-recup-kpi-label">
-            ⭐ Perfil Modelo Premium
+            ⭐ Perfil Modelo Premium {modelo === 'premium' && '✓'}
           </span>
           <span className="dino-recup-kpi-value" style={{ color: '#c084fc' }}>
             {dados.resumo?.porModelo?.premium?.toLocaleString('pt-BR') || 0}
@@ -347,9 +497,17 @@ export default function DinoRecuperacaoAvecPanel({ onAbrirAgenda }) {
           <span className="dino-recup-kpi-sub">ticket alto, extras ou cliente do Dino</span>
         </div>
 
-        <div className="dino-recup-kpi-card">
+        <div
+          className="dino-recup-kpi-card"
+          style={{ cursor: 'pointer' }}
+          onClick={() => {
+            setModelo(modelo === 'club' ? 'todos' : 'club')
+            setPagina(1)
+          }}
+          title="Clique para filtrar apenas assinantes do Club"
+        >
           <span className="dino-recup-kpi-label">
-            🔄 Assinantes Club / Pacote
+            🔄 Assinantes Club / Pacote {modelo === 'club' && '✓'}
           </span>
           <span className="dino-recup-kpi-value" style={{ color: '#fbbf24' }}>
             {dados.resumo?.porModelo?.club?.toLocaleString('pt-BR') || 0}
@@ -358,7 +516,188 @@ export default function DinoRecuperacaoAvecPanel({ onAbrirAgenda }) {
         </div>
       </div>
 
-      {/* BANNER DE CENÁRIO DO REAJUSTE DE PREÇOS E FILTROS MANUAIS DE DATA */}
+      {/* BARRA VISUAL DE DISTRIBUIÇÃO DE CHURN (INTERATIVA) */}
+      <div className="dino-recup-churn-section">
+        <div className="dino-recup-churn-header">
+          <div className="dino-recup-churn-title">
+            <Flame size={16} color="#f59e0b" />
+            Distribuição da Base por Tempo de Ausência (Clique nas faixas para filtrar)
+          </div>
+          <span style={{ fontSize: '12px', color: 'var(--muted)' }}>
+            Total no escopo: <strong>{totalFaixas.toLocaleString('pt-BR')} clientes</strong>
+          </span>
+        </div>
+
+        <div className="dino-recup-churn-bar">
+          <div
+            className="dino-recup-churn-segment atencao"
+            style={{ width: `${Math.max(Number(pctAtencao), 4)}%` }}
+            title={`Atenção (30-60d): ${faixas.atencao_30_60 || 0} clientes (${pctAtencao}%)`}
+            onClick={() => {
+              setDiasSemVir('30_60')
+              setPagina(1)
+            }}
+          >
+            {Number(pctAtencao) > 7 && `${pctAtencao}%`}
+          </div>
+
+          <div
+            className="dino-recup-churn-segment alerta"
+            style={{ width: `${Math.max(Number(pctAlerta), 4)}%` }}
+            title={`Alerta (60-90d): ${faixas.alerta_60_90 || 0} clientes (${pctAlerta}%)`}
+            onClick={() => {
+              setDiasSemVir('60_90')
+              setPagina(1)
+            }}
+          >
+            {Number(pctAlerta) > 7 && `${pctAlerta}%`}
+          </div>
+
+          <div
+            className="dino-recup-churn-segment churn"
+            style={{ width: `${Math.max(Number(pctChurn), 4)}%` }}
+            title={`Churn (90-180d): ${faixas.churn_90_180 || 0} clientes (${pctChurn}%)`}
+            onClick={() => {
+              setDiasSemVir('90_180')
+              setPagina(1)
+            }}
+          >
+            {Number(pctChurn) > 7 && `${pctChurn}%`}
+          </div>
+
+          <div
+            className="dino-recup-churn-segment critico"
+            style={{ width: `${Math.max(Number(pctCritico), 4)}%` }}
+            title={`Crítico (+180d): ${faixas.perdido_180_mais || 0} clientes (${pctCritico}%)`}
+            onClick={() => {
+              setDiasSemVir('180_mais')
+              setPagina(1)
+            }}
+          >
+            {Number(pctCritico) > 7 && `${pctCritico}%`}
+          </div>
+        </div>
+
+        <div className="dino-recup-churn-legend">
+          <div
+            className="dino-recup-churn-legend-item"
+            onClick={() => {
+              setDiasSemVir('30_60')
+              setPagina(1)
+            }}
+          >
+            <div className="dino-recup-churn-dot" style={{ background: '#f59e0b' }} />
+            <span>
+              Atenção (30 a 60d): <strong>{faixas.atencao_30_60 || 0}</strong> ({pctAtencao}%)
+            </span>
+          </div>
+
+          <div
+            className="dino-recup-churn-legend-item"
+            onClick={() => {
+              setDiasSemVir('60_90')
+              setPagina(1)
+            }}
+          >
+            <div className="dino-recup-churn-dot" style={{ background: '#f97316' }} />
+            <span>
+              Alerta (60 a 90d): <strong>{faixas.alerta_60_90 || 0}</strong> ({pctAlerta}%)
+            </span>
+          </div>
+
+          <div
+            className="dino-recup-churn-legend-item"
+            onClick={() => {
+              setDiasSemVir('90_180')
+              setPagina(1)
+            }}
+          >
+            <div className="dino-recup-churn-dot" style={{ background: '#ef4444' }} />
+            <span>
+              Churn (90 a 180d): <strong>{faixas.churn_90_180 || 0}</strong> ({pctChurn}%)
+            </span>
+          </div>
+
+          <div
+            className="dino-recup-churn-legend-item"
+            onClick={() => {
+              setDiasSemVir('180_mais')
+              setPagina(1)
+            }}
+          >
+            <div className="dino-recup-churn-dot" style={{ background: '#64748b' }} />
+            <span>
+              Crítico (+180d): <strong>{faixas.perdido_180_mais || 0}</strong> ({pctCritico}%)
+            </span>
+          </div>
+
+          {diasSemVir !== 'todos' && diasSemVir !== 'ausentes' && (
+            <button
+              type="button"
+              className="dino-recup-var-btn"
+              style={{ marginLeft: 'auto' }}
+              onClick={() => {
+                setDiasSemVir('ausentes')
+                setPagina(1)
+              }}
+            >
+              Limpar filtro de faixa (Ver todos os ausentes)
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* CALCULADORA / SIMULADOR DE ROI DA CAMPANHA */}
+      <div className="dino-recup-roi-card">
+        <div className="dino-recup-roi-header">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <Calculator size={18} color="#10b981" />
+            <div>
+              <strong style={{ fontSize: '14px', color: 'var(--fg)' }}>
+                Simulador de Retorno Financeiro & Metas de Resgate
+              </strong>
+              <div style={{ fontSize: '12px', color: 'var(--muted)' }}>
+                Estime o faturamento mensal e anual recuperado conforme a taxa de conversão da campanha
+              </div>
+            </div>
+          </div>
+
+          <div className="dino-recup-roi-pills">
+            <span style={{ fontSize: '12px', color: 'var(--muted)', marginRight: 4 }}>Taxa de Retorno:</span>
+            {[5, 10, 15, 20, 25].map((t) => (
+              <button
+                key={t}
+                type="button"
+                className={`dino-recup-roi-pill${taxaConversao === t ? ' active' : ''}`}
+                onClick={() => setTaxaConversao(t)}
+              >
+                {t}%
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="dino-recup-roi-metrics">
+          <div className="dino-recup-roi-metric-item">
+            <span>Clientes Reativados</span>
+            <strong style={{ color: '#3b82f6' }}>{roiCalculado.clientesRecuperados} clientes</strong>
+          </div>
+          <div className="dino-recup-roi-metric-item">
+            <span>Receita Mensal Recuperada</span>
+            <strong style={{ color: '#10b981' }}>{moeda(roiCalculado.receitaMensal)}/mês</strong>
+          </div>
+          <div className="dino-recup-roi-metric-item">
+            <span>LTV Projetado (12 Meses)</span>
+            <strong style={{ color: '#c084fc' }}>{moeda(roiCalculado.ltvAnual)}/ano</strong>
+          </div>
+          <div className="dino-recup-roi-metric-item">
+            <span>Ticket Médio da Base</span>
+            <strong style={{ color: '#fbbf24' }}>{moeda(roiCalculado.ticketMedioBase)}</strong>
+          </div>
+        </div>
+      </div>
+
+      {/* BANNER DE CENÁRIO DO REAJUSTE DE PREÇOS */}
       <div className="dino-recup-cohort-box" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
           <div className="dino-recup-cohort-info">
@@ -370,43 +709,118 @@ export default function DinoRecuperacaoAvecPanel({ onAbrirAgenda }) {
               </p>
             </div>
           </div>
-          <button
-            type="button"
-            className={`dino-recup-cohort-btn${isCenarioReajuste ? ' active' : ''}`}
-            onClick={toggleCenarioReajuste}
-          >
-            {isCenarioReajuste ? '✓ Cenário Aplicado (Limpar)' : 'Aplicar Cenário do Reajuste (766 Clientes)'}
-          </button>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              className={`dino-recup-cohort-btn${isCenarioReajuste ? ' active' : ''}`}
+              onClick={toggleCenarioReajuste}
+            >
+              {isCenarioReajuste ? '✓ Cenário Aplicado (Limpar)' : 'Aplicar Cenário do Reajuste (766 Clientes)'}
+            </button>
 
-          <button
-            type="button"
-            className="dino-recup-cohort-btn"
-            style={{ marginLeft: 8, background: '#059669', color: '#fff', borderColor: '#059669', cursor: 'pointer' }}
-            onClick={() => {
-              setCampanhaDisparada(null);
-              setTesteFeedback(null);
-              setModalCampanhaCRM(true);
-            }}
-          >
-            <Sparkles size={14} style={{ marginRight: 4 }} /> 
-            Disparar Campanha CRM ({dados.total ? `${dados.total} clientes` : `${dados.itens.length}`})
-          </button>
+            <button
+              type="button"
+              className="dino-recup-cohort-btn"
+              style={{ background: '#059669', color: '#fff', borderColor: '#059669', cursor: 'pointer' }}
+              onClick={() => {
+                setCampanhaDisparada(null)
+                setTesteFeedback(null)
+                setEscopoEnvio(selecionados.size > 0 ? 'selecionados' : 'filtrados')
+                setModalCampanhaCRM(true)
+              }}
+            >
+              <Sparkles size={14} style={{ marginRight: 4 }} />
+              {selecionados.size > 0
+                ? `Disparar para Selecionados (${selecionados.size})`
+                : `Disparar Campanha CRM (${dados.total ? `${dados.total} clientes` : `${dados.itens.length}`})`}
+            </button>
+          </div>
         </div>
-        
+
         {/* Filtros customizados de período de presença e ausência */}
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, padding: '12px 16px', background: 'var(--card2)', borderRadius: 8, border: '1px solid var(--line)' }}>
+        <div
+          style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: 16,
+            padding: '12px 16px',
+            background: 'var(--card2)',
+            borderRadius: 8,
+            border: '1px solid var(--line)',
+          }}
+        >
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             <span style={{ fontSize: 13, fontWeight: 600 }}>Frequentou entre:</span>
-            <input type="date" value={deAtivo} onChange={e => { setDeAtivo(e.target.value); setPagina(1); }} style={{ padding: '4px 8px', borderRadius: 6, border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--fg)', fontSize: 13 }} />
+            <input
+              type="date"
+              value={deAtivo}
+              onChange={(e) => {
+                setDeAtivo(e.target.value)
+                setPagina(1)
+              }}
+              style={{
+                padding: '4px 8px',
+                borderRadius: 6,
+                border: '1px solid var(--line)',
+                background: 'var(--surface)',
+                color: 'var(--fg)',
+                fontSize: 13,
+              }}
+            />
             <span style={{ fontSize: 13, color: 'var(--muted)' }}>e</span>
-            <input type="date" value={ateAtivo} onChange={e => { setAteAtivo(e.target.value); setPagina(1); }} style={{ padding: '4px 8px', borderRadius: 6, border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--fg)', fontSize: 13 }} />
+            <input
+              type="date"
+              value={ateAtivo}
+              onChange={(e) => {
+                setAteAtivo(e.target.value)
+                setPagina(1)
+              }}
+              style={{
+                padding: '4px 8px',
+                borderRadius: 6,
+                border: '1px solid var(--line)',
+                background: 'var(--surface)',
+                color: 'var(--fg)',
+                fontSize: 13,
+              }}
+            />
           </div>
           <div style={{ width: '1px', background: 'var(--line)', minHeight: 24, margin: '0 8px' }} />
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             <span style={{ fontSize: 13, fontWeight: 600 }}>Ausente entre:</span>
-            <input type="date" value={deAusente} onChange={e => { setDeAusente(e.target.value); setPagina(1); }} style={{ padding: '4px 8px', borderRadius: 6, border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--fg)', fontSize: 13 }} />
+            <input
+              type="date"
+              value={deAusente}
+              onChange={(e) => {
+                setDeAusente(e.target.value)
+                setPagina(1)
+              }}
+              style={{
+                padding: '4px 8px',
+                borderRadius: 6,
+                border: '1px solid var(--line)',
+                background: 'var(--surface)',
+                color: 'var(--fg)',
+                fontSize: 13,
+              }}
+            />
             <span style={{ fontSize: 13, color: 'var(--muted)' }}>e</span>
-            <input type="date" value={ateAusente} onChange={e => { setAteAusente(e.target.value); setPagina(1); }} style={{ padding: '4px 8px', borderRadius: 6, border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--fg)', fontSize: 13 }} />
+            <input
+              type="date"
+              value={ateAusente}
+              onChange={(e) => {
+                setAteAusente(e.target.value)
+                setPagina(1)
+              }}
+              style={{
+                padding: '4px 8px',
+                borderRadius: 6,
+                border: '1px solid var(--line)',
+                background: 'var(--surface)',
+                color: 'var(--fg)',
+                fontSize: 13,
+              }}
+            />
           </div>
         </div>
       </div>
@@ -441,12 +855,15 @@ export default function DinoRecuperacaoAvecPanel({ onAbrirAgenda }) {
               setPagina(1)
             }}
           >
-            <option value="todos">Todos os barbeiros</option>
-            {listaProfissionais.map((p) => (
-              <option key={p} value={p}>
-                {p}
-              </option>
-            ))}
+            <option value="todos">Todos os barbeiros ({dados.resumo?.totalAnalisados || 0})</option>
+            {listaProfissionais.map((p) => {
+              const count = dados.resumo?.porProfissional?.[p] || 0
+              return (
+                <option key={p} value={p}>
+                  {p} ({count})
+                </option>
+              )
+            })}
           </select>
 
           {/* MODELO SUGERIDO */}
@@ -481,21 +898,18 @@ export default function DinoRecuperacaoAvecPanel({ onAbrirAgenda }) {
             <option value="nome">Nome (A–Z)</option>
           </select>
 
-          {/* FILTRO DE DIAS SEM VIR */}
+          {/* ITENS POR PÁGINA */}
           <select
             className="dino-recup-select"
-            value={diasSemVir}
+            value={limite}
             onChange={(e) => {
-              setDiasSemVir(e.target.value)
+              setLimite(Number(e.target.value))
               setPagina(1)
             }}
           >
-            <option value="todos">Qualquer tempo de ausência</option>
-            <option value="ausentes">Ausentes há mais de 30 dias</option>
-            <option value="30_60">30 a 60 dias sem vir (Atenção)</option>
-            <option value="60_90">60 a 90 dias sem vir (Alerta)</option>
-            <option value="90_180">90 a 180 dias sem vir (Churn)</option>
-            <option value="180_mais">Mais de 180 dias sem vir (Perdido)</option>
+            <option value={25}>Exibir 25 clientes</option>
+            <option value={50}>Exibir 50 clientes</option>
+            <option value={100}>Exibir 100 clientes</option>
           </select>
         </div>
 
@@ -530,6 +944,21 @@ export default function DinoRecuperacaoAvecPanel({ onAbrirAgenda }) {
         <table className="dino-recup-table">
           <thead>
             <tr>
+              <th style={{ width: '40px', textAlign: 'center' }}>
+                <button
+                  type="button"
+                  onClick={toggleSelecionarTodosPagina}
+                  style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--fg)', padding: 0 }}
+                  title="Selecionar todos da página atual"
+                >
+                  {(dados.itens || []).length > 0 &&
+                  (dados.itens || []).every((c) => selecionados.has(c.key)) ? (
+                    <CheckSquare size={16} color="#3b82f6" />
+                  ) : (
+                    <Square size={16} color="var(--muted)" />
+                  )}
+                </button>
+              </th>
               <th>Cliente</th>
               <th>Última Visita</th>
               <th>Barbeiro Habitual</th>
@@ -542,18 +971,19 @@ export default function DinoRecuperacaoAvecPanel({ onAbrirAgenda }) {
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={7} style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>
+                <td colSpan={8} style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>
                   Carregando análise histórica da base…
                 </td>
               </tr>
             ) : dados.itens?.length === 0 ? (
               <tr>
-                <td colSpan={7} style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>
+                <td colSpan={8} style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>
                   Nenhum cliente encontrado para os filtros selecionados.
                 </td>
               </tr>
             ) : (
               dados.itens.map((c) => {
+                const estaSelecionado = selecionados.has(c.key)
                 const iniciais = (c.nome || 'CL')
                   .split(' ')
                   .slice(0, 2)
@@ -562,7 +992,24 @@ export default function DinoRecuperacaoAvecPanel({ onAbrirAgenda }) {
                   .toUpperCase()
 
                 return (
-                  <tr key={c.key}>
+                  <tr
+                    key={c.key}
+                    style={estaSelecionado ? { background: 'rgba(59, 130, 246, 0.08)' } : undefined}
+                  >
+                    <td style={{ textAlign: 'center' }}>
+                      <button
+                        type="button"
+                        onClick={() => toggleCliente(c.key)}
+                        style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--fg)', padding: 0 }}
+                      >
+                        {estaSelecionado ? (
+                          <CheckSquare size={16} color="#3b82f6" />
+                        ) : (
+                          <Square size={16} color="var(--muted)" />
+                        )}
+                      </button>
+                    </td>
+
                     <td>
                       <div className="dino-recup-client-cell">
                         <div className="dino-recup-avatar">{iniciais}</div>
@@ -655,7 +1102,10 @@ export default function DinoRecuperacaoAvecPanel({ onAbrirAgenda }) {
                           className="dino-recup-btn-icon"
                           onClick={() => {
                             if (onAbrirAgenda) onAbrirAgenda(c)
-                            else window.location.href = `/admin/barbearia?tab=Agenda&clienteId=${encodeURIComponent(c.key)}&clienteNome=${encodeURIComponent(c.nome)}`
+                            else
+                              window.location.href = `/admin/barbearia?tab=Agenda&clienteId=${encodeURIComponent(
+                                c.key
+                              )}&clienteNome=${encodeURIComponent(c.nome)}`
                           }}
                           title="Agendar horário na agenda"
                         >
@@ -684,7 +1134,7 @@ export default function DinoRecuperacaoAvecPanel({ onAbrirAgenda }) {
         {dados.paginas > 1 && (
           <div className="dino-recup-pagination">
             <span>
-              Página {dados.pagina} de {dados.paginas} ({dados.total} clientes)
+              Página {dados.pagina} de {dados.paginas} ({dados.total} clientes no filtro)
             </span>
             <div className="dino-recup-page-controls">
               <button
@@ -709,6 +1159,74 @@ export default function DinoRecuperacaoAvecPanel({ onAbrirAgenda }) {
           </div>
         )}
       </div>
+
+      {/* BARRA FLUTUANTE DE AÇÕES EM MASSA */}
+      {selecionados.size > 0 && (
+        <div className="dino-recup-bulk-bar">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div
+              style={{
+                width: 28,
+                height: 28,
+                borderRadius: '50%',
+                background: '#3b82f6',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#fff',
+                fontWeight: 800,
+                fontSize: 12,
+              }}
+            >
+              {selecionados.size}
+            </div>
+            <div>
+              <strong style={{ color: '#fff', fontSize: '14px' }}>
+                {selecionados.size} cliente{selecionados.size === 1 ? '' : 's'} selecionado{selecionados.size === 1 ? '' : 's'}
+              </strong>
+              <div style={{ fontSize: '12px', color: '#94a3b8' }}>
+                Ações em lote para o grupo selecionado
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <button
+              type="button"
+              className="dino-recup-btn ghost"
+              style={{ minHeight: '36px', fontSize: '12.5px' }}
+              onClick={copiarTelefonesSelecionados}
+            >
+              <Copy size={14} />
+              {copiadoTelefones ? '✓ Telefones Copiados!' : 'Copiar Telefones'}
+            </button>
+
+            <button
+              type="button"
+              className="dino-recup-btn primary"
+              style={{ minHeight: '36px', fontSize: '12.5px', background: '#059669', borderColor: '#059669' }}
+              onClick={() => {
+                setCampanhaDisparada(null)
+                setTesteFeedback(null)
+                setEscopoEnvio('selecionados')
+                setModalCampanhaCRM(true)
+              }}
+            >
+              <Sparkles size={14} />
+              Disparar CRM para Selecionados ({selecionados.size})
+            </button>
+
+            <button
+              type="button"
+              className="dino-recup-btn ghost"
+              style={{ minHeight: '36px', fontSize: '12px', color: '#94a3b8' }}
+              onClick={() => setSelecionados(new Set())}
+            >
+              Limpar Seleção
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* MODAL DE HISTÓRICO COMPLETO DO AVEC */}
       {modalCliente && (
@@ -807,7 +1325,9 @@ export default function DinoRecuperacaoAvecPanel({ onAbrirAgenda }) {
                     ) : (
                       historicoModal.map((item, idx) => (
                         <tr key={idx}>
-                          <td><strong>{dataBR(item.data)}</strong></td>
+                          <td>
+                            <strong>{dataBR(item.data)}</strong>
+                          </td>
                           <td>
                             {item.servico}
                             {item.pacote && (
@@ -839,10 +1359,21 @@ export default function DinoRecuperacaoAvecPanel({ onAbrirAgenda }) {
       {/* MODAL DE DISPARO DA CAMPANHA CRM */}
       {modalCampanhaCRM && (
         <div className="dino-recup-modal-backdrop" onClick={() => !resgatandoCRM && setModalCampanhaCRM(false)}>
-          <div className="dino-recup-modal" style={{ maxWidth: '720px' }} onClick={(e) => e.stopPropagation()}>
+          <div className="dino-recup-modal" style={{ maxWidth: '740px' }} onClick={(e) => e.stopPropagation()}>
             <div className="dino-recup-modal-header" style={{ borderBottomColor: 'rgba(16, 185, 129, 0.25)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'rgba(16, 185, 129, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#10b981' }}>
+                <div
+                  style={{
+                    width: 36,
+                    height: 36,
+                    borderRadius: '50%',
+                    background: 'rgba(16, 185, 129, 0.15)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#10b981',
+                  }}
+                >
                   <Sparkles size={20} />
                 </div>
                 <div>
@@ -862,254 +1393,291 @@ export default function DinoRecuperacaoAvecPanel({ onAbrirAgenda }) {
               </button>
             </div>
 
-            <div className="dino-recup-modal-body">
+            <div className="dino-recup-modal-body" style={{ gap: 16 }}>
               {campanhaDisparada ? (
-                <div style={{ textAlign: 'center', padding: '30px 20px', display: 'grid', gap: 16 }}>
-                  <div style={{ width: 64, height: 64, borderRadius: '50%', background: 'rgba(16, 185, 129, 0.2)', color: '#10b981', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto' }}>
-                    <Check size={36} />
-                  </div>
-                  <h4 style={{ margin: 0, fontSize: '20px', fontWeight: 800, color: 'var(--fg, #0f172a)' }}>
+                <div style={{ padding: '24px 16px', textAlign: 'center', display: 'flex', flexDirection: 'column', gap: 14 }}>
+                  <div style={{ fontSize: '48px' }}>🎉</div>
+                  <h3 style={{ fontSize: '20px', fontWeight: 800, color: '#10b981', margin: 0 }}>
                     Campanha de Resgate Iniciada com Sucesso!
-                  </h4>
-                  <p style={{ margin: 0, fontSize: '14px', color: 'var(--muted, #475569)', maxWidth: '520px', margin: '0 auto', lineHeight: 1.5 }}>
-                    Foram enfileirados <strong>{campanhaDisparada.alvos} clientes</strong> para envio. O robô de mensageria da Barbearia Dino está processando os envios com intervalo seguro contra bloqueios no WhatsApp.
+                  </h3>
+                  <p style={{ fontSize: '14px', color: 'var(--muted)', maxWidth: 520, margin: '0 auto', lineHeight: 1.5 }}>
+                    Foram enfileirados <strong>{campanhaDisparada.totalClientes} clientes</strong> para envio. O robô de
+                    mensageria da Barbearia Dino está processando os envios com intervalo seguro contra bloqueios no WhatsApp.
                   </p>
-                  <div style={{ display: 'flex', justifyContent: 'center', gap: 12, marginTop: 10 }}>
-                    <button
-                      type="button"
-                      className="dino-recup-btn primary"
-                      style={{ background: '#10b981', borderColor: '#10b981', minHeight: '40px', padding: '0 24px', fontWeight: 700 }}
-                      onClick={() => {
-                        setModalCampanhaCRM(false);
-                        setCampanhaDisparada(null);
-                      }}
-                    >
-                      Concluir e Voltar
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <>
-                  <div className="dino-recup-modal-summary" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))' }}>
-                    <div>
-                      <span>Total Selecionado</span>
-                      <strong style={{ color: '#10b981', fontSize: '18px' }}>
-                        {escopoEnvio === 'filtrados' ? dados.total : dados.itens.length} clientes
-                      </strong>
+
+                  <div style={{ background: 'var(--surface-2)', padding: '14px', borderRadius: 10, border: '1px solid var(--line)', maxWidth: 440, margin: '8px auto', textAlign: 'left', fontSize: 13 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                      <span style={{ color: 'var(--muted)' }}>Identificador:</span>
+                      <strong>{campanhaDisparada.id?.slice(0, 18)}...</strong>
                     </div>
-                    <div>
-                      <span>🏷️ Essencial</span>
-                      <strong style={{ color: '#10b981' }}>{dados.resumo?.porModelo?.essencial || 0}</strong>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                      <span style={{ color: 'var(--muted)' }}>Clientes Válidos:</span>
+                      <strong style={{ color: '#10b981' }}>{campanhaDisparada.totalClientes}</strong>
                     </div>
-                    <div>
-                      <span>⭐ Premium</span>
-                      <strong style={{ color: '#a855f7' }}>{dados.resumo?.porModelo?.premium || 0}</strong>
-                    </div>
-                    <div>
-                      <span>🔄 Club / Pacote</span>
-                      <strong style={{ color: '#f59e0b' }}>{dados.resumo?.porModelo?.club || 0}</strong>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span style={{ color: 'var(--muted)' }}>Status:</span>
+                      <strong style={{ color: '#38bdf8' }}>Enfileirado e Processando</strong>
                     </div>
                   </div>
 
-                  <div style={{ display: 'grid', gap: 8 }}>
-                    <label style={{ fontSize: '12.5px', fontWeight: 700, color: 'var(--muted, #475569)', textTransform: 'uppercase' }}>
-                      1. Escolha o público do disparo:
+                  <button
+                    type="button"
+                    className="dino-recup-btn primary"
+                    style={{ background: '#10b981', borderColor: '#10b981', alignSelf: 'center', marginTop: 8 }}
+                    onClick={() => {
+                      setModalCampanhaCRM(false)
+                      setCampanhaDisparada(null)
+                    }}
+                  >
+                    Concluir e Voltar
+                  </button>
+                </div>
+              ) : (
+                <>
+                  {/* SELEÇÃO DO ESCOPO */}
+                  <div style={{ background: 'var(--surface-2)', padding: '12px 14px', borderRadius: 10, border: '1px solid var(--line)' }}>
+                    <label style={{ fontSize: '12.5px', fontWeight: 700, color: 'var(--fg)', display: 'block', marginBottom: 8 }}>
+                      Público Alvo do Disparo:
                     </label>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 10 }}>
-                      <label style={{
-                        display: 'flex', alignItems: 'flex-start', gap: 10, padding: '12px', borderRadius: '10px',
-                        border: `1px solid ${escopoEnvio === 'filtrados' ? '#10b981' : 'var(--line, #cbd5e1)'}`,
-                        background: escopoEnvio === 'filtrados' ? 'rgba(16, 185, 129, 0.08)' : 'var(--surface-2, #f8fafc)',
-                        cursor: 'pointer'
-                      }}>
+                    <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
+                      {selecionados.size > 0 && (
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '13px', cursor: 'pointer', color: '#3b82f6', fontWeight: 700 }}>
+                          <input
+                            type="radio"
+                            name="escopo"
+                            checked={escopoEnvio === 'selecionados'}
+                            onChange={() => setEscopoEnvio('selecionados')}
+                          />
+                          Apenas os Selecionados ({selecionados.size} clientes)
+                        </label>
+                      )}
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '13px', cursor: 'pointer', color: 'var(--fg)' }}>
                         <input
                           type="radio"
                           name="escopo"
                           checked={escopoEnvio === 'filtrados'}
                           onChange={() => setEscopoEnvio('filtrados')}
-                          style={{ marginTop: 3 }}
                         />
-                        <div>
-                          <strong style={{ display: 'block', fontSize: '13px', color: 'var(--fg, #0f172a)' }}>
-                            Todos os clientes filtrados ({dados.total})
-                          </strong>
-                          <span style={{ fontSize: '11.5px', color: 'var(--muted, #64748b)' }}>
-                            Alcança toda a coorte calculada ({isCenarioReajuste ? 'Cenário do Reajuste' : 'filtro ativo'})
-                          </span>
-                        </div>
+                        Clientes do Filtro Atual ({dados.total} clientes)
                       </label>
-
-                      <label style={{
-                        display: 'flex', alignItems: 'flex-start', gap: 10, padding: '12px', borderRadius: '10px',
-                        border: `1px solid ${escopoEnvio === 'pagina' ? '#10b981' : 'var(--line, #cbd5e1)'}`,
-                        background: escopoEnvio === 'pagina' ? 'rgba(16, 185, 129, 0.08)' : 'var(--surface-2, #f8fafc)',
-                        cursor: 'pointer'
-                      }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '13px', cursor: 'pointer', color: 'var(--fg)' }}>
                         <input
                           type="radio"
                           name="escopo"
-                          checked={escopoEnvio === 'pagina'}
-                          onChange={() => setEscopoEnvio('pagina')}
-                          style={{ marginTop: 3 }}
+                          checked={escopoEnvio === 'todos'}
+                          onChange={() => setEscopoEnvio('todos')}
                         />
-                        <div>
-                          <strong style={{ display: 'block', fontSize: '13px', color: 'var(--fg, #0f172a)' }}>
-                            Apenas página atual ({dados.itens.length})
-                          </strong>
-                          <span style={{ fontSize: '11.5px', color: 'var(--muted, #64748b)' }}>
-                            Envio de lote controlado dos clientes visíveis
-                          </span>
-                        </div>
+                        Toda a Base Histórica Avec ({dados.resumo?.totalAnalisados || 0} clientes)
                       </label>
                     </div>
                   </div>
 
-                  <div style={{ display: 'grid', gap: 8 }}>
-                    <label style={{ fontSize: '12.5px', fontWeight: 700, color: 'var(--muted, #475569)', textTransform: 'uppercase' }}>
-                      2. Estratégia de Mensagem:
+                  {/* ESTRATÉGIA DE MENSAGEM */}
+                  <div style={{ background: 'var(--surface-2)', padding: '12px 14px', borderRadius: 10, border: '1px solid var(--line)' }}>
+                    <label style={{ fontSize: '12.5px', fontWeight: 700, color: 'var(--fg)', display: 'block', marginBottom: 8 }}>
+                      Estratégia de Abordagem:
                     </label>
-                    <div style={{ display: 'grid', gap: 8 }}>
-                      <label style={{
-                        display: 'flex', alignItems: 'flex-start', gap: 10, padding: '12px', borderRadius: '10px',
-                        border: `1px solid ${tipoMensagem === 'personalizada_modelo' ? '#0284c7' : 'var(--line, #cbd5e1)'}`,
-                        background: tipoMensagem === 'personalizada_modelo' ? 'rgba(2, 132, 199, 0.08)' : 'var(--surface-2, #f8fafc)',
-                        cursor: 'pointer'
-                      }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: '13px', cursor: 'pointer', color: 'var(--fg)' }}>
                         <input
                           type="radio"
                           name="tipoMsg"
                           checked={tipoMensagem === 'personalizada_modelo'}
                           onChange={() => setTipoMensagem('personalizada_modelo')}
-                          style={{ marginTop: 3 }}
+                          style={{ marginTop: 2 }}
                         />
                         <div>
-                          <strong style={{ display: 'block', fontSize: '13px', color: '#0284c7' }}>
-                            ✨ Mensagem Inteligente Personalizada por Perfil (Recomendado)
-                          </strong>
-                          <span style={{ fontSize: '11.5px', color: 'var(--muted, #64748b)', lineHeight: 1.4, display: 'block', marginTop: 2 }}>
-                            O sistema adapta o texto para cada cliente: quem parou no reajuste recebe a oferta do <strong>Modelo Essencial</strong>; quem consome serviços extras recebe o convite <strong>Premium VIP</strong>; e quem tinha plano recebe a oferta de reativação do <strong>Club</strong>.
-                          </span>
+                          <strong>Mensagem Inteligente por Perfil do Cliente (Recomendado)</strong>
+                          <div style={{ fontSize: '12px', color: 'var(--muted)' }}>
+                            O sistema envia o texto calibrado para cada perfil: oferta acessível para <strong>Essencial</strong>, exclusividade para <strong>Premium</strong> e retorno do plano para <strong>Club</strong>.
+                          </div>
                         </div>
                       </label>
 
-                      <label style={{
-                        display: 'flex', alignItems: 'flex-start', gap: 10, padding: '12px', borderRadius: '10px',
-                        border: `1px solid ${tipoMensagem === 'custom' ? '#0284c7' : 'var(--line, #cbd5e1)'}`,
-                        background: tipoMensagem === 'custom' ? 'rgba(2, 132, 199, 0.08)' : 'var(--surface-2, #f8fafc)',
-                        cursor: 'pointer'
-                      }}>
+                      <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: '13px', cursor: 'pointer', color: 'var(--fg)' }}>
                         <input
                           type="radio"
                           name="tipoMsg"
-                          checked={tipoMensagem === 'custom'}
-                          onChange={() => setTipoMensagem('custom')}
-                          style={{ marginTop: 3 }}
+                          checked={tipoMensagem === 'unica'}
+                          onChange={() => setTipoMensagem('unica')}
+                          style={{ marginTop: 2 }}
                         />
                         <div>
-                          <strong style={{ display: 'block', fontSize: '13px', color: 'var(--fg, #0f172a)' }}>
-                            ✍️ Mensagem Personalizada Única
-                          </strong>
-                          <span style={{ fontSize: '11.5px', color: 'var(--muted, #64748b)' }}>
-                            Você digita o texto e o sistema substitui as variáveis automaticamente.
-                          </span>
+                          <strong>Mensagem Personalizada Única para Todos</strong>
+                          <div style={{ fontSize: '12px', color: 'var(--muted)' }}>
+                            Você digita o texto e o robô personaliza automaticamente o nome do cliente e do barbeiro preferido.
+                          </div>
                         </div>
                       </label>
                     </div>
+                  </div>
 
-                    {tipoMensagem === 'custom' && (
-                      <div style={{ marginTop: 6, display: 'grid', gap: 6 }}>
-                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                          <button
-                            type="button"
-                            className="dino-recup-btn ghost"
-                            style={{ minHeight: '26px', fontSize: '11px', padding: '0 8px' }}
-                            onClick={() => setMsgCampanha((m) => m + ' {Nome}')}
-                          >
-                            + {'{Nome}'}
-                          </button>
-                          <button
-                            type="button"
-                            className="dino-recup-btn ghost"
-                            style={{ minHeight: '26px', fontSize: '11px', padding: '0 8px' }}
-                            onClick={() => setMsgCampanha((m) => m + ' {Profissional}')}
-                          >
-                            + {'{Profissional}'}
-                          </button>
-                          <button
-                            type="button"
-                            className="dino-recup-btn ghost"
-                            style={{ minHeight: '26px', fontSize: '11px', padding: '0 8px' }}
-                            onClick={() => setMsgCampanha((m) => m + ' {Link Agendamento}')}
-                          >
-                            + {'{Link Agendamento}'}
-                          </button>
-                        </div>
-                        <textarea
-                          value={msgCampanha}
-                          onChange={(e) => setMsgCampanha(e.target.value)}
-                          rows={4}
-                          style={{
-                            width: '100%', borderRadius: 8, border: '1px solid var(--line)', background: 'var(--surface-2)',
-                            color: 'var(--fg)', padding: 10, fontSize: 13, fontFamily: 'inherit', resize: 'vertical', boxSizing: 'border-box'
+                  {/* GATILHOS / CUPONS DE RETORNO (INSERÇÃO COM 1 CLIQUE) */}
+                  <div>
+                    <label style={{ fontSize: '12.5px', fontWeight: 700, color: 'var(--fg)', display: 'block', marginBottom: 6 }}>
+                      Gatilhos & Benefícios de Retorno (Clique para injetar no texto):
+                    </label>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                      {GATILHOS_CRM.map((g) => (
+                        <button
+                          key={g.id}
+                          type="button"
+                          className="dino-recup-trigger-pill"
+                          onClick={() => {
+                            setTipoMensagem('unica')
+                            setMsgCampanha((prev) => prev + g.texto)
                           }}
-                        />
+                        >
+                          {g.rotulo}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* EDITOR DE MENSAGEM */}
+                  {tipoMensagem === 'unica' ? (
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                        <label style={{ fontSize: '12.5px', fontWeight: 700, color: 'var(--fg)' }}>
+                          Texto da Mensagem no WhatsApp:
+                        </label>
+                        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                          <span style={{ fontSize: '11px', color: 'var(--muted)', alignSelf: 'center', marginRight: 4 }}>Tags:</span>
+                          {['{Nome}', '{Profissional}', '{Link Agendamento}', '{Ultima Visita}', '{Dias Sem Vir}'].map((tag) => (
+                            <button
+                              key={tag}
+                              type="button"
+                              className="dino-recup-var-btn"
+                              onClick={() => setMsgCampanha((prev) => prev + ' ' + tag)}
+                            >
+                              {tag}
+                            </button>
+                          ))}
+                        </div>
                       </div>
-                    )}
-                  </div>
-
-                  <div style={{ background: 'var(--surface-2, #f8fafc)', border: '1px solid var(--line, #e2e8f0)', borderRadius: 12, padding: 14 }}>
-                    <div style={{ fontSize: '11px', fontWeight: 800, color: '#0284c7', textTransform: 'uppercase', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <MessageSquare size={13} /> Prévia da Mensagem (Exemplo: {dados.itens[0]?.nome || 'Cliente'})
+                      <textarea
+                        value={msgCampanha}
+                        onChange={(e) => setMsgCampanha(e.target.value)}
+                        rows={5}
+                        style={{
+                          width: '100%',
+                          padding: '10px 12px',
+                          borderRadius: 8,
+                          border: '1px solid var(--line)',
+                          background: 'var(--surface-2)',
+                          color: 'var(--fg)',
+                          fontSize: 13,
+                          fontFamily: 'inherit',
+                          lineHeight: 1.4,
+                          boxSizing: 'border-box',
+                        }}
+                      />
                     </div>
-                    <div style={{
-                      background: 'rgba(16, 185, 129, 0.12)', borderLeft: '3px solid #10b981', padding: '10px 14px', borderRadius: '4px 10px 10px 4px',
-                      fontSize: '12.5px', color: 'var(--fg, #0f172a)', whiteSpace: 'pre-wrap', lineHeight: 1.45, maxHeight: '140px', overflowY: 'auto'
-                    }}>
+                  ) : (
+                    <div
+                      style={{
+                        background: 'rgba(16, 185, 129, 0.08)',
+                        border: '1px solid rgba(16, 185, 129, 0.25)',
+                        padding: '12px 14px',
+                        borderRadius: 8,
+                        fontSize: 13,
+                        color: 'var(--fg)',
+                      }}
+                    >
+                      <strong style={{ color: '#10b981', display: 'block', marginBottom: 4 }}>
+                        ✓ Modo Inteligente Ativado
+                      </strong>
+                      Cada cliente receberá uma das 3 versões validadas (Essencial, Premium ou Club), incluindo o primeiro nome e o barbeiro habitual que ele costumava cortar no Avec.
+                    </div>
+                  )}
+
+                  {/* PRÉVIA ESTILO WHATSAPP */}
+                  <div style={{ background: '#0b141a', padding: '14px', borderRadius: 10, border: '1px solid #202c33' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                      <div style={{ width: 24, height: 24, borderRadius: '50%', background: '#25d366', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 11, fontWeight: 800 }}>
+                        D
+                      </div>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: '#e9edef' }}>Prévia do Balão no WhatsApp</span>
+                    </div>
+                    <div
+                      style={{
+                        background: '#005c4b',
+                        color: '#e9edef',
+                        padding: '10px 12px',
+                        borderRadius: '8px 8px 0 8px',
+                        fontSize: 12.5,
+                        lineHeight: 1.45,
+                        maxWidth: '92%',
+                        whiteSpace: 'pre-wrap',
+                      }}
+                    >
                       {tipoMensagem === 'personalizada_modelo'
-                        ? (dados.itens[0]?.mensagemWhatsapp || 'Mensagem personalizada por perfil do cliente...')
+                        ? 'Olá Rodrigo! Aqui é da Barbearia Dino! 💈\n\nSentimos sua falta por aqui! Notamos que faz um tempinho que você não vem dar aquele trato no visual com a gente.\n\nPodemos reservar um horário especial com o Dino essa semana?'
                         : msgCampanha
-                            .replace(/\{Nome do Cliente\}|\{Nome\}/g, dados.itens[0]?.nome?.split(' ')[0] || 'Cliente')
-                            .replace(/\{Profissional\}/g, dados.itens[0]?.profissionalPreferido?.split(' ')[0] || 'Equipe Dino')
-                            .replace(/\{Link Agendamento\}/g, `https://kytto.com.br/barbeiro/dino?t=${dados.itens[0]?.telefone || ''}`)}
+                            .replace(/\{Nome\}/g, 'Rodrigo')
+                            .replace(/\{Profissional\}/g, 'Dino')
+                            .replace(/\{Link Agendamento\}/g, 'https://kytto.com.br/barbeiro/dino')
+                            .replace(/\{Ultima Visita\}/g, '15/08/2026')
+                            .replace(/\{Dias Sem Vir\}/g, '78')}
+                      <div style={{ textAlign: 'right', fontSize: 10, color: 'rgba(255,255,255,0.6)', marginTop: 4 }}>
+                        14:30 ✓✓
+                      </div>
                     </div>
                   </div>
 
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '10px 14px', background: 'var(--surface-2, #f8fafc)', borderRadius: 10, border: '1px solid var(--line, #e2e8f0)', flexWrap: 'wrap' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: '260px' }}>
-                      <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--muted, #475569)', whiteSpace: 'nowrap' }}>Testar no seu Whats:</span>
+                  {/* TESTE PRELIMINAR NO WHATSAPP */}
+                  <div
+                    style={{
+                      borderTop: '1px solid var(--line)',
+                      paddingTop: 14,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 8,
+                    }}
+                  >
+                    <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--muted)' }}>
+                      Enviar Teste no WhatsApp antes de disparar para a base:
+                    </label>
+                    <div style={{ display: 'flex', gap: 8 }}>
                       <input
                         type="text"
-                        placeholder="Ex: 65999998888"
+                        placeholder="DDD + Celular (ex: 65999056008)"
                         value={testeTelefone}
                         onChange={(e) => setTesteTelefone(e.target.value)}
-                        style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid var(--line, #cbd5e1)', background: 'var(--surface, #ffffff)', color: 'var(--fg, #0f172a)', fontSize: '12.5px', width: '150px' }}
+                        style={{
+                          flex: 1,
+                          padding: '8px 12px',
+                          borderRadius: 8,
+                          border: '1px solid var(--line)',
+                          background: 'var(--surface-2)',
+                          color: 'var(--fg)',
+                          fontSize: 13,
+                        }}
                       />
                       <button
                         type="button"
                         className="dino-recup-btn ghost"
-                        style={{ minHeight: '30px', fontSize: '12px', padding: '0 12px' }}
+                        style={{ minHeight: '38px', fontSize: '12.5px' }}
                         disabled={testandoEnvio || !testeTelefone}
                         onClick={enviarTesteWhatsApp}
                       >
-                        {testandoEnvio ? 'Enviando…' : 'Enviar Teste'}
+                        <Send size={14} />
+                        {testandoEnvio ? 'Enviando teste...' : 'Enviar Teste'}
                       </button>
                     </div>
+
                     {testeFeedback && (
-                      <div style={{
-                        width: '100%',
-                        marginTop: 4,
-                        padding: '8px 12px',
-                        borderRadius: 6,
-                        fontSize: '12px',
-                        fontWeight: 600,
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 8,
-                        background: testeFeedback.tipo === 'sucesso' ? 'rgba(16, 185, 129, 0.12)' : 'rgba(239, 68, 68, 0.12)',
-                        color: testeFeedback.tipo === 'sucesso' ? '#059669' : '#dc2626',
-                        border: `1px solid ${testeFeedback.tipo === 'sucesso' ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`
-                      }}>
-                        {testeFeedback.tipo === 'sucesso' ? '✓ ' : '✕ '}
+                      <div
+                        style={{
+                          fontSize: '12.5px',
+                          padding: '8px 12px',
+                          borderRadius: 6,
+                          background: testeFeedback.tipo === 'sucesso' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                          color: testeFeedback.tipo === 'sucesso' ? '#34d399' : '#f87171',
+                          border: `1px solid ${testeFeedback.tipo === 'sucesso' ? 'rgba(16, 185, 129, 0.4)' : 'rgba(239, 68, 68, 0.4)'}`,
+                          fontWeight: 600,
+                        }}
+                      >
                         {testeFeedback.texto}
                       </div>
                     )}
@@ -1118,32 +1686,42 @@ export default function DinoRecuperacaoAvecPanel({ onAbrirAgenda }) {
               )}
             </div>
 
-            <div className="dino-recup-modal-footer">
-              <button
-                type="button"
-                className="dino-recup-btn ghost"
-                style={{ color: 'var(--fg, #0f172a)', border: '1px solid var(--line, #cbd5e1)' }}
-                disabled={resgatandoCRM}
-                onClick={() => setModalCampanhaCRM(false)}
+            {!campanhaDisparada && (
+              <div
+                className="dino-recup-modal-footer"
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  background: 'var(--surface-2)',
+                  borderTop: '1px solid var(--line)',
+                }}
               >
-                {campanhaDisparada ? 'Fechar' : 'Cancelar'}
-              </button>
+                <button
+                  type="button"
+                  className="dino-recup-btn ghost"
+                  disabled={resgatandoCRM}
+                  onClick={() => setModalCampanhaCRM(false)}
+                >
+                  Cancelar
+                </button>
 
-              {!campanhaDisparada && (
                 <button
                   type="button"
                   className="dino-recup-btn primary"
-                  style={{ background: '#059669', borderColor: '#059669', minHeight: '38px', padding: '0 20px', fontWeight: 700, color: '#fff', cursor: 'pointer' }}
-                  disabled={resgatandoCRM || (escopoEnvio === 'filtrados' ? dados.total === 0 : dados.itens.length === 0)}
+                  style={{ background: '#059669', borderColor: '#059669', minHeight: '40px' }}
+                  disabled={resgatandoCRM}
                   onClick={dispararCampanha}
                 >
-                  <Sparkles size={15} style={{ marginRight: 6 }} />
+                  <Sparkles size={16} />
                   {resgatandoCRM
-                    ? 'Disparando Campanha…'
-                    : `Disparar para ${escopoEnvio === 'filtrados' ? dados.total : dados.itens.length} Clientes`}
+                    ? 'Enfileirando Envios...'
+                    : escopoEnvio === 'selecionados'
+                    ? `Disparar para ${selecionados.size} Selecionados`
+                    : `Disparar para ${dados.total ? `${dados.total} Clientes` : `${dados.itens.length} Clientes`}`}
                 </button>
-              )}
-            </div>
+              </div>
+            )}
           </div>
         </div>
       )}
