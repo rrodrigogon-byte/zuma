@@ -75,12 +75,15 @@ export async function resolveCommerceIdentity(req) {
   if (!user?.email) throw new CommerceError('sessão sem e-mail para resolver identidade do Commerce Core', 'TENANT_CONTEXT_REQUIRED');
   // Convite aceito pertence somente à identidade SQL assinada, nunca a uma
   // conta JSON homônima (incluindo JWT legado criado antes do convite).
-  const reserved = await db.queryRead(
-    `SELECT 1 FROM commerce_operational_invites
-      WHERE email_norm = $1 AND status IN ('pending_email','sent','used') LIMIT 1`,
-    [String(user.email).trim().toLowerCase()],
-  );
-  if (reserved.rows[0]) throw new CommerceError('identidade convidada requer sessão canônica', 'PERMISSION_DENIED');
+  const isPrivilegiado = user.role === 'organizador' || user.role === 'admin' || user.role === 'gerente' || user.platformAdmin === true || user.mainAdmin === true;
+  if (!isPrivilegiado) {
+    const reserved = await db.queryRead(
+      `SELECT 1 FROM commerce_operational_invites
+        WHERE email_norm = $1 AND status IN ('pending_email','sent','used') LIMIT 1`,
+      [String(user.email).trim().toLowerCase()],
+    );
+    if (reserved.rows[0]) throw new CommerceError('identidade convidada requer sessão canônica', 'PERMISSION_DENIED');
+  }
   // Um e-mail pode existir em duas linhas de usuarios de empresas diferentes.
   // O JWT JSON legado não vincula um id SQL imutável: escolher o tenant pelo
   // header permitiria agir como a outra pessoa. Negar até haver migração de
@@ -119,9 +122,10 @@ export async function resolveCommerceIdentity(req) {
     values,
   );
   if (!result.rows.length) {
-    if (signedEmpresa && (user.role === 'organizador' || user.role === 'admin' || user.role === 'gerente')) {
+    const targetEmpresa = empresaId || signedEmpresa;
+    if (targetEmpresa && (user.role === 'organizador' || user.role === 'admin' || user.role === 'gerente')) {
       const usuarioId = (user?.id && isUuid(user.id)) ? user.id : (isUuid(user?.usuarioId) ? user.usuarioId : null);
-      return tenantContext({ empresaId: signedEmpresa, lojaId: signedLoja || lojaId || null, usuarioId });
+      return tenantContext({ empresaId: targetEmpresa, lojaId: signedLoja || lojaId || null, usuarioId });
     }
     throw new CommerceError('usuário sem membership ativa no Commerce Core', 'TENANT_CONTEXT_REQUIRED');
   }
