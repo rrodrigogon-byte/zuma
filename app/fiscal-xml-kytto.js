@@ -45,8 +45,15 @@ function decimal(value, places) {
   return number(value).toFixed(places);
 }
 
+function removerAcentos(str) {
+  return String(str ?? '')
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/[^\x20-\x7E]/g, '');
+}
+
 function xml(value) {
-  return text(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;');
+  return removerAcentos(text(value)).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;');
 }
 
 function tag(name, value, { optional = false, raw = false } = {}) {

@@ -177,14 +177,17 @@ const pegar = (xml, tag) => { const m = String(xml || '').match(new RegExp(`<(?:
 /** Transporte HTTPS com o certificado da empresa (mTLS). */
 export function transporteSoap({ certPem, keyPem, timeoutMs = 30000 }) {
   const agent = new https.Agent({ cert: certPem, key: keyPem, keepAlive: false, rejectUnauthorized: false });
-  return ({ url, xml }) => new Promise((resolve, reject) => {
+  return ({ url, xml, soapAction }) => new Promise((resolve, reject) => {
     const payload = Buffer.from(xml, 'utf8');
+    const contentType = soapAction
+      ? `application/soap+xml; charset=utf-8; action="${soapAction}"`
+      : 'application/soap+xml; charset=utf-8';
     const req = https.request(url, {
       method: 'POST',
       agent,
       timeout: timeoutMs,
       headers: {
-        'Content-Type': 'application/soap+xml; charset=utf-8',
+        'Content-Type': contentType,
         'Content-Length': payload.length
       }
     }, (res) => {
@@ -226,7 +229,7 @@ function exigirRespostaUtil(r, ret, servico) {
 export async function autorizar({ uf, modelo, xmlAssinado, idLote, transporte, env = process.env, chaveEsperada = null, ambiente = 'homologacao', esperar = esperarPadrao, svc = false }) {
   const end = enderecos(uf, modelo, { ambiente, env, svc });
   const corpo = `<enviNFe xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00"><idLote>${String(idLote).replace(/\D/g, '').slice(0, 15) || '1'}</idLote><indSinc>1</indSinc>${semDeclaracao(xmlAssinado)}</enviNFe>`;
-  const r = await transporte({ url: end.autorizacao, xml: envelope('autorizacao', corpo) });
+  const r = await transporte({ url: end.autorizacao, xml: envelope('autorizacao', corpo), soapAction: SERVICOS.autorizacao });
   const ret = pegar(r.corpo, 'retEnviNFe') ?? '';
   const prot = pegar(ret, 'protNFe');
   if (prot) return lerProtocolo(prot, chaveEsperada, ambiente);
@@ -246,7 +249,7 @@ async function consultarRecibo({ end, recibo, transporte, env, chaveEsperada, am
   const corpo = `<consReciNFe xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00"><tpAmb>${tpAmbDe(ambiente)}</tpAmb><nRec>${String(recibo).replace(/\D/g, '')}</nRec></consReciNFe>`;
   for (let i = 0; i < tentativas; i += 1) {
     await esperar(1500 * (i + 1));
-    const r = await transporte({ url: end.retAutorizacao, xml: envelope('retAutorizacao', corpo) });
+    const r = await transporte({ url: end.retAutorizacao, xml: envelope('retAutorizacao', corpo), soapAction: SERVICOS.retAutorizacao });
     const ret = pegar(r.corpo, 'retConsReciNFe') ?? '';
     const prot = pegar(ret, 'protNFe');
     if (prot) return lerProtocolo(prot, chaveEsperada, ambiente);
@@ -319,7 +322,7 @@ export function montarEventoCartaCorrecao({ uf, cnpj, chave, texto, dataEvento, 
 
 export async function enviarEvento({ uf, modelo, xmlAssinado, transporte, env = process.env, ambiente = 'homologacao' }) {
   const end = enderecos(uf, modelo, { ambiente, env });
-  const r = await transporte({ url: end.evento, xml: envelope('evento', semDeclaracao(xmlAssinado)) });
+  const r = await transporte({ url: end.evento, xml: envelope('evento', semDeclaracao(xmlAssinado)), soapAction: SERVICOS.evento });
   const ret = pegar(r.corpo, 'retEvento') ?? pegar(r.corpo, 'retEnvEvento') ?? '';
   const cStat = pegar(ret, 'infEvento') ? pegar(pegar(ret, 'infEvento'), 'cStat') : pegar(ret, 'cStat');
   const inf = pegar(ret, 'infEvento') ?? ret;
@@ -330,7 +333,7 @@ export async function enviarEvento({ uf, modelo, xmlAssinado, transporte, env = 
 export async function statusServico({ uf, modelo, transporte, env = process.env, ambiente = 'homologacao' }) {
   const end = enderecos(uf, modelo, { ambiente, env });
   const corpo = `<consStatServ xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00"><tpAmb>${tpAmbDe(ambiente)}</tpAmb><cUF>${CODIGOS_UF[String(uf).toUpperCase()]}</cUF><xServ>STATUS</xServ></consStatServ>`;
-  const r = await transporte({ url: end.status, xml: envelope('status', corpo) });
+  const r = await transporte({ url: end.status, xml: envelope('status', corpo), soapAction: SERVICOS.status });
   return { cStat: pegar(r.corpo, 'cStat'), xMotivo: pegar(r.corpo, 'xMotivo') };
 }
 
@@ -366,7 +369,7 @@ export function montarInutilizacao({ uf, ano, cnpj, modelo, serie, numeroInicial
 export async function inutilizar({ uf, modelo, xmlAssinado, transporte, env = process.env, reenvio = false, ambiente = 'homologacao' }) {
   const end = enderecos(uf, modelo, { ambiente, env });
   if (!end.inutilizacao) throw new ErroDominio('UF_SEM_ENDERECO', `Endereço de inutilização da SEFAZ para ${uf}, modelo ${modelo}, não cadastrado.`, 422);
-  const r = await transporte({ url: end.inutilizacao, xml: envelope('inutilizacao', semDeclaracao(xmlAssinado)) });
+  const r = await transporte({ url: end.inutilizacao, xml: envelope('inutilizacao', semDeclaracao(xmlAssinado)), soapAction: SERVICOS.inutilizacao });
   const ret = pegar(r.corpo, 'retInutNFe') ?? '';
   const inf = pegar(ret, 'infInut') ?? ret;
   const cStat = pegar(inf, 'cStat') || String(r.status);
