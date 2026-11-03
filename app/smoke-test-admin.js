@@ -35,7 +35,11 @@ async function runSmokeTest() {
     { rota: '/api/admin/barbearia/antiban', expected: [200] },
     { rota: '/api/admin/commerce/storefront', expected: [200] },
     { rota: '/api/admin/commerce/catalog/products?storefrontId=94ce95de-f36d-4ced-ad92-40f4208a7e06&limit=10&offset=0', expected: [200] },
-    { rota: '/api/admin/barbearia/equipe/desempenho?inicio=2026-10-01&fim=2026-11-03', expected: [200] }
+    { rota: '/api/admin/barbearia/equipe/desempenho?inicio=2026-10-01&fim=2026-11-03', expected: [200] },
+    { rota: '/api/omnichannel/canais', expected: [200] },
+    { rota: '/api/omnichannel/fidelidade/configuracao', expected: [200] },
+    { rota: '/api/omnichannel/pedidos?limit=10', expected: [200] },
+    { rota: '/api/omnichannel/integracoes/tarefas', expected: [200] }
   ];
 
   let falhas = 0;
