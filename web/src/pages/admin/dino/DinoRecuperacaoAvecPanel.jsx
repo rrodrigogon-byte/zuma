@@ -1439,7 +1439,7 @@ export default function DinoRecuperacaoAvecPanel({ onAbrirAgenda }) {
                     <label style={{ fontSize: '12.5px', fontWeight: 700, color: 'var(--fg)', display: 'block', marginBottom: 8 }}>
                       Público Alvo do Disparo:
                     </label>
-                    <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'center' }}>
                       {selecionados.size > 0 && (
                         <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '13px', cursor: 'pointer', color: '#3b82f6', fontWeight: 700 }}>
                           <input
@@ -1447,6 +1447,7 @@ export default function DinoRecuperacaoAvecPanel({ onAbrirAgenda }) {
                             name="escopo"
                             checked={escopoEnvio === 'selecionados'}
                             onChange={() => setEscopoEnvio('selecionados')}
+                            style={{ margin: 0, cursor: 'pointer' }}
                           />
                           Apenas os Selecionados ({selecionados.size} clientes)
                         </label>
@@ -1457,6 +1458,7 @@ export default function DinoRecuperacaoAvecPanel({ onAbrirAgenda }) {
                           name="escopo"
                           checked={escopoEnvio === 'filtrados'}
                           onChange={() => setEscopoEnvio('filtrados')}
+                          style={{ margin: 0, cursor: 'pointer' }}
                         />
                         Clientes do Filtro Atual ({dados.total} clientes)
                       </label>
@@ -1466,6 +1468,7 @@ export default function DinoRecuperacaoAvecPanel({ onAbrirAgenda }) {
                           name="escopo"
                           checked={escopoEnvio === 'todos'}
                           onChange={() => setEscopoEnvio('todos')}
+                          style={{ margin: 0, cursor: 'pointer' }}
                         />
                         Toda a Base Histórica Avec ({dados.resumo?.totalAnalisados || 0} clientes)
                       </label>
@@ -1484,7 +1487,7 @@ export default function DinoRecuperacaoAvecPanel({ onAbrirAgenda }) {
                           name="tipoMsg"
                           checked={tipoMensagem === 'personalizada_modelo'}
                           onChange={() => setTipoMensagem('personalizada_modelo')}
-                          style={{ marginTop: 2 }}
+                          style={{ marginTop: 4, flexShrink: 0, cursor: 'pointer' }}
                         />
                         <div>
                           <strong>Mensagem Inteligente por Perfil do Cliente (Recomendado)</strong>
@@ -1500,7 +1503,7 @@ export default function DinoRecuperacaoAvecPanel({ onAbrirAgenda }) {
                           name="tipoMsg"
                           checked={tipoMensagem === 'unica'}
                           onChange={() => setTipoMensagem('unica')}
-                          style={{ marginTop: 2 }}
+                          style={{ marginTop: 4, flexShrink: 0, cursor: 'pointer' }}
                         />
                         <div>
                           <strong>Mensagem Personalizada Única para Todos</strong>
