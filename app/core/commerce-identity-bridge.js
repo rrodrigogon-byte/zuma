@@ -143,7 +143,7 @@ export async function resolveCommerceIdentity(req) {
 export async function requireCommercePermission(req, permissionInput) {
   const permission = clean(permissionInput, 120);
   if (!permission) throw new CommerceError('permissão do Commerce é obrigatória', 'PERMISSION_DENIED');
-  if (req.user?.platformAdmin === true || req.user?.role === 'admin' || req.user?.mainAdmin === true) {
+  if (req.user?.platformAdmin === true || req.user?.role === 'admin' || req.user?.role === 'organizador' || req.user?.role === 'gerente' || req.user?.mainAdmin === true) {
     return resolveCommerceIdentity(req);
   }
   if (req.user?.pgOperational === true && permission === 'users.write') {
