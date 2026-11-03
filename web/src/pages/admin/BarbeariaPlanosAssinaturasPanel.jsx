@@ -14,6 +14,7 @@ import {
   AlertCircle,
   Clock,
   ShieldCheck,
+  Search,
 } from 'lucide-react'
 import './BarbeariaPlanosAssinaturasPanel.css'
 
@@ -41,6 +42,7 @@ export default function BarbeariaPlanosAssinaturasPanel({
   onReativarPlano,
 }) {
   const [copiadoId, setCopiadoId] = useState(null)
+  const [filtroServico, setFiltroServico] = useState('')
   const [modalLink, setModalLink] = useState(null)
   const [modalPlanoAberto, setModalPlanoAberto] = useState(false)
   const [planoEmEdicao, setPlanoEmEdicao] = useState(null)
@@ -84,6 +86,7 @@ export default function BarbeariaPlanosAssinaturasPanel({
   }
 
   function abrirModalCriarPlano(planoExistente = null) {
+    setFiltroServico('')
     if (planoExistente) {
       setPlanoEmEdicao(planoExistente)
       setFormPlano({
@@ -800,50 +803,57 @@ border: '1px solid #fee2e2',
 
       {/* MODAL DE CRIAÇÃO / EDIÇÃO DE PLANO COM SUPORTE TOTAL A PROFISSIONAL & VIP */}
       {modalPlanoAberto && (
-        <div className="modal-link-backdrop">
-          <div className="modal-link-box" style={{ maxWidth: 640 }}>
-            <div className="modal-link-header">
-              <h3 className="modal-link-titulo">
-                {formPlano.ehVip ? <Crown size={22} color="#D4AF37" /> : <Scissors size={20} />}
-                {planoEmEdicao ? 'Editar Plano' : 'Novo Plano de Recorrência & VIP'}
-              </h3>
+        <div
+          className="modal-link-backdrop"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setModalPlanoAberto(false)
+          }}
+        >
+          <div className={`modal-plano-box ${formPlano.ehVip ? 'vip-glow' : ''}`}>
+            <div className="modal-plano-header">
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                {formPlano.ehVip ? <Crown size={24} color="#D4AF37" /> : <Scissors size={22} color="var(--accent, #6E7CE0)" />}
+                <div>
+                  <h3 className="modal-link-titulo" style={{ margin: 0, fontSize: 18 }}>
+                    {planoEmEdicao ? 'Editar Plano' : 'Novo Plano de Recorrência & VIP'}
+                  </h3>
+                  <span style={{ fontSize: 12, color: 'var(--muted)', display: 'block', marginTop: 2 }}>
+                    Defina regras, profissionais vinculados, valores e serviços inclusos
+                  </span>
+                </div>
+              </div>
               <button
                 type="button"
                 onClick={() => setModalPlanoAberto(false)}
-                style={{ background: 'transparent', border: 0, color: 'var(--muted)', cursor: 'pointer' }}
+                className="btn-fechar-modal"
+                title="Fechar"
               >
                 <X size={20} />
               </button>
             </div>
 
-            <form onSubmit={handleSubmeterPlano} style={{ display: 'grid', gap: 14 }}>
+            <form onSubmit={handleSubmeterPlano} className="modal-plano-form">
+              <div className="modal-plano-body">
               {/* Checkbox Destaque VIP */}
-              <label
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 10,
-                  padding: '12px 14px',
-                  background: formPlano.ehVip ? 'rgba(212, 175, 55, 0.15)' : 'var(--card2, #161922)',
-                  border: `1.5px solid ${formPlano.ehVip ? '#D4AF37' : 'var(--line, #2b3140)'}`,
-                  borderRadius: 12,
-                  cursor: 'pointer',
-                  fontWeight: 800,
-                  color: formPlano.ehVip ? '#FFD700' : 'var(--fg)',
-                  transition: 'all 0.2s ease',
-                }}
-              >
+              <label className={`card-vip-destaque ${formPlano.ehVip ? 'ativo' : ''}`}>
                 <input
                   type="checkbox"
                   checked={formPlano.ehVip}
                   onChange={(e) => setFormPlano((prev) => ({ ...prev, ehVip: e.target.checked }))}
                   style={{ width: 18, height: 18, cursor: 'pointer' }}
                 />
-                <Crown size={18} color="#D4AF37" />
-                <span>Marcar como Plano VIP (Tratamento Executivo & Destaque Dourado)</span>
+                <Crown size={20} color={formPlano.ehVip ? '#D4AF37' : 'var(--muted)'} />
+                <div>
+                  <strong style={{ color: formPlano.ehVip ? '#FFD700' : 'var(--fg)', display: 'block' }}>
+                    Marcar como Plano VIP (Tratamento Executivo & Destaque Dourado)
+                  </strong>
+                  <span style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 400 }}>
+                    Clientes deste plano recebem prioridade, atendimento exclusivo e badge especial
+                  </span>
+                </div>
               </label>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 12 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 14 }}>
                 <div>
                   <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)', display: 'block', marginBottom: 4 }}>
                     Nome do Plano *
@@ -1046,30 +1056,74 @@ border: '1px solid #fee2e2',
 
               
               {/* SERVIÇOS INCLUSOS */}
-              <div style={{ background: 'var(--card2, #161922)', padding: 12, borderRadius: 12, border: '1px solid var(--line)' }}>
-                <label style={{ fontSize: 12, fontWeight: 800, textTransform: 'uppercase', color: 'var(--muted)', display: 'block', marginBottom: 8 }}>
-                  Serviços Cobertos
-                </label>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 8 }}>
+              <div className="box-servicos-container">
+                <div className="box-servicos-header">
+                  <div>
+                    <label style={{ fontSize: 12, fontWeight: 800, textTransform: 'uppercase', color: 'var(--muted)', display: 'block' }}>
+                      Serviços Cobertos ({formPlano.servicosIds.length} selecionados)
+                    </label>
+                    <span style={{ fontSize: 11, color: 'var(--muted)' }}>
+                      Selecione os procedimentos aos quais o cliente tem direito
+                    </span>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      className="btn-mini-acao"
+                      onClick={() => {
+                        const ativos = servicos.filter((s) => s.ativo !== false)
+                        const todosJa = ativos.every((s) => formPlano.servicosIds.includes(s.id))
+                        setFormPlano((prev) => ({
+                          ...prev,
+                          servicosIds: todosJa ? [] : ativos.map((s) => s.id),
+                        }))
+                      }}
+                    >
+                      {servicos.filter((s) => s.ativo !== false).every((s) => formPlano.servicosIds.includes(s.id))
+                        ? 'Desmarcar Todos'
+                        : 'Selecionar Todos'}
+                    </button>
+
+                    <div style={{ position: 'relative', width: 170 }}>
+                      <Search
+                        size={13}
+                        style={{
+                          position: 'absolute',
+                          left: 8,
+                          top: '50%',
+                          transform: 'translateY(-50%)',
+                          color: 'var(--muted)',
+                        }}
+                      />
+                      <input
+                        type="text"
+                        placeholder="Buscar serviço..."
+                        value={filtroServico}
+                        onChange={(e) => setFiltroServico(e.target.value)}
+                        style={{
+                          width: '100%',
+                          padding: '5px 8px 5px 26px',
+                          fontSize: 11,
+                          background: 'var(--surface, #161922)',
+                          border: '1px solid var(--line, #2b3140)',
+                          borderRadius: 6,
+                          color: 'var(--fg, #e8eaf2)',
+                          boxSizing: 'border-box',
+                        }}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="box-servicos-scroll">
                   {servicos
                     .filter((s) => s.ativo !== false)
+                    .filter((s) => !filtroServico || s.nome.toLowerCase().includes(filtroServico.toLowerCase()))
                     .map((s) => {
                       const checked = formPlano.servicosIds.includes(s.id)
                       return (
-                        <label
-                          key={s.id}
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 6,
-                            padding: '6px 8px',
-                            background: checked ? 'rgba(110, 124, 224, 0.15)' : 'var(--card)',
-                            border: '1px solid var(--line)',
-                            borderRadius: 8,
-                            fontSize: 12,
-                            cursor: 'pointer',
-                          }}
-                        >
+                        <label key={s.id} className={`chip-servico ${checked ? 'checked' : ''}`}>
                           <input
                             type="checkbox"
                             checked={checked}
@@ -1079,8 +1133,9 @@ border: '1px solid #fee2e2',
                                 : formPlano.servicosIds.filter((id) => id !== s.id)
                               setFormPlano((prev) => ({ ...prev, servicosIds: ids }))
                             }}
+                            style={{ width: 15, height: 15, cursor: 'pointer' }}
                           />
-                          {s.nome}
+                          <span>{s.nome}</span>
                         </label>
                       )
                     })}
@@ -1157,38 +1212,22 @@ border: '1px solid #fee2e2',
                   style={{ fontFamily: 'inherit', resize: 'vertical' }}
                 />
               </div>
+              </div>
 
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 10 }}>
+              <div className="modal-plano-footer">
                 <button
                   type="button"
                   onClick={() => setModalPlanoAberto(false)}
-                  style={{
-                    padding: '10px 16px',
-                    borderRadius: 8,
-                    border: '1px solid var(--line)',
-                    background: 'transparent',
-                    color: 'var(--fg)',
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                  }}
+                  className="btn-modal-cancelar"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
                   disabled={salvando}
-                  style={{
-                    padding: '10px 20px',
-                    borderRadius: 8,
-                    border: 0,
-                    background: formPlano.ehVip
-                      ? 'linear-gradient(135deg, #FFD700 0%, #D4AF37 100%)'
-                      : 'var(--accent, #6E7CE0)',
-                    color: formPlano.ehVip ? '#121212' : '#fff',
-                    fontWeight: 800,
-                    cursor: 'pointer',
-                  }}
+                  className={`btn-modal-salvar ${formPlano.ehVip ? 'vip' : 'padrao'}`}
                 >
+                  {formPlano.ehVip ? <Crown size={16} /> : <Check size={16} />}
                   {salvando ? 'Salvando…' : planoEmEdicao ? 'Salvar Alterações' : 'Criar Plano'}
                 </button>
               </div>
@@ -1199,7 +1238,12 @@ border: '1px solid #fee2e2',
 
       {/* MODAL DE DETALHES DE LINK E VÍNCULO */}
       {modalLink && (
-        <div className="modal-link-backdrop">
+        <div
+          className="modal-link-backdrop"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setModalLink(null)
+          }}
+        >
           <div className="modal-link-box">
             <div className="modal-link-header">
               <h3 className="modal-link-titulo">
