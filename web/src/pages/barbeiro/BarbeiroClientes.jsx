@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react'
+import { api } from '../../lib/api'
 
 const t = {
   bg: '#0E1014',
@@ -17,28 +18,14 @@ const t = {
 
 const reais = (v) => `R$\u00a0${Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 const dataBR = (v) => (v ? String(v).slice(0, 10).split('-').reverse().join('/') : 'Recente')
-const soDigitos = (v) => String(v || '').replace(/\D/g, '')
-
-function linkWhatsappMensagem(telefone, nomeCliente, nomeBarbeiro, ultimoServico, dias, template = 'padrao') {
-  const d = soDigitos(telefone)
-  if (d.length < 10) return ''
-  const telCompleto = d.startsWith('55') ? d : `55${d}`
-  const primeiroNome = String(nomeCliente || '').trim().split(/\s+/)[0] || 'amigo'
-  const barberNome = String(nomeBarbeiro || '').trim().split(/\s+/)[0] || 'seu barbeiro'
-
-  let texto = `Fala ${primeiroNome}, beleza? Aqui é o ${barberNome} da Barbearia Dino! 💈 Vi que já faz ${dias > 0 ? `${dias} dias` : 'um tempinho'} do seu último ${ultimoServico || 'corte'}. Vamos renovar o visual essa semana? Me avisa que já separo seu horário!`
-  if (template === 'vip') {
-    texto = `E aí ${primeiroNome}! Aqui é o ${barberNome} da Barbearia Dino 💈 Abri 2 horários especiais hoje/amanhã na minha agenda e lembrei de você. Quer garantir sua cadeira?`
-  } else if (template === 'combo') {
-    texto = `Fala ${primeiroNome}! ${barberNome} da Barbearia Dino por aqui 💈 Essa semana estamos com condição especial fazendo Corte + Barba ou Hidratação. Bora dar um talento no visual?`
-  }
-  return `https://wa.me/${telCompleto}?text=${encodeURIComponent(texto)}`
-}
 
 export default function BarbeiroClientes({ clientes = [], profissionalNome = 'Barbeiro', onAbrirProntuario, onEncaixarCliente }) {
   const [busca, setBusca] = useState('')
-  const [filtroRetorno, setFiltroRetorno] = useState('todos') // 'todos', 'retorno_ideal', 'atrasados', 'em_dia'
-  const [templateZap, setTemplateZap] = useState('padrao') // 'padrao' | 'vip' | 'combo'
+  const [filtroRetorno, setFiltroRetorno] = useState('todos')
+  const [templateZap, setTemplateZap] = useState('padrao')
+  const [clienteModal, setClienteModal] = useState(null)
+  const [enviando, setEnviando] = useState(false)
+  const [statusEnvio, setStatusEnvio] = useState(null)
 
   const clientesNorm = useMemo(() => {
     return clientes.map((c) => {
@@ -69,7 +56,6 @@ export default function BarbeiroClientes({ clientes = [], profissionalNome = 'Ba
       res = res.filter(
         (c) =>
           (c.nome || '').toLowerCase().includes(q) ||
-          (c.telefone || '').includes(q) ||
           (c.ultimoServico || '').toLowerCase().includes(q)
       )
     }
@@ -82,6 +68,42 @@ export default function BarbeiroClientes({ clientes = [], profissionalNome = 'Ba
     }
     return res
   }, [clientesNorm, busca, filtroRetorno])
+
+  async function dispararAvisoOficial(cliente, modelo = templateZap) {
+    if (!cliente) return
+    setEnviando(true)
+    setStatusEnvio(null)
+    try {
+      const res = await api.post('/api/admin/barbearia/modo-barbeiro/notificar-cliente', {
+        clienteId: cliente.clienteId || cliente.id || '',
+        tipo: 'retorno',
+        template: modelo,
+      })
+      if (res && res.ok) {
+        setStatusEnvio({ sucesso: true, mensagem: res.mensagem || 'Mensagem enviada com sucesso pelo WhatsApp oficial da barbearia!' })
+        setTimeout(() => {
+          setClienteModal(null)
+          setStatusEnvio(null)
+        }, 2200)
+      } else {
+        throw new Error(res?.error || 'Não foi possível entregar a mensagem no WhatsApp.')
+      }
+    } catch (err) {
+      setStatusEnvio({ sucesso: false, mensagem: err.message || 'Erro ao enviar mensagem pelo WhatsApp oficial.' })
+    } finally {
+      setEnviando(false)
+    }
+  }
+
+  const primeiroNomeCli = clienteModal ? String(clienteModal.nome || '').split(' ')[0] : 'Cliente'
+  const primeiroNomeBarber = String(profissionalNome || '').split(' ')[0] || 'Barbeiro'
+
+  let textoPrevia = `Olá, ${primeiroNomeCli}! Tudo bem? Aqui é da Barbearia Dino. 💈 O barbeiro ${primeiroNomeBarber} notou que já faz um tempinho desde a sua última visita para ${clienteModal?.ultimoServico || 'Corte'}. Que tal renovar o visual essa semana? Responda aqui ou agende online pelo link: https://kytto.com.br/agendar/dino`
+  if (templateZap === 'vip') {
+    textoPrevia = `Olá, ${primeiroNomeCli}! Tudo bem? Aqui é da Barbearia Dino. 💈 O barbeiro ${primeiroNomeBarber} abriu alguns horários especiais na agenda e lembrou de você. Gostaria de garantir o seu atendimento para hoje ou amanhã? Responda por aqui para reservar!`
+  } else if (templateZap === 'combo') {
+    textoPrevia = `Olá, ${primeiroNomeCli}! Tudo bem? Aqui é da Barbearia Dino. 💈 Esta semana estamos com condições especiais em combos de Corte + Barba ou Tratamento com o barbeiro ${primeiroNomeBarber}. Vamos renovar o visual? Responda aqui para agendar!`
+  }
 
   return (
     <div style={{ display: 'grid', gap: 14 }}>
@@ -118,9 +140,10 @@ export default function BarbeiroClientes({ clientes = [], profissionalNome = 'Ba
               cursor: 'pointer',
             }}
           >
-            <div style={{ fontSize: 10, color: t.muted, fontWeight: 700 }}>EM DIA (≤15d)</div>
+            <div style={{ fontSize: 10, color: t.muted, fontWeight: 700 }}>EM DIA (&le;15d)</div>
             <div style={{ fontSize: 18, fontWeight: 900, color: t.green, marginTop: 2 }}>{qtdEmDia}</div>
           </button>
+
           <button
             type="button"
             onClick={() => setFiltroRetorno(filtroRetorno === 'retorno_ideal' ? 'todos' : 'retorno_ideal')}
@@ -133,9 +156,10 @@ export default function BarbeiroClientes({ clientes = [], profissionalNome = 'Ba
               cursor: 'pointer',
             }}
           >
-            <div style={{ fontSize: 10, color: t.muted, fontWeight: 700 }}>CHAMAR (16-30d)</div>
+            <div style={{ fontSize: 10, color: t.muted, fontWeight: 700 }}>VOLTAR (16-30d)</div>
             <div style={{ fontSize: 18, fontWeight: 900, color: t.yellow, marginTop: 2 }}>{qtdIdeal}</div>
           </button>
+
           <button
             type="button"
             onClick={() => setFiltroRetorno(filtroRetorno === 'atrasados' ? 'todos' : 'atrasados')}
@@ -156,7 +180,7 @@ export default function BarbeiroClientes({ clientes = [], profissionalNome = 'Ba
         {/* SELETOR DE SCRIPT DE ABORDAGEM WHATSAPP */}
         <div>
           <div style={{ fontSize: 11, color: t.muted, fontWeight: 700, marginBottom: 6 }}>
-            💬 Estilo da mensagem rápida de WhatsApp:
+            💬 Modelo da mensagem oficial de retorno (WhatsApp Barbearia Dino):
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
             {[
@@ -171,9 +195,9 @@ export default function BarbeiroClientes({ clientes = [], profissionalNome = 'Ba
                 style={{
                   padding: '6px 8px',
                   borderRadius: 8,
-                  border: `1px solid ${templateZap === id ? '#16A34A' : t.line}`,
-                  background: templateZap === id ? 'rgba(22, 163, 74, 0.2)' : t.surface,
-                  color: templateZap === id ? '#86efac' : t.cream,
+                  border: `1px solid ${templateZap === id ? '#2563EB' : t.line}`,
+                  background: templateZap === id ? 'rgba(37, 99, 235, 0.25)' : t.surface,
+                  color: templateZap === id ? '#93c5fd' : t.cream,
                   fontSize: 11,
                   fontWeight: 800,
                   cursor: 'pointer',
@@ -189,7 +213,7 @@ export default function BarbeiroClientes({ clientes = [], profissionalNome = 'Ba
       {/* CAMPO DE PESQUISA */}
       <input
         type="search"
-        placeholder="🔍 Buscar cliente por nome, telefone ou serviço…"
+        placeholder="🔍 Buscar cliente por nome ou serviço…"
         value={busca}
         onChange={(e) => setBusca(e.target.value)}
         style={{
@@ -221,13 +245,13 @@ export default function BarbeiroClientes({ clientes = [], profissionalNome = 'Ba
               type="button"
               onClick={() => setFiltroRetorno(chave)}
               style={{
-                padding: '6px 12px',
-                borderRadius: 20,
-                border: `1px solid ${ativo ? t.accent : t.line}`,
                 background: ativo ? t.accent : t.surface,
-                color: ativo ? '#fff' : t.cream,
-                fontWeight: 700,
+                color: ativo ? '#fff' : t.muted,
+                border: `1px solid ${ativo ? t.accent : t.line}`,
+                borderRadius: 99,
+                padding: '6px 12px',
                 fontSize: 12,
+                fontWeight: 700,
                 cursor: 'pointer',
                 whiteSpace: 'nowrap',
               }}
@@ -246,13 +270,11 @@ export default function BarbeiroClientes({ clientes = [], profissionalNome = 'Ba
           </div>
         ) : (
           listaFiltrada.map((c, i) => {
-            const zap = linkWhatsappMensagem(c.telefone, c.nome, profissionalNome, c.ultimoServico, c.diasDesdeUltimo, templateZap)
             const corStatus = c.statusRetorno === 'em_dia' ? t.green : c.statusRetorno === 'ideal_retorno' ? t.yellow : t.red
             const rotuloStatus = c.statusRetorno === 'em_dia' ? 'Cortou recente' : c.statusRetorno === 'ideal_retorno' ? 'Hora de voltar!' : 'Sumido / Risco'
-
             return (
               <div
-                key={`${c.id || c.telefone || c.nome}-${i}`}
+                key={`${c.id || c.clienteId || c.nome}-${i}`}
                 style={{
                   background: t.card,
                   border: `1px solid ${c.statusRetorno === 'ideal_retorno' ? 'rgba(224, 178, 75, 0.4)' : t.line}`,
@@ -291,30 +313,33 @@ export default function BarbeiroClientes({ clientes = [], profissionalNome = 'Ba
                 </div>
 
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                  {zap && (
-                    <a
-                      href={zap}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      style={{
-                        flex: 1.4,
-                        background: '#16A34A',
-                        color: '#fff',
-                        textDecoration: 'none',
-                        textAlign: 'center',
-                        padding: '8px 10px',
-                        borderRadius: 10,
-                        fontWeight: 800,
-                        fontSize: 12,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: 4,
-                      }}
-                    >
-                      💬 Chamar Zap
-                    </a>
-                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setStatusEnvio(null)
+                      setClienteModal(c)
+                    }}
+                    style={{
+                      flex: 1.4,
+                      background: 'linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)',
+                      color: '#fff',
+                      border: 'none',
+                      textAlign: 'center',
+                      padding: '9px 10px',
+                      borderRadius: 10,
+                      fontWeight: 800,
+                      fontSize: 12,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 4,
+                      cursor: 'pointer',
+                      boxShadow: '0 2px 8px rgba(37, 99, 235, 0.35)',
+                    }}
+                  >
+                    📲 Lembrar no Zap da Barbearia
+                  </button>
+
                   {onAbrirProntuario && (
                     <button
                       type="button"
@@ -334,6 +359,7 @@ export default function BarbeiroClientes({ clientes = [], profissionalNome = 'Ba
                       👤 Ficha 360º
                     </button>
                   )}
+
                   {onEncaixarCliente && (
                     <button
                       type="button"
@@ -359,6 +385,187 @@ export default function BarbeiroClientes({ clientes = [], profissionalNome = 'Ba
           })
         )}
       </div>
+
+      {/* MODAL DE NOTIFICAÇÃO PELO WHATSAPP OFICIAL DA BARBEARIA */}
+      {clienteModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0,0,0,0.75)',
+          zIndex: 9999,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: 16,
+          backdropFilter: 'blur(4px)',
+        }}>
+          <div style={{
+            background: '#161922',
+            border: `1px solid ${t.line}`,
+            borderRadius: 18,
+            padding: 20,
+            maxWidth: 420,
+            width: '100%',
+            display: 'grid',
+            gap: 14,
+            boxShadow: '0 20px 40px rgba(0,0,0,0.6)',
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 22 }}>📲</span>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: 16, fontWeight: 900, color: '#fff' }}>
+                    Avisar no WhatsApp da Barbearia
+                  </h3>
+                  <div style={{ fontSize: 11.5, color: '#93c5fd', fontWeight: 700 }}>
+                    Saída oficial: WhatsApp Barbearia Dino (65 99917-2020)
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setClienteModal(null)}
+                disabled={enviando}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: t.muted,
+                  fontSize: 18,
+                  cursor: 'pointer',
+                  padding: 4,
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div style={{
+              background: 'rgba(37, 99, 235, 0.1)',
+              border: '1px solid rgba(37, 99, 235, 0.3)',
+              borderRadius: 12,
+              padding: 12,
+              fontSize: 12,
+              color: '#dbeafe',
+              lineHeight: 1.4,
+            }}>
+              🔒 <strong>Privacidade Garantida:</strong> A mensagem sai pelo canal institucional da barbearia com proteção de dados e cadência humanizada. O número pessoal do cliente não é exposto.
+            </div>
+
+            <div>
+              <div style={{ fontSize: 12, color: t.muted, fontWeight: 700, marginBottom: 4 }}>
+                Cliente: <strong style={{ color: '#fff' }}>{clienteModal.nome}</strong> · Último corte há {clienteModal.diasDesdeUltimo} dias
+              </div>
+            </div>
+
+            <div>
+              <div style={{ fontSize: 12, color: t.muted, fontWeight: 700, marginBottom: 6 }}>
+                Escolha o estilo da mensagem:
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
+                {[
+                  ['padrao', '💈 Lembrete'],
+                  ['vip', '⚡ Vaga VIP'],
+                  ['combo', '🎁 Combo'],
+                ].map(([id, rotulo]) => (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => setTemplateZap(id)}
+                    style={{
+                      padding: '8px 4px',
+                      borderRadius: 8,
+                      border: `1px solid ${templateZap === id ? '#2563EB' : t.line}`,
+                      background: templateZap === id ? '#2563EB' : t.surface,
+                      color: '#fff',
+                      fontSize: 11,
+                      fontWeight: 800,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {rotulo}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div style={{
+              background: t.card,
+              border: `1px solid ${t.line}`,
+              borderRadius: 12,
+              padding: 12,
+              fontSize: 12,
+              color: t.cream,
+              lineHeight: 1.45,
+              whiteSpace: 'pre-wrap',
+            }}>
+              <span style={{ fontSize: 10.5, color: '#93c5fd', fontWeight: 800, display: 'block', marginBottom: 4 }}>
+                PRÉVIA DA MENSAGEM OFICIAL:
+              </span>
+              {textoPrevia}
+            </div>
+
+            {statusEnvio && (
+              <div style={{
+                padding: '10px 12px',
+                borderRadius: 10,
+                fontSize: 12.5,
+                fontWeight: 800,
+                textAlign: 'center',
+                background: statusEnvio.sucesso ? 'rgba(60, 196, 139, 0.15)' : 'rgba(242, 122, 137, 0.15)',
+                border: `1px solid ${statusEnvio.sucesso ? t.green : t.red}`,
+                color: statusEnvio.sucesso ? t.green : t.red,
+              }}>
+                {statusEnvio.sucesso ? '✓ ' : '✕ '} {statusEnvio.mensagem}
+              </div>
+            )}
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.4fr', gap: 8, marginTop: 4 }}>
+              <button
+                type="button"
+                onClick={() => setClienteModal(null)}
+                disabled={enviando}
+                style={{
+                  background: t.surface,
+                  border: `1px solid ${t.line}`,
+                  color: t.cream,
+                  borderRadius: 10,
+                  padding: '10px 12px',
+                  fontWeight: 700,
+                  fontSize: 13,
+                  cursor: 'pointer',
+                }}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={enviando}
+                onClick={() => dispararAvisoOficial(clienteModal, templateZap)}
+                style={{
+                  background: 'linear-gradient(135deg, #16A34A 0%, #15803D 100%)',
+                  border: 'none',
+                  color: '#fff',
+                  borderRadius: 10,
+                  padding: '10px 14px',
+                  fontWeight: 800,
+                  fontSize: 13,
+                  cursor: enviando ? 'not-allowed' : 'pointer',
+                  opacity: enviando ? 0.7 : 1,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 6,
+                }}
+              >
+                {enviando ? 'Enviando...' : '🚀 Enviar pelo Zap Oficial'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -593,6 +593,29 @@ export default function ModoBarbeiro() {
   const [clienteEncaixeInicial, setClienteEncaixeInicial] = useState(null)
   const [vendaPendente, setVendaPendente] = useState(false)
   const [atualizadoEm, setAtualizadoEm] = useState(null)
+  const [notificandoAgendamentoId, setNotificandoAgendamentoId] = useState(null)
+  const [sucessoNotificacaoId, setSucessoNotificacaoId] = useState(null)
+
+  async function avisarNoZapOficial(agendamento) {
+    if (!agendamento) return
+    setNotificandoAgendamentoId(agendamento.id)
+    try {
+      const res = await api.post('/api/admin/barbearia/modo-barbeiro/notificar-cliente', {
+        agendamentoId: agendamento.id,
+        tipo: 'horario_hoje',
+      })
+      if (res && res.ok) {
+        setSucessoNotificacaoId(agendamento.id)
+        setTimeout(() => setSucessoNotificacaoId(null), 3000)
+      } else {
+        alert(res?.error || 'Não foi possível enviar a mensagem no WhatsApp oficial.')
+      }
+    } catch (err) {
+      alert(err.message || 'Erro ao comunicar com o WhatsApp da barbearia.')
+    } finally {
+      setNotificandoAgendamentoId(null)
+    }
+  }
   const data = /^\d{4}-\d{2}-\d{2}$/.test(params.get('data') || '') ? params.get('data') : ''
   const pedido = useRef(0)
   const contextoPainel = JSON.stringify([data, profissionalId, user?.id, user?.email, empresaAtiva?.id, lojaAtiva?.id])
@@ -926,15 +949,29 @@ export default function ModoBarbeiro() {
                 >
                   ▶ Iniciar Atendimento
                 </button>
-                {proximoCliente.clienteTelefone && (
-                  <a
-                    href={linkWhatsappAgendamento(proximoCliente.clienteTelefone, proximoCliente.clienteNome, painel.profissional?.nome, hora(proximoCliente.dataHora), proximoCliente.servicoNome)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    style={{ ...btn2, textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}
+                {!['cancelado'].includes(proximoCliente.status) && (
+                  <button
+                    type="button"
+                    onClick={() => avisarNoZapOficial(proximoCliente)}
+                    disabled={notificandoAgendamentoId === proximoCliente.id}
+                    style={{
+                      ...btn2,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 4,
+                      background: sucessoNotificacaoId === proximoCliente.id ? 'rgba(60, 196, 139, 0.2)' : 'rgba(37, 99, 235, 0.2)',
+                      borderColor: sucessoNotificacaoId === proximoCliente.id ? t.green : '#2563EB',
+                      color: sucessoNotificacaoId === proximoCliente.id ? '#86efac' : '#93c5fd',
+                      fontWeight: 800,
+                    }}
                   >
-                    💬 WhatsApp
-                  </a>
+                    {notificandoAgendamentoId === proximoCliente.id
+                      ? 'Enviando...'
+                      : sucessoNotificacaoId === proximoCliente.id
+                      ? '✓ Avisado no Zap!'
+                      : '📲 Avisar no Zap da Barbearia'}
+                  </button>
                 )}
               </div>
             </div>
@@ -1128,10 +1165,33 @@ export default function ModoBarbeiro() {
                         👤 Ver Prontuário do Cliente
                       </button>
                     )}
-                    {(a.clienteTelefone && !['cancelado'].includes(a.status)) && <div style={{ display: 'flex', gap: 8 }}>
-                    <a href={`tel:${soDigitos(a.clienteTelefone)}`} style={{ ...btn2, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>Ligar</a>
-                    {zap && <a href={linkWhatsappAgendamento(a.clienteTelefone, a.clienteNome, painel.profissional?.nome, hora(a.dataHora), a.servicoNome)} target="_blank" rel="noopener noreferrer" style={{ ...btn2, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 4 }}>💬 WhatsApp</a>}
-                  </div>}
+                    {(!['cancelado', 'concluido'].includes(a.status)) && (
+                      <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+                        <button
+                          type="button"
+                          onClick={() => avisarNoZapOficial(a)}
+                          disabled={notificandoAgendamentoId === a.id}
+                          style={{
+                            ...btn2,
+                            width: '100%',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: 6,
+                            background: sucessoNotificacaoId === a.id ? 'rgba(60, 196, 139, 0.2)' : 'rgba(37, 99, 235, 0.15)',
+                            borderColor: sucessoNotificacaoId === a.id ? t.green : '#2563EB',
+                            color: sucessoNotificacaoId === a.id ? '#86efac' : '#93c5fd',
+                            fontWeight: 800,
+                          }}
+                        >
+                          {notificandoAgendamentoId === a.id
+                            ? 'Enviando aviso...'
+                            : sucessoNotificacaoId === a.id
+                            ? '✓ Horário avisado pelo WhatsApp da barbearia!'
+                            : '📲 Avisar Horário no Zap da Barbearia'}
+                        </button>
+                      </div>
+                    )}
                 </article>
               })())}
           </section>

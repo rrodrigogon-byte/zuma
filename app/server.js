@@ -3826,6 +3826,24 @@ app.post('/api/admin/barbearia/modo-barbeiro/comandas', (req, res) => {
     res.status(comanda.idempotente ? 200 : 201).json({ ok: true, comanda: { id: comanda.id, status: comanda.status, total: comanda.total, saldoPendente: comanda.saldoPendente, idempotente: comanda.idempotente, itens: comanda.itens.map(i => ({ nome: i.nome, quantidade: i.quantidade, subtotal: i.subtotal })) } });
   } catch (error) { erroEquipe(res, error); }
 });
+// Disparo de mensagem oficial da Barbearia Dino pelo WhatsApp corporativo (proteção LGPD e número oculto)
+app.post('/api/admin/barbearia/modo-barbeiro/notificar-cliente', async (req, res) => {
+  try {
+    const ctx = contextoEquipe(req);
+    const { clienteId, agendamentoId, tipo, template } = req.body || {};
+    const resultado = await modoBarbeiro.notificarClientePeloZapOficial(barbeariaErpKytto, {
+      empresaId: ctx.empresaId,
+      lojaId: ctx.lojaId,
+      usuario: req.user,
+      clienteId,
+      agendamentoId,
+      tipo,
+      template,
+      clientesKytto,
+    });
+    res.json(resultado);
+  } catch (error) { erroEquipe(res, error); }
+});
 // Troca de senha pelo próprio profissional no aplicativo do barbeiro (/barbeiro)
 app.post('/api/admin/barbearia/modo-barbeiro/trocar-senha', async (req, res) => {
   const { senhaAtual, senhaNova, confirmarSenha } = req.body || {};

@@ -20,7 +20,16 @@ function dinheiro(valor) { return Math.round(Number(valor || 0) * 100) / 100; }
 function dataValida(data) { return /^\d{4}-\d{2}-\d{2}$/.test(String(data || '')); }
 function normStr(s) { return String(s || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''); }
 
-export function clientesRecentesDoBarbeiro(erp, { empresaId, lojaId = '', profissionalId = '', agora = new Date() } = {}) {
+export function mascararTelefone(telefone) {
+  if (!telefone) return '';
+  const d = String(telefone).replace(/\D/g, '');
+  if (d.length < 8) return '';
+  const ddd = d.length >= 10 ? `(${d.slice(-11, -9)}) ` : '';
+  const ultimos2 = d.slice(-2);
+  return `${ddd}9****-**${ultimos2}`;
+}
+
+export function clientesRecentesDoBarbeiro(erp, { empresaId, lojaId = '', profissionalId = '', agora = new Date(), gestao = false } = {}) {
   if (!empresaId || !profissionalId) return [];
   try {
     const todosAgendamentos = erp.listarAgendamentos(empresaId, { profissionalId, lojaId });
@@ -34,7 +43,8 @@ export function clientesRecentesDoBarbeiro(erp, { empresaId, lojaId = '', profis
         id: a.clienteId || null,
         clienteId: a.clienteId || null,
         nome: a.clienteNome || 'Cliente',
-        telefone: a.clienteTelefone || '',
+        telefone: gestao ? (a.clienteTelefone || '') : mascararTelefone(a.clienteTelefone),
+        telefoneProtegido: !gestao,
         ultimoServico: a.servicoNome || 'Serviço',
         ultimaData: dataIso,
         totalAtendimentos: 0,
@@ -235,7 +245,8 @@ export function painelBarbeiro(erp, { empresaId, lojaId = '', usuario = {}, prof
         motivoCancelamento: a.motivoCancelamento || '',
         confirmacaoAutomatica: automaticoAtivo && a.confirmacaoAutomatica?.ativa === true ? { ativa: true, status: a.confirmacaoAutomatica.status } : null,
         clienteNome: a.clienteNome || '',
-        clienteTelefone: a.clienteTelefone || '',
+        clienteTelefone: gestao ? (a.clienteTelefone || '') : mascararTelefone(a.clienteTelefone),
+        telefoneProtegido: !gestao,
         clienteId: a.clienteId || null,
         servicoId: a.servicoId,
         servicoNome: servico?.nome || a.servicoNome || 'Serviço',
@@ -505,7 +516,7 @@ export function painelBarbeiro(erp, { empresaId, lojaId = '', usuario = {}, prof
     visaoGeralEquipe,
     gamificacao,
     clientesRecentes: (() => {
-      const recentes = clientesRecentesDoBarbeiro(erp, { empresaId, lojaId, profissionalId: escolhido.id, agora });
+      const recentes = clientesRecentesDoBarbeiro(erp, { empresaId, lojaId, profissionalId: escolhido.id, agora, gestao });
       try {
         const cart = listarCarteiraClientes(empresaId, { profissionalId: escolhido.id, lojaId });
         if (cart && Array.isArray(cart.clientes) && cart.clientes.length > 0) {
@@ -516,7 +527,8 @@ export function painelBarbeiro(erp, { empresaId, lojaId = '', usuario = {}, prof
               id: c.id || c.clienteId || null,
               clienteId: c.clienteId || c.id || null,
               nome: c.nome || 'Cliente',
-              telefone: c.telefone || '',
+              telefone: gestao ? (c.telefone || '') : mascararTelefone(c.telefone),
+              telefoneProtegido: !gestao,
               ultimoServico: c.ultimoServico || c.servicoFavorito || 'Corte Masculino',
               ultimaData: c.ultimaData || c.ultimaVisita || '',
               diasDesdeUltimo: dias,
@@ -591,4 +603,105 @@ export function assistenteAtendimento(erp, {
     now: agora,
     storeId: lojaId,
   });
+}
+
+/**
+ * Dispara mensagem oficial pelo WhatsApp corporativo da Barbearia Dino.
+ * O barbeiro não tem acesso ao número de telefone do cliente (proteção e privacidade).
+ * A mensagem sai da instância oficial da barbearia.
+ */
+export async function notificarClientePeloZapOficial(erp, {
+  empresaId,
+  lojaId = '',
+  usuario = {},
+  clienteId = '',
+  agendamentoId = '',
+  tipo = 'retorno',
+  template = 'padrao',
+  clientesKytto = null,
+  enviarMensagemFn = null,
+} = {}) {
+  const gestao = ehGestao(usuario);
+  const profissionais = erp.listarProfissionais(empresaId);
+  const eu = profissionalDoUsuario(profissionais, usuario);
+  if (!gestao && !eu) {
+    throw new ModoBarbeiroError('Seu usuário não está vinculado a um profissional da barbearia.', 'SEM_VINCULO', 403);
+  }
+  const barbeiroNome = eu?.nome || usuario?.nome || 'Seu Barbeiro';
+  const barbeiroPrimeiroNome = barbeiroNome.split(' ')[0] || 'Barbeiro';
+
+  let telefoneReal = '';
+  let nomeCliente = 'Amigo';
+  let servicoNome = 'Corte & Barba';
+  let horaAgenda = '';
+
+  if (agendamentoId) {
+    const ag = erp.obterAgendamento ? erp.obterAgendamento(empresaId, agendamentoId) : null;
+    if (ag) {
+      telefoneReal = ag.clienteTelefone || '';
+      nomeCliente = ag.clienteNome || nomeCliente;
+      servicoNome = ag.servicoNome || servicoNome;
+      if (ag.horaLocal) horaAgenda = ag.horaLocal;
+      else if (ag.dataHora) {
+        try {
+          horaAgenda = new Date(ag.dataHora).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Cuiaba' });
+        } catch {}
+      }
+    }
+  }
+
+  if (!telefoneReal && clienteId && clientesKytto?.obterCliente) {
+    const cli = clientesKytto.obterCliente(empresaId, clienteId);
+    if (cli) {
+      telefoneReal = cli.telefone || '';
+      nomeCliente = cli.nome || nomeCliente;
+    }
+  }
+
+  if (!telefoneReal && clienteId) {
+    // Procura na lista de agendamentos pelo clienteId
+    try {
+      const ags = erp.listarAgendamentos(empresaId, { clienteId, lojaId });
+      const ultimo = ags.find((a) => a.clienteTelefone);
+      if (ultimo) {
+        telefoneReal = ultimo.clienteTelefone;
+        nomeCliente = ultimo.clienteNome || nomeCliente;
+        servicoNome = ultimo.servicoNome || servicoNome;
+      }
+    } catch {}
+  }
+
+  const telDigitos = String(telefoneReal || '').replace(/\D/g, '');
+  if (telDigitos.length < 10) {
+    throw new ModoBarbeiroError('O cliente não possui um número de WhatsApp cadastrado.', 'TELEFONE_NAO_ENCONTRADO', 400);
+  }
+
+  const primeiroNomeCli = String(nomeCliente || '').trim().split(/\s+/)[0] || 'amigo';
+  let texto = '';
+
+  if (tipo === 'horario_hoje' || tipo === 'confirmacao_hoje') {
+    texto = `Olá, ${primeiroNomeCli}! Tudo bem? Aqui é da Barbearia Dino. 💈 Confirmando seu horário de hoje${horaAgenda ? ` às ${horaAgenda}` : ''} com o barbeiro ${barbeiroPrimeiroNome} (${servicoNome}). Te aguardamos na barbearia! Caso precise remarcar, basta nos responder por aqui.`;
+  } else if (template === 'vip') {
+    texto = `Olá, ${primeiroNomeCli}! Tudo bem? Aqui é da Barbearia Dino. 💈 O barbeiro ${barbeiroPrimeiroNome} abriu alguns horários especiais na agenda e lembrou de você. Gostaria de garantir o seu atendimento para hoje ou amanhã? Responda por aqui para reservar!`;
+  } else if (template === 'combo') {
+    texto = `Olá, ${primeiroNomeCli}! Aqui é da Barbearia Dino. 💈 Esta semana estamos com condições especiais em combos de Corte + Barba ou Tratamento com o barbeiro ${barbeiroPrimeiroNome}. Vamos renovar o visual? Responda aqui para agendar!`;
+  } else {
+    texto = `Olá, ${primeiroNomeCli}! Tudo bem? Aqui é da Barbearia Dino. 💈 O barbeiro ${barbeiroPrimeiroNome} notou que já faz um tempinho desde a sua última visita para ${servicoNome}. Que tal renovar o visual essa semana? Responda por aqui ou agende online pelo link: https://kytto.com.br/agendar/dino`;
+  }
+
+  // Realiza o envio pelo WhatsApp corporativo da Dino
+  if (typeof enviarMensagemFn === 'function') {
+    const res = await enviarMensagemFn(telDigitos, texto);
+    if (res && res.ok === false) {
+      throw new ModoBarbeiroError(res.error || 'Falha ao despachar mensagem pelo WhatsApp da barbearia.', 'ERRO_DISPARO', 502);
+    }
+    return { ok: true, mensagem: 'Mensagem enviada com sucesso pelo WhatsApp oficial da Barbearia Dino!' };
+  }
+
+  const { enviarMensagemDinoCRM } = await import('./dino-crm-disparo.js');
+  const res = await enviarMensagemDinoCRM(telDigitos, texto);
+  if (res && res.ok === false) {
+    throw new ModoBarbeiroError(res.error || 'Não foi possível entregar a mensagem no WhatsApp oficial.', 'ERRO_DISPARO', 502);
+  }
+  return { ok: true, mensagem: 'Mensagem enviada com sucesso pelo WhatsApp oficial da Barbearia Dino!' };
 }
