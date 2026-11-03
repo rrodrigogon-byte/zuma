@@ -97,8 +97,9 @@ export function lerCertificadoPfx(pfxBase64, senha) {
     const certBag = certBags[0];
     if (!keyBag?.key || !certBag?.cert) throw new Error('PFX sem chave privada ou certificado');
     const validoAte = certBag.cert.validity.notAfter;
-    const certChain = certBags.map((b) => forge.pki.certificateToPem(b.cert)).join('\n');
-    return { certPem: certChain, keyPem: forge.pki.privateKeyToPem(keyBag.key), validoAte: validoAte.toISOString(), titular: certBag.cert.subject.getField('CN')?.value || '' };
+    const certLeafPem = forge.pki.certificateToPem(certBag.cert);
+    const certChainPem = certBags.map((b) => forge.pki.certificateToPem(b.cert)).join('\n');
+    return { certPem: certLeafPem, certChainPem, keyPem: forge.pki.privateKeyToPem(keyBag.key), validoAte: validoAte.toISOString(), titular: certBag.cert.subject.getField('CN')?.value || '' };
   } catch (error) {
     throw new NfseError('Não foi possível ler o certificado A1: confira o arquivo e a senha.', 'NFSE_CERTIFICADO_INVALIDO');
   }
@@ -246,8 +247,8 @@ function campo(corpo, nome) {
 
 // ---------------------------------------------------------------------------
 // Cliente HTTP (mTLS). `transporte` pode ser injetado nos testes.
-export function transporteHttps({ certPem, keyPem, timeoutMs = 30000 }) {
-  const agent = new https.Agent({ cert: certPem, key: keyPem, keepAlive: false, rejectUnauthorized: false });
+export function transporteHttps({ certPem, keyPem, certChainPem, timeoutMs = 30000 }) {
+  const agent = new https.Agent({ cert: certChainPem || certPem, key: keyPem, keepAlive: false, rejectUnauthorized: false });
   return ({ metodo, url, corpo }) => new Promise((resolve, reject) => {
     const bodyStr = corpo !== undefined ? JSON.stringify(corpo) : null;
     const payload = bodyStr ? Buffer.from(bodyStr, 'utf8') : null;

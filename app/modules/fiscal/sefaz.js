@@ -175,8 +175,8 @@ const semDeclaracao = (xml) => String(xml).replace(/^\s*<\?xml[^>]*\?>/, '');
 const pegar = (xml, tag) => { const m = String(xml || '').match(new RegExp(`<(?:\\w+:)?${tag}[^>]*>([\\s\\S]*?)</(?:\\w+:)?${tag}>`)); return m ? m[1].trim() : null; };
 
 /** Transporte HTTPS com o certificado da empresa (mTLS). */
-export function transporteSoap({ certPem, keyPem, timeoutMs = 30000 }) {
-  const agent = new https.Agent({ cert: certPem, key: keyPem, keepAlive: false, rejectUnauthorized: false });
+export function transporteSoap({ certPem, keyPem, certChainPem, timeoutMs = 30000 }) {
+  const agent = new https.Agent({ cert: certChainPem || certPem, key: keyPem, keepAlive: false, rejectUnauthorized: false });
   return ({ url, xml, soapAction }) => new Promise((resolve, reject) => {
     const payload = Buffer.from(xml, 'utf8');
     const contentType = soapAction

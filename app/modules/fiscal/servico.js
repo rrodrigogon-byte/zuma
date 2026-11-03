@@ -335,7 +335,7 @@ async function materialAtivo(q, empresa, env, agora = new Date()) {
   const pfx = decifrar(c.pfx_cifrado, empresa, env, { comoTexto: false });
   const senha = decifrar(c.senha_cifrada, empresa, env);
   const pem = nfse.lerCertificadoPfx(pfx.toString('base64'), senha);
-  return { pfx, senha, certPem: pem.certPem, keyPem: pem.keyPem, validoAte: c.valido_ate };
+  return { pfx, senha, certPem: pem.certPem, certChainPem: pem.certChainPem, keyPem: pem.keyPem, validoAte: c.valido_ate };
 }
 
 // ── classificação fiscal ─────────────────────────────────────────────────────
@@ -1065,7 +1065,7 @@ function montarNfe({ doc, emit, itens, pagamentos, material, env, agora, destina
 }
 
 async function transmitirNfe({ doc, emit, material, transporte, env, esperar }) {
-  const t = transporte || sefaz.transporteSoap({ certPem: material.certPem, keyPem: material.keyPem });
+  const t = transporte || sefaz.transporteSoap({ certPem: material.certPem, keyPem: material.keyPem, certChainPem: material.certChainPem });
   const ambiente = ambienteDe(doc);
   const svc = ['6', '7'].includes(String(doc.tp_emis));
   let ret = await sefaz.autorizar({ uf: emit.uf, modelo: doc.modelo, xmlAssinado: doc.xml_assinado, idLote: Date.now(), transporte: t, env, chaveEsperada: doc.chave, ambiente, svc, ...(esperar ? { esperar } : {}) });
@@ -1116,7 +1116,7 @@ function montarNfse({ doc, emit, itens, valorTotal, material, agora, destinatari
 
 async function transmitirNfse({ doc, emit, material, transporte, reenvio }) {
   const cfg = cfgNfse(emit, doc.serie, ambienteDe(doc));
-  const cliente = nfse.clienteSefin(cfg, transporte || nfse.transporteHttps({ certPem: material.certPem, keyPem: material.keyPem }));
+  const cliente = nfse.clienteSefin(cfg, transporte || nfse.transporteHttps({ certPem: material.certPem, keyPem: material.keyPem, certChainPem: material.certChainPem }));
   const recuperar = async () => {
     const c = await cliente.consultarDps(doc.id_dps);
     return c?.chaveAcesso ? { status: 'autorizado', chave: c.chaveAcesso, mensagens: [{ codigo: 'RECUPERADA', mensagem: 'NFS-e recuperada pela DPS já recebida na Sefin.' }] } : null;
