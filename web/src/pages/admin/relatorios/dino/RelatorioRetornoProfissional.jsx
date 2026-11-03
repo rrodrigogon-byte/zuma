@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Sparkles, Filter, ChevronDown, RefreshCw, ChevronUp, Edit, Download } from 'lucide-react';
+import { Sparkles, Filter, ChevronDown, RefreshCw, ChevronUp, Edit, Edit2, Download } from 'lucide-react';
 const RelatorioRetornoProfissional = () => {
   const [dataAnaliseInicio, setDataAnaliseInicio] = useState('2026-08-01');
   const [dataAnaliseFim, setDataAnaliseFim] = useState('2026-08-31');

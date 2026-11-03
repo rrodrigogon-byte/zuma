@@ -1,16 +1,49 @@
-import React, { useState } from 'react';
-import { Calendar, ExternalLink, Sparkles, Filter, User, RefreshCw, Download } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Calendar, ExternalLink, Sparkles, Filter, User, RefreshCw, Download, Search } from 'lucide-react';
+import { api } from '../../../../lib/api';
 const RelatorioClientesAtendidos = () => {
   const [dataInicio, setDataInicio] = useState('2026-09-01');
   const [dataFim, setDataFim] = useState('2026-10-26');
-  
-  const clientes = [
-    { id: 1, nome: 'João Pedro', telefone: '(65) 9999-3333', ultimaVisita: '02/10/2026', visitas: 3, ticket: 180, perfil: '🏷️ Essencial' },
-    { id: 2, nome: 'Carlos Silva', telefone: '(65) 9999-1111', ultimaVisita: '15/10/2026', visitas: 2, ticket: 180, perfil: '⭐ Premium' },
-    { id: 3, nome: 'Marcos Paulo', telefone: '(65) 9999-2222', ultimaVisita: '20/10/2026', visitas: 1, ticket: 120, perfil: '⭐ Premium' },
-    { id: 4, nome: 'Lucas Lima', telefone: '(65) 9999-4444', ultimaVisita: '22/10/2026', visitas: 4, ticket: 240, perfil: '🏷️ Essencial' },
-    { id: 5, nome: 'Pedro Henrique', telefone: '(65) 9999-5555', ultimaVisita: '25/10/2026', visitas: 1, ticket: 60, perfil: '🔄 Club' }
-  ];
+  const [clientes, setClientes] = useState([]);
+  const [carregando, setCarregando] = useState(true);
+  const [termoBusca, setTermoBusca] = useState('');
+
+  const carregarClientes = useCallback(async () => {
+    setCarregando(true);
+    try {
+      const res = await api.get('/api/admin/barbearia/clientes-360?limit=100');
+      const raw = Array.isArray(res?.items) ? res.items : (Array.isArray(res) ? res : []);
+      const formatados = raw.map((c, i) => {
+        const ultimaData = c.ultima_visita || c.ultimaVisita || c.atualizado_em || 'Recente';
+        const valorTotal = Number(c.total_gasto || c.ltv || c.ticket_medio || 0);
+        return {
+          id: c.id || c.ref || i,
+          nome: c.nome || c.name || 'Cliente sem nome',
+          telefone: c.telefone || c.phone || 'Sem telefone',
+          ultimaVisita: typeof ultimaData === 'string' && ultimaData.includes('T') ? ultimaData.split('T')[0] : String(ultimaData),
+          visitas: Number(c.total_atendimentos || c.visitas || 1),
+          ticket: valorTotal > 0 ? valorTotal : 90.00,
+          perfil: (c.plano_ativo || c.is_vip) ? '⭐ Premium' : (valorTotal > 200 ? '⭐ Premium' : '🏷️ Essencial'),
+          ref: c.ref || c.id
+        };
+      });
+      setClientes(formatados);
+    } catch (e) {
+      console.warn('Erro ao carregar clientes 360 reais:', e);
+    } finally {
+      setCarregando(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    carregarClientes();
+  }, [carregarClientes]);
+
+  const clientesFiltrados = clientes.filter(c => {
+    if (!termoBusca) return true;
+    const t = termoBusca.toLowerCase();
+    return c.nome.toLowerCase().includes(t) || c.telefone.includes(t);
+  });
   const styles = {
     container: { padding: '0', maxWidth: '100%', margin: '0 auto', fontFamily: 'var(--font)' },
     header: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '16px', marginBottom: '24px' },
@@ -55,7 +88,7 @@ const RelatorioClientesAtendidos = () => {
           <p style={styles.sub}>Exibir todos os clientes que foram atendidos e volume de consumo.</p>
         </div>
         <div style={styles.actions}>
-          <button style={styles.btnOutline}><RefreshCw size={14} /> Atualizar</button>
+          <button style={styles.btnOutline} onClick={carregarClientes}><RefreshCw size={14} /> Atualizar</button>
           <button style={styles.btnOutline}><Download size={14} /> Exportar</button>
         </div>
       </div>
@@ -72,6 +105,10 @@ const RelatorioClientesAtendidos = () => {
       <div style={styles.filterCard}>
         <h3 style={styles.filterTitle}><Filter size={16} /> Filtros de Período</h3>
         <div style={styles.filterGrid}>
+          <div style={styles.filterGroup}>
+            <span style={styles.label}>Buscar Cliente</span>
+            <input type="text" placeholder="Nome ou telefone..." value={termoBusca} onChange={e => setTermoBusca(e.target.value)} style={styles.input} />
+          </div>
           <div style={styles.filterGroup}>
             <span style={styles.label}>Data Início</span>
             <input type="date" value={dataInicio} onChange={e => setDataInicio(e.target.value)} style={styles.input} />
@@ -94,7 +131,11 @@ const RelatorioClientesAtendidos = () => {
             </tr>
           </thead>
           <tbody>
-            {clientes.map(c => (
+            {carregando ? (
+              <tr><td colSpan="5" style={{ padding: '32px', textAlign: 'center', color: 'var(--muted)' }}>Carregando clientes reais da base Dino...</td></tr>
+            ) : clientesFiltrados.length === 0 ? (
+              <tr><td colSpan="5" style={{ padding: '32px', textAlign: 'center', color: 'var(--muted)' }}>Nenhum cliente encontrado.</td></tr>
+            ) : clientesFiltrados.slice(0, 50).map(c => (
               <tr key={c.id} style={styles.tr}>
                 <td style={styles.td}>
                   <div style={styles.avatarBox}>

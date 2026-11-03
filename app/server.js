@@ -140,6 +140,7 @@ import { agendaHistoricaAvec } from './dino-agenda-historica.js';
 import { registerCustomer360Routes } from './customer360-routes.js';
 import { registerDinoRecuperacaoAvecRoutes } from './dino-recuperacao-avec-routes.js';
 import { registerDinoAntibanRoutes } from './dino-antiban-routes.js';
+import omnichannelRouter from './routes/omnichannel.js';
 import { registerEquipePerformanceRoutes, equipePerformanceNoStore } from './dino-equipe-desempenho-routes.js';
 import { registerPainelGestaoRoutes } from './dino-painel-gestao-routes.js';
 import { registerAiBrainRoutes } from './ai-brain-routes.js';
@@ -767,7 +768,7 @@ app.use('/api/admin/commerce', (req, res, next) => {
 });
 
 // Módulos de /api/admin que separam dados por empresa e podem ser usados por tenant.
-const TENANT_ADMIN_MODULES = new Set(['a2', 'bar', 'barbearia', 'commerce', 'commerce-session', 'usuarios', 'usuarios-diretorio', 'platform', 'fidelidade', 'login', 'auditoria', 'modificadores', 'combos', 'clube', 'unidades', 'razao', 'suprimentos', 'fiscal', 'salao', 'varejo', 'supermercado', 'pdv-offline', 'minhas-permissoes']);
+const TENANT_ADMIN_MODULES = new Set(['a2', 'bar', 'barbearia', 'commerce', 'commerce-session', 'usuarios', 'usuarios-diretorio', 'platform', 'fidelidade', 'login', 'auditoria', 'modificadores', 'combos', 'clube', 'unidades', 'razao', 'suprimentos', 'fiscal', 'salao', 'varejo', 'supermercado', 'pdv-offline', 'minhas-permissoes', 'cupons', 'omnichannel', 'pdv', 'dino-captacao', 'clientes-360', 'relatorios']);
 
 // [kytto-clube] Kytto Clube & Academia (catraca, contrato digital, agenda, retenção, Wellhub/TotalPass).
 // Usa o pool do Commerce que já existe (não abre outro pool) e a mesma resolução de empresa e
@@ -1611,6 +1612,8 @@ app.use('/api/webhooks', createWhatsappAiWebhookRouter());
   const pdvOfflineRouter = createPdvOfflineRouter({ db: clubeDb, escopoDaRequisicao: escopoComercial, auth, requireStaff, fuso: FUSO_KYTTO });
   app.use('/api/pdv-offline', (req, res, next) => (modulosOcultos().has('pdv-offline') ? respostaModuloOculto(res) : next()), publicLimit(3000, 10 * 60 * 1000), pdvOfflineRouter);
   app.use('/api/admin/pdv-offline', (req, res, next) => (modulosOcultos().has('pdv-offline') ? respostaModuloOculto(res) : next()), pdvOfflineRouter);
+  app.use('/api/omnichannel', omnichannelRouter);
+  app.use('/api/admin/omnichannel', omnichannelRouter);
   // [kytto-varejo] Supermercado/varejo sobre o estoque único: preço por unidade, promoções, lotes, etiquetas e transferências.
   const varejoRouter = createVarejoAdminRouter({ db: clubeDb, escopoDaRequisicao: escopoComercial, fuso: FUSO_KYTTO });
   app.use('/api/admin/varejo', auth, requireStaff, varejoRouter);

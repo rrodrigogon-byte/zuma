@@ -35,8 +35,11 @@ export function clearEquipePerformanceCache() { performanceCache.clear(); }
 
 function commerceWindow(period) {
   // America/Cuiaba permanece UTC-4; o intervalo é inclusivo nas datas exibidas.
-  const from = new Date(`${period.inicio}T04:00:00.000Z`);
-  const to = new Date(`${period.fim}T04:00:00.000Z`);
+  const hoje = new Date().toISOString().slice(0, 10);
+  const inicioPadrao = period?.inicio || new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
+  const fimPadrao = period?.fim || hoje;
+  const from = new Date(`${inicioPadrao}T04:00:00.000Z`);
+  const to = new Date(`${fimPadrao}T04:00:00.000Z`);
   to.setUTCDate(to.getUTCDate() + 1);
   return { from: from.toISOString(), to: to.toISOString() };
 }
