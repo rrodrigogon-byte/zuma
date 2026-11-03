@@ -912,14 +912,14 @@ export default function DinoRecuperacaoAvecPanel({ onAbrirAgenda }) {
                   </div>
 
                   <div style={{ display: 'grid', gap: 8 }}>
-                    <label style={{ fontSize: '12.5px', fontWeight: 700, color: '#cbd5e1', textTransform: 'uppercase' }}>
+                    <label style={{ fontSize: '12.5px', fontWeight: 700, color: 'var(--muted, #475569)', textTransform: 'uppercase' }}>
                       1. Escolha o público do disparo:
                     </label>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 10 }}>
                       <label style={{
                         display: 'flex', alignItems: 'flex-start', gap: 10, padding: '12px', borderRadius: '10px',
-                        border: `1px solid ${escopoEnvio === 'filtrados' ? '#10b981' : 'var(--line)'}`,
-                        background: escopoEnvio === 'filtrados' ? 'rgba(16, 185, 129, 0.08)' : 'var(--surface-2)',
+                        border: `1px solid ${escopoEnvio === 'filtrados' ? '#10b981' : 'var(--line, #cbd5e1)'}`,
+                        background: escopoEnvio === 'filtrados' ? 'rgba(16, 185, 129, 0.08)' : 'var(--surface-2, #f8fafc)',
                         cursor: 'pointer'
                       }}>
                         <input
@@ -930,10 +930,10 @@ export default function DinoRecuperacaoAvecPanel({ onAbrirAgenda }) {
                           style={{ marginTop: 3 }}
                         />
                         <div>
-                          <strong style={{ display: 'block', fontSize: '13px', color: '#f8fafc' }}>
+                          <strong style={{ display: 'block', fontSize: '13px', color: 'var(--fg, #0f172a)' }}>
                             Todos os clientes filtrados ({dados.total})
                           </strong>
-                          <span style={{ fontSize: '11.5px', color: '#94a3b8' }}>
+                          <span style={{ fontSize: '11.5px', color: 'var(--muted, #64748b)' }}>
                             Alcança toda a coorte calculada ({isCenarioReajuste ? 'Cenário do Reajuste' : 'filtro ativo'})
                           </span>
                         </div>
@@ -941,8 +941,8 @@ export default function DinoRecuperacaoAvecPanel({ onAbrirAgenda }) {
 
                       <label style={{
                         display: 'flex', alignItems: 'flex-start', gap: 10, padding: '12px', borderRadius: '10px',
-                        border: `1px solid ${escopoEnvio === 'pagina' ? '#10b981' : 'var(--line)'}`,
-                        background: escopoEnvio === 'pagina' ? 'rgba(16, 185, 129, 0.08)' : 'var(--surface-2)',
+                        border: `1px solid ${escopoEnvio === 'pagina' ? '#10b981' : 'var(--line, #cbd5e1)'}`,
+                        background: escopoEnvio === 'pagina' ? 'rgba(16, 185, 129, 0.08)' : 'var(--surface-2, #f8fafc)',
                         cursor: 'pointer'
                       }}>
                         <input
@@ -953,10 +953,10 @@ export default function DinoRecuperacaoAvecPanel({ onAbrirAgenda }) {
                           style={{ marginTop: 3 }}
                         />
                         <div>
-                          <strong style={{ display: 'block', fontSize: '13px', color: '#f8fafc' }}>
+                          <strong style={{ display: 'block', fontSize: '13px', color: 'var(--fg, #0f172a)' }}>
                             Apenas página atual ({dados.itens.length})
                           </strong>
-                          <span style={{ fontSize: '11.5px', color: '#94a3b8' }}>
+                          <span style={{ fontSize: '11.5px', color: 'var(--muted, #64748b)' }}>
                             Envio de lote controlado dos clientes visíveis
                           </span>
                         </div>
@@ -965,14 +965,14 @@ export default function DinoRecuperacaoAvecPanel({ onAbrirAgenda }) {
                   </div>
 
                   <div style={{ display: 'grid', gap: 8 }}>
-                    <label style={{ fontSize: '12.5px', fontWeight: 700, color: '#cbd5e1', textTransform: 'uppercase' }}>
+                    <label style={{ fontSize: '12.5px', fontWeight: 700, color: 'var(--muted, #475569)', textTransform: 'uppercase' }}>
                       2. Estratégia de Mensagem:
                     </label>
                     <div style={{ display: 'grid', gap: 8 }}>
                       <label style={{
                         display: 'flex', alignItems: 'flex-start', gap: 10, padding: '12px', borderRadius: '10px',
-                        border: `1px solid ${tipoMensagem === 'personalizada_modelo' ? '#38bdf8' : 'var(--line)'}`,
-                        background: tipoMensagem === 'personalizada_modelo' ? 'rgba(56, 189, 248, 0.08)' : 'var(--surface-2)',
+                        border: `1px solid ${tipoMensagem === 'personalizada_modelo' ? '#0284c7' : 'var(--line, #cbd5e1)'}`,
+                        background: tipoMensagem === 'personalizada_modelo' ? 'rgba(2, 132, 199, 0.08)' : 'var(--surface-2, #f8fafc)',
                         cursor: 'pointer'
                       }}>
                         <input
@@ -983,10 +983,10 @@ export default function DinoRecuperacaoAvecPanel({ onAbrirAgenda }) {
                           style={{ marginTop: 3 }}
                         />
                         <div>
-                          <strong style={{ display: 'block', fontSize: '13px', color: '#38bdf8' }}>
+                          <strong style={{ display: 'block', fontSize: '13px', color: '#0284c7' }}>
                             ✨ Mensagem Inteligente Personalizada por Perfil (Recomendado)
                           </strong>
-                          <span style={{ fontSize: '11.5px', color: '#94a3b8', lineHeight: 1.4, display: 'block', marginTop: 2 }}>
+                          <span style={{ fontSize: '11.5px', color: 'var(--muted, #64748b)', lineHeight: 1.4, display: 'block', marginTop: 2 }}>
                             O sistema adapta o texto para cada cliente: quem parou no reajuste recebe a oferta do <strong>Modelo Essencial</strong>; quem consome serviços extras recebe o convite <strong>Premium VIP</strong>; e quem tinha plano recebe a oferta de reativação do <strong>Club</strong>.
                           </span>
                         </div>
@@ -994,8 +994,8 @@ export default function DinoRecuperacaoAvecPanel({ onAbrirAgenda }) {
 
                       <label style={{
                         display: 'flex', alignItems: 'flex-start', gap: 10, padding: '12px', borderRadius: '10px',
-                        border: `1px solid ${tipoMensagem === 'custom' ? '#38bdf8' : 'var(--line)'}`,
-                        background: tipoMensagem === 'custom' ? 'rgba(56, 189, 248, 0.08)' : 'var(--surface-2)',
+                        border: `1px solid ${tipoMensagem === 'custom' ? '#0284c7' : 'var(--line, #cbd5e1)'}`,
+                        background: tipoMensagem === 'custom' ? 'rgba(2, 132, 199, 0.08)' : 'var(--surface-2, #f8fafc)',
                         cursor: 'pointer'
                       }}>
                         <input
@@ -1006,10 +1006,10 @@ export default function DinoRecuperacaoAvecPanel({ onAbrirAgenda }) {
                           style={{ marginTop: 3 }}
                         />
                         <div>
-                          <strong style={{ display: 'block', fontSize: '13px', color: '#f8fafc' }}>
+                          <strong style={{ display: 'block', fontSize: '13px', color: 'var(--fg, #0f172a)' }}>
                             ✍️ Mensagem Personalizada Única
                           </strong>
-                          <span style={{ fontSize: '11.5px', color: '#94a3b8' }}>
+                          <span style={{ fontSize: '11.5px', color: 'var(--muted, #64748b)' }}>
                             Você digita o texto e o sistema substitui as variáveis automaticamente.
                           </span>
                         </div>
@@ -1057,13 +1057,13 @@ export default function DinoRecuperacaoAvecPanel({ onAbrirAgenda }) {
                     )}
                   </div>
 
-                  <div style={{ background: 'rgba(15, 23, 42, 0.6)', border: '1px solid var(--line)', borderRadius: 12, padding: 14 }}>
-                    <div style={{ fontSize: '11px', fontWeight: 800, color: '#38bdf8', textTransform: 'uppercase', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <div style={{ background: 'var(--surface-2, #f8fafc)', border: '1px solid var(--line, #e2e8f0)', borderRadius: 12, padding: 14 }}>
+                    <div style={{ fontSize: '11px', fontWeight: 800, color: '#0284c7', textTransform: 'uppercase', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
                       <MessageSquare size={13} /> Prévia da Mensagem (Exemplo: {dados.itens[0]?.nome || 'Cliente'})
                     </div>
                     <div style={{
                       background: 'rgba(16, 185, 129, 0.12)', borderLeft: '3px solid #10b981', padding: '10px 14px', borderRadius: '4px 10px 10px 4px',
-                      fontSize: '12.5px', color: '#e2e8f0', whiteSpace: 'pre-wrap', lineHeight: 1.45, maxHeight: '140px', overflowY: 'auto'
+                      fontSize: '12.5px', color: 'var(--fg, #0f172a)', whiteSpace: 'pre-wrap', lineHeight: 1.45, maxHeight: '140px', overflowY: 'auto'
                     }}>
                       {tipoMensagem === 'personalizada_modelo'
                         ? (dados.itens[0]?.mensagemWhatsapp || 'Mensagem personalizada por perfil do cliente...')
@@ -1074,15 +1074,15 @@ export default function DinoRecuperacaoAvecPanel({ onAbrirAgenda }) {
                     </div>
                   </div>
 
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '10px 14px', background: 'var(--surface-2)', borderRadius: 10, border: '1px solid var(--line)', flexWrap: 'wrap' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '10px 14px', background: 'var(--surface-2, #f8fafc)', borderRadius: 10, border: '1px solid var(--line, #e2e8f0)', flexWrap: 'wrap' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: '260px' }}>
-                      <span style={{ fontSize: '12px', fontWeight: 600, color: '#94a3b8', whiteSpace: 'nowrap' }}>Testar no seu Whats:</span>
+                      <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--muted, #475569)', whiteSpace: 'nowrap' }}>Testar no seu Whats:</span>
                       <input
                         type="text"
                         placeholder="Ex: 65999998888"
                         value={testeTelefone}
                         onChange={(e) => setTesteTelefone(e.target.value)}
-                        style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--fg)', fontSize: '12.5px', width: '150px' }}
+                        style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid var(--line, #cbd5e1)', background: 'var(--surface, #ffffff)', color: 'var(--fg, #0f172a)', fontSize: '12.5px', width: '150px' }}
                       />
                       <button
                         type="button"
@@ -1108,6 +1108,7 @@ export default function DinoRecuperacaoAvecPanel({ onAbrirAgenda }) {
               <button
                 type="button"
                 className="dino-recup-btn ghost"
+                style={{ color: 'var(--fg, #0f172a)', border: '1px solid var(--line, #cbd5e1)' }}
                 disabled={resgatandoCRM}
                 onClick={() => setModalCampanhaCRM(false)}
               >
