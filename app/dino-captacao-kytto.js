@@ -27,6 +27,21 @@ import { telefoneChave } from './dino-clientes-vinculo.js';
 import * as financeiroKytto from './financeiro-central-kytto.js';
 import { profissionalKyttoDoAvec } from './dino-vinculos-avec.js';
 import { DINO_COMMERCE_LOJA_ID, DINO_LEGACY_LOJA_ID } from './core/legacy-commerce-scope.js';
+import { carregarBaseConsolidada } from './dino-recuperacao-avec.js';
+
+let baseConsolidadaRetornosCache = null;
+export async function inicializarBaseRetornos() {
+  try {
+    baseConsolidadaRetornosCache = await carregarBaseConsolidada();
+    return baseConsolidadaRetornosCache;
+  } catch (err) {
+    console.warn('Falha ao carregar base consolidada de retornos:', err?.message);
+    return [];
+  }
+}
+export function baseConsolidadaCarregada() {
+  return Boolean(baseConsolidadaRetornosCache && baseConsolidadaRetornosCache.length > 0);
+}
 
 const DIA_MS = 24 * 60 * 60 * 1000;
 const STATUS_ATIVOS = new Set(['agendado', 'confirmado']);
@@ -1211,6 +1226,9 @@ export function retornosPrevistos(empresaId, { horizonteDias = 7, sugerirHorario
   const futurosPorChave = new Set(agendamentos
     .filter((item) => STATUS_ATIVOS.has(item.status) && new Date(item.dataHora).valueOf() > ms)
     .map((item) => `${chaveCliente(item)}:${item.servicoId || ''}`));
+  const futurosCliente = new Set(agendamentos
+    .filter((item) => STATUS_ATIVOS.has(item.status) && new Date(item.dataHora).valueOf() > ms)
+    .map((item) => chaveCliente(item)));
   const porCliente = new Map();
   for (const item of agendamentos) {
     if (item.status !== 'concluido') continue;
@@ -1225,6 +1243,7 @@ export function retornosPrevistos(empresaId, { horizonteDias = 7, sugerirHorario
   const profissionais = mapaPorId(barbearia.listarProfissionais(empresaId, { incluirInativos: true }));
   const servicos = mapaPorId(barbearia.listarServicos(empresaId, { incluirInativos: true }));
   const itens = [];
+  const clientesProcessados = new Set();
   for (const [chave, visitas] of porCliente) {
     if (visitas.length < 2) continue;
     const ordenadas = visitas.sort((a, b) => new Date(a.dataHora) - new Date(b.dataHora));
@@ -1248,6 +1267,10 @@ export function retornosPrevistos(empresaId, { horizonteDias = 7, sugerirHorario
     const situacao = futurosPorChave.has(chave)
       ? 'agendado'
       : diasAtraso > 0 ? 'atrasado' : previsto - ms <= horizonte * DIA_MS ? 'esta_semana' : 'no_prazo';
+    const chaveTelLocal = telefoneChave(ultima.clienteTelefone);
+    const chaveNomeLocal = String(ultima.clienteNome || '').trim().toLowerCase();
+    if (chaveTelLocal) clientesProcessados.add(chaveTelLocal);
+    if (chaveNomeLocal) clientesProcessados.add(chaveNomeLocal);
     itens.push({
       clienteId: ultima.clienteId || '',
       nome: ultima.clienteNome,

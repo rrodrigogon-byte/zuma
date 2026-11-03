@@ -2,6 +2,16 @@ import { CommerceError, tenantContext } from './commerce-core.js';
 import { restricaoDePermissao } from './perfis-acesso.js';
 import { db } from './database.js';
 import { accountRequestIdentity } from './commerce-accounts.js';
+import {
+  commerceEmpresaIdFromLegacy,
+  commerceLojaIdFromLegacy,
+  DINO_COMMERCE_EMPRESA_ID,
+  DINO_COMMERCE_LOJA_ID,
+} from './legacy-commerce-scope.js';
+
+export function isUuid(value) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value || ''));
+}
 
 function clean(value, max = 180) {
   return String(value || '').trim().slice(0, max);
@@ -31,8 +41,10 @@ export async function resolveCommerceIdentity(req) {
   }
   if (user?.platformAdmin === true || user?.role === 'admin' || user?.mainAdmin === true) {
     const requested = requestedScope(req);
-    const empresaId = requested.empresaId || clean(user?.empresaId) || 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
-    const lojaId = requested.lojaId || clean(user?.lojaId) || null;
+    let empresaId = commerceEmpresaIdFromLegacy(requested.empresaId) || commerceEmpresaIdFromLegacy(clean(user?.empresaId)) || DINO_COMMERCE_EMPRESA_ID;
+    let lojaId = commerceLojaIdFromLegacy(requested.lojaId, empresaId) || commerceLojaIdFromLegacy(clean(user?.lojaId), empresaId) || null;
+    if (!isUuid(empresaId)) empresaId = DINO_COMMERCE_EMPRESA_ID;
+    if (lojaId && !isUuid(lojaId)) lojaId = DINO_COMMERCE_LOJA_ID;
     const usuarioId = (user?.id && isUuid(user.id)) ? user.id : (isUuid(user?.usuarioId) ? user.usuarioId : null);
     return tenantContext({ empresaId, lojaId, usuarioId });
   }
