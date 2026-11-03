@@ -392,6 +392,7 @@ export default function App() {
         <Route path="/pedido/:storeAlias/:codigo" element={<AcompanharPedido />} />
         <Route path="/cardapio/mesa/:token" element={<CardapioMesaPublico />} />
         <Route path="/agendar/:slug" element={<AgendamentoOnline />} />
+        <Route path="/agendar/:slug/:barbeiro" element={<AgendamentoOnline />} />
         <Route path="/avaliar/:slug" element={<AvaliarAtendimento />} />
         <Route path="/minha/:slug" element={<MinhaConta />} />
         <Route path="/barbeiro" element={<ModoBarbeiro />} />

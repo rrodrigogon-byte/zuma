@@ -92,6 +92,14 @@ const dataLonga = (dia) => { const txt = new Date(`${dia}T12:00:00`).toLocaleDat
 const somarDias = (dia, n) => { const d = new Date(`${dia}T12:00:00`); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10) }
 const primeiroNome = (nome) => String(nome || '').trim().split(/\s+/)[0] || ''
 const soDigitos = (v) => String(v || '').replace(/\D/g, '')
+function slugify(valor) {
+  return String(valor || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+}
 function linkWhatsapp(telefone) { const d = soDigitos(telefone); if (d.length < 10) return ''; return `https://wa.me/${d.startsWith('55') ? d : `55${d}`}` }
 function linkWhatsappAgendamento(telefone, clienteNome, barbeiroNome, horaAgenda, servicoNome) {
   const d = soDigitos(telefone)
@@ -279,6 +287,205 @@ function RoletaModal({ onFechar, onGanhado }) {
   );
 }
 
+function BarbeiroLinkPanel({ painel, slug }) {
+  const [copiado, setCopiado] = useState(false)
+  const [copiadoInsta, setCopiadoInsta] = useState(false)
+
+  const nomeProf = painel?.profissional?.nome || 'barbeiro'
+  const slugProf = slugify(nomeProf)
+  const slugEstab = slug || painel?.estabelecimento?.slug || 'dino'
+
+  const linkCompleto = typeof window !== 'undefined'
+    ? `${window.location.origin}/agendar/${slugEstab}/${slugProf}`
+    : `https://kytto.com.br/agendar/${slugEstab}/${slugProf}`
+
+  const msgWhatsapp = `Olá! Para facilitar seu agendamento de corte ou barba comigo, escolha o melhor dia e horário direto pelo meu link exclusivo:\n\n✂️ ${linkCompleto}\n\nVocê visualiza todos os horários livres e confirma na hora!`
+  const linkShareWa = `https://wa.me/?text=${encodeURIComponent(msgWhatsapp)}`
+
+  const textoInstaBio = `✂️ Agende seu horário comigo online:\n👉 ${linkCompleto}`
+  const textoStories = `💈 Horários livres para esta semana! Agende direto no link: ${linkCompleto}`
+
+  const copiar = (texto, tipo = 'geral') => {
+    if (navigator?.clipboard?.writeText) {
+      navigator.clipboard.writeText(texto)
+      if (tipo === 'insta') {
+        setCopiadoInsta(true)
+        setTimeout(() => setCopiadoInsta(false), 2500)
+      } else {
+        setCopiado(true)
+        setTimeout(() => setCopiado(false), 2500)
+      }
+    }
+  }
+
+  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&margin=10&data=${encodeURIComponent(linkCompleto)}`
+
+  return (
+    <div style={{ display: 'grid', gap: 14 }}>
+      <div style={{
+        ...card,
+        background: 'linear-gradient(135deg, rgba(110, 124, 224, 0.15) 0%, rgba(22, 25, 34, 0.95) 100%)',
+        borderColor: '#6E7CE0',
+        padding: 18,
+        display: 'grid',
+        gap: 12,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontSize: 28 }}>✂️</span>
+          <div>
+            <div style={{ fontSize: 18, fontWeight: 800, color: '#fff' }}>Meu Link de Agendamento</div>
+            <div style={{ fontSize: 12, color: t.muted }}>
+              Compartilhe com seus clientes para que eles agendem direto com você
+            </div>
+          </div>
+        </div>
+
+        <div style={{
+          background: t.surface,
+          border: `1px solid ${t.line}`,
+          borderRadius: 12,
+          padding: '12px 14px',
+          wordBreak: 'break-all',
+          fontFamily: 'monospace',
+          fontSize: 13,
+          color: '#A7F3D0',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 8,
+        }}>
+          <span>{linkCompleto}</span>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+          <button
+            type="button"
+            onClick={() => copiar(linkCompleto)}
+            style={{
+              ...btn,
+              background: copiado ? '#10B981' : t.accent,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 6,
+            }}
+          >
+            {copiado ? '✓ Copiado!' : '📋 Copiar Link'}
+          </button>
+
+          <a
+            href={linkShareWa}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{
+              ...btn,
+              background: '#25D366',
+              color: '#000',
+              textDecoration: 'none',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 6,
+            }}
+          >
+            💬 WhatsApp
+          </a>
+        </div>
+      </div>
+
+      <div style={{ ...card, padding: 16, display: 'grid', gap: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 16, fontWeight: 800 }}>
+          <span style={{ fontSize: 22 }}>📸</span> Divulgar no Instagram
+        </div>
+        <p style={{ fontSize: 13, color: t.muted, margin: 0 }}>
+          Coloque o link na sua biografia ou cole nas figurinhas de <strong>Link</strong> dos seus Stories:
+        </p>
+
+        <div style={{ display: 'grid', gap: 8 }}>
+          <button
+            type="button"
+            onClick={() => copiar(textoInstaBio, 'insta')}
+            style={{
+              ...btn2,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '12px 14px',
+              textAlign: 'left',
+            }}
+          >
+            <div>
+              <div style={{ fontWeight: 800, fontSize: 13 }}>Copiar texto para a Bio</div>
+              <div style={{ fontSize: 11, color: t.muted }}>Inclui chamada e link encurtado</div>
+            </div>
+            <span>{copiadoInsta ? '✓ Copiado!' : '📋'}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => copiar(textoStories, 'insta')}
+            style={{
+              ...btn2,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '12px 14px',
+              textAlign: 'left',
+            }}
+          >
+            <div>
+              <div style={{ fontWeight: 800, fontSize: 13 }}>Copiar texto para Stories</div>
+              <div style={{ fontSize: 11, color: t.muted }}>Mensagem rápida de horários da semana</div>
+            </div>
+            <span>📋</span>
+          </button>
+        </div>
+      </div>
+
+      <div style={{ ...card, padding: 16, display: 'grid', gap: 12, textAlign: 'center' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontSize: 16, fontWeight: 800 }}>
+          <span style={{ fontSize: 22 }}>📲</span> QR Code para a Bancada / Espelho
+        </div>
+        <p style={{ fontSize: 13, color: t.muted, margin: 0 }}>
+          Aponte a câmera do celular ou deixe visível na sua cadeira para o cliente já sair com o próximo corte marcado:
+        </p>
+        <div style={{
+          background: '#fff',
+          borderRadius: 16,
+          padding: 16,
+          display: 'inline-block',
+          margin: '4px auto',
+          boxShadow: '0 8px 24px rgba(0,0,0,0.3)',
+        }}>
+          <img
+            src={qrUrl}
+            alt="QR Code de agendamento"
+            style={{ width: 200, height: 200, display: 'block' }}
+          />
+        </div>
+        <button
+          type="button"
+          onClick={() => window.open(linkCompleto, '_blank')}
+          style={{ ...btn2, width: '100%' }}
+        >
+          👁️ Ver página como cliente
+        </button>
+      </div>
+
+      <div style={{ ...card, padding: 14, background: 'rgba(255,255,255,0.02)', borderColor: t.line }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: '#A7F3D0', marginBottom: 4 }}>
+          🛡️ Privacidade Total Garantida
+        </div>
+        <div style={{ fontSize: 12, color: t.muted, lineHeight: 1.5 }}>
+          Ao acessar seu link, o cliente consegue navegar por qualquer data e ver opções de corte, barba e combos. O cliente <strong>nunca visualiza dados internos da agenda</strong> (nomes de outros clientes, valores faturados ou notas), apenas se o horário está <strong>Livre</strong> ou <strong>Ocupado</strong>.
+          <br /><br />
+          Ao escolher o horário, ele informa Nome, CPF e WhatsApp. O sistema cria ou vincula automaticamente o agendamento ao cadastro dele no Kytto!
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function ModoBarbeiro() {
   const { slug = '' } = useParams()
   const [params, setParams] = useSearchParams()
@@ -413,12 +620,13 @@ export default function ModoBarbeiro() {
           />
         )}
         {painel?.profissional && (
-          <nav aria-label="Abas do app" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6, marginBottom: 4 }}>
+          <nav aria-label="Abas do app" style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 6, marginBottom: 4 }}>
             {[
               ['agenda', 'Agenda', '📅'],
               ['ganhos', 'Ganhos', '💰'],
               ['metas', 'Metas', '🎯'],
               ['clientes', 'Clientes', '👥'],
+              ['link', 'Meu Link', '🔗'],
             ].map(([id, label, icon]) => {
               const ativo = abaAtiva === id
               return (
@@ -479,6 +687,10 @@ export default function ModoBarbeiro() {
             onAtualizar={carregar}
             tocarSom={tocarSom}
           />
+        )}
+
+        {abaAtiva === 'link' && painel?.profissional && (
+          <BarbeiroLinkPanel painel={painel} slug={slug} />
         )}
 
         {abaAtiva === 'agenda' && <>
@@ -873,6 +1085,7 @@ export default function ModoBarbeiro() {
           ['ganhos', 'Ganhos', '💰', reais(painel?.comissao?.dia?.repasse || 0)],
           ['metas', 'Metas', '🎯', painel?.gamificacao?.girosPendentes?.length ? `${painel.gamificacao.girosPendentes.length}🎡` : null],
           ['clientes', 'Clientes', '👥', painel?.clientesRecentes?.filter((c) => c.statusRetorno === 'ideal_retorno').length || null],
+          ['link', 'Meu Link', '🔗', null],
         ].map(([id, label, icon, badge]) => {
           const ativo = abaAtiva === id
           return (

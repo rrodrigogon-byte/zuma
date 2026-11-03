@@ -643,6 +643,7 @@ export default function BarbeariaERP() {
   const [dadosCarregados, setDadosCarregados] = useState(false);
   const pedidoOverview = useRef(0);
   const [profissionais, setProfissionais] = useState([]);
+  const [profissionalLinkModal, setProfissionalLinkModal] = useState(null);
   const [servicos, setServicos] = useState([]);
   const [clientes, setClientes] = useState([]);
   const [configuracao, setConfiguracao] = useState(null);
@@ -4509,6 +4510,13 @@ export default function BarbeariaERP() {
   }
 
   function renderProfissionaisTabela(equipeAtual) {
+    const slugifyBarbeiro = (valor) => String(valor || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '');
+
     return (
       <div style={{ display: "grid", gap: 16 }}>
         <Card style={{ padding: 16 }}>
@@ -4683,6 +4691,19 @@ export default function BarbeariaERP() {
                   </button>
                   <button
                     type="button"
+                    style={{
+                      ...styles.primary,
+                      flex: "1 1 200px",
+                      background: "#6E7CE0",
+                      color: "#fff",
+                      fontSize: 12,
+                    }}
+                    onClick={() => setProfissionalLinkModal(profissional)}
+                  >
+                    🔗 Link Online (Bio/Zap)
+                  </button>
+                  <button
+                    type="button"
                     style={{ ...styles.secondary, flex: "1 1 170px" }}
                     onClick={() => alternarProfissional(profissional)}
                   >
@@ -4707,6 +4728,109 @@ export default function BarbeariaERP() {
           )}
         </div>
         {renderExcluidos(profissionais, "profissionais", "Profissional")}
+        {profissionalLinkModal && (
+          <div
+            role="dialog"
+            aria-modal="true"
+            style={{
+              position: "fixed",
+              inset: 0,
+              background: "rgba(0, 0, 0, 0.7)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              zIndex: 1000,
+              padding: 16,
+            }}
+            onClick={() => setProfissionalLinkModal(null)}
+          >
+            <Card
+              style={{
+                maxWidth: 480,
+                width: "100%",
+                padding: 24,
+                background: "var(--card)",
+                border: "1.5px solid #6E7CE0",
+                display: "grid",
+                gap: 16,
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>
+                  ✂️ Link de {profissionalLinkModal.nome}
+                </h3>
+                <button
+                  type="button"
+                  style={{ ...styles.small, background: "none", border: "none", fontSize: 18, cursor: "pointer" }}
+                  onClick={() => setProfissionalLinkModal(null)}
+                >
+                  ✕
+                </button>
+              </div>
+
+              <p style={{ margin: 0, fontSize: 13, color: "var(--muted)" }}>
+                Link exclusivo e responsivo para publicar no Instagram (Bio/Stories), enviar no WhatsApp e usar na bancada. O cliente navega pelos dias e vê horários livres sem expor a agenda.
+              </p>
+
+              <div
+                style={{
+                  background: "var(--bg)",
+                  border: "1px solid var(--line)",
+                  borderRadius: 10,
+                  padding: "10px 14px",
+                  wordBreak: "break-all",
+                  fontFamily: "monospace",
+                  fontSize: 13,
+                  color: "#10b981",
+                }}
+              >
+                {`${window.location.origin}/agendar/${formConfig.slugPublico || "dino"}/${slugifyBarbeiro(profissionalLinkModal.nome)}`}
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                <button
+                  type="button"
+                  style={{ ...styles.primary, background: "#6E7CE0", color: "#fff" }}
+                  onClick={() => {
+                    const url = `${window.location.origin}/agendar/${formConfig.slugPublico || "dino"}/${slugifyBarbeiro(profissionalLinkModal.nome)}`;
+                    navigator.clipboard?.writeText(url);
+                    alert("Link copiado para a área de transferência!");
+                  }}
+                >
+                  📋 Copiar Link
+                </button>
+                <a
+                  href={`https://wa.me/?text=${encodeURIComponent(`Olá! Agende seu corte ou barba comigo direto pelo meu link exclusivo: ${window.location.origin}/agendar/${formConfig.slugPublico || "dino"}/${slugifyBarbeiro(profissionalLinkModal.nome)}`)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ ...styles.secondary, textAlign: "center", textDecoration: "none", display: "flex", alignItems: "center", justifyContent: "center" }}
+                >
+                  💬 WhatsApp
+                </a>
+              </div>
+
+              <div style={{ textAlign: "center", padding: "12px 0" }}>
+                <img
+                  src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&margin=8&data=${encodeURIComponent(`${typeof window !== "undefined" ? window.location.origin : "https://kytto.com.br"}/agendar/${formConfig.slugPublico || "dino"}/${slugifyBarbeiro(profissionalLinkModal.nome)}`)}`}
+                  alt="QR Code do barbeiro"
+                  style={{ borderRadius: 12, border: "4px solid #fff", display: "inline-block" }}
+                />
+                <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 6 }}>
+                  QR Code para imprimir ou mostrar na bancada
+                </div>
+              </div>
+
+              <button
+                type="button"
+                style={{ ...styles.secondary, width: "100%" }}
+                onClick={() => setProfissionalLinkModal(null)}
+              >
+                Fechar
+              </button>
+            </Card>
+          </div>
+        )}
       </div>
     );
   }

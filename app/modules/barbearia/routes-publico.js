@@ -77,12 +77,36 @@ function servicoPublico(item) {
   };
 }
 
+export function validarCpf(cpf) {
+  const limpo = String(cpf || '').replace(/\D/g, '');
+  if (limpo.length !== 11) return false;
+  if (/^(\d)\1{10}$/.test(limpo)) return false;
+  let soma = 0;
+  for (let i = 0; i < 9; i++) soma += parseInt(limpo.charAt(i), 10) * (10 - i);
+  let resto = (soma * 10) % 11;
+  if (resto === 10 || resto === 11) resto = 0;
+  if (resto !== parseInt(limpo.charAt(9), 10)) return false;
+  soma = 0;
+  for (let i = 0; i < 10; i++) soma += parseInt(limpo.charAt(i), 10) * (11 - i);
+  resto = (soma * 10) % 11;
+  if (resto === 10 || resto === 11) resto = 0;
+  return resto === parseInt(limpo.charAt(10), 10);
+}
+
+export function formatarCpf(cpf) {
+  const limpo = String(cpf || '').replace(/\D/g, '').slice(0, 11);
+  if (limpo.length !== 11) return limpo;
+  return limpo.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
+}
+
 function profissionalPublico(item) {
   return {
     id: item.id,
     nome: item.nome,
     especialidade: item.especialidade || 'Barbeiro',
     foto_emoji: texto(item.fotoEmoji, 8) || '✂️',
+    foto_url: texto(item.fotoUrl, 500) || '',
+    slug: slug(item.nome) || item.id,
   };
 }
 
@@ -254,6 +278,16 @@ router.post('/:slug/confirmar', async (req, res) => {
     if (nome.length < 2) return res.status(400).json({ ok: false, error: 'Informe seu nome.' });
     if (telefone.length < 10) return res.status(400).json({ ok: false, error: 'Informe um telefone válido com DDD.' });
     if (!servicoId || !data || !horario) return res.status(400).json({ ok: false, error: 'Serviço, data e horário são obrigatórios.' });
+
+    const rawCpf = String(corpo.cliente_cpf || corpo.cpf || corpo.clienteCpf || '').trim();
+    const cpfLimpo = rawCpf.replace(/\D/g, '');
+    if (cpfLimpo) {
+      if (!validarCpf(cpfLimpo)) {
+        return res.status(400).json({ ok: false, error: 'CPF inválido. Verifique os dígitos informados.', code: 'CPF_INVALIDO' });
+      }
+    }
+    const cpfFormatado = cpfLimpo ? formatarCpf(cpfLimpo) : '';
+
     // Um mesmo telefone não segura a agenda inteira: no máximo 2 horários futuros pelo site.
     const limitePorTelefone = Math.max(1, Number.parseInt(process.env.AGENDAMENTO_PUBLICO_MAX_POR_TELEFONE || '2', 10));
     const agora = Date.now();
@@ -273,11 +307,12 @@ router.post('/:slug/confirmar', async (req, res) => {
       lojaId: identidade.lojaId,
     });
     const codigo = crypto.randomBytes(4).toString('hex').toUpperCase();
-    const vinculo = vincularClienteAoAtendimento(identidade.empresaId, { clienteNome: nome, clienteTelefone: telefone }, { origem: 'agendamento_online' });
+    const vinculo = vincularClienteAoAtendimento(identidade.empresaId, { clienteNome: nome, clienteTelefone: telefone, clienteCpf: cpfFormatado }, { origem: 'agendamento_online' });
     const agendamento = barbearia.criarAgendamento(identidade.empresaId, {
       clienteId: vinculo.clienteId || undefined,
       clienteNome: nome,
       clienteTelefone: telefone,
+      clienteCpf: cpfFormatado,
       profissionalId: disponibilidade.profissional.id,
       servicoId,
       dataHora: disponibilidade.dataHora,

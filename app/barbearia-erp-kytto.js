@@ -962,7 +962,8 @@ function agendamentoNormalizado(dados = {}, anterior = {}, opcoes = {}) {
     clienteId: texto(dados.clienteId ?? dados.cliente_id ?? anterior.clienteId, 100),
     clienteNome: texto(dados.clienteNome ?? dados.cliente_nome ?? anterior.clienteNome, 160),
     clienteTelefone: texto(dados.clienteTelefone ?? dados.cliente_telefone ?? anterior.clienteTelefone, 30),
-        clienteEmail: texto(dados.clienteEmail ?? dados.cliente_email ?? anterior.clienteEmail, 160).toLowerCase(),
+    clienteCpf: texto(dados.clienteCpf ?? dados.cliente_cpf ?? anterior.clienteCpf, 20),
+    clienteEmail: texto(dados.clienteEmail ?? dados.cliente_email ?? anterior.clienteEmail, 160).toLowerCase(),
     lojaId: texto(dados.lojaId ?? dados.loja_id ?? anterior.lojaId, 120),
     // Quando o cliente/admin envia somente dataHora, a jornada é validada no
     // fuso operacional do servidor, nunca no fuso do navegador.

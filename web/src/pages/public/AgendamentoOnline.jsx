@@ -125,9 +125,51 @@ const s = {
   },
 }
 
+function slugify(valor) {
+  return String(valor || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+}
+
+function validarCpf(cpf) {
+  const limpo = String(cpf || '').replace(/\D/g, '')
+  if (limpo.length !== 11) return false
+  if (/^(\d)\1{10}$/.test(limpo)) return false
+  let soma = 0
+  for (let i = 0; i < 9; i++) soma += parseInt(limpo.charAt(i), 10) * (10 - i)
+  let resto = (soma * 10) % 11
+  if (resto === 10 || resto === 11) resto = 0
+  if (resto !== parseInt(limpo.charAt(9), 10)) return false
+  soma = 0
+  for (let i = 0; i < 10; i++) soma += parseInt(limpo.charAt(i), 10) * (11 - i)
+  resto = (soma * 10) % 11
+  if (resto === 10 || resto === 11) resto = 0
+  return resto === parseInt(limpo.charAt(10), 10)
+}
+
+function mascaraCpf(valor) {
+  const d = String(valor || '').replace(/\D/g, '').slice(0, 11)
+  if (d.length <= 3) return d
+  if (d.length <= 6) return `${d.slice(0, 3)}.${d.slice(3)}`
+  if (d.length <= 9) return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6)}`
+  return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9, 11)}`
+}
+
+function mascaraTelefone(valor) {
+  const d = String(valor || '').replace(/\D/g, '').slice(0, 11)
+  if (!d) return ''
+  if (d.length <= 2) return `(${d}`
+  if (d.length <= 6) return `(${d.slice(0, 2)}) ${d.slice(2)}`
+  if (d.length <= 10) return `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`
+  return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7, 11)}`
+}
+
 // ─── Componente principal ─────────────────────────────────────────────────────
 export default function AgendamentoOnline() {
-  const { slug } = useParams()
+  const { slug, barbeiro } = useParams()
   const isDino = String(slug || '').trim().toLowerCase() === 'dino'
   const [passo, setPasso] = useState(1) // 1=serviço 2=profissional 3=data/hora 4=dados 5=confirmado
   const [estabelecimento, setEstabelecimento] = useState(null)
@@ -143,15 +185,17 @@ export default function AgendamentoOnline() {
   // Seleções do usuário
   const [servicoSel, setServicoSel] = useState(null)
   const [profissionalSel, setProfissionalSel] = useState(null)
+  const [barbeiroPreselecionado, setBarbeiroPreselecionado] = useState(null)
   const [dataSel, setDataSel] = useState('')
   const [horarioSel, setHorarioSel] = useState('')
-  const [form, setForm] = useState({ nome: '', telefone: '', observacoes: '' })
+  const [form, setForm] = useState({ nome: '', cpf: '', telefone: '', observacoes: '' })
   const [agendamento, setAgendamento] = useState(null)
   const [consentimento, setConsentimento] = useState(false)
   // Consentimento separado por finalidade: aviso de vaga ≠ confirmação/lembrete do agendamento.
   const [consentimentoEspera, setConsentimentoEspera] = useState(false)
   const [politicas, setPoliticas] = useState({ cancelamentoHoras: 4 })
   const [searchParams] = useSearchParams()
+  const barbeiroParam = barbeiro || searchParams.get('barbeiro') || searchParams.get('b') || searchParams.get('prof') || ''
   // Código de quem indicou (vem do link de indicação). Só o código, nunca dado pessoal.
   const indicacao = String(searchParams.get('indicacao') || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 12)
   // Canal de origem do link (Google, Instagram, WhatsApp, QR code). Só o nome do canal.
@@ -197,9 +241,26 @@ export default function AgendamentoOnline() {
       const data = await res.json().catch(() => ({}))
       if (!res.ok || !data.ok) throw new Error(data.error || 'Estabelecimento não encontrado')
       setEstabelecimento(data.estabelecimento)
-      setProfissionais(data.profissionais || [])
+      const profs = data.profissionais || []
+      setProfissionais(profs)
       setServicos(data.servicos || [])
       if (data.politicas) setPoliticas(data.politicas)
+
+      // Auto-selecionar barbeiro quando acessado via link individual (/agendar/:slug/:barbeiro ou ?barbeiro=...)
+      if (barbeiroParam && profs.length > 0) {
+        const bSlug = slugify(barbeiroParam)
+        const match = profs.find(p =>
+          p.id === barbeiroParam ||
+          p.slug === bSlug ||
+          slugify(p.nome) === bSlug ||
+          slugify(p.nome).includes(bSlug) ||
+          bSlug.includes(slugify(p.nome))
+        )
+        if (match) {
+          setProfissionalSel(match)
+          setBarbeiroPreselecionado(match)
+        }
+      }
     } catch (err) {
       setErro(err.message)
     } finally {
@@ -232,9 +293,18 @@ export default function AgendamentoOnline() {
 
   async function confirmarAgendamento() {
     const nome = form.nome.trim()
+    const cpfLimpo = form.cpf.replace(/\D/g, '')
     const telefone = form.telefone.replace(/\D/g, '')
-    if (nome.length < 2 || telefone.length < 10) {
-      setErroFluxo('Informe seu nome e um telefone válido com DDD.')
+    if (nome.length < 2) {
+      setErroFluxo('Informe seu nome completo.')
+      return
+    }
+    if (!cpfLimpo || !validarCpf(cpfLimpo)) {
+      setErroFluxo('Informe um CPF válido com 11 dígitos.')
+      return
+    }
+    if (telefone.length < 10) {
+      setErroFluxo('Informe um telefone WhatsApp válido com DDD.')
       return
     }
     setErroFluxo('')
@@ -249,6 +319,7 @@ export default function AgendamentoOnline() {
           data: dataSel,
           horario: horarioSel,
           cliente_nome: nome,
+          cliente_cpf: cpfLimpo,
           cliente_telefone: telefone,
           observacoes: form.observacoes,
           consentimento_whatsapp: consentimento === true,
@@ -386,6 +457,69 @@ export default function AgendamentoOnline() {
     <div style={s.page}>
       <Header />
       <div style={s.container}>
+        {barbeiroPreselecionado && (
+          <div style={{
+            background: 'linear-gradient(135deg, rgba(110,124,224,0.18), rgba(22,25,34,0.95))',
+            border: `1.5px solid ${theme.green}`,
+            borderRadius: 16,
+            padding: '16px 20px',
+            marginBottom: 20,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 14,
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+              <div style={{
+                width: 48,
+                height: 48,
+                borderRadius: '50%',
+                background: 'rgba(110,124,224,0.2)',
+                border: `1.5px solid ${theme.green}`,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: 26,
+                overflow: 'hidden',
+              }}>
+                {barbeiroPreselecionado.foto_url ? (
+                  <img src={barbeiroPreselecionado.foto_url} alt={barbeiroPreselecionado.nome} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                ) : (
+                  barbeiroPreselecionado.foto_emoji || '✂️'
+                )}
+              </div>
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 800, color: theme.green, textTransform: 'uppercase', letterSpacing: '.8px' }}>
+                  Agendamento com
+                </div>
+                <div style={{ fontSize: 17, fontWeight: 800, color: theme.cream }}>
+                  {barbeiroPreselecionado.nome}
+                </div>
+                <div style={{ fontSize: 12, color: theme.muted }}>
+                  {barbeiroPreselecionado.especialidade || 'Barbeiro Profissional'}
+                </div>
+              </div>
+            </div>
+            <button
+              type="button"
+              style={{
+                background: 'none',
+                border: `1px solid ${theme.line}`,
+                borderRadius: 8,
+                color: theme.muted,
+                fontSize: 11,
+                padding: '6px 10px',
+                cursor: 'pointer',
+              }}
+              onClick={() => {
+                setBarbeiroPreselecionado(null)
+                setProfissionalSel(null)
+              }}
+            >
+              Trocar
+            </button>
+          </div>
+        )}
         <div style={s.card}>
           <div style={s.stepTitle}>🛠️ Qual serviço deseja?</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -415,7 +549,7 @@ export default function AgendamentoOnline() {
         <button
           style={{ ...s.btnPrimary, opacity: servicoSel ? 1 : .4 }}
           disabled={!servicoSel}
-          onClick={() => setPasso(2)}
+          onClick={() => setPasso(barbeiroPreselecionado ? 3 : 2)}
         >
           Continuar →
         </button>
@@ -558,25 +692,93 @@ export default function AgendamentoOnline() {
   )
 
   // ── Passo 3: Escolher data e horário ───────────────────────────────────────
-  if (passo === 3) return (
+  if (passo === 3) {
+    const proximosDias = Array.from({ length: 14 }, (_, i) => {
+      const d = new Date()
+      d.setDate(d.getDate() + i)
+      const iso = d.toISOString().slice(0, 10)
+      const ehHoje = i === 0
+      const ehAmanha = i === 1
+      const diaSemana = d.toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', '').toUpperCase()
+      const diaMes = d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
+      const label = ehHoje ? 'Hoje' : ehAmanha ? 'Amanhã' : diaSemana
+      return { iso, label, diaMes }
+    })
+
+    const dataSelFormatada = dataSel
+      ? new Date(dataSel + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' })
+      : ''
+
+    return (
     <div style={s.page}>
       <Header />
       <div style={s.container}>
         <div style={s.card}>
-          <div style={s.stepTitle}>📅 Quando prefere?</div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+            <div style={s.stepTitle}>📅 Quando prefere?</div>
+            {profissionalSel && (
+              <div style={{ fontSize: 12, color: theme.green, fontWeight: 700 }}>
+                {profissionalSel.nome}
+              </div>
+            )}
+          </div>
           {erroFluxo && <div role="alert" aria-live="assertive" style={s.alerta}>{erroFluxo}</div>}
-          <label htmlFor="agendamento-data" style={s.label}>Data</label>
+
+          <label style={s.label}>Selecione um dia</label>
+          <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 10, marginBottom: 16 }}>
+            {proximosDias.map(({ iso, label, diaMes }) => {
+              const sel = dataSel === iso
+              return (
+                <button
+                  type="button"
+                  key={iso}
+                  onClick={() => { setDataSel(iso); setHorarioSel(''); setEspera(x => ({ ...x, aberta: false, enviada: false, erro: '' })) }}
+                  style={{
+                    flex: '0 0 auto',
+                    minWidth: 72,
+                    padding: '10px 12px',
+                    borderRadius: 12,
+                    background: sel ? theme.green : theme.surface,
+                    border: `1.5px solid ${sel ? theme.green : theme.line}`,
+                    color: sel ? '#fff' : theme.cream,
+                    cursor: 'pointer',
+                    textAlign: 'center',
+                    transition: 'all .15s',
+                  }}
+                >
+                  <div style={{ fontSize: 11, fontWeight: 800, textTransform: 'uppercase', opacity: sel ? 1 : 0.7 }}>{label}</div>
+                  <div style={{ fontSize: 14, fontWeight: 800, marginTop: 2 }}>{diaMes}</div>
+                </button>
+              )
+            })}
+          </div>
+
+          <div style={{ marginBottom: 20 }}>
+            <label htmlFor="agendamento-data" style={{ ...s.label, fontSize: 11 }}>Ou escolha outra data no calendário:</label>
           <input
             id="agendamento-data"
             type="date"
             min={hoje}
             value={dataSel}
             onChange={e => { setDataSel(e.target.value); setHorarioSel(''); setEspera(x => ({ ...x, aberta: false, enviada: false, erro: '' })) }}
-            style={{ ...s.input, marginBottom: 20 }}
+            style={s.input}
           />
+          </div>
           {dataSel && (
             <>
-              <label style={s.label}>Horário disponível</label>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
+                <label style={{ ...s.label, margin: 0 }}>
+                  Horários para {dataSelFormatada}
+                </label>
+                <div style={{ display: 'flex', gap: 12, fontSize: 11, color: theme.muted }}>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: theme.green }} /> Livre
+                  </span>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: theme.muted, opacity: 0.5 }} /> Ocupado
+                  </span>
+                </div>
+              </div>
               {carregandoHorarios ? (
                 <p role="status" aria-live="polite" style={{ color: theme.muted, fontSize: 13, textAlign: 'center', padding: '20px 0' }}>Consultando a agenda…</p>
               ) : horariosDisponiveis.filter(h => h.disponivel).length === 0 ? (
@@ -616,11 +818,32 @@ export default function AgendamentoOnline() {
                       key={h.horario}
                       disabled={!h.disponivel}
                       aria-pressed={horarioSel === h.horario}
-                      aria-label={`${h.horario}${h.disponivel ? '' : ', indisponível'}`}
-                      style={s.horarioBtn(horarioSel === h.horario, !h.disponivel)}
-                      onClick={() => { setHorarioSel(h.horario); setErroFluxo('') }}
+                      aria-label={`${h.horario}, ${h.disponivel ? 'horário livre' : 'horário ocupado'}`}
+                      style={{
+                        ...s.horarioBtn(horarioSel === h.horario, !h.disponivel),
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        padding: '10px 4px',
+                      }}
+                      onClick={() => {
+                        if (h.disponivel) {
+                          setHorarioSel(h.horario)
+                          setErroFluxo('')
+                        }
+                      }}
                     >
-                      {h.horario}
+                      <span style={{ fontSize: 15, fontWeight: 800 }}>{h.horario}</span>
+                      <span style={{
+                        fontSize: 10,
+                        marginTop: 3,
+                        fontWeight: 700,
+                        color: h.disponivel ? (horarioSel === h.horario ? '#fff' : theme.green) : theme.muted,
+                        opacity: h.disponivel ? 1 : 0.6,
+                      }}>
+                        {h.disponivel ? 'Livre' : 'Ocupado'}
+                      </span>
                     </button>
                   ))}
                 </div>
@@ -629,7 +852,7 @@ export default function AgendamentoOnline() {
           )}
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
-          <button style={{ ...s.btnSecondary, flex: 1 }} onClick={() => setPasso(2)}>← Voltar</button>
+          <button style={{ ...s.btnSecondary, flex: 1 }} onClick={() => setPasso(barbeiroPreselecionado ? 1 : 2)}>← Voltar</button>
           <button
             style={{ ...s.btnPrimary, flex: 2, opacity: (dataSel && horarioSel) ? 1 : .4 }}
             disabled={!dataSel || !horarioSel}
@@ -641,6 +864,7 @@ export default function AgendamentoOnline() {
       </div>
     </div>
   )
+  }
 
   // ── Passo 4: Dados do cliente ──────────────────────────────────────────────
   if (passo === 4) return (
@@ -681,7 +905,7 @@ export default function AgendamentoOnline() {
           <div style={s.stepTitle}>📱 Seus dados</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             <div>
-              <label htmlFor="agendamento-nome" style={s.label}>Seu nome *</label>
+              <label htmlFor="agendamento-nome" style={s.label}>Seu nome completo *</label>
               <input
                 id="agendamento-nome"
                 name="nome"
@@ -689,25 +913,52 @@ export default function AgendamentoOnline() {
                 autoComplete="name"
                 maxLength={160}
                 style={s.input}
-                placeholder="Como prefere ser chamado(a)?"
+                placeholder="Ex.: João Pedro da Silva"
                 value={form.nome}
                 onChange={e => { setForm(f => ({ ...f, nome: e.target.value })); setErroFluxo('') }}
               />
             </div>
             <div>
-              <label htmlFor="agendamento-telefone" style={s.label}>Telefone com DDD *</label>
+              <label htmlFor="agendamento-cpf" style={s.label}>CPF *</label>
+              <input
+                id="agendamento-cpf"
+                name="cpf"
+                required
+                inputMode="numeric"
+                maxLength={14}
+                style={s.input}
+                placeholder="000.000.000-00"
+                value={form.cpf}
+                onChange={e => {
+                  const formatado = mascaraCpf(e.target.value)
+                  setForm(f => ({ ...f, cpf: formatado }))
+                  setErroFluxo('')
+                }}
+              />
+              {form.cpf && form.cpf.replace(/\D/g, '').length === 11 && !validarCpf(form.cpf) && (
+                <span style={{ fontSize: 11, color: theme.red, marginTop: 4, display: 'block' }}>
+                  CPF inválido. Verifique os números digitados.
+                </span>
+              )}
+            </div>
+            <div>
+              <label htmlFor="agendamento-telefone" style={s.label}>WhatsApp com DDD *</label>
               <input
                 id="agendamento-telefone"
                 name="telefone"
                 required
                 autoComplete="tel"
                 inputMode="tel"
-                maxLength={18}
+                maxLength={15}
                 style={s.input}
-                placeholder="(65) 9 9999-9999"
+                placeholder="(65) 99999-9999"
                 type="tel"
                 value={form.telefone}
-                onChange={e => { setForm(f => ({ ...f, telefone: e.target.value })); setErroFluxo('') }}
+                onChange={e => {
+                  const formatado = mascaraTelefone(e.target.value)
+                  setForm(f => ({ ...f, telefone: formatado }))
+                  setErroFluxo('')
+                }}
               />
             </div>
             <div>
@@ -735,8 +986,8 @@ export default function AgendamentoOnline() {
         <div style={{ display: 'flex', gap: 10 }}>
           <button style={{ ...s.btnSecondary, flex: 1 }} onClick={() => setPasso(3)}>← Voltar</button>
           <button
-            style={{ ...s.btnPrimary, flex: 2, opacity: (form.nome && form.telefone && !enviando) ? 1 : .4 }}
-            disabled={!form.nome || !form.telefone || enviando}
+            style={{ ...s.btnPrimary, flex: 2, opacity: (form.nome && form.cpf && form.telefone && !enviando) ? 1 : .4 }}
+            disabled={!form.nome || !form.cpf || !form.telefone || enviando}
             onClick={confirmarAgendamento}
           >
             {enviando ? 'Confirmando...' : '✅ Confirmar Agendamento'}
@@ -824,7 +1075,7 @@ export default function AgendamentoOnline() {
 
           <button
             style={{ ...s.btnSecondary, width: '100%' }}
-            onClick={() => { setPasso(1); setServicoSel(null); setProfissionalSel(null); setDataSel(''); setHorarioSel(''); setHorariosDisponiveis([]); setAgendamento(null); setErroFluxo(''); setForm({ nome: '', telefone: '', observacoes: '' }); setConsentimento(false); setConsentimentoEspera(false); setEspera({ aberta: false, periodo: 'qualquer', enviada: false, enviando: false, erro: '' }) }}
+            onClick={() => { setPasso(1); setServicoSel(null); setProfissionalSel(null); setBarbeiroPreselecionado(null); setDataSel(''); setHorarioSel(''); setHorariosDisponiveis([]); setAgendamento(null); setErroFluxo(''); setForm({ nome: '', cpf: '', telefone: '', observacoes: '' }); setConsentimento(false); setConsentimentoEspera(false); setEspera({ aberta: false, periodo: 'qualquer', enviada: false, enviando: false, erro: '' }) }}
           >
             + Fazer outro agendamento
           </button>
