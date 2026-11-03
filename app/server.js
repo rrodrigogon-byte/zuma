@@ -140,6 +140,7 @@ import { agendaHistoricaAvec } from './dino-agenda-historica.js';
 import { registerCustomer360Routes } from './customer360-routes.js';
 import { registerDinoRecuperacaoAvecRoutes } from './dino-recuperacao-avec-routes.js';
 import { registerDinoAntibanRoutes } from './dino-antiban-routes.js';
+import { registerDinoEstoqueFichasRoutes } from './dino-estoque-fichas-routes.js';
 import omnichannelRouter from './routes/omnichannel.js';
 import { registerEquipePerformanceRoutes, equipePerformanceNoStore } from './dino-equipe-desempenho-routes.js';
 import { registerPainelGestaoRoutes } from './dino-painel-gestao-routes.js';
@@ -768,7 +769,7 @@ app.use('/api/admin/commerce', (req, res, next) => {
 });
 
 // Módulos de /api/admin que separam dados por empresa e podem ser usados por tenant.
-const TENANT_ADMIN_MODULES = new Set(['a2', 'bar', 'barbearia', 'commerce', 'commerce-session', 'usuarios', 'usuarios-diretorio', 'platform', 'fidelidade', 'login', 'auditoria', 'modificadores', 'combos', 'clube', 'unidades', 'razao', 'suprimentos', 'fiscal', 'salao', 'varejo', 'supermercado', 'pdv-offline', 'minhas-permissoes', 'cupons', 'omnichannel', 'pdv', 'dino-captacao', 'clientes-360', 'relatorios']);
+const TENANT_ADMIN_MODULES = new Set(['a2', 'bar', 'barbearia', 'commerce', 'commerce-session', 'usuarios', 'usuarios-diretorio', 'platform', 'fidelidade', 'login', 'auditoria', 'modificadores', 'combos', 'clube', 'unidades', 'razao', 'suprimentos', 'fiscal', 'salao', 'varejo', 'supermercado', 'pdv-offline', 'minhas-permissoes', 'cupons', 'omnichannel', 'pdv', 'dino-captacao', 'clientes-360', 'relatorios', 'estoque', 'cardapio', 'fichas-tecnicas']);
 
 // [kytto-clube] Kytto Clube & Academia (catraca, contrato digital, agenda, retenção, Wellhub/TotalPass).
 // Usa o pool do Commerce que já existe (não abre outro pool) e a mesma resolução de empresa e
@@ -3589,6 +3590,7 @@ registerPainelGestaoRoutes(app, { db, save, audit, legacyEmpresaId, legacyLojaId
 registerCustomer360Routes(app, { legacyEmpresaId, legacyLojaId, clientesKytto, barbeariaErpKytto, canaisFidelidadeKytto, listarAgendamentosBarbearia, requireCommercePermission, audit, save, coberturasDoCliente: comandaPlanoKytto.coberturasDoCliente });
 registerDinoRecuperacaoAvecRoutes(app, { legacyEmpresaId, legacyLojaId, barbeariaErpKytto, listarAgendamentosBarbearia });
 registerDinoAntibanRoutes(app, { legacyEmpresaId, legacyLojaId });
+registerDinoEstoqueFichasRoutes(app, { auth, requireStaff, legacyEmpresaId });
 // Diagnóstico do Financeiro (só administração da plataforma): onde estão os lançamentos de cada
 // empresa no banco JSON — quantidades por unidade e por origem, sem valores nem descrições.
 // Serve para achar lançamentos gravados sem unidade ou sob outro identificador de empresa.

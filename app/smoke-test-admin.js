@@ -41,10 +41,15 @@ async function runSmokeTest() {
     { rota: '/api/pdv-offline/conflitos', expected: [200], desc: '2.2 PDV - Auditoria de Conflitos Offline' },
     { rota: '/api/admin/bar/produtos', expected: [200], desc: '2.3 PDV - Catálogo do Balcão' },
     
-    // Módulo 3: Estoque e Compras com Custo Médio
-    { rota: '/api/admin/barbearia/compras/reposicao?dias=30', expected: [200], desc: '3.1 Estoque - Sugestão de Reposição' },
-    { rota: '/api/admin/barbearia/compras/curva-abc?dias=30', expected: [200], desc: '3.2 Estoque - Curva ABC por Receita' },
-    { rota: '/api/admin/barbearia/estoque-revenda', expected: [200], desc: '3.3 Estoque - Itens de Revenda' },
+    // Módulo 3: Estoque, Compras, Fichas Técnicas e Inventário
+    { rota: '/api/admin/estoque', expected: [200], desc: '3.1 Estoque - Lista Geral e Saldos' },
+    { rota: '/api/admin/estoque/ocorrencias', expected: [200], desc: '3.2 Estoque - Ocorrências e Perdas' },
+    { rota: '/api/admin/estoque/inventarios', expected: [200], desc: '3.3 Estoque - Histórico de Inventários' },
+    { rota: '/api/admin/estoque/acuracidade', expected: [200], desc: '3.4 Estoque - Relatório de Acuracidade' },
+    { rota: '/api/admin/fichas-tecnicas', expected: [200], desc: '3.5 Estoque - Fichas Técnicas (Baixa por Insumo)' },
+    { rota: '/api/admin/barbearia/compras/reposicao?dias=30', expected: [200], desc: '3.6 Compras - Sugestão de Reposição' },
+    { rota: '/api/admin/barbearia/compras/curva-abc?dias=30', expected: [200], desc: '3.7 Compras - Curva ABC por Receita' },
+    { rota: '/api/admin/barbearia/estoque-revenda', expected: [200], desc: '3.8 Estoque - Itens de Revenda' },
     
     // Módulo 4: Financeiro com Conciliação Bancária
     { rota: '/api/admin/barbearia/equipe/desempenho?inicio=2026-10-01&fim=2026-11-03', expected: [200], desc: '4.1 Financeiro - Comissões e Metas' },
