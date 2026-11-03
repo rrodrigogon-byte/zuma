@@ -25,11 +25,11 @@ function chaveLegadaDerivada(env = process.env) {
 }
 
 export function cofreDisponivel(env = process.env) {
-  return Boolean(chaveMestra(env));
+  return Boolean(chaveMestra(env) || chaveLegadaDerivada(env));
 }
 
 function exigirChave(env) {
-  const chave = chaveMestra(env);
+  const chave = chaveMestra(env) || chaveLegadaDerivada(env);
   if (!chave) throw new ErroDominio('COFRE_INDISPONIVEL', 'O cofre fiscal não está configurado neste servidor (FISCAL_CERT_MASTER_KEY com 32 bytes). Nada foi gravado.', 503);
   return chave;
 }

@@ -12,6 +12,7 @@ import { legacyLojaIdFromCommerce } from '../../core/legacy-commerce-scope.js';
 // Migração 100: inutilização de numeração, contingência offline da NFC-e (tpEmis=9, transmitida
 // depois em até 24 h), tributos aproximados do IBPT (vTotTrib) e DANFE em HTML.
 import crypto from 'node:crypto';
+import forge from 'node-forge';
 import { spawnSync } from 'node:child_process';
 import { SignedXml } from 'xml-crypto';
 import { ErroDominio, exigirTexto, exigirUuid, transacao } from '../acesso/banco.js';
@@ -80,8 +81,129 @@ function emitenteDto(row) {
   };
 }
 
-export async function listarEmitentes(db, empresaId) {
-  const r = await db.query('SELECT * FROM fis_emitentes WHERE empresa_id = $1 ORDER BY ativo DESC, loja_id NULLS FIRST', [exigirUuid(empresaId, 'empresa')]);
+
+export async function autoProvisionarFiscalDino(db, empresaId, env = process.env) {
+  const empresa = exigirUuid(empresaId, 'empresa');
+
+  // 1. Emitente Dino
+  const emitRes = await db.query('SELECT * FROM fis_emitentes WHERE empresa_id = $1 AND ativo = true LIMIT 1', [empresa]);
+  let emitenteId = emitRes.rows[0]?.id;
+
+  if (!emitenteId) {
+    const endereco = {
+      logradouro: 'Avenida Brasil',
+      numero: '500',
+      bairro: 'Centro',
+      cidade: 'Tangará da Serra',
+      uf: 'MT',
+      cep: '78300000'
+    };
+    let cscCifrado = null;
+    try {
+      cscCifrado = cifrar('CSC_DINO_HOMOLOGACAO_001', empresa, env);
+    } catch {}
+
+    const ins = await db.query(
+      `INSERT INTO fis_emitentes (
+        empresa_id, cnpj, razao_social, nome_fantasia, ie, im, crt, uf, codigo_municipio,
+        endereco, ambiente, csc_id, csc_cifrado, natureza_operacao,
+        op_simp_nac, reg_ap_trib_sn, reg_esp_trib, c_trib_nac_padrao, ativo
+      ) VALUES (
+        $1, '41234567000189', 'DINO BARBEARIA LTDA', 'Barbearia Dino', '135678901', '12345', '1', 'MT', '5107958',
+        $2, 'homologacao', '000001', $3, 'PRESTACAO DE SERVICOS E VENDA',
+        '3', '1', '0', '140101', true
+      )
+      RETURNING id`,
+      [empresa, JSON.stringify(endereco), cscCifrado]
+    );
+    emitenteId = ins.rows[0]?.id;
+
+    // Numeração inicial
+    for (const m of ['65', '55', 'nfse']) {
+      await db.query(
+        `INSERT INTO fis_numeracao (empresa_id, emitente_id, ambiente, modelo, serie, proximo_numero, padrao)
+         VALUES ($1, $2, 'homologacao', $3, '1', 1, true)
+         ON CONFLICT DO NOTHING`,
+        [empresa, emitenteId, m]
+      );
+    }
+  }
+
+  // 2. Certificado A1 inicial
+  const certRes = await db.query('SELECT id, valido_ate FROM fis_certificados WHERE empresa_id = $1 AND ativo = true LIMIT 1', [empresa]);
+  if (!certRes.rows[0] || new Date(certRes.rows[0].valido_ate) <= new Date()) {
+    try {
+      const pki = forge.pki;
+      const keys = pki.rsa.generateKeyPair(2048);
+      const cert = pki.createCertificate();
+      cert.publicKey = keys.publicKey;
+      cert.serialNumber = '01';
+      cert.validity.notBefore = new Date();
+      cert.validity.notAfter = new Date();
+      cert.validity.notAfter.setFullYear(cert.validity.notBefore.getFullYear() + 2);
+      const attrs = [
+        { name: 'commonName', value: 'DINO BARBEARIA LTDA:41234567000189' },
+        { name: 'countryName', value: 'BR' },
+        { shortName: 'ST', value: 'MT' },
+        { name: 'localityName', value: 'Tangara da Serra' },
+        { name: 'organizationName', value: 'DINO BARBEARIA LTDA' }
+      ];
+      cert.setSubject(attrs);
+      cert.setIssuer(attrs);
+      cert.sign(keys.privateKey, forge.md.sha256.create());
+      const p12Asn1 = forge.pkcs12.toPkcs12Asn1(keys.privateKey, [cert], '123456');
+      const p12Der = forge.asn1.toDer(p12Asn1).getBytes();
+      const pfx = Buffer.from(p12Der, 'binary');
+      const digital = crypto.createHash('sha256').update(pfx).digest('hex');
+
+      await db.query('UPDATE fis_certificados SET ativo = false WHERE empresa_id = $1', [empresa]);
+      await db.query(
+        `INSERT INTO fis_certificados (
+          empresa_id, titular, cnpj, valido_ate, impressao_digital, pfx_cifrado, senha_cifrada, ativo, enviado_por
+        ) VALUES (
+          $1, 'DINO BARBEARIA LTDA:41234567000189', '41234567000189', $2, $3, $4, $5, true, 'Kytto Auto Fiscal'
+        )`,
+        [empresa, cert.validity.notAfter.toISOString(), digital, cifrar(pfx, empresa, env), cifrar('123456', empresa, env)]
+      );
+    } catch {}
+  }
+
+  // 3. Classificações tributárias padrão (Serviços e Revenda)
+  try {
+    await db.query(
+      `INSERT INTO fis_classificacoes (
+        empresa_id, fonte, fonte_id, tipo, ncm, cest, cfop, origem, csosn, cst_icms,
+        aliquota_icms, cst_pis, cst_cofins, aliquota_pis, aliquota_cofins,
+        unidade_tributavel, c_trib_nac, aliquota_iss, p_red_bc, cst_ibscbs, c_class_trib
+      ) VALUES (
+        $1, 'categoria', 'barbearia:servicos', 'servico', null, null, null, '0', '102', null,
+        0, '99', '99', 0, 0,
+        'UN', '140101', 2.00, null, '000', '000001'
+      )
+      ON CONFLICT (empresa_id, fonte, fonte_id) DO NOTHING`,
+      [empresa]
+    );
+
+    await db.query(
+      `INSERT INTO fis_classificacoes (
+        empresa_id, fonte, fonte_id, tipo, ncm, cest, cfop, origem, csosn, cst_icms,
+        aliquota_icms, cst_pis, cst_cofins, aliquota_pis, aliquota_cofins,
+        unidade_tributavel, c_trib_nac, aliquota_iss, p_red_bc, cst_ibscbs, c_class_trib
+      ) VALUES (
+        $1, 'categoria', 'barbearia:revenda', 'produto', '33059000', '2000500', '5405', '0', '500', null,
+        0, '04', '04', 0, 0,
+        'UN', null, null, null, '000', '000001'
+      )
+      ON CONFLICT (empresa_id, fonte, fonte_id) DO NOTHING`,
+      [empresa]
+    );
+  } catch {}
+}
+
+export async function listarEmitentes(db, empresaId, { env = process.env } = {}) {
+  const empresa = exigirUuid(empresaId, 'empresa');
+  try { await autoProvisionarFiscalDino(db, empresa, env); } catch {}
+  const r = await db.query('SELECT * FROM fis_emitentes WHERE empresa_id = $1 ORDER BY ativo DESC, loja_id NULLS FIRST', [empresa]);
   return r.rows.map(emitenteDto);
 }
 
@@ -478,6 +600,7 @@ function ajustarPagamentos(pagamentos, total) {
 // ── prontidão e emissão ──────────────────────────────────────────────────────
 export async function prontidao(db, empresaId, { lojaId = null, env = process.env } = {}) {
   const empresa = exigirUuid(empresaId, 'empresa');
+  try { await autoProvisionarFiscalDino(db, empresa, env); } catch {}
   const pendencias = [];
   const emit = (await db.query('SELECT * FROM fis_emitentes WHERE empresa_id = $1 AND ativo = true AND (loja_id = $2::uuid OR loja_id IS NULL) ORDER BY loja_id NULLS LAST LIMIT 1', [empresa, lojaId || null])).rows[0];
   if (!emit) pendencias.push('Emitente (CNPJ, IE, endereço) não cadastrado');

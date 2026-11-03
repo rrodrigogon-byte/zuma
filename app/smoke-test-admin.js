@@ -24,22 +24,29 @@ async function runSmokeTest() {
   };
 
   const rotasCriticas = [
-    { rota: '/health', expected: [200] },
-    { rota: '/api/admin/fiscal/documentos', expected: [200] },
-    { rota: '/api/admin/fiscal/estado', expected: [200] },
-    { rota: '/api/admin/fiscal/contingencias', expected: [200] },
-    { rota: '/api/pdv-offline/terminais', expected: [200] },
-    { rota: '/api/admin/barbearia/cerebro-ia', expected: [200] },
-    { rota: '/api/admin/barbearia/cerebro-ia/grafo', expected: [200] },
-    { rota: '/api/admin/barbearia/clientes-360', expected: [200] },
-    { rota: '/api/admin/barbearia/antiban', expected: [200] },
-    { rota: '/api/admin/commerce/storefront', expected: [200] },
-    { rota: '/api/admin/commerce/catalog/products?storefrontId=94ce95de-f36d-4ced-ad92-40f4208a7e06&limit=10&offset=0', expected: [200] },
-    { rota: '/api/admin/barbearia/equipe/desempenho?inicio=2026-10-01&fim=2026-11-03', expected: [200] },
-    { rota: '/api/omnichannel/canais', expected: [200] },
-    { rota: '/api/omnichannel/fidelidade/configuracao', expected: [200] },
-    { rota: '/api/omnichannel/pedidos?limit=10', expected: [200] },
-    { rota: '/api/omnichannel/integracoes/tarefas', expected: [200] }
+    { rota: '/health', expected: [200], desc: 'Saúde geral' },
+    // Bloco 1: Fiscal (Item 1 completo)
+    { rota: '/api/admin/fiscal/estado', expected: [200], desc: 'Fiscal - Estado e Prontidão' },
+    { rota: '/api/admin/fiscal/emitentes', expected: [200], desc: 'Fiscal - Emitentes' },
+    { rota: '/api/admin/fiscal/certificados', expected: [200], desc: 'Fiscal - Certificados A1' },
+    { rota: '/api/admin/fiscal/classificacoes', expected: [200], desc: 'Fiscal - Classificações Tributárias' },
+    { rota: '/api/admin/fiscal/numeracao', expected: [200], desc: 'Fiscal - Séries e Numeração' },
+    { rota: '/api/admin/fiscal/documentos', expected: [200], desc: 'Fiscal - Documentos' },
+    { rota: '/api/admin/fiscal/contingencias', expected: [200], desc: 'Fiscal - Contingência Offline (tpEmis 9)' },
+    { rota: '/api/admin/fiscal/contador/resumo', expected: [200], desc: 'Fiscal - Resumo Contábil' },
+    // Outros módulos
+    { rota: '/api/pdv-offline/terminais', expected: [200], desc: 'PDV Offline' },
+    { rota: '/api/admin/barbearia/cerebro-ia', expected: [200], desc: 'Cérebro IA' },
+    { rota: '/api/admin/barbearia/cerebro-ia/grafo', expected: [200], desc: 'Grafo IA' },
+    { rota: '/api/admin/barbearia/clientes-360', expected: [200], desc: 'Clientes 360' },
+    { rota: '/api/admin/barbearia/antiban', expected: [200], desc: 'Antiban WhatsApp' },
+    { rota: '/api/admin/commerce/storefront', expected: [200], desc: 'Commerce Storefront' },
+    { rota: '/api/admin/commerce/catalog/products?storefrontId=94ce95de-f36d-4ced-ad92-40f4208a7e06&limit=10&offset=0', expected: [200], desc: 'Catálogo de Produtos' },
+    { rota: '/api/admin/barbearia/equipe/desempenho?inicio=2026-10-01&fim=2026-11-03', expected: [200], desc: 'Desempenho da Equipe' },
+    { rota: '/api/omnichannel/canais', expected: [200], desc: 'Omnichannel Canais' },
+    { rota: '/api/omnichannel/fidelidade/configuracao', expected: [200], desc: 'Omnichannel Fidelidade' },
+    { rota: '/api/omnichannel/pedidos?limit=10', expected: [200], desc: 'Omnichannel Pedidos' },
+    { rota: '/api/omnichannel/integracoes/tarefas', expected: [200], desc: 'Omnichannel Tarefas' }
   ];
 
   let falhas = 0;
@@ -49,13 +56,13 @@ async function runSmokeTest() {
       const text = await res.text();
       const ok = item.expected.includes(res.status);
       if (ok) {
-        console.log(`[Smoke Test] ✅ ${res.status} em ${item.rota}`);
+        console.log(`[Smoke Test] ✅ ${res.status} em ${item.desc} (${item.rota})`);
       } else {
-        console.error(`[Smoke Test] ❌ ${res.status} em ${item.rota} (esperado ${item.expected.join(',')}): ${text.slice(0, 150)}`);
+        console.error(`[Smoke Test] ❌ ${res.status} em ${item.desc} (${item.rota}): ${text.slice(0, 150)}`);
         falhas++;
       }
     } catch (err) {
-      console.error(`[Smoke Test] ❌ ERRO DE CONEXÃO em ${item.rota}: ${err.message}`);
+      console.error(`[Smoke Test] ❌ ERRO DE CONEXÃO em ${item.desc} (${item.rota}): ${err.message}`);
       falhas++;
     }
   }
