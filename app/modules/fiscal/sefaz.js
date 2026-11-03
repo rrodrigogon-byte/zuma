@@ -178,7 +178,16 @@ const pegar = (xml, tag) => { const m = String(xml || '').match(new RegExp(`<(?:
 export function transporteSoap({ certPem, keyPem, timeoutMs = 30000 }) {
   const agent = new https.Agent({ cert: certPem, key: keyPem, keepAlive: false, rejectUnauthorized: false });
   return ({ url, xml }) => new Promise((resolve, reject) => {
-    const req = https.request(url, { method: 'POST', agent, timeout: timeoutMs, headers: { 'Content-Type': 'application/soap+xml; charset=utf-8' } }, (res) => {
+    const payload = Buffer.from(xml, 'utf8');
+    const req = https.request(url, {
+      method: 'POST',
+      agent,
+      timeout: timeoutMs,
+      headers: {
+        'Content-Type': 'application/soap+xml; charset=utf-8',
+        'Content-Length': payload.length
+      }
+    }, (res) => {
       const partes = [];
       res.on('data', (c) => partes.push(c));
       res.on('end', () => resolve({ status: res.statusCode, corpo: Buffer.concat(partes).toString('utf8') }));
@@ -186,7 +195,7 @@ export function transporteSoap({ certPem, keyPem, timeoutMs = 30000 }) {
     // erro de transporte NÃO é ErroDominio: quem chama trata como falha de comunicação (a nota pode ter sido autorizada)
     req.on('timeout', () => req.destroy(Object.assign(new Error('Tempo esgotado na comunicação com a SEFAZ.'), { code: 'SEFAZ_TIMEOUT' })));
     req.on('error', reject);
-    req.write(xml);
+    req.write(payload);
     req.end();
   });
 }

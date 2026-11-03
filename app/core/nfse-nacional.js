@@ -249,7 +249,18 @@ function campo(corpo, nome) {
 export function transporteHttps({ certPem, keyPem, timeoutMs = 30000 }) {
   const agent = new https.Agent({ cert: certPem, key: keyPem, keepAlive: false, rejectUnauthorized: false });
   return ({ metodo, url, corpo }) => new Promise((resolve, reject) => {
-    const req = https.request(url, { method: metodo, agent, headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, timeout: timeoutMs }, (res) => {
+    const bodyStr = corpo !== undefined ? JSON.stringify(corpo) : null;
+    const payload = bodyStr ? Buffer.from(bodyStr, 'utf8') : null;
+    const req = https.request(url, {
+      method: metodo,
+      agent,
+      headers: {
+        'Content-Type': 'application/json; charset=utf-8',
+        Accept: 'application/json',
+        ...(payload ? { 'Content-Length': payload.length } : {})
+      },
+      timeout: timeoutMs
+    }, (res) => {
       const partes = [];
       res.on('data', (c) => partes.push(c));
       res.on('end', () => {
@@ -261,7 +272,7 @@ export function transporteHttps({ certPem, keyPem, timeoutMs = 30000 }) {
     });
     req.on('timeout', () => req.destroy(new NfseError('Tempo esgotado na comunicação com a Sefin Nacional.', 'NFSE_TIMEOUT')));
     req.on('error', reject);
-    if (corpo !== undefined) req.write(JSON.stringify(corpo));
+    if (payload) req.write(payload);
     req.end();
   });
 }
