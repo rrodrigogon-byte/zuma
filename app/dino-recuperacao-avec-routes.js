@@ -4,6 +4,7 @@ import {
   exportarCsvRecuperacao,
   invalidarCacheRecuperacao,
 } from './dino-recuperacao-avec.js';
+import { dispararCampanhaCRM } from './dino-crm-disparo.js';
 
 export function registerDinoRecuperacaoAvecRoutes(app, deps) {
   const { legacyEmpresaId, legacyLojaId, barbeariaErpKytto, listarAgendamentosBarbearia } = deps;
@@ -95,6 +96,28 @@ export function registerDinoRecuperacaoAvecRoutes(app, deps) {
     } catch (error) {
       console.error('Erro ao buscar histórico do cliente:', error);
       res.status(500).json({ ok: false, error: 'Não foi possível carregar o histórico de visitas do cliente.' });
+    }
+  });
+
+  // Disparo em massa de Campanha de Recuperação CRM via WhatsApp
+  app.post(`${BASE}/disparar`, async (req, res) => {
+    try {
+      const empresaId = legacyEmpresaId(req);
+      const lojaId = legacyLojaId(req);
+      const payload = {
+        empresaId,
+        lojaId,
+        ...(req.body || {}),
+      };
+
+      const resultado = await dispararCampanhaCRM(payload);
+      if (!resultado.ok) {
+        return res.status(400).json(resultado);
+      }
+      res.json(resultado);
+    } catch (error) {
+      console.error('Erro ao processar disparo de campanha de recuperação:', error);
+      res.status(500).json({ ok: false, error: error.message || 'Erro interno ao processar disparo de campanha.' });
     }
   });
 }
