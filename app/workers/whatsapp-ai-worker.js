@@ -268,6 +268,12 @@ export async function runWhatsappAiBatch({ limit = BATCH_SIZE } = {}) {
   try {
     const recoveriesQueued = whatsappMessagingReady() ? await enqueueDueCartRecoveries() : 0;
     const appointmentRemindersQueued = whatsappMessagingReady() ? await enqueueDueAppointmentReminders() : 0;
+    try {
+      const { verificarEEnviarBriefingDiario } = await import('../core/dino-daily-briefing.js');
+      await verificarEEnviarBriefingDiario();
+    } catch (errBriefing) {
+      // Ignora erro no tick
+    }
     const tasks = await claimWhatsappAiTasks(limit);
     const summary = { worker: 'whatsapp-ai', runId: crypto.randomUUID(), retentionRemoved, recoveriesQueued, appointmentRemindersQueued, claimed: tasks.length, completed: 0, failed: 0, deadLettered: 0 };
     for (const task of tasks) {

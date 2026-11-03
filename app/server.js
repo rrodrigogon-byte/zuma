@@ -72,6 +72,7 @@ import { getInstanceStatus } from './core/whatsapp-provider.js';
 import { startWhatsappAiWorker } from './workers/whatsapp-ai-worker.js';
 import { startIsaPollWorker } from './core/whatsapp-isa-poll.js';
 import { startDinoDailyConfirmationWorker } from './core/dino-confirmacao-diaria.js';
+import { startDinoDailyBriefingWorker } from './core/dino-daily-briefing.js';
 import { configuracaoResumo, configuracaoResumoPublica, diaLocal as diaLocalResumo, enviarResumo, lojaDoCanal as lojaDoCanalResumo, montarResumoDiario, startResumoDiarioWorker } from './core/dino-resumo-diario.js';
 import { startPendingFollowUpWorker } from './core/whatsapp-ai-followup.js';
 import { db as commerceDb, getPool as getCommercePool } from './core/database.js';
@@ -1405,6 +1406,28 @@ if(process.env.COMMERCE_CORE_ENABLED === '1'){
 
 
 app.use('/api/webhooks', createWhatsappAiWebhookRouter());
+
+  app.post('/api/public/dino-briefing/enviar', async (req, res) => {
+    try {
+      const { enviarBriefingDiarioDino } = await import('./core/dino-daily-briefing.js');
+      const { dataStr, telefone, forcar } = req.body || {};
+      const resultado = await enviarBriefingDiarioDino({ dataStr, telefone, forcar: Boolean(forcar ?? true) });
+      res.json(resultado);
+    } catch (error) {
+      res.status(500).json({ ok: false, error: error.message });
+    }
+  });
+
+  app.get('/api/public/dino-briefing/previa', async (req, res) => {
+    try {
+      const { compilarBriefingDiarioDino } = await import('./core/dino-daily-briefing.js');
+      const dataStr = req.query.data || null;
+      const briefing = compilarBriefingDiarioDino({ dataStr });
+      res.json({ ok: true, briefing });
+    } catch (error) {
+      res.status(500).json({ ok: false, error: error.message });
+    }
+  });
 
   app.post('/api/test/audio', async (req, res) => {
     try {
@@ -9628,6 +9651,7 @@ process.on('uncaughtException', (e)=> console.error('uncaughtException:', e?.mes
   // Fechamento do dia no WhatsApp do dono (DINO_RESUMO_DIARIO=on).
   startResumoDiarioWorker();
   startDinoDailyConfirmationWorker();
+  startDinoDailyBriefingWorker();
   startAiBrainSchedulers();
   // Cobranças da barbearia: sinal vencido libera o horário (e avisa a lista de
   // espera); a cobrança do clube é gerada e enviada uma vez por hora.
