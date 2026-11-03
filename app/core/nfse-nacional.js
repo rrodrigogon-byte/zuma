@@ -158,9 +158,14 @@ export function montarDpsXml(cfg, dados) {
     toma = `<toma>${doc}<xNome>${xmlEsc(texto(t.nome, 300) || 'Consumidor')}</xNome></toma>`;
   }
 
-  const totTrib = cfg.pTotTribSN !== '' && cfg.opSimpNac !== '1'
-    ? `<totTrib><pTotTribSN>${Number(cfg.pTotTribSN).toFixed(2)}</pTotTribSN></totTrib>`
-    : '<totTrib><indTotTrib>0</indTotTrib></totTrib>';
+  let totTrib = '';
+  if (cfg.pTotTribSN !== '' && cfg.pTotTribSN !== null && Number.isFinite(Number(cfg.pTotTribSN))) {
+    totTrib = `<totTrib><pTotTribSN>${Number(cfg.pTotTribSN).toFixed(2)}</pTotTribSN></totTrib>`;
+  } else if (cfg.opSimpNac === '1') {
+    // Não optante pelo Simples Nacional: informa indTotTrib
+    totTrib = '<totTrib><indTotTrib>0</indTotTrib></totTrib>';
+  }
+  // Para ME/EPP optante pelo Simples (opSimpNac !== '1') sem pTotTribSN informado: não envia indTotTrib (regra E0712)
 
   const xml = `<DPS xmlns="${NS_NFSE}" versao="${VERSAO_DPS}"><infDPS Id="${id}">`
     + `<tpAmb>${tpAmb}</tpAmb><dhEmi>${dhEmi}</dhEmi><verAplic>${VER_APLIC}</verAplic>`
