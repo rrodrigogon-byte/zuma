@@ -55,6 +55,7 @@ const PROFISSIONAL = [
   ['*', /^\/notificacoes(?:\/|$)/],
   ['GET', /^\/barbearia\/modo-barbeiro(?:\/.*)?$/],
   ['POST', /^\/barbearia\/modo-barbeiro\/comandas$/],
+  ['POST', /^\/barbearia\/modo-barbeiro\/trocar-senha$/],
   ['POST', /^\/barbearia\/gamificacao\/giros\/executar$/],
   ['GET', /^\/(?:barbearia|dino)\/clientes\/[^/]+\/360$/],
   ['POST', /^\/barbearia\/push\/(?:situacao|assinar|cancelar|teste)$/],

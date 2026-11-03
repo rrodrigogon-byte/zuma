@@ -578,7 +578,7 @@ function BarbeiroLinkPanel({ painel, slug }) {
 export default function ModoBarbeiro() {
   const { slug = '' } = useParams()
   const [params, setParams] = useSearchParams()
-  const { user, logout, empresaAtiva, lojaAtiva } = useAuth()
+  const { user, login, logout, empresaAtiva, lojaAtiva } = useAuth()
   const [abaAtiva, setAbaAtiva] = useState('agenda') // 'agenda', 'ganhos', 'metas', 'clientes'
   const [filtroStatus, setFiltroStatus] = useState('todos')
   const [buscaAgenda, setBuscaAgenda] = useState('')
@@ -691,6 +691,7 @@ export default function ModoBarbeiro() {
         <div style={{ fontSize: 12, color: offline ? t.yellow : t.muted }}>{offline ? `${painel?._offline?.motivo === 'servidor' ? 'Servidor indisponível · cópia de' : 'Sem internet · agenda de'} ${atualizadoEm ? atualizadoEm.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '—'}` : carregando ? 'Atualizando…' : atualizadoEm ? `Atualizado às ${atualizadoEm.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}` : ''}</div>
       </div>
       {user && <button type="button" onClick={carregar} aria-label="Atualizar agenda" style={{ ...btn2, minHeight: 40, padding: '6px 12px' }}>↻</button>}
+      {user && <button type="button" onClick={() => setFolha('trocar_senha')} aria-label="Alterar Minha Senha" style={{ ...btn2, minHeight: 40, padding: '6px 12px', background: 'rgba(234, 179, 8, 0.1)', color: '#facc15', borderColor: '#eab308' }}>🔑 Senha</button>}
       {user && <button type="button" onClick={() => setFolha('portfolio')} aria-label="Meu Portfólio e Avaliações" style={{ ...btn2, minHeight: 40, padding: '6px 12px', background: 'rgba(139, 92, 246, 0.1)', color: '#a78bfa', borderColor: '#8b5cf6' }}>⭐ Perfil</button>}
       {user && <button type="button" onClick={() => { if (window.confirm('Sair do app neste aparelho?')) logout() }} style={{ ...btn2, minHeight: 40, padding: '6px 12px' }}>Sair</button>}
     </div>
@@ -1271,11 +1272,21 @@ export default function ModoBarbeiro() {
         }}
       />
     )}
+    {folha === 'trocar_senha' && (
+      <FolhaTrocarSenha
+        onFechar={() => setFolha('')}
+        onSenhaAlterada={(novoToken, novoUser) => {
+          if (novoToken && login) login(novoToken, novoUser || user, false, {})
+          carregar()
+        }}
+      />
+    )}
     {folha === 'portfolio' && painel?.profissional && (
       <FolhaPortfolioPerfil
         painel={painel}
         slug={slug || 'dino'}
         onFechar={() => setFolha('')}
+        onAbrirTrocarSenha={() => setFolha('trocar_senha')}
       />
     )}
   </div>
@@ -1497,7 +1508,241 @@ function FolhaPortfolioPerfil({ painel, slug, onFechar }) {
             </a>
           </div>
         </div>
+
+        {/* SEGURANÇA E ACESSO: ALTERAÇÃO DE SENHA */}
+        <div style={{ background: t.card, border: `1px solid ${t.line}`, borderRadius: 14, padding: 14, display: 'grid', gap: 10 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ fontSize: 13, fontWeight: 800, color: '#fff' }}>🔐 Segurança da Conta</div>
+            {onAbrirTrocarSenha && (
+              <button
+                type="button"
+                onClick={() => {
+                  onFechar()
+                  onAbrirTrocarSenha()
+                }}
+                style={{ ...btn, fontSize: 12, padding: '6px 12px', background: 'rgba(234, 179, 8, 0.15)', color: '#fbbf24', border: '1px solid #eab308' }}
+              >
+                🔑 Trocar Minha Senha
+              </button>
+            )}
+          </div>
+          <div style={{ fontSize: 11.5, color: t.muted }}>
+            Troque sua senha de acesso a qualquer momento. Você precisará confirmar sua senha atual e definir a nova senha.
+          </div>
+        </div>
       </div>
+    </Folha>
+  )
+}
+
+function FolhaTrocarSenha({ onFechar, onSenhaAlterada }) {
+  const [form, setForm] = useState({
+    senhaAtual: '',
+    senhaNova: '',
+    confirmarSenha: '',
+  })
+  const [verAtual, setVerAtual] = useState(false)
+  const [verNova, setVerNova] = useState(false)
+  const [verConfirmar, setVerConfirmar] = useState(false)
+  const [enviando, setEnviando] = useState(false)
+  const [erro, setErro] = useState('')
+  const [sucesso, setSucesso] = useState('')
+
+  const senhasCoincidem = form.senhaNova && form.confirmarSenha && form.senhaNova === form.confirmarSenha
+  const tamanhoValido = form.senhaNova.length >= 6
+
+  async function salvar(e) {
+    e.preventDefault()
+    setErro('')
+    setSucesso('')
+
+    if (!form.senhaAtual) {
+      setErro('Por favor, informe a sua senha atual.')
+      return
+    }
+    if (!form.senhaNova || form.senhaNova.length < 6) {
+      setErro('A nova senha deve ter no mínimo 6 caracteres.')
+      return
+    }
+    if (form.senhaNova !== form.confirmarSenha) {
+      setErro('A confirmação da nova senha não confere.')
+      return
+    }
+    if (form.senhaNova === form.senhaAtual) {
+      setErro('A nova senha deve ser diferente da senha atual.')
+      return
+    }
+
+    setEnviando(true)
+    try {
+      const res = await api.post('/api/admin/barbearia/modo-barbeiro/trocar-senha', {
+        senhaAtual: form.senhaAtual,
+        senhaNova: form.senhaNova,
+        confirmarSenha: form.confirmarSenha,
+      })
+      if (!res?.ok) throw new Error(res?.error || 'Não foi possível alterar a senha.')
+
+      setSucesso(res.mensagem || 'Senha alterada com sucesso!')
+      if (onSenhaAlterada && res.token) {
+        onSenhaAlterada(res.token, res.user)
+      }
+      setTimeout(() => {
+        onFechar()
+      }, 1800)
+    } catch (err) {
+      setErro(err.message || 'Erro ao alterar senha. Verifique os dados e tente novamente.')
+    } finally {
+      setEnviando(false)
+    }
+  }
+
+  return (
+    <Folha titulo="🔑 Alterar Minha Senha" onFechar={onFechar}>
+      <form onSubmit={salvar} style={{ display: 'grid', gap: 14 }}>
+        <div style={{ background: 'rgba(110, 124, 224, 0.08)', border: `1px solid ${t.line}`, borderRadius: 14, padding: 12, fontSize: 13, color: t.cream }}>
+          🔒 Para sua segurança, digite primeiro sua senha atual e na sequência digite e confirme sua nova senha.
+        </div>
+
+        {/* 1. SENHA ATUAL */}
+        <label style={{ ...label, fontSize: 13 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+            <span>Senha atual:</span>
+            <span style={{ color: t.muted, fontSize: 11 }}>Obrigatório</span>
+          </div>
+          <div style={{ position: 'relative' }}>
+            <input
+              style={{ ...input, height: 46, borderRadius: 12, fontSize: 15, background: '#10131A', border: `1px solid ${t.line}`, paddingRight: 45 }}
+              type={verAtual ? 'text' : 'password'}
+              value={form.senhaAtual}
+              onChange={(e) => setForm({ ...form, senhaAtual: e.target.value })}
+              placeholder="Digite sua senha atual"
+              autoComplete="current-password"
+              required
+            />
+            <button
+              type="button"
+              onClick={() => setVerAtual(!verAtual)}
+              style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: t.muted, cursor: 'pointer', fontSize: 14, padding: 4 }}
+            >
+              {verAtual ? '👁️' : '🔒'}
+            </button>
+          </div>
+        </label>
+
+        {/* 2. NOVA SENHA */}
+        <label style={{ ...label, fontSize: 13 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+            <span>Nova senha:</span>
+            <span style={{ color: tamanhoValido ? t.green : t.muted, fontSize: 11, fontWeight: 700 }}>
+              {tamanhoValido ? '✓ Mínimo 6 caracteres' : 'Mínimo 6 caracteres'}
+            </span>
+          </div>
+          <div style={{ position: 'relative' }}>
+            <input
+              style={{
+                ...input,
+                height: 46,
+                borderRadius: 12,
+                fontSize: 15,
+                background: '#10131A',
+                border: `1px solid ${form.senhaNova ? (tamanhoValido ? t.green : t.yellow) : t.line}`,
+                paddingRight: 45,
+              }}
+              type={verNova ? 'text' : 'password'}
+              value={form.senhaNova}
+              onChange={(e) => setForm({ ...form, senhaNova: e.target.value })}
+              placeholder="Digite a nova senha"
+              autoComplete="new-password"
+              required
+            />
+            <button
+              type="button"
+              onClick={() => setVerNova(!verNova)}
+              style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: t.muted, cursor: 'pointer', fontSize: 14, padding: 4 }}
+            >
+              {verNova ? '👁️' : '🔒'}
+            </button>
+          </div>
+        </label>
+
+        {/* 3. CONFIRMAR NOVA SENHA */}
+        <label style={{ ...label, fontSize: 13 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+            <span>Confirmar nova senha:</span>
+            {form.confirmarSenha && (
+              <span style={{ color: senhasCoincidem ? t.green : t.red, fontSize: 11, fontWeight: 700 }}>
+                {senhasCoincidem ? '✓ As senhas coincidem' : '✕ Não confere'}
+              </span>
+            )}
+          </div>
+          <div style={{ position: 'relative' }}>
+            <input
+              style={{
+                ...input,
+                height: 46,
+                borderRadius: 12,
+                fontSize: 15,
+                background: '#10131A',
+                border: `1px solid ${form.confirmarSenha ? (senhasCoincidem ? t.green : t.red) : t.line}`,
+                paddingRight: 45,
+              }}
+              type={verConfirmar ? 'text' : 'password'}
+              value={form.confirmarSenha}
+              onChange={(e) => setForm({ ...form, confirmarSenha: e.target.value })}
+              placeholder="Confirme a nova senha"
+              autoComplete="new-password"
+              required
+            />
+            <button
+              type="button"
+              onClick={() => setVerConfirmar(!verConfirmar)}
+              style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: t.muted, cursor: 'pointer', fontSize: 14, padding: 4 }}
+            >
+              {verConfirmar ? '👁️' : '🔒'}
+            </button>
+          </div>
+        </label>
+
+        {erro && (
+          <div style={{ color: t.red, fontWeight: 700, fontSize: 13, textAlign: 'center', background: 'rgba(242, 122, 137, 0.1)', border: '1px solid rgba(242, 122, 137, 0.25)', padding: 10, borderRadius: 10 }}>
+            ⚠️ {erro}
+          </div>
+        )}
+
+        {sucesso && (
+          <div style={{ color: t.green, fontWeight: 800, fontSize: 13, textAlign: 'center', background: 'rgba(60, 196, 139, 0.12)', border: '1px solid rgba(60, 196, 139, 0.3)', padding: 10, borderRadius: 10 }}>
+            ✓ {sucesso}
+          </div>
+        )}
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 6 }}>
+          <button
+            type="button"
+            onClick={onFechar}
+            disabled={enviando}
+            style={{ ...btn2, height: 48, borderRadius: 12, fontSize: 14 }}
+          >
+            Cancelar
+          </button>
+          <button
+            type="submit"
+            disabled={enviando || !form.senhaAtual || !tamanhoValido || !senhasCoincidem}
+            style={{
+              ...btn,
+              height: 48,
+              borderRadius: 12,
+              fontSize: 14,
+              fontWeight: 800,
+              background: (!form.senhaAtual || !tamanhoValido || !senhasCoincidem) ? '#374151' : t.accent,
+              color: (!form.senhaAtual || !tamanhoValido || !senhasCoincidem) ? '#9ca3af' : '#fff',
+              cursor: (!form.senhaAtual || !tamanhoValido || !senhasCoincidem) ? 'not-allowed' : 'pointer',
+              opacity: enviando ? 0.7 : 1,
+            }}
+          >
+            {enviando ? 'Salvando...' : 'Salvar Nova Senha'}
+          </button>
+        </div>
+      </form>
     </Folha>
   )
 }

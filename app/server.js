@@ -3525,6 +3525,7 @@ function profissionalDaSessao(req) {
   return profissionalDoUsuario(barbeariaErpKytto.listarProfissionais(legacyEmpresaId(req)), req.user);
 }
 function exigirPerfilProfissional(req, res, next) {
+  if (req.path === '/modo-barbeiro/trocar-senha') return next();
   const eu = profissionalDaSessao(req);
   if (!eu) return res.status(403).json({ error: 'Seu login não está vinculado a um profissional (o e-mail do cadastro precisa ser o mesmo do login).', code: 'SEM_VINCULO' });
   const caminho = req.path || '';
@@ -3776,6 +3777,68 @@ app.post('/api/admin/barbearia/modo-barbeiro/comandas', (req, res) => {
     const comanda = lancarComandaEquipe(barbeariaErpKytto, ctx, req.body || {}, req.get('Idempotency-Key'), dados => vincularClienteAoAtendimento(ctx.empresaId, dados, { origem: 'comanda', usuario: req.user?.email || '' }).dados);
     res.status(comanda.idempotente ? 200 : 201).json({ ok: true, comanda: { id: comanda.id, status: comanda.status, total: comanda.total, saldoPendente: comanda.saldoPendente, idempotente: comanda.idempotente, itens: comanda.itens.map(i => ({ nome: i.nome, quantidade: i.quantidade, subtotal: i.subtotal })) } });
   } catch (error) { erroEquipe(res, error); }
+});
+// Troca de senha pelo próprio profissional no aplicativo do barbeiro (/barbeiro)
+app.post('/api/admin/barbearia/modo-barbeiro/trocar-senha', async (req, res) => {
+  const { senhaAtual, senhaNova, confirmarSenha } = req.body || {};
+  if (!senhaAtual || typeof senhaAtual !== 'string') {
+    return res.status(400).json({ error: 'Informe a sua senha atual.', code: 'SENHA_ATUAL_OBRIGATORIA' });
+  }
+  if (!senhaNova || typeof senhaNova !== 'string' || senhaNova.length < 6) {
+    return res.status(400).json({ error: 'A nova senha deve ter no mínimo 6 caracteres.', code: 'SENHA_NOVA_CURTA' });
+  }
+  if (confirmarSenha !== undefined && senhaNova !== confirmarSenha) {
+    return res.status(400).json({ error: 'A confirmação da nova senha não confere.', code: 'SENHA_CONFIRMACAO_DIVERGENTE' });
+  }
+  if (senhaAtual === senhaNova) {
+    return res.status(400).json({ error: 'A nova senha deve ser diferente da senha atual.', code: 'SENHA_IDENTICA' });
+  }
+
+  const d = db();
+  const u = (d.usuarios || []).find(x => x.id === req.user?.id || (req.user?.email && norm(x.email) === norm(req.user.email)));
+  if (!u) {
+    return res.status(404).json({ error: 'Usuário não encontrado.', code: 'USUARIO_NAO_ENCONTRADO' });
+  }
+
+  const senhaValida = await senhaConfere(String(senhaAtual), u.senhaHash);
+  if (!senhaValida) {
+    return res.status(401).json({ error: 'A senha atual digitada está incorreta.', code: 'SENHA_ATUAL_INVALIDA' });
+  }
+
+  const novoHash = bcrypt.hashSync(senhaNova, 10);
+  u.senhaHash = novoHash;
+  u.passwordChangedAt = new Date().toISOString();
+  save();
+
+  // Sincroniza também no PostgreSQL se estiver habilitado
+  if (process.env.COMMERCE_CORE_ENABLED === '1' && commerceDb && typeof commerceDb.query === 'function') {
+    try {
+      await commerceDb.query(
+        `UPDATE usuarios 
+         SET senha_hash = $1, data_atualizacao = NOW() 
+         WHERE lower(btrim(email)) = $2`,
+        [novoHash, norm(u.email)]
+      );
+    } catch (pgErr) {
+      console.warn('[modo-barbeiro/trocar-senha] Aviso ao sincronizar senha no Postgres:', pgErr.message);
+    }
+  }
+
+  const sessao = await commerceSessionFor(u);
+  const empresaId = sessao.empresaId ?? u.empresaId ?? req.user?.empresaId;
+  const lojaId = sessao.lojaId ?? u.lojaId ?? req.user?.lojaId;
+  const novoToken = tokenFor({ ...u, empresaId, lojaId });
+
+  try {
+    auditoria(req.user, 'TROCA_SENHA_PROPRIO_BARBEIRO', { usuarioId: u.id, email: u.email, nome: u.nome });
+  } catch {}
+
+  return res.json({
+    ok: true,
+    mensagem: 'Sua senha foi alterada com sucesso!',
+    token: novoToken,
+    user: publicUser(u)
+  });
 });
 // Notificações push do app do barbeiro (VAPID no ambiente; desligado sem as chaves).
 function respostaPush(res, error) {
