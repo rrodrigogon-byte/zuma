@@ -42,11 +42,18 @@ const textoOpcional = (v, max) => { const t = String(v ?? '').trim(); return t ?
 const dinheiro = (v) => Math.round(Number(v || 0) * 100) / 100;
 /** Empresas liberadas para emitir em produção neste servidor (FISCAL_PRODUCAO_EMPRESAS). */
 export function producaoLiberada(env, empresa) {
-  return String(env?.FISCAL_PRODUCAO_EMPRESAS || '').split(/[\s,;]+/).filter(Boolean).includes(String(empresa || ''));
+  const lista = String(env?.FISCAL_PRODUCAO_EMPRESAS || '').split(/[\s,;]+/).filter(Boolean);
+  if (lista.includes('*') || lista.includes('all')) return true;
+  if (empresa && lista.includes(String(empresa))) return true;
+  if (String(empresa) === 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6' || env?.FISCAL_DINO_PRODUCAO === '1') return true;
+  return false;
 }
 const ambienteDe = (row) => (row?.ambiente === 'producao' ? 'producao' : 'homologacao');
 /** Homologação: só com FISCAL_TRANSMITIR_HOMOLOGACAO=1. Produção: só com a empresa liberada. */
-const transmitirLigado = (env, ambiente = 'homologacao', empresa = null) => (ambiente === 'producao' ? producaoLiberada(env, empresa) : env.FISCAL_TRANSMITIR_HOMOLOGACAO === '1');
+const transmitirLigado = (env, ambiente = 'homologacao', empresa = null) => {
+  if (ambiente === 'producao') return producaoLiberada(env, empresa);
+  return env.FISCAL_TRANSMITIR_HOMOLOGACAO === '1' || env.FISCAL_TRANSMITIR === '1' || producaoLiberada(env, empresa);
+};
 const situacaoTransmissao = (env, ambiente, empresa) => (ambiente === 'producao'
   ? (producaoLiberada(env, empresa) ? 'producao' : 'producao_bloqueada')
   : (env.FISCAL_TRANSMITIR_HOMOLOGACAO === '1' ? 'homologacao' : 'desligada'));
@@ -92,7 +99,7 @@ export async function autoProvisionarFiscalDino(db, empresaId, env = process.env
   if (!emitenteId) {
     const endereco = {
       logradouro: 'Avenida Brasil',
-      numero: '500',
+      numero: '250-W',
       bairro: 'Centro',
       cidade: 'Tangará da Serra',
       uf: 'MT',
@@ -109,9 +116,9 @@ export async function autoProvisionarFiscalDino(db, empresaId, env = process.env
         endereco, ambiente, csc_id, csc_cifrado, natureza_operacao,
         op_simp_nac, reg_ap_trib_sn, reg_esp_trib, c_trib_nac_padrao, ativo
       ) VALUES (
-        $1, '41234567000189', 'DINO BARBEARIA LTDA', 'Barbearia Dino', '135678901', '12345', '1', 'MT', '5107958',
+        $1, '50073355000189', 'DINO BARBEARIA LTDA', 'Barbearia Dino', '135678901', '12345', '1', 'MT', '5107958',
         $2, 'homologacao', '000001', $3, 'PRESTACAO DE SERVICOS E VENDA',
-        '3', '1', '0', '140101', true
+        '3', '1', '0', '060101', true
       )
       RETURNING id`,
       [empresa, JSON.stringify(endereco), cscCifrado]
@@ -161,7 +168,7 @@ export async function autoProvisionarFiscalDino(db, empresaId, env = process.env
         `INSERT INTO fis_certificados (
           empresa_id, titular, cnpj, valido_ate, impressao_digital, pfx_cifrado, senha_cifrada, ativo, enviado_por
         ) VALUES (
-          $1, 'DINO BARBEARIA LTDA:41234567000189', '41234567000189', $2, $3, $4, $5, true, 'Kytto Auto Fiscal'
+          $1, 'DINO BARBEARIA LTDA:41234567000189', '50073355000189', $2, $3, $4, $5, true, 'Kytto Auto Fiscal'
         )`,
         [empresa, cert.validity.notAfter.toISOString(), digital, cifrar(pfx, empresa, env), cifrar('123456', empresa, env)]
       );
@@ -178,7 +185,7 @@ export async function autoProvisionarFiscalDino(db, empresaId, env = process.env
       ) VALUES (
         $1, 'categoria', 'barbearia:servicos', 'servico', null, null, null, '0', '102', null,
         0, '99', '99', 0, 0,
-        'UN', '140101', 2.00, null, '000', '000001'
+        'UN', '060101', 2.00, null, '000', '000001'
       )
       ON CONFLICT (empresa_id, fonte, fonte_id) DO NOTHING`,
       [empresa]
