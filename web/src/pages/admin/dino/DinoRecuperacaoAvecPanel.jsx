@@ -868,10 +868,10 @@ export default function DinoRecuperacaoAvecPanel({ onAbrirAgenda }) {
                   <div style={{ width: 64, height: 64, borderRadius: '50%', background: 'rgba(16, 185, 129, 0.2)', color: '#10b981', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto' }}>
                     <Check size={36} />
                   </div>
-                  <h4 style={{ margin: 0, fontSize: '20px', fontWeight: 800, color: '#f8fafc' }}>
+                  <h4 style={{ margin: 0, fontSize: '20px', fontWeight: 800, color: 'var(--fg, #0f172a)' }}>
                     Campanha de Resgate Iniciada com Sucesso!
                   </h4>
-                  <p style={{ margin: 0, fontSize: '14px', color: '#94a3b8', maxWidth: '520px', margin: '0 auto', lineHeight: 1.5 }}>
+                  <p style={{ margin: 0, fontSize: '14px', color: 'var(--muted, #475569)', maxWidth: '520px', margin: '0 auto', lineHeight: 1.5 }}>
                     Foram enfileirados <strong>{campanhaDisparada.alvos} clientes</strong> para envio. O robô de mensageria da Barbearia Dino está processando os envios com intervalo seguro contra bloqueios no WhatsApp.
                   </p>
                   <div style={{ display: 'flex', justifyContent: 'center', gap: 12, marginTop: 10 }}>
@@ -1095,9 +1095,23 @@ export default function DinoRecuperacaoAvecPanel({ onAbrirAgenda }) {
                       </button>
                     </div>
                     {testeFeedback && (
-                      <span style={{ fontSize: '11.5px', color: testeFeedback.tipo === 'sucesso' ? '#10b981' : '#ef4444' }}>
+                      <div style={{
+                        width: '100%',
+                        marginTop: 4,
+                        padding: '8px 12px',
+                        borderRadius: 6,
+                        fontSize: '12px',
+                        fontWeight: 600,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 8,
+                        background: testeFeedback.tipo === 'sucesso' ? 'rgba(16, 185, 129, 0.12)' : 'rgba(239, 68, 68, 0.12)',
+                        color: testeFeedback.tipo === 'sucesso' ? '#059669' : '#dc2626',
+                        border: `1px solid ${testeFeedback.tipo === 'sucesso' ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`
+                      }}>
+                        {testeFeedback.tipo === 'sucesso' ? '✓ ' : '✕ '}
                         {testeFeedback.texto}
-                      </span>
+                      </div>
                     )}
                   </div>
                 </>
