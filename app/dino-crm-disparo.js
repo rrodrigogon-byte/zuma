@@ -3,6 +3,15 @@ import { v4 as uuid } from 'uuid';
 import { enviarMensagem } from './core/whatsapp.js';
 import { sendTextViaChatbotBackend } from './core/whatsapp-provider.js';
 import { carregarBaseConsolidada, consultarClientesRecuperacao } from './dino-recuperacao-avec.js';
+import {
+  podeEnviarMensagemAtiva,
+  registrarEnvioRealizado,
+  gerarMensagemHumanizadaDino,
+  calcularCadenciaHumanizada,
+  verificarCooldownLote,
+  obterConfiguracaoAntiban,
+  normalizarTelefone,
+} from './core/whatsapp-antiban.js';
 
 const DINO_COMMERCE_EMPRESA_ID = 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
 const DINO_COMMERCE_LOJA_ID = 'ab049a75-6e2e-4cc9-abbc-6fd11cdda1d8';
@@ -14,7 +23,7 @@ const DINO_CANAL_ID = 'ae741d39-039c-4f4b-9183-9c5f639405a0';
  * e possui fallback direto para o chatbot backend NestJS da Dino.
  */
 export async function enviarMensagemDinoCRM(telefone, texto) {
-  const telLimpo = String(telefone || '').replace(/\D/g, '');
+  const telLimpo = normalizarTelefone(telefone);
   if (!telLimpo || telLimpo.length < 10) {
     return { ok: false, error: 'Número de telefone inválido para envio.' };
   }
@@ -44,6 +53,7 @@ export async function enviarMensagemDinoCRM(telefone, texto) {
       instance: 'dino',
       number: telLimpo,
       text: texto,
+      simulateTyping: true,
     });
     if (resDirect?.ok) {
       return { ok: true, data: resDirect.data };
@@ -74,21 +84,23 @@ export async function dispararCampanhaCRM({
   testeApenas = false,
   testeTelefone = '',
   escopo = 'filtrados',
+  ignorarJanelaHorario = false,
 }) {
-  // 1. Modo de teste (envio único para conferência)
+  // 1. Modo de teste (envio único imediato para conferência do gestor)
   if (testeApenas) {
-    const telTeste = String(testeTelefone || '').replace(/\D/g, '');
+    const telTeste = normalizarTelefone(testeTelefone);
     if (!telTeste || telTeste.length < 10) {
       return { ok: false, error: 'Informe um número de WhatsApp válido com DDD para o teste.' };
     }
 
-    let textoTeste = mensagem || 'Olá! Esta é uma mensagem de teste da Campanha de Recuperação da Barbearia Dino.';
-    textoTeste = textoTeste
-      .replace(/\{Nome do Cliente\}|\{Nome\}/g, 'Cliente Teste')
-      .replace(/\{Profissional\}/g, 'Equipe Dino')
-      .replace(/\{Link Agendamento\}/g, `https://kytto.com.br/barbeiro/dino?t=${telTeste}`)
-      .replace(/\{Ultima Visita\}/g, '15/08/2026')
-      .replace(/\{Dias Sem Vir\}/g, '78');
+    const textoTeste = gerarMensagemHumanizadaDino({
+      template: mensagem || undefined,
+      cliente: { nome: 'Cliente Teste (Rodrigo)', ultimaVisita: '2026-08-15', diasSemVir: 78 },
+      profissional: 'Dino',
+      modelo: 'essencial',
+      link: `https://kytto.com.br/barbeiro/dino?t=${telTeste}`,
+      incluirOptOut: true,
+    });
 
     try {
       const resEnvio = await enviarMensagemDinoCRM(telTeste, textoTeste);
@@ -145,10 +157,10 @@ export async function dispararCampanhaCRM({
     alvos = base;
   }
 
-  // 3. Filtrar apenas clientes com telefone válido
+  // 3. Filtrar clientes válidos
   const clientesValidos = alvos
     .map((c) => {
-      const tel = String(c.telefone || '').replace(/\D/g, '');
+      const tel = normalizarTelefone(c.telefone || c.telefoneFormatado || '');
       return { ...c, telefoneLimpo: tel };
     })
     .filter((c) => c.telefoneLimpo.length >= 10);
@@ -157,7 +169,10 @@ export async function dispararCampanhaCRM({
     return { ok: false, error: 'Nenhum cliente com telefone válido encontrado para este disparo.' };
   }
 
-  // 4. Registrar campanha no banco
+  // 4. Checar configuração de antiban da barbearia
+  const configAntiban = obterConfiguracaoAntiban(empresaId);
+
+  // 5. Registrar campanha no banco com métricas de proteção antiban
   const campanhaId = uuid();
   const agoraIso = new Date().toISOString();
 
@@ -167,15 +182,25 @@ export async function dispararCampanhaCRM({
     empresa_id: DINO_COMMERCE_EMPRESA_ID,
     loja_id: DINO_COMMERCE_LOJA_ID,
     criado_em: agoraIso,
-    mensagem: usarMensagemPersonalizadaPorModelo ? '[Mensagem Personalizada por Perfil/Modelo]' : mensagem,
+    mensagem: usarMensagemPersonalizadaPorModelo ? '[Mensagem Humanizada por Perfil/Modelo com Spintax]' : mensagem,
     usarMensagemPersonalizadaPorModelo: Boolean(usarMensagemPersonalizadaPorModelo),
     status: 'processando',
     alvos: clientesValidos.length,
     enviados: 0,
     falhas: 0,
+    puladosOptOut: 0,
+    pausadaPorLimiteDiario: false,
+    indiceProcessado: 0,
+    protecaoAntiban: {
+      estagio: configAntiban.estagio,
+      limiteDiario: configAntiban.limiteDiario,
+      restantesHojeNoInicio: configAntiban.restantesHoje,
+      intervaloMinSec: configAntiban.estagioDados.intervaloMinSec,
+      intervaloMaxSec: configAntiban.estagioDados.intervaloMaxSec,
+    },
     amostraAlvos: clientesValidos.slice(0, 5).map((c) => ({
       nome: c.nome,
-      telefone: c.telefoneFormatado || c.telefone,
+      telefone: c.telefoneLimpo,
       modelo: c.modeloRecomendado || 'essencial',
     })),
   };
@@ -188,35 +213,54 @@ export async function dispararCampanhaCRM({
     console.warn('[CRM Disparo] Erro ao salvar campanha em db.json:', e.message);
   }
 
-  // 5. Processar envio assíncrono em segundo plano (background com rate limit)
+  // 6. Processar envio em segundo plano com motor Antiban (Jitter + Cooldown + Cota Diária)
   setTimeout(async () => {
-    console.log(`[CRM Disparo] Iniciando envio da campanha ${campanhaId} para ${clientesValidos.length} clientes...`);
+    console.log(`[CRM Disparo Antiban] Iniciando envio seguro da campanha ${campanhaId} (${clientesValidos.length} alvos, cota hoje: ${configAntiban.restantesHoje})...`);
+
+    let enviosNestaSessao = 0;
 
     for (let i = 0; i < clientesValidos.length; i++) {
+      registroCampanha.indiceProcessado = i;
       const c = clientesValidos[i];
-      try {
-        let textoFinal = '';
 
-        if (usarMensagemPersonalizadaPorModelo && c.mensagemWhatsapp) {
-          textoFinal = c.mensagemWhatsapp;
-        } else {
-          const primeiroNome = (c.nome || 'Cliente').trim().split(' ')[0];
-          const profNome = c.profissionalPreferido && c.profissionalPreferido !== 'Não informado'
-            ? c.profissionalPreferido.trim().split(' ')[0]
-            : 'nossa equipe';
-
-          textoFinal = (mensagem || 'Olá {Nome do Cliente}! Sentimos sua falta aqui na Barbearia Dino.')
-            .replace(/\{Nome do Cliente\}|\{Nome\}/g, primeiroNome)
-            .replace(/\{Nome Completo\}/g, c.nome || 'Cliente')
-            .replace(/\{Profissional\}/g, profNome)
-            .replace(/\{Ultima Visita\}/g, c.ultimaVisita ? new Date(c.ultimaVisita).toLocaleDateString('pt-BR') : 'recente')
-            .replace(/\{Dias Sem Vir\}/g, String(c.diasSemVir || ''))
-            .replace(/\{Link Agendamento\}/g, `https://kytto.com.br/barbeiro/dino?t=${c.telefoneLimpo}`);
+      // 6.1 Validação Antiban para o destinatário
+      const validacaoEnvio = podeEnviarMensagemAtiva(empresaId, c.telefoneLimpo, { ignorarJanelaHorario });
+      if (!validacaoEnvio.ok) {
+        if (validacaoEnvio.limiteAtingido) {
+          console.warn(`[CRM Disparo Antiban] Cota diária do chip atingida. Pausando campanha ${campanhaId} para amanhã para proteger contra banimento.`);
+          registroCampanha.status = 'pausada_limite_diario';
+          registroCampanha.motivoPausa = validacaoEnvio.motivo;
+          try { save(); } catch {}
+          break;
         }
 
+        // Se bloqueado por opt-out ou horário
+        registroCampanha.puladosOptOut++;
+        console.log(`[CRM Disparo Antiban] Cliente ${c.nome} (${c.telefoneLimpo}) pulado: ${validacaoEnvio.motivo}`);
+        continue;
+      }
+
+      // 6.2 Geração de mensagem humanizada com variação de Spintax
+      try {
+        const templateEscolhido = usarMensagemPersonalizadaPorModelo && c.mensagemWhatsapp
+          ? c.mensagemWhatsapp
+          : mensagem;
+
+        const textoFinal = gerarMensagemHumanizadaDino({
+          template: templateEscolhido || undefined,
+          cliente: c,
+          profissional: c.profissionalPreferido,
+          modelo: c.modeloRecomendado,
+          link: `https://kytto.com.br/barbeiro/dino?t=${c.telefoneLimpo}`,
+          incluirOptOut: true,
+        });
+
+        // 6.3 Disparo via WhatsApp
         const envio = await enviarMensagemDinoCRM(c.telefoneLimpo, textoFinal);
         if (envio?.ok) {
           registroCampanha.enviados++;
+          enviosNestaSessao++;
+          registrarEnvioRealizado(empresaId, c.telefoneLimpo);
         } else {
           registroCampanha.falhas++;
           console.warn(`[CRM Disparo] Falha no envio para ${c.telefoneLimpo}:`, envio?.error);
@@ -226,16 +270,40 @@ export async function dispararCampanhaCRM({
         console.warn(`[CRM Disparo] Falha no cliente ${c.nome} (${c.telefoneLimpo}):`, err.message);
       }
 
-      // Intervalo de segurança entre disparos para respeitar limites do WhatsApp (1.8 segundos)
-      await new Promise((r) => setTimeout(r, 1800));
+      try { save(); } catch {}
+
+      // 6.4 Se ainda há clientes na fila, aplicar Cadência Humanizada Antiban
+      if (i < clientesValidos.length - 1) {
+        // Pausa de respiro (cooldown) a cada lote (ex: a cada 10 envios descansa 2 a 4 minutos)
+        const cooldown = verificarCooldownLote(enviosNestaSessao, {
+          aCada: configAntiban.estagioDados.cooldownACada,
+          pausaMinSec: configAntiban.estagioDados.cooldownPausaSec,
+          pausaMaxSec: configAntiban.estagioDados.cooldownPausaSec + 60,
+        });
+
+        if (cooldown.necessario) {
+          console.log(`[CRM Disparo Antiban] Cooldown de proteção ativado (${cooldown.pausaSegundos}s) para respiro do chip após ${enviosNestaSessao} envios.`);
+          await new Promise((r) => setTimeout(r, cooldown.pausaMs));
+        } else {
+          // Cadência padrão com Jitter aleatório (ex: entre 18s e 40s)
+          const delayHumanizado = calcularCadenciaHumanizada({
+            minSec: configAntiban.estagioDados.intervaloMinSec,
+            maxSec: configAntiban.estagioDados.intervaloMaxSec,
+          });
+          console.log(`[CRM Disparo Antiban] Aguardando intervalo humanizado de ${Math.round(delayHumanizado / 1000)}s antes do próximo envio...`);
+          await new Promise((r) => setTimeout(r, delayHumanizado));
+        }
+      }
     }
 
-    registroCampanha.status = 'concluida';
+    if (registroCampanha.status !== 'pausada_limite_diario') {
+      registroCampanha.status = 'concluida';
+    }
     registroCampanha.finalizado_em = new Date().toISOString();
     try {
       save();
     } catch {}
-    console.log(`[CRM Disparo] Campanha ${campanhaId} concluída. Enviados: ${registroCampanha.enviados}, Falhas: ${registroCampanha.falhas}`);
+    console.log(`[CRM Disparo Antiban] Campanha ${campanhaId} finalizada. Status: ${registroCampanha.status}. Enviados: ${registroCampanha.enviados}, Falhas: ${registroCampanha.falhas}, Pulados Opt-Out: ${registroCampanha.puladosOptOut}`);
   }, 1000);
 
   return {
@@ -244,6 +312,9 @@ export async function dispararCampanhaCRM({
       id: campanhaId,
       status: 'processando',
       alvos: clientesValidos.length,
+      cotaHoje: configAntiban.restantesHoje,
+      estagioChip: configAntiban.estagioDados.nome,
+      intervaloSeguro: `${configAntiban.estagioDados.intervaloMinSec}s a ${configAntiban.estagioDados.intervaloMaxSec}s`,
       mensagem: registroCampanha.mensagem,
       criado_em: agoraIso,
     },

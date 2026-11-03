@@ -76,6 +76,10 @@ export async function processarConfirmacoesDiarias(options = {}) {
   const empresasIds = obterEmpresasBarbearia();
   let totalEnviadas = 0;
   let alterou = false;
+  const isTest = process.env.NODE_ENV === 'test' || Boolean(process.env.npm_lifecycle_event === 'test') || process.execArgv.includes('--test') || process.argv.includes('--test');
+  const aplicarDelay = options.intervaloMs !== undefined
+    ? options.intervaloMs
+    : (isTest || options.semDelay ? 0 : Math.round(15000 + Math.random() * 15000));
 
   for (const empresaId of empresasIds) {
     const estado = barbearia.estadoEmpresa ? barbearia.estadoEmpresa(empresaId, false) : null;
@@ -104,6 +108,7 @@ export async function processarConfirmacoesDiarias(options = {}) {
             ag.confirmacaoDiaEnviadaEm = now.toISOString();
             alterou = true;
           }
+          if (aplicarDelay > 0) await new Promise((r) => setTimeout(r, aplicarDelay));
         }
       }
     }
@@ -133,6 +138,7 @@ export async function processarConfirmacoesDiarias(options = {}) {
             ag.lembreteVesperaEnviadoEm = now.toISOString();
             alterou = true;
           }
+          if (aplicarDelay > 0) await new Promise((r) => setTimeout(r, aplicarDelay));
         }
       }
     }

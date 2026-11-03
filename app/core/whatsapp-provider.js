@@ -477,9 +477,12 @@ async function sendTextIsa({ instance, number, text, simulateTyping = process.en
   if (!chatId) return { ok: false, status: null, retryable: false, uncertain: false, error: 'INVALID_CHAT_ID', data: {} };
   const message = isaMessageText(text);
   if (!message) return { ok: false, status: null, retryable: false, uncertain: false, error: 'EMPTY_MESSAGE', data: {} };
+  // Proteção Antiban: Ativa simulação de digitação humanizada (composing) proporcional ao tamanho
+  const deveSimularDigitacao = simulateTyping !== false && process.env.WHATSAPP_SIMULATE_TYPING !== 'false';
+  const delayHumanizado = deveSimularDigitacao ? Math.min(5, Math.max(2, Math.round(message.length / 60))) : 0;
   // O backend multi-instância documenta APENAS /send com instanceName; nunca
   // tentar rotas sem escopo como fallback após resposta incerta ou 404.
-  const result = await call(cfg, 'POST', '/send', { ...(instanceName ? { instanceName } : {}), chat_id: chatId, message, simulateTyping: Boolean(simulateTyping), delaySeconds: 0, waitForReply: false }, fetchImpl);
+  const result = await call(cfg, 'POST', '/send', { ...(instanceName ? { instanceName } : {}), chat_id: chatId, message, simulateTyping: deveSimularDigitacao, delaySeconds: delayHumanizado, waitForReply: false }, fetchImpl);
   // accepted é opcional no Swagger. Não reenviar 2xx sem success conclusivo:
   // a API pode ter colocado a mensagem em fila antes de perder a resposta.
   const aceito = result.ok && result.data?.success === true && result.data?.accepted !== false;

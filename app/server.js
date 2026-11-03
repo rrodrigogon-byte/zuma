@@ -139,6 +139,7 @@ import { buildDinoDashboardAnalytics, dashboardPeriod, filterDashboardRowsToStor
 import { agendaHistoricaAvec } from './dino-agenda-historica.js';
 import { registerCustomer360Routes } from './customer360-routes.js';
 import { registerDinoRecuperacaoAvecRoutes } from './dino-recuperacao-avec-routes.js';
+import { registerDinoAntibanRoutes } from './dino-antiban-routes.js';
 import { registerEquipePerformanceRoutes, equipePerformanceNoStore } from './dino-equipe-desempenho-routes.js';
 import { registerPainelGestaoRoutes } from './dino-painel-gestao-routes.js';
 import { registerAiBrainRoutes } from './ai-brain-routes.js';
@@ -3576,6 +3577,7 @@ registerEquipePerformanceRoutes(app, { db, legacyEmpresaId, legacyLojaId, requir
 registerPainelGestaoRoutes(app, { db, save, audit, legacyEmpresaId, legacyLojaId, dataVersion: () => estadoGravacao()?.alteracoes ?? null });
 registerCustomer360Routes(app, { legacyEmpresaId, legacyLojaId, clientesKytto, barbeariaErpKytto, canaisFidelidadeKytto, listarAgendamentosBarbearia, requireCommercePermission, audit, save, coberturasDoCliente: comandaPlanoKytto.coberturasDoCliente });
 registerDinoRecuperacaoAvecRoutes(app, { legacyEmpresaId, legacyLojaId, barbeariaErpKytto, listarAgendamentosBarbearia });
+registerDinoAntibanRoutes(app, { legacyEmpresaId, legacyLojaId });
 // Diagnóstico do Financeiro (só administração da plataforma): onde estão os lançamentos de cada
 // empresa no banco JSON — quantidades por unidade e por origem, sem valores nem descrições.
 // Serve para achar lançamentos gravados sem unidade ou sob outro identificador de empresa.

@@ -1,6 +1,7 @@
 import { prefersSelfService, canResumeSelfService, RECOVERABLE_HANDOFF_REASONS, recoverableModelFailure, OUTPUT_STYLE_VIOLATIONS } from './whatsapp-self-service.js';
 import { standaloneGreetingReply } from './whatsapp-ai-greeting.mjs';
 import { isWhatsappOptOutText, canonicalWhatsappPhone } from './whatsapp-phone.js';
+import { registrarOptOut } from './whatsapp-antiban.js';
 import { resolveConfirmation, CONFIRMATION_HINT, PENDING_REMINDER_HINT, actionTtlMinutes, formatActionSummary, formatForWhatsapp, declineWithNewRequest } from './whatsapp-ai-intents.js';
 export { PENDING_REMINDER_HINT };
 import { MEDIA_SYSTEM_GUIDANCE } from './whatsapp-ai-media.js';
@@ -1534,6 +1535,7 @@ async function deterministicResponseCore(task, channel, session, message) {
     );
     await updateWhatsappMarketingConsent(context, { granted: false, evidence: `Opt-out recebido no WhatsApp: ${message.text}` }).catch(error => console.warn('[WhatsApp AI] opt-out CRM pendente:', cleanText(error?.message || error, 300)));
     await recordAutomationOptOut(db.query.bind(db), session.empresa_id, session.telefone, 'sair_no_whatsapp').catch(() => null);
+    try { registrarOptOut(session.empresa_id || 'dino', session.telefone, 'sair_no_whatsapp'); } catch {}
     if (session.status === 'humano') return { text: null, kind: 'human_queue' };
     return { text: 'Preferência registrada. Você não receberá mensagens de marketing por este atendimento. Ainda posso responder solicitações que você iniciar.', kind: 'opt_out' };
   }

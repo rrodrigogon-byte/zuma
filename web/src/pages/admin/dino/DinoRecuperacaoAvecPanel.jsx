@@ -22,7 +22,10 @@ import {
   Flame,
   ArrowRight,
   Send,
-} from 'lucide-react'
+  ShieldCheck,
+  ShieldAlert,
+  Clock,
+  Info,} from 'lucide-react'
 import './DinoRecuperacaoAvecPanel.css'
 
 const moeda = (v) => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
@@ -126,6 +129,15 @@ export default function DinoRecuperacaoAvecPanel({ onAbrirAgenda }) {
   const [testeTelefone, setTesteTelefone] = useState('')
   const [testandoEnvio, setTestandoEnvio] = useState(false)
   const [testeFeedback, setTesteFeedback] = useState(null)
+  const [antibanData, setAntibanData] = useState(null)
+
+  useEffect(() => {
+    if (modalCampanhaCRM) {
+      api.get('/api/admin/barbearia/antiban')
+        .then((res) => { if (res?.ok) setAntibanData(res) })
+        .catch(() => null)
+    }
+  }, [modalCampanhaCRM])
 
   const [historicoModal, setHistoricoModal] = useState([])
   const [loadingHistorico, setLoadingHistorico] = useState(false)
@@ -1434,11 +1446,49 @@ export default function DinoRecuperacaoAvecPanel({ onAbrirAgenda }) {
                 </div>
               ) : (
                 <>
+                  {/* CARD DE PROTEÇÃO ANTIBAN ATIVA */}
+                  <div style={{
+                    background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.08) 0%, rgba(2, 132, 199, 0.08) 100%)',
+                    border: '1px solid rgba(16, 185, 129, 0.35)',
+                    borderRadius: '12px',
+                    padding: '12px 16px',
+                    display: 'grid',
+                    gap: '8px'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#059669', fontWeight: 800, fontSize: '13px' }}>
+                        <ShieldCheck size={18} />
+                        <span>Escudo Antiban & Aquecimento de Chip Ativo</span>
+                      </div>
+                      <span style={{ fontSize: '11px', background: 'rgba(16, 185, 129, 0.15)', color: '#047857', padding: '2px 8px', borderRadius: '12px', fontWeight: 700 }}>
+                        {antibanData?.antiban?.estagioDados?.nome || 'Proteção Humanizada'}
+                      </span>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '8px', fontSize: '12px', color: 'var(--muted, #475569)' }}>
+                      <div>
+                        <strong>⏱️ Cadência Humanizada:</strong> 20s a 45s com jitter aleatório
+                      </div>
+                      <div>
+                        <strong>⏸️ Cooldown de Respiro:</strong> Pausa de 3 min a cada 10 envios
+                      </div>
+                      <div>
+                        <strong>🎯 Cota Restante Hoje:</strong> {antibanData?.antiban?.restantesHoje !== undefined ? `${antibanData.antiban.restantesHoje} de ${antibanData.antiban.limiteDiario}` : 'Até 60 envios/dia'}
+                      </div>
+                      <div>
+                        <strong>🛑 Opt-Out Obrigatório:</strong> Descadastro via "SAIR" protegido
+                      </div>
+                    </div>
+                    {(escopoEnvio === 'filtrados' ? dados.total : dados.itens.length) > (antibanData?.antiban?.restantesHoje || 60) && (
+                      <div style={{ fontSize: '11.5px', color: '#b45309', background: 'rgba(245, 158, 11, 0.12)', border: '1px solid rgba(245, 158, 11, 0.3)', padding: '6px 10px', borderRadius: '6px', display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <Info size={14} />
+                        <span>Base maior que a cota diária: os envios que excederem o limite de hoje serão pausados com segurança para o próximo dia, evitando banimento.</span>
+                      </div>
+                    )}
+                  </div>
                   {/* SELEÇÃO DO ESCOPO */}
                   <div style={{ background: 'var(--surface-2)', padding: '12px 14px', borderRadius: 10, border: '1px solid var(--line)' }}>
                     <label style={{ fontSize: '12.5px', fontWeight: 700, color: 'var(--fg)', display: 'block', marginBottom: 8 }}>
-                      Público Alvo do Disparo:
-                    </label>
+                      Público Alvo do Disparo:                    </label>
                     <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'center' }}>
                       {selecionados.size > 0 && (
                         <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '13px', cursor: 'pointer', color: '#3b82f6', fontWeight: 700 }}>
