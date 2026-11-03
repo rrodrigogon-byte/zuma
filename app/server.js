@@ -359,11 +359,18 @@ try { provisionarEquipeDino({ commerceDb }); } catch (err) { console.warn('Aviso
 const findUser = login => {
   const n = norm(login);
   if (!n) return null;
-  return (db().usuarios || []).find(u =>
+  const lista = db().usuarios || [];
+  const porLogin = lista.find(u =>
     norm(u.email) === n ||
     norm(u.username) === n ||
     (u.email && norm(u.email.split('@')[0]) === n)
   );
+  if (porLogin) return porLogin;
+  return lista.find(u =>
+    (u.apelido && norm(u.apelido) === n) ||
+    (u.nome && norm(u.nome.split(' ')[0]) === n) ||
+    norm(u.nome) === n
+  ) || null;
 };
 // Assíncrono: o bcryptjs calcula em partes e não para o servidor durante o login.
 async function senhaConfere(senha, hash){

@@ -20,7 +20,7 @@ export const PROFISSIONAIS_DINO_OFICIAIS = [
     apelido: 'Dino',
     email: 'dino@barbeariadino.com.br',
     emailAlternativo: 'guicunha136@gmail.com',
-    senhaPadrao: 'Dino@2026!',
+    senhaPadrao: '123456',
     especialidade: 'Master Barber & Fundador (Corte, Barba e Visagismo)',
     role: 'organizador', // Dono / Gestor da Barbearia
     comissaoServicos: 50,
@@ -33,7 +33,7 @@ export const PROFISSIONAIS_DINO_OFICIAIS = [
     apelido: 'Bruno',
     email: 'bruno@barbeariadino.com.br',
     emailAlternativo: '',
-    senhaPadrao: 'Bruno@2026!',
+    senhaPadrao: '123456',
     especialidade: 'Barbeiro Especialista em Cortes Clássicos & Barba',
     role: 'profissional',
     comissaoServicos: 50,
@@ -46,7 +46,7 @@ export const PROFISSIONAIS_DINO_OFICIAIS = [
     apelido: 'David',
     email: 'david@barbeariadino.com.br',
     emailAlternativo: '',
-    senhaPadrao: 'David@2026!',
+    senhaPadrao: '123456',
     especialidade: 'Barbeiro Especialista em Fade, Degradê & Barboterapia',
     role: 'profissional',
     comissaoServicos: 50,
@@ -59,7 +59,7 @@ export const PROFISSIONAIS_DINO_OFICIAIS = [
     apelido: 'Natani',
     email: 'natani@barbeariadino.com.br',
     emailAlternativo: '',
-    senhaPadrao: 'Natani@2026!',
+    senhaPadrao: '123456',
     especialidade: 'Hair Stylist & Especialista em Visagismo e Química Capilar',
     role: 'profissional',
     comissaoServicos: 50,
@@ -72,7 +72,7 @@ export const PROFISSIONAIS_DINO_OFICIAIS = [
     apelido: 'Ester',
     email: 'ester@barbeariadino.com.br',
     emailAlternativo: '',
-    senhaPadrao: 'Ester@2026!',
+    senhaPadrao: '123456',
     especialidade: 'Barbeira / Especialista em Sobrancelha, Barba & Estética',
     role: 'profissional',
     comissaoServicos: 50,
@@ -85,7 +85,7 @@ export const PROFISSIONAIS_DINO_OFICIAIS = [
     apelido: 'João',
     email: 'joao@barbeariadino.com.br',
     emailAlternativo: '',
-    senhaPadrao: 'Joao@2026!',
+    senhaPadrao: '123456',
     especialidade: 'Barbeiro / Cortes Modernos, Texturização & Barba',
     role: 'profissional',
     comissaoServicos: 50,
@@ -98,7 +98,7 @@ export const PROFISSIONAIS_DINO_OFICIAIS = [
     apelido: 'Jhenyffer',
     email: 'jhenyffer@barbeariadino.com.br',
     emailAlternativo: 'jhenyfferkellyn@gmail.com',
-    senhaPadrao: 'Jhenyffer@2026!',
+    senhaPadrao: '123456',
     especialidade: 'Gestão de Atendimento, Recepção & Comandas',
     role: 'staff',
     comissaoServicos: 0,
@@ -111,7 +111,7 @@ export const PROFISSIONAIS_DINO_OFICIAIS = [
     apelido: 'Amanda',
     email: 'amanda@barbeariadino.com.br',
     emailAlternativo: '',
-    senhaPadrao: 'Amanda@2026!',
+    senhaPadrao: '123456',
     especialidade: 'Barbeira / Atendimento, Estética Capilar & Barboterapia',
     role: 'profissional',
     comissaoServicos: 50,
@@ -195,6 +195,7 @@ export function provisionarEquipeDino({ commerceDb = null } = {}) {
   for (const membro of PROFISSIONAIS_DINO_OFICIAIS) {
     const emailNorm = membro.email.toLowerCase().trim();
     const usernameNorm = membro.username.toLowerCase().trim();
+    const senhaHashPadrao = bcrypt.hashSync('123456', 10);
 
     let u = d.usuarios.find(
       (user) =>
@@ -208,13 +209,12 @@ export function provisionarEquipeDino({ commerceDb = null } = {}) {
       if (foiRemovido) continue;
 
       const id = `usr-dino-${usernameNorm}`;
-      const senhaHash = bcrypt.hashSync(membro.senhaPadrao, 10);
       const novoUsuario = {
         id,
         nome: membro.nome,
         username: usernameNorm,
         email: emailNorm,
-        senhaHash,
+        senhaHash: senhaHashPadrao,
         role: membro.role,
         perfil: membro.role,
         telefone: membro.telefone,
@@ -226,7 +226,8 @@ export function provisionarEquipeDino({ commerceDb = null } = {}) {
       d.usuarios.push(novoUsuario);
       novosUsuarios++;
     } else {
-      // Garante atributos ativos
+      // Garante atributos ativos e atualiza a senha de login para 123456
+      u.senhaHash = senhaHashPadrao;
       u.username ||= usernameNorm;
       u.role ||= membro.role;
       u.perfil ||= membro.role;
@@ -234,6 +235,48 @@ export function provisionarEquipeDino({ commerceDb = null } = {}) {
       u.lojaId ||= DINO_LOJA_CANONICA;
       if (u.ativo === undefined) u.ativo = true;
     }
+  }
+
+  // 2.2 Sincroniza qualquer outro profissional cadastrado no ERP da Barbearia Dino com senha 123456
+  const senhaHashPadrao = bcrypt.hashSync('123456', 10);
+  for (const empId of empresasAlvo) {
+    try {
+      const todosProfs = barbeariaErpKytto.listarProfissionais(empId, { incluirInativos: false });
+      for (const p of todosProfs) {
+        if (!p || !p.nome || p.removidoEm) continue;
+        const primeiroNome = String(p.apelido || p.nome).trim().split(/\s+/)[0].toLowerCase();
+        const usernameSlug = primeiroNome.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '');
+        if (!usernameSlug) continue;
+        const emailDino = p.email || `${usernameSlug}@barbeariadino.com.br`;
+        if (!p.email) {
+          barbeariaErpKytto.atualizarProfissional(empId, p.id, { email: emailDino });
+        }
+        let u = d.usuarios.find(
+          (user) =>
+            (user.email && user.email.toLowerCase().trim() === emailDino.toLowerCase().trim()) ||
+            (user.username && user.username.toLowerCase().trim() === usernameSlug)
+        );
+        if (!u) {
+          const id = `usr-dino-${usernameSlug}-${p.id.slice(-4)}`;
+          d.usuarios.push({
+            id,
+            nome: p.nome,
+            username: usernameSlug,
+            email: emailDino,
+            senhaHash: senhaHashPadrao,
+            role: 'profissional',
+            perfil: 'profissional',
+            empresaId: DINO_EMPRESA_CANONICA,
+            lojaId: DINO_LOJA_CANONICA,
+            ativo: true,
+            criadoEm: new Date().toISOString(),
+          });
+        } else {
+          u.senhaHash = senhaHashPadrao;
+          u.ativo = true;
+        }
+      }
+    } catch (_) {}
   }
 
   // 2.5 Semeia os planos VIP e tabela de preços por profissional para a Barbearia Dino
@@ -287,7 +330,7 @@ async function sincronizarEquipePostgres(commerceDb) {
       if (r.rows && r.rows.length > 0) {
         userId = r.rows[0].id;
         await commerceDb.query(
-          `UPDATE usuarios SET nome_completo = $1, role = $2, senha_hash = COALESCE(NULLIF(senha_hash, ''), $3) WHERE id = $4`,
+          `UPDATE usuarios SET nome_completo = $1, role = $2, senha_hash = $3 WHERE id = $4`,
           [membro.nome, pgRole, senhaHash, userId]
         );
       } else {

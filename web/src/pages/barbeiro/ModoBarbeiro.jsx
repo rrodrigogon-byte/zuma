@@ -129,8 +129,23 @@ function Folha({ titulo, onFechar, children, podeFechar = true }) {
 function LoginEquipe({ isDino }) {
   const { login } = useAuth()
   const [form, setForm] = useState({ user: '', senha: '' })
+  const [verSenha, setVerSenha] = useState(false)
   const [erro, setErro] = useState('')
   const [enviando, setEnviando] = useState(false)
+
+  const barbeirosAtalhos = isDino
+    ? [
+        { nome: 'Dino', user: 'dino' },
+        { nome: 'Bruno', user: 'bruno' },
+        { nome: 'David', user: 'david' },
+        { nome: 'Natani', user: 'natani' },
+        { nome: 'Ester', user: 'ester' },
+        { nome: 'João', user: 'joao' },
+        { nome: 'Amanda', user: 'amanda' },
+        { nome: 'Jhenyffer', user: 'jhenyffer' },
+      ]
+    : []
+
   async function entrar(e) {
     e.preventDefault(); setErro(''); setEnviando(true)
     try {
@@ -145,32 +160,106 @@ function LoginEquipe({ isDino }) {
       <div style={{ background: t.card, padding: 30, borderRadius: 24, border: `1px solid ${t.line}`, width: '100%', maxWidth: 400, boxShadow: '0 20px 40px rgba(0,0,0,0.5)', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
         <img src={isDino ? '/brand/dino-equipe-192.png' : '/favicon.svg'} alt="Logo" style={{ width: 80, height: 80, borderRadius: 20, marginBottom: 20, objectFit: 'cover' }} />
         <h1 style={{ fontSize: 24, fontWeight: 900, color: t.cream, margin: '0 0 8px' }}>{isDino ? 'Barbearia Dino' : 'Equipe App'}</h1>
-        <p style={{ color: t.muted, fontSize: 14, margin: '0 0 30px', textAlign: 'center' }}>Acesse com seu e-mail de profissional para carregar sua agenda.</p>
+        <p style={{ color: t.muted, fontSize: 13.5, margin: '0 0 20px', textAlign: 'center' }}>
+          App oficial da equipe. Acesse com seu usuário ou e-mail para abrir sua agenda.
+        </p>
+
+        {barbeirosAtalhos.length > 0 && (
+          <div style={{ width: '100%', marginBottom: 16 }}>
+            <div style={{ fontSize: 11.5, color: t.muted, fontWeight: 700, marginBottom: 8, textTransform: 'uppercase' }}>
+              Toque no seu nome para preencher:
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {barbeirosAtalhos.map((b) => {
+                const selecionado = form.user.toLowerCase() === b.user.toLowerCase()
+                return (
+                  <button
+                    key={b.user}
+                    type="button"
+                    onClick={() => setForm({ user: b.user, senha: form.senha || '123456' })}
+                    style={{
+                      padding: '6px 12px',
+                      borderRadius: 16,
+                      background: selecionado ? t.accent : '#202430',
+                      color: selecionado ? '#fff' : t.cream,
+                      border: `1px solid ${selecionado ? t.accent : t.line}`,
+                      fontSize: 12.5,
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 4
+                    }}
+                  >
+                    <span>💈</span>
+                    <span>{b.nome}</span>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        )}
         
         <form onSubmit={entrar} style={{ width: '100%', display: 'grid', gap: 16 }}>
           <label style={{ ...label, fontSize: 14 }}>
-            E-mail ou usuário
+            Usuário ou e-mail
             <input 
               style={{ ...input, height: 50, borderRadius: 14, fontSize: 16, background: '#10131A', border: `1px solid ${t.line}` }} 
               value={form.user} 
               onChange={(e) => setForm({ ...form, user: e.target.value })} 
               autoComplete="username" 
-              placeholder="barbeiro@dino.com.br"
+              placeholder="ex: bruno ou dino"
               required 
             />
           </label>
           <label style={{ ...label, fontSize: 14 }}>
             Senha
-            <input 
-              style={{ ...input, height: 50, borderRadius: 14, fontSize: 16, background: '#10131A', border: `1px solid ${t.line}` }} 
-              type="password" 
-              value={form.senha} 
-              onChange={(e) => setForm({ ...form, senha: e.target.value })} 
-              autoComplete="current-password" 
-              placeholder="••••••••"
-              required 
-            />
+            <div style={{ position: 'relative' }}>
+              <input 
+                style={{ ...input, height: 50, borderRadius: 14, fontSize: 16, background: '#10131A', border: `1px solid ${t.line}`, paddingRight: 45 }} 
+                type={verSenha ? 'text' : 'password'} 
+                value={form.senha} 
+                onChange={(e) => setForm({ ...form, senha: e.target.value })} 
+                autoComplete="current-password" 
+                placeholder="123456"
+                required 
+              />
+              <button
+                type="button"
+                onClick={() => setVerSenha(!verSenha)}
+                style={{
+                  position: 'absolute',
+                  right: 12,
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  background: 'none',
+                  border: 'none',
+                  color: t.muted,
+                  cursor: 'pointer',
+                  fontSize: 14,
+                  padding: 4
+                }}
+              >
+                {verSenha ? '👁️' : '🔒'}
+              </button>
+            </div>
           </label>
+
+          <div style={{
+            background: 'rgba(110, 124, 224, 0.1)',
+            border: '1px solid rgba(110, 124, 224, 0.25)',
+            borderRadius: 10,
+            padding: '8px 12px',
+            fontSize: 12,
+            color: '#c2c8f6',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6
+          }}>
+            <span>🔑</span>
+            <span>Senha padrão de acesso: <strong>123456</strong></span>
+          </div>
+
           {erro && <div style={{ color: t.red, fontWeight: 700, fontSize: 14, textAlign: 'center', background: 'rgba(242, 122, 137, 0.1)', padding: 10, borderRadius: 10 }}>{erro}</div>}
           <button type="submit" style={{ ...btn, background: t.accent, color: '#fff', fontSize: 17, height: 50, borderRadius: 14, marginTop: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: enviando ? 0.7 : 1 }} disabled={enviando}>
             {enviando ? 'Autenticando...' : 'Entrar no App'}
