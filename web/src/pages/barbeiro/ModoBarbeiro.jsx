@@ -133,18 +133,16 @@ function LoginEquipe({ isDino }) {
   const [erro, setErro] = useState('')
   const [enviando, setEnviando] = useState(false)
 
-  const barbeirosAtalhos = isDino
-    ? [
-        { nome: 'Dino', user: 'dino' },
-        { nome: 'Bruno', user: 'bruno' },
-        { nome: 'David', user: 'david' },
-        { nome: 'Natani', user: 'natani' },
-        { nome: 'Ester', user: 'ester' },
-        { nome: 'João', user: 'joao' },
-        { nome: 'Amanda', user: 'amanda' },
-        { nome: 'Jhenyffer', user: 'jhenyffer' },
-      ]
-    : []
+  const barbeirosAtalhos = [
+    { nome: 'Dino', user: 'dino' },
+    { nome: 'Bruno', user: 'bruno' },
+    { nome: 'David', user: 'david' },
+    { nome: 'Natani', user: 'natani' },
+    { nome: 'Ester', user: 'ester' },
+    { nome: 'João', user: 'joao' },
+    { nome: 'Amanda', user: 'amanda' },
+    { nome: 'Jhenyffer', user: 'jhenyffer' },
+  ]
 
   async function entrar(e) {
     e.preventDefault(); setErro(''); setEnviando(true)
@@ -629,7 +627,7 @@ export default function ModoBarbeiro() {
   }, [carregar])
   useEffect(() => { document.documentElement.style.background = t.bg; return () => { document.documentElement.style.background = '' } }, [])
 
-  const isDino = String(slug || painel?.slug || '').toLowerCase() === 'dino'
+  const isDino = !slug || String(slug || painel?.slug || '').toLowerCase() === 'dino'
   const dia = data || painel?.data || painel?.hoje || painelRecebido?.hoje || ''
   const hoje = painel?.hoje || ''
   const irPara = (novo) => { const p = new URLSearchParams(params); if (!novo || novo === hoje) p.delete('data'); else p.set('data', novo); p.delete('acao'); setParams(p, { replace: true }) }

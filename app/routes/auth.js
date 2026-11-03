@@ -26,6 +26,18 @@ function obterLojaSolicitada(req, payload = {}) {
 
 async function listarLojasAcessiveis({ empresaId, usuarioId, role }) {
   const params = [empresaId];
+  const isUuid = typeof usuarioId === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(usuarioId);
+  if (!isUuid) {
+    const fallbackSql = `
+      SELECT l.id, l.empresa_id, l.codigo, l.nome, l.nome_fantasia, l.ativa,
+             'operador' AS role_loja, '{}'::jsonb AS permissoes
+      FROM lojas l
+      WHERE l.empresa_id = $1 AND l.ativa = true
+      ORDER BY CASE WHEN l.codigo = 'MATRIZ' THEN 0 ELSE 1 END, l.nome
+    `;
+    const fallbackResult = await dbPg.query(fallbackSql, [empresaId]);
+    return fallbackResult.rows;
+  }
   let sql = `
     SELECT l.id, l.empresa_id, l.codigo, l.nome, l.nome_fantasia, l.ativa,
            ul.role_loja, COALESCE(ul.permissoes, '{}'::jsonb) AS permissoes

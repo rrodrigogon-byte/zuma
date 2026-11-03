@@ -362,11 +362,23 @@ const findUser = login => {
   const n = norm(login);
   if (!n) return null;
   const lista = db().usuarios || [];
+  let alias = n;
+  if (['natani', 'nati', 'naty', 'natani minanis', 'natani dobler'].includes(n)) alias = 'natani';
+  else if (['bruno', 'bruno mendes'].includes(n)) alias = 'bruno';
+  else if (['david', 'david kaua', 'david kauã'].includes(n)) alias = 'david';
+  else if (['dino', 'guilherme', 'gui', 'guicunha'].includes(n)) alias = 'dino';
+  else if (['joao', 'joão', 'ruedel'].includes(n)) alias = 'joao';
+  else if (['ester', 'steffany', 'steffany marielly'].includes(n)) alias = 'ester';
+  else if (['amanda', 'amanda gabrielly'].includes(n)) alias = 'amanda';
+  else if (['jhenyffer', 'jhenyfer', 'jhennyfer'].includes(n)) alias = 'jhenyffer';
+
   const porLogin = lista.find(u =>
     norm(u.email) === n ||
     norm(u.emailAlternativo) === n ||
     norm(u.username) === n ||
-    (u.email && norm(u.email.split('@')[0]) === n)
+    norm(u.username) === alias ||
+    (alias === 'natani' && norm(u.username) === 'nati') ||
+    (u.email && (norm(u.email.split('@')[0]) === n || norm(u.email.split('@')[0]) === alias))
   );
   if (porLogin) return porLogin;
   // Aliases conhecidos da equipe Dino
@@ -375,8 +387,8 @@ const findUser = login => {
     if (jheUser) return jheUser;
   }
   return lista.find(u =>
-    (u.apelido && norm(u.apelido) === n) ||
-    (u.nome && norm(u.nome.split(' ')[0]) === n) ||
+    (u.apelido && (norm(u.apelido) === n || norm(u.apelido) === alias)) ||
+    (u.nome && (norm(u.nome.split(' ')[0]) === n || norm(u.nome.split(' ')[0]) === alias)) ||
     norm(u.nome) === n
   ) || null;
 };
@@ -1947,8 +1959,9 @@ app.post('/api/admin/login', async (req,res)=>{
   if(!STAFF.includes(u.role)) return res.status(403).json({error:'esta conta não tem acesso ao painel'});
   limparTentativas(chave);
   const sessao = await commerceSessionFor(u);
-  const empresaId = sessao.empresaId ?? u.empresaId;
-  const lojaId = sessao.lojaId ?? u.lojaId;
+  const isDinoEquipe = String(u.email || '').toLowerCase().includes('dino') || String(u.id || '').startsWith('usr-dino') || u.role === 'profissional';
+  const empresaId = sessao.empresaId ?? u.empresaId ?? (isDinoEquipe ? DINO_COMMERCE_EMPRESA_ID : undefined);
+  const lojaId = sessao.lojaId ?? u.lojaId ?? (isDinoEquipe ? DINO_COMMERCE_LOJA_ID : undefined);
   if (process.env.COMMERCE_CORE_ENABLED === '1') {
     if (sessao.empresaId) {
       try {
@@ -3415,7 +3428,12 @@ function hostDino(req) {
   const slug = String(req.query?.slug || req.headers?.['x-barbearia-slug'] || '').trim().toLowerCase();
   if (slug === 'dino') return true;
   const ref = String(req.headers?.referer || '').toLowerCase();
-  if (ref.includes('/barbeiro/dino')) return true;
+  if (ref.includes('/barbeiro')) return true;
+  const path = String(req.originalUrl || req.path || '').toLowerCase();
+  if (path.includes('/modo-barbeiro')) return true;
+  const userEmail = String(req.user?.email || '').toLowerCase();
+  if (userEmail.includes('@barbeariadino.com.br') || userEmail.includes('dino')) return true;
+  if (['dino', 'bruno', 'david', 'natani', 'nati', 'ester', 'joao', 'amanda', 'jhenyffer', 'diego'].includes(String(req.user?.username || '').toLowerCase())) return true;
   return false;
 }
 
@@ -3489,11 +3507,13 @@ async function resolverEscopoBarbearia(req, res, next) {
   const signedEmpresa = String(req.user?.empresaId || '').trim();
   const signedLoja = String(req.user?.lojaId || '').trim();
   const explicitDinoApp = String(req.query?.slug || req.headers['x-barbearia-slug'] || '').trim().toLowerCase() === 'dino'
-    || String(req.headers.referer || '').toLowerCase().includes('/barbeiro/dino');
+    || String(req.headers.referer || '').toLowerCase().includes('/barbeiro')
+    || String(req.originalUrl || req.path || '').toLowerCase().includes('/modo-barbeiro')
+    || hostDino(req);
   const isDinoSignedUser = signedEmpresa === DINO_COMMERCE_EMPRESA_ID || signedEmpresa === DINO_LEGACY_EMPRESA_ID;
   const isDinoRequested = requestedEmpresa === DINO_COMMERCE_EMPRESA_ID || requestedEmpresa === DINO_LEGACY_EMPRESA_ID || requestedEmpresa.toLowerCase() === 'dino';
   if ((explicitDinoApp || isDinoRequested)
-    && (isPlatformAdminUser(req.user) || isMainAdminUser(req.user) || isDinoSignedUser || !signedEmpresa)) {
+    && (isPlatformAdminUser(req.user) || isMainAdminUser(req.user) || isDinoSignedUser || !signedEmpresa || req.user?.role === 'profissional')) {
     req.barbeariaContext = { empresaId: DINO_COMMERCE_EMPRESA_ID, lojaId: DINO_COMMERCE_LOJA_ID };
     return next();
   }
@@ -3529,7 +3549,17 @@ async function resolverEscopoBarbearia(req, res, next) {
 }
 // Agenda e bloqueio do próprio profissional: o vínculo é o e-mail do login no cadastro dele.
 function profissionalDaSessao(req) {
-  return profissionalDoUsuario(barbeariaErpKytto.listarProfissionais(legacyEmpresaId(req)), req.user);
+  const empId = legacyEmpresaId(req);
+  let profs = barbeariaErpKytto.listarProfissionais(empId, { incluirInativos: false });
+  let eu = profissionalDoUsuario(profs, req.user);
+  if (!eu) {
+    for (const altEmp of [DINO_COMMERCE_EMPRESA_ID, 'emp-kytto-001', 'dino']) {
+      const altProfs = barbeariaErpKytto.listarProfissionais(altEmp, { incluirInativos: false });
+      const found = profissionalDoUsuario(altProfs, req.user);
+      if (found) return found;
+    }
+  }
+  return eu;
 }
 function exigirPerfilProfissional(req, res, next) {
   if (req.path === '/modo-barbeiro/trocar-senha') return next();

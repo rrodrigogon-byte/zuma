@@ -79,6 +79,21 @@ export function profissionalDoUsuario(profissionais = [], usuario = {}) {
   const userId = String(usuario.id || '').trim();
   const nome = String(usuario.nome || usuario.nome_completo || '').trim().toLowerCase();
 
+  const aliasEquivalente = (a, b) => {
+    if (!a || !b) return false;
+    const s1 = a.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    const s2 = b.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    if (s1 === s2) return true;
+    if ((s1 === 'natani' || s1 === 'nati' || s1 === 'naty') && (s2 === 'natani' || s2 === 'nati' || s2 === 'naty')) return true;
+    if ((s1 === 'dino' || s1 === 'guilherme' || s1 === 'gui') && (s2 === 'dino' || s2 === 'guilherme' || s2 === 'gui')) return true;
+    if ((s1 === 'ester' || s1 === 'steffany') && (s2 === 'ester' || s2 === 'steffany')) return true;
+    if ((s1 === 'david' || s1 === 'david kaua') && (s2 === 'david' || s2 === 'david kaua')) return true;
+    if ((s1 === 'joao' || s1 === 'joao victor') && (s2 === 'joao' || s2 === 'joao victor')) return true;
+    if ((s1 === 'amanda' || s1 === 'amanda gabrielly') && (s2 === 'amanda' || s2 === 'amanda gabrielly')) return true;
+    if ((s1 === 'jhenyffer' || s1 === 'jhenyfer' || s1 === 'jhennyfer') && (s2 === 'jhenyffer' || s2 === 'jhenyfer' || s2 === 'jhennyfer')) return true;
+    return false;
+  };
+
   return profissionais.find((p) => {
     if (p.ativo === false) return false;
     const pEmail = String(p.email || '').trim().toLowerCase();
@@ -87,10 +102,14 @@ export function profissionalDoUsuario(profissionais = [], usuario = {}) {
     if (userId && (p.usuarioId === userId || p.userId === userId)) return true;
     const pNome = String(p.nome || '').trim().toLowerCase();
     const pApelido = String(p.apelido || '').trim().toLowerCase();
+    const pPrimeiroNome = pNome.split(' ')[0];
+    const uPrimeiroNome = nome.split(' ')[0];
+
+    if (aliasEquivalente(username, pApelido) || aliasEquivalente(username, pPrimeiroNome) || aliasEquivalente(uPrimeiroNome, pApelido) || aliasEquivalente(uPrimeiroNome, pPrimeiroNome)) return true;
     if (username && pApelido && (pApelido === username || username.startsWith(pApelido) || pApelido.startsWith(username))) return true;
     if (nome && pApelido && (pApelido === nome || nome.startsWith(pApelido) || pApelido.startsWith(nome))) return true;
     if (username && pNome && (pNome === username || pNome.split(' ')[0] === username)) return true;
-    if (nome && pNome && pNome === nome) return true;
+    if (nome && pNome && (pNome === nome || pNome.startsWith(nome) || nome.startsWith(pNome))) return true;
     return false;
   }) || null;
 }
@@ -152,16 +171,22 @@ export function painelBarbeiro(erp, { empresaId, lojaId = '', usuario = {}, prof
   if (!dataValida(data)) throw new ModoBarbeiroError('Data inválida.', 'DATA_INVALIDA');
   const gestao = ehGestao(usuario);
   let profissionais = erp.listarProfissionais(empresaId);
-  if ((!profissionais || profissionais.length === 0) && (empresaId === 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6' || empresaId === 'emp-kytto-001' || empresaId === 'dino')) {
+  let eu = profissionalDoUsuario(profissionais, usuario);
+  if (!eu || !profissionais || profissionais.length === 0) {
     for (const altId of ['d0d0ac01-8e50-4b61-8c79-de4aaa916da6', 'emp-kytto-001', 'dino']) {
       const altList = erp.listarProfissionais(altId);
-      if (altList && altList.length > 0) {
+      const altEu = profissionalDoUsuario(altList, usuario);
+      if (altEu) {
         profissionais = altList;
+        eu = altEu;
+        empresaId = altId;
         break;
+      }
+      if ((!profissionais || profissionais.length === 0) && altList && altList.length > 0) {
+        profissionais = altList;
       }
     }
   }
-  const eu = profissionalDoUsuario(profissionais, usuario);
   let escolhido = null;
   if (gestao) {
     escolhido = profissionalId ? profissionais.find((p) => p.id === String(profissionalId)) : eu;

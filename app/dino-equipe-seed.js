@@ -58,7 +58,7 @@ export const PROFISSIONAIS_DINO_OFICIAIS = [
     nome: 'Natani Minanis Dobler',
     apelido: 'Natani',
     email: 'natani@barbeariadino.com.br',
-    emailAlternativo: '',
+    emailAlternativo: 'nati@barbeariadino.com.br',
     senhaPadrao: '123456',
     especialidade: 'Hair Stylist & Especialista em Visagismo e Química Capilar',
     role: 'profissional',
@@ -169,20 +169,14 @@ export function provisionarEquipeDino({ commerceDb = null } = {}) {
         };
 
         if (prof) {
-          // Atualiza dados e garante e-mail e comissões corretas
-          if ((prof.removidoEm || prof.ativo === false) && !poucosAtivos) {
-            console.warn(`[dino-equipe-seed] Ignorando recriacao/update de ${membro.nome} pois ja foi desligado.`);
-          } else {
-            barbeariaErpKytto.atualizarProfissional(empId, prof.id, {
-              ...dadosProf,
-              nome: prof.nome || dadosProf.nome,
-              ativo: true,
-            });
-          }
+          barbeariaErpKytto.atualizarProfissional(empId, prof.id, {
+            ...dadosProf,
+            nome: prof.nome || dadosProf.nome,
+            ativo: true,
+            removidoEm: null,
+          });
         } else {
-          // Cria novo profissional no ERP
-          const isMatch = (p) => (p.email && p.email.toLowerCase() === membro.email.toLowerCase()) || (membro.emailAlternativo && p.email && p.email.toLowerCase() === membro.emailAlternativo.toLowerCase()) || (p.nome && p.nome.trim().toLowerCase() === membro.nome.trim().toLowerCase()) || (p.apelido && p.apelido.trim().toLowerCase() === membro.apelido.trim().toLowerCase());
-          if (!profissionaisAtuais.some(p => p.removidoEm && isMatch(p))) { barbeariaErpKytto.criarProfissional(empId, dadosProf); }
+          barbeariaErpKytto.criarProfissional(empId, dadosProf);
         }
       }
     } catch (e) {
@@ -205,9 +199,6 @@ export function provisionarEquipeDino({ commerceDb = null } = {}) {
     );
 
     if (!u) {
-      const foiRemovido = ['d0d0ac01-8e50-4b61-8c79-de4aaa916da6', 'emp-kytto-001', 'dino'].some(e => { const p = barbeariaErpKytto.listarProfissionais(e, { incluirInativos: true }).find(p => p.email === membro.email); return p && p.removidoEm; });
-      if (foiRemovido) continue;
-
       const id = `usr-dino-${usernameNorm}`;
       const novoUsuario = {
         id,
@@ -229,15 +220,43 @@ export function provisionarEquipeDino({ commerceDb = null } = {}) {
       novosUsuarios++;
     } else {
       // Garante atributos ativos e atualiza a senha de login para 123456
-      u.senhaHash = senhaHashPadrao;
+      if (!u.passwordChangedAt) {
+        u.senhaHash = senhaHashPadrao;
+      }
       u.username ||= usernameNorm;
       u.apelido ||= membro.apelido || usernameNorm;
       if (membro.emailAlternativo) u.emailAlternativo = membro.emailAlternativo.toLowerCase().trim();
       u.role ||= membro.role;
       u.perfil ||= membro.role;
-      u.empresaId ||= DINO_EMPRESA_CANONICA;
-      u.lojaId ||= DINO_LOJA_CANONICA;
-      if (u.ativo === undefined) u.ativo = true;
+      u.empresaId = DINO_EMPRESA_CANONICA;
+      u.lojaId = DINO_LOJA_CANONICA;
+      u.ativo = true;
+    }
+
+    // Garante também conta para nati se natani existir
+    if (membro.username === 'natani') {
+      let uNati = d.usuarios.find(user => user.username === 'nati' || (user.email && user.email.toLowerCase().trim() === 'nati@barbeariadino.com.br'));
+      if (!uNati) {
+        d.usuarios.push({
+          id: 'usr-dino-nati',
+          nome: membro.nome,
+          username: 'nati',
+          email: 'nati@barbeariadino.com.br',
+          senhaHash: senhaHashPadrao,
+          role: membro.role,
+          perfil: membro.role,
+          telefone: membro.telefone,
+          empresaId: DINO_EMPRESA_CANONICA,
+          lojaId: DINO_LOJA_CANONICA,
+          ativo: true,
+          criadoEm: new Date().toISOString(),
+        });
+      } else {
+        if (!uNati.passwordChangedAt) uNati.senhaHash = senhaHashPadrao;
+        uNati.ativo = true;
+        uNati.empresaId = DINO_EMPRESA_CANONICA;
+        uNati.lojaId = DINO_LOJA_CANONICA;
+      }
     }
   }
 
