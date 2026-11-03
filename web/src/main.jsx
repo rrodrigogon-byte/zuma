@@ -38,6 +38,10 @@ window.addEventListener('error', (event) => {
   const mensagem = String(event?.message || event?.error?.message || '')
   if (/failed to fetch dynamically imported module|importing a module script failed/i.test(mensagem)) recuperarAssetsAtualizados(event)
 })
+window.addEventListener('unhandledrejection', (event) => {
+  const mensagem = String(event?.reason?.message || event?.reason || '')
+  if (/failed to fetch dynamically imported module|importing a module script failed/i.test(mensagem)) recuperarAssetsAtualizados(event)
+})
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
