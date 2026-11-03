@@ -9427,7 +9427,34 @@ app.use('/assets', express.static(path.join(publicDir, 'assets'), {
   maxAge: '1y',
   setHeaders: setStaticCacheHeaders,
 }));
-app.use('/assets', (req, res) => res.status(404).json({ error: 'asset not found', code: 'STATIC_ASSET_NOT_FOUND' }));
+app.use('/assets', (req, res) => {
+  const assetsDir = path.join(publicDir, 'assets');
+  const requestedFile = path.basename(req.path || '');
+  if (!requestedFile || requestedFile.includes('..')) {
+    return res.status(404).json({ error: 'asset not found', code: 'STATIC_ASSET_NOT_FOUND' });
+  }
+  // Auto-recovery para chunks dinâmicos entre revisões:
+  // Se o hash específico mudou (ex: Barbearia-Cj8c93GR.js), redireciona para a versão atual do chunk
+  const match = requestedFile.match(/^([a-zA-Z0-9_\-]+)-([a-zA-Z0-9_\-]+)\.(js|css)$/);
+  if (match) {
+    const [, basePrefix, , ext] = match;
+    try {
+      const files = fs.readdirSync(assetsDir);
+      const candidato = files
+        .filter(f => f.startsWith(`${basePrefix}-`) && f.endsWith(`.${ext}`))
+        .sort((a, b) => {
+          const sA = fs.statSync(path.join(assetsDir, a)).mtimeMs;
+          const sB = fs.statSync(path.join(assetsDir, b)).mtimeMs;
+          return sB - sA;
+        })[0];
+      if (candidato) {
+        res.setHeader('Cache-Control', 'no-cache');
+        return res.redirect(302, `/assets/${candidato}`);
+      }
+    } catch (_) {}
+  }
+  return res.status(404).json({ error: 'asset not found', code: 'STATIC_ASSET_NOT_FOUND' });
+});
 app.use(express.static(publicDir, { setHeaders: setStaticCacheHeaders }));
 
 // Meta tags do link de agendamento/avaliação: quem compartilha o link no WhatsApp
