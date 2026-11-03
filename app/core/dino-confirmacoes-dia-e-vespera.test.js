@@ -103,7 +103,7 @@ test('processarConfirmacoesDiarias enfileira confirmações de hoje e da vésper
       horaLocal: '10:00',
     });
 
-    const total = await processarConfirmacoesDiarias();
+    const total = await processarConfirmacoesDiarias({ forcar: true });
     assert.equal(total, 2);
 
     const inserts = mock.captured.filter((item) => /INSERT INTO tarefas_integracao_canais/.test(item.sql));
@@ -113,6 +113,84 @@ test('processarConfirmacoesDiarias enfileira confirmações de hoje e da vésper
     const eventTypes = payloads.map((p) => p.eventType);
     assert.ok(eventTypes.includes('confirmacao_dia'), 'enfileirou confirmacao_dia para o agendamento de hoje');
     assert.ok(eventTypes.includes('lembrete'), 'enfileirou lembrete para o agendamento de amanha');
+  } finally {
+    mock.restore();
+  }
+});
+
+test('janela matinal das 07h00 as 09h00 envia confirmacao do dia, e vespera envia um dia antes', async () => {
+  reset();
+  const mock = mockQueueDatabase();
+  try {
+    const clienteHoje = criarCliente(EMPRESA_DINO, { nome: 'Marcos Manha', telefone: '65999990010' });
+    const clienteAmanha = criarCliente(EMPRESA_DINO, { nome: 'Lucas Vespera', telefone: '65999990020' });
+    atualizarConsentimentoCliente(EMPRESA_DINO, clienteHoje.id, { canal: 'whatsapp', finalidade: 'atendimento', concedido: true, origem: 'teste' });
+    atualizarConsentimentoCliente(EMPRESA_DINO, clienteAmanha.id, { canal: 'whatsapp', finalidade: 'atendimento', concedido: true, origem: 'teste' });
+
+    const prof = criarProfissional(EMPRESA_DINO, { nome: 'Dino' });
+    const serv = criarServico(EMPRESA_DINO, { nome: 'Corte', duracaoMinutos: 30, preco: 100 });
+
+    const now = new Date();
+    const formatter = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Cuiaba' });
+    const hoje = formatter.format(now);
+    const amanha = formatter.format(new Date(now.valueOf() + 24 * 60 * 60 * 1000));
+
+    const agHoje = criarAgendamento(EMPRESA_DINO, {
+      lojaId: LOJA,
+      clienteId: clienteHoje.id,
+      clienteNome: clienteHoje.nome,
+      clienteTelefone: clienteHoje.telefone,
+      profissionalId: prof.id,
+      servicoId: serv.id,
+      dataHora: `${hoje}T10:00:00-04:00`,
+      dataAgenda: hoje,
+      horaLocal: '10:00',
+    });
+
+    const agAmanha = criarAgendamento(EMPRESA_DINO, {
+      lojaId: LOJA,
+      clienteId: clienteAmanha.id,
+      clienteNome: clienteAmanha.nome,
+      clienteTelefone: clienteAmanha.telefone,
+      profissionalId: prof.id,
+      servicoId: serv.id,
+      dataHora: `${amanha}T15:00:00-04:00`,
+      dataAgenda: amanha,
+      horaLocal: '15:00',
+    });
+
+    // 1. Às 08h00 (dentro da janela matinal 07h-09h): deve enviar confirmacao_dia para hoje
+    mock.captured.length = 0;
+    const enviadasManha = await processarConfirmacoesDiarias({ hora: 8 });
+    assert.equal(enviadasManha, 1, 'Às 08h deve enviar apenas a confirmacao do dia');
+    const insertsManha = mock.captured.filter((item) => /INSERT INTO tarefas_integracao_canais/.test(item.sql));
+    assert.equal(insertsManha.length, 1);
+    const payloadManha = JSON.parse(insertsManha[0].params[4]);
+    assert.equal(payloadManha.eventType, 'confirmacao_dia');
+
+    // Executar novamente às 08h15 não deve duplicar o envio
+    mock.captured.length = 0;
+    const enviadasRepetidas = await processarConfirmacoesDiarias({ hora: 8 });
+    assert.equal(enviadasRepetidas, 0, 'Não deve reenviar na mesma janela matinal');
+
+    // 2. Às 15h00 (tarde da véspera): deve enviar o lembrete de amanhã (1 dia antes)
+    mock.captured.length = 0;
+    const enviadasTarde = await processarConfirmacoesDiarias({ hora: 15 });
+    assert.equal(enviadasTarde, 1, 'Às 15h deve enviar a confirmacao da vespera para amanha');
+    const insertsTarde = mock.captured.filter((item) => /INSERT INTO tarefas_integracao_canais/.test(item.sql));
+    assert.equal(insertsTarde.length, 1);
+    const payloadTarde = JSON.parse(insertsTarde[0].params[4]);
+    assert.equal(payloadTarde.eventType, 'lembrete');
+
+    // Executar novamente às 15h30 não deve duplicar o envio da véspera
+    mock.captured.length = 0;
+    const enviadasVesperaRepetida = await processarConfirmacoesDiarias({ hora: 15 });
+    assert.equal(enviadasVesperaRepetida, 0, 'Não deve reenviar na mesma vespera');
+
+    // 3. Às 23h00 (fora de horário): não deve enviar nada
+    mock.captured.length = 0;
+    const enviadasNoite = await processarConfirmacoesDiarias({ hora: 23 });
+    assert.equal(enviadasNoite, 0, 'Fora do horario comercial nao deve enviar nada');
   } finally {
     mock.restore();
   }

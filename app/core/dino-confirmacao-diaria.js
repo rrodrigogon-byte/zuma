@@ -1,4 +1,4 @@
-import { db } from '../db.js';
+import { db, save } from '../db.js';
 import * as cadastrosMestres from '../cadastros-mestres-kytto.js';
 import * as barbearia from '../barbearia-erp-kytto.js';
 import * as clientes from '../clientes-contas-kytto.js';
@@ -59,43 +59,86 @@ function garantirConsentimentoAgendamento(empresaId, ag) {
   } catch {}
 }
 
-export async function processarConfirmacoesDiarias() {
-  const now = new Date();
+export async function processarConfirmacoesDiarias(options = {}) {
+  const now = options.agora || new Date();
   const dateFormatter = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Cuiaba' });
+  const timeFormatter = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Cuiaba', hour: '2-digit', hour12: false });
   const hoje = dateFormatter.format(now);
   const amanha = dateFormatter.format(new Date(now.valueOf() + 24 * 60 * 60 * 1000));
+  const horaCuiaba = options.hora !== undefined ? options.hora : parseInt(timeFormatter.format(now), 10);
+  const forcar = options.forcar === true;
+
+  // 1. Confirmação do dia: SEMPRE NO PERÍODO DA MANHÃ, DAS 07h00 ÀS 09h00 (horário de Cuiabá)
+  const janelaManha = (horaCuiaba >= 7 && horaCuiaba <= 9) || forcar;
+  // 2. Confirmação da véspera: ENVIANDO SEMPRE UM DIA ANTES (horário comercial/tarde da véspera, das 10h00 às 20h00)
+  const janelaVespera = (horaCuiaba >= 10 && horaCuiaba <= 20) || forcar;
   
   const empresasIds = obterEmpresasBarbearia();
   let totalEnviadas = 0;
+  let alterou = false;
 
   for (const empresaId of empresasIds) {
-    // 1. Confirmação do dia de hoje (pela manhã)
-    const agendamentosHoje = barbearia.listarAgendamentos(empresaId, { de: hoje, ate: hoje });
-    for (const ag of agendamentosHoje) {
-      if (ag.status === 'agendado') {
-        garantirConsentimentoAgendamento(empresaId, ag);
-        const res = await queueAppointmentNotifications(
-          { empresaId, legacyEmpresaId: empresaId, lojaId: ag.lojaId },
-          ag,
-          'confirmacao_dia'
-        ).catch(() => null);
-        if (res && res.queued > 0) totalEnviadas += res.queued;
+    const estado = barbearia.estadoEmpresa ? barbearia.estadoEmpresa(empresaId, false) : null;
+    // 1. Confirmação do dia de hoje (pela manhã: das 07h00 às 09h00)
+    if (janelaManha) {
+      const agendamentosHoje = barbearia.listarAgendamentos(empresaId, { de: hoje, ate: hoje });
+      for (const ag of agendamentosHoje) {
+        if (ag.status === 'agendado') {
+          // Evita reenvio se já enviado na manhã de hoje
+          if (ag.confirmacaoDiaData === hoje) continue;
+
+          garantirConsentimentoAgendamento(empresaId, ag);
+          const res = await queueAppointmentNotifications(
+            { empresaId, legacyEmpresaId: empresaId, lojaId: ag.lojaId },
+            ag,
+            'confirmacao_dia'
+          ).catch(() => null);
+          if (res && res.queued > 0) {
+            totalEnviadas += res.queued;
+            const agReal = estado?.agendamentos?.[String(ag.id)];
+            if (agReal) {
+              agReal.confirmacaoDiaData = hoje;
+              agReal.confirmacaoDiaEnviadaEm = now.toISOString();
+            }
+            ag.confirmacaoDiaData = hoje;
+            ag.confirmacaoDiaEnviadaEm = now.toISOString();
+            alterou = true;
+          }
+        }
       }
     }
 
     // 2. Confirmação da véspera / dia anterior (para amanhã)
-    const agendamentosAmanha = barbearia.listarAgendamentos(empresaId, { de: amanha, ate: amanha });
-    for (const ag of agendamentosAmanha) {
-      if (ag.status === 'agendado') {
-        garantirConsentimentoAgendamento(empresaId, ag);
-        const res = await queueAppointmentNotifications(
-          { empresaId, legacyEmpresaId: empresaId, lojaId: ag.lojaId },
-          ag,
-          'lembrete'
-        ).catch(() => null);
-        if (res && res.queued > 0) totalEnviadas += res.queued;
+    if (janelaVespera) {
+      const agendamentosAmanha = barbearia.listarAgendamentos(empresaId, { de: amanha, ate: amanha });
+      for (const ag of agendamentosAmanha) {
+        if (ag.status === 'agendado') {
+          // Evita reenvio se já enviado na véspera
+          if (ag.lembreteVesperaData === hoje) continue;
+
+          garantirConsentimentoAgendamento(empresaId, ag);
+          const res = await queueAppointmentNotifications(
+            { empresaId, legacyEmpresaId: empresaId, lojaId: ag.lojaId },
+            ag,
+            'lembrete'
+          ).catch(() => null);
+          if (res && res.queued > 0) {
+            totalEnviadas += res.queued;
+            const agReal = estado?.agendamentos?.[String(ag.id)];
+            if (agReal) {
+              agReal.lembreteVesperaData = hoje;
+              agReal.lembreteVesperaEnviadoEm = now.toISOString();
+            }
+            ag.lembreteVesperaData = hoje;
+            ag.lembreteVesperaEnviadoEm = now.toISOString();
+            alterou = true;
+          }
+        }
       }
     }
+  }
+  if (alterou) {
+    try { save(); } catch {}
   }
   return totalEnviadas;
 }
@@ -103,9 +146,9 @@ export async function processarConfirmacoesDiarias() {
 export function startDinoDailyConfirmationWorker() {
   if (process.env.DINO_DAILY_CONFIRMATION_ENABLED === '0') return null;
 
-  console.log('[Dino Confirmacao Diaria] Inicializando agendador de confirmacoes (vespera + dia)');
+  console.log('[Dino Confirmacao Diaria] Inicializando agendador de confirmacoes (vespera + manha 07h-09h)');
 
-  // Varredura logo após a subida do servidor
+  // Varredura inicial 10 segundos após boot respeitando a janela horária
   setTimeout(() => {
     processarConfirmacoesDiarias().then((count) => {
       if (count > 0) console.log(`[Dino Confirmacao Diaria] Varredura inicial: ${count} confirmacoes enfileiradas.`);
@@ -114,23 +157,17 @@ export function startDinoDailyConfirmationWorker() {
     });
   }, 10000);
 
+  // Verificação a cada 15 minutos ao longo do dia
   const timer = setInterval(async () => {
     try {
-      const now = new Date();
-      const formatter = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Cuiaba', hour: '2-digit', hour12: false });
-      const hour = parseInt(formatter.format(now), 10);
-
-      // Executa de manhã e durante o expediente (entre 07:00 e 13:00 de Cuiabá)
-      if (hour >= 7 && hour <= 13) {
-        const enviadas = await processarConfirmacoesDiarias();
-        if (enviadas > 0) {
-          console.log(`[Dino Confirmacao Diaria] ${enviadas} confirmacoes enfileiradas.`);
-        }
+      const enviadas = await processarConfirmacoesDiarias();
+      if (enviadas > 0) {
+        console.log(`[Dino Confirmacao Diaria] ${enviadas} confirmacoes enfileiradas.`);
       }
     } catch (e) {
       console.warn('[Dino Confirmacao Diaria] falhou', String(e?.message || e).slice(0, 200));
     }
-  }, 15 * 60 * 1000); // Roda a cada 15 minutos
+  }, 15 * 60 * 1000);
   
   timer.unref?.();
   return timer;
