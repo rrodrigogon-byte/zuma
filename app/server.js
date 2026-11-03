@@ -364,10 +364,16 @@ const findUser = login => {
   const lista = db().usuarios || [];
   const porLogin = lista.find(u =>
     norm(u.email) === n ||
+    norm(u.emailAlternativo) === n ||
     norm(u.username) === n ||
     (u.email && norm(u.email.split('@')[0]) === n)
   );
   if (porLogin) return porLogin;
+  // Aliases conhecidos da equipe Dino
+  if (n === 'jhe' || n === 'jhenyffer' || n === 'jhenyfferkellyn@gmail.com') {
+    const jheUser = lista.find(u => norm(u.email).includes('jhenyffer') || norm(u.emailAlternativo).includes('jhenyffer') || norm(u.nome).includes('jhenyffer'));
+    if (jheUser) return jheUser;
+  }
   return lista.find(u =>
     (u.apelido && norm(u.apelido) === n) ||
     (u.nome && norm(u.nome.split(' ')[0]) === n) ||

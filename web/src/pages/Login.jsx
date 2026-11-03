@@ -150,7 +150,16 @@ export default function Login() {
           </>
         ) : (
           <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-            {erro && <div role="alert" style={{ background: '#FEE2E2', color: '#B91C1C', padding: '12px 16px', borderRadius: 10, fontSize: '0.9rem', fontWeight: 600, border: '1px solid #FCA5A5' }}>{erro}</div>}
+            {erro && (
+              <div role="alert" style={{ background: '#FEE2E2', color: '#B91C1C', padding: '12px 16px', borderRadius: 10, fontSize: '0.9rem', fontWeight: 600, border: '1px solid #FCA5A5' }}>
+                <div>{erro}</div>
+                {aba === 'painel' && (
+                  <div style={{ marginTop: 6, fontSize: '0.82rem', fontWeight: 500, color: '#7f1d1d' }}>
+                    💡 Equipe Dino: a senha padrão de acesso é <strong>123456</strong>. Se o navegador preencheu uma senha antiga salva automaticamente, apague o campo senha e digite <strong>123456</strong>.
+                  </div>
+                )}
+              </div>
+            )}
             <div>
                   <label style={labelStyle}>{aba === 'painel' ? 'E-mail ou identificador cadastrado' : 'E-mail'}</label>
               <input type={aba === 'painel' ? 'text' : 'email'} value={user} onChange={e => setUser(e.target.value)} placeholder={aba === 'painel' ? 'admin' : 'atleta@email.com'} required autoComplete="username" style={inputStyle} onFocus={focusInput} onBlur={blurInput} />

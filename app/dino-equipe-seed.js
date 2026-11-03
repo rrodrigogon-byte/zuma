@@ -213,7 +213,9 @@ export function provisionarEquipeDino({ commerceDb = null } = {}) {
         id,
         nome: membro.nome,
         username: usernameNorm,
+        apelido: membro.apelido || usernameNorm,
         email: emailNorm,
+        emailAlternativo: membro.emailAlternativo ? membro.emailAlternativo.toLowerCase().trim() : null,
         senhaHash: senhaHashPadrao,
         role: membro.role,
         perfil: membro.role,
@@ -229,6 +231,8 @@ export function provisionarEquipeDino({ commerceDb = null } = {}) {
       // Garante atributos ativos e atualiza a senha de login para 123456
       u.senhaHash = senhaHashPadrao;
       u.username ||= usernameNorm;
+      u.apelido ||= membro.apelido || usernameNorm;
+      if (membro.emailAlternativo) u.emailAlternativo = membro.emailAlternativo.toLowerCase().trim();
       u.role ||= membro.role;
       u.perfil ||= membro.role;
       u.empresaId ||= DINO_EMPRESA_CANONICA;
@@ -320,20 +324,24 @@ async function sincronizarEquipePostgres(commerceDb) {
       const senhaHash = bcrypt.hashSync(membro.senhaPadrao, 10);
       const pgRole = membro.username === 'dino' || membro.username === 'jhenyffer' ? 'gerente' : 'barbeiro';
 
-      // Verifica se usuário já existe no Postgres
+      const altEmail = membro.emailAlternativo ? membro.emailAlternativo.toLowerCase().trim() : '';
+
+      // 1. Atualiza todos os registros existentes com email corporativo ou pessoal
+      await commerceDb.query(
+        `UPDATE usuarios 
+            SET nome_completo = $1, role = $2, senha_hash = $3, ativo = true, data_atualizacao = NOW() 
+          WHERE lower(btrim(email)) = $4 OR (length($5) > 0 AND lower(btrim(email)) = $5)`,
+        [membro.nome, pgRole, senhaHash, email, altEmail]
+      );
+
+      // 2. Busca IDs para vincular memberships
       const r = await commerceDb.query(
         `SELECT id FROM usuarios WHERE lower(btrim(email)) = $1 OR lower(btrim(email)) = $2 LIMIT 1`,
-        [email, membro.emailAlternativo ? membro.emailAlternativo.toLowerCase().trim() : email]
+        [email, altEmail || email]
       );
 
       let userId;
-      if (r.rows && r.rows.length > 0) {
-        userId = r.rows[0].id;
-        await commerceDb.query(
-          `UPDATE usuarios SET nome_completo = $1, role = $2, senha_hash = $3 WHERE id = $4`,
-          [membro.nome, pgRole, senhaHash, userId]
-        );
-      } else {
+      if (!r.rows || r.rows.length === 0) {
         const ins = await commerceDb.query(
           `INSERT INTO usuarios (id, email, senha_hash, nome_completo, role, empresa_id, ativo, data_criacao, data_atualizacao)
            VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, true, NOW(), NOW())
@@ -341,6 +349,8 @@ async function sincronizarEquipePostgres(commerceDb) {
           [email, senhaHash, membro.nome, pgRole, DINO_EMPRESA_CANONICA]
         );
         userId = ins.rows[0].id;
+      } else {
+        userId = r.rows[0].id;
       }
 
       // Garante membership na loja e empresa da Dino
