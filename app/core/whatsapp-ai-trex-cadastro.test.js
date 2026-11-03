@@ -131,3 +131,43 @@ test('T-Rex: calcular_pacote_frequencia aceita resposta do cliente com frequenci
   assert.equal(pacote4.desconto, '10%');
   assert.equal(pacote4.economia, 40);
 });
+
+test('T-Rex: calcular_pacote_frequencia calcula Pacote 5 Procedimentos a R$ 425 com 15% de desconto', async () => {
+  const empresaId = 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
+  let servicoCorte = barbearia.listarServicos(empresaId).find(s => s.nome === 'Corte Dino VIP');
+  if (!servicoCorte) servicoCorte = barbearia.criarServico(empresaId, { nome: 'Corte Dino VIP', preco: 100 });
+
+  let pacote5 = barbearia.listarPlanos(empresaId).find(p => p.nome === 'Pacote 5 Procedimentos');
+  if (!pacote5) {
+    pacote5 = barbearia.criarPlano(empresaId, {
+      nome: 'Pacote 5 Procedimentos',
+      preco: 425,
+      sessoesIncluidas: 5,
+      servicosIds: [servicoCorte.id],
+    });
+  }
+
+  const context = {
+    empresaId,
+    lojaId: empresaId,
+    canalId: 'a1b2c3d4-e5f6-4a8b-9c0d-1e2f3a4b5c6d',
+    sessionId: 'b1b2c3d4-e5f6-4a8b-9c0d-1e2f3a4b5c6d',
+    phone: '5565999991111',
+    customerText: 'Quero saber dos pacotes de 5',
+    primaryIntentResolved: true,
+    capabilities: { manageAppointments: true },
+  };
+
+  const execute = createWhatsappAiToolExecutor(context);
+  const resultado = await execute('calcular_pacote_frequencia', {
+    servico: 'Corte Dino VIP',
+  });
+
+  assert.equal(resultado.ok, true);
+  const p5 = resultado.pacotes.find(p => p.procedimentos === 5);
+  assert.ok(p5, 'Pacote de 5 procedimentos encontrado');
+  assert.equal(p5.valorComDesconto, 425);
+  assert.equal(p5.valorCheio, 500);
+  assert.equal(p5.economia, 75);
+  assert.equal(p5.desconto, '15%');
+});

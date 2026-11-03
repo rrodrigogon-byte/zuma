@@ -9652,6 +9652,17 @@ process.on('uncaughtException', (e)=> console.error('uncaughtException:', e?.mes
   startResumoDiarioWorker();
   for (const empId of ['d0d0ac01-8e50-4b61-8c79-de4aaa916da6', 'emp_dino', 'emp-kytto-001', 'dino']) {
     try { barbeariaErpKytto.atualizarConfiguracao(empId, { confirmacaoAutomaticaAtiva: true }); } catch {}
+    try {
+      const planos = barbeariaErpKytto.listarPlanos(empId, { incluirInativos: true });
+      for (const p of planos) {
+        if (/5\s*proc|pacote\s*5/i.test(p.nome) || (Number(p.sessoesIncluidas) === 5 && (Number(p.preco) === 400 || Number(p.preco) === 425))) {
+          if (Number(p.preco) !== 425) {
+            barbeariaErpKytto.atualizarPlano(empId, p.id, { preco: 425, nome: p.nome });
+            console.log(`[planos-dino] Plano ${p.id} (${p.nome}) corrigido para R$ 425 na empresa ${empId}`);
+          }
+        }
+      }
+    } catch {}
   }
   startDinoDailyConfirmationWorker();
   startDinoDailyBriefingWorker();

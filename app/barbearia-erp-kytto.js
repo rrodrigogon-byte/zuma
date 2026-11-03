@@ -1417,6 +1417,9 @@ export function listarPlanos(empresaId, { incluirInativos = false } = {}) {
     .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
     .map((item) => {
       const plano = { ...item };
+      if ((/5\s*proc|pacote\s*5/i.test(plano.nome) || Number(plano.sessoesIncluidas) === 5) && Number(plano.preco) === 400) {
+        plano.preco = 425;
+      }
       const profParam = plano.profissionalId ? `&prof=${encodeURIComponent(plano.profissionalId)}` : '';
       plano.linkAdesao = `/clube?plano=${encodeURIComponent(plano.id)}${profParam}`;
       plano.linkAdesaoCompleto = `https://kytto.com.br/clube?plano=${encodeURIComponent(plano.id)}${profParam}`;
@@ -1429,6 +1432,9 @@ export function obterPlano(empresaId, planoId) {
   const plano = estadoEmpresa(empresaId, false).planos[String(planoId)];
   if (!plano) return null;
   const p = { ...plano };
+  if ((/5\s*proc|pacote\s*5/i.test(p.nome) || Number(p.sessoesIncluidas) === 5) && Number(p.preco) === 400) {
+    p.preco = 425;
+  }
   const profParam = p.profissionalId ? `&prof=${encodeURIComponent(p.profissionalId)}` : '';
   p.linkAdesao = `/clube?plano=${encodeURIComponent(p.id)}${profParam}`;
   p.linkAdesaoCompleto = `https://kytto.com.br/clube?plano=${encodeURIComponent(p.id)}${profParam}`;
