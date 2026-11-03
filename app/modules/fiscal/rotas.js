@@ -30,7 +30,7 @@ export function createFiscalAdminRouter({ db, escopoDaRequisicao, env = process.
 
   router.get('/estado', rota('payments.read', ({ req, empresaId, lojaRestrita }) => svc.prontidao(db, empresaId, { lojaId: lojaRestrita || req.query.lojaId || null, env })));
 
-  router.get('/emitentes', rota('settings.write', ({ empresaId }) => svc.listarEmitentes(db, empresaId)));
+  router.get('/emitentes', rota('settings.write', ({ empresaId }) => svc.listarEmitentes(db, empresaId, { env })));
   router.put('/emitentes', rota('settings.write', ({ req, empresaId, lojaRestrita }) => { empresaToda(lojaRestrita, 'Configurar o emitente'); return svc.salvarEmitente(db, empresaId, req.body || {}, { env }); }));
   router.delete('/emitentes/:id', rota('settings.write', ({ req, empresaId, lojaRestrita }) => { empresaToda(lojaRestrita, 'Excluir o emitente'); return svc.excluirEmitente(db, empresaId, req.params.id); }));
   router.post('/emitentes/:id/reativar', rota('settings.write', ({ req, empresaId, lojaRestrita }) => { empresaToda(lojaRestrita, 'Reativar o emitente'); return svc.reativarEmitente(db, empresaId, req.params.id); }));
