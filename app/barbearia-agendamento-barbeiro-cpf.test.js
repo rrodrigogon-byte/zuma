@@ -116,3 +116,53 @@ test('barbearia.criarAgendamento preserva clienteCpf e clienteId', () => {
     assert.equal(h.id, undefined, 'nunca vaza id do agendamento');
   }
 });
+
+test('serviço restrito a profissional só pode ser agendado por quem está habilitado', () => {
+  const empresaId = `empresa-servicos-${Date.now()}`;
+  const profNati = barbearia.criarProfissional(empresaId, { nome: 'Nati', ativo: true });
+  const profDino = barbearia.criarProfissional(empresaId, { nome: 'Dino', ativo: true });
+
+  // Serviço restrito ao Dino (ex: Barba com Dino)
+  const servDino = barbearia.criarServico(empresaId, {
+    nome: 'Barba com Dino',
+    preco: 300,
+    duracaoMinutos: 30,
+    ativo: true,
+    profissionaisIds: [profDino.id],
+  });
+
+  // Serviço feito pela Nati
+  const servNati = barbearia.criarServico(empresaId, {
+    nome: 'Corte Premium Nati',
+    preco: 100,
+    duracaoMinutos: 40,
+    ativo: true,
+    profissionaisIds: [profNati.id],
+  });
+
+  // Dino consultando Barba com Dino -> OK
+  const horariosDino = barbearia.listarHorariosDisponiveis(empresaId, {
+    data: '2026-11-05',
+    servicoId: servDino.id,
+    profissionalId: profDino.id,
+  });
+  assert.ok(Array.isArray(horariosDino));
+
+  // Nati consultando Barba com Dino -> Erro "Este profissional não realiza este serviço."
+  assert.throws(
+    () => barbearia.listarHorariosDisponiveis(empresaId, {
+      data: '2026-11-05',
+      servicoId: servDino.id,
+      profissionalId: profNati.id,
+    }),
+    /não realiza este serviço/i
+  );
+
+  // Nati consultando Corte Premium Nati -> OK
+  const horariosNati = barbearia.listarHorariosDisponiveis(empresaId, {
+    data: '2026-11-05',
+    servicoId: servNati.id,
+    profissionalId: profNati.id,
+  });
+  assert.ok(Array.isArray(horariosNati));
+});

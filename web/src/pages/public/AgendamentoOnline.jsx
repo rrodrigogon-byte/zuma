@@ -3,7 +3,7 @@
  * Acessível sem login — link compartilhável via WhatsApp/Instagram
  * Rota: /agendar/:slug (slug do tenant)
  */
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
 import { DINO_BARBERSHOP_LOGO } from '../../lib/brand'
 
@@ -123,6 +123,23 @@ const s = {
     border: `1px solid ${theme.red}`, background: 'rgba(242,122,137,.1)',
     color: theme.red, fontSize: 13, fontWeight: 700, lineHeight: 1.45,
   },
+}
+
+export function servicoDisponivelParaProfissional(servico, profissionalId, profissionalNome = '') {
+  if (!profissionalId || profissionalId === 'qualquer') return true
+  if (!servico) return false
+  const ids = Array.isArray(servico.profissionais_ids) && servico.profissionais_ids.length > 0
+    ? servico.profissionais_ids
+    : (Array.isArray(servico.profissionaisIds) && servico.profissionaisIds.length > 0 ? servico.profissionaisIds : [])
+  if (ids.length > 0) {
+    return ids.includes(profissionalId)
+  }
+  const nomeUpper = (servico.nome || '').toUpperCase()
+  const profUpper = (profissionalNome || '').toUpperCase()
+  if (/\bCOM DINO\b|\(DINO\)/i.test(nomeUpper) && !/\bDINO\b/i.test(profUpper)) return false
+  if (/\( *JO[AÃ]O *\)/i.test(nomeUpper) && !/\bJO[AÃ]O\b/i.test(profUpper)) return false
+  if (/\( *BRUNO OU NATI *\)/i.test(nomeUpper) && !(/\bBRUNO\b/i.test(profUpper) || /\bNATI\b/i.test(profUpper) || /\bNATANI\b/i.test(profUpper))) return false
+  return true
 }
 
 function slugify(valor) {
@@ -278,7 +295,15 @@ export default function AgendamentoOnline() {
         `${API}/api/publico/agendamento/${encodeURIComponent(slug)}/horarios?profissional_id=${encodeURIComponent(profissionalSel.id)}&data=${encodeURIComponent(dataSel)}&servico_id=${encodeURIComponent(servicoSel.id)}`
       )
       const data = await res.json().catch(() => ({}))
-      if (!res.ok || !data.ok) throw new Error(data.error || 'Não foi possível consultar os horários.')
+      if (!res.ok || !data.ok) {
+        const msg = data.error || 'Não foi possível consultar os horários.'
+        if (msg.includes('não realiza este serviço')) {
+          setErroFluxo(`O profissional ${profissionalSel?.nome || ''} não realiza o serviço "${servicoSel?.nome || ''}".`)
+          setHorariosDisponiveis([])
+          return
+        }
+        throw new Error(msg)
+      }
       setHorariosDisponiveis(Array.isArray(data.horarios) ? data.horarios : [])
     } catch (err) {
       setErroFluxo(err.message || 'Não foi possível consultar os horários.')
@@ -286,6 +311,27 @@ export default function AgendamentoOnline() {
       setCarregandoHorarios(false)
     }
   }
+
+  // Filtra serviços para exibir apenas os que o profissional selecionado realiza
+  const servicosExibidos = useMemo(() => {
+    if (!profissionalSel || profissionalSel.id === 'qualquer') return servicos
+    return servicos.filter(sv => servicoDisponivelParaProfissional(sv, profissionalSel.id, profissionalSel.nome))
+  }, [servicos, profissionalSel])
+
+  // Se o serviço previamente selecionado não for realizado pelo profissional ativo, limpa a seleção
+  useEffect(() => {
+    if (servicoSel && profissionalSel && profissionalSel.id !== 'qualquer') {
+      if (!servicoDisponivelParaProfissional(servicoSel, profissionalSel.id, profissionalSel.nome)) {
+        setServicoSel(null)
+      }
+    }
+  }, [profissionalSel, servicoSel])
+
+  // No Passo 2: exibe apenas os profissionais que realizam o serviço selecionado no Passo 1
+  const profissionaisExibidos = useMemo(() => {
+    if (!servicoSel) return profissionais
+    return profissionais.filter(p => servicoDisponivelParaProfissional(servicoSel, p.id, p.nome))
+  }, [profissionais, servicoSel])
 
   useEffect(() => {
     if (passo === 3 && profissionalSel && dataSel && servicoSel) carregarHorarios()
@@ -514,6 +560,7 @@ export default function AgendamentoOnline() {
               onClick={() => {
                 setBarbeiroPreselecionado(null)
                 setProfissionalSel(null)
+                setServicoSel(null)
               }}
             >
               Trocar
@@ -521,10 +568,21 @@ export default function AgendamentoOnline() {
           </div>
         )}
         <div style={s.card}>
-          <div style={s.stepTitle}>🛠️ Qual serviço deseja?</div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <div style={s.stepTitle}>🛠️ Qual serviço deseja?</div>
+            {profissionalSel && (
+              <span style={{ fontSize: 11, color: theme.green, fontWeight: 700 }}>
+                Serviços de {profissionalSel.nome} ({servicosExibidos.length})
+              </span>
+            )}
+          </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {servicos.length === 0 && <p role="status" style={{ color: theme.muted, fontSize: 13 }}>Nenhum serviço está habilitado para agendamento online.</p>}
-            {servicos.map(sv => (
+            {servicosExibidos.length === 0 && (
+              <p role="status" style={{ color: theme.muted, fontSize: 13 }}>
+                Nenhum serviço disponível para este profissional no momento.
+              </p>
+            )}
+            {servicosExibidos.map(sv => (
               <button
                 type="button"
                 key={sv.id}
@@ -649,18 +707,25 @@ export default function AgendamentoOnline() {
       <div style={s.container}>
         <div style={s.card}>
           <div style={s.stepTitle}>👤 Com quem prefere?</div>
+          {servicoSel && (
+            <div style={{ fontSize: 12, color: theme.muted, marginBottom: 14 }}>
+              Profissionais disponíveis para <strong style={{ color: theme.cream }}>{servicoSel.nome}</strong>:
+            </div>
+          )}
           <div style={s.grid2}>
-            {/* Opção "Qualquer disponível" */}
-            <button
-              type="button"
-              aria-pressed={profissionalSel?.id === 'qualquer'}
-              style={s.profCard(profissionalSel?.id === 'qualquer')}
-              onClick={() => { setProfissionalSel({ id: 'qualquer', nome: 'Qualquer disponível' }); setErroFluxo('') }}
-            >
-              <span aria-hidden="true" style={{ display: 'block', fontSize: 28, marginBottom: 6 }}>🎲</span>
-              <span style={{ fontSize: 12, fontWeight: 700 }}>Qualquer disponível</span>
-            </button>
-            {profissionais.map(p => (
+            {/* Opção "Qualquer disponível" quando há mais de 1 profissional */}
+            {profissionaisExibidos.length > 1 && (
+              <button
+                type="button"
+                aria-pressed={profissionalSel?.id === 'qualquer'}
+                style={s.profCard(profissionalSel?.id === 'qualquer')}
+                onClick={() => { setProfissionalSel({ id: 'qualquer', nome: 'Qualquer disponível' }); setErroFluxo('') }}
+              >
+                <span aria-hidden="true" style={{ display: 'block', fontSize: 28, marginBottom: 6 }}>🎲</span>
+                <span style={{ fontSize: 12, fontWeight: 700 }}>Qualquer disponível</span>
+              </button>
+            )}
+            {profissionaisExibidos.map(p => (
               <button
                 type="button"
                 key={p.id}
@@ -722,7 +787,35 @@ export default function AgendamentoOnline() {
               </div>
             )}
           </div>
-          {erroFluxo && <div role="alert" aria-live="assertive" style={s.alerta}>{erroFluxo}</div>}
+          {erroFluxo && (
+            <div role="alert" aria-live="assertive" style={s.alerta}>
+              <div>{erroFluxo}</div>
+              {erroFluxo.includes('não realiza') && (
+                <button
+                  type="button"
+                  style={{
+                    background: 'none',
+                    border: `1px solid ${theme.red}`,
+                    borderRadius: 8,
+                    color: '#fff',
+                    padding: '8px 12px',
+                    fontSize: 12,
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    marginTop: 10,
+                    width: '100%',
+                  }}
+                  onClick={() => {
+                    setServicoSel(null)
+                    setErroFluxo('')
+                    setPasso(1)
+                  }}
+                >
+                  ← Escolher outro serviço para {profissionalSel?.nome || 'este profissional'}
+                </button>
+              )}
+            </div>
+          )}
 
           <label style={s.label}>Selecione um dia</label>
           <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 10, marginBottom: 16 }}>

@@ -74,6 +74,8 @@ function servicoPublico(item) {
     tipo_preco: item.tipoPreco || 'fixo',
     preco_rotulo: barbearia.rotuloPrecoServico(item),
     duracao_min: Number(item.duracaoMinutos || 30),
+    profissionais_ids: Array.isArray(item.profissionaisIds) ? item.profissionaisIds : [],
+    profissionaisIds: Array.isArray(item.profissionaisIds) ? item.profissionaisIds : [],
   };
 }
 
