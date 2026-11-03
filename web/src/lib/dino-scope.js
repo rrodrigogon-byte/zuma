@@ -33,7 +33,7 @@ export function isDinoDedicatedHost(host = typeof window === 'undefined' ? '' : 
 }
 
 export function isDinoPath(pathname = typeof window === 'undefined' ? '' : window.location?.pathname) {
-  return /^\/barbeiro\/dino(?:\/|$)/i.test(String(pathname || ''))
+  return /^\/(?:barbeiro\/dino|admin\/barbearia)(?:\/|$|-erp)/i.test(String(pathname || ''))
 }
 
 export function scopeDinoAdminHeaders(path, headers = {}, host = typeof window === 'undefined' ? '' : window.location.hostname) {

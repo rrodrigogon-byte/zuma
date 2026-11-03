@@ -1,7 +1,67 @@
 import { db, save } from './db.js';
 import { v4 as uuid } from 'uuid';
 import { enviarMensagem } from './core/whatsapp.js';
+import { sendTextViaChatbotBackend } from './core/whatsapp-provider.js';
 import { carregarBaseConsolidada, consultarClientesRecuperacao } from './dino-recuperacao-avec.js';
+
+const DINO_COMMERCE_EMPRESA_ID = 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
+const DINO_COMMERCE_LOJA_ID = 'ab049a75-6e2e-4cc9-abbc-6fd11cdda1d8';
+const DINO_CANAL_ID = 'ae741d39-039c-4f4b-9183-9c5f639405a0';
+
+/**
+ * Envia mensagem pelo canal oficial de WhatsApp da Dino.
+ * Tenta pelo fluxo institucional do core com validação de escopo,
+ * e possui fallback direto para o chatbot backend NestJS da Dino.
+ */
+export async function enviarMensagemDinoCRM(telefone, texto) {
+  const telLimpo = String(telefone || '').replace(/\D/g, '');
+  if (!telLimpo || telLimpo.length < 10) {
+    return { ok: false, error: 'Número de telefone inválido para envio.' };
+  }
+
+  const canalTenant = {
+    empresa_id: DINO_COMMERCE_EMPRESA_ID,
+    loja_id: DINO_COMMERCE_LOJA_ID,
+    canal_id: DINO_CANAL_ID,
+    whatsapp_instance: 'dino',
+    instance: 'dino',
+  };
+
+  // 1. Tentar via pipeline oficial enviarMensagem
+  try {
+    const res = await enviarMensagem(canalTenant, telLimpo, texto);
+    if (res?.ok) {
+      return { ok: true, data: res.data };
+    }
+    console.warn('[CRM Disparo] enviarMensagem core retornou erro:', res?.error);
+  } catch (err) {
+    console.warn('[CRM Disparo] Exceção em enviarMensagem core:', err.message);
+  }
+
+  // 2. Fallback direto via sendTextViaChatbotBackend para a instância Dino
+  try {
+    const resDirect = await sendTextViaChatbotBackend({
+      instance: 'dino',
+      number: telLimpo,
+      text: texto,
+    });
+    if (resDirect?.ok) {
+      return { ok: true, data: resDirect.data };
+    }
+    console.warn('[CRM Disparo] sendTextViaChatbotBackend retornou erro:', resDirect?.error);
+    return {
+      ok: false,
+      error: resDirect?.error || 'Provedor WhatsApp não confirmou o envio.',
+      status: resDirect?.status,
+    };
+  } catch (errDirect) {
+    console.error('[CRM Disparo] Exceção em sendTextViaChatbotBackend:', errDirect.message);
+    return {
+      ok: false,
+      error: `Falha de conexão com backend WhatsApp: ${errDirect.message}`,
+    };
+  }
+}
 
 export async function dispararCampanhaCRM({
   empresaId = 'dino',
@@ -31,12 +91,15 @@ export async function dispararCampanhaCRM({
       .replace(/\{Dias Sem Vir\}/g, '78');
 
     try {
-      const canalTenant = {
-        empresa_id: empresaId,
-        loja_id: lojaId,
-        whatsapp_instance: 'dino',
-      };
-      const resEnvio = await enviarMensagem(canalTenant, telTeste, textoTeste);
+      const resEnvio = await enviarMensagemDinoCRM(telTeste, textoTeste);
+      if (!resEnvio?.ok) {
+        return {
+          ok: false,
+          destinatario: telTeste,
+          error: resEnvio?.error || 'Provedor recusou o envio do WhatsApp. Verifique se o canal está conectado.',
+          resultadoProvedor: resEnvio,
+        };
+      }
       return {
         ok: true,
         teste: true,
@@ -94,22 +157,15 @@ export async function dispararCampanhaCRM({
     return { ok: false, error: 'Nenhum cliente com telefone válido encontrado para este disparo.' };
   }
 
-  // 4. Instância WhatsApp
-  const canalTenant = {
-    empresa_id: empresaId,
-    loja_id: lojaId,
-    whatsapp_instance: 'dino',
-  };
-
-  // 5. Registrar campanha no banco
+  // 4. Registrar campanha no banco
   const campanhaId = uuid();
   const agoraIso = new Date().toISOString();
 
   const registroCampanha = {
     id: campanhaId,
     tipo: 'recuperacao_avec',
-    empresa_id: empresaId,
-    loja_id: lojaId,
+    empresa_id: DINO_COMMERCE_EMPRESA_ID,
+    loja_id: DINO_COMMERCE_LOJA_ID,
     criado_em: agoraIso,
     mensagem: usarMensagemPersonalizadaPorModelo ? '[Mensagem Personalizada por Perfil/Modelo]' : mensagem,
     usarMensagemPersonalizadaPorModelo: Boolean(usarMensagemPersonalizadaPorModelo),
@@ -132,7 +188,7 @@ export async function dispararCampanhaCRM({
     console.warn('[CRM Disparo] Erro ao salvar campanha em db.json:', e.message);
   }
 
-  // 6. Processar envio assíncrono em segundo plano (background com rate limit)
+  // 5. Processar envio assíncrono em segundo plano (background com rate limit)
   setTimeout(async () => {
     console.log(`[CRM Disparo] Iniciando envio da campanha ${campanhaId} para ${clientesValidos.length} clientes...`);
 
@@ -158,12 +214,12 @@ export async function dispararCampanhaCRM({
             .replace(/\{Link Agendamento\}/g, `https://kytto.com.br/barbeiro/dino?t=${c.telefoneLimpo}`);
         }
 
-        const envio = await enviarMensagem(canalTenant, c.telefoneLimpo, textoFinal);
+        const envio = await enviarMensagemDinoCRM(c.telefoneLimpo, textoFinal);
         if (envio?.ok) {
           registroCampanha.enviados++;
         } else {
           registroCampanha.falhas++;
-          console.warn(`[CRM Disparo] Aviso ao enviar para ${c.telefoneLimpo}:`, envio?.error);
+          console.warn(`[CRM Disparo] Falha no envio para ${c.telefoneLimpo}:`, envio?.error);
         }
       } catch (err) {
         registroCampanha.falhas++;

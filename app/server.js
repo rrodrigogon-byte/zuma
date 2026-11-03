@@ -3471,7 +3471,8 @@ async function resolverEscopoBarbearia(req, res, next) {
   const explicitDinoApp = String(req.query?.slug || req.headers['x-barbearia-slug'] || '').trim().toLowerCase() === 'dino'
     || String(req.headers.referer || '').toLowerCase().includes('/barbeiro/dino');
   const isDinoSignedUser = signedEmpresa === DINO_COMMERCE_EMPRESA_ID || signedEmpresa === DINO_LEGACY_EMPRESA_ID;
-  if ((explicitDinoApp || requestedEmpresa === DINO_COMMERCE_EMPRESA_ID)
+  const isDinoRequested = requestedEmpresa === DINO_COMMERCE_EMPRESA_ID || requestedEmpresa === DINO_LEGACY_EMPRESA_ID || requestedEmpresa.toLowerCase() === 'dino';
+  if ((explicitDinoApp || isDinoRequested)
     && (isPlatformAdminUser(req.user) || isMainAdminUser(req.user) || isDinoSignedUser || !signedEmpresa)) {
     req.barbeariaContext = { empresaId: DINO_COMMERCE_EMPRESA_ID, lojaId: DINO_COMMERCE_LOJA_ID };
     return next();
