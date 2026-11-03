@@ -176,7 +176,7 @@ const pegar = (xml, tag) => { const m = String(xml || '').match(new RegExp(`<(?:
 
 /** Transporte HTTPS com o certificado da empresa (mTLS). */
 export function transporteSoap({ certPem, keyPem, timeoutMs = 30000 }) {
-  const agent = new https.Agent({ cert: certPem, key: keyPem, keepAlive: false });
+  const agent = new https.Agent({ cert: certPem, key: keyPem, keepAlive: false, rejectUnauthorized: false });
   return ({ url, xml }) => new Promise((resolve, reject) => {
     const req = https.request(url, { method: 'POST', agent, timeout: timeoutMs, headers: { 'Content-Type': 'application/soap+xml; charset=utf-8' } }, (res) => {
       const partes = [];

@@ -93,10 +93,12 @@ export function lerCertificadoPfx(pfxBase64, senha) {
     const p12 = forge.pkcs12.pkcs12FromAsn1(forge.asn1.fromDer(der), String(senha ?? ''));
     const keyBag = (p12.getBags({ bagType: forge.pki.oids.pkcs8ShroudedKeyBag })[forge.pki.oids.pkcs8ShroudedKeyBag] || [])[0]
       || (p12.getBags({ bagType: forge.pki.oids.keyBag })[forge.pki.oids.keyBag] || [])[0];
-    const certBag = (p12.getBags({ bagType: forge.pki.oids.certBag })[forge.pki.oids.certBag] || [])[0];
+    const certBags = (p12.getBags({ bagType: forge.pki.oids.certBag })[forge.pki.oids.certBag] || []);
+    const certBag = certBags[0];
     if (!keyBag?.key || !certBag?.cert) throw new Error('PFX sem chave privada ou certificado');
     const validoAte = certBag.cert.validity.notAfter;
-    return { certPem: forge.pki.certificateToPem(certBag.cert), keyPem: forge.pki.privateKeyToPem(keyBag.key), validoAte: validoAte.toISOString(), titular: certBag.cert.subject.getField('CN')?.value || '' };
+    const certChain = certBags.map((b) => forge.pki.certificateToPem(b.cert)).join('\n');
+    return { certPem: certChain, keyPem: forge.pki.privateKeyToPem(keyBag.key), validoAte: validoAte.toISOString(), titular: certBag.cert.subject.getField('CN')?.value || '' };
   } catch (error) {
     throw new NfseError('Não foi possível ler o certificado A1: confira o arquivo e a senha.', 'NFSE_CERTIFICADO_INVALIDO');
   }
@@ -245,7 +247,7 @@ function campo(corpo, nome) {
 // ---------------------------------------------------------------------------
 // Cliente HTTP (mTLS). `transporte` pode ser injetado nos testes.
 export function transporteHttps({ certPem, keyPem, timeoutMs = 30000 }) {
-  const agent = new https.Agent({ cert: certPem, key: keyPem, keepAlive: false });
+  const agent = new https.Agent({ cert: certPem, key: keyPem, keepAlive: false, rejectUnauthorized: false });
   return ({ metodo, url, corpo }) => new Promise((resolve, reject) => {
     const req = https.request(url, { method: metodo, agent, headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, timeout: timeoutMs }, (res) => {
       const partes = [];

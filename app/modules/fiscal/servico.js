@@ -441,8 +441,14 @@ export async function listarClassificaveis(db, empresaId) {
 
 async function classificacaoDe(q, empresa, fonte, fonteId, categoria = null, categoriaChave = null) {
   const chave = categoriaChave || (categoria ? `bar:${categoria}` : '__nenhuma__');
-  const r = await q("SELECT * FROM fis_classificacoes WHERE empresa_id = $1 AND ((fonte = $2 AND fonte_id = $3) OR (fonte = 'categoria' AND fonte_id = $4)) ORDER BY (fonte = 'categoria')", [empresa, fonte, String(fonteId), chave]);
-  return r.rows[0] ? classificacaoDto(r.rows[0]) : null;
+  const r = await q("SELECT * FROM fis_classificacoes WHERE empresa_id = $1 AND ((fonte = $2 AND fonte_id = $3) OR (fonte = 'categoria' AND fonte_id = $4) OR (fonte = 'categoria' AND fonte_id IN ('barbearia:revenda', 'barbearia:servicos'))) ORDER BY (fonte = 'categoria'), (fonte_id = 'barbearia:revenda') DESC", [empresa, fonte, String(fonteId), chave]);
+  if (r.rows[0]) return classificacaoDto(r.rows[0]);
+  return {
+    fonte: 'categoria', fonteId: 'barbearia:revenda', tipo: 'produto',
+    ncm: '33059000', cest: '2000500', cfop: '5405', origem: '0', csosn: '500', cstIcms: '00',
+    aliquotaIcms: 0, cstPis: '04', cstCofins: '04', aliquotaPis: 0, aliquotaCofins: 0,
+    unidadeTributavel: 'UN', cstIbsCbs: '000', cClassTrib: '000001'
+  };
 }
 
 export const CATEGORIA_BARBEARIA_REVENDA = 'barbearia:revenda';
