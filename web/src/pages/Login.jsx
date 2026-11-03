@@ -75,7 +75,8 @@ export default function Login() {
         const data = validarRespostaLogin(await api.post('/api/admin/login', { user, senha }))
         login(data.token, data.user, false, data.sessao || {})
         if (['org', 'admin', 'organizador', 'gerente'].includes(String(data.user.role || '').toLowerCase())) {
-          const destinoAdmin = ['dino', 'stallone'].includes(data.sessao?.empresa?.brandKey) ? '/admin/ecommerce' : '/admin'
+          const brandKey = data.sessao?.empresa?.brandKey
+          const destinoAdmin = brandKey === 'dino' ? '/admin/barbearia-erp' : brandKey === 'stallone' ? '/admin/ecommerce' : '/admin'
           navigate(proximoSeguro || destinoAdmin, { replace: true })
         }
         else navigate(proximoSeguro || '/pdv', { replace: true })

