@@ -1104,7 +1104,7 @@ function cfgNfse(emit, serie, ambiente = 'homologacao') {
 }
 
 function montarNfse({ doc, emit, itens, valorTotal, material, agora, destinatario }) {
-  if (!emit.im) throw new ErroDominio('PENDENCIAS_FISCAIS', 'Inscrição municipal do emitente é obrigatória na NFS-e', 422);
+  // IM é opcional na NFS-e Nacional e proibida em municípios sem tabela complementar no CNC
   const cfg = cfgNfse(emit, doc.serie, ambienteDe(doc));
   const descricao = itens.map((i) => `${i.quantidade > 1 ? `${i.quantidade}x ` : ''}${i.descricaoOriginal || i.descricao}`).join('; ');
   let dps;
