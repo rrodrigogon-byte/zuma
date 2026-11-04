@@ -141,11 +141,14 @@ A aba **Clientes** coloca na mão do barbeiro o controle estratégico da sua pr�
 * **Hora de Voltar (16 a 30 dias):** Clientes cujo intervalo habitual de corte já venceu. Ideal para acionar via WhatsApp oferecendo vagas disponíveis.
 * **Sumidos / Em Risco (+30 dias):** Clientes que não comparecem há mais de um mês, necessitando de uma abordagem especial com condições atrativas.
 
-### 6.2 Mensagens Rápidas de WhatsApp em 1 Toque:
-O barbeiro pode escolher entre estilos de mensagens pré-formatadas para enviar com apenas um toque no botão **"💬 Chamar Zap"**:
-1. **Lembrete de Corte:** Mensagem gentil lembrando que o corte já completou 20 ou 30 dias.
-2. **Vaga VIP Hoje:** Mensagem avisando que abriu um horário especial na bancada para o dia de hoje.
-3. **Oferta Combo:** Sugestão de pacote ou corte + barba com condição especial.
+### 6.2 Mensagens de WhatsApp com Edição Livre e Toque Pessoal:
+Ao clicar em **"📲 Lembrar no Zap da Barbearia"**, o aplicativo abre a tela de revisão e edição da mensagem:
+
+![Modal de Edição de Mensagem Personalizada no App](/home/ubuntu/agro-open/docs/prints-barbeiro/09_mensagem_personalizada_editavel.png)
+
+1. **Estilos Rápidos de Apoio:** O barbeiro pode selecionar com 1 toque entre **💈 Lembrete**, **⚡ Vaga VIP** ou **🎁 Combo** para carregar o modelo inicial.
+2. **Caixa de Edição Livre:** O barbeiro pode alterar cada palavra do texto para falar no seu tom de amigo com o cliente, citar conversas anteriores, brincadeiras ou preferências específicas (ex: *"Passando pra avisar que tô com um horário livre hoje e a cervejinha já tá no grau!"*).
+3. **Segurança e Privacidade Absoluta (LGPD):** O número pessoal do cliente é mantido em sigilo e protegido contra exportação indevida. O envio é despachado pelo canal institucional oficial da Barbearia Dino (65 99917-2020) com cadência humanizada contra bloqueios da Meta.
 
 ### 6.3 Ficha 360° do Cliente:
 Ao clicar em **"👤 Ficha 360°"**, o barbeiro visualiza o histórico completo do cliente: quantidade de visitas anteriores, histórico de serviços realizados, preferência de estilo, se possui plano/pacote ativo e o valor total já gasto na barbearia (LTV).

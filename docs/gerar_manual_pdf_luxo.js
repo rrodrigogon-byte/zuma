@@ -22,6 +22,7 @@ const printGanhos = toBase64(path.join(PRINTS_DIR, '03_ganhos_comissoes.png'));
 const printMetas = toBase64(path.join(PRINTS_DIR, '04_metas_bonificacoes.png'));
 const printClientes = toBase64(path.join(PRINTS_DIR, '05_clientes_historico.png'));
 const printLink = toBase64(path.join(PRINTS_DIR, '06_meu_link_agendamento.png'));
+const printMensagemEditavel = toBase64(path.join(PRINTS_DIR, '09_mensagem_personalizada_editavel.png'));
 
 const htmlContent = `
 <!DOCTYPE html>
@@ -499,13 +500,14 @@ const htmlContent = `
         <li><strong>Em Dia (&le; 15 dias):</strong> Clientes que cortaram recentemente.</li>
         <li><strong>Hora de Voltar (16 a 30 dias):</strong> O sistema avisa que está no momento ideal de mandar uma mensagem.</li>
         <li><strong>Sumidos (+30 dias):</strong> Clientes que precisam de resgate.</li>
-        <li><strong>Botão "💬 Chamar Zap":</strong> Dispara mensagens prontas em 1 clique (Lembrete de Corte, Vaga VIP ou Oferta Combo).</li>
+        <li><strong>Disparo com Edição Livre:</strong> O barbeiro pode escolher um modelo (Lembrete, Vaga VIP, Combo) ou <strong>editar a mensagem livremente na caixa de texto</strong> para falar no seu tom de amigo com o cliente!</li>
+        <li><strong>Privacidade Garantida:</strong> O número pessoal do cliente é mantido em sigilo, saindo pelo WhatsApp corporativo oficial da Barbearia Dino (65 99917-2020).</li>
         <li><strong>Ficha 360°:</strong> Mostra histórico de visitas e valor total gasto (LTV).</li>
       </ul>
     </div>
     <div class="mockup-phone">
-      <img src="${printClientes}" alt="Aba Clientes" />
-      <div class="mockup-caption">Figura 5 — Carteira de Clientes e WhatsApp em 1 clique</div>
+      <img src="${printMensagemEditavel}" alt="Edição de Mensagem no WhatsApp" />
+      <div class="mockup-caption">Figura 5 — Edição de Mensagem Personalizada no App</div>
     </div>
   </div>
 
