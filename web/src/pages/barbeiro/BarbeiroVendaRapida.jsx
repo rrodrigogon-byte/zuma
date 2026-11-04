@@ -45,10 +45,13 @@ export default function BarbeiroVendaRapida({ profissional, atendimento, onPront
   }
   function alterarQtd(item, valor) {
     if (bloqueado) return
-    const qtdNum = Math.max(0, Math.min(99, Math.round(Number(valor) || 0)))
-    if (qtdNum === 0) {
-      setCarrinho(atual => atual.filter(i => i !== item))
-    } else {
+    if (valor === '') {
+      setCarrinho(atual => atual.map(i => i === item ? { ...i, quantidade: '' } : i))
+      return
+    }
+    const parsed = parseInt(valor, 10)
+    if (!isNaN(parsed) && parsed > 0) {
+      const qtdNum = Math.min(99, parsed)
       setCarrinho(atual => atual.map(i => i === item ? { ...i, quantidade: qtdNum } : i))
     }
   }
@@ -111,6 +114,11 @@ export default function BarbeiroVendaRapida({ profissional, atendimento, onPront
                 value={i.quantidade}
                 disabled={bloqueado}
                 onChange={e => alterarQtd(i, e.target.value)}
+                onBlur={() => {
+                  if (!i.quantidade || i.quantidade < 1) {
+                    alterarQtd(i, 1)
+                  }
+                }}
                 style={{ width: 44, height: 34, textAlign: 'center', borderRadius: 8, border: '1px solid #475569', background: '#0f172a', color: '#fff', fontWeight: 800, fontSize: 14 }}
               />
               <button
