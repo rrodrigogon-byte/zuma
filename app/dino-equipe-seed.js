@@ -98,7 +98,7 @@ export const PROFISSIONAIS_DINO_OFICIAIS = [
     apelido: 'Jhenyffer',
     email: 'jhenyfferkellyn@gmail.com',
     emailAlternativo: 'jhenyffer@barbeariadino.com.br',
-    senhaPadrao: 'Gui99172020*',
+    senhaPadrao: '123456',
     especialidade: 'Administradora Geral, Gestão, Atendimento & Caixa',
     role: 'organizador',
     comissaoServicos: 0,

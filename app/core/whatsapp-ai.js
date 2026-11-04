@@ -271,7 +271,9 @@ COMO ESCREVER E AGIR NO WHATSAPP:
 - Resolva fazendo, não prometendo: se existe ferramenta para o pedido, use-a na hora. Só ofereça a equipe quando o cliente pedir uma pessoa, reclamar, ou quando nenhuma ferramenta resolver.
 - Nunca termine com "vou verificar" ou "estou consultando": não há consulta em segundo plano. Consulte nesta resposta e entregue o resultado; se faltar informação, pergunte objetivamente.
 - Agendamento e Horários Indisponíveis: Se o cliente pedir um horário e ele estiver ocupado ou indisponível, NÃO FAÇA OUTRA PERGUNTA INÚTIL (ex: "qual período prefere?"). Em vez disso, chame sugerir_proximos_horarios e RETORNE IMEDIATAMENTE 3 OPÇÕES DIFERENTES DE HORÁRIO do mesmo dia. Se não houver 3 opções no mesmo dia, proponha 3 horários em outro dia.
-- Agendamento: quando o cliente escolher o horário (ou disser um horário que está livre), chame preparar_agendamento DIRETO, sem perguntar "posso preparar?" e sem pedir SIM antes. O sistema manda o resumo com SIM/NÃO; não repita o resumo, valores ou horários no seu texto.
+- NUNCA CHUTE SERVIÇO NÃO INFORMADO: Se o cliente perguntar de horário ("tem horário hoje?", "tem vaga essa semana?") SEM ESPECIFICAR o serviço desejado, NUNCA presuma nem chame sugerir_proximos_horarios para serviços aleatórios como Manicure, Unha, Sobrancelha, etc. Pergunte primeiro: "Temos sim! Qual serviço você deseja agendar (corte, barba ou combo) e qual seu barbeiro de preferência?".
+- ANTI-REPETIÇÃO DE HORÁRIOS: NUNCA repita a lista de 3 horários com data, profissional e preço se você já enviou esses horários na mensagem anterior. Se o cliente responder com frases curtas de conversa ou contexto ("tá bom", "eu tô na cidade", "consigo sim", "beleza"), NÃO mande novamente a lista inteira de horários! Pergunte apenas de forma objetiva: "Show! Qual dos horários anteriores você prefere que eu marque?".
+- Agendamento imediato: quando o cliente escolher o horário (ou disser "pode deixar esse horário então", "esse mesmo", "marca esse", "consigo sim", "pode ser esse"), determine o horário correspondente e chame preparar_agendamento DIRETO, sem perguntar "posso preparar?" e sem pedir SIM antes. NUNCA diga "Fechado!" ou "Combinado!" sem chamar a ferramenta preparar_agendamento nesta mesma resposta. O sistema manda o resumo com SIM/NÃO; não repita o resumo, valores ou horários no seu texto.
 - Busca de Serviços (Nomes Compostos): Quando o cliente pedir múltiplos serviços (ex: "barba e cabelo", "cortar cabelo e barba"), NUNCA diga "não encontrei o serviço X". Olhe a resposta de listar_servicos: pode ser que exista o pacote/combo "Corte e Barba", "Cabelo e Barba", ou você deva selecionar os dois separados na hora de agendar. Seja super flexível com o nome.
 - Nome: use o nome real da pessoa em customerName. Se não souber o nome (ou só tiver "Cliente"), pergunte "Qual seu nome para eu deixar no agendamento?" antes de preparar. Nunca chame o cliente de "Cliente".
 - Vários serviços: confira em listar_servicos quem faz cada um (campo profissionais). Os serviços extras (extraServiceIds) ficam automaticamente com quem faz cada um; não prometa que o mesmo profissional fará tudo.
@@ -795,7 +797,7 @@ export function withPendingReminder(replyText, pending, now = Date.now()) {
   if (!pending?.actionId || pending.mostrado !== true) return text;
   const preparedAt = new Date(pending.preparadoEm || 0).valueOf();
   if (preparedAt && now - preparedAt > actionTtlMinutes() * 60000) return text;
-  if (text.includes(CONFIRMATION_HINT) || text.includes(PENDING_REMINDER_HINT)) return text;
+  if (text.includes(CONFIRMATION_HINT) || text.includes(PENDING_REMINDER_HINT) || /esperando\s+(?:sua\s+)?confirma[cç][aã]o/i.test(text)) return text;
   const tipo = pending.type === 'pedido' ? 'seu pedido' : pending.type === 'cancelamento_pedido' ? 'o cancelamento do pedido' : pending.type === 'cancelamento' ? 'o cancelamento' : pending.type === 'remarcacao' ? 'a remarcação' : 'seu agendamento';
   // Só palavra explícita aqui: se o texto acima terminou numa pergunta ("quer incluir a barba?"),
   // um "quero" responde ESSA pergunta e não pode confirmar o horário sem querer.
@@ -1466,7 +1468,7 @@ export async function confirmNextAppointment(context) {
   const agora = Date.now();
   const diaHoje = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Cuiaba' }).format(new Date(agora));
   const pendentes = (lista?.agendamentos || [])
-    .filter((item) => item?.id && (item.dataAgenda === diaHoje || new Date(item.dataHora).valueOf() > agora - 60 * 60 * 1000) && !['cancelado', 'concluido', 'nao_compareceu'].includes(String(item.status)))
+    .filter((item) => item?.id && (item.dataAgenda === diaHoje || new Date(item.dataHora).valueOf() > agora - 60 * 60 * 1000) && !['cancelado', 'concluido', 'nao_compareceu', 'confirmado'].includes(String(item.status)))
     .sort((a, b) => new Date(a.dataHora) - new Date(b.dataHora));
   if (!pendentes.length) return null;
 
@@ -1599,14 +1601,33 @@ async function deterministicResponseCore(task, channel, session, message) {
   // Resposta ao lembrete ("CONFIRMO", "confirmado!") vale mesmo com a conversa na fila,
   // desde que ninguém da equipe tenha assumido: em 27/10 o "confirmado!" ficou sem
   // registro e o horário corria risco de cancelamento automático por falta de confirmação.
-  if (!session.assigned_to && !session.acao_pendente && presenceConfirmIntent(message.text)) {
+  const recentMsgs = await db.queryRead(
+    `SELECT papel, conteudo, criado_em, metadados FROM whatsapp_ai_messages
+      WHERE sessao_id = $1 AND id <> $2
+      ORDER BY criado_em DESC LIMIT 4`,
+    [session.id, message.id || '00000000-0000-0000-0000-000000000000'],
+  ).then((r) => r.rows).catch(() => []);
+  const ultimaMsg = recentMsgs[0] || null;
+  const minutosDesdeUltima = ultimaMsg?.criado_em ? (Date.now() - new Date(ultimaMsg.criado_em).valueOf()) / 60000 : 999;
+  const conversaRecente = minutosDesdeUltima < 45;
+  const ultimoEnvioEraLembrete = recentMsgs.some((m) =>
+    m.papel === 'assistant' && (
+      m.metadados?.kind === 'reminder' ||
+      m.metadados?.tipo === 'lembrete_presenca' ||
+      m.metadados?.tipo === 'confirmacao_automatica' ||
+      /\b(?:responda\s+confirmo|passando\s+pra\s+(?:lembrar|confirmar)|confirmar\s+seu\s+hor[aá]rio)\b/i.test(m.conteudo || '')
+    )
+  );
+  const explicitPresenceConfirm = /\b(?:confirmo\s+presen[cç]a|confirmo\s+(?:o\s+)?hor[aá]rio|estarei\s+(?:a[ií]|l[aá])|vou\s+(?:sim|comparecer)|confirmad[ií]ssimo)\b/i.test(message.text);
+
+  if (!session.assigned_to && !session.acao_pendente && (explicitPresenceConfirm || (ultimoEnvioEraLembrete && presenceConfirmIntent(message.text)))) {
     const confirmado = await confirmNextAppointment(context).catch(() => null);
     if (confirmado) return confirmado;
   }
   if (session.status === 'humano') return { text: null, kind: 'human_queue' };
-  const greeting = standaloneGreetingReply(message.text, { pendingAction: Boolean(session.acao_pendente), customerName: context.customerName });
+  const greeting = !conversaRecente ? standaloneGreetingReply(message.text, { pendingAction: Boolean(session.acao_pendente), customerName: context.customerName }) : null;
   const consentQuestionOpen = Boolean(session.personalization_prompted_at) && session.estado?.personalizacaoRespondida !== true;
-  if (greeting || (persona && !session.acao_pendente && !consentQuestionOpen && isPersonaGreeting(message.text))) {
+  if (greeting || (!conversaRecente && persona && !session.acao_pendente && !consentQuestionOpen && isPersonaGreeting(message.text))) {
     return { text: persona ? personaGreeting(persona, { text: message.text, seed: message.externalId, customerName: context.customerName }) : greeting, kind: 'greeting' };
   }
   if (resumeIntent(message.text) && !prefersSelfService(message.text)) return { text: 'A automação só pode ser retomada pela equipe após concluir o atendimento humano.', kind: 'resume_blocked' };
@@ -1935,7 +1956,8 @@ async function deterministicResponseCore(task, channel, session, message) {
     }
     if (shouldAskPersonalization({ policy, consent: profileResult.consent, session, pendingAction: Boolean(pendingNow || session.acao_pendente) })) {
       await markPersonalizationPrompted(context, session, message.externalId).catch(() => null);
-      replyText = `${String(replyText || '').trim()}\n\n${persona ? personaPersonalizationQuestion(persona) : PERSONALIZATION_QUESTION}`.trim();
+      const q = persona ? personaPersonalizationQuestion(persona) : PERSONALIZATION_QUESTION;
+      if (!/prefer[eê]ncias|guardar\s+suas/i.test(replyText)) replyText = `${String(replyText || '').trim()}\n\n${q}`.trim();
     }
     await rememberQuotedPrices(session, presentationContext.toolResults).catch(() => null);
     const sticker = presentationContext.sticker && !pendingNow ? presentationContext.sticker : null;

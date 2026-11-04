@@ -469,12 +469,12 @@ test('PATCH e status não aceitam ledger forjado nem confirmam pagamento sem o f
   assert.equal(listarLancamentos(EMPRESA_A, { origem: 'barbearia_comanda' }).length, 0);
 });
 
-test('comanda parcialmente paga não pode ser cancelada por rotas genéricas', () => {
+test('comanda parcialmente paga não pode ser cancelada por rotas genéricas', async () => {
   const servico = baseServico();
   const comanda = criarComandaBarbearia(EMPRESA_A, { lojaId: LOJA, itens: [{ tipo: 'servico', servicoId: servico.id }] });
   const parcial = registrarPagamentoComandaBarbearia(EMPRESA_A, comanda.id, { confirmado: true, lojaId: LOJA, meioPagamento: 'pix', valor: 20, chaveIdempotencia: 'parcial-1' });
   assert.equal(parcial.status, 'parcialmente_paga');
-  assert.throws(() => cancelarComandaBarbearia(EMPRESA_A, comanda.id), /fluxo financeiro apropriado/);
+  await assert.rejects(async () => await cancelarComandaBarbearia(EMPRESA_A, comanda.id), /fluxo financeiro apropriado/);
   assert.throws(() => alterarStatusComandaBarbearia(EMPRESA_A, comanda.id, 'cancelada'), /fluxo financeiro apropriado/);
   assert.equal(obterComandaBarbearia(EMPRESA_A, comanda.id).status, 'parcialmente_paga');
   assert.equal(listarLancamentos(EMPRESA_A, { origem: 'barbearia_comanda' }).length, 1);
@@ -661,7 +661,7 @@ test('reservas: saldo 1 não é reservado duas vezes e replay/conflict são 409 
   assert.equal(primeira.lojaId, 'loja-reserva');
 });
 
-test('reservas: commit, release, expire e cancelamento convertem/liberam uma única vez', () => {
+test('reservas: commit, release, expire e cancelamento convertem/liberam uma única vez', async () => {
   const produto = criarProdutoRevenda(EMPRESA_A, { lojaId: 'loja-reserva', nome: 'Produto ciclo', precoVenda: 10, estoqueAtual: 3 });
   const commitida = reserveInventoryForOperation(EMPRESA_A, { lojaId: 'loja-reserva', produtoId: produto.id, quantidade: 1, origem: 'teste', actionId: 'ciclo-commit', expiresAt: '2099-01-01T00:00:00.000Z' });
   const baixa = commitInventoryReservation(EMPRESA_A, { lojaId: 'loja-reserva', reservationId: commitida.id, actionId: 'commit-1' });
@@ -680,9 +680,9 @@ test('reservas: commit, release, expire e cancelamento convertem/liberam uma ún
 
   const comanda = criarComandaBarbearia(EMPRESA_A, { lojaId: 'loja-reserva', itens: [{ tipo: 'produto', produtoId: produto.id, quantidade: 1 }] });
   const idReservaComanda = comanda.reservasEstoqueIds[0];
-  cancelarComandaBarbearia(EMPRESA_A, comanda.id, { motivo: 'teste' });
+  await cancelarComandaBarbearia(EMPRESA_A, comanda.id, { motivo: 'teste' });
   assert.equal(listarInventoryReservations(EMPRESA_A, { lojaId: 'loja-reserva', status: 'released' }).some((item) => item.id === idReservaComanda), true);
-  assert.equal(cancelarComandaBarbearia(EMPRESA_A, comanda.id).idempotente, true);
+  assert.equal((await cancelarComandaBarbearia(EMPRESA_A, comanda.id)).idempotente, true);
 });
 
 test('revenda distingue saldo explicitamente informado do zero operacional padrão', () => {

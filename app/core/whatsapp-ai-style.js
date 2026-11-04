@@ -240,7 +240,27 @@ export function removeSelfIntro(text) {
  * de uma ação, por exemplo) são quebrados em frases, sem perder texto.
  */
 export function splitBubbles(content, { max = 120, hardMax = 4 } = {}) {
-  const paragraphs = String(content ?? '').split(/\n{2,}/).map((p) => p.trim()).filter(Boolean);
+  const rawParagraphs = String(content ?? '').split(/\n{2,}/).map((p) => p.trim()).filter(Boolean);
+  const paragraphs = [];
+  for (let i = 0; i < rawParagraphs.length; i++) {
+    const current = rawParagraphs[i];
+    const next = rawParagraphs[i + 1];
+    const isSummaryOrAction = (txt) => /Confere aí:|Para confirmar|👉|Responda \*?SIM\*?/i.test(txt);
+    const isConversationalLead = (txt) => /^(?:Opa|Beleza|Show|Fechado|Isso mesmo|Bom dia|Boa tarde|Boa noite|E aí|Fala|Perfeito|Tranquilo)\b/i.test(txt);
+    const isShortQuestion = (txt) => /\?$/.test(txt.trim()) && txt.length <= 45;
+    // Agrupa parágrafo introdutório muito curto com o corpo da mensagem, exceto se for resumo de confirmação
+    if (next && isConversationalLead(current) && current.length <= 45 && !isSummaryOrAction(current) && !isSummaryOrAction(next) && (current.length + next.length <= max * 1.8)) {
+      paragraphs.push(`${current}\n\n${next}`);
+      i++;
+      continue;
+    }
+    // Agrupa pergunta final curta com o parágrafo anterior
+    if (paragraphs.length && isShortQuestion(current) && !isSummaryOrAction(current) && !isSummaryOrAction(paragraphs[paragraphs.length - 1]) && (paragraphs[paragraphs.length - 1].length + current.length <= max * 1.8)) {
+      paragraphs[paragraphs.length - 1] = `${paragraphs[paragraphs.length - 1]}\n\n${current}`;
+      continue;
+    }
+    paragraphs.push(current);
+  }
   const bubbles = [];
   for (const paragraph of paragraphs) {
     if (paragraph.length <= max * 1.6 || paragraph.includes('\n') || /https?:\/\//i.test(paragraph)) { bubbles.push(paragraph); continue; }
@@ -272,4 +292,3 @@ export function styleReport(content, { max = 120 } = {}) {
     banned,
   };
 }
-

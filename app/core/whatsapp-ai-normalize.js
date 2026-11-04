@@ -263,7 +263,7 @@ export function cleanCustomerDisplayName(rawName, { firstNameOnly = false } = {}
   if (!name) return ''
   name = name.replace(/\s*\([^)]*\)/g, ' ')
   name = name.split(/[,;\-—]/)[0]
-  name = name.replace(/\b(novo|nova|lead\s+whatsapp\s*\d*|cliente\s+balc[aã]o|dino|barbearia)\b/gi, ' ')
+  name = name.replace(/\b(novo|nova|lead\s+whatsapp\s*\d*|lead\b|cliente\s+balc[aã]o|dino|barbearia|eng\b|eng\.\b|civil\b|engenheiro\b|engenheira\b|adv\b|advogado\b|advogada\b)\b/gi, ' ')
   name = name.replace(/\b(hoje|amanh[aã]|segunda|ter[cç]a|quarta|quinta|sexta|s[aá]bado|domingo|\d{1,2}\/\d{1,2}|\d{1,2}h|\d{1,2}:\d{2})\b/gi, ' ')
   name = name.replace(/\s+/g, ' ').trim()
   if (!name) return ''

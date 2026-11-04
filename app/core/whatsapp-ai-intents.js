@@ -180,12 +180,12 @@ export function formatForWhatsapp(text) {
   return out.trim();
 }
 // Nome genérico ("Cliente", "Contato", só números) não é nome de pessoa.
-const GENERIC_NAMES = new Set(['cliente', 'clientes', 'contato', 'contact', 'customer', 'client', 'usuario', 'usuário', 'user', 'whatsapp', 'sem nome', 'desconhecido', 'nome', 'teste', 'eu', 'mim']);
+const GENERIC_NAMES = new Set(['cliente', 'clientes', 'contato', 'contact', 'customer', 'client', 'usuario', 'usuário', 'user', 'whatsapp', 'sem nome', 'desconhecido', 'nome', 'teste', 'eu', 'mim', 'eng', 'eng civil', 'engenheiro', 'engenheira', 'adv', 'advogado', 'advogada', 'dr', 'dra', 'doutor', 'doutora', 'lead']);
 export function isGenericCustomerName(value) {
   const name = String(value ?? '').normalize('NFC').trim().toLowerCase().replace(/[.\-_~*]+/g, ' ').replace(/\s+/g, ' ').trim();
   if (!name || name.length < 2) return true;
   if (!/\p{L}/u.test(name)) return true;
-  return GENERIC_NAMES.has(name) || /^cliente\s*\d*$/.test(name);
+  return GENERIC_NAMES.has(name) || /^(?:cliente|contato|lead|user)\b/i.test(name) || /^(?:eng|adv|dr|dra)\b/i.test(name);
 }
 
 /**

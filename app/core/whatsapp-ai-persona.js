@@ -479,7 +479,7 @@ export function personaAppointmentMessage(persona, { evento, nome, servico, prof
   // "Corte com Dino" + "Dino" saía "Corte com Dino com Dino" (lembrete de 15/10).
   const servicoComQuem = serviceWithProfessional(servico, profissional);
   if (evento === 'confirmacao_dia') return `${oi} Passando pra confirmar seu horário de hoje: ${quando}, ${servicoComQuem}. Responda CONFIRMO, REMARCAR ou CANCELO. ${rodape}`;
-  if (evento === 'lembrete') return `${oi} Passando pra confirmar seu horário de amanhã: ${quando}, ${servicoComQuem}. Responda CONFIRMO, REMARCAR ou CANCELO. ${rodape}`;
+  if (evento === 'lembrete') return `${oi} Passando pra lembrar: ${quandoRelativo ? `${quandoRelativo}, ` : 'amanhã, '}${quando}, ${servicoComQuem}. Responda CONFIRMO, REMARCAR ou CANCELO. ${rodape}`;
   if (evento === 'remarcado') return `${oi} Seu horário mudou: ${quando}, ${servicoComQuem}. ${rodape}`;
   if (evento === 'cancelado') return `${oi} Seu horário na ${clean(loja, 120) || 'barbearia'} foi cancelado. Quer marcar outro? ${rodape}`;
   return `${oi} Tá marcado: ${quando}, ${servicoComQuem}. ${rodape}`;

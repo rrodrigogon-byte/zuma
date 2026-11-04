@@ -2285,7 +2285,7 @@ export function perfilDoTelefone(empresaId, telefone, opcoes = {}) {
     }
   }
   const profPreferido = Object.entries(contagemProf).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
-  const periodoPreferido = Object.entries(contagemHoras).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
+  const periodoPreferido = Object.entries(contagemHoras).filter(([_, count]) => count > 0).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
   const servicoHabitual = Object.entries(contagemServicos).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
       const padraoCliente = {
     profissionalPreferido: profPreferido,
