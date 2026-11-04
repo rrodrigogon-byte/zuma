@@ -5783,10 +5783,27 @@ app.post('/api/admin/barbearia/comandas/:id/consumo-interno', (req, res) => {
     res.json({ ok: true, ...resultado });
   } catch (error) { res.status(400).json({ error: error.message }); }
 });
-app.post('/api/admin/barbearia/comandas/:id/cancelar', (req, res) => {
+app.post('/api/admin/barbearia/comandas/:id/cancelar', async (req, res) => {
   try {
     if (!comandaBarbeariaDaSessao(req, req.params.id)) return res.status(404).json({ error: 'Comanda não encontrada na empresa/unidade ativa.' });
-    const comanda = barbeariaErpKytto.cancelarComandaBarbearia(legacyEmpresaId(req), req.params.id, req.body || {});
+    const comanda = await barbeariaErpKytto.cancelarComandaBarbearia(legacyEmpresaId(req), req.params.id, {
+      ...(req.body || {}),
+      lojaId: legacyLojaId(req),
+      usuario: req.user?.nome || req.user?.email || 'operador',
+    });
+    res.json({ ok: true, comanda });
+  } catch (error) { res.status(400).json({ error: error.message }); }
+});
+
+app.post('/api/admin/barbearia/comandas/:id/cancelar-finalizada', async (req, res) => {
+  try {
+    if (!comandaBarbeariaDaSessao(req, req.params.id)) return res.status(404).json({ error: 'Comanda não encontrada na empresa/unidade ativa.' });
+    const comanda = await barbeariaErpKytto.cancelarComandaBarbearia(legacyEmpresaId(req), req.params.id, {
+      ...(req.body || {}),
+      lojaId: legacyLojaId(req),
+      usuario: req.user?.nome || req.user?.email || 'operador',
+      confirmado: true,
+    });
     res.json({ ok: true, comanda });
   } catch (error) { res.status(400).json({ error: error.message }); }
 });
@@ -5838,6 +5855,8 @@ function resumoOperacaoBarbearia(req) {
     quantidadeProdutos,
     valorProdutos,
     fechamentoDia,
+    comandas,
+    comandasFechadas: comandas.filter((item) => ['paga', 'em_conta', 'cancelada'].includes(item.status)),
   };
 }
 
@@ -5860,6 +5879,20 @@ app.get('/api/admin/barbearia/operacao/caixas/:id/movimentos', (req, res) => {
   const caixa = caixaBarbeariaDaSessao(req, req.params.id);
   if (!caixa) return res.status(404).json({ error: 'Caixa não encontrado na empresa/unidade ativa.' });
   res.json({ ok: true, caixa, movimentos: caixaKytto.movimentosDoCaixa(legacyEmpresaId(req), caixa.id) });
+});
+app.get('/api/admin/barbearia/operacao/caixas/:id/comandas', (req, res) => {
+  try {
+    const empresaId = legacyEmpresaId(req);
+    const lojaId = legacyLojaId(req);
+    const caixa = caixaBarbeariaDaSessao(req, req.params.id);
+    if (!caixa) return res.status(404).json({ error: 'Caixa não encontrado na empresa/unidade ativa.' });
+    const comandas = barbeariaErpKytto.listarComandasBarbearia(empresaId, {
+      caixaId: caixa.id,
+      lojaId,
+      data: caixa.dataOperacao ? String(caixa.dataOperacao).slice(0, 10) : undefined,
+    });
+    res.json({ ok: true, caixa, comandas, total: comandas.length });
+  } catch (error) { res.status(400).json({ error: error.message }); }
 });
 app.post('/api/admin/barbearia/operacao/caixas/:id/movimentos', (req, res) => {
   try {
@@ -6522,7 +6555,7 @@ function erroEstornoCoordenado(res, error) {
   const safeStatus = [400, 409, 503].includes(status) ? status : 400;
   return res.status(safeStatus).json({ error: String(error?.message || 'Não foi possível solicitar o estorno.').slice(0, 240), code: error?.code || 'DINO_REVERSAL_ERROR' });
 }
-app.post('/api/admin/barbearia/comandas/:id/estorno', requireRole('admin', 'organizador'), destructiveAdminGuard, async (req, res) => {
+app.post('/api/admin/barbearia/comandas/:id/estorno', requireRole('admin', 'organizador', 'gerente', 'atendente'), async (req, res) => {
   if (req.body?.confirmado !== true) return res.status(409).json({ error: 'A confirmação explícita do estorno é obrigatória.', code: 'DINO_REVERSAL_CONFIRMATION_REQUIRED' });
   const idempotencyKey = String(req.get('Idempotency-Key') || req.body?.idempotencyKey || '').trim();
   if (!idempotencyKey) return res.status(400).json({ error: 'Idempotency-Key é obrigatório.', code: 'DINO_IDEMPOTENCY_KEY_REQUIRED' });
@@ -6532,11 +6565,13 @@ app.post('/api/admin/barbearia/comandas/:id/estorno', requireRole('admin', 'orga
       actionId: req.body?.actionId || req.body?.action_id,
       operador: req.user?.id || req.user?.email || req.user?.nome,
       approvedBy: req.body?.approvedBy || req.user?.id || req.user?.email,
+      estornoManual: true,
+      confirmarEstornoManual: true,
     });
     return respostaEstornoCoordenado(req, res, resultado);
   } catch (error) { return erroEstornoCoordenado(res, error); }
 });
-app.post('/api/admin/barbearia/vendas-revenda/:id/estorno', requireRole('admin', 'organizador'), destructiveAdminGuard, async (req, res) => {
+app.post('/api/admin/barbearia/vendas-revenda/:id/estorno', requireRole('admin', 'organizador', 'gerente', 'atendente'), async (req, res) => {
   if (req.body?.confirmado !== true) return res.status(409).json({ error: 'A confirmação explícita do estorno é obrigatória.', code: 'DINO_REVERSAL_CONFIRMATION_REQUIRED' });
   const idempotencyKey = String(req.get('Idempotency-Key') || req.body?.idempotencyKey || '').trim();
   if (!idempotencyKey) return res.status(400).json({ error: 'Idempotency-Key é obrigatório.', code: 'DINO_IDEMPOTENCY_KEY_REQUIRED' });

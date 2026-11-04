@@ -438,6 +438,23 @@ export function atualizarContaReceber(empresaId, contaId, dados) {
   return conta;
 }
 
+export function cancelarContaReceber(empresaId, contaId, dados = {}) {
+  const store = clientesPersistidos(empresaId);
+  const conta = store.contasReceber[contaId];
+  if (!conta || conta.empresaId !== empresaId) return null;
+  const cliente = obterCliente(empresaId, conta.clienteId);
+  const saldoAntes = !['paga', 'cancelada'].includes(conta.status) ? Number(conta.valor || 0) : 0;
+  conta.status = 'cancelada';
+  conta.canceladaEm = agora();
+  conta.cancelamentoMotivo = dados.motivo || 'Cancelamento de comanda';
+  conta.atualizadoEm = agora();
+  if (cliente && saldoAntes > 0) {
+    cliente.saldoDevedor = Math.max(0, Number(cliente.saldoDevedor || 0) - saldoAntes);
+  }
+  save();
+  return conta;
+}
+
 export function listarContasReceber(empresaId, filtros = {}) {
   return Object.values(clientesPersistidos(empresaId).contasReceber)
     .filter((conta) => conta.empresaId === empresaId)

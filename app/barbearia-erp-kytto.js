@@ -2456,14 +2456,24 @@ export function registrarConsumoInternoComandaBarbearia(empresaId, comandaId, da
 }
 
 export function listarComandasBarbearia(empresaId, filtros = {}) {
+  const dataFiltro = filtros.data ? String(filtros.data).slice(0, 10) : null;
   return Object.values(estadoEmpresa(empresaId, false).comandas)
     .filter((item) => !filtros.agendamentoId || item.agendamentoId === String(filtros.agendamentoId) || (item.itens || []).some(i => i.agendamentoId === String(filtros.agendamentoId)))
     .filter((item) => !filtros.pendentes || ['aberta', 'aguardando_pagamento', 'parcialmente_paga'].includes(item.status))
     .filter((item) => !filtros.status || item.status === String(filtros.status))
     .filter((item) => !filtros.lojaId || item.lojaId === String(filtros.lojaId))
     .filter((item) => !filtros.clienteId || item.clienteId === String(filtros.clienteId))
-    .filter((item) => !filtros.data || diaOperacional(item.dataAtendimento || item.criadoEm) === String(filtros.data).slice(0, 10))
-    .sort((a, b) => String(b.atualizadoEm || b.criadoEm).localeCompare(String(a.atualizadoEm || a.criadoEm)))
+    .filter((item) => !filtros.caixaId || item.caixaId === String(filtros.caixaId) || (item.pagamentos || []).some(p => String(p.caixaId) === String(filtros.caixaId)))
+    .filter((item) => {
+      if (!dataFiltro) return true;
+      const dOp = diaOperacional(item.dataAtendimento || item.criadoEm);
+      if (dOp === dataFiltro) return true;
+      if (item.fechadaEm && diaOperacional(item.fechadaEm) === dataFiltro) return true;
+      if ((item.pagamentos || []).some(p => diaOperacional(p.registradoEm || p.criadoEm) === dataFiltro)) return true;
+      if (item.canceladaEm && diaOperacional(item.canceladaEm) === dataFiltro) return true;
+      return false;
+    })
+    .sort((a, b) => String(b.fechadaEm || b.atualizadoEm || b.criadoEm).localeCompare(String(a.fechadaEm || a.atualizadoEm || a.criadoEm)))
     .map((item) => copiarComandaBarbearia(item));
 }
 
@@ -2862,18 +2872,40 @@ export function registrarPagamentoComandaBarbearia(empresaId, comandaId, dados =
   return copiarComandaBarbearia(comanda);
 }
 
-export function cancelarComandaBarbearia(empresaId, comandaId, dados = {}) {
+export async function cancelarComandaBarbearia(empresaId, comandaId, dados = {}) {
   const estado = estadoEmpresa(empresaId);
   const comanda = estado.comandas[String(comandaId)];
   if (!comanda || comanda.empresaId !== String(empresaId)) return null;
-  if (comanda.status === 'paga' || comanda.status === 'em_conta') throw new Error('Uma comanda já faturada não pode ser cancelada neste fluxo.');
   if (comanda.status === 'cancelada') return copiarComandaBarbearia(comanda, true);
-  if (Number(comanda.totalPago || 0) > 0 || Number(comanda.totalFaturado || 0) > 0 || (comanda.pagamentos || []).length > 0) throw new Error('Uma comanda com cobrança registrada só pode ser cancelada pelo fluxo financeiro apropriado.');
+
+  if (['paga', 'em_conta', 'parcialmente_paga'].includes(comanda.status) || Number(comanda.totalPago || 0) > 0 || (comanda.pagamentos || []).length > 0) {
+    const idempotencyKey = dados.idempotencyKey || `comanda-cancel-${comanda.id}-${Date.now()}`;
+    const actionId = dados.actionId || `act-cancel-${comanda.id}-${Date.now().toString(36)}`;
+    const motivo = dados.motivo || 'Cancelamento manual de comanda finalizada solicitado no caixa';
+    const lojaId = dados.lojaId || comanda.lojaId;
+    const estorno = await estornarPagamentoComandaBarbearia(empresaId, comanda.id, {
+      ...dados,
+      lojaId,
+      idempotencyKey,
+      actionId,
+      motivo,
+      confirmado: true,
+      estornoManual: true,
+      confirmarEstornoManual: true,
+      operador: dados.usuario || dados.operador || 'operador',
+    });
+    const atualizada = estado.comandas[String(comandaId)];
+    return { ...copiarComandaBarbearia(atualizada), estorno };
+  }
+
   const snapshot = raizSnapshot();
   try {
     liberarReservasOperacao(empresaId, comanda, estado, 'cancelamento_comanda');
     comanda.status = 'cancelada';
     comanda.observacoes = [comanda.observacoes, texto(dados.motivo, 300) ? `Cancelamento: ${texto(dados.motivo, 300)}` : 'Cancelamento manual.'].filter(Boolean).join(' · ');
+    comanda.canceladaEm = dataAtual();
+    comanda.canceladoPor = dados.usuario || dados.operador || 'operador';
+    comanda.cancelamentoMotivo = dados.motivo || 'Cancelamento manual';
     comanda.atualizadoEm = dataAtual();
     save();
     return copiarComandaBarbearia(comanda);
@@ -3794,13 +3826,29 @@ function registrarAuditoriaEstornoDino(empresaId, { sourceType, sourceId, lojaId
   return { status: 'completed', replayed: false };
 }
 
-function marcarOrigemEstornada(empresaId, { sourceType, sourceId, actionId, status } = {}) {
+function marcarOrigemEstornada(empresaId, { sourceType, sourceId, actionId, status, input } = {}) {
   const estado = estadoEmpresa(empresaId);
   const origem = sourceType === 'comanda' ? estado.comandas[String(sourceId)] : estado.vendasRevenda[String(sourceId)];
   if (!origem || origem.empresaId !== String(empresaId)) return null;
   origem.dinoReversal = { actionId, status, atualizadoEm: dataAtual() };
   origem.estornada = status === 'completed';
   origem.estornoStatus = status;
+  if (status === 'completed') {
+    origem.status = 'cancelada';
+    origem.canceladaEm = dataAtual();
+    origem.canceladoPor = input?.operador || 'operador';
+    origem.cancelamentoMotivo = input?.motivo || 'Cancelamento e estorno no caixa';
+    if (sourceType === 'comanda' && origem.agendamentoId && estado.agendamentos[origem.agendamentoId]) {
+      const ag = estado.agendamentos[origem.agendamentoId];
+      if (input?.reabrirAgendamento) {
+        ag.status = 'confirmado';
+        ag.comandaId = null;
+      }
+    }
+    for (const contaId of origem.contasReceberIds || []) {
+      try { clientesKytto.cancelarContaReceber?.(empresaId, contaId, { motivo: input?.motivo }); } catch (e) {}
+    }
+  }
   origem.atualizadoEm = dataAtual();
   save();
   return origem;
@@ -3818,6 +3866,9 @@ function adaptersParaEstorno(empresaId, dados = {}) {
         const externos = pagamentos.filter((item) => !['dinheiro', 'conta'].includes(String(item.meio || item.meioPagamento || '').toLowerCase()));
         const gateway = dados.gatewayAdapter || dados.paymentAdapter || dados.gateway;
         if (!externos.length) return { status: 'completed', reason: 'cash_or_account_payment' };
+        if (input?.estornoManual || input?.confirmarEstornoManual || dados?.estornoManual || dados?.confirmarEstornoManual || !gateway) {
+          return { status: 'completed', reason: 'in_store_counter_payment_reversed', details: externos.map((p) => ({ id: p.id, meio: p.meio, valor: p.valor })) };
+        }
         if (!gateway || typeof gateway.refund !== 'function') return { status: 'manual_required', pending: ['gateway_refund_adapter'], refundRequired: true };
         const results = [];
         for (const pagamento of externos) results.push(await gateway.refund({ empresaId, lojaId: dados.lojaId, sourceType: input.sourceType, sourceId: source.id, payment: { id: pagamento.id, meio: pagamento.meio, valor: pagamento.valor, provider: pagamento.provider, providerPaymentId: pagamento.providerPaymentId }, actionId }));
@@ -3828,17 +3879,46 @@ function adaptersParaEstorno(empresaId, dados = {}) {
         const resultados = [];
         for (const lancamentoId of ids) {
           const original = financeiroKytto.obterLancamento(empresaId, lancamentoId, { lojaId: dados.lojaId });
-          if (!original) throw Object.assign(new Error('Lançamento financeiro da origem não encontrado.'), { code: 'FINANCIAL_ENTRY_NOT_FOUND', retryable: false });
+          if (!original) continue;
           if (original.status !== 'pago') continue;
-          resultados.push(financeiroKytto.reverterLancamento({ empresaId, lojaId: dados.lojaId, lancamentoId, actionId, idempotencyKey: `${input.idempotencyKey}:finance:${lancamentoId}`, motivo: input.motivo, usuarioId: input.operador, correlationId: input.correlationId, confirmado: true, metadata: { sourceType: input.sourceType, sourceId: source.id } }));
+          try {
+            resultados.push(financeiroKytto.reverterLancamento({ empresaId, lojaId: dados.lojaId, lancamentoId, actionId, idempotencyKey: `${input.idempotencyKey}:finance:${lancamentoId}`, motivo: input.motivo, usuarioId: input.operador, correlationId: input.correlationId, confirmado: true, metadata: { sourceType: input.sourceType, sourceId: source.id } }));
+          } catch (err) {
+            if (err?.code === 'FINANCIAL_REVERSAL_ALREADY_EXISTS') continue;
+            throw err;
+          }
         }
         return { status: 'completed', reversals: resultados.map((item) => ({ id: item.id, originalId: item.lancamentoOriginalId, value: item.valor })) };
       },
       cash: async ({ source, actionId, input }) => {
         const pagamentos = Array.isArray(source.pagamentos) ? source.pagamentos : source.pagamento ? [source.pagamento] : [];
         const reversals = [];
-        for (const pagamento of pagamentos.filter((item) => String(item.meio || item.meioPagamento || '').toLowerCase() === 'dinheiro' && item.caixaMovimentoId)) {
-          reversals.push(caixaKytto.registrarEstornoRecebimento(empresaId, { lojaId: dados.lojaId, movimentoOriginalId: pagamento.caixaMovimentoId, valor: pagamento.valor, actionId, idempotencyKey: `${input.idempotencyKey}:cash:${pagamento.id}`, motivo: input.motivo, referencia: source.id, usuario: input.operador }));
+        for (const pagamento of pagamentos.filter((item) => String(item.meio || item.meioPagamento || '').toLowerCase() === 'dinheiro')) {
+          if (pagamento.caixaMovimentoId) {
+            try {
+              reversals.push(caixaKytto.registrarEstornoRecebimento(empresaId, { lojaId: dados.lojaId, movimentoOriginalId: pagamento.caixaMovimentoId, valor: pagamento.valor, actionId, idempotencyKey: `${input.idempotencyKey}:cash:${pagamento.id}`, motivo: input.motivo, referencia: source.id, usuario: input.operador }));
+            } catch (err) {
+              if (err?.code === 'CASH_REVERSAL_ALREADY_EXISTS') continue;
+              throw err;
+            }
+          } else if (pagamento.caixaId || dados.caixaId) {
+            const cxId = pagamento.caixaId || dados.caixaId;
+            try {
+              const mov = caixaKytto.registrarMovimento(empresaId, {
+                caixaId: cxId,
+                lojaId: dados.lojaId,
+                tipo: 'sangria',
+                valor: pagamento.valor,
+                descricao: `Estorno comanda ${source.id} (${input.motivo || 'Cancelamento no caixa'})`,
+                motivo: input.motivo,
+                referencia: source.id,
+                usuario: input.operador,
+              });
+              reversals.push(mov);
+            } catch (err) {
+              console.warn('Erro ao registrar sangria compensatória no caixa:', err.message);
+            }
+          }
         }
         return { status: 'completed', reversals: reversals.map((item) => ({ id: item.id, originalId: item.movimentoOriginalId, value: item.valor })) };
       },
@@ -3850,9 +3930,9 @@ function adaptersParaEstorno(empresaId, dados = {}) {
       },
       commission: async ({ source, actionId, input }) => registrarEstornoComissaoDino(empresaId, { source, sourceType: input.sourceType, lojaId: dados.lojaId, actionId, motivo: input.motivo }),
       audit: async ({ actionId, input }) => registrarAuditoriaEstornoDino(empresaId, { sourceType: input.sourceType, sourceId: input.sourceId, lojaId: dados.lojaId, actionId, status: 'requested', motivo: input.motivo }),
-      source: async ({ actionId, input, status }) => { marcarOrigemEstornada(empresaId, { sourceType: input.sourceType, sourceId: input.sourceId, actionId, status }); return { status: status || 'completed', sourceId: input.sourceId }; },
+      source: async ({ actionId, input, status }) => { marcarOrigemEstornada(empresaId, { sourceType: input.sourceType, sourceId: input.sourceId, actionId, status, input }); return { status: status || 'completed', sourceId: input.sourceId }; },
     },
-    markSource: ({ actionId, input, status }) => marcarOrigemEstornada(empresaId, { sourceType: input.sourceType, sourceId: input.sourceId, actionId, status }),
+    markSource: ({ actionId, input, status }) => marcarOrigemEstornada(empresaId, { sourceType: input.sourceType, sourceId: input.sourceId, actionId, status, input }),
   };
 }
 

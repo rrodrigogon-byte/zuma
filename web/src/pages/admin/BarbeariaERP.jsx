@@ -1733,6 +1733,20 @@ export default function BarbeariaERP() {
     );
   }
 
+  async function cancelarComandaFinalizada(comanda, dados = {}) {
+    const target = comanda || modal?.comanda;
+    if (!target) return;
+    await atualizarComandaNaTela(
+      () =>
+        api.post(`/api/admin/barbearia/comandas/${target.id}/cancelar-finalizada`, {
+          ...dados,
+          confirmado: true,
+        }),
+      "Comanda finalizada cancelada e estornada com sucesso.",
+    );
+    await carregar();
+  }
+
   async function pagarComanda() {
     const comanda = modal?.comanda;
     const valor = Number(
@@ -4090,6 +4104,10 @@ export default function BarbeariaERP() {
         <BarbeariaOperacaoPanel
           data={dataSelecionada}
           operacao={operacao || {}}
+          comandas={comandas}
+          profissionais={profissionais}
+          onOpenComanda={abrirComanda}
+          onCancelarComandaFinalizada={cancelarComandaFinalizada}
           onOpenCaixa={abrirCaixaOperacao}
           onMove={movimentarCaixaOperacao}
           onClose={fecharCaixaOperacao}
@@ -9665,6 +9683,39 @@ export default function BarbeariaERP() {
               <div style={styles.notice}>
                 <strong>Observações</strong>
                 <div style={styles.sub}>{comanda.observacoes}</div>
+              </div>
+            )}
+            {["paga", "em_conta"].includes(comanda.status) && !comanda.estornada && (
+              <div style={{ marginTop: 12, padding: 14, borderRadius: 10, background: "rgba(224, 92, 92, 0.06)", border: "1px solid rgba(224, 92, 92, 0.25)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                <div>
+                  <strong style={{ color: "#e05c5c", display: "block" }}>Procedimento de Cancelamento de Comanda Finalizada</strong>
+                  <span style={{ fontSize: 12, color: "var(--muted)" }}>Estorna numerário do caixa, cancela lançamentos financeiros e devolve produtos ao estoque.</span>
+                </div>
+                <button
+                  type="button"
+                  style={{ ...styles.secondary, color: "#e05c5c", borderColor: "#e05c5c", fontWeight: 800 }}
+                  disabled={salvando}
+                  onClick={async () => {
+                    const motivo = window.prompt("Procedimento de Cancelamento de Comanda Finalizada:\nInforme a justificativa do cancelamento / estorno:");
+                    if (!motivo || !motivo.trim()) return;
+                    const reabrir = comanda.agendamentoId ? window.confirm("Deseja reabrir o horário do agendamento vinculado na agenda operacional?") : false;
+                    await cancelarComandaFinalizada(comanda, {
+                      motivo: motivo.trim(),
+                      reabrirAgendamento: reabrir,
+                    });
+                  }}
+                >
+                  🚫 Cancelar e estornar comanda
+                </button>
+              </div>
+            )}
+            {(comanda.status === "cancelada" || comanda.estornada) && (
+              <div style={{ marginTop: 12, padding: 14, borderRadius: 10, background: "rgba(224, 92, 92, 0.08)", border: "1px solid rgba(224, 92, 92, 0.3)" }}>
+                <strong style={{ color: "#e05c5c" }}>🚫 Comanda Cancelada / Estornada no Caixa</strong>
+                <div style={{ fontSize: 12, color: "var(--fg)", marginTop: 4 }}>
+                  Motivo: {comanda.cancelamentoMotivo || "Cancelamento manual de comanda faturada"}
+                  {comanda.canceladoPor && ` · Operador: ${comanda.canceladoPor}`}
+                </div>
               </div>
             )}
           </div>
