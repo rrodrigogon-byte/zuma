@@ -109,3 +109,42 @@ test('Privacidade do Barbeiro: notificarClientePeloZapOficial dispara mensagem o
   assert.match(mensagemEnviada, /16:30/, 'Mensagem deve conter o horário');
   assert.match(mensagemEnviada, /Bruno/, 'Mensagem deve assinar o nome do barbeiro');
 });
+
+test('Privacidade do Barbeiro: mensagem personalizada editada pelo barbeiro tem precedência', async () => {
+  let telefoneDestino = '';
+  let mensagemEnviada = '';
+
+  const mockEnviar = async (tel, texto) => {
+    telefoneDestino = tel;
+    mensagemEnviada = texto;
+    return { ok: true };
+  };
+
+  const erpMock = {
+    listarProfissionais: () => [
+      { id: 'prof-bruno', nome: 'Bruno Mendes', email: 'bruno@barbeariadino.com.br', ativo: true },
+    ],
+    obterAgendamento: () => ({
+      id: 'ag-100',
+      clienteNome: 'Arthur Martins',
+      clienteTelefone: '65999887766',
+      horaLocal: '17:00',
+      servicoNome: 'Corte Degrade',
+    }),
+  };
+
+  const textoAmigo = 'Fala meu irmão Arthur! Aqui é o Bruno. Tô com um horário livre às 17h e lembrei de você. Bora dar aquele talento no visual? Cervejinha tá trincando!';
+
+  const resultado = await notificarClientePeloZapOficial(erpMock, {
+    empresaId: 'emp-dino',
+    usuario: { email: 'bruno@barbeariadino.com.br', role: 'profissional' },
+    agendamentoId: 'ag-100',
+    tipo: 'retorno',
+    mensagemPersonalizada: textoAmigo,
+    enviarMensagemFn: mockEnviar,
+  });
+
+  assert.equal(resultado.ok, true);
+  assert.equal(telefoneDestino, '65999887766');
+  assert.equal(mensagemEnviada, textoAmigo, 'A mensagem despachada deve ser exatamente o texto personalizado pelo barbeiro');
+});

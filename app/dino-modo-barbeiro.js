@@ -618,6 +618,7 @@ export async function notificarClientePeloZapOficial(erp, {
   agendamentoId = '',
   tipo = 'retorno',
   template = 'padrao',
+  mensagemPersonalizada = '',
   clientesKytto = null,
   enviarMensagemFn = null,
 } = {}) {
@@ -685,7 +686,10 @@ export async function notificarClientePeloZapOficial(erp, {
   const primeiroNomeCli = String(nomeCliente || '').trim().split(/\s+/)[0] || 'amigo';
   let texto = '';
 
-  if (tipo === 'horario_hoje' || tipo === 'confirmacao_hoje') {
+  const textoCustom = String(mensagemPersonalizada || '').trim();
+  if (textoCustom.length >= 3) {
+    texto = textoCustom;
+  } else if (tipo === 'horario_hoje' || tipo === 'confirmacao_hoje') {
     texto = `Olá, ${primeiroNomeCli}! Tudo bem? Aqui é da Barbearia Dino. 💈 Confirmando seu horário de hoje${horaAgenda ? ` às ${horaAgenda}` : ''} com o barbeiro ${barbeiroPrimeiroNome} (${servicoNome}). Te aguardamos na barbearia! Caso precise remarcar, basta nos responder por aqui.`;
   } else if (template === 'vip') {
     texto = `Olá, ${primeiroNomeCli}! Tudo bem? Aqui é da Barbearia Dino. 💈 O barbeiro ${barbeiroPrimeiroNome} abriu alguns horários especiais na agenda e lembrou de você. Gostaria de garantir o seu atendimento para hoje ou amanhã? Responda por aqui para reservar!`;

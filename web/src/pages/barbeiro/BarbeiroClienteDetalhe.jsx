@@ -26,6 +26,7 @@ export default function BarbeiroClienteDetalhe({ clienteId, clienteFallback = nu
   const [templateZap, setTemplateZap] = useState('padrao')
   const [enviando, setEnviando] = useState(false)
   const [statusEnvio, setStatusEnvio] = useState(null)
+  const [mensagemEditada, setMensagemEditada] = useState('')
 
   const chaveStorage = `kytto_nota_corte_${clienteId || clienteFallback?.id || clienteFallback?.nome || 'anon'}`
   const [notaCorte, setNotaCorte] = useState(() => {
@@ -76,6 +77,7 @@ export default function BarbeiroClienteDetalhe({ clienteId, clienteFallback = nu
         clienteId: clienteId || cli.id || cli.clienteId || '',
         tipo: 'retorno',
         template: modelo,
+        mensagemPersonalizada: (mensagemEditada || '').trim(),
       })
       if (res && (res.ok || res.enfileirado || res.enviado)) {
         setStatusEnvio({ sucesso: true, mensagem: res.mensagem || 'Aviso registrado! Encaminhado pelo WhatsApp oficial da barbearia com cadência humanizada.' })
@@ -134,6 +136,14 @@ export default function BarbeiroClienteDetalhe({ clienteId, clienteFallback = nu
   } else if (templateZap === 'combo') {
     textoPrevia = `Olá, ${primeiroNomeCli}! Tudo bem? Aqui é da Barbearia Dino. 💈 Esta semana estamos com condições especiais em combos de Corte + Barba ou Tratamento com o barbeiro ${primeiroNomeBarber}. Vamos renovar o visual? Responda aqui para agendar!`
   }
+
+  useEffect(() => {
+    if (modalNotificar) {
+      setMensagemEditada(textoPrevia)
+    } else {
+      setMensagemEditada('')
+    }
+  }, [modalNotificar, templateZap])
 
   return (
     <div style={{ display: 'grid', gap: 14 }}>
@@ -426,20 +436,38 @@ export default function BarbeiroClienteDetalhe({ clienteId, clienteFallback = nu
               </div>
             </div>
 
-            <div style={{
-              background: t.card,
-              border: `1px solid ${t.line}`,
-              borderRadius: 12,
-              padding: 12,
-              fontSize: 12,
-              color: t.cream,
-              lineHeight: 1.45,
-              whiteSpace: 'pre-wrap',
-            }}>
-              <span style={{ fontSize: 10.5, color: '#93c5fd', fontWeight: 800, display: 'block', marginBottom: 4 }}>
-                PRÉVIA DA MENSAGEM OFICIAL:
-              </span>
-              {textoPrevia}
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                <span style={{ fontSize: 11.5, color: '#93c5fd', fontWeight: 800, display: 'flex', alignItems: 'center', gap: 4 }}>
+                  ✏️ EDITE A MENSAGEM ANTES DE ENVIAR:
+                </span>
+                <span style={{ fontSize: 10.5, color: t.muted }}>
+                  {mensagemEditada.length} caracteres
+                </span>
+              </div>
+              <textarea
+                value={mensagemEditada}
+                onChange={(e) => setMensagemEditada(e.target.value)}
+                placeholder="Escreva sua mensagem com o seu toque pessoal..."
+                rows={5}
+                style={{
+                  width: '100%',
+                  background: '#0d1117',
+                  border: '1.5px solid rgba(59, 130, 246, 0.45)',
+                  borderRadius: 12,
+                  padding: '10px 12px',
+                  fontSize: 13,
+                  color: '#fff',
+                  lineHeight: 1.45,
+                  resize: 'vertical',
+                  fontFamily: 'inherit',
+                  boxSizing: 'border-box',
+                  outline: 'none',
+                }}
+              />
+              <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 5, display: 'flex', alignItems: 'center', gap: 4 }}>
+                💬 <em>Você tem total liberdade para mudar as palavras, falar de igual pra igual ou combinar algo específico com ele!</em>
+              </div>
             </div>
 
             {statusEnvio && (

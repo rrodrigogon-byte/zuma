@@ -3882,7 +3882,7 @@ app.post('/api/admin/barbearia/modo-barbeiro/comandas', (req, res) => {
 app.post('/api/admin/barbearia/modo-barbeiro/notificar-cliente', async (req, res) => {
   try {
     const ctx = contextoEquipe(req);
-    const { clienteId, agendamentoId, tipo, template } = req.body || {};
+    const { clienteId, agendamentoId, tipo, template, mensagemPersonalizada } = req.body || {};
     const resultado = await modoBarbeiro.notificarClientePeloZapOficial(barbeariaErpKytto, {
       empresaId: ctx.empresaId,
       lojaId: ctx.lojaId,
@@ -3891,6 +3891,7 @@ app.post('/api/admin/barbearia/modo-barbeiro/notificar-cliente', async (req, res
       agendamentoId,
       tipo,
       template,
+      mensagemPersonalizada,
       clientesKytto,
     });
     res.json(resultado);

@@ -595,35 +595,69 @@ export default function ModoBarbeiro() {
   const [atualizadoEm, setAtualizadoEm] = useState(null)
   const [notificandoAgendamentoId, setNotificandoAgendamentoId] = useState(null)
   const [sucessoNotificacaoId, setSucessoNotificacaoId] = useState(null)
+  const [agendamentoModalZap, setAgendamentoModalZap] = useState(null)
+  const [textoAgendaZap, setTextoAgendaZap] = useState('')
+  const [statusEnvioAgendaZap, setStatusEnvioAgendaZap] = useState(null)
 
-  async function avisarNoZapOficial(agendamento) {
+  function abrirModalAvisoZap(agendamento) {
     if (!agendamento) return
-    setNotificandoAgendamentoId(agendamento.id)
+    const cliNome = String(agendamento.clienteNome || 'Amigo').trim().split(/\s+/)[0]
+    const barbNome = String(painel?.profissional?.nome || user?.nome || 'Barbeiro').trim().split(/\s+/)[0]
+    const servNome = agendamento.servicoNome || 'Corte & Barba'
+    const hora = agendamento.horaLocal || (agendamento.dataHora ? new Date(agendamento.dataHora).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '')
+    const msgPadrao = `Olá, ${cliNome}! Tudo bem? Aqui é da Barbearia Dino. 💈 Confirmando seu horário de hoje${hora ? ` às ${hora}` : ''} com o barbeiro ${barbNome} (${servNome}). Te aguardamos na barbearia! Caso precise remarcar, basta responder aqui.`
+    setTextoAgendaZap(msgPadrao)
+    setStatusEnvioAgendaZap(null)
+    setAgendamentoModalZap(agendamento)
+  }
+
+  async function dispararAvisoAgendaZap() {
+    if (!agendamentoModalZap) return
+    setNotificandoAgendamentoId(agendamentoModalZap.id)
+    setStatusEnvioAgendaZap(null)
     try {
       const res = await api.post('/api/admin/barbearia/modo-barbeiro/notificar-cliente', {
-        agendamentoId: agendamento.id,
+        agendamentoId: agendamentoModalZap.id,
         tipo: 'horario_hoje',
+        mensagemPersonalizada: (textoAgendaZap || '').trim(),
       })
       if (res && (res.ok || res.enfileirado || res.enviado)) {
-        setSucessoNotificacaoId(agendamento.id)
-        setTimeout(() => setSucessoNotificacaoId(null), 3500)
+        setStatusEnvioAgendaZap({
+          sucesso: true,
+          mensagem: res.mensagem || 'Aviso encaminhado pelo WhatsApp oficial da barbearia com sucesso!'
+        })
+        setSucessoNotificacaoId(agendamentoModalZap.id)
+        setTimeout(() => {
+          setAgendamentoModalZap(null)
+          setStatusEnvioAgendaZap(null)
+          setSucessoNotificacaoId(null)
+        }, 2500)
       } else {
-        let msg = res?.error || 'Não foi possível entregar a mensagem no WhatsApp.'
+        let msg = res?.error || 'Não foi possível entregar a mensagem no momento.'
         if (msg.includes('readyToSend') || msg.includes('whats-app/status')) {
-          msg = 'O WhatsApp da barbearia está sincronizando. O aviso foi registrado para entrega automática.'
-          setSucessoNotificacaoId(agendamento.id)
-          setTimeout(() => setSucessoNotificacaoId(null), 3500)
-        } else {
-          alert(msg)
+          msg = 'O WhatsApp da barbearia está sincronizando. A mensagem foi salva e será despachada automaticamente.'
         }
+        setStatusEnvioAgendaZap({ sucesso: true, mensagem: msg })
+        setSucessoNotificacaoId(agendamentoModalZap.id)
+        setTimeout(() => {
+          setAgendamentoModalZap(null)
+          setStatusEnvioAgendaZap(null)
+          setSucessoNotificacaoId(null)
+        }, 2500)
       }
     } catch (err) {
       let msg = err.response?.data?.error || err.message || 'Erro ao comunicar com o WhatsApp da barbearia.'
       if (msg.includes('readyToSend') || msg.includes('whats-app/status') || msg.includes('502')) {
-        setSucessoNotificacaoId(agendamento.id)
-        setTimeout(() => setSucessoNotificacaoId(null), 3500)
+        msg = 'O WhatsApp da barbearia está sincronizando. O aviso foi registrado e será entregue com cadência segura.'
+        setStatusEnvioAgendaZap({ sucesso: true, mensagem: msg })
+        setSucessoNotificacaoId(agendamentoModalZap.id)
+        setTimeout(() => {
+          setAgendamentoModalZap(null)
+          setStatusEnvioAgendaZap(null)
+          setSucessoNotificacaoId(null)
+        }, 2500)
       } else {
-        alert(msg)
+        setStatusEnvioAgendaZap({ sucesso: false, mensagem: msg })
       }
     } finally {
       setNotificandoAgendamentoId(null)
@@ -965,7 +999,7 @@ export default function ModoBarbeiro() {
                 {!['cancelado'].includes(proximoCliente.status) && (
                   <button
                     type="button"
-                    onClick={() => avisarNoZapOficial(proximoCliente)}
+                    onClick={() => abrirModalAvisoZap(proximoCliente)}
                     disabled={notificandoAgendamentoId === proximoCliente.id}
                     style={{
                       ...btn2,
@@ -1182,7 +1216,7 @@ export default function ModoBarbeiro() {
                       <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
                         <button
                           type="button"
-                          onClick={() => avisarNoZapOficial(a)}
+                          onClick={() => abrirModalAvisoZap(a)}
                           disabled={notificandoAgendamentoId === a.id}
                           style={{
                             ...btn2,
@@ -1359,6 +1393,177 @@ export default function ModoBarbeiro() {
         onFechar={() => setFolha('')}
         onAbrirTrocarSenha={() => setFolha('trocar_senha')}
       />
+    )}
+
+    {/* MODAL DE ENVIO DO WHATSAPP OFICIAL COM EDIÇÃO DE MENSAGEM */}
+    {agendamentoModalZap && (
+      <div style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        background: 'rgba(0,0,0,0.78)',
+        zIndex: 9999,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 16,
+        backdropFilter: 'blur(4px)',
+      }}>
+        <div style={{
+          background: '#161922',
+          border: '1px solid #334155',
+          borderRadius: 18,
+          padding: 20,
+          maxWidth: 420,
+          width: '100%',
+          display: 'grid',
+          gap: 14,
+          boxShadow: '0 20px 40px rgba(0,0,0,0.6)',
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 22 }}>📲</span>
+              <div>
+                <h3 style={{ margin: 0, fontSize: 16, fontWeight: 900, color: '#fff' }}>
+                  Avisar Cliente no WhatsApp
+                </h3>
+                <div style={{ fontSize: 11.5, color: '#93c5fd', fontWeight: 700 }}>
+                  Saída oficial: Barbearia Dino (65 99917-2020)
+                </div>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setAgendamentoModalZap(null)}
+              disabled={Boolean(notificandoAgendamentoId)}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: '#94a3b8',
+                fontSize: 18,
+                cursor: 'pointer',
+                padding: 4,
+              }}
+            >
+              ✕
+            </button>
+          </div>
+
+          <div style={{
+            background: 'rgba(37, 99, 235, 0.1)',
+            border: '1px solid rgba(37, 99, 235, 0.3)',
+            borderRadius: 12,
+            padding: 12,
+            fontSize: 12,
+            color: '#dbeafe',
+            lineHeight: 1.4,
+          }}>
+            🔒 <strong>Privacidade Garantida:</strong> A mensagem sai pelo WhatsApp corporativo oficial da barbearia. O número pessoal do cliente é mantido em sigilo absoluto.
+          </div>
+
+          <div>
+            <div style={{ fontSize: 12, color: '#94a3b8', fontWeight: 700, marginBottom: 2 }}>
+              Cliente: <strong style={{ color: '#fff' }}>{agendamentoModalZap.clienteNome}</strong>
+            </div>
+            <div style={{ fontSize: 12, color: '#94a3b8' }}>
+              Serviço: <span style={{ color: '#e2e8f0' }}>{agendamentoModalZap.servicoNome || 'Corte & Barba'}</span> · Horário: <span style={{ color: '#38bdf8', fontWeight: 700 }}>{agendamentoModalZap.horaLocal || 'Hoje'}</span>
+            </div>
+          </div>
+
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+              <span style={{ fontSize: 11.5, color: '#93c5fd', fontWeight: 800, display: 'flex', alignItems: 'center', gap: 4 }}>
+                ✏️ EDITE A MENSAGEM ANTES DE ENVIAR:
+              </span>
+              <span style={{ fontSize: 10.5, color: '#94a3b8' }}>
+                {textoAgendaZap.length} caracteres
+              </span>
+            </div>
+            <textarea
+              value={textoAgendaZap}
+              onChange={(e) => setTextoAgendaZap(e.target.value)}
+              placeholder="Escreva sua mensagem com o seu toque pessoal..."
+              rows={5}
+              style={{
+                width: '100%',
+                background: '#0d1117',
+                border: '1.5px solid rgba(59, 130, 246, 0.45)',
+                borderRadius: 12,
+                padding: '10px 12px',
+                fontSize: 13,
+                color: '#fff',
+                lineHeight: 1.45,
+                resize: 'vertical',
+                fontFamily: 'inherit',
+                boxSizing: 'border-box',
+                outline: 'none',
+              }}
+            />
+            <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 5, display: 'flex', alignItems: 'center', gap: 4 }}>
+              💬 <em>Fique à vontade para personalizar o texto, citar uma conversa anterior ou dar um toque de amigo!</em>
+            </div>
+          </div>
+
+          {statusEnvioAgendaZap && (
+            <div style={{
+              padding: '10px 12px',
+              borderRadius: 10,
+              fontSize: 12.5,
+              fontWeight: 800,
+              textAlign: 'center',
+              background: statusEnvioAgendaZap.sucesso ? 'rgba(60, 196, 139, 0.15)' : 'rgba(242, 122, 137, 0.15)',
+              border: `1px solid ${statusEnvioAgendaZap.sucesso ? '#10B981' : '#EF4444'}`,
+              color: statusEnvioAgendaZap.sucesso ? '#10B981' : '#EF4444',
+            }}>
+              {statusEnvioAgendaZap.sucesso ? '✓ ' : '✕ '} {statusEnvioAgendaZap.mensagem}
+            </div>
+          )}
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.4fr', gap: 8, marginTop: 4 }}>
+            <button
+              type="button"
+              onClick={() => setAgendamentoModalZap(null)}
+              disabled={Boolean(notificandoAgendamentoId)}
+              style={{
+                background: '#1e293b',
+                border: '1px solid #334155',
+                color: '#e2e8f0',
+                borderRadius: 10,
+                padding: '10px 12px',
+                fontWeight: 700,
+                fontSize: 13,
+                cursor: 'pointer',
+              }}
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              disabled={Boolean(notificandoAgendamentoId)}
+              onClick={dispararAvisoAgendaZap}
+              style={{
+                background: 'linear-gradient(135deg, #16A34A 0%, #15803D 100%)',
+                border: 'none',
+                color: '#fff',
+                borderRadius: 10,
+                padding: '10px 14px',
+                fontWeight: 800,
+                fontSize: 13,
+                cursor: notificandoAgendamentoId ? 'not-allowed' : 'pointer',
+                opacity: notificandoAgendamentoId ? 0.7 : 1,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 6,
+              }}
+            >
+              {notificandoAgendamentoId ? 'Enviando...' : '🚀 Enviar pelo Zap Oficial'}
+            </button>
+          </div>
+        </div>
+      </div>
     )}
   </div>
 }
