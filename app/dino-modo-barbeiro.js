@@ -636,7 +636,13 @@ export async function notificarClientePeloZapOficial(erp, {
   let horaAgenda = '';
 
   if (agendamentoId) {
-    const ag = erp.obterAgendamento ? erp.obterAgendamento(empresaId, agendamentoId) : null;
+    let ag = null;
+    if (typeof erp.obterAgendamento === 'function') {
+      ag = erp.obterAgendamento(empresaId, agendamentoId);
+    } else if (typeof erp.listarAgendamentos === 'function') {
+      const ags = erp.listarAgendamentos(empresaId, { lojaId });
+      ag = (ags || []).find((item) => item.id === agendamentoId);
+    }
     if (ag) {
       telefoneReal = ag.clienteTelefone || '';
       nomeCliente = ag.clienteNome || nomeCliente;
