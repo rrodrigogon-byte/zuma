@@ -72,6 +72,7 @@ export default function BarbeariaOperacaoPanel({
   const [motivoDetalhado, setMotivoDetalhado] = useState('');
   const [reabrirAgendamento, setReabrirAgendamento] = useState(false);
   const [processandoCancelamento, setProcessandoCancelamento] = useState(false);
+  const [cancelarSenhaGerente, setCancelarSenhaGerente] = useState('');
 
   const caixas = operacao.caixas || [];
   const caixasAbertos = useMemo(() => caixas.filter((c) => c.status === 'aberto'), [caixas]);
@@ -241,6 +242,10 @@ export default function BarbeariaOperacaoPanel({
       alert('Por favor, informe a justificativa para o cancelamento.');
       return;
     }
+    if (!cancelarSenhaGerente.trim()) {
+      alert('A senha do gerente/administrador é obrigatória para autorizar o cancelamento.');
+      return;
+    }
 
     try {
       setProcessandoCancelamento(true);
@@ -248,11 +253,13 @@ export default function BarbeariaOperacaoPanel({
         await onCancelarComandaFinalizada(modalCancelamento, {
           motivo: motivoFinal,
           reabrirAgendamento,
+          senhaGerente: cancelarSenhaGerente.trim(),
           confirmado: true,
         });
       }
       setModalCancelamento(null);
       setMotivoDetalhado('');
+      setCancelarSenhaGerente('');
     } catch (err) {
       alert(`Erro no cancelamento: ${err.message || 'Falha ao estornar comanda'}`);
     } finally {
@@ -1097,6 +1104,22 @@ export default function BarbeariaOperacaoPanel({
                   <span>Reabrir horário do agendamento vinculado na agenda operacional</span>
                 </label>
               )}
+
+              <label style={{ display: 'grid', gap: 4 }}>
+                <span style={{ ...labelStyle, color: '#e05c5c', display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span>🔒 Senha de Gerente / Administrador</span>
+                  <small style={{ color: 'var(--muted)', fontWeight: 400 }}>(Trava de autorização obrigatória)</small>
+                </span>
+                <input
+                  type="password"
+                  required
+                  value={cancelarSenhaGerente}
+                  onChange={(e) => setCancelarSenhaGerente(e.target.value)}
+                  style={{ ...inputStyle, borderColor: '#e05c5c' }}
+                  placeholder="Digite a senha de gerente..."
+                  disabled={processandoCancelamento}
+                />
+              </label>
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 10 }}>
                 <button

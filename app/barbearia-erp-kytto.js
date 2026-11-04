@@ -2611,8 +2611,11 @@ export function atualizarItemComandaBarbearia(empresaId, comandaId, itemId, dado
   const estado = estadoEmpresa(empresaId);
   const comanda = estado.comandas[String(comandaId)];
   if (!comanda || comanda.empresaId !== String(empresaId)) return null;
+  if (['paga', 'em_conta'].includes(comanda.status)) {
+    return alterarItemComandaFinalizada(empresaId, comandaId, itemId, dados);
+  }
   if (!['aberta', 'aguardando_pagamento', 'parcialmente_paga'].includes(comanda.status)) throw new Error('A comanda não está disponível para edição.');
-  const atual = comanda.itens.find((item) => item.id === String(itemId));
+  const atual = (comanda.itens || []).find((item, idx) => String(item.id) === String(itemId) || `${item.tipo}-${idx}` === String(itemId) || String(idx) === String(itemId));
   if (!atual) return null;
   const quantidade = dados.quantidade !== undefined || dados.qtd !== undefined ? Math.max(1, Math.round(numero(dados.quantidade ?? dados.qtd, atual.quantidade))) : atual.quantidade;
   if (quantidade !== atual.quantidade && (atual.coberturaPlano || atual.tipo === 'loja')) throw new Error('Para mudar a quantidade deste item, remova a linha e lance de novo.');
@@ -2641,6 +2644,237 @@ export function atualizarItemComandaBarbearia(empresaId, comandaId, itemId, dado
     restaurarRaiz(snapshot);
     throw error;
   }
+}
+
+export function alterarItemComandaFinalizada(empresaId, comandaId, itemId, dados = {}) {
+  const estado = estadoEmpresa(empresaId);
+  const comanda = estado.comandas[String(comandaId)];
+  if (!comanda || comanda.empresaId !== String(empresaId)) return null;
+  if (!['paga', 'em_conta', 'parcialmente_paga'].includes(comanda.status)) {
+    throw new Error('Apenas comandas já faturadas (pagas ou em conta) utilizam este fluxo de alteração.');
+  }
+  const atual = (comanda.itens || []).find((item, idx) => String(item.id) === String(itemId) || `${item.tipo}-${idx}` === String(itemId) || String(idx) === String(itemId));
+  if (!atual) return null;
+
+  const quantidade = dados.quantidade !== undefined || dados.qtd !== undefined
+    ? Math.max(1, Math.round(numero(dados.quantidade ?? dados.qtd, atual.quantidade)))
+    : (atual.quantidade || 1);
+
+  const precoUnitario = (dados.preco !== undefined || dados.precoUnitario !== undefined || dados.valor !== undefined)
+    ? dinheiro(dados.preco ?? dados.precoUnitario ?? dados.valor)
+    : atual.precoUnitario;
+
+  const valorUnitarioAntigo = Number(atual.precoUnitario || atual.preco || 0);
+  const subtotalAntigoItem = Number(atual.subtotal || (valorUnitarioAntigo * (atual.quantidade || 1)));
+  const subtotalNovoItem = atual.coberturaPlano ? 0 : dinheiro(precoUnitario * quantidade);
+
+  const subtotalAtual = Number((comanda.itens || []).reduce((soma, item) => soma + Number(item.subtotal || 0), 0).toFixed(2));
+  const descontoAntigo = Number(Math.min(subtotalAtual, Math.max(0, Number(comanda.desconto || 0))).toFixed(2));
+  const gorjetaAntiga = Number(Math.max(0, Number(comanda.gorjeta || 0)).toFixed(2));
+  const totalAntigo = Number(Math.max(0, subtotalAtual - descontoAntigo + gorjetaAntiga).toFixed(2));
+  const subtotalNovo = Number((subtotalAtual - subtotalAntigoItem + subtotalNovoItem).toFixed(2));
+  const desconto = Number(Math.min(subtotalNovo, Math.max(0, Number(comanda.desconto || 0))).toFixed(2));
+  const totalNovo = Number(Math.max(0, subtotalNovo - desconto + Math.max(0, Number(comanda.gorjeta || 0))).toFixed(2));
+  const diferenca = Number((totalNovo - totalAntigo).toFixed(2));
+
+  const snapshot = raizSnapshot();
+  try {
+    atual.quantidade = quantidade;
+    atual.precoUnitario = precoUnitario;
+    atual.preco = precoUnitario;
+    atual.subtotal = subtotalNovoItem;
+    if (dados.observacao !== undefined || dados.obs !== undefined) atual.observacao = texto(dados.observacao ?? dados.obs, 400);
+    atual.atualizadoEm = dataAtual();
+
+    comanda.subtotal = subtotalNovo;
+    comanda.desconto = desconto;
+    comanda.total = totalNovo;
+    comanda.atualizadoEm = atual.atualizadoEm;
+
+    if (comanda.status === 'em_conta') {
+      comanda.totalFaturado = totalNovo;
+      comanda.saldoPendente = 0;
+      const pagConta = (comanda.pagamentos || []).find((p) => p.meio === 'conta');
+      if (pagConta) {
+        pagConta.valor = totalNovo;
+        pagConta.atualizadoEm = atual.atualizadoEm;
+      }
+      const contaId = (comanda.contasReceberIds && comanda.contasReceberIds[0]) || (pagConta && pagConta.contaReceberId);
+      if (contaId) {
+        try {
+          clientesKytto.atualizarContaReceber(empresaId, contaId, {
+            valor: totalNovo,
+            descricao: `Comanda ${comanda.id} - ${comanda.clienteNome || 'Cliente'} (ajustada)`,
+          });
+        } catch {}
+      }
+      if (comanda.financeiroLancamentoIds && comanda.financeiroLancamentoIds[0]) {
+        try {
+          financeiroKytto.atualizarLancamento(empresaId, comanda.financeiroLancamentoIds[0], {
+            valorBruto: totalNovo,
+            valorLiquido: totalNovo,
+            valor: totalNovo,
+            descricao: `Venda comanda barbearia ${comanda.id} (ajustada)`,
+          });
+        } catch {}
+      }
+    } else if (comanda.status === 'paga') {
+      if (diferenca < 0) {
+        comanda.totalFaturado = totalNovo;
+        comanda.totalPago = totalNovo;
+        comanda.saldoPendente = 0;
+        if (comanda.financeiroLancamentoIds && comanda.financeiroLancamentoIds[0]) {
+          try {
+            financeiroKytto.atualizarLancamento(empresaId, comanda.financeiroLancamentoIds[0], {
+              valorBruto: totalNovo,
+              valorLiquido: totalNovo,
+              valor: totalNovo,
+            });
+          } catch {}
+        }
+        const pagDinheiro = (comanda.pagamentos || []).find((p) => p.meio === 'dinheiro' && p.caixaId);
+        if (pagDinheiro) {
+          const valorEstorno = Math.min(pagDinheiro.valor, Math.abs(diferenca));
+          pagDinheiro.valor = Number((pagDinheiro.valor - valorEstorno).toFixed(2));
+          try {
+            caixaKytto.registrarMovimentoCaixa(empresaId, {
+              caixaId: pagDinheiro.caixaId,
+              lojaId: comanda.lojaId,
+              tipo: 'estorno_recebimento',
+              valor: valorEstorno,
+              descricao: `Ajuste de item (${atual.nome}) na comanda ${comanda.id}`,
+              referencia: comanda.id,
+              usuario: texto(dados.gerente || dados.usuario || 'Gerente', 120),
+              chaveIdempotencia: `barbearia_comanda:${empresaId}:${comanda.id}:ajuste_item:${itemId}:${Date.now()}`,
+            });
+          } catch {}
+        }
+      } else if (diferenca > 0) {
+        comanda.saldoPendente = Number((totalNovo - Number(comanda.totalPago || 0)).toFixed(2));
+        if (comanda.saldoPendente > 0.02) {
+          comanda.status = 'parcialmente_paga';
+        }
+      }
+    }
+
+    comanda.historicoAlteracoes = comanda.historicoAlteracoes || [];
+    comanda.historicoAlteracoes.push({
+      tipo: 'alteracao_item_finalizado',
+      itemId: String(itemId),
+      itemNome: atual.nome,
+      valorAntigo: valorUnitarioAntigo,
+      valorNovo: precoUnitario,
+      totalAntigo,
+      totalNovo,
+      diferenca,
+      dataHora: dataAtual(),
+      gerente: texto(dados.gerente || dados.usuario || 'Gerente', 120),
+      motivo: texto(dados.motivo || 'Ajuste de valor em comanda finalizada', 400),
+    });
+
+    save();
+    return copiarComandaBarbearia(comanda);
+  } catch (error) {
+    restaurarRaiz(snapshot);
+    throw error;
+  }
+}
+
+export function reabrirComandaBarbearia(empresaId, comandaId, dados = {}) {
+  const estado = estadoEmpresa(empresaId);
+  const comanda = estado.comandas[String(comandaId)];
+  if (!comanda || comanda.empresaId !== String(empresaId)) return null;
+  if (!['paga', 'em_conta', 'parcialmente_paga'].includes(comanda.status)) {
+    throw new Error('Apenas comandas finalizadas (pagas ou em conta) podem ser reabertas.');
+  }
+  const snapshot = raizSnapshot();
+  try {
+    const statusAnterior = comanda.status;
+    comanda.statusAnteriorReabertura = statusAnterior;
+    comanda.status = 'aguardando_pagamento';
+    comanda.reabertaEm = dataAtual();
+    comanda.reabertaPor = texto(dados.gerente || dados.usuario || 'Gerente', 120);
+    comanda.motivoReabertura = texto(dados.motivo || 'Reabertura para ajuste de itens', 400);
+    comanda.atualizadoEm = dataAtual();
+
+    comanda.historicoAlteracoes = comanda.historicoAlteracoes || [];
+    comanda.historicoAlteracoes.push({
+      tipo: 'reabertura_comanda',
+      statusAnterior,
+      dataHora: comanda.reabertaEm,
+      gerente: comanda.reabertaPor,
+      motivo: comanda.motivoReabertura,
+    });
+
+    save();
+    return copiarComandaBarbearia(comanda);
+  } catch (error) {
+    restaurarRaiz(snapshot);
+    throw error;
+  }
+}
+
+export function refecharComandaEmContaBarbearia(empresaId, comandaId, dados = {}) {
+  const estado = estadoEmpresa(empresaId);
+  const comanda = estado.comandas[String(comandaId)];
+  if (!comanda || comanda.empresaId !== String(empresaId)) return null;
+
+  const subtotal = Number((comanda.itens || []).reduce((soma, item) => soma + Number(item.subtotal || 0), 0).toFixed(2));
+  const desconto = Number(Math.min(subtotal, Math.max(0, Number(comanda.desconto || 0))).toFixed(2));
+  const gorjeta = Number(Math.max(0, Number(comanda.gorjeta || 0)).toFixed(2));
+  const total = Number(Math.max(0, subtotal - desconto + gorjeta).toFixed(2));
+  comanda.totalFaturado = total;
+  comanda.saldoPendente = 0;
+  comanda.status = 'em_conta';
+  comanda.atualizadoEm = dataAtual();
+  comanda.fechadaEm = comanda.atualizadoEm;
+
+  const pagConta = (comanda.pagamentos || []).find((p) => p.meio === 'conta');
+  if (pagConta) {
+    pagConta.valor = total;
+    pagConta.atualizadoEm = comanda.atualizadoEm;
+  } else {
+    comanda.pagamentos = comanda.pagamentos || [];
+    comanda.pagamentos.push({
+      id: novoId('pag', estado.comandas),
+      meio: 'conta',
+      valor: total,
+      registradoEm: comanda.atualizadoEm,
+    });
+  }
+
+  const contaId = (comanda.contasReceberIds && comanda.contasReceberIds[0]) || (pagConta && pagConta.contaReceberId);
+  if (contaId) {
+    try {
+      clientesKytto.atualizarContaReceber(empresaId, contaId, {
+        valor: total,
+        descricao: `Comanda ${comanda.id} - ${comanda.clienteNome || 'Cliente'} (refechada)`,
+      });
+    } catch {}
+  } else if (comanda.clienteId) {
+    try {
+      const novaConta = clientesKytto.criarContaReceber(empresaId, {
+        clienteId: comanda.clienteId,
+        descricao: `Comanda ${comanda.id} - ${comanda.clienteNome || 'Cliente'} (refechada)`,
+        valor: total,
+      });
+      comanda.contasReceberIds = [novaConta.id];
+      if (pagConta) pagConta.contaReceberId = novaConta.id;
+    } catch {}
+  }
+
+  if (comanda.financeiroLancamentoIds && comanda.financeiroLancamentoIds[0]) {
+    try {
+      financeiroKytto.atualizarLancamento(empresaId, comanda.financeiroLancamentoIds[0], {
+        valorBruto: total,
+        valorLiquido: total,
+        valor: total,
+      });
+    } catch {}
+  }
+
+  save();
+  return copiarComandaBarbearia(comanda);
 }
 
 export function removerItemComandaBarbearia(empresaId, comandaId, itemId) {

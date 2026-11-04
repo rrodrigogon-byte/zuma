@@ -1560,20 +1560,47 @@ export default function BarbeariaERP() {
   }
 
   async function alterarValorItemComanda(comandaId, itemId, valorAtual) {
+    const comanda = modal?.comanda;
+    const ehFinalizada = comanda && ["paga", "em_conta"].includes(comanda.status);
+
     const novoValorStr = window.prompt(
-      "Informe o novo valor para este item (ex: 50.00):",
+      ehFinalizada
+        ? `Alterar valor do item na comanda finalizada (${comanda.status === "em_conta" ? "Lançada em Conta" : "Paga"}):\nInforme o novo valor (ex: 20.00):`
+        : "Informe o novo valor para este item (ex: 50.00):",
       valorAtual,
     );
     if (novoValorStr === null) return;
     const novoValor = parseFloat(novoValorStr.replace(",", "."));
     if (isNaN(novoValor) || novoValor < 0)
       return toast("Valor inválido.", "error");
+
+    let senhaGerente = "";
+    if (ehFinalizada) {
+      senhaGerente = window.prompt(
+        "🔒 TRAVA DE SEGURANÇA:\nEsta comanda já foi finalizada. Digite a SENHA DO GERENTE para autorizar a alteração do item e refinalização automática:"
+      );
+      if (!senhaGerente || !senhaGerente.trim()) {
+        return toast("A senha de gerente é obrigatória para autorizar a alteração de comanda finalizada.", "error");
+      }
+    }
+
     try {
       const resposta = await api.patch(
         `/api/admin/barbearia/comandas/${comandaId}/itens/${itemId}`,
-        { valor: novoValor, precoUnitario: novoValor, preco: novoValor },
+        {
+          valor: novoValor,
+          precoUnitario: novoValor,
+          preco: novoValor,
+          senhaGerente: senhaGerente.trim(),
+          motivo: "Ajuste de valor em comanda finalizada",
+        },
       );
-      toast("Item atualizado com sucesso.", "success");
+      toast(
+        ehFinalizada
+          ? `Item alterado para ${moeda(novoValor)} e comanda refinalizada com sucesso!`
+          : "Item atualizado com sucesso.",
+        "success"
+      );
       setModal((m) =>
         m?.tipo === "comanda"
           ? { ...m, comanda: resposta.comanda || resposta }
@@ -9131,7 +9158,7 @@ export default function BarbeariaERP() {
                             )
                           )}
                         </strong>
-                        {podeEditar && !item.coberturaPlano && (
+                        {(podeEditar || ["paga", "em_conta"].includes(comanda.status)) && !item.coberturaPlano && (
                           <button
                             type="button"
                             style={{
@@ -9139,6 +9166,7 @@ export default function BarbeariaERP() {
                               padding: "2px 6px",
                               fontSize: 11,
                             }}
+                            title={["paga", "em_conta"].includes(comanda.status) ? "Alterar valor do item e re-fechar comanda" : "Alterar valor do item"}
                             onClick={() =>
                               alterarValorItemComanda(
                                 comanda.id,
@@ -9412,6 +9440,32 @@ export default function BarbeariaERP() {
                 </div>
             )}
             
+            {comanda.status === "aguardando_pagamento" && (comanda.statusAnteriorReabertura === "em_conta" || comanda.pagamentos?.some((p) => p.meio === "conta")) && (
+              <div style={{ marginTop: 12, padding: 14, borderRadius: 10, background: "rgba(20, 184, 122, 0.08)", border: "1px solid rgba(20, 184, 122, 0.3)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                <div>
+                  <strong style={{ color: "#14b87a", display: "block" }}>Comanda Reaberta para Edição</strong>
+                  <span style={{ fontSize: 12, color: "var(--muted)" }}>Após ajustar os itens acima, clique para refinalizar e lançar o novo total ({moeda(comanda.total)}) em conta do cliente.</span>
+                </div>
+                <button
+                  type="button"
+                  style={{ ...styles.primary, background: "#14b87a" }}
+                  disabled={salvando}
+                  onClick={async () => {
+                    try {
+                      const r = await api.post(`/api/admin/barbearia/comandas/${comanda.id}/refechar-conta`, {});
+                      toast(`Comanda finalizada novamente em conta! Total: ${moeda(r.comanda?.total || comanda.total)}`, "success");
+                      setModal({ tipo: "comanda", comanda: r.comanda || r });
+                      await carregar();
+                    } catch (e) {
+                      toast(e.message || "Erro ao refinalizar comanda em conta.", "error");
+                    }
+                  }}
+                >
+                  💾 Finalizar Novamente em Conta ({moeda(comanda.total)})
+                </button>
+              </div>
+            )}
+
             {!["paga", "cancelada", "em_conta"].includes(comanda.status) &&
               saldoPendente > 0 && (
                 <Card style={styles.paymentPanel}>
@@ -9710,6 +9764,36 @@ export default function BarbeariaERP() {
               </div>
             )}
             {["paga", "em_conta"].includes(comanda.status) && !comanda.estornada && (
+              <div style={{ marginTop: 12, padding: 14, borderRadius: 10, background: "rgba(56, 189, 248, 0.06)", border: "1px solid rgba(56, 189, 248, 0.25)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                <div>
+                  <strong style={{ color: "#0284c7", display: "block" }}>Ajuste de Itens da Comanda Finalizada</strong>
+                  <span style={{ fontSize: 12, color: "var(--muted)" }}>Você pode alterar o valor de qualquer item clicando no ✏️ acima, ou reabrir a comanda para adicionar e remover serviços e produtos.</span>
+                </div>
+                <button
+                  type="button"
+                  style={{ ...styles.secondary, color: "#0284c7", borderColor: "#0284c7", fontWeight: 800 }}
+                  disabled={salvando}
+                  onClick={async () => {
+                    const senha = window.prompt("🔒 TRAVA DE SEGURANÇA:\nInforme a SENHA DO GERENTE para reabrir esta comanda finalizada para alteração de itens:");
+                    if (!senha || !senha.trim()) return toast("A senha do gerente é obrigatória.", "error");
+                    try {
+                      const r = await api.post(`/api/admin/barbearia/comandas/${comanda.id}/reabrir`, {
+                        senhaGerente: senha.trim(),
+                        motivo: "Reabertura autorizada para ajuste de itens",
+                      });
+                      toast("Comanda reaberta com sucesso. Ajuste os itens e finalize novamente.", "success");
+                      setModal({ tipo: "comanda", comanda: r.comanda || r });
+                      await carregar();
+                    } catch (e) {
+                      toast(e.message || "Erro ao reabrir comanda.", "error");
+                    }
+                  }}
+                >
+                  ✏️ Reabrir para Alteração Completa
+                </button>
+              </div>
+            )}
+            {["paga", "em_conta"].includes(comanda.status) && !comanda.estornada && (
               <div style={{ marginTop: 12, padding: 14, borderRadius: 10, background: "rgba(224, 92, 92, 0.06)", border: "1px solid rgba(224, 92, 92, 0.25)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
                 <div>
                   <strong style={{ color: "#e05c5c", display: "block" }}>Procedimento de Cancelamento de Comanda Finalizada</strong>
@@ -9722,9 +9806,15 @@ export default function BarbeariaERP() {
                   onClick={async () => {
                     const motivo = window.prompt("Procedimento de Cancelamento de Comanda Finalizada:\nInforme a justificativa do cancelamento / estorno:");
                     if (!motivo || !motivo.trim()) return;
+                    const senhaGerente = window.prompt("🔒 TRAVA DE SEGURANÇA:\nInforme a SENHA DO GERENTE / ADMINISTRADOR para autorizar este cancelamento:");
+                    if (!senhaGerente || !senhaGerente.trim()) {
+                      toast("A senha do gerente é obrigatória para autorizar o cancelamento.", "error");
+                      return;
+                    }
                     const reabrir = comanda.agendamentoId ? window.confirm("Deseja reabrir o horário do agendamento vinculado na agenda operacional?") : false;
                     await cancelarComandaFinalizada(comanda, {
                       motivo: motivo.trim(),
+                      senhaGerente: senhaGerente.trim(),
                       reabrirAgendamento: reabrir,
                     });
                   }}

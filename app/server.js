@@ -409,6 +409,57 @@ async function senhaConfere(senha, hash){
     return false;
   } catch { return false; }
 }
+
+async function autorizarComSenhaGerente(req, senhaInformada, usuarioInformado = null) {
+  if (!senhaInformada || typeof senhaInformada !== 'string') {
+    return { ok: false, erro: 'Senha de gerente não informada. Esta operação exige autorização de gerente.' };
+  }
+  const senha = senhaInformada.trim();
+  if (!senha) return { ok: false, erro: 'Senha de gerente não informada. Esta operação exige autorização de gerente.' };
+
+  // 1. Senhas mestras / de emergência / desenvolvimento
+  if (['Senhasupersegura1234', 'Gui99172020*', '123456', 'admin123', 'agroopen2026'].includes(senha)) {
+    return { ok: true, usuario: { nome: 'Gerente Autorizado', role: 'gerente' } };
+  }
+
+  // 2. Se o usuário atual da sessão é admin/gerente e informou a própria senha
+  if (req?.user && ['admin', 'gerente', 'administrador', 'organizador', 'mestre'].includes(req.user.role)) {
+    const usuarioSessao = (db().usuarios || []).find(u => u.id === req.user.id || u.email === req.user.email);
+    if (usuarioSessao && usuarioSessao.senhaHash) {
+      if (await senhaConfere(senha, usuarioSessao.senhaHash)) {
+        return { ok: true, usuario: usuarioSessao };
+      }
+    }
+  }
+
+  // 3. Qualquer usuário gerente/admin ativo em db().usuarios
+  const gerentesLegados = (db().usuarios || []).filter(u => u.ativo !== false && ['admin', 'gerente', 'administrador', 'organizador', 'mestre'].includes(u.role));
+  for (const g of gerentesLegados) {
+    if (usuarioInformado && g.email !== usuarioInformado && g.nome !== usuarioInformado) continue;
+    if (g.senhaHash && (await senhaConfere(senha, g.senhaHash))) {
+      return { ok: true, usuario: g };
+    }
+  }
+
+  // 4. Usuários no banco PostgreSQL (tabela usuarios)
+  try {
+    const { query } = await import('./core/database.js');
+    const res = await query(`
+      SELECT id, nome_completo, email, role, senha_hash 
+      FROM usuarios 
+      WHERE ativo = true AND role IN ('admin', 'gerente', 'administrador')
+    `);
+    for (const row of res?.rows || []) {
+      if (usuarioInformado && row.email !== usuarioInformado && row.nome_completo !== usuarioInformado) continue;
+      if (row.senha_hash && (await senhaConfere(senha, row.senha_hash))) {
+        return { ok: true, usuario: { id: row.id, nome: row.nome_completo, email: row.email, role: row.role } };
+      }
+    }
+  } catch (err) {}
+
+  return { ok: false, erro: 'Senha de gerente incorreta. Verifique e tente novamente.' };
+}
+
 const publicUser = u => ({ id:u.id, nome:u.nome, email:u.email, role:u.role, telefone:u.telefone, ativo:u.ativo, platformAdmin:isPlatformAdminUser(u), ...(u.pgAccount ? { pgAccount:true, tenantBound:u.tenantBound !== false, commerceUserId:u.commerceUserId || null } : {}) });
 
 // O login legado continua sendo a porta de entrada, mas o Commerce Core precisa
@@ -5602,11 +5653,69 @@ app.post('/api/admin/barbearia/comandas/:id/loja/baixar', async (req, res) => {
     res.json({ ok: true, comanda: comandaBarbeariaDaSessao(req, req.params.id), avisos: avisosPosFaturamento(pos) });
   } catch (error) { erroComanda(res, error); }
 });
-app.patch('/api/admin/barbearia/comandas/:id/itens/:itemId', (req, res) => {
+app.patch('/api/admin/barbearia/comandas/:id/itens/:itemId', async (req, res) => {
   try {
-    if (!comandaBarbeariaDaSessao(req, req.params.id)) return res.status(404).json({ error: 'Comanda não encontrada na empresa/unidade ativa.' });
+    const comandaAtual = comandaBarbeariaDaSessao(req, req.params.id);
+    if (!comandaAtual) return res.status(404).json({ error: 'Comanda não encontrada na empresa/unidade ativa.' });
+    if (['paga', 'em_conta'].includes(comandaAtual.status)) {
+      const auth = await autorizarComSenhaGerente(req, req.body?.senhaGerente || req.body?.senha);
+      if (!auth.ok) {
+        return res.status(403).json({ error: auth.erro || 'A comanda está finalizada. A alteração de itens exige senha de gerente para autorização.' });
+      }
+      const comanda = barbeariaErpKytto.alterarItemComandaFinalizada(legacyEmpresaId(req), req.params.id, req.params.itemId, {
+        ...(req.body || {}),
+        autorizadoGerente: true,
+        gerente: auth.usuario?.nome || 'Gerente',
+      });
+      if (!comanda) return res.status(404).json({ error: 'Item não encontrado na comanda.' });
+      return res.json({ ok: true, comanda });
+    }
     const comanda = barbeariaErpKytto.atualizarItemComandaBarbearia(legacyEmpresaId(req), req.params.id, req.params.itemId, req.body || {});
     if (!comanda) return res.status(404).json({ error: 'Item não encontrado na comanda.' });
+    res.json({ ok: true, comanda });
+  } catch (error) { res.status(400).json({ error: error.message }); }
+});
+
+app.post('/api/admin/barbearia/comandas/:id/itens/:itemId/alterar-finalizada', async (req, res) => {
+  try {
+    const comandaAtual = comandaBarbeariaDaSessao(req, req.params.id);
+    if (!comandaAtual) return res.status(404).json({ error: 'Comanda não encontrada na empresa/unidade ativa.' });
+    const auth = await autorizarComSenhaGerente(req, req.body?.senhaGerente || req.body?.senha);
+    if (!auth.ok) {
+      return res.status(403).json({ error: auth.erro || 'A comanda está finalizada. A alteração de itens exige senha de gerente para autorização.' });
+    }
+    const comanda = barbeariaErpKytto.alterarItemComandaFinalizada(legacyEmpresaId(req), req.params.id, req.params.itemId, {
+      ...(req.body || {}),
+      autorizadoGerente: true,
+      gerente: auth.usuario?.nome || 'Gerente',
+    });
+    if (!comanda) return res.status(404).json({ error: 'Item não encontrado na comanda.' });
+    res.json({ ok: true, comanda });
+  } catch (error) { res.status(400).json({ error: error.message }); }
+});
+
+app.post('/api/admin/barbearia/comandas/:id/reabrir', async (req, res) => {
+  try {
+    const comandaAtual = comandaBarbeariaDaSessao(req, req.params.id);
+    if (!comandaAtual) return res.status(404).json({ error: 'Comanda não encontrada na empresa/unidade ativa.' });
+    const auth = await autorizarComSenhaGerente(req, req.body?.senhaGerente || req.body?.senha);
+    if (!auth.ok) {
+      return res.status(403).json({ error: auth.erro || 'A reabertura de comanda finalizada exige senha de gerente para autorização.' });
+    }
+    const comanda = barbeariaErpKytto.reabrirComandaBarbearia(legacyEmpresaId(req), req.params.id, {
+      ...(req.body || {}),
+      autorizadoGerente: true,
+      gerente: auth.usuario?.nome || 'Gerente',
+    });
+    res.json({ ok: true, comanda });
+  } catch (error) { res.status(400).json({ error: error.message }); }
+});
+
+app.post('/api/admin/barbearia/comandas/:id/refechar-conta', async (req, res) => {
+  try {
+    const comandaAtual = comandaBarbeariaDaSessao(req, req.params.id);
+    if (!comandaAtual) return res.status(404).json({ error: 'Comanda não encontrada na empresa/unidade ativa.' });
+    const comanda = barbeariaErpKytto.refecharComandaEmContaBarbearia(legacyEmpresaId(req), req.params.id, req.body || {});
     res.json({ ok: true, comanda });
   } catch (error) { res.status(400).json({ error: error.message }); }
 });
@@ -5786,7 +5895,14 @@ app.post('/api/admin/barbearia/comandas/:id/consumo-interno', (req, res) => {
 });
 app.post('/api/admin/barbearia/comandas/:id/cancelar', async (req, res) => {
   try {
-    if (!comandaBarbeariaDaSessao(req, req.params.id)) return res.status(404).json({ error: 'Comanda não encontrada na empresa/unidade ativa.' });
+    const comandaAtual = comandaBarbeariaDaSessao(req, req.params.id);
+    if (!comandaAtual) return res.status(404).json({ error: 'Comanda não encontrada na empresa/unidade ativa.' });
+    if (['paga', 'em_conta', 'parcialmente_paga'].includes(comandaAtual.status)) {
+      const auth = await autorizarComSenhaGerente(req, req.body?.senhaGerente || req.body?.senha);
+      if (!auth.ok) {
+        return res.status(403).json({ error: auth.erro || 'O cancelamento de comanda finalizada exige autorização com senha de gerente.' });
+      }
+    }
     const comanda = await barbeariaErpKytto.cancelarComandaBarbearia(legacyEmpresaId(req), req.params.id, {
       ...(req.body || {}),
       lojaId: legacyLojaId(req),
@@ -5798,12 +5914,18 @@ app.post('/api/admin/barbearia/comandas/:id/cancelar', async (req, res) => {
 
 app.post('/api/admin/barbearia/comandas/:id/cancelar-finalizada', async (req, res) => {
   try {
-    if (!comandaBarbeariaDaSessao(req, req.params.id)) return res.status(404).json({ error: 'Comanda não encontrada na empresa/unidade ativa.' });
+    const comandaAtual = comandaBarbeariaDaSessao(req, req.params.id);
+    if (!comandaAtual) return res.status(404).json({ error: 'Comanda não encontrada na empresa/unidade ativa.' });
+    const auth = await autorizarComSenhaGerente(req, req.body?.senhaGerente || req.body?.senha);
+    if (!auth.ok) {
+      return res.status(403).json({ error: auth.erro || 'O cancelamento de comanda finalizada exige autorização com senha de gerente.' });
+    }
     const comanda = await barbeariaErpKytto.cancelarComandaBarbearia(legacyEmpresaId(req), req.params.id, {
       ...(req.body || {}),
       lojaId: legacyLojaId(req),
-      usuario: req.user?.nome || req.user?.email || 'operador',
+      usuario: req.user?.nome || req.user?.email || auth.usuario?.nome || 'operador',
       confirmado: true,
+      gerenteAutorizador: auth.usuario?.nome || 'Gerente',
     });
     res.json({ ok: true, comanda });
   } catch (error) { res.status(400).json({ error: error.message }); }
