@@ -60,6 +60,21 @@
 
 ---
 
+## 2.4. Inteligência de CRM, Atendimento por IA e Proteção Antiban Meta
+
+- **Recuperação Estratégica de Clientes de Ex-Barbeiros:**
+  - Identificação automática dos profissionais que não fazem mais parte da equipe (Gustavo, Vitor, Lucas, Vinycius, Danilo, Bruno Rafael, etc.).
+  - **Proibição de Menção a Ex-Barbeiros:** O sistema e os templates de WhatsApp nunca mais citam nomes de quem não atua mais na barbearia.
+  - **Substituição e Encantamento da Base:** Mensagens de resgate dos modelos Club, Essencial e Premium foram reestruturadas para valorizar os novos barbeiros de ponta da equipe (Bruno, Nati, Dino, David, Ester, João Victor e Amanda), promovendo o agendamento com a nova equipe ativa.
+  - **Orientação Construtiva na IA:** Caso um cliente mencione o nome de um ex-barbeiro, o T-Rex acolhe com cordialidade, explica que ele não atua mais na Dino, apresenta a nova equipe de especialistas ativos e oferece consultar vagas imediatamente.
+- **Proteção Técnica Antiban da Meta:**
+  - **Eliminação de Rajadas:** Desativada a quebra de bolhas múltiplas (splitBubbles) para evitar disparos em rajada de várias mensagens no mesmo minuto. O atendimento por IA envia uma única mensagem harmoniosa e completa.
+  - **Resolução Determinística de Gírias:** Termos como 'padre', 'pode', 'pode ser', 'tanto faz', 'qualquer um', 'quem tiver livre' são tratados deterministicamente como aceitação de qualquer barbeiro (professionalId='qualquer'), sem alucinações.
+  - **Fim de Retrocessos:** Quando o cliente responde 'Fechado!', 'Sim' ou 'Bora' a uma proposta de horário, a IA não dá ré perguntando novamente qual serviço quer fazer; ela segue diretamente para a preparação e confirmação do agendamento.
+  - **Isolamento de Nomes:** A IA é proibida de chamar o cliente pelo nome de barbeiros da equipe.
+
+---
+
 ## 3. Artefatos de Entrega Disponibilizados
 
 1. **[Manual Operacional do Barbeiro em PDF Executivo](/home/ubuntu/agro-open/docs/MANUAL-DO-BARBEIRO-DINO-KYTTO.pdf):** Documento diagramado padrão A4 executivo, contendo capturas de tela reais do aplicativo móvel, orientações de uso, metas/comissões e a senha padrão de acesso `123456`.
