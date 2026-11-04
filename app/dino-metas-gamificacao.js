@@ -264,9 +264,10 @@ export function apurarDesempenhoEquipe(empresaId, { dataIso = dataIsoCuiaba(), i
       const noDia = dataAg === dataIso || dataAg === dataIsoCuiaba(new Date().toISOString()) || dataAgCuiaba === dataIso;
       if (noDia && ag.profissionalId && stats[resolverProfId(ag.profissionalId)]) {
         const profId = resolverProfId(ag.profissionalId);
+        const qtdAg = Math.max(1, Math.round(Number(ag.quantidade || 1)));
         stats[profId].dia.comandasAtendidas += 1;
-        stats[profId].dia.servicosTotal += 1;
-        stats[profId].semana.servicosTotal += 1;
+        stats[profId].dia.servicosTotal += qtdAg;
+        stats[profId].semana.servicosTotal += qtdAg;
         const valorAg = Number(ag.preco || ag.valor || 0);
         stats[profId].dia.faturamentoServicos += valorAg;
         stats[profId].dia.faturamentoTotal += valorAg;
@@ -280,21 +281,27 @@ export function apurarDesempenhoEquipe(empresaId, { dataIso = dataIsoCuiaba(), i
           } catch (err) {}
         }
         
-        const ehExtra = /extra|adicional|sobrancelha|pigmenta|spa|massagem|barboterapia|hidrata/i.test(servicoNomeAtual || '');
+        const ehExtra = /extra|adicional|sobrancelha|pigmenta|spa|massagem|barboterapia|hidrata|limpeza|est[eé]tica|revitaliza|selagem|botox|platinado|luzes|qu[ií]mica/i.test(servicoNomeAtual || '');
         
         stats[profId].dia.servicosLista = stats[profId].dia.servicosLista || [];
         stats[profId].dia.servicosLista.push({ 
           nome: servicoNomeAtual || 'Serviço Agendado', 
+          quantidade: qtdAg,
           valor: valorAg, 
+          precoUnitario: valorAg / qtdAg,
           extra: ehExtra, 
           cliente: ag.clienteNome || ag.clienteTelefone || 'Cliente não identificado' 
         });
 
         if (ehExtra) {
-
-          stats[profId].dia.servicosExtras += 1;
-          stats[profId].dia.servicosExtrasLista.push({ nome: servicoNomeAtual || 'Serviço Extra (Agendado)', valor: valorAg });
-          stats[profId].semana.servicosExtras += 1;
+          stats[profId].dia.servicosExtras += qtdAg;
+          stats[profId].dia.servicosExtrasLista.push({ 
+            nome: servicoNomeAtual || 'Serviço Extra (Agendado)', 
+            quantidade: qtdAg,
+            valor: valorAg,
+            precoUnitario: valorAg / qtdAg,
+          });
+          stats[profId].semana.servicosExtras += qtdAg;
         }
       }
     }
@@ -329,34 +336,50 @@ const rawCmd = cmd.fechadaEm || cmd.atualizadoEm || cmd.criadoEm || '';
         const profId = resolverProfId(item.profissionalId || cmd.profissionalId);
         if (!profId || !stats[profId]) return;
 
+        let qtd = Math.max(1, Math.round(Number(item.quantidade || item.qtd || 1)));
+        const valor = Number(item.subtotal || item.valor || 0);
+
+        // Se quantidade veio 1 mas o serviço cadastrado tem preço unitário fixo e o valor total é múltiplo exato
+        if (qtd === 1 && valor > 0 && item.servicoId) {
+          try {
+            const srvObj = barbeariaErpKytto.listarServicos(emp, { incluirInativos: true }).find(s => s.id === item.servicoId);
+            const pUnit = Number(srvObj?.preco || 0);
+            if (pUnit > 0 && valor > pUnit && Math.round(valor / pUnit) === (valor / pUnit)) {
+              qtd = Math.round(valor / pUnit);
+            }
+          } catch {}
+        }
+
         const ehExtra = Boolean(
           item.extra === true ||
           item.ehExtra === true ||
           index > 0 || // serviço adicional na mesma comanda!
-          /extra|adicional|sobrancelha|pigmenta|spa|massagem|barboterapia|hidrata/i.test(item.nome || '')
+          /extra|adicional|sobrancelha|pigmenta|spa|massagem|barboterapia|hidrata|limpeza|est[eé]tica|revitaliza|selagem|botox|platinado|luzes|qu[ií]mica/i.test(item.nome || '') ||
+          /est[eé]tica|facial|tratamento|qu[ií]mica/i.test(item.categoria || '')
         );
 
-        const valor = Number(item.subtotal || item.valor || 0);
-
-        
         if (noDia) {
           stats[profId].dia.servicosLista = stats[profId].dia.servicosLista || [];
           stats[profId].dia.servicosLista.push({
             nome: item.nome,
+            quantidade: qtd,
             valor,
+            precoUnitario: item.precoUnitario || (valor / qtd),
             extra: ehExtra,
             cliente: cmd.clienteNome || cmd.clienteTelefone || 'Cliente não identificado'
           });
 
-          stats[profId].dia.servicosTotal += 1;
+          stats[profId].dia.servicosTotal += qtd;
 
           stats[profId].dia.faturamentoServicos += valor;
           stats[profId].dia.faturamentoTotal += valor;
           if (ehExtra) {
-            stats[profId].dia.servicosExtras += 1;
+            stats[profId].dia.servicosExtras += qtd;
             stats[profId].dia.servicosExtrasLista.push({
               nome: item.nome,
+              quantidade: qtd,
               valor,
+              precoUnitario: item.precoUnitario || (valor / qtd),
               comandaId: cmd.id,
               clienteNome: cmd.clienteNome,
             });
@@ -364,10 +387,10 @@ const rawCmd = cmd.fechadaEm || cmd.atualizadoEm || cmd.criadoEm || '';
         }
 
         if (naSemana) {
-          stats[profId].semana.servicosTotal += 1;
+          stats[profId].semana.servicosTotal += qtd;
           stats[profId].semana.faturamentoServicos += valor;
           stats[profId].semana.faturamentoTotal += valor;
-          if (ehExtra) stats[profId].semana.servicosExtras += 1;
+          if (ehExtra) stats[profId].semana.servicosExtras += qtd;
         }
       });
 

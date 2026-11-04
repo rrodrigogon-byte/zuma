@@ -33,14 +33,24 @@ export default function BarbeiroVendaRapida({ profissional, atendimento, onPront
     window.addEventListener('beforeunload', aviso)
     return () => window.removeEventListener('beforeunload', aviso)
   }, [bloqueado])
-  function adicionar(item) {
+  function adicionar(item, delta = 1) {
     if (bloqueado) return
     setCarrinho(atual => {
-      const anterior = atual.find(i => i.id === item.id && i.tipo === tipo)
-      const limite = tipo === 'produto' ? Math.min(99, Math.floor(item.estoque)) : 99
-      if ((anterior?.quantidade || 0) >= limite) return atual
-      return anterior ? atual.map(i => i === anterior ? { ...i, quantidade: i.quantidade + 1 } : i) : [...atual, { ...item, tipo, quantidade: 1 }]
+      const tipoItem = item.tipo || tipo
+      const anterior = atual.find(i => i.id === item.id && i.tipo === tipoItem)
+      const limite = tipoItem === 'produto' ? Math.min(99, Math.floor(item.estoque)) : 99
+      const novaQtd = Math.min(limite, (anterior?.quantidade || 0) + delta)
+      return anterior ? atual.map(i => i === anterior ? { ...i, quantidade: novaQtd } : i) : [...atual, { ...item, tipo: tipoItem, quantidade: Math.max(1, delta) }]
     })
+  }
+  function alterarQtd(item, valor) {
+    if (bloqueado) return
+    const qtdNum = Math.max(0, Math.min(99, Math.round(Number(valor) || 0)))
+    if (qtdNum === 0) {
+      setCarrinho(atual => atual.filter(i => i !== item))
+    } else {
+      setCarrinho(atual => atual.map(i => i === item ? { ...i, quantidade: qtdNum } : i))
+    }
   }
   function reduzir(item) { if (!bloqueado) setCarrinho(atual => atual.flatMap(i => i !== item ? [i] : i.quantidade > 1 ? [{ ...i, quantidade: i.quantidade - 1 }] : [])) }
   async function salvar() {
@@ -72,7 +82,50 @@ export default function BarbeiroVendaRapida({ profissional, atendimento, onPront
     {catalogo && <><div className="barber-sale-tabs" role="group" aria-label="Catálogo"><button type="button" aria-pressed={tipo === 'servico'} onClick={() => setTipo('servico')}>Serviços ({catalogo.servicos.length})</button><button type="button" aria-pressed={tipo === 'produto'} onClick={() => setTipo('produto')}>Produtos ({catalogo.produtos.length})</button></div>
       <label>Buscar no catálogo<input type="search" value={busca} onChange={e => setBusca(e.target.value)} placeholder="Nome do serviço ou produto" /></label>
       <div className="barber-sale-catalog">{filtrados.map(i => <button type="button" key={i.id} disabled={bloqueado} onClick={() => adicionar(i)}><strong>{i.nome}</strong><span>{reais(i.preco)} · {tipo === 'servico' ? `${i.duracaoMinutos} min` : `${i.estoque} em estoque`}</span><b>+ Adicionar</b></button>)}{!filtrados.length && <p>Nenhum item disponível neste filtro.</p>}</div>
-      <div className="barber-sale-cart" aria-label="Itens da comanda">{carrinho.map(i => <div key={`${i.tipo}-${i.id}`}><span>{i.quantidade} × {i.nome}<small>{reais(i.preco * i.quantidade)}</small></span><button type="button" aria-label={`Diminuir ${i.nome}`} disabled={bloqueado} onClick={() => reduzir(i)}>−</button></div>)}</div>
+      <div className="barber-sale-cart" aria-label="Itens da comanda">
+        <div style={{ fontSize: 13, fontWeight: 800, marginBottom: 8, color: '#f8fafc' }}>
+          Itens na comanda ({carrinho.reduce((acc, i) => acc + (i.quantidade || 1), 0)} itens):
+        </div>
+        {carrinho.map(i => (
+          <div key={`${i.tipo}-${i.id}`} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid rgba(255,255,255,0.08)', gap: 8 }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontWeight: 700, fontSize: 13.5, color: '#f8fafc', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{i.nome}</div>
+              <div style={{ fontSize: 12, color: 'var(--muted, #94a3b8)', marginTop: 2 }}>
+                {reais(i.preco)} un · <strong style={{ color: '#10b981' }}>{reais(i.preco * i.quantidade)}</strong>
+              </div>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+              <button
+                type="button"
+                aria-label={`Diminuir ${i.nome}`}
+                disabled={bloqueado}
+                onClick={() => reduzir(i)}
+                style={{ width: 34, height: 34, borderRadius: 8, border: '1px solid #475569', background: '#1e293b', color: '#fff', fontSize: 18, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              >
+                −
+              </button>
+              <input
+                type="number"
+                min="1"
+                max="99"
+                value={i.quantidade}
+                disabled={bloqueado}
+                onChange={e => alterarQtd(i, e.target.value)}
+                style={{ width: 44, height: 34, textAlign: 'center', borderRadius: 8, border: '1px solid #475569', background: '#0f172a', color: '#fff', fontWeight: 800, fontSize: 14 }}
+              />
+              <button
+                type="button"
+                aria-label={`Aumentar ${i.nome}`}
+                disabled={bloqueado}
+                onClick={() => adicionar(i, 1)}
+                style={{ width: 34, height: 34, borderRadius: 8, border: '1px solid #475569', background: '#1e293b', color: '#fff', fontSize: 18, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              >
+                +
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
       <strong aria-live="polite">Total dos itens: {reais(carrinho.reduce((n,i) => n + i.preco * i.quantidade,0))}</strong>
       <p>Preços e estoque são conferidos no servidor ao salvar. Produtos do catálogo de revenda do ERP.</p>
       <button type="button" className="barber-sale-save" disabled={enviando || !online || !carrinho.length || !nome.trim() || (catalogo?.comanda && !['aberta','aguardando_pagamento'].includes(catalogo.comanda.status))} onClick={salvar}>{enviando ? 'Conferindo…' : pendente ? 'Conferir e tentar novamente' : 'Salvar comanda para o caixa'}</button>

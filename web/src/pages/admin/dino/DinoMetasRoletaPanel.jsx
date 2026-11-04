@@ -660,35 +660,59 @@ export default function DinoMetasRoletaPanel() {
       )}
 
       {modalProfAberto && profSelecionadoDetalhes && (
-        <Modal title={`Detalhes - ${profSelecionadoDetalhes.nome}`} onClose={() => setModalProfAberto(false)} wide>
-          <div style={{ padding: 20 }}>
-            <h4 style={{ marginBottom: 12 }}>Serviços Realizados Hoje ({profSelecionadoDetalhes.dia.servicosLista?.length || 0})</h4>
-            {(!profSelecionadoDetalhes.dia.servicosLista || profSelecionadoDetalhes.dia.servicosLista.length === 0) ? (
-              <p style={{ color: 'var(--muted)' }}>Nenhum serviço realizado hoje.</p>
-            ) : (
-              <table className="dino-historico-table" style={{ marginBottom: 24 }}>
-                <thead>
-                  <tr>
-                    <th>Cliente</th>
-                    <th>Serviço</th>
-                    <th>Valor</th>
-                    <th>Tipo</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {profSelecionadoDetalhes.dia.servicosLista.map((srv, idx) => (
-                    <tr key={idx}>
-                      <td>{srv.cliente}</td>
-                      <td>{srv.nome}</td>
-                      <td>{fmtR(srv.valor)}</td>
-                      <td>{srv.extra ? <span className="dino-status-pill girado">Extra</span> : <span className="dino-status-pill entregue">Padrão</span>}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </div>
-        </Modal>
+        (() => {
+          const servicos = profSelecionadoDetalhes.dia.servicosLista || [];
+          const totalProcedimentos = servicos.reduce((soma, s) => soma + (s.quantidade || 1), 0);
+          const totalExtras = servicos.filter(s => s.extra).reduce((soma, s) => soma + (s.quantidade || 1), 0);
+          return (
+            <Modal title={`Detalhes - ${profSelecionadoDetalhes.nome}`} onClose={() => setModalProfAberto(false)} wide>
+              <div style={{ padding: 20 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, flexWrap: 'wrap', gap: 8 }}>
+                  <h4 style={{ margin: 0 }}>Serviços Realizados Hoje ({totalProcedimentos} procedimentos)</h4>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <span className="dino-status-pill entregue">{totalProcedimentos - totalExtras} Padrão</span>
+                    <span className="dino-status-pill girado">{totalExtras} Extra(s)</span>
+                  </div>
+                </div>
+                {servicos.length === 0 ? (
+                  <p style={{ color: 'var(--muted)' }}>Nenhum serviço realizado hoje.</p>
+                ) : (
+                  <table className="dino-historico-table" style={{ marginBottom: 24 }}>
+                    <thead>
+                      <tr>
+                        <th>Cliente</th>
+                        <th>Serviço</th>
+                        <th style={{ textAlign: 'center' }}>Qtd</th>
+                        <th>Valor Total</th>
+                        <th>Tipo</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {servicos.map((srv, idx) => (
+                        <tr key={idx}>
+                          <td>{srv.cliente}</td>
+                          <td>
+                            <strong>{srv.nome}</strong>
+                            {srv.quantidade > 1 && srv.precoUnitario ? (
+                              <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>
+                                {srv.quantidade}x de {fmtR(srv.precoUnitario)} cada
+                              </div>
+                            ) : null}
+                          </td>
+                          <td style={{ textAlign: 'center', fontWeight: 800 }}>
+                            {srv.quantidade || 1}
+                          </td>
+                          <td>{fmtR(srv.valor)}</td>
+                          <td>{srv.extra ? <span className="dino-status-pill girado">Extra</span> : <span className="dino-status-pill entregue">Padrão</span>}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </Modal>
+          );
+        })()
       )}
     </div>
   )
