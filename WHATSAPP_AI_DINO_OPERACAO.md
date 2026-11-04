@@ -89,6 +89,19 @@ Hoje o `GET /messages` entrega áudio como `content: "[ÁUDIO RECEBIDO]"`, sem o
 2. **URL baixável**: `mediaUrl` (a chave `X-API-KEY` só é enviada se a URL for do próprio backend);
 3. **Rota dedicada**: `GET {BASE}/messages/{whatsappMessageId}/media` devolvendo o binário ou `{ base64, mimetype }`, ligada por `CHATBOT_BACKEND_MEDIA_PATH=/messages/{id}/media`.
 
+## Travas Anti-Alucinação e Anti-Repetição da Barbearia Dino (Nov/2026)
+
+Com base em incidentes reais de conversação reportados na operação, foram implementadas blindagens estritas no pipeline de atendimento da IA:
+
+1. **Anti-Adivinhação de Serviço**: Se o cliente perguntar de horário ("tem horário hoje?", "tem vaga essa semana?") sem especificar o serviço desejado, o atendente é impedido de presumir serviços e chamar ferramentas com palpites aleatórios (ex: manicure, unhas, sobrancelhas). Ele pergunta objetivamente: *"Temos sim! Qual serviço você deseja agendar (corte, barba ou combo) e qual seu barbeiro de preferência?"*.
+2. **Anti-Repetição de Horários**: NUNCA repete a lista de 3 horários com data, profissional e preço se esses horários já foram enviados na mensagem anterior. Respostas curtas de contexto ("tá bom", "eu tô na cidade", "consigo sim", "beleza") recebem apenas a pergunta direta: *"Show! Qual dos horários anteriores você prefere que eu marque?"*.
+3. **Agendamento Imediato no Aceite**: Quando o cliente disser *"pode deixar esse horário então"*, *"esse mesmo"*, *"marca esse"* ou concordar com o horário citado, a IA determina o horário e invoca `preparar_agendamento` imediatamente, sem responder *"Fechado!"* ou *"Combinado!"* sem preparar a ação na mesma resposta.
+4. **Isolamento de Confirmação de Presença Determinística**: O interceptor determinístico de presença (`confirmNextAppointment`) agora só é acionado se a última mensagem enviada pela barbearia foi expressamente um lembrete de presença ou se o cliente digitou uma frase inequívoca de presença (*"confirmo presença"*, *"estarei lá"*). Em diálogos ativos com a IA (mensagens nos últimos 45 minutos), respostas como *"confirmo"*, *"sim"*, *"pode ser"* pertencem ao diálogo e não confirmam agendamentos preexistentes. Além disso, horários já com status `confirmado` são excluídos da lista de pendências.
+5. **Isolamento de Saudação em Conversa Ativa**: Se houver interação recente nos últimos 45 minutos, mensagens como *"bom dia"* ou *"opa"* não disparam o reset para o menu de saudação genérica.
+6. **Tratamento de Prefixos Profissionais e Genéricos no CRM**: Títulos como *"Eng Civil"*, *"Eng"*, *"Advogado"*, *"Dr."*, *"Lead WhatsApp"* são tratados como nomes genéricos, impedindo que a IA cumprimente o cliente como *"Eng"* ou *"Lead"*.
+7. **Correção de Perfil de Atendimento Habitual**: Para novos contatos ou leads com 0 visitas registradas, o período preferido habitual é mantido como `null`, impedindo que a IA alucine que o cliente tem o hábito de cortar na madrugada.
+8. **Suavização e Agrupamento de Mensagens**: Saudações curtas e perguntas finais agora são consolidadas em blocos coesos, evitando rajadas fragmentadas de 4 ou 5 bolhas curtas no WhatsApp.
+
 Enquanto o backend não expõe a mídia, o comportamento é o anterior (resposta fixa pedindo texto). Na Evolution, ligar `webhook_base64` (e subir `WHATSAPP_AI_WEBHOOK_MAX_BYTES` até 524288 para fotos) já ativa voz e foto pelo webhook.
 
 A mídia nunca é gravada: fica só em memória durante a transcrição. Mensagem repetida no polling não é transcrita de novo (o id do evento é conferido antes de chamar o Gemini).
