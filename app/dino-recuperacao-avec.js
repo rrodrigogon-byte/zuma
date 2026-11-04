@@ -7,6 +7,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import readline from 'node:readline';
 import { fileURLToPath } from 'node:url';
+import { verificarStatusBarbeiroDino } from './core/barbershop-agenda.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const AVEC_DATA_FILE = path.join(__dirname, 'migrations', 'data', 'avec-dino-20261022', 'historico-servicos-completo.jsonl');
@@ -265,16 +266,29 @@ export async function carregarBaseConsolidada({
 
     // Mensagem humanizada para WhatsApp
     const primeiroNome = c.nome.split(' ')[0] || 'Cliente';
-    const profNome = c.profissionalPreferido && c.profissionalPreferido !== 'Não informado'
-      ? c.profissionalPreferido.split(' ')[0]
-      : 'nossa equipe';
+    const statusProf = verificarStatusBarbeiroDino(c.profissionalPreferido);
+    c.barbeiroAtivo = statusProf.ativo;
+    c.barbeiroSaiu = statusProf.exBarbeiro || false;
+    c.barbeiroNomeExibicao = statusProf.nomeExibicao;
 
     if (c.modeloRecomendado === 'essencial') {
-      c.mensagemWhatsapp = `Olá ${primeiroNome}, tudo bem? Aqui é da Barbearia Dino! 💈\n\nSentimos sua falta por aqui! Notamos que faz um tempinho que você não vem dar aquele trato no visual com a gente.\n\nEstamos com novidades: estruturamos nosso atendimento com o novo Modelo Essencial — um corte com a mesma qualidade e cuidado de sempre, mas numa condição super acessível para o seu dia a dia!\n\nPodemos reservar um horário especial para você essa semana? Me avisa aqui qual dia e período fica melhor pra você!`;
+      if (statusProf.ativo) {
+        c.mensagemWhatsapp = `Olá ${primeiroNome}, tudo bem? Aqui é da Barbearia Dino! 💈\n\nSentimos sua falta por aqui! Notamos que faz um tempinho que você não vem dar aquele trato no visual com a gente.\n\nEstamos com novidades: estruturamos nosso atendimento com o novo Modelo Essencial — um corte com a mesma qualidade e cuidado de sempre, mas numa condição super acessível para o seu dia a dia!\n\nPodemos reservar um horário especial com ${statusProf.nomeExibicao} para você essa semana? Me avisa aqui qual dia e período fica melhor pra você!`;
+      } else {
+        c.mensagemWhatsapp = `Olá ${primeiroNome}, tudo bem? Aqui é da Barbearia Dino! 💈\n\nSentimos sua falta por aqui! Notamos que faz um tempinho que você não vem dar aquele talento no visual com a gente.\n\nEstamos com novidades: estruturamos nosso atendimento com o novo Modelo Essencial e novos barbeiros de ponta na equipe — um corte com a mesma qualidade de sempre, mas numa condição super acessível para o seu dia a dia!\n\nGostaria que eu reservasse um horário com o Bruno, com a Nati ou com outro especialista da nossa equipe para você essa semana? Me avisa aqui qual dia e período fica melhor!`;
+      }
     } else if (c.modeloRecomendado === 'premium') {
-      c.mensagemWhatsapp = `Olá ${primeiroNome}, tudo bem? Aqui é da Barbearia Dino! ✂️\n\nPassando para lembrar que já faz um tempo desde seu último atendimento aqui com a gente. Como você preza por uma experiência completa de cuidado e estilo, gostaríamos de te convidar para conhecer nosso Atendimento Premium com exclusividade e serviços completos.\n\nQue tal garantir seu horário para essa semana? Responda aqui para reservarmos a sua cadeira preferida!`;
+      if (statusProf.ativo) {
+        c.mensagemWhatsapp = `Olá ${primeiroNome}, tudo bem? Aqui é da Barbearia Dino! ✂️\n\nPassando para lembrar que já faz um tempo desde seu último atendimento aqui com a gente. Como você preza por uma experiência completa de cuidado e estilo, gostaríamos de te convidar para conhecer nosso Atendimento Premium com exclusividade e serviços completos.\n\nQue tal garantir seu horário com ${statusProf.nomeExibicao} para essa semana? Responda aqui para reservarmos a sua cadeira preferida!`;
+      } else {
+        c.mensagemWhatsapp = `Olá ${primeiroNome}, tudo bem? Aqui é da Barbearia Dino! ✂️\n\nPassando para lembrar que já faz um tempo desde seu último atendimento aqui com a gente. Como você preza por uma experiência completa de cuidado e estilo, gostaríamos de te convidar para conhecer nosso Atendimento Premium com exclusividade e serviços completos.\n\nNossa equipe de especialistas sênior (incluindo o Dino, o Bruno e a Nati) está pronta para te receber com todo o conforto.\n\nQue tal garantir seu horário para essa semana? Responda aqui para reservarmos a sua cadeira preferida!`;
+      }
     } else {
-      c.mensagemWhatsapp = `Olá ${primeiroNome}, tudo bem? Aqui é da Barbearia Dino! 🦁\n\nEstamos entrando em contato porque você era um dos nossos clientes especiais do Club e sentimos sua falta na barbearia!\n\nLançamos condições imperdíveis de renovação e retorno para você manter o visual sempre alinhado com a melhor economia.\n\nQuer que eu verifique os horários disponíveis com ${profNome} para você essa semana?`;
+      if (statusProf.ativo) {
+        c.mensagemWhatsapp = `Olá ${primeiroNome}, tudo bem? Aqui é da Barbearia Dino! 🦁\n\nEstamos entrando em contato porque você era um dos nossos clientes especiais do Club e sentimos sua falta na barbearia!\n\nLançamos condições imperdíveis de renovação e retorno para você manter o visual sempre alinhado com a melhor economia.\n\nQuer que eu verifique os horários disponíveis com ${statusProf.nomeExibicao} para você essa semana?`;
+      } else {
+        c.mensagemWhatsapp = `Olá ${primeiroNome}, tudo bem? Aqui é da Barbearia Dino! 🦁\n\nEstamos entrando em contato porque você era um dos nossos clientes especiais do Club e sentimos muito sua falta por aqui!\n\nLançamos condições imperdíveis de renovação e retorno para você manter o visual sempre alinhado com a melhor economia.\n\nEstamos com uma nova equipe incrível de especialistas (como o Bruno, a Nati e o time completo do Dino) prontos para manter o padrão de excelência no seu estilo!\n\nQuer que eu verifique os horários disponíveis com um dos nossos barbeiros para você essa semana?`;
+      }
     }
 
     consolidados.push(c);

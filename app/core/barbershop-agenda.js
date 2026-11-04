@@ -384,6 +384,56 @@ export async function listProfessionals(scope) {
     .map((item) => ({ id: item.id, nome: item.nome, especialidade: item.especialidade || '' }));
 }
 
+export const BARBEIROS_ATIVOS_DINO = [
+  { id: 'dino', nome: 'Guilherme Cunha Martins', apelido: 'Dino', matches: ['guilherme cunha martins', 'dino', 'guilherme'] },
+  { id: 'bruno', nome: 'Bruno Mendes Pedroso', apelido: 'Bruno', matches: ['bruno mendes pedroso', 'bruno mendes', 'bruno'] },
+  { id: 'david', nome: 'David Kauã Araújo Moraes', apelido: 'David', matches: ['david kaua', 'david', 'davi'] },
+  { id: 'nati', nome: 'Natani Minanis Dobler', apelido: 'Nati', matches: ['natani minanis dobler', 'natani', 'nati', 'nathy'] },
+  { id: 'ester', nome: 'Steffany Marielly de Oliveira', apelido: 'Ester', matches: ['steffany marielly', 'steffany', 'ester', 'stefany'] },
+  { id: 'joao', nome: 'João Victor Domingos Ruedel', apelido: 'João Victor', matches: ['joao victor', 'joão victor', 'ruedel', 'joao', 'joão'] },
+  { id: 'amanda', nome: 'Amanda Gabrielly Santos da Silva', apelido: 'Amanda', matches: ['amanda gabrielly', 'amanda'] },
+];
+
+/**
+ * Verifica se um barbeiro ainda atua na Barbearia Dino.
+ * Caso não atue mais (ex: Gustavo, Vitor, Lucas, Vinycius, etc.), marca como ex-barbeiro
+ * para que mensagens e a IA ofertem os novos profissionais ativos da equipe.
+ */
+export function verificarStatusBarbeiroDino(nomeOuProfissional) {
+  if (!nomeOuProfissional) return { ativo: false, exBarbeiro: false, nomeExibicao: 'nossa equipe' };
+  const raw = typeof nomeOuProfissional === 'string' ? nomeOuProfissional : (nomeOuProfissional.nome || nomeOuProfissional.apelido || '');
+  const clean = raw.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+
+  if (!clean || clean === 'nao informado' || clean === 'qualquer' || clean === 'equipe' || clean.includes('jhenyffer')) {
+    return { ativo: false, exBarbeiro: false, nomeExibicao: 'nossa equipe' };
+  }
+
+  // Diferenciar Bruno Mendes (ativo) de Bruno Rafael (saiu da equipe)
+  if (clean.includes('bruno rafael')) {
+    return {
+      ativo: false,
+      exBarbeiro: true,
+      nomeOriginal: 'Bruno Rafael',
+      nomeExibicao: 'um dos nossos barbeiros (como o Bruno ou a Nati)',
+      barbeirosSugeridos: ['Bruno', 'Nati', 'Dino']
+    };
+  }
+
+  const achado = BARBEIROS_ATIVOS_DINO.find((b) => b.matches.some((m) => clean === m || clean.startsWith(m) || clean.includes(m)));
+  if (achado) {
+    return { ativo: true, exBarbeiro: false, barbeiro: achado, nomeExibicao: achado.apelido };
+  }
+
+  const exNome = raw.split(' ')[0];
+  return {
+    ativo: false,
+    exBarbeiro: true,
+    nomeOriginal: exNome,
+    nomeExibicao: 'um dos nossos barbeiros especialistas (como o Bruno ou a Nati)',
+    barbeirosSugeridos: ['Bruno', 'Nati', 'Dino']
+  };
+}
+
 export async function availability(scope, input = {}) {
   exigirEscopoOperacional(scope, input, true);
   if (await agendaSource(scope) === 'postgres') return pgAvailability(scope, input);

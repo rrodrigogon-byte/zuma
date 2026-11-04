@@ -14,6 +14,7 @@
 
 import { db, save } from '../db.js';
 import { isWhatsappOptOutText } from './whatsapp-phone.js';
+import { verificarStatusBarbeiroDino } from './barbershop-agenda.js';
 
 // Fuso horário operacional da Barbearia Dino (Cuiabá / MT)
 export const TIMEZONE_PADRAO = 'America/Cuiaba';
@@ -92,9 +93,10 @@ export function gerarMensagemHumanizadaDino({
 }) {
   const nomeCompleto = String(cliente.nome || 'Cliente').trim();
   const primeiroNome = nomeCompleto.split(' ')[0] || 'Cliente';
-  const profNome = profissional && profissional !== 'Não informado'
-    ? String(profissional).trim().split(' ')[0]
-    : 'nossa equipe';
+  const statusProf = verificarStatusBarbeiroDino(profissional);
+  const profNome = statusProf.ativo
+    ? statusProf.nomeExibicao
+    : '{um dos nossos barbeiros especialistas|a nossa equipe de ponta da Barbearia Dino|um dos nossos profissionais (como o Bruno ou a Nati)}';
 
   // Se nenhum template foi fornecido, usamos um gerador padrão com rico Spintax
   let baseTemplate = template;

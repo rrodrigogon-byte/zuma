@@ -1049,7 +1049,14 @@ export default function DinoRecuperacaoAvecPanel({ onAbrirAgenda }) {
                     </td>
 
                     <td>
-                      <strong style={{ color: '#38bdf8' }}>{c.profissionalPreferido}</strong>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                        <strong style={{ color: '#38bdf8' }}>{c.profissionalPreferido}</strong>
+                        {c.barbeiroSaiu && (
+                          <span style={{ fontSize: '10px', background: 'rgba(239, 68, 68, 0.15)', color: '#f87171', border: '1px solid rgba(239, 68, 68, 0.3)', padding: '1px 6px', borderRadius: 4 }} title="Este profissional não atua mais na Dino. A IA e o sistema ofertam os novos barbeiros ativos da equipe.">
+                            Não atua mais
+                          </span>
+                        )}
+                      </div>
                       <div style={{ fontSize: '11.5px', color: '#94a3b8' }}>
                         {c.profissionalPreferidoVisitas} atendimento{c.profissionalPreferidoVisitas === 1 ? '' : 's'}
                       </div>
@@ -1272,14 +1279,28 @@ export default function DinoRecuperacaoAvecPanel({ onAbrirAgenda }) {
                   <strong>{moeda(modalCliente.ticketMedio)}</strong>
                 </div>
                 <div>
-                  <span>Barbeiro Favorito</span>
-                  <strong style={{ color: '#38bdf8' }}>{modalCliente.profissionalPreferido}</strong>
+                  <span>Barbeiro Favorito (Histórico)</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <strong style={{ color: '#38bdf8' }}>{modalCliente.profissionalPreferido}</strong>
+                    {modalCliente.barbeiroSaiu && (
+                      <span style={{ fontSize: '10px', background: 'rgba(239, 68, 68, 0.15)', color: '#f87171', border: '1px solid rgba(239, 68, 68, 0.3)', padding: '1px 6px', borderRadius: 4 }}>
+                        Ex-barbeiro
+                      </span>
+                    )}
+                  </div>
                 </div>
                 <div>
                   <span>Última Visita</span>
                   <strong>{dataBR(modalCliente.ultimaVisita)}</strong>
                 </div>
               </div>
+
+              {/* AVISO DE EX-BARBEIRO CASO TENHA SAÍDO */}
+              {modalCliente.barbeiroSaiu && (
+                <div style={{ background: 'rgba(245, 158, 11, 0.1)', border: '1px solid rgba(245, 158, 11, 0.25)', padding: '10px 14px', borderRadius: 8, fontSize: '12.5px', color: '#fcd34d', marginBottom: 14 }}>
+                  💡 <strong>Profissional mudou de equipe:</strong> O profissional do histórico ({modalCliente.profissionalPreferido.split(' ')[0]}) não atua mais na Barbearia Dino. A mensagem de resgate abaixo foi adaptada automaticamente para apresentar a nova equipe de especialistas ativos (Bruno, Nati, Dino, etc.) e recuperar o cliente com máxima excelência.
+                </div>
+              )}
 
               {/* MENSAGEM SUGERIDA */}
               <div className="dino-recup-modal-message-box">

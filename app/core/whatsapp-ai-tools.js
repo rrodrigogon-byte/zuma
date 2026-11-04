@@ -24,6 +24,7 @@ import {
   agendaSource,
   confirmAttendance,
   noteDelay,
+  verificarStatusBarbeiroDino,
 } from './barbershop-agenda.js';
 import { clubeParaTelefone, entrarListaEspera, planoDoTelefone, perfilDoTelefone, validarAgendamentoComPlano, sugestaoPosServico, codigoIndicacaoCliente } from '../dino-captacao-kytto.js';
 import { saldoCashback } from '../dino-cobranca-kytto.js';
@@ -160,6 +161,15 @@ async function resolveAgendaId(scope, value, field, { allowAny = false } = {}) {
   if (UUID_REGEX.test(normalized) || AGENDA_ID_REGEX.test(normalized)) return normalized;
   if (!normalized) throw new WhatsappAiToolError(`${field} obrigatório`, 'INVALID_ID');
   const profissional = field.startsWith('professional');
+  if (profissional) {
+    const statusDino = verificarStatusBarbeiroDino(normalized);
+    if (statusDino.exBarbeiro) {
+      throw new WhatsappAiToolError(
+        `O profissional "${statusDino.nomeOriginal || normalized}" não faz mais parte da equipe da Barbearia Dino. Explique com carinho e gentileza que ele não atua mais na barbearia, apresente com entusiasmo os barbeiros de ponta da equipe atual (Bruno, Nati, David, Ester, João Victor, Amanda e o próprio Dino) que mantêm o mesmo padrão de excelência e cuidado com o estilo, e pergunte se gostaria de verificar os horários com um deles para esta semana.`,
+        'EX_PROFISSIONAL_NAO_ATUA_MAIS'
+      );
+    }
+  }
   const lista = (profissional ? await listSchedulingProfessionals(scope) : await listSchedulingServices(scope)) || [];
   const { item, candidatos } = matchAgendaName(normalized, lista);
   if (item?.id) return item.id;
