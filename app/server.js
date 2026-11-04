@@ -3572,7 +3572,7 @@ function profissionalDaSessao(req) {
   return eu;
 }
 function exigirPerfilProfissional(req, res, next) {
-  if (req.path === '/modo-barbeiro/trocar-senha') return next();
+  if (req.path === '/modo-barbeiro/trocar-senha' || req.path === '/modo-barbeiro/notificar-cliente') return next();
   const eu = profissionalDaSessao(req);
   if (!eu) return res.status(403).json({ error: 'Seu login não está vinculado a um profissional (o e-mail do cadastro precisa ser o mesmo do login).', code: 'SEM_VINCULO' });
   const caminho = req.path || '';
