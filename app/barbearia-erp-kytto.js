@@ -116,8 +116,8 @@ const TRANSICOES_COMANDA_BARBEARIA = {
   paga: new Set(),
   cancelada: new Set(),
 };
-const MEIOS_PAGAMENTO_COMANDA_BARBEARIA = new Set(['dinheiro', 'pix', 'cartao', 'credito', 'debito', 'transferencia', 'tef', 'carteira', 'conta']);
-const MEIOS_TAXA_COMISSAO = new Set(['pix', 'cartao', 'credito', 'debito', 'transferencia', 'tef', 'carteira']);
+const MEIOS_PAGAMENTO_COMANDA_BARBEARIA = new Set(['dinheiro', 'pix', 'cartao', 'credito', 'cartao_credito', 'debito', 'cartao_debito', 'transferencia', 'tef', 'carteira', 'conta', 'cheque', 'boleto', 'voucher', 'cortesia', 'permuta', 'credito_utilizado']);
+const MEIOS_TAXA_COMISSAO = new Set(['pix', 'cartao', 'credito', 'cartao_credito', 'debito', 'cartao_debito', 'transferencia', 'tef', 'carteira']);
 
 function estadoVazio() {
   return {
@@ -2748,8 +2748,8 @@ export function registrarPagamentoComandaBarbearia(empresaId, comandaId, dados =
     const valor = dinheiro(item?.valor);
     if (!MEIOS_PAGAMENTO_COMANDA_BARBEARIA.has(meio) || valor <= 0) throw new Error('Informe meio e valor válidos para cada pagamento.');
     let caixaId = texto(item?.caixaId ?? item?.caixa_id ?? dados.caixaId ?? dados.caixa_id, 120) || null;
-    if (meio === 'dinheiro' && !caixaId) {
-      // Dinheiro sem caixa escolhido: usa o caixa aberto da unidade quando há um só.
+    if (!caixaId) {
+      // Qualquer meio de pagamento vincula automaticamente ao caixa aberto da unidade se houver
       const abertos = caixaKytto.listarCaixas(empresaId, { status: 'aberto', ...(lojaIdOperacao ? { lojaId: lojaIdOperacao } : {}) });
       if (abertos.length === 1) caixaId = abertos[0].id;
     }
@@ -2757,7 +2757,8 @@ export function registrarPagamentoComandaBarbearia(empresaId, comandaId, dados =
       const caixa = caixaKytto.obterCaixa(empresaId, caixaId);
       if (!caixa || caixa.status !== 'aberto' || (lojaIdOperacao && caixa.lojaId !== lojaIdOperacao)) throw new Error('O caixa informado não está aberto ou não pertence à unidade ativa.');
     }
-    return { id: texto(item?.id, 120) || `pagbar-${crypto.randomUUID()}`, meio, valor, caixaId, ...(meio === 'dinheiro' && !caixaId ? { semCaixa: true } : {}), chaveIdempotencia: texto(item?.chaveIdempotencia ?? item?.chave_idempotencia ?? chaveIdempotencia, 220) || null, registradoEm: dataAtual() };
+    const bandeira = texto(item?.bandeira ?? item?.cardBrand, 50) || null;
+    return { id: texto(item?.id, 120) || `pagbar-${crypto.randomUUID()}`, meio, bandeira, valor, caixaId, ...(meio === 'dinheiro' && !caixaId ? { semCaixa: true } : {}), chaveIdempotencia: texto(item?.chaveIdempotencia ?? item?.chave_idempotencia ?? chaveIdempotencia, 220) || null, registradoEm: dataAtual() };
   });
   const valorNovo = Number(pagamentos.reduce((soma, item) => soma + item.valor, 0).toFixed(2));
   if (valorNovo - saldoAnterior > 0.02) throw new Error(`O pagamento excede o saldo pendente de ${saldoAnterior.toFixed(2)}.`);
@@ -2869,6 +2870,87 @@ export function registrarPagamentoComandaBarbearia(empresaId, comandaId, dados =
     }
   }
   save();
+  return copiarComandaBarbearia(comanda);
+}
+
+
+export function alterarPagamentoComandaBarbearia(empresaId, comandaId, dados = {}) {
+  const estado = estadoEmpresa(empresaId);
+  const comanda = estado.comandas[String(comandaId)];
+  if (!comanda || comanda.empresaId !== String(empresaId)) throw new Error('Comanda não encontrada na empresa ativa.');
+
+  const pagamentoId = texto(dados.pagamentoId ?? dados.pagamento_id, 120);
+  const pagamentos = comanda.pagamentos || [];
+  const pagamentoIndex = pagamentoId
+    ? pagamentos.findIndex((p) => String(p.id) === pagamentoId)
+    : 0;
+  if (pagamentoIndex === -1 || !pagamentos[pagamentoIndex]) throw new Error('Pagamento não encontrado na comanda.');
+
+  const pagAtual = pagamentos[pagamentoIndex];
+
+  // Validação: se o pagamento estiver associado a um caixa, ele precisa estar ABERTO
+  if (pagAtual.caixaId) {
+    const caixa = caixaKytto.obterCaixa(empresaId, pagAtual.caixaId);
+    if (caixa && caixa.status !== 'aberto') {
+      throw new Error('Para alterar a forma de pagamento, reabra o caixa correspondente.');
+    }
+  }
+
+  const novoMeio = dados.meio ? texto(dados.meio, 40).toLowerCase() : pagAtual.meio;
+  const novaBandeira = dados.bandeira !== undefined ? texto(dados.bandeira, 50) : pagAtual.bandeira;
+  const novoValor = dados.valor !== undefined ? dinheiro(dados.valor) : pagAtual.valor;
+  const motivo = texto(dados.motivo || 'Correção de forma de pagamento com caixa reaberto', 300);
+  const usuario = texto(dados.usuario || 'gestao@kytto.local', 120);
+
+  if (!MEIOS_PAGAMENTO_COMANDA_BARBEARIA.has(novoMeio)) throw new Error('Meio de pagamento inválido.');
+  if (novoValor <= 0) throw new Error('Valor do pagamento deve ser positivo.');
+
+  // Se mudou de/para dinheiro, ajusta movimentação no caixa
+  if (pagAtual.meio === 'dinheiro' && novoMeio !== 'dinheiro' && pagAtual.caixaMovimentoId) {
+    try {
+      caixaKytto.registrarEstornoRecebimento(empresaId, {
+        lojaId: comanda.lojaId,
+        movimentoOriginalId: pagAtual.caixaMovimentoId,
+        valor: pagAtual.valor,
+        actionId: `estorno-correcao-${Date.now()}`,
+        motivo: `Correção de forma de pagamento de Dinheiro para ${novoMeio}: ${motivo}`,
+        usuario,
+      });
+    } catch (e) {
+      // continua
+    }
+    pagAtual.caixaMovimentoId = null;
+  } else if (pagAtual.meio !== 'dinheiro' && novoMeio === 'dinheiro' && pagAtual.caixaId) {
+    const recebimento = caixaKytto.registrarRecebimento(empresaId, {
+      caixaId: pagAtual.caixaId,
+      lojaId: comanda.lojaId,
+      valor: novoValor,
+      descricao: `Recebimento corrigido em dinheiro da comanda ${comanda.id}`,
+      referencia: comanda.id,
+      usuario,
+    });
+    pagAtual.caixaMovimentoId = recebimento.id;
+  }
+
+  pagAtual.historicoAlteracoes ||= [];
+  pagAtual.historicoAlteracoes.push({
+    meioAnterior: pagAtual.meio,
+    bandeiraAnterior: pagAtual.bandeira,
+    valorAnterior: pagAtual.valor,
+    alteradoEm: dataAtual(),
+    alteradoPor: usuario,
+    motivo,
+  });
+
+  pagAtual.meio = novoMeio;
+  pagAtual.bandeira = novaBandeira || null;
+  pagAtual.valor = novoValor;
+  pagAtual.atualizadoEm = dataAtual();
+
+  comanda.pagamento = comanda.pagamentos[0]?.meio || null;
+  comanda.atualizadoEm = dataAtual();
+  save();
+
   return copiarComandaBarbearia(comanda);
 }
 

@@ -1,13 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { RefreshCw, Download, Calendar, DollarSign, Archive, User, Filter } from 'lucide-react';
+import { RefreshCw, Download, Calendar, DollarSign, Archive, User, Filter, Eye, X } from 'lucide-react';
 const Card = ({ children, style }) => <div style={{ background: 'var(--card)', borderRadius: '12px', ...style }}>{children}</div>;
 import { api } from '../../../../lib/api';
 import { useToast } from '../../../../hooks/useToast';
+import BarbeariaCaixaDetalhado from '../../BarbeariaCaixaDetalhado';
 
 const RelatorioCaixasFechados = () => {
   const toast = useToast();
   const [caixas, setCaixas] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [caixaModalId, setCaixaModalId] = useState(null);
   const [dataInicio, setDataInicio] = useState(new Date(new Date().setDate(1)).toISOString().slice(0, 10)); // 1st day of month
   const [dataFim, setDataFim] = useState(new Date().toISOString().slice(0, 10)); // today
 
@@ -146,10 +148,11 @@ const RelatorioCaixasFechados = () => {
               <th style={styles.th}>Abertura (R$)</th>
               <th style={styles.th}>Esperado (R$)</th>
               <th style={styles.th}>Contado (R$)</th>
-              <th style={styles.th}>Divergência</th>
-              <th style={styles.th}>Obs</th>
-            </tr>
-          </thead>
+             <th style={styles.th}>Divergência</th>
+             <th style={styles.th}>Obs</th>
+             <th style={{ ...styles.th, textAlign: 'center' }}>Ação</th>
+           </tr>
+         </thead>
           <tbody>
             {caixas.length === 0 ? (
               <tr>
@@ -182,16 +185,46 @@ const RelatorioCaixasFechados = () => {
                     </span>
                   </td>
                   <td style={styles.td}>
-                    <div style={{ fontSize: '12px', maxWidth: '150px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={caixa.observacao}>
-                      {caixa.observacao || '—'}
-                    </div>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+                   <div style={{ fontSize: '12px', maxWidth: '150px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={caixa.observacao}>
+                     {caixa.observacao || '—'}
+                   </div>
+                 </td>
+                 <td style={{ ...styles.td, textAlign: 'center' }}>
+                   <button
+                     type="button"
+                     onClick={() => setCaixaModalId(caixa.id)}
+                     style={{ padding: '6px 12px', background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: '6px', fontSize: '12px', fontWeight: 700, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                   >
+                     <Eye size={13} /> Conferir
+                   </button>
+                 </td>
+               </tr>
+             ))
+           )}
+         </tbody>
+       </table>
+     </div>
+
+     {caixaModalId && (
+       <div style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.7)', backdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: '16px' }}>
+         <div style={{ background: 'var(--card)', borderRadius: '14px', maxWidth: '880px', width: '100%', maxHeight: '92vh', overflowY: 'auto', border: '1px solid var(--line)', padding: '20px', position: 'relative' }}>
+           <button
+             type="button"
+             onClick={() => setCaixaModalId(null)}
+             style={{ position: 'absolute', top: '16px', right: '16px', background: 'var(--card2)', border: '1px solid var(--line)', borderRadius: '8px', padding: '6px', cursor: 'pointer', color: 'var(--fg)', zIndex: 10 }}
+           >
+             <X size={20} />
+           </button>
+           <BarbeariaCaixaDetalhado
+             caixaId={caixaModalId}
+             onCaixaAtualizado={() => {
+               fetchCaixas();
+             }}
+             toast={(msg, type) => toast(msg, type)}
+           />
+         </div>
+       </div>
+     )}
     </div>
   );
 };

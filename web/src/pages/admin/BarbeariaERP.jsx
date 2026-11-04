@@ -1776,12 +1776,13 @@ export default function BarbeariaERP() {
         api.post(`/api/admin/barbearia/comandas/${comanda.id}/pagamentos`, {
           confirmado: true,
           clienteId: formPagamentoComanda.clienteId || comanda.clienteId,
-          pagamentos: [
-            {
-              meio: formPagamentoComanda.meioPagamento,
-              valor,
-              caixaId: formPagamentoComanda.caixaId || undefined,
-            },
+         pagamentos: [
+           {
+             meio: formPagamentoComanda.meioPagamento,
+             bandeira: formPagamentoComanda.bandeira || undefined,
+             valor,
+             caixaId: formPagamentoComanda.caixaId || undefined,
+           },
           ],
           chaveIdempotencia,
         }),
@@ -4112,12 +4113,14 @@ export default function BarbeariaERP() {
           onMove={movimentarCaixaOperacao}
           onClose={fecharCaixaOperacao}
           onCloseDay={fecharDiaOperacao}
-          onViewDay={(fechamento) => {
-            setFechamentoDetalhado(fechamento);
-            setModal("fechamentoDia");
-          }}
-          salvando={salvando}
-        />
+         onViewDay={(fechamento) => {
+           setFechamentoDetalhado(fechamento);
+           setModal("fechamentoDia");
+         }}
+         onRefresh={carregar}
+         toast={toast}
+         salvando={salvando}
+       />
       </div>
     );
   }
@@ -9437,13 +9440,34 @@ export default function BarbeariaERP() {
                         <option value="dinheiro">Dinheiro</option>
                         <option value="debito">Cartão de débito</option>
                         <option value="credito">Cartão de crédito</option>
-                        <option value="transferencia">Transferência</option>
-                        <option value="conta">Conta do cliente</option>
-                      </select>
-                    </Field>
-                    <Field label="Valor recebido (R$)">
-                      <input
-                        type="number"
+                       <option value="transferencia">Transferência</option>
+                       <option value="conta">Conta do cliente</option>
+                     </select>
+                   </Field>
+                   {['debito', 'credito'].includes(formPagamentoComanda.meioPagamento) && (
+                     <Field label="Bandeira do Cartão">
+                       <select
+                         value={formPagamentoComanda.bandeira || ''}
+                         onChange={(event) =>
+                           setFormPagamentoComanda((atual) => ({
+                             ...atual,
+                             bandeira: event.target.value,
+                           }))
+                         }
+                         style={inputStyle}
+                       >
+                         <option value="">(Selecione a bandeira / Padrão)</option>
+                         <option value="MasterCard">MasterCard</option>
+                         <option value="Visa">Visa</option>
+                         <option value="ELO">ELO</option>
+                         <option value="Hipercard">Hipercard</option>
+                         <option value="American Express">American Express</option>
+                       </select>
+                     </Field>
+                   )}
+                   <Field label="Valor recebido (R$)">
+                     <input
+                       type="number"
                         min="0.01"
                         max={saldoPendente}
                         step="0.01"

@@ -152,6 +152,7 @@ import * as dinoBi from './dino-bi.js';
 import * as dinoMetas from './dino-metas.js';
 import * as dinoGamificacao from './dino-metas-gamificacao.js';
 import * as dinoCarteiraClientes from './dino-carteira-clientes.js';
+import { obterDetalhesCaixaOperacao } from './dino-caixa-detalhes.js';
 import { funnelSummary } from './storefront-funnel.js';
 import { whatsappProviderConfigured, whatsappProviderName } from './core/whatsapp-provider.js';
 import { enviarMensagem as enviarWhatsappCore } from './core/whatsapp.js';
@@ -5903,6 +5904,46 @@ app.post('/api/admin/barbearia/operacao/caixas/:id/movimentos', (req, res) => {
     res.status(201).json({ ok: true, movimento });
   } catch (error) { res.status(400).json({ error: error.message }); }
 });
+
+app.post('/api/admin/barbearia/operacao/caixas/:id/reabrir', (req, res) => {
+  try {
+    const caixa = caixaBarbeariaDaSessao(req, req.params.id);
+    if (!caixa) return res.status(404).json({ error: 'Caixa não encontrado na empresa/unidade ativa.' });
+    if (req.body?.confirmado !== true) return res.status(400).json({ error: 'A confirmação explícita da reabertura é obrigatória.' });
+    const reaberto = caixaKytto.reabrirCaixa(legacyEmpresaId(req), {
+      caixaId: caixa.id,
+      lojaId: legacyLojaId(req),
+      usuario: req.user?.email || req.user?.nome,
+      motivo: req.body?.motivo || 'Reabertura para correções e conferência',
+    });
+    audit(req, 'CAIXA_REABERTO', `caixaId=${caixa.id} motivo=${req.body?.motivo || ''}`);
+    res.json({ ok: true, caixa: reaberto });
+  } catch (error) { res.status(400).json({ error: error.message }); }
+});
+
+app.get('/api/admin/barbearia/operacao/caixas/:id/detalhes', (req, res) => {
+  try {
+    const caixa = caixaBarbeariaDaSessao(req, req.params.id);
+    if (!caixa) return res.status(404).json({ error: 'Caixa não encontrado na empresa/unidade ativa.' });
+    const detalhes = obterDetalhesCaixaOperacao(legacyEmpresaId(req), caixa.id);
+    res.json({ ok: true, detalhes });
+  } catch (error) { res.status(400).json({ error: error.message }); }
+});
+
+app.patch('/api/admin/barbearia/comandas/:id/pagamentos/:pagamentoId', (req, res) => {
+  try {
+    const comanda = comandaBarbeariaDaSessao(req, req.params.id);
+    if (!comanda) return res.status(404).json({ error: 'Comanda não encontrada na empresa/unidade ativa.' });
+    const comandaAtualizada = barbeariaErpKytto.alterarPagamentoComandaBarbearia(legacyEmpresaId(req), comanda.id, {
+      ...(req.body || {}),
+      pagamentoId: req.params.pagamentoId,
+      usuario: req.user?.email || req.user?.nome,
+    });
+    audit(req, 'PAGAMENTO_COMANDA_ALTERADO', `comandaId=${comanda.id} pagId=${req.params.pagamentoId} novoMeio=${req.body?.meio || ''}`);
+    res.json({ ok: true, comanda: comandaAtualizada });
+  } catch (error) { res.status(400).json({ error: error.message }); }
+});
+
 app.post('/api/admin/barbearia/operacao/caixas/:id/fechamento', (req, res) => {
   try {
     const caixa = caixaBarbeariaDaSessao(req, req.params.id);

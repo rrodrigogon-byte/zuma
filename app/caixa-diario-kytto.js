@@ -242,3 +242,46 @@ export function fecharCaixa(empresaId, dados = {}) {
     resumo: { recebimentosDinheiro, recebimentosRegistrados: dinheiro(recebimentosRegistrados), estornosRecebimento: dinheiro(estornosRecebimento), recebimentosLiquidos: recebimentosDinheiro, sangrias: dinheiro(sangrias), suprimentos: dinheiro(suprimentos), valorEsperado, valorInformado, divergencia: caixa.divergencia },
   };
 }
+
+export function reabrirCaixa(empresaId, dados = {}) {
+  const caixaId = String(dados.caixaId || dados.caixa_id || dados.id || '');
+  const store = storeEmpresa(empresaId);
+  const caixa = store.caixas[caixaId];
+  if (!caixa || caixa.empresaId !== String(empresaId)) throw new Error('Caixa não encontrado na empresa ativa.');
+  if (dados.lojaId && caixa.lojaId !== String(dados.lojaId)) throw new Error('Caixa não pertence à unidade ativa.');
+  if (caixa.status !== 'fechado') throw new Error('Apenas caixas com status fechado podem ser reabertos.');
+
+  // Verifica se não há outro caixa aberto com o mesmo número na mesma unidade e data
+  const outroAberto = Object.values(store.caixas).find((item) =>
+    item.id !== caixa.id &&
+    item.numeroCaixa === caixa.numeroCaixa &&
+    item.data === caixa.data &&
+    item.status === 'aberto' &&
+    (item.lojaId || null) === (caixa.lojaId || null)
+  );
+  if (outroAberto) throw new Error('Já existe outro caixa aberto para esta unidade e data. Feche-o antes de reabrir este caixa.');
+
+  const usuario = texto(dados.usuario || 'sistema@kytto.local', 120);
+  const motivo = texto(dados.motivo || 'Reabertura para conferência/correção', 300);
+
+  caixa.historicoFechamentos ||= [];
+  caixa.historicoFechamentos.push({
+    fechadoEm: caixa.fechadoEm,
+    valorEsperado: caixa.valorEsperado,
+    valorInformado: caixa.valorInformado,
+    divergencia: caixa.divergencia,
+    observacaoFechamento: caixa.observacaoFechamento,
+    reabertoEm: agora(),
+    reabertoPor: usuario,
+    motivo,
+  });
+
+  caixa.status = 'aberto';
+  caixa.reabertoEm = agora();
+  caixa.reabertoPor = usuario;
+  caixa.motivoReabertura = motivo;
+  caixa.fechadoEm = null;
+  caixa.atualizadoEm = agora();
+  save();
+  return serializarCaixa(caixa);
+}
