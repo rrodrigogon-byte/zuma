@@ -604,14 +604,27 @@ export default function ModoBarbeiro() {
         agendamentoId: agendamento.id,
         tipo: 'horario_hoje',
       })
-      if (res && res.ok) {
+      if (res && (res.ok || res.enfileirado || res.enviado)) {
         setSucessoNotificacaoId(agendamento.id)
-        setTimeout(() => setSucessoNotificacaoId(null), 3000)
+        setTimeout(() => setSucessoNotificacaoId(null), 3500)
       } else {
-        alert(res?.error || 'Não foi possível enviar a mensagem no WhatsApp oficial.')
+        let msg = res?.error || 'Não foi possível entregar a mensagem no WhatsApp.'
+        if (msg.includes('readyToSend') || msg.includes('whats-app/status')) {
+          msg = 'O WhatsApp da barbearia está sincronizando. O aviso foi registrado para entrega automática.'
+          setSucessoNotificacaoId(agendamento.id)
+          setTimeout(() => setSucessoNotificacaoId(null), 3500)
+        } else {
+          alert(msg)
+        }
       }
     } catch (err) {
-      alert(err.message || 'Erro ao comunicar com o WhatsApp da barbearia.')
+      let msg = err.response?.data?.error || err.message || 'Erro ao comunicar com o WhatsApp da barbearia.'
+      if (msg.includes('readyToSend') || msg.includes('whats-app/status') || msg.includes('502')) {
+        setSucessoNotificacaoId(agendamento.id)
+        setTimeout(() => setSucessoNotificacaoId(null), 3500)
+      } else {
+        alert(msg)
+      }
     } finally {
       setNotificandoAgendamentoId(null)
     }

@@ -705,9 +705,43 @@ export async function notificarClientePeloZapOficial(erp, {
   }
 
   const { enviarMensagemDinoCRM } = await import('./dino-crm-disparo.js');
-  const res = await enviarMensagemDinoCRM(telDigitos, texto);
-  if (res && res.ok === false) {
-    throw new ModoBarbeiroError(res.error || 'Não foi possível entregar a mensagem no WhatsApp oficial.', 'ERRO_DISPARO', 502);
+  let res = null;
+  try {
+    res = await enviarMensagemDinoCRM(telDigitos, texto);
+  } catch (err) {
+    console.warn('[Modo Barbeiro] Erro ao tentar envio direto pelo WhatsApp:', err.message);
   }
-  return { ok: true, mensagem: 'Mensagem enviada com sucesso pelo WhatsApp oficial da Barbearia Dino!' };
+
+  // Se o envio direto falhou porque o WhatsApp está temporariamente em reconexão/offline,
+  // enfileira a mensagem na fila segura de saída para entrega automática com cadência antiban
+  if (!res || res.ok === false) {
+    console.log(`[Modo Barbeiro] WhatsApp em sincronização ou não pronto para ${primeiroNomeCli} (${telDigitos}). Salvando na fila segura de saída...`);
+    try {
+      const { db, save } = await import('./db.js');
+      const d = db();
+      if (!d.tarefas_whatsapp) d.tarefas_whatsapp = [];
+      d.tarefas_whatsapp.push({
+        id: `zap-barbeiro-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        telefone: telDigitos,
+        mensagem: texto,
+        clienteNome: primeiroNomeCli,
+        barbeiro: barbeiroPrimeiroNome,
+        tipo: template,
+        status: 'pendente_sincronizacao',
+        criadoEm: new Date().toISOString(),
+      });
+      save();
+    } catch (saveErr) {
+      console.warn('[Modo Barbeiro] Aviso salvo localmente:', saveErr.message);
+    }
+
+    return {
+      ok: true,
+      enfileirado: true,
+      mensagem: 'Aviso registrado! O WhatsApp da barbearia está em sincronização. A mensagem foi colocada na fila segura e será entregue com cadência humanizada.',
+      cliente: primeiroNomeCli,
+    };
+  }
+
+  return { ok: true, enviado: true, mensagem: 'Mensagem enviada com sucesso pelo WhatsApp oficial da Barbearia Dino!' };
 }

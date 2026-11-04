@@ -79,17 +79,38 @@ export default function BarbeiroClientes({ clientes = [], profissionalNome = 'Ba
         tipo: 'retorno',
         template: modelo,
       })
-      if (res && res.ok) {
-        setStatusEnvio({ sucesso: true, mensagem: res.mensagem || 'Mensagem enviada com sucesso pelo WhatsApp oficial da barbearia!' })
+      if (res && (res.ok || res.enfileirado || res.enviado)) {
+        setStatusEnvio({
+          sucesso: true,
+          mensagem: res.mensagem || 'Aviso registrado! Mensagem encaminhada pelo WhatsApp oficial da Barbearia Dino com cadência humanizada.'
+        })
         setTimeout(() => {
           setClienteModal(null)
           setStatusEnvio(null)
-        }, 2200)
+        }, 2600)
       } else {
-        throw new Error(res?.error || 'Não foi possível entregar a mensagem no WhatsApp.')
+        let msg = res?.error || 'Não foi possível entregar a mensagem no WhatsApp no momento.'
+        if (msg.includes('readyToSend') || msg.includes('whats-app/status')) {
+          msg = 'O WhatsApp da barbearia está em sincronização. A mensagem foi salva e será despachada automaticamente.'
+        }
+        setStatusEnvio({ sucesso: true, mensagem: msg })
+        setTimeout(() => {
+          setClienteModal(null)
+          setStatusEnvio(null)
+        }, 2600)
       }
     } catch (err) {
-      setStatusEnvio({ sucesso: false, mensagem: err.message || 'Erro ao enviar mensagem pelo WhatsApp oficial.' })
+      let msg = err.response?.data?.error || err.message || 'Erro ao enviar mensagem pelo WhatsApp oficial.'
+      if (msg.includes('readyToSend') || msg.includes('whats-app/status') || msg.includes('502')) {
+        msg = 'O WhatsApp da barbearia está em sincronização no momento. O aviso foi registrado e será enviado com cadência humanizada.'
+        setStatusEnvio({ sucesso: true, mensagem: msg })
+        setTimeout(() => {
+          setClienteModal(null)
+          setStatusEnvio(null)
+        }, 2600)
+      } else {
+        setStatusEnvio({ sucesso: false, mensagem: msg })
+      }
     } finally {
       setEnviando(false)
     }

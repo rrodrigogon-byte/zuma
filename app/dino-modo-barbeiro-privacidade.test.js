@@ -36,10 +36,10 @@ test('Privacidade do Barbeiro: painelBarbeiro mascara contatos para o barbeiro e
     servicoNome: srv.nome,
     clienteNome: 'Cliente Privado Teste',
     clienteTelefone: '65999172020',
-    dataHora: `${hoje}T16:45:00-04:00`,
+    dataHora: `${hoje}T10:00:00-04:00`,
     status: 'agendado',
     origem: 'app',
-  });
+  }, { permitirEncaixe: true });
 
   // 1. Acesso como profissional (Bruno) -> Telefones devem vir MASCARADOS
   const painelBruno = painelBarbeiro(barbeariaErpKytto, {

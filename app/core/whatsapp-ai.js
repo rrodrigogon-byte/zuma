@@ -274,6 +274,9 @@ COMO ESCREVER E AGIR NO WHATSAPP:
 - NUNCA CHUTE SERVIÇO NÃO INFORMADO: Se o cliente perguntar de horário ("tem horário hoje?", "tem vaga essa semana?") SEM ESPECIFICAR o serviço desejado, NUNCA presuma nem chame sugerir_proximos_horarios para serviços aleatórios como Manicure, Unha, Sobrancelha, etc. Pergunte primeiro: "Temos sim! Qual serviço você deseja agendar (corte, barba ou combo) e qual seu barbeiro de preferência?".
 - ANTI-REPETIÇÃO DE HORÁRIOS: NUNCA repita a lista de 3 horários com data, profissional e preço se você já enviou esses horários na mensagem anterior. Se o cliente responder com frases curtas de conversa ou contexto ("tá bom", "eu tô na cidade", "consigo sim", "beleza"), NÃO mande novamente a lista inteira de horários! Pergunte apenas de forma objetiva: "Show! Qual dos horários anteriores você prefere que eu marque?".
 - Agendamento imediato: quando o cliente escolher o horário (ou disser "pode deixar esse horário então", "esse mesmo", "marca esse", "consigo sim", "pode ser esse"), determine o horário correspondente e chame preparar_agendamento DIRETO, sem perguntar "posso preparar?" e sem pedir SIM antes. NUNCA diga "Fechado!" ou "Combinado!" sem chamar a ferramenta preparar_agendamento nesta mesma resposta. O sistema manda o resumo com SIM/NÃO; não repita o resumo, valores ou horários no seu texto.
+- Continuidade e Cumprimento de Acordos (MUITO IMPORTANTE): Se na mensagem anterior você propôs verificar a disponibilidade para uma data/hora com outro barbeiro da equipe, e o cliente respondeu "Fechado!", "Sim", "Bora", "Show", "Pode ser", "Combinado" ou similar: CUMPRA O ACORDADO NA HORA! Consulte a disponibilidade para aquela data e horário com professionalId="qualquer", escolha o horário e chame preparar_agendamento direto! NUNCA dê ré na conversa nem volte a perguntar "qual serviço você quer fazer?". Se o cliente não disse o serviço explicitamente, assuma o serviço habitual dele ou "Corte Masculino" (o serviço principal da barbearia).
+- Tolerância a Gírias e Erros de Digitação: Palavras como "padre", "pode", "pode ser", "tanto faz", "qualquer um", "quem tiver livre", "vc escolhe" NUNCA são nomes de profissionais! Elas significam que o cliente aceita qualquer profissional disponível da equipe (professionalId="qualquer"). NUNCA diga "Não temos nenhum profissional com o nome Padre".
+- Isolamento de Nomes: NUNCA chame o cliente pelo nome de um profissional da barbearia (Dino, Bruno, Nati, Ester, David, João Victor, Amanda) a menos que o cadastro real do cliente tenha esse nome.
 - Busca de Serviços (Nomes Compostos): Quando o cliente pedir múltiplos serviços (ex: "barba e cabelo", "cortar cabelo e barba"), NUNCA diga "não encontrei o serviço X". Olhe a resposta de listar_servicos: pode ser que exista o pacote/combo "Corte e Barba", "Cabelo e Barba", ou você deva selecionar os dois separados na hora de agendar. Seja super flexível com o nome.
 - Nome: use o nome real da pessoa em customerName. Se não souber o nome (ou só tiver "Cliente"), pergunte "Qual seu nome para eu deixar no agendamento?" antes de preparar. Nunca chame o cliente de "Cliente".
 - Vários serviços: confira em listar_servicos quem faz cada um (campo profissionais). Os serviços extras (extraServiceIds) ficam automaticamente com quem faz cada um; não prometa que o mesmo profissional fará tudo.
@@ -513,7 +516,8 @@ async function sendOutput(channel, session, output) {
   // As bolhas da 1ª tentativa ficam salvas: a retomada usa exatamente as mesmas,
   // mesmo que a persona ou o limite mudem no meio do caminho.
   const salvas = Array.isArray(claimed.metadados?.bolhasTexto) && claimed.metadados.bolhasTexto.every((b) => typeof b === 'string' && b) ? claimed.metadados.bolhasTexto : null;
-  const bubbles = salvas || (persona?.mensagensCurtas ? splitBubbles(claimed.conteudo, { max: persona.maxBolha }) : [claimed.conteudo]).filter((b) => String(b || '').trim());
+  // Antiban Meta: respostas de atendimento saem em bolha única harmoniosa para evitar rajadas e denúncias de spam
+  const bubbles = salvas || [claimed.conteudo].filter((b) => String(b || '').trim());
   if (!bubbles.length) {
     throw await deliveryError(session, claimed, 'skipped', 'WHATSAPP_EMPTY_OUTPUT', 'resposta vazia; nada enviado');
   }
@@ -1954,7 +1958,8 @@ async function deterministicResponseCore(task, channel, session, message) {
       replyText = composeReplyWithNewAction(replyText, pendingNow, persona);
       await db.query(`UPDATE whatsapp_ai_sessions SET acao_pendente = acao_pendente || '{"mostrado":true}'::jsonb WHERE id = $1 AND empresa_id = $2 AND loja_id = $3 AND acao_pendente->>'actionId' = $4`, [session.id, session.empresa_id, session.loja_id, String(pendingNow.actionId)]);
     }
-    if (shouldAskPersonalization({ policy, consent: profileResult.consent, session, pendingAction: Boolean(pendingNow || session.acao_pendente) })) {
+    const jaTemPergunta = String(replyText || '').includes('?');
+    if (!jaTemPergunta && shouldAskPersonalization({ policy, consent: profileResult.consent, session, pendingAction: Boolean(pendingNow || session.acao_pendente) })) {
       await markPersonalizationPrompted(context, session, message.externalId).catch(() => null);
       const q = persona ? personaPersonalizationQuestion(persona) : PERSONALIZATION_QUESTION;
       if (!/prefer[eê]ncias|guardar\s+suas/i.test(replyText)) replyText = `${String(replyText || '').trim()}\n\n${q}`.trim();

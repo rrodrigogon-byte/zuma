@@ -372,7 +372,15 @@ export async function listProfessionals(scope) {
   exigirEscopoOperacional(scope);
   if (await agendaSource(scope) === 'postgres') return pgProfessionals(scope);
   return barbearia.listarProfissionais(chaveEmpresa(scope))
-    .filter((item) => item.ativo !== false)
+    .filter((item) => {
+      if (item.ativo === false) return false;
+      if (item.atendeCliente === false) return false;
+      const esp = String(item.especialidade || '').toLowerCase();
+      const nome = String(item.nome || '').toLowerCase();
+      // Jhenyffer é administradora/gerente/caixa e não barbeira de atendimento na cadeira
+      if (nome.includes('jhenyffer')) return false;
+      return true;
+    })
     .map((item) => ({ id: item.id, nome: item.nome, especialidade: item.especialidade || '' }));
 }
 

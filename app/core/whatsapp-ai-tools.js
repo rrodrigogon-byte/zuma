@@ -88,9 +88,41 @@ function nomeComparavel(value) {
 function tokensNome(value) {
   return nomeComparavel(value).split(' ').filter((item) => item && !PALAVRAS_VAZIAS.has(item));
 }
+// Apelidos e termos populares para correspondencia resiliente de barbeiros
+const APELIDOS_PROFISSIONAIS = {
+  'dino': ['guilherme cunha martins', 'dino'],
+  'mestre dino': ['guilherme cunha martins', 'dino'],
+  'patrao': ['guilherme cunha martins', 'dino'],
+  'bruno': ['bruno mendes pedroso', 'bruno'],
+  'bruninho': ['bruno mendes pedroso', 'bruno'],
+  'nati': ['natani minanis dobler', 'natani', 'naty'],
+  'naty': ['natani minanis dobler', 'natani', 'nati'],
+  'natani': ['natani minanis dobler', 'naty', 'nati'],
+  'ester': ['steffany marielly de oliveira', 'steffany', 'ester'],
+  'steffany': ['steffany marielly de oliveira', 'ester'],
+  'stefany': ['steffany marielly de oliveira', 'ester'],
+  'david': ['david kaua araujo moraes', 'david', 'davi'],
+  'davi': ['david kaua araujo moraes', 'david'],
+  'kaua': ['david kaua araujo moraes', 'david'],
+  'joao': ['joao victor domingos ruedel', 'joao victor'],
+  'joao victor': ['joao victor domingos ruedel', 'joao'],
+  'jv': ['joao victor domingos ruedel'],
+  'amanda': ['amanda gabrielly santos da silva', 'amanda'],
+};
+
 export function matchAgendaName(value, items = []) {
   const alvo = nomeComparavel(value);
   if (!alvo) return { item: null, candidatos: [] };
+  // 1. Tentar resolucao direta por apelido conhecido (somente quando o alvo for o nome do profissional)
+  const semPreposicao = alvo.replace(/^(?:com|com o|com a|pra|para|pelo|pela)\s+/, '').trim();
+  if (semPreposicao in APELIDOS_PROFISSIONAIS) {
+    const correspondencias = APELIDOS_PROFISSIONAIS[semPreposicao];
+    const achado = items.find((item) => {
+      const n = nomeComparavel(item?.nome);
+      return correspondencias.some((c) => n.includes(c) || c.includes(n));
+    });
+    if (achado) return { item: achado, candidatos: [achado] };
+  }
   const exato = items.filter((item) => nomeComparavel(item?.nome) === alvo);
   if (exato.length === 1) return { item: exato[0], candidatos: exato };
   const pedidos = tokensNome(value);
@@ -107,10 +139,24 @@ export function matchAgendaName(value, items = []) {
   return { item: empatados.length === 1 ? empatados[0].item : null, candidatos: empatados.map((entry) => entry.item) };
 }
 
+const TERMOS_QUALQUER_PROFISSIONAL = new Set([
+  'qualquer', 'indiferente', 'tanto faz', 'qualquer um', 'qualquer profissional',
+  'pode ser', 'pode', 'padre', 'pode ser qualquer um', 'pode ser qualquer',
+  'quem tiver', 'quem tiver livre', 'o que tiver', 'o que tiver livre',
+  'o primeiro', 'o primeiro livre', 'primeiro horario', 'vc escolhe',
+  'voce escolhe', 'tanto faz quem', 'qualquer barbeiro', 'nenhum de preferencia',
+  'sem preferencia', 'tanto fez', 'outro', 'outro barbeiro', 'outro profissional',
+  'outro da equipe', 'qualquer outro', 'fechado', 'sim', 'ok', 'bora', 'pode sim'
+]);
+
 async function resolveAgendaId(scope, value, field, { allowAny = false } = {}) {
   const normalized = cleanText(value, 100);
   const plainValue = nomeComparavel(normalized);
-  if (allowAny && (!normalized || ['qualquer', 'indiferente', 'tanto faz', 'qualquer um', 'qualquer profissional'].includes(plainValue))) return 'qualquer';
+  const ehQualquer = !normalized || TERMOS_QUALQUER_PROFISSIONAL.has(plainValue) ||
+    plainValue.startsWith('pode ser') || plainValue.startsWith('tanto faz') ||
+    plainValue.startsWith('qualquer') || plainValue.startsWith('outro');
+  if (allowAny && ehQualquer) return 'qualquer';
+  if (field.startsWith('professional') && ehQualquer) return 'qualquer';
   if (UUID_REGEX.test(normalized) || AGENDA_ID_REGEX.test(normalized)) return normalized;
   if (!normalized) throw new WhatsappAiToolError(`${field} obrigatório`, 'INVALID_ID');
   const profissional = field.startsWith('professional');
