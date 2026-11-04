@@ -863,6 +863,25 @@ export default function BarbeariaOperacaoPanel({
                           Abrir comanda completa
                         </button>
                       )}
+                      {!cancelada && onOpenComanda && (
+                        <button
+                          type="button"
+                          style={{
+                            padding: '6px 12px',
+                            borderRadius: 6,
+                            border: '1px solid rgba(2, 132, 199, 0.4)',
+                            background: 'rgba(2, 132, 199, 0.08)',
+                            color: '#0284c7',
+                            fontSize: 12,
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                          }}
+                          onClick={() => onOpenComanda(comanda)}
+                          title="Alterar valor de algum serviço ou produto e refinalizar comanda"
+                        >
+                          ✏️ Alterar valor de item / Refinalizar
+                        </button>
+                      )}
 
                       {/* Botão Formal do Procedimento de Cancelamento de Comanda Finalizada */}
                       {!cancelada && (
@@ -907,7 +926,29 @@ export default function BarbeariaOperacaoPanel({
                                   <span>✂️ <strong>{s.nome}</strong></span>
                                   {s.profissionalNome && <small style={{ color: 'var(--muted)', marginLeft: 8 }}>({s.profissionalNome})</small>}
                                 </div>
-                                <strong>{moeda(s.preco ?? s.precoUnitario)}</strong>
+                                <div style={{ display: 'flex', alignItems: 'center' }}>
+                                  <strong>{moeda(s.preco ?? s.precoUnitario)}</strong>
+                                  {!cancelada && onOpenComanda && (
+                                    <button
+                                      type="button"
+                                      style={{
+                                        marginLeft: 8,
+                                        padding: '2px 8px',
+                                        fontSize: 11,
+                                        fontWeight: 700,
+                                        color: '#0284c7',
+                                        background: 'rgba(2, 132, 199, 0.08)',
+                                        border: '1px solid rgba(2, 132, 199, 0.3)',
+                                        borderRadius: 4,
+                                        cursor: 'pointer',
+                                      }}
+                                      onClick={() => onOpenComanda(comanda)}
+                                      title="Alterar valor do item e refinalizar comanda"
+                                    >
+                                      ✏️ Alterar
+                                    </button>
+                                  )}
+                                </div>
                               </div>
                             ))}
                           </div>
@@ -927,7 +968,29 @@ export default function BarbeariaOperacaoPanel({
                                   <span>🧴 <strong>{p.nome}</strong></span>
                                   <small style={{ color: 'var(--muted)', marginLeft: 8 }}>({p.quantidade || 1}x {moeda(p.precoUnitario || p.preco)})</small>
                                 </div>
-                                <strong>{moeda(p.subtotal ?? (Number(p.preco || 0) * Number(p.quantidade || 1)))}</strong>
+                                <div style={{ display: 'flex', alignItems: 'center' }}>
+                                  <strong>{moeda(p.subtotal ?? (Number(p.preco || 0) * Number(p.quantidade || 1)))}</strong>
+                                  {!cancelada && onOpenComanda && (
+                                    <button
+                                      type="button"
+                                      style={{
+                                        marginLeft: 8,
+                                        padding: '2px 8px',
+                                        fontSize: 11,
+                                        fontWeight: 700,
+                                        color: '#0284c7',
+                                        background: 'rgba(2, 132, 199, 0.08)',
+                                        border: '1px solid rgba(2, 132, 199, 0.3)',
+                                        borderRadius: 4,
+                                        cursor: 'pointer',
+                                      }}
+                                      onClick={() => onOpenComanda(comanda)}
+                                      title="Alterar valor do item e refinalizar comanda"
+                                    >
+                                      ✏️ Alterar
+                                    </button>
+                                  )}
+                                </div>
                               </div>
                             ))}
                           </div>

@@ -446,7 +446,7 @@ function Kpi({ label, value, note, color = "var(--accent)" }) {
   );
 }
 
-function Modal({ title, children, onClose, wide = false, xl = false }) {
+function Modal({ title, children, onClose, wide = false, xl = false, zIndex = 1000 }) {
   return (
     <div
       role="dialog"
@@ -459,7 +459,7 @@ function Modal({ title, children, onClose, wide = false, xl = false }) {
       style={{
         position: "fixed",
         inset: 0,
-        zIndex: 1000,
+        zIndex,
         background: "rgba(0,0,0,.72)",
         display: "flex",
         alignItems: "center",
@@ -715,6 +715,8 @@ export default function BarbeariaERP() {
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState("");
   const [modal, setModal] = useState(null);
+  const [modalItemValor, setModalItemValor] = useState(null);
+  const [modalReabrir, setModalReabrir] = useState(null);
   const [fechamentoDetalhado, setFechamentoDetalhado] = useState(null);
 
   // Id do cadastro em edição nos modais de serviço, plano e produto (null = novo cadastro).
@@ -1559,57 +1561,96 @@ export default function BarbeariaERP() {
     }
   }
 
-  async function alterarValorItemComanda(comandaId, itemId, valorAtual) {
-    const comanda = modal?.comanda;
-    const ehFinalizada = comanda && ["paga", "em_conta"].includes(comanda.status);
+  function abrirModalAlterarValorItem(comandaAlvo, itemAlvo, idFallback, precoFallback) {
+    const c = comandaAlvo || modal?.comanda;
+    if (!c) return;
+    const item = itemAlvo || (c.itens || [])[0];
+    const itemId = item?.id || idFallback || (item ? `${item.tipo}-0` : "");
+    const valor = item?.precoUnitario ?? item?.preco ?? precoFallback ?? 0;
+    setModalItemValor({
+      comanda: c,
+      itemId,
+      itemNome: item?.nome || "Item da comanda",
+      itemTipo: item?.tipo === "produto" ? "Produto de revenda" : "Serviço",
+      quantidade: item?.quantidade || item?.qtd || 1,
+      valorAtual: valor,
+      novoValor: valor,
+      senhaGerente: "",
+      motivo: "Ajuste de valor incorreto cobrado no atendimento",
+      salvando: false,
+    });
+  }
 
-    const novoValorStr = window.prompt(
-      ehFinalizada
-        ? `Alterar valor do item na comanda finalizada (${comanda.status === "em_conta" ? "Lançada em Conta" : "Paga"}):\nInforme o novo valor (ex: 20.00):`
-        : "Informe o novo valor para este item (ex: 50.00):",
-      valorAtual,
-    );
-    if (novoValorStr === null) return;
-    const novoValor = parseFloat(novoValorStr.replace(",", "."));
-    if (isNaN(novoValor) || novoValor < 0)
-      return toast("Valor inválido.", "error");
+  function abrirModalReabrirComanda(comandaAlvo) {
+    const c = comandaAlvo || modal?.comanda;
+    if (!c) return;
+    setModalReabrir({
+      comanda: c,
+      senhaGerente: "",
+      motivo: "Reabertura autorizada para ajuste de itens",
+      salvando: false,
+    });
+  }
 
-    let senhaGerente = "";
-    if (ehFinalizada) {
-      senhaGerente = window.prompt(
-        "🔒 TRAVA DE SEGURANÇA:\nEsta comanda já foi finalizada. Digite a SENHA DO GERENTE para autorizar a alteração do item e refinalização automática:"
-      );
-      if (!senhaGerente || !senhaGerente.trim()) {
-        return toast("A senha de gerente é obrigatória para autorizar a alteração de comanda finalizada.", "error");
-      }
+  async function confirmarAlteracaoValorItem() {
+    if (!modalItemValor) return;
+    const { comanda, itemId, novoValor, senhaGerente, motivo } = modalItemValor;
+    const valNum = parseFloat(String(novoValor).replace(",", "."));
+    if (isNaN(valNum) || valNum < 0) {
+      return toast("Informe um valor numérico válido (ex: 20.00).", "error");
+    }
+    const ehFinalizada = ["paga", "em_conta"].includes(comanda.status);
+    if (ehFinalizada && (!senhaGerente || !senhaGerente.trim())) {
+      return toast("A senha do gerente é obrigatória para autorizar a alteração em comanda finalizada.", "error");
     }
 
+    setModalItemValor((prev) => ({ ...prev, salvando: true }));
     try {
       const resposta = await api.patch(
-        `/api/admin/barbearia/comandas/${comandaId}/itens/${itemId}`,
+        `/api/admin/barbearia/comandas/${comanda.id}/itens/${itemId}`,
         {
-          valor: novoValor,
-          precoUnitario: novoValor,
-          preco: novoValor,
-          senhaGerente: senhaGerente.trim(),
-          motivo: "Ajuste de valor em comanda finalizada",
-        },
+          valor: valNum,
+          precoUnitario: valNum,
+          preco: valNum,
+          senhaGerente: senhaGerente?.trim() || "",
+          motivo: motivo?.trim() || "Ajuste de valor de item faturado",
+        }
       );
-      toast(
-        ehFinalizada
-          ? `Item alterado para ${moeda(novoValor)} e comanda refinalizada com sucesso!`
-          : "Item atualizado com sucesso.",
-        "success"
-      );
-      setModal((m) =>
-        m?.tipo === "comanda"
-          ? { ...m, comanda: resposta.comanda || resposta }
-          : m,
-      );
+      const atualizada = resposta.comanda || resposta;
+      toast(`Valor atualizado para ${moeda(valNum)} com sucesso! Comanda refinalizada.`, "success");
+      setModalItemValor(null);
+      setModal({ tipo: "comanda", comanda: atualizada });
       await carregar();
-    } catch (e) {
-      toast(e.message || "Erro ao atualizar item.", "error");
+    } catch (erro) {
+      toast(erro.message || "Erro ao alterar valor do item.", "error");
+      setModalItemValor((prev) => ({ ...prev, salvando: false }));
     }
+  }
+
+  async function confirmarReaberturaComanda() {
+    if (!modalReabrir) return;
+    const { comanda, senhaGerente, motivo } = modalReabrir;
+    if (!senhaGerente || !senhaGerente.trim()) {
+      return toast("A senha do gerente é obrigatória para reabrir a comanda.", "error");
+    }
+    setModalReabrir((prev) => ({ ...prev, salvando: true }));
+    try {
+      const r = await api.post(`/api/admin/barbearia/comandas/${comanda.id}/reabrir`, {
+        senhaGerente: senhaGerente.trim(),
+        motivo: motivo?.trim() || "Reabertura autorizada para ajuste de itens",
+      });
+      toast("Comanda reaberta com sucesso! Ajuste os itens e finalize novamente.", "success");
+      setModalReabrir(null);
+      setModal({ tipo: "comanda", comanda: r.comanda || r });
+      await carregar();
+    } catch (erro) {
+      toast(erro.message || "Erro ao reabrir comanda.", "error");
+      setModalReabrir((prev) => ({ ...prev, salvando: false }));
+    }
+  }
+
+  function alterarValorItemComanda(comandaId, itemId, valorAtual) {
+    abrirModalAlterarValorItem(modal?.comanda, null, itemId, valorAtual);
   }
 
   async function abrirComanda(comanda) {
@@ -9162,20 +9203,31 @@ export default function BarbeariaERP() {
                           <button
                             type="button"
                             style={{
-                              ...styles.small,
-                              padding: "2px 6px",
-                              fontSize: 11,
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: 5,
+                              padding: "4px 10px",
+                              fontSize: 12,
+                              fontWeight: 700,
+                              borderRadius: 6,
+                              background: "rgba(2, 132, 199, 0.08)",
+                              color: "#0284c7",
+                              border: "1px solid rgba(2, 132, 199, 0.4)",
+                              cursor: "pointer",
+                              whiteSpace: "nowrap",
+                              transition: "all 0.15s ease",
                             }}
                             title={["paga", "em_conta"].includes(comanda.status) ? "Alterar valor do item e re-fechar comanda" : "Alterar valor do item"}
                             onClick={() =>
-                              alterarValorItemComanda(
-                                comanda.id,
+                              abrirModalAlterarValorItem(
+                                comanda,
+                                item,
                                 item.id || `${item.tipo}-${indice}`,
                                 item.precoUnitario || item.preco || 0,
                               )
                             }
                           >
-                            ✏️
+                            ✏️ Alterar valor
                           </button>
                         )}
                         {podeEditar && (
@@ -9764,33 +9816,73 @@ export default function BarbeariaERP() {
               </div>
             )}
             {["paga", "em_conta"].includes(comanda.status) && !comanda.estornada && (
-              <div style={{ marginTop: 12, padding: 14, borderRadius: 10, background: "rgba(56, 189, 248, 0.06)", border: "1px solid rgba(56, 189, 248, 0.25)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+              <div
+                style={{
+                  marginTop: 14,
+                  padding: 16,
+                  borderRadius: 12,
+                  background: "linear-gradient(135deg, rgba(2, 132, 199, 0.06), rgba(16, 185, 129, 0.06))",
+                  border: "1px solid rgba(2, 132, 199, 0.3)",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 12,
+                }}
+              >
                 <div>
-                  <strong style={{ color: "#0284c7", display: "block" }}>Ajuste de Itens da Comanda Finalizada</strong>
-                  <span style={{ fontSize: 12, color: "var(--muted)" }}>Você pode alterar o valor de qualquer item clicando no ✏️ acima, ou reabrir a comanda para adicionar e remover serviços e produtos.</span>
+                  <strong style={{ color: "#0284c7", fontSize: 15, display: "flex", alignItems: "center", gap: 8 }}>
+                    ✏️ Precisa corrigir algum item ou valor?
+                  </strong>
+                  <span style={{ fontSize: 13, color: "var(--fg)", display: "block", marginTop: 4 }}>
+                    Se o valor de algum serviço ou produto ficou incorreto (por exemplo, a sobrancelha, corte ou produto), <strong>não é necessário cancelar toda a comanda</strong>.
+                    Você pode alterar o valor do item diretamente ou reabrir a comanda para ajustar tudo e finalizar novamente.
+                  </span>
                 </div>
-                <button
-                  type="button"
-                  style={{ ...styles.secondary, color: "#0284c7", borderColor: "#0284c7", fontWeight: 800 }}
-                  disabled={salvando}
-                  onClick={async () => {
-                    const senha = window.prompt("🔒 TRAVA DE SEGURANÇA:\nInforme a SENHA DO GERENTE para reabrir esta comanda finalizada para alteração de itens:");
-                    if (!senha || !senha.trim()) return toast("A senha do gerente é obrigatória.", "error");
-                    try {
-                      const r = await api.post(`/api/admin/barbearia/comandas/${comanda.id}/reabrir`, {
-                        senhaGerente: senha.trim(),
-                        motivo: "Reabertura autorizada para ajuste de itens",
-                      });
-                      toast("Comanda reaberta com sucesso. Ajuste os itens e finalize novamente.", "success");
-                      setModal({ tipo: "comanda", comanda: r.comanda || r });
-                      await carregar();
-                    } catch (e) {
-                      toast(e.message || "Erro ao reabrir comanda.", "error");
-                    }
-                  }}
-                >
-                  ✏️ Reabrir para Alteração Completa
-                </button>
+                <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                  <button
+                    type="button"
+                    style={{
+                      ...styles.primary,
+                      background: "#0284c7",
+                      borderColor: "#0284c7",
+                      fontSize: 13,
+                      fontWeight: 800,
+                      padding: "9px 18px",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 6,
+                    }}
+                    disabled={salvando}
+                    onClick={() => {
+                      const itensEditaveis = (comanda.itens || []).filter((i) => !i.coberturaPlano);
+                      if (itensEditaveis.length === 1) {
+                        abrirModalAlterarValorItem(comanda, itensEditaveis[0]);
+                      } else {
+                        const itemSobrancelha = itensEditaveis.find((i) => (i.nome || "").toLowerCase().includes("sobrancelha")) || itensEditaveis[itensEditaveis.length - 1];
+                        abrirModalAlterarValorItem(comanda, itemSobrancelha);
+                      }
+                    }}
+                  >
+                    ✏️ Alterar Valor do Item & Refinalizar
+                  </button>
+                  <button
+                    type="button"
+                    style={{
+                      ...styles.secondary,
+                      color: "#0284c7",
+                      borderColor: "#0284c7",
+                      fontSize: 13,
+                      fontWeight: 700,
+                      padding: "9px 18px",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 6,
+                    }}
+                    disabled={salvando}
+                    onClick={() => abrirModalReabrirComanda(comanda)}
+                  >
+                    🔄 Reabrir Comanda para Edição Completa
+                  </button>
+                </div>
               </div>
             )}
             {["paga", "em_conta"].includes(comanda.status) && !comanda.estornada && (
@@ -11237,6 +11329,222 @@ export default function BarbeariaERP() {
         </Modal>
       );
     return null;
+  }
+
+  function renderModalItemValor() {
+    if (!modalItemValor) return null;
+    const { comanda, itemId, itemNome, itemTipo, quantidade, valorAtual, novoValor, senhaGerente, motivo, salvando: salvandoItem } = modalItemValor;
+    const ehFinalizada = ["paga", "em_conta"].includes(comanda.status);
+    const valNum = parseFloat(String(novoValor).replace(",", ".")) || 0;
+    const novoSubtotalItem = valNum * Number(quantidade || 1);
+    const subtotalAntigoItem = Number(valorAtual || 0) * Number(quantidade || 1);
+    const diferencaEstimada = novoSubtotalItem - subtotalAntigoItem;
+    const novoTotalEstimado = Math.max(0, Number(comanda.total || 0) + diferencaEstimada);
+
+    return (
+      <Modal
+        title={`✏️ Alterar Valor do Item — ${itemNome}`}
+        zIndex={1100}
+        onClose={() => !salvandoItem && setModalItemValor(null)}
+      >
+        <div style={{ display: "grid", gap: 16, minWidth: 320, maxWidth: 480 }}>
+          <div style={{ padding: 14, borderRadius: 10, background: "var(--card)", border: "1px solid var(--line)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+              <div>
+                <strong style={{ fontSize: 16 }}>{itemNome}</strong>
+                <div style={{ fontSize: 13, color: "var(--muted)", marginTop: 2 }}>
+                  {itemTipo} · Quantidade: <strong>{quantidade}</strong>
+                </div>
+              </div>
+              <div style={{ textAlign: "right" }}>
+                <span style={{ fontSize: 12, color: "var(--muted)", display: "block" }}>Valor cobrado atual</span>
+                <strong style={{ fontSize: 16, color: "#e05c5c" }}>{moeda(valorAtual)}</strong>
+              </div>
+            </div>
+          </div>
+
+          {comanda.itens?.length > 1 && (
+            <div>
+              <label style={{ display: "block", fontSize: 13, fontWeight: 700, marginBottom: 4 }}>
+                Item a ser alterado:
+              </label>
+              <select
+                style={inputStyle}
+                value={itemId}
+                onChange={(e) => {
+                  const sel = (comanda.itens || []).find((i, idx) => (i.id || `${i.tipo}-${idx}`) === e.target.value);
+                  if (sel) {
+                    const v = sel.precoUnitario ?? sel.preco ?? 0;
+                    setModalItemValor((prev) => ({
+                      ...prev,
+                      itemId: sel.id || e.target.value,
+                      itemNome: sel.nome,
+                      itemTipo: sel.tipo === "produto" ? "Produto de revenda" : "Serviço",
+                      quantidade: sel.quantidade || sel.qtd || 1,
+                      valorAtual: v,
+                      novoValor: v,
+                    }));
+                  }
+                }}
+              >
+                {(comanda.itens || []).map((i, idx) => (
+                  <option key={i.id || idx} value={i.id || `${i.tipo}-${idx}`}>
+                    {i.nome} — Atual: {moeda(i.precoUnitario || i.preco || 0)}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          <div>
+            <label style={{ display: "block", fontSize: 13, fontWeight: 700, marginBottom: 4 }}>
+              Novo Valor Unitário (R$):
+            </label>
+            <input
+              type="number"
+              step="0.01"
+              min="0"
+              autoFocus
+              style={{ ...inputStyle, fontSize: 18, fontWeight: 800, color: "var(--fg)" }}
+              value={novoValor}
+              onChange={(e) => setModalItemValor((prev) => ({ ...prev, novoValor: e.target.value }))}
+              placeholder="Ex: 20.00"
+            />
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 6, fontSize: 13 }}>
+              <span style={{ color: "var(--muted)" }}>
+                Subtotal deste item: <strong>{moeda(novoSubtotalItem)}</strong>
+              </span>
+              <span style={{ color: "#14b87a", fontWeight: 700 }}>
+                Novo Total da Comanda: {moeda(novoTotalEstimado)}
+              </span>
+            </div>
+          </div>
+
+          {ehFinalizada && (
+            <div style={{ padding: 14, borderRadius: 10, background: "rgba(2, 132, 199, 0.07)", border: "1px solid rgba(2, 132, 199, 0.35)" }}>
+              <strong style={{ color: "#0284c7", display: "flex", alignItems: "center", gap: 6, fontSize: 14 }}>
+                🔒 Trava de Segurança — Senha de Gerente Obrigatória
+              </strong>
+              <span style={{ fontSize: 12, color: "var(--fg)", display: "block", margin: "4px 0 8px" }}>
+                Como esta comanda já foi finalizada ({comanda.status === "em_conta" ? "Lançada em Conta" : "Paga"}), a alteração recalcula automaticamente o faturamento e o saldo do cliente e exige a senha do gerente:
+              </span>
+              <input
+                type="password"
+                placeholder="Digite a senha do gerente / administrador"
+                style={{ ...inputStyle, background: "#fff", color: "#111" }}
+                value={senhaGerente}
+                onChange={(e) => setModalItemValor((prev) => ({ ...prev, senhaGerente: e.target.value }))}
+              />
+            </div>
+          )}
+
+          <div>
+            <label style={{ display: "block", fontSize: 12, color: "var(--muted)", marginBottom: 4 }}>
+              Justificativa / Motivo da correção (opcional):
+            </label>
+            <input
+              type="text"
+              style={inputStyle}
+              value={motivo}
+              onChange={(e) => setModalItemValor((prev) => ({ ...prev, motivo: e.target.value }))}
+              placeholder="Ex: Valor da sobrancelha digitado errado"
+            />
+          </div>
+
+          <div style={{ ...styles.modalActions, marginTop: 10, display: "flex", justifyContent: "flex-end", gap: 10 }}>
+            <button
+              type="button"
+              style={styles.secondary}
+              disabled={salvandoItem}
+              onClick={() => setModalItemValor(null)}
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              style={{ ...styles.primary, background: "#10b981", borderColor: "#059669", fontWeight: 800, fontSize: 14, padding: "10px 20px" }}
+              disabled={salvandoItem}
+              onClick={confirmarAlteracaoValorItem}
+            >
+              {salvandoItem ? "Salvando e refinalizando…" : "💾 Salvar Novo Valor & Refinalizar Comanda"}
+            </button>
+          </div>
+        </div>
+      </Modal>
+    );
+  }
+
+  function renderModalReabrir() {
+    if (!modalReabrir) return null;
+    const { comanda, senhaGerente, motivo, salvando: salvandoReabrir } = modalReabrir;
+
+    return (
+      <Modal
+        title={`🔄 Reabrir Comanda para Edição Completa (#${comanda.id})`}
+        zIndex={1100}
+        onClose={() => !salvandoReabrir && setModalReabrir(null)}
+      >
+        <div style={{ display: "grid", gap: 16, minWidth: 320, maxWidth: 480 }}>
+          <div style={{ padding: 14, borderRadius: 10, background: "rgba(2, 132, 199, 0.06)", border: "1px solid rgba(2, 132, 199, 0.25)" }}>
+            <div style={{ fontWeight: 700, fontSize: 15, color: "#0284c7" }}>
+              Reabertura de Comanda Finalizada
+            </div>
+            <div style={{ fontSize: 13, marginTop: 4, color: "var(--fg)" }}>
+              Cliente: <strong>{comanda.clienteNome || "Cliente Eventual"}</strong> · Total faturado atual: <strong>{moeda(comanda.total)}</strong>
+            </div>
+            <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 6 }}>
+              Esta ação reabre a comanda para que você possa adicionar ou remover serviços e produtos livremente. Ao concluir a edição, basta clicar em <strong>"Finalizar Novamente em Conta"</strong>.
+            </div>
+          </div>
+
+          <div>
+            <label style={{ display: "block", fontSize: 13, fontWeight: 700, marginBottom: 4 }}>
+              🔒 Senha de Gerente / Administrador:
+            </label>
+            <input
+              type="password"
+              autoFocus
+              placeholder="Digite a senha para autorizar a reabertura"
+              style={{ ...inputStyle, background: "#fff", color: "#111" }}
+              value={senhaGerente}
+              onChange={(e) => setModalReabrir((prev) => ({ ...prev, senhaGerente: e.target.value }))}
+            />
+          </div>
+
+          <div>
+            <label style={{ display: "block", fontSize: 12, color: "var(--muted)", marginBottom: 4 }}>
+              Motivo da Reabertura:
+            </label>
+            <input
+              type="text"
+              style={inputStyle}
+              value={motivo}
+              onChange={(e) => setModalReabrir((prev) => ({ ...prev, motivo: e.target.value }))}
+              placeholder="Ex: Ajuste de itens e serviços"
+            />
+          </div>
+
+          <div style={{ ...styles.modalActions, marginTop: 10, display: "flex", justifyContent: "flex-end", gap: 10 }}>
+            <button
+              type="button"
+              style={styles.secondary}
+              disabled={salvandoReabrir}
+              onClick={() => setModalReabrir(null)}
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              style={{ ...styles.primary, background: "#0284c7", borderColor: "#0284c7", fontWeight: 800, fontSize: 14, padding: "10px 20px" }}
+              disabled={salvandoReabrir}
+              onClick={confirmarReaberturaComanda}
+            >
+              {salvandoReabrir ? "Reabrindo comanda…" : "🔄 Confirmar Reabertura"}
+            </button>
+          </div>
+        </div>
+      </Modal>
+    );
   }
 
   function renderIntegracoes() {
@@ -13230,6 +13538,8 @@ export default function BarbeariaERP() {
           <div aria-busy={loading && !tabAutonoma}>{renderConteudo()}</div>
         )}
         {renderModal()}
+        {renderModalItemValor()}
+        {renderModalReabrir()}
       </div>
     );
   }
@@ -13448,6 +13758,8 @@ export default function BarbeariaERP() {
         </div>
       )}
       {renderModal()}
+        {renderModalItemValor()}
+        {renderModalReabrir()}
     </div>
   );
 }
