@@ -2749,9 +2749,9 @@ export function registrarPagamentoComandaBarbearia(empresaId, comandaId, dados =
     if (!MEIOS_PAGAMENTO_COMANDA_BARBEARIA.has(meio) || valor <= 0) throw new Error('Informe meio e valor válidos para cada pagamento.');
     let caixaId = texto(item?.caixaId ?? item?.caixa_id ?? dados.caixaId ?? dados.caixa_id, 120) || null;
     if (!caixaId) {
-      // Qualquer meio de pagamento vincula automaticamente ao caixa aberto da unidade se houver
+      // Qualquer meio de pagamento vincula automaticamente ao caixa aberto da unidade se houver. Se houver múltiplos caixas abertos, usa o primeiro aberto ativo.
       const abertos = caixaKytto.listarCaixas(empresaId, { status: 'aberto', ...(lojaIdOperacao ? { lojaId: lojaIdOperacao } : {}) });
-      if (abertos.length === 1) caixaId = abertos[0].id;
+      if (abertos.length >= 1) caixaId = abertos[0].id;
     }
     if (meio === 'dinheiro' && caixaId) {
       const caixa = caixaKytto.obterCaixa(empresaId, caixaId);

@@ -9556,7 +9556,7 @@ export default function BarbeariaERP() {
                             .filter((caixa) => caixa.status === "aberto")
                             .map((caixa) => (
                               <option key={caixa.id} value={caixa.id}>
-                                Caixa {caixa.numeroCaixa} · aberto
+                                Caixa {caixa.numeroCaixa}{caixa.nomeCaixa ? ` · ${caixa.nomeCaixa}` : ""} ({moeda(caixa.valorEsperadoAtual ?? caixa.valorAbertura)})
                               </option>
                             ))}
                         </select>

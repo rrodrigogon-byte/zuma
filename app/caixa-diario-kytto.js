@@ -36,21 +36,30 @@ function serializarCaixa(caixa) {
 }
 
 export function abrirCaixa(empresaId, dados = {}) {
-  const numeroCaixa = Math.floor(Number(dados.numeroCaixa ?? dados.numero_caixa));
-  const valorAbertura = dinheiro(dados.valorAbertura ?? dados.valor_abertura);
-  if (!Number.isInteger(numeroCaixa) || numeroCaixa < 1) throw new Error('Número do caixa é obrigatório.');
-  if (!Number.isFinite(valorAbertura) || valorAbertura < 0) throw new Error('Valor de abertura não pode ser negativo.');
+  const store = storeEmpresa(empresaId);
   const data = dataDia(dados.dataOperacao);
   const lojaId = texto(dados.lojaId ?? dados.loja_id, 120) || null;
-  const store = storeEmpresa(empresaId);
+  let numeroCaixa = Math.floor(Number(dados.numeroCaixa ?? dados.numero_caixa));
+  if (!Number.isInteger(numeroCaixa) || numeroCaixa < 1) {
+    const abertos = Object.values(store.caixas).filter((item) => item.status === 'aberto' && item.data === data && (item.lojaId || null) === lojaId);
+    const ocupados = new Set(abertos.map((c) => Number(c.numeroCaixa)));
+    let proximo = 1;
+    while (ocupados.has(proximo)) proximo++;
+    numeroCaixa = proximo;
+  }
+  const valorAbertura = dinheiro(dados.valorAbertura ?? dados.valor_abertura);
+  if (!Number.isFinite(valorAbertura) || valorAbertura < 0) throw new Error('Valor de abertura não pode ser negativo.');
   const existente = Object.values(store.caixas).find((item) => item.numeroCaixa === numeroCaixa && item.data === data && item.status === 'aberto' && (item.lojaId || null) === lojaId);
-  if (existente) throw new Error('Já existe um caixa aberto para este número e data.');
+  if (existente) throw new Error(`O Caixa ${numeroCaixa} já está aberto nesta unidade. Escolha outro número (ex.: Caixa ${numeroCaixa + 1}).`);
   const idUnidade = encodeURIComponent(lojaId || 'corporativo');
-  const id = `cx-${empresaId}-${data}-${idUnidade}-${numeroCaixa}`;
+  const baseId = `cx-${empresaId}-${data}-${idUnidade}-${numeroCaixa}`;
+  const id = dados.id || (store.caixas[baseId] ? `${baseId}-${Date.now().toString(36)}` : baseId);
+  const nomeCaixa = texto(dados.nomeCaixa || dados.nome || `Caixa ${numeroCaixa}`, 120);
   const caixa = {
     id,
     empresaId: String(empresaId),
     numeroCaixa,
+    nomeCaixa,
     data,
     lojaId,
     valorAbertura,
@@ -87,8 +96,24 @@ export function listarCaixas(empresaId, filtros = {}) {
     .filter((item) => !dataFim || item.data <= dataFim)
     .filter((item) => !status || item.status === status)
     .filter((item) => !filtros.lojaId || item.lojaId === String(filtros.lojaId))
-    .sort((a, b) => String(b.abertoEm).localeCompare(String(a.abertoEm)))
-    .map(serializarCaixa);
+    .sort((a, b) => (a.numeroCaixa || 0) - (b.numeroCaixa || 0) || String(b.abertoEm).localeCompare(String(a.abertoEm)))
+    .map((caixa) => {
+      const item = serializarCaixa(caixa);
+      if (caixa.status === 'aberto') {
+        const movs = movimentosDoCaixa(empresaId, caixa.id);
+        const recs = movs.filter((m) => m.tipo === 'recebimento').reduce((s, m) => s + Number(m.valor || 0), 0);
+        const ests = movs.filter((m) => m.tipo === 'estorno_recebimento').reduce((s, m) => s + Number(m.valor || 0), 0);
+        const recLiquido = dinheiro(recs - ests);
+        const supr = movs.filter((m) => m.tipo === 'suprimento').reduce((s, m) => s + Number(m.valor || 0), 0);
+        const sang = movs.filter((m) => m.tipo === 'sangria').reduce((s, m) => s + Number(m.valor || 0), 0);
+        item.valorEsperadoAtual = dinheiro(caixa.valorAbertura + recLiquido + supr - sang);
+        item.recebimentosDinheiroAtual = recLiquido;
+        item.suprimentosAtual = dinheiro(supr);
+        item.sangriasAtual = dinheiro(sang);
+        item.movimentosCount = movs.length;
+      }
+      return item;
+    });
 }
 
 export function registrarMovimento(empresaId, dados = {}) {

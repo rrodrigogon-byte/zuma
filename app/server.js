@@ -5824,7 +5824,8 @@ function resumoOperacaoBarbearia(req) {
   const fechamentos = financeiroKytto.listarFechamentos(empresaId, { lojaId });
   const fechamentoDia = fechamentos.find((f) => String(f.data).slice(0, 10) === data) || null;
 
-  const caixaAberto = caixas.find((item) => item.status === 'aberto') || null;
+  const caixasAbertos = caixas.filter((item) => item.status === 'aberto');
+  const caixaAberto = caixasAbertos[0] || null;
   const movimentos = caixas.flatMap((caixa) => caixaKytto.movimentosDoCaixa(empresaId, caixa.id));
   const comandas = barbeariaErpKytto.listarComandasBarbearia(empresaId, { data, lojaId });
   const comandasFaturadas = comandas.filter((item) => item.status !== 'cancelada' && Number(item.totalFaturado ?? item.total ?? 0) > 0);
@@ -5840,7 +5841,7 @@ function resumoOperacaoBarbearia(req) {
   const valorProdutos = Number(produtosVendidos.reduce((soma, item) => soma + (Number(item.preco || 0) * Number(item.quantidade || 1)), 0).toFixed(2));
   
   return {
-    data, lojaId: lojaId || null, caixas, caixaAberto,
+    data, lojaId: lojaId || null, caixas, caixasAbertos, totalCaixasAbertos: caixasAbertos.length, caixaAberto,
     movimentos, comandasAbertas: comandas.filter((item) => ['aberta', 'aguardando_pagamento', 'parcialmente_paga'].includes(item.status)).length,
     comandasPagas: comandas.filter((item) => item.status === 'paga').length,
     emConta: comandas.filter((item) => item.status === 'em_conta').length,

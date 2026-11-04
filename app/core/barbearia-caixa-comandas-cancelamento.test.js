@@ -117,3 +117,69 @@ test('Caixa: visualização de comandas fechadas e cancelamento de comanda final
   assert.equal(atualizadas.filter(c => c.status === 'cancelada').length, 2);
   assert.equal(atualizadas.filter(c => c.status === 'paga').length, 0);
 });
+
+test('Múltiplos Caixas: abertura simultânea de 2, 3, 4 ou mais caixas e operações independentes', async () => {
+  reset();
+  const empresaId = 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
+  const lojaId = 'loja-dino-multi';
+
+  // 1. Abrir Caixa 1 (Balcão Principal) com R$ 100 de troco
+  const cx1 = caixa.abrirCaixa(empresaId, { numeroCaixa: 1, nomeCaixa: 'Balcão Principal', valorAbertura: 100, lojaId });
+  assert.equal(cx1.numeroCaixa, 1);
+  assert.equal(cx1.nomeCaixa, 'Balcão Principal');
+  assert.equal(cx1.status, 'aberto');
+
+  // 2. Abrir Caixa 2 (Recepção) com R$ 200 de troco
+  const cx2 = caixa.abrirCaixa(empresaId, { numeroCaixa: 2, nomeCaixa: 'Recepção 2', valorAbertura: 200, lojaId });
+  assert.equal(cx2.numeroCaixa, 2);
+  assert.equal(cx2.status, 'aberto');
+
+  // 3. Abrir Caixa 3 (Bar / Cafeteria) com R$ 50 de troco
+  const cx3 = caixa.abrirCaixa(empresaId, { numeroCaixa: 3, nomeCaixa: 'Bar Dino', valorAbertura: 50, lojaId });
+  assert.equal(cx3.numeroCaixa, 3);
+  assert.equal(cx3.status, 'aberto');
+
+  // 4. Abrir Caixa 4 (Turno Noturno) sem passar número explícito (deve auto-atribuir 4)
+  const cx4 = caixa.abrirCaixa(empresaId, { nomeCaixa: 'Caixa Noturno', valorAbertura: 150, lojaId });
+  assert.equal(cx4.numeroCaixa, 4);
+  assert.equal(cx4.status, 'aberto');
+
+  // 5. Validar que os 4 caixas constam como abertos simultaneamente
+  const caixasAbertos = caixa.listarCaixas(empresaId, { lojaId, status: 'aberto' });
+  assert.equal(caixasAbertos.length, 4);
+  assert.deepEqual(caixasAbertos.map(c => c.numeroCaixa), [1, 2, 3, 4]);
+
+  // 6. Registrar suprimento no Caixa 1 e sangria no Caixa 3
+  caixa.registrarMovimento(empresaId, { caixaId: cx1.id, tipo: 'suprimento', valor: 50, descricao: 'Reforço troco' });
+  caixa.registrarMovimento(empresaId, { caixaId: cx3.id, tipo: 'sangria', valor: 20, descricao: 'Sangria Bar' });
+
+  // 7. Criar e pagar comanda direcionada para o Caixa 2
+  const serv = barbearia.criarServico(empresaId, { nome: 'Barba VIP', preco: 70, duracaoMinutos: 30 });
+  const cmd = barbearia.criarComandaBarbearia(empresaId, {
+    clienteNome: 'Cliente Caixa 2',
+    lojaId,
+    itens: [{ tipo: 'servico', servicoId: serv.id, nome: serv.nome, preco: 70, precoUnitario: 70, quantidade: 1, subtotal: 70 }],
+  });
+  barbearia.registrarPagamentoComandaBarbearia(empresaId, cmd.id, {
+    confirmado: true,
+    lojaId,
+    meioPagamento: 'dinheiro',
+    valor: 70,
+    caixaId: cx2.id,
+  });
+
+  // 8. Verificar live expected balances de cada um dos caixas
+  const listaAtualizada = caixa.listarCaixas(empresaId, { lojaId, status: 'aberto' });
+  const mapaEsperados = Object.fromEntries(listaAtualizada.map(c => [c.numeroCaixa, c.valorEsperadoAtual]));
+  assert.equal(mapaEsperados[1], 150); // 100 + 50 suprimento
+  assert.equal(mapaEsperados[2], 270); // 200 + 70 recebimento dinheiro
+  assert.equal(mapaEsperados[3], 30);  // 50 - 20 sangria
+  assert.equal(mapaEsperados[4], 150); // 150 intacto
+
+  // 9. Fechar o Caixa 2 individualmente mantendo Caixa 1, 3 e 4 abertos
+  const fechamento2 = caixa.fecharCaixa(empresaId, { caixaId: cx2.id, valorInformado: 270 });
+  assert.equal(fechamento2.caixa.status, 'fechado');
+  const restantesAbertos = caixa.listarCaixas(empresaId, { lojaId, status: 'aberto' });
+  assert.equal(restantesAbertos.length, 3);
+  assert.deepEqual(restantesAbertos.map(c => c.numeroCaixa), [1, 3, 4]);
+});
