@@ -126,10 +126,26 @@ export function PainelCliente({ cliente, planos, carregando, profissionais = [] 
   )
 }
 
+const BEBIDAS_PADRAO_DINO = [
+  { itemId: 'beb-hein-330', nome: 'Cerveja Heineken Long Neck 330ml', preco: 12.00, detalhe: '330ml gelada · Long Neck', icone: '🍺' },
+  { itemId: 'beb-cor-330', nome: 'Cerveja Corona Extra Long Neck 330ml', preco: 14.00, detalhe: '330ml gelada · com limão', icone: '🍺' },
+  { itemId: 'beb-bud-330', nome: 'Cerveja Budweiser Long Neck 330ml', preco: 10.00, detalhe: '330ml gelada · Long Neck', icone: '🍺' },
+  { itemId: 'beb-ste-330', nome: 'Cerveja Stella Artois Long Neck 330ml', preco: 12.00, detalhe: '330ml gelada · Puro Malte', icone: '🍺' },
+  { itemId: 'beb-coca-350', nome: 'Refrigerante Coca-Cola Lata 350ml', preco: 7.00, detalhe: 'Lata 350ml gelada', icone: '🥤' },
+  { itemId: 'beb-cocaz-350', nome: 'Refrigerante Coca-Cola Zero Lata 350ml', preco: 7.00, detalhe: 'Lata 350ml sem açúcar', icone: '🥤' },
+  { itemId: 'beb-guar-350', nome: 'Refrigerante Guaraná Antarctica 350ml', preco: 7.00, detalhe: 'Lata 350ml gelada', icone: '🥤' },
+  { itemId: 'beb-agua-500', nome: 'Água Mineral sem Gás 500ml', preco: 5.00, detalhe: 'Garrafa 500ml', icone: '💧' },
+  { itemId: 'beb-aguag-500', nome: 'Água Mineral com Gás 500ml', preco: 6.00, detalhe: 'Garrafa 500ml', icone: '🫧' },
+  { itemId: 'beb-redb-250', nome: 'Energético Red Bull 250ml', preco: 16.00, detalhe: 'Lata 250ml', icone: '⚡' },
+  { itemId: 'beb-cafe-01', nome: 'Café Expresso Gourmet', preco: 5.00, detalhe: 'Xícara moída na hora', icone: '☕' },
+  { itemId: 'beb-dose-01', nome: 'Dose Whisky / Destilado Especial', preco: 25.00, detalhe: 'Dose 50ml no copo com gelo', icone: '🥃' },
+];
+
 const ABAS = [
+  ['bebidas', '🍺 Bebidas & Bar'],
   ['servico', 'Serviços'],
   ['pacote', 'Pacotes e Planos'],
-  ['produto', 'Revenda da barbearia'],
+  ['produto', 'Produtos de Revenda'],
   ['loja', 'Loja Dino'],
   ['outro', 'Outro item / Taxa'],
 ]
@@ -176,6 +192,31 @@ export function SeletorItens({ servicos, produtosRevenda, planos, catalogoPlanos
   }, [aba, termo])
 
   const resultados = useMemo(() => {
+    if (aba === 'bebidas') {
+      const cadastradas = (produtosRevenda || []).filter((p) => {
+        if (p.ativo === false) return false;
+        const cat = String(p.categoria || '').toLowerCase();
+        const n = String(p.nome || '').toLowerCase();
+        return cat.includes('bebida') || cat.includes('bar') || /cerveja|heineken|corona|budweiser|stella|coca|guarana|agua|refri|red bull|energetico|cafe|dose|whisky|gin|chopp/.test(n);
+      });
+      if (cadastradas.length > 0) {
+        return filtrarCatalogo(cadastradas, termo, ['nome', 'categoria', 'sku']).map((p) => ({
+          tipo: 'produto',
+          itemId: p.id,
+          nome: p.nome,
+          preco: Number(p.precoVenda || 0),
+          detalhe: `${p.estoqueAtual !== undefined ? p.estoqueAtual : 'Livre'} em estoque · Bebidas & Bar`,
+          estoque: p.estoqueAtual !== undefined ? Number(p.estoqueAtual) : undefined,
+        }));
+      }
+      return filtrarCatalogo(BEBIDAS_PADRAO_DINO, termo, ['nome', 'detalhe']).map((b) => ({
+        tipo: 'produto',
+        itemId: b.itemId,
+        nome: b.nome,
+        preco: b.preco,
+        detalhe: b.detalhe,
+      }));
+    }
     if (aba === 'servico') return filtrarCatalogo((servicos || []).filter((s) => s.ativo !== false), termo, ['nome', 'categoria']).map((s) => ({ tipo: 'servico', itemId: s.id, nome: s.nome, preco: Number(s.preco || 0), detalhe: s.duracaoMinutos ? `${s.duracaoMinutos} min` : '' }))
     if (aba === 'pacote') {
       const basePlanos = (listaPlanos || []).filter((p) => p.ativo !== false)
@@ -466,6 +507,25 @@ export default function ComandaNova({ clientes, profissionais, servicos, produto
         {/* div (e não label): um label repassaria o clique para o botão "Trocar" e desfaria a escolha. */}
         <div className="cn-campo" role="group" aria-labelledby="cn-rotulo-cliente"><span id="cn-rotulo-cliente">Cliente</span>
           <BuscaCliente clientes={clientes} clienteId={clienteId} nomeEventual={nomeEventual} onSelecionar={(c) => { setClienteId(c?.id || ''); setNomeEventual('') }} onNomeEventual={(nome) => { setClienteId(''); setNomeEventual(nome) }} />
+          {!cliente && (
+            <div style={{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+              <span style={{ fontSize: 11, color: 'var(--muted, #64748b)' }}>Atalho de consumo rápido:</span>
+              <button
+                type="button"
+                onClick={() => { setClienteId(''); setNomeEventual('Cliente Balcão'); }}
+                style={{ fontSize: 11, padding: '3px 8px', borderRadius: 6, border: '1px solid var(--line, #cbd5e1)', background: nomeEventual === 'Cliente Balcão' ? '#dbeafe' : '#f8fafc', color: nomeEventual === 'Cliente Balcão' ? '#1d4ed8' : '#334155', cursor: 'pointer', fontWeight: 600 }}
+              >
+                🍺 Cliente Balcão
+              </button>
+              <button
+                type="button"
+                onClick={() => { setClienteId(''); setNomeEventual('Mesa Bar'); }}
+                style={{ fontSize: 11, padding: '3px 8px', borderRadius: 6, border: '1px solid var(--line, #cbd5e1)', background: nomeEventual === 'Mesa Bar' ? '#dbeafe' : '#f8fafc', color: nomeEventual === 'Mesa Bar' ? '#1d4ed8' : '#334155', cursor: 'pointer', fontWeight: 600 }}
+              >
+                🍻 Mesa Bar
+              </button>
+            </div>
+          )}
         </div>
         {!cliente && nomeEventual && <label className="cn-campo"><span>Telefone do eventual (opcional)</span><input className="cn-input" inputMode="tel" value={telefoneEventual} onChange={(e) => setTelefoneEventual(e.target.value)} placeholder="(65) 9 9999-9999" /></label>}
         <label className="cn-campo"><span>Profissional responsável</span>
@@ -494,7 +554,9 @@ export default function ComandaNova({ clientes, profissionais, servicos, produto
       </div>
       <div className="cn-acoes">
         <button type="button" className="cn-botao secundario" onClick={onCancelar}>Cancelar</button>
-        <button type="submit" className="cn-botao" disabled={salvando || !carrinho.length}>{salvando ? 'Abrindo…' : `Abrir comanda${carrinho.length ? ` · ${carrinho.length} item(ns)` : ''}`}</button>
+        <button type="submit" className="cn-botao" disabled={salvando || !carrinho.length}>
+          {salvando ? 'Abrindo…' : carrinho.length > 0 && carrinho.every(i => i.tipo === 'produto' || i.tipo === 'bebida') ? `🍺 Abrir comanda de bar · ${carrinho.length} item(ns)` : `Abrir comanda${carrinho.length ? ` · ${carrinho.length} item(ns)` : ''}`}
+        </button>
       </div>
     </form>
   )

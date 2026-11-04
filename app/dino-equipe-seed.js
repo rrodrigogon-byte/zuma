@@ -288,6 +288,9 @@ export function provisionarEquipeDino({ commerceDb = null } = {}) {
     }
   }
 
+  // 2.6 Provisiona o catálogo de Bebidas & Bar e Revenda da Barbearia Dino
+  provisionarBebidasRevendaDino();
+
   save();
 
   // 3. Opcionalmente sincroniza no PostgreSQL (se database fornecido)
@@ -454,4 +457,50 @@ export async function provisionarPDVOfflineDino(commerceDb) {
   } catch (err) {
     console.warn('[dino-equipe-seed] Aviso ao provisionar PDV Offline Dino:', err.message);
   }
+}
+
+export const BEBIDAS_E_PRODUTOS_DINO = [
+  // Cervejas e Bebidas Alcoólicas
+  { nome: 'Cerveja Heineken Long Neck 330ml', categoria: 'Bebidas & Bar', precoVenda: 12.00, custoUnitario: 5.50, estoqueAtual: 48, estoqueMinimo: 12, sku: 'BEB-HEIN-330' },
+  { nome: 'Cerveja Corona Extra Long Neck 330ml', categoria: 'Bebidas & Bar', precoVenda: 14.00, custoUnitario: 6.80, estoqueAtual: 36, estoqueMinimo: 12, sku: 'BEB-COR-330' },
+  { nome: 'Cerveja Budweiser Long Neck 330ml', categoria: 'Bebidas & Bar', precoVenda: 10.00, custoUnitario: 4.80, estoqueAtual: 36, estoqueMinimo: 12, sku: 'BEB-BUD-330' },
+  { nome: 'Cerveja Stella Artois Long Neck 330ml', categoria: 'Bebidas & Bar', precoVenda: 12.00, custoUnitario: 5.50, estoqueAtual: 36, estoqueMinimo: 12, sku: 'BEB-STE-330' },
+  { nome: 'Dose Whisky / Destilado Especial', categoria: 'Bebidas & Bar', precoVenda: 25.00, custoUnitario: 10.00, estoqueAtual: 50, estoqueMinimo: 10, sku: 'BEB-DOSE-01' },
+  // Bebidas Não Alcoólicas
+  { nome: 'Refrigerante Coca-Cola Lata 350ml', categoria: 'Bebidas & Bar', precoVenda: 7.00, custoUnitario: 3.20, estoqueAtual: 48, estoqueMinimo: 12, sku: 'BEB-COCA-350' },
+  { nome: 'Refrigerante Coca-Cola Zero Lata 350ml', categoria: 'Bebidas & Bar', precoVenda: 7.00, custoUnitario: 3.20, estoqueAtual: 36, estoqueMinimo: 12, sku: 'BEB-COCAZ-350' },
+  { nome: 'Refrigerante Guaraná Antarctica Lata 350ml', categoria: 'Bebidas & Bar', precoVenda: 7.00, custoUnitario: 3.00, estoqueAtual: 36, estoqueMinimo: 12, sku: 'BEB-GUAR-350' },
+  { nome: 'Água Mineral sem Gás 500ml', categoria: 'Bebidas & Bar', precoVenda: 5.00, custoUnitario: 1.80, estoqueAtual: 60, estoqueMinimo: 20, sku: 'BEB-AGUA-500' },
+  { nome: 'Água Mineral com Gás 500ml', categoria: 'Bebidas & Bar', precoVenda: 6.00, custoUnitario: 2.20, estoqueAtual: 40, estoqueMinimo: 15, sku: 'BEB-AGUAG-500' },
+  { nome: 'Energético Red Bull 250ml', categoria: 'Bebidas & Bar', precoVenda: 16.00, custoUnitario: 8.50, estoqueAtual: 30, estoqueMinimo: 10, sku: 'BEB-REDB-250' },
+  { nome: 'Café Expresso Gourmet', categoria: 'Bebidas & Bar', precoVenda: 5.00, custoUnitario: 1.50, estoqueAtual: 100, estoqueMinimo: 20, sku: 'BEB-CAFE-01' },
+  // Cuidados Masculinos / Revenda
+  { nome: 'Pomada Modeladora Efeito Matte 120g', categoria: 'Revenda', precoVenda: 65.00, custoUnitario: 25.00, estoqueAtual: 24, estoqueMinimo: 6, sku: 'REV-POM-01' },
+  { nome: 'Óleo para Barba Premium Hidratante 30ml', categoria: 'Revenda', precoVenda: 55.00, custoUnitario: 20.00, estoqueAtual: 18, estoqueMinimo: 5, sku: 'REV-OLEO-01' },
+  { nome: 'Balm Alinhador e Modelador de Barba 100g', categoria: 'Revenda', precoVenda: 50.00, custoUnitario: 18.00, estoqueAtual: 20, estoqueMinimo: 5, sku: 'REV-BALM-01' },
+  { nome: 'Shampoo Masculino Anticaspa Fortalecedor 250ml', categoria: 'Revenda', precoVenda: 45.00, custoUnitario: 16.00, estoqueAtual: 15, estoqueMinimo: 4, sku: 'REV-SHAMP-01' },
+];
+
+export function provisionarBebidasRevendaDino() {
+  const empresasAlvo = [DINO_EMPRESA_CANONICA, 'emp-kytto-001', 'dino'];
+  let totalCriados = 0;
+  for (const empId of empresasAlvo) {
+    try {
+      const existentes = barbeariaErpKytto.listarProdutosRevenda(empId, { incluirInativos: true });
+      const nomesExistentes = new Set(existentes.map((p) => p.nome.toLowerCase().trim()));
+      for (const item of BEBIDAS_E_PRODUTOS_DINO) {
+        if (!nomesExistentes.has(item.nome.toLowerCase().trim())) {
+          barbeariaErpKytto.criarProdutoRevenda(empId, {
+            ...item,
+            ativo: true,
+            lojaId: DINO_LOJA_CANONICA,
+          });
+          totalCriados++;
+        }
+      }
+    } catch (e) {
+      console.warn(`[dino-equipe-seed] Aviso ao provisionar bebidas para ${empId}:`, e.message);
+    }
+  }
+  return totalCriados;
 }

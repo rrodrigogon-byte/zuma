@@ -2159,7 +2159,19 @@ function itemLojaComandaNormalizado(estado, comanda, dados = {}) {
 }
 
 function itemComandaBarbeariaNormalizado(estado, comanda, dados = {}) {
-  const tipo = String(dados.tipo || (dados.servicoId || dados.servico_id ? 'servico' : 'produto')).toLowerCase();
+  let tipo = String(dados.tipo || (dados.servicoId || dados.servico_id ? 'servico' : 'produto')).toLowerCase();
+  if (tipo === 'bebida' || tipo === 'bar') {
+    const idBeb = String(dados.itemId || dados.produtoId || dados.produto_id || '').trim();
+    const prodBeb = estado.produtosRevenda[idBeb] || Object.values(estado.produtosRevenda || {}).find(p => p.id === idBeb || p.nome.toLowerCase() === String(dados.nome || '').toLowerCase());
+    if (prodBeb) {
+      tipo = 'produto';
+      dados.produtoId = prodBeb.id;
+      dados.itemId = prodBeb.id;
+    } else {
+      tipo = 'outro';
+      dados.categoria = 'Bebidas & Bar';
+    }
+  }
   if (tipo === 'loja') return itemLojaComandaNormalizado(estado, comanda, dados);
   // Suporte a Pacotes e Planos de Procedimentos na comanda
   if (tipo === 'pacote' || tipo === 'plano') {
@@ -2227,7 +2239,9 @@ function itemComandaBarbeariaNormalizado(estado, comanda, dados = {}) {
   if (profissionalId && (!estado.profissionais[profissionalId] || estado.profissionais[profissionalId].ativo === false)) throw new Error('Profissional responsável não encontrado ou inativo.');
   const precoUnitario = dinheiro(tipo === 'servico' ? cadastro.preco : cadastro.precoVenda);
   if (precoUnitario < 0) throw new Error('O item não pode ter preço negativo.');
-  if (tipo === 'produto' && Number(cadastro.estoqueAtual || 0) < quantidade) throw new Error(`Estoque insuficiente para ${cadastro.nome} (disponível: ${cadastro.estoqueAtual || 0}).`);
+  if (tipo === 'produto' && Number(cadastro.estoqueAtual || 0) < quantidade && cadastro.bloquearSemEstoque === true) {
+    throw new Error(`Estoque insuficiente para ${cadastro.nome} (disponível: ${cadastro.estoqueAtual || 0}).`);
+  }
   // Cobertura de plano: preparada e validada pelo servidor (barbearia-comanda-plano.js).
   const cobertura = tipo === 'servico' && dados.coberturaPlano && dados.coberturaPlano.verificadoPeloServidor === true ? dados.coberturaPlano : null;
   if (cobertura && quantidade !== 1) throw new Error('Item coberto pelo plano entra com quantidade 1 por linha.');

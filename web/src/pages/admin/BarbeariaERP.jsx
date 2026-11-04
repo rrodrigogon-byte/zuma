@@ -4118,6 +4118,7 @@ export default function BarbeariaERP() {
           key={scopeKey}
           profissionais={profissionais}
           onOpen={abrirComanda}
+          onNovaComanda={() => abrirNovaComanda(null)}
           refreshKey={agendaRevisao}
         />
         <BarbeariaAtendimentoBoard
@@ -4168,6 +4169,7 @@ export default function BarbeariaERP() {
           key={scopeKey}
           profissionais={profissionais}
           onOpen={abrirComanda}
+          onNovaComanda={() => abrirNovaComanda(null)}
           refreshKey={agendaRevisao}
         />
         <BarbeariaOperacaoPanel

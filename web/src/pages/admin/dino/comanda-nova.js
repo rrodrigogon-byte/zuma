@@ -101,6 +101,9 @@ export function itensParaApi(carrinho, profissionalPadrao = '') {
     }
     if (linha.tipo === 'servico') return { ...base, servicoId: linha.itemId, usarPlano: linha.usarPlano !== false }
     if (linha.tipo === 'produto') return { ...base, produtoId: linha.itemId }
+    if (linha.tipo === 'bebida' || linha.tipo === 'bar') {
+      return { ...base, tipo: 'bebida', produtoId: linha.itemId, itemId: linha.itemId, nome: linha.nome, preco: Number(linha.preco || 0) }
+    }
     if (linha.tipo === 'pacote' || linha.tipo === 'plano') return { ...base, planoId: linha.itemId || linha.planoId, itemId: linha.itemId, nome: linha.nome, ...(linha.preco !== undefined ? { preco: Number(linha.preco || 0) } : {}) }
     if (linha.tipo === 'outro') return { ...base, nome: linha.nome, preco: Number(linha.preco || 0), ...(linha.obs || linha.detalhe ? { obs: linha.obs || linha.detalhe } : {}) }
     return { ...base, variantId: linha.itemId }
