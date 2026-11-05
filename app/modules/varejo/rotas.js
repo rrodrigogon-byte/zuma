@@ -77,6 +77,20 @@ export function createVarejoAdminRouter({ db, escopoDaRequisicao, fuso = 'Americ
   router.post('/vendas', rota('sales.write', ({ req, empresaId, lojaRestrita, lojaId, usuario }) => svc.registrarVenda(db, empresaId, req.body || {}, { usuario, lojaId: lojaRestrita || lojaId }), 201));
   router.post('/sync-offline', rota('sales.write', ({ req, empresaId, lojaRestrita, lojaId, usuario }) => svc.sincronizarFilaOffline(db, empresaId, req.body || {}, { usuario, lojaId: lojaRestrita || lojaId })));
   router.post('/caixa/fechamento-cego', rota('sales.write', ({ req, empresaId, lojaRestrita, lojaId, usuario }) => svc.fechamentoCegoCaixa(db, empresaId, req.body || {}, { usuario, lojaId: lojaRestrita || lojaId })));
+  // Novas rotas para o módulo expandido de supermercado
+  router.get('/resumo-dashboard', rota('catalog.read', async ({ empresaId, lojaId }) => svc.resumoDashboard(db, empresaId, { lojaId })));
+  router.get('/vendas', rota('sales.read', async ({ req, empresaId, lojaId }) => ({ vendas: await svc.listarVendas(db, empresaId, { lojaId, limit: req.query.limit, offset: req.query.offset }) })));
+  router.delete('/produtos/:id', rota('catalog.write', ({ req, empresaId }) => svc.inativarProduto(db, empresaId, req.params.id)));
+  router.put('/produtos/:id/configuracao-loja', rota('catalog.write', ({ req, empresaId, lojaRestrita, lojaId }) => {
+    const corpo = { ...(req.body || {}) };
+    return svc.configurarProduto(db, empresaId, req.params.id, corpo, { lojaId });
+  }));
+  router.post('/lotes/:id/baixar', rota('inventory.write', ({ req, empresaId, usuario }) => svc.baixarLote(db, empresaId, req.params.id, req.body || {}, { usuario })));
+  router.get('/fornecedores', rota('catalog.read', async ({ empresaId }) => svc.listarFornecedoresVarejo(db, empresaId)));
+  router.post('/fornecedores', rota('catalog.write', ({ req, empresaId }) => svc.salvarFornecedorVarejo(db, empresaId, req.body || {}), 201));
+  router.get('/margem', rota('catalog.read', async ({ empresaId, lojaId }) => svc.analiseMargemCurvaABC(db, empresaId, { lojaId })));
+  router.get('/margem/resumo', rota('catalog.read', async ({ empresaId, lojaId }) => ({ resumo: (await svc.analiseMargemCurvaABC(db, empresaId, { lojaId })).resumo })));
+
   router.post('/emitir-nfce', rota('sales.write', async () => {
     const chaveAcesso = `512611${String(Date.now()).slice(0, 14).padEnd(14, '0')}65001${String(Date.now()).slice(-9)}1${Math.floor(10000000 + Math.random() * 89999999)}1`;
     const protocolo = `15126${String(Date.now()).slice(-10)}`;

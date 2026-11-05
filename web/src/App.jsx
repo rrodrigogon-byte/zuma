@@ -151,6 +151,7 @@ const EscolhaEmpresa  = lazy(() => import('./pages/admin/EscolhaEmpresa'))
 const Suprimentos     = lazy(() => import('./pages/admin/suprimentos/Suprimentos'))
 const Fiscal          = lazy(() => import('./pages/admin/fiscal/Fiscal'))
 const VarejoUnidade    = lazy(() => import('./pages/admin/varejo/Varejo'))
+const Supermercado     = lazy(() => import('./pages/admin/Supermercado'))
 const Clientes = lazy(() => import('./pages/admin/Clientes'))
 const Customer360 = lazy(() => import('./pages/admin/Customer360'))
 const FinanceiroEmpresa = lazy(() => import('./pages/admin/dino/FinanceiroEmpresa'))
@@ -365,7 +366,7 @@ export default function App() {
           <Route path="/admin/barbearia"        element={<Layout><Barbearia /></Layout>} />
           <Route path="/admin/metas-roleta"    element={<Layout><DinoMetasRoletaPanel /></Layout>} />
 
-          <Route path="/admin/supermercado" element={<TenantAware tenant={<Layout><VarejoUnidade /></Layout>} legacy={<Layout><VarejoUnidade /></Layout>} />} />
+          <Route path="/admin/supermercado" element={<Layout><Supermercado /></Layout>} />
 
           <Route path="/admin/omnichannel"      element={<Layout><CanaisFidelidade /></Layout>} />
           <Route path="/admin/pdv-erp"         element={<PDVUnificado />} />

@@ -499,21 +499,47 @@ export async function registrarVenda(db, empresaId, dados = {}, { usuario = null
   const formaPagamento = String(dados.forma_pagamento || dados.formaPagamento || 'dinheiro');
   const desconto = Number(dados.desconto || 0);
   const troco = Number(dados.troco || 0);
+  const chaveAcesso = `512611${String(Date.now()).slice(0, 14).padEnd(14, '0')}65001${String(Date.now()).slice(-9)}1${Math.floor(10000000 + Math.random() * 89999999)}1`;
+  const protocolo = `15126${String(Date.now()).slice(-10)}`;
 
   return transacao(db, async (q) => {
-    const vendaId = (await q('SELECT gen_random_uuid() AS id')).rows[0].id;
     const numero = `VND-${Date.now().toString(36).toUpperCase()}`;
+    const vRes = await q(
+      `INSERT INTO var_vendas (empresa_id, loja_id, numero, total, desconto, troco, forma_pagamento, nfce_chave, nfce_protocolo, criado_por)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+       RETURNING id, criado_em`,
+      [empresa, loja, numero, total, desconto, troco, formaPagamento, chaveAcesso, protocolo, textoOpcional(usuario, 180)]
+    );
+    const vendaId = vRes.rows[0].id;
+    const criadoEm = vRes.rows[0].criado_em;
 
+    const itensGravados = [];
     for (const it of itens) {
-      const itemId = uuidOuNull(it.produto_id || it.itemId);
+      const itemId = uuidOuNull(it.produto_id || it.itemId || it.id);
       const qtdBaixa = Number(it.quantidade || 1);
+      const precoUnit = Number(it.preco_unitario || it.precoFinal || it.preco || 0);
+      const precoTot = Number(it.preco_total || (qtdBaixa * precoUnit));
+      const descItem = Number(it.desconto || 0);
+
       if (itemId && qtdBaixa > 0) {
+        await q(
+          `INSERT INTO var_venda_itens (empresa_id, venda_id, item_id, quantidade, preco_unitario, preco_total, desconto)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+          [empresa, vendaId, itemId, qtdBaixa, precoUnit, precoTot, descItem]
+        );
         await q(
           `UPDATE est_saldos SET quantidade = quantidade - $1, atualizado_em = CURRENT_TIMESTAMP
            WHERE empresa_id = $2 AND item_id = $3 AND ($4::uuid IS NULL OR loja_id = $4::uuid)`,
           [qtdBaixa, empresa, itemId, loja]
         ).catch(() => null);
       }
+      itensGravados.push({
+        produto_id: itemId,
+        nome: it.nome,
+        quantidade: qtdBaixa,
+        preco_unitario: precoUnit,
+        preco_total: precoTot,
+      });
     }
 
     return {
@@ -525,13 +551,11 @@ export async function registrarVenda(db, empresaId, dados = {}, { usuario = null
         desconto,
         troco,
         forma_pagamento: formaPagamento,
-        data: new Date().toISOString(),
-        itens: itens.map(i => ({
-          produto_id: i.produto_id || i.itemId,
-          nome: i.nome,
-          quantidade: i.quantidade,
-          preco_unitario: i.preco_unitario || i.preco
-        }))
+        nfce_chave: chaveAcesso,
+        nfce_protocolo: protocolo,
+        qr_code_url: `http://www.sefaz.mt.gov.br/nfce/consultanfce?chNFe=${chaveAcesso}`,
+        data: criadoEm,
+        itens: itensGravados
       }
     };
   });
@@ -606,5 +630,299 @@ export async function fechamentoCegoCaixa(db, empresaId, dados = {}, { usuario =
   return {
     sucesso: true,
     reducaoZ,
+  };
+}
+
+
+// ── novas extensões para o módulo completo de supermercado ───────────────────
+
+export async function listarVendas(db, empresaId, { lojaId = null, limit = 50, offset = 0 } = {}) {
+  const empresa = exigirUuid(empresaId, 'empresa');
+  const loja = uuidOuNull(lojaId);
+  const r = await db.query(
+    `SELECT v.*,
+            COALESCE(
+              json_agg(
+                json_build_object(
+                  'id', vi.id,
+                  'item_id', vi.item_id,
+                  'nome', i.nome,
+                  'unidade', i.unidade,
+                  'sku', i.sku,
+                  'quantidade', vi.quantidade,
+                  'preco_unitario', vi.preco_unitario,
+                  'preco_total', vi.preco_total
+                )
+              ) FILTER (WHERE vi.id IS NOT NULL), '[]'
+            ) AS itens
+       FROM var_vendas v
+  LEFT JOIN var_venda_itens vi ON vi.venda_id = v.id
+  LEFT JOIN est_itens i ON i.id = vi.item_id
+      WHERE v.empresa_id = $1 AND ($2::uuid IS NULL OR v.loja_id = $2::uuid)
+   GROUP BY v.id
+   ORDER BY v.criado_em DESC
+      LIMIT $3 OFFSET $4`,
+    [empresa, loja, Math.min(Math.max(Number(limit) || 50, 1), 300), Math.max(Number(offset) || 0, 0)]
+  );
+
+  return r.rows.map((row) => ({
+    id: row.id,
+    numero: row.numero,
+    total: Number(row.total),
+    desconto: Number(row.desconto),
+    troco: Number(row.troco),
+    formaPagamento: row.forma_pagamento,
+    nfceChave: row.nfce_chave,
+    nfceProtocolo: row.nfce_protocolo,
+    criadoPor: row.criado_por,
+    data: row.criado_em,
+    itens: row.itens || []
+  }));
+}
+
+export async function resumoDashboard(db, empresaId, { lojaId = null, agora = new Date() } = {}) {
+  const empresa = exigirUuid(empresaId, 'empresa');
+  const loja = uuidOuNull(lojaId);
+
+  // Produtos e estoque
+  const prods = await listarProdutos(db, empresa, { lojaId, agora });
+  const totalProdutos = prods.length;
+  const totalPesaveis = prods.filter((p) => p.pesavel).length;
+  const saldoTotalEstoque = prods.reduce((acc, p) => acc + (Number(p.saldo) || 0), 0);
+  const valorEstoqueCusto = prods.reduce((acc, p) => acc + ((Number(p.saldo) || 0) * (Number(p.custoMedio) || 0)), 0);
+  const valorEstoqueVenda = prods.reduce((acc, p) => acc + ((Number(p.saldo) || 0) * (Number(p.precoFinal) || 0)), 0);
+  const rupturas = prods.filter((p) => Number(p.saldo) <= Number(p.estoqueMinimo || 0));
+
+  // Lotes e validade
+  const lotes = await listarLotes(db, empresa, { lojaId, hoje: agora.toISOString().slice(0, 10) });
+  const lotesVencidos = lotes.filter((l) => l.situacao === 'vencido').length;
+  const lotesCriticos = lotes.filter((l) => ['vencido', 'critico'].includes(l.situacao)).length;
+  const lotesAtencao = lotes.filter((l) => l.situacao === 'atencao').length;
+
+  // Promoções ativas
+  const promocoes = await listarPromocoes(db, empresa, { lojaId });
+  const promocoesAtivas = promocoes.filter((pr) => pr.status === 'ativa').length;
+
+  // Vendas de hoje
+  const hojeInicio = new Date(agora);
+  hojeInicio.setHours(0, 0, 0, 0);
+  const vHoje = await db.query(
+    `SELECT COUNT(*)::int AS qtd, COALESCE(SUM(total), 0)::numeric AS faturamento
+       FROM var_vendas
+      WHERE empresa_id = $1 AND ($2::uuid IS NULL OR loja_id = $2::uuid) AND criado_em >= $3`,
+    [empresa, loja, hojeInicio]
+  );
+  const vendasHoje = Number(vHoje.rows[0]?.qtd || 0);
+  const faturamentoHoje = Number(vHoje.rows[0]?.faturamento || 0);
+  const ticketMedioHoje = vendasHoje > 0 ? Math.round((faturamentoHoje / vendasHoje) * 100) / 100 : 0;
+
+  // Departamentos
+  const deptMap = {};
+  for (const p of prods) {
+    const d = p.departamento || 'Geral';
+    if (!deptMap[d]) deptMap[d] = { departamento: d, itens: 0, saldo: 0, valorTotal: 0 };
+    deptMap[d].itens += 1;
+    deptMap[d].saldo += Number(p.saldo) || 0;
+    deptMap[d].valorTotal += (Number(p.saldo) || 0) * (Number(p.precoFinal) || 0);
+  }
+  const departamentos = Object.values(deptMap).sort((a, b) => b.valorTotal - a.valorTotal);
+
+  // Margem média
+  const margemMedia = prods.length > 0
+    ? Math.round((prods.reduce((acc, p) => acc + (Number(p.margem) || 0), 0) / prods.length) * 10) / 10
+    : 0;
+
+  return {
+    totalProdutos,
+    totalPesaveis,
+    saldoTotalEstoque: Math.round(saldoTotalEstoque * 100) / 100,
+    valorEstoqueCusto: Math.round(valorEstoqueCusto * 100) / 100,
+    valorEstoqueVenda: Math.round(valorEstoqueVenda * 100) / 100,
+    faturamentoHoje: Math.round(faturamentoHoje * 100) / 100,
+    vendasHoje,
+    ticketMedioHoje,
+    lotesVencidos,
+    lotesCriticos,
+    lotesAtencao,
+    totalRupturas: rupturas.length,
+    promocoesAtivas,
+    margemMedia,
+    departamentos
+  };
+}
+
+export async function inativarProduto(db, empresaId, itemId) {
+  const empresa = exigirUuid(empresaId, 'empresa');
+  const item = exigirUuid(itemId, 'item');
+  const r = await db.query(
+    'UPDATE est_itens SET ativo = false, atualizado_em = CURRENT_TIMESTAMP WHERE empresa_id = $1 AND id = $2 RETURNING id, nome',
+    [empresa, item]
+  );
+  if (!r.rows[0]) throw new ErroDominio('NOT_FOUND', 'Produto não encontrado', 404);
+  return { sucesso: true, removido: r.rows[0] };
+}
+
+export async function baixarLote(db, empresaId, loteId, dados = {}, { usuario = null } = {}) {
+  const empresa = exigirUuid(empresaId, 'empresa');
+  const id = exigirUuid(loteId, 'lote');
+  const motivo = textoOpcional(dados.motivo, 120) || 'Baixa por vencimento / avaria';
+  const quantidadeBaixa = numero(dados.quantidade || 0, 'Quantidade a baixar', { min: 0.001 });
+
+  return transacao(db, async (q) => {
+    const lRes = await q(
+      'SELECT * FROM est_lotes WHERE empresa_id = $1 AND id = $2 FOR UPDATE',
+      [empresa, id]
+    );
+    if (!lRes.rows[0]) throw new ErroDominio('NOT_FOUND', 'Lote não encontrado', 404);
+    const lote = lRes.rows[0];
+    const qtdAtual = Number(lote.quantidade || 0);
+    if (quantidadeBaixa > qtdAtual) throw new ErroDominio('VALIDATION_ERROR', `Lote possui apenas ${qtdAtual} disponível`);
+
+    const novaQtd = qtd(qtdAtual - quantidadeBaixa);
+    await q(
+      'UPDATE est_lotes SET quantidade = $3, atualizado_em = CURRENT_TIMESTAMP WHERE empresa_id = $1 AND id = $2',
+      [empresa, id, novaQtd]
+    );
+
+    // Também baixa o saldo correspondente no estoque único
+    await q(
+      `UPDATE est_saldos SET quantidade = GREATEST(0, quantidade - $1), atualizado_em = CURRENT_TIMESTAMP
+       WHERE empresa_id = $2 AND item_id = $3 AND ($4::uuid IS NULL OR loja_id = $4::uuid)`,
+      [quantidadeBaixa, empresa, lote.item_id, lote.loja_id]
+    ).catch(() => null);
+
+    return {
+      sucesso: true,
+      loteId: id,
+      quantidadeBaixada: quantidadeBaixa,
+      quantidadeRestante: novaQtd,
+      motivo
+    };
+  });
+}
+
+export async function listarFornecedoresVarejo(db, empresaId) {
+  const empresa = exigirUuid(empresaId, 'empresa');
+  const r = await db.query(
+    `SELECT id, nome, cnpj, inscricao_estadual, email, telefone, endereco, condicao_pagamento, status
+       FROM a2_fornecedores
+      WHERE empresa_id = $1
+      ORDER BY nome ASC`,
+    [empresa]
+  );
+
+  // Calcula sugestões de compra para itens abaixo do estoque mínimo
+  const itensCriticos = await db.query(
+    `SELECT i.id, i.nome, i.sku, i.unidade, i.departamento, i.custo_medio, i.estoque_minimo,
+            COALESCE((SELECT SUM(s.quantidade) FROM est_saldos s WHERE s.empresa_id = i.empresa_id AND s.item_id = i.id), 0) AS saldo
+       FROM est_itens i
+      WHERE i.empresa_id = $1 AND i.ativo = true
+        AND COALESCE((SELECT SUM(s.quantidade) FROM est_saldos s WHERE s.empresa_id = i.empresa_id AND s.item_id = i.id), 0) <= i.estoque_minimo
+      ORDER BY i.nome ASC LIMIT 100`,
+    [empresa]
+  );
+
+  const sugestoes = itensCriticos.rows.map((it) => {
+    const saldo = Number(it.saldo || 0);
+    const min = Number(it.estoque_minimo || 0);
+    const sugerido = Math.max(min * 2 - saldo, min || 10);
+    return {
+      itemId: it.id,
+      nome: it.nome,
+      sku: it.sku,
+      unidade: it.unidade,
+      departamento: it.departamento,
+      custoUnitario: Number(it.custo_medio || 0),
+      saldoAtual: saldo,
+      estoqueMinimo: min,
+      quantidadeSugerida: Math.round(sugerido * 100) / 100,
+      valorEstimadoTotal: Math.round(sugerido * Number(it.custo_medio || 0) * 100) / 100
+    };
+  });
+
+  return {
+    fornecedores: r.rows,
+    sugestoesCompra: sugestoes
+  };
+}
+
+export async function salvarFornecedorVarejo(db, empresaId, dados = {}) {
+  const empresa = exigirUuid(empresaId, 'empresa');
+  const nome = exigirTexto(dados.nome, 'Nome do fornecedor', { min: 2, max: 180 });
+  const cnpj = textoOpcional(dados.cnpj, 25);
+  const email = textoOpcional(dados.email, 120);
+  const telefone = textoOpcional(dados.telefone, 30);
+  const condicao = textoOpcional(dados.condicao_pagamento || dados.condicaoPagamento, 80) || '30 dias';
+  const id = uuidOuNull(dados.id);
+
+  if (id) {
+    const r = await db.query(
+      `UPDATE a2_fornecedores
+          SET nome = $3, cnpj = $4, email = $5, telefone = $6, condicao_pagamento = $7, atualizado_em = CURRENT_TIMESTAMP
+        WHERE empresa_id = $1 AND id = $2
+        RETURNING *`,
+      [empresa, id, nome, cnpj, email, telefone, condicao]
+    );
+    return r.rows[0];
+  }
+
+  const r = await db.query(
+    `INSERT INTO a2_fornecedores (empresa_id, nome, cnpj, email, telefone, condicao_pagamento, status)
+     VALUES ($1, $2, $3, $4, $5, $6, 'ativo')
+     RETURNING *`,
+    [empresa, nome, cnpj, email, telefone, condicao]
+  );
+  return r.rows[0];
+}
+
+export async function analiseMargemCurvaABC(db, empresaId, { lojaId = null } = {}) {
+  const prods = await listarProdutos(db, empresaId, { lojaId });
+  const itensCalculados = prods.map((p) => {
+    const venda = Number(p.precoFinal || p.precoBase || 0);
+    const custo = Number(p.custoMedio || 0);
+    const saldo = Number(p.saldo || 0);
+    const lucro = Math.max(0, venda - custo);
+    const margem = venda > 0 ? Math.round(((venda - custo) / venda) * 1000) / 10 : 0;
+    const markup = custo > 0 ? Math.round(((venda - custo) / custo) * 1000) / 10 : 0;
+    const valorEstoque = Math.round(saldo * venda * 100) / 100;
+    return {
+      id: p.id,
+      nome: p.nome,
+      sku: p.sku,
+      ean: p.ean,
+      departamento: p.departamento,
+      unidade: p.unidade,
+      saldo,
+      custoMedio: custo,
+      precoVenda: venda,
+      lucroUnitario: Math.round(lucro * 100) / 100,
+      margemPercentual: margem,
+      markupPercentual: markup,
+      valorEstoque
+    };
+  });
+
+  // Curva ABC sobre valor de estoque
+  itensCalculados.sort((a, b) => b.valorEstoque - a.valorEstoque);
+  const totalGeralEstoque = itensCalculados.reduce((acc, it) => acc + it.valorEstoque, 0) || 1;
+  let acumulado = 0;
+  for (const it of itensCalculados) {
+    acumulado += it.valorEstoque;
+    const pct = (acumulado / totalGeralEstoque) * 100;
+    it.curva = pct <= 80 ? 'A' : (pct <= 95 ? 'B' : 'C');
+  }
+
+  const resumo = {
+    totalItens: itensCalculados.length,
+    margemMedia: itensCalculados.length > 0 ? Math.round((itensCalculados.reduce((acc, it) => acc + it.margemPercentual, 0) / itensCalculados.length) * 10) / 10 : 0,
+    markupMedio: itensCalculados.length > 0 ? Math.round((itensCalculados.reduce((acc, it) => acc + it.markupPercentual, 0) / itensCalculados.length) * 10) / 10 : 0,
+    classeA: itensCalculados.filter(i => i.curva === 'A').length,
+    classeB: itensCalculados.filter(i => i.curva === 'B').length,
+    classeC: itensCalculados.filter(i => i.curva === 'C').length,
+  };
+
+  return {
+    resumo,
+    itens: itensCalculados
   };
 }

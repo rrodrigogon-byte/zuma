@@ -1775,7 +1775,7 @@ app.use('/api/webhooks', createWhatsappAiWebhookRouter());
   // [kytto-varejo] Supermercado/varejo sobre o estoque único: preço por unidade, promoções, lotes, etiquetas e transferências.
   const varejoRouter = createVarejoAdminRouter({ db: clubeDb, escopoDaRequisicao: escopoComercial, fuso: FUSO_KYTTO });
   app.use('/api/admin/varejo', auth, requireStaff, varejoRouter);
-  app.use('/api/supermercado', auth, requireStaff, (req, res, next) => {
+  app.use(['/api/supermercado', '/api/admin/supermercado'], auth, requireStaff, (req, res, next) => {
     if (req.url.startsWith('/produtos/buscar/')) {
       req.url = req.url.replace('/produtos/buscar/', '/produtos/codigo/');
     }
