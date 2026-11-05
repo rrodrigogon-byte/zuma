@@ -192,3 +192,45 @@ O relatório apresenta layout otimizado para impressoras térmicas e padrão A4/
 
 *Documento gerado pelo Kytto — Plataforma de Inteligência e Gestão Comercial.*  
 *Versão do Sistema: Produção (Live) | Novembro/2026*
+
+---
+
+## 9. Gestão Fiscal e Emissão de NFS-e / DANFSe (Tangará da Serra - MT)
+
+A plataforma Kytto conta com módulo fiscal completo integrado à Secretaria de Finanças Nacional (Sefin Nacional) e em conformidade com as normas tributárias de Tangará da Serra/MT para emissão de Nota Fiscal de Serviço Eletrônica (NFS-e) e Documento Auxiliar da NFS-e (DANFSe).
+
+### 9.1 Dados Cadastrais Fiscais Validados
+
+| Dado Cadastral | Identificação Oficial / Situação |
+| :--- | :--- |
+| **Razão Social** | DINO BARBEARIA LTDA |
+| **Nome Fantasia** | Barbearia Dino |
+| **CNPJ (Filial Tangará da Serra)** | 50.073.355/0002-60 (Ativo) |
+| **CNPJ (Matriz)** | 50.073.355/0001-89 (Ativo) |
+| **Inscrição Estadual (SEFAZ-MT / Sintegra)** | **14.229.191-9** (Ativa e Habilitada) |
+| **Inscrição Municipal (IM)** | Isento / Dispensa Sefin Nacional (Emissão direta via DPS/NFS-e Nacional, Município 5107958) |
+| **Endereço Fiscal** | Rua Avelina Jaci Bohn, 80W, Centro — Tangará da Serra/MT, CEP 78300-060 |
+| **Regime Tributário** | Simples Nacional — ME/EPP |
+| **Código de Tributação Nacional** | 06.01.01 — Barbearia, cabeleireiros, manicuros, pedicuros e congêneres |
+
+### 9.2 Novos Recursos na Central de Notas Fiscais (/admin/notas)
+
+Na tela de gerenciamento fiscal ([https://kytto.com.br/admin/notas](https://kytto.com.br/admin/notas)), foram implantadas melhorias para dar agilidade à operação diária:
+
+1. **Botão "Imprimir NFS-e" (🖨️):** Dispara diretamente a visualização do DANFSe com a caixa de diálogo nativa de impressão já aberta, permitindo emissão imediata em impressoras térmicas de 80mm ou impressoras de escritório A4;
+2. **Botão "DANFSe / PDF" (📄):** Abre o documento auxiliar da NFS-e formatado no padrão A4 oficial com barra de ferramentas contendo o botão "Imprimir / Salvar em PDF" e o link "Consultar no Portal Nacional";
+3. **Botão "XML":** Faz o download instantâneo do XML assinado digitalmente com certificado ICP-Brasil para envio ao contador;
+4. **Botão "Cancelar nota":** Permite registrar o evento de cancelamento oficial perante a Sefin Nacional caso haja erro operacional.
+
+![Tabela de Notas Fiscais com Novos Botões de Impressão e PDF](/home/ubuntu/manual-assets/print_tabela_notas_novos_botoes.png)
+
+### 9.3 Estrutura do DANFSe Oficial Gerado
+
+O DANFSe gerado pela plataforma Kytto atende integralmente ao modelo visual unificado da Receita Federal e da Sefin Nacional:
+
+- **Cabeçalho:** Identificação do DPS, Número da NFS-e, Data e Hora de Processamento, Competência e Chave de Acesso de 50 dígitos formatada em blocos de 4 caracteres;
+- **QR Code Oficial:** Código bidimensional de autenticidade que direciona para a validação pública no portal nacional (`nfse.gov.br`);
+- **Dados do Prestador:** Razão social, CNPJ, Inscrição Estadual (`14.229.191-9`), Inscrição Municipal, regime tributário e endereço completo;
+- **Valores e Discriminação:** Descrição dos serviços ou produtos de revenda faturados, valor bruto, alíquota de retenção e valor líquido da NFS-e.
+
+![DANFSe Oficial Gerado para a NFS-e 14](/home/ubuntu/manual-assets/print_nfse_danfse_documento_14.png)
