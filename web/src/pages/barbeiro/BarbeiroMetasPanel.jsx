@@ -200,6 +200,15 @@ export default function BarbeiroMetasPanel({ painel, onLancarVenda, onAtualizar,
   const metaMensalAlvo = Number(mes.metaFaturamentoMensal || 7000)
   const realizadoMes = Number(mes.faturamentoRealizado || 0)
   const faltaParaMeta = Math.max(0, metaMensalAlvo - realizadoMes)
+
+  const metasServico = painel?.metasEvolucao?.servicos || mes?.metasServico || painel?.comissao?.metasEvolucao?.servicos || null
+  const metasProduto = painel?.metasEvolucao?.produtos || mes?.metasProduto || painel?.comissao?.metasEvolucao?.produtos || null
+  const faixasServ = Array.isArray(metasServico?.todasFaixas) && metasServico.todasFaixas.length > 0
+    ? metasServico.todasFaixas
+    : (Array.isArray(painel?.profissional?.faixasComissaoServico) ? painel.profissional.faixasComissaoServico : [])
+  const faixasProd = Array.isArray(metasProduto?.todasFaixas) && metasProduto.todasFaixas.length > 0
+    ? metasProduto.todasFaixas
+    : (Array.isArray(painel?.profissional?.faixasComissaoProduto) ? painel.profissional.faixasComissaoProduto : [])
   const producaoDiariaSimulada = simCortesDia * simTicketMedio
   const diasParaBaterMeta = producaoDiariaSimulada > 0 ? Math.ceil(faltaParaMeta / producaoDiariaSimulada) : 0
   const percComissao = Number(painel?.comissao?.percentualServicos || 50) / 100
@@ -516,6 +525,183 @@ export default function BarbeiroMetasPanel({ painel, onLancarVenda, onAtualizar,
       {/* ABA 2: METAS DO MÊS & SIMULADOR INTERATIVO */}
       {subAba === 'mes' && (
         <div style={{ display: 'grid', gap: 12 }}>
+          {/* RÉGUA VISUAL DE METAS MENSAIS PROGRESSIVAS DE SERVIÇOS (CABELO, BARBA E EXTRAS) */}
+          {faixasServ.length > 0 && (
+            <div style={{
+              ...card,
+              background: 'linear-gradient(145deg, rgba(30, 27, 75, 0.98) 0%, rgba(15, 23, 42, 0.98) 100%)',
+              borderColor: '#818cf8',
+              display: 'grid',
+              gap: 14,
+              boxShadow: '0 8px 24px rgba(99, 102, 241, 0.15)',
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+                <div>
+                  <div style={{ fontSize: 11, fontWeight: 900, color: '#a5b4fc', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                    🚀 Escalada de Metas & Bonificação Mensal
+                  </div>
+                  <div style={{ fontSize: 18, fontWeight: 900, color: '#fff', marginTop: 2 }}>
+                    Cabelo, Barba e Serviços Extras
+                  </div>
+                  <div style={{ fontSize: 12, color: '#cbd5e1' }}>
+                    Comissão Base: <strong style={{ color: '#fff' }}>{metasServico?.percentualBase || painel?.comissao?.percentualServicos || 40}%</strong> · Comissão Atual no Mês: <strong style={{ color: '#4ade80', fontSize: 14 }}>{metasServico?.percentualEfetivo || painel?.comissao?.percentualServicos || 40}%</strong>
+                  </div>
+                </div>
+                <div style={{
+                  background: (metasServico?.bonusPercentual || 0) > 0 ? 'rgba(74, 222, 128, 0.15)' : 'rgba(255, 255, 255, 0.08)',
+                  border: (metasServico?.bonusPercentual || 0) > 0 ? '1px solid #4ade80' : '1px solid rgba(255,255,255,0.15)',
+                  borderRadius: 12,
+                  padding: '8px 14px',
+                  textAlign: 'right',
+                }}>
+                  <div style={{ fontSize: 11, color: (metasServico?.bonusPercentual || 0) > 0 ? '#4ade80' : '#94a3b8', fontWeight: 800 }}>
+                    {(metasServico?.bonusPercentual || 0) > 0 ? `🔥 +${metasServico.bonusPercentual}% BÔNUS ATIVO` : 'SEM BÔNUS AINDA'}
+                  </div>
+                  <div style={{ fontSize: 16, fontWeight: 900, color: '#fff' }}>
+                    {metasServico?.percentualEfetivo || painel?.comissao?.percentualServicos || 40}% de Repasse
+                  </div>
+                </div>
+              </div>
+
+              {/* RÉGUA VISUAL DE METAS NA MESMA LINHA */}
+              <div style={{ display: 'grid', gridTemplateColumns: `repeat(${faixasServ.length}, minmax(0, 1fr))`, gap: 8 }}>
+                {faixasServ.map((f, idx) => {
+                  const fatServico = Number(metasServico?.faturamento ?? mes?.faturamentoServicos ?? realizadoMes)
+                  const atingida = fatServico >= f.metaFaturamento
+                  const ehProxima = metasServico?.proximaFaixa && metasServico.proximaFaixa.metaFaturamento === f.metaFaturamento
+                  return (
+                    <div
+                      key={idx}
+                      style={{
+                        background: atingida ? 'rgba(34, 197, 94, 0.18)' : ehProxima ? 'rgba(99, 102, 241, 0.22)' : 'rgba(255, 255, 255, 0.04)',
+                        border: atingida ? '2px solid #22c55e' : ehProxima ? '2px solid #818cf8' : '1px solid rgba(255,255,255,0.1)',
+                        borderRadius: 12,
+                        padding: '10px 8px',
+                        display: 'grid',
+                        gap: 4,
+                        position: 'relative',
+                        textAlign: 'center',
+                      }}
+                    >
+                      {atingida && (
+                        <span style={{ position: 'absolute', top: -8, right: 6, background: '#22c55e', color: '#000', fontSize: 9, fontWeight: 900, padding: '1px 5px', borderRadius: 6 }}>
+                          ✓ BATIDA
+                        </span>
+                      )}
+                      {ehProxima && (
+                        <span style={{ position: 'absolute', top: -8, right: 6, background: '#818cf8', color: '#fff', fontSize: 9, fontWeight: 900, padding: '1px 5px', borderRadius: 6 }}>
+                          PRÓXIMA
+                        </span>
+                      )}
+                      <div style={{ fontSize: 11, fontWeight: 800, color: atingida ? '#86efac' : ehProxima ? '#c7d2fe' : '#94a3b8' }}>
+                        Meta {idx + 1}
+                      </div>
+                      <div style={{ fontSize: 15, fontWeight: 900, color: '#fff' }}>
+                        {reais(f.metaFaturamento)}
+                      </div>
+                      <div style={{ fontSize: 12, fontWeight: 800, color: atingida ? '#4ade80' : '#fbbf24' }}>
+                        +{f.bonusPercentual}% = {(metasServico?.percentualBase || 40) + f.bonusPercentual}%
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+
+              {/* PROGRESSO EM TEMPO REAL E STATUS */}
+              <div style={{ background: 'rgba(0, 0, 0, 0.35)', padding: 12, borderRadius: 10, display: 'grid', gap: 6 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, flexWrap: 'wrap', gap: 4 }}>
+                  <span>Produção em Serviços no Mês: <strong style={{ color: '#38bdf8' }}>{reais(metasServico?.faturamento ?? mes?.faturamentoServicos ?? realizadoMes)}</strong></span>
+                  {metasServico?.proximaFaixa ? (
+                    <span style={{ color: '#fbbf24', fontWeight: 800 }}>
+                      Faltam {reais(metasServico.faltaParaProxima)} para a Meta {faixasServ.findIndex(f => f.metaFaturamento === metasServico.proximaFaixa.metaFaturamento) + 1} (+{metasServico.proximaFaixa.bonusPercentual}%)
+                    </span>
+                  ) : (
+                    <span style={{ color: '#4ade80', fontWeight: 900 }}>🏆 META MÁXIMA ALCANÇADA!</span>
+                  )}
+                </div>
+                <div style={{ height: 10, background: 'rgba(255,255,255,0.1)', borderRadius: 99, overflow: 'hidden' }}>
+                  <div style={{
+                    height: '100%',
+                    width: `${metasServico?.progressoPct ?? 0}%`,
+                    background: (metasServico?.bonusPercentual || 0) >= 10 ? '#22c55e' : 'linear-gradient(90deg, #6366f1, #38bdf8)',
+                    transition: 'width 0.4s ease',
+                  }} />
+                </div>
+                <div style={{ fontSize: 12, color: '#e2e8f0', lineHeight: 1.4 }}>
+                  {metasServico?.mensagemStatus || `Comissão base de ${metasServico?.percentualBase || 40}%.`}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* RÉGUA VISUAL DE METAS DE PRODUTOS DE REVENDA (SEPARADA) */}
+          {faixasProd.length > 0 && (
+            <div style={{
+              ...card,
+              background: 'linear-gradient(145deg, rgba(88, 28, 135, 0.95) 0%, rgba(15, 23, 42, 0.98) 100%)',
+              borderColor: '#c084fc',
+              display: 'grid',
+              gap: 14,
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+                <div>
+                  <div style={{ fontSize: 11, fontWeight: 900, color: '#e9d5ff', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                    🧴 Metas & Bonificação de Produtos (Revenda)
+                  </div>
+                  <div style={{ fontSize: 17, fontWeight: 900, color: '#fff', marginTop: 2 }}>
+                    Pomadas, Óleos, Shampoos e Balms
+                  </div>
+                  <div style={{ fontSize: 12, color: '#cbd5e1' }}>
+                    Base de Produtos: <strong style={{ color: '#fff' }}>{metasProduto?.percentualBase || 10}%</strong> · Comissão Atual: <strong style={{ color: '#c084fc', fontSize: 14 }}>{metasProduto?.percentualEfetivo || 10}%</strong>
+                  </div>
+                </div>
+                <div style={{
+                  background: (metasProduto?.bonusPercentual || 0) > 0 ? 'rgba(192, 132, 252, 0.2)' : 'rgba(255, 255, 255, 0.08)',
+                  border: (metasProduto?.bonusPercentual || 0) > 0 ? '1px solid #c084fc' : '1px solid rgba(255,255,255,0.15)',
+                  borderRadius: 12,
+                  padding: '8px 14px',
+                  textAlign: 'right',
+                }}>
+                  <div style={{ fontSize: 11, color: '#e9d5ff', fontWeight: 800 }}>
+                    {(metasProduto?.bonusPercentual || 0) > 0 ? `🧴 +${metasProduto.bonusPercentual}% BÔNUS ATIVO` : 'SEM BÔNUS'}
+                  </div>
+                  <div style={{ fontSize: 16, fontWeight: 900, color: '#fff' }}>
+                    {metasProduto?.percentualEfetivo || 10}% de Repasse
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: `repeat(${faixasProd.length}, minmax(0, 1fr))`, gap: 8 }}>
+                {faixasProd.map((f, idx) => {
+                  const fatProd = Number(metasProduto?.faturamento ?? mes?.faturamentoProdutos ?? 0)
+                  const atingida = fatProd >= f.metaFaturamento
+                  const ehProxima = metasProduto?.proximaFaixa && metasProduto.proximaFaixa.metaFaturamento === f.metaFaturamento
+                  return (
+                    <div
+                      key={idx}
+                      style={{
+                        background: atingida ? 'rgba(192, 132, 252, 0.25)' : ehProxima ? 'rgba(168, 85, 247, 0.22)' : 'rgba(255, 255, 255, 0.04)',
+                        border: atingida ? '2px solid #c084fc' : ehProxima ? '2px solid #a855f7' : '1px solid rgba(255,255,255,0.1)',
+                        borderRadius: 12,
+                        padding: '10px 8px',
+                        display: 'grid',
+                        gap: 4,
+                        position: 'relative',
+                        textAlign: 'center',
+                      }}
+                    >
+                      <div style={{ fontSize: 11, fontWeight: 800, color: '#e9d5ff' }}>Meta {idx + 1}</div>
+                      <div style={{ fontSize: 15, fontWeight: 900, color: '#fff' }}>{reais(f.metaFaturamento)}</div>
+                      <div style={{ fontSize: 12, fontWeight: 800, color: '#fbcfe8' }}>
+                        +{f.bonusPercentual}% = {(metasProduto?.percentualBase || 10) + f.bonusPercentual}%
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
           <div style={{ ...card, display: 'grid', gap: 12 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>

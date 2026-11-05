@@ -62,8 +62,17 @@ export const PROFISSIONAIS_DINO_OFICIAIS = [
     senhaPadrao: '123456',
     especialidade: 'Hair Stylist & Especialista em Visagismo e Química Capilar',
     role: 'profissional',
-    comissaoServicos: 50,
+    comissaoServicos: 40,
     comissaoProdutos: 10,
+    faixasComissaoServico: [
+      { metaFaturamento: 15000, bonusPercentual: 5, descricao: 'Meta 1: R$ 15.000 (40% + 5% = 45%)' },
+      { metaFaturamento: 20000, bonusPercentual: 7, descricao: 'Meta 2: R$ 20.000 (40% + 7% = 47%)' },
+      { metaFaturamento: 26000, bonusPercentual: 10, descricao: 'Meta 3: Acima de R$ 26.000 (40% + 10% = 50%)' },
+    ],
+    faixasComissaoProduto: [
+      { metaFaturamento: 1000, bonusPercentual: 2, descricao: 'Meta 1 Produtos: R$ 1.000 (+2% = 12%)' },
+      { metaFaturamento: 2500, bonusPercentual: 5, descricao: 'Meta 2 Produtos: R$ 2.500 (+5% = 15%)' },
+    ],
     telefone: '(65) 99999-0004',
   },
   {
@@ -161,6 +170,8 @@ export function provisionarEquipeDino({ commerceDb = null } = {}) {
           tipo: 'parceiro',
           percentualComissao: membro.comissaoServicos,
           percentualComissaoProduto: membro.comissaoProdutos,
+          faixasComissaoServico: membro.faixasComissaoServico || (prof?.faixasComissaoServico?.length ? prof.faixasComissaoServico : []),
+          faixasComissaoProduto: membro.faixasComissaoProduto || (prof?.faixasComissaoProduto?.length ? prof.faixasComissaoProduto : []),
           horarioInicio: '08:00',
           horarioFim: '20:00',
           diasTrabalho: [1, 2, 3, 4, 5, 6], // Seg a Sáb

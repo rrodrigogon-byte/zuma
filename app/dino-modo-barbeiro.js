@@ -2,6 +2,7 @@ import { listarCarteiraClientes } from './dino-carteira-clientes.js';
 import { buildDinoCustomerAssistant } from './core/dino-customer-assistant.js';
 import * as dinoGamificacao from './dino-metas-gamificacao.js';
 import * as dinoMetas from './dino-metas.js';
+import { calcularFaixaBonificacao } from './barbearia-erp-kytto.js';
 
 // Modo barbeiro: a tela do celular de cada profissional.
 //
@@ -292,9 +293,32 @@ export function painelBarbeiro(erp, { empresaId, lojaId = '', usuario = {}, prof
   const totalPrevistoHoje = dinheiro(comissaoDia.repasse + comissaoPendente);
   const ticketMedioHoje = comissaoDia.atendimentos > 0 ? dinheiro(comissaoDia.bruto / comissaoDia.atendimentos) : (ativos.length > 0 ? dinheiro(resumo.previsto / ativos.length) : 0);
 
+  const faturamentoServicosMes = dinheiro(comissaoMes.brutoServicos || 0);
+  const faturamentoProdutosMes = dinheiro(comissaoMes.brutoProdutos || 0);
+  const fnCalcularBonificacao = typeof erp?.calcularFaixaBonificacao === 'function' ? erp.calcularFaixaBonificacao : calcularFaixaBonificacao;
+  const metasServico = fnCalcularBonificacao(
+    faturamentoServicosMes,
+    escolhido.percentualComissao || 40,
+    escolhido.faixasComissaoServico || []
+  );
+  const metasProduto = fnCalcularBonificacao(
+    faturamentoProdutosMes,
+    escolhido.percentualComissaoProduto || 10,
+    escolhido.faixasComissaoProduto || []
+  );
+  const metasEvolucao = {
+    servicos: metasServico,
+    produtos: metasProduto,
+  };
+
   const comissao = {
     percentualServicos: Number(escolhido.percentualComissao || 0),
     percentualProdutos: Number(escolhido.percentualComissaoProduto || 0),
+    percentualEfetivoServicos: metasServico.percentualEfetivo,
+    bonusPercentualServicos: metasServico.bonusPercentual,
+    percentualEfetivoProdutos: metasProduto.percentualEfetivo,
+    bonusPercentualProdutos: metasProduto.bonusPercentual,
+    metasEvolucao,
     dia: { ...comissaoDia, previsaoTotal: totalPrevistoHoje, pendenteEstimado: comissaoPendente, ticketMedio: ticketMedioHoje },
     semana: { ...comissaoSemana, inicio: inicioSemana, fim: data },
     mes: { ...comissaoMes, inicio: inicioMes, fim: data },
@@ -431,6 +455,8 @@ export function painelBarbeiro(erp, { empresaId, lojaId = '', usuario = {}, prof
         inicioIso: inicioMes,
         fimIso: data,
         faturamentoRealizado: dinheiro(faturamentoMesAtual),
+        faturamentoServicos: faturamentoServicosMes,
+        faturamentoProdutos: faturamentoProdutosMes,
         metaFaturamentoMensal: dinheiro(metaFaturamentoMensalProf),
         progressoFaturamentoMensal: Math.min(100, Math.round((faturamentoMesAtual / Math.max(1, metaFaturamentoMensalProf)) * 100)),
         faltaFaturamentoMensal: faltaFaturamentoMes,
@@ -443,6 +469,10 @@ export function painelBarbeiro(erp, { empresaId, lojaId = '', usuario = {}, prof
         ticketMedioRealizado: ticketMedioMesAtual,
         metaTicketMedio: dinheiro(metaTicketMedio),
         comissaoAcumulada: dinheiro(comissaoMes.repasse || 0),
+        metasServico,
+        metasProduto,
+        faixasComissaoServico: escolhido.faixasComissaoServico || [],
+        faixasComissaoProduto: escolhido.faixasComissaoProduto || [],
       },
       girosPendentes: meuDesempenho?.girosPendentes || [],
       girosAguardandoEntrega: meuDesempenho?.girosAguardandoEntrega || [],
@@ -553,9 +583,11 @@ export function painelBarbeiro(erp, { empresaId, lojaId = '', usuario = {}, prof
     profissional: {
       id: escolhido.id, nome: escolhido.nome, especialidade: escolhido.especialidade, fotoUrl: escolhido.fotoUrl || '',
       horarioInicio: escolhido.horarioInicio, horarioFim: escolhido.horarioFim, diasTrabalho: escolhido.diasTrabalho,
+      faixasComissaoServico: escolhido.faixasComissaoServico || [],
+      faixasComissaoProduto: escolhido.faixasComissaoProduto || [],
       souEu: Boolean(eu && eu.id === escolhido.id),
     },
-    agendamentos, bloqueios, resumo, comissao,
+    agendamentos, bloqueios, resumo, comissao, metasEvolucao,
     servicos: servicos.filter(s => s.ativo !== false && (!s.profissionaisIds?.length || s.profissionaisIds.includes(escolhido.id))).map((s) => ({ id: s.id, nome: s.nome, preco: dinheiro(s.preco), duracaoMinutos: s.duracaoMinutos })),
   };
 }
