@@ -14,6 +14,8 @@ import { useToast } from '../../../hooks/useToast';
 import { useAuth } from '../../../lib/auth';
 import { moneyK } from './format';
 import Modal from '../../../components/Modal';
+import DinoFichaItemModal from './DinoFichaItemModal';
+import DinoCadastrosIncompletosModal from './DinoCadastrosIncompletosModal';
 
 const styles = {
   container: { display: 'grid', gap: 16 },
@@ -195,6 +197,14 @@ export default function DinoComprasEstoqueHub({
   const [modalPdf, setModalPdf] = useState(false);
   const [pedidoParaPdf, setPedidoParaPdf] = useState(null);
 
+  // ── ESTADOS DE FICHA DO ITEM & AUDITORIA DE CADASTROS ──
+  const [modalFichaItem, setModalFichaItem] = useState(null);
+  const [salvandoFicha, setSalvandoFicha] = useState(false);
+  const [modalCadastrosIncompletos, setModalCadastrosIncompletos] = useState(false);
+  const [dadosAuditoria, setDadosAuditoria] = useState(null);
+  const [carregandoAuditoria, setCarregandoAuditoria] = useState(false);
+  const [arquivandoDemo, setArquivandoDemo] = useState(false);
+
   // Cadastro de Fornecedor
   const [modalNovoFornecedor, setModalNovoFornecedor] = useState(false);
   const [formFornecedor, setFormFornecedor] = useState({
@@ -291,6 +301,51 @@ export default function DinoComprasEstoqueHub({
       { data: '01/10/2026 08:00', tipo: 'Inventário Inicial', doc: 'BAL-2026-10', qtd: produto.estoqueAtual - 9, saldo: produto.estoqueAtual - 9, operador: 'Rodrigo Gonçalves' }
     ];
   }
+
+  // Funções de Auditoria, Saneamento e Ficha do Item
+  const abrirAuditoriaCadastros = async () => {
+    setModalCadastrosIncompletos(true);
+    setCarregandoAuditoria(true);
+    try {
+      const res = await api.get('/api/admin/fiscal/cadastros-incompletos');
+      setDadosAuditoria(res);
+    } catch (e) {
+      toast('Erro ao auditar cadastros incompletos', true);
+    } finally {
+      setCarregandoAuditoria(false);
+    }
+  };
+
+  const executarArquivamentoDemo = async () => {
+    setArquivandoDemo(true);
+    try {
+      const res = await api.post('/api/admin/fiscal/arquivar-demonstracao-dino', {});
+      if (res.ok) {
+        toast(`Catálogo demo saneado com sucesso! ${res.totalArquivadosEstoque || 0} itens arquivados.`);
+        carregarTudo();
+        onAtualizar?.();
+      }
+    } catch (e) {
+      toast(e.message || 'Erro ao arquivar catálogo de demonstração', true);
+    } finally {
+      setArquivandoDemo(false);
+    }
+  };
+
+  const salvarFichaItem = async (dadosFicha) => {
+    setSalvandoFicha(true);
+    try {
+      await api.patch(`/api/admin/barbearia/produtos/${dadosFicha.id}`, dadosFicha);
+      toast('Ficha técnica do item salva com sucesso!');
+      setModalFichaItem(null);
+      carregarTudo();
+      onAtualizar?.();
+    } catch (err) {
+      toast(err.message || 'Erro ao salvar ficha técnica do item', true);
+    } finally {
+      setSalvandoFicha(false);
+    }
+  };
 
   // Carga dos Dados Integrados
   const carregarTudo = useCallback(async () => {
@@ -738,7 +793,20 @@ export default function DinoComprasEstoqueHub({
                   <option value="baixo">⚠️ Abaixo do Mínimo</option>
                 </select>
               </div>
-              <div style={{ display: 'flex', gap: 8 }}>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <button type="button" style={styles.btn} onClick={abrirAuditoriaCadastros}>
+                  📋 Cadastros Incompletos
+                </button>
+                {nomeEmpresa.toLowerCase().includes('dino') && (
+                  <button
+                    type="button"
+                    style={{ ...styles.btn, borderColor: '#f59e0b', color: '#f59e0b' }}
+                    onClick={executarArquivamentoDemo}
+                    disabled={arquivandoDemo}
+                  >
+                    🧹 {arquivandoDemo ? 'Arquivando...' : 'Arquivar Catálogo Demo'}
+                  </button>
+                )}
                 <button type="button" style={styles.btn} onClick={exportarCSV}>
                   📥 Exportar CSV
                 </button>
@@ -800,6 +868,13 @@ export default function DinoComprasEstoqueHub({
                           </td>
                           <td style={styles.td}>
                             <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                              <button
+                                type="button"
+                                style={{ ...styles.btn, fontSize: 11, padding: '4px 8px', borderColor: '#0284c7', color: '#0284c7' }}
+                                onClick={() => setModalFichaItem(p)}
+                              >
+                                🔍 Ficha
+                              </button>
                               <button
                                 type="button"
                                 style={{ ...styles.btnPrimary, fontSize: 11, padding: '4px 8px' }}
@@ -2526,6 +2601,25 @@ export default function DinoComprasEstoqueHub({
             </div>
           </form>
         </Modal>
+      )}
+      {/* Modal de Ficha do Item com 5 Abas */}
+      {modalFichaItem && (
+        <DinoFichaItemModal
+          item={modalFichaItem}
+          salvando={salvandoFicha}
+          onClose={() => setModalFichaItem(null)}
+          onSalvar={salvarFichaItem}
+        />
+      )}
+
+      {/* Modal de Auditoria de Cadastros Incompletos */}
+      {modalCadastrosIncompletos && (
+        <DinoCadastrosIncompletosModal
+          dados={dadosAuditoria}
+          loading={carregandoAuditoria}
+          onClose={() => setModalCadastrosIncompletos(false)}
+          onEditarItem={(item) => setModalFichaItem(item)}
+        />
       )}
     </div>
   );

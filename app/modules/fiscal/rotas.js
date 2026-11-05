@@ -31,6 +31,10 @@ export function createFiscalAdminRouter({ db, escopoDaRequisicao, env = process.
 
   router.get('/estado', rota('payments.read', ({ req, empresaId, lojaRestrita }) => svc.prontidao(db, empresaId, { lojaId: lojaRestrita || req.query.lojaId || null, env })));
   router.post('/saneamento-multiempresa', rota('settings.write', () => svc.sanearFiscalMultiempresa(db)));
+  router.post('/arquivar-demonstracao-dino', rota('settings.write', () => svc.arquivarCatalogoDemoDino(db)));
+  router.post('/classificar-agro-open', rota('settings.write', () => svc.classificarProdutosAgroOpen(db)));
+  router.post('/classificar-stallone-grupos', rota('settings.write', () => svc.classificarProdutosStallonePorGrupo(db)));
+  router.get('/cadastros-incompletos', rota('catalog.read', ({ empresaId }) => svc.auditarCadastrosIncompletos(db, empresaId)));
 
   router.get('/emitentes', rota('settings.write', ({ empresaId }) => svc.listarEmitentes(db, empresaId, { env })));
   router.put('/emitentes', rota('settings.write', ({ req, empresaId, lojaRestrita }) => { empresaToda(lojaRestrita, 'Configurar o emitente'); return svc.salvarEmitente(db, empresaId, req.body || {}, { env }); }));
