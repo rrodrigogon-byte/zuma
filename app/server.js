@@ -4739,7 +4739,9 @@ app.get('/api/admin/barbearia/profissionais', (req, res) => {
 const CAMPOS_REMUNERACAO = ['percentualComissao', 'percentual_comissao', 'percentualComissaoProduto', 'percentual_comissao_produto', 'comissoesPorServico', 'comissoes_por_servico', 'descontaTaxaMaquininha', 'desconta_taxa_maquininha', 'faixasComissaoServico', 'faixas_comissao_servico', 'faixasComissaoProduto', 'faixas_comissao_produto'];
 function semCamposDeRemuneracao(req) {
   const corpo = { ...(req.body || {}) };
-  if (['admin', 'organizador', 'gerente'].includes(String(req.user?.role || '').toLowerCase())) return corpo;
+  const role = String(req.user?.role || '').toLowerCase();
+  const perfis = Array.isArray(req.user?.perfis) ? req.user.perfis.map((p) => String(p).toLowerCase()) : [];
+  if (['admin', 'organizador', 'gerente', 'administrador', 'gerente_operacional'].includes(role) || perfis.some((p) => ['admin', 'organizador', 'gerente', 'administrador', 'gerente_operacional'].includes(p))) return corpo;
   for (const campo of CAMPOS_REMUNERACAO) delete corpo[campo];
   return corpo;
 }
@@ -5034,7 +5036,9 @@ app.patch('/api/admin/barbearia/agenda/:id/status', async (req, res) => {
 function gestaoDaUnidade(req, res) {
   // Pontos, pagamentos de assinatura e metas mexem em dinheiro e remuneração:
   // só a gestão da unidade altera (o mesmo critério das taxas de pagamento).
-  if (['admin', 'organizador', 'gerente'].includes(String(req.user?.role || '').toLowerCase())) return true;
+  const role = String(req.user?.role || '').toLowerCase();
+  const perfis = Array.isArray(req.user?.perfis) ? req.user.perfis.map((p) => String(p).toLowerCase()) : [];
+  if (['admin', 'organizador', 'gerente', 'administrador', 'gerente_operacional'].includes(role) || perfis.some((p) => ['admin', 'organizador', 'gerente', 'administrador', 'gerente_operacional'].includes(p))) return true;
   res.status(403).json({ error: 'Só a gestão da unidade pode fazer esta alteração.', code: 'GESTAO_RESTRITA' });
   return false;
 }

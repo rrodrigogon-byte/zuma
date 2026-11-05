@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import { useEffect } from 'react'
 
 export function DinoMetasGamificacaoModalConfig({
   open,
@@ -11,6 +12,12 @@ export function DinoMetasGamificacaoModalConfig({
     return JSON.parse(JSON.stringify(configAtual || {}))
   })
   const [abaConfig, setAbaConfig] = useState('diarias') // 'diarias' | 'semanais' | 'roleta'
+
+  useEffect(() => {
+    if (open && configAtual) {
+      setForm(JSON.parse(JSON.stringify(configAtual || {})))
+    }
+  }, [open, configAtual])
 
   if (!open) return null
 

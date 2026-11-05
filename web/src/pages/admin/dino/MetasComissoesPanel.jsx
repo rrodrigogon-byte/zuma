@@ -48,6 +48,7 @@ export default function MetasComissoesPanel({ onOpenTab }) {
 
   // Modal de edição de metas do profissional
   const [modalMetasAberto, setModalMetasAberto] = useState(false)
+  const [profissionalEditando, setProfissionalEditando] = useState(null)
   const [formMetas, setFormMetas] = useState({
     percentualComissao: 40,
     percentualComissaoProduto: 10,
@@ -109,26 +110,33 @@ export default function MetasComissoesPanel({ onOpenTab }) {
   // Abre modal de edição de metas
   const abrirModalMetas = (prof) => {
     if (!prof) return
+    const profReal = prof?.profissional || prof
+    setProfissionalEditando(profReal)
     setFormMetas({
-      percentualComissao: prof.percentualComissaoServico ?? prof.percentualComissao ?? 40,
-      percentualComissaoProduto: prof.percentualComissaoProduto ?? 10,
-      faixasComissaoServico: Array.isArray(prof.faixasComissaoServico) ? [...prof.faixasComissaoServico] : [],
-      faixasComissaoProduto: Array.isArray(prof.faixasComissaoProduto) ? [...prof.faixasComissaoProduto] : [],
+      percentualComissao: profReal.percentualComissaoServico ?? profReal.percentualComissao ?? 40,
+      percentualComissaoProduto: profReal.percentualComissaoProduto ?? 10,
+      faixasComissaoServico: Array.isArray(profReal.faixasComissaoServico) ? [...profReal.faixasComissaoServico] : [],
+      faixasComissaoProduto: Array.isArray(profReal.faixasComissaoProduto) ? [...profReal.faixasComissaoProduto] : [],
     })
     setModalMetasAberto(true)
   }
 
   // Salva configuração de metas do profissional
   const salvarMetas = async (e) => {
-    e.preventDefault()
-    const id = profissionalId || relatorioIndividual?.profissional?.id
-    if (!id) return
+    e?.preventDefault?.()
+    const id = profissionalEditando?.id || profissionalEditando?.profissionalId || profissionalId || relatorioIndividual?.profissional?.id
+    if (!id) {
+      alert('Erro: nenhum profissional identificado para salvar as metas.')
+      return
+    }
     setSalvandoMetas(true)
     try {
       await api.put(`/api/admin/barbearia/profissionais/${encodeURIComponent(id)}/metas-comissoes`, formMetas)
       setModalMetasAberto(false)
+      setProfissionalEditando(null)
       await carregarProfissionais()
       await carregarDados()
+      alert('Metas salvas com sucesso!')
     } catch (err) {
       alert(err?.message || 'Erro ao salvar metas.')
     } finally {
@@ -336,10 +344,17 @@ export default function MetasComissoesPanel({ onOpenTab }) {
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                 <button
                   type="button"
+                  style={{ ...btn, padding: '8px 14px', fontSize: 13, fontWeight: 700 }}
+                  onClick={() => setProfissionalId('')}
+                >
+                  ← Voltar para Toda a Equipe
+                </button>
+                <button
+                  type="button"
                   style={btnPrimary}
                   onClick={() => abrirModalMetas(relatorioIndividual.profissional)}
                 >
-                  ⚙ Cadastrar / Ajustar Metas deste Barbeiro
+                  ⚙️ Editar Metas deste Barbeiro
                 </button>
               </div>
             </div>
@@ -1112,18 +1127,28 @@ export default function MetasComissoesPanel({ onOpenTab }) {
                         <div style={{ display: 'flex', gap: 6 }}>
                           <button
                             type="button"
-                            style={{ ...btn, padding: '4px 10px', fontSize: 11 }}
+                            style={{ ...btn, padding: '5px 10px', fontSize: 11, fontWeight: 700 }}
                             onClick={() => setProfissionalId(item.profissional.id)}
                           >
-                            Ver Relatório
+                            📊 Relatório
                           </button>
                           <button
                             type="button"
-                            style={{ ...btn, padding: '4px 8px', fontSize: 11 }}
+                            style={{
+                              ...btnPrimary,
+                              padding: '5px 10px',
+                              fontSize: 11,
+                              fontWeight: 800,
+                              background: 'linear-gradient(135deg, #4f46e5, #4338ca)',
+                              borderColor: '#6366f1',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 4,
+                            }}
                             onClick={() => abrirModalMetas(item.profissional)}
-                            title="Ajustar metas"
+                            title={`Ajustar metas de ${item.profissional.nome}`}
                           >
-                            ⚙
+                            ⚙️ Editar Metas
                           </button>
                         </div>
                       </td>
@@ -1142,7 +1167,14 @@ export default function MetasComissoesPanel({ onOpenTab }) {
           <div style={{ background: 'var(--card)', borderRadius: 16, border: '1px solid var(--line)', maxWidth: 620, width: '100%', maxHeight: '90vh', overflowY: 'auto', padding: 24, boxShadow: '0 20px 40px rgba(0,0,0,0.3)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, borderBottom: '1px solid var(--line)', paddingBottom: 12 }}>
               <div>
-                <h3 style={{ ...h3, fontSize: 18 }}>Cadastrar Metas e Comissões Individuais</h3>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <h3 style={{ ...h3, fontSize: 18, margin: 0 }}>Cadastrar Metas e Comissões Individuais</h3>
+                  {profissionalEditando?.nome && (
+                    <span style={{ background: '#4f46e5', color: '#fff', fontSize: 11, fontWeight: 800, padding: '2px 8px', borderRadius: 6 }}>
+                      {profissionalEditando.nome}
+                    </span>
+                  )}
+                </div>
                 <p style={sub}>Configuração de escalonamento progressivo de metas de serviços e produtos.</p>
               </div>
               <button type="button" style={{ ...btn, padding: '4px 10px' }} onClick={() => setModalMetasAberto(false)}>✕</button>
@@ -1312,7 +1344,7 @@ export default function MetasComissoesPanel({ onOpenTab }) {
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 10, borderTop: '1px solid var(--line)', paddingTop: 14 }}>
                 <button type="button" style={btn} onClick={() => setModalMetasAberto(false)}>Cancelar</button>
                 <button type="submit" style={btnPrimary} disabled={salvandoMetas}>
-                  {salvandoMetas ? 'Salvando...' : 'Salvar Configurações de Metas'}
+                  {salvandoMetas ? 'Salvando...' : `💾 Salvar Metas de ${profissionalEditando?.nome ? profissionalEditando.nome.split(' ')[0] : 'Profissional'}`}
                 </button>
               </div>
             </form>
@@ -1322,4 +1354,3 @@ export default function MetasComissoesPanel({ onOpenTab }) {
     </div>
   )
 }
-
