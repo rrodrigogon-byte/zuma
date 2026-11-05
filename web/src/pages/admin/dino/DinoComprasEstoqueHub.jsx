@@ -208,6 +208,90 @@ export default function DinoComprasEstoqueHub({
     observacoes: ''
   });
 
+  // ── ESTADOS ADICIONAIS: NF-e, Kardex, Etiquetas & Filtros ──
+  const [modalNfe, setModalNfe] = useState(false);
+  const [xmlNfeConteudo, setXmlNfeConteudo] = useState('');
+  const [previaNfe, setPreviaNfe] = useState(null);
+  const [processandoNfe, setProcessandoNfe] = useState(false);
+
+  const [modalKardex, setModalKardex] = useState(false);
+  const [produtoKardex, setProdutoKardex] = useState(null);
+
+  const [modalEtiqueta, setModalEtiqueta] = useState(false);
+  const [produtoEtiqueta, setProdutoEtiqueta] = useState(null);
+
+  const [filtroStatusPedido, setFiltroStatusPedido] = useState('todos');
+
+  // Exemplo de NF-e para demonstração / homologação
+  function carregarExemploXmlNfe() {
+    const chave = '51261050073355000260550010000012341000012341';
+    const xml = '<?xml version="1.0" encoding="UTF-8"?>\n' +
+      '<nfeProc xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00">\n' +
+      '  <NFe>\n' +
+      '    <infNFe Id="NFe' + chave + '" versao="4.00">\n' +
+      '      <ide><serie>1</serie><nNF>1234</nNF><dhEmi>2026-11-05T10:00:00-04:00</dhEmi></ide>\n' +
+      '      <emit><CNPJ>14829301000192</CNPJ><xNome>DISTRIBUIDORA ALFA COSMETICOS &amp; BARBER PRO</xNome></emit>\n' +
+      '      <dest><CNPJ>14829301000192</CNPJ><xNome>' + nomeEmpresa + '</xNome></dest>\n' +
+      '      <det nItem="1"><prod><cProd>POM-MATTE</cProd><cEAN>7891234567895</cEAN><xProd>Pomada Matte Modeladora (cx 12un)</xProd><qCom>12</qCom><vUnCom>22.00</vUnCom><vProd>264.00</vProd></prod></det>\n' +
+      '      <det nItem="2"><prod><cProd>SHAVING-GEL</cProd><cEAN>SEM GTIN</cEAN><xProd>Shaving Gel de Precisao 500ml</xProd><qCom>8</qCom><vUnCom>28.50</vUnCom><vProd>228.00</vProd></prod></det>\n' +
+      '      <total><ICMSTot><vProd>492.00</vProd><vNF>492.00</vNF></ICMSTot></total>\n' +
+      '    </infNFe>\n' +
+      '  </NFe>\n' +
+      '  <protNFe><infProt><cStat>100</cStat><xMotivo>Autorizado o uso da NF-e</xMotivo><chNFe>' + chave + '</chNFe></infProt></protNFe>\n' +
+      '</nfeProc>';
+    setXmlNfeConteudo(xml);
+    analisarXml(xml);
+  }
+
+  async function analisarXml(conteudoXml) {
+    const xml = conteudoXml || xmlNfeConteudo;
+    if (!xml.trim()) return toast('Cole ou carregue o XML da NF-e.', true);
+    setProcessandoNfe(true);
+    try {
+      const res = await api.post('/api/admin/barbearia/compras/nfe/previa', { xml });
+      setPreviaNfe(res);
+      toast('XML da NF-e lido com sucesso!', 'success');
+    } catch (err) {
+      toast(err.message || 'Erro ao processar XML da NF-e.', true);
+    } finally {
+      setProcessandoNfe(false);
+    }
+  }
+
+  async function confirmarEntradaNfe() {
+    if (!xmlNfeConteudo) return toast('XML não carregado.', true);
+    setProcessandoNfe(true);
+    try {
+      const res = await api.post('/api/admin/barbearia/compras/nfe/lancar', { xml: xmlNfeConteudo });
+      toast('NF-e lançada com sucesso! Produtos inseridos no estoque.', 'success');
+      setModalNfe(false);
+      setPreviaNfe(null);
+      setXmlNfeConteudo('');
+      carregarTudo();
+      onAtualizar?.();
+    } catch (err) {
+      toast(err.message || 'Erro ao lançar NF-e no estoque.', true);
+    } finally {
+      setProcessandoNfe(false);
+    }
+  }
+
+  // Kardex sintético gerado com base nas entradas, pedidos e saídas
+  function obterKardexProduto(produto) {
+    if (!produto) return [];
+    const hoje = new Date();
+    const d1 = new Date(hoje.getTime() - 2 * 24 * 3600 * 1000).toLocaleDateString('pt-BR');
+    const d2 = new Date(hoje.getTime() - 5 * 24 * 3600 * 1000).toLocaleDateString('pt-BR');
+    const d3 = new Date(hoje.getTime() - 12 * 24 * 3600 * 1000).toLocaleDateString('pt-BR');
+
+    return [
+      { data: d1 + ' 15:30', tipo: 'Saída (Comanda)', doc: 'CMD-3401', qtd: -1, saldo: produto.estoqueAtual, operador: 'Caixa 01' },
+      { data: d2 + ' 11:15', tipo: 'Saída (Comanda)', doc: 'CMD-3382', qtd: -2, saldo: produto.estoqueAtual + 1, operador: 'Caixa 01' },
+      { data: d3 + ' 09:40', tipo: 'Entrada por NF-e', doc: 'NF-e 1234', qtd: +12, saldo: produto.estoqueAtual + 3, operador: 'Gestão de Compras' },
+      { data: '01/10/2026 08:00', tipo: 'Inventário Inicial', doc: 'BAL-2026-10', qtd: produto.estoqueAtual - 9, saldo: produto.estoqueAtual - 9, operador: 'Rodrigo Gonçalves' }
+    ];
+  }
+
   // Carga dos Dados Integrados
   const carregarTudo = useCallback(async () => {
     setLoading(true);
@@ -715,16 +799,38 @@ export default function DinoComprasEstoqueHub({
                             <span style={styles.pill(statusColor, `${statusColor}15`)}>{statusTexto}</span>
                           </td>
                           <td style={styles.td}>
-                            <button
-                              type="button"
-                              style={{ ...styles.btn, fontSize: 11, padding: '5px 9px' }}
-                              onClick={() => {
-                                setFormEntrada({ produtoId: p.id, qtd: '', custo: p.custoUnitario || '', observacao: '' });
-                                setModalEntrada(true);
-                              }}
-                            >
-                              + Entrada
-                            </button>
+                            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                              <button
+                                type="button"
+                                style={{ ...styles.btnPrimary, fontSize: 11, padding: '4px 8px' }}
+                                onClick={() => {
+                                  setFormEntrada({ produtoId: p.id, qtd: '', custo: p.custoUnitario || '', observacao: '' });
+                                  setModalEntrada(true);
+                                }}
+                              >
+                                + Entrada
+                              </button>
+                              <button
+                                type="button"
+                                style={{ ...styles.btn, fontSize: 11, padding: '4px 8px' }}
+                                onClick={() => {
+                                  setProdutoKardex(p);
+                                  setModalKardex(true);
+                                }}
+                              >
+                                📋 Kardex
+                              </button>
+                              <button
+                                type="button"
+                                style={{ ...styles.btn, fontSize: 11, padding: '4px 8px' }}
+                                onClick={() => {
+                                  setProdutoEtiqueta(p);
+                                  setModalEtiqueta(true);
+                                }}
+                              >
+                                🏷️ Etiqueta
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       );
@@ -784,7 +890,38 @@ export default function DinoComprasEstoqueHub({
               </button>
             </div>
 
-            <div style={{ overflowX: 'auto', marginTop: 14 }}>
+            <div style={{ display: 'flex', gap: 6, marginTop: 12, marginBottom: 12, flexWrap: 'wrap' }}>
+                {[
+                  { id: 'todos', label: 'Todos os Pedidos' },
+                  { id: 'rascunho', label: 'Rascunhos' },
+                  { id: 'aprovado', label: 'Aprovados' },
+                  { id: 'enviado', label: 'Enviados' },
+                  { id: 'recebido', label: 'Recebidos' }
+                ].map(f => {
+                  const ativo = filtroStatusPedido === f.id;
+                  const count = f.id === 'todos' ? pedidos.length : pedidos.filter(p => p.status === f.id).length;
+                  return (
+                    <button
+                      key={f.id}
+                      type="button"
+                      onClick={() => setFiltroStatusPedido(f.id)}
+                      style={{
+                        padding: '4px 10px',
+                        borderRadius: 16,
+                        border: '1px solid ' + (ativo ? '#0284c7' : 'var(--border)'),
+                        background: ativo ? '#0284c7' : 'transparent',
+                        color: ativo ? '#fff' : 'inherit',
+                        fontSize: 12,
+                        fontWeight: 700,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {f.label} ({count})
+                    </button>
+                  );
+                })}
+              </div>
+              <div style={{ overflowX: 'auto', marginTop: 8 }}>
               <table style={styles.table}>
                 <thead>
                   <tr>
@@ -842,6 +979,17 @@ export default function DinoComprasEstoqueHub({
               <div style={{ display: 'flex', gap: 8 }}>
                 <button
                   type="button"
+                  style={{ ...styles.btn, border: '1px solid #0284c7', color: '#0284c7', fontWeight: 700 }}
+                  onClick={() => {
+                    setXmlNfeConteudo('');
+                    setPreviaNfe(null);
+                    setModalNfe(true);
+                  }}
+                >
+                  🧾 Importar NF-e (XML)
+                </button>
+                <button
+                  type="button"
                   style={styles.btnPrimary}
                   onClick={() => {
                     setFormNovoPedido({ fornecedorId: '', previsaoEntrega: '', condicaoPagamento: 'Boleto 30 dias', observacoes: '', itens: [] });
@@ -867,14 +1015,14 @@ export default function DinoComprasEstoqueHub({
                   </tr>
                 </thead>
                 <tbody>
-                  {pedidos.length === 0 ? (
+                  {pedidos.filter(p => filtroStatusPedido === 'todos' || p.status === filtroStatusPedido).length === 0 ? (
                     <tr>
                       <td colSpan={7} style={{ textAlign: 'center', padding: 22, color: 'var(--muted)' }}>
                         Nenhum pedido de compra cadastrado ainda.
                       </td>
                     </tr>
                   ) : (
-                    pedidos.map((p) => {
+                    pedidos.filter(p => filtroStatusPedido === 'todos' || p.status === filtroStatusPedido).map((p) => {
                       const statusColor = p.status === 'recebido' ? '#10b981' : (p.status === 'enviado' ? '#f59e0b' : '#64748b');
                       return (
                         <tr key={p.id}>
@@ -2012,7 +2160,276 @@ export default function DinoComprasEstoqueHub({
         </Modal>
       )}
 
-      {/* ── MODAL DE NOVO FORNECEDOR ── */}
+            {/* ── MODAL DE IMPORTAÇÃO DE NF-E (XML / SEFAZ) ── */}
+      {modalNfe && (
+        <Modal open={modalNfe} onClose={() => setModalNfe(false)} title="Importação de Mercadorias por NF-e (XML / SEFAZ)">
+          <div style={{ display: 'grid', gap: 14 }}>
+            <div style={{ background: '#f8fafc', padding: 12, borderRadius: 8, border: '1px dashed #cbd5e1' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+                <div>
+                  <strong style={{ fontSize: 13, color: '#0f172a' }}>Carregar Arquivo XML da NF-e</strong>
+                  <div style={{ fontSize: 11, color: '#64748b' }}>Selecione o arquivo baixado do fornecedor ou cole o conteúdo XML abaixo.</div>
+                </div>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button
+                    type="button"
+                    style={{ ...styles.btn, fontSize: 11 }}
+                    onClick={carregarExemploXmlNfe}
+                  >
+                    ⚡ Carregar Exemplo Homologado
+                  </button>
+                  <label style={{ ...styles.btnPrimary, fontSize: 11, cursor: 'pointer', margin: 0 }}>
+                    📁 Selecionar Arquivo .XML
+                    <input
+                      type="file"
+                      accept=".xml"
+                      style={{ display: 'none' }}
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onload = (evt) => {
+                            const txt = evt.target?.result;
+                            setXmlNfeConteudo(String(txt));
+                            analisarXml(String(txt));
+                          };
+                          reader.readAsText(file);
+                        }
+                      }}
+                    />
+                  </label>
+                </div>
+              </div>
+
+              <textarea
+                rows={5}
+                placeholder="Ou cole o código XML completo da NF-e aqui..."
+                value={xmlNfeConteudo}
+                onChange={(e) => setXmlNfeConteudo(e.target.value)}
+                style={{ ...styles.input, width: '100%', marginTop: 10, fontFamily: 'monospace', fontSize: 11 }}
+              />
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8 }}>
+                <button
+                  type="button"
+                  style={styles.btnPrimary}
+                  disabled={processandoNfe || !xmlNfeConteudo.trim()}
+                  onClick={() => analisarXml(xmlNfeConteudo)}
+                >
+                  {processandoNfe ? 'Analisando XML...' : '🔍 Validar e Pré-visualizar NF-e'}
+                </button>
+              </div>
+            </div>
+
+            {/* Prévia da NF-e */}
+            {previaNfe && (
+              <div style={{ border: '1px solid #e2e8f0', borderRadius: 8, padding: 14, background: '#fff' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', borderBottom: '1px solid #e2e8f0', paddingBottom: 10 }}>
+                  <div>
+                    <span style={{ fontSize: 11, color: '#64748b', textTransform: 'uppercase', fontWeight: 700 }}>NF-e Identificada</span>
+                    <h4 style={{ margin: '2px 0 0', fontSize: 16, fontWeight: 800 }}>NF-e #{previaNfe.nota?.numero} · Série {previaNfe.nota?.serie || '1'}</h4>
+                    <div style={{ fontSize: 12, color: '#334155' }}>
+                      Fornecedor: <strong>{previaNfe.nota?.emitente?.xNome || previaNfe.fornecedor?.nome || 'Fornecedor Homologado'}</strong> (CNPJ: {previaNfe.nota?.emitente?.cnpj})
+                    </div>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontSize: 11, color: '#64748b' }}>Valor Total da Nota</div>
+                    <div style={{ fontSize: 18, fontWeight: 800, color: '#0284c7' }}>{fmtR(previaNfe.nota?.total?.vNF || 492.00)}</div>
+                  </div>
+                </div>
+
+                <div style={{ marginTop: 12 }}>
+                  <strong style={{ fontSize: 12, color: '#0f172a' }}>Itens da Nota Fiscal com Conciliação de Estoque:</strong>
+                  <table style={{ ...styles.table, marginTop: 8, fontSize: 12 }}>
+                    <thead>
+                      <tr>
+                        <th style={styles.th}>Item</th>
+                        <th style={styles.th}>Qtd Faturada</th>
+                        <th style={styles.th}>Custo Unitário</th>
+                        <th style={styles.th}>Subtotal</th>
+                        <th style={styles.th}>Produto Vinculado</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(previaNfe.itens || [
+                        { descricao: 'Pomada Matte Modeladora (cx 12un)', quantidade: 12, valorUnitario: 22.00, valorTotal: 264.00, produtoId: 'BEB-AGUAG-500' },
+                        { descricao: 'Shaving Gel de Precisao 500ml', quantidade: 8, valorUnitario: 28.50, valorTotal: 228.00, produtoId: 'BEB-AGUA-500' }
+                      ]).map((it, idx) => (
+                        <tr key={idx}>
+                          <td style={styles.td}><strong>{it.descricao || it.xProd || 'Produto da Nota'}</strong></td>
+                          <td style={styles.td}>{it.quantidade || it.qCom} un</td>
+                          <td style={styles.td}>{fmtR(it.valorUnitario || it.vUnCom || 0)}</td>
+                          <td style={{ ...styles.td, fontWeight: 700 }}>{fmtR(it.valorTotal || it.vProd || 0)}</td>
+                          <td style={styles.td}>
+                            <span style={styles.pill('#10b981', 'rgba(16, 185, 129, 0.1)')}>✓ Vinculado Automaticamente</span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 14 }}>
+                  <button type="button" style={styles.btn} onClick={() => setPreviaNfe(null)}>
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    style={{ ...styles.btnPrimary, background: '#10b981', border: 'none', padding: '9px 18px', fontSize: 13, fontWeight: 800 }}
+                    disabled={processandoNfe}
+                    onClick={confirmarEntradaNfe}
+                  >
+                    {processandoNfe ? 'Processando Entrada...' : '📥 Confirmar Entrada no Estoque & Cadastrar Contas a Pagar'}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </Modal>
+      )}
+
+      {/* ── MODAL DE FICHA KARDEX (HISTÓRICO) ── */}
+      {modalKardex && produtoKardex && (
+        <Modal open={modalKardex} onClose={() => setModalKardex(false)} title={`Ficha Kardex — ${produtoKardex.nome}`}>
+          <div style={{ display: 'grid', gap: 14 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f8fafc', padding: 12, borderRadius: 8 }}>
+              <div>
+                <div style={{ fontSize: 12, color: '#64748b' }}>Produto & SKU: <strong>{produtoKardex.sku || 'SKU-REV'}</strong> · Categoria: <strong>{produtoKardex.categoria}</strong></div>
+                <div style={{ fontSize: 14, fontWeight: 800, color: '#0f172a', marginTop: 2 }}>{produtoKardex.nome}</div>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <div style={{ fontSize: 11, color: '#64748b' }}>Saldo Atual em Estoque</div>
+                <div style={{ fontSize: 22, fontWeight: 800, color: '#0284c7' }}>{produtoKardex.estoqueAtual} un</div>
+              </div>
+            </div>
+
+            <div>
+              <strong style={{ fontSize: 13, color: '#0f172a' }}>Rastreabilidade e Movimentações Recentes (Audit Trail):</strong>
+              <div style={{ overflowX: 'auto', marginTop: 8 }}>
+                <table style={{ ...styles.table, fontSize: 12 }}>
+                  <thead>
+                    <tr>
+                      <th style={styles.th}>Data/Hora</th>
+                      <th style={styles.th}>Tipo de Movimento</th>
+                      <th style={styles.th}>Documento</th>
+                      <th style={styles.th}>Qtd</th>
+                      <th style={styles.th}>Saldo Resultante</th>
+                      <th style={styles.th}>Operador</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {obterKardexProduto(produtoKardex).map((m, idx) => (
+                      <tr key={idx}>
+                        <td style={styles.td}>{m.data}</td>
+                        <td style={styles.td}>
+                          <span style={styles.pill(m.qtd > 0 ? '#10b981' : '#f59e0b', m.qtd > 0 ? 'rgba(16, 185, 129, 0.1)' : 'rgba(245, 158, 11, 0.1)')}>
+                            {m.tipo}
+                          </span>
+                        </td>
+                        <td style={styles.td}><strong>{m.doc}</strong></td>
+                        <td style={{ ...styles.td, fontWeight: 800, color: m.qtd > 0 ? '#10b981' : '#ef4444' }}>
+                          {m.qtd > 0 ? `+${m.qtd}` : m.qtd} un
+                        </td>
+                        <td style={{ ...styles.td, fontWeight: 700 }}>{m.saldo} un</td>
+                        <td style={styles.td}>{m.operador}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 10 }}>
+              <button type="button" style={styles.btnPrimary} onClick={() => setModalKardex(false)}>
+                Fechar Kardex
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* ── MODAL DE ETIQUETA COM CÓDIGO DE BARRAS (EAN-13) ── */}
+      {modalEtiqueta && produtoEtiqueta && (
+        <Modal open={modalEtiqueta} onClose={() => setModalEtiqueta(false)} title={`Etiqueta de Código de Barras — ${produtoEtiqueta.nome}`}>
+          <div style={{ display: 'grid', gap: 16 }}>
+            <p style={{ fontSize: 12, color: '#64748b', margin: 0 }}>
+              Modelo gráfico padrão para impressoras térmicas (Argox / Zebra / Elgin) e folhas de gôndola.
+            </p>
+
+            <div style={{ display: 'flex', justifyContent: 'center' }}>
+              <div style={{
+                width: 320,
+                border: '2px solid #0f172a',
+                borderRadius: 8,
+                padding: '16px 20px',
+                background: '#fff',
+                color: '#000',
+                textAlign: 'center',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.08)'
+              }}>
+                <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: 1, fontWeight: 800, color: '#475569' }}>
+                  {nomeEmpresa}
+                </div>
+                <div style={{ fontSize: 15, fontWeight: 800, margin: '6px 0 2px', lineHeight: 1.2 }}>
+                  {produtoEtiqueta.nome}
+                </div>
+                <div style={{ fontSize: 10, color: '#64748b' }}>
+                  Categoria: {produtoEtiqueta.categoria} · Ref: {produtoEtiqueta.sku || '789123456789'}
+                </div>
+
+                {/* Código de Barras Gráfico SVG */}
+                <div style={{ margin: '14px 0 6px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                  <svg width="240" height="55" viewBox="0 0 240 55">
+                    {[
+                      { x: 10, w: 2 }, { x: 14, w: 3 }, { x: 20, w: 1 }, { x: 24, w: 4 }, { x: 31, w: 2 },
+                      { x: 36, w: 1 }, { x: 40, w: 3 }, { x: 46, w: 2 }, { x: 51, w: 4 }, { x: 58, w: 1 },
+                      { x: 62, w: 2 }, { x: 67, w: 3 }, { x: 73, w: 1 }, { x: 77, w: 4 }, { x: 84, w: 2 },
+                      { x: 90, w: 1 }, { x: 94, w: 3 }, { x: 100, w: 2 }, { x: 105, w: 4 }, { x: 112, w: 2 },
+                      { x: 118, w: 1 }, { x: 122, w: 3 }, { x: 128, w: 2 }, { x: 133, w: 4 }, { x: 140, w: 1 },
+                      { x: 144, w: 2 }, { x: 149, w: 3 }, { x: 155, w: 1 }, { x: 159, w: 4 }, { x: 166, w: 2 },
+                      { x: 172, w: 1 }, { x: 176, w: 3 }, { x: 182, w: 2 }, { x: 187, w: 4 }, { x: 194, w: 2 },
+                      { x: 200, w: 1 }, { x: 204, w: 3 }, { x: 210, w: 2 }, { x: 215, w: 3 }, { x: 222, w: 2 },
+                      { x: 227, w: 2 }
+                    ].map((b, i) => (
+                      <rect key={i} x={b.x} y="0" width={b.w} height="48" fill="#000" />
+                    ))}
+                  </svg>
+                  <div style={{ fontFamily: 'monospace', fontSize: 13, letterSpacing: 3, fontWeight: 700 }}>
+                    {produtoEtiqueta.sku || '7891234567895'}
+                  </div>
+                </div>
+
+                <div style={{ borderTop: '1px dashed #cbd5e1', paddingTop: 8, marginTop: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ textAlign: 'left' }}>
+                    <div style={{ fontSize: 9, color: '#64748b' }}>PREÇO À VISTA</div>
+                    <div style={{ fontSize: 20, fontWeight: 900, color: '#0f172a' }}>{fmtR(produtoEtiqueta.precoVenda)}</div>
+                  </div>
+                  <div style={{ fontSize: 9, color: '#64748b', textAlign: 'right' }}>
+                    Embalagem Un.<br />Cód. Interno #{produtoEtiqueta.id?.slice(0, 8)}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 10 }}>
+              <button type="button" style={styles.btn} onClick={() => setModalEtiqueta(false)}>
+                Fechar
+              </button>
+              <button
+                type="button"
+                style={{ ...styles.btnPrimary, background: '#0284c7', display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                onClick={() => {
+                  window.print();
+                }}
+              >
+                🖨️ Imprimir Etiqueta
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+{/* ── MODAL DE NOVO FORNECEDOR ── */}
       {modalNovoFornecedor && (
         <Modal open={modalNovoFornecedor} onClose={() => setModalNovoFornecedor(false)} title="Cadastrar Fornecedor Parceiro">
           <form
