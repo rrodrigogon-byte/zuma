@@ -191,6 +191,11 @@ export async function updateStorefront(trx, context, storefrontId, input = {}) {
       SET public_config = jsonb_set(COALESCE(public_config, '{}'::jsonb), '{policies}', (CASE WHEN jsonb_typeof(public_config->'policies') = 'object' THEN public_config->'policies' ELSE '{}'::jsonb END) || $3::jsonb, true), atualizado_em = CURRENT_TIMESTAMP
       WHERE empresa_id = $1 AND storefront_id = $2`, [empresaId, current.id, JSON.stringify(policies)]);
   }
+  if (input.configuracoes?.public && typeof input.configuracoes.public === 'object') {
+    await trx.query(`UPDATE commerce_storefront_aliases
+      SET public_config = COALESCE(public_config, '{}'::jsonb) || $3::jsonb, atualizado_em = CURRENT_TIMESTAMP
+      WHERE empresa_id = $1 AND storefront_id = $2`, [empresaId, current.id, JSON.stringify(input.configuracoes.public)]);
+  }
   await auditLog(trx, context, { entidade: 'storefront', entidadeId: current.id, acao: 'updated', lojaId: current.loja_id || null, antes: { nome: current.nome, codigo: current.codigo, status: current.status, lojaId: current.loja_id }, depois: { fields: Object.keys(input).slice(0, 20) } });
   return result.rows[0];
 }

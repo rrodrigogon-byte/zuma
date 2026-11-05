@@ -1,0 +1,503 @@
+/* ==========================================================================
+   COMMERCE STORE MANAGEMENT - SISTEMA DE GESTÃO DE LOJA ON-LINE & REDE DE LOJAS
+   Design moderno, profissional e responsivo integrado ao Kytto Commerce OS
+   ========================================================================== */
+
+.csm-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  width: 100%;
+  margin-bottom: 40px;
+}
+
+/* Banner de Topo com Resumo do Canal */
+.csm-hero-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 20px;
+  padding: 24px 28px;
+  background: linear-gradient(135deg, #ffffff 0%, #f7faf8 100%);
+  border: 1px solid #d4e5dc;
+  border-radius: 20px;
+  box-shadow: 0 10px 30px rgba(18, 48, 38, 0.05);
+}
+
+.csm-hero-info {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  min-width: 0;
+}
+
+.csm-hero-avatar {
+  width: 60px;
+  height: 60px;
+  border-radius: 16px;
+  background: #eaf3ee;
+  border: 1px solid #c9ded3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #1a4d3e;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.csm-hero-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  padding: 4px;
+}
+
+.csm-hero-titles h2 {
+  margin: 0 0 4px 0;
+  font-size: 22px;
+  font-weight: 800;
+  color: #123026;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.csm-hero-titles p {
+  margin: 0;
+  font-size: 13px;
+  color: #557268;
+}
+
+.csm-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 999px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.csm-status-pill.active {
+  background: #def7ec;
+  color: #03543f;
+  border: 1px solid #bcf0da;
+}
+
+.csm-status-pill.paused {
+  background: #fef08a;
+  color: #854d0e;
+  border: 1px solid #fde047;
+}
+
+.csm-status-pill.draft {
+  background: #f3f4f6;
+  color: #4b5563;
+  border: 1px solid #e5e7eb;
+}
+
+.csm-hero-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* Navegação em Sub-Abas */
+.csm-subtabs-nav {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px;
+  background: #e8f1ec;
+  border: 1px solid #d0e2d8;
+  border-radius: 14px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.csm-subtab-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  border: none;
+  background: transparent;
+  color: #3b5c51;
+  font-size: 13px;
+  font-weight: 700;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  white-space: nowrap;
+}
+
+.csm-subtab-btn:hover {
+  color: #123026;
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.csm-subtab-btn.active {
+  background: #ffffff;
+  color: #123026;
+  box-shadow: 0 4px 12px rgba(18, 48, 38, 0.08);
+}
+
+/* Painel de Conteúdo */
+.csm-panel {
+  background: #ffffff;
+  border: 1px solid #dce8e1;
+  border-radius: 18px;
+  padding: 26px 28px;
+  box-shadow: 0 8px 24px rgba(18, 48, 38, 0.04);
+}
+
+.csm-panel-header {
+  margin-bottom: 22px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #eef4f0;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.csm-panel-header h3 {
+  margin: 0 0 4px 0;
+  font-size: 18px;
+  font-weight: 800;
+  color: #123026;
+}
+
+.csm-panel-header p {
+  margin: 0;
+  font-size: 13px;
+  color: #557268;
+}
+
+/* Grades e Formulários */
+.csm-grid-2 {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 20px;
+}
+
+.csm-grid-3 {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 18px;
+}
+
+.csm-field-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.csm-field-group label {
+  font-size: 12px;
+  font-weight: 800;
+  color: #2b493e;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.csm-field-group input,
+.csm-field-group select,
+.csm-field-group textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 11px 14px;
+  font-size: 13px;
+  border: 1px solid #cfe0d6;
+  border-radius: 10px;
+  background: #fbfdfc;
+  color: #123026;
+  font-family: inherit;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.csm-field-group input:focus,
+.csm-field-group select:focus,
+.csm-field-group textarea:focus {
+  outline: none;
+  border-color: #2e7d32;
+  box-shadow: 0 0 0 3px rgba(46, 125, 50, 0.15);
+  background: #ffffff;
+}
+
+.csm-hint {
+  font-size: 11px;
+  color: #6a887d;
+  line-height: 1.4;
+}
+
+/* Seção de Cores da Marca */
+.csm-color-picker-box {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border: 1px solid #cfe0d6;
+  border-radius: 10px;
+  background: #fbfdfc;
+}
+
+.csm-color-swatch {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  cursor: pointer;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+.csm-color-picker-box input[type="color"] {
+  border: none;
+  background: transparent;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  cursor: pointer;
+}
+
+.csm-color-picker-box input[type="text"] {
+  border: none;
+  background: transparent;
+  font-family: monospace;
+  font-weight: 700;
+  font-size: 13px;
+  color: #123026;
+  padding: 0;
+}
+
+/* Presets de Paleta */
+.csm-presets-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+.csm-preset-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid #d4e3dc;
+  border-radius: 8px;
+  background: #f7faf8;
+  font-size: 11px;
+  font-weight: 700;
+  color: #27483c;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.csm-preset-btn:hover {
+  background: #ffffff;
+  border-color: #2e7d32;
+  transform: translateY(-1px);
+}
+
+.csm-preset-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  display: inline-block;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+/* Simulador de Vitrine ao Vivo (Live Preview) */
+.csm-live-preview-wrap {
+  margin-top: 24px;
+  border: 1px solid #cfe0d6;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 10px 30px rgba(18, 48, 38, 0.06);
+}
+
+.csm-preview-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 18px;
+  background: #eaf1ed;
+  border-bottom: 1px solid #d5e4dc;
+  font-size: 12px;
+  font-weight: 800;
+  color: #2b493e;
+}
+
+.csm-preview-body {
+  padding: 24px;
+  transition: background-color 0.2s, color 0.2s;
+}
+
+.csm-preview-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 20px;
+  border-radius: 12px;
+  margin-bottom: 18px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+}
+
+.csm-preview-hero {
+  padding: 28px 24px;
+  border-radius: 14px;
+  text-align: center;
+  margin-bottom: 20px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.06);
+}
+
+.csm-preview-product-card {
+  max-width: 280px;
+  margin: 0 auto;
+  padding: 16px;
+  border-radius: 14px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+  text-align: left;
+}
+
+/* Banners e Badges */
+.csm-banner-item {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px;
+  border: 1px solid #dbe7e0;
+  border-radius: 12px;
+  background: #fbfdfc;
+  margin-bottom: 12px;
+}
+
+.csm-banner-thumb {
+  width: 90px;
+  height: 55px;
+  border-radius: 8px;
+  object-fit: cover;
+  background: #eef4f0;
+  border: 1px solid #d0e0d6;
+}
+
+/* Cards das Lojas Físicas */
+.csm-unidade-card {
+  padding: 18px 20px;
+  border: 1px solid #dce8e1;
+  border-radius: 14px;
+  background: #ffffff;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  transition: box-shadow 0.15s, border-color 0.15s;
+}
+
+.csm-unidade-card:hover {
+  border-color: #2e7d32;
+  box-shadow: 0 6px 20px rgba(46, 125, 50, 0.08);
+}
+
+.csm-unidade-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.csm-unidade-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 800;
+  color: #123026;
+}
+
+.csm-unidade-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: #557268;
+}
+
+.csm-unidade-meta span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Alerta de Retirada */
+.csm-pickup-callout {
+  display: flex;
+  gap: 16px;
+  padding: 18px 22px;
+  border-radius: 14px;
+  background: #edf7f2;
+  border: 1px solid #bfe3d1;
+  color: #155724;
+  margin-bottom: 20px;
+}
+
+/* Botões do Componente */
+.csm-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  border: none;
+  border-radius: 10px;
+  background: #2e7d32;
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  box-shadow: 0 4px 12px rgba(46, 125, 50, 0.25);
+}
+
+.csm-btn-primary:hover {
+  background: #256628;
+  transform: translateY(-1px);
+}
+
+.csm-btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  border: 1px solid #c9ded3;
+  border-radius: 10px;
+  background: #ffffff;
+  color: #1a4d3e;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.csm-btn-secondary:hover {
+  background: #f2f7f4;
+  border-color: #1a4d3e;
+}
+
+@media (max-width: 800px) {
+  .csm-hero-card {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .csm-hero-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+  .csm-subtabs-nav {
+    width: 100%;
+  }
+}

@@ -213,9 +213,12 @@ export function sanitizePublicStorefrontConfig(storefront = {}) {
     displayName: String(source.displayName || storefront.nome || '').trim().slice(0, 120),
     tagline: String(source.tagline || '').trim().slice(0, 240),
     logoUrl: safePublicUrl(source.logoUrl) || '',
+    faviconUrl: safePublicUrl(source.faviconUrl) || '',
     contact: {
       phone: /^\+?\d{10,15}$/.test(phone) ? phone : '',
       email: /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : '',
+      whatsapp: String(source.contact?.whatsapp || '').replace(/[^+\d]/g, '').slice(0, 16),
+      instagram: String(source.contact?.instagram || '').trim().slice(0, 80),
     },
     address: {
       street: String(address.street || '').trim().slice(0, 180),
@@ -225,8 +228,10 @@ export function sanitizePublicStorefrontConfig(storefront = {}) {
       city: String(address.city || '').trim().slice(0, 100),
       state: /^[A-Z]{2}$/.test(String(address.state || '').toUpperCase()) ? String(address.state).toUpperCase() : '',
       postalCode: String(address.postalCode || '').replace(/\D/g, '').slice(0, 8),
+      hours: String(address.hours || '').trim().slice(0, 200),
     },
     pickup: {
+      enabled: source.pickup?.enabled !== false,
       instructions: String(source.pickup?.instructions || '').trim().slice(0, 500),
       leadTimeHours: Math.max(0, Math.min(720, Number(source.pickup?.leadTimeHours) || 0)),
     },
@@ -235,6 +240,38 @@ export function sanitizePublicStorefrontConfig(storefront = {}) {
       returnsUrl: safePublicUrl(policies.returnsUrl),
       shippingUrl: safePublicUrl(policies.shippingUrl),
       termsUrl: safePublicUrl(policies.termsUrl),
+    },
+    announcement: {
+      enabled: Boolean(source.announcement?.enabled),
+      text: String(source.announcement?.text || '').trim().slice(0, 200),
+      link: safePublicUrl(source.announcement?.link) || '',
+      bgColor: safeColor(source.announcement?.bgColor, '#172033'),
+      textColor: safeColor(source.announcement?.textColor, '#FFFFFF'),
+    },
+    banners: Array.isArray(source.banners) ? source.banners.slice(0, 6).map((b, idx) => ({
+      id: String(b.id || idx),
+      title: String(b.title || '').trim().slice(0, 100),
+      subtitle: String(b.subtitle || '').trim().slice(0, 200),
+      imageUrl: safePublicUrl(b.imageUrl) || '',
+      linkUrl: safePublicUrl(b.linkUrl) || '',
+      ctaText: String(b.ctaText || 'Ver produtos').trim().slice(0, 40),
+      active: b.active !== false,
+    })) : [],
+    badges: Array.isArray(source.badges) ? source.badges.slice(0, 6).map((badge, idx) => ({
+      id: String(badge.id || idx),
+      title: String(badge.title || '').trim().slice(0, 60),
+      description: String(badge.description || '').trim().slice(0, 120),
+      icon: String(badge.icon || 'shield').trim().slice(0, 40),
+      active: badge.active !== false,
+    })) : [],
+    seo: {
+      metaTitle: String(source.seo?.metaTitle || '').trim().slice(0, 120),
+      metaDescription: String(source.seo?.metaDescription || '').trim().slice(0, 300),
+      ogImage: safePublicUrl(source.seo?.ogImage) || '',
+    },
+    tracking: {
+      metaPixelId: String(source.tracking?.metaPixelId || '').replace(/[^\w-]/g, '').slice(0, 50),
+      gaMeasurementId: String(source.tracking?.gaMeasurementId || '').replace(/[^\w-]/g, '').slice(0, 50),
     },
     colors: {
       accent: safeColor(source.colors?.accent, '#FF6B2C'),
