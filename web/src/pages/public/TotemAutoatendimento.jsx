@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import {
   ShoppingBag,
   Scissors,
@@ -43,7 +43,14 @@ export default function TotemAutoatendimento() {
   const [profissionais, setProfissionais] = useState([]);
   const [categoriaAtiva, setCategoriaAtiva] = useState('Todos');
   const [busca, setBusca] = useState('');
-  
+
+  // Extrai categorias dinâmicas dos produtos disponíveis
+  const categoriasDisponiveis = useMemo(() => {
+    const cats = new Set(['Todos']);
+    produtos.forEach(p => { if (p.categoria) cats.add(p.categoria); });
+    return Array.from(cats);
+  }, [produtos]);
+
   // Estado do Carrinho (Produtos)
   const [carrinho, setCarrinho] = useState([]);
   
@@ -443,7 +450,7 @@ export default function TotemAutoatendimento() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               {/* Barra de Categorias e Busca */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, overflowX: 'auto', paddingBottom: 6 }}>
-                {['Todos', 'Cabelo', 'Barba', 'Bebidas'].map(cat => (
+                {categoriasDisponiveis.map(cat => (
                   <button
                     key={cat}
                     onClick={() => { setCategoriaAtiva(cat); registrarAtividade(); }}
