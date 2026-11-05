@@ -299,8 +299,15 @@ function fornecedorPorCnpj(empresaId, cnpj) {
 
 function visaoPedido(pedido) {
   if (!pedido) return null;
-  const itens = pedido.itens.map((item) => ({ ...item, pendente: Math.max(0, item.quantidade - item.recebido) }));
-  return { ...pedido, itens, total: dinheiro(itens.reduce((soma, item) => soma + item.quantidade * item.custoUnitario, 0)), totalRecebido: dinheiro(itens.reduce((soma, item) => soma + item.recebido * item.custoUnitario, 0)) };
+  const itens = (pedido.itens || []).map((item) => {
+    const custo = Number(item.custoUnitario ?? item.precoUnitario ?? 0);
+    const qtd = Number(item.quantidade || 0);
+    const total = Number(item.total ?? (qtd * custo));
+    return { ...item, custoUnitario: custo, total, pendente: Math.max(0, qtd - Number(item.recebido || 0)) };
+  });
+  const somaItens = itens.reduce((soma, item) => soma + (item.total || (item.quantidade * item.custoUnitario)), 0);
+  const total = dinheiro(pedido.valorTotal || somaItens);
+  return { ...pedido, itens, total, totalRecebido: dinheiro(itens.reduce((soma, item) => soma + Number(item.recebido || 0) * item.custoUnitario, 0)) };
 }
 
 function itensPedidoNormalizados(empresaId, itens = [], lojaId = '') {

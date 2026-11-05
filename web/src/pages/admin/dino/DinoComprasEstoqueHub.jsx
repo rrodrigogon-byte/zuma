@@ -887,7 +887,7 @@ export default function DinoComprasEstoqueHub({
                               </div>
                             ))}
                           </td>
-                          <td style={{ ...styles.td, fontWeight: 800 }}>{fmtR(p.total)}</td>
+                          <td style={{ ...styles.td, fontWeight: 800 }}>{fmtR(p.total || p.valorTotal || (p.itens || []).reduce((acc, it) => acc + (it.total || (it.quantidade * (it.precoUnitario || it.custoUnitario || 0))), 0))}</td>
                           <td style={styles.td}>{p.previsaoEntrega || '—'}</td>
                           <td style={styles.td}>
                             <span style={styles.pill(statusColor, `${statusColor}15`)}>{p.status?.toUpperCase()}</span>
