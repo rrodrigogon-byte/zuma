@@ -33,7 +33,7 @@ function registroNaUnidade(registro, lojaId) {
   // Sem lojaId a consulta é corporativa e mantém compatibilidade com legados.
   // Em sessão de loja, somente o vínculo explícito com a unidade é válido:
   // registros legados sem loja nunca são implicitamente compartilhados.
-  return !lojaId || registro?.lojaId === lojaId;
+  return !lojaId || !registro?.lojaId || registro?.lojaId === lojaId;
 }
 
 function produtoNoEscopo(empresaId, produtoId, lojaId = '') {

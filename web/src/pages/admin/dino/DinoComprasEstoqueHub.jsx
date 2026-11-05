@@ -240,7 +240,8 @@ export default function DinoComprasEstoqueHub({
       setEstoqueGeral(listaEst);
       setResumoEstoque(estoqueRes.resumo || { total: listaEst.length, ok: 0, baixo: 0, semEstoque: 0, valorTotal: 0 });
 
-      setFornecedores(fornRes.fornecedores || []);
+      const listaForn = (fornRes.fornecedores && fornRes.fornecedores.length > 0) ? fornRes.fornecedores : (mestresFornRes.fornecedores || []);
+      setFornecedores(listaForn);
       setPedidos(pedRes.pedidos || []);
       setReposicao(repRes || { itens: [], totalEstimado: 0 });
 
