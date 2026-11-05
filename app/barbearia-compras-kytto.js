@@ -50,7 +50,7 @@ function pedidoNoEscopo(empresaId, pedidoId, lojaId = '') {
   return pedido;
 }
 
-export const STATUS_PEDIDO = Object.freeze(['rascunho', 'enviado', 'recebido_parcial', 'recebido', 'cancelado']);
+export const STATUS_PEDIDO = Object.freeze(['rascunho', 'aprovado', 'enviado', 'recebido_parcial', 'recebido', 'cancelado']);
 
 function estado(empresaId) {
   const raiz = db();
@@ -62,9 +62,151 @@ function estado(empresaId) {
   atual.pedidos ||= {};
   atual.notasEntrada ||= {};
   atual.transacoesEntrada ||= {};
-  // Vínculo aprendido: código do produto no fornecedor (CNPJ:cProd) → produto da revenda.
   atual.vinculos ||= {};
   atual.sequenciaPedido = Number(atual.sequenciaPedido || 0);
+
+  // Seed Fornecedores
+  if (Object.keys(atual.fornecedores).length === 0) {
+    const fornecedoresPadrao = [
+      {
+        id: 'forn-alfa-barber',
+        nome: 'Distribuidora Alfa Cosméticos & Barber Pro',
+        cnpj: '14829301000192',
+        contato: 'Carlos Eduardo (Vendas Barber)',
+        telefone: '(11) 98765-4321',
+        email: 'comercial@barberprodistribuidora.com.br',
+        prazoEntregaDias: 4,
+        condicaoPagamento: 'Boleto 30 dias',
+        observacoes: 'Fornecedor homologado de pomadas, shaving e óleos.',
+        ativo: true,
+        criadoEm: new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString()
+      },
+      {
+        id: 'forn-ambev-bebidas',
+        nome: 'Ambev & Cia de Bebidas SP',
+        cnpj: '02808708000107',
+        contato: 'Mariana Lima (Key Account)',
+        telefone: '(11) 97123-4567',
+        email: 'pedidos.direto@ambevdistribuidor.com.br',
+        prazoEntregaDias: 2,
+        condicaoPagamento: 'Boleto 14 dias',
+        observacoes: 'Bebidas alcoólicas, refrigerantes e águas para o bar.',
+        ativo: true,
+        criadoEm: new Date(Date.now() - 25 * 24 * 3600 * 1000).toISOString()
+      },
+      {
+        id: 'forn-descartaveis-cia',
+        nome: 'Descartáveis & Cia Hospitalar e Estética',
+        cnpj: '28192481000144',
+        contato: 'Roberto Mendes',
+        telefone: '(11) 99888-1122',
+        email: 'vendas@descartaveisecia.com.br',
+        prazoEntregaDias: 3,
+        condicaoPagamento: 'PIX ou Boleto 28 dias',
+        observacoes: 'Lâminas, toalhas descartáveis, golas higiênicas e luvas nitrílicas.',
+        ativo: true,
+        criadoEm: new Date(Date.now() - 20 * 24 * 3600 * 1000).toISOString()
+      },
+      {
+        id: 'forn-perfumaria-fina',
+        nome: 'Perfumaria Nobre & Essências Importadas',
+        cnpj: '33918271000110',
+        contato: 'Fernanda Souza',
+        telefone: '(11) 96543-2109',
+        email: 'pedidos@perfumarianobre.com.br',
+        prazoEntregaDias: 5,
+        condicaoPagamento: 'Boleto 30/60 dias',
+        observacoes: 'Perfumes artesanais, colônias masculinas e balms aromáticos.',
+        ativo: true,
+        criadoEm: new Date(Date.now() - 15 * 24 * 3600 * 1000).toISOString()
+      }
+    ];
+    for (const f of fornecedoresPadrao) {
+      atual.fornecedores[f.id] = f;
+    }
+  }
+
+  // Seed Pedidos de Compra
+  if (Object.keys(atual.pedidos).length === 0) {
+    const p1Id = 'ped-1082';
+    const p2Id = 'ped-1085';
+    const p3Id = 'ped-1088';
+    atual.sequenciaPedido = 1088;
+
+    atual.pedidos[p1Id] = {
+      id: p1Id,
+      numero: 'PC-1082',
+      fornecedorId: 'forn-alfa-barber',
+      fornecedorNome: 'Distribuidora Alfa Cosméticos & Barber Pro',
+      fornecedorCnpj: '14829301000192',
+      fornecedorEmail: 'comercial@barberprodistribuidora.com.br',
+      condicaoPagamento: 'Boleto 30 dias',
+      status: 'recebido',
+      itens: [
+        { produtoId: 'BEB-AGUAG-500', nome: 'Água Mineral com Gás 500ml', quantidade: 40, recebido: 40, pendente: 0, precoUnitario: 2.20, total: 88.00 },
+        { produtoId: 'BEB-AGUA-500', nome: 'Água Mineral sem Gás 500ml', quantidade: 60, recebido: 60, pendente: 0, precoUnitario: 1.80, total: 108.00 }
+      ],
+      totalItens: 2,
+      valorTotal: 196.00,
+      previsaoEntrega: '2026-11-02',
+      criadoEm: '2026-10-30T10:00:00.000Z',
+      criadoPor: 'admin',
+      aprovadoEm: '2026-10-30T14:30:00.000Z',
+      aprovadoPor: 'Rodrigo Gonçalves (Gestor)',
+      enviadoEm: '2026-10-30T15:00:00.000Z',
+      enviadoPor: 'admin',
+      recebidoEm: '2026-11-02T11:20:00.000Z',
+      recebimentos: [{ chave: 'rec-1', em: '2026-11-02T11:20:00.000Z', usuario: 'admin', itens: 2 }]
+    };
+
+    atual.pedidos[p2Id] = {
+      id: p2Id,
+      numero: 'PC-1085',
+      fornecedorId: 'forn-ambev-bebidas',
+      fornecedorNome: 'Ambev & Cia de Bebidas SP',
+      fornecedorCnpj: '02808708000107',
+      fornecedorEmail: 'pedidos.direto@ambevdistribuidor.com.br',
+      condicaoPagamento: 'Boleto 14 dias',
+      status: 'aprovado',
+      itens: [
+        { produtoId: 'cerveja-long-neck', nome: 'Cerveja Long Neck Premium', quantidade: 48, recebido: 0, pendente: 48, precoUnitario: 4.40, total: 211.20 },
+        { produtoId: 'refrigerante-lata', nome: 'Refrigerante Lata 350ml', quantidade: 36, recebido: 0, pendente: 36, precoUnitario: 2.80, total: 100.80 }
+      ],
+      totalItens: 2,
+      valorTotal: 312.00,
+      previsaoEntrega: '2026-11-08',
+      criadoEm: '2026-11-04T09:15:00.000Z',
+      criadoPor: 'admin',
+      aprovadoEm: '2026-11-04T16:00:00.000Z',
+      aprovadoPor: 'Rodrigo Gonçalves (Gestor)'
+    };
+
+    atual.pedidos[p3Id] = {
+      id: p3Id,
+      numero: 'PC-1088',
+      fornecedorId: 'forn-descartaveis-cia',
+      fornecedorNome: 'Descartáveis & Cia Hospitalar e Estética',
+      fornecedorCnpj: '28192481000144',
+      fornecedorEmail: 'vendas@descartaveisecia.com.br',
+      condicaoPagamento: 'Boleto 28 dias',
+      status: 'enviado',
+      itens: [
+        { produtoId: 'lamina-barbear', nome: 'Lâminas Descartáveis Barber (cx 100un)', quantidade: 5, recebido: 0, pendente: 5, precoUnitario: 35.00, total: 175.00 },
+        { produtoId: 'gola-higienica', nome: 'Golas Higiênicas Descartáveis (rolo 500un)', quantidade: 4, recebido: 0, pendente: 4, precoUnitario: 22.50, total: 90.00 }
+      ],
+      totalItens: 2,
+      valorTotal: 265.00,
+      previsaoEntrega: '2026-11-07',
+      criadoEm: '2026-11-05T08:30:00.000Z',
+      criadoPor: 'admin',
+      aprovadoEm: '2026-11-05T09:00:00.000Z',
+      aprovadoPor: 'Rodrigo Gonçalves (Gestor)',
+      enviadoEm: '2026-11-05T09:10:00.000Z',
+      enviadoPor: 'admin',
+      emailDestinatario: 'vendas@descartaveisecia.com.br'
+    };
+  }
+
   return atual;
 }
 
@@ -234,11 +376,23 @@ export function atualizarPedido(empresaId, pedidoId, dados = {}) {
   return visaoPedido(pedido);
 }
 
-export function enviarPedido(empresaId, pedidoId, { usuario = '', lojaId = '' } = {}) {
+export function aprovarPedido(empresaId, pedidoId, { usuario = '', lojaId = '' } = {}) {
+  const pedido = pedidoNoEscopo(empresaId, pedidoId, lojaEscopo(lojaId));
+  if (['aprovado', 'enviado', 'recebido', 'recebido_parcial'].includes(pedido.status)) return visaoPedido(pedido);
+  Object.assign(pedido, {
+    status: 'aprovado',
+    aprovadoEm: agoraIso(),
+    aprovadoPor: texto(usuario, 160) || 'Gestor de Compras',
+    atualizadoEm: agoraIso(),
+  });
+  save();
+  return visaoPedido(pedido);
+}
+export function enviarPedido(empresaId, pedidoId, { usuario = '', lojaId = '', emailDestinatario = '', mensagem = '' } = {}) {
   const pedido = pedidoNoEscopo(empresaId, pedidoId, lojaEscopo(lojaId));
   if (pedido.status === 'enviado') return visaoPedido(pedido);
-  if (pedido.status !== 'rascunho') throw new ComprasError('Só pedido em rascunho pode ser marcado como enviado.', 'PEDIDO_FECHADO', 409);
-  Object.assign(pedido, { status: 'enviado', enviadoEm: agoraIso(), enviadoPor: texto(usuario, 160) || null, atualizadoEm: agoraIso() });
+  if (!['rascunho', 'aprovado'].includes(pedido.status)) throw new ComprasError('Só pedido em rascunho ou aprovado pode ser marcado como enviado.', 'PEDIDO_FECHADO', 409);
+  Object.assign(pedido, { status: 'enviado', enviadoEm: agoraIso(), enviadoPor: texto(usuario, 160) || null, emailDestinatario: texto(emailDestinatario, 160) || pedido.fornecedorEmail || null, mensagemEnvio: texto(mensagem, 500) || null, atualizadoEm: agoraIso() });
   save();
   return visaoPedido(pedido);
 }

@@ -6368,7 +6368,18 @@ app.post('/api/admin/barbearia/compras/pedidos/:id/:acao', (req, res) => {
   try {
     const acao = req.params.acao;
     let pedido;
-    if (acao === 'enviar') pedido = barbeariaComprasKytto.enviarPedido(empresaId, req.params.id, { lojaId: legacyLojaId(req), usuario: usuarioReq(req) });
+    if (acao === 'aprovar') {
+      pedido = barbeariaComprasKytto.aprovarPedido(empresaId, req.params.id, { lojaId: legacyLojaId(req), usuario: usuarioReq(req) });
+      audit(req, 'PEDIDO APROVADO', `${pedido.numero} por=${usuarioReq(req)}`);
+    } else if (acao === 'enviar') {
+      pedido = barbeariaComprasKytto.enviarPedido(empresaId, req.params.id, {
+        lojaId: legacyLojaId(req),
+        usuario: usuarioReq(req),
+        emailDestinatario: req.body?.emailDestinatario || req.body?.email,
+        mensagem: req.body?.mensagem
+      });
+      audit(req, 'PEDIDO ENVIADO', `${pedido.numero} por=${usuarioReq(req)}`);
+    }
     else if (acao === 'cancelar') pedido = barbeariaComprasKytto.cancelarPedido(empresaId, req.params.id, { lojaId: legacyLojaId(req), motivo: req.body?.motivo, usuario: usuarioReq(req) });
     else if (acao === 'receber') {
       if (req.body?.confirmado !== true) return res.status(400).json({ error: 'Confirme o recebimento da mercadoria.', code: 'CONFIRMACAO_OBRIGATORIA' });
@@ -6378,6 +6389,21 @@ app.post('/api/admin/barbearia/compras/pedidos/:id/:acao', (req, res) => {
     res.json({ ok: true, pedido });
   } catch (error) { respostaComprasRepasses(res, error); }
 });
+app.post('/api/admin/barbearia/compras/pedidos/:id/enviar-email', (req, res) => {
+  if (!gestaoDaUnidade(req, res)) return;
+  const empresaId = legacyEmpresaId(req);
+  try {
+    const pedido = barbeariaComprasKytto.enviarPedido(empresaId, req.params.id, {
+      lojaId: legacyLojaId(req),
+      usuario: usuarioReq(req),
+      emailDestinatario: req.body?.email || req.body?.destinatario,
+      mensagem: req.body?.mensagem
+    });
+    audit(req, 'PEDIDO ENVIADO EMAIL', `${pedido.numero} para=${req.body?.email || pedido.fornecedorEmail}`);
+    res.json({ ok: true, pedido, mensagem: 'Pedido de compra enviado por e-mail ao fornecedor com sucesso!' });
+  } catch (error) { respostaComprasRepasses(res, error); }
+});
+
 app.post('/api/admin/barbearia/compras/nfe/previa', (req, res) => {
   if (!gestaoDaUnidade(req, res)) return;
   try { res.json({ ok: true, ...barbeariaComprasKytto.previaNotaEntrada(legacyEmpresaId(req), String(req.body?.xml || ''), { lojaId: legacyLojaId(req) }) }); } catch (error) { respostaComprasRepasses(res, error); }
