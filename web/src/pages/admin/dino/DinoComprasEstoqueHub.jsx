@@ -105,7 +105,8 @@ export default function DinoComprasEstoqueHub({
   onAbrirProduto,
   onAjustarEstoque,
 }) {
-  const { empresaAtiva } = useAuth();
+  const { empresaAtiva, empresasAcessiveis, user } = useAuth();
+  const nomeEmpresa = empresaAtiva?.nome || empresasAcessiveis?.[0]?.nome || user?.empresa || 'Empresa';
   const { toast } = useToast();
 
   // Resolve aba ativa a partir da prop ou URL
@@ -424,10 +425,10 @@ export default function DinoComprasEstoqueHub({
       <div style={styles.headerCard}>
         <div style={styles.titleRow}>
           <div>
-            <div style={styles.kicker}>Hub Integrado de Gestão de Materiais · {empresaAtiva?.nome || 'Empresa'}</div>
+            <div style={styles.kicker}>Hub Integrado de Gestão de Materiais · {nomeEmpresa}</div>
             <h1 style={styles.h1}>Compras e Estoque</h1>
             <p style={styles.sub}>
-              Gestão centralizada de suprimentos e materiais para {empresaAtiva?.nome || 'todas as empresas'}. Fluxo unificado de compras e fornecedores, controle de saldos por unidade, perdas e inventário rotativo, fichas técnicas e cadastros mestres.
+              Gestão centralizada de suprimentos e materiais para {nomeEmpresa}. Fluxo unificado de compras e fornecedores, controle de saldos por unidade, perdas e inventário rotativo, fichas técnicas e cadastros mestres.
             </p>
           </div>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
