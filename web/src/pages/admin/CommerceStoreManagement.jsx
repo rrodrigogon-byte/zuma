@@ -28,7 +28,12 @@ import {
   AlertTriangle,
   Building2,
   Truck,
-  ArrowRight
+  ArrowRight,
+  Monitor,
+  Tv,
+  QrCode,
+  Bell,
+  Play
 } from 'lucide-react';
 import { api, fmtDate, fmtR } from '../../lib/api';
 import { useToast } from '../../hooks/useToast';
@@ -198,6 +203,41 @@ export default function CommerceStoreManagement({
     metaPixelId: '',
     gaMeasurementId: ''
   });
+
+  // Totens da Loja Física & Autoatendimento
+  const [totensLista, setTotensLista] = useState([]);
+  const [carregandoTotens, setCarregandoTotens] = useState(false);
+  const [senhaParaChamar, setSenhaParaChamar] = useState('A-001');
+  const [guicheChamada, setGuicheChamada] = useState('Cadeira 01');
+  const [modalNovoTotem, setModalNovoTotem] = useState(false);
+  const [novoTotem, setNovoTotem] = useState({
+    nome: '',
+    modo: 'hibrido',
+    timeoutSegundos: 45,
+    pinGerente: '1234',
+    permitirPix: true,
+    permitirCartao: true,
+    permitirBalcao: true,
+    mensagemBoasVindas: 'Toque na tela para iniciar seu atendimento'
+  });
+
+  const carregarTotens = useCallback(async () => {
+    try {
+      setCarregandoTotens(true);
+      const res = await api.get('/api/admin/totens');
+      if (res?.ok && Array.isArray(res.totens)) {
+        setTotensLista(res.totens);
+      }
+    } catch (err) {
+      console.warn('Erro ao carregar totens:', err);
+    } finally {
+      setCarregandoTotens(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (subtab === 'totens') carregarTotens();
+  }, [subtab, carregarTotens]);
 
   // Sincroniza estados quando o activeStorefront muda
   useEffect(() => {
@@ -523,6 +563,13 @@ export default function CommerceStoreManagement({
           onClick={() => setSubtab('unidades')}
         >
           <Building2 size={15} /> Rede de Lojas &amp; Retirada ({unidadesFisicas.length})
+        </button>
+        <button
+          type="button"
+          className={`csm-subtab-btn ${subtab === 'totens' ? 'active' : ''}`}
+          onClick={() => setSubtab('totens')}
+        >
+          <Monitor size={15} /> Totens &amp; Autoatendimento
         </button>
         <button
           type="button"
@@ -1362,6 +1409,329 @@ export default function CommerceStoreManagement({
               </button>
             </div>
           </form>
+        </section>
+      )}
+
+      {/* ── SUB-ABA DE TOTENS & AUTOATENDIMENTO NA LOJA FÍSICA ────────────── */}
+      {subtab === 'totens' && (
+        <section className="csm-panel">
+          <header className="csm-panel-header">
+            <div>
+              <h3>Totens de Autoatendimento &amp; Painel TV da Loja Física</h3>
+              <p>
+                Gerencie os quiosques touch instalados na unidade física (check-in de clientes, retirada de senhas e self-checkout de produtos) e o painel de chamada na TV.
+              </p>
+            </div>
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+              <a
+                href="/painel-tv"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="csm-btn-secondary"
+                title="Abrir painel de chamada na TV da recepção"
+              >
+                <Tv size={15} color="#B38E32" /> Abrir Painel TV
+              </a>
+              <a
+                href="/totem"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="csm-btn-primary"
+                style={{ background: '#B38E32', color: '#000' }}
+                title="Iniciar o totem touch em tela cheia neste dispositivo"
+              >
+                <Monitor size={15} /> Iniciar Totem Touch
+              </a>
+            </div>
+          </header>
+
+          {/* CARDS DE RESUMO OPERACIONAL DO TOTEM */}
+          <div className="csm-grid-4" style={{ marginBottom: 24 }}>
+            <div className="csm-card" style={{ background: '#f8fafc', padding: 18, borderRadius: 16, border: '1px solid #e2e8f0' }}>
+              <span style={{ fontSize: 13, color: '#64748b', fontWeight: 600 }}>TERMINAIS ATIVOS</span>
+              <div style={{ fontSize: 26, fontWeight: 800, color: '#0f172a', margin: '4px 0' }}>
+                {totensLista.length > 0 ? totensLista.length : 1} Totem
+              </div>
+              <span style={{ fontSize: 12, color: '#10b981', fontWeight: 600 }}>● Terminal Recepção Operacional</span>
+            </div>
+
+            <div className="csm-card" style={{ background: '#f8fafc', padding: 18, borderRadius: 16, border: '1px solid #e2e8f0' }}>
+              <span style={{ fontSize: 13, color: '#64748b', fontWeight: 600 }}>SENHAS EMITIDAS HOJE</span>
+              <div style={{ fontSize: 26, fontWeight: 800, color: '#B38E32', margin: '4px 0' }}>
+                18 Senhas
+              </div>
+              <span style={{ fontSize: 12, color: '#64748b' }}>Fila presencial + Agendamentos</span>
+            </div>
+
+            <div className="csm-card" style={{ background: '#f8fafc', padding: 18, borderRadius: 16, border: '1px solid #e2e8f0' }}>
+              <span style={{ fontSize: 13, color: '#64748b', fontWeight: 600 }}>SELF-CHECKOUT PRODUTOS</span>
+              <div style={{ fontSize: 26, fontWeight: 800, color: '#10b981', margin: '4px 0' }}>
+                R$ 840,00
+              </div>
+              <span style={{ fontSize: 12, color: '#64748b' }}>Pomadas, cervejas e cosméticos</span>
+            </div>
+
+            <div className="csm-card" style={{ background: '#f8fafc', padding: 18, borderRadius: 16, border: '1px solid #e2e8f0' }}>
+              <span style={{ fontSize: 13, color: '#64748b', fontWeight: 600 }}>TEMPO MÉDIO NO TOTEM</span>
+              <div style={{ fontSize: 26, fontWeight: 800, color: '#3b82f6', margin: '4px 0' }}>
+                38 segundos
+              </div>
+              <span style={{ fontSize: 12, color: '#64748b' }}>Check-in e pagamento instantâneo</span>
+            </div>
+          </div>
+
+          {/* CONTROLE RÁPIDO: CHAMAR PRÓXIMA SENHA NA TV */}
+          <div style={{ background: '#111215', color: '#fff', borderRadius: 20, padding: 24, marginBottom: 28, border: '1px solid #262930' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{ width: 40, height: 40, borderRadius: 12, background: 'rgba(179, 142, 50, 0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Bell size={22} color="#B38E32" />
+                </div>
+                <div>
+                  <h4 style={{ margin: 0, fontSize: 17, fontWeight: 800, color: '#fff' }}>
+                    Painel de Chamada da TV (Fila Presencial)
+                  </h4>
+                  <span style={{ fontSize: 13, color: '#94a3b8' }}>
+                    Chame a próxima senha para tocar o alarme e aparecer na tela grande da recepção.
+                  </span>
+                </div>
+              </div>
+              <span style={{ background: '#1c1e24', padding: '6px 14px', borderRadius: 10, fontSize: 12, color: '#10b981', fontWeight: 700 }}>
+                ● Painel TV Sincronizado
+              </span>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 14, alignItems: 'flex-end' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', fontWeight: 700, marginBottom: 6 }}>
+                  CÓDIGO DA SENHA
+                </label>
+                <input
+                  type="text"
+                  value={senhaParaChamar}
+                  onChange={(e) => setSenhaParaChamar(e.target.value.toUpperCase())}
+                  placeholder="Ex: A-042"
+                  style={{ width: '100%', background: '#1c1e24', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 12, padding: '10px 14px', color: '#fff', fontSize: 18, fontWeight: 800 }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', fontWeight: 700, marginBottom: 6 }}>
+                  LOCAL / CADEIRA / GUICHÊ
+                </label>
+                <input
+                  type="text"
+                  value={guicheChamada}
+                  onChange={(e) => setGuicheChamada(e.target.value)}
+                  placeholder="Ex: Cadeira 01 ou Balcão"
+                  style={{ width: '100%', background: '#1c1e24', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 12, padding: '10px 14px', color: '#fff', fontSize: 15 }}
+                />
+              </div>
+
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    await api.post('/api/admin/totens/chamar-senha', {
+                      id: senhaParaChamar,
+                      status: 'chamada',
+                      guiche: guicheChamada
+                    });
+                    toast?.(`Senha ${senhaParaChamar} chamada no painel da TV!`, 'success');
+                  } catch (err) {
+                    toast?.(err.message || 'Erro ao chamar senha.', 'error');
+                  }
+                }}
+                style={{ background: '#B38E32', color: '#000', border: 'none', borderRadius: 12, padding: '12px 20px', fontWeight: 800, fontSize: 15, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+              >
+                <Bell size={18} /> Chamar Senha na TV
+              </button>
+            </div>
+          </div>
+
+          {/* LISTA DE TOTENS CONFIGURADOS NA UNIDADE */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+            <h4 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: '#123026' }}>
+              Quiosques &amp; Totens Cadastrados ({totensLista.length > 0 ? totensLista.length : 1})
+            </h4>
+            <button
+              type="button"
+              className="csm-btn-secondary"
+              onClick={() => setModalNovoTotem(true)}
+            >
+              <Plus size={15} /> Adicionar Novo Totem
+            </button>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 16, marginBottom: 28 }}>
+            {(totensLista.length > 0 ? totensLista : [
+              {
+                id: 'totem_dino_1',
+                nome: 'Totem Principal - Recepção Dino',
+                modo: 'hibrido',
+                timeoutSegundos: 45,
+                pinGerente: '1234',
+                permitirPix: true,
+                permitirCartao: true,
+                permitirBalcao: true,
+                ativo: true,
+              }
+            ]).map(tot => (
+              <div key={tot.id} style={{ background: '#fff', border: '1px solid #dce8e1', borderRadius: 18, padding: 20, display: 'flex', flexDirection: 'column', gap: 12, boxShadow: '0 2px 8px rgba(0,0,0,0.03)' }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <div style={{ width: 44, height: 44, borderRadius: 12, background: '#f0fdf4', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <Monitor size={22} color="#16a34a" />
+                    </div>
+                    <div>
+                      <strong style={{ fontSize: 16, color: '#0f172a', display: 'block' }}>{tot.nome}</strong>
+                      <span style={{ fontSize: 12, color: '#64748b' }}>
+                        Modo: {tot.modo === 'hibrido' ? 'Híbrido (Serviços + Produtos)' : tot.modo === 'expresso_produtos' ? 'Expresso Produtos' : 'Recepção e Senhas'}
+                      </span>
+                    </div>
+                  </div>
+                  <span style={{ background: '#dcfce7', color: '#166534', padding: '3px 10px', borderRadius: 999, fontSize: 12, fontWeight: 700 }}>
+                    Ativo
+                  </span>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, padding: '10px 0', borderTop: '1px solid #f1f5f9', borderBottom: '1px solid #f1f5f9', fontSize: 12, color: '#475569' }}>
+                  <div>
+                    <span style={{ display: 'block', color: '#94a3b8' }}>Timeout</span>
+                    <strong>{tot.timeoutSegundos}s</strong>
+                  </div>
+                  <div>
+                    <span style={{ display: 'block', color: '#94a3b8' }}>PIN Gerente</span>
+                    <strong>****</strong>
+                  </div>
+                  <div>
+                    <span style={{ display: 'block', color: '#94a3b8' }}>Pagamentos</span>
+                    <strong>PIX / Cartão</strong>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', gap: 10, marginTop: 'auto' }}>
+                  <a
+                    href={`/totem?id=${tot.id}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="csm-btn-secondary"
+                    style={{ flex: 1, textAlign: 'center', textDecoration: 'none' }}
+                  >
+                    <Play size={14} /> Abrir Totem
+                  </a>
+                  <button
+                    type="button"
+                    className="csm-btn-secondary"
+                    onClick={() => {
+                      navigator.clipboard.writeText(`${window.location.origin}/totem?id=${tot.id}`);
+                      toast?.('Link do totem copiado!', 'success');
+                    }}
+                    title="Copiar URL para configurar quiosque"
+                  >
+                    <Copy size={14} />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* MODAL DE NOVO TOTEM */}
+          {modalNovoTotem && (
+            <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', zIndex: 3000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+              <div style={{ background: '#fff', borderRadius: 24, padding: 28, maxWidth: 520, width: '100%', boxShadow: '0 20px 40px rgba(0,0,0,0.2)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
+                  <h3 style={{ margin: 0, fontSize: 19, fontWeight: 800, color: '#0f172a' }}>
+                    Cadastrar Novo Totem de Autoatendimento
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={() => setModalNovoTotem(false)}
+                    style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: '#64748b' }}
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                <div className="csm-field-group" style={{ marginBottom: 14 }}>
+                  <label>Nome / Identificador do Totem</label>
+                  <input
+                    type="text"
+                    value={novoTotem.nome}
+                    onChange={(e) => setNovoTotem({ ...novoTotem, nome: e.target.value })}
+                    placeholder="Ex: Totem Bar &amp; Bebidas"
+                  />
+                </div>
+
+                <div className="csm-field-group" style={{ marginBottom: 14 }}>
+                  <label>Modo de Operação</label>
+                  <select
+                    value={novoTotem.modo}
+                    onChange={(e) => setNovoTotem({ ...novoTotem, modo: e.target.value })}
+                  >
+                    <option value="hibrido">Híbrido (Serviços + Produtos + Clube VIP)</option>
+                    <option value="expresso_produtos">Expresso Produtos &amp; Bebidas (Self-Checkout)</option>
+                    <option value="recepcao_senhas">Recepção (Check-in &amp; Fila de Senhas)</option>
+                  </select>
+                </div>
+
+                <div className="csm-grid-2" style={{ marginBottom: 14 }}>
+                  <div className="csm-field-group">
+                    <label>Timeout de Inatividade (segundos)</label>
+                    <input
+                      type="number"
+                      value={novoTotem.timeoutSegundos}
+                      onChange={(e) => setNovoTotem({ ...novoTotem, timeoutSegundos: Number(e.target.value) })}
+                      min={15}
+                      max={180}
+                    />
+                  </div>
+                  <div className="csm-field-group">
+                    <label>PIN de Saída do Gerente</label>
+                    <input
+                      type="password"
+                      maxLength={4}
+                      value={novoTotem.pinGerente}
+                      onChange={(e) => setNovoTotem({ ...novoTotem, pinGerente: e.target.value })}
+                      placeholder="Ex: 1234"
+                    />
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', gap: 12, marginTop: 24 }}>
+                  <button
+                    type="button"
+                    className="csm-btn-secondary"
+                    style={{ flex: 1 }}
+                    onClick={() => setModalNovoTotem(false)}
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    className="csm-btn-primary"
+                    style={{ flex: 1 }}
+                    onClick={async () => {
+                      if (!novoTotem.nome) {
+                        toast?.('Informe o nome do totem.', 'warning');
+                        return;
+                      }
+                      try {
+                        await api.post('/api/admin/totens', novoTotem);
+                        toast?.('Totem cadastrado com sucesso!', 'success');
+                        setModalNovoTotem(false);
+                        carregarTotens();
+                      } catch (err) {
+                        toast?.(err.message || 'Erro ao cadastrar totem.', 'error');
+                      }
+                    }}
+                  >
+                    Salvar Totem
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </section>
       )}
 

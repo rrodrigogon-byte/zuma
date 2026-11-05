@@ -173,6 +173,7 @@ import { buildCurrentMaterials, previewTaxMaterialPlan, PreviewConflictError, Pr
 import { perfilDoUsuario, profissionalPode, operadorPodeNaBarbearia, respostaParaOperador, papelLegadoDoRole, permissoesDoPerfil, MODULOS_FECHADOS_AO_OPERADOR, MENSAGEM_PERFIL } from './core/perfis-acesso.js';
 import { profissionalDoUsuario } from './dino-modo-barbeiro.js';
 import { provisionarEquipeDino } from './dino-equipe-seed.js';
+import * as totemLojaFisica from './core/totem-loja-fisica.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -6279,6 +6280,111 @@ app.post(['/api/admin/fechamento-diario/reabrir', '/api/admin/barbearia/operacao
     });
     audit(req, 'FECHAMENTO_DIARIO_REABERTO', `data=${resultado.data} caixasReabertos=${resultado.caixasReabertos}`);
     res.json(resultado);
+  } catch (error) { res.status(400).json({ error: error.message }); }
+});
+
+// ── TOTENS DE AUTOATENDIMENTO E LOJAS FÍSICAS ────────────────────────────────
+app.get('/api/totem/config', (req, res) => {
+  try {
+    const empresaId = String(req.query?.empresaId || 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6').trim();
+    const lojaId = String(req.query?.lojaId || 'matriz').trim();
+    const slug = String(req.query?.slug || '').trim();
+    
+    const totens = totemLojaFisica.listarTotens({ empresaId, lojaId });
+    const totemAtivo = (slug ? totens.find(t => t.slug === slug || t.id === slug) : null) || totens[0] || {
+      id: 'totem_padrao',
+      nome: 'Totem de Autoatendimento',
+      modo: totemLojaFisica.MODOS_TOTEM.HIBRIDO,
+      timeoutSegundos: 45,
+      permitirPix: true,
+      permitirCartao: true,
+      permitirBalcao: true,
+      mensagemBoasVindas: 'Toque na tela para iniciar seu atendimento',
+    };
+
+    const produtos = (barbeariaErpKytto.listarProdutosRevenda?.(empresaId) || []).map(p => ({
+      id: p.id,
+      nome: p.nome,
+      preco: Number(p.precoVenda || p.preco || 0),
+      categoria: p.categoria || 'Produtos',
+      imagem: p.imagem || null,
+      estoque: p.estoqueAtual ?? 10,
+    }));
+
+    const servicos = (barbeariaErpKytto.listarServicosBarbearia?.(empresaId) || []).map(s => ({
+      id: s.id,
+      nome: s.nome,
+      preco: Number(s.preco || 0),
+      duracao: s.duracaoMinutos || 30,
+      categoria: 'Serviços',
+    }));
+
+    const profissionais = (barbeariaErpKytto.listarProfissionaisBarbearia?.(empresaId) || []).map(p => ({
+      id: p.id,
+      nome: p.nome,
+      apelido: p.apelido || p.nome,
+      foto: p.foto || null,
+    }));
+
+    res.json({
+      ok: true,
+      totem: totemAtivo,
+      produtos,
+      servicos,
+      profissionais,
+    });
+  } catch (error) { res.status(400).json({ error: error.message }); }
+});
+
+app.post('/api/totem/senhas', (req, res) => {
+  try {
+    const senha = totemLojaFisica.emitirSenhaTotem(req.body || {});
+    res.status(201).json({ ok: true, senha });
+  } catch (error) { res.status(400).json({ error: error.message }); }
+});
+
+app.get('/api/totem/painel-tv', (req, res) => {
+  try {
+    const empresaId = String(req.query?.empresaId || 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6').trim();
+    const lojaId = String(req.query?.lojaId || 'matriz').trim();
+    const painel = totemLojaFisica.obterEstadoPainelTV({ empresaId, lojaId });
+    res.json({ ok: true, ...painel });
+  } catch (error) { res.status(400).json({ error: error.message }); }
+});
+
+app.post('/api/totem/pedidos', (req, res) => {
+  try {
+    const pedido = totemLojaFisica.registrarPedidoTotem(req.body || {});
+    res.status(201).json({ ok: true, pedido });
+  } catch (error) { res.status(400).json({ error: error.message }); }
+});
+
+app.get('/api/admin/totens', auth, requireStaff, (req, res) => {
+  try {
+    const empresaId = legacyEmpresaId(req);
+    const lojaId = legacyLojaId(req);
+    const totens = totemLojaFisica.listarTotens({ empresaId, lojaId });
+    res.json({ ok: true, totens });
+  } catch (error) { res.status(400).json({ error: error.message }); }
+});
+
+app.post('/api/admin/totens', auth, requireStaff, (req, res) => {
+  try {
+    const empresaId = legacyEmpresaId(req);
+    const lojaId = legacyLojaId(req);
+    const totem = totemLojaFisica.salvarTotem({ ...(req.body || {}), empresaId, lojaId });
+    audit(req, 'TOTEM_SALVO', `id=${totem.id} nome=${totem.nome}`);
+    res.json({ ok: true, totem });
+  } catch (error) { res.status(400).json({ error: error.message }); }
+});
+
+app.post('/api/admin/totens/chamar-senha', auth, requireStaff, (req, res) => {
+  try {
+    const { id, status = 'chamada', guiche } = req.body || {};
+    const profissionalNome = req.user?.nome || 'Atendente';
+    const senha = totemLojaFisica.atualizarStatusSenha({ id, status, profissionalNome, guiche });
+    audit(req, 'SENHA_CHAMADA', `codigo=${senha.codigo} status=${status}`);
+    res.json({ ok: true, senha });
   } catch (error) { res.status(400).json({ error: error.message }); }
 });
 
