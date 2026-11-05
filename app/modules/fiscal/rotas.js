@@ -1,6 +1,7 @@
 import express from 'express';
 import * as svc from './servico.js';
 import * as lote from './lote.js';
+import * as analiseClassificacao from './classificacao-analise.js';
 import * as sped from './sped.js';
 import * as contador from './contador.js';
 import { ErroDominio, responderErro } from '../acesso/banco.js';
@@ -45,6 +46,10 @@ export function createFiscalAdminRouter({ db, escopoDaRequisicao, env = process.
   router.post('/certificados/:id/ativar', rota('settings.write', ({ req, empresaId, lojaRestrita }) => { empresaToda(lojaRestrita, 'Ativar o certificado'); return svc.ativarCertificado(db, empresaId, req.params.id); }));
 
   // sem classificação, cada item traz a sugestão de NCM/CEST pelo nome (o contador confere)
+  // pesquisa completa: lista conferida nas tabelas oficiais (NCM, CEST, CFOP, Lista de Serviços Nacional)
+  router.get('/classificacoes/analise', rota('catalog.read', async ({ empresaId }) => analiseClassificacao.analisarClassificaveis(db, empresaId, (await svc.listarClassificaveis(db, empresaId)).map((i) => (i.classificacao ? i : { ...i, sugestao: lote.sugerirClassificacao(i.nome) })))));
+  router.get('/classificacoes/referencias', rota('catalog.read', ({ req }) => analiseClassificacao.referencias(req.query || {})));
+  router.post('/classificacoes/conferir', rota('catalog.read', async ({ req, empresaId }) => analiseClassificacao.conferir(req.body || {}, await analiseClassificacao.crtDaEmpresa(db, empresaId))));
   router.get('/classificacoes', rota('catalog.read', async ({ empresaId }) => (await svc.listarClassificaveis(db, empresaId))
     .map((i) => (i.classificacao ? i : { ...i, sugestao: lote.sugerirClassificacao(i.nome) }))));
   router.get('/classificacoes/perfis', rota('catalog.read', () => lote.PERFIS));
@@ -61,7 +66,10 @@ export function createFiscalAdminRouter({ db, escopoDaRequisicao, env = process.
     const arquivo = Buffer.isBuffer(req.body) ? req.body : req.body?.arquivoBase64 ? Buffer.from(String(req.body.arquivoBase64).replace(/^data:[^,]*,/, ''), 'base64') : req.body?.csv;
     return lote.importarClassificacoesCsv(db, empresaId, { arquivo, aplicar: req.query.aplicar === '1' });
   }));
+  // códigos inexistentes ou combinação errada (ex.: CEST que não abrange o NCM) não chegam a ser gravados
+  router.post('/classificacoes/lote', analiseClassificacao.barrarClassificacaoInvalida({ lote: true }));
   router.post('/classificacoes/lote', rota('catalog.write', ({ req, empresaId, lojaRestrita }) => { empresaToda(lojaRestrita, 'Classificar em lote'); return lote.classificarEmLote(db, empresaId, req.body || {}); }));
+  router.put('/classificacoes', analiseClassificacao.barrarClassificacaoInvalida());
   router.put('/classificacoes', rota('catalog.write', ({ req, empresaId, lojaRestrita }) => { empresaToda(lojaRestrita, 'Classificar produtos'); return svc.salvarClassificacao(db, empresaId, req.body || {}); }));
   router.delete('/classificacoes', rota('catalog.write', ({ req, empresaId, lojaRestrita }) => { empresaToda(lojaRestrita, 'Excluir a classificação'); return svc.excluirClassificacao(db, empresaId, { fonte: req.query.fonte || req.body?.fonte, fonteId: req.query.fonteId || req.body?.fonteId }); }));
 

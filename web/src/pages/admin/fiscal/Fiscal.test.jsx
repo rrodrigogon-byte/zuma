@@ -129,34 +129,6 @@ describe('Fiscal (homologação)', () => {
     await act(async () => { await form.props.onSubmit({ preventDefault() {} }) })
     expect(mocks.api.upload).toHaveBeenCalledWith('/api/admin/fiscal/ibpt', arquivo)
   })
-
-  it('classifica item do estoque único com o NCM do cadastro como sugestão', async () => {
-    mocks.api.put.mockResolvedValue({})
-    const tree = await montar('classificacao')
-    expect(texto(tree)).toContain('NCM do cadastro 19059090')
-    await act(async () => { botoes(tree, 'Classificar')[0].props.onClick() })
-    const ncm = tree.root.find((n) => n.type === 'input' && n.props.maxLength === 8)
-    expect(ncm.props.value).toBe('19059090')
-    const form = tree.root.find((n) => n.type === 'form')
-    await act(async () => { await form.props.onSubmit({ preventDefault() {} }) })
-    const corpo = mocks.api.put.mock.calls[0][1]
-    expect(corpo).toMatchObject({ fonte: 'est_item', fonteId: 'it1', ncm: '19059090', cfop: '5102' })
-    expect(corpo).not.toHaveProperty('ncmSugerido')
-  })
-
-  it('classificação: IBS/CBS com CST e cClassTrib (o cClassTrib começa pelo CST)', async () => {
-    mocks.api.put.mockResolvedValue({})
-    const tree = await montar('classificacao')
-    await act(async () => { botoes(tree, 'Classificar')[0].props.onClick() })
-    const cClass = () => tree.root.find((n) => n.type === 'input' && n.props['aria-label'] === 'cClassTrib')
-    expect(cClass().props.disabled).toBe(true)
-    const cst = tree.root.find((n) => n.type === 'select' && n.props['aria-label'] === 'CST do IBS/CBS')
-    await act(async () => { cst.props.onChange({ target: { value: '410' } }) })
-    expect(cClass().props.value).toBe('410001')
-    await act(async () => { await tree.root.find((n) => n.type === 'form').props.onSubmit({ preventDefault() {} }) })
-    expect(mocks.api.put.mock.calls[0][1]).toMatchObject({ cstIbsCbs: '410', cClassTrib: '410001' })
-  })
-
   it('produção: aviso de valor fiscal; liberada mas bloqueada avisa que nada sai', async () => {
     let tree = await montar('situacao', { '/api/admin/fiscal/estado': { ambiente: 'producao', transmissao: 'producao', producaoLiberada: true, pronto: true, pendencias: [], avisos: ['O certificado A1 vence em 10 dia(s): renove antes para não parar a emissão'] } })
     let s = texto(tree)
@@ -209,34 +181,6 @@ describe('Fiscal (homologação)', () => {
     await act(async () => { await form.props.onSubmit({ preventDefault() {} }) })
     expect(mocks.api.delete).toHaveBeenCalledWith('/api/admin/fiscal/ibpt/MT')
   })
-
-  it('classificação: editar e excluir a própria; CST 20 pede a redução e ST pede CEST', async () => {
-    mocks.api.delete.mockResolvedValue({ ok: true, excluido: true })
-    mocks.api.put.mockResolvedValue({})
-    const tree = await montar('classificacao', { '/api/admin/fiscal/classificacoes': [
-      { fonte: 'loja_variante', fonteId: 'v1', nome: 'CK Be 100ml', grupo: 'Loja online', classificacao: { tipo: 'produto', ncm: '33030010', cfop: '5405', csosn: '500', cest: '2002000', origem: '0', aliquotaIcms: 0, reducaoBaseIcms: null }, herdada: false },
-      { fonte: 'categoria', fonteId: 'barbearia:revenda', nome: 'Revenda da barbearia (padrão)', grupo: 'Padrão de categoria', classificacao: null, herdada: false, tipo: 'produto' },
-    ] })
-    expect(botoes(tree, 'Editar')).toHaveLength(1)
-    await act(async () => { botoes(tree, 'Editar')[0].props.onClick() })
-    const cest = tree.root.find((n) => n.type === 'input' && n.props.maxLength === 7)
-    expect(cest.props.required).toBe(true)
-    expect(cest.props.value).toBe('2002000')
-    // nenhum campo vira "null"
-    expect(texto(tree)).not.toContain('"null"')
-    const cst = tree.root.findAll((n) => n.type === 'select').find((x) => x.findAll((o) => o.type === 'option' && o.props.value === '60').length)
-    await act(async () => { cst.props.onChange({ target: { value: '20' } }) })
-    expect(texto(tree)).toContain('Redução da base do ICMS (%)')
-    await act(async () => { botoes(tree, 'Voltar')[0].props.onClick() })
-    await act(async () => { botoes(tree, 'Excluir')[0].props.onClick() })
-    const form = tree.root.findAll((n) => n.type === 'form').find((f) => f.findAll((n) => n.type === 'button' && n.children.join('') === 'Excluir').length)
-    await act(async () => { await form.props.onSubmit({ preventDefault() {} }) })
-    expect(mocks.api.delete).toHaveBeenCalledWith('/api/admin/fiscal/classificacoes?fonte=loja_variante&fonteId=v1')
-    // padrão da barbearia: rótulo fixo, sem campo de categoria do bar
-    await act(async () => { botoes(tree, 'Classificar')[0].props.onClick() })
-    expect(texto(tree)).toContain('Revenda da barbearia (padrão dos produtos da comanda)')
-  })
-
   it('documentos: período personalizado filtra sem quebrar e autorizado mostra o ambiente', async () => {
     const tree = await montar('documentos', { '/api/admin/fiscal/documentos': [
       { id: 'p1', modelo: '65', serie: 1, numero: 1, status: 'autorizado', ambiente: 'producao', valorTotal: 300, mensagens: [], criadoEm: '2026-11-01T12:00:00Z', temXml: true, origem: 'loja_pedido', origemId: 'o1' },
@@ -294,39 +238,6 @@ describe('Fiscal (homologação)', () => {
     expect(mocks.api.post).toHaveBeenCalledWith('/api/admin/fiscal/automatica/rodar', {})
     expect(mocks.toast).toHaveBeenCalledWith(expect.stringContaining('3 nota(s) emitida(s)'), 'success')
   })
-
-  it('classificação: marcar vários, aplicar perfil e classificar em lote; usar a sugestão de NCM', async () => {
-    mocks.api.post.mockResolvedValue({ ok: true, aplicadas: 2 })
-    const perfis = [{ id: 'sn_revenda_st', nome: 'Simples · revenda com ST', valores: { cfop: '5405', csosn: '500', cstPis: '49', cstCofins: '49' } }]
-    const tree = await montar('classificacao', {
-      '/api/admin/fiscal/classificacoes/perfis': perfis,
-      '/api/admin/fiscal/classificacoes': [
-        { fonte: 'loja_variante', fonteId: 'v1', nome: '1 Million Parfum', grupo: 'Loja online', classificacao: null, herdada: false, sugestao: { ncm: '33030010', cest: '2000700', descricao: 'Perfume (extrato)' } },
-        { fonte: 'loja_variante', fonteId: 'v2', nome: 'CK Be', grupo: 'Loja online', classificacao: null, herdada: false },
-      ] })
-    expect(texto(tree)).toContain('sugestão NCM 33030010 / CEST 2000700')
-    // sugestão no formulário individual
-    await act(async () => { botoes(tree, 'Classificar')[0].props.onClick() })
-    await act(async () => { botoes(tree, 'Usar sugestão')[0].props.onClick() })
-    expect(tree.root.find((n) => n.type === 'input' && n.props.maxLength === 8).props.value).toBe('33030010')
-    expect(tree.root.find((n) => n.type === 'input' && n.props.maxLength === 7).props.value).toBe('2000700')
-    await act(async () => { botoes(tree, 'Voltar')[0].props.onClick() })
-    // lote
-    const todos = tree.root.find((n) => n.type === 'input' && n.props['aria-label'] === 'Marcar todos')
-    await act(async () => { todos.props.onChange() })
-    await act(async () => { botoes(tree, 'Classificar selecionados (2)')[0].props.onClick() })
-    const perfil = tree.root.find((n) => n.type === 'select' && n.props['aria-label'] === 'Perfil fiscal')
-    await act(async () => { perfil.props.onChange({ target: { value: 'sn_revenda_st' } }) })
-    await act(async () => { tree.root.find((n) => n.type === 'input' && n.props.maxLength === 8).props.onChange({ target: { value: '33030010' } }) })
-    await act(async () => { tree.root.find((n) => n.type === 'input' && n.props.maxLength === 7).props.onChange({ target: { value: '2000700' } }) })
-    const form = tree.root.findAll((n) => n.type === 'form').find((f) => f.findAll((n) => n.type === 'button' && n.children.join('') === 'Aplicar a 2').length)
-    await act(async () => { await form.props.onSubmit({ preventDefault() {} }) })
-    const [url, corpo] = mocks.api.post.mock.calls.at(-1)
-    expect(url).toBe('/api/admin/fiscal/classificacoes/lote')
-    expect(corpo.itens).toEqual([{ fonte: 'loja_variante', fonteId: 'v1' }, { fonte: 'loja_variante', fonteId: 'v2' }])
-    expect(corpo.classificacao).toMatchObject({ ncm: '33030010', cest: '2000700', cfop: '5405', csosn: '500' })
-  })
-
   it('planilha: baixar, prévia (sem gravar) e aplicar', async () => {
     mocks.api.blob.mockResolvedValue(new Blob(['fonte;fonte_id'], { type: 'text/csv' }))
     mocks.api.upload.mockResolvedValueOnce({ linhas: 3, validas: 1, ignoradas: 1, aplicadas: 0, prevista: true, erros: [{ linha: 3, item: 'Kit', mensagem: 'CFOP com 4 dígitos' }] })

@@ -7,6 +7,7 @@ import { Badge, Dialog, Table } from '../customer360/shared'
 import { money, dateTime } from '../dino/format'
 import '../customer360.css'
 import '../dino/dino-admin.css'
+import ClassificacaoFiscal from './ClassificacaoFiscal'
 
 // Fiscal da empresa: emitente, certificado A1, tabela IBPT, classificação dos produtos, documentos
 // (NFC-e, NF-e, NFS-e, com DANFE e contingência offline da NFC-e) e inutilização de numeração.
@@ -56,7 +57,7 @@ export default function Fiscal({ abaInicial = 'situacao' }) {
       {ABAS.map(([id, rotulo]) => <button key={id} type="button" role="tab" aria-selected={aba === id} onClick={() => setAba(id)}>{rotulo}</button>)}
     </div>
     {aba === 'situacao' && <Situacao toast={toast} onMudou={carregarEstado} producaoLiberada={Boolean(estado?.producaoLiberada)} />}
-    {aba === 'classificacao' && <Classificacao toast={toast} />}
+    {aba === 'classificacao' && <ClassificacaoFiscal toast={toast} />}
     {aba === 'documentos' && <Documentos toast={toast} />}
     {aba === 'numeracao' && <Numeracao toast={toast} />}
     {aba === 'inutilizacao' && <Inutilizacao toast={toast} />}
@@ -218,169 +219,6 @@ const ORIGENS = [['0', '0 · nacional'], ['1', '1 · estrangeira (importação d
 const rotuloCategoria = (fonteId) => (fonteId === 'barbearia:revenda' ? 'Revenda da barbearia (padrão dos produtos da comanda)' : fonteId === 'barbearia:servicos' ? 'Serviços da barbearia (padrão da NFS-e da comanda)' : null)
 
 // campos fiscais do formulário (um item ou vários de uma vez)
-function CamposClassificacao({ form, setForm, perfis = [] }) {
-  const aplicarPerfil = (id) => { const p = perfis.find((x) => x.id === id); if (p) setForm({ ...form, ...Object.fromEntries(Object.entries(p.valores).map(([k, v]) => [k, String(v)])) }) }
-  if (form.tipo === 'servico') {
-    return <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 10 }}>
-      <label className="c360-field">Código de tributação nacional (cTribNac, 6 dígitos)<input className="c360-input" required inputMode="numeric" maxLength={6} value={form.cTribNac || ''} onChange={(e) => setForm({ ...form, cTribNac: e.target.value })} /></label>
-      <label className="c360-field">Alíquota do ISS (%)<input className="c360-input" inputMode="decimal" value={form.aliquotaIss ?? ''} onChange={(e) => setForm({ ...form, aliquotaIss: e.target.value })} /></label>
-    </div>
-  }
-  return <>
-    {perfis.length > 0 && <label className="c360-field">Perfil pronto (preenche CFOP, CSOSN/CST e PIS/COFINS)<select className="c360-input" aria-label="Perfil fiscal" value="" onChange={(e) => aplicarPerfil(e.target.value)}><option value="">— escolher —</option>{perfis.map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}</select></label>}
-    {form.sugestao && <p className="dadm-note">Sugestão pelo nome: NCM {form.sugestao.ncm}{form.sugestao.cest ? ` · CEST ${form.sugestao.cest}` : ''} ({form.sugestao.descricao}). <button type="button" className="c360-btn ghost" onClick={() => setForm({ ...form, ncm: form.sugestao.ncm, ...(form.sugestao.cest ? { cest: form.sugestao.cest } : {}) })}>Usar sugestão</button></p>}
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
-      <label className="c360-field">NCM{form.ncmSugerido ? ` (cadastro do estoque: ${form.ncmSugerido})` : ''}<input className="c360-input" required inputMode="numeric" maxLength={8} value={form.ncm || ''} onChange={(e) => setForm({ ...form, ncm: e.target.value })} /></label>
-      <label className="c360-field">CFOP<input className="c360-input" required inputMode="numeric" maxLength={4} value={form.cfop || ''} onChange={(e) => setForm({ ...form, cfop: e.target.value })} /></label>
-      <label className="c360-field">CEST{ehST(form) ? ' (obrigatório com ST)' : ' (se houver ST)'}<input className="c360-input" inputMode="numeric" maxLength={7} required={ehST(form)} value={form.cest || ''} onChange={(e) => setForm({ ...form, cest: e.target.value })} /></label>
-    </div>
-    <label className="c360-field">Origem da mercadoria<select className="c360-input" value={form.origem || '0'} onChange={(e) => setForm({ ...form, origem: e.target.value })}>{ORIGENS.map(([v, r]) => <option key={v} value={v}>{r}</option>)}</select></label>
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
-      <label className="c360-field">CSOSN (Simples)<select className="c360-input" value={form.csosn || ''} onChange={(e) => setForm({ ...form, csosn: e.target.value })}><option value="">—</option>{CSOSN.map(([v, r]) => <option key={v} value={v}>{r}</option>)}</select></label>
-      <label className="c360-field">CST ICMS (regime normal)<select className="c360-input" value={form.cstIcms || ''} onChange={(e) => setForm({ ...form, cstIcms: e.target.value })}><option value="">—</option>{CST.map(([v, r]) => <option key={v} value={v}>{r}</option>)}</select></label>
-      <label className="c360-field">Alíquota ICMS (%)<input className="c360-input" inputMode="decimal" value={form.aliquotaIcms ?? ''} onChange={(e) => setForm({ ...form, aliquotaIcms: e.target.value })} /></label>
-    </div>
-    {form.cstIcms === '20' && <label className="c360-field">Redução da base do ICMS (%)<input className="c360-input" required inputMode="decimal" value={form.reducaoBaseIcms ?? ''} onChange={(e) => setForm({ ...form, reducaoBaseIcms: e.target.value })} /></label>}
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 10 }}>
-      <label className="c360-field">CST PIS<input className="c360-input" inputMode="numeric" maxLength={2} placeholder="49" value={form.cstPis || ''} onChange={(e) => setForm({ ...form, cstPis: e.target.value })} /></label>
-      <label className="c360-field">PIS (%)<input className="c360-input" inputMode="decimal" value={form.aliquotaPis ?? ''} onChange={(e) => setForm({ ...form, aliquotaPis: e.target.value })} /></label>
-      <label className="c360-field">CST COFINS<input className="c360-input" inputMode="numeric" maxLength={2} placeholder="49" value={form.cstCofins || ''} onChange={(e) => setForm({ ...form, cstCofins: e.target.value })} /></label>
-      <label className="c360-field">COFINS (%)<input className="c360-input" inputMode="decimal" value={form.aliquotaCofins ?? ''} onChange={(e) => setForm({ ...form, aliquotaCofins: e.target.value })} /></label>
-    </div>
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-      <label className="c360-field">CST do IBS/CBS (regime normal)<select className="c360-input" aria-label="CST do IBS/CBS" value={form.cstIbsCbs || ''} onChange={(e) => setForm({ ...form, cstIbsCbs: e.target.value, cClassTrib: e.target.value ? (form.cClassTrib && form.cClassTrib.startsWith(e.target.value) ? form.cClassTrib : `${e.target.value}001`) : '' })}>{CST_IBSCBS.map(([v, r]) => <option key={v || 'padrao'} value={v}>{r}</option>)}</select></label>
-      <label className="c360-field">cClassTrib (6 dígitos)<input className="c360-input" aria-label="cClassTrib" inputMode="numeric" maxLength={6} disabled={!form.cstIbsCbs} value={form.cClassTrib || ''} placeholder="000001" onChange={(e) => setForm({ ...form, cClassTrib: e.target.value })} /></label>
-    </div>
-    <p className="dadm-muted">Confirme com o contador. Simples Nacional: CSOSN 102, 103, 300, 400 e 500 (ST). Regime normal: CST 00, 20, 40, 41, 50 e 60 (ST). Perfumaria em MT costuma ter ST (CSOSN 500 / CST 60, com CEST).</p>
-  </>
-}
-
-const chaveItem = (i) => `${i.fonte}:${i.fonteId}`
-
-function Classificacao({ toast }) {
-  const [lista, setLista] = useState([])
-  const [perfis, setPerfis] = useState([])
-  const [busca, setBusca] = useState('')
-  const [soPendentes, setSoPendentes] = useState(false)
-  const [form, setForm] = useState(null)
-  const [emLote, setEmLote] = useState(null)
-  const [selecionados, setSelecionados] = useState(() => new Set())
-  const [confirmar, setConfirmar] = useState(null)
-  const [planilha, setPlanilha] = useState({ arquivo: null, previa: null })
-  const [enviando, setEnviando] = useState(false)
-  const carregar = useCallback(() => api.get(`${BASE}/classificacoes`).then((l) => setLista(Array.isArray(l) ? l : [])).catch((e) => toast(e.message, 'error')), [toast])
-  useEffect(() => { carregar() }, [carregar])
-  useEffect(() => { api.get(`${BASE}/classificacoes/perfis`).then((p) => setPerfis(Array.isArray(p) ? p : [])).catch(() => setPerfis([])) }, [])
-  const visiveis = lista.filter((i) => (!busca || `${i.nome} ${i.grupo}`.toLowerCase().includes(busca.toLowerCase())) && (!soPendentes || !i.classificacao))
-  const semClassificacao = lista.filter((i) => !i.classificacao).length
-  const selecionaveis = visiveis.filter((i) => i.fonte !== 'servico' && (i.classificacao?.tipo || i.tipo || 'produto') !== 'servico')
-  const todosMarcados = selecionaveis.length > 0 && selecionaveis.every((i) => selecionados.has(chaveItem(i)))
-  const alternar = (i) => setSelecionados((atual) => { const n = new Set(atual); if (n.has(chaveItem(i))) n.delete(chaveItem(i)); else n.add(chaveItem(i)); return n })
-  const alternarTodos = () => setSelecionados(todosMarcados ? new Set() : new Set(selecionaveis.map(chaveItem)))
-  async function salvar() {
-    const { ncmSugerido, sugestao, ...corpo } = form
-    void ncmSugerido; void sugestao
-    try { await api.put(`${BASE}/classificacoes`, corpo); toast('Classificação salva.', 'success'); setForm(null); carregar() } catch (error) { toast(error.message, 'error') }
-  }
-  async function salvarLote() {
-    if (enviando) return
-    setEnviando(true)
-    const itens = lista.filter((i) => selecionados.has(chaveItem(i))).map((i) => ({ fonte: i.fonte, fonteId: i.fonteId }))
-    try {
-      const r = await api.post(`${BASE}/classificacoes/lote`, { itens, classificacao: emLote })
-      toast(`${r.aplicadas} item(ns) classificado(s).`, 'success'); setEmLote(null); setSelecionados(new Set()); carregar()
-    } catch (error) { toast(error.message, 'error') } finally { setEnviando(false) }
-  }
-  async function baixarPlanilha() {
-    try {
-      const blob = await api.blob(`${BASE}/classificacoes/planilha`)
-      const url = URL.createObjectURL(blob instanceof Blob ? blob : new Blob([blob], { type: 'text/csv' }))
-      const a = document.createElement('a'); a.href = url; a.download = 'classificacao-fiscal.csv'; a.click()
-      setTimeout(() => URL.revokeObjectURL(url), 1000)
-    } catch (error) { toast(error.message, 'error') }
-  }
-  async function importarPlanilha(aplicar) {
-    if (!planilha.arquivo || enviando) return
-    setEnviando(true)
-    try {
-      const r = await api.upload(`${BASE}/classificacoes/planilha${aplicar ? '?aplicar=1' : ''}`, planilha.arquivo)
-      if (aplicar) { toast(`Planilha aplicada: ${r.aplicadas} item(ns) classificado(s)${r.erros.length ? `; ${r.erros.length} linha(s) com erro` : ''}.`, r.erros.length ? 'error' : 'success'); setPlanilha({ arquivo: null, previa: aplicar ? r : null }); carregar() }
-      else setPlanilha({ ...planilha, previa: r })
-    } catch (error) { toast(error.message, 'error') } finally { setEnviando(false) }
-  }
-  const pedirExclusao = (i) => setConfirmar({
-    titulo: 'Excluir classificação',
-    texto: `Excluir a classificação de "${i.nome}"? ${i.fonte === 'bar_produto' ? 'Volta a valer a da categoria, se houver.' : 'O item fica sem classificação até classificar de novo.'}`,
-    acao: async () => {
-      try { await api.delete(`${BASE}/classificacoes?fonte=${encodeURIComponent(i.fonte)}&fonteId=${encodeURIComponent(i.fonteId)}`); toast('Classificação excluída.', 'success'); carregar() } catch (error) { toast(error.message, 'error') }
-    },
-  })
-  const abrir = (i) => setForm({ fonte: i.fonte, fonteId: i.fonteId, tipo: i.classificacao?.tipo || i.tipo || 'produto', ...VAZIO, ...(i.ncmSugerido ? { ncm: i.ncmSugerido } : {}), ...(i.herdada ? {} : limpar(i.classificacao)), ncmSugerido: i.ncmSugerido || null, sugestao: i.classificacao ? null : (i.sugestao || null) })
-  return <section className="dadm-card">
-    <h2>Classificação fiscal</h2>
-    <p className="dadm-muted">NCM, CFOP e CSOSN/CST de cada produto vendido (bar, loja online, barbearia e itens do estoque). Marque vários itens para classificar de uma vez, ou baixe a planilha, preencha no Excel e importe de volta. {semClassificacao ? <strong>{semClassificacao} sem classificação.</strong> : null}</p>
-    <div className="dadm-filters">
-      <input className="c360-input" type="search" placeholder="Buscar produto" aria-label="Buscar produto" value={busca} onChange={(e) => setBusca(e.target.value)} />
-      <label className="dadm-muted"><input type="checkbox" checked={soPendentes} onChange={(e) => setSoPendentes(e.target.checked)} /> Só sem classificação</label>
-      <button type="button" className="c360-btn ghost" onClick={() => setForm({ fonte: 'categoria', fonteId: 'bar:', tipo: 'produto', ...VAZIO })}>Padrão de categoria do bar</button>
-      <button type="button" className="c360-btn ghost" onClick={() => setForm({ fonte: 'servico', fonteId: '', tipo: 'servico', ...VAZIO })}>+ Serviço (NFS-e)</button>
-    </div>
-    <div className="dadm-actions" style={{ marginBottom: 10 }}>
-      <button type="button" className="c360-btn primary" disabled={!selecionados.size} onClick={() => setEmLote({ tipo: 'produto', ...VAZIO })}>Classificar selecionados ({selecionados.size})</button>
-      {selecionados.size > 0 && <button type="button" className="c360-btn ghost" onClick={() => setSelecionados(new Set())}>Limpar seleção</button>}
-    </div>
-    <Table caption="Produtos e classificação" rows={visiveis.map((i) => ({ ...i, id: chaveItem(i) }))} empty="Nada para classificar." columns={[
-      { key: 'sel', label: <input type="checkbox" aria-label="Marcar todos" checked={todosMarcados} onChange={alternarTodos} />, render: (i) => (selecionaveis.includes(i) || selecionaveis.some((x) => chaveItem(x) === chaveItem(i)) ? <input type="checkbox" aria-label={`Marcar ${i.nome}`} checked={selecionados.has(chaveItem(i))} onChange={() => alternar(i)} /> : null) },
-      { key: 'nome', label: 'Produto / serviço', render: (i) => <div><strong>{i.nome}</strong><div className="dadm-muted">{i.grupo}{i.ncmSugerido && !i.classificacao ? ` · NCM do cadastro ${i.ncmSugerido}` : ''}{!i.classificacao && i.sugestao ? ` · sugestão NCM ${i.sugestao.ncm}${i.sugestao.cest ? ` / CEST ${i.sugestao.cest}` : ''}` : ''}</div></div> },
-      { key: 'cls', label: 'Classificação', render: (i) => (i.classificacao ? `${i.classificacao.tipo === 'servico' ? `cTribNac ${i.classificacao.cTribNac}` : `NCM ${i.classificacao.ncm} · CFOP ${i.classificacao.cfop} · ${i.classificacao.csosn ? `CSOSN ${i.classificacao.csosn}` : `CST ${i.classificacao.cstIcms}`}${i.classificacao.cest ? ` · CEST ${i.classificacao.cest}` : ''}`}${i.herdada ? ' (da categoria)' : ''}` : <Badge tone="warning">sem classificação</Badge>) },
-      { key: 'a', label: '', render: (i) => <div className="dadm-actions">
-        <button type="button" className="c360-btn ghost" onClick={() => abrir(i)}>{i.classificacao && !i.herdada ? 'Editar' : 'Classificar'}</button>
-        {i.classificacao && !i.herdada && <button type="button" className="c360-btn ghost" onClick={() => pedirExclusao(i)}>Excluir</button>}
-      </div> },
-    ]} />
-    <section className="dadm-card" style={{ marginTop: 16 }}>
-      <h3>Planilha</h3>
-      <p className="dadm-muted">Baixe a planilha com todos os itens (e as sugestões de NCM/CEST), preencha no Excel e importe. Primeiro sai a prévia, sem gravar nada; depois aplique. Linhas sem NCM ficam como estão.</p>
-      <div className="dadm-filters">
-        <button type="button" className="c360-btn ghost" onClick={baixarPlanilha}>Baixar planilha</button>
-        <input type="file" accept=".csv,text/csv" aria-label="Planilha de classificação (CSV)" onChange={(e) => setPlanilha({ arquivo: e.target.files?.[0] || null, previa: null })} />
-        <button type="button" className="c360-btn ghost" disabled={!planilha.arquivo || enviando} onClick={() => importarPlanilha(false)}>Ver prévia</button>
-        <button type="button" className="c360-btn primary" disabled={!planilha.arquivo || !planilha.previa || planilha.previa.prevista === false || !planilha.previa.validas || enviando} onClick={() => importarPlanilha(true)}>Aplicar planilha</button>
-      </div>
-      {planilha.previa && <div role="status">
-        <p className={`dadm-note ${planilha.previa.erros.length ? 'warn' : 'success'}`}>{planilha.previa.prevista ? 'Prévia' : 'Aplicada'}: {planilha.previa.linhas} linha(s), {planilha.previa.prevista ? `${planilha.previa.validas} válida(s)` : `${planilha.previa.aplicadas} gravada(s)`}, {planilha.previa.ignoradas} sem NCM (ignoradas), {planilha.previa.erros.length} com erro.</p>
-        {planilha.previa.erros.length > 0 && <Table caption="Linhas com erro" rows={planilha.previa.erros.map((e) => ({ ...e, id: `l${e.linha}` }))} columns={[
-          { key: 'l', label: 'Linha', render: (e) => e.linha }, { key: 'i', label: 'Item', render: (e) => e.item }, { key: 'm', label: 'Erro', render: (e) => e.mensagem },
-        ]} />}
-      </div>}
-    </section>
-    <Dialog open={Boolean(form)} title="Classificação fiscal" labelId="fis-cls" onClose={() => setForm(null)} onSubmit={salvar}
-      actions={<><button type="button" className="c360-btn ghost" onClick={() => setForm(null)}>Voltar</button><button type="submit" className="c360-btn primary">Salvar</button></>}>
-      {form && <div style={{ display: 'grid', gap: 10 }}>
-        {form.fonte === 'categoria' && (rotuloCategoria(form.fonteId)
-          ? <p className="dadm-muted"><strong>{rotuloCategoria(form.fonteId)}</strong></p>
-          : <label className="c360-field">Categoria do bar (como no cardápio)<input className="c360-input" required value={form.fonteId.replace(/^bar:/, '')} onChange={(e) => setForm({ ...form, fonteId: `bar:${e.target.value}` })} /></label>)}
-        {form.fonte === 'servico' && <label className="c360-field">Código interno do serviço<input className="c360-input" required value={form.fonteId} onChange={(e) => setForm({ ...form, fonteId: e.target.value })} placeholder="ex.: aula-tenis" /></label>}
-        <CamposClassificacao form={form} setForm={setForm} perfis={perfis} />
-      </div>}
-    </Dialog>
-    <Dialog open={Boolean(emLote)} title={`Classificar ${selecionados.size} item(ns) de uma vez`} labelId="fis-cls-lote" onClose={() => setEmLote(null)} onSubmit={salvarLote}
-      actions={<><button type="button" className="c360-btn ghost" onClick={() => setEmLote(null)}>Voltar</button><button type="submit" className="c360-btn primary" disabled={enviando}>Aplicar a {selecionados.size}</button></>}>
-      {emLote && <div style={{ display: 'grid', gap: 10 }}>
-        <p className="dadm-note warn">A mesma classificação vai para todos os itens marcados e substitui a que eles já tiverem. Se algum item der erro, nenhum é gravado.</p>
-        <CamposClassificacao form={emLote} setForm={setEmLote} perfis={perfis} />
-      </div>}
-    </Dialog>
-    <Confirmar pedido={confirmar} onFechar={() => setConfirmar(null)} />
-  </section>
-}
-
-// campos da classificação que voltam para o formulário (sem nulos, que viram "null" nos inputs)
-function limpar(c) {
-  if (!c) return {}
-  return Object.fromEntries(Object.entries(c).filter(([, v]) => v !== null && v !== undefined).map(([k, v]) => [k, typeof v === 'number' ? String(v) : v]))
-}
-
 function Documentos({ toast }) {
   const [docs, setDocs] = useState([])
   const [vendas, setVendas] = useState([])
