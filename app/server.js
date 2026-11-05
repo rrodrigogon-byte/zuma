@@ -1635,6 +1635,12 @@ app.use('/api/webhooks', createWhatsappAiWebhookRouter());
       '/funcionarios',
       '/fornecedores',
       '/usuarios-mestres',
+      '/servicos',
+      '/produtos',
+      '/formas-pagamento',
+      '/unidades',
+      '/empresas-plataforma',
+      '/empresa-ativa',
     ];
     if (subPath === '/fechamento-diario' && req.method === 'GET' && req.query?.legadoA2 === '1') {
       return auth(req, res, () => requireStaff(req, res, () => a2RouterInstance(req, res, next)));
