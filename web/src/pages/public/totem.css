@@ -6,7 +6,8 @@
 }
 
 .totem-container {
-  min-height: 100vh;
+  height: 100vh;
+  max-height: 100vh;
   background-color: #0b0c0e;
   color: #f1f3f5;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -16,7 +17,7 @@
   display: flex;
   flex-direction: column;
   position: relative;
-  overflow-x: hidden;
+  overflow: hidden;
 }
 
 /* Proteção de tela / Screensaver */
@@ -55,13 +56,15 @@
 
 /* Header do Totem */
 .totem-header {
-  padding: 16px 24px;
-  background: rgba(18, 19, 22, 0.95);
+  flex-shrink: 0;
+  padding: 14px 24px;
+  background: rgba(18, 19, 22, 0.98);
   backdrop-filter: blur(12px);
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   display: flex;
   align-items: center;
   justify-content: space-between;
+  z-index: 50;
 }
 
 /* Menu de jornadas */
@@ -85,24 +88,131 @@
   box-shadow: 0 0 30px rgba(179, 142, 50, 0.3);
 }
 
+/* Barra de Busca Touch */
+.totem-search-box {
+  display: flex;
+  align-items: center;
+  background: #15161b;
+  border: 1.5px solid rgba(255, 255, 255, 0.12);
+  border-radius: 16px;
+  padding: 6px 14px;
+  gap: 10px;
+  transition: all 0.2s ease;
+}
+
+.totem-search-box:focus-within {
+  border-color: #b38e32;
+  box-shadow: 0 0 0 3px rgba(179, 142, 50, 0.25);
+}
+
+.totem-search-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: #fff;
+  font-size: 16px;
+  font-weight: 600;
+  height: 40px;
+}
+
+.totem-search-input::placeholder {
+  color: #64748b;
+  font-weight: 500;
+}
+
+/* Pílulas de Categoria */
+.totem-cat-pill {
+  padding: 10px 18px;
+  border-radius: 14px;
+  font-weight: 700;
+  font-size: 14px;
+  border: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+
+.totem-cat-pill:active {
+  transform: scale(0.95);
+}
+
 /* Grade de produtos touch */
 .totem-product-card {
   background: #141519;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 18px;
-  padding: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 20px;
+  padding: 16px;
   display: flex;
   flex-direction: column;
-  transition: transform 0.15s ease;
+  transition: all 0.15s ease;
   cursor: pointer;
+  position: relative;
+  overflow: hidden;
 }
 
 .totem-product-card:active {
   transform: scale(0.97);
-  background: #1c1e24;
+  background: #1a1c22;
+  border-color: #b38e32;
 }
 
-/* Teclado touch virtual */
+.totem-product-card.no-carrinho {
+  border-color: #b38e32;
+  box-shadow: 0 0 20px rgba(179, 142, 50, 0.2);
+}
+
+/* Teclado Virtual Touch QWERTY para Quiosque */
+.totem-virtual-keyboard {
+  background: #121318;
+  border-top: 2px solid #b38e32;
+  padding: 16px 20px;
+  box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.7);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 80;
+}
+
+.totem-vk-row {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+}
+
+.totem-vk-key {
+  height: 48px;
+  min-width: 44px;
+  padding: 0 12px;
+  border-radius: 10px;
+  background: #1f2128;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #fff;
+  font-size: 16px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.totem-vk-key:active {
+  background: #b38e32;
+  color: #000;
+  transform: scale(0.93);
+}
+
+.totem-vk-key.special {
+  background: #2a2c35;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* Teclado touch numérico */
 .totem-keypad {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
