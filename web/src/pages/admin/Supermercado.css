@@ -663,3 +663,287 @@
   color: #334155;
   cursor: pointer;
 }
+
+/* ══════════════════════════════════════════════════════════════
+   NOVOS ESTILOS: CAIXA, DESOSSA, PADARIA, BALANÇAS & CLUBE
+   ══════════════════════════════════════════════════════════════ */
+
+.super-caixa-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 0.82rem;
+  font-weight: 500;
+}
+.super-caixa-badge.aberto {
+  background: #ecfdf5;
+  color: #065f46;
+  border: 1px solid #a7f3d0;
+}
+.super-caixa-badge.fechado {
+  background: #fef2f2;
+  color: #991b1b;
+  border: 1px solid #fecaca;
+}
+.super-caixa-gaveta {
+  color: #047857;
+  font-weight: 700;
+}
+
+.super-caixa-btn-group {
+  display: inline-flex;
+  gap: 6px;
+}
+
+.super-btn-mix-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: linear-gradient(135deg, #4f46e5, #3730a3);
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 2px 4px rgba(79, 70, 229, 0.25);
+  transition: all 0.15s ease;
+}
+.super-btn-mix-cta:hover {
+  filter: brightness(1.1);
+  transform: translateY(-1px);
+}
+
+.cpf-input-group {
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.cliente-clube-alert {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #fefce8;
+  border: 1px solid #fef08a;
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin-top: 8px;
+  font-size: 0.82rem;
+  color: #854d0e;
+}
+
+.badge-desconto-clube {
+  display: inline-block;
+  background: #fef08a;
+  color: #854d0e;
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 4px;
+  margin-left: 6px;
+}
+
+.super-pdv-shortcuts {
+  margin-top: 14px;
+  padding: 12px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+}
+.shortcuts-title {
+  display: block;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #64748b;
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.shortcuts-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.shortcut-pill {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  padding: 6px 10px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.shortcut-pill:hover {
+  background: #eff6ff;
+  border-color: #3b82f6;
+  transform: translateY(-1px);
+}
+.shortcut-pill span {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #1e293b;
+}
+.shortcut-pill small {
+  font-size: 0.72rem;
+  color: #16a34a;
+  font-weight: 700;
+}
+
+/* Açougue e Desossa */
+.desossas-cards-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+}
+.desossa-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 18px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+.desossa-card-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.desossa-stats-row {
+  display: flex;
+  gap: 24px;
+  padding: 10px 14px;
+  background: #f8fafc;
+  border-radius: 8px;
+  margin-bottom: 14px;
+}
+.desossa-cortes-table {
+  overflow-x: auto;
+}
+.super-mini-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+}
+.super-mini-table th {
+  background: #f1f5f9;
+  padding: 6px 10px;
+  text-align: left;
+  color: #475569;
+  font-weight: 600;
+}
+.super-mini-table td {
+  padding: 6px 10px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+/* Padaria */
+.receitas-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 16px;
+}
+.receita-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+.receita-card-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.ingredientes-box {
+  background: #f8fafc;
+  border-radius: 6px;
+  padding: 10px 12px;
+  margin-bottom: 14px;
+}
+.ingredientes-title {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #64748b;
+  display: block;
+  margin-bottom: 4px;
+}
+.ingredientes-box ul {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 0.8rem;
+  color: #334155;
+}
+
+/* Balanças */
+.balancas-card-box {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  background: linear-gradient(135deg, #f0fdf4, #e0f2fe);
+  border: 1px solid #bae6fd;
+  border-radius: 12px;
+  padding: 24px;
+  margin-bottom: 24px;
+}
+.balancas-buttons-row {
+  display: flex;
+  gap: 12px;
+  margin-top: 14px;
+}
+.badge-plu-big {
+  font-family: monospace;
+  background: #0284c7;
+  color: #ffffff;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+.sub-title-mt {
+  margin-top: 18px;
+  margin-bottom: 10px;
+  font-size: 1rem;
+  color: #1e293b;
+  font-weight: 700;
+}
+
+/* Inventários */
+.inventarios-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.inventario-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 18px;
+}
+.inv-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 14px;
+}
+.inv-divergencia-badge {
+  text-align: right;
+  font-size: 0.85rem;
+}
+.inv-table-wrap {
+  overflow-x: auto;
+}
+
+.text-yellow { color: #ca8a04; }
+.text-orange { color: #ea580c; }
+.text-red { color: #dc2626; }
+.text-green { color: #16a34a; }
+.text-blue { color: #2563eb; }

@@ -926,3 +926,375 @@ export async function analiseMargemCurvaABC(db, empresaId, { lojaId = null } = {
     itens: itensCalculados
   };
 }
+
+
+// ═════════════════════════════════════════════════════════════════════════════
+// 10. GESTÃO AVANÇADA DE FRENTE DE CAIXA (PDV OPERAÇÕES)
+// ═════════════════════════════════════════════════════════════════════════════
+
+export async function obterSessaoCaixa(db, empresaId, { lojaId = null } = {}) {
+  const r = await db.query(
+    `SELECT * FROM var_caixas 
+     WHERE empresa_id = $1 AND ($2::uuid IS NULL OR loja_id = $2 OR loja_id IS NULL)
+     ORDER BY aberto_em DESC LIMIT 1`,
+    [empresaId, lojaId]
+  );
+  if (r.rows.length === 0) {
+    return { status: 'fechado', caixa: null, movimentacoes: [], resumo: { totalVendas: 0, sangrias: 0, suprimentos: 0 } };
+  }
+  const caixa = r.rows[0];
+  const movs = await db.query(
+    `SELECT * FROM var_caixa_movimentacoes WHERE caixa_id = $1 ORDER BY criado_em ASC`,
+    [caixa.id]
+  );
+
+  let sangrias = 0;
+  let suprimentos = Number(caixa.saldo_inicial || 0);
+  let vendasDinheiro = 0;
+  let vendasPix = 0;
+  let vendasCartao = 0;
+  let vendasVale = 0;
+
+  for (const m of movs.rows) {
+    const val = Number(m.valor || 0);
+    if (m.tipo === 'sangria') sangrias += val;
+    if (m.tipo === 'suprimento') suprimentos += val;
+    if (m.tipo === 'venda') {
+      if (m.forma_pagamento === 'dinheiro') vendasDinheiro += val;
+      else if (m.forma_pagamento === 'pix') vendasPix += val;
+      else if (['debito', 'credito'].includes(m.forma_pagamento)) vendasCartao += val;
+      else vendasVale += val;
+    }
+  }
+
+  const saldoDinheiroEsperado = Math.max(0, suprimentos + vendasDinheiro - sangrias);
+
+  return {
+    status: caixa.status,
+    caixa,
+    movimentacoes: movs.rows,
+    resumo: {
+      saldoInicial: Number(caixa.saldo_inicial || 0),
+      suprimentos,
+      sangrias,
+      vendasDinheiro,
+      vendasPix,
+      vendasCartao,
+      vendasVale,
+      totalVendasGeral: vendasDinheiro + vendasPix + vendasCartao + vendasVale,
+      saldoDinheiroEsperado
+    }
+  };
+}
+
+export async function abrirCaixa(db, empresaId, dados = {}, { usuario = null, lojaId = null } = {}) {
+  const saldoInicial = Number(dados.saldoInicial || 150.00);
+  const operador = dados.operadorNome || usuario?.nome || 'Operador Caixa';
+  const terminal = dados.numeroTerminal || 'PDV-01';
+
+  // Fechar anteriores se houver
+  await db.query(
+    `UPDATE var_caixas SET status = 'fechado', fechado_em = NOW() WHERE empresa_id = $1 AND status = 'aberto'`,
+    [empresaId]
+  );
+
+  const res = await db.query(
+    `INSERT INTO var_caixas (empresa_id, loja_id, numero_terminal, operador_nome, status, saldo_inicial, aberto_em)
+     VALUES ($1, $2, $3, $4, 'aberto', $5, NOW()) RETURNING *`,
+    [empresaId, lojaId, terminal, operador, saldoInicial]
+  );
+
+  const novoCaixa = res.rows[0];
+
+  await db.query(
+    `INSERT INTO var_caixa_movimentacoes (caixa_id, empresa_id, tipo, valor, forma_pagamento, motivo, autorizador)
+     VALUES ($1, $2, 'suprimento', $3, 'dinheiro', 'Fundo de Troco de Abertura do Turno', $4)`,
+    [novoCaixa.id, empresaId, saldoInicial, operador]
+  );
+
+  return novoCaixa;
+}
+
+export async function registrarMovimentacaoCaixa(db, empresaId, dados = {}, { usuario = null, lojaId = null } = {}) {
+  const tipo = String(dados.tipo || 'sangria').toLowerCase(); // sangria ou suprimento
+  const valor = Number(dados.valor || 0);
+  if (valor <= 0) throw new Error('Valor da movimentação deve ser maior que zero.');
+
+  const caixaSessao = await obterSessaoCaixa(db, empresaId, { lojaId });
+  if (caixaSessao.status !== 'aberto' || !caixaSessao.caixa) {
+    throw new Error('Nenhum caixa está aberto para registrar sangria ou suprimento.');
+  }
+
+  const caixaId = caixaSessao.caixa.id;
+  const motivo = dados.motivo || (tipo === 'sangria' ? 'Sangria de Caixa / Transporte para Cofre' : 'Reforço de Troco / Suprimento');
+  const autorizador = dados.autorizador || usuario?.nome || 'Fiscal de Caixa';
+
+  const res = await db.query(
+    `INSERT INTO var_caixa_movimentacoes (caixa_id, empresa_id, tipo, valor, forma_pagamento, motivo, autorizador)
+     VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+    [caixaId, empresaId, tipo, valor, dados.formaPagamento || 'dinheiro', motivo, autorizador]
+  );
+
+  return { movimentacao: res.rows[0], saldoAtualizado: await obterSessaoCaixa(db, empresaId, { lojaId }) };
+}
+
+export async function fecharCaixa(db, empresaId, dados = {}, { usuario = null, lojaId = null } = {}) {
+  const caixaSessao = await obterSessaoCaixa(db, empresaId, { lojaId });
+  if (caixaSessao.status !== 'aberto' || !caixaSessao.caixa) {
+    throw new Error('O caixa já se encontra fechado.');
+  }
+
+  const caixaId = caixaSessao.caixa.id;
+  const saldoInformado = Number(dados.saldoFinalInformado || 0);
+  const saldoEsperado = caixaSessao.resumo.saldoDinheiroEsperado;
+  const diferenca = Math.round((saldoInformado - saldoEsperado) * 100) / 100;
+
+  const res = await db.query(
+    `UPDATE var_caixas 
+     SET status = 'fechado', fechado_em = NOW(), saldo_final_sistema = $1, saldo_final_informado = $2, diferenca_quebra = $3, observacoes = $4
+     WHERE id = $5 RETURNING *`,
+    [saldoEsperado, saldoInformado, diferenca, dados.observacoes || (diferenca === 0 ? 'Fechamento sem divergência' : `Diferença apurada: R$ ${diferenca}`), caixaId]
+  );
+
+  return {
+    caixaFechado: res.rows[0],
+    resumoFinal: caixaSessao.resumo,
+    auditoriaQuebra: {
+      esperado: saldoEsperado,
+      informado: saldoInformado,
+      diferenca,
+      situacao: diferenca === 0 ? 'Exato' : (diferenca > 0 ? 'Sobra de Caixa' : 'Falta / Quebra de Caixa')
+    }
+  };
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// 11. CARGA OFICIAL DE BALANÇAS COMERCIAIS (TOLEDO MGV5/MGV6 & FILIZOLA)
+// ═════════════════════════════════════════════════════════════════════════════
+
+export async function exportarArquivoToledoMgv(db, empresaId, { versao = 'mgv6', lojaId = null } = {}) {
+  const produtos = await listarProdutos(db, empresaId, { lojaId });
+  const pesaveis = produtos.filter(p => p.pesavel || p.plu);
+
+  // Formato oficial TXITENS.TXT (Toledo MGV6 padrão posicional):
+  // [0..1] Depto (2 chars)
+  // [2..2] Tipo (1 char: 0=peso, 1=unidade)
+  // [3..8] PLU (6 chars, com zeros à esquerda)
+  // [9..14] Preço (6 chars em centavos sem vírgula)
+  // [15..17] Validade (3 chars em dias)
+  // [18..42] Descrição Linha 1 (25 chars)
+  // [43..67] Descrição Linha 2 (25 chars)
+  const linhas = pesaveis.map(p => {
+    const depto = '01';
+    const tipo = p.unidade === 'KG' ? '0' : '1';
+    const pluNum = parseInt(String(p.plu || p.sku || '1').replace(/\D/g, ''), 10) || 1;
+    const pluStr = String(pluNum).padStart(6, '0').slice(-6);
+    const precoCentavos = Math.round(Number(p.precoFinal || p.precoBase || 0) * 100);
+    const precoStr = String(precoCentavos).padStart(6, '0').slice(-6);
+    const validadeDias = '015'; // 15 dias padrão perecíveis
+
+    // Limpar caracteres e acentos para a balança
+    const nomeLimpo = (p.nome || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toUpperCase()
+      .replace(/[^A-Z0-9 ]/g, ' ')
+      .trim();
+
+    const desc1 = nomeLimpo.slice(0, 25).padEnd(25, ' ');
+    const desc2 = nomeLimpo.slice(25, 50).padEnd(25, ' ');
+
+    return `${depto}${tipo}${pluStr}${precoStr}${validadeDias}${desc1}${desc2}0000000000000000`;
+  });
+
+  return {
+    conteudo: linhas.join('\r\n'),
+    totalItens: linhas.length,
+    nomeArquivo: 'TXITENS.TXT',
+    formato: 'Toledo MGV5/MGV6'
+  };
+}
+
+export async function exportarArquivoFilizola(db, empresaId, { lojaId = null } = {}) {
+  const produtos = await listarProdutos(db, empresaId, { lojaId });
+  const pesaveis = produtos.filter(p => p.pesavel || p.plu);
+
+  // Formato Filizola CADTXT.TXT:
+  // [PLU 6d][Tipo 1d][Descricao 22 chars][Preco 7d][Validade 3d]
+  const linhas = pesaveis.map(p => {
+    const pluNum = parseInt(String(p.plu || '1').replace(/\D/g, ''), 10) || 1;
+    const pluStr = String(pluNum).padStart(6, '0').slice(-6);
+    const tipo = p.unidade === 'KG' ? 'P' : 'U';
+    const nomeLimpo = (p.nome || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toUpperCase()
+      .slice(0, 22)
+      .padEnd(22, ' ');
+    const precoCentavos = Math.round(Number(p.precoFinal || p.precoBase || 0) * 100);
+    const precoStr = String(precoCentavos).padStart(7, '0').slice(-7);
+    const valStr = '015';
+
+    return `${pluStr}${tipo}${nomeLimpo}${precoStr}${valStr}`;
+  });
+
+  return {
+    conteudo: linhas.join('\r\n'),
+    totalItens: linhas.length,
+    nomeArquivo: 'CADTXT.TXT',
+    formato: 'Filizola Smart'
+  };
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// 12. MÓDULO DE AÇOUGUE: RENDIMENTO DE CARCAÇAS E DESOSSA
+// ═════════════════════════════════════════════════════════════════════════════
+
+export async function listarDesossas(db, empresaId, { lojaId = null } = {}) {
+  const r = await db.query(
+    `SELECT * FROM var_desossas WHERE empresa_id = $1 ORDER BY criado_em DESC LIMIT 50`,
+    [empresaId]
+  );
+  return r.rows;
+}
+
+export async function registrarDesossa(db, empresaId, dados = {}, { usuario = null, lojaId = null } = {}) {
+  const tipoCarcaca = dados.tipoCarcaca || 'Bovino — Quarto Traseiro';
+  const pesoCarcaca = Number(dados.pesoCarcaca || 0);
+  const custoKg = Number(dados.custoKg || 0);
+  const custoTotal = Math.round(pesoCarcaca * custoKg * 100) / 100;
+  const operador = dados.operador || usuario?.nome || 'Mestre Açougueiro';
+  const cortes = Array.isArray(dados.cortes) ? dados.cortes : [];
+
+  const rendimentoTotalKg = cortes.reduce((acc, c) => acc + (Number(c.pesoKg) || 0), 0);
+  const percentualRendimento = pesoCarcaca > 0 ? Math.round((rendimentoTotalKg / pesoCarcaca) * 10000) / 100 : 0;
+
+  const res = await db.query(
+    `INSERT INTO var_desossas (empresa_id, loja_id, tipo_carcaca, peso_carcaca, custo_kg, custo_total, rendimento_total_kg, percentual_rendimento, operador, detalhes)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
+    [empresaId, lojaId, tipoCarcaca, pesoCarcaca, custoKg, custoTotal, rendimentoTotalKg, percentualRendimento, operador, JSON.stringify(cortes)]
+  );
+
+  return res.rows[0];
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// 13. MÓDULO DE PADARIA: FICHAS TÉCNICAS E ORDENS DE PRODUÇÃO
+// ═════════════════════════════════════════════════════════════════════════════
+
+export async function listarReceitasPadaria(db, empresaId) {
+  const r = await db.query(
+    `SELECT * FROM var_receitas_padaria WHERE empresa_id = $1 ORDER BY nome ASC`,
+    [empresaId]
+  );
+  return r.rows;
+}
+
+export async function salvarReceitaPadaria(db, empresaId, dados = {}) {
+  if (dados.id) {
+    const r = await db.query(
+      `UPDATE var_receitas_padaria 
+       SET nome = $1, rendimento_padrao = $2, unidade_rendimento = $3, tempo_preparo_min = $4, custo_estimado_lote = $5, ingredientes = $6
+       WHERE id = $7 AND empresa_id = $8 RETURNING *`,
+      [dados.nome, dados.rendimentoPadrao, dados.unidadeRendimento || 'UN', dados.tempoPreparoMin || 60, dados.custoEstimadoLote || 0, JSON.stringify(dados.ingredientes || []), dados.id, empresaId]
+    );
+    return r.rows[0];
+  } else {
+    const r = await db.query(
+      `INSERT INTO var_receitas_padaria (empresa_id, nome, departamento, rendimento_padrao, unidade_rendimento, tempo_preparo_min, custo_estimado_lote, ingredientes)
+       VALUES ($1, $2, 'Padaria e Confeitaria', $3, $4, $5, $6, $7) RETURNING *`,
+      [empresaId, dados.nome, dados.rendimentoPadrao || 100, dados.unidadeRendimento || 'UN', dados.tempoPreparoMin || 60, dados.custoEstimadoLote || 0, JSON.stringify(dados.ingredientes || [])]
+    );
+    return r.rows[0];
+  }
+}
+
+export async function registrarProducaoPadaria(db, empresaId, dados = {}, { usuario = null, lojaId = null } = {}) {
+  const receitaId = dados.receitaId;
+  const lotes = Number(dados.lotesProduzidos || 1);
+  const operador = dados.operador || usuario?.nome || 'Padeiro Chefe';
+
+  const rec = await db.query(`SELECT * FROM var_receitas_padaria WHERE id = $1 AND empresa_id = $2`, [receitaId, empresaId]);
+  if (rec.rows.length === 0) throw new Error('Receita não encontrada.');
+  const r = rec.rows[0];
+
+  const totalObtido = Math.round(Number(r.rendimento_padrao) * lotes * 1000) / 1000;
+
+  const res = await db.query(
+    `INSERT INTO var_producao_padaria (receita_id, empresa_id, loja_id, receita_nome, lotes_produzidos, quantidade_obtida, unidade, operador)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+    [receitaId, empresaId, lojaId, r.nome, lotes, totalObtido, r.unidade_rendimento, operador]
+  );
+
+  return res.rows[0];
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// 14. INVENTÁRIO CÍCLICO E AUDITORIA DE GÔNDOLA
+// ═════════════════════════════════════════════════════════════════════════════
+
+export async function listarInventarios(db, empresaId, { lojaId = null } = {}) {
+  const r = await db.query(
+    `SELECT * FROM var_inventarios WHERE empresa_id = $1 ORDER BY aberto_em DESC LIMIT 40`,
+    [empresaId]
+  );
+  return r.rows;
+}
+
+export async function criarInventario(db, empresaId, dados = {}, { usuario = null, lojaId = null } = {}) {
+  const titulo = dados.titulo || `Inventário Cíclico — ${new Date().toLocaleDateString('pt-BR')}`;
+  const depto = dados.departamento || 'Todos';
+  const itens = Array.isArray(dados.itens) ? dados.itens : [];
+
+  let divergenciaQtd = 0;
+  let divergenciaFin = 0;
+
+  for (const it of itens) {
+    const dif = Number(it.saldoContado || 0) - Number(it.saldoSistema || 0);
+    const cUnit = Number(it.custoUnitario || 0);
+    divergenciaQtd += dif;
+    divergenciaFin += dif * cUnit;
+  }
+
+  const res = await db.query(
+    `INSERT INTO var_inventarios (empresa_id, loja_id, titulo, departamento, status, total_itens_contados, divergencia_unidades, divergencia_financeira, itens)
+     VALUES ($1, $2, $3, $4, 'conciliado', $5, $6, $7, $8) RETURNING *`,
+    [empresaId, lojaId, titulo, depto, itens.length, divergenciaQtd, Math.round(divergenciaFin * 100) / 100, JSON.stringify(itens)]
+  );
+
+  return res.rows[0];
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// 15. CLUBE KYTTO DE BENEFÍCIOS (FIDELIDADE & CPF NA NOTA)
+// ═════════════════════════════════════════════════════════════════════════════
+
+export async function listarClientesClube(db, empresaId) {
+  const r = await db.query(
+    `SELECT * FROM var_clientes_clube WHERE empresa_id = $1 ORDER BY nome ASC`,
+    [empresaId]
+  );
+  return r.rows;
+}
+
+export async function consultarClienteClubePorCpf(db, empresaId, cpfOuTel) {
+  const clean = String(cpfOuTel || '').replace(/\D/g, '');
+  if (!clean) return null;
+
+  const r = await db.query(
+    `SELECT * FROM var_clientes_clube 
+     WHERE empresa_id = $1 AND (REPLACE(REPLACE(REPLACE(cpf, '.', ''), '-', ''), ' ', '') = $2 OR REPLACE(REPLACE(REPLACE(telefone, '(', ''), ')', ''), '-', '') LIKE '%' || $2)
+     LIMIT 1`,
+    [empresaId, clean]
+  );
+  return r.rows[0] || null;
+}
+
+export async function salvarClienteClube(db, empresaId, dados = {}) {
+  const r = await db.query(
+    `INSERT INTO var_clientes_clube (empresa_id, cpf, nome, telefone, email, total_economizado)
+     VALUES ($1, $2, $3, $4, $5, 0) RETURNING *`,
+    [empresaId, dados.cpf, dados.nome, dados.telefone, dados.email]
+  );
+  return r.rows[0];
+}

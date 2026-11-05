@@ -110,5 +110,76 @@ export function createVarejoAdminRouter({ db, escopoDaRequisicao, fuso = 'Americ
       }
     };
   }));
+
+  // ── Caixa e Operações de Frente de Caixa (PDV) ──
+  router.get('/caixa/sessao', rota(async (req) => {
+    return svc.obterSessaoCaixa(db, req.empresaId, { lojaId: req.lojaId });
+  }));
+
+  router.post('/caixa/abrir', rota(async (req) => {
+    return svc.abrirCaixa(db, req.empresaId, req.body, { usuario: req.usuario, lojaId: req.lojaId });
+  }));
+
+  router.post('/caixa/movimentacao', rota(async (req) => {
+    return svc.registrarMovimentacaoCaixa(db, req.empresaId, req.body, { usuario: req.usuario, lojaId: req.lojaId });
+  }));
+
+  router.post('/caixa/fechar', rota(async (req) => {
+    return svc.fecharCaixa(db, req.empresaId, req.body, { usuario: req.usuario, lojaId: req.lojaId });
+  }));
+
+  // ── Cargas de Balança Oficiais (Toledo MGV6 e Filizola) ──
+  router.get('/balanca/toledo-mgv', rota(async (req) => {
+    return svc.exportarArquivoToledoMgv(db, req.empresaId, { versao: req.query.versao || 'mgv6', lojaId: req.lojaId });
+  }));
+
+  router.get('/balanca/filizola', rota(async (req) => {
+    return svc.exportarArquivoFilizola(db, req.empresaId, { lojaId: req.lojaId });
+  }));
+
+  // ── Módulo de Açougue / Desossa (Rendimento) ──
+  router.get('/desossas', rota(async (req) => {
+    return svc.listarDesossas(db, req.empresaId, { lojaId: req.lojaId });
+  }));
+
+  router.post('/desossas', rota(async (req) => {
+    return svc.registrarDesossa(db, req.empresaId, req.body, { usuario: req.usuario, lojaId: req.lojaId });
+  }));
+
+  // ── Módulo de Padaria / Produção (Fichas Técnicas) ──
+  router.get('/padaria/receitas', rota(async (req) => {
+    return svc.listarReceitasPadaria(db, req.empresaId);
+  }));
+
+  router.post('/padaria/receitas', rota(async (req) => {
+    return svc.salvarReceitaPadaria(db, req.empresaId, req.body);
+  }));
+
+  router.post('/padaria/producao', rota(async (req) => {
+    return svc.registrarProducaoPadaria(db, req.empresaId, req.body, { usuario: req.usuario, lojaId: req.lojaId });
+  }));
+
+  // ── Inventário Cíclico e Auditoria de Gôndola ──
+  router.get('/inventarios', rota(async (req) => {
+    return svc.listarInventarios(db, req.empresaId, { lojaId: req.lojaId });
+  }));
+
+  router.post('/inventarios', rota(async (req) => {
+    return svc.criarInventario(db, req.empresaId, req.body, { usuario: req.usuario, lojaId: req.lojaId });
+  }));
+
+  // ── Clube de Benefícios Kytto ──
+  router.get('/clube/clientes', rota(async (req) => {
+    return svc.listarClientesClube(db, req.empresaId);
+  }));
+
+  router.get('/clube/consultar', rota(async (req) => {
+    return svc.consultarClienteClubePorCpf(db, req.empresaId, req.query.cpf || req.query.q);
+  }));
+
+  router.post('/clube/clientes', rota(async (req) => {
+    return svc.salvarClienteClube(db, req.empresaId, req.body);
+  }));
+
   return router;
 }
