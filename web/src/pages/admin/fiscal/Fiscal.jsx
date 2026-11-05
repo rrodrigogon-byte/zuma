@@ -469,11 +469,12 @@ function Documentos({ toast }) {
       setTimeout(() => URL.revokeObjectURL(url), 1000)
     } catch (error) { toast(error.message, 'error') }
   }
-  async function imprimirDanfe(d) {
+  async function imprimirDanfe(d, { autoPrint = false } = {}) {
     // abre a aba já no clique (senão o navegador bloqueia) e carrega o DANFE autenticado nela
     const janela = typeof window.open === 'function' ? window.open('', '_blank') : null
     try {
-      const html = await api.blob(`${BASE}/documentos/${d.id}/danfe`)
+      const q = autoPrint ? '?print=1' : ''
+      const html = await api.blob(`${BASE}/documentos/${d.id}/danfe${q}`)
       const url = URL.createObjectURL(new Blob([html], { type: 'text/html' }))
       if (janela) janela.location.href = url
       else { const a = document.createElement('a'); a.href = url; a.target = '_blank'; a.rel = 'noopener'; a.click() }
@@ -704,6 +705,8 @@ function Documentos({ toast }) {
         { key: 'a', label: '', render: (d) => <div className="dadm-actions">
           {d.temXml && <button type="button" className="c360-btn ghost" onClick={() => baixarXml(d)}>XML</button>}
           {d.temXml && d.modelo !== 'nfse' && <button type="button" className="c360-btn ghost" onClick={() => imprimirDanfe(d)}>Imprimir DANFE</button>}
+          {d.temXml && d.modelo === 'nfse' && <button type="button" className="c360-btn ghost" onClick={() => imprimirDanfe(d, { autoPrint: true })}>Imprimir NFS-e</button>}
+          {d.temXml && d.modelo === 'nfse' && <button type="button" className="c360-btn ghost" onClick={() => imprimirDanfe(d)}>DANFSe / PDF</button>}
           {d.modelo === '65' && d.status === 'falha_comunicacao' && <button type="button" className="c360-btn ghost" disabled={Boolean(enviando)} onClick={() => emContingencia(d)}>Emitir em contingência</button>}
           {d.modelo === '55' && d.status === 'falha_comunicacao' && <button type="button" className="c360-btn ghost" disabled={Boolean(enviando)} onClick={() => setSvcDoc({ doc: d, justificativa: 'SEFAZ de origem sem resposta: falha de comunicação na autorização da NF-e' })}>Emitir em SVC</button>}
           {d.modelo === '55' && d.status === 'autorizado' && <button type="button" className="c360-btn ghost" onClick={() => setCce({ doc: d, texto: '' })}>Carta de correção</button>}

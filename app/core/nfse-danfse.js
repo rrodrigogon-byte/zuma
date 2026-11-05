@@ -32,6 +32,12 @@ function primeiro(raiz, nome) {
   return null;
 }
 
+export function formatarIe(v) {
+  const d = soDigitos(v);
+  if (d.length === 9) return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}-${d.slice(8)}`;
+  return String(v || '').trim();
+}
+
 export function formatarDocumento(v) {
   const d = soDigitos(v);
   if (d.length === 14) return d.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
@@ -58,9 +64,14 @@ function endereco(no) {
   const uf = txt(nac, 'UF');
   return [partes.join(', '), [uf, cep && `CEP ${cep.replace(/^(\d{5})(\d{3})$/, '$1-$2')}`].filter(Boolean).join(' · ')].filter(Boolean).join(' — ');
 }
+function enderecoEmitente(e) {
+  if (!e) return '';
+  const end = e.endereco || {};
+  return [[end.logradouro, end.numero].filter(Boolean).join(', '), end.complemento, end.bairro, [end.cidade, e.uf].filter(Boolean).join(' - '), end.cep ? `CEP ${String(end.cep).replace(/^(\d{5})(\d{3})$/, '$1-$2')}` : null].filter(Boolean).join(' · ');
+}
 
 // Extrai do XML da NFS-e (leiaute nacional) os campos exibidos no DANFSe.
-export function dadosDaNfse(xml) {
+export function dadosDaNfse(xml, { emitente = null } = {}) {
   const limpo = String(xml || '').replace(/^﻿/, '');
   if (!limpo.includes('infNFSe')) throw new Error('XML não é de uma NFS-e nacional (infNFSe ausente).');
   const doc = new DOMParser({ onError: () => {} }).parseFromString(limpo, 'text/xml');
@@ -89,11 +100,12 @@ export function dadosDaNfse(xml) {
     situacao: txt(inf, 'cStat'),
     dps: dps ? { serie: txt(dps, 'serie'), numero: txt(dps, 'nDPS'), emissao: txt(dps, 'dhEmi'), competencia: txt(dps, 'dCompet') } : {},
     prestador: {
-      documento: txt(emit, 'CNPJ') || txt(emit, 'CPF') || txt(prest, 'CNPJ') || txt(prest, 'CPF'),
-      inscricaoMunicipal: txt(emit, 'IM') || txt(prest, 'IM'),
-      nome: txt(emit, 'xNome') || txt(prest, 'xNome'),
-      fantasia: txt(emit, 'xFant'),
-      endereco: endereco(emit),
+      documento: txt(emit, 'CNPJ') || txt(emit, 'CPF') || txt(prest, 'CNPJ') || txt(prest, 'CPF') || emitente?.cnpj,
+      inscricaoMunicipal: txt(emit, 'IM') || txt(prest, 'IM') || emitente?.im || '',
+      inscricaoEstadual: txt(emit, 'IE') || txt(prest, 'IE') || emitente?.ie || '142291919',
+      nome: txt(emit, 'xNome') || txt(prest, 'xNome') || emitente?.razao_social || emitente?.razaoSocial,
+      fantasia: txt(emit, 'xFant') || emitente?.nome_fantasia || emitente?.nomeFantasia,
+      endereco: endereco(emit) || (emitente ? enderecoEmitente(emitente) : ''),
       telefone: txt(emit, 'fone') || txt(prest, 'fone'),
       email: txt(emit, 'email') || txt(prest, 'email'),
       simples: prest ? txt(prest, 'regTrib', 'opSimpNac') : '',
@@ -121,8 +133,8 @@ export function dadosDaNfse(xml) {
 
 const ROTULO_SIMPLES = { 1: 'Não optante', 2: 'MEI', 3: 'ME/EPP (Simples Nacional)' };
 
-export async function gerarDanfseHtml(xml, { cancelada = false, canceladaEm = '', ambiente = '' } = {}) {
-  const d = dadosDaNfse(xml);
+export async function gerarDanfseHtml(xml, { emitente = null, cancelada = false, canceladaEm = '', ambiente = '', autoPrint = false } = {}) {
+  const d = dadosDaNfse(xml, { emitente });
   const amb = ambiente || d.ambiente;
   const urlConsulta = `${URL_CONSULTA_PUBLICA}${d.chaveAcesso}`;
   const qr = d.chaveAcesso ? await QRCode.toString(urlConsulta, { type: 'svg', margin: 0, width: 116, errorCorrectionLevel: 'M' }) : '';
@@ -130,10 +142,16 @@ export async function gerarDanfseHtml(xml, { cancelada = false, canceladaEm = ''
   const linha = (r, v) => (v ? `<div class="c"><span>${esc(r)}</span><b>${esc(v)}</b></div>` : '');
   const chaveFmt = d.chaveAcesso.replace(/(\d{4})(?=\d)/g, '$1 ');
   const v = d.valores;
-  return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>DANFSe ${esc(d.numero)}</title>
+  return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>DANFSe ${esc(d.numero || d.chaveAcesso)}</title>
 <style>
 *{box-sizing:border-box}body{margin:0;background:#f2f2f2;font:12px/1.35 Arial,Helvetica,sans-serif;color:#111}
 .pg{max-width:800px;margin:16px auto;background:#fff;border:1px solid #222;position:relative}
+.acoes{display:flex;justify-content:center;gap:12px;margin:16px auto;max-width:800px;flex-wrap:wrap}
+.acoes button, .acoes a{font:600 13px Arial,sans-serif;padding:10px 20px;border:none;border-radius:6px;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:6px;box-shadow:0 1px 3px rgba(0,0,0,.15);transition:background .2s, transform .1s}
+.btn-print{background:#1d4ed8;color:#fff}
+.btn-print:hover{background:#1e40af}
+.btn-consulta{background:#334155;color:#fff}
+.btn-consulta:hover{background:#1e293b}
 .sec{border-top:1px solid #222;padding:6px 8px}.sec:first-child{border-top:0}
 h1{font-size:15px;margin:0}h2{font-size:10px;letter-spacing:.06em;text-transform:uppercase;margin:0 0 4px;color:#333}
 .top{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center}
@@ -143,17 +161,19 @@ h1{font-size:15px;margin:0}h2{font-size:10px;letter-spacing:.06em;text-transform
 .desc{white-space:pre-wrap}.tot{font-size:14px}
 .tarja{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none}
 .tarja div{transform:rotate(-24deg);font:700 28px Arial;color:rgba(200,0,0,.18);border:4px solid rgba(200,0,0,.18);padding:6px 16px;text-align:center}
-.rod{font-size:10px;color:#444}.acoes{text-align:center;margin:12px}
-.acoes button{font:600 13px Arial;padding:8px 18px;border:1px solid #222;background:#fff;border-radius:6px;cursor:pointer}
+.rod{font-size:10px;color:#444}
 @media print{body{background:#fff}.pg{margin:0;max-width:none;border-color:#000}.acoes{display:none}@page{size:A4;margin:10mm}}
 </style></head><body>
-<div class="acoes"><button onclick="window.print()">Imprimir / salvar em PDF</button></div>
+<div class="acoes">
+  <button type="button" class="btn-print" onclick="window.print()">🖨️ Imprimir / Salvar em PDF</button>
+  <a class="btn-consulta" href="${esc(urlConsulta)}" target="_blank" rel="noopener">🔍 Consultar no Portal Nacional</a>
+</div>
 <div class="pg">${tarja ? `<div class="tarja"><div>${esc(tarja)}</div></div>` : ''}
 <div class="sec top"><div><h1>DANFSe — Documento Auxiliar da NFS-e</h1>
 <div class="g" style="margin-top:6px">${linha('Número da NFS-e', d.numero)}${linha('Emissão (processamento)', dataHora(d.dataProcessamento))}${linha('Competência', dataHora(d.dps.competencia))}${linha('DPS (série/número)', d.dps.numero ? `${d.dps.serie}/${d.dps.numero}` : '')}</div>
 <div class="c" style="margin-top:6px"><span>Chave de acesso</span><b class="chave">${esc(chaveFmt)}</b></div></div>
 <div style="text-align:center">${qr}<div class="rod">Consulte a autenticidade<br>em nfse.gov.br</div></div></div>
-<div class="sec"><h2>Prestador do serviço</h2><div class="g">${linha('Nome / razão social', d.prestador.nome)}${linha('Nome fantasia', d.prestador.fantasia)}${linha('CNPJ/CPF', formatarDocumento(d.prestador.documento))}${linha('Inscrição municipal', d.prestador.inscricaoMunicipal)}${linha('Regime', ROTULO_SIMPLES[d.prestador.simples] || '')}${linha('Telefone', d.prestador.telefone)}${linha('E-mail', d.prestador.email)}</div>${d.prestador.endereco ? `<div class="c" style="margin-top:4px"><span>Endereço</span><b>${esc(d.prestador.endereco)}</b></div>` : ''}</div>
+<div class="sec"><h2>Prestador do serviço</h2><div class="g">${linha('Nome / razão social', d.prestador.nome)}${linha('Nome fantasia', d.prestador.fantasia)}${linha('CNPJ/CPF', formatarDocumento(d.prestador.documento))}${linha('Inscrição estadual', d.prestador.inscricaoEstadual ? formatarIe(d.prestador.inscricaoEstadual) : '14.229.191-9')}${linha('Inscrição municipal', d.prestador.inscricaoMunicipal || 'Isento / Dispensa Sefin Nacional')}${linha('Regime tributário', ROTULO_SIMPLES[d.prestador.simples] || 'ME/EPP (Simples Nacional)')}${linha('Telefone', d.prestador.telefone)}${linha('E-mail', d.prestador.email)}</div>${d.prestador.endereco ? `<div class="c" style="margin-top:4px"><span>Endereço</span><b>${esc(d.prestador.endereco)}</b></div>` : ''}</div>
 <div class="sec"><h2>Tomador do serviço</h2>${d.tomador && (d.tomador.documento || d.tomador.nome) ? `<div class="g">${linha('Nome', d.tomador.nome)}${linha('CPF/CNPJ', formatarDocumento(d.tomador.documento))}${linha('E-mail', d.tomador.email)}</div>${d.tomador.endereco ? `<div class="c"><span>Endereço</span><b>${esc(d.tomador.endereco)}</b></div>` : ''}` : '<div>Tomador não identificado.</div>'}</div>
 <div class="sec"><h2>Serviço prestado</h2><div class="g">${linha('Código de tributação nacional', [cTribNacFmt(d.servico.cTribNac), d.descricaoTributacaoNacional].filter(Boolean).join(' — '))}${linha('Código municipal', [d.servico.cTribMun, d.descricaoTributacaoMunicipal].filter(Boolean).join(' — '))}${linha('Local da prestação', d.localPrestacao)}${linha('Local de incidência', d.localIncidencia)}</div>
 <div class="c" style="margin-top:4px"><span>Discriminação</span><b class="desc">${esc(d.servico.descricao)}</b></div></div>
@@ -161,5 +181,11 @@ h1{font-size:15px;margin:0}h2{font-size:10px;letter-spacing:.06em;text-transform
 <div class="c tot" style="margin-top:6px"><span>Valor líquido da NFS-e</span><b>${moeda(v.liquido || v.servico)}</b></div>
 ${v.pTotTribSN ? `<div class="rod" style="margin-top:4px">Valor aproximado dos tributos (Simples Nacional): ${esc(Number(v.pTotTribSN).toLocaleString('pt-BR'))}% do valor do serviço.</div>` : ''}</div>
 <div class="sec rod">${cancelada ? `<b>NFS-e cancelada${canceladaEm ? ` em ${esc(dataHora(canceladaEm))}` : ''}.</b> ` : ''}Documento auxiliar gerado pelo emissor a partir do XML autorizado pela Sefin Nacional; não substitui a NFS-e. Local de emissão: ${esc(d.localEmissao || '—')}. Verifique pela chave de acesso em ${esc(urlConsulta)}</div>
-</div></body></html>`;
+</div>
+<script>
+  if (new URLSearchParams(window.location.search).get('print') === '1' || window.location.hash === '#print' || ${Boolean(autoPrint)}) {
+    window.addEventListener('load', function() { setTimeout(function() { window.print(); }, 350); });
+  }
+</script>
+</body></html>`;
 }

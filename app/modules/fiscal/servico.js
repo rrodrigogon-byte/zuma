@@ -24,6 +24,7 @@ import { totalizarDocumentoFiscal } from '../../tributacao-kytto.js';
 import * as nfse from '../../core/nfse-nacional.js';
 import { tributosAproximados, importarIbpt as importarTabelaIbpt, listarIbpt as listarTabelasIbpt } from './ibpt.js';
 import { danfeNfceHtml, danfeNfeHtml } from './danfe.js';
+import { gerarDanfseHtml } from '../../core/nfse-danfse.js';
 
 export const AMBIENTE = 'homologacao'; // ambiente padrão de um emitente novo
 export const TEXTO_HOMOLOGACAO = 'NOTA FISCAL EMITIDA EM AMBIENTE DE HOMOLOGACAO - SEM VALOR FISCAL';
@@ -116,7 +117,7 @@ export async function autoProvisionarFiscalDino(db, empresaId, env = process.env
         endereco, ambiente, csc_id, csc_cifrado, natureza_operacao,
         op_simp_nac, reg_ap_trib_sn, reg_esp_trib, c_trib_nac_padrao, ativo
       ) VALUES (
-        $1, '50073355000189', 'DINO BARBEARIA LTDA', 'Barbearia Dino', '135678901', '12345', '1', 'MT', '5107958',
+        $1, '50073355000189', 'DINO BARBEARIA LTDA', 'Barbearia Dino', '142291919', '12345', '1', 'MT', '5107958',
         $2, 'homologacao', '000001', $3, 'PRESTACAO DE SERVICOS E VENDA',
         '3', '1', '0', '060101', true
       )
@@ -135,6 +136,13 @@ export async function autoProvisionarFiscalDino(db, empresaId, env = process.env
       );
     }
   }
+
+  // Sincronizar Inscrição Estadual oficial da Barbearia Dino (14.229.191-9)
+  try {
+    await db.query(
+      "UPDATE fis_emitentes SET ie = '142291919' WHERE cnpj IN ('50073355000189', '50073355000260') AND (ie IS NULL OR ie = '135678901' OR ie = '')"
+    );
+  } catch {}
 
   // 2. Certificado A1 inicial
   const certRes = await db.query('SELECT id, valido_ate FROM fis_certificados WHERE empresa_id = $1 AND ativo = true LIMIT 1', [empresa]);
@@ -1545,13 +1553,24 @@ export async function listarInutilizacoes(db, empresaId, { lojaRestrita = null, 
 }
 
 // ── DANFE (HTML imprimível) ──────────────────────────────────────────────────
-export async function danfe(db, empresaId, id, { lojaRestrita = null } = {}) {
+export async function danfe(db, empresaId, id, { lojaRestrita = null, autoPrint = false } = {}) {
   const empresa = exigirUuid(empresaId, 'empresa');
   const doc = (await db.query('SELECT * FROM fis_documentos WHERE empresa_id = $1 AND id = $2', [empresa, exigirUuid(id, 'documento')])).rows[0];
   if (!doc || (lojaRestrita && doc.loja_id !== lojaRestrita)) throw new ErroDominio('NOT_FOUND', 'Documento não encontrado', 404);
-  if (doc.modelo === 'nfse') throw new ErroDominio('DANFE_INDISPONIVEL', 'NFS-e não tem DANFE: use o DANFSe do Portal Nacional', 422);
+  const emitente = (await db.query('SELECT * FROM fis_emitentes WHERE empresa_id = $1 AND id = $2', [empresa, doc.emitente_id])).rows[0]
+    || (await db.query('SELECT * FROM fis_emitentes WHERE empresa_id = $1 AND ativo = true ORDER BY loja_id NULLS LAST LIMIT 1', [empresa])).rows[0];
+  if (doc.modelo === 'nfse') {
+    const xml = doc.xml_autorizado || doc.xml_assinado;
+    if (!xml) throw new ErroDominio('DANFE_INDISPONIVEL', 'NFS-e ainda sem XML', 422);
+    return gerarDanfseHtml(xml, {
+      emitente,
+      cancelada: doc.status === 'cancelado',
+      canceladaEm: doc.cancelado_em,
+      ambiente: doc.ambiente,
+      autoPrint,
+    });
+  }
   if (!doc.xml_assinado || !doc.chave) throw new ErroDominio('DANFE_INDISPONIVEL', 'Documento ainda sem XML assinado', 422);
-  const emitente = (await db.query('SELECT * FROM fis_emitentes WHERE empresa_id = $1 AND id = $2', [empresa, doc.emitente_id])).rows[0];
   return doc.modelo === '65' ? danfeNfceHtml({ doc, emitente }) : danfeNfeHtml({ doc, emitente });
 }
 

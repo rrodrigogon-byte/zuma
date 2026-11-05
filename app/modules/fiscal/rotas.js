@@ -69,10 +69,10 @@ export function createFiscalAdminRouter({ db, escopoDaRequisicao, env = process.
   router.get('/documentos/:id/danfe', async (req, res) => {
     try {
       const { empresaId, lojaRestrita = null } = await escopoDaRequisicao(req, 'payments.read');
-      const html = await svc.danfe(db, empresaId, req.params.id, { lojaRestrita });
+      const autoPrint = req.query.print === '1';
+      const html = await svc.danfe(db, empresaId, req.params.id, { lojaRestrita, autoPrint });
       res.set('Cache-Control', 'private, no-store');
-      // o DANFE é só leitura: sem script, sem recurso externo
-      res.set('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; img-src data:; frame-ancestors 'self'");
+      res.set('Content-Security-Policy', "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: https:; frame-ancestors 'self'");
       res.type('text/html; charset=utf-8').send(html);
     } catch (error) { responderErro(res, error); }
   });
