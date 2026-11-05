@@ -29,63 +29,120 @@ import {
   Receipt,
   Users,
   Zap,
+  Building2,
+  Store,
+  Layers,
+  PlusCircle,
+  Clock,
 } from 'lucide-react';
 
 const moeda = (val) => fmtR(Number(val || 0));
 
 function dataHojeStr() {
-  const d = new Date();
-  return d.toLocaleDateString('sv', { timeZone: 'America/Cuiaba' });
-}
-
-function dataOntemStr() {
-  const d = new Date();
-  d.setDate(d.getDate() - 1);
-  return d.toLocaleDateString('sv', { timeZone: 'America/Cuiaba' });
+  const agora = new Date();
+  return agora.toLocaleDateString('sv', { timeZone: 'America/Cuiaba' });
 }
 
 export default function FechamentoDiarioGestao() {
-  const { user, empresaAtiva, lojaAtiva } = useAuth();
-  const { toast } = useToast();
+  const { empresaAtiva, empresasAcessiveis, trocarEmpresa, lojaAtiva, lojasAcessiveis, trocarLoja } = useAuth();
+  const toast = useToast();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
-  const isDino = isDinoBrandContext(empresaAtiva);
+  // Multi-Empresa selecionada
+  const [empresaSelecionadaId, setEmpresaSelecionadaId] = useState(
+    searchParams.get('empresaId') || empresaAtiva?.id || 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6'
+  );
+  const [lojaSelecionadaId, setLojaSelecionadaId] = useState(
+    searchParams.get('lojaId') || lojaAtiva?.id || ''
+  );
+
   const dataQuery = searchParams.get('data') || dataHojeStr();
   const [dataSelecionada, setDataSelecionada] = useState(dataQuery);
   const [carregando, setCarregando] = useState(true);
   const [dados, setDados] = useState(null);
 
+  // Lista de empresas cadastradas no sistema
+  const [listaEmpresas, setListaEmpresas] = useState([]);
+
   // Abas internas
   const [abaAtiva, setAbaAtiva] = useState('conciliacao'); // 'conciliacao' | 'caixas' | 'comandas' | 'historico'
   const [buscaComanda, setBuscaComanda] = useState('');
+  const [filtroStatusComanda, setFiltroStatusComanda] = useState('todas'); // 'todas' | 'paga' | 'em_conta' | 'aberta'
 
-  // Modais
+  // Modais de Fechamento e Reabertura Geral
   const [modalFechamento, setModalFechamento] = useState(false);
   const [fecharCaixasAutomatico, setFecharCaixasAutomatico] = useState(true);
   const [obsFechamento, setObsFechamento] = useState('');
   const [senhaGerenteFechamento, setSenhaGerenteFechamento] = useState('');
   const [processandoFechamento, setProcessandoFechamento] = useState(false);
 
+  // Modal Fechar Todos os Caixas da Empresa
+  const [modalFecharTodosCaixas, setModalFecharTodosCaixas] = useState(false);
+  const [valoresPorCaixa, setValoresPorCaixa] = useState({});
+  const [senhaGerenteLote, setSenhaGerenteLote] = useState('');
+  const [processandoLote, setProcessandoLote] = useState(false);
+
+  // Modal Fechar Caixa Individual
+  const [caixaParaFechar, setCaixaParaFechar] = useState(null);
+  const [valorContadoIndividual, setValorContadoIndividual] = useState('');
+  const [obsCaixaIndividual, setObsCaixaIndividual] = useState('');
+  const [processandoFechamentoIndividual, setProcessandoFechamentoIndividual] = useState(false);
+
+  // Modal Abrir Caixa
+  const [modalAbrirCaixa, setModalAbrirCaixa] = useState(false);
+  const [novoCaixaNumero, setNovoCaixaNumero] = useState(1);
+  const [novoCaixaNome, setNovoCaixaNome] = useState('Caixa Balcão');
+  const [novoCaixaValorAbertura, setNovoCaixaValorAbertura] = useState('100.00');
+  const [novoCaixaOperador, setNovoCaixaOperador] = useState('');
+  const [processandoAberturaCaixa, setProcessandoAberturaCaixa] = useState(false);
+
+  // Modal Reabertura
   const [modalReabrir, setModalReabrir] = useState(false);
   const [motivoReabertura, setMotivoReabertura] = useState('');
   const [senhaGerenteReabertura, setSenhaGerenteReabertura] = useState('');
   const [reabrirCaixasFisicos, setReabrirCaixasFisicos] = useState(true);
   const [processandoReabertura, setProcessandoReabertura] = useState(false);
 
+  // Modal Impressão
   const [modalImpressao, setModalImpressao] = useState(false);
 
-  // Carrega dados da conciliação da data selecionada
-  const carregarDados = useCallback(async (dataAlvo) => {
+  // Carrega lista de empresas
+  useEffect(() => {
+    async function carregarEmpresas() {
+      try {
+        const res = await api.get('/api/admin/fechamento-diario/empresas');
+        if (res && res.ok && Array.isArray(res.empresas)) {
+          setListaEmpresas(res.empresas);
+        } else if (Array.isArray(empresasAcessiveis) && empresasAcessiveis.length) {
+          setListaEmpresas(empresasAcessiveis);
+        }
+      } catch (err) {
+        if (Array.isArray(empresasAcessiveis) && empresasAcessiveis.length) {
+          setListaEmpresas(empresasAcessiveis);
+        }
+      }
+    }
+    carregarEmpresas();
+  }, [empresasAcessiveis]);
+
+  // Carrega dados da conciliação da data e empresa selecionada
+  const carregarDados = useCallback(async (dataAlvo, empresaAlvo, lojaAlvo) => {
     const dia = dataAlvo || dataSelecionada || dataHojeStr();
+    const empId = empresaAlvo || empresaSelecionadaId || '';
+    const ljId = lojaAlvo !== undefined ? lojaAlvo : lojaSelecionadaId;
     try {
       setCarregando(true);
-      const res = await api.get(`/api/admin/fechamento-diario/conciliacao?data=${dia}`);
+      const url = `/api/admin/fechamento-diario?data=${dia}&empresaId=${empId}${ljId ? `&lojaId=${ljId}` : ''}`;
+      const res = await api.get(url);
       if (res && res.ok) {
         setDados(res);
+        if (Array.isArray(res.empresas) && res.empresas.length) {
+          setListaEmpresas(res.empresas);
+        }
       } else {
-        // Fallback para rota barbearia se necessário
-        const fallback = await api.get(`/api/admin/barbearia/operacao/fechamento-conciliacao?data=${dia}`);
+        // Fallback
+        const fallback = await api.get(`/api/admin/fechamento-diario/conciliacao?data=${dia}&empresaId=${empId}`);
         if (fallback && fallback.ok) setDados(fallback);
       }
     } catch (e) {
@@ -94,16 +151,55 @@ export default function FechamentoDiarioGestao() {
     } finally {
       setCarregando(false);
     }
-  }, [dataSelecionada, toast]);
+  }, [dataSelecionada, empresaSelecionadaId, lojaSelecionadaId, toast]);
 
   useEffect(() => {
-    carregarDados(dataSelecionada);
-  }, [dataSelecionada, carregarDados]);
+    carregarDados(dataSelecionada, empresaSelecionadaId, lojaSelecionadaId);
+  }, [dataSelecionada, empresaSelecionadaId, lojaSelecionadaId, carregarDados]);
 
   const trocarData = (novaData) => {
     setDataSelecionada(novaData);
-    setSearchParams({ data: novaData });
+    setSearchParams((prev) => {
+      const p = new URLSearchParams(prev);
+      p.set('data', novaData);
+      return p;
+    });
   };
+
+  const handleMudarEmpresa = (novaEmpresaId) => {
+    setEmpresaSelecionadaId(novaEmpresaId);
+    setLojaSelecionadaId('');
+    setSearchParams((prev) => {
+      const p = new URLSearchParams(prev);
+      p.set('empresaId', novaEmpresaId);
+      p.delete('lojaId');
+      return p;
+    });
+    // Se o usuário tem essa empresa no contexto geral, atualiza no useAuth
+    if (trocarEmpresa && empresasAcessiveis?.some((e) => e.id === novaEmpresaId)) {
+      trocarEmpresa(novaEmpresaId);
+    }
+  };
+
+  const handleMudarLoja = (novaLojaId) => {
+    setLojaSelecionadaId(novaLojaId);
+    setSearchParams((prev) => {
+      const p = new URLSearchParams(prev);
+      if (novaLojaId) p.set('lojaId', novaLojaId);
+      else p.delete('lojaId');
+      return p;
+    });
+    if (trocarLoja && novaLojaId) trocarLoja(novaLojaId);
+  };
+
+  // Empresa ativa encontrada no cadastro
+  const empresaAtualObj = useMemo(() => {
+    return listaEmpresas.find((e) => e.id === empresaSelecionadaId) ||
+      empresasAcessiveis?.find((e) => e.id === empresaSelecionadaId) ||
+      empresaAtiva || { id: empresaSelecionadaId, nome: 'Empresa Ativa' };
+  }, [listaEmpresas, empresasAcessiveis, empresaAtiva, empresaSelecionadaId]);
+
+  const isDino = isDinoBrandContext(empresaAtualObj);
 
   // Executa fechamento diário integrado
   const handleExecutarFechamento = async (e) => {
@@ -112,8 +208,9 @@ export default function FechamentoDiarioGestao() {
       setProcessandoFechamento(true);
       const payload = {
         confirmado: true,
+        empresaId: empresaSelecionadaId,
         data: dataSelecionada,
-        lojaId: lojaAtiva?.id || undefined,
+        lojaId: lojaSelecionadaId || undefined,
         fecharCaixasAbertos: fecharCaixasAutomatico,
         observacao: obsFechamento || 'Fechamento diário unificado homologado',
         senhaGerente: senhaGerenteFechamento || undefined,
@@ -125,12 +222,98 @@ export default function FechamentoDiarioGestao() {
         setModalFechamento(false);
         setSenhaGerenteFechamento('');
         setObsFechamento('');
-        await carregarDados(dataSelecionada);
+        await carregarDados(dataSelecionada, empresaSelecionadaId, lojaSelecionadaId);
       }
     } catch (err) {
       toast(err.message || 'Erro ao realizar fechamento diário', 'error');
     } finally {
       setProcessandoFechamento(false);
+    }
+  };
+
+  // Executa fechamento de todos os caixas da empresa
+  const handleFecharTodosCaixas = async (e) => {
+    e.preventDefault();
+    try {
+      setProcessandoLote(true);
+      const payload = {
+        confirmado: true,
+        empresaId: empresaSelecionadaId,
+        data: dataSelecionada,
+        lojaId: lojaSelecionadaId || undefined,
+        valoresPorCaixa,
+        senhaGerente: senhaGerenteLote || undefined,
+        observacao: 'Fechamento em lote dos caixas da empresa',
+      };
+
+      const res = await api.post('/api/admin/fechamento-diario/fechar-todos-caixas', payload);
+      if (res && res.ok) {
+        toast(`Todos os ${res.caixasFechados || 0} caixa(s) foram fechados com sucesso!`, 'success');
+        setModalFecharTodosCaixas(false);
+        setSenhaGerenteLote('');
+        setValoresPorCaixa({});
+        await carregarDados(dataSelecionada, empresaSelecionadaId, lojaSelecionadaId);
+      }
+    } catch (err) {
+      toast(err.message || 'Erro ao fechar caixas em lote', 'error');
+    } finally {
+      setProcessandoLote(false);
+    }
+  };
+
+  // Executa fechamento de caixa individual
+  const handleFecharCaixaIndividual = async (e) => {
+    e.preventDefault();
+    if (!caixaParaFechar) return;
+    try {
+      setProcessandoFechamentoIndividual(true);
+      const payload = {
+        empresaId: empresaSelecionadaId,
+        caixaId: caixaParaFechar.id,
+        valorInformado: valorContadoIndividual !== '' ? Number(valorContadoIndividual) : undefined,
+        observacao: obsCaixaIndividual || 'Fechamento individual de caixa',
+      };
+
+      const res = await api.post('/api/admin/fechamento-diario/fechar-caixa-individual', payload);
+      if (res && res.ok) {
+        toast(`Caixa ${caixaParaFechar.numeroCaixa} fechado com sucesso!`, 'success');
+        setCaixaParaFechar(null);
+        setValorContadoIndividual('');
+        setObsCaixaIndividual('');
+        await carregarDados(dataSelecionada, empresaSelecionadaId, lojaSelecionadaId);
+      }
+    } catch (err) {
+      toast(err.message || 'Erro ao fechar caixa individual', 'error');
+    } finally {
+      setProcessandoFechamentoIndividual(false);
+    }
+  };
+
+  // Executa abertura de novo caixa
+  const handleAbrirNovoCaixa = async (e) => {
+    e.preventDefault();
+    try {
+      setProcessandoAberturaCaixa(true);
+      const payload = {
+        empresaId: empresaSelecionadaId,
+        lojaId: lojaSelecionadaId || undefined,
+        data: dataSelecionada,
+        numeroCaixa: Number(novoCaixaNumero || 1),
+        nomeCaixa: novoCaixaNome || `Caixa ${novoCaixaNumero}`,
+        valorAbertura: Number(novoCaixaValorAbertura || 0),
+        responsavel: novoCaixaOperador || 'Operador',
+      };
+
+      const res = await api.post('/api/admin/fechamento-diario/abrir-caixa', payload);
+      if (res && res.ok) {
+        toast(`Caixa ${res.numeroCaixa || novoCaixaNumero} aberto com sucesso!`, 'success');
+        setModalAbrirCaixa(false);
+        await carregarDados(dataSelecionada, empresaSelecionadaId, lojaSelecionadaId);
+      }
+    } catch (err) {
+      toast(err.message || 'Erro ao abrir novo caixa', 'error');
+    } finally {
+      setProcessandoAberturaCaixa(false);
     }
   };
 
@@ -144,8 +327,9 @@ export default function FechamentoDiarioGestao() {
     try {
       setProcessandoReabertura(true);
       const payload = {
+        empresaId: empresaSelecionadaId,
         data: dataSelecionada,
-        lojaId: lojaAtiva?.id || undefined,
+        lojaId: lojaSelecionadaId || undefined,
         reabrirCaixas: reabrirCaixasFisicos,
         motivo: motivoReabertura || 'Reabertura para conferência e correções',
         senhaGerente: senhaGerenteReabertura,
@@ -157,7 +341,7 @@ export default function FechamentoDiarioGestao() {
         setModalReabrir(false);
         setSenhaGerenteReabertura('');
         setMotivoReabertura('');
-        await carregarDados(dataSelecionada);
+        await carregarDados(dataSelecionada, empresaSelecionadaId, lojaSelecionadaId);
       }
     } catch (err) {
       toast(err.message || 'Erro ao reabrir fechamento diário', 'error');
@@ -190,23 +374,125 @@ export default function FechamentoDiarioGestao() {
   const historico = dados?.historicoFechamentos || [];
 
   const comandasFiltradas = useMemo(() => {
-    if (!buscaComanda.trim()) return comandas;
+    let filtradas = comandas;
+    if (filtroStatusComanda !== 'todas') {
+      if (filtroStatusComanda === 'paga') filtradas = filtradas.filter((c) => c.status === 'paga');
+      else if (filtroStatusComanda === 'em_conta') filtradas = filtradas.filter((c) => c.status === 'em_conta');
+      else if (filtroStatusComanda === 'aberta') filtradas = filtradas.filter((c) => ['aberta', 'aguardando_pagamento', 'parcialmente_paga'].includes(c.status));
+    }
+    if (!buscaComanda.trim()) return filtradas;
     const q = buscaComanda.toLowerCase().trim();
-    return comandas.filter((c) =>
+    return filtradas.filter((c) =>
       String(c.numeroComanda || '').includes(q) ||
       String(c.clienteNome || '').toLowerCase().includes(q) ||
       String(c.profissionalNome || '').toLowerCase().includes(q) ||
-      String(c.itensResumo || '').toLowerCase().includes(q)
+      String(c.itensResumo || '').toLowerCase().includes(q) ||
+      String(c.moduloOrigem || '').toLowerCase().includes(q)
     );
-  }, [comandas, buscaComanda]);
+  }, [comandas, buscaComanda, filtroStatusComanda]);
 
   const diaFechado = dados?.diaFechado || false;
   const statusGeral = dados?.statusGeral || 'conciliado';
+  const caixasAbertosCount = caixas.filter((c) => c.status === 'aberto').length;
 
   return (
     <div style={{ maxWidth: 1400, margin: '0 auto', padding: '24px 20px', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
       
-      {/* ── CABEÇALHO PRINCIPAL ── */}
+      {/* ── BARRA SUPERIOR: MULTI-EMPRESA E UNIDADE ── */}
+      <div style={{ background: 'var(--card, #ffffff)', border: '1px solid var(--line, #e2e8f0)', borderRadius: 16, padding: '16px 20px', marginBottom: 20, boxShadow: '0 1px 3px rgba(0,0,0,0.05)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 14 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px', background: '#f8fafc', borderRadius: 10, border: '1px solid #e2e8f0' }}>
+            <Building2 size={18} color="#2563eb" />
+            <span style={{ fontSize: 13, fontWeight: 700, color: '#475569' }}>Empresa:</span>
+            <select
+              value={empresaSelecionadaId}
+              onChange={(e) => handleMudarEmpresa(e.target.value)}
+              style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid #cbd5e1', fontWeight: 800, color: '#0f172a', background: '#fff', fontSize: 13, cursor: 'pointer' }}
+            >
+              {listaEmpresas.map((emp) => (
+                <option key={emp.id} value={emp.id}>
+                  {emp.nome} ({emp.tipo || 'geral'})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {Array.isArray(empresaAtualObj?.lojas) && empresaAtualObj.lojas.length > 1 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px', background: '#f8fafc', borderRadius: 10, border: '1px solid #e2e8f0' }}>
+              <Store size={18} color="#14b87a" />
+              <span style={{ fontSize: 13, fontWeight: 700, color: '#475569' }}>Unidade:</span>
+              <select
+                value={lojaSelecionadaId}
+                onChange={(e) => handleMudarLoja(e.target.value)}
+                style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid #cbd5e1', fontWeight: 700, color: '#0f172a', background: '#fff', fontSize: 13, cursor: 'pointer' }}
+              >
+                <option value="">Todas as Unidades</option>
+                {empresaAtualObj.lojas.map((lj) => (
+                  <option key={lj.id} value={lj.id}>
+                    {lj.nome}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+        </div>
+
+        {/* Ações Rápidas de Fechamento por Empresa */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          {caixasAbertosCount > 0 && (
+            <button
+              type="button"
+              onClick={() => {
+                const initValores = {};
+                caixas.filter((c) => c.status === 'aberto').forEach((c) => {
+                  initValores[c.id] = c.valorEsperado != null ? String(c.valorEsperado) : String(c.valorAbertura || 0);
+                });
+                setValoresPorCaixa(initValores);
+                setModalFecharTodosCaixas(true);
+              }}
+              style={{
+                padding: '8px 14px',
+                borderRadius: 8,
+                border: '1px solid #f59e0b',
+                background: '#fffbeb',
+                color: '#b45309',
+                fontWeight: 800,
+                fontSize: 13,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+              }}
+            >
+              <Lock size={15} />
+              <span>Fechar Todos os Caixas da Empresa ({caixasAbertosCount})</span>
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={() => setModalAbrirCaixa(true)}
+            style={{
+              padding: '8px 14px',
+              borderRadius: 8,
+              border: '1px solid #14b87a',
+              background: '#14b87a',
+              color: '#fff',
+              fontWeight: 800,
+              fontSize: 13,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+            }}
+          >
+            <PlusCircle size={15} />
+            <span>+ Abrir Caixa</span>
+          </button>
+        </div>
+      </div>
+
+      {/* ── CABEÇALHO PRINCIPAL DA PÁGINA ── */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 16, marginBottom: 20 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
           {isDino ? (
@@ -221,40 +507,44 @@ export default function FechamentoDiarioGestao() {
             </div>
           )}
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <h1 style={{ margin: 0, fontSize: 24, fontWeight: 800, color: 'var(--text, #0f172a)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <h1 style={{ margin: 0, fontSize: 24, fontWeight: 900, color: 'var(--text, #0f172a)' }}>
                 Fechamento Diário &amp; Conciliação ERP
               </h1>
-              {diaFechado ? (
-                <span style={{ fontSize: 12, fontWeight: 700, padding: '3px 10px', borderRadius: 999, background: '#dcfce7', color: '#15803d', border: '1px solid #86efac', display: 'flex', alignItems: 'center', gap: 4 }}>
-                  <Lock size={12} /> Dia Fechado Oficialmente
-                </span>
-              ) : (
-                <span style={{ fontSize: 12, fontWeight: 700, padding: '3px 10px', borderRadius: 999, background: '#fef3c7', color: '#b45309', border: '1px solid #fde68a', display: 'flex', alignItems: 'center', gap: 4 }}>
-                  <Unlock size={12} /> Dia em Operação (Prévia)
-                </span>
-              )}
+              <span
+                style={{
+                  fontSize: 12,
+                  fontWeight: 800,
+                  padding: '4px 10px',
+                  borderRadius: 20,
+                  background: diaFechado ? '#dcfce7' : '#fef3c7',
+                  color: diaFechado ? '#166534' : '#92400e',
+                  border: `1px solid ${diaFechado ? '#86efac' : '#fcd34d'}`,
+                }}
+              >
+                {diaFechado ? '🔒 Dia Fechado Oficialmente' : '🔓 Dia em Operação (Prévia)'}
+              </span>
             </div>
-            <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--muted, #64748b)' }}>
-              {isDino ? 'Barbearia Dino' : (empresaAtiva?.nome || 'Kytto ERP')} &bull; Conciliação unificada entre a Operação de Caixa (Balcão/Gaveta/Comandas) e o Livro-Caixa / Razão Financeiro.
+            <p style={{ margin: '4px 0 0', color: 'var(--muted, #64748b)', fontSize: 13 }}>
+              {empresaAtualObj.nome} · Conciliação unificada entre a Operação de Caixa (Balcão/Gaveta/Comandas/Vendas) e o Livro-Caixa / Razão Financeiro.
             </p>
           </div>
         </div>
 
-        {/* ── SELETOR DE DATA E AÇÕES RÁPIDAS ── */}
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-          <div style={{ display: 'flex', background: 'var(--card, #fff)', border: '1px solid var(--line, #e2e8f0)', borderRadius: 10, padding: 3 }}>
+        {/* Seletores de Data e Ações Globais */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', background: '#f1f5f9', padding: 3, borderRadius: 10, border: '1px solid #cbd5e1' }}>
             <button
               type="button"
               onClick={() => trocarData(dataHojeStr())}
               style={{
+                padding: '6px 12px',
+                borderRadius: 8,
                 border: 'none',
                 background: dataSelecionada === dataHojeStr() ? '#2563eb' : 'transparent',
-                color: dataSelecionada === dataHojeStr() ? '#fff' : 'inherit',
-                fontWeight: 600,
-                fontSize: 12,
-                padding: '6px 12px',
-                borderRadius: 7,
+                color: dataSelecionada === dataHojeStr() ? '#fff' : '#475569',
+                fontWeight: 700,
+                fontSize: 13,
                 cursor: 'pointer',
               }}
             >
@@ -262,15 +552,19 @@ export default function FechamentoDiarioGestao() {
             </button>
             <button
               type="button"
-              onClick={() => trocarData(dataOntemStr())}
+              onClick={() => {
+                const ontem = new Date();
+                ontem.setDate(ontem.getDate() - 1);
+                trocarData(ontem.toLocaleDateString('sv', { timeZone: 'America/Cuiaba' }));
+              }}
               style={{
-                border: 'none',
-                background: dataSelecionada === dataOntemStr() ? '#2563eb' : 'transparent',
-                color: dataSelecionada === dataOntemStr() ? '#fff' : 'inherit',
-                fontWeight: 600,
-                fontSize: 12,
                 padding: '6px 12px',
-                borderRadius: 7,
+                borderRadius: 8,
+                border: 'none',
+                background: 'transparent',
+                color: '#475569',
+                fontWeight: 700,
+                fontSize: 13,
                 cursor: 'pointer',
               }}
             >
@@ -278,59 +572,120 @@ export default function FechamentoDiarioGestao() {
             </button>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'var(--card, #fff)', border: '1px solid var(--line, #e2e8f0)', borderRadius: 10, padding: '4px 10px' }}>
-            <Calendar size={15} color="#64748b" />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#fff', border: '1px solid #cbd5e1', borderRadius: 10, padding: '6px 12px' }}>
+            <Calendar size={16} color="#64748b" />
             <input
               type="date"
               value={dataSelecionada}
               onChange={(e) => trocarData(e.target.value)}
-              style={{ border: 'none', background: 'transparent', fontSize: 13, fontWeight: 600, color: 'inherit', outline: 'none' }}
+              style={{ border: 'none', outline: 'none', fontSize: 13, fontWeight: 700, color: '#0f172a', cursor: 'pointer' }}
             />
           </div>
 
           <button
             type="button"
-            onClick={() => carregarDados(dataSelecionada)}
-            disabled={carregando}
-            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 12px', background: 'var(--card, #fff)', border: '1px solid var(--line, #e2e8f0)', borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
-            title="Atualizar dados do fechamento"
+            onClick={() => carregarDados(dataSelecionada, empresaSelecionadaId, lojaSelecionadaId)}
+            style={{
+              padding: '8px 12px',
+              borderRadius: 8,
+              border: '1px solid #cbd5e1',
+              background: '#fff',
+              cursor: 'pointer',
+              color: '#334155',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              fontSize: 13,
+              fontWeight: 700,
+            }}
+            title="Atualizar dados da data"
           >
-            <RefreshCw size={14} style={{ animation: carregando ? 'spin 1s linear infinite' : 'none' }} /> Atualizar
+            <RefreshCw size={15} className={carregando ? 'spin' : ''} />
+            <span>Atualizar</span>
           </button>
 
           <button
             type="button"
             onClick={() => setModalImpressao(true)}
-            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: 'var(--card, #fff)', border: '1px solid var(--line, #e2e8f0)', borderRadius: 10, fontSize: 13, fontWeight: 600, color: '#0f172a', cursor: 'pointer' }}
-            title="Imprimir Comprovante de Fechamento"
+            style={{
+              padding: '8px 14px',
+              borderRadius: 8,
+              border: '1px solid #2563eb',
+              background: '#eff6ff',
+              color: '#2563eb',
+              fontWeight: 700,
+              fontSize: 13,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+            }}
           >
-            <Printer size={15} color="#2563eb" /> Imprimir Fechamento
+            <Printer size={16} />
+            <span>Imprimir Fechamento</span>
           </button>
 
-          <button
-            type="button"
-            onClick={() => navigate('/admin/barbearia-erp?area=operacao&tab=Caixa+e+fechamento')}
-            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: 'var(--card, #fff)', border: '1px solid #cbd5e1', borderRadius: 10, fontSize: 13, fontWeight: 600, color: '#334155', cursor: 'pointer' }}
-            title="Ir para o Caixa do ERP da Barbearia"
-          >
-            💈 Abrir Caixa Barbearia
-          </button>
-
-          {diaFechado ? (
+          {isDino && (
             <button
               type="button"
-              onClick={() => setModalReabrir(true)}
-              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', background: '#f59e0b', color: '#fff', border: 'none', borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}
+              onClick={() => navigate('/admin/barbearia-erp?area=operacao&tab=Caixa+e+fechamento')}
+              style={{
+                padding: '8px 14px',
+                borderRadius: 8,
+                border: '1px solid #cbd5e1',
+                background: '#fff',
+                color: '#0f172a',
+                fontWeight: 700,
+                fontSize: 13,
+                cursor: 'pointer',
+              }}
             >
-              <Unlock size={15} /> Reabrir Fechamento
+              💈 Abrir Caixa Barbearia
+            </button>
+          )}
+
+          {!diaFechado ? (
+            <button
+              type="button"
+              onClick={() => setModalFechamento(true)}
+              style={{
+                padding: '8px 16px',
+                borderRadius: 8,
+                border: 'none',
+                background: '#16a34a',
+                color: '#fff',
+                fontWeight: 800,
+                fontSize: 13,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                boxShadow: '0 2px 4px rgba(22, 163, 74, 0.25)',
+              }}
+            >
+              <Lock size={16} />
+              <span>Fechar o Dia no ERP</span>
             </button>
           ) : (
             <button
               type="button"
-              onClick={() => setModalFechamento(true)}
-              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 18px', background: 'linear-gradient(135deg, #10b981, #059669)', color: '#fff', border: 'none', borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: 'pointer', boxShadow: '0 2px 4px rgba(16, 185, 129, 0.3)' }}
+              onClick={() => setModalReabrir(true)}
+              style={{
+                padding: '8px 16px',
+                borderRadius: 8,
+                border: '1px solid #dc2626',
+                background: '#fef2f2',
+                color: '#dc2626',
+                fontWeight: 800,
+                fontSize: 13,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+              }}
             >
-              <Lock size={15} /> Fechar o Dia no ERP
+              <Unlock size={16} />
+              <span>Reabrir Fechamento</span>
             </button>
           )}
         </div>
@@ -339,152 +694,146 @@ export default function FechamentoDiarioGestao() {
       {/* ── BANNER DE STATUS DA CONCILIAÇÃO ── */}
       <div
         style={{
+          padding: '16px 20px',
+          borderRadius: 14,
+          marginBottom: 20,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
           flexWrap: 'wrap',
-          gap: 12,
-          padding: '14px 18px',
-          borderRadius: 12,
-          marginBottom: 20,
-          background: statusGeral === 'conciliado'
-            ? 'linear-gradient(90deg, rgba(34,197,94,0.12), rgba(34,197,94,0.04))'
-            : statusGeral === 'pendente'
-            ? 'linear-gradient(90deg, rgba(245,158,11,0.12), rgba(245,158,11,0.04))'
-            : 'linear-gradient(90deg, rgba(239,68,68,0.12), rgba(239,68,68,0.04))',
-          border: `1px solid ${statusGeral === 'conciliado' ? '#86efac' : statusGeral === 'pendente' ? '#fde68a' : '#fca5a5'}`,
+          gap: 16,
+          background: statusGeral === 'conciliado' ? '#f0fdf4' : statusGeral === 'pendente' ? '#fffbeb' : '#fef2f2',
+          border: `1px solid ${statusGeral === 'conciliado' ? '#bbf7d0' : statusGeral === 'pendente' ? '#fde68a' : '#fecaca'}`,
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
           {statusGeral === 'conciliado' && <CheckCircle2 size={24} color="#16a34a" />}
-          {statusGeral === 'pendente' && <AlertCircle size={24} color="#d97706" />}
-          {statusGeral === 'divergente' && <AlertTriangle size={24} color="#dc2626" />}
+          {statusGeral === 'pendente' && <AlertTriangle size={24} color="#d97706" />}
+          {statusGeral === 'divergente' && <AlertCircle size={24} color="#dc2626" />}
           <div>
-            <div style={{ fontSize: 15, fontWeight: 800, color: statusGeral === 'conciliado' ? '#15803d' : statusGeral === 'pendente' ? '#b45309' : '#b91c1c' }}>
+            <strong style={{ fontSize: 15, color: statusGeral === 'conciliado' ? '#166534' : statusGeral === 'pendente' ? '#92400e' : '#991b1b' }}>
               {statusGeral === 'conciliado' && '✅ Operação de Caixa e ERP 100% Conciliados'}
-              {statusGeral === 'pendente' && '🟡 Dia em Operação (Prévia em Tempo Real)'}
-              {statusGeral === 'divergente' && '🔴 Divergência Identificada na Conciliação'}
-            </div>
-            <div style={{ fontSize: 12, color: 'var(--muted, #64748b)', marginTop: 2 }}>
-              {dados?.mensagemStatus || 'Conferência automática realizada entre as comandas faturadas e o Livro-Caixa do ERP.'}
-            </div>
+              {statusGeral === 'pendente' && '⚠️ Dia em Operação (Caixas ou Comandas em Aberto)'}
+              {statusGeral === 'divergente' && '🚨 Atenção: Divergência Apurada entre Caixa e ERP'}
+            </strong>
+            <p style={{ margin: '2px 0 0', fontSize: 13, color: '#475569' }}>
+              {dados?.mensagemStatus || 'Conferência automática realizada entre a operação de balcão e o Livro-Caixa do ERP.'}
+            </p>
           </div>
         </div>
 
-        <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
-          <div style={{ textAlign: 'right' }}>
-            <div style={{ fontSize: 11, color: 'var(--muted, #64748b)', textTransform: 'uppercase', fontWeight: 600 }}>Divergência Total</div>
-            <div style={{ fontSize: 16, fontWeight: 800, color: kpis.totalDivergencias > 0 ? '#dc2626' : '#16a34a' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 24, textAlign: 'right' }}>
+          <div>
+            <small style={{ color: '#64748b', fontSize: 11, fontWeight: 700, textTransform: 'uppercase' }}>Divergência Total</small>
+            <div style={{ fontSize: 16, fontWeight: 800, color: kpis.totalDivergencias > 0.05 ? '#dc2626' : '#16a34a' }}>
               {moeda(kpis.totalDivergencias)}
             </div>
           </div>
-          <div style={{ height: 28, width: 1, background: 'var(--line, #cbd5e1)' }} />
-          <div style={{ textAlign: 'right' }}>
-            <div style={{ fontSize: 11, color: 'var(--muted, #64748b)', textTransform: 'uppercase', fontWeight: 600 }}>Caixas Operados</div>
-            <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--text, #0f172a)' }}>
+          <div>
+            <small style={{ color: '#64748b', fontSize: 11, fontWeight: 700, textTransform: 'uppercase' }}>Caixas Operados</small>
+            <div style={{ fontSize: 16, fontWeight: 800, color: '#0f172a' }}>
               {kpis.caixasFechados} / {kpis.totalCaixas} fechados
             </div>
           </div>
         </div>
       </div>
 
-      {/* ── KPIS DE GESTÃO CONSOLIDADA DA EMPRESA ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 14, marginBottom: 24 }}>
+      {/* ── CARDS DE KPIS DE GESTÃO DA EMPRESA ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 14, marginBottom: 24 }}>
         
         {/* Faturamento Bruto */}
-        <div style={{ background: 'var(--card, #fff)', padding: '16px 18px', borderRadius: 12, border: '1px solid var(--line, #e2e8f0)', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted, #64748b)', textTransform: 'uppercase' }}>Faturamento Bruto</span>
-            <TrendingUp size={18} color="#2563eb" />
+        <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: '16px 18px', boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+            <span style={{ fontSize: 12, fontWeight: 800, color: '#64748b', textTransform: 'uppercase' }}>Faturamento Bruto</span>
+            <TrendingUp size={16} color="#2563eb" />
           </div>
-          <div style={{ fontSize: 22, fontWeight: 800, color: '#0f172a' }}>{moeda(kpis.faturamentoBruto)}</div>
-          <div style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>
-            ✂️ Serviços: {moeda(kpis.valorServicos)} ({kpis.totalServicos}) &bull; 🧴 Produtos: {moeda(kpis.valorProdutos)}
-          </div>
+          <div style={{ fontSize: 22, fontWeight: 900, color: '#0f172a' }}>{moeda(kpis.faturamentoBruto)}</div>
+          <small style={{ color: '#64748b', fontSize: 12, display: 'block', marginTop: 4 }}>
+            ✂️ Serviços: {moeda(kpis.valorServicos)} ({kpis.totalServicos}) · 🧴 Produtos: {moeda(kpis.valorProdutos)}
+          </small>
         </div>
 
-        {/* Total Recebido Líquido */}
-        <div style={{ background: 'var(--card, #fff)', padding: '16px 18px', borderRadius: 12, border: '1px solid var(--line, #e2e8f0)', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted, #64748b)', textTransform: 'uppercase' }}>Recebido Líquido</span>
-            <ArrowDownRight size={18} color="#16a34a" />
+        {/* Recebido Líquido */}
+        <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: '16px 18px', boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+            <span style={{ fontSize: 12, fontWeight: 800, color: '#64748b', textTransform: 'uppercase' }}>Recebido Líquido</span>
+            <ArrowDownRight size={16} color="#16a34a" />
           </div>
-          <div style={{ fontSize: 22, fontWeight: 800, color: '#16a34a' }}>{moeda(kpis.totalRecebidoLiquido)}</div>
-          <div style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>
+          <div style={{ fontSize: 22, fontWeight: 900, color: '#16a34a' }}>{moeda(kpis.totalRecebidoLiquido)}</div>
+          <small style={{ color: '#64748b', fontSize: 12, display: 'block', marginTop: 4 }}>
             Entradas no Balcão (Dinheiro + Pix + Cartões)
-          </div>
+          </small>
         </div>
 
-        {/* Faturado Em Conta */}
-        <div style={{ background: 'var(--card, #fff)', padding: '16px 18px', borderRadius: 12, border: '1px solid var(--line, #e2e8f0)', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted, #64748b)', textTransform: 'uppercase' }}>Lançado em Conta</span>
-            <Receipt size={18} color="#f59e0b" />
+        {/* Lançado em Conta (Crediário) */}
+        <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: '16px 18px', boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+            <span style={{ fontSize: 12, fontWeight: 800, color: '#64748b', textTransform: 'uppercase' }}>Lançado em Conta</span>
+            <Receipt size={16} color="#d97706" />
           </div>
-          <div style={{ fontSize: 22, fontWeight: 800, color: '#b45309' }}>{moeda(kpis.totalEmConta)}</div>
-          <div style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>
+          <div style={{ fontSize: 22, fontWeight: 900, color: '#d97706' }}>{moeda(kpis.totalEmConta)}</div>
+          <small style={{ color: '#64748b', fontSize: 12, display: 'block', marginTop: 4 }}>
             Crediário a Receber de Clientes (Futuro)
-          </div>
+          </small>
         </div>
 
         {/* Despesas Pagas */}
-        <div style={{ background: 'var(--card, #fff)', padding: '16px 18px', borderRadius: 12, border: '1px solid var(--line, #e2e8f0)', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted, #64748b)', textTransform: 'uppercase' }}>Despesas Pagas</span>
-            <ArrowUpRight size={18} color="#dc2626" />
+        <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: '16px 18px', boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+            <span style={{ fontSize: 12, fontWeight: 800, color: '#64748b', textTransform: 'uppercase' }}>Despesas Pagas</span>
+            <ArrowUpRight size={16} color="#dc2626" />
           </div>
-          <div style={{ fontSize: 22, fontWeight: 800, color: '#dc2626' }}>{moeda(kpis.totalDespesasPagas)}</div>
-          <div style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>
+          <div style={{ fontSize: 22, fontWeight: 900, color: '#dc2626' }}>{moeda(kpis.totalDespesasPagas)}</div>
+          <small style={{ color: '#64748b', fontSize: 12, display: 'block', marginTop: 4 }}>
             Saídas Operacionais pagas no dia
-          </div>
+          </small>
         </div>
 
-        {/* Saldo Líquido do Dia */}
-        <div style={{ background: 'var(--card, #fff)', padding: '16px 18px', borderRadius: 12, border: '1px solid var(--line, #e2e8f0)', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted, #64748b)', textTransform: 'uppercase' }}>Resultado Líquido</span>
-            <DollarSign size={18} color={kpis.saldoLiquidoDia >= 0 ? '#16a34a' : '#dc2626'} />
+        {/* Resultado Líquido do Dia */}
+        <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: '16px 18px', boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+            <span style={{ fontSize: 12, fontWeight: 800, color: '#64748b', textTransform: 'uppercase' }}>Resultado Líquido</span>
+            <DollarSign size={16} color={kpis.saldoLiquidoDia >= 0 ? '#16a34a' : '#dc2626'} />
           </div>
-          <div style={{ fontSize: 22, fontWeight: 800, color: kpis.saldoLiquidoDia >= 0 ? '#16a34a' : '#dc2626' }}>
+          <div style={{ fontSize: 22, fontWeight: 900, color: kpis.saldoLiquidoDia >= 0 ? '#16a34a' : '#dc2626' }}>
             {moeda(kpis.saldoLiquidoDia)}
           </div>
-          <div style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>
-            Recebido Líquido &minus; Despesas Pagas
-          </div>
+          <small style={{ color: '#64748b', fontSize: 12, display: 'block', marginTop: 4 }}>
+            Recebido Líquido − Despesas Pagas
+          </small>
         </div>
 
-        {/* Comandas e Clientes */}
-        <div style={{ background: 'var(--card, #fff)', padding: '16px 18px', borderRadius: 12, border: '1px solid var(--line, #e2e8f0)', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted, #64748b)', textTransform: 'uppercase' }}>Comandas Fechadas</span>
-            <Users size={18} color="#8b5cf6" />
+        {/* Comandas e Vendas */}
+        <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: '16px 18px', boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+            <span style={{ fontSize: 12, fontWeight: 800, color: '#64748b', textTransform: 'uppercase' }}>Comandas &amp; Vendas</span>
+            <Users size={16} color="#6d28d9" />
           </div>
           <div style={{ fontSize: 22, fontWeight: 800, color: '#6d28d9' }}>{kpis.comandasFechadas} / {kpis.totalComandas}</div>
-          <div style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>
-            {kpis.comandasAbertas > 0 ? `⚠️ ${kpis.comandasAbertas} ainda em aberto` : 'Todas as comandas finalizadas'}
-          </div>
+          <small style={{ color: '#64748b', fontSize: 12, display: 'block', marginTop: 4 }}>
+            {kpis.comandasAbertas > 0 ? `⚠️ ${kpis.comandasAbertas} ainda em aberto` : 'Todas finalizadas'}
+          </small>
         </div>
 
       </div>
 
-      {/* ── NAVEGAÇÃO DE ABAS DO MÓDULO ── */}
-      <div style={{ display: 'flex', gap: 6, borderBottom: '2px solid var(--line, #e2e8f0)', marginBottom: 20 }}>
+      {/* ── ABAS DE DETALHAMENTO & AUDITORIA ── */}
+      <div style={{ borderBottom: '1px solid #e2e8f0', marginBottom: 20, display: 'flex', gap: 24, overflowX: 'auto' }}>
         <button
           type="button"
           onClick={() => setAbaAtiva('conciliacao')}
           style={{
-            padding: '10px 16px',
+            padding: '12px 6px',
             border: 'none',
             background: 'transparent',
-            fontWeight: 700,
+            fontWeight: 800,
             fontSize: 14,
             cursor: 'pointer',
             color: abaAtiva === 'conciliacao' ? '#2563eb' : 'var(--muted, #64748b)',
             borderBottom: abaAtiva === 'conciliacao' ? '2px solid #2563eb' : '2px solid transparent',
-            marginBottom: -2,
             display: 'flex',
             alignItems: 'center',
-            gap: 6,
+            gap: 8,
           }}
         >
           ⚖️ Conciliação Caixa ⟷ ERP
@@ -494,18 +843,17 @@ export default function FechamentoDiarioGestao() {
           type="button"
           onClick={() => setAbaAtiva('caixas')}
           style={{
-            padding: '10px 16px',
+            padding: '12px 6px',
             border: 'none',
             background: 'transparent',
-            fontWeight: 700,
+            fontWeight: 800,
             fontSize: 14,
             cursor: 'pointer',
             color: abaAtiva === 'caixas' ? '#2563eb' : 'var(--muted, #64748b)',
             borderBottom: abaAtiva === 'caixas' ? '2px solid #2563eb' : '2px solid transparent',
-            marginBottom: -2,
             display: 'flex',
             alignItems: 'center',
-            gap: 6,
+            gap: 8,
           }}
         >
           📦 Caixas Físicos da Data ({caixas.length})
@@ -515,236 +863,298 @@ export default function FechamentoDiarioGestao() {
           type="button"
           onClick={() => setAbaAtiva('comandas')}
           style={{
-            padding: '10px 16px',
+            padding: '12px 6px',
             border: 'none',
             background: 'transparent',
-            fontWeight: 700,
+            fontWeight: 800,
             fontSize: 14,
             cursor: 'pointer',
             color: abaAtiva === 'comandas' ? '#2563eb' : 'var(--muted, #64748b)',
             borderBottom: abaAtiva === 'comandas' ? '2px solid #2563eb' : '2px solid transparent',
-            marginBottom: -2,
             display: 'flex',
             alignItems: 'center',
-            gap: 6,
+            gap: 8,
           }}
         >
-          🧾 Comandas Fechadas ({comandas.length})
+          🧾 Comandas &amp; Vendas Fechadas ({comandas.length})
         </button>
 
         <button
           type="button"
           onClick={() => setAbaAtiva('historico')}
           style={{
-            padding: '10px 16px',
+            padding: '12px 6px',
             border: 'none',
             background: 'transparent',
-            fontWeight: 700,
+            fontWeight: 800,
             fontSize: 14,
             cursor: 'pointer',
             color: abaAtiva === 'historico' ? '#2563eb' : 'var(--muted, #64748b)',
             borderBottom: abaAtiva === 'historico' ? '2px solid #2563eb' : '2px solid transparent',
-            marginBottom: -2,
             display: 'flex',
             alignItems: 'center',
-            gap: 6,
+            gap: 8,
           }}
         >
           📜 Histórico de Fechamentos ({historico.length})
         </button>
       </div>
 
-      {/* ── CONTEÚDO DA ABA 1: CONCILIAÇÃO CAIXA ⟷ ERP ── */}
+      {/* ── CONTEÚDO DA ABA 1: CONCILIAÇÃO CAIXA <-> ERP ── */}
       {abaAtiva === 'conciliacao' && (
-        <div>
-          <div style={{ background: 'var(--card, #fff)', borderRadius: 12, border: '1px solid var(--line, #e2e8f0)', overflow: 'hidden', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
-            <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--line, #e2e8f0)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
-                <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: '#0f172a' }}>
-                  Matriz de Conciliação Financeira: Caixa Balcão ⟷ ERP Razão
-                </h3>
-                <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--muted, #64748b)' }}>
-                  Comparativo meio a meio entre o apurado na operação da barbearia e os registros do Livro-Caixa do ERP.
-                </p>
-              </div>
-              <span style={{ fontSize: 12, fontWeight: 700, color: '#2563eb', background: '#eff6ff', padding: '4px 10px', borderRadius: 8 }}>
-                Data: {fmtDateOnly(dataSelecionada)}
-              </span>
+        <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+          <div style={{ padding: '16px 20px', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: '#0f172a' }}>
+                Matriz de Conciliação Financeira: Caixa Balcão ⟷ ERP Razão
+              </h3>
+              <p style={{ margin: '3px 0 0', fontSize: 13, color: '#64748b' }}>
+                Comparativo meio a meio entre o apurado na operação da barbearia/loja e os registros do Livro-Caixa do ERP.
+              </p>
             </div>
+            <span style={{ fontSize: 12, fontWeight: 700, color: '#2563eb', background: '#eff6ff', padding: '4px 10px', borderRadius: 8 }}>
+              Data: {fmtDateOnly(dataSelecionada)}
+            </span>
+          </div>
 
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 13 }}>
-                <thead>
-                  <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0', color: '#475569', fontSize: 12, textTransform: 'uppercase' }}>
-                    <th style={{ padding: '12px 18px' }}>Forma de Pagamento / Movimentação</th>
-                    <th style={{ padding: '12px 18px', textAlign: 'right' }}>Apurado no Caixa (Operação)</th>
-                    <th style={{ padding: '12px 18px', textAlign: 'right' }}>Registrado no ERP (Financeiro)</th>
-                    <th style={{ padding: '12px 18px', textAlign: 'right' }}>Divergência</th>
-                    <th style={{ padding: '12px 18px', textAlign: 'center' }}>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {conciliacaoLinhas.map((linha) => {
-                    const temBandeiras = linha.bandeiras && Object.keys(linha.bandeiras).length > 0;
-                    return (
-                      <React.Fragment key={linha.chave}>
-                        <tr style={{ borderBottom: '1px solid #f1f5f9' }}>
-                          <td style={{ padding: '14px 18px', fontWeight: 600, color: '#0f172a' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                              {linha.chave === 'dinheiro' && <DollarSign size={16} color="#16a34a" />}
-                              {linha.chave === 'pix' && <Zap size={16} color="#06b6d4" />}
-                              {(linha.chave === 'cartao_debito' || linha.chave === 'cartao_credito') && <CreditCard size={16} color="#3b82f6" />}
-                              {linha.chave === 'conta' && <Receipt size={16} color="#f59e0b" />}
-                              {linha.chave === 'sangrias' && <ArrowUpRight size={16} color="#dc2626" />}
-                              {linha.chave === 'suprimentos' && <ArrowDownRight size={16} color="#10b981" />}
-                              <span>{linha.label}</span>
-                            </div>
-                            {linha.chave === 'dinheiro' && linha.esperadoGaveta != null && (
-                              <div style={{ fontSize: 11, color: '#64748b', marginTop: 4, marginLeft: 24 }}>
-                                Saldo esperado gaveta: <strong>{moeda(linha.esperadoGaveta)}</strong>
-                                {linha.informadoGaveta > 0 && ` · Contado no fechamento: ${moeda(linha.informadoGaveta)}`}
-                              </div>
-                            )}
-                          </td>
-                          <td style={{ padding: '14px 18px', textAlign: 'right', fontWeight: 700, color: '#0f172a' }}>
-                            {moeda(linha.operacao)}
-                          </td>
-                          <td style={{ padding: '14px 18px', textAlign: 'right', fontWeight: 700, color: '#0f172a' }}>
-                            {moeda(linha.erp)}
-                          </td>
-                          <td style={{ padding: '14px 18px', textAlign: 'right', fontWeight: 700, color: linha.diferenca !== 0 ? '#dc2626' : '#16a34a' }}>
-                            {moeda(linha.diferenca)}
-                          </td>
-                          <td style={{ padding: '14px 18px', textAlign: 'center' }}>
-                            {linha.status === 'conciliado' ? (
-                              <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 6, background: '#dcfce7', color: '#15803d' }}>
-                                ✅ Conciliado
-                              </span>
-                            ) : (
-                              <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 6, background: '#fee2e2', color: '#b91c1c' }}>
-                                ⚠️ Divergente
-                              </span>
-                            )}
-                          </td>
-                        </tr>
-
-                        {/* Detalhamento de bandeiras de cartão caso existam */}
-                        {temBandeiras && Object.entries(linha.bandeiras).map(([bandeira, valor]) => (
-                          <tr key={`${linha.chave}-${bandeira}`} style={{ background: '#f8fafc', borderBottom: '1px solid #f1f5f9', fontSize: 12 }}>
-                            <td style={{ padding: '8px 18px 8px 44px', color: '#64748b' }}>
-                              &bull; Bandeira <strong>{bandeira}</strong>
-                            </td>
-                            <td style={{ padding: '8px 18px', textAlign: 'right', color: '#475569' }}>
-                              {moeda(valor)}
-                            </td>
-                            <td style={{ padding: '8px 18px', textAlign: 'right', color: '#475569' }}>
-                              {moeda(valor)}
-                            </td>
-                            <td style={{ padding: '8px 18px', textAlign: 'right', color: '#16a34a' }}>
-                              {moeda(0)}
-                            </td>
-                            <td style={{ padding: '8px 18px', textAlign: 'center' }}>
-                              <span style={{ fontSize: 10, color: '#16a34a', fontWeight: 600 }}>100% TEF</span>
-                            </td>
-                          </tr>
-                        ))}
-                      </React.Fragment>
-                    );
-                  })}
-                </tbody>
-                <tfoot>
-                  <tr style={{ background: '#f1f5f9', fontWeight: 800, borderTop: '2px solid #cbd5e1' }}>
-                    <td style={{ padding: '14px 18px', color: '#0f172a' }}>TOTAL FATURAMENTO OPERACIONAL</td>
-                    <td style={{ padding: '14px 18px', textAlign: 'right', color: '#0f172a' }}>{moeda(kpis.faturamentoBruto)}</td>
-                    <td style={{ padding: '14px 18px', textAlign: 'right', color: '#0f172a' }}>{moeda(kpis.faturamentoBruto)}</td>
-                    <td style={{ padding: '14px 18px', textAlign: 'right', color: kpis.totalDivergencias > 0 ? '#dc2626' : '#16a34a' }}>
-                      {moeda(kpis.totalDivergencias)}
-                    </td>
-                    <td style={{ padding: '14px 18px', textAlign: 'center' }}>
-                      {kpis.totalDivergencias === 0 ? (
-                        <span style={{ fontSize: 12, fontWeight: 800, color: '#15803d' }}>100% OK</span>
-                      ) : (
-                        <span style={{ fontSize: 12, fontWeight: 800, color: '#b91c1c' }}>VERIFICAR</span>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 13 }}>
+              <thead>
+                <tr style={{ background: '#f8fafc', color: '#475569', borderBottom: '1px solid #e2e8f0', textTransform: 'uppercase', fontSize: 11, letterSpacing: '.05em' }}>
+                  <th style={{ padding: '12px 20px' }}>Forma de Pagamento / Movimentação</th>
+                  <th style={{ padding: '12px 16px', textAlign: 'right' }}>Apurado no Caixa (Operação)</th>
+                  <th style={{ padding: '12px 16px', textAlign: 'right' }}>Registrado no ERP (Financeiro)</th>
+                  <th style={{ padding: '12px 16px', textAlign: 'right' }}>Divergência</th>
+                  <th style={{ padding: '12px 20px', textAlign: 'center' }}>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {conciliacaoLinhas.map((linha) => (
+                  <tr key={linha.chave} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                    <td style={{ padding: '14px 20px', fontWeight: 700, color: '#0f172a' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        {linha.chave === 'dinheiro' && <DollarSign size={16} color="#16a34a" />}
+                        {linha.chave === 'pix' && <Zap size={16} color="#06b6d4" />}
+                        {linha.chave.startsWith('cartao') && <CreditCard size={16} color="#2563eb" />}
+                        {linha.chave === 'conta' && <Receipt size={16} color="#d97706" />}
+                        {linha.chave === 'sangrias' && <ArrowUpRight size={16} color="#dc2626" />}
+                        {linha.chave === 'suprimentos' && <ArrowDownRight size={16} color="#16a34a" />}
+                        <span>{linha.label}</span>
+                      </div>
+                      {linha.esperadoGaveta != null && (
+                        <div style={{ fontSize: 11, color: '#64748b', marginTop: 3, fontWeight: 500 }}>
+                          Esperado gaveta física: <strong>{moeda(linha.esperadoGaveta)}</strong> · Informado: {moeda(linha.informadoGaveta)}
+                        </div>
+                      )}
+                      {linha.bandeiras && Object.keys(linha.bandeiras).length > 0 && (
+                        <div style={{ fontSize: 11, color: '#64748b', marginTop: 3, fontWeight: 500 }}>
+                          Bandeiras: {Object.entries(linha.bandeiras).map(([b, v]) => `${b}: ${moeda(v)}`).join(' · ')}
+                        </div>
                       )}
                     </td>
+                    <td style={{ padding: '14px 16px', textAlign: 'right', fontWeight: 800, color: '#0f172a' }}>
+                      {moeda(linha.operacao)}
+                    </td>
+                    <td style={{ padding: '14px 16px', textAlign: 'right', fontWeight: 700, color: '#475569' }}>
+                      {moeda(linha.erp)}
+                    </td>
+                    <td
+                      style={{
+                        padding: '14px 16px',
+                        textAlign: 'right',
+                        fontWeight: 800,
+                        color: Math.abs(linha.diferenca) < 0.05 ? '#16a34a' : '#dc2626',
+                      }}
+                    >
+                      {moeda(linha.diferenca)}
+                    </td>
+                    <td style={{ padding: '14px 20px', textAlign: 'center' }}>
+                      <span
+                        style={{
+                          fontSize: 11,
+                          fontWeight: 800,
+                          padding: '3px 8px',
+                          borderRadius: 6,
+                          background: linha.status === 'conciliado' ? '#dcfce7' : '#fee2e2',
+                          color: linha.status === 'conciliado' ? '#166534' : '#991b1b',
+                        }}
+                      >
+                        {linha.status === 'conciliado' ? '✅ Conciliado' : '⚠️ Divergente'}
+                      </span>
+                    </td>
                   </tr>
-                </tfoot>
-              </table>
-            </div>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr style={{ background: '#f8fafc', borderTop: '2px solid #e2e8f0', fontWeight: 800 }}>
+                  <td style={{ padding: '14px 20px', textTransform: 'uppercase', color: '#0f172a' }}>
+                    Total Faturamento Operacional
+                  </td>
+                  <td style={{ padding: '14px 16px', textAlign: 'right', color: '#0f172a', fontSize: 14 }}>
+                    {moeda(kpis.faturamentoBruto)}
+                  </td>
+                  <td style={{ padding: '14px 16px', textAlign: 'right', color: '#0f172a', fontSize: 14 }}>
+                    {moeda(kpis.totalRecebidoLiquido + kpis.totalEmConta)}
+                  </td>
+                  <td
+                    style={{
+                      padding: '14px 16px',
+                      textAlign: 'right',
+                      color: kpis.totalDivergencias < 0.05 ? '#16a34a' : '#dc2626',
+                      fontSize: 14,
+                    }}
+                  >
+                    {moeda(kpis.totalDivergencias)}
+                  </td>
+                  <td style={{ padding: '14px 20px', textAlign: 'center', color: '#16a34a' }}>
+                    {kpis.totalDivergencias < 0.05 ? '100% OK' : 'Ajustar'}
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
           </div>
         </div>
       )}
 
       {/* ── CONTEÚDO DA ABA 2: CAIXAS FÍSICOS DA DATA ── */}
       {abaAtiva === 'caixas' && (
-        <div>
+        <div style={{ display: 'grid', gap: 16 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+            <div>
+              <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: '#0f172a' }}>
+                Caixas Físicos da Empresa ({caixas.length})
+              </h3>
+              <p style={{ margin: '3px 0 0', fontSize: 13, color: '#64748b' }}>
+                Acompanhamento individual de gavetas, fundo de abertura, suprimentos, sangrias e saldo esperado em dinheiro físico.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setModalAbrirCaixa(true)}
+              style={{
+                padding: '8px 14px',
+                borderRadius: 8,
+                border: 'none',
+                background: '#14b87a',
+                color: '#fff',
+                fontWeight: 800,
+                fontSize: 13,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+              }}
+            >
+              <PlusCircle size={16} />
+              <span>+ Abrir Novo Caixa</span>
+            </button>
+          </div>
+
           {caixas.length === 0 ? (
-            <div style={{ padding: 40, textAlign: 'center', background: 'var(--card, #fff)', borderRadius: 12, border: '1px solid var(--line, #e2e8f0)', color: 'var(--muted, #64748b)' }}>
-              📦 Nenhum caixa físico foi aberto nesta data ({fmtDateOnly(dataSelecionada)}).
+            <div style={{ background: '#fff', border: '1px dashed #cbd5e1', borderRadius: 14, padding: '40px 20px', textAlign: 'center' }}>
+              <Layers size={36} color="#94a3b8" style={{ margin: '0 auto 10px' }} />
+              <strong style={{ display: 'block', fontSize: 15, color: '#334155' }}>Nenhum caixa físico registrado nesta data</strong>
+              <p style={{ color: '#64748b', fontSize: 13, margin: '4px 0 16px' }}>
+                Abra um novo caixa operacional para registrar recebimentos de balcão e suprimentos.
+              </p>
+              <button
+                type="button"
+                onClick={() => setModalAbrirCaixa(true)}
+                style={{ padding: '8px 16px', borderRadius: 8, background: '#2563eb', color: '#fff', border: 'none', fontWeight: 800, fontSize: 13, cursor: 'pointer' }}
+              >
+                + Abrir Caixa Agora
+              </button>
             </div>
           ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: 16 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 16 }}>
               {caixas.map((c) => (
                 <div
                   key={c.id}
                   style={{
-                    background: 'var(--card, #fff)',
-                    borderRadius: 12,
-                    border: `1px solid ${c.status === 'aberto' ? '#3b82f6' : '#cbd5e1'}`,
-                    padding: 20,
-                    boxShadow: '0 2px 4px rgba(0,0,0,0.03)',
+                    background: '#fff',
+                    border: `1px solid ${c.status === 'aberto' ? '#86efac' : '#e2e8f0'}`,
+                    borderRadius: 14,
+                    padding: 18,
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
                   }}
                 >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
                     <div>
-                      <div style={{ fontSize: 17, fontWeight: 800, color: '#0f172a' }}>
-                        {c.nomeCaixa} (Caixa {c.numeroCaixa})
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <strong style={{ fontSize: 16, color: '#0f172a' }}>{c.nomeCaixa}</strong>
+                        <span
+                          style={{
+                            fontSize: 11,
+                            fontWeight: 800,
+                            padding: '2px 8px',
+                            borderRadius: 12,
+                            background: c.status === 'aberto' ? '#dcfce7' : '#f1f5f9',
+                            color: c.status === 'aberto' ? '#166534' : '#475569',
+                          }}
+                        >
+                          {c.status === 'aberto' ? '🟢 Aberto' : '🔒 Fechado'}
+                        </span>
                       </div>
-                      <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
-                        👤 Operador: <strong>{c.responsavel}</strong>
+                      <small style={{ color: '#64748b', fontSize: 12, display: 'block', marginTop: 2 }}>
+                        Operador: {c.responsavel} · Data: {fmtDateOnly(c.data)}
+                      </small>
+                    </div>
+
+                    {c.status === 'aberto' && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCaixaParaFechar(c);
+                          setValorContadoIndividual(String(c.valorEsperado != null ? c.valorEsperado : c.valorAbertura));
+                        }}
+                        style={{
+                          padding: '6px 10px',
+                          borderRadius: 6,
+                          border: '1px solid #f59e0b',
+                          background: '#fffbeb',
+                          color: '#b45309',
+                          fontSize: 12,
+                          fontWeight: 800,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        Fechar Caixa
+                      </button>
+                    )}
+                  </div>
+
+                  <div style={{ background: '#f8fafc', padding: '12px 14px', borderRadius: 10, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, fontSize: 12, marginBottom: 12 }}>
+                    <div>
+                      <span style={{ color: '#64748b' }}>Fundo Abertura:</span>
+                      <strong style={{ display: 'block', color: '#0f172a', fontSize: 13 }}>{moeda(c.valorAbertura)}</strong>
+                    </div>
+                    <div>
+                      <span style={{ color: '#64748b' }}>Entradas Dinheiro:</span>
+                      <strong style={{ display: 'block', color: '#16a34a', fontSize: 13 }}>{moeda(c.recebimentosDinheiro)}</strong>
+                    </div>
+                    <div>
+                      <span style={{ color: '#64748b' }}>Suprimentos (+):</span>
+                      <strong style={{ display: 'block', color: '#2563eb', fontSize: 13 }}>{moeda(c.suprimentos)}</strong>
+                    </div>
+                    <div>
+                      <span style={{ color: '#64748b' }}>Sangrias (-):</span>
+                      <strong style={{ display: 'block', color: '#dc2626', fontSize: 13 }}>{moeda(c.sangrias)}</strong>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 10, borderTop: '1px solid #f1f5f9' }}>
+                    <div>
+                      <span style={{ fontSize: 11, color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Saldo Esperado em Dinheiro</span>
+                      <div style={{ fontSize: 17, fontWeight: 900, color: '#0f172a' }}>{moeda(c.valorEsperado)}</div>
+                    </div>
+                    {c.valorInformado != null && (
+                      <div style={{ textAlign: 'right' }}>
+                        <span style={{ fontSize: 11, color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Contado / Quebra</span>
+                        <div style={{ fontSize: 14, fontWeight: 800, color: Math.abs(c.quebraCaixa || 0) < 0.05 ? '#16a34a' : '#dc2626' }}>
+                          {moeda(c.valorInformado)} ({c.quebraCaixa >= 0 ? `+${moeda(c.quebraCaixa)}` : moeda(c.quebraCaixa)})
+                        </div>
                       </div>
-                    </div>
-                    <span
-                      style={{
-                        fontSize: 11,
-                        fontWeight: 700,
-                        padding: '3px 8px',
-                        borderRadius: 6,
-                        background: c.status === 'aberto' ? '#dbeafe' : '#f1f5f9',
-                        color: c.status === 'aberto' ? '#1e40af' : '#475569',
-                      }}
-                    >
-                      {c.status === 'aberto' ? '🟢 Aberto' : '🔒 Fechado'}
-                    </span>
-                  </div>
-
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, background: '#f8fafc', padding: 12, borderRadius: 8, fontSize: 13, marginBottom: 14 }}>
-                    <div>Fundo Abertura: <strong>{moeda(c.valorAbertura)}</strong></div>
-                    <div>Recebido Dinheiro: <strong style={{ color: '#16a34a' }}>{moeda(c.recebimentosDinheiro)}</strong></div>
-                    <div>Suprimentos: <strong style={{ color: '#10b981' }}>{moeda(c.suprimentos)}</strong></div>
-                    <div>Sangrias: <strong style={{ color: '#dc2626' }}>{moeda(c.sangrias)}</strong></div>
-                  </div>
-
-                  <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 14 }}>
-                    <span style={{ fontWeight: 600, color: '#475569' }}>Saldo Esperado na Gaveta:</span>
-                    <strong style={{ fontSize: 16, color: '#0f172a' }}>{moeda(c.valorEsperado)}</strong>
-                  </div>
-
-                  {c.status === 'fechado' && (
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13, marginTop: 6, color: c.quebraCaixa !== 0 ? '#dc2626' : '#16a34a' }}>
-                      <span>Valor Informado: <strong>{moeda(c.valorInformado)}</strong></span>
-                      <span>Diferença: <strong>{moeda(c.quebraCaixa)}</strong></span>
-                    </div>
-                  )}
-
-                  <div style={{ marginTop: 16, display: 'flex', gap: 8 }}>
-                    <button
-                      type="button"
-                      onClick={() => navigate('/admin/barbearia-erp?area=operacao&tab=Caixa+e+fechamento')}
-                      style={{ flex: 1, padding: '8px', background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: 8, fontSize: 12, fontWeight: 600, color: '#1e293b', cursor: 'pointer' }}
-                    >
-                      Ver Detalhes Padrão Avec &rarr;
-                    </button>
+                    )}
                   </div>
                 </div>
               ))}
@@ -753,101 +1163,146 @@ export default function FechamentoDiarioGestao() {
         </div>
       )}
 
-      {/* ── CONTEÚDO DA ABA 3: COMANDAS FECHADAS ── */}
+      {/* ── CONTEÚDO DA ABA 3: COMANDAS & VENDAS FECHADAS ── */}
       {abaAtiva === 'comandas' && (
-        <div style={{ background: 'var(--card, #fff)', borderRadius: 12, border: '1px solid var(--line, #e2e8f0)', overflow: 'hidden' }}>
-          <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--line, #e2e8f0)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+        <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+          <div style={{ padding: '16px 20px', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
             <div>
-              <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800 }}>Comandas da Data ({comandasFiltradas.length})</h3>
-              <p style={{ margin: '2px 0 0', fontSize: 12, color: 'var(--muted, #64748b)' }}>
-                Todas as comandas faturadas ou em aberto vinculadas à data do fechamento.
+              <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: '#0f172a' }}>
+                Comandas &amp; Vendas Fechadas no Dia ({comandasFiltradas.length})
+              </h3>
+              <p style={{ margin: '3px 0 0', fontSize: 13, color: '#64748b' }}>
+                Relação detalhada de serviços executados, produtos vendidos e comprovantes de recebimento.
               </p>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: '4px 10px', width: 280 }}>
-              <Search size={14} color="#64748b" />
-              <input
-                type="text"
-                placeholder="Buscar cliente, profissional, item..."
-                value={buscaComanda}
-                onChange={(e) => setBuscaComanda(e.target.value)}
-                style={{ border: 'none', background: 'transparent', outline: 'none', fontSize: 12, width: '100%' }}
-              />
+
+            {/* Filtros e Busca */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', background: '#f1f5f9', padding: 2, borderRadius: 8 }}>
+                {[
+                  { id: 'todas', label: 'Todas' },
+                  { id: 'paga', label: 'Pagas' },
+                  { id: 'em_conta', label: 'Em Conta' },
+                  { id: 'aberta', label: 'Em Aberto' },
+                ].map((f) => (
+                  <button
+                    key={f.id}
+                    type="button"
+                    onClick={() => setFiltroStatusComanda(f.id)}
+                    style={{
+                      padding: '5px 10px',
+                      borderRadius: 6,
+                      border: 'none',
+                      background: filtroStatusComanda === f.id ? '#2563eb' : 'transparent',
+                      color: filtroStatusComanda === f.id ? '#fff' : '#475569',
+                      fontSize: 12,
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: 8, padding: '6px 10px' }}>
+                <Search size={15} color="#64748b" />
+                <input
+                  type="text"
+                  placeholder="Buscar cliente, profissional, itens..."
+                  value={buscaComanda}
+                  onChange={(e) => setBuscaComanda(e.target.value)}
+                  style={{ border: 'none', background: 'transparent', outline: 'none', fontSize: 12, width: 200 }}
+                />
+              </div>
             </div>
           </div>
 
           <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, textAlign: 'left' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 13 }}>
               <thead>
-                <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0', color: '#475569', fontSize: 12 }}>
-                  <th style={{ padding: '10px 16px' }}>Comanda</th>
-                  <th style={{ padding: '10px 16px' }}>Cliente</th>
-                  <th style={{ padding: '10px 16px' }}>Profissional</th>
-                  <th style={{ padding: '10px 16px' }}>Itens Executados</th>
-                  <th style={{ padding: '10px 16px', textAlign: 'right' }}>Total</th>
-                  <th style={{ padding: '10px 16px' }}>Meio de Pagamento</th>
-                  <th style={{ padding: '10px 16px', textAlign: 'center' }}>Status</th>
+                <tr style={{ background: '#f8fafc', color: '#475569', borderBottom: '1px solid #e2e8f0', textTransform: 'uppercase', fontSize: 11, letterSpacing: '.05em' }}>
+                  <th style={{ padding: '12px 20px' }}>Comanda / Venda</th>
+                  <th style={{ padding: '12px 16px' }}>Módulo</th>
+                  <th style={{ padding: '12px 16px' }}>Cliente</th>
+                  <th style={{ padding: '12px 16px' }}>Profissional / Atendente</th>
+                  <th style={{ padding: '12px 16px' }}>Itens Fechados</th>
+                  <th style={{ padding: '12px 16px' }}>Forma de Pagamento</th>
+                  <th style={{ padding: '12px 20px', textAlign: 'right' }}>Total (R$)</th>
                 </tr>
               </thead>
               <tbody>
                 {comandasFiltradas.length === 0 ? (
                   <tr>
-                    <td colSpan="7" style={{ padding: 30, textAlign: 'center', color: '#64748b' }}>
-                      Nenhuma comanda encontrada para os critérios selecionados.
+                    <td colSpan={7} style={{ padding: '36px 20px', textAlign: 'center', color: '#94a3b8' }}>
+                      Nenhuma comanda ou venda encontrada para os filtros aplicados.
                     </td>
                   </tr>
                 ) : (
-                  comandasFiltradas.map((c) => (
-                    <tr key={c.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                      <td style={{ padding: '12px 16px', fontWeight: 700, color: '#0f172a' }}>
-                        Nº {c.numeroComanda || String(c.id).slice(-4)}
-                      </td>
-                      <td style={{ padding: '12px 16px' }}>
-                        <div style={{ fontWeight: 600 }}>{c.clienteNome}</div>
-                        {c.clienteTelefone && <div style={{ fontSize: 11, color: '#64748b' }}>{c.clienteTelefone}</div>}
-                      </td>
-                      <td style={{ padding: '12px 16px', color: '#475569' }}>
-                        {c.profissionalNome}
-                      </td>
-                      <td style={{ padding: '12px 16px', color: '#334155', maxWidth: 300 }}>
-                        <div style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={c.itensResumo}>
-                          {c.itensResumo || `${c.itensQuantidade || 0} itens`}
-                        </div>
-                      </td>
-                      <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 800, color: '#0f172a' }}>
-                        {moeda(c.totalFaturado || c.total)}
-                      </td>
-                      <td style={{ padding: '12px 16px' }}>
-                        {(c.pagamentos || []).map((p, idx) => (
-                          <span
-                            key={idx}
-                            style={{
-                              display: 'inline-block',
-                              fontSize: 11,
-                              fontWeight: 600,
-                              padding: '2px 6px',
-                              borderRadius: 4,
-                              background: '#e2e8f0',
-                              color: '#1e293b',
-                              marginRight: 4,
-                            }}
-                          >
-                            {p.meio?.toUpperCase()} ({moeda(p.valor)})
-                          </span>
-                        ))}
-                      </td>
-                      <td style={{ padding: '12px 16px', textAlign: 'center' }}>
+                  comandasFiltradas.map((cmd) => (
+                    <tr key={cmd.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                      <td style={{ padding: '12px 20px', fontWeight: 800, color: '#0f172a' }}>
+                        #{cmd.numeroComanda}
                         <span
                           style={{
-                            fontSize: 11,
-                            fontWeight: 700,
-                            padding: '3px 8px',
-                            borderRadius: 6,
-                            background: c.status === 'paga' ? '#dcfce7' : c.status === 'em_conta' ? '#fef3c7' : '#f1f5f9',
-                            color: c.status === 'paga' ? '#15803d' : c.status === 'em_conta' ? '#b45309' : '#475569',
+                            display: 'block',
+                            fontSize: 10,
+                            fontWeight: 800,
+                            padding: '2px 6px',
+                            borderRadius: 4,
+                            marginTop: 4,
+                            width: 'fit-content',
+                            background: cmd.status === 'paga' ? '#dcfce7' : cmd.status === 'em_conta' ? '#fef3c7' : '#fee2e2',
+                            color: cmd.status === 'paga' ? '#166534' : cmd.status === 'em_conta' ? '#92400e' : '#991b1b',
                           }}
                         >
-                          {c.status?.toUpperCase()}
+                          {cmd.status === 'paga' ? 'Paga' : cmd.status === 'em_conta' ? 'Em Conta' : cmd.status}
                         </span>
+                      </td>
+                      <td style={{ padding: '12px 16px' }}>
+                        <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 6, background: '#f1f5f9', color: '#475569' }}>
+                          {cmd.moduloOrigem || 'Operação'}
+                        </span>
+                      </td>
+                      <td style={{ padding: '12px 16px', fontWeight: 700, color: '#0f172a' }}>
+                        {cmd.clienteNome}
+                        {cmd.clienteTelefone && (
+                          <small style={{ display: 'block', color: '#64748b', fontSize: 11, fontWeight: 400 }}>
+                            {cmd.clienteTelefone}
+                          </small>
+                        )}
+                      </td>
+                      <td style={{ padding: '12px 16px', color: '#334155' }}>
+                        {cmd.profissionalNome}
+                      </td>
+                      <td style={{ padding: '12px 16px', color: '#475569', fontSize: 12 }}>
+                        {cmd.itensResumo || `${cmd.itensQuantidade || 0} item(ns)`}
+                      </td>
+                      <td style={{ padding: '12px 16px' }}>
+                        {cmd.pagamentos && cmd.pagamentos.length > 0 ? (
+                          cmd.pagamentos.map((p, idx) => (
+                            <span
+                              key={idx}
+                              style={{
+                                display: 'inline-block',
+                                fontSize: 11,
+                                fontWeight: 700,
+                                padding: '2px 8px',
+                                borderRadius: 6,
+                                background: '#eff6ff',
+                                color: '#1e40af',
+                                margin: '2px 4px 2px 0',
+                              }}
+                            >
+                              {p.meio} {p.bandeira ? `(${p.bandeira})` : ''} · {moeda(p.valor)}
+                            </span>
+                          ))
+                        ) : (
+                          <span style={{ color: '#94a3b8', fontSize: 12 }}>Em aberto</span>
+                        )}
+                      </td>
+                      <td style={{ padding: '12px 20px', textAlign: 'right', fontWeight: 900, color: '#0f172a', fontSize: 14 }}>
+                        {moeda(cmd.totalFaturado || cmd.total)}
                       </td>
                     </tr>
                   ))
@@ -860,63 +1315,78 @@ export default function FechamentoDiarioGestao() {
 
       {/* ── CONTEÚDO DA ABA 4: HISTÓRICO DE FECHAMENTOS ── */}
       {abaAtiva === 'historico' && (
-        <div style={{ background: 'var(--card, #fff)', borderRadius: 12, border: '1px solid var(--line, #e2e8f0)', overflow: 'hidden' }}>
-          <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--line, #e2e8f0)' }}>
-            <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800 }}>Histórico de Fechamentos Auditados ({historico.length})</h3>
-            <p style={{ margin: '2px 0 0', fontSize: 12, color: 'var(--muted, #64748b)' }}>
-              Registros históricos de encerramento do dia gravados no Financeiro Central do ERP.
+        <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+          <div style={{ padding: '16px 20px', borderBottom: '1px solid #e2e8f0' }}>
+            <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: '#0f172a' }}>
+              Histórico Consolidado de Fechamentos da Empresa ({historico.length})
+            </h3>
+            <p style={{ margin: '3px 0 0', fontSize: 13, color: '#64748b' }}>
+              Registro auditável de todos os fechamentos anteriores com faturamento, despesas e resultado líquido.
             </p>
           </div>
 
           <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, textAlign: 'left' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 13 }}>
               <thead>
-                <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0', color: '#475569', fontSize: 12 }}>
-                  <th style={{ padding: '10px 16px' }}>Data Fechamento</th>
-                  <th style={{ padding: '10px 16px', textAlign: 'right' }}>Recebido</th>
-                  <th style={{ padding: '10px 16px', textAlign: 'right' }}>Pago (Despesas)</th>
-                  <th style={{ padding: '10px 16px', textAlign: 'right' }}>Saldo Líquido</th>
-                  <th style={{ padding: '10px 16px' }}>Responsável</th>
-                  <th style={{ padding: '10px 16px', textAlign: 'center' }}>Ação</th>
+                <tr style={{ background: '#f8fafc', color: '#475569', borderBottom: '1px solid #e2e8f0', textTransform: 'uppercase', fontSize: 11, letterSpacing: '.05em' }}>
+                  <th style={{ padding: '12px 20px' }}>Data do Fechamento</th>
+                  <th style={{ padding: '12px 16px' }}>Responsável</th>
+                  <th style={{ padding: '12px 16px', textAlign: 'right' }}>Faturamento Bruto</th>
+                  <th style={{ padding: '12px 16px', textAlign: 'right' }}>Recebido Líquido</th>
+                  <th style={{ padding: '12px 16px', textAlign: 'right' }}>Despesas Pagas</th>
+                  <th style={{ padding: '12px 16px', textAlign: 'right' }}>Resultado Líquido</th>
+                  <th style={{ padding: '12px 16px', textAlign: 'center' }}>Caixas</th>
+                  <th style={{ padding: '12px 20px', textAlign: 'center' }}>Ação</th>
                 </tr>
               </thead>
               <tbody>
                 {historico.length === 0 ? (
                   <tr>
-                    <td colSpan="6" style={{ padding: 30, textAlign: 'center', color: '#64748b' }}>
-                      Nenhum fechamento registrado no histórico ainda.
+                    <td colSpan={8} style={{ padding: '36px 20px', textAlign: 'center', color: '#94a3b8' }}>
+                      Nenhum fechamento histórico registrado ainda para esta empresa.
                     </td>
                   </tr>
                 ) : (
-                  historico.map((f) => (
-                    <tr key={f.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                      <td style={{ padding: '12px 16px', fontWeight: 700 }}>
+                  historico.map((f, i) => (
+                    <tr key={f.id || i} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                      <td style={{ padding: '14px 20px', fontWeight: 800, color: '#0f172a' }}>
                         {fmtDateOnly(f.data)}
+                        {String(f.data).slice(0, 10) === dataSelecionada && (
+                          <span style={{ marginLeft: 8, fontSize: 10, background: '#eff6ff', color: '#2563eb', padding: '2px 6px', borderRadius: 4, fontWeight: 800 }}>
+                            Atual
+                          </span>
+                        )}
                       </td>
-                      <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 700, color: '#16a34a' }}>
-                        {moeda(f.recebimentos ?? f.totais?.recebido)}
+                      <td style={{ padding: '14px 16px', color: '#475569', fontWeight: 600 }}>
+                        {f.responsavel || 'Gerência'}
                       </td>
-                      <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 700, color: '#dc2626' }}>
-                        {moeda(f.pagamentos ?? f.totais?.pago)}
+                      <td style={{ padding: '14px 16px', textAlign: 'right', fontWeight: 800, color: '#0f172a' }}>
+                        {moeda(f.faturamentoBruto)}
                       </td>
-                      <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 800, color: '#0f172a' }}>
-                        {moeda(f.saldoDia ?? (Number(f.recebimentos || 0) - Number(f.pagamentos || 0)))}
+                      <td style={{ padding: '14px 16px', textAlign: 'right', fontWeight: 800, color: '#16a34a' }}>
+                        {moeda(f.totalRecebidoLiquido)}
                       </td>
-                      <td style={{ padding: '12px 16px', color: '#475569' }}>
-                        {f.responsavel}
+                      <td style={{ padding: '14px 16px', textAlign: 'right', fontWeight: 800, color: '#dc2626' }}>
+                        {moeda(f.totalDespesasPagas)}
                       </td>
-                      <td style={{ padding: '12px 16px', textAlign: 'center' }}>
+                      <td style={{ padding: '14px 16px', textAlign: 'right', fontWeight: 900, color: (f.saldoLiquidoDia ?? 0) >= 0 ? '#16a34a' : '#dc2626' }}>
+                        {moeda(f.saldoLiquidoDia)}
+                      </td>
+                      <td style={{ padding: '14px 16px', textAlign: 'center', fontWeight: 700, color: '#64748b' }}>
+                        {f.caixasFechados || 1}
+                      </td>
+                      <td style={{ padding: '14px 20px', textAlign: 'center' }}>
                         <button
                           type="button"
                           onClick={() => trocarData(String(f.data).slice(0, 10))}
                           style={{
-                            padding: '4px 10px',
-                            background: '#eff6ff',
-                            border: '1px solid #bfdbfe',
+                            padding: '6px 12px',
                             borderRadius: 6,
-                            fontSize: 12,
-                            fontWeight: 600,
+                            border: '1px solid #2563eb',
+                            background: '#eff6ff',
                             color: '#2563eb',
+                            fontWeight: 800,
+                            fontSize: 12,
                             cursor: 'pointer',
                           }}
                         >
@@ -932,87 +1402,92 @@ export default function FechamentoDiarioGestao() {
         </div>
       )}
 
-      {/* ── MODAL: EXECUTAR FECHAMENTO DIÁRIO INTEGRADO ── */}
+      {/* ── MODAL: FECHAR O DIA NO ERP ── */}
       {modalFechamento && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: 16 }}>
-          <div style={{ background: '#fff', borderRadius: 16, width: '100%', maxWidth: 540, boxShadow: '0 20px 25px -5px rgba(0,0,0,0.2)', overflow: 'hidden' }}>
-            <div style={{ background: 'linear-gradient(135deg, #10b981, #059669)', padding: '18px 24px', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: 16 }}>
+          <div style={{ background: '#fff', borderRadius: 16, maxWidth: 520, width: '100%', padding: 24, boxShadow: '0 20px 25px -5px rgba(0,0,0,0.2)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <Lock size={20} />
-                <h3 style={{ margin: 0, fontSize: 17, fontWeight: 800 }}>Fechamento Diário Integrado</h3>
+                <Lock size={22} color="#16a34a" />
+                <h3 style={{ margin: 0, fontSize: 18, fontWeight: 900, color: '#0f172a' }}>Fechar o Dia no ERP</h3>
               </div>
-              <button type="button" onClick={() => setModalFechamento(false)} style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer' }}>
+              <button type="button" onClick={() => setModalFechamento(false)} style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#64748b' }}>
                 <X size={20} />
               </button>
             </div>
 
-            <form onSubmit={handleExecutarFechamento} style={{ padding: '20px 24px' }}>
-              <div style={{ background: '#f8fafc', padding: '14px 16px', borderRadius: 10, border: '1px solid #e2e8f0', marginBottom: 16, fontSize: 13 }}>
-                <div style={{ fontWeight: 700, color: '#0f172a', marginBottom: 6 }}>
-                  Data do Fechamento: {fmtDateOnly(dataSelecionada)}
+            <form onSubmit={handleExecutarFechamento}>
+              <div style={{ background: '#f8fafc', padding: '14px 16px', borderRadius: 12, marginBottom: 16, fontSize: 13 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                  <span style={{ color: '#64748b' }}>Data do Fechamento:</span>
+                  <strong>{fmtDateOnly(dataSelecionada)}</strong>
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, color: '#475569' }}>
-                  <div>Faturamento Total: <strong>{moeda(kpis.faturamentoBruto)}</strong></div>
-                  <div>Recebido Líquido: <strong style={{ color: '#16a34a' }}>{moeda(kpis.totalRecebidoLiquido)}</strong></div>
-                  <div>Lançado em Conta: <strong>{moeda(kpis.totalEmConta)}</strong></div>
-                  <div>Despesas Pagas: <strong style={{ color: '#dc2626' }}>{moeda(kpis.totalDespesasPagas)}</strong></div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                  <span style={{ color: '#64748b' }}>Faturamento Total:</span>
+                  <strong>{moeda(kpis.faturamentoBruto)}</strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                  <span style={{ color: '#64748b' }}>Recebimentos no Balcão:</span>
+                  <strong style={{ color: '#16a34a' }}>{moeda(kpis.totalRecebidoLiquido)}</strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: '#64748b' }}>Divergência Apurada:</span>
+                  <strong style={{ color: kpis.totalDivergencias < 0.05 ? '#16a34a' : '#dc2626' }}>{moeda(kpis.totalDivergencias)}</strong>
                 </div>
               </div>
 
               <div style={{ marginBottom: 16 }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 600, color: '#1e293b', cursor: 'pointer' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#0f172a', fontWeight: 700, cursor: 'pointer' }}>
                   <input
                     type="checkbox"
                     checked={fecharCaixasAutomatico}
                     onChange={(e) => setFecharCaixasAutomatico(e.target.checked)}
                   />
-                  <span>Fechar automaticamente todos os caixas operacionais abertos com o saldo conferido</span>
+                  <span>Encerrar e fechar automaticamente todos os caixas operacionais abertos</span>
                 </label>
               </div>
 
-              <div style={{ marginBottom: 14 }}>
-                <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#334155', marginBottom: 6 }}>
-                  Observações do Fechamento (Opcional):
+              <div style={{ marginBottom: 16 }}>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 800, color: '#475569', marginBottom: 4, textTransform: 'uppercase' }}>
+                  Observações do Turno
                 </label>
                 <textarea
                   rows={2}
                   value={obsFechamento}
                   onChange={(e) => setObsFechamento(e.target.value)}
-                  placeholder="Ex.: Fechamento sem divergências, troco de gaveta conferido."
-                  style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid #cbd5e1', fontSize: 13, boxSizing: 'border-box' }}
+                  placeholder="Observações da conferência de caixa..."
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #cbd5e1', fontSize: 13, resize: 'none' }}
                 />
               </div>
 
-              <div style={{ marginBottom: 18, background: '#fef3c7', padding: '12px 14px', borderRadius: 8, border: '1px solid #fde68a' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 700, color: '#b45309', marginBottom: 6 }}>
-                  <ShieldCheck size={16} /> Trava de Segurança: Senha de Gerente
-                </div>
+              <div style={{ marginBottom: 20 }}>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 800, color: '#dc2626', marginBottom: 4, textTransform: 'uppercase' }}>
+                  🔒 Senha de Gerente / Administrador
+                </label>
                 <input
                   type="password"
-                  placeholder="Digite a senha de gerente ou administrador..."
+                  required
+                  placeholder="Digite sua senha de autorização"
                   value={senhaGerenteFechamento}
                   onChange={(e) => setSenhaGerenteFechamento(e.target.value)}
-                  style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid #d97706', fontSize: 13, boxSizing: 'border-box' }}
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #cbd5e1', fontSize: 13, fontWeight: 700 }}
                 />
-                <small style={{ color: '#92400e', fontSize: 11, marginTop: 4, display: 'block' }}>
-                  Apenas usuários com perfil de Gerente ou Administrador podem oficializar o fechamento do dia.
-                </small>
               </div>
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
                 <button
                   type="button"
                   onClick={() => setModalFechamento(false)}
-                  style={{ padding: '8px 16px', background: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+                  style={{ padding: '10px 16px', borderRadius: 8, border: '1px solid #cbd5e1', background: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
                   disabled={processandoFechamento}
-                  style={{ padding: '8px 20px', background: 'linear-gradient(135deg, #10b981, #059669)', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}
+                  style={{ padding: '10px 20px', borderRadius: 8, border: 'none', background: '#16a34a', color: '#fff', fontWeight: 800, fontSize: 13, cursor: 'pointer' }}
                 >
-                  {processandoFechamento ? 'Processando...' : 'Confirmar e Fechar o Dia'}
+                  {processandoFechamento ? 'Fechando...' : 'Confirmar e Fechar o Dia'}
                 </button>
               </div>
             </form>
@@ -1020,61 +1495,309 @@ export default function FechamentoDiarioGestao() {
         </div>
       )}
 
-      {/* ── MODAL: REABRIR FECHAMENTO DIÁRIO ── */}
-      {modalReabrir && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: 16 }}>
-          <div style={{ background: '#fff', borderRadius: 16, width: '100%', maxWidth: 520, boxShadow: '0 20px 25px -5px rgba(0,0,0,0.2)', overflow: 'hidden' }}>
-            <div style={{ background: '#f59e0b', padding: '18px 24px', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      {/* ── MODAL: FECHAR TODOS OS CAIXAS DA EMPRESA EM LOTE ── */}
+      {modalFecharTodosCaixas && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: 16 }}>
+          <div style={{ background: '#fff', borderRadius: 16, maxWidth: 580, width: '100%', padding: 24, boxShadow: '0 20px 25px -5px rgba(0,0,0,0.2)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <Unlock size={20} />
-                <h3 style={{ margin: 0, fontSize: 17, fontWeight: 800 }}>Reabrir Fechamento do Dia</h3>
+                <Lock size={22} color="#b45309" />
+                <h3 style={{ margin: 0, fontSize: 18, fontWeight: 900, color: '#0f172a' }}>
+                  Fechar Todos os Caixas da Empresa ({caixas.filter((c) => c.status === 'aberto').length})
+                </h3>
               </div>
-              <button type="button" onClick={() => setModalReabrir(false)} style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer' }}>
+              <button type="button" onClick={() => setModalFecharTodosCaixas(false)} style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#64748b' }}>
                 <X size={20} />
               </button>
             </div>
 
-            <form onSubmit={handleReabrirFechamento} style={{ padding: '20px 24px' }}>
-              <p style={{ margin: '0 0 16px', fontSize: 13, color: '#475569', lineHeight: 1.5 }}>
-                Esta ação cancela o fechamento oficial do dia <strong>{fmtDateOnly(dataSelecionada)}</strong> no Livro-Caixa e permite realizar novas movimentações, correções de comandas ou estornos.
+            <form onSubmit={handleFecharTodosCaixas}>
+              <p style={{ margin: '0 0 16px', fontSize: 13, color: '#475569' }}>
+                Informe o valor contado em dinheiro para cada gaveta física. O sistema apurará a quebra e efetuará o encerramento em lote.
               </p>
 
+              <div style={{ maxHeight: 260, overflowY: 'auto', display: 'grid', gap: 10, marginBottom: 18 }}>
+                {caixas.filter((c) => c.status === 'aberto').map((c) => (
+                  <div key={c.id} style={{ background: '#f8fafc', padding: '12px 14px', borderRadius: 10, border: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                      <strong style={{ display: 'block', fontSize: 14, color: '#0f172a' }}>{c.nomeCaixa}</strong>
+                      <small style={{ color: '#64748b', fontSize: 12 }}>
+                        Esperado em Gaveta: <strong>{moeda(c.valorEsperado)}</strong>
+                      </small>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: '#475569' }}>Contado: R$</span>
+                      <input
+                        type="number"
+                        step="0.01"
+                        required
+                        value={valoresPorCaixa[c.id] || ''}
+                        onChange={(e) => setValoresPorCaixa({ ...valoresPorCaixa, [c.id]: e.target.value })}
+                        style={{ width: 100, padding: '6px 8px', borderRadius: 6, border: '1px solid #cbd5e1', fontWeight: 800, fontSize: 13 }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div style={{ marginBottom: 20 }}>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 800, color: '#dc2626', marginBottom: 4, textTransform: 'uppercase' }}>
+                  🔒 Senha de Gerente / Administrador
+                </label>
+                <input
+                  type="password"
+                  required
+                  placeholder="Digite sua senha de autorização"
+                  value={senhaGerenteLote}
+                  onChange={(e) => setSenhaGerenteLote(e.target.value)}
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #cbd5e1', fontSize: 13, fontWeight: 700 }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+                <button
+                  type="button"
+                  onClick={() => setModalFecharTodosCaixas(false)}
+                  style={{ padding: '10px 16px', borderRadius: 8, border: '1px solid #cbd5e1', background: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={processandoLote}
+                  style={{ padding: '10px 20px', borderRadius: 8, border: 'none', background: '#b45309', color: '#fff', fontWeight: 800, fontSize: 13, cursor: 'pointer' }}
+                >
+                  {processandoLote ? 'Fechando em lote...' : 'Confirmar Fechamento em Lote'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL: FECHAR CAIXA INDIVIDUAL ── */}
+      {caixaParaFechar && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: 16 }}>
+          <div style={{ background: '#fff', borderRadius: 16, maxWidth: 460, width: '100%', padding: 24, boxShadow: '0 20px 25px -5px rgba(0,0,0,0.2)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <Lock size={20} color="#b45309" />
+                <h3 style={{ margin: 0, fontSize: 17, fontWeight: 900, color: '#0f172a' }}>
+                  Fechar {caixaParaFechar.nomeCaixa}
+                </h3>
+              </div>
+              <button type="button" onClick={() => setCaixaParaFechar(null)} style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#64748b' }}>
+                <X size={20} />
+              </button>
+            </div>
+
+            <form onSubmit={handleFecharCaixaIndividual}>
+              <div style={{ background: '#f8fafc', padding: '12px 14px', borderRadius: 10, marginBottom: 16, fontSize: 13 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                  <span style={{ color: '#64748b' }}>Saldo Esperado em Gaveta:</span>
+                  <strong style={{ fontSize: 15, color: '#0f172a' }}>{moeda(caixaParaFechar.valorEsperado)}</strong>
+                </div>
+                <small style={{ color: '#64748b' }}>
+                  Abertura: {moeda(caixaParaFechar.valorAbertura)} · Recs: {moeda(caixaParaFechar.recebimentosDinheiro)} · Supr: {moeda(caixaParaFechar.suprimentos)} · Sang: {moeda(caixaParaFechar.sangrias)}
+                </small>
+              </div>
+
+              <div style={{ marginBottom: 16 }}>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 800, color: '#475569', marginBottom: 4, textTransform: 'uppercase' }}>
+                  Valor Contado em Dinheiro Físico (R$)
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  required
+                  value={valorContadoIndividual}
+                  onChange={(e) => setValorContadoIndividual(e.target.value)}
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #cbd5e1', fontSize: 16, fontWeight: 800 }}
+                />
+              </div>
+
+              <div style={{ marginBottom: 20 }}>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 800, color: '#475569', marginBottom: 4, textTransform: 'uppercase' }}>
+                  Observação de Fechamento
+                </label>
+                <input
+                  type="text"
+                  placeholder="Ex: Turno manhã finalizado sem pendências"
+                  value={obsCaixaIndividual}
+                  onChange={(e) => setObsCaixaIndividual(e.target.value)}
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #cbd5e1', fontSize: 13 }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+                <button
+                  type="button"
+                  onClick={() => setCaixaParaFechar(null)}
+                  style={{ padding: '10px 16px', borderRadius: 8, border: '1px solid #cbd5e1', background: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={processandoFechamentoIndividual}
+                  style={{ padding: '10px 20px', borderRadius: 8, border: 'none', background: '#b45309', color: '#fff', fontWeight: 800, fontSize: 13, cursor: 'pointer' }}
+                >
+                  {processandoFechamentoIndividual ? 'Fechando...' : 'Confirmar Fechamento'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL: ABRIR NOVO CAIXA ── */}
+      {modalAbrirCaixa && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: 16 }}>
+          <div style={{ background: '#fff', borderRadius: 16, maxWidth: 460, width: '100%', padding: 24, boxShadow: '0 20px 25px -5px rgba(0,0,0,0.2)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <PlusCircle size={20} color="#14b87a" />
+                <h3 style={{ margin: 0, fontSize: 17, fontWeight: 900, color: '#0f172a' }}>
+                  Abrir Novo Caixa Operacional
+                </h3>
+              </div>
+              <button type="button" onClick={() => setModalAbrirCaixa(false)} style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#64748b' }}>
+                <X size={20} />
+              </button>
+            </div>
+
+            <form onSubmit={handleAbrirNovoCaixa}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 12, marginBottom: 14 }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 800, color: '#475569', marginBottom: 4 }}>
+                    Número
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    required
+                    value={novoCaixaNumero}
+                    onChange={(e) => setNovoCaixaNumero(e.target.value)}
+                    style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid #cbd5e1', fontSize: 13, fontWeight: 700 }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 800, color: '#475569', marginBottom: 4 }}>
+                    Identificação / Nome
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={novoCaixaNome}
+                    onChange={(e) => setNovoCaixaNome(e.target.value)}
+                    style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid #cbd5e1', fontSize: 13, fontWeight: 700 }}
+                  />
+                </div>
+              </div>
+
               <div style={{ marginBottom: 14 }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 600, color: '#1e293b', cursor: 'pointer' }}>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 800, color: '#475569', marginBottom: 4 }}>
+                  Fundo de Troco Inicial (R$)
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  required
+                  value={novoCaixaValorAbertura}
+                  onChange={(e) => setNovoCaixaValorAbertura(e.target.value)}
+                  style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid #cbd5e1', fontSize: 15, fontWeight: 800 }}
+                />
+              </div>
+
+              <div style={{ marginBottom: 20 }}>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 800, color: '#475569', marginBottom: 4 }}>
+                  Operador Responsável
+                </label>
+                <input
+                  type="text"
+                  placeholder="Nome do operador de balcão"
+                  value={novoCaixaOperador}
+                  onChange={(e) => setNovoCaixaOperador(e.target.value)}
+                  style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid #cbd5e1', fontSize: 13 }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+                <button
+                  type="button"
+                  onClick={() => setModalAbrirCaixa(false)}
+                  style={{ padding: '10px 16px', borderRadius: 8, border: '1px solid #cbd5e1', background: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={processandoAberturaCaixa}
+                  style={{ padding: '10px 20px', borderRadius: 8, border: 'none', background: '#14b87a', color: '#fff', fontWeight: 800, fontSize: 13, cursor: 'pointer' }}
+                >
+                  {processandoAberturaCaixa ? 'Abrindo...' : 'Abrir Caixa'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL: REABRIR FECHAMENTO ── */}
+      {modalReabrir && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: 16 }}>
+          <div style={{ background: '#fff', borderRadius: 16, maxWidth: 500, width: '100%', padding: 24, boxShadow: '0 20px 25px -5px rgba(0,0,0,0.2)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <Unlock size={22} color="#dc2626" />
+                <h3 style={{ margin: 0, fontSize: 18, fontWeight: 900, color: '#0f172a' }}>Reabrir Fechamento Diário</h3>
+              </div>
+              <button type="button" onClick={() => setModalReabrir(false)} style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#64748b' }}>
+                <X size={20} />
+              </button>
+            </div>
+
+            <form onSubmit={handleReabrirFechamento}>
+              <p style={{ margin: '0 0 16px', fontSize: 13, color: '#475569' }}>
+                A reabertura remove o status de oficializado no ERP e permite fazer ajustes em comandas e caixas da data selecionada (<strong>{fmtDateOnly(dataSelecionada)}</strong>).
+              </p>
+
+              <div style={{ marginBottom: 16 }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#0f172a', fontWeight: 700, cursor: 'pointer' }}>
                   <input
                     type="checkbox"
                     checked={reabrirCaixasFisicos}
                     onChange={(e) => setReabrirCaixasFisicos(e.target.checked)}
                   />
-                  <span>Reabrir também os caixas operacionais fechados nesta data</span>
+                  <span>Reabrir também os caixas físicos operacionais fechados</span>
                 </label>
               </div>
 
-              <div style={{ marginBottom: 14 }}>
-                <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#334155', marginBottom: 6 }}>
-                  Motivo da Reabertura (Obrigatório):
+              <div style={{ marginBottom: 16 }}>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 800, color: '#475569', marginBottom: 4, textTransform: 'uppercase' }}>
+                  Motivo da Reabertura (Obrigatório)
                 </label>
-                <input
-                  type="text"
+                <textarea
+                  rows={2}
                   required
                   value={motivoReabertura}
                   onChange={(e) => setMotivoReabertura(e.target.value)}
-                  placeholder="Ex.: Correção de valor de comanda ou inclusão de item"
-                  style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid #cbd5e1', fontSize: 13, boxSizing: 'border-box' }}
+                  placeholder="Ex: Ajuste de comanda faturada errada..."
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #cbd5e1', fontSize: 13, resize: 'none' }}
                 />
               </div>
 
-              <div style={{ marginBottom: 18, background: '#fee2e2', padding: '12px 14px', borderRadius: 8, border: '1px solid #fca5a5' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 700, color: '#b91c1c', marginBottom: 6 }}>
-                  <ShieldCheck size={16} /> Senha de Gerente Obrigatória
-                </div>
+              <div style={{ marginBottom: 20 }}>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 800, color: '#dc2626', marginBottom: 4, textTransform: 'uppercase' }}>
+                  🔒 Senha de Gerente / Administrador
+                </label>
                 <input
                   type="password"
                   required
-                  placeholder="Digite sua senha de gerente..."
+                  placeholder="Digite sua senha de autorização"
                   value={senhaGerenteReabertura}
                   onChange={(e) => setSenhaGerenteReabertura(e.target.value)}
-                  style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid #dc2626', fontSize: 13, boxSizing: 'border-box' }}
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #cbd5e1', fontSize: 13, fontWeight: 700 }}
                 />
               </div>
 
@@ -1082,14 +1805,14 @@ export default function FechamentoDiarioGestao() {
                 <button
                   type="button"
                   onClick={() => setModalReabrir(false)}
-                  style={{ padding: '8px 16px', background: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+                  style={{ padding: '10px 16px', borderRadius: 8, border: '1px solid #cbd5e1', background: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
                   disabled={processandoReabertura}
-                  style={{ padding: '8px 20px', background: '#f59e0b', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}
+                  style={{ padding: '10px 20px', borderRadius: 8, border: 'none', background: '#dc2626', color: '#fff', fontWeight: 800, fontSize: 13, cursor: 'pointer' }}
                 >
                   {processandoReabertura ? 'Reabrindo...' : 'Confirmar Reabertura'}
                 </button>
@@ -1099,116 +1822,117 @@ export default function FechamentoDiarioGestao() {
         </div>
       )}
 
-      {/* ── MODAL DE IMPRESSÃO: COMPROVANTE OFICIAL DE FECHAMENTO ── */}
+      {/* ── MODAL DE IMPRESSÃO / COMPROVANTE OFICIAL ── */}
       {modalImpressao && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: 16 }}>
-          <div style={{ background: '#fff', borderRadius: 16, width: '100%', maxWidth: 600, maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.2)' }}>
-            <div style={{ padding: '16px 20px', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <Printer size={18} color="#2563eb" />
-                <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800 }}>Comprovante Oficial de Fechamento Diário</h3>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: 16 }}>
+          <div style={{ background: '#fff', borderRadius: 16, maxWidth: 600, width: '100%', padding: 24, maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, borderBottom: '1px solid #e2e8f0', paddingBottom: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <Printer size={20} color="#2563eb" />
+                <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: '#0f172a' }}>Comprovante Oficial de Fechamento Diário</h3>
               </div>
-              <button type="button" onClick={() => setModalImpressao(false)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
-                <X size={20} color="#64748b" />
+              <button type="button" onClick={() => setModalImpressao(false)} style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#64748b' }}>
+                <X size={20} />
               </button>
             </div>
 
-            {/* ÁREA IMPRIMÍVEL */}
-            <div id="area-impressao-fechamento" style={{ padding: '24px 28px', color: '#0f172a', fontFamily: 'monospace, sans-serif' }}>
-              <div style={{ textAlign: 'center', borderBottom: '2px dashed #94a3b8', paddingBottom: 16, marginBottom: 16 }}>
-                <div style={{ fontSize: 18, fontWeight: 800, textTransform: 'uppercase' }}>
-                  {isDino ? 'BARBEARIA DINO' : (empresaAtiva?.nome || 'KYTTO ERP')}
-                </div>
-                <div style={{ fontSize: 12, color: '#475569', marginTop: 4 }}>
-                  RELATÓRIO CONSOLIDADO DE FECHAMENTO DIÁRIO
-                </div>
-                <div style={{ fontSize: 12, color: '#475569' }}>
-                  Data: <strong>{fmtDateOnly(dataSelecionada)}</strong> &bull; Emissão: {new Date().toLocaleString('pt-BR')}
-                </div>
+            {/* Espelho do cupom impresso */}
+            <div
+              id="cupom-fechamento-print"
+              style={{
+                fontFamily: 'monospace',
+                fontSize: 12,
+                background: '#fafafa',
+                padding: '20px 24px',
+                borderRadius: 10,
+                border: '1px dashed #cbd5e1',
+                color: '#0f172a',
+                lineHeight: 1.5,
+              }}
+            >
+              <div style={{ textAlign: 'center', marginBottom: 12 }}>
+                <strong style={{ fontSize: 15, textTransform: 'uppercase' }}>{empresaAtualObj.nome}</strong>
+                <div style={{ fontSize: 11, color: '#64748b' }}>RELATÓRIO CONSOLIDADO DE FECHAMENTO DIÁRIO</div>
+                <div style={{ fontSize: 11, color: '#64748b' }}>Data: {fmtDateOnly(dataSelecionada)} · Emissão: {new Date().toLocaleString('pt-BR')}</div>
               </div>
 
-              <div style={{ marginBottom: 14 }}>
-                <div style={{ fontWeight: 800, fontSize: 13, borderBottom: '1px solid #cbd5e1', paddingBottom: 4, marginBottom: 6 }}>
-                  1. RESUMO DE FATURAMENTO
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+              <div style={{ borderTop: '1px dashed #cbd5e1', paddingTop: 10, marginBottom: 10 }}>
+                <strong>1. RESUMO DE FATURAMENTO</strong>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <span>Serviços Realizados ({kpis.totalServicos}):</span>
                   <strong>{moeda(kpis.valorServicos)}</strong>
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <span>Produtos de Revenda ({kpis.totalProdutos}):</span>
                   <strong>{moeda(kpis.valorProdutos)}</strong>
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, fontWeight: 800, borderTop: '1px solid #e2e8f0', marginTop: 4, paddingTop: 4 }}>
-                  <span>TOTAL FATURADO:</span>
-                  <span>{moeda(kpis.faturamentoBruto)}</span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4, borderTop: '1px solid #e2e8f0', paddingTop: 4 }}>
+                  <strong>TOTAL FATURADO:</strong>
+                  <strong>{moeda(kpis.faturamentoBruto)}</strong>
                 </div>
               </div>
 
-              <div style={{ marginBottom: 14 }}>
-                <div style={{ fontWeight: 800, fontSize: 13, borderBottom: '1px solid #cbd5e1', paddingBottom: 4, marginBottom: 6 }}>
-                  2. MEIOS DE PAGAMENTO APURADOS
-                </div>
-                {conciliacaoLinhas.filter(l => l.tipo !== 'movimento_caixa').map((l) => (
-                  <div key={l.chave} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 2 }}>
+              <div style={{ borderTop: '1px dashed #cbd5e1', paddingTop: 10, marginBottom: 10 }}>
+                <strong>2. MEIOS DE PAGAMENTO APURADOS</strong>
+                {conciliacaoLinhas.filter((l) => l.tipo !== 'movimento_caixa').map((l) => (
+                  <div key={l.chave} style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span>{l.label}:</span>
-                    <strong>{moeda(l.operacao)}</strong>
+                    <span>{moeda(l.operacao)}</span>
                   </div>
                 ))}
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, fontWeight: 800, borderTop: '1px solid #e2e8f0', marginTop: 4, paddingTop: 4 }}>
-                  <span>TOTAL RECEBIDO LÍQUIDO:</span>
-                  <span>{moeda(kpis.totalRecebidoLiquido)}</span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4, borderTop: '1px solid #e2e8f0', paddingTop: 4 }}>
+                  <strong>TOTAL RECEBIDO LÍQUIDO:</strong>
+                  <strong style={{ color: '#16a34a' }}>{moeda(kpis.totalRecebidoLiquido)}</strong>
                 </div>
               </div>
 
-              <div style={{ marginBottom: 14 }}>
-                <div style={{ fontWeight: 800, fontSize: 13, borderBottom: '1px solid #cbd5e1', paddingBottom: 4, marginBottom: 6 }}>
-                  3. MOVIMENTAÇÕES DE GAVETA &amp; DESPESAS
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+              <div style={{ borderTop: '1px dashed #cbd5e1', paddingTop: 10, marginBottom: 10 }}>
+                <strong>3. MOVIMENTAÇÕES DE GAVETA &amp; DESPESAS</strong>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <span>Suprimentos de Fundo de Troco:</span>
-                  <strong>{moeda(conciliacaoLinhas.find(l => l.chave === 'suprimentos')?.operacao || 0)}</strong>
+                  <span>{moeda(conciliacaoLinhas.find((l) => l.chave === 'suprimentos')?.operacao)}</span>
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <span>Sangrias / Retiradas:</span>
-                  <strong style={{ color: '#dc2626' }}>{moeda(conciliacaoLinhas.find(l => l.chave === 'sangrias')?.operacao || 0)}</strong>
+                  <span style={{ color: '#dc2626' }}>{moeda(conciliacaoLinhas.find((l) => l.chave === 'sangrias')?.operacao)}</span>
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <span>Despesas Operacionais do Dia:</span>
-                  <strong style={{ color: '#dc2626' }}>{moeda(kpis.totalDespesasPagas)}</strong>
+                  <span style={{ color: '#dc2626' }}>{moeda(kpis.totalDespesasPagas)}</span>
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, fontWeight: 800, borderTop: '1px solid #e2e8f0', marginTop: 4, paddingTop: 4 }}>
-                  <span>RESULTADO LÍQUIDO DO DIA:</span>
-                  <span style={{ color: kpis.saldoLiquidoDia >= 0 ? '#16a34a' : '#dc2626' }}>{moeda(kpis.saldoLiquidoDia)}</span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4, borderTop: '1px solid #e2e8f0', paddingTop: 4 }}>
+                  <strong>RESULTADO LÍQUIDO DO DIA:</strong>
+                  <strong style={{ color: kpis.saldoLiquidoDia >= 0 ? '#16a34a' : '#dc2626' }}>{moeda(kpis.saldoLiquidoDia)}</strong>
                 </div>
               </div>
 
-              <div style={{ marginTop: 30, borderTop: '1px solid #94a3b8', paddingTop: 10, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, textAlign: 'center', fontSize: 11 }}>
+              <div style={{ borderTop: '1px dashed #cbd5e1', paddingTop: 24, marginTop: 20, display: 'flex', justifyContent: 'space-around', textAlign: 'center', fontSize: 10 }}>
                 <div>
-                  <div style={{ borderBottom: '1px solid #334155', height: 24, marginBottom: 4 }} />
-                  <div>Assinatura do Operador</div>
+                  ____________________________________
+                  <div style={{ marginTop: 4 }}>Assinatura do Operador</div>
                 </div>
                 <div>
-                  <div style={{ borderBottom: '1px solid #334155', height: 24, marginBottom: 4 }} />
-                  <div>Assinatura do Gerente</div>
+                  ____________________________________
+                  <div style={{ marginTop: 4 }}>Assinatura do Gerente</div>
                 </div>
               </div>
             </div>
 
-            <div style={{ padding: '16px 20px', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 20 }}>
               <button
                 type="button"
                 onClick={() => setModalImpressao(false)}
-                style={{ padding: '8px 16px', background: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+                style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #cbd5e1', background: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}
               >
                 Fechar
               </button>
               <button
                 type="button"
                 onClick={() => window.print()}
-                style={{ padding: '8px 20px', background: '#2563eb', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
+                style={{ padding: '8px 20px', borderRadius: 8, border: 'none', background: '#2563eb', color: '#fff', fontWeight: 800, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
               >
-                <Printer size={15} /> Imprimir Agora
+                <Printer size={16} />
+                <span>Imprimir Agora</span>
               </button>
             </div>
           </div>

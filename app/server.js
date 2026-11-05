@@ -157,6 +157,10 @@ import {
   obterFechamentoDiarioEConciliacao,
   executarFechamentoDiarioIntegrado,
   reabrirFechamentoDiarioIntegrado,
+  listarEmpresasParaFechamento,
+  fecharTodosOsCaixasDaEmpresa,
+  fecharCaixaIndividualEmpresa,
+  abrirNovoCaixaEmpresa,
 } from './dino-fechamento-conciliacao.js';
 import { funnelSummary } from './storefront-funnel.js';
 import { whatsappProviderConfigured, whatsappProviderName } from './core/whatsapp-provider.js';
@@ -6105,10 +6109,17 @@ app.post('/api/admin/barbearia/operacao/fechar-dia', (req, res) => {
 });
 
 // ── CONCILIAÇÃO FECHAMENTO DIÁRIO E GESTÃO INTEGRADA ─────────────────────────
+app.get('/api/admin/fechamento-diario/empresas', auth, requireStaff, (req, res) => {
+  try {
+    res.json({ ok: true, empresas: listarEmpresasParaFechamento() });
+  } catch (error) { res.status(400).json({ error: error.message }); }
+});
+
 app.get(['/api/admin/fechamento-diario', '/api/admin/fechamento-diario/conciliacao', '/api/admin/barbearia/operacao/fechamento-conciliacao'], auth, requireStaff, (req, res) => {
   try {
-    const empresaId = legacyEmpresaId(req);
-    const lojaId = legacyLojaId(req);
+    const empresaSolicitada = String(req.query?.empresaId || req.headers['x-empresa-id'] || '').trim();
+    const empresaId = empresaSolicitada || legacyEmpresaId(req);
+    const lojaId = req.query?.lojaId || legacyLojaId(req);
     const resultado = obterFechamentoDiarioEConciliacao(empresaId, req.query?.data, { lojaId });
     res.json({
       ok: true,
@@ -6121,8 +6132,9 @@ app.get(['/api/admin/fechamento-diario', '/api/admin/fechamento-diario/conciliac
 app.post(['/api/admin/fechamento-diario', '/api/admin/fechamento-diario/executar', '/api/admin/barbearia/operacao/fechamento-integrado'], auth, requireStaff, async (req, res) => {
   try {
     if (req.body?.confirmado !== true) return res.status(400).json({ error: 'A confirmação explícita do fechamento diário é obrigatória.' });
-    const empresaId = legacyEmpresaId(req);
-    const lojaId = legacyLojaId(req);
+    const empresaSolicitada = String(req.body?.empresaId || req.headers['x-empresa-id'] || '').trim();
+    const empresaId = empresaSolicitada || legacyEmpresaId(req);
+    const lojaId = req.body?.lojaId || legacyLojaId(req);
     const senhaGerente = String(req.body?.senhaGerente || req.body?.senha || '').trim();
     if (senhaGerente) {
       const authOk = await autorizarComSenhaGerente(req, senhaGerente);
@@ -6138,10 +6150,59 @@ app.post(['/api/admin/fechamento-diario', '/api/admin/fechamento-diario/executar
   } catch (error) { res.status(400).json({ error: error.message }); }
 });
 
+app.post('/api/admin/fechamento-diario/fechar-todos-caixas', auth, requireStaff, async (req, res) => {
+  try {
+    const empresaSolicitada = String(req.body?.empresaId || req.headers['x-empresa-id'] || '').trim();
+    const empresaId = empresaSolicitada || legacyEmpresaId(req);
+    const lojaId = req.body?.lojaId || legacyLojaId(req);
+    const senhaGerente = String(req.body?.senhaGerente || req.body?.senha || '').trim();
+    if (senhaGerente) {
+      const authOk = await autorizarComSenhaGerente(req, senhaGerente);
+      if (!authOk) return res.status(403).json({ error: 'Senha de gerente incorreta ou usuário não autorizado.' });
+    }
+    const resultado = fecharTodosOsCaixasDaEmpresa(empresaId, {
+      ...(req.body || {}),
+      lojaId,
+      usuario: req.user?.nome || req.user?.email || 'Gerente',
+    });
+    audit(req, 'FECHAMENTO_TODOS_CAIXAS_EMPRESA', `empresa=${empresaId} caixas=${resultado.caixasFechados}`);
+    res.json(resultado);
+  } catch (error) { res.status(400).json({ error: error.message }); }
+});
+
+app.post('/api/admin/fechamento-diario/fechar-caixa-individual', auth, requireStaff, async (req, res) => {
+  try {
+    const empresaSolicitada = String(req.body?.empresaId || req.headers['x-empresa-id'] || '').trim();
+    const empresaId = empresaSolicitada || legacyEmpresaId(req);
+    const caixaId = String(req.body?.caixaId || req.body?.id || '').trim();
+    if (!caixaId) return res.status(400).json({ error: 'Identificador do caixa é obrigatório.' });
+    const resultado = fecharCaixaIndividualEmpresa(empresaId, caixaId, {
+      ...(req.body || {}),
+      usuario: req.user?.nome || req.user?.email || 'Operador',
+    });
+    audit(req, 'FECHAMENTO_CAIXA_INDIVIDUAL', `empresa=${empresaId} caixaId=${caixaId}`);
+    res.json({ ok: true, ...resultado });
+  } catch (error) { res.status(400).json({ error: error.message }); }
+});
+
+app.post('/api/admin/fechamento-diario/abrir-caixa', auth, requireStaff, (req, res) => {
+  try {
+    const empresaSolicitada = String(req.body?.empresaId || req.headers['x-empresa-id'] || '').trim();
+    const empresaId = empresaSolicitada || legacyEmpresaId(req);
+    const resultado = abrirNovoCaixaEmpresa(empresaId, {
+      ...(req.body || {}),
+      responsavel: req.body?.responsavel || req.user?.nome || 'Operador',
+    });
+    audit(req, 'ABERTURA_NOVO_CAIXA', `empresa=${empresaId} caixaId=${resultado.id}`);
+    res.json({ ok: true, ...resultado });
+  } catch (error) { res.status(400).json({ error: error.message }); }
+});
+
 app.post(['/api/admin/fechamento-diario/reabrir', '/api/admin/barbearia/operacao/fechamento-reabrir'], auth, requireStaff, async (req, res) => {
   try {
-    const empresaId = legacyEmpresaId(req);
-    const lojaId = legacyLojaId(req);
+    const empresaSolicitada = String(req.body?.empresaId || req.headers['x-empresa-id'] || '').trim();
+    const empresaId = empresaSolicitada || legacyEmpresaId(req);
+    const lojaId = req.body?.lojaId || legacyLojaId(req);
     const senhaGerente = String(req.body?.senhaGerente || req.body?.senha || '').trim();
     if (!senhaGerente) return res.status(403).json({ error: 'Senha de gerente obrigatória para reabrir o fechamento diário.' });
     const authOk = await autorizarComSenhaGerente(req, senhaGerente);
