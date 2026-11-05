@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { api, fmtR, fmtDateOnly } from '../../lib/api'
+import { api, fmtR, fmtK, fmtDateOnly } from '../../lib/api'
 import { a2Path } from '../../lib/tenant-api'
 import { useToast } from '../../hooks/useToast'
 import Modal from '../../components/Modal'
@@ -166,11 +166,13 @@ export default function ContasReceber() {
       <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(200px,1fr))', gap:12, marginBottom:24 }}>
         <div className="kpi" style={{ borderLeft:'4px solid #FF6B2C' }}>
           <div className="kpi-label">Total a Receber</div>
-          <div className="kpi-value">{fmtR(totalReceber)}</div>
+          <div className="kpi-value" title={fmtR(totalReceber)}>{fmtK(totalReceber)}</div>
+          <small style={{ fontSize: 11, color: 'var(--muted)', display: 'block', marginTop: 2 }}>Exato: {fmtR(totalReceber)}</small>
         </div>
         <div className="kpi" style={{ borderLeft:'4px solid #e74c3c' }}>
           <div className="kpi-label">Total em Atraso</div>
-          <div className="kpi-value" style={{ color:'#e74c3c' }}>{fmtR(totalAtrasado)}</div>
+          <div className="kpi-value" style={{ color:'#e74c3c' }} title={fmtR(totalAtrasado)}>{fmtK(totalAtrasado)}</div>
+          <small style={{ fontSize: 11, color: 'var(--muted)', display: 'block', marginTop: 2 }}>Exato: {fmtR(totalAtrasado)}</small>
         </div>
         <div className="kpi" style={{ borderLeft:`4px solid ${totalAlertas > 0 ? '#FFB703' : '#2ecc71'}` }}>
           <div className="kpi-label">Alertas de Vencimento</div>

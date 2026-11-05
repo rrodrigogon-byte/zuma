@@ -2,6 +2,33 @@ export const money = (value) => new Intl.NumberFormat('pt-BR', { style: 'currenc
 export const pct = (value, digits = 1) => (value == null || Number.isNaN(Number(value)) ? '—' : `${Number(value).toFixed(digits).replace('.', ',')}%`)
 export const int = (value) => Number(value || 0).toLocaleString('pt-BR')
 
+/** Formata valores em formato compacto "k" ou "M" com números redondos (ex: R$ 55k, R$ 55.5k, R$ 1.2M, R$ 460). */
+export function moneyK(value, options = {}) {
+  const num = Number(value || 0)
+  const prefix = options.prefix !== false ? 'R$ ' : ''
+  if (num === 0) return `${prefix}0`
+
+  const abs = Math.abs(num)
+  const sign = num < 0 ? '-' : ''
+
+  if (abs >= 1_000_000) {
+    const m = abs / 1_000_000
+    const rounded = Math.round(m * 10) / 10
+    const formatted = rounded % 1 === 0 ? rounded.toFixed(0) : rounded.toFixed(1)
+    return `${sign}${prefix}${formatted}M`
+  }
+
+  if (abs >= 1_000) {
+    const k = abs / 1_000
+    const rounded = Math.round(k * 10) / 10
+    const formatted = rounded % 1 === 0 ? rounded.toFixed(0) : rounded.toFixed(1)
+    return `${sign}${prefix}${formatted}k`
+  }
+
+  const rounded = Math.round(abs)
+  return `${sign}${prefix}${rounded}`
+}
+
 export function shortDate(value) {
   if (!value) return '—'
   const text = String(value)

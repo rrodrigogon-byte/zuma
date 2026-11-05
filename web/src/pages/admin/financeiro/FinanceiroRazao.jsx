@@ -4,7 +4,7 @@ import { useToast } from '../../../hooks/useToast'
 import { useAuth } from '../../../lib/auth'
 import { lojasDaEmpresa } from '../../../lib/context-selection'
 import { Badge, Dialog, Table } from '../customer360/shared'
-import { downloadCsv, localDay, money, shortDate, dateTime } from '../dino/format'
+import { downloadCsv, localDay, money, moneyK, shortDate, dateTime } from '../dino/format'
 import Conciliacao from './Conciliacao'
 import '../customer360.css'
 import '../dino/dino-admin.css'
@@ -248,12 +248,12 @@ export default function FinanceiroRazao({ abaInicial = 'geral' }) {
 
     {aba === 'geral' && resumo && <>
       <section className="dadm-kpis" aria-label="Resumo financeiro">
-        <article><span>Saldo realizado</span><strong className={resumo.saldo >= 0 ? '' : 'dadm-neg'}>{money(resumo.saldo)}</strong><small>Tudo o que foi recebido − pago</small></article>
-        <article><span>A receber</span><strong>{money(resumo.aReceber)}</strong><small>{resumo.receberVencidos ? `${resumo.receberVencidos} vencido(s): ${money(resumo.receberVencidosValor)}` : 'Nada vencido'}</small></article>
-        <article className={resumo.pagarVencidos ? 'is-alert' : ''}><span>A pagar</span><strong>{money(resumo.aPagar)}</strong><small>{resumo.pagarVencidos ? `${resumo.pagarVencidos} vencido(s): ${money(resumo.pagarVencidosValor)}` : 'Nada vencido'}</small></article>
-        <article><span>Recebido no mês</span><strong>{money(resumo.recMes)}</strong><small>{resumo.mesAtual?.slice(5)}/{resumo.mesAtual?.slice(0, 4)}</small></article>
-        <article><span>Pago no mês</span><strong>{money(resumo.despMes)}</strong><small>Despesas pagas</small></article>
-        <article className={resumo.resultadoMes < 0 ? 'is-alert' : ''}><span>Resultado do mês</span><strong>{money(resumo.resultadoMes)}</strong><small>{resumo.recMes > 0 ? `Margem ${((resumo.resultadoMes / resumo.recMes) * 100).toFixed(1).replace('.', ',')}%` : 'Sem recebimentos'}</small></article>
+        <article><span>Saldo realizado</span><strong className={resumo.saldo >= 0 ? '' : 'dadm-neg'} title={money(resumo.saldo)}>{moneyK(resumo.saldo)}</strong><div className="dadm-kpi-subval">Exato: {money(resumo.saldo)}</div><small>Tudo o que foi recebido − pago</small></article>
+        <article><span>A receber</span><strong title={money(resumo.aReceber)}>{moneyK(resumo.aReceber)}</strong><div className="dadm-kpi-subval">Exato: {money(resumo.aReceber)}</div><small>{resumo.receberVencidos ? `${resumo.receberVencidos} vencido(s): ${moneyK(resumo.receberVencidosValor)}` : 'Nada vencido'}</small></article>
+        <article className={resumo.pagarVencidos ? 'is-alert' : ''}><span>A pagar</span><strong title={money(resumo.aPagar)}>{moneyK(resumo.aPagar)}</strong><div className="dadm-kpi-subval">Exato: {money(resumo.aPagar)}</div><small>{resumo.pagarVencidos ? `${resumo.pagarVencidos} vencido(s): ${moneyK(resumo.pagarVencidosValor)}` : 'Nada vencido'}</small></article>
+        <article><span>Recebido no mês</span><strong title={money(resumo.recMes)}>{moneyK(resumo.recMes)}</strong><div className="dadm-kpi-subval">Exato: {money(resumo.recMes)}</div><small>{resumo.mesAtual?.slice(5)}/{resumo.mesAtual?.slice(0, 4)}</small></article>
+        <article><span>Pago no mês</span><strong title={money(resumo.despMes)}>{moneyK(resumo.despMes)}</strong><div className="dadm-kpi-subval">Exato: {money(resumo.despMes)}</div><small>Despesas pagas</small></article>
+        <article className={resumo.resultadoMes < 0 ? 'is-alert' : ''}><span>Resultado do mês</span><strong title={money(resumo.resultadoMes)}>{moneyK(resumo.resultadoMes)}</strong><div className="dadm-kpi-subval">Exato: {money(resumo.resultadoMes)}</div><small>{resumo.recMes > 0 ? `Margem ${((resumo.resultadoMes / resumo.recMes) * 100).toFixed(1).replace('.', ',')}%` : 'Sem recebimentos'}</small></article>
       </section>
       {resumo.vencendo3Dias > 0 && <p className="dadm-note warn">{resumo.vencendo3Dias} conta(s) vencem nos próximos 3 dias. Veja nas abas A pagar e A receber.</p>}
       {resumo.semUnidade > 0 && !unidade && lojas.length > 1 && <p className="dadm-note">{resumo.semUnidade} lançamento(s) ainda sem unidade. Edite para atribuir, ou filtre por “Sem unidade definida”.</p>}

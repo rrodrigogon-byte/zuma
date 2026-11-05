@@ -163,6 +163,33 @@ export function fmtR(v) {
   return _brl.format(Number(v || 0))
 }
 
+/** Formata valores monetários em formato compacto "k" ou "M" (ex: R$ 55k, R$ 55.5k, R$ 1.2M, R$ 460). */
+export function fmtK(value, options = {}) {
+  const num = Number(value || 0)
+  const prefix = options.prefix !== false ? 'R$ ' : ''
+  if (num === 0) return `${prefix}0`
+
+  const abs = Math.abs(num)
+  const sign = num < 0 ? '-' : ''
+
+  if (abs >= 1_000_000) {
+    const m = abs / 1_000_000
+    const rounded = Math.round(m * 10) / 10
+    const formatted = rounded % 1 === 0 ? rounded.toFixed(0) : rounded.toFixed(1)
+    return `${sign}${prefix}${formatted}M`
+  }
+
+  if (abs >= 1_000) {
+    const k = abs / 1_000
+    const rounded = Math.round(k * 10) / 10
+    const formatted = rounded % 1 === 0 ? rounded.toFixed(0) : rounded.toFixed(1)
+    return `${sign}${prefix}${formatted}k`
+  }
+
+  const rounded = Math.round(abs)
+  return `${sign}${prefix}${rounded}`
+}
+
 // Número com separador de milhar. casas = nº de casas decimais (opcional)
 export function fmtNum(v, casas) {
   const n = Number(v || 0)

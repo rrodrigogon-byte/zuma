@@ -6,7 +6,7 @@ import EscolherUnidade, { useUnidadeAtiva } from '../../../components/EscolherUn
 import { useRazaoAtivo } from '../../../lib/razao-estado'
 import { brandFromContext } from '../../../lib/brand'
 import { Badge, Dialog, Table } from '../customer360/shared'
-import { downloadCsv, localDay, money, shortDate } from './format'
+import { downloadCsv, localDay, money, moneyK, shortDate } from './format'
 import '../customer360.css'
 import './dino-admin.css'
 
@@ -258,6 +258,545 @@ function DespesasCategoriaPanel({ dre, onSelectCategoria }) {
   </div>
 }
 
+
+// Painel Detalhado de Contas a Receber
+function ContasReceberPanel({ lancamentos, hoje, modoK, onMarcarPago, onNovo }) {
+  const [busca, setBusca] = useState('')
+  const [filtroStatus, setFiltroStatus] = useState('pendente')
+
+  const aReceber = useMemo(() => {
+    return lancamentos.filter((i) => i.tipo === 'receita')
+  }, [lancamentos])
+
+  const totalPendente = aReceber.filter((i) => i.status === 'pendente').reduce((s, i) => s + (i.valor || 0), 0)
+  const totalVencidas = aReceber.filter((i) => i.status === 'pendente' && i.vencimento < hoje).reduce((s, i) => s + (i.valor || 0), 0)
+  const totalVencendo7d = aReceber.filter((i) => {
+    const d7 = new Date()
+    d7.setDate(d7.getDate() + 7)
+    const d7Str = d7.toISOString().slice(0, 10)
+    return i.status === 'pendente' && i.vencimento >= hoje && i.vencimento <= d7Str
+  }).reduce((s, i) => s + (i.valor || 0), 0)
+  const totalRecebido = aReceber.filter((i) => i.status === 'pago').reduce((s, i) => s + (i.valor || 0), 0)
+
+  const lista = useMemo(() => {
+    return aReceber.filter((i) => {
+      if (filtroStatus === 'pendente' && i.status !== 'pendente') return false
+      if (filtroStatus === 'pagas' && i.status !== 'pago') return false
+      if (filtroStatus === 'vencidas' && (i.status !== 'pendente' || i.vencimento >= hoje)) return false
+      if (busca) {
+        const b = busca.toLowerCase()
+        const t = `${i.descricao || ''} ${i.categoria || ''} ${i.observacao || ''}`.toLowerCase()
+        if (!t.includes(b)) return false
+      }
+      return true
+    })
+  }, [aReceber, filtroStatus, busca, hoje])
+
+  
+  function obterDadosDetalheKpi(tipo) {
+    if (tipo === 'saldo') {
+      const topEntradas = lancamentos.filter((i) => i.tipo === 'receita' && i.status === 'pago').slice(0, 5)
+      const topSaidas = lancamentos.filter((i) => i.tipo === 'despesa' && i.status === 'pago').slice(0, 5)
+      return {
+        valor: indicadoresPeriodo.saldoGlobal,
+        descricao: 'Saldo realizado acumulado resultante de todas as receitas pagas menos despesas pagas consolidadas.',
+        itens: [...topEntradas, ...topSaidas]
+      }
+    }
+    if (tipo === 'aReceber') {
+      const pendentes = lancamentos.filter((i) => i.tipo === 'receita' && i.status === 'pendente')
+      return {
+        valor: indicadoresPeriodo.aReceberPeriodo,
+        descricao: `Total de contas a receber pendentes vencendo em ${periodoDatas.label}.`,
+        itens: pendentes.slice(0, 5)
+      }
+    }
+    if (tipo === 'aPagar') {
+      const pendentes = lancamentos.filter((i) => i.tipo === 'despesa' && i.status === 'pendente')
+      return {
+        valor: indicadoresPeriodo.aPagarPeriodo,
+        descricao: `Total de contas a pagar pendentes vencendo em ${periodoDatas.label}.`,
+        itens: pendentes.slice(0, 5)
+      }
+    }
+    if (tipo === 'recPeriodo') {
+      const receitas = lancamentos.filter((i) => i.tipo === 'receita' && i.status === 'pago')
+      return {
+        valor: indicadoresPeriodo.recPeriodo,
+        descricao: `Receitas recebidas no período selecionado (${periodoDatas.label}).`,
+        itens: receitas.slice(0, 5)
+      }
+    }
+    if (tipo === 'despPeriodo') {
+      const despesas = lancamentos.filter((i) => i.tipo === 'despesa' && i.status === 'pago')
+      return {
+        valor: indicadoresPeriodo.despPeriodo,
+        descricao: `Despesas pagas no período selecionado (${periodoDatas.label}).`,
+        itens: despesas.slice(0, 5)
+      }
+    }
+    if (tipo === 'resultadoPeriodo') {
+      return {
+        valor: indicadoresPeriodo.resultadoPeriodo,
+        descricao: `Resultado líquido do período: ${modoK ? moneyK(indicadoresPeriodo.recPeriodo) : money(indicadoresPeriodo.recPeriodo)} em receitas menos ${modoK ? moneyK(indicadoresPeriodo.despPeriodo) : money(indicadoresPeriodo.despPeriodo)} em despesas, gerando margem de ${indicadoresPeriodo.margemPeriodo}%.`,
+        itens: []
+      }
+    }
+    if (tipo === 'vencidos') {
+      return {
+        valor: totalVencidos,
+        descricao: `Existem ${vencidos.length} despesa(s) antiga(s) vencida(s) (em especial da importação Avec) aguardando liquidação.`,
+        itens: vencidos.slice(0, 5)
+      }
+    }
+    return { valor: 0, descricao: '', itens: [] }
+  }
+
+  return (
+    <div style={{ display: 'grid', gap: 14 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+        <div>
+          <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800 }}>📥 Gestão Detalhada de Contas a Receber</h3>
+          <p style={{ margin: '2px 0 0', fontSize: 12, color: 'var(--muted)' }}>
+            Acompanhamento de comandas, mensalidades e valores pendentes a entrar
+          </p>
+        </div>
+        <button type="button" className="c360-btn primary" onClick={() => onNovo('receita')} style={{ fontSize: 12 }}>
+          + Nova Receita / Conta a Receber
+        </button>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 10 }}>
+        <div style={{ padding: '12px 14px', borderRadius: 12, background: 'var(--card2)', border: '1px solid var(--line)' }}>
+          <span style={{ fontSize: 11, fontWeight: 800, color: 'var(--muted)', textTransform: 'uppercase' }}>A Receber Pendente</span>
+          <strong style={{ fontSize: 22, color: '#10b981', display: 'block', margin: '4px 0 2px' }}>
+            {modoK ? moneyK(totalPendente) : money(totalPendente)}
+          </strong>
+          <small style={{ fontSize: 11, color: 'var(--muted)' }}>Exato: {money(totalPendente)}</small>
+        </div>
+        <div style={{ padding: '12px 14px', borderRadius: 12, background: 'var(--card2)', border: '1px solid var(--line)' }}>
+          <span style={{ fontSize: 11, fontWeight: 800, color: 'var(--muted)', textTransform: 'uppercase' }}>Vencendo em 7 Dias</span>
+          <strong style={{ fontSize: 22, color: '#f59e0b', display: 'block', margin: '4px 0 2px' }}>
+            {modoK ? moneyK(totalVencendo7d) : money(totalVencendo7d)}
+          </strong>
+          <small style={{ fontSize: 11, color: 'var(--muted)' }}>Exato: {money(totalVencendo7d)}</small>
+        </div>
+        <div style={{ padding: '12px 14px', borderRadius: 12, background: 'var(--card2)', border: totalVencidas > 0 ? '1px solid #e05c5c' : '1px solid var(--line)' }}>
+          <span style={{ fontSize: 11, fontWeight: 800, color: totalVencidas > 0 ? '#e05c5c' : 'var(--muted)', textTransform: 'uppercase' }}>Em Atraso (Vencidas)</span>
+          <strong style={{ fontSize: 22, color: totalVencidas > 0 ? '#e05c5c' : 'var(--fg)', display: 'block', margin: '4px 0 2px' }}>
+            {modoK ? moneyK(totalVencidas) : money(totalVencidas)}
+          </strong>
+          <small style={{ fontSize: 11, color: 'var(--muted)' }}>Exato: {money(totalVencidas)}</small>
+        </div>
+        <div style={{ padding: '12px 14px', borderRadius: 12, background: 'var(--card2)', border: '1px solid var(--line)' }}>
+          <span style={{ fontSize: 11, fontWeight: 800, color: 'var(--muted)', textTransform: 'uppercase' }}>Total Já Recebido</span>
+          <strong style={{ fontSize: 22, color: 'var(--fg)', display: 'block', margin: '4px 0 2px' }}>
+            {modoK ? moneyK(totalRecebido) : money(totalRecebido)}
+          </strong>
+          <small style={{ fontSize: 11, color: 'var(--muted)' }}>Exato: {money(totalRecebido)}</small>
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+        <div style={{ display: 'flex', gap: 6 }}>
+          {[['pendente', 'Pendentes'], ['vencidas', 'Vencidas'], ['pagas', 'Recebidas'], ['todos', 'Todas']].map(([st, rotulo]) => (
+            <button
+              key={st}
+              type="button"
+              className={`c360-btn ${filtroStatus === st ? 'primary' : 'ghost'}`}
+              style={{ fontSize: 12, padding: '4px 10px' }}
+              onClick={() => setFiltroStatus(st)}
+            >
+              {rotulo}
+            </button>
+          ))}
+        </div>
+        <input
+          type="search"
+          className="c360-input"
+          placeholder="Buscar conta a receber..."
+          value={busca}
+          onChange={(e) => setBusca(e.target.value)}
+          style={{ maxWidth: 240, fontSize: 12 }}
+        />
+      </div>
+
+      {!lista.length ? (
+        <p className="dadm-muted" style={{ padding: 16, textAlign: 'center', background: 'var(--card2)', borderRadius: 10 }}>
+          Nenhuma conta a receber encontrada com os filtros selecionados.
+        </p>
+      ) : (
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+            <thead>
+              <tr style={{ borderBottom: '1px solid var(--line)', color: 'var(--muted)', textAlign: 'left' }}>
+                <th style={{ padding: '8px 10px' }}>Vencimento</th>
+                <th style={{ padding: '8px 10px' }}>Descrição</th>
+                <th style={{ padding: '8px 10px' }}>Categoria</th>
+                <th style={{ padding: '8px 10px', textAlign: 'right' }}>Valor</th>
+                <th style={{ padding: '8px 10px', textAlign: 'center' }}>Status</th>
+                <th style={{ padding: '8px 10px', textAlign: 'right' }}>Ação</th>
+              </tr>
+            </thead>
+            <tbody>
+              {lista.slice(0, 30).map((item) => {
+                const emAtraso = item.status === 'pendente' && item.vencimento < hoje
+                return (
+                  <tr key={item.id} style={{ borderBottom: '1px solid var(--line)', background: emAtraso ? 'rgba(239, 68, 68, 0.05)' : undefined }}>
+                    <td style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>
+                      <strong>{shortDate(item.vencimento)}</strong>
+                      {emAtraso && <span style={{ display: 'block', fontSize: 11, color: '#e05c5c', fontWeight: 700 }}>Atrasado</span>}
+                    </td>
+                    <td style={{ padding: '8px 10px' }}>
+                      <span style={{ fontWeight: 600 }}>{item.descricao || 'Receita'}</span>
+                      {item.observacao && <span style={{ display: 'block', fontSize: 11, color: 'var(--muted)' }}>{item.observacao}</span>}
+                    </td>
+                    <td style={{ padding: '8px 10px' }}>
+                      <span className="c360-badge" style={{ fontSize: 11 }}>{item.categoria || 'Geral'}</span>
+                    </td>
+                    <td style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                      <strong style={{ color: '#10b981' }}>{modoK ? moneyK(item.valor) : money(item.valor)}</strong>
+                      {modoK && <span style={{ display: 'block', fontSize: 10, color: 'var(--muted)' }}>{money(item.valor)}</span>}
+                    </td>
+                    <td style={{ padding: '8px 10px', textAlign: 'center' }}>
+                      <span className={`c360-badge ${item.status === 'pago' ? 'success' : emAtraso ? 'danger' : 'warning'}`}>
+                        {item.status === 'pago' ? 'Recebido' : emAtraso ? 'Vencida' : 'Pendente'}
+                      </span>
+                    </td>
+                    <td style={{ padding: '8px 10px', textAlign: 'right' }}>
+                      {item.status === 'pendente' ? (
+                        <button
+                          type="button"
+                          className="c360-btn primary"
+                          style={{ fontSize: 11, padding: '3px 8px' }}
+                          onClick={() => onMarcarPago(item)}
+                        >
+                          ✓ Receber
+                        </button>
+                      ) : (
+                        <span style={{ fontSize: 11, color: 'var(--muted)' }}>Liquidado</span>
+                      )}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+          {lista.length > 30 && (
+            <p style={{ margin: '8px 0 0', fontSize: 12, color: 'var(--muted)', textAlign: 'center' }}>
+              Exibindo 30 de {lista.length} contas a receber. Use a busca ou filtros para refinar.
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// Painel Detalhado de Contas a Pagar
+function ContasPagarPanel({ lancamentos, hoje, modoK, onMarcarPago, onNovo }) {
+  const [busca, setBusca] = useState('')
+  const [filtroStatus, setFiltroStatus] = useState('pendente')
+
+  const aPagar = useMemo(() => {
+    return lancamentos.filter((i) => i.tipo === 'despesa')
+  }, [lancamentos])
+
+  const totalPendente = aPagar.filter((i) => i.status === 'pendente').reduce((s, i) => s + (i.valor || 0), 0)
+  const totalVencidas = aPagar.filter((i) => i.status === 'pendente' && i.vencimento < hoje).reduce((s, i) => s + (i.valor || 0), 0)
+  const totalVencendo7d = aPagar.filter((i) => {
+    const d7 = new Date()
+    d7.setDate(d7.getDate() + 7)
+    const d7Str = d7.toISOString().slice(0, 10)
+    return i.status === 'pendente' && i.vencimento >= hoje && i.vencimento <= d7Str
+  }).reduce((s, i) => s + (i.valor || 0), 0)
+  const totalPago = aPagar.filter((i) => i.status === 'pago').reduce((s, i) => s + (i.valor || 0), 0)
+
+  const lista = useMemo(() => {
+    return aPagar.filter((i) => {
+      if (filtroStatus === 'pendente' && i.status !== 'pendente') return false
+      if (filtroStatus === 'pagas' && i.status !== 'pago') return false
+      if (filtroStatus === 'vencidas' && (i.status !== 'pendente' || i.vencimento >= hoje)) return false
+      if (busca) {
+        const b = busca.toLowerCase()
+        const t = `${i.descricao || ''} ${i.categoria || ''} ${i.observacao || ''}`.toLowerCase()
+        if (!t.includes(b)) return false
+      }
+      return true
+    })
+  }, [aPagar, filtroStatus, busca, hoje])
+
+  return (
+    <div style={{ display: 'grid', gap: 14 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+        <div>
+          <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800 }}>📤 Gestão Detalhada de Contas a Pagar</h3>
+          <p style={{ margin: '2px 0 0', fontSize: 12, color: 'var(--muted)' }}>
+            Obrigações, contas operacionais, insumos, fornecedores e vencimentos
+          </p>
+        </div>
+        <button type="button" className="c360-btn primary" onClick={() => onNovo('despesa')} style={{ fontSize: 12 }}>
+          + Nova Despesa / Conta a Pagar
+        </button>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 10 }}>
+        <div style={{ padding: '12px 14px', borderRadius: 12, background: 'var(--card2)', border: '1px solid var(--line)' }}>
+          <span style={{ fontSize: 11, fontWeight: 800, color: 'var(--muted)', textTransform: 'uppercase' }}>A Pagar Pendente</span>
+          <strong style={{ fontSize: 22, color: '#e05c5c', display: 'block', margin: '4px 0 2px' }}>
+            {modoK ? moneyK(totalPendente) : money(totalPendente)}
+          </strong>
+          <small style={{ fontSize: 11, color: 'var(--muted)' }}>Exato: {money(totalPendente)}</small>
+        </div>
+        <div style={{ padding: '12px 14px', borderRadius: 12, background: 'var(--card2)', border: '1px solid var(--line)' }}>
+          <span style={{ fontSize: 11, fontWeight: 800, color: 'var(--muted)', textTransform: 'uppercase' }}>Vencendo em 7 Dias</span>
+          <strong style={{ fontSize: 22, color: '#f59e0b', display: 'block', margin: '4px 0 2px' }}>
+            {modoK ? moneyK(totalVencendo7d) : money(totalVencendo7d)}
+          </strong>
+          <small style={{ fontSize: 11, color: 'var(--muted)' }}>Exato: {money(totalVencendo7d)}</small>
+        </div>
+        <div style={{ padding: '12px 14px', borderRadius: 12, background: 'var(--card2)', border: totalVencidas > 0 ? '1px solid #e05c5c' : '1px solid var(--line)' }}>
+          <span style={{ fontSize: 11, fontWeight: 800, color: totalVencidas > 0 ? '#e05c5c' : 'var(--muted)', textTransform: 'uppercase' }}>Despesas Vencidas</span>
+          <strong style={{ fontSize: 22, color: totalVencidas > 0 ? '#e05c5c' : 'var(--fg)', display: 'block', margin: '4px 0 2px' }}>
+            {modoK ? moneyK(totalVencidas) : money(totalVencidas)}
+          </strong>
+          <small style={{ fontSize: 11, color: 'var(--muted)' }}>Exato: {money(totalVencidas)}</small>
+        </div>
+        <div style={{ padding: '12px 14px', borderRadius: 12, background: 'var(--card2)', border: '1px solid var(--line)' }}>
+          <span style={{ fontSize: 11, fontWeight: 800, color: 'var(--muted)', textTransform: 'uppercase' }}>Total Já Pago</span>
+          <strong style={{ fontSize: 22, color: 'var(--fg)', display: 'block', margin: '4px 0 2px' }}>
+            {modoK ? moneyK(totalPago) : money(totalPago)}
+          </strong>
+          <small style={{ fontSize: 11, color: 'var(--muted)' }}>Exato: {money(totalPago)}</small>
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+        <div style={{ display: 'flex', gap: 6 }}>
+          {[['pendente', 'Pendentes'], ['vencidas', 'Vencidas'], ['pagas', 'Pagas'], ['todos', 'Todas']].map(([st, rotulo]) => (
+            <button
+              key={st}
+              type="button"
+              className={`c360-btn ${filtroStatus === st ? 'primary' : 'ghost'}`}
+              style={{ fontSize: 12, padding: '4px 10px' }}
+              onClick={() => setFiltroStatus(st)}
+            >
+              {rotulo}
+            </button>
+          ))}
+        </div>
+        <input
+          type="search"
+          className="c360-input"
+          placeholder="Buscar conta a pagar..."
+          value={busca}
+          onChange={(e) => setBusca(e.target.value)}
+          style={{ maxWidth: 240, fontSize: 12 }}
+        />
+      </div>
+
+      {!lista.length ? (
+        <p className="dadm-muted" style={{ padding: 16, textAlign: 'center', background: 'var(--card2)', borderRadius: 10 }}>
+          Nenhuma conta a pagar encontrada com os filtros selecionados.
+        </p>
+      ) : (
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+            <thead>
+              <tr style={{ borderBottom: '1px solid var(--line)', color: 'var(--muted)', textAlign: 'left' }}>
+                <th style={{ padding: '8px 10px' }}>Vencimento</th>
+                <th style={{ padding: '8px 10px' }}>Descrição</th>
+                <th style={{ padding: '8px 10px' }}>Categoria</th>
+                <th style={{ padding: '8px 10px', textAlign: 'right' }}>Valor</th>
+                <th style={{ padding: '8px 10px', textAlign: 'center' }}>Status</th>
+                <th style={{ padding: '8px 10px', textAlign: 'right' }}>Ação</th>
+              </tr>
+            </thead>
+            <tbody>
+              {lista.slice(0, 30).map((item) => {
+                const emAtraso = item.status === 'pendente' && item.vencimento < hoje
+                return (
+                  <tr key={item.id} style={{ borderBottom: '1px solid var(--line)', background: emAtraso ? 'rgba(239, 68, 68, 0.05)' : undefined }}>
+                    <td style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>
+                      <strong>{shortDate(item.vencimento)}</strong>
+                      {emAtraso && <span style={{ display: 'block', fontSize: 11, color: '#e05c5c', fontWeight: 700 }}>Atrasada</span>}
+                    </td>
+                    <td style={{ padding: '8px 10px' }}>
+                      <span style={{ fontWeight: 600 }}>{item.descricao || 'Despesa'}</span>
+                      {item.observacao && <span style={{ display: 'block', fontSize: 11, color: 'var(--muted)' }}>{item.observacao}</span>}
+                    </td>
+                    <td style={{ padding: '8px 10px' }}>
+                      <span className="c360-badge" style={{ fontSize: 11 }}>{item.categoria || 'Outros'}</span>
+                    </td>
+                    <td style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                      <strong style={{ color: '#e05c5c' }}>- {modoK ? moneyK(item.valor) : money(item.valor)}</strong>
+                      {modoK && <span style={{ display: 'block', fontSize: 10, color: 'var(--muted)' }}>{money(item.valor)}</span>}
+                    </td>
+                    <td style={{ padding: '8px 10px', textAlign: 'center' }}>
+                      <span className={`c360-badge ${item.status === 'pago' ? 'success' : emAtraso ? 'danger' : 'warning'}`}>
+                        {item.status === 'pago' ? 'Paga' : emAtraso ? 'Vencida' : 'Pendente'}
+                      </span>
+                    </td>
+                    <td style={{ padding: '8px 10px', textAlign: 'right' }}>
+                      {item.status === 'pendente' ? (
+                        <button
+                          type="button"
+                          className="c360-btn primary"
+                          style={{ fontSize: 11, padding: '3px 8px', background: '#b45309', borderColor: '#b45309', color: '#fff' }}
+                          onClick={() => onMarcarPago(item)}
+                        >
+                          ✓ Pagar
+                        </button>
+                      ) : (
+                        <span style={{ fontSize: 11, color: 'var(--muted)' }}>Liquidada</span>
+                      )}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+          {lista.length > 30 && (
+            <p style={{ margin: '8px 0 0', fontSize: 12, color: 'var(--muted)', textAlign: 'center' }}>
+              Exibindo 30 de {lista.length} contas a pagar. Use a busca ou filtros para refinar.
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// Painel de Raio-X Financeiro 360°
+function RaioXFinanceiroPanel({ indicadores, modoK }) {
+  const mediaReceitaDia = indicadores.recPeriodo > 0 ? (indicadores.recPeriodo / 30) : 0
+  const mediaDespesaDia = indicadores.despPeriodo > 0 ? (indicadores.despPeriodo / 30) : 0
+
+  return (
+    <div style={{ display: 'grid', gap: 16 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div>
+          <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800 }}>🔍 Raio-X & Diagnóstico Financeiro 360°</h3>
+          <p style={{ margin: '2px 0 0', fontSize: 12, color: 'var(--muted)' }}>
+            Indicadores de liquidez, margem, ponto de equilíbrio e saúde contábil
+          </p>
+        </div>
+        <span style={{ fontSize: 12, fontWeight: 700, padding: '4px 10px', borderRadius: 999, background: indicadores.resultadoPeriodo >= 0 ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)', color: indicadores.resultadoPeriodo >= 0 ? '#10b981' : '#e05c5c' }}>
+          {indicadores.resultadoPeriodo >= 0 ? '● Operação Superavitária' : '● Operação em Déficit'}
+        </span>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 12 }}>
+        <div style={{ padding: '14px', borderRadius: 12, background: 'var(--card2)', border: '1px solid var(--line)' }}>
+          <span style={{ fontSize: 11, fontWeight: 800, color: 'var(--muted)', textTransform: 'uppercase' }}>Margem Operacional Líquida</span>
+          <strong style={{ fontSize: 24, color: indicadores.margemPeriodo >= 0 ? 'var(--accent, #b0892e)' : '#e05c5c', display: 'block', margin: '4px 0' }}>
+            {indicadores.margemPeriodo}%
+          </strong>
+          <small style={{ fontSize: 11, color: 'var(--muted)' }}>
+            Lucro de {modoK ? moneyK(indicadores.resultadoPeriodo) : money(indicadores.resultadoPeriodo)} sobre as receitas
+          </small>
+        </div>
+
+        <div style={{ padding: '14px', borderRadius: 12, background: 'var(--card2)', border: '1px solid var(--line)' }}>
+          <span style={{ fontSize: 11, fontWeight: 800, color: 'var(--muted)', textTransform: 'uppercase' }}>Faturamento Diário Médio</span>
+          <strong style={{ fontSize: 24, color: '#10b981', display: 'block', margin: '4px 0' }}>
+            {modoK ? moneyK(mediaReceitaDia) : money(mediaReceitaDia)}/dia
+          </strong>
+          <small style={{ fontSize: 11, color: 'var(--muted)' }}>
+            Exato: {money(mediaReceitaDia)} por dia
+          </small>
+        </div>
+
+        <div style={{ padding: '14px', borderRadius: 12, background: 'var(--card2)', border: '1px solid var(--line)' }}>
+          <span style={{ fontSize: 11, fontWeight: 800, color: 'var(--muted)', textTransform: 'uppercase' }}>Custo Operacional Médio</span>
+          <strong style={{ fontSize: 24, color: '#e05c5c', display: 'block', margin: '4px 0' }}>
+            {modoK ? moneyK(mediaDespesaDia) : money(mediaDespesaDia)}/dia
+          </strong>
+          <small style={{ fontSize: 11, color: 'var(--muted)' }}>
+            Exato: {money(mediaDespesaDia)} por dia
+          </small>
+        </div>
+
+        <div style={{ padding: '14px', borderRadius: 12, background: 'var(--card2)', border: '1px solid var(--line)' }}>
+          <span style={{ fontSize: 11, fontWeight: 800, color: 'var(--muted)', textTransform: 'uppercase' }}>Saldo Acumulado Realizado</span>
+          <strong style={{ fontSize: 24, color: 'var(--fg)', display: 'block', margin: '4px 0' }}>
+            {modoK ? moneyK(indicadores.saldoGlobal) : money(indicadores.saldoGlobal)}
+          </strong>
+          <small style={{ fontSize: 11, color: 'var(--muted)' }}>
+            Exato: {money(indicadores.saldoGlobal)}
+          </small>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Modal Interativo de Detalhamento de KPI
+function ModalDetalheKpi({ tipo, dados, modoK, onClose, onFiltrarTabela }) {
+  if (!tipo) return null
+
+  const titulos = {
+    saldo: 'Detalhamento do Saldo Realizado',
+    aReceber: 'Detalhamento de Contas a Receber',
+    aPagar: 'Detalhamento de Contas a Pagar',
+    recPeriodo: 'Detalhamento das Receitas do Período',
+    despPeriodo: 'Detalhamento das Despesas do Período',
+    resultadoPeriodo: 'Detalhamento do Resultado & Margem',
+    vencidos: 'Detalhamento dos Títulos Vencidos'
+  }
+
+  return (
+    <Dialog open title={titulos[tipo] || 'Detalhamento'} onClose={onClose}>
+      <div style={{ display: 'grid', gap: 16 }}>
+        <div style={{ padding: '16px', borderRadius: 12, background: 'var(--card2)', border: '1px solid var(--line)', textAlign: 'center' }}>
+          <span style={{ fontSize: 12, color: 'var(--muted)', textTransform: 'uppercase', fontWeight: 800 }}>
+            {titulos[tipo]}
+          </span>
+          <strong style={{ fontSize: 32, display: 'block', margin: '6px 0 2px', color: 'var(--accent, #b0892e)' }}>
+            {modoK ? moneyK(dados.valor) : money(dados.valor)}
+          </strong>
+          <span style={{ fontSize: 13, color: 'var(--muted)' }}>Valor Exato: {money(dados.valor)}</span>
+        </div>
+
+        <div style={{ fontSize: 13, lineHeight: 1.6, color: 'var(--fg)' }}>
+          <p style={{ margin: '0 0 10px' }}>{dados.descricao}</p>
+          {dados.itens && dados.itens.length > 0 && (
+            <div>
+              <strong style={{ display: 'block', marginBottom: 6 }}>Principais Compositores:</strong>
+              <div style={{ display: 'grid', gap: 6 }}>
+                {dados.itens.slice(0, 5).map((it, idx) => (
+                  <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 10px', background: 'var(--card)', border: '1px solid var(--line)', borderRadius: 6 }}>
+                    <span>{it.descricao || it.nome}</span>
+                    <strong style={{ color: it.tipo === 'despesa' ? '#e05c5c' : '#10b981' }}>
+                      {modoK ? moneyK(it.valor) : money(it.valor)}
+                    </strong>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 10 }}>
+          <button type="button" className="c360-btn ghost" onClick={onClose}>
+            Fechar
+          </button>
+          <button
+            type="button"
+            className="c360-btn primary"
+            onClick={() => {
+              onFiltrarTabela(tipo)
+              onClose()
+            }}
+          >
+            Filtrar Lançamentos na Tabela →
+          </button>
+        </div>
+      </div>
+    </Dialog>
+  )
+}
+
 function calcularDatasPeriodo(tipo, refHoje = localDay()) {
   const [anoStr, mesStr, diaStr] = refHoje.split('-')
   const ano = Number(anoStr)
@@ -343,7 +882,16 @@ export default function FinanceiroEmpresa() {
     return null
   })
   const [mesSelecionado, setMesSelecionado] = useState(null)
-  const [abaAnalitica, setAbaAnalitica] = useState('fluxo') // 'fluxo' | 'dre' | 'categorias'
+  const [modoK, setModoK] = useState(true)
+  const [modalDetalheKpi, setModalDetalheKpi] = useState(null)
+  const [abaAnalitica, setAbaAnalitica] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const sp = new URLSearchParams(window.location.search)
+      if (sp.get('aba') === 'receber') return 'receber'
+      if (sp.get('aba') === 'pagar') return 'pagar'
+    }
+    return 'fluxo'
+  }) // 'fluxo' | 'receber' | 'pagar' | 'dre' | 'categorias' | 'raiox'
   const [ordenacao, setOrdenacao] = useState({ campo: 'vencimento', direcao: 'desc' })
   const [itensPorPagina, setItensPorPagina] = useState(50)
   const [paginaAtual, setPaginaAtual] = useState(1)
@@ -913,6 +1461,15 @@ export default function FinanceiroEmpresa() {
               Resetar (Este Mês)
             </button>
           )}
+          <button
+            type="button"
+            className={`c360-btn ${modoK ? 'primary' : 'ghost'}`}
+            style={{ fontSize: 11, padding: '4px 10px', borderRadius: 20 }}
+            onClick={() => setModoK(!modoK)}
+            title="Alternar entre números redondos em K (ex: 55k, 535.7k) ou moeda completa (R$ 55.345,00)"
+          >
+            {modoK ? '🏷️ Valores em K (Ativo)' : '💵 Moeda Completa'}
+          </button>
         </div>
       </div>
 
@@ -925,8 +1482,22 @@ export default function FinanceiroEmpresa() {
           style={cardStyle(cardFiltroAtivo === 'saldo')}
           title="Clique para filtrar todos os lançamentos pagos"
         >
-          <span>Saldo realizado</span>
-          <strong className={indicadoresPeriodo.saldoGlobal >= 0 ? '' : 'dadm-neg'}>{money(indicadoresPeriodo.saldoGlobal)}</strong>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span>Saldo realizado</span>
+            <button
+              type="button"
+              className="c360-btn ghost"
+              style={{ padding: '2px 6px', fontSize: 10, height: 'auto', lineHeight: 1 }}
+              onClick={(e) => { e.stopPropagation(); setModalDetalheKpi('saldo') }}
+              title="Ver composição detalhada"
+            >
+              🔎 Detalhes
+            </button>
+          </div>
+          <strong className={indicadoresPeriodo.saldoGlobal >= 0 ? '' : 'dadm-neg'}>
+            {modoK ? moneyK(indicadoresPeriodo.saldoGlobal) : money(indicadoresPeriodo.saldoGlobal)}
+          </strong>
+          <div className="dadm-kpi-subval">Exato: {money(indicadoresPeriodo.saldoGlobal)}</div>
           <small>Receitas − despesas pagas (acumulado)</small>
         </article>
         <article
@@ -936,8 +1507,22 @@ export default function FinanceiroEmpresa() {
           style={cardStyle(cardFiltroAtivo === 'aReceber')}
           title="Clique para filtrar contas a receber pendentes do período"
         >
-          <span>A receber</span>
-          <strong>{money(indicadoresPeriodo.aReceberPeriodo)}</strong>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span>A receber</span>
+            <button
+              type="button"
+              className="c360-btn ghost"
+              style={{ padding: '2px 6px', fontSize: 10, height: 'auto', lineHeight: 1 }}
+              onClick={(e) => { e.stopPropagation(); setModalDetalheKpi('aReceber') }}
+              title="Ver composição detalhada"
+            >
+              🔎 Detalhes
+            </button>
+          </div>
+          <strong style={{ color: '#10b981' }}>
+            {modoK ? moneyK(indicadoresPeriodo.aReceberPeriodo) : money(indicadoresPeriodo.aReceberPeriodo)}
+          </strong>
+          <div className="dadm-kpi-subval">Exato: {money(indicadoresPeriodo.aReceberPeriodo)}</div>
           <small>{periodoFiltro === 'tudo' ? 'Pendentes totais' : 'Vencendo no período'}</small>
         </article>
         <article
@@ -947,8 +1532,22 @@ export default function FinanceiroEmpresa() {
           style={cardStyle(cardFiltroAtivo === 'aPagar')}
           title="Clique para filtrar contas a pagar pendentes do período"
         >
-          <span>A pagar</span>
-          <strong>{money(indicadoresPeriodo.aPagarPeriodo)}</strong>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span>A pagar</span>
+            <button
+              type="button"
+              className="c360-btn ghost"
+              style={{ padding: '2px 6px', fontSize: 10, height: 'auto', lineHeight: 1 }}
+              onClick={(e) => { e.stopPropagation(); setModalDetalheKpi('aPagar') }}
+              title="Ver composição detalhada"
+            >
+              🔎 Detalhes
+            </button>
+          </div>
+          <strong style={{ color: '#e05c5c' }}>
+            {modoK ? moneyK(indicadoresPeriodo.aPagarPeriodo) : money(indicadoresPeriodo.aPagarPeriodo)}
+          </strong>
+          <div className="dadm-kpi-subval">Exato: {money(indicadoresPeriodo.aPagarPeriodo)}</div>
           <small>{periodoFiltro === 'tudo' ? 'Pendentes totais' : 'Vencendo no período'}</small>
         </article>
         <article
@@ -958,8 +1557,22 @@ export default function FinanceiroEmpresa() {
           style={cardStyle(cardFiltroAtivo === 'recPeriodo' || cardFiltroAtivo === 'recMes')}
           title={`Clique para filtrar receitas pagas em ${periodoDatas.label}`}
         >
-          <span>{tituloReceitas}</span>
-          <strong>{money(indicadoresPeriodo.recPeriodo)}</strong>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span>{tituloReceitas}</span>
+            <button
+              type="button"
+              className="c360-btn ghost"
+              style={{ padding: '2px 6px', fontSize: 10, height: 'auto', lineHeight: 1 }}
+              onClick={(e) => { e.stopPropagation(); setModalDetalheKpi('recPeriodo') }}
+              title="Ver composição detalhada"
+            >
+              🔎 Detalhes
+            </button>
+          </div>
+          <strong style={{ color: '#10b981' }}>
+            {modoK ? moneyK(indicadoresPeriodo.recPeriodo) : money(indicadoresPeriodo.recPeriodo)}
+          </strong>
+          <div className="dadm-kpi-subval">Exato: {money(indicadoresPeriodo.recPeriodo)}</div>
           <small>Pagas em {periodoDatas.label}</small>
         </article>
         <article
@@ -969,8 +1582,22 @@ export default function FinanceiroEmpresa() {
           style={cardStyle(cardFiltroAtivo === 'despPeriodo' || cardFiltroAtivo === 'despMes')}
           title={`Clique para filtrar despesas pagas em ${periodoDatas.label}`}
         >
-          <span>{tituloDespesas}</span>
-          <strong>{money(indicadoresPeriodo.despPeriodo)}</strong>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span>{tituloDespesas}</span>
+            <button
+              type="button"
+              className="c360-btn ghost"
+              style={{ padding: '2px 6px', fontSize: 10, height: 'auto', lineHeight: 1 }}
+              onClick={(e) => { e.stopPropagation(); setModalDetalheKpi('despPeriodo') }}
+              title="Ver composição detalhada"
+            >
+              🔎 Detalhes
+            </button>
+          </div>
+          <strong style={{ color: '#e05c5c' }}>
+            {modoK ? moneyK(indicadoresPeriodo.despPeriodo) : money(indicadoresPeriodo.despPeriodo)}
+          </strong>
+          <div className="dadm-kpi-subval">Exato: {money(indicadoresPeriodo.despPeriodo)}</div>
           <small>Pagas no período</small>
         </article>
         <article
@@ -981,8 +1608,22 @@ export default function FinanceiroEmpresa() {
           style={cardStyle(cardFiltroAtivo === 'resultadoPeriodo' || cardFiltroAtivo === 'resultadoMes')}
           title={`Clique para filtrar movimentações do período (${periodoDatas.label})`}
         >
-          <span>{tituloResultado}</span>
-          <strong className={indicadoresPeriodo.resultadoPeriodo >= 0 ? '' : 'dadm-neg'}>{money(indicadoresPeriodo.resultadoPeriodo)}</strong>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span>{tituloResultado}</span>
+            <button
+              type="button"
+              className="c360-btn ghost"
+              style={{ padding: '2px 6px', fontSize: 10, height: 'auto', lineHeight: 1 }}
+              onClick={(e) => { e.stopPropagation(); setModalDetalheKpi('resultadoPeriodo') }}
+              title="Ver composição detalhada"
+            >
+              🔎 Detalhes
+            </button>
+          </div>
+          <strong className={indicadoresPeriodo.resultadoPeriodo >= 0 ? '' : 'dadm-neg'}>
+            {modoK ? moneyK(indicadoresPeriodo.resultadoPeriodo) : money(indicadoresPeriodo.resultadoPeriodo)}
+          </strong>
+          <div className="dadm-kpi-subval">Exato: {money(indicadoresPeriodo.resultadoPeriodo)}</div>
           <small>{indicadoresPeriodo.recPeriodo > 0 ? `Margem ${indicadoresPeriodo.margemPeriodo}%` : 'Sem receitas no período'}</small>
         </article>
         <article
@@ -996,9 +1637,21 @@ export default function FinanceiroEmpresa() {
           }}
           title="Clique para filtrar apenas os lançamentos vencidos"
         >
-          <span>Vencidos</span>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span>Vencidos</span>
+            <button
+              type="button"
+              className="c360-btn ghost"
+              style={{ padding: '2px 6px', fontSize: 10, height: 'auto', lineHeight: 1 }}
+              onClick={(e) => { e.stopPropagation(); setModalDetalheKpi('vencidos') }}
+              title="Ver composição detalhada"
+            >
+              🔎 Detalhes
+            </button>
+          </div>
           <strong style={{ color: vencidos.length ? '#e05c5c' : 'inherit' }}>{vencidos.length}</strong>
-          <small>{vencidos.length ? money(totalVencidos) : 'Nada atrasado'}</small>
+          <div className="dadm-kpi-subval">Total: {modoK ? moneyK(totalVencidos) : money(totalVencidos)}</div>
+          <small>{vencidos.length ? `Exato: ${money(totalVencidos)}` : 'Nada atrasado'}</small>
         </article>
       </section>
       {/* Banner de Aviso de Vencimento Próximo */}
@@ -1040,19 +1693,35 @@ export default function FinanceiroEmpresa() {
       {/* Seção Analítica: Abas de Fluxo de Caixa, DRE Gerencial e Despesas por Categoria */}
       <section className="dadm-card">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10, borderBottom: '1px solid var(--line)', paddingBottom: 10, marginBottom: 14 }}>
-          <div style={{ display: 'flex', gap: 6 }}>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             <button
               type="button"
               className={`c360-btn ${abaAnalitica === 'fluxo' ? 'primary' : 'ghost'}`}
-              style={{ fontSize: 13, padding: '6px 12px' }}
+              style={{ fontSize: 12, padding: '5px 10px' }}
               onClick={() => setAbaAnalitica('fluxo')}
             >
-              📊 Fluxo dos 12 Meses
+              📊 Fluxo 12 Meses
+            </button>
+            <button
+              type="button"
+              className={`c360-btn ${abaAnalitica === 'receber' ? 'primary' : 'ghost'}`}
+              style={{ fontSize: 12, padding: '5px 10px' }}
+              onClick={() => setAbaAnalitica('receber')}
+            >
+              📥 Contas a Receber Detalhado
+            </button>
+            <button
+              type="button"
+              className={`c360-btn ${abaAnalitica === 'pagar' ? 'primary' : 'ghost'}`}
+              style={{ fontSize: 12, padding: '5px 10px' }}
+              onClick={() => setAbaAnalitica('pagar')}
+            >
+              📤 Contas a Pagar Detalhado
             </button>
             <button
               type="button"
               className={`c360-btn ${abaAnalitica === 'dre' ? 'primary' : 'ghost'}`}
-              style={{ fontSize: 13, padding: '6px 12px' }}
+              style={{ fontSize: 12, padding: '5px 10px' }}
               onClick={() => setAbaAnalitica('dre')}
             >
               📑 DRE Gerencial
@@ -1060,21 +1729,52 @@ export default function FinanceiroEmpresa() {
             <button
               type="button"
               className={`c360-btn ${abaAnalitica === 'categorias' ? 'primary' : 'ghost'}`}
-              style={{ fontSize: 13, padding: '6px 12px' }}
+              style={{ fontSize: 12, padding: '5px 10px' }}
               onClick={() => setAbaAnalitica('categorias')}
             >
               🏷️ Despesas por Categoria
             </button>
+            <button
+              type="button"
+              className={`c360-btn ${abaAnalitica === 'raiox' ? 'primary' : 'ghost'}`}
+              style={{ fontSize: 12, padding: '5px 10px' }}
+              onClick={() => setAbaAnalitica('raiox')}
+            >
+              🔍 Raio-X 360°
+            </button>
           </div>
           <span style={{ fontSize: 12, color: 'var(--muted)' }}>
             {abaAnalitica === 'fluxo' && 'Clique em um mês para filtrar'}
+            {abaAnalitica === 'receber' && 'Gestão avançada de recebíveis e faturamento'}
+            {abaAnalitica === 'pagar' && 'Gestão avançada de fornecedores e obrigações'}
             {abaAnalitica === 'dre' && 'Demonstrativo contábil gerencial'}
             {abaAnalitica === 'categorias' && 'Clique na categoria para filtrar a lista'}
+            {abaAnalitica === 'raiox' && 'Métricas de margem, faturamento médio e liquidez'}
           </span>
         </div>
 
         {abaAnalitica === 'fluxo' && (
           <FlowChart fluxo={fluxo} mesSelecionado={mesSelecionado} onSelectMes={handleSelectMesFluxo} />
+        )}
+
+        {abaAnalitica === 'receber' && (
+          <ContasReceberPanel
+            lancamentos={lancamentos}
+            hoje={hoje}
+            modoK={modoK}
+            onMarcarPago={marcarPago}
+            onNovo={(tipo) => abrirNovo(tipo)}
+          />
+        )}
+
+        {abaAnalitica === 'pagar' && (
+          <ContasPagarPanel
+            lancamentos={lancamentos}
+            hoje={hoje}
+            modoK={modoK}
+            onMarcarPago={marcarPago}
+            onNovo={(tipo) => abrirNovo(tipo)}
+          />
         )}
 
         {abaAnalitica === 'dre' && (
@@ -1083,6 +1783,10 @@ export default function FinanceiroEmpresa() {
 
         {abaAnalitica === 'categorias' && (
           <DespesasCategoriaPanel dre={dre} onSelectCategoria={handleSelectCategoriaFiltro} />
+        )}
+
+        {abaAnalitica === 'raiox' && (
+          <RaioXFinanceiroPanel indicadores={indicadoresPeriodo} modoK={modoK} />
         )}
       </section>
     </>}
@@ -1094,7 +1798,7 @@ export default function FinanceiroEmpresa() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <span style={{ fontSize: 12, color: 'var(--muted)' }}>
             Exibindo <strong>{lista.length}</strong> lançamento(s)
-            {lista.length > 0 && ` · Saldo: ${money(totalFiltrado.saldo)} (Receitas: ${money(totalFiltrado.rec)} | Despesas: ${money(totalFiltrado.desp)})`}
+            {lista.length > 0 && ` · Saldo: ${modoK ? moneyK(totalFiltrado.saldo) : money(totalFiltrado.saldo)} (Receitas: ${modoK ? moneyK(totalFiltrado.rec) : money(totalFiltrado.rec)} | Despesas: ${modoK ? moneyK(totalFiltrado.desp) : money(totalFiltrado.desp)})`}
           </span>
           {(cardFiltroAtivo || mesSelecionado || filtros.q || filtros.tipo || filtros.status || filtros.categoria || filtros.de || filtros.ate) && (
             <button type="button" className="c360-btn ghost" style={{ fontSize: 11, padding: '4px 8px' }} onClick={limparTodosFiltros}>
@@ -1267,5 +1971,16 @@ export default function FinanceiroEmpresa() {
         </p>
       </div>
     </Dialog>
+
+    {/* Modal de Detalhamento Interativo de KPI */}
+    {modalDetalheKpi && (
+      <ModalDetalheKpi
+        tipo={modalDetalheKpi}
+        dados={obterDadosDetalheKpi(modalDetalheKpi)}
+        modoK={modoK}
+        onClose={() => setModalDetalheKpi(null)}
+        onFiltrarTabela={(tipo) => toggleCardFiltro(tipo)}
+      />
+    )}
   </div>
 }
