@@ -25,7 +25,7 @@ test('cancelarPorFaltaConfirmacao bloqueia cancelamento automatico na Dino', () 
   const EMPRESA_DINO = 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
   
   const servicos = barbearia.listarServicos(EMPRESA_DINO);
-  const servico = servicos[0];
+  const servico = servicos[0] || barbearia.criarServico(EMPRESA_DINO, { nome: "Corte Teste Anti Canc", preco: 60, duracaoMinutos: 40 });
   const profissional = barbearia.criarProfissional(EMPRESA_DINO, {
     nome: `Dino Teste Anti Canc ${Date.now()}`,
     servicosIds: [servico.id],

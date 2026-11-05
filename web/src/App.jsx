@@ -140,6 +140,7 @@ const AdminLigas      = lazy(() => import('./pages/admin/AdminLigas'))
 const Contatos        = lazy(() => import('./pages/admin/Contatos'))
 const Lojas           = lazy(() => import('./pages/admin/Lojas'))
 const Empresas        = lazy(() => import('./pages/admin/Empresas'))
+const ConsolidacaoGrupo = lazy(() => import('./pages/admin/ConsolidacaoGrupo'))
 const PDVOffline      = lazy(() => import('./pages/admin/PDVOffline'))
 const Oficina         = lazy(() => import('./pages/admin/Oficina'))
 const Agropecuaria    = lazy(() => import('./pages/admin/Agropecuaria'))
@@ -332,6 +333,7 @@ export default function App() {
           <Route path="/admin/contatos"       element={<Layout><Contatos /></Layout>} />
           <Route path="/admin/lojas"          element={<Layout><Lojas /></Layout>} />
           <Route path="/admin/empresas"       element={<Layout><Empresas /></Layout>} />
+          <Route path="/admin/consolidacao-grupo" element={<Layout><ConsolidacaoGrupo /></Layout>} />
           <Route path="/admin/notas" element={<TenantAware tenant={<Layout><Fiscal abaInicial="documentos" /></Layout>} legacy={<Layout><EscolhaEmpresa modulo="Central fiscal (NF-e e NFC-e)" /></Layout>} />} />
           <Route path="/admin/clientes"       element={<Layout><Clientes /></Layout>} />
           <Route path="/admin/clientes-360"   element={<Layout><Customer360 /></Layout>} />

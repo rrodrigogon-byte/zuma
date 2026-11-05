@@ -1,4 +1,6 @@
 import express from 'express';
+import * as consolidacao from './consolidacao.js';
+import { listarEventosInternos, obterMetricasEventosInternos, emitirEventoInterno } from '../a2/eventos.js';
 import * as svc from './servico.js';
 import { responderErro } from '../acesso/banco.js';
 
@@ -29,6 +31,41 @@ export function createEmpresasAdminRouter({ db }) {
       incluirInativas: req.query.incluir_inativas === 'true' || req.query.incluirInativas === 'true'
     });
     return { empresas, total: empresas.length };
+  }));
+
+  // Consolidação de Empresas do Mesmo Grupo e Multi-Business
+  router.get('/consolidacao-grupo', executar(async ({ req }) => {
+    const grupoId = req.query.grupoId || req.query.grupo_id || '';
+    const periodo = req.query.periodo || 'mes_atual';
+    return await consolidacao.obterConsolidacaoGrupo(db, { grupoId, periodo });
+  }));
+
+  // Listar Grupos Empresariais / Holdings
+  router.get('/grupos', executar(async () => {
+    const grupos = await consolidacao.listarGruposEmpresariais(db);
+    return { grupos, total: grupos.length };
+  }));
+
+  // Log e Auditoria da Sincronização por Evento Interno (Nossa Gente × Ultra)
+  router.get('/eventos-internos', executar(async ({ req }) => {
+    const eventos = listarEventosInternos({
+      empresaId: req.query.empresaId || '',
+      tipo: req.query.tipo || '',
+      limite: req.query.limite || 50
+    });
+    return { eventos, total: eventos.length };
+  }));
+
+  // Métricas do Barramento de Eventos Internos
+  router.get('/metricas-eventos-internos', executar(async () => {
+    return obterMetricasEventosInternos();
+  }));
+
+  // Disparar sincronização manual entre Nossa Gente e Ultra
+  router.post('/sincronizar-eventos', executar(async ({ req }) => {
+    const { tipo = 'cadastro_atualizado', acao = 'sincronizar', empresaId = '', id = 'todas', payload = {} } = req.body || {};
+    const evento = emitirEventoInterno({ origem: 'Nossa Gente', destino: 'Ultra', tipo, acao, empresaId, id, payload });
+    return { ok: true, mensagem: 'Sincronização por evento interno disparada com sucesso', evento };
   }));
 
   // Diagnóstico Consolidado da Holding Kytto por IA
