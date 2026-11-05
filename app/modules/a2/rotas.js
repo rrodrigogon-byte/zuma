@@ -26,6 +26,15 @@ export function createA2AdminRouter({ db, empresaDaRequisicao, operadorDaRequisi
   router.post('/clientes/viralgram/mapear-todos', executar(({ empresaId }) => mapearTodosClientesViralgram(empresaId)));
   router.post('/clientes/:id/mapear-viralgram', executar(({ empresaId, req }) => mapearClienteNoViralgram(empresaId, req.params.id)));
   router.patch('/clientes/:id', executar(({ empresaId, req }) => svc.salvarCliente(db, empresaId, req.body || {}, req.params.id)));
+  router.delete('/clientes/:id', executar(({ empresaId, req }) => svc.excluirCliente(db, empresaId, req.params.id)));
+  router.get('/servicos', executar(({ empresaId }) => svc.listarServicosMestres(empresaId).then((servicos) => ({ servicos }))));
+  router.post('/servicos', executar(({ empresaId, req }) => svc.salvarServicoMestre(empresaId, req.body || {}), 201));
+  router.patch('/servicos/:id', executar(({ empresaId, req }) => svc.salvarServicoMestre(empresaId, req.body || {}, req.params.id)));
+  router.delete('/servicos/:id', executar(({ empresaId, req }) => svc.excluirServicoMestre(empresaId, req.params.id)));
+  router.get('/produtos', executar(({ empresaId }) => svc.listarProdutosMestres(empresaId).then((produtos) => ({ produtos }))));
+  router.post('/produtos', executar(({ empresaId, req }) => svc.salvarProdutoMestre(empresaId, req.body || {}), 201));
+  router.patch('/produtos/:id', executar(({ empresaId, req }) => svc.salvarProdutoMestre(empresaId, req.body || {}, req.params.id)));
+  router.delete('/produtos/:id', executar(({ empresaId, req }) => svc.excluirProdutoMestre(empresaId, req.params.id)));
 
   router.get('/contas-receber', executar(async ({ empresaId, req }) => ({ contas: await svc.listarContas(db, empresaId, req.query) })));
   router.post('/contas-receber', executar(({ empresaId, req, operador }) => svc.criarConta(db, empresaId, req.body || {}, operador), 201));

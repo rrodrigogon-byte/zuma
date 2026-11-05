@@ -1,4 +1,6 @@
 import { barramentoA2 } from "./eventos.js";
+import bcrypt from "bcryptjs";
+import * as barbearia from "../../barbearia-erp-kytto.js";
 import { ErroDominio, exigirData, exigirTexto, exigirUuid } from '../acesso/banco.js';
 import * as clientesKytto from '../../clientes-contas-kytto.js';
 import * as financeiroKytto from '../../financeiro-central-kytto.js';
@@ -616,10 +618,60 @@ function cadastroDto(tipo, row) {
   return { ...row, inscricaoEstadual: row.inscricao_estadual, condicaoPagamento: row.condicao_pagamento, criadoEm: row.criado_em, atualizadoEm: row.atualizado_em };
 }
 
+export async function autoSincronizarCadastrosEmpresa(db, empresaId) {
+  if (!db || typeof db.query !== 'function') return;
+  const empresaUuid = id(empresaId, 'empresa');
+  try {
+    const pgUsers = await db.query('SELECT * FROM usuarios WHERE empresa_id = $1', [empresaUuid]);
+    for (const u of pgUsers.rows) {
+      if (u.email) {
+        const existeUser = await db.query('SELECT id FROM a2_usuarios_mestres WHERE empresa_id = $1 AND lower(email) = lower($2)', [empresaUuid, u.email]);
+        if (!existeUser.rows[0]) {
+          await db.query(`
+            INSERT INTO a2_usuarios_mestres (id, empresa_id, nome, email, telefone, tipo_usuario, perfis, senha_inicial_configurada, ativo)
+            VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, true, $8)
+            ON CONFLICT (id) DO NOTHING
+          `, [u.id, empresaUuid, u.nome_completo || u.email, u.email, u.telefone || null, u.role || 'operador_pdv', JSON.stringify([u.role || 'operador_pdv']), u.ativo !== false]);
+        }
+      }
+      const cargo = u.role === 'admin' ? 'Administrador' : (u.role === 'gerente' ? 'Gerente' : (u.role === 'barbeiro' ? 'Barbeiro' : 'Colaborador'));
+      const existeFunc = await db.query('SELECT id FROM a2_funcionarios WHERE empresa_id = $1 AND ((email IS NOT NULL AND lower(email) = lower($2)) OR lower(nome) = lower($3))', [empresaUuid, u.email || '', (u.nome_completo || '').trim()]);
+      if (!existeFunc.rows[0]) {
+        await db.query(`
+          INSERT INTO a2_funcionarios (empresa_id, nome, cpf, email, telefone, cargo, departamento, status, observacao)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        `, [empresaUuid, (u.nome_completo || u.email).trim(), u.cpf || null, u.email || null, u.telefone || null, cargo, 'Operacional', u.ativo !== false ? 'ativo' : 'desligado', `Perfil: ${u.role || 'colaborador'}`]);
+      }
+    }
+  } catch (e) {
+    console.warn('[a2-sync] Falha na auto-sincronizacao de usuarios:', e.message);
+  }
+  try {
+    const profs = barbearia.listarProfissionais(empresaId, { incluirInativos: true }) || [];
+    for (const p of profs) {
+      if (!p.nome) continue;
+      const existeFunc = await db.query('SELECT id FROM a2_funcionarios WHERE empresa_id = $1 AND lower(nome) = lower($2)', [empresaUuid, p.nome.trim()]);
+      if (!existeFunc.rows[0]) {
+        await db.query(`
+          INSERT INTO a2_funcionarios (empresa_id, nome, cpf, email, telefone, cargo, departamento, status, observacao)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        `, [empresaUuid, p.nome.trim(), p.cpf || null, p.email || null, p.telefone || null, p.cargo || 'Barbeiro Especialista', 'Atendimento & Barbearia', p.ativo !== false ? 'ativo' : 'desligado', p.id ? `Profissional ID: ${p.id}` : 'Equipe barbearia']);
+      }
+    }
+  } catch (e) {
+    console.warn('[a2-sync] Falha na auto-sincronizacao de profissionais:', e.message);
+  }
+}
+
 export async function listarCadastros(db, empresaId, tipo) {
   const cfg = TABELAS[tipo];
   if (!cfg) throw new ErroDominio('VALIDATION_ERROR', 'cadastro inválido');
-  const result = await db.query(`SELECT * FROM ${cfg.tabela} WHERE empresa_id=$1 ORDER BY lower(nome)`, [id(empresaId, 'empresa')]);
+  const empresaUuid = id(empresaId, 'empresa');
+  let result = await db.query(`SELECT * FROM ${cfg.tabela} WHERE empresa_id=$1 ORDER BY lower(nome)`, [empresaUuid]);
+  if (result.rows.length === 0 && tipo === 'funcionarios') {
+    await autoSincronizarCadastrosEmpresa(db, empresaId);
+    result = await db.query(`SELECT * FROM ${cfg.tabela} WHERE empresa_id=$1 ORDER BY lower(nome)`, [empresaUuid]);
+  }
   return result.rows.map((row) => cadastroDto(tipo, row));
 }
 
@@ -647,17 +699,48 @@ export async function salvarCadastro(db, empresaId, tipo, corpo = {}, registroId
     const result = await db.query(`UPDATE ${cfg.tabela} SET ${sets}, atualizado_em=CURRENT_TIMESTAMP WHERE empresa_id=$${valores.length + 1} AND id=$${valores.length + 2} RETURNING *`, [...valores, empresa, id(registroId, 'registro')]);
     if (!result.rows[0]) throw new ErroDominio('NOT_FOUND', 'Cadastro não encontrado', 404);
     const dto = cadastroDto(tipo, result.rows[0]);
+    if (tipo === 'funcionarios') {
+      try {
+        const profs = barbearia.listarProfissionais(empresaId, { incluirInativos: true }) || [];
+        const profExistente = profs.find(p => p.nome && (p.nome.toLowerCase() === nome.toLowerCase() || p.id === registroId));
+        if (profExistente) {
+          barbearia.atualizarProfissional(empresaId, profExistente.id, {
+            nome,
+            cargo: corpo.cargo || 'Barbeiro',
+            telefone: corpo.telefone || null,
+            email: corpo.email || null,
+            ativo: corpo.status !== 'desligado' && corpo.status !== 'afastado' && corpo.status !== 'inativo',
+          });
+        }
+      } catch {}
+    }
     barramentoA2.emit('cadastro_atualizado', { empresaId: empresa, tipo, acao: 'atualizar', id: dto.id, payload: dto });
     return dto;
   }
-  const result = await db.query(`INSERT INTO ${cfg.tabela} (empresa_id, ${cfg.campos.join(',')}) VALUES ($1, ${cfg.campos.map((_, index) => `$${index + 2}`).join(',')}) RETURNING *`, [empresa, ...valores]);
+  const result = await db.query(`INSERT INTO ${cfg.tabela} (empresa_id, ${cfg.campos.join(',')}) VALUES ($1, ${cfg.campos.map((_, index) => `${index + 2}`).join(',')}) RETURNING *`, [empresa, ...valores]);
   const dto = cadastroDto(tipo, result.rows[0]);
+  if (tipo === 'funcionarios') {
+    try {
+      barbearia.criarProfissional(empresaId, {
+        nome,
+        cargo: corpo.cargo || 'Barbeiro',
+        telefone: corpo.telefone || null,
+        email: corpo.email || null,
+        ativo: corpo.status !== 'desligado',
+      });
+    } catch {}
+  }
   barramentoA2.emit('cadastro_atualizado', { empresaId: empresa, tipo, acao: 'inserir', id: dto.id, payload: dto });
   return dto;
 }
 
 export async function listarUsuariosMestres(db, empresaId) {
-  const result = await db.query('SELECT * FROM a2_usuarios_mestres WHERE empresa_id=$1 ORDER BY lower(nome)', [id(empresaId, 'empresa')]);
+  const empresaUuid = id(empresaId, 'empresa');
+  let result = await db.query('SELECT * FROM a2_usuarios_mestres WHERE empresa_id=$1 ORDER BY lower(nome)', [empresaUuid]);
+  if (result.rows.length === 0) {
+    await autoSincronizarCadastrosEmpresa(db, empresaId);
+    result = await db.query('SELECT * FROM a2_usuarios_mestres WHERE empresa_id=$1 ORDER BY lower(nome)', [empresaUuid]);
+  }
   return result.rows.map(usuarioMestreDto);
 }
 
@@ -687,15 +770,35 @@ export async function salvarUsuarioMestre(db, empresaId, corpo = {}, registroId 
   if (!perfis.length) throw new ErroDominio('VALIDATION_ERROR', 'Selecione ao menos um perfil de acesso.');
   const ativo = corpo.ativo !== false;
   const temSenha = Boolean(corpo.senhaInicial);
+  let senhaHash = null;
+  if (temSenha && String(corpo.senhaInicial).length >= 8) {
+    senhaHash = await bcrypt.hash(String(corpo.senhaInicial), 10);
+  }
   if (registroId) {
-    const result = await db.query('UPDATE a2_usuarios_mestres SET nome=$1,email=$2,telefone=$3,tipo_usuario=$4,perfis=$5::jsonb,senha_inicial_configurada=senha_inicial_configurada OR $6,ativo=$7,atualizado_em=CURRENT_TIMESTAMP WHERE empresa_id=$8 AND id=$9 RETURNING *', [nome, email, telefone, tipo, json(perfis, []), temSenha, ativo, empresa, id(registroId, 'registro')]);
+    const regId = id(registroId, 'registro');
+    const result = await db.query('UPDATE a2_usuarios_mestres SET nome=$1,email=$2,telefone=$3,tipo_usuario=$4,perfis=$5::jsonb,senha_inicial_configurada=senha_inicial_configurada OR $6,ativo=$7,atualizado_em=CURRENT_TIMESTAMP WHERE empresa_id=$8 AND id=$9 RETURNING *', [nome, email, telefone, tipo, json(perfis, []), temSenha, ativo, empresa, regId]);
     if (!result.rows[0]) throw new ErroDominio('NOT_FOUND', 'Usuário mestre não encontrado', 404);
+    try {
+      if (senhaHash) {
+        await db.query(`UPDATE usuarios SET nome_completo=$1, email=COALESCE($2, email), telefone=$3, role=$4, ativo=$5, senha_hash=$6, data_atualizacao=CURRENT_TIMESTAMP WHERE empresa_id=$7 AND (id=$8 OR email=$2)`, [nome, email, telefone, tipo, ativo, senhaHash, empresa, regId]);
+      } else {
+        await db.query(`UPDATE usuarios SET nome_completo=$1, email=COALESCE($2, email), telefone=$3, role=$4, ativo=$5, data_atualizacao=CURRENT_TIMESTAMP WHERE empresa_id=$7 AND (id=$8 OR email=$2)`, [nome, email, telefone, tipo, ativo, empresa, regId]);
+      }
+    } catch {}
     const dto = usuarioMestreDto(result.rows[0], perfis);
     barramentoA2.emit('cadastro_atualizado', { empresaId: empresa, tipo: 'usuarios', acao: 'atualizar', id: dto.id, payload: dto });
     return dto;
   }
   if (!temSenha || String(corpo.senhaInicial).length < 8) throw new ErroDominio('VALIDATION_ERROR', 'A senha inicial deve ter ao menos 8 caracteres.');
   const result = await db.query('INSERT INTO a2_usuarios_mestres (empresa_id,nome,email,telefone,tipo_usuario,perfis,senha_inicial_configurada,ativo) VALUES ($1,$2,$3,$4,$5,$6::jsonb,true,$7) RETURNING *', [empresa, nome, email, telefone, tipo, json(perfis, []), ativo]);
+  try {
+    const novoId = result.rows[0].id;
+    await db.query(`
+      INSERT INTO usuarios (id, empresa_id, nome_completo, email, senha_hash, telefone, role, ativo, permissoes)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb)
+      ON CONFLICT (id) DO UPDATE SET nome_completo=$3, email=$4, senha_hash=COALESCE($5, usuarios.senha_hash), telefone=$6, role=$7, ativo=$8
+    `, [novoId, empresa, nome, email, senhaHash, telefone, tipo, ativo, json(perfis, [])]);
+  } catch {}
   const dto = usuarioMestreDto(result.rows[0], perfis);
   barramentoA2.emit('cadastro_atualizado', { empresaId: empresa, tipo: 'usuarios', acao: 'inserir', id: dto.id, payload: dto });
   return dto;
@@ -710,11 +813,24 @@ export async function obterEmpresa(db, empresaId) {
 
 
 export async function excluirCadastro(db, empresaId, tipo, registroId) {
-  const cfg = CONFIG_CADASTRO[tipo];
+  const cfg = TABELAS[tipo];
   if (!cfg) throw new ErroDominio('VALIDATION_ERROR', 'Tipo de cadastro inválido');
   const empresa = id(empresaId, 'empresa');
-  const result = await db.query(`DELETE FROM ${cfg.tabela} WHERE empresa_id=$1 AND id=$2 RETURNING id`, [empresa, id(registroId, 'registro')]);
+  const regId = id(registroId, 'registro');
+  let nomeRegistro = null;
+  if (tipo === 'funcionarios') {
+    const rAntigo = await db.query(`SELECT nome FROM ${cfg.tabela} WHERE empresa_id=$1 AND id=$2`, [empresa, regId]);
+    nomeRegistro = rAntigo.rows[0]?.nome;
+  }
+  const result = await db.query(`DELETE FROM ${cfg.tabela} WHERE empresa_id=$1 AND id=$2 RETURNING id`, [empresa, regId]);
   if (!result.rows[0]) throw new ErroDominio('NOT_FOUND', 'Cadastro não encontrado', 404);
+  if (tipo === 'funcionarios' && nomeRegistro) {
+    try {
+      const profs = barbearia.listarProfissionais(empresaId, { incluirInativos: true }) || [];
+      const prof = profs.find(p => p.nome && p.nome.toLowerCase() === nomeRegistro.toLowerCase());
+      if (prof) barbearia.excluirProfissional(empresaId, prof.id);
+    } catch {}
+  }
   barramentoA2.emit('cadastro_atualizado', { empresaId: empresa, tipo, acao: 'excluir', id: registroId });
   return { sucesso: true };
 }
@@ -728,3 +844,66 @@ export async function excluirUsuarioMestre(db, empresaId, registroId) {
 }
 
 export { clienteDto, contaDto, resumo };
+
+
+export async function excluirCliente(db, empresaId, clienteId) {
+  const empresa = id(empresaId, 'empresa');
+  const cliId = id(clienteId, 'cliente');
+  if (db && typeof db.query === 'function') {
+    await db.query('UPDATE commerce_customers SET bloqueado=true, atualizado_em=CURRENT_TIMESTAMP WHERE empresa_id=$1 AND id=$2', [empresa, cliId]).catch(() => {});
+    await db.query('UPDATE clientes SET ativo=false WHERE empresa_id=$1 AND id=$2', [empresa, cliId]).catch(() => {});
+  }
+  return { sucesso: true };
+}
+
+export async function listarServicosMestres(empresaId) {
+  const equivalentes = empresasEquivalentes(empresaId);
+  const map = new Map();
+  for (const emp of equivalentes) {
+    try {
+      const lista = barbearia.listarServicos(emp, { incluirInativos: true }) || [];
+      for (const item of lista) {
+        if (!map.has(item.id)) map.set(item.id, item);
+      }
+    } catch {}
+  }
+  return Array.from(map.values()).sort((a, b) => (a.nome || '').localeCompare(b.nome || '', 'pt-BR'));
+}
+
+export async function salvarServicoMestre(empresaId, dados = {}, servicoId = null) {
+  if (servicoId) {
+    return barbearia.atualizarServico(empresaId, servicoId, dados);
+  }
+  return barbearia.criarServico(empresaId, dados);
+}
+
+export async function excluirServicoMestre(empresaId, servicoId) {
+  barbearia.excluirServico(empresaId, servicoId);
+  return { sucesso: true };
+}
+
+export async function listarProdutosMestres(empresaId) {
+  const equivalentes = empresasEquivalentes(empresaId);
+  const map = new Map();
+  for (const emp of equivalentes) {
+    try {
+      const lista = barbearia.listarProdutosRevenda(emp, { incluirInativos: true, incluirSemLoja: true }) || [];
+      for (const item of lista) {
+        if (!map.has(item.id)) map.set(item.id, item);
+      }
+    } catch {}
+  }
+  return Array.from(map.values()).sort((a, b) => (a.nome || '').localeCompare(b.nome || '', 'pt-BR'));
+}
+
+export async function salvarProdutoMestre(empresaId, dados = {}, produtoId = null) {
+  if (produtoId) {
+    return barbearia.atualizarProdutoRevenda(empresaId, produtoId, dados);
+  }
+  return barbearia.criarProdutoRevenda(empresaId, dados);
+}
+
+export async function excluirProdutoMestre(empresaId, produtoId) {
+  barbearia.excluirProdutoRevenda(empresaId, produtoId);
+  return { sucesso: true };
+}
