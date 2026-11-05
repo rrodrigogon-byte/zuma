@@ -157,19 +157,19 @@ export default function Supermercado() {
 
       // 5. Açougue / Desossas
       const rDes = await api.get('/api/admin/supermercado/desossas').catch(() => null);
-      if (rDes && Array.isArray(rDes.desossas)) setDesossas(rDes.desossas);
+      if (rDes) setDesossas(Array.isArray(rDes) ? rDes : (rDes.desossas || []));
 
       // 6. Padaria
       const rPad = await api.get('/api/admin/supermercado/padaria/receitas').catch(() => null);
-      if (rPad && Array.isArray(rPad.receitas)) setReceitasPadaria(rPad.receitas);
+      if (rPad) setReceitasPadaria(Array.isArray(rPad) ? rPad : (rPad.receitas || []));
 
       // 7. Inventários
       const rInv = await api.get('/api/admin/supermercado/inventarios').catch(() => null);
-      if (rInv && Array.isArray(rInv.inventarios)) setInventarios(rInv.inventarios);
+      if (rInv) setInventarios(Array.isArray(rInv) ? rInv : (rInv.inventarios || []));
 
       // 8. Clube Kytto
       const rClube = await api.get('/api/admin/supermercado/clube/clientes').catch(() => null);
-      if (rClube && Array.isArray(rClube.clientes)) setClientesClube(rClube.clientes);
+      if (rClube) setClientesClube(Array.isArray(rClube) ? rClube : (rClube.clientes || []));
 
       // 9. Promoções
       const rPromo = await api.get('/api/admin/supermercado/promocoes').catch(() => null);

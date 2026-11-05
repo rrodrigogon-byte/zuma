@@ -139,7 +139,7 @@ export function createVarejoAdminRouter({ db, escopoDaRequisicao, fuso = 'Americ
 
   // ── Módulo de Açougue / Desossa (Rendimento) ──
   router.get('/desossas', rota('catalog.read', async ({ empresaId, lojaId }) => {
-    return svc.listarDesossas(db, empresaId, { lojaId });
+    return { desossas: await svc.listarDesossas(db, empresaId, { lojaId }) };
   }));
 
   router.post('/desossas', rota('catalog.write', async ({ req, empresaId, lojaId, usuario }) => {
@@ -148,7 +148,7 @@ export function createVarejoAdminRouter({ db, escopoDaRequisicao, fuso = 'Americ
 
   // ── Módulo de Padaria / Produção (Fichas Técnicas) ──
   router.get('/padaria/receitas', rota('catalog.read', async ({ empresaId }) => {
-    return svc.listarReceitasPadaria(db, empresaId);
+    return { receitas: await svc.listarReceitasPadaria(db, empresaId) };
   }));
 
   router.post('/padaria/receitas', rota('catalog.write', async ({ req, empresaId }) => {
@@ -161,7 +161,7 @@ export function createVarejoAdminRouter({ db, escopoDaRequisicao, fuso = 'Americ
 
   // ── Inventário Cíclico e Auditoria de Gôndola ──
   router.get('/inventarios', rota('catalog.read', async ({ empresaId, lojaId }) => {
-    return svc.listarInventarios(db, empresaId, { lojaId });
+    return { inventarios: await svc.listarInventarios(db, empresaId, { lojaId }) };
   }));
 
   router.post('/inventarios', rota('catalog.write', async ({ req, empresaId, lojaId, usuario }) => {
@@ -170,7 +170,7 @@ export function createVarejoAdminRouter({ db, escopoDaRequisicao, fuso = 'Americ
 
   // ── Clube de Benefícios Kytto ──
   router.get('/clube/clientes', rota('catalog.read', async ({ empresaId }) => {
-    return svc.listarClientesClube(db, empresaId);
+    return { clientes: await svc.listarClientesClube(db, empresaId) };
   }));
 
   router.get('/clube/consultar', rota('catalog.read', async ({ req, empresaId }) => {
