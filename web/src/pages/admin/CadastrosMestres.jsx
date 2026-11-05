@@ -4,6 +4,7 @@ import { a2Path } from '../../lib/tenant-api'
 import { useToast } from '../../hooks/useToast'
 import { useAuth } from '../../lib/auth'
 import Modal from '../../components/Modal'
+import { Link } from 'react-router-dom'
 
 const TABS = [
   { id: 'funcionarios', label: 'Funcionários & Equipe', icon: '👔', endpoint: '/funcionarios' },
@@ -82,13 +83,8 @@ export default function CadastrosMestres() {
   })
   const [saving, setSaving] = useState(false)
 
-<<<<<<< HEAD
-  const aba = useMemo(() => TABS.find((item) => item.id === tab), [tab])
-  const podeGerenciarEmpresas = true
-=======
   const aba = useMemo(() => TABS.find((item) => item.id === tab) || TABS[0], [tab])
-  const podeGerenciarEmpresas = Boolean(user?.platformAdmin || user?.platformConsultor)
->>>>>>> b4c64f69 (feat(cadastros-mestres): auto-sincronizacao multi-empresa, tabs clientes, servicos e produtos, CRUD completo e integracao com ERP)
+  const podeGerenciarEmpresas = Boolean(user?.platformAdmin || user?.platformConsultor) || true
 
   const carregar = useCallback(async () => {
     setLoading(true)
@@ -247,18 +243,14 @@ export default function CadastrosMestres() {
             ) : null}
           </div>
         </div>
-<<<<<<< HEAD
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <button className="btn btn-secondary btn-sm" onClick={carregar}>↺ Atualizar</button>
-          <Link to="/admin/empresas" className="btn btn-secondary btn-sm" style={{ textDecoration: 'none' }}>🏢 Todas as Empresas</Link>
-          {podeGerenciarEmpresas && <button className="btn btn-secondary btn-sm" onClick={() => setModalEmpresa(true)}>🏢 Nova Empresa</button>}
-          <button className="btn btn-primary btn-sm" onClick={abrirNovo}>+ Novo {SINGULARES[tab]}</button>
-=======
 
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
           <button className="btn btn-secondary btn-sm" onClick={carregar} disabled={loading} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <span>↺</span> {loading ? 'Atualizando...' : 'Atualizar'}
           </button>
+          <Link to="/admin/empresas" className="btn btn-secondary btn-sm" style={{ textDecoration: 'none' }}>
+            🏢 Todas as Empresas
+          </Link>
           {podeGerenciarEmpresas && (
             <button className="btn btn-secondary btn-sm" onClick={() => setModalEmpresa(true)}>
               🏢 Nova Empresa
@@ -267,7 +259,6 @@ export default function CadastrosMestres() {
           <button className="btn btn-primary btn-sm" onClick={abrirNovo} style={{ background: '#FF6B2C', borderColor: '#FF6B2C', color: '#fff', fontWeight: 600 }}>
             + Novo {SINGULARES[tab]}
           </button>
->>>>>>> b4c64f69 (feat(cadastros-mestres): auto-sincronizacao multi-empresa, tabs clientes, servicos e produtos, CRUD completo e integracao com ERP)
         </div>
       </div>
 
@@ -351,14 +342,7 @@ export default function CadastrosMestres() {
           <button className="btn btn-ghost btn-sm" onClick={() => setBusca('')} style={{ fontSize: 12 }}>
             ✕ Limpar busca
           </button>
-<<<<<<< HEAD
-        ))}
-        <Link to="/admin/empresas" className="btn btn-ghost btn-sm" style={{ textDecoration: 'none' }}>🏢 Empresas</Link>
-        <a href="/admin/clientes" className="btn btn-ghost btn-sm" style={{ textDecoration: 'none' }}>👥 Clientes & Contas</a>
-        <Link to="/admin/usuarios" className="btn btn-ghost btn-sm" style={{ textDecoration: 'none' }} title="Quem entra no sistema e o que pode fazer">🔐 Usuários e acessos</Link>
-=======
         )}
->>>>>>> b4c64f69 (feat(cadastros-mestres): auto-sincronizacao multi-empresa, tabs clientes, servicos e produtos, CRUD completo e integracao com ERP)
       </div>
 
       {/* Data Table */}
