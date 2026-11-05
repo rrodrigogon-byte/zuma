@@ -1,27 +1,28 @@
-# Manual Operacional: Gestão de Empresas & Multiempresa Kytto
+# Manual Operacional: Gestão de Empresas & Multiempresa Kytto com Inteligência Artificial
 
 **ERP Kytto · Barbearia Dino · Stallone Nutre Sport · AGRO OPEN TTC**  
-*Documento Oficial de Homologação e Operação Multiempresa*  
-*Versão: 2.5 · Data: Novembro/2026*
+*Documento Oficial de Homologação e Operação Multiempresa com Copilot IA*  
+*Versão: 3.0 · Data: Novembro/2026*
 
 ---
 
-## 1. Visão Geral do Módulo Multiempresa
+## 1. Visão Geral do Módulo Multiempresa & Copilot IA
 
-O **Módulo de Gestão de Empresas & Multiempresa Kytto** foi desenvolvido para centralizar a administração de todas as empresas e unidades da rede com **isolamento absoluto e autonomia operacional**. Cada empresa cadastrada possui regras contábeis, regimes fiscais (NFC-e/NFS-e), estoques, cardápios, planos, comandas, clientes e permissões totalmente segregados e protegidos contra vazamento de dados.
+O **Módulo de Gestão de Empresas & Multiempresa Kytto** centraliza a administração de todas as empresas e unidades da rede com **isolamento absoluto, autonomia operacional e inteligência artificial integrada**. Cada empresa cadastrada possui regras contábeis, regimes fiscais (NFC-e/NFS-e), estoques, cardápios, planos, comandas, clientes e permissões totalmente segregados e protegidos contra vazamento de dados.
 
 O sistema atende simultaneamente às empresas ativas no ecossistema:
-1. **Barbearia Dino** (DINO BARBEARIA LTDA · CNPJ 50.073.355/0002-60 · Inscrição Estadual 14.229.191-9): Barbearia, estética e perfumaria premium.
+1. **Barbearia Dino** (DINO BARBEARIA LTDA · CNPJ 50.073.355/0002-60 · Inscrição Estadual 14.229.191-9): Barbearia, estética e perfumaria premium com emissão NFS-e Sefin Nacional (código 060101) e NFC-e SEFAZ-MT.
 2. **Stallone Nutre Sport** (E. P. DE SOUZA LTDA · CNPJ 56.099.531/0001-38): Loja especializada em suplementação, nutrição esportiva e produtos naturais.
 3. **AGRO OPEN TTC** (AGRO OPEN TTC · CNPJ 43.084.070/0001-88): Complexo esportivo de tênis/beach tennis, bar, conveniência e eventos.
+4. **Kytto — Sistemas Inteligentes para Negócios** (CNPJ 54.518.772/0001-49): Holding de tecnologia e infraestrutura multi-tenant.
 
 ---
 
-## 2. Visão Geral da Interface de Empresas
+## 2. Visão Panorâmica & Painel Executivo da Holding
 
-O gestor tem acesso à visão panorâmica em cards interativos com busca em tempo real por Nome, Razão Social, CNPJ ou Cidade, além de filtros avançados por segmento de mercado e status operacional.
+O gestor tem acesso à visão panorâmica em cards interativos com 4 KPIs executivos da holding no topo, busca em tempo real por Nome, Razão Social, CNPJ ou Cidade, além de filtros avançados por segmento de mercado e status operacional.
 
-![Visão Geral da Gestão de Empresas](/home/ubuntu/agro-open/docs/prints-empresas/01_gestao_empresas_visao_geral.png)
+![Visão Geral da Gestão de Empresas com Painel da Holding](/home/ubuntu/agro-open/docs/prints-empresas/01_gestao_empresas_visao_geral.png)
 
 ### Principais Indicadores por Empresa:
 - **Identificação Completa:** Nome Fantasia comercial e Razão Social oficial registrada na Receita Federal.
@@ -34,72 +35,69 @@ O gestor tem acesso à visão panorâmica em cards interativos com busca em temp
 
 ---
 
-## 3. Como Cadastrar uma Nova Empresa (+ Nova Empresa)
+## 3. Assistente de Cadastro por IA & Consulta de CNPJ Público
 
-Para cadastrar uma nova matriz ou filial com autonomia multiempresa:
+Ao cadastrar uma nova empresa ou atualizar uma existente, o gestor não precisa digitar manualmente endereço, razão social ou regime fiscal:
 
-1. Acesse o menu lateral em **Empresas** (ou navegue diretamente para `https://kytto.com.br/admin/empresas`).
+1. Acesse o menu em **Empresas** (`https://kytto.com.br/admin/empresas`).
 2. Clique no botão de destaque superior **`+ Nova Empresa`**.
-3. O sistema exibirá o modal inteligente organizado em 4 seções operacionais:
+3. Digite o número do CNPJ (14 dígitos) e clique em **`🤖 Auto-preencher por IA`**:
 
-![Modal de Cadastro de Nova Empresa](/home/ubuntu/agro-open/docs/prints-empresas/02_modal_nova_empresa.png)
+![Modal de Cadastro de Nova Empresa com Auto-Preenchimento por IA](/home/ubuntu/agro-open/docs/prints-empresas/02_modal_nova_empresa.png)
 
-### Campos do Formulário:
-
-| Bloco | Campo | Obrigatório | Descrição / Exemplo |
-| :--- | :--- | :---: | :--- |
-| **1. Identificação Jurídica** | Nome Comercial (Fantasia) | **Sim** | Ex: *Stallone Nutre Sport*, *Barbearia Dino* |
-| | Razão Social Oficial | **Sim** | Ex: *E. P. DE SOUZA LTDA*, *DINO BARBEARIA LTDA* |
-| | CNPJ | Não (rascunho) | 14 dígitos numéricos com formatação automática |
-| | Inscrição Estadual (IE) | Opcional | Ex: *14.229.191-9* (para emissão de NFC-e na SEFAZ) |
-| | Inscrição Municipal (IM) | Opcional | Código de inscrição no município (NFS-e Sefin) |
-| | Segmento / Tipo | **Sim** | Barbearia, Suplementos, Esporte, Bar, etc. |
-| **2. Endereço Fiscal** | CEP | Opcional | 8 dígitos. O botão `🔍` busca rua, bairro e cidade no ViaCEP |
-| | Logradouro e Número | Opcional | Ex: *Av. Brasil, nº 500-W* |
-| | Complemento e Bairro | Opcional | Ex: *Sala 02, Centro* |
-| | Cidade e Estado (UF) | **Sim** | Ex: *Tangará da Serra / MT* |
-| **3. Contatos** | Telefone / WhatsApp | Opcional | Número de contato para suporte e clientes |
-| | E-mail Corporativo | Opcional | E-mail oficial da empresa |
-| | Website | Opcional | Link do catálogo público ou domínio próprio |
-| **4. Unidade & Admin** | Criar Unidade Matriz | Opcional | Cria a loja matriz inicial no PostgreSQL automaticamente |
-| | Permitir Estoque Negativo | Opcional | Habilita venda no PDV mesmo sem saldo em estoque |
-| | Administrador Inicial | Opcional | Cadastra usuário com e-mail e senha inicial (mín. 6 dígitos) |
-
-Ao clicar em **Cadastrar Empresa**, o registro é inserido no PostgreSQL, sincronizado no Datastore JSON e disparado como evento interno no barramento multiempresa.
+4. O motor de IA consulta as bases públicas oficiais e realiza:
+   - **Preenchimento Automático:** Razão Social, Nome Fantasia, CEP, Logradouro, Bairro, Município, UF e Telefone.
+   - **Análise Semântica do CNAE:** A IA classifica o segmento automaticamente (ex: CNAE 9602-5/01 -> *Barbearia & Perfumaria*).
+   - **Recomendação Fiscal Inteligente:** Sugere o código de serviço municipal (`060101` para barbearias, ou NCM `2106.90.30` para suplementos), além do CFOP e CSOSN adequados ao Simples Nacional.
 
 ---
 
-## 4. Como Editar e Modificar Informações de Empresas
+## 4. Diagnóstico Executivo de Saúde por IA da Empresa
 
-O sistema permite alterar livremente qualquer informação de qualquer empresa já cadastrada:
+Cada empresa possui o botão dedicado **`🧠 Diagnóstico IA`** diretamente em seu card operacional. Ao clicar, a inteligência artificial analisa o ecossistema da empresa em tempo real e emite o diagnóstico completo de conformidade:
 
-1. Na lista de empresas, localize a empresa desejada e clique em **`✏️ Editar`**.
-2. O modal será carregado com todos os dados atuais previamente preenchidos:
+![Modal de Diagnóstico Inteligente por IA da Empresa](/home/ubuntu/agro-open/docs/prints-empresas/03_diagnostico_ia_empresa.png)
 
-![Modal de Edição de Empresa](/home/ubuntu/agro-open/docs/prints-empresas/03_modal_editar_empresa.png)
-
-3. Modifique os campos desejados (telefone, endereço, razão social, CNPJ, Inscrição Estadual, etc.).
-4. Clique em **`Salvar Alterações`**. As atualizações são aplicadas imediatamente em tempo real.
-
----
-
-## 5. Inativação e Reativação Segura de Empresas
-
-- Para **inativar** uma empresa temporariamente (sem perder histórico de vendas, comandas ou notas emitidas), clique no botão **`Inativar`** no card da empresa e confirme.
-- Para **reativar**, utilize o filtro de status selecionando **"Somente Inativas"** e clique em **`Reativar`**.
-- **Trava de Segurança:** A empresa principal da Barbearia Dino (`d0d0ac01-8e50-4b61-8c79-de4aaa916da6`) é protegida contra exclusão acidental por ser o núcleo do ERP.
+### Dimensões Auditadas pelo Diagnóstico IA:
+1. **Score Geral de Prontidão (0 a 100%):**
+   - **Cadastral (até 25 pts):** Razão Social, CNPJ válido, endereço completo e contatos.
+   - **Fiscal (até 25 pts):** Inscrição Estadual, Inscrição Municipal, Certificado A1 ICP-Brasil instalado e validade em dias.
+   - **Operacional (até 25 pts):** Loja matriz ativa, catálogo de serviços/produtos e controle de estoque.
+   - **IA & Atendimento (até 25 pts):** Atendente IA T-Rex / WhatsApp com motor de proteção antiban ativo e fila humanizada.
+2. **Status dos Pilares em Tempo Real:** Certificado Digital & mTLS, Emissão de Documentos Fiscais, Atendente IA e Barramento A2.
+3. **Insights & Recomendações Estratégicas:** Sugestões personalizadas geradas pela IA para alavancar faturamento e garantir conformidade fiscal contínua.
 
 ---
 
-## 6. Alternância Rápida de Empresa Ativa (Multi-Tenant)
+## 5. Copilot da Holding Kytto & Governança Multi-Tenant
 
-O gestor que administra mais de um negócio não precisa fazer logout para alternar de empresa:
-- Basta clicar no botão **`⚡ Operar nesta`** no card da empresa desejada.
-- A sessão autenticada é imediatamente alternada para a empresa selecionada, redirecionando o escopo de comandas, estoque, financeiro e notas fiscais para a empresa escolhida.
+Para gestores e administradores que supervisionam mais de um negócio, o botão superior **`🧠 Copilot Holding`** apresenta a síntese executiva consolidada de todo o grupo:
+
+![Diagnóstico Consolidado da Holding Kytto por IA](/home/ubuntu/agro-open/docs/prints-empresas/04_copilot_holding_ia.png)
+
+### Recursos do Copilot Holding:
+- **Score Médio do Grupo:** Média ponderada de conformidade e prontidão operacional de todas as marcas ativas.
+- **Mapeamento de Unidades:** Relação consolidada de lojas operacionais em Tangará da Serra e região.
+- **Diretrizes de Governança:** Confirmação do isolamento contábil e fiscal de cada CNPJ, garantindo que comandas, clientes e faturamentos nunca se misturem.
 
 ---
 
-## 7. Arquitetura de Sincronização por Evento Interno
+## 6. Ficha Cadastral Oficial da Empresa (Impressão & Auditoria)
+
+- No card de qualquer empresa, clique em **`📋 Ficha`** para visualizar a ficha cadastral padronizada.
+- A ficha reúne todos os registros jurídicos, fiscais, endereço e contatos em padrão executivo, com botão integrado **`🖨️ Imprimir Ficha`** para exportação rápida em folha A4.
+
+---
+
+## 7. Alternância Rápida de Empresa Ativa (Multi-Tenant)
+
+O gestor não precisa fazer logout para navegar entre diferentes empresas do grupo:
+- Clique no botão **`⚡ Operar nesta`** no card da empresa desejada.
+- A sessão autenticada é imediatamente alternada para a empresa selecionada, redirecionando o escopo de comandas, caixa, estoque, financeiro e notas fiscais para o CNPJ escolhido.
+
+---
+
+## 8. Arquitetura de Sincronização por Evento Interno
 
 Conforme os padrões de governança do Kytto, toda operação de inclusão, alteração ou inativação de empresas emite um evento no barramento interno:
 ```javascript

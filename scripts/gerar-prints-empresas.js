@@ -7,7 +7,7 @@ if (!fs.existsSync(OUT_DIR)) {
 }
 
 async function main() {
-  console.log('Iniciando Puppeteer para captura de telas de Empresas...');
+  console.log('Iniciando Puppeteer para captura de telas de Empresas & IA...');
   const browser = await puppeteer.launch({
     headless: 'new',
     args: ['--no-sandbox', '--disable-setuid-sandbox', '--window-size=1400,900']
@@ -45,8 +45,8 @@ async function main() {
   await page.screenshot({ path: `${OUT_DIR}/01_gestao_empresas_visao_geral.png`, fullPage: false });
   console.log('Salvo: 01_gestao_empresas_visao_geral.png');
 
-  // 3. Clicar em "+ Nova Empresa"
-  console.log('Abrindo modal + Nova Empresa...');
+  // 3. Abrir modal + Nova Empresa
+  console.log('Abrindo modal + Nova Empresa com IA...');
   await page.evaluate(() => {
     const botoes = Array.from(document.querySelectorAll('button'));
     const btn = botoes.find(b => b.textContent.includes('Nova Empresa'));
@@ -64,16 +64,35 @@ async function main() {
   });
   await new Promise(r => setTimeout(r, 800));
 
-  // 4. Clicar em "Editar" no card
-  console.log('Abrindo modal Editar Empresa...');
+  // 4. Clicar em "Diagnóstico IA" no card
+  console.log('Abrindo modal Diagnóstico IA...');
   await page.evaluate(() => {
     const botoes = Array.from(document.querySelectorAll('button'));
-    const btn = botoes.find(b => b.textContent.includes('Editar'));
+    const btn = botoes.find(b => b.textContent.includes('Diagnóstico IA'));
+    if (btn) btn.click();
+  });
+  await new Promise(r => setTimeout(r, 1200));
+  await page.screenshot({ path: `${OUT_DIR}/03_diagnostico_ia_empresa.png`, fullPage: false });
+  console.log('Salvo: 03_diagnostico_ia_empresa.png');
+
+  // Fechar diagnóstico
+  await page.evaluate(() => {
+    const botoes = Array.from(document.querySelectorAll('button'));
+    const btn = botoes.find(b => b.textContent.includes('Fechar'));
+    if (btn) btn.click();
+  });
+  await new Promise(r => setTimeout(r, 800));
+
+  // 5. Clicar em "Copilot Holding"
+  console.log('Abrindo Copilot Holding...');
+  await page.evaluate(() => {
+    const botoes = Array.from(document.querySelectorAll('button'));
+    const btn = botoes.find(b => b.textContent.includes('Copilot Holding'));
     if (btn) btn.click();
   });
   await new Promise(r => setTimeout(r, 1000));
-  await page.screenshot({ path: `${OUT_DIR}/03_modal_editar_empresa.png`, fullPage: false });
-  console.log('Salvo: 03_modal_editar_empresa.png');
+  await page.screenshot({ path: `${OUT_DIR}/04_copilot_holding_ia.png`, fullPage: false });
+  console.log('Salvo: 04_copilot_holding_ia.png');
 
   await browser.close();
   console.log('Todas as capturas geradas com sucesso!');

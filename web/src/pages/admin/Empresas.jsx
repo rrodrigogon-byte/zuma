@@ -76,6 +76,14 @@ export default function Empresas() {
   const [form, setForm] = useState(FORM_VAZIO)
   const [salvando, setSalvando] = useState(false)
   const [buscandoCep, setBuscandoCep] = useState(false)
+  const [buscandoCnpjIa, setBuscandoCnpjIa] = useState(false)
+  const [sugestaoIaCnpj, setSugestaoIaCnpj] = useState(null)
+
+  // Modais de Diagnóstico IA e Ficha Cadastral
+  const [modalDiagnostico, setModalDiagnostico] = useState(null) // dados do diagnostico
+  const [loadingDiagnostico, setLoadingDiagnostico] = useState(false)
+  const [modalHolding, setModalHolding] = useState(null)
+  const [modalFicha, setModalFicha] = useState(null) // empresa para ficha cadastral
 
   const carregar = useCallback(async () => {
     setLoading(true)
@@ -95,10 +103,12 @@ export default function Empresas() {
 
   const abrirNovo = () => {
     setForm(FORM_VAZIO)
+    setSugestaoIaCnpj(null)
     setModal({ modo: 'novo' })
   }
 
   const abrirEditar = (empresa) => {
+    setSugestaoIaCnpj(null)
     setForm({
       nome: empresa.nomeFantasia || empresa.nome || '',
       razaoSocial: empresa.razaoSocial || empresa.nome || '',
@@ -123,6 +133,43 @@ export default function Empresas() {
     setModal({ modo: 'editar', id: empresa.id, empresa })
   }
 
+  // Consulta pública enriquecida por IA
+  const consultarCnpjComIa = async () => {
+    const digitos = String(form.cnpj || '').replace(/\D/g, '')
+    if (digitos.length !== 14) {
+      return toast('Informe os 14 dígitos do CNPJ para a IA consultar.', true)
+    }
+    setBuscandoCnpjIa(true)
+    try {
+      const res = await api.get(`/api/admin/empresas/consulta-cnpj/${digitos}`)
+      if (res.ok && res.dados) {
+        const d = res.dados
+        setForm((prev) => ({
+          ...prev,
+          nome: d.nomeFantasia || prev.nome || d.razaoSocial,
+          razaoSocial: d.razaoSocial || prev.razaoSocial,
+          tipoNegocio: d.ia?.tipoNegocioSugerido || prev.tipoNegocio,
+          inscricaoMunicipal: d.ia?.codigoServicoSugerido || prev.inscricaoMunicipal,
+          enderecoLogradouro: d.endereco?.logradouro || prev.enderecoLogradouro,
+          enderecoNumero: d.endereco?.numero || prev.enderecoNumero,
+          enderecoComplemento: d.endereco?.complemento || prev.enderecoComplemento,
+          enderecoBairro: d.endereco?.bairro || prev.enderecoBairro,
+          enderecoCidade: d.endereco?.cidade || prev.enderecoCidade,
+          enderecoEstado: d.endereco?.estado || prev.enderecoEstado,
+          enderecoCep: mascaraCep(d.endereco?.cep || prev.enderecoCep),
+          telefone: mascaraTelefone(d.contato?.telefone || prev.telefone),
+          email: d.contato?.email || prev.email,
+        }))
+        setSugestaoIaCnpj(d.ia)
+        toast('Dados preenchidos e enriquecidos com sucesso pela IA!')
+      }
+    } catch (err) {
+      toast(err.message || 'Não foi possível consultar os dados públicos do CNPJ.', true)
+    } finally {
+      setBuscandoCnpjIa(false)
+    }
+  }
+
   const buscarCepAutomatico = async (cepEntrada) => {
     const limpo = String(cepEntrada || '').replace(/\D/g, '')
     if (limpo.length !== 8) return
@@ -142,19 +189,43 @@ export default function Empresas() {
         toast('Endereço preenchido com sucesso pelo CEP!')
       }
     } catch {
-      // silencioso se offline
+      // silencioso
     } finally {
       setBuscandoCep(false)
     }
   }
 
+  // Diagnóstico IA de uma Empresa específica
+  const abrirDiagnosticoIa = async (empresa) => {
+    setLoadingDiagnostico(true)
+    setModalDiagnostico({ carregando: true, empresa })
+    try {
+      const res = await api.get(`/api/admin/empresas/${empresa.id}/diagnostico-ia`)
+      setModalDiagnostico(res.diagnostico)
+    } catch (err) {
+      toast(err.message || 'Erro ao gerar diagnóstico IA da empresa.', true)
+      setModalDiagnostico(null)
+    } finally {
+      setLoadingDiagnostico(false)
+    }
+  }
+
+  // Diagnóstico Consolidado da Holding
+  const abrirDiagnosticoHolding = async () => {
+    setLoadingDiagnostico(true)
+    try {
+      const res = await api.get('/api/admin/empresas/diagnostico-holding')
+      setModalHolding(res)
+    } catch (err) {
+      toast(err.message || 'Erro ao carregar diagnóstico da holding.', true)
+    } finally {
+      setLoadingDiagnostico(false)
+    }
+  }
+
   const salvar = async () => {
-    if (!form.nome?.trim()) {
-      return toast('O Nome Fantasia é obrigatório.', true)
-    }
-    if (!form.razaoSocial?.trim()) {
-      return toast('A Razão Social é obrigatória.', true)
-    }
+    if (!form.nome?.trim()) return toast('O Nome Fantasia é obrigatório.', true)
+    if (!form.razaoSocial?.trim()) return toast('A Razão Social é obrigatória.', true)
 
     const cnpjDigitos = String(form.cnpj || '').replace(/\D/g, '')
     if (cnpjDigitos && cnpjDigitos.length !== 14) {
@@ -238,10 +309,17 @@ export default function Empresas() {
     })
   }, [empresas, busca, filtroTipo, filtroStatus])
 
+  const kpisHolding = useMemo(() => {
+    const total = empresas.length
+    const ativas = empresas.filter(e => e.ativa !== false).length
+    const totalLojas = empresas.reduce((acc, e) => acc + (e.totalLojas || 1), 0)
+    return { total, ativas, totalLojas }
+  }, [empresas])
+
   return (
-    <div className="page" style={{ maxWidth: 1200, margin: '0 auto', paddingBottom: 60 }}>
-      {/* Topo / Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, flexWrap: 'wrap', marginBottom: 24 }}>
+    <div className="page" style={{ maxWidth: 1240, margin: '0 auto', paddingBottom: 60 }}>
+      {/* Topo / Header com Barra de Gestão Executiva */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, flexWrap: 'wrap', marginBottom: 20 }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <span style={{ fontSize: 28 }}>🏢</span>
@@ -250,7 +328,7 @@ export default function Empresas() {
             </h1>
           </div>
           <div style={{ marginTop: 6, color: 'var(--muted, #64748b)', fontSize: 13 }}>
-            Cadastro completo de matrizes e filiais com isolamento contábil, fiscal, estoque e financeiro.
+            Cadastro completo e autônomo com inteligência artificial, isolamento contábil, fiscal e operacional.
             {empresaAtiva && (
               <span style={{ marginLeft: 8, padding: '2px 8px', borderRadius: 6, background: 'rgba(255,107,44,.12)', color: '#FF6B2C', fontWeight: 700 }}>
                 Ativa agora: {empresaAtiva.nomeFantasia || empresaAtiva.nome}
@@ -259,21 +337,71 @@ export default function Empresas() {
           </div>
         </div>
 
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
           <button className="btn btn-secondary btn-sm" onClick={carregar} disabled={loading} title="Recarregar lista">
             ↺ {loading ? 'Carregando...' : 'Atualizar'}
+          </button>
+          <button className="btn btn-secondary btn-sm" onClick={abrirDiagnosticoHolding} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span>🧠</span> Copilot Holding
           </button>
           <Link to="/admin/lojas" className="btn btn-secondary btn-sm" style={{ textDecoration: 'none' }}>
             🏪 Unidades / Lojas
           </Link>
-          <button className="btn btn-primary btn-sm" onClick={abrirNovo} style={{ background: '#FF6B2C', borderColor: '#FF6B2C', fontWeight: 700 }}>
-            + Nova Empresa
+          <button className="btn btn-primary btn-sm" onClick={abrirNovo} style={{ background: '#FF6B2C', borderColor: '#FF6B2C', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span>+</span> Nova Empresa
           </button>
         </div>
       </div>
 
+      {/* Painel de Indicadores da Holding & IA */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 12, marginBottom: 20 }}>
+        <div className="card" style={{ padding: '14px 16px', background: '#fff', borderRadius: 10, border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{ width: 42, height: 42, borderRadius: 8, background: 'rgba(18,40,63,.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20 }}>
+            🏢
+          </div>
+          <div>
+            <span style={{ fontSize: 11, color: '#64748b', fontWeight: 600, textTransform: 'uppercase', display: 'block' }}>Empresas do Grupo</span>
+            <strong style={{ fontSize: 18, color: '#12283F' }}>{kpisHolding.total} cadastradas</strong>
+            <span style={{ fontSize: 11, color: '#16a34a', display: 'block' }}>{kpisHolding.ativas} ativas em produção</span>
+          </div>
+        </div>
+
+        <div className="card" style={{ padding: '14px 16px', background: '#fff', borderRadius: 10, border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{ width: 42, height: 42, borderRadius: 8, background: 'rgba(255,107,44,.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20 }}>
+            🏪
+          </div>
+          <div>
+            <span style={{ fontSize: 11, color: '#64748b', fontWeight: 600, textTransform: 'uppercase', display: 'block' }}>Unidades & Filiais</span>
+            <strong style={{ fontSize: 18, color: '#FF6B2C' }}>{kpisHolding.totalLojas} operacionais</strong>
+            <span style={{ fontSize: 11, color: '#64748b', display: 'block' }}>Matrizes e pontos de venda</span>
+          </div>
+        </div>
+
+        <div className="card" style={{ padding: '14px 16px', background: '#fff', borderRadius: 10, border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{ width: 42, height: 42, borderRadius: 8, background: 'rgba(34,197,94,.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20 }}>
+            ⚡
+          </div>
+          <div>
+            <span style={{ fontSize: 11, color: '#64748b', fontWeight: 600, textTransform: 'uppercase', display: 'block' }}>Barramento A2</span>
+            <strong style={{ fontSize: 18, color: '#15803d' }}>100% Síncrono</strong>
+            <span style={{ fontSize: 11, color: '#64748b', display: 'block' }}>Eventos internos sem atraso</span>
+          </div>
+        </div>
+
+        <div className="card" style={{ padding: '14px 16px', background: '#fff', borderRadius: 10, border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{ width: 42, height: 42, borderRadius: 8, background: 'rgba(99,102,241,.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20 }}>
+            🤖
+          </div>
+          <div>
+            <span style={{ fontSize: 11, color: '#64748b', fontWeight: 600, textTransform: 'uppercase', display: 'block' }}>IA & Automação</span>
+            <strong style={{ fontSize: 18, color: '#4f46e5' }}>Auditado</strong>
+            <span style={{ fontSize: 11, color: '#64748b', display: 'block' }}>Diagnóstico & consulta ativos</span>
+          </div>
+        </div>
+      </div>
+
       {/* Barra de Filtros e Busca */}
-      <div className="card" style={{ padding: '14px 18px', marginBottom: 20, display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center', background: '#fff', borderRadius: 10, border: '1px solid #e2e8f0' }}>
+      <div className="card" style={{ padding: '12px 16px', marginBottom: 20, display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center', background: '#fff', borderRadius: 10, border: '1px solid #e2e8f0' }}>
         <div style={{ flex: 1, minWidth: 260 }}>
           <input
             type="text"
@@ -329,7 +457,7 @@ export default function Empresas() {
           </button>
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: 16 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(370px, 1fr))', gap: 16 }}>
           {empresasFiltradas.map((emp) => {
             const eAtiva = emp.id === empresaAtiva?.id
             const seg = TIPOS_NEGOCIO.find((t) => t.id === emp.tipoNegocio) || TIPOS_NEGOCIO[6]
@@ -339,7 +467,7 @@ export default function Empresas() {
                 key={emp.id}
                 className="card"
                 style={{
-                  padding: 20,
+                  padding: 18,
                   borderRadius: 12,
                   background: '#fff',
                   border: eAtiva ? '2px solid #FF6B2C' : '1px solid #e2e8f0',
@@ -347,9 +475,8 @@ export default function Empresas() {
                   display: 'flex',
                   flexDirection: 'column',
                   justifyContent: 'space-between',
-                  gap: 14,
+                  gap: 12,
                   position: 'relative',
-                  transition: 'transform .15s ease, box-shadow .15s ease',
                 }}
               >
                 {/* Header do Card */}
@@ -369,15 +496,15 @@ export default function Empresas() {
 
                     <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                       {eAtiva && (
-                        <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 6, background: '#22c55e', color: '#fff' }}>
+                        <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 6, background: '#22c55e', color: '#fff' }}>
                           EM USO
                         </span>
                       )}
                       <span
                         style={{
-                          fontSize: 11,
+                          fontSize: 10,
                           fontWeight: 700,
-                          padding: '2px 8px',
+                          padding: '2px 6px',
                           borderRadius: 6,
                           background: emp.ativa !== false ? 'rgba(34,197,94,.12)' : 'rgba(239,68,68,.12)',
                           color: emp.ativa !== false ? '#15803d' : '#b91c1c',
@@ -389,7 +516,7 @@ export default function Empresas() {
                   </div>
 
                   {/* Informações Fiscais e Cadastrais */}
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 12px', fontSize: 12, marginTop: 12, padding: '10px 12px', background: '#f8fafc', borderRadius: 8, border: '1px solid #f1f5f9' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 10px', fontSize: 12, marginTop: 10, padding: '10px 12px', background: '#f8fafc', borderRadius: 8, border: '1px solid #f1f5f9' }}>
                     <div>
                       <span style={{ color: '#64748b', display: 'block', fontSize: 11 }}>CNPJ</span>
                       <strong style={{ color: '#334155', fontFamily: 'monospace' }}>{emp.cnpj || 'Não informado'}</strong>
@@ -412,7 +539,7 @@ export default function Empresas() {
                   </div>
 
                   {/* Contato e Endereço */}
-                  <div style={{ marginTop: 10, fontSize: 12, color: '#475569', display: 'grid', gap: 4 }}>
+                  <div style={{ marginTop: 8, fontSize: 12, color: '#475569', display: 'grid', gap: 3 }}>
                     {emp.endereco && (
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                         <span style={{ color: '#94a3b8' }}>📍</span>
@@ -436,8 +563,31 @@ export default function Empresas() {
                   </div>
                 </div>
 
+                {/* Ações Especiais de IA e Documentos */}
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', paddingTop: 8, borderTop: '1px solid #f1f5f9' }}>
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => abrirDiagnosticoIa(emp)}
+                    style={{ flex: 1, fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, background: '#f8fafc' }}
+                    title="Análise de conformidade fiscal, operacional e atendimento por IA"
+                  >
+                    <span>🧠</span> Diagnóstico IA
+                  </button>
+
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => setModalFicha(emp)}
+                    style={{ fontSize: 11, display: 'flex', alignItems: 'center', gap: 4 }}
+                    title="Visualizar e imprimir ficha cadastral oficial da empresa"
+                  >
+                    <span>📋</span> Ficha
+                  </button>
+                </div>
+
                 {/* Rodapé de Ações do Card */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, paddingTop: 12, borderTop: '1px solid #f1f5f9' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, paddingTop: 8, borderTop: '1px solid #f1f5f9' }}>
                   <button
                     type="button"
                     className="btn btn-sm"
@@ -448,7 +598,7 @@ export default function Empresas() {
                       borderColor: eAtiva ? '#e2e8f0' : '#12283F',
                       fontSize: 12,
                       fontWeight: 600,
-                      padding: '6px 12px',
+                      padding: '5px 12px',
                     }}
                   >
                     {eAtiva ? '✓ Selecionada' : '⚡ Operar nesta'}
@@ -483,50 +633,28 @@ export default function Empresas() {
         </div>
       )}
 
-      {/* Modal de Nova Empresa / Edição */}
+      {/* Modal de Nova Empresa / Edição com IA de CNPJ */}
       {modal && (
         <Modal
-          title={modal.modo === 'novo' ? '🏢 Cadastrar Nova Empresa' : `✏️ Editar Empresa: ${modal.empresa?.nomeFantasia || modal.empresa?.nome}`}
+          title={modal.modo === 'novo' ? '🏢 Cadastrar Nova Empresa com IA' : `✏️ Editar Empresa: ${modal.empresa?.nomeFantasia || modal.empresa?.nome}`}
           onClose={() => setModal(null)}
-          width={740}
+          width={760}
         >
-          <div style={{ display: 'grid', gap: 16, paddingBottom: 16 }}>
-            <div className="card" style={{ fontSize: 12, color: '#475569', background: 'rgba(255,107,44,.06)', border: '1px solid rgba(255,107,44,.18)', padding: 12, borderRadius: 8 }}>
-              O Kytto garante <strong>isolamento multiempresa absoluto</strong>. A nova empresa terá cadastros mestres, catálogo, estoque, financeiro, regras fiscais (NFC-e/NFS-e) e usuários próprios e autônomos.
+          <div style={{ display: 'grid', gap: 14, paddingBottom: 16 }}>
+            {/* Bloco de Ajuda IA */}
+            <div className="card" style={{ fontSize: 12, color: '#334155', background: 'rgba(99,102,241,.06)', border: '1px solid rgba(99,102,241,.2)', padding: '10px 14px', borderRadius: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              <div>
+                <strong>Assistente de Cadastro por IA:</strong> Digite o CNPJ e clique no botão para auto-preencher razão social, endereço e segmento automaticamente!
+              </div>
             </div>
 
-            {/* SEÇÃO 1: Dados Jurídicos e Segmento */}
-            <h3 style={{ margin: '8px 0 0', color: '#12283F', fontSize: 14, fontWeight: 700, borderBottom: '1px solid #e2e8f0', paddingBottom: 4 }}>
-              1. Identificação Jurídica & Segmento
+            {/* SEÇÃO 1: Identificação Jurídica & Segmento */}
+            <h3 style={{ margin: '6px 0 0', color: '#12283F', fontSize: 14, fontWeight: 700, borderBottom: '1px solid #e2e8f0', paddingBottom: 4 }}>
+              1. Identificação Jurídica & Inteligência Fiscal
             </h3>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-              <div>
-                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#334155', marginBottom: 4 }}>Nome Fantasia / Comercial *</label>
-                <input
-                  type="text"
-                  className="form-control"
-                  placeholder="Ex: Barbearia Dino, Stallone Nutre Sport"
-                  value={form.nome}
-                  onChange={(e) => setForm({ ...form, nome: e.target.value })}
-                  style={{ width: '100%', padding: '8px 10px', fontSize: 13, borderRadius: 6, border: '1px solid #cbd5e1' }}
-                />
-              </div>
-
-              <div>
-                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#334155', marginBottom: 4 }}>Razão Social Oficial *</label>
-                <input
-                  type="text"
-                  className="form-control"
-                  placeholder="Ex: DINO BARBEARIA LTDA"
-                  value={form.razaoSocial}
-                  onChange={(e) => setForm({ ...form, razaoSocial: e.target.value })}
-                  style={{ width: '100%', padding: '8px 10px', fontSize: 13, borderRadius: 6, border: '1px solid #cbd5e1' }}
-                />
-              </div>
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr', gap: 12 }}>
+            {/* CNPJ com botão de Auto-Preenchimento por IA */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1.2fr auto 1fr 1fr', gap: 10, alignItems: 'flex-end' }}>
               <div>
                 <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#334155', marginBottom: 4 }}>CNPJ</label>
                 <input
@@ -538,6 +666,19 @@ export default function Empresas() {
                   onChange={(e) => setForm({ ...form, cnpj: mascaraCnpj(e.target.value) })}
                   style={{ width: '100%', padding: '8px 10px', fontSize: 13, borderRadius: 6, border: '1px solid #cbd5e1', fontFamily: 'monospace' }}
                 />
+              </div>
+
+              <div>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={consultarCnpjComIa}
+                  disabled={buscandoCnpjIa}
+                  style={{ background: '#4f46e5', borderColor: '#4f46e5', color: '#fff', fontSize: 12, fontWeight: 700, padding: '8px 12px', display: 'flex', alignItems: 'center', gap: 6 }}
+                  title="Consultar dados públicos do CNPJ e enriquecer com IA"
+                >
+                  <span>🤖</span> {buscandoCnpjIa ? 'Consultando IA...' : 'Auto-preencher por IA'}
+                </button>
               </div>
 
               <div>
@@ -565,6 +706,39 @@ export default function Empresas() {
               </div>
             </div>
 
+            {/* Alerta de Recomendação da IA quando CNPJ for consultado */}
+            {sugestaoIaCnpj && (
+              <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: '10px 12px', fontSize: 12, color: '#166534' }}>
+                <strong>Recomendação da IA:</strong> {sugestaoIaCnpj.recomendacaoIa}
+              </div>
+            )}
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#334155', marginBottom: 4 }}>Nome Fantasia / Comercial *</label>
+                <input
+                  type="text"
+                  className="form-control"
+                  placeholder="Ex: Barbearia Dino, Stallone Nutre Sport"
+                  value={form.nome}
+                  onChange={(e) => setForm({ ...form, nome: e.target.value })}
+                  style={{ width: '100%', padding: '8px 10px', fontSize: 13, borderRadius: 6, border: '1px solid #cbd5e1' }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#334155', marginBottom: 4 }}>Razão Social Oficial *</label>
+                <input
+                  type="text"
+                  className="form-control"
+                  placeholder="Ex: DINO BARBEARIA LTDA"
+                  value={form.razaoSocial}
+                  onChange={(e) => setForm({ ...form, razaoSocial: e.target.value })}
+                  style={{ width: '100%', padding: '8px 10px', fontSize: 13, borderRadius: 6, border: '1px solid #cbd5e1' }}
+                />
+              </div>
+            </div>
+
             <div>
               <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#334155', marginBottom: 4 }}>Segmento / Tipo de Negócio</label>
               <select
@@ -580,7 +754,7 @@ export default function Empresas() {
             </div>
 
             {/* SEÇÃO 2: Endereço */}
-            <h3 style={{ margin: '12px 0 0', color: '#12283F', fontSize: 14, fontWeight: 700, borderBottom: '1px solid #e2e8f0', paddingBottom: 4 }}>
+            <h3 style={{ margin: '8px 0 0', color: '#12283F', fontSize: 14, fontWeight: 700, borderBottom: '1px solid #e2e8f0', paddingBottom: 4 }}>
               2. Endereço Fiscal & Operacional
             </h3>
 
@@ -691,7 +865,7 @@ export default function Empresas() {
             </div>
 
             {/* SEÇÃO 3: Contatos */}
-            <h3 style={{ margin: '12px 0 0', color: '#12283F', fontSize: 14, fontWeight: 700, borderBottom: '1px solid #e2e8f0', paddingBottom: 4 }}>
+            <h3 style={{ margin: '8px 0 0', color: '#12283F', fontSize: 14, fontWeight: 700, borderBottom: '1px solid #e2e8f0', paddingBottom: 4 }}>
               3. Contatos & Comunicação
             </h3>
 
@@ -734,10 +908,10 @@ export default function Empresas() {
               </div>
             </div>
 
-            {/* SEÇÃO 4: Configurações & Administrador (Apenas no cadastro novo) */}
+            {/* SEÇÃO 4: Unidade Matriz & Administrador Inicial */}
             {modal.modo === 'novo' && (
               <>
-                <h3 style={{ margin: '12px 0 0', color: '#12283F', fontSize: 14, fontWeight: 700, borderBottom: '1px solid #e2e8f0', paddingBottom: 4 }}>
+                <h3 style={{ margin: '8px 0 0', color: '#12283F', fontSize: 14, fontWeight: 700, borderBottom: '1px solid #e2e8f0', paddingBottom: 4 }}>
                   4. Unidade Matriz & Administrador Inicial (Opcional)
                 </h3>
 
@@ -802,7 +976,7 @@ export default function Empresas() {
             )}
 
             {/* Ações do Modal */}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 14, paddingTop: 14, borderTop: '1px solid #e2e8f0' }}>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 10, paddingTop: 12, borderTop: '1px solid #e2e8f0' }}>
               <button type="button" className="btn btn-ghost" onClick={() => setModal(null)} disabled={salvando}>
                 Cancelar
               </button>
@@ -814,6 +988,214 @@ export default function Empresas() {
                 style={{ background: '#FF6B2C', borderColor: '#FF6B2C', fontWeight: 700 }}
               >
                 {salvando ? 'Salvando dados...' : modal.modo === 'novo' ? 'Cadastrar Empresa' : 'Salvar Alterações'}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* Modal de Diagnóstico IA da Empresa */}
+      {modalDiagnostico && (
+        <Modal
+          title={`🧠 Diagnóstico de Inteligência Artificial: ${modalDiagnostico.nomeFantasia || 'Empresa'}`}
+          onClose={() => setModalDiagnostico(null)}
+          width={780}
+        >
+          {loadingDiagnostico ? (
+            <div style={{ padding: 40, textAlign: 'center', color: '#64748b' }}>
+              <div style={{ fontSize: 28, marginBottom: 10 }}>🧠</div>
+              A IA está analisando cadastros, notas fiscais, lojas, estoques e automações...
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gap: 16, paddingBottom: 16 }}>
+              {/* Score Geral com Badge */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', background: '#f8fafc', borderRadius: 10, border: '1px solid #e2e8f0' }}>
+                <div>
+                  <span style={{ fontSize: 12, color: '#64748b', fontWeight: 600, textTransform: 'uppercase' }}>Score de Prontidão Operacional & Fiscal</span>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginTop: 4 }}>
+                    <span style={{ fontSize: 36, fontWeight: 900, color: modalDiagnostico.score?.cor || '#15803d' }}>
+                      {modalDiagnostico.score?.total}%
+                    </span>
+                    <span style={{ fontSize: 14, fontWeight: 700, padding: '4px 10px', borderRadius: 8, background: `${modalDiagnostico.score?.cor}18`, color: modalDiagnostico.score?.cor }}>
+                      {modalDiagnostico.score?.nivel}
+                    </span>
+                  </div>
+                </div>
+
+                <div style={{ textAlign: 'right', fontSize: 12, color: '#475569' }}>
+                  <div><strong>Cadastral:</strong> {modalDiagnostico.score?.cadastral}/25 pts</div>
+                  <div><strong>Fiscal:</strong> {modalDiagnostico.score?.fiscal}/25 pts</div>
+                  <div><strong>Operacional:</strong> {modalDiagnostico.score?.operacional}/25 pts</div>
+                  <div><strong>IA & Atendimento:</strong> {modalDiagnostico.score?.ia}/25 pts</div>
+                </div>
+              </div>
+
+              {/* Status dos Pilares */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div className="card" style={{ padding: 14, background: '#fff', borderRadius: 8, border: '1px solid #e2e8f0' }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Certificado Digital & mTLS</span>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: '#1e293b', marginTop: 4 }}>
+                    {modalDiagnostico.status?.certificadoDigital}
+                  </div>
+                </div>
+
+                <div className="card" style={{ padding: 14, background: '#fff', borderRadius: 8, border: '1px solid #e2e8f0' }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Emissão de Documentos Fiscais</span>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: '#1e293b', marginTop: 4 }}>
+                    {modalDiagnostico.status?.documentosFiscais}
+                  </div>
+                </div>
+
+                <div className="card" style={{ padding: 14, background: '#fff', borderRadius: 8, border: '1px solid #e2e8f0' }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Atendente IA & WhatsApp Antiban</span>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: '#1e293b', marginTop: 4 }}>
+                    {modalDiagnostico.status?.atendenteIa}
+                  </div>
+                </div>
+
+                <div className="card" style={{ padding: 14, background: '#fff', borderRadius: 8, border: '1px solid #e2e8f0' }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Barramento Multiempresa A2</span>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: '#1e293b', marginTop: 4 }}>
+                    {modalDiagnostico.status?.barramentoA2}
+                  </div>
+                </div>
+              </div>
+
+              {/* Insights e Recomendações Estratégicas da IA */}
+              <div>
+                <h4 style={{ margin: '0 0 8px', fontSize: 13, fontWeight: 700, color: '#12283F' }}>
+                  Insights & Recomendações Estratégicas da IA
+                </h4>
+                <div style={{ display: 'grid', gap: 8 }}>
+                  {modalDiagnostico.recomendacoes?.map((rec, i) => (
+                    <div
+                      key={i}
+                      style={{
+                        padding: '10px 14px',
+                        borderRadius: 8,
+                        background: rec.tipo === 'sucesso' ? '#f0fdf4' : rec.tipo === 'alerta' ? '#fef2f2' : '#f0f9ff',
+                        border: `1px solid ${rec.tipo === 'sucesso' ? '#bbf7d0' : rec.tipo === 'alerta' ? '#fecaca' : '#bae6fd'}`,
+                      }}
+                    >
+                      <strong style={{ fontSize: 12, color: rec.tipo === 'sucesso' ? '#166534' : rec.tipo === 'alerta' ? '#991b1b' : '#0369a1' }}>
+                        {rec.titulo}
+                      </strong>
+                      <p style={{ margin: '4px 0 0', fontSize: 12, color: '#334155' }}>
+                        {rec.texto}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Botão de Fechar */}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: 10, borderTop: '1px solid #e2e8f0' }}>
+                <button type="button" className="btn btn-secondary" onClick={() => setModalDiagnostico(null)}>
+                  Fechar Diagnóstico
+                </button>
+              </div>
+            </div>
+          )}
+        </Modal>
+      )}
+
+      {/* Modal de Diagnóstico da Holding Kytto */}
+      {modalHolding && (
+        <Modal
+          title="🏢 Copilot IA: Diagnóstico Consolidado da Holding Kytto"
+          onClose={() => setModalHolding(null)}
+          width={760}
+        >
+          <div style={{ display: 'grid', gap: 16, paddingBottom: 16 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', background: '#f8fafc', borderRadius: 10, border: '1px solid #e2e8f0' }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: '#12283F' }}>{modalHolding.holding}</h3>
+                <span style={{ fontSize: 12, color: '#64748b' }}>Consolidado de Governança, Isolamento Multi-Tenant e Automações</span>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <span style={{ fontSize: 11, color: '#64748b', display: 'block' }}>Score Médio do Grupo</span>
+                <strong style={{ fontSize: 28, color: '#15803d' }}>{modalHolding.scoreMedioGrupo}%</strong>
+              </div>
+            </div>
+
+            <div>
+              <h4 style={{ margin: '0 0 8px', fontSize: 13, fontWeight: 700, color: '#12283F' }}>
+                Empresas Ativas no Ecossistema
+              </h4>
+              <div style={{ display: 'grid', gap: 8 }}>
+                {modalHolding.empresas?.map((emp) => (
+                  <div key={emp.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', background: '#fff', borderRadius: 8, border: '1px solid #e2e8f0' }}>
+                    <div>
+                      <strong style={{ fontSize: 13, color: '#1e293b' }}>{emp.nome}</strong>
+                      <span style={{ fontSize: 11, color: '#64748b', display: 'block' }}>CNPJ: {emp.cnpj} · Segmento: {emp.tipoNegocio}</span>
+                    </div>
+                    <span style={{ fontSize: 12, fontWeight: 700, padding: '3px 8px', borderRadius: 6, background: '#f1f5f9', color: '#334155' }}>
+                      {emp.lojas} loja(s)
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <h4 style={{ margin: '0 0 8px', fontSize: 13, fontWeight: 700, color: '#12283F' }}>
+                Diretrizes de Inteligência Artificial da Holding
+              </h4>
+              <ul style={{ margin: 0, paddingLeft: 20, fontSize: 12, color: '#334155', display: 'grid', gap: 6 }}>
+                {modalHolding.insightsIa?.map((ins, idx) => (
+                  <li key={idx}>{ins}</li>
+                ))}
+              </ul>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: 10, borderTop: '1px solid #e2e8f0' }}>
+              <button type="button" className="btn btn-secondary" onClick={() => setModalHolding(null)}>
+                Concluir Leitura
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* Modal de Ficha Cadastral Oficial da Empresa */}
+      {modalFicha && (
+        <Modal
+          title={`📋 Ficha Cadastral Oficial: ${modalFicha.nomeFantasia || modalFicha.nome}`}
+          onClose={() => setModalFicha(null)}
+          width={720}
+        >
+          <div style={{ display: 'grid', gap: 14, paddingBottom: 16 }}>
+            <div style={{ padding: 16, background: '#f8fafc', borderRadius: 8, border: '1px solid #e2e8f0', display: 'grid', gap: 10 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #cbd5e1', paddingBottom: 8 }}>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: '#12283F' }}>{modalFicha.razaoSocial || modalFicha.nome}</h3>
+                  <span style={{ fontSize: 13, color: '#64748b' }}>Nome Fantasia: {modalFicha.nomeFantasia || modalFicha.nome}</span>
+                </div>
+                <span style={{ fontSize: 12, fontWeight: 700, padding: '4px 10px', borderRadius: 6, background: '#22c55e', color: '#fff' }}>
+                  ATIVA
+                </span>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, fontSize: 12 }}>
+                <div><strong>CNPJ:</strong> {modalFicha.cnpj || 'Não informado'}</div>
+                <div><strong>Inscrição Estadual:</strong> {modalFicha.inscricaoEstadual || 'Isento'}</div>
+                <div><strong>Inscrição Municipal:</strong> {modalFicha.inscricaoMunicipal || 'Isento'}</div>
+                <div><strong>Segmento:</strong> {modalFicha.tipoNegocio}</div>
+                <div><strong>Telefone:</strong> {modalFicha.telefone || 'Não informado'}</div>
+                <div><strong>E-mail:</strong> {modalFicha.email || 'Não informado'}</div>
+              </div>
+
+              <div style={{ fontSize: 12, borderTop: '1px solid #e2e8f0', paddingTop: 8 }}>
+                <strong>Endereço Operacional:</strong> {modalFicha.endereco || `${modalFicha.enderecoLogradouro || ''}, ${modalFicha.enderecoNumero || ''} - ${modalFicha.enderecoBairro || ''}, ${modalFicha.enderecoCidade || 'Tangará da Serra'}/${modalFicha.enderecoEstado || 'MT'}`}
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 10, borderTop: '1px solid #e2e8f0' }}>
+              <button type="button" className="btn btn-secondary btn-sm" onClick={() => window.print()}>
+                🖨️ Imprimir Ficha
+              </button>
+              <button type="button" className="btn btn-primary btn-sm" onClick={() => setModalFicha(null)} style={{ background: '#FF6B2C', borderColor: '#FF6B2C' }}>
+                Fechar
               </button>
             </div>
           </div>

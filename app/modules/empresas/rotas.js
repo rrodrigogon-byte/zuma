@@ -31,6 +31,23 @@ export function createEmpresasAdminRouter({ db }) {
     return { empresas, total: empresas.length };
   }));
 
+  // Diagnóstico Consolidado da Holding Kytto por IA
+  router.get('/diagnostico-holding', executar(async () => {
+    return await svc.gerarDiagnosticoHoldingIa(db);
+  }));
+
+  // Consulta Inteligente de CNPJ Público com inferência de segmento por IA
+  router.get('/consulta-cnpj/:cnpj', executar(async ({ req }) => {
+    const dados = await svc.consultarCnpjPublicoComIa(req.params.cnpj);
+    return { ok: true, dados };
+  }));
+
+  // Diagnóstico Executivo de Saúde por IA da Empresa
+  router.get('/:id/diagnostico-ia', executar(async ({ req }) => {
+    const diagnostico = await svc.gerarDiagnosticoIaEmpresa(db, req.params.id);
+    return { ok: true, diagnostico };
+  }));
+
   // Buscar uma empresa por ID
   router.get('/:id', executar(async ({ req }) => {
     return { empresa: await svc.obterEmpresaPorId(db, req.params.id) };
