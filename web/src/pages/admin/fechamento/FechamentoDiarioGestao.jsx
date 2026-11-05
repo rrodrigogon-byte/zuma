@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { api, fmtR, fmtDateOnly } from '../../../lib/api';
 import { useAuth } from '../../../lib/auth';
@@ -45,7 +45,7 @@ function dataHojeStr() {
 
 export default function FechamentoDiarioGestao() {
   const { empresaAtiva, empresasAcessiveis, trocarEmpresa, lojaAtiva, lojasAcessiveis, trocarLoja } = useAuth();
-  const toast = useToast();
+  const { toast } = useToast();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -124,13 +124,16 @@ export default function FechamentoDiarioGestao() {
       }
     }
     carregarEmpresas();
-  }, [empresasAcessiveis]);
+  }, []);
 
+  const buscandoRef = useRef(false);
   // Carrega dados da conciliação da data e empresa selecionada
   const carregarDados = useCallback(async (dataAlvo, empresaAlvo, lojaAlvo) => {
-    const dia = dataAlvo || dataSelecionada || dataHojeStr();
-    const empId = empresaAlvo || empresaSelecionadaId || '';
-    const ljId = lojaAlvo !== undefined ? lojaAlvo : lojaSelecionadaId;
+    if (buscandoRef.current) return;
+    buscandoRef.current = true;
+    const dia = dataAlvo || dataHojeStr();
+    const empId = empresaAlvo || '';
+    const ljId = lojaAlvo !== undefined ? lojaAlvo : '';
     try {
       setCarregando(true);
       const url = `/api/admin/fechamento-diario?data=${dia}&empresaId=${empId}${ljId ? `&lojaId=${ljId}` : ''}`;
@@ -140,18 +143,15 @@ export default function FechamentoDiarioGestao() {
         if (Array.isArray(res.empresas) && res.empresas.length) {
           setListaEmpresas(res.empresas);
         }
-      } else {
-        // Fallback
-        const fallback = await api.get(`/api/admin/fechamento-diario/conciliacao?data=${dia}&empresaId=${empId}`);
-        if (fallback && fallback.ok) setDados(fallback);
       }
     } catch (e) {
       console.error(e);
-      toast(e.message || 'Erro ao carregar dados do fechamento diário e conciliação', 'error');
+      toast?.(e.message || 'Erro ao carregar dados do fechamento diário e conciliação', 'error');
     } finally {
       setCarregando(false);
+      buscandoRef.current = false;
     }
-  }, [dataSelecionada, empresaSelecionadaId, lojaSelecionadaId, toast]);
+  }, [toast]);
 
   useEffect(() => {
     carregarDados(dataSelecionada, empresaSelecionadaId, lojaSelecionadaId);

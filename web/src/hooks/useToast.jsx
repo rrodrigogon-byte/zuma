@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback } from 'react'
+import { createContext, useContext, useState, useCallback, useMemo } from 'react'
 
 const Ctx = createContext(null)
 
@@ -40,5 +40,9 @@ export function ToastProvider({ children }) {
 
 export function useToast() {
   const toast = useContext(Ctx)
-  return { toast }
+  return useMemo(() => {
+    const fn = (msg, kind) => toast?.(msg, kind)
+    fn.toast = toast
+    return fn
+  }, [toast])
 }
