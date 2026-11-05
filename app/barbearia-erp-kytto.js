@@ -3677,7 +3677,10 @@ export function registrarConfirmacaoAutomaticaEnviada(empresaId, agendamentoId, 
 }
 
 export function cancelarPorFaltaConfirmacao(empresaId, agendamentoId, { lojaId = '', agora = new Date() } = {}) {
-  if (obterConfiguracao(empresaId).confirmacaoAutomaticaAtiva !== true) return null;
+  const isDino = ['d0d0ac01-8e50-4b61-8c79-de4aaa916da6', 'emp_dino', 'dino'].includes(String(empresaId || '').toLowerCase());
+  const cfg = obterConfiguracao(empresaId);
+  // Na Barbearia Dino (e empresas sem autorização explícita de descarte): NUNCA cancelar horários automaticamente por timeout de mensagem!
+  if (isDino || cfg.confirmacaoAutomaticaAtiva !== true || cfg.cancelamentoAutomaticoPorFaltaConfirmacao !== true) return null;
   const atual = estadoEmpresa(empresaId).agendamentos[String(agendamentoId)];
   if (!atual || atual.empresaId !== String(empresaId) || (lojaId && atual.lojaId && String(atual.lojaId) !== String(lojaId))
       || atual.status !== 'agendado' || atual.confirmacaoAutomatica?.ativa !== true

@@ -70,6 +70,10 @@ export function confirmIntent(text, { actionType = '' } = {}) {
   if (actionType === 'cancelamento' || actionType === 'cancelamento_pedido') {
     if (CANCELLATION_CONFIRM.has(value)) return 'confirm';
     if (value === 'cancelar' || value === 'cancelado') return null;
+    // Para cancelamentos, nunca aceitar palavras casuais de conversa (ok, beleza, blz, show, ta bom) como confirmação
+    if (CONFIRM_PHRASES.has(value) && !['sim', 'sim confirmar', 'pode confirmar', 'confirmo', 'confirmar'].includes(value)) {
+      return null;
+    }
   }
   if (CANCEL_PHRASES.has(value)) return 'cancel';
   if (/^(nao|n)\b/.test(value)) return null; // "não, prefiro sábado" → modelo

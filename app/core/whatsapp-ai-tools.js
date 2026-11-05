@@ -1745,6 +1745,16 @@ async function toolPrepareReschedule(context, args = {}) {
 }
 
 async function toolPrepareCancellation(context, args = {}) {
+  const rawText = String(context?.customerText || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  // Segurança estrita: o cliente PRECISA ter solicitado expressamente o cancelamento ou desmarcação
+  // Frases como "não posso hoje", "tem amanhã?", "não quero produto" NÃO autorizam cancelamento!
+  const pediuCancelamentoExplicitamente = /\b(cancelar|cancela|cancelamento|desmarcar|desmarca|desmarque|desmarquem|anular)\b/i.test(rawText);
+  if (!pediuCancelamentoExplicitamente && !args.confirmacaoExpressa) {
+    throw new WhatsappAiToolError(
+      'Cancelamento bloqueado por segurança: o cliente não solicitou expressamente o cancelamento do agendamento (frases como "não posso hoje", "tem mais tarde?", "não quero" não autorizam cancelamento). Se o cliente quiser outro dia ou horário, use sugerir_proximos_horarios ou preparar_remarcacao.',
+      'CANCELLATION_NOT_EXPLICITLY_REQUESTED'
+    );
+  }
   const scope = contextScope(context);
   const appointments = await listWhatsappCustomerAppointments(scope, { includePast: false, limit: 20, toleranceHours: 6 });
   const appointment = findOwnAppointment(appointments, cleanText(args.appointmentId, 80));

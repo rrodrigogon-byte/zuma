@@ -540,7 +540,8 @@ export async function enqueueDueAppointmentReminders() {
         const plano = confirmationPlan(dataHora, now);
         if (!plano.enabled) continue;
         const confirmacao = agendamento.confirmacaoAutomatica || {};
-        if (confirmacao.status === 'segunda_enviada' && confirmationDeadlineExpired(confirmacao.prazoRespostaAte, now)) {
+        const isDinoEmp = ['d0d0ac01-8e50-4b61-8c79-de4aaa916da6', 'emp_dino', 'dino'].includes(String(legacyEmpresaId || '').toLowerCase());
+        if (!isDinoEmp && confirmacao.status === 'segunda_enviada' && confirmationDeadlineExpired(confirmacao.prazoRespostaAte, now)) {
           const cancelado = barbearia.cancelarPorFaltaConfirmacao(legacyEmpresaId, agendamento.id, { lojaId: agendamento.lojaId || '', agora: now });
           if (cancelado) {
             const contexto = { empresaId: legacyEmpresaId, lojaId: cancelado.lojaId || '', legacyEmpresaId };
@@ -586,7 +587,7 @@ export function mensagem(snapshot, agendamento, cliente, evento, persona = null)
   const cabecalho = `Olá, ${nomeLimpo}.`;
   const rodape = 'Esta é uma mensagem de atendimento. Para não receber estes avisos, responda SAIR.';
   if (evento === EVENTO_CONFIRMACAO_DIA) {
-    return `${cabecalho} Ainda não recebemos a confirmação do seu agendamento ${quando} (${servico}). Responda CONFIRMO em até 1 hora para manter o horário. Sem resposta, o agendamento será cancelado automaticamente e o horário liberado para outra pessoa. Para mudar, responda REMARCAR. ${rodape}`;
+    return `${cabecalho} Passando para confirmar seu horário de hoje: ${quando} (${servico}) com ${profissional}. Responda CONFIRMO para confirmar sua presença, ou REMARCAR se preferir outro horário. Te aguardamos! ${rodape}`;
   }
   if (evento === 'cancelado' && agendamento.motivoCancelamento === 'falta_confirmacao') return `${cabecalho} Seu agendamento ${quando} foi cancelado automaticamente porque não recebemos a confirmação dentro de 1 hora. O horário foi liberado. Entre em contato com a equipe para escolher outro horário. ${rodape}`;
   if (evento === 'cancelado') return `${cabecalho} Seu agendamento na ${limpo(snapshot.configuracao.nomePublico || 'barbearia', 120)} foi cancelado. Se precisar, entre em contato para escolher outro horário. ${rodape}`;
