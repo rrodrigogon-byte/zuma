@@ -102,7 +102,7 @@ export function dadosDaNfse(xml, { emitente = null } = {}) {
     prestador: {
       documento: txt(emit, 'CNPJ') || txt(emit, 'CPF') || txt(prest, 'CNPJ') || txt(prest, 'CPF') || emitente?.cnpj,
       inscricaoMunicipal: txt(emit, 'IM') || txt(prest, 'IM') || emitente?.im || '',
-      inscricaoEstadual: txt(emit, 'IE') || txt(prest, 'IE') || emitente?.ie || '142291919',
+      inscricaoEstadual: (emitente?.ie && soDigitos(emitente.ie).length >= 8 && (!txt(emit, 'IE') || soDigitos(txt(emit, 'IE')) === '135678901')) ? emitente.ie : (txt(emit, 'IE') || txt(prest, 'IE') || emitente?.ie || '142291919'),
       nome: txt(emit, 'xNome') || txt(prest, 'xNome') || emitente?.razao_social || emitente?.razaoSocial,
       fantasia: txt(emit, 'xFant') || emitente?.nome_fantasia || emitente?.nomeFantasia,
       endereco: endereco(emit) || (emitente ? enderecoEmitente(emitente) : ''),
