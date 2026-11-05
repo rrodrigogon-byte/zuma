@@ -112,73 +112,73 @@ export function createVarejoAdminRouter({ db, escopoDaRequisicao, fuso = 'Americ
   }));
 
   // ── Caixa e Operações de Frente de Caixa (PDV) ──
-  router.get('/caixa/sessao', rota(async (req) => {
-    return svc.obterSessaoCaixa(db, req.empresaId, { lojaId: req.lojaId });
+  router.get('/caixa/sessao', rota('catalog.read', async ({ empresaId, lojaId }) => {
+    return svc.obterSessaoCaixa(db, empresaId, { lojaId });
   }));
 
-  router.post('/caixa/abrir', rota(async (req) => {
-    return svc.abrirCaixa(db, req.empresaId, req.body, { usuario: req.usuario, lojaId: req.lojaId });
+  router.post('/caixa/abrir', rota('catalog.write', async ({ req, empresaId, lojaId, usuario }) => {
+    return svc.abrirCaixa(db, empresaId, req.body, { usuario, lojaId });
   }));
 
-  router.post('/caixa/movimentacao', rota(async (req) => {
-    return svc.registrarMovimentacaoCaixa(db, req.empresaId, req.body, { usuario: req.usuario, lojaId: req.lojaId });
+  router.post('/caixa/movimentacao', rota('catalog.write', async ({ req, empresaId, lojaId, usuario }) => {
+    return svc.registrarMovimentacaoCaixa(db, empresaId, req.body, { usuario, lojaId });
   }));
 
-  router.post('/caixa/fechar', rota(async (req) => {
-    return svc.fecharCaixa(db, req.empresaId, req.body, { usuario: req.usuario, lojaId: req.lojaId });
+  router.post('/caixa/fechar', rota('catalog.write', async ({ req, empresaId, lojaId, usuario }) => {
+    return svc.fecharCaixa(db, empresaId, req.body, { usuario, lojaId });
   }));
 
   // ── Cargas de Balança Oficiais (Toledo MGV6 e Filizola) ──
-  router.get('/balanca/toledo-mgv', rota(async (req) => {
-    return svc.exportarArquivoToledoMgv(db, req.empresaId, { versao: req.query.versao || 'mgv6', lojaId: req.lojaId });
+  router.get('/balanca/toledo-mgv', rota('catalog.read', async ({ req, empresaId, lojaId }) => {
+    return svc.exportarArquivoToledoMgv(db, empresaId, { versao: req.query.versao || 'mgv6', lojaId });
   }));
 
-  router.get('/balanca/filizola', rota(async (req) => {
-    return svc.exportarArquivoFilizola(db, req.empresaId, { lojaId: req.lojaId });
+  router.get('/balanca/filizola', rota('catalog.read', async ({ empresaId, lojaId }) => {
+    return svc.exportarArquivoFilizola(db, empresaId, { lojaId });
   }));
 
   // ── Módulo de Açougue / Desossa (Rendimento) ──
-  router.get('/desossas', rota(async (req) => {
-    return svc.listarDesossas(db, req.empresaId, { lojaId: req.lojaId });
+  router.get('/desossas', rota('catalog.read', async ({ empresaId, lojaId }) => {
+    return svc.listarDesossas(db, empresaId, { lojaId });
   }));
 
-  router.post('/desossas', rota(async (req) => {
-    return svc.registrarDesossa(db, req.empresaId, req.body, { usuario: req.usuario, lojaId: req.lojaId });
+  router.post('/desossas', rota('catalog.write', async ({ req, empresaId, lojaId, usuario }) => {
+    return svc.registrarDesossa(db, empresaId, req.body, { usuario, lojaId });
   }));
 
   // ── Módulo de Padaria / Produção (Fichas Técnicas) ──
-  router.get('/padaria/receitas', rota(async (req) => {
-    return svc.listarReceitasPadaria(db, req.empresaId);
+  router.get('/padaria/receitas', rota('catalog.read', async ({ empresaId }) => {
+    return svc.listarReceitasPadaria(db, empresaId);
   }));
 
-  router.post('/padaria/receitas', rota(async (req) => {
-    return svc.salvarReceitaPadaria(db, req.empresaId, req.body);
+  router.post('/padaria/receitas', rota('catalog.write', async ({ req, empresaId }) => {
+    return svc.salvarReceitaPadaria(db, empresaId, req.body);
   }));
 
-  router.post('/padaria/producao', rota(async (req) => {
-    return svc.registrarProducaoPadaria(db, req.empresaId, req.body, { usuario: req.usuario, lojaId: req.lojaId });
+  router.post('/padaria/producao', rota('catalog.write', async ({ req, empresaId, lojaId, usuario }) => {
+    return svc.registrarProducaoPadaria(db, empresaId, req.body, { usuario, lojaId });
   }));
 
   // ── Inventário Cíclico e Auditoria de Gôndola ──
-  router.get('/inventarios', rota(async (req) => {
-    return svc.listarInventarios(db, req.empresaId, { lojaId: req.lojaId });
+  router.get('/inventarios', rota('catalog.read', async ({ empresaId, lojaId }) => {
+    return svc.listarInventarios(db, empresaId, { lojaId });
   }));
 
-  router.post('/inventarios', rota(async (req) => {
-    return svc.criarInventario(db, req.empresaId, req.body, { usuario: req.usuario, lojaId: req.lojaId });
+  router.post('/inventarios', rota('catalog.write', async ({ req, empresaId, lojaId, usuario }) => {
+    return svc.criarInventario(db, empresaId, req.body, { usuario, lojaId });
   }));
 
   // ── Clube de Benefícios Kytto ──
-  router.get('/clube/clientes', rota(async (req) => {
-    return svc.listarClientesClube(db, req.empresaId);
+  router.get('/clube/clientes', rota('catalog.read', async ({ empresaId }) => {
+    return svc.listarClientesClube(db, empresaId);
   }));
 
-  router.get('/clube/consultar', rota(async (req) => {
-    return svc.consultarClienteClubePorCpf(db, req.empresaId, req.query.cpf || req.query.q);
+  router.get('/clube/consultar', rota('catalog.read', async ({ req, empresaId }) => {
+    return svc.consultarClienteClubePorCpf(db, empresaId, req.query.cpf || req.query.q);
   }));
 
-  router.post('/clube/clientes', rota(async (req) => {
-    return svc.salvarClienteClube(db, req.empresaId, req.body);
+  router.post('/clube/clientes', rota('catalog.write', async ({ req, empresaId }) => {
+    return svc.salvarClienteClube(db, empresaId, req.body);
   }));
 
   return router;
