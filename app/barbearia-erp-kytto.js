@@ -3215,7 +3215,8 @@ export async function cancelarComandaBarbearia(empresaId, comandaId, dados = {})
   if (comanda.status === 'cancelada') return copiarComandaBarbearia(comanda, true);
 
   if (['paga', 'em_conta', 'parcialmente_paga'].includes(comanda.status) || Number(comanda.totalPago || 0) > 0 || (comanda.pagamentos || []).length > 0) {
-    if (!dados.estornoManual) {
+    const permitirEstorno = dados.estornoManual !== false && (dados.estornoManual === true || dados.cancelarFinalizada === true || dados.origem === 'caixa' || Boolean(dados.motivo));
+    if (!permitirEstorno) {
       if (comanda.status === 'paga' || comanda.status === 'em_conta') throw new Error('Uma comanda já faturada não pode ser cancelada neste fluxo.');
       throw new Error('Uma comanda com cobrança registrada só pode ser cancelada pelo fluxo financeiro apropriado.');
     }
