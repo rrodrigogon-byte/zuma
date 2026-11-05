@@ -28,6 +28,7 @@ import {
   TrendingUp,
   Receipt,
   Users,
+  Zap,
 } from 'lucide-react';
 
 const moeda = (val) => fmtR(Number(val || 0));
