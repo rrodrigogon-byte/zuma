@@ -937,11 +937,17 @@ export function duracaoAtendimentoProfissional(servico, profissional, calendario
   if (profissional && Number(profissional.duracaoAtendimentoMinutos) > 0) {
     return Number(profissional.duracaoAtendimentoMinutos);
   }
+  // A duração do procedimento reflete primariamente o tempo necessário cadastrado no Catálogo de Serviços do ERP
+  // (ex: Corte 40min, Barba 30min, Corte e Barba 60min, Selagem 45min, Prótese 90min, etc.).
+  if (servico && Number(servico.duracaoMinutos) > 0) {
+    // Se tempoAtendimentoDinoMinutos foi configurado explicitamente no painel e o serviço é o genérico básico de 30 min:
+    if (ehProfissionalDino(profissional) && Number(calendario?.tempoAtendimentoDinoMinutos) > 0 && servico.duracaoMinutos === 30 && !String(servico.nome || '').toLowerCase().includes('barba')) {
+      return Number(calendario.tempoAtendimentoDinoMinutos);
+    }
+    return Number(servico.duracaoMinutos);
+  }
   if (ehProfissionalDino(profissional) && Number(calendario?.tempoAtendimentoDinoMinutos) > 0) {
     return Number(calendario.tempoAtendimentoDinoMinutos);
-  }
-  if (servico && Number(servico.duracaoMinutos) > 0) {
-    return Number(servico.duracaoMinutos);
   }
   return Number(calendario?.intervaloMinutos) || 15;
 }

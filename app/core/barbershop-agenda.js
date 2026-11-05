@@ -464,7 +464,7 @@ export async function availability(scope, input = {}) {
 
   return {
     date,
-    service: { id: servico.id, nome: servico.nome, duracaoMinutos: barbearia.duracaoAtendimentoProfissional ? barbearia.duracaoAtendimentoProfissional(servico, profissional, barbearia.obterConfiguracao(empresa)) : Number(servico.duracaoMinutos || 15), preco: Number(servico.preco || 0) },
+    service: { id: servico.id, nome: servico.nome, duracaoMinutos: Number(servico.duracaoMinutos || 0) || (barbearia.duracaoAtendimentoProfissional ? barbearia.duracaoAtendimentoProfissional(servico, profissional, barbearia.obterConfiguracao(empresa)) : 30), preco: Number(servico.preco || 0) },
     professional: profissional ? { id: profissional.id, nome: profissional.nome, duracaoAtendimentoMinutos: profissional.duracaoAtendimentoMinutos || null } : { id: 'qualquer', nome: 'qualquer profissional disponível' },
     slots: horarios.filter((item) => item.disponivel).map((item) => item.horario),
     tabelaValores,
@@ -560,6 +560,9 @@ function criarNaAgendaDaBarbearia(scope, input = {}) {
     // O cliente iniciou a conversa no WhatsApp para marcar: os avisos do próprio
     // agendamento fazem parte do atendimento pedido (nunca reativa quem revogou).
     captacao.registrarConsentimentoAtendimento(empresa, vinculo.clienteId, 'conversa_whatsapp_iniciada_pelo_cliente');
+    const servicosEmpresa = barbearia.listarServicos(empresa, { incluirInativos: true });
+    const servicoObj = servicosEmpresa.find((s) => s.id === limpo(input.serviceId, 100));
+    const duracaoServico = Number(servicoObj?.duracaoMinutos || 0) || duracaoDoServico(empresa, input.serviceId);
     const agendamento = barbearia.criarAgendamento(empresa, {
       clienteId: vinculo.clienteId || undefined,
       clienteNome: limpo(input.customerName, 160),
@@ -569,6 +572,7 @@ function criarNaAgendaDaBarbearia(scope, input = {}) {
       dataHora: livre.dataHora,
       dataAgenda: livre.dataAgenda,
       horaLocal: livre.horaLocal,
+      duracaoMinutos: duracaoServico,
       lojaId: scope.lojaId,
       observacoes: limpo(input.notes, 600),
       origem: 'whatsapp_ia',

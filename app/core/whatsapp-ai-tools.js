@@ -557,6 +557,8 @@ async function toolAvailability(context, args = {}) {
     dataClassification: 'untrusted_business_data',
     disponibilidade: sanitizeToolData({
       ...disponibilidade,
+      duracaoMinutos: Number(disponibilidade.service?.duracaoMinutos || 30),
+      duracaoTexto: `${Number(disponibilidade.service?.duracaoMinutos || 30)} min`,
       // Valor por horário calculado pelo sistema (regra do Dino: diurno x após 18h09).
       valoresPorHorario: Object.fromEntries((disponibilidade?.slots || []).slice(0, 40).map((time) => [time, brl(precoNoHorario(disponibilidade.service, disponibilidade.professional, time, servicesList))])),
     }),
@@ -784,15 +786,23 @@ async function toolNextSlots(context, args = {}) {
       // O nearestAlternatives pode receber a lista para não precisar buscar dnv
       const profs = professionalId === 'qualquer' ? [] : await listSchedulingProfessionals(scope).catch(() => []);
       const prof = (profs || []).find((item) => item.id === professionalId) || null;
+      const duracaoMinutos = Number(servico.duracaoMinutos || 30);
       return result.slots.map((slot) => {
         const profSlot = prof || (slot.professional ? { nome: slot.professional } : null);
-        return { ...slot, quando: friendlyWhen(slot.date, slot.time), valor: brl(precoNoHorario(servico, profSlot, slot.time, servicos)), horarioExtra: horarioExtraDoDino(servico, profSlot, slot.time) };
+        return {
+          ...slot,
+          quando: friendlyWhen(slot.date, slot.time),
+          duracaoMinutos,
+          duracaoTexto: `${duracaoMinutos} min`,
+          valor: brl(precoNoHorario(servico, profSlot, slot.time, servicos)),
+          horarioExtra: horarioExtraDoDino(servico, profSlot, slot.time)
+        };
       });
     })()),
     periodo: result.period,
     diasConsultados: result.searchedDays,
     instrucao: result.slots.length
-      ? 'Ofereça exatamente 3 opções concretas (dia da semana + data + hora + valor) numa mensagem só. Fale em "horário extra"/"atendimento exclusivo noturno" só para opções com horarioExtra=true. Depois que o cliente escolher, use preparar_agendamento.'
+      ? 'Ofereça exatamente 3 opções concretas (dia da semana + data + hora + duração + valor) numa mensagem só, respeitando a duração real do procedimento. Fale em "horário extra"/"atendimento exclusivo noturno" só para opções com horarioExtra=true. Depois que o cliente escolher, use preparar_agendamento.'
       : 'Não há vaga no período. Ofereça ampliar o período/outro profissional ou entrar na lista de espera (entrar_lista_espera) para ser avisado se abrir horário.',
   };
 }
