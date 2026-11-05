@@ -293,64 +293,7 @@ function ContasReceberPanel({ lancamentos, hoje, modoK, onMarcarPago, onNovo }) 
   }, [aReceber, filtroStatus, busca, hoje])
 
   
-  function obterDadosDetalheKpi(tipo) {
-    if (tipo === 'saldo') {
-      const topEntradas = lancamentos.filter((i) => i.tipo === 'receita' && i.status === 'pago').slice(0, 5)
-      const topSaidas = lancamentos.filter((i) => i.tipo === 'despesa' && i.status === 'pago').slice(0, 5)
-      return {
-        valor: indicadoresPeriodo.saldoGlobal,
-        descricao: 'Saldo realizado acumulado resultante de todas as receitas pagas menos despesas pagas consolidadas.',
-        itens: [...topEntradas, ...topSaidas]
-      }
-    }
-    if (tipo === 'aReceber') {
-      const pendentes = lancamentos.filter((i) => i.tipo === 'receita' && i.status === 'pendente')
-      return {
-        valor: indicadoresPeriodo.aReceberPeriodo,
-        descricao: `Total de contas a receber pendentes vencendo em ${periodoDatas.label}.`,
-        itens: pendentes.slice(0, 5)
-      }
-    }
-    if (tipo === 'aPagar') {
-      const pendentes = lancamentos.filter((i) => i.tipo === 'despesa' && i.status === 'pendente')
-      return {
-        valor: indicadoresPeriodo.aPagarPeriodo,
-        descricao: `Total de contas a pagar pendentes vencendo em ${periodoDatas.label}.`,
-        itens: pendentes.slice(0, 5)
-      }
-    }
-    if (tipo === 'recPeriodo') {
-      const receitas = lancamentos.filter((i) => i.tipo === 'receita' && i.status === 'pago')
-      return {
-        valor: indicadoresPeriodo.recPeriodo,
-        descricao: `Receitas recebidas no período selecionado (${periodoDatas.label}).`,
-        itens: receitas.slice(0, 5)
-      }
-    }
-    if (tipo === 'despPeriodo') {
-      const despesas = lancamentos.filter((i) => i.tipo === 'despesa' && i.status === 'pago')
-      return {
-        valor: indicadoresPeriodo.despPeriodo,
-        descricao: `Despesas pagas no período selecionado (${periodoDatas.label}).`,
-        itens: despesas.slice(0, 5)
-      }
-    }
-    if (tipo === 'resultadoPeriodo') {
-      return {
-        valor: indicadoresPeriodo.resultadoPeriodo,
-        descricao: `Resultado líquido do período: ${modoK ? moneyK(indicadoresPeriodo.recPeriodo) : money(indicadoresPeriodo.recPeriodo)} em receitas menos ${modoK ? moneyK(indicadoresPeriodo.despPeriodo) : money(indicadoresPeriodo.despPeriodo)} em despesas, gerando margem de ${indicadoresPeriodo.margemPeriodo}%.`,
-        itens: []
-      }
-    }
-    if (tipo === 'vencidos') {
-      return {
-        valor: totalVencidos,
-        descricao: `Existem ${vencidos.length} despesa(s) antiga(s) vencida(s) (em especial da importação Avec) aguardando liquidação.`,
-        itens: vencidos.slice(0, 5)
-      }
-    }
-    return { valor: 0, descricao: '', itens: [] }
-  }
+
 
   return (
     <div style={{ display: 'grid', gap: 14 }}>
@@ -1321,6 +1264,65 @@ export default function FinanceiroEmpresa() {
     boxShadow: ativo ? '0 0 12px rgba(176, 137, 46, 0.25)' : 'none',
     background: ativo ? 'var(--card2, rgba(176, 137, 46, 0.08))' : 'var(--card)',
   })
+
+    function obterDadosDetalheKpi(tipo) {
+    if (tipo === 'saldo') {
+      const topEntradas = lancamentos.filter((i) => i.tipo === 'receita' && i.status === 'pago').slice(0, 5)
+      const topSaidas = lancamentos.filter((i) => i.tipo === 'despesa' && i.status === 'pago').slice(0, 5)
+      return {
+        valor: indicadoresPeriodo.saldoGlobal,
+        descricao: 'Saldo realizado acumulado resultante de todas as receitas pagas menos despesas pagas consolidadas.',
+        itens: [...topEntradas, ...topSaidas]
+      }
+    }
+    if (tipo === 'aReceber') {
+      const pendentes = lancamentos.filter((i) => i.tipo === 'receita' && i.status === 'pendente')
+      return {
+        valor: indicadoresPeriodo.aReceberPeriodo,
+        descricao: `Total de contas a receber pendentes vencendo em ${periodoDatas.label}.`,
+        itens: pendentes.slice(0, 5)
+      }
+    }
+    if (tipo === 'aPagar') {
+      const pendentes = lancamentos.filter((i) => i.tipo === 'despesa' && i.status === 'pendente')
+      return {
+        valor: indicadoresPeriodo.aPagarPeriodo,
+        descricao: `Total de contas a pagar pendentes vencendo em ${periodoDatas.label}.`,
+        itens: pendentes.slice(0, 5)
+      }
+    }
+    if (tipo === 'recPeriodo') {
+      const receitas = lancamentos.filter((i) => i.tipo === 'receita' && i.status === 'pago')
+      return {
+        valor: indicadoresPeriodo.recPeriodo,
+        descricao: `Receitas recebidas no período selecionado (${periodoDatas.label}).`,
+        itens: receitas.slice(0, 5)
+      }
+    }
+    if (tipo === 'despPeriodo') {
+      const despesas = lancamentos.filter((i) => i.tipo === 'despesa' && i.status === 'pago')
+      return {
+        valor: indicadoresPeriodo.despPeriodo,
+        descricao: `Despesas pagas no período selecionado (${periodoDatas.label}).`,
+        itens: despesas.slice(0, 5)
+      }
+    }
+    if (tipo === 'resultadoPeriodo') {
+      return {
+        valor: indicadoresPeriodo.resultadoPeriodo,
+        descricao: `Resultado líquido do período: ${modoK ? moneyK(indicadoresPeriodo.recPeriodo) : money(indicadoresPeriodo.recPeriodo)} em receitas menos ${modoK ? moneyK(indicadoresPeriodo.despPeriodo) : money(indicadoresPeriodo.despPeriodo)} em despesas, gerando margem de ${indicadoresPeriodo.margemPeriodo}%.`,
+        itens: []
+      }
+    }
+    if (tipo === 'vencidos') {
+      return {
+        valor: totalVencidos,
+        descricao: `Existem ${vencidos.length} despesa(s) antiga(s) vencida(s) (em especial da importação Avec) aguardando liquidação.`,
+        itens: vencidos.slice(0, 5)
+      }
+    }
+    return { valor: 0, descricao: '', itens: [] }
+  }
 
   return <div className="dadm-page">
     <header className="dadm-head">
