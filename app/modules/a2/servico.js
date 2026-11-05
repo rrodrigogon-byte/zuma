@@ -679,6 +679,29 @@ export async function salvarCadastro(db, empresaId, tipo, corpo = {}, registroId
   const cfg = TABELAS[tipo];
   if (!cfg) throw new ErroDominio('VALIDATION_ERROR', 'cadastro inválido');
   const empresa = id(empresaId, 'empresa');
+  if (registroId && corpo.nome === undefined && corpo.status !== undefined) {
+    const status = String(corpo.status ?? 'ativo').trim().toLowerCase() || 'ativo';
+    if (!STATUS_CADASTRO.has(status)) throw new ErroDominio('VALIDATION_ERROR', 'status deve ser ativo, afastado, desligado ou inativo');
+    const result = await db.query(
+      `UPDATE ${cfg.tabela} SET status=$1, atualizado_em=CURRENT_TIMESTAMP WHERE empresa_id=$2 AND id=$3 RETURNING *`,
+      [status, empresa, id(registroId, 'registro')]
+    );
+    if (!result.rows[0]) throw new ErroDominio('NOT_FOUND', 'Cadastro não encontrado', 404);
+    const dto = cadastroDto(tipo, result.rows[0]);
+    if (tipo === 'funcionarios') {
+      try {
+        const profs = barbearia.listarProfissionais(empresaId, { incluirInativos: true }) || [];
+        const prof = profs.find(p => p.id === registroId || (p.nome && p.nome.toLowerCase() === (dto.nome || '').toLowerCase()));
+        if (prof) {
+          barbearia.atualizarProfissional(empresaId, prof.id, {
+            ativo: status !== 'desligado' && status !== 'afastado' && status !== 'inativo',
+          });
+        }
+      } catch {}
+    }
+    barramentoA2.emit('cadastro_atualizado', { empresaId: empresa, tipo, acao: 'atualizar', id: dto.id, payload: dto });
+    return dto;
+  }
   const nome = exigirTexto(corpo.nome, 'nome', { max: 240 });
   const aliases = { dataAdmissao: 'data_admissao', condicaoPagamento: 'condicao_pagamento', inscricaoEstadual: 'inscricao_estadual' };
   const valores = cfg.campos.map((campo) => {
@@ -778,6 +801,15 @@ function usuarioMestreDto(row, perfis = null) {
 
 export async function salvarUsuarioMestre(db, empresaId, corpo = {}, registroId = null) {
   const empresa = id(empresaId, 'empresa');
+  if (registroId && corpo.nome === undefined && corpo.ativo !== undefined) {
+    const result = await db.query(
+      'UPDATE a2_usuarios_mestres SET ativo=$1, atualizado_em=CURRENT_TIMESTAMP WHERE empresa_id=$2 AND id=$3 RETURNING *',
+      [Boolean(corpo.ativo), empresa, id(registroId, 'registro')]
+    );
+    if (!result.rows[0]) throw new ErroDominio('NOT_FOUND', 'Usuário mestre não encontrado', 404);
+    await db.query('UPDATE usuarios SET ativo=$1 WHERE empresa_id=$2 AND id=$3', [Boolean(corpo.ativo), empresa, id(registroId, 'registro')]).catch(() => {});
+    return usuarioMestreDto(result.rows[0]);
+  }
   const nome = exigirTexto(corpo.nome, 'nome', { max: 240 });
   const email = corpo.email ? exigirTexto(corpo.email, 'email', { max: 320 }) : null;
   const telefone = corpo.telefone ? exigirTexto(corpo.telefone, 'telefone', { max: 30 }) : null;
@@ -922,4 +954,153 @@ export async function salvarProdutoMestre(empresaId, dados = {}, produtoId = nul
 export async function excluirProdutoMestre(empresaId, produtoId) {
   barbearia.excluirProdutoRevenda(empresaId, produtoId);
   return { sucesso: true };
+}
+
+
+export async function listarFormasPagamento(db, empresaId) {
+  const empresa = id(empresaId, 'empresa');
+  const res = await db.query(
+    'SELECT * FROM a2_formas_pagamento WHERE empresa_id = $1 ORDER BY ativo DESC, nome ASC',
+    [empresa]
+  );
+  return res.rows.map((r) => ({
+    id: r.id,
+    nome: r.nome,
+    tipo: r.tipo || 'dinheiro',
+    taxaOperacional: Number(r.taxa_operacional || 0),
+    prazoDias: Number(r.prazo_dias || 0),
+    ativo: r.ativo !== false,
+    observacao: r.observacao || '',
+    criadoEm: r.criado_em,
+  }));
+}
+
+export async function salvarFormaPagamento(db, empresaId, dados = {}, formaId = null) {
+  const empresa = id(empresaId, 'empresa');
+  const nome = dados.nome ? String(dados.nome).trim().slice(0, 100) : null;
+  const tipo = String(dados.tipo || 'dinheiro').trim().toLowerCase();
+  const taxa = dados.taxaOperacional != null ? Number(dados.taxaOperacional) : (dados.taxa != null ? Number(dados.taxa) : 0);
+  const prazo = dados.prazoDias != null ? Number(dados.prazoDias) : (dados.prazo != null ? Number(dados.prazo) : 0);
+  const ativo = dados.ativo !== false;
+  const obs = dados.observacao != null ? String(dados.observacao).slice(0, 500) : null;
+
+  if (formaId) {
+    const regId = id(formaId, 'forma');
+    const res = await db.query(
+      `UPDATE a2_formas_pagamento 
+       SET nome = COALESCE($1, nome),
+           tipo = COALESCE($2, tipo),
+           taxa_operacional = COALESCE($3, taxa_operacional),
+           prazo_dias = COALESCE($4, prazo_dias),
+           ativo = COALESCE($5, ativo),
+           observacao = COALESCE($6, observacao),
+           atualizado_em = CURRENT_TIMESTAMP
+       WHERE empresa_id = $7 AND id = $8
+       RETURNING *`,
+      [nome, tipo, taxa, prazo, dados.ativo !== undefined ? ativo : null, obs, empresa, regId]
+    );
+    if (!res.rows[0]) throw new ErroDominio('NOT_FOUND', 'Forma de pagamento não encontrada', 404);
+    return { sucesso: true, forma: res.rows[0] };
+  }
+
+  if (!nome) throw new ErroDominio('VALIDATION_ERROR', 'Nome da forma de pagamento é obrigatório');
+  const res = await db.query(
+    `INSERT INTO a2_formas_pagamento (empresa_id, nome, tipo, taxa_operacional, prazo_dias, ativo, observacao)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
+     RETURNING *`,
+    [empresa, nome, tipo, taxa, prazo, ativo, obs]
+  );
+  return { sucesso: true, forma: res.rows[0] };
+}
+
+export async function excluirFormaPagamento(db, empresaId, formaId) {
+  const empresa = id(empresaId, 'empresa');
+  const regId = id(formaId, 'forma');
+  await db.query('DELETE FROM a2_formas_pagamento WHERE empresa_id = $1 AND id = $2', [empresa, regId]);
+  return { sucesso: true };
+}
+
+export async function listarUnidadesMestres(db, empresaId) {
+  const empresa = id(empresaId, 'empresa');
+  const res = await db.query(
+    'SELECT * FROM lojas WHERE empresa_id = $1 ORDER BY ativa DESC, nome ASC',
+    [empresa]
+  );
+  return res.rows.map((r) => ({
+    id: r.id,
+    codigo: r.codigo || 'MATRIZ',
+    nome: r.nome || r.nome_fantasia,
+    nomeFantasia: r.nome_fantasia || r.nome,
+    cnpj: r.cnpj || '',
+    telefone: r.telefone || '',
+    email: r.email || '',
+    endereco: [r.endereco_logradouro, r.endereco_numero, r.endereco_bairro, r.endereco_cidade, r.endereco_estado].filter(Boolean).join(', ') || '—',
+    timezone: r.timezone || 'America/Sao_Paulo',
+    ativo: r.ativa !== false,
+  }));
+}
+
+export async function salvarUnidadeMestre(db, empresaId, dados = {}, unidadeId = null) {
+  const empresa = id(empresaId, 'empresa');
+  const nome = dados.nome ? String(dados.nome).trim().slice(0, 150) : null;
+  const codigo = dados.codigo ? String(dados.codigo).trim().toUpperCase().slice(0, 50) : 'FILIAL';
+  const cnpj = dados.cnpj ? String(dados.cnpj).replace(/\D/g, '') : null;
+  const tel = dados.telefone ? String(dados.telefone).trim() : null;
+  const email = dados.email ? String(dados.email).trim() : null;
+  const ativa = dados.ativo !== false && dados.ativa !== false;
+
+  if (unidadeId) {
+    const regId = id(unidadeId, 'unidade');
+    const res = await db.query(
+      `UPDATE lojas
+       SET nome = COALESCE($1, nome),
+           nome_fantasia = COALESCE($1, nome_fantasia),
+           codigo = COALESCE($2, codigo),
+           cnpj = COALESCE($3, cnpj),
+           telefone = COALESCE($4, telefone),
+           email = COALESCE($5, email),
+           ativa = COALESCE($6, ativa),
+           data_atualizacao = CURRENT_TIMESTAMP
+       WHERE empresa_id = $7 AND id = $8
+       RETURNING *`,
+      [nome, dados.codigo ? codigo : null, cnpj, tel, email, dados.ativo !== undefined || dados.ativa !== undefined ? ativa : null, empresa, regId]
+    );
+    if (!res.rows[0]) throw new ErroDominio('NOT_FOUND', 'Unidade não encontrada', 404);
+    return { sucesso: true, unidade: res.rows[0] };
+  }
+
+  if (!nome) throw new ErroDominio('VALIDATION_ERROR', 'Nome da unidade é obrigatório');
+  const res = await db.query(
+    `INSERT INTO lojas (empresa_id, codigo, nome, nome_fantasia, cnpj, telefone, email, ativa)
+     VALUES ($1, $2, $3, $3, $4, $5, $6, $7)
+     RETURNING *`,
+    [empresa, codigo, nome, cnpj, tel, email, ativa]
+  );
+  return { sucesso: true, unidade: res.rows[0] };
+}
+
+export async function excluirUnidadeMestre(db, empresaId, unidadeId) {
+  const empresa = id(empresaId, 'empresa');
+  const regId = id(unidadeId, 'unidade');
+  const total = await db.query('SELECT count(*)::int AS count FROM lojas WHERE empresa_id = $1', [empresa]);
+  if (total.rows[0].count <= 1) {
+    throw new ErroDominio('VALIDATION_ERROR', 'A empresa deve possuir ao menos uma unidade matriz cadastrada.');
+  }
+  await db.query('DELETE FROM lojas WHERE empresa_id = $1 AND id = $2', [empresa, regId]);
+  return { sucesso: true };
+}
+
+export async function listarEmpresasPlataforma(db) {
+  const res = await db.query(
+    'SELECT id, nome, razao_social, cnpj, ativa, tipo_negocio FROM empresas ORDER BY ativa DESC, nome ASC'
+  );
+  return res.rows.map((r) => ({
+    id: r.id,
+    nome: r.nome || r.razao_social,
+    razaoSocial: r.razao_social || r.nome,
+    nomeFantasia: r.nome || r.razao_social,
+    cnpj: r.cnpj || '',
+    ativa: r.ativa !== false,
+    tipoNegocio: r.tipo_negocio || 'geral',
+  }));
 }

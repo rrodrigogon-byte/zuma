@@ -57,5 +57,20 @@ export function createA2AdminRouter({ db, empresaDaRequisicao, operadorDaRequisi
   router.patch('/usuarios-mestres/:id', executar(({ empresaId, req }) => svc.salvarUsuarioMestre(db, empresaId, req.body || {}, req.params.id)));
   router.delete('/usuarios-mestres/:id', executar(({ empresaId, req }) => svc.excluirUsuarioMestre(db, empresaId, req.params.id)));
 
+  // Empresas da plataforma para alternancia rapida
+  router.get('/empresas-plataforma', executar(async () => ({ empresas: await svc.listarEmpresasPlataforma(db) })));
+
+  // Formas de Pagamento & Contas Financeiras
+  router.get('/formas-pagamento', executar(async ({ empresaId }) => ({ formasPagamento: await svc.listarFormasPagamento(db, empresaId) })));
+  router.post('/formas-pagamento', executar(({ empresaId, req }) => svc.salvarFormaPagamento(db, empresaId, req.body || {}), 201));
+  router.patch('/formas-pagamento/:id', executar(({ empresaId, req }) => svc.salvarFormaPagamento(db, empresaId, req.body || {}, req.params.id)));
+  router.delete('/formas-pagamento/:id', executar(({ empresaId, req }) => svc.excluirFormaPagamento(db, empresaId, req.params.id)));
+
+  // Unidades & Lojas da Empresa
+  router.get('/unidades', executar(async ({ empresaId }) => ({ unidades: await svc.listarUnidadesMestres(db, empresaId) })));
+  router.post('/unidades', executar(({ empresaId, req }) => svc.salvarUnidadeMestre(db, empresaId, req.body || {}), 201));
+  router.patch('/unidades/:id', executar(({ empresaId, req }) => svc.salvarUnidadeMestre(db, empresaId, req.body || {}, req.params.id)));
+  router.delete('/unidades/:id', executar(({ empresaId, req }) => svc.excluirUnidadeMestre(db, empresaId, req.params.id)));
+
   return router;
 }
