@@ -46,6 +46,7 @@ function Card({ children, style = {} }) {
   );
 }
 import { NfseComandaAcoes, NfseConfigCard } from "./BarbeariaNfsePanel";
+import DinoComprasEstoqueHub from "./dino/DinoComprasEstoqueHub";
 import { ComprasPanel, CurvaAbcPanel } from "./dino/ComprasPanels";
 import { RepassesPanel, ReguaClubePanel } from "./dino/RepassesPanel";
 
@@ -153,6 +154,9 @@ const TABS = [
   ["Vale-presente", "Venda, consulta e saldo dos vales"],
   ["Unidades", "Comparativo entre unidades"],
   ["Compras e fornecedores", "NF-e de entrada, pedidos e reposição"],
+  ["Perdas e inventário", "Baixas manuais, contagem cíclica e acuracidade"],
+  ["Fichas técnicas", "Composição de insumos e custo por serviço"],
+  ["Fornecedores e funcionários", "Cadastros mestres da operação"],
   ["Curva ABC", "Margem, giro e itens parados"],
   ["Extrato e repasses", "Extrato, vales, recibos e pote dos planos"],
 ];
@@ -198,6 +202,9 @@ const AREAS = [
       "Saúde do clube",
       "Estoque de revenda",
       "Compras e fornecedores",
+      "Perdas e inventário",
+      "Fichas técnicas",
+      "Fornecedores e funcionários",
       "Curva ABC",
       "Vendas de revenda",
     ],
@@ -13282,7 +13289,23 @@ export default function BarbeariaERP() {
     if (tab === "Fila e bloqueios") return renderFilaBloqueios();
     if (tab === "Planos e assinaturas") return renderPlanosAssinaturas();
     if (tab === "Fidelidade") return renderFidelidade();
-    if (tab === "Estoque de revenda") return renderEstoqueRevenda();
+    if (
+      tab === "Estoque de revenda" ||
+      tab === "Compras e fornecedores" ||
+      tab === "Perdas e inventário" ||
+      tab === "Fichas técnicas" ||
+      tab === "Fornecedores e funcionários"
+    ) {
+      return (
+        <DinoComprasEstoqueHub
+          tabInicial={tab}
+          produtosRevenda={produtosRevenda}
+          onAtualizar={carregar}
+          onAbrirProduto={() => abrirProdutoRevenda()}
+          onAjustarEstoque={(p) => abrirAjusteEstoque(p)}
+        />
+      );
+    }
     if (tab === "Vendas de revenda") return renderVendasRevenda();
     if (tab === "Relatórios") {
       window.location.href = "/admin/relatorios/dino";
@@ -13298,15 +13321,6 @@ export default function BarbeariaERP() {
           <ClubeSaudePanel />
           <ReguaClubePanel />
         </div>
-      );
-    if (tab === "Compras e fornecedores")
-      return (
-        <ComprasPanel
-          produtos={produtosRevenda.filter(
-            (produto) => produto.ativo !== false,
-          )}
-          onEstoqueMudou={carregar}
-        />
       );
     if (tab === "Curva ABC") return <CurvaAbcPanel />;
     if (tab === "Metas e comissões")

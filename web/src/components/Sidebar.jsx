@@ -234,14 +234,20 @@ const NAV_DINO_GROUPS = [
     ],
   },
   {
-    // Retaguarda (ERP) da Dino: compras da revenda/perfumaria, estoque e notas em homologação.
-    // Cada item respeita a permissão do perfil e BACKOFFICE_MODULOS_OCULTOS (itemDisponivel).
-    label: 'Retaguarda (ERP)',
+    label: 'Compras e estoque',
     items: [
-      { to: '/admin/compras', icon: '▤', label: 'Compras e fornecedores' },
-      { to: '/admin/perdas-inventario', icon: '▤', label: 'Perdas e inventário' },
-      { to: '/admin/notas', icon: '◇', label: 'Notas fiscais' },
-      { to: '/admin/fiscal/config', icon: '⚙', label: 'Configuração fiscal' },
+      { to: '/admin/compras', icon: '🚚', label: 'Compras e fornecedores' },
+      { to: '/admin/estoque', icon: '📦', label: 'Estoque' },
+      { to: '/admin/perdas-inventario', icon: '🧾', label: 'Perdas e inventário' },
+      { to: '/admin/fichas-tecnicas', icon: '🧪', label: 'Fichas técnicas' },
+      { to: '/admin/cadastros-mestres', icon: '🗂️', label: 'Fornecedores e funcionários' },
+    ],
+  },
+  {
+    label: 'Fiscal',
+    items: [
+      { to: '/admin/notas', icon: '🧾', label: 'Notas fiscais' },
+      { to: '/admin/fiscal/config', icon: '⚙️', label: 'Configuração fiscal' },
     ],
   },
   {
@@ -392,15 +398,21 @@ const NAV_STALLONE_GROUPS = [
     ],
   },
   {
-    // Retaguarda (ERP) da Stallone: compras, estoque, PDV da loja física e fiscal em homologação.
-    label: 'Retaguarda (ERP)',
+    label: 'Compras e estoque',
     items: [
-      { to: '/admin/compras', icon: '▤', label: 'Compras e fornecedores' },
-      { to: '/admin/perdas-inventario', icon: '▤', label: 'Perdas e inventário' },
-      { to: '/admin/pdv-offline', icon: '▱', label: 'PDV da loja e periféricos' },
-      { to: '/admin/notas', icon: '◇', label: 'Notas fiscais' },
-      { to: '/admin/fiscal/config', icon: '⚙', label: 'Configuração fiscal' },
-      { to: '/admin/fiscal/classificacao', icon: '⚙', label: 'Classificação fiscal (NCM)' },
+      { to: '/admin/compras', icon: '🚚', label: 'Compras e fornecedores' },
+      { to: '/admin/estoque', icon: '📦', label: 'Estoque' },
+      { to: '/admin/perdas-inventario', icon: '🧾', label: 'Perdas e inventário' },
+      { to: '/admin/fichas-tecnicas', icon: '🧪', label: 'Fichas técnicas' },
+      { to: '/admin/cadastros-mestres', icon: '🗂️', label: 'Fornecedores e funcionários' },
+    ],
+  },
+  {
+    label: 'Fiscal',
+    items: [
+      { to: '/admin/notas', icon: '🧾', label: 'Notas fiscais' },
+      { to: '/admin/fiscal/config', icon: '⚙️', label: 'Configuração fiscal' },
+      { to: '/admin/fiscal/classificacao', icon: '🏷️', label: 'Classificação fiscal (NCM)' },
     ],
   },
   {
