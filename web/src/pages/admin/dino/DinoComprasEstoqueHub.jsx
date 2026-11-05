@@ -1246,9 +1246,9 @@ export default function DinoComprasEstoqueHub({
                     </tr>
                   ) : (
                     fichas.map((f) => {
-                      const custoTotal = Number(f.custoTotalEstimado || f.custoTotal || 0);
-                      const preco = Number(f.precoVenda || 0);
-                      const margem = preco > 0 ? Math.round(((preco - custoTotal) / preco) * 100) : 0;
+                      const custoTotal = Number(f.custoTotalInsumos || f.custoTotalEstimado || f.custoTotal || (f.itens || []).reduce((acc, it) => acc + (it.custoTotal || (it.qtd * (it.custoUnitario || 0))), 0));
+                      const preco = Number(f.precoServico || f.precoVenda || 0);
+                      const margem = preco > 0 ? Math.round(((preco - custoTotal) / preco) * 100) : (Number(f.margemContribuicao) || 0);
 
                       return (
                         <tr key={f.id}>
