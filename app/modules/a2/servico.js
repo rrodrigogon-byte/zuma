@@ -744,6 +744,22 @@ export async function listarUsuariosMestres(db, empresaId) {
   return result.rows.map(usuarioMestreDto);
 }
 
+function normalizarPerfisArray(val) {
+  if (Array.isArray(val)) return val;
+  if (typeof val === 'string') {
+    const s = val.trim();
+    if (s.startsWith('{') && s.endsWith('}')) {
+      return s.slice(1, -1).split(',').map((x) => x.trim().replace(/^"|"$/g, '')).filter(Boolean);
+    }
+    try {
+      const parsed = JSON.parse(s);
+      if (Array.isArray(parsed)) return parsed;
+    } catch (_) {}
+    return s ? [s] : [];
+  }
+  return [];
+}
+
 function usuarioMestreDto(row, perfis = null) {
   return {
     id: row.id,
@@ -751,7 +767,7 @@ function usuarioMestreDto(row, perfis = null) {
     email: row.email || '',
     telefone: row.telefone || '',
     tipoUsuario: row.tipo_usuario || 'operador_pdv',
-    perfis: perfis || (Array.isArray(row.perfis) ? row.perfis : []),
+    perfis: normalizarPerfisArray(perfis || row.perfis),
     senhaInicialConfigurada: Boolean(row.senha_inicial_configurada),
     senhaInicial: '',
     ativo: row.ativo !== false,

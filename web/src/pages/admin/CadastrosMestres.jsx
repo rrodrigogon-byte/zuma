@@ -491,7 +491,20 @@ export default function CadastrosMestres() {
                     </td>
                     <td>
                       <div style={{ fontSize: 11, color: '#475569' }}>
-                        {(registro.perfis || registro.roles || []).map((p) => PERFIS_ACESSO.find((item) => item.id === p)?.nome || p).join(' · ') || 'Padrão'}
+                        {(() => {
+                        const raw = registro.perfis || registro.roles || []
+                        let perfList = []
+                        if (Array.isArray(raw)) {
+                          perfList = raw
+                        } else if (typeof raw === 'string') {
+                          if (raw.startsWith('{') && raw.endsWith('}')) {
+                            perfList = raw.slice(1, -1).split(',').map((s) => s.trim().replace(/^"|"$/g, '')).filter(Boolean)
+                          } else {
+                            perfList = [raw]
+                          }
+                        }
+                        return perfList.map((p) => PERFIS_ACESSO.find((item) => item.id === p)?.nome || p).join(' · ') || 'Padrão'
+                      })()}
                       </div>
                     </td>
                     <td>{registro.telefone || '—'}</td>

@@ -336,7 +336,7 @@ export default function App() {
           <Route path="/admin/clientes"       element={<Layout><Clientes /></Layout>} />
           <Route path="/admin/clientes-360"   element={<Layout><Customer360 /></Layout>} />
           <Route path="/admin/clientes-360/:ref" element={<Layout><Customer360 /></Layout>} />
-          <Route path="/admin/cadastros-mestres" element={<TenantAware tenant={<Layout><ComprasEstoquePage abaInicial="cadastros" /></Layout>} legacy={<Layout><CadastrosMestres /></Layout>} />} />
+          <Route path="/admin/cadastros-mestres" element={<Layout><CadastrosMestres /></Layout>} />
           <Route path="/admin/contas-receber" element={<Layout><FinanceiroAuto aba="receber" antigo={<ContasReceber />} /></Layout>} />
           <Route path="/admin/contas-pagar" element={<Layout><FinanceiroAuto aba="pagar" antigo={<Navigate to="/admin/financeiro" replace />} /></Layout>} />
           <Route path="/admin/fechamento-diario" element={<Layout><FechamentoDiario /></Layout>} />
