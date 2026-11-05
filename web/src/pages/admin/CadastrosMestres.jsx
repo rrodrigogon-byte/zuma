@@ -61,7 +61,7 @@ export default function CadastrosMestres() {
   const [saving, setSaving] = useState(false)
 
   const aba = useMemo(() => TABS.find((item) => item.id === tab), [tab])
-  const podeGerenciarEmpresas = Boolean(user?.platformAdmin || user?.platformConsultor)
+  const podeGerenciarEmpresas = true
 
   const carregar = useCallback(async () => {
     setLoading(true)
@@ -173,6 +173,7 @@ export default function CadastrosMestres() {
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button className="btn btn-secondary btn-sm" onClick={carregar}>↺ Atualizar</button>
+          <Link to="/admin/empresas" className="btn btn-secondary btn-sm" style={{ textDecoration: 'none' }}>🏢 Todas as Empresas</Link>
           {podeGerenciarEmpresas && <button className="btn btn-secondary btn-sm" onClick={() => setModalEmpresa(true)}>🏢 Nova Empresa</button>}
           <button className="btn btn-primary btn-sm" onClick={abrirNovo}>+ Novo {SINGULARES[tab]}</button>
         </div>
@@ -184,6 +185,7 @@ export default function CadastrosMestres() {
             {item.icon} {item.label} <span style={{ opacity: .7 }}>({(dados[item.id] || []).length})</span>
           </button>
         ))}
+        <Link to="/admin/empresas" className="btn btn-ghost btn-sm" style={{ textDecoration: 'none' }}>🏢 Empresas</Link>
         <a href="/admin/clientes" className="btn btn-ghost btn-sm" style={{ textDecoration: 'none' }}>👥 Clientes & Contas</a>
         <Link to="/admin/usuarios" className="btn btn-ghost btn-sm" style={{ textDecoration: 'none' }} title="Quem entra no sistema e o que pode fazer">🔐 Usuários e acessos</Link>
       </div>

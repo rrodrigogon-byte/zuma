@@ -51,6 +51,7 @@ import { lerSociosTtc, importarAlunos } from './modules/clube/importar-legado.js
 import { createA2AdminRouter } from './modules/a2/rotas.js';
 import * as a2Svc from './modules/a2/servico.js';
 import { createUnidadesAdminRouter } from './modules/unidades/rotas.js';
+import { createEmpresasAdminRouter } from './modules/empresas/rotas.js';
 import { createRazaoAdminRouter, createRazaoPlataformaRouter } from './modules/razao/rotas.js';
 import { iniciarRotina as iniciarRotinaBackoffice } from './modules/razao/rotina.js';
 import { createSuprimentosAdminRouter } from './modules/suprimentos/rotas.js';
@@ -479,6 +480,60 @@ async function commerceSessionFor(user) {
   if (process.env.COMMERCE_CORE_ENABLED !== '1' || !user?.email) return {};
   if (user.pgAccount === true) return accountSession(user);
   try {
+    // Administradores globais e gestores autorizados recebem todas as empresas ativas da plataforma
+    if (isPlatformAdminUser(user) || isMainAdminUser(user) || user.role === 'admin' || user.role === 'administrador') {
+      const resEmpresas = await commerceDb.query(
+        `SELECT e.id::text, e.nome, e.razao_social, e.cnpj, e.tipo_negocio, e.ativa,
+                COALESCE((SELECT a.brand_key FROM commerce_storefront_aliases a
+                  WHERE a.empresa_id = e.id AND a.ativo = true
+                  ORDER BY a.criado_em ASC LIMIT 1),
+                  CASE 
+                    WHEN e.id = 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6' THEN 'dino'
+                    WHEN e.id = '31f70c83-9172-40c2-945f-9e793b5048be' THEN 'stallone'
+                    ELSE 'default'
+                  END
+                ) AS brand_key
+           FROM empresas e
+          WHERE e.ativa = true
+          ORDER BY e.nome ASC`
+      );
+      const resLojas = await commerceDb.query(
+        `SELECT l.id::text, l.empresa_id::text, l.codigo, l.nome, l.ativa
+           FROM lojas l
+           JOIN empresas e ON e.id = l.empresa_id AND e.ativa = true
+          WHERE l.ativa = true
+          ORDER BY l.nome ASC`
+      );
+      const empresas = (resEmpresas.rows || []).map(r => ({
+        id: r.id,
+        nome: r.nome,
+        razaoSocial: r.razao_social,
+        cnpj: r.cnpj,
+        brandKey: r.brand_key || 'default',
+        tipoNegocio: r.tipo_negocio || 'outro',
+        ativa: r.ativa !== false
+      }));
+      const lojas = (resLojas.rows || []).map(r => ({
+        id: r.id,
+        empresaId: r.empresa_id,
+        codigo: r.codigo || '',
+        nome: r.nome || r.id,
+        ativa: r.ativa !== false
+      }));
+      const empresaAtivaId = user.empresaId || (empresas.find(e => e.id === 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6')?.id) || empresas[0]?.id || null;
+      const empresa = empresas.find(e => e.id === empresaAtivaId) || empresas[0] || null;
+      const loja = lojas.find(l => l.empresaId === empresa?.id) || lojas[0] || null;
+
+      return {
+        empresas_acessiveis: empresas,
+        empresa,
+        empresaId: empresa?.id || null,
+        lojas_acessiveis: lojas,
+        loja,
+        lojaId: loja?.id || null,
+      };
+    }
+
     const identities = await commerceDb.queryRead(
       `SELECT id FROM usuarios WHERE lower(btrim(email)) = $1 AND ativo = true LIMIT 2`,
       [norm(user.email)],
@@ -858,7 +913,7 @@ app.use('/api/admin/commerce', (req, res, next) => {
 });
 
 // Módulos de /api/admin que separam dados por empresa e podem ser usados por tenant.
-const TENANT_ADMIN_MODULES = new Set(['a2', 'bar', 'barbearia', 'commerce', 'commerce-session', 'usuarios', 'usuarios-diretorio', 'platform', 'fidelidade', 'login', 'auditoria', 'modificadores', 'combos', 'clube', 'unidades', 'razao', 'suprimentos', 'fiscal', 'salao', 'varejo', 'supermercado', 'pdv-offline', 'minhas-permissoes', 'cupons', 'omnichannel', 'pdv', 'dino-captacao', 'clientes-360', 'relatorios', 'estoque', 'cardapio', 'fichas-tecnicas']);
+const TENANT_ADMIN_MODULES = new Set(['a2', 'bar', 'barbearia', 'commerce', 'commerce-session', 'usuarios', 'usuarios-diretorio', 'platform', 'fidelidade', 'login', 'auditoria', 'modificadores', 'combos', 'clube', 'unidades', 'empresas', 'plataforma', 'razao', 'suprimentos', 'fiscal', 'salao', 'varejo', 'supermercado', 'pdv-offline', 'minhas-permissoes', 'cupons', 'omnichannel', 'pdv', 'dino-captacao', 'clientes-360', 'relatorios', 'estoque', 'cardapio', 'fichas-tecnicas']);
 
 // [kytto-clube] Kytto Clube & Academia (catraca, contrato digital, agenda, retenção, Wellhub/TotalPass).
 // Usa o pool do Commerce que já existe (não abre outro pool) e a mesma resolução de empresa e
@@ -1682,6 +1737,10 @@ app.use('/api/webhooks', createWhatsappAiWebhookRouter());
     }
   });
   // [kytto-unidades] Cadastro das unidades (lojas) da empresa ativa, no PostgreSQL.
+  // [kytto-empresas] Cadastro completo de empresas multiempresa
+  const empresasRouter = createEmpresasAdminRouter({ db: clubeDb });
+  app.use('/api/admin/empresas', auth, requireStaff, empresasRouter);
+  app.use('/api/admin/plataforma/empresas', auth, requireStaff, empresasRouter);
   app.use('/api/admin/unidades', auth, requireStaff, createUnidadesAdminRouter({ db: clubeDb, empresaDaRequisicao: empresaDasUnidades }));
   // [kytto-razao] Razão financeiro único (Financeiro, contas a pagar e a receber, DRE, fechamento).
   app.use('/api/admin/razao', auth, requireStaff, createRazaoAdminRouter({ db: clubeDb, escopoDaRequisicao: escopoComercial, fonteJson: fonteJsonDoRazao, fuso: FUSO_KYTTO }));
