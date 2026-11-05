@@ -153,6 +153,11 @@ import * as dinoMetas from './dino-metas.js';
 import * as dinoGamificacao from './dino-metas-gamificacao.js';
 import * as dinoCarteiraClientes from './dino-carteira-clientes.js';
 import { obterDetalhesCaixaOperacao } from './dino-caixa-detalhes.js';
+import {
+  obterFechamentoDiarioEConciliacao,
+  executarFechamentoDiarioIntegrado,
+  reabrirFechamentoDiarioIntegrado,
+} from './dino-fechamento-conciliacao.js';
 import { funnelSummary } from './storefront-funnel.js';
 import { whatsappProviderConfigured, whatsappProviderName } from './core/whatsapp-provider.js';
 import { enviarMensagem as enviarWhatsappCore } from './core/whatsapp.js';
@@ -1567,12 +1572,14 @@ app.use('/api/webhooks', createWhatsappAiWebhookRouter());
     const rotasA2 = [
       '/contas-receber',
       '/alertas-vencimento',
-      '/fechamento-diario',
       '/clientes',
       '/funcionarios',
       '/fornecedores',
       '/usuarios-mestres',
     ];
+    if (subPath === '/fechamento-diario' && req.method === 'GET' && req.query?.legadoA2 === '1') {
+      return auth(req, res, () => requireStaff(req, res, () => a2RouterInstance(req, res, next)));
+    }
     if (rotasA2.some((r) => subPath === r || subPath.startsWith(`${r}/`))) {
       return auth(req, res, () => requireStaff(req, res, () => a2RouterInstance(req, res, next)));
     }
@@ -6094,6 +6101,58 @@ app.post('/api/admin/barbearia/operacao/fechar-dia', (req, res) => {
     const dia = String(req.body?.data || new Date().toISOString().slice(0, 10)).slice(0, 10);
     const resumo = resumoOperacaoBarbearia({ ...req, query: { data: dia } });
     res.json({ ok: true, fechamento: financeiroKytto.fecharDia(legacyEmpresaId(req), dia, req.user?.email || req.user?.nome, { lojaId: legacyLojaId(req), resumoOperacao: resumo }) });
+  } catch (error) { res.status(400).json({ error: error.message }); }
+});
+
+// ── CONCILIAÇÃO FECHAMENTO DIÁRIO E GESTÃO INTEGRADA ─────────────────────────
+app.get(['/api/admin/fechamento-diario', '/api/admin/fechamento-diario/conciliacao', '/api/admin/barbearia/operacao/fechamento-conciliacao'], auth, requireStaff, (req, res) => {
+  try {
+    const empresaId = legacyEmpresaId(req);
+    const lojaId = legacyLojaId(req);
+    const resultado = obterFechamentoDiarioEConciliacao(empresaId, req.query?.data, { lojaId });
+    res.json({
+      ok: true,
+      ...resultado,
+      fechamentos: resultado.historicoFechamentos,
+    });
+  } catch (error) { res.status(400).json({ error: error.message }); }
+});
+
+app.post(['/api/admin/fechamento-diario', '/api/admin/fechamento-diario/executar', '/api/admin/barbearia/operacao/fechamento-integrado'], auth, requireStaff, async (req, res) => {
+  try {
+    if (req.body?.confirmado !== true) return res.status(400).json({ error: 'A confirmação explícita do fechamento diário é obrigatória.' });
+    const empresaId = legacyEmpresaId(req);
+    const lojaId = legacyLojaId(req);
+    const senhaGerente = String(req.body?.senhaGerente || req.body?.senha || '').trim();
+    if (senhaGerente) {
+      const authOk = await autorizarComSenhaGerente(req, senhaGerente);
+      if (!authOk) return res.status(403).json({ error: 'Senha de gerente incorreta ou usuário não autorizado.' });
+    }
+    const resultado = executarFechamentoDiarioIntegrado(empresaId, {
+      ...(req.body || {}),
+      lojaId,
+      usuario: req.user?.nome || req.user?.email || 'Gerente',
+    });
+    audit(req, 'FECHAMENTO_DIARIO_INTEGRADO', `data=${resultado.data} caixas=${resultado.caixasFechados}`);
+    res.json(resultado);
+  } catch (error) { res.status(400).json({ error: error.message }); }
+});
+
+app.post(['/api/admin/fechamento-diario/reabrir', '/api/admin/barbearia/operacao/fechamento-reabrir'], auth, requireStaff, async (req, res) => {
+  try {
+    const empresaId = legacyEmpresaId(req);
+    const lojaId = legacyLojaId(req);
+    const senhaGerente = String(req.body?.senhaGerente || req.body?.senha || '').trim();
+    if (!senhaGerente) return res.status(403).json({ error: 'Senha de gerente obrigatória para reabrir o fechamento diário.' });
+    const authOk = await autorizarComSenhaGerente(req, senhaGerente);
+    if (!authOk) return res.status(403).json({ error: 'Senha de gerente incorreta ou usuário não autorizado.' });
+    const resultado = reabrirFechamentoDiarioIntegrado(empresaId, req.body?.data, {
+      ...(req.body || {}),
+      lojaId,
+      usuario: req.user?.nome || req.user?.email || 'Gerente',
+    });
+    audit(req, 'FECHAMENTO_DIARIO_REABERTO', `data=${resultado.data} caixasReabertos=${resultado.caixasReabertos}`);
+    res.json(resultado);
   } catch (error) { res.status(400).json({ error: error.message }); }
 });
 

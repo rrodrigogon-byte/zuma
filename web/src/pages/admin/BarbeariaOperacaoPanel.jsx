@@ -310,14 +310,32 @@ export default function BarbeariaOperacaoPanel({
                 fontSize: 13,
                 fontWeight: 800,
                 cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 6,
-              }}
-            >
-              <span>+ Abrir novo caixa (2, 3, 4...)</span>
-            </button>
-          </div>
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+            }}
+          >
+            <span>+ Abrir novo caixa (2, 3, 4...)</span>
+          </button>
+          <a
+            href="/admin/fechamento-diario"
+            style={{
+              padding: '8px 14px',
+              borderRadius: 8,
+              border: '1px solid #2563eb',
+              background: '#eff6ff',
+              color: '#2563eb',
+              fontSize: 13,
+              fontWeight: 800,
+              textDecoration: 'none',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+            }}
+          >
+            <span>🔐 Conciliação &amp; Fechamento Geral ERP &rarr;</span>
+          </a>
+        </div>
 
           {/* Abas e seleção rápida de Caixas Abertos */}
           {caixasAbertos.length > 0 && (
