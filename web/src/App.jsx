@@ -111,6 +111,7 @@ const Agenda     = lazy(() => import('./pages/admin/Agenda'))
 const Inscricoes = lazy(() => import('./pages/admin/Inscricoes'))
 const Cardapio   = lazy(() => import('./pages/admin/Cardapio'))
 const Estoque    = lazy(() => import('./pages/admin/Estoque'))
+const ComprasEstoquePage = lazy(() => import('./pages/admin/ComprasEstoquePage'))
 const ModificadoresCombos = lazy(() => import('./pages/admin/ModificadoresCombos'))
 const Mesas      = lazy(() => import('./pages/admin/Mesas'))
 const ReservasFilas = lazy(() => import('./pages/admin/ReservasFilas'))
@@ -234,9 +235,7 @@ function Loading() {
 function ComprasPorMarca() {
   const { user, empresaAtiva, empresasAcessiveis } = useAuth()
   const empresaEfetiva = empresaAtiva || empresasAcessiveis?.[0] || null
-  if (isTenantScope(user, empresaEfetiva) && isDinoBrandContext(empresaEfetiva)) return <Navigate to="/admin/barbearia-erp?area=catalogo&tab=Estoque+de+revenda" replace />
-  // sem empresa ativa não há estoque nem compras (a tela antiga chamava rotas que não existem mais)
-  return isTenantScope(user, empresaEfetiva) ? <Layout><Suprimentos abaInicial="compras" /></Layout> : <Layout><EscolhaEmpresa modulo="Estoque e compras" /></Layout>
+  return isTenantScope(user, empresaEfetiva) ? <Layout><ComprasEstoquePage abaInicial="compras" /></Layout> : <Layout><EscolhaEmpresa modulo="Estoque e compras" /></Layout>
 }
 
 function TenantAware({ tenant, legacy, stallone, clube }) {
@@ -284,9 +283,9 @@ export default function App() {
           <Route path="/admin/agenda"       element={<Layout><Agenda /></Layout>} />
           <Route path="/admin/inscricoes"   element={<Layout><Inscricoes /></Layout>} />
           <Route path="/admin/cardapio"     element={<Layout><Cardapio /></Layout>} />
-          <Route path="/admin/estoque"      element={<Layout><Estoque /></Layout>} />
-          <Route path="/admin/perdas-inventario" element={<TenantAware tenant={<Layout><Suprimentos abaInicial="inventario" /></Layout>} legacy={<Layout><EscolhaEmpresa modulo="Perdas e inventário" /></Layout>} />} />
-          <Route path="/admin/fichas-tecnicas" element={<TenantAware tenant={<Layout><Suprimentos abaInicial="fichas" /></Layout>} legacy={<Layout><EscolhaEmpresa modulo="Fichas técnicas" /></Layout>} />} />
+          <Route path="/admin/estoque"      element={<TenantAware tenant={<Layout><ComprasEstoquePage abaInicial="estoque" /></Layout>} legacy={<Layout><ComprasEstoquePage abaInicial="estoque" /></Layout>} />} />
+          <Route path="/admin/perdas-inventario" element={<TenantAware tenant={<Layout><ComprasEstoquePage abaInicial="perdas" /></Layout>} legacy={<Layout><ComprasEstoquePage abaInicial="perdas" /></Layout>} />} />
+          <Route path="/admin/fichas-tecnicas" element={<TenantAware tenant={<Layout><ComprasEstoquePage abaInicial="fichas" /></Layout>} legacy={<Layout><ComprasEstoquePage abaInicial="fichas" /></Layout>} />} />
           <Route path="/admin/modificadores-combos" element={<Layout><ModificadoresCombos /></Layout>} />
           <Route path="/admin/mesas"        element={<Layout><Mesas /></Layout>} />
           <Route path="/admin/reservas" element={<TenantAware tenant={<Layout><ReservasFilas /></Layout>} legacy={<Layout><EscolhaEmpresa modulo="Reservas e fila de espera" /></Layout>} />} />
@@ -335,7 +334,7 @@ export default function App() {
           <Route path="/admin/clientes"       element={<Layout><Clientes /></Layout>} />
           <Route path="/admin/clientes-360"   element={<Layout><Customer360 /></Layout>} />
           <Route path="/admin/clientes-360/:ref" element={<Layout><Customer360 /></Layout>} />
-          <Route path="/admin/cadastros-mestres" element={<Layout><CadastrosMestres /></Layout>} />
+          <Route path="/admin/cadastros-mestres" element={<TenantAware tenant={<Layout><ComprasEstoquePage abaInicial="cadastros" /></Layout>} legacy={<Layout><CadastrosMestres /></Layout>} />} />
           <Route path="/admin/contas-receber" element={<Layout><FinanceiroAuto aba="receber" antigo={<ContasReceber />} /></Layout>} />
           <Route path="/admin/contas-pagar" element={<Layout><FinanceiroAuto aba="pagar" antigo={<Navigate to="/admin/financeiro" replace />} /></Layout>} />
           <Route path="/admin/fechamento-diario" element={<Layout><FechamentoDiario /></Layout>} />

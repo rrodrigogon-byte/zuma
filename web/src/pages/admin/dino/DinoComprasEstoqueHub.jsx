@@ -11,6 +11,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api, fmtR } from '../../../lib/api';
 import { a2Path } from '../../../lib/tenant-api';
 import { useToast } from '../../../hooks/useToast';
+import { useAuth } from '../../../lib/auth';
+import { moneyK } from './format';
 import Modal from '../../../components/Modal';
 
 const styles = {
@@ -103,6 +105,7 @@ export default function DinoComprasEstoqueHub({
   onAbrirProduto,
   onAjustarEstoque,
 }) {
+  const { empresaAtiva } = useAuth();
   const { toast } = useToast();
 
   // Resolve aba ativa a partir da prop ou URL
@@ -421,10 +424,10 @@ export default function DinoComprasEstoqueHub({
       <div style={styles.headerCard}>
         <div style={styles.titleRow}>
           <div>
-            <div style={styles.kicker}>Hub Integrado de Gestão de Materiais</div>
+            <div style={styles.kicker}>Hub Integrado de Gestão de Materiais · {empresaAtiva?.nome || 'Empresa'}</div>
             <h1 style={styles.h1}>Compras e Estoque</h1>
             <p style={styles.sub}>
-              Módulos completos e autônomos para Barbearia Dino e todas as empresas Kytto. Controle absoluto de pedidos, entrada por XML, catálogo de revenda e bar, perdas, contagem física e fichas técnicas com baixa automática.
+              Gestão centralizada de suprimentos e materiais para {empresaAtiva?.nome || 'todas as empresas'}. Fluxo unificado de compras e fornecedores, controle de saldos por unidade, perdas e inventário rotativo, fichas técnicas e cadastros mestres.
             </p>
           </div>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -503,11 +506,13 @@ export default function DinoComprasEstoqueHub({
             </div>
             <div style={styles.kpi}>
               <div style={styles.kpiLabel}>Valor Investido (Custo)</div>
-              <div style={styles.kpiValue}>{fmtR(kpis.valorCusto)}</div>
+              <div style={styles.kpiValue}>{moneyK(kpis.valorCusto)}</div>
+              <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>Exato: {fmtR(kpis.valorCusto)}</div>
             </div>
             <div style={styles.kpi}>
               <div style={styles.kpiLabel}>Previsão de Receita</div>
-              <div style={styles.kpiValue}>{fmtR(kpis.valorVenda)}</div>
+              <div style={styles.kpiValue}>{moneyK(kpis.valorVenda)}</div>
+              <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>Exato: {fmtR(kpis.valorVenda)}</div>
             </div>
             <div style={styles.kpi}>
               <div style={styles.kpiLabel}>Margem Média Projetada</div>
@@ -635,7 +640,8 @@ export default function DinoComprasEstoqueHub({
             </div>
             <div style={styles.kpi}>
               <div style={styles.kpiLabel}>Total Estimado Reposição</div>
-              <div style={styles.kpiValue}>{fmtR(reposicao.totalEstimado || 0)}</div>
+              <div style={styles.kpiValue}>{moneyK(reposicao.totalEstimado || 0)}</div>
+              <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>Exato: {fmtR(reposicao.totalEstimado || 0)}</div>
             </div>
             <div style={styles.kpi}>
               <div style={styles.kpiLabel}>Fornecedores Parceiros</div>
@@ -815,7 +821,8 @@ export default function DinoComprasEstoqueHub({
             </div>
             <div style={styles.kpi}>
               <div style={styles.kpiLabel}>Impacto Total de Perdas</div>
-              <div style={{ ...styles.kpiValue, color: '#f59e0b' }}>{fmtR(relatorioAcuracidade?.totalPerdas || 0)}</div>
+              <div style={{ ...styles.kpiValue, color: '#f59e0b' }}>{moneyK(relatorioAcuracidade?.totalPerdas || 0)}</div>
+              <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>Exato: {fmtR(relatorioAcuracidade?.totalPerdas || 0)}</div>
             </div>
             <div style={styles.kpi}>
               <div style={styles.kpiLabel}>Inventários Concluídos</div>

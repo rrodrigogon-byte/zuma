@@ -318,13 +318,19 @@ export const NAV_CLUBE_GROUPS = [
     ],
   },
   {
-    // Retaguarda (ERP) do clube: salão do bar, insumos e compras, PDV offline e fiscal.
-    label: 'Retaguarda (ERP)',
+    label: 'Compras e estoque',
+    items: [
+      { to: '/admin/compras', icon: '🚚', label: 'Compras e fornecedores' },
+      { to: '/admin/estoque', icon: '📦', label: 'Estoque' },
+      { to: '/admin/perdas-inventario', icon: '🧾', label: 'Perdas e inventário' },
+      { to: '/admin/fichas-tecnicas', icon: '🧪', label: 'Fichas técnicas' },
+      { to: '/admin/cadastros-mestres', icon: '🗂️', label: 'Fornecedores e funcionários' },
+    ],
+  },
+  {
+    label: 'Bar & Fiscal',
     items: [
       { to: '/admin/reservas', icon: '🍽️', label: 'Reservas e fila do bar' },
-      { to: '/admin/fichas-tecnicas', icon: '📋', label: 'Fichas técnicas' },
-      { to: '/admin/perdas-inventario', icon: '📦', label: 'Perdas e inventário' },
-      { to: '/admin/compras', icon: '🛒', label: 'Compras e fornecedores' },
       { to: '/admin/pdv-offline', icon: '🖨️', label: 'PDV offline e periféricos' },
       { to: '/admin/fiscal/config', icon: '⚙️', label: 'Configuração fiscal' },
     ],

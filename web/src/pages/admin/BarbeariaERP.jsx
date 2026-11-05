@@ -13562,19 +13562,28 @@ export default function BarbeariaERP() {
 
   // Painéis analíticos usam 100% da largura; os demais mantêm leitura confortável.
   const ehAgenda = tab === "Agenda";
+  const ehModuloEstoqueSuprimentos = [
+    "Estoque de revenda",
+    "Estoque",
+    "Compras e fornecedores",
+    "Perdas e inventário",
+    "Fichas técnicas",
+    "Fornecedores e funcionários",
+    "Curva ABC",
+  ].includes(tab);
+  const ocultarCabecalhoOperacional = ehAgenda || ehModuloEstoqueSuprimentos;
 
-  // Na aba Agenda, removemos o cabeçalho gigante do print 2 para proporcionar tela 100% limpa, ampla e independente
   return (
     <div
       style={{
-        padding: ehAgenda
-          ? "10px clamp(10px, 1.5vw, 20px)"
+        padding: ehAgenda || ehModuloEstoqueSuprimentos
+          ? "12px clamp(10px, 1.5vw, 20px)"
           : "24px clamp(16px, 3vw, 36px)",
-        maxWidth: tab === "Desempenho da equipe" || ehAgenda ? "none" : 1440,
+        maxWidth: tab === "Desempenho da equipe" || ehAgenda || ehModuloEstoqueSuprimentos ? "none" : 1440,
         margin: "0 auto",
       }}
     >
-      {!ehAgenda && (
+      {!ocultarCabecalhoOperacional && (
         <>
           <header
             style={{
@@ -13596,7 +13605,7 @@ export default function BarbeariaERP() {
                   letterSpacing: ".08em",
                 }}
               >
-                Dino · ERP operacional · empresa ativa
+                {empresaAtiva?.nome || 'Empresa'} · ERP operacional · empresa ativa
               </div>
               <h1
                 style={{
@@ -13605,7 +13614,7 @@ export default function BarbeariaERP() {
                   fontFamily: "var(--font-display)",
                 }}
               >
-                {configuracao?.nomePublico || "Dino"} · Barbearia & Salão
+                {empresaAtiva?.nome || configuracao?.nomePublico || "Empresa"} · {configuracao?.ramo || "Barbearia & Salão"}
               </h1>
               <p style={{ margin: 0, color: "var(--muted)", maxWidth: 720 }}>
                 A operação da unidade em um fluxo único: agenda, atendimento,
