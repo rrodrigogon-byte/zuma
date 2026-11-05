@@ -11,26 +11,54 @@ const soDigitos = (v) => String(v ?? '').replace(/\D/g, '');
 // ── sugestão de NCM/CEST pelo nome ───────────────────────────────────────────
 // Ponto de partida para o contador conferir (nunca aplicada sozinha). CEST conferido no anexo XX
 // (perfumaria, higiene pessoal e cosméticos) do Convênio ICMS 142/2018 em 01/11/2026; nas bebidas o
-// CEST fica para o contador (depende do item e da UF).
+// CEST segue Convênio ICMS 142/2018; alimentos e suplementos têm prioridade para evitar falsos positivos.
 const SUGESTOES = [
-  [/\b(perfume|parfum|eau de parfum|edp|extrato)\b/i, { ncm: '33030010', cest: '2000700', descricao: 'Perfume (extrato)' }],
+  // Alimentos / Suplementos / Nutrição (prioridade antes de cosméticos para evitar falsos positivos)
+  [/\b(pr[oó]polis|extrato de pr[oó]polis)\b/i, { ncm: '21069030', descricao: 'Extrato de própolis / Suplemento' }],
+  [/\b(carbo[- ]?gel|energy[- ]?gel|gel de carboidrato|gel intra|gel energ[eé]tico|endurance gel|intra[- ]?treino)\b/i, { ncm: '21069090', descricao: 'Gel de carboidrato / Suplemento energético' }],
+  [/\b(guaran[aá].*(c[aá]psula|caps|comprimido)|c[aá]psula.*guaran[aá])\b/i, { ncm: '21069030', descricao: 'Guaraná em cápsulas / Suplemento' }],
+  [/\b(whey|prote[ií]na em p[oó]|albumina|beef protein|col[aá]geno proteico|blend proteico)\b/i, { ncm: '21061000', descricao: 'Concentrado proteico / Whey' }],
+  [/\b(creatina|creatine)\b/i, { ncm: '21069030', descricao: 'Creatina / Suplemento' }],
+  [/\b(pr[eé][- ]?treino|bcaa|glutamina|beta[- ]?alanina|arginina)\b/i, { ncm: '21069090', descricao: 'Pré-treino / Aminoácidos' }],
+  [/\b(suplemento|vitamina|multivitam[ií]nico|minerais|coenzima|ômega|omega)\b/i, { ncm: '21069030', descricao: 'Suplemento alimentar' }],
+  [/\b(energy drink|booster.*drink|bebida energ[eé]tica)\b/i, { ncm: '22029900', cest: '0301300', descricao: 'Bebida energética' }],
+  [/\b(isot[oô]nico|gatorade)\b/i, { ncm: '22029900', cest: '0301500', descricao: 'Isotônico' }],
+  [/\b(pasta de amendoim|pasta de castanha)\b/i, { ncm: '20081100', descricao: 'Pasta de amendoim / Castanhas' }],
+  [/\b(barra de prote[ií]na|barra proteica|protein bar)\b/i, { ncm: '21069090', descricao: 'Barra proteica' }],
+
+  // Bebidas
+  [/\b(cerveja|chopp?)\b/i, { ncm: '22030000', cest: '0302101', descricao: 'Cerveja' }],
+  [/\b(refrigerante|soda|coca[- ]?cola|pepsi|guaran[aá] antarctica|guaran[aá] lata)\b/i, { ncm: '22021000', cest: '0301002', descricao: 'Refrigerante' }],
+  [/\b(energ[eé]tico|red[- ]?bull|monster)\b/i, { ncm: '22029900', cest: '0301300', descricao: 'Energético' }],
+  [/\b(água mineral|agua mineral|água com g[aá]s|agua com gas)\b/i, { ncm: '22011000', cest: '0300504', descricao: 'Água mineral' }],
+  [/\b(whisky|u[ií]sque|vodka|gin|rum|cacha[cç]a|tequila|licor)\b/i, { ncm: '22089000', descricao: 'Bebida destilada' }],
+  [/\b(vinho|espumante)\b/i, { ncm: '22042100', descricao: 'Vinho' }],
+
+  // Cuidados corporais, pele e massagem
+  [/\b(gel negro|gel de massagem|gel corporal|arnica|fisioblack)\b/i, { ncm: '33049990', cest: '2001500', descricao: 'Gel de massagem / Cuidados corporais' }],
+  [/\b(perfume|parfum|eau de parfum|edp)\b/i, { ncm: '33030010', cest: '2000700', descricao: 'Perfume (extrato)' }],
   [/\b(col[oô]nia|eau de toilette|edt|eau de cologne|body splash|deo col[oô]nia)\b/i, { ncm: '33030020', cest: '2000800', descricao: 'Água-de-colônia' }],
   [/\b(desodorante|antitranspirante|roll[- ]?on)\b/i, { ncm: '33072010', cest: '2002700', descricao: 'Desodorante' }],
   [/\b(shampoo|xampu)\b/i, { ncm: '33051000', cest: '2001700', descricao: 'Xampu' }],
-  [/\b(condicionador|pomada|gel|cera|finalizador|t[oô]nico capilar|leave[- ]?in|spray fixador|balm|bal[sç]amo|[oó]leo (para|de) barba|tinta|colora[cç][aã]o)\b/i, { ncm: '33059000', cest: '2002000', descricao: 'Preparação capilar' }],
-  [/\b(espuma|creme|gel) de barbear|\bpr[eé][- ]?barba|\bp[oó]s[- ]?barba|aftershave/i, { ncm: '33071000', cest: '2002600', descricao: 'Preparação para barbear' }],
+  [/\b(condicionador|pomada|cera|finalizador|t[oô]nico capilar|leave[- ]?in|spray fixador|balm|bal[sç]amo|[oó]leo (para|de) barba|tinta|colora[cç][aã]o|gel capilar|gel fixador)\b/i, { ncm: '33059000', cest: '2002000', descricao: 'Preparação capilar' }],
+  [/\b(espuma|creme) de barbear|\bpr[eé][- ]?barba|\bp[oó]s[- ]?barba|aftershave/i, { ncm: '33071000', cest: '2002600', descricao: 'Preparação para barbear' }],
   [/\b(sabonete)\b/i, { ncm: '34011190', cest: '2003400', descricao: 'Sabonete' }],
-  [/\b(hidratante|protetor solar|creme facial|s[eé]rum|m[aá]scara facial|esfoliante)\b/i, { ncm: '33049990', descricao: 'Preparação para pele' }],
+  [/\b(hidratante|protetor solar|creme facial|s[eé]rum|m[aá]scara facial|esfoliante)\b/i, { ncm: '33049990', cest: '2001600', descricao: 'Preparação para pele' }],
   [/\b(l[aâ]mina|gilete|aparelho de barbear)\b/i, { ncm: '82121020', descricao: 'Lâmina de barbear' }],
   [/\b(pente|escova de cabelo)\b/i, { ncm: '96151100', descricao: 'Pente' }],
   [/\b(m[aá]quina de cortar|cortador de cabelo|trimmer|aparador)\b/i, { ncm: '85102000', descricao: 'Máquina de cortar cabelo' }],
-  [/\b(cerveja|chopp?)\b/i, { ncm: '22030000', descricao: 'Cerveja' }],
-  [/\b(refrigerante|soda|guaran[aá])\b/i, { ncm: '22021000', descricao: 'Refrigerante' }],
-  [/\b(energ[eé]tico)\b/i, { ncm: '22029900', descricao: 'Energético' }],
-  [/\b(água mineral|agua mineral|água com g[aá]s|agua com gas)\b/i, { ncm: '22011000', descricao: 'Água mineral' }],
-  [/\b(whisky|u[ií]sque|vodka|gin|rum|cacha[cç]a|tequila|licor)\b/i, { ncm: '22089000', descricao: 'Bebida destilada' }],
-  [/\b(vinho|espumante)\b/i, { ncm: '22042100', descricao: 'Vinho' }],
-  [/\b(suplemento|whey|creatina|prote[ií]na)\b/i, { ncm: '21069030', descricao: 'Suplemento alimentar' }],
+
+  // Vestuário e Acessórios Esportivos (AGRO OPEN / Stallone / Kytto)
+  [/\b(camiseta|t[- ]?shirt|camisa)\b/i, { ncm: '61091000', descricao: 'Camiseta de malha de algodão' }],
+  [/\b(bon[eé]|bone|viseira|cap)/i, { ncm: '65050090', descricao: 'Boné / Viseira' }],
+  [/\b(meia|meias)\b/i, { ncm: '61159500', descricao: 'Meias esportivas' }],
+  [/\b(mochila|sacola|tote bag|raqueteira)\b/i, { ncm: '42029200', descricao: 'Mochila / Sacola / Raqueteira' }],
+  [/\b(squeeze|garrafa pl[aá]stica|coqueteleira)\b/i, { ncm: '39241000', descricao: 'Garrafa squeeze / Coqueteleira' }],
+  [/\b(garrafa t[eé]rmica|copo t[eé]rmico)\b/i, { ncm: '96170010', descricao: 'Garrafa ou copo térmico' }],
+  [/\b(toalha|toalhinha)\b/i, { ncm: '63026000', descricao: 'Toalha de banho ou tênis' }],
+  [/\b(munhequeira|headband|bandana)\b/i, { ncm: '61178010', descricao: 'Munhequeira / Faixa esportiva' }],
+  [/\b(overgrip|grip)\b/i, { ncm: '95065900', descricao: 'Grip / Overgrip para raquete' }],
+  [/\b(pulseira)\b/i, { ncm: '39269090', descricao: 'Pulseira de identificação' }],
 ];
 
 /** Sugestão de NCM (e CEST, quando a ST é usual) pelo nome do produto. */

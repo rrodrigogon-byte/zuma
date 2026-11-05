@@ -29,6 +29,7 @@ export function createFiscalAdminRouter({ db, escopoDaRequisicao, env = process.
   const empresaToda = (lojaRestrita, acao) => { if (lojaRestrita) throw new ErroDominio('PERMISSION_DENIED', `${acao} exige permissão na empresa toda`, 403); };
 
   router.get('/estado', rota('payments.read', ({ req, empresaId, lojaRestrita }) => svc.prontidao(db, empresaId, { lojaId: lojaRestrita || req.query.lojaId || null, env })));
+  router.post('/saneamento-multiempresa', rota('settings.write', () => svc.sanearFiscalMultiempresa(db)));
 
   router.get('/emitentes', rota('settings.write', ({ empresaId }) => svc.listarEmitentes(db, empresaId, { env })));
   router.put('/emitentes', rota('settings.write', ({ req, empresaId, lojaRestrita }) => { empresaToda(lojaRestrita, 'Configurar o emitente'); return svc.salvarEmitente(db, empresaId, req.body || {}, { env }); }));

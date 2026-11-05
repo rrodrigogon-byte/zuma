@@ -92,6 +92,9 @@ function emitenteDto(row) {
 
 export async function autoProvisionarFiscalDino(db, empresaId, env = process.env) {
   const empresa = exigirUuid(empresaId, 'empresa');
+  // Trava de segurança multiempresa: auto-provisionamento Dino aplica-se EXCLUSIVAMENTE à Barbearia Dino
+  const DINO_EMPRESA_CANONICA = 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
+  if (empresa !== DINO_EMPRESA_CANONICA) return;
 
   // 1. Emitente Dino
   const emitRes = await db.query('SELECT * FROM fis_emitentes WHERE empresa_id = $1 AND ativo = true LIMIT 1', [empresa]);
@@ -205,8 +208,8 @@ export async function autoProvisionarFiscalDino(db, empresaId, env = process.env
         aliquota_icms, cst_pis, cst_cofins, aliquota_pis, aliquota_cofins,
         unidade_tributavel, c_trib_nac, aliquota_iss, p_red_bc, cst_ibscbs, c_class_trib
       ) VALUES (
-        $1, 'categoria', 'barbearia:revenda', 'produto', '33059000', '2000500', '5405', '0', '500', null,
-        0, '04', '04', 0, 0,
+        $1, 'categoria', 'barbearia:revenda', 'produto', null, '2002000', '5405', '0', '500', null,
+        0, '49', '49', 0, 0,
         'UN', null, null, null, '000', '000001'
       )
       ON CONFLICT (empresa_id, fonte, fonte_id) DO NOTHING`,
@@ -215,9 +218,85 @@ export async function autoProvisionarFiscalDino(db, empresaId, env = process.env
   } catch {}
 }
 
+/**
+ * Saneamento auditado do isolamento multiempresa fiscal:
+ * 1. Inativa emitentes e certificados indevidos criados pelo 'Kytto Auto Fiscal' fora da Dino.
+ * 2. Remove padrões de barbearia (barbearia:revenda / barbearia:servicos) de empresas de outros segmentos.
+ * 3. Garante que o padrão da Dino fique sem NCM forçado.
+ */
+export async function sanearFiscalMultiempresa(db) {
+  const DINO_EMPRESA_CANONICA = 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
+  const relatorio = { emitentesInativados: 0, certificadosInativados: 0, categoriasRemovidas: 0, padraoDinoAtualizado: false };
+
+  try {
+    // 1. Inativar emitentes com dados da Dino em outras empresas
+    const resEmit = await db.query(
+      `UPDATE fis_emitentes
+          SET ativo = false
+        WHERE empresa_id <> $1
+          AND cnpj IN ('50073355000189', '50073355000260')
+          AND ativo = true
+        RETURNING id`,
+      [DINO_EMPRESA_CANONICA]
+    );
+    relatorio.emitentesInativados = resEmit.rowCount || 0;
+
+    // 2. Inativar certificados de teste 'Kytto Auto Fiscal' em outras empresas
+    const resCert = await db.query(
+      `UPDATE fis_certificados
+          SET ativo = false
+        WHERE empresa_id <> $1
+          AND enviado_por = 'Kytto Auto Fiscal'
+          AND ativo = true
+        RETURNING id`,
+      [DINO_EMPRESA_CANONICA]
+    );
+    relatorio.certificadosInativados = resCert.rowCount || 0;
+
+    // 3. Remover categorias de barbearia de outras empresas
+    const resCat = await db.query(
+      `DELETE FROM fis_classificacoes
+        WHERE empresa_id <> $1
+          AND fonte = 'categoria'
+          AND fonte_id IN ('barbearia:revenda', 'barbearia:servicos')
+        RETURNING id`,
+      [DINO_EMPRESA_CANONICA]
+    );
+    relatorio.categoriasRemovidas = resCat.rowCount || 0;
+
+    // 4. Atualizar padrão da Dino (sem NCM forçado e com CEST 20.020.00)
+    await db.query(
+      `UPDATE fis_classificacoes
+          SET ncm = NULL, cest = '2002000', cst_pis = '49', cst_cofins = '49'
+        WHERE empresa_id = $1
+          AND fonte = 'categoria'
+          AND fonte_id = 'barbearia:revenda'`,
+      [DINO_EMPRESA_CANONICA]
+    );
+    relatorio.padraoDinoAtualizado = true;
+
+    // 5. Inativar itens de demonstração de supermercado e testes na Dino (preservando histórico)
+    const resEst = await db.query(
+      `UPDATE est_itens
+          SET ativo = false
+        WHERE empresa_id = $1 AND (
+            categoria IN ('Açougue e Carnes', 'Hortifrúti', 'Laticínios e Frios', 'Mercearia Salgada', 'Mercearia Doce', 'Limpeza', 'Matinais')
+            OR nome ILIKE '%teste%'
+            OR nome ILIKE '%homologação%'
+          )
+          AND ativo = true
+        RETURNING id`,
+      [DINO_EMPRESA_CANONICA]
+    );
+    relatorio.itensSupermercadoInativados = resEst.rowCount || 0;
+  } catch (err) {
+    console.error('[fiscal] Erro durante sanearFiscalMultiempresa:', err?.message || err);
+  }
+  return relatorio;
+}
+
 export async function listarEmitentes(db, empresaId, { env = process.env } = {}) {
   const empresa = exigirUuid(empresaId, 'empresa');
-  try { await autoProvisionarFiscalDino(db, empresa, env); } catch {}
   const r = await db.query('SELECT * FROM fis_emitentes WHERE empresa_id = $1 ORDER BY ativo DESC, loja_id NULLS FIRST', [empresa]);
   return r.rows.map(emitenteDto);
 }
@@ -365,7 +444,9 @@ export async function salvarClassificacao(db, empresaId, dados = {}) {
   if (!fonteId) throw new ErroDominio('VALIDATION_ERROR', 'Informe o produto ou serviço');
   const tipo = dados.tipo === 'servico' || dados.fonte === 'servico' ? 'servico' : 'produto';
   const ncm = soDigitos(dados.ncm); const cfop = soDigitos(dados.cfop); const cest = soDigitos(dados.cest); const ctrib = soDigitos(dados.cTribNac);
-  if (tipo === 'produto' && ncm.length !== 8) throw new ErroDominio('VALIDATION_ERROR', 'NCM com 8 dígitos');
+  const isCategoria = dados.fonte === 'categoria';
+  if (tipo === 'produto' && !isCategoria && ncm.length !== 8) throw new ErroDominio('VALIDATION_ERROR', 'NCM com 8 dígitos');
+  if (tipo === 'produto' && isCategoria && ncm && ncm.length !== 8) throw new ErroDominio('VALIDATION_ERROR', 'NCM de categoria deve ter 8 dígitos se informado');
   if (tipo === 'produto' && !/^[1-7]\d{3}$/.test(cfop)) throw new ErroDominio('VALIDATION_ERROR', 'CFOP com 4 dígitos');
   if (tipo === 'servico' && ctrib.length !== 6) throw new ErroDominio('VALIDATION_ERROR', 'Código de tributação nacional (cTribNac) com 6 dígitos');
   if (cest && cest.length !== 7) throw new ErroDominio('VALIDATION_ERROR', 'CEST com 7 dígitos');
@@ -452,9 +533,9 @@ async function classificacaoDe(q, empresa, fonte, fonteId, categoria = null, cat
   const r = await q("SELECT * FROM fis_classificacoes WHERE empresa_id = $1 AND ((fonte = $2 AND fonte_id = $3) OR (fonte = 'categoria' AND fonte_id = $4) OR (fonte = 'categoria' AND fonte_id IN ('barbearia:revenda', 'barbearia:servicos'))) ORDER BY (fonte = 'categoria'), (fonte_id = 'barbearia:revenda') DESC", [empresa, fonte, String(fonteId), chave]);
   if (r.rows[0]) return classificacaoDto(r.rows[0]);
   return {
-    fonte: 'categoria', fonteId: 'barbearia:revenda', tipo: 'produto',
-    ncm: '33059000', cest: '2000500', cfop: '5405', origem: '0', csosn: '500', cstIcms: '00',
-    aliquotaIcms: 0, cstPis: '04', cstCofins: '04', aliquotaPis: 0, aliquotaCofins: 0,
+    fonte: 'categoria', fonteId: 'padrao:geral', tipo: 'produto',
+    ncm: null, cest: null, cfop: '5102', origem: '0', csosn: '102', cstIcms: '00',
+    aliquotaIcms: 0, cstPis: '49', cstCofins: '49', aliquotaPis: 0, aliquotaCofins: 0,
     unidadeTributavel: 'UN', cstIbsCbs: '000', cClassTrib: '000001'
   };
 }
@@ -621,7 +702,6 @@ function ajustarPagamentos(pagamentos, total) {
 // ── prontidão e emissão ──────────────────────────────────────────────────────
 export async function prontidao(db, empresaId, { lojaId = null, env = process.env } = {}) {
   const empresa = exigirUuid(empresaId, 'empresa');
-  try { await autoProvisionarFiscalDino(db, empresa, env); } catch {}
   const pendencias = [];
   const emit = (await db.query('SELECT * FROM fis_emitentes WHERE empresa_id = $1 AND ativo = true AND (loja_id = $2::uuid OR loja_id IS NULL) ORDER BY loja_id NULLS LAST LIMIT 1', [empresa, lojaId || null])).rows[0];
   if (!emit) pendencias.push('Emitente (CNPJ, IE, endereço) não cadastrado');

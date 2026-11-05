@@ -122,8 +122,8 @@ export async function resolveCommerceIdentity(req) {
     values,
   );
   if (!result.rows.length) {
-    const targetEmpresa = empresaId || signedEmpresa;
-    if (targetEmpresa && (user.role === 'organizador' || user.role === 'admin' || user.role === 'gerente')) {
+    const targetEmpresa = empresaId || signedEmpresa || user.empresa_id || user.empresaId || 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
+    if (targetEmpresa && (user.role === 'organizador' || user.role === 'admin' || user.role === 'administrador' || user.role === 'gerente' || user.platformAdmin === true || user.mainAdmin === true)) {
       const usuarioId = (user?.id && isUuid(user.id)) ? user.id : (isUuid(user?.usuarioId) ? user.usuarioId : null);
       return tenantContext({ empresaId: targetEmpresa, lojaId: signedLoja || lojaId || null, usuarioId });
     }

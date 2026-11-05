@@ -751,6 +751,22 @@ async function adminContext(req) {
 }
 
 async function requirePermission(req, permission) {
+  // Administradores globais e gestores autorizados têm bypass de permissão no Commerce Core
+  if (
+    req.user?.platformAdmin === true ||
+    req.user?.role === 'admin' ||
+    req.user?.role === 'administrador' ||
+    req.user?.role === 'organizador' ||
+    req.user?.role === 'gerente' ||
+    req.user?.mainAdmin === true ||
+    isLegacyGlobalAdmin(req.user)
+  ) {
+    const context = await adminContext(req);
+    context.corporateAccess = true;
+    context.capabilities = context.capabilities instanceof Set ? context.capabilities : new Set(context.capabilities || []);
+    context.capabilities.add(permission);
+    return context;
+  }
   // perfil operador/profissional limita o vínculo (core/perfis-acesso.js)
   const restricao = restricaoDePermissao(req, permission);
   if (restricao) throw new CommerceError(restricao, 'PERMISSION_DENIED', { permission, perfil: true });
