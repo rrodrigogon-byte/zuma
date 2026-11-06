@@ -73,6 +73,7 @@ test('Dino Fechamento Diário e Conciliação com ERP', async (t) => {
     // Paga comanda: R$ 50 no Dinheiro (vinculado ao Caixa 1) e R$ 50 no PIX
     barbeariaErpKytto.registrarPagamentoComandaBarbearia(empresaId, comanda1.id, {
       confirmado: true,
+      data,
       pagamentos: [
         { meio: 'dinheiro', valor: 50.00, caixaId: caixa1.id },
         { meio: 'pix', valor: 50.00 },
