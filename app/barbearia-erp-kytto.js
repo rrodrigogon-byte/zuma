@@ -2961,7 +2961,7 @@ export function registrarPagamentoComandaBarbearia(empresaId, comandaId, dados =
   const subtotal = Number((comanda.itens || []).reduce((soma, item) => soma + Number(item.subtotal || 0), 0).toFixed(2));
   const desconto = Number(Math.min(subtotal, Math.max(0, Number(comanda.desconto || 0))).toFixed(2));
   const total = Number(Math.max(0, subtotal - desconto + Math.max(0, Number(comanda.gorjeta || 0))).toFixed(2));
-  const pagamentosEntrada = Array.isArray(dados.pagamentos) && dados.pagamentos.length ? dados.pagamentos : [{ meio: dados.meioPagamento ?? dados.meio_pagamento, valor: dados.valor }];
+  const pagamentosEntrada = Array.isArray(dados.pagamentos) && dados.pagamentos.length ? dados.pagamentos : [{ meio: dados.meio ?? dados.meioPagamento ?? dados.meio_pagamento, valor: dados.valor }];
   const lojaIdOperacao = texto(dados.lojaId ?? comanda.lojaId, 120) || null;
   const clienteId = texto(dados.clienteId ?? dados.cliente_id ?? comanda.clienteId, 120) || null;
   // Saldo considera o que já foi faturado (inclusive lançado em conta), não só o recebido.
@@ -3024,7 +3024,8 @@ export function registrarPagamentoComandaBarbearia(empresaId, comandaId, dados =
       if (!caixa || caixa.status !== 'aberto' || (lojaIdOperacao && caixa.lojaId !== lojaIdOperacao)) throw new Error('O caixa informado não está aberto ou não pertence à unidade ativa.');
     }
     const bandeira = texto(item?.bandeira ?? item?.cardBrand, 50) || null;
-    return { id: texto(item?.id, 120) || `pagbar-${crypto.randomUUID()}`, meio, bandeira, valor, caixaId, ...(meio === 'dinheiro' && !caixaId ? { semCaixa: true } : {}), chaveIdempotencia: texto(item?.chaveIdempotencia ?? item?.chave_idempotencia ?? chaveIdempotencia, 220) || null, registradoEm: dataAtual() };
+    const dataReg = dados.data ? `${String(dados.data).slice(0, 10)}T12:00:00.000Z` : dataAtual();
+    return { id: texto(item?.id, 120) || `pagbar-${crypto.randomUUID()}`, meio, bandeira, valor, caixaId, ...(meio === 'dinheiro' && !caixaId ? { semCaixa: true } : {}), chaveIdempotencia: texto(item?.chaveIdempotencia ?? item?.chave_idempotencia ?? chaveIdempotencia, 220) || null, registradoEm: dataReg };
   });
   const valorNovo = Number(pagamentos.reduce((soma, item) => soma + item.valor, 0).toFixed(2));
   if (valorNovo - saldoAnterior > 0.02) throw new Error(`O pagamento excede o saldo pendente de ${saldoAnterior.toFixed(2)}.`);
@@ -3121,7 +3122,7 @@ export function registrarPagamentoComandaBarbearia(empresaId, comandaId, dados =
   }
   if (faturada && !reservaComitada.committed) aplicarConsumoInternoComanda(estado, comanda, consumoPlanejado);
   comanda.atualizadoEm = dataAtual();
-  if (faturada) comanda.fechadaEm = comanda.atualizadoEm;
+  if (faturada) comanda.fechadaEm = dados.data ? `${String(dados.data).slice(0, 10)}T12:00:00.000Z` : comanda.atualizadoEm;
   if (faturada && !possuiConta && clienteId && comanda.totalPago > Number(comanda.fidelidadeValorPontuado || 0)) {
     const valorElegivel = Number((comanda.totalPago - Number(comanda.fidelidadeValorPontuado || 0)).toFixed(2));
     const credito = canaisFidelidadeKytto.creditarFidelidade(empresaId, clienteId, valorElegivel, 'barbearia_comanda', {

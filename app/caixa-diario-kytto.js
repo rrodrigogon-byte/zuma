@@ -37,7 +37,7 @@ function serializarCaixa(caixa) {
 
 export function abrirCaixa(empresaId, dados = {}) {
   const store = storeEmpresa(empresaId);
-  const data = dataDia(dados.dataOperacao);
+  const data = dataDia(dados.dataOperacao ?? dados.data);
   const lojaId = texto(dados.lojaId ?? dados.loja_id, 120) || null;
   let numeroCaixa = Math.floor(Number(dados.numeroCaixa ?? dados.numero_caixa));
   if (!Number.isInteger(numeroCaixa) || numeroCaixa < 1) {

@@ -150,7 +150,8 @@ export function obterFechamentoDiarioEConciliacao(empresaId, dataParam, options 
   // Inclui caixas esquecidos/abertos de turnos anteriores que continuam aguardando fechamento
   const todosCaixasEmpresa = caixaKytto.listarCaixas(empresa, { lojaId }) || [];
   for (const c of todosCaixasEmpresa) {
-    if (c.status === 'aberto' && !caixas.some((exist) => exist.id === c.id)) {
+    const dFechamento = String(c.fechadoEm || c.abertoEm || c.criadoEm || '').slice(0, 10);
+    if ((c.status === 'aberto' || dFechamento === data) && !caixas.some((exist) => exist.id === c.id)) {
       caixas.push(c);
     }
   }
@@ -582,7 +583,13 @@ export function executarFechamentoDiarioIntegrado(empresaId, dados = {}) {
   // 1. Opcionalmente fecha todos os caixas abertos da empresa na data
   let caixasFechadosCount = 0;
   if (dados.fecharCaixasAbertos !== false) {
-    const caixas = caixaKytto.listarCaixas(empresa, { data, lojaId }) || [];
+    let caixas = caixaKytto.listarCaixas(empresa, { data, lojaId }) || [];
+    const todosCaixasEmpresa = caixaKytto.listarCaixas(empresa, { lojaId }) || [];
+    for (const c of todosCaixasEmpresa) {
+      if (c.status === 'aberto' && !caixas.some((exist) => exist.id === c.id)) {
+        caixas.push(c);
+      }
+    }
     for (const c of caixas) {
       if (c.status === 'aberto') {
         const valEsp = c.valorEsperadoAtual != null ? c.valorEsperadoAtual : (c.valorAbertura || 0);
@@ -733,7 +740,13 @@ export function reabrirFechamentoDiarioIntegrado(empresaId, dados = {}) {
   // 2. Opcionalmente reabre os caixas fechados da data
   let caixasReabertosCount = 0;
   if (dados.reabrirCaixas !== false) {
-    const caixas = caixaKytto.listarCaixas(empresa, { data, lojaId }) || [];
+    let caixas = caixaKytto.listarCaixas(empresa, { data, lojaId }) || [];
+    const todosCaixasEmpresa = caixaKytto.listarCaixas(empresa, { lojaId }) || [];
+    for (const c of todosCaixasEmpresa) {
+      if (!caixas.some((exist) => exist.id === c.id)) {
+        caixas.push(c);
+      }
+    }
     for (const c of caixas) {
       if (c.status === 'fechado') {
         try {
