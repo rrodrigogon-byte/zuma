@@ -480,13 +480,13 @@ export async function availability(scope, input = {}) {
 // descartado no envio pela conferência da agenda).
 function notificarDepois(contexto, agendamento, evento) {
   setImmediate(async () => {
-    // Aviso no celular do profissional (app do barbeiro) também para ações feitas pela IA.
+    // Aviso no celular do profissional (app do barbeiro) para ações da agenda/IA.
     const legado = contexto.legacyEmpresaId || contexto.empresaId;
     const servicoNome = agendamento.servicoNome || barbearia.listarServicos(legado, { incluirInativos: true }).find((s) => s.id === agendamento.servicoId)?.nome || '';
     await notificarEquipe(legado, agendamento, evento, { servicoNome }).catch(() => null);
     if (evento === 'remarcado' || evento === 'cancelado') await cancelPendingAppointmentNotifications(contexto, agendamento.id).catch(() => null);
-    // Nota: O lembrete oficial de véspera (1 dia antes) e de dia (manhã) é gerenciado deterministicamente
-    // pelo dino-confirmacao-diaria.js e pelo agendamento da fila. Nunca disparar lembrete imediato no mesmo minuto da confirmação no WhatsApp.
+    // NÃO dispara lembrete imediato aqui: o agendamento acabou de ser confirmado no chat com o código.
+    // O lembrete oficial de véspera e de dia é gerenciado pelo dino-confirmacao-diaria.js e pelo agendamento da fila.
   });
 }
 
@@ -604,12 +604,12 @@ function criarNaAgendaDaBarbearia(scope, input = {}) {
 function agendamentosDoTelefone(empresa, phone, { includePast = false, lojaId, toleranceHours = 4 } = {}) {
   const chave = phoneMatchKey(phone);
   const unidade = limpo(lojaId, 120);
-  if (!chave || !unidade) return [];
+  if (!chave) return [];
   const agora = Date.now();
   const diaHoje = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Cuiaba' }).format(new Date(agora));
   const limitePassado = includePast ? 0 : agora - (Number(toleranceHours) || 0) * 3600000;
   return barbearia.listarAgendamentos(empresa, {})
-    .filter((item) => String(item.lojaId || '') === unidade)
+    .filter((item) => !unidade || !item.lojaId || String(item.lojaId) === unidade)
     .filter((item) => phoneMatchKey(item.clienteTelefone) === chave)
     .filter((item) => !['cancelado', 'nao_compareceu'].includes(item.status))
     .filter((item) => includePast || item.dataAgenda === diaHoje || instanteAgendamento(item) >= limitePassado);

@@ -1704,7 +1704,9 @@ async function toolPreparePromotion(context, args = {}) {
 // (age-...). Em 30/10 "pode cancelar esse corte de amanhã" voltou "não encontrei" logo depois
 // de marcar. Aceita id, código ou, se o contato tem um único horário futuro, esse horário.
 export function findOwnAppointment(appointments = [], ref = '') {
-  const lista = (appointments || []).filter((item) => !['cancelado', 'concluido', 'nao_compareceu'].includes(String(item?.status)));
+  const lista = (appointments || [])
+    .filter((item) => !['cancelado', 'concluido', 'nao_compareceu'].includes(String(item?.status)))
+    .sort((a, b) => new Date(a.dataHora).valueOf() - new Date(b.dataHora).valueOf());
   const alvo = String(ref || '').trim();
   if (alvo) {
     const norm = alvo.replace(/^#/, '').toLowerCase();
@@ -1715,7 +1717,8 @@ export function findOwnAppointment(appointments = [], ref = '') {
       || lista.find((item) => String(item.profissional?.nome || '').toLowerCase().includes(norm));
     if (achado) return achado;
   }
-  return lista.length === 1 ? lista[0] : null;
+  // Se não foi informada referência, prioriza o próximo agendamento cronológico ativo
+  return lista.length ? lista[0] : null;
 }
 
 function appointmentNotFound(appointments = []) {

@@ -1,4 +1,4 @@
-import { isWhatsappOptOutText, phoneMatchKey } from './whatsapp-phone.js';
+import { isWhatsappOptOutText, phoneMatchKey, phoneMatchKeySql } from './whatsapp-phone.js';
 import { createHash } from 'node:crypto';
 import { db as legacyDb, save as legacySave } from '../db.js';
 import * as barbearia from '../barbearia-erp-kytto.js';
@@ -661,12 +661,13 @@ export async function processAppointmentNotificationTask(task = {}) {
       WHERE id = $1 AND status = 'processando' AND lease_token = $2::uuid`,
     [task.id, task.lease_token],
   );
+  const textoMsg = mensagem(snapshot, agendamento, elegibilidade.cliente, evento, resolvePersona(canal.configuracao, process.env, task.empresa_id));
   const resultado = await enviarMensagem({
     whatsapp_api_url: process.env.EVOLUTION_API_URL || canal.api_base_url,
     whatsapp_api_key: process.env.EVOLUTION_API_KEY,
     whatsapp_instance: canal.configuracao?.instance || process.env.EVOLUTION_INSTANCE,
     empresa_id: task.empresa_id, loja_id: task.loja_id, canal_id: task.canal_id,
-  }, elegibilidade.telefone, mensagem(snapshot, agendamento, elegibilidade.cliente, evento, resolvePersona(canal.configuracao, process.env, task.empresa_id)));
+  }, elegibilidade.telefone, textoMsg);
   if (!resultado?.ok) {
     const unknown = resultado?.uncertain === true;
     if (!unknown) await db.query(`UPDATE tarefas_integracao_canais SET delivery_started_at = NULL WHERE id = $1`, [task.id]);
@@ -674,6 +675,32 @@ export async function processAppointmentNotificationTask(task = {}) {
   }
   const providerMessageId = limpo(resultado?.data?.key?.id || resultado?.data?.id, 200) || null;
   await db.query(`UPDATE tarefas_integracao_canais SET provider_message_id = $2 WHERE id = $1`, [task.id, providerMessageId]);
+
+  // Registra no histórico de conversa da sessão para que o T-Rex saiba que o último envio foi um lembrete/confirmação
+  try {
+    const sessaoRes = await db.query(
+      `SELECT id FROM whatsapp_ai_sessions WHERE canal_id = $1 AND ${phoneMatchKeySql('telefone')} = ${phoneMatchKeySql('$2')} LIMIT 1`,
+      [task.canal_id, elegibilidade.telefone]
+    );
+    const sessaoId = sessaoRes.rows[0]?.id;
+    if (sessaoId) {
+      await db.query(
+        `INSERT INTO whatsapp_ai_messages
+          (empresa_id, loja_id, canal_id, sessao_id, direcao, papel, evento_externo_id, conteudo, metadados, delivery_status, delivered_at)
+         VALUES ($1, $2, $3, $4, 'saida', 'assistant', $5, $6, $7::jsonb, 'sent', CURRENT_TIMESTAMP)
+         ON CONFLICT (canal_id, evento_externo_id) WHERE evento_externo_id IS NOT NULL DO NOTHING`,
+        [task.empresa_id, task.loja_id, task.canal_id, sessaoId, `notif:${appointmentId}:${evento}:${Date.now()}`, textoMsg, JSON.stringify({ kind: 'reminder', tipo: evento, appointmentId })]
+      );
+      await db.query(
+        `UPDATE whatsapp_ai_sessions
+            SET estado = estado || $1::jsonb, atualizado_em = CURRENT_TIMESTAMP
+          WHERE id = $2`,
+        [JSON.stringify({ ultimoLembreteEnviadoEm: new Date().toISOString(), ultimoAgendamentoLembradoId: appointmentId }), sessaoId]
+      );
+    }
+  } catch (errGravar) {
+    // Gravação da mensagem não interrompe a tarefa concluída com sucesso
+  }
   if (snapshot.configuracao?.confirmacaoAutomaticaAtiva === true && evento === 'lembrete') {
     barbearia.registrarConfirmacaoAutomaticaEnviada(legacyEmpresaId, appointmentId, 'primeira', { lojaId: task.loja_id, enviadoEm: new Date() });
   } else if (evento === EVENTO_CONFIRMACAO_DIA) {
