@@ -452,10 +452,10 @@ export async function availability(scope, input = {}) {
   }
   const ehDino = barbearia.ehProfissionalDino(profissional) || String(servico?.nome || '').toLowerCase().includes('dino');
   const tabelaValores = ehDino ? {
-    tipo: 'dino_24x7',
-    diurno: 'R$ 300,00 (06h00 às 18h09)',
-    noturnoExtra: 'R$ 600,00 (após 18h09 até as 06h00 da manhã)',
-    orientacaoHumana: 'Sempre alerte o cliente com simpatia e transparência sobre o valor do corte com Dino (R$ 300 diurno ou R$ 600 em horário extra noturno/madrugada) antes de fechar o agendamento.',
+    tipo: 'dino',
+    diurno: 'R$ 300,00 (08h00 às 18h00)',
+    noturnoExtra: 'R$ 600,00 (atendimento exclusivo fora do expediente regular)',
+    orientacaoHumana: 'Sempre alerte o cliente com simpatia e transparência sobre o valor do corte com Dino (R$ 300 no expediente normal das 08h às 18h ou R$ 600 em horário extra) antes de fechar o agendamento.',
   } : {
     tipo: 'padrao',
     valor: `R$ ${Number(servico.preco || 0).toFixed(2).replace('.', ',')}`,
@@ -485,7 +485,8 @@ function notificarDepois(contexto, agendamento, evento) {
     const servicoNome = agendamento.servicoNome || barbearia.listarServicos(legado, { incluirInativos: true }).find((s) => s.id === agendamento.servicoId)?.nome || '';
     await notificarEquipe(legado, agendamento, evento, { servicoNome }).catch(() => null);
     if (evento === 'remarcado' || evento === 'cancelado') await cancelPendingAppointmentNotifications(contexto, agendamento.id).catch(() => null);
-    if (evento !== 'cancelado') await queueAppointmentNotifications(contexto, agendamento, 'lembrete').catch(() => null);
+    // Nota: O lembrete oficial de véspera (1 dia antes) e de dia (manhã) é gerenciado deterministicamente
+    // pelo dino-confirmacao-diaria.js e pelo agendamento da fila. Nunca disparar lembrete imediato no mesmo minuto da confirmação no WhatsApp.
   });
 }
 

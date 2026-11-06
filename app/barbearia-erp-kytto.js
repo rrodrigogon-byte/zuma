@@ -3493,8 +3493,10 @@ export function listarHorariosDisponiveis(empresaId, dados = {}) {
   const contexto = contextoDisponibilidadePublica(empresaId, dados);
   if (contexto.profissionais.length === 0) return [];
   const ehDino = contexto.profissionais.length === 1 && ehProfissionalDino(contexto.profissionais[0]);
-  const abertura = ehDino ? 0 : minutosHoraPublica(contexto.calendario.horarioAbertura);
-  const fechamento = ehDino ? 1440 : minutosHoraPublica(contexto.calendario.horarioFechamento);
+  const aberturaLoja = minutosHoraPublica(contexto.calendario.horarioAbertura || "08:00");
+  const fechamentoLoja = minutosHoraPublica(contexto.calendario.horarioFechamento || "20:00");
+  const abertura = (ehDino && dados.permitirMadrugada === true) ? 0 : aberturaLoja;
+  const fechamento = (ehDino && dados.permitirMadrugada === true) ? 1440 : fechamentoLoja;
   const intervalo = Math.max(5, Number(contexto.calendario.intervaloMinutos || 15));
   if (!Number.isFinite(abertura) || !Number.isFinite(fechamento) || fechamento <= abertura) throw new Error('Horário de funcionamento inválido.');
   const duracao = contexto.profissionais.length === 1

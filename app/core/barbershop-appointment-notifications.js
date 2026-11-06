@@ -190,7 +190,16 @@ export async function queueAppointmentNotifications(contexto = {}, agendamento =
       );
     }
     let queued = 0;
-    queued += await inserirTarefa(trx, { empresaId, lojaId, canalId: canal.id, legacyEmpresaId, agendamento, evento, executarEm: new Date() });
+    if (evento === "lembrete") {
+      const lembreteAlvo = dataHora ? dataHora.valueOf() - 24 * 60 * 60 * 1000 : null;
+      if (lembreteAlvo && lembreteAlvo > Date.now() + 5 * 60 * 1000) {
+        queued += await inserirTarefa(trx, { empresaId, lojaId, canalId: canal.id, legacyEmpresaId, agendamento, evento: "lembrete", executarEm: new Date(lembreteAlvo) });
+      } else if (lembreteAlvo && Math.abs(Date.now() - lembreteAlvo) <= 24 * 60 * 60 * 1000) {
+        queued += await inserirTarefa(trx, { empresaId, lojaId, canalId: canal.id, legacyEmpresaId, agendamento, evento: "lembrete", executarEm: new Date() });
+      }
+    } else {
+      queued += await inserirTarefa(trx, { empresaId, lojaId, canalId: canal.id, legacyEmpresaId, agendamento, evento, executarEm: new Date() });
+    }
     if (['criado', 'remarcado'].includes(evento) && String(agendamento.status) === 'agendado') {
       const autoConfirm = barbearia.obterConfiguracao(legacyEmpresaId)?.confirmacaoAutomaticaAtiva === true;
       const ehOrigemWhatsapp = agendamento.origem === 'whatsapp_ia';
