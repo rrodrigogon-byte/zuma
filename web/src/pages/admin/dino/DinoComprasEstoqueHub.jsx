@@ -16,6 +16,8 @@ import { moneyK } from './format';
 import Modal from '../../../components/Modal';
 import DinoFichaItemModal from './DinoFichaItemModal';
 import DinoCadastrosIncompletosModal from './DinoCadastrosIncompletosModal';
+import DinoCotacoesPanel from './DinoCotacoesPanel';
+import DinoCurvaAbcPanel from './DinoCurvaAbcPanel';
 
 const styles = {
   container: { display: 'grid', gap: 16 },
@@ -94,7 +96,9 @@ const styles = {
 
 const MODULOS = [
   { id: 'compras', label: 'Compras e fornecedores', icon: '🚚' },
+  { id: 'cotacoes', label: 'Cotações & RFQ', icon: '📑' },
   { id: 'estoque', label: 'Estoque', icon: '📦' },
+  { id: 'curva_abc', label: 'Curva ABC & Giro', icon: '📊' },
   { id: 'perdas', label: 'Perdas e inventário', icon: '🧾' },
   { id: 'fichas', label: 'Fichas técnicas', icon: '🧪' },
   { id: 'cadastros', label: 'Fornecedores e funcionários', icon: '🗂️' },
@@ -118,6 +122,11 @@ export default function DinoComprasEstoqueHub({
     'estoque': 'estoque',
     'Compras e fornecedores': 'compras',
     'compras': 'compras',
+    'cotacoes': 'cotacoes',
+    'Cotações': 'cotacoes',
+    'Cotações & RFQ': 'cotacoes',
+    'curva_abc': 'curva_abc',
+    'Curva ABC': 'curva_abc',
     'Perdas e inventário': 'perdas',
     'perdas': 'perdas',
     'Fichas técnicas': 'fichas',
@@ -147,6 +156,7 @@ export default function DinoComprasEstoqueHub({
   // Compras, Pedidos e Fornecedores
   const [fornecedores, setFornecedores] = useState([]);
   const [pedidos, setPedidos] = useState([]);
+  const [cotacoes, setCotacoes] = useState([]);
   const [reposicao, setReposicao] = useState({ itens: [], totalEstimado: 0 });
 
   // Perdas e Inventário
@@ -386,6 +396,7 @@ export default function DinoComprasEstoqueHub({
         fichasRes,
         mestresFornRes,
         mestresFuncRes,
+        cotacoesRes,
       ] = await Promise.all([
         api.get('/api/admin/estoque').catch(() => ({ estoque: [] })),
         api.get('/api/admin/barbearia/compras/fornecedores').catch(() => ({ fornecedores: [] })),
@@ -397,6 +408,7 @@ export default function DinoComprasEstoqueHub({
         api.get('/api/admin/fichas-tecnicas').catch(() => ({ fichas: [] })),
         api.get(a2Path('/fornecedores')).catch(() => ({ fornecedores: [] })),
         api.get(a2Path('/funcionarios')).catch(() => ({ funcionarios: [] })),
+        api.get('/api/admin/barbearia/compras/cotacoes').catch(() => ({ cotacoes: [] })),
       ]);
 
       const listaEst = Array.isArray(estoqueRes) ? estoqueRes : (estoqueRes.estoque || []);
@@ -406,6 +418,7 @@ export default function DinoComprasEstoqueHub({
       const listaForn = (fornRes.fornecedores && fornRes.fornecedores.length > 0) ? fornRes.fornecedores : (mestresFornRes.fornecedores || []);
       setFornecedores(listaForn);
       setPedidos(pedRes.pedidos || []);
+      setCotacoes(cotacoesRes?.cotacoes || []);
       setReposicao(repRes || { itens: [], totalEstimado: 0 });
 
       setOcorrencias(ocoRes.ocorrencias || []);
@@ -826,6 +839,11 @@ export default function DinoComprasEstoqueHub({
               badgeTexto = `${kpis.acuracidade}% acurácia`;
             } else if (mod.id === 'fichas') {
               badgeTexto = kpis.totalFichas;
+            } else if (mod.id === 'cotacoes') {
+              const abertas = cotacoes.filter(c => c.status === 'em_aberto' || c.status === 'com_propostas').length;
+              if (abertas > 0) { badgeTexto = `${abertas} ativas`; badgeAlerta = true; }
+            } else if (mod.id === 'curva_abc') {
+              badgeTexto = 'ABC';
             } else if (mod.id === 'cadastros') {
               badgeTexto = fornecedores.length + funcionarios.length;
             }
@@ -1027,6 +1045,19 @@ export default function DinoComprasEstoqueHub({
             </div>
           </div>
         </div>
+      )}
+
+
+      {/* ── SUBMÓDULO: 📑 COTAÇÕES DE PREÇOS (RFQ) & MAPA COMPARATIVO ── */}
+      {abaAtiva === 'cotacoes' && (
+        <DinoCotacoesPanel
+          cotacoes={cotacoes}
+          fornecedores={fornecedores}
+          produtos={produtosRevenda.length > 0 ? produtosRevenda : estoqueGeral}
+          onAtualizar={sincronizar}
+          fmtR={fmtR}
+          toast={toast}
+        />
       )}
 
       {/* ── SUBMÓDULO 2: 🚚 COMPRAS E FORNECEDORES ── */}
@@ -1318,6 +1349,12 @@ export default function DinoComprasEstoqueHub({
             </div>
           </div>
         </div>
+      )}
+
+
+      {/* ── SUBMÓDULO: 📊 CURVA ABC & GIRO DE ESTOQUE ── */}
+      {abaAtiva === 'curva_abc' && (
+        <DinoCurvaAbcPanel fmtR={fmtR} toast={toast} />
       )}
 
       {/* ── SUBMÓDULO 3: 🧾 PERDAS E INVENTÁRIO ── */}

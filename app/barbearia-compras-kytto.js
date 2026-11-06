@@ -64,6 +64,8 @@ function estado(empresaId) {
   atual.transacoesEntrada ||= {};
   atual.vinculos ||= {};
   atual.sequenciaPedido = Number(atual.sequenciaPedido || 0);
+  atual.cotacoes ||= {};
+  atual.sequenciaCotacao = Number(atual.sequenciaCotacao || 0);
 
   // Seed Fornecedores
   if (Object.keys(atual.fornecedores).length === 0) {
@@ -1057,4 +1059,262 @@ export function curvaAbc(empresaId, { dias = 90, criterio = 'receita', lojaId = 
     semCusto: linhas.filter((l) => l.semCusto).length,
     linhas,
   };
+}
+
+
+// ── COTAÇÕES DE PREÇOS (RFQ) & MAPA COMPARATIVO MULTIFORNECEDOR ───────────
+
+export function proximoNumeroCotacao(atual) {
+  atual.sequenciaCotacao = Number(atual.sequenciaCotacao || 0) + 1;
+  return `COT-${String(atual.sequenciaCotacao).padStart(5, "0")}`;
+}
+
+export function listarCotacoes(empresaId, opcoes = {}) {
+  const est = estado(empresaId);
+  const escopo = lojaEscopo(opcoes.lojaId);
+  const lista = Object.values(est.cotacoes || {})
+    .filter((c) => registroNaUnidade(c, escopo))
+    .sort((a, b) => new Date(b.criadoEm || 0) - new Date(a.criadoEm || 0));
+  return lista.map((c) => ({
+    ...c,
+    qtdItens: (c.itens || []).length,
+    qtdFornecedoresConvidados: (c.fornecedoresConvidados || []).length,
+    qtdPropostasRecebidas: Object.keys(c.propostas || {}).length
+  }));
+}
+
+export function obterCotacao(empresaId, cotacaoId, opcoes = {}) {
+  const est = estado(empresaId);
+  const c = est.cotacoes?.[String(cotacaoId)];
+  if (!c) throw new ComprasError("Cotação não encontrada.", "COTACAO_NAO_ENCONTRADA", 404);
+  return { ...c };
+}
+
+export function criarCotacao(empresaId, dados = {}, opcoes = {}) {
+  const est = estado(empresaId);
+  const escopo = lojaEscopo(opcoes.lojaId || dados.lojaId);
+  const id = novoId("cot");
+  const numero = proximoNumeroCotacao(est);
+  const agora = agoraIso(opcoes);
+
+  const itens = Array.isArray(dados.itens) ? dados.itens.map((it, idx) => ({
+    id: it.id || `it-${idx + 1}`,
+    produtoId: it.produtoId || null,
+    nome: texto(it.nome, 160) || "Item em Cotação",
+    unidade: texto(it.unidade, 12) || "un",
+    quantidade: Math.max(1, Number(it.quantidade || 1)),
+    observacao: texto(it.observacao, 200)
+  })) : [];
+
+  if (itens.length === 0) {
+    throw new ComprasError("Informe ao menos um item para cotar.", "COTACAO_SEM_ITENS", 400);
+  }
+
+  const fornecedoresConvidados = Array.isArray(dados.fornecedores) ? dados.fornecedores.map((f) => ({
+    id: String(f.id || f.fornecedorId || ""),
+    nome: texto(f.nome || f.fornecedorNome, 160),
+    email: texto(f.email, 120),
+    telefone: texto(f.telefone, 30)
+  })).filter((f) => f.id || f.nome) : [];
+
+  const cotacao = {
+    id,
+    numero,
+    empresaId: String(empresaId),
+    lojaId: escopo || null,
+    titulo: texto(dados.titulo, 160) || `Cotação de Suprimentos #${numero}`,
+    descricao: texto(dados.descricao, 400),
+    prazoLimiteResposta: dados.prazoLimiteResposta || null,
+    status: "em_aberto", // em_aberto, com_propostas, finalizada, cancelada
+    itens,
+    fornecedoresConvidados,
+    propostas: {},
+    pedidoGeradoId: null,
+    fornecedorVencedorId: null,
+    criadoPor: texto(opcoes.usuario?.nome || opcoes.usuario?.email || dados.criadoPor, 120),
+    criadoEm: agora,
+    atualizadoEm: agora
+  };
+
+  est.cotacoes[id] = cotacao;
+  save();
+  return cotacao;
+}
+
+export function registrarPropostaCotacao(empresaId, cotacaoId, proposta = {}, opcoes = {}) {
+  const est = estado(empresaId);
+  const c = est.cotacoes?.[String(cotacaoId)];
+  if (!c) throw new ComprasError("Cotação não encontrada.", "COTACAO_NAO_ENCONTRADA", 404);
+  if (c.status === "finalizada" || c.status === "cancelada") {
+    throw new ComprasError("Não é possível lançar propostas em cotação finalizada ou cancelada.", "COTACAO_ENCERRADA", 400);
+  }
+
+  const fornecedorId = String(proposta.fornecedorId || proposta.id || novoId("forn-prop"));
+  const fornecedorNome = texto(proposta.fornecedorNome || proposta.nome, 160) || "Fornecedor";
+
+  const precosItens = {};
+  let subtotal = 0;
+
+  (c.itens || []).forEach((it) => {
+    const itProp = (proposta.itens || []).find((p) => p.itemCotacaoId === it.id || p.produtoId === it.produtoId) || {};
+    const precoUnitario = dinheiro(Math.max(0, Number(itProp.precoUnitario || itProp.valor || 0)));
+    const totalItem = dinheiro(precoUnitario * it.quantidade);
+    subtotal += totalItem;
+    precosItens[it.id] = {
+      precoUnitario,
+      totalItem,
+      marcaSugerida: texto(itProp.marcaSugerida || itProp.marca, 80),
+      prazoEntregaDias: Number(itProp.prazoEntregaDias || proposta.prazoEntregaDias || 0)
+    };
+  });
+
+  const freteTipo = texto(proposta.freteTipo || "cif", 10).toLowerCase() === "fob" ? "fob" : "cif";
+  const freteValor = freteTipo === "fob" ? dinheiro(Number(proposta.freteValor || 0)) : 0;
+  const valorTotal = dinheiro(subtotal + freteValor);
+
+  c.propostas ||= {};
+  c.propostas[fornecedorId] = {
+    fornecedorId,
+    fornecedorNome,
+    fornecedorCnpj: texto(proposta.fornecedorCnpj || proposta.cnpj, 25),
+    fornecedorTelefone: texto(proposta.fornecedorTelefone || proposta.telefone, 30),
+    fornecedorEmail: texto(proposta.fornecedorEmail || proposta.email, 120),
+    prazoEntregaDias: Number(proposta.prazoEntregaDias || 5),
+    condicaoPagamento: texto(proposta.condicaoPagamento, 80) || "Boleto 30 dias",
+    freteTipo,
+    freteValor,
+    precosItens,
+    subtotal: dinheiro(subtotal),
+    valorTotal,
+    observacoes: texto(proposta.observacoes, 300),
+    recebidaEm: agoraIso(opcoes)
+  };
+
+  if (c.status === "em_aberto") c.status = "com_propostas";
+  c.atualizadoEm = agoraIso(opcoes);
+  save();
+  return c;
+}
+
+export function mapaComparativoCotacao(empresaId, cotacaoId, opcoes = {}) {
+  const est = estado(empresaId);
+  const c = est.cotacoes?.[String(cotacaoId)];
+  if (!c) throw new ComprasError("Cotação não encontrada.", "COTACAO_NAO_ENCONTRADA", 404);
+
+  const propostasArray = Object.values(c.propostas || {});
+
+  // Comparação por Item
+  const matrizItens = (c.itens || []).map((it) => {
+    let menorPreco = Infinity;
+    let fornecedorMenorPreco = null;
+
+    const ofertas = propostasArray.map((p) => {
+      const precoInfo = p.precosItens?.[it.id] || { precoUnitario: 0, totalItem: 0 };
+      if (precoInfo.precoUnitario > 0 && precoInfo.precoUnitario < menorPreco) {
+        menorPreco = precoInfo.precoUnitario;
+        fornecedorMenorPreco = p.fornecedorId;
+      }
+      return {
+        fornecedorId: p.fornecedorId,
+        fornecedorNome: p.fornecedorNome,
+        precoUnitario: precoInfo.precoUnitario,
+        totalItem: precoInfo.totalItem,
+        marca: precoInfo.marcaSugerida
+      };
+    });
+
+    return {
+      itemId: it.id,
+      produtoId: it.produtoId,
+      nome: it.nome,
+      unidade: it.unidade,
+      quantidade: it.quantidade,
+      menorPreco: menorPreco === Infinity ? 0 : menorPreco,
+      fornecedorMenorPreco,
+      ofertas
+    };
+  });
+
+  // Ranking Global dos Fornecedores
+  const rankingFornecedores = propostasArray
+    .map((p) => ({
+      fornecedorId: p.fornecedorId,
+      fornecedorNome: p.fornecedorNome,
+      valorTotal: p.valorTotal,
+      subtotal: p.subtotal,
+      freteValor: p.freteValor,
+      freteTipo: p.freteTipo,
+      prazoEntregaDias: p.prazoEntregaDias,
+      condicaoPagamento: p.condicaoPagamento,
+      itensAtendidos: Object.values(p.precosItens || {}).filter((x) => x.precoUnitario > 0).length
+    }))
+    .sort((a, b) => a.valorTotal - b.valorTotal);
+
+  return {
+    cotacao: {
+      id: c.id,
+      numero: c.numero,
+      titulo: c.titulo,
+      status: c.status,
+      prazoLimiteResposta: c.prazoLimiteResposta,
+      qtdPropostas: propostasArray.length,
+      fornecedorVencedorId: c.fornecedorVencedorId,
+      pedidoGeradoId: c.pedidoGeradoId
+    },
+    matrizItens,
+    rankingFornecedores,
+    melhorPropostaGeral: rankingFornecedores[0] || null
+  };
+}
+
+export function aprovarCotacaoEGerarPedido(empresaId, cotacaoId, dadosAprovacao = {}, opcoes = {}) {
+  const est = estado(empresaId);
+  const c = est.cotacoes?.[String(cotacaoId)];
+  if (!c) throw new ComprasError("Cotação não encontrada.", "COTACAO_NAO_ENCONTRADA", 404);
+
+  const fornecedorId = dadosAprovacao.fornecedorId || c.fornecedorVencedorId;
+  const propostaVencedora = c.propostas?.[fornecedorId];
+  if (!propostaVencedora) {
+    throw new ComprasError("Proposta do fornecedor selecionado não encontrada nesta cotação.", "PROPOSTA_NAO_ENCONTRADA", 400);
+  }
+
+  // Montar itens do pedido de compra
+  const itensPedido = (c.itens || []).map((it) => {
+    const precoInfo = propostaVencedora.precosItens?.[it.id] || {};
+    const precoUnitario = precoInfo.precoUnitario || 0;
+    return {
+      produtoId: it.produtoId,
+      nome: it.nome,
+      unidade: it.unidade,
+      quantidade: it.quantidade,
+      precoUnitario,
+      desconto: 0,
+      total: dinheiro(precoUnitario * it.quantidade)
+    };
+  }).filter((it) => it.precoUnitario > 0);
+
+  const payloadPedido = {
+    fornecedorId: propostaVencedora.fornecedorId,
+    fornecedorNome: propostaVencedora.fornecedorNome,
+    fornecedorCnpj: propostaVencedora.fornecedorCnpj,
+    fornecedorTelefone: propostaVencedora.fornecedorTelefone,
+    fornecedorEmail: propostaVencedora.fornecedorEmail,
+    condicaoPagamento: propostaVencedora.condicaoPagamento,
+    freteTipo: propostaVencedora.freteTipo,
+    freteValor: propostaVencedora.freteValor,
+    observacoes: `Gerado automaticamente da Cotação de Preços ${c.numero}. ${dadosAprovacao.observacoes || ""}`.trim(),
+    itens: itensPedido,
+    origem: "cotacao",
+    cotacaoId: c.id
+  };
+
+  const pedidoCriado = criarPedido(empresaId, payloadPedido, { ...opcoes, lojaId: c.lojaId });
+
+  c.status = "finalizada";
+  c.fornecedorVencedorId = fornecedorId;
+  c.pedidoGeradoId = pedidoCriado.id;
+  c.atualizadoEm = agoraIso(opcoes);
+  save();
+
+  return { ok: true, cotacao: c, pedido: pedidoCriado };
 }

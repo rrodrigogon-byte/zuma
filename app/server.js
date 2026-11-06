@@ -6740,6 +6740,58 @@ app.get('/api/admin/barbearia/compras/curva-abc', (req, res) => {
   try { res.json({ ok: true, ...barbeariaComprasKytto.curvaAbc(legacyEmpresaId(req), { dias: req.query.dias, criterio: String(req.query.criterio || 'receita'), lojaId: legacyLojaId(req) }) }); } catch (error) { respostaComprasRepasses(res, error); }
 });
 
+// ── Cotações de Preços (RFQ) & Mapa Comparativo ────────────────────────────
+app.get('/api/admin/barbearia/compras/cotacoes', (req, res) => {
+  if (!gestaoDaUnidade(req, res)) return;
+  try {
+    const cotacoes = barbeariaComprasKytto.listarCotacoes(legacyEmpresaId(req), { lojaId: legacyLojaId(req) });
+    res.json({ ok: true, cotacoes });
+  } catch (error) { respostaComprasRepasses(res, error); }
+});
+
+app.get('/api/admin/barbearia/compras/cotacoes/:id', (req, res) => {
+  if (!gestaoDaUnidade(req, res)) return;
+  try {
+    const cotacao = barbeariaComprasKytto.obterCotacao(legacyEmpresaId(req), req.params.id, { lojaId: legacyLojaId(req) });
+    res.json({ ok: true, cotacao });
+  } catch (error) { respostaComprasRepasses(res, error); }
+});
+
+app.post('/api/admin/barbearia/compras/cotacoes', (req, res) => {
+  if (!gestaoDaUnidade(req, res)) return;
+  try {
+    const cotacao = barbeariaComprasKytto.criarCotacao(legacyEmpresaId(req), req.body || {}, { lojaId: legacyLojaId(req), usuario: usuarioReq(req) });
+    audit(req, 'COTACAO CRIADA', `${cotacao.numero} itens=${cotacao.itens.length}`);
+    res.status(201).json({ ok: true, cotacao });
+  } catch (error) { respostaComprasRepasses(res, error); }
+});
+
+app.post('/api/admin/barbearia/compras/cotacoes/:id/propostas', (req, res) => {
+  if (!gestaoDaUnidade(req, res)) return;
+  try {
+    const cotacao = barbeariaComprasKytto.registrarPropostaCotacao(legacyEmpresaId(req), req.params.id, req.body || {}, { lojaId: legacyLojaId(req), usuario: usuarioReq(req) });
+    audit(req, 'PROPOSTA COTACAO REGISTRADA', `${cotacao.numero} fornecedor=${req.body?.fornecedorNome}`);
+    res.json({ ok: true, cotacao });
+  } catch (error) { respostaComprasRepasses(res, error); }
+});
+
+app.get('/api/admin/barbearia/compras/cotacoes/:id/mapa-comparativo', (req, res) => {
+  if (!gestaoDaUnidade(req, res)) return;
+  try {
+    const mapa = barbeariaComprasKytto.mapaComparativoCotacao(legacyEmpresaId(req), req.params.id, { lojaId: legacyLojaId(req) });
+    res.json({ ok: true, ...mapa });
+  } catch (error) { respostaComprasRepasses(res, error); }
+});
+
+app.post('/api/admin/barbearia/compras/cotacoes/:id/aprovar', (req, res) => {
+  if (!gestaoDaUnidade(req, res)) return;
+  try {
+    const resultado = barbeariaComprasKytto.aprovarCotacaoEGerarPedido(legacyEmpresaId(req), req.params.id, req.body || {}, { lojaId: legacyLojaId(req), usuario: usuarioReq(req) });
+    audit(req, 'COTACAO APROVADA PEDIDO GERADO', `${resultado.cotacao.numero} -> ${resultado.pedido.numero}`);
+    res.json({ ok: true, ...resultado });
+  } catch (error) { respostaComprasRepasses(res, error); }
+});
+
 // ── Comissões: extrato, vales, repasses com recibo e pote dos planos ────────
 app.get('/api/admin/barbearia/comissoes/extrato', (req, res) => {
   if (!gestaoDaUnidade(req, res)) return;
