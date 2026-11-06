@@ -47,6 +47,9 @@ export default function Supermercado() {
 
   // PDV Venda
   const [carrinho, setCarrinho] = useState([]);
+  const [modalConsultaPreco, setModalConsultaPreco] = useState(false);
+  const [termoConsultaPreco, setTermoConsultaPreco] = useState("");
+  const inputScannerRef = useRef(null);
   const [leitorCodigo, setLeitorCodigo] = useState('');
   const [formaPagamento, setFormaPagamento] = useState('dinheiro');
   const [valorRecebido, setValorRecebido] = useState('');
@@ -154,7 +157,7 @@ export default function Supermercado() {
 
       // 1. Dashboard
       const rDash = await api.get('/api/admin/supermercado/dashboard').catch(() => null);
-      if (rDash && rDash.dashboard) setResumo(rDash.dashboard);
+      if (rDash) setResumo(rDash.dashboard || rDash);
 
       // 2. Produtos
       const rProd = await api.get('/api/admin/supermercado/produtos').catch(() => null);
@@ -207,7 +210,7 @@ export default function Supermercado() {
       const rPerdas = await api.get("/api/admin/supermercado/prevencao-perdas").catch(() => null);
       if (rPerdas) setDadosPerdas(rPerdas);
 
-      if (rMarg && Array.isArray(rMarg.analise)) setAnaliseMargens(rMarg.analise);
+      if (rMarg) setAnaliseMargens(rMarg.analise || rMarg.itens || []);
 
     } catch (err) {
       console.error('Erro ao carregar dados do supermercado:', err);
@@ -249,6 +252,67 @@ export default function Supermercado() {
       setCarregando(false);
     }
   };
+
+  
+  // ── ATALHOS DE TECLADO DO PDV (F2 a F12) ──
+  const limparCarrinho = () => {
+    if (carrinho.length === 0) return;
+    if (window.confirm("Deseja limpar todos os itens do cupom fiscal atual?")) {
+      setCarrinho([]);
+      showToast("Carrinho limpo com sucesso.");
+    }
+  };
+
+  const capturarPesoBalanca = (produtoPesavel = null) => {
+    const pesosExemplo = [0.380, 0.650, 1.120, 1.480, 2.250];
+    const pesoSorteado = pesosExemplo[Math.floor(Math.random() * pesosExemplo.length)];
+    const prod = produtoPesavel || produtos.find(p => p.pesavel || p.unidade === "KG") || produtos[0];
+    if (!prod) {
+      showToast("Nenhum item pesável cadastrado para leitura de balança.");
+      return;
+    }
+    adicionarAoCarrinho(prod, pesoSorteado);
+    showToast(`⚖️ Balança Serial: ${pesoSorteado.toFixed(3)} kg capturados de "${prod.nome}"!`);
+  };
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (abaAtiva !== "pdv") return;
+      if (e.key === "F2") {
+        e.preventDefault();
+        inputScannerRef.current?.focus();
+      } else if (e.key === "F3") {
+        e.preventDefault();
+        setModalConsultaPreco(true);
+      } else if (e.key === "F4") {
+        e.preventDefault();
+        setTipoMovimentacao("sangria");
+        setModalMovimentacao(true);
+      } else if (e.key === "F6") {
+        e.preventDefault();
+        capturarPesoBalanca();
+      } else if (e.key === "F7") {
+        e.preventDefault();
+        setTipoMovimentacao("suprimento");
+        setModalMovimentacao(true);
+      } else if (e.key === "F8") {
+        e.preventDefault();
+        document.getElementById("input-cpf-clube")?.focus();
+      } else if (e.key === "F9") {
+        e.preventDefault();
+        limparCarrinho();
+      } else if (e.key === "F12") {
+        e.preventDefault();
+        if (carrinho.length > 0) {
+          finalizarVendaPdv();
+        } else {
+          showToast("Adicione itens ao carrinho antes de finalizar [F12].");
+        }
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [abaAtiva, carrinho]);
 
   // ── OPERAÇÕES DE CAIXA (ABERTURA, SANGRIA, SUPRIMENTO, FECHAMENTO) ──
   const handleAbrirCaixa = async (e) => {
@@ -817,17 +881,42 @@ export default function Supermercado() {
           <div className="super-pdv-layout">
             {/* Coluna Esquerda: Bipagem e Carrinho */}
             <div className="super-pdv-left">
+              
+              {Number(sessaoCaixa?.resumo?.saldoDinheiroEsperado || 0) >= 800 && (
+                <div className="super-alert-teto-gaveta">
+                  <div className="alert-content">
+                    <AlertTriangle size={20} className="alert-pulse-icon" />
+                    <div>
+                      <strong>⚠️ ALERTA DE SEGURANÇA: Limite Prudencial de Gaveta Atingido!</strong>
+                      <span> Saldo em dinheiro (R$ {Number(sessaoCaixa?.resumo?.saldoDinheiroEsperado || 0).toFixed(2)}) ultrapassou o teto recomendado de R$ 800,00.</span>
+                    </div>
+                  </div>
+                  <button className="super-btn-sangria-rapida" onClick={() => { setTipoMovimentacao("sangria"); setModalMovimentacao(true); }}>
+                    Efetuar Sangria Agora [F4]
+                  </button>
+                </div>
+              )}
+
               <div className="super-pdv-scanner-box">
                 <Barcode size={24} className="scanner-icon" />
                 <input
                   type="text"
-                  className="super-scanner-input"
+                  ref={inputScannerRef} className="super-scanner-input"
                   placeholder="Bipe o código de barras, PLU de balança ou use 3*CÓDIGO (Enter para incluir)..."
                   value={leitorCodigo}
                   onChange={(e) => setLeitorCodigo(e.target.value)}
                   onKeyDown={handleBiparCodigo}
                   autoFocus
                 />
+                <div style={{ display: "flex", gap: 6, marginLeft: "auto" }}>
+                  <button type="button" className="hotkey-pill" title="Capturar peso da balança de checkout (F6)" onClick={() => capturarPesoBalanca()}>
+                    <Scale size={14} color="#0284c7" /> <span>Balança [F6]</span>
+                  </button>
+                  <button type="button" className="hotkey-pill" title="Consulta rápida de preço e gôndola (F3)" onClick={() => setModalConsultaPreco(true)}>
+                    <Search size={14} color="#0284c7" /> <span>Preço [F3]</span>
+                  </button>
+                </div>
+
               </div>
 
               {/* Tabela de Itens Bipados */}

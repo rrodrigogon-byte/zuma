@@ -1244,3 +1244,181 @@
   padding-top: 10px;
   border-top: 1px dashed #94a3b8;
 }
+
+/* ═════════════════════════════════════════════════════════════════════════════
+   15. ATALHOS DE TECLADO PDV, ALERTA TETO GAVETA E CONSULTA RÁPIDA DE PREÇO
+   ═════════════════════════════════════════════════════════════════════════════ */
+.super-alert-teto-gaveta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #fef2f2;
+  border: 1.5pt solid #ef4444;
+  padding: 10px 16px;
+  border-radius: 8px;
+  margin-bottom: 14px;
+  gap: 12px;
+}
+.super-alert-teto-gaveta .alert-content {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #991b1b;
+  font-size: 13px;
+}
+.alert-pulse-icon {
+  color: #dc2626;
+  animation: pulse 1.5s infinite;
+  flex-shrink: 0;
+}
+@keyframes pulse {
+  0% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.15); opacity: 0.8; }
+  100% { transform: scale(1); opacity: 1; }
+}
+.super-btn-sangria-rapida {
+  background: #dc2626;
+  color: white;
+  border: none;
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-weight: 700;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.2s;
+}
+.super-btn-sangria-rapida:hover {
+  background: #b91c1c;
+}
+.super-pdv-hotkeys-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px dashed #e2e8f0;
+}
+.hotkey-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  padding: 5px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #334155;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.hotkey-pill:hover {
+  background: #e2e8f0;
+  border-color: #94a3b8;
+}
+.key-badge {
+  background: #0284c7;
+  color: white;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 800;
+}
+.key-badge.danger {
+  background: #dc2626;
+}
+.key-badge.success {
+  background: #059669;
+}
+.super-modal-price-check {
+  max-width: 680px !important;
+}
+.price-check-input {
+  font-size: 16px !important;
+  padding: 10px 14px !important;
+  margin-bottom: 14px;
+}
+.price-check-results-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 420px;
+  overflow-y: auto;
+}
+.price-check-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 12px 16px;
+  gap: 16px;
+}
+.price-check-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.price-check-depto {
+  font-size: 11px;
+  text-transform: uppercase;
+  color: #64748b;
+  font-weight: 700;
+}
+.price-check-name {
+  font-size: 15px;
+  color: #0f172a;
+}
+.price-check-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 12px;
+  color: #475569;
+}
+.price-check-prices {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  min-width: 140px;
+}
+.price-normal-box, .price-clube-box {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 14px;
+}
+.price-normal-box small, .price-clube-box small {
+  font-size: 11px;
+  color: #64748b;
+}
+.price-legal-ref {
+  font-size: 11px;
+  color: #0284c7;
+  font-weight: 600;
+}
+.super-empty-mix-hero {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: linear-gradient(135deg, #eff6ff 0%, #e0f2fe 100%);
+  border: 1.5px solid #0284c7;
+  padding: 20px 24px;
+  border-radius: 12px;
+  margin-bottom: 20px;
+  gap: 20px;
+}
+.super-empty-mix-hero h3 {
+  margin: 0 0 6px 0;
+  color: #0369a1;
+  font-size: 17px;
+}
+.super-empty-mix-hero p {
+  margin: 0;
+  color: #334155;
+  font-size: 13.5px;
+  line-height: 1.4;
+}

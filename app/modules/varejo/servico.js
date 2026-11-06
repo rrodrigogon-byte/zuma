@@ -68,9 +68,11 @@ export async function listarProdutos(db, empresaId, { lojaId = null, q = '', ago
     const precoFinal = promo ? promo.preco : precoBase;
     const custo = Number(row.custo_medio);
     return {
-      id: row.id, nome: row.nome, sku: row.sku || null, ean: row.ean || null, plu: row.plu || null, departamento: row.departamento || row.categoria || null, unidade: row.unidade,
-      pesavel: row.pesavel === true, controlaLote: row.controla_lote === true, saldo: qtd(row.saldo), estoqueMinimo: Number(row.estoque_minimo), custoMedio: custo,
-      precoBase, precoDaUnidade: row.preco_unidade !== null ? Number(row.preco_unidade) : null, precoFinal, promocao: promo,
+      id: row.id, nome: row.nome, sku: row.sku || null, ean: row.ean || null, codigoBarras: row.ean || null, plu: row.plu || null,
+      departamento: row.departamento || row.categoria || 'Geral', categoria: row.categoria || row.departamento || 'Geral', unidade: row.unidade || 'UN',
+      pesavel: row.pesavel === true, controlaLote: row.controla_lote === true, saldo: qtd(row.saldo), saldoEstoque: qtd(row.saldo),
+      estoqueMinimo: Number(row.estoque_minimo || 5), custoMedio: custo, precoCusto: custo,
+      precoBase, precoDaUnidade: row.preco_unidade !== null ? Number(row.preco_unidade) : null, precoFinal, precoVenda: precoFinal, promocao: promo,
       margem: precoFinal ? Math.round(((precoFinal - custo) / precoFinal) * 1000) / 10 : null,
     };
   });
@@ -401,7 +403,7 @@ export async function criarProduto(db, empresaId, dados = {}, { usuario = null, 
   const departamento = textoOpcional(dados.departamento, 80) || 'Geral';
   const categoria = textoOpcional(dados.categoria, 80) || departamento;
   const precoVenda = dados.precoVenda != null && dados.precoVenda !== '' ? dinheiro(numero(dados.precoVenda, 'Preço de venda')) : 0;
-  const precoCusto = dados.precoCusto != null && dados.precoCusto !== '' ? dinheiro(numero(dados.precoCusto, 'Preço de custo')) : 0;
+  const precoCusto = dados.precoCusto != null && dados.precoCusto !== '' ? dinheiro(numero(dados.precoCusto, 'Preço de custo')) : (dados.custoMedio != null && dados.custoMedio !== '' ? dinheiro(numero(dados.custoMedio, 'Preço de custo')) : 0);
   const saldoInicial = Number(dados.saldoInicial || 0);
   const estoqueMinimo = Number(dados.estoqueMinimo || 0);
   const pesavel = dados.pesavel === true;
@@ -484,7 +486,7 @@ export async function carregarCatalogoOficialSupermercado(db, empresaId, { lojaI
   for (const item of CATALOGO_OFICIAL_SUPERMERCADO) {
     const existe = await db.query('SELECT id FROM est_itens WHERE empresa_id = $1 AND (sku = $2 OR ean = $3) LIMIT 1', [empresa, item.sku, item.ean]);
     if (!existe.rows[0]) {
-      await criarProduto(db, empresa, item, { usuario, lojaId: lojaDestino });
+      await criarProduto(db, empresa, { ...item, precoCusto: item.custoMedio, precoVenda: item.precoVenda }, { usuario, lojaId: lojaDestino });
       adicionados++;
     }
   }
