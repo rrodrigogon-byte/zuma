@@ -1,3 +1,4 @@
+import { encontrarClientePorTelefone } from '../dino-clientes-vinculo.js';
 import { canonicalWhatsappPhone, phoneMatchKeySql } from './whatsapp-phone.js';
 import crypto from 'node:crypto';
 import { db } from './database.js';
@@ -234,19 +235,35 @@ async function commerceProfile(empresaId, lojaId, phone) {
 }
 
 async function barbershopProfile(empresaId, phone) {
+  // 1. Prioriza o cadastro oficial de clientes da barbearia Dino no ERP Kytto
+  try {
+    const cliente = encontrarClientePorTelefone(empresaId, phone);
+    if (cliente && cliente.nome) {
+      return [{
+        nome: cliente.nome,
+        total_visitas: Number(cliente.totalVisitas || cliente.totalAtendimentos || 0),
+        ultima_visita: cliente.ultimaVisita || cliente.atualizadoEm || null,
+        preferencias: cliente.preferencias || cliente.observacoes || '',
+      }];
+    }
+  } catch (_) {}
+
+  // 2. Consulta a tabela clientes oficial do Postgres (com colunas reais)
   try {
     const result = await db.queryRead(
-      `SELECT nome, total_visitas, ultima_visita, preferencias
-         FROM clientes_barbearia
+      `SELECT nome,
+              COALESCE(tags->>'total_visitas', '0')::int AS total_visitas,
+              criado_em AS ultima_visita,
+              COALESCE(tags->>'preferencias', '') AS preferencias
+         FROM clientes
         WHERE empresa_id = $1 AND ativo = true
           AND ${phoneMatchKeySql('telefone')} = ${phoneMatchKeySql('$2')}
         LIMIT 2`,
       [empresaId, phone],
     );
-    return result.rows;
-  } catch (error) {
-    if (error?.code === '42P01') return [];
-    throw error;
+    return result.rows || [];
+  } catch (_) {
+    return [];
   }
 }
 

@@ -1523,7 +1523,9 @@ async function deterministicResponse(task, channel, session, message) {
 const EMOJIS_CONFIRMACAO_PRESENCA = /(?:👍|👍🏻|👍🏼|👍🏽|👍🏾|👍🏿|👌|👌🏻|👌🏼|👌🏽|👌🏾|👌🏿|✌️|✌🏻|✌🏼|✌🏽|✌🏾|✌🏿|👊|👊🏻|👊🏼|👊🏽|👊🏾|👊🏿|🤝|🙏|🙌|👏|🤙|✅|✔️|✔|☑️|✂️|💈|🔥|💪)/u;
 
 export function presenceConfirmIntent(text) {
-  const raw = String(text ?? '').trim();
+  const raw = String(text ?? '')
+    .replace(/^\[(?:áudio|audio|mensagem de voz|foto|imagem|documento)(?:\s+transcrit[oa]|\s+enviad[oa])?\]\s*/i, '')
+    .trim();
   if (!raw || raw.length > 100) return false;
   // Se o cliente respondeu com emoji de positivo/joinha/acordo (ex.: 👍, 🤝, 🙏, ✅, 💈, ✂️)
   if (EMOJIS_CONFIRMACAO_PRESENCA.test(raw)) {

@@ -35,8 +35,14 @@ const CANCEL_PHRASES = new Set([
 // Palavras que indicam ressalva: nunca confirmar automaticamente.
 const CAVEAT = /\b(mas|porem|so que|se|caso|antes|troca|trocar|muda|mudar|outro|outra|ou|quanto|qual|quando|onde|como)\b/;
 
-function normalize(text) {
+export function stripMediaPrefix(text) {
   return String(text ?? '')
+    .replace(/^\[(?:áudio|audio|mensagem de voz|foto|imagem|documento)(?:\s+transcrit[oa]|\s+enviad[oa])?\]\s*/i, '')
+    .trim();
+}
+
+function normalize(text) {
+  return stripMediaPrefix(text)
     .normalize('NFD').replace(/[̀-ͯ]/g, '')
     .toLowerCase()
     .replace(/(.)\1{2,}/g, '$1$1') // "simmmm" -> "simm"
