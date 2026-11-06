@@ -181,5 +181,35 @@ export function createVarejoAdminRouter({ db, escopoDaRequisicao, fuso = 'Americ
     return svc.salvarClienteClube(db, empresaId, req.body);
   }));
 
+
+  // ── PDV Operacional & Emissão de Vendas ──
+  router.post('/vendas/pdv', rota('catalog.write', async ({ req, empresaId, lojaId, usuario }) => {
+    return svc.registrarVendaPdv(db, empresaId, req.body || {}, { usuario, lojaId });
+  }));
+
+  // ── Pacote Completo de Carga Toledo MGV6 (Nutricional, Alergênicos, Receitas) ──
+  router.get('/balanca/toledo-mgv/pacote-completo', rota('catalog.read', async ({ empresaId, lojaId }) => {
+    return svc.exportarPacoteCompletoToledo(db, empresaId, { lojaId });
+  }));
+
+  // ── Etiquetas de Gôndola & Precificação por Quilo/Litro ──
+  router.get('/etiquetas/itens', rota('catalog.read', async ({ empresaId, lojaId }) => {
+    return { itens: await svc.listarItensEtiquetas(db, empresaId, { lojaId }) };
+  }));
+  router.post('/etiquetas/gerar-zpl', rota('catalog.write', async ({ req, empresaId }) => {
+    return svc.gerarEtiquetasZpl(db, empresaId, req.body || {});
+  }));
+
+  // ── Importador de XML de Compra (NF-e Modelo 55) ──
+  router.post('/nfe-entrada/processar-xml', rota('catalog.write', async ({ req, empresaId, lojaId, usuario }) => {
+    const xml = req.body?.xmlString || req.body?.xml || (typeof req.body === 'string' ? req.body : '');
+    return svc.processarXmlNfeCompra(db, empresaId, xml, { usuario, lojaId });
+  }));
+
+  // ── Prevenção de Perdas & Indicadores ABRAS ──
+  router.get('/prevencao-perdas', rota('catalog.read', async ({ empresaId, lojaId }) => {
+    return svc.obterRelatorioPrevencaoPerdas(db, empresaId, { lojaId });
+  }));
+
   return router;
 }

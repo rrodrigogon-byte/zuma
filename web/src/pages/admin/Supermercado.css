@@ -947,3 +947,300 @@
 .text-red { color: #dc2626; }
 .text-green { color: #16a34a; }
 .text-blue { color: #2563eb; }
+
+/* ═════════════════════════════════════════════════════════════════════════════
+   ETIQUETAS DE GÔNDOLA & LEI DA PRECIFICAÇÃO (KG/LITRO & CLUBE)
+   ═════════════════════════════════════════════════════════════════════════════ */
+.etiquetas-preview-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+.etiqueta-card-real {
+  border: 2px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 12px 14px;
+  background: #ffffff;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+  min-height: 140px;
+  position: relative;
+}
+.etiqueta-card-real.clube-oferta {
+  background: #fffbeb;
+  border-color: #f59e0b;
+}
+.etiqueta-card-real.validade-oferta {
+  background: #fef2f2;
+  border-color: #ef4444;
+}
+.etiqueta-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 6px;
+}
+.etiqueta-nome-prod {
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: #0f172a;
+  line-height: 1.2;
+}
+.etiqueta-depto-tag {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  background: #e2e8f0;
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: #475569;
+}
+.etiqueta-precos-box {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  margin: 8px 0;
+}
+.etiqueta-preco-grande {
+  display: flex;
+  flex-direction: column;
+}
+.etiqueta-cifrao {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+.etiqueta-valor-destaque {
+  font-size: 1.85rem;
+  font-weight: 900;
+  color: #0f172a;
+  line-height: 1;
+}
+.etiqueta-preco-clube-box {
+  background: #f59e0b;
+  color: #ffffff;
+  padding: 4px 8px;
+  border-radius: 6px;
+  text-align: right;
+}
+.clube-rotulo {
+  font-size: 0.65rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  display: block;
+}
+.clube-valor-destaque {
+  font-size: 1.35rem;
+  font-weight: 900;
+}
+.etiqueta-bottom {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-top: 1px dashed #cbd5e1;
+  padding-top: 6px;
+  margin-top: 4px;
+}
+.etiqueta-ref-legal {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #475569;
+}
+.etiqueta-ean-display {
+  font-size: 0.72rem;
+  font-family: 'Courier New', monospace;
+  color: #64748b;
+  letter-spacing: 1px;
+}
+
+/* ═════════════════════════════════════════════════════════════════════════════
+   ENTRADA DE NF-E (XML MODELO 55)
+   ═════════════════════════════════════════════════════════════════════════════ */
+.nfe-upload-container {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 24px;
+  margin-bottom: 24px;
+}
+.nfe-dropzone {
+  border: 2px dashed #94a3b8;
+  border-radius: 10px;
+  padding: 32px 20px;
+  text-align: center;
+  background: #f8fafc;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  margin-bottom: 16px;
+}
+.nfe-dropzone:hover {
+  border-color: #0284c7;
+  background: #f0f9ff;
+}
+.nfe-paste-area {
+  margin-top: 14px;
+}
+.nfe-textarea {
+  width: 100%;
+  height: 100px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 10px;
+  font-family: 'Courier New', monospace;
+  font-size: 0.8rem;
+  resize: vertical;
+}
+.nfe-resumo-card {
+  background: #ffffff;
+  border: 1px solid #0284c7;
+  border-radius: 10px;
+  padding: 20px;
+  margin-bottom: 24px;
+}
+.nfe-header-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+  margin-bottom: 16px;
+}
+.nfe-duplicatas-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 10px;
+}
+.dup-pill {
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 0.82rem;
+}
+
+/* ═════════════════════════════════════════════════════════════════════════════
+   PREVENÇÃO DE PERDAS (PADRÃO ABRAS)
+   ═════════════════════════════════════════════════════════════════════════════ */
+.perdas-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+.perda-kpi-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+}
+.perda-kpi-card.destaque {
+  background: #eff6ff;
+  border-color: #3b82f6;
+}
+.perda-kpi-label {
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #64748b;
+  margin-bottom: 6px;
+}
+.perda-kpi-valor {
+  font-size: 1.85rem;
+  font-weight: 900;
+  color: #0f172a;
+}
+.perda-kpi-sub {
+  font-size: 0.78rem;
+  color: #64748b;
+  margin-top: 4px;
+}
+.perdas-chart-container {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 20px;
+  margin-bottom: 24px;
+}
+.perda-bar-item {
+  margin-bottom: 16px;
+}
+.perda-bar-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #1e293b;
+  margin-bottom: 4px;
+}
+.perda-bar-track {
+  width: 100%;
+  height: 12px;
+  background: #f1f5f9;
+  border-radius: 6px;
+  overflow: hidden;
+}
+.perda-bar-fill {
+  height: 100%;
+  border-radius: 6px;
+  transition: width 0.4s ease;
+}
+
+/* ═════════════════════════════════════════════════════════════════════════════
+   MODAL ZPL E CUPOM TÉRMICO NFC-E
+   ═════════════════════════════════════════════════════════════════════════════ */
+.zpl-code-box {
+  background: #0f172a;
+  color: #38bdf8;
+  font-family: 'Courier New', monospace;
+  font-size: 0.78rem;
+  padding: 14px;
+  border-radius: 8px;
+  max-height: 280px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  margin-bottom: 14px;
+}
+.nfce-thermal-receipt {
+  width: 320px;
+  margin: 0 auto;
+  background: #ffffff;
+  border: 1px dashed #94a3b8;
+  padding: 16px;
+  font-family: 'Courier New', monospace;
+  font-size: 0.78rem;
+  color: #0f172a;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+.nfce-thermal-header {
+  text-align: center;
+  border-bottom: 1px dashed #0f172a;
+  padding-bottom: 10px;
+  margin-bottom: 10px;
+}
+.nfce-store-name {
+  font-size: 1rem;
+  font-weight: 900;
+}
+.nfce-thermal-item {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+.nfce-thermal-total {
+  border-top: 1px dashed #0f172a;
+  padding-top: 8px;
+  margin-top: 8px;
+  font-size: 0.95rem;
+  font-weight: 900;
+  display: flex;
+  justify-content: space-between;
+}
+.nfce-thermal-qr {
+  text-align: center;
+  margin-top: 14px;
+  padding-top: 10px;
+  border-top: 1px dashed #94a3b8;
+}
