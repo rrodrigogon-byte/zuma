@@ -171,6 +171,10 @@ const AvecMixImport = lazy(() => import('./pages/admin/dino/AvecMixImport'))
 const AdminPlataforma = lazy(() => import('./pages/admin/AdminPlataforma'))
 const ConciliacaoFinanceiraPlataforma = lazy(() => import('./pages/admin/financeiro/ConciliacaoFinanceiraPlataforma'))
 const ERP             = lazy(() => import('./pages/admin/ERP'))
+const PropostasComerciais = lazy(() => import('./pages/admin/PropostasComerciais'))
+const OrdensServico   = lazy(() => import('./pages/admin/OrdensServico'))
+const ExpedicaoLogistica = lazy(() => import('./pages/admin/ExpedicaoLogistica'))
+const PatrimonioAtivos = lazy(() => import('./pages/admin/PatrimonioAtivos'))
 const LojaModa        = lazy(() => import('./pages/admin/LojaModa'))
 const BarbeariaERP    = lazy(() => import('./pages/admin/BarbeariaERP'))
 const Barbearia       = lazy(() => import('./pages/admin/Barbearia'))
@@ -349,6 +353,10 @@ export default function App() {
           <Route path="/admin/pdv-offline" element={<TenantAware tenant={<Layout><PDVOffline /></Layout>} legacy={<Layout><PDVOffline /></Layout>} />} />
 
           <Route path="/admin/erp"            element={<Layout><ERP /></Layout>} />
+          <Route path="/admin/propostas"      element={<Layout><PropostasComerciais /></Layout>} />
+          <Route path="/admin/ordens-servico" element={<Layout><OrdensServico /></Layout>} />
+          <Route path="/admin/expedicao"      element={<Layout><ExpedicaoLogistica /></Layout>} />
+          <Route path="/admin/patrimonio"     element={<Layout><PatrimonioAtivos /></Layout>} />
           <Route path="/admin/oficina"         element={<Layout><Oficina /></Layout>} />
           <Route path="/admin/agropecuaria"    element={<Layout><Agropecuaria /></Layout>} />
           <Route path="/admin/varejo"          element={<Layout><Varejo /></Layout>} />

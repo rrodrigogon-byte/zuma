@@ -43,12 +43,16 @@ export const CATALOGO = [
   M('/admin/perdas-inventario', 'Perdas e inventário', '🧾', 'Compras e estoque', 'estoque'),
   M('/admin/fichas-tecnicas', 'Fichas técnicas', '🧪', 'Compras e estoque', 'estoque'),
   M('/admin/cadastros-mestres', 'Fornecedores e funcionários', '🗂️', 'Compras e estoque', 'cadastros'),
+  M('/admin/patrimonio', 'Patrimônio e ativos', '🏛️', 'Compras e estoque', 'estoque'),
 
   // fiscal novo: só homologação da SEFAZ até liberar produção (certificado, CSC e credenciamento)
   M('/admin/notas', 'Notas fiscais', '🧾', 'Fiscal', 'fiscal', { homologacao: true }),
   M('/admin/fiscal/config', 'Configuração fiscal', '⚙️', 'Fiscal', 'fiscal', { homologacao: true }),
   M('/admin/fiscal/classificacao', 'Classificação fiscal', '🏷️', 'Fiscal', 'fiscal', { homologacao: true }),
 
+  M('/admin/propostas', 'Propostas comerciais', '📜', 'Vendas e operação', 'varejo'),
+  M('/admin/ordens-servico', 'Ordens de serviço (OS)', '🛠️', 'Vendas e operação', 'oficina'),
+  M('/admin/expedicao', 'Expedição e entregas', '🚚', 'Vendas e operação', 'varejo'),
   M('/admin/pdv', 'PDV', '🛒', 'Vendas e operação', 'pdv'),
   M('/admin/mesas', 'Mesas', '🪑', 'Vendas e operação', 'mesas'),
   M('/admin/cardapio', 'Cardápio', '🍽️', 'Vendas e operação', 'cardapio'),

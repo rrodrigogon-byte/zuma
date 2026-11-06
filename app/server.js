@@ -61,6 +61,7 @@ import { createSalaoAdminRouter } from './modules/salao/rotas.js';
 import { createPdvOfflineRouter } from './modules/pdv-offline/rotas.js';
 import { createVarejoAdminRouter } from './modules/varejo/rotas.js';
 import { createVerticaisRouter } from './modules/verticais-kytto.js';
+import { createErpAdminRouter } from './modules/erp/rotas.js';
 import { createBarAdminRouter } from './modules/bar/rotas-multiempresa.js';
 import * as barService from './modules/bar/servico.js';
 import { responderErro as responderErroBarra } from './modules/acesso/banco.js';
@@ -1776,6 +1777,9 @@ app.use('/api/webhooks', createWhatsappAiWebhookRouter());
   // [kytto-varejo] Supermercado/varejo sobre o estoque único: preço por unidade, promoções, lotes, etiquetas e transferências.
   const varejoRouter = createVarejoAdminRouter({ db: clubeDb, escopoDaRequisicao: escopoComercial, fuso: FUSO_KYTTO });
   app.use('/api/admin/varejo', auth, requireStaff, varejoRouter);
+  // [kytto-erp] Hub Central ERP 360: Propostas Comerciais, Ordens de Serviço, Romaneios e Patrimônio
+  const erpRouter = createErpAdminRouter({ db: clubeDb, escopoDaRequisicao: escopoComercial });
+  app.use('/api/admin/erp', auth, requireStaff, erpRouter);
   app.use(['/api/supermercado', '/api/admin/supermercado'], auth, requireStaff, (req, res, next) => {
     if (req.url.startsWith('/produtos/buscar/')) {
       req.url = req.url.replace('/produtos/buscar/', '/produtos/codigo/');
