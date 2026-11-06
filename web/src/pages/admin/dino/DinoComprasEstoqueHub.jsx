@@ -1945,7 +1945,7 @@ export default function DinoComprasEstoqueHub({
 
       {/* ── MODAL DE NOVO PEDIDO DE COMPRA ── */}
       {modalNovoPedido && (
-        <Modal open={modalNovoPedido} onClose={() => setModalNovoPedido(false)} title="Novo Pedido de Compra / Ordem de Fornecimento">
+        <Modal open={modalNovoPedido} onClose={() => setModalNovoPedido(false)} width={800} title="Novo Pedido de Compra / Ordem de Fornecimento">
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -2529,7 +2529,7 @@ export default function DinoComprasEstoqueHub({
 
       {/* ── MODAL DE ORDEM DE COMPRA EM PDF (VISUALIZAÇÃO & IMPRESSÃO) ── */}
       {modalPdf && pedidoParaPdf && (
-        <Modal open={modalPdf} onClose={() => setModalPdf(false)} title={`Ordem de Compra #${pedidoParaPdf.numero}`}>
+        <Modal open={modalPdf} onClose={() => setModalPdf(false)} width={880} title={`Ordem de Compra #${pedidoParaPdf.numero}`}>
           <div style={{ display: 'grid', gap: 16 }}>
             {/* Barra de Ações Superior */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--surface-2, #f8fafc)', padding: '10px 14px', borderRadius: 10 }}>
@@ -2697,7 +2697,7 @@ export default function DinoComprasEstoqueHub({
 
       {/* ── MODAL DE RECEBIMENTO DE MERCADORIAS (CONFERÊNCIA GUIADA) ── */}
       {modalRecebimento && pedidoParaReceber && (
-        <Modal open={modalRecebimento} onClose={() => setModalRecebimento(false)} title={`Conferência e Recebimento de Mercadorias — Pedido #${pedidoParaReceber.numero}`}>
+        <Modal open={modalRecebimento} onClose={() => setModalRecebimento(false)} width={850} title={`Conferência e Recebimento de Mercadorias — Pedido #${pedidoParaReceber.numero}`}>
           <div style={{ display: 'grid', gap: 14 }}>
             <div style={{ background: '#f8fafc', padding: 12, borderRadius: 8, border: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
               <div>
