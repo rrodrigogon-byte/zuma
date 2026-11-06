@@ -6692,6 +6692,9 @@ app.post('/api/admin/barbearia/compras/pedidos/:id/:acao', (req, res) => {
       if (req.body?.confirmado !== true) return res.status(400).json({ error: 'Confirme o recebimento da mercadoria.', code: 'CONFIRMACAO_OBRIGATORIA' });
       pedido = barbeariaComprasKytto.receberPedido(empresaId, req.params.id, { ...(req.body || {}), lojaId: legacyLojaId(req), usuario: usuarioReq(req) });
       audit(req, 'COMPRA RECEBIDA', `${pedido.numero} status=${pedido.status}`);
+    } else if (acao === 'duplicar') {
+      pedido = barbeariaComprasKytto.duplicarPedido(empresaId, req.params.id, { lojaId: legacyLojaId(req), usuario: usuarioReq(req) });
+      audit(req, 'PEDIDO DUPLICADO', `${pedido.numero} a partir de ${req.params.id}`);
     } else return res.status(404).json({ error: 'Ação inválida.' });
     res.json({ ok: true, pedido });
   } catch (error) { respostaComprasRepasses(res, error); }

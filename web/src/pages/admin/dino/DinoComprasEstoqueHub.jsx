@@ -176,16 +176,35 @@ export default function DinoComprasEstoqueHub({
 
   // Gestão Completa de Pedidos de Compra & Fornecedores
   const [modalNovoPedido, setModalNovoPedido] = useState(false);
-  const [formNovoPedido, setFormNovoPedido] = useState({
+  const formNovoPedidoVazio = {
     fornecedorId: '',
+    fornecedorNome: '',
+    fornecedorCnpj: '',
+    fornecedorEmail: '',
+    fornecedorTelefone: '',
+    fornecedorContato: '',
+    comprador: 'Rodrigo Gonçalves (Gestor)',
+    centroCusto: 'Estoque Revenda & Consumo',
     previsaoEntrega: '',
     condicaoPagamento: 'Boleto 30 dias',
+    formaPagamento: 'Boleto Bancário',
+    freteTipo: 'cif',
+    freteValor: '',
+    descontoTotal: '',
+    despesasAcessorias: '',
+    dadosBancarios: '',
     observacoes: '',
+    instrucoesEntrega: 'Horário de recebimento: 09h às 18h. Informar o número do Pedido de Compra na tag xPed da NF-e.',
     itens: []
-  });
+  };
+  const [formNovoPedido, setFormNovoPedido] = useState(formNovoPedidoVazio);
+  const [abaNovoPedido, setAbaNovoPedido] = useState('itens');
   const [itemPedProdutoId, setItemPedProdutoId] = useState('');
+  const [itemPedNome, setItemPedNome] = useState('');
   const [itemPedQtd, setItemPedQtd] = useState('10');
+  const [itemPedUnidade, setItemPedUnidade] = useState('un');
   const [itemPedPreco, setItemPedPreco] = useState('');
+  const [itemPedDesconto, setItemPedDesconto] = useState('');
 
   // Envio por E-mail do Pedido ao Fornecedor
   const [modalEmail, setModalEmail] = useState(false);
@@ -196,6 +215,11 @@ export default function DinoComprasEstoqueHub({
   // Ordem de Compra Oficial em PDF
   const [modalPdf, setModalPdf] = useState(false);
   const [pedidoParaPdf, setPedidoParaPdf] = useState(null);
+
+  // Recebimento de Mercadorias (Conferência Cega / Parcial / Total)
+  const [modalRecebimento, setModalRecebimento] = useState(false);
+  const [pedidoParaReceber, setPedidoParaReceber] = useState(null);
+  const [itensRecebimento, setItensRecebimento] = useState([]);
 
   // ── ESTADOS DE FICHA DO ITEM & AUDITORIA DE CADASTROS ──
   const [modalFichaItem, setModalFichaItem] = useState(null);
@@ -571,18 +595,105 @@ export default function DinoComprasEstoqueHub({
   }
 
   // Ações de Pedido de Compra
-  async function criarPedidoDeCompra() {
+  async function criarPedidoDeCompra(statusDesejado = 'rascunho') {
     if (!formNovoPedido.fornecedorId) return toast('Selecione o fornecedor.', true);
     if (!formNovoPedido.itens.length) return toast('Adicione ao menos um item ao pedido.', true);
 
     try {
-      await api.post('/api/admin/barbearia/compras/pedidos', formNovoPedido);
-      toast('Pedido de compra criado em rascunho com sucesso!', 'success');
+      const payload = {
+        ...formNovoPedido,
+        status: statusDesejado,
+        freteValor: Number(String(formNovoPedido.freteValor || '0').replace(',', '.')),
+        descontoTotal: Number(String(formNovoPedido.descontoTotal || '0').replace(',', '.')),
+        despesasAcessorias: Number(String(formNovoPedido.despesasAcessorias || '0').replace(',', '.'))
+      };
+      await api.post('/api/admin/barbearia/compras/pedidos', payload);
+      toast(statusDesejado === 'aprovado' ? 'Pedido criado e APROVADO com sucesso!' : 'Pedido de compra salvo em rascunho com sucesso!', 'success');
       setModalNovoPedido(false);
-      setFormNovoPedido({ fornecedorId: '', previsaoEntrega: '', condicaoPagamento: 'Boleto 30 dias', observacoes: '', itens: [] });
+      setFormNovoPedido(formNovoPedidoVazio);
       carregarTudo();
     } catch (err) {
       toast(err.message || 'Erro ao criar pedido de compra.', true);
+    }
+  }
+
+  async function duplicarPedido(pedidoId) {
+    try {
+      const res = await api.post(`/api/admin/barbearia/compras/pedidos/${pedidoId}/duplicar`, {});
+      toast(`Pedido duplicado com sucesso! Gerado novo rascunho ${res.pedido?.numero || ''}.`, 'success');
+      carregarTudo();
+    } catch (err) {
+      toast(err.message || 'Erro ao duplicar pedido.', true);
+    }
+  }
+
+  async function cancelarPedido(pedidoId) {
+    const motivo = window.prompt('Informe a justificativa do cancelamento do pedido:');
+    if (!motivo) return;
+    try {
+      await api.post(`/api/admin/barbearia/compras/pedidos/${pedidoId}/cancelar`, { motivo });
+      toast('Pedido de compra cancelado.', 'info');
+      carregarTudo();
+    } catch (err) {
+      toast(err.message || 'Erro ao cancelar pedido.', true);
+    }
+  }
+
+  function abrirModalWhatsapp(pedido) {
+    const tel = String(pedido.fornecedorTelefone || '').replace(/\D/g, '');
+    const telFormatado = tel.startsWith('55') ? tel : (tel.length >= 10 ? `55${tel}` : '');
+    const itensTexto = (pedido.itens || []).map(it => `• *${it.quantidade} ${it.unidade || 'un'}* × ${it.nome} - R$ ${Number(it.precoUnitario || it.custoUnitario || 0).toFixed(2)} un (Subtotal: R$ ${Number(it.total || 0).toFixed(2)})`).join('\n');
+    const msg = `*ORDEM DE COMPRA ${pedido.numero}*\n*Comprador:* ${nomeEmpresa}\n*Fornecedor:* ${pedido.fornecedorNome}\n\nPrezada equipe comercial, segue nossa Ordem de Compra oficial:\n\n${itensTexto}\n\n*VALOR TOTAL:* R$ ${Number(pedido.total || 0).toFixed(2)}\n*Condição de Pagamento:* ${pedido.condicaoPagamento || 'Boleto 30 dias'}\n*Previsão de Entrega:* ${pedido.previsaoEntrega || 'A combinar'}\n*Frete:* ${String(pedido.freteTipo || 'cif').toUpperCase()}\n\n*Instruções Fiscais:* Favor informar o número do pedido *${pedido.numero}* no campo de observações/xPed da NF-e.\n\nFavor confirmar o recebimento e o faturamento desta ordem.`;
+    
+    if (telFormatado) {
+      const url = `https://wa.me/${telFormatado}?text=${encodeURIComponent(msg)}`;
+      window.open(url, '_blank');
+      if (pedido.status === 'aprovado' || pedido.status === 'rascunho') {
+        api.post(`/api/admin/barbearia/compras/pedidos/${pedido.id}/enviar`, { mensagem: 'Enviado via WhatsApp' }).then(() => carregarTudo()).catch(() => {});
+      }
+      toast(`Mensagem aberta no WhatsApp para ${pedido.fornecedorNome}!`, 'success');
+    } else {
+      navigator.clipboard?.writeText(msg);
+      toast('Texto da Ordem de Compra copiado para a área de transferência! Cole no WhatsApp do vendedor.', 'success');
+    }
+  }
+
+  function abrirModalRecebimento(pedido) {
+    setPedidoParaReceber(pedido);
+    setItensRecebimento((pedido.itens || []).map(it => ({
+      produtoId: it.produtoId,
+      nome: it.nome,
+      unidade: it.unidade || 'un',
+      quantidadePedida: it.quantidade,
+      recebidoAnterior: it.recebido || 0,
+      pendente: Math.max(0, it.quantidade - (it.recebido || 0)),
+      quantidadeReceber: Math.max(0, it.quantidade - (it.recebido || 0)),
+      custoUnitario: it.custoUnitario || it.precoUnitario || 0
+    })));
+    setModalRecebimento(true);
+  }
+
+  async function confirmarRecebimentoParcialOuTotal() {
+    if (!pedidoParaReceber) return;
+    try {
+      const itensFiltrados = itensRecebimento.filter(it => Number(it.quantidadeReceber) > 0).map(it => ({
+        produtoId: it.produtoId,
+        quantidade: Number(it.quantidadeReceber),
+        custoUnitario: Number(it.custoUnitario)
+      }));
+      if (!itensFiltrados.length) return toast('Informe ao menos uma quantidade a receber.', true);
+      await api.post(`/api/admin/barbearia/compras/pedidos/${pedidoParaReceber.id}/receber`, {
+        confirmado: true,
+        itens: itensFiltrados,
+        chaveIdempotencia: `rec-${Date.now()}`
+      });
+      toast(`Recebimento do pedido ${pedidoParaReceber.numero} processado com entrada no estoque!`, 'success');
+      setModalRecebimento(false);
+      setPedidoParaReceber(null);
+      carregarTudo();
+      onAtualizar?.();
+    } catch (err) {
+      toast(err.message || 'Erro ao processar recebimento.', true);
     }
   }
 
@@ -1113,7 +1224,7 @@ export default function DinoComprasEstoqueHub({
                           <td style={{ ...styles.td, fontWeight: 800 }}>{fmtR(p.total || p.valorTotal || (p.itens || []).reduce((acc, it) => acc + (it.total || (it.quantidade * (it.precoUnitario || it.custoUnitario || 0))), 0))}</td>
                           <td style={styles.td}>{p.previsaoEntrega || '—'}</td>
                           <td style={styles.td}>
-                            <span style={styles.pill(statusColor, `${statusColor}15`)}>{p.status?.toUpperCase()}</span>
+                            <span style={styles.pill(statusColor, `${statusColor}15`)}>{p.status === 'recebido_parcial' ? 'PARCIAL' : p.status?.toUpperCase()}</span>
                           </td>
                           <td style={styles.td}>
                             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
@@ -1128,17 +1239,6 @@ export default function DinoComprasEstoqueHub({
                                 </button>
                               )}
 
-                              {/* Aprovado: Enviar por E-mail */}
-                              {(p.status === 'aprovado' || p.status === 'enviado') && (
-                                <button
-                                  type="button"
-                                  style={{ ...styles.btnPrimary, fontSize: 11, padding: '5px 10px', background: '#3b82f6', border: '1px solid #2563eb' }}
-                                  onClick={() => abrirModalEmail(p)}
-                                >
-                                  ✉️ Enviar E-mail
-                                </button>
-                              )}
-
                               {/* Visualizar / Baixar PDF Oficial */}
                               <button
                                 type="button"
@@ -1148,28 +1248,56 @@ export default function DinoComprasEstoqueHub({
                                 📄 Ordem / PDF
                               </button>
 
-                              {/* Recebimento no Estoque */}
-                              {['aprovado', 'enviado'].includes(p.status) && (
+                              {/* WhatsApp Oficial */}
+                              <button
+                                type="button"
+                                style={{ ...styles.btn, fontSize: 11, padding: '5px 9px', color: '#16a34a', borderColor: '#86efac', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                                onClick={() => abrirModalWhatsapp(p)}
+                              >
+                                💬 WhatsApp
+                              </button>
+
+                              {/* Aprovado: Enviar por E-mail */}
+                              {(p.status === 'aprovado' || p.status === 'enviado') && (
+                                <button
+                                  type="button"
+                                  style={{ ...styles.btnPrimary, fontSize: 11, padding: '5px 10px', background: '#3b82f6', border: '1px solid #2563eb' }}
+                                  onClick={() => abrirModalEmail(p)}
+                                >
+                                  ✉️ E-mail
+                                </button>
+                              )}
+
+                              {/* Recebimento no Estoque (Total ou Parcial com Conferência) */}
+                              {['aprovado', 'enviado', 'recebido_parcial'].includes(p.status) && (
                                 <button
                                   type="button"
                                   style={{ ...styles.btnSuccess, fontSize: 11, padding: '5px 9px' }}
-                                  onClick={async () => {
-                                    if (window.confirm(`Confirmar recebimento do pedido ${p.numero} e dar entrada de todos os itens no estoque?`)) {
-                                      try {
-                                        await api.post(`/api/admin/barbearia/compras/pedidos/${p.id}/receber`, {
-                                          confirmado: true,
-                                          chaveIdempotencia: `rec-${Date.now()}`,
-                                        });
-                                        toast(`Pedido ${p.numero} recebido com entrada no estoque!`, 'success');
-                                        carregarTudo();
-                                        onAtualizar?.();
-                                      } catch (e) {
-                                        toast(e.message, true);
-                                      }
-                                    }
-                                  }}
+                                  onClick={() => abrirModalRecebimento(p)}
                                 >
                                   📥 Receber
+                                </button>
+                              )}
+
+                              {/* Duplicar Pedido */}
+                              <button
+                                type="button"
+                                style={{ ...styles.btn, fontSize: 11, padding: '5px 8px', color: '#6366f1' }}
+                                onClick={() => duplicarPedido(p.id)}
+                                title="Recomprar / Duplicar Pedido"
+                              >
+                                🔄 Duplicar
+                              </button>
+
+                              {/* Cancelar */}
+                              {['rascunho', 'aprovado', 'enviado'].includes(p.status) && (
+                                <button
+                                  type="button"
+                                  style={{ ...styles.btn, fontSize: 11, padding: '5px 8px', color: '#ef4444' }}
+                                  onClick={() => cancelarPedido(p.id)}
+                                  title="Cancelar Pedido"
+                                >
+                                  ❌
                                 </button>
                               )}
 
@@ -1817,7 +1945,7 @@ export default function DinoComprasEstoqueHub({
 
       {/* ── MODAL DE NOVO PEDIDO DE COMPRA ── */}
       {modalNovoPedido && (
-        <Modal open={modalNovoPedido} onClose={() => setModalNovoPedido(false)} title="Novo Pedido de Compra / Fornecimento">
+        <Modal open={modalNovoPedido} onClose={() => setModalNovoPedido(false)} title="Novo Pedido de Compra / Ordem de Fornecimento">
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -1825,187 +1953,506 @@ export default function DinoComprasEstoqueHub({
             }}
             style={{ display: 'grid', gap: 14 }}
           >
-            <div>
-              <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)' }}>Fornecedor Parceiro *</label>
-              <select
-                required
-                value={formNovoPedido.fornecedorId}
-                onChange={(e) => setFormNovoPedido({ ...formNovoPedido, fornecedorId: e.target.value })}
-                style={{ ...styles.input, width: '100%', marginTop: 4 }}
-              >
-                <option value="">Selecione o fornecedor…</option>
-                {fornecedores.map((f) => (
-                  <option key={f.id} value={f.id}>
-                    {f.nome} (CNPJ: {f.cnpj || '—'} | Prazo: {f.prazoEntregaDias || 7} dias)
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-              <div>
-                <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)' }}>Previsão de Entrega</label>
-                <input
-                  type="date"
-                  value={formNovoPedido.previsaoEntrega}
-                  onChange={(e) => setFormNovoPedido({ ...formNovoPedido, previsaoEntrega: e.target.value })}
-                  style={{ ...styles.input, width: '100%', marginTop: 4 }}
-                />
-              </div>
-              <div>
-                <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)' }}>Condição de Pagamento</label>
-                <select
-                  value={formNovoPedido.condicaoPagamento}
-                  onChange={(e) => setFormNovoPedido({ ...formNovoPedido, condicaoPagamento: e.target.value })}
-                  style={{ ...styles.input, width: '100%', marginTop: 4 }}
-                >
-                  <option value="Boleto 30 dias">Boleto 30 dias</option>
-                  <option value="Boleto 14 dias">Boleto 14 dias</option>
-                  <option value="Boleto 30/60 dias">Boleto 30/60 dias</option>
-                  <option value="PIX à vista">PIX à vista (Desconto)</option>
-                  <option value="Cartão Corporativo">Cartão Corporativo</option>
-                  <option value="Transferência Bancária">Transferência Bancária</option>
-                </select>
-              </div>
-            </div>
-
-            {/* Adicionar Itens ao Pedido */}
-            <div style={{ background: 'var(--surface-2, #f8fafc)', padding: 14, borderRadius: 12 }}>
-              <label style={{ fontSize: 12, fontWeight: 800, textTransform: 'uppercase', color: 'var(--muted)' }}>
-                Adicionar Itens ao Pedido
-              </label>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 100px 120px auto', gap: 8, marginTop: 8 }}>
-                <select
-                  value={itemPedProdutoId}
-                  onChange={(e) => {
-                    const id = e.target.value;
-                    setItemPedProdutoId(id);
-                    const prod = produtosCombinados.find((p) => p.id === id);
-                    if (prod && !itemPedPreco) setItemPedPreco(String(prod.custoUnitario || ''));
+            {/* Abas do Assistente de Compra */}
+            <div style={{ display: 'flex', gap: 6, borderBottom: '1px solid var(--line, #e2e8f0)', paddingBottom: 8, overflowX: 'auto' }}>
+              {[
+                { id: 'itens', label: `📦 1. Itens Solicitados (${formNovoPedido.itens.length})` },
+                { id: 'fornecedor', label: '🏢 2. Fornecedor & Responsável' },
+                { id: 'logistica', label: '🚚 3. Frete & Prazos' },
+                { id: 'financeiro', label: '💰 4. Condições & Totais' },
+              ].map(tab => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setAbaNovoPedido(tab.id)}
+                  style={{
+                    padding: '6px 12px',
+                    borderRadius: 8,
+                    border: abaNovoPedido === tab.id ? '1px solid #0284c7' : '1px solid transparent',
+                    background: abaNovoPedido === tab.id ? 'rgba(2, 132, 199, 0.1)' : 'transparent',
+                    color: abaNovoPedido === tab.id ? '#0284c7' : 'var(--muted)',
+                    fontWeight: 700,
+                    fontSize: 12,
+                    cursor: 'pointer',
+                    whiteSpace: 'nowrap'
                   }}
-                  style={styles.input}
                 >
-                  <option value="">Selecione o produto/insumo…</option>
-                  {produtosCombinados.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.nome} (Atual: {p.estoqueAtual} | Custo: {fmtR(p.custoUnitario)})
-                    </option>
-                  ))}
-                </select>
-                <input
-                  type="number"
-                  min="1"
-                  placeholder="Qtd"
-                  value={itemPedQtd}
-                  onChange={(e) => setItemPedQtd(e.target.value)}
-                  style={styles.input}
-                />
-                <input
-                  type="number"
-                  min="0.01"
-                  step="0.01"
-                  placeholder="Preço R$"
-                  value={itemPedPreco}
-                  onChange={(e) => setItemPedPreco(e.target.value)}
-                  style={styles.input}
-                />
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+
+            {/* ABA 1: ITENS SOLICITADOS */}
+            {abaNovoPedido === 'itens' && (
+              <div style={{ display: 'grid', gap: 12 }}>
+                <div style={{ background: 'var(--surface-2, #f8fafc)', padding: 14, borderRadius: 12, border: '1px solid var(--line, #e2e8f0)' }}>
+                  <label style={{ fontSize: 11, fontWeight: 800, textTransform: 'uppercase', color: 'var(--muted)', letterSpacing: '.05em' }}>
+                    Inserir Produto ou Insumo na Ordem
+                  </label>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'minmax(200px, 1.8fr) 80px 90px 110px 100px auto', gap: 8, marginTop: 8, alignItems: 'center' }}>
+                    <select
+                      value={itemPedProdutoId}
+                      onChange={(e) => {
+                        const id = e.target.value;
+                        setItemPedProdutoId(id);
+                        const prod = produtosCombinados.find((p) => p.id === id);
+                        if (prod) {
+                          setItemPedNome(prod.nome);
+                          setItemPedPreco(String(prod.custoUnitario || ''));
+                          setItemPedUnidade(prod.tipo === 'insumo' ? 'un' : 'un');
+                        }
+                      }}
+                      style={styles.input}
+                    >
+                      <option value="">Selecione do catálogo…</option>
+                      {produtosCombinados.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.nome} (Saldo: {p.estoqueAtual} | Custo: {fmtR(p.custoUnitario)})
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      type="text"
+                      placeholder="Unidade"
+                      value={itemPedUnidade}
+                      onChange={(e) => setItemPedUnidade(e.target.value)}
+                      style={{ ...styles.input, textAlign: 'center' }}
+                    />
+                    <input
+                      type="number"
+                      min="1"
+                      placeholder="Qtd"
+                      value={itemPedQtd}
+                      onChange={(e) => setItemPedQtd(e.target.value)}
+                      style={styles.input}
+                    />
+                    <input
+                      type="number"
+                      min="0.01"
+                      step="0.01"
+                      placeholder="Custo R$"
+                      value={itemPedPreco}
+                      onChange={(e) => setItemPedPreco(e.target.value)}
+                      style={styles.input}
+                    />
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      placeholder="Desc. R$"
+                      value={itemPedDesconto}
+                      onChange={(e) => setItemPedDesconto(e.target.value)}
+                      style={styles.input}
+                    />
+                    <button
+                      type="button"
+                      style={{ ...styles.btnPrimary, whiteSpace: 'nowrap' }}
+                      onClick={() => {
+                        const qtd = Number(itemPedQtd);
+                        const preco = Number(itemPedPreco);
+                        const desc = Number(itemPedDesconto || 0);
+                        if ((!itemPedProdutoId && !itemPedNome) || qtd <= 0 || preco <= 0) {
+                          return toast('Informe o produto, quantidade válida e preço negociado.', true);
+                        }
+                        const prod = produtosCombinados.find((p) => p.id === itemPedProdutoId);
+                        const nomeFinal = itemPedNome || prod?.nome || 'Item avulso';
+                        const subtotal = Math.max(0, Number((qtd * preco - desc).toFixed(2)));
+                        const novoItem = {
+                          produtoId: itemPedProdutoId || `avulso-${Date.now()}`,
+                          nome: nomeFinal,
+                          sku: prod?.sku || '',
+                          unidade: itemPedUnidade || 'un',
+                          quantidade: qtd,
+                          precoUnitario: preco,
+                          custoUnitario: preco,
+                          desconto: desc,
+                          total: subtotal,
+                          subtotal
+                        };
+                        setFormNovoPedido({
+                          ...formNovoPedido,
+                          itens: [...formNovoPedido.itens, novoItem]
+                        });
+                        setItemPedProdutoId('');
+                        setItemPedNome('');
+                        setItemPedQtd('10');
+                        setItemPedPreco('');
+                        setItemPedDesconto('');
+                      }}
+                    >
+                      + Adicionar
+                    </button>
+                  </div>
+                  {!itemPedProdutoId && (
+                    <div style={{ marginTop: 6 }}>
+                      <input
+                        type="text"
+                        placeholder="Ou digite o nome de um produto/insumo avulso para compra sob encomenda..."
+                        value={itemPedNome}
+                        onChange={(e) => setItemPedNome(e.target.value)}
+                        style={{ ...styles.input, width: '100%', fontSize: 12 }}
+                      />
+                    </div>
+                  )}
+                </div>
+
+                {/* Tabela dos Itens Adicionados */}
+                {formNovoPedido.itens.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: 24, color: 'var(--muted)', background: '#fafafa', borderRadius: 8, fontSize: 13 }}>
+                    Nenhum item adicionado à ordem de compra ainda. Adicione ao menos um item acima.
+                  </div>
+                ) : (
+                  <div style={{ overflowX: 'auto' }}>
+                    <table style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse' }}>
+                      <thead>
+                        <tr style={{ borderBottom: '2px solid var(--line, #e2e8f0)', color: 'var(--muted)', textAlign: 'left' }}>
+                          <th style={{ padding: '8px 6px' }}>Item</th>
+                          <th style={{ textAlign: 'center', padding: '8px 6px' }}>Un</th>
+                          <th style={{ textAlign: 'center', padding: '8px 6px' }}>Qtd</th>
+                          <th style={{ textAlign: 'right', padding: '8px 6px' }}>Unitário</th>
+                          <th style={{ textAlign: 'right', padding: '8px 6px' }}>Desc.</th>
+                          <th style={{ textAlign: 'right', padding: '8px 6px' }}>Subtotal</th>
+                          <th style={{ textAlign: 'center', padding: '8px 6px' }}></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {formNovoPedido.itens.map((it, idx) => (
+                          <tr key={idx} style={{ borderBottom: '1px solid var(--line, #f1f5f9)' }}>
+                            <td style={{ padding: '8px 6px' }}>
+                              <strong>{it.nome}</strong>
+                              {it.sku && <div style={{ fontSize: 10, color: 'var(--muted)' }}>SKU: {it.sku}</div>}
+                            </td>
+                            <td style={{ textAlign: 'center', padding: '8px 6px' }}>{it.unidade || 'un'}</td>
+                            <td style={{ textAlign: 'center', padding: '8px 6px', fontWeight: 700 }}>{it.quantidade}</td>
+                            <td style={{ textAlign: 'right', padding: '8px 6px' }}>{fmtR(it.precoUnitario)}</td>
+                            <td style={{ textAlign: 'right', padding: '8px 6px', color: it.desconto ? '#ef4444' : 'var(--muted)' }}>{it.desconto ? `-${fmtR(it.desconto)}` : '—'}</td>
+                            <td style={{ textAlign: 'right', padding: '8px 6px', fontWeight: 800 }}>{fmtR(it.total)}</td>
+                            <td style={{ textAlign: 'center', padding: '8px 6px' }}>
+                              <button
+                                type="button"
+                                style={{ border: 'none', background: 'transparent', color: '#ef4444', cursor: 'pointer', fontWeight: 800, fontSize: 14 }}
+                                onClick={() => setFormNovoPedido({
+                                  ...formNovoPedido,
+                                  itens: formNovoPedido.itens.filter((_, i) => i !== idx)
+                                })}
+                              >
+                                ×
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot>
+                        <tr style={{ background: 'var(--surface-2, #f8fafc)', borderTop: '2px solid var(--line, #e2e8f0)' }}>
+                          <td colSpan={5} style={{ textAlign: 'right', padding: '10px 8px', fontWeight: 800 }}>Subtotal dos Produtos:</td>
+                          <td style={{ textAlign: 'right', padding: '10px 8px', fontWeight: 900, fontSize: 14, color: '#0284c7' }}>
+                            {fmtR(formNovoPedido.itens.reduce((acc, it) => acc + (it.total || 0), 0))}
+                          </td>
+                          <td></td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ABA 2: FORNECEDOR & RESPONSÁVEL */}
+            {abaNovoPedido === 'fornecedor' && (
+              <div style={{ display: 'grid', gap: 12 }}>
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)' }}>Fornecedor Parceiro *</label>
+                  <select
+                    required
+                    value={formNovoPedido.fornecedorId}
+                    onChange={(e) => {
+                      const fid = e.target.value;
+                      const f = fornecedores.find(item => item.id === fid);
+                      const prazo = Number(f?.prazoEntregaDias || 7);
+                      const d = new Date();
+                      d.setDate(d.getDate() + prazo);
+                      const prev = d.toISOString().slice(0, 10);
+                      setFormNovoPedido({
+                        ...formNovoPedido,
+                        fornecedorId: fid,
+                        fornecedorNome: f?.nome || '',
+                        fornecedorCnpj: f?.cnpj || '',
+                        fornecedorEmail: f?.email || '',
+                        fornecedorTelefone: f?.telefone || '',
+                        fornecedorContato: f?.contato || '',
+                        condicaoPagamento: f?.condicaoPagamento || formNovoPedido.condicaoPagamento || 'Boleto 30 dias',
+                        previsaoEntrega: formNovoPedido.previsaoEntrega || prev
+                      });
+                    }}
+                    style={{ ...styles.input, width: '100%', marginTop: 4 }}
+                  >
+                    <option value="">Selecione o fornecedor…</option>
+                    {fornecedores.map((f) => (
+                      <option key={f.id} value={f.id}>
+                        {f.nome} (CNPJ: {f.cnpj || '—'} | Prazo: {f.prazoEntregaDias || 7} dias | {f.contato || 'Comercial'})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                  <div>
+                    <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)' }}>Comprador Responsável</label>
+                    <input
+                      type="text"
+                      value={formNovoPedido.comprador}
+                      onChange={(e) => setFormNovoPedido({ ...formNovoPedido, comprador: e.target.value })}
+                      style={{ ...styles.input, width: '100%', marginTop: 4 }}
+                      placeholder="Nome do gestor / comprador"
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)' }}>Centro de Custo / Destinação</label>
+                    <select
+                      value={formNovoPedido.centroCusto}
+                      onChange={(e) => setFormNovoPedido({ ...formNovoPedido, centroCusto: e.target.value })}
+                      style={{ ...styles.input, width: '100%', marginTop: 4 }}
+                    >
+                      <option value="Estoque Revenda & Consumo">Estoque Revenda & Consumo</option>
+                      <option value="Insumos de Atendimento (Salão/Barbearia)">Insumos de Atendimento (Salão/Barbearia)</option>
+                      <option value="Bebidas e Bar">Bebidas e Bar</option>
+                      <option value="Embalagens & Descartáveis">Embalagens & Descartáveis</option>
+                      <option value="Manutenção & Ferramentas">Manutenção & Ferramentas</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                  <div>
+                    <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)' }}>E-mail do Vendedor / Representante</label>
+                    <input
+                      type="email"
+                      value={formNovoPedido.fornecedorEmail}
+                      onChange={(e) => setFormNovoPedido({ ...formNovoPedido, fornecedorEmail: e.target.value })}
+                      style={{ ...styles.input, width: '100%', marginTop: 4 }}
+                      placeholder="vendas@fornecedor.com.br"
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)' }}>Telefone / WhatsApp do Fornecedor</label>
+                    <input
+                      type="text"
+                      value={formNovoPedido.fornecedorTelefone}
+                      onChange={(e) => setFormNovoPedido({ ...formNovoPedido, fornecedorTelefone: e.target.value })}
+                      style={{ ...styles.input, width: '100%', marginTop: 4 }}
+                      placeholder="(65) 99999-0000"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ABA 3: FRETE & LOGÍSTICA */}
+            {abaNovoPedido === 'logistica' && (
+              <div style={{ display: 'grid', gap: 12 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                  <div>
+                    <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)' }}>Previsão de Entrega no Destino</label>
+                    <input
+                      type="date"
+                      value={formNovoPedido.previsaoEntrega}
+                      onChange={(e) => setFormNovoPedido({ ...formNovoPedido, previsaoEntrega: e.target.value })}
+                      style={{ ...styles.input, width: '100%', marginTop: 4 }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)' }}>Modalidade do Frete</label>
+                    <select
+                      value={formNovoPedido.freteTipo}
+                      onChange={(e) => setFormNovoPedido({ ...formNovoPedido, freteTipo: e.target.value })}
+                      style={{ ...styles.input, width: '100%', marginTop: 4 }}
+                    >
+                      <option value="cif">CIF — Por conta do Fornecedor (Frete Grátis)</option>
+                      <option value="fob">FOB — Por conta do Comprador</option>
+                      <option value="retirada">Retirada no Balcão do Fornecedor</option>
+                    </select>
+                  </div>
+                </div>
+
+                {formNovoPedido.freteTipo === 'fob' && (
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                    <div>
+                      <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)' }}>Valor do Frete (R$)</label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={formNovoPedido.freteValor}
+                        onChange={(e) => setFormNovoPedido({ ...formNovoPedido, freteValor: e.target.value })}
+                        style={{ ...styles.input, width: '100%', marginTop: 4 }}
+                        placeholder="0,00"
+                      />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)' }}>Transportadora / Rastreador</label>
+                      <input
+                        type="text"
+                        value={formNovoPedido.transportadora}
+                        onChange={(e) => setFormNovoPedido({ ...formNovoPedido, transportadora: e.target.value })}
+                        style={{ ...styles.input, width: '100%', marginTop: 4 }}
+                        placeholder="Nome da transportadora ou motorista"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)' }}>Instruções de Recebimento & Faturamento Fiscal</label>
+                  <textarea
+                    rows={3}
+                    value={formNovoPedido.instrucoesEntrega}
+                    onChange={(e) => setFormNovoPedido({ ...formNovoPedido, instrucoesEntrega: e.target.value })}
+                    style={{ ...styles.input, width: '100%', marginTop: 4, fontFamily: 'inherit' }}
+                    placeholder="Ex: Horário de recebimento das 09h às 18h. Informar o número da Ordem de Compra na tag xPed da NF-e."
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* ABA 4: CONDIÇÕES & TOTAIS */}
+            {abaNovoPedido === 'financeiro' && (
+              <div style={{ display: 'grid', gap: 12 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                  <div>
+                    <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)' }}>Condição de Pagamento</label>
+                    <select
+                      value={formNovoPedido.condicaoPagamento}
+                      onChange={(e) => setFormNovoPedido({ ...formNovoPedido, condicaoPagamento: e.target.value })}
+                      style={{ ...styles.input, width: '100%', marginTop: 4 }}
+                    >
+                      <option value="Boleto 30 dias">Boleto 30 dias</option>
+                      <option value="Boleto 14 dias">Boleto 14 dias</option>
+                      <option value="Boleto 28 dias">Boleto 28 dias</option>
+                      <option value="Boleto 30/60 dias">Boleto 30/60 dias (2x)</option>
+                      <option value="Boleto 30/60/90 dias">Boleto 30/60/90 dias (3x)</option>
+                      <option value="PIX à vista">PIX à vista (Desconto)</option>
+                      <option value="Cartão Corporativo">Cartão Corporativo</option>
+                      <option value="Transferência Bancária (TED)">Transferência Bancária (TED)</option>
+                      <option value="Personalizado">Personalizado</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)' }}>Forma de Liquidação</label>
+                    <select
+                      value={formNovoPedido.formaPagamento}
+                      onChange={(e) => setFormNovoPedido({ ...formNovoPedido, formaPagamento: e.target.value })}
+                      style={{ ...styles.input, width: '100%', marginTop: 4 }}
+                    >
+                      <option value="Boleto Bancário">Boleto Bancário</option>
+                      <option value="PIX">PIX</option>
+                      <option value="Transferência TED/DOC">Transferência TED/DOC</option>
+                      <option value="Cartão de Crédito Corporativo">Cartão de Crédito Corporativo</option>
+                      <option value="Dinheiro / Cheque">Dinheiro / Cheque</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                  <div>
+                    <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)' }}>Desconto Comercial Global (R$)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={formNovoPedido.descontoTotal}
+                      onChange={(e) => setFormNovoPedido({ ...formNovoPedido, descontoTotal: e.target.value })}
+                      style={{ ...styles.input, width: '100%', marginTop: 4 }}
+                      placeholder="0,00"
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)' }}>Chave Pix ou Dados Bancários do Fornecedor</label>
+                    <input
+                      type="text"
+                      value={formNovoPedido.dadosBancarios}
+                      onChange={(e) => setFormNovoPedido({ ...formNovoPedido, dadosBancarios: e.target.value })}
+                      style={{ ...styles.input, width: '100%', marginTop: 4 }}
+                      placeholder="Chave Pix (CNPJ/E-mail) ou Banco/Ag/Conta"
+                    />
+                  </div>
+                </div>
+
+                {/* Card Resumo Financeiro da Compra */}
+                <div style={{ background: 'linear-gradient(135deg, rgba(2, 132, 199, 0.08) 0%, rgba(16, 185, 129, 0.05) 100%)', padding: 16, borderRadius: 12, border: '1px solid rgba(2, 132, 199, 0.25)' }}>
+                  <div style={{ fontSize: 12, fontWeight: 800, textTransform: 'uppercase', color: '#0284c7', letterSpacing: '.05em', marginBottom: 8 }}>
+                    Quadro Resumo da Ordem de Compra
+                  </div>
+                  <div style={{ display: 'grid', gap: 4, fontSize: 13 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span style={{ color: 'var(--muted)' }}>Subtotal dos Produtos ({formNovoPedido.itens.length} itens):</span>
+                      <strong>{fmtR(formNovoPedido.itens.reduce((acc, it) => acc + (it.total || 0), 0))}</strong>
+                    </div>
+                    {Number(formNovoPedido.freteValor) > 0 && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span style={{ color: 'var(--muted)' }}>(+) Frete ({formNovoPedido.freteTipo.toUpperCase()}):</span>
+                        <strong>+{fmtR(formNovoPedido.freteValor)}</strong>
+                      </div>
+                    )}
+                    {Number(formNovoPedido.descontoTotal) > 0 && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', color: '#ef4444' }}>
+                        <span>(-) Desconto Negociado:</span>
+                        <strong>-{fmtR(formNovoPedido.descontoTotal)}</strong>
+                      </div>
+                    )}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '2px solid #0284c7', paddingTop: 8, marginTop: 4, fontSize: 17, fontWeight: 900, color: '#0284c7' }}>
+                      <span>TOTAL LÍQUIDO DO PEDIDO:</span>
+                      <span>
+                        {fmtR(Math.max(0,
+                          formNovoPedido.itens.reduce((acc, it) => acc + (it.total || 0), 0) +
+                          Number(String(formNovoPedido.freteValor || '0').replace(',', '.')) -
+                          Number(String(formNovoPedido.descontoTotal || '0').replace(',', '.'))
+                        ))}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)' }}>Observações Gerais para o Fornecedor</label>
+                  <input
+                    type="text"
+                    placeholder="Ex: Entregar com nota fiscal e cópia deste pedido."
+                    value={formNovoPedido.observacoes}
+                    onChange={(e) => setFormNovoPedido({ ...formNovoPedido, observacoes: e.target.value })}
+                    style={{ ...styles.input, width: '100%', marginTop: 4 }}
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Ações Inferiores */}
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'space-between', alignItems: 'center', marginTop: 10, borderTop: '1px solid var(--line, #e2e8f0)', paddingTop: 12 }}>
+              <div style={{ fontSize: 12, color: 'var(--muted)' }}>
+                Total da Ordem: <strong>{fmtR(Math.max(0,
+                  formNovoPedido.itens.reduce((acc, it) => acc + (it.total || 0), 0) +
+                  Number(String(formNovoPedido.freteValor || '0').replace(',', '.')) -
+                  Number(String(formNovoPedido.descontoTotal || '0').replace(',', '.'))
+                ))}</strong>
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button type="button" style={styles.btn} onClick={() => setModalNovoPedido(false)}>
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  style={{ ...styles.btn, border: '1px solid #0284c7', color: '#0284c7', fontWeight: 700 }}
+                  onClick={() => criarPedidoDeCompra('rascunho')}
+                >
+                  Salvar Rascunho
+                </button>
                 <button
                   type="button"
                   style={styles.btnPrimary}
-                  onClick={() => {
-                    const qtd = Number(itemPedQtd);
-                    const preco = Number(itemPedPreco);
-                    if (!itemPedProdutoId || qtd <= 0 || preco <= 0) {
-                      return toast('Selecione o item, quantidade e preço negociado.', true);
-                    }
-                    const prod = produtosCombinados.find((p) => p.id === itemPedProdutoId);
-                    const novoItem = {
-                      produtoId: itemPedProdutoId,
-                      nome: prod?.nome || 'Item',
-                      quantidade: qtd,
-                      precoUnitario: preco,
-                      total: Number((qtd * preco).toFixed(2))
-                    };
-                    setFormNovoPedido({
-                      ...formNovoPedido,
-                      itens: [...formNovoPedido.itens, novoItem]
-                    });
-                    setItemPedProdutoId('');
-                    setItemPedQtd('10');
-                    setItemPedPreco('');
-                  }}
+                  onClick={() => criarPedidoDeCompra('aprovado')}
                 >
-                  + Inserir
+                  ✓ Salvar & Aprovar Ordem
                 </button>
               </div>
-
-              {/* Lista dos Itens Adicionados */}
-              {formNovoPedido.itens.length > 0 && (
-                <div style={{ marginTop: 12 }}>
-                  <table style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse' }}>
-                    <thead>
-                      <tr style={{ borderBottom: '1px solid var(--line, #e2e8f0)', color: 'var(--muted)' }}>
-                        <th style={{ textAlign: 'left', padding: '6px 0' }}>Item</th>
-                        <th style={{ textAlign: 'center', padding: '6px 0' }}>Qtd</th>
-                        <th style={{ textAlign: 'right', padding: '6px 0' }}>Unitário</th>
-                        <th style={{ textAlign: 'right', padding: '6px 0' }}>Total</th>
-                        <th style={{ textAlign: 'center', padding: '6px 0' }}></th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {formNovoPedido.itens.map((it, idx) => (
-                        <tr key={idx} style={{ borderBottom: '1px solid var(--line, #f1f5f9)' }}>
-                          <td style={{ padding: '6px 0' }}><strong>{it.nome}</strong></td>
-                          <td style={{ textAlign: 'center', padding: '6px 0' }}>{it.quantidade}</td>
-                          <td style={{ textAlign: 'right', padding: '6px 0' }}>{fmtR(it.precoUnitario)}</td>
-                          <td style={{ textAlign: 'right', padding: '6px 0', fontWeight: 700 }}>{fmtR(it.total)}</td>
-                          <td style={{ textAlign: 'center', padding: '6px 0' }}>
-                            <button
-                              type="button"
-                              style={{ border: 'none', background: 'transparent', color: '#ef4444', cursor: 'pointer', fontWeight: 800 }}
-                              onClick={() => setFormNovoPedido({
-                                ...formNovoPedido,
-                                itens: formNovoPedido.itens.filter((_, i) => i !== idx)
-                              })}
-                            >
-                              ×
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                    <tfoot>
-                      <tr>
-                        <td colSpan={3} style={{ textAlign: 'right', padding: '8px 0', fontWeight: 800 }}>Total Estimado do Pedido:</td>
-                        <td style={{ textAlign: 'right', padding: '8px 0', fontWeight: 800, fontSize: 14, color: '#0284c7' }}>
-                          {fmtR(formNovoPedido.itens.reduce((acc, it) => acc + (it.total || 0), 0))}
-                        </td>
-                        <td></td>
-                      </tr>
-                    </tfoot>
-                  </table>
-                </div>
-              )}
-            </div>
-
-            <div>
-              <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)' }}>Observações para o Fornecedor</label>
-              <input
-                type="text"
-                placeholder="Ex: Entregar na recepção, horário comercial das 9h às 18h"
-                value={formNovoPedido.observacoes}
-                onChange={(e) => setFormNovoPedido({ ...formNovoPedido, observacoes: e.target.value })}
-                style={{ ...styles.input, width: '100%', marginTop: 4 }}
-              />
-            </div>
-
-            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 10 }}>
-              <button type="button" style={styles.btn} onClick={() => setModalNovoPedido(false)}>
-                Cancelar
-              </button>
-              <button type="submit" style={styles.btnPrimary}>
-                Salvar Pedido em Rascunho
-              </button>
             </div>
           </form>
         </Modal>
@@ -2093,13 +2540,20 @@ export default function DinoComprasEstoqueHub({
                 <button
                   type="button"
                   style={{ ...styles.btnPrimary, background: '#0284c7', display: 'inline-flex', alignItems: 'center', gap: 6 }}
-                  onClick={() => window.print()}
-                >
-                  🖨️ Imprimir / Salvar em PDF
-                </button>
-                <button
-                  type="button"
-                  style={{ ...styles.btnPrimary, background: '#2563eb', display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                 onClick={() => window.print()}
+               >
+                 🖨️ Imprimir / Salvar em PDF
+               </button>
+               <button
+                 type="button"
+                 style={{ ...styles.btnPrimary, background: '#16a34a', borderColor: '#15803d', display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                 onClick={() => abrirModalWhatsapp(pedidoParaPdf)}
+               >
+                 💬 WhatsApp
+               </button>
+               <button
+                 type="button"
+                 style={{ ...styles.btnPrimary, background: '#2563eb', display: 'inline-flex', alignItems: 'center', gap: 6 }}
                   onClick={() => {
                     setModalPdf(false);
                     abrirModalEmail(pedidoParaPdf);
@@ -2131,11 +2585,12 @@ export default function DinoComprasEstoqueHub({
                     KYTTO ERP · GESTÃO DE COMPRAS E SUPRIMENTOS
                   </div>
                   <h2 style={{ margin: '4px 0 2px', fontSize: 22, fontWeight: 900, color: '#0f172a' }}>
-                    {nomeEmpresa}
+                    {nomeEmpresa === "Dino" || String(nomeEmpresa).includes("Dino") ? "Dino Barbearia Ltda" : nomeEmpresa}
                   </h2>
                   <div style={{ fontSize: 12, color: '#64748b' }}>
-                    CNPJ: 14.829.301/0001-92 · Matriz Operacional<br />
-                    Av. Principal, 1000 — Centro · Contato: compras@kytto.com.br
+                    CNPJ: 50.073.355/0001-89 · Inscrição Estadual: 14.229.191-9<br />
+                    Av. Filinto Müller, 1269 — Centro-Norte, Várzea Grande - MT · CEP: 78110-000<br />
+                    Contato: compras@kytto.com.br · Fone: (65) 99999-0000
                   </div>
                 </div>
 
@@ -2158,14 +2613,19 @@ export default function DinoComprasEstoqueHub({
                 <div>
                   <div style={{ fontWeight: 800, textTransform: 'uppercase', color: '#64748b', marginBottom: 4 }}>Dados do Fornecedor</div>
                   <div style={{ fontSize: 14, fontWeight: 800, color: '#0f172a' }}>{pedidoParaPdf.fornecedorNome}</div>
-                  <div>CNPJ: {pedidoParaPdf.fornecedorCnpj || 'Consulte cadastro'}</div>
+                  <div>CNPJ: {pedidoParaPdf.fornecedorCnpj || 'Consulte cadastro comercial'}</div>
                   <div>E-mail: {pedidoParaPdf.fornecedorEmail || 'comercial@fornecedor.com.br'}</div>
+                  <div>Telefone / WhatsApp: {pedidoParaPdf.fornecedorTelefone || '—'}</div>
+                  {pedidoParaPdf.dadosBancarios && <div>Pagamento via: <strong>{pedidoParaPdf.dadosBancarios}</strong></div>}
                 </div>
                 <div>
                   <div style={{ fontWeight: 800, textTransform: 'uppercase', color: '#64748b', marginBottom: 4 }}>Condições Comerciais</div>
                   <div>Condição de Pagamento: <strong>{pedidoParaPdf.condicaoPagamento || 'Boleto 30 dias'}</strong></div>
+                  <div>Forma de Liquidação: <strong>{pedidoParaPdf.formaPagamento || 'Boleto Bancário'}</strong></div>
+                  <div>Modalidade do Frete: <strong>{String(pedidoParaPdf.freteTipo || 'CIF').toUpperCase()}</strong></div>
                   <div>Previsão de Entrega: <strong>{pedidoParaPdf.previsaoEntrega || 'A combinar'}</strong></div>
-                  <div>Local de Entrega: <strong>Endereço da Unidade Ativa</strong></div>
+                  <div>Comprador Responsável: <strong>{pedidoParaPdf.comprador || 'Rodrigo Gonçalves (Gestor)'}</strong></div>
+                  <div>Centro de Custo: <strong>{pedidoParaPdf.centroCusto || 'Estoque Revenda & Consumo'}</strong></div>
                 </div>
               </div>
 
@@ -2216,7 +2676,7 @@ export default function DinoComprasEstoqueHub({
 
               {/* Instruções de Entrega e Faturamento */}
               <div style={{ background: '#f8fafc', padding: 12, borderRadius: 6, fontSize: 11, color: '#475569', marginBottom: 24 }}>
-                <strong>Instruções de Faturamento:</strong> A Nota Fiscal Eletrônica (NF-e) deve ser emitida com a identificação do Pedido de Compra nº #{pedidoParaPdf.numero} nos dados adicionais. Toda mercadoria deverá ser entregue acompanhada de DANFE no horário das 9h às 18h.
+                <strong>Instruções de Faturamento:</strong> A Nota Fiscal Eletrônica (NF-e) deve ser emitida destacando obrigatoriamente a identificação deste Pedido de Compra nº <strong>#{pedidoParaPdf.numero}</strong> na tag <code>&lt;xPed&gt;</code> e nos dados adicionais. Toda mercadoria deverá ser entregue acompanhada do respectivo DANFE. {pedidoParaPdf.instrucoesEntrega || 'Horário de recebimento: 09h às 18h.'}
               </div>
 
               {/* Assinaturas */}
@@ -2230,6 +2690,90 @@ export default function DinoComprasEstoqueHub({
                   <div style={{ fontSize: 11, color: '#64748b' }}>Aceite & Confirmação do Fornecedor</div>
                 </div>
               </div>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* ── MODAL DE RECEBIMENTO DE MERCADORIAS (CONFERÊNCIA GUIADA) ── */}
+      {modalRecebimento && pedidoParaReceber && (
+        <Modal open={modalRecebimento} onClose={() => setModalRecebimento(false)} title={`Conferência e Recebimento de Mercadorias — Pedido #${pedidoParaReceber.numero}`}>
+          <div style={{ display: 'grid', gap: 14 }}>
+            <div style={{ background: '#f8fafc', padding: 12, borderRadius: 8, border: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+              <div>
+                <strong style={{ fontSize: 13, color: '#0f172a' }}>Fornecedor: {pedidoParaReceber.fornecedorNome}</strong>
+                <div style={{ fontSize: 11, color: '#64748b' }}>
+                  Ordem total de <strong>{fmtR(pedidoParaReceber.total)}</strong> · Condição: {pedidoParaReceber.condicaoPagamento || 'Boleto 30 dias'}
+                </div>
+              </div>
+              <button
+                type="button"
+                style={{ ...styles.btn, fontSize: 11, background: '#0284c7', color: '#fff', border: 'none', cursor: 'pointer', padding: '6px 12px', borderRadius: 6, fontWeight: 700 }}
+                onClick={() => {
+                  setItensRecebimento(itensRecebimento.map(it => ({ ...it, quantidadeReceber: it.pendente })));
+                }}
+              >
+                ⚡ Preencher Tudo Pendente
+              </button>
+            </div>
+
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ borderBottom: '2px solid var(--line, #e2e8f0)', color: 'var(--muted)', textAlign: 'left' }}>
+                    <th style={{ padding: '8px 6px' }}>Item</th>
+                    <th style={{ textAlign: 'center', padding: '8px 6px' }}>Pedido</th>
+                    <th style={{ textAlign: 'center', padding: '8px 6px' }}>Já Entregue</th>
+                    <th style={{ textAlign: 'center', padding: '8px 6px' }}>Pendente</th>
+                    <th style={{ textAlign: 'center', padding: '8px 6px' }}>Qtd Entregue Agora</th>
+                    <th style={{ textAlign: 'right', padding: '8px 6px' }}>Custo Un.</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {itensRecebimento.map((it, idx) => (
+                    <tr key={idx} style={{ borderBottom: '1px solid var(--line, #f1f5f9)' }}>
+                      <td style={{ padding: '8px 6px' }}>
+                        <strong>{it.nome}</strong>
+                        <div style={{ fontSize: 10, color: 'var(--muted)' }}>Unidade: {it.unidade}</div>
+                      </td>
+                      <td style={{ textAlign: 'center', padding: '8px 6px' }}>{it.quantidadePedida}</td>
+                      <td style={{ textAlign: 'center', padding: '8px 6px' }}>{it.recebidoAnterior}</td>
+                      <td style={{ textAlign: 'center', padding: '8px 6px', color: it.pendente > 0 ? '#f59e0b' : 'var(--muted)', fontWeight: 700 }}>{it.pendente}</td>
+                      <td style={{ textAlign: 'center', padding: '8px 6px' }}>
+                        <input
+                          type="number"
+                          min="0"
+                          max={it.pendente}
+                          value={it.quantidadeReceber}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setItensRecebimento(itensRecebimento.map((x, i) => i === idx ? { ...x, quantidadeReceber: val } : x));
+                          }}
+                          style={{ ...styles.input, width: 80, textAlign: 'center', padding: '5px 8px' }}
+                        />
+                      </td>
+                      <td style={{ textAlign: 'right', padding: '8px 6px', fontWeight: 700 }}>{fmtR(it.custoUnitario)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', padding: 12, borderRadius: 8, fontSize: 12, color: '#166534' }}>
+              💡 <strong>Entrada Automática:</strong> A quantidade informada dará entrada imediatamente no saldo de estoque da unidade, atualizará o Kardex e o Custo Médio Ponderado, e provisionará o título no Contas a Pagar do Razão Financeiro.
+            </div>
+
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 8 }}>
+              <button type="button" style={styles.btn} onClick={() => setModalRecebimento(false)}>
+                Cancelar
+              </button>
+              <button
+                type="button"
+                style={styles.btnSuccess}
+                onClick={confirmarRecebimentoParcialOuTotal}
+              >
+                ✓ Confirmar Entrada no Estoque
+              </button>
             </div>
           </div>
         </Modal>
