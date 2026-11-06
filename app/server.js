@@ -916,7 +916,7 @@ app.use('/api/admin/commerce', (req, res, next) => {
 });
 
 // Módulos de /api/admin que separam dados por empresa e podem ser usados por tenant.
-const TENANT_ADMIN_MODULES = new Set(['a2', 'bar', 'barbearia', 'commerce', 'commerce-session', 'usuarios', 'usuarios-diretorio', 'platform', 'fidelidade', 'login', 'auditoria', 'modificadores', 'combos', 'clube', 'unidades', 'empresas', 'plataforma', 'razao', 'suprimentos', 'fiscal', 'salao', 'varejo', 'supermercado', 'pdv-offline', 'minhas-permissoes', 'cupons', 'omnichannel', 'pdv', 'dino-captacao', 'clientes-360', 'relatorios', 'estoque', 'cardapio', 'fichas-tecnicas']);
+const TENANT_ADMIN_MODULES = new Set(['a2', 'bar', 'barbearia', 'commerce', 'commerce-session', 'usuarios', 'usuarios-diretorio', 'platform', 'fidelidade', 'login', 'auditoria', 'modificadores', 'combos', 'clube', 'unidades', 'empresas', 'plataforma', 'razao', 'suprimentos', 'fiscal', 'salao', 'varejo', 'supermercado', 'pdv-offline', 'minhas-permissoes', 'cupons', 'omnichannel', 'pdv', 'dino-captacao', 'clientes-360', 'relatorios', 'estoque', 'cardapio', 'fichas-tecnicas', 'erp']);
 
 // [kytto-clube] Kytto Clube & Academia (catraca, contrato digital, agenda, retenção, Wellhub/TotalPass).
 // Usa o pool do Commerce que já existe (não abre outro pool) e a mesma resolução de empresa e
