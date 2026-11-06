@@ -1054,7 +1054,7 @@ export default function DinoComprasEstoqueHub({
           cotacoes={cotacoes}
           fornecedores={fornecedores}
           produtos={produtosRevenda.length > 0 ? produtosRevenda : estoqueGeral}
-          onAtualizar={sincronizar}
+          onAtualizar={carregarTudo}
           fmtR={fmtR}
           toast={toast}
         />
