@@ -381,7 +381,7 @@ export default function OrdensServico() {
                   <div style={{ fontWeight: 600 }}>{o.equipamento_marca} {o.equipamento_modelo}</div>
                   <div style={{ fontSize: 12, color: 'var(--muted)' }}>{o.equipamento_tipo} {o.equipamento_serie ? `· S/N: ${o.equipamento_serie}` : ''}</div>
                 </td>
-                <td style={{ padding: '12px 16px' }}>{new Date(o.data_abertura).toLocaleDateString('pt-BR')}</td>
+                <td style={{ padding: '12px 16px' }}>{new Date(o.data_abertura || o.criado_em || Date.now()).toLocaleDateString('pt-BR')}</td>
                 <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 800 }}>
                   R$ {Number(o.valor_total || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                 </td>
@@ -698,7 +698,7 @@ export default function OrdensServico() {
                 <div style={{ textAlign: 'right' }}>
                   <div style={{ fontSize: 18, fontWeight: 800 }}>ORDEM DE SERVIÇO</div>
                   <div style={{ fontSize: 16, fontWeight: 700, color: '#f97316' }}>{modalVisualizar.numero}</div>
-                  <div style={{ fontSize: 11, color: '#64748b' }}>Data: {new Date(modalVisualizar.data_abertura).toLocaleDateString('pt-BR')}</div>
+                  <div style={{ fontSize: 11, color: '#64748b' }}>Data: {new Date(modalVisualizar.data_abertura || modalVisualizar.criado_em || Date.now()).toLocaleDateString('pt-BR')}</div>
                 </div>
               </div>
 

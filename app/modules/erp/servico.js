@@ -203,15 +203,20 @@ export async function salvarProposta(db, empresaId, dados, usuario = 'admin') {
   // Calcular totais
   let subtotal = 0;
   let descontoTotal = Number(dados.desconto_total || 0);
+  let somaDescontoItens = 0;
   for (const it of itens) {
     const q = Number(it.quantidade || 1);
     const vu = Number(it.valor_unitario || 0);
     const desc = Number(it.valor_desconto || 0);
+    somaDescontoItens += desc;
     const st = (q * vu) - desc;
     it.subtotal = Math.round(st * 100) / 100;
     subtotal += (q * vu);
   }
   subtotal = Math.round(subtotal * 100) / 100;
+  if (!descontoTotal && somaDescontoItens > 0) {
+    descontoTotal = Math.round(somaDescontoItens * 100) / 100;
+  }
   const valorFrete = Number(dados.valor_frete || 0);
   const valorTotal = Math.max(0, Math.round((subtotal - descontoTotal + valorFrete) * 100) / 100);
 
@@ -515,6 +520,8 @@ export async function salvarOS(db, empresaId, dados, usuario = 'admin') {
     garantia_dias: Number(dados.garantia_dias || 90),
     termo_garantia: dados.termo_garantia || 'Garantia de 90 dias conforme Art. 26 do Código de Defesa do Consumidor (Lei 8.078/90) sobre serviços e peças aplicadas.',
     assinatura_cliente: dados.assinatura_cliente || null,
+    data_abertura: dados.data_abertura || agora.toISOString(),
+    criado_em: dados.criado_em || agora.toISOString(),
     criado_por: usuario,
     atualizado_em: agora.toISOString()
   };
@@ -727,7 +734,7 @@ export async function salvarRomaneio(db, empresaId, dados, usuario = 'admin') {
   for (const ent of entregas) {
     totalVolumes += Number(ent.volumes || 1);
     valorTotalMercadorias += Number(ent.valor_mercadoria || 0);
-    if (ent.forma_pagamento === 'cobrar_destino') {
+    if (['cobrar_destino', 'cobrar_na_entrega', 'na_entrega'].includes(ent.forma_pagamento)) {
       valorAReceberDestino += Number(ent.valor_a_cobrar || 0);
     }
     if (!ent.id) ent.id = crypto.randomUUID();
@@ -819,6 +826,7 @@ export async function atualizarStatusEntrega(db, empresaId, romaneioId, entregaI
   if (recebedor_nome) ent.recebedor_nome = recebedor_nome;
   if (recebedor_doc) ent.recebedor_doc = recebedor_doc;
   ent.hora_baixa = new Date().toISOString();
+  ent.entregue_em = ent.hora_baixa;
 
   // Se todas as entregas forem entregues, marcar romaneio como concluído
   const todasEntregues = entregas.every(e => e.status === 'entregue' || e.status === 'cancelada');
@@ -895,7 +903,9 @@ function enriquecerAtivoComDepreciacao(ativo, dataReferencia = new Date()) {
     ...ativo,
     meses_decorridos: mesesDecorridos,
     depreciacao_acumulada: depreciacaoAcumulada,
+    depreciacaoAcumulada,
     valor_residual: valorResidual,
+    valorResidual,
     percentual_depreciado: percentualDepreciado
   };
 }

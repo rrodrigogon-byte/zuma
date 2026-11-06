@@ -1844,6 +1844,17 @@ app.use('/api/webhooks', createWhatsappAiWebhookRouter());
   console.log('Commerce Core PostgreSQL habilitado (host, alias público e backoffice multiempresa)');
 }
 
+// [kytto-erp-fallback] Se Commerce Core estiver desligado (offline/dev local sem PG), opera com resiliência sobre JSON-DB
+if (process.env.COMMERCE_CORE_ENABLED !== '1') {
+  const erpFallbackDb = { query: async () => { throw new Error('PG_OFFLINE_FALLBACK'); } };
+  const escopoFallback = async (req) => {
+    const empresaId = legacyEmpresaId(req) || 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
+    return { empresaId, lojaRestrita: null };
+  };
+  const erpFallbackRouter = createErpAdminRouter({ db: erpFallbackDb, escopoDaRequisicao: escopoFallback });
+  app.use('/api/admin/erp', auth, requireStaff, erpFallbackRouter);
+}
+
 // ============================================================================
 // LOJA DE MODA & VESTUÁRIO COM IA INTEGRADA (/api/v1/loja-moda e /api/admin/loja-moda)
 // ============================================================================
