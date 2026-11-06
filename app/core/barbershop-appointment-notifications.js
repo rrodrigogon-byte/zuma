@@ -545,7 +545,9 @@ export async function enqueueDueAppointmentReminders() {
       const dataHora = dataValida(agendamento?.dataHora);
       if (!dataHora || ['cancelado', 'concluido', 'nao_compareceu'].includes(String(agendamento.status))) continue;
       const leadMs = dataHora.valueOf() - now.valueOf();
-      if (autoConfirm && String(agendamento.status) === 'agendado' && leadMs >= 0 && leadMs <= 36 * 60 * 60 * 1000) {
+      const isDinoEmp = ['d0d0ac01-8e50-4b61-8c79-de4aaa916da6', 'emp_dino', 'dino'].includes(String(legacyEmpresaId || '').toLowerCase());
+      // Na Barbearia Dino: NUNCA usar prazos de cancelamento nem descartar horários por timeout
+      if (!isDinoEmp && autoConfirm && String(agendamento.status) === 'agendado' && leadMs >= 0 && leadMs <= 36 * 60 * 60 * 1000) {
         const plano = confirmationPlan(dataHora, now);
         if (!plano.enabled) continue;
         const confirmacao = agendamento.confirmacaoAutomatica || {};

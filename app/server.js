@@ -4958,6 +4958,15 @@ app.get('/api/admin/barbearia/overview', async (req, res) => {
   } catch (error) { res.status(400).json({ error: error.message }); }
 });
 
+app.post('/api/admin/barbearia/sanear-confirmacoes', (req, res) => {
+  try {
+    const empresaId = legacyEmpresaId(req);
+    const resultado = barbeariaErpKytto.sanearConfirmacoesDino(empresaId);
+    res.json({ ok: true, empresaId, ...resultado, mensagem: 'Agendamentos saneados e prazos destravados com sucesso.' });
+  } catch (error) {
+    res.status(400).json({ ok: false, error: error.message });
+  }
+});
 app.get('/api/admin/barbearia/configuracoes', (req, res) => res.json({ ok: true, configuracao: barbeariaErpKytto.obterConfiguracao(legacyEmpresaId(req)) }));
 app.get('/api/admin/barbearia/configuracoes/unidade-ativa', (req, res) => {
   try { res.json({ ok: true, ...barbeariaErpKytto.obterConfiguracaoLoja(legacyEmpresaId(req), legacyLojaId(req)) }); }
