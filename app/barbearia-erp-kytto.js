@@ -1000,8 +1000,14 @@ function ordenarPorData(a, b) {
 export function obterConfiguracao(empresaId) {
   const configuracao = estadoEmpresa(empresaId, false).configuracao;
   const isDino = ['d0d0ac01-8e50-4b61-8c79-de4aaa916da6', 'emp_dino', 'dino'].includes(String(empresaId || '').toLowerCase());
-  const ativa = isDino ? configuracao.confirmacaoAutomaticaAtiva !== false : configuracao.confirmacaoAutomaticaAtiva === true;
-  return { ...configuracao, confirmacaoAutomaticaAtiva: ativa, lojas: { ...(configuracao.lojas || {}) } };
+  // Na Dino Barbearia, NUNCA ativar cancelamento automático por falta de confirmação!
+  const ativa = isDino ? false : configuracao.confirmacaoAutomaticaAtiva === true;
+  return {
+    ...configuracao,
+    confirmacaoAutomaticaAtiva: ativa,
+    cancelamentoAutomaticoPorFaltaConfirmacao: false,
+    lojas: { ...(configuracao.lojas || {}) },
+  };
 }
 
 function obterCalendarioLoja(estado, lojaId) {
@@ -1178,6 +1184,7 @@ function identidadeCliente(registro) {
 }
 
 export function listarAgendamentos(empresaId, filtros = {}) {
+  const telFiltro = filtros.telefone ? String(filtros.telefone).replace(/\D/g, '') : '';
   const itens = Object.values(estadoEmpresa(empresaId, false).agendamentos)
     .filter((item) => !filtros.data || String(item.dataAgenda || chaveDia(item.dataHora)).slice(0, 10) === String(filtros.data).slice(0, 10))
     .filter((item) => !filtros.de || String(item.dataAgenda || chaveDia(item.dataHora)).slice(0, 10) >= String(filtros.de).slice(0, 10))
@@ -1185,6 +1192,11 @@ export function listarAgendamentos(empresaId, filtros = {}) {
     .filter((item) => !filtros.status || item.status === String(filtros.status))
     .filter((item) => !filtros.profissionalId || String(filtros.profissionalId).split(',').map(id => id.trim()).includes(item.profissionalId))
     .filter((item) => !filtros.lojaId || !item.lojaId || item.lojaId === String(filtros.lojaId))
+    .filter((item) => {
+      if (!telFiltro) return true;
+      const tItem = String(item.clienteTelefone || '').replace(/\D/g, '');
+      return tItem && (tItem === telFiltro || tItem.slice(-8) === telFiltro.slice(-8));
+    })
     .sort(ordenarPorData);
   if (!itens.length) return [];
   // Um índice por empresa para a lista inteira (antes: uma varredura da base por agendamento).

@@ -27,6 +27,39 @@ import { enviarAudio, enviarEnquete, enviarFigurinha, enviarMensagem, enqueteSup
 import { generateSpeechWithType } from './whatsapp-ai-tts.js';
 import { enviarFigurinhaDoMomento } from './whatsapp-stickers.js';
 import { encontrarClientePorTelefone } from '../dino-clientes-vinculo.js';
+import { cleanCustomerDisplayName } from './whatsapp-ai-normalize.js';
+import * as barbearia from '../barbearia-erp-kytto.js';
+
+export function resolverNomeCliente(empresaId, telefone, fallbackName = '') {
+  let nomeLimpo = cleanCustomerDisplayName(fallbackName);
+  if (nomeLimpo) return nomeLimpo;
+
+  // 1. Tenta encontrar no cadastro de clientes persistido
+  try {
+    const cli = encontrarClientePorTelefone(empresaId, telefone);
+    if (cli?.nome) {
+      nomeLimpo = cleanCustomerDisplayName(cli.nome);
+      if (nomeLimpo) return nomeLimpo;
+    }
+  } catch {}
+
+  // 2. Tenta nos agendamentos da barbearia pelo telefone
+  try {
+    const agendamentos = barbearia.listarAgendamentos(empresaId, { telefone });
+    if (Array.isArray(agendamentos)) {
+      const telDigitos = String(telefone || '').replace(/\D/g, '');
+      for (const ag of agendamentos) {
+        const agTel = String(ag.clienteTelefone || '').replace(/\D/g, '');
+        if (ag.clienteNome && agTel && (agTel.slice(-8) === telDigitos.slice(-8) || agTel === telDigitos)) {
+          nomeLimpo = cleanCustomerDisplayName(ag.clienteNome);
+          if (nomeLimpo) return nomeLimpo;
+        }
+      }
+    }
+  } catch {}
+
+  return '';
+}
 import { chatbotBackendAudioPath, chatbotBackendConfig, chatbotBackendMode, providerSummary, registerInstanceWebhook, whatsappProviderConfigured, whatsappProviderName } from './whatsapp-provider.js';
 import { provisionWahaSession, validWahaGroupId, validWahaSession, wahaControlConfigured, wahaProviderSummary } from './whatsapp-waha.js';
 import {
@@ -272,6 +305,11 @@ COMO ESCREVER E AGIR NO WHATSAPP:
 - Nunca termine com "vou verificar" ou "estou consultando": não há consulta em segundo plano. Consulte nesta resposta e entregue o resultado; se faltar informação, pergunte objetivamente.
 - Agendamento e Horários Indisponíveis: Se o cliente pedir um horário e ele estiver ocupado ou indisponível, NÃO FAÇA OUTRA PERGUNTA INÚTIL (ex: "qual período prefere?"). Em vez disso, chame sugerir_proximos_horarios e RETORNE IMEDIATAMENTE 3 OPÇÕES DIFERENTES DE HORÁRIO do mesmo dia. Se não houver 3 opções no mesmo dia, proponha 3 horários em outro dia.
 - NUNCA CHUTE SERVIÇO NÃO INFORMADO: Se o cliente perguntar de horário ("tem horário hoje?", "tem vaga essa semana?") SEM ESPECIFICAR o serviço desejado, NUNCA presuma nem chame sugerir_proximos_horarios para serviços aleatórios como Manicure, Unha, Sobrancelha, etc. Pergunte primeiro: "Temos sim! Qual serviço você deseja agendar (corte, barba ou combo) e qual seu barbeiro de preferência?".
+- PROIBIÇÃO ABSOLUTA DE TERMOS TÉCNICOS E "CLIENTE AVEC": NUNCA sob nenhuma circunstância chame nenhum cliente de "Cliente Avec", "Avec", "Cliente sem nome" ou "Cliente". Use SEMPRE o primeiro nome real do cliente. Se o nome não estiver no cadastro, chame calorosamente de "meu irmão", "amigo" ou apenas "Opa, tudo bem?".
+- ACOLHIMENTO E EMPATIA EM CASO DE DESENCONTRO OU AVISO DE CANCELAMENTO: Se o cliente disser que recebeu aviso de cancelamento, que viajou (ex.: Cuiabá), que teve imprevisto ou que não compareceu por causa de mensagem:
+  1. Peça sinceras desculpas imediatamente pelo mal-entendido com carinho e humildade ("Poxa, peço mil desculpas pelo mal-entendido com o aviso de cancelamento!").
+  2. NUNCA confronte o cliente nem diga que o agendamento continuava ativo no sistema. O cliente sempre tem razão e precisa ser acolhido.
+  3. Deixe claro que a vaga e a presença dele são prioridade máxima na Barbearia Dino, e ofereça agendar com prioridade para a próxima semana ou no dia em que ele puder voltar!
 - ANTI-REPETIÇÃO DE HORÁRIOS: NUNCA repita a lista de 3 horários com data, profissional e preço se você já enviou esses horários na mensagem anterior. Se o cliente responder com frases curtas de conversa ou contexto ("tá bom", "eu tô na cidade", "consigo sim", "beleza"), NÃO mande novamente a lista inteira de horários! Pergunte apenas de forma objetiva: "Show! Qual dos horários anteriores você prefere que eu marque?".
 - Agendamento imediato: quando o cliente escolher o horário (ou disser "pode deixar esse horário então", "esse mesmo", "marca esse", "consigo sim", "pode ser esse"), determine o horário correspondente e chame preparar_agendamento DIRETO, sem perguntar "posso preparar?" e sem pedir SIM antes. NUNCA diga "Fechado!" ou "Combinado!" sem chamar a ferramenta preparar_agendamento nesta mesma resposta. O sistema manda o resumo com SIM/NÃO; não repita o resumo, valores ou horários no seu texto.
 - Continuidade e Cumprimento de Acordos (MUITO IMPORTANTE): Se na mensagem anterior você propôs verificar a disponibilidade para uma data/hora com outro barbeiro da equipe, e o cliente respondeu "Fechado!", "Sim", "Bora", "Show", "Pode ser", "Combinado" ou similar: CUMPRA O ACORDADO NA HORA! Consulte a disponibilidade para aquela data e horário com professionalId="qualquer", escolha o horário e chame preparar_agendamento direto! NUNCA dê ré na conversa nem volte a perguntar "qual serviço você quer fazer?". Se o cliente não disse o serviço explicitamente, assuma o serviço habitual dele ou "Corte Masculino" (o serviço principal da barbearia).
@@ -874,8 +912,9 @@ export function customerContextFor(toolContext) {
     alertaEsposa = `A ESPOSA DO CLIENTE (${cliente.conjugeNome || 'esposa'}) FAZ ANIVERSÁRIO ESTE MÊS (dia ${anivEsposa.slice(3)}/${mesAtual})! Lembre com gentileza e sugira que ele venha cortar o cabelo antes da festa ou comprar um mimo/voucher para ela!`;
   }
 
+  const nomeExibicao = resolverNomeCliente(toolContext.empresaId, toolContext.phone, cliente.nome);
   const conhecidos = [
-    `Nome: ${cliente.nome}`,
+    nomeExibicao ? `Nome: ${nomeExibicao}` : 'Nome: (trate cordialmente por meu irmão ou amigo)',
     cliente.aniversario ? `Aniversário: ${cliente.aniversario}` : null,
     (cliente.bairro || cliente.cidade) ? `Localização: ${[cliente.bairro, cliente.cidade].filter(Boolean).join(', ')}` : null,
     cliente.estadoCivil ? `Estado civil: ${cliente.estadoCivil}` : null,
@@ -1462,10 +1501,22 @@ async function deterministicResponse(task, channel, session, message) {
   return { ...response, text: personaFixedText(persona, response.kind, response.text, { storeName, seed: message.externalId }) };
 }
 
+const EMOJIS_CONFIRMACAO_PRESENCA = /(?:👍|👍🏻|👍🏼|👍🏽|👍🏾|👍🏿|👌|👌🏻|👌🏼|👌🏽|👌🏾|👌🏿|✌️|✌🏻|✌🏼|✌🏽|✌🏾|✌🏿|👊|👊🏻|👊🏼|👊🏽|👊🏾|👊🏿|🤝|🙏|🙌|👏|🤙|✅|✔️|✔|☑️|✂️|💈|🔥|💪)/u;
+
 export function presenceConfirmIntent(text) {
-  const value = plain(text).replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
-  return /^(confirmo|confirmado|confirmada|confirmo presenca|confirmo sim|sim confirmo|estarei ai|estarei la|vou sim|confirmadissimo|ok confirmado|pode confirmar|ta confirmado|esta confirmado|confirmar)( obrigad[oa])?$/.test(value)
-    || /^(sim|ok|pode ser|com certeza|fechado|perfeito)$/.test(value);
+  const raw = String(text ?? '').trim();
+  if (!raw || raw.length > 100) return false;
+  // Se o cliente respondeu com emoji de positivo/joinha/acordo (ex.: 👍, 🤝, 🙏, ✅)
+  if (EMOJIS_CONFIRMACAO_PRESENCA.test(raw)) {
+    // Não pode conter negação ou dúvida
+    const semEmojis = plain(raw).replace(/[^a-z0-9 ]/g, ' ').trim();
+    if (/\b(nao|cancel|desmar|remarc|troc|mud|duvid|sera)\b/i.test(semEmojis)) return false;
+    return true;
+  }
+  const value = plain(raw).replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!value) return false;
+  return /^(confirmo|confirmado|confirmada|confirmo presenca|confirmo sim|sim confirmo|estarei ai|estarei la|vou sim|vou|vou comparecer|confirmadissimo|ok confirmado|pode confirmar|ta confirmado|esta confirmado|confirmar|sim confirmar)( obrigad[oa])?$/.test(value)
+    || /^(sim|ok|pode ser|com certeza|fechado|fechou|perfeito|beleza|blz|bora|show|tamo junto|combinado|certo|marcado|ta marcado|opa vou|partiu)( obrigad[oa])?$/.test(value);
 }
 
 export async function confirmNextAppointment(context) {
@@ -1522,7 +1573,7 @@ async function deterministicResponseCore(task, channel, session, message) {
     canalId: task.canal_id,
     sessionId: session.id,
     phone: session.telefone,
-    customerName: session.nome || message.name,
+    customerName: resolverNomeCliente(task.empresa_id, session.telefone, session.nome || message.name),
     externalEventId: message.externalId,
     capabilities: channel.configuracao?.capabilities || {},
     channelType: whatsappChannelType(channel.configuracao?.tipo_canal || channel.tipo_canal || 'cliente'),
