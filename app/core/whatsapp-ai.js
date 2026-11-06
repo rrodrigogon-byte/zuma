@@ -319,6 +319,11 @@ COMO ESCREVER E AGIR NO WHATSAPP:
 - Nome: use o nome real da pessoa em customerName. Se não souber o nome (ou só tiver "Cliente"), pergunte "Qual seu nome para eu deixar no agendamento?" antes de preparar. Nunca chame o cliente de "Cliente".
 - Vários serviços: confira em listar_servicos quem faz cada um (campo profissionais). Os serviços extras (extraServiceIds) ficam automaticamente com quem faz cada um; não prometa que o mesmo profissional fará tudo.
 - REGRA DE SEGURANÇA MÁXIMA - NUNCA CANCELE AGENDAMENTOS SEM PEDIDO EXPLÍCITO: Você NUNCA deve chamar a ferramenta preparar_cancelamento a não ser que o cliente tenha solicitado COM TODAS AS LETRAS o cancelamento/desmarcação do horário dele (ex: "quero cancelar", "cancela meu horário", "desmarca meu corte"). Se o cliente disser "não posso esse horário", "hoje não vai dar", "tem mais tarde?", "tem amanhã?": ISSO É REMARCAÇÃO! NÃO CANCELE! Consulte a disponibilidade e ofereça alternativas com sugerir_proximos_horarios ou preparar_remarcacao. Se o cliente disser "não quero", "deixa pra lá", "agora não", "não obrigado" em resposta a uma oferta ou pergunta: ISSO NÃO É CANCELAMENTO DO CORTE! Continue o atendimento cordial sem tocar no agendamento dele. Se disser "vou me atrasar", "atrasei", use avisar_atraso. NUNCA cancele agendamentos sem solicitação expressa do cliente!
+- MODO RV (RÉGUA VELOZ - AGENDAMENTO E CONFIRMAÇÃO ULTRA DIRETOS E RÁPIDOS):
+  1. AGENDAMENTO EXPRESSO EM 2 TURNOS: Se o cliente disser dia, hora e serviço (ex: "quero cortar amanhã às 15h"), NUNCA pergunte "Quer que eu prepare?" ou "Posso marcar?". Consulte a vaga e chame preparar_agendamento IMEDIATAMENTE no mesmo turno! Responda em no máximo 2 linhas com o resumo e peça um "SIM" para fechar. Quando o cliente disser "SIM" ou afirmativa, o sistema confirma e encerra com o código.
+  2. CONFIRMAÇÃO DE LEMBRETE EM 1 TURNO (ZERO ATRITO): Se o cliente responder a qualquer lembrete com confirmação ("confirmo", "confirmando", "confirmado", "sim", "ok", "pode confirmar", "fechou", "bora", "combinado", etc.), a presença é confirmada na hora pelo sistema. Responda em uma única linha calorosa: "Fechado, [Nome]! Presença confirmada para [Dia/Horário] com [Profissional]. Te esperamos na Dino Barbearia! 💈". NUNCA peça confirmação novamente!
+  3. MENSAGENS CURTAS E OBJETIVAS: Máximo de 2 a 3 linhas por mensagem. Vá direto ao ponto com calor humano, sem apresentações repetitivas de "Sou novo por aqui" para quem já é cliente.
+
 - DURAÇÃO REAL DO SERVIÇO (RESPEITO AO TEMPO DA BANCADA): Cada serviço na Barbearia Dino possui uma duração cadastrada em minutos no catálogo oficial em https://kytto.com.br/admin/barbearia-erp?area=catalogo&tab=Servi%C3%A7os (ex.: Corte Premium ou com Dino: 40 min; Barba Premium: 30 min; Corte e Barba / Combo: 60 min; Selagem: 45 min; Prótese: 90 min; Sobrancelha: 15 min; etc.). Ao consultar a agenda e oferecer opções de horários, ou ao preparar um agendamento, você DEVE SEMPRE respeitar a duração necessária do serviço solicitado, garantindo que o tempo reservado na cadeira do barbeiro seja suficiente e sem colisão. NUNCA presuma que todo serviço leva 15 ou 30 minutos! Sempre mencione a duração estimada do atendimento (ex: "temos às 14:00, duração de 40 min") para que o cliente se programe bem.
 - Se houver uma ação esperando SIM e o cliente perguntar outra coisa, responda a pergunta normalmente; o sistema lembra a confirmação.
 - Nunca diga que algo foi confirmado, agendado ou comprado: quem confirma é o sistema, depois do SIM/CONFIRMAR do cliente.
@@ -1111,7 +1116,9 @@ async function markPersonalizationAnswered(session) {
 }
 
 /** Pergunta de autorização no primeiro contato: uma vez, sem ação pendente e só se a unidade habilitou. */
-export function shouldAskPersonalization({ policy = {}, consent = {}, session = {}, pendingAction = false } = {}) {
+export function shouldAskPersonalization({ policy = {}, consent = {}, session = {}, pendingAction = false, persona = null } = {}) {
+  // Barbearia Dino (T-Rex) prioriza agilidade e resolução imediata sem interrupções de pesquisa
+  if (persona?.id === 'trex' || persona?.segmento === 'barbearia') return false;
   return policy.personalizationEnabled === true
     && consent.personalization !== true
     && !session.personalization_prompted_at
@@ -1518,7 +1525,7 @@ const EMOJIS_CONFIRMACAO_PRESENCA = /(?:👍|👍🏻|👍🏼|👍🏽|👍🏾
 export function presenceConfirmIntent(text) {
   const raw = String(text ?? '').trim();
   if (!raw || raw.length > 100) return false;
-  // Se o cliente respondeu com emoji de positivo/joinha/acordo (ex.: 👍, 🤝, 🙏, ✅)
+  // Se o cliente respondeu com emoji de positivo/joinha/acordo (ex.: 👍, 🤝, 🙏, ✅, 💈, ✂️)
   if (EMOJIS_CONFIRMACAO_PRESENCA.test(raw)) {
     // Não pode conter negação ou dúvida
     const semEmojis = plain(raw).replace(/[^a-z0-9 ]/g, ' ').trim();
@@ -1527,8 +1534,8 @@ export function presenceConfirmIntent(text) {
   }
   const value = plain(raw).replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
   if (!value) return false;
-  return /^(confirmo|confirmando|confirmado|confirmada|confirmo presenca|confirmo sim|sim confirmo|estarei ai|estarei la|vou sim|vou|vou comparecer|confirmadissimo|ok confirmado|pode confirmar|ta confirmado|esta confirmado|confirmar|sim confirmar)( obrigad[oa])?$/.test(value)
-    || /^(sim|ok|pode ser|com certeza|fechado|fechou|perfeito|beleza|blz|bora|show|tamo junto|combinado|certo|marcado|ta marcado|opa vou|partiu)( obrigad[oa])?$/.test(value);
+  return /^(confirmo|confirmando|confirmado|confirmada|confirmo presenca|confirmo sim|sim confirmo|confirma|confirma pra mim|pode confirmar|pode ser sim|sim pode ser|estarei ai|estarei la|vou sim|vou|vou comparecer|confirmadissimo|ok confirmado|ta confirmado|esta confirmado|confirmar|sim confirmar|pode deixar marcado|vou querer esse|deixa marcado|deixa esse|marca esse|pode marcar|to a caminho|estou a caminho|chegando|ja to chegando|ja cheguei|to chegando|corte cabelo e barba|corte e barba|corte|barba)( obrigad[oa])?$/.test(value)
+    || /^(sim|ok|pode ser|com certeza|fechado|fechou|perfeito|beleza|blz|bora|show|tamo junto|combinado|certo|marcado|ta marcado|opa vou|partiu|fechado entao|combinado entao)( obrigad[oa])?$/.test(value);
 }
 
 export async function confirmNextAppointment(context) {

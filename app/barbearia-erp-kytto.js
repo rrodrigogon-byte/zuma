@@ -3567,7 +3567,7 @@ export function atualizarAgendamento(empresaId, agendamentoId, dados = {}, opcoe
   if (!atual || atual.empresaId !== String(empresaId)) return null;
   if (dados.lojaId !== undefined && texto(dados.lojaId, 120) !== texto(atual.lojaId, 120)) return null;
   const statusAntes = atual.status;
-  const antes = { dataHora: atual.dataHora, dataAgenda: atual.dataAgenda, profissionalId: atual.profissionalId, servicoId: atual.servicoId };
+  const antes = { dataHora: atual.dataHora, dataAgenda: atual.dataAgenda, horaLocal: atual.horaLocal, profissionalId: atual.profissionalId, servicoId: atual.servicoId };
   const agendamento = agendamentoNormalizado(dados, atual, opcoes);
   const STATUS_VALIDOS = ['agendado', 'confirmado', 'concluido', 'cancelado', 'nao_compareceu'];
   agendamento.status = (dados.status && STATUS_VALIDOS.includes(dados.status)) ? dados.status : atual.status;
