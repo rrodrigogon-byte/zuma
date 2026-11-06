@@ -3569,7 +3569,8 @@ export function atualizarAgendamento(empresaId, agendamentoId, dados = {}, opcoe
   const statusAntes = atual.status;
   const antes = { dataHora: atual.dataHora, dataAgenda: atual.dataAgenda, profissionalId: atual.profissionalId, servicoId: atual.servicoId };
   const agendamento = agendamentoNormalizado(dados, atual, opcoes);
-  agendamento.status = atual.status;
+  const STATUS_VALIDOS = ['agendado', 'confirmado', 'concluido', 'cancelado', 'nao_compareceu'];
+  agendamento.status = (dados.status && STATUS_VALIDOS.includes(dados.status)) ? dados.status : atual.status;
   if (!agendamento.servicoId || !estado.servicos[agendamento.servicoId] || estado.servicos[agendamento.servicoId].ativo === false) throw new Error('Serviço ativo é obrigatório.');
   const profissional = agendamento.profissionalId ? estado.profissionais[agendamento.profissionalId] : null;
   const servico = estado.servicos[agendamento.servicoId];
@@ -3582,12 +3583,15 @@ export function atualizarAgendamento(empresaId, agendamentoId, dados = {}, opcoe
     throw new Error('O valor do agendamento não pode ser alterado pela remarcação. Use a comanda para ajustes auditados.');
   }
   agendamento.valor = valorEsperado;
-  validarCalendarioAgendamento(estado, agendamento, agendamento.profissionalId ? estado.profissionais[agendamento.profissionalId] : null);
-  if (verificarConflito(estado, agendamento, atual.id)) {
-    if (opcoes.permitirEncaixe !== true) throw new Error('Horário indisponível para o profissional selecionado.');
-    agendamento.encaixe = true;
-  } else {
-    agendamento.encaixe = false;
+  const mudouHorarioOuProf = ['dataHora', 'dataAgenda', 'horaLocal', 'profissionalId'].some((campo) => String(antes[campo] || '') !== String(agendamento[campo] || ''));
+  if (mudouHorarioOuProf) {
+    validarCalendarioAgendamento(estado, agendamento, agendamento.profissionalId ? estado.profissionais[agendamento.profissionalId] : null);
+    if (verificarConflito(estado, agendamento, atual.id)) {
+      if (opcoes.permitirEncaixe !== true) throw new Error('Horário indisponível para o profissional selecionado.');
+      agendamento.encaixe = true;
+    } else {
+      agendamento.encaixe = false;
+    }
   }
   if(agendamento.usarPlano) agendamento.assinaturaId=validarAgendamentoComPlano(empresaId,agendamento,{...opcoes,ignorarAgendamentoId:atual.id});
   const remarcado = ['dataHora', 'dataAgenda', 'profissionalId', 'servicoId'].some((campo) => String(antes[campo] || '') !== String(agendamento[campo] || ''));
