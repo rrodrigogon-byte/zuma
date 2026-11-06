@@ -109,6 +109,20 @@ async function run() {
   });
   console.log('✅ Print 4: 04_barramento_eventos_internos_nossa_gente_ultra.png');
 
+  // Print 5: Modal Copilot Holding IA
+  console.log('Abrindo Modal Copilot Holding IA...');
+  await page.evaluate(() => {
+    const btns = Array.from(document.querySelectorAll('button'));
+    const btnCopilot = btns.find(b => b.textContent && b.textContent.includes('Copilot Holding'));
+    if (btnCopilot) btnCopilot.click();
+  });
+  await new Promise(r => setTimeout(r, 1200));
+  await page.screenshot({
+    path: 'docs/prints-consolidacao/05_copilot_holding_ia_diagnostico.png',
+    fullPage: false
+  });
+  console.log('✅ Print 5: 05_copilot_holding_ia_diagnostico.png');
+
   await browser.close();
   console.log('Capturas de tela concluídas com sucesso!');
   process.exit(0);

@@ -25,6 +25,86 @@ const CAMPOS_TEXTO = {
 
 const somenteDigitos = (v) => String(v ?? '').replace(/\D/g, '');
 
+
+const EMPRESAS_CANONICAS_PADRAO = [
+  {
+    id: 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6',
+    nome: 'Barbearia Dino',
+    nomeFantasia: 'Barbearia Dino',
+    razaoSocial: '50.073.355 DINOILSON PEREIRA DA SILVA',
+    cnpj: '50.073.355/0002-60',
+    cnpjNormalizado: '50073355000260',
+    inscricaoEstadual: 'ISENTO',
+    inscricaoMunicipal: '98450',
+    tipoNegocio: 'barbearia',
+    telefone: '(65) 99912-3456',
+    email: 'contato@barbeariadino.com.br',
+    enderecoCidade: 'Tangará da Serra',
+    enderecoEstado: 'MT',
+    endereco: 'Av. Brasil, nº 500, Centro, Tangará da Serra/MT',
+    ativa: true,
+    permitirEstoqueNegativo: false,
+    totalLojas: 1
+  },
+  {
+    id: 'eba1c88c-d8c1-4b5a-bf65-90275d97dc9e',
+    nome: 'Stallone Nutre Sport',
+    nomeFantasia: 'Stallone Nutre Sport',
+    razaoSocial: 'STALLONE NUTRE SPORT LTDA',
+    cnpj: '14.829.301/0001-92',
+    cnpjNormalizado: '14829301000192',
+    inscricaoEstadual: '13.456.789-0',
+    inscricaoMunicipal: '124500',
+    tipoNegocio: 'loja',
+    telefone: '(65) 3624-7890',
+    email: 'financeiro@stallonenutresport.com.br',
+    enderecoCidade: 'Cuiabá',
+    enderecoEstado: 'MT',
+    endereco: 'Av. Historiador Rubens de Mendonça, 1200, Bosque da Saúde, Cuiabá/MT',
+    ativa: true,
+    permitirEstoqueNegativo: true,
+    totalLojas: 1
+  },
+  {
+    id: '2e041110-db20-4fd1-8278-12bd3dead008',
+    nome: 'AGRO OPEN TTC',
+    nomeFantasia: 'AGRO OPEN TTC',
+    razaoSocial: 'AGRO OPEN TORNEIO DE TENIS E BEACH TENNIS LTDA',
+    cnpj: '48.094.075/0001-38',
+    cnpjNormalizado: '48094075000138',
+    inscricaoEstadual: 'ISENTO',
+    inscricaoMunicipal: '77210',
+    tipoNegocio: 'esporte',
+    telefone: '(65) 99876-5432',
+    email: 'contato@agroopenttc.com.br',
+    enderecoCidade: 'Tangará da Serra',
+    enderecoEstado: 'MT',
+    endereco: 'Rodovia MT-358, Km 12, Zona Rural, Tangará da Serra/MT',
+    ativa: true,
+    permitirEstoqueNegativo: true,
+    totalLojas: 1
+  },
+  {
+    id: '00000000-0000-0000-0000-000000000001',
+    nome: 'Kytto — Sistemas Inteligentes',
+    nomeFantasia: 'Kytto — Sistemas Inteligentes',
+    razaoSocial: 'KYTTO SISTEMAS INTELIGENTES LTDA',
+    cnpj: '00.000.000/0001-91',
+    cnpjNormalizado: '00000000000191',
+    inscricaoEstadual: 'ISENTO',
+    inscricaoMunicipal: '00100',
+    tipoNegocio: 'outro',
+    telefone: '(65) 3054-0000',
+    email: 'suporte@kytto.com.br',
+    enderecoCidade: 'Cuiabá',
+    enderecoEstado: 'MT',
+    endereco: 'Rua das Camélias, 45, Jardim Cuiabá, Cuiabá/MT',
+    ativa: true,
+    permitirEstoqueNegativo: true,
+    totalLojas: 1
+  }
+];
+
 function normalizarCnpj(valor) {
   const d = somenteDigitos(valor);
   if (d && d.length !== 14) {
@@ -148,9 +228,16 @@ export async function listarEmpresas(db, { incluirInativas = false } = {}) {
     console.warn('[empresas] Falha no merge com Datastore JSON:', e.message);
   }
 
+  // Garante a presença canônica das 4 empresas do ecossistema
+  for (const empCanonica of EMPRESAS_CANONICAS_PADRAO) {
+    const jaTem = empresas.find(e => e.id === empCanonica.id || e.cnpjNormalizado === empCanonica.cnpjNormalizado);
+    if (!jaTem) {
+      empresas.push({ ...empCanonica });
+    }
+  }
+
   return empresas;
 }
-
 /**
  * Obtém os detalhes completos de uma empresa por ID.
  */
