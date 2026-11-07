@@ -4,7 +4,7 @@ import {
   Truck, TrendingUp, RefreshCw, Plus, Trash2, Printer, CheckCircle2,
   Download, Search, DollarSign, Calendar, Layers, ShieldCheck,
   Beef, UtensilsCrossed, Scale, Users, ClipboardCheck, Sparkles,
-  Percent, ArrowDownRight, ArrowUpRight, Lock, KeyRound, AlertCircle, FileText
+  Percent, ArrowDownRight, ArrowUpRight, Lock, KeyRound, AlertCircle, FileText, Apple, Boxes, ShieldAlert, Tv, CreditCard, Receipt
 } from 'lucide-react';
 import { api } from '../../lib/api';
 import Modal from '../../components/Modal';
@@ -108,6 +108,18 @@ export default function Supermercado() {
   const [fornecedores, setFornecedores] = useState([]);
   const [analiseMargens, setAnaliseMargens] = useState([]);
   const [simulacaoReajuste, setSimulacaoReajuste] = useState(5);
+  // ── Hortifrúti (FLV) ──
+  const [dadosHortifruti, setDadosHortifruti] = useState(null);
+  const [carregandoHortifruti, setCarregandoHortifruti] = useState(false);
+  // ── Ruptura & Reposição (ROP) ──
+  const [dadosRuptura, setDadosRuptura] = useState(null);
+  const [carregandoRuptura, setCarregandoRuptura] = useState(false);
+  // ── Auditoria de Preços Gôndola vs PDV ──
+  const [dadosAuditoria, setDadosAuditoria] = useState(null);
+  // ── Visor do Cliente & TEF PDV ──
+  const [visorClienteAtivo, setVisorClienteAtivo] = useState(true);
+  const [ultimoItemBipado, setUltimoItemBipado] = useState(null);
+  const [modalTef, setModalTef] = useState(null);
 
   // Modal Novo Produto
   const [modalNovoProduto, setModalNovoProduto] = useState(false);
@@ -394,6 +406,13 @@ export default function Supermercado() {
           item.id === produto.id ? { ...item, quantidade: item.quantidade + pesoOuQtd } : item
         );
       }
+      setUltimoItemBipado({
+        nome: produto.nome,
+        quantidade: pesoOuQtd,
+        unidade: produto.unidade || 'UN',
+        precoUnitario,
+        subtotal: Math.round(precoUnitario * pesoOuQtd * 100) / 100
+      });
       return [...prev, {
         id: produto.id,
         nome: produto.nome,
@@ -781,6 +800,9 @@ export default function Supermercado() {
         <button className={`super-tab-btn ${abaAtiva === 'mix' ? 'active' : ''}`} onClick={() => setAbaAtiva('mix')}>
           <Barcode size={16} /> Mix & Gôndola ({produtos.length})
         </button>
+        <button className={`super-tab-btn ${abaAtiva === 'hortifruti' ? 'active' : ''}`} onClick={() => setAbaAtiva('hortifruti')}>
+          <Apple size={16} /> Hortifrúti (FLV)
+        </button>
         <button className={`super-tab-btn ${abaAtiva === 'desossa' ? 'active' : ''}`} onClick={() => setAbaAtiva('desossa')}>
           <Beef size={16} /> Açougue & Desossa ({desossas.length})
         </button>
@@ -788,10 +810,25 @@ export default function Supermercado() {
           <UtensilsCrossed size={16} /> Padaria & Produção
         </button>
         <button className={`super-tab-btn ${abaAtiva === 'lotes' ? 'active' : ''}`} onClick={() => setAbaAtiva('lotes')}>
-          <AlertTriangle size={16} /> Lotes & Validade (FEFO)
+          <AlertTriangle size={16} /> Lotes & FEFO ({lotes.length})
+        </button>
+        <button className={`super-tab-btn ${abaAtiva === 'ruptura' ? 'active' : ''}`} onClick={() => setAbaAtiva('ruptura')}>
+          <Boxes size={16} /> Ruptura & Reposição
         </button>
         <button className={`super-tab-btn ${abaAtiva === 'balancas' ? 'active' : ''}`} onClick={() => setAbaAtiva('balancas')}>
-          <Scale size={16} /> Carga Balanças & MGV
+          <Scale size={16} /> Carga Balanças
+        </button>
+        <button className={`super-tab-btn ${abaAtiva === 'etiquetas' ? 'active' : ''}`} onClick={() => setAbaAtiva('etiquetas')}>
+          <Tag size={16} /> Etiquetas Gôndola
+        </button>
+        <button className={`super-tab-btn ${abaAtiva === 'nfe' ? 'active' : ''}`} onClick={() => setAbaAtiva('nfe')}>
+          <FileText size={16} /> Entrada NF-e XML
+        </button>
+        <button className={`super-tab-btn ${abaAtiva === 'perdas' ? 'active' : ''}`} onClick={() => setAbaAtiva('perdas')}>
+          <ShieldAlert size={16} /> Prevenção de Perdas
+        </button>
+        <button className={`super-tab-btn ${abaAtiva === 'auditoria' ? 'active' : ''}`} onClick={() => setAbaAtiva('auditoria')}>
+          <ShieldCheck size={16} /> Auditoria Preços
         </button>
         <button className={`super-tab-btn ${abaAtiva === 'inventarios' ? 'active' : ''}`} onClick={() => setAbaAtiva('inventarios')}>
           <ClipboardCheck size={16} /> Inventário Cíclico
@@ -897,6 +934,28 @@ export default function Supermercado() {
                 </div>
               )}
 
+              {/* VISOR VIRTUAL DO CLIENTE (POLE DISPLAY) */}
+              {visorClienteAtivo && (
+                <div className="super-pdv-pole-display">
+                  <div className="pole-display-left">
+                    <span className="pole-tag">
+                      <span className="pole-live-dot" /> Visor do Cliente / Checkout em Operação
+                    </span>
+                    <div className="pole-item-name">
+                      {ultimoItemBipado ? ultimoItemBipado.nome : "SEJA BEM-VINDO AO SUPERMERCADO KYTTO"}
+                    </div>
+                    <div className="pole-item-meta">
+                      {ultimoItemBipado
+                        ? `QTD: ${ultimoItemBipado.quantidade} ${ultimoItemBipado.unidade} × R$ ${ultimoItemBipado.precoUnitario.toFixed(2)} = R$ ${ultimoItemBipado.subtotal.toFixed(2)}`
+                        : "PASSE AS SUAS COMPRAS PELO LEITOR DE CÓDIGOS OU BALANÇA"}
+                    </div>
+                  </div>
+                  <div className="pole-display-right">
+                    <span className="pole-total-label">Subtotal Geral</span>
+                    <span className="pole-total-val">R$ {totalCarrinho.toFixed(2)}</span>
+                  </div>
+                </div>
+              )}
               <div className="super-pdv-scanner-box">
                 <Barcode size={24} className="scanner-icon" />
                 <input
@@ -1636,7 +1695,7 @@ export default function Supermercado() {
         )}
 
         {/* ── 12. ETIQUETAS DE GÔNDOLA & LEI DA PRECIFICAÇÃO ── */}
-        {abaAtiva === etiquetas && (
+        {abaAtiva === 'etiquetas' && (
           <div className="super-etiquetas-container">
             <div className="super-toolbar">
               <div>
@@ -1750,7 +1809,7 @@ export default function Supermercado() {
         )}
 
         {/* ── 13. ENTRADA DE NOTA FISCAL (XML MODELO 55) ── */}
-        {abaAtiva === nfe && (
+        {abaAtiva === 'nfe' && (
           <div className="super-nfe-container">
             <div className="super-toolbar">
               <div>
@@ -1868,7 +1927,7 @@ export default function Supermercado() {
         )}
 
         {/* ── 14. PREVENÇÃO DE PERDAS (PADRÃO ABRAS) ── */}
-        {abaAtiva === perdas && (
+        {abaAtiva === 'perdas' && (
           <div className="super-perdas-container">
             <div className="super-toolbar">
               <div>
@@ -2202,6 +2261,44 @@ export default function Supermercado() {
                 a.click();
               }}>
                 Baixar Arquivo .ZPL
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* MODAL COMPROVANTE TEF HOMOLOGADO */}
+      {modalTef && (
+        <Modal title="Comprovante de Pagamento TEF (Cartão Aprovado)" onClose={() => setModalTef(null)}>
+          <div className="super-modal-form">
+            <div className="tef-badge-homologado">
+              <CheckCircle2 size={16} /> Transação TEF Autorizada pela Rede
+            </div>
+            <div className="tef-receipt-container">
+              <div className="tef-receipt-header">
+                <div>SUPERMERCADO KYTTO LTDA</div>
+                <div>CNPJ: 50.073.355/0001-89 · IE: 14.229.191-9</div>
+                <div>COMPROVANTE TEF MULTIADQUIRENTE</div>
+              </div>
+              <div><strong>Adquirente:</strong> {modalTef.adquirente}</div>
+              <div><strong>Bandeira:</strong> {modalTef.bandeira}</div>
+              <div><strong>Operação:</strong> VENDA APROVADA ON-LINE</div>
+              <div><strong>NSU Terminal:</strong> {modalTef.nsu}</div>
+              <div><strong>Código Autorização:</strong> {modalTef.autorizacao}</div>
+              <div><strong>Data / Hora:</strong> {modalTef.dataHora}</div>
+              <div style={{ margin: "8px 0", borderTop: "1px dashed #cbd5e1", paddingTop: "8px" }}>
+                <strong>VALOR TOTAL PAGO: R$ {Number(modalTef.valor).toFixed(2)}</strong>
+              </div>
+              <div style={{ textAlign: "center", fontSize: "11px", color: "#64748b", marginTop: "10px" }}>
+                1ª VIA — ESTABELECIMENTO / 2ª VIA — CLIENTE
+              </div>
+            </div>
+            <div className="super-modal-actions">
+              <button type="button" className="super-btn-sec" onClick={() => window.print()}>
+                <Printer size={16} /> Imprimir Comprovante TEF
+              </button>
+              <button type="button" className="super-btn-primary" onClick={() => setModalTef(null)}>
+                Fechar e Novo Cliente
               </button>
             </div>
           </div>

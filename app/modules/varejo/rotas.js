@@ -235,5 +235,28 @@ export function createVarejoAdminRouter({ db, escopoDaRequisicao, fuso = 'Americ
     return svc.obterRelatorioPrevencaoPerdas(db, empresaId, { lojaId });
   }));
 
+  // ── Gestão de Hortifrúti (FLV) & Perecíveis ──
+  router.get('/hortifruti', rota('catalog.read', async ({ empresaId, lojaId }) => {
+    return svc.listarItensHortifruti(db, empresaId, { lojaId });
+  }));
+
+  router.post('/hortifruti/remarcar', rota('catalog.write', async ({ req, empresaId, usuario }) => {
+    return svc.aplicarRemarcacaoMaturacaoFLV(db, empresaId, req.body || {}, { usuario });
+  }));
+
+  // ── Ruptura de Gôndola & Reposição Automática (ROP) ──
+  router.get('/ruptura', rota('catalog.read', async ({ empresaId, lojaId }) => {
+    return svc.obterRelatorioRuptura(db, empresaId, { lojaId });
+  }));
+
+  router.post('/ruptura/gerar-pedido', rota('catalog.write', async ({ req, empresaId, usuario }) => {
+    return svc.gerarOrdemCompraRuptura(db, empresaId, req.body || {}, { usuario });
+  }));
+
+  // ── Auditoria de Preços Gôndola vs PDV (Lei 10.962/04 Procon) ──
+  router.get('/auditoria-precos', rota('catalog.read', async ({ empresaId, lojaId }) => {
+    return svc.auditarPrecosGondolaPdv(db, empresaId, { lojaId });
+  }));
+
   return router;
 }
