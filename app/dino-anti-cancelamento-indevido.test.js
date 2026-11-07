@@ -288,3 +288,37 @@ test('planPendingFollowUp e shouldAskPersonalization bloqueiam envio excessivo d
   });
   assert.equal(ask, false);
 });
+
+test('normalização de horários e datas lida com variações reais do WhatsApp', async () => {
+  const { normalizeAgendaTime, normalizeAgendaDate, serviceWithProfessional } = await import('./core/whatsapp-ai-normalize.js');
+  const { precoNoHorario } = await import('./core/whatsapp-ai-tools.js');
+
+  // Horários com termos cotidianos ("hoje as 18h45 hr", "amanhã às 16:15", "18h45 hr")
+  assert.equal(normalizeAgendaTime('18h45 hr'), '18:45');
+  assert.equal(normalizeAgendaTime('Hoje as 18h45 hr'), '18:45');
+  assert.equal(normalizeAgendaTime('Hoje as 16:45'), '16:45');
+  assert.equal(normalizeAgendaTime('Hoje as 16:15'), '16:15');
+  assert.equal(normalizeAgendaTime('18:45'), '18:45');
+  assert.equal(normalizeAgendaTime('16h'), '16:00');
+  assert.equal(normalizeAgendaTime('amanha as 10:30 da manha'), '10:30');
+
+  // Datas relativas com preposição e pontuação ("para segunda ?", "proxima segunda")
+  const sabado = '2026-11-07';
+  assert.equal(normalizeAgendaDate('para segunda ?', sabado), '2026-11-09');
+  assert.equal(normalizeAgendaDate('segunda', sabado), '2026-11-09');
+  assert.equal(normalizeAgendaDate('proxima segunda', sabado), '2026-11-09');
+  assert.equal(normalizeAgendaDate('segunda feira', sabado), '2026-11-09');
+  assert.equal(normalizeAgendaDate('dia 09/11', sabado), '2026-11-09');
+
+  // Preço nunca retorna 0 para corte ou barba na Barbearia Dino
+  const precoCorte = precoNoHorario({ nome: 'Corte' }, { nome: 'Bruno' }, '14:00');
+  assert.equal(precoCorte >= 100, true);
+  const precoBarba = precoNoHorario({ nome: 'Barba' }, { nome: 'Nati' }, '14:00');
+  assert.equal(precoBarba >= 100, true);
+  const precoDino = precoNoHorario({ nome: 'Corte com Dino' }, { nome: 'Dino' }, '14:00');
+  assert.equal(precoDino >= 300, true);
+
+  // Evitar duplicação "com Dino com Dino"
+  assert.equal(serviceWithProfessional('Corte com Dino', 'Dino'), 'Corte com Dino');
+  assert.equal(serviceWithProfessional('Barba', 'Nati'), 'Barba com Nati');
+});

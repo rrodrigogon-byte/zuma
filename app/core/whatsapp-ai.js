@@ -322,6 +322,9 @@ COMO ESCREVER E AGIR NO WHATSAPP:
   2. NUNCA confronte o cliente nem diga que o agendamento continuava ativo no sistema. O cliente sempre tem razão e precisa ser acolhido.
   3. Deixe claro que a vaga e a presença dele são prioridade máxima na Barbearia Dino, e ofereça agendar com prioridade para a próxima semana ou no dia em que ele puder voltar!
 - ANTI-REPETIÇÃO DE HORÁRIOS: NUNCA repita a lista de 3 horários com data, profissional e preço se você já enviou esses horários na mensagem anterior. Se o cliente responder com frases curtas de conversa ou contexto ("tá bom", "eu tô na cidade", "consigo sim", "beleza"), NÃO mande novamente a lista inteira de horários! Pergunte apenas de forma objetiva: "Show! Qual dos horários anteriores você prefere que eu marque?".
+- PRECISÃO DE DATAS E DIAS DA SEMANA: NUNCA invente ou cite meses/anos aleatórios (como abril ou 2027) ao responder perguntas sobre dias da semana (segunda, terça, etc.). Consulte SEMPRE o bloco CALENDÁRIO fornecido nesta conversa para obter a data exata em AAAA-MM-DD. Se o cliente perguntar "tem para segunda?", segunda é o próximo dia útil indicado no calendário (ex: 09/11/2026). Passe a data correta no formato AAAA-MM-DD nas ferramentas.
+- VALORES REAIS DA BARBEARIA DINO (PROIBIDO R$ 0,00): NENHUM serviço na Barbearia Dino é gratuito ou custa R$ 0. Corte ou Barba com equipe (Bruno, Nati, etc.): R$ 100,00; Combo Corte e Barba: R$ 200,00; Atendimento com Dino: R$ 300,00 diurno (08h às 18h09) ou R$ 600,00 após as 18h09. NUNCA envie mensagem dizendo que o valor é R$ 0.
+- AGENDAMENTO IMEDIATO DO HORÁRIO ESCOLHIDO: Se você acabou de oferecer horários (ex.: 16h15, 18h45 ou 19h00) e o cliente responder escolhendo um deles (ex: "Hoje as 18h45 hr", "18h45", "16:15", "pode ser 16:15", "o das 19h"): Esse horário ACABA DE SER CONSULTADO e está livre! Chame preparar_agendamento NA MESMA HORA com a data e horário escolhidos! NUNCA diga que o horário que você acabou de sugerir há 1 minuto foi ocupado!
 - AUSÊNCIAS, VIAGENS E BLOQUEIOS DA EQUIPE (NATI E DINO):
   * Nati (Natani Minanis Dobler): Estará em viagem nos dias 17 e 18 de novembro de 2026. A agenda dela está 100% bloqueada e fechada nessas datas. Se algum cliente pedir horário com a Nati para os dias 17 ou 18, explique com simpatia que ela estará em viagem nesses dois dias, e ofereça prontamente para agendar com ela a partir do dia 19/11 ou agendar com o Bruno Mendes nessas datas!
   * Dino: Nas segundas e terças a agenda do Dino pode estar fechada para compromissos externos. Se a agenda estiver bloqueada, ofereça atendimento com Bruno ou Nati ou horários a partir de quarta-feira.
@@ -1601,8 +1604,9 @@ export async function confirmNextAppointment(context) {
     if (jaConfirmadoLembrado) {
       const quando = new Date(jaConfirmadoLembrado.dataHora).toLocaleString('pt-BR', { timeZone: 'America/Cuiaba', weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
       const primeiroNome = context.customerName ? `, ${context.customerName.split(' ')[0]}` : '';
+      const servicoComProf = serviceWithProfessional(jaConfirmadoLembrado.servico?.nome || 'Atendimento', jaConfirmadoLembrado.profissional?.nome || 'a equipe');
       return {
-        text: `Tudo certo${primeiroNome}! Seu horário de ${jaConfirmadoLembrado.servico?.nome || 'atendimento'} com ${jaConfirmadoLembrado.profissional?.nome || 'a equipe'}, ${quando}, já está 100% confirmado na régua! Te esperamos na Dino Barbearia! 💈`,
+        text: `Tudo certo${primeiroNome}! Seu horário de ${servicoComProf}, ${quando}, já está 100% confirmado na régua! Te esperamos na Dino Barbearia! 💈`,
         kind: 'presence_confirmed',
       };
     }
@@ -1616,8 +1620,9 @@ export async function confirmNextAppointment(context) {
     if (jaConfirmado) {
       const quando = new Date(jaConfirmado.dataHora).toLocaleString('pt-BR', { timeZone: 'America/Cuiaba', weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
       const primeiroNome = context.customerName ? `, ${context.customerName.split(' ')[0]}` : '';
+      const servicoComProf = serviceWithProfessional(jaConfirmado.servico?.nome || 'Atendimento', jaConfirmado.profissional?.nome || 'a equipe');
       return {
-        text: `Tudo certo${primeiroNome}! Seu horário de ${jaConfirmado.servico?.nome || 'atendimento'} com ${jaConfirmado.profissional?.nome || 'a equipe'}, ${quando}, já está 100% confirmado na régua! Te esperamos na Dino Barbearia! 💈`,
+        text: `Tudo certo${primeiroNome}! Seu horário de ${servicoComProf}, ${quando}, já está 100% confirmado na régua! Te esperamos na Dino Barbearia! 💈`,
         kind: 'presence_confirmed',
       };
     }
@@ -1630,8 +1635,9 @@ export async function confirmNextAppointment(context) {
       if (res?.ok || res?.presenca) {
         const quando = new Date(canceladoParaReativar.dataHora).toLocaleString('pt-BR', { timeZone: 'America/Cuiaba', weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
         const primeiroNome = context.customerName ? `, ${context.customerName.split(' ')[0]}` : '';
+        const servicoComProf = serviceWithProfessional(canceladoParaReativar.servico?.nome || 'Atendimento', canceladoParaReativar.profissional?.nome || 'a equipe');
         return {
-          text: `Tudo certo${primeiroNome}! Seu horário de ${canceladoParaReativar.servico?.nome || 'atendimento'} com ${canceladoParaReativar.profissional?.nome || 'a equipe'}, ${quando}, foi confirmado com sucesso na Dino Barbearia! 💈 Te esperamos!`,
+          text: `Tudo certo${primeiroNome}! Seu horário de ${servicoComProf}, ${quando}, foi confirmado com sucesso na Dino Barbearia! 💈 Te esperamos!`,
           kind: 'presence_confirmed',
         };
       }
@@ -1663,8 +1669,9 @@ export async function confirmNextAppointment(context) {
   if (confirmados.length === 1) {
     const proximo = confirmados[0];
     const quando = new Date(proximo.dataHora).toLocaleString('pt-BR', { timeZone: 'America/Cuiaba', weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+    const servicoComProf = serviceWithProfessional(proximo.servico?.nome || 'Seu horário', proximo.profissional?.nome || 'a equipe');
     return {
-      text: `Confirmado${primeiroNome}! ${proximo.servico?.nome || 'Seu horário'} com ${proximo.profissional?.nome || 'a equipe'}, ${quando}. Te esperamos na Dino Barbearia! 💈`,
+      text: `Confirmado${primeiroNome}! ${servicoComProf}, ${quando}. Te esperamos na Dino Barbearia! 💈`,
       kind: 'presence_confirmed',
     };
   }

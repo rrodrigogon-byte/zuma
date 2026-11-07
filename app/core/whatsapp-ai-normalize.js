@@ -17,15 +17,44 @@ function pad(value) {
 
 /** "11h", "11h00", "11:00", "11.30", "1130", "às 11 horas", "11:30:00" → "11:00"/"11:30"; inválido → ''. */
 export function normalizeAgendaTime(value) {
-  let text = plain(value).replace(/^(as|a|para|pras?|umas?)\s+/, '').replace(/\s*(horas?|hrs?|hs)\b/, 'h').replace(/\s+/g, '')
-  if (!text) return ''
-  let match = text.match(/^(\d{1,2})[:h.](\d{2})(?::\d{2})?$/) || text.match(/^(\d{1,2})h$/) || text.match(/^(\d{1,2})$/)
-  if (!match && /^\d{3,4}$/.test(text)) match = [text, text.slice(0, -2), text.slice(-2)]
-  if (!match) return ''
-  const hour = Number(match[1])
-  const minute = match[2] === undefined ? 0 : Number(match[2])
-  if (!Number.isInteger(hour) || !Number.isInteger(minute) || hour > 23 || minute > 59) return ''
-  return `${pad(hour)}:${pad(minute)}`
+  if (!value) return ''
+  let str = plain(value)
+  // Remove menções de dia e preposições que acompanham o horário (ex: "hoje as 18h45 hr", "amanhã às 16:15")
+  str = str.replace(/\b(hoje|amanha|depois de amanha|segunda|terca|quarta|quinta|sexta|sabado|domingo)\b/gi, ' ')
+  str = str.replace(/\b(dia\s+\d{1,2}(?:\/\d{1,2})?)\b/gi, ' ')
+  str = str.replace(/\b(as|a|para|pras?|umas?|de|pelas?|por volta d[ae]s?|por volta de)\b/gi, ' ')
+  str = str.replace(/\b(da tarde|da noite|da manha|da madrugada)\b/gi, ' ')
+  str = str.replace(/\s*(horas?|hrs?|hs?|minutos?|mins?|m)\b/gi, ' ')
+  str = str.replace(/[?!,;()]/g, ' ').replace(/\s+/g, ' ').trim()
+  if (!str) return ''
+
+  // Casa 18:45, 18h45, 18.45 ou 18 45
+  let match = str.match(/\b(\d{1,2})\s*[:h.\s]\s*(\d{2})(?::\d{2})?\b/)
+  if (match) {
+    const hour = Number(match[1])
+    const minute = Number(match[2])
+    if (Number.isInteger(hour) && Number.isInteger(minute) && hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59) {
+      return `${pad(hour)}:${pad(minute)}`
+    }
+  }
+  // Casa 4 dígitos juntos como "1845"
+  match = str.match(/\b(\d{2})(\d{2})\b/)
+  if (match) {
+    const hour = Number(match[1])
+    const minute = Number(match[2])
+    if (Number.isInteger(hour) && Number.isInteger(minute) && hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59) {
+      return `${pad(hour)}:${pad(minute)}`
+    }
+  }
+  // Casa hora cheia (ex: "18h", "18")
+  match = str.match(/\b(\d{1,2})\s*h?\b/)
+  if (match) {
+    const hour = Number(match[1])
+    if (Number.isInteger(hour) && hour >= 0 && hour <= 23) {
+      return `${pad(hour)}:00`
+    }
+  }
+  return ''
 }
 
 function addDays(iso, days) {
@@ -40,11 +69,12 @@ function addDays(iso, days) {
  * contando hoje). `today` é a data local da unidade em "AAAA-MM-DD". Inválido → ''.
  */
 export function normalizeAgendaDate(value, today) {
-  const text = plain(value).replace(/\s+/g, ' ')
-  if (!text || !/^\d{4}-\d{2}-\d{2}$/.test(String(today || ''))) return ''
-  let match = text.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/)
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(String(today || ''))) return ''
+  let text = plain(value).replace(/[?!.,;:()]/g, ' ').replace(/\s+/g, ' ').trim()
+  if (!text) return ''
+  let match = text.match(/\b(\d{4})-(\d{1,2})-(\d{1,2})\b/)
   if (match) return validIso(match[1], match[2], match[3])
-  match = text.match(/^(?:dia\s+)?(\d{1,2})[/-](\d{1,2})(?:[/-](\d{2,4}))?$/)
+  match = text.match(/\b(?:dia\s+)?(\d{1,2})[/-](\d{1,2})(?:[/-](\d{2,4}))?\b/)
   if (match) {
     const year = match[3] ? Number(match[3].length === 2 ? `20${match[3]}` : match[3]) : Number(today.slice(0, 4))
     let iso = validIso(year, match[2], match[1])
@@ -52,10 +82,15 @@ export function normalizeAgendaDate(value, today) {
     if (iso && !match[3] && iso < today) iso = validIso(year + 1, match[2], match[1])
     return iso
   }
-  if (text === 'hoje') return today
-  if (text === 'amanha') return addDays(today, 1)
-  if (text === 'depois de amanha') return addDays(today, 2)
-  const weekday = WEEKDAYS.findIndex((day) => text === day || text === `${day}-feira` || text === `${day} feira` || text === `na ${day}` || text === `na ${day}-feira`)
+  const semPrep = text.replace(/^(?:para\s+|pra\s+|pro\s+|na\s+|no\s+|em\s+|de\s+|nesta\s+|neste\s+|proxima\s+|proximo\s+)+/, '').trim()
+  if (semPrep === 'hoje' || text === 'hoje') return today
+  if (semPrep === 'amanha' || text === 'amanha') return addDays(today, 1)
+  if (semPrep === 'depois de amanha' || text === 'depois de amanha') return addDays(today, 2)
+  const weekday = WEEKDAYS.findIndex((day) =>
+    semPrep === day || semPrep === `${day}-feira` || semPrep === `${day} feira` ||
+    text === day || text === `${day}-feira` || text === `${day} feira` || text === `na ${day}` || text === `na ${day}-feira` ||
+    semPrep.startsWith(`${day} `) || semPrep.startsWith(`${day}-feira`)
+  )
   if (weekday >= 0) {
     const current = new Date(`${today}T12:00:00Z`).getUTCDay()
     return addDays(today, (weekday - current + 7) % 7)

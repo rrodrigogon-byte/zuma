@@ -640,20 +640,23 @@ async function toolAvailability(context, args = {}) {
   const date = normalizeAgendaDate(args.date, localDateIso()) || cleanText(args.date, 10);
   const disponibilidade = await listSchedulingAvailability(scope, { serviceId, professionalId, date });
   const servicesList = await listSchedulingServices(scope).catch(() => []);
+  const dataFormatada = friendlyWhen(date, '08:00').split(' às ')[0];
   return {
     ok: true,
     dataClassification: 'untrusted_business_data',
     disponibilidade: sanitizeToolData({
       ...disponibilidade,
+      dataConsultada: date,
+      dataLegivel: dataFormatada,
       duracaoMinutos: Number(disponibilidade.service?.duracaoMinutos || 30),
       duracaoTexto: `${Number(disponibilidade.service?.duracaoMinutos || 30)} min`,
       // Valor por horário calculado pelo sistema (regra do Dino: diurno x após 18h09).
       valoresPorHorario: Object.fromEntries((disponibilidade?.slots || []).slice(0, 40).map((time) => [time, brl(precoNoHorario(disponibilidade.service, disponibilidade.professional, time, servicesList))])),
     }),
     instrucao: ((disponibilidade?.slots || []).length > 0
-      ? 'Se o horário pedido ESTIVER livre nos slots, chame preparar_agendamento IMEDIATAMENTE nesta mesma resposta para apresentar o resumo ao cliente sem enrolação. Se o horário pedido não estiver em slots, ofereça os 3 horários livres mais próximos dele, com o valor de cada um. Não pergunte período.'
-      : 'Não há horários disponíveis para este profissional nesta data.')
-      + (disponibilidade?.bloqueio?.ativo ? ` ATENÇÃO: A agenda de ${disponibilidade.professional?.nome || 'profissional'} está BLOQUEADA nesta data (${disponibilidade.bloqueio.motivo || 'ausência/viagem'}). Avise com clareza e simpatia que a agenda está fechada nesta data e ofereça agendar em outra data (ou com outro barbeiro da equipe, como Bruno).` : ''),
+      ? `Se o horário pedido ESTIVER livre nos slots para ${dataFormatada}, chame preparar_agendamento IMEDIATAMENTE nesta mesma resposta para apresentar o resumo ao cliente sem enrolação. Se o horário pedido não estiver em slots, ofereça os 3 horários livres mais próximos dele em ${dataFormatada}, com o valor de cada um. Não pergunte período.`
+      : `Não há horários disponíveis para ${disponibilidade.professional?.nome || 'este profissional'} em ${dataFormatada}.`)
+      + (disponibilidade?.bloqueio?.ativo ? ` ATENÇÃO: A agenda de ${disponibilidade.professional?.nome || 'profissional'} está BLOQUEADA em ${dataFormatada} (${disponibilidade.bloqueio.motivo || 'ausência/viagem'}). Avise com clareza e simpatia que a agenda está fechada em ${dataFormatada} e ofereça agendar em outra data (ou com outro barbeiro da equipe, como Bruno).` : ''),
   };
 }
 
@@ -683,8 +686,21 @@ export function precoNoHorario(service = {}, professional = {}, time = '', servi
       String(s.nome).toLowerCase().includes(nomeServicoLimpo) && 
       String(s.nome).toLowerCase().includes(nomeProf.split(' ')[0])
     );
-    if (especifico) return Number(especifico.preco || 0);
+    if (especifico && Number(especifico.preco) > 0) return Number(especifico.preco);
   }
+  if (base > 0) return base;
+
+  // Fallback seguro da tabela oficial da Barbearia Dino para nunca exibir R$ 0,00
+  const sNome = String(service?.nome || '').toLowerCase();
+  const pNome = String(prof?.nome || prof?.apelido || '').toLowerCase();
+  const ehDino = servicoDoDino || pNome.includes('dino');
+  if (ehDino) {
+    return barbeariaErp.ehHorarioExtraDino(time) ? 600 : 300;
+  }
+  if (sNome.includes('barba') && (sNome.includes('corte') || sNome.includes('combo'))) return 200;
+  if (sNome.includes('barba')) return 100;
+  if (sNome.includes('corte') || sNome.includes('cabelo')) return 100;
+  if (sNome.includes('sobrancelha')) return 30;
   return base;
 }
 
