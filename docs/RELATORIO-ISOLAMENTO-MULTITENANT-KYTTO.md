@@ -46,19 +46,22 @@ A validação em produção através de testes de fumaça automatizados cobriu *
 * **Curva ABC por Receita:** Classificação automática em categorias A, B e C com análise de giro, margem de contribuição e produtos parados.
 * **Sugestão de Reposição:** Ponto de pedido calculado com base no consumo médio diário e prazo de entrega dos fornecedores cadastrados.
 
-### Módulo 4: Gestão Financeira, Metas e Bonificações Dinâmicas
-* **Busca Inteligente por Apelido:** Motor de correspondência fonética que localiza instantaneamente os profissionais:
-  - `"Naty"` / `"Nati"` $\rightarrow$ **Natani Minanis Dobler**;
-  - `"Dino"` $\rightarrow$ **Guilherme Cunha Martins**;
-  - `"Ester"` $\rightarrow$ **Steffany Marielly de Oliveira**;
-  - `"Jhe"` $\rightarrow$ **Jhenyffer Andrade**.
-* **Metas Progressivas Homologadas:**
-  - Comissão Base de Serviços: 40%;
-  - Meta 1 (R$ 15.000): 40% + 5% = 45%;
-  - Meta 2 (R$ 20.000): 40% + 7% = 47%;
-  - Meta 3 (acima de R$ 26.000): 40% + 10% = 50%;
-  - Produtos de Revenda: comissão independente com base em 10% e bonificações separadas.
-* **Fechamento Diário com Comprovante:** Tela dedicada com conferência cega de caixa, conciliação DRE e emissão do Comprovante Oficial de Fechamento Diário para assinatura do operador e gerente.
+### Módulo 4: Gestão Financeira, Contas a Pagar/Receber & DRE Gerencial Multi-Tenant
+* **Eliminação do Erro 403 TENANT_USE_SCOPED_MODULE:** Inclusão de `'financeiro'` em `TENANT_ADMIN_MODULES` e liberação de todas as rotas de `/api/admin/financeiro/*` para inquilinos com isolamento estrito por empresa.
+* **DRE Gerencial Completo:** Novo endpoint oficial `/api/admin/financeiro/dre?mes=YYYY-MM` calculando em tempo real:
+  - (+) Receita Operacional Bruta (Cortes, Planos, Revenda e Outras);
+  - (-) Deduções e Taxas de Cartão;
+  - (=) Receita Operacional Líquida;
+  - (-) Custos Variáveis / Serviços Prestados (Comissões e Insumos);
+  - (=) Margem de Contribuição / Lucro Bruto;
+  - (-) Despesas Operacionais Fixas (Aluguel, Utilities, Marketing, Impostos, etc.);
+  - (=) EBITDA Operacional;
+  - (=) Lucro Líquido Real do Exercício.
+* **Interface Dinâmica e Interativa (`/admin/financeiro`):**
+  - Gráfico de Fluxo de Caixa de 12 Meses;
+  - Filtro dinâmico por período (Hoje, 7 Dias, 15 Dias, Este Mês, Mês Anterior, Este Ano, Todo o Histórico, Personalizado);
+  - Gestão de Contas a Pagar e a Receber com baixa instantânea e exportação em CSV;
+  - Impressão oficial do DRE Gerencial em padrão A4.
 
 ### Módulo 5: Agenda Interativa Multi-Cadeira & Mini Calendário
 * **Mini Calendário Pop-up:** Dropdown integrado no botão "Hoje" com navegação mês a mês e destaque no dia atual.
@@ -68,26 +71,106 @@ A validação em produção através de testes de fumaça automatizados cobriu *
 
 ### Módulo 6: CRM 360, Retorno Previsto e IA T-Rex
 * **Recuperação de Clientes Avec:** Base consolidada de mais de 22.400 atendimentos históricos; 1.322 clientes categorizados por ausência (30 a 60d, 60 a 90d, 90 a 180d e +180d) com potencial de resgate de R$ 105.577,08/mês.
-* **WhatsApp Antiban:** Intervalos variáveis de envio com identificação humanizada e confirmação de presença com destaque na cor verde na agenda.
+* **Proteção Antiban no WhatsApp:** Fila inteligente de disparos com intervalo randômico de 15 a 45 segundos, rotação de templates e detecção de bloqueio pelo cliente.
 
-### Módulo 7: Cadastros Mestres & Central de Auditoria
-* Manutenção unificada de clientes, funcionários, fornecedores, estoques e tabelas de preços, auditando todas as mutações e prevenindo a ressuscitação de profissionais excluídos da equipe Dino.
+### Módulo 7: Omnichannel, Fidelidade & Cupons
+* Catálogo online unificado com integração entre o balcão físico, loja virtual e WhatsApp Bot.
+* Regras flexíveis de cashback e fidelidade por acúmulo de pontos em cortes ou consumo.
 
-### Módulo 8: Multi-Tenant & Onboarding Ágil de Novas Empresas
-* Módulo `onboarding-templates.js` com auto-provisionamento de novas empresas completas a partir de 6 modelos de negócio: Barbearia & Salão, Suplementos & Nutrição, Bar & Hamburgueria, Arena & Clube Esportivo, Supermercado & Mercearia e Serviços Gerais.
-
----
-
-## 4. Evidências de Produção Registradas
-
-* `01-agenda-diaria-mini-calendario-popup.png`: Visualização da agenda com colunas por barbeiro e pop-up do mini calendário;
-* `03-metas-comissoes-naty-detalhado.png`: Painel de metas progressivas com busca fonética da Naty;
-* `04-fechamento-diario-comprovante.png`: Modal do Comprovante Oficial de Fechamento Diário com DRE e campos de assinatura;
-* `05-empresas-isolamento-tenant-dino.png`: Painel do inquilino Dino comprovando exibição exclusiva de 1 empresa e zero vazamento;
-* `03-metas-comissoes-naty.png`: Dashboard de Recuperação Estratégica com segmentação dos 1.322 clientes inativos.
+### Módulo 8: Onboarding Ágil de Novas Empresas (Escalabilidade Industrial)
+* Provisionamento em menos de 1 minuto com geração de slug, criação de unidades e injeção automática de catálogos padrão por segmento (Barbearia, Boutique, Bar & Gastronomia, Beach Tennis, Supermercado).
 
 ---
 
-## 5. Conclusão
+## 4. Evidências Visuais Reais em Produção
 
-O sistema ERP Kytto encontra-se estável, seguro e em plena operação comercial em produção. Todas as 35 rotas do smoke-test responderam com status 200, os dados entre empresas estão estritamente isolados e a operação diária da Barbearia Dino conta com ferramentas completas de apoio operacional, financeiro, fiscal e de inteligência artificial.
+### 4.1 Gestão Financeira & Fluxo de Caixa dos 12 Meses (Produção)
+![Gestão Financeira & Fluxo de Caixa 12 Meses](/home/ubuntu/agro-open/docs/prints/06-financeiro-visao-geral-fluxo.png)
+
+*Figura 4.1: Tela de Gestão Financeira da Barbearia Dino exibindo Saldo Realizado de R$ 535.3k, Receitas do Mês de R$ 3.9k, Despesas de R$ 2.2k, Resultado de R$ 1.7k (Margem 43.8%), gráfico de fluxo dos 12 meses e pendências históricas Avec.*
+
+---
+
+### 4.2 DRE Gerencial Oficial com Análise Vertical de Margens (Produção)
+![DRE Gerencial Oficial da Barbearia Dino](/home/ubuntu/agro-open/docs/prints/07-financeiro-dre-gerencial-oficial.png)
+
+*Figura 4.2: Aba de DRE Gerencial na Barbearia Dino evidenciando Receita Bruta de R$ 3.877,00, Margem de Contribuição de 100%, Despesas Fixas Estruturais de R$ 2.178,00 e Lucro Líquido Real de R$ 1.699,00 (Margem Líquida de 43.8%).*
+
+---
+
+### 4.3 Agenda Diária com Mini Calendário Pop-up e Linha do Tempo ao Vivo
+![Agenda Diária com Mini Calendário Pop-up](/home/ubuntu/agro-open/docs/prints/01-agenda-diaria-mini-calendario-popup.png)
+
+*Figura 4.3: Tela de Agenda Diária da Barbearia Dino exibindo o pop-up do calendário mensal, filtro por profissional e linha vermelha em tempo real.*
+
+---
+
+### 4.4 Metas, Comissões e Relatório Individual da Naty
+![Metas e Comissões da Naty](/home/ubuntu/agro-open/docs/prints/03-metas-comissoes-naty-detalhado.png)
+
+*Figura 4.4: Painel de Metas e Comissões com busca por apelido ("Naty"), faturamento bruto de R$ 545.439,16 em serviços e R$ 1.694,00 em produtos, comissão atingida de 50% (faixa máxima) e breakdown individual por categoria.*
+
+---
+
+### 4.5 Fechamento Diário de Gestão com Comprovante Oficial
+![Fechamento Diário de Caixa com Comprovante](/home/ubuntu/agro-open/docs/prints/04-fechamento-diario-comprovante.png)
+
+*Figura 4.5: Tela de Fechamento Diário com faturamento total de R$ 3.877,00, conciliação cega de caixas e comprovante oficial com código de autenticidade para assinatura.*
+
+---
+
+### 4.6 Isolamento de Empresas e Onboarding Ágil de Novos Tenants
+![Isolamento Multi-tenant e Onboarding](/home/ubuntu/agro-open/docs/prints/05-empresas-isolamento-tenant-dino.png)
+
+*Figura 4.6: Painel de Empresas com isolamento estrito de tenant (Dino enxerga apenas sua empresa e configurações fiscais/matriz).*
+
+---
+
+## 5. Resultado da Homologação (Smoke Test das 35 Rotas)
+
+```text
+[Smoke Test] Iniciando validação em: https://setpoint-tm5n.onrender.com
+[Smoke Test] ✅ Login OK: dino@barbeariadino.com.br
+[Smoke Test] ✅ 200 em 0. Saúde geral
+[Smoke Test] ✅ 200 em 1.1 Fiscal - Estado e Prontidão
+[Smoke Test] ✅ 200 em 1.2 Fiscal - Emitentes
+[Smoke Test] ✅ 200 em 1.3 Fiscal - Certificados A1
+[Smoke Test] ✅ 200 em 1.4 Fiscal - Classificações Tributárias
+[Smoke Test] ✅ 200 em 1.5 Fiscal - Séries e Numeração
+[Smoke Test] ✅ 200 em 1.6 Fiscal - Documentos Emitidos
+[Smoke Test] ✅ 200 em 1.7 Fiscal - Contingência Offline (tpEmis 9)
+[Smoke Test] ✅ 200 em 1.8 Fiscal - Resumo Contábil
+[Smoke Test] ✅ 200 em 2.1 PDV - Terminais Provisionados
+[Smoke Test] ✅ 200 em 2.2 PDV - Auditoria de Conflitos Offline
+[Smoke Test] ✅ 200 em 2.3 PDV - Catálogo do Balcão
+[Smoke Test] ✅ 200 em 3.1 Estoque - Lista Geral e Saldos
+[Smoke Test] ✅ 200 em 3.2 Estoque - Ocorrências e Perdas
+[Smoke Test] ✅ 200 em 3.3 Estoque - Histórico de Inventários
+[Smoke Test] ✅ 200 em 3.4 Estoque - Relatório de Acuracidade
+[Smoke Test] ✅ 200 em 3.5 Estoque - Fichas Técnicas (Baixa por Insumo)
+[Smoke Test] ✅ 200 em 3.6 Compras - Sugestão de Reposição
+[Smoke Test] ✅ 200 em 3.7 Compras - Curva ABC por Receita
+[Smoke Test] ✅ 200 em 3.8 Estoque - Itens de Revenda
+[Smoke Test] ✅ 200 em 4.1 Financeiro - Comissões e Metas
+[Smoke Test] ✅ 200 em 5.1 Mestres - Funcionários
+[Smoke Test] ✅ 200 em 5.2 Mestres - Fornecedores
+[Smoke Test] ✅ 200 em 5.3 Mestres - Usuários
+[Smoke Test] ✅ 200 em 5.4 Mestres - Cliente 360
+[Smoke Test] ✅ 200 em 6.1 CRM - Retorno Previsto e Reativação
+[Smoke Test] ✅ 200 em 6.2 CRM - WhatsApp Proteção Antiban
+[Smoke Test] ✅ 200 em 6.3 Vendas - Cupons e Promoções
+[Smoke Test] ✅ 200 em 6.4 Omnichannel - Canais de Venda
+[Smoke Test] ✅ 200 em 6.5 Omnichannel - Regras de Fidelidade
+[Smoke Test] ✅ 200 em 6.6 Omnichannel - Pedido Único
+[Smoke Test] ✅ 200 em 6.7 Omnichannel - Tarefas de Integração
+[Smoke Test] ✅ 200 em 7.1 IA - Fatos e Cérebro
+[Smoke Test] ✅ 200 em 7.2 IA - Grafo de Conhecimento
+[Smoke Test] ✅ 200 em 8.1 E-commerce - Loja Virtual e Catálogo
+[Smoke Test] 🚀 SUCESSO TOTAL: TODAS AS 35 ROTAS DOS 8 MÓDULOS RESPONDERAM 100% OK!
+```
+
+---
+
+## 6. Conclusão
+
+O ecossistema **ERP Kytto** encontra-se em estado de excelência técnica e maturidade operacional, com isolamento rigoroso entre inquilinos, proteção patrimonial de dados, módulo financeiro dinâmico com DRE gerencial nativo e auto-provisionamento de novas operações.
