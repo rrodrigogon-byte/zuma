@@ -407,20 +407,24 @@ async function ensureSession(task, message) {
 async function historyForSession(session) {
   const result = await db.queryRead(
     `SELECT papel, conteudo, criado_em, metadados->'enquete' AS enquete, metadados->>'autor' AS autor,
-            metadados->>'interactionType' AS interacao
+            metadados->>'autorNome' AS autor_nome, metadados->>'interactionType' AS interacao
        FROM whatsapp_ai_messages
       WHERE empresa_id = $1 AND loja_id = $2 AND sessao_id = $3
         AND papel IN ('user', 'assistant') AND conteudo IS NOT NULL
-      ORDER BY criado_em DESC LIMIT 16`,
+      ORDER BY criado_em DESC LIMIT 35`,
     [session.empresa_id, session.loja_id, session.id],
   );
   // A enquete enviada entra no histórico com as opções numeradas: o voto ("2" ou o nome) faz sentido.
-  return result.rows.reverse().map(row => ({
-    role: row.papel === 'assistant' ? 'assistant' : 'user',
-    // Mensagem da equipe (painel ou celular) entra marcada: ao retomar, o T-Rex sabe o que já foi dito.
-    text: `${row.papel === 'assistant' && (row.autor === 'equipe' || row.interacao === 'organic') ? '[Equipe da loja] ' : ''}${row.papel === 'assistant' && row.enquete?.opcoes?.length ? `${row.conteudo}\n\n[Enquete enviada] ${enqueteNoHistorico(row.enquete)}` : row.conteudo}`,
-    at: row.criado_em,
-  }));
+  return result.rows.reverse().map(row => {
+    const isStaff = row.papel === 'assistant' && (row.autor === 'equipe' || row.interacao === 'organic');
+    const staffPrefix = isStaff ? `[Equipe da Loja / Atendente Humano${row.autor_nome ? `: ${row.autor_nome}` : ''}] ` : '';
+    return {
+      role: row.papel === 'assistant' ? 'assistant' : 'user',
+      // Mensagem da equipe (painel ou celular) entra marcada: ao retomar, o T-Rex sabe o que já foi dito.
+      text: `${staffPrefix}${row.papel === 'assistant' && row.enquete?.opcoes?.length ? `${row.conteudo}\n\n[Enquete enviada] ${enqueteNoHistorico(row.enquete)}` : row.conteudo}`,
+      at: row.criado_em,
+    };
+  });
 }
 
 export function enqueteNoHistorico(enquete = {}) {

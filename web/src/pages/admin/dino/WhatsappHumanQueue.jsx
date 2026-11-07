@@ -392,13 +392,14 @@ export default function WhatsappHumanQueue({
           {displayedRows.map((item) => {
             const comEquipe = item.status === 'humano'
             const encerrada = item.status === 'encerrado'
-            const tom = encerrada ? 'encerrada' : item.precisaAtendente ? 'alerta' : comEquipe ? 'equipe' : 'ia'
+            const precisaColetaUrgente = !encerrada && (item.precisaAtendente || (comEquipe && !item.assigned))
+            const tom = encerrada ? 'encerrada' : precisaColetaUrgente ? 'alerta' : comEquipe ? 'equipe' : 'ia'
             const titulo = item.nome || item.telefone
-            const situacao = encerrada ? 'Encerrada' : item.precisaAtendente
-              ? `T-Rex não resolveu · ${item.handoff_label}`
+            const situacao = encerrada ? 'Encerrada' : precisaColetaUrgente
+              ? `🚨 URGENTE · ${item.handoff_label}`
               : comEquipe ? (item.assigned ? (item.isMine ? 'Com você' : 'Com outro atendente') : `Com a equipe · ${item.handoff_label}`) : 'Em conversa com o T-Rex'
             return (
-              <article key={item.id} className={`wa-trex-card wa-trex-card--${tom}`} aria-label={`Conversa ${titulo}: ${situacao}`}>
+              <article key={item.id} className={`wa-trex-card wa-trex-card--${tom}${precisaColetaUrgente ? ' wa-trex-card--urgente' : ''}`} aria-label={`Conversa ${titulo}: ${situacao}`}>
                 <header className="wa-trex-card__head">
                   <div>
                     <strong className="wa-trex-card__nome">{titulo}</strong>
@@ -406,7 +407,7 @@ export default function WhatsappHumanQueue({
                   </div>
                   <span className="wa-trex-card__selo">{situacao}</span>
                 </header>
-                {item.precisaAtendente && <p className="wa-trex-card__aviso" role="alert">O atendente deve assumir esta conversa.</p>}
+                {precisaColetaUrgente && <p className="wa-trex-card__aviso" role="alert">🚨 Coleta urgente: o atendente deve assumir esta conversa.</p>}
                 {item.ultimaMensagemCliente && <p className="wa-trex-card__msg"><b>Cliente:</b> {item.ultimaMensagemCliente}</p>}
                 {item.ultimaRespostaIa && <p className="wa-trex-card__msg wa-trex-card__msg--ia"><b>T-Rex:</b> {item.ultimaRespostaIa}</p>}
                 <p className="wa-trex-card__meta">
