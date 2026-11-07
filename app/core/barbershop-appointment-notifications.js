@@ -552,14 +552,8 @@ export async function enqueueDueAppointmentReminders() {
         if (!plano.enabled) continue;
         const confirmacao = agendamento.confirmacaoAutomatica || {};
         const isDinoEmp = ['d0d0ac01-8e50-4b61-8c79-de4aaa916da6', 'emp_dino', 'dino'].includes(String(legacyEmpresaId || '').toLowerCase());
-        if (!isDinoEmp && confirmacao.status === 'segunda_enviada' && confirmationDeadlineExpired(confirmacao.prazoRespostaAte, now)) {
-          const cancelado = barbearia.cancelarPorFaltaConfirmacao(legacyEmpresaId, agendamento.id, { lojaId: agendamento.lojaId || '', agora: now });
-          if (cancelado) {
-            const contexto = { empresaId: legacyEmpresaId, lojaId: cancelado.lojaId || '', legacyEmpresaId };
-            await queueAppointmentNotifications(contexto, cancelado, 'cancelado').catch(() => null);
-            const candidatos = captacao.candidatosParaVaga(legacyEmpresaId, cancelado, { lojaId: cancelado.lojaId || '' });
-            await queueWaitlistNotifications(contexto, cancelado, candidatos).catch(() => null);
-          }
+        if (confirmacao.status === 'segunda_enviada' && confirmationDeadlineExpired(confirmacao.prazoRespostaAte, now)) {
+          // BLINDAGEM: Cancelamento automatico desativado. Agendamentos sao firmes e nao expiram por timeout.
           continue;
         }
         if (confirmacao.status === 'segunda_enviada' || confirmacao.status === 'confirmado' || confirmacao.status === 'cancelado_falta_confirmacao') continue;
