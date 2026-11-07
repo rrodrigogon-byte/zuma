@@ -29,6 +29,7 @@ import {
   SchedulingError,
 } from './barbershop-scheduling.js';
 import { notificarEquipe } from '../dino-push-equipe.js';
+import { matchAgendaName } from './whatsapp-ai-tools.js';
 import {
   listWhatsappCustomerAppointments as pgCustomerAppointments,
   rescheduleWhatsappAppointment as pgReschedule,
@@ -439,7 +440,12 @@ export async function availability(scope, input = {}) {
   if (await agendaSource(scope) === 'postgres') return pgAvailability(scope, input);
   const empresa = chaveEmpresa(scope);
   const date = dataLocalValida(input.date);
-  const servico = barbearia.listarServicos(empresa).find((item) => item.id === limpo(input.serviceId, 100));
+  const servicos = barbearia.listarServicos(empresa);
+  let servico = servicos.find((item) => item.id === limpo(input.serviceId, 100));
+  if (!servico) {
+    const { item } = matchAgendaName(input.serviceId, servicos);
+    if (item) servico = item;
+  }
   if (!servico) throw new SchedulingError('serviço não encontrado', 'SERVICE_NOT_FOUND');
   const professionalId = limpo(input.professionalId, 100) || 'qualquer';
   const profissional = professionalId === 'qualquer' ? null : barbearia.listarProfissionais(empresa).find((item) => item.id === professionalId);
@@ -452,7 +458,7 @@ export async function availability(scope, input = {}) {
   }
   const ehDino = barbearia.ehProfissionalDino(profissional) || String(servico?.nome || '').toLowerCase().includes('dino');
   const tabelaValores = ehDino ? {
-    tipo: 'dino',
+    tipo: 'dino_24x7',
     diurno: 'R$ 300,00 (08h00 às 18h00)',
     noturnoExtra: 'R$ 600,00 (atendimento exclusivo fora do expediente regular)',
     orientacaoHumana: 'Sempre alerte o cliente com simpatia e transparência sobre o valor do corte com Dino (R$ 300 no expediente normal das 08h às 18h ou R$ 600 em horário extra) antes de fechar o agendamento.',
@@ -562,7 +568,14 @@ function criarNaAgendaDaBarbearia(scope, input = {}) {
     // agendamento fazem parte do atendimento pedido (nunca reativa quem revogou).
     captacao.registrarConsentimentoAtendimento(empresa, vinculo.clienteId, 'conversa_whatsapp_iniciada_pelo_cliente');
     const servicosEmpresa = barbearia.listarServicos(empresa, { incluirInativos: true });
-    const servicoObj = servicosEmpresa.find((s) => s.id === limpo(input.serviceId, 100));
+    let servicoObj = servicosEmpresa.find((s) => s.id === limpo(input.serviceId, 100));
+    if (!servicoObj) {
+      const { item } = matchAgendaName(input.serviceId, servicosEmpresa);
+      if (item) {
+        servicoObj = item;
+        input.serviceId = item.id;
+      }
+    }
     const duracaoServico = Number(servicoObj?.duracaoMinutos || 0) || duracaoDoServico(empresa, input.serviceId);
     const agendamento = barbearia.criarAgendamento(empresa, {
       clienteId: vinculo.clienteId || undefined,

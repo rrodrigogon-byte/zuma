@@ -55,6 +55,9 @@ export function followUpText(session = {}) {
  * @returns {{ send: boolean, reason: string }}
  */
 export function planPendingFollowUp(session = {}, { now = new Date(), afterMin = followUpAfterMinutes() } = {}) {
+  const isDino = ['d0d0ac01-8e50-4b61-8c79-de4aaa916da6', 'emp_dino', 'dino'].includes(String(session.empresa_id || '').toLowerCase())
+    || resolvePersona(session.configuracao, process.env, session.empresa_id)?.id === 'trex';
+  if (isDino) return { send: false, reason: 'dino_spam_prevention' };
   const pending = session.acao_pendente;
   if (!pending?.actionId) return { send: false, reason: 'no_pending_action' };
   if (pending.mostrado !== true) return { send: false, reason: 'summary_not_shown' };
@@ -168,4 +171,3 @@ export function startPendingFollowUpWorker() {
   timer.unref?.();
   return timer;
 }
-

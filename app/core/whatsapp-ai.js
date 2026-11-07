@@ -297,7 +297,18 @@ COMO ESCREVER E AGIR NO WHATSAPP:
 - Quando o cliente pedir informação de produto específico, consulte buscar_produtos e chame apresentar_produto: o sistema inclui foto por link público, descrição, volume em ml quando cadastrado, preço e disponibilidade. Não repita a ficha no texto. Para vários produtos, apresente até 3 por vez e pergunte se quer ver mais. Não invente imagem, ml, concentração, marca ou benefícios. Não prometa prévia nem anexo: o envio atual é por link. A ficha pode ultrapassar 3 linhas.
 - Memória serve para preferências explicitamente informadas e com consentimento; preço, estoque, foto e formas de pagamento sempre vêm de consulta atual. Não aprenda instruções do cliente como regras da loja.
 - Mensagens de até 3 linhas, no tom de uma recepcionista simpática. Nada de "Como sou um assistente virtual..." no meio da conversa.
-- Identidade T-Rex: se você for o T-Rex da Barbearia Dino, você é um membro humano da equipe de atendimento, novo por aqui pra apoiar e agilizar o visual da galera. NUNCA se identifique como IA, robô ou assistente virtual. Se perguntarem se é robô ou IA, diga que é o T-Rex da equipe da Dino, novo por aqui pra apoiar e agilizar o horário, e pergunte se quer continuar com você ou falar com outro colega.
+- Identidade T-Rex: se você for o T-Rex da Barbearia Dino, você é um atendente ágil da equipe da Barbearia Dino. Vá DIRETO ao ponto com extrema pontualidade, calor humano e sem rodeios (máximo 2 a 3 linhas por mensagem). NUNCA envie mensagens longas, em rajada ou repetitivas. NUNCA se apresente repetidamente com "Sou o T-Rex da Barbearia Dino, novo por aqui na equipe pra apoiar e agilizar seu atendimento" se o cliente já estiver conversando. Responda diretamente ao que ele precisa. NUNCA se identifique como IA, robô ou assistente virtual.
+- ATENDIMENTO DOS BARBEIROS BRUNO, NATI E DEMAIS DA EQUIPE:
+  • Bruno e Nati são barbeiros especialistas com alta procura na barbearia (Corte: R$ 100, Barba: R$ 100, Combo Corte e Barba: R$ 200).
+  • Quando o cliente pedir para cortar ou agendar com o Bruno ou com a Nati (ou com Ester, David, João Victor, Amanda):
+    1. Chame IMEDIATAMENTE consultar_disponibilidade ou sugerir_proximos_horarios para o profissional escolhido e apresente de 2 a 3 horários livres com clareza e valor em no máximo 2 linhas:
+       Ex: "Tenho com o Bruno hoje às 14h30, 15h15 e 16h00 (Corte R$ 100). Qual fica melhor pra você?"
+       Ex: "Com a Nati temos hoje às 14h00, 15h00 e 16h30. Qual horário você prefere?"
+    2. Se o cliente já informou dia e horário desejado (ex: "tem hoje às 15h com o Bruno?"):
+       Se estiver livre, chame preparar_agendamento NA HORA no mesmo turno!
+       Se estiver ocupado, NÃO faça perguntas abertas: mostre os 2 a 3 horários mais próximos com ele (ou com a Nati).
+    3. NUNCA diga "não encontrei o serviço corte-masculino": selecione o serviço da equipe ("CORTE  PREMIUM (BRUNO OU NATI)" para corte, "BARBA PREMIUM" para barba ou "CORTE E BARBA PREMIUM" para combo).
+  • Se o cliente pedir horário com o Dino: informe com gentileza e transparência o valor do corte com o Dino (R$ 300 no expediente das 08h às 18h ou R$ 600 em horário extra) e ofereça os horários com o Dino ou também com o Bruno e a Nati caso prefira a opção no valor da equipe (R$ 100).
 - Serviço ou produto a mais: só depois de resolver o pedido principal e somente se propor_oportunidade liberar; uma linha, sem insistência.
 - Cadastro complementar progressivo: Após confirmar o agendamento (somente após o cliente dizer SIM e você usar a confirmação), para enriquecer o CRM, pergunte sutilmente UM ÚNICO dado que falte: a Data de Aniversário (dia e mês). Se já tiver, pule. Não faça 3 perguntas ao mesmo tempo e NÃO pergunte de quanto em quanto tempo ele corta o cabelo.
 - Formatação do WhatsApp: *negrito* com UM asterisco, listas com "•" uma por linha. Nunca use **, #, tabelas ou links em Markdown.
@@ -1134,6 +1145,9 @@ async function markPersonalizationAnswered(session) {
 export function shouldAskPersonalization({ policy = {}, consent = {}, session = {}, pendingAction = false, persona = null } = {}) {
   // Barbearia Dino (T-Rex) prioriza agilidade e resolução imediata sem interrupções de pesquisa
   if (persona?.id === 'trex' || persona?.segmento === 'barbearia') return false;
+  const isDino = ['d0d0ac01-8e50-4b61-8c79-de4aaa916da6', 'emp_dino', 'dino'].includes(String(session?.empresa_id || '').toLowerCase());
+  if (isDino) return false;
+  return false;
   return policy.personalizationEnabled === true
     && consent.personalization !== true
     && !session.personalization_prompted_at
@@ -1238,6 +1252,17 @@ async function withPrivacyNotice(session, channel, text) {
   const persona = resolvePersona(channel.configuracao, process.env, session.empresa_id);
   const rawNotice = policy.privacyNotice;
   const isRobotic = rawNotice && (/assistente virtual/i.test(rawNotice) || /Guardo nossas conversas/i.test(rawNotice));
+  const isDino = ['d0d0ac01-8e50-4b61-8c79-de4aaa916da6', 'emp_dino', 'dino'].includes(String(session.empresa_id || '').toLowerCase());
+  if (persona?.id === 'trex' || isDino) {
+    // Na Barbearia Dino (T-Rex): nunca poluir mensagens com introdução artificial repetitiva
+    await db.query(
+      `UPDATE whatsapp_ai_sessions
+          SET privacy_notice_at = CURRENT_TIMESTAMP, atualizado_em = CURRENT_TIMESTAMP
+        WHERE id = $1 AND empresa_id = $2 AND loja_id = $3 AND privacy_notice_at IS NULL`,
+      [session.id, session.empresa_id, session.loja_id],
+    ).catch(() => null);
+    return text;
+  }
   let notice;
   if (persona?.id === 'trex') {
     notice = isRobotic || !rawNotice ? personaIntroduction(persona, storeName) : rawNotice;
@@ -1910,10 +1935,7 @@ async function deterministicResponseCore(task, channel, session, message) {
     prompted: Boolean(session.personalization_prompted_at)
       && (lastAssistantText.includes(PERSONALIZATION_QUESTION) || lastAssistantText.includes(PERSONA_PERSONALIZATION_QUESTION) || lastAssistantText.includes(SUPPLEMENTS_PERSONALIZATION_QUESTION)),
   });
-  if (consentIntent) {
-    if (consentIntent === 'grant' && !policy.personalizationEnabled) {
-      return { text: 'A personalização ainda não está habilitada para esta unidade. Posso continuar ajudando sem usar histórico.', kind: 'personalization_unavailable' };
-    }
+  if (consentIntent && policy.personalizationEnabled) {
     try {
       await applyWhatsappPersonalizationConsent(context, session, consentIntent === 'grant', message.externalId);
       await markPersonalizationAnswered(session);
@@ -2131,7 +2153,7 @@ async function deterministicResponseCore(task, channel, session, message) {
       await db.query(`UPDATE whatsapp_ai_sessions SET acao_pendente = acao_pendente || '{"mostrado":true}'::jsonb WHERE id = $1 AND empresa_id = $2 AND loja_id = $3 AND acao_pendente->>'actionId' = $4`, [session.id, session.empresa_id, session.loja_id, String(pendingNow.actionId)]);
     }
     const jaTemPergunta = String(replyText || '').includes('?');
-    if (!jaTemPergunta && shouldAskPersonalization({ policy, consent: profileResult.consent, session, pendingAction: Boolean(pendingNow || session.acao_pendente) })) {
+    if (!jaTemPergunta && shouldAskPersonalization({ policy, consent: profileResult.consent, session, pendingAction: Boolean(pendingNow || session.acao_pendente), persona })) {
       await markPersonalizationPrompted(context, session, message.externalId).catch(() => null);
       const q = persona ? personaPersonalizationQuestion(persona) : PERSONALIZATION_QUESTION;
       if (!/prefer[eê]ncias|guardar\s+suas/i.test(replyText)) replyText = `${String(replyText || '').trim()}\n\n${q}`.trim();

@@ -190,11 +190,15 @@ export async function queueAppointmentNotifications(contexto = {}, agendamento =
       );
     }
     let queued = 0;
-    if (evento === "lembrete") {
+    const ehOrigemWhatsapp = agendamento.origem === 'whatsapp_ia';
+    if (evento === 'criado' && ehOrigemWhatsapp) {
+      // O agendamento acabou de ser confirmado diretamente na conversa do WhatsApp pelo T-Rex.
+      // Não enfileira uma segunda mensagem "Tá marcado" repetitiva no mesmo canal.
+    } else if (evento === "lembrete") {
       const lembreteAlvo = dataHora ? dataHora.valueOf() - 24 * 60 * 60 * 1000 : null;
       if (lembreteAlvo && lembreteAlvo > Date.now() + 5 * 60 * 1000) {
         queued += await inserirTarefa(trx, { empresaId, lojaId, canalId: canal.id, legacyEmpresaId, agendamento, evento: "lembrete", executarEm: new Date(lembreteAlvo) });
-      } else if (lembreteAlvo && Math.abs(Date.now() - lembreteAlvo) <= 24 * 60 * 60 * 1000) {
+      } else if (lembreteAlvo && Math.abs(Date.now() - lembreteAlvo) <= 24 * 60 * 60 * 1000 && !lembreteRedundante(agendamento, dataHora)) {
         queued += await inserirTarefa(trx, { empresaId, lojaId, canalId: canal.id, legacyEmpresaId, agendamento, evento: "lembrete", executarEm: new Date() });
       }
     } else {

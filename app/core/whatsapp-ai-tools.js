@@ -95,8 +95,10 @@ const APELIDOS_PROFISSIONAIS = {
   'mestre dino': ['guilherme cunha martins', 'dino'],
   'patrao': ['guilherme cunha martins', 'dino'],
   'bruno': ['bruno mendes pedroso', 'bruno'],
+  'bruno mendes': ['bruno mendes pedroso', 'bruno'],
   'bruninho': ['bruno mendes pedroso', 'bruno'],
-  'nati': ['natani minanis dobler', 'natani', 'naty'],
+  'nati': ['natani minanis dobler', 'natani', 'naty', 'nati'],
+  'nati dobler': ['natani minanis dobler', 'natani', 'naty', 'nati'],
   'naty': ['natani minanis dobler', 'natani', 'nati'],
   'natani': ['natani minanis dobler', 'naty', 'nati'],
   'ester': ['steffany marielly de oliveira', 'steffany', 'ester'],
@@ -112,19 +114,53 @@ const APELIDOS_PROFISSIONAIS = {
 };
 
 const APELIDOS_SERVICOS = {
-  'corte e barba': ['corte e barba', 'combo corte e barba'],
-  'cabelo e barba': ['corte e barba', 'combo corte e barba'],
-  'combo': ['corte e barba', 'combo corte e barba'],
+  // Corte de cabelo / Corte masculino (Bruno, Nati, Ester, David, etc.)
+  'corte': ['corte premium (bruno ou nati)', 'corte com dino', 'corte premium', 'corte tradicional', 'corte masculino'],
+  'corte masculino': ['corte premium (bruno ou nati)', 'corte com dino', 'corte premium'],
+  'corte-masculino': ['corte premium (bruno ou nati)', 'corte com dino', 'corte premium'],
+  'corte cabelo masculino': ['corte premium (bruno ou nati)', 'corte com dino', 'corte premium'],
+  'corte de cabelo': ['corte premium (bruno ou nati)', 'corte com dino', 'corte premium'],
+  'corte cabelo': ['corte premium (bruno ou nati)', 'corte com dino', 'corte premium'],
+  'cortar cabelo': ['corte premium (bruno ou nati)', 'corte com dino', 'corte premium'],
+  'cortar o cabelo': ['corte premium (bruno ou nati)', 'corte com dino', 'corte premium'],
+  'cabelo': ['corte premium (bruno ou nati)', 'corte com dino', 'corte premium'],
+  'cabelo masculino': ['corte premium (bruno ou nati)', 'corte com dino', 'corte premium'],
+  'corte tradicional': ['corte premium (bruno ou nati)', 'corte com dino', 'corte premium'],
+
+  // Barba
+  'barba': ['barba premium', 'barba com o dino', 'barba com dino', 'barba'],
+  'barba premium': ['barba premium', 'barba com o dino', 'barba com dino'],
+  'barba masculina': ['barba premium', 'barba com o dino', 'barba com dino'],
+  'fazer barba': ['barba premium', 'barba com o dino', 'barba com dino'],
+  'fazer a barba': ['barba premium', 'barba com o dino', 'barba com dino'],
+  'aparar barba': ['barba premium', 'barba com o dino', 'barba com dino'],
+
+  // Corte e Barba / Combo
+  'corte e barba': ['corte e barba premium', 'corte e barba com dino', 'combo corte e barba', 'corte e barba'],
+  'cabelo e barba': ['corte e barba premium', 'corte e barba com dino', 'combo corte e barba', 'corte e barba'],
+  'barba e cabelo': ['corte e barba premium', 'corte e barba com dino', 'combo corte e barba', 'corte e barba'],
+  'barba e corte': ['corte e barba premium', 'corte e barba com dino', 'combo corte e barba', 'corte e barba'],
+  'combo': ['corte e barba premium', 'corte e barba com dino', 'combo corte e barba', 'corte e barba'],
+  'combo corte e barba': ['corte e barba premium', 'corte e barba com dino', 'combo corte e barba', 'corte e barba'],
+  'corte e barba premium': ['corte e barba premium', 'corte e barba com dino'],
+
+  // Extras
   'sobrancelha': ['design de sobrancelha', 'sobrancelha (navalha)', 'sobrancelha'],
+  'design de sobrancelha': ['design de sobrancelha', 'sobrancelha (navalha)', 'sobrancelha'],
+  'nariz': ['depilacao masculina - nariz', 'depilacao nariz', 'nariz'],
+  'depilacao masculina nariz': ['depilacao masculina - nariz', 'depilacao nariz', 'nariz'],
+  'depilacao nariz': ['depilacao masculina - nariz', 'depilacao nariz', 'nariz'],
   'pezinho': ['pezinho', 'acabamento'],
+  'acabamento': ['pezinho', 'acabamento'],
   'corte infantil': ['corte infantil'],
   'infantil': ['corte infantil'],
   'corte com dino': ['corte com dino'],
   'barba com dino': ['barba com o dino', 'barba com dino'],
+  'corte e barba com dino': ['corte e barba com dino'],
 };
 
 export function matchAgendaName(value, items = []) {
-  const alvo = nomeComparavel(value);
+  const alvo = nomeComparavel(value).replace(/[-_]/g, ' ').replace(/\s+/g, ' ').trim();
   if (!alvo) return { item: null, candidatos: [] };
   // 1. Tentar resolucao direta por apelido conhecido (somente quando o alvo for o nome do profissional)
   const semPreposicao = alvo.replace(/^(?:com|com o|com a|pra|para|pelo|pela)\s+/, '').trim();
@@ -136,16 +172,48 @@ export function matchAgendaName(value, items = []) {
     });
     if (achado) return { item: achado, candidatos: [achado] };
   }
-  if (semPreposicao in APELIDOS_SERVICOS) {
-    const correspondencias = APELIDOS_SERVICOS[semPreposicao];
-    const achado = items.find((item) => {
+  // 2. Apelidos de serviços
+  const chaveServico = (semPreposicao in APELIDOS_SERVICOS) ? semPreposicao : (alvo in APELIDOS_SERVICOS ? alvo : null);
+  if (chaveServico) {
+    const correspondencias = APELIDOS_SERVICOS[chaveServico];
+    const achados = items.filter((item) => {
       const n = nomeComparavel(item?.nome);
       return correspondencias.some((c) => n === c || n.includes(c));
     });
-    if (achado) return { item: achado, candidatos: [achado] };
+    if (achados.length === 1) return { item: achados[0], candidatos: achados };
+    if (achados.length > 1) {
+      const comDino = /\bdino\b/i.test(semPreposicao);
+      const selecionado = achados.find((it) => comDino ? /\bdino\b/i.test(it.nome) : !/\bdino\b/i.test(it.nome)) || achados[0];
+      return { item: selecionado, candidatos: achados };
+    }
   }
   const exato = items.filter((item) => nomeComparavel(item?.nome) === alvo);
   if (exato.length === 1) return { item: exato[0], candidatos: exato };
+  // 3. Mapeamento inteligente de serviços por palavras-chave (corte, barba, combo)
+  const comDino = /\bdino\b/i.test(alvo);
+  const temCorte = /\b(corte|cabelo)\b/i.test(alvo);
+  const temBarba = /\bbarba\b/i.test(alvo);
+  if (temCorte && temBarba) {
+    const achado = items.find((it) => {
+      const n = nomeComparavel(it?.nome);
+      return comDino ? n.includes('dino') && n.includes('barba') && n.includes('corte') : !n.includes('dino') && n.includes('barba') && n.includes('corte');
+    }) || items.find((it) => nomeComparavel(it?.nome).includes('barba') && nomeComparavel(it?.nome).includes('corte'));
+    if (achado) return { item: achado, candidatos: [achado] };
+  }
+  if (temCorte) {
+    const achado = items.find((it) => {
+      const n = nomeComparavel(it?.nome);
+      return comDino ? n.includes('dino') && n.includes('corte') : !n.includes('dino') && n.includes('corte') && !n.includes('barba');
+    }) || items.find((it) => nomeComparavel(it?.nome).includes('corte') && !nomeComparavel(it?.nome).includes('barba'));
+    if (achado) return { item: achado, candidatos: [achado] };
+  }
+  if (temBarba) {
+    const achado = items.find((it) => {
+      const n = nomeComparavel(it?.nome);
+      return comDino ? n.includes('dino') && n.includes('barba') : !n.includes('dino') && n.includes('barba') && !n.includes('corte');
+    }) || items.find((it) => nomeComparavel(it?.nome).includes('barba') && !nomeComparavel(it?.nome).includes('corte'));
+    if (achado) return { item: achado, candidatos: [achado] };
+  }
   const pedidos = tokensNome(value);
   if (!pedidos.length) return { item: null, candidatos: [] };
   const pontuados = items.map((item) => {
@@ -154,7 +222,7 @@ export function matchAgendaName(value, items = []) {
     // Cobre o que o cliente pediu e penaliza nome de serviço com muitas palavras sobrando.
     const score = tokens.length ? (comuns / pedidos.length) - (Math.max(0, tokens.length - comuns) * 0.05) : 0;
     return { item, score, comuns };
-  }).filter((entry) => entry.comuns > 0 && entry.score >= 0.6).sort((a, b) => b.score - a.score);
+  }).filter((entry) => entry.comuns > 0 && entry.score >= 0.5).sort((a, b) => b.score - a.score);
   if (!pontuados.length) return { item: null, candidatos: [] };
   const empatados = pontuados.filter((entry) => Math.abs(entry.score - pontuados[0].score) < 0.001);
   return { item: empatados.length === 1 ? empatados[0].item : null, candidatos: empatados.map((entry) => entry.item) };

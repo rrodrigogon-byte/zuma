@@ -5,6 +5,9 @@ import * as barbearia from './barbearia-erp-kytto.js';
 import { toolPrepareCancellation } from './core/whatsapp-ai-tools.js';
 import * as cobranca from './dino-cobranca-kytto.js';
 import { personaAppointmentMessage } from './core/whatsapp-ai-persona.js';
+import { matchAgendaName } from './core/whatsapp-ai-tools.js';
+import { planPendingFollowUp } from './core/whatsapp-ai-followup.js';
+import { shouldAskPersonalization } from './core/whatsapp-ai.js';
 
 test('confirmIntent rejeita palavras casuais como confirmação de cancelamento', () => {
   // Palavras casuais de conversa NUNCA devem confirmar cancelamento de horário
@@ -226,4 +229,62 @@ test('confirmAttendance reativa agendamento cancelado se cliente confirmar na Di
   assert.ok(res);
   assert.equal(estado.agendamentos[agId].status, 'confirmado');
   assert.match(estado.agendamentos[agId].observacoes, /Presença confirmada pelo cliente no WhatsApp/);
+});
+
+test('matchAgendaName resolve perfeitamente Bruno, Nati, corte e corte-masculino sem erro', () => {
+  const servicos = [
+    { id: 's1', nome: 'CORTE  PREMIUM (BRUNO OU NATI)' },
+    { id: 's2', nome: 'Corte com Dino' },
+    { id: 's3', nome: 'BARBA PREMIUM' },
+    { id: 's4', nome: 'CORTE E BARBA PREMIUM' },
+    { id: 's5', nome: 'Corte e barba com Dino' },
+  ];
+  const profissionais = [
+    { id: 'p1', nome: 'Bruno Mendes Pedroso' },
+    { id: 'p2', nome: 'Natani Minanis Dobler' },
+    { id: 'p3', nome: 'Guilherme Cunha Martins (Dino)' },
+    { id: 'p4', nome: 'Steffany Marielly de Oliveira (Ester)' },
+  ];
+
+  // Profissionais: Bruno e Nati
+  assert.equal(matchAgendaName('bruno', profissionais).item?.id, 'p1');
+  assert.equal(matchAgendaName('bruninho', profissionais).item?.id, 'p1');
+  assert.equal(matchAgendaName('bruno mendes', profissionais).item?.id, 'p1');
+  assert.equal(matchAgendaName('nati', profissionais).item?.id, 'p2');
+  assert.equal(matchAgendaName('naty', profissionais).item?.id, 'p2');
+  assert.equal(matchAgendaName('natani', profissionais).item?.id, 'p2');
+  assert.equal(matchAgendaName('nati dobler', profissionais).item?.id, 'p2');
+
+  // Serviços: corte-masculino e corte mapeiam para CORTE  PREMIUM (BRUNO OU NATI)
+  assert.equal(matchAgendaName('corte-masculino', servicos).item?.id, 's1');
+  assert.equal(matchAgendaName('corte', servicos).item?.id, 's1');
+  assert.equal(matchAgendaName('corte masculino', servicos).item?.id, 's1');
+  assert.equal(matchAgendaName('corte de cabelo', servicos).item?.id, 's1');
+  assert.equal(matchAgendaName('cabelo', servicos).item?.id, 's1');
+  assert.equal(matchAgendaName('corte com dino', servicos).item?.id, 's2');
+  assert.equal(matchAgendaName('barba', servicos).item?.id, 's3');
+  assert.equal(matchAgendaName('corte e barba', servicos).item?.id, 's4');
+  assert.equal(matchAgendaName('corte e barba com dino', servicos).item?.id, 's5');
+});
+
+test('planPendingFollowUp e shouldAskPersonalization bloqueiam envio excessivo de mensagens na Dino', () => {
+  const sessionDino = {
+    empresa_id: 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6',
+    status: 'ativo',
+    acao_pendente: { actionId: 'act-1', mostrado: true, summary: 'Corte às 15h' },
+    configuracao: { persona: 'trex' },
+  };
+  // Dino nunca recebe follow-up autônomo chato para evitar sobrecarregar o cliente
+  const followup = planPendingFollowUp(sessionDino, { now: new Date(Date.now() + 30 * 60000) });
+  assert.equal(followup.send, false);
+  assert.equal(followup.reason, 'dino_spam_prevention');
+
+  // Dino nunca faz perguntas de preferências ou pesquisas desnecessárias
+  const ask = shouldAskPersonalization({
+    policy: { personalizationEnabled: true },
+    consent: {},
+    session: sessionDino,
+    persona: { id: 'trex', segmento: 'barbearia' },
+  });
+  assert.equal(ask, false);
 });
