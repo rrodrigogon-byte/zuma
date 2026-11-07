@@ -324,13 +324,17 @@ export default function Empresas() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <span style={{ fontSize: 28 }}>🏢</span>
             <h1 className="page-title" style={{ margin: 0, fontSize: 24, fontWeight: 800, color: '#12283F' }}>
-              {isPlatformAdmin ? 'Gestão de Empresas & Multiempresa' : (empresaAtiva?.nome || 'Minha Empresa')}
+              {isPlatformAdmin
+                ? 'Gestão de Empresas & Multiempresa'
+                : (empresas.length > 1 ? 'Minhas Empresas Autorizadas' : (empresaAtiva?.nome || 'Minha Empresa'))}
             </h1>
           </div>
           <div style={{ marginTop: 6, color: 'var(--muted, #64748b)', fontSize: 13 }}>
             {isPlatformAdmin
-              ? 'Cadastro completo e autônomo com inteligência artificial, isolamento contábil, fiscal e operacional.'
-              : 'Dados cadastrais, fiscais e operacionais exclusivos da sua unidade no ERP Kytto.'}
+              ? 'Painel corporativo e gestão global da holding Kytto (Acesso Exclusivo: Rodrigo Gonçalves / rrodrigogon).'
+              : (empresas.length > 1
+                  ? 'Empresas autorizadas sob sua gestão (Stallone & Agro Open). Alterne e opere entre elas com isolamento total.'
+                  : 'Dados cadastrais, fiscais e operacionais exclusivos da sua barbearia no ERP Kytto.')}
             {empresaAtiva && (
               <span style={{ marginLeft: 8, padding: '2px 8px', borderRadius: 6, background: 'rgba(255,107,44,.12)', color: '#FF6B2C', fontWeight: 700 }}>
                 Unidade ativa: {empresaAtiva.nomeFantasia || empresaAtiva.nome}

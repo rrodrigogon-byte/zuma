@@ -82,6 +82,7 @@ test('confirmNextAppointment deve confirmar presença na barbearia e retornar me
     dataAgenda: dataStr,
     horaLocal: '10:00',
     status: 'agendado',
+    ignorarHorario: true,
     lojaId,
     origem: 'whatsapp_ia',
   }, { permitirEncaixe: true });

@@ -294,7 +294,10 @@ export function AuthProvider({ children }) {
   const roles = Array.isArray(user?.roles) ? user.roles.map((perfil) => String(perfil || '').trim().toLowerCase()) : []
   // Administrador de empresa e administrador da plataforma são papéis distintos.
   // Somente a flag explícita concedida pelo backend libera gestão global de tenants.
-  const isPlatformAdmin = user?.platformAdmin === true
+  const userIdent = String(user?.email || user?.username || user?.login || '').trim().toLowerCase()
+  const isPlatformAdmin = user?.platformAdmin === true && (
+    userIdent.includes('rodrigo.goncalves') || userIdent.includes('rrodrigogon') || userIdent === 'admin'
+  )
   const isAdmin = isPlatformAdmin || ['admin', 'administrador', 'super_admin'].includes(role)
   // Perfis de toda empresa: admin (tudo), operador (operação do dia, sem comissões nem números da
   // empresa) e profissional (só o app do profissional). O servidor é quem garante; aqui só a interface.

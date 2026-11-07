@@ -47,6 +47,25 @@ const EMPRESAS_CANONICAS_PADRAO = [
     totalLojas: 1
   },
   {
+    id: '31f70c83-9172-40c2-945f-9e793b5048be',
+    nome: 'Stallone Nutre Sport',
+    nomeFantasia: 'Stallone Nutre Sport',
+    razaoSocial: 'STALLONE NUTRE SPORT LTDA',
+    cnpj: '56.099.531/0001-38',
+    cnpjNormalizado: '56099531000138',
+    inscricaoEstadual: '13.456.789-0',
+    inscricaoMunicipal: '124500',
+    tipoNegocio: 'loja',
+    telefone: '(65) 3624-7890',
+    email: 'financeiro@stallonenutresport.com.br',
+    enderecoCidade: 'Cuiabá',
+    enderecoEstado: 'MT',
+    endereco: 'Av. Historiador Rubens de Mendonça, 1200, Bosque da Saúde, Cuiabá/MT',
+    ativa: true,
+    permitirEstoqueNegativo: true,
+    totalLojas: 1
+  },
+  {
     id: 'eba1c88c-d8c1-4b5a-bf65-90275d97dc9e',
     nome: 'Stallone Nutre Sport',
     nomeFantasia: 'Stallone Nutre Sport',
@@ -173,7 +192,12 @@ function empresaDto(row, totalLojas = 1) {
  */
 export async function listarEmpresas(db, { incluirInativas = false, empresaIdFiltro = null } = {}) {
   let empresas = [];
-  const filtroId = empresaIdFiltro ? String(empresaIdFiltro).trim() : null;
+  let listaFiltro = null;
+  if (Array.isArray(empresaIdFiltro)) {
+    listaFiltro = empresaIdFiltro.map(x => String(x).trim().toLowerCase()).filter(Boolean);
+  } else if (empresaIdFiltro) {
+    listaFiltro = [String(empresaIdFiltro).trim().toLowerCase()];
+  }
 
   try {
     let sql = `
@@ -187,9 +211,9 @@ export async function listarEmpresas(db, { incluirInativas = false, empresaIdFil
        WHERE ${incluirInativas ? '1=1' : 'e.ativa = true'}
     `;
     const params = [];
-    if (filtroId) {
-      params.push(filtroId);
-      sql += ` AND (e.id::text = $1 OR e.id::text ILIKE $1)`;
+    if (listaFiltro && listaFiltro.length > 0) {
+      params.push(listaFiltro);
+      sql += ` AND lower(e.id::text) = ANY($1::text[])`;
     }
     sql += `
        GROUP BY e.id, e.nome, e.razao_social, e.cnpj, e.inscricao_estadual, e.inscricao_municipal,
@@ -208,7 +232,13 @@ export async function listarEmpresas(db, { incluirInativas = false, empresaIdFil
   try {
     const empresasJson = jsonStore.listarEmpresas({ incluirInativas });
     for (const ej of empresasJson) {
-      if (filtroId && ej.id !== filtroId && ej.id !== 'dino' && filtroId !== 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6') continue;
+      const ejId = String(ej.id || '').toLowerCase();
+      if (listaFiltro && listaFiltro.length > 0) {
+        const permitido = listaFiltro.includes(ejId) ||
+          (listaFiltro.includes('d0d0ac01-8e50-4b61-8c79-de4aaa916da6') && ejId === 'dino') ||
+          (listaFiltro.includes('dino') && ejId === 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6');
+        if (!permitido) continue;
+      }
       const jaExiste = empresas.find((e) => e.id === ej.id || (e.cnpjNormalizado && e.cnpjNormalizado === somenteDigitos(ej.cnpj)));
       if (!jaExiste) {
         empresas.push({
@@ -239,15 +269,28 @@ export async function listarEmpresas(db, { incluirInativas = false, empresaIdFil
 
   // Garante a presença canônica das empresas (respeitando o filtro de tenant!)
   for (const empCanonica of EMPRESAS_CANONICAS_PADRAO) {
-    if (filtroId && empCanonica.id !== filtroId) continue;
-    const jaTem = empresas.find(e => e.id === empCanonica.id || e.cnpjNormalizado === empCanonica.cnpjNormalizado);
+    const canId = String(empCanonica.id || '').toLowerCase();
+    if (listaFiltro && listaFiltro.length > 0) {
+      const permitido = listaFiltro.includes(canId) ||
+        (listaFiltro.includes('d0d0ac01-8e50-4b61-8c79-de4aaa916da6') && canId === 'dino') ||
+        (listaFiltro.includes('dino') && canId === 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6');
+      if (!permitido) continue;
+    }
+    const jaTem = empresas.find(e => e.id === empCanonica.id || (e.cnpjNormalizado && e.cnpjNormalizado === empCanonica.cnpjNormalizado));
     if (!jaTem) {
       empresas.push({ ...empCanonica });
     }
   }
 
-  if (filtroId) {
-    empresas = empresas.filter(e => e.id === filtroId || (filtroId === 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6' && e.id === 'dino'));
+  // Filtro final rigoroso de isolamento multi-tenant
+  if (listaFiltro && listaFiltro.length > 0) {
+    empresas = empresas.filter(e => {
+      const eid = String(e.id || '').trim().toLowerCase();
+      if (listaFiltro.includes(eid)) return true;
+      if (listaFiltro.includes('d0d0ac01-8e50-4b61-8c79-de4aaa916da6') && eid === 'dino') return true;
+      if (listaFiltro.includes('dino') && eid === 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6') return true;
+      return false;
+    });
   }
 
   return empresas;
