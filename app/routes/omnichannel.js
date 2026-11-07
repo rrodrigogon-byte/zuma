@@ -961,15 +961,18 @@ router.use(autenticar);
 /** GET /canais — lista os canais configurados da loja ativa. */
 router.get('/canais', autorizar(...ROLES_GESTAO), async (req, res) => {
   try {
-    const resultado = await dbPg.query(
-      `SELECT id, codigo_publico, provedor, nome, status, modo_operacao, cabecalho_assinatura,
+    const params = [req.empresaId];
+    let sql = `SELECT id, codigo_publico, provedor, nome, status, modo_operacao, cabecalho_assinatura,
               algoritmo_assinatura, credencial_referencia, configuracao, ultimo_evento_em,
               ultima_sincronizacao_em, ultimo_erro, data_criacao, data_atualizacao
          FROM canais_integracao
-        WHERE empresa_id = $1 AND loja_id = $2
-        ORDER BY nome`,
-      [req.empresaId, req.lojaId],
-    );
+        WHERE empresa_id = $1`;
+    if (req.lojaId) {
+      params.push(req.lojaId);
+      sql += ` AND (loja_id = $2 OR loja_id IS NULL)`;
+    }
+    sql += ` ORDER BY nome`;
+    const resultado = await dbPg.query(sql, params);
     res.json({ sucesso: true, loja_id: req.lojaId, canais: resultado.rows });
   } catch (error) {
     console.error('Erro ao listar canais omnichannel:', error);

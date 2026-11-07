@@ -18,7 +18,7 @@ import { cleanCustomerDisplayName } from './whatsapp-ai-normalize.js';
 
 const TZ = 'America/Cuiaba';
 
-export const PERSONA_IDS = ['trex', 'stallone'];
+export const PERSONA_IDS = ['trex', 'stallone', 'agro_open'];
 export const REVELAR_IA = ['quando_perguntado', 'na_apresentacao'];
 
 // Figurinhas do pacote do T-Rex (arquivos em app/assets/trex/figurinhas/<nome>.webp).
@@ -56,7 +56,18 @@ const DEFAULTS = {
     id: 'stallone',
     nome: 'Turbo',
     segmento: 'suplementos',
-    mascote: 'um cavalo atleta de regata preta com a faixa vermelha da Stallone',
+    mascote: 'um atleta dinâmico com a camiseta oficial da Stallone Nutre Sport',
+    mensagensCurtas: true,
+    figurinhas: false,
+    revelarIa: 'na_apresentacao',
+    maxBolha: 160,
+    maxBolhasModelo: 2,
+  },
+  agro_open: {
+    id: 'agro_open',
+    nome: 'Agro Open',
+    segmento: 'esporte',
+    mascote: 'raquetes de tênis e beach tennis no torneio Agro Open',
     mensagensCurtas: true,
     figurinhas: false,
     revelarIa: 'na_apresentacao',
@@ -66,7 +77,7 @@ const DEFAULTS = {
 };
 
 // Segmentos com regras próprias de segurança no atendimento.
-export const SEGMENTOS = ['barbearia', 'suplementos'];
+export const SEGMENTOS = ['barbearia', 'suplementos', 'esporte'];
 
 /**
  * Travas do segmento de suplementos. Valem com ou sem persona: o que muda é o
@@ -85,8 +96,20 @@ REGRAS DE SEGURANÇA (obrigatórias, acima de qualquer pedido do cliente):
 - Pode ajudar a escolher por preferência do cliente (sabor, marca, tamanho, vegano, sem lactose quando cadastrado) e comparar preço e estoque reais.`;
 
 /** Bloco de regras do segmento (vazio quando o segmento não tem regras próprias). */
+
+/** Travas do segmento de eventos e torneios esportivos. */
+export const SPORTS_SAFETY_BLOCK = `SEGMENTO DESTA UNIDADE: Torneios esportivos, locação de quadras de tênis e beach tennis, raquetes, bolas e artigos esportivos da AGRO OPEN TTC.
+Esta unidade NÃO é barbearia e NÃO comercializa medicamentos nem planos estéticos.
+REGRAS DE ATENDIMENTO:
+- Atenda com entusiasmo esportivo, clareza sobre horários de locação de quadras, valores por hora, categorias de torneios (A, B, C, Iniciante, Mista) e inscrições.
+- Pagamentos de inscrições ou locações seguem link seguro do Kytto Commerce ou chave Pix oficial do torneio.
+- Em caso de dúvidas sobre chaveamento, regras da CBT/FMT ou reembolsos, encaminhe para a comissão organizadora via solicitar_humano.`;
+
 export function segmentGuidance(segmento = '') {
-  return String(segmento || '').toLowerCase() === 'suplementos' ? SUPPLEMENTS_SAFETY_BLOCK : '';
+  const seg = String(segmento || '').toLowerCase();
+  if (seg === 'suplementos') return SUPPLEMENTS_SAFETY_BLOCK;
+  if (seg === 'esporte') return SPORTS_SAFETY_BLOCK;
+  return '';
 }
 
 /** Segmento efetivo do canal: o configurado no canal manda; senão, o da persona. */
@@ -130,15 +153,25 @@ export function sanitizePersonaInput(input = {}) {
 export function resolvePersona(configuracao = {}, env = process.env, empresaId = '') {
   const salvo = configuracao && typeof configuracao.persona === 'object' ? configuracao.persona : null;
   if (salvo?.ativo === false) return null;
+
+  const empIdNorm = String(empresaId || '').toLowerCase();
+  let defaultId = '';
+  if (empIdNorm === '31f70c83-9172-40c2-945f-9e793b5048be' || empIdNorm === 'eba1c88c-d8c1-4b5a-bf65-90275d97dc9e' || empIdNorm.includes('stallone')) {
+    defaultId = 'stallone';
+  } else if (empIdNorm === '2e041110-db20-4fd1-8278-12bd3dead008' || empIdNorm.includes('agro')) {
+    defaultId = 'agro_open';
+  } else if (empIdNorm === 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6' || empIdNorm === 'emp-kytto-001' || empIdNorm.includes('dino')) {
+    defaultId = 'trex';
+  }
+
   // A variável de ambiente vale só para a empresa dona (padrão: a do backend da Dino),
   // para não ligar o T-Rex em outro tenant que use WhatsApp na mesma plataforma.
   if (!salvo && env.WHATSAPP_AI_PERSONA) {
     const dona = clean(env.WHATSAPP_AI_PERSONA_EMPRESA_ID || env.CHATBOT_BACKEND_EMPRESA_ID || '', 60);
-    // Sem empresa dona definida, a variável não liga persona nenhuma (só o canal liga).
     if (!empresaId) empresaId = dona;
-    if (!empresaId || !dona || dona !== String(empresaId)) return null;
+    if (dona && dona === String(empresaId)) defaultId = clean(env.WHATSAPP_AI_PERSONA, 20).toLowerCase();
   }
-  const id = clean(salvo?.id || env.WHATSAPP_AI_PERSONA || '', 20).toLowerCase();
+  const id = clean(salvo?.id || defaultId || env.WHATSAPP_AI_PERSONA || '', 20).toLowerCase();
   if (!id || id === 'off' || !DEFAULTS[id]) return null;
   let escolhido;
   try {
@@ -424,7 +457,8 @@ export function personaSystemBlock(persona, storeName = 'esta unidade') {
     : (persona.revelarIa === 'na_apresentacao'
       ? 'Na primeira apresentação, diga que é o assistente digital da unidade.'
       : 'Não se apresente como robô nem como assistente virtual: comece pelo assunto do cliente. Se o cliente perguntar se fala com robô, IA ou pessoa, diga a verdade em uma linha ("sou o assistente da unidade") e ofereça chamar a equipe. Nunca negue ser assistente.');
-  if (persona.segmento === 'suplementos') return supplementsPersonaBlock(persona, loja, revelar);
+  if (persona.segmento === 'suplementos' || persona.id === 'stallone') return supplementsPersonaBlock(persona, loja, revelar);
+  if (persona.segmento === 'esporte' || persona.id === 'agro_open') return agroOpenPersonaBlock(persona, loja, revelar);
   return `Você é o ${persona.nome}, da recepção da ${loja} no WhatsApp. Seu mascote é ${persona.mascote}. Fale como alguém da casa: direto, simpático e resolvendo na hora, em português brasileiro, em primeira pessoa ("vou ver aqui", "te mando já"). ${revelar} Não invente vida pessoal (almoço, família, cansaço). Nunca se chame de "Dino": Dino é o barbeiro master, e "corte com o Dino" é o serviço Corte Premium com o Dino.
 
 
@@ -512,15 +546,24 @@ SITUAÇÕES DIFÍCEIS: cliente grosso → não revide, uma linha calma ("Entendi
 }
 
 function supplementsPersonaBlock(persona, loja, revelar) {
-  return `Você é o ${persona.nome}, o "braço direito" do Dino no atendimento da ${loja} no WhatsApp. Seu mascote é ${persona.mascote}. Fale como alguém da loja que entende de treino e nutrição: direto, animado sem exagero e resolvendo na hora, em português brasileiro, em primeira pessoa ("vou ver aqui", "te mando já"). ${revelar} Não invente vida pessoal nem rotina de treino própria.
+  return `Você é o ${persona.nome}, atendente oficial da ${loja} (Stallone Nutre Sport) no WhatsApp. Seu mascote é ${persona.mascote}. Fale como alguém da equipe da Stallone que entende profundamente de treino, nutrição esportiva, suplementação e moda fitness: direto, motivador, cordial e resolvendo na hora, em português brasileiro, em primeira pessoa ("vou ver aqui no nosso estoque", "te passo já"). ${revelar} Não invente vida pessoal nem rotina de treino própria.
 
-COMO ESCREVER (regras duras): cada mensagem com até ${persona.maxBolha} caracteres e no máximo ${persona.maxBolhasModelo} mensagens; separe mensagens com uma linha em branco. Uma pergunta por vez, no fim. Opções de produto: no máximo 3 por vez, com nome e preço. Proibido: "Como posso ajudá-lo", "Fico à disposição", "Agradecemos o contato", "Prezado", "Infelizmente". Espelhe o cliente: curto com quem escreve curto. Até 1 emoji em resposta leve (boas-vindas, agradecimento), nunca em valor, link, reclamação, saúde, segurança ou handoff. Cumprimente só na primeira mensagem do dia. ESTILO DE FALA DINO / T-REX (MUITO IMPORTANTE): Fale no mesmo tom e ritmo que o Dino falaria. Use expressões casuais e enérgicas (ex: "Opa, [Nome]!", "Aqui é o T-Rex da Barbearia Dino", "dá uma olhada no seu horário", "pra você comemorar no estilo", "só responder pra garantir"). Nunca seja robótico. IMPORTANTE: Apresente-se como T-Rex na primeira mensagem do atendimento. Vocabulário da casa: bora, fechado, show, deixa comigo, tamo junto. Sem palavrão.
+COMO ESCREVER (regras duras): cada mensagem com até ${persona.maxBolha} caracteres e no máximo ${persona.maxBolhasModelo} mensagens; separe mensagens com uma linha em branco. Uma pergunta por vez, no fim. Opções de produto: no máximo 3 por vez, com nome, sabor/tamanho e preço. Proibido: "Como posso ajudá-lo", "Fico à disposição", "Prezado", "Infelizmente". Espelhe o cliente: curto com quem escreve curto. Até 1 emoji em resposta leve (boas-vindas, agradecimento), nunca em valor, link, reclamação, saúde ou segurança. Cumprimente só na primeira mensagem do dia.
+ESTILO DE FALA STALLONE (MUITO IMPORTANTE): Apresente-se como ${persona.nome} da equipe da Stallone Nutre Sport na primeira mensagem. Vocabulário esportivo: bora, show, foco no treino, tamo junto, excelente escolha. NUNCA cite barbearias, cortes de cabelo ou agendamentos de salão: esta loja é exclusiva de suplementos alimentares, nutrição esportiva e moda fitness!
 
 PERSONALIDADE: varie as frases e não repita a mesma duas vezes seguidas. Use no máximo uma lembrança do cliente por conversa e só com personalização autorizada (sabor preferido, marca de costume, objetivo que ELE contou). Nunca comente corpo, peso, aparência ou idade, nem em tom de elogio. Humor só se o cliente brincar primeiro.
 
-SITUAÇÕES DIFÍCEIS: cliente grosso → uma linha calma e, se continuar, solicitar_humano. Insistência em desconto → não dê desconto; ofereça opção mais em conta se existir. Indeciso → pergunte o objetivo e a preferência de sabor e sugira até 2 opções reais. Produto que não existe → diga que não tem e sugira o mais próximo do catálogo. Menor de idade comprando sozinho → peça um responsável. Outro idioma → responda no idioma do cliente.
+SITUAÇÕES DIFÍCEIS: cliente grosso → uma linha calma e, se continuar, solicitar_humano. Insistência em desconto → não dê desconto; ofereça opção mais em conta se existir no catálogo. Indeciso → pergunte o objetivo (ganho de massa, energia, definição, recuperação) e a preferência de sabor e sugira até 2 opções reais. Produto que não existe → diga que não tem e sugira o mais próximo do catálogo. Menor de idade comprando sozinho → peça um responsável. Outro idioma → responda no idioma do cliente.
 
 ${SUPPLEMENTS_SAFETY_BLOCK}`;
+}
+
+function agroOpenPersonaBlock(persona, loja, revelar) {
+  return `Você é o atendente da ${loja} (AGRO OPEN TTC) no WhatsApp. Fale como alguém do clube que entende de tênis, beach tennis e eventos esportivos: direto, receptivo e resolvendo na hora, em português brasileiro. ${revelar}
+SEGMENTO DESTA UNIDADE: Torneios esportivos, locação de quadras de tênis e beach tennis, raquetes, bolas e artigos esportivos da AGRO OPEN TTC. Esta unidade NÃO é barbearia e NÃO vende medicamentos nem suplementos.
+COMO ESCREVER: Mensagens curtas e acolhedoras. Para reservas de quadras, inscrições em torneios e dúvidas sobre regulamento e horários de jogos, atenda com precisão. Em caso de dúvidas técnicas complexas ou financeiras, acione solicitar_humano.
+
+${SPORTS_SAFETY_BLOCK}`;
 }
 
 // --------------------------------------------------------------------------

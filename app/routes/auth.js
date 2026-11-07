@@ -98,7 +98,30 @@ export async function autenticar(req, res, next) {
     }
 
     const decoded = jwt.verify(token, JWT_SECRET);
-    const empresaId = decoded.empresa_id || decoded.empresaId || req.headers['x-empresa-id'] || 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
+    const userIdent = String(decoded.email || decoded.username || decoded.login || '').trim().toLowerCase();
+    const isAdminGlobal = (decoded.platformAdmin === true || decoded.mainAdmin === true) && (
+      userIdent.includes('rodrigo.goncalves') || userIdent.includes('rrodrigogon') || userIdent === 'admin'
+    );
+    const isSilvester = userIdent.includes('silvest') || userIdent.includes('stallone');
+    const isDino = userIdent.includes('dino') || userIdent.includes('guicunha');
+
+    const requestedEmpresa = String(req.headers['x-empresa-id'] || '').trim();
+    let empresaId = decoded.empresa_id || decoded.empresaId || '';
+
+    if (isAdminGlobal) {
+      empresaId = requestedEmpresa || empresaId || 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
+    } else if (isSilvester) {
+      const allowedSilvester = ['31f70c83-9172-40c2-945f-9e793b5048be', 'eba1c88c-d8c1-4b5a-bf65-90275d97dc9e', '2e041110-db20-4fd1-8278-12bd3dead008'];
+      if (requestedEmpresa && allowedSilvester.includes(requestedEmpresa)) {
+        empresaId = requestedEmpresa;
+      } else if (!allowedSilvester.includes(empresaId)) {
+        empresaId = '31f70c83-9172-40c2-945f-9e793b5048be';
+      }
+    } else if (isDino) {
+      empresaId = 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
+    } else {
+      empresaId = empresaId || requestedEmpresa || 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
+    }
     const usuarioId = decoded.usuario_id || decoded.id;
     const role = decoded.role || (decoded.platformAdmin ? 'admin' : 'admin');
     const lojaIdSolicitada = obterLojaSolicitada(req, decoded) || decoded.lojaId || req.headers['x-loja-id'];
