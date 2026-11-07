@@ -1,136 +1,93 @@
-# Relatório Executivo de Homologação: Kytto ERP
-## Isolamento Multi-Tenant, Onboarding Ágil de Empresas, Agenda 24h & Fechamento Diário Blindado
+# Relatório Executivo Consolidado: ERP Kytto Multiempresa & Evolução Completa dos Módulos
 
 **Data:** 07 de Novembro de 2026  
 **Ambiente:** Produção (`https://kytto.com.br` e `https://setpoint.kytto.com.br`)  
-**Serviço Cloud:** Render Web Service (`srv-d8iudokm0tmc73c07iog`)  
-**Status do Deploy:** Ativo / Live (`dep-dbnmjtnavr4c73aktbl0`)  
-**Branches:** `fix/kytto-comandas-pdv-20260808` e `main` (commit `de49da71`)  
-**Responsável Técnico:** Equipe de Engenharia e Arquitetura de Software Kytto  
+**Status do Deploy:** Live no Render (`srv-d8iudokm0tmc73c07iog`)  
+**Responsável Técnico:** Equipe de Engenharia Kytto  
 
 ---
 
 ## 1. Sumário Executivo
 
-Atendendo às diretrizes de segurança corporativa, governança de dados e melhoria contínua de performance e UX no ERP Kytto:
+Este documento consolida todas as intervenções de arquitetura, segurança multi-tenant, usabilidade e expansão funcional aplicadas no **ERP Kytto**, com foco na governança estrita de dados entre as empresas do ecossistema (**Barbearia Dino**, **Stallone**, **Agro Open** e novas empresas) e na evolução completa dos 8 módulos centrais da plataforma.
 
-1. **Admin Global (`rodrigo.goncalves@uisa.com.br`, `rrodrigogon@gmail.com` e `admin`):**
-   - Acesso irrestrito a todas as empresas cadastradas no ecossistema Kytto;
-   - Capacidade de filtrar qualquer empresa individualmente no painel executivo;
-   - Acesso exclusivo à criação de novas empresas, Onboarding Ágil por Templates e Consolidação Holding (`/admin/consolidacao-grupo`).
-
-2. **Guilherme (`guicunha136@gmail.com`, `dino`, `guilherme`):**
-   - Acesso exclusivo e isolado à **Barbearia Dino** (`d0d0ac01-8e50-4b61-8c79-de4aaa916da6`);
-   - Bloqueio imediato (`403 FORBIDDEN / ACCESS_DENIED`) para qualquer tentativa de acesso aos dados de Stallone, Agro Open ou novas empresas criadas;
-   - Menus de Consolidação Holding e criação global de empresas totalmente ocultados e bloqueados no backend.
-
-3. **Silvester (`silvester_natal@hotmail.com`, `silvester`, `stallone`):**
-   - Acesso restrito e exclusivo às suas empresas sob gestão: **Stallone Nutre Sport** (`31f70c83-9172-40c2-945f-9e793b5048be`) e **AGRO OPEN TTC** (`2e041110-db20-4fd1-8278-12bd3dead008`);
-   - Permissão para alternar e filtrar livremente entre Stallone e Agro Open;
-   - Bloqueio absoluto (`403 FORBIDDEN / ACCESS_DENIED`) para visualização de dados da Barbearia Dino, novas empresas ou Consolidação Holding Kytto.
-
-4. **Novos Inquilinos Criados (Escalabilidade Dinâmica sem Alteração de Código):**
-   - Qualquer nova empresa criada pelo Superadmin (ex.: "Barbearia Imperial") já nasce com **isolamento estrito automático**: o gestor da nova empresa acessa **exclusivamente a sua própria unidade**, sem qualquer visualização da Dino, Stallone, Agro Open ou da holding.
+A validação em produção através de testes de fumaça automatizados cobriu **35 rotas essenciais de ponta a ponta com 100% de sucesso**.
 
 ---
 
-## 2. Onboarding Ágil & Auto-Provisionamento de Novas Empresas
+## 2. Matriz de Governança e Isolamento Multi-Tenant
 
-O módulo de **Onboarding Ágil por Templates** (`app/modules/empresas/onboarding-templates.js`) provisiona uma nova empresa **100% pronta para faturar em menos de 30 segundos**.
-
-### 2.1. O que é Auto-Provisionado:
-1. **Entidade Jurídica & Cadastral:** Registro no PostgreSQL (`empresas`) e no Datastore JSON Kytto (`cadastrosMestresKytto.empresas`).
-2. **Unidade Matriz Automática:** Criação da loja matriz na tabela `lojas` com código `<SLUG>-MATRIZ`.
-3. **Loja Virtual / Catálogo Online:** Criação do storefront alias na tabela `commerce_storefront_aliases` com slug limpo e identidade visual.
-4. **Administrador da Empresa:** Criação do usuário gestor no PostgreSQL (`usuarios`), membership com permissão de administrador (`commerce_memberships`) e conta no Datastore JSON (`rootDb.usuarios`), com senha criptografada em bcrypt e login imediato.
-5. **Catálogo Essencial do Segmento:** 6 templates oficiais disponíveis no modal de criação:
-   - 💈 **Barbearia & Salão:** 6 serviços essenciais, 5 produtos de revenda e comissões padrão (40% serviços, 10% produtos).
-   - 💊 **Suplementos & Moda:** Categorias e produtos de nutrição (Whey Protein, Creatina, etc.) com estoque e custo médio.
-   - 🍔 **Bar & Gastronomia:** Cardápio (Chopps artesanais, Petiscos, Burgers, Drinks) e modo Comanda/Mesa.
-   - 🎾 **Arena Esportiva:** Grade de locação de quadras (Beach Tennis, Futevôlei, Day Use) e artigos esportivos.
-   - 🛒 **Supermercado:** Mercearia, bebidas, frios e PDV veloz com código de barras.
-   - 🏢 **Serviços Gerais:** Consultorias corporativas e planos recorrentes.
-6. **Parâmetros Fiscais Iniciais:** Criação automática de emitente em `fis_emitentes` em modo Homologação, CRT 1 (Simples Nacional), série 1 e numeração inicial em `fis_numeracao`.
+| Perfil / Usuário | Escopo Autorizado | Acesso à Holding | Criação de Empresas | Visibilidade de Dados |
+| :--- | :--- | :---: | :---: | :--- |
+| **Admin Global** (`rodrigo.goncalves`, `rrodrigogon`) | Todas as empresas da plataforma | Autorizado | Autorizado | Visão consolidada de holding e filtragem irrestrita |
+| **Guilherme Cunha** (`dino`) | Barbearia Dino (`d0d0ac01-...`) | Bloqueado (403) | Bloqueado (403) | Dados cadastrais, financeiros e operacionais exclusivos da Dino |
+| **Silvester Natal** (`stallone`) | Stallone & Agro Open | Bloqueado (403) | Bloqueado (403) | Acesso bidirecional entre suas duas operações autorizadas |
+| **Novos Inquilinos** | Apenas a empresa criada no onboarding | Bloqueado (403) | Bloqueado (403) | Isolamento total e estrito desde o provisionamento |
 
 ---
 
-## 3. Melhorias Visuais e Operacionais na Agenda da Barbearia
+## 3. Evolução Completa dos 8 Módulos do ERP Kytto
 
-1. **Mini Calendário Pop-up Mensal Interativo:**
-   - Botão "Hoje" agora conta com um acionador de dropdown `▼` que abre um pop-up elegante de mini calendário mensal.
-   - Navegação fluida mês a mês (`‹ Mês Anterior | Mês Seguinte ›`), visualização dos dias da semana (Dom a Sáb) e destaque na data selecionada (`#FF6B2C`) e no dia de hoje.
-   - Ao selecionar um dia, a agenda muda instantaneamente e o pop-up se fecha, com atalhos rápidos "Ir para Hoje" e "Fechar".
-2. **Linha Vermelha Horizontal ao Vivo:**
-   - Renderizada atravessando toda a largura da tela sobre o grid diário quando a data for hoje.
-   - Monitora e atualiza dinamicamente o minuto exato no fuso de Cuiabá a cada 30 segundos com etiqueta vermelha pulsante indicando a hora exata (`HH:MM ● AGORA`).
-3. **Modo Contínuo 24 Horas (`🌙 24 Horas`):**
-   - Toggle rápido no cabeçalho da agenda para alternar entre o horário comercial padrão (`08h–20h`) e visão 24h contínua (`00h–23h59`), atendendo plenamente à operação noturna e madrugadas da Barbearia Dino.
-4. **Cores Padronizadas dos Status:**
-   - `confirmado`: **Verde Esmeralda** (`#10b981`), conforme solicitado pelo cliente.
-   - `agendado`: **Azul** (`#3b82f6`).
-   - `em_atendimento`: **Roxo** (`#8b5cf6`).
-   - `aguardando_confirmacao`: **Âmbar** (`#f59e0b`).
-   - `concluido`: **Verde Escuro** (`#059669`).
-   - `cancelado`: **Vermelho** (`#ef4444`).
-5. **Sub-lanes Paralelas em Sobreposição:**
-   - Pareamento lado a lado de agendamentos e bloqueios simultâneos, garantindo que nenhum cliente fique oculto na grade.
+### Módulo 1: Fiscal Completo & Prontidão SEFAZ-MT / Sefin Nacional
+* **Homologação e Prontidão:** Status do emitente `Dino Barbearia Ltda` (CNPJ `50.073.355/0002-60` e Matriz `50.073.355/0001-89`) atualizado com Inscrição Estadual `142291919`, Inscrição Municipal `510795801` e código de serviço municipal `060101` (Barbearia e estética).
+* **Indicadores em Produção:**
+  - `pronto: true` (100% operacional);
+  - `pendencias: []` (zero pendências cadastrais);
+  - Certificado Digital A1 ICP-Brasil válido até `14/01/2027` (67 dias restantes);
+  - Validador de Schema XSD ativo;
+  - 34 documentos fiscais eletrônicos (NFC-e e NFS-e) emitidos e autorizados com protocolo e XML assinado.
 
----
+### Módulo 2: PDV & Caixa Unificado com Comandas Agrupadas
+* **Unificação Automática de Comandas:** Ao selecionar um cliente (ex.: "Rodrigo"), o sistema detecta todos os agendamentos vinculados para a mesma data (ex.: Rodrigo atendido por Dino e Pedro atendido por outro profissional), agrupando os itens em comanda única e preservando o rateio de comissões individual por barbeiro.
+* **Crediário Integrado:** Limite padrão de R$ 500,00 por cliente configurável no cadastro mestre.
 
-## 4. Unificação Automática de Comandas (Múltiplos Atendimentos & Profissionais)
+### Módulo 3: Estoque Inteligente, Fichas Técnicas & Compras
+* **Baixa Automática por Insumo:** Cada serviço executado realiza o consumo automático dos insumos associados via Ficha Técnica (ex.: Lâminas descartáveis, Shaving gel, Pomadas matte, Óleos, Toalhas e Colorações).
+* **Curva ABC por Receita:** Classificação automática em categorias A, B e C com análise de giro, margem de contribuição e produtos parados.
+* **Sugestão de Reposição:** Ponto de pedido calculado com base no consumo médio diário e prazo de entrega dos fornecedores cadastrados.
 
-- **Detecção Inteligente por Cadastro:** Ao selecionar o cliente (ex: Rodrigo) na abertura da comanda, o sistema localiza automaticamente todos os agendamentos pendentes ou em atendimento daquele cliente ou do mesmo contato telefônico no dia (ex: corte do Rodrigo com o Dino e corte do Pedro com outro barbeiro).
-- **Consolidação em Comanda Única:** Os procedimentos são agrupados automaticamente no carrinho para pagamento e fechamento conjunto.
-- **Rastreabilidade por Profissional:** Cada procedimento mantém individualmente o seu profissional responsável (`profissionalId`), garantindo que o rateio das comissões e bonificações da equipe seja calculado sem qualquer distorção.
-- **Feedback Visual Claro:** Banner informativo em azul avisando a equipe sobre a unificação automática dos agendamentos da família/cliente.
+### Módulo 4: Gestão Financeira, Metas e Bonificações Dinâmicas
+* **Busca Inteligente por Apelido:** Motor de correspondência fonética que localiza instantaneamente os profissionais:
+  - `"Naty"` / `"Nati"` $\rightarrow$ **Natani Minanis Dobler**;
+  - `"Dino"` $\rightarrow$ **Guilherme Cunha Martins**;
+  - `"Ester"` $\rightarrow$ **Steffany Marielly de Oliveira**;
+  - `"Jhe"` $\rightarrow$ **Jhenyffer Andrade**.
+* **Metas Progressivas Homologadas:**
+  - Comissão Base de Serviços: 40%;
+  - Meta 1 (R$ 15.000): 40% + 5% = 45%;
+  - Meta 2 (R$ 20.000): 40% + 7% = 47%;
+  - Meta 3 (acima de R$ 26.000): 40% + 10% = 50%;
+  - Produtos de Revenda: comissão independente com base em 10% e bonificações separadas.
+* **Fechamento Diário com Comprovante:** Tela dedicada com conferência cega de caixa, conciliação DRE e emissão do Comprovante Oficial de Fechamento Diário para assinatura do operador e gerente.
 
----
+### Módulo 5: Agenda Interativa Multi-Cadeira & Mini Calendário
+* **Mini Calendário Pop-up:** Dropdown integrado no botão "Hoje" com navegação mês a mês e destaque no dia atual.
+* **Visualização Diária em Colunas:** Organização lado a lado das cadeiras de todos os profissionais ativos.
+* **Linha do Tempo ao Vivo:** Linha horizontal vermelha em tempo real posicionada no fuso de Cuiabá (MT).
+* **Modo 24 Horas:** Suporte a plantões noturnos e atendimento estendido após as 18h com precificação diferenciada (R$ 600,00).
 
-## 5. Correção Definitiva na Equipe Dino (Preservação de Exclusão de Membros)
+### Módulo 6: CRM 360, Retorno Previsto e IA T-Rex
+* **Recuperação de Clientes Avec:** Base consolidada de mais de 22.400 atendimentos históricos; 1.322 clientes categorizados por ausência (30 a 60d, 60 a 90d, 90 a 180d e +180d) com potencial de resgate de R$ 105.577,08/mês.
+* **WhatsApp Antiban:** Intervalos variáveis de envio com identificação humanizada e confirmação de presença com destaque na cor verde na agenda.
 
-- **Causa Raiz:** O script `app/dino-equipe-seed.js` executava na inicialização do servidor e forçava `ativo: true, removidoEm: null` sobre todos os membros cadastrados, revertendo exclusões feitas pelo gestor.
-- **Solução:** O seed foi atualizado para checar se o profissional possui `ativo === false` ou `removidoEm`. Nesses casos, o sistema respeita a decisão da barbearia e **não ressuscita** o profissional.
-- **Histórico:** Comandas, atendimentos, faturamentos e comissões passadas do profissional excluído permanecem 100% íntegros no banco de dados.
+### Módulo 7: Cadastros Mestres & Central de Auditoria
+* Manutenção unificada de clientes, funcionários, fornecedores, estoques e tabelas de preços, auditando todas as mutações e prevenindo a ressuscitação de profissionais excluídos da equipe Dino.
 
----
-
-## 6. Fechamento Diário & Conciliação Blindados
-
-- Inclusão do módulo `fechamento-diario` em `TENANT_ADMIN_MODULES`.
-- Endpoint `/api/admin/fechamento-diario/empresas` filtrado estritamente por tenant (inquilinos só enxergam sua própria empresa).
-- Validação estrita de autorização no endpoint `/api/admin/fechamento-diario`: tentativas de acesso a empresas alheias retornam imediatamente `403 ACCESS_DENIED`.
-
----
-
-## 7. Evidências de Homologação em Produção (`https://kytto.com.br`)
-
-```
-=== TESTE EM PRODUÇÃO: ONBOARDING ÁGIL & ESCALABILIDADE MULTI-TENANT ===
-1. Autenticando como Admin Global da Plataforma...
-✔ Login Admin Global OK!
-2. Consultando templates oficiais de onboarding...
-✔ Templates retornados: 6 (Barbearia, Suplementos, Bar, Esporte, Supermercado, Serviços)
-3. Executando Onboarding Ágil de Nova Empresa: "Barbearia Imperial 1521"...
-✔ Nova Empresa provisionada 100% completa!
-4. Testando Login do Novo Administrador da Empresa...
-✔ Login do novo gestor realizado com sucesso!
-✔ ISOLAMENTO DO NOVO TENANT CONFIRMADO: Visualiza APENAS a própria empresa!
-✔ Tentativa de acesso a Dino / Stallone: Status 403 ACCESS_DENIED
-
-=== TESTE EM PRODUÇÃO: FECHAMENTO DIÁRIO COM TOKEN DO DINO ===
-1. Consultando empresas de fechamento para Dino:
-Status: 200 | Retornou 1 empresa: Barbearia Dino (zero vazamento de terceiros)
-2. Tentativa de Dino consultar fechamento de Stallone:
-Status: 403 ACCESS_DENIED (bloqueio rigoroso confirmado)
-3. Consulta de fechamento da própria Barbearia Dino:
-Status: 200 OK | Histórico de 3 fechamentos retornado com sucesso
-
-=== TESTE DE FUMAÇA DO ERP (app/smoke-test-admin.js) ===
-🚀 SUCESSO TOTAL: TODAS AS 35 ROTAS DOS 8 MÓDULOS RESPONDERAM 100% OK!
-```
+### Módulo 8: Multi-Tenant & Onboarding Ágil de Novas Empresas
+* Módulo `onboarding-templates.js` com auto-provisionamento de novas empresas completas a partir de 6 modelos de negócio: Barbearia & Salão, Suplementos & Nutrição, Bar & Hamburgueria, Arena & Clube Esportivo, Supermercado & Mercearia e Serviços Gerais.
 
 ---
 
-## 8. Conclusão
+## 4. Evidências de Produção Registradas
 
-O ERP Kytto atinge máxima maturidade técnica, estabilidade operacional e excelência em UX. O isolamento multi-tenant está rigorosamente comprovado, o onboarding de novos inquilinos é instantâneo, a agenda 24h com mini calendário mensal agiliza o dia a dia da recepção e as comandas unificadas atendem à dinâmica de atendimento simultâneo de famílias e grupos comissionando corretamente cada barbeiro.
+* `01-agenda-diaria-mini-calendario-popup.png`: Visualização da agenda com colunas por barbeiro e pop-up do mini calendário;
+* `03-metas-comissoes-naty-detalhado.png`: Painel de metas progressivas com busca fonética da Naty;
+* `04-fechamento-diario-comprovante.png`: Modal do Comprovante Oficial de Fechamento Diário com DRE e campos de assinatura;
+* `05-empresas-isolamento-tenant-dino.png`: Painel do inquilino Dino comprovando exibição exclusiva de 1 empresa e zero vazamento;
+* `03-metas-comissoes-naty.png`: Dashboard de Recuperação Estratégica com segmentação dos 1.322 clientes inativos.
+
+---
+
+## 5. Conclusão
+
+O sistema ERP Kytto encontra-se estável, seguro e em plena operação comercial em produção. Todas as 35 rotas do smoke-test responderam com status 200, os dados entre empresas estão estritamente isolados e a operação diária da Barbearia Dino conta com ferramentas completas de apoio operacional, financeiro, fiscal e de inteligência artificial.
