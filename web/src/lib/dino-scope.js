@@ -40,7 +40,7 @@ export function scopeDinoAdminHeaders(path, headers = {}, host = typeof window =
   const route = String(path || '').split('?')[0]
   const isBarbeariaRoute = /^\/api\/admin\/(?:barbearia|dino)(?:\/|$)/.test(route)
   if (!isBarbeariaRoute) return headers
-  if (isDinoDedicatedHost(host) || isDinoPath() || !headers['X-Empresa-Id']) {
+  if (isDinoDedicatedHost(host) || isDinoPath()) {
     return {
       ...headers,
       'X-Empresa-Id': headers['X-Empresa-Id'] || DINO_SCOPE.empresaId,

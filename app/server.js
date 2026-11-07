@@ -174,6 +174,7 @@ import { buildCurrentMaterials, previewTaxMaterialPlan, PreviewConflictError, Pr
 import { perfilDoUsuario, profissionalPode, operadorPodeNaBarbearia, respostaParaOperador, papelLegadoDoRole, permissoesDoPerfil, MODULOS_FECHADOS_AO_OPERADOR, MENSAGEM_PERFIL } from './core/perfis-acesso.js';
 import { profissionalDoUsuario } from './dino-modo-barbeiro.js';
 import { provisionarEquipeDino } from './dino-equipe-seed.js';
+import { sincronizarTenantsEquipes } from './tenant-provisioning.js';
 import * as totemLojaFisica from './core/totem-loja-fisica.js';
 import * as lojaModaIa from './core/loja-moda-ia.js';
 
@@ -372,6 +373,7 @@ function seedUsuarios(){
 }
 seedUsuarios();
 try { provisionarEquipeDino({ commerceDb }); } catch (err) { console.warn('Aviso ao provisionar equipe Dino:', err.message); }
+try { sincronizarTenantsEquipes(commerceDb); } catch (err) { console.warn('Aviso ao sincronizar tenants:', err.message); }
 const findUser = login => {
   const n = norm(login);
   if (!n) return null;
@@ -385,6 +387,8 @@ const findUser = login => {
   else if (['ester', 'steffany', 'steffany marielly'].includes(n)) alias = 'ester';
   else if (['amanda', 'amanda gabrielly'].includes(n)) alias = 'amanda';
   else if (['jhenyffer', 'jhenyfer', 'jhennyfer'].includes(n)) alias = 'jhenyffer';
+  else if (['stallone', 'silvester', 'silvester natal'].includes(n)) alias = 'stallone';
+  else if (['agroopen', 'agro open', 'caua rafa'].includes(n)) alias = 'agroopen';
 
   const porLogin = lista.find(u =>
     norm(u.email) === n ||
@@ -484,7 +488,7 @@ async function commerceSessionFor(user) {
   if (user.pgAccount === true) return accountSession(user);
   try {
     // Administradores globais e gestores autorizados recebem todas as empresas ativas da plataforma
-    if (isPlatformAdminUser(user) || isMainAdminUser(user) || user.role === 'admin' || user.role === 'administrador') {
+    if (isPlatformAdminUser(user) || isMainAdminUser(user)) {
       const resEmpresas = await commerceDb.query(
         `SELECT e.id::text, e.nome, e.razao_social, e.cnpj, e.tipo_negocio, e.ativa,
                 COALESCE((SELECT a.brand_key FROM commerce_storefront_aliases a
@@ -537,9 +541,12 @@ async function commerceSessionFor(user) {
       };
     }
 
+    const emailNorm = norm(user.email);
+    const emailBusca = emailNorm === 'dino@barbeariadino.com.br' ? 'guicunha136@gmail.com'
+      : (emailNorm === 'stallone@kytto.com.br' || emailNorm === 'stallone' ? 'silvester_natal@hotmail.com' : emailNorm);
     const identities = await commerceDb.queryRead(
-      `SELECT id FROM usuarios WHERE lower(btrim(email)) = $1 AND ativo = true LIMIT 2`,
-      [norm(user.email)],
+      `SELECT id FROM usuarios WHERE (lower(btrim(email)) = $1 OR lower(btrim(email)) = $2) AND ativo = true LIMIT 2`,
+      [emailNorm, emailBusca],
     );
     if (identities.rows.length > 1 && !isMainAdminUser(user) && !isPlatformAdminUser(user)) return {};
     const result = await commerceDb.query(
@@ -554,10 +561,10 @@ async function commerceSessionFor(user) {
          LEFT JOIN lojas l ON l.empresa_id = m.empresa_id
           AND (l.id = m.loja_id OR m.loja_id IS NULL)
           AND l.ativa = true
-        WHERE lower(u.email) = $1 AND u.ativo = true AND m.ativo = true
+        WHERE (lower(u.email) = $1 OR lower(u.email) = $2) AND u.ativo = true AND m.ativo = true
           AND (m.expires_at IS NULL OR m.expires_at > CURRENT_TIMESTAMP)
         ORDER BY m.empresa_id, l.id NULLS FIRST`,
-      [norm(user.email)],
+      [emailNorm, emailBusca],
     );
     const rows = result.rows || [];
     const empresaIds = [...new Set(rows.map(row => row.empresa_id).filter(Boolean))];
@@ -2275,9 +2282,9 @@ app.post('/api/admin/login', async (req,res)=>{
   const chave = 'adm:'+(req.ip||'')+':'+norm(user);
   if(!rateLimit(chave)) return res.status(429).json({error:'muitas tentativas. Tente novamente em alguns minutos.'});
   try { if (await tryAccountLogin(user, senhaInformada, res, true, chave)) return; }
-  catch { return res.status(503).json({ error:'acesso temporariamente indisponível', code:'SCOPE_UNAVAILABLE' }); }
+  catch { /* segue para checagem por usuário */ }
   const u = findUser(user);
-  if (!u && process.env.COMMERCE_CORE_ENABLED === '1') {
+  if (!u && process.env.COMMERCE_CORE_ENABLED === '1' && typeof user === 'string' && user.includes('@')) {
     try {
       const owner = await findOperationalByEmail(user);
       if (owner?.ativo && await senhaConfere(String(senhaInformada || ''), owner.senhaHash)) {
@@ -2291,16 +2298,35 @@ app.post('/api/admin/login', async (req,res)=>{
         return res.json({ token: jwt.sign({...scoped,credentialVersion:credentialVersion(owner.senhaHash,owner.passwordChangedAt)}, JWT_SECRET, { expiresIn: '12h' }), user: publicUser(scoped), role: 'organizador', sessao });
       }
     } catch {
-      return res.status(503).json({ error: 'acesso temporariamente indisponível', code: 'SCOPE_UNAVAILABLE' });
+      // segue para 401
     }
   }
   if(!u || !u.ativo || !(await senhaConfere(String(senhaInformada || ''), u.senhaHash))) return res.status(401).json({error:'usuário ou senha inválidos', code:'INVALID_CREDENTIALS'});
   if(!STAFF.includes(u.role)) return res.status(403).json({error:'esta conta não tem acesso ao painel'});
   limparTentativas(chave);
   const sessao = await commerceSessionFor(u);
-  const isDinoEquipe = String(u.email || '').toLowerCase().includes('dino') || String(u.id || '').startsWith('usr-dino') || u.role === 'profissional';
-  const empresaId = sessao.empresaId ?? u.empresaId ?? (isDinoEquipe ? DINO_COMMERCE_EMPRESA_ID : undefined);
-  const lojaId = sessao.lojaId ?? u.lojaId ?? (isDinoEquipe ? DINO_COMMERCE_LOJA_ID : undefined);
+  const emailNorm = String(u.email || '').toLowerCase();
+  const isStalloneEquipe = emailNorm.includes('stallone') || emailNorm.includes('silvester') || String(u.id || '').includes('stallone') || u.empresaId === '31f70c83-9172-40c2-945f-9e793b5048be';
+  const isAgroOpenEquipe = emailNorm.includes('agroopen') || emailNorm.includes('cauarafa') || String(u.id || '').includes('agroopen') || u.empresaId === '2e041110-db20-4fd1-8278-12bd3dead008';
+  const isDinoEquipe = !isStalloneEquipe && !isAgroOpenEquipe && (emailNorm.includes('dino') || String(u.id || '').startsWith('usr-dino') || u.role === 'profissional' || u.empresaId === DINO_COMMERCE_EMPRESA_ID);
+
+  const fallbackEmpresa = isStalloneEquipe
+    ? { id: '31f70c83-9172-40c2-945f-9e793b5048be', nome: 'Stallone Nutre Sport', brandKey: 'stallone' }
+    : isAgroOpenEquipe
+    ? { id: '2e041110-db20-4fd1-8278-12bd3dead008', nome: 'AGRO OPEN TTC', brandKey: 'agroopen' }
+    : { id: DINO_COMMERCE_EMPRESA_ID, nome: 'Barbearia Dino', brandKey: 'dino' };
+
+  const fallbackLoja = isStalloneEquipe
+    ? { id: '6a15e943-2570-4f29-a2d5-d900d2812911', nome: 'Stallone Nutre Sport', empresaId: '31f70c83-9172-40c2-945f-9e793b5048be' }
+    : isAgroOpenEquipe
+    ? { id: '17b057ab-a13f-4fee-ae42-bc70578ec756', nome: 'Loja Web - AGRO OPEN TTC', empresaId: '2e041110-db20-4fd1-8278-12bd3dead008' }
+    : { id: DINO_COMMERCE_LOJA_ID, nome: 'Barbearia Dino', empresaId: DINO_COMMERCE_EMPRESA_ID };
+
+  const empresaId = sessao.empresaId ?? u.empresaId ?? fallbackEmpresa.id;
+  const lojaId = sessao.lojaId ?? u.lojaId ?? fallbackLoja.id;
+
+  const empresaObj = sessao.empresa || (empresaId === fallbackEmpresa.id ? fallbackEmpresa : { id: empresaId, nome: fallbackEmpresa.nome, brandKey: fallbackEmpresa.brandKey });
+  const lojaObj = sessao.loja || (lojaId === fallbackLoja.id ? fallbackLoja : { id: lojaId, nome: fallbackLoja.nome, empresaId });
   if (process.env.COMMERCE_CORE_ENABLED === '1') {
     if (sessao.empresaId) {
       try {
@@ -2325,10 +2351,10 @@ app.post('/api/admin/login', async (req,res)=>{
     ...sessao,
     empresaId,
     lojaId,
-    empresa: sessao.empresa || (empresaId ? { id: empresaId, nome: 'Barbearia Dino' } : null),
-    loja: sessao.loja || (lojaId ? { id: lojaId, nome: 'Barbearia Dino' } : null),
-    empresas_acessiveis: (sessao.empresas_acessiveis && sessao.empresas_acessiveis.length > 0) ? sessao.empresas_acessiveis : (empresaId ? [{ id: empresaId, nome: 'Barbearia Dino' }] : []),
-    lojas_acessiveis: (sessao.lojas_acessiveis && sessao.lojas_acessiveis.length > 0) ? sessao.lojas_acessiveis : (lojaId ? [{ id: lojaId, nome: 'Barbearia Dino', empresaId }] : []),
+    empresa: empresaObj,
+    loja: lojaObj,
+    empresas_acessiveis: (sessao.empresas_acessiveis && sessao.empresas_acessiveis.length > 0) ? sessao.empresas_acessiveis : [empresaObj],
+    lojas_acessiveis: (sessao.lojas_acessiveis && sessao.lojas_acessiveis.length > 0) ? sessao.lojas_acessiveis : [lojaObj],
   };
   res.json({ token: tokenFor({ ...u, empresaId, lojaId }), user: publicUser(u), role: u.role, sessao: sessaoFinal });
 });
@@ -3846,13 +3872,12 @@ async function resolverEscopoBarbearia(req, res, next) {
   const signedEmpresa = String(req.user?.empresaId || '').trim();
   const signedLoja = String(req.user?.lojaId || '').trim();
   const explicitDinoApp = String(req.query?.slug || req.headers['x-barbearia-slug'] || '').trim().toLowerCase() === 'dino'
-    || String(req.headers.referer || '').toLowerCase().includes('/barbeiro')
-    || String(req.originalUrl || req.path || '').toLowerCase().includes('/modo-barbeiro')
+    || String(req.headers.referer || '').toLowerCase().includes('/barbeiro/dino')
     || hostDino(req);
   const isDinoSignedUser = signedEmpresa === DINO_COMMERCE_EMPRESA_ID || signedEmpresa === DINO_LEGACY_EMPRESA_ID;
   const isDinoRequested = requestedEmpresa === DINO_COMMERCE_EMPRESA_ID || requestedEmpresa === DINO_LEGACY_EMPRESA_ID || requestedEmpresa.toLowerCase() === 'dino';
   if ((explicitDinoApp || isDinoRequested)
-    && (isPlatformAdminUser(req.user) || isMainAdminUser(req.user) || isDinoSignedUser || !signedEmpresa || req.user?.role === 'profissional')) {
+    && (isPlatformAdminUser(req.user) || isMainAdminUser(req.user) || isDinoSignedUser || (!signedEmpresa && req.user?.role === 'profissional'))) {
     req.barbeariaContext = { empresaId: DINO_COMMERCE_EMPRESA_ID, lojaId: DINO_COMMERCE_LOJA_ID };
     return next();
   }

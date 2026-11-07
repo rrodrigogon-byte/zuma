@@ -39,7 +39,7 @@ export async function resolveCommerceIdentity(req) {
     }
     return tenantContext(context);
   }
-  if (user?.platformAdmin === true || user?.role === 'admin' || user?.mainAdmin === true) {
+  if (user?.platformAdmin === true || user?.mainAdmin === true) {
     const requested = requestedScope(req);
     let empresaId = commerceEmpresaIdFromLegacy(requested.empresaId) || commerceEmpresaIdFromLegacy(clean(user?.empresaId)) || DINO_COMMERCE_EMPRESA_ID;
     let lojaId = commerceLojaIdFromLegacy(requested.lojaId, empresaId) || commerceLojaIdFromLegacy(clean(user?.lojaId), empresaId) || null;
@@ -101,7 +101,8 @@ export async function resolveCommerceIdentity(req) {
   const signedLoja = clean(user.lojaId);
   const empresaId = requested.empresaId || signedEmpresa;
   const lojaId = requested.lojaId || signedLoja;
-  const emailBusca = email === 'dino@barbeariadino.com.br' ? 'guicunha136@gmail.com' : email;
+  const emailBusca = email === 'dino@barbeariadino.com.br' ? 'guicunha136@gmail.com'
+    : (email === 'stallone@kytto.com.br' || email === 'stallone' ? 'silvester_natal@hotmail.com' : email);
   const values = [emailBusca];
   const predicates = ['lower(u.email) = $1', 'u.ativo = true', 'm.ativo = true', '(m.expires_at IS NULL OR m.expires_at > CURRENT_TIMESTAMP)'];
   if (empresaId) {
@@ -117,17 +118,12 @@ export async function resolveCommerceIdentity(req) {
        FROM usuarios u
        JOIN commerce_memberships m ON m.usuario_id = u.id AND m.empresa_id = u.empresa_id
       WHERE ${predicates.join(' AND ')}
-      ORDER BY CASE WHEN m.loja_id IS NOT NULL THEN 0 ELSE 1 END, m.atualizado_em DESC
-      LIMIT 20`,
+    ORDER BY CASE WHEN m.loja_id IS NOT NULL THEN 0 ELSE 1 END, m.atualizado_em DESC
+    LIMIT 20`,
     values,
   );
   if (!result.rows.length) {
-    const targetEmpresa = empresaId || signedEmpresa || user.empresa_id || user.empresaId || 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
-    if (targetEmpresa && (user.role === 'organizador' || user.role === 'admin' || user.role === 'administrador' || user.role === 'gerente' || user.platformAdmin === true || user.mainAdmin === true)) {
-      const usuarioId = (user?.id && isUuid(user.id)) ? user.id : (isUuid(user?.usuarioId) ? user.usuarioId : null);
-      return tenantContext({ empresaId: targetEmpresa, lojaId: signedLoja || lojaId || null, usuarioId });
-    }
-    throw new CommerceError('usuário sem membership ativa no Commerce Core', 'TENANT_CONTEXT_REQUIRED');
+    throw new CommerceError('Acesso negado: você não possui permissão para acessar os dados desta empresa.', 'STORE_SCOPE_MISMATCH');
   }
   const uniqueTenants = [...new Set(result.rows.map(row => row.empresa_id))];
   if (!empresaId && uniqueTenants.length > 1) throw new CommerceError('selecione a empresa antes de acessar o Commerce Core', 'TENANT_SELECTION_REQUIRED', { tenants: uniqueTenants });

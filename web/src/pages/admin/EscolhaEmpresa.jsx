@@ -1,28 +1,26 @@
+import { useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../../lib/auth'
 
-// Tela por empresa aberta sem empresa ativa (administração sem empresa escolhida): pede a
-// escolha em vez de abrir a versão antiga, que não tem mais servidor.
 export default function EscolhaEmpresa({ modulo }) {
-  const { empresasAcessiveis = [], trocarEmpresa } = useAuth() || {}
+  const { empresasAcessiveis = [], trocarEmpresa, empresaAtiva } = useAuth() || {}
 
-  const EMPRESAS_PADRAO = [
-    {
-      id: 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6',
-      nome: 'Dino Barbearia & Perfumaria',
-      fantasia: 'Barbearia Dino',
-      slug: 'dino',
-      cnpj: '50.073.355/0002-60',
-    },
-    {
-      id: 'emp-stallone-001',
-      nome: 'Stallone',
-      fantasia: 'Stallone',
-      slug: 'stallone',
-    },
-  ]
+  const lista = Array.isArray(empresasAcessiveis) ? empresasAcessiveis : []
 
-  const lista = Array.isArray(empresasAcessiveis) && empresasAcessiveis.length > 0 ? empresasAcessiveis : EMPRESAS_PADRAO
+  // Se o usuário tem apenas 1 empresa autorizada, seleciona automaticamente sem exigir clique
+  useEffect(() => {
+    if (lista.length === 1 && lista[0]?.id && (!empresaAtiva?.id || empresaAtiva.id !== lista[0].id)) {
+      if (trocarEmpresa?.(lista[0].id)) {
+        return
+      }
+      try {
+        localStorage.setItem('sp_empresa_ativa', JSON.stringify(lista[0]))
+        window.location.reload()
+      } catch {
+        // fallback
+      }
+    }
+  }, [lista, empresaAtiva, trocarEmpresa])
 
   function selecionar(emp) {
     if (trocarEmpresa?.(emp.id)) {
@@ -42,31 +40,37 @@ export default function EscolhaEmpresa({ modulo }) {
         <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--muted, #64748b)', textTransform: 'uppercase', letterSpacing: '.05em' }}>Escolha a empresa</div>
         <h1 className="page-title" style={{ margin: 0, fontSize: 22, fontWeight: 800 }}>{modulo}</h1>
         <p style={{ margin: 0, color: 'var(--muted, #475569)', lineHeight: 1.55 }}>
-          Este módulo opera por empresa. Selecione a unidade abaixo para abrir as notas fiscais e relatórios:
+          Este módulo opera por empresa. Selecione a unidade autorizada abaixo para abrir as operações e relatórios:
         </p>
 
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 6 }}>
-          {lista.map((emp) => (
-            <button
-              key={emp.id}
-              type="button"
-              className="btn btn-primary"
-              onClick={() => selecionar(emp)}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 8,
-                padding: '10px 20px',
-                fontSize: 14,
-                fontWeight: 600,
-                borderRadius: 8,
-                cursor: 'pointer',
-              }}
-            >
-              🏢 Abrir em {emp.nome || emp.fantasia || emp.slug}
-            </button>
-          ))}
-        </div>
+        {lista.length === 0 ? (
+          <div style={{ padding: '16px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, color: '#991b1b', fontSize: 14 }}>
+            Nenhuma empresa vinculada à sua conta com permissão neste módulo.
+          </div>
+        ) : (
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 6 }}>
+            {lista.map((emp) => (
+              <button
+                key={emp.id}
+                type="button"
+                className="btn btn-primary"
+                onClick={() => selecionar(emp)}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '10px 20px',
+                  fontSize: 14,
+                  fontWeight: 600,
+                  borderRadius: 8,
+                  cursor: 'pointer',
+                }}
+              >
+                🏢 Abrir em {emp.nome || emp.fantasia || emp.slug || emp.id}
+              </button>
+            ))}
+          </div>
+        )}
 
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10, paddingTop: 14, borderTop: '1px solid var(--border, #e2e8f0)' }}>
           <Link className="btn btn-secondary" to="/admin" style={{ textDecoration: 'none', color: '#475569', fontSize: 13, fontWeight: 600 }}>
