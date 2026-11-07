@@ -2337,3 +2337,166 @@ export async function obterKardexProduto(db, empresaId, produtoId) {
     }))
   };
 }
+
+// ════════════════════════════════════════════════════════════════════════════
+// 12. DOCAS & RECEBIMENTO DE CARGAS (CADEIA DE FRIO & CONFERÊNCIA CEGA)
+// ════════════════════════════════════════════════════════════════════════════
+
+export async function listarRecebimentosDoca(db, empresaId, { lojaId = null } = {}) {
+  const loja = uuidOuNull(lojaId);
+  const r = await db.query(
+    `SELECT * FROM var_doca_recebimentos 
+     WHERE empresa_id = $1 AND ($2::uuid IS NULL OR loja_id = $2::uuid)
+     ORDER BY criado_em DESC LIMIT 200`,
+    [exigirUuid(empresaId, 'empresa'), loja]
+  );
+  return r.rows.map(row => ({
+    id: row.id,
+    numero: row.numero,
+    fornecedor: row.fornecedor,
+    chaveNfe: row.chave_nfe,
+    numeroNfe: row.numero_nfe,
+    temperaturaCaminhao: row.temperatura_caminhao ? Number(row.temperatura_caminhao) : null,
+    status: row.status,
+    placaVeiculo: row.placa_veiculo,
+    motorista: row.motorista,
+    itens: row.itens || [],
+    observacoes: row.observacoes,
+    conferidoPor: row.conferido_por,
+    criadoEm: row.criado_em
+  }));
+}
+
+export async function registrarRecebimentoDoca(db, empresaId, dados = {}, { usuario = null, lojaId = null } = {}) {
+  const empresa = exigirUuid(empresaId, 'empresa');
+  const loja = uuidOuNull(lojaId);
+  const numero = `DOCA-${Date.now().toString().slice(-6)}`;
+  const fornecedor = exigirTexto(dados.fornecedor || 'Fornecedor Parceiro', 'Fornecedor');
+  const chaveNfe = dados.chaveNfe ? String(dados.chaveNfe).trim() : null;
+  const numeroNfe = dados.numeroNfe ? String(dados.numeroNfe).trim() : 'S/N';
+  const temperatura = dados.temperaturaCaminhao !== undefined && dados.temperaturaCaminhao !== null ? Number(dados.temperaturaCaminhao) : null;
+  const placa = dados.placaVeiculo ? String(dados.placaVeiculo).toUpperCase().trim() : null;
+  const motorista = dados.motorista ? String(dados.motorista).trim() : null;
+  const itens = Array.isArray(dados.itens) ? dados.itens : [];
+  const status = dados.status || 'aprovado';
+  const observacoes = dados.observacoes || null;
+  const conferidoPor = usuario?.nome || 'Conferente de Doca';
+
+  const r = await db.query(
+    `INSERT INTO var_doca_recebimentos (
+       empresa_id, loja_id, numero, fornecedor, chave_nfe, numero_nfe, temperatura_caminhao,
+       status, placa_veiculo, motorista, itens, observacoes, conferido_por
+     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+     RETURNING *`,
+    [empresa, loja, numero, fornecedor, chaveNfe, numeroNfe, temperatura, status, placa, motorista, JSON.stringify(itens), observacoes, conferidoPor]
+  );
+  return { id: r.rows[0].id, numero, status, mensagem: `Carga #${numero} conferida e registrada na doca com sucesso!` };
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// 13. CENTRAL DE TROCAS, DEVOLUÇÕES & VALE-COMPRAS (SAC DO SUPERMERCADO)
+// ════════════════════════════════════════════════════════════════════════════
+
+export async function listarTrocas(db, empresaId, { lojaId = null } = {}) {
+  const loja = uuidOuNull(lojaId);
+  const r = await db.query(
+    `SELECT * FROM var_trocas 
+     WHERE empresa_id = $1 AND ($2::uuid IS NULL OR loja_id = $2::uuid)
+     ORDER BY criado_em DESC LIMIT 200`,
+    [exigirUuid(empresaId, 'empresa'), loja]
+  );
+  return r.rows.map(row => ({
+    id: row.id,
+    numero: row.numero,
+    cupomOrigem: row.cupom_origem,
+    clienteNome: row.cliente_nome,
+    clienteCpf: row.cliente_cpf,
+    motivo: row.motivo,
+    valorTotal: Number(row.valor_total || 0),
+    tipoRessarcimento: row.tipo_ressarcimento,
+    codigoVale: row.codigo_vale,
+    statusVale: row.status_vale,
+    itens: row.itens || [],
+    destinacao: row.destinacao,
+    criadoPor: row.criado_por,
+    criadoEm: row.criado_em
+  }));
+}
+
+export async function registrarTrocaDevolucao(db, empresaId, dados = {}, { usuario = null, lojaId = null } = {}) {
+  const empresa = exigirUuid(empresaId, 'empresa');
+  const loja = uuidOuNull(lojaId);
+  const numero = `TRC-${Date.now().toString().slice(-6)}`;
+  const cupomOrigem = dados.cupomOrigem ? String(dados.cupomOrigem).trim() : 'PDV-AVULSO';
+  const clienteNome = dados.clienteNome ? String(dados.clienteNome).trim() : 'Cliente Balcão';
+  const clienteCpf = dados.clienteCpf ? String(dados.clienteCpf).replace(/\D/g, '') : null;
+  const motivo = dados.motivo || 'defeito_avaria';
+  const valorTotal = Number(dados.valorTotal || 0);
+  const tipoRessarcimento = dados.tipoRessarcimento || 'vale_compras';
+  const codigoVale = `VALE-${Date.now().toString(36).toUpperCase()}`;
+  const statusVale = 'ativo';
+  const itens = Array.isArray(dados.itens) ? dados.itens : [];
+  const destinacao = dados.destinacao || 'retorno_estoque';
+  const criadoPor = usuario?.nome || 'Atendente SAC';
+
+  // Se a destinação for retorno ao estoque, devolve os itens ao est_saldos
+  if (destinacao === 'retorno_estoque' && itens.length > 0) {
+    for (const it of itens) {
+      if (it.itemId && Number(it.quantidade) > 0) {
+        await db.query(
+          `UPDATE est_saldos SET quantidade = quantidade + $1, atualizado_em = CURRENT_TIMESTAMP
+           WHERE empresa_id = $2 AND item_id = $3 AND ($4::uuid IS NULL OR loja_id = $4::uuid)`,
+          [Number(it.quantidade), empresa, it.itemId, loja]
+        ).catch(() => null);
+
+        const chaveMov = `TROCA-ENTRADA-${numero}-${it.itemId}-${Date.now()}`;
+        await db.query(
+          `INSERT INTO est_movimentos (
+             empresa_id, loja_id, item_id, quantidade, custo_unitario, tipo, origem, origem_id, motivo, chave, usuario, criado_em
+           ) VALUES (
+             $1, $2, $3, $4, $5, 'entrada', 'troca_devolucao', $6, $7, $8, $9, CURRENT_TIMESTAMP
+           ) ON CONFLICT (empresa_id, chave) DO NOTHING`,
+          [empresa, loja, it.itemId, Number(it.quantidade), Number(it.precoUnitario || 0), numero, `Devolução SAC Troca #${numero}`, chaveMov, criadoPor]
+        ).catch(() => null);
+      }
+    }
+  }
+
+  const r = await db.query(
+    `INSERT INTO var_trocas (
+       empresa_id, loja_id, numero, cupom_origem, cliente_nome, cliente_cpf, motivo,
+       valor_total, tipo_ressarcimento, codigo_vale, status_vale, itens, destinacao, criado_por
+     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+     RETURNING *`,
+    [empresa, loja, numero, cupomOrigem, clienteNome, clienteCpf, motivo, valorTotal, tipoRessarcimento, codigoVale, statusVale, JSON.stringify(itens), destinacao, criadoPor]
+  );
+
+  return {
+    id: r.rows[0].id,
+    numero,
+    codigoVale,
+    valorTotal,
+    mensagem: `Troca #${numero} homologada com sucesso! Vale-Compras gerado: ${codigoVale} no valor de R$ ${valorTotal.toFixed(2)}`
+  };
+}
+
+export async function validarValeCompras(db, empresaId, codigoVale) {
+  const empresa = exigirUuid(empresaId, 'empresa');
+  const cod = String(codigoVale || '').trim().toUpperCase();
+  const r = await db.query(
+    `SELECT * FROM var_trocas WHERE empresa_id = $1 AND UPPER(codigo_vale) = $2 AND status_vale = 'ativo' LIMIT 1`,
+    [empresa, cod]
+  );
+  if (r.rows.length === 0) {
+    return { valido: false, mensagem: 'Vale-Compras não encontrado, já utilizado ou expirado.' };
+  }
+  const t = r.rows[0];
+  return {
+    valido: true,
+    trocaId: t.id,
+    codigoVale: t.codigo_vale,
+    valor: Number(t.valor_total),
+    clienteNome: t.cliente_nome,
+    clienteCpf: t.cliente_cpf
+  };
+}

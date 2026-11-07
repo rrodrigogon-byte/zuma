@@ -1791,3 +1791,169 @@
   font-size: 15px;
   color: #0f172a;
 }
+
+/* ════════════════════════════════════════════════════════════════════════════
+   AUTOATENDIMENTO (SELF-CHECKOUT TOTEM)
+   ════════════════════════════════════════════════════════════════════════════ */
+.super-totem-screen {
+  background: #0f172a;
+  border-radius: 12px;
+  color: #ffffff;
+  padding: 24px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+  margin-bottom: 24px;
+}
+.super-totem-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid #1e293b;
+  padding-bottom: 16px;
+  margin-bottom: 20px;
+}
+.super-totem-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 20px;
+  font-weight: 800;
+  color: #38bdf8;
+}
+.super-totem-body {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: 24px;
+}
+.super-totem-scanner-area {
+  background: #1e293b;
+  border: 2px dashed #38bdf8;
+  border-radius: 10px;
+  padding: 24px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+.super-totem-sacola-monitor {
+  background: #1e293b;
+  border-radius: 10px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.totem-balanca-box {
+  background: #0f172a;
+  border-radius: 8px;
+  padding: 14px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border: 1px solid #334155;
+}
+.totem-balanca-status-ok {
+  color: #22c55e;
+  font-weight: 700;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.totem-balanca-status-alert {
+  color: #f59e0b;
+  font-weight: 700;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   DOCAS, CONFERÊNCIA CEGA & CADEIA DE FRIO
+   ════════════════════════════════════════════════════════════════════════════ */
+.super-doca-temp-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-weight: 700;
+  font-size: 12px;
+}
+.temp-frio-ok {
+  background: #e0f2fe;
+  color: #0369a1;
+  border: 1px solid #bae6fd;
+}
+.temp-frio-alerta {
+  background: #fee2e2;
+  color: #b91c1c;
+  border: 1px solid #fecaca;
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   CENTRAL DE TROCAS (SAC) & VALES-COMPRA
+   ════════════════════════════════════════════════════════════════════════════ */
+.super-vale-compras-card {
+  background: #f8fafc;
+  border: 1.5pt dashed #0284c7;
+  border-radius: 8px;
+  padding: 14px 18px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 12px;
+}
+.vale-codigo-texto {
+  font-family: monospace;
+  font-size: 16px;
+  font-weight: 800;
+  color: #0369a1;
+  letter-spacing: 1px;
+}
+.vale-valor-destaque {
+  font-size: 20px;
+  font-weight: 800;
+  color: #16a34a;
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   TABLOIDES & PROMOÇÕES DE SUPERMERCADO
+   ════════════════════════════════════════════════════════════════════════════ */
+.super-promocoes-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+}
+.super-promo-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 16px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+.promo-ribbon {
+  position: absolute;
+  top: 12px;
+  right: -32px;
+  background: #ef4444;
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 800;
+  padding: 4px 36px;
+  transform: rotate(45deg);
+  text-transform: uppercase;
+}
+.promo-ribbon.leve-pague {
+  background: #8b5cf6;
+}
+.promo-ribbon.preco-fixo {
+  background: #10b981;
+}

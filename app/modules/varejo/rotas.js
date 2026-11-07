@@ -282,6 +282,26 @@ export function createVarejoAdminRouter({ db, escopoDaRequisicao, fuso = 'Americ
     return svc.obterKardexProduto(db, empresaId, req.params.id);
   }));
 
+  // ── Docas & Recebimento de Cargas (Cadeia de Frio & Conferência Cega) ──
+  router.get("/docas/recebimentos", rota("catalog.read", async ({ empresaId, lojaId }) => {
+    return svc.listarRecebimentosDoca(db, empresaId, { lojaId });
+  }));
+  router.post("/docas/recebimentos", rota("catalog.write", async ({ req, empresaId, lojaId, usuario }) => {
+    return svc.registrarRecebimentoDoca(db, empresaId, req.body || {}, { usuario, lojaId });
+  }));
+
+  // ── Central de Trocas & Devoluções (SAC & Vales-Compra) ──
+  router.get("/trocas", rota("catalog.read", async ({ empresaId, lojaId }) => {
+    return svc.listarTrocas(db, empresaId, { lojaId });
+  }));
+  router.post("/trocas", rota("catalog.write", async ({ req, empresaId, lojaId, usuario }) => {
+    return svc.registrarTrocaDevolucao(db, empresaId, req.body || {}, { usuario, lojaId });
+  }));
+  router.get("/trocas/validar-vale/:codigo", rota("catalog.read", async ({ req, empresaId }) => {
+    return svc.validarValeCompras(db, empresaId, req.params.codigo);
+  }));
+
   return router;
 }
+
 

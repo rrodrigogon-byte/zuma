@@ -4,7 +4,7 @@ import {
   Truck, TrendingUp, RefreshCw, Plus, Trash2, Printer, CheckCircle2,
   Download, Search, DollarSign, Calendar, Layers, ShieldCheck,
   Beef, UtensilsCrossed, Scale, Users, ClipboardCheck, Sparkles,
-  Percent, ArrowDownRight, ArrowUpRight, Lock, KeyRound, AlertCircle, FileText, Apple, Boxes, ShieldAlert, Tv, CreditCard, Receipt, Wifi, WifiOff, Eye, ArrowUpCircle, CheckSquare, History, List
+  Percent, ArrowDownRight, ArrowUpRight, Lock, KeyRound, AlertCircle, FileText, Apple, Boxes, ShieldAlert, Tv, CreditCard, Receipt, Wifi, WifiOff, Eye, ArrowUpCircle, CheckSquare, RotateCcw, History, List
 } from 'lucide-react';
 import { api } from '../../lib/api';
 import Modal from '../../components/Modal';
@@ -108,6 +108,39 @@ export default function Supermercado() {
   const [fornecedores, setFornecedores] = useState([]);
   const [analiseMargens, setAnaliseMargens] = useState([]);
   const [simulacaoReajuste, setSimulacaoReajuste] = useState(5);
+  // ── DOCAS & RECEBIMENTO ──
+  const [recebimentosDoca, setRecebimentosDoca] = useState([]);
+  const [modalNovoRecebimentoDoca, setModalNovoRecebimentoDoca] = useState(false);
+  const [formDoca, setFormDoca] = useState({
+    fornecedor: "BRF Distribuidora S/A",
+    chaveNfe: "51261101838723000190550010000049211002345678",
+    numeroNfe: "004921",
+    temperaturaCaminhao: "-14.5",
+    placaVeiculo: "BRA2E19",
+    motorista: "Marcos Andrade",
+    observacoes: "Carga de congelados inspecionada na doca 02"
+  });
+  // ── TROCAS & DEVOLUÇÕES (SAC) ──
+  const [trocas, setTrocas] = useState([]);
+  const [modalNovaTroca, setModalNovaTroca] = useState(false);
+  const [formTroca, setFormTroca] = useState({
+    cupomOrigem: "PDV-MW707LNM",
+    clienteNome: "Mariana Souza",
+    clienteCpf: "123.456.789-00",
+    motivo: "avaria_embalagem",
+    valorTotal: "29.90",
+    tipoRessarcimento: "vale_compras",
+    destinacao: "retorno_estoque",
+    itens: []
+  });
+  const [valeEmitido, setValeEmitido] = useState(null);
+  // ── SELF-CHECKOUT (TOTEM) ──
+  const [totemCarrinho, setTotemCarrinho] = useState([]);
+  const [totemLeitor, setTotemLeitor] = useState("");
+  const [totemPesoEsperado, setTotemPesoEsperado] = useState(0);
+  const [totemPesoReal, setTotemPesoReal] = useState(0);
+  const [totemAlertaSupervisor, setTotemAlertaSupervisor] = useState(false);
+  const [totemSucesso, setTotemSucesso] = useState(null);
   // ── Hortifrúti (FLV) ──
   const [dadosHortifruti, setDadosHortifruti] = useState(null);
   const [carregandoHortifruti, setCarregandoHortifruti] = useState(false);
@@ -222,6 +255,18 @@ export default function Supermercado() {
       // 8. Clube Kytto
       const rClube = await api.get('/api/admin/supermercado/clube/clientes').catch(() => null);
       if (rClube) setClientesClube(Array.isArray(rClube) ? rClube : (rClube.clientes || []));
+      // 9. Docas
+      const rDoc = await api.get('/api/admin/supermercado/docas/recebimentos').catch(() => null);
+      if (rDoc) setRecebimentosDoca(Array.isArray(rDoc) ? rDoc : (rDoc.recebimentos || []));
+      // 10. Trocas
+      const rTrc = await api.get('/api/admin/supermercado/trocas').catch(() => null);
+      if (rTrc) setTrocas(Array.isArray(rTrc) ? rTrc : (rTrc.trocas || []));
+      // 11. Promoções
+      const rPro = await api.get('/api/admin/supermercado/promocoes').catch(() => null);
+      if (rPro) setPromocoes(Array.isArray(rPro) ? rPro : (rPro.promocoes || []));
+      // 12. Transferências
+      const rTra = await api.get('/api/admin/supermercado/transferencias').catch(() => null);
+      if (rTra) setTransferencias(Array.isArray(rTra) ? rTra : (rTra.transferencias || []));
 
       // 9. Promoções
       const rPromo = await api.get('/api/admin/supermercado/promocoes').catch(() => null);
@@ -347,6 +392,93 @@ export default function Supermercado() {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [abaAtiva, carrinho]);
+
+  // ── HANDLERS DE DOCAS, TROCAS & SELF-CHECKOUT ──
+  const handleRegistrarDoca = async (e) => {
+    e.preventDefault();
+    try {
+      const res = await api.post("/api/admin/supermercado/docas/recebimentos", formDoca);
+      showToast(res.mensagem || "Recebimento de doca registrado com sucesso!");
+      setModalNovoRecebimentoDoca(false);
+      carregarDados();
+    } catch (err) {
+      showToast("❌ Erro ao registrar carga na doca: " + (err.message || "Falha na requisição"));
+    }
+  };
+
+  const handleRegistrarTroca = async (e) => {
+    e.preventDefault();
+    try {
+      const res = await api.post("/api/admin/supermercado/trocas", {
+        ...formTroca,
+        valorTotal: Number(formTroca.valorTotal)
+      });
+      showToast(res.mensagem || "Troca homologada com sucesso!");
+      setValeEmitido(res);
+      setModalNovaTroca(false);
+      carregarDados();
+    } catch (err) {
+      showToast("❌ Erro ao homologar troca: " + (err.message || "Falha na requisição"));
+    }
+  };
+
+  const handleTotemBipar = (e) => {
+    e.preventDefault();
+    if (!totemLeitor.trim()) return;
+    const term = totemLeitor.trim().toLowerCase();
+    const prod = produtos.find(p => (p.ean && p.ean === term) || (p.plu && p.plu === term) || p.nome.toLowerCase().includes(term));
+    if (!prod) {
+      showToast("❌ Produto não identificado no leitor do totem.");
+      setTotemLeitor("");
+      return;
+    }
+    const novoItem = {
+      id: prod.id,
+      nome: prod.nome,
+      preco: Number(prod.precoVenda || prod.precoNormal || 10),
+      quantidade: 1,
+      pesoG: prod.pesavel ? 500 : 350
+    };
+    setTotemCarrinho(prev => [...prev, novoItem]);
+    setTotemPesoEsperado(prev => prev + novoItem.pesoG);
+    // Simula prato de empacotamento com balança eletrônica
+    setTotemPesoReal(prev => prev + novoItem.pesoG);
+    setTotemLeitor("");
+    showToast(`🛒 "${prod.nome}" adicionado! Coloque o item na sacola.`);
+  };
+
+  const handleTotemFinalizar = async (forma) => {
+    if (totemCarrinho.length === 0) return;
+    const total = totemCarrinho.reduce((acc, it) => acc + it.preco * it.quantidade, 0);
+    try {
+      const payload = {
+        valorTotal: total,
+        formaPagamento: forma,
+        desconto: 0,
+        troco: 0,
+        itens: totemCarrinho.map(it => ({
+          itemId: it.id,
+          nome: it.nome,
+          quantidade: it.quantidade,
+          precoUnitario: it.preco,
+          precoTotal: it.preco * it.quantidade
+        }))
+      };
+      const res = await api.post("/api/admin/supermercado/vendas/pdv", payload);
+      setTotemSucesso({
+        numero: res.venda?.numero || "TOTEM-" + Date.now().toString().slice(-4),
+        total,
+        chaveNfce: res.nfce?.chaveAcesso || "512611" + Math.random().toString().slice(2, 40),
+        forma
+      });
+      setTotemCarrinho([]);
+      setTotemPesoEsperado(0);
+      setTotemPesoReal(0);
+      showToast("✅ Compra finalizada no Totem com sucesso!");
+    } catch (err) {
+      showToast("❌ Erro ao finalizar no Totem: " + err.message);
+    }
+  };
 
   // ── OPERAÇÕES DE CAIXA (ABERTURA, SANGRIA, SUPRIMENTO, FECHAMENTO) ──
   const handleAbrirCaixa = async (e) => {
@@ -967,8 +1099,20 @@ export default function Supermercado() {
         <button className={`super-tab-btn ${abaAtiva === 'clube' ? 'active' : ''}`} onClick={() => setAbaAtiva('clube')}>
           <Users size={16} /> Clube Kytto ({clientesClube.length})
         </button>
+        <button className={`super-tab-btn ${abaAtiva === 'selfcheckout' ? 'active' : ''}`} onClick={() => setAbaAtiva('selfcheckout')}>
+          <Sparkles size={16} /> Self-Checkout Totem
+        </button>
+        <button className={`super-tab-btn ${abaAtiva === 'docas' ? 'active' : ''}`} onClick={() => setAbaAtiva('docas')}>
+          <Truck size={16} /> Docas & Recebimento ({recebimentosDoca.length})
+        </button>
+        <button className={`super-tab-btn ${abaAtiva === 'trocas' ? 'active' : ''}`} onClick={() => setAbaAtiva('trocas')}>
+          <RotateCcw size={16} /> Trocas & SAC ({trocas.length})
+        </button>
         <button className={`super-tab-btn ${abaAtiva === 'promocoes' ? 'active' : ''}`} onClick={() => setAbaAtiva('promocoes')}>
-          <Percent size={16} /> Promoções & Ofertas
+          <Percent size={16} /> Promoções & Tabloides ({promocoes.length})
+        </button>
+        <button className={`super-tab-btn ${abaAtiva === 'transferencias' ? 'active' : ''}`} onClick={() => setAbaAtiva('transferencias')}>
+          <ArrowRightLeft size={16} /> Transferências & CD ({transferencias.length})
         </button>
         <button className={`super-tab-btn ${abaAtiva === 'margens' ? 'active' : ''}`} onClick={() => setAbaAtiva('margens')}>
           <TrendingUp size={16} /> Margens & Curva ABC
