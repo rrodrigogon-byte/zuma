@@ -47,6 +47,7 @@ export const TENANTS_OFICIAIS = {
     roleIdStaff: '10a80e2f-6f9f-4c54-8a28-7bb6c317c3d2',
     usuarios: [
       { username: 'agroopen', email: 'cauarafa7@gmail.com', nome: 'Cauã Rafa', role: 'admin', pgRole: 'admin', isOwner: true },
+      { username: 'silvester_agro', email: 'silvester_natal@hotmail.com', nome: 'Silvester Natal', role: 'organizador', pgRole: 'gerente', isOwner: true },
       { username: 'teste_diag', email: 'teste_diag@test.com', nome: 'Operador Agro Open', role: 'operador', pgRole: 'operador' },
     ]
   }

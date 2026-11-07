@@ -371,15 +371,29 @@ const isAdminGlobal = (user) => {
 const isSilvesterUser = (user) => {
   if (!user) return false;
   if (isAdminGlobal(user)) return false;
-  const em = norm(user.email || user.username || user.login || user.nome || user.id || '');
-  return em.includes('silvester') || em.includes('silvestre');
+  const em = (
+    norm(user.email) + ' ' +
+    norm(user.emailAlternativo) + ' ' +
+    norm(user.username) + ' ' +
+    norm(user.login) + ' ' +
+    norm(user.nome) + ' ' +
+    norm(user.id)
+  );
+  return em.includes('silvester') || em.includes('silvestre') || em.includes('stallone');
 };
 
 const isGuilhermeUser = (user) => {
   if (!user) return false;
   if (isAdminGlobal(user)) return false;
-  const em = norm(user.email || user.username || user.login || user.nome || user.id || '');
-  return em.includes('guilherme') || em.includes('guicunha') || em.includes('dino') || em === 'gui';
+  const em = (
+    norm(user.email) + ' ' +
+    norm(user.emailAlternativo) + ' ' +
+    norm(user.username) + ' ' +
+    norm(user.login) + ' ' +
+    norm(user.nome) + ' ' +
+    norm(user.id)
+  );
+  return em.includes('guilherme') || em.includes('guicunha') || em.includes('dino') || em.includes('gui');
 };
 
 const obterEmpresasAutorizadasDoUsuario = (user) => {
@@ -927,7 +941,7 @@ function auditEmpresaId(req){
   const header = String(req?.headers?.['x-empresa-id'] || '').trim();
   return header && isPlatformAdminUser(req?.user) ? header.slice(0, 64) : null;
 }
-const tokenFor = u => jwt.sign({ id:u.id, nome:u.nome, email:u.email, role:u.role, credentialVersion:credentialVersion(u.senhaHash,u.passwordChangedAt), platformAdmin:isPlatformAdminUser(u), ...(u.empresaId ? { empresaId:u.empresaId } : {}), ...(u.lojaId ? { lojaId:u.lojaId } : {}) }, JWT_SECRET, { expiresIn:'12h' });
+const tokenFor = u => jwt.sign({ id:u.id, nome:u.nome, email:u.email, username:u.username, role:u.role, credentialVersion:credentialVersion(u.senhaHash,u.passwordChangedAt), platformAdmin:isPlatformAdminUser(u), ...(u.empresaId ? { empresaId:u.empresaId } : {}), ...(u.lojaId ? { lojaId:u.lojaId } : {}) }, JWT_SECRET, { expiresIn:'12h' });
 
 // ---- rate-limit simples (anti força-bruta no login) ----
 const tentativas = new Map(); // chave -> { n, until }
