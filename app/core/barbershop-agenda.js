@@ -601,7 +601,7 @@ function criarNaAgendaDaBarbearia(scope, input = {}) {
   }
 }
 
-function agendamentosDoTelefone(empresa, phone, { includePast = false, lojaId, toleranceHours = 4 } = {}) {
+function agendamentosDoTelefone(empresa, phone, { includePast = false, lojaId, toleranceHours = 4, includeCancelled = false } = {}) {
   const chave = phoneMatchKey(phone);
   const unidade = limpo(lojaId, 120);
   if (!chave) return [];
@@ -611,7 +611,7 @@ function agendamentosDoTelefone(empresa, phone, { includePast = false, lojaId, t
   return barbearia.listarAgendamentos(empresa, {})
     .filter((item) => !unidade || !item.lojaId || String(item.lojaId) === unidade)
     .filter((item) => phoneMatchKey(item.clienteTelefone) === chave)
-    .filter((item) => !['cancelado', 'nao_compareceu'].includes(item.status))
+    .filter((item) => includeCancelled || !['cancelado', 'nao_compareceu'].includes(item.status))
     .filter((item) => includePast || item.dataAgenda === diaHoje || instanteAgendamento(item) >= limitePassado);
 }
 
@@ -650,10 +650,12 @@ export async function listCustomerAppointments(scope, { includePast = false, lim
     }));
 }
 
-function agendamentoDoContato(empresa, phone, appointmentId, lojaId) {
-  const agendamento = agendamentosDoTelefone(empresa, phone, { includePast: true, lojaId }).find((item) => item.id === limpo(appointmentId, 120));
+function agendamentoDoContato(empresa, phone, appointmentId, lojaId, { permitirCancelado = false } = {}) {
+  const agendamento = agendamentosDoTelefone(empresa, phone, { includePast: true, lojaId, includeCancelled: permitirCancelado }).find((item) => item.id === limpo(appointmentId, 120));
   if (!agendamento) throw new SchedulingError('agendamento não encontrado para este contato', 'APPOINTMENT_NOT_FOUND');
-  if (!ATIVOS.has(agendamento.status)) throw new SchedulingError('este agendamento já não está ativo', 'APPOINTMENT_NOT_ACTIVE');
+  if (!ATIVOS.has(agendamento.status) && !(permitirCancelado && agendamento.status === 'cancelado')) {
+    throw new SchedulingError('este agendamento já não está ativo', 'APPOINTMENT_NOT_ACTIVE');
+  }
   return agendamento;
 }
 
@@ -665,13 +667,20 @@ export async function confirmAttendance(scope, appointmentId) {
   exigirEscopoOperacional(scope);
   if (await agendaSource(scope) === 'postgres') throw new SchedulingError('confirmação de presença disponível apenas na agenda da barbearia', 'NOT_BARBERSHOP_AGENDA');
   const empresa = chaveEmpresa(scope);
-  const agendamento = agendamentoDoContato(empresa, scope.phone, appointmentId, scope.lojaId);
+  const isDino = ['d0d0ac01-8e50-4b61-8c79-de4aaa916da6', 'emp_dino', 'dino'].includes(String(empresa || '').toLowerCase());
+  const agendamento = agendamentoDoContato(empresa, scope.phone, appointmentId, scope.lojaId, { permitirCancelado: isDino });
   const diaHoje = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Cuiaba' }).format(new Date());
   const ehHoje = agendamento.dataAgenda === diaHoje;
   if (!ehHoje && instanteAgendamento(agendamento) < Date.now() - 30 * 60 * 1000) throw new SchedulingError('este horário já passou', 'APPOINTMENT_PAST');
   const atualizado = agendamento.status === 'confirmado'
     ? agendamento
-    : barbearia.alterarStatusAgendamento(empresa, agendamento.id, 'confirmado', { lojaId: scope.lojaId, observacoes: limpo(`${agendamento.observacoes || ''} · Presença confirmada pelo cliente no WhatsApp`.replace(/^ · /, ''), 600) });
+    : barbearia.alterarStatusAgendamento(empresa, agendamento.id, 'confirmado', {
+        lojaId: scope.lojaId,
+        origem: 'cliente',
+        canceladoPor: null,
+        motivoCancelamento: '',
+        observacoes: limpo(`${agendamento.observacoes || ''} · Presença confirmada pelo cliente no WhatsApp`.replace(/^ · /, ''), 600),
+      });
   if (!atualizado) throw new SchedulingError('agendamento não encontrado para este contato', 'APPOINTMENT_NOT_FOUND');
 
   // Se o cliente tem mais de um agendamento na mesma data (ex.: barba + corte), confirma todos

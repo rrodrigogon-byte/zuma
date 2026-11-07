@@ -201,3 +201,29 @@ test('personaAppointmentMessage cancelado diferencia cliente vs equipe com clare
   assert.match(msgCliente, /conforme você solicitou/);
   assert.match(msgCliente, /Se quiser marcar outro dia, só me avisar por aqui!/);
 });
+
+test('confirmAttendance reativa agendamento cancelado se cliente confirmar na Dino', async () => {
+  const { confirmAttendance } = await import('./core/barbershop-agenda.js');
+  const EMPRESA_DINO = 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
+  const agId = `age-reativar-${Date.now()}`;
+  const phone = '5565999554433';
+  const lojaId = 'loja-dino-01';
+  const hojeStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Cuiaba' }).format(new Date());
+  const estado = barbearia.estadoEmpresa(EMPRESA_DINO);
+  estado.agendamentos[agId] = {
+    id: agId,
+    empresaId: EMPRESA_DINO,
+    lojaId,
+    clienteNome: 'Evertom Teste',
+    clienteTelefone: phone,
+    dataAgenda: hojeStr,
+    dataHora: `${hojeStr}T14:15:00.000Z`,
+    status: 'cancelado',
+    motivoCancelamento: 'falta_confirmacao',
+  };
+  const scope = { empresaId: EMPRESA_DINO, phone, lojaId };
+  const res = await confirmAttendance(scope, agId);
+  assert.ok(res);
+  assert.equal(estado.agendamentos[agId].status, 'confirmado');
+  assert.match(estado.agendamentos[agId].observacoes, /Presença confirmada pelo cliente no WhatsApp/);
+});

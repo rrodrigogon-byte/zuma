@@ -1588,6 +1588,21 @@ export async function confirmNextAppointment(context) {
         kind: 'presence_confirmed',
       };
     }
+    const canceladoParaReativar = (lista?.agendamentos || []).find((item) =>
+      item?.id && (item.id === lembradoId || item.dataAgenda === diaHoje || new Date(item.dataHora).valueOf() > agora - 60 * 60 * 1000)
+      && String(item.status) === 'cancelado'
+    );
+    if (canceladoParaReativar) {
+      const res = await run('confirmar_presenca', { appointmentId: canceladoParaReativar.id }).catch(() => null);
+      if (res?.ok || res?.presenca) {
+        const quando = new Date(canceladoParaReativar.dataHora).toLocaleString('pt-BR', { timeZone: 'America/Cuiaba', weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+        const primeiroNome = context.customerName ? `, ${context.customerName.split(' ')[0]}` : '';
+        return {
+          text: `Tudo certo${primeiroNome}! Seu horário de ${canceladoParaReativar.servico?.nome || 'atendimento'} com ${canceladoParaReativar.profissional?.nome || 'a equipe'}, ${quando}, foi confirmado com sucesso na Dino Barbearia! 💈 Te esperamos!`,
+          kind: 'presence_confirmed',
+        };
+      }
+    }
     return null;
   }
 
