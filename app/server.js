@@ -1747,7 +1747,16 @@ app.use('/api/webhooks', createWhatsappAiWebhookRouter());
   });
   // [kytto-unidades] Cadastro das unidades (lojas) da empresa ativa, no PostgreSQL.
   // [kytto-empresas] Cadastro completo de empresas multiempresa
-  const empresasRouter = createEmpresasAdminRouter({ db: clubeDb });
+  const empresasRouter = createEmpresasAdminRouter({
+    db: clubeDb,
+    isPlatformAdmin: (user) => isPlatformAdminUser(user) || isMainAdminUser(user),
+    obterEmpresaIdDoUsuario: (req) => {
+      if (isPlatformAdminUser(req.user) || isMainAdminUser(req.user)) {
+        return req.headers['x-empresa-id'] ? String(req.headers['x-empresa-id']).trim() : null;
+      }
+      return req.user?.empresaId ? String(req.user.empresaId).trim() : (legacyEmpresaId(req) || null);
+    }
+  });
   app.use('/api/admin/empresas', auth, requireStaff, empresasRouter);
   app.use('/api/admin/plataforma/empresas', auth, requireStaff, empresasRouter);
   app.use('/api/admin/unidades', auth, requireStaff, createUnidadesAdminRouter({ db: clubeDb, empresaDaRequisicao: empresaDasUnidades }));

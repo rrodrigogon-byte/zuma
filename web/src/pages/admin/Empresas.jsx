@@ -66,7 +66,7 @@ function mascaraTelefone(v) {
 
 export default function Empresas() {
   const { toast } = useToast()
-  const { empresaAtiva, trocarEmpresa, user } = useAuth()
+  const { empresaAtiva, trocarEmpresa, user, isPlatformAdmin } = useAuth()
   const [empresas, setEmpresas] = useState([])
   const [loading, setLoading] = useState(true)
   const [busca, setBusca] = useState('')
@@ -324,14 +324,16 @@ export default function Empresas() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <span style={{ fontSize: 28 }}>🏢</span>
             <h1 className="page-title" style={{ margin: 0, fontSize: 24, fontWeight: 800, color: '#12283F' }}>
-              Gestão de Empresas & Multiempresa
+              {isPlatformAdmin ? 'Gestão de Empresas & Multiempresa' : (empresaAtiva?.nome || 'Minha Empresa')}
             </h1>
           </div>
           <div style={{ marginTop: 6, color: 'var(--muted, #64748b)', fontSize: 13 }}>
-            Cadastro completo e autônomo com inteligência artificial, isolamento contábil, fiscal e operacional.
+            {isPlatformAdmin
+              ? 'Cadastro completo e autônomo com inteligência artificial, isolamento contábil, fiscal e operacional.'
+              : 'Dados cadastrais, fiscais e operacionais exclusivos da sua unidade no ERP Kytto.'}
             {empresaAtiva && (
               <span style={{ marginLeft: 8, padding: '2px 8px', borderRadius: 6, background: 'rgba(255,107,44,.12)', color: '#FF6B2C', fontWeight: 700 }}>
-                Ativa agora: {empresaAtiva.nomeFantasia || empresaAtiva.nome}
+                Unidade ativa: {empresaAtiva.nomeFantasia || empresaAtiva.nome}
               </span>
             )}
           </div>
@@ -341,15 +343,19 @@ export default function Empresas() {
           <button className="btn btn-secondary btn-sm" onClick={carregar} disabled={loading} title="Recarregar lista">
             ↺ {loading ? 'Carregando...' : 'Atualizar'}
           </button>
-          <button className="btn btn-secondary btn-sm" onClick={abrirDiagnosticoHolding} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span>🧠</span> Copilot Holding
-          </button>
+          {isPlatformAdmin && (
+            <button className="btn btn-secondary btn-sm" onClick={abrirDiagnosticoHolding} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span>🧠</span> Copilot Holding
+            </button>
+          )}
           <Link to="/admin/lojas" className="btn btn-secondary btn-sm" style={{ textDecoration: 'none' }}>
             🏪 Unidades / Lojas
           </Link>
-          <button className="btn btn-primary btn-sm" onClick={abrirNovo} style={{ background: '#FF6B2C', borderColor: '#FF6B2C', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span>+</span> Nova Empresa
-          </button>
+          {isPlatformAdmin && (
+            <button className="btn btn-primary btn-sm" onClick={abrirNovo} style={{ background: '#FF6B2C', borderColor: '#FF6B2C', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span>+</span> Nova Empresa
+            </button>
+          )}
         </div>
       </div>
 
@@ -614,7 +620,7 @@ export default function Empresas() {
                     >
                       ✏️ Editar
                     </button>
-                    {emp.id !== 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6' && (
+                    {isPlatformAdmin && emp.id !== 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6' && (
                       <button
                         type="button"
                         className="btn btn-ghost btn-sm"
