@@ -206,6 +206,38 @@ export function createEmpresasAdminRouter({ db, isPlatformAdmin = () => false, o
     return { ok: true, diagnostico };
   }));
 
+  // Listar templates de onboarding disponíveis para o ecossistema Kytto
+  router.get('/templates', executar(async () => {
+    return {
+      ok: true,
+      templates: Object.values(svc.TEMPLATES_NEGOCIO || {})
+    };
+  }));
+
+  // Onboarding Rápido de Empresa Completa — Exclusivo Superadmin da plataforma
+  router.post('/onboarding-rapido', executar(async ({ req }) => {
+    if (!isPlatformAdmin(req.user)) {
+      const erro = new Error('Apenas administradores da plataforma Kytto podem realizar onboarding de novas empresas.');
+      erro.status = 403;
+      erro.code = 'PLATFORM_ADMIN_REQUIRED';
+      throw erro;
+    }
+    const payload = req.body || {};
+    const empresa = await svc.criarEmpresa(db, {
+      ...payload,
+      criarLojaMatriz: payload.criarLojaMatriz !== false,
+      autoProvisionarCatalogo: payload.autoProvisionarCatalogo !== false,
+      criarAdminAutomatico: payload.criarAdminAutomatico !== false,
+    }, req.user);
+
+    return {
+      ok: true,
+      empresa,
+      administrador: empresa.administrador || null,
+      catalogoInicial: empresa.catalogoInicial || null
+    };
+  }, 201));
+
   // Buscar uma empresa por ID — Com bloqueio contra acesso a empresas alheias
   router.get('/:id', executar(async ({ req }) => {
     if (!verificarAcessoEmpresa(req, req.params.id)) {

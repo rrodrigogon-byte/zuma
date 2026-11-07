@@ -1,3 +1,9 @@
+import {
+  TEMPLATES_NEGOCIO,
+  provisionarCatalogoSegmento,
+  provisionarAdminCompleto,
+  provisionarIntegracoesIniciais
+} from './onboarding-templates.js';
 import crypto from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import { ErroDominio, exigirUuid, exigirTexto } from '../acesso/banco.js';
@@ -379,6 +385,7 @@ export async function criarEmpresa(db, dados = {}, usuarioOperador = null) {
   const cep = dados.enderecoCep || dados.endereco_cep ? somenteDigitos(dados.enderecoCep || dados.endereco_cep).slice(0, 8) : null;
 
   let registroCriado = null;
+  let lojaMatrizId = null;
 
   // 1. Inserir no PostgreSQL
   try {
@@ -400,7 +407,7 @@ export async function criarEmpresa(db, dados = {}, usuarioOperador = null) {
 
     // Criar unidade Matriz por padrão se não existir
     if (dados.criarLojaMatriz !== false) {
-      const lojaId = crypto.randomUUID();
+      lojaMatrizId = crypto.randomUUID();
       const codigoMatriz = `${nomeFantasia.slice(0, 8).toUpperCase().replace(/[^A-Z0-9]/g, '') || 'EMP'}-MATRIZ`;
       await db.query(
         `INSERT INTO lojas (
@@ -410,7 +417,7 @@ export async function criarEmpresa(db, dados = {}, usuarioOperador = null) {
           $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, true
         ) ON CONFLICT (empresa_id, codigo) DO NOTHING`,
         [
-          lojaId, novoId, codigoMatriz, `${nomeFantasia} · Matriz`, cnpjNormalizadoDoc,
+          lojaMatrizId, novoId, codigoMatriz, `${nomeFantasia} · Matriz`, cnpjNormalizadoDoc,
           ie, im, tel, email, logradouro, numero, bairro, cidade, estado, cep
         ]
       );
@@ -447,24 +454,43 @@ export async function criarEmpresa(db, dados = {}, usuarioOperador = null) {
     console.warn('[empresas] Erro ao salvar no Datastore JSON:', e.message);
   }
 
-  // 3. Criar Administrador Inicial se fornecido
-  if (dados.administrador?.email && dados.administrador?.senhaInicial) {
-    const admNome = String(dados.administrador.nome || 'Administrador').trim();
-    const admEmail = String(dados.administrador.email).trim().toLowerCase();
-    const admSenha = String(dados.administrador.senhaInicial).trim();
-    if (admSenha.length >= 6) {
-      const senhaHash = bcrypt.hashSync(admSenha, 10);
-      try {
-        const userId = crypto.randomUUID();
-        await db.query(
-          `INSERT INTO usuarios (id, empresa_id, nome, email, senha_hash, role, ativo)
-           VALUES ($1, $2, $3, $4, $5, 'admin', true)
-           ON CONFLICT (empresa_id, email) DO UPDATE SET senha_hash = EXCLUDED.senha_hash, ativo = true`,
-          [userId, novoId, admNome, admEmail, senhaHash]
-        );
-      } catch (e) {
-        console.warn('[empresas] Erro ao cadastrar administrador inicial no PG:', e.message);
-      }
+  // 3. Provisionamento de Administrador Inicial com Membership & Acesso Total
+  let adminCriado = null;
+  if (dados.administrador?.email || dados.criarAdminAutomatico === true) {
+    try {
+      adminCriado = await provisionarAdminCompleto(db, novoId, dados.administrador || {}, nomeFantasia);
+    } catch (e) {
+      console.warn('[empresas] Erro ao provisionar administrador completo:', e.message);
+    }
+  }
+
+  // 4. Provisionar Integrações (Storefront Virtual e Parâmetros Fiscais)
+  try {
+    await provisionarIntegracoesIniciais(db, novoId, lojaMatrizId, {
+      nome: nomeFantasia,
+      nomeFantasia,
+      razaoSocial,
+      cnpj: cnpjNormalizadoDoc,
+      inscricaoEstadual: ie,
+      inscricaoMunicipal: im,
+      telefone: tel,
+      email,
+      enderecoLogradouro: logradouro,
+      enderecoNumero: numero,
+      enderecoCidade: cidade,
+      enderecoEstado: estado
+    });
+  } catch (e) {
+    console.warn('[empresas] Erro ao provisionar integrações iniciais:', e.message);
+  }
+
+  // 5. Auto-provisionar Catálogo do Segmento / Template
+  let catalogoProvisionado = null;
+  if (dados.autoProvisionarCatalogo !== false) {
+    try {
+      catalogoProvisionado = provisionarCatalogoSegmento(novoId, tipoNegocio, lojaMatrizId);
+    } catch (e) {
+      console.warn('[empresas] Erro ao provisionar catálogo do segmento:', e.message);
     }
   }
 
@@ -489,6 +515,9 @@ export async function criarEmpresa(db, dados = {}, usuarioOperador = null) {
         criadoEm: new Date().toISOString(),
         atualizadoEm: new Date().toISOString(),
       };
+
+  if (adminCriado) dto.administrador = adminCriado;
+  if (catalogoProvisionado) dto.catalogoInicial = catalogoProvisionado;
 
   // Dispara evento interno de sincronização multiempresa
   try {
@@ -1026,3 +1055,10 @@ export async function gerarDiagnosticoHoldingIa(db) {
     geradoEm: new Date().toISOString(),
   };
 }
+
+export {
+  TEMPLATES_NEGOCIO,
+  provisionarCatalogoSegmento,
+  provisionarAdminCompleto,
+  provisionarIntegracoesIniciais
+};
