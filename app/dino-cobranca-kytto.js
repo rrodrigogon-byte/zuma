@@ -856,6 +856,18 @@ export function expirarSinais(opcoes = {}) {
       }
       const agendamentoId = item.referencia.replace(/^sinal:/, '');
       const agendamento = barbearia.listarAgendamentos(empresaId, {}).find((ag) => ag.id === agendamentoId);
+      const isDino = ['d0d0ac01-8e50-4b61-8c79-de4aaa916da6', 'emp_dino', 'dino'].includes(String(empresaId || '').toLowerCase());
+      if (isDino) {
+        // Na Barbearia Dino: NUNCA cancelar horários automaticamente!
+        // A cobrança do sinal expira para evitar pagamentos tardios não reconciliados,
+        // mas o horário permanece agendado na grade para a equipe humana/atendente entrar em contato.
+        try {
+          barbearia.alterarStatusAgendamento(empresaId, agendamentoId, 'agendado', {
+            observacoes: texto(`${agendamento?.observacoes || ''} · Sinal expirou sem pagamento - manter agendamento e verificar com o cliente`, 600),
+          });
+        } catch (_) {}
+        continue;
+      }
       if (agendamento?.status === 'agendado') {
         try {
           const cancelado = barbearia.alterarStatusAgendamento(empresaId, agendamentoId, 'cancelado', { observacoes: texto(`${agendamento.observacoes || ''} · Cancelado: sinal não pago no prazo`, 600) });

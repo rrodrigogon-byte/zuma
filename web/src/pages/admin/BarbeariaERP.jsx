@@ -1865,10 +1865,11 @@ export default function BarbeariaERP() {
     );
   }
 
-  async function mudarStatus(agendamento, novoStatus) {
+  async function mudarStatus(agendamento, novoStatus, opcoes = {}) {
     const label = STATUS[novoStatus]?.label || novoStatus;
     if (
       novoStatus === "cancelado" &&
+      !opcoes.motivo &&
       !window.confirm(
         `Cancelar o atendimento de ${agendamento.clienteNome || agendamento.cliente_nome || "cliente"}?`,
       )
@@ -1879,13 +1880,22 @@ export default function BarbeariaERP() {
         api.patch(`/api/admin/barbearia/agenda/${agendamento.id}/status`, {
           status: novoStatus,
           registrarFinanceiro: false,
+          ...(novoStatus === "cancelado"
+            ? {
+                origem: "atendente",
+                canceladoPor: "atendente",
+                motivoCancelamento:
+                  opcoes.motivo || "Cancelado pela equipe da barbearia",
+                notificarCliente: opcoes.notificarCliente !== false,
+              }
+            : {}),
         }),
       `Atendimento marcado como ${label.toLowerCase()}.`,
       { mostrarPesquisa: novoStatus === "concluido" },
     );
   }
 
-  async function mudarStatusAtendimento(agendamento, novoStatus) {
+  async function mudarStatusAtendimento(agendamento, novoStatus, opcoes = {}) {
     if (agendamento.status === novoStatus) return;
     const statusAnterior = agendamento.status;
 
@@ -1924,7 +1934,7 @@ export default function BarbeariaERP() {
     }
 
     try {
-      await mudarStatus(agendamento, novoStatus);
+      await mudarStatus(agendamento, novoStatus, opcoes);
     } catch (err) {
       setAgendamentos((prev) =>
         prev.map((item) =>

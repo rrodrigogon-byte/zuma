@@ -3629,6 +3629,18 @@ export function alterarStatusAgendamento(empresaId, agendamentoId, status, dados
   if (novoStatus !== atual.status && !TRANSICOES[atual.status]?.has(novoStatus)) {
     throw new Error(`Transição de ${atual.status} para ${novoStatus} não permitida.`);
   }
+  const isDino = ['d0d0ac01-8e50-4b61-8c79-de4aaa916da6', 'emp_dino', 'dino'].includes(String(empresaId || '').toLowerCase());
+  if (isDino && novoStatus === 'cancelado') {
+    const origem = String(dados.origem || dados.canceladoPor || '').toLowerCase();
+    if (['sistema', 'confirmacao_automatica', 'expiracao_sinal', 'robo', 'bot_autonomo', 'worker_autonomo'].includes(origem)) {
+      const erro = new Error('Na Barbearia Dino, cancelamentos automáticos do sistema são proibidos. O cancelamento só pode ser solicitado pelo cliente ou realizado manualmente pelo atendente.');
+      erro.code = 'CANCELAMENTO_AUTOMATICO_BLOQUEADO';
+      throw erro;
+    }
+  }
+  const canceladoPor = novoStatus === 'cancelado'
+    ? texto(dados.canceladoPor ?? dados.cancelado_por ?? (dados.origem === 'cliente' ? 'cliente' : (dados.origem === 'atendente' ? 'atendente' : atual.canceladoPor || 'equipe')), 80)
+    : atual.canceladoPor;
   if (atual.status === 'concluido' && atual.financeiroLancamentoId && novoStatus !== 'concluido') {
     throw new Error('Não é possível alterar status de atendimento já faturado no financeiro.');
   }
@@ -3638,8 +3650,10 @@ export function alterarStatusAgendamento(empresaId, agendamentoId, status, dados
     status: novoStatus,
     observacoes: texto(dados.observacoes ?? atual.observacoes, 600),
     motivoCancelamento: novoStatus === 'cancelado'
-      ? texto(dados.motivoCancelamento ?? dados.motivo_cancelamento ?? atual.motivoCancelamento, 60)
+      ? texto(dados.motivoCancelamento ?? dados.motivo_cancelamento ?? atual.motivoCancelamento, 120)
       : atual.motivoCancelamento,
+    canceladoPor,
+    origemCancelamento: novoStatus === 'cancelado' ? texto(dados.origem || canceladoPor, 80) : atual.origemCancelamento,
     atualizadoEm: dataAtual(),
   });
   if (novoStatus === 'confirmado') {

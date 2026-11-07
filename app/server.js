@@ -5229,7 +5229,16 @@ app.patch('/api/admin/barbearia/agenda/:id/status', async (req, res) => {
         return res.status(409).json({ error: 'O vínculo financeiro do atendimento precisa de reconciliação manual.', code: 'RECEIPT_RECONCILIATION_REQUIRED' });
       }
     }
-    const dadosStatus = { ...(req.body || {}), lojaId };
+    const canceladoPor = req.user?.nome || req.user?.email || 'Atendente da Barbearia';
+    const dadosStatus = {
+      ...(req.body || {}),
+      lojaId,
+      ...(status === 'cancelado' ? {
+        origem: req.body?.origem || 'atendente',
+        canceladoPor: req.body?.canceladoPor || canceladoPor,
+        motivoCancelamento: req.body?.motivoCancelamento || req.body?.motivo || 'Cancelado pela equipe da barbearia',
+      } : {}),
+    };
     for (const campo of camposPagamento) delete dadosStatus[campo];
     // Vale e cashback são debitados ANTES de concluir e lançar o recebimento: se o
     // débito falhar, nada é gravado; se a conclusão falhar, o débito é desfeito.
@@ -5270,9 +5279,10 @@ app.patch('/api/admin/barbearia/agenda/:id/status', async (req, res) => {
       agendamento = barbeariaErpKytto.vincularLancamentoFinanceiro(empresaId, agendamento.id, financeiro.id) || agendamento;
     }
     if (status === 'cancelado') { try { cobrancaKytto.cancelarSinalPendente(empresaId, agendamento.id, lojaId); } catch (_) { /* não impede o cancelamento */ } }
-    const notificacao = status === 'cancelado'
+    const notificarCliente = req.body?.notificarCliente !== false;
+    const notificacao = status === 'cancelado' && notificarCliente
       ? await queueAppointmentNotifications({ empresaId, lojaId, legacyEmpresaId: empresaId }, agendamento, 'cancelado').catch(() => ({ queued: 0, skipped: true, reason: 'queue_unavailable' }))
-      : { queued: 0, skipped: true, reason: 'event_not_notifiable' };
+      : { queued: 0, skipped: true, reason: notificarCliente ? 'event_not_notifiable' : 'notification_suppressed_by_user' };
     // Captação e retenção: vaga liberada avisa a lista de espera; atendimento
     // concluído recompensa a indicação e desconta a sessão do plano do cliente.
     let listaEspera = null;

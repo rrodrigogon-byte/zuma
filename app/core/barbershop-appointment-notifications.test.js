@@ -94,8 +94,8 @@ test('opt-in enfileira as duas etapas e uma mensagem inicial com prazo explícit
     assert.equal(new Date(second.params[5]).toISOString(), '2030-06-10T11:45:00.000Z');
     assert.ok(payloads.every(({ payload }) => !('phone' in payload)));
     const text = mensagem({ servicos: [servico], profissionais: [profissional], configuracao: { nomePublico: 'Dino Barbearia' } }, agendamento, cliente, 'confirmacao_dia');
-    assert.match(text, /CONFIRMO em até 1 hora/);
-    assert.match(text, /cancelado automaticamente/);
+    assert.match(text, /Passando para confirmar seu horário de hoje/);
+    assert.match(text, /Responda CONFIRMO para confirmar sua presença/);
   } finally { mock.restore(); }
 });
 

@@ -718,7 +718,16 @@ export default function ModoBarbeiro() {
     if (pergunta && !window.confirm(pergunta)) return
     setAcaoEmCurso(agendamento.id); setErro('')
     try {
-      await api.patch(`/api/admin/barbearia/agenda/${agendamento.id}/status`, { status, registrarFinanceiro: false })
+      await api.patch(`/api/admin/barbearia/agenda/${agendamento.id}/status`, {
+        status,
+        registrarFinanceiro: false,
+        ...(status === 'cancelado' ? {
+          origem: 'barbeiro',
+          canceladoPor: 'barbeiro',
+          motivoCancelamento: 'Cancelado pelo profissional no app',
+          notificarCliente: true,
+        } : {}),
+      })
       if (status === 'em_atendimento') tocarSom('iniciar')
       else if (status === 'concluido') tocarSom('sucesso')
       await carregar()

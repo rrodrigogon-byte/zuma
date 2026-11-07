@@ -749,7 +749,13 @@ export async function cancelAppointment(trx, scope, appointmentId) {
   const empresa = chaveEmpresa(scope);
   try {
     const atual = agendamentoDoContato(empresa, scope.phone, appointmentId, scope.lojaId);
-    const cancelado = barbearia.alterarStatusAgendamento(empresa, atual.id, 'cancelado', { lojaId: scope.lojaId, observacoes: `${atual.observacoes ? `${atual.observacoes} · ` : ''}Cancelado pelo cliente no WhatsApp` });
+    const cancelado = barbearia.alterarStatusAgendamento(empresa, atual.id, 'cancelado', {
+      lojaId: scope.lojaId,
+      origem: 'cliente',
+      canceladoPor: 'cliente',
+      motivoCancelamento: 'Cancelado pelo cliente no WhatsApp',
+      observacoes: `${atual.observacoes ? `${atual.observacoes} · ` : ''}Cancelado pelo cliente no WhatsApp`,
+    });
     const contexto = { empresaId: scope.empresaId, lojaId: scope.lojaId, legacyEmpresaId: empresa };
     notificarDepois(contexto, cancelado, 'cancelado');
     const candidatos = captacao.candidatosParaVaga(empresa, atual);

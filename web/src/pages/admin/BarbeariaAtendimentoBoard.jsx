@@ -244,6 +244,8 @@ export default function BarbeariaAtendimentoBoard({
   // Modal de Adicionar Item Rápido na Comanda
   const [modalItemComanda, setModalItemComanda] = useState(null) // { agendamento, comanda }
   const [abaItemComanda, setAbaItemComanda] = useState('produtos') // produtos, servicos
+  // Modal de Confirmação Segura de Cancelamento
+  const [modalCancelamento, setModalCancelamento] = useState(null) // { item, motivo: '', notificarCliente: true, motivoCustom: '' }
 
   // Touch Drag para Mobile
   const [touchDragging, setTouchDragging] = useState(false)
@@ -474,7 +476,13 @@ export default function BarbeariaAtendimentoBoard({
 
   function executarTransicaoComEfeitos(item, novoStatus) {
     if (novoStatus === 'cancelado') {
-      if (!window.confirm(`Deseja cancelar o atendimento de ${item.clienteNome || 'cliente'}?`)) return
+      setModalCancelamento({
+        item,
+        motivo: 'Solicitado pelo cliente via WhatsApp / telefone',
+        motivoCustom: '',
+        notificarCliente: true,
+      })
+      return
     }
     if (novoStatus === 'nao_compareceu') {
       if (!window.confirm(`Marcar que ${item.clienteNome || 'o cliente'} não compareceu?`)) return
@@ -495,6 +503,27 @@ export default function BarbeariaAtendimentoBoard({
     if (onStatusChange) {
       onStatusChange(item, novoStatus)
     }
+    setMenuAbertoId(null)
+    setMoverAbertoId(null)
+    setReatribuirAbertoId(null)
+    setWhatsappMenuId(null)
+  }
+
+  function confirmarCancelamentoModal() {
+    if (!modalCancelamento?.item) return
+    const motivoFinal = modalCancelamento.motivo === 'Outro motivo'
+      ? (modalCancelamento.motivoCustom || 'Outro motivo')
+      : modalCancelamento.motivo
+    tocarSomInterativo('avancar', somAtivo)
+    if (onStatusChange) {
+      onStatusChange(modalCancelamento.item, 'cancelado', {
+        motivo: motivoFinal,
+        notificarCliente: modalCancelamento.notificarCliente,
+        origem: 'atendente',
+        canceladoPor: 'atendente',
+      })
+    }
+    setModalCancelamento(null)
     setMenuAbertoId(null)
     setMoverAbertoId(null)
     setReatribuirAbertoId(null)
@@ -1420,6 +1449,131 @@ export default function BarbeariaAtendimentoBoard({
                   onClick={() => setModalItemComanda(null)}
                 >
                   Fechar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL DE CONFIRMAÇÃO SEGURA DE CANCELAMENTO ── */}
+      {modalCancelamento && (
+        <div className="atendimento-modal-backdrop" onClick={() => setModalCancelamento(null)}>
+          <div className="atendimento-modal-box" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 480 }}>
+            <div className="atendimento-modal-head" style={{ borderBottomColor: '#fecaca', background: '#fff1f2' }}>
+              <h3 style={{ color: '#b91c1c' }}>
+                <XCircle size={18} style={{ color: '#dc2626' }} />
+                Confirmar Cancelamento de Atendimento
+              </h3>
+              <button
+                type="button"
+                className="atendimento-modal-close"
+                onClick={() => setModalCancelamento(null)}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="atendimento-modal-body" style={{ display: 'grid', gap: 14 }}>
+              <div style={{ padding: 12, borderRadius: 10, background: '#f8fafc', border: '1px solid #e2e8f0', fontSize: 13 }}>
+                <div>Cliente: <strong style={{ color: 'var(--navy)' }}>{modalCancelamento.item.clienteNome || 'Cliente'}</strong></div>
+                <div style={{ color: 'var(--muted)', marginTop: 4 }}>
+                  Horário: <strong>{formatarHora(modalCancelamento.item.dataHora)}</strong> · {modalCancelamento.item.servicoNome || 'Serviço'}
+                  {modalCancelamento.item.profissionalNome ? ` com ${modalCancelamento.item.profissionalNome}` : ''}
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, marginBottom: 6 }}>
+                  Motivo do cancelamento:
+                </label>
+                <select
+                  value={modalCancelamento.motivo}
+                  onChange={(e) => setModalCancelamento((prev) => ({ ...prev, motivo: e.target.value }))}
+                  style={{
+                    width: '100%',
+                    padding: '9px 12px',
+                    borderRadius: 9,
+                    border: '1px solid var(--line)',
+                    background: 'var(--card)',
+                    fontSize: 13,
+                  }}
+                >
+                  <option value="Solicitado pelo cliente via WhatsApp / telefone">Solicitado pelo cliente via WhatsApp / telefone</option>
+                  <option value="Imprevisto com o profissional / barbeiro">Imprevisto com o profissional / barbeiro</option>
+                  <option value="Reorganização de agenda da barbearia">Reorganização de agenda da barbearia</option>
+                  <option value="Desistência informada">Desistência informada</option>
+                  <option value="Outro motivo">Outro motivo</option>
+                </select>
+                {modalCancelamento.motivo === 'Outro motivo' && (
+                  <input
+                    type="text"
+                    placeholder="Descreva o motivo brevemente..."
+                    value={modalCancelamento.motivoCustom}
+                    onChange={(e) => setModalCancelamento((prev) => ({ ...prev, motivoCustom: e.target.value }))}
+                    style={{
+                      width: '100%',
+                      boxSizing: 'border-box',
+                      marginTop: 8,
+                      padding: '8px 12px',
+                      borderRadius: 8,
+                      border: '1px solid var(--line)',
+                      fontSize: 13,
+                    }}
+                  />
+                )}
+              </div>
+
+              <div style={{ padding: 10, borderRadius: 10, background: '#f0fdf4', border: '1px solid #bbf7d0' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 9, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: '#166534' }}>
+                  <input
+                    type="checkbox"
+                    checked={modalCancelamento.notificarCliente}
+                    onChange={(e) => setModalCancelamento((prev) => ({ ...prev, notificarCliente: e.target.checked }))}
+                    style={{ width: 16, height: 16, accentColor: '#16a34a' }}
+                  />
+                  Avisar cliente pelo WhatsApp (T-Rex)
+                </label>
+                <p style={{ margin: '6px 0 0 25px', fontSize: 11, color: '#15803d' }}>
+                  {modalCancelamento.notificarCliente
+                    ? (modalCancelamento.motivo.includes('cliente')
+                        ? 'O T-Rex confirmará o cancelamento dizendo que foi a pedido do cliente.'
+                        : 'O T-Rex informará de forma educada que a equipe precisou cancelar o horário, pedindo desculpas e oferecendo novo horário.')
+                    : 'Nenhuma mensagem será enviada ao cliente no WhatsApp (cancelamento apenas interno no sistema).'}
+                </p>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 8 }}>
+                <button
+                  type="button"
+                  style={{
+                    padding: '8px 14px',
+                    borderRadius: 9,
+                    border: '1px solid var(--line)',
+                    background: 'var(--card)',
+                    fontSize: 13,
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                  }}
+                  onClick={() => setModalCancelamento(null)}
+                >
+                  Voltar
+                </button>
+                <button
+                  type="button"
+                  style={{
+                    padding: '8px 16px',
+                    borderRadius: 9,
+                    border: 'none',
+                    background: '#dc2626',
+                    color: '#fff',
+                    fontSize: 13,
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                  }}
+                  onClick={confirmarCancelamentoModal}
+                >
+                  Confirmar Cancelamento
                 </button>
               </div>
             </div>

@@ -232,6 +232,9 @@ export function cancelarAgendamentoCliente(empresaId, { codigo, telefone, motivo
     );
   }
   const atualizado = barbearia.alterarStatusAgendamento(empresaId, agendamento.id, 'cancelado', {
+    origem: 'cliente',
+    canceladoPor: 'cliente',
+    motivoCancelamento: motivo || 'Cancelado pelo cliente no portal',
     observacoes: texto(`${agendamento.observacoes ? `${agendamento.observacoes} · ` : ''}Cancelado pelo cliente${motivo ? `: ${texto(motivo, 200)}` : ''}`, 600),
   });
   return { agendamento: atualizado, visao: visaoPublicaAgendamento(empresaId, atualizado, opcoes) };

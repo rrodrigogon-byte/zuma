@@ -592,6 +592,9 @@ export function mensagem(snapshot, agendamento, cliente, evento, persona = null)
       evento, nome: nomeLimpo, servico, profissional,
       quando: quandoCurto(agendamento), quandoRelativo: quandoRelativo(agendamento),
       loja: snapshot.configuracao?.nomePublico,
+      canceladoPor: agendamento.canceladoPor || agendamento.origemCancelamento,
+      motivo: agendamento.motivoCancelamento,
+      observacoes: agendamento.observacoes,
     });
   }
   const quando = formatarQuando(agendamento);
@@ -600,8 +603,14 @@ export function mensagem(snapshot, agendamento, cliente, evento, persona = null)
   if (evento === EVENTO_CONFIRMACAO_DIA) {
     return `${cabecalho} Passando para confirmar seu horário de hoje: ${quando} (${servico}) com ${profissional}. Responda CONFIRMO para confirmar sua presença, ou REMARCAR se preferir outro horário. Te aguardamos! ${rodape}`;
   }
-  if (evento === 'cancelado' && agendamento.motivoCancelamento === 'falta_confirmacao') return `${cabecalho} Seu agendamento ${quando} foi cancelado automaticamente porque não recebemos a confirmação dentro de 1 hora. O horário foi liberado. Entre em contato com a equipe para escolher outro horário. ${rodape}`;
-  if (evento === 'cancelado') return `${cabecalho} Seu agendamento na ${limpo(snapshot.configuracao.nomePublico || 'barbearia', 120)} foi cancelado. Se precisar, entre em contato para escolher outro horário. ${rodape}`;
+  if (evento === 'cancelado') {
+    const ehCliente = agendamento.canceladoPor === 'cliente' || String(agendamento.observacoes || '').toLowerCase().includes('pelo cliente') || String(agendamento.motivoCancelamento || '').toLowerCase().includes('cliente');
+    if (ehCliente) {
+      return `${cabecalho} Confirmamos o cancelamento do seu agendamento ${quando} (${servico} com ${profissional}), conforme você solicitou. Se precisar agendar um novo horário, estamos à disposição. ${rodape}`;
+    }
+    const motivoTexto = agendamento.motivoCancelamento && !['falta_confirmacao', 'cancelado', 'equipe'].includes(String(agendamento.motivoCancelamento).toLowerCase()) ? ` Motivo: ${limpo(agendamento.motivoCancelamento, 100)}.` : '';
+    return `${cabecalho} A equipe da ${limpo(snapshot.configuracao?.nomePublico || 'barbearia', 120)} precisou cancelar seu agendamento ${quando} (${servico} com ${profissional}). Pedimos desculpas pelo imprevisto!${motivoTexto} Se precisar, entre em contato para escolher outro horário. ${rodape}`;
+  }
   if (evento === 'remarcado') return `${cabecalho} Seu agendamento foi remarcado para ${quando}. Serviço: ${servico}. Profissional: ${profissional}. ${rodape}`;
   if (evento === 'lembrete') return `${cabecalho} Lembrete do seu agendamento ${quandoRelativo(agendamento)}, ${quando}. Serviço: ${servico}. Profissional: ${profissional}. Responda CONFIRMO, REMARCAR ou CANCELO. ${rodape}`;
   return `${cabecalho} Seu agendamento foi registrado para ${quando}. Serviço: ${servico}. Profissional: ${profissional}. ${rodape}`;

@@ -492,15 +492,23 @@ ${SUPPLEMENTS_SAFETY_BLOCK}`;
 // --------------------------------------------------------------------------
 // Lembretes de agenda na voz da persona (fila governada de notificações).
 // --------------------------------------------------------------------------
-export function personaAppointmentMessage(persona, { evento, nome, servico, profissional, quando, quandoRelativo, loja }) {
+export function personaAppointmentMessage(persona, { evento, nome, servico, profissional, quando, quandoRelativo, loja, canceladoPor, motivo, observacoes }) {
   const primeiro = cleanCustomerDisplayName(nome, { firstNameOnly: true }) || clean(nome, 80).split(' ')[0] || '';
   const oi = primeiro ? `Opa, ${primeiro}!` : 'Opa!';
   const rodape = 'Pra não receber avisos, responda SAIR.';
   // "Corte com Dino" + "Dino" saía "Corte com Dino com Dino" (lembrete de 15/10).
   const servicoComQuem = serviceWithProfessional(servico, profissional);
+  const lojaNome = clean(loja, 120) || 'Barbearia Dino';
   if (evento === 'confirmacao_dia') return `${oi} Passando pra confirmar seu horário de hoje: ${quando}, ${servicoComQuem}. Responda CONFIRMO, REMARCAR ou CANCELO. Te esperamos na barbearia! ${rodape}`;
   if (evento === 'lembrete') return `${oi} Passando pra confirmar seu horário de ${quandoRelativo ? `${quandoRelativo}` : 'amanhã'}: ${quando}, ${servicoComQuem}. Responda CONFIRMO, REMARCAR ou CANCELO. ${rodape}`;
   if (evento === 'remarcado') return `${oi} Seu horário mudou: ${quando}, ${servicoComQuem}. ${rodape}`;
-  if (evento === 'cancelado') return `${oi} Seu horário na ${clean(loja, 120) || 'barbearia'} foi cancelado. Quer marcar outro? ${rodape}`;
+  if (evento === 'cancelado') {
+    const ehCliente = canceladoPor === 'cliente' || String(observacoes || '').toLowerCase().includes('pelo cliente') || String(motivo || '').toLowerCase().includes('cliente');
+    if (ehCliente) {
+      return `${oi} Confirmamos o cancelamento do seu horário (${quando}, ${servicoComQuem}) na ${lojaNome}, conforme você solicitou. Se quiser marcar outro dia, só me avisar por aqui! ${rodape}`;
+    }
+    const motivoTexto = motivo && !['falta_confirmacao', 'cancelado', 'equipe'].includes(String(motivo).toLowerCase()) ? ` Motivo: ${clean(motivo, 100)}.` : '';
+    return `${oi} A equipe da ${lojaNome} precisou cancelar o seu agendamento de ${quando} (${servicoComQuem}). Pedimos desculpas pelo imprevisto!${motivoTexto} Quer que eu te ajude a encontrar outro horário que fique melhor pra você? ${rodape}`;
+  }
   return `${oi} Tá marcado: ${quando}, ${servicoComQuem}. ${rodape}`;
 }
