@@ -51,6 +51,12 @@ export default function WhatsappHumanQueue({
   const [claimDialog, setClaimDialog] = useState(null)
   // Encerradas ficam fora do quadro: só aparecem escolhendo o filtro.
   const [filtro, setFiltro] = useState('em_andamento')
+  const [busca, setBusca] = useState('')
+  const [subFiltro, setSubFiltro] = useState('todas')
+  const [somHabilitado, setSomHabilitado] = useState(() => {
+    try { return localStorage.getItem('kytto_wa_som') === 'true' } catch { return false }
+  })
+  const prevUrgentesRef = useRef(0)
   const [claimingId, setClaimingId] = useState('')
   // Conversa aberta no painel lateral (histórico completo + resposta do atendente).
   const [conversaId, setConversaId] = useState('')
@@ -187,7 +193,68 @@ export default function WhatsappHumanQueue({
     return () => clearInterval(timer)
   }, [open, loadQueue])
 
-  const displayedRows = useMemo(() => loadedContextKey === contextKey ? rows : [], [contextKey, loadedContextKey, rows])
+  const baseRows = useMemo(() => loadedContextKey === contextKey ? rows : [], [contextKey, loadedContextKey, rows])
+
+  const stats = useMemo(() => {
+    let urgentes = 0
+    let ia = 0
+    let equipe = 0
+    for (const r of baseRows) {
+      const isUrgente = r.status !== 'encerrado' && (r.precisaAtendente || (r.status === 'humano' && !r.assigned))
+      if (isUrgente) urgentes++
+      else if (r.status === 'humano') equipe++
+      else if (r.status === 'ativo') ia++
+    }
+    return { urgentes, ia, equipe, total: baseRows.length }
+  }, [baseRows])
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return
+    if (stats.urgentes > 0) {
+      document.title = `(🚨 ${stats.urgentes}) Fila WhatsApp · Kytto`
+      if (somHabilitado && stats.urgentes > prevUrgentesRef.current) {
+        try {
+          const ctx = new (window.AudioContext || window.webkitAudioContext)()
+          const osc = ctx.createOscillator()
+          const gain = ctx.createGain()
+          osc.type = 'sine'
+          osc.frequency.setValueAtTime(587.33, ctx.currentTime)
+          osc.frequency.setValueAtTime(880, ctx.currentTime + 0.1)
+          gain.gain.setValueAtTime(0.12, ctx.currentTime)
+          gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3)
+          osc.connect(gain)
+          gain.connect(ctx.destination)
+          osc.start()
+          osc.stop(ctx.currentTime + 0.3)
+        } catch {}
+      }
+    } else {
+      document.title = 'Fila WhatsApp · Kytto'
+    }
+    prevUrgentesRef.current = stats.urgentes
+  }, [stats.urgentes, somHabilitado])
+
+  const displayedRows = useMemo(() => {
+    let list = baseRows
+    if (subFiltro === 'urgentes') {
+      list = list.filter((r) => r.status !== 'encerrado' && (r.precisaAtendente || (r.status === 'humano' && !r.assigned)))
+    } else if (subFiltro === 'ia') {
+      list = list.filter((r) => r.status === 'ativo' && !r.precisaAtendente)
+    } else if (subFiltro === 'equipe') {
+      list = list.filter((r) => r.status === 'humano')
+    }
+
+    const q = busca.trim().toLowerCase()
+    if (!q) return list
+    return list.filter((r) => {
+      const nome = (r.nome || '').toLowerCase()
+      const tel = (r.telefone || '').toLowerCase()
+      const msgC = (r.ultimaMensagemCliente || '').toLowerCase()
+      const msgIa = (r.ultimaRespostaIa || '').toLowerCase()
+      const mot = (r.handoff_label || '').toLowerCase()
+      return nome.includes(q) || tel.includes(q) || msgC.includes(q) || msgIa.includes(q) || mot.includes(q)
+    })
+  }, [baseRows, subFiltro, busca])
 
   function openQueue() {
     openRef.current = true
@@ -373,12 +440,64 @@ export default function WhatsappHumanQueue({
 
     {open && <>
       <div className="wa-human-queue__toolbar" aria-label="Filtros da fila humana">
-        <label className="wa-trex-filtro" htmlFor="wa-trex-filtro">Mostrar
+        <label className="wa-trex-filtro" htmlFor="wa-trex-filtro">Status
           <select id="wa-trex-filtro" value={filtro} onChange={(event) => setFiltro(event.target.value)} disabled={loading || Boolean(claimingId)}>
             {FILTROS_QUADRO.map((item) => <option key={item.valor} value={item.valor}>{item.rotulo}</option>)}
           </select>
         </label>
+        <div className="wa-trex-busca-wrapper">
+          <input
+            type="search"
+            className="wa-trex-busca"
+            placeholder="🔍 Buscar por nome, telefone ou mensagem…"
+            value={busca}
+            onChange={(e) => setBusca(e.target.value)}
+          />
+        </div>
+        <button
+          type="button"
+          className={`c360-btn ghost ${somHabilitado ? 'primary' : ''}`}
+          onClick={() => {
+            const novo = !somHabilitado
+            setSomHabilitado(novo)
+            try { localStorage.setItem('kytto_wa_som', String(novo)) } catch {}
+          }}
+          title="Ativar/desativar aviso sonoro ao chegar nova conversa urgente"
+        >
+          {somHabilitado ? '🔔 Som Ativo' : '🔕 Som Desativado'}
+        </button>
         <button type="button" className="c360-btn ghost" onClick={loadQueue} disabled={loading || Boolean(claimingId)}>{loading ? 'Atualizando…' : 'Atualizar'}</button>
+      </div>
+
+      <div className="wa-trex-stats" role="tablist" aria-label="Filtros rápidos">
+        <button
+          type="button"
+          className={`wa-trex-pill wa-trex-pill--urgente ${subFiltro === 'urgentes' ? 'active' : ''} ${stats.urgentes > 0 ? 'has-urgentes' : ''}`}
+          onClick={() => setSubFiltro(subFiltro === 'urgentes' ? 'todas' : 'urgentes')}
+        >
+          🚨 Coleta Urgente ({stats.urgentes})
+        </button>
+        <button
+          type="button"
+          className={`wa-trex-pill ${subFiltro === 'ia' ? 'active' : ''}`}
+          onClick={() => setSubFiltro(subFiltro === 'ia' ? 'todas' : 'ia')}
+        >
+          🤖 Com T-Rex ({stats.ia})
+        </button>
+        <button
+          type="button"
+          className={`wa-trex-pill ${subFiltro === 'equipe' ? 'active' : ''}`}
+          onClick={() => setSubFiltro(subFiltro === 'equipe' ? 'todas' : 'equipe')}
+        >
+          👤 Com Atendentes ({stats.equipe})
+        </button>
+        <button
+          type="button"
+          className={`wa-trex-pill ${subFiltro === 'todas' ? 'active' : ''}`}
+          onClick={() => setSubFiltro('todas')}
+        >
+          📋 Todas ({stats.total})
+        </button>
       </div>
       <p className="wa-human-queue__scope">Escopo: {safeText(empresaNome, 'empresa atual')} · {safeText(lojaNome, 'unidade atual')} · até {HUMAN_QUEUE_LIMIT} conversas por leitura.</p>
       {quedaWhatsapp && <p className="dadm-note danger" role="alert"><strong>O WhatsApp da loja está desconectado do Kytto{quedaWhatsapp.desde ? ` desde ${queueDateLabel(quedaWhatsapp.desde)}` : ''}.</strong> As mensagens dos clientes chegam no celular, mas o atendente virtual não recebe nem responde. <a href="/admin/whatsapp">Abra a Conexão do WhatsApp</a>, gere o QR e leia pelo celular da loja (WhatsApp › Aparelhos conectados).</p>}

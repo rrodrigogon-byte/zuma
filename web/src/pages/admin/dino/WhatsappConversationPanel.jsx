@@ -8,6 +8,16 @@ const AUTORES = {
   equipe: 'Equipe',
 }
 
+
+const RESPOSTAS_RAPIDAS = [
+  { rotulo: "👋 Olá", texto: "Olá! Sou da equipe de atendimento da barbearia. Como posso te ajudar hoje?" },
+  { rotulo: "💈 Vou ver horários", texto: "Vou conferir a disponibilidade com os barbeiros agora mesmo e já te passo as opções!" },
+  { rotulo: "✅ Confirmado!", texto: "Perfeito! Seu agendamento está 100% confirmado na nossa agenda. Te esperamos!" },
+  { rotulo: "📍 Endereço", texto: "Estamos na barbearia com estacionamento exclusivo e gratuito para clientes." },
+  { rotulo: "💳 Chave PIX", texto: "Nossa chave PIX é o CNPJ 50.073.355/0001-89 (Dino Barbearia)." },
+  { rotulo: "⏳ Um segundinho", texto: "Só um instante enquanto finalizo o atendimento anterior e já continuo com você!" },
+];
+
 const ENTREGA = {
   sending: 'enviando…',
   failed: 'não enviada',
@@ -141,6 +151,13 @@ export default function WhatsappConversationPanel({
         <div>
           <h2 id="wa-conv-titulo">{sessao?.nome || sessao?.telefone || 'Conversa'}</h2>
           <p className="wa-conv__sub">{sessao?.nome ? `${sessao.telefone} · ` : ''}{situacao}</p>
+          <div className="wa-conv__atalhos">
+            <a href="/admin/barbearia?tab=agenda" target="_blank" rel="noreferrer" className="wa-conv__atalho-link">📅 Ver Agenda</a>
+            <a href="/admin/barbearia?tab=clientes" target="_blank" rel="noreferrer" className="wa-conv__atalho-link">👤 Clientes</a>
+            {sessao?.telefone && !sessao.telefone.includes("*") && (
+              <a href={`https://wa.me/55${sessao.telefone.replace(/\D/g, "")}`} target="_blank" rel="noreferrer" className="wa-conv__atalho-link">💬 WhatsApp Web</a>
+            )}
+          </div>
         </div>
         <button type="button" className="c360-btn ghost" onClick={() => onClose?.()} disabled={Boolean(ocupado)} aria-label="Fechar conversa">Fechar</button>
       </header>
@@ -163,12 +180,20 @@ export default function WhatsappConversationPanel({
       </div>
 
       {encerrada ? <p className="wa-conv__rodape">Conversa no histórico. Se o cliente escrever de novo, o T-Rex volta a atender.</p> : <>
-        {podeResponder ? <form className="wa-conv__composer" onSubmit={enviar}>
+        {podeResponder ? <>
+          <div className="wa-conv__macros" aria-label="Respostas Rápidas">
+            {RESPOSTAS_RAPIDAS.map((m, idx) => (
+              <button key={idx} type="button" className="wa-conv__macro-btn" onClick={() => setTexto((prev) => prev ? `${prev} ${m.texto}` : m.texto)} title={m.texto}>
+                {m.rotulo}
+              </button>
+            ))}
+          </div>
+          <form className="wa-conv__composer" onSubmit={enviar}>
           <textarea value={texto} onChange={(event) => setTexto(event.target.value)} rows={3} maxLength={4000}
             placeholder="Responder ao cliente pelo WhatsApp da loja…" disabled={Boolean(ocupado)}
             onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); enviar() } }} />
           <button type="submit" className="c360-btn primary" disabled={!texto.trim() || Boolean(ocupado)}>{ocupado === 'enviar' ? 'Enviando…' : 'Enviar'}</button>
-        </form> : <p className="wa-conv__rodape">
+        </form></> : <p className="wa-conv__rodape">
           {!canAct ? 'Seu acesso permite só ver a conversa.' : outroAtendente ? 'Outro atendente está com esta conversa.' : 'O T-Rex está atendendo. Assuma para responder por aqui.'}
         </p>}
         {canAct && <div className="wa-conv__acoes">

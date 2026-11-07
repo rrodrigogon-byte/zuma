@@ -592,3 +592,27 @@
 .wa-conv__confirma { display: inline-flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 13px; color: var(--fg); }
 .wa-conv__rodape { margin: 0; color: var(--muted); font-size: 13px; }
 @media (max-width: 600px) { .wa-conv { width: 100vw; padding: 12px; } .wa-conv__msg { max-width: 92%; } }
+
+/* Métricas e Pílulas de Filtro Rápido */
+.wa-trex-stats { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0 6px; }
+.wa-trex-pill { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line, #d0d5dd); background: var(--card, #fff); color: var(--fg, #12283f); font-size: 13px; font-weight: 700; cursor: pointer; transition: all .15s ease; }
+.wa-trex-pill:hover { border-color: var(--accent, #4a56a6); }
+.wa-trex-pill.active { background: var(--accent, #4a56a6); border-color: var(--accent, #4a56a6); color: #fff; }
+.wa-trex-pill--urgente { border-color: #22c55e; color: #15803d; }
+.wa-trex-pill--urgente.active { background: #16a34a; border-color: #16a34a; color: #fff; box-shadow: 0 2px 8px rgba(22, 163, 74, 0.4); }
+.wa-trex-pill--urgente.has-urgentes { animation: wa-badge-pulse 1.6s infinite ease-in-out; }
+
+/* Barra de Busca em Tempo Real */
+.wa-trex-busca-wrapper { flex: 1 1 260px; min-width: 220px; }
+.wa-trex-busca { width: 100%; min-height: 38px; padding: 8px 12px; border-radius: 10px; border: 1px solid var(--line, #d0d5dd); background: var(--card, #fff); color: var(--fg, #12283f); font: inherit; font-size: 13px; outline: none; }
+.wa-trex-busca:focus { border-color: #22c55e; box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.2); }
+
+/* Respostas Rápidas (Macros de Atendimento) */
+.wa-conv__macros { display: flex; flex-wrap: wrap; gap: 6px; padding: 4px 0; }
+.wa-conv__macro-btn { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--line, #d0d5dd); background: var(--card, #fff); color: var(--fg, #12283f); font-size: 12px; font-weight: 600; cursor: pointer; transition: all .15s ease; }
+.wa-conv__macro-btn:hover { border-color: #16a34a; background: color-mix(in srgb, #22c55e 10%, #fff); }
+
+/* Atalhos Rápidos no Header da Conversa */
+.wa-conv__atalhos { display: flex; gap: 6px; margin-top: 4px; }
+.wa-conv__atalho-link { font-size: 12px; font-weight: 700; color: var(--accent, #4a56a6); text-decoration: none; display: inline-flex; align-items: center; gap: 4px; padding: 2px 6px; border-radius: 6px; background: color-mix(in srgb, var(--accent, #4a56a6) 10%, transparent); }
+.wa-conv__atalho-link:hover { text-decoration: underline; }
