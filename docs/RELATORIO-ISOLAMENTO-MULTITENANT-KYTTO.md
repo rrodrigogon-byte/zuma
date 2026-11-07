@@ -4,8 +4,8 @@
 **Data:** 07 de Novembro de 2026  
 **Ambiente:** Produção (`https://kytto.com.br` e `https://setpoint.kytto.com.br`)  
 **Serviço Cloud:** Render Web Service (`srv-d8iudokm0tmc73c07iog`)  
-**Status do Deploy:** Ativo / Live  
-**Branches:** `fix/kytto-comandas-pdv-20260808` e `main`  
+**Status do Deploy:** Ativo / Live (`dep-dbnmjtnavr4c73aktbl0`)  
+**Branches:** `fix/kytto-comandas-pdv-20260808` e `main` (commit `de49da71`)  
 **Responsável Técnico:** Equipe de Engenharia e Arquitetura de Software Kytto  
 
 ---
@@ -56,33 +56,45 @@ O módulo de **Onboarding Ágil por Templates** (`app/modules/empresas/onboardin
 
 ## 3. Melhorias Visuais e Operacionais na Agenda da Barbearia
 
-1. **Linha Vermelha Horizontal ao Vivo:**
+1. **Mini Calendário Pop-up Mensal Interativo:**
+   - Botão "Hoje" agora conta com um acionador de dropdown `▼` que abre um pop-up elegante de mini calendário mensal.
+   - Navegação fluida mês a mês (`‹ Mês Anterior | Mês Seguinte ›`), visualização dos dias da semana (Dom a Sáb) e destaque na data selecionada (`#FF6B2C`) e no dia de hoje.
+   - Ao selecionar um dia, a agenda muda instantaneamente e o pop-up se fecha, com atalhos rápidos "Ir para Hoje" e "Fechar".
+2. **Linha Vermelha Horizontal ao Vivo:**
    - Renderizada atravessando toda a largura da tela sobre o grid diário quando a data for hoje.
-   - Monitora e atualiza dinamicamente o minuto exato no fuso de Cuiabá a cada 30 segundos.
-   - Destaque com etiqueta vermelha pulsante indicando a hora exata (`HH:MM ● AGORA`).
-2. **Modo Contínuo 24 Horas (`🌙 24 Horas`):**
+   - Monitora e atualiza dinamicamente o minuto exato no fuso de Cuiabá a cada 30 segundos com etiqueta vermelha pulsante indicando a hora exata (`HH:MM ● AGORA`).
+3. **Modo Contínuo 24 Horas (`🌙 24 Horas`):**
    - Toggle rápido no cabeçalho da agenda para alternar entre o horário comercial padrão (`08h–20h`) e visão 24h contínua (`00h–23h59`), atendendo plenamente à operação noturna e madrugadas da Barbearia Dino.
-3. **Cores Padronizadas dos Status:**
+4. **Cores Padronizadas dos Status:**
    - `confirmado`: **Verde Esmeralda** (`#10b981`), conforme solicitado pelo cliente.
    - `agendado`: **Azul** (`#3b82f6`).
    - `em_atendimento`: **Roxo** (`#8b5cf6`).
    - `aguardando_confirmacao`: **Âmbar** (`#f59e0b`).
    - `concluido`: **Verde Escuro** (`#059669`).
    - `cancelado`: **Vermelho** (`#ef4444`).
-4. **Sub-lanes Paralelas em Sobreposição:**
+5. **Sub-lanes Paralelas em Sobreposição:**
    - Pareamento lado a lado de agendamentos e bloqueios simultâneos, garantindo que nenhum cliente fique oculto na grade.
 
 ---
 
-## 4. Correção Definitiva na Equipe Dino (Preservação de Exclusão de Membros)
+## 4. Unificação Automática de Comandas (Múltiplos Atendimentos & Profissionais)
 
-- **Causa Raiz:** O script `app/dino-equipe-seed.js` executava na inicialização do servidor e forçava `ativo: true, removidoEm: null` sobre todos os membros cadastrados, revertendo exclusões feitas pelo gestor.
-- **Solução:** O seed foi atualizado para checar se o profissional possui `ativo === false` ou `removidoEm`. Nesses casos, o sistema respeita a decisão da barbearia e **não ressuscita** o profissional.
-- **Histórico:** Comandas, atendimentos, faturamentos e comissões passadas do profissional permanecem 100% íntegros no banco de dados.
+- **Detecção Inteligente por Cadastro:** Ao selecionar o cliente (ex: Rodrigo) na abertura da comanda, o sistema localiza automaticamente todos os agendamentos pendentes ou em atendimento daquele cliente ou do mesmo contato telefônico no dia (ex: corte do Rodrigo com o Dino e corte do Pedro com outro barbeiro).
+- **Consolidação em Comanda Única:** Os procedimentos são agrupados automaticamente no carrinho para pagamento e fechamento conjunto.
+- **Rastreabilidade por Profissional:** Cada procedimento mantém individualmente o seu profissional responsável (`profissionalId`), garantindo que o rateio das comissões e bonificações da equipe seja calculado sem qualquer distorção.
+- **Feedback Visual Claro:** Banner informativo em azul avisando a equipe sobre a unificação automática dos agendamentos da família/cliente.
 
 ---
 
-## 5. Fechamento Diário & Conciliação Blindados
+## 5. Correção Definitiva na Equipe Dino (Preservação de Exclusão de Membros)
+
+- **Causa Raiz:** O script `app/dino-equipe-seed.js` executava na inicialização do servidor e forçava `ativo: true, removidoEm: null` sobre todos os membros cadastrados, revertendo exclusões feitas pelo gestor.
+- **Solução:** O seed foi atualizado para checar se o profissional possui `ativo === false` ou `removidoEm`. Nesses casos, o sistema respeita a decisão da barbearia e **não ressuscita** o profissional.
+- **Histórico:** Comandas, atendimentos, faturamentos e comissões passadas do profissional excluído permanecem 100% íntegros no banco de dados.
+
+---
+
+## 6. Fechamento Diário & Conciliação Blindados
 
 - Inclusão do módulo `fechamento-diario` em `TENANT_ADMIN_MODULES`.
 - Endpoint `/api/admin/fechamento-diario/empresas` filtrado estritamente por tenant (inquilinos só enxergam sua própria empresa).
@@ -90,7 +102,7 @@ O módulo de **Onboarding Ágil por Templates** (`app/modules/empresas/onboardin
 
 ---
 
-## 6. Evidências de Homologação em Produção (`https://kytto.com.br`)
+## 7. Evidências de Homologação em Produção (`https://kytto.com.br`)
 
 ```
 === TESTE EM PRODUÇÃO: ONBOARDING ÁGIL & ESCALABILIDADE MULTI-TENANT ===
@@ -119,6 +131,6 @@ Status: 200 OK | Histórico de 3 fechamentos retornado com sucesso
 
 ---
 
-## 7. Conclusão
+## 8. Conclusão
 
-O ERP Kytto opera agora com total estabilidade, segurança e agilidade. O isolamento de dados protege cada inquilino, a criação de novas empresas é instantânea, a agenda atende perfeitamente à operação 24 horas da Barbearia Dino e o fechamento diário está completamente integrado e blindado.
+O ERP Kytto atinge máxima maturidade técnica, estabilidade operacional e excelência em UX. O isolamento multi-tenant está rigorosamente comprovado, o onboarding de novos inquilinos é instantâneo, a agenda 24h com mini calendário mensal agiliza o dia a dia da recepção e as comandas unificadas atendem à dinâmica de atendimento simultâneo de famílias e grupos comissionando corretamente cada barbeiro.
