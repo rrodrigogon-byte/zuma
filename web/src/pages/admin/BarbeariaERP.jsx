@@ -797,6 +797,9 @@ export default function BarbeariaERP() {
   const [formBloqueio, setFormBloqueio] = useState({
     titulo: "",
     motivo: "",
+    dataInicio: "",
+    dataFim: "",
+    diaTodo: false,
     inicioHora: "08:00",
     fimHora: "20:00",
     profissionalId: "",
@@ -804,6 +807,7 @@ export default function BarbeariaERP() {
     dataFimRepeticao: "",
     diasSemana: [1, 2, 3, 4, 5, 6],
   });
+  const [filtroBloqueioProf, setFiltroBloqueioProf] = useState("");
   const [grupoServicos, setGrupoServicos] = useState("todos");
   const [formPlano, setFormPlano] = useState({
     nome: "",
@@ -2636,83 +2640,87 @@ export default function BarbeariaERP() {
     );
   }
 
-  async function salvarBloqueio(event) {
+  async function salvarBloqueio(event, overrideData = null) {
     if (event?.preventDefault) event.preventDefault();
-    const dataAlvo = formBloqueio.data || dataSelecionada;
-    if (formBloqueio.periodo === "apenas_dia") {
-      const inicio = new Date(
-        `${dataAlvo}T${formBloqueio.inicioHora}:00`,
-      ).toISOString();
-      const fim = new Date(
-        `${dataAlvo}T${formBloqueio.fimHora}:00`,
-      ).toISOString();
+    const dados = overrideData || formBloqueio;
+    const dataInicio = dados.dataInicio || dados.data || dataSelecionada || new Date().toISOString().slice(0, 10);
+    const dataFim = dados.dataFim || dados.dataFimRepeticao || dataInicio;
+    const ehDiaTodo = dados.diaTodo === true || dados.periodo === "dia_todo";
+    const inicioH = ehDiaTodo ? "00:00" : (dados.inicioHora || "08:00");
+    const fimH = ehDiaTodo ? "23:59" : (dados.fimHora || "20:00");
+
+    const isSingleDay = dataFim <= dataInicio && ["apenas_dia", "dia_todo", "30_min", "1_hora", "2_horas", "3_horas"].includes(dados.periodo || "apenas_dia");
+
+    if (isSingleDay) {
+      const inicio = new Date(`${dataInicio}T${inicioH}:00`).toISOString();
+      const fim = new Date(`${dataInicio}T${fimH}:59`).toISOString();
       await executar(
         () =>
           api.post("/api/admin/barbearia/bloqueios", {
-            titulo: formBloqueio.titulo || "Bloqueio de agenda",
-            motivo: formBloqueio.motivo,
+            titulo: dados.titulo || "Bloqueio de agenda",
+            motivo: dados.motivo || "",
             inicio,
             fim,
-            profissionalId: formBloqueio.profissionalId,
+            profissionalId: dados.profissionalId || "",
           }),
-        "Bloqueio criado com sucesso.",
+        "Bloqueio criado com sucesso na agenda.",
       );
     } else {
-      let diasLimite = 0;
-      if (formBloqueio.periodo === "uma_semana") diasLimite = 7;
-      else if (formBloqueio.periodo === "15_dias") diasLimite = 15;
-      else if (formBloqueio.periodo === "30_dias") diasLimite = 30;
-      else if (formBloqueio.periodo === "60_dias") diasLimite = 60;
-      else if (formBloqueio.periodo === "1_ano") diasLimite = 365;
-      else if (formBloqueio.periodo === "indeterminado") diasLimite = 1825; // 5 anos
+      let diasLimite = 1;
+      if (dados.periodo === "uma_semana") diasLimite = 7;
+      else if (dados.periodo === "15_dias") diasLimite = 15;
+      else if (dados.periodo === "30_dias") diasLimite = 30;
+      else if (dados.periodo === "60_dias") diasLimite = 60;
+      else if (dados.periodo === "1_ano") diasLimite = 365;
+      else if (dados.periodo === "indeterminado") diasLimite = 1825;
+      else if (dataFim > dataInicio) {
+        const diffMs = new Date(`${dataFim}T12:00:00`).getTime() - new Date(`${dataInicio}T12:00:00`).getTime();
+        diasLimite = Math.max(1, Math.round(diffMs / 86400000) + 1);
+      }
+
       const lote = [];
-      let dataCursor = new Date(`${dataAlvo}T12:00:00`);
+      let dataCursor = new Date(`${dataInicio}T12:00:00`);
       let count = 0;
-      let dataFim = null;
-      if (
-        formBloqueio.periodo === "escolher_data" &&
-        formBloqueio.dataFimRepeticao
-      )
-        dataFim = new Date(`${formBloqueio.dataFimRepeticao}T12:00:00`);
-      while (true) {
-        if (dataFim) {
-          if (dataCursor > dataFim) break;
-        } else {
-          if (count >= diasLimite) break;
-        }
-        if (formBloqueio.diasSemana.includes(dataCursor.getDay())) {
+      let dataFimObj = new Date(`${dataFim}T12:00:00`);
+
+      const diasSemanaValidos = Array.isArray(dados.diasSemana) && dados.diasSemana.length > 0
+        ? dados.diasSemana
+        : [0, 1, 2, 3, 4, 5, 6];
+
+      while (count < diasLimite && dataCursor <= dataFimObj) {
+        if (diasSemanaValidos.includes(dataCursor.getDay())) {
           const isoDia = dataCursor.toISOString().slice(0, 10);
-          const inicio = new Date(
-            `${isoDia}T${formBloqueio.inicioHora}:00`,
-          ).toISOString();
-          const fim = new Date(
-            `${isoDia}T${formBloqueio.fimHora}:00`,
-          ).toISOString();
+          const inicio = new Date(`${isoDia}T${inicioH}:00`).toISOString();
+          const fim = new Date(`${isoDia}T${fimH}:59`).toISOString();
           lote.push({
-            titulo: formBloqueio.titulo || "Bloqueio de agenda",
-            motivo: formBloqueio.motivo,
+            titulo: dados.titulo || "Bloqueio de agenda",
+            motivo: dados.motivo || "",
             inicio,
             fim,
-            profissionalId: formBloqueio.profissionalId,
+            profissionalId: dados.profissionalId || "",
           });
         }
         dataCursor.setDate(dataCursor.getDate() + 1);
         count++;
       }
+
       if (lote.length === 0) {
-        alert("Nenhuma data coincide com os dias da semana selecionados.");
-        return;
+        const inicio = new Date(`${dataInicio}T${inicioH}:00`).toISOString();
+        const fim = new Date(`${dataInicio}T${fimH}:59`).toISOString();
+        lote.push({
+          titulo: dados.titulo || "Bloqueio de agenda",
+          motivo: dados.motivo || "",
+          inicio,
+          fim,
+          profissionalId: dados.profissionalId || "",
+        });
       }
-      if (
-        lote.length > 300 &&
-        !window.confirm(
-          `Você está prestes a criar ${lote.length} bloqueios. Continuar?`,
-        )
-      )
-        return;
+
+      if (lote.length > 300 && !window.confirm(`Você está prestes a criar ${lote.length} bloqueios. Continuar?`)) return;
+
       await executar(
         () => api.post("/api/admin/barbearia/bloqueios", { lote }),
-        `Foram criados ${lote.length} bloqueios na agenda com sucesso.`,
+        `${lote.length} bloqueio(s) criado(s) com sucesso na agenda.`,
       );
     }
     setModal(null);
@@ -5674,34 +5682,84 @@ export default function BarbeariaERP() {
               <div>
                 <h2 style={styles.h2}>Bloqueios da agenda</h2>
                 <p style={styles.sub}>
-                  Indisponibilidade global ou por profissional para{" "}
-                  {fmtDateOnly(dataSelecionada)}.
+                  Bloqueie horários ou dias inteiros para o Dino ou equipe. A IA T-Rex e o link público recusam reservas nestes intervalos.
                 </p>
               </div>
               <strong style={{ color: "#f59e0b" }}>
                 {bloqueios.length} ativos
               </strong>
             </div>
+
+            {/* Presets Rápidos de 1 Clique */}
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14, padding: "10px 12px", background: "rgba(245, 158, 11, 0.08)", borderRadius: 8, border: "1px dashed rgba(245, 158, 11, 0.3)" }}>
+              <span style={{ fontSize: 12, fontWeight: 700, color: "var(--accent)", alignSelf: "center", marginRight: 4 }}>
+                ⚡ Ações Rápidas:
+              </span>
+              <button
+                type="button"
+                style={{ padding: "6px 12px", background: "#f59e0b", color: "#fff", border: "none", borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}
+                onClick={() => {
+                  const dino = profissionais.find(p => /dino/i.test(p.nome));
+                  setFormBloqueio({
+                    titulo: "Ausência / Viagem Dino",
+                    motivo: "Dino ausente (segunda e terça - agenda bloqueada)",
+                    dataInicio: "2026-11-09",
+                    dataFim: "2026-11-10",
+                    diaTodo: true,
+                    inicioHora: "00:00",
+                    fimHora: "23:59",
+                    profissionalId: dino ? dino.id : "",
+                    periodo: "escolher_data",
+                    diasSemana: [1, 2],
+                  });
+                }}
+              >
+                👑 Bloquear Seg e Ter (Dino)
+              </button>
+              <button
+                type="button"
+                style={{ padding: "6px 12px", background: "var(--bg-card)", color: "var(--text)", border: "1px solid var(--border)", borderRadius: 6, fontSize: 12, cursor: "pointer" }}
+                onClick={() => {
+                  const hoje = new Date().toISOString().slice(0, 10);
+                  setFormBloqueio(atual => ({
+                    ...atual,
+                    dataInicio: hoje,
+                    dataFim: hoje,
+                    diaTodo: true,
+                    inicioHora: "00:00",
+                    fimHora: "23:59",
+                    titulo: atual.titulo || "Folga / Ausência",
+                  }));
+                }}
+              >
+                📅 Bloquear Hoje (Dia Todo)
+              </button>
+              <button
+                type="button"
+                style={{ padding: "6px 12px", background: "var(--bg-card)", color: "var(--text)", border: "1px solid var(--border)", borderRadius: 6, fontSize: 12, cursor: "pointer" }}
+                onClick={() => {
+                  const amanha = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+                  setFormBloqueio(atual => ({
+                    ...atual,
+                    dataInicio: amanha,
+                    dataFim: amanha,
+                    diaTodo: true,
+                    inicioHora: "00:00",
+                    fimHora: "23:59",
+                    titulo: atual.titulo || "Folga / Ausência",
+                  }));
+                }}
+              >
+                ⏭️ Bloquear Amanhã (Dia Todo)
+              </button>
+            </div>
+
             <form
               onSubmit={salvarBloqueio}
               style={{ display: "grid", gap: 14 }}
             >
               <div style={styles.formGrid}>
-                <Field label="Título">
-                  <input
-                    required
-                    value={formBloqueio.titulo}
-                    onChange={(event) =>
-                      setFormBloqueio((atual) => ({
-                        ...atual,
-                        titulo: event.target.value,
-                      }))
-                    }
-                    style={inputStyle}
-                    placeholder="Almoço, manutenção…"
-                  />
-                </Field>
-                <Field label="Profissional">
+                <Field label="Profissional *">
                   <select
                     value={formBloqueio.profissionalId}
                     onChange={(event) =>
@@ -5712,45 +5770,113 @@ export default function BarbeariaERP() {
                     }
                     style={inputStyle}
                   >
-                    <option value="">Toda a unidade</option>
+                    <option value="">🏢 Toda a unidade (bloqueio geral)</option>
                     {profissionais
                       .filter((item) => item.ativo !== false)
                       .map((profissional) => (
                         <option key={profissional.id} value={profissional.id}>
-                          {profissional.nome}
+                          {/dino/i.test(profissional.nome) ? ("👑 " + profissional.nome + " (Dino)") : ("💈 " + profissional.nome)}
                         </option>
                       ))}
                   </select>
                 </Field>
-                <Field label="Início">
+                <Field label="Título do Bloqueio *">
                   <input
-                    type="time"
                     required
-                    value={formBloqueio.inicioHora}
+                    value={formBloqueio.titulo}
                     onChange={(event) =>
                       setFormBloqueio((atual) => ({
                         ...atual,
-                        inicioHora: event.target.value,
+                        titulo: event.target.value,
+                      }))
+                    }
+                    style={inputStyle}
+                    placeholder="Ex: Ausência Dino, Folga, Almoço, Manutenção…"
+                  />
+                </Field>
+                <Field label="Data Início *">
+                  <input
+                    type="date"
+                    required
+                    value={formBloqueio.dataInicio || formBloqueio.data || dataSelecionada}
+                    onChange={(event) => {
+                      const v = event.target.value;
+                      setFormBloqueio((atual) => ({
+                        ...atual,
+                        dataInicio: v,
+                        dataFim: atual.dataFim && atual.dataFim >= v ? atual.dataFim : v,
+                      }));
+                    }}
+                    style={inputStyle}
+                  />
+                </Field>
+                <Field label="Data Término (para períodos)">
+                  <input
+                    type="date"
+                    value={formBloqueio.dataFim || formBloqueio.dataInicio || dataSelecionada}
+                    onChange={(event) =>
+                      setFormBloqueio((atual) => ({
+                        ...atual,
+                        dataFim: event.target.value,
                       }))
                     }
                     style={inputStyle}
                   />
                 </Field>
-                <Field label="Fim">
+                <div style={{ gridColumn: "1 / -1", display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", background: "rgba(0,0,0,0.02)", borderRadius: 6, border: "1px solid var(--border)" }}>
                   <input
-                    type="time"
-                    required
-                    value={formBloqueio.fimHora}
-                    onChange={(event) =>
-                      setFormBloqueio((atual) => ({
+                    type="checkbox"
+                    id="chkDiaTodo"
+                    checked={formBloqueio.diaTodo || formBloqueio.periodo === "dia_todo"}
+                    onChange={(e) => {
+                      const checked = e.target.checked;
+                      setFormBloqueio(atual => ({
                         ...atual,
-                        fimHora: event.target.value,
-                      }))
-                    }
-                    style={inputStyle}
+                        diaTodo: checked,
+                        periodo: checked ? "dia_todo" : "apenas_dia",
+                        inicioHora: checked ? "00:00" : (atual.inicioHora === "00:00" ? "08:00" : atual.inicioHora),
+                        fimHora: checked ? "23:59" : (atual.fimHora === "23:59" ? "20:00" : atual.fimHora),
+                      }));
+                    }}
+                    style={{ width: 18, height: 18, cursor: "pointer" }}
                   />
-                </Field>
-                <Field label="Motivo" full>
+                  <label htmlFor="chkDiaTodo" style={{ fontSize: 13, fontWeight: 600, cursor: "pointer", margin: 0 }}>
+                    Bloquear o dia todo (00:00 às 23:59) - Sem atendimentos nesta(s) data(s)
+                  </label>
+                </div>
+                {!(formBloqueio.diaTodo || formBloqueio.periodo === "dia_todo") && (
+                  <>
+                    <Field label="Horário Início">
+                      <input
+                        type="time"
+                        required
+                        value={formBloqueio.inicioHora}
+                        onChange={(event) =>
+                          setFormBloqueio((atual) => ({
+                            ...atual,
+                            inicioHora: event.target.value,
+                          }))
+                        }
+                        style={inputStyle}
+                      />
+                    </Field>
+                    <Field label="Horário Fim">
+                      <input
+                        type="time"
+                        required
+                        value={formBloqueio.fimHora}
+                        onChange={(event) =>
+                          setFormBloqueio((atual) => ({
+                            ...atual,
+                            fimHora: event.target.value,
+                          }))
+                        }
+                        style={inputStyle}
+                      />
+                    </Field>
+                  </>
+                )}
+                <Field label="Motivo / Observações" full>
                   <input
                     value={formBloqueio.motivo}
                     onChange={(event) =>
@@ -5760,11 +5886,12 @@ export default function BarbeariaERP() {
                       }))
                     }
                     style={inputStyle}
+                    placeholder="Opcional: motivo da ausência ou aviso interno"
                   />
                 </Field>
               </div>
               <button type="submit" style={styles.primary} disabled={salvando}>
-                Criar bloqueio
+                🔒 Criar e Salvar Bloqueio na Agenda
               </button>
             </form>
           </Card>
@@ -5858,40 +5985,62 @@ export default function BarbeariaERP() {
         <Card style={{ padding: 18 }}>
           <div style={styles.sectionTitle}>
             <div>
-              <h2 style={styles.h2}>Bloqueios ativos</h2>
+              <h2 style={styles.h2}>Bloqueios ativos da agenda ({bloqueios.length})</h2>
               <p style={styles.sub}>
-                A agenda recusa novos horários que sobreponham estes intervalos.
+                A agenda e a IA T-Rex recusam reservas que sobreponham estes intervalos.
               </p>
             </div>
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <select
+                value={filtroBloqueioProf}
+                onChange={(e) => setFiltroBloqueioProf(e.target.value)}
+                style={{ ...inputStyle, width: "auto", fontSize: 12, padding: "4px 8px" }}
+              >
+                <option value="">Todos os profissionais</option>
+                {profissionais.map(p => (
+                  <option key={p.id} value={p.id}>{p.nome}</option>
+                ))}
+              </select>
+            </div>
           </div>
-          {bloqueios.length === 0 ? (
-            <div style={styles.empty}>Nenhum bloqueio para esta data.</div>
+          {bloqueios.filter(b => !filtroBloqueioProf || b.profissionalId === filtroBloqueioProf).length === 0 ? (
+            <div style={styles.empty}>Nenhum bloqueio cadastrado para os filtros selecionados.</div>
           ) : (
             <div style={{ display: "grid", gap: 8 }}>
-              {bloqueios.map((item) => (
-                <div key={item.id} style={styles.listRow}>
-                  <div>
-                    <strong>{item.titulo}</strong>
-                    <div style={styles.sub}>
-                      {horario(item.inicio)}–{horario(item.fim)} ·{" "}
-                      {item.profissionalId
-                        ? profissionais.find(
-                            (profissional) =>
-                              profissional.id === item.profissionalId,
-                          )?.nome || "Profissional"
-                        : "Toda a unidade"}
-                      {item.motivo ? ` · ${item.motivo}` : ""}
+              {bloqueios
+                .filter(b => !filtroBloqueioProf || b.profissionalId === filtroBloqueioProf)
+                .map((item) => {
+                  const prof = item.profissionalId ? profissionais.find(p => p.id === item.profissionalId) : null;
+                  const ehDiaTodo = (item.inicio && item.fim && item.inicio.slice(11, 16) === "00:00" && item.fim.slice(11, 16) === "23:59") || (horario(item.inicio) === "00:00" && (horario(item.fim) === "23:59" || horario(item.fim) === "00:00"));
+                  return (
+                    <div key={item.id} style={{ ...styles.listRow, borderLeft: prof && /dino/i.test(prof.nome) ? "4px solid #f59e0b" : "4px solid var(--accent)" }}>
+                      <div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                          <strong style={{ fontSize: 14 }}>{item.titulo}</strong>
+                          <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 10, background: prof && /dino/i.test(prof.nome) ? "rgba(245, 158, 11, 0.15)" : "rgba(37, 99, 235, 0.1)", color: prof && /dino/i.test(prof.nome) ? "#b45309" : "var(--accent)", fontWeight: 600 }}>
+                            {prof ? (/dino/i.test(prof.nome) ? ("👑 " + prof.nome) : ("💈 " + prof.nome)) : "🏢 Toda a Unidade"}
+                          </span>
+                          {ehDiaTodo && (
+                            <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 10, background: "rgba(239, 68, 68, 0.1)", color: "#b91c1c", fontWeight: 600 }}>
+                              Dia Todo
+                            </span>
+                          )}
+                        </div>
+                        <div style={styles.sub}>
+                          📅 {fmtDateOnly(item.inicio.slice(0, 10))} {item.inicio.slice(0, 10) !== item.fim.slice(0, 10) ? (" até " + fmtDateOnly(item.fim.slice(0, 10))) : ""} · 🕒 {horario(item.inicio)}–{horario(item.fim)}
+                          {item.motivo ? (" · Motivo: " + item.motivo) : ""}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        style={{ ...styles.small, color: "#dc2626", borderColor: "#fca5a5", cursor: "pointer" }}
+                        onClick={() => desativarBloqueio(item)}
+                      >
+                        🗑️ Desbloquear
+                      </button>
                     </div>
-                  </div>
-                  <button
-                    type="button"
-                    style={styles.small}
-                    onClick={() => desativarBloqueio(item)}
-                  >
-                    Desativar
-                  </button>
-                </div>
-              ))}
+                  );
+                })}
             </div>
           )}
         </Card>
