@@ -111,6 +111,18 @@ const APELIDOS_PROFISSIONAIS = {
   'amanda': ['amanda gabrielly santos da silva', 'amanda'],
 };
 
+const APELIDOS_SERVICOS = {
+  'corte e barba': ['corte e barba', 'combo corte e barba'],
+  'cabelo e barba': ['corte e barba', 'combo corte e barba'],
+  'combo': ['corte e barba', 'combo corte e barba'],
+  'sobrancelha': ['design de sobrancelha', 'sobrancelha (navalha)', 'sobrancelha'],
+  'pezinho': ['pezinho', 'acabamento'],
+  'corte infantil': ['corte infantil'],
+  'infantil': ['corte infantil'],
+  'corte com dino': ['corte com dino'],
+  'barba com dino': ['barba com o dino', 'barba com dino'],
+};
+
 export function matchAgendaName(value, items = []) {
   const alvo = nomeComparavel(value);
   if (!alvo) return { item: null, candidatos: [] };
@@ -121,6 +133,14 @@ export function matchAgendaName(value, items = []) {
     const achado = items.find((item) => {
       const n = nomeComparavel(item?.nome);
       return correspondencias.some((c) => n.includes(c) || c.includes(n));
+    });
+    if (achado) return { item: achado, candidatos: [achado] };
+  }
+  if (semPreposicao in APELIDOS_SERVICOS) {
+    const correspondencias = APELIDOS_SERVICOS[semPreposicao];
+    const achado = items.find((item) => {
+      const n = nomeComparavel(item?.nome);
+      return correspondencias.some((c) => n === c || n.includes(c));
     });
     if (achado) return { item: achado, candidatos: [achado] };
   }
@@ -738,9 +758,15 @@ function localTimeHHMM(now = new Date()) {
 
 async function toolNextSlots(context, args = {}) {
   const scope = contextScope(context);
-  if (!cleanText(args.serviceId, 100)) throw new WhatsappAiToolError('informe o serviço (id de listar_servicos)', 'SERVICE_REQUIRED');
-  const serviceId = await resolveAgendaId(scope, args.serviceId, 'serviceId');
-  const professionalId = await resolveAgendaId(scope, args.professionalId, 'professionalId', { allowAny: true });
+  let rawService = cleanText(args.serviceId, 100);
+  if (!rawService) {
+    const servicos = await listSchedulingServices(scope).catch(() => []);
+    const principal = (servicos || []).find((s) => /corte/i.test(s.nome)) || servicos?.[0];
+    if (principal?.id) rawService = principal.id;
+    else throw new WhatsappAiToolError('informe o serviço (id de listar_servicos)', 'SERVICE_REQUIRED');
+  }
+  const serviceId = await resolveAgendaId(scope, rawService, 'serviceId');
+  const professionalId = await resolveAgendaId(scope, args.professionalId || 'qualquer', 'professionalId', { allowAny: true });
   const today = localDateIso();
   const askedFrom = normalizeAgendaDate(args.fromDate, today);
   const fromDate = askedFrom && askedFrom >= today ? askedFrom : today;
@@ -1099,8 +1125,14 @@ async function toolPrepareExpense(context) {
 }
 async function toolPrepareAppointment(context, args = {}) {
   const scope = contextScope(context);
-  const serviceId = await resolveAgendaId(scope, args.serviceId, 'serviceId');
-  const professionalId = await resolveAgendaId(scope, args.professionalId, 'professionalId', { allowAny: true });
+  let rawService = cleanText(args.serviceId, 100);
+  if (!rawService) {
+    const servicos = await listSchedulingServices(scope).catch(() => []);
+    const principal = (servicos || []).find((s) => /corte/i.test(s.nome)) || servicos?.[0];
+    if (principal?.id) rawService = principal.id;
+  }
+  const serviceId = await resolveAgendaId(scope, rawService, 'serviceId');
+  const professionalId = await resolveAgendaId(scope, args.professionalId || 'qualquer', 'professionalId', { allowAny: true });
   // O modelo repete o que o cliente falou ("11h", "sexta", "14/10"); a agenda usa 11:00 e AAAA-MM-DD.
   const date = normalizeAgendaDate(args.date, localDateIso()) || cleanText(args.date, 10);
   const availability = await listSchedulingAvailability(scope, { serviceId, professionalId, date });
