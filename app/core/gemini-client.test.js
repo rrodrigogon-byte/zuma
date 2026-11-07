@@ -222,7 +222,7 @@ test('WhatsApp recupera resposta vazia uma vez preservando resultados de ferrame
     });
     assert.match(result.text, /19h/); assert.equal(executions, 1);
     assert.deepEqual(requests[2].contents, requests[1].contents);
-    assert.equal(requests[0].generationConfig.thinkingConfig.thinkingBudget, 512);
+    assert.equal(requests[0].generationConfig.thinkingConfig.thinkingBudget, 0);
     assert.equal(requests[0].generationConfig.maxOutputTokens, 2048);
     assert.deepEqual(result.traces, [{ name: 'consultar_disponibilidade', ok: true }]);
   } finally {

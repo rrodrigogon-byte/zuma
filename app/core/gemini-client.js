@@ -135,9 +135,13 @@ export async function runGeminiWithTools({
   let repairedEmptyReply = false;
   // O limite de saída também inclui raciocínio. Reservar espaço para texto no
   // modelo usado pelo WhatsApp evita consumir os 900 tokens só em pensamento.
+  const thinkingBudget = Number.isInteger(Number(process.env.GEMINI_THINKING_BUDGET))
+    ? Number(process.env.GEMINI_THINKING_BUDGET)
+    : 0;
   const generationConfig = requireCompletedReply && model === 'gemini-2.5-flash'
     // Temperatura menor: mais precisão ao escolher ferramenta, data e horário (menos variação).
-    ? { temperature: 0.2, maxOutputTokens: 2048, thinkingConfig: { thinkingBudget: 512 } }
+    // thinkingBudget 0 entrega resposta ultra rápida (<600ms) no WhatsApp sem latência de raciocínio.
+    ? { temperature: 0.2, maxOutputTokens: 2048, thinkingConfig: { thinkingBudget } }
     : { temperature: 0.2, maxOutputTokens: 900 };
 
   for (let step = 0; step < maxSteps; step += 1) {
