@@ -1941,3 +1941,30 @@
   background: #ef4444;
   border-color: #ef4444;
 }
+
+/* ── ESTILO AVEC: LINHAS LADO A LADO PARA BLOQUEIOS E ENCAIXES SIMULTÂNEOS ── */
+.dino-cal-avec-split-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  width: 100%;
+  align-items: stretch;
+}
+
+.dino-cal-avec-single-row {
+  width: 100%;
+}
+
+/* Cores Fiéis ao Avec (Verde Pinho para Agendamento Regular) */
+.dino-cal-event-card[data-status="agendado"],
+.dino-cal-event-card[data-status="confirmado"] {
+  background: #1e463a !important;
+  border-left: 5px solid #10b981 !important;
+  border: 1px solid #16362d !important;
+  color: #ffffff !important;
+}
+
+.dino-cal-event-card[data-status="agendado"] *,
+.dino-cal-event-card[data-status="confirmado"] * {
+  color: #ffffff !important;
+}

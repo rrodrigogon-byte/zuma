@@ -160,6 +160,101 @@ function processarItensEEncaixes(lista) {
   return combinada;
 }
 
+function prepararLinhasAvec(itens) {
+  if (!Array.isArray(itens) || itens.length === 0) return [];
+
+  function toMins(h) {
+    if (!h) return 0;
+    const [hh, mm] = String(h).split(':').map(Number);
+    return (hh || 0) * 60 + (mm || 0);
+  }
+
+  const bloqueios = itens.filter((it) => it.isBloqueio);
+  const agendamentos = itens.filter((it) => !it.isBloqueio);
+
+  bloqueios.sort((a, b) => (horaDoItem(a) || '00:00').localeCompare(horaDoItem(b) || '00:00'));
+  agendamentos.sort((a, b) => (horaDoItem(a) || '00:00').localeCompare(horaDoItem(b) || '00:00'));
+
+  const linhas = [];
+  const bloqueiosUsados = new Set();
+  const agendamentosUsados = new Set();
+
+  for (let i = 0; i < agendamentos.length; i++) {
+    const ag = agendamentos[i];
+    if (agendamentosUsados.has(ag.id)) continue;
+
+    const agHora = horaDoItem(ag);
+    const agIni = toMins(agHora);
+    const agDur = Number(ag.duracao || ag.duracaoMinutos || 30);
+    const agFim = agIni + agDur;
+
+    // Checa bloqueio sobreposto
+    const blkCoincidente = bloqueios.find((b) => {
+      if (bloqueiosUsados.has(b.id)) return false;
+      const bHora = b.horaLocal || '08:00';
+      const bIni = toMins(bHora);
+      const bDur = Number(b.duracao || 60);
+      const bFim = bIni + bDur;
+      return agIni < bFim && agFim > bIni;
+    });
+
+    if (blkCoincidente) {
+      agendamentosUsados.add(ag.id);
+      bloqueiosUsados.add(blkCoincidente.id);
+      linhas.push({
+        tipo: 'par_bloqueio_agendamento',
+        hora: agHora,
+        agendamento: ag,
+        bloqueio: blkCoincidente,
+      });
+      continue;
+    }
+
+    // Checa agendamento sobreposto (outro encaixe)
+    const agSobreposto = agendamentos.find((outro, j) => {
+      if (i === j || agendamentosUsados.has(outro.id)) return false;
+      const outroHora = horaDoItem(outro);
+      const outroIni = toMins(outroHora);
+      const outroDur = Number(outro.duracao || outro.duracaoMinutos || 30);
+      const outroFim = outroIni + outroDur;
+      return agIni < outroFim && agFim > outroIni;
+    });
+
+    if (agSobreposto) {
+      agendamentosUsados.add(ag.id);
+      agendamentosUsados.add(agSobreposto.id);
+      linhas.push({
+        tipo: 'par_agendamentos',
+        hora: agHora,
+        principal: ag,
+        encaixe: agSobreposto,
+      });
+      continue;
+    }
+
+    agendamentosUsados.add(ag.id);
+    linhas.push({
+      tipo: 'individual',
+      hora: agHora,
+      item: ag,
+    });
+  }
+
+  // Bloqueios restantes não pareados
+  for (const b of bloqueios) {
+    if (bloqueiosUsados.has(b.id)) continue;
+    bloqueiosUsados.add(b.id);
+    linhas.push({
+      tipo: 'individual',
+      hora: b.horaLocal || '08:00',
+      item: b,
+    });
+  }
+
+  linhas.sort((a, b) => (a.hora || '00:00').localeCompare(b.hora || '00:00'));
+  return linhas;
+}
+
 export const MODELOS_AGENDA = [
   {
     id: "avec_colunas",
@@ -942,6 +1037,100 @@ export default function BarbeariaAgendaPeriodo({
     if (modo === "mes") return mesAnoLegivel(de);
     return `${diaLegivel(de)} a ${diaLegivel(ate)}`;
   }, [modo, de, ate]);
+
+  function renderItemCard(item, { ePar = false } = {}) {
+    if (item.isBloqueio) {
+      return (
+        <div
+          key={item.id}
+          className="dino-cal-event-card dino-cal-block-card"
+          data-status="bloqueado"
+          title={`Bloqueio: ${item.clienteNome} (${item.servicoNome})`}
+        >
+          <div className="dino-cal-event-time">
+            <span>🔒 {item.horaLocal} {item.horaFimLocal ? `– ${item.horaFimLocal}` : ""}</span>
+            <span className="dino-cal-block-badge">BLOQUEIO</span>
+          </div>
+          <div className="dino-cal-event-client" style={{ color: "#fff", fontWeight: 800 }}>
+            {item.clienteNome?.replace(/^🔒\s*/, "") || "Horário Bloqueado"}
+          </div>
+          <div className="dino-cal-event-service" style={{ color: "#cbd5e1" }}>
+            {item.servicoNome || "Indisponível"}
+          </div>
+          <div className="dino-cal-event-footer" style={{ marginTop: 4, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <span style={{ fontSize: 10, color: "#cbd5e1" }}>
+              {item.duracao ? `${item.duracao}m` : "Período"}
+            </span>
+            {onDesativarBloqueio && (
+              <button
+                type="button"
+                className="dino-cal-block-action-btn"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDesativarBloqueio(item.rawBloqueio || item);
+                }}
+                title="Desativar este bloqueio e liberar horário"
+              >
+                ✕ Desativar
+              </button>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    const hora = horaDoItem(item);
+    const valorFormatado = formatarMoeda(item.valor);
+    const eEncaixe = item.isEncaixe;
+
+    return (
+      <button
+        type="button"
+        key={item.id}
+        className={`dino-cal-event-card ${eEncaixe ? "is-encaixe" : ""}`}
+        data-status={eEncaixe ? "encaixe" : getAgendaSlotStatus(item)}
+        data-encaixe={eEncaixe ? "true" : "false"}
+        onClick={() =>
+          item.status === "em_atendimento" || item.status === "concluido"
+            ? onConferirComanda?.(item)
+            : onOpenAppointment?.(item)
+        }
+        title={
+          eEncaixe
+            ? `⚡ ENCAIXE: ${item.clienteNome || "Cliente"} às ${hora}. ${item.noBloqueio ? "Agendado durante bloqueio!" : "Sobreposição na agenda!"}`
+            : `Clique para gerenciar ou remanejar o agendamento de ${item.clienteNome || item.cliente_nome}`
+        }
+      >
+        <div className="dino-cal-event-time">
+          <span>{hora}</span>
+          <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+            {eEncaixe && (
+              <span className="dino-cal-encaixe-pill" title="Atendimento de encaixe na grade">
+                ⚡ ENCAIXE {item.noBloqueio ? "NO BLOQUEIO" : ""}
+              </span>
+            )}
+            {valorFormatado && !ePar && (
+              <span className="dino-cal-event-val">{valorFormatado}</span>
+            )}
+          </div>
+        </div>
+        <div className="dino-cal-event-client">
+          {item.clienteNome || item.cliente_nome || "Cliente sem nome"}
+        </div>
+        <div className="dino-cal-event-service">
+          {item.servicoNome || item.servico_nome || "Serviço"}
+        </div>
+        <div className="dino-cal-event-footer">
+          {item.origem === "whatsapp_ia" && (
+            <span className="dino-cal-event-wpp-badge">🤖 IA</span>
+          )}
+          <span className="dino-cal-event-status-badge">
+            {eEncaixe ? "⚡ Encaixe" : (STATUS[item.status] || item.status)}
+          </span>
+        </div>
+      </button>
+    );
+  }
 
   return (
     <section className="dino-cal" aria-label="Agenda visual da Barbearia Dino">
@@ -1781,10 +1970,28 @@ export default function BarbeariaAgendaPeriodo({
                                 >
                                   {barbeiro.apelido || barbeiro.nome}
                                 </span>
-                                <span className="dino-cal-barber-badge">
-                                  {itensBarbeiro.length} agendamento
-                                  {itensBarbeiro.length === 1 ? "" : "s"}
-                                </span>
+                                <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+                                  <span className="dino-cal-barber-badge">
+                                    {itensBarbeiro.filter((it) => !it.isBloqueio).length} agendamento
+                                    {itensBarbeiro.filter((it) => !it.isBloqueio).length === 1 ? "" : "s"}
+                                  </span>
+                                  {itensBarbeiro.some((it) => it.isBloqueio) && (
+                                    <span
+                                      style={{
+                                        fontSize: 10,
+                                        fontWeight: 700,
+                                        background: "rgba(100, 116, 139, 0.25)",
+                                        color: "#cbd5e1",
+                                        padding: "1px 5px",
+                                        borderRadius: 4,
+                                        border: "1px solid rgba(148, 163, 184, 0.3)",
+                                      }}
+                                      title={itensBarbeiro.filter((it) => it.isBloqueio).map((b) => `${b.horaLocal}: ${b.servicoNome || b.clienteNome}`).join(", ")}
+                                    >
+                                      🔒 {itensBarbeiro.filter((it) => it.isBloqueio).length} bloqueio(s)
+                                    </span>
+                                  )}
+                                </div>
                               </div>
                             </div>
 
@@ -1828,104 +2035,27 @@ export default function BarbeariaAgendaPeriodo({
 
                           {/* Corpo da Coluna: Agendamentos do Barbeiro */}
                           <div className="dino-cal-barber-body">
-                          {itensBarbeiro.map((item) => {
-                             if (item.isBloqueio) {
-                               return (
-                                 <div
-                                   key={item.id}
-                                   className="dino-cal-event-card dino-cal-block-card"
-                                   data-status="bloqueado"
-                                   title={`Bloqueio: ${item.clienteNome} (${item.servicoNome})`}
-                                 >
-                                   <div className="dino-cal-event-time">
-                                     <span>🔒 {item.horaLocal} {item.horaFimLocal ? `– ${item.horaFimLocal}` : ""}</span>
-                                     <span className="dino-cal-block-badge">BLOQUEIO</span>
-                                   </div>
-                                   <div className="dino-cal-event-client" style={{ color: "#fff", fontWeight: 800 }}>
-                                     {item.clienteNome?.replace(/^🔒\s*/, "") || "Horário Bloqueado"}
-                                   </div>
-                                   <div className="dino-cal-event-service" style={{ color: "#cbd5e1" }}>
-                                     {item.servicoNome || "Indisponível"}
-                                   </div>
-                                   <div className="dino-cal-event-footer" style={{ marginTop: 6, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                                     <span style={{ fontSize: 10.5, color: "#94a3b8" }}>
-                                       {item.duracao ? `${item.duracao} min` : "Período"}
-                                     </span>
-                                     {onDesativarBloqueio && (
-                                       <button
-                                         type="button"
-                                         className="dino-cal-block-action-btn"
-                                         onClick={(e) => {
-                                           e.stopPropagation();
-                                           onDesativarBloqueio(item.rawBloqueio || item);
-                                         }}
-                                         title="Desativar este bloqueio e liberar horário"
-                                       >
-                                         ✕ Desativar
-                                       </button>
-                                     )}
-                                   </div>
-                                 </div>
-                               );
-                             }
-
-                             const hora = horaDoItem(item);
-                             const valorFormatado = formatarMoeda(item.valor);
-                             const eEncaixe = item.isEncaixe;
-
-                             return (
-                              <button
-                                type="button"
-                                key={item.id}
-                                className={`dino-cal-event-card ${eEncaixe ? "is-encaixe" : ""}`}
-                                data-status={eEncaixe ? "encaixe" : getAgendaSlotStatus(item)}
-                                data-encaixe={eEncaixe ? "true" : "false"}
-                                onClick={() =>
-                                  item.status === "em_atendimento" ||
-                                  item.status === "concluido"
-                                      ? onConferirComanda?.(item)
-                                      : onOpenAppointment?.(item)
-                                }
-                                title={
-                                  eEncaixe
-                                    ? `⚡ ENCAIXE: ${item.clienteNome || "Cliente"} às ${hora}. ${item.noBloqueio ? "Agendado durante bloqueio!" : "Sobreposição na agenda!"}`
-                                    : `Clique para gerenciar ou remanejar o agendamento de ${item.clienteNome || item.cliente_nome}`
-                                }
-                              >
-                                <div className="dino-cal-event-time">
-                                  <span>{hora}</span>
-                                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                                    {eEncaixe && (
-                                      <span className="dino-cal-encaixe-pill" title="Atendimento de encaixe na grade">
-                                        ⚡ ENCAIXE {item.noBloqueio ? "NO BLOQUEIO" : ""}
-                                      </span>
-                                    )}
-                                    {valorFormatado && (
-                                      <span className="dino-cal-event-val">{valorFormatado}</span>
-                                    )}
-                                  </div>
+                          {prepararLinhasAvec(itensBarbeiro).map((linha, lIdx) => {
+                            if (linha.tipo === "par_bloqueio_agendamento") {
+                              return (
+                                <div key={`par-blk-${lIdx}`} className="dino-cal-avec-split-row">
+                                  {renderItemCard(linha.agendamento, { ePar: true })}
+                                  {renderItemCard(linha.bloqueio, { ePar: true })}
                                 </div>
-                                <div className="dino-cal-event-client">
-                                  {item.clienteNome ||
-                                    item.cliente_nome ||
-                                    "Cliente sem nome"}
+                              );
+                            }
+                            if (linha.tipo === "par_agendamentos") {
+                              return (
+                                <div key={`par-ag-${lIdx}`} className="dino-cal-avec-split-row">
+                                  {renderItemCard(linha.principal, { ePar: true })}
+                                  {renderItemCard(linha.encaixe, { ePar: true })}
                                 </div>
-                                <div className="dino-cal-event-service">
-                                  {item.servicoNome ||
-                                    item.servico_nome ||
-                                    "Serviço"}
-                                </div>
-                                <div className="dino-cal-event-footer">
-                                  {item.origem === "whatsapp_ia" && (
-                                    <span className="dino-cal-event-wpp-badge">
-                                      🤖 WhatsApp IA
-                                    </span>
-                                  )}
-                                  <span className="dino-cal-event-status-badge">
-                                    {eEncaixe ? "⚡ Encaixe" : (STATUS[item.status] || item.status)}
-                                  </span>
-                                </div>
-                              </button>
+                              );
+                            }
+                            return (
+                              <div key={`ind-${linha.item.id || lIdx}`} className="dino-cal-avec-single-row">
+                                {renderItemCard(linha.item, { ePar: false })}
+                              </div>
                             );
                           })}
 
@@ -1995,60 +2125,29 @@ export default function BarbeariaAgendaPeriodo({
                           </div>
                         </div>
                         <div className="dino-cal-barber-body">
-                         {agendamentosPorBarbeiroNoDia.semBarbeiro.map(
-                           (item) => {
-                             const hora = horaDoItem(item);
-                             const valorFormatado = formatarMoeda(item.valor);
-                             const eEncaixe = item.isEncaixe;
-                             return (
-                             <button
-                               type="button"
-                               key={item.id}
-                               className={`dino-cal-event-card ${eEncaixe ? "is-encaixe" : ""}`}
-                               data-status={eEncaixe ? "encaixe" : getAgendaSlotStatus(item)}
-                               data-encaixe={eEncaixe ? "true" : "false"}
-                               onClick={() =>
-                                  item.isBloqueio
-                                    ? null
-                                    : item.status === "em_atendimento" ||
-                                        item.status === "concluido"
-                                      ? onConferirComanda?.(item)
-                                      : onOpenAppointment?.(item)
-                                }
-                                title={eEncaixe ? `⚡ ENCAIXE: ${item.clienteNome || "Cliente"} às ${hora}` : "Clique para designar um barbeiro ou remanejar"}
-                              >
-                                <div className="dino-cal-event-time">
-                                  <span>{hora}</span>
-                                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                                    {eEncaixe && (
-                                      <span className="dino-cal-encaixe-pill" title="Atendimento de encaixe">
-                                        ⚡ ENCAIXE
-                                      </span>
-                                    )}
-                                    {valorFormatado && (
-                                      <span className="dino-cal-event-val">{valorFormatado}</span>
-                                    )}
-                                  </div>
+                          {prepararLinhasAvec(agendamentosPorBarbeiroNoDia.semBarbeiro).map((linha, lIdx) => {
+                            if (linha.tipo === "par_bloqueio_agendamento") {
+                              return (
+                                <div key={`sem-par-blk-${lIdx}`} className="dino-cal-avec-split-row">
+                                  {renderItemCard(linha.agendamento, { ePar: true })}
+                                  {renderItemCard(linha.bloqueio, { ePar: true })}
                                 </div>
-                                <div className="dino-cal-event-client">
-                                  {item.clienteNome ||
-                                    item.cliente_nome ||
-                                    "Cliente sem nome"}
+                              );
+                            }
+                            if (linha.tipo === "par_agendamentos") {
+                              return (
+                                <div key={`sem-par-ag-${lIdx}`} className="dino-cal-avec-split-row">
+                                  {renderItemCard(linha.principal, { ePar: true })}
+                                  {renderItemCard(linha.encaixe, { ePar: true })}
                                 </div>
-                                <div className="dino-cal-event-service">
-                                  {item.servicoNome ||
-                                    item.servico_nome ||
-                                    "Serviço"}
-                                </div>
-                                <div className="dino-cal-event-footer">
-                                  <span className="dino-cal-event-status-badge">
-                                    {eEncaixe ? "⚡ Encaixe" : (STATUS[item.status] || item.status)}
-                                  </span>
-                                </div>
-                              </button>
+                              );
+                            }
+                            return (
+                              <div key={`sem-ind-${linha.item.id || lIdx}`} className="dino-cal-avec-single-row">
+                                {renderItemCard(linha.item, { ePar: false })}
+                              </div>
                             );
-                           },
-                          )}
+                          })}
                         </div>
                       </div>
                     )}
