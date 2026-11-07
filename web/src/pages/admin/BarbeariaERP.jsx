@@ -1338,8 +1338,25 @@ export default function BarbeariaERP() {
     hora,
     profissionalId,
     servicoId,
+    abrirBloqueio,
   }) {
     setDataSelecionada(data);
+    if (abrirBloqueio) {
+      setFormBloqueio({
+        titulo: "Ausência / Folga",
+        motivo: "",
+        dataInicio: data || dataSelecionada,
+        dataFim: data || dataSelecionada,
+        diaTodo: true,
+        inicioHora: "00:00",
+        fimHora: "23:59",
+        profissionalId: profissionalId || "",
+        periodo: "dia_todo",
+        diasSemana: [1, 2, 3, 4, 5, 6],
+      });
+      setModal("bloqueioAgenda");
+      return;
+    }
     setFormAgenda({
       clienteId: "",
       clienteNome: "",
@@ -7600,6 +7617,19 @@ export default function BarbeariaERP() {
     if (modal === "bloqueioAgenda") {
       const atalhos = [
         {
+          rotulo: "👑 Seg e Ter (Dino)",
+          titulo: "Ausência Dino",
+          motivo: "Dino ausente (segunda e terça - agenda bloqueada)",
+          inicio: "00:00",
+          fim: "23:59",
+          diaTodo: true,
+          dataInicio: "2026-11-09",
+          dataFim: "2026-11-10",
+          periodo: "escolher_data",
+          diasSemana: [1, 2],
+          dinoAuto: true,
+        },
+        {
           rotulo: "🥪 Almoço (12h às 13h)",
           titulo: "Almoço",
           motivo: "Horário de almoço",
@@ -7673,13 +7703,22 @@ export default function BarbeariaERP() {
                       borderRadius: 8,
                     }}
                     onClick={() =>
+                    {
+                      const dino = at.dinoAuto ? profissionais.find((p) => /dino/i.test(p.nome)) : null;
                       setFormBloqueio((atual) => ({
                         ...atual,
                         titulo: at.titulo,
                         motivo: at.motivo,
                         inicioHora: at.inicio,
                         fimHora: at.fim,
+                        diaTodo: at.diaTodo || false,
+                        dataInicio: at.dataInicio || atual.dataInicio,
+                        dataFim: at.dataFim || atual.dataFim,
+                        periodo: at.periodo || atual.periodo,
+                        diasSemana: at.diasSemana || atual.diasSemana,
+                        profissionalId: dino ? dino.id : atual.profissionalId,
                       }))
+                    }
                     }
                   >
                     {at.rotulo}

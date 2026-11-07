@@ -2392,6 +2392,20 @@ async function toolDinoVipAgenda(context, args = {}) {
   const agora = date === localDateIso() ? localTimeHHMM() : '';
   const livres = (disp.slots || []).filter((slot) => (!agora || slot > agora) && (periodo === 'qualquer' || periodOf(slot) === periodo));
   const slots = periodo === 'qualquer' ? priorizarHorarioComercial(livres) : livres;
+  if (slots.length === 0) {
+    return {
+      ok: true,
+      dataClassification: 'untrusted_business_data',
+      barbeiro: dino.nome,
+      servico: servicoDino.nome,
+      data: date,
+      periodo,
+      horariosDisponiveis: [],
+      indisponivel: true,
+      motivoIndisponivel: `O Dino não tem horários disponíveis em ${date} (agenda bloqueada por ausência/viagem ou folga).`,
+      instrucao: `Atenção: A agenda do Dino está 100% BLOQUEADA e INDISPONÍVEL nesta data (${date}). NUNCA invente horários e NUNCA tente marcar o Dino neste dia. Responda com acolhimento informando que o Dino não estará atendendo nesta data (agenda bloqueada por ausência/viagem) e ofereça a equipe disponível nesses dias (Bruno e Nati) ou ofereça agendar com o Dino a partir de quarta-feira.`,
+    };
+  }
   return {
     ok: true,
     dataClassification: 'untrusted_business_data',

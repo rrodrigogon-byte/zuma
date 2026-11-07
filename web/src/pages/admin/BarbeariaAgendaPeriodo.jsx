@@ -1590,22 +1590,42 @@ export default function BarbeariaAgendaPeriodo({
                               </div>
                             </div>
 
-                            <button
-                              type="button"
-                              className="dino-cal-barber-add-mini"
-                              onClick={() =>
-                                onPickSlot
-                                  ? onPickSlot({
-                                      data: de,
-                                      hora: "10:00",
-                                      profissionalId: barbeiro.id,
-                                    })
-                                  : onNewAppointment?.()
-                              }
-                              title={`Agendar diretamente com ${barbeiro.nome}`}
-                            >
-                              + Agendar
-                            </button>
+                            <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+                              <button
+                                type="button"
+                                className="dino-cal-barber-add-mini"
+                                onClick={() =>
+                                  onPickSlot
+                                    ? onPickSlot({
+                                        data: de,
+                                        hora: "10:00",
+                                        profissionalId: barbeiro.id,
+                                      })
+                                    : onNewAppointment?.()
+                                }
+                                title={`Agendar diretamente com ${barbeiro.nome}`}
+                              >
+                                + Agendar
+                              </button>
+                              <button
+                                type="button"
+                                className="dino-cal-barber-add-mini"
+                                style={{ background: "rgba(245, 158, 11, 0.15)", color: "#b45309", borderColor: "rgba(245, 158, 11, 0.3)" }}
+                                onClick={() =>
+                                  onPickSlot
+                                    ? onPickSlot({
+                                        data: de,
+                                        hora: "08:00",
+                                        profissionalId: barbeiro.id,
+                                        abrirBloqueio: true,
+                                      })
+                                    : null
+                                }
+                                title={`Bloquear horário ou dia para ${barbeiro.nome}`}
+                              >
+                                🔒 Bloquear
+                              </button>
+                            </div>
                           </div>
 
                           {/* Corpo da Coluna: Agendamentos do Barbeiro */}
