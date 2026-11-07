@@ -6560,7 +6560,13 @@ app.post('/api/admin/barbearia/operacao/fechar-dia', (req, res) => {
 // ── CONCILIAÇÃO FECHAMENTO DIÁRIO E GESTÃO INTEGRADA ─────────────────────────
 app.get('/api/admin/fechamento-diario/empresas', auth, requireStaff, (req, res) => {
   try {
-    res.json({ ok: true, empresas: listarEmpresasParaFechamento() });
+    const empresasTodas = listarEmpresasParaFechamento();
+    if (isAdminGlobal(req.user)) {
+      return res.json({ ok: true, empresas: empresasTodas });
+    }
+    const autorizadas = obterEmpresasAutorizadasDoUsuario(req.user).map(id => String(id).toLowerCase().trim());
+    const filtradas = empresasTodas.filter(e => autorizadas.includes(String(e.id).toLowerCase().trim()));
+    res.json({ ok: true, empresas: filtradas });
   } catch (error) { res.status(400).json({ error: error.message }); }
 });
 
@@ -6568,8 +6574,18 @@ app.get(['/api/admin/fechamento-diario', '/api/admin/fechamento-diario/conciliac
   try {
     const empresaSolicitada = String(req.query?.empresaId || req.headers['x-empresa-id'] || '').trim();
     const empresaId = empresaSolicitada || legacyEmpresaId(req);
+    if (!isAdminGlobal(req.user)) {
+      const autorizadas = obterEmpresasAutorizadasDoUsuario(req.user).map(id => String(id).toLowerCase().trim());
+      if (empresaId && !autorizadas.includes(String(empresaId).toLowerCase().trim())) {
+        return res.status(403).json({ error: 'Acesso negado: você não tem permissão para visualizar o fechamento diário desta empresa.', code: 'ACCESS_DENIED' });
+      }
+    }
     const lojaId = req.query?.lojaId || legacyLojaId(req);
     const resultado = obterFechamentoDiarioEConciliacao(empresaId, req.query?.data, { lojaId });
+    if (!isAdminGlobal(req.user) && Array.isArray(resultado.empresas)) {
+      const autorizadas = obterEmpresasAutorizadasDoUsuario(req.user).map(id => String(id).toLowerCase().trim());
+      resultado.empresas = resultado.empresas.filter(e => autorizadas.includes(String(e.id).toLowerCase().trim()));
+    }
     res.json({
       ok: true,
       ...resultado,
@@ -6583,6 +6599,12 @@ app.post(['/api/admin/fechamento-diario', '/api/admin/fechamento-diario/executar
     if (req.body?.confirmado !== true) return res.status(400).json({ error: 'A confirmação explícita do fechamento diário é obrigatória.' });
     const empresaSolicitada = String(req.body?.empresaId || req.headers['x-empresa-id'] || '').trim();
     const empresaId = empresaSolicitada || legacyEmpresaId(req);
+    if (!isAdminGlobal(req.user)) {
+      const autorizadas = obterEmpresasAutorizadasDoUsuario(req.user).map(id => String(id).toLowerCase().trim());
+      if (empresaId && !autorizadas.includes(String(empresaId).toLowerCase().trim())) {
+        return res.status(403).json({ error: 'Acesso negado: você não tem permissão para alterar o fechamento desta empresa.', code: 'ACCESS_DENIED' });
+      }
+    }
     const lojaId = req.body?.lojaId || legacyLojaId(req);
     const senhaGerente = String(req.body?.senhaGerente || req.body?.senha || '').trim();
     if (senhaGerente) {

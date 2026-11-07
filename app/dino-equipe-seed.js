@@ -180,6 +180,11 @@ export function provisionarEquipeDino({ commerceDb = null } = {}) {
         };
 
         if (prof) {
+          // Se o profissional foi inativado ou removido pelo gestor da barbearia,
+          // RESPEITA a decisão e NÃO ressuscita! Mantém todo o histórico preservado.
+          if (prof.ativo === false || prof.removidoEm) {
+            continue;
+          }
           barbeariaErpKytto.atualizarProfissional(empId, prof.id, {
             ...dadosProf,
             nome: prof.nome || dadosProf.nome,

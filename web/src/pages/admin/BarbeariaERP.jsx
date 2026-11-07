@@ -247,8 +247,8 @@ const TAB_AREA = Object.fromEntries(
 const TAB_DESCRICAO = Object.fromEntries(TABS);
 
 const STATUS = {
-  agendado: { label: "Agendado", color: "#8b5cf6" },
-  confirmado: { label: "Confirmado", color: "#8b5cf6" },
+  agendado: { label: "Agendado", color: "#3b82f6" },
+  confirmado: { label: "Confirmado", color: "#10b981" },
   aguardando_confirmacao: { label: "Aguardando confirmação", color: "#e0b24b" },
   cancelado_falta_confirmacao: {
     label: "Cancelado por falta de confirmação",

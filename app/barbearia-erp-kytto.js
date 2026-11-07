@@ -1049,7 +1049,7 @@ function actualOrDefault(value, fallback) {
 
 export function listarProfissionais(empresaId, { incluirInativos = false } = {}) {
   return Object.values(estadoEmpresa(empresaId, false).profissionais)
-    .filter((item) => incluirInativos || item.ativo !== false)
+    .filter((item) => incluirInativos || (item.ativo !== false && !item.removidoEm && !item.excluido))
     .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
 }
 
