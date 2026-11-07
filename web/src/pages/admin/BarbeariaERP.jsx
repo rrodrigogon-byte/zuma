@@ -2671,7 +2671,7 @@ export default function BarbeariaERP() {
     if (isSingleDay) {
       const inicio = new Date(`${dataInicio}T${inicioH}:00`).toISOString();
       const fim = new Date(`${dataInicio}T${fimH}:59`).toISOString();
-      await executar(
+      const res = await executar(
         () =>
           api.post("/api/admin/barbearia/bloqueios", {
             titulo: dados.titulo || "Bloqueio de agenda",
@@ -2682,6 +2682,11 @@ export default function BarbeariaERP() {
           }),
         "Bloqueio criado com sucesso na agenda.",
       );
+      if (res?.conflitos && res.conflitos.length > 0) {
+        alert(`⚠️ Atenção: ${res.conflitos.length} agendamento(s) já existente(s) colidem com este bloqueio:\n\n` +
+          res.conflitos.map((c) => `• ${c.horaLocal} - ${c.clienteNome} (${c.servicoNome})`).join("\n") +
+          `\n\nFavor entrar em contato com os clientes para remarcação.`);
+      }
     } else {
       let diasLimite = 1;
       if (dados.periodo === "uma_semana") diasLimite = 7;
@@ -8473,7 +8478,6 @@ export default function BarbeariaERP() {
                           ? {
                               horarioInicio: "00:00",
                               horarioFim: "23:59",
-                              diasTrabalho: [0, 1, 2, 3, 4, 5, 6],
                             }
                           : {}),
                       }));

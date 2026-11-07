@@ -1277,7 +1277,25 @@ export function criarBloqueio(empresaId, dados = {}) {
   const agora = dataAtual();
   estado.bloqueios[id] = { id, empresaId: String(empresaId), ...bloqueio, criadoEm: agora, atualizadoEm: agora };
   save();
-  return { ...estado.bloqueios[id] };
+  // Detecta agendamentos já existentes que colidem com este novo bloqueio
+  const blkInicio = new Date(bloqueio.inicio).valueOf();
+  const blkFim = new Date(bloqueio.fim).valueOf();
+  const conflitos = Object.values(estado.agendamentos || {}).filter((ag) => {
+    if (ag.status === 'cancelado' || ag.status === 'nao_compareceu' || ag.status === 'concluido') return false;
+    if (bloqueio.profissionalId && ag.profissionalId !== bloqueio.profissionalId) return false;
+    const agInicio = new Date(ag.dataHora).valueOf();
+    const agFim = agInicio + (ag.duracaoMinutos || 30) * 60000;
+    return agInicio < blkFim && agFim > blkInicio;
+  }).map((ag) => ({
+    id: ag.id,
+    clienteNome: ag.clienteNome,
+    clienteTelefone: ag.clienteTelefone,
+    dataHora: ag.dataHora,
+    horaLocal: ag.horaLocal,
+    servicoNome: estado.servicos[ag.servicoId]?.nome || 'Serviço',
+    profissionalNome: estado.profissionais[ag.profissionalId]?.nome || 'Profissional',
+  }));
+  return { ...estado.bloqueios[id], conflitos };
 }
 
 export function atualizarBloqueio(empresaId, bloqueioId, dados = {}) {
@@ -3394,18 +3412,25 @@ export function registrarBaixaLojaNoItemComanda(empresaId, comandaId, itemId, { 
   return { ...item.estoqueLoja };
 }
 
-function validarCalendarioAgendamento(estado, agendamento, profissional) {
+export function validarCalendarioAgendamento(estado, agendamento, profissional) {
   const dataAgenda = String(agendamento.dataAgenda || chaveDia(agendamento.dataHora)).slice(0, 10);
   const calendario = obterCalendarioLoja(estado, agendamento.lojaId);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(dataAgenda)) throw new Error('Data operacional inválida.');
   if (!horaValida(agendamento.horaLocal)) throw new Error('Horário operacional inválido. Use HH:MM.');
   if (!Number.isFinite(new Date(agendamento.dataHora).valueOf())) throw new Error('Data e horário do atendimento são inválidos.');
+  const dataLocal = new Date(`${dataAgenda}T12:00:00Z`);
+  if (Number.isNaN(dataLocal.valueOf())) throw new Error('Data operacional inválida.');
+  const diaSemana = dataLocal.getUTCDay();
+  // Escala e dias de trabalho do profissional: SEMPRE checados e respeitados
+  if (profissional && Array.isArray(profissional.diasTrabalho) && profissional.diasTrabalho.length > 0) {
+    if (!profissional.diasTrabalho.includes(diaSemana)) {
+      throw new Error(`O profissional ${profissional.nome || ''} não atende neste dia da semana.`);
+    }
+  }
   const isDino24x7 = ehProfissionalDino(profissional);
   if (!isDino24x7) {
     if (calendario.feriados?.includes(dataAgenda)) throw new Error('A unidade não recebe reservas nesta data: feriado configurado.');
-    const dataLocal = new Date(`${dataAgenda}T12:00:00Z`);
-    if (Number.isNaN(dataLocal.valueOf())) throw new Error('Data operacional inválida.');
-    if (Array.isArray(calendario.diasFuncionamento) && !calendario.diasFuncionamento.includes(dataLocal.getUTCDay())) throw new Error('A unidade não funciona neste dia da semana.');
+    if (Array.isArray(calendario.diasFuncionamento) && !calendario.diasFuncionamento.includes(diaSemana)) throw new Error('A unidade não funciona neste dia da semana.');
     const [hora, minuto] = agendamento.horaLocal.split(':').map(Number);
     const inicioMinutos = hora * 60 + minuto;
     const fimMinutos = inicioMinutos + agendamento.duracaoMinutos;
@@ -3487,10 +3512,12 @@ function contextoDisponibilidadePublica(empresaId, dados = {}) {
   limiteFinal.setUTCDate(limiteFinal.getUTCDate() + Number(calendario.janelaReservaDias || 60));
   const profissionalId = texto(dados.profissionalId ?? dados.profissional_id, 100);
   const habilitados = Array.isArray(servico.profissionaisIds) && servico.profissionaisIds.length ? new Set(servico.profissionaisIds) : null;
+  const diaSemana = dia.getUTCDay();
   const profissionais = Object.values(estado.profissionais)
     .filter((item) => item.ativo !== false)
     .filter((item) => !habilitados || habilitados.has(item.id))
     .filter((item) => !profissionalId || profissionalId === 'qualquer' || item.id === profissionalId)
+    .filter((item) => !Array.isArray(item.diasTrabalho) || item.diasTrabalho.length === 0 || item.diasTrabalho.includes(diaSemana))
     .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
 
   const ehDinoFoco = (profissionalId && profissionalId !== 'qualquer' && profissionais.length === 1 && ehProfissionalDino(profissionais[0])) ||
