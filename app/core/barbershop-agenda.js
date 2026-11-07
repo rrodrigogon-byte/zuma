@@ -473,6 +473,11 @@ export async function availability(scope, input = {}) {
     service: { id: servico.id, nome: servico.nome, duracaoMinutos: Number(servico.duracaoMinutos || 0) || (barbearia.duracaoAtendimentoProfissional ? barbearia.duracaoAtendimentoProfissional(servico, profissional, barbearia.obterConfiguracao(empresa)) : 30), preco: Number(servico.preco || 0) },
     professional: profissional ? { id: profissional.id, nome: profissional.nome, duracaoAtendimentoMinutos: profissional.duracaoAtendimentoMinutos || null } : { id: 'qualquer', nome: 'qualquer profissional disponível' },
     slots: horarios.filter((item) => item.disponivel).map((item) => item.horario),
+    bloqueio: (() => {
+      const bloqueios = barbearia.listarBloqueios(empresa, { data: date, profissionalId: profissional?.id, lojaId: scope.lojaId });
+      const b = (bloqueios || []).find((item) => item.ativo !== false && (!item.profissionalId || item.profissionalId === profissional?.id));
+      return b ? { ativo: true, motivo: b.motivo || b.titulo || 'Ausência programada', titulo: b.titulo } : null;
+    })(),
     tabelaValores,
   };
 }

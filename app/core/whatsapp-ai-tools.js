@@ -650,7 +650,10 @@ async function toolAvailability(context, args = {}) {
       // Valor por horário calculado pelo sistema (regra do Dino: diurno x após 18h09).
       valoresPorHorario: Object.fromEntries((disponibilidade?.slots || []).slice(0, 40).map((time) => [time, brl(precoNoHorario(disponibilidade.service, disponibilidade.professional, time, servicesList))])),
     }),
-    instrucao: 'Se o horário pedido ESTIVER livre nos slots, chame preparar_agendamento IMEDIATAMENTE nesta mesma resposta para apresentar o resumo ao cliente sem enrolação. Se o horário pedido não estiver em slots, ofereça os 3 horários livres mais próximos dele, com o valor de cada um. Não pergunte período.',
+    instrucao: ((disponibilidade?.slots || []).length > 0
+      ? 'Se o horário pedido ESTIVER livre nos slots, chame preparar_agendamento IMEDIATAMENTE nesta mesma resposta para apresentar o resumo ao cliente sem enrolação. Se o horário pedido não estiver em slots, ofereça os 3 horários livres mais próximos dele, com o valor de cada um. Não pergunte período.'
+      : 'Não há horários disponíveis para este profissional nesta data.')
+      + (disponibilidade?.bloqueio?.ativo ? ` ATENÇÃO: A agenda de ${disponibilidade.professional?.nome || 'profissional'} está BLOQUEADA nesta data (${disponibilidade.bloqueio.motivo || 'ausência/viagem'}). Avise com clareza e simpatia que a agenda está fechada nesta data e ofereça agendar em outra data (ou com outro barbeiro da equipe, como Bruno).` : ''),
   };
 }
 

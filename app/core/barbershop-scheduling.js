@@ -119,14 +119,16 @@ export async function listSchedulingAvailability(context, input = {}) {
     ),
     db.queryRead(
       `SELECT usuario_profissional_id AS profissional_id, data_agendamento AS inicio,
-              data_agendamento + (COALESCE(duracao_minutos, 30)::text || ' minutes')::interval AS fim
+              data_agendamento + (COALESCE(duracao_minutos, 30)::text || ' minutes')::interval AS fim,
+              NULL::text AS motivo
          FROM agendamentos
         WHERE empresa_id = $1 AND loja_id = $2 AND ($3::uuid IS NULL OR usuario_profissional_id = $3::uuid)
           AND data_agendamento >= $4::date
           AND data_agendamento < ($4::date + INTERVAL '1 day')
           AND status NOT IN ('cancelado', 'nao_compareceu')
        UNION ALL
-       SELECT usuario_profissional_id AS profissional_id, data_inicio AS inicio, data_fim AS fim
+       SELECT usuario_profissional_id AS profissional_id, data_inicio AS inicio, data_fim AS fim,
+              motivo::text AS motivo
          FROM agendamentos_bloqueios
         WHERE empresa_id = $1 AND (loja_id = $2 OR loja_id IS NULL)
           AND ($3::uuid IS NULL OR usuario_profissional_id = $3::uuid) AND ativo = true
@@ -152,7 +154,8 @@ export async function listSchedulingAvailability(context, input = {}) {
   const occupiedRanges = occupied.rows.map(row => ({ 
     profId: row.profissional_id, 
     start: new Date(row.inicio).getTime(), 
-    end: new Date(row.fim).getTime() 
+    end: new Date(row.fim).getTime(),
+    motivo: row.motivo || null,
   }));
   const availableProfIds = allProfs.rows.map(r => r.id);
   
@@ -182,6 +185,10 @@ export async function listSchedulingAvailability(context, input = {}) {
     },
     professional: { id: professional.rows[0].id, nome: professional.rows[0].nome_completo },
     slots,
+    bloqueio: (() => {
+      const b = occupiedRanges.find(r => r.motivo && (!r.profId || String(r.profId) === String(professional.rows[0]?.id)));
+      return b ? { ativo: true, motivo: b.motivo } : null;
+    })(),
   };
 }
 

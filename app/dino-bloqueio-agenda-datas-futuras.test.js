@@ -140,4 +140,24 @@ test('Bloqueios de agenda em datas futuras na Barbearia Dino', async (t) => {
     });
     assert.ok(!conflitoAposRemover, 'Após desativar bloqueio, horário deve ficar liberado');
   });
+
+  await t.test('5. availability retorna bloqueio ativo com motivo quando dia estiver bloqueado', async () => {
+    const { availability } = await import('./core/barbershop-agenda.js');
+    const b18 = criarBloqueio(EMPRESA_ID, {
+      titulo: 'Viagem Nati',
+      motivo: 'Nati em viagem nos dias 17 e 18 de novembro',
+      inicio: '2026-11-18T00:00:00.000Z',
+      fim: '2026-11-18T23:59:59.000Z',
+      profissionalId: profNati.id,
+    });
+    assert.ok(b18?.id);
+
+    const res = await availability(
+      { empresaId: EMPRESA_ID, legacyEmpresaId: EMPRESA_ID, lojaId: 'loja-dino-01' },
+      { date: '2026-11-18', serviceId: servicoCorte.id, professionalId: profNati.id }
+    );
+    assert.equal(res.slots.length, 0, 'Slots de Nati no dia 18 devem estar vazios');
+    assert.ok(res.bloqueio?.ativo, 'Deve indicar bloqueio ativo');
+    assert.match(res.bloqueio.motivo, /viagem/i, 'Motivo deve citar viagem');
+  });
 });
