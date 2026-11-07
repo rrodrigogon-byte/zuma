@@ -38,6 +38,19 @@ export default function Supermercado() {
   const [apenasPesaveis, setApenasPesaveis] = useState(false);
   const [apenasRupturas, setApenasRupturas] = useState(false);
 
+  // Parque de Terminais & Multi-Caixas
+  const [terminais, setTerminais] = useState([]);
+  const [terminalAtivoCodigo, setTerminalAtivoCodigo] = useState('PDV-01');
+  const [modalNovoTerminal, setModalNovoTerminal] = useState(false);
+  const [caixaAlvoModal, setCaixaAlvoModal] = useState(null);
+  const [nomeOperadorAbertura, setNomeOperadorAbertura] = useState('');
+  const [formTerminal, setFormTerminal] = useState({
+    codigo: '',
+    nome: '',
+    tipo: 'convencional',
+    limiteSangria: 800,
+    ipEquipamento: ''
+  });
   // Caixa / PDV
   const [sessaoCaixa, setSessaoCaixa] = useState(null);
   const [modalCaixa, setModalCaixa] = useState(null); // 'abrir', 'sangria', 'suprimento', 'fechar'
@@ -224,6 +237,11 @@ export default function Supermercado() {
         }
       }
 
+      // 0. Terminais PDV
+      const rTerminais = await api.get('/api/admin/supermercado/terminais').catch(() => null);
+      if (rTerminais && Array.isArray(rTerminais.terminais)) {
+        setTerminais(rTerminais.terminais);
+      }
       // 1. Dashboard
       const rDash = await api.get('/api/admin/supermercado/dashboard').catch(() => null);
       if (rDash) setResumo(rDash.dashboard || rDash);
@@ -233,7 +251,7 @@ export default function Supermercado() {
       if (rProd && Array.isArray(rProd.produtos)) setProdutos(rProd.produtos);
 
       // 3. Sessão Caixa
-      const rCaixa = await api.get('/api/admin/supermercado/caixa/sessao').catch(() => null);
+      const rCaixa = await api.get(`/api/admin/supermercado/caixa/sessao?terminal=${encodeURIComponent(terminalAtivoCodigo || 'PDV-01')}`).catch(() => null);
       if (rCaixa) setSessaoCaixa(rCaixa);
 
       // 4. Lotes
@@ -1057,6 +1075,9 @@ export default function Supermercado() {
         <button className={`super-tab-btn ${abaAtiva === 'dashboard' ? 'active' : ''}`} onClick={() => setAbaAtiva('dashboard')}>
           <TrendingUp size={16} /> Painel & KPIs
         </button>
+        <button className={`super-tab-btn ${abaAtiva === 'terminais' ? 'active' : ''}`} onClick={() => setAbaAtiva('terminais')}>
+          <Tv size={16} /> Frentes de Caixa ({terminais.length})
+        </button>
         <button className={`super-tab-btn ${abaAtiva === 'pdv' ? 'active' : ''}`} onClick={() => setAbaAtiva('pdv')}>
           <ShoppingCart size={16} /> Frente de Caixa (PDV)
         </button>
@@ -1191,6 +1212,55 @@ export default function Supermercado() {
         {/* ── 2. FRENTE DE CAIXA (PDV SUPERMERCADO) ── */}
         {abaAtiva === 'pdv' && (
           <div className="super-pdv-layout">
+            {/* SELETOR SUPERIOR DE FRENTE DE CAIXA ATIVA */}
+            <div className="super-pdv-terminal-bar col-span-full">
+              <div className="flex items-center gap-3">
+                <Tv size={18} className="text-sky-600" />
+                <span className="text-xs font-bold text-slate-700 uppercase">Terminal Operado:</span>
+                <select
+                  className="super-select font-bold text-sm bg-white"
+                  value={terminalAtivoCodigo}
+                  onChange={async (e) => {
+                    const novo = e.target.value;
+                    setTerminalAtivoCodigo(novo);
+                    setTerminalSelecionado(novo);
+                    const rCx = await api.get(`/api/admin/supermercado/caixa/sessao?terminal=${encodeURIComponent(novo)}`).catch(() => null);
+                    if (rCx) setSessaoCaixa(rCx);
+                    showToast(`Conectado ao Terminal ${novo}!`);
+                  }}
+                >
+                  {terminais.length === 0 ? (
+                    <option value="PDV-01">PDV-01 (Caixa Padrão)</option>
+                  ) : (
+                    terminais.map(t => (
+                      <option key={t.id || t.codigo} value={t.codigo}>
+                        {t.codigo} — {t.nome} {t.status === 'aberto' ? '🟢 [Aberto]' : '⚪ [Fechado]'}
+                      </option>
+                    ))
+                  )}
+                </select>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  className="super-btn sm neutral"
+                  onClick={() => setAbaAtiva('terminais')}
+                >
+                  <List size={14} /> Ver Todas as Frentes ({terminais.length})
+                </button>
+                <button
+                  type="button"
+                  className="super-btn sm primary"
+                  onClick={() => {
+                    setFormTerminal({ codigo: `PDV-${String(terminais.length + 1).padStart(2, '0')}`, nome: `Caixa ${String(terminais.length + 1).padStart(2, '0')}`, tipo: 'convencional', limiteSangria: 800, ipEquipamento: '' });
+                    setModalNovoTerminal(true);
+                  }}
+                >
+                  <Plus size={14} /> Novo PDV
+                </button>
+              </div>
+            </div>
             {/* Coluna Esquerda: Bipagem e Carrinho */}
             <div className="super-pdv-left">
               {/* BANNER DE CONTINGÊNCIA OFFLINE & STATUS DO TERMINAL */}

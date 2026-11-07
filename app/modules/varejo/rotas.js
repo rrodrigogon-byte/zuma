@@ -136,7 +136,19 @@ export function createVarejoAdminRouter({ db, escopoDaRequisicao, fuso = 'Americ
   }));
 
   // ── Caixa e Operações de Frente de Caixa (PDV) ──
-  router.get('/caixa/sessao', rota('catalog.read', async ({ empresaId, lojaId }) => {
+  router.get('/caixa/sessao', rota('catalog.read', async ({ req, empresaId, lojaId }) => {
+    return svc.obterSessaoCaixa(db, empresaId, { lojaId, terminal: req?.query?.terminal });
+  }));
+
+  // ── Parque de Terminais PDV (Frentes de Caixa Configuráveis) ──
+  router.get('/terminais', rota('catalog.read', async ({ empresaId, lojaId }) => {
+    return svc.listarTerminaisPdv(db, empresaId, { lojaId });
+  }));
+  router.post('/terminais', rota('catalog.write', async ({ req, empresaId, lojaId, usuario }) => {
+    return svc.salvarTerminalPdv(db, empresaId, req.body || {}, { usuario, lojaId });
+  }));
+
+  router.get('/caixa/sessao-antiga', rota('catalog.read', async ({ empresaId, lojaId }) => {
     return svc.obterSessaoCaixa(db, empresaId, { lojaId });
   }));
 

@@ -934,13 +934,15 @@ export async function analiseMargemCurvaABC(db, empresaId, { lojaId = null } = {
 // 10. GESTÃO AVANÇADA DE FRENTE DE CAIXA (PDV OPERAÇÕES)
 // ═════════════════════════════════════════════════════════════════════════════
 
-export async function obterSessaoCaixa(db, empresaId, { lojaId = null } = {}) {
-  const r = await db.query(
-    `SELECT * FROM var_caixas 
-     WHERE empresa_id = $1 AND ($2::uuid IS NULL OR loja_id = $2 OR loja_id IS NULL)
-     ORDER BY aberto_em DESC LIMIT 1`,
-    [empresaId, lojaId]
-  );
+export async function obterSessaoCaixa(db, empresaId, { lojaId = null, terminal = null } = {}) {
+  let sql = `SELECT * FROM var_caixas WHERE empresa_id = $1 AND ($2::uuid IS NULL OR loja_id = $2 OR loja_id IS NULL)`;
+  const params = [empresaId, lojaId];
+  if (terminal) {
+    params.push(String(terminal).toUpperCase().trim());
+    sql += ` AND UPPER(numero_terminal) = $3`;
+  }
+  sql += ` ORDER BY (CASE WHEN status = 'aberto' THEN 0 ELSE 1 END), aberto_em DESC LIMIT 1`;
+  const r = await db.query(sql, params);
   if (r.rows.length === 0) {
     return { status: 'fechado', caixa: null, movimentacoes: [], resumo: { totalVendas: 0, sangrias: 0, suprimentos: 0 } };
   }
@@ -994,10 +996,11 @@ export async function abrirCaixa(db, empresaId, dados = {}, { usuario = null, lo
   const operador = dados.operadorNome || usuario?.nome || 'Operador Caixa';
   const terminal = dados.numeroTerminal || 'PDV-01';
 
-  // Fechar anteriores se houver
+  // Fechar anterior DESTE TERMINAL ESPECÍFICO se houver
   await db.query(
-    `UPDATE var_caixas SET status = 'fechado', fechado_em = NOW() WHERE empresa_id = $1 AND status = 'aberto'`,
-    [empresaId]
+    `UPDATE var_caixas SET status = 'fechado', fechado_em = NOW() 
+     WHERE empresa_id = $1 AND UPPER(numero_terminal) = UPPER($2) AND status = 'aberto'`,
+    [empresaId, terminal]
   );
 
   const res = await db.query(
@@ -1022,7 +1025,7 @@ export async function registrarMovimentacaoCaixa(db, empresaId, dados = {}, { us
   const valor = Number(dados.valor || 0);
   if (valor <= 0) throw new Error('Valor da movimentação deve ser maior que zero.');
 
-  const caixaSessao = await obterSessaoCaixa(db, empresaId, { lojaId });
+  const caixaSessao = await obterSessaoCaixa(db, empresaId, { lojaId, terminal: dados.numeroTerminal });
   if (caixaSessao.status !== 'aberto' || !caixaSessao.caixa) {
     throw new Error('Nenhum caixa está aberto para registrar sangria ou suprimento.');
   }
@@ -1041,7 +1044,7 @@ export async function registrarMovimentacaoCaixa(db, empresaId, dados = {}, { us
 }
 
 export async function fecharCaixa(db, empresaId, dados = {}, { usuario = null, lojaId = null } = {}) {
-  const caixaSessao = await obterSessaoCaixa(db, empresaId, { lojaId });
+  const caixaSessao = await obterSessaoCaixa(db, empresaId, { lojaId, terminal: dados.numeroTerminal });
   if (caixaSessao.status !== 'aberto' || !caixaSessao.caixa) {
     throw new Error('O caixa já se encontra fechado.');
   }
@@ -2499,4 +2502,95 @@ export async function validarValeCompras(db, empresaId, codigoVale) {
     clienteNome: t.cliente_nome,
     clienteCpf: t.cliente_cpf
   };
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// 21. PARQUE DE TERMINAIS PDV & FRENTES DE CAIXA ILIMITADAS
+// ═════════════════════════════════════════════════════════════════════════════
+export async function listarTerminaisPdv(db, empresaId, { lojaId = null } = {}) {
+  const empresa = exigirUuid(empresaId, 'empresa');
+  const rTerminais = await db.query(
+    `SELECT * FROM var_terminais_pdv 
+     WHERE empresa_id = $1 AND ($2::uuid IS NULL OR loja_id = $2::uuid)
+     ORDER BY codigo ASC`,
+    [empresa, lojaId]
+  );
+
+  const terminais = [];
+  for (const t of rTerminais.rows) {
+    const rCx = await db.query(
+      `SELECT * FROM var_caixas 
+       WHERE empresa_id = $1 AND UPPER(numero_terminal) = UPPER($2) AND status = 'aberto'
+       ORDER BY aberto_em DESC LIMIT 1`,
+      [empresa, t.codigo]
+    );
+
+    let sessao = null;
+    if (rCx.rows.length > 0) {
+      const cx = rCx.rows[0];
+      const movs = await db.query(
+        `SELECT tipo, valor, forma_pagamento FROM var_caixa_movimentacoes WHERE caixa_id = $1`,
+        [cx.id]
+      );
+      let vendas = 0;
+      let dinheiro = Number(cx.saldo_inicial || 0);
+      let sangrias = 0;
+      for (const m of movs.rows) {
+        const val = Number(m.valor || 0);
+        if (m.tipo === 'venda') {
+          vendas += val;
+          if (m.forma_pagamento === 'dinheiro') dinheiro += val;
+        } else if (m.tipo === 'sangria') {
+          sangrias += val;
+          dinheiro -= val;
+        } else if (m.tipo === 'suprimento') {
+          dinheiro += val;
+        }
+      }
+      sessao = {
+        caixaId: cx.id,
+        operadorNome: cx.operador_nome,
+        abertoEm: cx.aberto_em,
+        saldoInicial: Number(cx.saldo_inicial || 0),
+        totalVendas: vendas,
+        saldoDinheiroAtual: Math.max(0, dinheiro),
+        sangrias,
+        alertaSangria: dinheiro > Number(t.limite_sangria || 800)
+      };
+    }
+
+    terminais.push({
+      id: t.id,
+      codigo: t.codigo,
+      nome: t.nome,
+      tipo: t.tipo,
+      ipEquipamento: t.ip_equipamento,
+      limiteSangria: Number(t.limite_sangria || 800),
+      ativo: t.ativo,
+      status: sessao ? 'aberto' : 'fechado',
+      sessao
+    });
+  }
+
+  return { terminais };
+}
+
+export async function salvarTerminalPdv(db, empresaId, dados = {}, { usuario = null, lojaId = null } = {}) {
+  const empresa = exigirUuid(empresaId, 'empresa');
+  const codigo = String(dados.codigo || '').toUpperCase().trim();
+  if (!codigo) throw new Error('Código do terminal é obrigatório (ex: PDV-07)');
+  const nome = String(dados.nome || `Terminal ${codigo}`).trim();
+  const tipo = dados.tipo || 'convencional';
+  const limiteSangria = Number(dados.limiteSangria || 800);
+  const ipEquipamento = dados.ipEquipamento || null;
+
+  const res = await db.query(
+    `INSERT INTO var_terminais_pdv (empresa_id, loja_id, codigo, nome, tipo, limite_sangria, ip_equipamento)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
+     ON CONFLICT (empresa_id, codigo) DO UPDATE
+     SET nome = EXCLUDED.nome, tipo = EXCLUDED.tipo, limite_sangria = EXCLUDED.limite_sangria, ip_equipamento = EXCLUDED.ip_equipamento, ativo = true
+     RETURNING *`,
+    [empresa, lojaId, codigo, nome, tipo, limiteSangria, ipEquipamento]
+  );
+  return { terminal: res.rows[0], mensagem: `Terminal ${codigo} cadastrado/atualizado com sucesso!` };
 }
