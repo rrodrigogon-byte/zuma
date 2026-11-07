@@ -374,6 +374,35 @@ export default function BarbeariaAtendimentoBoard({
       return timeA - timeB
     })
 
+    // Marca isEncaixe dinamicamente por barbeiro
+    const mapaProf = new Map()
+    for (const item of lista) {
+      const profId = item.profissionalId || 'sem_prof'
+      if (!mapaProf.has(profId)) mapaProf.set(profId, [])
+      mapaProf.get(profId).push(item)
+    }
+    for (const itensProf of mapaProf.values()) {
+      for (let i = 0; i < itensProf.length; i++) {
+        const item = itensProf[i]
+        let eEncaixe = Boolean(item.encaixe || item.tipo_agendamento === 'encaixe')
+        const ini = new Date(item.dataHora).getTime()
+        const dur = (Number(item.duracaoMinutos || 30)) * 60000
+        const fim = ini + dur
+        for (let j = 0; j < itensProf.length; j++) {
+          if (i === j) continue
+          const outro = itensProf[j]
+          const outroIni = new Date(outro.dataHora).getTime()
+          const outroDur = (Number(outro.duracaoMinutos || 30)) * 60000
+          const outroFim = outroIni + outroDur
+          if (ini < outroFim && fim > outroIni) {
+            eEncaixe = true
+            break
+          }
+        }
+        item.isEncaixe = eEncaixe
+      }
+    }
+
     return lista
   }, [agendamentos, busca, filtroProfissional, filtroTurno, filtroRapido, ordenacao, comandas, agoraTempo])
 
@@ -1107,6 +1136,11 @@ export default function BarbeariaAtendimentoBoard({
                           {statusTempo?.tipo === 'atrasado' && (
                             <span className="atendimento-badge-urgente">⚠️ {statusTempo.label}</span>
                           )}
+                          {item.isEncaixe && (
+                            <span style={{ background: 'linear-gradient(135deg, #7c2d12 0%, #991b1b 100%)', color: '#fff', fontSize: 10, fontWeight: 800, padding: '2px 6px', borderRadius: 4 }}>
+                              ⚡ ENCAIXE
+                            </span>
+                          )}
                         </div>
                         <div style={{ color: 'var(--muted)', fontSize: 12 }}>
                           {item.servicoNome || item.servico_nome} · {item.profissionalNome || item.profissional_nome}
@@ -1801,6 +1835,25 @@ function CardAtendimentoSwipeable({
             {statusTempo?.tipo === 'chegando' && (
               <span className="atendimento-badge-chegando">
                 ⏰ {statusTempo.label}
+              </span>
+            )}
+            {item.isEncaixe && (
+              <span
+                style={{
+                  background: 'linear-gradient(135deg, #7c2d12 0%, #991b1b 100%)',
+                  color: '#fff',
+                  fontSize: 10,
+                  fontWeight: 800,
+                  padding: '2px 7px',
+                  borderRadius: 4,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 3,
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+                }}
+                title="Atendimento de Encaixe na agenda"
+              >
+                ⚡ ENCAIXE
               </span>
             )}
 

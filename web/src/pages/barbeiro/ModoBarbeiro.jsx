@@ -1189,6 +1189,13 @@ export default function ModoBarbeiro() {
                   <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'flex-start' }}>
                     <div style={{ minWidth: 0 }}>
                       {destaque && <div style={{ fontSize: 11, fontWeight: 800, color: t.accent, textTransform: 'uppercase', letterSpacing: '.05em' }}>Próximo cliente</div>}
+                      {Boolean(a.isEncaixe || a.encaixe || a.tipo_agendamento === 'encaixe') && (
+                        <div style={{ marginBottom: 4 }}>
+                          <span style={{ fontSize: 11, fontWeight: 800, background: 'linear-gradient(135deg, #7c2d12 0%, #991b1b 100%)', color: '#fff', padding: '3px 8px', borderRadius: 4, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                            ⚡ ENCAIXE NA AGENDA
+                          </span>
+                        </div>
+                      )}
                       <div style={{ fontSize: 18, fontWeight: 800 }}>{hora(a.dataHora)} · {a.clienteNome || 'Cliente'}</div>
                       <div style={{ fontSize: 14, color: t.muted }}>{a.servicoNome} · {a.duracaoMinutos} min · {reais(a.valor)}</div>
                       {a.observacoes && <div style={{ fontSize: 13, color: t.muted, marginTop: 4 }}>Obs.: {a.observacoes}</div>}

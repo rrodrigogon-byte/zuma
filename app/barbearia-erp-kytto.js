@@ -3559,6 +3559,9 @@ export function resolverProfissionalDisponivel(empresaId, dados = {}) {
 // `opcoes.permitirEncaixe`: só o painel da equipe passa (nunca o link público nem a IA).
 // O encaixe aceita sobreposição com outro atendimento do mesmo profissional e fica marcado.
 export function criarAgendamento(empresaId, dados = {}, opcoes = {}) {
+  if (dados.encaixe === true || dados.permitirEncaixe === true) {
+    opcoes = { ...opcoes, permitirEncaixe: true };
+  }
   rejeitarPagamentoNaAgenda(dados);
   if (dados.status && dados.status !== 'agendado') throw new Error('Status inicial do agendamento deve ser agendado.');
   const estado = estadoEmpresa(empresaId);
