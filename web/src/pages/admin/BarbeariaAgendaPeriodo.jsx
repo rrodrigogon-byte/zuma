@@ -151,6 +151,8 @@ export default function BarbeariaAgendaPeriodo({
   onDateChange,
   statusFiltro = "",
   onNewAppointment,
+  onBloquearAgenda,
+  onDesativarBloqueio,
 }) {
   const hoje = hojeAgenda();
   const STORAGE_KEY_MODELO = "dino_agenda_modelo_padrao";
@@ -1118,6 +1120,33 @@ export default function BarbeariaAgendaPeriodo({
           >
             <span>+</span> Agendar
           </button>
+          <button
+            type="button"
+            className="dino-cal-btn-bloqueio"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              background: "rgba(245, 158, 11, 0.15)",
+              color: "#d97706",
+              border: "1px solid rgba(245, 158, 11, 0.4)",
+              borderRadius: 8,
+              padding: "6px 14px",
+              fontSize: 13,
+              fontWeight: 700,
+              cursor: "pointer",
+              transition: "all 0.15s ease",
+            }}
+            onClick={() =>
+              onBloquearAgenda?.({
+                data: dataSelecionada || hoje,
+                profissionalId: profissionalId || "",
+              })
+            }
+            title="Bloquear horários, folgas, viagens ou ausências na agenda"
+          >
+            <span>🔒</span> Bloquear Agenda / Férias
+          </button>
 
           <button
             type="button"
@@ -1326,7 +1355,7 @@ export default function BarbeariaAgendaPeriodo({
                               data-status={getAgendaSlotStatus(item)}
                               onClick={() =>
                                 item.isBloqueio
-                                  ? null
+                                  ? onDesativarBloqueio?.(item)
                                   : item.status === "em_atendimento" ||
                                       item.status === "concluido"
                                     ? onConferirComanda?.(item)

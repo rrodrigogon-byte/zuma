@@ -193,6 +193,7 @@ export default function BarbeariaAtendimentoBoard({
   onOpenComanda,
   onCreateComanda,
   onNewAppointment,
+  onBloquearAgenda,
   onNewComanda,
   onOpenRecebimento,
   onOpenHistorico,
@@ -749,6 +750,28 @@ export default function BarbeariaAtendimentoBoard({
                 }}
               >
                 <Plus size={16} /> Novo atendimento
+              </button>
+            )}
+            {onBloquearAgenda && (
+              <button
+                type="button"
+                onClick={() => onBloquearAgenda({ data: dataSelecionada, profissionalId: filtroBarbeiro !== 'todos' ? filtroBarbeiro : '' })}
+                style={{
+                  background: 'rgba(245, 158, 11, 0.15)',
+                  color: '#d97706',
+                  border: '1px solid rgba(245, 158, 11, 0.4)',
+                  borderRadius: 10,
+                  padding: '8px 14px',
+                  fontWeight: 700,
+                  fontSize: 13,
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                }}
+                title="Bloquear horários, folgas, viagens ou ausências na agenda"
+              >
+                🔒 Bloquear agenda
               </button>
             )}
           </div>

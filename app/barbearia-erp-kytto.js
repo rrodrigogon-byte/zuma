@@ -1295,6 +1295,37 @@ export function desativarBloqueio(empresaId, bloqueioId) {
   return atualizarBloqueio(empresaId, bloqueioId, { ativo: false });
 }
 
+export function listarConflitosBloqueio(empresaId, dados = {}) {
+  const estado = estadoEmpresa(empresaId, false);
+  if (!estado) return [];
+  const inicio = dados.inicio ? new Date(dados.inicio).valueOf() : NaN;
+  const fim = dados.fim ? new Date(dados.fim).valueOf() : NaN;
+  if (!Number.isFinite(inicio) || !Number.isFinite(fim)) return [];
+  const profId = dados.profissionalId ? String(dados.profissionalId) : '';
+  const lojaId = dados.lojaId ? String(dados.lojaId) : '';
+
+  return Object.values(estado.agendamentos || {})
+    .filter((ag) => {
+      if (ag.status === 'cancelado' || ag.status === 'nao_compareceu' || ag.status === 'concluido') return false;
+      if (profId && ag.profissionalId && String(ag.profissionalId) !== profId) return false;
+      if (lojaId && ag.lojaId && String(ag.lojaId) !== lojaId) return false;
+      const agIni = new Date(ag.dataHora).valueOf();
+      const agFim = agIni + (Number(ag.duracaoMinutos) || 30) * 60 * 1000;
+      return inicio < agFim && agIni < fim;
+    })
+    .map((ag) => ({
+      id: ag.id,
+      clienteNome: ag.clienteNome || 'Cliente',
+      clienteTelefone: ag.clienteTelefone || '',
+      profissionalId: ag.profissionalId,
+      profissionalNome: estado.profissionais[ag.profissionalId]?.nome || 'Barbeiro',
+      dataAgenda: ag.dataAgenda || ag.dataHora?.slice(0, 10),
+      horaLocal: ag.horaLocal || '',
+      servicoNome: ag.servicoNome || 'Atendimento',
+      status: ag.status,
+    }));
+}
+
 function filaNormalizada(dados = {}, anterior = {}) {
   return {
     clienteId: texto(dados.clienteId ?? dados.cliente_id ?? anterior.clienteId, 100),
@@ -3388,6 +3419,11 @@ function validarCalendarioAgendamento(estado, agendamento, profissional) {
       if (inicioMinutos < inicioProf[0] * 60 + inicioProf[1] || fimMinutos > fimProf[0] * 60 + fimProf[1]) throw new Error('Horário fora da jornada do profissional.');
     }
   }
+}
+
+export function checarConflitoAgendamento(empresaId, dados, ignorarId = '') {
+  const estado = estadoEmpresa(empresaId);
+  return verificarConflito(estado, dados, ignorarId);
 }
 
 function verificarConflito(estado, dados, ignorarId = '') {

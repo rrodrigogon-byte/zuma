@@ -152,6 +152,47 @@ export async function inicializarBloqueiosEquipe() {
       ).catch((err) => console.warn('[bloqueios-sync] Erro ao inserir bloqueio no PG:', err.message));
     }
 
+    // 3. Bloquear Terça (17/11/2026) e Quarta (18/11/2026) da Nati (Viagem) no ERP e no PostgreSQL
+    const diasAusenciaNati = ['2026-11-17', '2026-11-18'];
+    const natiUuid = MAPA_PROF_UUID['prof-mtj67o7r-003'] || '6bec50bd-4e22-4aa0-8da5-a54439caf0bf';
+    const natiIdErp = 'prof-mtj67o7r-003';
+
+    for (const dia of diasAusenciaNati) {
+      const inicioIso = `${dia}T04:00:00.000Z`;
+      const fimIso = `${dia}T23:59:59.000Z`;
+
+      const bloqueiosExistentes = barbeariaErpKytto.listarBloqueios(EMPRESA_DINO_ID, { data: dia, profissionalId: natiIdErp });
+      const jaBloqueadoErp = bloqueiosExistentes.some((blk) => blk.profissionalId === natiIdErp && blk.ativo !== false);
+
+      if (!jaBloqueadoErp) {
+        barbeariaErpKytto.criarBloqueio(EMPRESA_DINO_ID, {
+          titulo: 'Viagem / Ausência',
+          motivo: 'Nati em viagem (dias 17 e 18/11) - agenda fechada',
+          inicio: inicioIso,
+          fim: fimIso,
+          profissionalId: natiIdErp,
+          lojaId: LOJA_DINO_ID,
+        });
+        console.log(`[bloqueios-sync] Bloqueio da Nati criado no ERP para ${dia}`);
+      }
+
+      await pgDb.query(
+        `INSERT INTO agendamentos_bloqueios
+          (empresa_id, loja_id, usuario_profissional_id, data_inicio, data_fim, motivo, descricao, ativo)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, true)
+         ON CONFLICT DO NOTHING`,
+        [
+          EMPRESA_DINO_ID,
+          LOJA_DINO_ID,
+          natiUuid,
+          `${dia} 00:00:00`,
+          `${dia} 23:59:59`,
+          'Viagem / Ausência Nati',
+          'Nati não atenderá nesta data (em viagem)',
+        ]
+      ).catch((err) => console.warn('[bloqueios-sync] Erro ao inserir bloqueio Nati no PG:', err.message));
+    }
+
     console.log('[bloqueios-sync] Inicialização e bloqueio de agenda de Dino concluídos.');
   } catch (erro) {
     console.warn('[bloqueios-sync] Aviso na inicialização de bloqueios:', erro.message);

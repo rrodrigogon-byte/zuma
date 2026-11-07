@@ -7238,6 +7238,19 @@ app.patch('/api/admin/barbearia/fila/:id/status', (req, res) => {
 });
 
 app.get('/api/admin/barbearia/bloqueios', (req, res) => res.json({ ok: true, bloqueios: barbeariaErpKytto.listarBloqueios(legacyEmpresaId(req), { data: req.query?.data, profissionalId: req.query?.profissionalId, lojaId: legacyLojaId(req), incluirInativos: String(req.query?.incluirInativos) === 'true' }) }));
+app.get('/api/admin/barbearia/bloqueios/conflitos', (req, res) => {
+  try {
+    const empresaId = legacyEmpresaId(req);
+    const lojaId = legacyLojaId(req);
+    const conflitos = barbeariaErpKytto.listarConflitosBloqueio(empresaId, {
+      profissionalId: req.query?.profissionalId,
+      inicio: req.query?.inicio,
+      fim: req.query?.fim,
+      lojaId,
+    });
+    res.json({ ok: true, conflitos, total: conflitos.length });
+  } catch (error) { res.status(400).json({ error: error.message }); }
+});
 app.post('/api/admin/barbearia/bloqueios', async (req, res) => {
   try {
     const empresaId = legacyEmpresaId(req);

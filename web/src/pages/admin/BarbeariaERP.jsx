@@ -4148,6 +4148,17 @@ export default function BarbeariaERP() {
           onDateChange={setDataSelecionada}
           statusFiltro={statusFiltro}
           onNewAppointment={abrirNovoAgendamento}
+          onBloquearAgenda={(dados) => {
+            setFormBloqueio((atual) => ({
+              ...atual,
+              data: dados?.data || dataSelecionada,
+              dataInicio: dados?.data || dataSelecionada,
+              dataFim: dados?.data || dataSelecionada,
+              profissionalId: dados?.profissionalId || "",
+            }));
+            setModal("bloqueioAgenda");
+          }}
+          onDesativarBloqueio={desativarBloqueio}
         />
       </div>
     );
@@ -4184,6 +4195,16 @@ export default function BarbeariaERP() {
           onCreateEncaixe={criarEncaixeRapido}
           onAddItemComanda={adicionarItemComandaRapido}
           onRefresh={carregar}
+          onBloquearAgenda={(dados) => {
+            setFormBloqueio((atual) => ({
+              ...atual,
+              data: dados?.data || dataSelecionada,
+              dataInicio: dados?.data || dataSelecionada,
+              dataFim: dados?.data || dataSelecionada,
+              profissionalId: dados?.profissionalId || "",
+            }));
+            setModal("bloqueioAgenda");
+          }}
           loading={loading}
         />
       </div>
@@ -7630,6 +7651,19 @@ export default function BarbeariaERP() {
           dinoAuto: true,
         },
         {
+          rotulo: "✈️ Viagem Nati (17 e 18/11)",
+          titulo: "Viagem Nati",
+          motivo: "Nati em viagem (17 e 18 de novembro) - agenda bloqueada",
+          inicio: "00:00",
+          fim: "23:59",
+          diaTodo: true,
+          dataInicio: "2026-11-17",
+          dataFim: "2026-11-18",
+          periodo: "escolher_data",
+          diasSemana: [0, 1, 2, 3, 4, 5, 6],
+          natiAuto: true,
+        },
+        {
           rotulo: "🥪 Almoço (12h às 13h)",
           titulo: "Almoço",
           motivo: "Horário de almoço",
@@ -7705,6 +7739,8 @@ export default function BarbeariaERP() {
                     onClick={() =>
                     {
                       const dino = at.dinoAuto ? profissionais.find((p) => /dino/i.test(p.nome)) : null;
+                      const nati = at.natiAuto ? profissionais.find((p) => /nati|natani/i.test(p.nome) || /nati|natani/i.test(p.apelido || "")) : null;
+                      const profAlvo = dino ? dino.id : (nati ? nati.id : atual.profissionalId);
                       setFormBloqueio((atual) => ({
                         ...atual,
                         titulo: at.titulo,
@@ -7716,7 +7752,7 @@ export default function BarbeariaERP() {
                         dataFim: at.dataFim || atual.dataFim,
                         periodo: at.periodo || atual.periodo,
                         diasSemana: at.diasSemana || atual.diasSemana,
-                        profissionalId: dino ? dino.id : atual.profissionalId,
+                        profissionalId: profAlvo,
                       }))
                     }
                     }
