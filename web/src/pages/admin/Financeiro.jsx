@@ -1,16 +1,41 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { api } from '../../lib/api'
 import { useToast } from '../../hooks/useToast'
 
-const fmtKpi = (v) => { if (v == null) return '—'; const n = Number(v || 0); const abs = Math.abs(n); const sign = n < 0 ? '-' : ''; if (abs >= 1000000) return `${sign}R$ ${(abs / 1000000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}M`; if (abs >= 1000) return `${sign}R$ ${(abs / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}K`; return `${sign}R$ ${abs.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`; }
+const fmtKpi = (v) => {
+  if (v == null) return '—'
+  const n = Number(v || 0)
+  const abs = Math.abs(n)
+  const sign = n < 0 ? '-' : ''
+  if (abs >= 1000000) return `${sign}R$ ${(abs / 1000000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}M`
+  if (abs >= 1000) return `${sign}R$ ${(abs / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}K`
+  return `${sign}R$ ${abs.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+}
+
 const fmtR = v => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(v || 0))
 const fmtData = s => s ? new Date(s + 'T12:00:00').toLocaleDateString('pt-BR') : '—'
-const mesLabel = s => { const [y, m] = s.split('-'); return `${m}/${y}` }
+const mesLabel = s => {
+  if (!s || !s.includes('-')) return s || ''
+  const [y, m] = s.split('-')
+  const meses = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
+  return `${meses[parseInt(m, 10) - 1] || m}/${y}`
+}
 
-const CAT_RECEITA = ['Mensalidade','Inscrição Torneio','Ingresso Evento','Bar/Lanchonete','Loja','Aula/Escola','Patrocínio','Aluguel de Quadra','Outros']
-const CAT_DESPESA = ['Pessoal/RH','Manutenção','Utilities (Água/Luz)','Material Esportivo','Alimentação/Bebidas','Marketing','Equipamentos','Impostos/Taxas','Serviços Terceiros','Outros']
+const CAT_RECEITA = ['Serviços & Cortes', 'Venda de Revenda / Bar', 'Mensalidades / Planos', 'Loja Virtual', 'Assinaturas', 'Outros']
+const CAT_DESPESA = [
+  'Pessoal/RH & Comissões',
+  'Aluguel & Ocupação',
+  'Produtos & Insumos',
+  'Taxas de Cartão / Bancárias',
+  'Utilities (Água/Luz)',
+  'Internet & Telefonia',
+  'Marketing & Tráfego',
+  'Impostos/Taxas',
+  'Manutenção & Equipamentos',
+  'Serviços Terceiros',
+  'Outros'
+]
 
-/* ── CSV export ── */
 function exportCSV(rows, filename) {
   if (!rows?.length) return
   const keys = Object.keys(rows[0])
@@ -18,129 +43,225 @@ function exportCSV(rows, filename) {
   const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
-  a.href = url; a.download = filename; a.click()
+  a.href = url
+  a.download = filename
+  a.click()
   URL.revokeObjectURL(url)
 }
 
 const S = {
-  page:   { padding:'24px 28px', maxWidth:1100 },
-  header: { display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:24, flexWrap:'wrap', gap:12 },
-  title:  { fontSize:22, fontWeight:800, color:'var(--cream)' },
-  cards:  { display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(165px,1fr))', gap:12, marginBottom:24 },
-  card:   { background:'var(--surface)', border:'1px solid var(--line)', borderRadius:10, padding:'14px 18px' },
-  cNum:   { fontSize:22, fontWeight:800, color:'var(--green)', marginBottom:2 },
-  cLbl:   { fontSize:11, color:'var(--muted)', textTransform:'uppercase', letterSpacing:'.5px' },
-  table:  { width:'100%', borderCollapse:'collapse', background:'var(--surface)', borderRadius:10, overflow:'hidden', border:'1px solid var(--line)' },
-  th:     { padding:'10px 14px', textAlign:'left', fontSize:11, fontWeight:700, color:'var(--muted)', textTransform:'uppercase', borderBottom:'1px solid var(--line)', background:'rgba(0,0,0,.03)' },
-  td:     { padding:'10px 14px', fontSize:13, borderBottom:'1px solid var(--line)' },
-  btn:    { padding:'8px 16px', borderRadius:8, border:'none', cursor:'pointer', fontWeight:700, fontSize:12 },
-  bar:    { display:'flex', gap:10, marginBottom:16, flexWrap:'wrap', alignItems:'center' },
-  inp:    { padding:'7px 12px', borderRadius:8, border:'1px solid var(--line)', background:'var(--surface)', color:'var(--cream)', fontSize:13 },
+  page: { padding: '24px 28px', maxWidth: 1200, margin: '0 auto' },
+  header: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24, flexWrap: 'wrap', gap: 12 },
+  title: { fontSize: 24, fontWeight: 800, color: 'var(--cream)', display: 'flex', alignItems: 'center', gap: 10 },
+  cards: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 14, marginBottom: 24 },
+  card: { background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 12, padding: '16px 20px' },
+  table: { width: '100%', borderCollapse: 'collapse', background: 'var(--surface)', borderRadius: 12, overflow: 'hidden', border: '1px solid var(--line)' },
+  th: { padding: '12px 16px', textAlign: 'left', fontSize: 11, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', borderBottom: '1px solid var(--line)', background: 'rgba(0,0,0,.03)' },
+  td: { padding: '12px 16px', fontSize: 13, borderBottom: '1px solid var(--line)' },
+  btn: { padding: '9px 18px', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13, display: 'inline-flex', alignItems: 'center', gap: 6 },
+  inp: { padding: '8px 12px', borderRadius: 8, border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--cream)', fontSize: 13 },
 }
 
-/* ── KPI card com borderLeft stripe ── */
 function KpiCard({ label, value, color, sub, icon }) {
   return (
     <div style={{
-      background:'var(--surface)', border:'1px solid var(--line)', borderRadius:10,
-      padding:'14px 18px', borderLeft:`4px solid ${color || 'var(--green)'}`,
-      flex:1, minWidth:150,
+      background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 12,
+      padding: '16px 20px', borderLeft: `4px solid ${color || 'var(--green)'}`,
+      flex: 1, minWidth: 170,
     }}>
-      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:6 }}>
-        <div style={{ fontSize:11, color:'var(--muted)', textTransform:'uppercase', letterSpacing:'.5px', fontWeight:700 }}>{label}</div>
-        {icon && <span style={{ fontSize:16 }}>{icon}</span>}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
+        <div style={{ fontSize: 11, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.5px', fontWeight: 700 }}>{label}</div>
+        {icon && <span style={{ fontSize: 18 }}>{icon}</span>}
       </div>
-      <div style={{ fontSize:22, fontWeight:800, color: color || 'var(--green)', lineHeight:1.1 }}>{value}</div>
-      {sub && <div style={{ fontSize:11, color:'var(--muted)', marginTop:4 }}>{sub}</div>}
+      <div style={{ fontSize: 24, fontWeight: 800, color: color || 'var(--green)', lineHeight: 1.1 }}>{value}</div>
+      {sub && <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>{sub}</div>}
     </div>
   )
 }
 
-/* ── Badge status ── */
 function Badge({ status, vencimento }) {
-  const hoje = new Date().toISOString().slice(0,10)
-  if (status === 'pago')      return <span style={{ display:'inline-block', padding:'2px 8px', borderRadius:20, fontSize:11, fontWeight:700, background:'#FFF9F5', color:'#12283F' }}>Pago</span>
-  if (status === 'cancelado') return <span style={{ display:'inline-block', padding:'2px 8px', borderRadius:20, fontSize:11, fontWeight:700, background:'#f3f4f6', color:'#6b7280' }}>Cancelado</span>
-  if (vencimento && vencimento < hoje) return <span style={{ display:'inline-block', padding:'2px 8px', borderRadius:20, fontSize:11, fontWeight:700, background:'#fee2e2', color:'#991b1b' }}>Vencido</span>
-  return <span style={{ display:'inline-block', padding:'2px 8px', borderRadius:20, fontSize:11, fontWeight:700, background:'#fef3c7', color:'#92400e' }}>Pendente</span>
+  const hoje = new Date().toISOString().slice(0, 10)
+  const isVencido = status !== 'pago' && vencimento && vencimento < hoje
+  const color = status === 'pago' ? 'var(--lime)' : isVencido ? '#ef4444' : 'var(--gold)'
+  const bg = status === 'pago' ? 'rgba(34,197,94,.12)' : isVencido ? 'rgba(239,68,68,.12)' : 'rgba(245,158,11,.12)'
+  const texto = status === 'pago' ? '✓ Pago' : isVencido ? '⚠ Vencido' : '⏳ Pendente'
+  return (
+    <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 6, color, background: bg, border: `1px solid ${color}30` }}>
+      {texto}
+    </span>
+  )
 }
 
-/* ── Fluxo de Caixa 12 meses ── */
 function FluxoChart({ dados }) {
-  const [hov, setHov] = useState(null)
   if (!dados?.length) return null
-  const maxVal = Math.max(...dados.map(d => Math.max(d.receitas, d.despesas)), 1)
-  const H = 130
+  const maxVal = Math.max(...dados.map(d => Math.max(d.receitas || 0, d.despesas || 0)), 1)
   return (
-    <div style={{ background:'var(--surface)', border:'1px solid var(--line)', borderRadius:10, padding:'16px 20px', marginBottom:24 }}>
-      <div style={{ fontSize:13, fontWeight:700, color:'var(--cream)', marginBottom:14 }}>📊 Fluxo de Caixa — 12 meses</div>
-      <div style={{ display:'flex', alignItems:'flex-end', gap:4, height:H+28, overflowX:'auto' }}>
-        {dados.map((d, i) => {
-          const hRec  = Math.round((d.receitas / maxVal) * H)
-          const hDesp = Math.round((d.despesas / maxVal) * H)
-          const saldo = d.receitas - d.despesas
+    <div style={{ ...S.card, marginBottom: 20 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+        <div style={{ fontWeight: 800, color: 'var(--cream)', fontSize: 14 }}>📊 Fluxo de Caixa — Últimos 12 Meses</div>
+        <div style={{ display: 'flex', gap: 14, fontSize: 11, color: 'var(--muted)' }}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><div style={{ width: 10, height: 10, background: 'var(--green)', borderRadius: 2 }} /> Receitas</span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><div style={{ width: 10, height: 10, background: '#ef4444', borderRadius: 2 }} /> Despesas</span>
+        </div>
+      </div>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', height: 110, padding: '0 4px' }}>
+        {dados.map(d => {
+          const recH = Math.max(4, Math.round(((d.receitas || 0) / maxVal) * 90))
+          const despH = Math.max(4, Math.round(((d.despesas || 0) / maxVal) * 90))
           return (
-            <div key={d.mes} style={{ display:'flex', flexDirection:'column', alignItems:'center', minWidth:48, flex:1, position:'relative' }}
-              onMouseEnter={() => setHov(i)} onMouseLeave={() => setHov(null)}>
-              {hov === i && (
-                <div style={{ position:'absolute', bottom:'100%', left:'50%', transform:'translateX(-50%)', background:'#12283F', border:'1px solid var(--green)', borderRadius:6, padding:'6px 10px', fontSize:11, color:'#fff', whiteSpace:'nowrap', zIndex:10, marginBottom:4 }}>
-                  <div style={{ color:'var(--green)' }}>↑ {fmtR(d.receitas)}</div>
-                  <div style={{ color:'#ef4444' }}>↓ {fmtR(d.despesas)}</div>
-                  <div style={{ color: saldo >= 0 ? 'var(--lime)' : '#fbbf24', borderTop:'1px solid #12283F', marginTop:3, paddingTop:3 }}>= {fmtR(saldo)}</div>
-                </div>
-              )}
-              <div style={{ display:'flex', alignItems:'flex-end', gap:2, height:H }}>
-                <div title={`Receitas: ${fmtR(d.receitas)}`} style={{ width:14, height:hRec || 2, background:'var(--green)', borderRadius:'3px 3px 0 0', transition:'height .3s' }} />
-                <div title={`Despesas: ${fmtR(d.despesas)}`} style={{ width:14, height:hDesp || 2, background:'#ef4444', borderRadius:'3px 3px 0 0', transition:'height .3s' }} />
+            <div key={d.mes} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+              <div style={{ display: 'flex', gap: 2, alignItems: 'flex-end', width: '100%', justifyContent: 'center' }}>
+                <div title={`Receitas: ${fmtR(d.receitas)}`} style={{ width: '45%', height: `${recH}px`, background: 'var(--green)', borderRadius: '3px 3px 0 0' }} />
+                <div title={`Despesas: ${fmtR(d.despesas)}`} style={{ width: '45%', height: `${despH}px`, background: '#ef4444', borderRadius: '3px 3px 0 0' }} />
               </div>
-              <div style={{ fontSize:9, color:'var(--muted)', marginTop:4, whiteSpace:'nowrap' }}>{mesLabel(d.mes)}</div>
+              <span style={{ fontSize: 10, color: 'var(--muted)', marginTop: 4 }}>{mesLabel(d.mes).split('/')[0]}</span>
             </div>
           )
         })}
       </div>
-      <div style={{ display:'flex', gap:16, marginTop:10 }}>
-        <div style={{ display:'flex', alignItems:'center', gap:6, fontSize:11, color:'var(--muted)' }}>
-          <div style={{ width:10, height:10, background:'var(--green)', borderRadius:2 }} /> Receitas
-        </div>
-        <div style={{ display:'flex', alignItems:'center', gap:6, fontSize:11, color:'var(--muted)' }}>
-          <div style={{ width:10, height:10, background:'#ef4444', borderRadius:2 }} /> Despesas
-        </div>
-      </div>
     </div>
   )
 }
 
-/* ── DRE Simplificado ── */
-function DRE({ resumo }) {
-  if (!resumo) return null
-  const rb = (resumo.recMes || 0)
-  const desp = (resumo.despMes || 0)
-  const resultado = rb - desp
-  const margem = rb > 0 ? ((resultado / rb) * 100).toFixed(1) : 0
+/* ── Componente Oficial do DRE Gerencial ── */
+function DreGerencialView({ mes, onMesChange }) {
+  const [dados, setDados] = useState(null)
+  const [loading, setLoading] = useState(false)
 
-  const linha = (label, val, color, bold) => (
-    <div style={{ display:'flex', justifyContent:'space-between', padding:'8px 0', borderBottom:'1px solid var(--line)', fontSize:13 }}>
-      <span style={{ color: bold ? 'var(--cream)' : 'var(--muted)', fontWeight: bold ? 700 : 400 }}>{label}</span>
-      <span style={{ fontWeight:700, color: color || 'var(--cream)' }}>{fmtKpi(val)}</span>
-    </div>
-  )
+  const carregarDre = useCallback(async (mesAlvo) => {
+    setLoading(true)
+    try {
+      const res = await api.get(`/api/admin/financeiro/dre?mes=${mesAlvo}`)
+      setDados(res)
+    } catch (e) {
+      console.error('Erro ao carregar DRE:', e)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    carregarDre(mes)
+  }, [mes, carregarDre])
+
+  if (loading) {
+    return <div style={{ ...S.card, textAlign: 'center', padding: 40, color: 'var(--muted)' }}>Carregando DRE Gerencial...</div>
+  }
+
+  if (!dados) return null
+
+  const rb = dados.receitaBruta || 0
+  const rl = dados.receitaLiquida || 0
+  const mc = dados.margemContribuicao || 0
+  const mcPct = dados.margemContribuicaoPercentual || (rb > 0 ? ((mc / rb) * 100).toFixed(1) : 0)
+  const resLiq = dados.resultadoLiquido || 0
+  const margemLiqPct = dados.margemLiquidaPercentual || (rb > 0 ? ((resLiq / rb) * 100).toFixed(1) : 0)
+  const ebitda = dados.ebitda || 0
+
+  const linhaDRE = (codigo, titulo, valor, cor = 'var(--cream)', negrito = false, nivel = 0, pct = null) => {
+    return (
+      <div style={{
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        padding: '10px 14px', borderBottom: '1px solid var(--line)',
+        background: nivel === 0 ? 'rgba(0,0,0,.08)' : 'transparent',
+        fontWeight: negrito ? 800 : 500, fontSize: nivel === 0 ? 14 : 13
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingLeft: nivel * 16 }}>
+          <span style={{ fontSize: 11, color: 'var(--muted)', width: 24 }}>{codigo}</span>
+          <span style={{ color: negrito ? 'var(--cream)' : 'var(--muted)' }}>{titulo}</span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
+          {pct != null && (
+            <span style={{ fontSize: 11, color: 'var(--muted)', minWidth: 45, textAlign: 'right' }}>
+              {pct}%
+            </span>
+          )}
+          <span style={{ fontWeight: 800, color: cor, minWidth: 100, textAlign: 'right' }}>
+            {fmtR(valor)}
+          </span>
+        </div>
+      </div>
+    )
+  }
 
   return (
-    <div style={{ ...S.card, marginTop:16 }}>
-      <div style={{ fontWeight:800, color:'var(--cream)', marginBottom:14, fontSize:14 }}>📋 DRE Simplificado — Mês Atual</div>
-      {linha('(+) Receita Bruta', rb, 'var(--green)', false)}
-      {linha('  Mensalidades Recebidas', resumo.mensRecebidas, 'var(--green)', false)}
-      {linha('  Inscrições Confirmadas', resumo.inscRec, 'var(--green)', false)}
-      {linha('  Bar / Comandas', resumo.recBar, 'var(--green)', false)}
-      {linha('(-) Despesas Operacionais', desp, '#ef4444', false)}
-      {linha('Mensalidades Pendentes', resumo.mensPendentes, '#fbbf24', false)}
-      <div style={{ display:'flex', justifyContent:'space-between', padding:'12px 0', fontSize:15 }}>
-        <span style={{ fontWeight:800, color:'var(--cream)' }}>= Resultado Líquido</span>
-        <span style={{ fontWeight:900, fontSize:17, color: resultado >= 0 ? 'var(--green)' : '#ef4444' }}>{fmtKpi(resultado)}</span>
+    <div style={{ marginTop: 16 }}>
+      {/* Barra de Ações do DRE */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <label style={{ fontSize: 13, fontWeight: 700, color: 'var(--cream)' }}>Mês de Apuração:</label>
+          <input
+            type="month"
+            value={mes}
+            onChange={(e) => onMesChange(e.target.value)}
+            style={{ ...S.inp, fontWeight: 700, color: 'var(--green)' }}
+          />
+        </div>
+        <button
+          onClick={() => window.print()}
+          style={{ ...S.btn, background: 'rgba(255,107,44,.15)', color: 'var(--green)', border: '1px solid var(--green)' }}
+        >
+          🖨️ Imprimir DRE Oficial
+        </button>
       </div>
-      <div style={{ marginTop:8, padding:'8px 12px', borderRadius:8, background: margem >= 0 ? 'rgba(255,107,44,.1)' : 'rgba(239,68,68,.1)', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-        <span style={{ fontSize:12, color:'var(--muted)' }}>Margem operacional</span>
-        <span style={{ fontSize:16, fontWeight:800, color: margem >= 0 ? 'var(--lime)' : '#ef4444' }}>{margem}%</span>
+
+      {/* Cards de Destaque Executivo do DRE */}
+      <div style={{ ...S.cards, marginBottom: 16 }}>
+        <KpiCard label="Receita Operacional Bruta" value={fmtR(rb)} color="var(--green)" icon="💰" sub={`Faturamento apurado em ${mesLabel(mes)}`} />
+        <KpiCard label="Margem de Contribuição" value={`${mcPct}%`} color="var(--lime)" icon="📊" sub={fmtR(mc)} />
+        <KpiCard label="EBITDA Operacional" value={fmtR(ebitda)} color={ebitda >= 0 ? 'var(--gold)' : '#ef4444'} icon="⚡" sub="Geração de caixa operacional" />
+        <KpiCard label="Resultado Líquido" value={fmtR(resLiq)} color={resLiq >= 0 ? 'var(--green)' : '#ef4444'} icon="🏆" sub={`Margem Líquida: ${margemLiqPct}%`} />
+      </div>
+
+      {/* Tabela Estruturada do DRE */}
+      <div style={{ ...S.card, padding: 0, overflow: 'hidden' }}>
+        <div style={{ padding: '14px 18px', background: 'rgba(0,0,0,.15)', borderBottom: '1px solid var(--line)', display: 'flex', justifyContent: 'space-between' }}>
+          <span style={{ fontWeight: 800, color: 'var(--cream)', fontSize: 14 }}>📋 Demonstração do Resultado do Exercício (DRE Gerencial)</span>
+          <span style={{ fontSize: 12, color: 'var(--muted)' }}>Competência: {mesLabel(mes)}</span>
+        </div>
+
+        {linhaDRE('1.0', '(+) RECEITA OPERACIONAL BRUTA', rb, 'var(--green)', true, 0, 100)}
+        {linhaDRE('1.1', '  Serviços de Corte & Barbearia', dados.detalhesReceita?.servicos || 0, 'var(--cream)', false, 1, rb > 0 ? (((dados.detalhesReceita?.servicos || 0) / rb) * 100).toFixed(1) : 0)}
+        {linhaDRE('1.2', '  Planos, Clubes & Assinaturas', dados.detalhesReceita?.planos || 0, 'var(--cream)', false, 1, rb > 0 ? (((dados.detalhesReceita?.planos || 0) / rb) * 100).toFixed(1) : 0)}
+        {linhaDRE('1.3', '  Produtos de Revenda & Bar', dados.detalhesReceita?.revenda || 0, 'var(--cream)', false, 1, rb > 0 ? (((dados.detalhesReceita?.revenda || 0) / rb) * 100).toFixed(1) : 0)}
+        {linhaDRE('1.4', '  Outras Receitas Operacionais', dados.detalhesReceita?.outras || 0, 'var(--cream)', false, 1, rb > 0 ? (((dados.detalhesReceita?.outras || 0) / rb) * 100).toFixed(1) : 0)}
+
+        {linhaDRE('2.0', '(-) DEDUÇÕES DA RECEITA BRUTA', -(dados.totalDeducoes || 0), '#ef4444', true, 0, rb > 0 ? (((dados.totalDeducoes || 0) / rb) * 100).toFixed(1) : 0)}
+        {linhaDRE('2.1', '  Taxas de Cartão de Crédito/Débito (MDR)', -(dados.detalhesCustos?.taxas || 0), 'var(--muted)', false, 1)}
+
+        {linhaDRE('3.0', '(=) RECEITA OPERACIONAL LÍQUIDA', rl, 'var(--green)', true, 0, rb > 0 ? ((rl / rb) * 100).toFixed(1) : 0)}
+
+        {linhaDRE('4.0', '(-) CUSTOS VARIÁVEIS / SERVIÇOS PRESTADOS', -(dados.totalCustosVariaveis || 0), '#ef4444', true, 0, rb > 0 ? (((dados.totalCustosVariaveis || 0) / rb) * 100).toFixed(1) : 0)}
+        {linhaDRE('4.1', '  Comissões & Repasses de Profissionais', -(dados.detalhesCustos?.comissoes || 0), 'var(--muted)', false, 1)}
+        {linhaDRE('4.2', '  Consumo de Insumos & Fichas Técnicas', -(dados.detalhesCustos?.insumos || 0), 'var(--muted)', false, 1)}
+
+        {linhaDRE('5.0', '(=) MARGEM DE CONTRIBUIÇÃO / LUCRO BRUTO', mc, mc >= 0 ? 'var(--lime)' : '#ef4444', true, 0, mcPct)}
+
+        {linhaDRE('6.0', '(-) DESPESAS OPERACIONAIS FIXAS', -(dados.totalDespesasOperacionais || 0), '#ef4444', true, 0, rb > 0 ? (((dados.totalDespesasOperacionais || 0) / rb) * 100).toFixed(1) : 0)}
+        {(dados.rankingCategorias || []).map((cat, idx) => (
+          linhaDRE(`6.${idx + 1}`, `  ${cat.categoria}`, -cat.valor, 'var(--muted)', false, 1, cat.percentual)
+        ))}
+
+        {linhaDRE('7.0', '(=) EBITDA OPERACIONAL', ebitda, ebitda >= 0 ? 'var(--gold)' : '#ef4444', true, 0)}
+
+        <div style={{
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+          padding: '16px 18px', background: resLiq >= 0 ? 'rgba(34,197,94,.12)' : 'rgba(239,68,68,.12)',
+          borderTop: '2px solid var(--line)', marginTop: 8
+        }}>
+          <div>
+            <div style={{ fontSize: 11, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.5px', fontWeight: 700 }}>8.0 RESULTADO LÍQUIDO FINAL</div>
+            <div style={{ fontSize: 18, fontWeight: 900, color: resLiq >= 0 ? 'var(--green)' : '#ef4444' }}>
+              {resLiq >= 0 ? 'LUCRO LÍQUIDO DO EXERCÍCIO' : 'PREJUÍZO NO PERÍODO'}
+            </div>
+          </div>
+          <div style={{ textAlign: 'right' }}>
+            <div style={{ fontSize: 24, fontWeight: 900, color: resLiq >= 0 ? 'var(--green)' : '#ef4444' }}>
+              {fmtR(resLiq)}
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--muted)' }}>Margem Líquida: {margemLiqPct}%</div>
+          </div>
+        </div>
       </div>
     </div>
   )
@@ -153,6 +274,8 @@ export default function Financeiro() {
   const [lancs, setLancs] = useState([])
   const [fluxo, setFluxo] = useState([])
   const [resumo, setResumo] = useState(null)
+  const [mesDRE, setMesDRE] = useState(new Date().toISOString().slice(0, 7))
+
   const [filtroTipo, setFiltroTipo] = useState('')
   const [filtroStatus, setFiltroStatus] = useState('')
   const [filtroCategoria, setFiltroCategoria] = useState('')
@@ -161,8 +284,9 @@ export default function Financeiro() {
   const [filtroAte, setFiltroAte] = useState('')
   const [loading, setLoading] = useState(false)
   const [modalForm, setModalForm] = useState(null)
-  const [form, setForm] = useState({ tipo:'receita', categoria:'Outros', descricao:'', valor:'', vencimento:'', obs:'' })
-  const hoje = new Date().toISOString().slice(0,10)
+  const [form, setForm] = useState({ tipo: 'receita', categoria: 'Outros', descricao: '', valor: '', vencimento: '', obs: '', formaPagamento: 'pix' })
+
+  const hoje = new Date().toISOString().slice(0, 10)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -172,20 +296,27 @@ export default function Financeiro() {
         api.get('/api/admin/financeiro/fluxo'),
         api.get('/api/admin/financeiro/resumo'),
       ])
-      setLancs(l); setFluxo(f); setResumo(r)
-    } finally { setLoading(false) }
-  }, [])
+      setLancs(Array.isArray(l) ? l : [])
+      setFluxo(Array.isArray(f) ? f : [])
+      setResumo(r || null)
+    } catch (err) {
+      console.error('Erro ao carregar dados financeiros:', err)
+      toast('Erro ao carregar financeiro', true)
+    } finally {
+      setLoading(false)
+    }
+  }, [toast])
 
   useEffect(() => { load() }, [load])
 
   /* filtros */
   let lista = lancs
-  if (filtroTipo)       lista = lista.filter(l => l.tipo === filtroTipo)
-  if (filtroStatus)     lista = lista.filter(l => l.status === filtroStatus)
-  if (filtroCategoria)  lista = lista.filter(l => l.categoria === filtroCategoria)
-  if (filtroQ)          lista = lista.filter(l => l.descricao?.toLowerCase().includes(filtroQ.toLowerCase()))
-  if (filtroDe)         lista = lista.filter(l => l.vencimento >= filtroDe)
-  if (filtroAte)        lista = lista.filter(l => l.vencimento <= filtroAte)
+  if (filtroTipo) lista = lista.filter(l => l.tipo === filtroTipo)
+  if (filtroStatus) lista = lista.filter(l => l.status === filtroStatus)
+  if (filtroCategoria) lista = lista.filter(l => l.categoria === filtroCategoria)
+  if (filtroQ) lista = lista.filter(l => l.descricao?.toLowerCase().includes(filtroQ.toLowerCase()))
+  if (filtroDe) lista = lista.filter(l => l.vencimento >= filtroDe)
+  if (filtroAte) lista = lista.filter(l => l.vencimento <= filtroAte)
 
   const listaTabFiltrada = lista.filter(l => tab === 'todos' || l.tipo === (tab === 'receitas' ? 'receita' : 'despesa'))
 
@@ -193,7 +324,6 @@ export default function Financeiro() {
     setFiltroTipo(''); setFiltroStatus(''); setFiltroCategoria('')
     setFiltroQ(''); setFiltroDe(''); setFiltroAte('')
   }
-
   const temFiltro = filtroTipo || filtroStatus || filtroCategoria || filtroQ || filtroDe || filtroAte
 
   /* CRUD */
@@ -202,35 +332,63 @@ export default function Financeiro() {
     try {
       if (modalForm?.id) {
         await api.patch(`/api/admin/financeiro/lancamentos/${modalForm.id}`, form)
-        toast('Atualizado')
+        toast('Lançamento atualizado')
       } else {
         await api.post('/api/admin/financeiro/lancamentos', form)
-        toast('Lançamento criado')
+        toast('Lançamento criado com sucesso')
       }
       setModalForm(null)
-      setForm({ tipo:'receita', categoria:'Outros', descricao:'', valor:'', vencimento:'', obs:'' })
+      setForm({ tipo: 'receita', categoria: 'Outros', descricao: '', valor: '', vencimento: '', obs: '', formaPagamento: 'pix' })
       load()
-    } catch(e) { toast(e.message, true) }
+    } catch (e) {
+      toast(e.message || 'Erro ao salvar lançamento', true)
+    }
   }
 
   async function marcarPago(id) {
-    try { await api.patch(`/api/admin/financeiro/lancamentos/${id}`, { status:'pago' }); toast('Marcado como pago'); load() }
-    catch(e) { toast(e.message, true) }
+    try {
+      await api.patch(`/api/admin/financeiro/lancamentos/${id}`, { status: 'pago' })
+      toast('Marcado como pago')
+      load()
+    } catch (e) {
+      toast(e.message || 'Erro ao dar baixa', true)
+    }
   }
 
   async function excluir(id) {
-    if (!confirm('Excluir lançamento?')) return
-    try { await api.delete(`/api/admin/financeiro/lancamentos/${id}`); toast('Excluído'); load() }
-    catch(e) { toast(e.message, true) }
+    if (!confirm('Deseja realmente cancelar este lançamento?')) return
+    try {
+      await api.delete(`/api/admin/financeiro/lancamentos/${id}`)
+      toast('Lançamento cancelado')
+      load()
+    } catch (e) {
+      toast(e.message || 'Erro ao excluir', true)
+    }
   }
 
   function abrirEdicao(l) {
-    setForm({ tipo:l.tipo, categoria:l.categoria, descricao:l.descricao, valor:l.valor, vencimento:l.vencimento, obs:l.obs || '' })
+    setForm({
+      tipo: l.tipo,
+      categoria: l.categoria,
+      descricao: l.descricao,
+      valor: l.valor,
+      vencimento: l.vencimento,
+      obs: l.obs || '',
+      formaPagamento: l.meioPagamento || 'pix'
+    })
     setModalForm(l)
   }
 
   function abrirNovo() {
-    setForm({ tipo:'receita', categoria:'Outros', descricao:'', valor:'', vencimento:hoje, obs:'' })
+    setForm({
+      tipo: tab === 'despesas' ? 'despesa' : 'receita',
+      categoria: tab === 'despesas' ? 'Aluguel & Ocupação' : 'Serviços & Cortes',
+      descricao: '',
+      valor: '',
+      vencimento: hoje,
+      obs: '',
+      formaPagamento: 'pix'
+    })
     setModalForm({})
   }
 
@@ -238,252 +396,190 @@ export default function Financeiro() {
   const catsDisponiveis = tab === 'receitas' ? CAT_RECEITA : tab === 'despesas' ? CAT_DESPESA : [...CAT_RECEITA, ...CAT_DESPESA]
 
   /* Alertas de vencimento */
-  const amanha = new Date(); amanha.setDate(amanha.getDate() + 1)
-  const fimSemana = new Date(); fimSemana.setDate(fimSemana.getDate() + 7)
-  const amStr = amanha.toISOString().slice(0,10)
-  const fimSemStr = fimSemana.toISOString().slice(0,10)
-
   const alertasVencimento = useMemo(() => {
-    const pendentes = lancs.filter(l => l.status !== 'pago' && l.status !== 'cancelado' && l.vencimento)
-    const hoje_str = hoje
-    const vencendoHoje = pendentes.filter(l => l.vencimento === hoje_str)
-    const vencendoSemana = pendentes.filter(l => l.vencimento > hoje_str && l.vencimento <= fimSemStr)
-    const jáVencidos = pendentes.filter(l => l.vencimento < hoje_str)
-    return { vencendoHoje, vencendoSemana, jáVencidos }
+    const pendentes = lancs.filter(l => l.status === 'pendente' && l.vencimento)
+    const seteDias = new Date()
+    seteDias.setDate(seteDias.getDate() + 7)
+    const limiteSemana = seteDias.toISOString().slice(0, 10)
+    return {
+      jáVencidos: pendentes.filter(l => l.vencimento < hoje),
+      vencendoHoje: pendentes.filter(l => l.vencimento === hoje),
+      vencendoSemana: pendentes.filter(l => l.vencimento > hoje && l.vencimento <= limiteSemana),
+    }
   }, [lancs, hoje])
 
-  function handleExportCSV() {
-    exportCSV(listaTabFiltrada.map(l => ({
-      tipo: l.tipo,
-      descricao: l.descricao,
-      categoria: l.categoria,
-      valor: l.valor,
-      vencimento: l.vencimento,
-      status: l.status,
-      obs: l.obs || '',
-    })), `lancamentos_${tab}_${hoje}.csv`)
+  const handleExportCSV = () => {
+    const rows = listaTabFiltrada.map(l => ({
+      ID: l.id,
+      Tipo: l.tipo,
+      Descricao: l.descricao,
+      Categoria: l.categoria,
+      Valor: l.valor,
+      Vencimento: l.vencimento,
+      Status: l.status,
+      DataPagamento: l.pagoEm || '',
+      Observacao: l.obs || ''
+    }))
+    exportCSV(rows, `financeiro-${tab}-${hoje}.csv`)
   }
 
   return (
     <div style={S.page}>
+      {/* Header */}
       <div style={S.header}>
-        <div style={S.title}>💰 Financeiro</div>
-        <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
-          <button onClick={abrirNovo} style={{ ...S.btn, background:'var(--green)', color:'var(--deep)' }}>+ Novo Lançamento</button>
+        <div>
+          <div style={S.title}>
+            <span>💳</span>
+            <span>Gestão Financeira & DRE</span>
+          </div>
+          <p style={{ margin: '4px 0 0', color: 'var(--muted)', fontSize: 13 }}>
+            Contas a pagar e receber, fluxo de caixa, conciliação e resultado operacional em tempo real.
+          </p>
+        </div>
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button onClick={load} style={{ ...S.btn, background: 'rgba(255,255,255,.06)', color: 'var(--cream)', border: '1px solid var(--line)' }}>
+            🔄 Atualizar
+          </button>
+          <button onClick={abrirNovo} style={{ ...S.btn, background: 'var(--green)', color: '#fff' }}>
+            + Novo Lançamento
+          </button>
         </div>
       </div>
 
-      {/* Cards KPI */}
-      {resumo && (() => {
-        const resultado = (resumo.recMes||0) - (resumo.despMes||0)
-        const margem = resumo.recMes > 0 ? ((resultado/resumo.recMes)*100).toFixed(1) : 0
-        return (
-          <>
-            <div style={{ display:'flex', gap:10, flexWrap:'wrap', marginBottom:12 }}>
-              <KpiCard label="Saldo Total" value={fmtKpi(resumo.saldo)} color={resumo.saldo >= 0 ? 'var(--green)' : '#ef4444'} icon="💰" />
-              <KpiCard label="A Receber" value={fmtKpi(resumo.aReceber)} color='var(--green)' icon="📥" />
-              <KpiCard label="A Pagar" value={fmtKpi(resumo.aPagar)} color='#ef4444' icon="📤" />
-              <KpiCard label="Rec. Mês" value={fmtKpi(resumo.recMes)} color='var(--green)' icon="↑" />
-              <KpiCard label="Desp. Mês" value={fmtKpi(resumo.despMes)} color='#ef4444' icon="↓" />
-              <KpiCard label="Resultado Mês" value={fmtKpi(resultado)} color={resultado >= 0 ? 'var(--lime)' : '#ef4444'}
-                sub={`Margem: ${margem}%`} icon={resultado >= 0 ? '📈' : '📉'} />
-              <KpiCard label="Inadimplentes" value={resumo.inadimplentes} color={resumo.inadimplentes > 0 ? '#ef4444' : 'var(--green)'} icon="⚠️" />
+      {/* Alertas Rápidos de Vencimento */}
+      {(alertasVencimento.jáVencidos.length > 0 || alertasVencimento.vencendoHoje.length > 0 || alertasVencimento.vencendoSemana.length > 0) && (
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 18 }}>
+          {alertasVencimento.jáVencidos.length > 0 && (
+            <div
+              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', borderRadius: 8, background: 'rgba(239,68,68,.12)', border: '1px solid rgba(239,68,68,.35)', cursor: 'pointer' }}
+              onClick={() => { setTab('todos'); setFiltroStatus('pendente'); setFiltroAte(hoje) }}
+            >
+              <span>🔴</span>
+              <span style={{ fontWeight: 700, color: '#ef4444', fontSize: 13 }}>{alertasVencimento.jáVencidos.length} Vencidos</span>
+              <span style={{ color: 'var(--muted)', fontSize: 12 }}>{fmtR(alertasVencimento.jáVencidos.reduce((s, l) => s + (l.valor || 0), 0))}</span>
             </div>
-            {/* Alertas de vencimento */}
-            {(alertasVencimento.vencendoHoje.length > 0 || alertasVencimento.jáVencidos.length > 0 || alertasVencimento.vencendoSemana.length > 0) && (
-              <div style={{ display:'flex', gap:8, flexWrap:'wrap', marginBottom:16 }}>
-                {alertasVencimento.jáVencidos.length > 0 && (
-                  <div style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 14px', borderRadius:8,
-                    background:'rgba(239,68,68,.1)', border:'1px solid rgba(239,68,68,.35)', cursor:'pointer' }}
-                    onClick={() => { setTab('todos'); setFiltroStatus('pendente') }}>
-                    <span>🔴</span>
-                    <span style={{ fontWeight:700, color:'#ef4444', fontSize:13 }}>{alertasVencimento.jáVencidos.length} Vencidos</span>
-                    <span style={{ color:'var(--muted)', fontSize:12 }}>{fmtR(alertasVencimento.jáVencidos.reduce((s,l)=>s+(l.valor||0),0))}</span>
-                  </div>
-                )}
-                {alertasVencimento.vencendoHoje.length > 0 && (
-                  <div style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 14px', borderRadius:8,
-                    background:'rgba(251,191,36,.1)', border:'1px solid rgba(251,191,36,.35)', cursor:'pointer' }}
-                    onClick={() => { setTab('todos'); setFiltroDe(hoje); setFiltroAte(hoje) }}>
-                    <span>⚡</span>
-                    <span style={{ fontWeight:700, color:'#fbbf24', fontSize:13 }}>{alertasVencimento.vencendoHoje.length} Vencem Hoje</span>
-                    <span style={{ color:'var(--muted)', fontSize:12 }}>{fmtR(alertasVencimento.vencendoHoje.reduce((s,l)=>s+(l.valor||0),0))}</span>
-                  </div>
-                )}
-                {alertasVencimento.vencendoSemana.length > 0 && (
-                  <div style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 14px', borderRadius:8,
-                    background:'rgba(255,107,44,.07)', border:'1px solid rgba(255,107,44,.25)' }}>
-                    <span>📅</span>
-                    <span style={{ fontWeight:700, color:'var(--green)', fontSize:13 }}>{alertasVencimento.vencendoSemana.length} Esta semana</span>
-                    <span style={{ color:'var(--muted)', fontSize:12 }}>{fmtR(alertasVencimento.vencendoSemana.reduce((s,l)=>s+(l.valor||0),0))}</span>
-                  </div>
-                )}
-              </div>
-            )}
-          </>
-        )
-      })()}
+          )}
+          {alertasVencimento.vencendoHoje.length > 0 && (
+            <div
+              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', borderRadius: 8, background: 'rgba(251,191,36,.12)', border: '1px solid rgba(251,191,36,.35)', cursor: 'pointer' }}
+              onClick={() => { setTab('todos'); setFiltroDe(hoje); setFiltroAte(hoje) }}
+            >
+              <span>⚡</span>
+              <span style={{ fontWeight: 700, color: '#fbbf24', fontSize: 13 }}>{alertasVencimento.vencendoHoje.length} Vencem Hoje</span>
+              <span style={{ color: 'var(--muted)', fontSize: 12 }}>{fmtR(alertasVencimento.vencendoHoje.reduce((s, l) => s + (l.valor || 0), 0))}</span>
+            </div>
+          )}
+          {alertasVencimento.vencendoSemana.length > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', borderRadius: 8, background: 'rgba(255,107,44,.07)', border: '1px solid rgba(255,107,44,.25)' }}>
+              <span>📅</span>
+              <span style={{ fontWeight: 700, color: 'var(--green)', fontSize: 13 }}>{alertasVencimento.vencendoSemana.length} Esta semana</span>
+              <span style={{ color: 'var(--muted)', fontSize: 12 }}>{fmtR(alertasVencimento.vencendoSemana.reduce((s, l) => s + (l.valor || 0), 0))}</span>
+            </div>
+          )}
+        </div>
+      )}
 
-      {/* Tabs */}
-      <div style={{ display:'flex', gap:4, marginBottom:16, borderBottom:'1px solid var(--line)' }}>
-        {['resumo','receitas','despesas','todos'].map(t => (
-          <button key={t} onClick={() => setTab(t)} style={{
-            padding:'8px 16px', border:'none', cursor:'pointer', fontWeight:700, fontSize:13,
-            background:'none', color: tab === t ? 'var(--green)' : 'var(--muted)',
-            borderBottom: tab === t ? '2px solid var(--green)' : '2px solid transparent',
-            textTransform:'capitalize',
-          }}>{t}</button>
+      {/* Navegação por Abas */}
+      <div style={{ display: 'flex', gap: 6, marginBottom: 20, borderBottom: '1px solid var(--line)' }}>
+        {[
+          { id: 'resumo', label: '📊 Visão Geral & Fluxo' },
+          { id: 'dre', label: '📋 DRE Gerencial' },
+          { id: 'receitas', label: '↑ Contas a Receber' },
+          { id: 'despesas', label: '↓ Contas a Pagar' },
+          { id: 'todos', label: '📑 Todos os Lançamentos' },
+        ].map(t => (
+          <button
+            key={t.id}
+            onClick={() => setTab(t.id)}
+            style={{
+              padding: '10px 18px', border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13,
+              background: 'none', color: tab === t.id ? 'var(--green)' : 'var(--muted)',
+              borderBottom: tab === t.id ? '3px solid var(--green)' : '3px solid transparent',
+              transition: 'all .15s'
+            }}
+          >
+            {t.label}
+          </button>
         ))}
       </div>
 
-      {/* Tab: Resumo */}
+      {/* Tab: Resumo Geral */}
       {tab === 'resumo' && (
         <>
+          {resumo && (
+            <div style={S.cards}>
+              <KpiCard label="Saldo Líquido Operacional" value={fmtR(resumo.saldo)} color={resumo.saldo >= 0 ? 'var(--green)' : '#ef4444'} icon="💼" sub="Receitas pagas menos despesas" />
+              <KpiCard label="Receitas do Mês" value={fmtR(resumo.totalReceitas || resumo.recMes)} color="var(--green)" icon="📈" sub="Serviços, revenda e planos" />
+              <KpiCard label="Despesas do Mês" value={fmtR(resumo.totalDespesas || resumo.despMes)} color="#ef4444" icon="📉" sub="Comissões e custos fixos" />
+              <KpiCard label="A Receber (Pendentes)" value={fmtR(resumo.aReceber)} color="var(--gold)" icon="⏳" sub="Vendas a prazo e crediários" />
+              <KpiCard label="A Pagar (Compromissos)" value={fmtR(resumo.aPagar)} color="#f87171" icon="📅" sub="Contas e fornecedores a vencer" />
+            </div>
+          )}
+
           <FluxoChart dados={fluxo} />
-          {resumo && (() => {
-            const resultado = (resumo.recMes||0) - (resumo.despMes||0)
-            const margem = resumo.recMes > 0 ? ((resultado/resumo.recMes)*100) : 0
-            const margemColor = margem >= 20 ? 'var(--green)' : margem >= 0 ? '#fbbf24' : '#ef4444'
-            const recPct = resumo.recMes > 0 ? Math.min(100, Math.round((resultado/resumo.recMes)*100+100)/2) : 50
-            return (
-              <>
-                {/* Gauge resultado mês */}
-                <div style={{ ...S.card, marginBottom:16, borderLeft:'4px solid ' + margemColor }}>
-                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10 }}>
-                    <div style={{ fontSize:14, fontWeight:800, color:'var(--cream)' }}>
-                      {resultado >= 0 ? '📈' : '📉'} Resultado do Mês Atual
-                    </div>
-                    <div style={{ fontSize:22, fontWeight:900, color:margemColor }}>{fmtKpi(resultado)}</div>
-                  </div>
-                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:10, marginBottom:12 }}>
-                    {[
-                      { label:'Receitas', val:resumo.recMes, color:'var(--green)' },
-                      { label:'Despesas', val:resumo.despMes, color:'#ef4444' },
-                      { label:'Margem', val:`${margem.toFixed(1)}%`, color:margemColor, isStr:true },
-                    ].map(k => (
-                      <div key={k.label} style={{ textAlign:'center', padding:'8px', background:'rgba(0,0,0,.12)', borderRadius:8 }}>
-                        <div style={{ fontSize:11, color:'var(--muted)', marginBottom:4 }}>{k.label}</div>
-                        <div style={{ fontSize:16, fontWeight:800, color:k.color }}>{k.isStr ? k.val : fmtKpi(k.val)}</div>
-                      </div>
-                    ))}
-                  </div>
-                  {/* Barra receita vs despesa */}
-                  {resumo.recMes > 0 && (
-                    <div>
-                      <div style={{ height:8, borderRadius:4, background:'rgba(239,68,68,.25)', overflow:'hidden', position:'relative' }}>
-                        <div style={{ position:'absolute', left:0, top:0, height:'100%', borderRadius:4,
-                          width:`${Math.min(100,(resumo.recMes-resumo.despMes>=0 ? (resumo.despMes/resumo.recMes)*100 : 100))}%`,
-                          background:'#ef4444' }} />
-                        <div style={{ position:'absolute', left:0, top:0, height:'100%', borderRadius:4,
-                          width:`${Math.min(100,100)}%`, background:'var(--green)', opacity:.25 }} />
-                      </div>
-                      <div style={{ display:'flex', justifyContent:'space-between', fontSize:10, color:'var(--muted)', marginTop:4 }}>
-                        <span style={{ color:'#ef4444' }}>■ Despesas {resumo.recMes > 0 ? ((resumo.despMes/resumo.recMes)*100).toFixed(0) : 0}%</span>
-                        <span style={{ color:'var(--green)' }}>■ Receitas 100%</span>
-                      </div>
-                    </div>
-                  )}
-                </div>
-                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:16, marginBottom:16 }}>
-                <div style={S.card}>
-                  <div style={{ fontWeight:700, color:'var(--cream)', marginBottom:12 }}>Receitas por fonte</div>
-                  {[
-                    { label:'Bar / Comandas', val:resumo.recBar },
-                    { label:'Mensalidades recebidas', val:resumo.mensRecebidas },
-                    { label:'Inscrições confirmadas', val:resumo.inscRec },
-                    { label:'Lançamentos este mês', val:resumo.recMes },
-                  ].map(r => (
-                    <div key={r.label} style={{ display:'flex', justifyContent:'space-between', padding:'7px 0', borderBottom:'1px solid var(--line)', fontSize:13 }}>
-                      <span style={{ color:'var(--muted)' }}>{r.label}</span>
-                      <span style={{ fontWeight:700, color:'var(--green)' }}>{fmtKpi(r.val)}</span>
-                    </div>
-                  ))}
-                </div>
-                <div style={S.card}>
-                  <div style={{ fontWeight:700, color:'var(--cream)', marginBottom:12 }}>Situação das mensalidades</div>
-                  {[
-                    { label:'Recebidas', val:resumo.mensRecebidas, color:'var(--green)' },
-                    { label:'Pendentes', val:resumo.mensPendentes, color:'var(--gold)' },
-                    { label:'Vencidas', val:resumo.mensVencidas, color:'#ef4444' },
-                  ].map(r => (
-                    <div key={r.label} style={{ display:'flex', justifyContent:'space-between', padding:'7px 0', borderBottom:'1px solid var(--line)', fontSize:13 }}>
-                      <span style={{ color:'var(--muted)' }}>{r.label}</span>
-                      <span style={{ fontWeight:700, color:r.color }}>{fmtKpi(r.val)}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-                <DRE resumo={resumo} />
-              </>
-            )
-          })()}
         </>
       )}
 
-      {/* Tab: Receitas / Despesas / Todos */}
+      {/* Tab: DRE Gerencial */}
+      {tab === 'dre' && (
+        <DreGerencialView mes={mesDRE} onMesChange={setMesDRE} />
+      )}
+
+      {/* Tab: Lançamentos (Receitas, Despesas, Todos) */}
       {(tab === 'receitas' || tab === 'despesas' || tab === 'todos') && (
         <>
-          {/* Filtros */}
-          <div style={{ background:'var(--surface)', border:'1px solid var(--line)', borderRadius:10, padding:'14px 16px', marginBottom:16 }}>
-            <div style={{ display:'flex', gap:10, flexWrap:'wrap', alignItems:'center', marginBottom:10 }}>
+          {/* Barra de Filtros */}
+          <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 12, padding: '16px', marginBottom: 18 }}>
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginBottom: 12 }}>
               {tab === 'todos' && (
                 <select value={filtroTipo} onChange={e => setFiltroTipo(e.target.value)} style={S.inp}>
-                  <option value=''>Tipo: Todos</option>
-                  <option value='receita'>↑ Receitas</option>
-                  <option value='despesa'>↓ Despesas</option>
+                  <option value="">Tipo: Todos</option>
+                  <option value="receita">↑ Apenas Receitas</option>
+                  <option value="despesa">↓ Apenas Despesas</option>
                 </select>
               )}
               <select value={filtroStatus} onChange={e => setFiltroStatus(e.target.value)} style={S.inp}>
-                <option value=''>Status: Todos</option>
-                <option value='pendente'>Pendente</option>
-                <option value='pago'>Pago</option>
-                <option value='cancelado'>Cancelado</option>
+                <option value="">Status: Todos</option>
+                <option value="pendente">⏳ Pendente</option>
+                <option value="pago">✓ Pago / Liquidado</option>
+                <option value="cancelado">✕ Cancelado</option>
               </select>
               <select value={filtroCategoria} onChange={e => setFiltroCategoria(e.target.value)} style={S.inp}>
-                <option value=''>Categoria: Todas</option>
+                <option value="">Categoria: Todas</option>
                 {catsDisponiveis.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
-              <input type='text' placeholder='🔍 Descrição…' value={filtroQ} onChange={e => setFiltroQ(e.target.value)}
-                style={{ ...S.inp, minWidth:140 }} />
+              <input
+                type="text"
+                placeholder="🔍 Buscar descrição ou cliente..."
+                value={filtroQ}
+                onChange={e => setFiltroQ(e.target.value)}
+                style={{ ...S.inp, minWidth: 200, flex: 1 }}
+              />
             </div>
-            <div style={{ display:'flex', gap:10, flexWrap:'wrap', alignItems:'center' }}>
-              <label style={{ fontSize:12, color:'var(--muted)' }}>De:</label>
-              <input type='date' value={filtroDe} onChange={e => setFiltroDe(e.target.value)} style={S.inp} />
-              <label style={{ fontSize:12, color:'var(--muted)' }}>Até:</label>
-              <input type='date' value={filtroAte} onChange={e => setFiltroAte(e.target.value)} style={S.inp} />
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+              <label style={{ fontSize: 12, color: 'var(--muted)' }}>De:</label>
+              <input type="date" value={filtroDe} onChange={e => setFiltroDe(e.target.value)} style={S.inp} />
+              <label style={{ fontSize: 12, color: 'var(--muted)' }}>Até:</label>
+              <input type="date" value={filtroAte} onChange={e => setFiltroAte(e.target.value)} style={S.inp} />
               {temFiltro && (
-                <button onClick={limparFiltros} style={{ ...S.btn, background:'none', border:'1px solid var(--line)', color:'var(--muted)' }}>✕ Limpar</button>
+                <button onClick={limparFiltros} style={{ ...S.btn, background: 'none', border: '1px solid var(--line)', color: 'var(--muted)' }}>✕ Limpar</button>
               )}
-              <span style={{ marginLeft:'auto', fontSize:12, color:'var(--muted)' }}>{listaTabFiltrada.length} lançamentos</span>
-              <button onClick={handleExportCSV} style={{ ...S.btn, background:'rgba(255,107,44,.15)', color:'var(--green)', border:'1px solid var(--green)' }}>
+              <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--muted)' }}>{listaTabFiltrada.length} lançamentos encontrados</span>
+              <button onClick={handleExportCSV} style={{ ...S.btn, background: 'rgba(255,107,44,.15)', color: 'var(--green)', border: '1px solid var(--green)' }}>
                 📥 Exportar CSV
               </button>
             </div>
           </div>
 
-          {/* Totais rápidos */}
-          <div style={{ display:'flex', gap:10, marginBottom:14, flexWrap:'wrap' }}>
-            {(() => {
-              const rec  = listaTabFiltrada.filter(l => l.tipo === 'receita').reduce((s,l) => s + (l.valor||0), 0)
-              const desp = listaTabFiltrada.filter(l => l.tipo === 'despesa').reduce((s,l) => s + (l.valor||0), 0)
-              const pgos = listaTabFiltrada.filter(l => l.status === 'pago').reduce((s,l) => s + (l.valor||0), 0)
-              const pendts = listaTabFiltrada.filter(l => l.status !== 'pago' && l.status !== 'cancelado').reduce((s,l) => s + (l.valor||0), 0)
-              return [
-                tab !== 'despesas' && { label:'↑ Receitas', val:rec, color:'var(--green)' },
-                tab !== 'receitas' && { label:'↓ Despesas', val:desp, color:'#ef4444' },
-                { label:'✓ Pagos', val:pgos, color:'var(--lime)' },
-                { label:'⏳ Pendente', val:pendts, color:'var(--gold)' },
-              ].filter(Boolean).map(k => (
-                <div key={k.label} style={{ ...S.card, padding:'10px 14px', flex:1, minWidth:120 }}>
-                  <div style={{ fontSize:11, color:'var(--muted)', marginBottom:3 }}>{k.label}</div>
-                  <div style={{ fontSize:16, fontWeight:800, color:k.color }}>{fmtKpi(k.val)}</div>
-                </div>
-              ))
-            })()}
-          </div>
-
-          {loading ? <div style={{ color:'var(--muted)', padding:24 }}>Carregando…</div> : (
-            <div style={{ overflowX:'auto' }}>
+          {/* Tabela de Lançamentos */}
+          {loading ? (
+            <div style={{ ...S.card, textAlign: 'center', padding: 40, color: 'var(--muted)' }}>Carregando lançamentos...</div>
+          ) : listaTabFiltrada.length === 0 ? (
+            <div style={{ ...S.card, textAlign: 'center', padding: 40, color: 'var(--muted)' }}>
+              Nenhum lançamento encontrado para os filtros selecionados.
+            </div>
+          ) : (
+            <div style={{ overflowX: 'auto' }}>
               <table style={S.table}>
                 <thead>
                   <tr>
@@ -497,38 +593,56 @@ export default function Financeiro() {
                   </tr>
                 </thead>
                 <tbody>
-                  {listaTabFiltrada.map(l => {
-                    const vencido = l.status !== 'pago' && l.status !== 'cancelado' && l.vencimento < hoje
-                    return (
-                      <tr key={l.id} style={{ background: vencido ? 'rgba(239,68,68,.04)' : undefined }}>
-                        <td style={S.td}>
-                          <span style={{ fontWeight:700, color: l.tipo === 'receita' ? 'var(--green)' : '#ef4444', fontSize:12, textTransform:'uppercase' }}>
-                            {l.tipo === 'receita' ? '↑ Rec' : '↓ Desp'}
-                          </span>
-                        </td>
-                        <td style={{ ...S.td, fontWeight:600, color:'var(--cream)' }}>{l.descricao}</td>
-                        <td style={{ ...S.td, color:'var(--muted)', fontSize:12 }}>{l.categoria}</td>
-                        <td style={{ ...S.td, fontWeight:700, color: l.tipo === 'receita' ? 'var(--green)' : '#ef4444' }}>{fmtR(l.valor)}</td>
-                        <td style={{ ...S.td, color: vencido ? '#ef4444' : undefined }}>{fmtData(l.vencimento)}</td>
-                        <td style={S.td}><Badge status={l.status} vencimento={l.vencimento} /></td>
-                        <td style={S.td}>
-                          <div style={{ display:'flex', gap:6 }}>
-                            {l.status === 'pendente' && (
-                              <button onClick={() => marcarPago(l.id)}
-                                style={{ ...S.btn, padding:'4px 9px', background:'#FFF9F5', color:'#12283F', fontSize:11 }}>✓ Pago</button>
-                            )}
-                            <button onClick={() => abrirEdicao(l)}
-                              style={{ ...S.btn, padding:'4px 9px', background:'var(--surface)', border:'1px solid var(--line)', color:'var(--cream)', fontSize:11 }}>✎</button>
-                            <button onClick={() => excluir(l.id)}
-                              style={{ ...S.btn, padding:'4px 9px', background:'#fee2e2', color:'#991b1b', fontSize:11 }}>🗑</button>
-                          </div>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                  {listaTabFiltrada.length === 0 && (
-                    <tr><td colSpan={7} style={{ ...S.td, textAlign:'center', color:'var(--muted)', padding:32 }}>Nenhum lançamento encontrado</td></tr>
-                  )}
+                  {listaTabFiltrada.map(l => (
+                    <tr key={l.id} style={{ transition: 'background .15s' }}>
+                      <td style={S.td}>
+                        <span style={{
+                          fontWeight: 800, fontSize: 11, padding: '3px 7px', borderRadius: 6,
+                          color: l.tipo === 'receita' ? 'var(--green)' : '#ef4444',
+                          background: l.tipo === 'receita' ? 'rgba(34,197,94,.1)' : 'rgba(239,68,68,.1)'
+                        }}>
+                          {l.tipo === 'receita' ? '↑ RECEITA' : '↓ DESPESA'}
+                        </span>
+                      </td>
+                      <td style={{ ...S.td, fontWeight: 600, color: 'var(--cream)' }}>
+                        {l.descricao}
+                        {l.obs && <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>{l.obs}</div>}
+                      </td>
+                      <td style={{ ...S.td, color: 'var(--muted)' }}>{l.categoria}</td>
+                      <td style={{ ...S.td, fontWeight: 800, color: l.tipo === 'receita' ? 'var(--green)' : '#ef4444' }}>
+                        {fmtR(l.valor)}
+                      </td>
+                      <td style={{ ...S.td, color: 'var(--cream)' }}>{fmtData(l.vencimento)}</td>
+                      <td style={S.td}><Badge status={l.status} vencimento={l.vencimento} /></td>
+                      <td style={S.td}>
+                        <div style={{ display: 'flex', gap: 6 }}>
+                          {l.status !== 'pago' && l.status !== 'cancelado' && (
+                            <button
+                              onClick={() => marcarPago(l.id)}
+                              style={{ ...S.btn, padding: '5px 10px', fontSize: 11, background: 'rgba(34,197,94,.15)', color: 'var(--lime)', border: '1px solid var(--lime)' }}
+                              title="Marcar como Pago"
+                            >
+                              ✓ Pagar
+                            </button>
+                          )}
+                          <button
+                            onClick={() => abrirEdicao(l)}
+                            style={{ ...S.btn, padding: '5px 10px', fontSize: 11, background: 'rgba(255,255,255,.05)', color: 'var(--cream)', border: '1px solid var(--line)' }}
+                            title="Editar"
+                          >
+                            ✎
+                          </button>
+                          <button
+                            onClick={() => excluir(l.id)}
+                            style={{ ...S.btn, padding: '5px 10px', fontSize: 11, background: 'rgba(239,68,68,.1)', color: '#ef4444', border: '1px solid rgba(239,68,68,.3)' }}
+                            title="Cancelar"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
@@ -536,59 +650,98 @@ export default function Financeiro() {
         </>
       )}
 
-      {/* Modal lançamento */}
-      {modalForm !== null && (
-        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.6)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:1000 }}>
-          <form onSubmit={salvar} style={{ background:'var(--surface)', borderRadius:12, padding:28, width:440, maxWidth:'95vw' }}>
-            <h3 style={{ marginBottom:18, color:'var(--cream)' }}>{modalForm?.id ? 'Editar Lançamento' : 'Novo Lançamento'}</h3>
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:12 }}>
-              <label>
-                <span style={{ fontSize:11, color:'var(--muted)', display:'block', marginBottom:4 }}>Tipo *</span>
-                <select required value={form.tipo} onChange={e => setForm(f => ({ ...f, tipo:e.target.value, categoria:'Outros' }))}
-                  style={{ width:'100%', padding:'8px 10px', borderRadius:8, border:'1px solid var(--line)', background:'var(--bg)', color:'var(--cream)' }}>
-                  <option value='receita'>↑ Receita</option>
-                  <option value='despesa'>↓ Despesa</option>
-                </select>
-              </label>
-              <label>
-                <span style={{ fontSize:11, color:'var(--muted)', display:'block', marginBottom:4 }}>Categoria *</span>
-                <select value={form.categoria} onChange={e => setForm(f => ({ ...f, categoria:e.target.value }))}
-                  style={{ width:'100%', padding:'8px 10px', borderRadius:8, border:'1px solid var(--line)', background:'var(--bg)', color:'var(--cream)' }}>
-                  {cats.map(c => <option key={c} value={c}>{c}</option>)}
-                </select>
-              </label>
+      {/* Modal de Criação / Edição de Lançamento */}
+      {modalForm && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.65)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: 16 }}>
+          <div style={{ background: '#1c1b18', border: '1px solid var(--line)', borderRadius: 14, width: '100%', maxWidth: 480, overflow: 'hidden' }}>
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--line)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ fontWeight: 800, color: 'var(--cream)', fontSize: 16 }}>
+                {modalForm.id ? '✎ Editar Lançamento Financeiro' : '+ Novo Lançamento Financeiro'}
+              </div>
+              <button onClick={() => setModalForm(null)} style={{ background: 'none', border: 'none', color: 'var(--muted)', cursor: 'pointer', fontSize: 18 }}>✕</button>
             </div>
-            <label style={{ display:'block', marginBottom:12 }}>
-              <span style={{ fontSize:11, color:'var(--muted)', display:'block', marginBottom:4 }}>Descrição *</span>
-              <input required value={form.descricao} onChange={e => setForm(f => ({ ...f, descricao:e.target.value }))}
-                placeholder='Ex: Pagamento de energia elétrica'
-                style={{ width:'100%', padding:'8px 10px', borderRadius:8, border:'1px solid var(--line)', background:'var(--bg)', color:'var(--cream)' }} />
-            </label>
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:12 }}>
-              <label>
-                <span style={{ fontSize:11, color:'var(--muted)', display:'block', marginBottom:4 }}>Valor (R$) *</span>
-                <input required type='number' min='0.01' step='0.01' value={form.valor}
-                  onChange={e => setForm(f => ({ ...f, valor:e.target.value }))}
-                  style={{ width:'100%', padding:'8px 10px', borderRadius:8, border:'1px solid var(--line)', background:'var(--bg)', color:'var(--cream)' }} />
-              </label>
-              <label>
-                <span style={{ fontSize:11, color:'var(--muted)', display:'block', marginBottom:4 }}>Vencimento *</span>
-                <input required type='date' value={form.vencimento}
-                  onChange={e => setForm(f => ({ ...f, vencimento:e.target.value }))}
-                  style={{ width:'100%', padding:'8px 10px', borderRadius:8, border:'1px solid var(--line)', background:'var(--bg)', color:'var(--cream)' }} />
-              </label>
-            </div>
-            <label style={{ display:'block', marginBottom:18 }}>
-              <span style={{ fontSize:11, color:'var(--muted)', display:'block', marginBottom:4 }}>Observações</span>
-              <textarea value={form.obs} onChange={e => setForm(f => ({ ...f, obs:e.target.value }))} rows={2}
-                style={{ width:'100%', padding:'8px 10px', borderRadius:8, border:'1px solid var(--line)', background:'var(--bg)', color:'var(--cream)', resize:'vertical' }} />
-            </label>
-            <div style={{ display:'flex', gap:8, justifyContent:'flex-end' }}>
-              <button type='button' onClick={() => setModalForm(null)}
-                style={{ ...S.btn, background:'none', border:'1px solid var(--line)', color:'var(--muted)' }}>Cancelar</button>
-              <button type='submit' style={{ ...S.btn, background:'var(--green)', color:'var(--deep)' }}>Salvar</button>
-            </div>
-          </form>
+            <form onSubmit={salvar} style={{ padding: 20 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, color: 'var(--muted)', marginBottom: 6 }}>Tipo de Operação</label>
+                  <select
+                    value={form.tipo}
+                    onChange={e => setForm({ ...form, tipo: e.target.value, categoria: e.target.value === 'receita' ? CAT_RECEITA[0] : CAT_DESPESA[0] })}
+                    style={{ ...S.inp, width: '100%' }}
+                  >
+                    <option value="receita">↑ Receita (Entrada)</option>
+                    <option value="despesa">↓ Despesa (Saída)</option>
+                  </select>
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, color: 'var(--muted)', marginBottom: 6 }}>Categoria</label>
+                  <select
+                    value={form.categoria}
+                    onChange={e => setForm({ ...form, categoria: e.target.value })}
+                    style={{ ...S.inp, width: '100%' }}
+                  >
+                    {cats.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              <div style={{ marginBottom: 14 }}>
+                <label style={{ display: 'block', fontSize: 12, color: 'var(--muted)', marginBottom: 6 }}>Descrição do Lançamento *</label>
+                <input
+                  type="text"
+                  placeholder="Ex: Fornecedor de Toalhas / Aluguel do Mês / Venda Especial"
+                  value={form.descricao}
+                  onChange={e => setForm({ ...form, descricao: e.target.value })}
+                  style={{ ...S.inp, width: '100%' }}
+                  required
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, color: 'var(--muted)', marginBottom: 6 }}>Valor (R$) *</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    placeholder="0,00"
+                    value={form.valor}
+                    onChange={e => setForm({ ...form, valor: e.target.value })}
+                    style={{ ...S.inp, width: '100%' }}
+                    required
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, color: 'var(--muted)', marginBottom: 6 }}>Data de Vencimento *</label>
+                  <input
+                    type="date"
+                    value={form.vencimento}
+                    onChange={e => setForm({ ...form, vencimento: e.target.value })}
+                    style={{ ...S.inp, width: '100%' }}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div style={{ marginBottom: 18 }}>
+                <label style={{ display: 'block', fontSize: 12, color: 'var(--muted)', marginBottom: 6 }}>Observações / Detalhes</label>
+                <textarea
+                  placeholder="Informações adicionais, nota fiscal ou comprovante..."
+                  value={form.obs}
+                  onChange={e => setForm({ ...form, obs: e.target.value })}
+                  style={{ ...S.inp, width: '100%', height: 60, resize: 'none' }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+                <button type="button" onClick={() => setModalForm(null)} style={{ ...S.btn, background: 'rgba(255,255,255,.05)', color: 'var(--cream)', border: '1px solid var(--line)' }}>
+                  Cancelar
+                </button>
+                <button type="submit" style={{ ...S.btn, background: 'var(--green)', color: '#fff' }}>
+                  {modalForm.id ? 'Salvar Alterações' : 'Criar Lançamento'}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
     </div>
