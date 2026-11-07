@@ -258,5 +258,30 @@ export function createVarejoAdminRouter({ db, escopoDaRequisicao, fuso = 'Americ
     return svc.auditarPrecosGondolaPdv(db, empresaId, { lojaId });
   }));
 
+  // ── Entrada de NF-e e Atualização de Estoque Central ──
+  router.post("/nfe-entrada/confirmar", rota("catalog.write", async ({ req, empresaId, lojaId, usuario }) => {
+    return svc.confirmarEntradaNfeCompra(db, empresaId, req.body || {}, { usuario, lojaId });
+  }));
+
+  // ── Sincronização de Vendas em Contingência Offline ──
+  router.post("/vendas/sincronizar-offline", rota("catalog.write", async ({ req, empresaId, lojaId, usuario }) => {
+    return svc.sincronizarVendasOffline(db, empresaId, req.body?.vendas || [], { usuario, lojaId });
+  }));
+
+  // ── Gestão de Caixas Individuais & Auditoria ──
+  router.get("/caixas", rota("catalog.read", async ({ empresaId, lojaId }) => {
+    return svc.listarCaixas(db, empresaId, { lojaId });
+  }));
+
+  router.get("/caixas/:id/detalhes", rota("catalog.read", async ({ req, empresaId }) => {
+    return svc.obterDetalhesCaixa(db, empresaId, req.params.id);
+  }));
+
+  // ── Kardex e Histórico do Produto ──
+  router.get("/produtos/:id/kardex", rota("catalog.read", async ({ req, empresaId }) => {
+    return svc.obterKardexProduto(db, empresaId, req.params.id);
+  }));
+
   return router;
 }
+

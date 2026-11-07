@@ -1649,3 +1649,145 @@
   font-size: 13px;
   color: #7c2d12;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   29. OFFLINE PWA & CONTINGÊNCIA LOCAL DO PDV
+   ═══════════════════════════════════════════════════════════════════════════ */
+.super-offline-banner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 16px;
+  border-radius: 8px;
+  margin-bottom: 14px;
+  font-size: 13px;
+  font-weight: 600;
+  gap: 12px;
+}
+.super-offline-banner.online {
+  background: #f0fdf4;
+  color: #166534;
+  border: 1px solid #bbf7d0;
+}
+.super-offline-banner.offline {
+  background: #fff7ed;
+  color: #c2410c;
+  border: 1.5px solid #fb923c;
+}
+.offline-banner-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.offline-banner-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.btn-toggle-offline {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+  color: #334155;
+  transition: all 0.2s;
+}
+.btn-toggle-offline:hover {
+  background: #f1f5f9;
+}
+.btn-sincronizar-offline {
+  background: #0284c7;
+  color: #ffffff;
+  border: none;
+  padding: 5px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.btn-sincronizar-offline:hover {
+  background: #0369a1;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   30. MODAIS DE DETALHAMENTO INDUSTRIAL (PRODUTO & SESSÃO CAIXA)
+   ═══════════════════════════════════════════════════════════════════════════ */
+.super-detalhes-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-height: 75vh;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+.super-detalhes-hero {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  background: #f8fafc;
+  padding: 14px 18px;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+}
+.detalhes-hero-title {
+  margin: 0 0 4px 0;
+  font-size: 18px;
+  color: #0f172a;
+}
+.detalhes-hero-meta {
+  font-size: 12.5px;
+  color: #64748b;
+  display: flex;
+  gap: 14px;
+}
+.super-detalhes-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+}
+.detalhes-kpi-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  padding: 10px 14px;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.detalhes-kpi-label {
+  font-size: 11px;
+  color: #64748b;
+  text-transform: uppercase;
+  font-weight: 700;
+}
+.detalhes-kpi-val {
+  font-size: 18px;
+  font-weight: 800;
+  color: #0f172a;
+}
+.super-caixa-totais-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 10px;
+}
+.caixa-total-card {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  padding: 8px 12px;
+  border-radius: 6px;
+  text-align: center;
+}
+.caixa-total-card span {
+  font-size: 11px;
+  color: #64748b;
+  display: block;
+}
+.caixa-total-card strong {
+  font-size: 15px;
+  color: #0f172a;
+}

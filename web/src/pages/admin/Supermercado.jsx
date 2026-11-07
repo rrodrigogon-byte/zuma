@@ -1,10 +1,10 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   Store, ShoppingCart, Barcode, Tag, AlertTriangle, ArrowRightLeft,
   Truck, TrendingUp, RefreshCw, Plus, Trash2, Printer, CheckCircle2,
   Download, Search, DollarSign, Calendar, Layers, ShieldCheck,
   Beef, UtensilsCrossed, Scale, Users, ClipboardCheck, Sparkles,
-  Percent, ArrowDownRight, ArrowUpRight, Lock, KeyRound, AlertCircle, FileText, Apple, Boxes, ShieldAlert, Tv, CreditCard, Receipt
+  Percent, ArrowDownRight, ArrowUpRight, Lock, KeyRound, AlertCircle, FileText, Apple, Boxes, ShieldAlert, Tv, CreditCard, Receipt, Wifi, WifiOff, Eye, ArrowUpCircle, CheckSquare, History, List
 } from 'lucide-react';
 import { api } from '../../lib/api';
 import Modal from '../../components/Modal';
@@ -120,6 +120,30 @@ export default function Supermercado() {
   const [visorClienteAtivo, setVisorClienteAtivo] = useState(true);
   const [ultimoItemBipado, setUltimoItemBipado] = useState(null);
   const [modalTef, setModalTef] = useState(null);
+
+  // ── Modo Offline & Contingência Local ──
+  const [modoOffline, setModoOffline] = useState(typeof navigator !== 'undefined' ? !navigator.onLine : false);
+  const [vendasOffline, setVendasOffline] = useState(() => {
+    try {
+      const salvo = localStorage.getItem('kytto_supermercado_vendas_offline');
+      return salvo ? JSON.parse(salvo) : [];
+    } catch (e) {
+      return [];
+    }
+  });
+
+  // ── Caixas Individuais & Terminais ──
+  const [listaCaixas, setListaCaixas] = useState([]);
+  const [modalDetalhesCaixa, setModalDetalhesCaixa] = useState(null);
+  const [detalhesCaixaDados, setDetalhesCaixaDados] = useState(null);
+  const [carregandoDetalhesCaixa, setCarregandoDetalhesCaixa] = useState(false);
+  const [terminalSelecionado, setTerminalSelecionado] = useState('PDV-01');
+  const [operadorNome, setOperadorNome] = useState('Rodrigo Gonçalves (Operador)');
+
+  // ── Detalhamento de Produto & Kardex ──
+  const [modalDetalhesProduto, setModalDetalhesProduto] = useState(null);
+  const [kardexProduto, setKardexProduto] = useState([]);
+  const [carregandoKardex, setCarregandoKardex] = useState(false);
 
   // Modal Novo Produto
   const [modalNovoProduto, setModalNovoProduto] = useState(false);
@@ -298,15 +322,13 @@ export default function Supermercado() {
         setModalConsultaPreco(true);
       } else if (e.key === "F4") {
         e.preventDefault();
-        setTipoMovimentacao("sangria");
-        setModalMovimentacao(true);
+        setModalCaixa("sangria");
       } else if (e.key === "F6") {
         e.preventDefault();
         capturarPesoBalanca();
       } else if (e.key === "F7") {
         e.preventDefault();
-        setTipoMovimentacao("suprimento");
-        setModalMovimentacao(true);
+        setModalCaixa("suprimento");
       } else if (e.key === "F8") {
         e.preventDefault();
         document.getElementById("input-cpf-clube")?.focus();
@@ -555,11 +577,68 @@ export default function Supermercado() {
     reader.readAsText(file);
   };
 
-  const handleConfirmarEntradaEstoque = () => {
-    showToast(`Entrada confirmada! ${nfeProcessada?.totalItens || 0} produtos atualizados no estoque e custo recalculado.`);
-    setNfeProcessada(null);
-    setXmlNfeTexto("");
-    carregarDados();
+  const handleConfirmarEntradaEstoque = async () => {
+    if (!nfeProcessada) return;
+    try {
+      const res = await api.post('/api/admin/supermercado/nfe-entrada/confirmar', { nfe: nfeProcessada });
+      showToast(res.mensagem || 'Entrada da NF-e confirmada e integrada ao estoque central!');
+      setNfeProcessada(null);
+      setXmlNfeTexto('');
+      carregarDados();
+    } catch (err) {
+      showToast(err.response?.data?.mensagem || err.message || 'Erro ao confirmar entrada da NF-e.');
+    }
+  };
+
+  // ── Sincronização de Vendas Offline ──
+  const handleSincronizarVendasOffline = async () => {
+    if (vendasOffline.length === 0) {
+      showToast('Nenhuma venda offline pendente de sincronização.');
+      return;
+    }
+    try {
+      const res = await api.post('/api/admin/supermercado/vendas/sincronizar-offline', { vendas: vendasOffline });
+      showToast(res.mensagem || `${vendasOffline.length} vendas sincronizadas com sucesso!`);
+      setVendasOffline([]);
+      localStorage.removeItem('kytto_supermercado_vendas_offline');
+      carregarDados();
+    } catch (err) {
+      showToast('Erro ao sincronizar vendas offline.');
+    }
+  };
+
+  // ── Detalhar Produto & Kardex ──
+  const handleAbrirDetalhesProduto = async (produto) => {
+    setModalDetalhesProduto(produto);
+    setCarregandoKardex(true);
+    setKardexProduto([]);
+    try {
+      const res = await api.get(`/api/admin/supermercado/produtos/${produto.id}/kardex`);
+      if (res && Array.isArray(res.movimentacoes)) {
+        setKardexProduto(res.movimentacoes);
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setCarregandoKardex(false);
+    }
+  };
+
+  // ── Detalhar Caixa Individual ──
+  const handleAbrirDetalhesCaixa = async (caixa) => {
+    setModalDetalhesCaixa(caixa);
+    setCarregandoDetalhesCaixa(true);
+    setDetalhesCaixaDados(null);
+    try {
+      const res = await api.get(`/api/admin/supermercado/caixas/${caixa.id}/detalhes`);
+      if (res && res.sucesso) {
+        setDetalhesCaixaDados(res);
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setCarregandoDetalhesCaixa(false);
+    }
   };
 
   // Handlers Balança Pacote
@@ -577,6 +656,58 @@ export default function Supermercado() {
   const finalizarVendaPdv = async () => {
     if (carrinho.length === 0) {
       showToast('O carrinho está vazio.');
+      return;
+    }
+
+    // ── SUPORTE TOTAL A CONTINGÊNCIA OFFLINE ──
+    if (modoOffline || (typeof navigator !== 'undefined' && !navigator.onLine)) {
+      const numeroVendaOff = 'PDV-OFF-' + Date.now().toString(36).toUpperCase();
+      const vendaOff = {
+        numero: numeroVendaOff,
+        valorTotal: totalCarrinho,
+        total: totalCarrinho,
+        formaPagamento,
+        desconto: 0,
+        troco: trocoCalculado,
+        cpfConsumidor: cpfCliente || null,
+        clienteClubeId: clienteClubeIdentificado?.id || null,
+        itens: carrinho.map(c => ({
+          id: c.id,
+          nome: c.nome,
+          quantidade: c.quantidade,
+          precoUnitario: c.precoUnitario,
+          precoTotal: c.precoUnitario * c.quantidade
+        })),
+        criadoEm: new Date().toISOString(),
+        contingenciaOffline: true
+      };
+
+      const novaFila = [...vendasOffline, vendaOff];
+      setVendasOffline(novaFila);
+      try {
+        localStorage.setItem('kytto_supermercado_vendas_offline', JSON.stringify(novaFila));
+      } catch(e) {}
+
+      setNfceEmitida({
+        chaveAcesso: '512611' + String(Date.now()).padStart(38, '0').slice(-38),
+        protocolo: '15126' + String(Date.now()).slice(-10) + ' (CONTINGÊNCIA)',
+        total: totalCarrinho,
+        offline: true
+      });
+
+      if (['debito', 'credito', 'alimentacao'].includes(formaPagamento)) {
+        setModalTef({
+          nsu: String(Math.floor(100000 + Math.random() * 900000)),
+          autorizacao: String(Math.floor(100000 + Math.random() * 900000)),
+          bandeira: formaPagamento === 'alimentacao' ? 'VR Alimentação' : (formaPagamento === 'debito' ? 'Mastercard Débito' : 'Visa Crédito'),
+          valor: totalCarrinho,
+          dataHora: new Date().toLocaleString('pt-BR'),
+          adquirente: 'Stone Pagamentos S/A (TEF Contingência Offline)'
+        });
+      }
+
+      limparCarrinho();
+      showToast(`Venda ${numeroVendaOff} salva em CONTINGÊNCIA OFFLINE! Terminal pronto para o próximo cliente.`);
       return;
     }
     if (sessaoCaixa?.status !== 'aberto') {
@@ -918,6 +1049,44 @@ export default function Supermercado() {
           <div className="super-pdv-layout">
             {/* Coluna Esquerda: Bipagem e Carrinho */}
             <div className="super-pdv-left">
+              {/* BANNER DE CONTINGÊNCIA OFFLINE & STATUS DO TERMINAL */}
+              <div className={`super-offline-banner ${modoOffline ? 'offline' : 'online'}`}>
+                <div className="offline-banner-left">
+                  {modoOffline ? <WifiOff size={18} color="#c2410c" /> : <Wifi size={18} color="#166534" />}
+                  <span>
+                    {modoOffline
+                      ? '⚠️ MODO CONTINGÊNCIA OFFLINE ATIVO — Vendas salvas com segurança no terminal'
+                      : `🟢 Online: Terminal ${sessaoCaixa?.caixa?.numero_terminal || terminalSelecionado} conectado ao Commerce Core`}
+                  </span>
+                  {vendasOffline.length > 0 && (
+                    <span className="badge-offline-count" style={{ background: '#ea580c', color: '#fff', padding: '2px 8px', borderRadius: 9999, fontSize: 11 }}>
+                      {vendasOffline.length} {vendasOffline.length === 1 ? 'venda pendente' : 'vendas pendentes'}
+                    </span>
+                  )}
+                </div>
+                <div className="offline-banner-actions">
+                  <button
+                    type="button"
+                    className="btn-toggle-offline"
+                    onClick={() => {
+                      const novo = !modoOffline;
+                      setModoOffline(novo);
+                      showToast(novo ? 'Modo Offline Ativado para Simulação / Contingência.' : 'Modo Online Conectado.');
+                    }}
+                  >
+                    {modoOffline ? 'Conectar Online' : 'Simular Offline'}
+                  </button>
+                  {vendasOffline.length > 0 && (
+                    <button
+                      type="button"
+                      className="btn-sincronizar-offline"
+                      onClick={handleSincronizarVendasOffline}
+                    >
+                      <ArrowUpCircle size={14} /> Sincronizar ({vendasOffline.length})
+                    </button>
+                  )}
+                </div>
+              </div>
               
               {Number(sessaoCaixa?.resumo?.saldoDinheiroEsperado || 0) >= 800 && (
                 <div className="super-alert-teto-gaveta">
@@ -928,7 +1097,7 @@ export default function Supermercado() {
                       <span> Saldo em dinheiro (R$ {Number(sessaoCaixa?.resumo?.saldoDinheiroEsperado || 0).toFixed(2)}) ultrapassou o teto recomendado de R$ 800,00.</span>
                     </div>
                   </div>
-                  <button className="super-btn-sangria-rapida" onClick={() => { setTipoMovimentacao("sangria"); setModalMovimentacao(true); }}>
+                  <button className="super-btn-sangria-rapida" onClick={() => setModalCaixa("sangria")}>
                     Efetuar Sangria Agora [F4]
                   </button>
                 </div>
@@ -2184,6 +2353,207 @@ export default function Supermercado() {
               <button type="submit" className="super-btn-primary">Criar Ciclo & Iniciar Contagem</button>
             </div>
           </form>
+        </Modal>
+      )}
+
+      {/* MODAL DETALHAMENTO DE PRODUTO & KARDEX DE ESTOQUE */}
+      {modalDetalhesProduto && (
+        <Modal
+          title={`Ficha Técnica & Kardex: ${modalDetalhesProduto.nome}`}
+          onClose={() => setModalDetalhesProduto(null)}
+        >
+          <div className="super-detalhes-container">
+            <div className="super-detalhes-hero">
+              <div>
+                <h3 className="detalhes-hero-title">{modalDetalhesProduto.nome}</h3>
+                <div className="detalhes-hero-meta">
+                  <span><strong>EAN-13:</strong> {modalDetalhesProduto.codigoBarras || modalDetalhesProduto.ean || 'SEM GTIN'}</span>
+                  <span><strong>PLU:</strong> {modalDetalhesProduto.plu || '-'}</span>
+                  <span><strong>Depto:</strong> {modalDetalhesProduto.departamento}</span>
+                  <span><strong>Unid:</strong> {modalDetalhesProduto.unidade || 'UN'}</span>
+                </div>
+              </div>
+              <span className="super-badge-primary">
+                {modalDetalhesProduto.pesavel ? 'Item Pesável (Balança)' : 'Item Unitário'}
+              </span>
+            </div>
+
+            <div className="super-detalhes-kpi-grid">
+              <div className="detalhes-kpi-card">
+                <span className="detalhes-kpi-label">Estoque Atual</span>
+                <strong className="detalhes-kpi-val text-blue">
+                  {modalDetalhesProduto.saldoEstoque || 0} {modalDetalhesProduto.unidade || 'UN'}
+                </strong>
+              </div>
+              <div className="detalhes-kpi-card">
+                <span className="detalhes-kpi-label">Estoque Mínimo</span>
+                <strong className="detalhes-kpi-val">
+                  {modalDetalhesProduto.estoqueMinimo || 10}
+                </strong>
+              </div>
+              <div className="detalhes-kpi-card">
+                <span className="detalhes-kpi-label">Custo Médio</span>
+                <strong className="detalhes-kpi-val">
+                  R$ {Number(modalDetalhesProduto.precoCusto || 0).toFixed(2)}
+                </strong>
+              </div>
+              <div className="detalhes-kpi-card">
+                <span className="detalhes-kpi-label">Preço Regular</span>
+                <strong className="detalhes-kpi-val text-green">
+                  R$ {Number(modalDetalhesProduto.precoVenda || 0).toFixed(2)}
+                </strong>
+              </div>
+              <div className="detalhes-kpi-card">
+                <span className="detalhes-kpi-label">Preço Clube (-10%)</span>
+                <strong className="detalhes-kpi-val text-orange">
+                  R$ {(Number(modalDetalhesProduto.precoVenda || 0) * 0.90).toFixed(2)}
+                </strong>
+              </div>
+            </div>
+
+            <div>
+              <h4 style={{ margin: "12px 0 6px 0", fontSize: "14px", color: "#334155" }}>
+                Histórico de Movimentações de Estoque (Kardex ERP)
+              </h4>
+              {carregandoKardex ? (
+                <p className="text-muted-small">Carregando movimentações do Kardex...</p>
+              ) : kardexProduto.length === 0 ? (
+                <p className="text-muted-small">Nenhuma movimentação recente registrada neste período.</p>
+              ) : (
+                <table className="super-data-table" style={{ fontSize: "12px" }}>
+                  <thead>
+                    <tr>
+                      <th>Data / Hora</th>
+                      <th>Tipo</th>
+                      <th>Qtd</th>
+                      <th>Custo Unit.</th>
+                      <th>Saldo Após</th>
+                      <th>Origem / Motivo</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {kardexProduto.map((k, idx) => (
+                      <tr key={idx}>
+                        <td>{new Date(k.criadoEm).toLocaleString('pt-BR')}</td>
+                        <td>
+                          <span className={k.tipo === 'entrada' ? 'super-badge-success' : 'super-badge-danger'}>
+                            {k.tipo.toUpperCase()}
+                          </span>
+                        </td>
+                        <td><strong>{k.quantidade > 0 ? `+${k.quantidade}` : k.quantidade}</strong></td>
+                        <td>R$ {Number(k.custoUnitario).toFixed(2)}</td>
+                        <td><strong>{k.saldoApos}</strong></td>
+                        <td><small>{k.motivo || k.origem}</small></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+
+            <div className="super-modal-actions">
+              <button type="button" className="super-btn-primary" onClick={() => setModalDetalhesProduto(null)}>
+                Fechar
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* MODAL DETALHAMENTO DE CAIXA INDIVIDUAL */}
+      {modalDetalhesCaixa && (
+        <Modal
+          title={`Auditoria de Caixa: ${modalDetalhesCaixa.numeroTerminal || modalDetalhesCaixa.numero_terminal || 'PDV'}`}
+          onClose={() => setModalDetalhesCaixa(null)}
+        >
+          <div className="super-detalhes-container">
+            <div className="super-detalhes-hero">
+              <div>
+                <h3 className="detalhes-hero-title">
+                  Terminal: {modalDetalhesCaixa.numeroTerminal || modalDetalhesCaixa.numero_terminal}
+                </h3>
+                <div className="detalhes-hero-meta">
+                  <span><strong>Operador:</strong> {modalDetalhesCaixa.operadorNome || modalDetalhesCaixa.operador_nome}</span>
+                  <span><strong>Abertura:</strong> {new Date(modalDetalhesCaixa.abertoEm || modalDetalhesCaixa.aberto_em).toLocaleString('pt-BR')}</span>
+                  <span><strong>Status:</strong> {modalDetalhesCaixa.status?.toUpperCase()}</span>
+                </div>
+              </div>
+              <span className={modalDetalhesCaixa.status === 'aberto' ? 'super-badge-success' : 'super-badge-danger'}>
+                {modalDetalhesCaixa.status === 'aberto' ? 'Em Turno Aberto' : 'Caixa Fechado'}
+              </span>
+            </div>
+
+            {detalhesCaixaDados && (
+              <>
+                <div className="super-caixa-totais-grid">
+                  <div className="caixa-total-card">
+                    <span>Fundo Troco</span>
+                    <strong>R$ {Number(detalhesCaixaDados.caixa.saldoInicial || 0).toFixed(2)}</strong>
+                  </div>
+                  <div className="caixa-total-card">
+                    <span>Total Vendas</span>
+                    <strong className="text-green">R$ {Number(detalhesCaixaDados.totais.totalVendas || 0).toFixed(2)}</strong>
+                  </div>
+                  <div className="caixa-total-card">
+                    <span>Dinheiro</span>
+                    <strong>R$ {Number(detalhesCaixaDados.totais.dinheiro || 0).toFixed(2)}</strong>
+                  </div>
+                  <div className="caixa-total-card">
+                    <span>Cartão Crédito</span>
+                    <strong>R$ {Number(detalhesCaixaDados.totais.credito || 0).toFixed(2)}</strong>
+                  </div>
+                  <div className="caixa-total-card">
+                    <span>Cartão Débito</span>
+                    <strong>R$ {Number(detalhesCaixaDados.totais.debito || 0).toFixed(2)}</strong>
+                  </div>
+                  <div className="caixa-total-card">
+                    <span>Pix Dinâmico</span>
+                    <strong>R$ {Number(detalhesCaixaDados.totais.pix || 0).toFixed(2)}</strong>
+                  </div>
+                  <div className="caixa-total-card">
+                    <span>Sangrias</span>
+                    <strong className="text-red">-R$ {Number(detalhesCaixaDados.totais.sangrias || 0).toFixed(2)}</strong>
+                  </div>
+                </div>
+
+                <h4 style={{ margin: "14px 0 6px 0", fontSize: "14px", color: "#334155" }}>
+                  Movimentações Cronológicas da Sessão
+                </h4>
+                <table className="super-data-table" style={{ fontSize: "12px" }}>
+                  <thead>
+                    <tr>
+                      <th>Horário</th>
+                      <th>Tipo</th>
+                      <th>Valor</th>
+                      <th>Forma / Motivo</th>
+                      <th>Autorizador</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {detalhesCaixaDados.movimentacoes.map((m, idx) => (
+                      <tr key={idx}>
+                        <td>{new Date(m.criadoEm).toLocaleTimeString('pt-BR')}</td>
+                        <td>
+                          <span className={m.tipo === 'venda' ? 'super-badge-success' : m.tipo === 'suprimento' ? 'super-badge-primary' : 'super-badge-danger'}>
+                            {m.tipo.toUpperCase()}
+                          </span>
+                        </td>
+                        <td><strong>R$ {Number(m.valor).toFixed(2)}</strong></td>
+                        <td>{m.motivo || m.formaPagamento}</td>
+                        <td><small>{m.autorizador || 'Fiscal'}</small></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </>
+            )}
+
+            <div className="super-modal-actions">
+              <button type="button" className="super-btn-primary" onClick={() => setModalDetalhesCaixa(null)}>
+                Concluir
+              </button>
+            </div>
+          </div>
         </Modal>
       )}
 

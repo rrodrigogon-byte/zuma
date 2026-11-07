@@ -1341,17 +1341,40 @@ export async function registrarVendaPdv(db, empresaId, dados = {}, { usuario = n
       const descItem = Number(it.desconto || 0);
 
       if (itemId && qtd > 0) {
-        await q(
-          `INSERT INTO var_venda_itens (empresa_id, venda_id, item_id, quantidade, preco_unitario, preco_total, desconto)
-           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-          [empresa, vendaId, itemId, qtd, pUnit, pTot, descItem]
+        const itemValido = await q(
+          `SELECT id, custo_medio FROM est_itens WHERE id = $1 AND empresa_id = $2 LIMIT 1`,
+          [itemId, empresa]
         );
-        // Baixa de estoque relacional se tabela existir
-        await q(
-          `UPDATE est_saldos SET quantidade = GREATEST(0, quantidade - $1), atualizado_em = CURRENT_TIMESTAMP
-           WHERE empresa_id = $2 AND item_id = $3 AND ($4::uuid IS NULL OR loja_id = $4::uuid)`,
-          [qtd, empresa, itemId, loja]
-        ).catch(() => null);
+
+        if (itemValido.rows.length > 0) {
+          await q(
+            `INSERT INTO var_venda_itens (empresa_id, venda_id, item_id, quantidade, preco_unitario, preco_total, desconto)
+             VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+            [empresa, vendaId, itemId, qtd, pUnit, pTot, descItem]
+          );
+          const upSaldo = await q(
+            `UPDATE est_saldos SET quantidade = GREATEST(0, quantidade - $1), atualizado_em = CURRENT_TIMESTAMP
+             WHERE empresa_id = $2 AND item_id = $3 AND ($4::uuid IS NULL OR loja_id = $4::uuid)
+             RETURNING quantidade`,
+            [qtd, empresa, itemId, loja]
+          ).catch(() => null);
+          const saldoApos = upSaldo && upSaldo.rows && upSaldo.rows.length > 0 ? Number(upSaldo.rows[0].quantidade) : 0;
+          const chaveMov = `PDV-SAIDA-${vendaId}-${itemId}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+          await q(
+            `INSERT INTO est_movimentos (
+               empresa_id, loja_id, item_id, quantidade, custo_unitario, saldo_apos, tipo, origem, origem_id, motivo, chave, usuario, criado_em
+             ) VALUES (
+               $1, $2, $3, $4, $5, $6, 'saida', 'venda_pdv', $7, $8, $9, $10, CURRENT_TIMESTAMP
+             ) ON CONFLICT (empresa_id, chave) DO NOTHING`,
+            [empresa, loja, itemId, qtd, pUnit, saldoApos, vendaId, `Venda PDV cupom #${numero}`, chaveMov, usuario?.nome || 'Operador PDV']
+          ).catch(err => console.error("Erro est_movimentos pdv:", err.message));
+        } else {
+          await q(
+            `INSERT INTO var_venda_itens (empresa_id, venda_id, item_id, quantidade, preco_unitario, preco_total, desconto)
+             VALUES ($1, $2, NULL, $3, $4, $5, $6)`,
+            [empresa, vendaId, qtd, pUnit, pTot, descItem]
+          );
+        }
       }
       itensGravados.push({
         itemId,
@@ -1377,6 +1400,18 @@ export async function registrarVendaPdv(db, empresaId, dados = {}, { usuario = n
         [caixaId, empresa, total, formaPagamento, `Venda PDV cupom #${numero}`, usuario?.nome || 'Operador PDV']
       );
     }
+    // Lançamento automático de receita no módulo Financeiro do ERP (fin_lancamentos)
+    const chaveLanc = `PDV-REC-${vendaId}`;
+    await q(
+      `INSERT INTO fin_lancamentos (
+        empresa_id, loja_id, tipo, natureza, valor, data_competencia, vencimento, pago_em, status,
+        meio_pagamento, categoria, descricao, origem, origem_id, chave, automatico
+      ) VALUES (
+        $1, $2, 'receita', 'receber', $3, CURRENT_DATE, CURRENT_DATE, CURRENT_TIMESTAMP, 'pago',
+        $4, 'Vendas Varejo / Supermercado', $5, 'venda_pdv', $6, $7, true
+      ) ON CONFLICT (empresa_id, chave) DO NOTHING`,
+      [empresa, loja, total, formaPagamento, `Receita Venda PDV Supermercado #${numero}`, vendaId, chaveLanc]
+    ).catch(err => console.error("Erro fin_lancamentos pdv:", err.message));
 
     // 4. Se cliente Clube Kytto, atualizar economia e pontos
     if (clienteClubeId) {
@@ -1928,5 +1963,377 @@ export async function auditarPrecosGondolaPdv(db, empresaId, { lojaId = null } =
     totalDivergencias: divergencias.length,
     indiceConformidade: Math.round(((produtos.length - divergencias.length) / Math.max(1, produtos.length)) * 1000) / 10,
     divergencias
+  };
+}
+
+
+// ═════════════════════════════════════════════════════════════════════════════
+// 24. CONFIRMAR ENTRADA DE NOTA FISCAL NO ESTOQUE (NF-E COMPRA)
+// ═════════════════════════════════════════════════════════════════════════════
+export async function confirmarEntradaNfeCompra(db, empresaId, dadosNfe = {}, { usuario = null, lojaId = null } = {}) {
+  const empresa = exigirUuid(empresaId, 'empresa');
+  const loja = uuidOuNull(lojaId);
+  const nfe = dadosNfe.nfe || dadosNfe;
+  const chaveAcesso = String(nfe.chaveAcesso || '').trim();
+  const numeroNfe = String(nfe.numero || nfe.numeroNfe || '000000');
+  const fornecedorNome = nfe.fornecedor?.razaoSocial || nfe.fornecedor?.nome || 'Fornecedor de Mercadorias';
+  const itens = Array.isArray(nfe.itens) ? nfe.itens : [];
+  const duplicatas = Array.isArray(nfe.duplicatas) ? nfe.duplicatas : [];
+
+  if (itens.length === 0) {
+    throw new Error('A nota fiscal informada não possui itens para entrada de estoque.');
+  }
+
+  return transacao(db, async (q) => {
+    let itensAtualizados = 0;
+    let novosCadastrados = 0;
+
+    for (let i = 0; i < itens.length; i++) {
+      const it = itens[i];
+      const ean = it.ean || '';
+      const nome = it.nome || 'Produto Sem Nome';
+      const qtdEntrada = Number(it.quantidade || 1);
+      const custoCompra = Number(it.custoUnitario || 0);
+      const precoVenda = Number(it.precoVendaSugerido || (custoCompra * 1.35));
+      const unidade = (it.unidade || 'UN').toUpperCase();
+      const ncm = it.ncm || '';
+      const depto = it.departamento || 'Mercearia e Grãos';
+
+      // 1. Verificar se produto já existe no est_itens
+      let itemExistente = null;
+      if (ean && ean !== 'SEM GTIN') {
+        const busqEan = await q(
+          `SELECT id, custo_medio FROM est_itens WHERE empresa_id = $1 AND ean = $2 LIMIT 1`,
+          [empresa, ean]
+        );
+        if (busqEan.rows.length > 0) itemExistente = busqEan.rows[0];
+      }
+
+      if (!itemExistente && nome) {
+        const busqNome = await q(
+          `SELECT id, custo_medio FROM est_itens WHERE empresa_id = $1 AND LOWER(TRIM(nome)) = LOWER(TRIM($2)) LIMIT 1`,
+          [empresa, nome]
+        );
+        if (busqNome.rows.length > 0) itemExistente = busqNome.rows[0];
+      }
+
+      let itemId;
+      let custoAnterior = 0;
+      let estoqueAnterior = 0;
+
+      if (itemExistente) {
+        itemId = itemExistente.id;
+        custoAnterior = Number(itemExistente.custo_medio || custoCompra);
+
+        // Obter saldo anterior
+        const saldoRes = await q(
+          `SELECT quantidade FROM est_saldos WHERE empresa_id = $1 AND item_id = $2 AND ($3::uuid IS NULL OR loja_id = $3::uuid) LIMIT 1`,
+          [empresa, itemId, loja]
+        );
+        if (saldoRes.rows.length > 0) {
+          estoqueAnterior = Number(saldoRes.rows[0].quantidade || 0);
+        }
+
+        // Custo médio ponderado
+        const novoCustoMedio = estoqueAnterior + qtdEntrada > 0
+          ? Math.round((((estoqueAnterior * custoAnterior) + (qtdEntrada * custoCompra)) / (estoqueAnterior + qtdEntrada)) * 100) / 100
+          : custoCompra;
+
+        // Atualizar produto no ERP
+        await q(
+          `UPDATE est_itens 
+           SET custo_medio = $1, preco_venda = GREATEST(preco_venda, $2), atualizado_em = CURRENT_TIMESTAMP
+           WHERE id = $3 AND empresa_id = $4`,
+          [novoCustoMedio, precoVenda, itemId, empresa]
+        );
+
+        // Atualizar saldo
+        const upSaldo = await q(
+          `UPDATE est_saldos 
+           SET quantidade = quantidade + $1, atualizado_em = CURRENT_TIMESTAMP
+           WHERE empresa_id = $2 AND item_id = $3 AND ($4::uuid IS NULL OR loja_id = $4::uuid)
+           RETURNING quantidade`,
+          [qtdEntrada, empresa, itemId, loja]
+        );
+        const novoSaldo = upSaldo.rows && upSaldo.rows.length > 0 ? Number(upSaldo.rows[0].quantidade) : (estoqueAnterior + qtdEntrada);
+
+        // Kardex est_movimentos
+        const chaveMov = `NFE-IN-${chaveAcesso || Date.now()}-${itemId}-${i}`;
+        await q(
+          `INSERT INTO est_movimentos (
+             empresa_id, loja_id, item_id, quantidade, custo_unitario, saldo_apos, tipo, origem, origem_id, motivo, chave, usuario, criado_em
+           ) VALUES (
+             $1, $2, $3, $4, $5, $6, 'entrada', 'nfe_compra', $7, $8, $9, $10, CURRENT_TIMESTAMP
+           ) ON CONFLICT (empresa_id, chave) DO NOTHING`,
+          [empresa, loja, itemId, qtdEntrada, custoCompra, novoSaldo, chaveAcesso, `Entrada NF-e #${numeroNfe} (${fornecedorNome})`, chaveMov, usuario?.nome || 'Entrada NF-e']
+        );
+        itensAtualizados++;
+      } else {
+        // Novo item cadastrado no ERP
+        const novoItemRes = await q(
+          `INSERT INTO est_itens (
+             empresa_id, nome, ean, ncm, departamento, unidade, custo_medio, preco_venda, estoque_minimo, ativo, pesavel, criado_em
+           ) VALUES (
+             $1, $2, $3, $4, $5, $6, $7, $8, 10, true, $9, CURRENT_TIMESTAMP
+           ) RETURNING id`,
+          [empresa, nome, ean, ncm, depto, unidade, custoCompra, precoVenda, unidade === 'KG']
+        );
+        itemId = novoItemRes.rows[0].id;
+
+        // Inserir saldo inicial
+        await q(
+          `INSERT INTO est_saldos (empresa_id, loja_id, item_id, quantidade, atualizado_em)
+           VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)`,
+          [empresa, loja, itemId, qtdEntrada]
+        );
+
+        // Kardex est_movimentos
+        const chaveMov = `NFE-IN-${chaveAcesso || Date.now()}-${itemId}-${i}`;
+        await q(
+          `INSERT INTO est_movimentos (
+             empresa_id, loja_id, item_id, quantidade, custo_unitario, saldo_apos, tipo, origem, origem_id, motivo, chave, usuario, criado_em
+           ) VALUES (
+             $1, $2, $3, $4, $5, $6, 'entrada', 'nfe_compra', $7, $8, $9, $10, CURRENT_TIMESTAMP
+           ) ON CONFLICT (empresa_id, chave) DO NOTHING`,
+          [empresa, loja, itemId, qtdEntrada, custoCompra, qtdEntrada, chaveAcesso, `Entrada NF-e #${numeroNfe} (${fornecedorNome})`, chaveMov, usuario?.nome || 'Entrada NF-e']
+        );
+        novosCadastrados++;
+      }
+    }
+
+    // 2. Registrar contas a pagar no Financeiro do ERP (fin_lancamentos)
+    let contasPagarGeradas = 0;
+    if (duplicatas.length > 0) {
+      for (let d = 0; d < duplicatas.length; d++) {
+        const dup = duplicatas[d];
+        const valorDup = Number(dup.valor || 0);
+        if (valorDup > 0) {
+          const chaveDup = `NFE-PAG-${chaveAcesso || Date.now()}-${dup.numero || d}`;
+          const vencimento = dup.vencimento ? new Date(dup.vencimento) : new Date(Date.now() + 30 * 86400000);
+          await q(
+            `INSERT INTO fin_lancamentos (
+               empresa_id, loja_id, tipo, natureza, valor, data_competencia, vencimento, status,
+               contraparte_tipo, contraparte_nome, categoria, descricao, origem, origem_id, chave, automatico
+             ) VALUES (
+               $1, $2, 'despesa', 'pagar', $3, CURRENT_DATE, $4, 'pendente',
+               'fornecedor', $5, 'Fornecedores / Compras de Mercadorias', $6, 'nfe_compra', $7, $8, true
+             ) ON CONFLICT (empresa_id, chave) DO NOTHING`,
+            [empresa, loja, valorDup, vencimento, fornecedorNome, `Duplicata ${dup.numero || d + 1} - NF-e #${numeroNfe} (${fornecedorNome})`, chaveAcesso, chaveDup]
+          );
+          contasPagarGeradas++;
+        }
+      }
+    } else {
+      const totalNota = itens.reduce((acc, it) => acc + Number(it.valorTotal || (it.quantidade * it.custoUnitario) || 0), 0);
+      if (totalNota > 0) {
+        const chaveDup = `NFE-PAG-${chaveAcesso || Date.now()}-TOTAL`;
+        await q(
+          `INSERT INTO fin_lancamentos (
+             empresa_id, loja_id, tipo, natureza, valor, data_competencia, vencimento, status,
+             contraparte_tipo, contraparte_nome, categoria, descricao, origem, origem_id, chave, automatico
+           ) VALUES (
+             $1, $2, 'despesa', 'pagar', $3, CURRENT_DATE, CURRENT_DATE + INTERVAL '30 days', 'pendente',
+             'fornecedor', $5, 'Fornecedores / Compras de Mercadorias', $6, 'nfe_compra', $7, $8, true
+           ) ON CONFLICT (empresa_id, chave) DO NOTHING`,
+          [empresa, loja, totalNota, fornecedorNome, `Compra de Mercadorias - NF-e #${numeroNfe} (${fornecedorNome})`, chaveAcesso, chaveDup]
+        );
+        contasPagarGeradas++;
+      }
+    }
+
+    return {
+      sucesso: true,
+      mensagem: `Entrada da NF-e #${numeroNfe} homologada com sucesso! ${itensAtualizados} produtos atualizados no estoque, ${novosCadastrados} novos itens cadastrados e ${contasPagarGeradas} parcelas geradas no Contas a Pagar.`,
+      chaveAcesso,
+      numeroNfe,
+      fornecedor: fornecedorNome,
+      totalItens: itens.length,
+      itensAtualizados,
+      novosCadastrados,
+      contasPagarGeradas
+    };
+  });
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// 25. SINCRONIZAÇÃO DE VENDAS EMITIDAS EM CONTINGÊNCIA OFFLINE
+// ═════════════════════════════════════════════════════════════════════════════
+export async function sincronizarVendasOffline(db, empresaId, vendasOffline = [], { usuario = null, lojaId = null } = {}) {
+  const lista = Array.isArray(vendasOffline) ? vendasOffline : [];
+  if (lista.length === 0) {
+    return { sucesso: true, totalSincronizadas: 0, mensagem: 'Nenhuma venda offline pendente.' };
+  }
+
+  const resultados = [];
+  for (const v of lista) {
+    try {
+      const res = await registrarVendaPdv(db, empresaId, v, { usuario, lojaId });
+      resultados.push({ sucesso: true, numero: res.venda.numero, total: res.venda.total });
+    } catch (err) {
+      resultados.push({ sucesso: false, erro: err.message, dados: v });
+    }
+  }
+
+  const sincronizadas = resultados.filter(r => r.sucesso).length;
+  return {
+    sucesso: true,
+    totalRecebidas: lista.length,
+    totalSincronizadas: sincronizadas,
+    resultados,
+    mensagem: `${sincronizadas} de ${lista.length} vendas offline sincronizadas com sucesso no ERP!`
+  };
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// 26. GESTÃO DE CAIXAS INDIVIDUAIS & AUDITORIA DE TERMINAIS
+// ═════════════════════════════════════════════════════════════════════════════
+export async function listarCaixas(db, empresaId, { lojaId = null } = {}) {
+  const res = await db.query(
+    `SELECT c.*,
+            (SELECT COUNT(*) FROM var_caixa_movimentacoes m WHERE m.caixa_id = c.id) as total_movimentacoes,
+            (SELECT COALESCE(SUM(valor), 0) FROM var_caixa_movimentacoes m WHERE m.caixa_id = c.id AND m.tipo = 'venda') as total_vendas
+     FROM var_caixas c
+     WHERE c.empresa_id = $1 AND ($2::uuid IS NULL OR c.loja_id = $2 OR c.loja_id IS NULL)
+     ORDER BY c.aberto_em DESC LIMIT 50`,
+    [empresaId, lojaId]
+  );
+  return {
+    sucesso: true,
+    total: res.rows.length,
+    caixas: res.rows.map(r => ({
+      id: r.id,
+      numeroTerminal: r.numero_terminal || 'PDV-01',
+      operadorNome: r.operador_nome || 'Operador',
+      status: r.status,
+      saldoInicial: Number(r.saldo_inicial || 0),
+      saldoFinalSistema: r.saldo_final_sistema ? Number(r.saldo_final_sistema) : null,
+      saldoFinalInformado: r.saldo_final_informado ? Number(r.saldo_final_informado) : null,
+      diferencaQuebra: Number(r.diferenca_quebra || 0),
+      totalVendas: Number(r.total_vendas || 0),
+      totalMovimentacoes: Number(r.total_movimentacoes || 0),
+      abertoEm: r.aberto_em,
+      fechadoEm: r.fechado_em
+    }))
+  };
+}
+
+export async function obterDetalhesCaixa(db, empresaId, caixaId) {
+  const cxRes = await db.query(
+    `SELECT * FROM var_caixas WHERE id = $1 AND empresa_id = $2 LIMIT 1`,
+    [caixaId, empresaId]
+  );
+  if (cxRes.rows.length === 0) {
+    throw new Error('Sessão de caixa não localizada.');
+  }
+  const caixa = cxRes.rows[0];
+
+  const movRes = await db.query(
+    `SELECT * FROM var_caixa_movimentacoes WHERE caixa_id = $1 ORDER BY criado_em ASC`,
+    [caixaId]
+  );
+
+  const totais = {
+    dinheiro: 0,
+    credito: 0,
+    debito: 0,
+    pix: 0,
+    alimentacao: 0,
+    suprimentos: 0,
+    sangrias: 0,
+    totalVendas: 0
+  };
+
+  movRes.rows.forEach(m => {
+    const val = Number(m.valor || 0);
+    const tipo = String(m.tipo || '').toLowerCase();
+    const fm = String(m.forma_pagamento || '').toLowerCase();
+
+    if (tipo === 'suprimento') totais.suprimentos += val;
+    else if (tipo === 'sangria') totais.sangrias += val;
+    else if (tipo === 'venda') {
+      totais.totalVendas += val;
+      if (fm.includes('dinheiro')) totais.dinheiro += val;
+      else if (fm.includes('credito')) totais.credito += val;
+      else if (fm.includes('debito')) totais.debito += val;
+      else if (fm.includes('pix')) totais.pix += val;
+      else if (fm.includes('alimentacao')) totais.alimentacao += val;
+    }
+  });
+
+  return {
+    sucesso: true,
+    caixa: {
+      id: caixa.id,
+      numeroTerminal: caixa.numero_terminal,
+      operadorNome: caixa.operador_nome,
+      status: caixa.status,
+      saldoInicial: Number(caixa.saldo_inicial || 0),
+      saldoFinalSistema: caixa.saldo_final_sistema ? Number(caixa.saldo_final_sistema) : null,
+      saldoFinalInformado: caixa.saldo_final_informado ? Number(caixa.saldo_final_informado) : null,
+      diferencaQuebra: Number(caixa.diferenca_quebra || 0),
+      abertoEm: caixa.aberto_em,
+      fechadoEm: caixa.fechado_em
+    },
+    totais,
+    movimentacoes: movRes.rows.map(m => ({
+      id: m.id,
+      tipo: m.tipo,
+      valor: Number(m.valor),
+      formaPagamento: m.forma_pagamento,
+      motivo: m.motivo,
+      autorizador: m.autorizador,
+      criadoEm: m.criado_em
+    }))
+  };
+}
+
+export async function obterKardexProduto(db, empresaId, produtoId) {
+  const prodRes = await db.query(
+    `SELECT i.*, COALESCE(s.quantidade, 0) as estoque_atual
+     FROM est_itens i
+     LEFT JOIN est_saldos s ON s.item_id = i.id AND s.empresa_id = i.empresa_id
+     WHERE i.id = $1 AND i.empresa_id = $2 LIMIT 1`,
+    [produtoId, empresaId]
+  );
+  if (prodRes.rows.length === 0) {
+    throw new Error('Produto não localizado.');
+  }
+  const produto = prodRes.rows[0];
+
+  const movRes = await db.query(
+    `SELECT * FROM est_movimentos 
+     WHERE item_id = $1 AND empresa_id = $2 
+     ORDER BY criado_em DESC LIMIT 30`,
+    [produtoId, empresaId]
+  );
+
+  return {
+    sucesso: true,
+    produto: {
+      id: produto.id,
+      nome: produto.nome,
+      sku: produto.sku,
+      ean: produto.ean,
+      plu: produto.plu,
+      ncm: produto.ncm,
+      departamento: produto.departamento,
+      unidade: produto.unidade,
+      custoMedio: Number(produto.custo_medio || 0),
+      precoVenda: Number(produto.preco_venda || 0),
+      estoqueMinimo: Number(produto.estoque_minimo || 0),
+      estoqueAtual: Number(produto.estoque_atual || 0),
+      pesavel: produto.pesavel
+    },
+    movimentacoes: movRes.rows.map(m => ({
+      id: m.id,
+      tipo: m.tipo,
+      quantidade: Number(m.quantidade),
+      custoUnitario: Number(m.custo_unitario || 0),
+      saldoApos: Number(m.saldo_apos || 0),
+      origem: m.origem,
+      motivo: m.motivo,
+      usuario: m.usuario,
+      criadoEm: m.criado_em
+    }))
   };
 }
