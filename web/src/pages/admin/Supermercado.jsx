@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { api } from '../../lib/api';
 import Modal from '../../components/Modal';
+import { QRCodeSVG } from 'qrcode.react';
 import './Supermercado.css';
 
 const DEPARTAMENTOS = [
@@ -118,6 +119,14 @@ export default function Supermercado() {
       setPwaInstalavel(false);
       setDeferredPromptPwa(null);
     }
+  };
+  // Comprovante Térmico & Gaveta
+  const [modalComprovanteVenda, setModalComprovanteVenda] = useState(null);
+  const [modalLeituraX, setModalLeituraX] = useState(false);
+
+  const handleAbrirGavetaDinheiro = () => {
+    tocarBeepScanner('sucesso');
+    showToast("🔓 Gaveta de Dinheiro Aberta! [Pulso elétrico RJ12 / ESC/POS enviado]");
   };
   // Caixa / PDV
   const [sessaoCaixa, setSessaoCaixa] = useState(null);
@@ -445,7 +454,10 @@ export default function Supermercado() {
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (abaAtiva !== "pdv") return;
-      if (e.key === "F2") {
+      if (e.key === "F6") {
+        e.preventDefault();
+        handleAbrirGavetaDinheiro();
+      } else if (e.key === "F2") {
         e.preventDefault();
         inputScannerRef.current?.focus();
       } else if (e.key === "F3") {
@@ -908,11 +920,26 @@ export default function Supermercado() {
         localStorage.setItem('kytto_supermercado_vendas_offline', JSON.stringify(novaFila));
       } catch(e) {}
 
-      setNfceEmitida({
+      const dadosNfceOff = {
         chaveAcesso: '512611' + String(Date.now()).padStart(38, '0').slice(-38),
         protocolo: '15126' + String(Date.now()).slice(-10) + ' (CONTINGÊNCIA)',
         total: totalCarrinho,
         offline: true
+      };
+      setNfceEmitida(dadosNfceOff);
+      setModalComprovanteVenda({
+        numero: numeroVendaOff,
+        itens: [...carrinho],
+        valorTotal: totalCarrinho,
+        formaPagamento,
+        valorRecebido: Number(valorRecebido || totalCarrinho),
+        troco: trocoCalculado,
+        cpfConsumidor: cpfCliente || null,
+        clienteNome: clienteClubeIdentificado?.nome || null,
+        dataHora: new Date().toLocaleString('pt-BR'),
+        terminal: terminalAtivoCodigo || 'PDV-01',
+        operador: sessaoCaixa?.caixa?.operador_nome || 'Operador de Caixa',
+        nfce: dadosNfceOff
       });
 
       if (['debito', 'credito', 'alimentacao'].includes(formaPagamento)) {
@@ -953,11 +980,26 @@ export default function Supermercado() {
       };
 
       const res = await api.post('/api/admin/supermercado/vendas/pdv', payload);
-      setNfceEmitida(res.nfce || {
+      const dadosNfceOn = res.nfce || {
         chaveAcesso: '512611000' + String(Date.now()).padStart(35, '0'),
         protocolo: '15126000' + String(Date.now()).slice(-8),
         numero: String(Date.now()).slice(-6),
         total: totalCarrinho
+      };
+      setNfceEmitida(dadosNfceOn);
+      setModalComprovanteVenda({
+        numero: res.numero || 'CUPOM-' + String(Date.now()).slice(-6),
+        itens: [...carrinho],
+        valorTotal: totalCarrinho,
+        formaPagamento,
+        valorRecebido: Number(valorRecebido || totalCarrinho),
+        troco: trocoCalculado,
+        cpfConsumidor: cpfCliente || null,
+        clienteNome: clienteClubeIdentificado?.nome || null,
+        dataHora: new Date().toLocaleString('pt-BR'),
+        terminal: terminalAtivoCodigo || 'PDV-01',
+        operador: sessaoCaixa?.caixa?.operador_nome || 'Operador de Caixa',
+        nfce: dadosNfceOn
       });
 
       showToast(`Venda finalizada com sucesso! Cupom NFC-e Autorizado SEFAZ.`);

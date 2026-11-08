@@ -2145,3 +2145,134 @@
   color: #475569;
   line-height: 1.4;
 }
+
+/* ════════════════════════════════════════════════════════════════════════════
+   CUPOM TÉRMICO DANFE NFC-E (80MM / 58MM) & LEITURA X
+   ════════════════════════════════════════════════════════════════════════════ */
+.super-thermal-receipt-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  max-height: 80vh;
+  overflow-y: auto;
+  padding: 10px;
+}
+.super-thermal-receipt {
+  width: 340px;
+  background: #ffffff;
+  color: #111827;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 11.5px;
+  line-height: 1.35;
+  padding: 16px 14px;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);
+  position: relative;
+}
+.super-thermal-receipt::before,
+.super-thermal-receipt::after {
+  content: '';
+  display: block;
+  height: 6px;
+  background-image: radial-gradient(circle, #e5e7eb 30%, transparent 35%);
+  background-size: 10px 10px;
+  margin: -10px -10px 10px -10px;
+}
+.super-thermal-receipt::after {
+  margin: 10px -10px -10px -10px;
+}
+.receipt-header-center {
+  text-align: center;
+  border-bottom: 1px dashed #9ca3af;
+  padding-bottom: 8px;
+  margin-bottom: 8px;
+}
+.receipt-store-title {
+  font-size: 14px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+.receipt-store-sub {
+  font-size: 10px;
+  color: #4b5563;
+}
+.receipt-dashed-line {
+  border-top: 1px dashed #9ca3af;
+  margin: 6px 0;
+}
+.receipt-items-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+.receipt-items-table th {
+  text-align: left;
+  border-bottom: 1px dashed #9ca3af;
+  padding-bottom: 4px;
+  font-size: 10px;
+  text-transform: uppercase;
+}
+.receipt-items-table td {
+  padding: 3px 0;
+  vertical-align: top;
+}
+.receipt-totals-section {
+  border-top: 1px dashed #9ca3af;
+  padding-top: 6px;
+  margin-top: 6px;
+  font-size: 11.5px;
+}
+.receipt-total-row {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 2px;
+}
+.receipt-total-row.destaque {
+  font-size: 14px;
+  font-weight: 800;
+  border-top: 1px solid #111827;
+  border-bottom: 1px solid #111827;
+  padding: 4px 0;
+  margin: 4px 0;
+}
+.receipt-qrcode-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px dashed #9ca3af;
+  text-align: center;
+}
+.receipt-key-text {
+  font-size: 9px;
+  word-break: break-all;
+  color: #4b5563;
+  margin-top: 4px;
+}
+
+/* Regras de Impressão Direta em Bobina Térmica 80mm */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .super-thermal-receipt, .super-thermal-receipt * {
+    visibility: visible;
+  }
+  .super-thermal-receipt {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 78mm !important;
+    margin: 0 !important;
+    padding: 2mm !important;
+    box-shadow: none !important;
+    border: none !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+}
