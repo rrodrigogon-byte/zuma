@@ -4,7 +4,7 @@ import {
   Truck, TrendingUp, RefreshCw, Plus, Trash2, Printer, CheckCircle2,
   Download, Search, DollarSign, Calendar, Layers, ShieldCheck,
   Beef, UtensilsCrossed, Scale, Users, ClipboardCheck, Sparkles,
-  Percent, ArrowDownRight, ArrowUpRight, Lock, KeyRound, AlertCircle, FileText, Apple, Boxes, ShieldAlert, Tv, CreditCard, Receipt, Wifi, WifiOff, Eye, ArrowUpCircle, CheckSquare, RotateCcw, History, List
+  Percent, ArrowDownRight, ArrowUpRight, Lock, KeyRound, AlertCircle, FileText, Apple, Boxes, ShieldAlert, Tv, CreditCard, Receipt, Wifi, WifiOff, Eye, ArrowUpCircle, CheckSquare, RotateCcw, History, List, Monitor, Volume2, Terminal, HardDrive
 } from 'lucide-react';
 import { api } from '../../lib/api';
 import Modal from '../../components/Modal';
@@ -51,6 +51,74 @@ export default function Supermercado() {
     limiteSangria: 800,
     ipEquipamento: ''
   });
+  // PWA & Instalador Windows
+  const [modalInstaladorWindows, setModalInstaladorWindows] = useState(false);
+  const [pwaInstalavel, setPwaInstalavel] = useState(false);
+  const [deferredPromptPwa, setDeferredPromptPwa] = useState(null);
+  const [somScannerAtivo, setSomScannerAtivo] = useState(true);
+
+  // Sintetizador de Áudio para Scanner de Caixa (Web Audio API)
+  const tocarBeepScanner = (tipo = 'sucesso') => {
+    if (!somScannerAtivo) return;
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      if (tipo === 'sucesso') {
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(1760, ctx.currentTime);
+        gain.gain.setValueAtTime(0.18, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.08);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.08);
+      } else {
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(320, ctx.currentTime);
+        gain.gain.setValueAtTime(0.22, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.22);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.22);
+      }
+    } catch (e) {}
+  };
+
+  // Inicialização PWA e Service Worker
+  useEffect(() => {
+    let link = document.querySelector("link[rel*='manifest']");
+    if (link) {
+      link.href = "/manifest-supermercado.json";
+    }
+    if ('serviceWorker' in navigator && window.location.protocol === 'https:') {
+      navigator.serviceWorker.register('/sw-supermercado.js').then((reg) => {
+        console.log('[PWA Kytto] Service Worker ativo:', reg.scope);
+      }).catch(() => {});
+    }
+    const handleBeforeInstall = (e) => {
+      e.preventDefault();
+      setDeferredPromptPwa(e);
+      setPwaInstalavel(true);
+    };
+    window.addEventListener('beforeinstallprompt', handleBeforeInstall);
+    return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstall);
+  }, []);
+
+  const handleInstalarPwaNativo = async () => {
+    if (!deferredPromptPwa) {
+      showToast("Para instalar no Windows, clique no ícone '+' ou 'Instalar' na barra do Edge/Chrome.");
+      return;
+    }
+    deferredPromptPwa.prompt();
+    const { outcome } = await deferredPromptPwa.userChoice;
+    if (outcome === 'accepted') {
+      showToast("🎉 Kytto PDV instalado com sucesso no seu Windows!");
+      setPwaInstalavel(false);
+      setDeferredPromptPwa(null);
+    }
+  };
   // Caixa / PDV
   const [sessaoCaixa, setSessaoCaixa] = useState(null);
   const [modalCaixa, setModalCaixa] = useState(null); // 'abrir', 'sangria', 'suprimento', 'fechar'
@@ -637,9 +705,11 @@ export default function Supermercado() {
       );
 
       if (prod) {
+        tocarBeepScanner('sucesso');
         adicionarAoCarrinho(prod, multiplicador);
         showToast(`Item adicionado: ${prod.nome} (${multiplicador}x)`);
       } else {
+        tocarBeepScanner('erro');
         showToast(`Produto com código "${codigoLimpo}" não encontrado no mix.`);
       }
       setLeitorCodigo('');
@@ -1062,6 +1132,14 @@ export default function Supermercado() {
 
           <button className="super-btn-mix-cta" onClick={executarCargaMixOficial} title="Carregar 25 itens da cesta brasileira">
             <Layers size={16} /> Carga Mix Oficial (25 Itens)
+          </button>
+          {pwaInstalavel && (
+            <button className="super-btn-pwa-install" onClick={handleInstalarPwaNativo} title="Instalar aplicativo nativo no Windows">
+              <Download size={16} /> Instalar no Windows (PWA)
+            </button>
+          )}
+          <button className="super-btn-windows-cta" onClick={() => setModalInstaladorWindows(true)} title="Instalador Windows & PWA">
+            <Monitor size={16} /> 🖥️ Instalador Windows & PWA
           </button>
 
           <button className="super-btn-refresh" onClick={carregarDados} disabled={carregando} title="Atualizar dados">

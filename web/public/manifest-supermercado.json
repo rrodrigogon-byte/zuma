@@ -1,0 +1,71 @@
+{
+  "name": "Kytto Supermercado & Multi-PDV 360",
+  "short_name": "Kytto PDV",
+  "description": "Frente de Caixa Industrial, Balanças Toledo/Filizola, Leitor de Código de Barras e Contingência Offline Ininterrupta.",
+  "start_url": "/admin/supermercado?tab=pdv",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": [
+    "window-controls-overlay",
+    "standalone",
+    "minimal-ui"
+  ],
+  "background_color": "#0f172a",
+  "theme_color": "#0284c7",
+  "orientation": "landscape-primary",
+  "categories": [
+    "business",
+    "finance",
+    "productivity",
+    "shopping"
+  ],
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Frente de Caixa (PDV)",
+      "short_name": "PDV",
+      "description": "Abrir Frente de Caixa para Vendas",
+      "url": "/admin/supermercado?tab=pdv",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Self-Checkout Totem",
+      "short_name": "Totem",
+      "description": "Autoatendimento com Balança de Sacolas",
+      "url": "/admin/supermercado?tab=selfcheckout",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Frentes de Caixa Loja",
+      "short_name": "Terminais",
+      "description": "Painel de Controle de todos os PDVs",
+      "url": "/admin/supermercado?tab=terminais",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Mix de Produtos & Gôndola",
+      "short_name": "Mix",
+      "description": "Catálogo e Consulta de Preços",
+      "url": "/admin/supermercado?tab=mix",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    }
+  ]
+}

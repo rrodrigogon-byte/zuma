@@ -313,6 +313,19 @@ export function createVarejoAdminRouter({ db, escopoDaRequisicao, fuso = 'Americ
     return svc.validarValeCompras(db, empresaId, req.params.codigo);
   }));
 
+  // ── Download do Instalador Windows Kytto PDV ──
+  router.get("/download-instalador-windows", (req, res) => {
+    const path = require("path");
+    const zipPath = path.resolve("web/public/downloads/Kytto-Supermercado-Windows-Installer.zip");
+    if (fs.existsSync(zipPath)) {
+      res.setHeader("Content-Disposition", "attachment; filename=Kytto-Supermercado-Windows-Installer.zip");
+      res.setHeader("Content-Type", "application/zip");
+      fs.createReadStream(zipPath).pipe(res);
+    } else {
+      res.status(404).json({ erro: "Instalador não encontrado." });
+    }
+  });
+
   return router;
 }
 
