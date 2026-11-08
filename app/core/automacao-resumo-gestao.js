@@ -70,7 +70,7 @@ export function consolidarResumoDiario(empresaId = EMPRESA_DINO_ID, dataFiltro =
 
   // Itens em ponto de reposição no estoque
   const produtosRevenda = barbearia.listarProdutosRevenda ? barbearia.listarProdutosRevenda(empresaId) : [];
-  const produtosEmRuptura = produtosRevenda.filter(p => Number(p.estoque || 0) <= Number(p.estoqueMinimo || p.pontoReposicao || 3));
+  const produtosEmRuptura = produtosRevenda.filter(p => Number(p.estoqueAtual ?? p.estoque ?? p.quantidade ?? 0) <= Number(p.estoqueMinimo ?? p.pontoReposicao ?? 3));
 
   return {
     empresaId,
@@ -87,7 +87,7 @@ export function consolidarResumoDiario(empresaId = EMPRESA_DINO_ID, dataFiltro =
     ticketMedioFormatado: formatarMoeda(ticketMedio),
     formasPagamento,
     producaoBarbeiros: Object.values(producaoBarbeiros),
-    itensAlertaEstoque: produtosEmRuptura.map(p => ({ id: p.id, nome: p.nome, estoque: p.estoque, minimo: p.estoqueMinimo || 3 }))
+    itensAlertaEstoque: produtosEmRuptura.map(p => ({ id: p.id, nome: p.nome, estoque: Number(p.estoqueAtual ?? p.estoque ?? p.quantidade ?? 0), minimo: Number(p.estoqueMinimo ?? 3) }))
   };
 }
 
