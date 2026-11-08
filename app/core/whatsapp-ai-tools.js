@@ -115,34 +115,35 @@ const APELIDOS_PROFISSIONAIS = {
 
 const APELIDOS_SERVICOS = {
   // Corte de cabelo / Corte masculino (Bruno, Nati, Ester, David, etc.)
-  'corte': ['corte premium (bruno ou nati)', 'corte com dino', 'corte premium', 'corte tradicional', 'corte masculino'],
-  'corte masculino': ['corte premium (bruno ou nati)', 'corte com dino', 'corte premium'],
-  'corte-masculino': ['corte premium (bruno ou nati)', 'corte com dino', 'corte premium'],
-  'corte cabelo masculino': ['corte premium (bruno ou nati)', 'corte com dino', 'corte premium'],
-  'corte de cabelo': ['corte premium (bruno ou nati)', 'corte com dino', 'corte premium'],
-  'corte cabelo': ['corte premium (bruno ou nati)', 'corte com dino', 'corte premium'],
-  'cortar cabelo': ['corte premium (bruno ou nati)', 'corte com dino', 'corte premium'],
-  'cortar o cabelo': ['corte premium (bruno ou nati)', 'corte com dino', 'corte premium'],
-  'cabelo': ['corte premium (bruno ou nati)', 'corte com dino', 'corte premium'],
-  'cabelo masculino': ['corte premium (bruno ou nati)', 'corte com dino', 'corte premium'],
-  'corte tradicional': ['corte premium (bruno ou nati)', 'corte com dino', 'corte premium'],
+  'corte': ['corte com bruno ou nati agendamento online', 'corte com bruno ou nati', 'corte com dino agendamento online', 'corte com dino', 'corte premium (bruno ou nati)', 'corte premium', 'corte tradicional', 'corte masculino'],
+  'corte masculino': ['corte com bruno ou nati agendamento online', 'corte com bruno ou nati', 'corte com dino agendamento online', 'corte com dino', 'corte premium'],
+  'corte-masculino': ['corte com bruno ou nati agendamento online', 'corte com bruno ou nati', 'corte com dino agendamento online', 'corte com dino', 'corte premium'],
+  'corte cabelo masculino': ['corte com bruno ou nati agendamento online', 'corte com bruno ou nati', 'corte com dino agendamento online', 'corte com dino'],
+  'corte de cabelo': ['corte com bruno ou nati agendamento online', 'corte com bruno ou nati', 'corte com dino agendamento online', 'corte com dino'],
+  'corte cabelo': ['corte com bruno ou nati agendamento online', 'corte com bruno ou nati', 'corte com dino agendamento online', 'corte com dino'],
+  'cortar cabelo': ['corte com bruno ou nati agendamento online', 'corte com bruno ou nati', 'corte com dino agendamento online', 'corte com dino'],
+  'cortar o cabelo': ['corte com bruno ou nati agendamento online', 'corte com bruno ou nati', 'corte com dino agendamento online', 'corte com dino'],
+  'cabelo': ['corte com bruno ou nati agendamento online', 'corte com bruno ou nati', 'corte com dino agendamento online', 'corte com dino'],
+  'cabelo masculino': ['corte com bruno ou nati agendamento online', 'corte com bruno ou nati', 'corte com dino agendamento online', 'corte com dino'],
+  'corte tradicional': ['corte com bruno ou nati agendamento online', 'corte com bruno ou nati', 'corte com dino agendamento online', 'corte com dino'],
 
   // Barba
-  'barba': ['barba premium', 'barba com o dino', 'barba com dino', 'barba'],
-  'barba premium': ['barba premium', 'barba com o dino', 'barba com dino'],
-  'barba masculina': ['barba premium', 'barba com o dino', 'barba com dino'],
-  'fazer barba': ['barba premium', 'barba com o dino', 'barba com dino'],
-  'fazer a barba': ['barba premium', 'barba com o dino', 'barba com dino'],
-  'aparar barba': ['barba premium', 'barba com o dino', 'barba com dino'],
+  'barba': ['barba com bruno ou nati agendamento online', 'barba com bruno ou nati', 'barba com o dino agendamento online', 'barba com o dino', 'barba com dino', 'barba premium'],
+  'barba premium': ['barba com bruno ou nati agendamento online', 'barba com bruno ou nati', 'barba com o dino agendamento online', 'barba com o dino', 'barba com dino'],
+  'barba masculina': ['barba com bruno ou nati agendamento online', 'barba com bruno ou nati', 'barba com o dino agendamento online', 'barba com o dino', 'barba com dino'],
+  'fazer barba': ['barba com bruno ou nati agendamento online', 'barba com bruno ou nati', 'barba com o dino agendamento online', 'barba com o dino', 'barba com dino'],
+  'fazer a barba': ['barba com bruno ou nati agendamento online', 'barba com bruno ou nati', 'barba com o dino agendamento online', 'barba com o dino', 'barba com dino'],
+  'aparar barba': ['barba com bruno ou nati agendamento online', 'barba com bruno ou nati', 'barba com o dino agendamento online', 'barba com o dino', 'barba com dino'],
 
   // Corte e Barba / Combo
-  'corte e barba': ['corte e barba premium', 'corte e barba com dino', 'combo corte e barba', 'corte e barba'],
-  'cabelo e barba': ['corte e barba premium', 'corte e barba com dino', 'combo corte e barba', 'corte e barba'],
-  'barba e cabelo': ['corte e barba premium', 'corte e barba com dino', 'combo corte e barba', 'corte e barba'],
-  'barba e corte': ['corte e barba premium', 'corte e barba com dino', 'combo corte e barba', 'corte e barba'],
-  'combo': ['corte e barba premium', 'corte e barba com dino', 'combo corte e barba', 'corte e barba'],
-  'combo corte e barba': ['corte e barba premium', 'corte e barba com dino', 'combo corte e barba', 'corte e barba'],
-  'corte e barba premium': ['corte e barba premium', 'corte e barba com dino'],
+  'corte e barba': ['corte e barba agendamento online', 'corte e barba', 'corte e barba com dino agendamento online', 'corte e barba com dino', 'corte e barba premium', 'combo corte e barba', 'combo'],
+  'cabelo e barba': ['corte e barba agendamento online', 'corte e barba', 'corte e barba com dino agendamento online', 'corte e barba com dino', 'corte e barba premium', 'combo'],
+  'barba e cabelo': ['corte e barba agendamento online', 'corte e barba', 'corte e barba com dino agendamento online', 'corte e barba com dino', 'corte e barba premium', 'combo'],
+  'barba e corte': ['corte e barba agendamento online', 'corte e barba', 'corte e barba com dino agendamento online', 'corte e barba com dino', 'corte e barba premium', 'combo'],
+  'combo': ['corte e barba agendamento online', 'corte e barba', 'corte e barba com dino agendamento online', 'corte e barba com dino', 'corte e barba premium', 'combo corte e barba'],
+  'combo corte e barba': ['corte e barba agendamento online', 'corte e barba', 'corte e barba com dino agendamento online', 'corte e barba com dino', 'corte e barba premium'],
+  'corte e barba premium': ['corte e barba agendamento online', 'corte e barba', 'corte e barba com dino agendamento online', 'corte e barba com dino'],
+  'corte-e-barba-premium': ['corte e barba agendamento online', 'corte e barba', 'corte e barba com dino agendamento online', 'corte e barba com dino'],
 
   // Extras
   'sobrancelha': ['design de sobrancelha', 'sobrancelha (navalha)', 'sobrancelha'],
@@ -152,14 +153,14 @@ const APELIDOS_SERVICOS = {
   'depilacao nariz': ['depilacao masculina - nariz', 'depilacao nariz', 'nariz'],
   'pezinho': ['pezinho', 'acabamento'],
   'acabamento': ['pezinho', 'acabamento'],
-  'corte infantil': ['corte infantil'],
-  'infantil': ['corte infantil'],
+  'corte infantil': ['corte infantil agendamento online', 'corte infantil', 'corte com bruno ou nati agendamento online', 'corte com dino agendamento online'],
+  'infantil': ['corte infantil agendamento online', 'corte infantil', 'corte com bruno ou nati agendamento online', 'corte com dino agendamento online'],
   'corte com dino': ['corte com dino'],
   'barba com dino': ['barba com o dino', 'barba com dino'],
   'corte e barba com dino': ['corte e barba com dino'],
 };
 
-export function matchAgendaName(value, items = []) {
+export function matchAgendaName(value, items = [], { isDino = null } = {}) {
   const alvo = nomeComparavel(value).replace(/[-_]/g, ' ').replace(/\s+/g, ' ').trim();
   if (!alvo) return { item: null, candidatos: [] };
   // 1. Tentar resolucao direta por apelido conhecido (somente quando o alvo for o nome do profissional)
@@ -180,9 +181,15 @@ export function matchAgendaName(value, items = []) {
       const n = nomeComparavel(item?.nome);
       return correspondencias.some((c) => n === c || n.includes(c));
     });
-    if (achados.length === 1) return { item: achados[0], candidatos: achados };
+    if (achados.length === 1) {
+      if (isDino === false && /\bdino\b/i.test(achados[0].nome)) {
+        const semDino = items.find((it) => !/\bdino\b/i.test(it.nome) && correspondencias.some((c) => nomeComparavel(it.nome).includes(c.replace(/\s*com\s*dino.*/, ''))));
+        if (semDino) return { item: semDino, candidatos: [semDino, ...achados] };
+      }
+      return { item: achados[0], candidatos: achados };
+    }
     if (achados.length > 1) {
-      const comDino = /\bdino\b/i.test(semPreposicao);
+      const comDino = isDino !== null ? isDino : /\bdino\b/i.test(semPreposicao);
       const selecionado = achados.find((it) => comDino ? /\bdino\b/i.test(it.nome) : !/\bdino\b/i.test(it.nome)) || achados[0];
       return { item: selecionado, candidatos: achados };
     }
@@ -190,7 +197,7 @@ export function matchAgendaName(value, items = []) {
   const exato = items.filter((item) => nomeComparavel(item?.nome) === alvo);
   if (exato.length === 1) return { item: exato[0], candidatos: exato };
   // 3. Mapeamento inteligente de serviços por palavras-chave (corte, barba, combo)
-  const comDino = /\bdino\b/i.test(alvo);
+  const comDino = isDino !== null ? isDino : /\bdino\b/i.test(alvo);
   const temCorte = /\b(corte|cabelo)\b/i.test(alvo);
   const temBarba = /\bbarba\b/i.test(alvo);
   if (temCorte && temBarba) {
@@ -238,7 +245,7 @@ const TERMOS_QUALQUER_PROFISSIONAL = new Set([
   'outro da equipe', 'qualquer outro', 'fechado', 'sim', 'ok', 'bora', 'pode sim'
 ]);
 
-async function resolveAgendaId(scope, value, field, { allowAny = false } = {}) {
+async function resolveAgendaId(scope, value, field, { allowAny = false, professionalId = null } = {}) {
   const normalized = cleanText(value, 100);
   const plainValue = nomeComparavel(normalized);
   const ehQualquer = !normalized || TERMOS_QUALQUER_PROFISSIONAL.has(plainValue) ||
@@ -259,8 +266,38 @@ async function resolveAgendaId(scope, value, field, { allowAny = false } = {}) {
     }
   }
   const lista = (profissional ? await listSchedulingProfessionals(scope) : await listSchedulingServices(scope)) || [];
-  const { item, candidatos } = matchAgendaName(normalized, lista);
+  let isDinoProf = null;
+  if (!profissional && professionalId && professionalId !== 'qualquer') {
+    const profs = await listSchedulingProfessionals(scope).catch(() => []);
+    const prof = profs.find((p) => p.id === professionalId || (UUID_REGEX.test(professionalId) && p.id === professionalId));
+    if (prof) {
+      isDinoProf = barbeariaErp.ehProfissionalDino(prof) || /\bdino\b/i.test(prof.nome);
+    }
+  }
+  const { item, candidatos } = matchAgendaName(normalized, lista, { isDino: isDinoProf });
   if (item?.id) return item.id;
+  // Fallback inteligente para serviços padrão da barbearia (evita erro "não encontrei o serviço" para termos comuns)
+  if (!profissional && lista.length) {
+    const pVal = nomeComparavel(normalized);
+    const ehCombo = /corte.*barba|barba.*corte|combo/i.test(pVal);
+    const ehCorte = /corte|cabelo/i.test(pVal) && !ehCombo;
+    const ehBarba = /barba/i.test(pVal) && !ehCombo;
+    if (ehCombo) {
+      const combo = lista.find((it) => isDinoProf ? /\bdino\b/i.test(it.nome) && /corte.*barba|barba.*corte/i.test(it.nome) : !/\bdino\b/i.test(it.nome) && /corte.*barba|barba.*corte/i.test(it.nome))
+        || lista.find((it) => /corte.*barba|barba.*corte/i.test(it.nome));
+      if (combo?.id) return combo.id;
+    }
+    if (ehCorte) {
+      const corte = lista.find((it) => isDinoProf ? /\bdino\b/i.test(it.nome) && /corte/i.test(it.nome) : !/\bdino\b/i.test(it.nome) && /corte/i.test(it.nome) && !/barba/i.test(it.nome))
+        || lista.find((it) => /corte/i.test(it.nome) && !/barba/i.test(it.nome));
+      if (corte?.id) return corte.id;
+    }
+    if (ehBarba) {
+      const barba = lista.find((it) => isDinoProf ? /\bdino\b/i.test(it.nome) && /barba/i.test(it.nome) : !/\bdino\b/i.test(it.nome) && /barba/i.test(it.nome) && !/corte/i.test(it.nome))
+        || lista.find((it) => /barba/i.test(it.nome) && !/corte/i.test(it.nome));
+      if (barba?.id) return barba.id;
+    }
+  }
   const nomes = (candidatos.length ? candidatos : lista).slice(0, 12).map((entry) => sanitizeUntrustedBusinessText(entry?.nome, 80)).filter(Boolean);
   throw new WhatsappAiToolError(
     candidatos.length > 1
@@ -635,8 +672,8 @@ async function toolProfessionals(context) {
 
 async function toolAvailability(context, args = {}) {
   const scope = contextScope(context);
-  const serviceId = await resolveAgendaId(scope, args.serviceId, 'serviceId');
   const professionalId = await resolveAgendaId(scope, args.professionalId, 'professionalId', { allowAny: true });
+  const serviceId = await resolveAgendaId(scope, args.serviceId, 'serviceId', { professionalId });
   const date = normalizeAgendaDate(args.date, localDateIso()) || cleanText(args.date, 10);
   const disponibilidade = await listSchedulingAvailability(scope, { serviceId, professionalId, date });
   const servicesList = await listSchedulingServices(scope).catch(() => []);
@@ -736,6 +773,8 @@ export async function nearestAlternatives(scope, { serviceId, professionalId, da
     quando: friendlyWhen(item.date, item.time),
     date: item.date,
     time: item.time,
+    serviceId: item.service?.id || serviceId,
+    serviceName: item.service?.nome || null,
     ...(item.professional ? { profissional: item.professional } : {}),
     valor: brl(precoNoHorario(item.service, item.prof, item.time, servicesList)),
   }));
@@ -1212,14 +1251,14 @@ async function toolPrepareExpense(context) {
 }
 async function toolPrepareAppointment(context, args = {}) {
   const scope = contextScope(context);
+  const professionalId = await resolveAgendaId(scope, args.professionalId || 'qualquer', 'professionalId', { allowAny: true });
   let rawService = cleanText(args.serviceId, 100);
   if (!rawService) {
     const servicos = await listSchedulingServices(scope).catch(() => []);
     const principal = (servicos || []).find((s) => /corte/i.test(s.nome)) || servicos?.[0];
     if (principal?.id) rawService = principal.id;
   }
-  const serviceId = await resolveAgendaId(scope, rawService, 'serviceId');
-  const professionalId = await resolveAgendaId(scope, args.professionalId || 'qualquer', 'professionalId', { allowAny: true });
+  const serviceId = await resolveAgendaId(scope, rawService, 'serviceId', { professionalId });
   // O modelo repete o que o cliente falou ("11h", "sexta", "14/10"); a agenda usa 11:00 e AAAA-MM-DD.
   const date = normalizeAgendaDate(args.date, localDateIso()) || cleanText(args.date, 10);
   const availability = await listSchedulingAvailability(scope, { serviceId, professionalId, date });
@@ -1344,6 +1383,15 @@ function textoPlano(valor) {
 
 export function nomeBaseDoServico(nome) {
   return textoPlano(nome)
+    .replace(/\bagendamento\s+online\b/g, ' ')
+    .replace(/\bagendamento\b/g, ' ')
+    .replace(/\bonline\b/g, ' ')
+    .replace(/\bpremium\b/g, ' ')
+    .replace(/\bcortesia\b/g, ' ')
+    .replace(/\bclub\b/g, ' ')
+    .replace(/\btradicional\b/g, ' ')
+    .replace(/\bmasculino\b/g, ' ')
+    .replace(/\bmasculina\b/g, ' ')
     .replace(/\([^)]*\)/g, ' ')
     .replace(/\s+com\s+(o|a)?\s*[a-z]+.*$/, ' ')
     .replace(/[^a-z0-9 ]+/g, ' ')
@@ -1366,9 +1414,18 @@ export function servicosEquivalentes(servicos = [], servicoId, profissional) {
   if (!base) return [];
   const apelidos = apelidosDoProfissional(profissional.nome);
   const citaProfissional = (item) => apelidos.some((apelido) => new RegExp(`\\b${apelido.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`).test(textoPlano(item.nome)));
+  const ehDino = barbeariaErp.ehProfissionalDino(profissional) || /\bdino\b/i.test(profissional.nome);
   return servicos
     .filter((item) => item.id !== servicoId && nomeBaseDoServico(item.nome) === base)
-    .sort((a, b) => Number(citaProfissional(b)) - Number(citaProfissional(a)));
+    .sort((a, b) => {
+      if (ehDino) {
+        return Number(/\bdino\b/i.test(b.nome)) - Number(/\bdino\b/i.test(a.nome));
+      }
+      const aTemDino = /\bdino\b/i.test(a.nome);
+      const bTemDino = /\bdino\b/i.test(b.nome);
+      if (aTemDino !== bTemDino) return aTemDino ? 1 : -1;
+      return Number(citaProfissional(b)) - Number(citaProfissional(a));
+    });
 }
 
 function profissionalNaoFazServico(error) {
@@ -1376,17 +1433,45 @@ function profissionalNaoFazServico(error) {
 }
 
 async function listSchedulingAvailability(scope, input = {}) {
+  const professionalId = String(input.professionalId || '');
+  let servicoAjustado = false;
+  let serviceIdFinal = input.serviceId;
+
+  // Pré-compatibilização na Dino: profissional de equipe não atende serviços exclusivos do Dino e vice-versa
+  if (professionalId && professionalId !== 'qualquer') {
+    const [servicos, profissionais] = await Promise.all([
+      listSchedulingServices(scope).catch(() => []),
+      listSchedulingProfessionals(scope).catch(() => []),
+    ]);
+    const profissional = (profissionais || []).find((item) => item.id === professionalId);
+    if (profissional) {
+      const ehDino = barbeariaErp.ehProfissionalDino(profissional) || /\bdino\b/i.test(profissional.nome);
+      const servicoAtual = (servicos || []).find((s) => s.id === input.serviceId);
+      const servicoEhDino = servicoAtual && /\bdino\b/i.test(servicoAtual.nome);
+      if ((!ehDino && servicoEhDino) || (ehDino && !servicoEhDino)) {
+        const equivalentes = servicosEquivalentes(servicos, input.serviceId, profissional);
+        if (equivalentes.length > 0) {
+          serviceIdFinal = equivalentes[0].id;
+          servicoAjustado = true;
+        }
+      }
+    }
+  }
+
   try {
-    return await agendaAvailability(scope, input);
+    const res = await agendaAvailability(scope, { ...input, serviceId: serviceIdFinal });
+    if (servicoAjustado && res) {
+      res.servicoAjustado = true;
+    }
+    return res;
   } catch (error) {
-    const professionalId = String(input.professionalId || '');
     if (!profissionalNaoFazServico(error) || !professionalId || professionalId === 'qualquer') throw error;
     const [servicos, profissionais] = await Promise.all([
       listSchedulingServices(scope).catch(() => []),
       listSchedulingProfessionals(scope).catch(() => []),
     ]);
     const profissional = (profissionais || []).find((item) => item.id === professionalId);
-    for (const candidato of servicosEquivalentes(servicos || [], input.serviceId, profissional)) {
+    for (const candidato of servicosEquivalentes(servicos || [], serviceIdFinal, profissional)) {
       try {
         const resultado = await agendaAvailability(scope, { ...input, serviceId: candidato.id });
         return { ...resultado, servicoAjustado: true, instrucaoServico: `Para ${profissional.nome} o serviço é "${resultado.service?.nome}". Use serviceId ${resultado.service?.id} nas próximas ferramentas.` };

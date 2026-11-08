@@ -296,6 +296,9 @@ test('normalização de horários e datas lida com variações reais do WhatsApp
   // Horários com termos cotidianos ("hoje as 18h45 hr", "amanhã às 16:15", "18h45 hr")
   assert.equal(normalizeAgendaTime('18h45 hr'), '18:45');
   assert.equal(normalizeAgendaTime('Hoje as 18h45 hr'), '18:45');
+  assert.equal(normalizeAgendaTime('12/11 as 17h'), '17:00');
+  assert.equal(normalizeAgendaTime('12/11 as 16h00'), '16:00');
+  assert.equal(normalizeAgendaTime('pode agendas as 17h00'), '17:00');
   assert.equal(normalizeAgendaTime('Hoje as 16:45'), '16:45');
   assert.equal(normalizeAgendaTime('Hoje as 16:15'), '16:15');
   assert.equal(normalizeAgendaTime('18:45'), '18:45');
@@ -309,6 +312,7 @@ test('normalização de horários e datas lida com variações reais do WhatsApp
   assert.equal(normalizeAgendaDate('proxima segunda', sabado), '2026-11-09');
   assert.equal(normalizeAgendaDate('segunda feira', sabado), '2026-11-09');
   assert.equal(normalizeAgendaDate('dia 09/11', sabado), '2026-11-09');
+  assert.equal(normalizeAgendaDate('12/11 as 17h', sabado), '2026-11-12');
 
   // Preço nunca retorna 0 para corte ou barba na Barbearia Dino
   const precoCorte = precoNoHorario({ nome: 'Corte' }, { nome: 'Bruno' }, '14:00');

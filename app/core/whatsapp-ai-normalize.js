@@ -19,6 +19,9 @@ function pad(value) {
 export function normalizeAgendaTime(value) {
   if (!value) return ''
   let str = plain(value)
+  // Remove menções explícitas de data no formato DD/MM, DD/MM/AAAA ou AAAA-MM-DD (ex: "12/11 as 17h")
+  str = str.replace(/\b\d{4}-\d{2}-\d{2}\b/g, ' ')
+  str = str.replace(/\b\d{1,2}\/\d{1,2}(?:\/\d{2,4})?\b/g, ' ')
   // Remove menções de dia e preposições que acompanham o horário (ex: "hoje as 18h45 hr", "amanhã às 16:15")
   str = str.replace(/\b(hoje|amanha|depois de amanha|segunda|terca|quarta|quinta|sexta|sabado|domingo)\b/gi, ' ')
   str = str.replace(/\b(dia\s+\d{1,2}(?:\/\d{1,2})?)\b/gi, ' ')
