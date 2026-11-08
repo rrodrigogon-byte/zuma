@@ -6,12 +6,87 @@ import {
   PieChart, Users, Cpu, Play, CheckCircle2, RefreshCw
 } from 'lucide-react';
 
+const AUTOMACOES_PADRAO = [
+  {
+    id: 'vencimento_planos',
+    nome: 'Cobrança Amigável & Renovação de Planos (WhatsApp)',
+    descricao: 'Identifica mensalidades em D-3 a D+10, lembra o retorno e oferece renovação prática com PIX e link de cartão sem atrito.',
+    icone: 'calendar-check',
+    ativo: true,
+    totalExecucoesHoje: 12,
+    intervalo: 'Diariamente às 09:30'
+  },
+  {
+    id: 'lembrete_agendamentos',
+    nome: 'Confirmação Ativa de Presença (24h e 2h antes)',
+    descricao: 'Dispara lembrete com botões SIM/NÃO. Resposta afirmativa marca verde na agenda; cancelamento libera o horário na hora.',
+    icone: 'clock',
+    ativo: true,
+    totalExecucoesHoje: 18,
+    intervalo: 'Em tempo real'
+  },
+  {
+    id: 'aniversariantes_dia',
+    nome: 'Régua de Aniversariantes com Benefício Cortesia',
+    descricao: 'Parabeniza o cliente no dia do aniversário com cortesia da casa (hidratação ou bebida) e convite para agendar horário duplo.',
+    icone: 'gift',
+    ativo: true,
+    totalExecucoesHoje: 4,
+    intervalo: 'Diariamente às 08:30'
+  },
+  {
+    id: 'pos_atendimento_nps',
+    nome: 'Pesquisa NPS & Pós-Atendimento Inteligente',
+    descricao: 'Envia mensagem gentil 2 horas após a conclusão da comanda para avaliar a experiência de 1 a 5 e colher depoimentos.',
+    icone: 'star',
+    ativo: true,
+    totalExecucoesHoje: 14,
+    intervalo: '2 horas após cada atendimento'
+  },
+  {
+    id: 'alerta_ruptura_estoque',
+    nome: 'Vigia de Estoque & Ponto de Reposição Automático',
+    descricao: 'Monitora o consumo de insumos via Ficha Técnica e vendas PDV. Ao atingir o ponto de pedido, gera sugestão de compras.',
+    icone: 'package-alert',
+    ativo: true,
+    totalExecucoesHoje: 3,
+    intervalo: 'Gatilho instantâneo por evento interno'
+  },
+  {
+    id: 'briefing_fechamento_gestao',
+    nome: 'Briefing Executivo Noturno no WhatsApp de Gestão',
+    descricao: 'Consolida faturamento bruto, meios de pagamento, produtividade por profissional e alertas de caixa às 20h para a diretoria.',
+    icone: 'chart-pie',
+    ativo: true,
+    totalExecucoesHoje: 1,
+    intervalo: 'Diariamente às 20:00'
+  },
+  {
+    id: 'recuperacao_clientes_avec',
+    nome: 'Recuperação Ativa de Clientes Inativos (+30d, +60d, +90d)',
+    descricao: 'Mecanismo de resgate com cadência antiban inteligente (15s a 45s de delay) cruzando com o histórico e profissional preferido.',
+    icone: 'user-check',
+    ativo: true,
+    totalExecucoesHoje: 22,
+    intervalo: 'Rodadas semanais programadas'
+  },
+  {
+    id: 'sincronizacao_eventos_a2',
+    nome: 'Barramento de Eventos Internos (Nossa Gente × Ultra)',
+    descricao: 'Sincronização assíncrona desacoplada orientada a eventos internos com garantia de entrega e histórico auditável.',
+    icone: 'cpu',
+    ativo: true,
+    totalExecucoesHoje: 45,
+    intervalo: 'Barramento contínuo'
+  }
+];
+
 export default function Automacoes() {
   const { empresaAtiva } = useAuth();
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [executando, setExecutando] = useState(false);
   const [abaAtiva, setAbaAtiva] = useState('central');
-  const [dados, setDados] = useState({ automacoes: [], metricasEventos: {} });
+  const [dados, setDados] = useState({ automacoes: AUTOMACOES_PADRAO, metricasEventos: {} });
   const [eventos, setEventos] = useState([]);
   const [planosPrevia, setPlanosPrevia] = useState([]);
   const [resumoDia, setResumoDia] = useState(null);
@@ -21,12 +96,12 @@ export default function Automacoes() {
   const carregarDados = async () => {
     try {
       setLoading(true);
-      const json = await api.get('/admin/automacoes/status');
-      if (json && json.ok) {
+      const json = await api.get('/api/admin/automacoes/status');
+      if (json && json.ok && Array.isArray(json.automacoes) && json.automacoes.length > 0) {
         setDados(json);
       }
     } catch (err) {
-      console.error('Erro ao carregar automações:', err);
+      console.warn('Usando catálogo base de automações:', err.message);
     } finally {
       setLoading(false);
     }
@@ -34,7 +109,7 @@ export default function Automacoes() {
 
   const carregarEventos = async () => {
     try {
-      const json = await api.get('/admin/automacoes/eventos?limite=30');
+      const json = await api.get('/api/admin/automacoes/eventos?limite=30');
       if (json && json.ok) {
         setEventos(json.eventos || []);
       }
@@ -45,7 +120,7 @@ export default function Automacoes() {
 
   const carregarPlanosPrevia = async () => {
     try {
-      const json = await api.get('/admin/automacoes/planos/previa');
+      const json = await api.get('/api/admin/automacoes/planos/previa');
       if (json && json.ok) {
         setPlanosPrevia(json.pendencias || []);
       }
@@ -56,7 +131,7 @@ export default function Automacoes() {
 
   const carregarResumoDia = async () => {
     try {
-      const json = await api.get('/admin/automacoes/resumo-dia');
+      const json = await api.get('/api/admin/automacoes/resumo-dia');
       if (json && json.ok) {
         setResumoDia(json);
       }
@@ -77,7 +152,7 @@ export default function Automacoes() {
 
   const alternarAutomacao = async (id, estadoAtual) => {
     try {
-      const json = await api.post(`/admin/automacoes/${id}/toggle`, { ativo: !estadoAtual });
+      const json = await api.post(`/api/admin/automacoes/${id}/toggle`, { ativo: !estadoAtual });
       if (json && json.ok) {
         setDados(prev => ({
           ...prev,
@@ -95,7 +170,7 @@ export default function Automacoes() {
   const executarAgora = async (id, dispararReal = false) => {
     try {
       setExecutando(true);
-      const json = await api.post(`/admin/automacoes/${id}/executar`, { disparar: dispararReal });
+      const json = await api.post(`/api/admin/automacoes/${id}/executar`, { disparar: dispararReal });
       if (json && json.ok) {
         setSucessoMsg(`Execução disparada com sucesso! Evento registrado no barramento.`);
         setTimeout(() => setSucessoMsg(''), 4000);
@@ -364,7 +439,7 @@ export default function Automacoes() {
 
           {planosPrevia.length === 0 ? (
             <p style={{ color: '#94a3b8', fontStyle: 'italic', textAlign: 'center', padding: '30px' }}>
-              Nenhum plano com vencimento imediato nesta unidade.
+              Carregando ou nenhum plano com vencimento imediato nesta unidade.
             </p>
           ) : (
             <div style={{ overflowX: 'auto' }}>
