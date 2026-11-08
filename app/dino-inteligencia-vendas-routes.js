@@ -11,7 +11,7 @@ export function registerInteligenciaVendasRoutes(app, { db, legacyEmpresaId, leg
       const empresaId = String(legacyEmpresaId(req) || '');
       const lojaId = String(legacyLojaId(req) || '');
 
-      const dados = buildInteligenciaVendas(db(), { empresaId, lojaId });
+      const dados = await buildInteligenciaVendas(db(), { empresaId, lojaId });
       res.json(dados);
     } catch (error) {
       console.error('[inteligencia-vendas] Erro ao processar:', error);
