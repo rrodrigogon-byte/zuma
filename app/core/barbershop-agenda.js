@@ -21,6 +21,7 @@ import * as clientesKytto from '../clientes-contas-kytto.js';
 import { phoneMatchKey } from './whatsapp-phone.js';
 import { cancelPendingAppointmentNotifications, queueAppointmentNotifications, queueWaitlistNotifications } from './barbershop-appointment-notifications.js';
 import * as captacao from '../dino-captacao-kytto.js';
+import { DINO_COMMERCE_EMPRESA_ID, DINO_COMMERCE_LOJA_ID } from './legacy-commerce-scope.js';
 import {
   createScheduledAppointment as pgCreate,
   listSchedulingAvailability as pgAvailability,
@@ -84,7 +85,16 @@ function duracaoDoServico(empresa, servicoId) {
 }
 
 function temEquipeNaAgendaDaBarbearia(scope) {
-  const estado = legacyDb().barbearias?.[chaveEmpresa(scope)];
+  const chave = chaveEmpresa(scope);
+  try {
+    const profs = barbearia.listarProfissionais(chave, { incluirInativos: false });
+    if (Array.isArray(profs) && profs.length > 0) return true;
+  } catch {}
+  try {
+    const profsDino = barbearia.listarProfissionais(DINO_COMMERCE_EMPRESA_ID, { incluirInativos: false });
+    if (Array.isArray(profsDino) && profsDino.length > 0) return true;
+  } catch {}
+  const estado = legacyDb().barbearias?.[chave] || legacyDb().barbearias?.[chave?.toLowerCase?.()];
   return Object.values(estado?.profissionais || {}).some((item) => item && item.ativo !== false);
 }
 
@@ -166,6 +176,9 @@ export async function agendaSource(scope = {}, { strictStoreMapping = false } = 
   if (forcada === 'barbearia' || forcada === 'postgres') return forcada;
   const empresa = chaveEmpresa(scope);
   const unidade = chaveUnidade(scope);
+  const isDino = ['d0d0ac01-8e50-4b61-8c79-de4aaa916da6', 'emp-kytto-001', 'dino'].includes(String(empresa || '').toLowerCase())
+    || empresa === DINO_COMMERCE_EMPRESA_ID;
+  if (isDino) return 'barbearia';
   if (!empresa || !unidade || !temEquipeNaAgendaDaBarbearia(scope)) return 'postgres';
   const chave = `${empresa}:${unidade}`;
   const emCache = fonteCache.get(chave);
@@ -447,12 +460,30 @@ export async function availability(scope, input = {}) {
     if (item) servico = item;
   }
   if (!servico) throw new SchedulingError('serviço não encontrado', 'SERVICE_NOT_FOUND');
+  const profs = barbearia.listarProfissionais(empresa);
   const professionalId = limpo(input.professionalId, 100) || 'qualquer';
-  const profissional = professionalId === 'qualquer' ? null : barbearia.listarProfissionais(empresa).find((item) => item.id === professionalId);
+  let profissional = professionalId === 'qualquer' ? null : profs.find((item) => item.id === professionalId);
+  if (professionalId !== 'qualquer' && !profissional) {
+    const { item } = matchAgendaName(professionalId, profs);
+    if (item) profissional = item;
+  }
   if (professionalId !== 'qualquer' && !profissional) throw new SchedulingError('profissional não encontrado', 'PROFESSIONAL_NOT_FOUND');
+
+  // Se o profissional não realiza este serviço (ex: Dino com Corte tradicional vs Corte com Dino),
+  // ajusta automaticamente para o serviço equivalente que o profissional realiza
+  if (profissional && Array.isArray(servico.profissionaisIds) && servico.profissionaisIds.length > 0 && !servico.profissionaisIds.includes(profissional.id)) {
+    const alternativo = servicos.find((s) => s.id !== servico.id && (!Array.isArray(s.profissionaisIds) || s.profissionaisIds.length === 0 || s.profissionaisIds.includes(profissional.id)));
+    if (alternativo) servico = alternativo;
+  }
+
   let horarios = [];
   try {
-    horarios = barbearia.listarHorariosDisponiveis(empresa, { data: date, servicoId: servico.id, profissionalId: professionalId, lojaId: scope.lojaId });
+    horarios = barbearia.listarHorariosDisponiveis(empresa, {
+      data: date,
+      servicoId: servico.id,
+      profissionalId: profissional ? profissional.id : 'qualquer',
+      lojaId: scope.lojaId
+    });
   } catch (erro) {
     throw traduzirErro(erro);
   }
@@ -528,6 +559,34 @@ export async function createAppointment(trx, scope, input = {}) {
 
 function criarNaAgendaDaBarbearia(scope, input = {}) {
   const empresa = chaveEmpresa(scope);
+  const servicos = barbearia.listarServicos(empresa, { incluirInativos: true });
+  let servico = servicos.find((item) => item.id === limpo(input.serviceId, 100));
+  if (!servico) {
+    const { item } = matchAgendaName(input.serviceId, servicos);
+    if (item) {
+      servico = item;
+      input.serviceId = item.id;
+    }
+  }
+  const profs = barbearia.listarProfissionais(empresa, { incluirInativos: true });
+  const rawProf = limpo(input.professionalId, 100) || 'qualquer';
+  let profissional = rawProf === 'qualquer' ? null : profs.find((item) => item.id === rawProf);
+  if (rawProf !== 'qualquer' && !profissional) {
+    const { item } = matchAgendaName(rawProf, profs);
+    if (item) {
+      profissional = item;
+      input.professionalId = item.id;
+    }
+  }
+  if (profissional && servico && Array.isArray(servico.profissionaisIds) && servico.profissionaisIds.length > 0 && !servico.profissionaisIds.includes(profissional.id)) {
+    const alternativo = servicos.find((s) => s.id !== servico.id && (!Array.isArray(s.profissionaisIds) || s.profissionaisIds.length === 0 || s.profissionaisIds.includes(profissional.id)));
+    if (alternativo) {
+      servico = alternativo;
+      input.serviceId = alternativo.id;
+    }
+  }
+  const servicoId = servico?.id || limpo(input.serviceId, 100);
+  const profissionalId = profissional?.id || 'qualquer';
   // Idempotência precisa preceder a resolução do slot: numa repetição depois de
   // uma resposta perdida, o próprio atendimento já ocupa o horário e não pode
   // ser confundido com um novo conflito.
@@ -554,8 +613,8 @@ function criarNaAgendaDaBarbearia(scope, input = {}) {
     const livre = barbearia.resolverProfissionalDisponivel(empresa, {
       data: dataLocalValida(input.date),
       horario: limpo(input.time, 5),
-      servicoId: limpo(input.serviceId, 100),
-      profissionalId: limpo(input.professionalId, 100) || 'qualquer',
+      servicoId,
+      profissionalId,
       lojaId: scope.lojaId,
     });
     // Limite por VISITA (dia + pessoa), não por serviço: no WhatsApp o mesmo número marca
@@ -587,7 +646,7 @@ function criarNaAgendaDaBarbearia(scope, input = {}) {
       clienteNome: limpo(input.customerName, 160),
       clienteTelefone: limpo(input.customerPhone, 30),
       profissionalId: livre.profissional.id,
-      servicoId: limpo(input.serviceId, 100),
+      servicoId,
       dataHora: livre.dataHora,
       dataAgenda: livre.dataAgenda,
       horaLocal: livre.horaLocal,

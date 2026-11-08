@@ -70,7 +70,7 @@ function ensureUuid(value, field) {
 }
 
 // IDs da agenda: UUID (PostgreSQL) ou o formato da agenda da barbearia (ex.: srv-xxxx).
-const AGENDA_ID_REGEX = /^[a-z]{2,10}-[a-z0-9-]{3,80}$/i;
+const AGENDA_ID_REGEX = /^(?:srv|prof|cmd|ag|pln|ass|prod|mov|bloq|fila)-[a-z0-9]+-\d{3,}$/i;
 function ensureAgendaId(value, field, { allowAny = false } = {}) {
   const normalized = cleanText(value, 100);
   if (allowAny && (!normalized || normalized === 'qualquer')) return 'qualquer';
@@ -253,7 +253,6 @@ async function resolveAgendaId(scope, value, field, { allowAny = false, professi
     plainValue.startsWith('qualquer') || plainValue.startsWith('outro');
   if (allowAny && ehQualquer) return 'qualquer';
   if (field.startsWith('professional') && ehQualquer) return 'qualquer';
-  if (UUID_REGEX.test(normalized) || AGENDA_ID_REGEX.test(normalized)) return normalized;
   if (!normalized) throw new WhatsappAiToolError(`${field} obrigatório`, 'INVALID_ID');
   const profissional = field.startsWith('professional');
   if (profissional) {
@@ -266,16 +265,14 @@ async function resolveAgendaId(scope, value, field, { allowAny = false, professi
     }
   }
   const lista = (profissional ? await listSchedulingProfessionals(scope) : await listSchedulingServices(scope)) || [];
-  let isDinoProf = null;
-  if (!profissional && professionalId && professionalId !== 'qualquer') {
-    const profs = await listSchedulingProfessionals(scope).catch(() => []);
-    const prof = profs.find((p) => p.id === professionalId || (UUID_REGEX.test(professionalId) && p.id === professionalId));
-    if (prof) {
-      isDinoProf = barbeariaErp.ehProfissionalDino(prof) || /\bdino\b/i.test(prof.nome);
-    }
-  }
-  const { item, candidatos } = matchAgendaName(normalized, lista, { isDino: isDinoProf });
+  // 1. Se for o ID de um item na lista (ou UUID)
+  const itemPorId = lista.find((it) => it.id === normalized || (it.uuid && it.uuid === normalized));
+  if (itemPorId?.id) return itemPorId.id;
+
+  // 2. Resolução inteligente por nome, apelido, slug ou palavras-chave
+  const { item, candidatos } = matchAgendaName(normalized, lista);
   if (item?.id) return item.id;
+
   // Fallback inteligente para serviços padrão da barbearia (evita erro "não encontrei o serviço" para termos comuns)
   if (!profissional && lista.length) {
     const pVal = nomeComparavel(normalized);
@@ -283,21 +280,33 @@ async function resolveAgendaId(scope, value, field, { allowAny = false, professi
     const ehCorte = /corte|cabelo/i.test(pVal) && !ehCombo;
     const ehBarba = /barba/i.test(pVal) && !ehCombo;
     if (ehCombo) {
-      const combo = lista.find((it) => isDinoProf ? /\bdino\b/i.test(it.nome) && /corte.*barba|barba.*corte/i.test(it.nome) : !/\bdino\b/i.test(it.nome) && /corte.*barba|barba.*corte/i.test(it.nome))
-        || lista.find((it) => /corte.*barba|barba.*corte/i.test(it.nome));
+      const combo = lista.find((it) => /corte.*barba|barba.*corte/i.test(it.nome));
       if (combo?.id) return combo.id;
     }
     if (ehCorte) {
-      const corte = lista.find((it) => isDinoProf ? /\bdino\b/i.test(it.nome) && /corte/i.test(it.nome) : !/\bdino\b/i.test(it.nome) && /corte/i.test(it.nome) && !/barba/i.test(it.nome))
-        || lista.find((it) => /corte/i.test(it.nome) && !/barba/i.test(it.nome));
+      const corte = lista.find((it) => /corte/i.test(it.nome) && !/barba/i.test(it.nome));
       if (corte?.id) return corte.id;
     }
     if (ehBarba) {
-      const barba = lista.find((it) => isDinoProf ? /\bdino\b/i.test(it.nome) && /barba/i.test(it.nome) : !/\bdino\b/i.test(it.nome) && /barba/i.test(it.nome) && !/corte/i.test(it.nome))
-        || lista.find((it) => /barba/i.test(it.nome) && !/corte/i.test(it.nome));
+      const barba = lista.find((it) => /barba/i.test(it.nome) && !/corte/i.test(it.nome));
       if (barba?.id) return barba.id;
     }
   }
+
+  // 3. Se for profissional, tentar mapeamento direto pelos barbeiros ativos da Dino
+  if (profissional) {
+    const barbeiroDino = BARBEIROS_ATIVOS_DINO.find((b) => b.matches.some((m) => plainValue.includes(m) || m.includes(plainValue)));
+    if (barbeiroDino) {
+      const matchNoLista = lista.find((it) => nomeComparavel(it.nome).includes(barbeiroDino.apelido.toLowerCase()));
+      if (matchNoLista?.id) return matchNoLista.id;
+    }
+  }
+
+  // 4. Se for UUID e a lista estiver vazia (fallback extremo postgres)
+  if (UUID_REGEX.test(normalized) && !lista.length) return normalized;
+
+  // 5. Se já era ID formal com prefixo conhecido (ex: srv-xxx, prof-xxx)
+  if (AGENDA_ID_REGEX.test(normalized)) return normalized;
   const nomes = (candidatos.length ? candidatos : lista).slice(0, 12).map((entry) => sanitizeUntrustedBusinessText(entry?.nome, 80)).filter(Boolean);
   throw new WhatsappAiToolError(
     candidatos.length > 1
@@ -1300,10 +1309,30 @@ async function toolPrepareAppointment(context, args = {}) {
       };
     }
   }
-  const customerName = requireCustomerName(args.customerName, scope.customerName, {
-    purpose: 'agendamento',
-    repeat: { serviceId, professionalId, date, time, ...(Array.isArray(args.extraServiceIds) && args.extraServiceIds.length ? { extraServiceIds: args.extraServiceIds.slice(0, 3) } : {}) },
-  });
+  let customerName = '';
+  try {
+    customerName = requireCustomerName(args.customerName, scope.customerName, {
+      purpose: 'agendamento',
+      repeat: { serviceId, professionalId, date, time, ...(Array.isArray(args.extraServiceIds) && args.extraServiceIds.length ? { extraServiceIds: args.extraServiceIds.slice(0, 3) } : {}) },
+    });
+  } catch (err) {
+    if (err?.code === 'CUSTOMER_NAME_REQUIRED') {
+      const nomeProf = availability.professional?.nome || 'nossa equipe';
+      const nomeServ = availability.service?.nome || 'atendimento';
+      return {
+        ok: false,
+        code: 'CUSTOMER_NAME_REQUIRED',
+        horarioReservado: `${friendlyWhen(date, time)} com ${nomeProf}`,
+        servico: nomeServ,
+        profissional: nomeProf,
+        data: date,
+        horario: time,
+        pergunta: 'Qual o seu nome completo para eu confirmar o agendamento?',
+        instrucao: `O horário de ${time} no dia ${date} com ${nomeProf} está LIVRE e reservado! Diga de forma calorosa e direta: "Perfeito! Às ${time} com o ${nomeProf} tá reservado. Qual o seu nome completo para eu confirmar o agendamento?". NUNCA diga que o serviço não foi encontrado. Assim que o cliente responder o nome, chame preparar_agendamento de novo passando customerName.`,
+      };
+    }
+    throw err;
+  }
   // Vários serviços na mesma ida (barba + manicure): encaixa um depois do outro.
   const extras = [];
   for (const id of (Array.isArray(args.extraServiceIds) ? args.extraServiceIds : []).slice(0, 3)) extras.push(await resolveAgendaId(scope, id, 'extraServiceIds'));
@@ -1381,6 +1410,16 @@ function textoPlano(valor) {
   return String(valor || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 }
 
+export function categoriaDoServico(nome) {
+  const plano = textoPlano(nome);
+  if (/\b(combo|corte e barba|barba e corte|cabelo e barba|barba e cabelo)\b/.test(plano)) return 'combo';
+  if (/\b(corte|cabelo|visagista)\b/.test(plano)) return 'corte';
+  if (/\bbarba\b/.test(plano)) return 'barba';
+  if (/\bsobrancelha\b/.test(plano)) return 'sobrancelha';
+  if (/\b(depila|nariz|orelha)\b/.test(plano)) return 'depilacao';
+  return nomeBaseDoServico(nome);
+}
+
 export function nomeBaseDoServico(nome) {
   return textoPlano(nome)
     .replace(/\bagendamento\s+online\b/g, ' ')
@@ -1401,30 +1440,21 @@ export function nomeBaseDoServico(nome) {
 
 function apelidosDoProfissional(nome) {
   const plano = textoPlano(nome);
-  const entreParenteses = [...plano.matchAll(/\(([^)]+)\)/g)].map((m) => m[1].trim());
-  const palavras = plano.replace(/\([^)]*\)/g, ' ').split(/[^a-z]+/).filter((p) => p.length >= 3);
-  return [...new Set([...entreParenteses, ...palavras])];
+  return plano.split(' ').filter((parte) => parte.length >= 3);
 }
 
-/** Serviços com o mesmo nome base, primeiro os que citam o profissional no nome. */
 export function servicosEquivalentes(servicos = [], servicoId, profissional) {
   const atual = servicos.find((item) => item.id === servicoId);
   if (!atual || !profissional) return [];
-  const base = nomeBaseDoServico(atual.nome);
-  if (!base) return [];
-  const apelidos = apelidosDoProfissional(profissional.nome);
-  const citaProfissional = (item) => apelidos.some((apelido) => new RegExp(`\\b${apelido.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`).test(textoPlano(item.nome)));
-  const ehDino = barbeariaErp.ehProfissionalDino(profissional) || /\bdino\b/i.test(profissional.nome);
+  const cat = categoriaDoServico(atual.nome);
+  const ehDino = /\bdino\b/i.test(profissional.nome);
   return servicos
-    .filter((item) => item.id !== servicoId && nomeBaseDoServico(item.nome) === base)
+    .filter((item) => item.id !== servicoId && (categoriaDoServico(item.nome) === cat || nomeBaseDoServico(item.nome) === nomeBaseDoServico(atual.nome)))
     .sort((a, b) => {
-      if (ehDino) {
-        return Number(/\bdino\b/i.test(b.nome)) - Number(/\bdino\b/i.test(a.nome));
-      }
-      const aTemDino = /\bdino\b/i.test(a.nome);
-      const bTemDino = /\bdino\b/i.test(b.nome);
-      if (aTemDino !== bTemDino) return aTemDino ? 1 : -1;
-      return Number(citaProfissional(b)) - Number(citaProfissional(a));
+      const aDino = /\bdino\b/i.test(a.nome);
+      const bDino = /\bdino\b/i.test(b.nome);
+      if (ehDino) return Number(bDino) - Number(aDino);
+      return Number(aDino) - Number(bDino);
     });
 }
 
