@@ -3047,6 +3047,349 @@ export default function Supermercado() {
         </Modal>
       )}
 
+{/* ── MODAL: INSTALADOR WINDOWS & SUÍTE PWA ── */}
+      {modalInstaladorWindows && (
+        <Modal title="🖥️ Kytto PDV — Instalador Windows & Suíte PWA Desktop" onClose={() => setModalInstaladorWindows(false)}>
+          <div className="flex flex-col gap-4">
+            <div className="p-3 bg-sky-50 border border-sky-200 rounded-lg text-xs text-sky-800 leading-relaxed">
+              <strong>Aplicação Nativa de Alta Performance para Frente de Caixa:</strong> O Kytto Supermercado pode ser instalado diretamente no Windows 10 e 11, rodando em tela cheia travada (Kiosk) ou janela própria de PDV, com suporte a balanças Toledo MGV6 / Filizola, leitores de código de barras USB e contingência offline ininterrupta.
+            </div>
+
+            <div className="super-installer-grid">
+              {/* Card 1: PWA 1-Clique */}
+              <div className="super-installer-card destaque">
+                <div>
+                  <h4><Sparkles size={16} className="text-emerald-600" /> 1. Instalação PWA (Nativo Windows)</h4>
+                  <p className="mt-1">
+                    Instala instantaneamente o Kytto PDV como aplicativo nativo no Windows através do Microsoft Edge ou Google Chrome, criando atalho na Área de Trabalho e barra de tarefas.
+                  </p>
+                </div>
+                <div className="mt-3">
+                  {pwaInstalavel ? (
+                    <button type="button" className="super-btn success sm w-full font-bold" onClick={handleInstalarPwaNativo}>
+                      <Download size={14} /> Instalar Agora (1-Clique)
+                    </button>
+                  ) : (
+                    <div className="p-2 bg-emerald-50 border border-emerald-200 rounded text-[11px] text-emerald-800 font-semibold text-center">
+                      ✅ PWA Ativo! Para reinstalar, use o ícone de app no topo do Edge/Chrome.
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Card 2: Pacote Completo ZIP */}
+              <div className="super-installer-card">
+                <div>
+                  <h4><HardDrive size={16} className="text-sky-600" /> 2. Pacote Completo Windows (.zip)</h4>
+                  <p className="mt-1">
+                    Contém o script de instalação automática (.bat), inicializadores de modo Kiosk/Quiosque, integração Toledo MGV6 e manual de hardware.
+                  </p>
+                </div>
+                <div className="mt-3">
+                  <a
+                    href="/downloads/Kytto-Supermercado-Windows-Installer.zip"
+                    download="Kytto-Supermercado-Windows-Installer.zip"
+                    className="super-btn primary sm w-full text-center font-bold flex items-center justify-center gap-2"
+                  >
+                    <Download size={14} /> Baixar Pacote (.zip)
+                  </a>
+                </div>
+              </div>
+
+              {/* Card 3: Instalador Automático .bat */}
+              <div className="super-installer-card">
+                <div>
+                  <h4><Terminal size={16} className="text-amber-600" /> 3. Instalador Rápido (.bat)</h4>
+                  <p className="mt-1">
+                    Script em lote para Windows que cria as pastas <code>C:\\KyttoPDV\\MGV6</code> e <code>C:\\KyttoPDV\\Spool</code> e gera os atalhos com 1 clique duplo.
+                  </p>
+                </div>
+                <div className="mt-3">
+                  <a
+                    href="/downloads/Instalar-Kytto-PDV-Windows.bat"
+                    download="Instalar-Kytto-PDV-Windows.bat"
+                    className="super-btn neutral sm w-full text-center font-bold flex items-center justify-center gap-2"
+                  >
+                    <Download size={14} /> Baixar Script (.bat)
+                  </a>
+                </div>
+              </div>
+
+              {/* Card 4: Script Inno Setup .iss */}
+              <div className="super-installer-card">
+                <div>
+                  <h4><FileText size={16} className="text-purple-600" /> 4. Compilador Inno Setup (.iss)</h4>
+                  <p className="mt-1">
+                    Código fonte oficial de compilação Inno Setup 6 para gerar o executável de instalação <code>Kytto-Setup.exe</code> personalizado com a marca da sua rede.
+                  </p>
+                </div>
+                <div className="mt-3">
+                  <a
+                    href="/downloads/Kytto-Supermercado-Setup.iss"
+                    download="Kytto-Supermercado-Setup.iss"
+                    className="super-btn neutral sm w-full text-center font-bold flex items-center justify-center gap-2"
+                  >
+                    <Download size={14} /> Baixar Script (.iss)
+                  </a>
+                </div>
+              </div>
+            </div>
+
+            {/* Configurações de Hardware */}
+            <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-700">
+              <div className="font-bold text-slate-900 mb-1 flex items-center gap-2">
+                <Volume2 size={15} className="text-sky-600" /> Recursos de Hardware Integrados:
+              </div>
+              <ul className="list-disc list-inside space-y-1 text-slate-600 text-[11.5px]">
+                <li><strong>Leitor de Código de Barras:</strong> Emulação de teclado USB com retorno sonoro instantâneo (bip 1.76kHz).</li>
+                <li><strong>Balanças Toledo e Filizola:</strong> Exportação de TXITENS.TXT para a pasta monitorada pelo MGV6.</li>
+                <li><strong>Impressora Térmica Não-Fiscal (80mm e 58mm):</strong> Emissão rápida com suporte a corte de papel.</li>
+                <li><strong>Modo Quiosque (Kiosk):</strong> Trava o computador exclusivamente na tela de venda sem acesso ao Windows.</li>
+              </ul>
+            </div>
+
+            <div className="flex justify-end mt-2">
+              <button type="button" className="super-btn primary" onClick={() => setModalInstaladorWindows(false)}>
+                Fechar
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* ── MODAL: COMPROVANTE FISCAL TÉRMICO DANFE NFC-E (80MM / 58MM) ── */}
+      {modalComprovanteVenda && (
+        <Modal title="🧾 Comprovante de Venda — Bobina Térmica 80mm" onClose={() => setModalComprovanteVenda(null)}>
+          <div className="super-thermal-receipt-container">
+            {/* O Cupom Térmico */}
+            <div className="super-thermal-receipt">
+              <div className="receipt-header-center">
+                <div className="receipt-store-title">KYTTO SUPERMERCADOS</div>
+                <div className="receipt-store-sub">KYTTO COMÉRCIO DE ALIMENTOS LTDA</div>
+                <div className="receipt-store-sub">CNPJ: 00.123.456/0001-89 — IE: 123.456.789.000</div>
+                <div className="receipt-store-sub">AV. BRASIL, 1500 — CENTRO — MATO GROSSO / BRASIL</div>
+                <div className="receipt-dashed-line"></div>
+                <div style={{ fontWeight: 'bold', fontSize: 12 }}>
+                  DANFE NFC-e — Documento Auxiliar da Nota Fiscal de Consumidor Eletrônica
+                </div>
+                <div style={{ fontSize: 10, color: '#374151', marginTop: 2 }}>
+                  {modalComprovanteVenda.nfce?.offline ? '⚠️ EMITIDA EM CONTINGÊNCIA OFFLINE' : 'EMITIDA VIA SEFAZ ONLINE'}
+                </div>
+              </div>
+
+              <div style={{ fontSize: 10.5, marginBottom: 6 }}>
+                <div><strong>Data/Hora:</strong> {modalComprovanteVenda.dataHora}</div>
+                <div><strong>Frente de Caixa:</strong> {modalComprovanteVenda.terminal} | <strong>Operador:</strong> {modalComprovanteVenda.operador}</div>
+                <div><strong>Cupom Nº:</strong> {modalComprovanteVenda.numero}</div>
+                {modalComprovanteVenda.cpfConsumidor && (
+                  <div><strong>Consumidor CPF:</strong> {modalComprovanteVenda.cpfConsumidor}</div>
+                )}
+                {modalComprovanteVenda.clienteNome && (
+                  <div><strong>Clube Kytto:</strong> {modalComprovanteVenda.clienteNome}</div>
+                )}
+              </div>
+
+              <table className="receipt-items-table">
+                <thead>
+                  <tr>
+                    <th># Item</th>
+                    <th style={{ textAlign: 'center' }}>Qtd x Unit</th>
+                    <th style={{ textAlign: 'right' }}>Total (R$)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {modalComprovanteVenda.itens.map((it, idx) => (
+                    <tr key={idx}>
+                      <td style={{ maxWidth: 140 }}>
+                        {String(idx + 1).padStart(2, '0')} {it.nome}
+                      </td>
+                      <td style={{ textAlign: 'center' }}>
+                        {it.quantidade} x R$ {Number(it.precoUnitario).toFixed(2)}
+                      </td>
+                      <td style={{ textAlign: 'right', fontWeight: 'bold' }}>
+                        R$ {(it.quantidade * it.precoUnitario).toFixed(2)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+
+              <div className="receipt-totals-section">
+                <div className="receipt-total-row">
+                  <span>Qtd. Total de Itens:</span>
+                  <span>{modalComprovanteVenda.itens.length}</span>
+                </div>
+                <div className="receipt-total-row destaque">
+                  <span>VALOR TOTAL A PAGAR:</span>
+                  <span>R$ {modalComprovanteVenda.valorTotal.toFixed(2)}</span>
+                </div>
+                <div className="receipt-total-row">
+                  <span className="capitalize">Forma de Pagamento ({modalComprovanteVenda.formaPagamento}):</span>
+                  <span>R$ {modalComprovanteVenda.valorRecebido.toFixed(2)}</span>
+                </div>
+                {modalComprovanteVenda.troco > 0 && (
+                  <div className="receipt-total-row" style={{ fontWeight: 'bold' }}>
+                    <span>TROCO:</span>
+                    <span>R$ {modalComprovanteVenda.troco.toFixed(2)}</span>
+                  </div>
+                )}
+              </div>
+
+              <div style={{ fontSize: 9.5, color: '#4b5563', margin: '6px 0', textAlign: 'center' }}>
+                Tributos Incidentes (Lei Federal 12.741/2012): R$ {(modalComprovanteVenda.valorTotal * 0.285).toFixed(2)} (28.50%)
+              </div>
+
+              {/* QR Code SEFAZ */}
+              <div className="receipt-qrcode-center">
+                <div style={{ fontSize: 10, fontWeight: 'bold', marginBottom: 4 }}>
+                  Consulte pela Chave de Acesso em:
+                  <div style={{ fontSize: 9, fontWeight: 'normal' }}>http://sefaz.mt.gov.br/nfce/consulta</div>
+                </div>
+                <QRCodeSVG
+                  value={`https://setpoint.kytto.com.br/consulta-nfce?ch=${modalComprovanteVenda.nfce?.chaveAcesso || '512611'}`}
+                  size={100}
+                  level="M"
+                />
+                <div className="receipt-key-text">
+                  <strong>CHAVE DE ACESSO:</strong><br />
+                  {modalComprovanteVenda.nfce?.chaveAcesso}
+                </div>
+                <div style={{ fontSize: 9.5, marginTop: 4 }}>
+                  <strong>Protocolo:</strong> {modalComprovanteVenda.nfce?.protocolo}
+                </div>
+              </div>
+
+              <div style={{ textAlign: 'center', marginTop: 10, fontSize: 10, fontWeight: 'bold' }}>
+                OBRIGADO PELA PREFERÊNCIA! VOLTE SEMPRE!
+              </div>
+            </div>
+
+            {/* Barra de Ações Rápidas do Cupom */}
+            <div className="flex flex-wrap gap-2 justify-center no-print">
+              <button
+                type="button"
+                className="super-btn primary font-bold flex items-center gap-2"
+                onClick={() => window.print()}
+              >
+                <Printer size={16} /> Imprimir Cupom Térmico (80mm)
+              </button>
+              <button
+                type="button"
+                className="super-btn neutral font-bold flex items-center gap-2"
+                onClick={handleAbrirGavetaDinheiro}
+              >
+                <KeyRound size={16} /> Abrir Gaveta [F6]
+              </button>
+              <button
+                type="button"
+                className="super-btn success font-bold flex items-center gap-2"
+                onClick={() => {
+                  const texto = encodeURIComponent(
+                    `*Comprovante de Compra — Kytto Supermercados*\\n` +
+                    `Cupom Nº: ${modalComprovanteVenda.numero}\\n` +
+                    `Data: ${modalComprovanteVenda.dataHora}\\n` +
+                    `Total: R$ ${modalComprovanteVenda.valorTotal.toFixed(2)}\\n` +
+                    `Forma: ${modalComprovanteVenda.formaPagamento}\\n` +
+                    `Chave NFC-e: ${modalComprovanteVenda.nfce?.chaveAcesso}\\n` +
+                    `Consulte em: https://setpoint.kytto.com.br/consulta-nfce?ch=${modalComprovanteVenda.nfce?.chaveAcesso}`
+                  );
+                  window.open(`https://api.whatsapp.com/send?text=${texto}`, '_blank');
+                }}
+              >
+                📱 Enviar WhatsApp
+              </button>
+              <button
+                type="button"
+                className="super-btn sm neutral"
+                onClick={() => {
+                  setModalComprovanteVenda(null);
+                  inputScannerRef.current?.focus();
+                }}
+              >
+                🛒 Próxima Venda [F2]
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* ── MODAL: LEITURA X / RESUMO CONSOLIDADO DO TURNO ── */}
+      {modalLeituraX && (
+        <Modal title="📑 Leitura X — Extrato Operacional do Turno de Caixa" onClose={() => setModalLeituraX(false)}>
+          <div className="super-thermal-receipt-container">
+            <div className="super-thermal-receipt">
+              <div className="receipt-header-center">
+                <div className="receipt-store-title">KYTTO SUPERMERCADOS</div>
+                <div className="receipt-store-sub">RELATÓRIO GERENCIAL — LEITURA X</div>
+                <div className="receipt-dashed-line"></div>
+                <div><strong>Terminal:</strong> {terminalAtivoCodigo || 'PDV-01'}</div>
+                <div><strong>Operador:</strong> {sessaoCaixa?.caixa?.operador_nome || 'Operador Caixa'}</div>
+                <div><strong>Emissão:</strong> {new Date().toLocaleString('pt-BR')}</div>
+              </div>
+
+              <div className="receipt-totals-section">
+                <div style={{ fontWeight: 'bold', fontSize: 12, marginBottom: 4 }}>MOVIMENTAÇÃO FINANCEIRA DO TURNO:</div>
+                <div className="receipt-total-row">
+                  <span>Fundo de Troco Inicial:</span>
+                  <span>R$ {Number(sessaoCaixa?.caixa?.saldo_inicial || 0).toFixed(2)}</span>
+                </div>
+                <div className="receipt-total-row">
+                  <span>(+) Total de Suprimentos:</span>
+                  <span>R$ {Number(sessaoCaixa?.resumo?.suprimentos || 0).toFixed(2)}</span>
+                </div>
+                <div className="receipt-total-row">
+                  <span>(-) Total de Sangrias:</span>
+                  <span>R$ {Number(sessaoCaixa?.resumo?.sangrias || 0).toFixed(2)}</span>
+                </div>
+                <div className="receipt-dashed-line"></div>
+                <div style={{ fontWeight: 'bold', fontSize: 11, marginBottom: 4 }}>FATURAMENTO POR MEIO DE PAGAMENTO:</div>
+                <div className="receipt-total-row">
+                  <span>Dinheiro em Espécie:</span>
+                  <span>R$ {Number(sessaoCaixa?.resumo?.vendasDinheiro || 0).toFixed(2)}</span>
+                </div>
+                <div className="receipt-total-row">
+                  <span>Cartão de Débito:</span>
+                  <span>R$ {Number(sessaoCaixa?.resumo?.vendasDebito || 0).toFixed(2)}</span>
+                </div>
+                <div className="receipt-total-row">
+                  <span>Cartão de Crédito:</span>
+                  <span>R$ {Number(sessaoCaixa?.resumo?.vendasCredito || 0).toFixed(2)}</span>
+                </div>
+                <div className="receipt-total-row">
+                  <span>Pix Dinâmico QR Code:</span>
+                  <span>R$ {Number(sessaoCaixa?.resumo?.vendasPix || 0).toFixed(2)}</span>
+                </div>
+                <div className="receipt-total-row">
+                  <span>Vales-Alimentação / Outros:</span>
+                  <span>R$ {Number(sessaoCaixa?.resumo?.vendasVale || 0).toFixed(2)}</span>
+                </div>
+                <div className="receipt-total-row destaque">
+                  <span>TOTAL VENDIDO NO TURNO:</span>
+                  <span>R$ {Number(sessaoCaixa?.resumo?.totalVendasGeral || sessaoCaixa?.resumo?.totalVendas || 0).toFixed(2)}</span>
+                </div>
+                <div className="receipt-total-row" style={{ fontWeight: 'bold', color: '#0369a1' }}>
+                  <span>SALDO ESPERADO NA GAVETA:</span>
+                  <span>R$ {Number(sessaoCaixa?.resumo?.saldoDinheiroEsperado || 0).toFixed(2)}</span>
+                </div>
+              </div>
+
+              <div style={{ textAlign: 'center', marginTop: 12, fontSize: 9.5, color: '#6b7280' }}>
+                --- FIM DA LEITURA X ---
+              </div>
+            </div>
+
+            <div className="flex gap-2 justify-center no-print">
+              <button type="button" className="super-btn primary font-bold flex items-center gap-2" onClick={() => window.print()}>
+                <Printer size={16} /> Imprimir Leitura X
+              </button>
+              <button type="button" className="super-btn neutral" onClick={() => setModalLeituraX(false)}>
+                Fechar
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
     </div>
   );
 }
