@@ -399,13 +399,25 @@ export async function listProfessionals(scope) {
 }
 
 export const BARBEIROS_ATIVOS_DINO = [
-  { id: 'dino', nome: 'Guilherme Cunha Martins', apelido: 'Dino', matches: ['guilherme cunha martins', 'dino', 'guilherme'] },
-  { id: 'bruno', nome: 'Bruno Mendes Pedroso', apelido: 'Bruno', matches: ['bruno mendes pedroso', 'bruno mendes', 'bruno'] },
-  { id: 'david', nome: 'David Kauã Araújo Moraes', apelido: 'David', matches: ['david kaua', 'david', 'davi'] },
-  { id: 'nati', nome: 'Natani Minanis Dobler', apelido: 'Nati', matches: ['natani minanis dobler', 'natani', 'nati', 'nathy'] },
+  { id: 'dino', nome: 'Guilherme Cunha Martins', apelido: 'Dino', matches: ['guilherme cunha martins', 'dino', 'guilherme', 'mestre dino', 'patrao'] },
+  { id: 'bruno', nome: 'Bruno Mendes Pedroso', apelido: 'Bruno', matches: ['bruno mendes pedroso', 'bruno mendes', 'bruno', 'mendes', 'brunao', 'bruninho'] },
+  { id: 'david', nome: 'David Kauã Araújo Moraes', apelido: 'David', matches: ['david kaua araujo moraes', 'david kaua', 'david', 'davi', 'araujo', 'kaua'] },
+  { id: 'nati', nome: 'Natani Minanis Dobler', apelido: 'Nati', matches: ['natani minanis dobler', 'natani', 'nati', 'naty', 'nat', 'nato', 'nathy', 'dobler'] },
   { id: 'ester', nome: 'Steffany Marielly de Oliveira', apelido: 'Ester', matches: ['steffany marielly', 'steffany', 'ester', 'stefany'] },
-  { id: 'joao', nome: 'João Victor Domingos Ruedel', apelido: 'João Victor', matches: ['joao victor', 'joão victor', 'ruedel', 'joao', 'joão'] },
+  { id: 'joao', nome: 'João Victor Domingos Ruedel', apelido: 'João Victor', matches: ['joao victor domingos ruedel', 'joao victor', 'joão victor', 'ruedel', 'joao', 'joão', 'jv'] },
   { id: 'amanda', nome: 'Amanda Gabrielly Santos da Silva', apelido: 'Amanda', matches: ['amanda gabrielly', 'amanda'] },
+];
+
+export const EX_BARBEIROS_DINO = [
+  'gustavo',
+  'vitor',
+  'victor ribeiro',
+  'lucas',
+  'vinycius',
+  'vinicius',
+  'danilo',
+  'bruno rafael',
+  'pedrinho'
 ];
 
 /**
@@ -422,6 +434,11 @@ export function verificarStatusBarbeiroDino(nomeOuProfissional) {
     return { ativo: false, exBarbeiro: false, nomeExibicao: 'nossa equipe' };
   }
 
+  // IDs do sistema (UUID, prefixos pro-, usr-, bar-) nunca são ex-barbeiros
+  if (/^[0-9a-f-]{36}$/i.test(clean) || /^(usr|pro|bar|srv|age)-/i.test(clean)) {
+    return { ativo: true, exBarbeiro: false, nomeExibicao: 'profissional' };
+  }
+
   // Diferenciar Bruno Mendes (ativo) de Bruno Rafael (saiu da equipe)
   if (clean.includes('bruno rafael')) {
     return {
@@ -433,17 +450,35 @@ export function verificarStatusBarbeiroDino(nomeOuProfissional) {
     };
   }
 
-  const achado = BARBEIROS_ATIVOS_DINO.find((b) => b.matches.some((m) => clean === m || clean.startsWith(m) || clean.includes(m)));
+  // 1. Barbeiro ativo titular conhecido
+  const achado = BARBEIROS_ATIVOS_DINO.find((b) => b.matches.some((m) => clean === m || clean.includes(m) || m.includes(clean)));
   if (achado) {
     return { ativo: true, exBarbeiro: false, barbeiro: achado, nomeExibicao: achado.apelido };
   }
 
-  const exNome = raw.split(' ')[0];
+  // 2. Somente ex-barbeiros explicitamente catalogados são marcados como exBarbeiro
+  const ehExBarbeiro = EX_BARBEIROS_DINO.some((ex) => {
+    if (ex === 'bruno rafael') return clean.includes('bruno rafael');
+    return new RegExp(`\\b${ex}\\b`, 'i').test(clean);
+  });
+
+  if (ehExBarbeiro) {
+    const exNome = raw.split(' ')[0];
+    return {
+      ativo: false,
+      exBarbeiro: true,
+      nomeOriginal: exNome,
+      nomeExibicao: 'um dos nossos barbeiros especialistas (como o Bruno ou a Nati)',
+      barbeirosSugeridos: ['Bruno', 'Nati', 'Dino']
+    };
+  }
+
+  // 3. Qualquer outro profissional não catalogado NÃO é ex-barbeiro
   return {
-    ativo: false,
-    exBarbeiro: true,
-    nomeOriginal: exNome,
-    nomeExibicao: 'um dos nossos barbeiros especialistas (como o Bruno ou a Nati)',
+    ativo: true,
+    exBarbeiro: false,
+    nomeOriginal: raw,
+    nomeExibicao: raw,
     barbeirosSugeridos: ['Bruno', 'Nati', 'Dino']
   };
 }

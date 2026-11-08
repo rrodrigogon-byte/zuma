@@ -326,3 +326,37 @@ test('normalização de horários e datas lida com variações reais do WhatsApp
   assert.equal(serviceWithProfessional('Corte com Dino', 'Dino'), 'Corte com Dino');
   assert.equal(serviceWithProfessional('Barba', 'Nati'), 'Barba com Nati');
 });
+
+test('verificarStatusBarbeiroDino garante que Bruno, Nati e UUIDs são ativos e nunca ex-barbeiros', async () => {
+  const { verificarStatusBarbeiroDino } = await import('./core/barbershop-agenda.js');
+
+  // Bruno Mendes Pedroso e variações são 100% ativos
+  assert.equal(verificarStatusBarbeiroDino('Bruno').ativo, true);
+  assert.equal(verificarStatusBarbeiroDino('Bruno').exBarbeiro, false);
+  assert.equal(verificarStatusBarbeiroDino('Bruno Mendes').ativo, true);
+  assert.equal(verificarStatusBarbeiroDino('Bruno Mendes').exBarbeiro, false);
+  assert.equal(verificarStatusBarbeiroDino('Bruno Mendes Pedroso').ativo, true);
+  assert.equal(verificarStatusBarbeiroDino('Bruno Mendes Pedroso').exBarbeiro, false);
+  assert.equal(verificarStatusBarbeiroDino('brunao').ativo, true);
+
+  // Nati e variações (nat, nato, naty, natani) são 100% ativas
+  assert.equal(verificarStatusBarbeiroDino('Nati').ativo, true);
+  assert.equal(verificarStatusBarbeiroDino('Nati').exBarbeiro, false);
+  assert.equal(verificarStatusBarbeiroDino('nat').ativo, true);
+  assert.equal(verificarStatusBarbeiroDino('nat').exBarbeiro, false);
+  assert.equal(verificarStatusBarbeiroDino('nato').ativo, true);
+  assert.equal(verificarStatusBarbeiroDino('nato').exBarbeiro, false);
+  assert.equal(verificarStatusBarbeiroDino('Natani Minanis Dobler').ativo, true);
+  assert.equal(verificarStatusBarbeiroDino('Natani Minanis Dobler').exBarbeiro, false);
+
+  // UUIDs e IDs do banco de dados NUNCA são considerados ex-barbeiros
+  assert.equal(verificarStatusBarbeiroDino('2c45e89a-0e78-4391-a1b2-c3d4e5f6a7b8').exBarbeiro, false);
+  assert.equal(verificarStatusBarbeiroDino('pro-mw52oc22-1002').exBarbeiro, false);
+  assert.equal(verificarStatusBarbeiroDino('usr-999').exBarbeiro, false);
+
+  // Somente ex-barbeiros reais que saíram da barbearia retornam exBarbeiro = true
+  assert.equal(verificarStatusBarbeiroDino('Gustavo').exBarbeiro, true);
+  assert.equal(verificarStatusBarbeiroDino('Lucas').exBarbeiro, true);
+  assert.equal(verificarStatusBarbeiroDino('Vitor').exBarbeiro, true);
+  assert.equal(verificarStatusBarbeiroDino('Bruno Rafael').exBarbeiro, true);
+});

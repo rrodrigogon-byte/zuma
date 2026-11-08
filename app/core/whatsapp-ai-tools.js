@@ -97,10 +97,15 @@ const APELIDOS_PROFISSIONAIS = {
   'bruno': ['bruno mendes pedroso', 'bruno'],
   'bruno mendes': ['bruno mendes pedroso', 'bruno'],
   'bruninho': ['bruno mendes pedroso', 'bruno'],
+  'brunao': ['bruno mendes pedroso', 'bruno'],
+  'mendes': ['bruno mendes pedroso', 'bruno'],
   'nati': ['natani minanis dobler', 'natani', 'naty', 'nati'],
   'nati dobler': ['natani minanis dobler', 'natani', 'naty', 'nati'],
   'naty': ['natani minanis dobler', 'natani', 'nati'],
   'natani': ['natani minanis dobler', 'naty', 'nati'],
+  'nat': ['natani minanis dobler', 'natani', 'naty', 'nati'],
+  'nato': ['natani minanis dobler', 'natani', 'naty', 'nati'],
+  'nathy': ['natani minanis dobler', 'natani', 'naty', 'nati'],
   'ester': ['steffany marielly de oliveira', 'steffany', 'ester'],
   'steffany': ['steffany marielly de oliveira', 'ester'],
   'stefany': ['steffany marielly de oliveira', 'ester'],
@@ -255,6 +260,11 @@ async function resolveAgendaId(scope, value, field, { allowAny = false, professi
   if (field.startsWith('professional') && ehQualquer) return 'qualquer';
   if (!normalized) throw new WhatsappAiToolError(`${field} obrigatório`, 'INVALID_ID');
   const profissional = field.startsWith('professional');
+  const lista = (profissional ? await listSchedulingProfessionals(scope) : await listSchedulingServices(scope)) || [];
+  // 1. Se for o ID de um item na lista (ou UUID)
+  const itemPorId = lista.find((it) => it.id === normalized || (it.uuid && it.uuid === normalized));
+  if (itemPorId?.id) return itemPorId.id;
+
   if (profissional) {
     const statusDino = verificarStatusBarbeiroDino(normalized);
     if (statusDino.exBarbeiro) {
@@ -264,10 +274,6 @@ async function resolveAgendaId(scope, value, field, { allowAny = false, professi
       );
     }
   }
-  const lista = (profissional ? await listSchedulingProfessionals(scope) : await listSchedulingServices(scope)) || [];
-  // 1. Se for o ID de um item na lista (ou UUID)
-  const itemPorId = lista.find((it) => it.id === normalized || (it.uuid && it.uuid === normalized));
-  if (itemPorId?.id) return itemPorId.id;
 
   // 2. Resolução inteligente por nome, apelido, slug ou palavras-chave
   const { item, candidatos } = matchAgendaName(normalized, lista);
@@ -297,7 +303,7 @@ async function resolveAgendaId(scope, value, field, { allowAny = false, professi
   if (profissional) {
     const barbeiroDino = BARBEIROS_ATIVOS_DINO.find((b) => b.matches.some((m) => plainValue.includes(m) || m.includes(plainValue)));
     if (barbeiroDino) {
-      const matchNoLista = lista.find((it) => nomeComparavel(it.nome).includes(barbeiroDino.apelido.toLowerCase()));
+      const matchNoLista = lista.find((it) => barbeiroDino.matches.some((m) => nomeComparavel(it.nome).includes(m) || m.includes(nomeComparavel(it.nome))));
       if (matchNoLista?.id) return matchNoLista.id;
     }
   }
