@@ -52,6 +52,7 @@ import { createA2AdminRouter } from './modules/a2/rotas.js';
 import * as a2Svc from './modules/a2/servico.js';
 import { createUnidadesAdminRouter } from './modules/unidades/rotas.js';
 import { createEmpresasAdminRouter } from './modules/empresas/rotas.js';
+import { createAutomacoesRouter } from './routes/automacoes-routes.js';
 import { createRazaoAdminRouter, createRazaoPlataformaRouter } from './modules/razao/rotas.js';
 import { iniciarRotina as iniciarRotinaBackoffice } from './modules/razao/rotina.js';
 import { createSuprimentosAdminRouter } from './modules/suprimentos/rotas.js';
@@ -1061,7 +1062,7 @@ app.use('/api/admin/commerce', (req, res, next) => {
 });
 
 // Módulos de /api/admin que separam dados por empresa e podem ser usados por tenant.
-const TENANT_ADMIN_MODULES = new Set(['a2', 'bar', 'barbearia', 'commerce', 'commerce-session', 'usuarios', 'usuarios-diretorio', 'platform', 'fidelidade', 'login', 'auditoria', 'modificadores', 'combos', 'clube', 'unidades', 'empresas', 'plataforma', 'razao', 'suprimentos', 'fiscal', 'salao', 'varejo', 'supermercado', 'pdv-offline', 'minhas-permissoes', 'cupons', 'omnichannel', 'pdv', 'dino-captacao', 'clientes-360', 'relatorios', 'estoque', 'cardapio', 'fichas-tecnicas', 'erp', 'fechamento-diario', 'compras', 'whatsapp', 'whatsapp-gestao', 'ia', 'gamificacao', 'barber', 'barbeiro', 'crm', 'financeiro']);
+const TENANT_ADMIN_MODULES = new Set(['a2', 'bar', 'barbearia', 'commerce', 'commerce-session', 'usuarios', 'usuarios-diretorio', 'platform', 'fidelidade', 'login', 'auditoria', 'modificadores', 'combos', 'clube', 'unidades', 'empresas', 'plataforma', 'razao', 'suprimentos', 'fiscal', 'salao', 'varejo', 'supermercado', 'pdv-offline', 'minhas-permissoes', 'cupons', 'omnichannel', 'pdv', 'dino-captacao', 'clientes-360', 'relatorios', 'estoque', 'cardapio', 'fichas-tecnicas', 'erp', 'fechamento-diario', 'compras', 'whatsapp', 'whatsapp-gestao', 'ia', 'gamificacao', 'barber', 'barbeiro', 'crm', 'financeiro', 'automacoes', 'eventos']);
 
 // [kytto-clube] Kytto Clube & Academia (catraca, contrato digital, agenda, retenção, Wellhub/TotalPass).
 // Usa o pool do Commerce que já existe (não abre outro pool) e a mesma resolução de empresa e
@@ -1904,6 +1905,18 @@ app.use('/api/webhooks', createWhatsappAiWebhookRouter());
     }
   });
   app.use('/api/admin/empresas', auth, requireStaff, empresasRouter);
+
+  // [kytto-automacoes] Motor corporativo de automações e barramento central de eventos internos
+  const automacoesRouter = createAutomacoesRouter({
+    obterEmpresaIdDoUsuario: (req) => {
+      if (isAdminGlobal(req.user)) {
+        return req.headers['x-empresa-id'] ? String(req.headers['x-empresa-id']).trim() : 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
+      }
+      return req.user?.empresaId ? String(req.user.empresaId).trim() : (legacyEmpresaId(req) || 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6');
+    },
+    isPlatformAdmin: (req) => isAdminGlobal(req.user)
+  });
+  app.use('/api/admin/automacoes', auth, requireStaff, automacoesRouter);
   app.use('/api/admin/plataforma/empresas', auth, requireStaff, empresasRouter);
   app.use('/api/admin/unidades', auth, requireStaff, createUnidadesAdminRouter({ db: clubeDb, empresaDaRequisicao: empresaDasUnidades }));
   // [kytto-razao] Razão financeiro único (Financeiro, contas a pagar e a receber, DRE, fechamento).

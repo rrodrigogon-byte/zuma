@@ -1019,8 +1019,11 @@ export function registrarUsoAssinatura(empresaId, assinaturaId, dados = {}, opco
   const resumo = resumoAssinatura(empresaId, assinaturaId, opcoes);
   if (!resumo) throw new CaptacaoError('Assinatura não encontrada.', 'ASSINATURA_NAO_ENCONTRADA', 404);
   if (resumo.assinatura.status !== 'ativa') throw new CaptacaoError('A assinatura não está ativa.', 'ASSINATURA_INATIVA', 409);
-  if (resumo.situacaoPagamento === 'inadimplente') throw new CaptacaoError('Assinatura com pagamento em atraso: regularize antes de usar o plano.', 'ASSINATURA_INADIMPLENTE', 409);
-  if (resumo.situacaoPagamento === 'aguardando_pagamento') throw new CaptacaoError('A assinatura ainda não tem pagamento confirmado.', 'ASSINATURA_SEM_PAGAMENTO', 409);
+  const permitirVencido = dados.permitirVencido === true || dados.toleranciaVencido === true || dados.origemComanda === true || Boolean(dados.comandaId);
+  if (!permitirVencido) {
+    if (resumo.situacaoPagamento === 'inadimplente') throw new CaptacaoError('Assinatura com pagamento em atraso: regularize antes de usar o plano.', 'ASSINATURA_INADIMPLENTE', 409);
+    if (resumo.situacaoPagamento === 'aguardando_pagamento') throw new CaptacaoError('A assinatura ainda não tem pagamento confirmado.', 'ASSINATURA_SEM_PAGAMENTO', 409);
+  }
   const servicoId = texto(dados.servicoId, 100);
   const servicos = resumo.plano?.servicosIds || [];
   if (servicos.length && !servicos.includes(servicoId)) throw new CaptacaoError('Este serviço não está incluído no plano.', 'SERVICO_FORA_DO_PLANO', 409);
@@ -1030,7 +1033,7 @@ export function registrarUsoAssinatura(empresaId, assinaturaId, dados = {}, opco
     const repetido = controle.usos.find((uso) => uso.agendamentoId === agendamentoId);
     if (repetido) return { ...resumoAssinatura(empresaId, assinaturaId, opcoes), repetido: true };
   }
-  if (resumo.situacaoPagamento !== 'em_dia') throw new CaptacaoError('O pacote não está disponível nesta data. Verifique o início e o vencimento.', 'ASSINATURA_FORA_DA_VALIDADE',409);
+  if (resumo.situacaoPagamento !== 'em_dia' && !permitirVencido) throw new CaptacaoError('O pacote não está disponível nesta data. Verifique o início e o vencimento.', 'ASSINATURA_FORA_DA_VALIDADE',409);
   if (resumo.sessoesRestantes <= reservasAssinatura(empresaId,resumo.assinatura.id,resumo,{ignorarAgendamentoId:dados.agendamentoId,ignorarComandaId:dados.comandaId})) throw new CaptacaoError('O plano já usou ou reservou todas as sessões deste ciclo.', 'LIMITE_DO_CICLO', 409);
   const servico = barbearia.listarServicos(empresaId, { incluirInativos: true }).find((item) => item.id === servicoId);
   controle.usos.push({

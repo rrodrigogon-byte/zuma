@@ -11,6 +11,7 @@ import * as clientesKytto from './clientes-contas-kytto.js';
 import * as caixaKytto from './caixa-diario-kytto.js';
 import * as canaisFidelidadeKytto from './canais-fidelidade-kytto.js';
 import { executeDinoReversal, getDinoReversalMemoryAdapter } from './core/dino-reversal-coordinator.js';
+import { kyttoEventBus } from './core/kytto-event-bus.js';
 
 const STATUS = new Set(['agendado', 'confirmado', 'em_atendimento', 'concluido', 'cancelado', 'nao_compareceu']);
 const TRANSICOES = {
@@ -3186,6 +3187,21 @@ export function registrarPagamentoComandaBarbearia(empresaId, comandaId, dados =
     }
   }
   save();
+  if (faturada) {
+    try {
+      kyttoEventBus.emitir('comanda.fechada', {
+        comandaId: comanda.id,
+        clienteId: comanda.clienteId,
+        clienteNome: comanda.clienteNome,
+        total: comanda.totalFaturado,
+        totalPago: comanda.totalPago,
+        itens: comanda.itens,
+        pagamentos: comanda.pagamentos
+      }, { empresaId, lojaId: comanda.lojaId, usuario: dados.usuario || 'operador' });
+    } catch (e) {
+      console.warn('[EventBus] Falha ao emitir comanda.fechada:', e.message);
+    }
+  }
   return copiarComandaBarbearia(comanda);
 }
 
@@ -3374,6 +3390,19 @@ export function fecharComandaSemSaldoBarbearia(empresaId, comandaId, dados = {})
     comanda.atualizadoEm = dataAtual();
     comanda.fechadaEm = comanda.atualizadoEm;
     save();
+    try {
+      kyttoEventBus.emitir('comanda.fechada', {
+        comandaId: comanda.id,
+        clienteId: comanda.clienteId,
+        clienteNome: comanda.clienteNome,
+        total: 0,
+        totalPago: 0,
+        fechadaPeloPlano: true,
+        itens: comanda.itens
+      }, { empresaId, lojaId: comanda.lojaId, usuario: dados.usuario || 'operador' });
+    } catch (e) {
+      console.warn('[EventBus] Falha ao emitir comanda.fechada:', e.message);
+    }
     return copiarComandaBarbearia(comanda);
   } catch (error) {
     restaurarRaiz(snapshot);
