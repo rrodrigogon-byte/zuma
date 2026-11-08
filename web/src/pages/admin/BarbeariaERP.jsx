@@ -71,6 +71,7 @@ const ProjecaoFaturamentoPanel = lazy(
   () => import("./dino/ProjecaoFaturamentoPanel"),
 );
 const DinoMetasRoletaPanel = lazy(() => import("./dino/DinoMetasRoletaPanel"));
+const DinoInteligenciaVendasIa = lazy(() => import("./dino/DinoInteligenciaVendasIa"));
 import ComandaNova, {
   AdicionarItensComanda,
   BuscaCliente,
@@ -101,6 +102,7 @@ import {
 } from "./dino/CaptacaoPanels";
 
 const TABS = [
+  ["Como Vender Mais com IA", "Indicadores de vendas, combate ao churn, upsell e motor preditivo da IA"],
   ["Visão geral", "Resumo da operação"],
   ["Agenda", "Reservas e horários"],
   ["Atendimento", "Fila e status"],
@@ -180,6 +182,7 @@ const AREAS = [
     label: "Relacionamento",
     short: "Clientes, retorno e indicação",
     tabs: [
+      "Como Vender Mais com IA",
       "Carteira por barbeiro",
       "Recuperação de clientes (Avec)",
       "Clientes",
@@ -214,6 +217,7 @@ const AREAS = [
     label: "Gestão",
     short: "Comissões, metas e regras",
     tabs: [
+      "Como Vender Mais com IA",
       "Recuperação de clientes (Avec)",
       "Metas & Roleta",
       "Metas e comissões",
@@ -571,6 +575,7 @@ function rotuloPreco(servico) {
 
 // Abas que não dependem da visão geral da barbearia (cada uma busca seus próprios dados).
 const TABS_AUTONOMAS = new Set([
+  "Como Vender Mais com IA",
   "Painel de gestão",
   "Desempenho da equipe",
   "Retorno previsto",
@@ -590,7 +595,7 @@ const TABS_AUTONOMAS = new Set([
   "Notas fiscais",
 ]);
 
-export default function BarbeariaERP() {
+export default function BarbeariaERP({ tabInicial } = {}) {
   const { toast } = useToast();
   const { user, empresaAtiva, lojaAtiva, lojasAcessiveis, perfil } = useAuth();
   // operador: só as abas da operação do dia (comissões, metas e indicadores ficam com a administração)
@@ -615,7 +620,7 @@ export default function BarbeariaERP() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   // apelidos de links antigos/externos (ex.: ?tab=Fiscal) para o nome real da aba
-  const requestedTab = { Fiscal: "Notas fiscais", fiscal: "Notas fiscais" }[searchParams.get("tab")] || searchParams.get("tab");
+  const requestedTab = { Fiscal: "Notas fiscais", fiscal: "Notas fiscais", vendas: "Como Vender Mais com IA", inteligencia: "Como Vender Mais com IA" }[searchParams.get("tab")] || searchParams.get("tab");
   const requestedArea = searchParams.get("area");
   const validRequestedTab =
     TABS.some(([name]) => name === requestedTab) &&
@@ -625,6 +630,7 @@ export default function BarbeariaERP() {
   const validRequestedArea =
     areasVisiveis.find((area) => area.id === requestedArea) || null;
   const tab =
+    tabInicial ||
     validRequestedTab ||
     validRequestedArea?.tabs[0] ||
     (operador ? "Agenda" : "Visão geral");
@@ -13449,6 +13455,13 @@ export default function BarbeariaERP() {
   }
 
   function renderConteudo() {
+    if (tab === "Como Vender Mais com IA") {
+      return (
+        <Suspense fallback={<Card style={{ padding: 40, textAlign: "center", color: "var(--muted)" }}>Carregando Inteligência de Vendas IA…</Card>}>
+          <DinoInteligenciaVendasIa />
+        </Suspense>
+      );
+    }
     if (tab === "Visão geral") return renderVisaoGeral();
     if (tab === "Agenda") return renderAgenda();
     if (tab === "Atendimento") return renderAtendimento();
@@ -13920,6 +13933,25 @@ export default function BarbeariaERP() {
                 onClick={() => navegarParaTab("Atendimento")}
               >
                 Atender agora
+              </button>
+              <button
+                type="button"
+                style={{
+                  ...styles.secondary,
+                  background: "linear-gradient(135deg, #10b981 0%, #059669 100%)",
+                  color: "#fff",
+                  border: "none",
+                  fontWeight: 800,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 6,
+                  boxShadow: "0 2px 6px rgba(16, 185, 129, 0.3)",
+                  cursor: "pointer",
+                }}
+                onClick={() => navegarParaTab("Como Vender Mais com IA")}
+                title="Motor preditivo de vendas, combate ao churn e oportunidades de faturamento com IA"
+              >
+                <span>🚀</span> Como Vender Mais (IA)
               </button>
               <Link
                 to={`/barbeiro/${encodeURIComponent(formConfig.slugPublico || "dino")}`}

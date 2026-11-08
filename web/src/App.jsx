@@ -374,6 +374,7 @@ export default function App() {
           <Route path="/admin/loja-moda"       element={<Layout><LojaModa /></Layout>} />
           <Route path="/admin/barbearia-erp"   element={<Layout><BarbeariaERP /></Layout>} />
           <Route path="/admin/barbearia"        element={<Layout><Barbearia /></Layout>} />
+          <Route path="/admin/inteligencia-vendas" element={<Layout><BarbeariaERP tabInicial="Como Vender Mais com IA" /></Layout>} />
           <Route path="/admin/metas-roleta"    element={<Layout><DinoMetasRoletaPanel /></Layout>} />
 
           <Route path="/admin/supermercado" element={<Layout><Supermercado /></Layout>} />
