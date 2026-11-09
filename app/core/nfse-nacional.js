@@ -14,7 +14,7 @@ import forge from 'node-forge';
 import { SignedXml } from 'xml-crypto';
 
 export const NS_NFSE = 'http://www.sped.fazenda.gov.br/nfse';
-export const VERSAO_DPS = '1.01';
+export const VERSAO_DPS = '1.00';
 export const VER_APLIC = 'kytto-nfse-1.0';
 
 export const AMBIENTES = Object.freeze({
@@ -169,7 +169,7 @@ export function montarDpsXml(cfg, dados) {
 
   const xml = `<DPS xmlns="${NS_NFSE}" versao="${VERSAO_DPS}"><infDPS Id="${id}">`
     + `<tpAmb>${tpAmb}</tpAmb><dhEmi>${dhEmi}</dhEmi><verAplic>${VER_APLIC}</verAplic>`
-    + `<serie>${Number(cfg.serie)}</serie><nDPS>${numero}</nDPS><dCompet>${dCompet}</dCompet>`
+    + `<serie>${String(cfg.serie || '1').padStart(5, '0')}</serie><nDPS>${numero}</nDPS><dCompet>${dCompet}</dCompet>`
     + `<tpEmit>1</tpEmit><cLocEmi>${cfg.codigoMunicipio}</cLocEmi>`
     + prest + toma
     + `<serv><locPrest><cLocPrestacao>${cfg.codigoMunicipio}</cLocPrestacao></locPrest>`

@@ -13,7 +13,7 @@ test('Id da DPS tem 45 caracteres e segue o padrão nacional', () => {
 
 test('DPS: ordem dos campos, tomador opcional, escape e totTrib do Simples', () => {
   const { xml, idDps } = n.montarDpsXml(cfg, { numero: 12, dataEmissao: new Date('2026-10-12T13:00:00Z'), servico: { cTribNac: '060101', descricao: 'Corte & barba <premium>' }, valorServico: 80 });
-  assert.ok(xml.startsWith(`<DPS xmlns="${n.NS_NFSE}" versao="1.01"><infDPS Id="${idDps}">`));
+  assert.ok(xml.startsWith(`<DPS xmlns="${n.NS_NFSE}" versao="1.00"><infDPS Id="${idDps}">`));
   const ordem = ['tpAmb', 'dhEmi', 'verAplic', 'serie', 'nDPS', 'dCompet', 'tpEmit', 'cLocEmi', 'prest', 'serv', 'valores'].map((tag) => xml.indexOf(`<${tag}>`));
   assert.deepEqual([...ordem].sort((a, b) => a - b), ordem);
   assert.ok(!xml.includes('<toma>'), 'tomador não identificado omite <toma>');
