@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { api } from '../../lib/api'
 import { useToast } from '../../hooks/useToast'
+import ConciliacaoBancariaTab from './financeiro/ConciliacaoBancariaTab'
 
 const fmtKpi = (v) => {
   if (v == null) return '—'
@@ -523,6 +524,11 @@ export default function Financeiro() {
       {/* Tab: DRE Gerencial */}
       {tab === 'dre' && (
         <DreGerencialView mes={mesDRE} onMesChange={setMesDRE} />
+      )}
+
+      {/* Tab: Conciliação Bancária OFX */}
+      {tab === 'conciliacao' && (
+        <ConciliacaoBancariaTab onAtualizarFinanceiro={load} />
       )}
 
       {/* Tab: Lançamentos (Receitas, Despesas, Todos) */}

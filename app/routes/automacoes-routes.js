@@ -1,7 +1,7 @@
 import express from 'express';
 import { kyttoEventBus } from '../core/kytto-event-bus.js';
 import { listarPlanosParaRenovacao, executarRodadaVencimentoPlanos } from '../core/automacao-planos-vencimento.js';
-import { consolidarResumoDiario, enviarBriefingGestao, formatarMensagemBriefingGestao } from '../core/automacao-resumo-gestao.js';
+import { consolidarResumoDiario, enviarBriefingGestao, formatarMensagemBriefingGestao, consolidarBriefingMatinalEquipe, formatarMensagemBriefingMatinal, enviarBriefingMatinalEquipe } from '../core/automacao-resumo-gestao.js';
 import { db } from '../db.js';
 
 // Definição das 8 automações corporativas centrais do ERP Kytto
@@ -50,6 +50,15 @@ const DEFINICOES_AUTOMACOES = [
     icone: 'package-alert',
     padraoAtivo: true,
     intervalo: 'Gatilho instantâneo por evento interno'
+  },
+  {
+    id: 'briefing_matinal_equipe',
+    nome: 'Briefing Matinal da Equipe & Metas do Dia (WhatsApp)',
+    descricao: 'Consolida às 08:00 a escala do dia, clientes agendados, horários vagos para encaixe e foco em metas por profissional.',
+    segmentos: ['barbearia', 'beleza', 'saude', 'esporte'],
+    icone: 'sun',
+    padraoAtivo: true,
+    intervalo: 'Diariamente às 08:00'
   },
   {
     id: 'briefing_fechamento_gestao',
@@ -159,6 +168,11 @@ export function createAutomacoesRouter({ obterEmpresaIdDoUsuario, isPlatformAdmi
 
       if (automacaoId === 'briefing_fechamento_gestao') {
         const resultado = await enviarBriefingGestao(empresaId, req.body?.data || null, req.body?.telefone || null);
+        return res.json({ ok: true, automacaoId, resultado });
+      }
+
+      if (automacaoId === 'briefing_matinal_equipe') {
+        const resultado = await enviarBriefingMatinalEquipe(empresaId, req.body?.data || null, req.body?.telefone || null);
         return res.json({ ok: true, automacaoId, resultado });
       }
 
