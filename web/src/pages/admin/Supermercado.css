@@ -2539,3 +2539,121 @@
   border-radius: 4px;
   letter-spacing: 0.5px;
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   SPRINT 3 ENTERPRISE: PEDIDOS EDI, SELINHOS, DRE & SPED BLOCO K
+   ═══════════════════════════════════════════════════════════════ */
+
+/* Pedidos de Compra & EDI */
+.super-pedidos-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+.super-status-po {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.super-status-po.ENVIADO { background: #dbeafe; color: #1d4ed8; }
+.super-status-po.CONFIRMADO { background: #dcfce7; color: #15803d; }
+.super-status-po.ENTREGUE_PARCIAL { background: #fef3c7; color: #b45309; }
+.super-status-po.CONCLUIDO { background: #f1f5f9; color: #334155; }
+
+/* Campanhas de Selinhos & Colecionáveis */
+.super-selinhos-banner {
+  background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+  color: #fff;
+  border-radius: 12px;
+  padding: 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+.super-stamp-book {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(44px, 1fr));
+  gap: 8px;
+  background: #f8fafc;
+  border: 1px dashed #cbd5e1;
+  border-radius: 10px;
+  padding: 16px;
+  margin-top: 14px;
+}
+.super-stamp-slot {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 800;
+  border: 2px dashed #94a3b8;
+  color: #64748b;
+  background: #fff;
+}
+.super-stamp-slot.filled {
+  background: #f59e0b;
+  border: 2px solid #d97706;
+  color: #fff;
+  box-shadow: 0 2px 4px rgba(245, 158, 11, 0.4);
+}
+
+/* DRE de Loja Supermercadista */
+.super-dre-card {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+.super-dre-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 20px;
+  border-bottom: 1px solid #f1f5f9;
+  font-size: 14px;
+}
+.super-dre-row.header {
+  background: #f8fafc;
+  font-weight: 800;
+  color: #0f172a;
+}
+.super-dre-row.destaque-positivo {
+  background: #f0fdf4;
+  font-weight: 800;
+  color: #166534;
+  font-size: 15px;
+}
+.super-dre-row.destaque-ebitda {
+  background: #eff6ff;
+  font-weight: 900;
+  color: #1e40af;
+  font-size: 16px;
+}
+.super-dre-row.deducao {
+  color: #dc2626;
+  padding-left: 36px;
+  font-size: 13px;
+}
+
+/* SPED Bloco K Terminal */
+.super-sped-box {
+  background: #0f172a;
+  color: #38bdf8;
+  font-family: monospace;
+  padding: 16px;
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.6;
+  overflow-x: auto;
+  max-height: 380px;
+}

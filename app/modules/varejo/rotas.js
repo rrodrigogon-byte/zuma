@@ -386,6 +386,27 @@ export function createVarejoAdminRouter({ db, escopoDaRequisicao, fuso = 'Americ
     return svc.obterCockpitExecutivoSupermercado(db, empresaId, { lojaId });
   }));
 
+
+  // ── Sprint 3 Enterprise: Pedidos EDI, Selinhos, DRE de Loja & SPED Bloco K ──
+  router.post("/pedidos-compra/criar", rota("catalog.write", async ({ req, empresaId, lojaId }) => {
+    return svc.criarPedidoCompraFornecedor(db, empresaId, { ...req.body, lojaId });
+  }));
+  router.get("/pedidos-compra/listar", rota("catalog.read", async ({ empresaId }) => {
+    return svc.listarPedidosCompraFornecedor(db, empresaId);
+  }));
+  router.get("/fidelidade/campanhas-selinhos", rota("catalog.read", async ({ empresaId }) => {
+    return svc.listarCampanhasSelinhos(db, empresaId);
+  }));
+  router.post("/fidelidade/selos-cliente", rota("catalog.write", async ({ req, empresaId }) => {
+    return svc.consultarOuCreditarSelosCliente(db, empresaId, req.body);
+  }));
+  router.get("/dre/mensal", rota("catalog.read", async ({ req, empresaId, lojaId }) => {
+    return svc.obterDreSupermercado(db, empresaId, { mesAno: req.query.mesAno, lojaId });
+  }));
+  router.get("/fiscal/sped-bloco-k", rota("catalog.read", async ({ empresaId }) => {
+    return svc.exportarSpedFiscalBlocoK(db, empresaId);
+  }));
+
   // ── Download do Instalador Windows Kytto PDV ──
   router.get("/download-instalador-windows", (req, res) => {
     const path = require("path");

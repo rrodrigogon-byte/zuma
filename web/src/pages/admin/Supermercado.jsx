@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
+  Award, BookOpen, FileSpreadsheet, FileCode,
   Smartphone, Landmark, Calculator, Activity, PieChart, Scan,
   Store, ShoppingCart, Barcode, Tag, AlertTriangle, ArrowRightLeft,
   Truck, TrendingUp, RefreshCw, Plus, Trash2, Printer, CheckCircle2,
@@ -323,6 +324,14 @@ export default function Supermercado() {
   const [enderecosWms, setEnderecosWms] = useState([]);
   const [cockpitDados, setCockpitDados] = useState(null);
 
+  // ── SPRINT 3 ENTERPRISE: PEDIDOS EDI, SELINHOS, DRE & SPED ──
+  const [pedidosCompra, setPedidosCompra] = useState([]);
+  const [campanhasSelinhos, setCampanhasSelinhos] = useState([]);
+  const [consultaCpfSelos, setConsultaCpfSelos] = useState('');
+  const [resultadoSelosCliente, setResultadoSelosCliente] = useState(null);
+  const [dreSupermercado, setDreSupermercado] = useState(null);
+  const [spedBlocoKDados, setSpedBlocoKDados] = useState(null);
+
   const [xmlNfeTexto, setXmlNfeTexto] = useState("");
   const [nfeProcessada, setNfeProcessada] = useState(null);
   const [carregandoNfe, setCarregandoNfe] = useState(false);
@@ -444,6 +453,22 @@ export default function Supermercado() {
       // 19. WMS de Endereçamento
       const rWms = await api.get('/api/admin/supermercado/wms/enderecos').catch(() => null);
       if (rWms && Array.isArray(rWms)) setEnderecosWms(rWms);
+
+      // 21. Pedidos de Compra & EDI
+      const rPed = await api.get('/api/admin/supermercado/pedidos-compra/listar').catch(() => null);
+      if (rPed && Array.isArray(rPed)) setPedidosCompra(rPed);
+
+      // 22. Campanhas de Selinhos
+      const rSel = await api.get('/api/admin/supermercado/fidelidade/campanhas-selinhos').catch(() => null);
+      if (rSel && Array.isArray(rSel)) setCampanhasSelinhos(rSel);
+
+      // 23. DRE de Loja
+      const rDre = await api.get('/api/admin/supermercado/dre/mensal').catch(() => null);
+      if (rDre) setDreSupermercado(rDre);
+
+      // 24. SPED Bloco K
+      const rSped = await api.get('/api/admin/supermercado/fiscal/sped-bloco-k').catch(() => null);
+      if (rSped && rSped.sucesso) setSpedBlocoKDados(rSped);
 
       // 20. Cockpit Executivo ABRAS
       const rCock = await api.get('/api/admin/supermercado/cockpit/kpis').catch(() => null);
@@ -1407,6 +1432,18 @@ export default function Supermercado() {
         </button>
         <button className={`super-tab-btn ${abaAtiva === 'cockpit' ? 'active' : ''}`} onClick={() => setAbaAtiva('cockpit')}>
           <Activity size={16} /> Cockpit ABRAS
+        </button>
+        <button className={`super-tab-btn ${abaAtiva === 'pedidos' ? 'active' : ''}`} onClick={() => setAbaAtiva('pedidos')}>
+          <FileCheck size={16} /> Pedidos Compra EDI ({pedidosCompra.length})
+        </button>
+        <button className={`super-tab-btn ${abaAtiva === 'selinhos' ? 'active' : ''}`} onClick={() => setAbaAtiva('selinhos')}>
+          <Award size={16} /> Campanha Selinhos ({campanhasSelinhos.length})
+        </button>
+        <button className={`super-tab-btn ${abaAtiva === 'dre' ? 'active' : ''}`} onClick={() => setAbaAtiva('dre')}>
+          <FileSpreadsheet size={16} /> DRE de Loja & EBITDA
+        </button>
+        <button className={`super-tab-btn ${abaAtiva === 'sped' ? 'active' : ''}`} onClick={() => setAbaAtiva('sped')}>
+          <FileCode size={16} /> SPED Fiscal Bloco K
         </button>
         <button className={`super-tab-btn ${abaAtiva === 'margens' ? 'active' : ''}`} onClick={() => setAbaAtiva('margens')}>
           <TrendingUp size={16} /> Margens & Curva ABC
