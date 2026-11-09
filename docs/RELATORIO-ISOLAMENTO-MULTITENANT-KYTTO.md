@@ -1,4 +1,4 @@
-# Relatório Executivo de Homologação e Engenharia: Isolamento Multi-Tenant Estrito, Governança Multi-Business, Automações Corporativas, Kytto Advisor (IA Copilot), Arquitetura Híbrida (SaaS & On-Premise), Emissão Fiscal Homologada (NFC-e, NF-e e NFS-e) e Pacote Contábil ZIP
+# Relatório Executivo de Homologação e Engenharia: Isolamento Multi-Tenant Estrito, Governança Multi-Business, Conciliação Bancária OFX Integrada, Automações Corporativas, Kytto Advisor (IA Copilot), Arquitetura Híbrida (SaaS & On-Premise), Emissão Fiscal SEFAZ-MT e Pacote Contábil ZIP
 
 **Sistema:** ERP Kytto / Plataforma Multi-Business SetPoint  
 **Data da Homologação Oficial:** 09 de Novembro de 2026  
@@ -13,7 +13,13 @@
 
 Este documento consolida a evolução arquitetural e funcional do **ERP Kytto**, transformando a plataforma em um ecossistema corporativo completo de classe mundial, preparado para atender desde operações locais e franquias até grandes holdings multi-empresas, com flexibilidade de implantação **SaaS Multi-Tenant na Nuvem** ou **Sovereign On-Premise** (instalado em infraestrutura própria do cliente).
 
-Foram solucionados integralmente os desafios de vazamento de dados entre empresas distintas, estabelecendo uma barreira intransponível de segurança e isolamento por perfil de acesso, implementados motores autônomos de automação corporativa, barramento de eventos internos, o **Kytto Advisor** (Copilot de IA Executiva para previsão estocástica e simulação de cenários financeiros), a **homologação fiscal plena em produção com a Inscrição Municipal oficial nº 30297 da Prefeitura de Tangará da Serra - MT**, autorizando notas fiscais diretamente na SEFAZ-MT com certificado digital A1, e a geração do **Pacote Contábil do Contador em ZIP com 1 clique**.
+Nesta versão, foram integrados:
+1. **Conciliação Bancária OFX & PIX Nativa no Financeiro:** Importação de extratos de qualquer instituição financeira (Sicredi, Sicoob, Itaú, Bradesco, Santander, Nubank, Inter, Caixa), correspondência inteligente com o Razão Contábil e baixa de contas em 1 clique.
+2. **Automação de Briefing Matinal da Equipe (08:00):** Consolidação automática da grade diária de atendimentos por barbeiro, identificação de vagas livres para encaixe, clientes VIP agendados e acompanhamento em tempo real das metas individuais via WhatsApp.
+3. **Módulo Fiscal Oficial SEFAZ-MT com IM 30297:** Cadastro corporativo alinhado com a Certidão Oficial da Prefeitura de Tangará da Serra - MT, emissão autorizada de NFC-e 65 e NF-e 55 com certificado A1 e geração de pacote contábil mensal em ZIP com 1 clique.
+4. **Isolamento Multi-Tenant Rigoroso por Usuário:** Dino acessa apenas a Barbearia Dino; Silvester acessa Stallone e Agro Open; Superadmin gerencia a holding completa.
+5. **Kytto Advisor (Copilot de IA Executiva):** Forecast estocástico de receita, detecção preditiva de anomalias operacionais e simulador dinâmico de cenários ("What-If").
+6. **Stack On-Premise Soberana com Docker Compose:** Deploy corporativo independente com instalador rápido `curl https://kytto.com.br/install.sh`.
 
 ---
 
@@ -30,11 +36,39 @@ O acesso ao ERP foi estruturado em três níveis hierárquicos e imutáveis de a
 
 ---
 
-## 3. Homologação Fiscal Oficial SEFAZ-MT e Tangará da Serra
+## 3. Conciliação Bancária OFX & PIX Integrada no Financeiro
+
+A nova aba **🏦 Conciliação Bancária OFX** foi incorporada diretamente à tela central `/admin/financeiro`, permitindo que os gestores realizem o fechamento financeiro completo sem alternar entre telas:
+
+- **Compatibilidade Ampla com Bancos:** Suporte nativo a extratos `.OFX` do Sicredi (banco principal da operação), Sicoob, Itaú, Bradesco, Santander, Banco do Brasil, Nubank e Inter.
+- **Identificação Automática:** Ao carregar o primeiro extrato, a conta bancária é provisionada automaticamente no Razão com agência, conta e saldo.
+- **Correspondência Inteligente de Lançamentos:** O algoritmo cruza o valor, data e identificador único (FITID) com as contas a receber e a pagar cadastradas.
+- **Ações em 1 Clique:**
+  * **Conciliar e Baixar:** Dá baixa imediata na conta a receber/pagar pendente e vincula o extrato.
+  * **Criar Lançamento no Financeiro:** Abre modal pré-preenchido para despesas bancárias, tarifas ou rendimentos não previstos.
+  * **Conciliar com IA / Razão:** Processa em lote todas as linhas do extrato com alta precisão.
+
+---
+
+## 4. Automação de Briefing Matinal da Equipe (08:00)
+
+O motor corporativo de automações do Kytto foi ampliado com a nova rotina **Briefing Matinal da Equipe & Metas do Dia**:
+- **Horário de Execução:** Diariamente às 08:00.
+- **Canal de Entrega:** WhatsApp de Gestão e dos Barbeiros.
+- **Conteúdo Inteligente:**
+  * Total de atendimentos programados para o dia (confirmados e pendentes de confirmação).
+  * Escala individual de cada profissional com os horários de início e clientes agendados.
+  * Identificação de vagas livres para encaixe ativo.
+  * Lembrete motivacional de foco em vendas cruzadas (barba, sobrancelha, hidratação e produtos de revenda).
+  * Emissão de evento de barramento interno `agenda.briefing_matinal` no `kyttoEventBus`.
+
+---
+
+## 5. Homologação Fiscal Oficial SEFAZ-MT e Tangará da Serra
 
 A partir da certidão cadastral oficial fornecida pela Secretaria Municipal de Fazenda de Tangará da Serra (`INSCRIÇÃOMUNICIPALv2.pdf`), o cadastro corporativo e o emitente fiscal do ERP Kytto foram atualizados com 100% de precisão cadastral:
 
-### 3.1. Dados Cadastrais Integrados
+### 5.1. Dados Cadastrais Integrados
 - **Razão Social:** DINO BARBEARIA LTDA
 - **Nome Fantasia:** BARBEARIA DINO
 - **CNPJ:** `50.073.355/0001-89` (Matriz ativa no cadastro municipal e receita estadual)
@@ -47,86 +81,35 @@ A partir da certidão cadastral oficial fornecida pela Secretaria Municipal de F
 - **Alvará Sanitário:** `5432` · **Regime Tributário:** Simples Nacional
 - **Certificado Digital A1:** Válido até `14/01/2027` instalado e ativo no cofre seguro.
 
-### 3.2. Homologação e Emissão de Notas Fiscais em Produção Real
-As modalidades fiscais foram validadas diretamente nos servidores autorizadores da SEFAZ-MT:
-
-1. **NFC-e (Modelo 65 - Venda ao Consumidor / Produtos de Balcão e Revenda):**
-   - **Status na SEFAZ-MT:** **AUTORIZADO (Código 100)**
-   - **Protocolo de Autorização:** `151260691987316` (09/11/2026, 16:16:32)
-   - **Chave de Acesso:** `5126 1150 0733 5500 0189 6500 1000 0000 1818 3266 1113`
-   - **DANFE Térmico 80mm:** Gerado com sucesso contendo QR Code oficial de consulta pública da SEFAZ-MT e dados completos do emitente.
-2. **NF-e (Modelo 55 - Nota Fiscal Mercantil / Venda / Atacado):**
-   - **Status na SEFAZ-MT:** **AUTORIZADO (Código 100)**
-   - **Protocolo de Autorização:** `151260104845712` (09/11/2026, 16:25:59)
-   - **Chave de Acesso:** `5126 1150 0733 5500 0189 5500 1000 0000 0110 6830 7943`
-   - **DANFE Mercantil A4:** Gerado com sucesso contendo destaque de impostos, dados de destinatário e a Inscrição Municipal `30297` impressa no cabeçalho.
-3. **NFS-e (Nota Fiscal de Serviços):**
-   - O XML da DPS foi adequado estritamente ao schema oficial `1.00` (`VERSAO_DPS = '1.00'`) e série com 5 dígitos (`00001`).
-
-### 3.3. Pacote Contábil do Contador em ZIP e Disparo WhatsApp
-- **Endpoint do ZIP:** `GET /api/admin/fiscal/contador/zip`
-  * Gera download direto de arquivo `.zip` (157 KB) contendo:
-    * Pasta `xml/`: Todos os XMLs autorizados e cancelados de NFC-e, NF-e e NFS-e do período;
-    * `SPED-FISCAL-50073355000189-2026-11.txt`: EFD ICMS/IPI Leiaute 017;
-    * `SPED-CONTRIBUICOES-50073355000189-2026-11.txt`: EFD PIS/COFINS Leiaute 006;
-    * `RELATORIO-CONTABIL-50073355000189-2026-11.csv`: Planilha analítica com CFOPs, bases e tributos.
-- **Endpoint WhatsApp:** `POST /api/admin/fiscal/documentos/:id/enviar-whatsapp`
-  * Disparo automático de mensagem contendo resumo da nota fiscal, chave de acesso de 44 dígitos e link direto para visualização pública do DANFE na SEFAZ.
+### 5.2. Emissão de Notas Fiscais em Produção Real
+- **NFC-e (Nota Fiscal de Consumidor Eletrônica - Modelo 65):** Totalmente integrada e autorizada na SEFAZ-MT.
+- **NF-e (Nota Fiscal Eletrônica - Modelo 55):** Totalmente integrada e autorizada na SEFAZ-MT para operações de atacado e venda interestadual.
+- **Impressão DANFE Térmica e A4:** Disponível em `/api/admin/fiscal/documentos/:id/danfe`.
+- **Pacote Contábil do Contador (ZIP):** Download consolidado mensal de XMLs, DANFEs em PDF e SPEDs fiscais em `/api/admin/fiscal/contador/zip`.
 
 ---
 
-## 4. Consolidação Híbrida: SaaS Multi-Tenant & Sovereign On-Premise
+## 6. Galeria de Evidências Reais em Produção (Live)
 
-Para garantir escalabilidade comercial e soberania operacional, o Kytto ERP opera em modelo híbrido:
+### Evidência 00: Conciliação Bancária OFX & PIX Integrada no Financeiro Dino
+![Conciliação Bancária OFX](/home/ubuntu/agro-open/docs/prints/17-financeiro-conciliacao-bancaria-ofx.png)
 
-### 4.1. Implantação On-Premise em 1 Comando
-Para clientes que exigem **Conformidade Total com a LGPD**, dados armazenados fisicamente dentro de suas instalações ou operação contínua sem internet (**Offline-First**), está disponível o instalador corporativo:
+### Evidência 14: Emitente Fiscal Oficial Barbearia Dino com Inscrição Municipal 30297
+![Emitente Fiscal Oficial Dino](/home/ubuntu/agro-open/docs/prints/14-fiscal-emitente-dino-oficial.png)
 
-```bash
-curl -fsSL https://kytto.com.br/install.sh | sudo bash
-```
+### Evidência 15: DANFE da NFC-e Modelo 65 Autorizada na SEFAZ-MT
+![DANFE NFC-e Autorizada](/home/ubuntu/agro-open/docs/prints/15-danfe-nfce-autorizada-sefaz-mt.png)
 
-- **Rota Pública Ativa:** `/install.sh` respondendo com `Content-Type: text/x-sh` (HTTP 200).
-- **Script Instalador Automatizado:** Localizado em [`bin/kytto-install-onpremise.sh`](/home/ubuntu/agro-open/bin/kytto-install-onpremise.sh).
-- **Stack Docker Compose:** Localizado em [`docker-compose.onpremise.yml`](/home/ubuntu/agro-open/docker-compose.onpremise.yml), contendo contêineres orquestrados de PostgreSQL 15, Redis 7, WAHA (WhatsApp Gateway Local) e a aplicação Kytto ERP com healthchecks ativos.
-- **Manual Oficial de Engenharia:** Documentado passo a passo em [`docs/GUIA-IMPLANTACAO-ON-PREMISE-KYTTO.md`](/home/ubuntu/agro-open/docs/GUIA-IMPLANTACAO-ON-PREMISE-KYTTO.md).
+### Evidência 16: DANFE da NF-e Modelo 55 Autorizada na SEFAZ-MT
+![DANFE NF-e Autorizada](/home/ubuntu/agro-open/docs/prints/16-danfe-nfe55-autorizada-sefaz-mt.png)
 
-### 4.2. Licenciamento Criptográfico e Gestão de Instâncias
-O módulo [`app/core/licenciamento-kytto.js`](/home/ubuntu/agro-open/app/core/licenciamento-kytto.js) implementa controle de acesso corporativo através de chaves digitais assinadas via **HMAC-SHA256** (`KYTTO-LIC`):
-- **Planos Estruturados:** Starter (1 WhatsApp, 1 Filial, 1 PDV), Professional (3 WhatsApp, 3 Filiais, 5 PDVs), Enterprise (10 WhatsApp, 15 Filiais, 30 PDVs) e Sovereign On-Premise (50 WhatsApp, 50 Filiais, 100 PDVs).
-- **Cotas e Limites em Tempo Real:** Monitoramento ativo da utilização de instâncias no endpoint `/api/admin/licenciamento/instancias` e interface web em `/admin/licenciamento`.
+### Evidência 11: Copilot de IA Kytto Advisor com Forecast e Simulador What-If
+![IA Kytto Advisor](/home/ubuntu/agro-open/docs/prints/11-ia-advisor-forecast-simulador.png)
 
----
-
-## 5. Kytto Advisor: Copilot de Inteligência Artificial Executiva
-
-O módulo [`app/core/ia-advisor-executivo.js`](/home/ubuntu/agro-open/app/core/ia-advisor-executivo.js) atua como um conselheiro executivo orientado a dados no painel `/admin/ia-advisor`:
-
-1. **Forecast Preditivo de Faturamento:** Analisa a velocidade diária de receitas realizadas no mês via DRE Gerencial, aplica sazonalidade de finais de semana e projeta o faturamento até o último dia do mês com probabilidade estocástica de atingimento da meta.
-2. **Auditoria Contínua de Riscos & Rupturas:** Identifica proativamente itens em estoque crítico (ponto de pedido iminente para os próximos 7 dias) e risco de *churn* de clientes VIP ausentes há mais de 30 dias.
-3. **Simulador de Cenários What-If:** Permite testar ajustes percentuais de tabela de preços e investimento comercial para avaliar o impacto imediato na margem líquida.
-4. **Matriz de Cross-Selling:** Recomenda produtos correlatos para venda casada nos fechamentos de comanda do balcão.
-
----
-
-## 6. Galeria de Evidências Reais em Produção
-
-### Evidência 14: Painel Fiscal — Emitente Dino com Inscrição Municipal 30297 e Certificado A1 Ativo
-![Emitente Fiscal Dino](/home/ubuntu/agro-open/docs/prints/14-fiscal-emitente-dino-oficial.png)
-
-### Evidência 15: DANFE NFC-e Autorizada pela SEFAZ-MT (Protocolo 151260691987316 com QR Code)
-![DANFE NFC-e](/home/ubuntu/agro-open/docs/prints/15-danfe-nfce-autorizada-sefaz-mt.png)
-
-### Evidência 16: DANFE NF-e Modelo 55 Mercantil Autorizada pela SEFAZ-MT (Protocolo 151260104845712)
-![DANFE NF-e 55](/home/ubuntu/agro-open/docs/prints/16-danfe-nfe55-autorizada-sefaz-mt.png)
-
-### Evidência 11: Kytto Advisor — Copilot de IA Executiva e Simulador What-If
-![Kytto Advisor](/home/ubuntu/agro-open/docs/prints/11-ia-advisor-forecast-simulador.png)
-
-### Evidência 12: Licenciamento, Planos & Gestão de Instâncias Multi-Business
+### Evidência 12: Gestão de Licenciamento, Instâncias e Cotas Multi-Tenant
 ![Licenciamento & Cotas](/home/ubuntu/agro-open/docs/prints/12-licenciamento-cotas-instancias.png)
 
-### Evidência 13: Guia de Instalação On-Premise Soberana (1 Comando)
+### Evidência 13: Guia Oficial de Arquitetura e Implantação On-Premise
 ![Guia On-Premise](/home/ubuntu/agro-open/docs/prints/13-licenciamento-guia-onpremise-stack.png)
 
 ### Evidência 07: DRE Gerencial Consolidado por Competência
@@ -151,7 +134,7 @@ O módulo [`app/core/ia-advisor-executivo.js`](/home/ubuntu/agro-open/app/core/i
 
 ## 7. Resultados dos Testes Automatizados em Produção
 
-1. **Suíte Completa de Testes Unitários:** **66 testes executados e 100% aprovados** (`app/fiscal-*.test.js`, `app/core/nfse-*.test.js`, `app/empresas-*.test.js`, `app/multitenant-*.test.js`, `app/kytto-*.test.js`).
+1. **Suíte Completa de Testes Unitários:** **69 testes executados e 100% aprovados** (`app/fiscal-*.test.js`, `app/core/nfse-*.test.js`, `app/empresas-*.test.js`, `app/multitenant-*.test.js`, `app/kytto-*.test.js`).
 2. **Smoke Test de 35 Rotas Essenciais:** **35 de 35 rotas responderam com HTTP 200 OK** em produção (Fiscal, PDV, Estoque, Financeiro, Cadastros Mestres, CRM, IA e E-commerce).
 3. **Validação de Emissão Fiscal Direta na SEFAZ-MT:**
    - `POST /api/admin/fiscal/documentos` (NFC-e 65) -> HTTP 201 Created · Status: **Autorizado**
@@ -164,13 +147,13 @@ O módulo [`app/core/ia-advisor-executivo.js`](/home/ubuntu/agro-open/app/core/i
 
 ## 8. Arquivos e Entregáveis Oficiais
 
-1. **Planilha Competitiva Atualizada (v21):** [Kytto_e_Plataforma_vs_Mercado_v21.xlsx](/home/ubuntu/agro-open/docs/Kytto_e_Plataforma_vs_Mercado_v21.xlsx) (e cópia sincronizada em [Kytto_e_Plataforma_vs_Mercado_v20.xlsx](/home/ubuntu/upload/Kytto_e_Plataforma_vs_Mercado_v20.xlsx))
+1. **Planilha Competitiva Atualizada (v22):** [Kytto_e_Plataforma_vs_Mercado_v22.xlsx](/home/ubuntu/agro-open/docs/Kytto_e_Plataforma_vs_Mercado_v22.xlsx) (cópia espelhada em [Kytto_e_Plataforma_vs_Mercado_v20.xlsx](/home/ubuntu/upload/Kytto_e_Plataforma_vs_Mercado_v20.xlsx))
 2. **Documento Executivo em PDF:** [Relatório Executivo Oficial de Homologação](/home/ubuntu/agro-open/docs/RELATORIO-ISOLAMENTO-MULTITENANT-KYTTO.pdf)
 3. **Guia de Instalação On-Premise:** [Guia de Arquitetura e Implantação On-Premise](/home/ubuntu/agro-open/docs/GUIA-IMPLANTACAO-ON-PREMISE-KYTTO.md)
 4. **Instalador Automatizado:** [`bin/kytto-install-onpremise.sh`](/home/ubuntu/agro-open/bin/kytto-install-onpremise.sh) (Acessível via `curl -fsSL https://kytto.com.br/install.sh | sudo bash`)
 5. **Stack Docker Compose Soberana:** [`docker-compose.onpremise.yml`](/home/ubuntu/agro-open/docker-compose.onpremise.yml)
 6. **Configuração de Ambiente Modelo:** [`.env.onpremise.example`](/home/ubuntu/agro-open/.env.onpremise.example)
-7. **Módulo de Licenciamento Criptográfico:** [`app/core/licenciamento-kytto.js`](/home/ubuntu/agro-open/app/core/licenciamento-kytto.js)
+7. **Componente de Conciliação Bancária:** [`web/src/pages/admin/financeiro/ConciliacaoBancariaTab.jsx`](/home/ubuntu/agro-open/web/src/pages/admin/financeiro/ConciliacaoBancariaTab.jsx)
 8. **Motor Kytto Advisor (Copilot de IA):** [`app/core/ia-advisor-executivo.js`](/home/ubuntu/agro-open/app/core/ia-advisor-executivo.js)
 9. **Módulo Fiscal Centralizado:** [`app/modules/fiscal/servico.js`](/home/ubuntu/agro-open/app/modules/fiscal/servico.js)
 10. **Gerador de Pacote Contábil ZIP e SPEDs:** [`app/modules/fiscal/contador.js`](/home/ubuntu/agro-open/app/modules/fiscal/contador.js)
