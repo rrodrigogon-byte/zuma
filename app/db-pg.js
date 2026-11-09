@@ -37,8 +37,7 @@ const pool = new Pool({
 
 // Tratamento de erros do pool
 pool.on('error', (err) => {
-  console.error('Erro não esperado no pool de conexões:', err);
-  process.exit(-1);
+  console.error('Aviso no pool de conexões (conexão descartada):', err?.message || err);
 });
 
 /**
