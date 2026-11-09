@@ -149,6 +149,7 @@ import { registerDinoEstoqueFichasRoutes } from './dino-estoque-fichas-routes.js
 import omnichannelRouter from './routes/omnichannel.js';
 import { registerEquipePerformanceRoutes, equipePerformanceNoStore } from './dino-equipe-desempenho-routes.js';
 import { registerPainelGestaoRoutes } from './dino-painel-gestao-routes.js';
+import { registerGestaoSalaoAvancadaRoutes } from './dino-gestao-salao-avancada.js';
 import { registerInteligenciaVendasRoutes } from './dino-inteligencia-vendas-routes.js';
 import { registerAiBrainRoutes } from './ai-brain-routes.js';
 import { startAiBrainSchedulers } from './ai-brain-scheduler.js';
@@ -4169,6 +4170,7 @@ function exigirPapelOperacaoBarbearia(req, res, next) {
 app.use('/api/admin/barbearia', auth, requireStaff, resolverEscopoBarbearia, exigirPapelOperacaoBarbearia);
 registerEquipePerformanceRoutes(app, { db, legacyEmpresaId, legacyLojaId, requireCommercePermission, salesReport, dataVersion: () => estadoGravacao()?.alteracoes ?? null });
 registerPainelGestaoRoutes(app, { db, save, audit, legacyEmpresaId, legacyLojaId, dataVersion: () => estadoGravacao()?.alteracoes ?? null });
+registerGestaoSalaoAvancadaRoutes(app, { db, legacyEmpresaId, legacyLojaId });
 registerInteligenciaVendasRoutes(app, { db, legacyEmpresaId, legacyLojaId });
 registerCustomer360Routes(app, { legacyEmpresaId, legacyLojaId, clientesKytto, barbeariaErpKytto, canaisFidelidadeKytto, listarAgendamentosBarbearia, requireCommercePermission, audit, save, coberturasDoCliente: comandaPlanoKytto.coberturasDoCliente });
 registerDinoRecuperacaoAvecRoutes(app, { legacyEmpresaId, legacyLojaId, barbeariaErpKytto, listarAgendamentosBarbearia });

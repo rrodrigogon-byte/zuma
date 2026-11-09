@@ -264,6 +264,7 @@ const NAV_DINO_GROUPS = [
   {
     label: 'Gestão',
     items: [
+      { to: '/admin/gestao-salao', icon: '📊', label: 'Gestão do Salão (IA)' },
       { to: '/admin/bi', icon: '↗', label: 'BI & Analytics' },
       { to: '/admin/barbearia-erp?area=gestao&tab=Painel+de+gestão', icon: '↗', label: 'Painel de gestão' },
       { to: '/admin/barbearia-erp?area=gestao&tab=Desempenho+da+equipe', icon: '↗', label: 'Desempenho da equipe' },

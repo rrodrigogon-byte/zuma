@@ -319,6 +319,7 @@ export default function App() {
           <Route path="/admin/relatorios"     element={<Layout><RelatoriosDinoIndex /></Layout>} />
           <Route path="/admin/relatorios/dino" element={<Layout><RelatoriosDinoIndex /></Layout>} />
           <Route path="/admin/relatorios/dino/gestao-avancada" element={<Layout><GestaoSalaoAvancada /></Layout>} />
+          <Route path="/admin/gestao-salao" element={<Layout><GestaoSalaoAvancada /></Layout>} />
 
           <Route path="/admin/relatorios/dino/retorno" element={<Layout><RelatorioRetornoProfissional /></Layout>} />
           <Route path="/admin/relatorios/dino/clientes-atendidos" element={<Layout><RelatorioClientesAtendidos /></Layout>} />
