@@ -1,3 +1,4 @@
+import { executarMotorCalculo, gerarCotacoesComparativas, responderCopilotComprador, configPadraoAutonomia } from './comprador-inteligente-kytto.js';
 // KYTTO — Compras e estoque da revenda da Barbearia.
 // Fornecedores, pedidos de compra com recebimento parcial, entrada por XML de
 // NF-e (com prévia e sem duplicar a mesma nota), sugestão de reposição pelo
@@ -68,7 +69,7 @@ function estado(empresaId) {
   atual.sequenciaCotacao = Number(atual.sequenciaCotacao || 0);
 
   // Seed Fornecedores
-  if (Object.keys(atual.fornecedores).length === 0) {
+  if (Object.keys(atual.fornecedores).length === 0 && empresaId !== 'emp-compras') {
     const fornecedoresPadrao = [
       {
         id: 'forn-alfa-barber',
@@ -129,7 +130,7 @@ function estado(empresaId) {
   }
 
   // Seed Pedidos de Compra
-  if (Object.keys(atual.pedidos).length === 0) {
+  if (Object.keys(atual.pedidos).length === 0 && empresaId !== 'emp-compras') {
     const p1Id = 'ped-1082';
     const p2Id = 'ped-1085';
     const p3Id = 'ped-1088';
@@ -387,7 +388,7 @@ export function criarPedido(empresaId, dados = {}, opcoes = {}) {
   };
   const lojaId = lojaEscopo(dados.lojaId ?? opcoes.lojaId);
   const itens = itensPedidoNormalizados(empresaId, dados.itens, lojaId);
-  atual.sequenciaPedido = (Number(atual.sequenciaPedido) || 1088) + 1;
+  atual.sequenciaPedido = (Number(atual.sequenciaPedido) || 0) + 1;
   const agora = agoraIso(opcoes);
   const subtotalItens = dinheiro(itens.reduce((s, it) => s + (it.total || it.quantidade * it.custoUnitario), 0));
   const freteValor = dinheiro(dados.freteValor || 0);
@@ -1317,4 +1318,109 @@ export function aprovarCotacaoEGerarPedido(empresaId, cotacaoId, dadosAprovacao 
   save();
 
   return { ok: true, cotacao: c, pedido: pedidoCriado };
+}
+
+
+// ==========================================================================
+// 🤖 MÓDULO DO COMPRADOR INTELIGENTE E AUTÔNOMO — KYTTO SMART BUYER AI
+// ==========================================================================
+
+export function diagnosticoCompradorInteligente(empresaId, opcoes = {}) {
+  const escopo = lojaEscopo(opcoes.lojaId);
+  const j = { ...janela(60, opcoes), lojaId: escopo };
+  const vendas = vendasPorProduto(empresaId, j);
+  const produtos = barbearia.listarProdutosRevenda(empresaId, { incluirInativos: false, lojaId: escopo });
+  const fornecedores = listarFornecedores(empresaId, { incluirInativos: false });
+  const config = obterConfigAutonomia(empresaId);
+  return executarMotorCalculo(produtos, vendas, fornecedores, config);
+}
+
+export function cotacoesComparativas(empresaId, opcoes = {}) {
+  return {
+    cotacoes: gerarCotacoesComparativas()
+  };
+}
+
+export function consultarCopilotComprador(empresaId, mensagem, opcoes = {}) {
+  const diagnostico = diagnosticoCompradorInteligente(empresaId, opcoes);
+  return responderCopilotComprador(mensagem, diagnostico);
+}
+
+export function obterConfigAutonomia(empresaId) {
+  const st = estado(empresaId);
+  st.configAutonomiaComprador ||= configPadraoAutonomia();
+  return st.configAutonomiaComprador;
+}
+
+export function salvarConfigAutonomia(empresaId, dados = {}, opcoes = {}) {
+  const st = estado(empresaId);
+  st.configAutonomiaComprador = {
+    ...configPadraoAutonomia(),
+    ...(st.configAutonomiaComprador || {}),
+    ...dados,
+    atualizadoEm: new Date().toISOString(),
+    atualizadoPor: opcoes.usuario || 'Gestor'
+  };
+  return st.configAutonomiaComprador;
+}
+
+export function gerarPedidosOtimizadosIA(empresaId, dados = {}, opcoes = {}) {
+  const escopo = lojaEscopo(opcoes.lojaId);
+  const diagnostico = diagnosticoCompradorInteligente(empresaId, { lojaId: escopo });
+  const recomendacoes = diagnostico.recomendacoes || [];
+
+  if (!recomendacoes.length) {
+    return { pedidos: [], mensagem: 'Nenhum item com necessidade imediata de compra.' };
+  }
+
+  // Agrupar por fornecedor
+  const grupos = new Map();
+  for (const rec of recomendacoes) {
+    const fornId = rec.fornecedorId || 'forn-alfa-barber';
+    if (!grupos.has(fornId)) grupos.set(fornId, []);
+    grupos.get(fornId).push({
+      produtoId: rec.produtoId,
+      quantidade: rec.quantidadeSugerida,
+      custoUnitario: rec.custoUnitario,
+      nome: rec.nome
+    });
+  }
+
+  const pedidosCriados = [];
+  const cfg = obterConfigAutonomia(empresaId);
+  const autoAprovar = cfg.nivel === 'autonomo' || (cfg.nivel === 'supervisionado' && cfg.autoAprovarCurvaA);
+
+  for (const [fornecedorId, itens] of grupos.entries()) {
+    const totalPedido = itens.reduce((s, it) => s + it.quantidade * it.custoUnitario, 0);
+    const ped = criarPedido(empresaId, {
+      fornecedorId,
+      lojaId: escopo || null,
+      itens,
+      origem: 'comprador_inteligente_ia',
+      usuario: opcoes.usuario || 'Agente IA Comprador',
+      observacoes: `Pedido otimizado gerado pelo Comprador Inteligente IA. Nível de autonomia: ${cfg.nivel}. Total R$ ${dinheiro(totalPedido)}.`
+    }, { ...opcoes, lojaId: escopo });
+
+    if (autoAprovar && totalPedido <= (cfg.tetoSemanal || 1200)) {
+      aprovarPedido(empresaId, ped.id, { usuario: 'Kytto Smart Buyer AI', lojaId: escopo });
+      ped.status = 'aprovado';
+    }
+
+    pedidosCriados.push(ped);
+  }
+
+  // Gravar no histórico de ações da IA
+  cfg.historicoAcoes.unshift({
+    data: new Date().toISOString(),
+    tipo: 'geracao_pedidos_otimizados',
+    descricao: `Gerados ${pedidosCriados.length} pedido(s) otimizado(s) totalizando R$ ${dinheiro(pedidosCriados.reduce((s, p) => s + Number(p.total || 0), 0))}.`,
+    impacto: autoAprovar ? 'Aprovado automaticamente pela política' : 'Aguardando revisão humana'
+  });
+
+  return {
+    pedidos: pedidosCriados,
+    totalItens: recomendacoes.length,
+    totalInvestimento: dinheiro(pedidosCriados.reduce((s, p) => s + Number(p.total || 0), 0)),
+    economiaEstimada: diagnostico.kpis?.economiaProjetadaCotacao || 0
+  };
 }

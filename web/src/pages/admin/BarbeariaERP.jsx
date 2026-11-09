@@ -156,6 +156,7 @@ const TABS = [
   ["Vale-presente", "Venda, consulta e saldo dos vales"],
   ["Unidades", "Comparativo entre unidades"],
   ["Compras e fornecedores", "NF-e de entrada, pedidos e reposição"],
+  ["Comprador Inteligente (IA)", "Motor preditivo de reposição, cotações e comprador autônomo com IA"],
   ["Perdas e inventário", "Baixas manuais, contagem cíclica e acuracidade"],
   ["Fichas técnicas", "Composição de insumos e custo por serviço"],
   ["Fornecedores e funcionários", "Cadastros mestres da operação"],
@@ -205,6 +206,7 @@ const AREAS = [
       "Saúde do clube",
       "Estoque de revenda",
       "Compras e fornecedores",
+      "Comprador Inteligente (IA)",
       "Perdas e inventário",
       "Fichas técnicas",
       "Fornecedores e funcionários",
@@ -13543,6 +13545,8 @@ export default function BarbeariaERP({ tabInicial } = {}) {
     if (
       tab === "Estoque de revenda" ||
       tab === "Compras e fornecedores" ||
+      tab === "Comprador Inteligente (IA)" ||
+      tab === "Comprador inteligente" ||
       tab === "Perdas e inventário" ||
       tab === "Fichas técnicas" ||
       tab === "Fornecedores e funcionários"
@@ -13817,6 +13821,8 @@ export default function BarbeariaERP({ tabInicial } = {}) {
     "Estoque de revenda",
     "Estoque",
     "Compras e fornecedores",
+    "Comprador Inteligente (IA)",
+    "Comprador inteligente",
     "Perdas e inventário",
     "Fichas técnicas",
     "Fornecedores e funcionários",

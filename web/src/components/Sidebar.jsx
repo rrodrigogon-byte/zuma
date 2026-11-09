@@ -243,6 +243,7 @@ const NAV_DINO_GROUPS = [
     label: 'Compras e estoque',
     items: [
       { to: '/admin/compras', icon: '🚚', label: 'Compras e fornecedores' },
+      { to: '/admin/comprador-inteligente', icon: '🤖', label: 'Comprador inteligente (IA)' },
       { to: '/admin/estoque', icon: '📦', label: 'Estoque' },
       { to: '/admin/perdas-inventario', icon: '🧾', label: 'Perdas e inventário' },
       { to: '/admin/fichas-tecnicas', icon: '🧪', label: 'Fichas técnicas' },
@@ -328,6 +329,7 @@ export const NAV_CLUBE_GROUPS = [
     label: 'Compras e estoque',
     items: [
       { to: '/admin/compras', icon: '🚚', label: 'Compras e fornecedores' },
+      { to: '/admin/comprador-inteligente', icon: '🤖', label: 'Comprador inteligente (IA)' },
       { to: '/admin/estoque', icon: '📦', label: 'Estoque' },
       { to: '/admin/perdas-inventario', icon: '🧾', label: 'Perdas e inventário' },
       { to: '/admin/fichas-tecnicas', icon: '🧪', label: 'Fichas técnicas' },
@@ -415,6 +417,7 @@ const NAV_STALLONE_GROUPS = [
     label: 'Compras e estoque',
     items: [
       { to: '/admin/compras', icon: '🚚', label: 'Compras e fornecedores' },
+      { to: '/admin/comprador-inteligente', icon: '🤖', label: 'Comprador inteligente (IA)' },
       { to: '/admin/estoque', icon: '📦', label: 'Estoque' },
       { to: '/admin/perdas-inventario', icon: '🧾', label: 'Perdas e inventário' },
       { to: '/admin/fichas-tecnicas', icon: '🧪', label: 'Fichas técnicas' },

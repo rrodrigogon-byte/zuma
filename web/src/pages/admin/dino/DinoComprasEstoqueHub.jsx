@@ -1,3 +1,4 @@
+import CompradorInteligentePanel from './CompradorInteligentePanel';
 // ==========================================================================
 // DINO COMPRAS E ESTOQUE HUB — KYTTO ERP
 // Módulo completo, autônomo, detalhado e integrado para Barbearia Dino e Kytto:
@@ -96,6 +97,7 @@ const styles = {
 
 const MODULOS = [
   { id: 'compras', label: 'Compras e fornecedores', icon: '🚚' },
+  { id: 'comprador', label: 'Comprador Inteligente (IA)', icon: '🤖' },
   { id: 'cotacoes', label: 'Cotações & RFQ', icon: '📑' },
   { id: 'estoque', label: 'Estoque', icon: '📦' },
   { id: 'curva_abc', label: 'Curva ABC & Giro', icon: '📊' },
@@ -122,6 +124,10 @@ export default function DinoComprasEstoqueHub({
     'estoque': 'estoque',
     'Compras e fornecedores': 'compras',
     'compras': 'compras',
+    'Comprador Inteligente (IA)': 'comprador',
+    'Comprador inteligente': 'comprador',
+    'comprador-inteligente': 'comprador',
+    'comprador': 'comprador',
     'cotacoes': 'cotacoes',
     'Cotações': 'cotacoes',
     'Cotações & RFQ': 'cotacoes',
@@ -1047,6 +1053,11 @@ export default function DinoComprasEstoqueHub({
         </div>
       )}
 
+
+      {/* ── SUBMÓDULO: 🤖 COMPRADOR INTELIGENTE E AUTÔNOMO (IA) ── */}
+      {abaAtiva === 'comprador' && (
+        <CompradorInteligentePanel nomeEmpresa={nomeEmpresa} />
+      )}
 
       {/* ── SUBMÓDULO: 📑 COTAÇÕES DE PREÇOS (RFQ) & MAPA COMPARATIVO ── */}
       {abaAtiva === 'cotacoes' && (

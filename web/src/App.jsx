@@ -242,10 +242,10 @@ function Loading() {
 // ativa, mostram a versão da empresa (ou levam ao módulo equivalente dela).
 // `clube`: clubes e academias têm telas próprias (não as da barbearia nem as do evento).
 // Compras: Dino segue na revenda da barbearia; demais empresas usam Estoque e compras.
-function ComprasPorMarca() {
+function ComprasPorMarca({ abaInicial = 'compras' }) {
   const { user, empresaAtiva, empresasAcessiveis } = useAuth()
   const empresaEfetiva = empresaAtiva || empresasAcessiveis?.[0] || null
-  return isTenantScope(user, empresaEfetiva) ? <Layout><ComprasEstoquePage abaInicial="compras" /></Layout> : <Layout><EscolhaEmpresa modulo="Estoque e compras" /></Layout>
+  return isTenantScope(user, empresaEfetiva) ? <Layout><ComprasEstoquePage abaInicial={abaInicial} /></Layout> : <Layout><EscolhaEmpresa modulo="Estoque e compras" /></Layout>
 }
 
 function TenantAware({ tenant, legacy, stallone, clube }) {
@@ -362,7 +362,8 @@ export default function App() {
           <Route path="/admin/oficina"         element={<Layout><Oficina /></Layout>} />
           <Route path="/admin/agropecuaria"    element={<Layout><Agropecuaria /></Layout>} />
           <Route path="/admin/varejo"          element={<Layout><Varejo /></Layout>} />
-          <Route path="/admin/compras"         element={<ComprasPorMarca />} />
+          <Route path="/admin/compras"         element={<ComprasPorMarca abaInicial="compras" />} />
+          <Route path="/admin/comprador-inteligente" element={<ComprasPorMarca abaInicial="comprador" />} />
           <Route path="/admin/fiscal" element={<TenantAware tenant={<Layout><Fiscal abaInicial="documentos" /></Layout>} legacy={<Layout><EscolhaEmpresa modulo="Notas fiscais" /></Layout>} />} />
           <Route path="/admin/fiscal/documentos" element={<TenantAware tenant={<Layout><Fiscal abaInicial="documentos" /></Layout>} legacy={<Layout><EscolhaEmpresa modulo="Notas fiscais" /></Layout>} />} />
           <Route path="/admin/fiscal/numeracao" element={<TenantAware tenant={<Layout><Fiscal abaInicial="numeracao" /></Layout>} legacy={<Layout><EscolhaEmpresa modulo="Numeração fiscal" /></Layout>} />} />

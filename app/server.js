@@ -7021,6 +7021,60 @@ app.post('/api/admin/barbearia/compras/cotacoes/:id/aprovar', (req, res) => {
   } catch (error) { respostaComprasRepasses(res, error); }
 });
 
+// ── 🤖 Comprador Inteligente & Autônomo (Kytto Smart Buyer AI) ────────
+app.get('/api/admin/barbearia/compras/inteligente/diagnostico', (req, res) => {
+  try {
+    const dados = barbeariaComprasKytto.diagnosticoCompradorInteligente(legacyEmpresaId(req), { lojaId: legacyLojaId(req) });
+    res.json({ ok: true, ...dados });
+  } catch (error) { respostaComprasRepasses(res, error); }
+});
+
+app.get('/api/admin/barbearia/compras/inteligente/cotacoes', (req, res) => {
+  try {
+    const dados = barbeariaComprasKytto.cotacoesComparativas(legacyEmpresaId(req), { lojaId: legacyLojaId(req) });
+    res.json({ ok: true, ...dados });
+  } catch (error) { respostaComprasRepasses(res, error); }
+});
+
+app.post('/api/admin/barbearia/compras/inteligente/pedidos-otimizados', (req, res) => {
+  if (!gestaoDaUnidade(req, res)) return;
+  try {
+    const resultado = barbeariaComprasKytto.gerarPedidosOtimizadosIA(legacyEmpresaId(req), req.body || {}, {
+      usuario: usuarioReq(req),
+      lojaId: legacyLojaId(req)
+    });
+    audit(req, 'COMPRADOR IA PEDIDOS GERADOS', `${resultado.pedidos?.length || 0} pedidos gerados com sucesso`);
+    res.status(201).json({ ok: true, ...resultado });
+  } catch (error) { respostaComprasRepasses(res, error); }
+});
+
+app.post('/api/admin/barbearia/compras/inteligente/copilot', (req, res) => {
+  if (!gestaoDaUnidade(req, res)) return;
+  try {
+    const resposta = barbeariaComprasKytto.consultarCopilotComprador(legacyEmpresaId(req), req.body?.mensagem || '', {
+      usuario: usuarioReq(req),
+      lojaId: legacyLojaId(req)
+    });
+    res.json({ ok: true, ...resposta });
+  } catch (error) { respostaComprasRepasses(res, error); }
+});
+
+app.get('/api/admin/barbearia/compras/inteligente/autonomia', (req, res) => {
+  try {
+    const config = barbeariaComprasKytto.obterConfigAutonomia(legacyEmpresaId(req));
+    res.json({ ok: true, config });
+  } catch (error) { respostaComprasRepasses(res, error); }
+});
+
+app.post('/api/admin/barbearia/compras/inteligente/autonomia', (req, res) => {
+  if (!gestaoDaUnidade(req, res)) return;
+  try {
+    const config = barbeariaComprasKytto.salvarConfigAutonomia(legacyEmpresaId(req), req.body || {}, { usuario: usuarioReq(req) });
+    audit(req, 'CONFIG AUTONOMIA COMPRADOR ATUALIZADA', `nivel=${config.nivel} teto=${config.tetoSemanal}`);
+    res.json({ ok: true, config });
+  } catch (error) { respostaComprasRepasses(res, error); }
+});
+
 // ── Comissões: extrato, vales, repasses com recibo e pote dos planos ────────
 app.get('/api/admin/barbearia/comissoes/extrato', (req, res) => {
   if (!gestaoDaUnidade(req, res)) return;
