@@ -356,6 +356,36 @@ export function createVarejoAdminRouter({ db, escopoDaRequisicao, fuso = 'Americ
     return svc.confirmarReposicaoGondola(db, empresaId, req.params.id, usuario);
   }));
 
+
+  // ── Sprint 2 Enterprise: Coletor Mobile, Tributário, WMS, Avarias & Cockpit ──
+  router.post("/coletor/leitura", rota("catalog.write", async ({ req, empresaId, lojaId, usuario }) => {
+    return svc.registrarLeituraColetor(db, empresaId, { ...req.body, lojaId, operador: usuario?.nome || req.body.operador });
+  }));
+  router.get("/coletor/leituras", rota("catalog.read", async ({ req, empresaId }) => {
+    return svc.listarLeiturasColetor(db, empresaId, req.query);
+  }));
+  router.get("/tributario/matriz", rota("catalog.read", async ({ empresaId }) => {
+    return svc.listarMatrizTributaria(db, empresaId);
+  }));
+  router.post("/tributario/simular", rota("catalog.read", async ({ req, empresaId }) => {
+    return svc.simularTributacaoItem(db, empresaId, req.body);
+  }));
+  router.get("/wms/enderecos", rota("catalog.read", async ({ empresaId }) => {
+    return svc.listarEnderecamentosWms(db, empresaId);
+  }));
+  router.post("/wms/reabastecer", rota("catalog.write", async ({ req, empresaId, usuario }) => {
+    return svc.gerarOrdemReabastecimentoWms(db, empresaId, { ...req.body, operador: usuario?.nome || req.body.operador });
+  }));
+  router.post("/avarias/registrar", rota("catalog.write", async ({ req, empresaId, lojaId, usuario }) => {
+    return svc.registrarAvariaPerda(db, empresaId, { ...req.body, lojaId, responsavel: usuario?.nome || req.body.responsavel });
+  }));
+  router.get("/avarias/listar", rota("catalog.read", async ({ empresaId }) => {
+    return svc.listarAvariasPerdas(db, empresaId);
+  }));
+  router.get("/cockpit/kpis", rota("catalog.read", async ({ req, empresaId, lojaId }) => {
+    return svc.obterCockpitExecutivoSupermercado(db, empresaId, { lojaId });
+  }));
+
   // ── Download do Instalador Windows Kytto PDV ──
   router.get("/download-instalador-windows", (req, res) => {
     const path = require("path");

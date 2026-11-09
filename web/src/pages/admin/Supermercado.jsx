@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
+  Smartphone, Landmark, Calculator, Activity, PieChart, Scan,
   Store, ShoppingCart, Barcode, Tag, AlertTriangle, ArrowRightLeft,
   Truck, TrendingUp, RefreshCw, Plus, Trash2, Printer, CheckCircle2,
   Download, Search, DollarSign, Calendar, Layers, ShieldCheck,
@@ -305,6 +306,23 @@ export default function Supermercado() {
   const [modeloEtiqueta, setModeloEtiqueta] = useState("gondola");
   const [modalZpl, setModalZpl] = useState(null);
 
+  // ── SPRINT 2 ENTERPRISE: COLETOR, TRIBUTÁRIO, WMS & COCKPIT ──
+  const [leiturasColetor, setLeiturasColetor] = useState([]);
+  const [coletorInput, setColetorInput] = useState('');
+  const [coletorPrecoGondola, setColetorPrecoGondola] = useState('');
+  const [coletorOperacao, setColetorOperacao] = useState('AUDITORIA_PRECO');
+  const [coletorMsg, setColetorMsg] = useState(null);
+  const [filtroColetorOp, setFiltroColetorOp] = useState('TODAS');
+
+  const [matrizTributaria, setMatrizTributaria] = useState([]);
+  const [simuladorNcm, setSimuladorNcm] = useState('22030000');
+  const [simuladorPrecoVenda, setSimuladorPrecoVenda] = useState('8.50');
+  const [simuladorPrecoCusto, setSimuladorPrecoCusto] = useState('4.80');
+  const [simuladorResultado, setSimuladorResultado] = useState(null);
+
+  const [enderecosWms, setEnderecosWms] = useState([]);
+  const [cockpitDados, setCockpitDados] = useState(null);
+
   const [xmlNfeTexto, setXmlNfeTexto] = useState("");
   const [nfeProcessada, setNfeProcessada] = useState(null);
   const [carregandoNfe, setCarregandoNfe] = useState(false);
@@ -414,6 +432,22 @@ export default function Supermercado() {
       // 15. Sugestão Inteligente de Compras (GMD)
       const rSug = await api.get('/api/admin/supermercado/sugestao-compras').catch(() => null);
       if (rSug && Array.isArray(rSug.sugestoes)) setSugestoesCompras(rSug.sugestoes);
+
+      // 17. Coletor Mobile
+      const rCol = await api.get('/api/admin/supermercado/coletor/leituras').catch(() => null);
+      if (rCol && Array.isArray(rCol)) setLeiturasColetor(rCol);
+
+      // 18. Matriz Tributária
+      const rTrib = await api.get('/api/admin/supermercado/tributario/matriz').catch(() => null);
+      if (rTrib && Array.isArray(rTrib)) setMatrizTributaria(rTrib);
+
+      // 19. WMS de Endereçamento
+      const rWms = await api.get('/api/admin/supermercado/wms/enderecos').catch(() => null);
+      if (rWms && Array.isArray(rWms)) setEnderecosWms(rWms);
+
+      // 20. Cockpit Executivo ABRAS
+      const rCock = await api.get('/api/admin/supermercado/cockpit/kpis').catch(() => null);
+      if (rCock && rCock.kpis) setCockpitDados(rCock);
 
       // 16. Monitor de Ruptura em Tempo Real
       const rRup = await api.get('/api/admin/supermercado/rupturas/tempo-real').catch(() => null);
@@ -1361,6 +1395,18 @@ export default function Supermercado() {
         </button>
         <button className={`super-tab-btn ${abaAtiva === 'transferencias' ? 'active' : ''}`} onClick={() => setAbaAtiva('transferencias')}>
           <ArrowRightLeft size={16} /> Transferências & CD ({transferencias.length})
+        </button>
+        <button className={`super-tab-btn ${abaAtiva === 'coletor' ? 'active' : ''}`} onClick={() => setAbaAtiva('coletor')}>
+          <Smartphone size={16} /> Coletor Mobile ({leiturasColetor.length})
+        </button>
+        <button className={`super-tab-btn ${abaAtiva === 'tributario' ? 'active' : ''}`} onClick={() => setAbaAtiva('tributario')}>
+          <Landmark size={16} /> Matriz Tributária ({matrizTributaria.length})
+        </button>
+        <button className={`super-tab-btn ${abaAtiva === 'wms' ? 'active' : ''}`} onClick={() => setAbaAtiva('wms')}>
+          <Boxes size={16} /> WMS & Gôndola ({enderecosWms.length})
+        </button>
+        <button className={`super-tab-btn ${abaAtiva === 'cockpit' ? 'active' : ''}`} onClick={() => setAbaAtiva('cockpit')}>
+          <Activity size={16} /> Cockpit ABRAS
         </button>
         <button className={`super-tab-btn ${abaAtiva === 'margens' ? 'active' : ''}`} onClick={() => setAbaAtiva('margens')}>
           <TrendingUp size={16} /> Margens & Curva ABC
