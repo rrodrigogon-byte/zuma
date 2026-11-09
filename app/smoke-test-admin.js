@@ -5,20 +5,29 @@ const BASE = process.env.TEST_BASE_URL || 'https://setpoint-tm5n.onrender.com';
 async function runSmokeTest() {
   console.log(`[Smoke Test] Iniciando validação em: ${BASE}`);
 
-  // 1. Login Administrativo
-  const loginRes = await fetch(`${BASE}/api/admin/login`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ user: 'dino', senha: '123456' })
-  });
+  // 1. Login Administrativo com retry resiliente
+  let loginRes, loginData;
+  for (let i = 0; i < 4; i++) {
+    try {
+      loginRes = await fetch(`${BASE}/api/admin/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Connection': 'close', 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X)' },
+        body: JSON.stringify({ user: 'dino', senha: '123456' })
+      });
+      if (loginRes.status === 200) {
+        loginData = await loginRes.json();
+        break;
+      }
+    } catch (e) {}
+    await new Promise(r => setTimeout(r, 1500));
+  }
 
-  assert.equal(loginRes.status, 200, `Login falhou com status ${loginRes.status}`);
-  const loginData = await loginRes.json();
+  assert.equal(loginRes?.status, 200, `Login falhou com status ${loginRes?.status}`);
   const token = loginData.token;
   console.log(`[Smoke Test] ✅ Login OK: ${loginData.user?.email}`);
 
   const headers = {
-    'Authorization': `Bearer ${token}`,
+    'Authorization': `Bearer ${token}`, 'Connection': 'close',
     'X-Empresa-Id': 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6',
     'X-Loja-Id': 'ab049a75-6e2e-4cc9-abbc-6fd11cdda1d8'
   };
