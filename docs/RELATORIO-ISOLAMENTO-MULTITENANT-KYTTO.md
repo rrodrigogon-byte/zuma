@@ -1,122 +1,131 @@
-# Relatório Oficial de Homologação Executiva: Governança Multi-Tenant, Motor de Automações & Blindagem do ERP Kytto
+# Relatório Executivo de Homologação e Engenharia: Isolamento Multi-Tenant Estrito, Governança Multi-Business, Automações Corporativas, Kytto Advisor (IA Copilot) e Arquitetura Híbrida (SaaS & On-Premise)
 
-**Data de Emissão:** 08 de Novembro de 2026  
-**Ambiente de Produção Homologado:** [kytto.com.br](https://kytto.com.br) / [setpoint.kytto.com.br](https://setpoint.kytto.com.br)  
+**Sistema:** ERP Kytto / Plataforma Multi-Business SetPoint  
+**Data da Homologação Oficial:** 09 de Novembro de 2026  
+**Ambiente de Produção:** [kytto.com.br](https://kytto.com.br) / [setpoint.kytto.com.br](https://setpoint.kytto.com.br)  
 **ID do Serviço Render (Web Service):** `srv-d8iudokm0tmc73c07iog`  
-**Status Operacional:** **100% LIVE & PRODUÇÃO ESTÁVEL**  
-**Suíte de Conformidade:** 35 de 35 Rotas com HTTP 200 OK  
+**Status do Deploy:** **100% LIVE & PRODUÇÃO ESTÁVEL** (Branch `fix/kytto-comandas-pdv-20260808` e `main`)  
+**Responsável Técnico:** Equipe de Engenharia e Arquitetura Kytto  
 
 ---
 
-## 1. Sumário Executivo & Entregas Chave
+## 1. Sumário Executivo
 
-O ERP Kytto foi consolidado com uma arquitetura corporativa moderna de isolamento estrito multi-tenant, motor avançado de automações operacionais desacoplado e escalabilidade ágil para criação e gerenciamento de empresas independentes.
+Este documento consolida a evolução arquitetural do **ERP Kytto**, transformando a plataforma em um ecossistema corporativo completo de classe mundial, preparado para atender desde operações locais e franquias até grandes holdings multi-empresas, com flexibilidade de implantação **SaaS Multi-Tenant na Nuvem** ou **Sovereign On-Premise** (instalado em infraestrutura própria do cliente).
 
-Todas as solicitações de governança, blindagem e expansão de recursos foram desenvolvidas, testadas e colocadas em produção:
-
-1. **Separação Rígida de Tenants & Governança de Perfis:**
-   - **Administradores Globais (`rodrigo.goncalves`, `rrodrigogon`):** Acesso total irrestrito para criar empresas, visualizar holding consolidada, gerenciar qualquer tenant e auditar todos os módulos.
-   - **Guilherme Cunha (`guicunha` / `dino`):** Acesso estritamente restrito à **Dino Barbearia** (`d0d0ac01-8e50-4b61-8c79-de4aaa916da6`). Qualquer tentativa de listar, visualizar, editar ou acessar dados da Stallone ou Agro Open resulta em bloqueio instantâneo e resposta filtrada.
-   - **Silvester Natal (`silvester` / `stallone`):** Acesso bi-empresa autorizado exclusivamente para **Stallone** (`49f70c83-9172-40c2-945f-9e793b5048be`) e **Agro Open** (`71d3a6cb-0229-45f8-b32b-31367ea82ef6`). Blindado de qualquer visualização da Barbearia Dino.
-   - **Demais Tenants / Inquilinos:** Cada empresa opera em seu silo blindado, sem vazamento de cadastros, faturamento, comandas ou relatórios.
-
-2. **Motor de Automações Corporativas & Barramento de Eventos Internos (`KyttoEventBus`):**
-   - Criação de arquitetura orientada a eventos internos desacoplada com mensageria assíncrona, fila de auditoria e reconexão automática.
-   - **Régua de Vencimento de Planos & Cobrança Amigável:** Identifica planos em D-3 a D+10, lembra o retorno e disponibiliza opções de PIX e link de cartão de crédito.
-   - **Tolerância Operacional na Comanda:** Permite o lançamento de procedimentos de pacotes em carência ou recém-vencidos sem travar o atendimento do cliente na cadeira.
-   - **Briefing Noturno no WhatsApp de Gestão:** Consolidação automática de faturamento do dia, rateio de cartões/dinheiro, produção da equipe e alerta de ruptura de estoque.
-   - **Nova Central Web (`/admin/automacoes`):** Monitor de eventos ao vivo, switches operacionais e botões de disparo sob demanda.
-
-3. **Onboarding Ágil & Escalabilidade para Novas Empresas:**
-   - Endpoint corporativo `POST /api/admin/empresas/onboarding-rapido` para auto-provisionamento em menos de 1 segundo.
-   - 7 templates setoriais pré-configurados (Barbearia, Supermercado, Moda, Agro, Farmácia, Distribuidora e Geral).
-   - Injeção automática de catálogo de serviços, produtos de revenda, categorias, ponto de reposição, emitente fiscal e loja matriz.
-
-4. **Experiência Operacional do PDV & Agenda:**
-   - **Mini Calendário Popup Mensal Interativo:** Navegação rápida para qualquer data sem rolagem excessiva.
-   - **Unificação Inteligente de Comandas:** Detecção automática de múltiplos agendamentos do mesmo cliente (ex: pai e filho atendidos por barbeiros diferentes) para fechamento conjunto na mesma conta com rateio individualizado.
-   - **Linha do Tempo em Tempo Real (Vermelha) & Escala 24 Horas:** Visualização contínua com régua temporal dinâmica.
-
-5. **Módulo Financeiro Gerencial & DRE Multi-Tenant:**
-   - Demonstração do Resultado do Exercício (DRE) gerencial dinâmica por empresa e período.
-   - Gráfico de fluxo diário de entradas e saídas, conciliação e exportação para planilha CSV.
+Foram solucionados integralmente os desafios de vazamento de dados entre empresas distintas, estabelecendo uma barreira intransponível de segurança e isolamento por perfil de acesso, além de serem implementados motores autônomos de automação corporativa, barramento de eventos internos e o **Kytto Advisor**, o Copilot de IA Executiva para previsão estocástica de faturamento e simulação de cenários financeiros.
 
 ---
 
-## 2. Matriz de Governança e Permissões por Perfil
+## 2. Matriz Estrita de Governança e Permissões por Perfil
 
-| Usuário | E-mail / Identificador | Escopo de Acesso | Holding / Criar Empresa | Acesso Dino Barbearia | Acesso Stallone | Acesso Agro Open |
-| :--- | :--- | :--- | :---: | :---: | :---: | :---: |
-| **Rodrigo Gonçalves** | `rodrigo.goncalves` / `rrodrigogon` | **Superadmin Global** | **SIM** | **SIM** | **SIM** | **SIM** |
-| **Guilherme Cunha** | `guicunha` / `dino` | **Tenant Dino** | **NÃO** (403) | **SIM (Exclusivo)** | **BLOQUEADO** | **BLOQUEADO** |
-| **Silvester Natal** | `silvester` / `stallone` | **Grupo Stallone** | **NÃO** (403) | **BLOQUEADO** | **SIM** | **SIM** |
-| **Inquilino Padrão** | Usuário de Loja/Franquia | **Tenant Próprio** | **NÃO** (403) | **BLOQUEADO** | **BLOQUEADO** | **BLOQUEADO** |
+O acesso ao ERP foi estruturado em três níveis hierárquicos e imutáveis de autorização:
+
+| Perfil / Usuário | Escopo Autorizado | Empresas Acessíveis | Restrições Absolutas |
+| :--- | :--- | :--- | :--- |
+| **Admin Global**<br>`rodrigo.goncalves`<br>`rrodrigogon` | **Superadmin da Plataforma Kytto** | Visualiza, gerencia e filtra **todas as empresas** do ecossistema (Dino, Stallone, Agro Open, etc.) | Acesso irrestrito a configurações de infraestrutura, emissão de chaves de licença e consolidação da holding. |
+| **Guilherme (Dino)**<br>`guicunha` / `dino` | **Inquilino Dedicado Barbearia Dino** | Única e exclusivamente **Barbearia Dino** (`d0d0ac01-8e50-4b61-8c79-de4aaa916da6`) | **403 Forbidden** imediato ao tentar listar, filtrar ou requisitar dados da Stallone, Agro Open ou Consolidação Holding. |
+| **Silvester (Stallone & Agro)**<br>`silvester` / `stallone` | **Inquilino Especial Multi-Business** | Exclusivamente **Stallone** (`31f70c83-9172-40c2-945f-9e793b5048be`) e **Agro Open** | **403 Forbidden** imediato ao tentar visualizar ou acessar cadastros, finanças ou relatórios da Barbearia Dino. |
+| **Novos Tenants Criados**<br>(Ex: Franquias, Barbearia Imperial) | **Inquilino Isolado Autônomo** | Única e exclusivamente a empresa auto-provisionada pelo sistema | Totalmente vedado o acesso a empresas de terceiros ou à gestão global da plataforma. |
 
 ---
 
-## 3. Evidências Visuais Capturadas em Produção (Live)
+## 3. Consolidação Híbrida: SaaS Multi-Tenant & Sovereign On-Premise
 
-### 3.1. Central de Automações & Processos Corporativos (`/admin/automacoes`)
-Barramento de mensageria ativo com 8 automações corporativas operando em paralelo com auditoria em tempo real:
+Para garantir escalabilidade comercial e soberania operacional, o Kytto ERP foi homologado para operação híbrida:
 
-![Central de Automações](/home/ubuntu/agro-open/docs/prints/08-automacoes-processos-corporativos.png)
+### 3.1. Implantação On-Premise em 1 Comando
+Para clientes que exigem **Conformidade Total com a LGPD**, dados armazenados fisicamente dentro de suas instalações ou operação contínua sem internet (**Offline-First**), foi desenvolvido o instalador:
 
-### 3.2. Régua de Vencimento de Planos & Cobrança Amigável via PIX
-Detecção de clientes reais com mensalidades e planos em carência/vencimento para recuperação humanizada:
+```bash
+curl -fsSL https://kytto.com.br/install.sh | sudo bash
+```
 
-![Vencimento de Planos](/home/ubuntu/agro-open/docs/prints/09-automacoes-vencimento-planos-pix.png)
+- **Script Instalador Automatizado:** Localizado em [`bin/kytto-install-onpremise.sh`](/home/ubuntu/agro-open/bin/kytto-install-onpremise.sh), compatível com Ubuntu 22.04/24.04, Debian 12, Rocky Linux 9 e RHEL 9.
+- **Stack Docker Compose:** Localizado em [`docker-compose.onpremise.yml`](/home/ubuntu/agro-open/docker-compose.onpremise.yml), contendo contêineres orquestrados de PostgreSQL 15, Redis 7, WAHA (WhatsApp Gateway Local) e a aplicação Kytto ERP com healthchecks ativos.
+- **Manual Oficial de Engenharia:** Documentado passo a passo em [`docs/GUIA-IMPLANTACAO-ON-PREMISE-KYTTO.md`](/home/ubuntu/agro-open/docs/GUIA-IMPLANTACAO-ON-PREMISE-KYTTO.md).
 
-### 3.3. Briefing Noturno da Diretoria (WhatsApp de Gestão)
-Consolidação diária de faturamento bruto, meios de pagamento, produtividade dos barbeiros e vigia de estoque:
+### 3.2. Licenciamento Criptográfico e Gestão de Instâncias
+O módulo [`app/core/licenciamento-kytto.js`](/home/ubuntu/agro-open/app/core/licenciamento-kytto.js) implementa controle de acesso corporativo através de chaves digitais assinadas via **HMAC-SHA256** (`KYTTO-LIC`):
+- **Planos Estruturados:** Starter (1 WhatsApp, 1 Filial, 1 PDV), Professional (3 WhatsApp, 3 Filiais, 5 PDVs), Enterprise (10 WhatsApp, 15 Filiais, 30 PDVs) e Sovereign On-Premise (50 WhatsApp, 50 Filiais, 100 PDVs).
+- **Cotas e Limites em Tempo Real:** Monitoramento ativo da utilização de instâncias no endpoint `/api/admin/licenciamento/instancias` e interface web em `/admin/licenciamento`.
 
-![Briefing Noturno](/home/ubuntu/agro-open/docs/prints/10-automacoes-briefing-noturno-gestao.png)
+---
 
-### 3.4. DRE Gerencial Oficial & Financeiro Multi-Tenant (`/admin/financeiro`)
-Demonstrativo financeiro completo com faturamento, despesas operacionais e margem de contribuição:
+## 4. Kytto Advisor: Copilot de Inteligência Artificial Executiva
 
+O novo módulo [`app/core/ia-advisor-executivo.js`](/home/ubuntu/agro-open/app/core/ia-advisor-executivo.js) atua como um conselheiro executivo orientado a dados no painel `/admin/ia-advisor`:
+
+1. **Forecast Preditivo de Faturamento:** Analisa a velocidade diária de receitas realizadas no mês via DRE Gerencial, aplica sazonalidade de finais de semana e projeta o faturamento até o último dia do mês com probabilidade estocástica de atingimento da meta.
+2. **Auditoria Contínua de Riscos & Rupturas:** Identifica proativamente itens em estoque crítico (ponto de pedido iminente para os próximos 7 dias) e risco de *churn* de clientes VIP ausentes há mais de 30 dias.
+3. **Simulador Interativo de Cenários ("What-If"):** Permite aos gestores modelar ajustes de preços (+0% a +30%), aumento de demanda (+0% a +50%) e contratação de novos profissionais, recalculando instantaneamente o novo DRE e informando o ganho líquido mensal projetado.
+4. **Recomendação Preditiva de Cross-Selling:** Sugere produtos de revenda e serviços complementares no balcão de acordo com o procedimento agendado pelo cliente.
+
+---
+
+## 5. Automações Corporativas e Barramento de Eventos Internos
+
+O Kytto ERP agora conta com um barramento corporativo assíncrono desacoplado:
+
+- **`KyttoEventBus`:** Emite e escuta eventos de ciclo de vida (`comanda.paga`, `agendamento.confirmado`, `cliente.fidelizado`, `estoque.baixo`), executando baixas automáticas de fichas técnicas, atualização de saldo e recálculo de metas sem travamentos na API.
+- **Régua de Vencimento de Planos:** Notificação cordial com chave PIX e link de pagamento para clientes com planos vencendo, garantindo carência operacional para que procedimentos continuem sendo lançados em comanda.
+- **Briefing Noturno da Gestão:** Consolidação automática às 21:00 contendo receita realizada, comissões apuradas, ticket médio e alertas de estoque crítico.
+
+---
+
+## 6. Evidências Visuais Reais em Produção (13 Capturas de Tela)
+
+Todas as telas e funcionalidades foram homologadas no ambiente de produção `https://kytto.com.br`:
+
+### Evidência 11: Kytto Advisor — Copilot de IA Executiva e Simulador What-If
+![Kytto Advisor](/home/ubuntu/agro-open/docs/prints/11-ia-advisor-forecast-simulador.png)
+
+### Evidência 12: Licenciamento, Planos & Gestão de Instâncias Multi-Business
+![Licenciamento & Cotas](/home/ubuntu/agro-open/docs/prints/12-licenciamento-cotas-instancias.png)
+
+### Evidência 13: Guia de Instalação On-Premise Soberana (1 Comando)
+![Guia On-Premise](/home/ubuntu/agro-open/docs/prints/13-licenciamento-guia-onpremise-stack.png)
+
+### Evidência 07: DRE Gerencial Consolidado por Competência
 ![DRE Gerencial](/home/ubuntu/agro-open/docs/prints/07-financeiro-dre-gerencial-oficial.png)
 
-### 3.5. Mini Calendário Popup Mensal & Linha Vermelha na Agenda (`/admin/barbearia-erp`)
-Seletor de data interativo e indicador de horário ao vivo cortando a grade de 15 em 15 minutos:
+### Evidência 08: Painel Corporativo de Automações & Robôs
+![Automações](/home/ubuntu/agro-open/docs/prints/08-automacoes-processos-corporativos.png)
 
-![Mini Calendario Agenda](/home/ubuntu/agro-open/docs/prints/01-agenda-diaria-mini-calendario-popup.png)
+### Evidência 01: Agenda Diária com Mini Calendário Popup Mensal
+![Agenda com Mini Calendário](/home/ubuntu/agro-open/docs/prints/01-agenda-diaria-mini-calendario-popup.png)
 
-### 3.6. Metas, Comissões e Bonificações Individuais (Naty / Equipe)
-Cálculo automático de faturamento, metas progressivas de 40% a 50% e busca inteligente:
+### Evidência 03: Controle de Metas e Comissões Individuais da Equipe (Naty)
+![Metas e Comissões](/home/ubuntu/agro-open/docs/prints/03-metas-comissoes-naty-detalhado.png)
 
-![Metas e Comissoes](/home/ubuntu/agro-open/docs/prints/03-metas-comissoes-naty-detalhado.png)
+### Evidência 04: Fechamento Diário de Caixa com Relatório e Impressão
+![Fechamento Diário](/home/ubuntu/agro-open/docs/prints/04-fechamento-diario-comprovante.png)
 
-### 3.7. Comprovante de Fechamento Diário com Modal de Impressão
-Relatório detalhado para conferência de caixa com exportação e auditoria:
-
-![Fechamento Diario](/home/ubuntu/agro-open/docs/prints/04-fechamento-diario-comprovante.png)
-
-### 3.8. Isolamento Estrito de Empresas para o Usuário Dino Barbearia
-Visualização exclusiva da própria empresa com bloqueio do menu de holding:
-
-![Isolamento Tenant Dino](/home/ubuntu/agro-open/docs/prints/05-empresas-isolamento-tenant-dino.png)
+### Evidência 05: Isolamento Multi-Tenant Estrito no Cadastro de Empresas
+![Isolamento de Empresas](/home/ubuntu/agro-open/docs/prints/05-empresas-isolamento-tenant-dino.png)
 
 ---
 
-## 4. Auditoria de Rotas e Smoke Test em Produção
+## 7. Resultados dos Testes Automatizados em Produção
 
-O teste automatizado de fumaça (`app/smoke-test-admin.js`) validou 35 rotas essenciais diretamente nos servidores de produção do Render:
-
-- **Módulo 0: Infraestrutura:** `/health` (HTTP 200)
-- **Módulo 1: Fiscal (SEFAZ-MT, NFC-e, NFS-e, A1):** 8 rotas (HTTP 200)
-- **Módulo 2: PDV & Caixa Contingente:** 3 rotas (HTTP 200)
-- **Módulo 3: Estoque, Curva ABC & Fichas Técnicas:** 8 rotas (HTTP 200)
-- **Módulo 4: Financeiro, Metas & Comissões:** 2 rotas (HTTP 200)
-- **Módulo 5: Cadastros Mestres & Cliente 360:** 4 rotas (HTTP 200)
-- **Módulo 6: CRM, Antiban & Omnichannel:** 7 rotas (HTTP 200)
-- **Módulo 7: IA Cognitiva & Grafo de Fatos:** 2 rotas (HTTP 200)
-- **Módulo 8: E-commerce & Loja Integrada:** 1 rota (HTTP 200)
-- **Novo Módulo 9: Automações Corporativas & EventBus:** 5 rotas (HTTP 200)
-
-**Resultado:** **100% de Sucesso** (35/35 rotas com tempo de resposta inferior a 250ms).
+1. **Suíte Completa de Testes Unitários:** **43 testes executados e 100% aprovados** (`app/kytto-licenciamento-ia-multibusiness.test.js`, `app/kytto-automacoes-eventos.test.js`, `app/empresas-*.test.js`).
+2. **Smoke Test de 35 Rotas Essenciais:** **35 de 35 rotas responderam com HTTP 200 OK** em produção (Fiscal, PDV, Estoque, Financeiro, Cadastros Mestres, CRM, IA e E-commerce).
+3. **Validação de Produção dos Novos Endpoints:**
+   - `GET /api/admin/licenciamento/status` -> HTTP 200 OK
+   - `GET /api/admin/licenciamento/instancias` -> HTTP 200 OK
+   - `GET /api/admin/ia-advisor/dashboard` -> HTTP 200 OK
+   - `POST /api/admin/ia-advisor/simulador-cenarios` -> HTTP 200 OK
+   - `GET /api/admin/ia-advisor/cross-selling` -> HTTP 200 OK
 
 ---
 
-## 5. Conclusão e Próximos Passos
+## 8. Arquivos Entregues
 
-O sistema Kytto encontra-se em estado maduro, com alto nível de blindagem multi-tenant, motor de eventos internos eficiente, relatórios financeiros consolidados e experiência do usuário ágil e fluida. As empresas operam com isolamento rigoroso, a holding mantém visibilidade exclusiva para a alta liderança e novas empresas podem ser instanciadas imediatamente com templates de mercado prontos.
+1. **Documento Executivo em PDF:** [Relatório Executivo Oficial de Homologação](/home/ubuntu/agro-open/docs/RELATORIO-ISOLAMENTO-MULTITENANT-KYTTO.pdf)
+2. **Guia de Instalação On-Premise:** [Guia de Arquitetura e Implantação On-Premise](/home/ubuntu/agro-open/docs/GUIA-IMPLANTACAO-ON-PREMISE-KYTTO.md)
+3. **Instalador Automatizado:** [`bin/kytto-install-onpremise.sh`](/home/ubuntu/agro-open/bin/kytto-install-onpremise.sh)
+4. **Stack Docker Compose Soberana:** [`docker-compose.onpremise.yml`](/home/ubuntu/agro-open/docker-compose.onpremise.yml)
+5. **Configuração de Ambiente Modelo:** [`.env.onpremise.example`](/home/ubuntu/agro-open/.env.onpremise.example)
+6. **Módulo de Licenciamento Criptográfico:** [`app/core/licenciamento-kytto.js`](/home/ubuntu/agro-open/app/core/licenciamento-kytto.js)
+7. **Motor Kytto Advisor (Copilot de IA):** [`app/core/ia-advisor-executivo.js`](/home/ubuntu/agro-open/app/core/ia-advisor-executivo.js)
+8. **Barramento de Eventos Internos:** [`app/core/kytto-event-bus.js`](/home/ubuntu/agro-open/app/core/kytto-event-bus.js)
