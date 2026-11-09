@@ -342,6 +342,7 @@ export default function App() {
           <Route path="/admin/whatsapp-fila" element={<WhatsappFilaPage />} />
           <Route path="/admin/cerebro-ia"     element={<Layout><CerebroIA /></Layout>} />
           <Route path="/admin/automacoes"     element={<Layout><Automacoes /></Layout>} />
+          <Route path="/admin/barramento-eventos" element={<Layout><Automacoes defaultTab="eventos" /></Layout>} />
           <Route path="/admin/ia-advisor"     element={<Layout><IaAdvisor /></Layout>} />
           <Route path="/admin/licenciamento"  element={<Layout><LicenciamentoInstancias /></Layout>} />
           <Route path="/admin/quadras"        element={<Layout><Quadras /></Layout>} />

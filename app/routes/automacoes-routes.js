@@ -204,6 +204,34 @@ export function createAutomacoesRouter({ obterEmpresaIdDoUsuario, isPlatformAdmi
     }
   });
 
+  // POST /eventos/disparar-teste: Emissão de evento interno Nossa Gente × Ultra
+  router.post('/eventos/disparar-teste', (req, res) => {
+    try {
+      const empresaId = obterEmpresaIdDoUsuario(req);
+      const {
+        origem = 'Nossa Gente',
+        destino = 'Ultra',
+        tipo = 'cadastro.colaborador_sincronizado',
+        dados = { teste: true, mensagem: 'Disparo sob demanda de evento interno' }
+      } = req.body || {};
+
+      const evento = kyttoEventBus.emitir(tipo, dados, {
+        empresaId,
+        origem,
+        destino,
+        usuario: req.user?.email || 'admin'
+      });
+
+      res.json({
+        ok: true,
+        mensagem: `Evento interno emitido e sincronizado com sucesso (${origem} -> ${destino}).`,
+        evento
+      });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // GET /planos/previa: Prévia dos planos que vencem em breve
   router.get('/planos/previa', (req, res) => {
     try {

@@ -22,7 +22,8 @@ export default function QuickActionsMenu() {
     { icone: '🛒', titulo: 'Pedido de Compras (IA)', rota: '/admin/comprador-inteligente', desc: 'Calcular reposição automática' },
     { icone: '📦', titulo: 'Importar NF-e (XML)', rota: '/admin/compras?tab=compras', desc: 'Entrada de estoque fiscal' },
     { icone: '👤', titulo: 'Novo Cliente', rota: '/admin/barbearia-erp?area=relacionamento&tab=Clientes', desc: 'Adicionar à base do salão' },
-    { icone: '🔒', titulo: 'Fechar Caixa Diário', rota: '/admin/barbearia-erp?area=operacao&tab=Caixa+e+fechamento', desc: 'Conferência e fechamento cego' }
+    { icone: '🔒', titulo: 'Fechar Caixa Diário', rota: '/admin/barbearia-erp?area=operacao&tab=Caixa+e+fechamento', desc: 'Conferência e fechamento cego' },
+    { icone: '⚡', titulo: 'Testar Evento Interno', rota: '/admin/barramento-eventos', desc: 'Sincronizar Nossa Gente × Ultra' }
   ];
 
   const executar = (rota) => {
