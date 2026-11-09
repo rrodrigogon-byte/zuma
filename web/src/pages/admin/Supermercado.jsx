@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
+  Radio, Ticket, Vault,
   Award, BookOpen, FileSpreadsheet, FileCode,
   Smartphone, Landmark, Calculator, Activity, PieChart, Scan,
   Store, ShoppingCart, Barcode, Tag, AlertTriangle, ArrowRightLeft,
@@ -331,6 +332,13 @@ export default function Supermercado() {
   const [resultadoSelosCliente, setResultadoSelosCliente] = useState(null);
   const [dreSupermercado, setDreSupermercado] = useState(null);
   const [spedBlocoKDados, setSpedBlocoKDados] = useState(null);
+  const [eslList, setEslList] = useState([]);
+  const [rotisseriaList, setRotisseriaList] = useState([]);
+  const [valesList, setValesList] = useState([]);
+  const [malotesList, setMalotesList] = useState([]);
+  const [formNovoVale, setFormNovoVale] = useState({ cpf: '', nome: '', valor: '', motivo: 'Troca de Mercadoria' });
+  const [formNovoMalote, setFormNovoMalote] = useState({ numeroLacre: '', transportadora: 'BRINKS', cedulas: '', moedas: '' });
+  const [formNovoRotisseria, setFormNovoRotisseria] = useState({ item: '', valor: '', tipo: 'ROTISSERIA_QUENTE', min: 15 });
 
   const [xmlNfeTexto, setXmlNfeTexto] = useState("");
   const [nfeProcessada, setNfeProcessada] = useState(null);
@@ -466,6 +474,18 @@ export default function Supermercado() {
       const rDre = await api.get('/api/admin/supermercado/dre/mensal').catch(() => null);
       if (rDre) setDreSupermercado(rDre);
 
+      // 25. Etiquetas Eletrônicas ESL
+      const rEsl = await api.get('/api/admin/supermercado/esl/listar').catch(() => null);
+      if (rEsl && Array.isArray(rEsl)) setEslList(rEsl);
+      // 26. Rotisseria KDS
+      const rRoti = await api.get('/api/admin/supermercado/rotisseria/pedidos/listar').catch(() => null);
+      if (rRoti && Array.isArray(rRoti)) setRotisseriaList(rRoti);
+      // 27. Vales-Compras & Trocas
+      const rVales = await api.get('/api/admin/supermercado/vales-compra/listar').catch(() => null);
+      if (rVales && Array.isArray(rVales)) setValesList(rVales);
+      // 28. Tesouraria Central & Malotes
+      const rMalo = await api.get('/api/admin/supermercado/tesouraria/malotes/listar').catch(() => null);
+      if (rMalo && Array.isArray(rMalo)) setMalotesList(rMalo);
       // 24. SPED Bloco K
       const rSped = await api.get('/api/admin/supermercado/fiscal/sped-bloco-k').catch(() => null);
       if (rSped && rSped.sucesso) setSpedBlocoKDados(rSped);
@@ -1444,6 +1464,18 @@ export default function Supermercado() {
         </button>
         <button className={`super-tab-btn ${abaAtiva === 'sped' ? 'active' : ''}`} onClick={() => setAbaAtiva('sped')}>
           <FileCode size={16} /> SPED Fiscal Bloco K
+        </button>
+        <button className={`super-tab-btn ${abaAtiva === 'esl' ? 'active' : ''}`} onClick={() => setAbaAtiva('esl')}>
+          <Radio size={16} /> Etiquetas ESL ({eslList.length})
+        </button>
+        <button className={`super-tab-btn ${abaAtiva === 'rotisseria' ? 'active' : ''}`} onClick={() => setAbaAtiva('rotisseria')}>
+          <UtensilsCrossed size={16} /> Rotisseria KDS ({rotisseriaList.length})
+        </button>
+        <button className={`super-tab-btn ${abaAtiva === 'trocas' ? 'active' : ''}`} onClick={() => setAbaAtiva('trocas')}>
+          <Ticket size={16} /> Vales & Trocas ({valesList.length})
+        </button>
+        <button className={`super-tab-btn ${abaAtiva === 'tesouraria' ? 'active' : ''}`} onClick={() => setAbaAtiva('tesouraria')}>
+          <Vault size={16} /> Tesouraria / Cofre ({malotesList.length})
         </button>
         <button className={`super-tab-btn ${abaAtiva === 'margens' ? 'active' : ''}`} onClick={() => setAbaAtiva('margens')}>
           <TrendingUp size={16} /> Margens & Curva ABC

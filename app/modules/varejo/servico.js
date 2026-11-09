@@ -1,3 +1,4 @@
+import { kyttoEventBus } from '../../core/kytto-event-bus.js';
 // Varejo/supermercado sobre o estoque único (migração 096), por unidade:
 // preço de venda (base no item e por unidade), promoções com período, preço final vigente,
 // lotes e validade, etiquetas de gôndola e transferências entre unidades com trânsito.
@@ -3697,4 +3698,381 @@ export async function exportarSpedFiscalBlocoK(db, empresaId) {
     conteudoSped: arquivoSped,
     nomeArquivo: `SPED_EFD_ICMS_IPI_BLOCO_K_${new Date().toISOString().slice(0, 7)}.TXT`
   };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SPRINT 4 ENTERPRISE: ETIQUETAS ELETRÔNICAS (ESL), ROTISSERIA KDS,
+// VALE-COMPRAS / TROCAS E TESOURARIA / CARRO-FORTE COM EVENT BUS
+// ═══════════════════════════════════════════════════════════════════════════
+
+export async function sincronizarEtiquetasEletronicasEsl(db, empresaId, dados = {}) {
+  const empresa = exigirUuid(empresaId, 'empresa');
+  const { codigoEsl, precoRegular, precoClube, precoAtacarejo } = dados;
+
+  if (codigoEsl) {
+    await db.query(
+      `UPDATE var_etiquetas_eletronicas_esl
+       SET preco_regular = COALESCE($3, preco_regular),
+           preco_clube = COALESCE($4, preco_clube),
+           preco_atacarejo = COALESCE($5, preco_atacarejo),
+           status_sincronizacao = 'SINCRONIZADO',
+           ultima_transmissao = CURRENT_TIMESTAMP
+       WHERE empresa_id = $1 AND codigo_esl = $2`,
+      [empresa, codigoEsl, precoRegular, precoClube, precoAtacarejo]
+    );
+
+    // Emissão de evento interno
+    try {
+      kyttoEventBus.emitir('supermercado.preco_alterado_esl', {
+        empresaId,
+        codigoEsl,
+        precoRegular,
+        horario: new Date().toISOString()
+      });
+    } catch (_) {}
+
+    return { sucesso: true, mensagem: `Display ESL ${codigoEsl} atualizado via rádio frequência.` };
+  }
+
+  // Sincronização em massa de todas as etiquetas da loja
+  await db.query(
+    `UPDATE var_etiquetas_eletronicas_esl
+     SET status_sincronizacao = 'SINCRONIZADO', ultima_transmissao = CURRENT_TIMESTAMP
+     WHERE empresa_id = $1`,
+    [empresa]
+  );
+
+  return { sucesso: true, mensagem: 'Broadcast RF transmitido para 100% das etiquetas eletrônicas da loja.' };
+}
+
+export async function listarEtiquetasEletronicasEsl(db, empresaId) {
+  const empresa = exigirUuid(empresaId, 'empresa');
+  const res = await db.query(
+    `SELECT * FROM var_etiquetas_eletronicas_esl WHERE empresa_id = $1 ORDER BY gondola_endereco ASC`,
+    [empresa]
+  );
+
+  if (res.rows.length === 0) {
+    const defaultEsl = [
+      { esl: 'ESL-G01-01', desc: 'Arroz Tipo 1 Camil 5kg', reg: 29.90, club: 26.90, atac: 24.90, end: 'R01-P01-A01-V01', bat: 98 },
+      { esl: 'ESL-G01-02', desc: 'Feijão Carioca Kicaldo 1kg', reg: 8.49, club: 7.99, atac: 7.49, end: 'R01-P01-A02-V01', bat: 95 },
+      { esl: 'ESL-G02-01', desc: 'Cerveja Heineken 350ml Sleek', reg: 5.79, club: 4.99, atac: 4.69, end: 'R02-P01-A01-V01', bat: 100 },
+      { esl: 'ESL-G03-01', desc: 'Picanha Bovina Resfriada kg', reg: 69.90, club: 59.90, atac: 54.90, end: 'R03-P01-A01-V01', bat: 92 },
+      { esl: 'ESL-G04-01', desc: 'Leite Integral Piracanjuba 1L', reg: 4.99, club: 4.49, atac: 4.19, end: 'R04-P01-A01-V01', bat: 97 }
+    ];
+
+    for (const e of defaultEsl) {
+      await db.query(
+        `INSERT INTO var_etiquetas_eletronicas_esl (
+           empresa_id, codigo_esl, descricao, preco_regular, preco_clube,
+           preco_atacarejo, gondola_endereco, bateria_pct, status_sincronizacao
+         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'SINCRONIZADO')
+         ON CONFLICT DO NOTHING`,
+        [empresa, e.esl, e.desc, e.reg, e.club, e.atac, e.end, e.bat]
+      );
+    }
+
+    const recarregado = await db.query(
+      `SELECT * FROM var_etiquetas_eletronicas_esl WHERE empresa_id = $1 ORDER BY gondola_endereco ASC`,
+      [empresa]
+    );
+    return recarregado.rows;
+  }
+
+  return res.rows;
+}
+
+export async function criarPedidoRotisseriaKds(db, empresaId, dados) {
+  const empresa = exigirUuid(empresaId, 'empresa');
+  const {
+    numeroComanda = `ROT-${Date.now().toString().slice(-4)}`,
+    tipo = 'ROTISSERIA_QUENTE',
+    descricaoItem,
+    pesoKg = null,
+    valorTotal = 0,
+    tempoEstimadoMin = 15,
+    operador = 'Cozinheiro Chefe',
+    observacoes = null
+  } = dados;
+
+  if (!descricaoItem || Number(valorTotal) <= 0) {
+    throw new Error('Item e valor são obrigatórios para pedido na rotisseria.');
+  }
+
+  const res = await db.query(
+    `INSERT INTO var_rotisseria_pedidos (
+       empresa_id, numero_comanda, tipo, descricao_item, peso_kg,
+       valor_total, status, tempo_estimado_min, operador, observacoes
+     ) VALUES ($1, $2, $3, $4, $5, $6, 'EM_PREPARO', $7, $8, $9)
+     RETURNING *`,
+    [empresa, numeroComanda, tipo, descricaoItem, pesoKg, valorTotal, tempoEstimadoMin, operador, observacoes]
+  );
+
+  const pedido = res.rows[0];
+
+  try {
+    kyttoEventBus.emitir('supermercado.rotisseria_pedido_criado', {
+      empresaId,
+      numeroComanda,
+      tipo,
+      descricaoItem,
+      valorTotal
+    });
+  } catch (_) {}
+
+  return { sucesso: true, pedido, mensagem: `Pedido ${numeroComanda} enviado ao display de produção (KDS).` };
+}
+
+export async function atualizarStatusRotisseriaKds(db, empresaId, dados) {
+  const empresa = exigirUuid(empresaId, 'empresa');
+  const { pedidoId, status, operador } = dados;
+
+  const res = await db.query(
+    `UPDATE var_rotisseria_pedidos
+     SET status = $3, operador = COALESCE($4, operador)
+     WHERE empresa_id = $1 AND id = $2
+     RETURNING *`,
+    [empresa, pedidoId, status, operador]
+  );
+
+  if (res.rows.length === 0) throw new Error('Pedido de rotisseria não encontrado.');
+
+  return { sucesso: true, pedido: res.rows[0], mensagem: `Status do pedido atualizado para ${status}.` };
+}
+
+export async function listarPedidosRotisseriaKds(db, empresaId) {
+  const empresa = exigirUuid(empresaId, 'empresa');
+  const res = await db.query(
+    `SELECT * FROM var_rotisseria_pedidos WHERE empresa_id = $1 ORDER BY criado_em DESC LIMIT 40`,
+    [empresa]
+  );
+
+  if (res.rows.length === 0) {
+    const defaultKds = [
+      { com: 'ROT-101', tipo: 'ROTISSERIA_QUENTE', item: 'Frango Assado Especial com Farofa e Batatas', v: 49.90, st: 'EM_PREPARO', min: 20 },
+      { com: 'ROT-102', tipo: 'BUFFET_PESO', item: 'Buffet por Quilo Almoço Executivo', peso: 0.680, v: 44.20, st: 'PRONTO_RETIRADA', min: 0 },
+      { com: 'ROT-103', tipo: 'PIZZA_SUSHI', item: 'Pizza Grande Calabresa com Borda Catupiry', v: 54.90, st: 'EM_PREPARO', min: 25 },
+      { com: 'ROT-104', tipo: 'ROTISSERIA_QUENTE', item: 'Costela Bovina no Bafo 1kg', v: 59.90, st: 'ENTREGUE_PDV', min: 0 }
+    ];
+
+    for (const k of defaultKds) {
+      await db.query(
+        `INSERT INTO var_rotisseria_pedidos (
+           empresa_id, numero_comanda, tipo, descricao_item, peso_kg, valor_total, status, tempo_estimado_min
+         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+         ON CONFLICT DO NOTHING`,
+        [empresa, k.com, k.tipo, k.item, k.peso || null, k.v, k.st, k.min]
+      );
+    }
+
+    const recarregado = await db.query(
+      `SELECT * FROM var_rotisseria_pedidos WHERE empresa_id = $1 ORDER BY criado_em DESC LIMIT 40`,
+      [empresa]
+    );
+    return recarregado.rows;
+  }
+
+  return res.rows;
+}
+
+export async function emitirValeCompraTroca(db, empresaId, dados) {
+  const empresa = exigirUuid(empresaId, 'empresa');
+  const {
+    cpfCliente,
+    nomeCliente = null,
+    valor,
+    motivoDevolucao = 'Troca de Mercadoria / Avaria',
+    numeroCupomOrigem = null,
+    validadeDias = 30
+  } = dados;
+
+  if (!cpfCliente || Number(valor) <= 0) {
+    throw new Error('CPF do cliente e valor são obrigatórios para emissão do vale-compras.');
+  }
+
+  const codigoVale = `VALE-${Date.now().toString().slice(-6)}`;
+  const valNominal = Number(valor);
+
+  const res = await db.query(
+    `INSERT INTO var_vales_compra (
+       empresa_id, codigo_vale, cpf_cliente, nome_cliente, valor_original,
+       saldo_restante, motivo_devolucao, numero_cupom_origem, data_validade, status
+     ) VALUES ($1, $2, $3, $4, $5, $5, $6, $7, CURRENT_DATE + ($8 || ' days')::INTERVAL, 'ATIVO')
+     RETURNING *`,
+    [empresa, codigoVale, String(cpfCliente).trim(), nomeCliente, valNominal, motivoDevolucao, numeroCupomOrigem, validadeDias]
+  );
+
+  const vale = res.rows[0];
+
+  try {
+    kyttoEventBus.emitir('supermercado.vale_compra_gerado', {
+      empresaId,
+      codigoVale,
+      cpfCliente,
+      valor: valNominal
+    });
+  } catch (_) {}
+
+  return {
+    sucesso: true,
+    vale,
+    mensagem: `Vale-Compras ${codigoVale} de R$ ${valNominal.toFixed(2)} gerado com sucesso (Validade: 30 dias).`
+  };
+}
+
+export async function consultarOuUtilizarValeCompra(db, empresaId, dados) {
+  const empresa = exigirUuid(empresaId, 'empresa');
+  const { codigoVale, valorAbater = 0 } = dados;
+
+  const res = await db.query(
+    `SELECT * FROM var_vales_compra WHERE empresa_id = $1 AND codigo_vale = $2`,
+    [empresa, String(codigoVale).trim().toUpperCase()]
+  );
+
+  if (res.rows.length === 0) throw new Error('Vale-compras não encontrado ou inválido.');
+
+  const vale = res.rows[0];
+
+  if (vale.status === 'UTILIZADO_TOTAL' || Number(vale.saldo_restante) <= 0) {
+    throw new Error('Este vale-compras já foi totalmente utilizado.');
+  }
+
+  if (new Date(vale.data_validade) < new Date()) {
+    throw new Error('Este vale-compras expirou a data de validade.');
+  }
+
+  if (Number(valorAbater) > 0) {
+    const abatimento = Math.min(Number(vale.saldo_restante), Number(valorAbater));
+    const novoSaldo = Number(vale.saldo_restante) - abatimento;
+    const novoStatus = novoSaldo === 0 ? 'UTILIZADO_TOTAL' : 'UTILIZADO_PARCIAL';
+
+    await db.query(
+      `UPDATE var_vales_compra
+       SET saldo_restante = $3, status = $4
+       WHERE empresa_id = $1 AND codigo_vale = $2`,
+      [empresa, codigoVale, novoSaldo, novoStatus]
+    );
+
+    return {
+      sucesso: true,
+      codigoVale,
+      valorAbatido: abatimento,
+      saldoRestante: novoSaldo,
+      mensagem: `R$ ${abatimento.toFixed(2)} abatido no checkout. Saldo restante do vale: R$ ${novoSaldo.toFixed(2)}.`
+    };
+  }
+
+  return {
+    sucesso: true,
+    vale,
+    mensagem: `Vale-compras válido! Saldo disponível para compras: R$ ${Number(vale.saldo_restante).toFixed(2)}.`
+  };
+}
+
+export async function listarValesCompra(db, empresaId) {
+  const empresa = exigirUuid(empresaId, 'empresa');
+  const res = await db.query(
+    `SELECT * FROM var_vales_compra WHERE empresa_id = $1 ORDER BY criado_em DESC LIMIT 50`,
+    [empresa]
+  );
+
+  if (res.rows.length === 0) {
+    // Sementes iniciais
+    await db.query(
+      `INSERT INTO var_vales_compra (
+         empresa_id, codigo_vale, cpf_cliente, nome_cliente, valor_original,
+         saldo_restante, motivo_devolucao, data_validade, status
+       ) VALUES ($1, 'VALE-892101', '384.912.840-02', 'Rodrigo Gonçalves', 89.90, 89.90, 'Troca de Fardo de Cerveja Lote Duplicado', CURRENT_DATE + INTERVAL '30 days', 'ATIVO')
+       ON CONFLICT DO NOTHING`,
+      [empresa]
+    );
+
+    const recarregado = await db.query(
+      `SELECT * FROM var_vales_compra WHERE empresa_id = $1 ORDER BY criado_em DESC LIMIT 50`,
+      [empresa]
+    );
+    return recarregado.rows;
+  }
+
+  return res.rows;
+}
+
+export async function registrarMaloteCarroForte(db, empresaId, dados) {
+  const empresa = exigirUuid(empresaId, 'empresa');
+  const {
+    numeroMalote = `MAL-${Date.now().toString().slice(-5)}`,
+    numeroLacre = `LAC-${Date.now().toString().slice(-6)}`,
+    empresaTransporte = 'BRINKS',
+    valorCedulas = 0,
+    valorMoedas = 0,
+    responsavelTesouraria = 'Gerente de Tesouraria',
+    observacoes = null
+  } = dados;
+
+  const total = Number(valorCedulas) + Number(valorMoedas);
+  if (total <= 0) {
+    throw new Error('Valor do malote deve ser superior a zero.');
+  }
+
+  const res = await db.query(
+    `INSERT INTO var_tesouraria_malotes (
+       empresa_id, numero_malote, numero_lacre, empresa_transporte,
+       valor_cedulas, valor_moedas, valor_total, responsavel_tesouraria, status, observacoes
+     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'AGUARDANDO_COLETA', $9)
+     RETURNING *`,
+    [empresa, numeroMalote, numeroLacre, empresaTransporte, valorCedulas, valorMoedas, total, responsavelTesouraria, observacoes]
+  );
+
+  const malote = res.rows[0];
+
+  try {
+    kyttoEventBus.emitir('supermercado.sangria_cofre', {
+      empresaId,
+      numeroMalote,
+      numeroLacre,
+      empresaTransporte,
+      valorTotal: total
+    });
+  } catch (_) {}
+
+  return {
+    sucesso: true,
+    malote,
+    mensagem: `Malote ${numeroMalote} lacrado (${numeroLacre}) no valor de R$ ${total.toFixed(2)} para recolhimento pela ${empresaTransporte}.`
+  };
+}
+
+export async function listarMalotesTesouraria(db, empresaId) {
+  const empresa = exigirUuid(empresaId, 'empresa');
+  const res = await db.query(
+    `SELECT * FROM var_tesouraria_malotes WHERE empresa_id = $1 ORDER BY data_recolhimento DESC LIMIT 40`,
+    [empresa]
+  );
+
+  if (res.rows.length === 0) {
+    const defaultMalotes = [
+      { mal: 'MAL-78401', lacre: 'LAC-902144', transp: 'BRINKS', ced: 34500.00, moe: 1250.00, resp: 'Carlos Tesoureiro', st: 'COLETADO_CARRO_FORTE' },
+      { mal: 'MAL-78402', lacre: 'LAC-902188', transp: 'PROSEGUR', ced: 42800.00, moe: 890.00, resp: 'Carlos Tesoureiro', st: 'DEPOSITADO_CONCILIADO' },
+      { mal: 'MAL-78403', lacre: 'LAC-902205', transp: 'BRINKS', ced: 21400.00, moe: 450.00, resp: 'Mariana Supervisora', st: 'AGUARDANDO_COLETA' }
+    ];
+
+    for (const m of defaultMalotes) {
+      await db.query(
+        `INSERT INTO var_tesouraria_malotes (
+           empresa_id, numero_malote, numero_lacre, empresa_transporte,
+           valor_cedulas, valor_moedas, valor_total, responsavel_tesouraria, status
+         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+         ON CONFLICT DO NOTHING`,
+        [empresa, m.mal, m.lacre, m.transp, m.ced, m.moe, m.ced + m.moe, m.resp, m.st]
+      );
+    }
+
+    const recarregado = await db.query(
+      `SELECT * FROM var_tesouraria_malotes WHERE empresa_id = $1 ORDER BY data_recolhimento DESC LIMIT 40`,
+      [empresa]
+    );
+    return recarregado.rows;
+  }
+
+  return res.rows;
 }

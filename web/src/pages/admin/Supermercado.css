@@ -2657,3 +2657,118 @@
   overflow-x: auto;
   max-height: 380px;
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   SPRINT 4 ENTERPRISE: ESL, ROTISSERIA KDS, TROCAS & TESOURARIA
+   ═══════════════════════════════════════════════════════════════ */
+
+/* Etiquetas Eletrônicas ESL */
+.super-esl-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+  margin-top: 16px;
+}
+.super-esl-card {
+  background: #fff;
+  border: 2px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 16px;
+  position: relative;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+.super-esl-screen {
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 12px;
+  font-family: 'Liberation Sans', sans-serif;
+  margin-top: 10px;
+}
+.super-esl-price-big {
+  font-size: 28px;
+  font-weight: 900;
+  color: #0f172a;
+}
+.super-esl-battery {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #16a34a;
+}
+
+/* Rotisseria KDS */
+.super-kds-board {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-top: 16px;
+}
+.super-kds-col {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 16px;
+  min-height: 480px;
+}
+.super-kds-col-header {
+  font-weight: 800;
+  font-size: 14px;
+  margin-bottom: 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.super-kds-card {
+  background: #fff;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 14px;
+  margin-bottom: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+/* Vales-Compras & Trocas */
+.super-vale-ticket {
+  background: #fff;
+  border: 2px dashed #94a3b8;
+  border-radius: 10px;
+  padding: 18px;
+  max-width: 440px;
+  margin-top: 16px;
+}
+.super-vale-barcode {
+  font-family: monospace;
+  font-size: 20px;
+  letter-spacing: 4px;
+  font-weight: 900;
+  text-align: center;
+  padding: 8px;
+  background: #f1f5f9;
+  border-radius: 4px;
+  margin: 10px 0;
+}
+
+/* Tesouraria & Carro-Forte */
+.super-malote-card {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+.super-lacre-badge {
+  background: #fef2f2;
+  color: #dc2626;
+  border: 1px solid #fecaca;
+  font-weight: 800;
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-family: monospace;
+}

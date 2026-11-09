@@ -407,6 +407,39 @@ export function createVarejoAdminRouter({ db, escopoDaRequisicao, fuso = 'Americ
     return svc.exportarSpedFiscalBlocoK(db, empresaId);
   }));
 
+
+  // ── Sprint 4 Enterprise: ESL, Rotisseria KDS, Vales/Trocas & Tesouraria/Carro-Forte ──
+  router.post("/esl/sincronizar", rota("catalog.write", async ({ req, empresaId }) => {
+    return svc.sincronizarEtiquetasEletronicasEsl(db, empresaId, req.body);
+  }));
+  router.get("/esl/listar", rota("catalog.read", async ({ empresaId }) => {
+    return svc.listarEtiquetasEletronicasEsl(db, empresaId);
+  }));
+  router.post("/rotisseria/pedidos/criar", rota("catalog.write", async ({ req, empresaId, usuario }) => {
+    return svc.criarPedidoRotisseriaKds(db, empresaId, { ...req.body, operador: usuario?.nome || req.body.operador });
+  }));
+  router.post("/rotisseria/pedidos/status", rota("catalog.write", async ({ req, empresaId, usuario }) => {
+    return svc.atualizarStatusRotisseriaKds(db, empresaId, { ...req.body, operador: usuario?.nome || req.body.operador });
+  }));
+  router.get("/rotisseria/pedidos/listar", rota("catalog.read", async ({ empresaId }) => {
+    return svc.listarPedidosRotisseriaKds(db, empresaId);
+  }));
+  router.post("/vales-compra/emitir", rota("catalog.write", async ({ req, empresaId, lojaId }) => {
+    return svc.emitirValeCompraTroca(db, empresaId, { ...req.body, lojaId });
+  }));
+  router.post("/vales-compra/utilizar", rota("catalog.write", async ({ req, empresaId }) => {
+    return svc.consultarOuUtilizarValeCompra(db, empresaId, req.body);
+  }));
+  router.get("/vales-compra/listar", rota("catalog.read", async ({ empresaId }) => {
+    return svc.listarValesCompra(db, empresaId);
+  }));
+  router.post("/tesouraria/malotes/registrar", rota("catalog.write", async ({ req, empresaId, lojaId, usuario }) => {
+    return svc.registrarMaloteCarroForte(db, empresaId, { ...req.body, lojaId, responsavelTesouraria: usuario?.nome || req.body.responsavelTesouraria });
+  }));
+  router.get("/tesouraria/malotes/listar", rota("catalog.read", async ({ empresaId }) => {
+    return svc.listarMalotesTesouraria(db, empresaId);
+  }));
+
   // ── Download do Instalador Windows Kytto PDV ──
   router.get("/download-instalador-windows", (req, res) => {
     const path = require("path");

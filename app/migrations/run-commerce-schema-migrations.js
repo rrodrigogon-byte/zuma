@@ -96,6 +96,7 @@ const migrationFiles = [
   '109_supermercado_atacarejo_ressuprimento.sql',
   '110_supermercado_enterprise_wms_tributario_coletor.sql',
   '111_supermercado_fase3_pedidos_edi_fidelidade_dre.sql',
+  '112_supermercado_onda4_esl_rotisseria_trocas_tesouraria.sql',
 ];
 const advisoryLockKey = 825410732;
 

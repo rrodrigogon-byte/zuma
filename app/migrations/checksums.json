@@ -109,5 +109,6 @@
  "108_fiscal_ibs_cbs.sql": "af9c1c8e7cd41b81ab694277669a4442bf4bb28b751f89830700e271c4498e5b",
  "109_supermercado_atacarejo_ressuprimento.sql": "8a3d9aa8284ca4b848834444ef8f8f380c02d379673b9976df11f544710f1559",
  "110_supermercado_enterprise_wms_tributario_coletor.sql": "2718f8209202dc0e903d89f487db75bc5ad1335054ec260232ef7fdfabefad98",
- "111_supermercado_fase3_pedidos_edi_fidelidade_dre.sql": "e172716c01b46e9a98bc79c3c3a508c2f1bbab2cd9e19cd8c89d98bc148c5383"
+ "111_supermercado_fase3_pedidos_edi_fidelidade_dre.sql": "e172716c01b46e9a98bc79c3c3a508c2f1bbab2cd9e19cd8c89d98bc148c5383",
+ "112_supermercado_onda4_esl_rotisseria_trocas_tesouraria.sql": "52f7508ce8858c0bed6e86a1c84d23655512da79b25d70ad7139f55cb39e3218"
 }
