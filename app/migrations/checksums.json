@@ -106,5 +106,6 @@
  "105_account_password_recovery.sql": "5fdac486cdd86df7189ed3774ba68e685b166bbdac530329864ed8cf642bd9a7",
  "106_fiscal_producao.sql": "1ab53f4cf2ea1d3cf9a2bcb3d83eb62848dfcbcfdc8fcd9f01ea6e8ce1aff880",
  "107_fiscal_automatica.sql": "2336a658abdbda78e476d5ac0676a79dbd9fabccee95b6cfc55f93c6c678ea48",
- "108_fiscal_ibs_cbs.sql": "af9c1c8e7cd41b81ab694277669a4442bf4bb28b751f89830700e271c4498e5b"
+ "108_fiscal_ibs_cbs.sql": "af9c1c8e7cd41b81ab694277669a4442bf4bb28b751f89830700e271c4498e5b",
+ "109_supermercado_atacarejo_ressuprimento.sql": "8a3d9aa8284ca4b848834444ef8f8f380c02d379673b9976df11f544710f1559"
 }
