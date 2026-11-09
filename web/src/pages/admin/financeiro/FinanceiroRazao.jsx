@@ -5,7 +5,7 @@ import { useAuth } from '../../../lib/auth'
 import { lojasDaEmpresa } from '../../../lib/context-selection'
 import { Badge, Dialog, Table } from '../customer360/shared'
 import { downloadCsv, localDay, money, moneyK, shortDate, dateTime } from '../dino/format'
-import Conciliacao from './Conciliacao'
+import Conciliacao from './ConciliacaoBancariaTab'
 import '../customer360.css'
 import '../dino/dino-admin.css'
 
@@ -15,7 +15,7 @@ import '../dino/dino-admin.css'
 const BASE = '/api/admin/razao'
 const ABAS = [
   ['geral', 'Visão geral'], ['lancamentos', 'Lançamentos'], ['pagar', 'A pagar'], ['receber', 'A receber'],
-  ['dre', 'DRE'], ['fechamento', 'Fechamento do dia'], ['conciliacao', 'Conciliação bancária'], ['ajustes', 'Ajustes'],
+  ['dre', 'DRE'], ['fechamento', 'Fechamento do dia'], ['conciliacao', '🏦 Conciliação Bancária & TEF'], ['ajustes', 'Ajustes'],
 ]
 const STATUS = { pendente: { label: 'Pendente', tone: 'warning' }, pago: { label: 'Pago', tone: 'success' }, cancelado: { label: 'Cancelado', tone: 'muted' } }
 const ORIGENS = {
