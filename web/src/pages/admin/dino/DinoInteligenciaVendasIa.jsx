@@ -40,6 +40,8 @@ function mapearIcone(nome = '') {
 
 export default function DinoInteligenciaVendasIa() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const [empresasAutorizadas, setEmpresasAutorizadas] = useState(EMPRESAS_CANONICAS);
+  const [ehAdminPlataforma, setEhAdminPlataforma] = useState(false);
   const empresaParam = searchParams.get('empresa') || searchParams.get('empresaId') || '';
 
   const [dados, setDados] = useState(null);

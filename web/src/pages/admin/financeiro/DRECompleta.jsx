@@ -39,6 +39,8 @@ function fmtPct(val) {
 
 export default function DRECompleta() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const [empresasAutorizadas, setEmpresasAutorizadas] = useState(EMPRESAS_CANONICAS);
+  const [ehAdminPlataforma, setEhAdminPlataforma] = useState(false);
   const { toast } = useToast();
   const { user } = useAuth();
 
