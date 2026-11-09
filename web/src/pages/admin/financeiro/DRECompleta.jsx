@@ -6,13 +6,23 @@ import { useAuth } from '../../../lib/auth';
 import '../customer360.css';
 import '../dino/dino-admin.css';
 
-const EMPRESAS_DISPONIVEIS = [
-  { id: 'dino', uuid: 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6', nome: 'Barbearia Dino', icone: '💈', segmento: 'Barbearia Masculina Premium & Perfumaria', cnpj: '50.073.355/0001-89', ie: '14.229.191-9' },
-  { id: 'stallone', uuid: 'f8e7d6c5-b4a3-4928-8172-6354ab89cdef', nome: 'Stallone Nutre Sport', icone: '💪', segmento: 'Suplementos, Fitness & Saúde', cnpj: '51.982.341/0001-20', ie: 'Isento' },
-  { id: 'agroopen', uuid: 'a1b2c3d4-e5f6-4a5b-8c9d-0e1f2a3b4c5d', nome: 'Agro Open Insumos', icone: '🌱', segmento: 'Agronegócio, Pecuária & Insumos', cnpj: '43.084.070/0001-88', ie: '13.987.654-2' },
-  { id: 'supermercado', uuid: 'b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6e', nome: 'Supermercado Kytto', icone: '🛒', segmento: 'Alimentos, Bebidas & Atacarejo', cnpj: '48.123.456/0001-77', ie: '14.112.233-4' },
-  { id: 'varejo', uuid: 'c3d4e5f6-a7b8-4c9d-0e1f-2a3b4c5d6e7f', nome: 'Varejo & Moda Kytto', icone: '👗', segmento: 'Moda, Calçados & E-commerce', cnpj: '49.876.543/0001-11', ie: '14.556.677-8' },
+// Empresas canônicas de referência rápida caso a API ainda não tenha retornado
+const EMPRESAS_CANONICAS = [
+  { id: "d0d0ac01-8e50-4b61-8c79-de4aaa916da6", uuid: "d0d0ac01-8e50-4b61-8c79-de4aaa916da6", nome: "Barbearia Dino", icone: "💈", segmento: "Barbearia Masculina & Perfumaria", cnpj: "50.073.355/0001-89", ie: "14.229.191-9" },
+  { id: "31f70c83-9172-40c2-945f-9e793b5048be", uuid: "31f70c83-9172-40c2-945f-9e793b5048be", nome: "Stallone Nutre Sport", icone: "💪", segmento: "Suplementos, Fitness & Saúde", cnpj: "56.099.531/0001-38", ie: "Isento" },
+  { id: "2e041110-db20-4fd1-8278-12bd3dead008", uuid: "2e041110-db20-4fd1-8278-12bd3dead008", nome: "AGRO OPEN TTC", icone: "🌱", segmento: "Agronegócio & Esportes", cnpj: "43.084.070/0001-88", ie: "13.987.654-2" },
+  { id: "supermercado", uuid: "supermercado", nome: "Supermercado Kytto", icone: "🛒", segmento: "Alimentos, Bebidas & Atacarejo", cnpj: "48.123.456/0001-77", ie: "Isento" }
 ];
+
+function mapearIcone(nome = "") {
+  const n = String(nome).toLowerCase();
+  if (n.includes("dino")) return "💈";
+  if (n.includes("stallone")) return "💪";
+  if (n.includes("agro")) return "🌱";
+  if (n.includes("supermercado")) return "🛒";
+  if (n.includes("varejo") || n.includes("moda")) return "👗";
+  return "🏢";
+}
 
 function fmtR(val) {
   const n = Number(val || 0);
@@ -44,6 +54,66 @@ export default function DRECompleta() {
   const [dreAnual, setDreAnual] = useState(null);
   const [carregando, setCarregando] = useState(true);
   const [exportando, setExportando] = useState(false);
+  // Carrega empresas autorizadas estritamente da API
+  useEffect(() => {
+    let ativo = true;
+    (async () => {
+      try {
+        const res = await api.get('/api/admin/empresas');
+        if (!ativo) return;
+        const bruta = res?.empresas || res || [];
+        const ehAdmin = Boolean(res?.ehAdminPlataforma);
+        setEhAdminPlataforma(ehAdmin);
+
+        const lista = (Array.isArray(bruta) ? bruta : []).filter(e => {
+          const nome = String(e.nome || '').toLowerCase();
+          const cnpj = String(e.cnpj || '').replace(/\D/g, '');
+          return !nome.includes('imperial') && !nome.includes('homologação alterada') && cnpj !== '98765432000199';
+        }).map(e => ({
+          id: e.id,
+          uuid: e.id,
+          nome: e.nome || e.nomeFantasia || e.razaoSocial,
+          icone: mapearIcone(e.nome),
+          segmento: e.tipoNegocio || e.segmento || 'Operação Comercial',
+          cnpj: e.cnpj || '',
+          ie: e.inscricaoEstadual || 'Isento'
+        }));
+
+        if (lista.length > 0) {
+          setEmpresasAutorizadas(lista);
+          // Sincroniza se a empresa ativa não for das autorizadas
+          setEmpresaAtiva(prev => {
+            const achou = lista.find(item => item.id === prev.id || (item.cnpj && prev.cnpj && item.cnpj.replace(/\D/g, '') === prev.cnpj.replace(/\D/g, '')));
+            return achou || lista[0];
+          });
+        }
+      } catch (err) {
+        console.warn('Erro ao buscar empresas para DRE:', err);
+      }
+    })();
+
+    // Escutar evento de troca global de empresa vinda da topbar
+    const onEmpresaAlterada = (ev) => {
+      const nova = ev.detail;
+      if (nova) {
+        setEmpresaAtiva({
+          id: nova.id,
+          uuid: nova.id,
+          nome: nova.nome || nova.nomeFantasia || nova.razaoSocial,
+          icone: mapearIcone(nova.nome),
+          segmento: nova.tipoNegocio || nova.segmento || 'Operação Comercial',
+          cnpj: nova.cnpj || '',
+          ie: nova.inscricaoEstadual || 'Isento'
+        });
+      }
+    };
+    window.addEventListener('empresa_alterada', onEmpresaAlterada);
+
+    return () => {
+      ativo = false;
+      window.removeEventListener('empresa_alterada', onEmpresaAlterada);
+    };
+  }, []);
 
   // Carrega DRE estruturada do mês/período
   const carregarDre = useCallback(async () => {
@@ -91,6 +161,12 @@ export default function DRECompleta() {
 
   const trocarEmpresa = (emp) => {
     setEmpresaAtiva(emp);
+    try {
+      localStorage.setItem('empresa_ativa', JSON.stringify(emp));
+      localStorage.setItem('sp_empresa_ativa', JSON.stringify(emp));
+      localStorage.setItem('empresaAtivaId', emp.id);
+      window.dispatchEvent(new CustomEvent('empresa_alterada', { detail: emp }));
+    } catch {}
     setSearchParams({ empresa: emp.id, mes: mesSelecionado, regime });
   };
 
@@ -188,36 +264,60 @@ export default function DRECompleta() {
           </div>
         </div>
 
-        {/* Seletor Multi-Empresa */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', paddingTop: 10, borderTop: '1px solid var(--line)' }}>
+        {/* Seletor Multi-Empresa com Blindagem Tenant */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', paddingTop: 10, borderTop: '1px solid var(--line)' }}>
           <span style={{ fontSize: 12, fontWeight: 800, color: 'var(--muted)', textTransform: 'uppercase' }}>
-            Empresa Ativa:
+            {ehAdminPlataforma && empresasAutorizadas.length > 1 ? 'Empresa Ativa:' : 'Empresa Vinculada:'}
           </span>
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            {EMPRESAS_DISPONIVEIS.map(emp => (
-              <button
-                key={emp.id}
-                onClick={() => trocarEmpresa(emp)}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  padding: '6px 12px',
-                  borderRadius: 8,
-                  border: `1.5px solid ${empresaAtiva.id === emp.id ? '#2563eb' : 'var(--line)'}`,
-                  background: empresaAtiva.id === emp.id ? 'rgba(37,99,235,0.08)' : 'var(--card)',
-                  color: empresaAtiva.id === emp.id ? '#2563eb' : 'var(--fg)',
-                  fontWeight: empresaAtiva.id === emp.id ? 800 : 600,
-                  fontSize: 12,
-                  cursor: 'pointer',
-                  transition: 'all 0.15s ease'
-                }}
-              >
-                <span>{emp.icone}</span>
-                <span>{emp.nome}</span>
-              </button>
-            ))}
-          </div>
+          {ehAdminPlataforma && empresasAutorizadas.length > 1 ? (
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {empresasAutorizadas.map(emp => (
+                <button
+                  key={emp.id}
+                  onClick={() => trocarEmpresa(emp)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    padding: '6px 12px',
+                    borderRadius: 8,
+                    border: `1.5px solid ${empresaAtiva.id === emp.id ? '#2563eb' : 'var(--line)'}`,
+                    background: empresaAtiva.id === emp.id ? 'rgba(37,99,235,0.08)' : 'var(--card)',
+                    color: empresaAtiva.id === emp.id ? '#2563eb' : 'var(--fg)',
+                    fontWeight: empresaAtiva.id === emp.id ? 800 : 600,
+                    fontSize: 12,
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  <span>{emp.icone}</span>
+                  <span>{emp.nome}</span>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 8,
+              padding: '6px 14px',
+              borderRadius: 8,
+              background: 'rgba(37,99,235,0.08)',
+              border: '1px solid rgba(37,99,235,0.25)',
+              color: '#2563eb',
+              fontWeight: 800,
+              fontSize: 13
+            }}>
+              <span>{empresaAtiva?.icone || '🏢'}</span>
+              <span>{empresaAtiva?.nome}</span>
+              {empresaAtiva?.cnpj && (
+                <span style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 600 }}>• CNPJ: {empresaAtiva.cnpj}</span>
+              )}
+              {empresaAtiva?.ie && empresaAtiva.ie !== 'Isento' && (
+                <span style={{ fontSize: 11, color: '#16a34a', fontWeight: 700 }}>• IE: {empresaAtiva.ie} (SEFAZ-MT)</span>
+              )}
+            </div>
+          )}
         </div>
       </div>
 

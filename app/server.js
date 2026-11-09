@@ -380,58 +380,85 @@ const EMPRESA_AGRO_OPEN_ID = '2e041110-db20-4fd1-8278-12bd3dead008';
 
 const isAdminGlobal = (user) => {
   if (!user) return false;
-  const em = norm(user.email || user.username || user.login || user.id || '');
-  return em.includes('rodrigo.goncalves') || em.includes('rrodrigogon') || em === norm(process.env.ADMIN_USER || 'admin');
+  const em = norm(
+    (user.email || "") + " " +
+    (user.emailAlternativo || "") + " " +
+    (user.username || "") + " " +
+    (user.login || "") + " " +
+    (user.nome || "") + " " +
+    (user.id || "")
+  );
+  return em.includes("rodrigo.goncalves") ||
+         em.includes("rrodrigogon") ||
+         em.includes("rodrigo goncalves") ||
+         em.includes("rodrigo ribeiro") ||
+         em === norm(process.env.ADMIN_USER || "admin");
 };
-
 const isSilvesterUser = (user) => {
   if (!user) return false;
   if (isAdminGlobal(user)) return false;
-  const em = (
-    norm(user.email) + ' ' +
-    norm(user.emailAlternativo) + ' ' +
-    norm(user.username) + ' ' +
-    norm(user.login) + ' ' +
-    norm(user.nome) + ' ' +
-    norm(user.id)
+  const em = norm(
+    (user.email || "") + " " +
+    (user.emailAlternativo || "") + " " +
+    (user.username || "") + " " +
+    (user.login || "") + " " +
+    (user.nome || "") + " " +
+    (user.id || "")
   );
-  return em.includes('silvester') || em.includes('silvestre') || em.includes('stallone');
+  return em.includes("silvester") || em.includes("silvestre") || em.includes("stallone");
 };
-
 const isGuilhermeUser = (user) => {
   if (!user) return false;
   if (isAdminGlobal(user)) return false;
-  const em = (
-    norm(user.email) + ' ' +
-    norm(user.emailAlternativo) + ' ' +
-    norm(user.username) + ' ' +
-    norm(user.login) + ' ' +
-    norm(user.nome) + ' ' +
-    norm(user.id)
+  const em = norm(
+    (user.email || "") + " " +
+    (user.emailAlternativo || "") + " " +
+    (user.username || "") + " " +
+    (user.login || "") + " " +
+    (user.nome || "") + " " +
+    (user.id || "")
   );
-  return em.includes('guilherme') || em.includes('guicunha') || em.includes('dino') || em.includes('gui');
+  return em.includes("guilherme") || em.includes("guicunha") || em.includes("dino") || em.includes("gui");
 };
-
+const isAgroOpenUser = (user) => {
+  if (!user) return false;
+  if (isAdminGlobal(user)) return false;
+  const em = norm(
+    (user.email || "") + " " +
+    (user.emailAlternativo || "") + " " +
+    (user.username || "") + " " +
+    (user.login || "") + " " +
+    (user.nome || "") + " " +
+    (user.id || "")
+  );
+  return em.includes("agroopen") || em.includes("caua") || em.includes("rafa") || em.includes("agro open");
+};
 const obterEmpresasAutorizadasDoUsuario = (user) => {
   if (!user) return [];
   if (isAdminGlobal(user)) {
-    return null; // Admin Global: sem restrição, vê e filtra todas as empresas
-  }
-  if (isSilvesterUser(user)) {
-    // Silvester: APENAS Stallone e Agro Open
-    return [
-      EMPRESA_STALLONE_ID,
-      EMPRESA_AGRO_OPEN_ID,
-      'eba1c88c-d8c1-4b5a-bf65-90275d97dc9e',
-      'e0e0ac01-8e50-4b61-8c79-de4aaa916da7',
-      'emp-agro-open'
-    ];
+    return null; // Admin Global (Rodrigo Gonçalves): sem restrição, vê e filtra todas as empresas legítimas
   }
   if (isGuilhermeUser(user)) {
-    // Guilherme: APENAS Barbearia Dino
+    // Guilherme: APENAS Barbearia Dino (não vê Stallone nem Agro Open)
     return [
       EMPRESA_DINO_ID,
-      'dino'
+      "dino"
+    ];
+  }
+  if (isSilvesterUser(user)) {
+    // Silvester: APENAS Stallone Nutre Sport (não vê Barbearia Dino)
+    return [
+      EMPRESA_STALLONE_ID,
+      "eba1c88c-d8c1-4b5a-bf65-90275d97dc9e",
+      "stallone"
+    ];
+  }
+  if (isAgroOpenUser(user)) {
+    // Agro Open: APENAS AGRO OPEN TTC (não vê Dino nem Stallone)
+    return [
+      EMPRESA_AGRO_OPEN_ID,
+      "emp-agro-open",
+      "agroopen"
     ];
   }
   if (user?.empresaId) {
@@ -439,7 +466,6 @@ const obterEmpresasAutorizadasDoUsuario = (user) => {
   }
   return [];
 };
-
 const isPlatformAdminUser = user => Boolean(user?.pgOperational !== true && isAdminGlobal(user));
 const isMainAdminUser = user => Boolean(user?.pgOperational !== true && isAdminGlobal(user));
 const isReservedEmail = email => norm(email).includes('rodrigo.goncalves') || norm(email).includes('rrodrigogon') || norm(email) === norm(process.env.ADMIN_USER || 'admin');
@@ -11151,3 +11177,16 @@ for(const sig of ['SIGTERM','SIGINT']){
 
 // A cópia local diária (com retenção de 7 dias) e a cópia externa ficam em
 // protecaoDados.iniciar(), chamado no boot.
+
+
+// Purga empresas indevidas/de testes no startup do PostgreSQL
+setTimeout(async () => {
+  try {
+    if (typeof clubeDb?.query === 'function') {
+      await clubeDb.query("DELETE FROM lojas WHERE empresa_id IN (SELECT id FROM empresas WHERE nome ILIKE '%imperial%' OR cnpj = '98765432000199' OR nome ILIKE '%homologação alterada%'); DELETE FROM empresas WHERE nome ILIKE '%imperial%' OR cnpj = '98765432000199' OR nome ILIKE '%homologação alterada%';");
+      console.log('[empresas] Purga automática de empresas indevidas executada com sucesso.');
+    }
+  } catch (err) {
+    console.warn('[empresas] Aviso na purga de empresas indevidas:', err.message);
+  }
+}, 5000);

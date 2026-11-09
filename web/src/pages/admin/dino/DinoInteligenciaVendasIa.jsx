@@ -22,13 +22,21 @@ const COR = {
   muted: 'var(--muted, #64748b)',
 };
 
-const EMPRESAS_DISPONIVEIS = [
+const EMPRESAS_CANONICAS = [
   { id: 'dino', nome: 'Barbearia Dino', icone: '💈', segmento: 'Barbearia & Salão Masculino' },
   { id: 'stallone', nome: 'Stallone Nutre Sport', icone: '💪', segmento: 'Suplementos, Fitness & Saúde' },
   { id: 'agroopen', nome: 'Agro Open Insumos', icone: '🌱', segmento: 'Agronegócio, Pecuária & Insumos' },
   { id: 'supermercado', nome: 'Supermercado Kytto', icone: '🛒', segmento: 'Alimentos, Bebidas & Atacarejo' },
-  { id: 'varejo', nome: 'Varejo & Moda Kytto', icone: '🏷️', segmento: 'Moda, Calçados & E-commerce' },
 ];
+
+function mapearIcone(nome = '') {
+  const n = String(nome).toLowerCase();
+  if (n.includes('dino')) return '💈';
+  if (n.includes('stallone')) return '💪';
+  if (n.includes('agro')) return '🌱';
+  if (n.includes('supermercado')) return '🛒';
+  return '🏢';
+}
 
 export default function DinoInteligenciaVendasIa() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -58,6 +66,66 @@ export default function DinoInteligenciaVendasIa() {
   // Formulário de Configurações Comerciais & Políticas Meta
   const [formConfig, setFormConfig] = useState(null);
   const [salvandoConfig, setSalvandoConfig] = useState(false);
+  // Carrega lista autorizada de empresas
+  useEffect(() => {
+    let ativo = true;
+    (async () => {
+      try {
+        const res = await api.get('/api/admin/empresas');
+        if (!ativo) return;
+        const bruta = res?.empresas || res || [];
+        const ehAdmin = Boolean(res?.ehAdminPlataforma);
+        setEhAdminPlataforma(ehAdmin);
+
+        const lista = (Array.isArray(bruta) ? bruta : []).filter(e => {
+          const nome = String(e.nome || '').toLowerCase();
+          const cnpj = String(e.cnpj || '').replace(/\D/g, '');
+          return !nome.includes('imperial') && !nome.includes('homologação alterada') && cnpj !== '98765432000199';
+        }).map(e => {
+          const n = String(e.nome || '').toLowerCase();
+          const empSlug = n.includes('stallone') ? 'stallone' :
+                          n.includes('agro') ? 'agroopen' :
+                          n.includes('supermercado') ? 'supermercado' : 'dino';
+          return {
+            id: empSlug,
+            uuid: e.id,
+            nome: e.nome || e.nomeFantasia || e.razaoSocial,
+            icone: mapearIcone(e.nome),
+            segmento: e.tipoNegocio || e.segmento || 'Operação Comercial',
+            cnpj: e.cnpj || ''
+          };
+        });
+
+        if (lista.length > 0) {
+          setEmpresasAutorizadas(lista);
+          setEmpresaAtivaId(prev => {
+            const achou = lista.find(item => item.id === prev);
+            return achou ? achou.id : lista[0].id;
+          });
+        }
+      } catch (err) {
+        console.warn('Erro ao buscar empresas autorizadas:', err);
+      }
+    })();
+
+    const onEmpresaAlterada = (ev) => {
+      const nova = ev.detail;
+      if (nova) {
+        const n = String(nova.nome || '').toLowerCase();
+        const empSlug = n.includes('stallone') ? 'stallone' :
+                        n.includes('agro') ? 'agroopen' :
+                        n.includes('supermercado') ? 'supermercado' : 'dino';
+        setEmpresaAtivaId(empSlug);
+        carregarInteligencia(empSlug);
+      }
+    };
+    window.addEventListener('empresa_alterada', onEmpresaAlterada);
+
+    return () => {
+      ativo = false;
+      window.removeEventListener('empresa_alterada', onEmpresaAlterada);
+    };
+  }, [carregarInteligencia]);
 
   const carregarInteligencia = useCallback(async (empId) => {
     setCarregando(true);
@@ -257,35 +325,53 @@ export default function DinoInteligenciaVendasIa() {
         border: `1px solid ${COR.line}`,
         boxShadow: '0 2px 6px rgba(0,0,0,0.03)'
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           <span style={{ fontSize: 13, fontWeight: 800, color: COR.muted, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-            Empresa Selecionada:
+            {ehAdminPlataforma && empresasAutorizadas.length > 1 ? 'Empresa Ativa:' : 'Empresa Vinculada:'}
           </span>
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            {EMPRESAS_DISPONIVEIS.map(emp => (
-              <button
-                key={emp.id}
-                onClick={() => trocarEmpresa(emp.id)}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  padding: '7px 14px',
-                  borderRadius: 10,
-                  border: `1.5px solid ${empresaAtivaId === emp.id ? COR.azul : COR.line}`,
-                  background: empresaAtivaId === emp.id ? COR.azulClaro : '#fff',
-                  color: empresaAtivaId === emp.id ? '#1e40af' : COR.fg,
-                  fontWeight: empresaAtivaId === emp.id ? 800 : 600,
-                  fontSize: 12,
-                  cursor: 'pointer',
-                  transition: 'all 0.15s ease'
-                }}
-              >
-                <span>{emp.icone}</span>
-                <span>{emp.nome}</span>
-              </button>
-            ))}
-          </div>
+          {ehAdminPlataforma && empresasAutorizadas.length > 1 ? (
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {empresasAutorizadas.map(emp => (
+                <button
+                  key={emp.id}
+                  onClick={() => trocarEmpresa(emp.id)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    padding: '7px 14px',
+                    borderRadius: 10,
+                    border: `1.5px solid ${empresaAtivaId === emp.id ? COR.azul : COR.line}`,
+                    background: empresaAtivaId === emp.id ? COR.azulClaro : '#fff',
+                    color: empresaAtivaId === emp.id ? '#1e40af' : COR.fg,
+                    fontWeight: empresaAtivaId === emp.id ? 800 : 600,
+                    fontSize: 12,
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  <span>{emp.icone}</span>
+                  <span>{emp.nome}</span>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 8,
+              padding: '7px 16px',
+              borderRadius: 10,
+              background: COR.azulClaro,
+              border: `1.5px solid ${COR.azul}`,
+              color: '#1e40af',
+              fontWeight: 800,
+              fontSize: 13
+            }}>
+              <span>{empresasAutorizadas.find(e => e.id === empresaAtivaId)?.icone || '🏢'}</span>
+              <span>{empresasAutorizadas.find(e => e.id === empresaAtivaId)?.nome || 'Empresa Vinculada'}</span>
+            </div>
+          )}
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>

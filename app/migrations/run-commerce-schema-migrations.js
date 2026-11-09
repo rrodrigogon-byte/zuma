@@ -97,6 +97,7 @@ const migrationFiles = [
   '110_supermercado_enterprise_wms_tributario_coletor.sql',
   '111_supermercado_fase3_pedidos_edi_fidelidade_dre.sql',
   '112_supermercado_onda4_esl_rotisseria_trocas_tesouraria.sql',
+  '114_remover_empresa_indevida_barbearia_imperial.sql',
 ];
 const advisoryLockKey = 825410732;
 

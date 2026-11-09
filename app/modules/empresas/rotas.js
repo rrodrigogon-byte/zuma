@@ -46,13 +46,13 @@ export function createEmpresasAdminRouter({ db, isPlatformAdmin = () => false, o
       if (em.includes('silvester') || em.includes('silvestre') || em.includes('stallone')) {
         autorizadas = [
           '31f70c83-9172-40c2-945f-9e793b5048be',
-          '2e041110-db20-4fd1-8278-12bd3dead008',
           'eba1c88c-d8c1-4b5a-bf65-90275d97dc9e',
-          'e0e0ac01-8e50-4b61-8c79-de4aaa916da7',
-          'emp-agro-open'
+          'stallone'
         ];
       } else if (em.includes('guilherme') || em.includes('guicunha') || em.includes('dino') || em === 'gui') {
         autorizadas = ['d0d0ac01-8e50-4b61-8c79-de4aaa916da6', 'dino'];
+      } else if (em.includes('agroopen') || em.includes('caua') || em.includes('rafa') || em.includes('agro open')) {
+        autorizadas = ['2e041110-db20-4fd1-8278-12bd3dead008', 'emp-agro-open', 'agroopen'];
       } else {
         const empId = obterEmpresaIdDoUsuario(req) || req.user?.empresaId || null;
         autorizadas = empId ? [empId] : [];

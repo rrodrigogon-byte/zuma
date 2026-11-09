@@ -40,9 +40,9 @@ const EMPRESAS_CANONICAS_PADRAO = [
     nome: 'Barbearia Dino',
     nomeFantasia: 'Barbearia Dino',
     razaoSocial: '50.073.355 DINOILSON PEREIRA DA SILVA',
-    cnpj: '50.073.355/0002-60',
-    cnpjNormalizado: '50073355000260',
-    inscricaoEstadual: 'ISENTO',
+    cnpj: '50.073.355/0001-89',
+    cnpjNormalizado: '50073355000189',
+    inscricaoEstadual: '14.229.191-9',
     inscricaoMunicipal: '98450',
     tipoNegocio: 'barbearia',
     telefone: '(65) 99912-3456',
@@ -291,6 +291,14 @@ export async function listarEmpresas(db, { incluirInativas = false, empresaIdFil
   }
 
   // Filtro final rigoroso de isolamento multi-tenant
+  empresas = empresas.filter(e => {
+    const nome = String(e.nome || "").toLowerCase();
+    const cnpj = somenteDigitos(e.cnpj);
+    if (nome.includes("imperial") || nome.includes("homologação alterada") || cnpj === "98765432000199" || cnpj === "11222333000181") {
+      return false;
+    }
+    return true;
+  });
   if (listaFiltro && listaFiltro.length > 0) {
     empresas = empresas.filter(e => {
       const eid = String(e.id || '').trim().toLowerCase();
