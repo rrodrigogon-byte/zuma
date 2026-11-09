@@ -110,21 +110,24 @@ export default function DinoInteligenciaVendasIa() {
   };
 
   const dispararMensagem = async (cliente, tipo) => {
-    const tel = String(cliente.telefone || '').replace(/\D/g, '');
+    let tel = String(cliente.telefone || "").replace(/\D/g, "");
+    if (tel.startsWith("55") && tel.length >= 12) {
+      // Já tem DDI 55
+    } else if (tel.length === 10 || tel.length === 11) {
+      tel = "55" + tel;
+    }
     const textoMsg = obterMensagemParaEnvio(cliente);
     const textoEncoded = encodeURIComponent(textoMsg);
-    const urlWpp = tel ? `https://wa.me/55${tel}?text=${textoEncoded}` : null;
-    if (urlWpp) {
-      window.open(urlWpp, '_blank');
-    }
+    const urlWpp = tel ? `https://wa.me/${tel}?text=${textoEncoded}` : `https://wa.me/?text=${textoEncoded}`;
+    window.open(urlWpp, "_blank");
     try {
-      await api.post('/api/admin/inteligencia-vendas/disparar-acao', {
+      await api.post(`/api/admin/inteligencia-vendas/disparar-acao?empresaId=${encodeURIComponent(empresaAtivaId)}`, {
         tipo,
         clienteId: cliente.id,
         telefone: cliente.telefone,
         mensagem: textoMsg,
       }).catch(() =>
-        api.post('/api/admin/barbearia/inteligencia-vendas/disparar-acao', {
+        api.post("/api/admin/barbearia/inteligencia-vendas/disparar-acao", {
           tipo,
           clienteId: cliente.id,
           telefone: cliente.telefone,
@@ -132,8 +135,44 @@ export default function DinoInteligenciaVendasIa() {
         })
       );
       setMensagemSucesso(`Ação registrada para ${cliente.nome}! WhatsApp aberto com a mensagem selecionada.`);
-      setTimeout(() => setMensagemSucesso(''), 6000);
+      setTimeout(() => setMensagemSucesso(""), 6000);
+      carregarInteligencia(empresaAtivaId);
     } catch (_) {}
+  };
+
+  const copiarMensagem = (texto) => {
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(texto);
+    }
+    setMensagemSucesso("📋 Mensagem copiada para a área de transferência!");
+    setTimeout(() => setMensagemSucesso(""), 4000);
+  };
+
+  const exportarListaCsv = () => {
+    if (!listaReativacao.length) return;
+    const cabecalho = ["Nome", "Telefone", "Dias Sem Comprar", "Gasto Histórico (R$)", "Tom de Voz", "Mensagem Recomendada"];
+    const linhas = listaReativacao.map(c => {
+      const opcaoAtual = opcaoSelecionada[c.id] || "fechamento";
+      const dadosOpcao = c.opcoesMensagem ? c.opcoesMensagem[opcaoAtual] : null;
+      const msg = (dadosOpcao ? dadosOpcao.texto : c.mensagemIa).replace(/"/g, "''");
+      return [
+        `"${c.nome}"`,
+        `"${c.telefone || ""}"`,
+        `"${c.diasSemVir || ""}"`,
+        `"${(c.gastoTotal || 0).toFixed(2)}"`,
+        `"${opcaoAtual}"`,
+        `"${msg}"`
+      ].join(";");
+    });
+    const csvContent = "\uFEFF" + [cabecalho.join(";"), ...linhas].join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `oportunidades_${empresaAtivaId}_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   const abrirModalConversao = (cliente = null) => {
@@ -477,7 +516,50 @@ export default function DinoInteligenciaVendasIa() {
                 </div>
               </div>
             </div>
-          </div>
+
+              {/* HISTÓRICO RECENTE DE DINHEIRO NO CAIXA */}
+              {funil.historicoRecente && funil.historicoRecente.length > 0 && (
+                <div style={{
+                  gridColumn: "1 / -1",
+                  background: "#f0fdf4",
+                  border: "1px solid #bbf7d0",
+                  borderRadius: 12,
+                  padding: "12px 16px",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 8
+                }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <span style={{ fontSize: 12, fontWeight: 800, color: "#166534", textTransform: "uppercase" }}>
+                      🧾 Vendas Recentes Confirmadas no Caixa ({funil.totalConversoes})
+                    </span>
+                    <span style={{ fontSize: 11, color: "#15803d", fontWeight: 600 }}>
+                      Atualizado em tempo real
+                    </span>
+                  </div>
+                  <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 4 }}>
+                    {funil.historicoRecente.map((reg, idx) => (
+                      <div key={reg.id || idx} style={{
+                        background: "#fff",
+                        border: "1px solid #86efac",
+                        borderRadius: 8,
+                        padding: "8px 12px",
+                        minWidth: 180,
+                        fontSize: 12,
+                        boxShadow: "0 1px 2px rgba(0,0,0,0.03)"
+                      }}>
+                        <div style={{ fontWeight: 800, color: "#14532d" }}>{reg.clienteNome}</div>
+                        <div style={{ display: "flex", justifyContent: "space-between", marginTop: 4, alignItems: "center" }}>
+                          <span style={{ fontWeight: 900, color: "#16a34a", fontSize: 13 }}>{fmtR(reg.valor)}</span>
+                          <span style={{ fontSize: 10, color: "#65a30d", background: "#ecfccb", padding: "1px 5px", borderRadius: 4 }}>
+                            {reg.tipo || "Conversão"}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}          </div>
 
           {/* 4 CARDS DE INDICADORES PRINCIPAIS */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16 }}>
@@ -638,6 +720,24 @@ export default function DinoInteligenciaVendasIa() {
                       >
                         Alta Propensão
                       </button>
+                      <button
+                        onClick={exportarListaCsv}
+                        style={{
+                          padding: "6px 12px",
+                          borderRadius: 8,
+                          border: `1px solid ${COR.line}`,
+                          background: "#fff",
+                          color: "#0f766e",
+                          fontWeight: 700,
+                          fontSize: 12,
+                          cursor: "pointer",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 6
+                        }}
+                      >
+                        <span>📥</span> Exportar CSV
+                      </button>
                     </div>
                   </div>
 
@@ -785,6 +885,24 @@ export default function DinoInteligenciaVendasIa() {
 
                             {/* BOTÕES DE AÇÃO: DISPARAR WHATSAPP & MARCAR CONVERTIDO */}
                             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, flexWrap: 'wrap' }}>
+                              <button
+                                onClick={() => copiarMensagem(textoExibido)}
+                                style={{
+                                  padding: "9px 14px",
+                                  background: "#f8fafc",
+                                  color: "#334155",
+                                  border: "1.5px solid #cbd5e1",
+                                  borderRadius: 8,
+                                  fontWeight: 700,
+                                  fontSize: 12,
+                                  cursor: "pointer",
+                                  display: "flex",
+                                  alignItems: "center",
+                                  gap: 6
+                                }}
+                              >
+                                <span>📋</span> Copiar
+                              </button>
                               <button
                                 onClick={() => abrirModalConversao(c)}
                                 style={{
