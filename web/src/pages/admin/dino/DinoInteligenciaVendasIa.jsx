@@ -5,7 +5,8 @@ import { api, fmtR } from '../../../lib/api';
 const COR = {
   verde: '#16a34a',
   verdeClaro: '#dcfce7',
-  azul: '#3b82f6',
+  verdeEscuro: '#15803d',
+  azul: '#2563eb',
   azulClaro: '#dbeafe',
   laranja: '#f59e0b',
   laranjaClaro: '#fef3c7',
@@ -22,9 +23,11 @@ const COR = {
 };
 
 const EMPRESAS_DISPONIVEIS = [
-  { id: 'dino', nome: 'Barbearia Dino', icone: '💈', segmento: 'Barbearia & Salão' },
-  { id: 'stallone', nome: 'Stallone Nutre Sport', icone: '💪', segmento: 'Suplementos & Fitness' },
-  { id: 'agroopen', nome: 'Agro Open Insumos', icone: '🌱', segmento: 'Agronegócio & Insumos' },
+  { id: 'dino', nome: 'Barbearia Dino', icone: '💈', segmento: 'Barbearia & Salão Masculino' },
+  { id: 'stallone', nome: 'Stallone Nutre Sport', icone: '💪', segmento: 'Suplementos, Fitness & Saúde' },
+  { id: 'agroopen', nome: 'Agro Open Insumos', icone: '🌱', segmento: 'Agronegócio, Pecuária & Insumos' },
+  { id: 'supermercado', nome: 'Supermercado Kytto', icone: '🛒', segmento: 'Alimentos, Bebidas & Atacarejo' },
+  { id: 'varejo', nome: 'Varejo & Moda Kytto', icone: '🏷️', segmento: 'Moda, Calçados & E-commerce' },
 ];
 
 export default function DinoInteligenciaVendasIa() {
@@ -39,14 +42,36 @@ export default function DinoInteligenciaVendasIa() {
   const [empresaAtivaId, setEmpresaAtivaId] = useState(empresaParam || 'dino');
   const [mensagemSucesso, setMensagemSucesso] = useState('');
 
+  // Estado das opções de mensagem selecionadas por cliente { [clienteId]: 'suave' | 'fechamento' | 'lembrete' }
+  const [opcaoSelecionada, setOpcaoSelecionada] = useState({});
+
+  // Modal de registro de conversão (Dinheiro no Caixa)
+  const [modalConversaoAberto, setModalConversaoAberto] = useState(false);
+  const [formConversao, setFormConversao] = useState({
+    clienteNome: '',
+    telefone: '',
+    valor: '',
+    tipo: 'reativacao',
+    observacao: '',
+  });
+
+  // Formulário de Configurações Comerciais & Políticas Meta
+  const [formConfig, setFormConfig] = useState(null);
+  const [salvandoConfig, setSalvandoConfig] = useState(false);
+
   const carregarInteligencia = useCallback(async (empId) => {
     setCarregando(true);
     setErro(null);
     try {
       const targetEmpresa = empId || empresaAtivaId || 'dino';
       const qs = targetEmpresa ? `?empresaId=${encodeURIComponent(targetEmpresa)}` : '';
-      const res = await api.get(`/api/admin/inteligencia-vendas${qs}`).catch(() => api.get(`/api/admin/barbearia/inteligencia-vendas${qs}`));
+      const res = await api.get(`/api/admin/inteligencia-vendas${qs}`).catch(() =>
+        api.get(`/api/admin/barbearia/inteligencia-vendas${qs}`)
+      );
       setDados(res);
+      if (res?.config) {
+        setFormConfig({ ...res.config });
+      }
     } catch (e) {
       console.error('Erro ao carregar inteligência de vendas:', e);
       setErro(e.message || 'Erro ao carregar inteligência de vendas.');
@@ -63,16 +88,32 @@ export default function DinoInteligenciaVendasIa() {
     setEmpresaAtivaId(novaEmpresaId);
     setSearchParams({ empresaId: novaEmpresaId });
     try {
-      localStorage.setItem("sp_empresa_ativa", JSON.stringify({ id: novaEmpresaId }));
-      localStorage.setItem("empresaAtiva", novaEmpresaId);
+      localStorage.setItem('sp_empresa_ativa', JSON.stringify({ id: novaEmpresaId }));
+      localStorage.setItem('empresaAtiva', novaEmpresaId);
     } catch (_) {}
     carregarInteligencia(novaEmpresaId);
   };
 
+  const alternarOpcaoMensagem = (clienteId, opcao) => {
+    setOpcaoSelecionada(prev => ({
+      ...prev,
+      [clienteId]: opcao,
+    }));
+  };
+
+  const obterMensagemParaEnvio = (cliente) => {
+    const tipo = opcaoSelecionada[cliente.id] || 'fechamento';
+    if (cliente.opcoesMensagem && cliente.opcoesMensagem[tipo]) {
+      return cliente.opcoesMensagem[tipo].texto;
+    }
+    return cliente.mensagemIa || '';
+  };
+
   const dispararMensagem = async (cliente, tipo) => {
     const tel = String(cliente.telefone || '').replace(/\D/g, '');
-    const texto = encodeURIComponent(cliente.mensagemIa || '');
-    const urlWpp = tel ? `https://wa.me/55${tel}?text=${texto}` : null;
+    const textoMsg = obterMensagemParaEnvio(cliente);
+    const textoEncoded = encodeURIComponent(textoMsg);
+    const urlWpp = tel ? `https://wa.me/55${tel}?text=${textoEncoded}` : null;
     if (urlWpp) {
       window.open(urlWpp, '_blank');
     }
@@ -81,16 +122,68 @@ export default function DinoInteligenciaVendasIa() {
         tipo,
         clienteId: cliente.id,
         telefone: cliente.telefone,
-        mensagem: cliente.mensagemIa,
-      }).catch(() => api.post('/api/admin/barbearia/inteligencia-vendas/disparar-acao', {
-        tipo,
-        clienteId: cliente.id,
-        telefone: cliente.telefone,
-        mensagem: cliente.mensagemIa,
-      }));
-      setMensagemSucesso(`Ação registrada para ${cliente.nome}! WhatsApp aberto com a mensagem da IA.`);
+        mensagem: textoMsg,
+      }).catch(() =>
+        api.post('/api/admin/barbearia/inteligencia-vendas/disparar-acao', {
+          tipo,
+          clienteId: cliente.id,
+          telefone: cliente.telefone,
+          mensagem: textoMsg,
+        })
+      );
+      setMensagemSucesso(`Ação registrada para ${cliente.nome}! WhatsApp aberto com a mensagem selecionada.`);
       setTimeout(() => setMensagemSucesso(''), 6000);
     } catch (_) {}
+  };
+
+  const abrirModalConversao = (cliente = null) => {
+    setFormConversao({
+      clienteNome: cliente?.nome || '',
+      telefone: cliente?.telefone || '',
+      valor: cliente?.gastoTotal ? String(cliente.gastoTotal) : (dados?.kpis?.ticketMedioAtual ? String(dados.kpis.ticketMedioAtual) : '150'),
+      tipo: cliente?.tipoOferta ? 'upsell' : 'reativacao',
+      observacao: cliente ? `Conversão registrada a partir da oportunidade (${cliente.nome})` : 'Venda via WhatsApp',
+    });
+    setModalConversaoAberto(true);
+  };
+
+  const salvarConversao = async (e) => {
+    e.preventDefault();
+    try {
+      const valorNum = parseFloat(String(formConversao.valor).replace(',', '.'));
+      if (!valorNum || isNaN(valorNum)) {
+        alert('Informe um valor numérico válido.');
+        return;
+      }
+      await api.post(`/api/admin/inteligencia-vendas/registrar-conversao?empresaId=${encodeURIComponent(empresaAtivaId)}`, {
+        clienteNome: formConversao.clienteNome || 'Cliente',
+        telefone: formConversao.telefone,
+        valor: valorNum,
+        tipo: formConversao.tipo,
+        observacao: formConversao.observacao,
+      });
+      setModalConversaoAberto(false);
+      setMensagemSucesso(`🎉 Dinheiro no Caixa! R$ ${valorNum.toFixed(2)} registrados com sucesso!`);
+      setTimeout(() => setMensagemSucesso(''), 6000);
+      carregarInteligencia(empresaAtivaId);
+    } catch (err) {
+      alert('Erro ao registrar conversão: ' + (err.message || 'Falha de comunicação.'));
+    }
+  };
+
+  const salvarConfiguracoesEmpresa = async (e) => {
+    e.preventDefault();
+    setSalvandoConfig(true);
+    try {
+      await api.post(`/api/admin/inteligencia-vendas/config?empresaId=${encodeURIComponent(empresaAtivaId)}`, formConfig);
+      setMensagemSucesso('Configurações de Vendas & Políticas Meta salvas com sucesso!');
+      setTimeout(() => setMensagemSucesso(''), 6000);
+      carregarInteligencia(empresaAtivaId);
+    } catch (err) {
+      alert('Erro ao salvar configurações: ' + (err.message || 'Falha de comunicação.'));
+    } finally {
+      setSalvandoConfig(false);
+    }
   };
 
   const kpis = dados?.kpis || {};
@@ -98,6 +191,8 @@ export default function DinoInteligenciaVendasIa() {
   const produtos = dados?.produtosDestaque || [];
   const simulador = dados?.simulador || {};
   const labels = dados?.labels || {};
+  const metaComp = dados?.metaCompliance || {};
+  const funil = dados?.funilDinheiroMesa || {};
   const icone = dados?.iconeSegmento || '🚀';
   const empresaNome = dados?.empresaNome || 'Empresa';
   const empresaSegmento = dados?.empresaSegmento || 'Comércio Inteligente Kytto';
@@ -110,7 +205,7 @@ export default function DinoInteligenciaVendasIa() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-      {/* SELETOR RÁPIDO DE EMPRESAS (MULTI-TENANT) */}
+      {/* SELETOR RÁPIDO DE EMPRESAS (MULTI-TENANT COMPLETO) */}
       <div style={{
         display: 'flex',
         alignItems: 'center',
@@ -123,7 +218,7 @@ export default function DinoInteligenciaVendasIa() {
         border: `1px solid ${COR.line}`,
         boxShadow: '0 2px 6px rgba(0,0,0,0.03)'
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           <span style={{ fontSize: 13, fontWeight: 800, color: COR.muted, textTransform: 'uppercase', letterSpacing: 0.5 }}>
             Empresa Selecionada:
           </span>
@@ -154,8 +249,70 @@ export default function DinoInteligenciaVendasIa() {
           </div>
         </div>
 
-        <div style={{ fontSize: 12, color: COR.muted }}>
-          Ambiente Multi-Empresas Isolado · Kytto Cloud
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <button
+            onClick={() => abrirModalConversao()}
+            style={{
+              padding: '8px 14px',
+              background: 'linear-gradient(135deg, #16a34a 0%, #15803d 100%)',
+              color: '#fff',
+              border: 0,
+              borderRadius: 10,
+              fontWeight: 800,
+              fontSize: 12,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              boxShadow: '0 2px 4px rgba(22, 163, 74, 0.2)'
+            }}
+          >
+            <span>💵</span> + Registrar Dinheiro no Caixa
+          </button>
+          <div style={{ fontSize: 12, color: COR.muted }}>
+            Multi-Empresas · Kytto Cloud
+          </div>
+        </div>
+      </div>
+
+      {/* BARRA DE CONFORMIDADE META & POLÍTICAS ANTI-BAN */}
+      <div style={{
+        background: 'linear-gradient(90deg, #ecfdf5 0%, #f0fdf4 100%)',
+        border: '1px solid #a7f3d0',
+        borderRadius: 12,
+        padding: '10px 18px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        flexWrap: 'wrap',
+        gap: 12
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontSize: 18 }}>🛡️</span>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 800, color: '#065f46' }}>
+              Proteção Ativa contra Bloqueios da Meta (WhatsApp Business Compliance)
+            </div>
+            <div style={{ fontSize: 11, color: '#047857' }}>
+              Spintax dinâmico ativo · Frase de Opt-out (PARAR) obrigatória · Horário comercial de envio (08h às 20h)
+            </div>
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <span style={{
+            background: metaComp.emHorarioComercial ? '#10b981' : '#f59e0b',
+            color: '#fff',
+            padding: '3px 10px',
+            borderRadius: 20,
+            fontSize: 11,
+            fontWeight: 800
+          }}>
+            {metaComp.emHorarioComercial ? '✓ Horário de Envio Liberado' : '⚠️ Fora de Horário Comercial'}
+          </span>
+          <span style={{ fontSize: 11, color: '#065f46', fontWeight: 700 }}>
+            Chave PIX Ativa: {dados?.config?.chavePix || 'Não informada'}
+          </span>
         </div>
       </div>
 
@@ -247,10 +404,85 @@ export default function DinoInteligenciaVendasIa() {
             </div>
           )}
 
+          {/* PAINEL DINHEIRO NA MESA (FUNIL DE CONVERSÃO EM TEMPO REAL) */}
+          <div style={{
+            background: '#fff',
+            border: `1.5px solid #cbd5e1`,
+            borderRadius: 16,
+            padding: '20px 24px',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.04)'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 20 }}>💰</span>
+                <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: '#0f172a' }}>
+                  DINHEIRO NA MESA · FUNIL DE CONVERSÃO EM TEMPO REAL
+                </h3>
+              </div>
+              <span style={{ fontSize: 12, color: COR.muted }}>
+                Valores projetados e convertidos para {empresaNome}
+              </span>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 14 }}>
+              {/* Estágio 1 */}
+              <div style={{ background: '#fef9c3', border: '1px solid #fde047', borderRadius: 12, padding: 14 }}>
+                <div style={{ fontSize: 11, fontWeight: 800, color: '#854d0e', textTransform: 'uppercase' }}>
+                  1. Mapeado na Mesa
+                </div>
+                <div style={{ fontSize: 22, fontWeight: 900, color: '#a16207', marginTop: 4 }}>
+                  {fmtR(funil.potencialTotalMapeado || 0)}
+                </div>
+                <div style={{ fontSize: 11, color: '#713f12', marginTop: 4 }}>
+                  Oportunidades em carteira
+                </div>
+              </div>
+
+              {/* Estágio 2 */}
+              <div style={{ background: '#dbeafe', border: '1px solid #93c5fd', borderRadius: 12, padding: 14 }}>
+                <div style={{ fontSize: 11, fontWeight: 800, color: '#1e40af', textTransform: 'uppercase' }}>
+                  2. Em Negociação Ativa
+                </div>
+                <div style={{ fontSize: 22, fontWeight: 900, color: '#1d4ed8', marginTop: 4 }}>
+                  {fmtR(funil.emNegociacaoAtiva || 0)}
+                </div>
+                <div style={{ fontSize: 11, color: '#1e3a8a', marginTop: 4 }}>
+                  Mensagens no WhatsApp
+                </div>
+              </div>
+
+              {/* Estágio 3 */}
+              <div style={{ background: '#dcfce7', border: '1px solid #86efac', borderRadius: 12, padding: 14 }}>
+                <div style={{ fontSize: 11, fontWeight: 800, color: '#15803d', textTransform: 'uppercase' }}>
+                  3. Dinheiro no Caixa
+                </div>
+                <div style={{ fontSize: 22, fontWeight: 900, color: '#16a34a', marginTop: 4 }}>
+                  {fmtR(funil.dinheiroNoCaixa || 0)}
+                </div>
+                <div style={{ fontSize: 11, color: '#14532d', marginTop: 4 }}>
+                  {funil.totalConversoes || 0} vendas fechadas
+                </div>
+              </div>
+
+              {/* Estágio 4 */}
+              <div style={{ background: '#f3e8ff', border: '1px solid #d8b4fe', borderRadius: 12, padding: 14 }}>
+                <div style={{ fontSize: 11, fontWeight: 800, color: '#6b21a8', textTransform: 'uppercase' }}>
+                  4. Taxa de Fechamento
+                </div>
+                <div style={{ fontSize: 22, fontWeight: 900, color: '#7e22ce', marginTop: 4 }}>
+                  {funil.taxaConversao || 0}%
+                </div>
+                <div style={{ fontSize: 11, color: '#581c87', marginTop: 4 }}>
+                  Eficiência comercial IA
+                </div>
+              </div>
+            </div>
+          </div>
+
           {/* 4 CARDS DE INDICADORES PRINCIPAIS */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16 }}>
             {/* KPI 1: TICKET MÉDIO */}
-            <div style={{ background: COR.card, border: `1px solid ${COR.line}`, borderRadius: 16, padding: 20, position: 'relative' }}>
+            <div style={{ background: COR.card, border: `1px solid ${COR.line}`, borderRadius: 16, padding: 20 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ fontSize: 13, fontWeight: 700, color: COR.muted }}>TICKET MÉDIO ATUAL</span>
                 <span style={{ fontSize: 18 }}>💳</span>
@@ -296,7 +528,7 @@ export default function DinoInteligenciaVendasIa() {
                 <span style={{ background: COR.vermelhoClaro, color: COR.vermelho, padding: '2px 8px', borderRadius: 6, fontWeight: 800 }}>
                   Prontos para resgate
                 </span>
-                <span style={{ color: COR.muted }}>Prevenção ativa</span>
+                <span style={{ color: COR.muted }}>Ciclo de {dados?.config?.cicloChurnDias || 21} dias</span>
               </div>
             </div>
 
@@ -324,6 +556,7 @@ export default function DinoInteligenciaVendasIa() {
                 { id: 'upsell', label: labels.upsell ? `🛍️ ${labels.upsell}` : '🛍️ Up-Sell & Combos', badge: oportunidades.upSellServicos?.length },
                 { id: 'clube', label: labels.fidelidade ? `👑 ${labels.fidelidade}` : '👑 Assinaturas & Fidelidade', badge: oportunidades.clubeAssinaturas?.length },
                 { id: 'simulador', label: '📈 Simulador Financeiro' },
+                { id: 'configuracoes', label: '⚙️ Configurações & Políticas Meta' },
               ].map(tab => (
                 <button
                   key={tab.id}
@@ -362,7 +595,7 @@ export default function DinoInteligenciaVendasIa() {
             </div>
 
             <div style={{ padding: 24 }}>
-              {/* ABA 1: REATIVAÇÃO ANTI-CHURN */}
+              {/* ABA 1: REATIVAÇÃO ANTI-CHURN COM MULTI-OPÇÕES E BOTÃO DINHEIRO NO CAIXA */}
               {abaAtiva === 'reativacao' && (
                 <div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12, marginBottom: 18 }}>
@@ -371,7 +604,7 @@ export default function DinoInteligenciaVendasIa() {
                         {labels.reativacao || 'Reativação Preditiva de Clientes'}
                       </h3>
                       <p style={{ margin: '4px 0 0', color: COR.muted, fontSize: 13 }}>
-                        Clientes com histórico de compras cujo ciclo de reposição está vencendo. A IA redigiu uma mensagem personalizada para cada um.
+                        Escolha o tom de voz ideal para cada cliente: abordagem suave (Anti-Ban Meta), fechamento com PIX (Dinheiro na Mesa) ou lembrete de reposição.
                       </p>
                     </div>
                     <div style={{ display: 'flex', gap: 8 }}>
@@ -413,78 +646,186 @@ export default function DinoInteligenciaVendasIa() {
                       <p style={{ margin: 0 }}>Nenhum cliente em risco nesta categoria no momento. Sua base está saudável!</p>
                     </div>
                   ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                      {listaReativacao.map((c, i) => (
-                        <div
-                          key={c.id || i}
-                          style={{
-                            display: 'grid',
-                            gridTemplateColumns: 'minmax(200px, 1.2fr) minmax(140px, 1fr) minmax(280px, 2fr) auto',
-                            gap: 16,
-                            alignItems: 'center',
-                            padding: '16px',
-                            background: '#fff',
-                            border: `1px solid ${COR.line}`,
-                            borderRadius: 12,
-                            transition: 'border-color 0.15s ease'
-                          }}
-                        >
-                          <div>
-                            <strong style={{ fontSize: 14, color: COR.fg }}>{c.nome}</strong>
-                            <div style={{ fontSize: 12, color: COR.muted, marginTop: 2 }}>{c.telefone || 'Sem telefone'}</div>
-                            <div style={{ fontSize: 11, color: COR.muted, marginTop: 2 }}>
-                              {c.barbeiroPreferido ? `Profissional: ${c.barbeiroPreferido}` : (c.ultimaCompra ? `Último item: ${c.ultimaCompra}` : '')}
-                            </div>
-                          </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                      {listaReativacao.map((c, i) => {
+                        const opcaoAtual = opcaoSelecionada[c.id] || 'fechamento';
+                        const dadosOpcao = c.opcoesMensagem ? c.opcoesMensagem[opcaoAtual] : null;
+                        const textoExibido = dadosOpcao ? dadosOpcao.texto : c.mensagemIa;
 
-                          <div>
-                            <span style={{ fontSize: 12, color: COR.muted }}>Dias sem vir/comprar:</span>
-                            <div style={{ fontSize: 15, fontWeight: 800, color: c.diasSemVir > 40 ? COR.vermelho : COR.laranja }}>
-                              {c.diasSemVir} dias
+                        return (
+                          <div
+                            key={c.id || i}
+                            style={{
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: 12,
+                              padding: '18px',
+                              background: '#fff',
+                              border: `1px solid ${COR.line}`,
+                              borderRadius: 14,
+                              boxShadow: '0 2px 4px rgba(0,0,0,0.02)'
+                            }}
+                          >
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+                              <div>
+                                <strong style={{ fontSize: 15, color: COR.fg }}>{c.nome}</strong>
+                                <span style={{ fontSize: 13, color: COR.muted, marginLeft: 8 }}>{c.telefone || 'Sem telefone'}</span>
+                                {c.barbeiroPreferido && (
+                                  <span style={{ fontSize: 12, color: COR.azul, fontWeight: 700, marginLeft: 8 }}>
+                                    · Barbeiro: {c.barbeiroPreferido}
+                                  </span>
+                                )}
+                                {c.ultimaCompra && (
+                                  <span style={{ fontSize: 12, color: COR.azul, fontWeight: 700, marginLeft: 8 }}>
+                                    · Último item: {c.ultimaCompra}
+                                  </span>
+                                )}
+                              </div>
+
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                <span style={{
+                                  background: c.diasSemVir > 40 ? COR.vermelhoClaro : COR.laranjaClaro,
+                                  color: c.diasSemVir > 40 ? COR.vermelho : '#b45309',
+                                  fontSize: 12,
+                                  fontWeight: 800,
+                                  padding: '3px 9px',
+                                  borderRadius: 8
+                                }}>
+                                  {c.diasSemVir} dias sem vir
+                                </span>
+                                {c.gastoTotal > 0 && (
+                                  <span style={{ fontSize: 12, color: COR.muted }}>
+                                    Gasto histórico: {fmtR(c.gastoTotal)}
+                                  </span>
+                                )}
+                              </div>
                             </div>
-                            {c.gastoTotal > 0 && (
-                              <div style={{ fontSize: 11, color: COR.muted }}>Gasto histórico: {fmtR(c.gastoTotal)}</div>
+
+                            {/* SELETOR DE ABORDAGEM DE MENSAGEM (META COMPLIANCE) */}
+                            {c.opcoesMensagem && (
+                              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                                <span style={{ fontSize: 11, fontWeight: 800, color: COR.muted, textTransform: 'uppercase' }}>
+                                  Tom de Voz:
+                                </span>
+                                <button
+                                  onClick={() => alternarOpcaoMensagem(c.id, 'suave')}
+                                  style={{
+                                    padding: '5px 10px',
+                                    borderRadius: 6,
+                                    border: `1px solid ${opcaoAtual === 'suave' ? COR.verde : COR.line}`,
+                                    background: opcaoAtual === 'suave' ? COR.verdeClaro : '#fff',
+                                    color: opcaoAtual === 'suave' ? COR.verdeEscuro : COR.muted,
+                                    fontSize: 11,
+                                    fontWeight: 700,
+                                    cursor: 'pointer'
+                                  }}
+                                >
+                                  💬 1. Suave (Risco Meta Zero)
+                                </button>
+                                <button
+                                  onClick={() => alternarOpcaoMensagem(c.id, 'fechamento')}
+                                  style={{
+                                    padding: '5px 10px',
+                                    borderRadius: 6,
+                                    border: `1px solid ${opcaoAtual === 'fechamento' ? COR.azul : COR.line}`,
+                                    background: opcaoAtual === 'fechamento' ? COR.azulClaro : '#fff',
+                                    color: opcaoAtual === 'fechamento' ? '#1e40af' : COR.muted,
+                                    fontSize: 11,
+                                    fontWeight: 700,
+                                    cursor: 'pointer'
+                                  }}
+                                >
+                                  💰 2. Fechamento c/ PIX (Dinheiro na Mesa)
+                                </button>
+                                <button
+                                  onClick={() => alternarOpcaoMensagem(c.id, 'lembrete')}
+                                  style={{
+                                    padding: '5px 10px',
+                                    borderRadius: 6,
+                                    border: `1px solid ${opcaoAtual === 'lembrete' ? COR.laranja : COR.line}`,
+                                    background: opcaoAtual === 'lembrete' ? COR.laranjaClaro : '#fff',
+                                    color: opcaoAtual === 'lembrete' ? '#b45309' : COR.muted,
+                                    fontSize: 11,
+                                    fontWeight: 700,
+                                    cursor: 'pointer'
+                                  }}
+                                >
+                                  ⏰ 3. Lembrete Útil
+                                </button>
+
+                                {dadosOpcao && (
+                                  <span style={{ fontSize: 11, color: dadosOpcao.corRisco || COR.verde, fontWeight: 700, marginLeft: 'auto' }}>
+                                    🛡️ {dadosOpcao.riscoMeta}
+                                  </span>
+                                )}
+                              </div>
                             )}
-                          </div>
 
-                          <div style={{
-                            background: '#f8fafc',
-                            padding: '10px 14px',
-                            borderRadius: 8,
-                            fontSize: 12,
-                            color: '#334155',
-                            borderLeft: `3px solid ${c.propensao === 'Alta' ? COR.verde : COR.azul}`,
-                            lineHeight: 1.4
-                          }}>
-                            <div style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', color: COR.muted, marginBottom: 4 }}>
-                              Mensagem Sugerida pela IA ({agenteIa})
+                            {/* CAIXA DE MENSAGEM SUGERIDA PELA IA */}
+                            <div style={{
+                              background: '#f8fafc',
+                              padding: '12px 16px',
+                              borderRadius: 10,
+                              fontSize: 13,
+                              color: '#334155',
+                              borderLeft: `4px solid ${opcaoAtual === 'fechamento' ? COR.azul : COR.verde}`,
+                              lineHeight: 1.5,
+                              whiteSpace: 'pre-wrap'
+                            }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                                <span style={{ fontSize: 11, fontWeight: 800, textTransform: 'uppercase', color: COR.muted }}>
+                                  {agenteIa} · Mensagem Pronta
+                                </span>
+                                <span style={{ fontSize: 11, color: '#64748b', fontStyle: 'italic' }}>
+                                  {dadosOpcao?.gatilho || 'Pronta para envio'}
+                                </span>
+                              </div>
+                              {textoExibido}
                             </div>
-                            {c.mensagemIa}
-                          </div>
 
-                          <div>
-                            <button
-                              onClick={() => dispararMensagem(c, 'anti_churn')}
-                              style={{
-                                padding: '10px 16px',
-                                background: '#25D366',
-                                color: '#fff',
-                                border: 0,
-                                borderRadius: 10,
-                                fontWeight: 800,
-                                fontSize: 12,
-                                cursor: 'pointer',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: 6,
-                                whiteSpace: 'nowrap'
-                              }}
-                            >
-                              <span>📲</span> Enviar no WhatsApp
-                            </button>
+                            {/* BOTÕES DE AÇÃO: DISPARAR WHATSAPP & MARCAR CONVERTIDO */}
+                            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, flexWrap: 'wrap' }}>
+                              <button
+                                onClick={() => abrirModalConversao(c)}
+                                style={{
+                                  padding: '9px 16px',
+                                  background: '#fff',
+                                  color: '#047857',
+                                  border: '1.5px solid #10b981',
+                                  borderRadius: 8,
+                                  fontWeight: 800,
+                                  fontSize: 12,
+                                  cursor: 'pointer',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: 6
+                                }}
+                              >
+                                <span>💵</span> Marcar Convertido (Dinheiro no Caixa)
+                              </button>
+
+                              <button
+                                onClick={() => dispararMensagem(c, 'anti_churn')}
+                                style={{
+                                  padding: '9px 18px',
+                                  background: '#25D366',
+                                  color: '#fff',
+                                  border: 0,
+                                  borderRadius: 8,
+                                  fontWeight: 800,
+                                  fontSize: 12,
+                                  cursor: 'pointer',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: 6
+                                }}
+                              >
+                                <span>📲</span> Enviar no WhatsApp
+                              </button>
+                            </div>
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                 </div>
@@ -525,8 +866,8 @@ export default function DinoInteligenciaVendasIa() {
                           <button
                             onClick={() => {
                               const msg = vaga.foco
-                                ? `Olá! Aqui é o ${agenteIa}. Separamos uma condição especial da semana em ${vaga.foco}. Quer que eu envie os detalhes?`
-                                : `Opa! Aqui é o ${agenteIa}. Abriu um horário exclusivo com o ${vaga.profissional} nesta ${vaga.dia} às ${vaga.horario}. Quer aproveitar para agendar?`;
+                                ? `Olá! Aqui é o ${agenteIa}. Separamos uma condição especial da semana em ${vaga.foco}. Chave PIX: ${dados?.config?.chavePix || ''}. Veja no link: ${dados?.config?.linkDireto || ''}\n\n${dados?.config?.fraseOptOut || ''}`
+                                : `Opa! Aqui é o ${agenteIa}. Abriu um horário exclusivo com o ${vaga.profissional} nesta ${vaga.dia} às ${vaga.horario}. Quer agendar em 1 toque? ${dados?.config?.linkDireto || ''}\n\n${dados?.config?.fraseOptOut || ''}`;
                               window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
                             }}
                             style={{
@@ -612,24 +953,41 @@ export default function DinoInteligenciaVendasIa() {
                             Oferta Recomendada: {c.tipoOferta} (+{fmtR(c.impactoTicket)})
                           </div>
                         </div>
-                        <button
-                          onClick={() => dispararMensagem(c, 'upsell')}
-                          style={{
-                            padding: '8px 14px',
-                            background: COR.roxo,
-                            color: '#fff',
-                            border: 0,
-                            borderRadius: 8,
-                            fontWeight: 700,
-                            fontSize: 12,
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 6
-                          }}
-                        >
-                          <span>💬</span> Propor no WhatsApp
-                        </button>
+                        <div style={{ display: 'flex', gap: 8 }}>
+                          <button
+                            onClick={() => abrirModalConversao(c)}
+                            style={{
+                              padding: '8px 12px',
+                              background: '#fff',
+                              color: '#047857',
+                              border: '1px solid #10b981',
+                              borderRadius: 8,
+                              fontWeight: 700,
+                              fontSize: 12,
+                              cursor: 'pointer'
+                            }}
+                          >
+                            💵 Fechou (+{fmtR(c.impactoTicket)})
+                          </button>
+                          <button
+                            onClick={() => dispararMensagem(c, 'upsell')}
+                            style={{
+                              padding: '8px 14px',
+                              background: COR.roxo,
+                              color: '#fff',
+                              border: 0,
+                              borderRadius: 8,
+                              fontWeight: 700,
+                              fontSize: 12,
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 6
+                            }}
+                          >
+                            <span>💬</span> Propor no WhatsApp
+                          </button>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -661,11 +1019,27 @@ export default function DinoInteligenciaVendasIa() {
                         <div style={{ marginTop: 12, padding: 10, background: '#fdfbf7', borderRadius: 8, fontSize: 12, color: '#78350f' }}>
                           {c.mensagemIa}
                         </div>
-                        <div style={{ marginTop: 14 }}>
+                        <div style={{ marginTop: 14, display: 'flex', gap: 8 }}>
+                          <button
+                            onClick={() => abrirModalConversao(c)}
+                            style={{
+                              flex: 1,
+                              padding: '9px',
+                              background: '#fff',
+                              color: '#92400e',
+                              border: `1px solid ${COR.dourado}`,
+                              borderRadius: 8,
+                              fontWeight: 800,
+                              fontSize: 12,
+                              cursor: 'pointer'
+                            }}
+                          >
+                            💵 Ativou Plano
+                          </button>
                           <button
                             onClick={() => dispararMensagem(c, 'clube_vip')}
                             style={{
-                              width: '100%',
+                              flex: 1,
                               padding: '9px',
                               background: COR.dourado,
                               color: '#fff',
@@ -742,9 +1116,385 @@ export default function DinoInteligenciaVendasIa() {
                   </div>
                 </div>
               )}
+
+              {/* ABA 6: CONFIGURAÇÕES COMERCIAIS & POLÍTICAS META (DISPONÍVEL PARA TODAS AS EMPRESAS) */}
+              {abaAtiva === 'configuracoes' && formConfig && (
+                <div>
+                  <div style={{ marginBottom: 20 }}>
+                    <h3 style={{ margin: 0, fontSize: 17, fontWeight: 800 }}>
+                      ⚙️ Configurações Comerciais & Políticas Meta · {empresaNome}
+                    </h3>
+                    <p style={{ margin: '4px 0 0', color: COR.muted, fontSize: 13 }}>
+                      Configure a chave PIX de fechamento rápido, links de pagamento/agendamento, parâmetros de churn e proteção Anti-Ban da Meta para este negócio.
+                    </p>
+                  </div>
+
+                  <form onSubmit={salvarConfiguracoesEmpresa} style={{ display: 'flex', flexDirection: 'column', gap: 20, maxWidth: 800 }}>
+                    {/* SEÇÃO 1: DADOS DE FECHAMENTO & PIX (DINHEIRO NA MESA) */}
+                    <div style={{ background: '#f8fafc', padding: 20, borderRadius: 14, border: `1px solid ${COR.line}` }}>
+                      <h4 style={{ margin: '0 0 14px', fontSize: 15, fontWeight: 800, color: '#0f172a' }}>
+                        💰 Dados de Fechamento Imediato (Dinheiro na Mesa)
+                      </h4>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 14 }}>
+                        <div>
+                          <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: COR.muted, marginBottom: 4 }}>
+                            Chave PIX da Empresa (Inserida nas mensagens de fechamento)
+                          </label>
+                          <input
+                            type="text"
+                            value={formConfig.chavePix || ''}
+                            onChange={e => setFormConfig({ ...formConfig, chavePix: e.target.value })}
+                            placeholder="ex: 50.073.355/0001-89 ou pix@empresa.com.br"
+                            style={{
+                              width: '100%',
+                              padding: '10px 12px',
+                              borderRadius: 8,
+                              border: `1px solid ${COR.line}`,
+                              fontSize: 13
+                            }}
+                          />
+                        </div>
+
+                        <div>
+                          <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: COR.muted, marginBottom: 4 }}>
+                            Tipo da Chave PIX
+                          </label>
+                          <select
+                            value={formConfig.chavePixTipo || 'CNPJ'}
+                            onChange={e => setFormConfig({ ...formConfig, chavePixTipo: e.target.value })}
+                            style={{
+                              width: '100%',
+                              padding: '10px 12px',
+                              borderRadius: 8,
+                              border: `1px solid ${COR.line}`,
+                              fontSize: 13
+                            }}
+                          >
+                            <option value="CNPJ">CNPJ</option>
+                            <option value="CPF">CPF</option>
+                            <option value="E-mail">E-mail</option>
+                            <option value="Celular">Celular</option>
+                            <option value="Aleatória">Chave Aleatória</option>
+                          </select>
+                        </div>
+
+                        <div style={{ gridColumn: '1 / -1' }}>
+                          <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: COR.muted, marginBottom: 4 }}>
+                            Link Direto de Agendamento ou Checkout da Empresa
+                          </label>
+                          <input
+                            type="text"
+                            value={formConfig.linkDireto || ''}
+                            onChange={e => setFormConfig({ ...formConfig, linkDireto: e.target.value })}
+                            placeholder="https://kytto.com.br/empresa"
+                            style={{
+                              width: '100%',
+                              padding: '10px 12px',
+                              borderRadius: 8,
+                              border: `1px solid ${COR.line}`,
+                              fontSize: 13
+                            }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* SEÇÃO 2: POLÍTICAS META WHATSAPP BUSINESS & ANTI-BAN */}
+                    <div style={{ background: '#ecfdf5', padding: 20, borderRadius: 14, border: '1px solid #a7f3d0' }}>
+                      <h4 style={{ margin: '0 0 14px', fontSize: 15, fontWeight: 800, color: '#065f46' }}>
+                        🛡️ Políticas da Meta & Prevenção de Bloqueio (WhatsApp Business)
+                      </h4>
+
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <input
+                            type="checkbox"
+                            id="chkOptOut"
+                            checked={!!formConfig.optOutAtivo}
+                            onChange={e => setFormConfig({ ...formConfig, optOutAtivo: e.target.checked })}
+                            style={{ width: 18, height: 18 }}
+                          />
+                          <label htmlFor="chkOptOut" style={{ fontSize: 13, fontWeight: 700, color: '#065f46', cursor: 'pointer' }}>
+                            Incluir Frase de Opt-out Amigável (Evita denúncias e bloqueios no WhatsApp)
+                          </label>
+                        </div>
+
+                        <div>
+                          <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#047857', marginBottom: 4 }}>
+                            Texto da Frase de Opt-out
+                          </label>
+                          <input
+                            type="text"
+                            value={formConfig.fraseOptOut || ''}
+                            onChange={e => setFormConfig({ ...formConfig, fraseOptOut: e.target.value })}
+                            style={{
+                              width: '100%',
+                              padding: '10px 12px',
+                              borderRadius: 8,
+                              border: '1px solid #6ee7b7',
+                              fontSize: 13,
+                              background: '#fff'
+                            }}
+                          />
+                        </div>
+
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <input
+                            type="checkbox"
+                            id="chkHorario"
+                            checked={!!formConfig.travaHorarioComercial}
+                            onChange={e => setFormConfig({ ...formConfig, travaHorarioComercial: e.target.checked })}
+                            style={{ width: 18, height: 18 }}
+                          />
+                          <label htmlFor="chkHorario" style={{ fontSize: 13, fontWeight: 700, color: '#065f46', cursor: 'pointer' }}>
+                            Travar Envios Fora do Horário Comercial (Permitir apenas entre 08h e 20h)
+                          </label>
+                        </div>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 14, marginTop: 6 }}>
+                          <div>
+                            <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#047857', marginBottom: 4 }}>
+                              Intervalo Seguro entre Envios (segundos)
+                            </label>
+                            <input
+                              type="number"
+                              min="15"
+                              max="120"
+                              value={formConfig.intervaloSegundos || 30}
+                              onChange={e => setFormConfig({ ...formConfig, intervaloSegundos: Number(e.target.value) })}
+                              style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid #6ee7b7', background: '#fff' }}
+                            />
+                          </div>
+
+                          <div>
+                            <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#047857', marginBottom: 4 }}>
+                              Limite Diário de Disparos (Tier de Aquecimento Meta)
+                            </label>
+                            <input
+                              type="number"
+                              min="20"
+                              max="500"
+                              value={formConfig.limiteDiarioEnvios || 100}
+                              onChange={e => setFormConfig({ ...formConfig, limiteDiarioEnvios: Number(e.target.value) })}
+                              style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid #6ee7b7', background: '#fff' }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* SEÇÃO 3: PARÂMETROS DE INTELIGÊNCIA PREDITIVA */}
+                    <div style={{ background: '#f8fafc', padding: 20, borderRadius: 14, border: `1px solid ${COR.line}` }}>
+                      <h4 style={{ margin: '0 0 14px', fontSize: 15, fontWeight: 800, color: '#0f172a' }}>
+                        📊 Parâmetros de Inteligência Comercial
+                      </h4>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 14 }}>
+                        <div>
+                          <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: COR.muted, marginBottom: 4 }}>
+                            Ciclo Médio de Reposição / Churn (dias)
+                          </label>
+                          <input
+                            type="number"
+                            value={formConfig.cicloChurnDias || 21}
+                            onChange={e => setFormConfig({ ...formConfig, cicloChurnDias: Number(e.target.value) })}
+                            style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: `1px solid ${COR.line}` }}
+                          />
+                        </div>
+
+                        <div>
+                          <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: COR.muted, marginBottom: 4 }}>
+                            Meta de Ticket Médio (R$)
+                          </label>
+                          <input
+                            type="number"
+                            value={formConfig.metaTicketMedio || 220}
+                            onChange={e => setFormConfig({ ...formConfig, metaTicketMedio: Number(e.target.value) })}
+                            style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: `1px solid ${COR.line}` }}
+                          />
+                        </div>
+
+                        <div>
+                          <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: COR.muted, marginBottom: 4 }}>
+                            Meta de Taxa de Cross-Sell (%)
+                          </label>
+                          <input
+                            type="number"
+                            value={formConfig.metaCrossSell || 50}
+                            onChange={e => setFormConfig({ ...formConfig, metaCrossSell: Number(e.target.value) })}
+                            style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: `1px solid ${COR.line}` }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div>
+                      <button
+                        type="submit"
+                        disabled={salvandoConfig}
+                        style={{
+                          padding: '12px 24px',
+                          background: COR.azul,
+                          color: '#fff',
+                          border: 0,
+                          borderRadius: 10,
+                          fontWeight: 800,
+                          fontSize: 14,
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 8,
+                          boxShadow: '0 4px 10px rgba(37, 99, 235, 0.2)'
+                        }}
+                      >
+                        {salvandoConfig ? '💾 Salvando configurações...' : `💾 Salvar Configurações da ${empresaNome}`}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              )}
             </div>
           </div>
         </>
+      )}
+
+      {/* MODAL PARA REGISTRO DE CONVERSÃO / DINHEIRO NO CAIXA */}
+      {modalConversaoAberto && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(15, 23, 42, 0.65)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 9999,
+          padding: 16
+        }}>
+          <div style={{
+            background: '#fff',
+            borderRadius: 16,
+            maxWidth: 480,
+            width: '100%',
+            padding: 24,
+            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.2)'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 22 }}>💵</span>
+                <h3 style={{ margin: 0, fontSize: 17, fontWeight: 800, color: '#0f172a' }}>
+                  Registrar Dinheiro no Caixa
+                </h3>
+              </div>
+              <button
+                onClick={() => setModalConversaoAberto(false)}
+                style={{ background: 'transparent', border: 0, fontSize: 20, cursor: 'pointer', color: COR.muted }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={salvarConversao} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: COR.muted, marginBottom: 4 }}>
+                  Nome do Cliente
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={formConversao.clienteNome}
+                  onChange={e => setFormConversao({ ...formConversao, clienteNome: e.target.value })}
+                  placeholder="Nome do cliente atendido"
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: `1px solid ${COR.line}`, fontSize: 13 }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: COR.muted, marginBottom: 4 }}>
+                  Telefone / WhatsApp
+                </label>
+                <input
+                  type="text"
+                  value={formConversao.telefone}
+                  onChange={e => setFormConversao({ ...formConversao, telefone: e.target.value })}
+                  placeholder="(65) 99999-9999"
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: `1px solid ${COR.line}`, fontSize: 13 }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: COR.verdeEscuro, marginBottom: 4 }}>
+                  Valor Recebido / Fechado (R$) *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={formConversao.valor}
+                  onChange={e => setFormConversao({ ...formConversao, valor: e.target.value })}
+                  placeholder="ex: 200.00"
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: `1.5px solid ${COR.verde}`, fontSize: 16, fontWeight: 800, color: COR.verdeEscuro }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: COR.muted, marginBottom: 4 }}>
+                  Tipo de Fechamento
+                </label>
+                <select
+                  value={formConversao.tipo}
+                  onChange={e => setFormConversao({ ...formConversao, tipo: e.target.value })}
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: `1px solid ${COR.line}`, fontSize: 13 }}
+                >
+                  <option value="reativacao">🎯 Reativação de Cliente em Churn</option>
+                  <option value="upsell">🛍️ Up-Sell de Combo / Produto</option>
+                  <option value="vagas">⚡ Preenchimento de Vaga / Campanha</option>
+                  <option value="clube">👑 Assinatura / Clube VIP</option>
+                  <option value="avulsa">💵 Venda Balcão / Outro</option>
+                </select>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: COR.muted, marginBottom: 4 }}>
+                  Observações
+                </label>
+                <input
+                  type="text"
+                  value={formConversao.observacao}
+                  onChange={e => setFormConversao({ ...formConversao, observacao: e.target.value })}
+                  placeholder="ex: Pagamento via PIX confirmado"
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: `1px solid ${COR.line}`, fontSize: 13 }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 10 }}>
+                <button
+                  type="button"
+                  onClick={() => setModalConversaoAberto(false)}
+                  style={{ padding: '10px 16px', background: '#f1f5f9', border: 0, borderRadius: 8, fontWeight: 700, cursor: 'pointer' }}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  style={{
+                    padding: '10px 20px',
+                    background: 'linear-gradient(135deg, #16a34a 0%, #15803d 100%)',
+                    color: '#fff',
+                    border: 0,
+                    borderRadius: 8,
+                    fontWeight: 800,
+                    cursor: 'pointer',
+                    boxShadow: '0 2px 6px rgba(22, 163, 74, 0.3)'
+                  }}
+                >
+                  Confirmar e Creditar no Caixa
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
     </div>
   );
