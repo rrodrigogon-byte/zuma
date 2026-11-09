@@ -1978,9 +1978,9 @@ app.use('/api/webhooks', createWhatsappAiWebhookRouter());
   const iaAdvisorRouter = createIaAdvisorRouter({
     obterEmpresaId: (req) => {
       if (isAdminGlobal(req.user)) {
-        return req.headers['x-empresa-id'] ? String(req.headers['x-empresa-id']).trim() : 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
+        return req.headers['x-empresa-id'] ? String(req.headers['x-empresa-id']).trim() : null;
       }
-      return req.user?.empresaId ? String(req.user.empresaId).trim() : (legacyEmpresaId(req) || 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6');
+      return req.user?.empresaId ? String(req.user.empresaId).trim() : (legacyEmpresaId(req) || null);
     }
   });
   app.use('/api/admin/ia-advisor', auth, requireStaff, iaAdvisorRouter);

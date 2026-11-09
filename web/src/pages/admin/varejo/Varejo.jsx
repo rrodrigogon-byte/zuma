@@ -29,8 +29,8 @@ function gerarEan13Aleatorio() {
 export default function Varejo({ abaInicial = 'produtos' }) {
   const { toast } = useToast()
   const { empresaAtiva, lojaAtiva, lojasAcessiveis, empresasAcessiveis } = useAuth()
-  const empresaIdEfetivo = empresaAtiva?.id && empresaAtiva.id !== 'principal' ? empresaAtiva.id : (empresasAcessiveis?.[0]?.id || 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6')
-  const nomeEmpresa = empresaAtiva?.nome && empresaAtiva.id !== 'principal' ? empresaAtiva.nome : (empresasAcessiveis?.[0]?.nome || 'Barbearia Dino')
+  const empresaIdEfetivo = empresaAtiva?.id && empresaAtiva.id !== 'principal' ? empresaAtiva.id : (empresasAcessiveis?.[0]?.id || '')
+  const nomeEmpresa = empresaAtiva?.nome && empresaAtiva.id !== 'principal' ? empresaAtiva.nome : (empresasAcessiveis?.[0]?.nome || 'Empresa')
   const lojas = useMemo(() => lojasDaEmpresa(lojasAcessiveis, empresaIdEfetivo), [lojasAcessiveis, empresaIdEfetivo])
   const [aba, setAba] = useState(abaInicial)
   const [unidade, setUnidade] = useState(() => lojaAtiva?.id || (lojas.length === 1 ? lojas[0].id : ''))

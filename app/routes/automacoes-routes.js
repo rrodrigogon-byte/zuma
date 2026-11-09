@@ -80,7 +80,7 @@ const DEFINICOES_AUTOMACOES = [
   },
   {
     id: 'sincronizacao_eventos_a2',
-    nome: 'Barramento de Eventos Internos (Nossa Gente × Ultra)',
+    nome: 'Barramento de Eventos Internos Kytto Enterprise',
     descricao: 'Sincronização assíncrona desacoplada orientada a eventos internos com garantia de entrega e histórico auditável.',
     segmentos: ['todos'],
     icone: 'cpu',

@@ -223,25 +223,25 @@ export default function Supermercado() {
   const [recebimentosDoca, setRecebimentosDoca] = useState([]);
   const [modalNovoRecebimentoDoca, setModalNovoRecebimentoDoca] = useState(false);
   const [formDoca, setFormDoca] = useState({
-    fornecedor: "BRF Distribuidora S/A",
-    chaveNfe: "51261101838723000190550010000049211002345678",
-    numeroNfe: "004921",
-    temperaturaCaminhao: "-14.5",
-    placaVeiculo: "BRA2E19",
-    motorista: "Marcos Andrade",
-    observacoes: "Carga de congelados inspecionada na doca 02"
+    fornecedor: "",
+    chaveNfe: "",
+    numeroNfe: "",
+    temperaturaCaminhao: "",
+    placaVeiculo: "",
+    motorista: "",
+    observacoes: ""
   });
   // ── TROCAS & DEVOLUÇÕES (SAC) ──
   const [trocas, setTrocas] = useState([]);
   const [modalNovaTroca, setModalNovaTroca] = useState(false);
   const [formTroca, setFormTroca] = useState({
-    cupomOrigem: "PDV-MW707LNM",
-    clienteNome: "Mariana Souza",
-    clienteCpf: "123.456.789-00",
+    cupomOrigem: "",
+    clienteNome: "",
+    clienteCpf: "",
     motivo: "avaria_embalagem",
-    valorTotal: "29.90",
+    valorTotal: "",
     tipoRessarcimento: "vale_compras",
-    destinacao: "retorno_estoque",
+    destinacao: "descarte_avaria",
     itens: []
   });
   const [valeEmitido, setValeEmitido] = useState(null);
@@ -581,15 +581,20 @@ export default function Supermercado() {
   };
 
   const capturarPesoBalanca = (produtoPesavel = null) => {
-    const pesosExemplo = [0.380, 0.650, 1.120, 1.480, 2.250];
-    const pesoSorteado = pesosExemplo[Math.floor(Math.random() * pesosExemplo.length)];
-    const prod = produtoPesavel || produtos.find(p => p.pesavel || p.unidade === "KG") || produtos[0];
+    const prod = produtoPesavel || produtos.find(p => p.pesavel || p.unidade === "KG");
     if (!prod) {
-      showToast("Nenhum item pesável cadastrado para leitura de balança.");
+      showToast("Nenhum item pesável cadastrado no catálogo.");
       return;
     }
-    adicionarAoCarrinho(prod, pesoSorteado);
-    showToast(`⚖️ Balança Serial: ${pesoSorteado.toFixed(3)} kg capturados de "${prod.nome}"!`);
+    const pesoEntrada = window.prompt(`⚖️ Balança / Pesagem — "${prod.nome}"\nInforme o peso líquido (em kg) indicado na balança:`, "1.000");
+    if (!pesoEntrada) return;
+    const pesoNumerico = Number(String(pesoEntrada).replace(',', '.'));
+    if (!pesoNumerico || pesoNumerico <= 0) {
+      showToast("Peso inválido. A pesagem deve ser maior que 0 kg.");
+      return;
+    }
+    adicionarAoCarrinho(prod, pesoNumerico);
+    showToast(`⚖️ Balança: ${pesoNumerico.toFixed(3)} kg de "${prod.nome}" adicionados ao cupom.`);
   };
 
   useEffect(() => {
@@ -707,7 +712,7 @@ export default function Supermercado() {
       setTotemSucesso({
         numero: res.venda?.numero || "TOTEM-" + Date.now().toString().slice(-4),
         total,
-        chaveNfce: res.nfce?.chaveAcesso || "512611" + Math.random().toString().slice(2, 40),
+        chaveNfce: res.nfce?.chaveAcesso || null,
         forma
       });
       setTotemCarrinho([]);
@@ -1155,12 +1160,11 @@ export default function Supermercado() {
 
       if (['debito', 'credito', 'alimentacao'].includes(formaPagamento)) {
         setModalTef({
-          nsu: String(Math.floor(100000 + Math.random() * 900000)),
-          autorizacao: String(Math.floor(100000 + Math.random() * 900000)),
-          bandeira: formaPagamento === 'alimentacao' ? 'VR Alimentação' : (formaPagamento === 'debito' ? 'Mastercard Débito' : 'Visa Crédito'),
+          manual: true,
+          bandeira: formaPagamento === 'alimentacao' ? 'Vale Alimentação' : (formaPagamento === 'debito' ? 'Cartão Débito' : 'Cartão Crédito'),
           valor: totalCarrinho,
           dataHora: new Date().toLocaleString('pt-BR'),
-          adquirente: 'Stone Pagamentos S/A (TEF Contingência Offline)'
+          operador: sessaoCaixa?.caixa?.operador_nome || 'Operador de Caixa'
         });
       }
 
@@ -3702,36 +3706,30 @@ export default function Supermercado() {
 
       {/* MODAL COMPROVANTE TEF HOMOLOGADO */}
       {modalTef && (
-        <Modal title="Comprovante de Pagamento TEF (Cartão Aprovado)" onClose={() => setModalTef(null)}>
+        <Modal title="Registro de Pagamento em Cartão (Conferência Manual)" onClose={() => setModalTef(null)}>
           <div className="super-modal-form">
-            <div className="tef-badge-homologado">
-              <CheckCircle2 size={16} /> Transação TEF Autorizada pela Rede
+            <div className="tef-badge-homologado" style={{ background: '#e0f2fe', color: '#0369a1', borderColor: '#bae6fd' }}>
+              <CheckCircle2 size={16} /> Registro de Cartão Efetuado no Caixa
             </div>
             <div className="tef-receipt-container">
               <div className="tef-receipt-header">
                 <div>SUPERMERCADO KYTTO LTDA</div>
-                <div>CNPJ: 50.073.355/0001-89 · IE: 14.229.191-9</div>
-                <div>COMPROVANTE TEF MULTIADQUIRENTE</div>
+                <div>COMPROVANTE DE CONFERÊNCIA DE CAIXA</div>
               </div>
-              <div><strong>Adquirente:</strong> {modalTef.adquirente}</div>
-              <div><strong>Bandeira:</strong> {modalTef.bandeira}</div>
-              <div><strong>Operação:</strong> VENDA APROVADA ON-LINE</div>
-              <div><strong>NSU Terminal:</strong> {modalTef.nsu}</div>
-              <div><strong>Código Autorização:</strong> {modalTef.autorizacao}</div>
+              <div><strong>Forma de Pagamento:</strong> {modalTef.bandeira}</div>
+              <div><strong>Modalidade:</strong> Maquininha Física de Balcão (Conferência Manual)</div>
+              <div><strong>Operador de Caixa:</strong> {modalTef.operador}</div>
               <div><strong>Data / Hora:</strong> {modalTef.dataHora}</div>
               <div style={{ margin: "8px 0", borderTop: "1px dashed #cbd5e1", paddingTop: "8px" }}>
-                <strong>VALOR TOTAL PAGO: R$ {Number(modalTef.valor).toFixed(2)}</strong>
+                <strong>VALOR REGISTRADO NO PDV: R$ {Number(modalTef.valor).toFixed(2)}</strong>
               </div>
               <div style={{ textAlign: "center", fontSize: "11px", color: "#64748b", marginTop: "10px" }}>
-                1ª VIA — ESTABELECIMENTO / 2ª VIA — CLIENTE
+                Conferência pelo comprovante emitido na maquininha física do estabelecimento.
               </div>
             </div>
             <div className="super-modal-actions">
-              <button type="button" className="super-btn-sec" onClick={() => window.print()}>
-                <Printer size={16} /> Imprimir Comprovante TEF
-              </button>
               <button type="button" className="super-btn-primary" onClick={() => setModalTef(null)}>
-                Fechar e Novo Cliente
+                Concluído / Próximo Cliente
               </button>
             </div>
           </div>

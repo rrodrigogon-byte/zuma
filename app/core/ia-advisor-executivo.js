@@ -15,17 +15,36 @@ function formatarMoeda(valor) {
 }
 
 function obterLojaMatriz(empresaId) {
+  if (!empresaId) return null;
   const store = db();
   const lojas = store.lojas?.filter(l => l.empresaId === empresaId || l.empresa_id === empresaId) || [];
   if (lojas.length > 0) return lojas[0].id;
   if (empresaId === EMPRESA_DINO_ID || empresaId === 'dino') return 'ab049a75-6e2e-4cc9-abbc-6fd11cdda1d8';
-  return 'matriz-padrao';
+  return null;
 }
 
 /**
  * Realiza previsão preditiva de faturamento para o mês atual com base na velocidade de vendas.
  */
-export function calcularForecastFaturamento(empresaId = EMPRESA_DINO_ID) {
+export function calcularForecastFaturamento(empresaId) {
+  if (!empresaId) {
+    return {
+      semDados: true,
+      mensagem: 'Empresa não informada para cálculo de forecast.',
+      receitaRealizada: 0,
+      receitaRealizadaFormatada: formatarMoeda(0),
+      mediaDiaria: 0,
+      mediaDiariaFormatada: formatarMoeda(0),
+      faturamentoProjetado: 0,
+      faturamentoProjetadoFormatado: formatarMoeda(0),
+      metaEmpresa: null,
+      metaEmpresaFormatada: 'Não cadastrada',
+      percentualAtingido: 0,
+      probabilidadeMeta: null,
+      statusTendencia: 'sem_dados',
+      recomendacao: 'Selecione uma empresa com movimentações para gerar o forecast executivo.'
+    };
+  }
   const agora = new Date();
   const ano = agora.getFullYear();
   const mes = agora.getMonth() + 1;
@@ -35,6 +54,7 @@ export function calcularForecastFaturamento(empresaId = EMPRESA_DINO_ID) {
   const lojaId = obterLojaMatriz(empresaId);
 
   let receitaRealizada = 0;
+  let metaEmpresa = 0;
   try {
     const dre = financeiro.dreGerencial ? financeiro.dreGerencial({ empresaId, lojaId, mes: mesFormatado, legacy: true }) : null;
     receitaRealizada = dre?.receitaBruta?.total || 0;
@@ -44,18 +64,44 @@ export function calcularForecastFaturamento(empresaId = EMPRESA_DINO_ID) {
     receitaRealizada = comandas.reduce((acc, c) => acc + Number(c.total || 0), 0);
   }
 
+  // Recupera meta real cadastrada no banco para esta empresa específica
+  try {
+    const store = db();
+    const empMeta = (store.metas || []).find(m => (m.empresaId === empresaId || m.empresa_id === empresaId) && m.mes === mesFormatado);
+    if (empMeta && Number(empMeta.valor || empMeta.metaFaturamento || 0) > 0) {
+      metaEmpresa = Number(empMeta.valor || empMeta.metaFaturamento);
+    }
+  } catch (_) {}
+
+  if (receitaRealizada <= 0) {
+    return {
+      mes: mesFormatado,
+      diaDoMes,
+      totalDiasMes,
+      diasRestantes: Math.max(0, totalDiasMes - diaDoMes),
+      receitaRealizada: 0,
+      receitaRealizadaFormatada: formatarMoeda(0),
+      mediaDiaria: 0,
+      mediaDiariaFormatada: formatarMoeda(0),
+      faturamentoProjetado: 0,
+      faturamentoProjetadoFormatado: formatarMoeda(0),
+      metaEmpresa: metaEmpresa > 0 ? metaEmpresa : null,
+      metaEmpresaFormatada: metaEmpresa > 0 ? formatarMoeda(metaEmpresa) : 'Não cadastrada',
+      percentualAtingido: 0,
+      probabilidadeMeta: null,
+      semDados: true,
+      statusTendencia: 'sem_dados',
+      recomendacao: 'Sem movimentações de receita registradas no mês atual. Lance vendas ou comandas para gerar a projeção real.'
+    };
+  }
+
   // Velocidade média diária
   const mediaDiaria = diaDoMes > 0 ? (receitaRealizada / diaDoMes) : 0;
   const diasRestantes = Math.max(0, totalDiasMes - diaDoMes);
-
-  // Projeção considerando peso adicional em fins de semana (+15%)
-  const projecaoRestante = diasRestantes * (mediaDiaria > 0 ? mediaDiaria : 500) * 1.05;
-  const faturamentoProjetado = receitaRealizada + projecaoRestante;
-
-  // Meta padrão do estabelecimento (ou baseada em meses anteriores)
-  const metaEmpresa = 25000; 
-  const percentualAtingido = metaEmpresa > 0 ? Math.round((receitaRealizada / metaEmpresa) * 100) : 0;
-  const probabilidadeMeta = faturamentoProjetado >= metaEmpresa ? Math.min(99, Math.round((faturamentoProjetado / metaEmpresa) * 85)) : Math.round((faturamentoProjetado / metaEmpresa) * 70);
+  const projecaoRestante = diasRestantes * mediaDiaria;
+  const faturamentoProjetado = Number((receitaRealizada + projecaoRestante).toFixed(2));
+  const percentualAtingido = metaEmpresa > 0 ? Math.round((receitaRealizada / metaEmpresa) * 100) : null;
+  const probabilidadeMeta = metaEmpresa > 0 ? Math.min(100, Math.round((faturamentoProjetado / metaEmpresa) * 100)) : null;
 
   return {
     mes: mesFormatado,
@@ -68,8 +114,8 @@ export function calcularForecastFaturamento(empresaId = EMPRESA_DINO_ID) {
     mediaDiariaFormatada: formatarMoeda(mediaDiaria),
     faturamentoProjetado,
     faturamentoProjetadoFormatado: formatarMoeda(faturamentoProjetado),
-    metaEmpresa,
-    metaEmpresaFormatada: formatarMoeda(metaEmpresa),
+    metaEmpresa: metaEmpresa > 0 ? metaEmpresa : null,
+    metaEmpresaFormatada: metaEmpresa > 0 ? formatarMoeda(metaEmpresa) : 'Não cadastrada',
     percentualAtingido,
     probabilidadeMeta,
     statusTendencia: faturamentoProjetado >= metaEmpresa ? 'acima_da_meta' : 'atencao_necessaria',
@@ -83,6 +129,7 @@ export function calcularForecastFaturamento(empresaId = EMPRESA_DINO_ID) {
  * Executa auditoria automática para detecção de anomalias operacionais e riscos.
  */
 export function auditarAnomaliasERiscos(empresaId = EMPRESA_DINO_ID) {
+  if (!empresaId) return { totalAnomalias: 0, totalRiscos: 0, scoreSaudeOperacional: null, semDados: true, anomalias: [], riscos: [] };
   const anomalias = [];
   const riscos = [];
 
@@ -136,7 +183,7 @@ export function auditarAnomaliasERiscos(empresaId = EMPRESA_DINO_ID) {
   return {
     totalAnomalias: anomalias.length,
     totalRiscos: riscos.length,
-    scoreSaudeOperacional: Math.max(70, 100 - (riscos.length * 10 + anomalias.length * 5)),
+    scoreSaudeOperacional: Math.max(0, 100 - (riscos.length * 10 + anomalias.length * 5)),
     anomalias,
     riscos
   };
@@ -145,23 +192,33 @@ export function auditarAnomaliasERiscos(empresaId = EMPRESA_DINO_ID) {
 /**
  * Simulador de Cenários "What-If" para apoio à tomada de decisão executiva.
  */
-export function simularCenario(empresaId = EMPRESA_DINO_ID, parametros = {}) {
+export function simularCenario(empresaId, parametros = {}) {
+  if (!empresaId) {
+    return { semDados: true, mensagem: 'Empresa não informada para simulação.' };
+  }
   const agora = new Date();
   const mesFormatado = `${agora.getFullYear()}-${String(agora.getMonth() + 1).padStart(2, '0')}`;
   const lojaId = obterLojaMatriz(empresaId);
 
-  let receitaAtual = 15000;
-  let custosAtuais = 6750;
-  let despesasAtuais = 4500;
+  let receitaAtual = 0;
+  let custosAtuais = 0;
+  let despesasAtuais = 0;
 
   try {
     const dreAtual = financeiro.dreGerencial ? financeiro.dreGerencial({ empresaId, lojaId, mes: mesFormatado, legacy: true }) : null;
     if (dreAtual?.receitaBruta?.total > 0) {
       receitaAtual = dreAtual.receitaBruta.total;
       custosAtuais = dreAtual.custoServicos?.total || (receitaAtual * 0.45);
-      despesasAtuais = dreAtual.despesasOperacionais?.total || 4500;
+      despesasAtuais = dreAtual.despesasOperacionais?.total || 0;
     }
   } catch (_) {}
+
+  if (receitaAtual <= 0) {
+    return {
+      semDados: true,
+      mensagem: 'Sem base financeira consolidada para o mês atual nesta empresa. Lance movimentações para permitir a simulação com base real.'
+    };
+  }
 
   const lucroAtual = receitaAtual - custosAtuais - despesasAtuais;
 

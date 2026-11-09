@@ -2602,6 +2602,7 @@ export async function salvarTerminalPdv(db, empresaId, dados = {}, { usuario = n
 
 export async function listarAtacarejoFaixas(db, empresaId, { lojaId = null, itemId = null } = {}) {
   const empresa = exigirUuid(empresaId, 'empresa');
+  try {
   let sql = `
     SELECT f.*, i.descricao as item_nome, i.sku, i.codigo_barras
     FROM var_atacarejo_faixas f
@@ -2616,6 +2617,10 @@ export async function listarAtacarejoFaixas(db, empresaId, { lojaId = null, item
   sql += ` ORDER BY f.item_id, f.quantidade_minima ASC`;
   const res = await db.query(sql, params);
   return { faixas: res.rows };
+  } catch (err) {
+    if (err.code === '42P01') return { faixas: [] };
+    throw err;
+  }
 }
 
 export async function salvarAtacarejoFaixa(db, empresaId, dados = {}) {
@@ -2646,6 +2651,7 @@ export async function removerAtacarejoFaixa(db, empresaId, id) {
 
 export async function listarPromocoesAvancadas(db, empresaId, { lojaId = null, ativasApenas = true } = {}) {
   const empresa = exigirUuid(empresaId, 'empresa');
+  try {
   let sql = `
     SELECT p.*, 
            i1.descricao as item_origem_nome, i1.codigo_barras as item_origem_ean,
@@ -2662,6 +2668,10 @@ export async function listarPromocoesAvancadas(db, empresaId, { lojaId = null, a
   sql += ` ORDER BY p.criado_em DESC`;
   const res = await db.query(sql, params);
   return { promocoes: res.rows };
+  } catch (err) {
+    if (err.code === '42P01') return { promocoes: [] };
+    throw err;
+  }
 }
 
 export async function salvarPromocaoAvancada(db, empresaId, dados = {}) {
@@ -2809,6 +2819,7 @@ export async function aplicarMotorPromocoesCarrinho(db, empresaId, itens = [], {
  */
 export async function calcularSugestaoCompras(db, empresaId, { diasHistorico = 30, margemSegurancaDias = 5, lojaId = null } = {}) {
   const empresa = exigirUuid(empresaId, 'empresa');
+  try {
 
   // Buscar itens de estoque com seus saldos atuais e histórico de saída
   const rItens = await db.query(
@@ -2891,6 +2902,12 @@ export async function calcularSugestaoCompras(db, empresaId, { diasHistorico = 3
     totalItensAbaixoPontoPedido: sugestoes.length,
     valorTotalGlobalEstimado: valorTotalGlobal
   };
+  } catch (err) {
+    if (err.code === '42P01') {
+      return { sugestoes: [], totalItensAbaixoPontoPedido: 0, valorTotalGlobalEstimado: 0 };
+    }
+    throw err;
+  }
 }
 
 export async function gerarPedidoCompraSugerido(db, empresaId, { itens = [], usuario = null } = {}) {
@@ -2916,6 +2933,7 @@ export async function gerarPedidoCompraSugerido(db, empresaId, { itens = [], usu
  */
 export async function monitorarRupturasTempoReal(db, empresaId, { toleranciaHoras = 3, lojaId = null } = {}) {
   const empresa = exigirUuid(empresaId, 'empresa');
+  try {
 
   // Buscar produtos Curva A com estoque positivo
   const rProdutos = await db.query(
@@ -2966,6 +2984,12 @@ export async function monitorarRupturasTempoReal(db, empresaId, { toleranciaHora
     rupturas,
     totalAlertas: rupturas.length
   };
+  } catch (err) {
+    if (err.code === '42P01') {
+      return { rupturas: [], totalAlertas: 0 };
+    }
+    throw err;
+  }
 }
 
 export async function confirmarReposicaoGondola(db, empresaId, id, usuario = null) {
@@ -3186,44 +3210,20 @@ export async function simularTributacaoItem(db, empresaId, dados) {
 
 export async function listarEnderecamentosWms(db, empresaId) {
   const empresa = exigirUuid(empresaId, 'empresa');
-  const res = await db.query(
-    `SELECT e.*, i.sku, i.codigo_barras, i.descricao as descricao_item
-     FROM var_enderecamento_wms e
-     LEFT JOIN est_itens i ON i.id = e.item_id
-     WHERE e.empresa_id = $1
-     ORDER BY e.rua ASC, e.predio ASC, e.andar ASC`,
-    [empresa]
-  );
-
-  if (res.rows.length === 0) {
-    // Inicializar mapa de endereçamento da loja física
-    const enderecosIniciais = [
-      { cod: 'R01-P01-A01-V01', rua: 'Rua 01', predio: 'P01', andar: 'N1', vao: 'V01', tipo: 'AREA_VENDA', cap: 60, pontoRep: 15, saldo: 42 },
-      { cod: 'R01-P01-A03-V01', rua: 'Rua 01', predio: 'P01', andar: 'N3', vao: 'V01', tipo: 'PULMAO_DEPOSITO', cap: 300, pontoRep: 50, saldo: 240 },
-      { cod: 'R02-P01-A01-V02', rua: 'Rua 02', predio: 'P01', andar: 'N1', vao: 'V02', tipo: 'AREA_VENDA', cap: 80, pontoRep: 20, saldo: 65 },
-      { cod: 'R03-P02-A01-V01', rua: 'Rua 03', predio: 'P02', andar: 'N1', vao: 'V01', tipo: 'AREA_VENDA', cap: 50, pontoRep: 10, saldo: 8 },
-      { cod: 'R03-P02-A04-V01', rua: 'Rua 03', predio: 'P02', andar: 'N4', vao: 'V01', tipo: 'PULMAO_DEPOSITO', cap: 400, pontoRep: 80, saldo: 320 },
-      { cod: 'R04-P01-A01-V01', rua: 'Rua 04', predio: 'P01', andar: 'N1', vao: 'V01', tipo: 'CAMARA_FRIA', cap: 120, pontoRep: 30, saldo: 95 }
-    ];
-
-    for (const e of enderecosIniciais) {
-      await db.query(
-        `INSERT INTO var_enderecamento_wms (
-           empresa_id, codigo_endereco, rua, predio, andar, vao, tipo_localizacao, capacidade_maxima, ponto_reposicao, saldo_atual
-         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-         ON CONFLICT DO NOTHING`,
-        [empresa, e.cod, e.rua, e.predio, e.andar, e.vao, e.tipo, e.cap, e.pontoRep, e.saldo]
-      );
-    }
-
-    const recarregado = await db.query(
-      `SELECT * FROM var_enderecamento_wms WHERE empresa_id = $1 ORDER BY rua ASC, predio ASC, andar ASC`,
+  try {
+    const res = await db.query(
+      `SELECT e.*, i.sku, i.codigo_barras, i.descricao as descricao_item
+       FROM var_enderecamento_wms e
+       LEFT JOIN est_itens i ON i.id = e.item_id
+       WHERE e.empresa_id = $1
+       ORDER BY e.rua ASC, e.predio ASC, e.andar ASC`,
       [empresa]
     );
-    return recarregado.rows;
+    return res.rows;
+  } catch (err) {
+    if (err.code === '42P01') return [];
+    throw err;
   }
-
-  return res.rows;
 }
 
 export async function gerarOrdemReabastecimentoWms(db, empresaId, dados) {
@@ -3327,6 +3327,7 @@ export async function obterCockpitExecutivoSupermercado(db, empresaId, options =
   const empresa = exigirUuid(empresaId, 'empresa');
   const { lojaId = null } = options;
 
+  try {
   // Buscar metas configuradas
   const rMetas = await db.query(
     `SELECT * FROM var_metas_supermercado WHERE empresa_id = $1 LIMIT 1`,
@@ -3334,12 +3335,12 @@ export async function obterCockpitExecutivoSupermercado(db, empresaId, options =
   );
 
   const metas = rMetas.rows[0] || {
-    area_vendas_m2: 850.0,
-    meta_venda_m2: 2500.0,
-    meta_ticket_medio: 75.0,
-    meta_margem_bruta_pct: 28.5,
-    meta_quebra_max_pct: 1.5,
-    meta_ruptura_max_pct: 2.0
+    area_vendas_m2: null,
+    meta_venda_m2: null,
+    meta_ticket_medio: null,
+    meta_margem_bruta_pct: null,
+    meta_quebra_max_pct: null,
+    meta_ruptura_max_pct: null
   };
 
   // Buscar total de vendas reais no varejo
@@ -3362,40 +3363,43 @@ export async function obterCockpitExecutivoSupermercado(db, empresaId, options =
     [empresa]
   );
   const totalPerdas = Number(rPerdas.rows[0]?.total_perdas || 0);
-  const quebraPct = faturamentoTotal > 0 ? (totalPerdas / faturamentoTotal) * 100 : 0.85;
+  const quebraPct = faturamentoTotal > 0 ? Number(((totalPerdas / faturamentoTotal) * 100).toFixed(2)) : 0;
 
   // Venda por m2
-  const areaM2 = Number(metas.area_vendas_m2) || 850;
-  const vendaPorM2 = areaM2 > 0 ? (faturamentoTotal || 142500.0) / areaM2 : 0;
-
-  // Heatmap do Fluxo por Horário (07h às 22h)
-  const heatmapHorarios = [
-    { hora: '07h - 09h', fluxo: 'BAIXO', cupons: 42, operadoresRecomendados: 3 },
-    { hora: '09h - 11h', fluxo: 'MEDIO', cupons: 118, operadoresRecomendados: 5 },
-    { hora: '11h - 14h', fluxo: 'PICO_ALMOCO', cupons: 265, operadoresRecomendados: 8 },
-    { hora: '14h - 17h', fluxo: 'MEDIO', cupons: 145, operadoresRecomendados: 5 },
-    { hora: '17h - 20h', fluxo: 'PICO_NOTURNO', cupons: 340, operadoresRecomendados: 10 },
-    { hora: '20h - 22h', fluxo: 'BAIXO', cupons: 76, operadoresRecomendados: 4 }
-  ];
+  const areaM2 = Number(metas.area_vendas_m2) || 0;
+  const vendaPorM2 = areaM2 > 0 ? Number((faturamentoTotal / areaM2).toFixed(2)) : 0;
 
   return {
     metas,
+    semDados: faturamentoTotal === 0,
     kpis: {
-      faturamentoTotal: faturamentoTotal || 142500.0,
-      totalCupons: totalCupons || 1980,
-      ticketMedioReal: ticketMedioReal || 71.97,
+      faturamentoTotal,
+      totalCupons,
+      ticketMedioReal: Number(ticketMedioReal.toFixed(2)),
       areaVendasM2: areaM2,
-      vendaPorM2: Number(vendaPorM2.toFixed(2)),
-      totalPerdasCusto: totalPerdas || 1211.25,
-      quebraPct: Number(quebraPct.toFixed(2)),
-      metaQuebraPct: Number(metas.meta_quebra_max_pct),
-      margemMediaReal: 29.2,
-      metaMargemPct: Number(metas.meta_margem_bruta_pct),
-      taxaRupturaGondola: 1.8,
-      metaRupturaPct: Number(metas.meta_ruptura_max_pct)
+      vendaPorM2,
+      totalPerdasCusto: totalPerdas,
+      quebraPct,
+      metaQuebraPct: metas.meta_quebra_max_pct ? Number(metas.meta_quebra_max_pct) : null,
+      margemMediaReal: 0,
+      metaMargemPct: metas.meta_margem_bruta_pct ? Number(metas.meta_margem_bruta_pct) : null,
+      taxaRupturaGondola: 0,
+      metaRupturaPct: metas.meta_ruptura_max_pct ? Number(metas.meta_ruptura_max_pct) : null
     },
-    heatmapHorarios
+    heatmapHorarios: []
   };
+  } catch (err) {
+    if (err.code === '42P01') {
+      return {
+        metas: {},
+        semDados: true,
+        mensagem: 'Tabelas de cockpit aguardando aplicação de DDL',
+        kpis: { faturamentoTotal: 0, totalCupons: 0, ticketMedioReal: 0, areaVendasM2: 0, vendaPorM2: 0, totalPerdasCusto: 0, quebraPct: 0, margemMediaReal: 0, taxaRupturaGondola: 0 },
+        heatmapHorarios: []
+      };
+    }
+    throw err;
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

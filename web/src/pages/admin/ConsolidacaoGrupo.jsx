@@ -88,7 +88,7 @@ export default function ConsolidacaoGrupo() {
         payload: { solicitadoEm: new Date().toISOString() }
       });
       if (data.ok) {
-        toast('Sincronização por evento interno concluída entre Nossa Gente e Ultra!', 'success');
+        toast('Sincronização por evento interno concluída entre as unidades do grupo!', 'success');
         carregarDados();
       }
     } catch (e) {
@@ -207,7 +207,7 @@ export default function ConsolidacaoGrupo() {
               </div>
             </div>
             <p style={{ margin: '6px 0 0', fontSize: 13, color: 'var(--muted, #5A6570)' }}>
-              Visão corporativa unificada das empresas do grupo, DRE contábil intercompany e sincronização síncrona por evento interno (Nossa Gente × Ultra).
+              Visão corporativa unificada das empresas do grupo, DRE contábil intercompany e sincronização síncrona por barramento de eventos internos.
             </p>
           </div>
 
@@ -388,7 +388,7 @@ export default function ConsolidacaoGrupo() {
           }}
         >
           <Activity style={{ width: 16, height: 16 }} />
-          Barramento de Eventos Internos (Nossa Gente × Ultra)
+          Barramento de Eventos Internos Kytto
           <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#10b981' }} />
         </button>
       </div>
@@ -453,7 +453,7 @@ export default function ConsolidacaoGrupo() {
               boxShadow: 'var(--shadow, 0 4px 16px rgba(0,0,0,0.03))'
             }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: 'var(--muted)', fontSize: 11, fontWeight: 800, textTransform: 'uppercase' }}>
-                <span>Equipe (Nossa Gente)</span>
+                <span>Equipe e Colaboradores</span>
                 <Users style={{ width: 16, height: 16, color: '#0284c7' }} />
               </div>
               <div style={{ fontSize: 24, fontWeight: 900, color: 'var(--navy, #12283F)', marginTop: 8 }}>
@@ -733,12 +733,12 @@ export default function ConsolidacaoGrupo() {
                 </div>
 
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 16px 10px 32px', color: 'var(--muted)', fontSize: 13 }}>
-                  <span>(-) Despesas com Pessoal, Comissões e Bonificações (Nossa Gente)</span>
+                  <span>(-) Despesas com Pessoal, Comissões e Bonificações</span>
                   <span>- {fmtBRL(dados?.consolidacaoFinanceira?.despesasEquipeComissoes)}</span>
                 </div>
 
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 16px 10px 32px', color: 'var(--muted)', fontSize: 13 }}>
-                  <span>(-) Despesas Administrativas e Custos Operacionais Fixos (Ultra)</span>
+                  <span>(-) Despesas Administrativas e Custos Operacionais Fixos</span>
                   <span>- {fmtBRL(dados?.consolidacaoFinanceira?.despesasAdministrativas)}</span>
                 </div>
 
@@ -800,7 +800,7 @@ export default function ConsolidacaoGrupo() {
                     <ShieldCheck style={{ width: 22, height: 22 }} />
                     Saudável
                   </div>
-                  <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>Nossa Gente ⇄ Ultra conectado</div>
+                  <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>Barramento interno conectado</div>
                 </div>
               </div>
 

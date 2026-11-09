@@ -69,8 +69,7 @@ const GATILHOS_CRM = [
     texto: '\n\n🔄 Para os membros históricos do nosso Club, preparamos uma taxa especial de reativação sem carência!',
   },
 ]
-
-export default function DinoRecuperacaoAvecPanel({ onAbrirAgenda }) {
+export default function DinoRecuperacaoAvecPanel({ onAbrirAgenda, empresaId }) {
   const [loading, setLoading] = useState(true)
   const [dados, setDados] = useState({
     itens: [],
@@ -226,7 +225,7 @@ export default function DinoRecuperacaoAvecPanel({ onAbrirAgenda }) {
       const res = await fetch(url, {
         headers: {
           Authorization: `Bearer ${localStorage.getItem('sp_token') || ''}`,
-          'X-Empresa-Id': 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6',
+          'X-Empresa-Id': String(empresaId || localStorage.getItem('sp_empresa_id') || '').trim(),
         },
       })
       if (!res.ok) throw new Error('Falha ao exportar')

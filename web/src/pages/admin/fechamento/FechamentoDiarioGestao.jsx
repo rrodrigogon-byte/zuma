@@ -51,7 +51,7 @@ export default function FechamentoDiarioGestao() {
 
   // Multi-Empresa selecionada
   const [empresaSelecionadaId, setEmpresaSelecionadaId] = useState(
-    searchParams.get('empresaId') || empresaAtiva?.id || 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6'
+    searchParams.get('empresaId') || empresaAtiva?.id || empresasAcessiveis?.[0]?.id || ''
   );
   const [lojaSelecionadaId, setLojaSelecionadaId] = useState(
     searchParams.get('lojaId') || lojaAtiva?.id || ''

@@ -27,10 +27,8 @@ export default function DinoSplitPagamento() {
           <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12, fontWeight: 'bold' }}>
             Gateway de Pagamento Integrado
             <select style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid var(--line)', background: 'var(--card)', color: 'var(--fg)' }} value={gateway} onChange={e => setGateway(e.target.value)}>
-              <option value="asaas">Asaas (PIX + Cartão)</option>
-              <option value="stripe">Stripe</option>
-              <option value="pagarme">Pagar.me</option>
-              <option value="mercadopago">Mercado Pago</option>
+              <option value="kytto_pay">Kytto Pay (PIX Direto BACEN / Split Nativo)</option>
+              <option value="mercadopago">Mercado Pago Gateway</option>
             </select>
           </label>
           <div style={{ flex: 1 }}>

@@ -2,7 +2,7 @@
  * Módulo de Inteligência Comercial, Indicadores de Vendas & IA de Crescimento
  * Multi-tenant completo: Dino Barbearia, Stallone Nutre Sport, Agro Open, Supermercado e Varejo.
  * Políticas Meta WhatsApp Business Compliance, Dinheiro na Mesa & Fechamento Imediato.
- * Kytto ERP - SetPoint Ultra
+ * Kytto ERP - SetPoint Intelligence
  */
 import { carregarBaseConsolidada } from './dino-recuperacao-avec.js';
 
@@ -144,9 +144,26 @@ const CONFIG_PADRAO = {
  */
 export function obterConfigEmpresa(raiz, empresaId) {
   const chaveTenant = identificarChaveTenant(empresaId);
-  const padrao = CONFIG_PADRAO[chaveTenant] || CONFIG_PADRAO.dino;
+  const padrao = CONFIG_PADRAO[chaveTenant] || {
+    empresaNome: 'Empresa em Configuração',
+    empresaSegmento: 'Comércio e Serviços',
+    agenteIaNome: 'Atendente Virtual IA',
+    iconeSegmento: '🏢',
+    chavePix: '',
+    chavePixTipo: 'Chave Aleatória',
+    linkDireto: '',
+    optOutAtivo: true,
+    fraseOptOut: "(Responda 'PARAR' para não receber mensagens)",
+    travaHorarioComercial: true,
+    intervaloSegundos: 30,
+    limiteDiarioEnvios: 50,
+    cicloChurnDias: 30,
+    metaTicketMedio: 0,
+    metaCrossSell: 0,
+    configurada: false
+  };
   const salvas = raiz?.vendasIaConfig?.[chaveTenant] || raiz?.vendasIaConfig?.[empresaId] || {};
-  return { ...padrao, ...salvas, chaveTenant };
+  return { ...padrao, ...salvas, chaveTenant, configurada: !!(salvas.chavePix || (CONFIG_PADRAO[chaveTenant] && padrao.chavePix)) };
 }
 
 /**
@@ -198,11 +215,12 @@ export function obterConversoesVenda(raiz, empresaId) {
 
 function identificarChaveTenant(empresaId) {
   const empId = String(empresaId || '').toLowerCase().trim();
+  if (empId.includes('d0d0ac01') || empId === 'dino' || empId.includes('dino')) return 'dino';
   if (empId.includes('2e041110') || empId === 'stallone' || empId.includes('stallone')) return 'stallone';
   if (empId.includes('a8000001') || empId === 'agroopen' || empId.includes('agro')) return 'agroopen';
   if (empId.includes('supermercado') || empId.includes('mercado') || empId.includes('emporio')) return 'supermercado';
   if (empId.includes('varejo') || empId.includes('moda') || empId.includes('loja')) return 'varejo';
-  return 'dino';
+  return empId || 'desconhecido';
 }
 
 /**
@@ -307,6 +325,20 @@ export async function buildInteligenciaVendas(raiz, { empresaId, lojaId }) {
   const hoje = hojeCuiaba();
   const config = obterConfigEmpresa(raiz, empresaId);
   const chaveTenant = config.chaveTenant;
+
+  if (!['dino', 'stallone', 'agroopen', 'supermercado', 'varejo'].includes(chaveTenant) && !config.configurada) {
+    return {
+      empresaId,
+      lojaId,
+      configurada: false,
+      aviso: 'Configure esta empresa: cadastre a chave PIX e os produtos no módulo comercial para ativar a Inteligência de Vendas.',
+      acoes: [],
+      reativacao: [],
+      oportunidades: [],
+      metricas: { totalClientes: 0, receitaEstimada: 0, dinheiroNaMesa: 0 },
+      config
+    };
+  }
 
   if (chaveTenant === 'stallone') {
     return buildInteligenciaStallone({ raiz, empresaId, lojaId, hoje, config });

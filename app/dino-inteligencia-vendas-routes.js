@@ -17,7 +17,7 @@ export function registerInteligenciaVendasRoutes(app, { db, legacyEmpresaId, leg
       req.headers['x-empresa-id'] ||
       req.user?.empresaId ||
       (legacyEmpresaId ? legacyEmpresaId(req) : '') ||
-      'dino'
+      ''
     ).trim();
   };
 

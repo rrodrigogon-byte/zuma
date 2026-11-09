@@ -13,13 +13,13 @@ import {
 } from '../core/ia-advisor-executivo.js';
 import { EMPRESA_DINO_ID } from '../modules/empresas/servico.js';
 
-export function createIaAdvisorRouter({ obterEmpresaId = () => EMPRESA_DINO_ID } = {}) {
+export function createIaAdvisorRouter({ obterEmpresaId = () => null } = {}) {
   const router = Router();
 
   // Forecast preditivo de faturamento do mês
   router.get('/forecast', (req, res) => {
     try {
-      const empresaId = req.query.empresaId || obterEmpresaId(req) || EMPRESA_DINO_ID;
+      const empresaId = req.query.empresaId || obterEmpresaId(req);
       const forecast = calcularForecastFaturamento(empresaId);
       res.json(forecast);
     } catch (err) {
@@ -30,7 +30,7 @@ export function createIaAdvisorRouter({ obterEmpresaId = () => EMPRESA_DINO_ID }
   // Auditoria contínua de anomalias e riscos operacionais
   router.get('/auditoria-riscos', (req, res) => {
     try {
-      const empresaId = req.query.empresaId || obterEmpresaId(req) || EMPRESA_DINO_ID;
+      const empresaId = req.query.empresaId || obterEmpresaId(req);
       const auditoria = auditarAnomaliasERiscos(empresaId);
       res.json(auditoria);
     } catch (err) {
@@ -41,7 +41,7 @@ export function createIaAdvisorRouter({ obterEmpresaId = () => EMPRESA_DINO_ID }
   // Simulador de Cenários Interativo "What-If"
   router.post('/simulador-cenarios', (req, res) => {
     try {
-      const empresaId = req.body.empresaId || obterEmpresaId(req) || EMPRESA_DINO_ID;
+      const empresaId = req.body.empresaId || obterEmpresaId(req);
       const parametros = req.body || {};
       const simulacao = simularCenario(empresaId, parametros);
       res.json(simulacao);
@@ -64,7 +64,7 @@ export function createIaAdvisorRouter({ obterEmpresaId = () => EMPRESA_DINO_ID }
   // Painel Geral Unificado do Advisor (KPIs + Riscos + Forecast)
   router.get('/dashboard', (req, res) => {
     try {
-      const empresaId = req.query.empresaId || obterEmpresaId(req) || EMPRESA_DINO_ID;
+      const empresaId = req.query.empresaId || obterEmpresaId(req);
       const forecast = calcularForecastFaturamento(empresaId);
       const auditoria = auditarAnomaliasERiscos(empresaId);
 

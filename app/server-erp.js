@@ -1751,6 +1751,12 @@ async function iniciar() {
   // destino fora da lista de empresas ativas do cadastro mestre.
   app.post('/api/admin/cardapio/replicar-todas-empresas', requerAdministradorPlataforma, (req, res) => {
     try {
+      const confirmacao = String(req.body?.confirmacao || '').trim();
+      if (confirmacao !== 'CONFIRMAR_REPLICACAO_CATALOGO') {
+        return res.status(400).json({
+          erro: 'Ação crítica bloqueada por segurança de isolamento entre empresas. É necessário enviar confirmação: "CONFIRMAR_REPLICACAO_CATALOGO".'
+        });
+      }
       const origemEmpresaId = String(req.body?.origemEmpresaId || req.get('X-Loja-Id') || cadastrosMestres.EMPRESA_PADRAO_ID).trim();
       const resultado = replicarCatalogoParaEmpresas(origemEmpresaId);
       res.json({ ok: true, ...resultado, mensagem: 'Produtos e cardápios replicados de forma idempotente para todas as empresas ativas.' });
@@ -4458,6 +4464,15 @@ async function iniciar() {
     const numero = Number(req.params.numero);
     const mesa = mesasPersistidas(req.empresaId).fisicas[numero];
     if (!mesa || mesa.empresaId !== req.empresaId || mesa.ativa === false) return res.status(404).json({ erro: 'Mesa não encontrada na empresa ativa.' });
+    const comandaAtiva = comandaAtivaDaMesa(req.empresaId, numero);
+    if (comandaAtiva) {
+      comandaAtiva.status = 'fechada';
+      comandaAtiva.contaPedida = false;
+      comandaAtiva.fechadaEm = new Date().toISOString();
+      comandaAtiva.atualizadaEm = comandaAtiva.fechadaEm;
+      comandaAtiva.motivoFechamento = 'fechamento_forcado_mesa';
+      comandaAtiva.fechadaPor = req.usuario?.email || 'gerente';
+    }
     mesa.status = 'livre';
     mesa.total = 0;
     mesa.aguardandoCozinha = 0;

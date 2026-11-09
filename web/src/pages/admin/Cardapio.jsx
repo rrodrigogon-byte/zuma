@@ -300,10 +300,11 @@ export default function Cardapio() {
   }
 
   const handleReplicarTodasEmpresas = async () => {
-    if (!confirm('Replicar o catálogo oficial para todas as empresas ativas? Itens já existentes não serão duplicados e nenhum preço será sobrescrito.')) return
+    const confirmacaoDigitada = window.prompt('Atenção: Esta ação replica o catálogo oficial para todas as empresas ativas da plataforma.\nDigite "CONFIRMAR" para prosseguir:');
+    if (confirmacaoDigitada !== 'CONFIRMAR') return;
     setReplicando(true)
     try {
-      const resultado = await api.post('/api/admin/cardapio/replicar-todas-empresas', {})
+      const resultado = await api.post('/api/admin/cardapio/replicar-todas-empresas', { confirmacao: 'CONFIRMAR_REPLICACAO_CATALOGO' })
       toast(`${resultado.totalAdicionados || 0} itens replicados em ${resultado.totalEmpresas || 0} empresas`, 'success')
       load()
     } catch (e) {

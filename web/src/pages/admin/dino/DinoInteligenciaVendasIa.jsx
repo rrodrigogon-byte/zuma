@@ -400,6 +400,45 @@ export default function DinoInteligenciaVendasIa() {
         </div>
       </div>
 
+      {/* AVISO DE EMPRESA SEM CONFIGURAÇÃO PRÓPRIA */}
+      {dados?.configurada === false && (
+        <div style={{
+          padding: '16px 20px',
+          borderRadius: 12,
+          background: '#fef3c7',
+          border: '1.5px solid #f59e0b',
+          marginBottom: 16,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: 12
+        }}>
+          <div>
+            <div style={{ fontWeight: 800, color: '#92400e', fontSize: 14, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span>⚙️</span> Configure esta empresa para ativar a Inteligência de Vendas
+            </div>
+            <div style={{ fontSize: 13, color: '#b45309', marginTop: 4 }}>
+              {dados?.aviso || 'Cadastre a chave PIX e os produtos próprios no formulário abaixo para gerar campanhas e Dinheiro na Mesa.'}
+            </div>
+          </div>
+          <button
+            onClick={() => setAbaAtiva('config')}
+            style={{
+              padding: '8px 16px',
+              borderRadius: 8,
+              background: '#d97706',
+              color: '#fff',
+              border: 0,
+              fontWeight: 800,
+              cursor: 'pointer'
+            }}
+          >
+            Configurar Agora
+          </button>
+        </div>
+      )}
+
       {/* BARRA DE CONFORMIDADE META & POLÍTICAS ANTI-BAN */}
       <div style={{
         background: 'linear-gradient(90deg, #ecfdf5 0%, #f0fdf4 100%)',

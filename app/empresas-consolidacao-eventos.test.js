@@ -3,10 +3,10 @@ import assert from 'node:assert/strict';
 import { obterConsolidacaoGrupo, listarGruposEmpresariais } from './modules/empresas/consolidacao.js';
 import { emitirEventoInterno, listarEventosInternos, obterMetricasEventosInternos } from './modules/a2/eventos.js';
 
-test('Sincronização por evento interno entre Nossa Gente e Ultra emite e registra evento com 100% de sucesso', () => {
+test('Sincronização por evento interno entre sistemas corporativos Kytto emite e registra evento com 100% de sucesso', () => {
   const evento = emitirEventoInterno({
-    origem: 'Nossa Gente',
-    destino: 'Ultra',
+    origem: 'RH Kytto',
+    destino: 'Operação Kytto',
     tipo: 'cadastro_atualizado',
     acao: 'sincronizar_colaborador',
     empresaId: 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6',
@@ -15,14 +15,14 @@ test('Sincronização por evento interno entre Nossa Gente e Ultra emite e regis
   });
 
   assert.ok(evento.id.startsWith('evt-'));
-  assert.equal(evento.origem, 'Nossa Gente');
-  assert.equal(evento.destino, 'Ultra');
+  assert.equal(evento.origem, 'RH Kytto');
+  assert.equal(evento.destino, 'Operação Kytto');
   assert.equal(evento.status, 'sincronizado');
   assert.equal(evento.tentativas, 1);
 
   const lista = listarEventosInternos({ empresaId: 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6' });
   assert.ok(lista.length >= 1);
-  assert.equal(lista[0].origem, 'Nossa Gente');
+  assert.equal(lista[0].origem, 'RH Kytto');
 
   const metricas = obterMetricasEventosInternos();
   assert.equal(metricas.taxaSucesso, 100.0);

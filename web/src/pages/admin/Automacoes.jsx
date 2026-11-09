@@ -14,7 +14,7 @@ const AUTOMACOES_PADRAO = [
     descricao: 'Identifica mensalidades em D-3 a D+10, lembra o retorno e oferece renovação prática com PIX e link de cartão sem atrito.',
     icone: 'calendar-check',
     ativo: true,
-    totalExecucoesHoje: 12,
+    totalExecucoesHoje: 0,
     intervalo: 'Diariamente às 09:30'
   },
   {
@@ -23,7 +23,7 @@ const AUTOMACOES_PADRAO = [
     descricao: 'Dispara lembrete com botões SIM/NÃO. Resposta afirmativa marca verde na agenda; cancelamento libera o horário na hora.',
     icone: 'clock',
     ativo: true,
-    totalExecucoesHoje: 18,
+    totalExecucoesHoje: 0,
     intervalo: 'Em tempo real'
   },
   {
@@ -32,7 +32,7 @@ const AUTOMACOES_PADRAO = [
     descricao: 'Parabeniza o cliente no dia do aniversário com cortesia da casa (hidratação ou bebida) e convite para agendar horário duplo.',
     icone: 'gift',
     ativo: true,
-    totalExecucoesHoje: 4,
+    totalExecucoesHoje: 0,
     intervalo: 'Diariamente às 08:30'
   },
   {
@@ -41,7 +41,7 @@ const AUTOMACOES_PADRAO = [
     descricao: 'Envia mensagem gentil 2 horas após a conclusão da comanda para avaliar a experiência de 1 a 5 e colher depoimentos.',
     icone: 'star',
     ativo: true,
-    totalExecucoesHoje: 14,
+    totalExecucoesHoje: 0,
     intervalo: '2 horas após cada atendimento'
   },
   {
@@ -50,7 +50,7 @@ const AUTOMACOES_PADRAO = [
     descricao: 'Monitora o consumo de insumos via Ficha Técnica e vendas PDV. Ao atingir o ponto de pedido, gera sugestão de compras.',
     icone: 'package-alert',
     ativo: true,
-    totalExecucoesHoje: 3,
+    totalExecucoesHoje: 0,
     intervalo: 'Gatilho instantâneo por evento interno'
   },
   {
@@ -59,7 +59,7 @@ const AUTOMACOES_PADRAO = [
     descricao: 'Consolida faturamento bruto, meios de pagamento, produtividade por profissional e alertas de caixa às 20h para a diretoria.',
     icone: 'chart-pie',
     ativo: true,
-    totalExecucoesHoje: 1,
+    totalExecucoesHoje: 0,
     intervalo: 'Diariamente às 20:00'
   },
   {
@@ -68,16 +68,16 @@ const AUTOMACOES_PADRAO = [
     descricao: 'Mecanismo de resgate com cadência antiban inteligente (15s a 45s de delay) cruzando com o histórico e profissional preferido.',
     icone: 'user-check',
     ativo: true,
-    totalExecucoesHoje: 22,
+    totalExecucoesHoje: 0,
     intervalo: 'Rodadas semanais programadas'
   },
   {
     id: 'sincronizacao_eventos_a2',
-    nome: 'Barramento de Eventos Internos (Nossa Gente × Ultra)',
+    nome: 'Barramento de Eventos Internos Kytto Enterprise',
     descricao: 'Sincronização assíncrona desacoplada orientada a eventos internos com garantia de entrega e histórico auditável.',
     icone: 'cpu',
     ativo: true,
-    totalExecucoesHoje: 45,
+    totalExecucoesHoje: 0,
     intervalo: 'Barramento contínuo'
   }
 ];
