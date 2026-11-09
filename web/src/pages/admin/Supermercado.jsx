@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
-  ScanLine, LayoutGrid,
+  ScanLine, LayoutGrid, FileCheck, QrCode,
   Navigation, Recycle, Handshake,
   Radio, Ticket, Vault,
   Award, BookOpen, FileSpreadsheet, FileCode,
