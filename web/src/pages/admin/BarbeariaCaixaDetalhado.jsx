@@ -1,10 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { api, fmtDateOnly, fmtR } from '../../lib/api';
-import { Printer, Unlock, RefreshCw, X, AlertCircle, CheckCircle2, ChevronRight, Edit3 } from 'lucide-react';
+import { Printer, Unlock, RefreshCw, X, AlertCircle, CheckCircle2, ChevronRight, Edit3, Calendar, Trash2, Eye } from 'lucide-react';
 
 const moeda = (val) => fmtR(Number(val || 0));
 
-export default function BarbeariaCaixaDetalhado({ caixaId, data, onCaixaAtualizado, toast }) {
+export default function BarbeariaCaixaDetalhado({
+  caixaId,
+  data,
+  profissionais = [],
+  onOpenComanda,
+  onCancelarComandaFinalizada,
+  onCaixaAtualizado,
+  toast,
+}) {
   const [detalhes, setDetalhes] = useState(null);
   const [loading, setLoading] = useState(true);
   const [modalDrilldown, setModalDrilldown] = useState(null); // { titulo, chave, total, comandas }
@@ -14,6 +22,11 @@ export default function BarbeariaCaixaDetalhado({ caixaId, data, onCaixaAtualiza
   const [modalRelatorio, setModalRelatorio] = useState(false);
   const [modalEdicaoPagamento, setModalEdicaoPagamento] = useState(null); // { comandaId, pagamentoId, meio, bandeira, valor }
   const [salvandoEdicao, setSalvandoEdicao] = useState(false);
+  const [modalAlterarDataComanda, setModalAlterarDataComanda] = useState(null); // { comandaId, dataAtual, titulo }
+  const [novaDataComanda, setNovaDataComanda] = useState('');
+  const [salvandoData, setSalvandoData] = useState(false);
+  const [modalCancelarComanda, setModalCancelarComanda] = useState(null); // { comandaId, titulo, motivo, senhaGerente }
+  const [cancelandoComanda, setCancelandoComanda] = useState(false);
 
   const carregarDetalhes = async () => {
     if (!caixaId) return;
@@ -78,6 +91,59 @@ export default function BarbeariaCaixaDetalhado({ caixaId, data, onCaixaAtualiza
       if (toast) toast(e.message || 'Erro ao atualizar pagamento', 'error');
     } finally {
       setSalvandoEdicao(false);
+    }
+  };
+
+  const handleAlterarDataComanda = async (e) => {
+    e.preventDefault();
+    if (!modalAlterarDataComanda?.comandaId || !novaDataComanda) return;
+    try {
+      setSalvandoData(true);
+      await api.post(`/api/admin/barbearia/comandas/${modalAlterarDataComanda.comandaId}/alterar-data`, {
+        data: novaDataComanda,
+      });
+      if (toast) toast('Data da comanda alterada com sucesso!', 'success');
+      setModalAlterarDataComanda(null);
+      setModalDrilldown(null);
+      await carregarDetalhes();
+      if (onCaixaAtualizado) onCaixaAtualizado();
+    } catch (err) {
+      if (toast) toast(err.message || 'Erro ao alterar data da comanda', 'error');
+    } finally {
+      setSalvandoData(false);
+    }
+  };
+
+  const handleCancelarComandaCaixa = async (e) => {
+    e.preventDefault();
+    if (!modalCancelarComanda?.comandaId) return;
+    try {
+      setCancelandoComanda(true);
+      if (onCancelarComandaFinalizada) {
+        await onCancelarComandaFinalizada(
+          { id: modalCancelarComanda.comandaId, clienteNome: modalCancelarComanda.titulo },
+          {
+            motivo: modalCancelarComanda.motivo || 'Cancelamento solicitado pelo caixa',
+            senhaGerente: modalCancelarComanda.senhaGerente,
+            reabrirAgendamento: false,
+          }
+        );
+      } else {
+        await api.post(`/api/admin/barbearia/comandas/${modalCancelarComanda.comandaId}/cancelar-finalizada`, {
+          motivo: modalCancelarComanda.motivo || 'Cancelamento solicitado pelo caixa',
+          senhaGerente: modalCancelarComanda.senhaGerente,
+          confirmado: true,
+        });
+      }
+      if (toast) toast('Comanda cancelada e estornada com sucesso!', 'success');
+      setModalCancelarComanda(null);
+      setModalDrilldown(null);
+      await carregarDetalhes();
+      if (onCaixaAtualizado) onCaixaAtualizado();
+    } catch (err) {
+      if (toast) toast(err.message || 'Erro ao cancelar comanda', 'error');
+    } finally {
+      setCancelandoComanda(false);
     }
   };
 
@@ -387,46 +453,112 @@ export default function BarbeariaCaixaDetalhado({ caixaId, data, onCaixaAtualiza
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
                 <thead>
                   <tr style={{ borderBottom: '2px solid #e2e8f0', color: '#64748b', fontSize: 12, textTransform: 'uppercase' }}>
-                    <th style={{ padding: '8px 10px', textAlign: 'left' }}>Título</th>
+                    <th style={{ padding: '8px 10px', textAlign: 'left' }}>Comanda & Cliente</th>
+                    <th style={{ padding: '8px 10px', textAlign: 'left' }}>Barbeiro</th>
+                    <th style={{ padding: '8px 10px', textAlign: 'left' }}>Itens / Serviços</th>
                     <th style={{ padding: '8px 10px', textAlign: 'right' }}>Valor</th>
-                    {caixa.status === 'aberto' && <th style={{ padding: '8px 10px', textAlign: 'center' }}>Ação</th>}
+                    <th style={{ padding: '8px 10px', textAlign: 'center' }}>Ações</th>
                   </tr>
                 </thead>
                 <tbody>
                   {modalDrilldown.comandas.map((item, index) => (
                     <tr key={`${item.comandaId}-${index}`} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                      <td style={{ padding: '10px 10px', fontWeight: 600, color: '#1e293b' }}>
-                        {item.titulo}
-                        {item.bandeira && <span style={{ marginLeft: 6, fontSize: 11, background: '#e0f2fe', color: '#0369a1', padding: '2px 6px', borderRadius: 4 }}>{item.bandeira}</span>}
+                      <td style={{ padding: '10px 10px', color: '#1e293b' }}>
+                        <div style={{ fontWeight: 700 }}>{item.titulo}</div>
+                        <div style={{ fontSize: 11, color: '#64748b', marginTop: 2, display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span>📅 {item.dataAtendimento || data}</span>
+                          {item.bandeira && <span style={{ background: '#e0f2fe', color: '#0369a1', padding: '1px 5px', borderRadius: 4, fontWeight: 700 }}>{item.bandeira}</span>}
+                        </div>
                       </td>
-                      <td style={{ padding: '10px 10px', textAlign: 'right', fontWeight: 700 }}>{moeda(item.valor)}</td>
-                      {caixa.status === 'aberto' && (
-                        <td style={{ padding: '10px 10px', textAlign: 'center' }}>
+                      <td style={{ padding: '10px 10px', fontSize: 13, color: '#334155', fontWeight: 600 }}>
+                        👤 {item.profissionalNome || 'Não definido'}
+                      </td>
+                      <td style={{ padding: '10px 10px', fontSize: 12, color: '#475569' }}>
+                        {item.itens && item.itens.length > 0 ? (
+                          <div style={{ display: 'grid', gap: 2 }}>
+                            {item.itens.map((it, idx) => (
+                              <span key={it.id || idx}>
+                                • {it.nome} {it.profissionalNome && it.profissionalNome !== item.profissionalNome ? `(${it.profissionalNome})` : ''} ({moeda(it.subtotal || it.precoUnitario)})
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          <span>—</span>
+                        )}
+                      </td>
+                      <td style={{ padding: '10px 10px', textAlign: 'right', fontWeight: 800, color: '#0f172a' }}>{moeda(item.valor)}</td>
+                      <td style={{ padding: '10px 10px', textAlign: 'center' }}>
+                        <div style={{ display: 'inline-flex', gap: 6, flexWrap: 'wrap', justifyContent: 'center' }}>
+                          {onOpenComanda && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                onOpenComanda({ id: item.comandaId });
+                                setModalDrilldown(null);
+                              }}
+                              style={{ background: '#e0f2fe', color: '#0284c7', border: '1px solid #bae6fd', borderRadius: 6, padding: '4px 8px', cursor: 'pointer', fontSize: 11, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 3 }}
+                              title="Abrir comanda completa para editar itens ou profissionais"
+                            >
+                              <Eye size={12} /> Abrir
+                            </button>
+                          )}
                           <button
                             type="button"
                             onClick={() => {
-                              setModalEdicaoPagamento({
+                              setNovaDataComanda(item.dataAtendimento || data);
+                              setModalAlterarDataComanda({
                                 comandaId: item.comandaId,
-                                pagamentoId: item.pagamentoId,
-                                meio: item.meio,
-                                bandeira: item.bandeira || '',
-                                valor: item.valor,
+                                dataAtual: item.dataAtendimento || data,
                                 titulo: item.titulo,
                               });
                             }}
-                            style={{ background: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: 6, padding: '4px 8px', cursor: 'pointer', fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 4 }}
-                            title="Corrigir forma de pagamento"
+                            style={{ background: '#f8fafc', color: '#334155', border: '1px solid #cbd5e1', borderRadius: 6, padding: '4px 8px', cursor: 'pointer', fontSize: 11, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 3 }}
+                            title="Mover data desta comanda para outro dia"
                           >
-                            <Edit3 size={12} /> Corrigir
+                            <Calendar size={12} /> Data
                           </button>
-                        </td>
-                      )}
+                          {caixa.status === 'aberto' && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setModalEdicaoPagamento({
+                                  comandaId: item.comandaId,
+                                  pagamentoId: item.pagamentoId,
+                                  meio: item.meio,
+                                  bandeira: item.bandeira || '',
+                                  valor: item.valor,
+                                  titulo: item.titulo,
+                                });
+                              }}
+                              style={{ background: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: 6, padding: '4px 8px', cursor: 'pointer', fontSize: 11, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 3 }}
+                              title="Corrigir forma de pagamento"
+                            >
+                              <Edit3 size={12} /> Meio
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setModalCancelarComanda({
+                                comandaId: item.comandaId,
+                                titulo: item.titulo,
+                                motivo: 'Cancelamento solicitado pelo caixa',
+                                senhaGerente: '',
+                              });
+                            }}
+                            style={{ background: '#fee2e2', color: '#b91c1c', border: '1px solid #f87171', borderRadius: 6, padding: '4px 8px', cursor: 'pointer', fontSize: 11, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 3 }}
+                            title="Cancelar e excluir comanda do caixa"
+                          >
+                            <Trash2 size={12} /> Cancelar
+                          </button>
+                        </div>
+                      </td>
                     </tr>
                   ))}
                   <tr style={{ borderTop: '2px solid #cbd5e1', fontWeight: 800 }}>
-                    <td style={{ padding: '12px 10px' }}>Total</td>
+                    <td style={{ padding: '12px 10px' }} colSpan={3}>Total</td>
                     <td style={{ padding: '12px 10px', textAlign: 'right', color: '#2563eb' }}>{moeda(modalDrilldown.total)}</td>
-                    {caixa.status === 'aberto' && <td></td>}
+                    <td></td>
                   </tr>
                 </tbody>
               </table>
@@ -554,6 +686,117 @@ export default function BarbeariaCaixaDetalhado({ caixaId, data, onCaixaAtualiza
                   style={{ padding: '9px 16px', background: '#2563eb', color: '#ffffff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 700 }}
                 >
                   {salvandoEdicao ? 'Salvando...' : 'Salvar Alteração'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE ALTERAÇÃO DE DATA DA COMANDA (EX.: MOVER DO DIA 09/11 PARA 02/11 OU 03/11) */}
+      {modalAlterarDataComanda && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(2px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10001, padding: 16 }}>
+          <div style={{ background: '#ffffff', borderRadius: 12, maxWidth: 440, width: '100%', padding: 24, boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.2)', border: '1px solid #cbd5e1' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14, color: '#0284c7' }}>
+              <Calendar size={24} />
+              <h3 style={{ margin: 0, fontSize: 18, color: '#0f172a' }}>Alterar Data da Comanda</h3>
+            </div>
+            <p style={{ color: '#64748b', fontSize: 13, marginBottom: 16, lineHeight: 1.4 }}>
+              <strong>{modalAlterarDataComanda.titulo}</strong><br />
+              Data atual registrada: <strong>{modalAlterarDataComanda.dataAtual || 'Hoje'}</strong>.<br />
+              Mover esta comanda atualizará a data de competência no caixa correspondente e o cálculo de comissões.
+            </p>
+            <form onSubmit={handleAlterarDataComanda} style={{ display: 'grid', gap: 14 }}>
+              <div>
+                <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#334155', marginBottom: 6 }}>
+                  Nova data oficial da comanda:
+                </label>
+                <input
+                  type="date"
+                  value={novaDataComanda}
+                  onChange={(e) => setNovaDataComanda(e.target.value)}
+                  required
+                  style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: 8, border: '1px solid #cbd5e1', fontSize: 14 }}
+                />
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 10 }}>
+                <button
+                  type="button"
+                  onClick={() => setModalAlterarDataComanda(null)}
+                  disabled={salvandoData}
+                  style={{ padding: '9px 16px', background: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: '#475569' }}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={salvandoData || !novaDataComanda}
+                  style={{ padding: '9px 16px', background: '#0284c7', color: '#ffffff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 700 }}
+                >
+                  {salvandoData ? 'Alterando...' : 'Salvar Nova Data'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE CANCELAMENTO SEGURO DE COMANDA FINALIZADA COM SENHA DE GERENTE */}
+      {modalCancelarComanda && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(2px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10001, padding: 16 }}>
+          <div style={{ background: '#ffffff', borderRadius: 12, maxWidth: 480, width: '100%', padding: 24, boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.2)', border: '1px solid #cbd5e1' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14, color: '#dc2626' }}>
+              <Trash2 size={24} />
+              <h3 style={{ margin: 0, fontSize: 18, color: '#0f172a' }}>Cancelar e Estornar Comanda</h3>
+            </div>
+            <p style={{ color: '#475569', fontSize: 13, marginBottom: 16, lineHeight: 1.5 }}>
+              Você está prestes a cancelar a <strong>{modalCancelarComanda.titulo}</strong>.<br />
+              Esta ação irá <strong>estornar o valor do caixa</strong>, anular os lançamentos financeiros vinculados e <strong>zerar a comissão do profissional</strong> dessa comanda.
+            </p>
+            <form onSubmit={handleCancelarComandaCaixa} style={{ display: 'grid', gap: 14 }}>
+              <div>
+                <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#334155', marginBottom: 4 }}>
+                  Motivo do cancelamento:
+                </label>
+                <input
+                  type="text"
+                  value={modalCancelarComanda.motivo}
+                  onChange={(e) => setModalCancelarComanda((prev) => ({ ...prev, motivo: e.target.value }))}
+                  required
+                  placeholder="Ex.: Comanda indevida de outro mês ou digitada por engano"
+                  style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: 8, border: '1px solid #cbd5e1', fontSize: 14 }}
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#334155', marginBottom: 4 }}>
+                  Senha de Gerente / Administrador:
+                </label>
+                <input
+                  type="password"
+                  value={modalCancelarComanda.senhaGerente}
+                  onChange={(e) => setModalCancelarComanda((prev) => ({ ...prev, senhaGerente: e.target.value }))}
+                  placeholder="Informe a senha de gerente para autorizar"
+                  style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: 8, border: '1px solid #cbd5e1', fontSize: 14 }}
+                />
+                <small style={{ color: '#64748b', fontSize: 11, marginTop: 4, display: 'block' }}>
+                  Se já estiver conectado como Gerente ou Admin, a confirmação poderá ser liberada automaticamente.
+                </small>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 10 }}>
+                <button
+                  type="button"
+                  onClick={() => setModalCancelarComanda(null)}
+                  disabled={cancelandoComanda}
+                  style={{ padding: '9px 16px', background: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: '#475569' }}
+                >
+                  Voltar
+                </button>
+                <button
+                  type="submit"
+                  disabled={cancelandoComanda}
+                  style={{ padding: '9px 16px', background: '#dc2626', color: '#ffffff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 700 }}
+                >
+                  {cancelandoComanda ? 'Estornando...' : 'Confirmar Cancelamento'}
                 </button>
               </div>
             </form>

@@ -674,6 +674,9 @@ export default function BarbeariaOperacaoPanel({
         <BarbeariaCaixaDetalhado
           caixaId={caixaExibidoId}
           data={data}
+          profissionais={profissionais}
+          onOpenComanda={onOpenComanda}
+          onCancelarComandaFinalizada={onCancelarComandaFinalizada}
           onCaixaAtualizado={onRefresh}
           toast={toast}
         />

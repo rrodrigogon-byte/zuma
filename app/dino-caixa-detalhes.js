@@ -61,6 +61,8 @@ function labelMeio(meio) {
 export function obterDetalhesCaixaOperacao(empresaId, caixaId, options = {}) {
   const caixa = caixaKytto.obterCaixa(empresaId, caixaId);
   if (!caixa) return null;
+  const estado = barbeariaErpKytto.estadoEmpresa(empresaId, false);
+  const mapaProf = estado?.profissionais || {};
 
   const movimentos = caixaKytto.movimentosDoCaixa(empresaId, caixa.id);
   const sangrias = movimentos.filter((m) => m.tipo === 'sangria');
@@ -112,6 +114,17 @@ export function obterDetalhesCaixaOperacao(empresaId, caixaId, options = {}) {
     const pags = c.pagamentos || [];
     const numeroComanda = c.numeroComanda ? `Nº${c.numeroComanda}` : `Nº${String(c.id).slice(-4)}`;
     const clienteNome = c.clienteNome || 'Avulso';
+    const itensFormatados = (c.itens || []).map((it) => ({
+      id: it.id,
+      nome: it.nome,
+      tipo: it.tipo,
+      quantidade: it.quantidade || 1,
+      precoUnitario: it.precoUnitario || it.preco || 0,
+      subtotal: it.subtotal || 0,
+      profissionalId: it.profissionalId || c.profissionalId || null,
+      profissionalNome: mapaProf[it.profissionalId]?.nome || mapaProf[c.profissionalId]?.nome || 'Barbeiro',
+    }));
+    const dataAtendFormatada = c.dataAtendimento || (c.criadoEm ? String(c.criadoEm).slice(0, 10) : caixa.data);
 
     for (const p of pags) {
       const meioNorm = normalizarMeio(p.meio);
@@ -156,6 +169,11 @@ export function obterDetalhesCaixaOperacao(empresaId, caixaId, options = {}) {
         bandeira: bandeira || '',
         pagamentoId: p.id,
         registradoEm: p.registradoEm || c.atualizadoEm || c.criadoEm,
+        dataAtendimento: dataAtendFormatada,
+        profissionalId: c.profissionalId || null,
+        profissionalNome: mapaProf[c.profissionalId]?.nome || 'Barbeiro',
+        status: c.status,
+        itens: itensFormatados,
       });
 
       // Item para Drilldown específico por bandeira (ex: 'cartao_debito_mastercard')
@@ -180,6 +198,11 @@ export function obterDetalhesCaixaOperacao(empresaId, caixaId, options = {}) {
           bandeira,
           pagamentoId: p.id,
           registradoEm: p.registradoEm || c.atualizadoEm || c.criadoEm,
+          dataAtendimento: dataAtendFormatada,
+          profissionalId: c.profissionalId || null,
+          profissionalNome: mapaProf[c.profissionalId]?.nome || 'Barbeiro',
+          status: c.status,
+          itens: itensFormatados,
         });
       }
 
@@ -228,6 +251,27 @@ export function obterDetalhesCaixaOperacao(empresaId, caixaId, options = {}) {
     comandasPorMeio,
     itensRelatorioFechamento,
     totalComandas: comandas.length,
+    todasComandas: comandas.map((c) => ({
+      id: c.id,
+      numeroComanda: c.numeroComanda,
+      clienteNome: c.clienteNome || 'Avulso',
+      total: c.total,
+      totalPago: c.totalPago,
+      status: c.status,
+      dataAtendimento: c.dataAtendimento || (c.criadoEm ? String(c.criadoEm).slice(0, 10) : caixa.data),
+      profissionalId: c.profissionalId || null,
+      profissionalNome: mapaProf[c.profissionalId]?.nome || 'Barbeiro',
+      pagamentos: c.pagamentos || [],
+      itens: (c.itens || []).map((it) => ({
+        id: it.id,
+        nome: it.nome,
+        quantidade: it.quantidade || 1,
+        precoUnitario: it.precoUnitario || it.preco || 0,
+        subtotal: it.subtotal || 0,
+        profissionalId: it.profissionalId || c.profissionalId || null,
+        profissionalNome: mapaProf[it.profissionalId]?.nome || mapaProf[c.profissionalId]?.nome || 'Barbeiro',
+      })),
+    })),
     dataImpressao: formatarDataHora(new Date().toISOString()),
   };
 }

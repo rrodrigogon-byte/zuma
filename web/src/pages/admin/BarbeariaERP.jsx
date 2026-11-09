@@ -1889,18 +1889,22 @@ export default function BarbeariaERP({ tabInicial } = {}) {
     )
       return;
     const chaveIdempotencia = `barbearia-comanda:${comanda.id}:${formPagamentoComanda.meioPagamento}:${valor.toFixed(2)}`;
+    const dataEfetivaPagamento = formPagamentoComanda.dataPagamento || formComanda.dataAtendimento || dataSelecionada || hojeLocal;
     await atualizarComandaNaTela(
       () =>
         api.post(`/api/admin/barbearia/comandas/${comanda.id}/pagamentos`, {
           confirmado: true,
           clienteId: formPagamentoComanda.clienteId || comanda.clienteId,
-         pagamentos: [
-           {
-             meio: formPagamentoComanda.meioPagamento,
-             bandeira: formPagamentoComanda.bandeira || undefined,
-             valor,
-             caixaId: formPagamentoComanda.caixaId || undefined,
-           },
+          data: dataEfetivaPagamento,
+          dataPagamento: dataEfetivaPagamento,
+          pagamentos: [
+            {
+              meio: formPagamentoComanda.meioPagamento,
+              bandeira: formPagamentoComanda.bandeira || undefined,
+              valor,
+              caixaId: formPagamentoComanda.caixaId || undefined,
+              data: dataEfetivaPagamento,
+            },
           ],
           chaveIdempotencia,
         }),
@@ -9440,6 +9444,44 @@ export default function BarbeariaERP({ tabInicial } = {}) {
                             ? ` · coberto pelo ${item.coberturaPlano.planoNome}${item.coberturaPlano.usoId ? " (sessão registrada)" : ""}${item.coberturaPlano.erro ? ` — atenção: ${item.coberturaPlano.erro}` : ""}`
                             : ""}
                         </small>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4 }}>
+                          <span style={{ fontSize: 11, color: "#64748b", fontWeight: 600 }}>👤 Barbeiro:</span>
+                          <select
+                            value={item.profissionalId || comanda.profissionalId || ""}
+                            onChange={async (event) => {
+                              const novoProfId = event.target.value;
+                              try {
+                                await api.patch(`/api/admin/barbearia/comandas/${comanda.id}/itens/${item.id || `${item.tipo}-${indice}`}`, {
+                                  profissionalId: novoProfId,
+                                });
+                                toast("Profissional do item atualizado com sucesso!", "success");
+                                const resposta = await api.get(`/api/admin/barbearia/comandas/${comanda.id}`);
+                                setModal({ tipo: "comanda", comanda: resposta?.comanda || resposta });
+                                carregar();
+                              } catch (err) {
+                                toast(err.message || "Erro ao trocar profissional do item", "error");
+                              }
+                            }}
+                            style={{
+                              fontSize: 12,
+                              padding: "2px 8px",
+                              borderRadius: 4,
+                              border: "1px solid #cbd5e1",
+                              background: "#f8fafc",
+                              color: "#0f172a",
+                              fontWeight: 600,
+                              cursor: "pointer",
+                              maxWidth: 180,
+                            }}
+                          >
+                            <option value="">Selecione o profissional...</option>
+                            {profissionais.map((p) => (
+                              <option key={p.id} value={p.id}>
+                                {p.nome}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
                       </div>
                       <div
                         style={{
@@ -9643,6 +9685,62 @@ export default function BarbeariaERP({ tabInicial } = {}) {
                   </div>
                 )}
             </Card>
+            {/* BLOCO DE DATA DA COMANDA - SEMPRE DISPONÍVEL, INCLUSIVE FINALIZADA */}
+            <div style={{ background: "#f8fafc", padding: 12, borderRadius: 8, border: "1px solid #e2e8f0", display: "grid", gap: 8, marginTop: 4 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <strong style={{ fontSize: 13, color: "#1e293b" }}>📅 Data Oficial da Comanda (Atendimento / Fechamento)</strong>
+                {["paga", "em_conta"].includes(comanda.status) && (
+                  <span style={{ fontSize: 11, padding: "2px 6px", background: "#ecfdf5", color: "#047857", borderRadius: 4, fontWeight: 700 }}>
+                    Comanda Finalizada
+                  </span>
+                )}
+              </div>
+              <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                <input
+                  type="date"
+                  value={formComanda.dataAtendimento || ""}
+                  onChange={(event) =>
+                    setFormComanda((atual) => ({
+                      ...atual,
+                      dataAtendimento: event.target.value,
+                    }))
+                  }
+                  style={{ ...inputStyle, maxWidth: 200 }}
+                />
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (!formComanda.dataAtendimento) return toast("Informe a nova data.", "error");
+                    try {
+                      await api.post(`/api/admin/barbearia/comandas/${comanda.id}/alterar-data`, {
+                        data: formComanda.dataAtendimento,
+                      });
+                      toast("Data da comanda atualizada com sucesso!", "success");
+                      const resposta = await api.get(`/api/admin/barbearia/comandas/${comanda.id}`);
+                      setModal({ tipo: "comanda", comanda: resposta?.comanda || resposta });
+                      carregar();
+                    } catch (err) {
+                      toast(err.message || "Erro ao atualizar data da comanda", "error");
+                    }
+                  }}
+                  style={{
+                    padding: "6px 14px",
+                    fontSize: 12,
+                    fontWeight: 700,
+                    background: "#0284c7",
+                    color: "#ffffff",
+                    border: "none",
+                    borderRadius: 6,
+                    cursor: "pointer",
+                  }}
+                >
+                  💾 Salvar Nova Data
+                </button>
+              </div>
+              <small style={{ color: "#64748b", fontSize: 11 }}>
+                Altera a data de fechamento e competência para qualquer dia (retroativo ou futuro), atualizando o caixa da respectiva data e o cálculo de comissões.
+              </small>
+            </div>
             {podeEditar && (
               <form
                 onSubmit={salvarDetalhesComanda}

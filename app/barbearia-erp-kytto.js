@@ -2637,27 +2637,56 @@ export function atualizarComandaBarbearia(empresaId, comandaId, dados = {}) {
   const estado = estadoEmpresa(empresaId);
   const comanda = estado.comandas[String(comandaId)];
   if (!comanda || comanda.empresaId !== String(empresaId)) return null;
-  if (!['aberta', 'aguardando_pagamento', 'parcialmente_paga'].includes(comanda.status)) throw new Error('A comanda não está aberta para edição.');
+  const isFinalizada = ['paga', 'em_conta'].includes(comanda.status);
+  const ehAjusteMetadados = (dados.dataAtendimento !== undefined || dados.data_atendimento !== undefined || dados.data !== undefined || dados.dataFechamento !== undefined || dados.profissionalId !== undefined || dados.observacoes !== undefined || dados.observacao !== undefined) && dados.desconto === undefined && dados.gorjeta === undefined;
+  if (!['aberta', 'aguardando_pagamento', 'parcialmente_paga'].includes(comanda.status) && !isFinalizada) throw new Error('A comanda não está aberta para edição.');
+  if (isFinalizada && !ehAjusteMetadados && dados.permitirFinalizada !== true) throw new Error('A comanda está finalizada. Permite alteração de data, barbeiro e observações.');
   if ('financeiroLancamentoIds' in dados || 'contasReceberIds' in dados) throw new Error('Vínculos financeiros só podem ser gerados no fluxo de recebimento confirmado.');
   const subtotal = Number((comanda.itens || []).reduce((soma, item) => soma + Number(item.subtotal || 0), 0).toFixed(2));
   const descontoNovo = dados.desconto !== undefined ? dinheiro(dados.desconto) : Number(comanda.desconto || 0);
   const gorjetaNova = dados.gorjeta !== undefined ? dinheiro(dados.gorjeta) : Number(comanda.gorjeta || 0);
   const totalNovo = Number(Math.max(0, subtotal - Math.min(subtotal, descontoNovo) + gorjetaNova).toFixed(2));
-  if (totalNovo + 0.02 < Number(comanda.totalFaturado || 0)) throw erroEstoqueReserva('O total da comanda não pode ficar abaixo do total já faturado.', 'TOTAL_BELOW_BILLED', 409);
+  if (!isFinalizada && totalNovo + 0.02 < Number(comanda.totalFaturado || 0)) throw erroEstoqueReserva('O total da comanda não pode ficar abaixo do total já faturado.', 'TOTAL_BELOW_BILLED', 409);
   const snapshot = raizSnapshot();
   try {
     if (dados.desconto !== undefined) comanda.desconto = descontoNovo;
     if (dados.descontoMotivo !== undefined || dados.desconto_motivo !== undefined) comanda.descontoMotivo = texto(dados.descontoMotivo ?? dados.desconto_motivo, 240);
     if (dados.gorjeta !== undefined) comanda.gorjeta = gorjetaNova;
     if (dados.observacoes !== undefined || dados.observacao !== undefined) comanda.observacoes = texto(dados.observacoes ?? dados.observacao, 600);
-    // Atualização da data exata informada da comanda
-    if (dados.dataAtendimento || dados.data_atendimento || dados.data) {
-      const novaData = texto(dados.dataAtendimento ?? dados.data_atendimento ?? dados.data, 30);
-      comanda.dataAtendimento = novaData;
+    if (dados.profissionalId !== undefined || dados.profissional_id !== undefined) {
+      const pId = texto(dados.profissionalId ?? dados.profissional_id, 120) || null;
+      if (pId && (!estado.profissionais[pId] || estado.profissionais[pId].ativo === false)) {
+        throw new Error('Profissional responsável não encontrado ou inativo.');
+      }
+      comanda.profissionalId = pId;
+    }
+    // Atualização da data exata informada da comanda (retroativa ou futura)
+    if (dados.dataAtendimento || dados.data_atendimento || dados.data || dados.dataFechamento) {
+      const novaData = texto(dados.dataAtendimento ?? dados.data_atendimento ?? dados.data ?? dados.dataFechamento, 30);
+      comanda.dataAtendimento = novaData ? String(novaData).slice(0, 10) : comanda.dataAtendimento;
       if (novaData && String(novaData).length >= 10) {
         const diaStr = String(novaData).slice(0, 10);
         const horaStr = comanda.criadoEm ? String(comanda.criadoEm).slice(11) : '12:00:00.000Z';
         comanda.criadoEm = `${diaStr}T${horaStr}`;
+        if (comanda.fechadaEm || isFinalizada) {
+          comanda.fechadaEm = `${diaStr}T12:00:00.000Z`;
+        }
+        if (Array.isArray(comanda.pagamentos)) {
+          for (const p of comanda.pagamentos) {
+            p.registradoEm = `${diaStr}T12:00:00.000Z`;
+          }
+        }
+        if (Array.isArray(comanda.financeiroLancamentoIds)) {
+          for (const lancId of comanda.financeiroLancamentoIds) {
+            try {
+              financeiroKytto.atualizarLancamento(empresaId, lancId, {
+                dataCompetencia: diaStr,
+                dataOperacao: diaStr,
+                data: diaStr,
+              });
+            } catch {}
+          }
+        }
       }
     }
     sincronizarReservasOperacao(empresaId, comanda, estado, { origem: 'comanda_barbearia', expiresAt: comanda.reservaEstoqueExpiresAt });
@@ -2728,6 +2757,13 @@ export function atualizarItemComandaBarbearia(empresaId, comandaId, itemId, dado
     atual.quantidade = quantidade;
     atual.precoUnitario = precoUnitario;
     atual.subtotal = atual.coberturaPlano ? 0 : dinheiro(precoUnitario * quantidade);
+    if (dados.profissionalId !== undefined || dados.profissional_id !== undefined) {
+      const pId = texto(dados.profissionalId ?? dados.profissional_id, 120) || null;
+      if (pId && (!estado.profissionais[pId] || estado.profissionais[pId].ativo === false)) {
+        throw new Error('Profissional responsável não encontrado ou inativo.');
+      }
+      atual.profissionalId = pId;
+    }
     if (dados.observacao !== undefined || dados.obs !== undefined) atual.observacao = texto(dados.observacao ?? dados.obs, 400);
     atual.atualizadoEm = dataAtual();
     sincronizarReservasOperacao(empresaId, comanda, estado, { origem: 'comanda_barbearia', expiresAt: comanda.reservaEstoqueExpiresAt });
@@ -2777,6 +2813,13 @@ export function alterarItemComandaFinalizada(empresaId, comandaId, itemId, dados
     atual.precoUnitario = precoUnitario;
     atual.preco = precoUnitario;
     atual.subtotal = subtotalNovoItem;
+    if (dados.profissionalId !== undefined || dados.profissional_id !== undefined) {
+      const pId = texto(dados.profissionalId ?? dados.profissional_id, 120) || null;
+      if (pId && (!estado.profissionais[pId] || estado.profissionais[pId].ativo === false)) {
+        throw new Error('Profissional responsável não encontrado ou inativo.');
+      }
+      atual.profissionalId = pId;
+    }
     if (dados.observacao !== undefined || dados.obs !== undefined) atual.observacao = texto(dados.observacao ?? dados.obs, 400);
     atual.atualizadoEm = dataAtual();
 

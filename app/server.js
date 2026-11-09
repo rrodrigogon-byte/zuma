@@ -6169,20 +6169,41 @@ app.patch('/api/admin/barbearia/comandas/:id/itens/:itemId', async (req, res) =>
     const comandaAtual = comandaBarbeariaDaSessao(req, req.params.id);
     if (!comandaAtual) return res.status(404).json({ error: 'Comanda não encontrada na empresa/unidade ativa.' });
     if (['paga', 'em_conta'].includes(comandaAtual.status)) {
-      const auth = await autorizarComSenhaGerente(req, req.body?.senhaGerente || req.body?.senha);
-      if (!auth.ok) {
-        return res.status(403).json({ error: auth.erro || 'A comanda está finalizada. A alteração de itens exige senha de gerente para autorização.' });
+      const apenasTrocaProfissional = (req.body?.profissionalId !== undefined || req.body?.profissional_id !== undefined) && req.body?.preco === undefined && req.body?.precoUnitario === undefined && req.body?.valor === undefined && req.body?.quantidade === undefined;
+      let gerenteNome = 'Gerente';
+      if (!apenasTrocaProfissional) {
+        const auth = await autorizarComSenhaGerente(req, req.body?.senhaGerente || req.body?.senha);
+        if (!auth.ok) {
+          return res.status(403).json({ error: auth.erro || 'A comanda está finalizada. A alteração de itens exige senha de gerente para autorização.' });
+        }
+        gerenteNome = auth.usuario?.nome || 'Gerente';
       }
       const comanda = barbeariaErpKytto.alterarItemComandaFinalizada(legacyEmpresaId(req), req.params.id, req.params.itemId, {
         ...(req.body || {}),
         autorizadoGerente: true,
-        gerente: auth.usuario?.nome || 'Gerente',
+        gerente: gerenteNome,
       });
       if (!comanda) return res.status(404).json({ error: 'Item não encontrado na comanda.' });
       return res.json({ ok: true, comanda });
     }
     const comanda = barbeariaErpKytto.atualizarItemComandaBarbearia(legacyEmpresaId(req), req.params.id, req.params.itemId, req.body || {});
     if (!comanda) return res.status(404).json({ error: 'Item não encontrado na comanda.' });
+    res.json({ ok: true, comanda });
+  } catch (error) { res.status(400).json({ error: error.message }); }
+});
+
+app.post('/api/admin/barbearia/comandas/:id/alterar-data', (req, res) => {
+  try {
+    const comandaAtual = comandaBarbeariaDaSessao(req, req.params.id);
+    if (!comandaAtual) return res.status(404).json({ error: 'Comanda não encontrada na empresa/unidade ativa.' });
+    const novaData = req.body?.data || req.body?.dataAtendimento || req.body?.dataFechamento;
+    if (!novaData) return res.status(400).json({ error: 'Informe a nova data da comanda.' });
+    const comanda = barbeariaErpKytto.atualizarComandaBarbearia(legacyEmpresaId(req), req.params.id, {
+      dataAtendimento: novaData,
+      data: novaData,
+      dataFechamento: novaData,
+      permitirFinalizada: true,
+    });
     res.json({ ok: true, comanda });
   } catch (error) { res.status(400).json({ error: error.message }); }
 });
