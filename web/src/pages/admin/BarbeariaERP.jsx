@@ -11785,6 +11785,83 @@ export default function BarbeariaERP({ tabInicial } = {}) {
     );
   }
 
+  function renderModalCancelamentoComanda() {
+    if (!modalCancelamentoComanda) return null;
+    const { comanda, motivo, reabrirAgendamento, senhaGerente } = modalCancelamentoComanda;
+    const totalEstorno = Number(comanda?.totalFaturado ?? comanda?.total ?? 0);
+
+    return (
+      <Modal
+        title={`🚫 Cancelar e Estornar Comanda #${comanda?.id}`}
+        zIndex={1200}
+        onClose={() => setModalCancelamentoComanda(null)}
+      >
+        <form
+          onSubmit={async (e) => {
+            e.preventDefault();
+            try {
+              await cancelarComandaFinalizada(comanda, {
+                motivo: motivo?.trim() || "Cancelamento manual solicitado no caixa",
+                reabrirAgendamento,
+                senhaGerente: senhaGerente?.trim() || undefined,
+                confirmado: true,
+              });
+              setModalCancelamentoComanda(null);
+            } catch (err) {
+              toast(err.message || "Erro ao estornar comanda.", "error");
+            }
+          }}
+          style={{ display: "grid", gap: 16, minWidth: 320, maxWidth: 520 }}
+        >
+          <div style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 10, padding: 14, fontSize: 13, color: "#991b1b" }}>
+            <strong style={{ fontSize: 15, display: "block", marginBottom: 4 }}>Atenção: Cancelamento com Estorno Automático</strong>
+            Esta ação estornará <strong>{moeda(totalEstorno)}</strong> do caixa da unidade, cancelará os lançamentos contábeis e financeiros vinculados e devolverá os produtos ao estoque.
+          </div>
+
+          <Field label="Motivo do cancelamento / estorno">
+            <input
+              required
+              value={motivo}
+              onChange={(e) => setModalCancelamentoComanda((prev) => ({ ...prev, motivo: e.target.value }))}
+              style={inputStyle}
+              placeholder="Descreva o motivo do estorno..."
+            />
+          </Field>
+
+          {comanda?.agendamentoId && (
+            <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 13 }}>
+              <input
+                type="checkbox"
+                checked={reabrirAgendamento}
+                onChange={(e) => setModalCancelamentoComanda((prev) => ({ ...prev, reabrirAgendamento: e.target.checked }))}
+              />
+              <span>Reabrir horário do agendamento vinculado na agenda operacional</span>
+            </label>
+          )}
+
+          <Field label="Senha de autorização de gerente" hint="Opcional se seu usuário já for gestor ou administrador logado">
+            <input
+              type="password"
+              value={senhaGerente}
+              onChange={(e) => setModalCancelamentoComanda((prev) => ({ ...prev, senhaGerente: e.target.value }))}
+              style={inputStyle}
+              placeholder="Senha de gerente (opcional para gestores logados)..."
+            />
+          </Field>
+
+          <div style={{ ...styles.modalActions, marginTop: 10, display: "flex", justifyContent: "flex-end", gap: 10 }}>
+            <button type="button" style={styles.secondary} onClick={() => setModalCancelamentoComanda(null)}>
+              Voltar / Manter
+            </button>
+            <button type="submit" style={{ ...styles.primary, background: "#e05c5c", borderColor: "#dc2626", fontWeight: 800 }}>
+              🚫 Confirmar Cancelamento e Estorno
+            </button>
+          </div>
+        </form>
+      </Modal>
+    );
+  }
+
   function renderModalReabrir() {
     if (!modalReabrir) return null;
     const { comanda, senhaGerente, motivo, salvando: salvandoReabrir } = modalReabrir;
@@ -13867,6 +13944,8 @@ export default function BarbeariaERP({ tabInicial } = {}) {
         {renderModal()}
         {renderModalItemValor()}
         {renderModalReabrir()}
+        {renderModalCancelamentoComanda()}
+        {renderModalCancelamentoComanda()}
       </div>
     );
   }
