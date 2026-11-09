@@ -163,6 +163,8 @@ const WhatsappFilaPage = lazy(() => import('./pages/admin/dino/WhatsappFilaPage'
 const WhatsappControlCenter = lazy(() => import('./pages/admin/dino/WhatsappControlCenter'))
 const CerebroIA = lazy(() => import('./pages/admin/dino/CerebroIA'))
 const Automacoes = lazy(() => import('./pages/admin/Automacoes'))
+const IaAdvisor = lazy(() => import('./pages/admin/IaAdvisor'))
+const LicenciamentoInstancias = lazy(() => import('./pages/admin/LicenciamentoInstancias'))
 const ContasReceber = lazy(() => import('./pages/admin/ContasReceber'))
 const FechamentoDiario = lazy(() => import('./pages/admin/FechamentoDiario'))
 const DinoMetasRoletaPanel = lazy(() => import('./pages/admin/dino/DinoMetasRoletaPanel'))
@@ -335,6 +337,8 @@ export default function App() {
           <Route path="/admin/whatsapp-fila" element={<WhatsappFilaPage />} />
           <Route path="/admin/cerebro-ia"     element={<Layout><CerebroIA /></Layout>} />
           <Route path="/admin/automacoes"     element={<Layout><Automacoes /></Layout>} />
+          <Route path="/admin/ia-advisor"     element={<Layout><IaAdvisor /></Layout>} />
+          <Route path="/admin/licenciamento"  element={<Layout><LicenciamentoInstancias /></Layout>} />
           <Route path="/admin/quadras"        element={<Layout><Quadras /></Layout>} />
           <Route path="/admin/pontos"         element={<Layout><Pontos /></Layout>} />
           <Route path="/admin/ranking"        element={<Layout><AdminRanking /></Layout>} />

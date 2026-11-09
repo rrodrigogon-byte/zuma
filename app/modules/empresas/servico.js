@@ -32,6 +32,8 @@ const CAMPOS_TEXTO = {
 const somenteDigitos = (v) => String(v ?? '').replace(/\D/g, '');
 
 
+export const EMPRESA_DINO_ID = 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
+
 const EMPRESAS_CANONICAS_PADRAO = [
   {
     id: 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6',

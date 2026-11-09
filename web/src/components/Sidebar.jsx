@@ -208,6 +208,8 @@ const NAV_DINO_GROUPS = [
       { to: '/admin/whatsapp-lancamentos', icon: '🧾', label: 'WhatsApp Lançamentos' },
       { to: '/admin/cerebro-ia', icon: '◈', label: 'Cérebro do atendente' },
       { to: '/admin/automacoes', icon: '⚡', label: 'Automações & Robôs' },
+      { to: '/admin/ia-advisor', icon: '✦', label: 'Kytto Advisor (IA)' },
+      { to: '/admin/licenciamento', icon: '🛡️', label: 'Licenças & Instâncias' },
       { to: '/admin/barbearia-erp?area=integracoes&tab=Integra%C3%A7%C3%B5es', icon: '✦', label: 'Atendente IA' },
       { to: '/admin/omnichannel', icon: '⇄', label: 'Canais e resgates' },
     ],
@@ -465,6 +467,8 @@ const NAV_ADMIN = NAV_ADMIN_GROUPS.flatMap(g => g.items)
 const NAV_PLATFORM = [
   { to: '/admin/plataforma', icon: '🏢', label: 'Empresas e Módulos' },
   { to: '/admin/plataforma/conciliacao-financeira', icon: '⚖️', label: 'Conciliação financeira' },
+  { to: '/admin/licenciamento', icon: '🛡️', label: 'Licenciamento & Instâncias' },
+  { to: '/admin/ia-advisor', icon: '✦', label: 'Kytto Advisor (Copilot IA)' },
 ]
 
 // O backend continua sendo a autoridade final. Este mapa apenas mantém o menu
