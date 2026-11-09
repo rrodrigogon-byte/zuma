@@ -8,11 +8,14 @@ import '../dino/dino-admin.css';
 
 // Empresas canônicas de referência rápida caso a API ainda não tenha retornado
 const EMPRESAS_CANONICAS = [
+
   { id: "d0d0ac01-8e50-4b61-8c79-de4aaa916da6", uuid: "d0d0ac01-8e50-4b61-8c79-de4aaa916da6", nome: "Barbearia Dino", icone: "💈", segmento: "Barbearia Masculina & Perfumaria", cnpj: "50.073.355/0001-89", ie: "14.229.191-9" },
   { id: "31f70c83-9172-40c2-945f-9e793b5048be", uuid: "31f70c83-9172-40c2-945f-9e793b5048be", nome: "Stallone Nutre Sport", icone: "💪", segmento: "Suplementos, Fitness & Saúde", cnpj: "56.099.531/0001-38", ie: "Isento" },
   { id: "2e041110-db20-4fd1-8278-12bd3dead008", uuid: "2e041110-db20-4fd1-8278-12bd3dead008", nome: "AGRO OPEN TTC", icone: "🌱", segmento: "Agronegócio & Esportes", cnpj: "43.084.070/0001-88", ie: "13.987.654-2" },
   { id: "supermercado", uuid: "supermercado", nome: "Supermercado Kytto", icone: "🛒", segmento: "Alimentos, Bebidas & Atacarejo", cnpj: "48.123.456/0001-77", ie: "Isento" }
 ];
+
+const EMPRESAS_DISPONIVEIS = EMPRESAS_CANONICAS;
 
 function mapearIcone(nome = "") {
   const n = String(nome).toLowerCase();
@@ -40,7 +43,7 @@ export default function DRECompleta() {
   const { user } = useAuth();
 
   const empresaParam = searchParams.get('empresa') || searchParams.get('empresaId') || '';
-  const empEncontrada = EMPRESAS_DISPONIVEIS.find(e => e.id === empresaParam || e.uuid === empresaParam) || EMPRESAS_DISPONIVEIS[0];
+  const empEncontrada = EMPRESAS_CANONICAS.find(e => e.id === empresaParam || e.uuid === empresaParam) || EMPRESAS_CANONICAS[0];
   const [empresaAtiva, setEmpresaAtiva] = useState(empEncontrada);
 
   const hoje = new Date().toISOString().slice(0, 7);
