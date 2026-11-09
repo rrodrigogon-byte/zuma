@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { api, fmtR } from '../../../lib/api';
 
 const COR = {
@@ -20,19 +21,31 @@ const COR = {
   muted: 'var(--muted, #64748b)',
 };
 
+const EMPRESAS_DISPONIVEIS = [
+  { id: 'dino', nome: 'Barbearia Dino', icone: '💈', segmento: 'Barbearia & Salão' },
+  { id: 'stallone', nome: 'Stallone Nutre Sport', icone: '💪', segmento: 'Suplementos & Fitness' },
+  { id: 'agroopen', nome: 'Agro Open Insumos', icone: '🌱', segmento: 'Agronegócio & Insumos' },
+];
+
 export default function DinoInteligenciaVendasIa() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const empresaParam = searchParams.get('empresa') || searchParams.get('empresaId') || '';
+
   const [dados, setDados] = useState(null);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState(null);
   const [abaAtiva, setAbaAtiva] = useState('reativacao');
   const [filtroPropensao, setFiltroPropensao] = useState('todos');
+  const [empresaAtivaId, setEmpresaAtivaId] = useState(empresaParam || 'dino');
   const [mensagemSucesso, setMensagemSucesso] = useState('');
 
-  const carregarInteligencia = useCallback(async () => {
+  const carregarInteligencia = useCallback(async (empId) => {
     setCarregando(true);
     setErro(null);
     try {
-      const res = await api.get('/api/admin/inteligencia-vendas').catch(() => api.get('/api/admin/barbearia/inteligencia-vendas'));
+      const targetEmpresa = empId || empresaAtivaId || 'dino';
+      const qs = targetEmpresa ? `?empresaId=${encodeURIComponent(targetEmpresa)}` : '';
+      const res = await api.get(`/api/admin/inteligencia-vendas${qs}`).catch(() => api.get(`/api/admin/barbearia/inteligencia-vendas${qs}`));
       setDados(res);
     } catch (e) {
       console.error('Erro ao carregar inteligência de vendas:', e);
@@ -40,11 +53,17 @@ export default function DinoInteligenciaVendasIa() {
     } finally {
       setCarregando(false);
     }
-  }, []);
+  }, [empresaAtivaId]);
 
   useEffect(() => {
-    carregarInteligencia();
-  }, [carregarInteligencia]);
+    carregarInteligencia(empresaParam || empresaAtivaId);
+  }, [empresaParam, empresaAtivaId, carregarInteligencia]);
+
+  const trocarEmpresa = (novaEmpresaId) => {
+    setEmpresaAtivaId(novaEmpresaId);
+    setSearchParams({ empresaId: novaEmpresaId });
+    carregarInteligencia(novaEmpresaId);
+  };
 
   const dispararMensagem = async (cliente, tipo) => {
     const tel = String(cliente.telefone || '').replace(/\D/g, '');
@@ -70,28 +89,6 @@ export default function DinoInteligenciaVendasIa() {
     } catch (_) {}
   };
 
-  if (carregando) {
-    return (
-      <div style={{ padding: 40, textAlign: 'center', color: COR.muted, background: COR.card, borderRadius: 16 }}>
-        <div style={{ fontSize: 32, marginBottom: 12 }}>🤖</div>
-        <h3 style={{ margin: 0, fontWeight: 700 }}>A IA está analisando a base e calculando as oportunidades de vendas...</h3>
-        <p style={{ margin: '8px 0 0', fontSize: 14 }}>Processando histórico de pedidos, ticket médio, churn preditivo e giro de estoque.</p>
-      </div>
-    );
-  }
-
-  if (erro) {
-    return (
-      <div style={{ padding: 30, background: COR.vermelhoClaro, border: `1px solid ${COR.vermelho}`, borderRadius: 14, color: COR.vermelho }}>
-        <h3 style={{ margin: '0 0 8px' }}>Erro ao consultar inteligência de vendas</h3>
-        <p style={{ margin: 0 }}>{erro}</p>
-        <button onClick={carregarInteligencia} style={{ marginTop: 12, padding: '8px 16px', background: COR.vermelho, color: '#fff', border: 0, borderRadius: 8, cursor: 'pointer', fontWeight: 700 }}>
-          Tentar novamente
-        </button>
-      </div>
-    );
-  }
-
   const kpis = dados?.kpis || {};
   const oportunidades = dados?.oportunidades || {};
   const produtos = dados?.produtosDestaque || [];
@@ -109,575 +106,642 @@ export default function DinoInteligenciaVendasIa() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-      {/* HEADER DE INTELIGÊNCIA */}
+      {/* SELETOR RÁPIDO DE EMPRESAS (MULTI-TENANT) */}
       <div style={{
-        background: 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)',
-        color: '#fff',
-        padding: '24px 28px',
-        borderRadius: 18,
         display: 'flex',
-        justifyContent: 'space-between',
         alignItems: 'center',
+        justifyContent: 'space-between',
         flexWrap: 'wrap',
-        gap: 16,
-        boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.2)'
+        gap: 12,
+        background: '#fff',
+        padding: '12px 18px',
+        borderRadius: 14,
+        border: `1px solid ${COR.line}`,
+        boxShadow: '0 2px 6px rgba(0,0,0,0.03)'
       }}>
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span style={{ fontSize: 26 }}>{icone}</span>
-            <h1 style={{ margin: 0, fontSize: 22, fontWeight: 800 }}>{empresaNome} - Motor de Vendas IA</h1>
-            <span style={{
-              background: '#10b981',
-              color: '#fff',
-              fontSize: 11,
-              fontWeight: 800,
-              padding: '3px 9px',
-              borderRadius: 20,
-              textTransform: 'uppercase',
-              letterSpacing: 0.5
-            }}>
-              {agenteIa}
-            </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 13, fontWeight: 800, color: COR.muted, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+            Empresa Selecionada:
+          </span>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {EMPRESAS_DISPONIVEIS.map(emp => (
+              <button
+                key={emp.id}
+                onClick={() => trocarEmpresa(emp.id)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  padding: '7px 14px',
+                  borderRadius: 10,
+                  border: `1.5px solid ${empresaAtivaId === emp.id ? COR.azul : COR.line}`,
+                  background: empresaAtivaId === emp.id ? COR.azulClaro : '#fff',
+                  color: empresaAtivaId === emp.id ? '#1e40af' : COR.fg,
+                  fontWeight: empresaAtivaId === emp.id ? 800 : 600,
+                  fontSize: 12,
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                <span>{emp.icone}</span>
+                <span>{emp.nome}</span>
+              </button>
+            ))}
           </div>
-          <p style={{ margin: '8px 0 0', color: '#94a3b8', fontSize: 14 }}>
-            {empresaSegmento} · Algoritmo preditivo de faturamento: combate ao churn, venda casada (cross-sell), yield management e campanhas automáticas.
-          </p>
         </div>
-        <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-          <button
-            onClick={carregarInteligencia}
-            style={{
-              padding: '10px 18px',
-              borderRadius: 10,
-              border: '1px solid rgba(255,255,255,0.2)',
-              background: 'rgba(255,255,255,0.1)',
-              color: '#fff',
-              cursor: 'pointer',
-              fontWeight: 700,
-              fontSize: 13,
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8
-            }}
-          >
-            <span>🔄</span> Atualizar Oportunidades
+
+        <div style={{ fontSize: 12, color: COR.muted }}>
+          Ambiente Multi-Empresas Isolado · Kytto Cloud
+        </div>
+      </div>
+
+      {carregando ? (
+        <div style={{ padding: 40, textAlign: 'center', color: COR.muted, background: COR.card, borderRadius: 16 }}>
+          <div style={{ fontSize: 32, marginBottom: 12 }}>🤖</div>
+          <h3 style={{ margin: 0, fontWeight: 700 }}>A IA está analisando a base e calculando as oportunidades de vendas...</h3>
+          <p style={{ margin: '8px 0 0', fontSize: 14 }}>Processando histórico de pedidos, ticket médio, churn preditivo e giro de estoque.</p>
+        </div>
+      ) : erro ? (
+        <div style={{ padding: 30, background: COR.vermelhoClaro, border: `1px solid ${COR.vermelho}`, borderRadius: 14, color: COR.vermelho }}>
+          <h3 style={{ margin: '0 0 8px' }}>Erro ao consultar inteligência de vendas</h3>
+          <p style={{ margin: 0 }}>{erro}</p>
+          <button onClick={() => carregarInteligencia(empresaAtivaId)} style={{ marginTop: 12, padding: '8px 16px', background: COR.vermelho, color: '#fff', border: 0, borderRadius: 8, cursor: 'pointer', fontWeight: 700 }}>
+            Tentar novamente
           </button>
         </div>
-      </div>
-
-      {mensagemSucesso && (
-        <div style={{
-          background: COR.verdeClaro,
-          color: '#065f46',
-          border: `1px solid ${COR.verde}`,
-          borderRadius: 12,
-          padding: '12px 18px',
-          fontWeight: 600,
-          display: 'flex',
-          alignItems: 'center',
-          gap: 10
-        }}>
-          <span>✅</span> {mensagemSucesso}
-        </div>
-      )}
-
-      {/* 4 CARDS DE INDICADORES PRINCIPAIS */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16 }}>
-        {/* KPI 1: TICKET MÉDIO */}
-        <div style={{ background: COR.card, border: `1px solid ${COR.line}`, borderRadius: 16, padding: 20, position: 'relative' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: 13, fontWeight: 700, color: COR.muted }}>TICKET MÉDIO ATUAL</span>
-            <span style={{ fontSize: 18 }}>💳</span>
-          </div>
-          <div style={{ fontSize: 28, fontWeight: 900, color: COR.fg, marginTop: 8 }}>
-            {fmtR(kpis.ticketMedioAtual || 0)}
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, fontSize: 12 }}>
-            <span style={{ background: COR.verdeClaro, color: COR.verde, padding: '2px 8px', borderRadius: 6, fontWeight: 800 }}>
-              Meta IA: {fmtR(kpis.metaTicketMedio || 0)}
-            </span>
-            <span style={{ color: COR.muted }}>+{fmtR(kpis.expansaoProjetadaTicket || 0)}/pedido</span>
-          </div>
-        </div>
-
-        {/* KPI 2: VENDA CASADA (CROSS-SELL) */}
-        <div style={{ background: COR.card, border: `1px solid ${COR.line}`, borderRadius: 16, padding: 20 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: 13, fontWeight: 700, color: COR.muted }}>TAXA DE CROSS-SELL / COMBO</span>
-            <span style={{ fontSize: 18 }}>🛍️⚡</span>
-          </div>
-          <div style={{ fontSize: 28, fontWeight: 900, color: COR.azul, marginTop: 8 }}>
-            {kpis.taxaCrossSell || 0}%
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, fontSize: 12 }}>
-            <span style={{ background: COR.azulClaro, color: COR.azul, padding: '2px 8px', borderRadius: 6, fontWeight: 800 }}>
-              Meta: {kpis.metaCrossSell || 50}%
-            </span>
-            <span style={{ color: COR.muted }}>Combos & Kits</span>
-          </div>
-        </div>
-
-        {/* KPI 3: CLIENTES EM RISCO DE CHURN */}
-        <div style={{ background: COR.card, border: `1px solid ${COR.line}`, borderRadius: 16, padding: 20 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: 13, fontWeight: 700, color: COR.muted }}>CHURN PREDITIVO</span>
-            <span style={{ fontSize: 18 }}>⚠️</span>
-          </div>
-          <div style={{ fontSize: 28, fontWeight: 900, color: COR.vermelho, marginTop: 8 }}>
-            {kpis.clientesEmRiscoChurn || 0} clientes
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, fontSize: 12 }}>
-            <span style={{ background: COR.vermelhoClaro, color: COR.vermelho, padding: '2px 8px', borderRadius: 6, fontWeight: 800 }}>
-              Prontos para resgate
-            </span>
-            <span style={{ color: COR.muted }}>Prevenção ativa</span>
-          </div>
-        </div>
-
-        {/* KPI 4: RECEITA ADICIONAL MAPEADA PELA IA */}
-        <div style={{ background: 'linear-gradient(135deg, #fef3c7 0%, #fef9c3 100%)', border: `1px solid #fde047`, borderRadius: 16, padding: 20 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: 13, fontWeight: 800, color: '#854d0e' }}>POTENCIAL EXTRA / MÊS</span>
-            <span style={{ fontSize: 18 }}>💰</span>
-          </div>
-          <div style={{ fontSize: 28, fontWeight: 900, color: '#a16207', marginTop: 8 }}>
-            +{fmtR(kpis.receitaPotencialTotal || 0)}
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, fontSize: 12, color: '#854d0e', fontWeight: 600 }}>
-            <span>Oportunidades identificadas na mesa</span>
-          </div>
-        </div>
-      </div>
-
-      {/* ABAS INTERATIVAS */}
-      <div style={{ background: COR.card, border: `1px solid ${COR.line}`, borderRadius: 16, overflow: 'hidden' }}>
-        <div style={{ display: 'flex', borderBottom: `1px solid ${COR.line}`, background: '#f8fafc', padding: '6px 12px', gap: 6, overflowX: 'auto' }}>
-          {[
-            { id: 'reativacao', label: labels.reativacao ? `🎯 ${labels.reativacao}` : '🎯 Reativação Anti-Churn', badge: kpis.clientesEmRiscoChurn },
-            { id: 'buracos', label: labels.vagas ? `⚡ ${labels.vagas}` : '⚡ Campanhas & Yield', badge: oportunidades.vagasOciosasSemana?.length },
-            { id: 'upsell', label: labels.upsell ? `🛍️ ${labels.upsell}` : '🛍️ Up-Sell & Combos', badge: oportunidades.upSellServicos?.length },
-            { id: 'clube', label: labels.fidelidade ? `👑 ${labels.fidelidade}` : '👑 Assinaturas & Fidelidade', badge: oportunidades.clubeAssinaturas?.length },
-            { id: 'simulador', label: '📈 Simulador Financeiro' },
-          ].map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => setAbaAtiva(tab.id)}
-              style={{
-                padding: '10px 18px',
-                border: 0,
-                borderRadius: 10,
-                background: abaAtiva === tab.id ? '#fff' : 'transparent',
-                color: abaAtiva === tab.id ? '#0f172a' : COR.muted,
-                fontWeight: abaAtiva === tab.id ? 800 : 600,
-                fontSize: 13,
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                boxShadow: abaAtiva === tab.id ? '0 2px 4px rgba(0,0,0,0.05)' : 'none',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              {tab.label}
-              {tab.badge != null && tab.badge > 0 && (
-                <span style={{
-                  background: abaAtiva === tab.id ? '#e2e8f0' : '#cbd5e1',
-                  color: '#0f172a',
-                  fontSize: 11,
-                  padding: '1px 7px',
-                  borderRadius: 10,
-                  fontWeight: 800
-                }}>
-                  {tab.badge}
-                </span>
-              )}
-            </button>
-          ))}
-        </div>
-
-        <div style={{ padding: 24 }}>
-          {/* ABA 1: REATIVAÇÃO ANTI-CHURN */}
-          {abaAtiva === 'reativacao' && (
+      ) : (
+        <>
+          {/* HEADER DE INTELIGÊNCIA */}
+          <div style={{
+            background: 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)',
+            color: '#fff',
+            padding: '24px 28px',
+            borderRadius: 18,
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: 16,
+            boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.2)'
+          }}>
             <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12, marginBottom: 18 }}>
-                <div>
-                  <h3 style={{ margin: 0, fontSize: 17, fontWeight: 800 }}>
-                    {labels.reativacao || 'Reativação Preditiva de Clientes'}
-                  </h3>
-                  <p style={{ margin: '4px 0 0', color: COR.muted, fontSize: 13 }}>
-                    Clientes com histórico de compras cujo ciclo de reposição está vencendo. A IA redigiu uma mensagem personalizada para cada um.
-                  </p>
-                </div>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <button
-                    onClick={() => setFiltroPropensao('todos')}
-                    style={{
-                      padding: '6px 12px',
-                      borderRadius: 8,
-                      border: `1px solid ${filtroPropensao === 'todos' ? COR.azul : COR.line}`,
-                      background: filtroPropensao === 'todos' ? COR.azulClaro : '#fff',
-                      color: filtroPropensao === 'todos' ? COR.azul : COR.muted,
-                      fontWeight: 700,
-                      fontSize: 12,
-                      cursor: 'pointer'
-                    }}
-                  >
-                    Todos ({oportunidades.reativacaoAntiChurn?.length || 0})
-                  </button>
-                  <button
-                    onClick={() => setFiltroPropensao('alta')}
-                    style={{
-                      padding: '6px 12px',
-                      borderRadius: 8,
-                      border: `1px solid ${filtroPropensao === 'alta' ? COR.verde : COR.line}`,
-                      background: filtroPropensao === 'alta' ? COR.verdeClaro : '#fff',
-                      color: filtroPropensao === 'alta' ? COR.verde : COR.muted,
-                      fontWeight: 700,
-                      fontSize: 12,
-                      cursor: 'pointer'
-                    }}
-                  >
-                    Alta Propensão
-                  </button>
-                </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ fontSize: 26 }}>{icone}</span>
+                <h1 style={{ margin: 0, fontSize: 22, fontWeight: 800 }}>{empresaNome} - Motor de Vendas IA</h1>
+                <span style={{
+                  background: '#10b981',
+                  color: '#fff',
+                  fontSize: 11,
+                  fontWeight: 800,
+                  padding: '3px 9px',
+                  borderRadius: 20,
+                  textTransform: 'uppercase',
+                  letterSpacing: 0.5
+                }}>
+                  {agenteIa}
+                </span>
               </div>
+              <p style={{ margin: '8px 0 0', color: '#94a3b8', fontSize: 14 }}>
+                {empresaSegmento} · Algoritmo preditivo de faturamento: combate ao churn, venda casada (cross-sell), yield management e campanhas automáticas.
+              </p>
+            </div>
+            <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+              <button
+                onClick={() => carregarInteligencia(empresaAtivaId)}
+                style={{
+                  padding: '10px 18px',
+                  borderRadius: 10,
+                  border: '1px solid rgba(255,255,255,0.2)',
+                  background: 'rgba(255,255,255,0.1)',
+                  color: '#fff',
+                  cursor: 'pointer',
+                  fontWeight: 700,
+                  fontSize: 13,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8
+                }}
+              >
+                <span>🔄</span> Atualizar Oportunidades
+              </button>
+            </div>
+          </div>
 
-              {listaReativacao.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: 40, color: COR.muted }}>
-                  <p style={{ margin: 0 }}>Nenhum cliente em risco nesta categoria no momento. Sua base está saudável!</p>
-                </div>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                  {listaReativacao.map((c, i) => (
-                    <div
-                      key={c.id || i}
-                      style={{
-                        display: 'grid',
-                        gridTemplateColumns: 'minmax(200px, 1.2fr) minmax(140px, 1fr) minmax(280px, 2fr) auto',
-                        gap: 16,
-                        alignItems: 'center',
-                        padding: '16px',
-                        background: '#fff',
-                        border: `1px solid ${COR.line}`,
-                        borderRadius: 12,
-                        transition: 'border-color 0.15s ease'
-                      }}
-                    >
-                      <div>
-                        <strong style={{ fontSize: 14, color: COR.fg }}>{c.nome}</strong>
-                        <div style={{ fontSize: 12, color: COR.muted, marginTop: 2 }}>{c.telefone || 'Sem telefone'}</div>
-                        <div style={{ fontSize: 11, color: COR.muted, marginTop: 2 }}>
-                          {c.barbeiroPreferido ? `Profissional: ${c.barbeiroPreferido}` : (c.ultimaCompra ? `Último item: ${c.ultimaCompra}` : '')}
-                        </div>
-                      </div>
+          {mensagemSucesso && (
+            <div style={{
+              background: COR.verdeClaro,
+              color: '#065f46',
+              border: `1px solid ${COR.verde}`,
+              borderRadius: 12,
+              padding: '12px 18px',
+              fontWeight: 600,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 10
+            }}>
+              <span>✅</span> {mensagemSucesso}
+            </div>
+          )}
 
-                      <div>
-                        <span style={{ fontSize: 12, color: COR.muted }}>Dias sem vir/comprar:</span>
-                        <div style={{ fontSize: 15, fontWeight: 800, color: c.diasSemVir > 40 ? COR.vermelho : COR.laranja }}>
-                          {c.diasSemVir} dias
-                        </div>
-                        {c.gastoTotal > 0 && (
-                          <div style={{ fontSize: 11, color: COR.muted }}>Gasto histórico: {fmtR(c.gastoTotal)}</div>
-                        )}
-                      </div>
+          {/* 4 CARDS DE INDICADORES PRINCIPAIS */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16 }}>
+            {/* KPI 1: TICKET MÉDIO */}
+            <div style={{ background: COR.card, border: `1px solid ${COR.line}`, borderRadius: 16, padding: 20, position: 'relative' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: 13, fontWeight: 700, color: COR.muted }}>TICKET MÉDIO ATUAL</span>
+                <span style={{ fontSize: 18 }}>💳</span>
+              </div>
+              <div style={{ fontSize: 28, fontWeight: 900, color: COR.fg, marginTop: 8 }}>
+                {fmtR(kpis.ticketMedioAtual || 0)}
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, fontSize: 12 }}>
+                <span style={{ background: COR.verdeClaro, color: COR.verde, padding: '2px 8px', borderRadius: 6, fontWeight: 800 }}>
+                  Meta IA: {fmtR(kpis.metaTicketMedio || 0)}
+                </span>
+                <span style={{ color: COR.muted }}>+{fmtR(kpis.expansaoProjetadaTicket || 0)}/pedido</span>
+              </div>
+            </div>
 
-                      <div style={{
-                        background: '#f8fafc',
-                        padding: '10px 14px',
-                        borderRadius: 8,
-                        fontSize: 12,
-                        color: '#334155',
-                        borderLeft: `3px solid ${c.propensao === 'Alta' ? COR.verde : COR.azul}`,
-                        lineHeight: 1.4
-                      }}>
-                        <div style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', color: COR.muted, marginBottom: 4 }}>
-                          Mensagem Sugerida pela IA ({agenteIa})
-                        </div>
-                        {c.mensagemIa}
-                      </div>
+            {/* KPI 2: VENDA CASADA (CROSS-SELL) */}
+            <div style={{ background: COR.card, border: `1px solid ${COR.line}`, borderRadius: 16, padding: 20 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: 13, fontWeight: 700, color: COR.muted }}>TAXA DE CROSS-SELL / COMBO</span>
+                <span style={{ fontSize: 18 }}>🛍️⚡</span>
+              </div>
+              <div style={{ fontSize: 28, fontWeight: 900, color: COR.azul, marginTop: 8 }}>
+                {kpis.taxaCrossSell || 0}%
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, fontSize: 12 }}>
+                <span style={{ background: COR.azulClaro, color: COR.azul, padding: '2px 8px', borderRadius: 6, fontWeight: 800 }}>
+                  Meta: {kpis.metaCrossSell || 50}%
+                </span>
+                <span style={{ color: COR.muted }}>Combos & Kits</span>
+              </div>
+            </div>
 
-                      <div>
-                        <button
-                          onClick={() => dispararMensagem(c, 'anti_churn')}
+            {/* KPI 3: CLIENTES EM RISCO DE CHURN */}
+            <div style={{ background: COR.card, border: `1px solid ${COR.line}`, borderRadius: 16, padding: 20 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: 13, fontWeight: 700, color: COR.muted }}>CHURN PREDITIVO</span>
+                <span style={{ fontSize: 18 }}>⚠️</span>
+              </div>
+              <div style={{ fontSize: 28, fontWeight: 900, color: COR.vermelho, marginTop: 8 }}>
+                {kpis.clientesEmRiscoChurn || 0} clientes
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, fontSize: 12 }}>
+                <span style={{ background: COR.vermelhoClaro, color: COR.vermelho, padding: '2px 8px', borderRadius: 6, fontWeight: 800 }}>
+                  Prontos para resgate
+                </span>
+                <span style={{ color: COR.muted }}>Prevenção ativa</span>
+              </div>
+            </div>
+
+            {/* KPI 4: RECEITA ADICIONAL MAPEADA PELA IA */}
+            <div style={{ background: 'linear-gradient(135deg, #fef3c7 0%, #fef9c3 100%)', border: `1px solid #fde047`, borderRadius: 16, padding: 20 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: 13, fontWeight: 800, color: '#854d0e' }}>POTENCIAL EXTRA / MÊS</span>
+                <span style={{ fontSize: 18 }}>💰</span>
+              </div>
+              <div style={{ fontSize: 28, fontWeight: 900, color: '#a16207', marginTop: 8 }}>
+                +{fmtR(kpis.receitaPotencialTotal || 0)}
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, fontSize: 12, color: '#854d0e', fontWeight: 600 }}>
+                <span>Oportunidades identificadas na mesa</span>
+              </div>
+            </div>
+          </div>
+
+          {/* ABAS INTERATIVAS */}
+          <div style={{ background: COR.card, border: `1px solid ${COR.line}`, borderRadius: 16, overflow: 'hidden' }}>
+            <div style={{ display: 'flex', borderBottom: `1px solid ${COR.line}`, background: '#f8fafc', padding: '6px 12px', gap: 6, overflowX: 'auto' }}>
+              {[
+                { id: 'reativacao', label: labels.reativacao ? `🎯 ${labels.reativacao}` : '🎯 Reativação Anti-Churn', badge: kpis.clientesEmRiscoChurn },
+                { id: 'buracos', label: labels.vagas ? `⚡ ${labels.vagas}` : '⚡ Campanhas & Yield', badge: oportunidades.vagasOciosasSemana?.length },
+                { id: 'upsell', label: labels.upsell ? `🛍️ ${labels.upsell}` : '🛍️ Up-Sell & Combos', badge: oportunidades.upSellServicos?.length },
+                { id: 'clube', label: labels.fidelidade ? `👑 ${labels.fidelidade}` : '👑 Assinaturas & Fidelidade', badge: oportunidades.clubeAssinaturas?.length },
+                { id: 'simulador', label: '📈 Simulador Financeiro' },
+              ].map(tab => (
+                <button
+                  key={tab.id}
+                  onClick={() => setAbaAtiva(tab.id)}
+                  style={{
+                    padding: '10px 18px',
+                    border: 0,
+                    borderRadius: 10,
+                    background: abaAtiva === tab.id ? '#fff' : 'transparent',
+                    color: abaAtiva === tab.id ? '#0f172a' : COR.muted,
+                    fontWeight: abaAtiva === tab.id ? 800 : 600,
+                    fontSize: 13,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    boxShadow: abaAtiva === tab.id ? '0 2px 4px rgba(0,0,0,0.05)' : 'none',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {tab.label}
+                  {tab.badge != null && tab.badge > 0 && (
+                    <span style={{
+                      background: abaAtiva === tab.id ? '#e2e8f0' : '#cbd5e1',
+                      color: '#0f172a',
+                      fontSize: 11,
+                      padding: '1px 7px',
+                      borderRadius: 10,
+                      fontWeight: 800
+                    }}>
+                      {tab.badge}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+
+            <div style={{ padding: 24 }}>
+              {/* ABA 1: REATIVAÇÃO ANTI-CHURN */}
+              {abaAtiva === 'reativacao' && (
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12, marginBottom: 18 }}>
+                    <div>
+                      <h3 style={{ margin: 0, fontSize: 17, fontWeight: 800 }}>
+                        {labels.reativacao || 'Reativação Preditiva de Clientes'}
+                      </h3>
+                      <p style={{ margin: '4px 0 0', color: COR.muted, fontSize: 13 }}>
+                        Clientes com histórico de compras cujo ciclo de reposição está vencendo. A IA redigiu uma mensagem personalizada para cada um.
+                      </p>
+                    </div>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button
+                        onClick={() => setFiltroPropensao('todos')}
+                        style={{
+                          padding: '6px 12px',
+                          borderRadius: 8,
+                          border: `1px solid ${filtroPropensao === 'todos' ? COR.azul : COR.line}`,
+                          background: filtroPropensao === 'todos' ? COR.azulClaro : '#fff',
+                          color: filtroPropensao === 'todos' ? COR.azul : COR.muted,
+                          fontWeight: 700,
+                          fontSize: 12,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        Todos ({oportunidades.reativacaoAntiChurn?.length || 0})
+                      </button>
+                      <button
+                        onClick={() => setFiltroPropensao('alta')}
+                        style={{
+                          padding: '6px 12px',
+                          borderRadius: 8,
+                          border: `1px solid ${filtroPropensao === 'alta' ? COR.verde : COR.line}`,
+                          background: filtroPropensao === 'alta' ? COR.verdeClaro : '#fff',
+                          color: filtroPropensao === 'alta' ? COR.verde : COR.muted,
+                          fontWeight: 700,
+                          fontSize: 12,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        Alta Propensão
+                      </button>
+                    </div>
+                  </div>
+
+                  {listaReativacao.length === 0 ? (
+                    <div style={{ textAlign: 'center', padding: 40, color: COR.muted }}>
+                      <p style={{ margin: 0 }}>Nenhum cliente em risco nesta categoria no momento. Sua base está saudável!</p>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                      {listaReativacao.map((c, i) => (
+                        <div
+                          key={c.id || i}
                           style={{
-                            padding: '10px 16px',
-                            background: '#25D366',
+                            display: 'grid',
+                            gridTemplateColumns: 'minmax(200px, 1.2fr) minmax(140px, 1fr) minmax(280px, 2fr) auto',
+                            gap: 16,
+                            alignItems: 'center',
+                            padding: '16px',
+                            background: '#fff',
+                            border: `1px solid ${COR.line}`,
+                            borderRadius: 12,
+                            transition: 'border-color 0.15s ease'
+                          }}
+                        >
+                          <div>
+                            <strong style={{ fontSize: 14, color: COR.fg }}>{c.nome}</strong>
+                            <div style={{ fontSize: 12, color: COR.muted, marginTop: 2 }}>{c.telefone || 'Sem telefone'}</div>
+                            <div style={{ fontSize: 11, color: COR.muted, marginTop: 2 }}>
+                              {c.barbeiroPreferido ? `Profissional: ${c.barbeiroPreferido}` : (c.ultimaCompra ? `Último item: ${c.ultimaCompra}` : '')}
+                            </div>
+                          </div>
+
+                          <div>
+                            <span style={{ fontSize: 12, color: COR.muted }}>Dias sem vir/comprar:</span>
+                            <div style={{ fontSize: 15, fontWeight: 800, color: c.diasSemVir > 40 ? COR.vermelho : COR.laranja }}>
+                              {c.diasSemVir} dias
+                            </div>
+                            {c.gastoTotal > 0 && (
+                              <div style={{ fontSize: 11, color: COR.muted }}>Gasto histórico: {fmtR(c.gastoTotal)}</div>
+                            )}
+                          </div>
+
+                          <div style={{
+                            background: '#f8fafc',
+                            padding: '10px 14px',
+                            borderRadius: 8,
+                            fontSize: 12,
+                            color: '#334155',
+                            borderLeft: `3px solid ${c.propensao === 'Alta' ? COR.verde : COR.azul}`,
+                            lineHeight: 1.4
+                          }}>
+                            <div style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', color: COR.muted, marginBottom: 4 }}>
+                              Mensagem Sugerida pela IA ({agenteIa})
+                            </div>
+                            {c.mensagemIa}
+                          </div>
+
+                          <div>
+                            <button
+                              onClick={() => dispararMensagem(c, 'anti_churn')}
+                              style={{
+                                padding: '10px 16px',
+                                background: '#25D366',
+                                color: '#fff',
+                                border: 0,
+                                borderRadius: 10,
+                                fontWeight: 800,
+                                fontSize: 12,
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 6,
+                                whiteSpace: 'nowrap'
+                              }}
+                            >
+                              <span>📲</span> Enviar no WhatsApp
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* ABA 2: PREENCHER VAGAS DA SEMANA / CAMPANHAS */}
+              {abaAtiva === 'buracos' && (
+                <div>
+                  <div style={{ marginBottom: 18 }}>
+                    <h3 style={{ margin: 0, fontSize: 17, fontWeight: 800 }}>
+                      {labels.vagas || 'Otimizador de Vagas Ociosas & Campanhas'}
+                    </h3>
+                    <p style={{ margin: '4px 0 0', color: COR.muted, fontSize: 13 }}>
+                      Otimização ativa de capacidade ociosa e campanhas programadas de alto retorno pelo WhatsApp.
+                    </p>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 16 }}>
+                    {(oportunidades.vagasOciosasSemana || []).map((vaga, idx) => (
+                      <div key={idx} style={{ background: '#fff', border: `1px solid ${COR.line}`, borderRadius: 14, padding: 18 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ background: COR.azulClaro, color: COR.azul, padding: '3px 8px', borderRadius: 6, fontWeight: 800, fontSize: 11 }}>
+                            {vaga.dia} {vaga.data ? `· ${vaga.data.split('-').reverse().slice(0, 2).join('/')}` : ''}
+                          </span>
+                          {vaga.horario && <strong style={{ fontSize: 16, color: COR.fg }}>{vaga.horario}</strong>}
+                        </div>
+
+                        <div style={{ marginTop: 12 }}>
+                          {vaga.profissional && <div style={{ fontSize: 14, fontWeight: 700, color: COR.fg }}>Profissional: {vaga.profissional}</div>}
+                          {vaga.foco && <div style={{ fontSize: 14, fontWeight: 700, color: COR.fg }}>Foco: {vaga.foco}</div>}
+                          {vaga.dica && <div style={{ fontSize: 12, color: COR.muted, marginTop: 4 }}>{vaga.dica}</div>}
+                          <div style={{ fontSize: 13, color: COR.verde, fontWeight: 800, marginTop: 6 }}>
+                            Potencial Estimado: {fmtR(vaga.potencial)}
+                          </div>
+                        </div>
+
+                        <div style={{ marginTop: 14, paddingTop: 14, borderTop: `1px solid ${COR.line}` }}>
+                          <button
+                            onClick={() => {
+                              const msg = vaga.foco
+                                ? `Olá! Aqui é o ${agenteIa}. Separamos uma condição especial da semana em ${vaga.foco}. Quer que eu envie os detalhes?`
+                                : `Opa! Aqui é o ${agenteIa}. Abriu um horário exclusivo com o ${vaga.profissional} nesta ${vaga.dia} às ${vaga.horario}. Quer aproveitar para agendar?`;
+                              window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
+                            }}
+                            style={{
+                              width: '100%',
+                              padding: '10px',
+                              background: COR.azul,
+                              color: '#fff',
+                              border: 0,
+                              borderRadius: 8,
+                              fontWeight: 700,
+                              fontSize: 12,
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              gap: 6
+                            }}
+                          >
+                            <span>📢</span> Disparar Campanha no WhatsApp
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* ABA 3: UP-SELL DE SERVIÇOS & PRODUTOS */}
+              {abaAtiva === 'upsell' && (
+                <div>
+                  <div style={{ marginBottom: 20 }}>
+                    <h3 style={{ margin: 0, fontSize: 17, fontWeight: 800 }}>
+                      {labels.upsell || 'Radar de Up-Sell & Combos'}
+                    </h3>
+                    <p style={{ margin: '4px 0 0', color: COR.muted, fontSize: 13 }}>
+                      Elevação de ticket médio através de produtos complementares e combos de alta margem.
+                    </p>
+                  </div>
+
+                  <h4 style={{ margin: '0 0 12px', fontSize: 14, fontWeight: 800, color: '#334155' }}>
+                    📦 Produtos Campeões Recomendados pela IA
+                  </h4>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: 14, marginBottom: 24 }}>
+                    {produtos.map(p => (
+                      <div key={p.id} style={{ background: '#fff', border: `1px solid ${COR.line}`, borderRadius: 12, padding: 14 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                          <strong style={{ fontSize: 13, color: COR.fg }}>{p.nome}</strong>
+                          <span style={{ fontSize: 14, fontWeight: 900, color: COR.verde }}>{fmtR(p.preco)}</span>
+                        </div>
+                        <div style={{ fontSize: 11, color: COR.muted, marginTop: 4 }}>
+                          Categoria: {p.categoria} · Estoque: {p.estoque} un.
+                        </div>
+                        <div style={{ marginTop: 10, background: '#f8fafc', padding: 8, borderRadius: 6, fontSize: 11, color: '#475569', fontStyle: 'italic' }}>
+                          💡 {p.dicaVendaIa}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <h4 style={{ margin: '0 0 12px', fontSize: 14, fontWeight: 800, color: '#334155' }}>
+                    👥 Oportunidades Identificadas de Up-Sell Casado
+                  </h4>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    {(oportunidades.upSellServicos || []).map((c, i) => (
+                      <div
+                        key={c.id || i}
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          padding: 14,
+                          borderRadius: 10,
+                          border: `1px solid ${COR.line}`,
+                          background: '#fff',
+                          flexWrap: 'wrap',
+                          gap: 12
+                        }}
+                      >
+                        <div>
+                          <strong style={{ fontSize: 14, color: COR.fg }}>{c.nome}</strong>
+                          <div style={{ fontSize: 12, color: COR.muted }}>{c.telefone || 'Sem telefone'}</div>
+                          <div style={{ fontSize: 12, color: COR.azul, fontWeight: 700, marginTop: 4 }}>
+                            Oferta Recomendada: {c.tipoOferta} (+{fmtR(c.impactoTicket)})
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => dispararMensagem(c, 'upsell')}
+                          style={{
+                            padding: '8px 14px',
+                            background: COR.roxo,
                             color: '#fff',
                             border: 0,
-                            borderRadius: 10,
-                            fontWeight: 800,
+                            borderRadius: 8,
+                            fontWeight: 700,
                             fontSize: 12,
                             cursor: 'pointer',
                             display: 'flex',
                             alignItems: 'center',
-                            gap: 6,
-                            whiteSpace: 'nowrap'
+                            gap: 6
                           }}
                         >
-                          <span>📲</span> Enviar no WhatsApp
+                          <span>💬</span> Propor no WhatsApp
                         </button>
                       </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* ABA 4: CONVERSÃO CLUBE VIP / ASSINATURAS */}
+              {abaAtiva === 'clube' && (
+                <div>
+                  <div style={{ marginBottom: 18 }}>
+                    <h3 style={{ margin: 0, fontSize: 17, fontWeight: 800 }}>
+                      {labels.fidelidade || 'Candidatos para Assinatura & Fidelidade Recorrente'}
+                    </h3>
+                    <p style={{ margin: '4px 0 0', color: COR.muted, fontSize: 13 }}>
+                      Clientes com compras contínuas. A conversão para planos recorrentes blinda sua empresa contra a concorrência e gera fluxo de caixa estável.
+                    </p>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 14 }}>
+                    {(oportunidades.clubeAssinaturas || []).map((c, i) => (
+                      <div key={c.id || i} style={{ background: '#fff', border: `1px solid ${COR.dourado}`, borderRadius: 12, padding: 16 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <strong style={{ fontSize: 15, color: COR.fg }}>{c.nome}</strong>
+                          <span style={{ background: COR.douradoClaro, color: '#92400e', fontSize: 11, fontWeight: 800, padding: '2px 8px', borderRadius: 10 }}>
+                            {c.visitasTotal || 4}+ Pedidos
+                          </span>
+                        </div>
+                        <div style={{ fontSize: 12, color: COR.muted, marginTop: 4 }}>Gasto Acumulado: {fmtR(c.gastoTotal)}</div>
+                        <div style={{ marginTop: 12, padding: 10, background: '#fdfbf7', borderRadius: 8, fontSize: 12, color: '#78350f' }}>
+                          {c.mensagemIa}
+                        </div>
+                        <div style={{ marginTop: 14 }}>
+                          <button
+                            onClick={() => dispararMensagem(c, 'clube_vip')}
+                            style={{
+                              width: '100%',
+                              padding: '9px',
+                              background: COR.dourado,
+                              color: '#fff',
+                              border: 0,
+                              borderRadius: 8,
+                              fontWeight: 800,
+                              fontSize: 12,
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              gap: 6
+                            }}
+                          >
+                            <span>👑</span> Convidar no WhatsApp
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* ABA 5: SIMULADOR DE IMPACTO FINANCEIRO */}
+              {abaAtiva === 'simulador' && (
+                <div>
+                  <div style={{ marginBottom: 20 }}>
+                    <h3 style={{ margin: 0, fontSize: 17, fontWeight: 800 }}>Simulador de Impacto Financeiro da IA</h3>
+                    <p style={{ margin: '4px 0 0', color: COR.muted, fontSize: 13 }}>
+                      Veja o impacto direto no seu caixa ao implementar as recomendações da Inteligência Artificial.
+                    </p>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16 }}>
+                    <div style={{ background: '#fff', border: `1px solid ${COR.line}`, borderRadius: 14, padding: 20 }}>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: COR.muted }}>EXPANSÃO DE TICKET MÉDIO</div>
+                      <div style={{ fontSize: 24, fontWeight: 900, color: COR.verde, marginTop: 8 }}>
+                        +{fmtR(simulador.impactoMais20ReaisTicket || 9600)}/mês
+                      </div>
+                      <p style={{ fontSize: 12, color: COR.muted, marginTop: 8 }}>
+                        Apenas adicionando um item de cross-sell (ex: produto, combo ou acessório) em cada pedido.
+                      </p>
                     </div>
-                  ))}
+
+                    <div style={{ background: '#fff', border: `1px solid ${COR.line}`, borderRadius: 14, padding: 20 }}>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: COR.muted }}>COMBOS DE ALTA PERFORMANCE</div>
+                      <div style={{ fontSize: 24, fontWeight: 900, color: COR.azul, marginTop: 8 }}>
+                        +{fmtR(simulador.impactoMais50ReaisTicket || 24000)}/mês
+                      </div>
+                      <p style={{ fontSize: 12, color: COR.muted, marginTop: 8 }}>
+                        Aumentando a adesão aos combos e kits recomendados pela IA.
+                      </p>
+                    </div>
+
+                    <div style={{ background: '#fff', border: `1px solid ${COR.line}`, borderRadius: 14, padding: 20 }}>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: COR.muted }}>RECUPERAÇÃO DE CLIENTES EM CHURN</div>
+                      <div style={{ fontSize: 24, fontWeight: 900, color: COR.laranja, marginTop: 8 }}>
+                        +{fmtR(simulador.impactoRecuperar10Clientes || 1750)}/mês
+                      </div>
+                      <p style={{ fontSize: 12, color: COR.muted, marginTop: 8 }}>
+                        Resgatando clientes inativos com as mensagens personalizadas geradas pela IA.
+                      </p>
+                    </div>
+
+                    <div style={{ background: '#fff', border: `1px solid ${COR.line}`, borderRadius: 14, padding: 20 }}>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: COR.muted }}>CAPACIDADE OCIOSA & CAMPANHAS</div>
+                      <div style={{ fontSize: 24, fontWeight: 900, color: COR.roxo, marginTop: 8 }}>
+                        +{fmtR(simulador.impactoPreencher2VagasDia || 8400)}/mês
+                      </div>
+                      <p style={{ fontSize: 12, color: COR.muted, marginTop: 8 }}>
+                        Preenchendo horários vagos e aproveitando picos semanais com campanhas no WhatsApp.
+                      </p>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
-          )}
-
-          {/* ABA 2: PREENCHER VAGAS DA SEMANA / CAMPANHAS */}
-          {abaAtiva === 'buracos' && (
-            <div>
-              <div style={{ marginBottom: 18 }}>
-                <h3 style={{ margin: 0, fontSize: 17, fontWeight: 800 }}>
-                  {labels.vagas || 'Otimizador de Vagas Ociosas & Campanhas'}
-                </h3>
-                <p style={{ margin: '4px 0 0', color: COR.muted, fontSize: 13 }}>
-                  Otimização ativa de capacidade ociosa e campanhas programadas de alto retorno pelo WhatsApp.
-                </p>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 16 }}>
-                {(oportunidades.vagasOciosasSemana || []).map((vaga, idx) => (
-                  <div key={idx} style={{ background: '#fff', border: `1px solid ${COR.line}`, borderRadius: 14, padding: 18 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ background: COR.azulClaro, color: COR.azul, padding: '3px 8px', borderRadius: 6, fontWeight: 800, fontSize: 11 }}>
-                        {vaga.dia} {vaga.data ? `· ${vaga.data.split('-').reverse().slice(0, 2).join('/')}` : ''}
-                      </span>
-                      {vaga.horario && <strong style={{ fontSize: 16, color: COR.fg }}>{vaga.horario}</strong>}
-                    </div>
-
-                    <div style={{ marginTop: 12 }}>
-                      {vaga.profissional && <div style={{ fontSize: 14, fontWeight: 700, color: COR.fg }}>Profissional: {vaga.profissional}</div>}
-                      {vaga.foco && <div style={{ fontSize: 14, fontWeight: 700, color: COR.fg }}>Foco: {vaga.foco}</div>}
-                      {vaga.dica && <div style={{ fontSize: 12, color: COR.muted, marginTop: 4 }}>{vaga.dica}</div>}
-                      <div style={{ fontSize: 13, color: COR.verde, fontWeight: 800, marginTop: 6 }}>
-                        Potencial Estimado: {fmtR(vaga.potencial)}
-                      </div>
-                    </div>
-
-                    <div style={{ marginTop: 14, paddingTop: 14, borderTop: `1px solid ${COR.line}` }}>
-                      <button
-                        onClick={() => {
-                          const msg = vaga.foco
-                            ? `Olá! Aqui é o ${agenteIa}. Separamos uma condição especial da semana em ${vaga.foco}. Quer que eu envie os detalhes?`
-                            : `Opa! Aqui é o ${agenteIa}. Abriu um horário exclusivo com o ${vaga.profissional} nesta ${vaga.dia} às ${vaga.horario}. Quer aproveitar para agendar?`;
-                          window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
-                        }}
-                        style={{
-                          width: '100%',
-                          padding: '10px',
-                          background: COR.azul,
-                          color: '#fff',
-                          border: 0,
-                          borderRadius: 8,
-                          fontWeight: 700,
-                          fontSize: 12,
-                          cursor: 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          gap: 6
-                        }}
-                      >
-                        <span>📢</span> Disparar Campanha no WhatsApp
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* ABA 3: UP-SELL DE SERVIÇOS & PRODUTOS */}
-          {abaAtiva === 'upsell' && (
-            <div>
-              <div style={{ marginBottom: 20 }}>
-                <h3 style={{ margin: 0, fontSize: 17, fontWeight: 800 }}>
-                  {labels.upsell || 'Radar de Up-Sell & Combos'}
-                </h3>
-                <p style={{ margin: '4px 0 0', color: COR.muted, fontSize: 13 }}>
-                  Elevação de ticket médio através de produtos complementares e combos de alta margem.
-                </p>
-              </div>
-
-              <h4 style={{ margin: '0 0 12px', fontSize: 14, fontWeight: 800, color: '#334155' }}>
-                📦 Produtos Campeões Recomendados pela IA
-              </h4>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: 14, marginBottom: 24 }}>
-                {produtos.map(p => (
-                  <div key={p.id} style={{ background: '#fff', border: `1px solid ${COR.line}`, borderRadius: 12, padding: 14 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                      <strong style={{ fontSize: 13, color: COR.fg }}>{p.nome}</strong>
-                      <span style={{ fontSize: 14, fontWeight: 900, color: COR.verde }}>{fmtR(p.preco)}</span>
-                    </div>
-                    <div style={{ fontSize: 11, color: COR.muted, marginTop: 4 }}>
-                      Categoria: {p.categoria} · Estoque: {p.estoque} un.
-                    </div>
-                    <div style={{ marginTop: 10, background: '#f8fafc', padding: 8, borderRadius: 6, fontSize: 11, color: '#475569', fontStyle: 'italic' }}>
-                      💡 {p.dicaVendaIa}
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              <h4 style={{ margin: '0 0 12px', fontSize: 14, fontWeight: 800, color: '#334155' }}>
-                👥 Oportunidades Identificadas de Up-Sell Casado
-              </h4>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {(oportunidades.upSellServicos || []).map((c, i) => (
-                  <div
-                    key={c.id || i}
-                    style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      padding: 14,
-                      borderRadius: 10,
-                      border: `1px solid ${COR.line}`,
-                      background: '#fff',
-                      flexWrap: 'wrap',
-                      gap: 12
-                    }}
-                  >
-                    <div>
-                      <strong style={{ fontSize: 14, color: COR.fg }}>{c.nome}</strong>
-                      <div style={{ fontSize: 12, color: COR.muted }}>{c.telefone || 'Sem telefone'}</div>
-                      <div style={{ fontSize: 12, color: COR.azul, fontWeight: 700, marginTop: 4 }}>
-                        Oferta Recomendada: {c.tipoOferta} (+{fmtR(c.impactoTicket)})
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => dispararMensagem(c, 'upsell')}
-                      style={{
-                        padding: '8px 14px',
-                        background: COR.roxo,
-                        color: '#fff',
-                        border: 0,
-                        borderRadius: 8,
-                        fontWeight: 700,
-                        fontSize: 12,
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 6
-                      }}
-                    >
-                      <span>💬</span> Propor no WhatsApp
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* ABA 4: CONVERSÃO CLUBE VIP / ASSINATURAS */}
-          {abaAtiva === 'clube' && (
-            <div>
-              <div style={{ marginBottom: 18 }}>
-                <h3 style={{ margin: 0, fontSize: 17, fontWeight: 800 }}>
-                  {labels.fidelidade || 'Candidatos para Assinatura & Fidelidade Recorrente'}
-                </h3>
-                <p style={{ margin: '4px 0 0', color: COR.muted, fontSize: 13 }}>
-                  Clientes com compras contínuas. A conversão para planos recorrentes blinda sua empresa contra a concorrência e gera fluxo de caixa estável.
-                </p>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 14 }}>
-                {(oportunidades.clubeAssinaturas || []).map((c, i) => (
-                  <div key={c.id || i} style={{ background: '#fff', border: `1px solid ${COR.dourado}`, borderRadius: 12, padding: 16 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <strong style={{ fontSize: 15, color: COR.fg }}>{c.nome}</strong>
-                      <span style={{ background: COR.douradoClaro, color: '#92400e', fontSize: 11, fontWeight: 800, padding: '2px 8px', borderRadius: 10 }}>
-                        {c.visitasTotal || 4}+ Pedidos
-                      </span>
-                    </div>
-                    <div style={{ fontSize: 12, color: COR.muted, marginTop: 4 }}>Gasto Acumulado: {fmtR(c.gastoTotal)}</div>
-                    <div style={{ marginTop: 12, padding: 10, background: '#fdfbf7', borderRadius: 8, fontSize: 12, color: '#78350f' }}>
-                      {c.mensagemIa}
-                    </div>
-                    <div style={{ marginTop: 14 }}>
-                      <button
-                        onClick={() => dispararMensagem(c, 'clube_vip')}
-                        style={{
-                          width: '100%',
-                          padding: '9px',
-                          background: COR.dourado,
-                          color: '#fff',
-                          border: 0,
-                          borderRadius: 8,
-                          fontWeight: 800,
-                          fontSize: 12,
-                          cursor: 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          gap: 6
-                        }}
-                      >
-                        <span>👑</span> Convidar no WhatsApp
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* ABA 5: SIMULADOR DE IMPACTO FINANCEIRO */}
-          {abaAtiva === 'simulador' && (
-            <div>
-              <div style={{ marginBottom: 20 }}>
-                <h3 style={{ margin: 0, fontSize: 17, fontWeight: 800 }}>Simulador de Impacto Financeiro da IA</h3>
-                <p style={{ margin: '4px 0 0', color: COR.muted, fontSize: 13 }}>
-                  Veja o impacto direto no seu caixa ao implementar as recomendações da Inteligência Artificial.
-                </p>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16 }}>
-                <div style={{ background: '#fff', border: `1px solid ${COR.line}`, borderRadius: 14, padding: 20 }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: COR.muted }}>EXPANSÃO DE TICKET MÉDIO</div>
-                  <div style={{ fontSize: 24, fontWeight: 900, color: COR.verde, marginTop: 8 }}>
-                    +{fmtR(simulador.impactoMais20ReaisTicket || 9600)}/mês
-                  </div>
-                  <p style={{ fontSize: 12, color: COR.muted, marginTop: 8 }}>
-                    Apenas adicionando um item de cross-sell (ex: produto, combo ou acessório) em cada pedido.
-                  </p>
-                </div>
-
-                <div style={{ background: '#fff', border: `1px solid ${COR.line}`, borderRadius: 14, padding: 20 }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: COR.muted }}>COMBOS DE ALTA PERFORMANCE</div>
-                  <div style={{ fontSize: 24, fontWeight: 900, color: COR.azul, marginTop: 8 }}>
-                    +{fmtR(simulador.impactoMais50ReaisTicket || 24000)}/mês
-                  </div>
-                  <p style={{ fontSize: 12, color: COR.muted, marginTop: 8 }}>
-                    Aumentando a adesão aos combos e kits recomendados pela IA.
-                  </p>
-                </div>
-
-                <div style={{ background: '#fff', border: `1px solid ${COR.line}`, borderRadius: 14, padding: 20 }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: COR.muted }}>RECUPERAÇÃO DE CLIENTES EM CHURN</div>
-                  <div style={{ fontSize: 24, fontWeight: 900, color: COR.laranja, marginTop: 8 }}>
-                    +{fmtR(simulador.impactoRecuperar10Clientes || 1750)}/mês
-                  </div>
-                  <p style={{ fontSize: 12, color: COR.muted, marginTop: 8 }}>
-                    Resgatando clientes inativos com as mensagens personalizadas geradas pela IA.
-                  </p>
-                </div>
-
-                <div style={{ background: '#fff', border: `1px solid ${COR.line}`, borderRadius: 14, padding: 20 }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: COR.muted }}>CAPACIDADE OCIOSA & CAMPANHAS</div>
-                  <div style={{ fontSize: 24, fontWeight: 900, color: COR.roxo, marginTop: 8 }}>
-                    +{fmtR(simulador.impactoPreencher2VagasDia || 8400)}/mês
-                  </div>
-                  <p style={{ fontSize: 12, color: COR.muted, marginTop: 8 }}>
-                    Preenchendo horários vagos e aproveitando picos semanais com campanhas no WhatsApp.
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
