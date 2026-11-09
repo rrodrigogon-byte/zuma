@@ -11183,7 +11183,7 @@ for(const sig of ['SIGTERM','SIGINT']){
 setTimeout(async () => {
   try {
     if (typeof clubeDb?.query === 'function') {
-      await clubeDb.query("DELETE FROM lojas WHERE empresa_id IN (SELECT id FROM empresas WHERE nome ILIKE '%imperial%' OR cnpj = '98765432000199' OR nome ILIKE '%homologação alterada%'); DELETE FROM empresas WHERE nome ILIKE '%imperial%' OR cnpj = '98765432000199' OR nome ILIKE '%homologação alterada%';");
+      await clubeDb.query("UPDATE empresas SET ativa = false, nome = '[DESATIVADA] Barbearia Imperial 1521' WHERE nome ILIKE '%imperial%' OR cnpj = '98765432000199'; UPDATE lojas SET ativa = false WHERE empresa_id IN (SELECT id FROM empresas WHERE nome ILIKE '%imperial%' OR cnpj = '98765432000199'); UPDATE empresas SET ativa = false WHERE nome ILIKE '%homologação alterada%' OR cnpj = '11222333000181';");
       console.log('[empresas] Purga automática de empresas indevidas executada com sucesso.');
     }
   } catch (err) {
