@@ -11,7 +11,7 @@
     "migrate:sql": "node app/migrations/run-sql-migrations.js",
     "worker:omnichannel": "node app/workers/omnichannel-worker.js --once",
     "check:omnichannel-worker": "node --check app/workers/omnichannel-worker.js",
-    "test:fast": "node --test test-barbearia-caixa-comanda-melhorias.test.js app/comandas-caixa-previa.test.js app/dino-painel-gestao.test.js app/dino-caixa-reabrir-detalhes.test.js app/empresas-isolamento-multitenant.test.js",
+    "test:fast": "node --test test-barbearia-caixa-comanda-melhorias.test.js app/comandas-caixa-previa.test.js app/dino-painel-gestao.test.js app/dino-caixa-reabrir-detalhes.test.js app/empresas-isolamento-multitenant.test.js app/multitenant-agentes-canais.test.js app/core/whatsapp-trex.test.js app/dino-trex-rv-rapido.test.js app/core/whatsapp-trex-regressao-2710.test.js app/core/whatsapp-ai-anti-alucinacao.test.js app/dino-anti-cancelamento-indevido.test.js app/dino-gestao-ia.test.js app/comprador-inteligente.test.js app/kytto-licenciamento-ia-multibusiness.test.js",
     "test:catalog-pg-real": "node scripts/test-dino-catalog-pg.mjs",
     "test:whatsapp-ai-provider-metrics-pg": "node scripts/test-dino-whatsapp-provider-metrics-pg.mjs",
     "test:catalog-diagnostic-ui": "node --test web/src/lib/catalog-diagnostic.test.js && (cd web && ../node_modules/.bin/vitest --config vite.config.js run src/pages/admin/CommerceCatalogDiagnostic.test.jsx)",

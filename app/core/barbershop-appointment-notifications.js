@@ -583,7 +583,9 @@ export async function enqueueDueAppointmentReminders() {
 export function mensagem(snapshot, agendamento, cliente, evento, persona = null) {
   const servico = snapshot.servicos.find((item) => item.id === agendamento.servicoId)?.nome || 'atendimento';
   const profissional = snapshot.profissionais.find((item) => item.id === agendamento.profissionalId)?.nome || 'profissional da equipe';
-  const nomeLimpo = cleanCustomerDisplayName(cliente?.nome || '', { firstNameOnly: true }) || 'Amigo';
+  const nomeLimpo = persona
+    ? (cleanCustomerDisplayName(cliente?.nome || '', { firstNameOnly: true }) || 'Amigo')
+    : (limpo(cliente?.nome, 80) || 'Cliente');
   if (persona) {
     // Mesma informação e os mesmos comandos (CONFIRMO, REMARCAR, CANCELO, SAIR), na voz curta da persona.
     return personaAppointmentMessage(persona, {

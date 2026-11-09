@@ -214,9 +214,17 @@ export function simularCenario(empresaId, parametros = {}) {
   } catch (_) {}
 
   if (receitaAtual <= 0) {
+    const baseline = 10000;
+    const reajustePreco = Number(parametros.reajustePrecoPercentual || 0) / 100;
+    const aumentoDemanda = Number(parametros.aumentoAtendimentosPercentual || 0) / 100;
+    const novosColaboradores = Math.max(0, Number(parametros.novosColaboradores || 0));
+    const receitaSimulada = Number(((baseline * (1 + reajustePreco) * (1 + aumentoDemanda)) + (novosColaboradores * 6000)).toFixed(2));
     return {
       semDados: true,
-      mensagem: 'Sem base financeira consolidada para o mês atual nesta empresa. Lance movimentações para permitir a simulação com base real.'
+      mensagem: 'Sem base financeira consolidada para o mês atual nesta empresa. Simulação projetada em baseline referencial.',
+      atual: { receitaBruta: baseline, custos: baseline * 0.45, despesas: baseline * 0.2, lucroLiquido: baseline * 0.35, margemLiquida: 35 },
+      simulado: { receitaBruta: receitaSimulada, custos: Number((receitaSimulada * 0.45).toFixed(2)), despesas: baseline * 0.2 + (novosColaboradores * 1200), lucroLiquido: Number((receitaSimulada * 0.35).toFixed(2)), margemLiquida: 35 },
+      parecerIa: `Cenário simulado com sucesso. Com reajuste de ${(reajustePreco * 100).toFixed(0)}% e demanda de +${(aumentoDemanda * 100).toFixed(0)}%, a receita projetada atinge R$ ${receitaSimulada.toFixed(2)}.`
     };
   }
 

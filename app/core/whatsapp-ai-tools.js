@@ -133,7 +133,7 @@ const APELIDOS_SERVICOS = {
   'corte tradicional': ['corte com bruno ou nati agendamento online', 'corte com bruno ou nati', 'corte com dino agendamento online', 'corte com dino'],
 
   // Barba
-  'barba': ['barba com bruno ou nati agendamento online', 'barba com bruno ou nati', 'barba com o dino agendamento online', 'barba com o dino', 'barba com dino', 'barba premium'],
+  'barba': ['barba com bruno ou nati agendamento online', 'barba com bruno ou nati', 'barba tradicional', 'barba', 'barba com o dino agendamento online', 'barba com o dino', 'barba com dino', 'barba premium'],
   'barba premium': ['barba com bruno ou nati agendamento online', 'barba com bruno ou nati', 'barba com o dino agendamento online', 'barba com o dino', 'barba com dino'],
   'barba masculina': ['barba com bruno ou nati agendamento online', 'barba com bruno ou nati', 'barba com o dino agendamento online', 'barba com o dino', 'barba com dino'],
   'fazer barba': ['barba com bruno ou nati agendamento online', 'barba com bruno ou nati', 'barba com o dino agendamento online', 'barba com o dino', 'barba com dino'],
@@ -184,6 +184,7 @@ export function matchAgendaName(value, items = [], { isDino = null } = {}) {
     const correspondencias = APELIDOS_SERVICOS[chaveServico];
     const achados = items.filter((item) => {
       const n = nomeComparavel(item?.nome);
+      if (!/\b(corte|cabelo)\b/i.test(semPreposicao) && /\b(corte|cabelo)\b/i.test(n) && !/\b(corte|cabelo)\b/i.test(chaveServico)) return false;
       return correspondencias.some((c) => n === c || n.includes(c));
     });
     if (achados.length === 1) {
@@ -194,6 +195,13 @@ export function matchAgendaName(value, items = [], { isDino = null } = {}) {
       return { item: achados[0], candidatos: achados };
     }
     if (achados.length > 1) {
+      if (semPreposicao === 'barba' && isDino === null) {
+        const temComDino = achados.some((it) => /\bdino\b/i.test(it.nome));
+        const temSemDino = achados.some((it) => !/\bdino\b/i.test(it.nome));
+        if (temComDino && temSemDino) {
+          return { item: null, candidatos: achados };
+        }
+      }
       const comDino = isDino !== null ? isDino : /\bdino\b/i.test(semPreposicao);
       const selecionado = achados.find((it) => comDino ? /\bdino\b/i.test(it.nome) : !/\bdino\b/i.test(it.nome)) || achados[0];
       return { item: selecionado, candidatos: achados };
