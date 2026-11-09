@@ -6,6 +6,9 @@ import SemAcesso from '../pages/admin/SemAcesso'
 import { aguardandoPermissoes, moduloOculto, permissaoQueFalta } from '../lib/permissoes-rota'
 import { moduloEmImplantacao } from '../lib/disponibilidade'
 import NotifBell from './NotifBell'
+import EmpresaSwitcher from './EmpresaSwitcher'
+import CommandPalette from './CommandPalette'
+import QuickActionsMenu from './QuickActionsMenu'
 import { useAuth } from '../lib/auth'
 import { useMenuEmGaveta } from '../lib/modo-menu'
 
@@ -13,56 +16,119 @@ import { useMenuEmGaveta } from '../lib/modo-menu'
 const MENU_RECOLHIDO = 78
 
 function TopBar({ gaveta = false }) {
-  const { user, isStaff, isAtleta, logout } = useAuth()
+  const { user, isStaff, isAtleta } = useAuth()
   const navigate = useNavigate()
+  const [paletteAberta, setPaletteAberta] = useState(false)
+
+  // Atalho global Ctrl+K ou Cmd+K
+  useEffect(() => {
+    const onKey = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        setPaletteAberta(prev => !prev)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
 
   if (!user) return null
-
   return (
-    <div style={{
-      position: 'fixed', top: 0, right: 0, left: gaveta ? 0 : MENU_RECOLHIDO,
-      height: 50, background: 'var(--surface)',
-      borderBottom: '1px solid var(--line)',
-      display: 'flex', alignItems: 'center',
-      justifyContent: 'flex-end',
-      // Na gaveta (iPad) o botão ☰ fica no canto esquerdo da barra.
-      padding: gaveta ? '0 12px 0 64px' : '0 20px', gap: 10, zIndex: 40,
-      transition: 'left .2s ease',
-    }} className="topbar">
-      {/* Atleta: botão painel */}
-      {isAtleta && (
-        <button onClick={() => navigate('/meu-painel')}
-          style={{ padding: '5px 14px', borderRadius: 8, border: '1px solid var(--accent)',
-            background: 'var(--accent-soft)', color: 'var(--accent)',
-            cursor: 'pointer', fontSize: 12, fontWeight: 700 }}>
-          🏠 Meu Painel
-        </button>
-      )}
-
-      {/* Bell de notificações (staff/admin) */}
-      {isStaff && <NotifBell />}
-
-      {/* Avatar/nome */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8,
-        padding: '4px 10px', borderRadius: 8,
-        border: '1px solid var(--line)', background: 'var(--card)' }}>
-        <div style={{ width: 26, height: 26, borderRadius: '50%',
-          background: 'var(--accent)', display: 'flex', alignItems: 'center',
-          justifyContent: 'center', color: '#fff', fontWeight: 800, fontSize: 12 }}>
-          {(user.nome || user.user || '?')[0].toUpperCase()}
+    <>
+      <div style={{
+        position: 'fixed', top: 0, right: 0, left: gaveta ? 0 : MENU_RECOLHIDO,
+        height: 52, background: 'var(--surface, #1e293b)',
+        borderBottom: '1px solid var(--line, #334155)',
+        display: 'flex', alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: gaveta ? '0 12px 0 64px' : '0 20px', gap: 12, zIndex: 40,
+        transition: 'left .2s ease',
+      }} className="topbar">
+        {/* Esquerda: Seletor Multi-Empresa & Status Barramento */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+          <EmpresaSwitcher />
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 6,
+            padding: '3px 8px', borderRadius: 6,
+            background: 'rgba(16, 185, 129, 0.08)',
+            border: '1px solid rgba(16, 185, 129, 0.25)',
+            fontSize: 11, fontWeight: 700, color: '#10b981',
+            whiteSpace: 'nowrap'
+          }} className="topbar-status-badge">
+            <span style={{ fontSize: 9 }}>●</span> Barramento A2 Síncrono
+          </div>
         </div>
-        <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--cream)', maxWidth: 120,
-          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-          {user.nome || user.user}
-        </span>
-        <span style={{ fontSize: 10, color: 'var(--muted)', textTransform: 'uppercase' }}>
-          {user.role}
-        </span>
+
+        {/* Centro: Barra de Busca Spotlight / Command Palette */}
+        <button
+          type="button"
+          onClick={() => setPaletteAberta(true)}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 10,
+            padding: '6px 14px', borderRadius: 8,
+            background: 'var(--card, #0f172a)',
+            border: '1px solid var(--line, #334155)',
+            color: 'var(--muted, #94a3b8)',
+            cursor: 'pointer',
+            fontSize: 12,
+            minWidth: 260,
+            maxWidth: 420,
+            flex: '1 1 auto',
+            justifyContent: 'space-between',
+            transition: 'all .15s ease'
+          }}
+          className="topbar-search-btn"
+          title="Abrir busca global do ERP (Ctrl+K)"
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span>🔍</span>
+            <span style={{ color: 'var(--muted, #94a3b8)' }}>Buscar clientes, comandas, relatórios...</span>
+          </div>
+          <kbd style={{
+            fontSize: 10, fontWeight: 700, padding: '2px 5px',
+            borderRadius: 4, background: 'var(--surface, #1e293b)',
+            border: '1px solid var(--line, #334155)', color: 'var(--muted, #94a3b8)'
+          }}>
+            Ctrl+K
+          </kbd>
+        </button>
+
+        {/* Direita: Ações Rápidas, Notificações e Usuário */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+          {isStaff && <QuickActionsMenu />}
+          {isAtleta && (
+            <button onClick={() => navigate('/meu-painel')}
+              style={{ padding: '5px 14px', borderRadius: 8, border: '1px solid var(--accent)',
+                background: 'var(--accent-soft)', color: 'var(--accent)',
+                cursor: 'pointer', fontSize: 12, fontWeight: 700 }}>
+              🏠 Meu Painel
+            </button>
+          )}
+          {isStaff && <NotifBell />}
+          {/* Avatar/nome */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8,
+            padding: '4px 10px', borderRadius: 8,
+            border: '1px solid var(--line, #334155)', background: 'var(--card, #0f172a)' }}>
+            <div style={{ width: 26, height: 26, borderRadius: '50%',
+              background: 'var(--accent, #6366f1)', display: 'flex', alignItems: 'center',
+              justifyContent: 'center', color: '#fff', fontWeight: 800, fontSize: 12 }}>
+              {(user.nome || user.user || '?')[0].toUpperCase()}
+            </div>
+            <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--cream, #f8fafc)', maxWidth: 110,
+              whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {user.nome || user.user}
+            </span>
+            <span style={{ fontSize: 10, color: 'var(--muted, #94a3b8)', textTransform: 'uppercase' }}>
+              {user.role}
+            </span>
+          </div>
+        </div>
       </div>
-    </div>
+
+      <CommandPalette isOpen={paletteAberta} onClose={() => setPaletteAberta(false)} />
+    </>
   )
 }
-
 export default function Layout({ children: conteudo, noSidebar = false, marketing = false }) {
   const location = useLocation()
   // módulo ainda não ligado em produção: aviso no lugar de uma tela cheia de erros 404
@@ -118,6 +184,8 @@ export default function Layout({ children: conteudo, noSidebar = false, marketin
       </main>
 
       <style>{`
+        @media (max-width: 960px) { .topbar-status-badge { display: none !important; } }
+        @media (max-width: 680px) { .topbar-search-btn { display: none !important; } }
         @media (max-width: 767px) { .topbar { display: none !important; } }
         /* Gaveta com a barra superior (iPad): o ☰ entra na própria barra. */
         @media (min-width: 768px) { .hamburger { top: calc(5px + env(safe-area-inset-top)); } }

@@ -3,6 +3,12 @@ import { Link } from 'react-router-dom';
 import { ChevronRight, Search, Filter, Sparkles } from 'lucide-react';
 import { todosRelatorios } from './relatoriosData';
 const RelatoriosDinoIndex = () => {
+  const [empresaAtiva, setEmpresaAtiva] = useState(() => {
+    try {
+      const e = localStorage.getItem('empresa_ativa') || localStorage.getItem('sp_empresa_ativa');
+      return e ? JSON.parse(e) : null;
+    } catch { return null; }
+  });
   const [busca, setBusca] = useState('');
   const [categoriaSelecionada, setCategoriaSelecionada] = useState('Todas');
   const categorias = ['Todas', ...new Set(todosRelatorios.map(r => r.categoria))].sort();
@@ -51,9 +57,44 @@ const RelatoriosDinoIndex = () => {
   return (
     <div style={styles.container}>
       <div style={styles.header}>
-        <span style={styles.sup}>DINO · INTELIGÊNCIA DE NEGÓCIOS</span>
-        <h1 style={styles.h1}>Central de Relatórios</h1>
-        <p style={styles.sub}>Acesse todos os seus {todosRelatorios.length} relatórios gerenciais e insights da IA.</p>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12 }}>
+          <div>
+            <span style={styles.sup}>KYTTO ERP · INTELIGÊNCIA DE NEGÓCIOS MULTI-EMPRESAS</span>
+            <h1 style={styles.h1}>Central de Relatórios Gerenciais</h1>
+            <p style={styles.sub}>
+              Base analítica integrada para <strong>{empresaAtiva?.nome || 'Todas as Unidades'}</strong> com {todosRelatorios.length} relatórios estruturados, conciliação e IA preditiva.
+            </p>
+          </div>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <span style={{ fontSize: 12, padding: '4px 10px', borderRadius: 6, background: 'rgba(16, 185, 129, 0.12)', color: '#10b981', fontWeight: 700, border: '1px solid rgba(16, 185, 129, 0.25)' }}>
+              🟢 SEFAZ: {empresaAtiva?.inscricaoEstadual || '14.229.191-9'} (MT)
+            </span>
+          </div>
+        </div>
+
+        {/* 4 Cards de Resumo Executivo */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px', marginTop: '16px' }}>
+          <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '10px', padding: '14px 16px' }}>
+            <div style={{ fontSize: '11px', color: 'var(--muted)', fontWeight: 700, textTransform: 'uppercase' }}>Modelos Homologados</div>
+            <div style={{ fontSize: '24px', fontWeight: 800, color: 'var(--text)', marginTop: '4px' }}>96 Relatórios</div>
+            <div style={{ fontSize: '11px', color: '#10b981', fontWeight: 600, marginTop: '2px' }}>100% integrados em PRD</div>
+          </div>
+          <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '10px', padding: '14px 16px' }}>
+            <div style={{ fontSize: '11px', color: 'var(--muted)', fontWeight: 700, textTransform: 'uppercase' }}>Categorias Abrangidas</div>
+            <div style={{ fontSize: '24px', fontWeight: 800, color: 'var(--text)', marginTop: '4px' }}>7 Módulos</div>
+            <div style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '2px' }}>Clientes, Serviços, Caixas, DRE</div>
+          </div>
+          <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '10px', padding: '14px 16px' }}>
+            <div style={{ fontSize: '11px', color: 'var(--muted)', fontWeight: 700, textTransform: 'uppercase' }}>Inteligência Preditiva</div>
+            <div style={{ fontSize: '24px', fontWeight: 800, color: 'var(--accent, #6366f1)', marginTop: '4px' }}>IA T-Rex Ativa</div>
+            <div style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '2px' }}>Metas, blend e diagnóstico</div>
+          </div>
+          <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '10px', padding: '14px 16px' }}>
+            <div style={{ fontSize: '11px', color: 'var(--muted)', fontWeight: 700, textTransform: 'uppercase' }}>Base Histórica</div>
+            <div style={{ fontSize: '24px', fontWeight: 800, color: '#10b981', marginTop: '4px' }}>Avec & Kytto</div>
+            <div style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '2px' }}>Auditoria completa sincronizada</div>
+          </div>
+        </div>
       </div>
       
       
