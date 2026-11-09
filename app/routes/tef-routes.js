@@ -6,8 +6,14 @@ import { Router } from 'express';
 import {
   ADQUIRENTES_BRASIL,
   BANDEIRAS_BRASIL,
+  CONFIGURACAO_PADRAO_DINO,
   obterConfiguracoesTef,
   salvarConfiguracoesTef,
+  listarTerminaisTef,
+  adicionarTerminalTef,
+  atualizarTerminalTef,
+  excluirTerminalTef,
+  testarConexaoTerminal,
   processarTransacaoTef,
   listarTransacoesTef,
   conciliarLoteTefComExtrato,
@@ -69,6 +75,60 @@ export function createTefRouter({ obterEmpresaId }) {
     res.json({ ok: true, config, mensagem: 'Configurações do TEF salvas com sucesso.' });
   });
 
+  // Restaurar padrões oficiais da Barbearia Dino
+  router.post('/restaurar-padrao-dino', (req, res) => {
+    const empresaId = resolverEmpresa(req);
+    const config = salvarConfiguracoesTef(empresaId, JSON.parse(JSON.stringify(CONFIGURACAO_PADRAO_DINO)));
+    res.json({ ok: true, config, mensagem: 'Configurações oficiais da Barbearia Dino restauradas com sucesso.' });
+  });
+
+  // Gestão de Terminais Pinpad
+  router.get('/terminais', (req, res) => {
+    const empresaId = resolverEmpresa(req);
+    const terminais = listarTerminaisTef(empresaId);
+    res.json({ ok: true, total: terminais.length, terminais });
+  });
+
+  router.post('/terminais', (req, res) => {
+    try {
+      const empresaId = resolverEmpresa(req);
+      const terminal = adicionarTerminalTef(empresaId, req.body || {});
+      res.status(201).json({ ok: true, terminal, mensagem: 'Terminal pinpad cadastrado com sucesso.' });
+    } catch (err) {
+      res.status(400).json({ ok: false, erro: err.message });
+    }
+  });
+
+  router.put('/terminais/:id', (req, res) => {
+    try {
+      const empresaId = resolverEmpresa(req);
+      const terminal = atualizarTerminalTef(empresaId, req.params.id, req.body || {});
+      res.json({ ok: true, terminal, mensagem: 'Terminal pinpad atualizado com sucesso.' });
+    } catch (err) {
+      res.status(404).json({ ok: false, erro: err.message });
+    }
+  });
+
+  router.delete('/terminais/:id', (req, res) => {
+    try {
+      const empresaId = resolverEmpresa(req);
+      const resultado = excluirTerminalTef(empresaId, req.params.id);
+      res.json({ ok: true, ...resultado });
+    } catch (err) {
+      res.status(404).json({ ok: false, erro: err.message });
+    }
+  });
+
+  router.post('/terminais/:id/testar-conexao', (req, res) => {
+    try {
+      const empresaId = resolverEmpresa(req);
+      const resultado = testarConexaoTerminal(empresaId, req.params.id);
+      res.json({ ok: true, ...resultado });
+    } catch (err) {
+      res.status(400).json({ ok: false, erro: err.message });
+    }
+  });
+
   // Listar transações TEF da empresa
   router.get('/transacoes', (req, res) => {
     const empresaId = resolverEmpresa(req);
@@ -86,6 +146,7 @@ export function createTefRouter({ obterEmpresaId }) {
         parcelas,
         adquirenteId,
         bandeiraId,
+        terminalId,
         referenciaVenda,
         clienteNome,
         operador
@@ -102,6 +163,7 @@ export function createTefRouter({ obterEmpresaId }) {
         parcelas: Number(parcelas) || 1,
         adquirenteId: adquirenteId || 'stone',
         bandeiraId: bandeiraId || 'visa',
+        terminalId,
         referenciaVenda,
         clienteNome,
         operador
@@ -124,7 +186,7 @@ export function createTefRouter({ obterEmpresaId }) {
       const { extratoLinhaId, adquirenteId, dataDeposito, valorDeposito } = req.body;
 
       if (!valorDeposito || Number(valorDeposito) <= 0) {
-        return res.status(400).json({ ok: false, erro: 'Valor do depósito deve ser informado.' });
+        return res.status(400).json({ ok: false, erro: 'Valor do depósito no extrato deve ser maior que zero.' });
       }
 
       const resultado = conciliarLoteTefComExtrato(empresaId, {
@@ -140,11 +202,15 @@ export function createTefRouter({ obterEmpresaId }) {
     }
   });
 
-  // Resumo de Previsão de Recebíveis de Cartão
+  // Resumo de previsões de recebíveis futuros
   router.get('/resumo-previsoes', (req, res) => {
-    const empresaId = resolverEmpresa(req);
-    const resumo = resumoPrevisaoRecebiveis(empresaId);
-    res.json({ ok: true, resumo });
+    try {
+      const empresaId = resolverEmpresa(req);
+      const resumo = resumoPrevisaoRecebiveis(empresaId);
+      res.json({ ok: true, resumo });
+    } catch (err) {
+      res.status(500).json({ ok: false, erro: err.message });
+    }
   });
 
   return router;

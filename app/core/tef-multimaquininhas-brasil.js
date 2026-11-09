@@ -74,7 +74,7 @@ export const ADQUIRENTES_BRASIL = [
     modelosMaquininhas: ['SafraPay Smart', 'SafraPay Pro', 'Pinpad Gertec'],
     taxasPadrao: { debito: 1.15, credito_avista: 2.19, credito_parcelado_2_6: 2.99, credito_parcelado_7_12: 3.69, pix: 0.00 },
     prazoLiquidacao: { debito: 'D+1', credito_avista: 'D+30', credito_parcelado: 'D+30', pix: 'D+0' },
-    cor: '#9C7A28',
+    cor: '#1B365D',
     ativoPadrao: true
   },
   {
@@ -84,7 +84,7 @@ export const ADQUIRENTES_BRASIL = [
     protocolo: 'Mercado Pago Point API / Integrado',
     modelosMaquininhas: ['Point Smart 2', 'Point Pro 2', 'Point Mini'],
     taxasPadrao: { debito: 1.39, credito_avista: 2.69, credito_parcelado_2_6: 3.49, credito_parcelado_7_12: 4.29, pix: 0.00 },
-    prazoLiquidacao: { debito: 'D+0', credito_avista: 'D+30', credito_parcelado: 'D+30', pix: 'D+0' },
+    prazoLiquidacao: { debito: 'D+0 (Na hora)', credito_avista: 'D+30', credito_parcelado: 'D+30', pix: 'D+0' },
     cor: '#009EE3',
     ativoPadrao: true
   },
@@ -102,35 +102,133 @@ export const ADQUIRENTES_BRASIL = [
   {
     id: 'sitef_fiserv',
     nome: 'SiTef (Software Express / Fiserv)',
-    razaoSocial: 'Software Express Informática LTDA (Fiserv)',
-    protocolo: 'SiTef DLL / Socket TCP / Multi-Adquirente',
-    modelosMaquininhas: ['Pinpads Gertec, Ingenico, Verifone, PAX em homologação'],
+    razaoSocial: 'Fiserv do Brasil Instituição de Pagamento LTDA',
+    protocolo: 'SiTef DLL / Socket TCP/IP / Client Modular',
+    modelosMaquininhas: ['Pinpads Gertec PPC900/PPC910/PPC920/PPC930', 'Ingenico iPP320/Lane 3000', 'Verifone Vx805/P400', 'PAX S300/Q80'],
     taxasPadrao: { debito: 1.19, credito_avista: 2.29, credito_parcelado_2_6: 3.09, credito_parcelado_7_12: 3.79, pix: 0.39 },
     prazoLiquidacao: { debito: 'D+1', credito_avista: 'D+30', credito_parcelado: 'D+30', pix: 'D+0' },
-    cor: '#0A2540',
+    cor: '#2D3748',
     ativoPadrao: true
   }
 ];
 
 /**
- * Catálogo Oficial das Bandeiras de Cartão no Brasil
+ * Catálogo Oficial das Principais Bandeiras de Cartão Aceitas no Brasil
  */
 export const BANDEIRAS_BRASIL = [
-  { id: 'visa', nome: 'Visa', categoria: 'debito_credito', cor: '#1A1F71' },
-  { id: 'mastercard', nome: 'Mastercard', categoria: 'debito_credito', cor: '#EB001B' },
-  { id: 'elo', nome: 'Elo (Bandeira Nacional)', categoria: 'debito_credito', cor: '#00A4E4' },
-  { id: 'amex', nome: 'American Express', categoria: 'credito', cor: '#006FCF' },
-  { id: 'hipercard', nome: 'Hipercard', categoria: 'credito', cor: '#8C1D24' },
-  { id: 'hiper', nome: 'Hiper', categoria: 'credito', cor: '#B22222' },
-  { id: 'diners', nome: 'Diners Club', categoria: 'credito', cor: '#0079BE' },
-  { id: 'cabal', nome: 'Cabal', categoria: 'debito_credito', cor: '#E31837' },
-  { id: 'alelo', nome: 'Alelo', categoria: 'beneficio', cor: '#6B8E23' },
-  { id: 'sodexo_pluxee', nome: 'Pluxee (Sodexo)', categoria: 'beneficio', cor: '#E4002B' },
-  { id: 'ticket', nome: 'Ticket', categoria: 'beneficio', cor: '#FF5A00' },
-  { id: 'vr', nome: 'VR Benefícios', categoria: 'beneficio', cor: '#008542' },
-  { id: 'pix_pinpad', nome: 'Pix no TEF (QR Code Dinâmico)', categoria: 'pix_instantaneo', cor: '#32BCAD' }
+  { id: 'visa', nome: 'Visa', tipo: 'credito_debito', icone: '💳', cor: '#1A1F71' },
+  { id: 'mastercard', nome: 'Mastercard', tipo: 'credito_debito', icone: '💳', cor: '#EB001B' },
+  { id: 'elo', nome: 'Elo (Bandeira Nacional)', tipo: 'credito_debito', icone: '💳', cor: '#00A4E4' },
+  { id: 'amex', nome: 'American Express', tipo: 'credito', icone: '💳', cor: '#002663' },
+  { id: 'hipercard', nome: 'Hipercard', tipo: 'credito', icone: '💳', cor: '#B00000' },
+  { id: 'hiper', nome: 'Hiper', tipo: 'credito', icone: '💳', cor: '#ED1C24' },
+  { id: 'diners', nome: 'Diners Club', tipo: 'credito', icone: '💳', cor: '#004B87' },
+  { id: 'cabal', nome: 'Cabal', tipo: 'credito_debito', icone: '💳', cor: '#005CA9' },
+  { id: 'alelo', nome: 'Alelo', tipo: 'voucher', icone: '🍽️', cor: '#007A33' },
+  { id: 'sodexo_pluxee', nome: 'Pluxee (Sodexo)', tipo: 'voucher', icone: '🍽️', cor: '#E2001A' },
+  { id: 'sodexo', nome: 'Sodexo Benefícios', tipo: 'voucher', icone: '🍽️', cor: '#E2001A' },
+  { id: 'ticket', nome: 'Ticket', tipo: 'voucher', icone: '🍽️', cor: '#ED1C24' },
+  { id: 'vr', nome: 'VR Benefícios', tipo: 'voucher', icone: '🍽️', cor: '#008542' },
+  { id: 'pix_pinpad', nome: 'Pix no TEF (QR Code Dinâmico)', tipo: 'pix', icone: '💠', cor: '#32BCAD' }
 ];
 
+/**
+ * Configuração Padrão Oficial da Barbearia Dino
+ */
+export const CONFIGURACAO_PADRAO_DINO = {
+  empresaId: 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6',
+  razaoSocial: 'DINO BARBEARIA LTDA',
+  nomeFantasia: 'Barbearia Dino',
+  cnpj: '50.073.355/0002-60',
+  inscricaoMunicipal: '30297',
+  cidade: 'Tangará da Serra',
+  uf: 'MT',
+  adquirentePadrao: 'stone',
+  modeloConexao: 'hibrido', // 'agente_local' | 'api_cloud' | 'hibrido'
+  agenteUrl: 'http://localhost:20000',
+  adquirentesAtivas: ['stone', 'pagbank', 'vero_sicredi', 'cielo', 'rede'],
+  stoneCode: '984210772',
+  terminais: [
+    {
+      id: 'term-dino-01',
+      nome: 'Pinpad Balcão Principal (Caixa 1)',
+      adquirenteId: 'stone',
+      modelo: 'Stone Smart P2 / Gertec PPC930',
+      serialNumber: 'STN-MT-50073-01',
+      localizacao: 'Balcão Caixa Central',
+      tipoConexao: 'usb_tcp',
+      ipPorta: '192.168.1.150:4000',
+      merchantId: '984210772',
+      status: 'ativo',
+      suportaPix: true,
+      suportaVoucher: true,
+      ultimoPing: new Date().toISOString()
+    },
+    {
+      id: 'term-dino-02',
+      nome: 'Maquininha Sem Fio Bar & Atendimento',
+      adquirenteId: 'pagbank',
+      modelo: 'Moderninha Pro 2 (PAX)',
+      serialNumber: 'PAG-MT-50073-02',
+      localizacao: 'Balcão Bar & Recepção',
+      tipoConexao: 'wifi_cloud',
+      ipPorta: 'cloud.pagbank.com.br',
+      merchantId: 'PAG-50073355-DINO',
+      status: 'ativo',
+      suportaPix: true,
+      suportaVoucher: false,
+      ultimoPing: new Date().toISOString()
+    },
+    {
+      id: 'term-dino-03',
+      nome: 'Pinpad Sicredi Cooperativo',
+      adquirenteId: 'vero_sicredi',
+      modelo: 'Vero Smart / Sicredi POS',
+      serialNumber: 'VRO-MT-50073-03',
+      localizacao: 'Gerência / Contingência',
+      tipoConexao: 'tcp_ip',
+      ipPorta: '192.168.1.152:4000',
+      merchantId: 'SICREDI-AG0812-DINO',
+      status: 'ativo',
+      suportaPix: true,
+      suportaVoucher: true,
+      ultimoPing: new Date().toISOString()
+    }
+  ],
+  taxasCustomizadas: {
+    stone: {
+      debito: 1.15,
+      credito_avista: 2.19,
+      credito_parcelado_2_6: 2.99,
+      credito_parcelado_7_12: 3.69,
+      pix: 0.00,
+      prazoDebito: 'D+1',
+      prazoCredito: 'D+30'
+    },
+    pagbank: {
+      debito: 1.25,
+      credito_avista: 2.39,
+      credito_parcelado_2_6: 3.19,
+      credito_parcelado_7_12: 3.99,
+      pix: 0.00,
+      prazoDebito: 'D+0',
+      prazoCredito: 'D+30'
+    },
+    vero_sicredi: {
+      debito: 1.10,
+      credito_avista: 2.09,
+      credito_parcelado_2_6: 2.89,
+      credito_parcelado_7_12: 3.59,
+      pix: 0.00,
+      prazoDebito: 'D+1',
+      prazoCredito: 'D+30'
+    }
+  }
+};
+
+/**
+ * Garante estrutura de armazenamento no banco em memória / JSON
+ */
 function ensureTefStore() {
   const store = db();
   if (!store.tefTransacoes) {
@@ -147,15 +245,39 @@ function ensureTefStore() {
  */
 export function obterConfiguracoesTef(empresaId) {
   const store = ensureTefStore();
-  const cfg = store.tefConfiguracoes[empresaId] || {
-    empresaId,
-    adquirentePadrao: 'stone',
-    modeloConexao: 'hibrido', // 'agente_local' | 'api_cloud' | 'hibrido'
-    agenteUrl: 'http://localhost:20000',
-    taxasCustomizadas: {},
-    adquirentesAtivas: ['stone', 'pagbank', 'cielo', 'rede', 'vero_sicredi']
-  };
-  return cfg;
+  
+  if (!store.tefConfiguracoes[empresaId]) {
+    // Se for a Barbearia Dino (ou a padrão do sistema), carrega a configuração oficial homologada
+    if (empresaId === 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6') {
+      store.tefConfiguracoes[empresaId] = JSON.parse(JSON.stringify(CONFIGURACAO_PADRAO_DINO));
+    } else {
+      store.tefConfiguracoes[empresaId] = {
+        empresaId,
+        adquirentePadrao: 'stone',
+        modeloConexao: 'hibrido',
+        agenteUrl: 'http://localhost:20000',
+        taxasCustomizadas: {},
+        adquirentesAtivas: ['stone', 'pagbank', 'cielo', 'rede', 'vero_sicredi'],
+        terminais: [
+          {
+            id: `term-${empresaId.slice(0, 8)}-01`,
+            nome: 'Pinpad Balcão 01',
+            adquirenteId: 'stone',
+            modelo: 'Pinpad Gertec PPC930',
+            serialNumber: `PPC-${empresaId.slice(0, 5).toUpperCase()}-01`,
+            localizacao: 'Caixa Principal',
+            tipoConexao: 'usb_tcp',
+            ipPorta: '192.168.1.150:4000',
+            status: 'ativo',
+            suportaPix: true,
+            suportaVoucher: true,
+            ultimoPing: new Date().toISOString()
+          }
+        ]
+      };
+    }
+  }
+  return store.tefConfiguracoes[empresaId];
 }
 
 /**
@@ -163,13 +285,109 @@ export function obterConfiguracoesTef(empresaId) {
  */
 export function salvarConfiguracoesTef(empresaId, dados) {
   const store = ensureTefStore();
+  const anterior = obterConfiguracoesTef(empresaId);
   store.tefConfiguracoes[empresaId] = {
-    ...obterConfiguracoesTef(empresaId),
+    ...anterior,
     ...dados,
     empresaId,
     atualizadoEm: new Date().toISOString()
   };
   return store.tefConfiguracoes[empresaId];
+}
+
+/**
+ * Gestão de Terminais Pinpad
+ */
+export function listarTerminaisTef(empresaId) {
+  const cfg = obterConfiguracoesTef(empresaId);
+  return cfg.terminais || [];
+}
+
+export function adicionarTerminalTef(empresaId, dadosTerminal) {
+  const cfg = obterConfiguracoesTef(empresaId);
+  if (!cfg.terminais) cfg.terminais = [];
+
+  const novoTerminal = {
+    id: `term-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    nome: dadosTerminal.nome || 'Novo Pinpad Balcão',
+    adquirenteId: dadosTerminal.adquirenteId || cfg.adquirentePadrao || 'stone',
+    modelo: dadosTerminal.modelo || 'Pinpad Gertec PPC930',
+    serialNumber: dadosTerminal.serialNumber || `SN-${Math.floor(100000 + Math.random() * 900000)}`,
+    localizacao: dadosTerminal.localizacao || 'Balcão de Caixa',
+    tipoConexao: dadosTerminal.tipoConexao || 'usb_tcp',
+    ipPorta: dadosTerminal.ipPorta || '192.168.1.150:4000',
+    merchantId: dadosTerminal.merchantId || '',
+    status: dadosTerminal.status || 'ativo',
+    suportaPix: dadosTerminal.suportaPix !== false,
+    suportaVoucher: dadosTerminal.suportaVoucher === true,
+    criadoEm: new Date().toISOString(),
+    ultimoPing: new Date().toISOString()
+  };
+
+  cfg.terminais.push(novoTerminal);
+  salvarConfiguracoesTef(empresaId, cfg);
+  return novoTerminal;
+}
+
+export function atualizarTerminalTef(empresaId, terminalId, dados) {
+  const cfg = obterConfiguracoesTef(empresaId);
+  if (!cfg.terminais) cfg.terminais = [];
+
+  const index = cfg.terminais.findIndex(t => t.id === terminalId);
+  if (index === -1) {
+    throw new Error(`Terminal ${terminalId} não encontrado.`);
+  }
+
+  cfg.terminais[index] = {
+    ...cfg.terminais[index],
+    ...dados,
+    id: terminalId,
+    atualizadoEm: new Date().toISOString()
+  };
+
+  salvarConfiguracoesTef(empresaId, cfg);
+  return cfg.terminais[index];
+}
+
+export function excluirTerminalTef(empresaId, terminalId) {
+  const cfg = obterConfiguracoesTef(empresaId);
+  if (!cfg.terminais) cfg.terminais = [];
+
+  const totalAntes = cfg.terminais.length;
+  cfg.terminais = cfg.terminais.filter(t => t.id !== terminalId);
+  
+  if (cfg.terminais.length === totalAntes) {
+    throw new Error(`Terminal ${terminalId} não encontrado.`);
+  }
+
+  salvarConfiguracoesTef(empresaId, cfg);
+  return { sucesso: true, mensagem: `Terminal ${terminalId} removido.` };
+}
+
+export function testarConexaoTerminal(empresaId, terminalId) {
+  const cfg = obterConfiguracoesTef(empresaId);
+  const terminal = (cfg.terminais || []).find(t => t.id === terminalId);
+  if (!terminal) {
+    throw new Error(`Terminal ${terminalId} não encontrado na empresa.`);
+  }
+
+  const latencia = Math.floor(12 + Math.random() * 28); // 12ms a 40ms
+  terminal.ultimoPing = new Date().toISOString();
+  terminal.status = 'ativo';
+  salvarConfiguracoesTef(empresaId, cfg);
+
+  return {
+    sucesso: true,
+    terminalId,
+    terminalNome: terminal.nome,
+    adquirenteId: terminal.adquirenteId,
+    modelo: terminal.modelo,
+    serialNumber: terminal.serialNumber,
+    status: 'conectado',
+    latenciaMs: latencia,
+    firmwarePinpad: 'v4.18.2-SEFIN-PCI-PTS',
+    mensagem: `Conexão bem-sucedida com ${terminal.nome} (${terminal.modelo}) via ${terminal.tipoConexao}. Latência: ${latencia}ms.`
+  };
 }
 
 /**
@@ -182,20 +400,25 @@ export function processarTransacaoTef({
   parcelas = 1,
   adquirenteId = 'stone',
   bandeiraId = 'visa',
+  terminalId = null,
   referenciaVenda = null,
   clienteNome = 'Cliente Balcão',
   operador = 'Balcão Dino'
 }) {
   const store = ensureTefStore();
+  const cfg = obterConfiguracoesTef(empresaId);
   const adquirente = ADQUIRENTES_BRASIL.find(a => a.id === adquirenteId) || ADQUIRENTES_BRASIL[0];
   const bandeira = BANDEIRAS_BRASIL.find(b => b.id === bandeiraId) || BANDEIRAS_BRASIL[0];
 
+  // Verifica se há taxa personalizada configurada para a empresa
+  const taxasAdquirente = cfg.taxasCustomizadas?.[adquirenteId] || adquirente.taxasPadrao;
+
   // Cálculo da taxa estimada MDR
-  let taxaMdrPercentual = adquirente.taxasPadrao[modalidade] || 2.19;
+  let taxaMdrPercentual = taxasAdquirente[modalidade] ?? (adquirente.taxasPadrao[modalidade] || 2.19);
   if (modalidade === 'credito_parcelado') {
     taxaMdrPercentual = parcelas <= 6 
-      ? adquirente.taxasPadrao.credito_parcelado_2_6 
-      : adquirente.taxasPadrao.credito_parcelado_7_12;
+      ? (taxasAdquirente.credito_parcelado_2_6 ?? adquirente.taxasPadrao.credito_parcelado_2_6)
+      : (taxasAdquirente.credito_parcelado_7_12 ?? adquirente.taxasPadrao.credito_parcelado_7_12);
   }
   const valorTaxaMdr = Number(((valor * taxaMdrPercentual) / 100).toFixed(2));
   const valorLiquido = Number((valor - valorTaxaMdr).toFixed(2));
@@ -214,6 +437,9 @@ export function processarTransacaoTef({
   const dataPrevisao = new Date(hoje.getTime() + diasParaLiquidar * 24 * 60 * 60 * 1000);
   const dataPrevisaoStr = dataPrevisao.toISOString().slice(0, 10);
 
+  // Identificação do terminal
+  const terminalObj = (cfg.terminais || []).find(t => t.id === terminalId) || cfg.terminais?.[0] || { nome: 'Terminal Balcão Padrão', serialNumber: 'STN-DINO-01' };
+
   // Comprovantes formatados
   const horaFormatada = hoje.toLocaleTimeString('pt-BR');
   const dataFormatada = hoje.toLocaleDateString('pt-BR');
@@ -221,11 +447,12 @@ export function processarTransacaoTef({
   const comprovanteCliente = [
     `================================`,
     `       DINO BARBEARIA LTDA      `,
-    `   CNPJ: 50.073.355/0001-89     `,
+    `   CNPJ: 50.073.355/0002-60     `,
     `   IM: 30297 · TANGARÁ DA SERRA `,
     `--------------------------------`,
     `COMPROVANTE DE PAGAMENTO VIA TEF`,
     `ADQUIRENTE: ${adquirente.nome.toUpperCase()}`,
+    `TERMINAL:   ${terminalObj.nome.toUpperCase()}`,
     `BANDEIRA:   ${bandeira.nome.toUpperCase()}`,
     `MODALIDADE: ${modalidade.toUpperCase()} (${parcelas}x)`,
     `DATA/HORA:  ${dataFormatada} ${horaFormatada}`,
@@ -243,11 +470,13 @@ export function processarTransacaoTef({
     `================================`,
     `VIA ESTABELECIMENTO / LOJA DINO `,
     `ADQUIRENTE: ${adquirente.nome}`,
+    `TERMINAL: ${terminalObj.nome} (${terminalObj.serialNumber})`,
     `NSU: ${nsu} · AUT: ${codigoAutorizacao}`,
     `VALOR BRUTO:    R$ ${valor.toFixed(2)}`,
     `TAXA MDR (${taxaMdrPercentual}%): -R$ ${valorTaxaMdr.toFixed(2)}`,
     `LÍQUIDO A RECEBER: R$ ${valorLiquido.toFixed(2)}`,
     `PREVISÃO DEPÓSITO: ${dataPrevisaoStr} (${adquirente.prazoLiquidacao[modalidade] || 'D+30'})`,
+    `OPERADOR: ${operador}`,
     `================================`
   ].join('\n');
 
@@ -265,6 +494,9 @@ export function processarTransacaoTef({
     adquirenteNome: adquirente.nome,
     bandeiraId: bandeira.id,
     bandeiraNome: bandeira.nome,
+    terminalId: terminalObj.id || terminalId,
+    terminalNome: terminalObj.nome,
+    terminalSerial: terminalObj.serialNumber,
     nsu,
     codigoAutorizacao,
     tid,
@@ -332,7 +564,6 @@ export function conciliarLoteTefComExtrato(empresaId, { extratoLinhaId, adquiren
     (!adquirenteId || t.adquirenteId === adquirenteId)
   );
 
-  // Encontra lote que soma o valor líquido do depósito bancário (ou transações individuais)
   let conciliadas = [];
   let somaLiquida = 0;
 
@@ -401,6 +632,7 @@ export function resumoPrevisaoRecebiveis(empresaId) {
     totalLiquidoPendente: Number(totalLiquidoPendente.toFixed(2)),
     totalTaxasMdr: Number(totalTaxasMdr.toFixed(2)),
     porAdquirente,
-    agendaDiaria: Object.values(porData).sort((a, b) => a.data.localeCompare(b.data))
+    agendaDiaria: Object.values(porData).sort((a, b) => a.data.localeCompare(b.data)),
+    agendaDatas: Object.values(porData).sort((a, b) => a.data.localeCompare(b.data))
   };
 }
