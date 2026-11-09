@@ -7,6 +7,7 @@ import { useRazaoAtivo } from '../../../lib/razao-estado'
 import { brandFromContext } from '../../../lib/brand'
 import { Badge, Dialog, Table } from '../customer360/shared'
 import { downloadCsv, localDay, money, moneyK, shortDate } from './format'
+import ConciliacaoBancariaTab from '../financeiro/ConciliacaoBancariaTab'
 import '../customer360.css'
 import './dino-admin.css'
 
@@ -1730,6 +1731,14 @@ export default function FinanceiroEmpresa() {
             </button>
             <button
               type="button"
+              className={`c360-btn ${abaAnalitica === 'conciliacao' ? 'primary' : 'ghost'}`}
+              style={{ fontSize: 12, padding: '5px 10px' }}
+              onClick={() => setAbaAnalitica('conciliacao')}
+            >
+              🏦 Conciliação Bancária OFX
+            </button>
+            <button
+              type="button"
               className={`c360-btn ${abaAnalitica === 'categorias' ? 'primary' : 'ghost'}`}
               style={{ fontSize: 12, padding: '5px 10px' }}
               onClick={() => setAbaAnalitica('categorias')}
@@ -1750,6 +1759,7 @@ export default function FinanceiroEmpresa() {
             {abaAnalitica === 'receber' && 'Gestão avançada de recebíveis e faturamento'}
             {abaAnalitica === 'pagar' && 'Gestão avançada de fornecedores e obrigações'}
             {abaAnalitica === 'dre' && 'Demonstrativo contábil gerencial'}
+            {abaAnalitica === 'conciliacao' && 'Importação de extratos OFX e conciliação bancária inteligente'}
             {abaAnalitica === 'categorias' && 'Clique na categoria para filtrar a lista'}
             {abaAnalitica === 'raiox' && 'Métricas de margem, faturamento médio e liquidez'}
           </span>
@@ -1781,6 +1791,12 @@ export default function FinanceiroEmpresa() {
 
         {abaAnalitica === 'dre' && (
           <DreGerencialPanel dre={dre} mes={mesDre} onMesChange={setMesDre} onFilterCategoria={handleSelectCategoriaFiltro} />
+        )}
+
+        {abaAnalitica === 'conciliacao' && (
+          <div style={{ marginTop: 12 }}>
+            <ConciliacaoBancariaTab onAtualizarFinanceiro={load} />
+          </div>
         )}
 
         {abaAnalitica === 'categorias' && (
