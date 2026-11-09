@@ -229,6 +229,55 @@ export function obterDetalhesCaixaOperacao(empresaId, caixaId, options = {}) {
   const totalSuprimentos = Number(suprimentos.reduce((s, m) => s + Number(m.valor || 0), 0).toFixed(2));
   const dinheiroEsperado = Number((Number(caixa.valorAbertura || 0) + Number(formasPagamento.dinheiro.total || 0) + totalSuprimentos - totalSangrias).toFixed(2));
 
+  // Cálculo consolidado de comissões dos barbeiros nas comandas deste caixa
+  const mapaComissoesProf = {};
+  let totalGorjetas = 0;
+
+  for (const c of comandas) {
+    if (c.status === 'cancelada' || c.estornada) continue;
+    totalGorjetas = Number((totalGorjetas + Number(c.gorjeta || 0)).toFixed(2));
+
+    for (const it of c.itens || []) {
+      const profId = it.profissionalId || c.profissionalId || '__sem_profissional__';
+      const prof = mapaProf[profId];
+      const nomeProf = prof?.nome || (profId === '__sem_profissional__' ? 'Sem Barbeiro Definido' : 'Profissional');
+      const comissaoPercent = Number(prof?.comissaoPercentual ?? prof?.comissaoServicos ?? 50);
+      const subtotalItem = Number(it.subtotal || (Number(it.precoUnitario || 0) * Number(it.quantidade || 1)));
+
+      if (!mapaComissoesProf[profId]) {
+        mapaComissoesProf[profId] = {
+          profissionalId: profId,
+          nome: nomeProf,
+          totalServicos: 0,
+          totalProdutos: 0,
+          totalFaturado: 0,
+          comissaoPercent,
+          valorComissao: 0,
+          quantidadeServicos: 0,
+          quantidadeProdutos: 0,
+        };
+      }
+
+      if (it.tipo === 'produto') {
+        const comissaoProdPercent = Number(prof?.comissaoProdutos ?? 10);
+        mapaComissoesProf[profId].totalProdutos = Number((mapaComissoesProf[profId].totalProdutos + subtotalItem).toFixed(2));
+        mapaComissoesProf[profId].quantidadeProdutos += Number(it.quantidade || 1);
+        const valorComissaoProd = Number((subtotalItem * (comissaoProdPercent / 100)).toFixed(2));
+        mapaComissoesProf[profId].valorComissao = Number((mapaComissoesProf[profId].valorComissao + valorComissaoProd).toFixed(2));
+      } else {
+        mapaComissoesProf[profId].totalServicos = Number((mapaComissoesProf[profId].totalServicos + subtotalItem).toFixed(2));
+        mapaComissoesProf[profId].quantidadeServicos += Number(it.quantidade || 1);
+        const valorComissaoServ = Number((subtotalItem * (comissaoPercent / 100)).toFixed(2));
+        mapaComissoesProf[profId].valorComissao = Number((mapaComissoesProf[profId].valorComissao + valorComissaoServ).toFixed(2));
+      }
+
+      mapaComissoesProf[profId].totalFaturado = Number((mapaComissoesProf[profId].totalServicos + mapaComissoesProf[profId].totalProdutos).toFixed(2));
+    }
+  }
+
+  const listaComissoes = Object.values(mapaComissoesProf);
+  const totalComissoesGeral = Number(listaComissoes.reduce((soma, p) => soma + p.valorComissao, 0).toFixed(2));
+
   return {
     caixa: {
       ...caixa,
@@ -248,6 +297,11 @@ export function obterDetalhesCaixaOperacao(empresaId, caixaId, options = {}) {
     formasPagamento,
     totalFaturado,
     dinheiroEsperado,
+    totalGorjetas,
+    comissoes: {
+      profissionais: listaComissoes,
+      totalComissoes: totalComissoesGeral,
+    },
     comandasPorMeio,
     itensRelatorioFechamento,
     totalComandas: comandas.length,

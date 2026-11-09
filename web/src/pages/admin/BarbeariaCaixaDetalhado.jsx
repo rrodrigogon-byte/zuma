@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { api, fmtDateOnly, fmtR } from '../../lib/api';
-import { Printer, Unlock, RefreshCw, X, AlertCircle, CheckCircle2, ChevronRight, Edit3, Calendar, Trash2, Eye } from 'lucide-react';
+import { Printer, Unlock, RefreshCw, X, AlertCircle, CheckCircle2, ChevronRight, Edit3, Calendar, Trash2, Eye, Send, Scissors, Search, Share2 } from 'lucide-react';
 
 const moeda = (val) => fmtR(Number(val || 0));
 
@@ -20,6 +20,9 @@ export default function BarbeariaCaixaDetalhado({
   const [motivoReabertura, setMotivoReabertura] = useState('');
   const [reabrindo, setReabrindo] = useState(false);
   const [modalRelatorio, setModalRelatorio] = useState(false);
+  const [modalTermico, setModalTermico] = useState(false);
+  const [buscaDrilldown, setBuscaDrilldown] = useState('');
+  const [profFiltroDrilldown, setProfFiltroDrilldown] = useState('');
   const [modalEdicaoPagamento, setModalEdicaoPagamento] = useState(null); // { comandaId, pagamentoId, meio, bandeira, valor }
   const [salvandoEdicao, setSalvandoEdicao] = useState(false);
   const [modalAlterarDataComanda, setModalAlterarDataComanda] = useState(null); // { comandaId, dataAtual, titulo }
@@ -67,6 +70,43 @@ export default function BarbeariaCaixaDetalhado({
     } finally {
       setReabrindo(false);
     }
+  };
+
+  const handleEnviarResumoWhatsApp = () => {
+    if (!detalhes) return;
+    const { caixa, formasPagamento, totalFaturado, dinheiroEsperado, movimentacoes, comissoes } = detalhes;
+    const dataFormatada = caixa.data ? caixa.data.split('-').reverse().join('/') : data;
+    const numeroCaixa = caixa.numeroCaixa || 1;
+    const nomeCaixa = caixa.nomeCaixa || `Caixa ${numeroCaixa}`;
+    const responsavel = caixa.responsavelNome || 'Operador';
+
+    let texto = `💈 *BARBEARIA DINO — RESUMO DO CAIXA* 💈\n`;
+    texto += `📅 *Data:* ${dataFormatada} · *${nomeCaixa}*\n`;
+    texto += `👤 *Responsável:* ${responsavel}\n`;
+    texto += `🔒 *Status:* ${caixa.status === 'aberto' ? '● CAIXA ABERTO' : '✓ CAIXA FECHADO'}\n\n`;
+
+    texto += `💰 *TOTAL FATURADO:* ${moeda(totalFaturado)}\n`;
+    texto += `💵 *Dinheiro em Gaveta:* ${moeda(dinheiroEsperado)} (Abertura: ${moeda(caixa.valorAbertura)})\n`;
+    texto += `💳 *Cartão Débito:* ${moeda(formasPagamento?.cartao_debito?.total || 0)}\n`;
+    texto += `💳 *Cartão Crédito:* ${moeda(formasPagamento?.cartao_credito?.total || 0)}\n`;
+    texto += `📱 *Pix:* ${moeda(formasPagamento?.pix?.total || 0)}\n`;
+    if (movimentacoes?.temMovimentacao) {
+      texto += `🔻 *Sangrias:* ${moeda(movimentacoes.totalSangrias)} | 🔺 *Suprimentos:* ${moeda(movimentacoes.totalSuprimentos)}\n`;
+    }
+
+    if (comissoes?.profissionais?.length > 0) {
+      texto += `\n✂️ *COMISSÕES DOS BARBEIROS NO CAIXA:*\n`;
+      comissoes.profissionais.forEach((p) => {
+        texto += `• *${p.nome}:* Faturou ${moeda(p.totalFaturado)} → Comissão: *${moeda(p.valorComissao)}*\n`;
+      });
+      texto += `👉 *Total de Comissões:* ${moeda(comissoes.totalComissoes)}\n`;
+      texto += `🏢 *Líquido Barbearia Dino:* ${moeda(Math.max(0, totalFaturado - comissoes.totalComissoes))}\n`;
+    }
+
+    texto += `\n_Auditoria Kytto ERP Barbearia Dino_`;
+
+    const url = `https://api.whatsapp.com/send?text=${encodeURIComponent(texto)}`;
+    window.open(url, '_blank');
   };
 
   const handleSalvarEdicaoPagamento = async (e) => {
@@ -213,6 +253,22 @@ export default function BarbeariaCaixaDetalhado({
             title="Visualizar e Imprimir Relatório de Fechamento"
           >
             <Printer size={16} color="#2563eb" /> Imprimir Relatório
+          </button>
+          <button
+            type="button"
+            onClick={() => setModalTermico(true)}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: '#1e293b' }}
+            title="Visualizar e Imprimir Cupom Térmico 80mm para Impressora de Balcão"
+          >
+            <Printer size={16} color="#059669" /> Cupom 80mm
+          </button>
+          <button
+            type="button"
+            onClick={handleEnviarResumoWhatsApp}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: '#25d366', color: '#ffffff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 700 }}
+            title="Enviar Resumo do Fechamento no WhatsApp da Gerência"
+          >
+            <Send size={15} /> WhatsApp
           </button>
           {caixa.status === 'aberto' ? (
             <span style={{ background: '#dcfce7', color: '#15803d', padding: '6px 12px', borderRadius: 20, fontSize: 12, fontWeight: 700 }}>
@@ -390,6 +446,57 @@ export default function BarbeariaCaixaDetalhado({
         </table>
       </div>
 
+      {/* BLOCO DE RATEIO E COMISSÕES DA EQUIPE NO CAIXA */}
+      {detalhes.comissoes?.profissionais?.length > 0 && (
+        <div style={{ padding: '16px 20px', background: '#f8fafc', borderTop: '2px solid #e2e8f0' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
+            <h4 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: '#0f172a', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <Scissors size={16} color="#2563eb" /> Rateio de Comissões dos Barbeiros no Caixa
+            </h4>
+            <div style={{ fontSize: 12, color: '#64748b' }}>
+              Total Comissões: <strong style={{ color: '#0284c7' }}>{moeda(detalhes.comissoes.totalComissoes)}</strong> · Líquido Barbearia: <strong style={{ color: '#16a34a' }}>{moeda(Math.max(0, totalFaturado - detalhes.comissoes.totalComissoes))}</strong>
+            </div>
+          </div>
+
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: 8 }}>
+              <thead>
+                <tr style={{ background: '#f1f5f9', color: '#475569', fontSize: 11, textTransform: 'uppercase', borderBottom: '1px solid #cbd5e1' }}>
+                  <th style={{ padding: '8px 12px', textAlign: 'left' }}>Barbeiro</th>
+                  <th style={{ padding: '8px 12px', textAlign: 'center' }}>Qtd Serv.</th>
+                  <th style={{ padding: '8px 12px', textAlign: 'right' }}>Total Serviços</th>
+                  <th style={{ padding: '8px 12px', textAlign: 'center' }}>Qtd Prod.</th>
+                  <th style={{ padding: '8px 12px', textAlign: 'right' }}>Total Produtos</th>
+                  <th style={{ padding: '8px 12px', textAlign: 'center' }}>Taxa Base</th>
+                  <th style={{ padding: '8px 12px', textAlign: 'right' }}>Comissão a Pagar</th>
+                </tr>
+              </thead>
+              <tbody>
+                {detalhes.comissoes.profissionais.map((p) => (
+                  <tr key={p.profissionalId} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                    <td style={{ padding: '10px 12px', fontWeight: 700, color: '#1e293b' }}>
+                      👤 {p.nome}
+                    </td>
+                    <td style={{ padding: '10px 12px', textAlign: 'center' }}>{p.quantidadeServicos}</td>
+                    <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600 }}>{moeda(p.totalServicos)}</td>
+                    <td style={{ padding: '10px 12px', textAlign: 'center' }}>{p.quantidadeProdutos}</td>
+                    <td style={{ padding: '10px 12px', textAlign: 'right', color: '#475569' }}>{moeda(p.totalProdutos)}</td>
+                    <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                      <span style={{ background: '#e0f2fe', color: '#0369a1', padding: '2px 6px', borderRadius: 4, fontWeight: 700, fontSize: 11 }}>
+                        {p.comissaoPercent}%
+                      </span>
+                    </td>
+                    <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 800, color: '#16a34a', fontSize: 14 }}>
+                      {moeda(p.valorComissao)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       {/* RODAPÉ DO CARD COM BOTÃO DE REABRIR CAIXA (IDÊNTICO À FOTO 1) */}
       <div style={{ padding: '16px 20px', background: '#f8fafc', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
         <div style={{ fontSize: 13, color: '#64748b' }}>
@@ -449,6 +556,30 @@ export default function BarbeariaCaixaDetalhado({
               </button>
             </div>
 
+            {/* BARRA DE PESQUISA E FILTRO */}
+            <div style={{ padding: '10px 16px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+              <div style={{ position: 'relative', flex: 1, minWidth: 200 }}>
+                <Search size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+                <input
+                  type="text"
+                  placeholder="Buscar por cliente, comanda ou serviço..."
+                  value={buscaDrilldown}
+                  onChange={(e) => setBuscaDrilldown(e.target.value)}
+                  style={{ width: '100%', boxSizing: 'border-box', padding: '6px 10px 6px 30px', borderRadius: 6, border: '1px solid #cbd5e1', fontSize: 12 }}
+                />
+              </div>
+              <select
+                value={profFiltroDrilldown}
+                onChange={(e) => setProfFiltroDrilldown(e.target.value)}
+                style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid #cbd5e1', fontSize: 12, background: '#ffffff', color: '#1e293b' }}
+              >
+                <option value="">Todos os barbeiros</option>
+                {profissionais.map((p) => (
+                  <option key={p.id} value={p.id}>{p.nome}</option>
+                ))}
+              </select>
+            </div>
+
             <div style={{ padding: '16px 20px', maxHeight: '60vh', overflowY: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
                 <thead>
@@ -461,7 +592,22 @@ export default function BarbeariaCaixaDetalhado({
                   </tr>
                 </thead>
                 <tbody>
-                  {modalDrilldown.comandas.map((item, index) => (
+                  {modalDrilldown.comandas.filter((item) => {
+                    if (buscaDrilldown) {
+                      const termo = buscaDrilldown.toLowerCase();
+                      const bateTitulo = String(item.titulo || '').toLowerCase().includes(termo);
+                      const bateCliente = String(item.clienteNome || '').toLowerCase().includes(termo);
+                      const bateItens = (item.itens || []).some((it) => String(it.nome || '').toLowerCase().includes(termo));
+                      if (!bateTitulo && !bateCliente && !bateItens) return false;
+                    }
+                    if (profFiltroDrilldown) {
+                      const profId = profFiltroDrilldown;
+                      const bateComanda = item.profissionalId === profId;
+                      const bateItem = (item.itens || []).some((it) => it.profissionalId === profId);
+                      if (!bateComanda && !bateItem) return false;
+                    }
+                    return true;
+                  }).map((item, index) => (
                     <tr key={`${item.comandaId}-${index}`} style={{ borderBottom: '1px solid #f1f5f9' }}>
                       <td style={{ padding: '10px 10px', color: '#1e293b' }}>
                         <div style={{ fontWeight: 700 }}>{item.titulo}</div>
@@ -949,13 +1095,135 @@ export default function BarbeariaCaixaDetalhado({
         </div>
       )}
 
+      {/* MODAL / TELA DE IMPRESSÃO DE CUPOM TÉRMICO 80MM (PADRÃO BALCÃO / MAQUININHA) */}
+      {modalTermico && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.7)', backdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: 16 }}>
+          <div style={{ background: '#ffffff', borderRadius: 12, maxWidth: 440, width: '100%', maxHeight: '90vh', display: 'flex', flexDirection: 'column', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)', overflow: 'hidden' }}>
+            <div className="dadm-no-print" style={{ padding: '14px 20px', background: '#065f46', color: '#ffffff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ fontWeight: 700, fontSize: 15, display: 'flex', alignItems: 'center', gap: 6 }}>
+                <Printer size={16} /> Cupom Térmico (80mm)
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  style={{ background: '#ffffff', color: '#065f46', border: 'none', borderRadius: 6, padding: '6px 12px', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}
+                >
+                  Imprimir 80mm
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setModalTermico(false)}
+                  style={{ background: 'transparent', border: '1px solid #34d399', color: '#ffffff', borderRadius: 6, padding: '6px 10px', fontSize: 12, cursor: 'pointer' }}
+                >
+                  Fechar
+                </button>
+              </div>
+            </div>
+
+            {/* CUPOM 80MM */}
+            <div id="cupom-termico-imprimir" style={{ padding: '20px 24px', overflowY: 'auto', flex: 1, color: '#000000', background: '#ffffff', fontFamily: 'Courier New, monospace', fontSize: 12, lineHeight: 1.4 }}>
+              <div style={{ textAlign: 'center', marginBottom: 10 }}>
+                <div style={{ fontWeight: 800, fontSize: 16 }}>BARBEARIA DINO</div>
+                <div style={{ fontSize: 10, color: '#444' }}>Cuiabá - MT · Tel: (65) 99352-2260</div>
+                <div style={{ fontWeight: 700, margin: '6px 0 2px' }}>FECHAMENTO DE CAIXA (80MM)</div>
+                <div>----------------------------------------</div>
+              </div>
+
+              <div style={{ marginBottom: 8, fontSize: 11 }}>
+                <div><strong>Caixa:</strong> {caixa.nomeCaixa || `Caixa ${caixa.numeroCaixa}`}</div>
+                <div><strong>Data:</strong> {caixa.data} · <strong>Hora:</strong> {detalhes.dataImpressao}</div>
+                <div><strong>Operador:</strong> {caixa.responsavelNome}</div>
+                <div><strong>Status:</strong> {caixa.status.toUpperCase()}</div>
+                <div>----------------------------------------</div>
+              </div>
+
+              <div style={{ marginBottom: 8 }}>
+                <div style={{ fontWeight: 700 }}>RESUMO FINANCEIRO:</div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span>(+) Valor Abertura:</span>
+                  <strong>{moeda(caixa.valorAbertura)}</strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span>(+) Dinheiro Recebido:</span>
+                  <strong>{moeda(formasPagamento.dinheiro?.total || 0)}</strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span>(+) Suprimentos:</span>
+                  <strong>{moeda(movimentacoes.totalSuprimentos)}</strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span>(-) Sangrias:</span>
+                  <strong>{moeda(movimentacoes.totalSangrias)}</strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px dashed #000', paddingTop: 3, marginTop: 3 }}>
+                  <span>(=) DINHEIRO EM GAVETA:</span>
+                  <strong>{moeda(dinheiroEsperado)}</strong>
+                </div>
+                <div>----------------------------------------</div>
+              </div>
+
+              <div style={{ marginBottom: 8 }}>
+                <div style={{ fontWeight: 700 }}>FORMAS ELETRÔNICAS:</div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span>Cartão Débito:</span>
+                  <strong>{moeda(formasPagamento.cartao_debito?.total || 0)}</strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span>Cartão Crédito:</span>
+                  <strong>{moeda(formasPagamento.cartao_credito?.total || 0)}</strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span>Pix:</span>
+                  <strong>{moeda(formasPagamento.pix?.total || 0)}</strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px dashed #000', paddingTop: 4, marginTop: 4, fontSize: 13 }}>
+                  <span>TOTAL FATURADO:</span>
+                  <strong>{moeda(totalFaturado)}</strong>
+                </div>
+                <div>----------------------------------------</div>
+              </div>
+
+              {detalhes.comissoes?.profissionais?.length > 0 && (
+                <div style={{ marginBottom: 8 }}>
+                  <div style={{ fontWeight: 700 }}>COMISSÕES DOS BARBEIROS:</div>
+                  {detalhes.comissoes.profissionais.map((p) => (
+                    <div key={p.profissionalId} style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span>{p.nome}:</span>
+                      <strong>{moeda(p.valorComissao)}</strong>
+                    </div>
+                  ))}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px dashed #000', paddingTop: 3, marginTop: 3 }}>
+                    <span>Total Comissões:</span>
+                    <strong>{moeda(detalhes.comissoes.totalComissoes)}</strong>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span>Líquido Barbearia:</span>
+                    <strong>{moeda(Math.max(0, totalFaturado - detalhes.comissoes.totalComissoes))}</strong>
+                  </div>
+                  <div>----------------------------------------</div>
+                </div>
+              )}
+
+              <div style={{ textAlign: 'center', marginTop: 20 }}>
+                <div>____________________________________</div>
+                <div style={{ fontSize: 10, marginTop: 2 }}>Assinatura do Operador</div>
+                <div style={{ marginTop: 15 }}>____________________________________</div>
+                <div style={{ fontSize: 10, marginTop: 2 }}>Assinatura do Gerente</div>
+                <div style={{ fontSize: 9, color: '#666', marginTop: 10 }}>Kytto ERP Barbearia Dino</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ESTILOS DE IMPRESSÃO */}
       <style dangerouslySetInnerHTML={{ __html: `
         @media print {
           body * {
             visibility: hidden;
           }
-          #relatorio-caixa-imprimir, #relatorio-caixa-imprimir * {
+          #relatorio-caixa-imprimir, #relatorio-caixa-imprimir *, #cupom-termico-imprimir, #cupom-termico-imprimir * {
             visibility: visible;
           }
           #relatorio-caixa-imprimir {
@@ -965,6 +1233,14 @@ export default function BarbeariaCaixaDetalhado({
             width: 100%;
             margin: 0;
             padding: 20px;
+          }
+          #cupom-termico-imprimir {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 80mm;
+            margin: 0;
+            padding: 5mm;
           }
           .dadm-no-print {
             display: none !important;
