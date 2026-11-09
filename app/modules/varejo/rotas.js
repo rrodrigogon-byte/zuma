@@ -475,6 +475,29 @@ export function createVarejoAdminRouter({ db, escopoDaRequisicao, fuso = 'Americ
     return svc.liquidarAcordoComercial(db, empresaId, req.body);
   }));
 
+  // ── FASE 6 ENTERPRISE: PREVENÇÃO DE PERDAS, RASTREABILIDADE SIF, PLANOGRAMAS & KIOSK ──
+  router.get("/prevencao-perdas/ocorrencias/listar", rota("catalog.read", async ({ empresaId }) => {
+    return svc.listarOcorrenciasPrevencaoPerdas(db, empresaId);
+  }));
+  router.post("/prevencao-perdas/ocorrencias/registrar", rota("catalog.write", async ({ req, empresaId, usuario }) => {
+    return svc.registrarOcorrenciaPrevencaoPerdas(db, empresaId, { ...req.body, fiscalResponsavel: usuario?.nome || req.body.fiscalResponsavel });
+  }));
+
+  router.get("/acougue/rastreabilidade/listar", rota("catalog.read", async ({ empresaId }) => {
+    return svc.listarLotesAcougueSif(db, empresaId);
+  }));
+  router.post("/acougue/rastreabilidade/registrar", rota("catalog.write", async ({ req, empresaId }) => {
+    return svc.registrarLoteAcougueSif(db, empresaId, req.body);
+  }));
+
+  router.get("/planogramas/listar", rota("catalog.read", async ({ empresaId }) => {
+    return svc.listarPlanogramasGondola(db, empresaId);
+  }));
+
+  router.post("/kiosk/consultar-preco", rota("catalog.read", async ({ req, empresaId }) => {
+    return svc.consultarPrecoKioskMultimidia(db, empresaId, req.body);
+  }));
+
   // ── Download do Instalador Windows Kytto PDV ──
   router.get("/download-instalador-windows", (req, res) => {
     const path = require("path");

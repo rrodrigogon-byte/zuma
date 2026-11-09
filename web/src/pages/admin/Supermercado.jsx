@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
+  ScanLine, LayoutGrid,
   Navigation, Recycle, Handshake,
   Radio, Ticket, Vault,
   Award, BookOpen, FileSpreadsheet, FileCode,
@@ -344,6 +345,10 @@ export default function Supermercado() {
   const [desperdicioList, setDesperdicioList] = useState([]);
   const [conciliacaoList, setConciliacaoList] = useState([]);
   const [acordosList, setAcordosList] = useState([]);
+  const [perdasOcorrenciasList, setPerdasOcorrenciasList] = useState([]);
+  const [sifAcougueList, setSifAcougueList] = useState([]);
+  const [planogramasList, setPlanogramasList] = useState([]);
+  const [kioskBusca, setKioskBusca] = useState({ ean: '7891000100103', resultado: null });
 
   const [xmlNfeTexto, setXmlNfeTexto] = useState("");
   const [nfeProcessada, setNfeProcessada] = useState(null);
@@ -479,6 +484,15 @@ export default function Supermercado() {
       const rDre = await api.get('/api/admin/supermercado/dre/mensal').catch(() => null);
       if (rDre) setDreSupermercado(rDre);
 
+      // 33. Prevenção de Perdas EAS
+      const rPerd = await api.get('/api/admin/supermercado/prevencao-perdas/ocorrencias/listar').catch(() => null);
+      if (rPerd && Array.isArray(rPerd)) setPerdasOcorrenciasList(rPerd);
+      // 34. Rastreabilidade Bovina SIF
+      const rSif = await api.get('/api/admin/supermercado/acougue/rastreabilidade/listar').catch(() => null);
+      if (rSif && Array.isArray(rSif)) setSifAcougueList(rSif);
+      // 35. Planogramas de Gôndola
+      const rPlano = await api.get('/api/admin/supermercado/planogramas/listar').catch(() => null);
+      if (rPlano && Array.isArray(rPlano)) setPlanogramasList(rPlano);
       // 29. Picking & E-commerce
       const rPick = await api.get('/api/admin/supermercado/picking/pedidos/listar').catch(() => null);
       if (rPick && Array.isArray(rPick)) setPickingList(rPick);
@@ -1505,6 +1519,18 @@ export default function Supermercado() {
         </button>
         <button className={`super-tab-btn ${abaAtiva === 'acordos' ? 'active' : ''}`} onClick={() => setAbaAtiva('acordos')}>
           <Handshake size={16} /> Acordos & Verbas VCC ({acordosList.length})
+        </button>
+        <button className={`super-tab-btn ${abaAtiva === 'prevencaoperdas' ? 'active' : ''}`} onClick={() => setAbaAtiva('prevencaoperdas')}>
+          <ShieldAlert size={16} /> Prevenção EAS & Furtos ({perdasOcorrenciasList.length})
+        </button>
+        <button className={`super-tab-btn ${abaAtiva === 'rastreabilidade' ? 'active' : ''}`} onClick={() => setAbaAtiva('rastreabilidade')}>
+          <QrCode size={16} /> Rastreabilidade SIF ({sifAcougueList.length})
+        </button>
+        <button className={`super-tab-btn ${abaAtiva === 'planograma' ? 'active' : ''}`} onClick={() => setAbaAtiva('planograma')}>
+          <LayoutGrid size={16} /> Planograma de Gôndola ({planogramasList.length})
+        </button>
+        <button className={`super-tab-btn ${abaAtiva === 'kiosk' ? 'active' : ''}`} onClick={() => setAbaAtiva('kiosk')}>
+          <ScanLine size={16} /> Busca-Preço Kiosk Multimídia
         </button>
         <button className={`super-tab-btn ${abaAtiva === 'margens' ? 'active' : ''}`} onClick={() => setAbaAtiva('margens')}>
           <TrendingUp size={16} /> Margens & Curva ABC
