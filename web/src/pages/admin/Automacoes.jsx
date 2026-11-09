@@ -172,6 +172,34 @@ export default function Automacoes({ defaultTab }) {
     }
   };
 
+  const dispararEventoTeste = async () => {
+    try {
+      setDisparandoTeste(true);
+      setSucessoMsg('');
+      setErroMsg('');
+      const json = await api.post('/api/admin/automacoes/eventos/disparar-teste', {
+        origem: 'Nossa Gente',
+        destino: 'Ultra',
+        tipo: 'cadastro.colaborador_sincronizado',
+        dados: {
+          colaborador: 'Dino Master Barbeiro',
+          cargo: 'Especialista em Corte & Barba',
+          cpf: '055.***.***-89',
+          rmBigQueryAuditado: true,
+          metadados: { canal: 'evento_interno', protocolo: 'EDA-v2' }
+        }
+      });
+      if (json && json.ok) {
+        setSucessoMsg(json.mensagem || 'Evento interno emitido e sincronizado com sucesso!');
+        await carregarEventos();
+      }
+    } catch (err) {
+      setErroMsg('Erro ao disparar evento interno: ' + (err.message || err));
+    } finally {
+      setDisparandoTeste(false);
+    }
+  };
+
   const executarAgora = async (id, dispararReal = false) => {
     try {
       setExecutando(true);
