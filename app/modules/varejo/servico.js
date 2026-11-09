@@ -4076,3 +4076,338 @@ export async function listarMalotesTesouraria(db, empresaId) {
 
   return res.rows;
 }
+
+// ══════════════════════════════════════════════════════════════════════════════════
+// FASE 5 ENTERPRISE: PICKING E-COMMERCE, GESTÃO DE DESPERDÍCIO (FOOD WASTE),
+// CONCILIAÇÃO TEF/PIX AUTOMATIZADA E ACORDOS COMERCIAIS & VERBAS (VCC)
+// ══════════════════════════════════════════════════════════════════════════════════
+
+export async function listarPedidosPicking(db, empresaId, filtros = {}) {
+  const empresa = String(empresaId || '').trim();
+  const res = await db.query(
+    `SELECT p.*,
+            (SELECT json_agg(i.*) FROM var_picking_itens i WHERE i.pedido_id = p.id) as itens
+     FROM var_picking_pedidos p
+     WHERE p.empresa_id = $1
+     ORDER BY p.data_pedido DESC LIMIT 50`,
+    [empresa]
+  );
+
+  if (!res.rows || res.rows.length === 0) {
+    // Semente demonstrativa de alta fidelidade para e-commerce / clique & retire
+    const seedPedidos = [
+      {
+        num: 'PED-ECOMM-9102',
+        canal: 'ECOMMERCE',
+        cli: 'Mariana Duarte Prado',
+        tel: '(11) 98455-1122',
+        st: 'EM_SEPARACAO',
+        op: 'Lucas Separador',
+        tot: 348.60,
+        subst: true,
+        itens: [
+          { ean: '7891000100103', desc: 'Arroz Agulhinha Tipo 1 Camil 5kg', corr: 'Corredor 02 - A01', qtd: 2, sep: 2, st: 'COLETADO' },
+          { ean: '7891000245002', desc: 'Leite UHT Integral Piracanjuba 1L', corr: 'Corredor 05 - B03', qtd: 12, sep: 12, st: 'COLETADO' },
+          { ean: '7894900010015', desc: 'Refrigerante Coca-Cola 2L', corr: 'Corredor 06 - C02', qtd: 3, sep: 0, st: 'PENDENTE' },
+          { ean: '7891025114138', desc: 'Detergente Líquido Ypê Maçã 500ml', corr: 'Corredor 09 - D01', qtd: 4, sep: 0, st: 'PENDENTE' }
+        ]
+      },
+      {
+        num: 'PED-RETIRE-8841',
+        canal: 'CLIQUE_RETIRE',
+        cli: 'Fernando Botelho Neves',
+        tel: '(11) 97120-3344',
+        st: 'AGUARDANDO_PICKING',
+        op: null,
+        tot: 182.40,
+        subst: true,
+        itens: [
+          { ean: '7891000315507', desc: 'Café Torrado e Moído Pilão 500g', corr: 'Corredor 03 - A04', qtd: 2, sep: 0, st: 'PENDENTE' },
+          { ean: '7894321711261', desc: 'Açúcar Refinado União 1kg', corr: 'Corredor 03 - B01', qtd: 3, sep: 0, st: 'PENDENTE' },
+          { ean: '7891962051016', desc: 'Óleo de Soja Soya Pet 900ml', corr: 'Corredor 04 - A02', qtd: 4, sep: 0, st: 'PENDENTE' }
+        ]
+      },
+      {
+        num: 'PED-IFOOD-7730',
+        canal: 'IFOOD_MERCADO',
+        cli: 'Beatriz Vasconcelos',
+        tel: '(11) 99881-2299',
+        st: 'SEPARADO',
+        op: 'Juliana Express',
+        tot: 95.80,
+        subst: false,
+        itens: [
+          { ean: '7891000053508', desc: 'Biscoito Recheado Passatempo 130g', corr: 'Corredor 07 - A03', qtd: 4, sep: 4, st: 'COLETADO' },
+          { ean: '7892840222949', desc: 'Salgadinho Doritos Queijo Nacho 140g', corr: 'Corredor 07 - B02', qtd: 2, sep: 2, st: 'COLETADO' }
+        ]
+      }
+    ];
+
+    for (const p of seedPedidos) {
+      const insP = await db.query(
+        `INSERT INTO var_picking_pedidos (
+           empresa_id, numero_pedido, canal, cliente_nome, cliente_telefone,
+           status, operador_picking, itens_total, itens_separados, valor_total, substituicoes_autorizadas
+         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+         RETURNING id`,
+        [empresa, p.num, p.canal, p.cli, p.tel, p.st, p.op, p.itens.length, p.itens.filter(i => i.st === 'COLETADO').length, p.tot, p.subst]
+      );
+      const pedId = insP.rows[0].id;
+      for (const it of p.itens) {
+        await db.query(
+          `INSERT INTO var_picking_itens (
+             pedido_id, codigo_barras, descricao, corredor_endereco,
+             quantidade_solicitada, quantidade_separada, status
+           ) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+          [pedId, it.ean, it.desc, it.corr, it.qtd, it.sep, it.st]
+        );
+      }
+    }
+
+    const rec = await db.query(
+      `SELECT p.*,
+              (SELECT json_agg(i.*) FROM var_picking_itens i WHERE i.pedido_id = p.id) as itens
+       FROM var_picking_pedidos p
+       WHERE p.empresa_id = $1
+       ORDER BY p.data_pedido DESC`,
+      [empresa]
+    );
+    return rec.rows;
+  }
+
+  return res.rows;
+}
+
+export async function atualizarStatusItemPicking(db, empresaId, dados) {
+  const { itemId, status, quantidadeSeparada, itemSubstituto } = dados;
+  await db.query(
+    `UPDATE var_picking_itens
+     SET status = $1,
+         quantidade_separada = COALESCE($2, quantidade_separada),
+         item_substituto_descricao = COALESCE($3, item_substituto_descricao)
+     WHERE id = $4`,
+    [status, quantidadeSeparada, itemSubstituto, itemId]
+  );
+  return { sucesso: true, mensagem: 'Status do item de picking atualizado.' };
+}
+
+export async function concluirSeparacaoPicking(db, empresaId, dados) {
+  const { pedidoId, operador } = dados;
+  const res = await db.query(
+    `UPDATE var_picking_pedidos
+     SET status = 'SEPARADO',
+         data_conclusao = NOW(),
+         operador_picking = COALESCE($1, operador_picking)
+     WHERE id = $2 AND empresa_id = $3
+     RETURNING *`,
+    [operador, pedidoId, empresaId]
+  );
+
+  // Disparar evento interno no EventBus
+  kyttoEventBus.emit('supermercado.picking_pedido_concluido', {
+    empresaId,
+    pedidoId,
+    numeroPedido: res.rows[0]?.numero_pedido,
+    cliente: res.rows[0]?.cliente_nome,
+    timestamp: new Date().toISOString()
+  });
+
+  return { sucesso: true, mensagem: `Pedido ${res.rows[0]?.numero_pedido || ''} separado com sucesso e pronto para despacho!`, pedido: res.rows[0] };
+}
+
+export async function listarItensRemarcacaoDesperdicio(db, empresaId) {
+  const empresa = String(empresaId || '').trim();
+  const res = await db.query(
+    `SELECT * FROM var_remarcacao_validade_desperdicio
+     WHERE empresa_id = $1
+     ORDER BY dias_para_vencer ASC, data_vencimento ASC LIMIT 50`,
+    [empresa]
+  );
+
+  if (!res.rows || res.rows.length === 0) {
+    const seedDesperdicio = [
+      { desc: 'Iogurte Grego Frutas Vermelhas Vigor 100g', ean: '7891234567890', lote: 'LT-8812', dias: 2, vcto: '2026-11-11', orig: 4.99, descPct: 50.00, rem: 2.49, qtd: 24, st: 'REMARCADO_GONDOLA' },
+      { desc: 'Presunto Cozido Fatiado Sadia 200g', ean: '7891515234001', lote: 'LT-9021', dias: 3, vcto: '2026-11-12', orig: 8.90, descPct: 30.00, rem: 6.23, qtd: 15, st: 'REMARCADO_GONDOLA' },
+      { desc: 'Pão de Forma Tradicional Wickbold 500g', ean: '7896001201019', lote: 'LT-7740', dias: 1, vcto: '2026-11-10', orig: 9.50, descPct: 50.00, rem: 4.75, qtd: 8, st: 'REMARCADO_GONDOLA' },
+      { desc: 'Ricota Fresca Tirolez 400g', ean: '7896024103017', lote: 'LT-9110', dias: 5, vcto: '2026-11-14', orig: 14.80, descPct: 20.00, rem: 11.84, qtd: 12, st: 'REMARCADO_GONDOLA' }
+    ];
+
+    for (const d of seedDesperdicio) {
+      await db.query(
+        `INSERT INTO var_remarcacao_validade_desperdicio (
+           empresa_id, descricao, codigo_barras, lote_codigo, data_vencimento,
+           dias_para_vencer, preco_original, percentual_desconto, preco_remarcado,
+           quantidade_lote, status
+         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+         ON CONFLICT DO NOTHING`,
+        [empresa, d.desc, d.ean, d.lote, d.vcto, d.dias, d.orig, d.descPct, d.rem, d.qtd, d.st]
+      );
+    }
+
+    const rec = await db.query(
+      `SELECT * FROM var_remarcacao_validade_desperdicio WHERE empresa_id = $1 ORDER BY dias_para_vencer ASC`,
+      [empresa]
+    );
+    return rec.rows;
+  }
+
+  return res.rows;
+}
+
+export async function executarAcaoDesperdicio(db, empresaId, dados) {
+  const { id, acao, motivo } = dados;
+  let novoStatus = 'REMARCADO_GONDOLA';
+  if (acao === 'DOAR') novoStatus = 'DOACAO_BANCO_ALIMENTOS';
+  if (acao === 'DESCARTAR') novoStatus = 'DESCARTE_REGULATORIO';
+  if (acao === 'VENDER') novoStatus = 'VENDIDO';
+
+  const res = await db.query(
+    `UPDATE var_remarcacao_validade_desperdicio
+     SET status = $1
+     WHERE id = $2 AND empresa_id = $3
+     RETURNING *`,
+    [novoStatus, id, empresaId]
+  );
+
+  kyttoEventBus.emit('supermercado.remarcacao_validade_critica', {
+    empresaId,
+    item: res.rows[0]?.descricao,
+    status: novoStatus,
+    motivo: motivo || 'Gestão de Food Waste'
+  });
+
+  return { sucesso: true, mensagem: `Ação ${acao} concluída com sucesso para "${res.rows[0]?.descricao || ''}"!`, item: res.rows[0] };
+}
+
+export async function listarConciliacaoCartoes(db, empresaId, filtros = {}) {
+  const empresa = String(empresaId || '').trim();
+  const res = await db.query(
+    `SELECT * FROM var_conciliacao_cartoes
+     WHERE empresa_id = $1
+     ORDER BY data_venda DESC LIMIT 50`,
+    [empresa]
+  );
+
+  if (!res.rows || res.rows.length === 0) {
+    const seedConciliacao = [
+      { adq: 'STONE', band: 'VISA_CREDITO', dtVenda: '2026-11-08', dtRepasse: '2026-12-08', bruto: 14500.00, mdrContr: 2.10, mdrCob: 2.10, liqEsp: 14195.50, liqPago: 14195.50, div: 0.00, st: 'CONCILIADO_OK' },
+      { adq: 'CIELO', band: 'MASTERCARD_DEBITO', dtVenda: '2026-11-08', dtRepasse: '2026-11-09', bruto: 9200.00, mdrContr: 0.95, mdrCob: 1.25, liqEsp: 9112.60, liqPago: 9085.00, div: 27.60, st: 'DIVERGENCIA_TAXA' },
+      { adq: 'REDE', band: 'ELO_CREDITO', dtVenda: '2026-11-08', dtRepasse: '2026-12-08', bruto: 6800.00, mdrContr: 2.40, mdrCob: 2.40, liqEsp: 6636.80, liqPago: 6636.80, div: 0.00, st: 'CONCILIADO_OK' },
+      { adq: 'VR_BENEFICIOS', band: 'ALELO_ALIMENTACAO', dtVenda: '2026-11-08', dtRepasse: '2026-11-23', bruto: 12400.00, mdrContr: 3.50, mdrCob: 3.50, liqEsp: 11966.00, liqPago: 0.00, div: 0.00, st: 'AGUARDANDO_REPASSE' },
+      { adq: 'PAGBANK_PIX', band: 'PIX_DINAMICO', dtVenda: '2026-11-09', dtRepasse: '2026-11-09', bruto: 18950.00, mdrContr: 0.40, mdrCob: 0.40, liqEsp: 18874.20, liqPago: 18874.20, div: 0.00, st: 'CONCILIADO_OK' }
+    ];
+
+    for (const c of seedConciliacao) {
+      await db.query(
+        `INSERT INTO var_conciliacao_cartoes (
+           empresa_id, adquirente, bandeira, data_venda, data_previsao_repasse,
+           valor_bruto_pdv, taxa_mdr_contratada_pct, taxa_mdr_cobrada_pct,
+           valor_liquido_esperado, valor_liquido_pago, divergencia_nominal, status
+         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+         ON CONFLICT DO NOTHING`,
+        [empresa, c.adq, c.band, c.dtVenda, c.dtRepasse, c.bruto, c.mdrContr, c.mdrCob, c.liqEsp, c.liqPago, c.div, c.st]
+      );
+    }
+
+    const rec = await db.query(
+      `SELECT * FROM var_conciliacao_cartoes WHERE empresa_id = $1 ORDER BY data_venda DESC`,
+      [empresa]
+    );
+    return rec.rows;
+  }
+
+  return res.rows;
+}
+
+export async function conciliarLoteAdquirente(db, empresaId, dados) {
+  const { adquirente } = dados;
+  const res = await db.query(
+    `SELECT COUNT(*) as total, SUM(divergencia_nominal) as divergencia_total
+     FROM var_conciliacao_cartoes
+     WHERE empresa_id = $1 AND adquirente = $2 AND status = 'DIVERGENCIA_TAXA'`,
+    [empresaId, adquirente]
+  );
+
+  kyttoEventBus.emit('supermercado.conciliacao_divergencia_detectada', {
+    empresaId,
+    adquirente,
+    divergenciaTotal: res.rows[0]?.divergencia_total || 0,
+    timestamp: new Date().toISOString()
+  });
+
+  return {
+    sucesso: true,
+    mensagem: `Conciliação da adquirente ${adquirente} processada. Divergências auditadas: R$ ${Number(res.rows[0]?.divergencia_total || 0).toFixed(2)}.`
+  };
+}
+
+export async function listarAcordosComerciais(db, empresaId) {
+  const empresa = String(empresaId || '').trim();
+  const res = await db.query(
+    `SELECT * FROM var_acordos_fornecedores_verbas
+     WHERE empresa_id = $1
+     ORDER BY data_acordo DESC LIMIT 50`,
+    [empresa]
+  );
+
+  if (!res.rows || res.rows.length === 0) {
+    const seedAcordos = [
+      { forn: 'Ambev S/A', cnpj: '07.526.557/0001-00', tipo: 'PONTA_GONDOLA', val: 5000.00, vig: 'Novembro/2026', forma: 'DESCONTO_DUPLICATA', st: 'ATIVO_A_FATURAR' },
+      { forn: 'Coca-Cola FEMSA Brasil', cnpj: '45.997.418/0001-53', tipo: 'ILHA_CONGELADOS', val: 7500.00, vig: 'Novembro/2026', forma: 'DESCONTO_DUPLICATA', st: 'ATIVO_A_FATURAR' },
+      { forn: 'Nestlé Brasil Ltda', cnpj: '60.409.075/0001-52', tipo: 'TABLOIDE_OFERTAS', val: 3200.00, vig: 'Quinzena 1 Nov/2026', forma: 'BONIFICACAO_PRODUTOS', st: 'LIQUIDADO_CREDITO' },
+      { forn: 'JBS Friboi Carnes', cnpj: '02.916.265/0001-00', tipo: 'REBATE_SELLOUT', val: 12000.00, vig: 'Outubro/2026', forma: 'DEPOSITO_CONTA', st: 'LIQUIDADO_CREDITO' }
+    ];
+
+    for (const a of seedAcordos) {
+      await db.query(
+        `INSERT INTO var_acordos_fornecedores_verbas (
+           empresa_id, fornecedor_nome, fornecedor_cnpj, tipo_acordo,
+           valor_acordado, periodo_vigencia, forma_liquidacao, status
+         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+         ON CONFLICT DO NOTHING`,
+        [empresa, a.forn, a.cnpj, a.tipo, a.val, a.vig, a.forma, a.st]
+      );
+    }
+
+    const rec = await db.query(
+      `SELECT * FROM var_acordos_fornecedores_verbas WHERE empresa_id = $1 ORDER BY data_acordo DESC`,
+      [empresa]
+    );
+    return rec.rows;
+  }
+
+  return res.rows;
+}
+
+export async function criarAcordoComercial(db, empresaId, dados) {
+  const { fornecedorNome, fornecedorCnpj, tipoAcordo, valorAcordado, periodoVigencia, formaLiquidacao } = dados;
+  const res = await db.query(
+    `INSERT INTO var_acordos_fornecedores_verbas (
+       empresa_id, fornecedor_nome, fornecedor_cnpj, tipo_acordo,
+       valor_acordado, periodo_vigencia, forma_liquidacao, status
+     ) VALUES ($1, $2, $3, $4, $5, $6, $7, 'ATIVO_A_FATURAR')
+     RETURNING *`,
+    [empresaId, fornecedorNome, fornecedorCnpj, tipoAcordo, Number(valorAcordado || 0), periodoVigencia, formaLiquidacao || 'DESCONTO_DUPLICATA']
+  );
+
+  kyttoEventBus.emit('supermercado.acordo_comercial_apurado', {
+    empresaId,
+    fornecedor: fornecedorNome,
+    valor: valorAcordado,
+    tipo: tipoAcordo
+  });
+
+  return { sucesso: true, mensagem: `Contrato de Verba Comercial (${tipoAcordo}) de R$ ${Number(valorAcordado).toFixed(2)} com ${fornecedorNome} registrado com sucesso!`, acordo: res.rows[0] };
+}
+
+export async function liquidarAcordoComercial(db, empresaId, dados) {
+  const { acordoId } = dados;
+  const res = await db.query(
+    `UPDATE var_acordos_fornecedores_verbas
+     SET status = 'LIQUIDADO_CREDITO'
+     WHERE id = $1 AND empresa_id = $2
+     RETURNING *`,
+    [acordoId, empresaId]
+  );
+  return { sucesso: true, mensagem: `Acordo liquidado como crédito no contas a pagar!`, acordo: res.rows[0] };
+}

@@ -2772,3 +2772,122 @@
   border-radius: 4px;
   font-family: monospace;
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   FASE 5 ENTERPRISE: PICKING, DESPERDÍCIO, CONCILIAÇÃO & ACORDOS
+   ═══════════════════════════════════════════════════════════════ */
+
+/* Picking E-commerce & Clique e Retire */
+.super-picking-board {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  gap: 16px;
+  margin-top: 14px;
+}
+.super-picking-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 16px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+.super-picking-card.separado {
+  border-left: 5px solid #16a34a;
+}
+.super-picking-card.em-separacao {
+  border-left: 5px solid #0284c7;
+}
+.super-picking-card.aguardando {
+  border-left: 5px solid #eab308;
+}
+.super-route-badge {
+  background: #f1f5f9;
+  color: #475569;
+  border: 1px solid #cbd5e1;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 4px;
+}
+
+/* Gestão de Desperdício & Food Waste */
+.super-waste-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+  margin-top: 14px;
+}
+.super-waste-card {
+  background: #ffffff;
+  border: 1px solid #fee2e2;
+  border-radius: 10px;
+  padding: 16px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}
+.super-waste-discount-badge {
+  background: #ef4444;
+  color: #ffffff;
+  font-weight: 900;
+  font-size: 12px;
+  padding: 4px 8px;
+  border-radius: 6px;
+}
+.super-waste-price-box {
+  background: #fff1f2;
+  border: 1px dashed #f43f5e;
+  border-radius: 6px;
+  padding: 8px 12px;
+  margin: 10px 0;
+  text-align: center;
+}
+
+/* Conciliação de Cartões TEF & PIX */
+.super-conciliacao-table-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 16px;
+  margin-top: 14px;
+}
+.super-divergence-badge {
+  background: #fef2f2;
+  color: #b91c1c;
+  border: 1px solid #f87171;
+  font-weight: 800;
+  font-size: 11px;
+  padding: 3px 6px;
+  border-radius: 4px;
+}
+.super-ok-badge {
+  background: #f0fdf4;
+  color: #15803d;
+  border: 1px solid #86efac;
+  font-weight: 800;
+  font-size: 11px;
+  padding: 3px 6px;
+  border-radius: 4px;
+}
+
+/* Acordos Comerciais & Verbas de Fornecedores (VCC) */
+.super-agreement-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 16px;
+  margin-top: 14px;
+}
+.super-agreement-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 16px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+.super-vcc-tag {
+  background: #f0f9ff;
+  color: #0369a1;
+  border: 1px solid #bae6fd;
+  font-weight: 800;
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: 4px;
+}

@@ -440,6 +440,41 @@ export function createVarejoAdminRouter({ db, escopoDaRequisicao, fuso = 'Americ
     return svc.listarMalotesTesouraria(db, empresaId);
   }));
 
+  // ── FASE 5 ENTERPRISE: PICKING, DESPERDÍCIO, CONCILIAÇÃO & ACORDOS ──
+  router.get("/picking/pedidos/listar", rota("catalog.read", async ({ empresaId }) => {
+    return svc.listarPedidosPicking(db, empresaId);
+  }));
+  router.post("/picking/itens/status", rota("catalog.write", async ({ req, empresaId }) => {
+    return svc.atualizarStatusItemPicking(db, empresaId, req.body);
+  }));
+  router.post("/picking/pedidos/concluir", rota("catalog.write", async ({ req, empresaId, usuario }) => {
+    return svc.concluirSeparacaoPicking(db, empresaId, { ...req.body, operador: usuario?.nome || req.body.operador });
+  }));
+
+  router.get("/desperdicio/remarcacao/listar", rota("catalog.read", async ({ empresaId }) => {
+    return svc.listarItensRemarcacaoDesperdicio(db, empresaId);
+  }));
+  router.post("/desperdicio/acao", rota("catalog.write", async ({ req, empresaId }) => {
+    return svc.executarAcaoDesperdicio(db, empresaId, req.body);
+  }));
+
+  router.get("/conciliacao/cartoes/listar", rota("catalog.read", async ({ empresaId }) => {
+    return svc.listarConciliacaoCartoes(db, empresaId);
+  }));
+  router.post("/conciliacao/adquirente/processar", rota("catalog.write", async ({ req, empresaId }) => {
+    return svc.conciliarLoteAdquirente(db, empresaId, req.body);
+  }));
+
+  router.get("/acordos-comerciais/listar", rota("catalog.read", async ({ empresaId }) => {
+    return svc.listarAcordosComerciais(db, empresaId);
+  }));
+  router.post("/acordos-comerciais/criar", rota("catalog.write", async ({ req, empresaId }) => {
+    return svc.criarAcordoComercial(db, empresaId, req.body);
+  }));
+  router.post("/acordos-comerciais/liquidar", rota("catalog.write", async ({ req, empresaId }) => {
+    return svc.liquidarAcordoComercial(db, empresaId, req.body);
+  }));
+
   // ── Download do Instalador Windows Kytto PDV ──
   router.get("/download-instalador-windows", (req, res) => {
     const path = require("path");

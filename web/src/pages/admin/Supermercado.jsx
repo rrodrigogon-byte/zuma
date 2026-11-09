@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
+  Navigation, Recycle, Handshake,
   Radio, Ticket, Vault,
   Award, BookOpen, FileSpreadsheet, FileCode,
   Smartphone, Landmark, Calculator, Activity, PieChart, Scan,
@@ -339,6 +340,10 @@ export default function Supermercado() {
   const [formNovoVale, setFormNovoVale] = useState({ cpf: '', nome: '', valor: '', motivo: 'Troca de Mercadoria' });
   const [formNovoMalote, setFormNovoMalote] = useState({ numeroLacre: '', transportadora: 'BRINKS', cedulas: '', moedas: '' });
   const [formNovoRotisseria, setFormNovoRotisseria] = useState({ item: '', valor: '', tipo: 'ROTISSERIA_QUENTE', min: 15 });
+  const [pickingList, setPickingList] = useState([]);
+  const [desperdicioList, setDesperdicioList] = useState([]);
+  const [conciliacaoList, setConciliacaoList] = useState([]);
+  const [acordosList, setAcordosList] = useState([]);
 
   const [xmlNfeTexto, setXmlNfeTexto] = useState("");
   const [nfeProcessada, setNfeProcessada] = useState(null);
@@ -474,6 +479,18 @@ export default function Supermercado() {
       const rDre = await api.get('/api/admin/supermercado/dre/mensal').catch(() => null);
       if (rDre) setDreSupermercado(rDre);
 
+      // 29. Picking & E-commerce
+      const rPick = await api.get('/api/admin/supermercado/picking/pedidos/listar').catch(() => null);
+      if (rPick && Array.isArray(rPick)) setPickingList(rPick);
+      // 30. Gestão de Desperdício & Validade
+      const rDesp = await api.get('/api/admin/supermercado/desperdicio/remarcacao/listar').catch(() => null);
+      if (rDesp && Array.isArray(rDesp)) setDesperdicioList(rDesp);
+      // 31. Conciliação de Cartões TEF/PIX
+      const rConc = await api.get('/api/admin/supermercado/conciliacao/cartoes/listar').catch(() => null);
+      if (rConc && Array.isArray(rConc)) setConciliacaoList(rConc);
+      // 32. Acordos Comerciais & Verbas
+      const rAcord = await api.get('/api/admin/supermercado/acordos-comerciais/listar').catch(() => null);
+      if (rAcord && Array.isArray(rAcord)) setAcordosList(rAcord);
       // 25. Etiquetas Eletrônicas ESL
       const rEsl = await api.get('/api/admin/supermercado/esl/listar').catch(() => null);
       if (rEsl && Array.isArray(rEsl)) setEslList(rEsl);
@@ -1476,6 +1493,18 @@ export default function Supermercado() {
         </button>
         <button className={`super-tab-btn ${abaAtiva === 'tesouraria' ? 'active' : ''}`} onClick={() => setAbaAtiva('tesouraria')}>
           <Vault size={16} /> Tesouraria / Cofre ({malotesList.length})
+        </button>
+        <button className={`super-tab-btn ${abaAtiva === 'picking' ? 'active' : ''}`} onClick={() => setAbaAtiva('picking')}>
+          <Navigation size={16} /> Picking & Dark Store ({pickingList.length})
+        </button>
+        <button className={`super-tab-btn ${abaAtiva === 'desperdicio' ? 'active' : ''}`} onClick={() => setAbaAtiva('desperdicio')}>
+          <Recycle size={16} /> Desperdício & Food Waste ({desperdicioList.length})
+        </button>
+        <button className={`super-tab-btn ${abaAtiva === 'conciliacao' ? 'active' : ''}`} onClick={() => setAbaAtiva('conciliacao')}>
+          <CreditCard size={16} /> Conciliação TEF/PIX ({conciliacaoList.length})
+        </button>
+        <button className={`super-tab-btn ${abaAtiva === 'acordos' ? 'active' : ''}`} onClick={() => setAbaAtiva('acordos')}>
+          <Handshake size={16} /> Acordos & Verbas VCC ({acordosList.length})
         </button>
         <button className={`super-tab-btn ${abaAtiva === 'margens' ? 'active' : ''}`} onClick={() => setAbaAtiva('margens')}>
           <TrendingUp size={16} /> Margens & Curva ABC
