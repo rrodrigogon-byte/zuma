@@ -323,6 +323,15 @@ app.get('/api/publico/cobranca/:id', (req, res) => {
 });
 
 
+app.get('/install.sh', (req, res) => {
+  const installScriptPath = path.resolve(__dirname, '../bin/kytto-install-onpremise.sh');
+  if (fs.existsSync(installScriptPath)) {
+    res.type('text/x-sh; charset=utf-8');
+    return res.sendFile(installScriptPath);
+  }
+  return res.status(404).send('#!/bin/bash\necho "Script de instalacao nao encontrado."\nexit 1\n');
+});
+
 app.get('/health', async (req, res) => {
   // O estado da persistência é informativo aqui: o health principal não reinicia o
   // serviço por causa de uma cópia atrasada (use /health/persistencia para alertar).
