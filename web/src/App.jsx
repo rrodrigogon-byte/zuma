@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect } from 'react'
 import { Routes, Route, Navigate, Outlet, useLocation } from 'react-router-dom'
 import Layout from './components/Layout'
 import ErrorBoundary from './components/ErrorBoundary'
+import lazyWithRetry from './lib/lazyWithRetry'
 import { useAuth } from './lib/auth'
 import { applyBrand, applyThemeMode, brandFromContext, brandFromHost, brandThemeMode, stalloneEntryFromHost, resolveBrand, storedThemeMode, isClubeBrandContext, isDinoBrandContext, isStalloneBrandContext } from './lib/brand'
 import { isTenantScope } from './lib/tenant-scope'
@@ -179,8 +180,9 @@ const OrdensServico   = lazy(() => import('./pages/admin/OrdensServico'))
 const ExpedicaoLogistica = lazy(() => import('./pages/admin/ExpedicaoLogistica'))
 const PatrimonioAtivos = lazy(() => import('./pages/admin/PatrimonioAtivos'))
 const LojaModa        = lazy(() => import('./pages/admin/LojaModa'))
-const BarbeariaERP    = lazy(() => import('./pages/admin/BarbeariaERP'))
-const Barbearia       = lazy(() => import('./pages/admin/Barbearia'))
+const BarbeariaERP    = lazyWithRetry(() => import('./pages/admin/BarbeariaERP'))
+const Barbearia       = lazyWithRetry(() => import('./pages/admin/Barbearia'))
+const InteligenciaVendasPage = lazyWithRetry(() => import('./pages/admin/InteligenciaVendasPage'))
 const Omnichannel     = lazy(() => import('./pages/admin/Omnichannel'))
 const CanaisFidelidade = lazy(() => import('./pages/admin/CanaisFidelidade'))
 const PDVUnificado    = lazy(() => import('./pages/admin/PDVUnificado'))
@@ -379,7 +381,8 @@ export default function App() {
           <Route path="/admin/loja-moda"       element={<Layout><LojaModa /></Layout>} />
           <Route path="/admin/barbearia-erp"   element={<Layout><BarbeariaERP /></Layout>} />
           <Route path="/admin/barbearia"        element={<Layout><Barbearia /></Layout>} />
-          <Route path="/admin/inteligencia-vendas" element={<Layout><BarbeariaERP tabInicial="Como Vender Mais com IA" /></Layout>} />
+          <Route path="/admin/inteligencia-vendas" element={<Layout><InteligenciaVendasPage /></Layout>} />
+          <Route path="/admin/vender-mais" element={<Layout><InteligenciaVendasPage /></Layout>} />
           <Route path="/admin/metas-roleta"    element={<Layout><DinoMetasRoletaPanel /></Layout>} />
 
           <Route path="/admin/supermercado" element={<Layout><Supermercado /></Layout>} />

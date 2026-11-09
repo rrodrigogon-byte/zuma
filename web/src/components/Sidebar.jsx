@@ -73,6 +73,7 @@ const NAV_ADMIN_GROUPS = [
     label: 'Visão Geral',
     items: [
       { to: '/admin',           icon: '📊', label: 'Dashboard', end: true },
+      { to: '/admin/inteligencia-vendas', icon: '🚀', label: 'Como Vender Mais com IA' },
       { to: '/admin/bi',        icon: '📉', label: 'BI & Analytics' },
       { to: '/admin/relatorios-operacionais',icon: '📄', label: 'Relatórios Operacionais' },
       { to: '/admin/financeiro',icon: '💰', label: 'Financeiro' },
@@ -184,6 +185,7 @@ const NAV_DINO_GROUPS = [
     label: 'Hoje',
     items: [
       { to: '/admin', icon: '◔', label: 'Painel do negócio', end: true },
+      { to: '/admin/inteligencia-vendas', icon: '🚀', label: 'Como Vender Mais com IA' },
       { to: '/admin/barbearia-erp?area=operacao&tab=Vis%C3%A3o+geral', icon: '⌂', label: 'Operação do dia' },
       // A agenda abre numa guia própria, em tela cheia, para ficar aberta ao lado do painel.
       { to: '/admin/barbearia-erp?area=operacao&tab=Agenda', icon: '▣', label: 'Agenda', novaGuia: true },
@@ -288,6 +290,7 @@ export const NAV_CLUBE_GROUPS = [
     label: 'Hoje no clube', aberto: true,
     items: [
       { to: '/admin', icon: '📊', label: 'Painel', end: true },
+      { to: '/admin/inteligencia-vendas', icon: '🚀', label: 'Como Vender Mais com IA' },
       { to: '/admin/clube/recepcao', icon: '🚪', label: 'Recepção & Catraca' },
       { to: '/admin/clube/quadras', icon: '📅', label: 'Reservas de quadras' },
       { to: '/admin/clube/aulas', icon: '🗓️', label: 'Aulas do dia' },
@@ -386,6 +389,7 @@ const NAV_STALLONE_GROUPS = [
     label: 'Hoje',
     items: [
       { to: '/admin/ecommerce?tab=overview', icon: '◔', label: 'Painel da loja' },
+      { to: '/admin/inteligencia-vendas', icon: '🚀', label: 'Como Vender Mais com IA' },
       { to: '/loja-atendimento', icon: '⌂', label: 'Pedidos para separar' },
       { to: '/admin/ecommerce?tab=orders', icon: '◧', label: 'Pedidos e entregas' },
     ],
