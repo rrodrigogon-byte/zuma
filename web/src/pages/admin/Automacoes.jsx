@@ -97,6 +97,27 @@ export default function Automacoes({ defaultTab }) {
   const [resumoDia, setResumoDia] = useState(null);
   const [sucessoMsg, setSucessoMsg] = useState('');
   const [erroMsg, setErroMsg] = useState('');
+  const [buscaEvento, setBuscaEvento] = useState('');
+  const [eventoDetalhe, setEventoDetalhe] = useState(null);
+  const [copiado, setCopiado] = useState(false);
+
+  const exportarAuditoriaJson = () => {
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(eventos, null, 2));
+    const downloadAnchor = document.createElement('a');
+    downloadAnchor.setAttribute("href", dataStr);
+    downloadAnchor.setAttribute("download", `kytto-auditoria-eventos-${new Date().toISOString().slice(0, 10)}.json`);
+    document.body.appendChild(downloadAnchor);
+    downloadAnchor.click();
+    downloadAnchor.remove();
+  };
+
+  const copiarPayload = (dados) => {
+    try {
+      navigator.clipboard.writeText(JSON.stringify(dados, null, 2));
+      setCopiado(true);
+      setTimeout(() => setCopiado(false), 2000);
+    } catch {}
+  };
 
   const carregarDados = async () => {
     try {
@@ -608,6 +629,26 @@ export default function Automacoes({ defaultTab }) {
 
                 <button
                   type="button"
+                  onClick={exportarAuditoriaJson}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '8px 14px',
+                    background: '#f8fafc',
+                    border: '1px solid #cbd5e1',
+                    borderRadius: '8px',
+                    fontSize: '13px',
+                    fontWeight: 600,
+                    color: '#334155',
+                    cursor: 'pointer'
+                  }}
+                  title="Baixar arquivo JSON com histórico auditável de eventos"
+                >
+                  📥 Exportar JSON
+                </button>
+                <button
+                  type="button"
                   onClick={carregarEventos}
                   style={{
                     padding: '8px 14px',
@@ -656,7 +697,33 @@ export default function Automacoes({ defaultTab }) {
               <div style={{ fontSize: '14px', fontWeight: 700, color: '#0f172a' }}>
                 Fluxo de Eventos em Tempo Real ({eventos.length})
               </div>
-              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', alignItems: 'center', background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '4px 10px' }}>
+                  <span style={{ fontSize: '12px', color: '#64748b', marginRight: '6px' }}>🔍</span>
+                  <input
+                    type="text"
+                    placeholder="Buscar evento, colaborador..."
+                    value={buscaEvento}
+                    onChange={(e) => setBuscaEvento(e.target.value)}
+                    style={{
+                      border: 'none',
+                      background: 'transparent',
+                      fontSize: '12px',
+                      outline: 'none',
+                      width: '180px',
+                      color: '#0f172a'
+                    }}
+                  />
+                  {buscaEvento && (
+                    <button
+                      onClick={() => setBuscaEvento('')}
+                      style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#94a3b8', fontSize: '12px' }}
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+                <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
                 <span style={{ fontSize: '12px', color: '#64748b', fontWeight: 600 }}>Filtrar Origem:</span>
                 <select
                   value={filtroOrigem}
@@ -679,6 +746,7 @@ export default function Automacoes({ defaultTab }) {
                 </select>
               </div>
             </div>
+            </div>
 
             <div style={{ overflowX: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '12px' }}>
@@ -690,11 +758,22 @@ export default function Automacoes({ defaultTab }) {
                     <th style={{ padding: '10px 12px' }}>Payload & Ação</th>
                     <th style={{ padding: '10px 12px' }}>Status</th>
                     <th style={{ padding: '10px 12px' }}>Latência</th>
+                    <th style={{ padding: '10px 12px', textAlign: 'center' }}>Inspecionar</th>
                   </tr>
                 </thead>
                 <tbody>
                   {eventos
-                    .filter(evt => filtroOrigem === 'todas' || (evt.origem && evt.origem.toLowerCase().includes(filtroOrigem.toLowerCase())))
+                    .filter(evt => {
+                      const matchOrigem = filtroOrigem === 'todas' || (evt.origem && evt.origem.toLowerCase().includes(filtroOrigem.toLowerCase()));
+                      if (!matchOrigem) return false;
+                      if (!buscaEvento.trim()) return true;
+                      const b = buscaEvento.toLowerCase();
+                      const payloadStr = JSON.stringify(evt.dados || {}).toLowerCase();
+                      return evt.tipo?.toLowerCase().includes(b) ||
+                             evt.origem?.toLowerCase().includes(b) ||
+                             evt.destino?.toLowerCase().includes(b) ||
+                             payloadStr.includes(b);
+                    })
                     .map((evt) => {
                       const isNG = evt.origem === 'Nossa Gente';
                       return (
@@ -735,11 +814,158 @@ export default function Automacoes({ defaultTab }) {
                           <td style={{ padding: '10px 12px', color: '#64748b', fontFamily: 'monospace' }}>
                             {evt.duracaoMs || 3}ms
                           </td>
+                          <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                            <button
+                              type="button"
+                              onClick={() => setEventoDetalhe(evt)}
+                              style={{
+                                padding: '4px 8px',
+                                background: '#f1f5f9',
+                                border: '1px solid #cbd5e1',
+                                borderRadius: '4px',
+                                fontSize: '11px',
+                                fontWeight: 600,
+                                color: '#475569',
+                                cursor: 'pointer'
+                              }}
+                              title="Ver payload e metadados completos"
+                            >
+                              🔍 Inspecionar
+                            </button>
+                          </td>
                         </tr>
                       );
                     })}
                 </tbody>
               </table>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* MODAL DE INSPEÇÃO DO EVENTO INTERNO */}
+      {eventoDetalhe && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'rgba(15, 23, 42, 0.75)',
+          backdropFilter: 'blur(4px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 9999,
+          padding: '20px'
+        }} onClick={() => setEventoDetalhe(null)}>
+          <div style={{
+            background: '#ffffff',
+            borderRadius: '16px',
+            maxWidth: '680px',
+            width: '100%',
+            maxHeight: '90vh',
+            display: 'flex',
+            flexDirection: 'column',
+            boxShadow: '0 25px 50px -12px rgba(0,0,0,0.3)',
+            border: '1px solid #e2e8f0',
+            overflow: 'hidden'
+          }} onClick={e => e.stopPropagation()}>
+            <div style={{
+              background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
+              color: '#ffffff',
+              padding: '18px 24px',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center'
+            }}>
+              <div>
+                <div style={{ fontSize: '12px', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  Auditoria de Evento Interno
+                </div>
+                <div style={{ fontSize: '16px', fontWeight: 800, color: '#f8fafc', marginTop: '2px', fontFamily: 'monospace' }}>
+                  {eventoDetalhe.tipo}
+                </div>
+              </div>
+              <button
+                onClick={() => setEventoDetalhe(null)}
+                style={{
+                  background: 'rgba(255,255,255,0.1)',
+                  border: 'none',
+                  color: '#ffffff',
+                  fontSize: '18px',
+                  width: '32px',
+                  height: '32px',
+                  borderRadius: '50%',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div style={{ padding: '20px 24px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', background: '#f8fafc', padding: '12px 16px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '12px' }}>
+                <div><strong>Fluxo:</strong> {eventoDetalhe.origem} ➔ {eventoDetalhe.destino}</div>
+                <div><strong>Status:</strong> <span style={{ color: '#10b981', fontWeight: 700 }}>● {eventoDetalhe.status}</span></div>
+                <div><strong>Horário:</strong> {new Date(eventoDetalhe.timestamp).toLocaleString('pt-BR')}</div>
+                <div><strong>Latência:</strong> {eventoDetalhe.duracaoMs || 3} ms</div>
+                <div><strong>ID do Evento:</strong> <span style={{ fontFamily: 'monospace', fontSize: '11px' }}>{eventoDetalhe.id}</span></div>
+                <div><strong>Usuário / Origem:</strong> {eventoDetalhe.usuario || 'integrador'}</div>
+              </div>
+
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                  <span style={{ fontSize: '12px', fontWeight: 700, color: '#475569' }}>Payload Estruturado:</span>
+                  <button
+                    type="button"
+                    onClick={() => copiarPayload(eventoDetalhe.dados)}
+                    style={{
+                      padding: '4px 10px',
+                      background: copiado ? '#10b981' : '#f1f5f9',
+                      color: copiado ? '#ffffff' : '#334155',
+                      border: '1px solid #cbd5e1',
+                      borderRadius: '4px',
+                      fontSize: '11px',
+                      fontWeight: 600,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {copiado ? '✓ Copiado!' : '📋 Copiar JSON'}
+                  </button>
+                </div>
+                <pre style={{
+                  background: '#0f172a',
+                  color: '#38bdf8',
+                  padding: '16px',
+                  borderRadius: '8px',
+                  fontSize: '12px',
+                  fontFamily: 'monospace',
+                  overflowX: 'auto',
+                  margin: 0,
+                  lineHeight: '1.5'
+                }}>
+                  {JSON.stringify(eventoDetalhe.dados, null, 2)}
+                </pre>
+              </div>
+            </div>
+
+            <div style={{ padding: '14px 24px', background: '#f8fafc', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'flex-end' }}>
+              <button
+                type="button"
+                onClick={() => setEventoDetalhe(null)}
+                style={{
+                  padding: '8px 20px',
+                  background: '#0f172a',
+                  color: '#ffffff',
+                  border: 'none',
+                  borderRadius: '8px',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  cursor: 'pointer'
+                }}
+              >
+                Fechar
+              </button>
             </div>
           </div>
         </div>
