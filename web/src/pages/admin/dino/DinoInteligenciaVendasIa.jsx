@@ -62,6 +62,10 @@ export default function DinoInteligenciaVendasIa() {
   const trocarEmpresa = (novaEmpresaId) => {
     setEmpresaAtivaId(novaEmpresaId);
     setSearchParams({ empresaId: novaEmpresaId });
+    try {
+      localStorage.setItem("sp_empresa_ativa", JSON.stringify({ id: novaEmpresaId }));
+      localStorage.setItem("empresaAtiva", novaEmpresaId);
+    } catch (_) {}
     carregarInteligencia(novaEmpresaId);
   };
 

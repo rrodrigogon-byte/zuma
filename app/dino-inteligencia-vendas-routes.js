@@ -8,16 +8,16 @@ export function registerInteligenciaVendasRoutes(app, { db, legacyEmpresaId, leg
   const handlerGet = async (req, res) => {
     try {
       const empresaId = String(
-        req.headers['x-empresa-id'] ||
         req.query.empresaId ||
+        req.headers['x-empresa-id'] ||
         req.user?.empresaId ||
         (legacyEmpresaId ? legacyEmpresaId(req) : '') ||
         'dino'
       ).trim();
 
       const lojaId = String(
-        req.headers['x-loja-id'] ||
         req.query.lojaId ||
+        req.headers['x-loja-id'] ||
         req.user?.lojaId ||
         (legacyLojaId ? legacyLojaId(req) : '') ||
         ''
