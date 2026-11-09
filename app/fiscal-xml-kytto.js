@@ -328,7 +328,7 @@ function xmlEmitente(config) {
   return `<emit>${tag('CNPJ', cnpj)}${tag('xNome', config.razaoSocial)}${config.nomeFantasia ? tag('xFant', config.nomeFantasia) : ''}<enderEmit>`
     + `${tag('xLgr', endereco.logradouro)}${tag('nro', endereco.numero)}${endereco.complemento ? tag('xCpl', endereco.complemento) : ''}${tag('xBairro', endereco.bairro)}`
     + `${tag('cMun', digits(endereco.codigoMunicipio, 7))}${tag('xMun', endereco.cidade)}${tag('UF', config.uf)}${tag('CEP', digits(endereco.cep, 8))}${tag('cPais', '1058')}${tag('xPais', 'BRASIL')}`
-    + `</enderEmit>${tag('IE', config.ie)}${config.im ? tag('IM', config.im) : ''}${tag('CRT', config.crt || '1')}</emit>`;
+    + `</enderEmit>${tag('IE', digits(config.ie))}${config.im ? tag('IM', config.im) : ''}${tag('CRT', config.crt || '1')}</emit>`;
 }
 
 function xmlDestinatario(destinatario) {

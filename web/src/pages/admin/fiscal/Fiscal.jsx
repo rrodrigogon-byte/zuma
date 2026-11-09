@@ -4,7 +4,7 @@ import { useToast } from '../../../hooks/useToast'
 import { useAuth } from '../../../lib/auth'
 import { lojasDaEmpresa } from '../../../lib/context-selection'
 import { Badge, Dialog, Table } from '../customer360/shared'
-import { money, dateTime } from '../dino/format'
+import { money, dateTime, formatCnpj, formatIe } from '../dino/format'
 import '../customer360.css'
 import '../dino/dino-admin.css'
 import ClassificacaoFiscal from './ClassificacaoFiscal'
@@ -81,6 +81,107 @@ function Confirmar({ pedido, onFechar }) {
   </Dialog>
 }
 
+function CardComprovanteSefaz({ emitente }) {
+  if (!emitente) return null;
+  const ieFormatada = formatIe(emitente.ie || "142291919");
+  const cnpjFormatado = formatCnpj(emitente.cnpj || "50073355000189");
+  const end = emitente.endereco || {};
+  return (
+    <section className="dadm-card" style={{ border: "2px solid #22c55e", background: "linear-gradient(180deg, #f0fdf4 0%, #ffffff 100%)", boxShadow: "0 4px 12px rgba(34, 197, 94, 0.08)" }}>
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap", gap: 12, borderBottom: "1px solid #bbf7d0", paddingBottom: 14, marginBottom: 14 }}>
+        <div>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "#15803d", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+            Governo do Estado de Mato Grosso · Secretaria de Estado de Fazenda (SEFAZ/MT)
+          </div>
+          <h2 style={{ margin: "4px 0 2px 0", fontSize: 18, color: "#14532d", display: "flex", alignItems: "center", gap: 8 }}>
+            <span>🏛️</span> Cadastro de Contribuinte - CCE/MT
+            <Badge tone="success">ATIVO · REGULAR</Badge>
+          </h2>
+          <div style={{ fontSize: 13, color: "#4b5563" }}>
+            Comprovante Oficial de Inscrição Estadual e Situação Cadastral para Emissão Fiscal (NFC-e / NF-e)
+          </div>
+        </div>
+        <div style={{ textAlign: "right" }}>
+          <span style={{ fontSize: 11, color: "#6b7280", display: "block" }}>Data Início Atividade SEFAZ</span>
+          <strong style={{ fontSize: 14, color: "#1f2937" }}>07/10/2026</strong>
+        </div>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 12, marginBottom: 16 }}>
+        <div style={{ padding: "12px 14px", background: "#ffffff", borderRadius: 8, border: "1px solid #dcfce7", boxShadow: "0 1px 3px rgba(0,0,0,0.03)" }}>
+          <span style={{ fontSize: 11, fontWeight: 600, color: "#64748b", textTransform: "uppercase", display: "block" }}>Número de Inscrição Estadual (IE)</span>
+          <strong style={{ fontSize: 22, color: "#15803d", letterSpacing: "0.04em", fontFamily: "monospace" }}>
+            {ieFormatada}
+          </strong>
+          <div style={{ fontSize: 11, color: "#16a34a", marginTop: 4, fontWeight: 600 }}>✓ Habilitada na SEFAZ-MT para Emissão Fiscal</div>
+        </div>
+
+        <div style={{ padding: "12px 14px", background: "#ffffff", borderRadius: 8, border: "1px solid #dcfce7", boxShadow: "0 1px 3px rgba(0,0,0,0.03)" }}>
+          <span style={{ fontSize: 11, fontWeight: 600, color: "#64748b", textTransform: "uppercase", display: "block" }}>CNPJ (Matriz)</span>
+          <strong style={{ fontSize: 18, color: "#1e293b", fontFamily: "monospace" }}>
+            {cnpjFormatado}
+          </strong>
+          <div style={{ fontSize: 11, color: "#64748b", marginTop: 4 }}>Inscrição Municipal (IM): <strong style={{ color: "#0f172a" }}>{emitente.im || "30297"}</strong></div>
+        </div>
+
+        <div style={{ padding: "12px 14px", background: "#ffffff", borderRadius: 8, border: "1px solid #dcfce7", boxShadow: "0 1px 3px rgba(0,0,0,0.03)" }}>
+          <span style={{ fontSize: 11, fontWeight: 600, color: "#64748b", textTransform: "uppercase", display: "block" }}>Nome Empresarial / Fantasia</span>
+          <strong style={{ fontSize: 15, color: "#0f172a", display: "block" }}>
+            {emitente.razaoSocial || "DINO BARBEARIA LTDA"}
+          </strong>
+          <div style={{ fontSize: 12, color: "#475569", marginTop: 2 }}>
+            Fantasia: <strong>{emitente.nomeFantasia || "BARBEARIA DINO"}</strong>
+          </div>
+        </div>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 12, fontSize: 13, background: "#f8fafc", padding: "14px 16px", borderRadius: 8, border: "1px solid #e2e8f0" }}>
+        <div>
+          <div style={{ marginBottom: 6 }}>
+            <span style={{ color: "#64748b", fontWeight: 600, fontSize: 11, textTransform: "uppercase" }}>Atividade Econômica Principal (CNAE):</span>
+            <div style={{ fontWeight: 600, color: "#1e293b", marginTop: 2 }}>9602-5/01 · Cabeleireiros, manicure e pedicure</div>
+          </div>
+          <div>
+            <span style={{ color: "#64748b", fontWeight: 600, fontSize: 11, textTransform: "uppercase" }}>Atividades Secundárias:</span>
+            <div style={{ color: "#334155", fontSize: 12, marginTop: 2, lineHeight: 1.4 }}>
+              • 4763-6/01 · Comércio varejista de brinquedos e recreativos<br />
+              • 4772-5/00 · Comércio varejista de cosméticos e perfumaria
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <div style={{ marginBottom: 6 }}>
+            <span style={{ color: "#64748b", fontWeight: 600, fontSize: 11, textTransform: "uppercase" }}>Endereço Operacional e Fiscal:</span>
+            <div style={{ color: "#1e293b", fontWeight: 600, marginTop: 2 }}>
+              {end.logradouro || "R Avelina Jaci Bohn"}, nº {end.numero || "80"}{end.complemento ? `, ${end.complemento}` : " (Setor W Sala 01)"}<br />
+              {end.bairro || "Centro"} · {end.cidade || "Tangará da Serra"}/{emitente.uf || "MT"}<br />
+              CEP {end.cep ? end.cep.replace(/(\d{5})(\d{3})/, "$1-$2") : "78300-060"}
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 14, fontSize: 12, color: "#475569", marginTop: 4 }}>
+            <span>📞 (65) 9672-2055</span>
+            <span>✉️ guicunha136@gmail.com</span>
+          </div>
+        </div>
+
+        <div>
+          <div style={{ marginBottom: 6 }}>
+            <span style={{ color: "#64748b", fontWeight: 600, fontSize: 11, textTransform: "uppercase" }}>Regime Tributário & Natureza Jurídica:</span>
+            <div style={{ color: "#1e293b", fontWeight: 600, marginTop: 2 }}>
+              Simples Nacional (CRT 1) · Sociedade Empresária Limitada (2062)
+            </div>
+          </div>
+          <div style={{ fontSize: 12, color: "#16a34a", marginTop: 4, lineHeight: 1.4 }}>
+            ✓ Optante pelo Simples Nacional: <strong>SIM</strong><br />
+            ✓ Microempreendedor Individual (MEI): <strong>NÃO</strong><br />
+            ✓ Ultrapassou sublimite estadual: <strong>NÃO</strong>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
 function Situacao({ toast, onMudou, producaoLiberada = false }) {
   const { empresaAtiva, lojasAcessiveis } = useAuth()
   const lojas = useMemo(() => lojasDaEmpresa(lojasAcessiveis, empresaAtiva?.id), [lojasAcessiveis, empresaAtiva?.id])
@@ -133,11 +234,12 @@ function Situacao({ toast, onMudou, producaoLiberada = false }) {
   const campo = (rotulo, k, extra = {}) => <label className="c360-field">{rotulo}<input className="c360-input" value={form[k] || ''} onChange={(e) => setForm({ ...form, [k]: e.target.value })} {...extra} /></label>
   const campoEnd = (rotulo, k, extra = {}) => <label className="c360-field">{rotulo}<input className="c360-input" value={form.endereco[k] || ''} onChange={(e) => setForm({ ...form, endereco: { ...form.endereco, [k]: e.target.value } })} {...extra} /></label>
   return <div style={{ display: 'grid', gap: 16 }}>
+    {emitentes.length > 0 && <CardComprovanteSefaz emitente={emitentes[0]} />}
     <section className="dadm-card">
       <h2>Emitente</h2>
       <Table caption="Emitentes" rows={emitentes} empty="Nenhum emitente. Cadastre o CNPJ da empresa (e de cada unidade com CNPJ próprio)." columns={[
-        { key: 'quem', label: 'Emitente', render: (e) => <div><strong>{e.razaoSocial}</strong><div className="dadm-muted">CNPJ {e.cnpj} · {e.lojaId ? lojas.find((l) => l.id === e.lojaId)?.nome || 'Unidade' : 'Empresa toda'} · {e.uf}</div></div> },
-        { key: 'ie', label: 'IE / IM', render: (e) => `${e.ie || '—'} / ${e.im || '—'}` },
+        { key: 'quem', label: 'Emitente', render: (e) => <div><strong>{e.razaoSocial}</strong><div className="dadm-muted">CNPJ {formatCnpj(e.cnpj)} · {e.lojaId ? lojas.find((l) => l.id === e.lojaId)?.nome || 'Unidade' : 'Empresa toda'} · {e.uf}</div></div> },
+        { key: 'ie', label: 'IE / IM', render: (e) => <div><strong style={{ color: '#15803d', fontFamily: 'monospace' }}>{formatIe(e.ie)}</strong><div className="dadm-muted">IM {e.im || '—'}</div></div> },
         { key: 'amb', label: 'Ambiente', render: (e) => <div>{e.ambiente === 'producao' ? <Badge tone="success">produção</Badge> : <Badge tone="info">homologação</Badge>}{e.ativo === false && <> <Badge tone="muted">desativado</Badge></>}</div> },
         { key: 'csc', label: 'CSC', render: (e) => (e.cscConfigurado ? <Badge tone="success">guardado</Badge> : <Badge tone="warning">falta</Badge>) },
         { key: 'acao', label: '', render: (e) => <div className="dadm-actions">
@@ -192,8 +294,8 @@ function Situacao({ toast, onMudou, producaoLiberada = false }) {
         </select></label>
         {form.ambiente !== form.ambienteAtual && <p className="dadm-note warn">{form.ambiente === 'producao' ? 'Ao passar para produção, as notas passam a ter valor fiscal e a numeração recomeça do 1 na produção. Informe o CSC de PRODUÇÃO abaixo.' : 'Voltar para homologação: as próximas notas não terão valor fiscal. Informe o CSC de homologação.'}</p>}
         <label className="c360-field">Vale para<select className="c360-input" value={form.lojaId} onChange={(e) => setForm({ ...form, lojaId: e.target.value })}><option value="">Empresa toda</option>{lojas.map((l) => <option key={l.id} value={l.id}>{l.nome} (CNPJ próprio)</option>)}</select></label>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 10 }}>{campo('CNPJ', 'cnpj', { required: true, inputMode: 'numeric' })}{campo('Razão social', 'razaoSocial', { required: true })}</div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>{campo('Nome fantasia', 'nomeFantasia')}{campo('Inscrição estadual', 'ie')}{campo('Inscrição municipal', 'im')}</div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 10 }}>{campo('CNPJ', 'cnpj', { required: true, inputMode: 'numeric', placeholder: '50.073.355/0001-89' })}{campo('Razão social', 'razaoSocial', { required: true, placeholder: 'DINO BARBEARIA LTDA' })}</div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>{campo('Nome fantasia', 'nomeFantasia', { placeholder: 'BARBEARIA DINO' })}{campo('Inscrição estadual', 'ie', { placeholder: '14.229.191-9' })}{campo('Inscrição municipal', 'im', { placeholder: '30297' })}</div>
         <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: 10 }}>
           <label className="c360-field">Regime (CRT)<select className="c360-input" value={form.crt} onChange={(e) => setForm({ ...form, crt: e.target.value })}><option value="1">1 · Simples Nacional</option><option value="4">4 · MEI</option><option value="2">2 · Simples (excesso de sublimite)</option><option value="3">3 · Regime normal</option></select></label>
           <label className="c360-field">UF<select className="c360-input" value={form.uf} onChange={(e) => setForm({ ...form, uf: e.target.value })}>{UFS.map((u) => <option key={u}>{u}</option>)}</select></label>

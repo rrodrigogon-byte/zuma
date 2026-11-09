@@ -69,3 +69,17 @@ export function downloadCsv(filename, rows) {
 export function localDay(date = new Date()) {
   return date.toLocaleDateString('en-CA')
 }
+
+export function formatCnpj(v) {
+  if (!v) return '—';
+  const c = String(v).replace(/\D/g, '');
+  if (c.length === 14) return c.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5');
+  return v;
+}
+
+export function formatIe(v) {
+  if (!v) return '—';
+  const c = String(v).replace(/\D/g, '');
+  if (c.length === 9) return c.replace(/(\d{2})(\d{3})(\d{3})(\d{1})/, '$1.$2.$3-$4');
+  return v;
+}
