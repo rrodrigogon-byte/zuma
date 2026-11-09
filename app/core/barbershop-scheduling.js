@@ -160,7 +160,7 @@ export async function listSchedulingAvailability(context, input = {}) {
   const availableProfIds = allProfs.rows.map(r => r.id);
   
   const slots = [];
-  for (let minute = openingMinutes; minute + duration <= closingMinutes; minute += 30) {
+  for (let minute = openingMinutes; minute + duration <= closingMinutes; minute += 15) {
     const hour = String(Math.floor(minute / 60)).padStart(2, '0');
     const min = String(minute % 60).padStart(2, '0');
     const timestamp = new Date(`${date}T${hour}:${min}:00`).getTime();

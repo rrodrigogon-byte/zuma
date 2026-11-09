@@ -138,11 +138,11 @@ export async function runGeminiWithTools({
   const thinkingBudget = Number.isInteger(Number(process.env.GEMINI_THINKING_BUDGET))
     ? Number(process.env.GEMINI_THINKING_BUDGET)
     : 0;
-  const generationConfig = requireCompletedReply && model === 'gemini-2.5-flash'
-    // Temperatura menor: mais precisão ao escolher ferramenta, data e horário (menos variação).
-    // thinkingBudget 0 entrega resposta ultra rápida (<600ms) no WhatsApp sem latência de raciocínio.
-    ? { temperature: 0.2, maxOutputTokens: 2048, thinkingConfig: { thinkingBudget } }
-    : { temperature: 0.2, maxOutputTokens: 900 };
+  const generationConfig = {
+    temperature: 0.2,
+    maxOutputTokens: requireCompletedReply ? 2048 : 900,
+    ...(model === 'gemini-2.5-flash' ? { thinkingConfig: { thinkingBudget } } : {}),
+  };
 
   for (let step = 0; step < maxSteps; step += 1) {
     const payload = await geminiRequest(endpoint, {

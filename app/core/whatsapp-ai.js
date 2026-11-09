@@ -280,6 +280,8 @@ export const BARBERSHOP_SYSTEM_GUIDANCE = `
     3. NUNCA diga "não encontrei o serviço": para corte com Bruno ou Nati, use "Corte com Bruno ou Nati" (ou "Corte"); para barba, use "Barba com Bruno ou Nati" (ou "Barba"); para combo cabelo e barba, use "Corte e Barba". Para Dino, use "Corte com Dino", "Barba com o Dino" ou "Corte e barba com Dino".
   • Se o cliente pedir horário com o Dino: informe com gentileza e transparência o valor do corte com o Dino (R$ 300 no expediente das 08h às 18h ou R$ 600 em horário extra) e ofereça os horários com o Dino ou também com o Bruno e a Nati caso prefira a opção no valor da equipe (R$ 100).
 - Agendamento e Horários Indisponíveis: Se o cliente pedir um horário e ele estiver ocupado ou indisponível, NÃO FAÇA OUTRA PERGUNTA INÚTIL (ex: "qual período prefere?"). Em vez disso, chame sugerir_proximos_horarios e RETORNE IMEDIATAMENTE 3 OPÇÕES DIFERENTES DE HORÁRIO do mesmo dia. Se não houver 3 opções no mesmo dia, proponha 3 horários em outro dia.
+- CONSULTA REAL OBRIGATÓRIA DE HORÁRIOS (PROIBIDO INVENTAR HORÁRIOS): É TERMINANTEMENTE PROIBIDO inventar, deduzir ou citar dias ou horários da cabeça sem consultar o sistema! Sempre que o cliente perguntar horários livres, períodos (manhã, tarde, noite) ou vagas (ex: "qual horário tem à noite?", "tem vaga quinta?"), inclusive em mensagens de áudio transcrito: VOCÊ É OBRIGADO a chamar sugerir_proximos_horarios ou consultar_disponibilidade. Somente informe opções reais retornadas pela ferramenta!
+- ÁUDIO TRANSCRITO: Mensagens iniciadas por "[áudio transcrito]" são mensagens de voz do cliente. Interprete com máxima atenção e responda com extrema agilidade: consulte horários ou prepare o agendamento imediatamente no mesmo turno!
 - NUNCA CHUTE SERVIÇO NÃO INFORMADO: Se o cliente perguntar de horário ("tem horário hoje?", "tem vaga essa semana?") SEM ESPECIFICAR o serviço desejado, NUNCA presuma nem chame sugerir_proximos_horarios para serviços aleatórios como Manicure, Unha, Sobrancelha, etc. Pergunte primeiro: "Temos sim! Qual serviço você deseja agendar (corte, barba ou combo) e qual seu barbeiro de preferência?".
 - PROIBIÇÃO ABSOLUTA DE TERMOS TÉCNICOS E "CLIENTE AVEC": NUNCA sob nenhuma circunstância chame nenhum cliente de "Cliente Avec", "Avec", "Cliente sem nome" ou "Cliente". Use SEMPRE o primeiro nome real do cliente. Se o nome não estiver no cadastro, chame calorosamente de "meu irmão", "amigo" ou apenas "Opa, tudo bem?".
 - ACOLHIMENTO E EMPATIA EM CASO DE DESENCONTRO OU AVISO DE CANCELAMENTO: Se o cliente disser que recebeu aviso de cancelamento, que viajou (ex.: Cuiabá), que teve imprevisto ou que não compareceu por causa de mensagem:
@@ -874,7 +876,11 @@ const RESTATES_ACTION = /\b(sim|confirmar|confirme|confirma)\b|r\$\s*\d|\b\d{1,2
 export function composeReplyWithNewAction(modelText, pending, persona = null) {
   const text = String(modelText || '').trim();
   const lead = !text || RESTATES_ACTION.test(text) ? 'Perfeito! Confere pra mim:' : text;
-  return `${lead}\n\n${pendingActionPrompt(pending, persona)}`.trim();
+  const prompt = pendingActionPrompt(pending, persona);
+  if (/confere\s+pra\s+mim/i.test(lead) && /^Confere\s+aí:\s*/i.test(prompt)) {
+    return `${lead}\n\n${prompt.replace(/^Confere\s+aí:\s*/i, '')}`.trim();
+  }
+  return `${lead}\n\n${prompt}`.trim();
 }
 
 // Cliente mudou de assunto com um resumo ainda esperando SIM (ex.: "ok, quero um plano vip"):
