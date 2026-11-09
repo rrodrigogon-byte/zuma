@@ -99,29 +99,29 @@ export function createErpAdminRouter({ db, escopoDaRequisicao }) {
 
 
   // ── DRE CONTÁBIL E GERENCIAL AVANÇADA ───────────────────────────────────
-  router.get(/dre, rota(reports.read, ({ req, empresaId, lojaRestrita }) => dreSvc.calcularDreCompleta(db, empresaId, {
+  router.get('/dre', rota('reports.read', ({ req, empresaId, lojaRestrita }) => dreSvc.calcularDreCompleta(db, empresaId, {
     de: req.query.de,
     ate: req.query.ate,
     mes: req.query.mes,
     ano: req.query.ano,
-    regime: req.query.regime || competencia,
+    regime: req.query.regime || 'competencia',
     lojaId: req.query.lojaId || lojaRestrita,
     centroCustoId: req.query.centroCustoId
   })));
 
-  router.get(/dre/anual, rota(reports.read, ({ req, empresaId, lojaRestrita }) => dreSvc.calcularDreAnual12Meses(db, empresaId, {
+  router.get('/dre/anual', rota('reports.read', ({ req, empresaId, lojaRestrita }) => dreSvc.calcularDreAnual12Meses(db, empresaId, {
     ano: req.query.ano,
-    regime: req.query.regime || competencia,
+    regime: req.query.regime || 'competencia',
     lojaId: req.query.lojaId || lojaRestrita
   })));
 
-  router.get(/dre/exportar-csv, rota(reports.read, async ({ req, empresaId, lojaRestrita }) => {
+  router.get('/dre/exportar-csv', rota('reports.read', async ({ req, empresaId, lojaRestrita }) => {
     const dre = await dreSvc.calcularDreCompleta(db, empresaId, {
       de: req.query.de,
       ate: req.query.ate,
       mes: req.query.mes,
       ano: req.query.ano,
-      regime: req.query.regime || competencia,
+      regime: req.query.regime || 'competencia',
       lojaId: req.query.lojaId || lojaRestrita,
       centroCustoId: req.query.centroCustoId
     });
