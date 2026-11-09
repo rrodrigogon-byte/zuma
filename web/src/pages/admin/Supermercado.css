@@ -2276,3 +2276,74 @@
     display: none !important;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   SPRINT 1 ENTERPRISE: ATACAREJO, COMPRAS GMD & RUPTURA REALTIME
+   ═══════════════════════════════════════════════════════════════ */
+.promo-badge-cart {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: #dcfce7;
+  color: #15803d;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+  margin-top: 3px;
+  border: 1px solid #86efac;
+}
+
+.super-kpi-grid-4 {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.super-ruptura-alert-banner {
+  background: #fef2f2;
+  border: 1px solid #f87171;
+  border-left: 6px solid #dc2626;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  animation: pulseRuptura 2s infinite;
+}
+
+@keyframes pulseRuptura {
+  0% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.4); }
+  70% { box-shadow: 0 0 0 10px rgba(220, 38, 38, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0); }
+}
+
+.super-badge-curva {
+  display: inline-block;
+  padding: 2px 8px;
+  font-weight: 800;
+  border-radius: 4px;
+  font-size: 11px;
+}
+.super-badge-curva.curva-A { background: #fee2e2; color: #991b1b; border: 1px solid #f87171; }
+.super-badge-curva.curva-B { background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; }
+.super-badge-curva.curva-C { background: #e0f2fe; color: #075985; border: 1px solid #7dd3fc; }
+
+.super-atacarejo-tag {
+  background: #f3e8ff;
+  color: #6b21a8;
+  border: 1px solid #d8b4fe;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.super-table-scroll {
+  overflow-x: auto;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+  background: #fff;
+}

@@ -313,6 +313,49 @@ export function createVarejoAdminRouter({ db, escopoDaRequisicao, fuso = 'Americ
     return svc.validarValeCompras(db, empresaId, req.params.codigo);
   }));
 
+  // ── SPRINT 1 ENTERPRISE: ATACAREJO, PROMOÇÕES, COMPRAS & RUPTURA ──
+  router.get("/atacarejo-faixas", rota("catalog.read", async ({ req, empresaId, lojaId }) => {
+    return svc.listarAtacarejoFaixas(db, empresaId, { lojaId, itemId: req.query.itemId });
+  }));
+  router.post("/atacarejo-faixas", rota("catalog.write", async ({ req, empresaId, lojaId }) => {
+    return svc.salvarAtacarejoFaixa(db, empresaId, { ...req.body, lojaId });
+  }));
+  router.delete("/atacarejo-faixas/:id", rota("catalog.write", async ({ req, empresaId }) => {
+    return svc.removerAtacarejoFaixa(db, empresaId, req.params.id);
+  }));
+
+  router.get("/promocoes-avancadas", rota("catalog.read", async ({ req, empresaId, lojaId }) => {
+    return svc.listarPromocoesAvancadas(db, empresaId, { lojaId, ativasApenas: req.query.todas !== "true" });
+  }));
+  router.post("/promocoes-avancadas", rota("catalog.write", async ({ req, empresaId, lojaId }) => {
+    return svc.salvarPromocaoAvancada(db, empresaId, { ...req.body, lojaId });
+  }));
+  router.delete("/promocoes-avancadas/:id", rota("catalog.write", async ({ req, empresaId }) => {
+    return svc.desativarPromocaoAvancada(db, empresaId, req.params.id);
+  }));
+
+  router.post("/precificacao/calcular-carrinho", rota("catalog.read", async ({ req, empresaId, lojaId }) => {
+    return svc.aplicarMotorPromocoesCarrinho(db, empresaId, req.body.itens || [], { clienteCpf: req.body.clienteCpf, lojaId });
+  }));
+
+  router.get("/sugestao-compras", rota("catalog.read", async ({ req, empresaId, lojaId }) => {
+    return svc.calcularSugestaoCompras(db, empresaId, { 
+      diasHistorico: Number(req.query.diasHistorico || 30), 
+      margemSegurancaDias: Number(req.query.margemSegurancaDias || 5),
+      lojaId 
+    });
+  }));
+  router.post("/sugestao-compras/gerar-pedido", rota("catalog.write", async ({ req, empresaId, usuario }) => {
+    return svc.gerarPedidoCompraSugerido(db, empresaId, { itens: req.body.itens || [], usuario });
+  }));
+
+  router.get("/rupturas/tempo-real", rota("catalog.read", async ({ req, empresaId, lojaId }) => {
+    return svc.monitorarRupturasTempoReal(db, empresaId, { toleranciaHoras: Number(req.query.toleranciaHoras || 3), lojaId });
+  }));
+  router.post("/rupturas/:id/repor", rota("catalog.write", async ({ req, empresaId, usuario }) => {
+    return svc.confirmarReposicaoGondola(db, empresaId, req.params.id, usuario);
+  }));
+
   // ── Download do Instalador Windows Kytto PDV ──
   router.get("/download-instalador-windows", (req, res) => {
     const path = require("path");

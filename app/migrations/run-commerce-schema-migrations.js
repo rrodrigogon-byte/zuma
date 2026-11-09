@@ -93,6 +93,7 @@ const migrationFiles = [
   '106_fiscal_producao.sql',
   '107_fiscal_automatica.sql',
   '108_fiscal_ibs_cbs.sql',
+  '109_supermercado_atacarejo_ressuprimento.sql',
 ];
 const advisoryLockKey = 825410732;
 

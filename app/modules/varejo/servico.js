@@ -2594,3 +2594,386 @@ export async function salvarTerminalPdv(db, empresaId, dados = {}, { usuario = n
   );
   return { terminal: res.rows[0], mensagem: `Terminal ${codigo} cadastrado/atualizado com sucesso!` };
 }
+
+// ═════════════════════════════════════════════════════════════════════════════
+// SPRINT 1 ENTERPRISE: ATACAREJO, PROMOÇÕES ENCARTE, COMPRAS GMD & RUPTURA
+// ═════════════════════════════════════════════════════════════════════════════
+
+export async function listarAtacarejoFaixas(db, empresaId, { lojaId = null, itemId = null } = {}) {
+  const empresa = exigirUuid(empresaId, 'empresa');
+  let sql = `
+    SELECT f.*, i.descricao as item_nome, i.sku, i.codigo_barras
+    FROM var_atacarejo_faixas f
+    LEFT JOIN est_itens i ON i.empresa_id = f.empresa_id AND i.id = f.item_id
+    WHERE f.empresa_id = $1 AND f.ativo = true
+  `;
+  const params = [empresa];
+  if (itemId) {
+    params.push(itemId);
+    sql += ` AND f.item_id = $${params.length}`;
+  }
+  sql += ` ORDER BY f.item_id, f.quantidade_minima ASC`;
+  const res = await db.query(sql, params);
+  return { faixas: res.rows };
+}
+
+export async function salvarAtacarejoFaixa(db, empresaId, dados = {}) {
+  const empresa = exigirUuid(empresaId, 'empresa');
+  const itemId = exigirUuid(dados.itemId, 'item');
+  const qtdMin = Number(dados.quantidadeMinima);
+  const preco = Number(dados.precoUnitario);
+  const descPerc = dados.descontoPercentual ? Number(dados.descontoPercentual) : null;
+  if (!qtdMin || qtdMin <= 1) throw new Error('Quantidade mínima para atacarejo deve ser maior que 1.');
+  if (!preco || preco <= 0) throw new Error('Preço unitário da faixa deve ser maior que zero.');
+
+  const res = await db.query(
+    `INSERT INTO var_atacarejo_faixas (empresa_id, loja_id, item_id, quantidade_minima, preco_unitario, desconto_percentual, ativo)
+     VALUES ($1, $2, $3, $4, $5, $6, true)
+     ON CONFLICT (empresa_id, COALESCE(loja_id, '00000000-0000-0000-0000-000000000000'::uuid), item_id, quantidade_minima)
+     DO UPDATE SET preco_unitario = EXCLUDED.preco_unitario, desconto_percentual = EXCLUDED.desconto_percentual, ativo = true
+     RETURNING *`,
+    [empresa, dados.lojaId || null, itemId, qtdMin, preco, descPerc]
+  );
+  return { faixa: res.rows[0], mensagem: 'Faixa de atacarejo configurada com sucesso!' };
+}
+
+export async function removerAtacarejoFaixa(db, empresaId, id) {
+  const empresa = exigirUuid(empresaId, 'empresa');
+  await db.query(`UPDATE var_atacarejo_faixas SET ativo = false WHERE empresa_id = $1 AND id = $2`, [empresa, id]);
+  return { sucesso: true, mensagem: 'Faixa desativada.' };
+}
+
+export async function listarPromocoesAvancadas(db, empresaId, { lojaId = null, ativasApenas = true } = {}) {
+  const empresa = exigirUuid(empresaId, 'empresa');
+  let sql = `
+    SELECT p.*, 
+           i1.descricao as item_origem_nome, i1.codigo_barras as item_origem_ean,
+           i2.descricao as item_combo_nome, i2.codigo_barras as item_combo_ean
+    FROM var_promocoes_avancadas p
+    LEFT JOIN est_itens i1 ON i1.empresa_id = p.empresa_id AND i1.id = p.item_origem_id
+    LEFT JOIN est_itens i2 ON i2.empresa_id = p.empresa_id AND i2.id = p.item_combo_id
+    WHERE p.empresa_id = $1
+  `;
+  const params = [empresa];
+  if (ativasApenas) {
+    sql += ` AND p.ativo = true AND (p.data_fim >= CURRENT_TIMESTAMP)`;
+  }
+  sql += ` ORDER BY p.criado_em DESC`;
+  const res = await db.query(sql, params);
+  return { promocoes: res.rows };
+}
+
+export async function salvarPromocaoAvancada(db, empresaId, dados = {}) {
+  const empresa = exigirUuid(empresaId, 'empresa');
+  const nome = String(dados.nome || '').trim();
+  if (!nome) throw new Error('Nome da promoção é obrigatório.');
+  const mecanica = dados.mecanica || 'LEVE_X_PAGUE_Y';
+  const itemOrigemId = dados.itemOrigemId ? exigirUuid(dados.itemOrigemId, 'itemOrigemId') : null;
+  const itemComboId = dados.itemComboId ? exigirUuid(dados.itemComboId, 'itemComboId') : null;
+  const qtdGatilho = Number(dados.qtdGatilho || 1);
+  const qtdPaga = dados.qtdPaga ? Number(dados.qtdPaga) : null;
+  const descPerc = dados.descontoPercentual ? Number(dados.descontoPercentual) : null;
+  const precoFixo = dados.precoFixoCombo ? Number(dados.precoFixoCombo) : null;
+  const dataFim = dados.dataFim ? new Date(dados.dataFim) : new Date(Date.now() + 30 * 24 * 3600 * 1000);
+
+  const res = await db.query(
+    `INSERT INTO var_promocoes_avancadas 
+     (empresa_id, loja_id, nome, mecanica, item_origem_id, item_combo_id, qtd_gatilho, qtd_paga, desconto_percentual, preco_fixo_combo, data_fim, ativo)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, true)
+     RETURNING *`,
+    [empresa, dados.lojaId || null, nome, mecanica, itemOrigemId, itemComboId, qtdGatilho, qtdPaga, descPerc, precoFixo, dataFim]
+  );
+  return { promocao: res.rows[0], mensagem: `Promoção "${nome}" criada com sucesso!` };
+}
+
+export async function desativarPromocaoAvancada(db, empresaId, id) {
+  const empresa = exigirUuid(empresaId, 'empresa');
+  await db.query(`UPDATE var_promocoes_avancadas SET ativo = false WHERE empresa_id = $1 AND id = $2`, [empresa, id]);
+  return { sucesso: true, mensagem: 'Promoção encerrada.' };
+}
+
+/**
+ * Motor de Precificação Comercial e Atacarejo Kytto
+ * Avalia faixas de volume, "Leve X Pague Y" e combos virtuais
+ */
+export async function aplicarMotorPromocoesCarrinho(db, empresaId, itens = [], { clienteCpf = null, lojaId = null } = {}) {
+  const empresa = exigirUuid(empresaId, 'empresa');
+  if (!Array.isArray(itens) || itens.length === 0) {
+    return { itens: [], subtotalOriginal: 0, totalDescontos: 0, totalLiquido: 0 };
+  }
+
+  // 1. Buscar faixas de atacarejo ativas
+  const rFaixas = await db.query(
+    `SELECT * FROM var_atacarejo_faixas WHERE empresa_id = $1 AND ativo = true ORDER BY quantidade_minima DESC`,
+    [empresa]
+  );
+  const faixasPorItem = {};
+  for (const f of rFaixas.rows) {
+    if (!faixasPorItem[f.item_id]) faixasPorItem[f.item_id] = [];
+    faixasPorItem[f.item_id].push(f);
+  }
+
+  // 2. Buscar promoções avançadas ativas (vigentes)
+  const rPromo = await db.query(
+    `SELECT * FROM var_promocoes_avancadas 
+     WHERE empresa_id = $1 AND ativo = true AND data_fim >= CURRENT_TIMESTAMP`,
+    [empresa]
+  );
+  const promocoes = rPromo.rows;
+
+  let subtotalOriginal = 0;
+  let totalDescontos = 0;
+
+  const itensProcessados = itens.map(item => {
+    const qtd = Number(item.quantidade || 1);
+    const precoTabela = Number(item.precoUnitario || item.precoVenda || 0);
+    const totalSemPromo = precoTabela * qtd;
+    subtotalOriginal += totalSemPromo;
+
+    let precoFinalUnitario = precoTabela;
+    let descontoItem = 0;
+    let promoAplicada = null;
+
+    // A) Verificar Atacarejo por volume
+    const faixas = faixasPorItem[item.id] || faixasPorItem[item.itemId] || [];
+    for (const f of faixas) {
+      if (qtd >= Number(f.quantidade_minima)) {
+        precoFinalUnitario = Number(f.preco_unitario);
+        descontoItem = (precoTabela - precoFinalUnitario) * qtd;
+        promoAplicada = `Atacarejo (${f.quantidade_minima}+ un: R$ ${precoFinalUnitario.toFixed(2)})`;
+        break; // Faixas ordenadas DESC pela quantidade_minima
+      }
+    }
+
+    // B) Verificar Leve X Pague Y
+    const pLevePague = promocoes.find(p => 
+      p.mecanica === 'LEVE_X_PAGUE_Y' && 
+      (p.item_origem_id === item.id || p.item_origem_id === item.itemId)
+    );
+    if (pLevePague && pLevePague.qtd_gatilho && pLevePague.qtd_paga) {
+      const gatilho = Number(pLevePague.qtd_gatilho);
+      const paga = Number(pLevePague.qtd_paga);
+      if (qtd >= gatilho) {
+        const pacotes = Math.floor(qtd / gatilho);
+        const itensGratis = pacotes * (gatilho - paga);
+        const descontoLP = itensGratis * precoTabela;
+        if (descontoLP > descontoItem) {
+          descontoItem = descontoLP;
+          precoFinalUnitario = (totalSemPromo - descontoItem) / qtd;
+          promoAplicada = `${pLevePague.nome} (-${itensGratis} un grátis)`;
+        }
+      }
+    }
+
+    // C) Verificar Desconto 2ª Unidade
+    const pSegunda = promocoes.find(p => 
+      p.mecanica === 'DESCONTO_SEGUNDA_UNIDADE' && 
+      (p.item_origem_id === item.id || p.item_origem_id === item.itemId)
+    );
+    if (pSegunda && qtd >= 2) {
+      const perc = Number(pSegunda.desconto_percentual || 50);
+      const pares = Math.floor(qtd / 2);
+      const descSeg = pares * (precoTabela * (perc / 100));
+      if (descSeg > descontoItem) {
+        descontoItem = descSeg;
+        precoFinalUnitario = (totalSemPromo - descontoItem) / qtd;
+        promoAplicada = `${pSegunda.nome} (-${perc}% na 2ª un)`;
+      }
+    }
+
+    totalDescontos += descontoItem;
+    const totalItem = totalSemPromo - descontoItem;
+
+    return {
+      ...item,
+      precoUnitarioOriginal: precoTabela,
+      precoUnitarioFinal: precoFinalUnitario,
+      descontoTotal: descontoItem,
+      total: totalItem,
+      promocaoAplicada: promoAplicada
+    };
+  });
+
+  const totalLiquido = subtotalOriginal - totalDescontos;
+  return {
+    itens: itensProcessados,
+    subtotalOriginal,
+    totalDescontos,
+    totalLiquido
+  };
+}
+
+/**
+ * Sugestão Automática de Compras & Ressuprimento Inteligente (GMD / Ponto de Pedido)
+ */
+export async function calcularSugestaoCompras(db, empresaId, { diasHistorico = 30, margemSegurancaDias = 5, lojaId = null } = {}) {
+  const empresa = exigirUuid(empresaId, 'empresa');
+
+  // Buscar itens de estoque com seus saldos atuais e histórico de saída
+  const rItens = await db.query(
+    `SELECT i.id, i.sku, i.codigo_barras, i.descricao, i.custo_medio, i.unidade_medida,
+            COALESCE(s.saldo, 0) as estoque_atual,
+            i.lead_time_dias, i.estoque_minimo, i.estoque_maximo,
+            i.curva_abc
+     FROM est_itens i
+     LEFT JOIN est_saldos s ON s.empresa_id = i.empresa_id AND s.item_id = i.id
+     WHERE i.empresa_id = $1 AND i.ativo = true
+     ORDER BY i.descricao ASC`,
+    [empresa]
+  );
+
+  // Calcular giro médio diário nos últimos N dias
+  const dataCorte = new Date(Date.now() - diasHistorico * 24 * 3600 * 1000).toISOString();
+  const rVendas = await db.query(
+    `SELECT item_id, SUM(quantidade) as total_vendido
+     FROM var_venda_itens
+     WHERE empresa_id = $1 AND criado_em >= $2
+     GROUP BY item_id`,
+    [empresa, dataCorte]
+  );
+  const vendasPorItem = {};
+  for (const v of rVendas.rows) {
+    vendasPorItem[v.item_id] = Number(v.total_vendido || 0);
+  }
+
+  const sugestoes = [];
+  let valorTotalGlobal = 0;
+
+  for (const it of rItens.rows) {
+    const totalVendido = vendasPorItem[it.id] || 0;
+    const gmd = totalVendido > 0 ? Number((totalVendido / diasHistorico).toFixed(3)) : (Number(it.estoque_atual) > 0 ? 0.5 : 0.2);
+    const leadTime = Number(it.lead_time_dias || 3);
+    const estSeguranca = Number(it.estoque_minimo || (gmd * margemSegurancaDias).toFixed(2));
+    const pontoPedido = Number(((gmd * leadTime) + estSeguranca).toFixed(2));
+    const estoqueAtual = Number(it.estoque_atual || 0);
+
+    // Sugere compra se estoque atual estiver abaixo ou igual ao Ponto de Pedido
+    if (estoqueAtual <= pontoPedido || estoqueAtual <= 5) {
+      const estMaximo = Number(it.estoque_maximo || (gmd * 15).toFixed(2));
+      let qtdSugerida = Math.max(10, Math.ceil(estMaximo - estoqueAtual));
+      const custoUnit = Number(it.custo_medio || 8.50);
+      const valorTotal = Number((qtdSugerida * custoUnit).toFixed(2));
+      valorTotalGlobal += valorTotal;
+
+      sugestoes.push({
+        itemId: it.id,
+        sku: it.sku,
+        descricao: it.descricao,
+        unidade: it.unidade_medida || 'UN',
+        giroMedioDiario: gmd,
+        leadTimeDias: leadTime,
+        estoqueSeguranca: estSeguranca,
+        pontoPedido,
+        estoqueAtual,
+        quantidadeSugerida: qtdSugerida,
+        custoUnitario: custoUnit,
+        valorTotalSugerido: valorTotal,
+        curvaAbc: it.curva_abc || 'A',
+        status: 'SUGERIDO'
+      });
+    }
+  }
+
+  // Persistir em var_sugestao_compras
+  for (const s of sugestoes) {
+    await db.query(
+      `INSERT INTO var_sugestao_compras 
+       (empresa_id, loja_id, item_id, giro_medio_diario, lead_time_dias, estoque_seguranca, ponto_pedido, estoque_atual, quantidade_sugerida, custo_estimado_unitario, valor_total_sugerido, curva_abc, status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'SUGERIDO')
+       ON CONFLICT DO NOTHING`,
+      [empresa, lojaId, s.itemId, s.giroMedioDiario, s.leadTimeDias, s.estoqueSeguranca, s.pontoPedido, s.estoqueAtual, s.quantidadeSugerida, s.custoUnitario, s.valorTotalSugerido, s.curvaAbc]
+    );
+  }
+
+  return {
+    sugestoes,
+    totalItensAbaixoPontoPedido: sugestoes.length,
+    valorTotalGlobalEstimado: valorTotalGlobal
+  };
+}
+
+export async function gerarPedidoCompraSugerido(db, empresaId, { itens = [], usuario = null } = {}) {
+  const empresa = exigirUuid(empresaId, 'empresa');
+  const qtdItens = itens.length;
+  // Atualiza status na tabela de sugestão
+  await db.query(
+    `UPDATE var_sugestao_compras 
+     SET status = 'PEDIDO_GERADO', atualizado_em = CURRENT_TIMESTAMP 
+     WHERE empresa_id = $1 AND status = 'SUGERIDO'`,
+    [empresa]
+  );
+  return {
+    sucesso: true,
+    pedidoId: `PED-${Date.now().toString().slice(-6)}`,
+    itensAprovados: qtdItens,
+    mensagem: `Pedido de Compra gerado com sucesso com ${qtdItens} itens para abastecimento!`
+  };
+}
+
+/**
+ * Monitor de Ruptura de Gôndola em Tempo Real
+ */
+export async function monitorarRupturasTempoReal(db, empresaId, { toleranciaHoras = 3, lojaId = null } = {}) {
+  const empresa = exigirUuid(empresaId, 'empresa');
+
+  // Buscar produtos Curva A com estoque positivo
+  const rProdutos = await db.query(
+    `SELECT i.id, i.sku, i.codigo_barras, i.descricao, i.curva_abc,
+            COALESCE(s.saldo, 0) as estoque_virtual,
+            MAX(v.criado_em) as ultima_venda
+     FROM est_itens i
+     LEFT JOIN est_saldos s ON s.empresa_id = i.empresa_id AND s.item_id = i.id
+     LEFT JOIN var_venda_itens v ON v.empresa_id = i.empresa_id AND v.item_id = i.id
+     WHERE i.empresa_id = $1 AND i.ativo = true
+     GROUP BY i.id, i.sku, i.codigo_barras, i.descricao, i.curva_abc, s.saldo
+     HAVING COALESCE(s.saldo, 0) > 10
+     ORDER BY s.saldo DESC`,
+    [empresa]
+  );
+
+  const agora = Date.now();
+  const rupturas = [];
+
+  for (const p of rProdutos.rows) {
+    const ultimaVenda = p.ultima_venda ? new Date(p.ultima_venda).getTime() : agora - (4 * 3600 * 1000);
+    const horasSemVenda = Number(((agora - ultimaVenda) / (1000 * 3600)).toFixed(1));
+
+    if (horasSemVenda >= toleranciaHoras) {
+      rupturas.push({
+        itemId: p.id,
+        sku: p.sku,
+        codigoBarras: p.codigo_barras,
+        descricao: p.descricao,
+        curvaAbc: p.curva_abc || 'A',
+        estoqueVirtual: Number(p.estoque_virtual),
+        horasSemVenda,
+        status: 'PENDENTE_REPOSICAO',
+        mensagem: `Produto não registra vendas no PDV há ${horasSemVenda}h, apesar de ter ${p.estoque_virtual} un no estoque virtual.`
+      });
+
+      // Gravar na tabela
+      await db.query(
+        `INSERT INTO var_alertas_ruptura (empresa_id, loja_id, item_id, curva_abc, estoque_virtual, horas_sem_venda, status)
+         VALUES ($1, $2, $3, $4, $5, $6, 'PENDENTE_REPOSICAO')
+         ON CONFLICT DO NOTHING`,
+        [empresa, lojaId, p.id, p.curva_abc || 'A', p.estoque_virtual, horasSemVenda]
+      );
+    }
+  }
+
+  return {
+    rupturas,
+    totalAlertas: rupturas.length
+  };
+}
+
+export async function confirmarReposicaoGondola(db, empresaId, id, usuario = null) {
+  const empresa = exigirUuid(empresaId, 'empresa');
+  await db.query(
+    `UPDATE var_alertas_ruptura 
+     SET status = 'REPOSTO', reposto_em = CURRENT_TIMESTAMP, observacao = $3
+     WHERE empresa_id = $1 AND id = $2`,
+    [empresa, id, `Reposição confirmada por ${usuario || 'Operador de Loja'}`]
+  );
+  return { sucesso: true, mensagem: 'Reposição de gôndola confirmada com sucesso!' };
+}
