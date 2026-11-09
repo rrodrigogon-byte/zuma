@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '../../../lib/api'
 import { useToast } from '../../../hooks/useToast'
 import { useAuth } from '../../../lib/auth'
@@ -269,7 +269,21 @@ export default function FinanceiroRazao({ abaInicial = 'geral' }) {
     </section>}
 
     {aba === 'dre' && <section className="dadm-card">
-      <h2>Demonstrativo de resultado (por competência)</h2>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10, marginBottom: 14 }}>
+        <div>
+          <h2 style={{ margin: 0 }}>Demonstrativo de resultado (por competência)</h2>
+          <p className="dadm-muted" style={{ margin: '4px 0 0', fontSize: 13 }}>
+            Apuração contábil por competência sobre o razão único da empresa.
+          </p>
+        </div>
+        <a
+          href={`/admin/dre?empresa=${empresaAtiva?.id || ''}`}
+          className="c360-btn primary"
+          style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 6, fontWeight: 800, background: '#16a34a', borderColor: '#16a34a', color: '#fff', padding: '8px 16px' }}
+        >
+          🚀 Abrir DRE Avançada (EBITDA, Matriz Anual e Margens) →
+        </a>
+      </div>
       <div className="dadm-filters">
         <label className="dadm-muted">De <input className="c360-input" type="date" value={periodo.de} onChange={(e) => setPeriodo({ ...periodo, de: e.target.value })} /></label>
         <label className="dadm-muted">Até <input className="c360-input" type="date" value={periodo.ate} onChange={(e) => setPeriodo({ ...periodo, ate: e.target.value })} /></label>

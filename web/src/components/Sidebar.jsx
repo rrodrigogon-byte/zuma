@@ -77,6 +77,7 @@ const NAV_ADMIN_GROUPS = [
       { to: '/admin/bi',        icon: '📉', label: 'BI & Analytics' },
       { to: '/admin/relatorios-operacionais',icon: '📄', label: 'Relatórios Operacionais' },
       { to: '/admin/financeiro',icon: '💰', label: 'Financeiro' },
+      { to: '/admin/dre', icon: '📈', label: 'DRE Contábil & Gerencial' },
       { to: '/admin/whatsapp', icon: '💬', label: 'WhatsApp da empresa' },
       { to: '/admin/whatsapp-gestao', icon: '▣', label: 'WhatsApp Gestão' },
       { to: '/admin/whatsapp-lancamentos', icon: '🧾', label: 'WhatsApp Lançamentos' },
@@ -122,6 +123,7 @@ const NAV_ADMIN_GROUPS = [
     label: 'ERP Comercial',
     items: [
       { to: '/admin/erp',           icon: '🏢', label: 'Hub ERP' },
+      { to: '/admin/dre',           icon: '📈', label: 'DRE & Margens' },
       { to: '/admin/propostas',     icon: '📜', label: 'Propostas Comerciais' },
       { to: '/admin/ordens-servico', icon: '🛠️', label: 'Ordens de Serviço (OS)' },
       { to: '/admin/expedicao',     icon: '🚚', label: 'Expedição & Logística' },

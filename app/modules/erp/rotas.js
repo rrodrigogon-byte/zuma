@@ -4,6 +4,7 @@
 // ============================================================================
 import express from 'express';
 import * as svc from './servico.js';
+import * as dreSvc from './dre-servico.js';
 import { responderErro } from '../acesso/banco.js';
 
 export function createErpAdminRouter({ db, escopoDaRequisicao }) {
@@ -95,6 +96,70 @@ export function createErpAdminRouter({ db, escopoDaRequisicao }) {
   router.put('/ativos/:id', rota('catalog.write', ({ req, empresaId }) => svc.salvarAtivo(db, empresaId, { ...(req.body || {}), id: req.params.id })));
 
   router.post('/ativos/:id/manutencao', rota('catalog.write', ({ req, empresaId }) => svc.registrarManutencaoAtivo(db, empresaId, req.params.id, req.body || {})));
+
+
+  // ── DRE CONTÁBIL E GERENCIAL AVANÇADA ───────────────────────────────────
+  router.get(/dre, rota(reports.read, ({ req, empresaId, lojaRestrita }) => dreSvc.calcularDreCompleta(db, empresaId, {
+    de: req.query.de,
+    ate: req.query.ate,
+    mes: req.query.mes,
+    ano: req.query.ano,
+    regime: req.query.regime || competencia,
+    lojaId: req.query.lojaId || lojaRestrita,
+    centroCustoId: req.query.centroCustoId
+  })));
+
+  router.get(/dre/anual, rota(reports.read, ({ req, empresaId, lojaRestrita }) => dreSvc.calcularDreAnual12Meses(db, empresaId, {
+    ano: req.query.ano,
+    regime: req.query.regime || competencia,
+    lojaId: req.query.lojaId || lojaRestrita
+  })));
+
+  router.get(/dre/exportar-csv, rota(reports.read, async ({ req, empresaId, lojaRestrita }) => {
+    const dre = await dreSvc.calcularDreCompleta(db, empresaId, {
+      de: req.query.de,
+      ate: req.query.ate,
+      mes: req.query.mes,
+      ano: req.query.ano,
+      regime: req.query.regime || competencia,
+      lojaId: req.query.lojaId || lojaRestrita,
+      centroCustoId: req.query.centroCustoId
+    });
+
+    const linhasCsv = [
+      "\uFEFFCódigo;Descrição Contábil;Valor (R$);Análise Vertical (%)",
+    ];
+
+    for (const l of dre.linhas) {
+      linhasCsv.push(`"${l.codigo}";"${l.descricao}";"${Number(l.valor || 0).toFixed(2).replace(".", ",")}";"${Number(l.av || 0).toFixed(1).replace(".", ",")}%"`);
+      if (Array.isArray(l.filhos)) {
+        for (const f of l.filhos) {
+          linhasCsv.push(`"  ${f.codigo}";"  ${f.descricao}";"${Number(f.valor || 0).toFixed(2).replace(".", ",")}";"${Number(f.av || 0).toFixed(1).replace(".", ",")}%"`);
+          if (Array.isArray(f.detalhe)) {
+            for (const d of f.detalhe) {
+              linhasCsv.push(`"    -";"    ${d.categoria}";"${Number(d.valor || 0).toFixed(2).replace(".", ",")}";"-"`);
+            }
+          }
+        }
+      }
+    }
+
+    linhasCsv.push("");
+    linhasCsv.push(`"RESUMO";"Receita Bruta";"${dre.resumo.receitaBruta.toFixed(2).replace(".", ",")}";"100,0%"`);
+    linhasCsv.push(`"RESUMO";"Receita Líquida (ROL)";"${dre.resumo.receitaLiquida.toFixed(2).replace(".", ",")}";"${((dre.resumo.receitaLiquida / (dre.resumo.receitaBruta || 1)) * 100).toFixed(1).replace(".", ",")}%"`);
+    linhasCsv.push(`"RESUMO";"Lucro Bruto";"${dre.resumo.lucroBruto.toFixed(2).replace(".", ",")}";"${dre.resumo.margemBrutaPct.toFixed(1).replace(".", ",")}%"`);
+    linhasCsv.push(`"RESUMO";"EBITDA Operacional";"${dre.resumo.ebitda.toFixed(2).replace(".", ",")}";"${dre.resumo.margemEbitdaPct.toFixed(1).replace(".", ",")}%"`);
+    linhasCsv.push(`"RESUMO";"Resultado Líquido";"${dre.resumo.resultadoLiquido.toFixed(2).replace(".", ",")}";"${dre.resumo.margemLiquidaPct.toFixed(1).replace(".", ",")}%"`);
+    linhasCsv.push(`"RESUMO";"Ponto de Equilíbrio";"${dre.resumo.pontoEquilibrio.toFixed(2).replace(".", ",")}";"-"`);
+
+    const conteudo = linhasCsv.join("\r\n");
+    return {
+      ok: true,
+      nomeArquivo: `DRE_${dre.periodo.mes || dre.periodo.ano || "Periodo"}_${dre.periodo.regime}.csv`,
+      conteudoBase64: Buffer.from(conteudo, "utf8").toString("base64"),
+      csvText: conteudo
+    };
+  }));
 
   return router;
 }

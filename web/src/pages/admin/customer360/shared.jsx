@@ -1,4 +1,4 @@
-import { useRef } from 'react'
+import React, { useRef } from 'react'
 import useDialogFocus from '../../../components/store/useDialogFocus'
 
 export const API = '/api/admin/barbearia/clientes-360'

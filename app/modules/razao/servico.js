@@ -691,7 +691,16 @@ export async function dre(db, empresaId, { de, ate, lojaId = null, centroCustoId
     `SELECT CASE WHEN o.tipo = 'receita' THEN 'despesa' ELSE COALESCE(o.tipo, l.tipo) END AS tipo,
             CASE WHEN o.tipo = 'receita' THEN l.categoria ELSE COALESCE(o.categoria, l.categoria) END AS categoria,
             CASE WHEN o.tipo = 'receita' THEN 'deducao'
-                 ELSE COALESCE(c.grupo_dre, CASE WHEN COALESCE(o.tipo, l.tipo) = 'receita' THEN 'receita_bruta' ELSE 'outros' END) END AS grupo,
+                 ELSE COALESCE(c.grupo_dre,
+                   CASE
+                     WHEN COALESCE(o.tipo, l.tipo) = 'receita' THEN 'receita_bruta'
+                     WHEN LOWER(COALESCE(o.categoria, l.categoria)) LIKE '%fornecedor%' OR LOWER(COALESCE(o.categoria, l.categoria)) LIKE '%compra%' OR LOWER(COALESCE(o.categoria, l.categoria)) LIKE '%mercadoria%' OR LOWER(COALESCE(o.categoria, l.categoria)) LIKE '%insumo%' OR LOWER(COALESCE(o.categoria, l.categoria)) LIKE '%cmv%' THEN 'cmv'
+                     WHEN LOWER(COALESCE(o.categoria, l.categoria)) LIKE '%comiss%' OR LOWER(COALESCE(o.categoria, l.categoria)) LIKE '%salario%' OR LOWER(COALESCE(o.categoria, l.categoria)) LIKE '%folha%' OR LOWER(COALESCE(o.categoria, l.categoria)) LIKE '%pessoal%' OR LOWER(COALESCE(o.categoria, l.categoria)) LIKE '%barbeiro%' THEN 'pessoal'
+                     WHEN LOWER(COALESCE(o.categoria, l.categoria)) LIKE '%taxa%' OR LOWER(COALESCE(o.categoria, l.categoria)) LIKE '%cartao%' OR LOWER(COALESCE(o.categoria, l.categoria)) LIKE '%cartão%' OR LOWER(COALESCE(o.categoria, l.categoria)) LIKE '%maquin%' OR LOWER(COALESCE(o.categoria, l.categoria)) LIKE '%desconto%' OR LOWER(COALESCE(o.categoria, l.categoria)) LIKE '%estorno%' THEN 'deducao'
+                     WHEN LOWER(COALESCE(o.categoria, l.categoria)) LIKE '%imposto%' OR LOWER(COALESCE(o.categoria, l.categoria)) LIKE '%tribut%' OR LOWER(COALESCE(o.categoria, l.categoria)) LIKE '%simples%' OR LOWER(COALESCE(o.categoria, l.categoria)) LIKE '%icms%' OR LOWER(COALESCE(o.categoria, l.categoria)) LIKE '%iss%' THEN 'impostos'
+                     WHEN LOWER(COALESCE(o.categoria, l.categoria)) LIKE '%juros%' OR LOWER(COALESCE(o.categoria, l.categoria)) LIKE '%tarifa%' OR LOWER(COALESCE(o.categoria, l.categoria)) LIKE '%bancaria%' OR LOWER(COALESCE(o.categoria, l.categoria)) LIKE '%bancária%' THEN 'financeiro'
+                     ELSE 'operacional'
+                   END) END AS grupo,
             SUM(CASE WHEN o.tipo = 'despesa' THEN -l.valor ELSE l.valor END * ${fator}) AS total
        FROM fin_lancamentos l
        LEFT JOIN fin_lancamentos o ON o.empresa_id = l.empresa_id AND o.id = l.estorno_de${juncaoRateio}

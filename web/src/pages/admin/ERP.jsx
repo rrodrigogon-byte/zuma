@@ -45,6 +45,7 @@ const GRUPOS_ERP = [
     items: [
       { icon: '🧾', label: 'Central de Notas Fiscais', desc: 'Emissão e consulta SEFAZ de NFC-e, NF-e e NFS-e com DANFE oficial', href: '/admin/notas' },
       { icon: '💰', label: 'Razão Financeiro', desc: 'Contas a pagar/receber, conciliação bancária OFX e fluxo de caixa', href: '/admin/financeiro' },
+      { icon: '📊', label: 'DRE Completa & Gerencial', desc: 'Demonstração do Resultado com EBITDA, margens, análise vertical e comparativo anual', href: '/admin/dre' },
       { icon: '⚙️', label: 'Configurações Fiscais', desc: 'Certificado A1, SEFAZ-MT, credenciamento CSC e alíquotas IBS/CBS', href: '/admin/fiscal/config' },
       { icon: '🏷️', label: 'Classificação Fiscal & NCM', desc: 'Auditoria tributária de itens, NCM, CFOP e regras de impostos', href: '/admin/fiscal/classificacao' },
       { icon: '📈', label: 'BI & Relatórios', desc: 'Curva ABC de vendas, ticket médio e dashboards executivos', href: '/admin/bi' }
