@@ -118,10 +118,19 @@ export default function BarbeariaComandasAbertas({ profissionais = [], onOpen, o
         <div className="comandas-caixa-card-head"><strong>{c.clienteNome || 'Nome não informado'}</strong><span>{statusNome[c.status]}</span></div>
         {c.clienteNomePendente && <small>Confira o nome no cadastro do cliente.</small>}
         <p>{nomeProfissional(c)} · {c.agendamentoId ? 'Vinculada à agenda' : 'Venda avulsa'}</p>
-        <small>Aberta em {c.criadoEm ? fmtDate(c.criadoEm) : 'data não informada'} · {c.id}</small>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', margin: '4px 0' }}>
+          <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--accent, #1d4ed8)', background: '#eff6ff', padding: '2px 8px', borderRadius: 6 }}>
+            📅 {c.dataAtendimento ? new Date(c.dataAtendimento + 'T12:00:00').toLocaleDateString('pt-BR') : (c.criadoEm ? fmtDate(c.criadoEm) : 'Data não informada')}
+          </span>
+          <small style={{ color: 'var(--muted, #64748b)' }}>· {c.id}</small>
+        </div>
         <ul>{(c.itens || []).slice(0,3).map((item,i) => <li key={item.id || i}>{item.quantidade} × {item.nome}</li>)}</ul>{c.itens?.length > 3 && <small>+ {c.itens.length - 3} item(ns)</small>}
         <dl><div><dt>Total</dt><dd>{fmtR(c.total)}</dd></div><div><dt>Recebido</dt><dd>{fmtR(c.totalPago)}</dd></div><div><dt>Saldo a receber</dt><dd>{fmtR(c.saldoPendente)}</dd></div></dl>
-        <button type="button" disabled={loading} onClick={() => onOpen(c)}>Conferir comanda e receber</button>
+        <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+          <button type="button" style={{ flex: 1 }} disabled={loading} onClick={() => onOpen(c)}>
+            {['paga', 'em_conta'].includes(c.status) ? '🔍 Ver comanda / Estornar' : 'Conferir comanda e receber'}
+          </button>
+        </div>
       </article>)}</div>
     </>}
     <p className="comandas-caixa-nota">Abrir a comanda não registra pagamento. O recebimento exige conferência e confirmação no caixa.</p>

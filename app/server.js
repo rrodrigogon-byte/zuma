@@ -519,6 +519,10 @@ async function senhaConfere(senha, hash){
 }
 
 async function autorizarComSenhaGerente(req, senhaInformada, usuarioInformado = null) {
+  // 0. Se o usuário logado na requisição já possui perfil gestor da empresa (admin, organizador, gerente)
+  if (req?.user && ['admin', 'gerente', 'administrador', 'organizador', 'mestre'].includes(String(req.user.role || '').toLowerCase())) {
+    return { ok: true, usuario: req.user };
+  }
   if (!senhaInformada || typeof senhaInformada !== 'string') {
     return { ok: false, erro: 'Senha de gerente não informada. Esta operação exige autorização de gerente.' };
   }

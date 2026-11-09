@@ -2579,6 +2579,8 @@ export function criarComandaBarbearia(empresaId, dados = {}) {
   if (profissionalId && (!estado.profissionais[profissionalId] || estado.profissionais[profissionalId].ativo === false)) throw new Error('Profissional responsável não encontrado ou inativo.');
   const agora = dataAtual();
   const id = novoId('cmdbar', estado.comandas);
+  const dataAtend = texto(dados.dataAtendimento ?? dados.data_atendimento ?? dados.data ?? agendamento?.dataAgenda ?? agendamento?.dataHora, 30) || null;
+  const criadoEmEfetivo = dados.criadoEm || (dataAtend ? `${String(dataAtend).slice(0, 10)}T${agora.slice(11)}` : agora);
   const comanda = {
     id,
     empresaId: String(empresaId),
@@ -2587,7 +2589,7 @@ export function criarComandaBarbearia(empresaId, dados = {}) {
     clienteNome: texto(dados.clienteNome ?? dados.cliente_nome ?? agendamento?.clienteNome, 160),
     clienteTelefone: texto(dados.clienteTelefone ?? dados.cliente_telefone ?? agendamento?.clienteTelefone, 30),
     agendamentoId: agendamento?.id || null,
-    dataAtendimento: texto(dados.dataAtendimento ?? dados.data_atendimento ?? agendamento?.dataAgenda ?? agendamento?.dataHora, 30) || null,
+    dataAtendimento: dataAtend,
     profissionalId,
     status: 'aberta',
     itens: [],
@@ -2610,7 +2612,7 @@ export function criarComandaBarbearia(empresaId, dados = {}) {
     lancamentosEquipe: Array.isArray(dados.lancamentosEquipe) ? dados.lancamentosEquipe.slice(0, 1).map(o => ({ chave: String(o.chave), hash: String(o.hash) })) : [],
     observacoes: texto(dados.observacoes ?? dados.observacao, 600),
     criadoPor: texto(dados.usuario, 120),
-    criadoEm: agora,
+    criadoEm: criadoEmEfetivo,
     atualizadoEm: agora,
     fechadaEm: null,
   };
@@ -2648,6 +2650,16 @@ export function atualizarComandaBarbearia(empresaId, comandaId, dados = {}) {
     if (dados.descontoMotivo !== undefined || dados.desconto_motivo !== undefined) comanda.descontoMotivo = texto(dados.descontoMotivo ?? dados.desconto_motivo, 240);
     if (dados.gorjeta !== undefined) comanda.gorjeta = gorjetaNova;
     if (dados.observacoes !== undefined || dados.observacao !== undefined) comanda.observacoes = texto(dados.observacoes ?? dados.observacao, 600);
+    // Atualização da data exata informada da comanda
+    if (dados.dataAtendimento || dados.data_atendimento || dados.data) {
+      const novaData = texto(dados.dataAtendimento ?? dados.data_atendimento ?? dados.data, 30);
+      comanda.dataAtendimento = novaData;
+      if (novaData && String(novaData).length >= 10) {
+        const diaStr = String(novaData).slice(0, 10);
+        const horaStr = comanda.criadoEm ? String(comanda.criadoEm).slice(11) : '12:00:00.000Z';
+        comanda.criadoEm = `${diaStr}T${horaStr}`;
+      }
+    }
     sincronizarReservasOperacao(empresaId, comanda, estado, { origem: 'comanda_barbearia', expiresAt: comanda.reservaEstoqueExpiresAt });
     comanda.atualizadoEm = dataAtual();
     save();
@@ -3074,7 +3086,8 @@ export function registrarPagamentoComandaBarbearia(empresaId, comandaId, dados =
       if (!caixa || caixa.status !== 'aberto' || (lojaIdOperacao && caixa.lojaId !== lojaIdOperacao)) throw new Error('O caixa informado não está aberto ou não pertence à unidade ativa.');
     }
     const bandeira = texto(item?.bandeira ?? item?.cardBrand, 50) || null;
-    const dataReg = dados.data ? `${String(dados.data).slice(0, 10)}T12:00:00.000Z` : dataAtual();
+    const dataAlvo = item?.data || dados.data || dados.dataOperacao || dados.dataPagamento || (comanda.dataAtendimento ? String(comanda.dataAtendimento).slice(0, 10) : null);
+    const dataReg = dataAlvo ? `${String(dataAlvo).slice(0, 10)}T12:00:00.000Z` : dataAtual();
     return { id: texto(item?.id, 120) || `pagbar-${crypto.randomUUID()}`, meio, bandeira, valor, caixaId, ...(meio === 'dinheiro' && !caixaId ? { semCaixa: true } : {}), chaveIdempotencia: texto(item?.chaveIdempotencia ?? item?.chave_idempotencia ?? chaveIdempotencia, 220) || null, registradoEm: dataReg };
   });
   const valorNovo = Number(pagamentos.reduce((soma, item) => soma + item.valor, 0).toFixed(2));
@@ -3112,12 +3125,13 @@ export function registrarPagamentoComandaBarbearia(empresaId, comandaId, dados =
       conta = clientesKytto.criarContaReceber(empresaId, { clienteId: cliente.id, descricao: `Comanda de barbearia ${comanda.id}`, valor: pagamento.valor, dataVencimento: dados.dataVencimento || undefined, observacao: 'Pagamento em conta gerado pela comanda da Barbearia.' });
       contasReceber.push(conta);
     }
+    const dataOpEfetiva = String(pagamento.registradoEm).slice(0, 10);
     const lancamento = financeiroKytto.registrarLancamento(empresaId, {
       tipo: 'receita', categoria: pagamento.meio === 'conta' ? 'Contas a receber' : 'Barbearia',
       descricao: `Comanda de barbearia ${comanda.id} — ${comanda.clienteNome || 'Atendimento'} (${pagamento.meio})`,
       valor: pagamento.valor, origem: 'barbearia_comanda', status: pagamento.meio === 'conta' ? 'pendente' : 'pago',
-      vencimento: pagamento.meio === 'conta' ? conta?.dataVencimento : (dados.data || dataAtual()), dataOperacao: (dados.data || dataAtual()),
-      pagoEm: pagamento.meio === 'conta' ? null : (dados.data || dataAtual()), meioPagamento: pagamento.meio,
+      vencimento: pagamento.meio === 'conta' ? conta?.dataVencimento : dataOpEfetiva, dataOperacao: dataOpEfetiva,
+      pagoEm: pagamento.meio === 'conta' ? null : dataOpEfetiva, meioPagamento: pagamento.meio,
       lojaId: lojaIdOperacao,
       usuario: texto(dados.usuario, 120), automatico: true,
       chaveIdempotencia: `barbearia_comanda:${empresaId}:${comanda.id}:pagamento:${pagamento.id}`,
@@ -3133,6 +3147,7 @@ export function registrarPagamentoComandaBarbearia(empresaId, comandaId, dados =
         descricao: `Recebimento em dinheiro da comanda ${comanda.id}`,
         referencia: comanda.id,
         usuario: texto(dados.usuario, 120),
+        dataOperacao: pagamento.registradoEm,
         chaveIdempotencia: `barbearia_comanda:${empresaId}:${comanda.id}:caixa_recebimento:${pagamento.id}`,
       });
       pagamento.caixaMovimentoId = recebimento.id;
@@ -3172,7 +3187,15 @@ export function registrarPagamentoComandaBarbearia(empresaId, comandaId, dados =
   }
   if (faturada && !reservaComitada.committed) aplicarConsumoInternoComanda(estado, comanda, consumoPlanejado);
   comanda.atualizadoEm = dataAtual();
-  if (faturada) comanda.fechadaEm = dados.data ? `${String(dados.data).slice(0, 10)}T12:00:00.000Z` : comanda.atualizadoEm;
+  if (faturada) {
+    const dataFechEfetiva = dados.data || dados.dataOperacao || dados.dataPagamento || (comanda.dataAtendimento ? String(comanda.dataAtendimento).slice(0, 10) : null);
+    comanda.fechadaEm = dataFechEfetiva ? `${String(dataFechEfetiva).slice(0, 10)}T12:00:00.000Z` : comanda.atualizadoEm;
+    if (dataFechEfetiva) {
+      comanda.dataAtendimento = String(dataFechEfetiva).slice(0, 10);
+      const horaCriacao = comanda.criadoEm ? String(comanda.criadoEm).slice(11) : '12:00:00.000Z';
+      comanda.criadoEm = `${comanda.dataAtendimento}T${horaCriacao}`;
+    }
+  }
   if (faturada && !possuiConta && clienteId && comanda.totalPago > Number(comanda.fidelidadeValorPontuado || 0)) {
     const valorElegivel = Number((comanda.totalPago - Number(comanda.fidelidadeValorPontuado || 0)).toFixed(2));
     const credito = canaisFidelidadeKytto.creditarFidelidade(empresaId, clienteId, valorElegivel, 'barbearia_comanda', {
@@ -3388,7 +3411,13 @@ export function fecharComandaSemSaldoBarbearia(empresaId, comandaId, dados = {})
     comanda.fechadaPeloPlano = true;
     comanda.fechadaPor = texto(dados.usuario, 120) || null;
     comanda.atualizadoEm = dataAtual();
-    comanda.fechadaEm = comanda.atualizadoEm;
+    const dataFechSemSaldo = dados.data || dados.dataOperacao || (comanda.dataAtendimento ? String(comanda.dataAtendimento).slice(0, 10) : null);
+    comanda.fechadaEm = dataFechSemSaldo ? `${String(dataFechSemSaldo).slice(0, 10)}T12:00:00.000Z` : comanda.atualizadoEm;
+    if (dataFechSemSaldo) {
+      comanda.dataAtendimento = String(dataFechSemSaldo).slice(0, 10);
+      const horaCriacao = comanda.criadoEm ? String(comanda.criadoEm).slice(11) : '12:00:00.000Z';
+      comanda.criadoEm = `${comanda.dataAtendimento}T${horaCriacao}`;
+    }
     save();
     try {
       kyttoEventBus.emitir('comanda.fechada', {

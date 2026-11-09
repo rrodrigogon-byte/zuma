@@ -459,7 +459,8 @@ export function usePlanosDoCliente(clienteId) {
 }
 
 /** Tela completa de abertura da comanda. */
-export default function ComandaNova({ clientes, profissionais, servicos, produtosRevenda, catalogoPlanos = [], agendamentos = [], agendamentoId = '', clienteInicial = '', nomeInicial = '', telefoneInicial = '', profissionalInicial = '', servicoInicialId = '', observacoesIniciais = '', onCancelar, onCriada, toast }) {
+export default function ComandaNova({ clientes, profissionais, servicos, produtosRevenda, catalogoPlanos = [], agendamentos = [], agendamentoId = '', clienteInicial = '', nomeInicial = '', telefoneInicial = '', profissionalInicial = '', servicoInicialId = '', observacoesIniciais = '', dataInicial = '', onCancelar, onCriada, toast }) {
+  const [dataComanda, setDataComanda] = useState(() => dataInicial || new Date().toISOString().slice(0, 10));
   const [clienteId, setClienteId] = useState(clienteInicial)
   const [nomeEventual, setNomeEventual] = useState(clienteInicial ? '' : nomeInicial)
   const [telefoneEventual, setTelefoneEventual] = useState(clienteInicial ? '' : telefoneInicial)
@@ -534,7 +535,10 @@ export default function ComandaNova({ clientes, profissionais, servicos, produto
     try {
       const resposta = await api.post('/api/admin/barbearia/comandas', {
         clienteId: cliente?.id || '', clienteNome: cliente?.nome || nomeEventual, clienteTelefone: cliente?.telefone || telefoneEventual,
-        profissionalId, agendamentoId, gorjeta: Number(extras.gorjeta || 0), desconto: Number(extras.desconto || 0), descontoMotivo: extras.descontoMotivo, observacoes: extras.observacoes,
+        profissionalId, agendamentoId,
+        dataAtendimento: dataComanda,
+        data: dataComanda,
+        gorjeta: Number(extras.gorjeta || 0), desconto: Number(extras.desconto || 0), descontoMotivo: extras.descontoMotivo, observacoes: extras.observacoes,
         itens: itensParaApi(carrinho, profissionalId),
       })
       await onCriada?.(resposta?.comanda, resposta?.avisos || [])
@@ -550,6 +554,15 @@ export default function ComandaNova({ clientes, profissionais, servicos, produto
       {carrinho.length > 0 && <div className="cn-acoes" style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '-10px' }}><button type="button" className="cn-botao" disabled={salvando} onClick={salvar} style={{ background: 'var(--accent)', color: '#fff' }}>{salvando ? 'Salvando...' : 'Conferir comanda e receber'}</button></div>}
       <div className="cn-aviso"><strong>Fluxo seguro</strong><span>Abrir a comanda não recebe pagamento nem baixa estoque. Serviços do plano do cliente entram abatidos; o uso do plano só é registrado no fechamento.</span></div>
       <div className="cn-topo">
+        <label className="cn-campo" style={{ minWidth: 160 }}>
+          <span style={{ fontWeight: 700, color: 'var(--accent, #1d4ed8)' }}>📅 Data da Comanda</span>
+          <input
+            type="date"
+            value={dataComanda}
+            onChange={(e) => setDataComanda(e.target.value)}
+            style={{ padding: '8px 10px', borderRadius: 8, border: '1px solid var(--line, #cbd5e1)', fontSize: 14, fontWeight: 700, background: 'var(--bg, #fff)', color: 'var(--fg, #0f172a)' }}
+          />
+        </label>
         {/* div (e não label): um label repassaria o clique para o botão "Trocar" e desfaria a escolha. */}
         <div className="cn-campo" role="group" aria-labelledby="cn-rotulo-cliente"><span id="cn-rotulo-cliente">Cliente</span>
           <BuscaCliente clientes={clientes} clienteId={clienteId} nomeEventual={nomeEventual} onSelecionar={(c) => { setClienteId(c?.id || ''); setNomeEventual('') }} onNomeEventual={(nome) => { setClienteId(''); setNomeEventual(nome) }} />

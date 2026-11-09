@@ -732,6 +732,7 @@ export default function BarbeariaERP({ tabInicial } = {}) {
   const [modal, setModal] = useState(null);
   const [modalItemValor, setModalItemValor] = useState(null);
   const [modalReabrir, setModalReabrir] = useState(null);
+  const [modalCancelamentoComanda, setModalCancelamentoComanda] = useState(null);
   const [fechamentoDetalhado, setFechamentoDetalhado] = useState(null);
 
   // Id do cadastro em edição nos modais de serviço, plano e produto (null = novo cadastro).
@@ -1695,11 +1696,14 @@ export default function BarbeariaERP({ tabInicial } = {}) {
         `/api/admin/barbearia/comandas/${comanda.id}`,
       );
       const atual = resposta?.comanda || resposta;
+      const dataSugerida = (atual?.dataAtendimento ? String(atual.dataAtendimento).slice(0, 10) : null) || (atual?.criadoEm ? String(atual.criadoEm).slice(0, 10) : null) || dataSelecionada || hojeLocal;
       setFormPagamentoComanda({
         meioPagamento: "pix",
         valor: String(atual?.saldoPendente || atual?.total || ""),
         clienteId: atual?.clienteId || "",
-        caixaId: "",
+        caixaId: (operacao?.caixas || dashboard?.caixa?.caixas || []).find(c => c.status === "aberto")?.id || "",
+        dataPagamento: dataSugerida,
+        bandeira: "",
       });
       setFormComanda((formAtual) => ({
         ...formAtual,
@@ -1708,6 +1712,7 @@ export default function BarbeariaERP({ tabInicial } = {}) {
         clienteTelefone: atual?.clienteTelefone || "",
         profissionalId: atual?.profissionalId || "",
         agendamentoId: atual?.agendamentoId || "",
+        dataAtendimento: dataSugerida,
         gorjeta: String(atual?.gorjeta || ""),
         desconto: String(atual?.desconto || ""),
         descontoMotivo: atual?.descontoMotivo || "",
@@ -1734,12 +1739,15 @@ export default function BarbeariaERP({ tabInicial } = {}) {
       toast("Selecione ao menos um serviço ou produto.", "error");
       return;
     }
+    const dataComandaEfetiva = formComanda.dataAtendimento || dataSelecionada || hojeLocal;
     const payload = {
       clienteId: formComanda.clienteId,
       clienteNome: cliente?.nome || formComanda.clienteNome,
       clienteTelefone: cliente?.telefone || formComanda.clienteTelefone,
       profissionalId: formComanda.profissionalId,
       agendamentoId: formComanda.agendamentoId,
+      dataAtendimento: dataComandaEfetiva,
+      data: dataComandaEfetiva,
       gorjeta: Number(formComanda.gorjeta || 0),
       desconto: Number(formComanda.desconto || 0),
       descontoMotivo: formComanda.descontoMotivo,
@@ -1801,8 +1809,10 @@ export default function BarbeariaERP({ tabInicial } = {}) {
           desconto: Number(formComanda.desconto || 0),
           descontoMotivo: formComanda.descontoMotivo,
           observacoes: formComanda.observacoes,
+          dataAtendimento: formComanda.dataAtendimento,
+          data: formComanda.dataAtendimento,
         }),
-      "Comanda atualizada.",
+      "Comanda e data atualizadas.",
     );
   }
 
@@ -9198,6 +9208,7 @@ export default function BarbeariaERP({ tabInicial } = {}) {
             profissionalInicial={formComanda.profissionalId}
             servicoInicialId={formComanda.itemId}
             observacoesIniciais={formComanda.observacoes}
+            dataInicial={formComanda.dataAtendimento || dataSelecionada || hojeLocal}
             toast={toast}
             onCancelar={() => setModal(null)}
             onCriada={async (comanda, avisos) => {
@@ -9634,6 +9645,19 @@ export default function BarbeariaERP({ tabInicial } = {}) {
                 style={{ display: "grid", gap: 12 }}
               >
                 <div style={styles.formGrid}>
+                  <Field label="📅 Data da Comanda (Atendimento)" hint="Permite alterar a data exata desta comanda">
+                    <input
+                      type="date"
+                      value={formComanda.dataAtendimento || ''}
+                      onChange={(event) =>
+                        setFormComanda((atual) => ({
+                          ...atual,
+                          dataAtendimento: event.target.value,
+                        }))
+                      }
+                      style={inputStyle}
+                    />
+                  </Field>
                   <Field label="Gorjeta (R$)">
                     <input
                       type="number"
@@ -9777,15 +9801,56 @@ export default function BarbeariaERP({ tabInicial } = {}) {
               saldoPendente > 0 && (
                 <Card style={styles.paymentPanel}>
                   <div style={styles.sectionTitle}>
-                    <div>
-                      <h3 style={{ margin: 0 }}>Receber comanda</h3>
-                      <p style={styles.sub}>
-                        A confirmação registra o financeiro idempotente e baixa
-                        produtos uma única vez.
-                      </p>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', width: '100%', flexWrap: 'wrap', gap: 10 }}>
+                      <div>
+                        <h3 style={{ margin: 0 }}>Receber comanda</h3>
+                        <p style={styles.sub}>
+                          A confirmação registra o financeiro idempotente e o caixa na data exata selecionada.
+                        </p>
+                      </div>
+                      {clienteCredito && (
+                        <div style={{ padding: '6px 14px', background: saldoDevedor > 0 ? 'rgba(239, 68, 68, 0.08)' : 'rgba(16, 185, 129, 0.08)', border: `1px solid ${saldoDevedor > 0 ? '#ef4444' : '#10b981'}`, borderRadius: 8, textAlign: 'right' }}>
+                          <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)' }}>Saldo do Cliente</div>
+                          <strong style={{ fontSize: 16, color: saldoDevedor > 0 ? '#ef4444' : '#10b981' }}>
+                            {saldoDevedor > 0 ? `-${moeda(saldoDevedor)}` : `+${moeda(creditoDisponivel)}`}
+                          </strong>
+                        </div>
+                      )}
                     </div>
                   </div>
                   <div style={styles.formGrid}>
+                    <Field label="📅 Data do Fechamento (Exata)" hint="Data oficial registrada no caixa e financeiro">
+                      <input
+                        type="date"
+                        value={formPagamentoComanda.dataPagamento || formComanda.dataAtendimento || dataSelecionada || hojeLocal}
+                        onChange={(event) =>
+                          setFormPagamentoComanda((atual) => ({
+                            ...atual,
+                            dataPagamento: event.target.value,
+                          }))
+                        }
+                        style={inputStyle}
+                      />
+                    </Field>
+                    <Field label="🏦 Caixa Responsável" hint="Turno/caixa de fechamento do dia">
+                      <select
+                        value={formPagamentoComanda.caixaId || ''}
+                        onChange={(event) =>
+                          setFormPagamentoComanda((atual) => ({
+                            ...atual,
+                            caixaId: event.target.value,
+                          }))
+                        }
+                        style={inputStyle}
+                      >
+                        <option value="">(Caixa padrão aberto / Automático)</option>
+                        {(operacao?.caixas || dashboard?.caixa?.caixas || []).map((caixa) => (
+                          <option key={caixa.id} value={caixa.id}>
+                            Caixa {caixa.numeroCaixa}{caixa.nomeCaixa ? ` · ${caixa.nomeCaixa}` : ''} ({caixa.status === 'aberto' ? '🟢 Aberto' : 'Fechado'}{caixa.criadoEm ? ` - ${new Date(caixa.criadoEm).toLocaleDateString('pt-BR')}` : ''})
+                          </option>
+                        ))}
+                      </select>
+                    </Field>
                     <Field label="Meio de pagamento">
                       <select
                         value={formPagamentoComanda.meioPagamento}
@@ -10150,21 +10215,12 @@ export default function BarbeariaERP({ tabInicial } = {}) {
                   type="button"
                   style={{ ...styles.secondary, color: "#e05c5c", borderColor: "#e05c5c", fontWeight: 800 }}
                   disabled={salvando}
-                  onClick={async () => {
-                    const motivo = window.prompt("Procedimento de Cancelamento de Comanda Finalizada:\nInforme a justificativa do cancelamento / estorno:");
-                    if (!motivo || !motivo.trim()) return;
-                    const senhaGerente = window.prompt("🔒 TRAVA DE SEGURANÇA:\nInforme a SENHA DO GERENTE / ADMINISTRADOR para autorizar este cancelamento:");
-                    if (!senhaGerente || !senhaGerente.trim()) {
-                      toast("A senha do gerente é obrigatória para autorizar o cancelamento.", "error");
-                      return;
-                    }
-                    const reabrir = comanda.agendamentoId ? window.confirm("Deseja reabrir o horário do agendamento vinculado na agenda operacional?") : false;
-                    await cancelarComandaFinalizada(comanda, {
-                      motivo: motivo.trim(),
-                      senhaGerente: senhaGerente.trim(),
-                      reabrirAgendamento: reabrir,
-                    });
-                  }}
+                  onClick={() => setModalCancelamentoComanda({
+                    comanda,
+                    motivo: "Cancelamento manual solicitado no caixa",
+                    reabrirAgendamento: Boolean(comanda.agendamentoId),
+                    senhaGerente: "",
+                  })}
                 >
                   🚫 Cancelar e estornar comanda
                 </button>

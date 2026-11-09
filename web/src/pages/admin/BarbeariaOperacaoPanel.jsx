@@ -242,10 +242,7 @@ export default function BarbeariaOperacaoPanel({
       alert('Por favor, informe a justificativa para o cancelamento.');
       return;
     }
-    if (!cancelarSenhaGerente.trim()) {
-      alert('A senha do gerente/administrador é obrigatória para autorizar o cancelamento.');
-      return;
-    }
+    // Senha opcional para usuários já autenticados como gestores
 
     try {
       setProcessandoCancelamento(true);
@@ -1189,15 +1186,14 @@ export default function BarbeariaOperacaoPanel({
               <label style={{ display: 'grid', gap: 4 }}>
                 <span style={{ ...labelStyle, color: '#e05c5c', display: 'flex', alignItems: 'center', gap: 6 }}>
                   <span>🔒 Senha de Gerente / Administrador</span>
-                  <small style={{ color: 'var(--muted)', fontWeight: 400 }}>(Trava de autorização obrigatória)</small>
+                  <small style={{ color: 'var(--muted)', fontWeight: 400 }}>(Opcional se já estiver logado como gestor/admin)</small>
                 </span>
                 <input
                   type="password"
-                  required
                   value={cancelarSenhaGerente}
                   onChange={(e) => setCancelarSenhaGerente(e.target.value)}
                   style={{ ...inputStyle, borderColor: '#e05c5c' }}
-                  placeholder="Digite a senha de gerente..."
+                  placeholder="Senha de gerente (opcional para admin logado)..."
                   disabled={processandoCancelamento}
                 />
               </label>

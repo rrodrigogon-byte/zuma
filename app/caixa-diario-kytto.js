@@ -178,18 +178,16 @@ export function registrarRecebimento(empresaId, dados = {}) {
 // empresa/unidade. A chave é única no escopo da empresa e evita duplicação em
 // retries do coordenador de estorno.
 export function registrarEstornoRecebimento(empresaId, dados = {}) {
-  const lojaId = texto(dados.lojaId ?? dados.loja_id, 120);
-  if (!lojaId) throw new Error('lojaId é obrigatório para estornar recebimento.');
+  const store = storeEmpresa(empresaId);
   const originalId = texto(dados.movimentoOriginalId ?? dados.movimento_original_id ?? dados.recebimentoId ?? dados.recebimento_id, 180);
   if (!originalId) throw new Error('movimentoOriginalId é obrigatório para estornar recebimento.');
-  const actionId = texto(dados.actionId ?? dados.action_id, 180);
+  const original = store.movimentos[originalId];
+  const lojaId = texto(dados.lojaId ?? dados.loja_id ?? original?.lojaId, 120) || original?.lojaId || 'loja-principal';
+  const actionId = texto(dados.actionId ?? dados.action_id, 180) || `act-rev-${Date.now().toString(36)}`;
   const chave = texto(dados.idempotencyKey ?? dados.idempotency_key ?? dados.chaveIdempotencia ?? dados.chave_idempotencia ?? actionId, 220);
   if (!actionId || !chave) throw new Error('actionId e idempotencyKey são obrigatórios para estornar recebimento.');
-  const motivo = texto(dados.motivo ?? dados.reason, 300);
-  if (!motivo) throw new Error('Motivo é obrigatório para estornar recebimento.');
-  const store = storeEmpresa(empresaId);
-  const original = store.movimentos[originalId];
-  if (!original || original.empresaId !== String(empresaId) || original.tipo !== 'recebimento' || original.lojaId !== lojaId) {
+  const motivo = texto(dados.motivo ?? dados.reason, 300) || 'Estorno manual no caixa';
+  if (!original || original.empresaId !== String(empresaId) || original.tipo !== 'recebimento') {
     throw new Error('Recebimento original não encontrado na empresa/unidade ativa.');
   }
   const valor = dinheiro(dados.valor ?? original.valor);
