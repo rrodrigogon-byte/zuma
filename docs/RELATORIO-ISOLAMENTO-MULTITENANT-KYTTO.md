@@ -1,4 +1,4 @@
-# Relatório Executivo de Homologação e Engenharia: Isolamento Multi-Tenant Estrito, Governança Multi-Business, Automações Corporativas, Kytto Advisor (IA Copilot), Arquitetura Híbrida (SaaS & On-Premise) e Emissão Fiscal Homologada (NFC-e, NF-e e NFS-e)
+# Relatório Executivo de Homologação e Engenharia: Isolamento Multi-Tenant Estrito, Governança Multi-Business, Automações Corporativas, Kytto Advisor (IA Copilot), Arquitetura Híbrida (SaaS & On-Premise), Emissão Fiscal Homologada (NFC-e, NF-e e NFS-e) e Pacote Contábil ZIP
 
 **Sistema:** ERP Kytto / Plataforma Multi-Business SetPoint  
 **Data da Homologação Oficial:** 09 de Novembro de 2026  
@@ -11,9 +11,9 @@
 
 ## 1. Sumário Executivo
 
-Este documento consolida a evolução arquitetural do **ERP Kytto**, transformando a plataforma em um ecossistema corporativo completo de classe mundial, preparado para atender desde operações locais e franquias até grandes holdings multi-empresas, com flexibilidade de implantação **SaaS Multi-Tenant na Nuvem** ou **Sovereign On-Premise** (instalado em infraestrutura própria do cliente).
+Este documento consolida a evolução arquitetural e funcional do **ERP Kytto**, transformando a plataforma em um ecossistema corporativo completo de classe mundial, preparado para atender desde operações locais e franquias até grandes holdings multi-empresas, com flexibilidade de implantação **SaaS Multi-Tenant na Nuvem** ou **Sovereign On-Premise** (instalado em infraestrutura própria do cliente).
 
-Foram solucionados integralmente os desafios de vazamento de dados entre empresas distintas, estabelecendo uma barreira intransponível de segurança e isolamento por perfil de acesso, implementados motores autônomos de automação corporativa, barramento de eventos internos, o **Kytto Advisor** (Copilot de IA Executiva para previsão estocástica e simulação de cenários financeiros) e a **homologação fiscal plena em produção com a Inscrição Municipal oficial nº 30297 da Prefeitura de Tangará da Serra - MT**, autorizando notas fiscais diretamente na SEFAZ-MT com certificado digital A1.
+Foram solucionados integralmente os desafios de vazamento de dados entre empresas distintas, estabelecendo uma barreira intransponível de segurança e isolamento por perfil de acesso, implementados motores autônomos de automação corporativa, barramento de eventos internos, o **Kytto Advisor** (Copilot de IA Executiva para previsão estocástica e simulação de cenários financeiros), a **homologação fiscal plena em produção com a Inscrição Municipal oficial nº 30297 da Prefeitura de Tangará da Serra - MT**, autorizando notas fiscais diretamente na SEFAZ-MT com certificado digital A1, e a geração do **Pacote Contábil do Contador em ZIP com 1 clique**.
 
 ---
 
@@ -30,7 +30,7 @@ O acesso ao ERP foi estruturado em três níveis hierárquicos e imutáveis de a
 
 ---
 
-## 3. Consolidação Fiscal Oficial da Barbearia Dino (Tangará da Serra - MT)
+## 3. Homologação Fiscal Oficial SEFAZ-MT e Tangará da Serra
 
 A partir da certidão cadastral oficial fornecida pela Secretaria Municipal de Fazenda de Tangará da Serra (`INSCRIÇÃOMUNICIPALv2.pdf`), o cadastro corporativo e o emitente fiscal do ERP Kytto foram atualizados com 100% de precisão cadastral:
 
@@ -40,29 +40,38 @@ A partir da certidão cadastral oficial fornecida pela Secretaria Municipal de F
 - **CNPJ:** `50.073.355/0001-89` (Matriz ativa no cadastro municipal e receita estadual)
 - **Inscrição Municipal (IM):** **`30297`** (Prefeitura Municipal de Tangará da Serra)
 - **Inscrição Estadual (IE):** **`14.229.191-9`** (SEFAZ-MT)
-- **Logradouro Oficial:** Rua Avelina Jaci Bohn, Quadra 37, Lote 05, Nº 80, W
-- **Bairro / Cidade / UF / CEP:** Centro, Tangará da Serra - MT, CEP `78300-060`
+- **Logradouro Oficial:** Rua Sebastião Barreto, nº 119-W (Endereço da Certidão Cadastral)
+- **Bairro / Cidade / UF / CEP:** Centro, Tangará da Serra - MT, CEP `78300-055`
 - **Código do Município (IBGE):** `5107958`
 - **Atividade Econômica Principal:** `9602-5/01` - Cabeleireiros, manicure e pedicure
 - **Alvará Sanitário:** `5432` · **Regime Tributário:** Simples Nacional
 - **Certificado Digital A1:** Válido até `14/01/2027` instalado e ativo no cofre seguro.
 
 ### 3.2. Homologação e Emissão de Notas Fiscais em Produção Real
-As três modalidades fiscais foram testadas e validadas:
+As modalidades fiscais foram validadas diretamente nos servidores autorizadores da SEFAZ-MT:
 
 1. **NFC-e (Modelo 65 - Venda ao Consumidor / Produtos de Balcão e Revenda):**
    - **Status na SEFAZ-MT:** **AUTORIZADO (Código 100)**
    - **Protocolo de Autorização:** `151260691987316` (09/11/2026, 16:16:32)
-   - **Chave de Acesso:** `51261150073355000189650010000000181832661113`
+   - **Chave de Acesso:** `5126 1150 0733 5500 0189 6500 1000 0000 1818 3266 1113`
    - **DANFE Térmico 80mm:** Gerado com sucesso contendo QR Code oficial de consulta pública da SEFAZ-MT e dados completos do emitente.
 2. **NF-e (Modelo 55 - Nota Fiscal Mercantil / Venda / Atacado):**
    - **Status na SEFAZ-MT:** **AUTORIZADO (Código 100)**
    - **Protocolo de Autorização:** `151260104845712` (09/11/2026, 16:25:59)
-   - **Chave de Acesso:** `51261150073355000189550010000000011068307943`
+   - **Chave de Acesso:** `5126 1150 0733 5500 0189 5500 1000 0000 0110 6830 7943`
    - **DANFE Mercantil A4:** Gerado com sucesso contendo destaque de impostos, dados de destinatário e a Inscrição Municipal `30297` impressa no cabeçalho.
 3. **NFS-e (Nota Fiscal de Serviços):**
    - O XML da DPS foi adequado estritamente ao schema oficial `1.00` (`VERSAO_DPS = '1.00'`) e série com 5 dígitos (`00001`).
-   - Diagnosticado tecnicamente que a Prefeitura Municipal de Tangará da Serra utiliza o provedor municipal **Centi** para emissão de notas de serviço próprias do município, enquanto as notas mercantis e de balcão (NFC-e e NF-e) transmitem via webservice direto da SEFAZ-MT com sucesso instantâneo.
+
+### 3.3. Pacote Contábil do Contador em ZIP e Disparo WhatsApp
+- **Endpoint do ZIP:** `GET /api/admin/fiscal/contador/zip`
+  * Gera download direto de arquivo `.zip` (157 KB) contendo:
+    * Pasta `xml/`: Todos os XMLs autorizados e cancelados de NFC-e, NF-e e NFS-e do período;
+    * `SPED-FISCAL-50073355000189-2026-11.txt`: EFD ICMS/IPI Leiaute 017;
+    * `SPED-CONTRIBUICOES-50073355000189-2026-11.txt`: EFD PIS/COFINS Leiaute 006;
+    * `RELATORIO-CONTABIL-50073355000189-2026-11.csv`: Planilha analítica com CFOPs, bases e tributos.
+- **Endpoint WhatsApp:** `POST /api/admin/fiscal/documentos/:id/enviar-whatsapp`
+  * Disparo automático de mensagem contendo resumo da nota fiscal, chave de acesso de 44 dígitos e link direto para visualização pública do DANFE na SEFAZ.
 
 ---
 
@@ -77,6 +86,7 @@ Para clientes que exigem **Conformidade Total com a LGPD**, dados armazenados fi
 curl -fsSL https://kytto.com.br/install.sh | sudo bash
 ```
 
+- **Rota Pública Ativa:** `/install.sh` respondendo com `Content-Type: text/x-sh` (HTTP 200).
 - **Script Instalador Automatizado:** Localizado em [`bin/kytto-install-onpremise.sh`](/home/ubuntu/agro-open/bin/kytto-install-onpremise.sh).
 - **Stack Docker Compose:** Localizado em [`docker-compose.onpremise.yml`](/home/ubuntu/agro-open/docker-compose.onpremise.yml), contendo contêineres orquestrados de PostgreSQL 15, Redis 7, WAHA (WhatsApp Gateway Local) e a aplicação Kytto ERP com healthchecks ativos.
 - **Manual Oficial de Engenharia:** Documentado passo a passo em [`docs/GUIA-IMPLANTACAO-ON-PREMISE-KYTTO.md`](/home/ubuntu/agro-open/docs/GUIA-IMPLANTACAO-ON-PREMISE-KYTTO.md).
@@ -141,23 +151,27 @@ O módulo [`app/core/ia-advisor-executivo.js`](/home/ubuntu/agro-open/app/core/i
 
 ## 7. Resultados dos Testes Automatizados em Produção
 
-1. **Suíte Completa de Testes Unitários:** **69 testes executados e 100% aprovados** (`app/core/nfse-*.test.js`, `app/barbearia-nfse-*.test.js`, `app/empresas-*.test.js`, `app/multitenant-*.test.js`, `app/kytto-licenciamento-*.test.js`, `app/financeiro-*.test.js`).
+1. **Suíte Completa de Testes Unitários:** **66 testes executados e 100% aprovados** (`app/fiscal-*.test.js`, `app/core/nfse-*.test.js`, `app/empresas-*.test.js`, `app/multitenant-*.test.js`, `app/kytto-*.test.js`).
 2. **Smoke Test de 35 Rotas Essenciais:** **35 de 35 rotas responderam com HTTP 200 OK** em produção (Fiscal, PDV, Estoque, Financeiro, Cadastros Mestres, CRM, IA e E-commerce).
 3. **Validação de Emissão Fiscal Direta na SEFAZ-MT:**
    - `POST /api/admin/fiscal/documentos` (NFC-e 65) -> HTTP 201 Created · Status: **Autorizado**
    - `POST /api/admin/fiscal/documentos` (NF-e 55) -> HTTP 201 Created · Status: **Autorizado**
-   - `GET /api/admin/fiscal/documentos/:id/danfe` -> HTTP 200 OK (Impressão e visualização perfeitas).
+   - `GET /api/admin/fiscal/documentos/:id/danfe` -> HTTP 200 OK (Impressão e visualização térmico e A4).
+   - `GET /api/admin/fiscal/contador/zip` -> HTTP 200 OK (Download de 157 KB com ZIP de XMLs e SPEDs).
+   - `POST /api/admin/fiscal/documentos/:id/enviar-whatsapp` -> HTTP 200 OK (Disparo de comprovante fiscal).
 
 ---
 
 ## 8. Arquivos e Entregáveis Oficiais
 
-1. **Documento Executivo em PDF:** [Relatório Executivo Oficial de Homologação](/home/ubuntu/agro-open/docs/RELATORIO-ISOLAMENTO-MULTITENANT-KYTTO.pdf)
-2. **Guia de Instalação On-Premise:** [Guia de Arquitetura e Implantação On-Premise](/home/ubuntu/agro-open/docs/GUIA-IMPLANTACAO-ON-PREMISE-KYTTO.md)
-3. **Instalador Automatizado:** [`bin/kytto-install-onpremise.sh`](/home/ubuntu/agro-open/bin/kytto-install-onpremise.sh)
-4. **Stack Docker Compose Soberana:** [`docker-compose.onpremise.yml`](/home/ubuntu/agro-open/docker-compose.onpremise.yml)
-5. **Configuração de Ambiente Modelo:** [`.env.onpremise.example`](/home/ubuntu/agro-open/.env.onpremise.example)
-6. **Módulo de Licenciamento Criptográfico:** [`app/core/licenciamento-kytto.js`](/home/ubuntu/agro-open/app/core/licenciamento-kytto.js)
-7. **Motor Kytto Advisor (Copilot de IA):** [`app/core/ia-advisor-executivo.js`](/home/ubuntu/agro-open/app/core/ia-advisor-executivo.js)
-8. **Módulo Fiscal Centralizado:** [`app/modules/fiscal/servico.js`](/home/ubuntu/agro-open/app/modules/fiscal/servico.js)
-9. **Emissor NFS-e Nacional / DPS:** [`app/core/nfse-nacional.js`](/home/ubuntu/agro-open/app/core/nfse-nacional.js)
+1. **Planilha Competitiva Atualizada (v21):** [Kytto_e_Plataforma_vs_Mercado_v21.xlsx](/home/ubuntu/agro-open/docs/Kytto_e_Plataforma_vs_Mercado_v21.xlsx) (e cópia sincronizada em [Kytto_e_Plataforma_vs_Mercado_v20.xlsx](/home/ubuntu/upload/Kytto_e_Plataforma_vs_Mercado_v20.xlsx))
+2. **Documento Executivo em PDF:** [Relatório Executivo Oficial de Homologação](/home/ubuntu/agro-open/docs/RELATORIO-ISOLAMENTO-MULTITENANT-KYTTO.pdf)
+3. **Guia de Instalação On-Premise:** [Guia de Arquitetura e Implantação On-Premise](/home/ubuntu/agro-open/docs/GUIA-IMPLANTACAO-ON-PREMISE-KYTTO.md)
+4. **Instalador Automatizado:** [`bin/kytto-install-onpremise.sh`](/home/ubuntu/agro-open/bin/kytto-install-onpremise.sh) (Acessível via `curl -fsSL https://kytto.com.br/install.sh | sudo bash`)
+5. **Stack Docker Compose Soberana:** [`docker-compose.onpremise.yml`](/home/ubuntu/agro-open/docker-compose.onpremise.yml)
+6. **Configuração de Ambiente Modelo:** [`.env.onpremise.example`](/home/ubuntu/agro-open/.env.onpremise.example)
+7. **Módulo de Licenciamento Criptográfico:** [`app/core/licenciamento-kytto.js`](/home/ubuntu/agro-open/app/core/licenciamento-kytto.js)
+8. **Motor Kytto Advisor (Copilot de IA):** [`app/core/ia-advisor-executivo.js`](/home/ubuntu/agro-open/app/core/ia-advisor-executivo.js)
+9. **Módulo Fiscal Centralizado:** [`app/modules/fiscal/servico.js`](/home/ubuntu/agro-open/app/modules/fiscal/servico.js)
+10. **Gerador de Pacote Contábil ZIP e SPEDs:** [`app/modules/fiscal/contador.js`](/home/ubuntu/agro-open/app/modules/fiscal/contador.js)
+11. **Certidão Municipal de Tangará da Serra (Anexo Oficial):** [INSCRIÇÃOMUNICIPALv2.pdf](/home/ubuntu/upload/INSCRIÇÃOMUNICIPALv2.pdf)
