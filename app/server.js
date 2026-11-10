@@ -633,7 +633,7 @@ async function senhaConfere(senha, hash){
   } catch { return false; }
 }
 
-async function autorizarComSenhaGerente(req, senhaInformada, usuarioInformado = null) {
+export async function autorizarComSenhaGerente(req, senhaInformada, usuarioInformado = null) {
   // 0. Se o usuário logado na requisição já possui perfil gestor da empresa (admin, organizador, gerente, administrador, mestre)
   // OU se o usuário logado é a própria Jhenyffer / Jhenifer
   const userRole = String(req?.user?.role || '').toLowerCase();

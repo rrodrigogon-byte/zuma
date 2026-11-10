@@ -107,6 +107,82 @@ export default function PDVUnificado() {
   const [modalCamera, setModalCamera] = useState(false)
   const [mostrarTecladoTouch, setMostrarTecladoTouch] = useState(false)
   const [atalhosSupermercado, setAtalhosSupermercado] = useState([])
+  // Vendas & Comandas anteriores / Reabertura e Cancelamento
+  const [modalVendas, setModalVendas] = useState(false)
+  const [vendasHistorico, setVendasHistorico] = useState([])
+  const [carregandoVendas, setCarregandoVendas] = useState(false)
+  const [vendaReabertaInfo, setVendaReabertaInfo] = useState(null)
+  const [modalSenhaGerente, setModalSenhaGerente] = useState(null) // { acao: 'reabrir' | 'cancelar', venda }
+  const [senhaGerenteInput, setSenhaGerenteInput] = useState('')
+  const [erroGerente, setErroGerente] = useState('')
+  const [toastPdv, setToastPdv] = useState('')
+
+  const exibirToast = (msg) => {
+    setToastPdv(msg)
+    setTimeout(() => setToastPdv(''), 4500)
+  }
+
+  const abrirModalVendas = async () => {
+    setModalVendas(true)
+    setCarregandoVendas(true)
+    try {
+      const res = await api.get('/api/pdv/vendas?limit=30').catch(async () => {
+        return await api.get('/api/admin/varejo/vendas?limit=30')
+      })
+      setVendasHistorico(res?.vendas || [])
+    } catch (err) {
+      console.warn('Erro ao carregar vendas:', err.message)
+    } finally {
+      setCarregandoVendas(false)
+    }
+  }
+
+  const confirmarReaberturaVenda = (venda) => {
+    setModalSenhaGerente({ acao: 'reabrir', venda })
+    setSenhaGerenteInput('')
+    setErroGerente('')
+  }
+
+  const confirmarCancelamentoVenda = (venda) => {
+    setModalSenhaGerente({ acao: 'cancelar', venda })
+    setSenhaGerenteInput('')
+    setErroGerente('')
+  }
+
+  const executarAcaoGerente = async () => {
+    if (!modalSenhaGerente) return
+    const { acao, venda } = modalSenhaGerente
+    try {
+      if (acao === 'reabrir') {
+        const res = await api.post(`/api/pdv/vendas/${venda.id}/reabrir`, { senha: senhaGerenteInput }).catch(async () => {
+          return await api.post(`/api/admin/varejo/vendas/${venda.id}/reabrir`, { senha: senhaGerenteInput })
+        })
+        const dadosVenda = res?.venda || venda
+        setItens((dadosVenda.itens || []).map(it => ({
+          produto_id: it.produto_id || it.item_id || it.id,
+          nome: it.nome,
+          preco: Number(it.preco || it.preco_unitario || 0),
+          quantidade: Number(it.quantidade || 1),
+          unidade: it.unidade || 'UN',
+          sku: it.sku || ''
+        })))
+        setVendaReabertaInfo(dadosVenda)
+        setModalSenhaGerente(null)
+        setModalVendas(false)
+        exibirToast(`🔄 Venda ${venda.numero} reaberta! Altere itens e aperte F10 para refinalizar.`)
+        inputRef.current?.focus()
+      } else if (acao === 'cancelar') {
+        await api.post(`/api/pdv/vendas/${venda.id}/cancelar`, { senha: senhaGerenteInput, motivo: 'Cancelamento autorizado pelo gerente' }).catch(async () => {
+          return await api.post(`/api/admin/varejo/vendas/${venda.id}/cancelar`, { senha: senhaGerenteInput, motivo: 'Cancelamento autorizado pelo gerente' })
+        })
+        setModalSenhaGerente(null)
+        exibirToast(`❌ Venda ${venda.numero} cancelada com sucesso!`)
+        abrirModalVendas()
+      }
+    } catch (err) {
+      setErroGerente(err?.response?.data?.error || err.message || 'Senha de gerente incorreta')
+    }
+  }
 
   const inputRef = useRef(null)
   const buscaTimer = useRef(null)
@@ -208,6 +284,9 @@ export default function PDVUnificado() {
           setTroco('')
           setCpfNota('')
         }
+      } else if (e.key === 'F6') {
+        e.preventDefault()
+        abrirModalVendas()
       } else if (e.key === 'F7') {
         e.preventDefault()
         document.getElementById('pdv-desconto-input')?.focus()
@@ -766,6 +845,14 @@ export default function PDVUnificado() {
             🔢 Teclado Touch
           </button>
 
+          {/* Vendas & Comandas (F6) */}
+          <button
+            onClick={abrirModalVendas}
+            style={{ background: theme.card, color: '#38bdf8', border: `1px solid ${theme.line}`, padding: '4px 8px', borderRadius: 6, cursor: 'pointer', fontSize: 11, fontWeight: 700 }}
+            title="Histórico de vendas e comandas, reabertura e cancelamento com gerente"
+          >
+            📋 Vendas & Comandas (F6)
+          </button>
           {/* Fechamento Cego e Redução Z */}
           {modoOperacao === 'operador' && (
             <button
@@ -785,6 +872,27 @@ export default function PDVUnificado() {
         </div>
       </div>
 
+      {/* Toast de Notificação */}
+      {toastPdv && (
+        <div style={{ position: 'fixed', top: 20, right: 20, zIndex: 9999, background: '#10b981', color: '#fff', padding: '12px 20px', borderRadius: 8, fontWeight: 800, boxShadow: '0 8px 24px rgba(0,0,0,0.5)', fontSize: 13, display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span>🔔</span> {toastPdv}
+        </div>
+      )}
+      {/* Banner de Edição / Reabertura de Venda */}
+      {vendaReabertaInfo && (
+        <div style={{ background: '#7c3aed', color: '#fff', padding: '8px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13, fontWeight: 700, borderBottom: '2px solid #a78bfa' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 16 }}>🔄</span>
+            <span>MODO DE EDIÇÃO ATIVO: Venda <strong>{vendaReabertaInfo.numero}</strong> — Altere itens, preços e finalize novamente (F10) para atualizar o faturamento!</span>
+          </div>
+          <button
+            onClick={() => { setVendaReabertaInfo(null); setItens([]); }}
+            style={{ background: 'rgba(0,0,0,0.3)', color: '#fff', border: '1px solid rgba(255,255,255,0.4)', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontSize: 11, fontWeight: 700 }}
+          >
+            ✕ Cancelar Edição
+          </button>
+        </div>
+      )}
       {/* Banner Especial para Modo Totem / Autoatendimento */}
       {modoOperacao === 'totem' && (
         <div style={{ background: 'linear-gradient(90deg, #1e3a8a, #065f46)', padding: '10px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `1px solid ${theme.line}` }}>
@@ -1669,6 +1777,140 @@ export default function PDVUnificado() {
                 style={{ padding: '12px 6px', background: theme.green, color: '#fff', border: 'none', borderRadius: 10, fontWeight: 900, cursor: 'pointer', fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}
               >
                 🖨️ Imprimir
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* MODAL HISTÓRICO DE VENDAS & COMANDAS (F6) */}
+      {modalVendas && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }}>
+          <div style={{ background: theme.surface, border: `1px solid ${theme.line}`, borderRadius: 16, width: '100%', maxWidth: 840, maxHeight: '90vh', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+            <div style={{ padding: '16px 20px', borderBottom: `1px solid ${theme.line}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: 17, color: theme.cream }}>📋 Vendas & Comandas Faturadas</h3>
+                <p style={{ margin: '4px 0 0', fontSize: 12, color: theme.muted }}>Histórico de vendas, reabertura, correção de itens e cancelamento com autorização de gerência</p>
+              </div>
+              <button onClick={() => setModalVendas(false)} style={{ background: 'transparent', border: 'none', color: theme.muted, fontSize: 20, cursor: 'pointer' }}>✕</button>
+            </div>
+            <div style={{ flex: 1, overflowY: 'auto', padding: 16 }}>
+              {carregandoVendas ? (
+                <div style={{ textAlign: 'center', padding: 40, color: theme.muted }}>Carregando vendas...</div>
+              ) : vendasHistorico.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: 40, color: theme.muted }}>Nenhuma venda registrada até o momento nesta empresa.</div>
+              ) : (
+                <div style={{ display: 'grid', gap: 10 }}>
+                  {vendasHistorico.map((v) => (
+                    <div key={v.id} style={{ background: theme.card, border: `1px solid ${theme.line}`, borderRadius: 10, padding: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+                      <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <strong style={{ fontSize: 14, color: theme.cream }}>{v.numero}</strong>
+                          <span style={{ fontSize: 11, padding: '2px 6px', borderRadius: 4, background: v.status === 'cancelada' ? 'rgba(239,68,68,0.2)' : 'rgba(16,185,129,0.2)', color: v.status === 'cancelada' ? theme.red : theme.green, fontWeight: 700 }}>
+                            {v.status === 'cancelada' ? 'Cancelada' : 'Finalizada'}
+                          </span>
+                          <span style={{ fontSize: 11, color: theme.muted }}>
+                            {v.data ? new Date(v.data).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : ''}
+                          </span>
+                        </div>
+                        <div style={{ fontSize: 12, color: theme.muted, marginTop: 4 }}>
+                          {v.itens?.length || 0} item(ns) · {v.formaPagamento || 'dinheiro'} {v.nfceChave ? '· NFC-e Emitida' : ''}
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                        <div style={{ textAlign: 'right' }}>
+                          <div style={{ fontSize: 16, fontWeight: 800, color: theme.green }}>R$ {(v.total || 0).toFixed(2)}</div>
+                          {v.desconto > 0 && <div style={{ fontSize: 11, color: theme.muted }}>Desc: R$ {(v.desconto || 0).toFixed(2)}</div>}
+                        </div>
+                        <div style={{ display: 'flex', gap: 6 }}>
+                          {v.status !== 'cancelada' && (
+                            <>
+                              <button
+                                onClick={() => confirmarReaberturaVenda(v)}
+                                style={{ background: 'rgba(124, 58, 237, 0.2)', border: '1px solid #7c3aed', color: '#c4b5fd', borderRadius: 6, padding: '6px 10px', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}
+                                title="Reabrir no carrinho do PDV para adicionar, remover ou corrigir itens"
+                              >
+                                🔄 Reabrir / Corrigir
+                              </button>
+                              <button
+                                onClick={() => confirmarCancelamentoVenda(v)}
+                                style={{ background: 'rgba(239, 68, 68, 0.15)', border: '1px solid #ef4444', color: '#fca5a5', borderRadius: 6, padding: '6px 10px', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}
+                                title="Cancelar venda e estornar estoque com senha de gerente"
+                              >
+                                ❌ Cancelar
+                              </button>
+                            </>
+                          )}
+                          <button
+                            onClick={() => { setVenda(v); setModalVendas(false); }}
+                            style={{ background: theme.surface, border: `1px solid ${theme.line}`, color: theme.cream, borderRadius: 6, padding: '6px 10px', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}
+                          >
+                            🖨️ Cupom
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div style={{ padding: '12px 20px', borderTop: `1px solid ${theme.line}`, display: 'flex', justifyContent: 'flex-end' }}>
+              <button onClick={() => setModalVendas(false)} style={{ background: theme.surface, border: `1px solid ${theme.line}`, color: theme.cream, borderRadius: 8, padding: '8px 16px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+                Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE AUTORIZAÇÃO DE GERENTE (JHENYFFER / ADMIN) */}
+      {modalSenhaGerente && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100, padding: 16 }}>
+          <div style={{ background: theme.surface, border: `1px solid ${theme.line}`, borderRadius: 16, width: '100%', maxWidth: 440, padding: 24 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+              <span style={{ fontSize: 28 }}>🛡️</span>
+              <div>
+                <h3 style={{ margin: 0, fontSize: 16, color: theme.cream }}>Autorização de Gerência</h3>
+                <p style={{ margin: '2px 0 0', fontSize: 12, color: theme.muted }}>
+                  {modalSenhaGerente.acao === 'reabrir' ? 'Reabertura e correção de venda' : 'Cancelamento de cupom e estorno'}
+                </p>
+              </div>
+            </div>
+            <div style={{ background: theme.card, borderRadius: 8, padding: 12, marginBottom: 16, border: `1px solid ${theme.line}` }}>
+              <div style={{ fontSize: 12, color: theme.muted }}>Venda Selecionada:</div>
+              <strong style={{ fontSize: 15, color: theme.cream }}>{modalSenhaGerente.venda?.numero}</strong>
+              <div style={{ fontSize: 13, color: theme.green, marginTop: 2 }}>Valor: R$ {(modalSenhaGerente.venda?.total || 0).toFixed(2)}</div>
+            </div>
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ display: 'block', fontSize: 12, color: theme.muted, marginBottom: 6 }}>
+                Digite a Senha da Gerente (Jhenyffer Andrade ou Admin):
+              </label>
+              <input
+                type="password"
+                value={senhaGerenteInput}
+                onChange={(e) => setSenhaGerenteInput(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && executarAcaoGerente()}
+                autoFocus
+                placeholder="Senha de gerente..."
+                style={{ width: '100%', padding: '10px 12px', borderRadius: 8, background: theme.bg, border: `1px solid ${theme.line}`, color: '#fff', fontSize: 14, boxSizing: 'border-box' }}
+              />
+              {erroGerente && (
+                <div style={{ color: theme.red, fontSize: 12, marginTop: 6, fontWeight: 700 }}>⚠️ {erroGerente}</div>
+              )}
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr', gap: 10 }}>
+              <button
+                type="button"
+                onClick={() => setModalSenhaGerente(null)}
+                style={{ padding: '10px', background: 'transparent', border: `1px solid ${theme.line}`, color: theme.muted, borderRadius: 8, cursor: 'pointer', fontWeight: 700, fontSize: 13 }}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={executarAcaoGerente}
+                style={{ padding: '10px', background: modalSenhaGerente.acao === 'reabrir' ? '#7c3aed' : theme.red, border: 'none', color: '#fff', borderRadius: 8, cursor: 'pointer', fontWeight: 800, fontSize: 13 }}
+              >
+                {modalSenhaGerente.acao === 'reabrir' ? '🔄 Autorizar e Reabrir' : '❌ Autorizar Cancelamento'}
               </button>
             </div>
           </div>

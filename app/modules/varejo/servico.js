@@ -679,8 +679,118 @@ export async function listarVendas(db, empresaId, { lojaId = null, limit = 50, o
     nfceProtocolo: row.nfce_protocolo,
     criadoPor: row.criado_por,
     data: row.criado_em,
+    status: row.status || 'paga',
     itens: row.itens || []
   }));
+}
+
+export async function cancelarVenda(db, empresaId, vendaId, { usuario = null, motivo = 'Cancelamento autorizado pelo gerente' } = {}) {
+  const empresa = exigirUuid(empresaId, 'empresa');
+  await db.query("ALTER TABLE var_vendas ADD COLUMN IF NOT EXISTS status VARCHAR(30) DEFAULT 'paga'").catch(() => null);
+  await db.query("ALTER TABLE var_vendas ADD COLUMN IF NOT EXISTS cancelada_em TIMESTAMPTZ").catch(() => null);
+  await db.query("ALTER TABLE var_vendas ADD COLUMN IF NOT EXISTS cancelada_por VARCHAR(180)").catch(() => null);
+
+  return transacao(db, async (q) => {
+    const vRes = await q('SELECT * FROM var_vendas WHERE id = $1 AND empresa_id = $2', [vendaId, empresa]);
+    if (!vRes.rows[0]) throw new Error('Venda não encontrada');
+    const venda = vRes.rows[0];
+
+    const iRes = await q('SELECT * FROM var_venda_itens WHERE venda_id = $1', [vendaId]);
+    for (const item of iRes.rows) {
+      if (item.item_id && Number(item.quantidade) > 0) {
+        await q(
+          `UPDATE est_saldos SET quantidade = quantidade + $1, atualizado_em = CURRENT_TIMESTAMP
+           WHERE empresa_id = $2 AND item_id = $3 AND ($4::uuid IS NULL OR loja_id = $4::uuid)`,
+          [Number(item.quantidade), empresa, item.item_id, venda.loja_id]
+        ).catch(() => null);
+      }
+    }
+
+    await q(
+      `UPDATE var_vendas 
+          SET status = 'cancelada', cancelada_em = NOW(), cancelada_por = $1
+        WHERE id = $2`,
+      [textoOpcional(usuario, 180) || 'gerente', vendaId]
+    );
+
+    try {
+      kyttoEventBus.emitir('venda.cancelada', {
+        vendaId: venda.id,
+        numero: venda.numero,
+        total: Number(venda.total),
+        motivo,
+        usuario
+      }, { empresaId: empresa, usuario: usuario || 'gerente' });
+    } catch {}
+
+    return {
+      sucesso: true,
+      mensagem: `Venda ${venda.numero} cancelada com sucesso e estoque estornado.`,
+      vendaId: venda.id,
+      status: 'cancelada'
+    };
+  });
+}
+
+export async function reabrirVenda(db, empresaId, vendaId, { usuario = null } = {}) {
+  const empresa = exigirUuid(empresaId, 'empresa');
+  await db.query("ALTER TABLE var_vendas ADD COLUMN IF NOT EXISTS status VARCHAR(30) DEFAULT 'paga'").catch(() => null);
+
+  const vRes = await db.query(
+    `SELECT v.*,
+            COALESCE(
+              json_agg(
+                json_build_object(
+                  'produto_id', vi.item_id,
+                  'id', vi.item_id,
+                  'nome', i.nome,
+                  'unidade', i.unidade,
+                  'sku', i.sku,
+                  'quantidade', vi.quantidade,
+                  'preco', vi.preco_unitario,
+                  'preco_unitario', vi.preco_unitario,
+                  'preco_total', vi.preco_total,
+                  'desconto', vi.desconto
+                )
+              ) FILTER (WHERE vi.id IS NOT NULL), '[]'
+            ) AS itens
+       FROM var_vendas v
+  LEFT JOIN var_venda_itens vi ON vi.venda_id = v.id
+  LEFT JOIN est_itens i ON i.id = vi.item_id
+      WHERE v.id = $1 AND v.empresa_id = $2
+   GROUP BY v.id`,
+    [vendaId, empresa]
+  );
+  if (!vRes.rows[0]) throw new Error('Venda não encontrada');
+  const venda = vRes.rows[0];
+
+  await db.query("UPDATE var_vendas SET status = 'em_edicao' WHERE id = $1", [vendaId]);
+
+  try {
+    kyttoEventBus.emitir('venda.reaberta', {
+      vendaId: venda.id,
+      numero: venda.numero,
+      total: Number(venda.total),
+      usuario
+    }, { empresaId: empresa, usuario: usuario || 'gerente' });
+  } catch {}
+
+  return {
+    sucesso: true,
+    venda: {
+      id: venda.id,
+      numero: venda.numero,
+      total: Number(venda.total),
+      desconto: Number(venda.desconto),
+      formaPagamento: venda.forma_pagamento,
+      status: 'em_edicao',
+      itens: (venda.itens || []).map(it => ({
+        ...it,
+        preco: Number(it.preco_unitario || it.preco || 0),
+        quantidade: Number(it.quantidade || 1)
+      }))
+    }
+  };
 }
 
 export async function resumoDashboard(db, empresaId, { lojaId = null, agora = new Date(), periodo = "hoje" } = {}) {
