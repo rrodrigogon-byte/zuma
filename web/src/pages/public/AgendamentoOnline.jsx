@@ -212,7 +212,7 @@ export default function AgendamentoOnline() {
   const [consentimentoEspera, setConsentimentoEspera] = useState(false)
   const [politicas, setPoliticas] = useState({ cancelamentoHoras: 4 })
   const [searchParams] = useSearchParams()
-  const barbeiroParam = barbeiro || searchParams.get('barbeiro') || searchParams.get('b') || searchParams.get('prof') || ''
+  const barbeiroParam = barbeiro || searchParams.get('barbeiro') || searchParams.get('profissional') || searchParams.get('b') || searchParams.get('prof') || ''
   // Código de quem indicou (vem do link de indicação). Só o código, nunca dado pessoal.
   const indicacao = String(searchParams.get('indicacao') || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 12)
   // Canal de origem do link (Google, Instagram, WhatsApp, QR code). Só o nome do canal.
@@ -607,7 +607,7 @@ export default function AgendamentoOnline() {
         <button
           style={{ ...s.btnPrimary, opacity: servicoSel ? 1 : .4 }}
           disabled={!servicoSel}
-          onClick={() => setPasso(barbeiroPreselecionado ? 3 : 2)}
+          onClick={() => setPasso((barbeiroPreselecionado || (profissionalSel && profissionalSel.id !== 'qualquer')) ? 3 : 2)}
         >
           Continuar →
         </button>
@@ -945,7 +945,7 @@ export default function AgendamentoOnline() {
           )}
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
-          <button style={{ ...s.btnSecondary, flex: 1 }} onClick={() => setPasso(barbeiroPreselecionado ? 1 : 2)}>← Voltar</button>
+          <button style={{ ...s.btnSecondary, flex: 1 }} onClick={() => setPasso((barbeiroPreselecionado || (profissionalSel && profissionalSel.id !== 'qualquer')) ? 1 : 2)}>← Voltar</button>
           <button
             style={{ ...s.btnPrimary, flex: 2, opacity: (dataSel && horarioSel) ? 1 : .4 }}
             disabled={!dataSel || !horarioSel}
