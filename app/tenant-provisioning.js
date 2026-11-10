@@ -15,6 +15,7 @@ export const TENANTS_OFICIAIS = {
     roleIdOwner: 'b125e523-957d-4d12-a881-56b958ecec45',
     roleIdStaff: '85f0c5c5-584b-4d9f-946e-a348c3688483',
     usuarios: [
+      { username: 'bruno', email: 'bruno@barbeariadino.com.br', emailAlt: 'brunomendes@barbeariadino.com.br', nome: 'Bruno Mendes Pedroso', role: 'profissional', pgRole: 'barbeiro' },
       { username: 'dino', email: 'dino@barbeariadino.com.br', emailAlt: 'guicunha136@gmail.com', nome: 'Guilherme Cunha Martins', role: 'organizador', pgRole: 'gerente', isOwner: true },
       { username: 'natani', email: 'natani@barbeariadino.com.br', emailAlt: 'nati@barbeariadino.com.br', nome: 'Natani Minanis Dobler', role: 'profissional', pgRole: 'barbeiro' },
       { username: 'ster', email: 'ster@barbeariadino.com.br', emailAlt: 'ester@barbeariadino.com.br', nome: 'Steffany Marielly de Oliveira (Ster)', role: 'operador', pgRole: 'operador' },

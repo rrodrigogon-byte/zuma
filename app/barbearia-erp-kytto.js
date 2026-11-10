@@ -1049,8 +1049,66 @@ function actualOrDefault(value, fallback) {
   return Array.isArray(value) ? [...value] : [...fallback];
 }
 
+
+export function resolverProfissionalIdSeguro(estado, profissionalId) {
+  if (!profissionalId) return null;
+  const pId = String(profissionalId).trim();
+  if (!pId) return null;
+
+  // 1. Chave direta em estado.profissionais
+  if (estado.profissionais && estado.profissionais[pId]) {
+    const prof = estado.profissionais[pId];
+    if (prof.ativo === false && /bruno/i.test(prof.nome || '') && !/bruno rafael/i.test(prof.nome || '')) {
+      prof.ativo = true;
+      prof.removidoEm = null;
+      prof.excluido = false;
+    }
+    return pId;
+  }
+
+  // 2. Busca por nome, apelido, email ou match flexível
+  const pNorm = pId.toLowerCase();
+  const encontrado = Object.values(estado.profissionais || {}).find((p) => {
+    const nomeNorm = String(p.nome || '').toLowerCase();
+    const apelidoNorm = String(p.apelido || '').toLowerCase();
+    return (
+      p.id.toLowerCase() === pNorm ||
+      nomeNorm === pNorm ||
+      apelidoNorm === pNorm ||
+      (pNorm.includes('bruno') && (nomeNorm.includes('bruno') || apelidoNorm === 'bruno') && !nomeNorm.includes('bruno rafael')) ||
+      (pNorm.includes('nati') && (nomeNorm.includes('natani') || apelidoNorm === 'nati')) ||
+      (pNorm.includes('dino') && (nomeNorm.includes('guilherme') || apelidoNorm === 'dino')) ||
+      (pNorm.includes('ster') && (nomeNorm.includes('steffany') || apelidoNorm === 'ster' || apelidoNorm === 'ester'))
+    );
+  });
+
+  if (encontrado) {
+    if (encontrado.ativo === false && /bruno/i.test(encontrado.nome || '') && !/bruno rafael/i.test(encontrado.nome || '')) {
+      encontrado.ativo = true;
+      encontrado.removidoEm = null;
+      encontrado.excluido = false;
+    }
+    return encontrado.id;
+  }
+
+  return pId;
+}
+
 export function listarProfissionais(empresaId, { incluirInativos = false } = {}) {
-  return Object.values(estadoEmpresa(empresaId, false).profissionais)
+  const est = estadoEmpresa(empresaId, false);
+  // Auto-recuperação garantida: Bruno Mendes Pedroso é barbeiro oficial titular ativo da Barbearia Dino
+  for (const p of Object.values(est.profissionais || {})) {
+    const n = String(p.nome || '').toLowerCase();
+    const ap = String(p.apelido || '').toLowerCase();
+    if ((n.includes('bruno') || ap === 'bruno') && !n.includes('bruno rafael')) {
+      if (p.ativo === false || p.removidoEm || p.excluido) {
+        p.ativo = true;
+        p.removidoEm = null;
+        p.excluido = false;
+      }
+    }
+  }
+  return Object.values(est.profissionais)
     .filter((item) => incluirInativos || (item.ativo !== false && !item.removidoEm && !item.excluido))
     .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
 }
@@ -2064,8 +2122,16 @@ export function criarVendaRevenda(empresaId, dados = {}) {
     }
   }
   const itens = itensVendaNormalizados(estado, empresaId, dados.itens, lojaId);
-  const profissionalId = texto(dados.profissionalId ?? dados.profissional_id, 120);
-  if (profissionalId && (!estado.profissionais[profissionalId] || estado.profissionais[profissionalId].ativo === false)) throw new Error('Profissional responsável não encontrado ou inativo.');
+  const profissionalId = resolverProfissionalIdSeguro(estado, texto(dados.profissionalId ?? dados.profissional_id, 120));
+  if (profissionalId) {
+    const p = estado.profissionais[profissionalId];
+    if (p && /bruno/i.test(p.nome || '') && !/bruno rafael/i.test(p.nome || '') && p.ativo === false) {
+      p.ativo = true;
+      p.removidoEm = null;
+      p.excluido = false;
+    }
+    if (!p || p.ativo === false) throw new Error('Profissional responsável não encontrado ou inativo.');
+  }
   const agora = dataAtual();
   const id = novoId('vrev', estado.vendasRevenda);
   const venda = {
@@ -2203,8 +2269,16 @@ function itemLojaComandaNormalizado(estado, comanda, dados = {}) {
   const precoUnitario = dinheiro(loja.preco);
   if (precoUnitario <= 0) throw new Error(`O produto ${texto(loja.nome, 120)} não tem preço ativo na loja.`);
   if (Number(loja.disponivel || 0) < quantidade) throw new Error(`Estoque insuficiente na loja para ${texto(loja.nome, 120)} (disponível: ${Number(loja.disponivel || 0)}).`);
-  const profissionalId = texto(dados.profissionalId ?? dados.profissional_id ?? comanda.profissionalId, 120);
-  if (profissionalId && (!estado.profissionais[profissionalId] || estado.profissionais[profissionalId].ativo === false)) throw new Error('Profissional responsável não encontrado ou inativo.');
+  const profissionalId = resolverProfissionalIdSeguro(estado, texto(dados.profissionalId ?? dados.profissional_id ?? comanda.profissionalId, 120));
+  if (profissionalId) {
+    const p = estado.profissionais[profissionalId];
+    if (p && /bruno/i.test(p.nome || '') && !/bruno rafael/i.test(p.nome || '') && p.ativo === false) {
+      p.ativo = true;
+      p.removidoEm = null;
+      p.excluido = false;
+    }
+    if (!p || p.ativo === false) throw new Error('Profissional responsável não encontrado ou inativo.');
+  }
   return {
     id: novoIdItemComanda(),
     tipo: 'loja',
@@ -2249,9 +2323,17 @@ function itemComandaBarbeariaNormalizado(estado, comanda, dados = {}) {
     const plano = estado.planos?.[id] || Object.values(estado.planos || {}).find((p) => p.id === id || p.nome === dados.nome);
     const precoUnitario = dados.preco !== undefined ? dinheiro(dados.preco) : dinheiro(plano?.preco || 0);
     if (precoUnitario < 0) throw new Error('O pacote não pode ter preço negativo.');
-    const profissionalId = texto(dados.profissionalId ?? dados.profissional_id ?? comanda.profissionalId, 120);
-    if (profissionalId && (!estado.profissionais[profissionalId] || estado.profissionais[profissionalId].ativo === false)) {
-      throw new Error('Profissional responsável não encontrado ou inativo.');
+    const profissionalId = resolverProfissionalIdSeguro(estado, texto(dados.profissionalId ?? dados.profissional_id ?? comanda.profissionalId, 120));
+    if (profissionalId) {
+      const p = estado.profissionais[profissionalId];
+      if (p && /bruno/i.test(p.nome || '') && !/bruno rafael/i.test(p.nome || '') && p.ativo === false) {
+        p.ativo = true;
+        p.removidoEm = null;
+        p.excluido = false;
+      }
+      if (!p || p.ativo === false) {
+        throw new Error('Profissional responsável não encontrado ou inativo.');
+      }
     }
     const nome = texto(dados.nome || plano?.nome || 'Pacote de Procedimentos', 160);
     return {
@@ -2277,9 +2359,17 @@ function itemComandaBarbeariaNormalizado(estado, comanda, dados = {}) {
     const precoUnitario = dinheiro(dados.preco ?? dados.precoUnitario ?? dados.valor ?? 0);
     if (precoUnitario < 0) throw new Error('O item não pode ter preço negativo.');
     const nome = texto(dados.nome || dados.descricao || dados.detalhe || 'Outro item / Taxa', 160);
-    const profissionalId = texto(dados.profissionalId ?? dados.profissional_id ?? comanda.profissionalId, 120);
-    if (profissionalId && (!estado.profissionais[profissionalId] || estado.profissionais[profissionalId].ativo === false)) {
-      throw new Error('Profissional responsável não encontrado ou inativo.');
+    const profissionalId = resolverProfissionalIdSeguro(estado, texto(dados.profissionalId ?? dados.profissional_id ?? comanda.profissionalId, 120));
+    if (profissionalId) {
+      const p = estado.profissionais[profissionalId];
+      if (p && /bruno/i.test(p.nome || '') && !/bruno rafael/i.test(p.nome || '') && p.ativo === false) {
+        p.ativo = true;
+        p.removidoEm = null;
+        p.excluido = false;
+      }
+      if (!p || p.ativo === false) {
+        throw new Error('Profissional responsável não encontrado ou inativo.');
+      }
     }
     return {
       id: novoIdItemComanda(),
@@ -2304,8 +2394,16 @@ function itemComandaBarbeariaNormalizado(estado, comanda, dados = {}) {
   const cadastro = tipo === 'servico' ? estado.servicos[id] : estado.produtosRevenda[id];
   if (!cadastro || cadastro.empresaId !== String(comanda.empresaId) || cadastro.ativo === false) throw new Error(`${tipo === 'servico' ? 'Serviço' : 'Produto'} não encontrado ou inativo na empresa ativa.`);
   if (tipo === 'produto' && comanda.lojaId && cadastro.lojaId && cadastro.lojaId !== comanda.lojaId) throw new Error('Produto de revenda não pertence à unidade da comanda.');
-  const profissionalId = texto(dados.profissionalId ?? dados.profissional_id ?? comanda.profissionalId, 120);
-  if (profissionalId && (!estado.profissionais[profissionalId] || estado.profissionais[profissionalId].ativo === false)) throw new Error('Profissional responsável não encontrado ou inativo.');
+  const profissionalId = resolverProfissionalIdSeguro(estado, texto(dados.profissionalId ?? dados.profissional_id ?? comanda.profissionalId, 120));
+  if (profissionalId) {
+    const p = estado.profissionais[profissionalId];
+    if (p && /bruno/i.test(p.nome || '') && !/bruno rafael/i.test(p.nome || '') && p.ativo === false) {
+      p.ativo = true;
+      p.removidoEm = null;
+      p.excluido = false;
+    }
+    if (!p || p.ativo === false) throw new Error('Profissional responsável não encontrado ou inativo.');
+  }
   const precoUnitario = dinheiro(tipo === 'servico' ? cadastro.preco : cadastro.precoVenda);
   if (precoUnitario < 0) throw new Error('O item não pode ter preço negativo.');
   if (tipo === 'produto' && Number(cadastro.estoqueAtual || 0) < quantidade && cadastro.bloquearSemEstoque === true) {

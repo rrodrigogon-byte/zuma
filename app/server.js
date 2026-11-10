@@ -543,6 +543,39 @@ function seedUsuarios(){
     });
     save();
   }
+  // Provisionamento de Bruno Mendes (Barbeiro Profissional da Dino Barbearia)
+  const temBruno = (d.usuarios || []).some(u => norm(u.username) === 'bruno' || norm(u.email).includes('bruno@'));
+  if (!temBruno) {
+    d.usuarios.push({
+      id: 'usr-dino-bruno-profissional-01',
+      nome: 'Bruno Mendes Pedroso',
+      username: 'bruno',
+      apelido: 'Bruno',
+      email: 'bruno@barbeariadino.com.br',
+      emailAlternativo: 'brunomendes@barbeariadino.com.br',
+      senhaHash: bcrypt.hashSync('123456', 10),
+      role: 'profissional',
+      perfil: 'profissional',
+      especialidade: 'Barbeiro Especialista (Corte, Barba e Procedimentos)',
+      empresaId: DINO_COMMERCE_EMPRESA_ID,
+      lojaId: DINO_COMMERCE_LOJA_ID,
+      ativo: true,
+      criadoEm: new Date().toISOString()
+    });
+    save();
+  } else {
+    const uBruno = d.usuarios.find(u => norm(u.username) === 'bruno' || norm(u.email).includes('bruno@'));
+    if (uBruno) {
+      uBruno.role = 'profissional';
+      uBruno.perfil = 'profissional';
+      uBruno.empresaId = DINO_COMMERCE_EMPRESA_ID;
+      uBruno.lojaId = DINO_COMMERCE_LOJA_ID;
+      uBruno.senhaHash = bcrypt.hashSync('123456', 10);
+      uBruno.ativo = true;
+      save();
+    }
+  }
+
   // Provisionamento de Ster (Operadora / Atendente da Dino Barbearia)
   const temSter = (d.usuarios || []).some(u => norm(u.username) === 'ster' || norm(u.email).includes('ster@') || norm(u.username) === 'ester');
   if (!temSter) {
