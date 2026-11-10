@@ -99,24 +99,31 @@ export function createErpAdminRouter({ db, escopoDaRequisicao }) {
 
 
   // ── DRE CONTÁBIL E GERENCIAL AVANÇADA ───────────────────────────────────
-  router.get('/dre', rota('reports.read', ({ req, empresaId, lojaRestrita }) => dreSvc.calcularDreCompleta(db, empresaId, {
-    de: req.query.de,
-    ate: req.query.ate,
-    mes: req.query.mes,
-    ano: req.query.ano,
-    regime: req.query.regime || 'competencia',
-    lojaId: req.query.lojaId || lojaRestrita,
-    centroCustoId: req.query.centroCustoId
-  })));
+  router.get('/dre', rota('reports.read', ({ req, empresaId, lojaRestrita }) => {
+    const empTarget = req.query.empresaId || req.query.empresa || empresaId;
+    return dreSvc.calcularDreCompleta(db, empTarget, {
+      de: req.query.de,
+      ate: req.query.ate,
+      mes: req.query.mes,
+      ano: req.query.ano,
+      regime: req.query.regime || 'competencia',
+      lojaId: req.query.lojaId || lojaRestrita,
+      centroCustoId: req.query.centroCustoId
+    });
+  }));
 
-  router.get('/dre/anual', rota('reports.read', ({ req, empresaId, lojaRestrita }) => dreSvc.calcularDreAnual12Meses(db, empresaId, {
-    ano: req.query.ano,
-    regime: req.query.regime || 'competencia',
-    lojaId: req.query.lojaId || lojaRestrita
-  })));
+  router.get('/dre/anual', rota('reports.read', ({ req, empresaId, lojaRestrita }) => {
+    const empTarget = req.query.empresaId || req.query.empresa || empresaId;
+    return dreSvc.calcularDreAnual12Meses(db, empTarget, {
+      ano: req.query.ano,
+      regime: req.query.regime || 'competencia',
+      lojaId: req.query.lojaId || lojaRestrita
+    });
+  }));
 
   router.get('/dre/exportar-csv', rota('reports.read', async ({ req, empresaId, lojaRestrita }) => {
-    const dre = await dreSvc.calcularDreCompleta(db, empresaId, {
+    const empTarget = req.query.empresaId || req.query.empresa || empresaId;
+    const dre = await dreSvc.calcularDreCompleta(db, empTarget, {
       de: req.query.de,
       ate: req.query.ate,
       mes: req.query.mes,
