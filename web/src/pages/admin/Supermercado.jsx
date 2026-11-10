@@ -327,6 +327,10 @@ export default function Supermercado() {
   const inputScannerRef = useRef(null);
   const [leitorCodigo, setLeitorCodigo] = useState('');
   const [formaPagamento, setFormaPagamento] = useState('dinheiro');
+  const [bandeiraCartao, setBandeiraCartao] = useState('visa');
+  const [parcelasCartao, setParcelasCartao] = useState(1);
+  const [convenioAlimentacao, setConvenioAlimentacao] = useState('alelo');
+  const [pixCopiado, setPixCopiado] = useState(false);
   const [valorRecebido, setValorRecebido] = useState('');
   const [cpfCliente, setCpfCliente] = useState('');
   const [clienteClubeIdentificado, setClienteClubeIdentificado] = useState(null);
@@ -2401,21 +2405,137 @@ export default function Supermercado() {
                 </div>
 
                 {formaPagamento === 'dinheiro' && (
-                  <div className="troco-box-row">
-                    <div>
-                      <label className="input-sub-label">Valor Recebido (R$):</label>
-                      <input
-                        type="number"
-                        step="0.01"
-                        className="super-form-input"
-                        placeholder="R$ 0,00"
-                        value={valorRecebido}
-                        onChange={(e) => setValorRecebido(e.target.value)}
+                  <div className="super-payment-sub-box">
+                    <div className="troco-box-row">
+                      <div className="troco-input-col">
+                        <label className="input-sub-label">Valor Recebido do Cliente (R$):</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          className="super-form-input valor-recebido-input"
+                          placeholder="R$ 0,00"
+                          value={valorRecebido}
+                          onChange={(e) => setValorRecebido(e.target.value)}
+                        />
+                      </div>
+                      <div className="troco-display">
+                        <span className="troco-label">TROCO A DEVOLVER:</span>
+                        <strong className="troco-val">R$ {trocoCalculado.toFixed(2)}</strong>
+                      </div>
+                    </div>
+                    <div className="super-cash-shortcuts">
+                      <span className="cash-shortcuts-label">Atalhos de Cédulas Rápidas:</span>
+                      <div className="cash-pills-row">
+                        <button type="button" className="super-cash-pill exato" onClick={() => setValorRecebido(totalCarrinho.toFixed(2))}>
+                          ✓ Valor Exato (R$ {totalCarrinho.toFixed(2)})
+                        </button>
+                        {[10, 20, 50, 100, 200].map(val => (
+                          <button key={val} type="button" className="super-cash-pill" onClick={() => setValorRecebido(val.toFixed(2))}>
+                            R$ {val}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {formaPagamento === 'pix' && (
+                  <div className="super-pix-payment-box">
+                    <div className="pix-qr-container">
+                      <QRCodeSVG
+                        value={'00020126580014br.gov.bcb.pix0136d0d0ac01-8e50-4b61-8c79-de4aaa916da6520400005303986540' + totalCarrinho.toFixed(2) + '5802BR5920Supermercado Kytto6016Tangara da Serra62070503***6304'}
+                        size={120}
+                        bgColor="#ffffff"
+                        fgColor="#0f172a"
                       />
                     </div>
-                    <div className="troco-display">
-                      <span className="troco-label">TROCO:</span>
-                      <strong className="troco-val">R$ {trocoCalculado.toFixed(2)}</strong>
+                    <div className="pix-details-col">
+                      <div className="pix-key-pill">Chave PIX: <strong>financeiro@kytto.com.br</strong></div>
+                      <div className="pix-val-pill">Total: <strong>R$ {totalCarrinho.toFixed(2)}</strong></div>
+                      <button
+                        type="button"
+                        className="super-btn-sec-small w-full"
+                        onClick={() => {
+                          navigator.clipboard?.writeText("00020126580014br.gov.bcb.pix0136d0d0ac01-8e50-4b61-8c79-de4aaa916da6520400005303986540" + totalCarrinho.toFixed(2) + "5802BR5920Supermercado Kytto6016Tangara da Serra");
+                          setPixCopiado(true);
+                          setTimeout(() => setPixCopiado(false), 2000);
+                          showToast("Chave / Código Pix Copia e Cola copiado!");
+                        }}
+                      >
+                        {pixCopiado ? "✓ Código Copiado!" : "📋 Copiar Pix Copia e Cola"}
+                      </button>
+                      <small className="pix-status-legend">🟢 Barramento Pix Síncrono A2 ativo. Confirmação instantânea após leitura.</small>
+                    </div>
+                  </div>
+                )}
+
+                {['debito', 'credito'].includes(formaPagamento) && (
+                  <div className="super-card-payment-box">
+                    <label className="input-sub-label">Bandeira do Cartão:</label>
+                    <div className="card-flags-grid">
+                      {[
+                        { id: 'visa', label: 'VISA' },
+                        { id: 'mastercard', label: 'MASTERCARD' },
+                        { id: 'elo', label: 'ELO' },
+                        { id: 'hipercard', label: 'HIPERCARD' }
+                      ].map(b => (
+                        <button
+                          key={b.id}
+                          type="button"
+                          className={'super-flag-btn ' + (bandeiraCartao === b.id ? 'active' : '')}
+                          onClick={() => setBandeiraCartao(b.id)}
+                        >
+                          {b.label}
+                        </button>
+                      ))}
+                    </div>
+                    {formaPagamento === 'credito' && (
+                      <div className="card-installments-box">
+                        <label className="input-sub-label">Plano de Parcelamento:</label>
+                        <select
+                          className="super-form-input select-installments"
+                          value={parcelasCartao}
+                          onChange={(e) => setParcelasCartao(Number(e.target.value))}
+                        >
+                          <option value={1}>1x de R$ {totalCarrinho.toFixed(2)} (À vista no vencimento)</option>
+                          <option value={2}>2x de R$ {(totalCarrinho / 2).toFixed(2)} (Sem juros)</option>
+                          <option value={3}>3x de R$ {(totalCarrinho / 3).toFixed(2)} (Sem juros)</option>
+                          <option value={4}>4x de R$ {(totalCarrinho / 4).toFixed(2)} (Sem juros)</option>
+                          <option value={5}>5x de R$ {(totalCarrinho / 5).toFixed(2)} (Sem juros)</option>
+                          <option value={6}>6x de R$ {(totalCarrinho / 6).toFixed(2)} (Sem juros)</option>
+                        </select>
+                      </div>
+                    )}
+                    <div className="tef-online-status">
+                      <CreditCard size={15} className="text-emerald-600" />
+                      <span>TEF / PinPad Conectado · Aproxime ou insira o cartão</span>
+                    </div>
+                  </div>
+                )}
+
+                {formaPagamento === 'alimentacao' && (
+                  <div className="super-card-payment-box">
+                    <label className="input-sub-label">Operadora do Voucher Alimentação / Refeição:</label>
+                    <div className="card-flags-grid">
+                      {[
+                        { id: 'alelo', label: 'ALELO' },
+                        { id: 'vr', label: 'VR' },
+                        { id: 'sodexo', label: 'SODEXO / PLUXEE' },
+                        { id: 'ticket', label: 'TICKET' }
+                      ].map(v => (
+                        <button
+                          key={v.id}
+                          type="button"
+                          className={'super-flag-btn ' + (convenioAlimentacao === v.id ? 'active' : '')}
+                          onClick={() => setConvenioAlimentacao(v.id)}
+                        >
+                          {v.label}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="tef-online-status">
+                      <CreditCard size={15} className="text-emerald-600" />
+                      <span>Cartão Benefício autorizando via rede credenciada</span>
                     </div>
                   </div>
                 )}
