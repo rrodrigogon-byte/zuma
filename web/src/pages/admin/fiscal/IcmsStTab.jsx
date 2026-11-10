@@ -125,7 +125,7 @@ export default function IcmsStTab({ toast }) {
                   >
                     <option value={7}>7,00% (Sul / Sudeste exceto ES)</option>
                     <option value={12}>12,00% (Norte / Nordeste / Centro-Oeste / ES)</option>
-                    <option value={4}>4,00% (Importados CAMEX > 40%)</option>
+                    <option value={4}>4,00% (Importados CAMEX &gt; 40%)</option>
                   </select>
                 </div>
               )}
