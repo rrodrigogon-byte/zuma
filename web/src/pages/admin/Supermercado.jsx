@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
-  UserX, Megaphone, Newspaper, Moon,
+  Zap, UserX, Megaphone, Newspaper, Moon,
   ScanLine, LayoutGrid, FileCheck, QrCode,
   Navigation, Recycle, Handshake,
   Radio, Ticket, Vault,
@@ -65,7 +65,7 @@ const AREAS_SUPERMERCADO = [
   {
     id: 'vendas_caixa',
     numero: '2',
-    nome: 'Vendas e caixa',
+    nome: 'Vendas & Caixa',
     icone: '💵',
     descricao: 'Frente de caixa, terminais, self-checkout, trocas, tesouraria e conciliação',
     subAbas: [
@@ -81,7 +81,7 @@ const AREAS_SUPERMERCADO = [
   {
     id: 'produtos_precos',
     numero: '3',
-    nome: 'Produtos e preços',
+    nome: 'Produtos & Preços',
     icone: '🏷️',
     descricao: 'Mix, atacarejo, promoções, planograma, busca-preço, etiquetas e balanças',
     subAbas: [
@@ -98,7 +98,7 @@ const AREAS_SUPERMERCADO = [
   {
     id: 'pereciveis_producao',
     numero: '4',
-    nome: 'Perecíveis e produção',
+    nome: 'Perecíveis',
     icone: '🥩',
     descricao: 'Controle de validade FEFO, açougue, padaria, hortifrúti e rotisseria',
     subAbas: [
@@ -112,7 +112,7 @@ const AREAS_SUPERMERCADO = [
   {
     id: 'suprimentos_estoque',
     numero: '5',
-    nome: 'Suprimentos e estoque',
+    nome: 'Estoque & Suprimentos',
     icone: '📦',
     descricao: 'Entrada de mercadorias, ruptura, docas, WMS, picking e compras',
     subAbas: [
@@ -128,7 +128,7 @@ const AREAS_SUPERMERCADO = [
   {
     id: 'clientes_prevencao',
     numero: '6',
-    nome: 'Clientes e prevenção',
+    nome: 'Clientes & Prevenção',
     icone: '🛡️',
     descricao: 'Fidelidade, prevenção de perdas, auditoria de fraude e fechamento',
     subAbas: [
@@ -160,6 +160,24 @@ export default function Supermercado() {
   const [areaAtiva, setAreaAtiva] = useState('painel');
   const [abaAtiva, setAbaAtiva] = useState('dashboard');
   const [lojaAtivaId, setLojaAtivaId] = useState(null);
+  const unidadeNome = useMemo(() => {
+    const lojasDaEmpresa = (lojas || []).filter(l => l.empresa_id === empresaAtiva?.id);
+    if (lojasDaEmpresa.length > 0) {
+      const sel = lojasDaEmpresa.find(l => l.id === lojaAtivaId);
+      return sel ? sel.nome : lojasDaEmpresa[0].nome;
+    }
+    if (empresaAtiva?.nome?.toLowerCase().includes('supermercado')) {
+      return 'Supermercado Kytto - Loja Principal';
+    }
+    if (empresaAtiva?.nome?.toLowerCase().includes('agro')) {
+      return 'Loja Web - AGRO OPEN TTC';
+    }
+    if (lojaAtiva && lojaAtiva.empresa_id === empresaAtiva?.id) {
+      return lojaAtiva.nome;
+    }
+    return 'Loja Matriz Central';
+  }, [lojas, lojaAtivaId, empresaAtiva, lojaAtiva]);
+
   const [lojas, setLojas] = useState([]);
   const [carregando, setCarregando] = useState(false);
   const [toastMsg, setToastMsg] = useState(null);
@@ -1602,59 +1620,103 @@ export default function Supermercado() {
         </div>
       )}
 
-      {/* ── CABEÇALHO PRINCIPAL COM MULTILOJA & STATUS DO CAIXA ── */}
+      {/* ── CABEÇALHO PRINCIPAL EXECUTIVO ── */}
       <header className="super-header-bar">
-        <div className="super-header-info">
-          <div className="super-title-row">
-            <Store className="super-logo-icon" size={28} />
-            <div>
-              <h1 className="super-main-title">Kytto Supermercado & Varejo Alimentar</h1>
-              <p className="super-sub-title">Gestão Integral de Gôndola, Frente de Caixa (PDV), Balanças e Perecíveis</p>
+        <div className="super-header-left">
+          <div className="super-header-icon-box">
+            <Store size={26} />
+          </div>
+          <div>
+            <div className="super-header-title-wrap">
+              <h1 className="super-main-title">Kytto Supermercado & Atacarejo</h1>
+              <span className="super-header-badge">Varejo Alimentar · Cash & Carry</span>
             </div>
+            <p className="super-sub-title">Gestão Integral de Gôndola, Balanças, Frente de Caixa (PDV) e Perecíveis</p>
           </div>
         </div>
 
-        <div className="super-header-actions">
-          {/* Status Caixa */}
-          <div className={`super-caixa-badge ${sessaoCaixa?.status === 'aberto' ? 'aberto' : 'fechado'}`}>
-            <Lock size={14} />
-            <span>Caixa PDV: <strong>{sessaoCaixa?.status === 'aberto' ? 'ABERTO' : 'FECHADO'}</strong></span>
-            {sessaoCaixa?.status === 'aberto' && (
-              <span className="super-caixa-gaveta">(R$ {sessaoCaixa?.resumo?.saldoDinheiroEsperado?.toFixed(2) || '0.00'})</span>
+        <div className="super-header-right">
+          {/* Status Caixa Compact Pill */}
+          <div className={`super-caixa-status-pill ${sessaoCaixa?.status === 'aberto' ? 'aberto' : 'fechado'}`}>
+            <div className="status-indicator-dot" />
+            <div className="status-text-wrap">
+              <span className="status-label">Caixa PDV #01</span>
+              <strong className="status-state">
+                {sessaoCaixa?.status === 'aberto'
+                  ? `ABERTO · R$ ${sessaoCaixa?.resumo?.saldoDinheiroEsperado?.toFixed(2) || '0.00'}`
+                  : 'FECHADO'}
+              </strong>
+            </div>
+            {sessaoCaixa?.status === 'aberto' ? (
+              <div className="status-mini-actions">
+                <button type="button" className="mini-act-btn" onClick={() => setModalCaixa('suprimento')} title="Suprimento">+ Sup</button>
+                <button type="button" className="mini-act-btn" onClick={() => setModalCaixa('sangria')} title="Sangria">- Sang</button>
+                <button type="button" className="mini-act-btn danger" onClick={() => setModalCaixa('fechar')} title="Fechar Caixa">Fechar</button>
+              </div>
+            ) : (
+              <button type="button" className="mini-act-btn primary" onClick={() => setModalCaixa('abrir')}>
+                <KeyRound size={12} /> Abrir
+              </button>
             )}
           </div>
 
-          {sessaoCaixa?.status === 'aberto' ? (
-            <div className="super-caixa-btn-group">
-              <button className="super-btn-sec" onClick={() => setModalCaixa('sangria')}>Sangria</button>
-              <button className="super-btn-sec" onClick={() => setModalCaixa('suprimento')}>Suprimento</button>
-              <button className="super-btn-danger" onClick={() => setModalCaixa('fechar')}>Fechar Caixa</button>
-            </div>
-          ) : (
-            <button className="super-btn-primary" onClick={() => setModalCaixa('abrir')}>
-              <KeyRound size={16} /> Abrir Caixa PDV
-            </button>
-          )}
-
-          <button className="super-btn-mix-cta" onClick={executarCargaMixOficial} title="Carregar 25 itens da cesta brasileira">
-            <Layers size={16} /> Carga Mix Oficial (25 Itens)
-          </button>
-          {pwaInstalavel && (
-            <button className="super-btn-pwa-install" onClick={handleInstalarPwaNativo} title="Instalar aplicativo nativo no Windows">
-              <Download size={16} /> Instalar no Windows (PWA)
-            </button>
-          )}
-          <button className="super-btn-windows-cta" onClick={() => setModalInstaladorWindows(true)} title="Instalador Windows & PWA">
-            <Monitor size={16} /> 🖥️ Instalador Windows & PWA
+          {/* Botão Primário: Frente de Caixa Tela Cheia */}
+          <button
+            type="button"
+            className="super-btn-cta-pdv"
+            onClick={() => window.open('/pdv', '_blank')}
+            title="Abrir Frente de Caixa PDV em tela cheia com atalhos e periféricos"
+          >
+            <ShoppingCart size={18} />
+            <span>Frente de Caixa (PDV)</span>
           </button>
 
-          <button className="super-btn-refresh" onClick={carregarDados} disabled={carregando} title="Atualizar dados">
+          {/* Botão Utilitário: Balança Serial */}
+          <button
+            type="button"
+            className="super-btn-utility"
+            onClick={() => { setAreaAtiva('vendas_caixa'); setAbaAtiva('simulador_balanca'); }}
+            title="Simulador de Balança Serial Toledo / Filizola"
+          >
+            <Scale size={16} />
+            <span>Balança</span>
+          </button>
+
+          {/* Botão Utilitário: Carga Mix */}
+          <button
+            type="button"
+            className="super-btn-utility"
+            onClick={executarCargaMixOficial}
+            title="Carregar 25 itens canônicos da cesta supermercadista brasileira"
+          >
+            <Layers size={16} />
+            <span>Mix Oficial (25)</span>
+          </button>
+
+          {/* Botão Utilitário: App Windows / PWA */}
+          <button
+            type="button"
+            className="super-btn-utility"
+            onClick={() => setModalInstaladorWindows(true)}
+            title="Instalador Windows e Aplicativo PWA"
+          >
+            <Monitor size={16} />
+            <span>Desktop</span>
+          </button>
+
+          {/* Atualizar */}
+          <button
+            type="button"
+            className="super-btn-icon"
+            onClick={carregarDados}
+            disabled={carregando}
+            title="Atualizar dados do supermercado"
+          >
             <RefreshCw size={16} className={carregando ? 'spin' : ''} />
           </button>
         </div>
       </header>
 
-      {/* ── BARRA DE NAVEGAÇÃO DE ABAS CORPORATIVAS ── */}
       {/* ── SELETOR DE CONTEXTO & PERÍODO EXECUTIVO (PADRÃO @RODRIGO GONÇALVES) ── */}
       <div className="super-exec-context-bar">
         <div className="super-exec-brand">
@@ -1662,7 +1724,7 @@ export default function Supermercado() {
           <div className="super-exec-scope">
             <span className="super-exec-scope-label">Escopo Corporativo</span>
             <span className="super-exec-scope-path">
-              Grupo Silvester Holding <span>›</span> Empresa: {empresaAtiva?.nome || 'AGRO OPEN'} <span>›</span> Negócio: Supermercado & Atacarejo <span>›</span> Unidade: {lojas.find(l => l.id === lojaAtivaId)?.nome || lojaAtiva?.nome || 'Loja Principal Matriz'}
+              Grupo Silvester Holding <span>›</span> Empresa: {empresaAtiva?.nome || 'Supermercado Kytto'} <span>›</span> Negócio: Supermercado & Atacarejo <span>›</span> Unidade: {unidadeNome}
             </span>
           </div>
         </div>
@@ -1708,18 +1770,17 @@ export default function Supermercado() {
             <button
               key={area.id}
               type="button"
-              className={`super-area-card-btn ${ativa ? 'active' : ''}`}
+              className={`super-area-tab-btn ${ativa ? 'active' : ''}`}
               onClick={() => {
                 setAreaAtiva(area.id);
                 const primeiraSub = area.subAbas[0]?.id;
                 if (primeiraSub) setAbaAtiva(primeiraSub);
               }}
+              title={area.descricao}
             >
-              <div className="super-area-num">{area.numero}</div>
-              <div className="super-area-content">
-                <span className="super-area-name">{area.icone} {area.nome}</span>
-                <span className="super-area-hint">{area.subAbas.length} telas ativas</span>
-              </div>
+              <span className="super-area-badge-num">{area.numero}</span>
+              <span className="super-area-emoji">{area.icone}</span>
+              <span className="super-area-label">{area.nome}</span>
             </button>
           );
         })}
@@ -1739,7 +1800,6 @@ export default function Supermercado() {
             else if (sub.badgeKey === 'rupturas') badgeVal = alertasRuptura.length > 0 ? `${alertasRuptura.length} faltas` : null;
             else if (sub.badgeKey === 'compras') badgeVal = sugestoesCompras.length > 0 ? sugestoesCompras.length : null;
             else if (sub.badgeKey === 'clube') badgeVal = clientesClube.length > 0 ? clientesClube.length : null;
-
             return (
               <button
                 key={sub.id}
@@ -1766,103 +1826,219 @@ export default function Supermercado() {
       <main className="super-main-content">
         {/* ── 1. DASHBOARD & KPIS ── */}
         {abaAtiva === 'dashboard' && (
-          <div className="super-dash-grid">
-            <div className="super-kpi-card">
-              <span className="kpi-label">{periodoAtivo === 'hoje' ? 'Faturamento do Dia' : (periodoAtivo === 'semana' ? 'Faturamento da Semana' : 'Faturamento do Mês')}</span>
-              <strong className="kpi-val text-green">
-                {(resumo?.totalVendas != null && Number(resumo.totalVendas) > 0)
-                  ? `R$ ${Number(resumo.totalVendas).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                  : '—'}
-              </strong>
-              <small className="kpi-sub">
-                {(resumo?.cuponsEmitidos != null && Number(resumo.cuponsEmitidos) > 0)
-                  ? `${resumo.cuponsEmitidos} ${resumo.cuponsEmitidos === 1 ? 'cupom NFC-e emitido' : 'cupons NFC-e emitidos'}`
-                  : 'Sem vendas registradas hoje'}
-              </small>
-            </div>
+          <div className="super-dash-container">
+            {/* Grid 4 Cartões Executivos */}
+            <div className="super-kpi-grid">
+              {/* Card 1: Faturamento */}
+              <div className="super-kpi-card green">
+                <div className="super-kpi-top">
+                  <span className="super-kpi-label">
+                    {periodoAtivo === 'hoje' ? 'Faturamento do Dia' : (periodoAtivo === 'semana' ? 'Faturamento da Semana' : 'Faturamento do Mês')}
+                  </span>
+                  <div className="super-kpi-icon green">
+                    <TrendingUp size={20} />
+                  </div>
+                </div>
+                <div className="super-kpi-value text-green">
+                  {(resumo?.totalVendas != null && Number(resumo.totalVendas) > 0)
+                    ? `R$ ${Number(resumo.totalVendas).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                    : '—'}
+                </div>
+                <div className="super-kpi-sub">
+                  {(resumo?.cuponsEmitidos != null && Number(resumo.cuponsEmitidos) > 0)
+                    ? `${resumo.cuponsEmitidos} ${resumo.cuponsEmitidos === 1 ? 'cupom NFC-e emitido' : 'cupons NFC-e emitidos'}`
+                    : 'Sem vendas registradas hoje'}
+                </div>
+                <div className="super-kpi-footer">
+                  <span className="super-kpi-tag success">SEFAZ Autorizada</span>
+                  <span className="super-kpi-hint">Vendas em tempo real</span>
+                </div>
+              </div>
 
-            <div className="super-kpi-card">
-              <span className="kpi-label">Ticket Médio</span>
-              <strong className="kpi-val">
-                {(resumo?.ticketMedio != null && Number(resumo.ticketMedio) > 0)
-                  ? `R$ ${Number(resumo.ticketMedio).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                  : '—'}
-              </strong>
-              <small className="kpi-sub">
-                {(resumo?.ticketMedio != null && Number(resumo.ticketMedio) > 0)
-                  ? 'Média por cliente no checkout'
-                  : 'Sem movimentação no período'}
-              </small>
-            </div>
+              {/* Card 2: Ticket Médio */}
+              <div className="super-kpi-card blue">
+                <div className="super-kpi-top">
+                  <span className="super-kpi-label">Ticket Médio</span>
+                  <div className="super-kpi-icon blue">
+                    <Receipt size={20} />
+                  </div>
+                </div>
+                <div className="super-kpi-value text-blue">
+                  {(resumo?.ticketMedio != null && Number(resumo.ticketMedio) > 0)
+                    ? `R$ ${Number(resumo.ticketMedio).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                    : '—'}
+                </div>
+                <div className="super-kpi-sub">
+                  {(resumo?.ticketMedio != null && Number(resumo.ticketMedio) > 0)
+                    ? 'Média por cliente no checkout'
+                    : 'Sem movimentação no período'}
+                </div>
+                <div className="super-kpi-footer">
+                  <span className="super-kpi-tag info">Frente de Caixa</span>
+                  <span className="super-kpi-hint">Cesta de compras</span>
+                </div>
+              </div>
 
-            <div className="super-kpi-card">
-              <span className="kpi-label">Estoque a Preço de Venda</span>
-              <strong className="kpi-val text-blue">
-                {totalEstoqueVendaReal > 0
-                  ? `R$ ${totalEstoqueVendaReal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                  : (produtos.length > 0 ? 'R$ 0,00' : '—')}
-              </strong>
-              <small className="kpi-sub">
-                {totalEstoqueCustoReal > 0
-                  ? `Custo: R$ ${totalEstoqueCustoReal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                  : 'Sem saldo em estoque'}
-              </small>
-            </div>
+              {/* Card 3: Estoque a Preço de Venda */}
+              <div className="super-kpi-card purple">
+                <div className="super-kpi-top">
+                  <span className="super-kpi-label">Estoque a Preço de Venda</span>
+                  <div className="super-kpi-icon purple">
+                    <Package size={20} />
+                  </div>
+                </div>
+                <div className="super-kpi-value text-purple">
+                  {totalEstoqueVendaReal > 0
+                    ? `R$ ${totalEstoqueVendaReal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                    : (produtos.length > 0 ? 'R$ 0,00' : '—')}
+                </div>
+                <div className="super-kpi-sub">
+                  {totalEstoqueCustoReal > 0
+                    ? `Custo: R$ ${totalEstoqueCustoReal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                    : 'Sem saldo em estoque'}
+                </div>
+                <div className="super-kpi-footer">
+                  <span className="super-kpi-tag purple">
+                    {totalEstoqueVendaReal > 0 && totalEstoqueCustoReal > 0
+                      ? `Margem: ${(((totalEstoqueVendaReal - totalEstoqueCustoReal) / totalEstoqueVendaReal) * 100).toFixed(1)}%`
+                      : 'WMS Gôndola & Pulmão'}
+                  </span>
+                  <span className="super-kpi-hint">{produtos.length} itens no mix</span>
+                </div>
+              </div>
 
-            <div className="super-kpi-card">
-              <span className="kpi-label">Lotes em Risco FEFO</span>
-              <strong className={`kpi-val ${(lotesVencidosTotal + lotesCriticosTotal) > 0 ? 'text-orange' : 'text-slate-600'}`}>
-                {(lotesVencidosTotal + lotesCriticosTotal) > 0
-                  ? `${lotesVencidosTotal + lotesCriticosTotal} Lotes`
-                  : '0 Lotes'}
-              </strong>
-              <small className={`kpi-sub ${lotesVencidosTotal > 0 ? 'text-red' : ''}`}>
-                {lotesVencidosTotal > 0
-                  ? `${lotesVencidosTotal} vencidos / ${lotesCriticosTotal} críticos`
-                  : ((lotesCriticosTotal > 0) ? `${lotesCriticosTotal} críticos` : 'Nenhum lote vencido ou crítico')}
-              </small>
-            </div>
-
-            {/* Painel de Departamentos */}
-            <div className="super-dash-section col-span-2">
-              <h3 className="section-title">Distribuição de Mix e Margens por Departamento</h3>
-              <div className="deptos-pills-grid">
-                {DEPARTAMENTOS.map(dep => {
-                  const itensDep = produtos.filter(p => p.departamento === dep);
-                  return (
-                    <div key={dep} className="depto-stat-pill">
-                      <span className="depto-name">{dep}</span>
-                      <strong className="depto-count">{itensDep.length} itens</strong>
-                    </div>
-                  );
-                })}
+              {/* Card 4: Lotes em Risco FEFO */}
+              <div className="super-kpi-card amber">
+                <div className="super-kpi-top">
+                  <span className="super-kpi-label">Lotes em Risco (FEFO)</span>
+                  <div className="super-kpi-icon amber">
+                    <AlertTriangle size={20} />
+                  </div>
+                </div>
+                <div className={`super-kpi-value ${(lotesVencidosTotal + lotesCriticosTotal) > 0 ? 'text-amber' : 'text-slate-800'}`}>
+                  {(lotesVencidosTotal + lotesCriticosTotal) > 0
+                    ? `${lotesVencidosTotal + lotesCriticosTotal} Lotes`
+                    : '0 Lotes'}
+                </div>
+                <div className={`super-kpi-sub ${lotesVencidosTotal > 0 ? 'text-red' : ''}`}>
+                  {lotesVencidosTotal > 0
+                    ? `${lotesVencidosTotal} vencidos / ${lotesCriticosTotal} críticos`
+                    : ((lotesCriticosTotal > 0) ? `${lotesCriticosTotal} críticos` : 'Nenhum lote vencido ou crítico')}
+                </div>
+                <div className="super-kpi-footer">
+                  <span className={`super-kpi-tag ${(lotesVencidosTotal + lotesCriticosTotal) > 0 ? 'warning' : 'neutral'}`}>
+                    {(lotesVencidosTotal + lotesCriticosTotal) > 0 ? 'Ação Imediata' : 'Gôndola Segura'}
+                  </span>
+                  <span className="super-kpi-hint">Auditoria diária</span>
+                </div>
               </div>
             </div>
 
-            {/* Ações Rápidas */}
-            <div className="super-dash-section col-span-2">
-              <h3 className="section-title">Ações Operacionais de Alta Frequência</h3>
-              <div className="super-quick-actions-row">
-                <button className="quick-act-btn" onClick={() => setAbaAtiva('pdv')}>
-                  <ShoppingCart size={20} />
-                  <span>Abrir Frente de Caixa PDV</span>
-                </button>
-                <button className="quick-act-btn" onClick={() => downloadArquivoBalanca('toledo')}>
-                  <Scale size={20} />
-                  <span>Exportar Carga Balança (TXITENS.TXT)</span>
-                </button>
-                <button className="quick-act-btn" onClick={() => setAbaAtiva('simulador_balanca')}>
-                  <Scale size={20} />
-                  <span>Simular Balança Serial (Toledo)</span>
-                </button>
-                <button className="quick-act-btn" onClick={() => setAbaAtiva('desossa')}>
-                  <Beef size={20} />
-                  <span>Nova Desossa de Carnes (Açougue)</span>
-                </button>
-                <button className="quick-act-btn" onClick={() => setAbaAtiva('inventarios')}>
-                  <ClipboardCheck size={20} />
-                  <span>Iniciar Auditoria de Gôndola</span>
-                </button>
+            {/* Split em 2 Colunas */}
+            <div className="super-dash-main-split">
+              {/* Coluna 1: Mix e Departamentos */}
+              <div className="super-section-card">
+                <div className="super-section-header">
+                  <div>
+                    <h3 className="super-section-title">
+                      <Barcode size={18} /> Composição do Mix por Departamento
+                    </h3>
+                    <p className="super-section-sub">Distribuição de sortimento de gôndola e representatividade</p>
+                  </div>
+                  <button type="button" className="super-btn-xs" onClick={() => { setAreaAtiva('produtos_precos'); setAbaAtiva('mix'); }}>
+                    Gerenciar Mix →
+                  </button>
+                </div>
+                <div className="super-dept-list">
+                  {DEPARTAMENTOS.map(dep => {
+                    const itensDep = produtos.filter(p => p.departamento === dep);
+                    const pct = produtos.length > 0 ? Math.round((itensDep.length / produtos.length) * 100) : 0;
+                    const getIconeDep = (d) => {
+                      if (d.includes('Carnes')) return '🥩';
+                      if (d.includes('Hortifrúti')) return '🥦';
+                      if (d.includes('Padaria')) return '🥖';
+                      if (d.includes('Frios')) return '🧀';
+                      if (d.includes('Grãos')) return '🍚';
+                      if (d.includes('Bebidas')) return '🍺';
+                      if (d.includes('Limpeza')) return '🧼';
+                      if (d.includes('Rotisseria')) return '🍗';
+                      if (d.includes('Biscoitos')) return '🍪';
+                      return '🥫';
+                    };
+                    return (
+                      <div key={dep} className="super-dept-row">
+                        <span className="super-dept-icon">{getIconeDep(dep)}</span>
+                        <div className="super-dept-info">
+                          <div className="super-dept-labels">
+                            <span className="super-dept-title">{dep}</span>
+                            <span className="super-dept-count">
+                              <strong>{itensDep.length}</strong> {itensDep.length === 1 ? 'item' : 'itens'} {pct > 0 ? `(${pct}%)` : ''}
+                            </span>
+                          </div>
+                          <div className="super-dept-bar-track">
+                            <div className="super-dept-bar-fill" style={{ width: `${Math.max(pct, itensDep.length > 0 ? 8 : 0)}%` }} />
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Coluna 2: Cockpit de Ações Operacionais */}
+              <div className="super-section-card">
+                <div className="super-section-header">
+                  <div>
+                    <h3 className="super-section-title">
+                      <Zap size={18} /> Ações Rápidas de Alta Frequência
+                    </h3>
+                    <p className="super-section-sub">Operações essenciais do dia a dia no supermercado</p>
+                  </div>
+                </div>
+                <div className="super-quick-action-cards">
+                  <div className="super-action-card primary" onClick={() => { setAreaAtiva('vendas_caixa'); setAbaAtiva('pdv'); }}>
+                    <div className="action-card-icon green"><ShoppingCart size={22} /></div>
+                    <div className="action-card-text">
+                      <strong>Frente de Caixa (PDV Rápido)</strong>
+                      <span>Operação de checkout com leitor de código de barras e balança</span>
+                    </div>
+                  </div>
+                  <div className="super-action-card" onClick={() => { setAreaAtiva('vendas_caixa'); setAbaAtiva('simulador_balanca'); }}>
+                    <div className="action-card-icon blue"><Scale size={22} /></div>
+                    <div className="action-card-text">
+                      <strong>Simulador de Balança Serial</strong>
+                      <span>Emulador Toledo Prix 3, Filizola CS-15 e EAN-13 Prefixo 2</span>
+                    </div>
+                  </div>
+                  <div className="super-action-card" onClick={() => downloadArquivoBalanca('toledo')}>
+                    <div className="action-card-icon purple"><FileText size={22} /></div>
+                    <div className="action-card-text">
+                      <strong>Carga de Balança (TXITENS.TXT)</strong>
+                      <span>Exportar catálogo para software Toledo MGV6 / Urano</span>
+                    </div>
+                  </div>
+                  <div className="super-action-card" onClick={() => { setAreaAtiva('pereciveis_producao'); setAbaAtiva('desossa'); }}>
+                    <div className="action-card-icon red"><Beef size={22} /></div>
+                    <div className="action-card-text">
+                      <strong>Açougue & Rastreabilidade SIF</strong>
+                      <span>Desossa de carcaças, cortes bovinos e selo fiscal 1254/MT</span>
+                    </div>
+                  </div>
+                  <div className="super-action-card" onClick={() => { setAreaAtiva('suprimentos_estoque'); setAbaAtiva('inventarios'); }}>
+                    <div className="action-card-icon amber"><ClipboardCheck size={22} /></div>
+                    <div className="action-card-text">
+                      <strong>Auditoria de Gôndola & Inventário</strong>
+                      <span>Conferência de etiquetas, preços e estoque físico</span>
+                    </div>
+                  </div>
+                  <div className="super-action-card" onClick={() => { setAreaAtiva('vendas_caixa'); setAbaAtiva('conciliacao'); }}>
+                    <div className="action-card-icon cyan"><CreditCard size={22} /></div>
+                    <div className="action-card-text">
+                      <strong>Conciliação TEF & Pix</strong>
+                      <span>Conferência de adquirentes e lote financeiro de cartões</span>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
