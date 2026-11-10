@@ -54,10 +54,12 @@ const AREAS_SUPERMERCADO = [
     numero: '2',
     nome: 'Vendas e caixa',
     icone: '💵',
-    descricao: 'Frente de caixa, terminais e checkout',
+    descricao: 'Frente de caixa, terminais, tesouraria e conciliação',
     subAbas: [
       { id: 'pdv', nome: 'Frente de Caixa (PDV)', iconeName: 'ShoppingCart' },
-      { id: 'terminais', nome: 'Caixas & Terminais', iconeName: 'Tv', badgeKey: 'terminais' }
+      { id: 'terminais', nome: 'Caixas & Terminais', iconeName: 'Tv', badgeKey: 'terminais' },
+      { id: 'tesouraria', nome: 'Tesouraria & Cofre Central', iconeName: 'Landmark' },
+      { id: 'conciliacao', nome: 'Conciliação TEF & Pix', iconeName: 'CreditCard' }
     ]
   },
   {
@@ -109,6 +111,18 @@ const AREAS_SUPERMERCADO = [
     subAbas: [
       { id: 'clube', nome: 'Clube Fidelidade', iconeName: 'Users', badgeKey: 'clube' },
       { id: 'perdas', nome: 'Prevenção de Perdas', iconeName: 'ShieldAlert' }
+    ]
+  },
+  {
+    id: 'erp_comum',
+    numero: '7',
+    nome: 'ERP Integrado',
+    icone: '🏛️',
+    descricao: 'DRE do negócio, matriz tributária e SPED Bloco K',
+    subAbas: [
+      { id: 'dre', nome: 'DRE de Loja & EBITDA', iconeName: 'TrendingUp' },
+      { id: 'tributario', nome: 'Matriz Tributária (ICMS/PIS/COFINS)', iconeName: 'Scale' },
+      { id: 'sped', nome: 'SPED Fiscal Bloco K', iconeName: 'FileText' }
     ]
   }
 ];
@@ -186,6 +200,8 @@ export default function Supermercado() {
       case 'ClipboardCheck': return <ClipboardCheck size={16} />;
       case 'Users': return <Users size={16} />;
       case 'ShieldAlert': return <ShieldAlert size={16} />;
+      case 'Landmark': return <Landmark size={16} />;
+      case 'CreditCard': return <CreditCard size={16} />;
       default: return <Store size={16} />;
     }
   };
