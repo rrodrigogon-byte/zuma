@@ -40,112 +40,118 @@ Demonstrativo do cancelamento formal e coordenado da comanda `cmdbar-mvvcv362-01
 
 ---
 
-### 2.3. Auditoria Preventiva DIMP vs Fiscal (Malha Fina SEFAZ-MT)
+### 2.3. Catálogo de Produtos e Segregação de Bebidas & Bar (Estoque de Revenda)
+Interface de gestão de materiais em produção demonstrando produtos cadastrados com as categorias oficiais Bebidas & Bar e Bebidas e snacks (comissão zero) e produtos cosméticos de Revenda (comissionáveis a 10%).
+
+
+---
+
+### 2.5. Auditoria Preventiva DIMP vs Fiscal (Malha Fina SEFAZ-MT)
 Tela em produção demonstrando cruzamento de R$ 33.500,00 em pagamentos eletrônicos com R$ 27.900,00 em notas fiscais, apontando divergência de R$ 5.600,00, nível de risco ALTO e detalhamento por adquirente DIMP (Cielo, Stone, Sicredi).
 
 ![Auditoria Preventiva DIMP vs Fiscal](/home/ubuntu/agro-open/docs/prints/37-fiscal-auditoria-dimp-malha-fina.png)
 
 ---
 
-### 2.4. Regularização Fiscal em Lote com Risco Zero
+### 2.5. Regularização Fiscal em Lote com Risco Zero
 Resultado da regularização instantânea em lote: emissão das notas fiscais pendentes, cobertura fiscal elevada a 100% e risco reduzido para **RISCO ZERO**.
 
 ![Regularização Fiscal DIMP com Risco Zero](/home/ubuntu/agro-open/docs/prints/40-fiscal-dimp-regularizacao-lote-sucesso.png)
 
 ---
 
-### 2.5. Supply Chain Hub — Cotações RFQ & Comparativo de Fornecedores (CIF vs FOB)
+### 2.6. Supply Chain Hub — Cotações RFQ & Comparativo de Fornecedores (CIF vs FOB)
 Painel de cotação corporativa comparando propostas da Cosméticos do Brasil (Menor Preço CIF, R$ 2.570,00) e Distribuidora Centro-Oeste (FOB, R$ 2.770,00).
 
 ![Supply Chain Cotações RFQ](/home/ubuntu/agro-open/docs/prints/38-supply-chain-cotacoes-rfq-comparativo.png)
 
 ---
 
-### 2.6. Conferência Cega 3-Way Matching (Pedido PO x NF-e MD-e x Estoque Físico)
+### 2.7. Conferência Cega 3-Way Matching (Pedido PO x NF-e MD-e x Estoque Físico)
 Demonstrativo de conferência aprovada sem divergência com recálculo do Custo Médio Ponderado.
 
 ![Conferência Cega 3-Way Matching](/home/ubuntu/agro-open/docs/prints/39-supply-chain-3way-matching-conferencia.png)
 
 ---
 
-### 2.7. Central SPED Fiscal EFD (Leiaute 020 - Blocos 0, B, C, D, E, H, K, 1 e 9)
+### 2.8. Central SPED Fiscal EFD (Leiaute 020 - Blocos 0, B, C, D, E, H, K, 1 e 9)
 Tela oficial em produção exibindo 91 registros gerados, débitos de R$ 314,50, créditos de R$ 59,50, prévia do arquivo e download do `.txt`.
 
 ![SPED Fiscal EFD Leiaute 020](/home/ubuntu/agro-open/docs/prints/34-sped-fiscal-efd-pre-pva-salao-parceiro.png)
 
 ---
 
-### 2.8. Relatório de Auditoria Pré-PVA da Receita Federal
+### 2.9. Relatório de Auditoria Pré-PVA da Receita Federal
 Checklist automatizado de conformidade fiscal aprovando o arquivo antes do envio ao contador.
 
 ![Auditoria Pré-PVA da Receita Federal](/home/ubuntu/agro-open/docs/prints/35-sped-auditoria-pre-pva-regras.png)
 
 ---
 
-### 2.9. Módulo Lei do Salão Parceiro (Lei 13.352/2016) & EFD-Reinf (R-4010)
+### 2.10. Módulo Lei do Salão Parceiro (Lei 13.352/2016) & EFD-Reinf (R-4010)
 Demonstrativo contábil de cotas-partes de Naty e Dino com cálculo de economia fiscal de R$ 2.133,00 sem bitributação.
 
 ![Salão Parceiro e EFD-Reinf](/home/ubuntu/agro-open/docs/prints/36-sped-efd-reinf-salao-parceiro.png)
 
 ---
 
-### 2.10. Monitor KDS de Produção em Tempo Real (Cozinha & Expedição)
+### 2.11. Monitor KDS de Produção em Tempo Real (Cozinha & Expedição)
 Display estilo Kanban com contagem regressiva de preparo e status de pontualidade.
 
 ![Monitor KDS de Produção](/home/ubuntu/agro-open/docs/prints/31-delivery-kds-monitor-producao.png)
 
 ---
 
-### 2.11. Tabela de Zonas de Frete de Tangará da Serra MT
+### 2.12. Tabela de Zonas de Frete de Tangará da Serra MT
 Parametrização oficial dos 10 bairros com taxas, tempos médios e critérios de frete grátis.
 
 ![Zonas de Frete Tangará da Serra MT](/home/ubuntu/agro-open/docs/prints/32-delivery-zonas-frete-tangara-mt.png)
 
 ---
 
-### 2.12. Visualizador de Comanda Térmica (ESC/POS 80mm) para Balcão e Entrega
+### 2.13. Visualizador de Comanda Térmica (ESC/POS 80mm) para Balcão e Entrega
 Modal com layout de impressão térmica pronto para expedição e entregador.
 
 ![Comanda Térmica 80mm](/home/ubuntu/agro-open/docs/prints/33-delivery-comanda-termica-80mm.png)
 
 ---
 
-### 2.13. Central de Pedidos de Delivery & Despacho
+### 2.14. Central de Pedidos de Delivery & Despacho
 Esteira de pedidos multicanal com endereço, itens, taxa de entrega e despacho para motoboy.
 
 ![Central de Delivery e Despacho](/home/ubuntu/agro-open/docs/prints/28-delivery-pedidos-multicanal-despacho.png)
 
 ---
 
-### 2.14. Gestão de Motoboys & Controle de Repasses
+### 2.15. Gestão de Motoboys & Controle de Repasses
 Tabela de entregadores com status em tempo real, placa do veículo e repasses acumulados.
 
 ![Gestão de Motoboys e Repasses](/home/ubuntu/agro-open/docs/prints/29-delivery-motoboys-repasses.png)
 
 ---
 
-### 2.15. Auditoria de CMV Teórico vs Real
+### 2.16. Auditoria de CMV Teórico vs Real
 Diagnóstico financeiro confrontando custos de fichas técnicas e consumo real.
 
 ![CMV Teórico vs Real](/home/ubuntu/agro-open/docs/prints/30-delivery-cmv-teorico-vs-real.png)
 
 ---
 
-### 2.16. Guia de Boleto Bancário Formatado FEBRABAN com Pix Copia e Cola (Sicredi 748)
+### 2.17. Guia de Boleto Bancário Formatado FEBRABAN com Pix Copia e Cola (Sicredi 748)
 Boleto híbrido oficial emitido pelo sistema com QR Code Pix dinâmico.
 
 ![Guia de Boleto Bancário Formatado FEBRABAN](/home/ubuntu/agro-open/docs/prints/27-visualizador-boleto-sicredi-pix-hibrido.png)
 
 ---
 
-### 2.17. Simulador e Memorial de Apuração de ICMS-ST (Mato Grosso)
+### 2.18. Simulador e Memorial de Apuração de ICMS-ST (Mato Grosso)
 Cálculo de MVA Ajustada, dedução do imposto interestadual e FCP-MT.
 
 ![Simulador e Memorial de Apuração de ICMS-ST MT](/home/ubuntu/agro-open/docs/prints/25-fiscal-icms-st-mato-grosso.png)
 
 ---
 
-### 2.18. Manifestação do Destinatário (MD-e) & Entrada Automatizada
+### 2.19. Manifestação do Destinatário (MD-e) & Entrada Automatizada
 Captura de notas destinadas junto à SEFAZ e recálculo do Custo Médio Ponderado.
 
 ![Manifestação do Destinatário MD-e](/home/ubuntu/agro-open/docs/prints/26-fiscal-mde-manifestacao-destinatario.png)
