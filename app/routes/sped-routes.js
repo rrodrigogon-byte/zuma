@@ -1,8 +1,12 @@
 /**
- * Rotas da API Administrativa do SPED Fiscal (EFD ICMS/IPI) & Validador Pré-PVA
+ * Rotas da API Administrativa do SPED Fiscal EFD ICMS/IPI e EFD-Reinf
  */
 import { Router } from 'express';
-import { gerarSpedFiscalEfd, validarArquivoPvaSped } from '../core/sped-efd-avancado.js';
+import {
+  gerarSpedFiscalEfd,
+  validarArquivoPvaSped,
+  gerarEfdReinfSalaoParceiro
+} from '../core/sped-efd-avancado.js';
 
 export function createSpedAdminRouter({ obterEmpresaIdDoUsuario }) {
   const router = Router();
@@ -30,7 +34,6 @@ export function createSpedAdminRouter({ obterEmpresaIdDoUsuario }) {
         email: 'financeiro@dinobarbearia.com.br'
       };
 
-      // Documentos fictícios/reais de saída para a escrituração do período
       const documentosSaida = [
         {
           modelo: '65',
@@ -73,14 +76,72 @@ export function createSpedAdminRouter({ obterEmpresaIdDoUsuario }) {
     }
   });
 
+  // Download do arquivo .txt do SPED Fiscal formatado para o PVA
+  router.get('/download-efd', async (req, res) => {
+    try {
+      const empresaId = resolverEmpresa(req);
+      const mes = Number(req.query.mes || 10);
+      const ano = Number(req.query.ano || 2026);
+
+      const empresa = {
+        id: empresaId,
+        nome: 'Dino Barbearia Ltda',
+        nomeFantasia: 'Dino Barbearia',
+        cnpj: '50073355000260',
+        inscricaoEstadual: '142291919',
+        email: 'financeiro@dinobarbearia.com.br'
+      };
+
+      const documentosSaida = [
+        {
+          modelo: '65',
+          numero: '1042',
+          chaveAcesso: '51261050073355000260650010000010421876543210',
+          dataEmissao: '2026-10-15',
+          valorTotal: 600.00,
+          valorIcms: 102.00,
+          status: 'autorizado'
+        }
+      ];
+
+      const resultado = await gerarSpedFiscalEfd({
+        empresa,
+        periodo: { mes, ano },
+        documentosSaida
+      });
+
+      res.setHeader('Content-Type', 'text/plain; charset=iso-8859-1');
+      res.setHeader('Content-Disposition', `attachment; filename="${resultado.nomeArquivo}"`);
+      res.send(resultado.conteudoArquivo);
+    } catch (err) {
+      res.status(500).send(`Erro ao gerar arquivo SPED: ${err.message}`);
+    }
+  });
+
   // Validar arquivo externo ou texto do SPED Pré-PVA
   router.post('/validar-pva', (req, res) => {
     try {
       const { conteudoSped } = req.body || {};
       if (!conteudoSped) return res.status(400).json({ sucesso: false, erro: 'Conteúdo do SPED obrigatório.' });
-
       const relatorio = validarArquivoPvaSped(conteudoSped);
       res.json({ sucesso: true, relatorio });
+    } catch (err) {
+      res.status(500).json({ sucesso: false, erro: err.message });
+    }
+  });
+
+  // EFD-Reinf: Lei do Salão Parceiro (Lei 13.352/2016 - Evento R-4010)
+  router.get('/efd-reinf/salao-parceiro', (req, res) => {
+    try {
+      const empresaId = resolverEmpresa(req);
+      const empresa = {
+        id: empresaId,
+        nome: 'Dino Barbearia Ltda',
+        nomeFantasia: 'Dino Barbearia',
+        cnpj: '50073355000260'
+      };
+      const resultado = gerarEfdReinfSalaoParceiro({ empresa });
+      res.json({ sucesso: true, ...resultado });
     } catch (err) {
       res.status(500).json({ sucesso: false, erro: err.message });
     }
