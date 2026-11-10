@@ -2389,11 +2389,16 @@ export function createCommerceAdminRouter() {
         return res.json({ items: await listWhatsappAiSessions({ ...context, tipoCanal }, { limit: req.query.limit, tipoCanal }) });
       }
       let canClaim = false;
-      try {
-        await requirePermission(req, 'settings.write');
+      const ehOperador = req.user?.role === 'operador' || req.user?.perfil === 'operador';
+      if (ehOperador) {
         canClaim = true;
-      } catch (error) {
-        if (error?.code !== 'PERMISSION_DENIED') throw error;
+      } else {
+        try {
+          await requirePermission(req, 'settings.write');
+          canClaim = true;
+        } catch (error) {
+          if (error?.code !== 'PERMISSION_DENIED') throw error;
+        }
       }
       const items = await listWhatsappAiSessions({ ...context, tipoCanal }, { limit: req.query.limit, status: req.query.status, assignment: req.query.assignment, tipoCanal });
       res.json({
@@ -2459,14 +2464,16 @@ export function createCommerceAdminRouter() {
   });
   router.post('/whatsapp-ai/sessions/:id/claim', async (req, res) => {
     try {
-      const context = await withWhatsappLoja(await requirePermission(req, 'settings.write'));
+      const isOp = req.user?.role === 'operador' || req.user?.perfil === 'operador';
+      const context = await withWhatsappLoja(await requirePermission(req, isOp ? 'customers.write' : 'settings.write'));
       const tipoCanal = whatsappTipoCanal(req);
       res.json(await claimWhatsappAiHandoff({ ...context, tipoCanal }, req.params.id));
     } catch (error) { jsonError(res, error); }
   });
   router.post('/whatsapp-ai/sessions/:id/release', async (req, res) => {
     try {
-      const context = await withWhatsappLoja(await requirePermission(req, 'settings.write'));
+      const isOp = req.user?.role === 'operador' || req.user?.perfil === 'operador';
+      const context = await withWhatsappLoja(await requirePermission(req, isOp ? 'customers.write' : 'settings.write'));
       const tipoCanal = whatsappTipoCanal(req);
       res.json(await releaseWhatsappAiHandoff({ ...context, tipoCanal }, req.params.id, { retomar: req.body?.retomar !== false }));
     } catch (error) { jsonError(res, error); }
@@ -2474,7 +2481,8 @@ export function createCommerceAdminRouter() {
   // Painel da conversa: histórico completo (cliente, T-Rex e equipe) e resposta do atendente.
   router.get('/whatsapp-ai/sessions/:id/messages', async (req, res) => {
     try {
-      const context = await withWhatsappLoja(await requirePermission(req, 'reports.read'));
+      const isOp = req.user?.role === 'operador' || req.user?.perfil === 'operador';
+      const context = await withWhatsappLoja(await requirePermission(req, isOp ? 'customers.read' : 'reports.read'));
       const tipoCanal = whatsappTipoCanal(req);
       res.set('Cache-Control', 'no-store');
       res.json(await getWhatsappAiConversation({ ...context, tipoCanal }, req.params.id, { limit: req.query.limit }));
@@ -2482,14 +2490,16 @@ export function createCommerceAdminRouter() {
   });
   router.post('/whatsapp-ai/sessions/:id/messages', async (req, res) => {
     try {
-      const context = await withWhatsappLoja(await requirePermission(req, 'settings.write'));
+      const isOp = req.user?.role === 'operador' || req.user?.perfil === 'operador';
+      const context = await withWhatsappLoja(await requirePermission(req, isOp ? 'customers.write' : 'settings.write'));
       const tipoCanal = whatsappTipoCanal(req);
       res.json(await sendWhatsappAiStaffMessage({ ...context, tipoCanal, usuarioNome: req.user?.nome || '' }, req.params.id, req.body || {}));
     } catch (error) { jsonError(res, error); }
   });
   router.post('/whatsapp-ai/sessions/:id/close', async (req, res) => {
     try {
-      const context = await withWhatsappLoja(await requirePermission(req, 'settings.write'));
+      const isOp = req.user?.role === 'operador' || req.user?.perfil === 'operador';
+      const context = await withWhatsappLoja(await requirePermission(req, isOp ? 'customers.write' : 'settings.write'));
       const tipoCanal = whatsappTipoCanal(req);
       res.json(await closeWhatsappAiHandoff({ ...context, tipoCanal }, req.params.id));
     } catch (error) { jsonError(res, error); }
