@@ -1753,6 +1753,30 @@ export default function FinanceiroEmpresa() {
             >
               🔍 Raio-X 360°
             </button>
+            <button
+              type="button"
+              className={`c360-btn ${abaAnalitica === 'dre_ebitda' ? 'primary' : 'ghost'}`}
+              style={{ fontSize: 12, padding: '5px 10px' }}
+              onClick={() => setAbaAnalitica('dre_ebitda')}
+            >
+              📊 DRE & EBITDA Operacional
+            </button>
+            <button
+              type="button"
+              className={`c360-btn ${abaAnalitica === 'conciliacao_tef' ? 'primary' : 'ghost'}`}
+              style={{ fontSize: 12, padding: '5px 10px' }}
+              onClick={() => setAbaAnalitica('conciliacao_tef')}
+            >
+              💳 Conciliação TEF/PIX
+            </button>
+            <button
+              type="button"
+              className={`c360-btn ${abaAnalitica === 'tesouraria' ? 'primary' : 'ghost'}`}
+              style={{ fontSize: 12, padding: '5px 10px' }}
+              onClick={() => setAbaAnalitica('tesouraria')}
+            >
+              🏦 Tesouraria & Cofre
+            </button>
           </div>
           <span style={{ fontSize: 12, color: 'var(--muted)' }}>
             {abaAnalitica === 'fluxo' && 'Clique em um mês para filtrar'}

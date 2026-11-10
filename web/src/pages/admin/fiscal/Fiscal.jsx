@@ -11,14 +11,28 @@ import ClassificacaoFiscal from './ClassificacaoFiscal'
 import IcmsStTab from './IcmsStTab'
 import MdeTab from './MdeTab'
 import BoletosTab from './BoletosTab'
-
+import SpedFiscalBlocoKPanel from './SpedFiscalBlocoKPanel'
+import MatrizTributariaPanel from './MatrizTributariaPanel'
 
 // Fiscal da empresa: emitente, certificado A1, tabela IBPT, classificação dos produtos, documentos
 // (NFC-e, NF-e, NFS-e, com DANFE e contingência offline da NFC-e) e inutilização de numeração.
 // O ambiente é do emitente: homologação (sem valor fiscal) ou produção, só depois que o servidor
 // libera a empresa (FISCAL_PRODUCAO_EMPRESAS).
 const BASE = '/api/admin/fiscal'
-const ABAS = [['situacao', 'Emitente e certificado'], ['classificacao', 'Classificação'], ['documentos', 'Documentos'], ['numeracao', 'Numeração'], ['inutilizacao', 'Inutilização'], ['sped', 'SPED'], ['contador', 'Fechamento Contábil'], ['icms_st', 'ICMS-ST (MT)'], ['mde', 'Manifestação (MD-e)'], ['boletos', 'Boletos & Pix Híbrido']]
+const ABAS = [
+  ['situacao', 'Emitente e certificado'],
+  ['classificacao', 'Classificação'],
+  ['documentos', 'Documentos'],
+  ['numeracao', 'Numeração'],
+  ['inutilizacao', 'Inutilização'],
+  ['sped', 'SPED Config'],
+  ['sped_bloco_k', 'SPED Bloco K (Produção & Estoque)'],
+  ['matriz_tributaria', 'Matriz Tributária Global'],
+  ['contador', 'Fechamento Contábil'],
+  ['icms_st', 'ICMS-ST (MT)'],
+  ['mde', 'Manifestação (MD-e)'],
+  ['boletos', 'Boletos & Pix Híbrido']
+]
 const STATUS = {
   rascunho: ['Rascunho', 'muted'], enviando: ['Enviando', 'info'], autorizado: ['Autorizado', 'success'], rejeitado: ['Rejeitado', 'danger'],
   falha_comunicacao: ['Falha de comunicação', 'warning'], validado_localmente: ['XML validado (não enviado)', 'info'], cancelado: ['Cancelado', 'muted'],
@@ -66,6 +80,8 @@ export default function Fiscal({ abaInicial = 'situacao' }) {
     {aba === 'numeracao' && <Numeracao toast={toast} />}
     {aba === 'inutilizacao' && <Inutilizacao toast={toast} />}
     {aba === 'sped' && <Sped toast={toast} />}
+    {aba === 'sped_bloco_k' && <SpedFiscalBlocoKPanel toast={toast} />}
+    {aba === 'matriz_tributaria' && <MatrizTributariaPanel toast={toast} />}
     {aba === 'contador' && <Contador toast={toast} />}
     {aba === 'icms_st' && <IcmsStTab toast={toast} />}
     {aba === 'mde' && <MdeTab toast={toast} />}

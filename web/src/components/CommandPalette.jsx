@@ -28,6 +28,11 @@ export default function CommandPalette({ isOpen, onClose }) {
     { id: 'mod-crm-avec', categoria: 'Módulos do ERP', icone: '⚡', titulo: 'CRM de Recuperação Inteligente (Avec)', descricao: 'Régua automática de clientes ausentes há 30, 60 e 90+ dias', rota: '/admin/barbearia-erp?area=gestao&tab=Recupera%C3%A7%C3%A3o+de+clientes+(Avec)' },
     { id: 'mod-pdv', categoria: 'Módulos do ERP', icone: '🏪', titulo: 'Frente de Caixa PDV Varejo', descricao: 'Vendas rápidas, balança pesadora e cupom fiscal', rota: '/admin/supermercado-pdv' },
     { id: 'mod-barbeiro-pwa', categoria: 'Módulos do ERP', icone: '📱', titulo: 'App do Barbeiro PWA Mobile', descricao: 'Visão individual de metas, agenda e roleta de prêmios', rota: '/barbeiro' },
+    { id: 'mod-sped-bloco-k', categoria: 'Módulos do ERP', icone: '📑', titulo: 'SPED Fiscal Bloco K', descricao: 'Registro da produção e estoque escriturado (K200, K230, K235)', rota: '/admin/sped-fiscal' },
+    { id: 'mod-matriz-trib', categoria: 'Módulos do ERP', icone: '⚖️', titulo: 'Matriz Tributária Global', descricao: 'Regras de ICMS, PIS, COFINS, NCM e Substituição Tributária (ST)', rota: '/admin/matriz-tributaria' },
+    { id: 'mod-dre-ebitda', categoria: 'Módulos do ERP', icone: '📈', titulo: 'DRE & EBITDA Operacional', descricao: 'Demonstrativo do resultado com CMV, margem de contribuição e quebras', rota: '/admin/dre-ebitda' },
+    { id: 'mod-conc-tef', categoria: 'Módulos do ERP', icone: '💳', titulo: 'Conciliação TEF, Cartões & PIX', descricao: 'Auditoria eletrônica de taxas MDR contratuais Stone, Cielo e Rede', rota: '/admin/conciliacao-tef' },
+    { id: 'mod-tesouraria-cofre', categoria: 'Módulos do ERP', icone: '🏦', titulo: 'Tesouraria & Cofre Central', descricao: 'Custódia de numerário físico, sangrias e malotes de carro-forte', rota: '/admin/tesouraria' },
 
     // Relatórios e Gestão
     { id: 'rel-central', categoria: 'Relatórios & Inteligência', icone: '📊', titulo: 'Central Geral de Relatórios (96 Modelos)', descricao: 'Clientes, serviços, profissionais, caixas e DRE', rota: '/admin/relatorios' },

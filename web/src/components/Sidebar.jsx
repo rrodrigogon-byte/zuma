@@ -260,6 +260,8 @@ const NAV_DINO_GROUPS = [
     label: 'Fiscal',
     items: [
       { to: '/admin/notas', icon: '🧾', label: 'Notas fiscais' },
+      { to: '/admin/sped-fiscal', icon: '📑', label: 'SPED Bloco K' },
+      { to: '/admin/matriz-tributaria', icon: '⚖️', label: 'Matriz Tributária' },
       { to: '/admin/fiscal/config', icon: '⚙️', label: 'Configuração fiscal' },
     ],
   },
@@ -271,6 +273,9 @@ const NAV_DINO_GROUPS = [
       { to: '/admin/barbearia-erp?area=gestao&tab=Painel+de+gestão', icon: '↗', label: 'Painel de gestão' },
       { to: '/admin/barbearia-erp?area=gestao&tab=Desempenho+da+equipe', icon: '↗', label: 'Desempenho da equipe' },
       { to: '/admin/financeiro', icon: '◇', label: 'Financeiro' },
+      { to: '/admin/dre-ebitda', icon: '📈', label: 'DRE & EBITDA Operacional' },
+      { to: '/admin/conciliacao-tef', icon: '💳', label: 'Conciliação TEF & PIX' },
+      { to: '/admin/tesouraria', icon: '🏦', label: 'Tesouraria & Cofre' },
       { to: '/admin/contas-pagar', icon: '◇', label: 'Contas a pagar', razao: true },
       { to: '/admin/contas-receber', icon: '◇', label: 'Contas a receber', razao: true },
       { to: '/admin/fechamento-diario', icon: '◇', label: 'Fechamento do dia', razao: true },

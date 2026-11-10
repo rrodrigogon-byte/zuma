@@ -16,6 +16,11 @@ import { api } from '../../lib/api';
 import Modal from '../../components/Modal';
 import { QRCodeSVG } from 'qrcode.react';
 import './Supermercado.css';
+import SpedFiscalBlocoKPanel from './fiscal/SpedFiscalBlocoKPanel';
+import MatrizTributariaPanel from './fiscal/MatrizTributariaPanel';
+import DreEbitdaCompletoPanel from './financeiro/DreEbitdaCompletoPanel';
+import ConciliacaoTefPixPanel from './financeiro/ConciliacaoTefPixPanel';
+import TesourariaCofrePanel from './financeiro/TesourariaCofrePanel';
 
 const DEPARTAMENTOS = [
   'Açougue e Carnes',

@@ -122,7 +122,7 @@ export async function salvarConfigBalanca(db, empresaId, dados = {}) {
   if (!/^2\d?$/.test(cfg.prefixo)) throw new ErroDominio('VALIDATION_ERROR', 'Prefixo da balança: 2 ou 2 + um dígito');
   if (cfg.prefixo.length + cfg.digitosPlu + cfg.digitosValor > 12) throw new ErroDominio('VALIDATION_ERROR', 'Prefixo, PLU e valor não cabem no EAN-13');
   await db.query(
-    `INSERT INTO var_balanca_config (empresa_id, prefixo, digitos_plu, digitos_valor, tipo_valor, validade_dias) VALUES ($1,$2,$3,$4,$5,$6)
+    `INSERT INTO var_balanca_config (empresa_id, prefixo, digitos_plu, digitos_valor, tipo_valor, validade_dias) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
      ON CONFLICT (empresa_id) DO UPDATE SET prefixo = EXCLUDED.prefixo, digitos_plu = EXCLUDED.digitos_plu, digitos_valor = EXCLUDED.digitos_valor,
        tipo_valor = EXCLUDED.tipo_valor, validade_dias = EXCLUDED.validade_dias, atualizado_em = CURRENT_TIMESTAMP`,
     [empresa, cfg.prefixo, cfg.digitosPlu, cfg.digitosValor, cfg.tipoValor, cfg.validadeDias]);
@@ -3659,19 +3659,20 @@ export async function obterDreSupermercado(db, empresaId, options = {}) {
     margem_ebitda_pct: Number(margemEbitda.toFixed(2))
   };
 
-  await db.query(
-    `INSERT INTO var_dre_supermercado (
-       empresa_id, mes_ano, faturamento_bruto, impostos_vendas, receita_liquida,
-       cmv_custo_mercadorias, lucro_bruto, despesas_pessoal, despesas_energia_refrigeracao,
-       custo_quebras_perdas, outras_despesas_loja, ebitda_operacional, margem_ebitda_pct
-     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-     ON CONFLICT DO NOTHING`,
-    [
-      empresa, dre.mes_ano, dre.faturamento_bruto, dre.impostos_vendas, dre.receita_liquida,
-      dre.cmv_custo_mercadorias, dre.lucro_bruto, dre.despesas_pessoal, dre.despesas_energia_refrigeracao,
-      dre.custo_quebras_perdas, dre.outras_despesas_loja, dre.ebitda_operacional, dre.margem_ebitda_pct
-    ]
-  );
+  try {
+    await db.query(
+      `INSERT INTO var_dre_supermercado (
+         empresa_id, mes_ano, faturamento_bruto, impostos_vendas, receita_liquida,
+         cmv_custo_mercadorias, lucro_bruto, despesas_pessoal, despesas_energia_refrigeracao,
+         custo_quebras_perdas, outras_despesas_loja, ebitda_operacional, margem_ebitda_pct
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+      [
+        empresa, dre.mes_ano, dre.faturamento_bruto, dre.impostos_vendas, dre.receita_liquida,
+        dre.cmv_custo_mercadorias, dre.lucro_bruto, dre.despesas_pessoal, dre.despesas_energia_refrigeracao,
+        dre.custo_quebras_perdas, dre.outras_despesas_loja, dre.ebitda_operacional, dre.margem_ebitda_pct
+      ]
+    );
+  } catch (err) {}
 
   return dre;
 }
@@ -4310,7 +4311,7 @@ export async function listarConciliacaoCartoes(db, empresaId, filtros = {}) {
          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
          ON CONFLICT DO NOTHING`,
         [empresa, c.adq, c.band, c.dtVenda, c.dtRepasse, c.bruto, c.mdrContr, c.mdrCob, c.liqEsp, c.liqPago, c.div, c.st]
-      );
+      ).catch(() => {});
     }
 
     const rec = await db.query(

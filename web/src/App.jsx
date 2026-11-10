@@ -115,6 +115,11 @@ const Inscricoes = lazy(() => import('./pages/admin/Inscricoes'))
 const Cardapio   = lazy(() => import('./pages/admin/Cardapio'))
 const Estoque    = lazy(() => import('./pages/admin/Estoque'))
 const ComprasEstoquePage = lazy(() => import('./pages/admin/ComprasEstoquePage'))
+const SpedFiscalPage = lazy(() => import('./pages/admin/SpedFiscalPage'))
+const MatrizTributariaPage = lazy(() => import('./pages/admin/MatrizTributariaPage'))
+const DreEbitdaPage = lazy(() => import('./pages/admin/DreEbitdaPage'))
+const ConciliacaoTefPage = lazy(() => import('./pages/admin/ConciliacaoTefPage'))
+const TesourariaCofrePage = lazy(() => import('./pages/admin/TesourariaCofrePage'))
 const ModificadoresCombos = lazy(() => import('./pages/admin/ModificadoresCombos'))
 const Mesas      = lazy(() => import('./pages/admin/Mesas'))
 const ReservasFilas = lazy(() => import('./pages/admin/ReservasFilas'))
@@ -334,6 +339,11 @@ export default function App() {
           <Route path="/admin/sumula"         element={<Layout><Sumula /></Layout>} />
           <Route path="/admin/mensalidades"   element={<Layout><Mensalidades /></Layout>} />
           <Route path="/admin/dre" element={<Layout><DRECompleta /></Layout>} />
+          <Route path="/admin/dre-ebitda" element={<Layout><DreEbitdaPage /></Layout>} />
+          <Route path="/admin/sped-fiscal" element={<Layout><SpedFiscalPage /></Layout>} />
+          <Route path="/admin/matriz-tributaria" element={<Layout><MatrizTributariaPage /></Layout>} />
+          <Route path="/admin/conciliacao-tef" element={<Layout><ConciliacaoTefPage /></Layout>} />
+          <Route path="/admin/tesouraria" element={<Layout><TesourariaCofrePage /></Layout>} />
           <Route path="/admin/financeiro"     element={<Layout><TenantAware tenant={<FinanceiroAuto antigo={<FinanceiroEmpresa />} />} legacy={<Financeiro />} /></Layout>} />
           <Route path="/admin/whatsapp-central" element={<Layout><WhatsappControlCenter /></Layout>} />
           <Route path="/admin/whatsapp"       element={<Layout><WhatsappConexao /></Layout>} />

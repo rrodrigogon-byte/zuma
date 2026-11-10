@@ -123,6 +123,22 @@ export function createFiscalAdminRouter({ db, escopoDaRequisicao, env = process.
     throw new ErroDominio('NOT_FOUND', 'Tipo de SPED desconhecido', 404);
   }));
 
+  // [kytto-bloco-k & matriz-tributaria] ERP Fiscal Global
+  router.get('/sped-bloco-k', rota('payments.read', async ({ empresaId }) => {
+    const { exportarSpedFiscalBlocoK } = await import('../varejo/servico.js');
+    return exportarSpedFiscalBlocoK(db, empresaId);
+  }));
+
+  router.get('/matriz-tributaria', rota('catalog.read', async ({ empresaId }) => {
+    const { listarMatrizTributaria } = await import('../varejo/servico.js');
+    return listarMatrizTributaria(db, empresaId);
+  }));
+
+  router.post('/matriz-tributaria/simular', rota('catalog.read', async ({ req, empresaId }) => {
+    const { simularTributacaoItem } = await import('../varejo/servico.js');
+    return simularTributacaoItem(db, empresaId, req.body || {});
+  }));
+
   router.get('/numeracao', rota('settings.write', ({ empresaId }) => svc.listarNumeracao(db, empresaId)));
   router.put('/numeracao', rota('settings.write', ({ req, empresaId, lojaRestrita, usuario }) => { empresaToda(lojaRestrita, 'Configurar a numeração'); return svc.salvarNumeracao(db, empresaId, req.body || {}, { usuario }); }));
   router.delete('/numeracao', rota('settings.write', ({ req, empresaId, lojaRestrita }) => {

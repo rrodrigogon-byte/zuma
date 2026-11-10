@@ -2061,6 +2061,37 @@ app.use('/api/webhooks', createWhatsappAiWebhookRouter());
     req.url = '/venda';
     return varejoRouter(req, res, next);
   });
+
+  // [kytto-financeiro-global] DRE, Conciliação TEF/PIX e Tesouraria Centralizada Global
+  app.get('/api/admin/financeiro/dre-ebitda', auth, requireStaff, async (req, res) => {
+    try {
+      const { empresaId } = await escopoComercial(req, 'payments.read');
+      const { obterDreSupermercado } = await import('./modules/varejo/servico.js');
+      return res.json(await obterDreSupermercado(clubeDb, empresaId, req.query));
+    } catch (e) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.get('/api/admin/financeiro/conciliacao-tef', auth, requireStaff, async (req, res) => {
+    try {
+      const { empresaId } = await escopoComercial(req, 'payments.read');
+      const { listarConciliacaoCartoes } = await import('./modules/varejo/servico.js');
+      return res.json(await listarConciliacaoCartoes(clubeDb, empresaId, req.query));
+    } catch (e) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.get('/api/admin/financeiro/tesouraria-malotes', auth, requireStaff, async (req, res) => {
+    try {
+      const { empresaId } = await escopoComercial(req, 'payments.read');
+      const { listarMalotesTesouraria } = await import('./modules/varejo/servico.js');
+      return res.json(await listarMalotesTesouraria(clubeDb, empresaId, req.query));
+    } catch (e) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
   // [kytto-bar] Bar, PDV, comandas, estoque fracionado, KDS e caixa por empresa.
   // O prefixo continua sob a trava /api/admin e a empresa é resolvida exclusivamente
   // pela membership SQL; nenhum empresaId do corpo da requisição é aceito.
