@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../../lib/api.js';
-import { useToast } from '../../components/Toast.jsx';
+import { useToast } from '../../hooks/useToast.jsx';
 
 export default function DeliveryHub() {
   const { toast } = useToast();

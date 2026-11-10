@@ -158,6 +158,7 @@ const Suprimentos     = lazy(() => import('./pages/admin/suprimentos/Suprimentos
 const Fiscal          = lazy(() => import('./pages/admin/fiscal/Fiscal'))
 const VarejoUnidade    = lazy(() => import('./pages/admin/varejo/Varejo'))
 const Supermercado     = lazy(() => import('./pages/admin/Supermercado'))
+const DeliveryHub      = lazy(() => import('./pages/admin/DeliveryHub'))
 const Clientes = lazy(() => import('./pages/admin/Clientes'))
 const Customer360 = lazy(() => import('./pages/admin/Customer360'))
 const FinanceiroEmpresa = lazy(() => import('./pages/admin/dino/FinanceiroEmpresa'))
