@@ -167,35 +167,6 @@ export default function Supermercado() {
   const [deferredPromptPwa, setDeferredPromptPwa] = useState(null);
   const [somScannerAtivo, setSomScannerAtivo] = useState(true);
 
-  // Sincroniza área ativa conforme sub-aba selecionada
-  useEffect(() => {
-    for (const area of AREAS_SUPERMERCADO) {
-      if (area.subAbas.some(s => s.id === abaAtiva)) {
-        if (areaAtiva !== area.id) setAreaAtiva(area.id);
-        break;
-      }
-    }
-  }, [abaAtiva]);
-
-  // Cálculos de dados reais estritos (sem números fictícios ou mocks)
-  const totalEstoqueVendaReal = useMemo(() => {
-    return produtos.reduce((acc, p) => acc + (Number(p.saldo || 0) * Number(p.precoVenda || p.precoFinal || p.preco || 0)), 0);
-  }, [produtos]);
-
-  const totalEstoqueCustoReal = useMemo(() => {
-    return produtos.reduce((acc, p) => acc + (Number(p.saldo || 0) * Number(p.precoCusto || p.custoMedio || 0)), 0);
-  }, [produtos]);
-
-  const lotesVencidosTotal = useMemo(() => {
-    return lotes.filter(l => l.situacao === 'vencido' || l.status === 'vencido').length;
-  }, [lotes]);
-
-  const lotesCriticosTotal = useMemo(() => {
-    return lotes.filter(l => ['vencido', 'critico'].includes(l.situacao || l.status)).length;
-  }, [lotes]);
-
-
-  // Sintetizador de Áudio para Scanner de Caixa (Web Audio API)
 
   const renderIconeSub = (nome) => {
     switch (nome) {
@@ -510,6 +481,33 @@ export default function Supermercado() {
   };
 
   // ── CARREGAMENTO DE DADOS ──
+  // Sincroniza área ativa conforme sub-aba selecionada
+  useEffect(() => {
+    for (const area of AREAS_SUPERMERCADO) {
+      if (area.subAbas.some(s => s.id === abaAtiva)) {
+        if (areaAtiva !== area.id) setAreaAtiva(area.id);
+        break;
+      }
+    }
+  }, [abaAtiva]);
+
+  // Cálculos de dados reais estritos (sem números fictícios ou mocks)
+  const totalEstoqueVendaReal = useMemo(() => {
+    return (produtos || []).reduce((acc, p) => acc + (Number(p.saldo || 0) * Number(p.precoVenda || p.precoFinal || p.preco || 0)), 0);
+  }, [produtos]);
+
+  const totalEstoqueCustoReal = useMemo(() => {
+    return (produtos || []).reduce((acc, p) => acc + (Number(p.saldo || 0) * Number(p.precoCusto || p.custoMedio || 0)), 0);
+  }, [produtos]);
+
+  const lotesVencidosTotal = useMemo(() => {
+    return (lotes || []).filter(l => l.situacao === 'vencido' || l.status === 'vencido').length;
+  }, [lotes]);
+
+  const lotesCriticosTotal = useMemo(() => {
+    return (lotes || []).filter(l => ['vencido', 'critico'].includes(l.situacao || l.status)).length;
+  }, [lotes]);
+
   const carregarDados = useCallback(async () => {
     setCarregando(true);
     try {
