@@ -385,7 +385,7 @@ export default function App() {
           <Route path="/admin/ordens-servico" element={<Layout><OrdensServico /></Layout>} />
           <Route path="/admin/expedicao"      element={<Layout><ExpedicaoLogistica /></Layout>} />
           <Route path="/admin/patrimonio"     element={<Layout><PatrimonioAtivos /></Layout>} />
-          <Route path="/admin/oficina"         element={<Layout><Oficina /></Layout>} />
+          <Route path="/admin/oficina"         element={<Layout><OficinaHubPage /></Layout>} />
           <Route path="/admin/agropecuaria"    element={<Layout><Agropecuaria /></Layout>} />
           <Route path="/admin/varejo"          element={<Layout><Varejo /></Layout>} />
           <Route path="/admin/compras"         element={<ComprasPorMarca abaInicial="compras" />} />

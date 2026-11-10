@@ -2182,6 +2182,7 @@ app.use('/api/webhooks', createWhatsappAiWebhookRouter());
   app.use('/api/admin/fiscal/reforma-tributaria', auth, requireStaff, createReformaTributariaRouter());
   app.use('/api/admin/varejo', auth, requireStaff, createVarejoMulticanalRouter());
   app.use('/api/admin/oficina', auth, requireStaff, createOficinaAdminRouter());
+  app.use('/api/v1/oficina', auth, requireStaff, createOficinaAdminRouter());
 
   app.use('/api/admin/plataforma/empresas', auth, requireStaff, empresasRouter);
   app.use('/api/admin/unidades', auth, requireStaff, createUnidadesAdminRouter({ db: clubeDb, empresaDaRequisicao: empresaDasUnidades }));
