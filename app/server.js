@@ -540,6 +540,38 @@ function seedUsuarios(){
     });
     save();
   }
+  // Provisionamento de Ster (Operadora / Atendente da Dino Barbearia)
+  const temSter = (d.usuarios || []).some(u => norm(u.username) === 'ster' || norm(u.email).includes('ster@') || norm(u.username) === 'ester');
+  if (!temSter) {
+    d.usuarios.push({
+      id: 'usr-dino-ster-operador-01',
+      nome: 'Steffany Marielly de Oliveira (Ster)',
+      username: 'ster',
+      apelido: 'Ster',
+      email: 'ster@barbeariadino.com.br',
+      emailAlternativo: 'ester@barbeariadino.com.br',
+      senhaHash: bcrypt.hashSync('123456', 10),
+      role: 'operador',
+      perfil: 'operador',
+      especialidade: 'Atendente & Operadora de Balcão (Recepção, Agenda e Caixa)',
+      empresaId: DINO_COMMERCE_EMPRESA_ID,
+      lojaId: DINO_COMMERCE_LOJA_ID,
+      ativo: true,
+      criadoEm: new Date().toISOString()
+    });
+    save();
+  } else {
+    const uSter = d.usuarios.find(u => norm(u.username) === 'ster' || norm(u.email).includes('ster@') || norm(u.username) === 'ester');
+    if (uSter) {
+      uSter.role = 'operador';
+      uSter.perfil = 'operador';
+      uSter.empresaId = DINO_COMMERCE_EMPRESA_ID;
+      uSter.lojaId = DINO_COMMERCE_LOJA_ID;
+      uSter.senhaHash = bcrypt.hashSync('123456', 10);
+      uSter.ativo = true;
+      save();
+    }
+  }
 }
 seedUsuarios();
 try { provisionarEquipeDino({ commerceDb }); } catch (err) { console.warn('Aviso ao provisionar equipe Dino:', err.message); }
@@ -554,7 +586,7 @@ const findUser = login => {
   else if (['david', 'david kaua', 'david kauã'].includes(n)) alias = 'david';
   else if (['dino', 'guilherme', 'gui', 'guicunha'].includes(n)) alias = 'dino';
   else if (['joao', 'joão', 'ruedel'].includes(n)) alias = 'joao';
-  else if (['ester', 'steffany', 'steffany marielly'].includes(n)) alias = 'ester';
+  else if (['ster', 'ester', 'steffany', 'steffany marielly', 'ster atendente', 'ester atendente'].includes(n)) alias = 'ster';
   else if (['amanda', 'amanda gabrielly'].includes(n)) alias = 'amanda';
   else if (['jhenyffer', 'jhenyfer', 'jhennyfer'].includes(n)) alias = 'jhenyffer';
   else if (['rodrigo', 'rodrigo goncalves', 'rodrigo gonçalves', 'rodrigo ribeiro', 'rodrigo.goncalves', 'rrodrigogon'].includes(n)) alias = 'rodrigo';

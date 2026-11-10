@@ -20,7 +20,7 @@ export const TENANTS_OFICIAIS = {
       { username: 'david', email: 'david@barbeariadino.com.br', nome: 'David Kauã Araújo Moraes', role: 'profissional', pgRole: 'barbeiro' },
       { username: 'natani', email: 'natani@barbeariadino.com.br', nome: 'Natani Minanis Dobler', role: 'profissional', pgRole: 'barbeiro' },
       { username: 'amanda', email: 'amanda@barbeariadino.com.br', nome: 'Amanda Gabrielly Santos da Silva', role: 'profissional', pgRole: 'barbeiro' },
-      { username: 'ester', email: 'ester@barbeariadino.com.br', nome: 'Steffany Marielly de Oliveira', role: 'profissional', pgRole: 'barbeiro' },
+      { username: 'ster', email: 'ster@barbeariadino.com.br', emailAlt: 'ester@barbeariadino.com.br', nome: 'Steffany Marielly de Oliveira (Ster)', role: 'operador', pgRole: 'operador' },
       { username: 'joao', email: 'joao@barbeariadino.com.br', nome: 'João Victor Domingos Ruedel', role: 'profissional', pgRole: 'barbeiro' },
       { username: 'jhenyffer', email: 'jhenyfferkellyn@gmail.com', nome: 'Jhenyffer Andrade', role: 'organizador', pgRole: 'gerente', isOwner: true },
     ]
