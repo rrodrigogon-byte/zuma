@@ -103,6 +103,7 @@ const migrationFiles = [
   '116_supermercado_fase7_auditoria_fraude_tabloide_trade.sql',
   '117_empresas_canonicas_e_lancamentos_todas_empresas.sql',
   '118_negocios_multi_negocio_governance.sql',
+  '119_supermercado_seed_enterprise_operacoes.sql',
 ];
 const advisoryLockKey = 825410732;
 

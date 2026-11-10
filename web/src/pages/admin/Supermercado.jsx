@@ -34,6 +34,7 @@ import WmsEnderecamentoPanel from './varejo/WmsEnderecamentoPanel';
 import PickingEcommercePanel from './varejo/PickingEcommercePanel';
 import AuditoriaFraudePdvPanel from './varejo/AuditoriaFraudePdvPanel';
 import TabloidesEncartesPanel from './varejo/TabloidesEncartesPanel';
+import SimuladorBalancaPanel from './varejo/SimuladorBalancaPanel';
 import AuditoriaNoturnaPanel from './varejo/AuditoriaNoturnaPanel';
 
 const DEPARTAMENTOS = [
@@ -69,6 +70,7 @@ const AREAS_SUPERMERCADO = [
     descricao: 'Frente de caixa, terminais, self-checkout, trocas, tesouraria e conciliação',
     subAbas: [
       { id: 'pdv', nome: 'Frente de Caixa (PDV)', iconeName: 'ShoppingCart' },
+      { id: 'simulador_balanca', nome: 'Balança Checkout (Toledo)', iconeName: 'Scale' },
       { id: 'terminais', nome: 'Caixas & Terminais', iconeName: 'Tv', badgeKey: 'terminais' },
       { id: 'totem', nome: 'Autoatendimento (Self-Checkout)', iconeName: 'Tv' },
       { id: 'trocas', nome: 'Trocas & Devoluções (SAC)', iconeName: 'RotateCcw' },
@@ -1849,6 +1851,10 @@ export default function Supermercado() {
                   <Scale size={20} />
                   <span>Exportar Carga Balança (TXITENS.TXT)</span>
                 </button>
+                <button className="quick-act-btn" onClick={() => setAbaAtiva('simulador_balanca')}>
+                  <Scale size={20} />
+                  <span>Simular Balança Serial (Toledo)</span>
+                </button>
                 <button className="quick-act-btn" onClick={() => setAbaAtiva('desossa')}>
                   <Beef size={20} />
                   <span>Nova Desossa de Carnes (Açougue)</span>
@@ -3449,6 +3455,10 @@ export default function Supermercado() {
           <TesourariaCofrePanel toast={showToast} />
         )}
 
+        {/* ── ABA SIMULADOR DE BALANÇA SERIAL TOLEDO/FILIZOLA ── */}
+        {abaAtiva === 'simulador_balanca' && (
+          <SimuladorBalancaPanel onEnviarAoPdv={() => setAbaAtiva('pdv')} />
+        )}
         {/* ── PAINÉIS OPERACIONAIS OFICIAIS DAS 7 ÁREAS ── */}
         {abaAtiva === 'totem' && (
           <SelfCheckoutTotemPanel toast={showToast} />

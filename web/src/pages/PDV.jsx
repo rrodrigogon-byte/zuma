@@ -681,6 +681,52 @@ export default function PDV() {
     }
   }
 
+  // Bipe de leitor de código de barras ou balança de checkout (EAN-13 Prefixo 2)
+  const handleBipeCodigoBarras = async (e) => {
+    if (e.key !== 'Enter' || !buscaCardapio.trim()) return;
+    const codigo = buscaCardapio.trim();
+
+    // Caso 1: Código de balança EAN-13 iniciando com 2 (2 + 5 dig PLU + 5 dig peso/preço + 1 dig DV)
+    if (codigo.length === 13 && codigo.startsWith('2')) {
+      const plu = codigo.slice(1, 6).replace(/^0+/, '');
+      const gramas = parseInt(codigo.slice(6, 11), 10);
+      const pesoKg = gramas > 0 ? Number((gramas / 1000).toFixed(3)) : 1;
+      const prod = cardapio.find(p => String(p.plu || p.sku || '').endsWith(plu) || String(p.id).includes(plu) || p.pesavel);
+      if (prod) {
+        if (comanda?.id) {
+          await adicionarItem(prod.id, pesoKg, `Pesável balança: ${pesoKg}kg`);
+        } else {
+          setCarrinhoOffline(atual => [
+            ...atual,
+            {
+              produto_id: prod.produto_id || prod.id,
+              nome: `${prod.nome} (${pesoKg}kg)`,
+              quantidade: pesoKg,
+              valor_unitario: Number(prod.preco || prod.preco_venda || 0),
+              desconto_item: 0
+            }
+          ]);
+        }
+        toast(`Balança: ${prod.nome} (${pesoKg}kg) adicionado com sucesso!`, 'success');
+        setBuscaCardapio('');
+        return;
+      }
+    }
+
+    // Caso 2: EAN convencional, SKU ou código exato
+    const prodExato = cardapio.find(p => p.ean === codigo || p.sku === codigo || p.codigo_barras === codigo || String(p.id) === codigo);
+    if (prodExato) {
+      if (comanda?.id) {
+        await lancamentoRapido(prodExato);
+      } else {
+        adicionarAoCarrinhoOffline(prodExato);
+      }
+      toast(`${prodExato.nome} bipado com sucesso!`, 'success');
+      setBuscaCardapio('');
+      return;
+    }
+  };
+
   // Venda direta de contingência. Ela não altera comandas abertas para evitar
   // duplicidade de estoque; cada evento é entregue ao agente local de forma idempotente.
   const totalCarrinhoOffline = carrinhoOffline.reduce((soma, item) => soma + item.quantidade * item.valor_unitario, 0)
@@ -1385,8 +1431,9 @@ export default function PDV() {
                 <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', fontSize: 14, opacity: 0.5 }}>🔍</span>
                 <input
                   style={{ ...S.input, paddingLeft: 32, marginBottom: 0, fontSize: 13 }}
-                  placeholder="Buscar produto…"
+                  placeholder="Buscar produto, EAN ou bipe de balança (ex: 2001001014859)…"
                   value={buscaCardapio}
+                  onKeyDown={handleBipeCodigoBarras}
                   onChange={e => setBuscaCardapio(e.target.value)}
                   autoFocus
                 />
