@@ -2618,13 +2618,19 @@ app.post('/api/admin/login', async (req,res)=>{
     const d = db();
     let exist = (d.usuarios || []).find(u => u.id === adminUser.id || norm(u.email) === norm(adminUser.email));
     if (!exist) {
-      d.usuarios.push({ ...adminUser, senhaHash: bcrypt.hashSync('123456', 10), criadoEm: new Date().toISOString() });
+      exist = {
+        ...adminUser,
+        senhaHash: bcrypt.hashSync('123456', 10),
+        criadoEm: new Date().toISOString()
+      };
+      d.usuarios.push(exist);
       save();
     } else {
       exist.role = 'admin';
       exist.platformAdmin = true;
       exist.mainAdmin = true;
       exist.ativo = true;
+      if (!exist.senhaHash) exist.senhaHash = bcrypt.hashSync('123456', 10);
       save();
     }
     const sessao = {
@@ -2637,8 +2643,8 @@ app.post('/api/admin/login', async (req,res)=>{
         { id: '00000000-0000-0000-0000-000000000002', nome: 'Supermercado Kytto' }
       ]
     };
-    const token = tokenFor(adminUser);
-    return res.json({ token, user: publicUser(adminUser), role: 'admin', sessao });
+    const token = tokenFor(exist);
+    return res.json({ token, user: publicUser(exist), role: 'admin', sessao });
   }
 
   try { if (await tryAccountLogin(user, senhaInformada, res, true, chave)) return; }
