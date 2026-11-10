@@ -1,4 +1,182 @@
 /* ════════════════════════════════════════════════════════════════════════════
+   CABEÇALHO CORPORATIVO & BOTÕES DE ALTA FREQUÊNCIA
+   ════════════════════════════════════════════════════════════════════════════ */
+
+.supermercado-corp-container {
+  padding: 1.25rem 1.75rem;
+  max-width: 1750px;
+  margin: 0 auto;
+  font-family: inherit;
+  color: #1e293b;
+}
+
+.super-header-bar {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 14px 20px;
+  margin-bottom: 16px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.super-title-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.super-logo-icon {
+  color: #0284c7;
+  flex-shrink: 0;
+}
+
+.super-main-title {
+  font-size: 1.35rem;
+  font-weight: 800;
+  color: #0f172a;
+  margin: 0;
+  line-height: 1.2;
+}
+
+.super-sub-title {
+  font-size: 0.85rem;
+  color: #64748b;
+  margin: 2px 0 0 0;
+}
+
+.super-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.super-btn-caixa-exclusivo {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: linear-gradient(135deg, #059669 0%, #10b981 100%);
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-size: 0.875rem;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: 0 4px 10px rgba(16, 185, 129, 0.3);
+  transition: all 0.2s ease;
+  letter-spacing: 0.3px;
+}
+.super-btn-caixa-exclusivo:hover {
+  filter: brightness(1.1);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 14px rgba(16, 185, 129, 0.4);
+}
+
+.super-btn-sec {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  color: #334155;
+  font-size: 0.825rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.super-btn-sec:hover {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+
+.super-caixa-btn-group {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.super-caixa-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+.super-caixa-badge.aberto {
+  background: #ecfdf5;
+  color: #065f46;
+  border: 1px solid #a7f3d0;
+}
+.super-caixa-badge.fechado {
+  background: #fef2f2;
+  color: #991b1b;
+  border: 1px solid #fecaca;
+}
+
+.super-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  background: #0284c7;
+  color: #ffffff;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.825rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.super-btn-primary:hover {
+  background: #0369a1;
+}
+
+.super-btn-danger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: #fef2f2;
+  color: #dc2626;
+  border: 1px solid #fecaca;
+  border-radius: 6px;
+  font-size: 0.825rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.super-btn-danger:hover {
+  background: #fee2e2;
+}
+
+.super-btn-refresh {
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  color: #475569;
+  padding: 7px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+}
+.super-btn-refresh:hover {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
    Kytto Supermercado & Varejo — Folha de Estilos Corporativa
    ════════════════════════════════════════════════════════════════════════════ */
 

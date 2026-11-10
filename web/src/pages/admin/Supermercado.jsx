@@ -36,6 +36,7 @@ import AuditoriaFraudePdvPanel from './varejo/AuditoriaFraudePdvPanel';
 import TabloidesEncartesPanel from './varejo/TabloidesEncartesPanel';
 import SimuladorBalancaPanel from './varejo/SimuladorBalancaPanel';
 import AuditoriaNoturnaPanel from './varejo/AuditoriaNoturnaPanel';
+import SupermercadoPdvExclusivo from './varejo/SupermercadoPdvExclusivo';
 
 const DEPARTAMENTOS = [
   'Açougue e Carnes',
@@ -314,6 +315,7 @@ export default function Supermercado() {
     showToast("🔓 Gaveta de Dinheiro Aberta! [Pulso elétrico RJ12 / ESC/POS enviado]");
   };
   // Caixa / PDV
+  const [modoPdvExclusivo, setModoPdvExclusivo] = useState(false);
   const [sessaoCaixa, setSessaoCaixa] = useState(null);
   const [modalCaixa, setModalCaixa] = useState(null); // 'abrir', 'sangria', 'suprimento', 'fechar'
   const [valorMovimentacao, setValorMovimentacao] = useState('');
@@ -799,7 +801,6 @@ export default function Supermercado() {
 
   // ── CARGA OFICIAL DO MIX (25 ITENS DA CESTA BRASILEIRA) ──
   const executarCargaMixOficial = async () => {
-    if (!window.confirm('Deseja carregar o Catálogo Oficial de Supermercado (25 itens da cesta brasileira com EANs e PLUs)?')) return;
     setCarregando(true);
     try {
       const res = await api.post('/api/admin/supermercado/catalogo-oficial/carregar', {});
@@ -1615,6 +1616,10 @@ export default function Supermercado() {
     );
   }
 
+  if (modoPdvExclusivo) {
+    return <SupermercadoPdvExclusivo onVoltarAdmin={() => setModoPdvExclusivo(false)} />;
+  }
+
   return (
     <div className="supermercado-corp-container">
       {/* ── TOAST NOTIFICATION ── */}
@@ -1662,6 +1667,7 @@ export default function Supermercado() {
               <button type="button" className="mini-act-btn primary" onClick={() => setModalCaixa('abrir')}>
                 <KeyRound size={12} /> Abrir
               </button>
+
             )}
           </div>
 
@@ -1729,7 +1735,7 @@ export default function Supermercado() {
           <div className="super-exec-scope">
             <span className="super-exec-scope-label">Escopo Corporativo</span>
             <span className="super-exec-scope-path">
-              Grupo Silvester Holding <span>›</span> Empresa: {empresaAtiva?.nome || 'Supermercado Kytto'} <span>›</span> Negócio: Supermercado & Atacarejo <span>›</span> Unidade: {unidadeNome}
+              Grupo Silvester Holding <span>›</span> Empresa: {empresaAtiva?.nome || 'Supermercado Kytto'} <span>›</span> Negócio: Supermercado & Atacarejo <span>›</span> Unidade: {unidadeNome && !unidadeNome.toLowerCase().includes('barbearia') ? unidadeNome : (lojas.find(l => l.id === lojaAtivaId)?.nome || 'Loja 01 — Hipermercado Matriz')}
             </span>
           </div>
         </div>
@@ -2130,6 +2136,11 @@ export default function Supermercado() {
 
         {/* ── 2. FRENTE DE CAIXA (PDV SUPERMERCADO) ── */}
         {abaAtiva === 'pdv' && (
+          <div style={{ marginTop: 12, borderRadius: 12, overflow: 'hidden' }}>
+            <SupermercadoPdvExclusivo onVoltarAdmin={() => setAbaAtiva('dashboard')} />
+          </div>
+        )}
+        {false && (
           <div className="super-pdv-layout">
             {/* SELETOR SUPERIOR DE FRENTE DE CAIXA ATIVA */}
             <div className="super-pdv-terminal-bar col-span-full">

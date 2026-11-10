@@ -159,6 +159,7 @@ const Suprimentos     = lazy(() => import('./pages/admin/suprimentos/Suprimentos
 const Fiscal          = lazy(() => import('./pages/admin/fiscal/Fiscal'))
 const VarejoUnidade    = lazy(() => import('./pages/admin/varejo/Varejo'))
 const Supermercado     = lazy(() => import('./pages/admin/Supermercado'))
+const SupermercadoPdvExclusivo = lazy(() => import('./pages/admin/varejo/SupermercadoPdvExclusivo'))
 const DeliveryHub      = lazy(() => import('./pages/admin/DeliveryHub'))
 const SupplyChainHub  = lazy(() => import('./pages/admin/SupplyChainHub'))
 const DimpAuditoriaPage = lazy(() => import('./pages/admin/DimpAuditoriaPage'))
@@ -408,6 +409,10 @@ export default function App() {
           <Route path="/admin/metas-roleta"    element={<Layout><DinoMetasRoletaPanel /></Layout>} />
 
           <Route path="/admin/supermercado" element={<Layout><Supermercado /></Layout>} />
+          <Route path="/admin/supermercado/caixa" element={<SupermercadoPdvExclusivo />} />
+          <Route path="/admin/supermercado-caixa" element={<SupermercadoPdvExclusivo />} />
+          <Route path="/supermercado/caixa" element={<SupermercadoPdvExclusivo />} />
+          <Route path="/pdv/supermercado" element={<SupermercadoPdvExclusivo />} />
 
           <Route path="/admin/delivery"         element={<Layout><DeliveryHub /></Layout>} />
           <Route path="/admin/supply-chain"     element={<Layout><SupplyChainHub /></Layout>} />
