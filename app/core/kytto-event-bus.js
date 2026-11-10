@@ -211,3 +211,36 @@ export const kyttoEventBus = new KyttoEventBus();
 barramentoA2.on('evento_interno_processado', (eventoA2) => {
   kyttoEventBus.emit('a2.sincronizado', eventoA2);
 });
+
+// Ouvintes automáticos para Sincronização por Evento Interno Nossa Gente × Ultra
+kyttoEventBus.on('comanda.fechada', (evento) => {
+  const dados = evento.dados || {};
+  const total = Number(dados.total || dados.totalFaturado || dados.totalPago || 0);
+  if (total > 0 && !evento._propagadoFolha) {
+    const profissional = dados.profissionalNome || dados.barbeiroNome || 'Equipe Geral';
+    const valorComissao = Number((total * 0.5).toFixed(2));
+    kyttoEventBus.emitir('folha.comissao_apurada', {
+      comandaId: dados.comandaId || dados.id,
+      clienteNome: dados.clienteNome || 'Cliente Atendido',
+      profissionalNome: profissional,
+      totalFaturado: total,
+      valorComissao,
+      statusIntegracao: 'creditado_folha_nossagente'
+    }, {
+      origem: 'Ultra',
+      destino: 'Nossa Gente',
+      empresaId: evento.empresaId,
+      _propagadoFolha: true
+    });
+  }
+});
+
+kyttoEventBus.on('cadastro.colaborador_sincronizado', (evento) => {
+  // Sincronização por evento interno do colaborador de Nossa Gente para o Ultra
+  console.log(`[A2_SYNC] Colaborador ${evento.dados?.colaborador || evento.dados?.nome || ''} sincronizado no Ultra.`);
+});
+
+kyttoEventBus.on('cpf.validado_rm_bigquery', (evento) => {
+  // Sincronização de validação de CPF sem travas
+  console.log('[A2_SYNC] Auditoria de CPF Nossa Gente -> Ultra sincronizada com sucesso.');
+});

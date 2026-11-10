@@ -3,6 +3,7 @@ import { kyttoEventBus } from '../core/kytto-event-bus.js';
 import { listarPlanosParaRenovacao, executarRodadaVencimentoPlanos } from '../core/automacao-planos-vencimento.js';
 import { consolidarResumoDiario, enviarBriefingGestao, formatarMensagemBriefingGestao, consolidarBriefingMatinalEquipe, formatarMensagemBriefingMatinal, enviarBriefingMatinalEquipe } from '../core/automacao-resumo-gestao.js';
 import { db } from '../db.js';
+import { armazenarCopiaSegura, obterCopiaSegura, listarArquivosSeguros, obterEstatisticasArmazenamento } from '../core/armazenamento-seguro.js';
 
 // Definição das 8 automações corporativas centrais do ERP Kytto
 const DEFINICOES_AUTOMACOES = [
@@ -250,6 +251,78 @@ export function createAutomacoesRouter({ obterEmpresaIdDoUsuario, isPlatformAdmi
       const resumo = consolidarResumoDiario(empresaId, req.query.data);
       const mensagemFormatada = formatarMensagemBriefingGestao(resumo);
       res.json({ ok: true, resumo, mensagemFormatada });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // GET /storage/arquivos: Lista arquivos e cópias seguras
+  router.get('/storage/arquivos', (req, res) => {
+    try {
+      const empresaId = obterEmpresaIdDoUsuario(req);
+      const arquivos = listarArquivosSeguros({
+        empresaId,
+        origem: req.query.origem,
+        limite: req.query.limite || 50
+      });
+      const estatisticas = obterEstatisticasArmazenamento();
+      res.json({ ok: true, total: arquivos.length, arquivos, estatisticas });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // POST /storage/armazenar: Armazena cópia segura com hash SHA-256 e auditoria
+  router.post('/storage/armazenar', (req, res) => {
+    try {
+      const empresaId = obterEmpresaIdDoUsuario(req);
+      const {
+        conteudo,
+        nomeOriginal = 'documento.bin',
+        tipoMime = 'application/octet-stream',
+        origem = 'Ultra',
+        destino = 'Nossa Gente',
+        entidadeId = '',
+        metadados = {}
+      } = req.body || {};
+
+      if (!conteudo) {
+        return res.status(400).json({ error: 'Conteúdo ou payload para armazenamento é obrigatório.' });
+      }
+
+      const registro = armazenarCopiaSegura(conteudo, {
+        nomeOriginal,
+        tipoMime,
+        origem,
+        destino,
+        empresaId,
+        entidadeId,
+        metadados
+      });
+
+      res.json({ ok: true, mensagem: 'Cópia segura armazenada e auditada com sucesso.', registro });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // GET /storage/:id: Recupera cópia segura com validação de integridade SHA-256
+  router.get('/storage/:id', (req, res) => {
+    try {
+      const arquivo = obterCopiaSegura(req.params.id);
+      if (!arquivo) return res.status(404).json({ error: 'Arquivo não encontrado no armazenamento seguro.' });
+      res.json({
+        ok: true,
+        id: arquivo.id,
+        sha256: arquivo.sha256,
+        nomeOriginal: arquivo.nomeOriginal,
+        tipoMime: arquivo.tipoMime,
+        tamanhoBytes: arquivo.tamanhoBytes,
+        integridadeConfirmada: arquivo.integridadeConfirmada,
+        criadoEm: arquivo.criadoEm,
+        origem: arquivo.origem,
+        destino: arquivo.destino
+      });
     } catch (err) {
       res.status(500).json({ error: err.message });
     }
