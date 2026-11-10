@@ -160,23 +160,6 @@ export default function Supermercado() {
   const [areaAtiva, setAreaAtiva] = useState('painel');
   const [abaAtiva, setAbaAtiva] = useState('dashboard');
   const [lojaAtivaId, setLojaAtivaId] = useState(null);
-  const unidadeNome = useMemo(() => {
-    const lojasDaEmpresa = (lojas || []).filter(l => l.empresa_id === empresaAtiva?.id);
-    if (lojasDaEmpresa.length > 0) {
-      const sel = lojasDaEmpresa.find(l => l.id === lojaAtivaId);
-      return sel ? sel.nome : lojasDaEmpresa[0].nome;
-    }
-    if (empresaAtiva?.nome?.toLowerCase().includes('supermercado')) {
-      return 'Supermercado Kytto - Loja Principal';
-    }
-    if (empresaAtiva?.nome?.toLowerCase().includes('agro')) {
-      return 'Loja Web - AGRO OPEN TTC';
-    }
-    if (lojaAtiva && lojaAtiva.empresa_id === empresaAtiva?.id) {
-      return lojaAtiva.nome;
-    }
-    return 'Loja Matriz Central';
-  }, [lojas, lojaAtivaId, empresaAtiva, lojaAtiva]);
 
   const [lojas, setLojas] = useState([]);
   const [carregando, setCarregando] = useState(false);
@@ -578,6 +561,24 @@ export default function Supermercado() {
   const lotesCriticosTotal = useMemo(() => {
     return (lotes || []).filter(l => ['vencido', 'critico'].includes(l.situacao || l.status)).length;
   }, [lotes]);
+
+  const unidadeNome = useMemo(() => {
+    const lojasDaEmpresa = (lojas || []).filter(l => l.empresa_id === empresaAtiva?.id);
+    if (lojasDaEmpresa.length > 0) {
+      const sel = lojasDaEmpresa.find(l => l.id === lojaAtivaId);
+      return sel ? sel.nome : lojasDaEmpresa[0].nome;
+    }
+    if (empresaAtiva?.nome?.toLowerCase().includes('supermercado')) {
+      return 'Supermercado Kytto - Loja Principal';
+    }
+    if (empresaAtiva?.nome?.toLowerCase().includes('agro')) {
+      return 'Loja Web - AGRO OPEN TTC';
+    }
+    if (lojaAtiva && lojaAtiva.empresa_id === empresaAtiva?.id) {
+      return lojaAtiva.nome;
+    }
+    return 'Loja Matriz Central';
+  }, [lojas, lojaAtivaId, empresaAtiva, lojaAtiva]);
 
   const carregarDados = useCallback(async () => {
     setCarregando(true);
