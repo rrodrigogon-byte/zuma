@@ -119,6 +119,7 @@ const NAV_ADMIN_GROUPS = [
       { to: '/admin/delivery', icon: '🛵', label: 'Central Delivery & Motoboys' },
       { to: '/admin/supply-chain', icon: '📦', label: 'Supply Chain & Cotações RFQ' },
       { to: '/admin/varejo-multicanal', icon: '🏷️', label: 'Varejo Multicanal & Grade' },
+      { to: '/admin/oficina', icon: '🚗', label: 'Oficina, Autopeças & OS' },
       { to: '/admin/omnichannel', icon: '🔄', label: 'Canais, Delivery & Fidelidade' },
     ],
   },
