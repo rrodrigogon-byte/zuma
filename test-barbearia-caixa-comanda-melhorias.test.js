@@ -101,5 +101,42 @@ test('Barbearia Dino - Caixa e Comandas: Alteração de data, multi-profissional
   const comandaNoCaixa = (detalhesAposCancelamento.todasComandas || []).find(c => c.id === comandaPaga.id);
   assert.equal(comandaNoCaixa, undefined, 'Comanda cancelada não deve mais aparecer no caixa');
 
+  // 7. Testa caso de Geofrey/Mineiro: comanda criada no dia 10 mas que pertencia ao dia 09
+  const comandaGeofrey = barbeariaErpKytto.criarComandaBarbearia(empresaId, {
+    lojaId,
+    clienteNome: 'Geofrey',
+    dataAtendimento: '2026-11-10',
+    profissionalId: 'prof-mineiro',
+    itens: [{ tipo: 'servico', servicoId: 'srv-corte', profissionalId: 'prof-mineiro' }],
+  });
+  const comandaGeofreyPaga = barbeariaErpKytto.registrarPagamentoComandaBarbearia(empresaId, comandaGeofrey.id, {
+    lojaId,
+    confirmado: true,
+    data: '2026-11-10',
+    pagamentos: [{ meio: 'pix', valor: 60, caixaId: caixa.id }],
+  });
+
+  // Transfere comanda do Geofrey para o dia 09/11
+  const geofreyMovido = barbeariaErpKytto.atualizarComandaBarbearia(empresaId, comandaGeofreyPaga.id, {
+    dataAtendimento: '2026-11-09',
+    permitirFinalizada: true,
+  });
+  assert.equal(geofreyMovido.dataAtendimento, '2026-11-09');
+
+  // Desvincula do caixa
+  const geofreyDesvinculado = barbeariaErpKytto.desvincularCaixaComandaBarbearia(empresaId, comandaGeofreyPaga.id, {
+    novaData: '2026-11-09',
+  });
+  assert.equal(geofreyDesvinculado.caixaId, null);
+  assert.equal((geofreyDesvinculado.pagamentos[0] || {}).caixaId, null);
+
+  // Cancela a comanda do Geofrey
+  const geofreyCancelado = await barbeariaErpKytto.cancelarComandaBarbearia(empresaId, comandaGeofreyPaga.id, {
+    confirmado: true,
+    motivo: 'Comanda lançada no dia errado - Geofrey',
+    usuario: 'jhenyffer@dino.com',
+  });
+  assert.equal(geofreyCancelado.status, 'cancelada');
+
   console.log('Todos os testes de caixa, comanda, multi-profissional e cancelamento passaram com sucesso!');
 });

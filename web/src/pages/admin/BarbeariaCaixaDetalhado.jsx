@@ -135,14 +135,16 @@ export default function BarbeariaCaixaDetalhado({
   };
 
   const handleAlterarDataComanda = async (e) => {
-    e.preventDefault();
-    if (!modalAlterarDataComanda?.comandaId || !novaDataComanda) return;
+    if (e?.preventDefault) e.preventDefault();
+    const comandaId = modalAlterarDataComanda?.comandaId;
+    const dataAlvo = novaDataComanda || modalAlterarDataComanda?.dataAtual;
+    if (!comandaId || !dataAlvo) return;
     try {
       setSalvandoData(true);
-      await api.post(`/api/admin/barbearia/comandas/${modalAlterarDataComanda.comandaId}/alterar-data`, {
-        data: novaDataComanda,
+      await api.post(`/api/admin/barbearia/comandas/${comandaId}/alterar-data`, {
+        data: dataAlvo,
       });
-      if (toast) toast('Data da comanda alterada com sucesso!', 'success');
+      if (toast) toast(`Comanda transferida com sucesso para ${dataAlvo}!`, 'success');
       setModalAlterarDataComanda(null);
       setModalDrilldown(null);
       await carregarDetalhes();
@@ -154,28 +156,49 @@ export default function BarbeariaCaixaDetalhado({
     }
   };
 
+  const handleDesvincularCaixa = async (comandaId, novaData = null) => {
+    if (!comandaId) return;
+    try {
+      setSalvandoData(true);
+      await api.post(`/api/admin/barbearia/comandas/${comandaId}/desvincular-caixa`, {
+        data: novaData,
+      });
+      if (toast) toast('Comanda desvinculada e retirada deste caixa com sucesso!', 'success');
+      setModalAlterarDataComanda(null);
+      setModalDrilldown(null);
+      await carregarDetalhes();
+      if (onCaixaAtualizado) onCaixaAtualizado();
+    } catch (err) {
+      if (toast) toast(err.message || 'Erro ao desvincular comanda', 'error');
+    } finally {
+      setSalvandoData(false);
+    }
+  };
+
   const handleCancelarComandaCaixa = async (e) => {
     e.preventDefault();
     if (!modalCancelarComanda?.comandaId) return;
     try {
       setCancelandoComanda(true);
-      if (onCancelarComandaFinalizada) {
-        await onCancelarComandaFinalizada(
-          { id: modalCancelarComanda.comandaId, clienteNome: modalCancelarComanda.titulo },
-          {
-            motivo: modalCancelarComanda.motivo || 'Cancelamento solicitado pelo caixa',
-            senhaGerente: modalCancelarComanda.senhaGerente,
-            reabrirAgendamento: false,
-          }
-        );
-      } else {
-        await api.post(`/api/admin/barbearia/comandas/${modalCancelarComanda.comandaId}/cancelar-finalizada`, {
-          motivo: modalCancelarComanda.motivo || 'Cancelamento solicitado pelo caixa',
-          senhaGerente: modalCancelarComanda.senhaGerente,
-          confirmado: true,
-        });
+      const payload = {
+        motivo: modalCancelarComanda.motivo || 'Cancelamento solicitado no detalhamento do caixa',
+        senhaGerente: modalCancelarComanda.senhaGerente?.trim() || '',
+        reabrirAgendamento: modalCancelarComanda.reabrirAgendamento !== false,
+        confirmado: true,
+      };
+      try {
+        await api.post(`/api/admin/barbearia/comandas/${modalCancelarComanda.comandaId}/cancelar-finalizada`, payload);
+      } catch (errPost) {
+        if (onCancelarComandaFinalizada) {
+          await onCancelarComandaFinalizada(
+            { id: modalCancelarComanda.comandaId, clienteNome: modalCancelarComanda.titulo },
+            payload
+          );
+        } else {
+          throw errPost;
+        }
       }
-      if (toast) toast('Comanda cancelada e estornada com sucesso!', 'success');
+      if (toast) toast('Comanda cancelada e retirada do caixa com sucesso!', 'success');
       setModalCancelarComanda(null);
       setModalDrilldown(null);
       await carregarDetalhes();
@@ -876,6 +899,34 @@ export default function BarbeariaCaixaDetalhado({
                   required
                   style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: 8, border: '1px solid #cbd5e1', fontSize: 14 }}
                 />
+                <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const d = new Date();
+                      d.setDate(d.getDate() - 1);
+                      setNovaDataComanda(d.toISOString().slice(0, 10));
+                    }}
+                    style={{ padding: '4px 10px', background: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: 'pointer', color: '#334155' }}
+                  >
+                    ⏮ Ontem
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setNovaDataComanda(new Date().toISOString().slice(0, 10))}
+                    style={{ padding: '4px 10px', background: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: 'pointer', color: '#334155' }}
+                  >
+                    ⏺ Hoje
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDesvincularCaixa(modalAlterarDataComanda.comandaId)}
+                    style={{ padding: '4px 10px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: 'pointer', color: '#b91c1c' }}
+                    title="Remove a comanda deste caixa sem apagar os dados"
+                  >
+                    🔓 Desvincular deste Caixa
+                  </button>
+                </div>
               </div>
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 10 }}>
                 <button
@@ -916,6 +967,18 @@ export default function BarbeariaCaixaDetalhado({
                 <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#334155', marginBottom: 4 }}>
                   Motivo do cancelamento:
                 </label>
+                <div style={{ display: 'flex', gap: 6, marginBottom: 8, flexWrap: 'wrap' }}>
+                  {['Comanda lançada no dia errado', 'Comanda duplicada', 'Cliente remarcou / teste'].map((m) => (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => setModalCancelarComanda(prev => ({ ...prev, motivo: m }))}
+                      style={{ padding: '4px 8px', background: modalCancelarComanda.motivo === m ? '#fee2e2' : '#f8fafc', border: '1px solid #cbd5e1', borderRadius: 6, fontSize: 11, cursor: 'pointer', color: '#1e293b' }}
+                    >
+                      {m}
+                    </button>
+                  ))}
+                </div>
                 <input
                   type="text"
                   value={modalCancelarComanda.motivo}

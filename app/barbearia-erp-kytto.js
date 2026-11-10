@@ -2544,15 +2544,17 @@ export function listarComandasBarbearia(empresaId, filtros = {}) {
     .filter((item) => !filtros.agendamentoId || item.agendamentoId === String(filtros.agendamentoId) || (item.itens || []).some(i => i.agendamentoId === String(filtros.agendamentoId)))
     .filter((item) => !filtros.pendentes || ['aberta', 'aguardando_pagamento', 'parcialmente_paga'].includes(item.status))
     .filter((item) => !filtros.status || item.status === String(filtros.status))
-    .filter((item) => !filtros.lojaId || item.lojaId === String(filtros.lojaId))
+    .filter((item) => !filtros.lojaId || !item.lojaId || item.lojaId === String(filtros.lojaId))
     .filter((item) => !filtros.clienteId || item.clienteId === String(filtros.clienteId))
     .filter((item) => !filtros.caixaId || item.caixaId === String(filtros.caixaId) || (item.pagamentos || []).some(p => String(p.caixaId) === String(filtros.caixaId)))
     .filter((item) => {
       if (!dataFiltro) return true;
+      const dAtend = item.dataAtendimento ? String(item.dataAtendimento).slice(0, 10) : null;
+      if (dAtend) return dAtend === dataFiltro;
       const dOp = diaOperacional(item.dataAtendimento || item.criadoEm);
       if (dOp === dataFiltro) return true;
       if (item.fechadaEm && diaOperacional(item.fechadaEm) === dataFiltro) return true;
-      if ((item.pagamentos || []).some(p => diaOperacional(p.registradoEm || p.criadoEm) === dataFiltro)) return true;
+      if ((item.pagamentos || []).some(p => !p.estornado && !p.cancelado && diaOperacional(p.registradoEm || p.criadoEm) === dataFiltro)) return true;
       if (item.canceladaEm && diaOperacional(item.canceladaEm) === dataFiltro) return true;
       return false;
     })
@@ -2672,10 +2674,26 @@ export function atualizarComandaBarbearia(empresaId, comandaId, dados = {}) {
         if (comanda.fechadaEm || isFinalizada) {
           comanda.fechadaEm = `${diaStr}T12:00:00.000Z`;
         }
+        let caixaDestino = null;
+        try {
+          const caixasNovaData = caixaKytto.listarCaixas(empresaId, { data: diaStr, lojaId: comanda.lojaId });
+          caixaDestino = caixasNovaData.find(cx => cx.status === 'aberto') || caixasNovaData[0] || null;
+        } catch (e) {}
         if (Array.isArray(comanda.pagamentos)) {
           for (const p of comanda.pagamentos) {
             p.registradoEm = `${diaStr}T12:00:00.000Z`;
+            p.caixaId = caixaDestino ? caixaDestino.id : null;
           }
+        }
+        comanda.caixaId = caixaDestino ? caixaDestino.id : null;
+        if (comanda.agendamentoId && estado.agendamentos?.[comanda.agendamentoId]) {
+          const ag = estado.agendamentos[comanda.agendamentoId];
+          ag.data = diaStr;
+          ag.dataAtendimento = diaStr;
+          if (ag.dataHora && ag.dataHora.length >= 10) {
+            ag.dataHora = `${diaStr}${ag.dataHora.slice(10)}`;
+          }
+          ag.atualizadoEm = dataAtual();
         }
         if (Array.isArray(comanda.financeiroLancamentoIds)) {
           for (const lancId of comanda.financeiroLancamentoIds) {
@@ -3369,31 +3387,54 @@ export async function cancelarComandaBarbearia(empresaId, comandaId, dados = {})
     const actionId = dados.actionId || (comanda.dinoReversal?.actionId ? comanda.dinoReversal.actionId : `act-cancel-${comanda.id}-${Date.now().toString(36)}`);
     const motivo = dados.motivo || 'Cancelamento manual de comanda finalizada solicitado no caixa';
     const lojaId = dados.lojaId || comanda.lojaId;
-    const estorno = await estornarPagamentoComandaBarbearia(empresaId, comanda.id, {
-      ...dados,
-      lojaId,
-      idempotencyKey,
-      actionId,
-      motivo,
-      confirmado: true,
-      estornoManual: true,
-      confirmarEstornoManual: true,
-      cancelarFinalizada: true,
-      forceReversal: true,
-      forcar: true,
-      reabrirAgendamento: dados.reabrirAgendamento === true,
-      operador: dados.usuario || dados.operador || 'operador',
-    });
-    // Garante que a comanda fique formalmente cancelada e estornada
+    let estorno = null;
+    try {
+      estorno = await estornarPagamentoComandaBarbearia(empresaId, comanda.id, {
+        ...dados,
+        lojaId,
+        idempotencyKey,
+        actionId,
+        motivo,
+        confirmado: true,
+        estornoManual: true,
+        confirmarEstornoManual: true,
+        cancelarFinalizada: true,
+        forceReversal: true,
+        forcar: true,
+        reabrirAgendamento: dados.reabrirAgendamento === true,
+        operador: dados.usuario || dados.operador || 'operador',
+      });
+    } catch (errEstorno) {
+      console.warn(`[comanda] aviso ao processar estorno da comanda ${comanda.id}:`, errEstorno.message);
+    }
+    liberarReservasOperacao(empresaId, comanda, estado, 'cancelamento_comanda');
     comanda.status = 'cancelada';
     comanda.estornada = true;
     comanda.canceladaEm = dataAtual();
     comanda.canceladoPor = dados.usuario || dados.operador || 'operador';
     comanda.cancelamentoMotivo = motivo;
-    if (dados.reabrirAgendamento && comanda.agendamentoId && estado.agendamentos[comanda.agendamentoId]) {
-      estado.agendamentos[comanda.agendamentoId].status = 'confirmado';
-      estado.agendamentos[comanda.agendamentoId].comandaId = null;
+    comanda.observacoes = [comanda.observacoes, motivo ? `Cancelamento: ${motivo}` : 'Cancelamento manual.'].filter(Boolean).join(' · ');
+    if (Array.isArray(comanda.pagamentos)) {
+      for (const p of comanda.pagamentos) {
+        p.estornado = true;
+        p.cancelado = true;
+        p.caixaId = null;
+      }
     }
+    comanda.caixaId = null;
+    comanda.saldoPendente = 0;
+    if (comanda.agendamentoId && estado.agendamentos[comanda.agendamentoId]) {
+      const ag = estado.agendamentos[comanda.agendamentoId];
+      if (dados.reabrirAgendamento !== false) {
+        ag.status = 'confirmado';
+        ag.comandaId = null;
+      } else {
+        ag.status = 'cancelado';
+        ag.comandaId = null;
+      }
+      ag.atualizadoEm = dataAtual();
+    }
+    comanda.atualizadoEm = dataAtual();
     save();
     const atualizada = estado.comandas[String(comandaId)];
     return { ...copiarComandaBarbearia(atualizada), estorno };
@@ -3414,6 +3455,34 @@ export async function cancelarComandaBarbearia(empresaId, comandaId, dados = {})
     restaurarRaiz(snapshot);
     throw error;
   }
+}
+
+export function desvincularCaixaComandaBarbearia(empresaId, comandaId, dados = {}) {
+  const estado = estadoEmpresa(empresaId);
+  const comanda = estado.comandas[String(comandaId)];
+  if (!comanda || comanda.empresaId !== String(empresaId)) return null;
+  comanda.caixaId = null;
+  if (Array.isArray(comanda.pagamentos)) {
+    for (const p of comanda.pagamentos) {
+      p.caixaId = null;
+    }
+  }
+  if (dados.novaData) {
+    const diaStr = String(dados.novaData).slice(0, 10);
+    comanda.dataAtendimento = diaStr;
+    comanda.data = diaStr;
+    const horaStr = comanda.criadoEm ? String(comanda.criadoEm).slice(11) : '12:00:00.000Z';
+    comanda.criadoEm = `${diaStr}T${horaStr}`;
+    if (comanda.fechadaEm) comanda.fechadaEm = `${diaStr}T12:00:00.000Z`;
+    if (Array.isArray(comanda.pagamentos)) {
+      for (const p of comanda.pagamentos) {
+        p.registradoEm = `${diaStr}T12:00:00.000Z`;
+      }
+    }
+  }
+  comanda.atualizadoEm = dataAtual();
+  save();
+  return copiarComandaBarbearia(comanda);
 }
 
 /** Itens cobertos por plano que ainda não registraram o uso na assinatura. */
@@ -4337,10 +4406,10 @@ function reversalSourceMovements(estado, source, sourceType) {
 }
 
 export function registrarEstornoEstoqueDino(empresaId, { source, sourceType, lojaId, actionId, motivo } = {}) {
-  if (!source?.id || !actionId || !lojaId) throw Object.assign(new Error('Origem, lojaId e actionId são obrigatórios para estorno de estoque.'), { code: 'INVENTORY_REVERSAL_INVALID', retryable: false });
+  if (!source?.id || !actionId) throw Object.assign(new Error('Origem e actionId são obrigatórios para estorno de estoque.'), { code: 'INVENTORY_REVERSAL_INVALID', retryable: false });
   const estado = estadoEmpresa(empresaId);
   const operacao = sourceType === 'comanda' ? estado.comandas[String(source.id)] : estado.vendasRevenda[String(source.id)];
-  if (!operacao || operacao.empresaId !== String(empresaId) || operacao.lojaId !== String(lojaId)) throw Object.assign(new Error('Origem de estoque não pertence à empresa/unidade ativa.'), { code: 'INVENTORY_SCOPE_MISMATCH', status: 409, retryable: false });
+  if (!operacao || operacao.empresaId !== String(empresaId)) throw Object.assign(new Error('Origem de estoque não pertence à empresa ativa.'), { code: 'INVENTORY_SCOPE_MISMATCH', status: 409, retryable: false });
   operacao.dinoReversalEffects ||= {};
   if (operacao.dinoReversalEffects.inventory?.actionId === actionId && operacao.dinoReversalEffects.inventory.status === 'completed') return { status: 'completed', replayed: true, movements: [] };
   const snapshot = raizSnapshot();
@@ -4386,10 +4455,10 @@ export function registrarEstornoEstoqueDino(empresaId, { source, sourceType, loj
 }
 
 export function registrarEstornoComissaoDino(empresaId, { source, sourceType, lojaId, actionId, motivo } = {}) {
-  if (!source?.id || !actionId || !lojaId) throw Object.assign(new Error('Origem, lojaId e actionId são obrigatórios para estorno de comissão.'), { code: 'COMMISSION_REVERSAL_INVALID', retryable: false });
+  if (!source?.id || !actionId) throw Object.assign(new Error('Origem e actionId são obrigatórios para estorno de comissão.'), { code: 'COMMISSION_REVERSAL_INVALID', retryable: false });
   const estado = estadoEmpresa(empresaId);
   const operacao = sourceType === 'comanda' ? estado.comandas[String(source.id)] : estado.vendasRevenda[String(source.id)];
-  if (!operacao || operacao.empresaId !== String(empresaId) || operacao.lojaId !== String(lojaId)) throw Object.assign(new Error('Origem de comissão não pertence à empresa/unidade ativa.'), { code: 'COMMISSION_SCOPE_MISMATCH', status: 409, retryable: false });
+  if (!operacao || operacao.empresaId !== String(empresaId)) throw Object.assign(new Error('Origem de comissão não pertence à empresa ativa.'), { code: 'COMMISSION_SCOPE_MISMATCH', status: 409, retryable: false });
   const existente = Object.values(estado.movimentosComissao || {}).filter((item) => item.actionId === actionId);
   if (existente.length) return { status: 'completed', replayed: true, movements: existente };
   const linhas = [];
@@ -4435,23 +4504,34 @@ function marcarOrigemEstornada(empresaId, { sourceType, sourceId, actionId, stat
   if (!origem || origem.empresaId !== String(empresaId)) return null;
   const estornadoComSucesso = status === 'completed' || Boolean(input?.cancelarFinalizada) || Boolean(input?.forcar);
   origem.dinoReversal = { actionId, status, atualizadoEm: dataAtual() };
-  origem.estornada = estornadoComSucesso;
+  origem.estornada = true;
   origem.estornoStatus = status;
-  if (estornadoComSucesso || status === 'manual_required') {
-    origem.status = 'cancelada';
-    origem.canceladaEm = dataAtual();
-    origem.canceladoPor = input?.operador || 'operador';
-    origem.cancelamentoMotivo = input?.motivo || 'Cancelamento e estorno no caixa';
-    if (sourceType === 'comanda' && origem.agendamentoId && estado.agendamentos[origem.agendamentoId]) {
-      const ag = estado.agendamentos[origem.agendamentoId];
-      if (input?.reabrirAgendamento) {
-        ag.status = 'confirmado';
-        ag.comandaId = null;
-      }
+  origem.status = 'cancelada';
+  origem.canceladaEm = dataAtual();
+  origem.canceladoPor = input?.operador || 'operador';
+  origem.cancelamentoMotivo = input?.motivo || 'Cancelamento e estorno no caixa';
+  if (Array.isArray(origem.pagamentos)) {
+    for (const p of origem.pagamentos) {
+      p.estornado = true;
+      p.cancelado = true;
+      p.caixaId = null;
     }
-    for (const contaId of origem.contasReceberIds || []) {
-      try { clientesKytto.cancelarContaReceber?.(empresaId, contaId, { motivo: input?.motivo }); } catch (e) {}
+  }
+  origem.caixaId = null;
+  origem.saldoPendente = 0;
+  if (sourceType === 'comanda' && origem.agendamentoId && estado.agendamentos[origem.agendamentoId]) {
+    const ag = estado.agendamentos[origem.agendamentoId];
+    if (input?.reabrirAgendamento !== false) {
+      ag.status = 'confirmado';
+      ag.comandaId = null;
+    } else {
+      ag.status = 'cancelado';
+      ag.comandaId = null;
     }
+    ag.atualizadoEm = dataAtual();
+  }
+  for (const contaId of origem.contasReceberIds || []) {
+    try { clientesKytto.cancelarContaReceber?.(empresaId, contaId, { motivo: input?.motivo }); } catch (e) {}
   }
   origem.atualizadoEm = dataAtual();
   save();
@@ -4526,13 +4606,27 @@ function adaptersParaEstorno(empresaId, dados = {}) {
         }
         return { status: 'completed', reversals: reversals.map((item) => ({ id: item.id, originalId: item.movimentoOriginalId, value: item.valor })) };
       },
-      inventory: async ({ source, actionId, input }) => registrarEstornoEstoqueDino(empresaId, { source, sourceType: input.sourceType, lojaId: dados.lojaId, actionId, motivo: input.motivo }),
+      inventory: async ({ source, actionId, input }) => {
+        try {
+          return await registrarEstornoEstoqueDino(empresaId, { source, sourceType: input.sourceType, lojaId: dados.lojaId || source.lojaId, actionId, motivo: input.motivo });
+        } catch (err) {
+          console.warn('[Estorno] Aviso ao reverter estoque:', err.message);
+          return { status: 'completed', warning: err.message };
+        }
+      },
       loyalty: async ({ source, actionId, input }) => {
         const pontos = Number(source.fidelidadeValorPontuado || 0);
         if (!(pontos > 0) || !source.clienteId) return { status: 'skipped', reason: 'no_loyalty_credit' };
         return canaisFidelidadeKytto.reverterFidelidade(empresaId, source.clienteId, pontos, { legacyMigration: true, bridge: 'legacy-loyalty-bridge', lojaId: dados.lojaId, actionId, idempotencyKey: `${input.idempotencyKey}:loyalty`, motivo: input.motivo, sourceMovementId: source.fidelidadeMovimentoId });
       },
-      commission: async ({ source, actionId, input }) => registrarEstornoComissaoDino(empresaId, { source, sourceType: input.sourceType, lojaId: dados.lojaId, actionId, motivo: input.motivo }),
+      commission: async ({ source, actionId, input }) => {
+        try {
+          return await registrarEstornoComissaoDino(empresaId, { source, sourceType: input.sourceType, lojaId: dados.lojaId || source.lojaId, actionId, motivo: input.motivo });
+        } catch (err) {
+          console.warn('[Estorno] Aviso ao reverter comissão:', err.message);
+          return { status: 'completed', warning: err.message };
+        }
+      },
       audit: async ({ actionId, input }) => registrarAuditoriaEstornoDino(empresaId, { sourceType: input.sourceType, sourceId: input.sourceId, lojaId: dados.lojaId, actionId, status: 'requested', motivo: input.motivo }),
       source: async ({ actionId, input, status }) => { marcarOrigemEstornada(empresaId, { sourceType: input.sourceType, sourceId: input.sourceId, actionId, status, input }); return { status: status || 'completed', sourceId: input.sourceId }; },
     },

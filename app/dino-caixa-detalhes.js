@@ -78,13 +78,18 @@ export function obterDetalhesCaixaOperacao(empresaId, caixaId, options = {}) {
   // Também busca qualquer comanda que tenha pagamentos explicitamente apontando para este caixaId
   const todasComandasEmpresa = barbeariaErpKytto.listarComandasBarbearia(empresaId, {}) || [];
   const comandasPorIdCaixa = todasComandasEmpresa.filter((c) =>
-    (c.pagamentos || []).some((p) => String(p.caixaId) === String(caixa.id))
+    c.status !== 'cancelada' &&
+    (c.pagamentos || []).some((p) => String(p.caixaId) === String(caixa.id) && !p.estornado && !p.cancelado)
   );
 
   // Unifica sem duplicidade
   const mapaComandas = new Map();
   for (const c of [...comandasDia, ...comandasPorIdCaixa]) {
     if (c.status !== 'cancelada') {
+      const dataAtend = c.dataAtendimento ? String(c.dataAtendimento).slice(0, 10) : (c.criadoEm ? String(c.criadoEm).slice(0, 10) : caixa.data);
+      if (dataAtend !== caixa.data && !comandasPorIdCaixa.some(cp => cp.id === c.id)) {
+        continue;
+      }
       mapaComandas.set(c.id, c);
     }
   }
