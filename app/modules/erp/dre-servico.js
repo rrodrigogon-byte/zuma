@@ -14,7 +14,23 @@
 import { exigirUuid, exigirData } from '../acesso/banco.js';
 import * as financeiroKytto from '../../financeiro-central-kytto.js';
 import { estadoEmpresa } from '../../barbearia-erp-kytto.js';
-import * as XLSX from 'xlsx';
+let _xlsxMod = null;
+async function obterXlsx() {
+  if (!_xlsxMod) {
+    try {
+      _xlsxMod = await import("xlsx");
+    } catch (e) {
+      try {
+        const { createRequire } = await import("module");
+        const req = createRequire(import.meta.url);
+        _xlsxMod = req("xlsx");
+      } catch (err) {
+        throw new Error("Módulo XLSX não instalado no ambiente.");
+      }
+    }
+  }
+  return _xlsxMod;
+}
 
 const dinheiro = (v) => Math.round(Number(v || 0) * 100) / 100;
 
