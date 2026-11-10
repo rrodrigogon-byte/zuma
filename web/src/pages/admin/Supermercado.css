@@ -3665,12 +3665,13 @@
 }
 .super-area-tab-btn {
   flex: 1;
-  min-width: 130px;
+  min-width: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  padding: 10px 14px;
+  gap: 6px;
+  padding: 8px 10px;
+  font-size: 12px;
   background: transparent;
   border: 1px solid transparent;
   border-radius: 8px;

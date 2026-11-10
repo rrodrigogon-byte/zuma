@@ -112,7 +112,7 @@ const AREAS_SUPERMERCADO = [
   {
     id: 'suprimentos_estoque',
     numero: '5',
-    nome: 'Estoque & Suprimentos',
+    nome: 'Estoque & WMS',
     icone: '📦',
     descricao: 'Entrada de mercadorias, ruptura, docas, WMS, picking e compras',
     subAbas: [
