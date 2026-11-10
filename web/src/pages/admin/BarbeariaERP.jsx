@@ -736,6 +736,7 @@ export default function BarbeariaERP({ tabInicial } = {}) {
   const [modal, setModal] = useState(null);
   const [modalItemValor, setModalItemValor] = useState(null);
   const [modalReabrir, setModalReabrir] = useState(null);
+  const [modalRefechar, setModalRefechar] = useState(null);
   const [modalCancelamentoComanda, setModalCancelamentoComanda] = useState(null);
   const [fechamentoDetalhado, setFechamentoDetalhado] = useState(null);
 
@@ -1583,13 +1584,12 @@ export default function BarbeariaERP({ tabInicial } = {}) {
     }
   }
 
-  async function removerItemComanda(comandaId, itemId) {
+  async function removerItemComanda(comandaId, itemId, senhaInformada = null) {
     if (!window.confirm("Tem certeza que deseja remover este item da comanda?"))
       return;
     try {
-      const resposta = await api.delete(
-        `/api/admin/barbearia/comandas/${comandaId}/itens/${itemId}`,
-      );
+      const url = `/api/admin/barbearia/comandas/${comandaId}/itens/${itemId}` + (senhaInformada ? `?senhaGerente=${encodeURIComponent(senhaInformada)}` : "");
+      const resposta = await api.delete(url);
       toast("Item removido com sucesso.", "success");
       setModal((m) =>
         m?.tipo === "comanda"
@@ -1598,7 +1598,73 @@ export default function BarbeariaERP({ tabInicial } = {}) {
       );
       await carregar();
     } catch (e) {
+      if (e.message?.includes("gerente") || e.status === 403) {
+        const msgPrompt = "A remocao deste item exige autorizacao da gerencia. Digite a senha da Gerente Jhenyffer Andrade:";
+        const senha = window.prompt(msgPrompt);
+        if (senha) {
+          try {
+            const url = `/api/admin/barbearia/comandas/${comandaId}/itens/${itemId}?senhaGerente=${encodeURIComponent(senha.trim())}`;
+            const resposta = await api.delete(url);
+            toast("Item removido com autorização de gerente.", "success");
+            setModal((m) =>
+              m?.tipo === "comanda"
+                ? { ...m, comanda: resposta.comanda || resposta }
+                : m,
+            );
+            await carregar();
+            return;
+          } catch (err2) {
+            return toast(err2.message || "Senha de gerente incorreta.", "error");
+          }
+        }
+      }
       toast(e.message || "Erro ao remover item.", "error");
+    }
+  }
+
+  function abrirModalRefecharComanda(comandaAlvo) {
+    const c = comandaAlvo || modal?.comanda;
+    if (!c) return;
+    const totalNovo = Number(c.total || 0);
+    const pagamentos = c.pagamentos || [];
+    const totalPago = Number(pagamentos.reduce((s, p) => s + Number(p.valor || 0), 0).toFixed(2));
+    const diferenca = Number((totalNovo - totalPago).toFixed(2));
+    const caixas = operacao?.caixas || dashboard?.caixa?.caixas || [];
+    const caixaAberto = caixas.find((cx) => cx.status === "aberto");
+
+    setModalRefechar({
+      comanda: c,
+      totalNovo,
+      totalPago,
+      diferenca,
+      meioPagamento: diferenca > 0 ? "pix" : "manter_pagamentos",
+      caixaId: caixaAberto?.id || "",
+      senhaGerente: "",
+      motivo: "Ajuste e refinalização de comanda",
+      salvando: false,
+    });
+  }
+
+  async function confirmarRefecharComanda() {
+    if (!modalRefechar) return;
+    const { comanda, meioPagamento, caixaId, senhaGerente, motivo } = modalRefechar;
+    setModalRefechar((prev) => ({ ...prev, salvando: true }));
+    try {
+      const payload = {
+        meio: meioPagamento,
+        meioPagamento,
+        caixaId: caixaId || undefined,
+        senhaGerente: senhaGerente?.trim() || undefined,
+        motivo: motivo || "Refinalização de comanda após ajustes de itens",
+      };
+      const r = await api.post(`/api/admin/barbearia/comandas/${comanda.id}/refechar`, payload);
+      toast("Comanda refinalizada e fechada com sucesso!", "success");
+      setModalRefechar(null);
+      setModal({ tipo: "comanda", comanda: r.comanda || r });
+      await carregar();
+    } catch (e) {
+      toast(e.message || "Erro ao refinalizar comanda.", "error");
+      setModalRefechar((prev) => ({ ...prev, salvando: false }));
     }
   }
 
@@ -1671,13 +1737,10 @@ export default function BarbeariaERP({ tabInicial } = {}) {
   async function confirmarReaberturaComanda() {
     if (!modalReabrir) return;
     const { comanda, senhaGerente, motivo } = modalReabrir;
-    if (!senhaGerente || !senhaGerente.trim()) {
-      return toast("A senha do gerente é obrigatória para reabrir a comanda.", "error");
-    }
     setModalReabrir((prev) => ({ ...prev, salvando: true }));
     try {
       const r = await api.post(`/api/admin/barbearia/comandas/${comanda.id}/reabrir`, {
-        senhaGerente: senhaGerente.trim(),
+        senhaGerente: (senhaGerente || "").trim(),
         motivo: motivo?.trim() || "Reabertura autorizada para ajuste de itens",
       });
       toast("Comanda reaberta com sucesso! Ajuste os itens e finalize novamente.", "success");
@@ -9262,11 +9325,16 @@ export default function BarbeariaERP({ tabInicial } = {}) {
         comanda.saldoPendente ??
           Math.max(0, Number(comanda.total || 0) - totalPago),
       );
-      const podeEditar = [
-        "aberta",
-        "aguardando_pagamento",
-        "parcialmente_paga",
-      ].includes(comanda.status);
+      const isReaberta = Boolean(
+        comanda.reabertaEm ||
+          comanda.reaberta ||
+          comanda.statusAnteriorReabertura,
+      );
+      const isFinalizada = ["paga", "em_conta"].includes(comanda.status);
+      const podeEditar =
+        ["aberta", "aguardando_pagamento", "parcialmente_paga"].includes(
+          comanda.status,
+        ) || isReaberta;
       const clienteCredito = clientes.find(
         (cliente) =>
           cliente.id === (formPagamentoComanda.clienteId || comanda.clienteId),
@@ -9318,8 +9386,15 @@ export default function BarbeariaERP({ tabInicial } = {}) {
     {comanda.status === "aberta" && (comanda.itens?.length > 0 || totalPago > 0) && (
       <button type="button" style={{ ...styles.primary, padding: '4px 12px', fontSize: 12 }} disabled={salvando} onClick={aguardarPagamentoComanda}>Enviar p/ pagamento</button>
     )}
-    {["aguardando_pagamento", "parcialmente_paga"].includes(comanda.status) && saldoPendente > 0 && (
-      <button type="button" style={{ ...styles.primary, padding: '4px 12px', fontSize: 12 }} disabled={salvando || !contaPermitida} onClick={pagarComanda}>Receber e fechar</button>
+    {["aguardando_pagamento", "parcialmente_paga"].includes(comanda.status) && (
+      <button type="button" style={{ ...styles.primary, background: "#16a34a", borderColor: "#15803d", padding: '5px 14px', fontSize: 13, fontWeight: 800 }} disabled={salvando} onClick={() => abrirModalRefecharComanda(comanda)}>
+        💾 {isReaberta || totalPago > 0 ? "Refinalizar / Fechar" : "Receber e fechar"}
+      </button>
+    )}
+    {isFinalizada && (
+      <button type="button" style={{ ...styles.secondary, color: "#0284c7", borderColor: "#0284c7", padding: '4px 12px', fontSize: 12, fontWeight: 700 }} disabled={salvando} onClick={() => abrirModalReabrirComanda(comanda)}>
+        🔄 Reabrir / Corrigir Itens
+      </button>
     )}
   </div>
             </div>
@@ -9542,7 +9617,7 @@ export default function BarbeariaERP({ tabInicial } = {}) {
                             ✏️ Alterar valor
                           </button>
                         )}
-                        {podeEditar && (
+                        {(podeEditar || isFinalizada) && (
                           <button
                             type="button"
                             style={{
@@ -9551,6 +9626,7 @@ export default function BarbeariaERP({ tabInicial } = {}) {
                               fontSize: 11,
                               color: "#ef4444",
                             }}
+                            title="Remover item da comanda"
                             onClick={() =>
                               removerItemComanda(
                                 comanda.id,
@@ -11964,6 +12040,132 @@ export default function BarbeariaERP({ tabInicial } = {}) {
     );
   }
 
+  function renderModalRefechar() {
+    if (!modalRefechar) return null;
+    const { comanda, totalNovo, totalPago, diferenca, meioPagamento, caixaId, senhaGerente, motivo, salvando: salvandoRefechar } = modalRefechar;
+    const caixas = (operacao?.caixas || dashboard?.caixa?.caixas || []).filter((cx) => cx.status === "aberto");
+
+    return (
+      <Modal
+        title={`💾 Refinalizar / Fechar Comanda (#${comanda.id})`}
+        zIndex={1100}
+        onClose={() => !salvandoRefechar && setModalRefechar(null)}
+      >
+        <div style={{ display: "grid", gap: 16, minWidth: 340, maxWidth: 520 }}>
+          <div style={{ padding: 14, borderRadius: 10, background: "#f0fdf4", border: "1px solid #86efac" }}>
+            <div style={{ fontWeight: 800, fontSize: 16, color: "#166534", marginBottom: 6 }}>
+              Resumo do Fechamento
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, fontSize: 13, color: "#14532d" }}>
+              <div>Novo Total dos Itens: <strong>{moeda(totalNovo)}</strong></div>
+              <div>Total Pago Anteriormente: <strong>{moeda(totalPago)}</strong></div>
+            </div>
+            {diferenca === 0 ? (
+              <div style={{ marginTop: 10, padding: 8, background: "#dcfce7", borderRadius: 6, color: "#166534", fontSize: 13, fontWeight: 700 }}>
+                ✔️ Os valores conferem exatamente! Nenhuma diferença de pagamento pendente.
+              </div>
+            ) : diferenca > 0 ? (
+              <div style={{ marginTop: 10, padding: 8, background: "#fef3c7", borderRadius: 6, color: "#92400e", fontSize: 13, fontWeight: 700 }}>
+                ⚠️ Diferença a RECEBER do cliente: {moeda(diferenca)}
+              </div>
+            ) : (
+              <div style={{ marginTop: 10, padding: 8, background: "#e0f2fe", borderRadius: 6, color: "#0369a1", fontSize: 13, fontWeight: 700 }}>
+                ℹ️ Diferença a ESTORNAR / Devolver ao cliente: {moeda(Math.abs(diferenca))}
+              </div>
+            )}
+          </div>
+
+          {diferenca > 0 && (
+            <div>
+              <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "var(--muted)", marginBottom: 6 }}>
+                Forma de Pagamento da Diferença ({moeda(diferenca)}):
+              </label>
+              <select
+                style={{ ...inputStyle, background: "#fff", color: "#111", fontWeight: 600 }}
+                value={meioPagamento}
+                onChange={(e) => setModalRefechar((prev) => ({ ...prev, meioPagamento: e.target.value }))}
+              >
+                <option value="pix">PIX</option>
+                <option value="cartao_credito">Cartão de Crédito</option>
+                <option value="cartao_debito">Cartão de Débito</option>
+                <option value="dinheiro">Dinheiro (no Caixa)</option>
+                <option value="conta">Lançar em Conta Corrente do Cliente</option>
+              </select>
+            </div>
+          )}
+
+          {diferenca < 0 && (
+            <div>
+              <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "var(--muted)", marginBottom: 6 }}>
+                Forma de Devolução / Ajuste da Diferença ({moeda(Math.abs(diferenca))}):
+              </label>
+              <select
+                style={{ ...inputStyle, background: "#fff", color: "#111", fontWeight: 600 }}
+                value={meioPagamento}
+                onChange={(e) => setModalRefechar((prev) => ({ ...prev, meioPagamento: e.target.value }))}
+              >
+                <option value="manter_pagamentos">Estorno em Dinheiro no Caixa / Ajuste Automático</option>
+                <option value="conta">Crédito na Conta Corrente do Cliente</option>
+              </select>
+            </div>
+          )}
+
+          {(meioPagamento === "dinheiro" || (diferenca < 0 && meioPagamento === "manter_pagamentos")) && caixas.length > 0 && (
+            <div>
+              <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "var(--muted)", marginBottom: 6 }}>
+                Caixa Operacional para Movimentação:
+              </label>
+              <select
+                style={{ ...inputStyle, background: "#fff", color: "#111" }}
+                value={caixaId}
+                onChange={(e) => setModalRefechar((prev) => ({ ...prev, caixaId: e.target.value }))}
+              >
+                <option value="">Selecione o caixa...</option>
+                {caixas.map((cx) => (
+                  <option key={cx.id} value={cx.id}>
+                    Caixa {cx.numeroCaixa} - {cx.nomeCaixa || "Balcão"} ({moeda(cx.valorEsperadoAtual || cx.valorAbertura || 0)})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          <div>
+            <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "var(--muted)", marginBottom: 4 }}>
+              Senha da Gerente (Jhenyffer Andrade / Gerente) — <span style={{ fontWeight: 400, color: "#64748b" }}>Opcional se já estiver conectada como Gerente</span>:
+            </label>
+            <input
+              type="password"
+              placeholder="Digite a senha de gerente (ou deixe em branco se já logada)"
+              style={{ ...inputStyle, background: "#fff", color: "#111" }}
+              value={senhaGerente}
+              onChange={(e) => setModalRefechar((prev) => ({ ...prev, senhaGerente: e.target.value }))}
+            />
+          </div>
+
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 12 }}>
+            <button
+              type="button"
+              style={styles.secondary}
+              disabled={salvandoRefechar}
+              onClick={() => setModalRefechar(null)}
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              style={{ ...styles.primary, background: "#16a34a", borderColor: "#15803d", fontWeight: 800, padding: "9px 20px" }}
+              disabled={salvandoRefechar}
+              onClick={confirmarRefecharComanda}
+            >
+              {salvandoRefechar ? "Refinalizando..." : "✅ Salvar e Refinalizar Comanda"}
+            </button>
+          </div>
+        </div>
+      </Modal>
+    );
+  }
+
   function renderModalReabrir() {
     if (!modalReabrir) return null;
     const { comanda, senhaGerente, motivo, salvando: salvandoReabrir } = modalReabrir;
@@ -14053,6 +14255,7 @@ export default function BarbeariaERP({ tabInicial } = {}) {
         {renderModal()}
         {renderModalItemValor()}
         {renderModalReabrir()}
+        {renderModalRefechar()}
         {renderModalCancelamentoComanda()}
         {renderModalCancelamentoComanda()}
       </div>
@@ -14305,6 +14508,7 @@ export default function BarbeariaERP({ tabInicial } = {}) {
       {renderModal()}
         {renderModalItemValor()}
         {renderModalReabrir()}
+        {renderModalRefechar()}
     </div>
   );
 }

@@ -2315,7 +2315,7 @@ function itemComandaBarbeariaNormalizado(estado, comanda, dados = {}) {
   const cobertura = tipo === 'servico' && dados.coberturaPlano && dados.coberturaPlano.verificadoPeloServidor === true ? dados.coberturaPlano : null;
   if (cobertura && quantidade !== 1) throw new Error('Item coberto pelo plano entra com quantidade 1 por linha.');
   return {
-    id: novoIdItemComanda(),
+    id: dados.id ? texto(dados.id, 120) : novoIdItemComanda(),
     tipo,
     servicoId: tipo === 'servico' ? cadastro.id : null,
     produtoId: tipo === 'produto' ? cadastro.id : null,
@@ -2649,13 +2649,17 @@ export function atualizarComandaBarbearia(empresaId, comandaId, dados = {}) {
   const descontoNovo = dados.desconto !== undefined ? dinheiro(dados.desconto) : Number(comanda.desconto || 0);
   const gorjetaNova = dados.gorjeta !== undefined ? dinheiro(dados.gorjeta) : Number(comanda.gorjeta || 0);
   const totalNovo = Number(Math.max(0, subtotal - Math.min(subtotal, descontoNovo) + gorjetaNova).toFixed(2));
-  if (!isFinalizada && totalNovo + 0.02 < Number(comanda.totalFaturado || 0)) throw erroEstoqueReserva('O total da comanda não pode ficar abaixo do total já faturado.', 'TOTAL_BELOW_BILLED', 409);
+  const permiteAbaixo = dados.permitirAbaixoFaturado === true || dados.autorizadoGerente === true || Boolean(comanda.reabertaEm) || Boolean(comanda.statusAnteriorReabertura) || Boolean(comanda.reaberta);
+  if (!isFinalizada && !permiteAbaixo && totalNovo + 0.02 < Number(comanda.totalFaturado || 0)) throw erroEstoqueReserva('O total da comanda não pode ficar abaixo do total já faturado.', 'TOTAL_BELOW_BILLED', 409);
   const snapshot = raizSnapshot();
   try {
     if (dados.desconto !== undefined) comanda.desconto = descontoNovo;
     if (dados.descontoMotivo !== undefined || dados.desconto_motivo !== undefined) comanda.descontoMotivo = texto(dados.descontoMotivo ?? dados.desconto_motivo, 240);
     if (dados.gorjeta !== undefined) comanda.gorjeta = gorjetaNova;
     if (dados.observacoes !== undefined || dados.observacao !== undefined) comanda.observacoes = texto(dados.observacoes ?? dados.observacao, 600);
+    comanda.subtotal = subtotal;
+    comanda.total = totalNovo;
+    comanda.saldoPendente = Number(Math.max(0, totalNovo - Number(comanda.totalPago || 0)).toFixed(2));
     if (dados.profissionalId !== undefined || dados.profissional_id !== undefined) {
       const pId = texto(dados.profissionalId ?? dados.profissional_id, 120) || null;
       if (pId && (!estado.profissionais[pId] || estado.profissionais[pId].ativo === false)) {
@@ -2718,11 +2722,12 @@ export function atualizarComandaBarbearia(empresaId, comandaId, dados = {}) {
   }
 }
 
-export function adicionarItensComandaBarbearia(empresaId, comandaId, itens = [], operacaoEquipe = null) {
+export function adicionarItensComandaBarbearia(empresaId, comandaId, itens = [], operacaoEquipe = null, dados = {}) {
   const estado = estadoEmpresa(empresaId);
   const comanda = estado.comandas[String(comandaId)];
   if (!comanda || comanda.empresaId !== String(empresaId)) return null;
-  if (!['aberta', 'aguardando_pagamento', 'parcialmente_paga'].includes(comanda.status)) throw new Error('A comanda não está disponível para novos itens.');
+  const isFinalizada = ['paga', 'em_conta'].includes(comanda.status);
+  if (!['aberta', 'aguardando_pagamento', 'parcialmente_paga'].includes(comanda.status) && !comanda.reabertaEm && !dados.autorizadoGerente && !isFinalizada) throw new Error('A comanda não está disponível para novos itens.');
   if (operacaoEquipe) {
     const anterior = (comanda.lancamentosEquipe || []).find(o => o.chave === operacaoEquipe.chave);
     if (anterior) {
@@ -2738,7 +2743,16 @@ export function adicionarItensComandaBarbearia(empresaId, comandaId, itens = [],
   try {
     comanda.itens.push(...novos);
     if (operacaoEquipe) comanda.lancamentosEquipe = [...(comanda.lancamentosEquipe || []), { ...operacaoEquipe }];
-    comanda.status = 'aberta';
+    if (!['aguardando_pagamento', 'parcialmente_paga'].includes(comanda.status)) {
+      comanda.status = 'aberta';
+    }
+    const subtotalNovo = Number((comanda.itens || []).reduce((soma, item) => soma + Number(item.subtotal || 0), 0).toFixed(2));
+    const descontoNovo = Number(Math.min(subtotalNovo, Math.max(0, Number(comanda.desconto || 0))).toFixed(2));
+    const totalNovo = Number(Math.max(0, subtotalNovo - descontoNovo + Math.max(0, Number(comanda.gorjeta || 0))).toFixed(2));
+    comanda.subtotal = subtotalNovo;
+    comanda.desconto = descontoNovo;
+    comanda.total = totalNovo;
+    comanda.saldoPendente = Number(Math.max(0, totalNovo - Number(comanda.totalPago || 0)).toFixed(2));
     sincronizarReservasOperacao(empresaId, comanda, estado, { origem: 'comanda_barbearia', expiresAt: comanda.reservaEstoqueExpiresAt });
     comanda.atualizadoEm = dataAtual();
     save();
@@ -2756,8 +2770,8 @@ export function atualizarItemComandaBarbearia(empresaId, comandaId, itemId, dado
   if (['paga', 'em_conta'].includes(comanda.status)) {
     return alterarItemComandaFinalizada(empresaId, comandaId, itemId, dados);
   }
-  if (!['aberta', 'aguardando_pagamento', 'parcialmente_paga'].includes(comanda.status)) throw new Error('A comanda não está disponível para edição.');
-  const atual = (comanda.itens || []).find((item, idx) => String(item.id) === String(itemId) || `${item.tipo}-${idx}` === String(itemId) || String(idx) === String(itemId));
+  if (!['aberta', 'aguardando_pagamento', 'parcialmente_paga'].includes(comanda.status) && !comanda.reabertaEm && !dados.autorizadoGerente) throw new Error('A comanda não está disponível para edição.');
+  const atual = (comanda.itens || []).find((item, idx) => String(item.id) === String(itemId) || `${item.tipo}-${idx}` === String(itemId) || String(idx) === String(itemId) || (item.servicoId && String(item.servicoId) === String(itemId)) || (item.produtoId && String(item.produtoId) === String(itemId)));
   if (!atual) return null;
   const quantidade = dados.quantidade !== undefined || dados.qtd !== undefined ? Math.max(1, Math.round(numero(dados.quantidade ?? dados.qtd, atual.quantidade))) : atual.quantidade;
   if (quantidade !== atual.quantidade && (atual.coberturaPlano || atual.tipo === 'loja')) throw new Error('Para mudar a quantidade deste item, remova a linha e lance de novo.');
@@ -2770,7 +2784,8 @@ export function atualizarItemComandaBarbearia(empresaId, comandaId, itemId, dado
   const subtotalNovo = Number((subtotalAtual - Number(atual.subtotal || 0) + (atual.coberturaPlano ? 0 : dinheiro(precoUnitario * quantidade))).toFixed(2));
   const desconto = Number(Math.min(subtotalNovo, Math.max(0, Number(comanda.desconto || 0))).toFixed(2));
   const totalNovo = Number(Math.max(0, subtotalNovo - desconto + Math.max(0, Number(comanda.gorjeta || 0))).toFixed(2));
-  if (totalNovo + 0.02 < Number(comanda.totalFaturado || 0)) throw erroEstoqueReserva('O total da comanda não pode ficar abaixo do total já faturado.', 'TOTAL_BELOW_BILLED', 409);
+  const permiteAbaixoItem = dados.permitirAbaixoFaturado === true || dados.autorizadoGerente === true || Boolean(comanda.reabertaEm) || Boolean(comanda.statusAnteriorReabertura) || Boolean(comanda.reaberta);
+  if (!permiteAbaixoItem && totalNovo + 0.02 < Number(comanda.totalFaturado || 0)) throw erroEstoqueReserva('O total da comanda não pode ficar abaixo do total já faturado.', 'TOTAL_BELOW_BILLED', 409);
   const snapshot = raizSnapshot();
   try {
     atual.quantidade = quantidade;
@@ -2785,6 +2800,10 @@ export function atualizarItemComandaBarbearia(empresaId, comandaId, itemId, dado
     }
     if (dados.observacao !== undefined || dados.obs !== undefined) atual.observacao = texto(dados.observacao ?? dados.obs, 400);
     atual.atualizadoEm = dataAtual();
+    comanda.subtotal = subtotalNovo;
+    comanda.desconto = desconto;
+    comanda.total = totalNovo;
+    comanda.saldoPendente = Number(Math.max(0, totalNovo - Number(comanda.totalPago || 0)).toFixed(2));
     sincronizarReservasOperacao(empresaId, comanda, estado, { origem: 'comanda_barbearia', expiresAt: comanda.reservaEstoqueExpiresAt });
     comanda.atualizadoEm = atual.atualizadoEm;
     save();
@@ -2792,6 +2811,36 @@ export function atualizarItemComandaBarbearia(empresaId, comandaId, itemId, dado
   } catch (error) {
     restaurarRaiz(snapshot);
     throw error;
+  }
+}
+
+
+function estornarCaixaComanda(empresaId, caixaId, lojaId, comandaId, valorEstorno, motivo, usuario, chaveIdempotencia) {
+  try {
+    const movs = caixaKytto.movimentosDoCaixa(empresaId, caixaId);
+    const movRec = movs.find(m => m.tipo === 'recebimento' && (m.referencia === comandaId || String(m.descricao || '').includes(comandaId)));
+    if (movRec) {
+      caixaKytto.registrarEstornoRecebimento(empresaId, {
+        caixaId,
+        lojaId,
+        movimentoOriginalId: movRec.id,
+        valor: valorEstorno,
+        motivo: texto(motivo || 'Estorno em comanda', 300),
+        usuario: texto(usuario || 'Gerente', 120),
+        chaveIdempotencia: chaveIdempotencia || `estorno_cx:${empresaId}:${comandaId}:${Date.now()}`,
+      });
+    } else {
+      caixaKytto.registrarMovimento(empresaId, {
+        caixaId,
+        lojaId,
+        tipo: 'sangria',
+        valor: valorEstorno,
+        descricao: texto(motivo || `Estorno em comanda ${comandaId}`, 200),
+        usuario: texto(usuario || 'Gerente', 120),
+      });
+    }
+  } catch (err) {
+    console.warn('[estornarCaixaComanda] Aviso:', err.message);
   }
 }
 
@@ -2947,11 +2996,24 @@ export function reabrirComandaBarbearia(empresaId, comandaId, dados = {}) {
   try {
     const statusAnterior = comanda.status;
     comanda.statusAnteriorReabertura = statusAnterior;
-    comanda.status = 'aguardando_pagamento';
+    comanda.totalFaturadoAnterior = Number(comanda.totalFaturado ?? comanda.totalPago ?? comanda.total ?? 0);
+    comanda.totalPagoAnterior = Number(comanda.totalPago ?? 0);
+    comanda.pagamentosAnteriores = (comanda.pagamentos || []).map(p => ({ ...p }));
+
+    comanda.reaberta = true;
     comanda.reabertaEm = dataAtual();
     comanda.reabertaPor = texto(dados.gerente || dados.usuario || 'Gerente', 120);
-    comanda.motivoReabertura = texto(dados.motivo || 'Reabertura para ajuste de itens', 400);
+    comanda.motivoReabertura = texto(dados.motivo || 'Reabertura para ajuste e correção de itens', 400);
+    comanda.status = 'aguardando_pagamento';
     comanda.atualizadoEm = dataAtual();
+
+    const subtotal = Number((comanda.itens || []).reduce((soma, item) => soma + Number(item.subtotal || 0), 0).toFixed(2));
+    const desconto = Number(Math.min(subtotal, Math.max(0, Number(comanda.desconto || 0))).toFixed(2));
+    const total = Number(Math.max(0, subtotal - desconto + Math.max(0, Number(comanda.gorjeta || 0))).toFixed(2));
+    comanda.subtotal = subtotal;
+    comanda.desconto = desconto;
+    comanda.total = total;
+    comanda.saldoPendente = Number(Math.max(0, total - Number(comanda.totalPago || 0)).toFixed(2));
 
     comanda.historicoAlteracoes = comanda.historicoAlteracoes || [];
     comanda.historicoAlteracoes.push({
@@ -3033,22 +3095,263 @@ export function refecharComandaEmContaBarbearia(empresaId, comandaId, dados = {}
   return copiarComandaBarbearia(comanda);
 }
 
-export function removerItemComandaBarbearia(empresaId, comandaId, itemId) {
+export function refecharComandaBarbearia(empresaId, comandaId, dados = {}) {
   const estado = estadoEmpresa(empresaId);
   const comanda = estado.comandas[String(comandaId)];
   if (!comanda || comanda.empresaId !== String(empresaId)) return null;
-  if (!['aberta', 'aguardando_pagamento', 'parcialmente_paga'].includes(comanda.status)) throw new Error('A comanda não está disponível para edição.');
-  const indice = comanda.itens.findIndex((item) => item.id === String(itemId));
+
+  const subtotal = Number((comanda.itens || []).reduce((soma, item) => soma + Number(item.subtotal || 0), 0).toFixed(2));
+  const desconto = Number(Math.min(subtotal, Math.max(0, Number(comanda.desconto || 0))).toFixed(2));
+  const gorjeta = Number(Math.max(0, Number(comanda.gorjeta || 0)).toFixed(2));
+  const totalNovo = Number(Math.max(0, subtotal - desconto + gorjeta).toFixed(2));
+
+  const meio = String(dados.meio || dados.meioPagamento || 'manter_pagamentos').toLowerCase();
+
+  // Se foi pedido expressamente em conta ou status anterior era em conta
+  if (meio === 'conta' || (meio === 'manter_pagamentos' && comanda.statusAnteriorReabertura === 'em_conta')) {
+    return refecharComandaEmContaBarbearia(empresaId, comandaId, dados);
+  }
+
+  const snapshot = raizSnapshot();
+  try {
+    const dataFechamento = dados.dataPagamento || dados.dataAtendimento || (comanda.dataAtendimento ? String(comanda.dataAtendimento).slice(0, 10) : null);
+    const dataReg = dataFechamento ? `${String(dataFechamento).slice(0, 10)}T12:00:00.000Z` : dataAtual();
+
+    const pagamentosAtuais = comanda.pagamentos || [];
+    const totalPagoAnterior = Number(pagamentosAtuais.reduce((soma, p) => soma + Number(p.valor || 0), 0).toFixed(2));
+    const diferenca = Number((totalNovo - totalPagoAnterior).toFixed(2));
+
+    // Opção 1: Substituição total do pagamento
+    if (dados.substituirPagamentos === true && meio !== 'manter_pagamentos') {
+      let caixaId = texto(dados.caixaId, 120) || null;
+      if (!caixaId) {
+        const abertos = caixaKytto.listarCaixas(empresaId, { status: 'aberto' });
+        if (abertos.length >= 1) caixaId = abertos[0].id;
+      }
+      comanda.pagamentos = [{
+        id: `pagbar-${crypto.randomUUID()}`,
+        meio,
+        bandeira: texto(dados.bandeira, 50) || null,
+        valor: totalNovo,
+        caixaId,
+        registradoEm: dataReg,
+        chaveIdempotencia: `refechamento_subst:${empresaId}:${comanda.id}:${Date.now()}`,
+      }];
+      comanda.total = totalNovo;
+      comanda.subtotal = subtotal;
+      comanda.desconto = desconto;
+      comanda.gorjeta = gorjeta;
+      comanda.totalPago = totalNovo;
+      comanda.totalFaturado = totalNovo;
+      comanda.saldoPendente = 0;
+      comanda.status = 'paga';
+      comanda.fechadaEm = dataReg;
+      comanda.atualizadoEm = dataAtual();
+      comanda.reaberta = false;
+    } else {
+      // Opção 2: Manter pagamentos existentes e ajustar diferença
+      if (diferenca === 0) {
+        // Total idêntico
+        comanda.total = totalNovo;
+        comanda.subtotal = subtotal;
+        comanda.desconto = desconto;
+        comanda.gorjeta = gorjeta;
+        comanda.totalFaturado = totalNovo;
+        comanda.totalPago = totalNovo;
+        comanda.saldoPendente = 0;
+        comanda.status = 'paga';
+        comanda.fechadaEm = dataReg;
+        comanda.atualizadoEm = dataAtual();
+        comanda.reaberta = false;
+      } else if (diferenca > 0) {
+        // Valor aumentou: registrar pagamento da diferença
+        const meioDiferenca = (meio === 'manter_pagamentos' || !meio) ? (dados.meioDiferenca || 'pix') : meio;
+        let caixaId = texto(dados.caixaId, 120) || null;
+        if (!caixaId) {
+          const abertos = caixaKytto.listarCaixas(empresaId, { status: 'aberto' });
+          if (abertos.length >= 1) caixaId = abertos[0].id;
+        }
+        comanda.pagamentos = comanda.pagamentos || [];
+        comanda.pagamentos.push({
+          id: `pagbar-${crypto.randomUUID()}`,
+          meio: meioDiferenca,
+          bandeira: texto(dados.bandeira, 50) || null,
+          valor: diferenca,
+          caixaId,
+          registradoEm: dataReg,
+          observacao: 'Diferença de itens comanda refechada',
+        });
+        comanda.total = totalNovo;
+        comanda.subtotal = subtotal;
+        comanda.desconto = desconto;
+        comanda.gorjeta = gorjeta;
+        comanda.totalFaturado = totalNovo;
+        comanda.totalPago = totalNovo;
+        comanda.saldoPendente = 0;
+        comanda.status = 'paga';
+        comanda.fechadaEm = dataReg;
+        comanda.atualizadoEm = dataAtual();
+        comanda.reaberta = false;
+      } else {
+        // Valor diminuiu (diferenca < 0): estorno / crédito
+        const valorEstorno = Math.abs(diferenca);
+        const pagDinheiro = (comanda.pagamentos || []).find(p => p.meio === 'dinheiro' && p.caixaId);
+        if (pagDinheiro) {
+          const estornoCaixa = Math.min(pagDinheiro.valor, valorEstorno);
+          pagDinheiro.valor = Number((pagDinheiro.valor - estornoCaixa).toFixed(2));
+          estornarCaixaComanda(
+            empresaId,
+            pagDinheiro.caixaId,
+            comanda.lojaId,
+            comanda.id,
+            estornoCaixa,
+            `Estorno de diferença na comanda ${comanda.id} (R$ ${totalPagoAnterior} -> R$ ${totalNovo})`,
+            texto(dados.gerente || dados.usuario || 'Gerente', 120),
+            `barbearia_comanda:${empresaId}:${comanda.id}:estorno_refechar:${Date.now()}`
+          );
+        } else if (comanda.pagamentos && comanda.pagamentos[0]) {
+          comanda.pagamentos[0].valor = Number(Math.max(0, comanda.pagamentos[0].valor - valorEstorno).toFixed(2));
+        }
+        comanda.total = totalNovo;
+        comanda.subtotal = subtotal;
+        comanda.desconto = desconto;
+        comanda.gorjeta = gorjeta;
+        comanda.totalFaturado = totalNovo;
+        comanda.totalPago = totalNovo;
+        comanda.saldoPendente = 0;
+        comanda.status = 'paga';
+        comanda.fechadaEm = dataReg;
+        comanda.atualizadoEm = dataAtual();
+        comanda.reaberta = false;
+      }
+    }
+
+    // Atualizar lançamentos financeiros vinculados
+    if (comanda.financeiroLancamentoIds && comanda.financeiroLancamentoIds[0]) {
+      try {
+        financeiroKytto.atualizarLancamento(empresaId, comanda.financeiroLancamentoIds[0], {
+          valorBruto: totalNovo,
+          valorLiquido: totalNovo,
+          valor: totalNovo,
+          descricao: `Venda comanda barbearia ${comanda.id} (refechada)`,
+        });
+      } catch {}
+    }
+
+    // Emitir evento para o ecossistema (metas, roleta, DRE, conciliação)
+    try {
+      kyttoEventBus.emitir('comanda.fechada', {
+        comandaId: comanda.id,
+        clienteId: comanda.clienteId,
+        clienteNome: comanda.clienteNome,
+        total: comanda.totalFaturado,
+        totalPago: comanda.totalPago,
+        itens: comanda.itens,
+        pagamentos: comanda.pagamentos,
+      }, { empresaId, lojaId: comanda.lojaId, usuario: dados.usuario || 'operador' });
+    } catch {}
+
+    comanda.historicoAlteracoes = comanda.historicoAlteracoes || [];
+    comanda.historicoAlteracoes.push({
+      tipo: 'refechamento_comanda',
+      totalAnterior: totalPagoAnterior,
+      totalNovo,
+      diferenca,
+      dataHora: dataAtual(),
+      gerente: texto(dados.gerente || dados.usuario || 'Gerente', 120),
+      motivo: texto(dados.motivo || 'Refinalização de comanda após ajustes de itens', 400),
+    });
+
+    save();
+    return copiarComandaBarbearia(comanda);
+  } catch (error) {
+    restaurarRaiz(snapshot);
+    throw error;
+  }
+}
+
+export function removerItemComandaBarbearia(empresaId, comandaId, itemId, dados = {}) {
+  const estado = estadoEmpresa(empresaId);
+  const comanda = estado.comandas[String(comandaId)];
+  if (!comanda || comanda.empresaId !== String(empresaId)) return null;
+  const isFinalizada = ['paga', 'em_conta'].includes(comanda.status);
+  if (!['aberta', 'aguardando_pagamento', 'parcialmente_paga'].includes(comanda.status) && !comanda.reabertaEm && !dados.autorizadoGerente && !isFinalizada) {
+    throw new Error('A comanda não está disponível para edição.');
+  }
+  const indice = (comanda.itens || []).findIndex((item, idx) => 
+    String(item.id) === String(itemId) 
+    || `${item.tipo}-${idx}` === String(itemId) 
+    || String(idx) === String(itemId)
+    || (item.servicoId && String(item.servicoId) === String(itemId))
+    || (item.produtoId && String(item.produtoId) === String(itemId))
+  );
   if (indice < 0) return null;
+  const itemRemovido = comanda.itens[indice];
   const subtotalNovo = Number((comanda.itens.reduce((soma, item, index) => soma + (index === indice ? 0 : Number(item.subtotal || 0)), 0)).toFixed(2));
   const desconto = Number(Math.min(subtotalNovo, Math.max(0, Number(comanda.desconto || 0))).toFixed(2));
   const totalNovo = Number(Math.max(0, subtotalNovo - desconto + Math.max(0, Number(comanda.gorjeta || 0))).toFixed(2));
-  if (totalNovo + 0.02 < Number(comanda.totalFaturado || 0)) throw erroEstoqueReserva('O total da comanda não pode ficar abaixo do total já faturado.', 'TOTAL_BELOW_BILLED', 409);
+  
+  const permiteAbaixo = dados.permitirAbaixoFaturado === true || dados.autorizadoGerente === true || Boolean(comanda.reabertaEm) || Boolean(comanda.statusAnteriorReabertura) || Boolean(comanda.reaberta) || isFinalizada;
+  if (!permiteAbaixo && totalNovo + 0.02 < Number(comanda.totalFaturado || 0)) {
+    throw erroEstoqueReserva('O total da comanda não pode ficar abaixo do total já faturado.', 'TOTAL_BELOW_BILLED', 409);
+  }
   const snapshot = raizSnapshot();
   try {
     comanda.itens.splice(indice, 1);
+    comanda.subtotal = subtotalNovo;
+    comanda.desconto = desconto;
+    comanda.total = totalNovo;
+    comanda.saldoPendente = Number(Math.max(0, totalNovo - Number(comanda.totalPago || 0)).toFixed(2));
+
+    if (isFinalizada) {
+      const diferenca = Number((totalNovo - Number(comanda.totalFaturado || 0)).toFixed(2));
+      comanda.totalFaturado = totalNovo;
+      if (comanda.status === 'paga') {
+        comanda.totalPago = totalNovo;
+        const pagDinheiro = (comanda.pagamentos || []).find((p) => p.meio === 'dinheiro' && p.caixaId);
+        if (pagDinheiro && diferenca < 0) {
+          const valorEstorno = Math.min(pagDinheiro.valor, Math.abs(diferenca));
+          pagDinheiro.valor = Number((pagDinheiro.valor - valorEstorno).toFixed(2));
+          try {
+            caixaKytto.registrarMovimentoCaixa(empresaId, {
+              caixaId: pagDinheiro.caixaId,
+              lojaId: comanda.lojaId,
+              tipo: 'estorno_recebimento',
+              valor: valorEstorno,
+              descricao: `Remoção de item (${itemRemovido.nome}) na comanda ${comanda.id}`,
+              referencia: comanda.id,
+              usuario: texto(dados.gerente || dados.usuario || 'Gerente', 120),
+              chaveIdempotencia: `barbearia_comanda:${empresaId}:${comanda.id}:remocao_item:${itemId}:${Date.now()}`,
+            });
+          } catch {}
+        }
+      } else if (comanda.status === 'em_conta') {
+        const pagConta = (comanda.pagamentos || []).find((p) => p.meio === 'conta');
+        if (pagConta) pagConta.valor = totalNovo;
+        const contaId = (comanda.contasReceberIds && comanda.contasReceberIds[0]) || (pagConta && pagConta.contaReceberId);
+        if (contaId) {
+          try {
+            clientesKytto.atualizarContaReceber(empresaId, contaId, {
+              valor: totalNovo,
+              descricao: `Comanda ${comanda.id} - ${comanda.clienteNome || 'Cliente'} (item removido)`,
+            });
+          } catch {}
+        }
+      }
+    }
+
     sincronizarReservasOperacao(empresaId, comanda, estado, { origem: 'comanda_barbearia', expiresAt: comanda.reservaEstoqueExpiresAt });
     comanda.atualizadoEm = dataAtual();
+    comanda.historicoAlteracoes = comanda.historicoAlteracoes || [];
+    comanda.historicoAlteracoes.push({
+      tipo: 'remocao_item',
+      itemId: String(itemId),
+      itemNome: itemRemovido.nome,
+      totalNovo,
+      dataHora: dataAtual(),
+      gerente: texto(dados.gerente || dados.usuario || 'Gerente', 120),
+      motivo: texto(dados.motivo || 'Remoção de item da comanda', 400),
+    });
     save();
     return copiarComandaBarbearia(comanda);
   } catch (error) {
@@ -3089,7 +3392,9 @@ export function registrarPagamentoComandaBarbearia(empresaId, comandaId, dados =
   const lojaIdOperacao = texto(dados.lojaId ?? comanda.lojaId, 120) || null;
   const clienteId = texto(dados.clienteId ?? dados.cliente_id ?? comanda.clienteId, 120) || null;
   // Saldo considera o que já foi faturado (inclusive lançado em conta), não só o recebido.
-  const saldoAnterior = Number(Math.max(0, total - Number(comanda.totalFaturado ?? comanda.totalPago ?? 0)).toFixed(2));
+  // Se a comanda foi reaberta, o saldo a quitar é a diferença entre o total atual e o já pago
+  const jaPago = comanda.reaberta ? Number(comanda.totalPago || 0) : Number(comanda.totalFaturado ?? comanda.totalPago ?? 0);
+  const saldoAnterior = Number(Math.max(0, total - jaPago).toFixed(2));
   // Fingerprint do pedido, não do caixa inferido nem de IDs/horários gerados.
   // Replay deve continuar sem efeito após o fechamento ou troca do caixa.
   const pagamentosPedido = pagamentosEntrada.map(item => ({
@@ -3125,7 +3430,7 @@ export function registrarPagamentoComandaBarbearia(empresaId, comandaId, dados =
     if (!compatible) throw Object.assign(new Error('A chave de idempotência foi reutilizada com payload diferente.'), { code: 'IDEMPOTENCY_CONFLICT' });
     return copiarComandaBarbearia(comanda, true);
   }
-  if (comanda.status === 'paga' || comanda.status === 'em_conta') return copiarComandaBarbearia(comanda, true);
+  if ((comanda.status === 'paga' || comanda.status === 'em_conta') && !comanda.reaberta) return copiarComandaBarbearia(comanda, true);
   const explicitIds = pagamentosPedido.map(item => texto(item?.id, 120)).filter(Boolean);
   const explicitKeys = pagamentosPedido.map(item => texto(item?.chaveIdempotencia ?? item?.chave_idempotencia, 220)).filter(Boolean);
   const existing = comanda.pagamentos || [];
@@ -3153,7 +3458,8 @@ export function registrarPagamentoComandaBarbearia(empresaId, comandaId, dados =
     return { id: texto(item?.id, 120) || `pagbar-${crypto.randomUUID()}`, meio, bandeira, valor, caixaId, ...(meio === 'dinheiro' && !caixaId ? { semCaixa: true } : {}), chaveIdempotencia: texto(item?.chaveIdempotencia ?? item?.chave_idempotencia ?? chaveIdempotencia, 220) || null, registradoEm: dataReg };
   });
   const valorNovo = Number(pagamentos.reduce((soma, item) => soma + item.valor, 0).toFixed(2));
-  if (valorNovo - saldoAnterior > 0.02) throw new Error(`O pagamento excede o saldo pendente de ${saldoAnterior.toFixed(2)}.`);
+  const isRefinalizacaoTotal = comanda.reaberta && Math.abs(valorNovo - total) <= 0.02;
+  if (!isRefinalizacaoTotal && valorNovo - saldoAnterior > 0.02) throw new Error(`O pagamento excede o saldo pendente de ${saldoAnterior.toFixed(2)}.`);
   const faturamentoCompleto = saldoAnterior - valorNovo <= 0.02;
   const consumoPlanejado = faturamentoCompleto ? planejarConsumoInternoComanda(estado, comanda) : [];
   validarEstoqueComandaBarbearia(estado, comanda, consumoPlanejado);

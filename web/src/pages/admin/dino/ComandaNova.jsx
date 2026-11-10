@@ -644,7 +644,22 @@ export function AdicionarItensComanda({ comanda, clientes, profissionais, servic
     if (!carrinho.length) return
     setSalvando(true)
     try {
-      const resposta = await api.post(`/api/admin/barbearia/comandas/${comanda.id}/itens`, { itens: itensParaApi(carrinho, comanda.profissionalId) })
+      const payload = { itens: itensParaApi(carrinho, comanda.profissionalId) }
+      let resposta
+      try {
+        resposta = await api.post(`/api/admin/barbearia/comandas/${comanda.id}/itens`, payload)
+      } catch (errPost) {
+        if (errPost.message?.includes('gerente') || errPost.status === 403) {
+          const senha = window.prompt('A comanda está finalizada. Digite a senha da Gerente Jhenyffer Andrade (ou senha master) para autorizar a inclusão de itens:')
+          if (senha) {
+            resposta = await api.post(`/api/admin/barbearia/comandas/${comanda.id}/itens`, { ...payload, senhaGerente: senha.trim() })
+          } else {
+            throw errPost
+          }
+        } else {
+          throw errPost
+        }
+      }
       setCarrinho([])
       await onAdicionados?.(resposta?.comanda, resposta?.avisos || [])
     } catch (error) {

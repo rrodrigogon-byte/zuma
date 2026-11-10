@@ -308,3 +308,136 @@ test('Comanda finalizada: reabertura para edição e refinalização em conta', 
   const clienteFinal = clientesKytto.obterCliente(empresaId, cliente.id);
   assert.equal(clienteFinal.saldoDevedor, 80);
 });
+
+test('Comanda Paga: reabertura, remoção de item abaixo do faturado anterior e refechamento com estorno no caixa', async () => {
+  reset();
+  const empresaId = 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
+  const lojaId = 'loja-dino-matriz';
+  const clientesKytto = await import('../clientes-contas-kytto.js');
+  const cliente = clientesKytto.criarCliente(empresaId, { nome: 'Carlos Silva', limiteCreditoMensal: 300 });
+  const cx = caixa.abrirCaixa(empresaId, { lojaId, valorAbertura: 200, operador: 'Operador Caixa' });
+
+  const s1 = barbearia.criarServico(empresaId, { nome: 'Corte Degradê', preco: 60, duracaoMinutos: 30 });
+  const s2 = barbearia.criarServico(empresaId, { nome: 'Sobrancelha', preco: 30, duracaoMinutos: 15 });
+
+  // 1. Criar comanda com 2 serviços (Total R$ 90,00)
+  const cmd = barbearia.criarComandaBarbearia(empresaId, {
+    clienteId: cliente.id,
+    lojaId,
+    itens: [
+      { id: 'item-corte', tipo: 'servico', servicoId: s1.id, nome: 'Corte Degradê', preco: 60, precoUnitario: 60, quantidade: 1, subtotal: 60 },
+      { id: 'item-sobrancelha', tipo: 'servico', servicoId: s2.id, nome: 'Sobrancelha', preco: 30, precoUnitario: 30, quantidade: 1, subtotal: 30 },
+    ],
+  });
+  assert.equal(cmd.total, 90);
+
+  // 2. Receber e finalizar em dinheiro no caixa (Total R$ 90,00)
+  barbearia.registrarPagamentoComandaBarbearia(empresaId, cmd.id, {
+    confirmado: true,
+    meioPagamento: 'dinheiro',
+    valor: 90,
+    caixaId: cx.id,
+    clienteId: cliente.id,
+    lojaId,
+  });
+
+  const cmdPaga = barbearia.obterComandaBarbearia(empresaId, cmd.id);
+  assert.equal(cmdPaga.status, 'paga');
+  assert.equal(cmdPaga.totalPago, 90);
+
+  // 3. Reabrir comanda para correção (autorizado por Jhenyffer / Gerente)
+  const cmdReaberta = barbearia.reabrirComandaBarbearia(empresaId, cmd.id, {
+    gerente: 'Jhenyffer Andrade',
+    motivo: 'Cliente desistiu da sobrancelha antes do atendimento',
+  });
+  assert.equal(cmdReaberta.status, 'aguardando_pagamento');
+  assert.equal(cmdReaberta.reaberta, true);
+
+  // 4. Remover o item Sobrancelha (novo total R$ 60,00 - abaixo do faturado anterior de R$ 90,00!)
+  const cmdAposRemover = barbearia.removerItemComandaBarbearia(empresaId, cmd.id, 'item-sobrancelha', {
+    autorizadoGerente: true,
+    permitirAbaixoFaturado: true,
+  });
+  assert.equal(cmdAposRemover.itens.length, 1);
+  assert.equal(cmdAposRemover.total, 60);
+
+  // 5. Refinalizar comanda mantendo pagamentos e estornando a diferença (R$ 30,00) no caixa
+  const cmdRefechada = barbearia.refecharComandaBarbearia(empresaId, cmd.id, {
+    meio: 'manter_pagamentos',
+    gerente: 'Jhenyffer Andrade',
+    usuario: 'Jhenyffer Andrade',
+  });
+
+  assert.equal(cmdRefechada.status, 'paga');
+  assert.equal(cmdRefechada.total, 60);
+  assert.equal(cmdRefechada.totalFaturado, 60);
+  assert.equal(cmdRefechada.totalPago, 60);
+  assert.equal(cmdRefechada.saldoPendente, 0);
+
+  // 6. Validar que o caixa registrou o estorno de R$ 30,00
+  const caixasAbertos = caixa.listarCaixas(empresaId, { lojaId, status: 'aberto' });
+  const cxAtual = caixasAbertos.find(c => c.id === cx.id);
+  assert.equal(cxAtual.valorEsperadoAtual, 260); // 200 abertura + 90 recebimento - 30 estorno = 260
+});
+
+test('Comanda Paga: reabertura, adição de produto e refinalização recebendo diferença via PIX', async () => {
+  reset();
+  const empresaId = 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
+  const lojaId = 'loja-dino-matriz';
+  const clientesKytto = await import('../clientes-contas-kytto.js');
+  const cliente = clientesKytto.criarCliente(empresaId, { nome: 'Rodrigo Gonçalves' });
+
+  const s1 = barbearia.criarServico(empresaId, { nome: 'Corte Clássico', preco: 50, duracaoMinutos: 30 });
+  const p1 = barbearia.criarProdutoRevenda(empresaId, { nome: 'Pomada Matte Dino', precoVenda: 45, estoqueAtual: 20 });
+
+  // 1. Criar e pagar comanda de corte (R$ 50,00) via PIX
+  const cmd = barbearia.criarComandaBarbearia(empresaId, {
+    clienteId: cliente.id,
+    lojaId,
+    itens: [
+      { id: 'item-corte', tipo: 'servico', servicoId: s1.id, nome: 'Corte Clássico', preco: 50, precoUnitario: 50, quantidade: 1, subtotal: 50 },
+    ],
+  });
+
+  barbearia.registrarPagamentoComandaBarbearia(empresaId, cmd.id, {
+    confirmado: true,
+    meioPagamento: 'pix',
+    valor: 50,
+    clienteId: cliente.id,
+    lojaId,
+  });
+
+  // 2. Reabrir comanda para adicionar pomada comprada na saída
+  barbearia.reabrirComandaBarbearia(empresaId, cmd.id, {
+    gerente: 'Jhenyffer Andrade',
+    motivo: 'Inclusão de pomada na saída',
+  });
+
+  // 3. Adicionar Pomada (R$ 45,00) -> Novo total R$ 95,00
+  const cmdComProduto = barbearia.adicionarItensComandaBarbearia(empresaId, cmd.id, [{
+    tipo: 'produto',
+    produtoId: p1.id,
+    nome: 'Pomada Matte Dino',
+    preco: 45,
+    precoUnitario: 45,
+    quantidade: 1,
+    subtotal: 45,
+  }]);
+
+  assert.equal(cmdComProduto.total, 95);
+  assert.equal(cmdComProduto.saldoPendente, 45); // 95 - 50 = 45
+
+  // 4. Refechar comanda recebendo a diferença de R$ 45,00 via PIX
+  const cmdRefechada = barbearia.refecharComandaBarbearia(empresaId, cmd.id, {
+    meio: 'pix',
+    gerente: 'Jhenyffer Andrade',
+    usuario: 'Jhenyffer Andrade',
+  });
+
+  assert.equal(cmdRefechada.status, 'paga');
+  assert.equal(cmdRefechada.total, 95);
+  assert.equal(cmdRefechada.totalFaturado, 95);
+  assert.equal(cmdRefechada.totalPago, 95);
+  assert.equal(cmdRefechada.saldoPendente, 0);
+  assert.equal(cmdRefechada.pagamentos.length, 2); // 50 inicial + 45 diferença
+});

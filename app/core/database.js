@@ -375,4 +375,5 @@ export const updateMany = async (table, records, idField = 'id') => {
   return results;
 };
 
+export const query = (text, values) => db.query(text, values);
 export default db;
