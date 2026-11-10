@@ -2221,8 +2221,7 @@ app.use('/api/webhooks', createWhatsappAiWebhookRouter());
     }
     return varejoRouter(req, res, next);
   });
-  app.use(['/api/pdv/venda', '/api/pdv/vendas'], auth, requireStaff, (req, res, next) => {
-    req.url = '/venda';
+  app.use(['/api/pdv', '/api/admin/pdv'], auth, requireStaff, (req, res, next) => {
     return varejoRouter(req, res, next);
   });
 
