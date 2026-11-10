@@ -2,6 +2,8 @@ import { createBoletosRouter } from './routes/boletos-routes.js';
 import { createSpedAdminRouter } from './routes/sped-routes.js';
 import { createDeliveryAdminRouter } from './routes/delivery-routes.js';
 import { createFiscalAvancadoRouter } from './routes/fiscal-avancado-routes.js';
+import { createDimpRoutes } from './routes/dimp-routes.js';
+import { createSupplyChainRoutes } from './routes/supply-chain-routes.js';
 // Primeiro import: a vigia de memória começa antes de carregar o banco (ver vigia-memoria.js).
 import { situacaoMemoria } from './vigia-memoria.js';
 import { registerAvecMixRoutes } from './avec-revenue-mix-routes.js';
@@ -1145,7 +1147,7 @@ app.use('/api/admin/commerce', (req, res, next) => {
 });
 
 // Módulos de /api/admin que separam dados por empresa e podem ser usados por tenant.
-const TENANT_ADMIN_MODULES = new Set(['a2', 'bar', 'barbearia', 'commerce', 'commerce-session', 'usuarios', 'usuarios-diretorio', 'platform', 'fidelidade', 'login', 'auditoria', 'modificadores', 'combos', 'clube', 'unidades', 'empresas', 'plataforma', 'razao', 'suprimentos', 'fiscal', 'salao', 'varejo', 'supermercado', 'pdv-offline', 'minhas-permissoes', 'cupons', 'omnichannel', 'pdv', 'dino-captacao', 'clientes-360', 'relatorios', 'estoque', 'cardapio', 'fichas-tecnicas', 'erp', 'fechamento-diario', 'compras', 'whatsapp', 'whatsapp-gestao', 'ia', 'gamificacao', 'barber', 'barbeiro', 'crm', 'financeiro', 'automacoes', 'eventos', 'licenciamento', 'ia-advisor', 'inteligencia-vendas', 'vender-mais', 'tef', 'boletos', 'fiscal-avancado', 'sped', 'delivery']);
+const TENANT_ADMIN_MODULES = new Set(['a2', 'bar', 'barbearia', 'commerce', 'commerce-session', 'usuarios', 'usuarios-diretorio', 'platform', 'fidelidade', 'login', 'auditoria', 'modificadores', 'combos', 'clube', 'unidades', 'empresas', 'plataforma', 'razao', 'suprimentos', 'fiscal', 'salao', 'varejo', 'supermercado', 'pdv-offline', 'minhas-permissoes', 'cupons', 'omnichannel', 'pdv', 'dino-captacao', 'clientes-360', 'relatorios', 'estoque', 'cardapio', 'fichas-tecnicas', 'erp', 'fechamento-diario', 'compras', 'whatsapp', 'whatsapp-gestao', 'ia', 'gamificacao', 'barber', 'barbeiro', 'crm', 'financeiro', 'automacoes', 'eventos', 'licenciamento', 'ia-advisor', 'inteligencia-vendas', 'vender-mais', 'tef', 'boletos', 'fiscal-avancado', 'sped', 'delivery', 'dimp-auditoria', 'supply-chain']);
 
 // [kytto-clube] Kytto Clube & Academia (catraca, contrato digital, agenda, retenção, Wellhub/TotalPass).
 // Usa o pool do Commerce que já existe (não abre outro pool) e a mesma resolução de empresa e
@@ -2077,6 +2079,30 @@ app.use('/api/webhooks', createWhatsappAiWebhookRouter());
     }
   });
   app.use('/api/admin/delivery', auth, requireStaff, deliveryRouter);
+
+  // [kytto-dimp] Auditoria Preventiva DIMP vs Documentos Fiscais
+  const dimpRouter = createDimpRoutes({
+    auth,
+    obterEmpresaId: (req) => {
+      if (isAdminGlobal(req.user)) {
+        return req.headers['x-empresa-id'] ? String(req.headers['x-empresa-id']).trim() : 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
+      }
+      return req.user?.empresaId ? String(req.user.empresaId).trim() : (legacyEmpresaId(req) || 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6');
+    }
+  });
+  app.use('/api/admin/dimp-auditoria', auth, requireStaff, dimpRouter);
+
+  // [kytto-supply-chain] Cotações de Compras (RFQ), Pedidos de Compra e 3-Way Matching
+  const supplyChainRouter = createSupplyChainRoutes({
+    auth,
+    obterEmpresaId: (req) => {
+      if (isAdminGlobal(req.user)) {
+        return req.headers['x-empresa-id'] ? String(req.headers['x-empresa-id']).trim() : 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
+      }
+      return req.user?.empresaId ? String(req.user.empresaId).trim() : (legacyEmpresaId(req) || 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6');
+    }
+  });
+  app.use('/api/admin/supply-chain', auth, requireStaff, supplyChainRouter);
 
   app.use('/api/admin/plataforma/empresas', auth, requireStaff, empresasRouter);
   app.use('/api/admin/unidades', auth, requireStaff, createUnidadesAdminRouter({ db: clubeDb, empresaDaRequisicao: empresaDasUnidades }));

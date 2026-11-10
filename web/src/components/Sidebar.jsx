@@ -117,6 +117,7 @@ const NAV_ADMIN_GROUPS = [
       { to: '/admin/cupons',   icon: '🎟️', label: 'Cupons' },
       { to: '/admin/pdv-offline', icon: '📡', label: 'PDV Offline & Periféricos' },
       { to: '/admin/delivery', icon: '🛵', label: 'Central Delivery & Motoboys' },
+      { to: '/admin/supply-chain', icon: '📦', label: 'Supply Chain & Cotações RFQ' },
       { to: '/admin/omnichannel', icon: '🔄', label: 'Canais, Delivery & Fidelidade' },
     ],
   },
