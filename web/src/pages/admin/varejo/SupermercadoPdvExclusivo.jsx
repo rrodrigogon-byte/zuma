@@ -102,14 +102,14 @@ const PRODUTOS_CATALOGO_CANONICO = [
   { id: 'prod-003', nome: 'Banana Prata Climatizada', sku: 'FLV-001', ean: '7891000100034', plu: 2001, unidade: 'KG', pesavel: true, precoBase: 6.99, precoFinal: 6.99 },
   { id: 'prod-004', nome: 'Maçã Gala Nacional Selecionada', sku: 'FLV-002', ean: '7891000100041', plu: 2002, unidade: 'KG', pesavel: true, precoBase: 9.80, precoFinal: 9.80 },
   { id: 'prod-005', nome: 'Pão Francês Tradicional Crocante', sku: 'PAD-001', ean: '7891000100058', plu: 3001, unidade: 'KG', pesavel: true, precoBase: 18.90, precoFinal: 18.90 },
-  { id: 'prod-006', nome: 'Açúcar Cristal Branco 1kg', sku: 'MER-005', ean: '7896006700052', plu: 5005, unidade: 'PCT', pesavel: false, precoBase: 4.89, precoFinal: 4.89 },
-  { id: 'prod-007', nome: 'Arroz Tipo 1 Longo Fino 5kg', sku: 'MER-001', ean: '7891000100072', plu: 5001, unidade: 'PCT', pesavel: false, precoBase: 26.90, precoFinal: 26.90 },
+  { id: 'prod-006', nome: 'Açúcar Cristal Branco 1kg', sku: 'MER-005', ean: '7896006700052', plu: 5005, unidade: 'PCT', pesavel: false, precoBase: 4.89, precoFinal: 4.89, atacarejoQtdMin: 10, atacarejoPreco: 4.19 },
+  { id: 'prod-007', nome: 'Arroz Tipo 1 Longo Fino 5kg', sku: 'MER-001', ean: '7891000100072', plu: 5001, unidade: 'PCT', pesavel: false, precoBase: 26.90, precoFinal: 26.90, atacarejoQtdMin: 6, atacarejoPreco: 23.90 },
   { id: 'prod-008', nome: 'Feijão Carioca Tipo 1 1kg', sku: 'MER-002', ean: '7891000100089', plu: 5002, unidade: 'PCT', pesavel: false, precoBase: 8.49, precoFinal: 8.49 },
-  { id: 'prod-009', nome: 'Óleo de Soja Refinado 900ml', sku: 'MER-003', ean: '7891000100096', plu: 5003, unidade: 'UN', pesavel: false, precoBase: 6.89, precoFinal: 6.89 },
+  { id: 'prod-009', nome: 'Óleo de Soja Refinado 900ml', sku: 'MER-003', ean: '7891000100096', plu: 5003, unidade: 'UN', pesavel: false, precoBase: 6.89, precoFinal: 6.89, atacarejoQtdMin: 12, atacarejoPreco: 5.99 },
   { id: 'prod-010', nome: 'Café Torrado e Moído Tradicional 500g', sku: 'MER-004', ean: '7891000100102', plu: 5004, unidade: 'PCT', pesavel: false, precoBase: 18.90, precoFinal: 18.90 },
-  { id: 'prod-011', nome: 'Leite Integral UHT 1L', sku: 'LAC-001', ean: '7891000100119', plu: 6001, unidade: 'UN', pesavel: false, precoBase: 5.29, precoFinal: 5.29 },
+  { id: 'prod-011', nome: 'Leite Integral UHT 1L', sku: 'LAC-001', ean: '7891000100119', plu: 6001, unidade: 'UN', pesavel: false, precoBase: 5.29, precoFinal: 5.29, atacarejoQtdMin: 12, atacarejoPreco: 4.69 },
   { id: 'prod-012', nome: 'Queijo Mussarela Fatiado', sku: 'LAC-002', ean: '7891000100126', plu: 4001, unidade: 'KG', pesavel: true, precoBase: 54.90, precoFinal: 54.90 },
-  { id: 'prod-013', nome: 'Cerveja Pilsen Puro Malte 350ml', sku: 'BEB-001', ean: '7891000100133', plu: 7001, unidade: 'LATA', pesavel: false, precoBase: 3.99, precoFinal: 3.99 },
+  { id: 'prod-013', nome: 'Cerveja Pilsen Puro Malte 350ml', sku: 'BEB-001', ean: '7891000100133', plu: 7001, unidade: 'LATA', pesavel: false, precoBase: 3.99, precoFinal: 3.99, atacarejoQtdMin: 12, atacarejoPreco: 3.29 },
   { id: 'prod-014', nome: 'Refrigerante Guaraná Antarctica 2L', sku: 'BEB-002', ean: '7891000100140', plu: 7002, unidade: 'PET', pesavel: false, precoBase: 8.99, precoFinal: 8.99 }
 ];
 
@@ -129,6 +129,7 @@ export default function SupermercadoPdvExclusivo({ onVoltarAdmin = null }) {
   const [parcelasCartao, setParcelasCartao] = useState(1);
   const [convenioAlimentacao, setConvenioAlimentacao] = useState('alelo');
   const [pixCopiado, setPixCopiado] = useState(false);
+  const [contingenciaOffline, setContingenciaOffline] = useState(false);
   const [valorRecebido, setValorRecebido] = useState('');
   const [cpfCliente, setCpfCliente] = useState('');
   const [clienteClube, setClienteClube] = useState(null);
@@ -317,7 +318,13 @@ export default function SupermercadoPdvExclusivo({ onVoltarAdmin = null }) {
       });
       showToast('🟢 Caixa aberto com sucesso! Fundo inicial: R$ 200,00');
     }
-    const precoUnit = Number(produto.precoFinal || produto.precoBase || produto.precoVenda || 0);
+    let precoUnit = Number(produto.precoFinal || produto.precoBase || produto.precoVenda || 0);
+    let atacarejoAplicado = false;
+    if (produto.atacarejoQtdMin && quantidade >= produto.atacarejoQtdMin) {
+      precoUnit = Number(produto.atacarejoPreco || precoUnit);
+      atacarejoAplicado = true;
+      showToast(`🏷️ Preço Atacarejo Ativado! ${produto.nome} a R$ ${precoUnit.toFixed(2)}/${produto.unidade}`);
+    }
     const novoItem = {
       id: produto.id,
       nome: produto.nome,
@@ -325,8 +332,9 @@ export default function SupermercadoPdvExclusivo({ onVoltarAdmin = null }) {
       ean: produto.ean || produto.codigoBarras || produto.plu,
       unidade: produto.unidade || (produto.pesavel ? 'KG' : 'UN'),
       quantidade: Number(quantidade),
-      precoBase: precoUnit,
-      precoFinal: precoUnit
+      precoBase: Number(produto.precoBase || precoUnit),
+      precoFinal: precoUnit,
+      atacarejo: atacarejoAplicado
     };
 
     setCarrinho(prev => [...prev, novoItem]);
