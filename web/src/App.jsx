@@ -161,6 +161,7 @@ const Supermercado     = lazy(() => import('./pages/admin/Supermercado'))
 const DeliveryHub      = lazy(() => import('./pages/admin/DeliveryHub'))
 const SupplyChainHub  = lazy(() => import('./pages/admin/SupplyChainHub'))
 const DimpAuditoriaPage = lazy(() => import('./pages/admin/DimpAuditoriaPage'))
+const VarejoMulticanalPage = lazy(() => import('./pages/admin/VarejoMulticanalPage'))
 const Clientes = lazy(() => import('./pages/admin/Clientes'))
 const Customer360 = lazy(() => import('./pages/admin/Customer360'))
 const FinanceiroEmpresa = lazy(() => import('./pages/admin/dino/FinanceiroEmpresa'))
@@ -409,6 +410,7 @@ export default function App() {
           <Route path="/admin/supply-chain"     element={<Layout><SupplyChainHub /></Layout>} />
           <Route path="/admin/dimp"             element={<Layout><DimpAuditoriaPage /></Layout>} />
           <Route path="/admin/dimp-auditoria"   element={<Layout><DimpAuditoriaPage /></Layout>} />
+          <Route path="/admin/varejo-multicanal" element={<Layout><VarejoMulticanalPage /></Layout>} />
           <Route path="/admin/omnichannel"      element={<Layout><CanaisFidelidade /></Layout>} />
           <Route path="/admin/pdv-erp"         element={<PDVUnificado />} />
         </Route>

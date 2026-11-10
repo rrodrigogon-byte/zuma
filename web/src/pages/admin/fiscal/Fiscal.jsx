@@ -12,6 +12,7 @@ import IcmsStTab from './IcmsStTab'
 import MdeTab from './MdeTab'
 import BoletosTab from './BoletosTab'
 import DimpAuditoriaTab from './DimpAuditoriaTab'
+import ReformaTributariaTab from './ReformaTributariaTab'
 import SpedFiscalBlocoKPanel from './SpedFiscalBlocoKPanel'
 import MatrizTributariaPanel from './MatrizTributariaPanel'
 
@@ -33,7 +34,8 @@ const ABAS = [
   ['icms_st', 'ICMS-ST (MT)'],
   ['mde', 'Manifestação (MD-e)'],
   ['boletos', 'Boletos & Pix Híbrido'],
-  ['dimp_auditoria', 'Auditoria DIMP vs Fiscal']
+  ['dimp_auditoria', 'Auditoria DIMP vs Fiscal'],
+  ['reforma_tributaria', 'Reforma Tributária (IBS/CBS)']
 ]
 const STATUS = {
   rascunho: ['Rascunho', 'muted'], enviando: ['Enviando', 'info'], autorizado: ['Autorizado', 'success'], rejeitado: ['Rejeitado', 'danger'],
@@ -89,6 +91,7 @@ export default function Fiscal({ abaInicial = 'situacao' }) {
     {aba === 'mde' && <MdeTab toast={toast} />}
     {aba === 'boletos' && <BoletosTab toast={toast} />}
     {aba === 'dimp_auditoria' && <DimpAuditoriaTab toast={toast} />}
+    {aba === 'reforma_tributaria' && <ReformaTributariaTab toast={toast} />}
   </div>
 }
 
