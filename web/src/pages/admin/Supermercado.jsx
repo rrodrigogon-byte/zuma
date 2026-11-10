@@ -36,7 +36,7 @@ import AuditoriaFraudePdvPanel from './varejo/AuditoriaFraudePdvPanel';
 import TabloidesEncartesPanel from './varejo/TabloidesEncartesPanel';
 import SimuladorBalancaPanel from './varejo/SimuladorBalancaPanel';
 import AuditoriaNoturnaPanel from './varejo/AuditoriaNoturnaPanel';
-import SupermercadoPdvExclusivo from './varejo/SupermercadoPdvExclusivo';
+import SupermercadoPdvExclusivo, { gerarPixCopiaECola } from './varejo/SupermercadoPdvExclusivo';
 
 const DEPARTAMENTOS = [
   'Açougue e Carnes',
@@ -2450,35 +2450,48 @@ export default function Supermercado() {
                   </div>
                 )}
 
-                {formaPagamento === 'pix' && (
-                  <div className="super-pix-payment-box">
-                    <div className="pix-qr-container">
-                      <QRCodeSVG
-                        value={'00020126580014br.gov.bcb.pix0136d0d0ac01-8e50-4b61-8c79-de4aaa916da6520400005303986540' + totalCarrinho.toFixed(2) + '5802BR5920Supermercado Kytto6016Tangara da Serra62070503***6304'}
-                        size={120}
-                        bgColor="#ffffff"
-                        fgColor="#0f172a"
-                      />
+                {formaPagamento === 'pix' && (() => {
+                  const chavePixEfetiva = empresaAtiva?.chave_pix || empresaAtiva?.pix_chave || empresaAtiva?.cnpj || 'financeiro@kytto.com.br';
+                  const nomeEmpresaEfetivo = empresaAtiva?.nome || 'SUPERMERCADO KYTTO';
+                  const cidadeEmpresaEfetiva = empresaAtiva?.cidade || 'TANGARA DA SERRA';
+                  const payloadPixOficial = gerarPixCopiaECola({
+                    chavePix: chavePixEfetiva,
+                    nomeRecebedor: nomeEmpresaEfetivo,
+                    cidadeRecebedor: cidadeEmpresaEfetiva,
+                    valor: totalCarrinho,
+                    txid: `SUP${Date.now().toString().slice(-6)}`
+                  });
+
+                  return (
+                    <div className="super-pix-payment-box">
+                      <div className="pix-qr-container">
+                        <QRCodeSVG
+                          value={payloadPixOficial}
+                          size={120}
+                          bgColor="#ffffff"
+                          fgColor="#0f172a"
+                        />
+                      </div>
+                      <div className="pix-details-col">
+                        <div className="pix-key-pill">Chave PIX: <strong>{chavePixEfetiva}</strong></div>
+                        <div className="pix-val-pill">Total: <strong>R$ {totalCarrinho.toFixed(2)}</strong></div>
+                        <button
+                          type="button"
+                          className="super-btn-sec-small w-full"
+                          onClick={() => {
+                            navigator.clipboard?.writeText(payloadPixOficial);
+                            setPixCopiado(true);
+                            setTimeout(() => setPixCopiado(false), 2000);
+                            showToast("Chave / Código Pix Copia e Cola copiado!");
+                          }}
+                        >
+                          {pixCopiado ? "✓ Código Copiado!" : "📋 Copiar Pix Copia e Cola"}
+                        </button>
+                        <small className="pix-status-legend">🟢 Barramento Pix Síncrono A2 ativo. Confirmação instantânea após leitura.</small>
+                      </div>
                     </div>
-                    <div className="pix-details-col">
-                      <div className="pix-key-pill">Chave PIX: <strong>financeiro@kytto.com.br</strong></div>
-                      <div className="pix-val-pill">Total: <strong>R$ {totalCarrinho.toFixed(2)}</strong></div>
-                      <button
-                        type="button"
-                        className="super-btn-sec-small w-full"
-                        onClick={() => {
-                          navigator.clipboard?.writeText("00020126580014br.gov.bcb.pix0136d0d0ac01-8e50-4b61-8c79-de4aaa916da6520400005303986540" + totalCarrinho.toFixed(2) + "5802BR5920Supermercado Kytto6016Tangara da Serra");
-                          setPixCopiado(true);
-                          setTimeout(() => setPixCopiado(false), 2000);
-                          showToast("Chave / Código Pix Copia e Cola copiado!");
-                        }}
-                      >
-                        {pixCopiado ? "✓ Código Copiado!" : "📋 Copiar Pix Copia e Cola"}
-                      </button>
-                      <small className="pix-status-legend">🟢 Barramento Pix Síncrono A2 ativo. Confirmação instantânea após leitura.</small>
-                    </div>
-                  </div>
-                )}
+                  );
+                })()}
 
                 {['debito', 'credito'].includes(formaPagamento) && (
                   <div className="super-card-payment-box">

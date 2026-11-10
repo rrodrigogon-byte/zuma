@@ -10,7 +10,7 @@ export default function WhatsappFilaPage() {
 
   const empresaIdEfetivo = (empresaAtiva?.id && empresaAtiva.id !== 'principal')
     ? empresaAtiva.id
-    : (user?.empresaId || empresasAcessiveis?.[0]?.id || 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6')
+    : (user?.empresaId || empresasAcessiveis?.[0]?.id || '')
   const empresaNomeEfetivo = empresaAtiva?.nome || empresasAcessiveis?.[0]?.nome || 'Dino Barbearia'
 
   const lojaIdEfetivo = (lojaAtiva?.id && lojaAtiva.id !== 'todas')

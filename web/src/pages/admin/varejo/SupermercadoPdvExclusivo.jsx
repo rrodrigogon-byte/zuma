@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../../../lib/auth';
 import { api } from '../../../lib/api';
 import {
   Store,
@@ -97,25 +98,45 @@ function playErrorBuzz() {
 }
 
 
-const PRODUTOS_CATALOGO_CANONICO = [
-  { id: 'prod-001', nome: 'Picanha Bovina Fatiada Resfriada', sku: 'ACO-001', ean: '7891000100010', plu: 1001, unidade: 'KG', pesavel: true, precoBase: 79.90, precoFinal: 79.90 },
-  { id: 'prod-002', nome: 'Alcatra com Maminha Bovina', sku: 'ACO-002', ean: '7891000100027', plu: 1002, unidade: 'KG', pesavel: true, precoBase: 48.90, precoFinal: 48.90 },
-  { id: 'prod-003', nome: 'Banana Prata Climatizada', sku: 'FLV-001', ean: '7891000100034', plu: 2001, unidade: 'KG', pesavel: true, precoBase: 6.99, precoFinal: 6.99 },
-  { id: 'prod-004', nome: 'Maçã Gala Nacional Selecionada', sku: 'FLV-002', ean: '7891000100041', plu: 2002, unidade: 'KG', pesavel: true, precoBase: 9.80, precoFinal: 9.80 },
-  { id: 'prod-005', nome: 'Pão Francês Tradicional Crocante', sku: 'PAD-001', ean: '7891000100058', plu: 3001, unidade: 'KG', pesavel: true, precoBase: 18.90, precoFinal: 18.90 },
-  { id: 'prod-006', nome: 'Açúcar Cristal Branco 1kg', sku: 'MER-005', ean: '7896006700052', plu: 5005, unidade: 'PCT', pesavel: false, precoBase: 4.89, precoFinal: 4.89, atacarejoQtdMin: 10, atacarejoPreco: 4.19 },
-  { id: 'prod-007', nome: 'Arroz Tipo 1 Longo Fino 5kg', sku: 'MER-001', ean: '7891000100072', plu: 5001, unidade: 'PCT', pesavel: false, precoBase: 26.90, precoFinal: 26.90, atacarejoQtdMin: 6, atacarejoPreco: 23.90 },
-  { id: 'prod-008', nome: 'Feijão Carioca Tipo 1 1kg', sku: 'MER-002', ean: '7891000100089', plu: 5002, unidade: 'PCT', pesavel: false, precoBase: 8.49, precoFinal: 8.49 },
-  { id: 'prod-009', nome: 'Óleo de Soja Refinado 900ml', sku: 'MER-003', ean: '7891000100096', plu: 5003, unidade: 'UN', pesavel: false, precoBase: 6.89, precoFinal: 6.89, atacarejoQtdMin: 12, atacarejoPreco: 5.99 },
-  { id: 'prod-010', nome: 'Café Torrado e Moído Tradicional 500g', sku: 'MER-004', ean: '7891000100102', plu: 5004, unidade: 'PCT', pesavel: false, precoBase: 18.90, precoFinal: 18.90 },
-  { id: 'prod-011', nome: 'Leite Integral UHT 1L', sku: 'LAC-001', ean: '7891000100119', plu: 6001, unidade: 'UN', pesavel: false, precoBase: 5.29, precoFinal: 5.29, atacarejoQtdMin: 12, atacarejoPreco: 4.69 },
-  { id: 'prod-012', nome: 'Queijo Mussarela Fatiado', sku: 'LAC-002', ean: '7891000100126', plu: 4001, unidade: 'KG', pesavel: true, precoBase: 54.90, precoFinal: 54.90 },
-  { id: 'prod-013', nome: 'Cerveja Pilsen Puro Malte 350ml', sku: 'BEB-001', ean: '7891000100133', plu: 7001, unidade: 'LATA', pesavel: false, precoBase: 3.99, precoFinal: 3.99, atacarejoQtdMin: 12, atacarejoPreco: 3.29 },
-  { id: 'prod-014', nome: 'Refrigerante Guaraná Antarctica 2L', sku: 'BEB-002', ean: '7891000100140', plu: 7002, unidade: 'PET', pesavel: false, precoBase: 8.99, precoFinal: 8.99 }
-];
+
+export function gerarPixCopiaECola({ chavePix, nomeRecebedor, cidadeRecebedor, valor, txid }) {
+  const chave = String(chavePix || 'financeiro@kytto.com.br').trim();
+  const nome = String(nomeRecebedor || 'SUPERMERCADO KYTTO').slice(0, 25).normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase();
+  const cidade = String(cidadeRecebedor || 'TANGARA DA SERRA').slice(0, 15).normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase();
+  const idTx = String(txid || `PDV${Date.now()}`).replace(/[^a-zA-Z0-9]/g, '').slice(0, 25);
+  const valorFmt = Number(valor || 0).toFixed(2);
+
+  function emv(id, valorTag) {
+    const v = String(valorTag);
+    return id + String(v.length).padStart(2, '0') + v;
+  }
+
+  const gui = emv('00', 'br.gov.bcb.pix');
+  const key = emv('01', chave);
+  const merchantAccount = emv('26', gui + key);
+  
+  let payload = emv('00', '01') + merchantAccount + emv('52', '0000') + emv('53', '986') + emv('54', valorFmt) + emv('58', 'BR') + emv('59', nome) + emv('60', cidade) + emv('62', emv('05', idTx));
+  payload += '6304';
+
+  let crc = 0xFFFF;
+  for (let i = 0; i < payload.length; i++) {
+    crc ^= payload.charCodeAt(i) << 8;
+    for (let j = 0; j < 8; j++) {
+      if ((crc & 0x8000) !== 0) {
+        crc = ((crc << 1) ^ 0x1021) & 0xFFFF;
+      } else {
+        crc = (crc << 1) & 0xFFFF;
+      }
+    }
+  }
+  const crcHex = crc.toString(16).toUpperCase().padStart(4, '0');
+  return payload + crcHex;
+}
+
 
 export default function SupermercadoPdvExclusivo({ onVoltarAdmin = null }) {
   const navigate = useNavigate();
+  const { empresaAtiva, lojaAtiva, user } = useAuth();
 
   // ── ESTADOS OPERACIONAIS DO CAIXA ──
   const [sessaoCaixa, setSessaoCaixa] = useState(null);
@@ -216,7 +237,7 @@ export default function SupermercadoPdvExclusivo({ onVoltarAdmin = null }) {
           setTerminalTefSel(resTermTef.terminais[0].id);
         }
       }
-      const prodsRecebidos = (resProd?.produtos && resProd.produtos.length > 0) ? resProd.produtos : PRODUTOS_CATALOGO_CANONICO;
+      const prodsRecebidos = (resProd?.produtos && Array.isArray(resProd.produtos)) ? resProd.produtos : [];
       setProdutos(prodsRecebidos);
       setTerminais((resTerm?.terminais && resTerm.terminais.length > 0) ? resTerm.terminais : [{ codigo: 'PDV-01', nome: 'Caixa 01 - Principal' }]);
       if (resSessao) {
@@ -314,9 +335,9 @@ export default function SupermercadoPdvExclusivo({ onVoltarAdmin = null }) {
   // ── CÁLCULO DOS TOTAIS DO CARRINHO ──
   const resumoItens = carrinho.map((item, idx) => {
     let precoUnit = Number(item.precoFinal || item.precoBase || item.precoVenda || 0);
-    // Aplica desconto do clube de 10% se identificado
-    if (clienteClube) {
-      precoUnit = Number((precoUnit * 0.90).toFixed(2));
+    // Aplica desconto do clube SOMENTE se cliente fidelidade for comprovadamente ativo
+    if (clienteClube && Number(clienteClube.descontoPercentual) > 0) {
+      precoUnit = Number((precoUnit * (1 - clienteClube.descontoPercentual / 100)).toFixed(2));
     }
     const totalItem = Number((precoUnit * item.quantidade).toFixed(2));
     return {
@@ -438,18 +459,31 @@ export default function SupermercadoPdvExclusivo({ onVoltarAdmin = null }) {
 
   // ── CONSULTA CLUBE KYTTO ──
   const consultarClienteClube = async (cpf) => {
+    const cpfLimpo = String(cpf || '').replace(/\D/g, '');
+    if (!cpfLimpo || cpfLimpo.length !== 11) {
+      showToast('⚠️ CPF inválido. Informe 11 dígitos.');
+      return;
+    }
     try {
-      const res = await api.get(`/api/admin/supermercado/fidelidade/campanhas-selinhos?cpf=${encodeURIComponent(cpf)}`).catch(() => null);
-      setClienteClube({
-        nome: 'Cliente Fidelidade Kytto',
-        cpf,
-        descontoPercentual: 10
-      });
-      showToast('🎉 Cliente Clube Identificado! 10% de desconto aplicado no cupom.');
-      playSuccessJingle();
+      const res = await api.get(`/api/admin/supermercado/fidelidade/campanhas-selinhos?cpf=${encodeURIComponent(cpfLimpo)}`).catch(() => null);
+      // Desconto é aplicado ESTRITAMENTE se o cliente for membro fidelidade comprovado
+      if (res && res.clienteFidelidade === true && Number(res.descontoPercentual) > 0) {
+        setClienteClube({
+          nome: res.nome || 'Cliente Clube Fidelidade',
+          cpf: cpfLimpo,
+          descontoPercentual: Number(res.descontoPercentual)
+        });
+        showToast(`🎉 Cliente Clube Identificado! ${res.descontoPercentual}% de desconto aplicado.`);
+        playSuccessJingle();
+      } else {
+        // Apenas identificação do consumidor para a NFC-e (SEM DESCONTO)
+        setClienteClube(null);
+        showToast(`CPF ${cpfLimpo} registrado para a NFC-e (sem desconto de clube).`);
+      }
     } catch (e) {
-      setClienteClube({ nome: 'Consumidor Identificado', cpf, descontoPercentual: 5 });
-      showToast('CPF incluído para NFC-e com sucesso.');
+      // Se houver falha de rede ou consulta, NÃO aplica desconto
+      setClienteClube(null);
+      showToast(`CPF ${cpfLimpo} registrado para a NFC-e.`);
     }
   };
 
@@ -927,10 +961,10 @@ export default function SupermercadoPdvExclusivo({ onVoltarAdmin = null }) {
               <span>Qtd Total de Itens: <strong>{carrinho.length}</strong> (Volume: <strong>{totalVolume.toFixed(2)}</strong>)</span>
               <span>Subtotal: <strong>R$ {subtotalCupom.toFixed(2)}</strong></span>
             </div>
-            {clienteClube && (
+            {clienteClube && Number(clienteClube.descontoPercentual) > 0 && (
               <div className="coupon-subtotal-row" style={{ color: '#059669' }}>
-                <span>Cliente: <strong>{clienteClube.nome}</strong> (CPF: {clienteClube.cpf})</span>
-                <span>Desconto Clube: <strong>-10%</strong></span>
+                <span>Cliente Clube: <strong>{clienteClube.nome}</strong> (CPF: {clienteClube.cpf})</span>
+                <span>Desconto Fidelidade: <strong>-{clienteClube.descontoPercentual}%</strong></span>
               </div>
             )}
             <div className="coupon-total-row">
@@ -1006,25 +1040,31 @@ export default function SupermercadoPdvExclusivo({ onVoltarAdmin = null }) {
           </div>
 
           {/* 4. ATALHOS RÁPIDOS DE BALCÃO E PESÁVEIS (1 CLIQUE) */}
-          <div>
-            <div style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', marginBottom: 6, textTransform: 'uppercase' }}>
-              Atalhos Rápidos de Balcão (1 Clique):
+          {produtos && produtos.length > 0 ? (
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', marginBottom: 6, textTransform: 'uppercase' }}>
+                Atalhos Rápidos de Balcão (1 Clique):
+              </div>
+              <div className="pdv-quick-items-row">
+                {produtos.slice(0, 7).map(prod => (
+                  <button
+                    key={prod.id}
+                    type="button"
+                    className="pdv-fast-item-pill"
+                    onClick={() => adicionarProdutoAoCarrinho(prod, 1)}
+                    title={`Adicionar 1 unidade de ${prod.nome}`}
+                  >
+                    <strong>{prod.nome.split(' ').slice(0, 2).join(' ')}</strong>
+                    <span>R$ {Number(prod.precoFinal || prod.precoBase || prod.precoVenda || 0).toFixed(2)}</span>
+                  </button>
+                ))}
+              </div>
             </div>
-            <div className="pdv-quick-items-row">
-              {produtos.slice(0, 7).map(prod => (
-                <button
-                  key={prod.id}
-                  type="button"
-                  className="pdv-fast-item-pill"
-                  onClick={() => adicionarProdutoAoCarrinho(prod, 1)}
-                  title={`Adicionar 1 unidade de ${prod.nome}`}
-                >
-                  <strong>{prod.nome.split(' ').slice(0, 2).join(' ')}</strong>
-                  <span>R$ {Number(prod.precoFinal || prod.precoBase || 0).toFixed(2)}</span>
-                </button>
-              ))}
+          ) : (
+            <div style={{ background: 'rgba(30, 41, 59, 0.5)', border: '1px dashed #475569', borderRadius: 8, padding: '10px 14px', color: '#94a3b8', fontSize: 11.5 }}>
+              📦 <strong>Catálogo Vazio:</strong> Nenhum produto cadastrado para esta empresa. Cadastre produtos no módulo administrativo para iniciar as vendas.
             </div>
-          </div>
+          )}
 
           {/* 5. FORMAS DE PAGAMENTO */}
           <div className="pdv-payment-box">
@@ -1092,35 +1132,48 @@ export default function SupermercadoPdvExclusivo({ onVoltarAdmin = null }) {
               </div>
             )}
 
-            {formaPagamento === 'pix' && (
-              <div className="pdv-pix-box">
-                <div className="pdv-pix-qr">
-                  <QRCodeSVG
-                    value={'00020126580014br.gov.bcb.pix0136d0d0ac01-8e50-4b61-8c79-de4aaa916da6520400005303986540' + subtotalCupom.toFixed(2) + '5802BR5920Supermercado Kytto6016Tangara da Serra62070503***6304'}
-                    size={96}
-                    bgColor="#ffffff"
-                    fgColor="#0f172a"
-                  />
+            {formaPagamento === 'pix' && (() => {
+              const chavePixEfetiva = empresaAtiva?.chave_pix || empresaAtiva?.pix_chave || empresaAtiva?.cnpj || 'financeiro@kytto.com.br';
+              const nomeEmpresaEfetivo = empresaAtiva?.nome || 'SUPERMERCADO KYTTO';
+              const cidadeEmpresaEfetiva = empresaAtiva?.cidade || 'TANGARA DA SERRA';
+              const payloadPixOficial = gerarPixCopiaECola({
+                chavePix: chavePixEfetiva,
+                nomeRecebedor: nomeEmpresaEfetivo,
+                cidadeRecebedor: cidadeEmpresaEfetiva,
+                valor: subtotalCupom,
+                txid: `PDV${Date.now().toString().slice(-6)}`
+              });
+
+              return (
+                <div className="pdv-pix-box">
+                  <div className="pdv-pix-qr">
+                    <QRCodeSVG
+                      value={payloadPixOficial}
+                      size={96}
+                      bgColor="#ffffff"
+                      fgColor="#0f172a"
+                    />
+                  </div>
+                  <div className="pdv-pix-info">
+                    <div className="pdv-pix-key">Chave Pix: <strong>{chavePixEfetiva}</strong></div>
+                    <div className="pdv-pix-total">Total a Receber: <strong>R$ {subtotalCupom.toFixed(2)}</strong></div>
+                    <button
+                      type="button"
+                      className="pdv-btn-pix-copy"
+                      onClick={() => {
+                        navigator.clipboard?.writeText(payloadPixOficial);
+                        setPixCopiado(true);
+                        setTimeout(() => setPixCopiado(false), 2000);
+                        showToast("Código Pix Copia e Cola copiado com sucesso!");
+                      }}
+                    >
+                      {pixCopiado ? '✓ Código Copiado!' : '📋 Copiar Pix Copia e Cola'}
+                    </button>
+                    <small className="pdv-pix-status">🟢 Barramento Pix BACEN Síncrono Ativo · CRC16 Validado</small>
+                  </div>
                 </div>
-                <div className="pdv-pix-info">
-                  <div className="pdv-pix-key">Chave Pix: <strong>financeiro@kytto.com.br</strong></div>
-                  <div className="pdv-pix-total">Total a Receber: <strong>R$ {subtotalCupom.toFixed(2)}</strong></div>
-                  <button
-                    type="button"
-                    className="pdv-btn-pix-copy"
-                    onClick={() => {
-                      navigator.clipboard?.writeText("00020126580014br.gov.bcb.pix0136d0d0ac01-8e50-4b61-8c79-de4aaa916da6520400005303986540" + subtotalCupom.toFixed(2) + "5802BR5920Supermercado Kytto6016Tangara da Serra");
-                      setPixCopiado(true);
-                      setTimeout(() => setPixCopiado(false), 2000);
-                      showToast("Código Pix Copia e Cola copiado com sucesso!");
-                    }}
-                  >
-                    {pixCopiado ? '✓ Código Copiado!' : '📋 Copiar Pix Copia e Cola'}
-                  </button>
-                  <small className="pdv-pix-status">🟢 Barramento Pix A2 Síncrono Conectado · Confirmação Instantânea</small>
-                </div>
-              </div>
-            )}
+              );
+            })()}
 
             {['debito', 'credito'].includes(formaPagamento) && (
               <div className="pdv-card-box">

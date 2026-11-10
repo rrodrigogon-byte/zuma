@@ -24,7 +24,7 @@ export function createDeliveryAdminRouter({ obterEmpresaIdDoUsuario }) {
       const id = obterEmpresaIdDoUsuario(req);
       if (id) return id;
     }
-    return req.headers['x-empresa-id'] || req.user?.empresaId || 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
+    return req.headers['x-empresa-id'] || req.user?.empresaId || req.user?.empresa_id || null;
   }
 
   // Listar todos os pedidos de delivery

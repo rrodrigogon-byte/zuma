@@ -1562,9 +1562,9 @@ app.get('/api/cep/:cep', publicLimit(80, 10 * 60 * 1000), async (req, res) => {
 const tefRouter = createTefRouter({
   obterEmpresaId: (req) => {
     if (isAdminGlobal(req.user)) {
-      return req.headers['x-empresa-id'] ? String(req.headers['x-empresa-id']).trim() : 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
+      return req.headers['x-empresa-id'] ? String(req.headers['x-empresa-id']).trim() : null;
     }
-    return req.user?.empresaId ? String(req.user.empresaId).trim() : (legacyEmpresaId(req) || 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6');
+    return req.user?.empresaId ? String(req.user.empresaId).trim() : (legacyEmpresaId(req) || null);
   }
 });
 app.use('/api/admin/tef', auth, requireStaff, tefRouter);

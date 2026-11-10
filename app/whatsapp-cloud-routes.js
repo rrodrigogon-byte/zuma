@@ -25,7 +25,8 @@ function store() {
 export function registerWhatsappCloudRoutes(app, { isPlatformAdmin = () => false } = {}) {
   // 1. Consulta de status da conexão oficial Meta
   app.get('/api/admin/whatsapp-cloud/status', async (req, res) => {
-    const empresaId = String(req.query?.empresaId || req.user?.empresa_id || 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6');
+    const empresaId = String(req.query?.empresaId || req.user?.empresa_id || req.user?.empresaId || '').trim();
+    if (!empresaId) return res.status(400).json({ ok: false, error: 'empresaId obrigatório' });
     const empresas = store();
     const configSalva = empresas[empresaId] || {};
     const config = getCloudApiConfig(configSalva);
@@ -94,7 +95,8 @@ export function registerWhatsappCloudRoutes(app, { isPlatformAdmin = () => false
 
   // 2. Salvar credenciais oficiais da Meta para a empresa
   app.post('/api/admin/whatsapp-cloud/config', async (req, res) => {
-    const empresaId = String(req.body?.empresaId || req.user?.empresa_id || 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6');
+    const empresaId = String(req.body?.empresaId || req.user?.empresa_id || req.user?.empresaId || '').trim();
+    if (!empresaId) return res.status(400).json({ ok: false, error: 'empresaId obrigatório' });
     const { token, phoneNumberId, wabaId, verifyToken, ativo } = req.body || {};
 
     const empresas = store();
@@ -118,7 +120,8 @@ export function registerWhatsappCloudRoutes(app, { isPlatformAdmin = () => false
 
   // 3. Listar templates aprovados na WABA
   app.get('/api/admin/whatsapp-cloud/templates', async (req, res) => {
-    const empresaId = String(req.query?.empresaId || req.user?.empresa_id || 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6');
+    const empresaId = String(req.query?.empresaId || req.user?.empresa_id || req.user?.empresaId || '').trim();
+    if (!empresaId) return res.status(400).json({ ok: false, error: 'empresaId obrigatório' });
     const empresas = store();
     const config = getCloudApiConfig(empresas[empresaId] || {});
 
@@ -146,7 +149,8 @@ export function registerWhatsappCloudRoutes(app, { isPlatformAdmin = () => false
 
   // 4. Envio de mensagem de teste oficial
   app.post('/api/admin/whatsapp-cloud/teste', async (req, res) => {
-    const empresaId = String(req.body?.empresaId || req.user?.empresa_id || 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6');
+    const empresaId = String(req.body?.empresaId || req.user?.empresa_id || req.user?.empresaId || '').trim();
+    if (!empresaId) return res.status(400).json({ ok: false, error: 'empresaId obrigatório' });
     const { telefone, mensagem, comBotoes } = req.body || {};
 
     if (!telefone) {
