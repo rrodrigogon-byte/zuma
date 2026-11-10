@@ -11180,11 +11180,15 @@ app.use('/assets', (req, res) => {
   if (!requestedFile || requestedFile.includes('..')) {
     return res.status(404).json({ error: 'asset not found', code: 'STATIC_ASSET_NOT_FOUND' });
   }
-  // Auto-recovery para chunks dinâmicos entre revisões:
-  // Se o hash específico mudou (ex: Barbearia-Cj8c93GR.js), redireciona para a versão atual do chunk
-  const match = requestedFile.match(/^([a-zA-Z0-9_\-]+)-([a-zA-Z0-9_\-]+)\.(js|css)$/);
-  if (match) {
-    const [, basePrefix, , ext] = match;
+  // Auto-recovery transparente para chunks dinâmicos entre revisões:
+  // Se o hash específico mudou, serve o arquivo correspondente diretamente (200 OK sem 302)
+  // para nunca falhar imports dinâmicos do ECMAScript no navegador.
+  const dotIndex = requestedFile.lastIndexOf('.');
+  if (dotIndex > 0) {
+    const ext = requestedFile.slice(dotIndex + 1);
+    const nameWithoutExt = requestedFile.slice(0, dotIndex);
+    const lastHyphen = nameWithoutExt.lastIndexOf('-');
+    const basePrefix = lastHyphen > 0 ? nameWithoutExt.slice(0, lastHyphen) : nameWithoutExt;
     try {
       const files = fs.readdirSync(assetsDir);
       const candidato = files
@@ -11195,8 +11199,10 @@ app.use('/assets', (req, res) => {
           return sB - sA;
         })[0];
       if (candidato) {
-        res.setHeader('Cache-Control', 'no-cache');
-        return res.redirect(302, `/assets/${candidato}`);
+        const filePath = path.join(assetsDir, candidato);
+        res.setHeader('Content-Type', ext === 'css' ? 'text/css; charset=utf-8' : 'application/javascript; charset=utf-8');
+        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+        return res.sendFile(filePath);
       }
     } catch (_) {}
   }
@@ -11345,7 +11351,9 @@ app.get(['/agendar/:slug', '/avaliar/:slug', '/minha/:slug'], (req, res, next) =
 // SPA fallback — React Router client-side routing
 app.get('*', (req, res) => {
   if (req.path.startsWith('/api/')) return res.status(404).json({ error: 'not found' });
-  res.setHeader('Cache-Control', 'no-store');
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 

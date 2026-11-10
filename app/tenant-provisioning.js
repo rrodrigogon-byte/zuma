@@ -16,13 +16,9 @@ export const TENANTS_OFICIAIS = {
     roleIdStaff: '85f0c5c5-584b-4d9f-946e-a348c3688483',
     usuarios: [
       { username: 'dino', email: 'dino@barbeariadino.com.br', emailAlt: 'guicunha136@gmail.com', nome: 'Guilherme Cunha Martins', role: 'organizador', pgRole: 'gerente', isOwner: true },
-      { username: 'bruno', email: 'bruno@barbeariadino.com.br', nome: 'Bruno Mendes Pedroso', role: 'profissional', pgRole: 'barbeiro' },
-      { username: 'david', email: 'david@barbeariadino.com.br', nome: 'David Kauã Araújo Moraes', role: 'profissional', pgRole: 'barbeiro' },
-      { username: 'natani', email: 'natani@barbeariadino.com.br', nome: 'Natani Minanis Dobler', role: 'profissional', pgRole: 'barbeiro' },
-      { username: 'amanda', email: 'amanda@barbeariadino.com.br', nome: 'Amanda Gabrielly Santos da Silva', role: 'profissional', pgRole: 'barbeiro' },
+      { username: 'natani', email: 'natani@barbeariadino.com.br', emailAlt: 'nati@barbeariadino.com.br', nome: 'Natani Minanis Dobler', role: 'profissional', pgRole: 'barbeiro' },
       { username: 'ster', email: 'ster@barbeariadino.com.br', emailAlt: 'ester@barbeariadino.com.br', nome: 'Steffany Marielly de Oliveira (Ster)', role: 'operador', pgRole: 'operador' },
-      { username: 'joao', email: 'joao@barbeariadino.com.br', nome: 'João Victor Domingos Ruedel', role: 'profissional', pgRole: 'barbeiro' },
-      { username: 'jhenyffer', email: 'jhenyfferkellyn@gmail.com', nome: 'Jhenyffer Andrade', role: 'organizador', pgRole: 'gerente', isOwner: true },
+      { username: 'jhenyffer', email: 'jhenyfferkellyn@gmail.com', emailAlt: 'jhenyffer@barbeariadino.com.br', nome: 'Jhenyffer Andrade', role: 'organizador', pgRole: 'gerente', isOwner: true },
     ]
   },
   stallone: {
@@ -90,8 +86,9 @@ export async function sincronizarTenantsEquipes(commerceDb) {
         rootDb.usuarios[indexJson] = {
           ...rootDb.usuarios[indexJson],
           ...dadosUsuarioJson,
-          // Mantém id existente caso já esteja vinculado
+          // Mantém id e senha existentes caso já esteja vinculado
           id: rootDb.usuarios[indexJson].id || dadosUsuarioJson.id,
+          senhaHash: rootDb.usuarios[indexJson].senhaHash || SENHA_PADRAO_HASH,
         };
       } else {
         rootDb.usuarios.push(dadosUsuarioJson);
@@ -103,13 +100,13 @@ export async function sincronizarTenantsEquipes(commerceDb) {
           const emailPrincipal = u.email.toLowerCase().trim();
           const emailAlt = (u.emailAlt || '').toLowerCase().trim();
 
-          // Atualiza usuário no PostgreSQL
+          // Atualiza usuário no PostgreSQL preservando senha alterada se houver
           const updateRes = await commerceDb.query(
             `UPDATE usuarios 
-                SET nome_completo = $1, role = $2, senha_hash = $3, empresa_id = $4, ativo = true, data_atualizacao = NOW()
-              WHERE lower(btrim(email)) = $5 OR (length($6) > 0 AND lower(btrim(email)) = $6)
+                SET nome_completo = $1, role = $2, empresa_id = $3, ativo = true, data_atualizacao = NOW()
+              WHERE lower(btrim(email)) = $4 OR (length($5) > 0 AND lower(btrim(email)) = $5)
               RETURNING id`,
-            [u.nome, u.pgRole, SENHA_PADRAO_HASH, config.empresaId, emailPrincipal, emailAlt]
+            [u.nome, u.pgRole, config.empresaId, emailPrincipal, emailAlt]
           );
 
           let userId = updateRes.rows?.[0]?.id;
@@ -129,41 +126,36 @@ export async function sincronizarTenantsEquipes(commerceDb) {
             const roleId = u.isOwner ? config.roleIdOwner : config.roleIdStaff;
             const lojaId = u.isOwner ? null : config.lojaId;
 
-            // Remove memberships espúrias em empresas diferentes (garante isolamento)
             await commerceDb.query(
-              `DELETE FROM commerce_memberships 
-                WHERE usuario_id = $1 AND empresa_id <> $2`,
-              [userId, config.empresaId]
-            ).catch(() => null);
-
-            // Garante membership ativa na empresa do tenant
-            const existeMem = await commerceDb.query(
-              `SELECT id FROM commerce_memberships WHERE usuario_id = $1 AND empresa_id = $2 LIMIT 1`,
-              [userId, config.empresaId]
+              `INSERT INTO commerce_memberships (id, usuario_id, empresa_id, loja_id, role_id, ativo, data_criacao, data_atualizacao)
+               VALUES (gen_random_uuid(), $1, $2, $3, $4, true, NOW(), NOW())
+               ON CONFLICT (usuario_id, empresa_id) 
+               DO UPDATE SET loja_id = EXCLUDED.loja_id, role_id = EXCLUDED.role_id, ativo = true, data_atualizacao = NOW()`,
+              [userId, config.empresaId, lojaId, roleId]
             );
-
-            if (!existeMem.rows || existeMem.rows.length === 0) {
-              await commerceDb.query(
-                `INSERT INTO commerce_memberships (id, empresa_id, usuario_id, loja_id, role_id, ativo, criado_em, atualizado_em)
-                 VALUES (gen_random_uuid(), $1, $2, $3, $4, true, NOW(), NOW())`,
-                [config.empresaId, userId, lojaId, roleId]
-              ).catch(() => null);
-            } else {
-              await commerceDb.query(
-                `UPDATE commerce_memberships 
-                    SET loja_id = $1, role_id = $2, ativo = true, atualizado_em = NOW() 
-                  WHERE id = $3`,
-                [lojaId, roleId, existeMem.rows[0].id]
-              ).catch(() => null);
-            }
           }
-        } catch (errPg) {
-          console.warn(`[tenant-sync] Erro ao sincronizar PG para ${u.username} (${tenantKey}):`, errPg.message);
+        } catch (dbErr) {
+          console.warn(`[tenant-provisioning] Aviso ao sincronizar usuário ${u.username} no PostgreSQL:`, dbErr.message);
         }
       }
     }
   }
 
+  // 3. Desativa ex-profissionais da Dino no PostgreSQL se o pool estiver conectado
+  if (commerceDb && typeof commerceDb.query === 'function') {
+    try {
+      const emailsDesligados = ['bruno@barbeariadino.com.br', 'david@barbeariadino.com.br', 'amanda@barbeariadino.com.br', 'joao@barbeariadino.com.br'];
+      await commerceDb.query(
+        `UPDATE usuarios SET ativo = false, data_atualizacao = NOW() WHERE lower(btrim(email)) = ANY($1::text[])`,
+        [emailsDesligados]
+      );
+      await commerceDb.query(
+        `UPDATE commerce_memberships SET ativo = false, data_atualizacao = NOW() WHERE usuario_id IN (SELECT id FROM usuarios WHERE lower(btrim(email)) = ANY($1::text[]))`,
+        [emailsDesligados]
+      );
+    } catch (_) {}
+  }
+
   save();
-  console.log('[tenant-sync] Sincronização multi-tenant concluída: Dino, Stallone e Agro Open isolados com sucesso.');
+  return { ok: true };
 }
