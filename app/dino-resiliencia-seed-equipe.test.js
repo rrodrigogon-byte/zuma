@@ -4,15 +4,15 @@ import { provisionarEquipeDino, PROFISSIONAIS_DINO_OFICIAIS, PROFISSIONAIS_DINO_
 import * as barbeariaErpKytto from './barbearia-erp-kytto.js';
 
 test('Resiliência de Equipe e Preservação de Horários da Barbearia Dino', async (t) => {
-  await t.test('1. Equipe oficial ativa deve conter apenas profissionais em atividade', () => {
+  await t.test('1. Equipe oficial ativa deve conter Bruno Mendes e profissionais titulares', () => {
     const usernames = PROFISSIONAIS_DINO_OFICIAIS.map(p => p.username);
     assert.ok(usernames.includes('dino'), 'Dino deve estar na equipe');
+    assert.ok(usernames.includes('bruno'), 'Bruno Mendes deve estar na equipe');
     assert.ok(usernames.includes('natani'), 'Nati deve estar na equipe');
     assert.ok(usernames.includes('ster'), 'Ster deve estar na equipe');
     assert.ok(usernames.includes('jhenyffer'), 'Jhenyffer deve estar na equipe');
 
-    // Desligados NÃO devem constar como ativos
-    assert.ok(!usernames.includes('bruno'), 'Bruno não deve estar no seed de ativos');
+    // Desligados reais NÃO devem constar como ativos
     assert.ok(!usernames.includes('david'), 'David não deve estar no seed de ativos');
     assert.ok(!usernames.includes('amanda'), 'Amanda não deve estar no seed de ativos');
     assert.ok(!usernames.includes('joao'), 'João não deve estar no seed de ativos');
@@ -25,14 +25,14 @@ test('Resiliência de Equipe e Preservação de Horários da Barbearia Dino', as
     assert.equal(dino.horarioFimPadrao, '23:59');
   });
 
-  await t.test('3. Execução do provisionamento deve manter ex-funcionários inativos', () => {
+  await t.test('3. Execução do provisionamento deve manter ex-funcionários inativos e Bruno ativo', () => {
     const res = provisionarEquipeDino();
     assert.ok(res.ok);
 
     const listaAtivos = barbeariaErpKytto.listarProfissionais(DINO_EMPRESA_CANONICA, { incluirInativos: false });
     const nomesAtivos = listaAtivos.map(p => p.nome.toLowerCase());
 
-    assert.ok(!nomesAtivos.some(n => n.includes('bruno mendes')), 'Bruno não deve constar na lista de ativos');
+    assert.ok(nomesAtivos.some(n => n.includes('bruno') && !n.includes('bruno rafael')), 'Bruno Mendes deve constar na lista de ativos');
     assert.ok(!nomesAtivos.some(n => n.includes('david kauã')), 'David não deve constar na lista de ativos');
     assert.ok(!nomesAtivos.some(n => n.includes('amanda gabrielly')), 'Amanda não deve constar na lista de ativos');
   });

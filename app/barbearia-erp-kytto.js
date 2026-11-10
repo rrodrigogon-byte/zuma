@@ -1139,10 +1139,25 @@ export function atualizarProfissional(empresaId, profissionalId, dados = {}) {
 // Exclusão lógica: profissionais podem estar referenciados por agenda,
 // comandas e comissões. Mantemos o registro histórico e retiramos o acesso
 // às novas operações ao marcar ativo=false.
-export function excluirProfissional(empresaId, profissionalId) {
+// Lista de profissionais protegidos da Dino Barbearia (imunes a exclusão acidental)
+export const PROFISSIONAIS_PROTEGIDOS_DINO = ['dino', 'bruno', 'bruno mendes', 'bruno mendes pedroso', 'nati', 'ester', 'ster', 'steffany', 'jhenyffer'];
+
+export function isProfissionalProtegido(nome = '', apelido = '') {
+  const n = String(nome || '').trim().toLowerCase();
+  const a = String(apelido || '').trim().toLowerCase();
+  return PROFISSIONAIS_PROTEGIDOS_DINO.some(prot => n.includes(prot) || a === prot);
+}
+
+export function excluirProfissional(empresaId, profissionalId, { forcar = false } = {}) {
   const estado = estadoEmpresa(empresaId);
   const atual = estado.profissionais[String(profissionalId)];
   if (!atual || atual.empresaId !== String(empresaId)) return null;
+
+  // Trava de segurança: impede exclusão acidental de profissionais titulares oficiais
+  if (isProfissionalProtegido(atual.nome, atual.apelido) && !forcar) {
+    throw new Error(`O profissional titular ${atual.nome} é protegido e essencial para a operação da Dino Barbearia. Ação bloqueada.`);
+  }
+
   const agora = dataAtual();
   Object.assign(atual, { ativo: false, removidoEm: atual.removidoEm || agora, atualizadoEm: agora });
   save();
@@ -2676,8 +2691,9 @@ export function criarComandaBarbearia(empresaId, dados = {}) {
   const agendamento = agendamentoId ? estado.agendamentos[agendamentoId] : null;
   if (agendamentoId && (!agendamento || agendamento.empresaId !== String(empresaId))) throw new Error('Agendamento não encontrado na empresa ativa.');
   const lojaId = texto(dados.lojaId ?? dados.loja_id ?? agendamento?.lojaId, 120);
-  const profissionalId = texto(dados.profissionalId ?? dados.profissional_id ?? agendamento?.profissionalId, 120);
-  if (profissionalId && (!estado.profissionais[profissionalId] || estado.profissionais[profissionalId].ativo === false)) throw new Error('Profissional responsável não encontrado ou inativo.');
+  const profissionalIdBruto = texto(dados.profissionalId ?? dados.profissional_id ?? agendamento?.profissionalId, 120);
+  const profissionalId = resolverProfissionalIdSeguro(empresaId, profissionalIdBruto);
+  if (profissionalIdBruto && !profissionalId) throw new Error('Profissional responsável não encontrado ou inativo.');
   const agora = dataAtual();
   const id = novoId('cmdbar', estado.comandas);
   const dataAtend = texto(dados.dataAtendimento ?? dados.data_atendimento ?? dados.data ?? agendamento?.dataAgenda ?? agendamento?.dataHora, 30) || null;
