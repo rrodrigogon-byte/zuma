@@ -68,6 +68,27 @@ export default function DinoInteligenciaVendasIa() {
   // Formulário de Configurações Comerciais & Políticas Meta
   const [formConfig, setFormConfig] = useState(null);
   const [salvandoConfig, setSalvandoConfig] = useState(false);
+  const carregarInteligencia = useCallback(async (empId) => {
+    setCarregando(true);
+    setErro(null);
+    try {
+      const targetEmpresa = empId || empresaAtivaId || "dino";
+      const qs = targetEmpresa ? `?empresaId=${encodeURIComponent(targetEmpresa)}` : "";
+      const res = await api.get(`/api/admin/inteligencia-vendas${qs}`).catch(() =>
+        api.get(`/api/admin/barbearia/inteligencia-vendas${qs}`)
+      );
+      setDados(res);
+      if (res?.config) {
+        setFormConfig({ ...res.config });
+      }
+    } catch (e) {
+      console.error("Erro ao carregar inteligência de vendas:", e);
+      setErro(e.message || "Erro ao carregar inteligência de vendas.");
+    } finally {
+      setCarregando(false);
+    }
+  }, [empresaAtivaId]);
+
   // Carrega lista autorizada de empresas
   useEffect(() => {
     let ativo = true;
@@ -128,27 +149,6 @@ export default function DinoInteligenciaVendasIa() {
       window.removeEventListener('empresa_alterada', onEmpresaAlterada);
     };
   }, [carregarInteligencia]);
-
-  const carregarInteligencia = useCallback(async (empId) => {
-    setCarregando(true);
-    setErro(null);
-    try {
-      const targetEmpresa = empId || empresaAtivaId || 'dino';
-      const qs = targetEmpresa ? `?empresaId=${encodeURIComponent(targetEmpresa)}` : '';
-      const res = await api.get(`/api/admin/inteligencia-vendas${qs}`).catch(() =>
-        api.get(`/api/admin/barbearia/inteligencia-vendas${qs}`)
-      );
-      setDados(res);
-      if (res?.config) {
-        setFormConfig({ ...res.config });
-      }
-    } catch (e) {
-      console.error('Erro ao carregar inteligência de vendas:', e);
-      setErro(e.message || 'Erro ao carregar inteligência de vendas.');
-    } finally {
-      setCarregando(false);
-    }
-  }, [empresaAtivaId]);
 
   useEffect(() => {
     carregarInteligencia(empresaParam || empresaAtivaId);
