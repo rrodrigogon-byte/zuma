@@ -142,16 +142,20 @@ export async function sincronizarTenantsEquipes(commerceDb) {
     }
   }
 
-  // 3. Desativa ex-profissionais da Dino no PostgreSQL se o pool estiver conectado
+  // 3. Desativa ex-profissionais da Dino no PostgreSQL se o pool estiver conectado (Bruno Mendes é ATIVO e titular!)
   if (commerceDb && typeof commerceDb.query === 'function') {
     try {
-      const emailsDesligados = ['bruno@barbeariadino.com.br', 'david@barbeariadino.com.br', 'amanda@barbeariadino.com.br', 'joao@barbeariadino.com.br'];
+      const emailsDesligados = ['david@barbeariadino.com.br', 'amanda@barbeariadino.com.br', 'joao@barbeariadino.com.br', 'brunorafael@barbeariadino.com.br'];
       await commerceDb.query(
         `UPDATE usuarios SET ativo = false, data_atualizacao = NOW() WHERE lower(btrim(email)) = ANY($1::text[])`,
         [emailsDesligados]
       );
       await commerceDb.query(
         `UPDATE commerce_memberships SET ativo = false, data_atualizacao = NOW() WHERE usuario_id IN (SELECT id FROM usuarios WHERE lower(btrim(email)) = ANY($1::text[]))`,
+        [emailsDesligados]
+      );
+      await commerceDb.query(
+        `UPDATE usuarios_lojas SET ativo = false WHERE usuario_id IN (SELECT id FROM usuarios WHERE lower(btrim(email)) = ANY($1::text[]))`,
         [emailsDesligados]
       );
     } catch (_) {}

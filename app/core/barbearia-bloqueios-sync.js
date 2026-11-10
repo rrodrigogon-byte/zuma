@@ -89,18 +89,15 @@ export async function desativarBloqueioNoPostgres(empresaId, bloqueio) {
  */
 export async function inicializarBloqueiosEquipe() {
   try {
-    // 1. Vincular barbeiros a usuarios_lojas
-    const barbeiros = [
-      { id: '5bd0e8d9-a6a0-4fc9-a9cb-ce350188bd20', role: 'barbeiro' }, // Dino
-      { id: '16212c5f-9d9c-4831-a669-92ec6c5f352c', role: 'barbeiro' }, // Bruno
-      { id: '6bec50bd-4e22-4aa0-8da5-a54439caf0bf', role: 'barbeiro' }, // Nati
-      { id: '4dc6960f-f7e9-4847-a1fd-7f111ab1000a', role: 'barbeiro' }, // Amanda
-      { id: 'c5f9ba2f-365f-4ada-9087-78d3ce4815d3', role: 'barbeiro' }, // David
-      { id: '5751b262-44fb-4554-9802-8ea3c9d2d517', role: 'barbeiro' }, // Ester
-      { id: '6856accc-e854-4a78-aa7a-40c722669943', role: 'barbeiro' }, // João Victor
+    // 1. Vincular EXCLUSIVAMENTE os barbeiros e equipe oficiais titulares
+    const equipeAtivaOficial = [
+      { id: '5bd0e8d9-a6a0-4fc9-a9cb-ce350188bd20', role: 'barbeiro' }, // Dino (Guilherme)
+      { id: '16212c5f-9d9c-4831-a669-92ec6c5f352c', role: 'barbeiro' }, // Bruno Mendes Pedroso
+      { id: '6bec50bd-4e22-4aa0-8da5-a54439caf0bf', role: 'barbeiro' }, // Nati (Natani)
+      { id: '5751b262-44fb-4554-9802-8ea3c9d2d517', role: 'operador' }, // Ster (Steffany)
     ];
 
-    for (const b of barbeiros) {
+    for (const b of equipeAtivaOficial) {
       await pgDb.query(
         `INSERT INTO usuarios_lojas (usuario_id, loja_id, role_loja, ativo, permissoes)
          VALUES ($1, $2, $3, true, '{}')
@@ -108,6 +105,25 @@ export async function inicializarBloqueiosEquipe() {
         [b.id, LOJA_DINO_ID, b.role]
       ).catch(() => null);
     }
+
+    // 1.1 INATIVAÇÃO MANDATÓRIA DE EX-COLABORADORES DESLIGADOS NO POSTGRESQL
+    const exFuncionariosIds = [
+      '4dc6960f-f7e9-4847-a1fd-7f111ab1000a', // Amanda
+      'c5f9ba2f-365f-4ada-9087-78d3ce4815d3', // David
+      '6856accc-e854-4a78-aa7a-40c722669943', // João Victor
+    ];
+    await pgDb.query(
+      `UPDATE usuarios_lojas SET ativo = false WHERE usuario_id = ANY($1::uuid[]) AND loja_id = $2`,
+      [exFuncionariosIds, LOJA_DINO_ID]
+    ).catch(() => null);
+    await pgDb.query(
+      `UPDATE usuarios SET ativo = false WHERE id = ANY($1::uuid[])`,
+      [exFuncionariosIds]
+    ).catch(() => null);
+    await pgDb.query(
+      `UPDATE commerce_memberships SET ativo = false WHERE usuario_id = ANY($1::uuid[])`,
+      [exFuncionariosIds]
+    ).catch(() => null);
 
     // 2. Bloquear Segunda (09/11/2026) e Terça (10/11/2026) do Dino no ERP e no PostgreSQL
     const diasAusenciaDino = ['2026-11-09', '2026-11-10'];
