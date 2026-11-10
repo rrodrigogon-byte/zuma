@@ -1,3 +1,13 @@
+
+export const TOPICOS_KYTTO = Object.freeze({
+  CADASTRO_SINCRONIZADO: 'cadastro.colaborador_sincronizado',
+  FOLHA_ATUALIZADA: 'folha.pagamento_atualizada',
+  COMANDA_PAGA: 'barbearia.comanda_paga',
+  NOTIFICACAO_ENVIADA: 'whatsapp.notificacao_enviada',
+  ENTREGA_ATUALIZADA: 'delivery.entrega_atualizada',
+  DOCUMENTO_EMITIDO: 'fiscal.documento_emitido'
+});
+
 import { EventEmitter } from 'events';
 import { emitirEventoInterno as emitirEventoA2, barramentoA2 } from '../modules/a2/eventos.js';
 

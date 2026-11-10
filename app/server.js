@@ -1,4 +1,6 @@
 import { createBoletosRouter } from './routes/boletos-routes.js';
+import { createSpedAdminRouter } from './routes/sped-routes.js';
+import { createDeliveryAdminRouter } from './routes/delivery-routes.js';
 import { createFiscalAvancadoRouter } from './routes/fiscal-avancado-routes.js';
 // Primeiro import: a vigia de memória começa antes de carregar o banco (ver vigia-memoria.js).
 import { situacaoMemoria } from './vigia-memoria.js';
@@ -1143,7 +1145,7 @@ app.use('/api/admin/commerce', (req, res, next) => {
 });
 
 // Módulos de /api/admin que separam dados por empresa e podem ser usados por tenant.
-const TENANT_ADMIN_MODULES = new Set(['a2', 'bar', 'barbearia', 'commerce', 'commerce-session', 'usuarios', 'usuarios-diretorio', 'platform', 'fidelidade', 'login', 'auditoria', 'modificadores', 'combos', 'clube', 'unidades', 'empresas', 'plataforma', 'razao', 'suprimentos', 'fiscal', 'salao', 'varejo', 'supermercado', 'pdv-offline', 'minhas-permissoes', 'cupons', 'omnichannel', 'pdv', 'dino-captacao', 'clientes-360', 'relatorios', 'estoque', 'cardapio', 'fichas-tecnicas', 'erp', 'fechamento-diario', 'compras', 'whatsapp', 'whatsapp-gestao', 'ia', 'gamificacao', 'barber', 'barbeiro', 'crm', 'financeiro', 'automacoes', 'eventos', 'licenciamento', 'ia-advisor', 'inteligencia-vendas', 'vender-mais', 'tef', 'boletos', 'fiscal-avancado']);
+const TENANT_ADMIN_MODULES = new Set(['a2', 'bar', 'barbearia', 'commerce', 'commerce-session', 'usuarios', 'usuarios-diretorio', 'platform', 'fidelidade', 'login', 'auditoria', 'modificadores', 'combos', 'clube', 'unidades', 'empresas', 'plataforma', 'razao', 'suprimentos', 'fiscal', 'salao', 'varejo', 'supermercado', 'pdv-offline', 'minhas-permissoes', 'cupons', 'omnichannel', 'pdv', 'dino-captacao', 'clientes-360', 'relatorios', 'estoque', 'cardapio', 'fichas-tecnicas', 'erp', 'fechamento-diario', 'compras', 'whatsapp', 'whatsapp-gestao', 'ia', 'gamificacao', 'barber', 'barbeiro', 'crm', 'financeiro', 'automacoes', 'eventos', 'licenciamento', 'ia-advisor', 'inteligencia-vendas', 'vender-mais', 'tef', 'boletos', 'fiscal-avancado', 'sped', 'delivery']);
 
 // [kytto-clube] Kytto Clube & Academia (catraca, contrato digital, agenda, retenção, Wellhub/TotalPass).
 // Usa o pool do Commerce que já existe (não abre outro pool) e a mesma resolução de empresa e
@@ -2053,6 +2055,28 @@ app.use('/api/webhooks', createWhatsappAiWebhookRouter());
     }
   });
   app.use('/api/admin/fiscal-avancado', auth, requireStaff, fiscalAvancadoRouter);
+
+  // [kytto-sped] EFD ICMS/IPI & EFD Contribuições Avançado com Bloco C, E, H e Pré-PVA
+  const spedRouter = createSpedAdminRouter({
+    obterEmpresaIdDoUsuario: (req) => {
+      if (isAdminGlobal(req.user)) {
+        return req.headers['x-empresa-id'] ? String(req.headers['x-empresa-id']).trim() : 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
+      }
+      return req.user?.empresaId ? String(req.user.empresaId).trim() : (legacyEmpresaId(req) || 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6');
+    }
+  });
+  app.use('/api/admin/sped', auth, requireStaff, spedRouter);
+
+  // [kytto-delivery] Central de Entregas, Motoboys, Roteirização e Régua WhatsApp
+  const deliveryRouter = createDeliveryAdminRouter({
+    obterEmpresaIdDoUsuario: (req) => {
+      if (isAdminGlobal(req.user)) {
+        return req.headers['x-empresa-id'] ? String(req.headers['x-empresa-id']).trim() : 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
+      }
+      return req.user?.empresaId ? String(req.user.empresaId).trim() : (legacyEmpresaId(req) || 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6');
+    }
+  });
+  app.use('/api/admin/delivery', auth, requireStaff, deliveryRouter);
 
   app.use('/api/admin/plataforma/empresas', auth, requireStaff, empresasRouter);
   app.use('/api/admin/unidades', auth, requireStaff, createUnidadesAdminRouter({ db: clubeDb, empresaDaRequisicao: empresaDasUnidades }));

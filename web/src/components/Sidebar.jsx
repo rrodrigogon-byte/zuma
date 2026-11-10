@@ -116,6 +116,7 @@ const NAV_ADMIN_GROUPS = [
       { to: '/admin/fechamento-diario', icon: '🔐', label: 'Fechamento Diário' },
       { to: '/admin/cupons',   icon: '🎟️', label: 'Cupons' },
       { to: '/admin/pdv-offline', icon: '📡', label: 'PDV Offline & Periféricos' },
+      { to: '/admin/delivery', icon: '🛵', label: 'Central Delivery & Motoboys' },
       { to: '/admin/omnichannel', icon: '🔄', label: 'Canais, Delivery & Fidelidade' },
     ],
   },

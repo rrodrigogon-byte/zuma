@@ -401,6 +401,7 @@ export default function App() {
 
           <Route path="/admin/supermercado" element={<Layout><Supermercado /></Layout>} />
 
+          <Route path="/admin/delivery"         element={<Layout><DeliveryHub /></Layout>} />
           <Route path="/admin/omnichannel"      element={<Layout><CanaisFidelidade /></Layout>} />
           <Route path="/admin/pdv-erp"         element={<PDVUnificado />} />
         </Route>
