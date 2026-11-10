@@ -155,7 +155,7 @@ export function createErpAdminRouter({ db, escopoDaRequisicao }) {
     const conteudo = linhasCsv.join("\r\n");
     return {
       ok: true,
-      nomeArquivo: `DRE_${infoEmpresa.nome.replace(/\s+/g, "_")}_${dre.periodo.mes || dre.periodo.ano || "Periodo"}.csv`,
+      nomeArquivo: `DRE_${String(infoEmpresa?.nome || "Empresa_Kytto").replace(/\s+/g, "_")}_${dre.periodo.mes || dre.periodo.ano || "Periodo"}.csv`,
       conteudoBase64: Buffer.from(conteudo, "utf8").toString("base64"),
       csvText: conteudo
     };
@@ -188,7 +188,7 @@ export function createErpAdminRouter({ db, escopoDaRequisicao }) {
       ie: req.query.empresaIe
     });
     const buffer = await dreSvc.exportarDreParaXlsx(dre, matrizAnual, infoEmpresa);
-    const nomeArquivo = `DRE_${infoEmpresa.nome.replace(/\s+/g, "_")}_${dre.periodo.mes || dre.periodo.ano || "Periodo"}.xlsx`;
+    const nomeArquivo = `DRE_${String(infoEmpresa?.nome || "Empresa_Kytto").replace(/\s+/g, "_")}_${dre.periodo.mes || dre.periodo.ano || "Periodo"}.xlsx`;
     return {
       ok: true,
       nomeArquivo,

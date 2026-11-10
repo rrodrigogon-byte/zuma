@@ -119,8 +119,16 @@ export const METADADOS_EMPRESAS = {
 
 export async function obterMetadadosEmpresa(db, empresaId, fallback = {}) {
   const normId = String(empresaId || "").toLowerCase().trim();
+  const cleanFallback = {};
+  if (fallback && typeof fallback === "object") {
+    for (const [k, v] of Object.entries(fallback)) {
+      if (v !== undefined && v !== null && String(v).trim() !== "") {
+        cleanFallback[k] = v;
+      }
+    }
+  }
   if (METADADOS_EMPRESAS[normId]) {
-    return { ...METADADOS_EMPRESAS[normId], ...fallback };
+    return { ...METADADOS_EMPRESAS[normId], ...cleanFallback };
   }
   if (db && typeof db.query === "function") {
     try {
@@ -298,8 +306,11 @@ async function coletarLancamentos({ db, empresaId, de, ate, regime = 'competenci
     }
   }
 
-  // 2. Unifica com Financeiro Central Kytto (ledger histórico de 6.894+ lançamentos)
-  if (financeiroKytto && typeof financeiroKytto.listarLancamentos === 'function') {
+  // 2. Unifica com Financeiro Central Kytto (ledger histórico de 6.894+ lançamentos apenas para Dino)
+  const ehDino = String(empresa || "").toLowerCase() === "d0d0ac01-8e50-4b61-8c79-de4aaa916da6" ||
+                 String(empresa || "").toLowerCase() === "emp-kytto-001" ||
+                 String(empresa || "").toLowerCase() === "dino";
+  if (ehDino && financeiroKytto && typeof financeiroKytto.listarLancamentos === 'function') {
     try {
       const todos = financeiroKytto.listarLancamentos(empresa, { lojaId });
       for (const item of todos) {
@@ -334,9 +345,10 @@ async function coletarLancamentos({ db, empresaId, de, ate, regime = 'competenci
     }
   }
 
-  // 3. Unifica com Comandas da Barbearia (se houver comandas sem lançamento no ledger)
-  try {
-    const estado = estadoEmpresa(empresa, false);
+  // 3. Unifica com Comandas da Barbearia (se houver comandas sem lançamento no ledger - apenas Dino)
+  if (ehDino) {
+    try {
+      const estado = estadoEmpresa(empresa, false);
     for (const comanda of Object.values(estado.comandas || {})) {
       if (comanda.status === 'cancelada') continue;
       const refData = String(comanda.fechadaEm || comanda.dataAtendimento || comanda.criadoEm || '').slice(0, 10);
@@ -373,6 +385,7 @@ async function coletarLancamentos({ db, empresaId, de, ate, regime = 'competenci
     }
   } catch (e) {
     // Barbearia opcional caso a empresa não seja barbearia
+  }
   }
 
   // 4. Unifica com Pedidos de Venda Ecommerce (Stallone Nutre Sport e Lojas Web)
