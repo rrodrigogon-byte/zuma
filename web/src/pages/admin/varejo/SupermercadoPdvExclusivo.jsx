@@ -24,6 +24,7 @@ import {
   UtensilsCrossed,
   Layers,
   RefreshCw,
+  Receipt,
   X
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
@@ -149,6 +150,17 @@ export default function SupermercadoPdvExclusivo({ onVoltarAdmin = null }) {
   const [modalBalanca, setModalBalanca] = useState(null); // produto selecionado para pesagem
   const [pesoBalancaInput, setPesoBalancaInput] = useState('1.000');
 
+  // ── ESTADOS DE TEF & PINPAD OFICIAL ──
+  const [modalTef, setModalTef] = useState(null); // { valor, forma, status: 'aguardando_pinpad'|'autorizada'|'erro', transacao, mensagem }
+  const [adquirenteSel, setAdquirenteSel] = useState('stone');
+  const [bandeiraSel, setBandeiraSel] = useState('visa');
+  const [terminalTefSel, setTerminalTefSel] = useState('');
+  const [parcelasTef, setParcelasTef] = useState(1);
+  const [tefProcessando, setTefProcessando] = useState(false);
+  const [adquirentesTef, setAdquirentesTef] = useState([]);
+  const [bandeirasTef, setBandeirasTef] = useState([]);
+  const [terminaisTef, setTerminaisTef] = useState([]);
+
   const inputScannerRef = useRef(null);
 
   const showToast = (msg) => {
@@ -173,6 +185,7 @@ export default function SupermercadoPdvExclusivo({ onVoltarAdmin = null }) {
         !modalAjuda &&
         !modalVendaConcluida &&
         !modalBalanca &&
+        !modalTef &&
         inputScannerRef.current
       ) {
         inputScannerRef.current.focus();
@@ -181,17 +194,28 @@ export default function SupermercadoPdvExclusivo({ onVoltarAdmin = null }) {
     focarScanner();
     const interval = setInterval(focarScanner, 1500);
     return () => clearInterval(interval);
-  }, [modalCaixa, modalConsultaPreco, modalAjuda, modalVendaConcluida, modalBalanca]);
+  }, [modalCaixa, modalConsultaPreco, modalAjuda, modalVendaConcluida, modalBalanca, modalTef]);
 
   // ── CARGA INICIAL DE PRODUTOS E TERMINAIS ──
   const carregarDadosOperacionais = async () => {
     setCarregando(true);
     try {
-      const [resProd, resTerm, resSessao] = await Promise.all([
+      const [resProd, resTerm, resSessao, resAdq, resBand, resTermTef] = await Promise.all([
         api.get('/api/admin/supermercado/produtos').catch(() => ({ produtos: [] })),
         api.get('/api/admin/supermercado/terminais').catch(() => ({ terminais: [] })),
-        api.get(`/api/admin/supermercado/caixa/sessao?terminal=${encodeURIComponent(terminalCodigo)}`).catch(() => null)
+        api.get(`/api/admin/supermercado/caixa/sessao?terminal=${encodeURIComponent(terminalCodigo)}`).catch(() => null),
+        api.get('/api/admin/tef/adquirentes').catch(() => ({ adquirentes: [] })),
+        api.get('/api/admin/tef/bandeiras').catch(() => ({ bandeiras: [] })),
+        api.get('/api/admin/tef/terminais').catch(() => ({ terminais: [] }))
       ]);
+      if (resAdq?.adquirentes) setAdquirentesTef(resAdq.adquirentes);
+      if (resBand?.bandeiras) setBandeirasTef(resBand.bandeiras);
+      if (resTermTef?.terminais) {
+        setTerminaisTef(resTermTef.terminais);
+        if (resTermTef.terminais.length > 0 && !terminalTefSel) {
+          setTerminalTefSel(resTermTef.terminais[0].id);
+        }
+      }
       const prodsRecebidos = (resProd?.produtos && resProd.produtos.length > 0) ? resProd.produtos : PRODUTOS_CATALOGO_CANONICO;
       setProdutos(prodsRecebidos);
       setTerminais((resTerm?.terminais && resTerm.terminais.length > 0) ? resTerm.terminais : [{ codigo: 'PDV-01', nome: 'Caixa 01 - Principal' }]);
@@ -499,8 +523,52 @@ export default function SupermercadoPdvExclusivo({ onVoltarAdmin = null }) {
     }
   };
 
-  // ── FINALIZAR VENDA (F10) ──
-  const finalizarVenda = async () => {
+  // ── FUNÇÕES DE TEF & PINPAD ──
+  const executarTransacaoPinpad = async () => {
+    setTefProcessando(true);
+    try {
+      const modalidade = formaPagamento === 'debito' ? 'debito' 
+        : (formaPagamento === 'alimentacao' ? 'voucher' 
+        : (parcelasTef > 1 ? 'credito_parcelado' : 'credito_avista'));
+
+      const res = await api.post('/api/admin/tef/processar', {
+        valor: subtotalCupom,
+        modalidade,
+        parcelas: modalidade === 'credito_parcelado' ? Number(parcelasTef) : 1,
+        adquirenteId: adquirenteSel,
+        bandeiraId: formaPagamento === 'alimentacao' ? 'alelo' : bandeiraSel,
+        terminalId: terminalTefSel || undefined,
+        referenciaVenda: `PDV-${Date.now().toString(36).toUpperCase()}`,
+        clienteNome: clienteClube?.nome || 'Consumidor Final',
+        operador: sessaoCaixa?.operador || 'Operador Caixa 01'
+      });
+
+      if (res && res.ok && res.transacao) {
+        playSuccessJingle();
+        setModalTef(prev => ({
+          ...prev,
+          status: 'autorizada',
+          transacao: res.transacao,
+          mensagem: 'TRANSAÇÃO AUTORIZADA PELA REDE'
+        }));
+        showToast(`💳 TEF Autorizado! NSU: ${res.transacao.nsu}`);
+      } else {
+        throw new Error(res?.erro || 'Transação não autorizada pela adquirente.');
+      }
+    } catch (err) {
+      playErrorBuzz();
+      setModalTef(prev => ({
+        ...prev,
+        status: 'erro',
+        mensagem: 'FALHA NA TRANSAÇÃO: ' + err.message
+      }));
+      showToast('❌ Erro no TEF: ' + err.message);
+    } finally {
+      setTefProcessando(false);
+    }
+  };
+
+  const executarFinalizacaoVenda = async (tefData = null) => {
     if (carrinho.length === 0) {
       playErrorBuzz();
       showToast('Cupom vazio! Bipe itens antes de finalizar.');
@@ -526,7 +594,8 @@ export default function SupermercadoPdvExclusivo({ onVoltarAdmin = null }) {
         valorRecebido: Number(valorRecebido || subtotalCupom),
         troco: trocoCalculado,
         cpfConsumidor: cpfCliente || null,
-        terminal: terminalCodigo
+        terminal: terminalCodigo,
+        tef: tefData
       };
 
       const res = await api.post('/api/admin/supermercado/vendas/pdv', payload).catch(() => ({
@@ -548,6 +617,7 @@ export default function SupermercadoPdvExclusivo({ onVoltarAdmin = null }) {
         troco: trocoCalculado,
         cpf: cpfCliente || 'Não informado',
         itens: [...resumoItens],
+        tef: tefData,
         nfce: res.nfce || {
           chaveAcesso: '512611' + String(Date.now()).padStart(38, '0').slice(-38),
           protocolo: '15126' + String(Date.now()).slice(-9)
@@ -561,12 +631,28 @@ export default function SupermercadoPdvExclusivo({ onVoltarAdmin = null }) {
       setValorRecebido('');
       setCpfCliente('');
       setClienteClube(null);
+      setModalTef(null);
       carregarDadosOperacionais();
     } catch (err) {
       playErrorBuzz();
       showToast('Erro ao registrar venda: ' + err.message);
     } finally {
       setCarregando(false);
+    }
+  };
+
+  // ── FINALIZAR VENDA (F10) ──
+  const finalizarVenda = () => {
+    if (['debito', 'credito', 'alimentacao'].includes(formaPagamento)) {
+      setModalTef({
+        valor: subtotalCupom,
+        forma: formaPagamento,
+        status: 'aguardando_pinpad',
+        mensagem: 'INSIRA OU APROXIME O CARTÃO NO PINPAD',
+        transacao: null
+      });
+    } else {
+      executarFinalizacaoVenda(null);
     }
   };
 
@@ -1354,6 +1440,170 @@ export default function SupermercadoPdvExclusivo({ onVoltarAdmin = null }) {
         </div>
       )}
 
+            {/* ── MODAL OFICIAL TEF & PINPAD MULTI-MAQUININHAS ── */}
+      {modalTef && (
+        <div className="pdv-modal-overlay">
+          <div className="pdv-modal-dialog tef-dialog">
+            <div className="pdv-modal-head" style={{ background: '#0f172a' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <CreditCard size={20} color="#38bdf8" />
+                <h3 style={{ margin: 0, color: '#f8fafc', fontSize: 16 }}>
+                  {modalTef.status === 'autorizada' ? '✅ Transação TEF Aprovada!' : '💳 Terminal Pinpad TEF Multi-Maquininhas'}
+                </h3>
+              </div>
+              <button className="pdv-modal-close-btn" onClick={() => setModalTef(null)}>×</button>
+            </div>
+
+            <div className="pdv-modal-body">
+              {/* Visor LCD Digital do Pinpad */}
+              <div className="pdv-tef-lcd">
+                <div className="pdv-tef-lcd-top">
+                  <span>● PINPAD ON-LINE</span>
+                  <span>{adquirenteSel.toUpperCase()} · GERTEC PPC930</span>
+                </div>
+                <div className="pdv-tef-lcd-msg">
+                  {tefProcessando ? 'PROCESSANDO CRIPTOGRAFIA PCI...' : (modalTef.status === 'autorizada' ? 'TRANSAÇÃO AUTORIZADA!' : 'INSIRA OU APROXIME O CARTÃO')}
+                </div>
+                <div className="pdv-tef-lcd-val">
+                  R$ {modalTef.valor?.toFixed(2)}
+                </div>
+              </div>
+
+              {/* Se ainda não foi autorizada, exibe os parâmetros operacionais */}
+              {modalTef.status !== 'autorizada' && (
+                <>
+                  <div className="pdv-tef-config-grid">
+                    <div>
+                      <label style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8' }}>Rede Adquirente:</label>
+                      <select
+                        className="pdv-modal-input"
+                        value={adquirenteSel}
+                        onChange={(e) => setAdquirenteSel(e.target.value)}
+                        disabled={tefProcessando}
+                      >
+                        <option value="stone">Stone / Ton (Taxa Deb: 1.15% | Cred: 2.19%)</option>
+                        <option value="pagbank">PagBank / PagSeguro (D+0)</option>
+                        <option value="cielo">Cielo (LIO / SiTef)</option>
+                        <option value="rede">Rede Itaú</option>
+                        <option value="vero_sicredi">Vero / Sicredi Cooperativo</option>
+                        <option value="sitef_fiserv">SiTef (Software Express / Fiserv)</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8' }}>Bandeira do Cartão:</label>
+                      <select
+                        className="pdv-modal-input"
+                        value={bandeiraSel}
+                        onChange={(e) => setBandeiraSel(e.target.value)}
+                        disabled={tefProcessando}
+                      >
+                        <option value="visa">💳 Visa</option>
+                        <option value="mastercard">💳 Mastercard</option>
+                        <option value="elo">💳 Elo (Nacional)</option>
+                        <option value="alelo">🍽️ Alelo Alimentação / Refeição</option>
+                        <option value="sodexo">🍽️ Sodexo / Pluxee</option>
+                        <option value="vr">🍽️ VR Benefícios</option>
+                        <option value="amex">💳 American Express</option>
+                        <option value="hipercard">💳 Hipercard</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {formaPagamento === 'credito' && (
+                    <div style={{ marginTop: 10 }}>
+                      <label style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8' }}>Condição de Parcelamento:</label>
+                      <select
+                        className="pdv-modal-input"
+                        value={parcelasTef}
+                        onChange={(e) => setParcelasTef(Number(e.target.value))}
+                        disabled={tefProcessando}
+                      >
+                        <option value={1}>1x à Vista — R$ {modalTef.valor?.toFixed(2)} (Taxa MDR 2.19%)</option>
+                        <option value={2}>2x de R$ {(modalTef.valor / 2).toFixed(2)}</option>
+                        <option value={3}>3x de R$ {(modalTef.valor / 3).toFixed(2)}</option>
+                        <option value={4}>4x de R$ {(modalTef.valor / 4).toFixed(2)}</option>
+                        <option value={5}>5x de R$ {(modalTef.valor / 5).toFixed(2)}</option>
+                        <option value={6}>6x de R$ {(modalTef.valor / 6).toFixed(2)} (Taxa MDR 2.99%)</option>
+                        <option value={10}>10x de R$ {(modalTef.valor / 10).toFixed(2)}</option>
+                        <option value={12}>12x de R$ {(modalTef.valor / 12).toFixed(2)} (Taxa MDR 3.69%)</option>
+                      </select>
+                    </div>
+                  )}
+
+                  <div className="pdv-modal-actions" style={{ marginTop: 18 }}>
+                    <button
+                      type="button"
+                      className="pdv-btn-modal-cancel"
+                      onClick={() => setModalTef(null)}
+                      disabled={tefProcessando}
+                    >
+                      Cancelar Operação
+                    </button>
+                    <button
+                      type="button"
+                      className="pdv-btn-modal-confirm"
+                      style={{ background: '#0284c7', minWidth: 220 }}
+                      onClick={executarTransacaoPinpad}
+                      disabled={tefProcessando}
+                    >
+                      {tefProcessando ? 'Aguardando Pinpad...' : '💳 Ler Cartão / Aproximar [ENTER]'}
+                    </button>
+                  </div>
+                </>
+              )}
+
+              {/* Se a transação foi autorizada com sucesso */}
+              {modalTef.status === 'autorizada' && modalTef.transacao && (
+                <div style={{ marginTop: 14 }}>
+                  <div className="pdv-tef-success-card">
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontWeight: 800, color: '#047857', fontSize: 13 }}>AUTORIZAÇÃO TEF: {modalTef.transacao.codigoAutorizacao}</span>
+                      <span className="pdv-badge-tef-ok">AUTORIZADO</span>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginTop: 8, fontSize: 11 }}>
+                      <div><strong>NSU:</strong> {modalTef.transacao.nsu}</div>
+                      <div><strong>TID:</strong> {modalTef.transacao.tid}</div>
+                      <div><strong>Modalidade:</strong> {modalTef.transacao.modalidade.toUpperCase()}</div>
+                      <div><strong>Bandeira:</strong> {modalTef.transacao.bandeiraNome}</div>
+                      <div><strong>Taxa MDR:</strong> {modalTef.transacao.taxaMdrPercentual}%</div>
+                      <div><strong>Previsão:</strong> {modalTef.transacao.previsaoLiquidacao}</div>
+                    </div>
+                  </div>
+
+                  {/* Comprovante Formatado da Via do Cliente */}
+                  <div style={{ maxHeight: 150, overflowY: 'auto', background: '#fff', color: '#000', padding: 10, borderRadius: 6, fontFamily: 'monospace', fontSize: 10.5, border: '1px dashed #cbd5e1', marginTop: 10 }}>
+                    <pre style={{ margin: 0 }}>{modalTef.transacao.comprovanteCliente}</pre>
+                  </div>
+
+                  <div className="pdv-modal-actions" style={{ marginTop: 16 }}>
+                    <button
+                      type="button"
+                      className="pdv-btn-modal-cancel"
+                      onClick={() => {
+                        const w = window.open('', '_blank');
+                        w.document.write(`<pre style="font-family: monospace; font-size: 12px; padding: 15px;">${modalTef.transacao.comprovanteCliente}</pre>`);
+                        w.print();
+                      }}
+                    >
+                      <Receipt size={14} style={{ display: 'inline', marginRight: 4 }} /> Imprimir Via TEF
+                    </button>
+                    <button
+                      type="button"
+                      className="pdv-btn-modal-confirm"
+                      style={{ background: '#10b981', minWidth: 240 }}
+                      onClick={() => executarFinalizacaoVenda(modalTef.transacao)}
+                    >
+                      ✅ Concluir Venda e Emitir NFC-e [F10]
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── MODAL COMPROVANTE TÉRMICO DE VENDA CONCLUÍDA ── */}
       {modalVendaConcluida && (
         <div className="pdv-modal-overlay">
@@ -1391,6 +1641,22 @@ export default function SupermercadoPdvExclusivo({ onVoltarAdmin = null }) {
                 <div style={{ fontSize: 10, marginTop: 4 }}>
                   CPF: {modalVendaConcluida.cpf}
                 </div>
+                {modalVendaConcluida.tef && (
+                  <>
+                    <hr />
+                    <div style={{ background: '#f8fafc', padding: '6px 8px', borderRadius: 4, marginTop: 4, border: '1px solid #e2e8f0' }}>
+                      <div style={{ textAlign: 'center', fontWeight: 'bold', fontSize: 10, color: '#0f172a' }}>PAGAMENTO VIA TEF APROVADO</div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 9.5 }}>
+                        <span>Rede: {modalVendaConcluida.tef.adquirenteNome}</span>
+                        <span>Band: {modalVendaConcluida.tef.bandeiraNome}</span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 9.5 }}>
+                        <span>NSU: {modalVendaConcluida.tef.nsu}</span>
+                        <span>AUT: {modalVendaConcluida.tef.codigoAutorizacao}</span>
+                      </div>
+                    </div>
+                  </>
+                )}
                 <hr />
                 <div style={{ fontSize: 9.5, textAlign: 'center', wordBreak: 'break-all' }}>
                   CHAVE DE ACESSO NFC-e:<br />
@@ -1409,6 +1675,20 @@ export default function SupermercadoPdvExclusivo({ onVoltarAdmin = null }) {
                 >
                   <Printer size={15} style={{ display: 'inline', marginRight: 6 }} /> Imprimir Térmico 80mm
                 </button>
+                {modalVendaConcluida.tef && (
+                  <button
+                    type="button"
+                    className="pdv-btn-modal-confirm"
+                    style={{ background: '#334155' }}
+                    onClick={() => {
+                      const w = window.open('', '_blank');
+                      w.document.write(`<pre style="font-family: monospace; font-size: 12px; padding: 15px;">${modalVendaConcluida.tef.comprovanteCliente || modalVendaConcluida.tef.comprovanteEstabelecimento}</pre>`);
+                      w.print();
+                    }}
+                  >
+                    <Receipt size={15} style={{ display: 'inline', marginRight: 6 }} /> Via TEF Cartão
+                  </button>
+                )}
                 <button
                   type="button"
                   className="pdv-btn-modal-confirm"

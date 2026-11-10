@@ -1547,6 +1547,25 @@ export async function registrarVendaPdv(db, empresaId, dados = {}, { usuario = n
       ).catch(() => null);
     }
 
+    // 5. Se pagamento com Cartão / TEF, registrar na Conciliação Eletrônica de Cartões (var_conciliacao_cartoes)
+    if (['debito', 'credito', 'alimentacao'].includes(formaPagamento) || dados.tef) {
+      const tefData = dados.tef || {};
+      const adq = String(tefData.adquirenteNome || tefData.adquirenteId || (formaPagamento === 'alimentacao' ? 'VR_BENEFICIOS' : 'STONE')).toUpperCase();
+      const band = String(tefData.bandeiraNome || tefData.bandeiraId || (formaPagamento === 'debito' ? 'VISA_DEBITO' : (formaPagamento === 'alimentacao' ? 'ALELO_ALIMENTACAO' : 'MASTERCARD_CREDITO'))).toUpperCase();
+      const mdrTaxa = Number(tefData.taxaMdrPercentual) || (formaPagamento === 'debito' ? 1.15 : (formaPagamento === 'alimentacao' ? 3.50 : 2.19));
+      const vLiq = Number((total * (1 - mdrTaxa / 100)).toFixed(2));
+      const diasRepasse = formaPagamento === 'debito' ? 1 : (formaPagamento === 'alimentacao' ? 15 : 30);
+
+      await q(
+        `INSERT INTO var_conciliacao_cartoes (
+           empresa_id, adquirente, bandeira, data_venda, data_previsao_repasse,
+           valor_bruto_pdv, taxa_mdr_contratada_pct, taxa_mdr_cobrada_pct,
+           valor_liquido_esperado, valor_liquido_pago, divergencia_nominal, status
+         ) VALUES ($1, $2, $3, CURRENT_DATE, CURRENT_DATE + ($4::integer * INTERVAL '1 day'), $5, $6, $6, $7, $7, 0.00, 'CONCILIADO_OK')`,
+        [empresa, adq, band, diasRepasse, total, mdrTaxa, vLiq]
+      ).catch(err => console.error('Erro var_conciliacao_cartoes pdv:', err.message));
+    }
+
     return {
       sucesso: true,
       venda: {
@@ -1557,8 +1576,10 @@ export async function registrarVendaPdv(db, empresaId, dados = {}, { usuario = n
         troco,
         formaPagamento,
         criadoEm,
-        itens: itensGravados
+        itens: itensGravados,
+        tef: dados.tef || null
       },
+      tef: dados.tef || null,
       nfce: {
         modelo: '65',
         serie: '001',

@@ -1558,6 +1558,17 @@ app.get('/api/cep/:cep', publicLimit(80, 10 * 60 * 1000), async (req, res) => {
   }
 });
 
+// [kytto-tef] Módulo Oficial TEF Multi-Maquininhas do Brasil (Stone, PagBank, Cielo, Rede, Getnet, SafraPay, Vero/Sicredi, SiTef)
+const tefRouter = createTefRouter({
+  obterEmpresaId: (req) => {
+    if (isAdminGlobal(req.user)) {
+      return req.headers['x-empresa-id'] ? String(req.headers['x-empresa-id']).trim() : 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
+    }
+    return req.user?.empresaId ? String(req.user.empresaId).trim() : (legacyEmpresaId(req) || 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6');
+  }
+});
+app.use('/api/admin/tef', auth, requireStaff, tefRouter);
+
 // Commerce Core PostgreSQL fica opt-in até DATABASE_URL, migrations, tenant e
 // checklist de rollout estarem aprovados. O runtime legado continua intacto.
 if(process.env.COMMERCE_CORE_ENABLED === '1'){
@@ -1994,6 +2005,7 @@ app.use('/api/webhooks', createWhatsappAiWebhookRouter());
     next();
   });
 
+
   // Sincronização inicial em segundo plano de pedidos pendentes para contas a receber
   if (clubeDb) {
     clubeDb.query(`
@@ -2135,16 +2147,6 @@ app.use('/api/webhooks', createWhatsappAiWebhookRouter());
   });
   app.use('/api/admin/ia-advisor', auth, requireStaff, iaAdvisorRouter);
 
-  // [kytto-tef] Módulo Oficial TEF Multi-Maquininhas do Brasil (Stone, PagBank, Cielo, Rede, Getnet, SafraPay, Vero/Sicredi, SiTef)
-  const tefRouter = createTefRouter({
-    obterEmpresaId: (req) => {
-      if (isAdminGlobal(req.user)) {
-        return req.headers['x-empresa-id'] ? String(req.headers['x-empresa-id']).trim() : 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
-      }
-      return req.user?.empresaId ? String(req.user.empresaId).trim() : (legacyEmpresaId(req) || 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6');
-    }
-  });
-  app.use('/api/admin/tef', auth, requireStaff, tefRouter);
   // [kytto-boletos] Boleto Bancário Registrado & Pix Cobrança Híbrido (Sicredi, Sicoob, Itaú, BB, Bradesco)
   const boletosRouter = createBoletosRouter({
     obterEmpresaId: (req) => {
