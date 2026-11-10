@@ -689,7 +689,7 @@ export default function PDV() {
     // Caso 1: Código de balança EAN-13 iniciando com 2 (2 + 5 dig PLU + 5 dig peso/preço + 1 dig DV)
     if (codigo.length === 13 && codigo.startsWith('2')) {
       const plu = codigo.slice(1, 6).replace(/^0+/, '');
-      const gramas = parseInt(codigo.slice(6, 11), 10);
+      const gramas = parseInt(codigo.slice(6, 12), 10);
       const pesoKg = gramas > 0 ? Number((gramas / 1000).toFixed(3)) : 1;
       const prod = cardapio.find(p => String(p.plu || p.sku || '').endsWith(plu) || String(p.id).includes(plu) || p.pesavel);
       if (prod) {

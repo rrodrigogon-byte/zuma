@@ -43,7 +43,7 @@ export default function SimuladorBalancaPanel({ onEnviarAoPdv }) {
   const barcodeEan13 = useMemo(() => {
     const prefixo = '2';
     const pluFormatado = String(produto.plu).padStart(5, '0');
-    const gramasFormatadas = String(Math.round(pesoLiquido * 1000)).padStart(5, '0');
+    const gramasFormatadas = String(Math.round(pesoLiquido * 1000)).padStart(6, '0');
     const corpo12 = `${prefixo}${pluFormatado}${gramasFormatadas}`;
     const dv = calcularDvEan13(corpo12);
     return `${corpo12}${dv}`;
@@ -183,7 +183,7 @@ export default function SimuladorBalancaPanel({ onEnviarAoPdv }) {
               onClick={() => setTara(prev => prev > 0 ? 0 : 0.020)}
               style={{ background: tara > 0 ? '#B45309' : '#1E293B', color: '#F1F5F9', border: 'none', borderRadius: 6, padding: '6px 14px', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}
             >
-              TARAR {tara > 0 ? 'LIMPAR TARA' : 'TARAR BANDEJA (20g)'}
+              {tara > 0 ? 'LIMPAR TARA' : 'TARA BANDEJA (20g)'}
             </button>
             <button
               type="button"
@@ -253,7 +253,7 @@ export default function SimuladorBalancaPanel({ onEnviarAoPdv }) {
               </button>
             </div>
             <div style={{ fontSize: 10, color: '#64748B', marginTop: 4 }}>
-              Decodificação: [2] Pesável + [{String(produto.plu).padStart(5, '0')}] PLU + [{String(Math.round(pesoLiquido * 1000)).padStart(5, '0')}] {Math.round(pesoLiquido * 1000)}g + [{barcodeEan13.slice(-1)}] DV
+              Decodificação: [2] Pesável + [{String(produto.plu).padStart(5, '0')}] PLU + [{String(Math.round(pesoLiquido * 1000)).padStart(6, '0')}] {Math.round(pesoLiquido * 1000)}g + [{barcodeEan13.slice(-1)}] DV
             </div>
           </div>
 
