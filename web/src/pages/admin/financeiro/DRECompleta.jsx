@@ -85,6 +85,18 @@ export default function DRECompleta() {
           ie: e.inscricaoEstadual || 'Isento'
         }));
 
+        if (ehAdmin) {
+          lista.unshift({
+            id: '00000000-0000-0000-0000-000000000001',
+            uuid: '00000000-0000-0000-0000-000000000001',
+            nome: 'Holding Kytto (Consolidado)',
+            icone: '🏢',
+            segmento: 'Consolidação de Todas as Empresas',
+            cnpj: '50.073.355/0001-89 (Matriz)',
+            ie: 'Múltiplas (MT)',
+            ehConsolidado: true
+          });
+        }
         if (lista.length > 0) {
           setEmpresasAutorizadas(lista);
           // Sincroniza se a empresa ativa não for das autorizadas
@@ -596,6 +608,67 @@ export default function DRECompleta() {
               overflow: 'hidden',
               boxShadow: '0 4px 14px rgba(0,0,0,0.03)'
             }}>
+              {Boolean(empresaAtiva?.ehConsolidado || dre?.ehConsolidado) && dre?.porEmpresa && (
+                <div style={{
+                  padding: "16px 20px",
+                  background: "var(--surface)",
+                  borderBottom: "1px solid var(--line)"
+                }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <span style={{ fontSize: 18 }}>🏢</span>
+                      <h3 style={{ margin: 0, fontSize: 14, fontWeight: 900, color: "var(--cream, #0f172a)" }}>
+                        Participação das Unidades de Negócio no Grupo Kytto
+                      </h3>
+                    </div>
+                    <span style={{ fontSize: 11, color: "var(--muted)", fontWeight: 700 }}>
+                      Consolidação Multi-Empresa em Tempo Real
+                    </span>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 12 }}>
+                    {Object.values(dre.porEmpresa).map(emp => (
+                      <div key={emp.nome} style={{
+                        background: "var(--card)",
+                        border: "1px solid var(--line)",
+                        borderRadius: 12,
+                        padding: "12px 14px",
+                        boxShadow: "0 2px 8px rgba(0,0,0,0.02)"
+                      }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                          <span style={{ fontWeight: 800, fontSize: 13, color: "var(--cream, #0f172a)" }}>
+                            {emp.icone || "🏢"} {emp.nome}
+                          </span>
+                          <span style={{
+                            background: "rgba(37,99,235,0.1)",
+                            color: "#2563eb",
+                            fontWeight: 800,
+                            fontSize: 11,
+                            padding: "2px 8px",
+                            borderRadius: 6
+                          }}>
+                            {emp.shareReceita || 0}% Share
+                          </span>
+                        </div>
+                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 4 }}>
+                          <span style={{ color: "var(--muted)" }}>Receita Bruta:</span>
+                          <strong>{fmtR(emp.receitaBruta)}</strong>
+                        </div>
+                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 4 }}>
+                          <span style={{ color: "var(--muted)" }}>Lucro Bruto:</span>
+                          <strong style={{ color: emp.lucroBruto >= 0 ? "#16a34a" : "#dc2626" }}>{fmtR(emp.lucroBruto)}</strong>
+                        </div>
+                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
+                          <span style={{ color: "var(--muted)" }}>EBITDA / LAJIDA:</span>
+                          <strong style={{ color: emp.ebitda >= 0 ? "#d97706" : "#dc2626" }}>{fmtR(emp.ebitda)}</strong>
+                        </div>
+                        <div style={{ width: "100%", height: 5, background: "var(--line)", borderRadius: 3, marginTop: 8, overflow: "hidden" }}>
+                          <div style={{ width: `${Math.min(Math.max(emp.shareReceita || 0, 0), 100)}%`, height: "100%", background: "#2563eb", borderRadius: 3 }} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
               <div style={{ padding: '14px 20px', background: 'var(--surface)', borderBottom: '1px solid var(--line)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ fontWeight: 800, fontSize: 14, color: 'var(--cream, #0f172a)' }}>
                   Demonstração Contábil Oficial · Período {dre?.periodo?.de} até {dre?.periodo?.ate}
@@ -612,7 +685,8 @@ export default function DRECompleta() {
                       <th style={{ padding: '12px 18px', width: 90, color: 'var(--muted)', fontSize: 11, textTransform: 'uppercase' }}>CÓDIGO</th>
                       <th style={{ padding: '12px 18px', color: 'var(--muted)', fontSize: 11, textTransform: 'uppercase' }}>CONTA / CLASSIFICAÇÃO CONTÁBIL</th>
                       <th style={{ padding: '12px 18px', textAlign: 'right', width: 180, color: 'var(--muted)', fontSize: 11, textTransform: 'uppercase' }}>VALOR (R$)</th>
-                      <th style={{ padding: '12px 18px', textAlign: 'right', width: 140, color: 'var(--muted)', fontSize: 11, textTransform: 'uppercase' }}>ANÁLISE VERTICAL</th>
+                      <th style={{ padding: '12px 18px', textAlign: 'right', width: 140, color: 'var(--muted)', fontSize: 11, textTransform: 'uppercase' }}>ANÁLISE VERTICAL (AV)</th>
+                      <th style={{ padding: '12px 18px', textAlign: 'right', width: 150, color: 'var(--muted)', fontSize: 11, textTransform: 'uppercase' }}>ANÁLISE HORIZ. (AH %)</th>
                     </tr>
                   </thead>
                   <tbody>

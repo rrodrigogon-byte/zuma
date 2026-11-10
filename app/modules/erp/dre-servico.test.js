@@ -105,3 +105,64 @@ test("geração de exportação XLSX e HTML Oficial PDF", async () => {
   assert.ok(html.includes("50.073.355/0001-89"));
   assert.ok(html.includes("RODRIGO RIBEIRO GONÇALVES"));
 });
+
+test("DRE Consolidada da Holding Kytto com Análise Horizontal (AH %) e porEmpresa", async () => {
+  const { calcularDreCompleta, HOLDING_CONSOLIDADO_ID } = await import("./dre-servico.js");
+  const mockDb = {
+    query: async (sql, params) => {
+      if (sql.includes("to_regclass")) return { rows: [{ t: "fin_lancamentos" }] };
+      const isNov = (params || []).some(p => String(p).includes("2026-11"));
+      if (isNov) {
+        return {
+          rows: [
+            { id: "1", empresa_id: "d0d0ac01-8e50-4b61-8c79-de4aaa916da6", tipo: "receita", categoria: "Cortes", valor: 20000, data_competencia: "2026-11-05", status: "pago" },
+            { id: "2", empresa_id: "31f70c83-9172-40c2-945f-9e793b5048be", tipo: "receita", categoria: "Suplementos Whey", valor: 15000, data_competencia: "2026-11-10", status: "pago" },
+            { id: "3", empresa_id: "2e041110-db20-4fd1-8278-12bd3dead008", tipo: "receita", categoria: "Insumos Agrícolas", valor: 5000, data_competencia: "2026-11-12", status: "pago" },
+            { id: "4", empresa_id: "00000000-0000-0000-0000-000000000002", tipo: "receita", categoria: "Mercadoria Geral", valor: 10000, data_competencia: "2026-11-15", status: "pago" }
+          ]
+        };
+      }
+      // Outubro (Mês Anterior M-1 para teste de AH)
+      return {
+        rows: [
+          { id: "10", empresa_id: "d0d0ac01-8e50-4b61-8c79-de4aaa916da6", tipo: "receita", categoria: "Cortes", valor: 16000, data_competencia: "2026-10-05", status: "pago" },
+          { id: "20", empresa_id: "31f70c83-9172-40c2-945f-9e793b5048be", tipo: "receita", categoria: "Suplementos Whey", valor: 10000, data_competencia: "2026-10-10", status: "pago" }
+        ]
+      };
+    }
+  };
+
+  const dre = await calcularDreCompleta(mockDb, HOLDING_CONSOLIDADO_ID, { mes: "2026-11", regime: "competencia" });
+
+  assert.equal(dre.ehConsolidado, true);
+  // Receita Bruta Consolidada = 20k + 15k + 5k + 10k = 50.000
+  assert.equal(dre.resumo.receitaBruta, 50000);
+  assert.equal(dre.resumo.receitaLiquida, 50000);
+  assert.equal(dre.resumo.lucroBruto, 50000);
+  assert.equal(dre.resumo.ebitda, 50000);
+
+  // Análise Horizontal na Receita Bruta: Mês Atual = 50k vs Mês Anterior = 26k (+92.3%)
+  const lRec = dre.linhas.find(l => l.codigo === "1");
+  assert.equal(lRec.valor, 50000);
+  assert.equal(lRec.valorAnterior, 26000);
+  assert.equal(lRec.variacaoNominal, 24000);
+  assert.equal(lRec.ah, 92.3);
+  assert.equal(lRec.tendencia, "alta");
+
+  // Quadro de Participação por Empresa
+  assert.ok(dre.porEmpresa["Barbearia Dino"]);
+  assert.equal(dre.porEmpresa["Barbearia Dino"].receitaBruta, 20000);
+  assert.equal(dre.porEmpresa["Barbearia Dino"].shareReceita, 40);
+
+  assert.ok(dre.porEmpresa["Stallone Nutre Sport"]);
+  assert.equal(dre.porEmpresa["Stallone Nutre Sport"].receitaBruta, 15000);
+  assert.equal(dre.porEmpresa["Stallone Nutre Sport"].shareReceita, 30);
+
+  assert.ok(dre.porEmpresa["AGRO OPEN TTC"]);
+  assert.equal(dre.porEmpresa["AGRO OPEN TTC"].receitaBruta, 5000);
+  assert.equal(dre.porEmpresa["AGRO OPEN TTC"].shareReceita, 10);
+
+  assert.ok(dre.porEmpresa["Supermercado Kytto"]);
+  assert.equal(dre.porEmpresa["Supermercado Kytto"].receitaBruta, 10000);
+  assert.equal(dre.porEmpresa["Supermercado Kytto"].shareReceita, 20);
+});

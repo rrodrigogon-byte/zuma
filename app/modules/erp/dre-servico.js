@@ -1,19 +1,20 @@
 /**
  * ============================================================================
- * ERP MODULAR KYTTO — DEMONSTRAÇÃO DO RESULTADO DO EXERCÍCIO (DRE)
+ * KYTTO ERP — MÓDULO DE DRE CONTÁBIL & GERENCIAL AVANÇADA (CPC / CFC / LEI 6.404/76)
  * ============================================================================
- * Módulo: dre-servico.js
- * Descrição: Motor oficial de apuração contábil e gerencial (Padrão CPC / CFC),
- *            EBITDA, margens brutas/líquidas, análise vertical (AV %), ponto
- *            de equilíbrio (break-even), matriz comparativa anual de 12 meses,
- *            unificação multi-fonte (PostgreSQL + ledger financeiro central +
- *            comandas operacionais da barbearia), exportação nativa em XLSX
- *            (Excel com 3 abas) e impressão timbrada A4/PDF.
+ * Apuração contábil oficial por Regime de Competência e Regime de Caixa.
+ * Multi-tenant absoluto: Barbearia Dino, Stallone Nutre Sport, Agro Open,
+ * Supermercado Kytto, e Visão Consolidada da Holding Kytto.
+ * Suporta Análise Vertical (AV %), Análise Horizontal (AH % vs. Mês Anterior),
+ * Matriz Anual Comparativa de 12 Meses, Ponto de Equilíbrio, Exportação em XLSX
+ * (Excel Multi-Abas) e impressão timbrada A4/PDF.
  * ============================================================================
  */
+
 import { exigirUuid, exigirData } from '../acesso/banco.js';
 import * as financeiroKytto from '../../financeiro-central-kytto.js';
 import { estadoEmpresa } from '../../barbearia-erp-kytto.js';
+
 let _xlsxMod = null;
 async function obterXlsx() {
   if (!_xlsxMod) {
@@ -32,8 +33,39 @@ async function obterXlsx() {
   return _xlsxMod;
 }
 
+export const HOLDING_CONSOLIDADO_ID = "00000000-0000-0000-0000-000000000001";
 
 export const METADADOS_EMPRESAS = {
+  "00000000-0000-0000-0000-000000000001": {
+    nome: "Holding Kytto (Consolidado)",
+    razaoSocial: "KYTTO HOLDING & PARTICIPAÇÕES S.A.",
+    cnpj: "50.073.355/0001-89 (Matriz)",
+    ie: "Múltiplas (SEFAZ-MT)",
+    segmento: "Holding Empresarial Multi-Setorial & Gestão de Participações",
+    cidade: "Tangará da Serra - MT",
+    endereco: "Tangará da Serra / Cuiabá - MT",
+    ehConsolidado: true
+  },
+  "consolidado": {
+    nome: "Holding Kytto (Consolidado)",
+    razaoSocial: "KYTTO HOLDING & PARTICIPAÇÕES S.A.",
+    cnpj: "50.073.355/0001-89 (Matriz)",
+    ie: "Múltiplas (SEFAZ-MT)",
+    segmento: "Holding Empresarial Multi-Setorial & Gestão de Participações",
+    cidade: "Tangará da Serra - MT",
+    endereco: "Tangará da Serra / Cuiabá - MT",
+    ehConsolidado: true
+  },
+  "holding": {
+    nome: "Holding Kytto (Consolidado)",
+    razaoSocial: "KYTTO HOLDING & PARTICIPAÇÕES S.A.",
+    cnpj: "50.073.355/0001-89 (Matriz)",
+    ie: "Múltiplas (SEFAZ-MT)",
+    segmento: "Holding Empresarial Multi-Setorial & Gestão de Participações",
+    cidade: "Tangará da Serra - MT",
+    endereco: "Tangará da Serra / Cuiabá - MT",
+    ehConsolidado: true
+  },
   "d0d0ac01-8e50-4b61-8c79-de4aaa916da6": {
     nome: "Barbearia Dino",
     razaoSocial: "50.073.355 DINOILSON PEREIRA DA SILVA",
@@ -138,102 +170,87 @@ export async function obterMetadadosEmpresa(db, empresaId, fallback = {}) {
         return {
           nome: fallback.nome || row.nome || "Empresa Kytto",
           razaoSocial: row.razao_social || row.nome || "Empresa Kytto",
-          cnpj: fallback.cnpj || row.cnpj || "",
-          ie: fallback.ie || row.inscricao_estadual || "ISENTO",
-          cidade: "Mato Grosso - MT",
-          endereco: "Tangará da Serra / Cuiabá - MT"
+          cnpj: row.cnpj || "00.000.000/0001-00",
+          ie: row.inscricao_estadual || "Isento",
+          segmento: fallback.segmento || "Comércio & Serviços",
+          cidade: "Tangará da Serra - MT",
+          ...cleanFallback
         };
       }
-    } catch (e) {}
+    } catch (e) {
+      // Ignora erro e usa fallback
+    }
   }
   return {
-    nome: fallback.nome || "Empresa Kytto",
-    razaoSocial: fallback.nome || "Empresa Kytto",
-    cnpj: fallback.cnpj || "",
-    ie: fallback.ie || "ISENTO",
-    cidade: "Mato Grosso - MT",
-    endereco: "Tangará da Serra / Cuiabá - MT"
+    nome: cleanFallback.nome || "Empresa Kytto",
+    razaoSocial: cleanFallback.razaoSocial || cleanFallback.nome || "Empresa Kytto",
+    cnpj: cleanFallback.cnpj || "50.073.355/0001-89",
+    ie: cleanFallback.ie || "14.229.191-9 (SEFAZ-MT)",
+    segmento: cleanFallback.segmento || "Comércio e Serviços",
+    cidade: "Tangará da Serra - MT",
+    ...cleanFallback
   };
 }
 
 const dinheiro = (v) => Math.round(Number(v || 0) * 100) / 100;
 
-/**
- * Classifica lançamentos e itens operacionais nas 11 contas padrão CPC / CFC.
- */
-export function classificarCategoriaDRE(tipo, categoriaNome = '', origem = '', descricao = '') {
-  const cat = String(categoriaNome || '').toLowerCase().trim();
-  const orig = String(origem || '').toLowerCase().trim();
-  const desc = String(descricao || '').toLowerCase().trim();
-  const textoGeral = `${cat} ${orig} ${desc}`;
+export function classificarCategoriaDRE(tipo, categoria, origem = null, descricao = '') {
+  const t = String(tipo || '').toLowerCase();
+  const c = String(categoria || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const d = String(descricao || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const o = String(origem || '').toLowerCase();
 
-  if (tipo === 'receita') {
-    // 1. Mensalidades, Planos & Clubes
-    if (textoGeral.includes('plano') || textoGeral.includes('mensalidade') || textoGeral.includes('assinatura') || textoGeral.includes('clube') || textoGeral.includes('combo') || textoGeral.includes('vip') || textoGeral.includes('passaporte')) {
-      return { subgrupo: 'receita_planos', rotulo: '1.3 Mensalidades, Planos & Clubes', ordem: 3 };
-    }
-    // 2. Venda de Serviços (Barbearia, Cortes, Barba, etc.)
-    if (orig.includes('barbearia_atendimento') || orig === 'ordem_servico' || textoGeral.includes('serviço') || textoGeral.includes('servico') || textoGeral.includes('corte') || textoGeral.includes('barba') || textoGeral.includes('sobrancelha') || textoGeral.includes('pigmentação') || textoGeral.includes('pigmentacao') || textoGeral.includes('limpeza') || textoGeral.includes('atendimento') || textoGeral.includes('comanda') || cat === 'receitas de vendas' || (orig.includes('barbearia') && !orig.includes('revenda') && !textoGeral.includes('produto') && !textoGeral.includes('pomada'))) {
-      return { subgrupo: 'receita_servicos', rotulo: '1.1 Venda de Serviços', ordem: 1 };
-    }
-    // 3. Venda de Mercadorias / Produtos
-    if (orig === 'barbearia_revenda' || orig === 'supermercado' || orig === 'varejo' || textoGeral.includes('produto') || textoGeral.includes('revenda') || textoGeral.includes('mercadoria') || textoGeral.includes('suplemento') || textoGeral.includes('pomada') || textoGeral.includes('minoxidil') || textoGeral.includes('cerveja') || textoGeral.includes('bebida') || textoGeral.includes('refrigerante') || textoGeral.includes('shampoo') || textoGeral.includes('cera') || textoGeral.includes('óleo') || textoGeral.includes('oleo') || textoGeral.includes('cookie') || textoGeral.includes('lamina') || textoGeral.includes('água') || /\bbar\b/i.test(cat)) {
-      return { subgrupo: 'receita_produtos', rotulo: '1.2 Venda de Mercadorias / Produtos', ordem: 2 };
-    }
-    // 4. Receitas Financeiras
-    if (textoGeral.includes('rendimento') || textoGeral.includes('juros') || textoGeral.includes('desconto obtido') || textoGeral.includes('aplicação')) {
+  if (t === 'receita') {
+    if (c.includes('juro') || c.includes('rendimento') || c.includes('aplicacao') || d.includes('rendimento')) {
       return { subgrupo: 'receita_financeira', rotulo: '8.1 Receitas Financeiras (Juros / Rendimentos)', ordem: 81 };
     }
-    return { subgrupo: 'receita_outras', rotulo: '1.4 Outras Receitas Operacionais', ordem: 4 };
+    if (c.includes('mensalidade') || c.includes('plano') || c.includes('clube') || c.includes('assinatura')) {
+      return { subgrupo: 'receita_planos', rotulo: '1.3 Mensalidades, Planos & Clubes', ordem: 13 };
+    }
+    if (c.includes('produto') || c.includes('cosmetico') || c.includes('pomada') || c.includes('mercadoria') || c.includes('revenda') || c.includes('suplemento') || c.includes('insumo') || c.includes('aliment') || o === 'barbearia_revenda' || o === 'commerce_order' || o === 'var_venda') {
+      return { subgrupo: 'receita_produtos', rotulo: '1.2 Venda de Mercadorias / Produtos', ordem: 12 };
+    }
+    if (c.includes('servico') || c.includes('corte') || c.includes('barba') || c.includes('barbearia') || c.includes('manicure') || c.includes('estetica') || o === 'barbearia_atendimento' || o === 'barbearia_comanda') {
+      return { subgrupo: 'receita_servicos', rotulo: '1.1 Venda de Serviços', ordem: 11 };
+    }
+    return { subgrupo: 'receita_outras', rotulo: '1.4 Outras Receitas Operacionais', ordem: 14 };
   }
 
-  // DESPESAS
-  // 1. Reversões, Devoluções e Cancelamentos (Deduções da Receita Bruta)
-  if (textoGeral.includes('reversão') || textoGeral.includes('reversao') || textoGeral.includes('estorno') || textoGeral.includes('devolu') || textoGeral.includes('cancelamento')) {
+  // Despesas / Custos / Deduções
+  if (c.includes('devolucao') || c.includes('cancelamento') || c.includes('estorno')) {
     return { subgrupo: 'deducoes_devolucoes', rotulo: '2.1 Devoluções e Cancelamentos', ordem: 21 };
   }
-  // 2. Taxas de Intermediação & Meios de Pagamento
-  if (textoGeral.includes('taxa') || textoGeral.includes('cartão') || textoGeral.includes('cartao') || textoGeral.includes('maquin') || textoGeral.includes('asaas') || textoGeral.includes('split') || textoGeral.includes('gateway')) {
+  if (c.includes('taxa') || c.includes('cartao') || c.includes('maquininha') || c.includes('stone') || c.includes('cielo') || c.includes('pagseguro') || c.includes('intermediacao') || c.includes('asaas') || c.includes('stripe')) {
     return { subgrupo: 'deducoes_taxas', rotulo: '2.2 Taxas de Intermediação & Meios de Pagamento', ordem: 22 };
   }
-  // 3. Tributos e Impostos sobre Vendas
-  if (textoGeral.includes('imposto') || textoGeral.includes('tributo') || textoGeral.includes('simples nacional') || textoGeral.includes('simples') || textoGeral.includes('icms') || /\biss\b/i.test(cat) || textoGeral.includes('issqn') || textoGeral.includes('pis') || textoGeral.includes('cofins')) {
+  if (c.includes('imposto') || c.includes('simples nacional') || c.includes('das') || c.includes('issqn') || c.includes('icms') || c.includes('pis') || c.includes('cofins')) {
     return { subgrupo: 'deducoes_tributos', rotulo: '2.3 Tributos e Impostos sobre Vendas', ordem: 23 };
   }
-  // 4. Descontos Concedidos
-  if (textoGeral.includes('desconto concedido') || (textoGeral.includes('desconto') && !textoGeral.includes('desconto obtido'))) {
+  if (c.includes('desconto') || c.includes('abatimento')) {
     return { subgrupo: 'deducoes_descontos', rotulo: '2.4 Descontos Concedidos e Abatimentos', ordem: 24 };
   }
-  // 5. Custos dos Serviços Prestados (CSP) / Comissões
-  if (textoGeral.includes('comiss') || textoGeral.includes('repasse') || textoGeral.includes('barbeiro') || textoGeral.includes('diária técnica') || textoGeral.includes('csp') || textoGeral.includes('adiantamento de comissão') || textoGeral.includes('antecipação de comissão') || cat === 'bruno' || cat === 'natani' || cat === 'vitor' || cat === 'david' || cat === 'dino' || cat.includes('bruno') || cat.includes('natani') || cat.includes('vitor') || cat.includes('david')) {
+  if (c.includes('comissao') || c.includes('comissoes') || c.includes('repasse barbeiro') || c.includes('parceiro') || c.includes('terceiro prestador') || d.includes('comissao')) {
     return { subgrupo: 'custo_csp', rotulo: '4.2 Custo dos Serviços Prestados (CSP) / Comissões', ordem: 42 };
   }
-  // 6. Custo das Mercadoridas Vendidas (CMV) / Insumos
-  if (textoGeral.includes('fornecedor') || textoGeral.includes('compra de mercadoria') || textoGeral.includes('estoque') || textoGeral.includes('insumo') || textoGeral.includes('cmv') || orig === 'nfe_compra') {
+  if (c.includes('cmv') || c.includes('fornecedor') || c.includes('compra') || c.includes('mercadoria') || c.includes('insumo') || c.includes('mercadoria para revenda') || c.includes('insumo') || c.includes('materia prima') || c.includes('lote suplemento') || o === 'nfe_compra') {
     return { subgrupo: 'custo_cmv', rotulo: '4.1 Custo das Mercadorias Vendidas (CMV) / Insumos', ordem: 41 };
   }
-  // 7. Despesas com Pessoal & Pró-labore
-  if (textoGeral.includes('salário') || textoGeral.includes('salario') || textoGeral.includes('folha') || textoGeral.includes('pessoal') || textoGeral.includes('pró-labore') || textoGeral.includes('pro-labore') || textoGeral.includes('encargo') || textoGeral.includes('fgts') || textoGeral.includes('inss')) {
+  if (c.includes('salario') || c.includes('pro-labore') || c.includes('pro labore') || c.includes('folha') || c.includes('inss') || c.includes('fgts') || c.includes('beneficio') || c.includes('vale') || c.includes('equipe')) {
     return { subgrupo: 'despesa_pessoal', rotulo: '6.1 Despesas com Pessoal & Pró-labore', ordem: 61 };
   }
-  // 8. Ocupação & Instalações
-  if (textoGeral.includes('aluguel') || textoGeral.includes('condomínio') || textoGeral.includes('condominio') || textoGeral.includes('energia') || textoGeral.includes('luz') || textoGeral.includes('água') || textoGeral.includes('agua') || textoGeral.includes('internet') || textoGeral.includes('telefonia') || textoGeral.includes('iptu')) {
+  if (c.includes('aluguel') || c.includes('condominio') || c.includes('energia') || c.includes('luz') || c.includes('agua') || c.includes('iptu') || c.includes('internet') || c.includes('telefone') || c.includes('limpeza') || c.includes('seguranca') || c.includes('locacao')) {
     return { subgrupo: 'despesa_ocupacao', rotulo: '6.2 Ocupação, Utilidades & Instalações', ordem: 62 };
   }
-  // 9. Comercial, Marketing & Tráfego Pago
-  if (textoGeral.includes('marketing') || textoGeral.includes('tráfego') || textoGeral.includes('trafego') || textoGeral.includes('anúncio') || textoGeral.includes('anuncio') || textoGeral.includes('propaganda') || textoGeral.includes('publicidade') || textoGeral.includes('redes sociais')) {
+  if (c.includes('marketing') || c.includes('anuncio') || c.includes('trafego') || c.includes('instagram') || c.includes('facebook') || c.includes('google ads') || c.includes('panfleto') || c.includes('propaganda')) {
     return { subgrupo: 'despesa_marketing', rotulo: '6.3 Comercial, Marketing & Tráfego Pago', ordem: 63 };
   }
-  // 10. Administrativas, Softwares & Sistemas
-  if (textoGeral.includes('software') || textoGeral.includes('sistema') || textoGeral.includes('contabilidade') || textoGeral.includes('jurídico') || textoGeral.includes('juridico') || textoGeral.includes('segurança')) {
+  if (c.includes('software') || c.includes('sistema') || c.includes('kytto') || c.includes('contabilidade') || c.includes('honorario') || c.includes('juridico') || c.includes('licenca') || c.includes('consultoria') || c.includes('ti') || c.includes('servidor')) {
     return { subgrupo: 'despesa_administrativa', rotulo: '6.4 Administrativas, Softwares & Honorários', ordem: 64 };
   }
-  // 11. Despesas Financeiras & Juros
-  if (textoGeral.includes('juros') || textoGeral.includes('tarifa') || textoGeral.includes('bancár') || textoGeral.includes('bancar') || textoGeral.includes('ted') || textoGeral.includes('doc') || textoGeral.includes('iof')) {
+  if (c.includes('tarifa bancaria') || c.includes('ted') || c.includes('pix taxa') || c.includes('iof') || c.includes('juros de mora') || c.includes('multa financeira') || c.includes('despesa financeira')) {
     return { subgrupo: 'despesa_financeira', rotulo: '8.2 Despesas Financeiras & Tarifas Bancárias', ordem: 82 };
   }
-  // 12. Investimentos & Ativos Imobilizados
-  if (textoGeral.includes('investimento') || textoGeral.includes('reforma') || textoGeral.includes('ativo imobilizado') || textoGeral.includes('equipamento') || textoGeral.includes('máquina')) {
+  if (c.includes('investimento') || c.includes('reforma') || c.includes('ativo imobilizado') || c.includes('equipamento') || c.includes('maquina') || c.includes('cadeira barbearia')) {
     return { subgrupo: 'investimentos', rotulo: '13. Investimentos & Ativos Imobilizados', ordem: 130 };
   }
   return { subgrupo: 'despesa_geral', rotulo: '6.5 Outras Despesas Operacionais', ordem: 65 };
@@ -242,15 +259,28 @@ export function classificarCategoriaDRE(tipo, categoriaNome = '', origem = '', d
 /**
  * Coleta lançamentos com unificação completa de fontes:
  * 1. PostgreSQL (tabela fin_lancamentos)
- * 2. Financeiro Central Kytto (store ledger de todas as empresas)
+ * 2. Financeiro Central Kytto (store ledger histórico de 6.894+ lançamentos)
  * 3. Comandas da Barbearia (se houver comandas faturadas sem ledger)
- * Deduplica de forma idempotente por ID / chaveIdempotencia / assinatura.
+ * 4. Commerce Orders (pedidos da Stallone Nutre Sport)
+ * 5. Vendas de Balcão e Insumos (AGRO OPEN TTC)
+ * Deduplica de forma idempotente por chave única.
  */
 async function coletarLancamentos({ db, empresaId, de, ate, regime = 'competencia', lojaId = null, centroCustoId = null }) {
-  const empresa = exigirUuid(empresaId, 'empresa');
+  const normId = String(empresaId || '').toLowerCase().trim();
+  const ehConsolidado = normId === HOLDING_CONSOLIDADO_ID || normId === 'consolidado' || normId === 'holding';
+  const empresa = ehConsolidado ? HOLDING_CONSOLIDADO_ID : (empresaId && empresaId.length === 36 ? exigirUuid(empresaId, 'empresa') : empresaId);
   const inicio = exigirData(de, 'De');
   const fim = exigirData(ate, 'Até');
   const mapaItens = new Map();
+
+  const mapearNomeEmpresa = (id) => {
+    const s = String(id || '').toLowerCase();
+    if (s.includes('d0d0ac01') || s.includes('dino')) return 'Barbearia Dino';
+    if (s.includes('31f70c83') || s.includes('stallone')) return 'Stallone Nutre Sport';
+    if (s.includes('2e041110') || s.includes('agro')) return 'AGRO OPEN TTC';
+    if (s.includes('00000000-0000-0000-0000-000000000002') || s.includes('supermercado')) return 'Supermercado Kytto';
+    return 'Barbearia Dino';
+  };
 
   // 1. Consulta PostgreSQL
   if (db && typeof db.query === 'function') {
@@ -259,7 +289,16 @@ async function coletarLancamentos({ db, empresaId, de, ate, regime = 'competenci
       if (temTabela) {
         const campoData = regime === 'caixa' ? "COALESCE(l.pago_em::date, l.vencimento, l.data_competencia)" : "COALESCE(l.data_competencia, l.vencimento, l.pago_em::date)";
         const condStatus = regime === 'caixa' ? "l.status = 'pago'" : "l.status <> 'cancelado'";
-        const v = [empresa, inicio, fim];
+        
+        let condEmpresa = '';
+        const v = [];
+        if (ehConsolidado) {
+          v.push(inicio, fim);
+          condEmpresa = `WHERE ${condStatus} AND ${campoData} BETWEEN $1 AND $2`;
+        } else {
+          v.push(empresa, inicio, fim);
+          condEmpresa = `WHERE l.empresa_id = $1 AND ${condStatus} AND ${campoData} BETWEEN $2 AND $3`;
+        }
         let filtroUnidade = '';
         if (lojaId) {
           v.push(lojaId);
@@ -271,15 +310,13 @@ async function coletarLancamentos({ db, empresaId, de, ate, regime = 'competenci
           filtroCentro = ` AND l.centro_custo_id = $${v.length}`;
         }
         const sql = `
-          SELECT l.id, l.tipo, l.categoria, l.descricao, l.valor, l.data_competencia, l.vencimento,
+          SELECT l.id, l.empresa_id, l.tipo, l.categoria, l.descricao, l.valor, l.data_competencia, l.vencimento,
                  l.pago_em, l.status, l.origem, l.meio_pagamento, c.grupo_dre, l.chave
             FROM fin_lancamentos l
             LEFT JOIN fin_categorias c ON c.empresa_id = l.empresa_id AND c.tipo = l.tipo AND c.nome = l.categoria
-           WHERE l.empresa_id = $1
-             AND ${condStatus}
-             AND ${campoData} BETWEEN $2 AND $3
-             ${filtroUnidade}
-             ${filtroCentro}
+           ${condEmpresa}
+           ${filtroUnidade}
+           ${filtroCentro}
            ORDER BY ${campoData} ASC
         `;
         const res = await db.query(sql, v);
@@ -287,6 +324,8 @@ async function coletarLancamentos({ db, empresaId, de, ate, regime = 'competenci
           const key = String(r.chave || r.id || `${r.tipo}:${r.descricao}:${r.valor}`);
           mapaItens.set(key, {
             id: r.id,
+            empresaId: r.empresa_id,
+            empresaNome: mapearNomeEmpresa(r.empresa_id),
             tipo: r.tipo,
             categoria: r.categoria,
             descricao: r.descricao,
@@ -306,13 +345,14 @@ async function coletarLancamentos({ db, empresaId, de, ate, regime = 'competenci
     }
   }
 
-  // 2. Unifica com Financeiro Central Kytto (ledger histórico de 6.894+ lançamentos apenas para Dino)
-  const ehDino = String(empresa || "").toLowerCase() === "d0d0ac01-8e50-4b61-8c79-de4aaa916da6" ||
+  // 2. Unifica com Financeiro Central Kytto (Dino)
+  const ehDino = ehConsolidado || String(empresa || "").toLowerCase() === "d0d0ac01-8e50-4b61-8c79-de4aaa916da6" ||
                  String(empresa || "").toLowerCase() === "emp-kytto-001" ||
                  String(empresa || "").toLowerCase() === "dino";
   if (ehDino && financeiroKytto && typeof financeiroKytto.listarLancamentos === 'function') {
     try {
-      const todos = financeiroKytto.listarLancamentos(empresa, { lojaId });
+      const empresaDinoId = 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
+      const todos = financeiroKytto.listarLancamentos(ehConsolidado ? empresaDinoId : empresa, { lojaId });
       for (const item of todos) {
         if (item.status === 'cancelado') continue;
         const refData = regime === 'caixa'
@@ -321,11 +361,12 @@ async function coletarLancamentos({ db, empresaId, de, ate, regime = 'competenci
         if (!refData) continue;
         if (refData < inicio || refData > fim) continue;
         if (regime === 'caixa' && item.status !== 'pago') continue;
-
         const key = String(item.chaveIdempotencia || item.id || `${item.tipo}:${item.descricao}:${item.valor}`);
         if (!mapaItens.has(key)) {
           mapaItens.set(key, {
             id: item.id,
+            empresaId: empresaDinoId,
+            empresaNome: 'Barbearia Dino',
             tipo: item.tipo,
             categoria: item.categoria || 'Outros',
             descricao: item.descricao || '',
@@ -345,156 +386,227 @@ async function coletarLancamentos({ db, empresaId, de, ate, regime = 'competenci
     }
   }
 
-  // 3. Unifica com Comandas da Barbearia (se houver comandas sem lançamento no ledger - apenas Dino)
+  // 3. Comandas da Barbearia Dino
   if (ehDino) {
     try {
-      const estado = estadoEmpresa(empresa, false);
-    for (const comanda of Object.values(estado.comandas || {})) {
-      if (comanda.status === 'cancelada') continue;
-      const refData = String(comanda.fechadaEm || comanda.dataAtendimento || comanda.criadoEm || '').slice(0, 10);
-      if (!refData || refData < inicio || refData > fim) continue;
-
-      const faturada = comanda.status === 'paga' || comanda.status === 'em_conta' || Number(comanda.totalPago || 0) > 0;
-      if (!faturada) continue;
-
-      // Se a comanda já tem pagamentos no mapa de itens, respeita a idempotência
-      const jaNoMapa = (comanda.financeiroLancamentoIds || []).some(id => mapaItens.has(String(id)));
-      if (jaNoMapa) continue;
-
-      // Desdobra itens em serviços e produtos para precisão analítica
-      for (const item of (comanda.itens || [])) {
-        const keyItem = `comanda:${comanda.id}:item:${item.id || item.nome}:${refData}`;
-        if (!mapaItens.has(keyItem)) {
-          const ehProduto = item.tipo === 'produto';
-          mapaItens.set(keyItem, {
-            id: keyItem,
-            tipo: 'receita',
-            categoria: ehProduto ? 'Produtos & Cosméticos' : 'Serviços Barbearia',
-            descricao: `${ehProduto ? 'Venda Produto' : 'Serviço'}: ${item.nome || 'Atendimento'} — Comanda ${comanda.id}`,
-            valor: Number(item.subtotal || (item.quantidade * item.precoUnitario) || 0),
-            dataCompetencia: refData,
-            vencimento: refData,
-            pagoEm: refData,
-            status: 'pago',
-            origem: ehProduto ? 'barbearia_revenda' : 'barbearia_atendimento',
-            meioPagamento: comanda.pagamento || 'pix',
-            grupoDreConfigurado: ehProduto ? 'receita_produtos' : 'receita_servicos'
-          });
-        }
-      }
-    }
-  } catch (e) {
-    // Barbearia opcional caso a empresa não seja barbearia
-  }
-  }
-
-  // 4. Unifica com Pedidos de Venda Ecommerce (Stallone Nutre Sport e Lojas Web)
-  if (db && typeof db.query === "function") {
-    try {
-      const sqlOrders = `
-        SELECT o.id, o.empresa_id, o.loja_id, o.total, o.subtotal, o.desconto, o.frete, o.status, o.criado_em,
-               i.id as item_id, i.nome_snapshot, i.quantidade, i.preco_unitario, i.subtotal as item_subtotal
-          FROM commerce_orders o
-          LEFT JOIN commerce_order_items i ON i.order_id = o.id
-         WHERE (o.empresa_id::text = $1::text OR ($1::text IN ('stallone', 'dino', 'agro', 'supermercado')))
-           AND o.status IN ('paid', 'ready', 'delivered', 'completed')
-           AND o.criado_em::date BETWEEN $2 AND $3
-      `;
-      const resOrders = await db.query(sqlOrders, [empresa, inicio, fim]);
-      for (const row of (resOrders.rows || [])) {
-        const refData = String(row.criado_em || "").slice(0, 10);
-        const key = `order:${row.id}:${row.item_id || "total"}:${refData}`;
-        if (!mapaItens.has(key)) {
-          mapaItens.set(key, {
-            id: key,
-            tipo: "receita",
-            categoria: "Vendas Ecommerce / Loja Online",
-            descricao: `Venda Online: ${row.nome_snapshot || "Suplementos & Produtos"} (Pedido #${String(row.id).slice(0, 8)})`,
-            valor: Number(row.item_subtotal || row.total || 0),
-            dataCompetencia: refData,
-            vencimento: refData,
-            pagoEm: refData,
-            status: "pago",
-            origem: "ecommerce",
-            meioPagamento: "pix",
-            grupoDreConfigurado: "receita_produtos"
-          });
+      const estado = estadoEmpresa(ehConsolidado ? 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6' : empresa, false);
+      for (const comanda of Object.values(estado.comandas || {})) {
+        if (comanda.status === 'cancelada') continue;
+        const refData = String(comanda.fechadaEm || comanda.dataAtendimento || comanda.criadoEm || '').slice(0, 10);
+        if (!refData || refData < inicio || refData > fim) continue;
+        const faturada = comanda.status === 'paga' || comanda.status === 'em_conta' || Number(comanda.totalPago || 0) > 0;
+        if (!faturada) continue;
+        const jaNoMapa = (comanda.financeiroLancamentoIds || []).some(id => mapaItens.has(String(id)));
+        if (jaNoMapa) continue;
+        for (const item of (comanda.itens || [])) {
+          const keyItem = `comanda:${comanda.id}:item:${item.id || item.nome}:${refData}`;
+          if (!mapaItens.has(keyItem)) {
+            const ehProduto = item.tipo === 'produto';
+            mapaItens.set(keyItem, {
+              id: keyItem,
+              empresaId: 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6',
+              empresaNome: 'Barbearia Dino',
+              tipo: 'receita',
+              categoria: ehProduto ? 'Produtos & Cosméticos' : 'Serviços Barbearia',
+              descricao: `${ehProduto ? 'Venda Produto' : 'Serviço'}: ${item.nome || 'Atendimento'} — Comanda ${comanda.id}`,
+              valor: Number(item.subtotal || (item.quantidade * item.precoUnitario) || 0),
+              dataCompetencia: refData,
+              vencimento: refData,
+              pagoEm: refData,
+              status: 'pago',
+              origem: 'barbearia_comanda',
+              meioPagamento: comanda.meioPagamento || 'pix',
+              grupoDreConfigurado: ehProduto ? 'receita_produtos' : 'receita_servicos'
+            });
+          }
         }
       }
     } catch (e) {
-      // Ignora erro em caso de schema parcial
+      console.warn('[dre-servico] Aviso ao unificar comandas Dino:', e.message);
     }
-
-    // 5. Unifica com Vendas de Varejo / Supermercado (Supermercado Kytto e PDV)
-    try {
-      const sqlVar = `
-        SELECT v.id, v.empresa_id, v.loja_id, v.total, v.desconto, v.forma_pagamento, v.criado_em
-          FROM var_vendas v
-         WHERE (v.empresa_id::text = $1::text OR ($1::text IN ('supermercado', 'agro', 'dino')))
-           AND v.criado_em::date BETWEEN $2 AND $3
-      `;
-      const resVar = await db.query(sqlVar, [empresa, inicio, fim]);
-      for (const row of (resVar.rows || [])) {
-        const refData = String(row.criado_em || "").slice(0, 10);
-        const key = `var_venda:${row.id}:${refData}`;
-        if (!mapaItens.has(key)) {
-          mapaItens.set(key, {
-            id: key,
-            tipo: "receita",
-            categoria: "Vendas de Mercadorias / Produtos",
-            descricao: `Venda PDV Varejo #${String(row.id).slice(0, 8)}`,
-            valor: Number(row.total || 0),
-            dataCompetencia: refData,
-            vencimento: refData,
-            pagoEm: refData,
-            status: "pago",
-            origem: "pdv",
-            meioPagamento: row.forma_pagamento || "dinheiro",
-            grupoDreConfigurado: "receita_produtos"
-          });
-        }
-      }
-    } catch (e) {}
-
-    // 6. Unifica com Comandas de Bar / Eventos (AGRO OPEN TTC)
-    try {
-      const sqlBar = `
-        SELECT bc.id, bc.empresa_id, bc.total, bc.status, bc.criado_em
-          FROM bar_comandas bc
-         WHERE (bc.empresa_id::text = $1::text OR ($1::text IN ('agro', 'agroopen')))
-           AND bc.status IN ('paga', 'fechada')
-           AND bc.criado_em::date BETWEEN $2 AND $3
-      `;
-      const resBar = await db.query(sqlBar, [empresa, inicio, fim]);
-      for (const row of (resBar.rows || [])) {
-        const refData = String(row.criado_em || "").slice(0, 10);
-        const key = `bar_comanda:${row.id}:${refData}`;
-        if (!mapaItens.has(key)) {
-          mapaItens.set(key, {
-            id: key,
-            tipo: "receita",
-            categoria: "Bar, Restaurante & Conveniência",
-            descricao: `Consumo Bar TTC #${String(row.id).slice(0, 8)}`,
-            valor: Number(row.total || 0),
-            dataCompetencia: refData,
-            vencimento: refData,
-            pagoEm: refData,
-            status: "pago",
-            origem: "bar_ttc",
-            meioPagamento: "pix",
-            grupoDreConfigurado: "receita_bruta"
-          });
-        }
-      }
-    } catch (e) {}
   }
 
+  // 4. Commerce Orders (Stallone)
+  const ehStallone = ehConsolidado || String(empresa || "").toLowerCase() === "31f70c83-9172-40c2-945f-9e793b5048be" ||
+                     String(empresa || "").toLowerCase().includes("stallone");
+  if (ehStallone && db && typeof db.query === 'function') {
+    try {
+      const temOrders = (await db.query("SELECT to_regclass('commerce_orders') AS t")).rows[0]?.t;
+      if (temOrders) {
+        const campoDataPed = regime === 'caixa' ? "COALESCE(paid_at::date, created_at::date)" : "COALESCE(created_at::date, paid_at::date)";
+        const condPagoPed = regime === 'caixa' ? "status = 'paid'" : "status <> 'cancelled'";
+        const sqlPed = `
+          SELECT id, numero, total, status, payment_method, created_at, paid_at
+            FROM commerce_orders
+           WHERE empresa_id = '31f70c83-9172-40c2-945f-9e793b5048be'
+             AND ${condPagoPed}
+             AND ${campoDataPed} BETWEEN $1 AND $2
+        `;
+        const rPed = await db.query(sqlPed, [inicio, fim]);
+        for (const row of rPed.rows) {
+          const keyPed = `order:${row.id}`;
+          if (!mapaItens.has(keyPed)) {
+            const dataRef = String(row.created_at || row.paid_at || '').slice(0, 10);
+            mapaItens.set(keyPed, {
+              id: row.id,
+              empresaId: '31f70c83-9172-40c2-945f-9e793b5048be',
+              empresaNome: 'Stallone Nutre Sport',
+              tipo: 'receita',
+              categoria: 'Vendas Ecommerce / Loja Online',
+              descricao: `Pedido #${row.numero || row.id} — Stallone Nutre Sport`,
+              valor: Number(row.total || 0),
+              dataCompetencia: dataRef,
+              vencimento: dataRef,
+              pagoEm: row.paid_at ? String(row.paid_at).slice(0, 10) : dataRef,
+              status: row.status === 'paid' ? 'pago' : 'pendente',
+              origem: 'commerce_order',
+              meioPagamento: row.payment_method || 'cartao',
+              grupoDreConfigurado: 'receita_produtos'
+            });
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[dre-servico] Aviso ao unificar commerce_orders:', e.message);
+    }
+  }
+
+  // 5. Varejo / Agro Open Vendas
+  const ehAgro = ehConsolidado || String(empresa || "").toLowerCase() === "2e041110-db20-4fd1-8278-12bd3dead008" ||
+                 String(empresa || "").toLowerCase().includes("agro");
+  if (ehAgro && db && typeof db.query === 'function') {
+    try {
+      const temVar = (await db.query("SELECT to_regclass('var_vendas') AS t")).rows[0]?.t;
+      if (temVar) {
+        const sqlVar = `
+          SELECT id, numero_venda, total_venda, status, forma_pagamento, data_venda
+            FROM var_vendas
+           WHERE empresa_id = '2e041110-db20-4fd1-8278-12bd3dead008'
+             AND status <> 'cancelada'
+             AND data_venda::date BETWEEN $1 AND $2
+        `;
+        const rVar = await db.query(sqlVar, [inicio, fim]);
+        for (const row of rVar.rows) {
+          const keyVar = `var:${row.id}`;
+          if (!mapaItens.has(keyVar)) {
+            const dataRef = String(row.data_venda || '').slice(0, 10);
+            mapaItens.set(keyVar, {
+              id: row.id,
+              empresaId: '2e041110-db20-4fd1-8278-12bd3dead008',
+              empresaNome: 'AGRO OPEN TTC',
+              tipo: 'receita',
+              categoria: 'Vendas Balcão / Agro Open',
+              descricao: `Venda #${row.numero_venda || row.id} — Insumos / Conveniência`,
+              valor: Number(row.total_venda || 0),
+              dataCompetencia: dataRef,
+              vencimento: dataRef,
+              pagoEm: dataRef,
+              status: 'pago',
+              origem: 'var_venda',
+              meioPagamento: row.forma_pagamento || 'pix',
+              grupoDreConfigurado: 'receita_produtos'
+            });
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[dre-servico] Aviso ao unificar var_vendas:', e.message);
+    }
+  }
 
   return Array.from(mapaItens.values());
 }
 
 /**
- * Calcula a DRE completa para um período específico (Mês, Ano ou Intervalo Customizado).
+ * Acumula os totais das 11 contas sintéticas e subgrupos da DRE a partir de uma lista de lançamentos
+ */
+function acumularTotaisDre(lancamentos) {
+  const acumuladores = {
+    receita_servicos: { rotulo: "1.1 Venda de Serviços", total: 0, linhas: {} },
+    receita_produtos: { rotulo: "1.2 Venda de Mercadorias / Produtos", total: 0, linhas: {} },
+    receita_planos: { rotulo: "1.3 Mensalidades, Planos & Clubes", total: 0, linhas: {} },
+    receita_outras: { rotulo: "1.4 Outras Receitas Operacionais", total: 0, linhas: {} },
+    deducoes_devolucoes: { rotulo: "2.1 Devoluções e Cancelamentos", total: 0, linhas: {} },
+    deducoes_taxas: { rotulo: "2.2 Taxas de Intermediação & Meios de Pagamento", total: 0, linhas: {} },
+    deducoes_tributos: { rotulo: "2.3 Tributos e Impostos sobre Vendas", total: 0, linhas: {} },
+    deducoes_descontos: { rotulo: "2.4 Descontos Concedidos e Abatimentos", total: 0, linhas: {} },
+    custo_cmv: { rotulo: "4.1 Custo das Mercadorias Vendidas (CMV) / Insumos", total: 0, linhas: {} },
+    custo_csp: { rotulo: "4.2 Custo dos Serviços Prestados (CSP) / Comissões", total: 0, linhas: {} },
+    despesa_pessoal: { rotulo: "6.1 Despesas com Pessoal & Pró-labore", total: 0, linhas: {} },
+    despesa_ocupacao: { rotulo: "6.2 Ocupação, Utilidades & Instalações", total: 0, linhas: {} },
+    despesa_marketing: { rotulo: "6.3 Comercial, Marketing & Tráfego Pago", total: 0, linhas: {} },
+    despesa_administrativa: { rotulo: "6.4 Administrativas, Softwares & Honorários", total: 0, linhas: {} },
+    despesa_geral: { rotulo: "6.5 Outras Despesas Operacionais", total: 0, linhas: {} },
+    receita_financeira: { rotulo: "8.1 Receitas Financeiras (Juros / Rendimentos)", total: 0, linhas: {} },
+    despesa_financeira: { rotulo: "8.2 Despesas Financeiras & Tarifas Bancárias", total: 0, linhas: {} },
+    investimentos: { rotulo: "13. Investimentos & Ativos Imobilizados", total: 0, linhas: {} }
+  };
+
+  for (const l of lancamentos) {
+    const classif = l.grupoDreConfigurado
+      ? { subgrupo: l.grupoDreConfigurado, rotulo: l.categoria, ordem: 99 }
+      : classificarCategoriaDRE(l.tipo, l.categoria, l.origem, l.descricao);
+    const alvo = acumuladores[classif.subgrupo] || acumuladores.despesa_geral;
+    const rotuloLinha = l.categoria && l.categoria !== "Barbearia" && l.categoria !== "Outros"
+      ? l.categoria
+      : (l.descricao ? l.descricao.split("—")[0].trim().slice(0, 80) : "Atendimento Barbearia");
+    alvo.total = dinheiro(alvo.total + l.valor);
+    alvo.linhas[rotuloLinha] = dinheiro((alvo.linhas[rotuloLinha] || 0) + l.valor);
+  }
+
+  const receitaBruta = dinheiro(
+    acumuladores.receita_servicos.total +
+    acumuladores.receita_produtos.total +
+    acumuladores.receita_planos.total +
+    acumuladores.receita_outras.total
+  );
+  const totalDeducoes = dinheiro(
+    acumuladores.deducoes_devolucoes.total +
+    acumuladores.deducoes_taxas.total +
+    acumuladores.deducoes_tributos.total +
+    acumuladores.deducoes_descontos.total
+  );
+  const receitaLiquida = dinheiro(receitaBruta - totalDeducoes);
+  const totalCustos = dinheiro(
+    acumuladores.custo_cmv.total +
+    acumuladores.custo_csp.total
+  );
+  const lucroBruto = dinheiro(receitaLiquida - totalCustos);
+  const totalDespesasOperacionais = dinheiro(
+    acumuladores.despesa_pessoal.total +
+    acumuladores.despesa_ocupacao.total +
+    acumuladores.despesa_marketing.total +
+    acumuladores.despesa_administrativa.total +
+    acumuladores.despesa_geral.total
+  );
+  const ebitda = dinheiro(lucroBruto - totalDespesasOperacionais);
+  const resultadoFinanceiro = dinheiro(acumuladores.receita_financeira.total - acumuladores.despesa_financeira.total);
+  const lair = dinheiro(ebitda + resultadoFinanceiro);
+  const impostosSobreLucro = 0;
+  const resultadoLiquido = dinheiro(lair - impostosSobreLucro);
+
+  return {
+    acumuladores,
+    totaisPorCodigo: {
+      "1": receitaBruta,
+      "2": totalDeducoes,
+      "3": receitaLiquida,
+      "4": totalCustos,
+      "5": lucroBruto,
+      "6": totalDespesasOperacionais,
+      "7": ebitda,
+      "8": resultadoFinanceiro,
+      "9": lair,
+      "10": impostosSobreLucro,
+      "11": resultadoLiquido
+    }
+  };
+}
+
+/**
+ * Calcula a DRE completa e detalhada para o período solicitado.
+ * Suporta apuração por Competência ou Caixa, cálculo de Análise Vertical (AV %),
+ * Análise Horizontal (AH % vs. Mês Anterior), EBITDA, Ponto de Equilíbrio e Consolidação Holding.
  */
 export async function calcularDreCompleta(db, empresaId, {
   de = null,
@@ -525,106 +637,28 @@ export async function calcularDreCompleta(db, empresaId, {
     dataFim = `${y}-${m}-${String(ultimoDia).padStart(2, '0')}`;
   }
 
+  const normId = String(empresaId || '').toLowerCase().trim();
+  const ehConsolidado = normId === HOLDING_CONSOLIDADO_ID || normId === 'consolidado' || normId === 'holding';
+
   const lancamentos = await coletarLancamentos({
     db, empresaId, de: dataInicio, ate: dataFim, regime, lojaId, centroCustoId
   });
 
-  // Estrutura acumuladora por subgrupos oficiais
-  const acumuladores = {
-    receita_servicos: { rotulo: '1.1 Venda de Serviços', total: 0, linhas: {} },
-    receita_produtos: { rotulo: '1.2 Venda de Mercadorias / Produtos', total: 0, linhas: {} },
-    receita_planos: { rotulo: '1.3 Mensalidades, Planos & Clubes', total: 0, linhas: {} },
-    receita_outras: { rotulo: '1.4 Outras Receitas Operacionais', total: 0, linhas: {} },
+  const { acumuladores, totaisPorCodigo } = acumularTotaisDre(lancamentos);
 
-    deducoes_devolucoes: { rotulo: '2.1 Devoluções e Cancelamentos', total: 0, linhas: {} },
-    deducoes_taxas: { rotulo: '2.2 Taxas de Intermediação & Meios de Pagamento', total: 0, linhas: {} },
-    deducoes_tributos: { rotulo: '2.3 Tributos e Impostos sobre Vendas', total: 0, linhas: {} },
-    deducoes_descontos: { rotulo: '2.4 Descontos Concedidos e Abatimentos', total: 0, linhas: {} },
-
-    custo_cmv: { rotulo: '4.1 Custo das Mercadorias Vendidas (CMV) / Insumos', total: 0, linhas: {} },
-    custo_csp: { rotulo: '4.2 Custo dos Serviços Prestados (CSP) / Comissões', total: 0, linhas: {} },
-
-    despesa_pessoal: { rotulo: '6.1 Despesas com Pessoal & Pró-labore', total: 0, linhas: {} },
-    despesa_ocupacao: { rotulo: '6.2 Ocupação, Utilidades & Instalações', total: 0, linhas: {} },
-    despesa_marketing: { rotulo: '6.3 Comercial, Marketing & Tráfego Pago', total: 0, linhas: {} },
-    despesa_administrativa: { rotulo: '6.4 Administrativas, Softwares & Honorários', total: 0, linhas: {} },
-    despesa_geral: { rotulo: '6.5 Outras Despesas Operacionais', total: 0, linhas: {} },
-
-    receita_financeira: { rotulo: '8.1 Receitas Financeiras (Juros / Rendimentos)', total: 0, linhas: {} },
-    despesa_financeira: { rotulo: '8.2 Despesas Financeiras & Tarifas Bancárias', total: 0, linhas: {} },
-
-    investimentos: { rotulo: '13. Investimentos & Ativos Imobilizados', total: 0, linhas: {} }
-  };
-
-  for (const l of lancamentos) {
-    const classif = l.grupoDreConfigurado
-      ? { subgrupo: l.grupoDreConfigurado, rotulo: l.categoria, ordem: 99 }
-      : classificarCategoriaDRE(l.tipo, l.categoria, l.origem, l.descricao);
-
-    const alvo = acumuladores[classif.subgrupo] || acumuladores.despesa_geral;
-    const rotuloLinha = l.categoria && l.categoria !== 'Barbearia' && l.categoria !== 'Outros'
-      ? l.categoria
-      : (l.descricao ? l.descricao.split('—')[0].trim().slice(0, 80) : 'Atendimento Barbearia');
-
-    alvo.total = dinheiro(alvo.total + l.valor);
-    alvo.linhas[rotuloLinha] = dinheiro((alvo.linhas[rotuloLinha] || 0) + l.valor);
-  }
-
-  // 1. Receita Operacional Bruta
-  const receitaBruta = dinheiro(
-    acumuladores.receita_servicos.total +
-    acumuladores.receita_produtos.total +
-    acumuladores.receita_planos.total +
-    acumuladores.receita_outras.total
-  );
-
-  // 2. Deduções da Receita Bruta
-  const totalDeducoes = dinheiro(
-    acumuladores.deducoes_devolucoes.total +
-    acumuladores.deducoes_taxas.total +
-    acumuladores.deducoes_tributos.total +
-    acumuladores.deducoes_descontos.total
-  );
-
-  // 3. Receita Operacional Líquida (ROL)
-  const receitaLiquida = dinheiro(receitaBruta - totalDeducoes);
-
-  // 4. Custos Diretos
-  const totalCustos = dinheiro(
-    acumuladores.custo_cmv.total +
-    acumuladores.custo_csp.total
-  );
-
-  // 5. Lucro Bruto
-  const lucroBruto = dinheiro(receitaLiquida - totalCustos);
+  const receitaBruta = totaisPorCodigo["1"];
+  const totalDeducoes = totaisPorCodigo["2"];
+  const receitaLiquida = totaisPorCodigo["3"];
+  const totalCustos = totaisPorCodigo["4"];
+  const lucroBruto = totaisPorCodigo["5"];
   const margemBrutaPct = receitaBruta > 0 ? Number(((lucroBruto / receitaBruta) * 100).toFixed(1)) : 0;
-
-  // 6. Despesas Operacionais Fixas & Administrativas
-  const totalDespesasOperacionais = dinheiro(
-    acumuladores.despesa_pessoal.total +
-    acumuladores.despesa_ocupacao.total +
-    acumuladores.despesa_marketing.total +
-    acumuladores.despesa_administrativa.total +
-    acumuladores.despesa_geral.total
-  );
-
-  // 7. EBITDA / LAJIDA
-  const ebitda = dinheiro(lucroBruto - totalDespesasOperacionais);
+  const totalDespesasOperacionais = totaisPorCodigo["6"];
+  const ebitda = totaisPorCodigo["7"];
   const margemEbitdaPct = receitaBruta > 0 ? Number(((ebitda / receitaBruta) * 100).toFixed(1)) : 0;
-
-  // 8. Resultado Financeiro Líquido
-  const resultadoFinanceiro = dinheiro(
-    acumuladores.receita_financeira.total - acumuladores.despesa_financeira.total
-  );
-
-  // 9. LAIR (Lucro Antes do IR e CSLL)
-  const lair = dinheiro(ebitda + resultadoFinanceiro);
-
-  // 10. Provisão Tributos sobre Lucro
-  const impostosSobreLucro = 0;
-
-  // 11. Resultado Líquido do Exercício
-  const resultadoLiquido = dinheiro(lair - impostosSobreLucro);
+  const resultadoFinanceiro = totaisPorCodigo["8"];
+  const lair = totaisPorCodigo["9"];
+  const impostosSobreLucro = totaisPorCodigo["10"];
+  const resultadoLiquido = totaisPorCodigo["11"];
   const margemLiquidaPct = receitaBruta > 0 ? Number(((resultadoLiquido / receitaBruta) * 100).toFixed(1)) : 0;
 
   // Ponto de Equilíbrio Operacional (Break-even): Custo Fixo / Margem de Contribuição %
@@ -633,8 +667,42 @@ export async function calcularDreCompleta(db, empresaId, {
     ? dinheiro(totalDespesasOperacionais / margemContribuicaoPct)
     : totalDespesasOperacionais;
 
-  // Helper para Análise Vertical (AV %)
+  // Análise Horizontal (AH %) vs Mês Anterior (M-1)
+  let mesAnterior = null;
+  let resumoMesAnt = null;
+  if (mes && mes.length === 7) {
+    const [y, m] = mes.split('-').map(Number);
+    const prevY = m === 1 ? y - 1 : y;
+    const prevM = m === 1 ? 12 : m - 1;
+    mesAnterior = `${prevY}-${String(prevM).padStart(2, '0')}`;
+    try {
+      const uDiaAnt = new Date(prevY, prevM, 0).getDate();
+      const lancsAnt = await coletarLancamentos({
+        db,
+        empresaId,
+        de: `${mesAnterior}-01`,
+        ate: `${mesAnterior}-${String(uDiaAnt).padStart(2, '0')}`,
+        regime,
+        lojaId,
+        centroCustoId
+      });
+      resumoMesAnt = acumularTotaisDre(lancsAnt);
+    } catch (e) {
+      console.warn('[dre-servico] Aviso ao calcular mês anterior para AH:', e.message);
+    }
+  }
+
+  // Helpers para AV % e AH %
   const calcAv = (val) => receitaBruta > 0 ? Number(((val / receitaBruta) * 100).toFixed(1)) : 0;
+  const calcAh = (valorAtual, valorAnt) => {
+    if (valorAnt === null || valorAnt === undefined) return 0;
+    const nAtual = Number(valorAtual || 0);
+    const nAnt = Number(valorAnt || 0);
+    if (nAnt !== 0) {
+      return Number((((nAtual - nAnt) / Math.abs(nAnt)) * 100).toFixed(1));
+    }
+    return nAtual !== 0 ? 100.0 : 0.0;
+  };
 
   function montarFilhos(chaves) {
     return chaves.map(k => {
@@ -643,12 +711,17 @@ export async function calcularDreCompleta(db, empresaId, {
         categoria: catNome,
         valor: v
       })).sort((a, b) => b.valor - a.valor);
-
+      const subAnt = resumoMesAnt ? resumoMesAnt.acumuladores[k] : null;
+      const vSubAnt = subAnt ? subAnt.total : null;
+      const ahSub = vSubAnt !== null ? calcAh(sub.total, vSubAnt) : 0;
       return {
         codigo: sub.rotulo.split(' ')[0],
         descricao: sub.rotulo,
         valor: sub.total,
         av: calcAv(sub.total),
+        valorAnterior: vSubAnt,
+        ah: ahSub,
+        tendencia: vSubAnt !== null ? (sub.total > vSubAnt ? 'alta' : (sub.total < vSubAnt ? 'baixa' : 'estavel')) : 'estavel',
         detalhe
       };
     });
@@ -778,6 +851,62 @@ export async function calcularDreCompleta(db, empresaId, {
     }
   ];
 
+  // Aplica AH nas linhas sintéticas principais
+  for (const l of linhas) {
+    const vAnt = resumoMesAnt ? (resumoMesAnt.totaisPorCodigo[l.codigo] ?? null) : null;
+    l.valorAnterior = vAnt;
+    if (vAnt !== null) {
+      l.variacaoNominal = dinheiro(l.valor - vAnt);
+      l.ah = calcAh(l.valor, vAnt);
+      l.tendencia = l.variacaoNominal > 0 ? 'alta' : (l.variacaoNominal < 0 ? 'baixa' : 'estavel');
+    } else {
+      l.variacaoNominal = 0;
+      l.ah = 0;
+      l.tendencia = 'estavel';
+    }
+  }
+
+  // Composição por Empresa (Quadro de Participação do Grupo Econômico)
+  const porEmpresa = {
+    'Barbearia Dino': { nome: 'Barbearia Dino', id: 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6', icone: '💈', receitaBruta: 0, receitaLiquida: 0, custos: 0, lucroBruto: 0, despesas: 0, ebitda: 0, resultadoLiquido: 0, totalLancamentos: 0, shareReceita: 0 },
+    'Stallone Nutre Sport': { nome: 'Stallone Nutre Sport', id: '31f70c83-9172-40c2-945f-9e793b5048be', icone: '💪', receitaBruta: 0, receitaLiquida: 0, custos: 0, lucroBruto: 0, despesas: 0, ebitda: 0, resultadoLiquido: 0, totalLancamentos: 0, shareReceita: 0 },
+    'AGRO OPEN TTC': { nome: 'AGRO OPEN TTC', id: '2e041110-db20-4fd1-8278-12bd3dead008', icone: '🌱', receitaBruta: 0, receitaLiquida: 0, custos: 0, lucroBruto: 0, despesas: 0, ebitda: 0, resultadoLiquido: 0, totalLancamentos: 0, shareReceita: 0 },
+    'Supermercado Kytto': { nome: 'Supermercado Kytto', id: '00000000-0000-0000-0000-000000000002', icone: '🛒', receitaBruta: 0, receitaLiquida: 0, custos: 0, lucroBruto: 0, despesas: 0, ebitda: 0, resultadoLiquido: 0, totalLancamentos: 0, shareReceita: 0 }
+  };
+
+  for (const l of lancamentos) {
+    const empAlvo = porEmpresa[l.empresaNome] || porEmpresa['Barbearia Dino'];
+    empAlvo.totalLancamentos += 1;
+    if (l.tipo === 'receita') {
+      empAlvo.receitaBruta = dinheiro(empAlvo.receitaBruta + l.valor);
+      empAlvo.receitaLiquida = dinheiro(empAlvo.receitaLiquida + l.valor);
+      empAlvo.lucroBruto = dinheiro(empAlvo.lucroBruto + l.valor);
+      empAlvo.ebitda = dinheiro(empAlvo.ebitda + l.valor);
+      empAlvo.resultadoLiquido = dinheiro(empAlvo.resultadoLiquido + l.valor);
+    } else {
+      const classif = classificarCategoriaDRE(l.tipo, l.categoria, l.origem, l.descricao);
+      if (classif.subgrupo.startsWith('custo_')) {
+        empAlvo.custos = dinheiro(empAlvo.custos + l.valor);
+        empAlvo.lucroBruto = dinheiro(empAlvo.lucroBruto - l.valor);
+        empAlvo.ebitda = dinheiro(empAlvo.ebitda - l.valor);
+        empAlvo.resultadoLiquido = dinheiro(empAlvo.resultadoLiquido - l.valor);
+      } else if (classif.subgrupo.startsWith('despesa_')) {
+        empAlvo.despesas = dinheiro(empAlvo.despesas + l.valor);
+        empAlvo.ebitda = dinheiro(empAlvo.ebitda - l.valor);
+        empAlvo.resultadoLiquido = dinheiro(empAlvo.resultadoLiquido - l.valor);
+      } else if (classif.subgrupo.startsWith('deducoes_')) {
+        empAlvo.receitaLiquida = dinheiro(empAlvo.receitaLiquida - l.valor);
+        empAlvo.lucroBruto = dinheiro(empAlvo.lucroBruto - l.valor);
+        empAlvo.ebitda = dinheiro(empAlvo.ebitda - l.valor);
+        empAlvo.resultadoLiquido = dinheiro(empAlvo.resultadoLiquido - l.valor);
+      }
+    }
+  }
+
+  for (const emp of Object.values(porEmpresa)) {
+    emp.shareReceita = receitaBruta > 0 ? Number(((emp.receitaBruta / receitaBruta) * 100).toFixed(1)) : 0;
+  }
+
   // Composição para gráficos
   const composicaoReceita = [
     { nome: 'Serviços Barbearia', valor: acumuladores.receita_servicos.total, cor: '#3b82f6' },
@@ -798,6 +927,8 @@ export async function calcularDreCompleta(db, empresaId, {
   ].filter(i => i.valor > 0);
 
   return {
+    ehConsolidado,
+    mesAnterior,
     periodo: {
       de: dataInicio,
       ate: dataFim,
@@ -823,6 +954,7 @@ export async function calcularDreCompleta(db, empresaId, {
       investimentos: acumuladores.investimentos.total,
       totalLancamentosApurados: lancamentos.length
     },
+    porEmpresa,
     linhas,
     graficos: {
       composicaoReceita,
@@ -848,34 +980,41 @@ export async function calcularDreAnual12Meses(db, empresaId, { ano = null, regim
 
   // Linhas síntese da matriz comparativa anual
   const codigos = [
-    { codigo: '1', descricao: '1. Receita Operacional Bruta' },
-    { codigo: '2', descricao: '2. (-) Deduções da Receita Bruta' },
-    { codigo: '3', descricao: '3. (=) Receita Operacional Líquida (ROL)' },
-    { codigo: '4', descricao: '4. (-) Custos das Vendas (CMV/CSP)' },
-    { codigo: '5', descricao: '5. (=) Lucro Bruto' },
-    { codigo: '6', descricao: '6. (-) Despesas Operacionais' },
-    { codigo: '7', descricao: '7. (=) EBITDA / LAJIDA' },
-    { codigo: '8', descricao: '8. (+/-) Resultado Financeiro' },
-    { codigo: '11', descricao: '11. (=) Resultado Líquido do Exercício' }
+    { codigo: '1', rotulo: '1. Receita Operacional Bruta' },
+    { codigo: '2', rotulo: '2. (-) Deduções da Receita' },
+    { codigo: '3', rotulo: '3. (=) Receita Operacional Líquida (ROL)' },
+    { codigo: '4', rotulo: '4. (-) Custos das Vendas (CPV/CMV/CSP)' },
+    { codigo: '5', rotulo: '5. (=) Lucro Bruto (Margem)' },
+    { codigo: '6', rotulo: '6. (-) Despesas Operacionais Fixas' },
+    { codigo: '7', rotulo: '7. (=) EBITDA / LAJIDA' },
+    { codigo: '8', rotulo: '8. (+/-) Resultado Financeiro' },
+    { codigo: '9', rotulo: '9. (=) Resultado Líquido do Exercício' }
   ];
 
   const linhasMatriz = codigos.map(c => {
-    const valoresMes = {};
+    const valoresMeses = {};
     let totalAno = 0;
-
     for (const m of meses) {
-      const dreMes = resultadosMensais[m];
-      const linha = dreMes.linhas.find(l => l.codigo === c.codigo);
-      const v = Number(linha?.valor || 0);
-      valoresMes[m] = v;
-      totalAno += v;
-    }
+      const d = resultadosMensais[m];
+      let val = 0;
+      if (c.codigo === '1') val = d.resumo.receitaBruta;
+      else if (c.codigo === '2') val = -d.resumo.totalDeducoes;
+      else if (c.codigo === '3') val = d.resumo.receitaLiquida;
+      else if (c.codigo === '4') val = -d.resumo.totalCustos;
+      else if (c.codigo === '5') val = d.resumo.lucroBruto;
+      else if (c.codigo === '6') val = -d.resumo.totalDespesasOperacionais;
+      else if (c.codigo === '7') val = d.resumo.ebitda;
+      else if (c.codigo === '8') val = d.resumo.resultadoFinanceiro;
+      else if (c.codigo === '9') val = d.resumo.resultadoLiquido;
 
+      valoresMeses[String(m).padStart(2, '0')] = val;
+      totalAno = dinheiro(totalAno + val);
+    }
     return {
       codigo: c.codigo,
-      descricao: c.descricao,
-      meses: valoresMes,
-      totalAno: dinheiro(totalAno)
+      descricao: c.rotulo,
+      meses: valoresMeses,
+      totalAno
     };
   });
 
@@ -888,33 +1027,53 @@ export async function calcularDreAnual12Meses(db, empresaId, { ano = null, regim
 }
 
 /**
- * Exporta a DRE em formato XLSX profissional (Multi-Abas: DRE Oficial, Matriz Anual e Lançamentos).
+ * Exporta a DRE completa para um arquivo XLSX nativo (Excel Multi-Abas).
  */
 export async function exportarDreParaXlsx(dre, matrizAnual = null, empresaInfo = {}) {
   const XLSX = await obterXlsx();
   const wb = XLSX.utils.book_new();
 
-  // ── ABA 1: DRE OFICIAL (CPC / CFC) ───────────────────────────────────────
+  // ── ABA 1: DRE OFICIAL COM ANÁLISE VERTICAL E HORIZONTAL ────────────────────
   const wsDreData = [
-    ['DEMONSTRAÇÃO DO RESULTADO DO EXERCÍCIO (DRE) - PADRÃO CPC / CFC'],
-    [`Empresa: ${empresaInfo.nome || 'Barbearia Dino'}`, `CNPJ: ${empresaInfo.cnpj || '50.073.355/0001-89'}`, `IE: ${empresaInfo.ie || '14.229.191-9 (SEFAZ-MT)'}`],
-    [`Período de Apuração: ${dre.periodo?.de} até ${dre.periodo?.ate}`, `Regime: ${String(dre.periodo?.regime || 'competencia').toUpperCase()}`, `Total de Lançamentos: ${dre.resumo?.totalLancamentosApurados || 0}`],
+    [`DEMONSTRAÇÃO DO RESULTADO DO EXERCÍCIO (DRE) — ${empresaInfo.nome || 'Kytto'}`],
+    [`CNPJ: ${empresaInfo.cnpj || '50.073.355/0001-89'} | Inscrição Estadual: ${empresaInfo.ie || '14.229.191-9 (SEFAZ-MT)'}`],
+    [`Período: ${dre.periodo?.de} até ${dre.periodo?.ate} | Regime: ${String(dre.periodo?.regime || 'competencia').toUpperCase()}`],
+    [`Receita Bruta: R$ ${Number(dre.resumo?.receitaBruta || 0).toFixed(2)} | EBITDA: R$ ${Number(dre.resumo?.ebitda || 0).toFixed(2)} | Resultado Líquido: R$ ${Number(dre.resumo?.resultadoLiquido || 0).toFixed(2)}`],
     [],
-    ['INDICADORES FINANCEIROS EXECUTIVOS'],
-    ['Receita Operacional Bruta (R$)', Number(dre.resumo?.receitaBruta || 0), 'Margem Bruta (%)', `${Number(dre.resumo?.margemBrutaPct || 0).toFixed(1)}%`],
-    ['Lucro Bruto (Margem) (R$)', Number(dre.resumo?.lucroBruto || 0), 'Margem EBITDA (%)', `${Number(dre.resumo?.margemEbitdaPct || 0).toFixed(1)}%`],
-    ['EBITDA / LAJIDA (R$)', Number(dre.resumo?.ebitda || 0), 'Margem Líquida (%)', `${Number(dre.resumo?.margemLiquidaPct || 0).toFixed(1)}%`],
-    ['Resultado Líquido do Exercício (R$)', Number(dre.resumo?.resultadoLiquido || 0), 'Ponto de Equilíbrio Break-even (R$)', Number(dre.resumo?.pontoEquilibrio || 0)],
-    [],
-    ['CÓDIGO', 'CONTA / CLASSIFICAÇÃO CONTÁBIL', 'VALOR (R$)', 'ANÁLISE VERTICAL (%)']
+    ['CÓDIGO', 'CONTA / CLASSIFICAÇÃO CONTÁBIL', 'VALOR ATUAL (R$)', 'ANÁLISE VERTICAL (AV %)', 'VALOR M-1 (R$)', 'ANÁLISE HORIZONTAL (AH %)']
   ];
 
-  for (const l of (dre.linhas || [])) {
-    wsDreData.push([l.codigo, l.descricao, Number(l.valor || 0), `${Number(l.av || 0).toFixed(1)}%`]);
-    for (const f of (l.filhos || [])) {
-      wsDreData.push([`  ${f.codigo}`, `  ${f.descricao}`, Number(f.valor || 0), `${Number(f.av || 0).toFixed(1)}%`]);
-      for (const d of (f.detalhe || [])) {
-        wsDreData.push(['    -', `    ${d.categoria}`, Number(d.valor || 0), '-']);
+  for (const l of dre.linhas) {
+    wsDreData.push([
+      l.codigo,
+      l.descricao,
+      Number(l.valor || 0),
+      `${Number(l.av || 0).toFixed(1)}%`,
+      l.valorAnterior !== null && l.valorAnterior !== undefined ? Number(l.valorAnterior) : '',
+      l.ah !== undefined ? `${Number(l.ah).toFixed(1)}%` : ''
+    ]);
+    if (Array.isArray(l.filhos)) {
+      for (const f of l.filhos) {
+        wsDreData.push([
+          `  ${f.codigo}`,
+          `  ${f.descricao}`,
+          Number(f.valor || 0),
+          `${Number(f.av || 0).toFixed(1)}%`,
+          f.valorAnterior !== null && f.valorAnterior !== undefined ? Number(f.valorAnterior) : '',
+          f.ah !== undefined ? `${Number(f.ah).toFixed(1)}%` : ''
+        ]);
+        if (Array.isArray(f.detalhe)) {
+          for (const d of f.detalhe) {
+            wsDreData.push([
+              '',
+              `    ↳ ${d.categoria}`,
+              Number(d.valor || 0),
+              '',
+              '',
+              ''
+            ]);
+          }
+        }
       }
     }
   }
@@ -922,46 +1081,82 @@ export async function exportarDreParaXlsx(dre, matrizAnual = null, empresaInfo =
   const wsDre = XLSX.utils.aoa_to_sheet(wsDreData);
   XLSX.utils.book_append_sheet(wb, wsDre, 'DRE Oficial (CPC-CFC)');
 
-  // ── ABA 2: MATRIZ ANUAL COMPARATIVA (12 MESES) ───────────────────────────
-  if (matrizAnual && Array.isArray(matrizAnual.linhas)) {
-    const wsMatrizData = [
-      [`MATRIZ ANUAL COMPARATIVA DA DRE — EXERCÍCIO ${matrizAnual.ano}`],
-      [`Empresa: ${empresaInfo.nome || 'Barbearia Dino'}`, `Regime: ${String(matrizAnual.regime || 'competencia').toUpperCase()}`],
+  // ── ABA 2: PARTICIPAÇÃO POR EMPRESA (SE CONSOLIDADO) ────────────────────────
+  if (dre.porEmpresa && Object.keys(dre.porEmpresa).length > 0) {
+    const wsEmpData = [
+      [`QUADRO DE PARTICIPAÇÃO DO GRUPO EMPRESARIAL KYTTO`],
+      [`Período: ${dre.periodo?.de} até ${dre.periodo?.ate}`],
       [],
-      ['CÓDIGO', 'CONTA / CLASSIFICAÇÃO CONTÁBIL', 'JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN', 'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ', 'TOTAL ACUMULADO (YTD)']
+      ['EMPRESA DO GRUPO', 'RECEITA BRUTA (R$)', 'RECEITA LÍQUIDA (R$)', 'CUSTOS DIRETOS (R$)', 'LUCRO BRUTO (R$)', 'DESPESAS (R$)', 'EBITDA (R$)', 'RESULTADO LÍQUIDO (R$)', 'SHARE RECEITA (%)', 'LANÇAMENTOS']
     ];
-
-    for (const l of matrizAnual.linhas) {
-      const row = [l.codigo, l.descricao];
-      for (let m = 1; m <= 12; m++) {
-        row.push(Number(l.meses?.[m] || 0));
-      }
-      row.push(Number(l.totalAno || 0));
-      wsMatrizData.push(row);
+    for (const emp of Object.values(dre.porEmpresa)) {
+      wsEmpData.push([
+        emp.nome,
+        Number(emp.receitaBruta || 0),
+        Number(emp.receitaLiquida || 0),
+        Number(emp.custos || 0),
+        Number(emp.lucroBruto || 0),
+        Number(emp.despesas || 0),
+        Number(emp.ebitda || 0),
+        Number(emp.resultadoLiquido || 0),
+        `${Number(emp.shareReceita || 0).toFixed(1)}%`,
+        emp.totalLancamentos || 0
+      ]);
     }
-    const wsMatriz = XLSX.utils.aoa_to_sheet(wsMatrizData);
-    XLSX.utils.book_append_sheet(wb, wsMatriz, `Matriz Anual ${matrizAnual.ano}`);
+    wsEmpData.push([
+      'TOTAL CONSOLIDADO HOLDING',
+      Number(dre.resumo?.receitaBruta || 0),
+      Number(dre.resumo?.receitaLiquida || 0),
+      Number(dre.resumo?.totalCustos || 0),
+      Number(dre.resumo?.lucroBruto || 0),
+      Number(dre.resumo?.totalDespesasOperacionais || 0),
+      Number(dre.resumo?.ebitda || 0),
+      Number(dre.resumo?.resultadoLiquido || 0),
+      '100.0%',
+      dre.resumo?.totalLancamentosApurados || 0
+    ]);
+    const wsEmp = XLSX.utils.aoa_to_sheet(wsEmpData);
+    XLSX.utils.book_append_sheet(wb, wsEmp, 'Participação por Empresa');
   }
 
-  // ── ABA 3: LANÇAMENTOS ANALÍTICOS DETALHADOS ─────────────────────────────
-  if (Array.isArray(dre.lancamentosDetalhados)) {
-    const wsLancData = [
-      ['RELATÓRIO ANALÍTICO DE LANÇAMENTOS OPERACIONAIS'],
-      [`Empresa: ${empresaInfo.nome || 'Barbearia Dino'}`, `Período: ${dre.periodo?.de} até ${dre.periodo?.ate}`],
+  // ── ABA 3: MATRIZ ANUAL COMPARATIVA (12 MESES) ──────────────────────────────
+  if (matrizAnual && Array.isArray(matrizAnual.linhas)) {
+    const cabecalhoMatriz = ['CÓDIGO', 'DESCRIÇÃO', 'JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN', 'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ', 'TOTAL ANO'];
+    const wsMatrizData = [
+      [`MATRIZ COMPARATIVA ANUAL (DRE 12 MESES) — EXERCÍCIO ${matrizAnual.ano || 2026}`],
       [],
-      ['ID LANÇAMENTO', 'DATA COMPETÊNCIA', 'VENCIMENTO', 'DATA PAGAMENTO', 'TIPO', 'CLASSIFICAÇÃO DRE', 'SUBGRUPO', 'CATEGORIA', 'HISTÓRICO / DESCRIÇÃO', 'VALOR (R$)', 'STATUS', 'MEIO DE PAGAMENTO', 'ORIGEM']
+      cabecalhoMatriz
     ];
+    for (const l of matrizAnual.linhas) {
+      const linhaArr = [l.codigo, l.descricao];
+      for (let m = 1; m <= 12; m++) {
+        const mKey = String(m).padStart(2, '0');
+        linhaArr.push(Number(l.meses?.[mKey] || 0));
+      }
+      linhaArr.push(Number(l.totalAno || 0));
+      wsMatrizData.push(linhaArr);
+    }
+    const wsMatriz = XLSX.utils.aoa_to_sheet(wsMatrizData);
+    XLSX.utils.book_append_sheet(wb, wsMatriz, 'Matriz Anual');
+  }
 
+  // ── ABA 4: LANÇAMENTOS ANALÍTICOS APURADOS ──────────────────────────────────
+  if (Array.isArray(dre.lancamentosDetalhados) && dre.lancamentosDetalhados.length > 0) {
+    const wsLancData = [
+      ['ID', 'EMPRESA', 'DATA COMPETÊNCIA', 'VENCIMENTO', 'PAGO EM', 'TIPO', 'SUBGRUPO DRE', 'CATEGORIA', 'DESCRIÇÃO', 'VALOR (R$)', 'STATUS', 'MEIO PAGAMENTO', 'ORIGEM']
+    ];
     for (const item of dre.lancamentosDetalhados) {
-      const classif = classificarCategoriaDRE(item.tipo, item.categoria, item.origem, item.descricao);
+      const classif = item.grupoDreConfigurado
+        ? { subgrupo: item.grupoDreConfigurado, rotulo: item.categoria }
+        : classificarCategoriaDRE(item.tipo, item.categoria, item.origem, item.descricao);
       wsLancData.push([
         item.id || '',
+        item.empresaNome || 'Barbearia Dino',
         item.dataCompetencia || '',
         item.vencimento || '',
         item.pagoEm || '',
         item.tipo === 'receita' ? 'RECEITA' : 'DESPESA',
         classif.rotulo,
-        classif.subgrupo,
         item.categoria || '',
         item.descricao || '',
         Number(item.valor || 0),
@@ -984,6 +1179,40 @@ export function gerarHtmlDreOficialPdf(dre, matrizAnual = null, empresaInfo = {}
   const agoraFormatada = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'long', timeStyle: 'short' }).format(new Date());
   const fmt = (v) => Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const fmtPct = (v) => `${Number(v || 0).toFixed(1).replace('.', ',')}%`;
+  const ehCons = Boolean(dre.ehConsolidado || empresaInfo.ehConsolidado);
+
+  let quadroParticipacaoHtml = '';
+  if (ehCons && dre.porEmpresa) {
+    quadroParticipacaoHtml = `
+    <div style="margin: 16px 0; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 12px;">
+      <h3 style="margin: 0 0 8px 0; font-size: 11px; text-transform: uppercase; color: #1e293b; font-weight: 800;">
+        🏢 Quadro Consolidado das Unidades de Negócio do Grupo
+      </h3>
+      <table style="margin-bottom: 0;">
+        <thead>
+          <tr style="background: #e2e8f0;">
+            <th style="padding: 4px 6px;">Empresa</th>
+            <th class="right" style="padding: 4px 6px;">Receita Bruta</th>
+            <th class="right" style="padding: 4px 6px;">Margem Bruta</th>
+            <th class="right" style="padding: 4px 6px;">EBITDA</th>
+            <th class="right" style="padding: 4px 6px;">Share</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${Object.values(dre.porEmpresa).map(e => `
+            <tr>
+              <td style="padding: 4px 6px;"><strong>${e.nome}</strong></td>
+              <td class="right" style="padding: 4px 6px;">R$ ${fmt(e.receitaBruta)}</td>
+              <td class="right" style="padding: 4px 6px;">R$ ${fmt(e.lucroBruto)}</td>
+              <td class="right" style="padding: 4px 6px; color: ${e.ebitda >= 0 ? '#16a34a' : '#dc2626'}; font-weight: 700;">R$ ${fmt(e.ebitda)}</td>
+              <td class="right" style="padding: 4px 6px; font-weight: 700;">${fmtPct(e.shareReceita)}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+    `;
+  }
 
   return `<!DOCTYPE html>
 <html lang="pt-BR">
@@ -1024,7 +1253,7 @@ export function gerarHtmlDreOficialPdf(dre, matrizAnual = null, empresaInfo = {}
   <div class="header">
     <div class="header-title">
       <h1>DEMONSTRAÇÃO DO RESULTADO DO EXERCÍCIO (DRE)</h1>
-      <p>Padrão Contábil CPC / CFC · Apuração Oficial de Margens e Resultados</p>
+      <p style="margin-top: 2px;">Padrão Contábil Oficial CPC / CFC · Lei das S/A nº 6.404/76</p>
       <p style="margin-top: 4px; font-weight: 600; color: #0284c7;">
         ${empresaInfo.nome || 'Barbearia Dino'} &nbsp;·&nbsp; CNPJ: ${empresaInfo.cnpj || '50.073.355/0001-89'} &nbsp;·&nbsp; IE: ${empresaInfo.ie || '14.229.191-9 (SEFAZ-MT)'}
       </p>
@@ -1051,50 +1280,60 @@ export function gerarHtmlDreOficialPdf(dre, matrizAnual = null, empresaInfo = {}
     <div class="kpi-card">
       <div class="kpi-label">EBITDA / LAJIDA</div>
       <div class="kpi-value" style="color: ${dre.resumo?.ebitda >= 0 ? '#16a34a' : '#dc2626'};">R$ ${fmt(dre.resumo?.ebitda)}</div>
-      <div class="kpi-sub">Margem: ${fmtPct(dre.resumo?.margemEbitdaPct)}</div>
+      <div class="kpi-sub">Geração: ${fmtPct(dre.resumo?.margemEbitdaPct)}</div>
     </div>
     <div class="kpi-card">
       <div class="kpi-label">Resultado Líquido</div>
       <div class="kpi-value" style="color: ${dre.resumo?.resultadoLiquido >= 0 ? '#16a34a' : '#dc2626'};">R$ ${fmt(dre.resumo?.resultadoLiquido)}</div>
-      <div class="kpi-sub">Margem: ${fmtPct(dre.resumo?.margemLiquidaPct)}</div>
+      <div class="kpi-sub">Líquido: ${fmtPct(dre.resumo?.margemLiquidaPct)}</div>
     </div>
     <div class="kpi-card">
       <div class="kpi-label">Ponto de Equilíbrio</div>
       <div class="kpi-value">R$ ${fmt(dre.resumo?.pontoEquilibrio)}</div>
-      <div class="kpi-sub">Break-Even R$</div>
+      <div class="kpi-sub">Break-even Point</div>
     </div>
   </div>
+
+  ${quadroParticipacaoHtml}
 
   <table>
     <thead>
       <tr>
-        <th style="width: 70px;">Código</th>
+        <th style="width: 80px;">Código</th>
         <th>Conta / Classificação Contábil</th>
         <th class="right" style="width: 130px;">Valor (R$)</th>
-        <th class="right" style="width: 90px;">Análise Vertical</th>
+        <th class="right" style="width: 80px;">AV %</th>
+        <th class="right" style="width: 80px;">AH %</th>
       </tr>
     </thead>
     <tbody>
-      ${(dre.linhas || []).map(l => `
+      ${dre.linhas.map(l => `
         <tr class="${l.destaque ? 'destaque' : ''}">
           <td><strong>${l.codigo}</strong></td>
-          <td><strong>${l.descricao}</strong></td>
-          <td class="right" style="color: ${l.valor < 0 ? '#dc2626' : (l.destaque ? '#0f172a' : 'inherit')};"><strong>R$ ${fmt(l.valor)}</strong></td>
-          <td class="right"><strong>${fmtPct(l.av)}</strong></td>
+          <td>${l.descricao}</td>
+          <td class="right" style="color: ${l.valor < 0 ? '#dc2626' : (l.destaque ? '#0f172a' : '#334155')};">
+            R$ ${fmt(l.valor)}
+          </td>
+          <td class="right">${fmtPct(l.av)}</td>
+          <td class="right" style="font-weight: 600; color: ${l.ah > 0 ? (l.codigo === '1' || l.codigo === '5' || l.codigo === '7' ? '#16a34a' : '#dc2626') : (l.ah < 0 ? (l.codigo === '1' || l.codigo === '5' || l.codigo === '7' ? '#dc2626' : '#16a34a') : '#64748b')};">
+            ${l.ah !== undefined ? (l.ah > 0 ? '+' : '') + fmtPct(l.ah) : '—'}
+          </td>
         </tr>
         ${(l.filhos || []).map(f => `
           <tr class="subgrupo">
-            <td style="padding-left: 14px;">${f.codigo}</td>
-            <td style="padding-left: 14px;">${f.descricao}</td>
-            <td class="right" style="color: ${f.valor < 0 ? '#dc2626' : 'inherit'};">R$ ${fmt(f.valor)}</td>
+            <td style="padding-left: 12px;">${f.codigo}</td>
+            <td style="padding-left: 12px;">${f.descricao}</td>
+            <td class="right">R$ ${fmt(f.valor)}</td>
             <td class="right">${fmtPct(f.av)}</td>
+            <td class="right">${f.ah !== undefined ? (f.ah > 0 ? '+' : '') + fmtPct(f.ah) : '—'}</td>
           </tr>
-          ${(f.detalhe || []).map(d => `
+          ${(f.detalhe || []).slice(0, 5).map(d => `
             <tr class="detalhe">
               <td></td>
               <td>↳ ${d.categoria}</td>
               <td class="right">R$ ${fmt(d.valor)}</td>
-              <td class="right">-</td>
+              <td></td>
+              <td></td>
             </tr>
           `).join('')}
         `).join('')}
@@ -1105,23 +1344,19 @@ export function gerarHtmlDreOficialPdf(dre, matrizAnual = null, empresaInfo = {}
   <div class="signatures">
     <div class="sig-box">
       <div class="sig-name">RODRIGO RIBEIRO GONÇALVES</div>
-      <div class="sig-role">Diretoria Executiva / Proprietário</div>
-      <div style="font-size: 9px; color: #94a3b8; margin-top: 4px;">Assinatura Digital Certificada ICP-Brasil</div>
+      <div class="sig-role">Diretoria Executiva · Kytto Ecosystem</div>
+      <div style="font-size: 9px; color: #94a3b8; margin-top: 4px;">Assinatura Digital ICP-Brasil / Kytto Trust</div>
     </div>
     <div class="sig-box">
-      <div class="sig-name">RESPONSÁVEL TÉCNICO CONTÁBIL</div>
-      <div class="sig-role">Contador Responsável · CRC/MT</div>
-      <div style="font-size: 9px; color: #94a3b8; margin-top: 4px;">Termo de Conformidade Contábil e Fiscal CPC/CFC</div>
+      <div class="sig-name">CONTADOR RESPONSÁVEL TÉCNICO</div>
+      <div class="sig-role">CRC-MT · Conselho Regional de Contabilidade</div>
+      <div style="font-size: 9px; color: #94a3b8; margin-top: 4px;">Livro Razão & Diário Geral Autenticados</div>
     </div>
+  </div>
+
+  <div style="margin-top: 30px; text-align: center; font-size: 9px; color: #94a3b8; border-top: 1px solid #f1f5f9; padding-top: 8px;">
+    Documento emitido eletronicamente pelo Sistema Kytto ERP em conformidade com as Normas Brasileiras de Contabilidade (NBC TG / CFC).
   </div>
 </body>
 </html>`;
 }
-
-export default {
-  classificarCategoriaDRE,
-  calcularDreCompleta,
-  calcularDreAnual12Meses,
-  exportarDreParaXlsx,
-  gerarHtmlDreOficialPdf
-};
