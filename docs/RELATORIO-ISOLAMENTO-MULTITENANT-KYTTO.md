@@ -1,4 +1,4 @@
-# Relatório Executivo Oficial de Homologação, Isolamento Multi-tenant e Capacidades Estratégicas do ERP Kytto (v30)
+# Relatório Executivo Oficial de Homologação, Isolamento Multi-tenant e Capacidades Estratégicas do ERP Kytto (v31)
 
 **Data de Emissão:** 10 de Novembro de 2026  
 **Ambiente de Produção Homologado:** `https://kytto.com.br` (Render Web Service `srv-d8iudokm0tmc73c07iog`, branch `fix/kytto-comandas-pdv-20260808` e `main`)  
@@ -9,7 +9,7 @@
 
 ## 1. Sumário Executivo & Destaques da Versão v30
 
-O ERP Kytto atinge a versão **v30** consolidando governança operacional, financeira e fiscal em nível corporativo de excelência nacional. Nesta versão foram homologadas em produção real as seguintes capacidades críticas demandadas pela operação da **Barbearia Dino**:
+O ERP Kytto atinge a versão **v31** consolidando governança operacional, financeira e fiscal em nível corporativo de excelência nacional. Nesta versão foram homologadas em produção real as seguintes capacidades críticas demandadas pela operação da **Barbearia Dino**:
 
 1. **Cancelamento e Estorno Coordenado de Comandas Finalizadas no Caixa:** Resolução definitiva do bloqueio operacional de concorrência (`"A origem já possui estorno coordenado por outra ação."`). Agora, quando uma comanda finalizada apresenta tentativas anteriores incompletas ou é cancelada pelo gestor/operador autorizado, o sistema coordena os efeitos em cascata de forma limpa e atômica: estorno do numerário no caixa físico, estorno compensatório no financeiro, devolução física ao estoque, estorno reverso dos movimentos de comissão e marcação da comanda como `CANCELADA / ESTORNADA`.
 2. **Regra Oficial de Isenção de Comissões de Bebidas (0%):** Em conformidade estrita com a diretriz da gerência e diretoria da Barbearia Dino (*"Bebidas eles não têm comissão"*), foi criado o motor `app/core/dino-regras-comissoes.js` que segrega automaticamente itens de Bar/Bebidas (águas minerais, cervejas, refrigerantes, cafés, energéticos e destilados) de Cosméticos de Revenda (pomadas, óleos, balms, shampoos). Bebidas geram **R$ 0,00 de comissão (0%)**, enquanto produtos de revenda continuam comissionados conforme a taxa base (10%). O rateio do caixa agora exibe detalhadamente a tag `🍺 Bebidas (0%)` e o banner oficial explicativo.
@@ -21,12 +21,20 @@ O ERP Kytto atinge a versão **v30** consolidando governança operacional, finan
 8. **Tabela de Zonas de Frete de Tangará da Serra MT:** Parametrização dos 10 bairros com taxas de R$ 6,00 a R$ 20,00 e limites de frete grátis.
 9. **Despacho Agrupado de Motoboys & Impressão Térmica (ESC/POS 80mm):** Agrupamento de rotas e comanda térmica de balcão e entrega com QR Pix dinâmico.
 10. **Auditoria de CMV Teórico vs Real com Apontamento de Desperdício:** Confronto contínuo de fichas técnicas e consumo real.
+11. **Perfil de Operador de Balcão e Atendimento da Dino Barbearia (Usuário Ster):** Criação e homologação do perfil oficial de operadora/atendente para Steffany Marielly de Oliveira (Ster) com credenciais (`ster` / `123456`), papel restrito `operador` com escopo exclusivo na Barbearia Dino (`d0d0ac01-8e50-4b61-8c79-de4aaa916da6`), redirecionamento automático para a Agenda operacional, acesso liberado a comandas, agendamentos, clientes e caixa físico, e bloqueio de relatórios corporativos confidenciais da holding.
 
 ---
 
 ## 2. Evidências Visuais Capturadas em Produção Real (Render Live)
 
-### 2.1. Rateio de Comissões dos Barbeiros no Caixa com Isenção de Bebidas (0%)
+### 2.1. Painel do Operador — Sessão de Atendente da Ster (Barbearia Dino)
+Tela operacional em produção (`https://kytto.com.br/admin/barbearia-erp?area=operacao&tab=Agenda`) capturada na sessão oficial da operadora Ster (Steffany Marielly de Oliveira), exibindo o badge oficial OPERADOR, a grade completa da agenda de atendimentos da semana, botões de agendamento e bloqueios, e isolamento total contra outras empresas da holding.
+
+![Painel do Operador - Sessão de Atendente da Ster](/home/ubuntu/agro-open/docs/prints/44-operador-atendente-ster-sessao-dino.png)
+
+---
+
+### 2.2. Rateio de Comissões dos Barbeiros no Caixa com Isenção de Bebidas (0%)
 Tela oficial do caixa e fechamento em produção demonstrando a segregação de bebidas com comissão ZERO e o rateio recalculado perfeitamente: Bruno recebeu R$ 600,01 (em vez de R$ 600,51), com a água de R$ 5,00 categorizada como `🍺 R$ 5,00 bebidas (0%)`. O rateio expurgou 100% da comissão indevida da comanda cancelada do Geofrey Lisgoski.
 
 ![Rateio de Comissões dos Barbeiros no Caixa com Bebidas Zero](/home/ubuntu/agro-open/docs/prints/42-caixa-rateio-comissoes-bebidas-zero.png)
@@ -199,7 +207,7 @@ Captura de notas destinadas junto à SEFAZ e recálculo do Custo Médio Ponderad
 
 1. **Planilha Competitiva Oficial v30:** [Planilha de Comparativo de Mercado v30](/home/ubuntu/agro-open/docs/Kytto_e_Plataforma_vs_Mercado_v30.xlsx).
 2. **Manual Oficial Operacional e Administrativo Kytto em PDF (v3.0):** [Manual Oficial Kytto ERP em PDF](/home/ubuntu/agro-open/docs/MANUAL-OFICIAL-KYTTO-TEF-E-MULTIEMPRESA.pdf).
-3. **Relatório Executivo Oficial de Homologação em PDF (v30):** [Relatório Executivo Oficial em PDF](/home/ubuntu/agro-open/docs/RELATORIO-ISOLAMENTO-MULTITENANT-KYTTO.pdf).
+3. **Relatório Executivo Oficial de Homologação em PDF (v31):** [Relatório Executivo Oficial em PDF](/home/ubuntu/agro-open/docs/RELATORIO-ISOLAMENTO-MULTITENANT-KYTTO.pdf).
 4. **Motor Oficial de Regras de Comissionamento e Bebidas:** [`app/core/dino-regras-comissoes.js`](/home/ubuntu/agro-open/app/core/dino-regras-comissoes.js).
 5. **Coordenador Resiliente de Estorno de Comandas:** [`app/core/dino-reversal-coordinator.js`](/home/ubuntu/agro-open/app/core/dino-reversal-coordinator.js).
 6. **Motor de Auditoria DIMP vs Fiscal:** [`app/core/auditoria-dimp-fiscal.js`](/home/ubuntu/agro-open/app/core/auditoria-dimp-fiscal.js).

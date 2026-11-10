@@ -7,7 +7,7 @@
 **Empresa Referência:** DINO BARBEARIA LTDA (CNPJ 50.073.355/0002-60 · IM 30297 · Tangará da Serra / MT)  
 **Holding Controladora:** AGRO OPEN TTC / HOLDING KYTTO (UUID: `00000000-0000-0000-0000-000000000001`)  
 **Plataforma Homologada:** Kytto Cloud & On-Premise Enterprise  
-**Versão do Documento:** 3.0 (Edição Definitiva Homologada de Produção — Catálogo Completo de 43 Telas e Evidências Reais)  
+**Versão do Documento:** 3.1 (Edição Definitiva Homologada de Produção — Catálogo Completo de 44 Telas e Evidências Reais)  
 **Data:** Novembro de 2026  
 **Ambiente Oficial de Produção:** `https://kytto.com.br`  
 **Web Service Render:** `srv-d8iudokm0tmc73c07iog` (Branches: `fix/kytto-comandas-pdv-20260808` e `main`)  
@@ -39,8 +39,9 @@
 21. **Cancelamento e Estorno Coordenado de Comandas Finalizadas no Caixa (Print 41)**
 22. **Regra Oficial de Comissionamento: Isenção de Bebidas (0%) vs Cosméticos de Revenda (10%) (Print 42)**
 23. **Catálogo Integrado de Materiais, Estoque de Bebidas e Produtos de Revenda (Print 43)**
-24. **Guia Operacional Passo a Passo para Gerentes e Recepção**
-25. **Termo de Homologação e Conclusão**
+24. **Perfil de Operador de Balcão e Atendimento da Barbearia Dino: Sessão da Ster (Print 44)**
+25. **Guia Operacional Passo a Passo para Gerentes e Recepção**
+26. **Termo de Homologação e Conclusão**
 
 ---
 
@@ -410,7 +411,36 @@ Interface oficial em produção (`/admin/barbearia-erp?area=catalogo&tab=Estoque
 
 ---
 
-## 24. GUIA OPERACIONAL PASSO A PASSO PARA GERENTES E RECEPÇÃO
+## 24. PERFIL DE OPERADOR DE BALCÃO E ATENDIMENTO DA BARBEARIA DINO: SESSÃO DA STER (PRINT 44)
+
+Para atender à necessidade operacional da recepção e atendimento da Dino Barbearia, foi criado e homologado o perfil de **Operador de Balcão** para a colaboradora **Ster (Steffany Marielly de Oliveira)**:
+
+### Evidência em Produção: Sessão Oficial de Atendente da Ster (Barbearia Dino)
+![Painel do Operador - Sessão de Atendente da Ster](/home/ubuntu/agro-open/docs/prints/44-operador-atendente-ster-sessao-dino.png)
+
+### Credenciais e Especificações de Acesso:
+* **Usuário Oficial:** `ster` (compatível também com alias `ester`);
+* **Senha Padrão Inicial:** `123456`;
+* **Nome de Exibição:** Steffany Marielly de Oliveira (Ster);
+* **Papel no Sistema:** `operador` (Selo cinza **OPERADOR** no cabeçalho superior);
+* **Empresa Vinculada:** Barbearia Dino (`d0d0ac01-8e50-4b61-8c79-de4aaa916da6`);
+* **Unidade / Loja:** Unidade Tangará da Serra MT (`ab049a75-6e2e-4cc9-abbc-6fd11cdda1d8`);
+* **Redirecionamento Automático no Login:** Ao efetuar login, o sistema redireciona a operadora diretamente para a **Agenda Operacional** (`/admin/barbearia-erp?area=operacao&tab=Agenda`).
+
+### Escopo de Permissões da Operadora:
+1. **Módulos Liberados para Atendimento:**
+   * **Agenda:** Visualização diária e semanal de todos os barbeiros, criação de novos agendamentos e encaixes, alteração de status e bloqueio de horários;
+   * **Atendimento / Comandas:** Abertura de comandas virtuais, lançamento de serviços, produtos e bebidas consumidas, e recebimento de pagamentos;
+   * **Caixa e Fechamento:** Abertura do caixa do dia, registro de suprimentos, sangrias e conferência de fechamento cego de balcão;
+   * **Clientes:** Consulta rápida por nome ou telefone e cadastro de novos clientes;
+   * **Estoque de Revenda:** Consulta de saldos e preços de produtos e bebidas.
+2. **Blindagem de Segurança e Isolamento Multi-Tenant:**
+   * **Zero Vazamento de Marcas:** Acesso estritamente bloqueado a Stallone Nutre Sport, AGRO OPEN TTC e Supermercado Kytto;
+   * **Sigilo Gerencial e Salarial:** Bloqueio nativo a relatórios confidenciais de DRE gerencial macro, comissões de outros profissionais, margens e configurações fiscais da diretoria.
+
+---
+
+## 25. GUIA OPERACIONAL PASSO A PASSO PARA GERENTES E RECEPÇÃO
 
 ### A. Como Cancelar Comanda Finalizada no Caixa:
 1. Acesse **Operação > Caixa e fechamento** (`https://kytto.com.br/admin/barbearia-erp?area=operacao&tab=Caixa+e+fechamento`);
@@ -430,9 +460,9 @@ Interface oficial em produção (`/admin/barbearia-erp?area=catalogo&tab=Estoque
 
 ---
 
-## 25. TERMO DE HOMOLOGAÇÃO E CONCLUSÃO
+## 26. TERMO DE HOMOLOGAÇÃO E CONCLUSÃO
 
-Declaramos para os devidos fins legais, operacionais e societários que todas as **43 telas e funcionalidades** descritas neste documento foram desenvolvidas, integradas, testadas com suíte de testes unitários automatizados (100% de aprovação) e encontram-se **ativas em ambiente de produção real (Live)** no domínio `https://kytto.com.br`.
+Declaramos para os devidos fins legais, operacionais e societários que todas as **44 telas e funcionalidades** descritas neste documento foram desenvolvidas, integradas, testadas com suíte de testes unitários automatizados (100% de aprovação) e encontram-se **ativas em ambiente de produção real (Live)** no domínio `https://kytto.com.br`.
 
 Este manual consolida a liderança tecnológica do **Kytto ERP Enterprise**, estabelecendo um padrão de excelência corporativa em segurança operacional, inteligência fiscal e governança multi-tenant para todo o Brasil.
 
