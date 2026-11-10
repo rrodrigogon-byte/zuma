@@ -608,6 +608,19 @@ function seedUsuarios(){
       save();
     }
   }
+  // [kytto-tef] Purga transações simuladas indevidas de 09/11 sem maquininha física na Dino
+  if (Array.isArray(d.tefTransacoes)) {
+    const qtdAntes = d.tefTransacoes.length;
+    d.tefTransacoes = d.tefTransacoes.filter(t => 
+      t.id !== "tef-1794265607536-z5nhj" && 
+      t.id !== "tef-1794263635602-78auh" &&
+      !(t.empresaId === "d0d0ac01-8e50-4b61-8c79-de4aaa916da6" && t.data === "2026-11-09" && t.valor === 180 && t.clienteNome === "Rodrigo Gonçalves")
+    );
+    if (d.tefTransacoes.length !== qtdAntes) {
+      console.log(`[TEF] Purga executada: ${qtdAntes - d.tefTransacoes.length} transações simuladas indevidas removidas.`);
+      save();
+    }
+  }
 }
 seedUsuarios();
 try { provisionarEquipeDino({ commerceDb }); } catch (err) { console.warn('Aviso ao provisionar equipe Dino:', err.message); }

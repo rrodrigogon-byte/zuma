@@ -234,6 +234,12 @@ function ensureTefStore() {
   if (!store.tefTransacoes) {
     store.tefTransacoes = [];
   }
+  // Purga transações simuladas indevidas de R$ 180 criadas sem maquininha na Dino em 09/11
+  store.tefTransacoes = store.tefTransacoes.filter(t => 
+    t.id !== "tef-1794265607536-z5nhj" && 
+    t.id !== "tef-1794263635602-78auh" &&
+    !(t.empresaId === "d0d0ac01-8e50-4b61-8c79-de4aaa916da6" && t.data === "2026-11-09" && t.valor === 180 && t.clienteNome === "Rodrigo Gonçalves")
+  );
   if (!store.tefConfiguracoes) {
     store.tefConfiguracoes = {};
   }
@@ -393,6 +399,33 @@ export function testarConexaoTerminal(empresaId, terminalId) {
 /**
  * Processar ou simular transação TEF
  */
+/**
+ * Excluir transação TEF (especialmente simulações ou registros de teste)
+ */
+export function excluirTransacaoTef(empresaId, transacaoId) {
+  const store = ensureTefStore();
+  const idx = (store.tefTransacoes || []).findIndex(t => t.id === transacaoId && t.empresaId === empresaId);
+  if (idx === -1) {
+    throw new Error(`Transação TEF ${transacaoId} não encontrada para a empresa.`);
+  }
+  const removida = store.tefTransacoes.splice(idx, 1)[0];
+  return { sucesso: true, mensagem: `Transação TEF ${transacaoId} removida com sucesso.`, transacao: removida };
+}
+
+/**
+ * Expurgar todas as transações simuladas/testes de uma empresa
+ */
+export function expurgarTransacoesSimuladas(empresaId) {
+  const store = ensureTefStore();
+  const antes = store.tefTransacoes.length;
+  store.tefTransacoes = store.tefTransacoes.filter(t => {
+    if (t.empresaId !== empresaId) return true;
+    return !t.simulado && t.status !== "simulada";
+  });
+  const removidas = antes - store.tefTransacoes.length;
+  return { sucesso: true, removidas, mensagem: `${removidas} transação(ões) simulada(s) expurgada(s) com sucesso.` };
+}
+
 export function processarTransacaoTef({
   empresaId,
   valor,
@@ -486,7 +519,8 @@ export function processarTransacaoTef({
     criadoEm: hoje.toISOString(),
     data: hoje.toISOString().slice(0, 10),
     hora: horaFormatada,
-    status: 'autorizada', // 'autorizada' | 'conciliada' | 'cancelada'
+    status: (!terminalId || terminalObj.status !== 'ativo') ? 'simulada' : 'autorizada',
+    simulado: (!terminalId || terminalObj.status !== 'ativo'),
     valor,
     modalidade,
     parcelas,
@@ -596,7 +630,7 @@ export function conciliarLoteTefComExtrato(empresaId, { extratoLinhaId, adquiren
  */
 export function resumoPrevisaoRecebiveis(empresaId) {
   const transacoes = listarTransacoesTef(empresaId);
-  const pendentes = transacoes.filter(t => !t.conciliadoComExtrato && t.status === 'autorizada');
+  const pendentes = transacoes.filter(t => !t.conciliadoComExtrato && t.status === 'autorizada' && !t.simulado);
 
   const porAdquirente = {};
   const porData = {};

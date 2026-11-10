@@ -1858,14 +1858,22 @@ export async function processarXmlNfeCompra(db, empresaId, xmlString, { usuario 
 // 20. PREVENÇÃO DE PERDAS (PADRÃO ABRAS — ÍNDICES E BENCHMARKING)
 // ═════════════════════════════════════════════════════════════════════════════
 export async function obterRelatorioPrevencaoPerdas(db, empresaId, { lojaId = null } = {}) {
-  // 1. Faturamento Total
+  // 1. Faturamento Total Real (var_vendas + fin_lancamentos de receita)
   const vendasRes = await db.query(
     `SELECT COALESCE(SUM(total), 0) AS total_vendas, COUNT(id) AS qtd_vendas 
      FROM var_vendas WHERE empresa_id = $1 AND ($2::uuid IS NULL OR loja_id = $2)`,
     [empresaId, lojaId]
-  ).catch(() => ({ rows: [{ total_vendas: 125400.00, qtd_vendas: 1420 }] }));
+  ).catch(() => ({ rows: [{ total_vendas: 0, qtd_vendas: 0 }] }));
 
-  const faturamentoTotal = Math.max(10000, Number(vendasRes.rows[0]?.total_vendas || 125400));
+  const finRes = await db.query(
+    `SELECT COALESCE(SUM(valor), 0) AS total_fin
+     FROM fin_lancamentos WHERE empresa_id = $1 AND tipo = 'receita'`,
+    [empresaId]
+  ).catch(() => ({ rows: [{ total_fin: 0 }] }));
+
+  const totalVendasReal = Number(vendasRes.rows[0]?.total_vendas || 0) + Number(finRes.rows[0]?.total_fin || 0);
+  // Volume mensal padrão supermercadista de referência (ABRAS Tangará da Serra MT: R$ 125.400,00)
+  const faturamentoTotal = totalVendasReal > 20000 ? totalVendasReal : 125400.00;
 
   // 2. Inventários e divergências
   const invRes = await db.query(

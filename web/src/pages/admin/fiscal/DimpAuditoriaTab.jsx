@@ -30,8 +30,14 @@ export default function DimpAuditoriaTab() {
     carregarAuditoria();
   }, []);
 
-  const handleRegularizarLote = async () => {
-    if (!auditoria?.vendasPendentesEmissao?.length) return;
+  const [flagEmissaoManual, setFlagEmissaoManual] = useState(false);
+  const [modalItemEmitir, setModalItemEmitir] = useState(null);
+
+  const handleEmitirItemIndividual = async (item) => {
+    if (!flagEmissaoManual) {
+      alert("Ative a flag de confirmação para autorizar a emissão individual.");
+      return;
+    }
     setRegularizando(true);
     try {
       const token = localStorage.getItem('sp_token') || localStorage.getItem('token');
@@ -41,25 +47,24 @@ export default function DimpAuditoriaTab() {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer ' + token
         },
-        body: JSON.stringify({ itens: auditoria.vendasPendentesEmissao })
+        body: JSON.stringify({ 
+          itens: [item],
+          confirmacaoManualExplicita: true 
+        })
       });
       const data = await res.json();
       if (data.sucesso) {
-        setMensagemSucesso(data.mensagem);
+        setMensagemSucesso(`NFC-e emitida com sucesso para NSU ${item.nsu} (R$ ${item.valorFaltante.toFixed(2)})`);
         setAuditoria(prev => ({
           ...prev,
-          analiseDivergencia: {
-            ...prev.analiseDivergencia,
-            diferencaNaoFaturada: 0,
-            percentualCobertura: 100,
-            nivelRisco: 'ZERO',
-            parecerFiscal: '100% dos recebimentos eletrônicos (Cartão e Pix) possuem respaldo em notas fiscais emitidas.'
-          },
-          vendasPendentesEmissao: []
+          vendasPendentesEmissao: prev.vendasPendentesEmissao.filter(v => v.nsu !== item.nsu)
         }));
+        setModalItemEmitir(null);
+      } else {
+        alert("Erro na emissão: " + (data.erro || "Rejeição SEFAZ"));
       }
     } catch (err) {
-      alert('Erro na regularização: ' + err.message);
+      alert("Erro na emissão individual: " + err.message);
     } finally {
       setRegularizando(false);
     }
@@ -176,25 +181,42 @@ export default function DimpAuditoriaTab() {
                 Vendas em Cartão/Pix Pendentes de Emissão Fiscal
               </h3>
             </div>
-            <button
-              onClick={handleRegularizarLote}
-              disabled={regularizando}
-              style={{
-                padding: '10px 18px',
-                background: '#d97706',
-                color: '#ffffff',
-                border: 'none',
-                borderRadius: '8px',
-                fontSize: '13px',
-                fontWeight: 700,
-                cursor: 'pointer',
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: '8px'
-              }}
-            >
-              {regularizando ? 'Emitindo Notas...' : '⚡ Regularizar em Lote (Emitir NFC-e)'}
-            </button>
+                gap: '8px',
+                background: '#ffffff',
+                padding: '6px 12px',
+                borderRadius: '6px',
+                border: '1px solid #cbd5e1',
+                fontSize: '12px',
+                fontWeight: 600,
+                color: '#475569'
+              }}>
+                <input
+                  type="checkbox"
+                  id="flag-manual-dimp"
+                  checked={flagEmissaoManual}
+                  onChange={(e) => setFlagEmissaoManual(e.target.checked)}
+                  style={{ cursor: 'pointer' }}
+                />
+                <label htmlFor="flag-manual-dimp" style={{ cursor: 'pointer' }}>
+                  Permitir emissão individual assistida (Trava Anti-Lote ativa)
+                </label>
+              </div>
+              <div style={{
+                padding: '8px 14px',
+                background: '#f1f5f9',
+                color: '#475569',
+                borderRadius: '8px',
+                fontSize: '12px',
+                fontWeight: 700,
+                border: '1px solid #e2e8f0'
+              }}>
+                🔒 Emissão em Lote Desativada
+              </div>
+            </div>
           </div>
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
             <thead style={{ background: '#f8fafc', color: '#475569', fontWeight: 700 }}>
@@ -204,6 +226,7 @@ export default function DimpAuditoriaTab() {
                 <th style={{ padding: '12px 16px' }}>NSU / Comprovante</th>
                 <th style={{ padding: '12px 16px' }}>Item Sugerido</th>
                 <th style={{ padding: '12px 16px', textAlign: 'right' }}>Valor Pendente</th>
+                <th style={{ padding: '12px 16px', textAlign: 'center' }}>Ação Fiscal</th>
               </tr>
             </thead>
             <tbody>
@@ -217,6 +240,24 @@ export default function DimpAuditoriaTab() {
                   <td style={{ padding: '12px 16px', color: '#334155' }}>{v.itensSugeridos[0]?.descricao}</td>
                   <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 800, color: '#0f172a' }}>
                     R$ {v.valorFaltante.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  </td>
+                  <td style={{ padding: '12px 16px', textAlign: 'center' }}>
+                    <button
+                      onClick={() => handleEmitirItemIndividual(v)}
+                      disabled={!flagEmissaoManual || regularizando}
+                      style={{
+                        padding: '6px 12px',
+                        background: flagEmissaoManual ? '#0284c7' : '#e2e8f0',
+                        color: flagEmissaoManual ? '#ffffff' : '#94a3b8',
+                        border: 'none',
+                        borderRadius: '6px',
+                        fontSize: '11px',
+                        fontWeight: 700,
+                        cursor: flagEmissaoManual ? 'pointer' : 'not-allowed'
+                      }}
+                    >
+                      Emitir Avulsa
+                    </button>
                   </td>
                 </tr>
               ))}

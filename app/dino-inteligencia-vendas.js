@@ -215,10 +215,10 @@ export function obterConversoesVenda(raiz, empresaId) {
 
 function identificarChaveTenant(empresaId) {
   const empId = String(empresaId || '').toLowerCase().trim();
-  if (empId.includes('d0d0ac01') || empId === 'dino' || empId.includes('dino')) return 'dino';
-  if (empId.includes('2e041110') || empId === 'stallone' || empId.includes('stallone')) return 'stallone';
-  if (empId.includes('a8000001') || empId === 'agroopen' || empId.includes('agro')) return 'agroopen';
-  if (empId.includes('supermercado') || empId.includes('mercado') || empId.includes('emporio')) return 'supermercado';
+  if (empId.includes('d0d0ac01') || empId === 'dino' || empId.includes('dino') || empId.includes('barbearia')) return 'dino';
+  if (empId.includes('2e041110') || empId === 'agroopen' || empId.includes('agro')) return 'agroopen';
+  if (empId.includes('31f70c83') || empId.includes('d0d0ac02') || empId === 'stallone' || empId.includes('stallone')) return 'stallone';
+  if (empId.includes('supermercado') || empId.includes('mercado') || empId.includes('00000000-0000-0000-0000-000000000002') || empId.includes('emporio')) return 'supermercado';
   if (empId.includes('varejo') || empId.includes('moda') || empId.includes('loja')) return 'varejo';
   return empId || 'desconhecido';
 }

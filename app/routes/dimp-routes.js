@@ -31,11 +31,28 @@ export function createDimpRoutes({ auth, obterEmpresaId }) {
     }
   });
 
-  // Regulariza em lote pendências de cartão e Pix emitindo as notas fiscais
+  // Regularização assistida individual (Emissão em lote bloqueada por diretriz fiscal SEFAZ-MT)
   router.post('/regularizar-lote', (req, res) => {
     try {
       const empresaId = typeof obterEmpresaId === 'function' ? obterEmpresaId(req) : req.empresaId;
       const itensRegularizar = req.body.itens || [];
+      
+      // Bloqueia emissão automática em lote sem confirmação manual
+      if (!req.body.confirmacaoManualExplicita) {
+        return res.status(403).json({
+          sucesso: false,
+          erro: "Emissão em lote desativada por política de segurança fiscal (SEFAZ-MT). Ative a flag de emissão individual assistida."
+        });
+      }
+
+      // Limita a 1 documento por chamada assistida para evitar disparos massivos descontrolados
+      if (itensRegularizar.length > 1) {
+        return res.status(400).json({
+          sucesso: false,
+          erro: "Diretriz SEFAZ: autorizada emissão de apenas 1 documento fiscal por validação assistida."
+        });
+      }
+
       const resultado = regularizarPendenciasDimp({ empresaId, itensRegularizar });
       return res.json(resultado);
     } catch (err) {

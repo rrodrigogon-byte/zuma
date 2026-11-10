@@ -117,5 +117,6 @@
   "116_supermercado_fase7_auditoria_fraude_tabloide_trade.sql": "907d844b0b2893f3c87335b3838f3b2574c4cc54a7d54426e5c6e68f1d85fa62",
   "117_empresas_canonicas_e_lancamentos_todas_empresas.sql": "584430f8bafece46bcdaf9b6e2fe09aed5078bc69c65f2872c5ad3835c12f218",
   "118_negocios_multi_negocio_governance.sql": "733361791f53aa869d5bf2f65ee4c0b07c17d4b6f659110f6d1d2a7f72258ad6",
-  "119_supermercado_seed_enterprise_operacoes.sql": "1e89672beaefe37794708c43cb9ff8e6f4e1a8b21f61d3acc2e565e6fa7b0389"
+  "119_supermercado_seed_enterprise_operacoes.sql": "1e89672beaefe37794708c43cb9ff8e6f4e1a8b21f61d3acc2e565e6fa7b0389",
+  "118_corrigir_emitentes_fiscais_todas_empresas.sql": "06b1820c6a17f20b14309371726b4777ae1a95742f2e4f783880a1f9ba2eb984"
 }

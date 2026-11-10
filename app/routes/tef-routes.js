@@ -16,6 +16,8 @@ import {
   testarConexaoTerminal,
   processarTransacaoTef,
   listarTransacoesTef,
+  excluirTransacaoTef,
+  expurgarTransacoesSimuladas,
   conciliarLoteTefComExtrato,
   resumoPrevisaoRecebiveis
 } from '../core/tef-multimaquininhas-brasil.js';
@@ -134,6 +136,28 @@ export function createTefRouter({ obterEmpresaId }) {
     const empresaId = resolverEmpresa(req);
     const transacoes = listarTransacoesTef(empresaId, req.query);
     res.json({ ok: true, total: transacoes.length, transacoes });
+  });
+
+  // Excluir transação TEF específica
+  router.delete('/transacoes/:id', (req, res) => {
+    try {
+      const empresaId = resolverEmpresa(req);
+      const resultado = excluirTransacaoTef(empresaId, req.params.id);
+      res.json({ ok: true, ...resultado });
+    } catch (err) {
+      res.status(404).json({ ok: false, erro: err.message });
+    }
+  });
+
+  // Expurgar todas as transações simuladas da empresa
+  router.post('/transacoes/expurgar-simuladas', (req, res) => {
+    try {
+      const empresaId = resolverEmpresa(req);
+      const resultado = expurgarTransacoesSimuladas(empresaId);
+      res.json({ ok: true, ...resultado });
+    } catch (err) {
+      res.status(500).json({ ok: false, erro: err.message });
+    }
   });
 
   // Processar / Simular transação TEF
