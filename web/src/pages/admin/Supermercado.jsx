@@ -3140,6 +3140,30 @@ export default function Supermercado() {
             </div>
           </div>
         )}
+        {/* ── ABA DRE DE LOJA & EBITDA ── */}
+        {abaAtiva === 'dre' && (
+          <DreEbitdaCompletoPanel toast={showToast} />
+        )}
+
+        {/* ── ABA SPED FISCAL BLOCO K ── */}
+        {abaAtiva === 'sped' && (
+          <SpedFiscalBlocoKPanel toast={showToast} />
+        )}
+
+        {/* ── ABA MATRIZ TRIBUTÁRIA ── */}
+        {abaAtiva === 'tributario' && (
+          <MatrizTributariaPanel toast={showToast} />
+        )}
+
+        {/* ── ABA CONCILIAÇÃO TEF/PIX ── */}
+        {abaAtiva === 'conciliacao' && (
+          <ConciliacaoTefPixPanel toast={showToast} />
+        )}
+
+        {/* ── ABA TESOURARIA / COFRE & MALOTES ── */}
+        {abaAtiva === 'tesouraria' && (
+          <TesourariaCofrePanel toast={showToast} />
+        )}
       </main>
 
       {/* ════════════════════════════════════════════════════════════════════════
