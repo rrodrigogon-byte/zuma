@@ -294,7 +294,7 @@ export async function listarEmpresas(db, { incluirInativas = false, empresaIdFil
   empresas = empresas.filter(e => {
     const nome = String(e.nome || "").toLowerCase();
     const cnpj = somenteDigitos(e.cnpj);
-    if (nome.includes("imperial") || nome.includes("homologação alterada") || cnpj === "98765432000199" || cnpj === "11222333000181") {
+    if (nome.includes("homologação alterada") || cnpj === "11222333000181") {
       return false;
     }
     return true;
