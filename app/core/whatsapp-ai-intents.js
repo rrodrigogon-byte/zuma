@@ -111,7 +111,9 @@ export function strictConfirmIntent(text, { actionType = '' } = {}) {
 
 /** A última fala do atendente pediu exatamente SIM/NÃO para a ação pendente? */
 export function naturalConfirmationAllowed(lastAssistantText) {
-  return String(lastAssistantText || '').includes(CONFIRMATION_HINT);
+  const text = String(lastAssistantText || '');
+  if (text.includes(CONFIRMATION_HINT)) return true;
+  return /\b(?:responda\s+(?:\*?sim\*?|\*?n[aã]o\*?)|para\s+confirmar|confere\s+(?:a[ií]|pra\s+mim)|posso\s+confirmar|vamos\s+agendar|posso\s+deixar\s+marcado|deseja\s+confirmar|quer\s+confirmar|fechado\?|tudo\s+certo\?)\b/i.test(text);
 }
 
 /**

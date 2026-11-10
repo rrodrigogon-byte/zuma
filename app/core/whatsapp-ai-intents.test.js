@@ -63,4 +63,12 @@ test('resposta natural só vale logo após o pedido de confirmação; palavra ex
   // num cancelamento de horário, "cancela" logo após o resumo confirma o cancelamento
   assert.equal(resolveConfirmation('cancela', { actionType: 'cancelamento', lastAssistantText: resumo }), 'confirm');
   assert.equal(resolveConfirmation('🙏', { lastAssistantText: resumo }), null);
+
+  // Variações reais de assistente ("Confere aí", "Para confirmar, responda SIM ou NÃO", "Posso confirmar?")
+  const resumoReal = 'Confere aí: Corte e barba com Dino para Rodrigo Goncalves, hoje, terça 27/10 às 18:45, no valor de R$ 600,00. Para confirmar, responda SIM ou NÃO.';
+  assert.equal(resolveConfirmation('Sim', { lastAssistantText: resumoReal }), 'confirm');
+  assert.equal(resolveConfirmation('pode marcar', { lastAssistantText: resumoReal }), 'confirm');
+  assert.equal(resolveConfirmation('fechado', { lastAssistantText: resumoReal }), 'confirm');
+  assert.equal(resolveConfirmation('bora', { lastAssistantText: resumoReal }), 'confirm');
+  assert.equal(resolveConfirmation('Não', { lastAssistantText: resumoReal }), 'cancel');
 });
