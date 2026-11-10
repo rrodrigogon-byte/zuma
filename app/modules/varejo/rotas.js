@@ -15,14 +15,13 @@ export function createVarejoAdminRouter({ db, escopoDaRequisicao, fuso = 'Americ
       const { empresaId, lojaRestrita = null } = await escopoDaRequisicao(req, permissao);
       // Trava de Módulo: Barbearia Dino e negócios sem licença não acessam Supermercado
       const empRes = await db.query(
-        "SELECT id, nome, tipo_negocio, modulos FROM empresas WHERE id = $1 LIMIT 1",
+        "SELECT id, nome, tipo_negocio FROM empresas WHERE id = $1 LIMIT 1",
         [empresaId]
       );
       const emp = empRes.rows[0];
       const tipo = String(emp?.tipo_negocio || "").toLowerCase();
       const nomeEmp = String(emp?.nome || "").toLowerCase();
-      const modulos = Array.isArray(emp?.modulos) ? emp.modulos.map(m => String(m).toLowerCase()) : [];
-      if ((tipo === "barbearia" || nomeEmp.includes("dino")) && !modulos.includes("supermercado") && !modulos.includes("varejo")) {
+      if (tipo === "barbearia" || nomeEmp.includes("dino")) {
         throw new ErroDominio("MODULO_NAO_LIBERADO", "O módulo de Supermercado não está liberado para este negócio.", 403);
       }
       let pedida = String(req.query.lojaId ?? req.query.loja_id ?? req.body?.lojaId ?? req.headers['x-loja-id'] ?? '').trim() || null;
