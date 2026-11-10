@@ -104,6 +104,7 @@ const migrationFiles = [
   '117_empresas_canonicas_e_lancamentos_todas_empresas.sql',
   '118_negocios_multi_negocio_governance.sql',
   '119_supermercado_seed_enterprise_operacoes.sql',
+  '120_corrigir_emitentes_fiscais_todas_empresas.sql',
 ];
 const advisoryLockKey = 825410732;
 
