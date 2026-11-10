@@ -789,6 +789,10 @@ async function adminContext(req) {
 
 async function requirePermission(req, permission) {
   // Administradores globais e gestores autorizados têm bypass de permissão no Commerce Core
+  const isOperador = req.user?.role === 'operador' || req.user?.perfil === 'operador';
+  const urlPath = String(req.originalUrl || req.url || '').split('?')[0];
+  const isWhatsappSessionRoute = urlPath.startsWith('/api/admin/commerce/whatsapp-ai');
+
   if (
     req.user?.platformAdmin === true ||
     req.user?.role === 'admin' ||
@@ -796,7 +800,8 @@ async function requirePermission(req, permission) {
     req.user?.role === 'organizador' ||
     req.user?.role === 'gerente' ||
     req.user?.mainAdmin === true ||
-    isLegacyGlobalAdmin(req.user)
+    isLegacyGlobalAdmin(req.user) ||
+    (isOperador && isWhatsappSessionRoute)
   ) {
     const context = await adminContext(req);
     context.corporateAccess = true;
