@@ -147,10 +147,10 @@ BEGIN
   -- 6. Inserir Endereçamento WMS (Gôndola x Pulmão)
   IF v_arroz_id IS NOT NULL THEN
     INSERT INTO var_enderecamento_wms (
-      empresa_id, item_id, codigo_endereco, rua, predio, andar, tipo_localizacao, capacidade_maxima, ponto_reposicao, saldo_atual, ativo
+      empresa_id, item_id, codigo_endereco, rua, predio, andar, vao, tipo_localizacao, capacidade_maxima, ponto_reposicao, saldo_atual, ativo
     ) VALUES
-    (v_empresa_id, v_arroz_id, 'RUA-A-01-N1', 'A', '01', '1', 'GONDOLA_PICKING', 120, 30, 45, true),
-    (v_empresa_id, v_arroz_id, 'RUA-A-01-N3', 'A', '01', '3', 'PULMAO_AEREO', 240, 50, 180, true)
+    (v_empresa_id, v_arroz_id, 'RUA-A-01-N1-V01', 'A', '01', '1', '01', 'GONDOLA_PICKING', 120, 30, 45, true),
+    (v_empresa_id, v_arroz_id, 'RUA-A-01-N3-V01', 'A', '01', '3', '01', 'PULMAO_AEREO', 240, 50, 180, true)
     ON CONFLICT DO NOTHING;
   END IF;
 
