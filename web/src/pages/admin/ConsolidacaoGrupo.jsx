@@ -418,9 +418,9 @@ export default function ConsolidacaoGrupo() {
               <div style={{ fontSize: 24, fontWeight: 900, color: 'var(--navy, #12283F)', marginTop: 8 }}>
                 {fmtBRL(dados?.consolidacaoFinanceira?.receitaBruta)}
               </div>
-              <div style={{ fontSize: 11, color: '#10b981', fontWeight: 700, marginTop: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
-                <ArrowUpRight style={{ width: 14, height: 14 }} />
-                <span>Consolidação 100% Auditada</span>
+              <div style={{ fontSize: 11, color: dados?.consolidacaoFinanceira?.dadoParcial ? '#f59e0b' : '#10b981', fontWeight: 700, marginTop: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
+                <ShieldCheck style={{ width: 14, height: 14 }} />
+                <span>{dados?.consolidacaoFinanceira?.dadoParcial ? 'Dado Parcial · Sem movimentação em algumas unidades' : 'Dados Reais Consolidados da Holding'}</span>
               </div>
             </div>
 
@@ -618,7 +618,10 @@ export default function ConsolidacaoGrupo() {
                             </span>
                           </td>
                           <td style={{ padding: '14px 18px', textAlign: 'right', fontWeight: 800, color: 'var(--navy, #12283F)' }}>
-                            {fmtBRL(emp.faturamento)}
+                            <div>{emp.faturamento > 0 ? fmtBRL(emp.faturamento) : '—'}</div>
+                            {emp.dadoParcial && (
+                              <span style={{ fontSize: 10, color: '#f59e0b', fontWeight: 700 }}>Sem lançamentos</span>
+                            )}
                           </td>
                           <td style={{ padding: '14px 18px', textAlign: 'center' }}>
                             <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>

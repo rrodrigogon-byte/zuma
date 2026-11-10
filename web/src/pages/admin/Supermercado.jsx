@@ -23,6 +23,18 @@ import MatrizTributariaPanel from './fiscal/MatrizTributariaPanel';
 import DreEbitdaCompletoPanel from './financeiro/DreEbitdaCompletoPanel';
 import ConciliacaoTefPixPanel from './financeiro/ConciliacaoTefPixPanel';
 import TesourariaCofrePanel from './financeiro/TesourariaCofrePanel';
+import SelfCheckoutTotemPanel from './varejo/SelfCheckoutTotemPanel';
+import TrocasSacPanel from './varejo/TrocasSacPanel';
+import PlanogramaGondolaPanel from './varejo/PlanogramaGondolaPanel';
+import KioskBuscaPrecoPanel from './varejo/KioskBuscaPrecoPanel';
+import HortifrutiFlvPanel from './varejo/HortifrutiFlvPanel';
+import RotisseriaKdsPanel from './varejo/RotisseriaKdsPanel';
+import DocasRecebimentoPanel from './varejo/DocasRecebimentoPanel';
+import WmsEnderecamentoPanel from './varejo/WmsEnderecamentoPanel';
+import PickingEcommercePanel from './varejo/PickingEcommercePanel';
+import AuditoriaFraudePdvPanel from './varejo/AuditoriaFraudePdvPanel';
+import TabloidesEncartesPanel from './varejo/TabloidesEncartesPanel';
+import AuditoriaNoturnaPanel from './varejo/AuditoriaNoturnaPanel';
 
 const DEPARTAMENTOS = [
   'Açougue e Carnes',
@@ -54,10 +66,12 @@ const AREAS_SUPERMERCADO = [
     numero: '2',
     nome: 'Vendas e caixa',
     icone: '💵',
-    descricao: 'Frente de caixa, terminais, tesouraria e conciliação',
+    descricao: 'Frente de caixa, terminais, self-checkout, trocas, tesouraria e conciliação',
     subAbas: [
       { id: 'pdv', nome: 'Frente de Caixa (PDV)', iconeName: 'ShoppingCart' },
       { id: 'terminais', nome: 'Caixas & Terminais', iconeName: 'Tv', badgeKey: 'terminais' },
+      { id: 'totem', nome: 'Autoatendimento (Self-Checkout)', iconeName: 'Tv' },
+      { id: 'trocas', nome: 'Trocas & Devoluções (SAC)', iconeName: 'RotateCcw' },
       { id: 'tesouraria', nome: 'Tesouraria & Cofre Central', iconeName: 'Landmark' },
       { id: 'conciliacao', nome: 'Conciliação TEF & Pix', iconeName: 'CreditCard' }
     ]
@@ -67,11 +81,13 @@ const AREAS_SUPERMERCADO = [
     numero: '3',
     nome: 'Produtos e preços',
     icone: '🏷️',
-    descricao: 'Mix, atacarejo, promoções, balanças, etiquetas e margens',
+    descricao: 'Mix, atacarejo, promoções, planograma, busca-preço, etiquetas e balanças',
     subAbas: [
       { id: 'mix', nome: 'Mix & Gôndola', iconeName: 'Barcode', badgeKey: 'produtos' },
       { id: 'atacarejo', nome: 'Preço por Volume (Atacarejo)', iconeName: 'Layers', badgeKey: 'atacarejo' },
       { id: 'promocoes', nome: 'Promoções & Tabloides', iconeName: 'Percent', badgeKey: 'promocoes' },
+      { id: 'planograma', nome: 'Planograma de Gôndola', iconeName: 'LayoutGrid' },
+      { id: 'kiosk', nome: 'Busca-Preço Kiosk', iconeName: 'Monitor' },
       { id: 'etiquetas', nome: 'Etiquetas de Gôndola', iconeName: 'Tag' },
       { id: 'balancas', nome: 'Carga de Balanças', iconeName: 'Scale' },
       { id: 'margens', nome: 'Margens & Curva ABC', iconeName: 'TrendingUp' }
@@ -82,11 +98,13 @@ const AREAS_SUPERMERCADO = [
     numero: '4',
     nome: 'Perecíveis e produção',
     icone: '🥩',
-    descricao: 'Controle de validade FEFO, açougue e padaria',
+    descricao: 'Controle de validade FEFO, açougue, padaria, hortifrúti e rotisseria',
     subAbas: [
       { id: 'lotes', nome: 'Validade (FEFO)', iconeName: 'AlertTriangle', badgeKey: 'lotesRisco', alert: true },
       { id: 'desossa', nome: 'Açougue & Desossa', iconeName: 'Beef', badgeKey: 'desossas' },
-      { id: 'padaria', nome: 'Padaria & Produção', iconeName: 'UtensilsCrossed' }
+      { id: 'padaria', nome: 'Padaria & Produção', iconeName: 'UtensilsCrossed' },
+      { id: 'hortifruti', nome: 'Hortifrúti (FLV)', iconeName: 'Apple' },
+      { id: 'rotisseria', nome: 'Rotisseria & KDS', iconeName: 'ChefHat' }
     ]
   },
   {
@@ -94,10 +112,13 @@ const AREAS_SUPERMERCADO = [
     numero: '5',
     nome: 'Suprimentos e estoque',
     icone: '📦',
-    descricao: 'Entrada de mercadorias, reposição, inventário e compras',
+    descricao: 'Entrada de mercadorias, ruptura, docas, WMS, picking e compras',
     subAbas: [
       { id: 'nfe', nome: 'Entrada NF-e XML', iconeName: 'FileText' },
       { id: 'ruptura', nome: 'Ruptura & Reposição', iconeName: 'Boxes', badgeKey: 'rupturas', alert: true },
+      { id: 'docas', nome: 'Recebimento & Docas', iconeName: 'Truck' },
+      { id: 'wms', nome: 'Endereçamento WMS', iconeName: 'Layers' },
+      { id: 'picking', nome: 'Picking E-commerce', iconeName: 'ShoppingBag' },
       { id: 'inventarios', nome: 'Inventário Cíclico', iconeName: 'ClipboardCheck' },
       { id: 'sugestaocompras', nome: 'Sugestão de Compras (GMD)', iconeName: 'ShoppingCart', badgeKey: 'compras' }
     ]
@@ -107,22 +128,25 @@ const AREAS_SUPERMERCADO = [
     numero: '6',
     nome: 'Clientes e prevenção',
     icone: '🛡️',
-    descricao: 'Fidelidade de clientes e prevenção de perdas e quebras',
+    descricao: 'Fidelidade, prevenção de perdas, auditoria de fraude e fechamento',
     subAbas: [
       { id: 'clube', nome: 'Clube Fidelidade', iconeName: 'Users', badgeKey: 'clube' },
-      { id: 'perdas', nome: 'Prevenção de Perdas', iconeName: 'ShieldAlert' }
+      { id: 'perdas', nome: 'Prevenção de Perdas', iconeName: 'ShieldAlert' },
+      { id: 'auditoria_fraude', nome: 'Auditoria Fraude PDV', iconeName: 'ShieldAlert' },
+      { id: 'tabloides', nome: 'Tabloides WhatsApp', iconeName: 'Megaphone' },
+      { id: 'auditoria_noturna', nome: 'Auditoria Noturna Gôndola', iconeName: 'Moon' }
     ]
   },
   {
-    id: 'erp_comum',
+    id: 'erp_integrado',
     numero: '7',
     nome: 'ERP Integrado',
     icone: '🏛️',
-    descricao: 'DRE do negócio, matriz tributária e SPED Bloco K',
+    descricao: 'Demonstrativo DRE/EBITDA, Matriz Tributária e SPED Fiscal Bloco K',
     subAbas: [
-      { id: 'dre', nome: 'DRE de Loja & EBITDA', iconeName: 'TrendingUp' },
-      { id: 'tributario', nome: 'Matriz Tributária (ICMS/PIS/COFINS)', iconeName: 'Scale' },
-      { id: 'sped', nome: 'SPED Fiscal Bloco K', iconeName: 'FileText' }
+      { id: 'dre', nome: 'DRE de Loja & EBITDA', iconeName: 'Activity' },
+      { id: 'tributario', nome: 'Matriz Tributária (ICMS/PIS/COFINS)', iconeName: 'Landmark' },
+      { id: 'sped', nome: 'SPED Fiscal Bloco K', iconeName: 'FileSpreadsheet' }
     ]
   }
 ];
@@ -202,6 +226,17 @@ export default function Supermercado() {
       case 'ShieldAlert': return <ShieldAlert size={16} />;
       case 'Landmark': return <Landmark size={16} />;
       case 'CreditCard': return <CreditCard size={16} />;
+      case 'RotateCcw': return <RotateCcw size={16} />;
+      case 'LayoutGrid': return <LayoutGrid size={16} />;
+      case 'Monitor': return <Monitor size={16} />;
+      case 'Apple': return <Apple size={16} />;
+      case 'ChefHat': return <UtensilsCrossed size={16} />;
+      case 'Truck': return <Truck size={16} />;
+      case 'ShoppingBag': return <ShoppingCart size={16} />;
+      case 'Megaphone': return <Percent size={16} />;
+      case 'Moon': return <Moon size={16} />;
+      case 'Activity': return <Activity size={16} />;
+      case 'FileSpreadsheet': return <FileText size={16} />;
       default: return <Store size={16} />;
     }
   };
@@ -3412,6 +3447,55 @@ export default function Supermercado() {
         {/* ── ABA TESOURARIA / COFRE & MALOTES ── */}
         {abaAtiva === 'tesouraria' && (
           <TesourariaCofrePanel toast={showToast} />
+        )}
+
+        {/* ── PAINÉIS OPERACIONAIS OFICIAIS DAS 7 ÁREAS ── */}
+        {abaAtiva === 'totem' && (
+          <SelfCheckoutTotemPanel toast={showToast} />
+        )}
+
+        {abaAtiva === 'trocas' && (
+          <TrocasSacPanel toast={showToast} />
+        )}
+
+        {abaAtiva === 'planograma' && (
+          <PlanogramaGondolaPanel toast={showToast} />
+        )}
+
+        {abaAtiva === 'kiosk' && (
+          <KioskBuscaPrecoPanel toast={showToast} />
+        )}
+
+        {abaAtiva === 'hortifruti' && (
+          <HortifrutiFlvPanel toast={showToast} />
+        )}
+
+        {abaAtiva === 'rotisseria' && (
+          <RotisseriaKdsPanel toast={showToast} />
+        )}
+
+        {abaAtiva === 'docas' && (
+          <DocasRecebimentoPanel toast={showToast} />
+        )}
+
+        {abaAtiva === 'wms' && (
+          <WmsEnderecamentoPanel toast={showToast} />
+        )}
+
+        {abaAtiva === 'picking' && (
+          <PickingEcommercePanel toast={showToast} />
+        )}
+
+        {abaAtiva === 'auditoria_fraude' && (
+          <AuditoriaFraudePdvPanel toast={showToast} />
+        )}
+
+        {abaAtiva === 'tabloides' && (
+          <TabloidesEncartesPanel toast={showToast} />
+        )}
+
+        {abaAtiva === 'auditoria_noturna' && (
+          <AuditoriaNoturnaPanel toast={showToast} />
         )}
       </main>
 

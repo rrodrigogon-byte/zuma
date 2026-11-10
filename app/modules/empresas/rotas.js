@@ -143,6 +143,97 @@ export function createEmpresasAdminRouter({ db, isPlatformAdmin = () => false, o
     return { grupos: gruposFiltrados, total: gruposFiltrados.length };
   }));
 
+  // ==========================================
+  // GOVERNANÇA DE NEGÓCIOS & MÓDULOS (ONDA 1)
+  // ==========================================
+  router.get("/negocios", executar(async ({ req }) => {
+    const ehAdminPlataforma = Boolean(isPlatformAdmin(req.user));
+    let empresaFiltro = req.query.empresaId || "";
+    if (!ehAdminPlataforma) {
+      empresaFiltro = String(obterEmpresaIdDoUsuario(req) || req.user?.empresaId || "");
+    }
+
+    let sql = `
+      SELECT n.id::text, n.empresa_id::text, n.tipo, n.nome, n.situacao, n.modulos_ligados,
+             e.nome AS empresa_nome, e.cnpj AS empresa_cnpj,
+             COUNT(l.id)::int AS total_unidades
+        FROM negocios n
+        JOIN empresas e ON e.id = n.empresa_id
+        LEFT JOIN lojas l ON l.negocio_id = n.id
+    `;
+    const params = [];
+    if (empresaFiltro) {
+      sql += ` WHERE n.empresa_id = $1 `;
+      params.push(empresaFiltro);
+    }
+    sql += ` GROUP BY n.id, n.empresa_id, n.tipo, n.nome, n.situacao, n.modulos_ligados, e.nome, e.cnpj
+             ORDER BY e.nome, n.nome `;
+
+    let rows = [];
+    try {
+      const res = await db.query(sql, params);
+      rows = res.rows || [];
+    } catch (e) {
+      console.warn("Erro ao buscar negocios do postgres:", e.message);
+    }
+
+    const empresasLista = await svc.listarEmpresas(db, { incluirInativas: false });
+
+    return {
+      negocios: rows,
+      total: rows.length,
+      empresas: empresasLista.map(e => ({ id: e.id, nome: e.nome, cnpj: e.cnpj, tipoNegocio: e.tipoNegocio }))
+    };
+  }));
+
+  router.post("/negocios", executar(async ({ req }) => {
+    if (!isPlatformAdmin(req.user)) {
+      const erro = new Error("Apenas administradores de plataforma podem criar novos negócios.");
+      erro.status = 403;
+      throw erro;
+    }
+    const { empresa_id, tipo, nome, modulos_ligados = [] } = req.body || {};
+    if (!empresa_id || !tipo || !nome) {
+      const erro = new Error("empresa_id, tipo e nome são obrigatórios.");
+      erro.status = 400;
+      throw erro;
+    }
+    const res = await db.query(
+      `INSERT INTO negocios (empresa_id, tipo, nome, situacao, modulos_ligados)
+       VALUES ($1, $2, $3, 'ativo', $4::jsonb)
+       RETURNING id::text, empresa_id::text, tipo, nome, situacao, modulos_ligados`,
+      [empresa_id, tipo, nome, JSON.stringify(modulos_ligados)]
+    );
+    return { ok: true, negocio: res.rows[0] };
+  }, 201));
+
+  router.put("/negocios/:id/modulos", executar(async ({ req }) => {
+    const { id } = req.params;
+    const { modulos_ligados } = req.body || {};
+    if (!Array.isArray(modulos_ligados)) {
+      const erro = new Error("modulos_ligados deve ser um array.");
+      erro.status = 400;
+      throw erro;
+    }
+    if (!modulos_ligados.includes("erp_comum")) {
+      modulos_ligados.unshift("erp_comum");
+    }
+    const res = await db.query(
+      `UPDATE negocios
+          SET modulos_ligados = $1::jsonb,
+              atualizado_em = NOW()
+        WHERE id = $2
+        RETURNING id::text, empresa_id::text, tipo, nome, situacao, modulos_ligados`,
+      [JSON.stringify(modulos_ligados), id]
+    );
+    if (!res.rows?.length) {
+      const erro = new Error("Negócio não encontrado.");
+      erro.status = 404;
+      throw erro;
+    }
+    return { ok: true, negocio: res.rows[0] };
+  }));
+
   // Log e Auditoria da Sincronização por Evento Interno
   router.get('/eventos-internos', executar(async ({ req }) => {
     const ehAdminPlataforma = Boolean(isPlatformAdmin(req.user));

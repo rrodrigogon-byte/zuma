@@ -461,6 +461,7 @@ const NAV_STALLONE_GROUPS = [
       { to: '/admin/cadastros-mestres', icon: '▤', label: 'Fornecedores e funcionários' },
       { to: '/admin/empresas', icon: '🏢', label: 'Empresas' },
       { to: '/admin/consolidacao-grupo', icon: '🏛️', label: 'Consolidação Holding' },
+      { to: '/admin/negocios-modulos', icon: '⚡', label: 'Negócios & Módulos' },
       { to: '/admin/lojas', icon: '▤', label: 'Unidades' },
       { to: '/admin/ecommerce?tab=users', icon: '♧', label: 'Usuários e acessos' },
       { to: '/admin/ecommerce?tab=audit', icon: '◌', label: 'Auditoria' },
@@ -482,6 +483,7 @@ const NAV_ADMIN = NAV_ADMIN_GROUPS.flatMap(g => g.items)
 
 const NAV_PLATFORM = [
   { to: '/admin/plataforma', icon: '🏢', label: 'Empresas e Módulos' },
+  { to: '/admin/negocios-modulos', icon: '⚡', label: 'Governança de Negócios' },
   { to: '/admin/plataforma/conciliacao-financeira', icon: '⚖️', label: 'Conciliação financeira' },
   { to: '/admin/licenciamento', icon: '🛡️', label: 'Licenciamento & Instâncias' },
   { to: '/admin/ia-advisor', icon: '✦', label: 'Kytto Advisor (Copilot IA)' },

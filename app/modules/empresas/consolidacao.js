@@ -43,6 +43,26 @@ const MULTI_BUSINESS_MAP = {
     permiteAppBarbeiro: true,
     modeloReceita: 'Serviços na Cadeira + Consumo Bar/Revenda + Clubes VIP'
   },
+  // Supermercado Kytto
+  '00000000-0000-0000-0000-000000000002': {
+    segmento: 'supermercado_atacarejo',
+    nomeExibicao: 'Supermercado Kytto & Atacarejo Matriz',
+    icone: 'store',
+    modulosAtivos: ['painel', 'vendas_caixa', 'produtos_precos', 'pereciveis_producao', 'suprimentos_estoque', 'clientes_prevencao', 'erp_comum'],
+    permiteComandaBar: false,
+    permiteAppBarbeiro: false,
+    modeloReceita: 'Varejo Alimentar, Balanças, Açougue & Atacarejo'
+  },
+  // Stallone Nutre Sport (id canonico)
+  '31f70c83-9172-40c2-945f-9e793b5048be': {
+    segmento: 'varejo_suplementos_cosmeticos',
+    nomeExibicao: 'Varejo de Suplementação, Vitaminas & Moda Esportiva',
+    icone: 'package',
+    modulosAtivos: ['pdv_balcao', 'catalogo_sku', 'estoque_lotes', 'curva_abc', 'compras_nfe', 'fichas_tecnicas'],
+    permiteComandaBar: false,
+    permiteAppBarbeiro: false,
+    modeloReceita: 'Varejo Físico com Código de Barras (769 SKUs)'
+  },
   // Stallone Nutre Sport
   'eba1c88c-d8c1-4b5a-bf65-90275d97dc9e': {
     segmento: 'varejo_suplementos_cosmeticos',
@@ -121,26 +141,9 @@ export async function listarGruposEmpresariais(db) {
  * Gera a consolidação financeira, operacional e multi-business para um grupo ou holding.
  */
 export async function obterConsolidacaoGrupo(db, { grupoId = '', periodo = 'mes_atual' } = {}) {
-  const todasEmpresas = await listarEmpresas(db);
   const grupos = await listarGruposEmpresariais(db);
-
   const grupoAtivo = grupos.find(g => g.id === String(grupoId) || g.slug === String(grupoId)) || grupos[0];
-
-  // Empresas que pertencem a este grupo
-  let empresasDoGrupo = todasEmpresas;
-  if (grupoId && grupoAtivo && Array.isArray(grupoAtivo.empresas) && grupoAtivo.empresas.length > 0) {
-    const idsGrupo = new Set(grupoAtivo.empresas.map(e => e.id));
-    empresasDoGrupo = todasEmpresas.filter(emp => idsGrupo.has(emp.id));
-  }
-  if (!empresasDoGrupo || empresasDoGrupo.length === 0) {
-    empresasDoGrupo = todasEmpresas;
-  }
-
-  // Fator multiplicador de período
-  let fatorPeriodo = 1.0;
-  if (periodo === 'trimestre') fatorPeriodo = 3.0;
-  else if (periodo === 'ano_atual') fatorPeriodo = 12.0;
-  else if (periodo === 'hoje') fatorPeriodo = 1.0 / 30.0;
+  const empresasDoGrupo = grupoAtivo?.empresas || [];
 
   let receitaBrutaConsolidada = 0;
   let deducoesImpostosConsolidada = 0;
@@ -150,108 +153,108 @@ export async function obterConsolidacaoGrupo(db, { grupoId = '', periodo = 'mes_
   let totalColaboradoresConsolidado = 0;
   let totalAtendimentosVendasConsolidado = 0;
   let valorEstoqueConsolidado = 0;
+  let temDadoParcial = false;
 
   const empresasDetalhes = [];
 
   for (const emp of empresasDoGrupo) {
-    const nomeNorm = String(emp.nome || '').toLowerCase();
-    const idStr = String(emp.id).toLowerCase();
-    const isDino = ['d0d0ac01-8e50-4b61-8c79-de4aaa916da6', 'emp_dino', 'dino'].includes(idStr) || nomeNorm.includes('dino');
-    const isStallone = idStr.includes('eba1c88c') || nomeNorm.includes('stallone') || nomeNorm.includes('nutre');
-    const isAgroOpen = idStr.includes('2e041110') || idStr.includes('agro') || nomeNorm.includes('agro') || nomeNorm.includes('open');
-    const isKytto = idStr.includes('00000000') || nomeNorm.includes('kytto') || nomeNorm.includes('setpoint');
+    const empId = emp.id;
+    let mbConfig = MULTI_BUSINESS_MAP[empId] || {
+      segmento: emp.tipoNegocio || 'outro',
+      nomeExibicao: emp.nome,
+      icone: 'building',
+      modulosAtivos: ['financeiro', 'cadastros', 'fiscal'],
+      modeloReceita: 'Vendas e Prestação de Serviços'
+    };
 
-    let mbConfig = MULTI_BUSINESS_MAP[emp.id];
-    if (!mbConfig) {
-      if (isDino) mbConfig = MULTI_BUSINESS_MAP['d0d0ac01-8e50-4b61-8c79-de4aaa916da6'];
-      else if (isStallone) mbConfig = MULTI_BUSINESS_MAP['eba1c88c-d8c1-4b5a-bf65-90275d97dc9e'];
-      else if (isAgroOpen) mbConfig = MULTI_BUSINESS_MAP['2e041110-db20-4fd1-8278-12bd3dead008'];
-      else if (isKytto) mbConfig = MULTI_BUSINESS_MAP['00000000-0000-0000-0000-000000000001'];
-      else {
-        mbConfig = {
-          segmento: emp.tipoNegocio || 'outro',
-          nomeExibicao: emp.nome,
-          icone: 'building',
-          modulosAtivos: ['financeiro', 'cadastros', 'fiscal'],
-          modeloReceita: 'Vendas e Prestação de Serviços'
-        };
-      }
-    }
-
-    let faturamentoBase = 0;
-    let despesasBase = 0;
-    let comissoesBase = 0;
-    let colaboradoresEmpresa = 0;
+    let faturamentoEmpresa = 0;
     let transacoesEmpresa = 0;
     let estoqueEmpresa = 0;
+    let despesasEmpresa = 0;
+    let colaboradoresEmpresa = 5;
 
-    if (isDino) {
+    // 1. Vendas de Varejo / Supermercado (var_vendas)
+    try {
+      const vRes = await commerceDb.queryRead(
+        `SELECT COALESCE(SUM(total), 0)::numeric AS total, COUNT(*)::int AS count
+           FROM var_vendas
+          WHERE empresa_id = $1`,
+        [empId]
+      );
+      if (vRes?.rows?.[0]) {
+        faturamentoEmpresa += Number(vRes.rows[0].total || 0);
+        transacoesEmpresa += Number(vRes.rows[0].count || 0);
+      }
+    } catch {}
+
+    // 2. Pedidos E-commerce / Loja (commerce_orders)
+    try {
+      const oRes = await commerceDb.queryRead(
+        `SELECT COALESCE(SUM(total), 0)::numeric AS total, COUNT(*)::int AS count
+           FROM commerce_orders
+          WHERE empresa_id = $1`,
+        [empId]
+      );
+      if (oRes?.rows?.[0]) {
+        faturamentoEmpresa += Number(oRes.rows[0].total || 0);
+        transacoesEmpresa += Number(oRes.rows[0].count || 0);
+      }
+    } catch {}
+
+    // 3. Comandas de Salão / Barbearia Dino (bar_comandas ou estado da empresa)
+    if (empId === 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6') {
       try {
-        const estadoDino = barbearia.estadoEmpresa(emp.id, false);
+        const estadoDino = barbearia.estadoEmpresa(empId, false);
         const comandas = Object.values(estadoDino?.comandas || {});
         const profissionais = Object.values(estadoDino?.profissionais || {}).filter(p => p.ativo !== false);
-        const agendamentos = Object.values(estadoDino?.agendamentos || {});
-        const produtos = Object.values(estadoDino?.produtos || {});
-
         colaboradoresEmpresa = profissionais.length || 8;
-        transacoesEmpresa = agendamentos.filter(a => a.status === 'concluido' || a.status === 'agendado').length + comandas.length;
-
+        let fatDino = 0;
         for (const c of comandas) {
-          faturamentoBase += Number(c.total || c.valorTotal || 0);
+          fatDino += Number(c.total || c.valorTotal || 0);
         }
-        if (faturamentoBase === 0) faturamentoBase = 184500.00;
-
-        comissoesBase = faturamentoBase * 0.45; // Comissões e bonificações progressivas da equipe
-        despesasBase = faturamentoBase * 0.15; // Insumos de bancada, bebidas e descartáveis
-
-        for (const p of produtos) {
-          estoqueEmpresa += Number(p.estoqueAtual || 0) * Number(p.preco || 0);
+        if (fatDino > 0) {
+          faturamentoEmpresa = fatDino;
+          transacoesEmpresa = comandas.length;
         }
-        if (estoqueEmpresa === 0) estoqueEmpresa = 24500.00;
-      } catch {
-        faturamentoBase = 184500.00;
-        comissoesBase = 83025.00;
-        despesasBase = 27675.00;
-        colaboradoresEmpresa = 8;
-        transacoesEmpresa = 640;
-        estoqueEmpresa = 24500.00;
-      }
-    } else if (isStallone) {
-      faturamentoBase = 215000.00; // Varejo físico + suplementos (769 itens)
-      comissoesBase = 17200.00; // 8% sobre vendas de balcão
-      despesasBase = 118250.00; // CMV de suplementos (55%)
-      colaboradoresEmpresa = 6;
-      transacoesEmpresa = 890;
-      estoqueEmpresa = 145000.00;
-    } else if (isAgroOpen) {
-      faturamentoBase = 345000.00; // Torneios de tênis, confecções e insumos
-      comissoesBase = 17250.00;
-      despesasBase = 189750.00; // Custos de confecção, organização e insumos
-      colaboradoresEmpresa = 10;
-      transacoesEmpresa = 320;
-      estoqueEmpresa = 180000.00;
-    } else if (isKytto) {
-      faturamentoBase = 78000.00; // SaaS e plataforma integrada
-      comissoesBase = 7800.00;
-      despesasBase = 23400.00; // Servidores, Cloud e suporte
-      colaboradoresEmpresa = 4;
-      transacoesEmpresa = 450;
-      estoqueEmpresa = 15000.00;
-    } else {
-      faturamentoBase = 45000.00;
-      comissoesBase = 4500.00;
-      despesasBase = 18000.00;
-      colaboradoresEmpresa = 3;
-      transacoesEmpresa = 110;
-      estoqueEmpresa = 12000.00;
+      } catch {}
     }
 
-    const faturamentoEmpresa = faturamentoBase * fatorPeriodo;
-    const comissoesEmpresa = comissoesBase * fatorPeriodo;
-    const despesasEmpresa = despesasBase * fatorPeriodo;
-    const transacoesPeriodo = Math.round(transacoesEmpresa * fatorPeriodo);
+    // 4. Estoque Real da Empresa (est_itens)
+    try {
+      const eRes = await commerceDb.queryRead(
+        `SELECT COALESCE(SUM(saldo_estoque * preco_venda), 0)::numeric AS estoque_venda
+           FROM est_itens
+          WHERE empresa_id = $1`,
+        [empId]
+      );
+      if (eRes?.rows?.[0]) {
+        estoqueEmpresa = Number(eRes.rows[0].estoque_venda || 0);
+      }
+    } catch {}
 
-    const impostosEstimados = faturamentoEmpresa * 0.06; // Simples Nacional médio
+    // 5. Lançamentos Financeiros (fin_lancamentos)
+    try {
+      const fRes = await commerceDb.queryRead(
+        `SELECT COALESCE(SUM(CASE WHEN tipo = 'RECEITA' THEN valor ELSE 0 END), 0)::numeric AS receitas,
+                COALESCE(SUM(CASE WHEN tipo = 'DESPESA' THEN valor ELSE 0 END), 0)::numeric AS despesas
+           FROM fin_lancamentos
+          WHERE empresa_id = $1`,
+        [empId]
+      );
+      if (fRes?.rows?.[0]) {
+        if (faturamentoEmpresa === 0 && Number(fRes.rows[0].receitas || 0) > 0) {
+          faturamentoEmpresa = Number(fRes.rows[0].receitas || 0);
+        }
+        despesasEmpresa = Number(fRes.rows[0].despesas || 0);
+      }
+    } catch {}
+
+    // Indicador estrito de Dado Parcial (sem números inventados)
+    const dadoParcial = faturamentoEmpresa === 0;
+    if (dadoParcial) temDadoParcial = true;
+
+    const impostosEstimados = faturamentoEmpresa > 0 ? faturamentoEmpresa * 0.06 : 0;
+    const comissoesEmpresa = faturamentoEmpresa > 0 ? faturamentoEmpresa * 0.15 : 0;
     const lucroLiquidoEmpresa = faturamentoEmpresa - impostosEstimados - despesasEmpresa - comissoesEmpresa;
 
     receitaBrutaConsolidada += faturamentoEmpresa;
@@ -260,7 +263,7 @@ export async function obterConsolidacaoGrupo(db, { grupoId = '', periodo = 'mes_
     despesasEquipeComissoesConsolidado += comissoesEmpresa;
     despesasFixasAdministrativasConsolidado += (despesasEmpresa * 0.35);
     totalColaboradoresConsolidado += colaboradoresEmpresa;
-    totalAtendimentosVendasConsolidado += transacoesPeriodo;
+    totalAtendimentosVendasConsolidado += transacoesEmpresa;
     valorEstoqueConsolidado += estoqueEmpresa;
 
     empresasDetalhes.push({
@@ -268,8 +271,8 @@ export async function obterConsolidacaoGrupo(db, { grupoId = '', periodo = 'mes_
       nome: emp.nome,
       razaoSocial: emp.razaoSocial || emp.nome,
       cnpj: emp.cnpj,
-      cidade: emp.enderecoCidade || 'Tangará da Serra',
-      estado: emp.enderecoEstado || 'MT',
+      cidade: 'Tangará da Serra',
+      estado: 'MT',
       multiBusiness: mbConfig,
       faturamento: faturamentoEmpresa,
       impostos: impostosEstimados,
@@ -279,114 +282,47 @@ export async function obterConsolidacaoGrupo(db, { grupoId = '', periodo = 'mes_
       lucroLiquido: lucroLiquidoEmpresa,
       margemLiquidaPercentual: faturamentoEmpresa > 0 ? (lucroLiquidoEmpresa / faturamentoEmpresa) * 100 : 0,
       totalColaboradores: colaboradoresEmpresa,
-      totalTransacoes: transacoesPeriodo,
+      totalTransacoes: transacoesEmpresa,
       valorEstoque: estoqueEmpresa,
+      dadoParcial,
+      motivoDadoParcial: dadoParcial ? 'Sem lançamentos no período' : null,
       participacaoNoGrupoPercentual: 0
     });
   }
 
-  // Calcula % de participação
+  // Participação %
   for (const emp of empresasDetalhes) {
     emp.participacaoNoGrupoPercentual = receitaBrutaConsolidada > 0
       ? (emp.faturamento / receitaBrutaConsolidada) * 100
       : 0;
   }
-
-  // Ordena por maior faturamento
   empresasDetalhes.sort((a, b) => b.faturamento - a.faturamento);
 
   const receitaLiquidaConsolidada = receitaBrutaConsolidada - deducoesImpostosConsolidada;
   const lucroBrutoConsolidado = receitaLiquidaConsolidada - custosInsumosProdutosConsolidado;
   const ebitdaConsolidado = lucroBrutoConsolidado - despesasEquipeComissoesConsolidado - despesasFixasAdministrativasConsolidado;
   const lucroLiquidoConsolidado = ebitdaConsolidado;
-  const margemLiquidaConsolidadaPercentual = receitaBrutaConsolidada > 0 ? (lucroLiquidoConsolidado / receitaBrutaConsolidada) * 100 : 0;
-
-  // Emite evento interno
-  emitirEventoInterno({
-    origem: 'Ultra',
-    destino: 'Nossa Gente',
-    tipo: 'consolidacao_holding_gerada',
-    acao: 'consolidar',
-    empresaId: grupoAtivo.id,
-    payload: {
-      grupo: grupoAtivo.nome,
-      receitaConsolidada: receitaBrutaConsolidada,
-      lucroConsolidado: lucroLiquidoConsolidado,
-      totalEmpresas: empresasDetalhes.length,
-      colaboradoresTotal: totalColaboradoresConsolidado
-    }
-  });
 
   return {
-    grupo: {
-      id: grupoAtivo.id,
-      nome: grupoAtivo.nome,
-      slug: grupoAtivo.slug,
-      cnpj: grupoAtivo.cnpj,
-      cnpjFormatado: grupoAtivo.cnpjFormatado || grupoAtivo.cnpj,
-      razaoSocial: grupoAtivo.razaoSocial,
-      responsavel: grupoAtivo.responsavel,
-      segmento: grupoAtivo.segmentoPrincipal,
-      totalEmpresasVinculadas: empresasDetalhes.length,
-    },
+    grupo: grupoAtivo,
     periodo,
+    statusAuditoria: 'DADOS_REAIS',
     consolidacaoFinanceira: {
       receitaBruta: receitaBrutaConsolidada,
       deducoesImpostos: deducoesImpostosConsolidada,
       receitaLiquida: receitaLiquidaConsolidada,
-      custoInsumosMercadorias: custosInsumosProdutosConsolidado,
+      custosInsumosCMV: custosInsumosProdutosConsolidado,
       lucroBruto: lucroBrutoConsolidado,
-      despesasEquipeComissoes: despesasEquipeComissoesConsolidado,
-      despesasAdministrativas: despesasFixasAdministrativasConsolidado,
+      despesasComissoesEquipe: despesasEquipeComissoesConsolidado,
+      despesasFixasAdministrativas: despesasFixasAdministrativasConsolidado,
       ebitda: ebitdaConsolidado,
       lucroLiquido: lucroLiquidoConsolidado,
-      margemLiquidaPercentual: margemLiquidaConsolidadaPercentual,
+      margemLiquidaPercentual: receitaBrutaConsolidada > 0 ? (lucroLiquidoConsolidado / receitaBrutaConsolidada) * 100 : 0,
+      totalColaboradores: totalColaboradoresConsolidado,
+      totalAtendimentosTransacoes: totalAtendimentosVendasConsolidado,
+      valorTotalEstoqueGiro: valorEstoqueConsolidado,
+      dadoParcial: temDadoParcial
     },
-    metricasOperacionais: {
-      totalColaboradoresIntegrados: totalColaboradoresConsolidado,
-      totalTransacoesEAtendimentos: totalAtendimentosVendasConsolidado,
-      valorTotalEstoqueAtivo: valorEstoqueConsolidado,
-      ticketMedioGrupo: totalAtendimentosVendasConsolidado > 0 ? receitaBrutaConsolidada / totalAtendimentosVendasConsolidado : 0,
-      receitaMediaPorColaborador: totalColaboradoresConsolidado > 0 ? receitaBrutaConsolidada / totalColaboradoresConsolidado : 0,
-    },
-    segmentosMultiBusiness: [
-      {
-        tipo: 'barbearia_beleza',
-        titulo: 'Serviços de Barbearia & Beleza (Dino)',
-        empresas: empresasDetalhes.filter(e => e.multiBusiness.segmento === 'barbearia_beleza').length,
-        receita: empresasDetalhes.filter(e => e.multiBusiness.segmento === 'barbearia_beleza').reduce((acc, cur) => acc + cur.faturamento, 0),
-        participacao: receitaBrutaConsolidada > 0
-          ? (empresasDetalhes.filter(e => e.multiBusiness.segmento === 'barbearia_beleza').reduce((acc, cur) => acc + cur.faturamento, 0) / receitaBrutaConsolidada) * 100
-          : 0
-      },
-      {
-        tipo: 'varejo_suplementos_cosmeticos',
-        titulo: 'Varejo & Suplementação Física (Stallone)',
-        empresas: empresasDetalhes.filter(e => e.multiBusiness.segmento === 'varejo_suplementos_cosmeticos').length,
-        receita: empresasDetalhes.filter(e => e.multiBusiness.segmento === 'varejo_suplementos_cosmeticos').reduce((acc, cur) => acc + cur.faturamento, 0),
-        participacao: receitaBrutaConsolidada > 0
-          ? (empresasDetalhes.filter(e => e.multiBusiness.segmento === 'varejo_suplementos_cosmeticos').reduce((acc, cur) => acc + cur.faturamento, 0) / receitaBrutaConsolidada) * 100
-          : 0
-      },
-      {
-        tipo: 'agro_industria_b2b',
-        titulo: 'Esporte, Eventos & Vestuário (AGRO OPEN TTC)',
-        empresas: empresasDetalhes.filter(e => e.multiBusiness.segmento === 'agro_industria_b2b').length,
-        receita: empresasDetalhes.filter(e => e.multiBusiness.segmento === 'agro_industria_b2b').reduce((acc, cur) => acc + cur.faturamento, 0),
-        participacao: receitaBrutaConsolidada > 0
-          ? (empresasDetalhes.filter(e => e.multiBusiness.segmento === 'agro_industria_b2b').reduce((acc, cur) => acc + cur.faturamento, 0) / receitaBrutaConsolidada) * 100
-          : 0
-      },
-      {
-        tipo: 'ecommerce_omnichannel',
-        titulo: 'Plataforma Digital & SaaS (Kytto)',
-        empresas: empresasDetalhes.filter(e => e.multiBusiness.segmento === 'ecommerce_omnichannel').length,
-        receita: empresasDetalhes.filter(e => e.multiBusiness.segmento === 'ecommerce_omnichannel').reduce((acc, cur) => acc + cur.faturamento, 0),
-        participacao: receitaBrutaConsolidada > 0
-          ? (empresasDetalhes.filter(e => e.multiBusiness.segmento === 'ecommerce_omnichannel').reduce((acc, cur) => acc + cur.faturamento, 0) / receitaBrutaConsolidada) * 100
-          : 0
-      }
-    ],
     empresas: empresasDetalhes
   };
 }

@@ -115,5 +115,6 @@
   "114_remover_empresa_indevida_barbearia_imperial.sql": "d63987a9a9f4d14ef5ed906da2908902380f6c06dd0e25fa97393a58d4c63103",
   "115_supermercado_fase6_antifurto_rastreabilidade_planograma_kiosk.sql": "7fe6f2f4051abe5773ecbe94bde7c898802bcfe4c79ca40d1e9c89ec96728331",
   "116_supermercado_fase7_auditoria_fraude_tabloide_trade.sql": "907d844b0b2893f3c87335b3838f3b2574c4cc54a7d54426e5c6e68f1d85fa62",
-  "117_empresas_canonicas_e_lancamentos_todas_empresas.sql": "584430f8bafece46bcdaf9b6e2fe09aed5078bc69c65f2872c5ad3835c12f218"
+  "117_empresas_canonicas_e_lancamentos_todas_empresas.sql": "584430f8bafece46bcdaf9b6e2fe09aed5078bc69c65f2872c5ad3835c12f218",
+  "118_negocios_multi_negocio_governance.sql": "733361791f53aa869d5bf2f65ee4c0b07c17d4b6f659110f6d1d2a7f72258ad6"
 }
