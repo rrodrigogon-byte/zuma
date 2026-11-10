@@ -101,6 +101,7 @@ const migrationFiles = [
   '114_remover_empresa_indevida_barbearia_imperial.sql',
   '115_supermercado_fase6_antifurto_rastreabilidade_planograma_kiosk.sql',
   '116_supermercado_fase7_auditoria_fraude_tabloide_trade.sql',
+  '117_empresas_canonicas_e_lancamentos_todas_empresas.sql',
 ];
 const advisoryLockKey = 825410732;
 
