@@ -14,6 +14,8 @@ import {
 } from 'lucide-react';
 import { api } from '../../lib/api';
 import Modal from '../../components/Modal';
+import { useAuth } from '../../lib/auth';
+import { isDinoBrandContext } from '../../lib/brand';
 import { QRCodeSVG } from 'qrcode.react';
 import './Supermercado.css';
 import SpedFiscalBlocoKPanel from './fiscal/SpedFiscalBlocoKPanel';
@@ -35,7 +37,87 @@ const DEPARTAMENTOS = [
   'Enlatados e Molhos'
 ];
 
+
+const AREAS_SUPERMERCADO = [
+  {
+    id: 'painel',
+    numero: '1',
+    nome: 'Painel',
+    icone: '📊',
+    descricao: 'Indicadores em tempo real e alertas',
+    subAbas: [
+      { id: 'dashboard', nome: 'Indicadores & Alertas', iconeName: 'TrendingUp' }
+    ]
+  },
+  {
+    id: 'vendas_caixa',
+    numero: '2',
+    nome: 'Vendas e caixa',
+    icone: '💵',
+    descricao: 'Frente de caixa, terminais e checkout',
+    subAbas: [
+      { id: 'pdv', nome: 'Frente de Caixa (PDV)', iconeName: 'ShoppingCart' },
+      { id: 'terminais', nome: 'Caixas & Terminais', iconeName: 'Tv', badgeKey: 'terminais' }
+    ]
+  },
+  {
+    id: 'produtos_precos',
+    numero: '3',
+    nome: 'Produtos e preços',
+    icone: '🏷️',
+    descricao: 'Mix, atacarejo, promoções, balanças, etiquetas e margens',
+    subAbas: [
+      { id: 'mix', nome: 'Mix & Gôndola', iconeName: 'Barcode', badgeKey: 'produtos' },
+      { id: 'atacarejo', nome: 'Preço por Volume (Atacarejo)', iconeName: 'Layers', badgeKey: 'atacarejo' },
+      { id: 'promocoes', nome: 'Promoções & Tabloides', iconeName: 'Percent', badgeKey: 'promocoes' },
+      { id: 'etiquetas', nome: 'Etiquetas de Gôndola', iconeName: 'Tag' },
+      { id: 'balancas', nome: 'Carga de Balanças', iconeName: 'Scale' },
+      { id: 'margens', nome: 'Margens & Curva ABC', iconeName: 'TrendingUp' }
+    ]
+  },
+  {
+    id: 'pereciveis_producao',
+    numero: '4',
+    nome: 'Perecíveis e produção',
+    icone: '🥩',
+    descricao: 'Controle de validade FEFO, açougue e padaria',
+    subAbas: [
+      { id: 'lotes', nome: 'Validade (FEFO)', iconeName: 'AlertTriangle', badgeKey: 'lotesRisco', alert: true },
+      { id: 'desossa', nome: 'Açougue & Desossa', iconeName: 'Beef', badgeKey: 'desossas' },
+      { id: 'padaria', nome: 'Padaria & Produção', iconeName: 'UtensilsCrossed' }
+    ]
+  },
+  {
+    id: 'suprimentos_estoque',
+    numero: '5',
+    nome: 'Suprimentos e estoque',
+    icone: '📦',
+    descricao: 'Entrada de mercadorias, reposição, inventário e compras',
+    subAbas: [
+      { id: 'nfe', nome: 'Entrada NF-e XML', iconeName: 'FileText' },
+      { id: 'ruptura', nome: 'Ruptura & Reposição', iconeName: 'Boxes', badgeKey: 'rupturas', alert: true },
+      { id: 'inventarios', nome: 'Inventário Cíclico', iconeName: 'ClipboardCheck' },
+      { id: 'sugestaocompras', nome: 'Sugestão de Compras (GMD)', iconeName: 'ShoppingCart', badgeKey: 'compras' }
+    ]
+  },
+  {
+    id: 'clientes_prevencao',
+    numero: '6',
+    nome: 'Clientes e prevenção',
+    icone: '🛡️',
+    descricao: 'Fidelidade de clientes e prevenção de perdas e quebras',
+    subAbas: [
+      { id: 'clube', nome: 'Clube Fidelidade', iconeName: 'Users', badgeKey: 'clube' },
+      { id: 'perdas', nome: 'Prevenção de Perdas', iconeName: 'ShieldAlert' }
+    ]
+  }
+];
+
 export default function Supermercado() {
+  const { empresaAtiva, lojaAtiva } = useAuth();
+  const isDino = isDinoBrandContext(empresaAtiva) || empresaAtiva?.tipo_negocio === 'barbearia';
+  const [periodoAtivo, setPeriodoAtivo] = useState('hoje');
+  const [areaAtiva, setAreaAtiva] = useState('painel');
   const [abaAtiva, setAbaAtiva] = useState('dashboard');
   const [lojaAtivaId, setLojaAtivaId] = useState(null);
   const [lojas, setLojas] = useState([]);
@@ -85,7 +167,58 @@ export default function Supermercado() {
   const [deferredPromptPwa, setDeferredPromptPwa] = useState(null);
   const [somScannerAtivo, setSomScannerAtivo] = useState(true);
 
+  // Sincroniza área ativa conforme sub-aba selecionada
+  useEffect(() => {
+    for (const area of AREAS_SUPERMERCADO) {
+      if (area.subAbas.some(s => s.id === abaAtiva)) {
+        if (areaAtiva !== area.id) setAreaAtiva(area.id);
+        break;
+      }
+    }
+  }, [abaAtiva]);
+
+  // Cálculos de dados reais estritos (sem números fictícios ou mocks)
+  const totalEstoqueVendaReal = useMemo(() => {
+    return produtos.reduce((acc, p) => acc + (Number(p.saldo || 0) * Number(p.precoVenda || p.precoFinal || p.preco || 0)), 0);
+  }, [produtos]);
+
+  const totalEstoqueCustoReal = useMemo(() => {
+    return produtos.reduce((acc, p) => acc + (Number(p.saldo || 0) * Number(p.precoCusto || p.custoMedio || 0)), 0);
+  }, [produtos]);
+
+  const lotesVencidosTotal = useMemo(() => {
+    return lotes.filter(l => l.situacao === 'vencido' || l.status === 'vencido').length;
+  }, [lotes]);
+
+  const lotesCriticosTotal = useMemo(() => {
+    return lotes.filter(l => ['vencido', 'critico'].includes(l.situacao || l.status)).length;
+  }, [lotes]);
+
+
   // Sintetizador de Áudio para Scanner de Caixa (Web Audio API)
+
+  const renderIconeSub = (nome) => {
+    switch (nome) {
+      case 'TrendingUp': return <TrendingUp size={16} />;
+      case 'ShoppingCart': return <ShoppingCart size={16} />;
+      case 'Tv': return <Tv size={16} />;
+      case 'Barcode': return <Barcode size={16} />;
+      case 'Layers': return <Layers size={16} />;
+      case 'Percent': return <Percent size={16} />;
+      case 'Tag': return <Tag size={16} />;
+      case 'Scale': return <Scale size={16} />;
+      case 'AlertTriangle': return <AlertTriangle size={16} />;
+      case 'Beef': return <Beef size={16} />;
+      case 'UtensilsCrossed': return <UtensilsCrossed size={16} />;
+      case 'FileText': return <FileText size={16} />;
+      case 'Boxes': return <Boxes size={16} />;
+      case 'ClipboardCheck': return <ClipboardCheck size={16} />;
+      case 'Users': return <Users size={16} />;
+      case 'ShieldAlert': return <ShieldAlert size={16} />;
+      default: return <Store size={16} />;
+    }
+  };
+
   const tocarBeepScanner = (tipo = 'sucesso') => {
     if (!somScannerAtivo) return;
     try {
@@ -395,7 +528,7 @@ export default function Supermercado() {
         setTerminais(rTerminais.terminais);
       }
       // 1. Dashboard
-      const rDash = await api.get('/api/admin/supermercado/dashboard').catch(() => null);
+      const rDash = await api.get(`/api/admin/supermercado/dashboard?periodo=${periodoAtivo}`).catch(() => null);
       if (rDash) setResumo(rDash.dashboard || rDash);
 
       // 2. Produtos
@@ -569,7 +702,7 @@ export default function Supermercado() {
     } finally {
       setCarregando(false);
     }
-  }, [lojaAtivaId]);
+  }, [lojaAtivaId, periodoAtivo]);
 
   useEffect(() => {
     carregarDados();
@@ -1378,6 +1511,36 @@ export default function Supermercado() {
     }
   };
 
+
+  if (isDino) {
+    return (
+      <div className="super-bloqueio-container">
+        <div className="super-bloqueio-card">
+          <div className="super-bloqueio-icon">🔒</div>
+          <h2>Módulo de Supermercado & Atacarejo</h2>
+          <div className="super-bloqueio-tag">Acesso Não Liberado</div>
+          <p>
+            O módulo corporativo de <strong>Supermercado & Atacarejo</strong> não está liberado para a empresa <strong>{empresaAtiva?.nome || 'Barbearia Dino'}</strong> (tipo de negócio: Barbearia).
+          </p>
+          <div className="super-bloqueio-detalhe">
+            <ShieldAlert size={18} className="text-amber-500" />
+            <span>
+              Conforme as diretrizes executivas Kytto Cloud ERP (@Rodrigo Gonçalves, Nov 2026), operações supermercadistas com pesáveis e gôndola são restritas aos negócios autorizados.
+            </span>
+          </div>
+          <div className="super-bloqueio-actions">
+            <a href="/admin/barbearia-erp" className="super-btn-primary">
+              Voltar ao Painel da Barbearia
+            </a>
+            <a href="/admin" className="super-btn-sec">
+              Voltar ao Início
+            </a>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="supermercado-corp-container">
       {/* ── TOAST NOTIFICATION ── */}
@@ -1441,152 +1604,110 @@ export default function Supermercado() {
       </header>
 
       {/* ── BARRA DE NAVEGAÇÃO DE ABAS CORPORATIVAS ── */}
-      <nav className="super-nav-tabs">
-        <button className={`super-tab-btn ${abaAtiva === 'dashboard' ? 'active' : ''}`} onClick={() => setAbaAtiva('dashboard')}>
-          <TrendingUp size={16} /> Painel & KPIs
-        </button>
-        <button className={`super-tab-btn ${abaAtiva === 'terminais' ? 'active' : ''}`} onClick={() => setAbaAtiva('terminais')}>
-          <Tv size={16} /> Frentes de Caixa ({terminais.length})
-        </button>
-        <button className={`super-tab-btn ${abaAtiva === 'pdv' ? 'active' : ''}`} onClick={() => setAbaAtiva('pdv')}>
-          <ShoppingCart size={16} /> Frente de Caixa (PDV)
-        </button>
-        <button className={`super-tab-btn ${abaAtiva === 'mix' ? 'active' : ''}`} onClick={() => setAbaAtiva('mix')}>
-          <Barcode size={16} /> Mix & Gôndola ({produtos.length})
-        </button>
-        <button className={`super-tab-btn ${abaAtiva === 'hortifruti' ? 'active' : ''}`} onClick={() => setAbaAtiva('hortifruti')}>
-          <Apple size={16} /> Hortifrúti (FLV)
-        </button>
-        <button className={`super-tab-btn ${abaAtiva === 'desossa' ? 'active' : ''}`} onClick={() => setAbaAtiva('desossa')}>
-          <Beef size={16} /> Açougue & Desossa ({desossas.length})
-        </button>
-        <button className={`super-tab-btn ${abaAtiva === 'padaria' ? 'active' : ''}`} onClick={() => setAbaAtiva('padaria')}>
-          <UtensilsCrossed size={16} /> Padaria & Produção
-        </button>
-        <button className={`super-tab-btn ${abaAtiva === 'lotes' ? 'active' : ''}`} onClick={() => setAbaAtiva('lotes')}>
-          <AlertTriangle size={16} /> Lotes & FEFO ({lotes.length})
-        </button>
-        <button className={`super-tab-btn ${abaAtiva === 'ruptura' ? 'active' : ''}`} onClick={() => setAbaAtiva('ruptura')}>
-          <Boxes size={16} /> Ruptura & Reposição
-        </button>
-        <button className={`super-tab-btn ${abaAtiva === 'balancas' ? 'active' : ''}`} onClick={() => setAbaAtiva('balancas')}>
-          <Scale size={16} /> Carga Balanças
-        </button>
-        <button className={`super-tab-btn ${abaAtiva === 'etiquetas' ? 'active' : ''}`} onClick={() => setAbaAtiva('etiquetas')}>
-          <Tag size={16} /> Etiquetas Gôndola
-        </button>
-        <button className={`super-tab-btn ${abaAtiva === 'nfe' ? 'active' : ''}`} onClick={() => setAbaAtiva('nfe')}>
-          <FileText size={16} /> Entrada NF-e XML
-        </button>
-        <button className={`super-tab-btn ${abaAtiva === 'perdas' ? 'active' : ''}`} onClick={() => setAbaAtiva('perdas')}>
-          <ShieldAlert size={16} /> Prevenção de Perdas
-        </button>
-        <button className={`super-tab-btn ${abaAtiva === 'auditoria' ? 'active' : ''}`} onClick={() => setAbaAtiva('auditoria')}>
-          <ShieldCheck size={16} /> Auditoria Preços
-        </button>
-        <button className={`super-tab-btn ${abaAtiva === 'inventarios' ? 'active' : ''}`} onClick={() => setAbaAtiva('inventarios')}>
-          <ClipboardCheck size={16} /> Inventário Cíclico
-        </button>
-        <button className={`super-tab-btn ${abaAtiva === 'clube' ? 'active' : ''}`} onClick={() => setAbaAtiva('clube')}>
-          <Users size={16} /> Clube Kytto ({clientesClube.length})
-        </button>
-        <button className={`super-tab-btn ${abaAtiva === 'selfcheckout' ? 'active' : ''}`} onClick={() => setAbaAtiva('selfcheckout')}>
-          <Sparkles size={16} /> Self-Checkout Totem
-        </button>
-        <button className={`super-tab-btn ${abaAtiva === 'docas' ? 'active' : ''}`} onClick={() => setAbaAtiva('docas')}>
-          <Truck size={16} /> Docas & Recebimento ({recebimentosDoca.length})
-        </button>
-        <button className={`super-tab-btn ${abaAtiva === 'trocas' ? 'active' : ''}`} onClick={() => setAbaAtiva('trocas')}>
-          <RotateCcw size={16} /> Trocas & SAC ({trocas.length})
-        </button>
-        <button className={`super-tab-btn ${abaAtiva === 'atacarejo' ? 'active' : ''}`} onClick={() => setAbaAtiva('atacarejo')}>
-          <Layers size={16} /> Atacarejo & Volume ({faixasAtacarejo.length})
-        </button>
-        <button className={`super-tab-btn ${abaAtiva === 'sugestaocompras' ? 'active' : ''}`} onClick={() => setAbaAtiva('sugestaocompras')}>
-          <ShoppingCart size={16} /> Sugestão Compras (GMD) ({sugestoesCompras.length})
-        </button>
-        <button className={`super-tab-btn ${abaAtiva === 'promocoes' ? 'active' : ''}`} onClick={() => setAbaAtiva('promocoes')}>
-          <Percent size={16} /> Promoções & Tabloides ({promocoes.length})
-        </button>
-        <button className={`super-tab-btn ${abaAtiva === 'transferencias' ? 'active' : ''}`} onClick={() => setAbaAtiva('transferencias')}>
-          <ArrowRightLeft size={16} /> Transferências & CD ({transferencias.length})
-        </button>
-        <button className={`super-tab-btn ${abaAtiva === 'coletor' ? 'active' : ''}`} onClick={() => setAbaAtiva('coletor')}>
-          <Smartphone size={16} /> Coletor Mobile ({leiturasColetor.length})
-        </button>
-        <button className={`super-tab-btn ${abaAtiva === 'tributario' ? 'active' : ''}`} onClick={() => setAbaAtiva('tributario')}>
-          <Landmark size={16} /> Matriz Tributária ({matrizTributaria.length})
-        </button>
-        <button className={`super-tab-btn ${abaAtiva === 'wms' ? 'active' : ''}`} onClick={() => setAbaAtiva('wms')}>
-          <Boxes size={16} /> WMS & Gôndola ({enderecosWms.length})
-        </button>
-        <button className={`super-tab-btn ${abaAtiva === 'cockpit' ? 'active' : ''}`} onClick={() => setAbaAtiva('cockpit')}>
-          <Activity size={16} /> Cockpit ABRAS
-        </button>
-        <button className={`super-tab-btn ${abaAtiva === 'pedidos' ? 'active' : ''}`} onClick={() => setAbaAtiva('pedidos')}>
-          <FileCheck size={16} /> Pedidos Compra EDI ({pedidosCompra.length})
-        </button>
-        <button className={`super-tab-btn ${abaAtiva === 'selinhos' ? 'active' : ''}`} onClick={() => setAbaAtiva('selinhos')}>
-          <Award size={16} /> Campanha Selinhos ({campanhasSelinhos.length})
-        </button>
-        <button className={`super-tab-btn ${abaAtiva === 'dre' ? 'active' : ''}`} onClick={() => setAbaAtiva('dre')}>
-          <FileSpreadsheet size={16} /> DRE de Loja & EBITDA
-        </button>
-        <button className={`super-tab-btn ${abaAtiva === 'sped' ? 'active' : ''}`} onClick={() => setAbaAtiva('sped')}>
-          <FileCode size={16} /> SPED Fiscal Bloco K
-        </button>
-        <button className={`super-tab-btn ${abaAtiva === 'esl' ? 'active' : ''}`} onClick={() => setAbaAtiva('esl')}>
-          <Radio size={16} /> Etiquetas ESL ({eslList.length})
-        </button>
-        <button className={`super-tab-btn ${abaAtiva === 'rotisseria' ? 'active' : ''}`} onClick={() => setAbaAtiva('rotisseria')}>
-          <UtensilsCrossed size={16} /> Rotisseria KDS ({rotisseriaList.length})
-        </button>
-        <button className={`super-tab-btn ${abaAtiva === 'trocas' ? 'active' : ''}`} onClick={() => setAbaAtiva('trocas')}>
-          <Ticket size={16} /> Vales & Trocas ({valesList.length})
-        </button>
-        <button className={`super-tab-btn ${abaAtiva === 'tesouraria' ? 'active' : ''}`} onClick={() => setAbaAtiva('tesouraria')}>
-          <Vault size={16} /> Tesouraria / Cofre ({malotesList.length})
-        </button>
-        <button className={`super-tab-btn ${abaAtiva === 'picking' ? 'active' : ''}`} onClick={() => setAbaAtiva('picking')}>
-          <Navigation size={16} /> Picking & Dark Store ({pickingList.length})
-        </button>
-        <button className={`super-tab-btn ${abaAtiva === 'desperdicio' ? 'active' : ''}`} onClick={() => setAbaAtiva('desperdicio')}>
-          <Recycle size={16} /> Desperdício & Food Waste ({desperdicioList.length})
-        </button>
-        <button className={`super-tab-btn ${abaAtiva === 'conciliacao' ? 'active' : ''}`} onClick={() => setAbaAtiva('conciliacao')}>
-          <CreditCard size={16} /> Conciliação TEF/PIX ({conciliacaoList.length})
-        </button>
-        <button className={`super-tab-btn ${abaAtiva === 'acordos' ? 'active' : ''}`} onClick={() => setAbaAtiva('acordos')}>
-          <Handshake size={16} /> Acordos & Verbas VCC ({acordosList.length})
-        </button>
-        <button className={`super-tab-btn ${abaAtiva === 'prevencaoperdas' ? 'active' : ''}`} onClick={() => setAbaAtiva('prevencaoperdas')}>
-          <ShieldAlert size={16} /> Prevenção EAS & Furtos ({perdasOcorrenciasList.length})
-        </button>
-        <button className={`super-tab-btn ${abaAtiva === 'rastreabilidade' ? 'active' : ''}`} onClick={() => setAbaAtiva('rastreabilidade')}>
-          <QrCode size={16} /> Rastreabilidade SIF ({sifAcougueList.length})
-        </button>
-        <button className={`super-tab-btn ${abaAtiva === 'planograma' ? 'active' : ''}`} onClick={() => setAbaAtiva('planograma')}>
-          <LayoutGrid size={16} /> Planograma de Gôndola ({planogramasList.length})
-        </button>
-        <button className={`super-tab-btn ${abaAtiva === 'kiosk' ? 'active' : ''}`} onClick={() => setAbaAtiva('kiosk')}>
-          <ScanLine size={16} /> Busca-Preço Kiosk Multimídia
-        </button>
-        <button className={`super-tab-btn ${abaAtiva === 'fraude' ? 'active' : ''}`} onClick={() => setAbaAtiva('fraude')}>
-          <UserX size={16} /> Fraude & Auditoria PDV ({fraudePdvList.length})
-        </button>
-        <button className={`super-tab-btn ${abaAtiva === 'tabloides' ? 'active' : ''}`} onClick={() => setAbaAtiva('tabloides')}>
-          <Megaphone size={16} /> Encartes & Tabloides ({tabloidesList.length})
-        </button>
-        <button className={`super-tab-btn ${abaAtiva === 'trademarketing' ? 'active' : ''}`} onClick={() => setAbaAtiva('trademarketing')}>
-          <Store size={16} /> Trade Marketing ({tradeMarketingList.length})
-        </button>
-        <button className={`super-tab-btn ${abaAtiva === 'auditorianoturna' ? 'active' : ''}`} onClick={() => setAbaAtiva('auditorianoturna')}>
-          <Moon size={16} /> Auditoria Noturna ({auditoriasNoturnasList.length})
-        </button>
-        <button className={`super-tab-btn ${abaAtiva === 'margens' ? 'active' : ''}`} onClick={() => setAbaAtiva('margens')}>
-          <TrendingUp size={16} /> Margens & Curva ABC
-        </button>
+      {/* ── SELETOR DE CONTEXTO & PERÍODO EXECUTIVO (PADRÃO @RODRIGO GONÇALVES) ── */}
+      <div className="super-exec-context-bar">
+        <div className="super-exec-brand">
+          <div className="super-exec-logo-k">K</div>
+          <div className="super-exec-scope">
+            <span className="super-exec-scope-label">Escopo Corporativo</span>
+            <span className="super-exec-scope-path">
+              Grupo Silvester Holding <span>›</span> Empresa: {empresaAtiva?.nome || 'AGRO OPEN'} <span>›</span> Negócio: Supermercado & Atacarejo <span>›</span> Unidade: {lojas.find(l => l.id === lojaAtivaId)?.nome || lojaAtiva?.nome || 'Loja Principal Matriz'}
+            </span>
+          </div>
+        </div>
+
+        <div className="super-exec-period-box">
+          <span className="super-exec-period-label">Período</span>
+          <div className="super-exec-period-pills">
+            <button
+              type="button"
+              className={`super-period-pill ${periodoAtivo === 'hoje' ? 'active' : ''}`}
+              onClick={() => setPeriodoAtivo('hoje')}
+            >
+              Hoje, 10/11/2026
+            </button>
+            <button
+              type="button"
+              className={`super-period-pill ${periodoAtivo === 'semana' ? 'active' : ''}`}
+              onClick={() => setPeriodoAtivo('semana')}
+            >
+              Esta semana
+            </button>
+            <button
+              type="button"
+              className={`super-period-pill ${periodoAtivo === 'mes' ? 'active' : ''}`}
+              onClick={() => setPeriodoAtivo('mes')}
+            >
+              Novembro de 2026
+            </button>
+          </div>
+        </div>
+
+        <div className="super-exec-user-badge" title="Rodrigo Gonçalves — Criador & Administrador Executivo">
+          <div className="super-user-avatar-circle">RG</div>
+          <span className="super-user-name-tag">Rodrigo G.</span>
+        </div>
+      </div>
+
+      {/* ── NAVEGAÇÃO CORPORATIVA EM 7 ÁREAS DE NEGÓCIO (ONDA 0) ── */}
+      <nav className="super-areas-nav" aria-label="7 Áreas Oficiais de Supermercado">
+        {AREAS_SUPERMERCADO.map((area) => {
+          const ativa = areaAtiva === area.id;
+          return (
+            <button
+              key={area.id}
+              type="button"
+              className={`super-area-card-btn ${ativa ? 'active' : ''}`}
+              onClick={() => {
+                setAreaAtiva(area.id);
+                const primeiraSub = area.subAbas[0]?.id;
+                if (primeiraSub) setAbaAtiva(primeiraSub);
+              }}
+            >
+              <div className="super-area-num">{area.numero}</div>
+              <div className="super-area-content">
+                <span className="super-area-name">{area.icone} {area.nome}</span>
+                <span className="super-area-hint">{area.subAbas.length} telas ativas</span>
+              </div>
+            </button>
+          );
+        })}
       </nav>
+
+      {/* ── SUB-BARRA OPERACIONAL DA ÁREA ATIVA ── */}
+      <div className="super-subnav-bar">
+        <div className="super-subnav-items">
+          {AREAS_SUPERMERCADO.find(a => a.id === areaAtiva)?.subAbas.map((sub) => {
+            let badgeVal = null;
+            if (sub.badgeKey === 'terminais') badgeVal = terminais.length > 0 ? terminais.length : null;
+            else if (sub.badgeKey === 'produtos') badgeVal = produtos.length > 0 ? produtos.length : null;
+            else if (sub.badgeKey === 'atacarejo') badgeVal = faixasAtacarejo.length > 0 ? faixasAtacarejo.length : null;
+            else if (sub.badgeKey === 'promocoes') badgeVal = promocoesAvancadas.length > 0 ? promocoesAvancadas.length : null;
+            else if (sub.badgeKey === 'lotesRisco') badgeVal = (lotesCriticosTotal + lotesVencidosTotal) > 0 ? `${lotesCriticosTotal + lotesVencidosTotal} em risco` : null;
+            else if (sub.badgeKey === 'desossas') badgeVal = desossas.length > 0 ? desossas.length : null;
+            else if (sub.badgeKey === 'rupturas') badgeVal = alertasRuptura.length > 0 ? `${alertasRuptura.length} faltas` : null;
+            else if (sub.badgeKey === 'compras') badgeVal = sugestoesCompras.length > 0 ? sugestoesCompras.length : null;
+            else if (sub.badgeKey === 'clube') badgeVal = clientesClube.length > 0 ? clientesClube.length : null;
+
+            return (
+              <button
+                key={sub.id}
+                type="button"
+                className={`super-subnav-btn ${abaAtiva === sub.id ? 'active' : ''}`}
+                onClick={() => setAbaAtiva(sub.id)}
+              >
+                {renderIconeSub(sub.iconeName)}
+                <span>{sub.nome}</span>
+                {badgeVal != null && (
+                  <span className={`super-subnav-badge ${sub.alert ? 'badge-alert' : ''}`}>
+                    {badgeVal}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </div>
 
       {/* ════════════════════════════════════════════════════════════════════════
           CONTEÚDO DAS ABAS
@@ -1596,24 +1717,59 @@ export default function Supermercado() {
         {abaAtiva === 'dashboard' && (
           <div className="super-dash-grid">
             <div className="super-kpi-card">
-              <span className="kpi-label">Faturamento do Dia</span>
-              <strong className="kpi-val text-green">R$ {(resumo?.totalVendas || 1845.90).toFixed(2)}</strong>
-              <small className="kpi-sub">{resumo?.cuponsEmitidos || 28} cupons NFC-e emitidos</small>
+              <span className="kpi-label">{periodoAtivo === 'hoje' ? 'Faturamento do Dia' : (periodoAtivo === 'semana' ? 'Faturamento da Semana' : 'Faturamento do Mês')}</span>
+              <strong className="kpi-val text-green">
+                {(resumo?.totalVendas != null && Number(resumo.totalVendas) > 0)
+                  ? `R$ ${Number(resumo.totalVendas).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                  : '—'}
+              </strong>
+              <small className="kpi-sub">
+                {(resumo?.cuponsEmitidos != null && Number(resumo.cuponsEmitidos) > 0)
+                  ? `${resumo.cuponsEmitidos} ${resumo.cuponsEmitidos === 1 ? 'cupom NFC-e emitido' : 'cupons NFC-e emitidos'}`
+                  : 'Sem vendas registradas hoje'}
+              </small>
             </div>
+
             <div className="super-kpi-card">
               <span className="kpi-label">Ticket Médio</span>
-              <strong className="kpi-val">R$ {(resumo?.ticketMedio || 65.92).toFixed(2)}</strong>
-              <small className="kpi-sub">Média por cliente no checkout</small>
+              <strong className="kpi-val">
+                {(resumo?.ticketMedio != null && Number(resumo.ticketMedio) > 0)
+                  ? `R$ ${Number(resumo.ticketMedio).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                  : '—'}
+              </strong>
+              <small className="kpi-sub">
+                {(resumo?.ticketMedio != null && Number(resumo.ticketMedio) > 0)
+                  ? 'Média por cliente no checkout'
+                  : 'Sem movimentação no período'}
+              </small>
             </div>
+
             <div className="super-kpi-card">
               <span className="kpi-label">Estoque a Preço de Venda</span>
-              <strong className="kpi-val text-blue">R$ {(resumo?.valorEstoqueVenda || 42890.00).toFixed(2)}</strong>
-              <small className="kpi-sub">Custo: R$ {(resumo?.valorEstoqueCusto || 27650.00).toFixed(2)}</small>
+              <strong className="kpi-val text-blue">
+                {totalEstoqueVendaReal > 0
+                  ? `R$ ${totalEstoqueVendaReal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                  : (produtos.length > 0 ? 'R$ 0,00' : '—')}
+              </strong>
+              <small className="kpi-sub">
+                {totalEstoqueCustoReal > 0
+                  ? `Custo: R$ ${totalEstoqueCustoReal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                  : 'Sem saldo em estoque'}
+              </small>
             </div>
+
             <div className="super-kpi-card">
               <span className="kpi-label">Lotes em Risco FEFO</span>
-              <strong className="kpi-val text-orange">{(resumo?.lotesCriticos || lotes.length)} Lotes</strong>
-              <small className="kpi-sub text-red">{resumo?.lotesVencidos || 0} vencidos / {resumo?.lotesCriticos || 3} críticos</small>
+              <strong className={`kpi-val ${(lotesVencidosTotal + lotesCriticosTotal) > 0 ? 'text-orange' : 'text-slate-600'}`}>
+                {(lotesVencidosTotal + lotesCriticosTotal) > 0
+                  ? `${lotesVencidosTotal + lotesCriticosTotal} Lotes`
+                  : '0 Lotes'}
+              </strong>
+              <small className={`kpi-sub ${lotesVencidosTotal > 0 ? 'text-red' : ''}`}>
+                {lotesVencidosTotal > 0
+                  ? `${lotesVencidosTotal} vencidos / ${lotesCriticosTotal} críticos`
+                  : ((lotesCriticosTotal > 0) ? `${lotesCriticosTotal} críticos` : 'Nenhum lote vencido ou crítico')}
+              </small>
             </div>
 
             {/* Painel de Departamentos */}
@@ -1653,6 +1809,85 @@ export default function Supermercado() {
                   <span>Iniciar Auditoria de Gôndola</span>
                 </button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── 2.1 TERMINAIS & CAIXAS PDV ── */}
+        {abaAtiva === 'terminais' && (
+          <div className="super-section-card">
+            <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
+              <div>
+                <h2 className="super-section-title">Parque de Frentes de Caixa & Terminais PDV</h2>
+                <p className="text-xs text-slate-500">Monitoramento e controle de caixas operacionais da unidade</p>
+              </div>
+              <button
+                type="button"
+                className="super-btn primary"
+                onClick={() => {
+                  setFormTerminal({
+                    codigo: `PDV-${String(terminais.length + 1).padStart(2, '0')}`,
+                    nome: `Caixa ${String(terminais.length + 1).padStart(2, '0')}`,
+                    tipo: 'convencional',
+                    limiteSangria: 800,
+                    ipEquipamento: ''
+                  });
+                  setModalNovoTerminal(true);
+                }}
+              >
+                <Plus size={16} /> Cadastrar Nova Frente PDV
+              </button>
+            </div>
+            <div className="super-table-wrapper">
+              <table className="super-table">
+                <thead>
+                  <tr>
+                    <th>Código</th>
+                    <th>Nome do Terminal</th>
+                    <th>Tipo</th>
+                    <th>Status</th>
+                    <th>Operador Atual</th>
+                    <th>Limite Sangria</th>
+                    <th>Ações</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {terminais.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} style={{ textAlign: 'center', padding: '24px', color: '#64748b' }}>
+                        Nenhum terminal cadastrado. O terminal padrão <strong>PDV-01</strong> está ativo.
+                      </td>
+                    </tr>
+                  ) : (
+                    terminais.map((t) => (
+                      <tr key={t.id || t.codigo}>
+                        <td><strong>{t.codigo}</strong></td>
+                        <td>{t.nome}</td>
+                        <td><span className="super-badge blue">{t.tipo || 'convencional'}</span></td>
+                        <td>
+                          <span className={`super-badge ${t.status === 'aberto' ? 'green' : 'gray'}`}>
+                            {t.status === 'aberto' ? '🟢 Aberto' : '⚪ Fechado'}
+                          </span>
+                        </td>
+                        <td>{t.operador_nome || t.operador || '—'}</td>
+                        <td>R$ {Number(t.limite_sangria || t.limiteSangria || 800).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                        <td>
+                          <button
+                            className="super-btn sm primary"
+                            onClick={() => {
+                              setTerminalAtivoCodigo(t.codigo);
+                              setTerminalSelecionado(t.codigo);
+                              setAbaAtiva('pdv');
+                            }}
+                          >
+                            Operar este PDV
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
             </div>
           </div>
         )}

@@ -13,6 +13,18 @@ export function createVarejoAdminRouter({ db, escopoDaRequisicao, fuso = 'Americ
   const rota = (permissao, fn, status = 200) => async (req, res) => {
     try {
       const { empresaId, lojaRestrita = null } = await escopoDaRequisicao(req, permissao);
+      // Trava de Módulo: Barbearia Dino e negócios sem licença não acessam Supermercado
+      const empRes = await db.query(
+        "SELECT id, nome, tipo_negocio, modulos FROM empresas WHERE id = $1 LIMIT 1",
+        [empresaId]
+      );
+      const emp = empRes.rows[0];
+      const tipo = String(emp?.tipo_negocio || "").toLowerCase();
+      const nomeEmp = String(emp?.nome || "").toLowerCase();
+      const modulos = Array.isArray(emp?.modulos) ? emp.modulos.map(m => String(m).toLowerCase()) : [];
+      if ((tipo === "barbearia" || nomeEmp.includes("dino")) && !modulos.includes("supermercado") && !modulos.includes("varejo")) {
+        throw new ErroDominio("MODULO_NAO_LIBERADO", "O módulo de Supermercado não está liberado para este negócio.", 403);
+      }
       let pedida = String(req.query.lojaId ?? req.query.loja_id ?? req.body?.lojaId ?? req.headers['x-loja-id'] ?? '').trim() || null;
       if (pedida && !UUID_RE.test(pedida)) {
         const store = await db.query(
@@ -81,8 +93,8 @@ export function createVarejoAdminRouter({ db, escopoDaRequisicao, fuso = 'Americ
   router.post('/sync-offline', rota('sales.write', ({ req, empresaId, lojaRestrita, lojaId, usuario }) => svc.sincronizarFilaOffline(db, empresaId, req.body || {}, { usuario, lojaId: lojaRestrita || lojaId })));
   router.post('/caixa/fechamento-cego', rota('sales.write', ({ req, empresaId, lojaRestrita, lojaId, usuario }) => svc.fechamentoCegoCaixa(db, empresaId, req.body || {}, { usuario, lojaId: lojaRestrita || lojaId })));
   // Novas rotas para o módulo expandido de supermercado
-  router.get(['/dashboard', '/resumo-dashboard'], rota('catalog.read', async ({ empresaId, lojaId }) => {
-    const dash = await svc.resumoDashboard(db, empresaId, { lojaId });
+  router.get(['/dashboard', '/resumo-dashboard'], rota('catalog.read', async ({ req, empresaId, lojaId }) => {
+    const dash = await svc.resumoDashboard(db, empresaId, { lojaId, periodo: req.query.periodo || 'hoje' });
     return {
       dashboard: {
         ...dash,

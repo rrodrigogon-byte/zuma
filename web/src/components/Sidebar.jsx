@@ -516,6 +516,10 @@ function itemDisponivel(item, isPlatformAdmin, empresa, usuarioDeEmpresa = false
   // telas sem backend em produção somem para todos; as do banco global do evento, para usuário de
   // empresa; as do backoffice cuja permissão a pessoa não tem, para ela
   if (!rotaVisivel(item.to, { isPlatformAdmin, usuarioDeEmpresa, permissoes, modulosOcultos })) return false
+  // Não exibir Supermercado para negócios do tipo Barbearia (ex.: Dino)
+  if ((isDinoBrandContext(empresa) || empresa?.tipo_negocio === "barbearia") && (item.to === "/admin/supermercado" || item.to.startsWith("/admin/supermercado"))) {
+    return false
+  }
   if (isPlatformAdmin) return true
   const modulos = Array.isArray(empresa?.modulos) ? empresa.modulos.map((modulo) => String(modulo).toLowerCase()) : null
   if (!modulos) return true

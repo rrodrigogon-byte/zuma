@@ -3102,3 +3102,333 @@
   text-align: center;
   border: 1px solid #334155;
 }
+
+
+/* ════════════════════════════════════════════════════════════════════════
+   ONDA 0: CABEÇALHO EXECUTIVO, 7 ÁREAS DE NEGÓCIO E BLOQUEIO DE ACESSO
+   Diretrizes oficiais @Rodrigo Gonçalves (Nov 2026)
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* Cabeçalho Executivo de Contexto & Período (Padrão @Rodrigo Gonçalves) */
+.super-exec-context-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  background: #0f172a;
+  color: #f8fafc;
+  padding: 10px 20px;
+  border-radius: 12px;
+  margin-bottom: 16px;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.15);
+  flex-wrap: wrap;
+}
+.super-exec-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.super-exec-logo-k {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #10b981, #06b6d4);
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 900;
+  font-size: 18px;
+  letter-spacing: -0.5px;
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.35);
+}
+.super-exec-scope {
+  display: flex;
+  flex-direction: column;
+}
+.super-exec-scope-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: #94a3b8;
+  font-weight: 700;
+}
+.super-exec-scope-path {
+  font-size: 13px;
+  font-weight: 600;
+  color: #f1f5f9;
+}
+.super-exec-scope-path span {
+  color: #64748b;
+  margin: 0 4px;
+}
+.super-exec-period-box {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.super-exec-period-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: #94a3b8;
+  font-weight: 700;
+}
+.super-exec-period-pills {
+  display: flex;
+  align-items: center;
+  background: #1e293b;
+  border-radius: 8px;
+  padding: 3px;
+  border: 1px solid #334155;
+  gap: 2px;
+}
+.super-period-pill {
+  border: none;
+  background: transparent;
+  color: #94a3b8;
+  padding: 5px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.super-period-pill:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.05);
+}
+.super-period-pill.active {
+  background: #10b981;
+  color: #ffffff;
+  box-shadow: 0 2px 6px rgba(16, 185, 129, 0.3);
+}
+.super-exec-user-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.super-user-avatar-circle {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #334155;
+  color: #38bdf8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 13px;
+  border: 1px solid #475569;
+}
+.super-user-name-tag {
+  font-size: 12px;
+  font-weight: 600;
+  color: #e2e8f0;
+}
+
+/* Barra de Navegação em 7 Áreas Oficiais */
+.super-areas-nav {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.super-area-card-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.2s ease;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+.super-area-card-btn:hover {
+  border-color: #cbd5e1;
+  background: #f8fafc;
+}
+.super-area-card-btn.active {
+  background: #0f172a;
+  border-color: #0f172a;
+  color: #ffffff;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.15);
+}
+.super-area-num {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  background: #f1f5f9;
+  color: #0f172a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+.super-area-card-btn.active .super-area-num {
+  background: #10b981;
+  color: #ffffff;
+}
+.super-area-content {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.super-area-name {
+  font-size: 12px;
+  font-weight: 700;
+  color: #1e293b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.super-area-card-btn.active .super-area-name {
+  color: #f8fafc;
+}
+.super-area-hint {
+  font-size: 10px;
+  color: #64748b;
+}
+.super-area-card-btn.active .super-area-hint {
+  color: #94a3b8;
+}
+
+/* Sub-Barra de Navegação Operacional */
+.super-subnav-bar {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 6px 10px;
+  margin-bottom: 20px;
+  overflow-x: auto;
+}
+.super-subnav-items {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.super-subnav-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+.super-subnav-btn:hover {
+  background: #f1f5f9;
+  color: #0f172a;
+}
+.super-subnav-btn.active {
+  background: #e2e8f0;
+  color: #0f172a;
+  border-color: #cbd5e1;
+  font-weight: 700;
+}
+.super-subnav-badge {
+  background: #e2e8f0;
+  color: #334155;
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 9999px;
+  font-weight: 700;
+}
+.super-subnav-btn.active .super-subnav-badge {
+  background: #0f172a;
+  color: #ffffff;
+}
+.super-subnav-badge.badge-alert {
+  background: #fee2e2;
+  color: #dc2626;
+}
+.super-subnav-btn.active .super-subnav-badge.badge-alert {
+  background: #ef4444;
+  color: #ffffff;
+}
+
+/* Tela de Bloqueio de Negócio (ex: Barbearia Dino) */
+.super-bloqueio-container {
+  min-height: 70vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+.super-bloqueio-card {
+  max-width: 520px;
+  background: #ffffff;
+  border: 1px solid #fecaca;
+  border-radius: 16px;
+  padding: 36px 32px;
+  text-align: center;
+  box-shadow: 0 10px 25px -5px rgba(239, 68, 68, 0.1);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+.super-bloqueio-icon {
+  font-size: 48px;
+  background: #fef2f2;
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #fee2e2;
+}
+.super-bloqueio-card h2 {
+  font-size: 20px;
+  font-weight: 800;
+  color: #1e293b;
+  margin: 0;
+}
+.super-bloqueio-tag {
+  background: #fee2e2;
+  color: #b91c1c;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 4px 10px;
+  border-radius: 9999px;
+}
+.super-bloqueio-card p {
+  font-size: 14px;
+  color: #475569;
+  line-height: 1.6;
+  margin: 0;
+}
+.super-bloqueio-detalhe {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 12px 14px;
+  font-size: 12px;
+  color: #64748b;
+  text-align: left;
+  line-height: 1.5;
+}
+.super-bloqueio-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 8px;
+  width: 100%;
+  justify-content: center;
+}

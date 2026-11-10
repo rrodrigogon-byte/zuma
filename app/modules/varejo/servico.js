@@ -683,7 +683,7 @@ export async function listarVendas(db, empresaId, { lojaId = null, limit = 50, o
   }));
 }
 
-export async function resumoDashboard(db, empresaId, { lojaId = null, agora = new Date() } = {}) {
+export async function resumoDashboard(db, empresaId, { lojaId = null, agora = new Date(), periodo = "hoje" } = {}) {
   const empresa = exigirUuid(empresaId, 'empresa');
   const loja = uuidOuNull(lojaId);
 
@@ -706,14 +706,24 @@ export async function resumoDashboard(db, empresaId, { lojaId = null, agora = ne
   const promocoes = await listarPromocoes(db, empresa, { lojaId });
   const promocoesAtivas = promocoes.filter((pr) => pr.status === 'ativa').length;
 
-  // Vendas de hoje
-  const hojeInicio = new Date(agora);
-  hojeInicio.setHours(0, 0, 0, 0);
+  // Vendas do período (hoje, semana, mes)
+  const inicioPeriodo = new Date(agora);
+  if (periodo === "semana") {
+    const dia = inicioPeriodo.getDay();
+    const diff = inicioPeriodo.getDate() - dia + (dia === 0 ? -6 : 1);
+    inicioPeriodo.setDate(diff);
+    inicioPeriodo.setHours(0, 0, 0, 0);
+  } else if (periodo === "mes") {
+    inicioPeriodo.setDate(1);
+    inicioPeriodo.setHours(0, 0, 0, 0);
+  } else {
+    inicioPeriodo.setHours(0, 0, 0, 0);
+  }
   const vHoje = await db.query(
     `SELECT COUNT(*)::int AS qtd, COALESCE(SUM(total), 0)::numeric AS faturamento
        FROM var_vendas
       WHERE empresa_id = $1 AND ($2::uuid IS NULL OR loja_id = $2::uuid) AND criado_em >= $3`,
-    [empresa, loja, hojeInicio]
+    [empresa, loja, inicioPeriodo]
   );
   const vendasHoje = Number(vHoje.rows[0]?.qtd || 0);
   const faturamentoHoje = Number(vHoje.rows[0]?.faturamento || 0);
