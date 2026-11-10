@@ -458,6 +458,11 @@ export default function BarbeariaCaixaDetalhado({
             </div>
           </div>
 
+          <div style={{ background: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: 6, padding: '6px 12px', marginBottom: 12, fontSize: 12, color: '#065f46', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span>🍺</span>
+            <span><strong>Regra Oficial:</strong> Bebidas e itens de bar possuem <strong>0% de comissão</strong> (isentos de rateio). Apenas cosméticos e produtos de revenda são comissionados.</span>
+          </div>
+
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: 8 }}>
               <thead>
@@ -480,7 +485,14 @@ export default function BarbeariaCaixaDetalhado({
                     <td style={{ padding: '10px 12px', textAlign: 'center' }}>{p.quantidadeServicos}</td>
                     <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600 }}>{moeda(p.totalServicos)}</td>
                     <td style={{ padding: '10px 12px', textAlign: 'center' }}>{p.quantidadeProdutos}</td>
-                    <td style={{ padding: '10px 12px', textAlign: 'right', color: '#475569' }}>{moeda(p.totalProdutos)}</td>
+                    <td style={{ padding: '10px 12px', textAlign: 'right', color: '#475569' }}>
+                      <div style={{ fontWeight: 600 }}>{moeda(p.totalProdutos)}</div>
+                      {Number(p.totalBebidas || 0) > 0 && (
+                        <div style={{ fontSize: 10, color: '#059669', fontWeight: 700 }} title="Bebidas não geram comissão">
+                          🍺 {moeda(p.totalBebidas)} bebidas (0%)
+                        </div>
+                      )}
+                    </td>
                     <td style={{ padding: '10px 12px', textAlign: 'center' }}>
                       <span style={{ background: '#e0f2fe', color: '#0369a1', padding: '2px 6px', borderRadius: 4, fontWeight: 700, fontSize: 11 }}>
                         {p.comissaoPercent}%

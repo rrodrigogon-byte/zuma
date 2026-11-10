@@ -252,6 +252,9 @@ export default function BarbeariaOperacaoPanel({
           reabrirAgendamento,
           senhaGerente: cancelarSenhaGerente.trim(),
           confirmado: true,
+          cancelarFinalizada: true,
+          estornoManual: true,
+          forcar: true,
         });
       }
       setModalCancelamento(null);

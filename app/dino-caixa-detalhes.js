@@ -8,6 +8,7 @@
 
 import * as caixaKytto from './caixa-diario-kytto.js';
 import * as barbeariaErpKytto from './barbearia-erp-kytto.js';
+import { isProdutoBebida } from './core/dino-regras-comissoes.js';
 
 function formatarDataHora(iso) {
   if (!iso) return '—';
@@ -259,11 +260,19 @@ export function obterDetalhesCaixaOperacao(empresaId, caixaId, options = {}) {
       }
 
       if (it.tipo === 'produto') {
-        const comissaoProdPercent = Number(prof?.comissaoProdutos ?? 10);
+        const isBebida = isProdutoBebida(it);
+        const comissaoProdPercent = isBebida ? 0 : Number(prof?.comissaoProdutos ?? 10);
         mapaComissoesProf[profId].totalProdutos = Number((mapaComissoesProf[profId].totalProdutos + subtotalItem).toFixed(2));
         mapaComissoesProf[profId].quantidadeProdutos += Number(it.quantidade || 1);
-        const valorComissaoProd = Number((subtotalItem * (comissaoProdPercent / 100)).toFixed(2));
-        mapaComissoesProf[profId].valorComissao = Number((mapaComissoesProf[profId].valorComissao + valorComissaoProd).toFixed(2));
+        if (isBebida) {
+          mapaComissoesProf[profId].totalBebidas = Number(((mapaComissoesProf[profId].totalBebidas || 0) + subtotalItem).toFixed(2));
+          mapaComissoesProf[profId].quantidadeBebidas = (mapaComissoesProf[profId].quantidadeBebidas || 0) + Number(it.quantidade || 1);
+        } else {
+          mapaComissoesProf[profId].totalRevenda = Number(((mapaComissoesProf[profId].totalRevenda || 0) + subtotalItem).toFixed(2));
+          mapaComissoesProf[profId].quantidadeRevenda = (mapaComissoesProf[profId].quantidadeRevenda || 0) + Number(it.quantidade || 1);
+          const valorComissaoProd = Number((subtotalItem * (comissaoProdPercent / 100)).toFixed(2));
+          mapaComissoesProf[profId].valorComissao = Number((mapaComissoesProf[profId].valorComissao + valorComissaoProd).toFixed(2));
+        }
       } else {
         mapaComissoesProf[profId].totalServicos = Number((mapaComissoesProf[profId].totalServicos + subtotalItem).toFixed(2));
         mapaComissoesProf[profId].quantidadeServicos += Number(it.quantidade || 1);

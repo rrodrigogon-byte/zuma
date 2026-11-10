@@ -12,6 +12,7 @@ import * as caixaKytto from './caixa-diario-kytto.js';
 import * as canaisFidelidadeKytto from './canais-fidelidade-kytto.js';
 import { executeDinoReversal, getDinoReversalMemoryAdapter } from './core/dino-reversal-coordinator.js';
 import { kyttoEventBus } from './core/kytto-event-bus.js';
+import { isProdutoBebida } from './core/dino-regras-comissoes.js';
 
 const STATUS = new Set(['agendado', 'confirmado', 'em_atendimento', 'concluido', 'cancelado', 'nao_compareceu']);
 const TRANSICOES = {
@@ -3358,14 +3359,14 @@ export async function cancelarComandaBarbearia(empresaId, comandaId, dados = {})
   if (!comanda || comanda.empresaId !== String(empresaId)) return null;
   if (comanda.status === 'cancelada') return copiarComandaBarbearia(comanda, true);
 
-  if (['paga', 'em_conta', 'parcialmente_paga'].includes(comanda.status) || Number(comanda.totalPago || 0) > 0 || (comanda.pagamentos || []).length > 0) {
+  if (['paga', 'em_conta', 'parcialmente_paga', 'aguardando_pagamento'].includes(comanda.status) || Number(comanda.totalPago || 0) > 0 || (comanda.pagamentos || []).length > 0 || comanda.dinoReversal) {
     const permitirEstorno = dados.estornoManual !== false && (dados.estornoManual === true || dados.cancelarFinalizada === true || dados.origem === 'caixa' || Boolean(dados.motivo));
     if (!permitirEstorno) {
       if (comanda.status === 'paga' || comanda.status === 'em_conta') throw new Error('Uma comanda já faturada não pode ser cancelada neste fluxo.');
       throw new Error('Uma comanda com cobrança registrada só pode ser cancelada pelo fluxo financeiro apropriado.');
     }
     const idempotencyKey = dados.idempotencyKey || `comanda-cancel-${comanda.id}-${Date.now()}`;
-    const actionId = dados.actionId || `act-cancel-${comanda.id}-${Date.now().toString(36)}`;
+    const actionId = dados.actionId || (comanda.dinoReversal?.actionId ? comanda.dinoReversal.actionId : `act-cancel-${comanda.id}-${Date.now().toString(36)}`);
     const motivo = dados.motivo || 'Cancelamento manual de comanda finalizada solicitado no caixa';
     const lojaId = dados.lojaId || comanda.lojaId;
     const estorno = await estornarPagamentoComandaBarbearia(empresaId, comanda.id, {
@@ -3377,8 +3378,23 @@ export async function cancelarComandaBarbearia(empresaId, comandaId, dados = {})
       confirmado: true,
       estornoManual: true,
       confirmarEstornoManual: true,
+      cancelarFinalizada: true,
+      forceReversal: true,
+      forcar: true,
+      reabrirAgendamento: dados.reabrirAgendamento === true,
       operador: dados.usuario || dados.operador || 'operador',
     });
+    // Garante que a comanda fique formalmente cancelada e estornada
+    comanda.status = 'cancelada';
+    comanda.estornada = true;
+    comanda.canceladaEm = dataAtual();
+    comanda.canceladoPor = dados.usuario || dados.operador || 'operador';
+    comanda.cancelamentoMotivo = motivo;
+    if (dados.reabrirAgendamento && comanda.agendamentoId && estado.agendamentos[comanda.agendamentoId]) {
+      estado.agendamentos[comanda.agendamentoId].status = 'confirmado';
+      estado.agendamentos[comanda.agendamentoId].comandaId = null;
+    }
+    save();
     const atualizada = estado.comandas[String(comandaId)];
     return { ...copiarComandaBarbearia(atualizada), estorno };
   }
@@ -4011,6 +4027,10 @@ export function calcularComissoesEstado(estado, empresaId, { data = '', lojaId =
     .map((item) => ({ ...item, origemTipo: 'comanda', origemId: comanda.id, clienteNome: comanda.clienteNome || '', dataRef: diaOperacional(comanda.fechadaEm || comanda.atualizadoEm), nomeItem: item.nome, profissionalId: item.profissionalId || comanda.profissionalId, valorRecebido: dinheiro(Number(item.subtotal || 0) * fatorDesconto(comanda)), valor: dinheiro(Number(item.subtotal || 0) * fatorDesconto(comanda)), pesoNaComanda: pesoNaComanda(comanda, Number(item.subtotal || 0)), rateio: rateioPagamentos(comanda), meioPagamento: comanda.pagamentos?.find((pagamento) => pagamento.meio !== 'conta')?.meio || comanda.pagamento })));
   const produtosComanda = comandasPagas.map((comanda) => {
     const itensProduto = (comanda.itens || []).filter((item) => item.tipo === 'produto');
+    const itensComissionaveis = itensProduto.filter((item) => !isProdutoBebida(item));
+    const itensBebidas = itensProduto.filter((item) => isProdutoBebida(item));
+    const totalComissionavel = dinheiro(itensComissionaveis.reduce((soma, item) => soma + Number(item.subtotal || 0), 0) * fatorDesconto(comanda));
+    const totalBebidas = dinheiro(itensBebidas.reduce((soma, item) => soma + Number(item.subtotal || 0), 0) * fatorDesconto(comanda));
     return {
       id: comanda.id,
       clienteNome: comanda.clienteNome || '',
@@ -4018,7 +4038,11 @@ export function calcularComissoesEstado(estado, empresaId, { data = '', lojaId =
       lojaId: comanda.lojaId,
       profissionalId: comanda.profissionalId || null,
       itens: itensProduto,
-      total: dinheiro(itensProduto.reduce((soma, item) => soma + Number(item.subtotal || 0), 0) * fatorDesconto(comanda)),
+      itensComissionaveis,
+      itensBebidas,
+      total: totalComissionavel,
+      totalBebidas,
+      totalGeralProdutos: dinheiro(itensProduto.reduce((soma, item) => soma + Number(item.subtotal || 0), 0) * fatorDesconto(comanda)),
       pagamento: { meioPagamento: comanda.pagamentos?.find((pagamento) => pagamento.meio !== 'conta')?.meio || comanda.pagamento },
       rateio: rateioPagamentos(comanda),
       pesoNaComanda: pesoNaComanda(comanda, itensProduto.reduce((soma, item) => soma + Number(item.subtotal || 0), 0)),
@@ -4409,10 +4433,11 @@ function marcarOrigemEstornada(empresaId, { sourceType, sourceId, actionId, stat
   const estado = estadoEmpresa(empresaId);
   const origem = sourceType === 'comanda' ? estado.comandas[String(sourceId)] : estado.vendasRevenda[String(sourceId)];
   if (!origem || origem.empresaId !== String(empresaId)) return null;
+  const estornadoComSucesso = status === 'completed' || Boolean(input?.cancelarFinalizada) || Boolean(input?.forcar);
   origem.dinoReversal = { actionId, status, atualizadoEm: dataAtual() };
-  origem.estornada = status === 'completed';
+  origem.estornada = estornadoComSucesso;
   origem.estornoStatus = status;
-  if (status === 'completed') {
+  if (estornadoComSucesso || status === 'manual_required') {
     origem.status = 'cancelada';
     origem.canceladaEm = dataAtual();
     origem.canceladoPor = input?.operador || 'operador';
@@ -4445,7 +4470,7 @@ function adaptersParaEstorno(empresaId, dados = {}) {
         const externos = pagamentos.filter((item) => !['dinheiro', 'conta'].includes(String(item.meio || item.meioPagamento || '').toLowerCase()));
         const gateway = dados.gatewayAdapter || dados.paymentAdapter || dados.gateway;
         if (!externos.length) return { status: 'completed', reason: 'cash_or_account_payment' };
-        if (input?.estornoManual || input?.confirmarEstornoManual || dados?.estornoManual || dados?.confirmarEstornoManual || !gateway) {
+        if (input?.estornoManual !== false || input?.confirmarEstornoManual || dados?.estornoManual !== false || dados?.confirmarEstornoManual || !gateway) {
           return { status: 'completed', reason: 'in_store_counter_payment_reversed', details: externos.map((p) => ({ id: p.id, meio: p.meio, valor: p.valor })) };
         }
         if (!gateway || typeof gateway.refund !== 'function') return { status: 'manual_required', pending: ['gateway_refund_adapter'], refundRequired: true };

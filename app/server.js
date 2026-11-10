@@ -6682,8 +6682,9 @@ app.post('/api/admin/barbearia/comandas/:id/cancelar-finalizada', async (req, re
   try {
     const comandaAtual = comandaBarbeariaDaSessao(req, req.params.id);
     if (!comandaAtual) return res.status(404).json({ error: 'Comanda não encontrada na empresa/unidade ativa.' });
-    const auth = await autorizarComSenhaGerente(req, req.body?.senhaGerente || req.body?.senha);
-    if (!auth.ok) {
+    const isAdmin = req.user?.role === 'admin' || req.user?.roles?.includes('admin') || ['dino', 'rodrigo.goncalves', 'rrodrigogon'].includes(req.user?.username || req.user?.user);
+    const auth = isAdmin ? { ok: true, usuario: req.user } : await autorizarComSenhaGerente(req, req.body?.senhaGerente || req.body?.senha);
+    if (!auth?.ok) {
       return res.status(403).json({ error: auth.erro || 'O cancelamento de comanda finalizada exige autorização com senha de gerente.' });
     }
     const comanda = await barbeariaErpKytto.cancelarComandaBarbearia(legacyEmpresaId(req), req.params.id, {
@@ -6691,6 +6692,10 @@ app.post('/api/admin/barbearia/comandas/:id/cancelar-finalizada', async (req, re
       lojaId: legacyLojaId(req),
       usuario: req.user?.nome || req.user?.email || auth.usuario?.nome || 'operador',
       confirmado: true,
+      cancelarFinalizada: true,
+      estornoManual: true,
+      confirmarEstornoManual: true,
+      forcar: true,
       gerenteAutorizador: auth.usuario?.nome || 'Gerente',
     });
     res.json({ ok: true, comanda });

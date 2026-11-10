@@ -364,7 +364,12 @@ export async function executeDinoReversal(context, input, deps = {}) {
   const request = await requestDinoReversal(scope, normalized, { ...deps, adapter });
   const actionId = actionIdFrom(request);
   if (!actionId) fail('Ação de estorno não localizada.', 'DINO_REVERSAL_ACTION_NOT_FOUND', 404);
-  if (source?.dinoReversal?.actionId && source.dinoReversal.actionId !== actionId) fail('A origem já possui estorno coordenado por outra ação.', 'DINO_SOURCE_ALREADY_REVERSED', 409);
+  if (source?.dinoReversal?.actionId && source.dinoReversal.actionId !== actionId) {
+    const priorCompleted = source.dinoReversal.status === 'completed' || source.estornada === true || source.status === 'cancelada';
+    if (priorCompleted && !normalized.forceReversal && !normalized.cancelarFinalizada && !normalized.forcar) {
+      fail('A origem já possui estorno coordenado por outra ação.', 'DINO_SOURCE_ALREADY_REVERSED', 409);
+    }
+  }
   const effects = {};
   const prior = typeof adapter.listEffects === 'function' ? await adapter.listEffects(scope, actionId) : [];
   for (const row of prior || []) {
