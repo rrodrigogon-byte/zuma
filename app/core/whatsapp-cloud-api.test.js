@@ -8,6 +8,7 @@ import {
   sendCloudApiTemplateMessage,
   verifyMetaWebhookChallenge,
   parseMetaWebhookEvent,
+  parseCloudApiMessage,
 } from './whatsapp-cloud-api.js';
 
 test('1. formatPhoneNumberE164 formata números brasileiros para o padrão internacional Meta', () => {
@@ -179,4 +180,42 @@ test('6. parseMetaWebhookEvent extrai texto, remetente e botões clicados', () =
   const parsedBtn = parseMetaWebhookEvent(payloadBotao);
   assert.equal(parsedBtn.messages[0].buttonId, 'btn_confirmar');
   assert.equal(parsedBtn.messages[0].text, 'CONFIRMAR');
+});
+
+test('7. parseCloudApiMessage normaliza clique de botão em comando semântico do T-Rex', () => {
+  const msgBotao = {
+    messageId: 'wamid.123',
+    from: '14997462929',
+    senderName: 'João Silva',
+    text: 'CONFIRMAR',
+    buttonId: 'btn_confirmar',
+    type: 'interactive',
+  };
+  const normalizado = parseCloudApiMessage(msgBotao);
+  assert.equal(normalizado.ignored, false);
+  assert.equal(normalizado.text, 'CONFIRMO');
+  assert.equal(normalizado.phone, '5514997462929');
+  assert.equal(normalizado.remoteJid, '5514997462929@s.whatsapp.net');
+
+  const msgSim = {
+    messageId: 'wamid.456',
+    from: '5565999056008',
+    senderName: 'Pedro',
+    text: 'SIM',
+    buttonId: 'btn_sim',
+    type: 'interactive',
+  };
+  const normalizadoSim = parseCloudApiMessage(msgSim);
+  assert.equal(normalizadoSim.text, 'CONFIRMO');
+
+  const msgCancel = {
+    messageId: 'wamid.789',
+    from: '5565999056008',
+    senderName: 'Pedro',
+    text: 'CANCELAR',
+    buttonId: 'btn_cancelar',
+    type: 'interactive',
+  };
+  const normalizadoCancel = parseCloudApiMessage(msgCancel);
+  assert.equal(normalizadoCancel.text, 'CANCELO');
 });

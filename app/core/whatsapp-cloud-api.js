@@ -280,7 +280,10 @@ export function parseMetaWebhookEvent(body = {}) {
       }
     } else if (type === 'button') {
       text = msg.button?.text || '';
+    } else if (type === 'audio' || type === 'voice') {
+      text = '[Áudio recebido]';
     }
+    const audioId = (type === 'audio' || type === 'voice') ? (msg.audio?.id || msg.voice?.id || null) : null;
 
     const contact = contacts.find(c => c.wa_id === msg.from);
 
@@ -292,6 +295,7 @@ export function parseMetaWebhookEvent(body = {}) {
       type,
       text,
       buttonId,
+      audioId,
       raw: msg,
     };
   });
@@ -300,5 +304,40 @@ export function parseMetaWebhookEvent(body = {}) {
     metadata: change.metadata || {},
     messages: parsedMessages,
     statuses,
+  };
+}
+
+/**
+ * Normaliza o evento da Meta Cloud API para o formato esperado pelo ingest do Kytto/T-Rex
+ */
+export function parseCloudApiMessage(metaMsg = {}) {
+  const rawPhone = String(metaMsg.from || '').replace(/\D/g, '');
+  const phone = rawPhone.startsWith('55') ? rawPhone : (rawPhone ? '55' + rawPhone : '');
+  const externalId = clean(metaMsg.messageId, 200);
+  let text = clean(metaMsg.text, 4000);
+
+  // Normalização semântica de respostas de botões interativos
+  if (metaMsg.buttonId) {
+    const btn = String(metaMsg.buttonId).toLowerCase();
+    if (btn.includes('confirm') || btn === 'btn_sim' || btn === 'sim') text = 'CONFIRMO';
+    else if (btn.includes('remarc')) text = 'REMARCAR';
+    else if (btn.includes('cancel') || btn === 'btn_nao' || btn === 'nao' || btn === 'não') text = 'CANCELO';
+  }
+
+  const isAudio = metaMsg.type === 'audio' || metaMsg.type === 'voice' || Boolean(metaMsg.audioId);
+
+  return {
+    ignored: !text && !isAudio,
+    event: 'MESSAGES_UPSERT',
+    externalId,
+    remoteJid: phone ? phone + '@s.whatsapp.net' : '',
+    phone,
+    name: clean(metaMsg.senderName, 160),
+    text: text || (isAudio ? '[Áudio recebido]' : ''),
+    buttonId: metaMsg.buttonId || null,
+    audioId: metaMsg.audioId || null,
+    isAudio,
+    timestamp: metaMsg.timestamp ? new Date(metaMsg.timestamp).getTime() : Date.now(),
+    fromMe: false,
   };
 }

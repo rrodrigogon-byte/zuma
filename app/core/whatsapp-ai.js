@@ -589,11 +589,15 @@ async function sendOutput(channel, session, output) {
   if (!claimed) {
     throw await deliveryError(session, output, 'unknown', 'WHATSAPP_DELIVERY_RACE', 'estado de entrega alterado por outro worker; revisão humana obrigatória');
   }
+  const isCloudApi = channel.configuracao?.transport === 'cloud_api' || channel.configuracao?.provedor === 'cloud_api' || channel.configuracao?.whatsapp_provider === 'cloud_api' || Boolean(channel.configuracao?.meta_access_token);
   const tenant = {
     nome: channel.configuracao?.display_name || channel.nome || 'Atendimento da unidade',
     whatsapp_api_url: channel.api_base_url || undefined,
     whatsapp_instance: channel.configuracao?.instance || undefined,
-    transport: channel.configuracao?.transporte === 'waha' || channel.configuracao?.provider === 'waha' ? 'waha' : undefined,
+    transport: isCloudApi ? 'cloud_api' : (channel.configuracao?.transporte === 'waha' || channel.configuracao?.provider === 'waha' ? 'waha' : undefined),
+    meta_access_token: channel.configuracao?.meta_access_token || undefined,
+    meta_phone_number_id: channel.configuracao?.meta_phone_number_id || undefined,
+    meta_waba_id: channel.configuracao?.meta_waba_id || undefined,
     waha_session: channel.configuracao?.waha_session || channel.configuracao?.instance || undefined,
     waha_group_id: channel.configuracao?.waha_group_id || undefined,
     empresa_id: session.empresa_id,
@@ -643,7 +647,24 @@ async function sendOutput(channel, session, output) {
   let result = null;
   for (let index = sent; index < bubbles.length; index += 1) {
     if (index > 0) await sleep(bubbleDelayMs(bubbles[index]));
-    result = await enviarMensagem(tenant, session.telefone, bubbles[index]);
+    let botoesInterativos = null;
+    if (tenant?.transport === 'cloud_api' || tenant?.botoes) {
+      const textoLower = String(bubbles[index] || '').toLowerCase();
+      if (textoLower.includes('sim ou não') || textoLower.includes('sim ou nao') || textoLower.includes('responda sim')) {
+        botoesInterativos = [
+          { id: 'btn_sim', title: '✅ SIM' },
+          { id: 'btn_nao', title: '❌ NÃO' },
+        ];
+      } else if (textoLower.includes('confirmo, remarcar ou cancelo') || textoLower.includes('confirmo ou remarcar')) {
+        botoesInterativos = [
+          { id: 'btn_confirmar', title: '✅ CONFIRMO' },
+          { id: 'btn_remarcar', title: '📅 REMARCAR' },
+          { id: 'btn_cancelar', title: '❌ CANCELAR' },
+        ];
+      }
+    }
+    const tenantEnvio = botoesInterativos ? { ...tenant, botoes: botoesInterativos } : tenant;
+    result = await enviarMensagem(tenantEnvio, session.telefone, bubbles[index]);
     if (result?.uncertain) {
       throw await deliveryError(session, claimed, 'unknown', 'WHATSAPP_DELIVERY_UNKNOWN', `${tenant.transport === 'waha' ? 'WAHA' : 'Evolution'} não confirmou se a mensagem foi aceita`, { bolhasEnviadas: index });
     }

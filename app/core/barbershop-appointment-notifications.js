@@ -673,10 +673,22 @@ export async function processAppointmentNotificationTask(task = {}) {
     [task.id, task.lease_token],
   );
   const textoMsg = mensagem(snapshot, agendamento, elegibilidade.cliente, evento, resolvePersona(canal.configuracao, process.env, task.empresa_id));
+  const isCloud = canal.configuracao?.transport === 'cloud_api' || canal.configuracao?.provedor === 'cloud_api' || Boolean(canal.configuracao?.meta_access_token);
+  const botoes = (evento === EVENTO_CONFIRMACAO_DIA || evento === 'lembrete') ? [
+    { id: 'btn_confirmar', title: '✅ CONFIRMO' },
+    { id: 'btn_remarcar', title: '📅 REMARCAR' },
+    { id: 'btn_cancelar', title: '❌ CANCELAR' },
+  ] : null;
+
   const resultado = await enviarMensagem({
     whatsapp_api_url: process.env.EVOLUTION_API_URL || canal.api_base_url,
     whatsapp_api_key: process.env.EVOLUTION_API_KEY,
     whatsapp_instance: canal.configuracao?.instance || process.env.EVOLUTION_INSTANCE,
+    transport: isCloud ? 'cloud_api' : (canal.configuracao?.transporte || canal.configuracao?.provider),
+    meta_access_token: canal.configuracao?.meta_access_token,
+    meta_phone_number_id: canal.configuracao?.meta_phone_number_id,
+    meta_waba_id: canal.configuracao?.meta_waba_id,
+    botoes,
     empresa_id: task.empresa_id, loja_id: task.loja_id, canal_id: task.canal_id,
   }, elegibilidade.telefone, textoMsg);
   if (!resultado?.ok) {

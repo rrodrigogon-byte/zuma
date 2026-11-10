@@ -11,7 +11,10 @@ import {
   sendCloudApiInteractiveButtons,
   verifyMetaWebhookChallenge,
   parseMetaWebhookEvent,
+  parseCloudApiMessage,
 } from './core/whatsapp-cloud-api.js';
+import crypto from 'node:crypto';
+import { db as pgDb } from './core/database.js';
 
 function store() {
   const state = db();
@@ -214,11 +217,43 @@ export function registerWhatsappCloudRoutes(app, { isPlatformAdmin = () => false
 
     try {
       const parsed = parseMetaWebhookEvent(req.body);
-      if (!parsed) return;
+      if (!parsed || !Array.isArray(parsed.messages) || !parsed.messages.length) return;
+
+      // Buscar canal de integração do WhatsApp ativo
+      let channel = null;
+      if (process.env.DATABASE_URL || process.env.POSTGRES_URL) {
+        try {
+          const channelResult = await pgDb.query(
+            `SELECT * FROM canais_integracao
+              WHERE provedor = 'whatsapp' AND status = 'ativo'
+              ORDER BY configuracao->>'meta_access_token' IS NOT NULL DESC, id LIMIT 1`
+          );
+          channel = channelResult.rows[0];
+        } catch {
+          channel = null;
+        }
+      }
 
       for (const msg of parsed.messages) {
-        // Log para auditoria operacional
         console.log(`[META_CLOUD_API] Mensagem recebida de ${msg.from} (${msg.senderName}): "${msg.text}" ${msg.buttonId ? `[Botão: ${msg.buttonId}]` : ''}`);
+
+        if (!channel) continue;
+
+        const parsedMsg = parseCloudApiMessage(msg);
+        if (parsedMsg.ignored) continue;
+
+        const hash = crypto.createHash('sha256').update(`${parsedMsg.externalId}|${parsedMsg.text}`).digest('hex');
+
+        try {
+          const { ingestInboundWhatsappMessage } = await import('./core/whatsapp-ai-routes.js');
+          const resultado = await ingestInboundWhatsappMessage(channel, parsedMsg, { hash, providerPayload: req.body });
+          if (!resultado?.duplicate && !resultado?.ignored) {
+            const { wakeWhatsappAiWorker } = await import('./core/whatsapp-ai-wake.js');
+            wakeWhatsappAiWorker?.();
+          }
+        } catch (ingestErr) {
+          console.error('[META_CLOUD_API] Falha ao ingerir mensagem na IA:', ingestErr.message);
+        }
       }
     } catch (err) {
       console.error('[META_CLOUD_API] Erro ao processar webhook:', err.message);
