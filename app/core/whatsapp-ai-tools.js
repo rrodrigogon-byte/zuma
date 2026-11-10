@@ -2170,11 +2170,14 @@ async function toolUpdateCustomerProfile(context, args = {}) {
       if (n.dataNascimento) dados.conjugeDataNascimento = n.dataNascimento;
     } catch {}
   }
-  if (args.bebida || args.corte || args.barba) {
+  if (args.bebida || args.corte || args.barba || args.objetivoFitness || args.esporte || args.restricaoAlimentar) {
     dados.preferencias = cliente?.preferencias || {};
     if (args.bebida) dados.preferencias.bebida = cleanText(args.bebida, 100);
     if (args.corte) dados.preferencias.corte = cleanText(args.corte, 100);
     if (args.barba) dados.preferencias.barba = cleanText(args.barba, 100);
+    if (args.objetivoFitness) dados.preferencias.objetivoFitness = cleanText(args.objetivoFitness, 100);
+    if (args.esporte) dados.preferencias.esporte = cleanText(args.esporte, 100);
+    if (args.restricaoAlimentar) dados.preferencias.restricaoAlimentar = cleanText(args.restricaoAlimentar, 100);
   }
   if (args.instagram) {
     dados.instagram = cleanText(args.instagram, 100);

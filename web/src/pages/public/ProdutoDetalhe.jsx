@@ -45,6 +45,15 @@ export default function ProdutoDetalhe() {
 
   const produto = useMemo(() => findProduto(produtos, slug), [produtos, slug])
 
+  useEffect(() => {
+    if (!loading && !produto && slug) {
+      const alias = slug.toLowerCase();
+      if (["stallone", "dino", "supermercado", "agro", "agro_open"].includes(alias)) {
+        navigate("/ecommerce/" + alias, { replace: true });
+      }
+    }
+  }, [loading, produto, slug, navigate]);
+
   // SEO dinâmico com Schema.org Product
   const jsonLd = useMemo(() => produto ? buildProductJsonLd(produto, window.location.href) : null, [produto])
   useSEO({
