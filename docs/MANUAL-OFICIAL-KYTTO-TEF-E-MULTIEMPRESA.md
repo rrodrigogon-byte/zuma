@@ -590,3 +590,13 @@ Ao abrir uma comanda de atendimento ou lançar procedimentos de pacotes/clubes:
 4. O motor Kytto reconhece tanto o ID quanto o nome do profissional, garantindo validação imediata e comissionamento sem erros.
 
 ![Print 51 — Comanda de Atendimento com Bruno Selecionado com Sucesso](/home/ubuntu/agro-open/docs/prints/51-barbearia-comanda-procedimento-bruno-sucesso.png)
+
+
+---
+
+## 36. PREVENÇÃO DEFINITIVA CONTRA SUMIÇO DE PROFISSIONAIS E TRAVAMENTO DE COMANDAS
+
+### 36.1 Por que o profissional não sai mais da agenda?
+1. **Auto-Reconciliação da Tela:** A agenda do Kytto ERP monitora os profissionais contratados e em atividade. Mesmo que a recepcionista tenha usado o filtro de exibição no passado, o sistema detecta a presença de profissionais ativos e garante que eles estejam marcados por padrão;
+2. **Proteção contra Exclusão Involuntária:** Os barbeiros oficiais titulares (Dino, Bruno Mendes, Nati, Ester/Ster, Jhenyffer) são cadastrados como profissionais protegidos. O sistema impede que cliques acidentais no painel administrativo desativem esses colaboradores;
+3. **Validação Inteligente em Comandas:** Ao abrir uma comanda de atendimento ou lançar procedimentos de pacotes/clubes, o operador pode selecionar o barbeiro normalmente. O sistema amarra o profissional e confirma o lançamento sem erros.
