@@ -81,3 +81,27 @@ test('cálculo da DRE completa com margens, EBITDA e análise vertical', async (
   const lEbitda = dre.linhas.find(l => l.codigo === '7');
   assert.equal(lEbitda.av, 36); // 9.000 / 25.000 = 36%
 });
+
+test("geração de exportação XLSX e HTML Oficial PDF", async () => {
+  const { exportarDreParaXlsx, gerarHtmlDreOficialPdf, calcularDreCompleta } = await import("./dre-servico.js");
+  const mockDb = {
+    query: async () => ({
+      rows: [
+        { id: "1", tipo: "receita", categoria: "Cortes", valor: 1000, data_competencia: "2026-11-01", status: "pago", origem: "barbearia_atendimento" }
+      ]
+    })
+  };
+  const dre = await calcularDreCompleta(mockDb, "d0d0ac01-8e50-4b61-8c79-de4aaa916da6", { mes: "2026-11" });
+  
+  // XLSX
+  const xlsxBuf = exportarDreParaXlsx(dre, null, { nome: "Barbearia Dino", cnpj: "50.073.355/0001-89" });
+  assert.ok(Buffer.isBuffer(xlsxBuf));
+  assert.ok(xlsxBuf.length > 1000);
+
+  // PDF / HTML
+  const html = gerarHtmlDreOficialPdf(dre, null, { nome: "Barbearia Dino", cnpj: "50.073.355/0001-89" });
+  assert.ok(html.includes("DEMONSTRAÇÃO DO RESULTADO DO EXERCÍCIO (DRE)"));
+  assert.ok(html.includes("Barbearia Dino"));
+  assert.ok(html.includes("50.073.355/0001-89"));
+  assert.ok(html.includes("RODRIGO RIBEIRO GONÇALVES"));
+});

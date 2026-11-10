@@ -59,6 +59,7 @@ export default function DRECompleta() {
   const [dreAnual, setDreAnual] = useState(null);
   const [carregando, setCarregando] = useState(true);
   const [exportando, setExportando] = useState(false);
+  const [exportandoXlsx, setExportandoXlsx] = useState(false);
   // Carrega empresas autorizadas estritamente da API
   useEffect(() => {
     let ativo = true;
@@ -209,7 +210,65 @@ export default function DRECompleta() {
     }
   };
 
-  const imprimirDre = () => {
+  const exportarXlsx = async () => {
+    setExportandoXlsx(true);
+    try {
+      const qs = new URLSearchParams({
+        mes: mesSelecionado,
+        ano: String(anoSelecionado),
+        regime,
+        empresaId: empresaAtiva.uuid,
+        empresaNome: empresaAtiva.nome,
+        empresaCnpj: empresaAtiva.cnpj || "",
+        empresaIe: empresaAtiva.ie || ""
+      });
+      const res = await api.get(`/api/admin/erp/dre/exportar-xlsx?${qs.toString()}`);
+      if (res?.conteudoBase64) {
+        const byteCharacters = atob(res.conteudoBase64);
+        const byteNumbers = new Array(byteCharacters.length);
+        for (let i = 0; i < byteCharacters.length; i++) {
+          byteNumbers[i] = byteCharacters.charCodeAt(i);
+        }
+        const byteArray = new Uint8Array(byteNumbers);
+        const blob = new Blob([byteArray], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.setAttribute("download", res.nomeArquivo || `DRE_${empresaAtiva.id}_${mesSelecionado}.xlsx`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        toast("DRE exportada com sucesso em planilha XLSX (Excel Multi-Abas)!", "success");
+      }
+    } catch (err) {
+      toast("Falha ao exportar XLSX: " + err.message, "error");
+    } finally {
+      setExportandoXlsx(false);
+    }
+  };
+
+  const imprimirDre = async () => {
+    try {
+      const qs = new URLSearchParams({
+        mes: mesSelecionado,
+        regime,
+        empresaId: empresaAtiva.uuid,
+        empresaNome: empresaAtiva.nome,
+        empresaCnpj: empresaAtiva.cnpj || "",
+        empresaIe: empresaAtiva.ie || ""
+      });
+      const res = await api.get(`/api/admin/erp/dre/imprimir-pdf?${qs.toString()}`);
+      if (res?.html) {
+        const win = window.open("", "_blank");
+        if (win) {
+          win.document.write(res.html);
+          win.document.close();
+          win.focus();
+          setTimeout(() => win.print(), 400);
+          return;
+        }
+      }
+    } catch {}
     window.print();
   };
 
@@ -257,14 +316,22 @@ export default function DRECompleta() {
               className="c360-btn ghost"
               style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 700, fontSize: 13, background: 'var(--card)' }}
             >
-              📥 {exportando ? 'Exportando…' : 'Exportar CSV (Excel)'}
+              📥 {exportando ? 'Exportando…' : 'Exportar CSV'}
+            </button>
+            <button
+              onClick={exportarXlsx}
+              disabled={exportandoXlsx}
+              className="c360-btn ghost"
+              style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 800, fontSize: 13, background: 'var(--card)', color: '#16a34a', borderColor: '#16a34a' }}
+            >
+              📊 {exportandoXlsx ? 'Gerando Planilha…' : 'Exportar XLSX (Excel)'}
             </button>
             <button
               onClick={imprimirDre}
               className="c360-btn primary"
               style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 800, fontSize: 13, background: '#16a34a', borderColor: '#16a34a' }}
             >
-              🖨️ Imprimir DRE Oficial (PDF)
+              🖨️ Gerar PDF / Imprimir Oficial
             </button>
           </div>
         </div>
