@@ -13,6 +13,7 @@ const GRUPOS_ERP = [
     categoria: '📜 Comercial & Vendas B2B/B2C',
     destaque: true,
     items: [
+      { icon: '🚀', label: 'Como Vender Mais com IA', desc: 'Funil Dinheiro na Mesa, recuperação de clientes inativos, opt-out Meta e cadência de WhatsApp', href: '/admin/inteligencia-vendas', novo: true },
       { icon: '📜', label: 'Propostas Comerciais', desc: 'Cotações B2B/B2C, envio WhatsApp, PDF timbrado e faturamento em 1 clique', href: '/admin/propostas', novo: true },
       { icon: '🛍️', label: 'Loja Online & E-commerce', desc: 'Catálogo de produtos, pedidos online, promoções e multi-loja', href: '/admin/ecommerce' },
       { icon: '🏪', label: 'Varejo Geral', desc: 'Preços por unidade, promoções, balança e etiquetas de gôndola', href: '/admin/varejo' },
