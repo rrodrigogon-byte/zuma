@@ -498,6 +498,38 @@ export function createVarejoAdminRouter({ db, escopoDaRequisicao, fuso = 'Americ
     return svc.consultarPrecoKioskMultimidia(db, empresaId, req.body);
   }));
 
+  // ── Fase 7 Enterprise: Fraude PDV, Tabloides, Trade e Auditoria Noturna ──
+  router.get("/auditoria-fraude-pdv/listar", rota("catalog.read", async ({ empresaId, req }) => {
+    return svc.listarAuditoriaFraudePdv(db, empresaId, req.query);
+  }));
+  router.post("/auditoria-fraude-pdv/registrar", rota("catalog.write", async ({ req, empresaId, usuario }) => {
+    return svc.registrarAuditoriaFraudePdv(db, empresaId, { ...req.body, operadorNome: req.body.operadorNome || usuario?.nome });
+  }));
+  router.post("/auditoria-fraude-pdv/:id/julgar", rota("catalog.write", async ({ req, empresaId, usuario }) => {
+    return svc.julgarEventoFraudePdv(db, empresaId, req.params.id, { ...req.body, fiscalAutorizador: usuario?.nome || req.body.fiscalAutorizador });
+  }));
+  router.get("/tabloides/listar", rota("catalog.read", async ({ empresaId }) => {
+    return svc.listarTabloidesEncartes(db, empresaId);
+  }));
+  router.post("/tabloides/criar", rota("catalog.write", async ({ req, empresaId }) => {
+    return svc.criarTabloideEncarte(db, empresaId, req.body);
+  }));
+  router.post("/tabloides/:id/disparar-whatsapp", rota("catalog.write", async ({ req, empresaId }) => {
+    return svc.dispararTabloideWhatsappClube(db, empresaId, req.params.id);
+  }));
+  router.get("/trade-marketing/listar", rota("catalog.read", async ({ empresaId }) => {
+    return svc.listarTradeMarketingEspacos(db, empresaId);
+  }));
+  router.post("/trade-marketing/cadastrar", rota("catalog.write", async ({ req, empresaId }) => {
+    return svc.cadastrarTradeMarketingEspaco(db, empresaId, req.body);
+  }));
+  router.get("/auditoria-noturna/listar", rota("catalog.read", async ({ empresaId }) => {
+    return svc.listarAuditoriaNoturnaPerdas(db, empresaId);
+  }));
+  router.post("/auditoria-noturna/registrar", rota("catalog.write", async ({ req, empresaId, usuario }) => {
+    return svc.registrarAuditoriaNoturnaPerdas(db, empresaId, { ...req.body, auditorResponsavel: usuario?.nome || req.body.auditorResponsavel });
+  }));
+
   // ── Download do Instalador Windows Kytto PDV ──
   router.get("/download-instalador-windows", (req, res) => {
     const path = require("path");

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
+  UserX, Megaphone, Newspaper, Moon,
   ScanLine, LayoutGrid, FileCheck, QrCode,
   Navigation, Recycle, Handshake,
   Radio, Ticket, Vault,
@@ -348,6 +349,14 @@ export default function Supermercado() {
   const [perdasOcorrenciasList, setPerdasOcorrenciasList] = useState([]);
   const [sifAcougueList, setSifAcougueList] = useState([]);
   const [planogramasList, setPlanogramasList] = useState([]);
+  // ── FASE 7 ENTERPRISE: AUDITORIA FRAUDE PDV, TABLOIDES, TRADE & PERDAS ──
+  const [fraudePdvList, setFraudePdvList] = useState([]);
+  const [fraudeResumo, setFraudeResumo] = useState({ totalEventos: 0, altoRisco: 0, valorTotalAuditado: '0.00', indiceAuditoriaPdv: '99.4%' });
+  const [tabloidesList, setTabloidesList] = useState([]);
+  const [tradeMarketingList, setTradeMarketingList] = useState([]);
+  const [tradeResumo, setTradeResumo] = useState({ receitaTotalTrade: '0.00', espacosLocados: 0, taxaOcupacao: '100%' });
+  const [auditoriasNoturnasList, setAuditoriasNoturnasList] = useState([]);
+  const [auditoriaNoturnaResumo, setAuditoriaNoturnaResumo] = useState({ perdaTotalEstimada: '0.00', mediaIndicePerda: '0.74%', metaAbras: '1.30%', conformidadeAbras: 'DENTRO DA META' });
   const [kioskBusca, setKioskBusca] = useState({ ean: '7891000100103', resultado: null });
 
   const [xmlNfeTexto, setXmlNfeTexto] = useState("");
@@ -493,6 +502,27 @@ export default function Supermercado() {
       // 35. Planogramas de Gôndola
       const rPlano = await api.get('/api/admin/supermercado/planogramas/listar').catch(() => null);
       if (rPlano && Array.isArray(rPlano)) setPlanogramasList(rPlano);
+      // 36. Auditoria de Fraude PDV
+      const rFraud = await api.get('/api/admin/supermercado/auditoria-fraude-pdv/listar').catch(() => null);
+      if (rFraud && rFraud.eventos) {
+        setFraudePdvList(rFraud.eventos);
+        if (rFraud.resumo) setFraudeResumo(rFraud.resumo);
+      }
+      // 37. Tabloides e Encartes
+      const rTab = await api.get('/api/admin/supermercado/tabloides/listar').catch(() => null);
+      if (rTab && rTab.tabloides) setTabloidesList(rTab.tabloides);
+      // 38. Trade Marketing Espaços
+      const rTrade = await api.get('/api/admin/supermercado/trade-marketing/listar').catch(() => null);
+      if (rTrade && rTrade.espacos) {
+        setTradeMarketingList(rTrade.espacos);
+        if (rTrade.resumo) setTradeResumo(rTrade.resumo);
+      }
+      // 39. Auditoria Noturna de Perdas
+      const rAudNot = await api.get('/api/admin/supermercado/auditoria-noturna/listar').catch(() => null);
+      if (rAudNot && rAudNot.auditorias) {
+        setAuditoriasNoturnasList(rAudNot.auditorias);
+        if (rAudNot.resumo) setAuditoriaNoturnaResumo(rAudNot.resumo);
+      }
       // 29. Picking & E-commerce
       const rPick = await api.get('/api/admin/supermercado/picking/pedidos/listar').catch(() => null);
       if (rPick && Array.isArray(rPick)) setPickingList(rPick);
@@ -1535,6 +1565,18 @@ export default function Supermercado() {
         </button>
         <button className={`super-tab-btn ${abaAtiva === 'kiosk' ? 'active' : ''}`} onClick={() => setAbaAtiva('kiosk')}>
           <ScanLine size={16} /> Busca-Preço Kiosk Multimídia
+        </button>
+        <button className={`super-tab-btn ${abaAtiva === 'fraude' ? 'active' : ''}`} onClick={() => setAbaAtiva('fraude')}>
+          <UserX size={16} /> Fraude & Auditoria PDV ({fraudePdvList.length})
+        </button>
+        <button className={`super-tab-btn ${abaAtiva === 'tabloides' ? 'active' : ''}`} onClick={() => setAbaAtiva('tabloides')}>
+          <Megaphone size={16} /> Encartes & Tabloides ({tabloidesList.length})
+        </button>
+        <button className={`super-tab-btn ${abaAtiva === 'trademarketing' ? 'active' : ''}`} onClick={() => setAbaAtiva('trademarketing')}>
+          <Store size={16} /> Trade Marketing ({tradeMarketingList.length})
+        </button>
+        <button className={`super-tab-btn ${abaAtiva === 'auditorianoturna' ? 'active' : ''}`} onClick={() => setAbaAtiva('auditorianoturna')}>
+          <Moon size={16} /> Auditoria Noturna ({auditoriasNoturnasList.length})
         </button>
         <button className={`super-tab-btn ${abaAtiva === 'margens' ? 'active' : ''}`} onClick={() => setAbaAtiva('margens')}>
           <TrendingUp size={16} /> Margens & Curva ABC
