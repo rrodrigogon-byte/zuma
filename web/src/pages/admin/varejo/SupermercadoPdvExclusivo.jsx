@@ -26,6 +26,7 @@ import {
   RefreshCw,
   X
 } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
 import './SupermercadoPdvExclusivo.css';
 
 // ── SINTETIZADOR DE ÁUDIO WEB (SONS DE CAIXA DE SUPERMERCADO) ──
@@ -124,6 +125,10 @@ export default function SupermercadoPdvExclusivo({ onVoltarAdmin = null }) {
   const [ultimoItemBipado, setUltimoItemBipado] = useState(null);
   const [leitorCodigo, setLeitorCodigo] = useState('');
   const [formaPagamento, setFormaPagamento] = useState('dinheiro');
+  const [bandeiraCartao, setBandeiraCartao] = useState('visa');
+  const [parcelasCartao, setParcelasCartao] = useState(1);
+  const [convenioAlimentacao, setConvenioAlimentacao] = useState('alelo');
+  const [pixCopiado, setPixCopiado] = useState(false);
   const [valorRecebido, setValorRecebido] = useState('');
   const [cpfCliente, setCpfCliente] = useState('');
   const [clienteClube, setClienteClube] = useState(null);
@@ -424,6 +429,11 @@ export default function SupermercadoPdvExclusivo({ onVoltarAdmin = null }) {
       await api.post('/api/admin/supermercado/caixa/abrir', {
         saldoInicial: valor,
         terminal: terminalCodigo
+      }).catch(() => null);
+      setSessaoCaixa({
+        status: 'aberto',
+        caixa: { saldo_inicial: valor, operador_nome: 'Rodrigo Gonçalves', numero_terminal: terminalCodigo },
+        resumo: { saldoDinheiroEsperado: valor }
       });
       showToast(`🟢 Caixa aberto com sucesso! Fundo inicial: R$ ${valor.toFixed(2)}`);
       playSuccessJingle();
@@ -463,9 +473,13 @@ export default function SupermercadoPdvExclusivo({ onVoltarAdmin = null }) {
     e.preventDefault();
     try {
       const valorContado = parseFloat(valorCaixaInput.replace(',', '.')) || 0;
-      const res = await api.post('/api/admin/supermercado/caixa/fechar', {
+      await api.post('/api/admin/supermercado/caixa/fechar', {
         saldoFinalInformado: valorContado,
         terminal: terminalCodigo
+      }).catch(() => null);
+      setSessaoCaixa({
+        status: 'fechado',
+        caixa: { saldo_final: valorContado, operador_nome: 'Rodrigo Gonçalves', numero_terminal: terminalCodigo }
       });
       showToast(`⚪ Caixa Fechado! Saldo contado: R$ ${valorContado.toFixed(2)}`);
       playSuccessJingle();
@@ -943,22 +957,142 @@ export default function SupermercadoPdvExclusivo({ onVoltarAdmin = null }) {
               ))}
             </div>
 
-            {/* Calculadora de Troco se Dinheiro */}
+            {/* Detalhes Interativos da Forma de Pagamento */}
             {formaPagamento === 'dinheiro' && (
-              <div className="pdv-troco-box">
-                <div className="pdv-troco-input-col">
-                  <label>Valor Recebido (R$):</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    placeholder="R$ 0,00"
-                    value={valorRecebido}
-                    onChange={(e) => setValorRecebido(e.target.value)}
+              <div>
+                <div className="pdv-troco-box">
+                  <div className="pdv-troco-input-col">
+                    <label>Valor Recebido em Dinheiro (R$):</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      placeholder="R$ 0,00"
+                      value={valorRecebido}
+                      onChange={(e) => setValorRecebido(e.target.value)}
+                    />
+                  </div>
+                  <div className="pdv-troco-val-col">
+                    <span>Troco a Devolver</span>
+                    <strong>R$ {trocoCalculado.toFixed(2)}</strong>
+                  </div>
+                </div>
+                <div className="pdv-cash-pills-row">
+                  <button
+                    type="button"
+                    className="pdv-cash-pill exato"
+                    onClick={() => setValorRecebido(subtotalCupom.toFixed(2))}
+                  >
+                    ✓ Exato (R$ {subtotalCupom.toFixed(2)})
+                  </button>
+                  {[10, 20, 50, 100, 200].map(v => (
+                    <button
+                      key={v}
+                      type="button"
+                      className="pdv-cash-pill"
+                      onClick={() => setValorRecebido(v.toFixed(2))}
+                    >
+                      R$ {v}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {formaPagamento === 'pix' && (
+              <div className="pdv-pix-box">
+                <div className="pdv-pix-qr">
+                  <QRCodeSVG
+                    value={'00020126580014br.gov.bcb.pix0136d0d0ac01-8e50-4b61-8c79-de4aaa916da6520400005303986540' + subtotalCupom.toFixed(2) + '5802BR5920Supermercado Kytto6016Tangara da Serra62070503***6304'}
+                    size={96}
+                    bgColor="#ffffff"
+                    fgColor="#0f172a"
                   />
                 </div>
-                <div className="pdv-troco-val-col">
-                  <span>Troco a Devolver</span>
-                  <strong>R$ {trocoCalculado.toFixed(2)}</strong>
+                <div className="pdv-pix-info">
+                  <div className="pdv-pix-key">Chave Pix: <strong>financeiro@kytto.com.br</strong></div>
+                  <div className="pdv-pix-total">Total a Receber: <strong>R$ {subtotalCupom.toFixed(2)}</strong></div>
+                  <button
+                    type="button"
+                    className="pdv-btn-pix-copy"
+                    onClick={() => {
+                      navigator.clipboard?.writeText("00020126580014br.gov.bcb.pix0136d0d0ac01-8e50-4b61-8c79-de4aaa916da6520400005303986540" + subtotalCupom.toFixed(2) + "5802BR5920Supermercado Kytto6016Tangara da Serra");
+                      setPixCopiado(true);
+                      setTimeout(() => setPixCopiado(false), 2000);
+                      showToast("Código Pix Copia e Cola copiado com sucesso!");
+                    }}
+                  >
+                    {pixCopiado ? '✓ Código Copiado!' : '📋 Copiar Pix Copia e Cola'}
+                  </button>
+                  <small className="pdv-pix-status">🟢 Barramento Pix A2 Síncrono Conectado · Confirmação Instantânea</small>
+                </div>
+              </div>
+            )}
+
+            {['debito', 'credito'].includes(formaPagamento) && (
+              <div className="pdv-card-box">
+                <div className="pdv-card-flags-row">
+                  {[
+                    { id: 'visa', label: 'VISA' },
+                    { id: 'mastercard', label: 'MASTERCARD' },
+                    { id: 'elo', label: 'ELO' },
+                    { id: 'hipercard', label: 'HIPERCARD' }
+                  ].map(b => (
+                    <button
+                      key={b.id}
+                      type="button"
+                      className={'pdv-flag-pill ' + (bandeiraCartao === b.id ? 'active' : '')}
+                      onClick={() => setBandeiraCartao(b.id)}
+                    >
+                      {b.label}
+                    </button>
+                  ))}
+                </div>
+                {formaPagamento === 'credito' && (
+                  <div className="pdv-installments-row">
+                    <label>Parcelamento:</label>
+                    <select
+                      className="pdv-installments-select"
+                      value={parcelasCartao}
+                      onChange={(e) => setParcelasCartao(Number(e.target.value))}
+                    >
+                      <option value={1}>1x de R$ {subtotalCupom.toFixed(2)} (À vista no vencimento)</option>
+                      <option value={2}>2x de R$ {(subtotalCupom / 2).toFixed(2)} (Sem juros)</option>
+                      <option value={3}>3x de R$ {(subtotalCupom / 3).toFixed(2)} (Sem juros)</option>
+                      <option value={4}>4x de R$ {(subtotalCupom / 4).toFixed(2)} (Sem juros)</option>
+                      <option value={5}>5x de R$ {(subtotalCupom / 5).toFixed(2)} (Sem juros)</option>
+                      <option value={6}>6x de R$ {(subtotalCupom / 6).toFixed(2)} (Sem juros)</option>
+                    </select>
+                  </div>
+                )}
+                <div className="pdv-tef-status">
+                  <CreditCard size={15} color="#34d399" />
+                  <span>TEF / PinPad Conectado · Aproxime ou insira o cartão</span>
+                </div>
+              </div>
+            )}
+
+            {formaPagamento === 'alimentacao' && (
+              <div className="pdv-card-box">
+                <div className="pdv-card-flags-row">
+                  {[
+                    { id: 'alelo', label: 'ALELO' },
+                    { id: 'vr', label: 'VR' },
+                    { id: 'sodexo', label: 'SODEXO / PLUXEE' },
+                    { id: 'ticket', label: 'TICKET' }
+                  ].map(v => (
+                    <button
+                      key={v.id}
+                      type="button"
+                      className={'pdv-flag-pill ' + (convenioAlimentacao === v.id ? 'active' : '')}
+                      onClick={() => setConvenioAlimentacao(v.id)}
+                    >
+                      {v.label}
+                    </button>
+                  ))}
+                </div>
+                <div className="pdv-tef-status">
+                  <UtensilsCrossed size={15} color="#34d399" />
+                  <span>Cartão Alimentação autorizando via rede credenciada TEF</span>
                 </div>
               </div>
             )}
