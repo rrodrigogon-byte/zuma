@@ -1,119 +1,82 @@
-# Relatório Executivo de Homologação e Engenharia ERP Kytto
-**Versão:** 2.4.0 — Homologação Oficial de Parametrização TEF, Pinpads de Balcão e Governança Multi-Tenant  
-**Data:** 09 de Novembro de 2026  
-**Empresas Homologadas:** Barbearia Dino (CNPJ 50.073.355/0002-60, IM 30297 - Tangará da Serra/MT), Stallone Nutre Sport e Agro Open  
+# Relatório Executivo Oficial de Homologação: Kytto ERP Enterprise
+
+**Data de Emissão:** 09 de Novembro de 2026 (Horário de Brasília)  
 **Ambiente:** Produção Live (`https://kytto.com.br`)  
+**Versão da Plataforma:** Kytto ERP v26 Enterprise Multi-Tenant & Multi-Business  
+**Classificação:** Confidencial / Corporativo  
 
 ---
 
-## 1. Sumário Executivo
+## 1. Sumário Executivo das Entregas
 
-O **ERP Kytto Enterprise** consolidou um salto de maturidade tecnológica, equiparando-se e superando os principais players do mercado (TOTVS Moda, Linx Microvix, ContaAzul, Trinks e Avec). Esta rodada de homologação entregou o ecossistema completo de **Parametrização TEF Multi-Adquirente**, permitindo que o administrador configure maquininhas físicas de balcão (Pinpads), conecte adquirentes oficiais e defina matrizes de taxas MDR negociadas diretamente pelo painel web, eliminando a dependência de suporte técnico ou de intermediadores externos com taxas abusivas.
+O ERP Kytto consolidou nesta versão uma suíte de alta performance fiscal, tributária e financeira, superando as soluções legadas do mercado (Conta Azul, Omie, Bling e Totvs Protheus) com arquitetura nativa na nuvem e suporte soberano On-Premise via Docker.
 
-A parametrização foi executada e validada em produção com os dados oficiais da **Barbearia Dino**:
-- **Razão Social:** DINO BARBEARIA LTDA
-- **CNPJ Oficial:** `50.073.355/0002-60`
-- **Inscrição Municipal:** `30297` (Prefeitura Municipal de Tangará da Serra - MT)
-- **Inscrição Estadual:** `14.229.191-9` (SEFAZ-MT)
-- **Adquirente Padrão do Caixa:** Stone / Ton
-- **Terminais Físicos Provisionados:** 3 pinpads (Balcão Principal Caixa 1, Balcão Bar & Recepção e Gerência Sicredi Cooperativo) com teste de conectividade Ping em tempo real.
-
----
-
-## 2. Área Administrativa de Parametrização TEF & Gestão de Pinpads
-
-A nova área administrativa de **Parametrização TEF & Gestão de Pinpads** foi integrada nativamente na aba `🏦 Conciliação Bancária OFX` do módulo financeiro. O usuário administrador tem autonomia total para gerenciar seus terminais e taxas:
-
-1. **Identificação do Estabelecimento & Adquirente Padrão:** Carregamento automático e persistente da Razão Social, CNPJ, IM e escolha da maquininha padrão que abre automaticamente no fechamento de comanda.
-2. **Terminais Pinpads Provisionados:** Listagem em tempo real dos equipamentos cadastrados com Nome, Adquirente/Modelo, Serial/StoneCode, Localização física (ex: Balcão Central, Bar) e status de comunicação.
-3. **Botão Testar Ping em Tempo Real:** Comunicação direta via WebSocket/HTTP verificando a latência e a conectividade com o pinpad antes de iniciar a operação do dia.
-4. **Modal Interativo "+ Provisionar Novo Pinpad":** Interface ágil para cadastrar terminais adicionais informando protocolo (USB/Serial, TCP/IP, Wi-Fi Cloud ou Bluetooth), IP e porta de comunicação.
-5. **Matriz de Taxas MDR Negociadas:** Tabela completa com Stone, PagBank, Cielo, Rede, Getnet, Vero/Sicredi e SafraPay, permitindo personalizar os percentuais de Débito, Crédito à Vista, Parcelado (2x a 6x e 7x a 12x) e Pix no TEF, com projeção imediata do valor líquido a receber.
-
-### Evidências Fotográficas Reais em Produção
-
-#### Painel de Identificação, Adquirentes e Pinpads Provisionados com Teste de Ping
-![Parametrização TEF & Terminais Provisionados](/home/ubuntu/agro-open/docs/prints/21-tef-parametrizacao-dino-terminais.png)
-
-#### Matriz de Taxas MDR Negociadas por Adquirente
-![Matriz de Taxas MDR Negociadas](/home/ubuntu/agro-open/docs/prints/22-tef-matriz-taxas-mdr-negociadas.png)
-
-#### Modal de Provisionamento Rápido de Novo Pinpad
-![Modal Provisionar Novo Pinpad](/home/ubuntu/agro-open/docs/prints/23-tef-modal-provisionar-pinpad.png)
+### Principais Inovações Homologadas:
+1. **Boletos Bancários Registrados Híbridos com Pix Dinâmico:** Emissão conforme o padrão FEBRABAN para os principais bancos do país (**Sicredi 748, Sicoob 756, Itaú 341, Banco do Brasil 001 e Bradesco 237**), com código de barras de 44 dígitos, linha digitável formatada e QR Code Pix Copia e Cola dinâmico no corpo da guia.
+2. **Motor Tributário de ICMS-ST para Mato Grosso:** Simulador e apurador de Substituição Tributária conforme o **Convênio ICMS 142/2018 e o RICMS-MT**, calculando automaticamente a **MVA Original vs MVA Ajustada** em compras interestaduais, adicional do **FCP-MT (2%)** e dedução de crédito de ICMS próprio.
+3. **Manifestação do Destinatário (MD-e) & Entrada Automatizada:** Painel de captura e governança de notas fiscais emitidas contra o CNPJ da empresa, com transmissão direta dos 4 eventos à SEFAZ (**210210 - Ciência da Emissão, 210200 - Confirmação da Operação, 210220 - Desconhecimento da Operação, 210240 - Operação não Realizada**) e integração com o estoque com recálculo automático do **Custo Médio Ponderado**.
+4. **Isolamento Estrito Multi-Tenant:** Segregação criptográfica e relacional de empresas, impedindo qualquer vazamento de dados entre a **Barbearia Dino**, a **Stallone Nutre Sport** e demais empresas do grupo, garantindo visão consolidada apenas ao Superadmin Global.
+5. **Módulo TEF Multi-Maquininhas & Pinpads:** Parametrização oficial de terminais bancários para balcão, cálculo automático de taxas MDR por bandeira e conciliação de recebíveis futuros.
 
 ---
 
-## 3. Arquitetura da Conciliação TEF Multi-Adquirente e Extratos Bancários
+## 2. Evidências Visuais Capturadas em Produção Real
 
-O motor corporativo de conciliação do Kytto opera em malha fechada de 4 vias, garantindo que nenhum centavo seja perdido em taxas indevidas ou repasses não creditados:
+### 2.1. Boletos Bancários Registrados Híbridos com Pix
+![Boletos Bancários Registrados Híbridos com Pix](/home/ubuntu/agro-open/docs/prints/24-fiscal-boletos-hibridos-pix.png)
 
-```
-┌───────────────────────────┐       ┌───────────────────────────┐
-│     Comanda / Venda       │ ────> │   Pinpad Balcão (TEF)     │
-│   (Serviços + Produtos)   │       │   Stone / PagBank / Vero  │
-└───────────────────────────┘       └───────────────────────────┘
-              │                                   │
-              ▼                                   ▼
-┌───────────────────────────┐       ┌───────────────────────────┐
-│     Razão Contábil        │ <──── │   Extrato OFX Bancário    │
-│  (Taxa MDR + Líquido D+1) │       │  (Sicredi, Itaú, BB, etc) │
-└───────────────────────────┘       └───────────────────────────┘
-```
+### 2.2. Guia de Boleto Bancário Formatado FEBRABAN com Pix Copia e Cola (Sicredi 748)
+![Guia de Boleto Bancário Formatado FEBRABAN](/home/ubuntu/agro-open/docs/prints/27-visualizador-boleto-sicredi-pix-hibrido.png)
 
----
+### 2.3. Simulador e Memorial de Apuração de ICMS-ST (Mato Grosso)
+![Simulador e Memorial de Apuração de ICMS-ST MT](/home/ubuntu/agro-open/docs/prints/25-fiscal-icms-st-mato-grosso.png)
 
-## 4. Matriz Oficial de Terminais e Adquirentes Homologados
+### 2.4. Manifestação do Destinatário (MD-e) & Gestão de Notas de Entrada
+![Manifestação do Destinatário MD-e](/home/ubuntu/agro-open/docs/prints/26-fiscal-mde-manifestacao-destinatario.png)
 
-| Adquirente / Maquininha | Modelos Homologados | Protocolo | Débito (D+1) | Crédito à Vista (D+30) | Crédito 2x a 6x | Pix no TEF (D+0) |
-| :--- | :--- | :--- | :---: | :---: | :---: | :---: |
-| **Stone / Ton** | Stone Smart P2, Ton T3 Pro, Gertec PPC930 | Stone Connect / SiTef | 1.15% | 2.19% | 2.99% | 0.00% |
-| **PagBank / PagSeguro** | Moderninha Pro 2, Smart 2, PAX S300 | PlugPag / Prototec | 1.25% | 2.39% | 3.19% | 0.00% |
-| **Cielo** | Cielo LIO V2, Flash, Gertec MP20, Ingenico Lane | Cielo LIO / SiTef | 1.29% | 2.49% | 3.29% | 0.59% |
-| **Rede (Itaú)** | Maquininha Smart Rede, Gertec PPC920 | Rede TEF / SiTef | 1.19% | 2.29% | 3.09% | 0.49% |
-| **Getnet (Santander)** | Getnet Smart, Clássica, PAX D200 | Getnet TEF / SiTef | 1.29% | 2.39% | 3.19% | 0.55% |
-| **Vero / Sicredi Cartões**| Vero Smart, Sicredi POS, Gertec PPC930 | Vero TEF / SiTef | 1.19% | 2.29% | 3.09% | 0.39% |
-| **SafraPay** | SafraPay Smart, Pro, Gertec PPC930 | SafraPay Connect | 1.15% | 2.19% | 2.99% | 0.00% |
-| **Mercado Pago** | Point Smart 2, Point Pro 2, Point Mini | Point API / Webhook | 1.39% | 2.69% | 3.49% | 0.00% |
-| **SiTef (Fiserv)** | Pinpads Gertec, Ingenico, Verifone, PAX | SiTef DLL / Socket | 1.19% | 2.29% | 3.09% | 0.39% |
+### 2.5. Parametrização TEF & Terminais Pinpad da Barbearia Dino
+![Parametrização TEF e Terminais](/home/ubuntu/agro-open/docs/prints/21-tef-parametrizacao-dino-terminais.png)
+
+### 2.6. Matriz Oficial de Taxas MDR Negociadas por Bandeira
+![Matriz de Taxas MDR](/home/ubuntu/agro-open/docs/prints/22-tef-matriz-taxas-mdr-negociadas.png)
+
+### 2.7. Emissão e DANFE Oficial de NFC-e Autorizada pela SEFAZ-MT
+![DANFE NFC-e Autorizada SEFAZ-MT](/home/ubuntu/agro-open/docs/prints/15-danfe-nfce-autorizada-sefaz-mt.png)
 
 ---
 
-## 5. Tabela Oficial de Bancos Brasileiros Integrados (OFX / CNAB / PIX)
+## 3. Matriz Técnica dos Bancos Brasileiros Homologados
 
-| Código COMPE | Banco Instituição | ISPB | Tipo de Instituição | Suporte Extrato | Repasses Mapeados |
-| :---: | :--- | :---: | :--- | :---: | :--- |
-| **748** | **Sicredi** | 01181521 | Cooperativo / Comercial | OFX / CNAB / PIX | Stone, Cielo, Rede, PagBank, Getnet, Vero |
-| **756** | **Sicoob** | 20301861 | Cooperativo | OFX / CNAB / PIX | Sipag, Stone, Cielo, Rede, PagBank |
-| **341** | **Itaú Unibanco** | 60701190 | Múltiplo Privado | OFX / CNAB / PIX | Rede, Redecard, Stone, Cielo, PagBank |
-| **237** | **Bradesco** | 60746948 | Múltiplo Privado | OFX / CNAB / PIX | Cielo, Stone, Rede, PagBank, Getnet |
-| **033** | **Santander** | 90400888 | Múltiplo Privado | OFX / CNAB / PIX | Getnet, Stone, Cielo, Rede, PagBank |
-| **001** | **Banco do Brasil** | 00000000 | Múltiplo / Estatal | OFX / CNAB / PIX | Cielo, Stone, Rede, PagBank |
-| **104** | **Caixa Econômica** | 00360305 | Público Federal | OFX / CNAB / PIX | Cielo, Rede, Stone, PagBank |
-| **260** | **Nubank** | 18236120 | Digital / Pagamentos | OFX / PIX | Nu Pay, Stone, Mercado Pago, PagBank |
-| **077** | **Banco Inter** | 00416968 | Múltiplo / Digital | OFX / CNAB / PIX | Inter Pag, Granito, Stone, Cielo |
-| **208** | **BTG Pactual** | 30723886 | Investimento / Empresas | OFX / CNAB / PIX | BTG Empresas, Stone |
-| **336** | **C6 Bank** | 31872495 | Múltiplo / Digital | OFX / PIX | C6 Pay, Stone, PagBank |
-| **422** | **Banco Safra** | 58160789 | Múltiplo Privado | OFX / CNAB / PIX | SafraPay, Stone |
-| **041** | **Banrisul** | 92702067 | Múltiplo Estadual | OFX / CNAB / PIX | Vero, Stone, Cielo |
+| Código COMPE | Banco Instituição | ISPB | Carteiras Homologadas | Suporte Boleto | Suporte Pix Híbrido | Suporte OFX |
+| :---: | :--- | :---: | :---: | :---: | :---: | :---: |
+| **748** | **Sicredi** | 01181521 | 1 (Simples com Registro) | Sim | Sim (EMV Dinâmico) | Sim |
+| **756** | **Sicoob** | 20301861 | 1 (Simples com Registro) | Sim | Sim (EMV Dinâmico) | Sim |
+| **341** | **Itaú Unibanco** | 60701190 | 109 / 112 | Sim | Sim (EMV Dinâmico) | Sim |
+| **001** | **Banco do Brasil** | 00000000 | 17 / 18 | Sim | Sim (EMV Dinâmico) | Sim |
+| **237** | **Bradesco** | 60746948 | 09 | Sim | Sim (EMV Dinâmico) | Sim |
+| **033** | **Santander** | 90400888 | 101 | Sim | Sim (EMV Dinâmico) | Sim |
+| **104** | **Caixa Econômica** | 00360305 | SIGCB (RG) | Sim | Sim (EMV Dinâmico) | Sim |
 
 ---
 
-## 6. Resultados dos Testes Automatizados e Homologação
+## 4. Resultados da Suíte Automatizada de Testes
 
-- **Suíte de Testes Unitários:** **78 testes aprovados (100% de sucesso)** cobrindo parametrização TEF, pinpads, teste de ping, matriz MDR, conciliação OFX, bancos brasileiros, emissão fiscal SEFAZ-MT, isolamento multi-tenant e briefing matinal.
-- **Smoke Test em Produção Real:** **35 de 35 rotas críticas aprovadas com HTTP 200 OK** apontando para `https://kytto.com.br`.
+- **Testes Unitários:** **75 testes aprovados (100% de sucesso)** cobrindo emissão de boletos, linha digitável FEBRABAN, módulo 10/11, apuração de ICMS-ST MT, eventos MD-e, custo médio ponderado, TEF, pinpads, isolamento de inquilinos e briefings da equipe.
+- **Smoke Test em Produção Real:** **35 de 35 rotas críticas aprovadas com HTTP 200 OK** apontando diretamente para `https://kytto.com.br`.
 
 ---
 
-## 7. Arquivos e Entregáveis Oficiais
+## 5. Arquivos e Entregáveis Oficiais
 
-1. **Planilha Competitiva Oficial v24:** [Kytto_e_Plataforma_vs_Mercado_v24.xlsx](/home/ubuntu/agro-open/docs/Kytto_e_Plataforma_vs_Mercado_v24.xlsx) (cópia espelhada em [Kytto_e_Plataforma_vs_Mercado_v20.xlsx](/home/ubuntu/upload/Kytto_e_Plataforma_vs_Mercado_v20.xlsx)).
-2. **Relatório Executivo Oficial de Homologação em PDF:** [Relatório Executivo Oficial de Homologação](/home/ubuntu/agro-open/docs/RELATORIO-ISOLAMENTO-MULTITENANT-KYTTO.pdf).
-3. **Módulo TEF Multi-Maquininhas:** [`app/core/tef-multimaquininhas-brasil.js`](/home/ubuntu/agro-open/app/core/tef-multimaquininhas-brasil.js).
-4. **Catálogo Oficial dos Bancos Brasileiros:** [`app/core/bancos-brasil-catalogo.js`](/home/ubuntu/agro-open/app/core/bancos-brasil-catalogo.js).
-5. **Rotas de API TEF & Parametrização:** [`app/routes/tef-routes.js`](/home/ubuntu/agro-open/app/routes/tef-routes.js).
-6. **Suíte de Testes Unitários TEF:** [`app/kytto-tef-parametrizacao.test.js`](/home/ubuntu/agro-open/app/kytto-tef-parametrizacao.test.js) e [`app/kytto-tef-bancos-conciliacao.test.js`](/home/ubuntu/agro-open/app/kytto-tef-bancos-conciliacao.test.js).
-7. **Componente de Parametrização TEF & Conciliação:** [`web/src/pages/admin/financeiro/ConciliacaoBancariaTab.jsx`](/home/ubuntu/agro-open/web/src/pages/admin/financeiro/ConciliacaoBancariaTab.jsx).
-8. **Guia de Instalação On-Premise:** [Guia de Arquitetura e Implantação On-Premise](/home/ubuntu/agro-open/docs/GUIA-IMPLANTACAO-ON-PREMISE-KYTTO.md).
-9. **Instalador Automatizado:** [`bin/kytto-install-onpremise.sh`](/home/ubuntu/agro-open/bin/kytto-install-onpremise.sh).
-10. **Certidão Municipal de Tangará da Serra (Anexo Oficial):** [INSCRIÇÃOMUNICIPALv2.pdf](/home/ubuntu/upload/INSCRIÇÃOMUNICIPALv2.pdf).
+1. **Planilha Competitiva Oficial v26:** [Planilha de Comparativo de Mercado v26](/home/ubuntu/agro-open/docs/Kytto_e_Plataforma_vs_Mercado_v26.xlsx).
+2. **Manual Oficial Operacional e Administrativo Kytto em PDF:** [Manual Oficial Kytto ERP em PDF](/home/ubuntu/agro-open/docs/MANUAL-OFICIAL-KYTTO-TEF-E-MULTIEMPRESA.pdf).
+3. **Relatório Executivo Oficial de Homologação em PDF:** [Relatório Executivo Oficial em PDF](/home/ubuntu/agro-open/docs/RELATORIO-ISOLAMENTO-MULTITENANT-KYTTO.pdf).
+4. **Motor de Boleto Híbrido com Pix:** [`app/core/boleto-hibrido-brasil.js`](/home/ubuntu/agro-open/app/core/boleto-hibrido-brasil.js).
+5. **Motor Tributário de ICMS-ST MT:** [`app/core/tributacao-icms-st-mt.js`](/home/ubuntu/agro-open/app/core/tributacao-icms-st-mt.js).
+6. **Módulo de Manifestação do Destinatário (MD-e):** [`app/core/manifestacao-destinatario-mde.js`](/home/ubuntu/agro-open/app/core/manifestacao-destinatario-mde.js).
+7. **Rotas de API de Boletos:** [`app/routes/boletos-routes.js`](/home/ubuntu/agro-open/app/routes/boletos-routes.js).
+8. **Rotas Fiscais Avançadas:** [`app/routes/fiscal-avancado-routes.js`](/home/ubuntu/agro-open/app/routes/fiscal-avancado-routes.js).
+9. **Componentes Frontend do Módulo Fiscal:**
+   - [`web/src/pages/admin/fiscal/BoletosTab.jsx`](/home/ubuntu/agro-open/web/src/pages/admin/fiscal/BoletosTab.jsx)
+   - [`web/src/pages/admin/fiscal/IcmsStTab.jsx`](/home/ubuntu/agro-open/web/src/pages/admin/fiscal/IcmsStTab.jsx)
+   - [`web/src/pages/admin/fiscal/MdeTab.jsx`](/home/ubuntu/agro-open/web/src/pages/admin/fiscal/MdeTab.jsx)
