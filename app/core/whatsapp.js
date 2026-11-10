@@ -8,6 +8,7 @@ import { chatbotBackendConfig, chatbotBackendMode, chatbotBackendPollPath, insta
 import { db } from './database.js';
 import { authorizeWhatsappEgress, evaluateWhatsappEgress } from './whatsapp-egress.js';
 import { sendWahaText, validWahaGroupId, validWahaSession } from './whatsapp-waha.js';
+import { getCloudApiConfig, sendCloudApiTextMessage, sendCloudApiInteractiveButtons } from './whatsapp-cloud-api.js';
 
 // ─── Configuração ─────────────────────────────────────────────────────────────
 function getConfig(tenant) {
@@ -102,6 +103,29 @@ export async function enviarMensagem(tenant, telefone, mensagem) {
 }
 
 async function enviarMensagemProvedor(tenant, telefone, mensagem) {
+  if (tenant?.transport === 'cloud_api' || tenant?.provedor === 'cloud_api' || tenant?.whatsapp_provider === 'cloud_api') {
+    const cfg = getCloudApiConfig(tenant);
+    if (!cfg.token || !cfg.phoneNumberId) {
+      return { ok: false, retryable: false, uncertain: false, error: 'META_CLOUD_API_CREDENTIALS_MISSING' };
+    }
+    const text = String(mensagem || '').slice(0, 4000);
+    const buttons = Array.isArray(tenant?.botoes) ? tenant.botoes : null;
+    if (buttons && buttons.length) {
+      return await sendCloudApiInteractiveButtons({
+        phoneNumberId: cfg.phoneNumberId,
+        token: cfg.token,
+        to: telefone,
+        bodyText: text,
+        buttons,
+      });
+    }
+    return await sendCloudApiTextMessage({
+      phoneNumberId: cfg.phoneNumberId,
+      token: cfg.token,
+      to: telefone,
+      text,
+    });
+  }
   if (tenant?.transport === 'waha') {
     const session = validWahaSession(tenant?.waha_session || tenant?.whatsapp_instance);
     const groupId = validWahaGroupId(tenant?.waha_group_id || telefone);

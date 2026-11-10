@@ -174,6 +174,7 @@ import { funnelSummary } from './storefront-funnel.js';
 import { whatsappProviderConfigured, whatsappProviderName } from './core/whatsapp-provider.js';
 import { enviarMensagem as enviarWhatsappCore } from './core/whatsapp.js';
 import { registerWhatsappConexaoRoutes } from './whatsapp-conexao-routes.js';
+import { registerWhatsappCloudRoutes } from './whatsapp-cloud-routes.js';
 import { vigiarTodas as vigiarConexoesWhatsapp } from './whatsapp-conexao-kytto.js';
 import { registerDinoAdminRoutes, loadCommerceSalesDetail } from './dino-admin-routes.js';
 import { buildCurrentMaterials, previewTaxMaterialPlan, PreviewConflictError, PreviewValidationError } from './comandas-caixa-previa.js';
@@ -4257,6 +4258,7 @@ registerAtivacaoRoutes(app, { legacyEmpresaId, requireCommercePermission, barbea
 registerWhatsappConexaoRoutes(app, { legacyEmpresaId: whatsappEmpresaId, legacyLojaId: whatsappLojaId, audit, save, enviarMensagem: enviarWhatsappCore, isPlatformAdmin: user => isPlatformAdminUser(user) || isMainAdminUser(user) });
 registerWhatsappConexaoRoutes(app, { legacyEmpresaId: whatsappEmpresaId, legacyLojaId: whatsappLojaId, audit, save, enviarMensagem: enviarWhatsappCore, isPlatformAdmin: user => isPlatformAdminUser(user) || isMainAdminUser(user), basePath: '/api/admin/barbearia/whatsapp-conexao-gestao', tipoCanal: 'gestao' });
 registerWhatsappConexaoRoutes(app, { legacyEmpresaId: whatsappEmpresaId, legacyLojaId: whatsappLojaId, audit, save, enviarMensagem: enviarWhatsappCore, isPlatformAdmin: user => isPlatformAdminUser(user) || isMainAdminUser(user), basePath: '/api/admin/barbearia/whatsapp-conexao-lancamentos', tipoCanal: 'lancamentos' });
+registerWhatsappCloudRoutes(app, { isPlatformAdmin: user => isPlatformAdminUser(user) || isMainAdminUser(user) });
 // Prévia integrada de taxas/materiais: POST por ser um cálculo de payload, nunca uma mutação.
 // Não há rota de aplicar neste recorte; o plano só devolve hash, divergências e pendências.
 function temPropriedade(valor, chave) {

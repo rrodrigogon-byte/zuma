@@ -15,6 +15,7 @@ import { normalizeWhatsappAiOperationalStatus } from './whatsapp-ai-operational'
 import { WhatsappAiOperationalSection } from './WhatsappAiOperationalSection'
 import { internalWhatsappReadiness } from './whatsapp-internal-readiness'
 import WhatsappHumanQueue from './WhatsappHumanQueue'
+import WhatsappCloudApiPanel from './WhatsappCloudApiPanel'
 import '../customer360.css'
 import './dino-admin.css'
 
@@ -83,6 +84,7 @@ function WhatsappConexaoEmpresa() {
   const [grupos, setGrupos] = useState([])
   const [grupoSelecionado, setGrupoSelecionado] = useState('')
   const [emailAlerta, setEmailAlerta] = useState('')
+  const [modoProvedor, setModoProvedor] = useState('waha')
   const emailAlertaSujoRef = useRef(false)
   const telefoneRef = useRef(null)
   const scopeRef = useRef(0)
@@ -436,6 +438,33 @@ function WhatsappConexaoEmpresa() {
       <div><div className="dadm-eyebrow">Administração · coleta via WAHA</div><h1>Central WhatsApp</h1><p>Conexão, QR Code, pareamento e diagnóstico do canal <strong>{canalLabel}</strong>, sempre isolados por empresa e unidade.</p></div>
       <div className="dadm-actions"><button type="button" className="c360-btn ghost" disabled={atualizando} onClick={() => { carregar(true); recarregarIa(); if (podeGerenciar && !diagBloqueado) diagnosticar() }}>{atualizando ? 'Atualizando…' : 'Atualizar agora'}</button></div>
     </header>
+
+    {/* Seletor de Provedor Oficial Meta Cloud API vs QR Code WAHA */}
+    <div className="flex flex-wrap items-center gap-2 my-4 p-1.5 bg-slate-900/90 border border-slate-800 rounded-xl w-fit">
+      <button
+        type="button"
+        onClick={() => setModoProvedor('waha')}
+        className={`px-4 py-2 rounded-lg text-xs font-semibold transition flex items-center gap-2 ${modoProvedor === 'waha' ? 'bg-emerald-600 text-white shadow' : 'text-slate-400 hover:text-white'}`}
+      >
+        <Smartphone size={15} />
+        WhatsApp Web / WAHA (QR Code)
+      </button>
+      <button
+        type="button"
+        onClick={() => setModoProvedor('cloud_api')}
+        className={`px-4 py-2 rounded-lg text-xs font-semibold transition flex items-center gap-2 ${modoProvedor === 'cloud_api' ? 'bg-emerald-600 text-white shadow' : 'text-slate-400 hover:text-white'}`}
+      >
+        <ShieldCheck size={15} />
+        WhatsApp Business Oficial (Meta Cloud API) 🛡️
+      </button>
+    </div>
+
+    {modoProvedor === 'cloud_api' ? (
+      <div className="my-4">
+        <WhatsappCloudApiPanel empresaId={tenantId} lojaId={lojaId} />
+      </div>
+    ) : (
+      <>
     <section className="dadm-wa-hero" aria-label="Resumo da Central WhatsApp">
       <div>
         <span className="dadm-wa-badge">Revisão humana obrigatória</span>
@@ -638,5 +667,6 @@ function WhatsappConexaoEmpresa() {
       <p>O atendente IA, lembretes de agenda, campanhas e recuperação de carrinho param de enviar mensagens até você conectar de novo. A reconexão automática fica pausada.</p>
       {state !== 'open' && <p className="dadm-note warn">A linha já está aguardando pareamento (sem aparelho conectado no momento). A desconexão irá limpar a sessão e pausar a reconexão automática para você conectar um novo número com segurança.</p>}
     </Dialog>
+    </>)}
   </div>
 }
