@@ -659,7 +659,8 @@ export async function calcularDreAnual12Meses(db, empresaId, { ano = null, regim
 /**
  * Exporta a DRE em formato XLSX profissional (Multi-Abas: DRE Oficial, Matriz Anual e Lançamentos).
  */
-export function exportarDreParaXlsx(dre, matrizAnual = null, empresaInfo = {}) {
+export async function exportarDreParaXlsx(dre, matrizAnual = null, empresaInfo = {}) {
+  const XLSX = await obterXlsx();
   const wb = XLSX.utils.book_new();
 
   // ── ABA 1: DRE OFICIAL (CPC / CFC) ───────────────────────────────────────

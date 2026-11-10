@@ -161,5 +161,64 @@ export function createErpAdminRouter({ db, escopoDaRequisicao }) {
     };
   }));
 
+  router.get("/dre/exportar-xlsx", rota("reports.read", async ({ req, empresaId, lojaRestrita }) => {
+    const dre = await dreSvc.calcularDreCompleta(db, empresaId, {
+      de: req.query.de,
+      ate: req.query.ate,
+      mes: req.query.mes,
+      ano: req.query.ano,
+      regime: req.query.regime || "competencia",
+      lojaId: req.query.lojaId || lojaRestrita,
+      centroCustoId: req.query.centroCustoId
+    });
+    let matrizAnual = null;
+    try {
+      matrizAnual = await dreSvc.calcularDreAnual12Meses(db, empresaId, {
+        ano: req.query.ano || (req.query.mes ? req.query.mes.slice(0, 4) : new Date().getFullYear()),
+        regime: req.query.regime || "competencia",
+        lojaId: req.query.lojaId || lojaRestrita
+      });
+    } catch (e) {
+      // Matriz opcional
+    }
+    const infoEmpresa = {
+      nome: req.query.empresaNome || (empresaId === "d0d0ac01-8e50-4b61-8c79-de4aaa916da6" ? "Barbearia Dino" : "Empresa Kytto"),
+      cnpj: req.query.empresaCnpj || (empresaId === "d0d0ac01-8e50-4b61-8c79-de4aaa916da6" ? "50.073.355/0001-89" : ""),
+      ie: req.query.empresaIe || (empresaId === "d0d0ac01-8e50-4b61-8c79-de4aaa916da6" ? "14.229.191-9 (SEFAZ-MT)" : "")
+    };
+    const buffer = await dreSvc.exportarDreParaXlsx(dre, matrizAnual, infoEmpresa);
+    const nomeArquivo = `DRE_${infoEmpresa.nome.replace(/\s+/g, "_")}_${dre.periodo.mes || dre.periodo.ano || "Periodo"}.xlsx`;
+    return {
+      ok: true,
+      nomeArquivo,
+      conteudoBase64: Buffer.from(buffer).toString("base64"),
+      tamanhoBytes: buffer.length
+    };
+  }));
+
+  router.get("/dre/imprimir-pdf", rota("reports.read", async ({ req, empresaId, lojaRestrita }) => {
+    const dre = await dreSvc.calcularDreCompleta(db, empresaId, {
+      de: req.query.de,
+      ate: req.query.ate,
+      mes: req.query.mes,
+      ano: req.query.ano,
+      regime: req.query.regime || "competencia",
+      lojaId: req.query.lojaId || lojaRestrita,
+      centroCustoId: req.query.centroCustoId
+    });
+    const infoEmpresa = {
+      nome: req.query.empresaNome || (empresaId === "d0d0ac01-8e50-4b61-8c79-de4aaa916da6" ? "Barbearia Dino" : "Empresa Kytto"),
+      cnpj: req.query.empresaCnpj || (empresaId === "d0d0ac01-8e50-4b61-8c79-de4aaa916da6" ? "50.073.355/0001-89" : ""),
+      ie: req.query.empresaIe || (empresaId === "d0d0ac01-8e50-4b61-8c79-de4aaa916da6" ? "14.229.191-9 (SEFAZ-MT)" : "")
+    };
+    const html = dreSvc.gerarHtmlDreOficialPdf(dre, null, infoEmpresa);
+    return {
+      ok: true,
+      html,
+      periodo: dre.periodo,
+      resumo: dre.resumo
+    };
+  }));
+
   return router;
 }
