@@ -6,7 +6,7 @@
 
 **Empresa Referência:** DINO BARBEARIA LTDA (CNPJ 50.073.355/0002-60 · IM 30297 · Tangará da Serra / MT)  
 **Plataforma Homologada:** Kytto Cloud & On-Premise Enterprise  
-**Versão do Documento:** 2.8 (Edição Homologada de Produção - SPED EFD Completo, KDS & Salão Parceiro)  
+**Versão do Documento:** 2.9 (Edição Homologada de Produção - DIMP Preventivo, Supply Chain RFQ & 3-Way Matching)  
 **Data:** Novembro de 2026  
 **Ambiente Oficial:** `https://kytto.com.br`  
 
@@ -36,6 +36,9 @@
 20. **Tabela Oficial de Zonas de Frete de Tangará da Serra MT**
 21. **Impressão Térmica de Comandas (ESC/POS 80mm) e Acerto de Motoboys**
 22. **Lei do Salão Parceiro (Lei 13.352/2016) e EFD-Reinf (Evento R-4010)**
+23. **Auditoria Preventiva DIMP vs Fiscal e Eliminação de Malha Fina SEFAZ**
+24. **Supply Chain, Cotação de Fornecedores RFQ e Comparativo CIF vs FOB**
+25. **Conferência Cega 3-Way Matching (PO x MD-e x Estoque Físico)**
 
 ---
 
@@ -464,6 +467,58 @@ Para barbearias, salões de beleza e clínicas de estética, a bitributação so
 1. **Segregação na Fonte:** A receita bruta auferida com serviços de barbeiros parceiros (ex: Naty, Dino) é automaticamente dividida conforme o percentual contratual da cota-parte (ex: 50% ou 60% para o profissional parceiro e 40% a 50% para a cota-parte do salão).
 2. **Base de Cálculo Própria:** O estabelecimento tributa no Simples Nacional / ISS apenas a sua cota-parte retida. A cota-parte repassada ao profissional parceiro não integra a receita bruta do salão, economizando mais de **R$ 2.133,00 por mês** em tributos recolhidos indevidamente.
 3. **Escrituração na EFD-Reinf:** O sistema gera automaticamente os dados do evento **R-4010** para envio à Receita Federal e emissão do comprovante anual de rendimentos para a declaração do IRPF do parceiro.
+
+---
+
+## 23. AUDITORIA PREVENTIVA DIMP VS FISCAL E ELIMINAÇÃO DE MALHA FINA SEFAZ
+
+Toda operação comercial que aceita pagamentos em cartões de crédito, débito e Pix está sujeita ao cruzamento automático da **DIMP (Declaração de Informações sobre Meios de Pagamento)** com os documentos fiscais emitidos (NFC-e, NF-e e NFS-e). 
+
+A SEFAZ-MT e a Receita Federal autuam contribuintes quando o faturamento eletrônico informado pelas credenciadoras supera o valor das notas fiscais emitidas.
+
+### Evidência em Produção: Painel de Auditoria DIMP vs Fiscal
+![Auditoria Preventiva DIMP vs Fiscal](/home/ubuntu/agro-open/docs/prints/37-fiscal-auditoria-dimp-malha-fina.png)
+
+### Recursos de Governança Preventiva:
+1. **Confronto Eletrônico Instantâneo:** Totaliza recebimentos nas credenciadoras cadastradas (**Cielo, Stone, Sicredi, PagBank, Rede**) e confronta com o total de notas fiscais autorizadas no período.
+2. **Índice de Cobertura Fiscal:** Percentual da receita eletrônica com lastro documental emitido.
+3. **Indicador Semafórico de Risco:** 
+   * **ALTO:** Diferença não faturada superior a R$ 5.000,00 com risco iminente de intimação fiscal;
+   * **MÉDIO:** Pequenas divergências diárias a ajustar;
+   * **ZERO:** 100% de cobertura fiscal garantida.
+4. **Regularização em Lote em 1 Clique:** Emissão automática das notas pendentes gerando NFC-e ou NFS-e com chave de acesso e protocolo SEFAZ, zerando o passivo fiscal.
+
+### Evidência em Produção: Regularização Concluída com Risco Zero
+![Regularização Fiscal DIMP com Risco Zero](/home/ubuntu/agro-open/docs/prints/40-fiscal-dimp-regularizacao-lote-sucesso.png)
+
+---
+
+## 24. SUPPLY CHAIN, COTAÇÃO DE FORNECEDORES RFQ E COMPARATIVO CIF VS FOB
+
+O módulo de **Supply Chain & Compras Corporativas** (`/admin/supply-chain`) profissionaliza o processo de aquisição de insumos e produtos de revenda:
+
+### Evidência em Produção: Cotações RFQ & Comparativo Comercial
+![Supply Chain Cotações RFQ](/home/ubuntu/agro-open/docs/prints/38-supply-chain-cotacoes-rfq-comparativo.png)
+
+### Etapas do Fluxo de Compras:
+1. **Requisição de Reposição (RFQ):** Agrupamento automático de itens que atingiram o Ponto de Pedido no estoque ou solicitação manual do encarregado de compras.
+2. **Quadro Comparativo de Fornecedores:** Confronto lado a lado de propostas com identificação automática do **Menor Preço**, modalidade de frete (**CIF incluso vs FOB com frete pago**), prazos de entrega (*lead time*) e condições de pagamento (Boleto 30/60 dias vs Pix com desconto).
+3. **Aprovação e Geração do Pedido de Compra (PO):** Com 1 clique em **"✓ Aprovar & Gerar Pedido"**, o sistema formaliza a Ordem de Compra oficial e notifica o fornecedor.
+
+---
+
+## 25. CONFERÊNCIA CEGA 3-WAY MATCHING (PO X MD-E X ESTOQUE FÍSICO)
+
+Para blindar o caixa contra cobranças indevidas de fornecedores e erros de faturamento, o Kytto executa a conferência cega **3-Way Matching**:
+
+### Evidência em Produção: Painel de Conferência 3-Way Matching
+![Conferência Cega 3-Way Matching](/home/ubuntu/agro-open/docs/prints/39-supply-chain-3way-matching-conferencia.png)
+
+### Validação dos Três Pilares:
+1. **Pilar 1 (Pedido de Compra PO):** Preço unitário e quantidades negociadas e autorizadas pela diretoria.
+2. **Pilar 2 (Nota Fiscal do Fornecedor):** XML da NF-e modelo 55 capturado diretamente da SEFAZ pelo módulo de **Manifestação do Destinatário (MD-e)**.
+3. **Pilar 3 (Estoque Físico Recebido):** Quantidades e lotes descarregados fisicamente na expedição.
+4. **Recálculo do Custo Médio Ponderado:** Com a aprovação sem divergência, o sistema recalcula automaticamente o custo contábil unitário de cada mercadoria no estoque da unidade.
 
 ---
 
