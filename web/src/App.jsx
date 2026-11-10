@@ -342,6 +342,7 @@ export default function App() {
           <Route path="/admin/dre" element={<Layout><DRECompleta /></Layout>} />
           <Route path="/admin/dre-ebitda" element={<Layout><DreEbitdaPage /></Layout>} />
           <Route path="/admin/sped-fiscal" element={<Layout><SpedFiscalPage /></Layout>} />
+          <Route path="/admin/sped" element={<Layout><SpedFiscalPage /></Layout>} />
           <Route path="/admin/matriz-tributaria" element={<Layout><MatrizTributariaPage /></Layout>} />
           <Route path="/admin/conciliacao-tef" element={<Layout><ConciliacaoTefPage /></Layout>} />
           <Route path="/admin/tesouraria" element={<Layout><TesourariaCofrePage /></Layout>} />
