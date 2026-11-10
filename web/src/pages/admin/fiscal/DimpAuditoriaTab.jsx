@@ -46,7 +46,6 @@ export default function DimpAuditoriaTab() {
       const data = await res.json();
       if (data.sucesso) {
         setMensagemSucesso(data.mensagem);
-        // Recarregar com dados limpos
         setAuditoria(prev => ({
           ...prev,
           analiseDivergencia: {
@@ -67,159 +66,178 @@ export default function DimpAuditoriaTab() {
   };
 
   if (loading && !auditoria) {
-    return <div className="p-8 text-center text-slate-500">Executando auditoria cruzada DIMP vs Documentos Fiscais...</div>;
+    return <div style={{ padding: '32px', textAlign: 'center', color: '#64748b' }}>Executando auditoria cruzada DIMP vs Documentos Fiscais...</div>;
   }
 
   const div = auditoria?.analiseDivergencia;
-  const isRiscoAlto = div?.nivelRisco === 'ALTO';
   const isRiscoZero = div?.nivelRisco === 'ZERO';
+  const isRiscoAlto = div?.nivelRisco === 'ALTO';
 
   return (
-    <div className="space-y-6">
+    <div style={{ padding: '24px', maxWidth: '1280px', margin: '0 auto', fontFamily: 'inherit', display: 'flex', flexDirection: 'column', gap: '24px' }}>
       {/* Cabeçalho */}
-      <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div style={{ background: '#ffffff', padding: '24px', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
         <div>
-          <div className="flex items-center gap-2">
-            <h2 className="text-xl font-bold text-slate-900">Auditoria Preventiva DIMP vs Fiscal</h2>
-            <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-800 border border-blue-200">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <h2 style={{ fontSize: '22px', fontWeight: 800, color: '#0f172a', margin: 0 }}>🛡️ Auditoria Preventiva DIMP vs Fiscal</h2>
+            <span style={{ padding: '4px 10px', borderRadius: '999px', fontSize: '12px', fontWeight: 700, background: '#dbeafe', color: '#1e40af' }}>
               Período: Outubro/2026
             </span>
           </div>
-          <p className="text-sm text-slate-500 mt-1">
+          <p style={{ fontSize: '13px', color: '#64748b', margin: '6px 0 0 0' }}>
             Confronto eletrônico de recebimentos em Cartão (TEF/POS) e Pix com notas emitidas (NFC-e, NF-e e NFS-e), prevenindo malha fina SEFAZ-MT e Receita Federal.
           </p>
         </div>
         <button
           onClick={carregarAuditoria}
-          className="flex items-center gap-2 px-4 py-2 border border-slate-300 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-50 transition"
+          style={{ padding: '10px 16px', background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '13px', fontWeight: 700, color: '#334155', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}
         >
-          <RefreshCw className="w-4 h-4" /> Recalcular Auditoria
+          <RefreshCw style={{ width: '16px', height: '16px' }} /> Recalcular Auditoria
         </button>
       </div>
 
       {mensagemSucesso && (
-        <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-800 flex items-center gap-3">
-          <CheckCircle2 className="w-5 h-5 flex-shrink-0" />
-          <span className="text-sm font-medium">{mensagemSucesso}</span>
+        <div style={{ padding: '14px 18px', background: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: '10px', color: '#065f46', fontSize: '14px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <CheckCircle2 style={{ width: '20px', height: '20px', flexShrink: 0 }} />
+          <span>{mensagemSucesso}</span>
         </div>
       )}
 
-      {/* Cards de Métricas Principais */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-          <div className="flex items-center justify-between text-slate-500 mb-2">
-            <span className="text-xs font-semibold uppercase tracking-wider">Meios de Pagamento (DIMP)</span>
-            <CreditCard className="w-5 h-5 text-indigo-500" />
+      {/* Grid de 4 Cards de Métricas */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '16px' }}>
+        <div style={{ background: '#ffffff', padding: '20px', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: '#64748b', marginBottom: '8px' }}>
+            <span style={{ fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Meios de Pagamento (DIMP)</span>
+            <CreditCard style={{ width: '20px', height: '20px', color: '#6366f1' }} />
           </div>
-          <div className="text-2xl font-bold text-slate-900">
+          <div style={{ fontSize: '24px', fontWeight: 800, color: '#0f172a' }}>
             R$ {auditoria?.totaisMeiosPagamento?.totalGeral?.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) || '0,00'}
           </div>
-          <div className="text-xs text-slate-500 mt-1">
+          <div style={{ fontSize: '12px', color: '#64748b', marginTop: '4px' }}>
             {auditoria?.totaisMeiosPagamento?.quantidadeTransacoes || 0} transações (TEF + Pix)
           </div>
         </div>
 
-        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-          <div className="flex items-center justify-between text-slate-500 mb-2">
-            <span className="text-xs font-semibold uppercase tracking-wider">Notas Fiscais Emitidas</span>
-            <FileText className="w-5 h-5 text-emerald-500" />
+        <div style={{ background: '#ffffff', padding: '20px', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: '#64748b', marginBottom: '8px' }}>
+            <span style={{ fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Notas Fiscais Emitidas</span>
+            <FileText style={{ width: '20px', height: '20px', color: '#10b981' }} />
           </div>
-          <div className="text-2xl font-bold text-slate-900">
+          <div style={{ fontSize: '24px', fontWeight: 800, color: '#0f172a' }}>
             R$ {auditoria?.totaisDocumentosFiscais?.totalGeral?.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) || '0,00'}
           </div>
-          <div className="text-xs text-slate-500 mt-1">
+          <div style={{ fontSize: '12px', color: '#64748b', marginTop: '4px' }}>
             NFC-e 65, NF-e 55 e NFS-e DPS
           </div>
         </div>
 
-        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-          <div className="flex items-center justify-between text-slate-500 mb-2">
-            <span className="text-xs font-semibold uppercase tracking-wider">Divergência / Omissão</span>
-            <ShieldAlert className={`w-5 h-5 ${isRiscoZero ? 'text-emerald-500' : 'text-amber-500'}`} />
+        <div style={{ background: '#ffffff', padding: '20px', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: '#64748b', marginBottom: '8px' }}>
+            <span style={{ fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Divergência / Omissão</span>
+            <ShieldAlert style={{ width: '20px', height: '20px', color: isRiscoZero ? '#10b981' : '#f59e0b' }} />
           </div>
-          <div className={`text-2xl font-bold ${div?.diferencaNaoFaturada > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>
+          <div style={{ fontSize: '24px', fontWeight: 800, color: div?.diferencaNaoFaturada > 0 ? '#d97706' : '#059669' }}>
             R$ {div?.diferencaNaoFaturada?.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) || '0,00'}
           </div>
-          <div className="text-xs text-slate-500 mt-1">
-            Cobertura: <strong className="text-slate-700">{div?.percentualCobertura}%</strong>
+          <div style={{ fontSize: '12px', color: '#64748b', marginTop: '4px' }}>
+            Cobertura Fiscal: <strong>{div?.percentualCobertura}%</strong>
           </div>
         </div>
 
-        <div className={`p-5 rounded-xl border shadow-sm ${
-          isRiscoZero ? 'bg-emerald-50 border-emerald-200 text-emerald-900' :
-          isRiscoAlto ? 'bg-amber-50 border-amber-200 text-amber-900' : 'bg-blue-50 border-blue-200 text-blue-900'
-        }`}>
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-bold uppercase tracking-wider">Risco Malha Fina SEFAZ</span>
-            {isRiscoZero ? <ShieldCheck className="w-5 h-5 text-emerald-600" /> : <ShieldAlert className="w-5 h-5 text-amber-600" />}
+        <div style={{
+          padding: '20px',
+          borderRadius: '12px',
+          border: isRiscoZero ? '1px solid #a7f3d0' : '1px solid #fde68a',
+          background: isRiscoZero ? '#ecfdf5' : '#fffbeb',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+            <span style={{ fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', color: isRiscoZero ? '#065f46' : '#92400e' }}>
+              Risco Malha Fina SEFAZ
+            </span>
+            {isRiscoZero ? <ShieldCheck style={{ width: '20px', height: '20px', color: '#059669' }} /> : <ShieldAlert style={{ width: '20px', height: '20px', color: '#d97706' }} />}
           </div>
-          <div className="text-xl font-bold">
+          <div style={{ fontSize: '20px', fontWeight: 800, color: isRiscoZero ? '#065f46' : '#92400e' }}>
             {div?.nivelRisco === 'ZERO' ? 'RISCO ZERO' : `ALERTA (${div?.nivelRisco})`}
           </div>
-          <p className="text-xs mt-1 leading-relaxed opacity-90">
+          <div style={{ fontSize: '12px', color: isRiscoZero ? '#047857' : '#b45309', marginTop: '4px', lineHeight: 1.4 }}>
             {div?.parecerFiscal}
-          </p>
+          </div>
         </div>
       </div>
 
-      {/* Vendas Pendentes de Emissão com Botão de Regularização em Lote */}
+      {/* Tabela de Vendas Pendentes de Emissão Fiscal */}
       {auditoria?.vendasPendentesEmissao?.length > 0 && (
-        <div className="bg-white rounded-xl border border-amber-200 shadow-sm overflow-hidden">
-          <div className="p-4 bg-amber-50 border-b border-amber-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <ShieldAlert className="w-5 h-5 text-amber-600" />
-              <h3 className="font-bold text-amber-900">Vendas em Cartão/Pix Pendentes de Emissão Fiscal</h3>
+        <div style={{ background: '#ffffff', borderRadius: '12px', border: '1px solid #fde68a', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', overflow: 'hidden' }}>
+          <div style={{ padding: '16px 20px', background: '#fffbeb', borderBottom: '1px solid #fef3c7', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <ShieldAlert style={{ width: '20px', height: '20px', color: '#d97706' }} />
+              <h3 style={{ fontSize: '15px', fontWeight: 800, color: '#92400e', margin: 0 }}>
+                Vendas em Cartão/Pix Pendentes de Emissão Fiscal
+              </h3>
             </div>
             <button
               onClick={handleRegularizarLote}
               disabled={regularizando}
-              className="flex items-center gap-2 px-4 py-2 bg-amber-600 text-white rounded-lg text-sm font-semibold hover:bg-amber-700 transition disabled:opacity-50"
+              style={{
+                padding: '10px 18px',
+                background: '#d97706',
+                color: '#ffffff',
+                border: 'none',
+                borderRadius: '8px',
+                fontSize: '13px',
+                fontWeight: 700,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px'
+              }}
             >
               {regularizando ? 'Emitindo Notas...' : '⚡ Regularizar em Lote (Emitir NFC-e)'}
             </button>
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead className="bg-slate-50 text-slate-700 border-b border-slate-200 font-semibold">
-                <tr>
-                  <th className="py-3 px-4">Data</th>
-                  <th className="py-3 px-4">Meio / Adquirente</th>
-                  <th className="py-3 px-4">NSU / Comprovante</th>
-                  <th className="py-3 px-4">Item Sugerido</th>
-                  <th className="py-3 px-4 text-right">Valor Pendente</th>
+          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
+            <thead style={{ background: '#f8fafc', color: '#475569', fontWeight: 700 }}>
+              <tr>
+                <th style={{ padding: '12px 16px' }}>Data</th>
+                <th style={{ padding: '12px 16px' }}>Meio / Adquirente</th>
+                <th style={{ padding: '12px 16px' }}>NSU / Comprovante</th>
+                <th style={{ padding: '12px 16px' }}>Item Sugerido</th>
+                <th style={{ padding: '12px 16px', textAlign: 'right' }}>Valor Pendente</th>
+              </tr>
+            </thead>
+            <tbody>
+              {auditoria.vendasPendentesEmissao.map((v, i) => (
+                <tr key={i} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                  <td style={{ padding: '12px 16px', color: '#64748b' }}>{v.data}</td>
+                  <td style={{ padding: '12px 16px', fontWeight: 700, color: '#1e293b' }}>
+                    {v.meioPagamento === 'PIX_DINAMICO' ? 'Pix Sicredi' : `${v.meioPagamento} (${v.adquirente})`}
+                  </td>
+                  <td style={{ padding: '12px 16px', fontFamily: 'monospace', color: '#64748b' }}>{v.nsu}</td>
+                  <td style={{ padding: '12px 16px', color: '#334155' }}>{v.itensSugeridos[0]?.descricao}</td>
+                  <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 800, color: '#0f172a' }}>
+                    R$ {v.valorFaltante.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  </td>
                 </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {auditoria.vendasPendentesEmissao.map((v, i) => (
-                  <tr key={i} className="hover:bg-slate-50 transition">
-                    <td className="py-3 px-4 text-slate-600">{v.data}</td>
-                    <td className="py-3 px-4 font-medium text-slate-800">
-                      {v.meioPagamento === 'PIX_DINAMICO' ? 'Pix Sicredi' : `${v.meioPagamento} (${v.adquirente})`}
-                    </td>
-                    <td className="py-3 px-4 font-mono text-xs text-slate-600">{v.nsu}</td>
-                    <td className="py-3 px-4 text-slate-600">{v.itensSugeridos[0]?.descricao}</td>
-                    <td className="py-3 px-4 text-right font-bold text-slate-900">
-                      R$ {v.valorFaltante.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
 
-      {/* Tabela de Adquirentes e Maquininhas */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
-        <h3 className="font-bold text-slate-900 mb-4">Detalhamento por Credenciadora DIMP Declarada</h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      {/* Detalhamento por Credenciadora DIMP */}
+      <div style={{ background: '#ffffff', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', padding: '24px' }}>
+        <h3 style={{ fontSize: '16px', fontWeight: 800, color: '#0f172a', margin: '0 0 16px 0' }}>
+          Detalhamento por Credenciadora DIMP Declarada à SEFAZ
+        </h3>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '14px' }}>
           {auditoria?.resumoAdquirentes?.map((adq, idx) => (
-            <div key={idx} className="p-4 rounded-lg border border-slate-200 bg-slate-50">
-              <div className="font-bold text-slate-800">{adq.nome}</div>
-              <div className="text-xs text-slate-500 font-mono mt-0.5">CNPJ: {adq.cnpj}</div>
-              <div className="mt-3 flex items-center justify-between text-sm">
-                <span className="text-slate-600">{adq.quantidadeTransacoes} transações</span>
-                <span className="font-bold text-indigo-600">
+            <div key={idx} style={{ padding: '16px', background: '#f8fafc', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
+              <div style={{ fontWeight: 800, color: '#1e293b', fontSize: '15px' }}>{adq.nome}</div>
+              <div style={{ fontSize: '12px', color: '#64748b', fontFamily: 'monospace', marginTop: '2px' }}>CNPJ: {adq.cnpj}</div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '14px', paddingTop: '10px', borderTop: '1px solid #e2e8f0' }}>
+                <span style={{ fontSize: '13px', color: '#64748b' }}>{adq.quantidadeTransacoes} transações</span>
+                <span style={{ fontSize: '16px', fontWeight: 800, color: '#4f46e5' }}>
                   R$ {adq.valorTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                 </span>
               </div>
