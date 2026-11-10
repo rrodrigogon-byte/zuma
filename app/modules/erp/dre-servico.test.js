@@ -94,7 +94,7 @@ test("geração de exportação XLSX e HTML Oficial PDF", async () => {
   const dre = await calcularDreCompleta(mockDb, "d0d0ac01-8e50-4b61-8c79-de4aaa916da6", { mes: "2026-11" });
   
   // XLSX
-  const xlsxBuf = exportarDreParaXlsx(dre, null, { nome: "Barbearia Dino", cnpj: "50.073.355/0001-89" });
+  const xlsxBuf = await exportarDreParaXlsx(dre, null, { nome: "Barbearia Dino", cnpj: "50.073.355/0001-89" });
   assert.ok(Buffer.isBuffer(xlsxBuf));
   assert.ok(xlsxBuf.length > 1000);
 

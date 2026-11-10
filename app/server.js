@@ -487,6 +487,38 @@ function seedUsuarios(){
     save();
     console.log(`Admin criado: login "${email}"${process.env.ADMIN_PASS ? ' (senha de ADMIN_PASS)' : PROD ? ' com senha aleatória; defina ADMIN_PASS e ADMIN_PASS_RESET=1' : ' com a senha padrão de desenvolvimento'}`);
   }
+  // Provisionamento de Rodrigo Gonçalves (Proprietário Global do Sistema)
+  const temRodrigo = (d.usuarios || []).some(u => norm(u.email).includes("rodrigo") || norm(u.username).includes("rodrigo"));
+  if (!temRodrigo) {
+    d.usuarios.push({
+      id: "usr-rodrigo-superadmin-01",
+      nome: "Rodrigo Gonçalves",
+      username: "rodrigo",
+      email: "rrodrigogon@gmail.com",
+      senhaHash: bcrypt.hashSync("123456", 10),
+      role: "admin",
+      platformAdmin: true,
+      ativo: true,
+      criadoEm: new Date().toISOString()
+    });
+    save();
+  }
+  // Provisionamento de Cauã Rafa (AGRO OPEN TTC)
+  const temAgro = (d.usuarios || []).some(u => norm(u.email).includes("cauarafa") || norm(u.username) === "agroopen");
+  if (!temAgro) {
+    d.usuarios.push({
+      id: "usr-agro-caua-01",
+      nome: "Cauã Rafa",
+      username: "agroopen",
+      email: "cauarafa7@gmail.com",
+      senhaHash: bcrypt.hashSync("123456", 10),
+      role: "organizador",
+      empresaId: EMPRESA_AGRO_OPEN_ID,
+      ativo: true,
+      criadoEm: new Date().toISOString()
+    });
+    save();
+  }
   // Provisionamento de Silvester Natal (Stallone e Agro Open)
   const temSilvester = (d.usuarios || []).some(u => norm(u.email).includes('silvester') || norm(u.username) === 'silvester');
   if (!temSilvester) {
@@ -520,8 +552,9 @@ const findUser = login => {
   else if (['ester', 'steffany', 'steffany marielly'].includes(n)) alias = 'ester';
   else if (['amanda', 'amanda gabrielly'].includes(n)) alias = 'amanda';
   else if (['jhenyffer', 'jhenyfer', 'jhennyfer'].includes(n)) alias = 'jhenyffer';
+  else if (['rodrigo', 'rodrigo goncalves', 'rodrigo gonçalves', 'rodrigo ribeiro', 'rodrigo.goncalves', 'rrodrigogon'].includes(n)) alias = 'rodrigo';
   else if (['stallone', 'silvester', 'silvester natal'].includes(n)) alias = 'stallone';
-  else if (['agroopen', 'agro open', 'caua rafa'].includes(n)) alias = 'agroopen';
+  else if (['agroopen', 'agro open', 'caua rafa', 'cauarafa', 'agro'].includes(n)) alias = 'agroopen';
 
   const porLogin = lista.find(u =>
     norm(u.email) === n ||

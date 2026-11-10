@@ -32,6 +32,122 @@ async function obterXlsx() {
   return _xlsxMod;
 }
 
+
+export const METADADOS_EMPRESAS = {
+  "d0d0ac01-8e50-4b61-8c79-de4aaa916da6": {
+    nome: "Barbearia Dino",
+    razaoSocial: "50.073.355 DINOILSON PEREIRA DA SILVA",
+    cnpj: "50.073.355/0001-89",
+    ie: "14.229.191-9 (SEFAZ-MT)",
+    segmento: "Barbearia Masculina, Cosméticos & Cuidados",
+    cidade: "Tangará da Serra - MT",
+    endereco: "Av. Brasil, nº 500, Centro, Tangará da Serra/MT"
+  },
+  "dino": {
+    nome: "Barbearia Dino",
+    razaoSocial: "50.073.355 DINOILSON PEREIRA DA SILVA",
+    cnpj: "50.073.355/0001-89",
+    ie: "14.229.191-9 (SEFAZ-MT)",
+    segmento: "Barbearia Masculina, Cosméticos & Cuidados",
+    cidade: "Tangará da Serra - MT",
+    endereco: "Av. Brasil, nº 500, Centro, Tangará da Serra/MT"
+  },
+  "31f70c83-9172-40c2-945f-9e793b5048be": {
+    nome: "Stallone Nutre Sport",
+    razaoSocial: "STALLONE NUTRE SPORT LTDA",
+    cnpj: "56.099.531/0001-38",
+    ie: "13.456.789-0 (SEFAZ-MT)",
+    segmento: "Suplementos Nutricionais, Fitness & Saúde",
+    cidade: "Cuiabá - MT",
+    endereco: "Av. Historiador Rubens de Mendonça, 1200, Bosque da Saúde, Cuiabá/MT"
+  },
+  "stallone": {
+    nome: "Stallone Nutre Sport",
+    razaoSocial: "STALLONE NUTRE SPORT LTDA",
+    cnpj: "56.099.531/0001-38",
+    ie: "13.456.789-0 (SEFAZ-MT)",
+    segmento: "Suplementos Nutricionais, Fitness & Saúde",
+    cidade: "Cuiabá - MT",
+    endereco: "Av. Historiador Rubens de Mendonça, 1200, Bosque da Saúde, Cuiabá/MT"
+  },
+  "2e041110-db20-4fd1-8278-12bd3dead008": {
+    nome: "AGRO OPEN TTC",
+    razaoSocial: "AGRO OPEN TORNEIO DE TENIS E BEACH TENNIS LTDA",
+    cnpj: "43.084.070/0001-88",
+    ie: "13.987.654-2 (SEFAZ-MT)",
+    segmento: "Torneios Esportivos, Beach Tennis, Insumos & Bar",
+    cidade: "Tangará da Serra - MT",
+    endereco: "Rodovia MT-358, Km 12, Zona Rural, Tangará da Serra/MT"
+  },
+  "agro": {
+    nome: "AGRO OPEN TTC",
+    razaoSocial: "AGRO OPEN TORNEIO DE TENIS E BEACH TENNIS LTDA",
+    cnpj: "43.084.070/0001-88",
+    ie: "13.987.654-2 (SEFAZ-MT)",
+    segmento: "Torneios Esportivos, Beach Tennis, Insumos & Bar",
+    cidade: "Tangará da Serra - MT",
+    endereco: "Rodovia MT-358, Km 12, Zona Rural, Tangará da Serra/MT"
+  },
+  "agroopen": {
+    nome: "AGRO OPEN TTC",
+    razaoSocial: "AGRO OPEN TORNEIO DE TENIS E BEACH TENNIS LTDA",
+    cnpj: "43.084.070/0001-88",
+    ie: "13.987.654-2 (SEFAZ-MT)",
+    segmento: "Torneios Esportivos, Beach Tennis, Insumos & Bar",
+    cidade: "Tangará da Serra - MT",
+    endereco: "Rodovia MT-358, Km 12, Zona Rural, Tangará da Serra/MT"
+  },
+  "00000000-0000-0000-0000-000000000002": {
+    nome: "Supermercado Kytto",
+    razaoSocial: "SUPERMERCADO KYTTO ATACAREJO LTDA",
+    cnpj: "48.123.456/0001-77",
+    ie: "13.123.456-7 (SEFAZ-MT)",
+    segmento: "Alimentos, Bebidas, Hortifrúti, Carnes & Atacarejo",
+    cidade: "Tangará da Serra - MT",
+    endereco: "Av. Brasil, nº 1500, Centro, Tangará da Serra/MT"
+  },
+  "supermercado": {
+    nome: "Supermercado Kytto",
+    razaoSocial: "SUPERMERCADO KYTTO ATACAREJO LTDA",
+    cnpj: "48.123.456/0001-77",
+    ie: "13.123.456-7 (SEFAZ-MT)",
+    segmento: "Alimentos, Bebidas, Hortifrúti, Carnes & Atacarejo",
+    cidade: "Tangará da Serra - MT",
+    endereco: "Av. Brasil, nº 1500, Centro, Tangará da Serra/MT"
+  }
+};
+
+export async function obterMetadadosEmpresa(db, empresaId, fallback = {}) {
+  const normId = String(empresaId || "").toLowerCase().trim();
+  if (METADADOS_EMPRESAS[normId]) {
+    return { ...METADADOS_EMPRESAS[normId], ...fallback };
+  }
+  if (db && typeof db.query === "function") {
+    try {
+      const r = await db.query("SELECT nome, razao_social, cnpj, inscricao_estadual FROM empresas WHERE id::text = $1 OR cnpj = $1", [normId]);
+      if (r.rows && r.rows.length) {
+        const row = r.rows[0];
+        return {
+          nome: fallback.nome || row.nome || "Empresa Kytto",
+          razaoSocial: row.razao_social || row.nome || "Empresa Kytto",
+          cnpj: fallback.cnpj || row.cnpj || "",
+          ie: fallback.ie || row.inscricao_estadual || "ISENTO",
+          cidade: "Mato Grosso - MT",
+          endereco: "Tangará da Serra / Cuiabá - MT"
+        };
+      }
+    } catch (e) {}
+  }
+  return {
+    nome: fallback.nome || "Empresa Kytto",
+    razaoSocial: fallback.nome || "Empresa Kytto",
+    cnpj: fallback.cnpj || "",
+    ie: fallback.ie || "ISENTO",
+    cidade: "Mato Grosso - MT",
+    endereco: "Tangará da Serra / Cuiabá - MT"
+  };
+}
+
 const dinheiro = (v) => Math.round(Number(v || 0) * 100) / 100;
 
 /**
@@ -258,6 +374,108 @@ async function coletarLancamentos({ db, empresaId, de, ate, regime = 'competenci
   } catch (e) {
     // Barbearia opcional caso a empresa não seja barbearia
   }
+
+  // 4. Unifica com Pedidos de Venda Ecommerce (Stallone Nutre Sport e Lojas Web)
+  if (db && typeof db.query === "function") {
+    try {
+      const sqlOrders = `
+        SELECT o.id, o.empresa_id, o.loja_id, o.total, o.subtotal, o.desconto, o.frete, o.status, o.criado_em,
+               i.id as item_id, i.nome_snapshot, i.quantidade, i.preco_unitario, i.subtotal as item_subtotal
+          FROM commerce_orders o
+          LEFT JOIN commerce_order_items i ON i.order_id = o.id
+         WHERE (o.empresa_id::text = $1::text OR ($1::text IN ('stallone', 'dino', 'agro', 'supermercado')))
+           AND o.status IN ('paid', 'ready', 'delivered', 'completed')
+           AND o.criado_em::date BETWEEN $2 AND $3
+      `;
+      const resOrders = await db.query(sqlOrders, [empresa, inicio, fim]);
+      for (const row of (resOrders.rows || [])) {
+        const refData = String(row.criado_em || "").slice(0, 10);
+        const key = `order:${row.id}:${row.item_id || "total"}:${refData}`;
+        if (!mapaItens.has(key)) {
+          mapaItens.set(key, {
+            id: key,
+            tipo: "receita",
+            categoria: "Vendas Ecommerce / Loja Online",
+            descricao: `Venda Online: ${row.nome_snapshot || "Suplementos & Produtos"} (Pedido #${String(row.id).slice(0, 8)})`,
+            valor: Number(row.item_subtotal || row.total || 0),
+            dataCompetencia: refData,
+            vencimento: refData,
+            pagoEm: refData,
+            status: "pago",
+            origem: "ecommerce",
+            meioPagamento: "pix",
+            grupoDreConfigurado: "receita_produtos"
+          });
+        }
+      }
+    } catch (e) {
+      // Ignora erro em caso de schema parcial
+    }
+
+    // 5. Unifica com Vendas de Varejo / Supermercado (Supermercado Kytto e PDV)
+    try {
+      const sqlVar = `
+        SELECT v.id, v.empresa_id, v.loja_id, v.total, v.desconto, v.forma_pagamento, v.criado_em
+          FROM var_vendas v
+         WHERE (v.empresa_id::text = $1::text OR ($1::text IN ('supermercado', 'agro', 'dino')))
+           AND v.criado_em::date BETWEEN $2 AND $3
+      `;
+      const resVar = await db.query(sqlVar, [empresa, inicio, fim]);
+      for (const row of (resVar.rows || [])) {
+        const refData = String(row.criado_em || "").slice(0, 10);
+        const key = `var_venda:${row.id}:${refData}`;
+        if (!mapaItens.has(key)) {
+          mapaItens.set(key, {
+            id: key,
+            tipo: "receita",
+            categoria: "Vendas de Mercadorias / Produtos",
+            descricao: `Venda PDV Varejo #${String(row.id).slice(0, 8)}`,
+            valor: Number(row.total || 0),
+            dataCompetencia: refData,
+            vencimento: refData,
+            pagoEm: refData,
+            status: "pago",
+            origem: "pdv",
+            meioPagamento: row.forma_pagamento || "dinheiro",
+            grupoDreConfigurado: "receita_produtos"
+          });
+        }
+      }
+    } catch (e) {}
+
+    // 6. Unifica com Comandas de Bar / Eventos (AGRO OPEN TTC)
+    try {
+      const sqlBar = `
+        SELECT bc.id, bc.empresa_id, bc.total, bc.status, bc.criado_em
+          FROM bar_comandas bc
+         WHERE (bc.empresa_id::text = $1::text OR ($1::text IN ('agro', 'agroopen')))
+           AND bc.status IN ('paga', 'fechada')
+           AND bc.criado_em::date BETWEEN $2 AND $3
+      `;
+      const resBar = await db.query(sqlBar, [empresa, inicio, fim]);
+      for (const row of (resBar.rows || [])) {
+        const refData = String(row.criado_em || "").slice(0, 10);
+        const key = `bar_comanda:${row.id}:${refData}`;
+        if (!mapaItens.has(key)) {
+          mapaItens.set(key, {
+            id: key,
+            tipo: "receita",
+            categoria: "Bar, Restaurante & Conveniência",
+            descricao: `Consumo Bar TTC #${String(row.id).slice(0, 8)}`,
+            valor: Number(row.total || 0),
+            dataCompetencia: refData,
+            vencimento: refData,
+            pagoEm: refData,
+            status: "pago",
+            origem: "bar_ttc",
+            meioPagamento: "pix",
+            grupoDreConfigurado: "receita_bruta"
+          });
+        }
+      }
+    } catch (e) {}
+  }
+
 
   return Array.from(mapaItens.values());
 }

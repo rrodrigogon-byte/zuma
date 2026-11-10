@@ -19,8 +19,8 @@ function clean(value, max = 180) {
 
 function requestedScope(req) {
   return {
-    empresaId: clean(req.headers['x-empresa-id']),
-    lojaId: clean(req.headers['x-loja-id']),
+    empresaId: clean(req.headers['x-empresa-id'] || req.query?.empresaId || req.query?.empresa),
+    lojaId: clean(req.headers['x-loja-id'] || req.query?.lojaId || req.query?.loja),
   };
 }
 

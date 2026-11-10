@@ -155,14 +155,15 @@ export function createErpAdminRouter({ db, escopoDaRequisicao }) {
     const conteudo = linhasCsv.join("\r\n");
     return {
       ok: true,
-      nomeArquivo: `DRE_${dre.periodo.mes || dre.periodo.ano || "Periodo"}_${dre.periodo.regime}.csv`,
+      nomeArquivo: `DRE_${infoEmpresa.nome.replace(/\s+/g, "_")}_${dre.periodo.mes || dre.periodo.ano || "Periodo"}.csv`,
       conteudoBase64: Buffer.from(conteudo, "utf8").toString("base64"),
       csvText: conteudo
     };
   }));
 
   router.get("/dre/exportar-xlsx", rota("reports.read", async ({ req, empresaId, lojaRestrita }) => {
-    const dre = await dreSvc.calcularDreCompleta(db, empresaId, {
+    const empTarget = req.query.empresaId || req.query.empresa || empresaId;
+    const dre = await dreSvc.calcularDreCompleta(db, empTarget, {
       de: req.query.de,
       ate: req.query.ate,
       mes: req.query.mes,
@@ -173,7 +174,7 @@ export function createErpAdminRouter({ db, escopoDaRequisicao }) {
     });
     let matrizAnual = null;
     try {
-      matrizAnual = await dreSvc.calcularDreAnual12Meses(db, empresaId, {
+      matrizAnual = await dreSvc.calcularDreAnual12Meses(db, empTarget, {
         ano: req.query.ano || (req.query.mes ? req.query.mes.slice(0, 4) : new Date().getFullYear()),
         regime: req.query.regime || "competencia",
         lojaId: req.query.lojaId || lojaRestrita
@@ -181,11 +182,11 @@ export function createErpAdminRouter({ db, escopoDaRequisicao }) {
     } catch (e) {
       // Matriz opcional
     }
-    const infoEmpresa = {
-      nome: req.query.empresaNome || (empresaId === "d0d0ac01-8e50-4b61-8c79-de4aaa916da6" ? "Barbearia Dino" : "Empresa Kytto"),
-      cnpj: req.query.empresaCnpj || (empresaId === "d0d0ac01-8e50-4b61-8c79-de4aaa916da6" ? "50.073.355/0001-89" : ""),
-      ie: req.query.empresaIe || (empresaId === "d0d0ac01-8e50-4b61-8c79-de4aaa916da6" ? "14.229.191-9 (SEFAZ-MT)" : "")
-    };
+    const infoEmpresa = await dreSvc.obterMetadadosEmpresa(db, empTarget, {
+      nome: req.query.empresaNome,
+      cnpj: req.query.empresaCnpj,
+      ie: req.query.empresaIe
+    });
     const buffer = await dreSvc.exportarDreParaXlsx(dre, matrizAnual, infoEmpresa);
     const nomeArquivo = `DRE_${infoEmpresa.nome.replace(/\s+/g, "_")}_${dre.periodo.mes || dre.periodo.ano || "Periodo"}.xlsx`;
     return {
@@ -197,7 +198,8 @@ export function createErpAdminRouter({ db, escopoDaRequisicao }) {
   }));
 
   router.get("/dre/imprimir-pdf", rota("reports.read", async ({ req, empresaId, lojaRestrita }) => {
-    const dre = await dreSvc.calcularDreCompleta(db, empresaId, {
+    const empTarget = req.query.empresaId || req.query.empresa || empresaId;
+    const dre = await dreSvc.calcularDreCompleta(db, empTarget, {
       de: req.query.de,
       ate: req.query.ate,
       mes: req.query.mes,
@@ -206,11 +208,11 @@ export function createErpAdminRouter({ db, escopoDaRequisicao }) {
       lojaId: req.query.lojaId || lojaRestrita,
       centroCustoId: req.query.centroCustoId
     });
-    const infoEmpresa = {
-      nome: req.query.empresaNome || (empresaId === "d0d0ac01-8e50-4b61-8c79-de4aaa916da6" ? "Barbearia Dino" : "Empresa Kytto"),
-      cnpj: req.query.empresaCnpj || (empresaId === "d0d0ac01-8e50-4b61-8c79-de4aaa916da6" ? "50.073.355/0001-89" : ""),
-      ie: req.query.empresaIe || (empresaId === "d0d0ac01-8e50-4b61-8c79-de4aaa916da6" ? "14.229.191-9 (SEFAZ-MT)" : "")
-    };
+    const infoEmpresa = await dreSvc.obterMetadadosEmpresa(db, empTarget, {
+      nome: req.query.empresaNome,
+      cnpj: req.query.empresaCnpj,
+      ie: req.query.empresaIe
+    });
     const html = dreSvc.gerarHtmlDreOficialPdf(dre, null, infoEmpresa);
     return {
       ok: true,

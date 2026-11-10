@@ -33,8 +33,12 @@ export function legacyLojaIdFromCommerce(lojaId, empresaId = '') {
 // Volta do id legado para o canônico do Commerce. Usado onde o dado pertence ao
 // Commerce (conexão WhatsApp, dono da instância, IA), mesmo atrás das rotas do ERP.
 export function commerceEmpresaIdFromLegacy(empresaId) {
-  const value = clean(empresaId);
-  return value === DINO_LEGACY_EMPRESA_ID ? DINO_COMMERCE_EMPRESA_ID : value;
+  const value = clean(empresaId).toLowerCase();
+  if (value === "dino" || value === DINO_LEGACY_EMPRESA_ID) return DINO_COMMERCE_EMPRESA_ID;
+  if (value === "stallone" || value === "31f70c83-9172-40c2-945f-9e793b5048be") return "31f70c83-9172-40c2-945f-9e793b5048be";
+  if (value === "agro" || value === "agroopen" || value === "2e041110-db20-4fd1-8278-12bd3dead008") return "2e041110-db20-4fd1-8278-12bd3dead008";
+  if (value === "supermercado" || value === "00000000-0000-0000-0000-000000000002") return "00000000-0000-0000-0000-000000000002";
+  return clean(empresaId);
 }
 
 export function commerceLojaIdFromLegacy(lojaId, empresaId = '') {
