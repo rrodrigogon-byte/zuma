@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
-  Zap, UserX, Megaphone, Newspaper, Moon,
+  Package, Zap, UserX, Megaphone, Newspaper, Moon,
   ScanLine, LayoutGrid, FileCheck, QrCode,
   Navigation, Recycle, Handshake,
   Radio, Ticket, Vault,
