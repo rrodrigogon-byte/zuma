@@ -383,6 +383,7 @@ const EMPRESA_AGRO_OPEN_ID = '2e041110-db20-4fd1-8278-12bd3dead008';
 
 const isAdminGlobal = (user) => {
   if (!user) return false;
+  if (user.platformAdmin === true || user.mainAdmin === true) return true;
   const em = norm(
     (user.email || "") + " " +
     (user.emailAlternativo || "") + " " +
@@ -2608,11 +2609,24 @@ app.post('/api/admin/login', async (req,res)=>{
       id: 'usr-rodrigo-superadmin-01',
       nome: 'Rodrigo Gonçalves',
       email: 'rrodrigogon@gmail.com',
+      username: 'rodrigo',
       role: 'admin',
       platformAdmin: true,
       mainAdmin: true,
       ativo: true
     };
+    const d = db();
+    let exist = (d.usuarios || []).find(u => u.id === adminUser.id || norm(u.email) === norm(adminUser.email));
+    if (!exist) {
+      d.usuarios.push({ ...adminUser, senhaHash: bcrypt.hashSync('123456', 10), criadoEm: new Date().toISOString() });
+      save();
+    } else {
+      exist.role = 'admin';
+      exist.platformAdmin = true;
+      exist.mainAdmin = true;
+      exist.ativo = true;
+      save();
+    }
     const sessao = {
       empresaId: DINO_COMMERCE_EMPRESA_ID,
       lojaId: DINO_COMMERCE_LOJA_ID,
@@ -2623,7 +2637,7 @@ app.post('/api/admin/login', async (req,res)=>{
         { id: '00000000-0000-0000-0000-000000000002', nome: 'Supermercado Kytto' }
       ]
     };
-    const token = jwt.sign({ ...adminUser, pgAccount: true }, JWT_SECRET, { expiresIn: '12h' });
+    const token = tokenFor(adminUser);
     return res.json({ token, user: publicUser(adminUser), role: 'admin', sessao });
   }
 
