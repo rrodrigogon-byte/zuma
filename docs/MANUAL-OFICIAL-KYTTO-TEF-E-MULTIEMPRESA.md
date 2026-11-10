@@ -568,3 +568,25 @@ A Ordem de Serviço separa de forma clara e fiscalmente adequada:
 Ao clicar no botão verde **📲 Disparar Aprovação WhatsApp**:
 - O Kytto envia uma mensagem personalizada para o WhatsApp do proprietário do veículo com o link seguro da OS, detalhamento dos itens e botões de **APROVAR ORÇAMENTO** e **FALAR COM O MECÂNICO**;
 - Quando o cliente clica em Aprovar, o status da OS no sistema muda automaticamente para `APROVADO_WHATSAPP` e a equipe mecânica inicia a execução sem atrasos burocráticos.
+
+
+---
+
+## 35. OPERAÇÃO DA EQUIPE: PERMANÊNCIA DO BARBEIRO BRUNO E LANÇAMENTO DE COMANDAS
+
+### 35.1 Visão da Agenda e Seleção de Barbeiros na Tela
+A Agenda Operacional (`/admin/barbearia-erp?area=operacao&tab=Agenda`) permite à recepção e aos gerentes filtrar visualmente quais profissionais devem ter seus horários exibidos no calendário diário ou semanal:
+1. No topo da tela, o componente **Barbeiros na Agenda** exibe os avatares de todos os profissionais ativos: **Bruno**, **Bruno Mendes**, **Dino**, **Ester**, **Jhenyffer Andrade** e **Nati**;
+2. Ao clicar no botão **Filtrar exibição**, o operador pode marcar ou desmarcar profissionais individualmente; o sistema preserva no navegador a preferência sem alterar o cadastro oficial;
+3. O barbeiro **Bruno Mendes Pedroso** possui status ativo definitivo e blindagem contra inativações automáticas.
+
+![Print 50 — Agenda da Barbearia Dino com Bruno Mendes Ativo](/home/ubuntu/agro-open/docs/prints/50-barbearia-agenda-bruno-mendes-ativo.png)
+
+### 35.2 Abertura de Comanda e Lançamento de Itens por Profissional
+Ao abrir uma comanda de atendimento ou lançar procedimentos de pacotes/clubes:
+1. Selecione o cliente cadastrado ou clique em **Cliente Balcão**;
+2. Defina o **Profissional Responsável** selecionando **Bruno**;
+3. No carrinho de itens, cada procedimento ou serviço avulso pode ter seu profissional associado independentemente, permitindo que diferentes profissionais prestem atendimento na mesma comanda (ex: corte com Bruno e barba com Dino);
+4. O motor Kytto reconhece tanto o ID quanto o nome do profissional, garantindo validação imediata e comissionamento sem erros.
+
+![Print 51 — Comanda de Atendimento com Bruno Selecionado com Sucesso](/home/ubuntu/agro-open/docs/prints/51-barbearia-comanda-procedimento-bruno-sucesso.png)
