@@ -2141,9 +2141,9 @@ app.use('/api/webhooks', createWhatsappAiWebhookRouter());
   const licenciamentoRouter = createLicenciamentoRouter({
     obterEmpresaId: (req) => {
       if (isAdminGlobal(req.user)) {
-        return req.headers['x-empresa-id'] ? String(req.headers['x-empresa-id']).trim() : 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
+        return req.headers['x-empresa-id'] ? String(req.headers['x-empresa-id']).trim() : (req.user?.empresaId || null);
       }
-      return req.user?.empresaId ? String(req.user.empresaId).trim() : (legacyEmpresaId(req) || 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6');
+      return req.user?.empresaId ? String(req.user.empresaId).trim() : (legacyEmpresaId(req) || null);
     },
     isPlatformAdmin: (req) => isAdminGlobal(req.user)
   });
@@ -2164,9 +2164,9 @@ app.use('/api/webhooks', createWhatsappAiWebhookRouter());
   const boletosRouter = createBoletosRouter({
     obterEmpresaId: (req) => {
       if (isAdminGlobal(req.user)) {
-        return req.headers['x-empresa-id'] ? String(req.headers['x-empresa-id']).trim() : 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
+        return req.headers['x-empresa-id'] ? String(req.headers['x-empresa-id']).trim() : (req.user?.empresaId || null);
       }
-      return req.user?.empresaId ? String(req.user.empresaId).trim() : (legacyEmpresaId(req) || 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6');
+      return req.user?.empresaId ? String(req.user.empresaId).trim() : (legacyEmpresaId(req) || null);
     }
   });
   app.use('/api/admin/boletos', auth, requireStaff, boletosRouter);
@@ -2175,9 +2175,9 @@ app.use('/api/webhooks', createWhatsappAiWebhookRouter());
   const fiscalAvancadoRouter = createFiscalAvancadoRouter({
     obterEmpresaId: (req) => {
       if (isAdminGlobal(req.user)) {
-        return req.headers['x-empresa-id'] ? String(req.headers['x-empresa-id']).trim() : 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
+        return req.headers['x-empresa-id'] ? String(req.headers['x-empresa-id']).trim() : (req.user?.empresaId || null);
       }
-      return req.user?.empresaId ? String(req.user.empresaId).trim() : (legacyEmpresaId(req) || 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6');
+      return req.user?.empresaId ? String(req.user.empresaId).trim() : (legacyEmpresaId(req) || null);
     }
   });
   app.use('/api/admin/fiscal-avancado', auth, requireStaff, fiscalAvancadoRouter);
@@ -2186,9 +2186,9 @@ app.use('/api/webhooks', createWhatsappAiWebhookRouter());
   const spedRouter = createSpedAdminRouter({
     obterEmpresaIdDoUsuario: (req) => {
       if (isAdminGlobal(req.user)) {
-        return req.headers['x-empresa-id'] ? String(req.headers['x-empresa-id']).trim() : 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
+        return req.headers['x-empresa-id'] ? String(req.headers['x-empresa-id']).trim() : (req.user?.empresaId || null);
       }
-      return req.user?.empresaId ? String(req.user.empresaId).trim() : (legacyEmpresaId(req) || 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6');
+      return req.user?.empresaId ? String(req.user.empresaId).trim() : (legacyEmpresaId(req) || null);
     }
   });
   app.use('/api/admin/sped', auth, requireStaff, spedRouter);
@@ -2197,9 +2197,9 @@ app.use('/api/webhooks', createWhatsappAiWebhookRouter());
   const deliveryRouter = createDeliveryAdminRouter({
     obterEmpresaIdDoUsuario: (req) => {
       if (isAdminGlobal(req.user)) {
-        return req.headers['x-empresa-id'] ? String(req.headers['x-empresa-id']).trim() : 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
+        return req.headers['x-empresa-id'] ? String(req.headers['x-empresa-id']).trim() : (req.user?.empresaId || null);
       }
-      return req.user?.empresaId ? String(req.user.empresaId).trim() : (legacyEmpresaId(req) || 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6');
+      return req.user?.empresaId ? String(req.user.empresaId).trim() : (legacyEmpresaId(req) || null);
     }
   });
   app.use('/api/admin/delivery', auth, requireStaff, deliveryRouter);
@@ -2209,9 +2209,9 @@ app.use('/api/webhooks', createWhatsappAiWebhookRouter());
     auth,
     obterEmpresaId: (req) => {
       if (isAdminGlobal(req.user)) {
-        return req.headers['x-empresa-id'] ? String(req.headers['x-empresa-id']).trim() : 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
+        return req.headers['x-empresa-id'] ? String(req.headers['x-empresa-id']).trim() : (req.user?.empresaId || null);
       }
-      return req.user?.empresaId ? String(req.user.empresaId).trim() : (legacyEmpresaId(req) || 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6');
+      return req.user?.empresaId ? String(req.user.empresaId).trim() : (legacyEmpresaId(req) || null);
     }
   });
   app.use('/api/admin/dimp-auditoria', auth, requireStaff, dimpRouter);
@@ -2221,9 +2221,9 @@ app.use('/api/webhooks', createWhatsappAiWebhookRouter());
     auth,
     obterEmpresaId: (req) => {
       if (isAdminGlobal(req.user)) {
-        return req.headers['x-empresa-id'] ? String(req.headers['x-empresa-id']).trim() : 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
+        return req.headers['x-empresa-id'] ? String(req.headers['x-empresa-id']).trim() : (req.user?.empresaId || null);
       }
-      return req.user?.empresaId ? String(req.user.empresaId).trim() : (legacyEmpresaId(req) || 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6');
+      return req.user?.empresaId ? String(req.user.empresaId).trim() : (legacyEmpresaId(req) || null);
     }
   });
   app.use('/api/admin/supply-chain', auth, requireStaff, supplyChainRouter);
@@ -2361,7 +2361,7 @@ app.use('/api/webhooks', createWhatsappAiWebhookRouter());
 if (process.env.COMMERCE_CORE_ENABLED !== '1') {
   const erpFallbackDb = { query: async () => { throw new Error('PG_OFFLINE_FALLBACK'); } };
   const escopoFallback = async (req) => {
-    const empresaId = legacyEmpresaId(req) || 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
+    const empresaId = legacyEmpresaId(req) || req.user?.empresaId || null;
     return { empresaId, lojaRestrita: null };
   };
   const erpFallbackRouter = createErpAdminRouter({ db: erpFallbackDb, escopoDaRequisicao: escopoFallback });
@@ -7192,7 +7192,8 @@ app.post(['/api/admin/fechamento-diario/reabrir', '/api/admin/barbearia/operacao
 // ── TOTENS DE AUTOATENDIMENTO E LOJAS FÍSICAS ────────────────────────────────
 app.get('/api/totem/config', (req, res) => {
   try {
-    const empresaId = String(req.query?.empresaId || 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6').trim();
+    const empresaId = String(req.query?.empresaId || req.headers['x-empresa-id'] || '').trim();
+    if (!empresaId) return res.status(400).json({ error: 'empresaId obrigatório' });
     const lojaId = String(req.query?.lojaId || 'matriz').trim();
     const slug = String(req.query?.slug || '').trim();
     
@@ -7251,7 +7252,8 @@ app.post('/api/totem/senhas', (req, res) => {
 
 app.get('/api/totem/painel-tv', (req, res) => {
   try {
-    const empresaId = String(req.query?.empresaId || 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6').trim();
+    const empresaId = String(req.query?.empresaId || req.headers['x-empresa-id'] || '').trim();
+    if (!empresaId) return res.status(400).json({ error: 'empresaId obrigatório' });
     const lojaId = String(req.query?.lojaId || 'matriz').trim();
     const painel = totemLojaFisica.obterEstadoPainelTV({ empresaId, lojaId });
     res.json({ ok: true, ...painel });
