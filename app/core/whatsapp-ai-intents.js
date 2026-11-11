@@ -60,7 +60,7 @@ const CANCELLATION_CONFIRM = new Set(['pode cancelar', 'cancela', 'cancela ai', 
  */
 export function confirmIntent(text, { actionType = '' } = {}) {
   const raw = String(text ?? '').trim();
-  if (!raw || raw.length > 80) return null;
+  if (!raw || raw.length > 140) return null;
   const compact = raw.replace(/\s+/g, '');
   if (EMOJI_CONFIRM.test(compact)) return 'confirm';
   if (EMOJI_CANCEL.test(compact)) return 'cancel';
@@ -71,6 +71,14 @@ export function confirmIntent(text, { actionType = '' } = {}) {
     .replace(/\s+/g, ' ')
     .trim();
   if (!value) return null;
+  // Rejeição explícita de serviço/ação errada ("eu nao quero dermaplaning", "nao dermaplaning", "nao quero isso")
+  if (/^(?:eu\s+)?nao\s+(?:quero|vou\s+querer|precisa|pedi)\b/.test(value) || /^nao\s+dermaplaning\b/.test(value)) {
+    return 'cancel';
+  }
+  // Confirmação explícita com complemento ("ok deixa agendado ai se abrir vaga...", "pode deixar agendado", "pode deixar marcado")
+  if (!/\b(?:nao|cancela|cancelar|desistir|desisto)\b/.test(value) && /\b(?:deixa\s+(?:agendad[oa]|marcad[oa])|pode\s+(?:deixar\s+)?(?:agendar|agendad[oa]|marcar|marcad[oa]|confirmar|confirmad[oa])|confirma\s+a[ií])\b/.test(value)) {
+    return 'confirm';
+  }
   const words = value.split(' ');
   if (words.length > 6) return null;
   if (actionType === 'cancelamento' || actionType === 'cancelamento_pedido') {
@@ -205,10 +213,18 @@ export function isGenericCustomerName(value) {
  * perfumes"). Não vale quando o resto ajusta a mesma ação (dia, hora, profissional, serviço):
  * "não, prefiro às 15h" ou "não, com o Bruno" continuam com o modelo.
  */
-const RECUSA_INICIO = /^(?:nao|n|negativo|nao quero|nao precisa|desisto|esquece|deixa|cancela|cancelar)\b[\s,.!;:-]+(.+)$/;
+const RECUSA_INICIO = /^(?:(?:eu\s+)?nao|n|negativo|(?:eu\s+)?nao\s+quero|nao\s+precisa|desisto|esquece|deixa|cancela|cancelar)\b[\s,.!;:-]+(.+)$/;
 const AJUSTE_DA_ACAO = /\b(?:\d{1,2}\s*(?:h|:|horas?)|as \d|prefiro|outro (?:dia|horario|barbeiro|profissional)|outra (?:hora|data)|troca|muda|mudar|em vez|ao inves|amanha|hoje|segunda|terca|quarta|quinta|sexta|sabado|domingo|manha|tarde|noite|com o |com a |dia \d|\d{1,2}\/\d{1,2})/;
-export function declineWithNewRequest(text) {
+export function declineWithNewRequest(text, pendingSummary = '') {
   const value = normalize(text).replace(/\s+/g, ' ').trim();
+  const summaryNorm = normalize(pendingSummary);
+  // Se a ação pendente era Dermaplaning/Estética e o cliente pede Corte/Barba (ou rejeita Dermaplaning), limpa a ação pendente na hora
+  if (summaryNorm.includes('dermaplaning') && /\b(dermaplaning|corte|cortar|cabelo|barba)\b/.test(value) && !/\bconfirm/i.test(value)) {
+    return true;
+  }
+  if (/^(?:eu\s+)?nao\s+quero\b/.test(value) || /^nao\s+dermaplaning\b/.test(value)) {
+    return true;
+  }
   const match = value.match(RECUSA_INICIO);
   if (!match) return false;
   const resto = match[1].trim();

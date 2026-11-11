@@ -43,14 +43,33 @@ function minutosHorario(value, fallback) {
   return hora * 60 + minuto
 }
 
-function gradeDaUnidade(configuracao = {}, overrideIntervalo = null, modo24h = false) {
+function gradeDaUnidade(configuracao = {}, overrideIntervalo = null, modo24h = false, profissionais = [], agendamentos = []) {
   if (modo24h) {
     const intv = overrideIntervalo || configuracao.intervaloMinutos || PADRAO_GRADE.intervalo
     const intervalo = Math.min(120, Math.max(5, Number(intv)))
     return { inicio: 0, fim: 24 * 60, intervalo }
   }
-  const inicio = minutosHorario(configuracao.horarioAbertura, PADRAO_GRADE.inicio)
-  const fim = minutosHorario(configuracao.horarioFechamento, PADRAO_GRADE.fim)
+  let inicio = minutosHorario(configuracao.horarioAbertura, 7 * 60)
+  let fim = minutosHorario(configuracao.horarioFechamento, PADRAO_GRADE.fim)
+  for (const p of Array.isArray(profissionais) ? profissionais : []) {
+    if (!p || p.ativo === false || p.atendimento24x7) continue
+    if (p.horarioInicio) {
+      const iniP = minutosHorario(p.horarioInicio, inicio)
+      if (iniP >= 6 * 60 && iniP < inicio) inicio = iniP
+    }
+    if (p.horarioFim) {
+      const fimP = minutosHorario(p.horarioFim, fim)
+      if (fimP <= 23 * 60 && fimP > fim) fim = fimP
+    }
+  }
+  for (const ag of Array.isArray(agendamentos) ? agendamentos : []) {
+    if (!ag || ag.status === 'cancelado') continue
+    const h = ag.horaLocal
+    if (h) {
+      const iniAg = minutosHorario(h, inicio)
+      if (iniAg >= 6 * 60 && iniAg < inicio) inicio = Math.floor(iniAg / 60) * 60
+    }
+  }
   const intv = overrideIntervalo || configuracao.intervaloMinutos || PADRAO_GRADE.intervalo
   const intervalo = Math.min(120, Math.max(5, Number(intv)))
   return { inicio, fim: Math.max(inicio + intervalo, fim), intervalo }
@@ -109,8 +128,21 @@ export default function BarbeariaAgendaBoard({ data, configuracao = {}, agendame
     return () => clearInterval(timer)
   }, [])
 
-  const profissionaisAtivos = useMemo(() => profissionais.filter((item) => item.ativo !== false && !item.removidoEm && !item.excluido), [profissionais])
-  const grade = useMemo(() => gradeDaUnidade(configuracao, intervaloManual, modo24h), [configuracao, intervaloManual, modo24h])
+  const profissionaisAtivos = useMemo(
+    () =>
+      profissionais.filter((item) => {
+        if (item.ativo === false || item.removidoEm || item.excluido || item.atendeCliente === false) return false
+        if (item.id === 'prof-mvsqchmy-023') return false
+        const n = String(item.nome || '').toLowerCase()
+        if (n.includes('jhenyffer') || n.includes('steffany') || n.includes('ester')) return false
+        return true
+      }),
+    [profissionais],
+  )
+  const grade = useMemo(
+    () => gradeDaUnidade(configuracao, intervaloManual, modo24h, profissionaisAtivos, agendamentos),
+    [configuracao, intervaloManual, modo24h, profissionaisAtivos, agendamentos],
+  )
   const alturaSlot = grade.intervalo <= 15 ? 36 : grade.intervalo <= 30 ? 46 : 56
   const colunas = useMemo(() => {
     const base = profissionaisAtivos.map((item) => ({ id: item.id, nome: item.nome, especialidade: item.especialidade, avatar: iniciais(item.nome), horarioInicio: item.horarioInicio, horarioFim: item.horarioFim, diasTrabalho: item.diasTrabalho || [] }))

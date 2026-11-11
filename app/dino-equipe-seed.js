@@ -80,9 +80,10 @@ export const PROFISSIONAIS_DINO_OFICIAIS = [
     ],
     telefone: '(65) 99999-0004',
     atendimento24x7: false,
-    horarioInicioPadrao: '08:00',
-    horarioFimPadrao: '20:00',
+    horarioInicioPadrao: '07:00',
+    horarioFimPadrao: '19:00',
     diasTrabalhoPadrao: [1, 2, 3, 4, 5, 6],
+    atendeCliente: true,
   },
   {
     username: 'ster',
@@ -100,6 +101,7 @@ export const PROFISSIONAIS_DINO_OFICIAIS = [
     horarioInicioPadrao: '08:00',
     horarioFimPadrao: '20:00',
     diasTrabalhoPadrao: [1, 2, 3, 4, 5, 6],
+    atendeCliente: false,
   },
   {
     username: 'jhenyffer',
@@ -117,6 +119,7 @@ export const PROFISSIONAIS_DINO_OFICIAIS = [
     horarioInicioPadrao: '08:00',
     horarioFimPadrao: '20:00',
     diasTrabalhoPadrao: [1, 2, 3, 4, 5, 6],
+    atendeCliente: false,
   },
 ];
 
@@ -148,6 +151,17 @@ export function provisionarEquipeDino({ commerceDb = null } = {}) {
       for (const p of profissionaisAtuais) {
         const pNome = String(p.nome || '').trim().toLowerCase();
         const pApelido = String(p.apelido || '').trim().toLowerCase();
+        // Unificar duplicata prof-mvsqchmy-023 no ID titular prof-mtj69hhx-002
+        if (p.id === 'prof-mvsqchmy-023') {
+          if (p.ativo !== false || p.atendeCliente !== false) {
+            barbeariaErpKytto.atualizarProfissional(empId, p.id, {
+              ativo: false,
+              atendeCliente: false,
+              removidoEm: p.removidoEm || new Date().toISOString()
+            });
+          }
+          continue;
+        }
         if ((pNome.includes('bruno') || pApelido === 'bruno') && !pNome.includes('bruno rafael')) {
           if (p.ativo === false || p.removidoEm) {
             barbeariaErpKytto.atualizarProfissional(empId, p.id, {
@@ -213,7 +227,10 @@ export function provisionarEquipeDino({ commerceDb = null } = {}) {
           }
 
           // PRESERVAÇÃO RIGOROSA: NUNCA sobrescrever os horários que o gestor já ajustou!
-          const horarioInicio = prof.horarioInicio || membro.horarioInicioPadrao || '08:00';
+          const ehNati = membro.username === 'natani' || String(prof.nome || '').toLowerCase().includes('natani');
+          const horarioInicio = (ehNati && (!prof.horarioInicio || prof.horarioInicio === '08:00'))
+            ? '07:00'
+            : (prof.horarioInicio || membro.horarioInicioPadrao || '08:00');
           const horarioFim = prof.horarioFim || membro.horarioFimPadrao || '20:00';
           const diasTrabalho = Array.isArray(prof.diasTrabalho) && prof.diasTrabalho.length > 0
             ? prof.diasTrabalho
@@ -221,6 +238,7 @@ export function provisionarEquipeDino({ commerceDb = null } = {}) {
           const atendimento24x7 = prof.atendimento24x7 !== undefined
             ? prof.atendimento24x7
             : Boolean(membro.atendimento24x7);
+          const atendeCliente = membro.atendeCliente !== undefined ? membro.atendeCliente : (prof.atendeCliente !== false);
 
           barbeariaErpKytto.atualizarProfissional(empId, prof.id, {
             ...prof,
@@ -228,6 +246,7 @@ export function provisionarEquipeDino({ commerceDb = null } = {}) {
             apelido: prof.apelido || membro.apelido,
             telefone: prof.telefone || membro.telefone,
             especialidade: prof.especialidade || membro.especialidade,
+            atendeCliente,
             percentualComissao: prof.percentualComissao ?? membro.comissaoServicos,
             percentualComissaoProduto: prof.percentualComissaoProduto ?? membro.comissaoProdutos,
             faixasComissaoServico: prof.faixasComissaoServico?.length ? prof.faixasComissaoServico : (membro.faixasComissaoServico || []),

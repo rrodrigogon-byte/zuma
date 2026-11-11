@@ -956,8 +956,11 @@ export function duracaoAtendimentoProfissional(servico, profissional, calendario
 
 function agendamentoNormalizado(dados = {}, anterior = {}, opcoes = {}) {
   const dataHoraRecebida = texto(dados.dataHora ?? dados.data_hora ?? anterior.dataHora, 40);
-  const horaLocalRecebida = texto(dados.horaLocal ?? dados.hora_local ?? anterior.horaLocal, 5);
-  const dataAgendaRecebida = texto(dados.dataAgenda ?? dados.data_agenda ?? anterior.dataAgenda, 10);
+  const temNovoDataHora = Boolean(dados.dataHora || dados.data_hora);
+  const horaLocalExplicita = texto(dados.horaLocal ?? dados.hora_local ?? dados.hora, 5);
+  const dataAgendaExplicita = texto(dados.dataAgenda ?? dados.data_agenda ?? dados.data, 10);
+  const horaLocalRecebida = horaLocalExplicita || (temNovoDataHora ? horaOperacional(dataHoraRecebida) : texto(anterior.horaLocal, 5));
+  const dataAgendaRecebida = dataAgendaExplicita || (temNovoDataHora ? diaOperacional(dataHoraRecebida) : texto(anterior.dataAgenda, 10));
   const dataAgendaOperacional = dataAgendaRecebida || (opcoes.horaOperacionalEstrita ? diaOperacional(dataHoraRecebida) : chaveDia(dataHoraRecebida));
   const horaLocalOperacional = horaLocalRecebida || horaOperacional(dataHoraRecebida);
   // A API administrativa recebe data e hora operacional, não a zona do navegador.
@@ -4251,10 +4254,7 @@ export function atualizarAgendamento(empresaId, agendamentoId, dados = {}, opcoe
     : duracaoAtendimentoProfissional(servico, profissional, obterCalendarioLoja(estado, agendamento.lojaId));
   const precoCalculado = calcularPrecoServicoHorario(servico, profissional, agendamento.horaLocal);
   const valorEsperado = agendamento.servicoId === atual.servicoId && Number(atual.valor) > 0 ? atual.valor : precoCalculado;
-  if (dados.valor !== undefined && Math.round(Number(dados.valor) * 100) !== Math.round(Number(valorEsperado) * 100) && Math.round(Number(dados.valor) * 100) !== Math.round(Number(servico.preco) * 100)) {
-    throw new Error('O valor do agendamento não pode ser alterado pela remarcação. Use a comanda para ajustes auditados.');
-  }
-  agendamento.valor = valorEsperado;
+  agendamento.valor = dados.valor !== undefined && Number(dados.valor) > 0 ? dinheiro(dados.valor, valorEsperado) : valorEsperado;
   const mudouHorarioOuProf = ['dataHora', 'dataAgenda', 'horaLocal', 'profissionalId'].some((campo) => String(antes[campo] || '') !== String(agendamento[campo] || ''));
   if (mudouHorarioOuProf) {
     validarCalendarioAgendamento(estado, agendamento, agendamento.profissionalId ? estado.profissionais[agendamento.profissionalId] : null);
