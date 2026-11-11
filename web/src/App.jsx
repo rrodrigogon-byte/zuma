@@ -166,6 +166,7 @@ const DimpAuditoriaPage = lazy(() => import('./pages/admin/DimpAuditoriaPage'))
 const VarejoMulticanalPage = lazy(() => import('./pages/admin/VarejoMulticanalPage'))
 const OficinaHubPage = lazy(() => import('./pages/admin/OficinaHubPage'))
 const ImplantacaoGoLivePage = lazy(() => import('./pages/admin/ImplantacaoGoLivePage'))
+const AgroERP = lazy(() => import('./pages/admin/AgroERP'))
 const Clientes = lazy(() => import('./pages/admin/Clientes'))
 const Customer360 = lazy(() => import('./pages/admin/Customer360'))
 const FinanceiroEmpresa = lazy(() => import('./pages/admin/dino/FinanceiroEmpresa'))
@@ -390,12 +391,15 @@ export default function App() {
           <Route path="/admin/expedicao"      element={<Layout><ExpedicaoLogistica /></Layout>} />
           <Route path="/admin/patrimonio"     element={<Layout><PatrimonioAtivos /></Layout>} />
           <Route path="/admin/oficina"         element={<Layout><OficinaHubPage /></Layout>} />
+          <Route path="/admin/implantacao"     element={<Layout><ImplantacaoGoLivePage /></Layout>} />
+          <Route path="/admin/agro-erp"        element={<Layout><AgroERP /></Layout>} />
+          <Route path="/admin/agro"            element={<Layout><AgroERP /></Layout>} />
           <Route path="/admin/agropecuaria"    element={<Layout><Agropecuaria /></Layout>} />
           <Route path="/admin/varejo"          element={<Layout><Varejo /></Layout>} />
           <Route path="/admin/compras"         element={<ComprasPorMarca abaInicial="compras" />} />
           <Route path="/admin/comprador-inteligente" element={<ComprasPorMarca abaInicial="comprador" />} />
-          <Route path="/admin/fiscal" element={<TenantAware tenant={<Layout><Fiscal abaInicial="documentos" /></Layout>} legacy={<Layout><EscolhaEmpresa modulo="Notas fiscais" /></Layout>} />} />
-          <Route path="/admin/fiscal/documentos" element={<TenantAware tenant={<Layout><Fiscal abaInicial="documentos" /></Layout>} legacy={<Layout><EscolhaEmpresa modulo="Notas fiscais" /></Layout>} />} />
+          <Route path="/admin/fiscal" element={<Layout><Fiscal abaInicial="documentos" /></Layout>} />
+          <Route path="/admin/fiscal/documentos" element={<Layout><Fiscal abaInicial="documentos" /></Layout>} />
           <Route path="/admin/fiscal/numeracao" element={<TenantAware tenant={<Layout><Fiscal abaInicial="numeracao" /></Layout>} legacy={<Layout><EscolhaEmpresa modulo="Numeração fiscal" /></Layout>} />} />
           <Route path="/admin/fiscal/sped" element={<TenantAware tenant={<Layout><Fiscal abaInicial="sped" /></Layout>} legacy={<Layout><EscolhaEmpresa modulo="SPED fiscal" /></Layout>} />} />
           <Route path="/admin/fiscal/contador" element={<TenantAware tenant={<Layout><Fiscal abaInicial="contador" /></Layout>} legacy={<Layout><EscolhaEmpresa modulo="Fechamento Contábil" /></Layout>} />} />
