@@ -2718,7 +2718,10 @@ export function criarComandaBarbearia(empresaId, dados = {}) {
   if (profissionalIdBruto && !profissionalId) throw new Error('Profissional responsável não encontrado ou inativo.');
   const agora = dataAtual();
   const id = novoId('cmdbar', estado.comandas);
-  const dataAtend = texto(dados.dataAtendimento ?? dados.data_atendimento ?? dados.data ?? agendamento?.dataAgenda ?? agendamento?.dataHora, 30) || null;
+  const dataAtendExplicita = texto(dados.dataAtendimento ?? dados.data_atendimento ?? dados.data, 30) || null;
+  const dataAg = texto(agendamento?.dataAgenda ?? agendamento?.dataHora, 30) || null;
+  const hojeOp = diaOperacional(agora);
+  const dataAtend = dataAtendExplicita || (dataAg && String(dataAg).slice(0, 10) <= hojeOp ? dataAg : null);
   const criadoEmEfetivo = dados.criadoEm || (dataAtend ? `${String(dataAtend).slice(0, 10)}T${agora.slice(11)}` : agora);
   const comanda = {
     id,
