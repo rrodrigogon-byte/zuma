@@ -292,7 +292,9 @@ export const BARBERSHOP_SYSTEM_GUIDANCE = `
   2. NUNCA confronte o cliente nem diga que o agendamento continuava ativo no sistema. O cliente sempre tem razão e precisa ser acolhido.
   3. Deixe claro que a vaga e a presença dele são prioridade máxima na Barbearia Dino, e ofereça agendar com prioridade para a próxima semana ou no dia em que ele puder voltar!
   4. ATENÇÃO: Se o cliente apenas disser que está viajando (ex.: "Tô em Lacerda", "Fui pra Brasnorte"), que quer cancelar o plano mensal ou que não vai conseguir ir no horário dele, NUNCA fale em "mal-entendido com o aviso de cancelamento"! Responda apenas ao que ele pediu com naturalidade.
-- ANTI-REPETIÇÃO DE HORÁRIOS: NUNCA repita a lista de 3 horários com data, profissional e preço se você já enviou esses horários na mensagem anterior. Se o cliente responder com frases curtas de conversa ou contexto ("tá bom", "eu tô na cidade", "consigo sim", "beleza"), NÃO mande novamente a lista inteira de horários! Pergunte apenas de forma objetiva: "Show! Qual dos horários anteriores você prefere que eu marque?".
+  - ANTI-REPETIÇÃO DE HORÁRIOS E ENCERRAMENTO CORDIAL: NUNCA repita a lista de 3 horários se você já enviou esses horários na mensagem anterior. Se você NÃO enviou horários na mensagem anterior e o cliente apenas agradecer ou encerrar ("joia, combinado", "beleza", "valeu", "obrigado", "fechou"), responda apenas de forma simpática ("Combinado! Qualquer coisa é só chamar. Te esperamos na Dino Barbearia!"), NUNCA perguntando "qual dos horários você prefere que eu marque?".
+  - CLAREZA QUANDO A VAGA É NA SEMANA SEGUINTE: Se o cliente pedir um dia da semana (ex.: "sexta-feira", "próxima sexta") e a ocorrência desta semana estiver lotada (sendo a primeira vaga na semana que vem), deixe explícito na resposta: "Nesta sexta (DD/MM) o [Barbeiro] já lotou, mas tenho na sexta da semana que vem (DD/MM) às [Horário]" (ou ofereça outro barbeiro livre nesta semana).
+  - AVALIAÇÃO DE PRÓTESE CAPILAR POR FOTO / CONTATO: Se o cliente perguntar sobre Prótese Capilar ou disser que um familiar/amigo quer mandar fotos para avaliação antes de vir, informe que SIM, pode mandar as fotos ou o contato por aqui mesmo no WhatsApp que o Dino e a equipe avaliam diretamente, sem nunca dizer que há fotos de prótese no catálogo de produtos.
 - PRECISÃO DE DATAS E DIAS DA SEMANA: NUNCA invente ou cite meses/anos aleatórios ao responder perguntas sobre dias da semana. Consulte SEMPRE o bloco CALENDÁRIO fornecido nesta conversa para obter a data exata em AAAA-MM-DD.
 - VALORES REAIS DA BARBEARIA DINO (PROIBIDO R$ 0,00): NENHUM serviço na Barbearia Dino é gratuito ou custa R$ 0. Corte ou Barba com equipe (Bruno, Nati, etc.): R$ 100,00; Combo Corte e Barba: R$ 200,00; Atendimento com Dino: R$ 300,00 diurno (08h às 18h09) ou R$ 600,00 após as 18h09. NUNCA envie mensagem dizendo que o valor é R$ 0.
 - AGENDAMENTO IMEDIATO DO HORÁRIO ESCOLHIDO (ZERO ENROLAÇÃO E ANTI-LOOP): Se você acabou de oferecer horários (ex.: 14h30, 15h15 ou 17h00) e o cliente responder escolhendo um deles (ex: "12/11 as 17h", "17h", "pode agendas as 17h00", "14h30", "15h15", "o último", "esse mesmo"): Esse horário ACABA DE SER CONSULTADO e está livre! Chame preparar_agendamento NA MESMA HORA nesta resposta com a data, horário e profissional escolhidos! NUNCA repita a mensagem dizendo que o barbeiro não está disponível para aquele serviço! NUNCA repita a lista de opções! NUNCA dê ré perguntando de novo o que o cliente quer! O cliente já escolheu!
@@ -2131,10 +2133,16 @@ async function deterministicResponseCore(task, channel, session, message) {
   const recentConversationText = [...history]
     .reverse()
     .find((item) => item.role === 'user' && typeof item.text === 'string' && item.text.includes('[despesa extraída da foto]'))?.text || '';
+  const recentUserText = priorHistory
+    .filter((item) => item.role === 'user' && typeof item.text === 'string')
+    .slice(-3)
+    .map((item) => item.text)
+    .join(' ');
   const toolContext = {
     ...context,
     customerText: message.text,
     recentConversationText,
+    recentUserText,
     customerProfile: profileResult.profile,
     opportunityPolicy: profileResult.policy,
     sessionSnapshot: session,
@@ -2167,6 +2175,16 @@ async function deterministicResponseCore(task, channel, session, message) {
   const isBarbershop = segLower === 'barbearia' || persona?.id === 'trex' || (!isSupplements && !isSports && channel.configuracao?.capabilities?.manageAppointments !== false);
   if (isBarbershop && !session.acao_pendente) {
     const lastAssMsg = [...priorHistory].reverse().find((item) => item.role === 'assistant')?.text || '';
+    const lastAssHasTimeSlots = /\b\d{1,2}\s*(?:h|:)\s*\d{0,2}\b/i.test(lastAssMsg.replace(/https?:\/\/\S+/gi, ''));
+    const cleanClosingText = plain(message.text).replace(/[!.,;?]+/g, ' ').replace(/\s+/g, ' ').trim();
+    if (!lastAssHasTimeSlots && /^(?:joia\s+combinado|combinado|beleza\s+obrigad[oa]|ok\s+obrigad[oa]|valeu\s+obrigad[oa]|show\s+obrigad[oa]|perfeito\s+obrigad[oa]|tudo\s+certo\s+obrigad[oa]|ta\s+otimo|beleza\s+entao|joia\s+valeu)$/.test(cleanClosingText)) {
+      return {
+        text: 'Combinado! Qualquer coisa que precisar é só chamar por aqui. Te esperamos na Dino Barbearia! 💈',
+        kind: 'closing_ack',
+        model: 'deterministic_closing_ack',
+        provider: 'system',
+      };
+    }
     const fastChoice = extractFastScheduleChoice(message.text, lastAssMsg);
     if (fastChoice) {
       try {
@@ -2336,7 +2354,7 @@ async function deterministicResponseCore(task, channel, session, message) {
       const validCustomerName = context.customerName && !/^(cliente|whatsapp|contato|usuario|usuário)$/i.test(String(context.customerName).trim());
       const choseOfferedSlot = Boolean(extractFastScheduleChoice(message.text, lastAssistantText));
       const explicitBookingOrder = !String(message.text || '').includes('?')
-        && /\b(pode\s+(agendar|marcar|fechar|confirmar|deixar)|marca\s+(ai|aí|esse|as|às|pra\s+mim)|agende|agenda\s+ai|agenda\s+aí|sim[,!\s]+agendar|deixa\s+(agendado|marcado))\b/i.test(plain(message.text));
+        && /\b(pode\s+(agendar|marcar|fechar|confirmar|deixar|remarcar|mudar)|marca\s+(ai|aí|esse|as|às|pra\s+mim)|agende|agenda\s+ai|agenda\s+aí|sim[,!\s]+agendar|deixa\s+(agendado|marcado)|deixar\s+(agendado|marcado)|remarca\s+(ai|aí|pra|para))\b/i.test(plain(message.text));
       const shouldAutoCommit = (intentMsg === 'confirm' && lastAssPerguntouConfirmacao)
         || (validCustomerName && (pendingNow.type === 'agendamento' || pendingNow.type === 'remarcacao') && (choseOfferedSlot || explicitBookingOrder));
       if (shouldAutoCommit) {

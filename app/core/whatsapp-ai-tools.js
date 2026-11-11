@@ -760,7 +760,7 @@ async function resolveRescheduleContext(scope, rawText = '', fallbackDate = '') 
 async function toolAvailability(context, args = {}) {
   const scope = contextScope(context);
   const date = normalizeAgendaDate(args.date, localDateIso()) || cleanText(args.date, 10);
-  const resCtx = await resolveRescheduleContext(scope, context?.customerText || '', date);
+  const resCtx = await resolveRescheduleContext(scope, `${context?.customerText || ''} ${context?.recentUserText || ''}`, date);
   const effectiveProfArg = args.professionalId || (resCtx.isRescheduleText && resCtx.matchedAppointment?.profissional?.id ? resCtx.matchedAppointment.profissional.id : '');
   const professionalId = await resolveAgendaId(scope, effectiveProfArg, 'professionalId', { allowAny: true });
   const effectiveServiceArg = (!resCtx.explicitServiceInText && resCtx.isRescheduleText && resCtx.matchedAppointment?.servico?.id)
@@ -983,7 +983,7 @@ async function toolNextSlots(context, args = {}) {
   const today = localDateIso();
   const askedFrom = normalizeAgendaDate(args.fromDate, today);
   const fromDate = askedFrom && askedFrom >= today ? askedFrom : today;
-  const resCtx = await resolveRescheduleContext(scope, context?.customerText || '', fromDate);
+  const resCtx = await resolveRescheduleContext(scope, `${context?.customerText || ''} ${context?.recentUserText || ''}`, fromDate);
   let rawService = cleanText(args.serviceId, 100);
   if (resCtx.isRescheduleText && !resCtx.explicitServiceInText && resCtx.matchedAppointment?.servico?.id) {
     rawService = resCtx.matchedAppointment.servico.id;
@@ -1392,6 +1392,15 @@ async function toolPrepareAppointment(context, args = {}) {
   const serviceId = await resolveAgendaId(scope, rawService, 'serviceId', { professionalId });
   // O modelo repete o que o cliente falou ("11h", "sexta", "14/10"); a agenda usa 11:00 e AAAA-MM-DD.
   const date = normalizeAgendaDate(args.date, localDateIso()) || cleanText(args.date, 10);
+  const resCtx = await resolveRescheduleContext(scope, `${context?.customerText || ''} ${context?.recentUserText || ''}`, date);
+  if (resCtx.isRescheduleText && resCtx.matchedAppointment?.id && args.confirmarOutroHorario !== true) {
+    return toolPrepareReschedule(context, {
+      appointmentId: resCtx.matchedAppointment.id,
+      date,
+      time: args.time,
+      professionalId: args.professionalId || resCtx.matchedAppointment.profissional?.id || '',
+    });
+  }
   const availability = await listSchedulingAvailability(scope, { serviceId, professionalId, date });
   const time = matchAgendaSlot(args.time, availability.slots);
   if (!time) {
@@ -2191,18 +2200,54 @@ async function toolPrepareReschedule(context, args = {}) {
   const scope = contextScope(context);
   const date = normalizeAgendaDate(args.date, localDateIso()) || cleanText(args.date, 10);
   const appointments = await listWhatsappCustomerAppointments(scope, { includePast: false, limit: 20, toleranceHours: 6 });
-  const appointment = findOwnAppointment(appointments, cleanText(args.appointmentId, 80), context?.customerText || '');
+  const appointment = findOwnAppointment(appointments, cleanText(args.appointmentId, 80), `${context?.customerText || ''} ${context?.recentUserText || ''}`);
   if (!appointment) throw appointmentNotFound(appointments);
   const appointmentId = appointment.id;
-  const availability = await listSchedulingAvailability(scope, { serviceId: appointment.servico.id, professionalId: appointment.profissional.id, date });
+  const targetProfId = args.professionalId
+    ? await resolveAgendaId(scope, args.professionalId, 'professionalId', { allowAny: true }).catch(() => appointment.profissional.id)
+    : appointment.profissional.id;
+  const effectiveProfId = targetProfId && targetProfId !== 'qualquer' ? targetProfId : appointment.profissional.id;
+  const availability = await listSchedulingAvailability(scope, {
+    serviceId: appointment.servico.id,
+    professionalId: effectiveProfId,
+    date,
+    ignoreAppointmentId: appointmentId,
+  });
   const time = matchAgendaSlot(args.time, availability.slots);
   if (!time) {
     const horaPedida = String(args.time || '').match(/(\d{1,2})(?:\s*[:h]\s*(\d{2}))?/);
     const pedido = horaPedida && Number(horaPedida[1]) < 24 ? `${horaPedida[1].padStart(2, '0')}:${horaPedida[2] || '00'}` : '';
-    const alternativas = await nearestAlternatives(scope, { serviceId: appointment.servico.id, professionalId: appointment.profissional.id, date, time: pedido, availability });
-    return { ok: false, code: 'SLOT_UNAVAILABLE', alternativas, instrucao: 'Horário pedido não está livre. Ofereça EXATAMENTE estas alternativas (quando + valor) e pergunte qual fica melhor.' };
+    const alternativas = await nearestAlternatives(scope, { serviceId: appointment.servico.id, professionalId: effectiveProfId, date, time: pedido, availability });
+    let alternativasMesmoDiaOutroProfissional = [];
+    const outrosProfs = (await listSchedulingProfessionals(scope).catch(() => []))
+      .filter((p) => p?.id && p.id !== effectiveProfId && !barbeariaErp.ehProfissionalDino(p));
+    for (const outro of outrosProfs) {
+      const dayOutro = await listSchedulingAvailability(scope, { serviceId: appointment.servico.id, professionalId: outro.id, date }).catch(() => null);
+      const slotsOutro = (dayOutro?.slots || []).slice(0, 3);
+      for (const t of slotsOutro) {
+        alternativasMesmoDiaOutroProfissional.push({
+          date,
+          time: String(t).slice(0, 5),
+          quando: friendlyWhen(date, String(t).slice(0, 5)),
+          professional: outro.nome || outro.apelido,
+        });
+      }
+    }
+    return {
+      ok: false,
+      code: 'SLOT_UNAVAILABLE',
+      alternativas,
+      ...(alternativasMesmoDiaOutroProfissional.length ? { alternativasMesmoDiaOutroProfissional } : {}),
+      instrucao: `Horário pedido não está livre. Ofereça EXATAMENTE estas alternativas (quando + profissional)${alternativasMesmoDiaOutroProfissional.length ? ` e também as opções no mesmo dia com outro barbeiro (${alternativasMesmoDiaOutroProfissional.map((a) => `${a.quando} com ${a.professional}`).join(', ')})` : ''} e pergunte qual fica melhor.`,
+    };
   }
-  return savePreparedAction(scope, 'remarcacao', { appointmentId, date, time }, `${serviceWithProfessional(appointment.servico.nome, appointment.profissional.nome)} será remarcado para ${friendlyWhen(date, time)}.`);
+  const nomeProfDestino = availability.professional?.nome || appointment.profissional.nome;
+  return savePreparedAction(
+    scope,
+    'remarcacao',
+    { appointmentId, date, time, professionalId: effectiveProfId },
+    `${serviceWithProfessional(appointment.servico.nome, nomeProfDestino)} será remarcado para ${friendlyWhen(date, time)}.`,
+  );
 }
 
 async function toolPrepareCancellation(context, args = {}) {
@@ -2836,7 +2881,7 @@ export const WHATSAPP_AI_TOOL_DECLARATIONS = [
   { name: 'listar_promocoes_ativas', description: 'Lista somente promoções ativas e vigentes da unidade. Nunca invente ofertas, valores ou cupons.', parameters: { type: 'OBJECT', properties: { limit: { type: 'INTEGER' } } } },
   { name: 'preparar_promocao_cliente', description: 'Prepara o envio de uma promoção ao cliente com opt-in. O envio só ocorre após CONFIRMAR.', parameters: { type: 'OBJECT', properties: { promotionId: { type: 'STRING' }, code: { type: 'STRING' }, message: { type: 'STRING' } }, required: ['promotionId', 'message'] } },
   { name: 'preparar_agendamento', description: 'Prepara um agendamento para confirmação. Não grava o agendamento. Use o id retornado por listar_profissionais; na agenda da barbearia também é aceito "qualquer" quando o cliente não tem preferência. Vários serviços na mesma ida: passe os demais em extraServiceIds e eles são encaixados em sequência. Para outra pessoa (filho, amigo), use o nome DELA em customerName. customerName é o nome real (nunca "Cliente"): se não souber, pergunte antes.', parameters: { type: 'OBJECT', properties: { confirmarOutroHorario: { type: 'BOOLEAN', description: 'true só depois que o cliente disse que quer mais um horário no mesmo dia' }, serviceId: { type: 'STRING' }, professionalId: { type: 'STRING' }, date: { type: 'STRING' }, time: { type: 'STRING' }, customerName: { type: 'STRING', description: 'Nome real da pessoa atendida' }, notes: { type: 'STRING' }, usePlan: { type: 'BOOLEAN', description: 'Somente quando o cliente pedir usar seu pacote. Exige saldo e validade, um procedimento por confirmação.' }, extraServiceIds: { type: 'ARRAY', items: { type: 'STRING' }, description: 'até 3 serviços seguidos na mesma visita' } }, required: ['serviceId', 'professionalId', 'date', 'time', 'customerName'] } },
-  { name: 'preparar_remarcacao', description: 'Prepara a remarcação de um agendamento do cliente para confirmação.', parameters: { type: 'OBJECT', properties: { appointmentId: { type: 'STRING' }, date: { type: 'STRING' }, time: { type: 'STRING' } }, required: ['appointmentId', 'date', 'time'] } },
+  { name: 'preparar_remarcacao', description: 'Prepara a remarcação de um agendamento existente do cliente para nova data/hora (e opcionalmente novo profissional se o cliente aceitar outro barbeiro). Aceita o id, código ou vazio quando o contato tem um único horário ou informou o dia.', parameters: { type: 'OBJECT', properties: { appointmentId: { type: 'STRING', description: 'id, código ou vazio' }, date: { type: 'STRING', description: 'Nova data ISO AAAA-MM-DD' }, time: { type: 'STRING', description: 'Novo horário HH:MM' }, professionalId: { type: 'STRING', description: 'Opcional: id ou nome do profissional se mudou de barbeiro' } }, required: ['date', 'time'] } },
   { name: 'preparar_cancelamento_pedido', description: 'Prepara o cancelamento de um pedido DO PRÓPRIO contato que ainda aguarda pagamento, para o cliente confirmar com SIM. Pedido pago, em separação ou entregue não cancela por aqui: ofereça a equipe.', parameters: { type: 'OBJECT', properties: { orderCode: { type: 'STRING', description: 'Código do pedido (KC-...); vazio se o contato tem um só pedido aguardando pagamento' } } } },
   { name: 'preparar_cancelamento', description: 'Prepara o cancelamento de um agendamento do cliente para confirmação. Aceita o id (consultar_meus_agendamentos) ou o código da confirmação; se o contato tiver um só horário futuro, pode mandar vazio.', parameters: { type: 'OBJECT', properties: { appointmentId: { type: 'STRING', description: 'id, código da confirmação (ex.: 5D0FDE32) ou vazio' } } } },
 

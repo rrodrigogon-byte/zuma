@@ -191,7 +191,7 @@ export async function queueAppointmentNotifications(contexto = {}, agendamento =
     }
     let queued = 0;
     const ehOrigemWhatsapp = agendamento.origem === 'whatsapp_ia';
-    if (evento === 'criado' && ehOrigemWhatsapp) {
+    if ((evento === 'criado' || evento === 'remarcado') && ehOrigemWhatsapp) {
       // O agendamento acabou de ser confirmado diretamente na conversa do WhatsApp pelo T-Rex.
       // Não enfileira uma segunda mensagem "Tá marcado" repetitiva no mesmo canal.
     } else if (evento === "lembrete") {
@@ -671,6 +671,18 @@ export async function processAppointmentNotificationTask(task = {}) {
     const motivoLower = String(agendamento.motivoCancelamento || agendamento.observacaoCancelamento || '').toLowerCase();
     if (/\b(duplicidade|duplicad|erro_lancamento|ajuste_interno|remarcac|teste|limpeza)\b/.test(motivoLower)) {
       return { skipped: true, reason: 'internal_cancellation_reason' };
+    }
+    // Se o cliente já possui outro agendamento futuro ativo (foi remarcado criando novo horário e cancelando o antigo),
+    // não envia mensagem de cancelamento para não confundir o cliente.
+    const telKey = phoneMatchKey(elegibilidade.telefone || agendamento.clienteTelefone);
+    const temOutroAtivoFuturo = (snapshot.agendamentos || []).some((outro) =>
+      outro.id !== agendamento.id
+      && !['cancelado', 'concluido', 'nao_compareceu'].includes(String(outro.status))
+      && new Date(outro.dataHora).valueOf() > Date.now() - 2 * 60 * 60 * 1000
+      && ((agendamento.clienteId && outro.clienteId === agendamento.clienteId) || (telKey && phoneMatchKey(outro.clienteTelefone) === telKey))
+    );
+    if (temOutroAtivoFuturo) {
+      return { skipped: true, reason: 'customer_already_rebooked' };
     }
     try {
       const sessRes = await db.query(

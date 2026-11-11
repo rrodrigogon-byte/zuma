@@ -4186,11 +4186,12 @@ function contextoDisponibilidadePublica(empresaId, dados = {}) {
   if (!ehDinoFoco && (dia < limiteHoje || dia > limiteFinal)) return { estado, dataAgenda, servico, lojaId, calendario, profissionais: [] };
   if (profissionalId && profissionalId !== 'qualquer' && habilitados && !habilitados.has(profissionalId)) throw new Error('Este profissional não realiza este serviço.');
   if (profissionalId && profissionalId !== 'qualquer' && profissionais.length === 0) throw new Error('Profissional indisponível para agendamento online.');
-  return { estado, dataAgenda, servico, lojaId, calendario, profissionais };
+  const ignorarAgendamentoId = texto(dados.ignorarAgendamentoId ?? dados.ignorar_agendamento_id, 100);
+  return { estado, dataAgenda, servico, lojaId, calendario, profissionais, ignorarAgendamentoId };
 }
 
 function profissionaisDisponiveisNoHorario(contexto, horaLocal, utcOffset) {
-  const { estado, dataAgenda, servico, lojaId, calendario, profissionais } = contexto;
+  const { estado, dataAgenda, servico, lojaId, calendario, profissionais, ignorarAgendamentoId } = contexto;
   const dataHora = dataHoraPublica(dataAgenda, horaLocal, utcOffset);
   if (new Date(dataHora).valueOf() < Date.now() + Number(calendario.antecedenciaMinutos || 0) * 60000) return [];
   const livres = [];
@@ -4207,7 +4208,7 @@ function profissionaisDisponiveisNoHorario(contexto, horaLocal, utcOffset) {
     };
     try {
       validarCalendarioAgendamento(estado, candidato, profissional);
-      if (!verificarConflito(estado, candidato)) {
+      if (!verificarConflito(estado, candidato, ignorarAgendamentoId || '')) {
         livres.push({ profissional, dataHora, duracaoMinutos });
       }
     } catch (_) {}

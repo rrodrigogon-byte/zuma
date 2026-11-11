@@ -553,7 +553,8 @@ export async function availability(scope, input = {}) {
       data: date,
       servicoId: servico.id,
       profissionalId: profissional ? profissional.id : 'qualquer',
-      lojaId: scope.lojaId
+      lojaId: scope.lojaId,
+      ignorarAgendamentoId: limpo(input.ignoreAppointmentId || input.ignorarAgendamentoId, 100),
     });
   } catch (erro) {
     throw traduzirErro(erro);
@@ -891,12 +892,17 @@ export async function rescheduleAppointment(trx, scope, input = {}) {
   const empresa = chaveEmpresa(scope);
   try {
     const atual = agendamentoDoContato(empresa, scope.phone, input.appointmentId, scope.lojaId);
+    const requestedProfId = limpo(input.professionalId, 100);
+    const targetProfId = requestedProfId && requestedProfId !== 'qualquer'
+      ? requestedProfId
+      : (atual.profissionalId || 'qualquer');
     const livre = barbearia.resolverProfissionalDisponivel(empresa, {
       data: dataLocalValida(input.date),
       horario: limpo(input.time, 5),
       servicoId: atual.servicoId,
-      profissionalId: atual.profissionalId || 'qualquer',
+      profissionalId: targetProfId,
       lojaId: scope.lojaId,
+      ignorarAgendamentoId: atual.id,
     });
     const atualizado = barbearia.atualizarAgendamento(empresa, atual.id, {
       lojaId: scope.lojaId,

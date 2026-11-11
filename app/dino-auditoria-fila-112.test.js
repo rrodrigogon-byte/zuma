@@ -119,3 +119,30 @@ test('Auditoria 112 Conversas Fila — 7. Caso Pablo Selle (#8): remarcação an
     '2026-11-12 14:00',
   ]);
 });
+
+test('Auditoria 112 Conversas Fila — 8. Remarcação adjacente no mesmo dia ignora o próprio agendamento antigo (ignorarAgendamentoId)', async () => {
+  const barbearia = await import('./barbearia-erp-kytto.js');
+  const empId = 'emp-teste-remarcacao-adjacente';
+  barbearia.estadoEmpresa(empId, true);
+  const prof = barbearia.criarProfissional(empId, { nome: 'Bruno Teste', apelido: 'Bruno', ativo: true, atendeCliente: true });
+  const srv = barbearia.criarServico(empId, { nome: 'CORTE PREMIUM', preco: 100, duracaoMinutos: 40, ativo: true, permiteAgendamentoOnline: true, profissionaisIds: [prof.id] });
+  assert.ok(prof && srv);
+  const ag = barbearia.criarAgendamento(empId, {
+    clienteNome: 'Yuk Andrade',
+    clienteTelefone: '556599990377',
+    profissionalId: prof.id,
+    servicoId: srv.id,
+    dataAgenda: '2026-11-13',
+    horaLocal: '16:00',
+    dataHora: '2026-11-13T16:00:00-04:00',
+  });
+  // Sem ignorarAgendamentoId, 16:15 conflita com o agendamento de 16:00; com ignorarAgendamentoId, fica livre!
+  const livreComIgnore = barbearia.resolverProfissionalDisponivel(empId, {
+    data: '2026-11-13',
+    horario: '16:15',
+    servicoId: srv.id,
+    profissionalId: prof.id,
+    ignorarAgendamentoId: ag.id,
+  });
+  assert.equal(livreComIgnore.horaLocal, '16:15');
+});
