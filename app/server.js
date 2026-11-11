@@ -193,6 +193,7 @@ import { perfilDoUsuario, profissionalPode, operadorPodeNaBarbearia, respostaPar
 import { profissionalDoUsuario } from './dino-modo-barbeiro.js';
 import { provisionarEquipeDino } from './dino-equipe-seed.js';
 import { sincronizarTenantsEquipes } from './tenant-provisioning.js';
+import { executarHigienizacaoGapsProducao } from './core/higienizar-gaps-producao.js';
 import { sincronizarBloqueioNoPostgres, desativarBloqueioNoPostgres, inicializarBloqueiosEquipe } from './core/barbearia-bloqueios-sync.js';
 import * as totemLojaFisica from './core/totem-loja-fisica.js';
 import * as lojaModaIa from './core/loja-moda-ia.js';
@@ -688,6 +689,7 @@ function seedUsuarios(){
 seedUsuarios();
 try { provisionarEquipeDino({ commerceDb }); } catch (err) { console.warn('Aviso ao provisionar equipe Dino:', err.message); }
 try { sincronizarTenantsEquipes(commerceDb); } catch (err) { console.warn('Aviso ao sincronizar tenants:', err.message); }
+executarHigienizacaoGapsProducao(commerceDb, { listarComandasBarbearia: barbeariaErpKytto.listarComandasBarbearia, listarClientesBarbearia: barbeariaErpKytto.listarAgendamentos }).then((resHig) => console.log('[Higienização Produção]', JSON.stringify(resHig))).catch((err) => console.warn('Aviso na higienização:', err.message));
 const findUser = login => {
   const n = norm(login);
   if (!n) return null;

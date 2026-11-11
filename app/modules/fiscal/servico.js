@@ -1001,6 +1001,9 @@ export async function emitir(db, empresaId, entrada = {}, { usuario = null, env 
     if (pendencias.length) throw new ErroDominio('PENDENCIAS_FISCAIS', pendencias.join(' · '), 422);
     const material = await materialAtivo(q, empresa, env, agora);
     const valorTotal = dinheiro(itens.reduce((s, i) => s + i.valorProduto, 0));
+    if (modelo === '65' && valorTotal >= 1000 && !(destinatario?.cpf || destinatario?.cnpj)) {
+      throw new ErroDominio('DESTINATARIO_OBRIGATORIO_ACIMA_1000', 'Na SEFAZ-MT, toda NFC-e com valor igual ou superior a R$ 1.000,00 exige CPF ou CNPJ identificado no destinatário (evita Rejeição 750).', 422);
+    }
     const pagamentos = ajustarPagamentos(venda.pagamentos, valorTotal);
     // tributos aproximados (Lei 12.741): só com a tabela do IBPT da UF importada
     const tributos = modelo === 'nfse' ? null
@@ -1219,9 +1222,9 @@ async function transmitirNfe({ doc, emit, material, transporte, env, esperar }) 
 function cfgNfse(emit, serie, ambiente = 'homologacao') {
   return nfse.normalizarConfigNfse({
     // homologação da NFS-e Nacional = produção restrita da Sefin
-    ambiente: ambiente === 'producao' ? 'producao' : 'producao_restrita', cnpj: emit.cnpj, inscricaoMunicipal: emit.im || '', codigoMunicipio: emit.codigo_municipio, serie: String(serie),
+    ambiente: ambiente === 'producao' ? 'producao' : 'producao_restrita', cnpj: emit.cnpj, inscricaoMunicipal: String(emit.codigo_municipio) === '5107958' ? '' : (emit.im || ''), codigoMunicipio: emit.codigo_municipio, serie: String(serie),
     opSimpNac: emit.op_simp_nac, regApTribSN: emit.reg_ap_trib_sn, regEspTrib: emit.reg_esp_trib, cTribNacPadrao: emit.c_trib_nac_padrao || '',
-    pTotTribSN: emit.p_tot_trib_sn === null ? '' : Number(emit.p_tot_trib_sn),
+    pTotTribSN: emit.p_tot_trib_sn === null ? (String(emit.op_simp_nac || '3') === '3' ? 6 : '') : Number(emit.p_tot_trib_sn),
   });
 }
 
