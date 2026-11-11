@@ -1,3 +1,5 @@
+import { executarHigienizacaoGapsProducao } from './higienizar-gaps-producao.js';
+import * as barbeariaErpKytto from '../barbearia-erp-kytto.js';
 /**
  * ============================================================================
  * KYTTO ERP — PILARES DE EXCELÊNCIA NACIONAL (AGRO, CT-E 57 / MDF-E 58,
@@ -613,6 +615,13 @@ export function encerrarMdfe58(tenantId, mdfeIdOuChave, { municipioEncerramento 
 // 4. IMPLANTAÇÃO GUIADA & AUDITORIA DE GO-LIVE EM PRODUÇÃO
 // ═════════════════════════════════════════════════════════════════════════════
 export async function obterPainelImplantacaoEmpresa(db, empresaId) {
+  let saneamento = null;
+  if (db && typeof db.query === 'function') {
+    saneamento = await executarHigienizacaoGapsProducao(db, {
+      listarComandasBarbearia: barbeariaErpKytto.listarComandasBarbearia,
+      listarClientesBarbearia: barbeariaErpKytto.listarAgendamentos,
+    }).catch((e) => ({ erro: e.message }));
+  }
   let emitenteOk = false;
   let certificadoOk = false;
   let numeracaoOk = false;

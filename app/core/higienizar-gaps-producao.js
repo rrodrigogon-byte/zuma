@@ -102,8 +102,8 @@ export async function executarHigienizacaoGapsProducao(db, { listarComandasBarbe
           `INSERT INTO fis_classificacoes (
              empresa_id, fonte, fonte_id, tipo, ncm, cest, cfop, origem, csosn,
              cst_pis, cst_cofins, aliquota_icms, aliquota_pis, aliquota_cofins,
-             unidade_tributavel, cst_ibs_cbs, c_class_trib
-           ) VALUES ($1::uuid, 'est_item', $2, 'produto', $3, $4, $5, '0', $6, '49', '49', 0, 0, 0, 'UN', '000', '000001')
+             unidade_tributavel
+           ) VALUES ($1::uuid, 'est_item', $2, 'produto', $3, $4, $5, '0', $6, '49', '49', 0, 0, 0, 'UN')
            ON CONFLICT (empresa_id, fonte, fonte_id) DO UPDATE SET
              ncm = EXCLUDED.ncm, cest = EXCLUDED.cest, cfop = EXCLUDED.cfop,
              csosn = EXCLUDED.csosn, cst_pis = '49', cst_cofins = '49', atualizado_em = NOW()`,
@@ -119,8 +119,8 @@ export async function executarHigienizacaoGapsProducao(db, { listarComandasBarbe
         `INSERT INTO fis_classificacoes (
            empresa_id, fonte, fonte_id, tipo, ncm, cest, cfop, origem, csosn,
            cst_pis, cst_cofins, aliquota_icms, aliquota_pis, aliquota_cofins,
-           unidade_tributavel, cst_ibs_cbs, c_class_trib
-         ) VALUES ($1::uuid, 'loja_variante', $2, 'produto', $3, $4, $5, '0', $6, '49', '49', 0, 0, 0, 'UN', '000', '000001')
+           unidade_tributavel
+         ) VALUES ($1::uuid, 'loja_variante', $2, 'produto', $3, $4, $5, '0', $6, '49', '49', 0, 0, 0, 'UN')
          ON CONFLICT (empresa_id, fonte, fonte_id) DO UPDATE SET
            ncm = EXCLUDED.ncm, cest = EXCLUDED.cest, cfop = EXCLUDED.cfop,
            csosn = EXCLUDED.csosn, cst_pis = '49', cst_cofins = '49', atualizado_em = NOW()`,
