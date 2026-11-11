@@ -1884,9 +1884,18 @@ async function deterministicResponseCore(task, channel, session, message) {
   const perguntouQualConfirmar = recentMsgs.some((m) => m.papel === 'assistant' && /qual\s+deles\s+voc[eê]\s+quer\s+confirmar/i.test(m.conteudo || ''));
   const temLembreteAtivo = ultimoEnvioEraLembrete || Boolean(session.estado?.ultimoAgendamentoLembradoId) || perguntouQualConfirmar;
 
-  if (!session.assigned_to && !session.acao_pendente && (ehIntencaoConfirmacao || (temLembreteAtivo && (ehIntencaoConfirmacao || perguntouQualConfirmar)))) {
+  if (!session.assigned_to && (!session.acao_pendente || ultimoEnvioEraLembrete || perguntouQualConfirmar) && (ehIntencaoConfirmacao || (temLembreteAtivo && (ehIntencaoConfirmacao || perguntouQualConfirmar)))) {
     const confirmado = await confirmNextAppointment(context, message.text).catch(() => null);
-    if (confirmado) return confirmado;
+    if (confirmado) {
+      if (session.estado?.ultimoAgendamentoLembradoId || session.acao_pendente) {
+        await db.query(
+          `UPDATE whatsapp_ai_sessions SET estado = COALESCE(estado, '{}'::jsonb) - 'ultimoAgendamentoLembradoId', acao_pendente = NULL WHERE id = $1`,
+          [session.id]
+        ).catch(() => null);
+        session.acao_pendente = null;
+      }
+      return confirmado;
+    }
   }
   if (session.status === 'humano') return { text: null, kind: 'human_queue' };
   const greeting = !conversaRecente ? standaloneGreetingReply(message.text, { pendingAction: Boolean(session.acao_pendente), customerName: context.customerName }) : null;
@@ -1913,6 +1922,15 @@ async function deterministicResponseCore(task, channel, session, message) {
     await putSessionInHandoff(session, /\breclama(?:cao|r)\b/.test(plain(message.text)) ? 'reclamacao' : 'pedido_do_cliente', 3);
     const storeName = cleanText(channel.configuracao?.display_name || channel.nome || 'esta unidade', 120);
     return { text: `Certo. Encaminhei sua conversa para a equipe humana da ${storeName}.`, kind: 'handoff' };
+  }
+  if (session.acao_pendente) {
+    // Auto-expira acao_pendente muito antiga (> 2 horas) caso o cliente mande nova mensagem sem confirmar
+    const criadaEmMs = session.acao_pendente?.createdAt ? Date.parse(session.acao_pendente.createdAt) : NaN;
+    const expiradaPorTempo = Number.isFinite(criadaEmMs) && (Date.now() - criadaEmMs > 2 * 60 * 60 * 1000);
+    if (expiradaPorTempo && !resolveConfirmation(message.text, { actionType: session.acao_pendente?.type, lastAssistantText: '' })) {
+      await cancelPendingAction(context).catch(() => null);
+      session.acao_pendente = null;
+    }
   }
   if (session.acao_pendente) {
     const lastAssistant = await db.queryRead(
@@ -2694,6 +2712,7 @@ export async function listWhatsappAiSessions(context = {}, { limit = 50, status,
   values.push(safeLimit);
   const result = await db.queryRead(
     `SELECT id, telefone, nome, status, (acao_pendente IS NOT NULL) AS has_pending_action,
+            LEFT(acao_pendente->>'summary', 220) AS pending_summary,
             (estado->>'marketingOptOut' = 'true') AS marketing_opt_out,
             ultima_interacao_em, atualizado_em, handoff_requested_at, handoff_reason,
             assigned_to, assigned_at, closed_at, priority, privacy_notice_at,
@@ -2720,6 +2739,7 @@ export async function listWhatsappAiSessions(context = {}, { limit = 50, status,
     nome: row.nome,
     status: row.status,
     hasPendingAction: row.has_pending_action === true,
+    pendingSummary: row.pending_summary || null,
     marketingOptOut: row.marketing_opt_out === true,
     ultima_interacao_em: row.ultima_interacao_em,
     atualizado_em: row.atualizado_em,
@@ -2896,12 +2916,42 @@ async function requeueLastCustomerMessage({ empresaId, lojaId, sessionId, canalI
  * Conversa completa para o painel do atendente: mensagens do cliente, do T-Rex e da equipe,
  * em ordem, com a situação atual. Telefone mascarado; nada de metadados internos.
  */
+export async function clearWhatsappAiPendingAction(context = {}, sessionId) {
+  const empresaId = requiredTenantUuid(context.empresaId, 'empresaId');
+  const lojaId = requiredTenantUuid(context.lojaId, 'lojaId');
+  const tipoCanal = whatsappChannelType(context.tipoCanal || 'cliente');
+  const normalizedSessionId = cleanText(sessionId, 60);
+  return db.transaction(async trx => {
+    await trx.query(
+      `UPDATE whatsapp_ai_actions SET status = 'cancelada'
+        WHERE empresa_id = $2 AND status = 'preparada'
+          AND id::text = (SELECT acao_pendente->>'actionId' FROM whatsapp_ai_sessions WHERE id = $1 AND empresa_id = $2)`,
+      [normalizedSessionId, empresaId],
+    );
+    const updated = await trx.query(
+      `UPDATE whatsapp_ai_sessions
+          SET acao_pendente = NULL, atualizado_em = CURRENT_TIMESTAMP
+        WHERE id = $1 AND empresa_id = $2 AND loja_id = $3
+          AND canal_id IN (SELECT id FROM canais_integracao WHERE empresa_id = $2 AND loja_id = $3 AND provedor = 'whatsapp' AND tipo_canal = $4)
+        RETURNING id, status, atualizado_em`,
+      [normalizedSessionId, empresaId, lojaId, tipoCanal],
+    );
+    if (!updated.rows[0]) {
+      const error = new Error('sessão não encontrada nesta unidade');
+      error.code = 'WHATSAPP_AI_SESSION_NOT_FOUND';
+      throw error;
+    }
+    await auditHandoff(trx, context, updated.rows[0].id, 'pending_action_cleared', {});
+    return { ok: true, id: updated.rows[0].id, status: updated.rows[0].status, hasPendingAction: false };
+  });
+}
+
 export async function getWhatsappAiConversation(context = {}, sessionId, { limit = 300 } = {}) {
   const empresaId = requiredTenantUuid(context.empresaId, 'empresaId');
   const lojaId = requiredTenantUuid(context.lojaId, 'lojaId');
   const tipoCanal = whatsappChannelType(context.tipoCanal || 'cliente');
   const sess = await db.queryRead(
-    `SELECT id, telefone, nome, status, handoff_reason, handoff_requested_at, assigned_to, assigned_at, closed_at, ultima_interacao_em
+    `SELECT id, telefone, nome, status, handoff_reason, handoff_requested_at, assigned_to, assigned_at, closed_at, ultima_interacao_em, acao_pendente
        FROM whatsapp_ai_sessions
       WHERE id = $1 AND empresa_id = $2 AND loja_id = $3
         AND canal_id IN (SELECT id FROM canais_integracao WHERE empresa_id = $2 AND loja_id = $3 AND provedor = 'whatsapp' AND tipo_canal = $4)`,
@@ -2934,6 +2984,8 @@ export async function getWhatsappAiConversation(context = {}, sessionId, { limit
       assumida: Boolean(s.assigned_to),
       minha: Boolean(s.assigned_to && context.usuarioId && String(s.assigned_to) === String(context.usuarioId)),
       assumidaEm: s.assigned_at, encerradaEm: s.closed_at, ultimaInteracao: s.ultima_interacao_em,
+      hasPendingAction: Boolean(s.acao_pendente),
+      pendingSummary: s.acao_pendente?.summary ? cleanText(s.acao_pendente.summary, 220) : null,
     },
     mensagens: rows.map((row) => ({
       id: row.id,

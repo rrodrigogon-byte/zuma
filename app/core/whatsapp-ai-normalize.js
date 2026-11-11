@@ -39,6 +39,7 @@ export function normalizeAgendaTime(value) {
     if (Number.isInteger(hour) && Number.isInteger(minute) && hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59) {
       return `${pad(hour)}:${pad(minute)}`
     }
+    return ''
   }
   // Casa 4 dígitos juntos como "1845"
   match = str.match(/\b(\d{2})(\d{2})\b/)
@@ -124,6 +125,14 @@ export function serviceWithProfessional(serviceName, professionalName) {
   const service = String(serviceName ?? '').trim()
   const professional = String(professionalName ?? '').trim()
   if (!professional || plain(professional) === 'qualquer') return service
+  // Se o servico traz "(BRUNO OU NATI)" entre parenteses e o cliente escolheu um barbeiro unico (ex: Bruno),
+  // remove o parentese ambiguo e explicita o barbeiro escolhido ("CORTE PREMIUM com Bruno")
+  if (/\([^)]*\bou\b[^)]*\)/i.test(service) && !/\bou\b/i.test(professional)) {
+    const limpo = service.replace(/\s*\([^)]*\bou\b[^)]*\)/gi, '').replace(/\s+/g, ' ').trim()
+    const firstLimpo = plain(professional).split(' ')[0]
+    if (firstLimpo && new RegExp(`\\b${firstLimpo.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`).test(plain(limpo))) return limpo
+    return `${limpo} com ${professional}`
+  }
   const first = plain(professional).split(' ')[0]
   if (first && new RegExp(`\\b${first.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`).test(plain(service))) return service
   return `${service} com ${professional}`

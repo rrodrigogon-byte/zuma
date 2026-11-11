@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { matchAgendaName } from './core/whatsapp-ai-tools.js';
 import { verificarStatusBarbeiroDino, BARBEIROS_ATIVOS_DINO } from './core/barbershop-agenda.js';
 import { confirmIntent, declineWithNewRequest } from './core/whatsapp-ai-intents.js';
+import { serviceWithProfessional } from './core/whatsapp-ai-normalize.js';
 
 test('Auditoria 112 Conversas Fila — 1. Resolução de corte-masculino e Corte cabelo masculino (Conversa #100)', () => {
   const servicos = [
@@ -41,4 +42,11 @@ test('Auditoria 112 Conversas Fila — 3. Destravamento de acao_pendente em Derm
   // Conversa #9 (Juliany): "Ok. Deixa agendado aí. Se abrir uma vaga antes das 18:00 você me fala"
   assert.equal(confirmIntent('Ok. Deixa agendado aí. Se abrir uma vaga antes das 18:00 você me fala'), 'confirm');
   assert.equal(confirmIntent('Pode deixar marcado obrigado'), 'confirm');
+});
+
+test('Auditoria 112 Conversas Fila — 4. Caso Fernanda (#71): desambiguação de CORTE PREMIUM (BRUNO OU NATI) quando escolhe Bruno', () => {
+  assert.equal(serviceWithProfessional('CORTE PREMIUM (BRUNO OU NATI)', 'Bruno'), 'CORTE PREMIUM com Bruno');
+  assert.equal(serviceWithProfessional('CORTE PREMIUM (BRUNO OU NATI)', 'Nati'), 'CORTE PREMIUM com Nati');
+  assert.equal(serviceWithProfessional('CORTE PREMIUM (BRUNO OU NATI)', 'Bruno ou Nati'), 'CORTE PREMIUM (BRUNO OU NATI)');
+  assert.equal(serviceWithProfessional('Corte com Bruno ou Nati', 'Nati'), 'Corte com Bruno ou Nati');
 });

@@ -1398,7 +1398,10 @@ async function toolPrepareAppointment(context, args = {}) {
     }
     if (!slot) throw new SchedulingError(`não há encaixe seguido para ${extra.service.nome} depois de ${String(Math.floor(cursor / 60)).padStart(2, '0')}:${String(cursor % 60).padStart(2, '0')}`, 'SLOT_UNAVAILABLE');
     combo.push({ serviceId: extra.service?.id || extraId, professionalId: extraProfessionalId, time: slot });
-    partes.push(extraProfessionalId === mesmoProfissional && mesmoProfissional ? `${extra.service.nome} às ${slot}` : `${extra.service.nome} às ${slot} (com quem estiver livre)`);
+    const nomeExtraFormatado = extraProfessionalId === mesmoProfissional && mesmoProfissional
+      ? serviceWithProfessional(extra.service.nome, nomeProfNoHorario || availability.professional?.nome || '')
+      : serviceWithProfessional(extra.service.nome, extra.professionalByTime?.[slot] || '');
+    partes.push(extraProfessionalId === mesmoProfissional && mesmoProfissional ? `${nomeExtraFormatado} às ${slot}` : `${nomeExtraFormatado} às ${slot} (com quem estiver livre)`);
     cursor = minutesOf(slot) + Number(extra.service.duracaoMinutos || 30);
     total += precoNoHorario(extra.service, extra.professional || (extraProfessionalId === 'qualquer' ? null : { id: extraProfessionalId, nome: (await listSchedulingProfessionals(scope).catch(()=>[])).find(p=>p.id===extraProfessionalId)?.nome }), slot, servicesList);
   }
@@ -2970,7 +2973,7 @@ export async function confirmPendingAction(context) {
         const criados = [response];
         try {
           for (const [index, item] of combo.entries()) {
-            criados.push(await createScheduledAppointment(trx, scope, { ...action.solicitacao, ...item, combo: undefined, actionId: `${action.id}:${index + 1}` }));
+            criados.push(await createScheduledAppointment(trx, scope, { ...action.solicitacao, ...item, combo: undefined, allowSameServiceInVisit: true, actionId: `${action.id}:${index + 1}` }));
           }
         } catch (error) {
           // Tudo ou nada: se um serviço da visita não encaixa mais, desfaz os já criados.

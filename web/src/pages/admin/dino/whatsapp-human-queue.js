@@ -80,6 +80,7 @@ function validItem(item, index, ids) {
     handoff_label: safeHandoffLabel(item.handoff_label),
     priority: item.priority,
     hasPendingAction: Boolean(item.hasPendingAction),
+    pendingSummary: typeof item.pendingSummary === 'string' ? item.pendingSummary.trim().slice(0, 220) : '',
     closed_at: nullableTimestamp(item.closed_at ?? null) ? (item.closed_at ?? null) : null,
     nome: typeof item.nome === 'string' ? item.nome.trim().slice(0, 80) : '',
     ultimaMensagemCliente: typeof item.ultima_mensagem_cliente === 'string' ? item.ultima_mensagem_cliente.slice(0, 160) : '',
