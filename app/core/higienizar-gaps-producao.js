@@ -197,37 +197,32 @@ export async function executarHigienizacaoGapsProducao(db, { listarComandasBarbe
           ? meioRaw
           : 'pix';
 
-        const jaExiste = await db.query(
-          `SELECT id FROM fin_lancamentos
-            WHERE empresa_id = $1::uuid AND origem = 'barbearia_comanda' AND origem_id = $2
-            LIMIT 1`,
-          [DINO_EMPRESA_ID, String(cmd.id)]
+        const chaveLanc = `barbearia_comanda:${cmd.id}`;
+        const ins = await db.query(
+          `INSERT INTO fin_lancamentos (
+             empresa_id, chave, tipo, natureza, status, descricao, categoria,
+             valor, data_competencia, vencimento, pago_em, meio_pagamento,
+             contraparte_tipo, contraparte_nome, origem, origem_id, automatico
+           ) VALUES (
+             $1::uuid, $2, 'receita', 'receber', 'pago', $3, 'Serviços e Produtos Barbearia',
+             $4, $5::date, $5::date, $6::timestamptz, $7,
+             'cliente', $8, 'barbearia_comanda', $9, true
+           )
+           ON CONFLICT (empresa_id, chave) DO NOTHING
+           RETURNING id`,
+          [
+            DINO_EMPRESA_ID,
+            chaveLanc,
+            descricao,
+            valor,
+            dataRef,
+            cmd.fechadaEm || new Date().toISOString(),
+            meio,
+            cmd.clienteNome || 'Cliente Barbearia Dino',
+            String(cmd.id),
+          ]
         );
-
-        if (jaExiste.rows.length === 0) {
-          await db.query(
-            `INSERT INTO fin_lancamentos (
-               id, empresa_id, loja_id, tipo, status, descricao, categoria,
-               valor, valor_pago, vencimento, pago_em, competencia,
-               meio_pagamento, contraparte_nome, origem, origem_id
-             ) VALUES (
-               $1::uuid, $2::uuid, $3::uuid, 'receita', 'pago', $4, 'Serviços e Produtos Barbearia',
-               $5, $5, $6::date, $7::timestamptz, $6::date,
-               $8, $9, 'barbearia_comanda', $10
-             )`,
-            [
-              crypto.randomUUID(),
-              DINO_EMPRESA_ID,
-              DINO_LOJA_ID,
-              descricao,
-              valor,
-              dataRef,
-              cmd.fechadaEm || new Date().toISOString(),
-              meio,
-              cmd.clienteNome || 'Cliente Barbearia Dino',
-              String(cmd.id),
-            ]
-          ).catch(() => {});
+        if (ins.rowCount > 0) {
           relatorio.comandasSincronizadasFinanceiro += 1;
         }
       }
