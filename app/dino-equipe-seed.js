@@ -83,9 +83,10 @@ export const PROFISSIONAIS_DINO_OFICIAIS = [
     ],
     telefone: '(65) 99999-0004',
     atendimento24x7: false,
-    horarioInicioPadrao: '08:00',
-    horarioFimPadrao: '20:00',
+    horarioInicioPadrao: '07:00',
+    horarioFimPadrao: '19:00',
     diasTrabalhoPadrao: [1, 2, 3, 4, 5, 6],
+    atendeCliente: true,
   },
   {
     idCanonico: 'prof-mv1a1m50-003',
@@ -105,6 +106,7 @@ export const PROFISSIONAIS_DINO_OFICIAIS = [
     horarioInicioPadrao: '08:00',
     horarioFimPadrao: '20:00',
     diasTrabalhoPadrao: [1, 2, 3, 4, 5, 6],
+    atendeCliente: false,
   },
   {
     idCanonico: 'prof-mv1a1n6r-006',
@@ -123,6 +125,7 @@ export const PROFISSIONAIS_DINO_OFICIAIS = [
     horarioInicioPadrao: '08:00',
     horarioFimPadrao: '20:00',
     diasTrabalhoPadrao: [1, 2, 3, 4, 5, 6],
+    atendeCliente: false,
   },
 ];
 
@@ -357,7 +360,11 @@ export function provisionarEquipeDino({ commerceDb = null } = {}) {
         const prof = profissionaisAtualizados.find(casaMembro);
 
         if (prof) {
-          const horarioInicio = prof.horarioInicio || membro.horarioInicioPadrao || '08:00';
+          // PRESERVAÇÃO RIGOROSA: NUNCA sobrescrever os horários que o gestor já ajustou!
+          const ehNati = membro.username === 'natani' || String(prof.nome || '').toLowerCase().includes('natani');
+          const horarioInicio = (ehNati && (!prof.horarioInicio || prof.horarioInicio === '08:00'))
+            ? '07:00'
+            : (prof.horarioInicio || membro.horarioInicioPadrao || '08:00');
           const horarioFim = prof.horarioFim || membro.horarioFimPadrao || '20:00';
           const diasTrabalho = Array.isArray(prof.diasTrabalho) && prof.diasTrabalho.length > 0
             ? prof.diasTrabalho
@@ -365,6 +372,7 @@ export function provisionarEquipeDino({ commerceDb = null } = {}) {
           const atendimento24x7 = prof.atendimento24x7 !== undefined
             ? prof.atendimento24x7
             : Boolean(membro.atendimento24x7);
+          const atendeCliente = membro.atendeCliente !== undefined ? membro.atendeCliente : (prof.atendeCliente !== false);
 
           barbeariaErpKytto.atualizarProfissional(empId, prof.id, {
             ...prof,
@@ -372,6 +380,7 @@ export function provisionarEquipeDino({ commerceDb = null } = {}) {
             apelido: membro.apelido,
             telefone: prof.telefone || membro.telefone,
             especialidade: prof.especialidade || membro.especialidade,
+            atendeCliente,
             percentualComissao: prof.percentualComissao ?? membro.comissaoServicos,
             percentualComissaoProduto: prof.percentualComissaoProduto ?? membro.comissaoProdutos,
             faixasComissaoServico: prof.faixasComissaoServico?.length ? prof.faixasComissaoServico : (membro.faixasComissaoServico || []),

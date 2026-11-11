@@ -21,8 +21,6 @@ test('T-Rex RV: Reconhecimento abrangente e veloz de confirmações de presença
     'vou sim',
     'to a caminho',
     'chegando',
-    'corte cabelo e barba',
-    'corte e barba',
     '👍',
     '💈',
     '✂️',
@@ -35,6 +33,8 @@ test('T-Rex RV: Reconhecimento abrangente e veloz de confirmações de presença
   }
 
   const casosNegativos = [
+    'corte cabelo e barba',
+    'corte e barba',
     'não vou conseguir',
     'cancela',
     'remarcar para outro dia',

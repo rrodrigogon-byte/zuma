@@ -1032,6 +1032,8 @@ export default function Supermercado() {
       }
     } catch (e) {
       console.error(e);
+      setClienteClubeIdentificado(null);
+      showToast('Consumidor registrado para NFC-e (sem desconto de clube). Preço integral.');
     }
   };
 
@@ -1675,8 +1677,14 @@ export default function Supermercado() {
           <button
             type="button"
             className="super-btn-cta-pdv"
-            onClick={() => window.open('/pdv', '_blank')}
-            title="Abrir Frente de Caixa PDV em tela cheia com atalhos e periféricos"
+            onClick={(e) => {
+              if (e.ctrlKey || e.metaKey) {
+                window.open('/admin/supermercado/caixa', '_blank');
+              } else {
+                setModoPdvExclusivo(true);
+              }
+            }}
+            title="Abrir Frente de Caixa PDV exclusivo de Supermercado com leitor, balança e TEF"
           >
             <ShoppingCart size={18} />
             <span>Frente de Caixa (PDV)</span>
@@ -1816,7 +1824,13 @@ export default function Supermercado() {
                 key={sub.id}
                 type="button"
                 className={`super-subnav-btn ${abaAtiva === sub.id ? 'active' : ''}`}
-                onClick={() => setAbaAtiva(sub.id)}
+                onClick={() => {
+                  if (sub.id === 'pdv') {
+                    setModoPdvExclusivo(true);
+                  } else {
+                    setAbaAtiva(sub.id);
+                  }
+                }}
               >
                 {renderIconeSub(sub.iconeName)}
                 <span>{sub.nome}</span>
@@ -2007,7 +2021,7 @@ export default function Supermercado() {
                   </div>
                 </div>
                 <div className="super-quick-action-cards">
-                  <div className="super-action-card primary" onClick={() => { setAreaAtiva('vendas_caixa'); setAbaAtiva('pdv'); }}>
+                  <div className="super-action-card primary" onClick={() => setModoPdvExclusivo(true)}>
                     <div className="action-card-icon green"><ShoppingCart size={22} /></div>
                     <div className="action-card-text">
                       <strong>Frente de Caixa (PDV Rápido)</strong>

@@ -23,6 +23,15 @@ export default class ErrorBoundary extends Component {
         try { sessionStorage.setItem(RECOVERY_KEY, String(agora)) } catch (_) {}
         this.purgarCachesERecarregar()
       }
+      return
+    }
+
+    // Em telas operacionais de fila/caixa, tenta auto-resetar o estado sem travar a tela do operador
+    const rota = typeof window !== 'undefined' ? String(window.location?.pathname || '') : ''
+    if (rota.includes('/whatsapp-fila') || rota.includes('/supermercado')) {
+      setTimeout(() => {
+        this.setState({ hasError: false, error: null })
+      }, 500)
     }
   }
 

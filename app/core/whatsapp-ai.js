@@ -270,7 +270,7 @@ export const BARBERSHOP_SYSTEM_GUIDANCE = `
 - Identidade T-Rex: você é o atendente ágil da equipe da Barbearia Dino. Vá DIRETO ao ponto com extrema pontualidade, calor humano e sem rodeios (máximo 2 a 3 linhas por mensagem). NUNCA envie mensagens longas, em rajada ou repetitivas. NUNCA se apresente repetidamente com "Sou o T-Rex da Barbearia Dino, novo por aqui na equipe pra apoiar e agilizar seu atendimento" se o cliente já estiver conversando. Responda diretamente ao que ele precisa. NUNCA se identifique como IA, robô ou assistente virtual.
 - ATENDIMENTO DOS BARBEIROS BRUNO, NATI E DEMAIS DA EQUIPE:
   • Bruno e Nati são barbeiros especialistas com alta procura na barbearia (Corte: R$ 100, Barba: R$ 100, Combo Corte e Barba: R$ 200).
-  • Quando o cliente pedir para cortar ou agendar com o Bruno ou com a Nati (ou com Ester, David, João Victor, Amanda):
+  • Quando o cliente pedir para cortar ou agendar com o Bruno ou com a Nati:
     1. Chame IMEDIATAMENTE consultar_disponibilidade ou sugerir_proximos_horarios para o profissional escolhido e apresente de 2 a 3 horários livres com clareza e valor em no máximo 2 linhas:
        Ex: "Tenho com o Bruno hoje às 14h30, 15h15 e 16h00 (Corte R$ 100). Qual fica melhor pra você?"
        Ex: "Com a Nati temos hoje às 14h00, 15h00 e 16h30. Qual horário você prefere?"
@@ -284,10 +284,11 @@ export const BARBERSHOP_SYSTEM_GUIDANCE = `
 - ÁUDIO TRANSCRITO: Mensagens iniciadas por "[áudio transcrito]" são mensagens de voz do cliente. Interprete com máxima atenção e responda com extrema agilidade: consulte horários ou prepare o agendamento imediatamente no mesmo turno!
 - NUNCA CHUTE SERVIÇO NÃO INFORMADO: Se o cliente perguntar de horário ("tem horário hoje?", "tem vaga essa semana?") SEM ESPECIFICAR o serviço desejado, NUNCA presuma nem chame sugerir_proximos_horarios para serviços aleatórios como Manicure, Unha, Sobrancelha, etc. Pergunte primeiro: "Temos sim! Qual serviço você deseja agendar (corte, barba ou combo) e qual seu barbeiro de preferência?".
 - PROIBIÇÃO ABSOLUTA DE TERMOS TÉCNICOS E "CLIENTE AVEC": NUNCA sob nenhuma circunstância chame nenhum cliente de "Cliente Avec", "Avec", "Cliente sem nome" ou "Cliente". Use SEMPRE o primeiro nome real do cliente. Se o nome não estiver no cadastro, chame calorosamente de "meu irmão", "amigo" ou apenas "Opa, tudo bem?".
-- ACOLHIMENTO E EMPATIA EM CASO DE DESENCONTRO OU AVISO DE CANCELAMENTO: Se o cliente disser que recebeu aviso de cancelamento, que viajou (ex.: Cuiabá), que teve imprevisto ou que não compareceu por causa de mensagem:
-  1. Peça sinceras desculpas imediatamente pelo mal-entendido com carinho e humildade ("Poxa, peço mil desculpas pelo mal-entendido com o aviso de cancelamento!").
+- ACOLHIMENTO EM CASO DE RECLAMAÇÃO EXPLÍCITA DE AVISO DE CANCELAMENTO INDEVIDO: SOMENTE se o cliente reclamar explicitamente que recebeu um aviso/mensagem dizendo que o horário dele foi cancelado sem ele ter pedido:
+  1. Peça sinceras desculpas pelo mal-entendido com o aviso de cancelamento.
   2. NUNCA confronte o cliente nem diga que o agendamento continuava ativo no sistema. O cliente sempre tem razão e precisa ser acolhido.
   3. Deixe claro que a vaga e a presença dele são prioridade máxima na Barbearia Dino, e ofereça agendar com prioridade para a próxima semana ou no dia em que ele puder voltar!
+  4. ATENÇÃO: Se o cliente apenas disser que está viajando (ex.: "Tô em Lacerda", "Fui pra Brasnorte"), que quer cancelar o plano mensal ou que não vai conseguir ir no horário dele, NUNCA fale em "mal-entendido com o aviso de cancelamento"! Responda apenas ao que ele pediu com naturalidade.
 - ANTI-REPETIÇÃO DE HORÁRIOS: NUNCA repita a lista de 3 horários com data, profissional e preço se você já enviou esses horários na mensagem anterior. Se o cliente responder com frases curtas de conversa ou contexto ("tá bom", "eu tô na cidade", "consigo sim", "beleza"), NÃO mande novamente a lista inteira de horários! Pergunte apenas de forma objetiva: "Show! Qual dos horários anteriores você prefere que eu marque?".
 - PRECISÃO DE DATAS E DIAS DA SEMANA: NUNCA invente ou cite meses/anos aleatórios ao responder perguntas sobre dias da semana. Consulte SEMPRE o bloco CALENDÁRIO fornecido nesta conversa para obter a data exata em AAAA-MM-DD.
 - VALORES REAIS DA BARBEARIA DINO (PROIBIDO R$ 0,00): NENHUM serviço na Barbearia Dino é gratuito ou custa R$ 0. Corte ou Barba com equipe (Bruno, Nati, etc.): R$ 100,00; Combo Corte e Barba: R$ 200,00; Atendimento com Dino: R$ 300,00 diurno (08h às 18h09) ou R$ 600,00 após as 18h09. NUNCA envie mensagem dizendo que o valor é R$ 0.
@@ -295,8 +296,8 @@ export const BARBERSHOP_SYSTEM_GUIDANCE = `
 - BLINDAGEM ANTI-SPAM META (PROIBIDO ENVIAR VÁRIAS MENSAGENS SEGUIDAS): Responda sempre em no máximo 1 a 2 linhas curtas e objetivas. NUNCA divida a resposta em rajada de mensagens separadas. Não envie enquetes nem mensagens de marketing paralelas para não sobrecarregar o cliente e evitar bloqueios na Meta/WhatsApp.
 - EQUIPE TITULAR 100% ATIVA (BRUNO MENDES E NATI SÃO ATIVOS!):
   * Bruno Mendes (Bruno) e Nati (Natani): São barbeiros titulares da equipe e estão 100% ATIVOS! NUNCA diga que o Bruno ou a Nati saíram da barbearia! NUNCA diga que eles não atendem!
-  * Demais barbeiros ativos: Dino (Guilherme / Mestre Dino), David, Ester (Steffany), João Victor e Amanda.
-  * Barbeiros antigos que saíram: SOMENTE Gustavo, Vitor, Lucas, Vinycius, Danilo, Bruno Rafael e Pedrinho.
+  * Demais barbeiros ativos para corte e barba: Dino (Guilherme / Mestre Dino). (Os ÚNICOS profissionais que fazem corte e barba hoje são Bruno, Nati e Dino!).
+  * Barbeiros antigos que saíram e NÃO trabalham mais na barbearia: João Victor (João), David (David Kauã), Amanda, Lucas, Gustavo, Vitor, Vinycius, Danilo, Bruno Rafael e Pedrinho. (Ester e Jhenyffer atuam na recepção/caixa/administração e NÃO fazem corte de cabelo nem barba). NUNCA liste João Victor, David, Amanda ou Ester como opções de barbeiros para corte!
 - AUSÊNCIAS ESPECÍFICAS DA NATI (SOMENTE DIAS 17 E 18/11):
   * A Nati estará viajando EXCLUSIVAMENTE nos dias 17 e 18 de novembro de 2026.
   * Para QUALQUER OUTRA DATA (como hoje, amanhã, 12/11, 13/11, 14/11, 19/11, etc.), a agenda da Nati está TOTALMENTE DISPONÍVEL!
@@ -1617,21 +1618,20 @@ export function presenceConfirmIntent(text) {
   const raw = String(text ?? '')
     .replace(/^\[(?:áudio|audio|mensagem de voz|foto|imagem|documento)(?:\s+transcrit[oa]|\s+enviad[oa])?\]\s*/i, '')
     .trim();
-  if (!raw || raw.length > 100) return false;
-  // Se o cliente respondeu com emoji de positivo/joinha/acordo (ex.: 👍, 🤝, 🙏, ✅, 💈, ✂️)
-  if (EMOJIS_CONFIRMACAO_PRESENCA.test(raw)) {
-    // Não pode conter negação ou dúvida
-    const semEmojis = plain(raw).replace(/[^a-z0-9 ]/g, ' ').trim();
-    if (/\b(nao|cancel|desmar|remarc|troc|mud|duvid|sera)\b/i.test(semEmojis)) return false;
+  if (!raw || raw.length > 100 || raw.includes('?')) return false;
+  const semEmojis = plain(raw).replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+  if (/\b(nao|cancel|desmar|remarc|reagend|imprevisto|reuniao|troc|mud|duvid|sera|outro|adiar|atras|depois|amanha|tarde|manha|noite|horario|vaga|marquei|agendei|dia\s+\d)\b/i.test(semEmojis)) return false;
+  // Se o cliente respondeu com emoji de positivo/joinha/acordo (ex.: 👍, 🤝, ✅, 💈, ✂️) e texto curto
+  if (EMOJIS_CONFIRMACAO_PRESENCA.test(raw) && semEmojis.split(' ').filter(Boolean).length <= 5) {
     return true;
   }
-  const value = plain(raw).replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+  const value = semEmojis;
   if (!value) return false;
-  return /^(confirmo|confirmando|confirmado|confirmada|confirmo presenca|confirmo sim|sim confirmo|confirma|confirma pra mim|pode confirmar|pode ser sim|sim pode ser|estarei ai|estarei la|vou sim|vou|vou comparecer|confirmadissimo|ok confirmado|ta confirmado|esta confirmado|confirmar|sim confirmar|pode deixar marcado|vou querer esse|deixa marcado|deixa esse|marca esse|pode marcar|to a caminho|estou a caminho|chegando|ja to chegando|ja cheguei|to chegando|corte cabelo e barba|corte e barba|corte|barba)( obrigad[oa])?$/.test(value)
+  return /^(confirmo|confirmando|confirmado|confirmada|confirmo presenca|confirmo sim|sim confirmo|confirma|confirma pra mim|pode confirmar|pode ser sim|sim pode ser|estarei ai|estarei la|vou sim|vou|vou comparecer|confirmadissimo|ok confirmado|ta confirmado|esta confirmado|confirmar|sim confirmar|pode deixar marcado|vou querer esse|deixa marcado|deixa esse|marca esse|pode marcar|to a caminho|estou a caminho|chegando|ja to chegando|ja cheguei|to chegando)( obrigad[oa])?$/.test(value)
     || /^(sim|ok|pode ser|com certeza|fechado|fechou|perfeito|beleza|blz|bora|show|tamo junto|combinado|certo|marcado|ta marcado|opa vou|partiu|fechado entao|combinado entao)( obrigad[oa])?$/.test(value);
 }
 
-export async function confirmNextAppointment(context) {
+export async function confirmNextAppointment(context, userText = '') {
   const run = createWhatsappAiToolExecutor({ ...context, toolResults: undefined, toolLinks: undefined });
   const lista = await run('consultar_meus_agendamentos', { limit: 10 });
   const agora = Date.now();
@@ -1639,6 +1639,35 @@ export async function confirmNextAppointment(context) {
   const todosValidos = (lista?.agendamentos || [])
     .filter((item) => item?.id && (item.dataAgenda === diaHoje || new Date(item.dataHora).valueOf() > agora - 60 * 60 * 1000) && !['cancelado', 'nao_compareceu'].includes(String(item.status)))
     .sort((a, b) => new Date(a.dataHora) - new Date(b.dataHora));
+
+  // Se o cliente especificou horário ou dia da semana (ex: "Quinta às 15:15"), filtra o agendamento correspondente
+  const msgNorm = plain(userText || '');
+  const matchHora = msgNorm.match(/\b(\d{1,2})\s*(?:[:h]\s*(\d{2}))?\b/);
+  const horaEscolhida = matchHora && Number(matchHora[1]) < 24 ? `${String(matchHora[1]).padStart(2, '0')}:${matchHora[2] || '00'}` : '';
+  const mapaDias = { domingo: 0, segunda: 1, terca: 2, quarta: 3, quinta: 4, sexta: 5, sabado: 6 };
+  const diaSemanaEscolhido = Object.keys(mapaDias).find((d) => new RegExp(`\\b${d}\\b`).test(msgNorm));
+  if (horaEscolhida || diaSemanaEscolhido) {
+    const especifico = todosValidos.find((item) => {
+      const horaItem = item.horaLocal || new Date(item.dataHora).toLocaleTimeString('pt-BR', { timeZone: 'America/Cuiaba', hour: '2-digit', minute: '2-digit' });
+      const dataIso = item.dataAgenda || new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Cuiaba' }).format(new Date(item.dataHora));
+      const dowItem = new Date(`${dataIso}T12:00:00Z`).getUTCDay();
+      const bateHora = !horaEscolhida || horaItem === horaEscolhida;
+      const bateDia = !diaSemanaEscolhido || dowItem === mapaDias[diaSemanaEscolhido];
+      return bateHora && bateDia;
+    });
+    if (especifico) {
+      const res = await run('confirmar_presenca', { appointmentId: especifico.id }).catch(() => null);
+      if (res?.ok || res?.presenca) {
+        const quando = new Date(especifico.dataHora).toLocaleString('pt-BR', { timeZone: 'America/Cuiaba', weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+        const primeiroNome = context.customerName ? `, ${context.customerName.split(' ')[0]}` : '';
+        const servicoComProf = serviceWithProfessional(especifico.servico?.nome || 'Seu horário', especifico.profissional?.nome || 'a equipe');
+        return {
+          text: `Confirmado${primeiroNome}! ${servicoComProf}, ${quando}. Te esperamos na Dino Barbearia! 💈`,
+          kind: 'presence_confirmed',
+        };
+      }
+    }
+  }
 
   const lembradoId = context?.session?.estado?.ultimoAgendamentoLembradoId;
 
@@ -1852,10 +1881,11 @@ async function deterministicResponseCore(task, channel, session, message) {
   const explicitPresenceConfirm = /\b(?:confirmo\s+presen[cç]a|confirmo\s+(?:o\s+)?hor[aá]rio|estarei\s+(?:a[ií]|l[aá])|vou\s+(?:sim|comparecer)|confirmad[ií]ssimo)\b/i.test(message.text);
 
   const ehIntencaoConfirmacao = presenceConfirmIntent(message.text) || explicitPresenceConfirm;
-  const temLembreteAtivo = ultimoEnvioEraLembrete || Boolean(session.estado?.ultimoAgendamentoLembradoId);
+  const perguntouQualConfirmar = recentMsgs.some((m) => m.papel === 'assistant' && /qual\s+deles\s+voc[eê]\s+quer\s+confirmar/i.test(m.conteudo || ''));
+  const temLembreteAtivo = ultimoEnvioEraLembrete || Boolean(session.estado?.ultimoAgendamentoLembradoId) || perguntouQualConfirmar;
 
-  if (!session.assigned_to && !session.acao_pendente && (ehIntencaoConfirmacao || temLembreteAtivo)) {
-    const confirmado = await confirmNextAppointment(context).catch(() => null);
+  if (!session.assigned_to && !session.acao_pendente && (ehIntencaoConfirmacao || (temLembreteAtivo && (ehIntencaoConfirmacao || perguntouQualConfirmar)))) {
+    const confirmado = await confirmNextAppointment(context, message.text).catch(() => null);
     if (confirmado) return confirmado;
   }
   if (session.status === 'humano') return { text: null, kind: 'human_queue' };
@@ -1924,7 +1954,7 @@ async function deterministicResponseCore(task, channel, session, message) {
     // "NÃO, era só teste. Quero ver os perfumes": recusa clara seguida de outro assunto.
     // Desiste da ação pendente e segue para o novo pedido (30/10 o resumo ficava pendurado e
     // voltava como lembrete). "não, prefiro às 15h" continua sendo ajuste da mesma ação.
-    if (!intent && declineWithNewRequest(message.text) && (lastAssistant.includes(CONFIRMATION_HINT) || lastAssistant.includes(PENDING_REMINDER_HINT))) {
+    if (!intent && declineWithNewRequest(message.text, session.acao_pendente?.summary || '') && (lastAssistant.includes(CONFIRMATION_HINT) || lastAssistant.includes(PENDING_REMINDER_HINT) || session.acao_pendente)) {
       await cancelPendingAction(context).catch(() => null);
       session.acao_pendente = null;
     }
@@ -2010,7 +2040,8 @@ async function deterministicResponseCore(task, channel, session, message) {
   }
 
   const profileResult = await resolveWhatsappCustomerProfile(context, channel, session);
-  if (policy.personalizationEnabled && !profileResult.consent.personalization
+  const isDinoSession = persona?.id === 'trex' || ['d0d0ac01-8e50-4b61-8c79-de4aaa916da6', 'emp_dino', 'dino'].includes(String(session.empresa_id || '').toLowerCase());
+  if (!isDinoSession && policy.personalizationEnabled && !profileResult.consent.personalization
       && !session.personalization_prompted_at && shouldPromptPersonalization(message.text)) {
     await markPersonalizationPrompted(context, session, message.externalId);
     return {

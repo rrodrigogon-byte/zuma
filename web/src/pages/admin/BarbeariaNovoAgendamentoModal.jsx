@@ -82,7 +82,7 @@ export default function BarbeariaNovoAgendamentoModal({
   const [linhasServicos, setLinhasServicos] = useState(() => {
     if (agendamentoEdicao) {
       const dur = agendamentoEdicao.duracaoMinutos || 30
-      const ini = agendamentoEdicao.hora || horaInicial || '10:00'
+      const ini = agendamentoEdicao.horaLocal || agendamentoEdicao.hora || horaInicial || '10:00'
       return [{
         id: 'linha-0',
         servicoId: agendamentoEdicao.servicoId || servicoPadrao.id,

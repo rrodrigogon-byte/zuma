@@ -84,7 +84,12 @@ function ensureAgendaId(value, field, { allowAny = false } = {}) {
 const PALAVRAS_VAZIAS = new Set(['com', 'o', 'a', 'os', 'as', 'e', 'de', 'do', 'da', 'dos', 'das', 'no', 'na', 'um', 'uma', 'servico', 'profissional', 'fazer', 'quero', 'queria', 'agendar', 'marcar', 'pra', 'para', 'meu', 'minha', 'so', 'tambem']);
 function nomeComparavel(value) {
   return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
-    .replace(/\bcabelo\b/g, 'corte').replace(/\bcortar\b/g, 'corte').replace(/\bbarbear\b/g, 'barba').replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+    .replace(/\bcabelo\b/g, 'corte').replace(/\bcortar\b/g, 'corte').replace(/\bbarbear\b/g, 'barba')
+    .replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ')
+    .replace(/\b(?:corte\s+)+corte\b/g, 'corte')
+    .replace(/\bcorte\s+de\s+corte\b/g, 'corte')
+    .replace(/\bcorte\s+o\s+corte\b/g, 'corte')
+    .trim();
 }
 function tokensNome(value) {
   return nomeComparavel(value).split(' ').filter((item) => item && !PALAVRAS_VAZIAS.has(item));
@@ -106,39 +111,30 @@ const APELIDOS_PROFISSIONAIS = {
   'nat': ['natani minanis dobler', 'natani', 'naty', 'nati'],
   'nato': ['natani minanis dobler', 'natani', 'naty', 'nati'],
   'nathy': ['natani minanis dobler', 'natani', 'naty', 'nati'],
-  'ester': ['steffany marielly de oliveira', 'steffany', 'ester'],
-  'steffany': ['steffany marielly de oliveira', 'ester'],
-  'stefany': ['steffany marielly de oliveira', 'ester'],
-  'david': ['david kaua araujo moraes', 'david', 'davi'],
-  'davi': ['david kaua araujo moraes', 'david'],
-  'kaua': ['david kaua araujo moraes', 'david'],
-  'joao': ['joao victor domingos ruedel', 'joao victor'],
-  'joao victor': ['joao victor domingos ruedel', 'joao'],
-  'jv': ['joao victor domingos ruedel'],
-  'amanda': ['amanda gabrielly santos da silva', 'amanda'],
 };
 
 const APELIDOS_SERVICOS = {
-  // Corte de cabelo / Corte masculino (Bruno, Nati, Ester, David, etc.)
+  // Corte de cabelo / Corte masculino (Bruno, Nati, Dino)
   'corte': ['corte com bruno ou nati agendamento online', 'corte com bruno ou nati', 'corte com dino agendamento online', 'corte com dino', 'corte premium (bruno ou nati)', 'corte premium', 'corte tradicional', 'corte masculino'],
-  'corte masculino': ['corte com bruno ou nati agendamento online', 'corte com bruno ou nati', 'corte com dino agendamento online', 'corte com dino', 'corte premium'],
-  'corte-masculino': ['corte com bruno ou nati agendamento online', 'corte com bruno ou nati', 'corte com dino agendamento online', 'corte com dino', 'corte premium'],
-  'corte cabelo masculino': ['corte com bruno ou nati agendamento online', 'corte com bruno ou nati', 'corte com dino agendamento online', 'corte com dino'],
-  'corte de cabelo': ['corte com bruno ou nati agendamento online', 'corte com bruno ou nati', 'corte com dino agendamento online', 'corte com dino'],
-  'corte cabelo': ['corte com bruno ou nati agendamento online', 'corte com bruno ou nati', 'corte com dino agendamento online', 'corte com dino'],
-  'cortar cabelo': ['corte com bruno ou nati agendamento online', 'corte com bruno ou nati', 'corte com dino agendamento online', 'corte com dino'],
-  'cortar o cabelo': ['corte com bruno ou nati agendamento online', 'corte com bruno ou nati', 'corte com dino agendamento online', 'corte com dino'],
-  'cabelo': ['corte com bruno ou nati agendamento online', 'corte com bruno ou nati', 'corte com dino agendamento online', 'corte com dino'],
-  'cabelo masculino': ['corte com bruno ou nati agendamento online', 'corte com bruno ou nati', 'corte com dino agendamento online', 'corte com dino'],
-  'corte tradicional': ['corte com bruno ou nati agendamento online', 'corte com bruno ou nati', 'corte com dino agendamento online', 'corte com dino'],
+  'corte premium': ['corte premium', 'corte com bruno ou nati agendamento online', 'corte com bruno ou nati', 'corte com dino agendamento online', 'corte com dino'],
+  'corte masculino': ['corte premium', 'corte com bruno ou nati agendamento online', 'corte com bruno ou nati', 'corte com dino agendamento online', 'corte com dino'],
+  'corte-masculino': ['corte premium', 'corte com bruno ou nati agendamento online', 'corte com bruno ou nati', 'corte com dino agendamento online', 'corte com dino'],
+  'corte cabelo masculino': ['corte premium', 'corte com bruno ou nati agendamento online', 'corte com bruno ou nati', 'corte com dino agendamento online', 'corte com dino'],
+  'corte de cabelo': ['corte premium', 'corte com bruno ou nati agendamento online', 'corte com bruno ou nati', 'corte com dino agendamento online', 'corte com dino'],
+  'corte cabelo': ['corte premium', 'corte com bruno ou nati agendamento online', 'corte com bruno ou nati', 'corte com dino agendamento online', 'corte com dino'],
+  'cortar cabelo': ['corte premium', 'corte com bruno ou nati agendamento online', 'corte com bruno ou nati', 'corte com dino agendamento online', 'corte com dino'],
+  'cortar o cabelo': ['corte premium', 'corte com bruno ou nati agendamento online', 'corte com bruno ou nati', 'corte com dino agendamento online', 'corte com dino'],
+  'cabelo': ['corte premium', 'corte com bruno ou nati agendamento online', 'corte com bruno ou nati', 'corte com dino agendamento online', 'corte com dino'],
+  'cabelo masculino': ['corte premium', 'corte com bruno ou nati agendamento online', 'corte com bruno ou nati', 'corte com dino agendamento online', 'corte com dino'],
+  'corte tradicional': ['corte premium', 'corte com bruno ou nati agendamento online', 'corte com bruno ou nati', 'corte com dino agendamento online', 'corte com dino'],
 
   // Barba
   'barba': ['barba com bruno ou nati agendamento online', 'barba com bruno ou nati', 'barba tradicional', 'barba', 'barba com o dino agendamento online', 'barba com o dino', 'barba com dino', 'barba premium'],
-  'barba premium': ['barba com bruno ou nati agendamento online', 'barba com bruno ou nati', 'barba com o dino agendamento online', 'barba com o dino', 'barba com dino'],
-  'barba masculina': ['barba com bruno ou nati agendamento online', 'barba com bruno ou nati', 'barba com o dino agendamento online', 'barba com o dino', 'barba com dino'],
-  'fazer barba': ['barba com bruno ou nati agendamento online', 'barba com bruno ou nati', 'barba com o dino agendamento online', 'barba com o dino', 'barba com dino'],
-  'fazer a barba': ['barba com bruno ou nati agendamento online', 'barba com bruno ou nati', 'barba com o dino agendamento online', 'barba com o dino', 'barba com dino'],
-  'aparar barba': ['barba com bruno ou nati agendamento online', 'barba com bruno ou nati', 'barba com o dino agendamento online', 'barba com o dino', 'barba com dino'],
+  'barba premium': ['barba premium', 'barba com bruno ou nati agendamento online', 'barba com bruno ou nati', 'barba com o dino agendamento online', 'barba com o dino', 'barba com dino'],
+  'barba masculina': ['barba premium', 'barba com bruno ou nati agendamento online', 'barba com bruno ou nati', 'barba com o dino agendamento online', 'barba com o dino', 'barba com dino'],
+  'fazer barba': ['barba premium', 'barba com bruno ou nati agendamento online', 'barba com bruno ou nati', 'barba com o dino agendamento online', 'barba com o dino', 'barba com dino'],
+  'fazer a barba': ['barba premium', 'barba com bruno ou nati agendamento online', 'barba com bruno ou nati', 'barba com o dino agendamento online', 'barba com o dino', 'barba com dino'],
+  'aparar barba': ['barba premium', 'barba com bruno ou nati agendamento online', 'barba com bruno ou nati', 'barba com o dino agendamento online', 'barba com o dino', 'barba com dino'],
 
   // Corte e Barba / Combo
   'corte e barba': ['corte e barba agendamento online', 'corte e barba', 'corte e barba com dino agendamento online', 'corte e barba com dino', 'corte e barba premium', 'combo corte e barba', 'combo'],
@@ -277,7 +273,7 @@ async function resolveAgendaId(scope, value, field, { allowAny = false, professi
     const statusDino = verificarStatusBarbeiroDino(normalized);
     if (statusDino.exBarbeiro) {
       throw new WhatsappAiToolError(
-        `O profissional "${statusDino.nomeOriginal || normalized}" não faz mais parte da equipe da Barbearia Dino. Explique com carinho e gentileza que ele não atua mais na barbearia, apresente com entusiasmo os barbeiros de ponta da equipe atual (Bruno, Nati, David, Ester, João Victor, Amanda e o próprio Dino) que mantêm o mesmo padrão de excelência e cuidado com o estilo, e pergunte se gostaria de verificar os horários com um deles para esta semana.`,
+        `O profissional "${statusDino.nomeOriginal || normalized}" não faz mais parte da equipe da Barbearia Dino. Explique com carinho e gentileza que ele não atua mais na barbearia, apresente com entusiasmo os barbeiros titulares da equipe atual (Bruno, Nati e o próprio Dino) que mantêm o mesmo padrão de excelência e cuidado com o estilo, e pergunte se gostaria de verificar os horários com um deles para esta semana.`,
         'EX_PROFISSIONAL_NAO_ATUA_MAIS'
       );
     }
@@ -1290,6 +1286,29 @@ async function toolPrepareAppointment(context, args = {}) {
     // "20h", "20:00", "às 20" → 20:00 (base para achar os horários mais próximos).
     const horaPedida = String(args.time || '').match(/(\d{1,2})(?:\s*[:h]\s*(\d{2}))?/);
     const pedido = horaPedida && Number(horaPedida[1]) < 24 ? `${horaPedida[1].padStart(2, '0')}:${horaPedida[2] || '00'}` : cleanText(args.time, 5);
+    // Se o próprio cliente já possui um agendamento ativo neste exato dia e horário (ex: respondeu "Quinta às 15:15" para confirmar 1 de 2 agendamentos),
+    // confirma imediatamente o agendamento existente em vez de dizer que o horário está ocupado!
+    const meusAgendamentos = await listWhatsappCustomerAppointments(scope, { includePast: false, limit: 15 }).catch(() => []);
+    const meuNoMesmoSlot = (meusAgendamentos || []).find((item) => {
+      if (!item?.id || ['cancelado', 'concluido', 'nao_compareceu'].includes(String(item.status))) return false;
+      const dataItem = item.dataAgenda || localDateIso(new Date(item.dataHora));
+      const horaItem = item.horaLocal || new Date(item.dataHora).toLocaleTimeString('pt-BR', { timeZone: AGENDA_TZ, hour: '2-digit', minute: '2-digit' });
+      return dataItem === date && horaItem === pedido;
+    });
+    if (meuNoMesmoSlot) {
+      const conf = await confirmAttendance(scope, meuNoMesmoSlot.id).catch(() => null);
+      return {
+        ok: true,
+        confirmadoExistente: true,
+        presenca: sanitizeToolData({
+          servico: conf?.servico || meuNoMesmoSlot.servico?.nome || 'Atendimento',
+          profissional: conf?.profissional || meuNoMesmoSlot.profissional?.nome || 'Equipe',
+          dataHora: conf?.dataHora || meuNoMesmoSlot.dataHora,
+          jaEstavaConfirmado: Boolean(conf?.jaEstavaConfirmado),
+        }),
+        instrucao: `Este horário (${friendlyWhen(date, pedido)}) já pertencia a este próprio cliente e acaba de ser CONFIRMADO com sucesso! Diga de forma direta e calorosa que o horário dele de ${friendlyWhen(date, pedido)} está 100% confirmado na agenda. Não peça SIM novamente.`,
+      };
+    }
     const alternativas = await nearestAlternatives(scope, { serviceId, professionalId, date, time: pedido, availability });
     return {
       ok: false,
@@ -1951,28 +1970,59 @@ async function toolPreparePromotion(context, args = {}) {
 // O cliente (e o modelo) usa o "Código" da confirmação (ex.: 5D0FDE32), não o id interno
 // (age-...). Em 30/10 "pode cancelar esse corte de amanhã" voltou "não encontrei" logo depois
 // de marcar. Aceita id, código ou, se o contato tem um único horário futuro, esse horário.
-export function findOwnAppointment(appointments = [], ref = '') {
+export function findOwnAppointment(appointments = [], ref = '', fallbackText = '') {
   const lista = (appointments || [])
     .filter((item) => !['cancelado', 'concluido', 'nao_compareceu'].includes(String(item?.status)))
     .sort((a, b) => new Date(a.dataHora).valueOf() - new Date(b.dataHora).valueOf());
   const alvo = String(ref || '').trim();
+  const getIsoDate = (item) => item.dataAgenda || (item.dataHora ? localDateIso(new Date(item.dataHora)) : '');
+  const matchPorDataOuDia = (texto) => {
+    const t = String(texto || '').trim().toLowerCase();
+    if (!t) return null;
+    const isoMatch = t.match(/(\d{4}-\d{2}-\d{2})/);
+    if (isoMatch) {
+      const m = lista.filter((it) => getIsoDate(it) === isoMatch[1]);
+      if (m.length === 1) return m[0];
+    }
+    const brMatch = t.match(/\b(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b/);
+    if (brMatch) {
+      const dd = brMatch[1].padStart(2, '0');
+      const mm = brMatch[2].padStart(2, '0');
+      const m = lista.filter((it) => getIsoDate(it).endsWith(`-${mm}-${dd}`));
+      if (m.length === 1) return m[0];
+    }
+    const diaMatch = t.match(/\bdia\s+(\d{1,2})\b/) || (/^\d{1,2}$/.test(t) ? [null, t] : null);
+    if (diaMatch) {
+      const dd = diaMatch[1].padStart(2, '0');
+      const m = lista.filter((it) => getIsoDate(it).endsWith(`-${dd}`));
+      if (m.length === 1) return m[0];
+    }
+    return null;
+  };
   if (alvo) {
     const norm = alvo.replace(/^#/, '').toLowerCase();
     const achado = lista.find((item) => item.id === alvo)
       || lista.find((item) => String(item.codigo || '').toLowerCase() === norm)
       || lista.find((item) => String(item.id || '').toLowerCase().endsWith(norm) && norm.length >= 4)
+      || matchPorDataOuDia(alvo)
       || lista.find((item) => String(item.servico?.nome || '').toLowerCase().includes(norm))
       || lista.find((item) => String(item.profissional?.nome || '').toLowerCase().includes(norm));
     if (achado) return achado;
+    return null;
   }
-  // Se não foi informada referência, prioriza o próximo agendamento cronológico ativo
-  return lista.length ? lista[0] : null;
+  if (fallbackText) {
+    const porTexto = matchPorDataOuDia(fallbackText);
+    if (porTexto) return porTexto;
+  }
+  // Só assume automaticamente quando há exatamente 1 horário futuro; com 2+, exige escolher qual
+  return lista.length === 1 ? lista[0] : null;
 }
 
 function appointmentNotFound(appointments = []) {
   const futuros = (appointments || []).filter((item) => !['cancelado', 'concluido', 'nao_compareceu'].includes(String(item?.status)));
   if (futuros.length > 1) {
-    return new WhatsappAiToolError(`o contato tem ${futuros.length} agendamentos: use consultar_meus_agendamentos e pergunte qual (dia, hora e serviço); depois chame de novo com o id`, 'APPOINTMENT_AMBIGUOUS');
+    const resumo = futuros.map((it) => `${it.id} (${it.dataAgenda || (it.dataHora ? localDateIso(new Date(it.dataHora)) : '')} às ${it.horaLocal || ''} - ${it.servico?.nome || 'Serviço'})`).join('; ');
+    return new WhatsappAiToolError(`o contato tem ${futuros.length} agendamentos futuros [${resumo}]: passe o appointmentId correspondente ao dia pedido pelo cliente ou pergunte qual deles deseja alterar/cancelar`, 'APPOINTMENT_AMBIGUOUS');
   }
   return new WhatsappAiToolError('agendamento não encontrado para este contato', 'APPOINTMENT_NOT_FOUND');
 }
@@ -1981,7 +2031,7 @@ async function toolPrepareReschedule(context, args = {}) {
   const scope = contextScope(context);
   const date = normalizeAgendaDate(args.date, localDateIso()) || cleanText(args.date, 10);
   const appointments = await listWhatsappCustomerAppointments(scope, { includePast: false, limit: 20, toleranceHours: 6 });
-  const appointment = findOwnAppointment(appointments, cleanText(args.appointmentId, 80));
+  const appointment = findOwnAppointment(appointments, cleanText(args.appointmentId, 80), context?.customerText || '');
   if (!appointment) throw appointmentNotFound(appointments);
   const appointmentId = appointment.id;
   const availability = await listSchedulingAvailability(scope, { serviceId: appointment.servico.id, professionalId: appointment.profissional.id, date });
@@ -2008,7 +2058,7 @@ async function toolPrepareCancellation(context, args = {}) {
   }
   const scope = contextScope(context);
   const appointments = await listWhatsappCustomerAppointments(scope, { includePast: false, limit: 20, toleranceHours: 6 });
-  const appointment = findOwnAppointment(appointments, cleanText(args.appointmentId, 80));
+  const appointment = findOwnAppointment(appointments, cleanText(args.appointmentId, 80), context?.customerText || '');
   if (!appointment) throw appointmentNotFound(appointments);
   const appointmentId = appointment.id;
   return savePreparedAction(scope, 'cancelamento', { appointmentId }, `Cancelamento de ${appointment.servico.nome} com ${appointment.profissional.nome}, ${appointment.dataAgenda && appointment.horaLocal ? friendlyWhen(appointment.dataAgenda, appointment.horaLocal) : new Intl.DateTimeFormat('pt-BR', { timeZone: AGENDA_TZ, dateStyle: 'short', timeStyle: 'short' }).format(new Date(appointment.dataHora))}.`);

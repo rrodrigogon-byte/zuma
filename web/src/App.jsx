@@ -411,7 +411,9 @@ export default function App() {
           <Route path="/admin/supermercado" element={<Layout><Supermercado /></Layout>} />
           <Route path="/admin/supermercado/caixa" element={<SupermercadoPdvExclusivo />} />
           <Route path="/admin/supermercado-caixa" element={<SupermercadoPdvExclusivo />} />
+          <Route path="/admin/supermercado-pdv" element={<SupermercadoPdvExclusivo />} />
           <Route path="/supermercado/caixa" element={<SupermercadoPdvExclusivo />} />
+          <Route path="/supermercado-pdv" element={<SupermercadoPdvExclusivo />} />
           <Route path="/pdv/supermercado" element={<SupermercadoPdvExclusivo />} />
 
           <Route path="/admin/delivery"         element={<Layout><DeliveryHub /></Layout>} />

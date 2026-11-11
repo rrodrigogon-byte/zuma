@@ -2320,7 +2320,7 @@ app.use('/api/webhooks', createWhatsappAiWebhookRouter());
 if (process.env.COMMERCE_CORE_ENABLED !== '1') {
   const erpFallbackDb = { query: async () => { throw new Error('PG_OFFLINE_FALLBACK'); } };
   const escopoFallback = async (req) => {
-    const empresaId = legacyEmpresaId(req) || 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
+    const empresaId = legacyEmpresaId(req) || req.user?.empresaId || null;
     return { empresaId, lojaRestrita: null };
   };
   const erpFallbackRouter = createErpAdminRouter({ db: erpFallbackDb, escopoDaRequisicao: escopoFallback });
@@ -7151,7 +7151,8 @@ app.post(['/api/admin/fechamento-diario/reabrir', '/api/admin/barbearia/operacao
 // ── TOTENS DE AUTOATENDIMENTO E LOJAS FÍSICAS ────────────────────────────────
 app.get('/api/totem/config', (req, res) => {
   try {
-    const empresaId = String(req.query?.empresaId || 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6').trim();
+    const empresaId = String(req.query?.empresaId || req.headers['x-empresa-id'] || '').trim();
+    if (!empresaId) return res.status(400).json({ error: 'empresaId obrigatório' });
     const lojaId = String(req.query?.lojaId || 'matriz').trim();
     const slug = String(req.query?.slug || '').trim();
     
@@ -7210,7 +7211,8 @@ app.post('/api/totem/senhas', (req, res) => {
 
 app.get('/api/totem/painel-tv', (req, res) => {
   try {
-    const empresaId = String(req.query?.empresaId || 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6').trim();
+    const empresaId = String(req.query?.empresaId || req.headers['x-empresa-id'] || '').trim();
+    if (!empresaId) return res.status(400).json({ error: 'empresaId obrigatório' });
     const lojaId = String(req.query?.lojaId || 'matriz').trim();
     const painel = totemLojaFisica.obterEstadoPainelTV({ empresaId, lojaId });
     res.json({ ok: true, ...painel });

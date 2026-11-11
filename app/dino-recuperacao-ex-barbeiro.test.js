@@ -9,12 +9,20 @@ test('Recuperação de Clientes: verificarStatusBarbeiroDino identifica ativos e
   assert.equal(verificarStatusBarbeiroDino('Bruno Mendes pedroso').ativo, true);
   assert.equal(verificarStatusBarbeiroDino('Natani Minanis Dobler').ativo, true);
   assert.equal(verificarStatusBarbeiroDino('GUILHERME CUNHA MARTINS').ativo, true);
-  assert.equal(verificarStatusBarbeiroDino('David Kaua Araujo Moraes').ativo, true);
-  assert.equal(verificarStatusBarbeiroDino('Joao Victor Domingos Ruedel').ativo, true);
-  assert.equal(verificarStatusBarbeiroDino('Steffany Marielly de Oliveira').ativo, true);
-  assert.equal(verificarStatusBarbeiroDino('Amanda Gabrielly Santos da Silva').ativo, true);
 
   // Ex-barbeiros que não atuam mais na Barbearia Dino
+  const exDavid = verificarStatusBarbeiroDino('David Kaua Araujo Moraes');
+  assert.equal(exDavid.ativo, false);
+  assert.equal(exDavid.exBarbeiro, true);
+
+  const exJoao = verificarStatusBarbeiroDino('Joao Victor Domingos Ruedel');
+  assert.equal(exJoao.ativo, false);
+  assert.equal(exJoao.exBarbeiro, true);
+
+  const exAmanda = verificarStatusBarbeiroDino('Amanda Gabrielly Santos da Silva');
+  assert.equal(exAmanda.ativo, false);
+  assert.equal(exAmanda.exBarbeiro, true);
+
   const exGustavo = verificarStatusBarbeiroDino('Gustavo Henrique Folha de Carvalho');
   assert.equal(exGustavo.ativo, false);
   assert.equal(exGustavo.exBarbeiro, true);
@@ -77,5 +85,5 @@ test('Recuperação de Clientes: gerarMensagemHumanizadaDino substitui ex-barbei
   });
 
   assert.ok(!msgEx.includes('Gustavo'), 'Não pode conter Gustavo!');
-  assert.ok(msgEx.includes('barbeiros') || msgEx.includes('equipe'), 'Deve citar os barbeiros ou a equipe!');
+  assert.ok(msgEx.includes('barbeiros') || msgEx.includes('equipe') || msgEx.includes('profissionais'), 'Deve citar os barbeiros, profissionais ou a equipe!');
 });

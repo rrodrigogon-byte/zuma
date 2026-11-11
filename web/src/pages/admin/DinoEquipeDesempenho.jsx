@@ -7,8 +7,6 @@ const DAYS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
 const MONTHS = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez']
 const UNATTRIBUTED_ID = '__sem_profissional__'
 const LEAF_PAGE = 100
-const DINO_COMMERCE_SCOPE = { empresaId: 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6', lojaId: 'ab049a75-6e2e-4cc9-abbc-6fd11cdda1d8' }
-const DINO_LEGACY_SCOPE = { empresaId: 'emp-kytto-001', lojaId: 'dino-web-estoque' }
 const amount = value => value == null ? 'Indisponível' : fmtR(value)
 const count = value => value == null ? '—' : Number(value).toLocaleString('pt-BR')
 const percent = value => value == null ? 'Sem base' : `${Number(value).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%`
@@ -24,10 +22,7 @@ function dateLabel(value) { return String(value || '').split('-').reverse().join
 function monthLabel(value) { const [year, month] = String(value || '').split('-'); return month ? `${MONTHS[Number(month) - 1] || month}/${year}` : String(value || '') }
 function samePerformanceScope(requested, returned) {
   if (requested?.empresaId === returned?.empresaId && requested?.lojaId === returned?.lojaId) return true
-  return (requested?.empresaId === DINO_COMMERCE_SCOPE.empresaId && requested?.lojaId === DINO_COMMERCE_SCOPE.lojaId
-    && returned?.empresaId === DINO_LEGACY_SCOPE.empresaId && returned?.lojaId === DINO_LEGACY_SCOPE.lojaId)
-    || (requested?.empresaId === DINO_LEGACY_SCOPE.empresaId && requested?.lojaId === DINO_LEGACY_SCOPE.lojaId
-      && returned?.empresaId === DINO_COMMERCE_SCOPE.empresaId && returned?.lojaId === DINO_COMMERCE_SCOPE.lojaId)
+  return false
 }
 function samePeriod(requested, returned) {
   if (requested.historico) return returned?.historico === true && returned?.fim === requested.fim

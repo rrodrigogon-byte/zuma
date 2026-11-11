@@ -389,10 +389,12 @@ export async function listProfessionals(scope) {
     .filter((item) => {
       if (item.ativo === false) return false;
       if (item.atendeCliente === false) return false;
-      const esp = String(item.especialidade || '').toLowerCase();
+      if (item.id === 'prof-mvsqchmy-023') return false;
       const nome = String(item.nome || '').toLowerCase();
-      // Jhenyffer é administradora/gerente/caixa e não barbeira de atendimento na cadeira
-      if (nome.includes('jhenyffer')) return false;
+      const apelido = String(item.apelido || '').toLowerCase();
+      // Jhenyffer e Ester/Steffany atuam na recepção/administração/caixa e não como barbeiros de corte
+      if (nome.includes('jhenyffer') || nome.includes('steffany') || nome.includes('ester') || apelido === 'ster' || apelido === 'ester') return false;
+      if (nome.includes('joao victor') || nome.includes('joão victor') || nome.includes('david') || nome.includes('amanda')) return false;
       return true;
     })
     .map((item) => ({ id: item.id, nome: item.nome, especialidade: item.especialidade || '' }));
@@ -401,11 +403,7 @@ export async function listProfessionals(scope) {
 export const BARBEIROS_ATIVOS_DINO = [
   { id: 'dino', nome: 'Guilherme Cunha Martins', apelido: 'Dino', matches: ['guilherme cunha martins', 'dino', 'guilherme', 'mestre dino', 'patrao'] },
   { id: 'bruno', nome: 'Bruno Mendes Pedroso', apelido: 'Bruno', matches: ['bruno mendes pedroso', 'bruno mendes', 'bruno', 'mendes', 'brunao', 'bruninho'] },
-  { id: 'david', nome: 'David Kauã Araújo Moraes', apelido: 'David', matches: ['david kaua araujo moraes', 'david kaua', 'david', 'davi', 'araujo', 'kaua'] },
   { id: 'nati', nome: 'Natani Minanis Dobler', apelido: 'Nati', matches: ['natani minanis dobler', 'natani', 'nati', 'naty', 'nat', 'nato', 'nathy', 'dobler'] },
-  { id: 'ester', nome: 'Steffany Marielly de Oliveira', apelido: 'Ester', matches: ['steffany marielly', 'steffany', 'ester', 'stefany'] },
-  { id: 'joao', nome: 'João Victor Domingos Ruedel', apelido: 'João Victor', matches: ['joao victor domingos ruedel', 'joao victor', 'joão victor', 'ruedel', 'joao', 'joão', 'jv'] },
-  { id: 'amanda', nome: 'Amanda Gabrielly Santos da Silva', apelido: 'Amanda', matches: ['amanda gabrielly', 'amanda'] },
 ];
 
 export const EX_BARBEIROS_DINO = [
@@ -417,8 +415,46 @@ export const EX_BARBEIROS_DINO = [
   'vinicius',
   'danilo',
   'bruno rafael',
-  'pedrinho'
+  'pedrinho',
+  'joao victor',
+  'joao',
+  'ruedel',
+  'david kaua',
+  'david',
+  'davi',
+  'amanda gabrielly',
+  'amanda'
 ];
+
+function categoriaServicoAgenda(nome = '') {
+  const n = String(nome || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  if (/\b(combo|corte e barba|barba e corte|cabelo e barba|barba e cabelo)\b/.test(n)) return 'combo';
+  if (/\b(corte|cabelo|visagista)\b/.test(n) && !/\bbarba\b/.test(n)) return 'corte';
+  if (/\bbarba\b/.test(n) && !/\b(corte|cabelo)\b/.test(n)) return 'barba';
+  if (/\bsobrancelha\b/.test(n)) return 'sobrancelha';
+  if (/\bdermaplaning\b/.test(n)) return 'dermaplaning';
+  if (/\b(depilacao|nariz|orelha)\b/.test(n)) return 'depilacao';
+  return n.trim();
+}
+
+function encontrarServicoCompativelMesmaCategoria(servicos = [], servicoAtual, profissional) {
+  if (!servicoAtual || !profissional) return null;
+  const catAtual = categoriaServicoAgenda(servicoAtual.nome);
+  const ehDino = barbearia.ehProfissionalDino(profissional) || /\bdino\b/i.test(String(profissional.nome || ''));
+  const candidatos = servicos.filter((s) => {
+    if (!s || s.id === servicoAtual.id || s.ativo === false) return false;
+    if (categoriaServicoAgenda(s.nome) !== catAtual) return false;
+    const ids = Array.isArray(s.profissionaisIds) ? s.profissionaisIds : [];
+    return ids.length === 0 || ids.includes(profissional.id);
+  });
+  if (!candidatos.length) return null;
+  candidatos.sort((a, b) => {
+    const aDino = /\bdino\b/i.test(String(a.nome || ''));
+    const bDino = /\bdino\b/i.test(String(b.nome || ''));
+    return ehDino ? Number(bDino) - Number(aDino) : Number(aDino) - Number(bDino);
+  });
+  return candidatos[0];
+}
 
 /**
  * Verifica se um barbeiro ainda atua na Barbearia Dino.
@@ -507,7 +543,7 @@ export async function availability(scope, input = {}) {
   // Se o profissional não realiza este serviço (ex: Dino com Corte tradicional vs Corte com Dino),
   // ajusta automaticamente para o serviço equivalente que o profissional realiza
   if (profissional && Array.isArray(servico.profissionaisIds) && servico.profissionaisIds.length > 0 && !servico.profissionaisIds.includes(profissional.id)) {
-    const alternativo = servicos.find((s) => s.id !== servico.id && (!Array.isArray(s.profissionaisIds) || s.profissionaisIds.length === 0 || s.profissionaisIds.includes(profissional.id)));
+    const alternativo = encontrarServicoCompativelMesmaCategoria(servicos, servico, profissional);
     if (alternativo) servico = alternativo;
   }
 
@@ -522,6 +558,27 @@ export async function availability(scope, input = {}) {
   } catch (erro) {
     throw traduzirErro(erro);
   }
+  const professionalByTime = {};
+  const professionalsByTime = {};
+  for (const item of horarios) {
+    if (item.disponivel && item.profissionalNome) {
+      professionalByTime[item.horario] = item.profissionalNome;
+    }
+    if (item.disponivel && Array.isArray(item.profissionaisDisponiveis) && item.profissionaisDisponiveis.length) {
+      professionalsByTime[item.horario] = item.profissionaisDisponiveis;
+    }
+  }
+  const nomesNoDia = [...new Set(Object.values(professionalsByTime).flat())];
+  const nomesHabilitados = (() => {
+    if (nomesNoDia.length) return nomesNoDia;
+    const hab = Array.isArray(servico.profissionaisIds) && servico.profissionaisIds.length
+      ? profs.filter((p) => p.ativo !== false && servico.profissionaisIds.includes(p.id))
+      : profs.filter((p) => p.ativo !== false);
+    return hab.map((p) => p.apelido || p.nome).filter(Boolean);
+  })();
+  const nomeProfissionalExibicao = profissional
+    ? (profissional.apelido || profissional.nome)
+    : (nomesHabilitados.length ? nomesHabilitados.join(' ou ') : 'Bruno ou Nati');
   const ehDino = barbearia.ehProfissionalDino(profissional) || String(servico?.nome || '').toLowerCase().includes('dino');
   const tabelaValores = ehDino ? {
     tipo: 'dino_24x7',
@@ -537,8 +594,10 @@ export async function availability(scope, input = {}) {
   return {
     date,
     service: { id: servico.id, nome: servico.nome, duracaoMinutos: Number(servico.duracaoMinutos || 0) || (barbearia.duracaoAtendimentoProfissional ? barbearia.duracaoAtendimentoProfissional(servico, profissional, barbearia.obterConfiguracao(empresa)) : 30), preco: Number(servico.preco || 0) },
-    professional: profissional ? { id: profissional.id, nome: profissional.nome, duracaoAtendimentoMinutos: profissional.duracaoAtendimentoMinutos || null } : { id: 'qualquer', nome: 'qualquer profissional disponível' },
+    professional: profissional ? { id: profissional.id, nome: profissional.nome, duracaoAtendimentoMinutos: profissional.duracaoAtendimentoMinutos || null } : { id: 'qualquer', nome: nomeProfissionalExibicao },
     slots: horarios.filter((item) => item.disponivel).map((item) => item.horario),
+    professionalByTime,
+    professionalsByTime,
     bloqueio: (() => {
       const bloqueios = barbearia.listarBloqueios(empresa, { data: date, profissionalId: profissional?.id, lojaId: scope.lojaId });
       const b = (bloqueios || []).find((item) => item.ativo !== false && (!item.profissionalId || item.profissionalId === profissional?.id));
@@ -614,16 +673,7 @@ function criarNaAgendaDaBarbearia(scope, input = {}) {
     }
   }
   if (profissional && servico && Array.isArray(servico.profissionaisIds) && servico.profissionaisIds.length > 0 && !servico.profissionaisIds.includes(profissional.id)) {
-    const nomeOriginal = String(servico.nome || '').toLowerCase();
-    const palavraChave = nomeOriginal.includes('barba') && !nomeOriginal.includes('corte')
-      ? 'barba'
-      : nomeOriginal.includes('sobrancelha')
-        ? 'sobrancelha'
-        : nomeOriginal.includes('corte')
-          ? 'corte'
-          : '';
-    const compativeisProf = servicos.filter((s) => s.id !== servico.id && s.ativo !== false && (!Array.isArray(s.profissionaisIds) || s.profissionaisIds.length === 0 || s.profissionaisIds.includes(profissional.id)));
-    const alternativo = (palavraChave && compativeisProf.find((s) => String(s.nome || '').toLowerCase().includes(palavraChave))) || compativeisProf[0];
+    const alternativo = encontrarServicoCompativelMesmaCategoria(servicos, servico, profissional);
     if (alternativo) {
       servico = alternativo;
       input.serviceId = alternativo.id;
