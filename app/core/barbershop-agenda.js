@@ -598,6 +598,7 @@ export async function availability(scope, input = {}) {
     slots: horarios.filter((item) => item.disponivel).map((item) => item.horario),
     professionalByTime,
     professionalsByTime,
+    professionalsAvailable: nomesHabilitados,
     bloqueio: (() => {
       const bloqueios = barbearia.listarBloqueios(empresa, { data: date, profissionalId: profissional?.id, lojaId: scope.lojaId });
       const b = (bloqueios || []).find((item) => item.ativo !== false && (!item.profissionalId || item.profissionalId === profissional?.id));
@@ -720,7 +721,8 @@ function criarNaAgendaDaBarbearia(scope, input = {}) {
     const servicosNaVisita = futurosDoTelefone.filter((item) => `${item.dataAgenda}|${limpo(item.clienteNome, 160).toLowerCase()}` === estaVisita).length;
     if ((!visitas.has(estaVisita) && visitas.size >= limite) || servicosNaVisita >= 4) throw new SchedulingError('este telefone já tem horários marcados; remarque ou cancele um deles antes', 'PHONE_LIMIT');
     const ehItemComboSecundario = String(input.actionId || '').includes(':');
-    const mesmoServico = !ehItemComboSecundario && futurosDoTelefone.some((item) => `${item.dataAgenda}|${limpo(item.clienteNome, 160).toLowerCase()}` === estaVisita && item.servicoId === limpo(input.serviceId, 100));
+    const permiteMultiplosCortesVisita = ehItemComboSecundario || input.allowSameServiceInVisit === true || input.confirmarOutroHorario === true || (Array.isArray(input.combo) && input.combo.length > 0);
+    const mesmoServico = !permiteMultiplosCortesVisita && futurosDoTelefone.some((item) => `${item.dataAgenda}|${limpo(item.clienteNome, 160).toLowerCase()}` === estaVisita && item.servicoId === limpo(servicoId, 100));
     if (mesmoServico) throw new SchedulingError('este cliente já tem este serviço marcado neste dia', 'ALREADY_BOOKED');
     const vinculo = vincularClienteAoAtendimento(empresa, { clienteNome: input.customerName, clienteTelefone: input.customerPhone }, { origem: 'whatsapp_ia' });
     // O cliente iniciou a conversa no WhatsApp para marcar: os avisos do próprio

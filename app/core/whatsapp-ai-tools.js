@@ -973,7 +973,7 @@ async function toolNextSlots(context, args = {}) {
     periodo: result.period,
     diasConsultados: result.searchedDays,
     instrucao: result.slots.length
-      ? 'Ofereça exatamente 3 opções concretas (dia da semana + data + hora + duração + valor) numa mensagem só, respeitando a duração real do procedimento. Fale em "horário extra"/"atendimento exclusivo noturno" só para opções com horarioExtra=true. Depois que o cliente escolher, use preparar_agendamento.'
+      ? 'Ofereça exatamente 3 opções concretas (dia da semana + data + hora + profissional + valor) numa mensagem só, SEMPRE informando o nome do barbeiro disponível em cada opção (campo professional, ex.: "com o Bruno ou a Nati"). NUNCA diga "com qualquer profissional disponível". Fale em "horário extra"/"atendimento exclusivo noturno" só para opções com horarioExtra=true. Depois que o cliente escolher, use preparar_agendamento.'
       : 'Não há vaga no período. Ofereça ampliar o período/outro profissional ou entrar na lista de espera (entrar_lista_espera) para ser avisado se abrir horário.',
   };
 }
@@ -1373,10 +1373,13 @@ async function toolPrepareAppointment(context, args = {}) {
   let cursor = minutesOf(time) + Number(availability.service.duracaoMinutos || 30);
   const servicesList = await listSchedulingServices(scope).catch(() => []);
   let total = precoNoHorario(availability.service, availability.professional, time, servicesList);
-  // "qualquer profissional disponível" não informa nada ao cliente: a equipe sai na confirmação.
-  const comQuem = availability.professional?.id === 'qualquer' ? '' : ` com ${availability.professional.nome}`;
+  // Se for "qualquer", usa os barbeiros reais disponíveis naquele horário (ex.: "Bruno ou Nati")
+  const profDoHorario = availability.professional?.id === 'qualquer'
+    ? (availability.professionalByTime?.[time] || (Array.isArray(availability.professionalsAvailable) && availability.professionalsAvailable.length ? availability.professionalsAvailable.join(' ou ') : ''))
+    : (availability.professional?.nome || '');
+  const comQuem = profDoHorario ? ` com ${profDoHorario}` : '';
   // "Corte e barba com Dino" + "com Dino" saía "com Dino com Dino".
-  const servicoComQuem = comQuem ? serviceWithProfessional(availability.service.nome, availability.professional.nome) : availability.service.nome;
+  const servicoComQuem = comQuem ? serviceWithProfessional(availability.service.nome, profDoHorario) : availability.service.nome;
   const partes = [`${servicoComQuem} às ${time}`];
   // O cliente escolheu um profissional: os serviços seguintes ficam com ELE quando ele
   // faz o serviço e está livre (corte + barba + sobrancelha com o mesmo barbeiro). Só
@@ -1398,7 +1401,10 @@ async function toolPrepareAppointment(context, args = {}) {
     }
     if (!slot) throw new SchedulingError(`não há encaixe seguido para ${extra.service.nome} depois de ${String(Math.floor(cursor / 60)).padStart(2, '0')}:${String(cursor % 60).padStart(2, '0')}`, 'SLOT_UNAVAILABLE');
     combo.push({ serviceId: extra.service?.id || extraId, professionalId: extraProfessionalId, time: slot });
-    partes.push(extraProfessionalId === mesmoProfissional && mesmoProfissional ? `${extra.service.nome} às ${slot}` : `${extra.service.nome} às ${slot} (com quem estiver livre)`);
+    const nomeExtraFormatado = extraProfessionalId === mesmoProfissional && mesmoProfissional
+      ? serviceWithProfessional(extra.service.nome, nomeProfNoHorario || availability.professional?.nome || '')
+      : serviceWithProfessional(extra.service.nome, extra.professionalByTime?.[slot] || '');
+    partes.push(extraProfessionalId === mesmoProfissional && mesmoProfissional ? `${nomeExtraFormatado} às ${slot}` : `${nomeExtraFormatado} às ${slot} (com quem estiver livre)`);
     cursor = minutesOf(slot) + Number(extra.service.duracaoMinutos || 30);
     total += precoNoHorario(extra.service, extra.professional || (extraProfessionalId === 'qualquer' ? null : { id: extraProfessionalId, nome: (await listSchedulingProfessionals(scope).catch(()=>[])).find(p=>p.id===extraProfessionalId)?.nome }), slot, servicesList);
   }
@@ -1446,7 +1452,8 @@ function textoPlano(valor) {
 export function categoriaDoServico(nome) {
   const plano = textoPlano(nome);
   if (/\b(combo|corte e barba|barba e corte|cabelo e barba|barba e cabelo)\b/.test(plano)) return 'combo';
-  if (/\b(corte|cabelo|visagista)\b/.test(plano)) return 'corte';
+  if (/\bvisagista\b/.test(plano)) return 'corte visagista';
+  if (/\b(corte|cabelo)\b/.test(plano)) return 'corte';
   if (/\bbarba\b/.test(plano)) return 'barba';
   if (/\bsobrancelha\b/.test(plano)) return 'sobrancelha';
   if (/\b(depila|nariz|orelha)\b/.test(plano)) return 'depilacao';
@@ -1480,10 +1487,19 @@ export function servicosEquivalentes(servicos = [], servicoId, profissional) {
   const atual = servicos.find((item) => item.id === servicoId);
   if (!atual || !profissional) return [];
   const cat = categoriaDoServico(atual.nome);
-  const ehDino = /\bdino\b/i.test(profissional.nome);
+  const ehDino = /\b(dino|guilherme)\b/i.test(profissional.nome);
+  const apelidos = apelidosDoProfissional(profissional.nome);
+  const citaProfissional = (nomeServico) => {
+    const p = textoPlano(nomeServico);
+    if (ehDino && /\b(dino|guilherme)\b/.test(p)) return true;
+    return apelidos.some((ap) => new RegExp(`\\b${ap}\\b`).test(p));
+  };
   return servicos
-    .filter((item) => item.id !== servicoId && (categoriaDoServico(item.nome) === cat || nomeBaseDoServico(item.nome) === nomeBaseDoServico(atual.nome)))
+    .filter((item) => item.id !== servicoId && categoriaDoServico(item.nome) === cat)
     .sort((a, b) => {
+      const aCita = citaProfissional(a.nome);
+      const bCita = citaProfissional(b.nome);
+      if (aCita !== bCita) return Number(bCita) - Number(aCita);
       const aDino = /\bdino\b/i.test(a.nome);
       const bDino = /\bdino\b/i.test(b.nome);
       if (ehDino) return Number(bDino) - Number(aDino);
@@ -2970,7 +2986,7 @@ export async function confirmPendingAction(context) {
         const criados = [response];
         try {
           for (const [index, item] of combo.entries()) {
-            criados.push(await createScheduledAppointment(trx, scope, { ...action.solicitacao, ...item, combo: undefined, actionId: `${action.id}:${index + 1}` }));
+            criados.push(await createScheduledAppointment(trx, scope, { ...action.solicitacao, ...item, combo: undefined, allowSameServiceInVisit: true, actionId: `${action.id}:${index + 1}` }));
           }
         } catch (error) {
           if (error?.code !== 'ALREADY_BOOKED') {

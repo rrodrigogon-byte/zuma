@@ -4165,8 +4165,11 @@ function contextoDisponibilidadePublica(empresaId, dados = {}) {
   const profissionalId = texto(dados.profissionalId ?? dados.profissional_id, 100);
   const habilitados = Array.isArray(servico.profissionaisIds) && servico.profissionaisIds.length ? new Set(servico.profissionaisIds) : null;
   const diaSemana = dia.getUTCDay();
+  const ehEsteticaServico = /dermaplaning|limpeza de pele|estetica/i.test(String(servico.nome || ''));
   const profissionais = Object.values(estado.profissionais)
-    .filter((item) => item.ativo !== false)
+    .filter((item) => item.ativo !== false && item.atendeCliente !== false)
+    .filter((item) => !/jhenyffer|jo[aã]o victor|david|amanda/i.test(String(item.nome || '')))
+    .filter((item) => ehEsteticaServico || !/steffany|ester/i.test(String(item.nome || '')))
     .filter((item) => !habilitados || habilitados.has(item.id))
     .filter((item) => !profissionalId || profissionalId === 'qualquer' || item.id === profissionalId)
     .filter((item) => !Array.isArray(item.diasTrabalho) || item.diasTrabalho.length === 0 || item.diasTrabalho.includes(diaSemana))
@@ -4230,7 +4233,16 @@ export function listarHorariosDisponiveis(empresaId, dados = {}) {
     const horario = horaPublica(minuto);
     const livres = profissionaisDisponiveisNoHorario(contexto, horario, dados.utcOffset ?? dados.utc_offset);
     const livre = livres[0] || null;
-    const nomesLivres = [...new Set(livres.map((item) => item.profissional.apelido || item.profissional.nome).filter(Boolean))];
+    const nomeCurtoProf = (p) => {
+      if (ehProfissionalDino(p)) return 'Dino';
+      const ap = String(p.apelido || '').trim();
+      if (ap) return ap;
+      const n = String(p.nome || '').trim();
+      if (/natani/i.test(n)) return 'Nati';
+      if (/bruno/i.test(n)) return 'Bruno';
+      return n.split(' ')[0] || n;
+    };
+    const nomesLivres = [...new Set(livres.map((item) => nomeCurtoProf(item.profissional)).filter(Boolean))];
     horarios.push({
       horario,
       disponivel: Boolean(livre),

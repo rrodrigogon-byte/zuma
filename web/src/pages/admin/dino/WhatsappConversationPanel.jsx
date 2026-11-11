@@ -141,6 +141,46 @@ export default function WhatsappConversationPanel({
     if (ok) onClose?.({ encerrada: true })
   }
 
+  async function limparPendencia() {
+    await acao('limparPendencia', () => api.post(`${HUMAN_QUEUE_PATH}/${encodeURIComponent(sessionId)}/clear-pending${canalQuery}`, {}, { headers }), 'Ação pendente removida com sucesso! O cliente não receberá mais cobrança de SIM no rodapé.')
+  }
+
+  async function inserirHorariosLivresHoje() {
+    if (ocupado) return
+    setOcupado('horarios')
+    setErro('')
+    try {
+      const hojeIso = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Cuiaba' }).format(new Date())
+      const servs = await api.get('/api/admin/barbearia/servicos', { headers }).catch(() => [])
+      const listaServ = Array.isArray(servs) ? servs : (servs?.servicos || servs?.items || [])
+      const corte = listaServ.find((s) => /corte\s+premium/i.test(s.nome)) || listaServ.find((s) => /corte/i.test(s.nome)) || listaServ[0]
+      if (!corte?.id) throw new Error('Serviço de corte não encontrado para consulta rápida.')
+      const resp = await api.get(`/api/admin/barbearia/horarios-livres?data=${hojeIso}&servicoId=${encodeURIComponent(corte.id)}&profissionalId=qualquer`, { headers })
+      const horarios = (Array.isArray(resp) ? resp : (resp?.horarios || [])).filter((h) => h.disponivel)
+      if (horarios.length > 0) {
+        const opcoes = horarios.slice(0, 4).map((h) => `${h.horario}${h.profissionalNome ? ` (com ${h.profissionalNome})` : ''}`).join(', ')
+        const sugestao = `Para hoje tenho disponível às ${opcoes}. Qual desses horários fica melhor pra você?`
+        setTexto((prev) => prev ? `${prev} ${sugestao}` : sugestao)
+        setAviso('Horários livres de hoje inseridos na mensagem!')
+      } else {
+        const amanha = new Date(Date.now() + 86400000)
+        const amanhaIso = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Cuiaba' }).format(amanha)
+        const respAmanha = await api.get(`/api/admin/barbearia/horarios-livres?data=${amanhaIso}&servicoId=${encodeURIComponent(corte.id)}&profissionalId=qualquer`, { headers })
+        const horariosAmanha = (Array.isArray(respAmanha) ? respAmanha : (respAmanha?.horarios || [])).filter((h) => h.disponivel)
+        const opcoesAmanha = horariosAmanha.slice(0, 4).map((h) => `${h.horario}${h.profissionalNome ? ` (com ${h.profissionalNome})` : ''}`).join(', ')
+        const sugestao = opcoesAmanha
+          ? `Para hoje a agenda já fechou, mas para amanhã tenho às ${opcoesAmanha}. Qual fica melhor pra você?`
+          : 'Vou verificar um encaixe na agenda com o Bruno ou a Nati e já te confirmo!'
+        setTexto((prev) => prev ? `${prev} ${sugestao}` : sugestao)
+        setAviso('Horários livres de amanhã inseridos na mensagem!')
+      }
+    } catch (caught) {
+      setErro(caught?.message || 'Não foi possível consultar os horários livres agora.')
+    } finally {
+      if (vivoRef.current) setOcupado('')
+    }
+  }
+
   const situacao = !sessao ? '' : encerrada ? 'Encerrada · no histórico'
     : comEquipe ? (sessao.minha ? 'Com você' : sessao.assumida ? 'Com outro atendente' : `Esperando a equipe${sessao.motivo ? ` · ${sessao.motivo}` : ''}`)
       : 'Em conversa com o T-Rex'
@@ -164,6 +204,18 @@ export default function WhatsappConversationPanel({
 
       {erro && <p className="dadm-note danger" role="alert">{erro}</p>}
       {aviso && <p className="dadm-note" role="status">{aviso}</p>}
+      {sessao?.hasPendingAction && !encerrada && (
+        <div className="dadm-note" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', borderColor: 'rgba(245, 158, 11, 0.5)', background: 'rgba(245, 158, 11, 0.12)' }}>
+          <span style={{ fontSize: 12 }}>
+            <strong>⏳ Ação pendente aguardando SIM:</strong> {sessao.pendingSummary || 'Confirmação pendente no T-Rex'}
+          </span>
+          {canAct && (
+            <button type="button" className="c360-btn ghost" style={{ padding: '4px 10px', fontSize: 12 }} onClick={limparPendencia} disabled={Boolean(ocupado)}>
+              {ocupado === 'limparPendencia' ? 'Limpando…' : '🧹 Destravar pendência'}
+            </button>
+          )}
+        </div>
+      )}
 
       <div className="wa-conv__lista" ref={listaRef} aria-live="polite">
         {!dados && !erro && <p className="c360-empty">Carregando a conversa…</p>}
@@ -182,6 +234,9 @@ export default function WhatsappConversationPanel({
       {encerrada ? <p className="wa-conv__rodape">Conversa no histórico. Se o cliente escrever de novo, o T-Rex volta a atender.</p> : <>
         {podeResponder ? <>
           <div className="wa-conv__macros" aria-label="Respostas Rápidas">
+            <button type="button" className="wa-conv__macro-btn" style={{ background: 'rgba(20, 184, 122, 0.18)', borderColor: '#14b87a', fontWeight: 700 }} onClick={inserirHorariosLivresHoje} disabled={Boolean(ocupado)} title="Consulta a agenda real do Bruno e da Nati e escreve os próximos horários livres">
+              {ocupado === 'horarios' ? '⏳ Consultando agenda…' : '⚡ Inserir Horários Livres (Bruno/Nati)'}
+            </button>
             {RESPOSTAS_RAPIDAS.map((m, idx) => (
               <button key={idx} type="button" className="wa-conv__macro-btn" onClick={() => setTexto((prev) => prev ? `${prev} ${m.texto}` : m.texto)} title={m.texto}>
                 {m.rotulo}

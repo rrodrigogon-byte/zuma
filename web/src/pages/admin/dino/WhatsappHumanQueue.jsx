@@ -199,13 +199,15 @@ export default function WhatsappHumanQueue({
     let urgentes = 0
     let ia = 0
     let equipe = 0
+    let pendentes = 0
     for (const r of baseRows) {
       const isUrgente = r.status !== 'encerrado' && (r.precisaAtendente || (r.status === 'humano' && !r.assigned))
       if (isUrgente) urgentes++
       else if (r.status === 'humano') equipe++
       else if (r.status === 'ativo') ia++
+      if (r.status !== 'encerrado' && r.hasPendingAction) pendentes++
     }
-    return { urgentes, ia, equipe, total: baseRows.length }
+    return { urgentes, ia, equipe, pendentes, total: baseRows.length }
   }, [baseRows])
 
   useEffect(() => {
@@ -242,6 +244,8 @@ export default function WhatsappHumanQueue({
       list = list.filter((r) => r.status === 'ativo' && !r.precisaAtendente)
     } else if (subFiltro === 'equipe') {
       list = list.filter((r) => r.status === 'humano')
+    } else if (subFiltro === 'pendentes') {
+      list = list.filter((r) => r.status !== 'encerrado' && r.hasPendingAction)
     }
 
     const q = busca.trim().toLowerCase()
@@ -310,6 +314,43 @@ export default function WhatsappHumanQueue({
         setNotice(devolvida?.retomou
           ? 'Conversa devolvida ao T-Rex: ele já está respondendo a última mensagem do cliente, com todo o histórico.'
           : 'Conversa devolvida ao T-Rex: ele continua de onde parou na próxima mensagem do cliente.')
+        setNoticeContextKey(contextKey)
+        if (typeof onChanged === 'function') await onChanged()
+      }
+    } catch (caught) {
+      if (!mountedRef.current || claimLockRef.current !== controller || caught?.name === 'AbortError' || contextKeyRef.current !== contextKey || !openRef.current) return
+      setError(queueErrorMessage(caught))
+      setErrorContextKey(contextKey)
+    } finally {
+      if (claimControllerRef.current === controller) claimControllerRef.current = null
+      if (claimLockRef.current === controller) {
+        claimLockRef.current = null
+        if (mountedRef.current && contextKeyRef.current === contextKey) setClaimingId('')
+      }
+    }
+  }
+
+  async function requestClearPending(item) {
+    if (!canClaim || !item?.hasPendingAction || claimingId) return
+    setError('')
+    setErrorContextKey('')
+    const controller = new AbortController()
+    claimLockRef.current = controller
+    const sessionId = item.id
+    claimControllerRef.current = controller
+    setClaimingId(sessionId)
+    setNotice('')
+    setNoticeContextKey('')
+    try {
+      const canalQuery = tipoCanal === 'cliente' ? '' : `?canal=${tipoCanal}`
+      await api.post(`${HUMAN_QUEUE_PATH}/${encodeURIComponent(sessionId)}/clear-pending${canalQuery}`, {}, {
+        headers: { 'X-Empresa-Id': selection?.empresaId || '', 'X-Loja-Id': selection?.canonicalLojaId || '' },
+        signal: controller.signal,
+      })
+      if (!mountedRef.current || claimLockRef.current !== controller || contextKeyRef.current !== contextKey || !openRef.current) return
+      const refreshed = await loadQueue()
+      if (refreshed && mountedRef.current && contextKeyRef.current === contextKey) {
+        setNotice('Ação pendente limpa com sucesso! O cliente não receberá mais avisos de confirmação pendente no rodapé.')
         setNoticeContextKey(contextKey)
         if (typeof onChanged === 'function') await onChanged()
       }
@@ -493,6 +534,13 @@ export default function WhatsappHumanQueue({
         </button>
         <button
           type="button"
+          className={`wa-trex-pill ${subFiltro === 'pendentes' ? 'active' : ''}`}
+          onClick={() => setSubFiltro(subFiltro === 'pendentes' ? 'todas' : 'pendentes')}
+        >
+          ⏳ Aguardando SIM ({stats.pendentes})
+        </button>
+        <button
+          type="button"
           className={`wa-trex-pill ${subFiltro === 'todas' ? 'active' : ''}`}
           onClick={() => setSubFiltro('todas')}
         >
@@ -527,6 +575,18 @@ export default function WhatsappHumanQueue({
                   <span className="wa-trex-card__selo">{situacao}</span>
                 </header>
                 {precisaColetaUrgente && <p className="wa-trex-card__aviso" role="alert">🚨 Coleta urgente: o atendente deve assumir esta conversa.</p>}
+                {!encerrada && item.hasPendingAction && (
+                  <div className="wa-trex-card__msg" style={{ background: 'rgba(245, 158, 11, 0.12)', border: '1px solid rgba(245, 158, 11, 0.45)', borderRadius: 8, padding: '8px 10px', marginBottom: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: 12, color: '#fbbf24' }}>
+                      <b>⏳ Aguardando SIM:</b> {item.pendingSummary || 'Confirmação de agendamento pendente'}
+                    </span>
+                    {canClaim && (
+                      <button type="button" className="c360-btn ghost" style={{ padding: '3px 8px', fontSize: 11 }} disabled={Boolean(claimingId)} onClick={() => requestClearPending(item)} title="Remove a ação pendente do rodapé desta conversa">
+                        🧹 Destravar pendência
+                      </button>
+                    )}
+                  </div>
+                )}
                 {item.ultimaMensagemCliente && <p className="wa-trex-card__msg"><b>Cliente:</b> {item.ultimaMensagemCliente}</p>}
                 {item.ultimaRespostaIa && <p className="wa-trex-card__msg wa-trex-card__msg--ia"><b>T-Rex:</b> {item.ultimaRespostaIa}</p>}
                 <p className="wa-trex-card__meta">
