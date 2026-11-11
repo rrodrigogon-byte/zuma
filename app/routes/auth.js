@@ -106,21 +106,28 @@ export async function autenticar(req, res, next) {
     const isDino = userIdent.includes('dino') || userIdent.includes('guicunha');
 
     const requestedEmpresa = String(req.headers['x-empresa-id'] || '').trim();
-    let empresaId = decoded.empresa_id || decoded.empresaId || '';
+    const tokenEmpresaId = String(decoded.empresa_id || decoded.empresaId || '').trim();
+    const empresasAutorizadas = Array.isArray(decoded.empresas_autorizadas)
+      ? decoded.empresas_autorizadas.map(String)
+      : (tokenEmpresaId ? [tokenEmpresaId] : []);
 
+    let empresaId = tokenEmpresaId;
     if (isAdminGlobal) {
-      empresaId = requestedEmpresa || empresaId || 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
-    } else if (isSilvester) {
-      const allowedSilvester = ['31f70c83-9172-40c2-945f-9e793b5048be', 'eba1c88c-d8c1-4b5a-bf65-90275d97dc9e', '2e041110-db20-4fd1-8278-12bd3dead008'];
-      if (requestedEmpresa && allowedSilvester.includes(requestedEmpresa)) {
-        empresaId = requestedEmpresa;
-      } else if (!allowedSilvester.includes(empresaId)) {
-        empresaId = '31f70c83-9172-40c2-945f-9e793b5048be';
+      empresaId = requestedEmpresa || tokenEmpresaId;
+    } else if (requestedEmpresa && requestedEmpresa !== tokenEmpresaId) {
+      if (!empresasAutorizadas.includes(requestedEmpresa)) {
+        return res.status(403).json({
+          erro: 'Acesso negado para a empresa informada em X-Empresa-Id.',
+          codigo: 'EMPRESA_FORA_DO_ESCOPO',
+        });
       }
-    } else if (isDino) {
-      empresaId = 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
-    } else {
-      empresaId = empresaId || requestedEmpresa || 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
+      empresaId = requestedEmpresa;
+    }
+    if (!empresaId) {
+      return res.status(403).json({
+        erro: 'Sessão sem empresa ativa vinculada.',
+        codigo: 'EMPRESA_NAO_VINCULADA',
+      });
     }
     const usuarioId = decoded.usuario_id || decoded.id;
     const role = decoded.role || (decoded.platformAdmin ? 'admin' : 'admin');
@@ -139,7 +146,7 @@ export async function autenticar(req, res, next) {
     let loja = selecionarLoja(lojas, lojaIdSolicitada);
     if (!loja) {
       loja = {
-        id: lojaIdSolicitada || 'ab049a75-6e2e-4cc9-abbc-6fd11cdda1d8',
+        id: lojaIdSolicitada || decoded.loja_id || decoded.lojaId || null,
         empresa_id: empresaId,
         nome: 'Unidade Principal',
         codigo: 'MATRIZ',

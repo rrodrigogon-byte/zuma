@@ -19,24 +19,12 @@ export default function SpedFiscalBlocoKPanel({ toast }) {
       if (res && res.sucesso) {
         setDadosSped(res);
       } else {
-        // Fallback semente rica se endpoint estiver offline
-        const mockRegistros = [
-          { registro: '|K001|0|', desc: 'Abertura do Bloco K com movimentação no período' },
-          { registro: '|K200|20261101|FRANGO-RESF|850.000|0|', desc: 'Estoque Escriturado: Frango Inteiro Resfriado' },
-          { registro: '|K200|20261101|CARNE-TRASEIRO|1240.000|0|', desc: 'Estoque Escriturado: Traseiro Bovino com Osso' },
-          { registro: '|K200|20261101|FARINHA-TRIGO-ESP|2500.000|0|', desc: 'Estoque Escriturado: Farinha de Trigo Especial 50kg' },
-          { registro: '|K230|20261101|20261101|OP-PAD-101|PAO-FRANCES|320.000||', desc: 'Itens Produzidos: Pão Francês Tradicional 50g' },
-          { registro: '|K235|20261101|FARINHA-TRIGO-ESP|200.000||OP-PAD-101|', desc: 'Insumo Consumido: Farinha de Trigo na OP-PAD-101' },
-          { registro: '|K235|20261101|FERMENTO-BIOLOGICO|8.000||OP-PAD-101|', desc: 'Insumo Consumido: Fermento Biológico Fresco' },
-          { registro: '|K230|20261101|20261101|OP-ACO-205|PICANHA-RESF|45.500||', desc: 'Item Desossado Produzido: Picanha Resfriada' },
-          { registro: '|K230|20261101|20261101|OP-ACO-205|ALCATRA-MIGNON|82.000||', desc: 'Item Desossado Produzido: Alcatra com Mignon' },
-          { registro: '|K990|10|', desc: 'Encerramento do Bloco K com 10 registros' }
-        ];
         setDadosSped({
-          sucesso: true,
-          totalRegistros: mockRegistros.length,
-          registros: mockRegistros,
-          conteudoSped: mockRegistros.map(r => r.registro).join('\r\n'),
+          sucesso: false,
+          semDados: true,
+          totalRegistros: 0,
+          registros: [],
+          conteudoSped: '',
           nomeArquivo: `SPED_EFD_ICMS_IPI_BLOCO_K_${mesAno}.TXT`
         });
       }

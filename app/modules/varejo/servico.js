@@ -1872,50 +1872,108 @@ export async function obterRelatorioPrevencaoPerdas(db, empresaId, { lojaId = nu
   ).catch(() => ({ rows: [{ total_fin: 0 }] }));
 
   const totalVendasReal = Number(vendasRes.rows[0]?.total_vendas || 0) + Number(finRes.rows[0]?.total_fin || 0);
-  // Volume mensal padrão supermercadista de referência (ABRAS Tangará da Serra MT: R$ 125.400,00)
-  const faturamentoTotal = totalVendasReal > 20000 ? totalVendasReal : 125400.00;
+  const faturamentoTotal = Math.round(totalVendasReal * 100) / 100;
 
   // 2. Inventários e divergências
   const invRes = await db.query(
     `SELECT COALESCE(SUM(ABS(divergencia_financeira)), 0) AS perda_inventario 
      FROM var_inventarios WHERE empresa_id = $1 AND ($2::uuid IS NULL OR loja_id = $2)`,
     [empresaId, lojaId]
-  ).catch(() => ({ rows: [{ perda_inventario: 420.50 }] }));
+  ).catch(() => ({ rows: [{ perda_inventario: 0 }] }));
 
-  const perdaInventario = Number(invRes.rows[0]?.perda_inventario || 420.50);
+  const perdaInventario = Number(invRes.rows[0]?.perda_inventario || 0);
 
   // 3. Quebra técnica de açougue (evaporação câmara)
   const desossaRes = await db.query(
-    `SELECT COALESCE(SUM(peso_carcaca_kg * 0.018 * 24.50), 0) AS perda_evaporacao 
+    `SELECT COALESCE(SUM(GREATEST(0, COALESCE(peso_carcaca, 0) - COALESCE(rendimento_total_kg, 0)) * COALESCE(custo_kg, 0)), 0) AS perda_evaporacao 
      FROM var_desossas WHERE empresa_id = $1 AND ($2::uuid IS NULL OR loja_id = $2)`,
     [empresaId, lojaId]
-  ).catch(() => ({ rows: [{ perda_evaporacao: 380.00 }] }));
+  ).catch(() => ({ rows: [{ perda_evaporacao: 0 }] }));
 
-  const perdaAcougue = Number(desossaRes.rows[0]?.perda_evaporacao || 380.00);
+  const perdaAcougue = Number(desossaRes.rows[0]?.perda_evaporacao || 0);
 
-  // Estimativas de quebra por setor
-  const perdasPorSetor = [
-    { setor: 'Hortifrúti e Verduras', valor: 680.00, percentual: 35.0, motivoPrincipal: 'Deterioração natural e manuseio de clientes' },
-    { setor: 'Açougue e Carnes', valor: perdaAcougue + 210.00, percentual: 28.0, motivoPrincipal: 'Evaporação em câmara fria e aparas' },
-    { setor: 'Padaria e Confeitaria', valor: 310.00, percentual: 16.0, motivoPrincipal: 'Sobra de pães do dia anterior (validade 24h)' },
-    { setor: 'Frios e Laticínios', valor: 250.00, percentual: 13.0, motivoPrincipal: 'Vencimento de queijos e embutidos' },
-    { setor: 'Mercearia e Bebidas', valor: perdaInventario, percentual: 8.0, motivoPrincipal: 'Quebra de garrafas e avarias no transporte' }
-  ];
+  // 4. Perdas e avarias reais por departamento (var_avarias_perdas + var_ocorrencias_prevencao_perdas)
+  const avariasRes = await db.query(
+    `SELECT COALESCE(departamento, 'Geral') AS setor,
+            COALESCE(SUM(custo_total), 0) AS valor,
+            MAX(motivo) AS motivo_principal
+     FROM var_avarias_perdas
+     WHERE empresa_id = $1 AND ($2::uuid IS NULL OR loja_id = $2)
+     GROUP BY COALESCE(departamento, 'Geral')
+     ORDER BY valor DESC`,
+    [empresaId, lojaId]
+  ).catch(() => ({ rows: [] }));
 
-  const perdaTotal = perdasPorSetor.reduce((a, b) => a + b.valor, 0);
-  const taxaQuebraGlobal = Math.round((perdaTotal / faturamentoTotal) * 10000) / 100; // % sobre faturamento
+  const ocorrenciasRes = await db.query(
+    `SELECT COALESCE(SUM(custo_total_perda), 0) AS total_ocorrencias
+     FROM var_ocorrencias_prevencao_perdas
+     WHERE empresa_id = $1`,
+    [empresaId]
+  ).catch(() => ({ rows: [{ total_ocorrencias: 0 }] }));
+  const perdaOcorrencias = Number(ocorrenciasRes.rows[0]?.total_ocorrencias || 0);
+
+  const mapaSetor = new Map();
+  for (const r of avariasRes.rows) {
+    const val = Number(r.valor || 0);
+    if (val > 0) {
+      mapaSetor.set(r.setor, {
+        setor: r.setor,
+        valor: Math.round(val * 100) / 100,
+        motivoPrincipal: r.motivo_principal || 'Avaria / vencimento registrado'
+      });
+    }
+  }
+  if (perdaAcougue > 0) {
+    const atual = mapaSetor.get('Açougue e Carnes') || { setor: 'Açougue e Carnes', valor: 0, motivoPrincipal: 'Quebra técnica de desossa registrada' };
+    atual.valor = Math.round((atual.valor + perdaAcougue) * 100) / 100;
+    mapaSetor.set('Açougue e Carnes', atual);
+  }
+  if (perdaInventario > 0) {
+    const atual = mapaSetor.get('Inventário / Divergências') || { setor: 'Inventário / Divergências', valor: 0, motivoPrincipal: 'Divergência apurada em inventário' };
+    atual.valor = Math.round((atual.valor + perdaInventario) * 100) / 100;
+    mapaSetor.set('Inventário / Divergências', atual);
+  }
+  if (perdaOcorrencias > 0) {
+    const atual = mapaSetor.get('Ocorrências / Prevenção') || { setor: 'Ocorrências / Prevenção', valor: 0, motivoPrincipal: 'Boletim de prevenção de perdas' };
+    atual.valor = Math.round((atual.valor + perdaOcorrencias) * 100) / 100;
+    mapaSetor.set('Ocorrências / Prevenção', atual);
+  }
+
+  const listaSetores = Array.from(mapaSetor.values());
+  const perdaTotal = Math.round(listaSetores.reduce((a, b) => a + b.valor, 0) * 100) / 100;
+  const perdasPorSetor = listaSetores.map((s) => ({
+    ...s,
+    percentual: perdaTotal > 0 ? Math.round((s.valor / perdaTotal) * 1000) / 10 : 0
+  }));
+
+  const semVendasNoPeriodo = faturamentoTotal === 0;
+  const taxaQuebraGlobal = !semVendasNoPeriodo ? Math.round((perdaTotal / faturamentoTotal) * 10000) / 100 : null;
+  const indicePerdaEstimado = taxaQuebraGlobal !== null ? `${taxaQuebraGlobal}%` : null;
+
+  const fefoRes = await db.query(
+    `SELECT COALESCE(SUM((preco_original - preco_remarcado) * quantidade_lote), 0) AS economia
+     FROM var_remarcacao_validade_desperdicio
+     WHERE empresa_id = $1 AND status = 'VENDIDO'`,
+    [empresaId]
+  ).catch(() => ({ rows: [{ economia: 0 }] }));
+  const perdasEvitadasFefo = Math.round(Number(fefoRes.rows[0]?.economia || 0) * 100) / 100;
 
   return {
     sucesso: true,
+    semDados: semVendasNoPeriodo && perdaTotal === 0,
+    semVendasNoPeriodo,
     faturamentoTotal,
-    perdaTotal: Math.round(perdaTotal * 100) / 100,
+    perdaTotal,
     taxaQuebraGlobal,
+    indicePerdaEstimado,
     benchmarkAbras: {
       metaExcelente: 1.5,
       metaNormal: 2.2,
-      situacaoAtual: taxaQuebraGlobal <= 1.8 ? 'Excelente (Abaixo da média nacional)' : 'Atenção (Margem de melhoria)'
+      situacaoAtual: taxaQuebraGlobal === null
+        ? 'Sem vendas no período para cálculo do índice'
+        : (taxaQuebraGlobal <= 1.8 ? 'Excelente (Abaixo da média nacional)' : 'Atenção (Margem de melhoria)')
     },
-    perdasEvitadasFefo: 1840.50, // Economia calculada de remarcações de preço feitas a tempo
+    perdasEvitadasFefo,
     perdasPorSetor
   };
 }
@@ -1931,12 +1989,9 @@ export async function listarItensHortifruti(db, empresaId, { lojaId = null } = {
     p.pesavel === true
   );
 
-  const maturaçoes = ['No Ponto', 'Maduro (Feira)', 'Verde', 'Crítico'];
-  const resultado = itensFlv.map((item, idx) => {
-    const estadoMat = maturaçoes[idx % maturaçoes.length];
-    const quebraEstimada = estadoMat === 'Crítico' ? 8.5 : (estadoMat === 'Maduro (Feira)' ? 4.2 : 1.5);
-    const precoOriginal = Number(item.precoNormal || item.precoVenda || 6.99);
-    const precoSugerido = estadoMat === 'Maduro (Feira)' ? Math.round(precoOriginal * 0.75 * 100) / 100 : precoOriginal;
+  const resultado = itensFlv.map((item) => {
+    const precoOriginal = Number(item.precoNormal || item.precoVenda || 0);
+    const precoSugerido = Number(item.promocao?.preco || precoOriginal);
 
     return {
       id: item.id,
@@ -1946,29 +2001,28 @@ export async function listarItensHortifruti(db, empresaId, { lojaId = null } = {
       departamento: item.departamento,
       unidade: item.unidade,
       pesavel: item.pesavel,
-      estoqueAtual: Number(item.saldoEstoque || 45.0),
-      custoMedio: Number(item.precoCusto || 3.50),
+      estoqueAtual: Number(item.saldoEstoque || 0),
+      custoMedio: Number(item.precoCusto || 0),
       precoVenda: precoOriginal,
       precoPromocional: precoSugerido,
-      estadoMaturacao: estadoMat,
-      perdaAguaEstimadaPct: quebraEstimada,
+      estadoMaturacao: item.promocao ? 'Remarcado' : 'No Ponto',
+      perdaAguaEstimadaPct: 0,
       temperaturaIdealC: '10°C a 14°C',
-      diasParaDescarte: estadoMat === 'Crítico' ? 1 : (estadoMat === 'Maduro (Feira)' ? 2 : 5),
-      acaoRecomendada: estadoMat === 'Maduro (Feira)' 
-        ? 'Remarcar com -25% para Queima do Dia' 
-        : (estadoMat === 'Crítico' ? 'Descarte / Doação / Processar na Rotisseria' : 'Expor em Gôndola Climatizada')
+      diasParaDescarte: null,
+      acaoRecomendada: 'Expor em Gôndola Climatizada'
     };
   });
 
   return {
     sucesso: true,
+    semDados: resultado.length === 0,
     totalItens: resultado.length,
     itens: resultado,
     kpis: {
       totalKilosExpostos: resultado.reduce((acc, i) => acc + i.estoqueAtual, 0),
-      itensEmQueimaDoDia: resultado.filter(i => i.estadoMaturacao === 'Maduro (Feira)').length,
-      indicePerdaAguaMedia: 2.8,
-      economiaPotencialRemarcacao: 420.00
+      itensEmQueimaDoDia: resultado.filter(i => i.estadoMaturacao === 'Remarcado').length,
+      indicePerdaAguaMedia: 0,
+      economiaPotencialRemarcacao: 0
     }
   };
 }
@@ -2010,23 +2064,34 @@ export async function aplicarRemarcacaoMaturacaoFLV(db, empresaId, dados = {}, {
 // ═════════════════════════════════════════════════════════════════════════════
 export async function obterRelatorioRuptura(db, empresaId, { lojaId = null } = {}) {
   const produtos = await listarProdutos(db, empresaId, { lojaId });
+  const dataCorte = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString();
+  const vendasRes = await db.query(
+    `SELECT vi.item_id, COALESCE(SUM(vi.quantidade), 0) AS total_vendido
+     FROM var_venda_itens vi
+     JOIN var_vendas v ON v.id = vi.venda_id
+     WHERE vi.empresa_id = $1 AND v.criado_em >= $2
+     GROUP BY vi.item_id`,
+    [empresaId, dataCorte]
+  ).catch(() => ({ rows: [] }));
+  const vendasMap = new Map(vendasRes.rows.map(r => [r.item_id, Number(r.total_vendido || 0)]));
 
-  const analiseRuptura = produtos.map((prod, idx) => {
-    const estoque = Number(prod.saldoEstoque || (idx % 4 === 0 ? 0 : (idx % 3 === 0 ? 3 : 28)));
-    const vendaMediaDia = Math.max(1, Math.round(Number(prod.precoVenda || 10) % 7 + 2));
-    const diasCobertura = Math.round((estoque / vendaMediaDia) * 10) / 10;
-    const estoqueMinimo = vendaMediaDia * 3; // Cobertura mínima de 3 dias de lead time
-    const estoqueIdeal = vendaMediaDia * 7;  // 7 dias de giro seguro
+  const analiseRuptura = produtos.map((prod) => {
+    const estoque = Number(prod.saldoEstoque ?? 0);
+    const vendido30d = vendasMap.get(prod.id) || 0;
+    const vendaMediaDia = Math.round((vendido30d / 30) * 100) / 100;
+    const diasCobertura = vendaMediaDia > 0 ? Math.round((estoque / vendaMediaDia) * 10) / 10 : null;
+    const estoqueMinimo = Number(prod.estoqueMinimo || 0);
+    const estoqueIdeal = vendaMediaDia > 0 ? Math.ceil(vendaMediaDia * 7) : estoqueMinimo;
 
     let statusRisco = 'Normal';
     let gravidade = 'baixo';
     if (estoque === 0) {
       statusRisco = 'Ruptura Ativa (Gôndola Vazia)';
       gravidade = 'critico';
-    } else if (diasCobertura <= 1.5) {
+    } else if (diasCobertura !== null && diasCobertura <= 1.5) {
       statusRisco = 'Risco Iminente (< 36h)';
       gravidade = 'alto';
-    } else if (diasCobertura <= 3.0) {
+    } else if (estoque <= estoqueMinimo) {
       statusRisco = 'Abaixo do Ponto de Pedido';
       gravidade = 'medio';
     }
@@ -2047,38 +2112,40 @@ export async function obterRelatorioRuptura(db, empresaId, { lojaId = null } = {
       statusRisco,
       gravidade,
       sugestaoCompraQtd,
-      custoEstimadoReposicao: Math.round(sugestaoCompraQtd * Number(prod.precoCusto || 5.0) * 100) / 100,
-      fornecedorPrincipal: 'Distribuidora Central de Alimentos S/A'
+      custoEstimadoReposicao: Math.round(sugestaoCompraQtd * Number(prod.precoCusto || 0) * 100) / 100,
+      fornecedorPrincipal: null
     };
   });
 
   const rupturasAtivas = analiseRuptura.filter(r => r.gravidade === 'critico');
   const riscoIminente = analiseRuptura.filter(r => r.gravidade === 'alto');
-  const taxaRuptura = Math.round((rupturasAtivas.length / Math.max(1, analiseRuptura.length)) * 1000) / 10; // %
+  const taxaRuptura = analiseRuptura.length > 0 ? Math.round((rupturasAtivas.length / analiseRuptura.length) * 1000) / 10 : 0;
 
   return {
     sucesso: true,
+    semDados: analiseRuptura.length === 0,
     totalItensMonitorados: analiseRuptura.length,
     taxaRupturaPercentual: taxaRuptura,
     benchmarkAbrasMeta: 4.5, // Meta supermercadista de ruptura < 4.5%
     itensRupturaAtiva: rupturasAtivas.length,
     itensRiscoIminente: riscoIminente.length,
     custoTotalReposicaoSugerida: analiseRuptura.reduce((acc, i) => acc + i.custoEstimadoReposicao, 0),
-    relatorio: analiseRuptura.sort((a, b) => a.diasCobertura - b.diasCobertura)
+    relatorio: analiseRuptura.sort((a, b) => (a.estoqueAtual - b.estoqueAtual))
   };
 }
 
 export async function gerarOrdemCompraRuptura(db, empresaId, dados = {}, { usuario = null } = {}) {
   const { itensSelecionados = [], departamento = 'Todos' } = dados;
   const numPedido = `PED-SUP-${Date.now().toString().slice(-6)}`;
+  const valorTotal = itensSelecionados.reduce((acc, it) => acc + Number(it?.custoEstimadoReposicao || it?.valorTotal || 0), 0);
   
   return {
     sucesso: true,
     numeroPedido: numPedido,
     dataCriacao: new Date().toISOString(),
     status: 'Aprovado para Cotação',
-    totalItens: itensSelecionados.length || 12,
-    valorTotalEstimado: 8450.00,
+    totalItens: itensSelecionados.length,
+    valorTotalEstimado: Math.round(valorTotal * 100) / 100,
     mensagem: `Ordem de Compra ${numPedido} gerada automaticamente para reposição de gôndola e prevenção de ruptura.`
   };
 }
@@ -2088,33 +2155,36 @@ export async function gerarOrdemCompraRuptura(db, empresaId, dados = {}, { usuar
 // ═════════════════════════════════════════════════════════════════════════════
 export async function auditarPrecosGondolaPdv(db, empresaId, { lojaId = null } = {}) {
   const produtos = await listarProdutos(db, empresaId, { lojaId });
+  const leiturasRes = await db.query(
+    `SELECT * FROM var_coletor_leituras
+     WHERE empresa_id = $1 AND tipo_operacao = 'AUDITORIA_PRECO' AND divergencia_encontrada = true
+     ORDER BY criado_em DESC LIMIT 50`,
+    [empresaId]
+  ).catch(() => ({ rows: [] }));
 
-  // Simulação de auditoria por scanner de conferência
-  const divergencias = [];
-  produtos.slice(0, 15).forEach((p, idx) => {
-    if (idx === 2 || idx === 8) {
-      const precoPdv = Number(p.precoVenda || 10.0);
-      const precoGondola = Math.round((precoPdv - 1.20) * 100) / 100;
-      divergencias.push({
-        id: p.id,
-        nome: p.nome,
-        codigoBarras: p.codigoBarras,
-        departamento: p.departamento,
-        precoGondola,
-        precoPdv,
-        diferenca: Math.round((precoPdv - precoGondola) * 100) / 100,
-        riscoLegal: 'Crítico — Preço do PDV superior ao da Gôndola (Infração Procon)',
-        acaoImediata: 'Imprimir nova etiqueta de gôndola imediatamente ou equiparar no PDV'
-      });
-    }
+  const divergencias = leiturasRes.rows.map((r) => {
+    const precoPdv = Number(r.preco_sistema || 0);
+    const precoGondola = Number(r.preco_gondola || 0);
+    return {
+      id: r.item_id || r.id,
+      nome: r.descricao || 'Item Auditado',
+      codigoBarras: r.codigo_barras,
+      departamento: 'Geral',
+      precoGondola,
+      precoPdv,
+      diferenca: Math.round((precoPdv - precoGondola) * 100) / 100,
+      riscoLegal: precoPdv > precoGondola ? 'Crítico — Preço do PDV superior ao da Gôndola (Infração Procon)' : 'Divergência de etiqueta',
+      acaoImediata: 'Imprimir nova etiqueta de gôndola imediatamente ou equiparar no PDV'
+    };
   });
 
   return {
     sucesso: true,
+    semDados: produtos.length === 0 && divergencias.length === 0,
     totalItensAuditados: produtos.length,
-    totalConformes: produtos.length - divergencias.length,
+    totalConformes: Math.max(0, produtos.length - divergencias.length),
     totalDivergencias: divergencias.length,
-    indiceConformidade: Math.round(((produtos.length - divergencias.length) / Math.max(1, produtos.length)) * 1000) / 10,
+    indiceConformidade: produtos.length > 0 ? Math.round(((Math.max(0, produtos.length - divergencias.length)) / produtos.length) * 1000) / 10 : 100,
     divergencias
   };
 }
@@ -2753,7 +2823,7 @@ export async function listarAtacarejoFaixas(db, empresaId, { lojaId = null, item
   const empresa = exigirUuid(empresaId, 'empresa');
   try {
   let sql = `
-    SELECT f.*, i.descricao as item_nome, i.sku, i.codigo_barras
+    SELECT f.*, i.nome as item_nome, i.sku, i.ean as codigo_barras
     FROM var_atacarejo_faixas f
     LEFT JOIN est_itens i ON i.empresa_id = f.empresa_id AND i.id = f.item_id
     WHERE f.empresa_id = $1 AND f.ativo = true
@@ -2765,9 +2835,9 @@ export async function listarAtacarejoFaixas(db, empresaId, { lojaId = null, item
   }
   sql += ` ORDER BY f.item_id, f.quantidade_minima ASC`;
   const res = await db.query(sql, params);
-  return { faixas: res.rows };
+  return { faixas: res.rows, items: res.rows, semDados: res.rows.length === 0 };
   } catch (err) {
-    if (err.code === '42P01') return { faixas: [] };
+    if (err.code === '42P01' || err.code === '42703') return { faixas: [], items: [], semDados: true };
     throw err;
   }
 }
@@ -2803,8 +2873,8 @@ export async function listarPromocoesAvancadas(db, empresaId, { lojaId = null, a
   try {
   let sql = `
     SELECT p.*, 
-           i1.descricao as item_origem_nome, i1.codigo_barras as item_origem_ean,
-           i2.descricao as item_combo_nome, i2.codigo_barras as item_combo_ean
+           i1.nome as item_origem_nome, i1.ean as item_origem_ean,
+           i2.nome as item_combo_nome, i2.ean as item_combo_ean
     FROM var_promocoes_avancadas p
     LEFT JOIN est_itens i1 ON i1.empresa_id = p.empresa_id AND i1.id = p.item_origem_id
     LEFT JOIN est_itens i2 ON i2.empresa_id = p.empresa_id AND i2.id = p.item_combo_id
@@ -2816,9 +2886,9 @@ export async function listarPromocoesAvancadas(db, empresaId, { lojaId = null, a
   }
   sql += ` ORDER BY p.criado_em DESC`;
   const res = await db.query(sql, params);
-  return { promocoes: res.rows };
+  return { promocoes: res.rows, items: res.rows, semDados: res.rows.length === 0 };
   } catch (err) {
-    if (err.code === '42P01') return { promocoes: [] };
+    if (err.code === '42P01' || err.code === '42703') return { promocoes: [], items: [], semDados: true };
     throw err;
   }
 }
@@ -2972,29 +3042,38 @@ export async function calcularSugestaoCompras(db, empresaId, { diasHistorico = 3
 
   // Buscar itens de estoque com seus saldos atuais e histórico de saída
   const rItens = await db.query(
-    `SELECT i.id, i.sku, i.codigo_barras, i.descricao, i.custo_medio, i.unidade_medida,
-            COALESCE(s.saldo, 0) as estoque_atual,
-            i.lead_time_dias, i.estoque_minimo, i.estoque_maximo,
-            i.curva_abc
+    `SELECT i.id, i.sku, i.ean as codigo_barras, i.nome as descricao, i.custo_medio, i.unidade as unidade_medida,
+            COALESCE((SELECT SUM(s.quantidade) FROM est_saldos s WHERE s.empresa_id = i.empresa_id AND s.item_id = i.id), 0) as estoque_atual,
+            i.estoque_minimo
      FROM est_itens i
-     LEFT JOIN est_saldos s ON s.empresa_id = i.empresa_id AND s.item_id = i.id
      WHERE i.empresa_id = $1 AND i.ativo = true
-     ORDER BY i.descricao ASC`,
+     ORDER BY i.nome ASC`,
     [empresa]
   );
 
-  // Calcular giro médio diário nos últimos N dias
+  // Calcular giro médio diário nos últimos N dias a partir das vendas reais
   const dataCorte = new Date(Date.now() - diasHistorico * 24 * 3600 * 1000).toISOString();
   const rVendas = await db.query(
-    `SELECT item_id, SUM(quantidade) as total_vendido
-     FROM var_venda_itens
-     WHERE empresa_id = $1 AND criado_em >= $2
-     GROUP BY item_id`,
+    `SELECT vi.item_id, SUM(vi.quantidade) as total_vendido
+     FROM var_venda_itens vi
+     JOIN var_vendas v ON v.id = vi.venda_id
+     WHERE vi.empresa_id = $1 AND v.criado_em >= $2 AND COALESCE(v.status, 'paga') != 'cancelado'
+     GROUP BY vi.item_id`,
     [empresa, dataCorte]
-  );
+  ).catch(() => ({ rows: [] }));
   const vendasPorItem = {};
   for (const v of rVendas.rows) {
     vendasPorItem[v.item_id] = Number(v.total_vendido || 0);
+  }
+
+  if (Object.keys(vendasPorItem).length === 0) {
+    return {
+      sugestoes: [],
+      items: [],
+      semDados: true,
+      totalItensAbaixoPontoPedido: 0,
+      valorTotalGlobalEstimado: 0
+    };
   }
 
   const sugestoes = [];
@@ -3002,17 +3081,18 @@ export async function calcularSugestaoCompras(db, empresaId, { diasHistorico = 3
 
   for (const it of rItens.rows) {
     const totalVendido = vendasPorItem[it.id] || 0;
-    const gmd = totalVendido > 0 ? Number((totalVendido / diasHistorico).toFixed(3)) : (Number(it.estoque_atual) > 0 ? 0.5 : 0.2);
-    const leadTime = Number(it.lead_time_dias || 3);
+    if (totalVendido <= 0) continue;
+    const gmd = Number((totalVendido / diasHistorico).toFixed(3));
+    const leadTime = 3;
     const estSeguranca = Number(it.estoque_minimo || (gmd * margemSegurancaDias).toFixed(2));
     const pontoPedido = Number(((gmd * leadTime) + estSeguranca).toFixed(2));
     const estoqueAtual = Number(it.estoque_atual || 0);
 
     // Sugere compra se estoque atual estiver abaixo ou igual ao Ponto de Pedido
-    if (estoqueAtual <= pontoPedido || estoqueAtual <= 5) {
-      const estMaximo = Number(it.estoque_maximo || (gmd * 15).toFixed(2));
-      let qtdSugerida = Math.max(10, Math.ceil(estMaximo - estoqueAtual));
-      const custoUnit = Number(it.custo_medio || 8.50);
+    if (estoqueAtual <= pontoPedido) {
+      const estMaximo = Number((gmd * 15).toFixed(2));
+      let qtdSugerida = Math.max(1, Math.ceil(estMaximo - estoqueAtual));
+      const custoUnit = Number(it.custo_medio || 0);
       const valorTotal = Number((qtdSugerida * custoUnit).toFixed(2));
       valorTotalGlobal += valorTotal;
 
@@ -3029,7 +3109,7 @@ export async function calcularSugestaoCompras(db, empresaId, { diasHistorico = 3
         quantidadeSugerida: qtdSugerida,
         custoUnitario: custoUnit,
         valorTotalSugerido: valorTotal,
-        curvaAbc: it.curva_abc || 'A',
+        curvaAbc: 'A',
         status: 'SUGERIDO'
       });
     }
@@ -3043,17 +3123,19 @@ export async function calcularSugestaoCompras(db, empresaId, { diasHistorico = 3
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'SUGERIDO')
        ON CONFLICT DO NOTHING`,
       [empresa, lojaId, s.itemId, s.giroMedioDiario, s.leadTimeDias, s.estoqueSeguranca, s.pontoPedido, s.estoqueAtual, s.quantidadeSugerida, s.custoUnitario, s.valorTotalSugerido, s.curvaAbc]
-    );
+    ).catch(() => null);
   }
 
   return {
     sugestoes,
+    items: sugestoes,
+    semDados: sugestoes.length === 0,
     totalItensAbaixoPontoPedido: sugestoes.length,
     valorTotalGlobalEstimado: valorTotalGlobal
   };
   } catch (err) {
-    if (err.code === '42P01') {
-      return { sugestoes: [], totalItensAbaixoPontoPedido: 0, valorTotalGlobalEstimado: 0 };
+    if (err.code === '42P01' || err.code === '42703') {
+      return { sugestoes: [], items: [], semDados: true, totalItensAbaixoPontoPedido: 0, valorTotalGlobalEstimado: 0 };
     }
     throw err;
   }
@@ -3084,18 +3166,18 @@ export async function monitorarRupturasTempoReal(db, empresaId, { toleranciaHora
   const empresa = exigirUuid(empresaId, 'empresa');
   try {
 
-  // Buscar produtos Curva A com estoque positivo
+  // Buscar produtos com estoque positivo e histórico real de vendas
   const rProdutos = await db.query(
-    `SELECT i.id, i.sku, i.codigo_barras, i.descricao, i.curva_abc,
-            COALESCE(s.saldo, 0) as estoque_virtual,
-            MAX(v.criado_em) as ultima_venda
+    `SELECT i.id, i.sku, i.ean as codigo_barras, i.nome as descricao,
+            COALESCE((SELECT SUM(s.quantidade) FROM est_saldos s WHERE s.empresa_id = i.empresa_id AND s.item_id = i.id), 0) as estoque_virtual,
+            MAX(vv.criado_em) as ultima_venda
      FROM est_itens i
-     LEFT JOIN est_saldos s ON s.empresa_id = i.empresa_id AND s.item_id = i.id
      LEFT JOIN var_venda_itens v ON v.empresa_id = i.empresa_id AND v.item_id = i.id
+     LEFT JOIN var_vendas vv ON vv.id = v.venda_id AND COALESCE(vv.status, 'paga') != 'cancelado'
      WHERE i.empresa_id = $1 AND i.ativo = true
-     GROUP BY i.id, i.sku, i.codigo_barras, i.descricao, i.curva_abc, s.saldo
-     HAVING COALESCE(s.saldo, 0) > 10
-     ORDER BY s.saldo DESC`,
+     GROUP BY i.id, i.sku, i.ean, i.nome
+     HAVING COALESCE((SELECT SUM(s.quantidade) FROM est_saldos s WHERE s.empresa_id = i.empresa_id AND s.item_id = i.id), 0) > 0
+     ORDER BY estoque_virtual DESC`,
     [empresa]
   );
 
@@ -3103,7 +3185,8 @@ export async function monitorarRupturasTempoReal(db, empresaId, { toleranciaHora
   const rupturas = [];
 
   for (const p of rProdutos.rows) {
-    const ultimaVenda = p.ultima_venda ? new Date(p.ultima_venda).getTime() : agora - (4 * 3600 * 1000);
+    if (!p.ultima_venda) continue;
+    const ultimaVenda = new Date(p.ultima_venda).getTime();
     const horasSemVenda = Number(((agora - ultimaVenda) / (1000 * 3600)).toFixed(1));
 
     if (horasSemVenda >= toleranciaHoras) {
@@ -3112,7 +3195,7 @@ export async function monitorarRupturasTempoReal(db, empresaId, { toleranciaHora
         sku: p.sku,
         codigoBarras: p.codigo_barras,
         descricao: p.descricao,
-        curvaAbc: p.curva_abc || 'A',
+        curvaAbc: 'A',
         estoqueVirtual: Number(p.estoque_virtual),
         horasSemVenda,
         status: 'PENDENTE_REPOSICAO',
@@ -3124,18 +3207,20 @@ export async function monitorarRupturasTempoReal(db, empresaId, { toleranciaHora
         `INSERT INTO var_alertas_ruptura (empresa_id, loja_id, item_id, curva_abc, estoque_virtual, horas_sem_venda, status)
          VALUES ($1, $2, $3, $4, $5, $6, 'PENDENTE_REPOSICAO')
          ON CONFLICT DO NOTHING`,
-        [empresa, lojaId, p.id, p.curva_abc || 'A', p.estoque_virtual, horasSemVenda]
-      );
+        [empresa, lojaId, p.id, 'A', p.estoque_virtual, horasSemVenda]
+      ).catch(() => null);
     }
   }
 
   return {
     rupturas,
+    items: rupturas,
+    semDados: rupturas.length === 0,
     totalAlertas: rupturas.length
   };
   } catch (err) {
-    if (err.code === '42P01') {
-      return { rupturas: [], totalAlertas: 0 };
+    if (err.code === '42P01' || err.code === '42703') {
+      return { rupturas: [], items: [], semDados: true, totalAlertas: 0 };
     }
     throw err;
   }
@@ -3176,9 +3261,9 @@ export async function registrarLeituraColetor(db, empresaId, dados) {
 
   // Buscar item correspondente
   const rItem = await db.query(
-    `SELECT id, sku, codigo_barras, descricao, preco_venda, preco_custo
+    `SELECT id, sku, ean as codigo_barras, nome as descricao, preco_venda, custo_medio as preco_custo
      FROM est_itens
-     WHERE empresa_id = $1 AND (codigo_barras = $2 OR sku = $2)
+     WHERE empresa_id = $1 AND (ean = $2 OR sku = $2)
      LIMIT 1`,
     [empresa, String(codigoBarras).trim()]
   );
@@ -3256,42 +3341,6 @@ export async function listarMatrizTributaria(db, empresaId) {
     `SELECT * FROM var_matriz_tributaria WHERE empresa_id = $1 ORDER BY descricao_grupo ASC`,
     [empresa]
   );
-
-  if (res.rows.length === 0) {
-    // Sementes tributárias oficiais do varejo supermercadista
-    const regrasDefault = [
-      { ncm: '22030000', cest: '0300100', grupo: 'Cervejas & Chopp', cstIcms: '60', aliqIcms: 25.0, mva: 70.0, cstPis: '04', aliqPis: 0, aliqCofins: 0, tipo: 'MONOFASICO', ibptFed: 9.4, ibptEst: 25.0 },
-      { ncm: '22021000', cest: '0300700', grupo: 'Refrigerantes & Águas Aromatizadas', cstIcms: '60', aliqIcms: 18.0, mva: 45.0, cstPis: '04', aliqPis: 0, aliqCofins: 0, tipo: 'MONOFASICO', ibptFed: 7.2, ibptEst: 18.0 },
-      { ncm: '10063021', cest: '1700100', grupo: 'Arroz Parboilizado / Polido (Cesta Básica)', cstIcms: '20', aliqIcms: 7.0, redBc: 33.33, cstPis: '06', aliqPis: 0, aliqCofins: 0, tipo: 'CESTA_BASICA', ibptFed: 2.1, ibptEst: 7.0 },
-      { ncm: '07133399', cest: '1700200', grupo: 'Feijão Comum Cores/Preto (Cesta Básica)', cstIcms: '40', aliqIcms: 0, cstPis: '06', aliqPis: 0, aliqCofins: 0, tipo: 'ISENTO_ALIMENTAR', ibptFed: 0, ibptEst: 0 },
-      { ncm: '02013000', cest: '1708100', grupo: 'Carnes Bovinas Desossadas / Cortes Frescos', cstIcms: '20', aliqIcms: 7.0, redBc: 41.67, cstPis: '06', aliqPis: 0, aliqCofins: 0, tipo: 'CESTA_BASICA', ibptFed: 4.5, ibptEst: 7.0 },
-      { ncm: '33072010', cest: '2002300', grupo: 'Desodorantes & Antitranspirantes', cstIcms: '60', aliqIcms: 18.0, mva: 52.0, cstPis: '04', aliqPis: 0, aliqCofins: 0, tipo: 'SUBSTITUICAO_TRIBUTARIA', ibptFed: 12.5, ibptEst: 18.0 },
-      { ncm: '19059090', cest: '1703100', grupo: 'Pães, Biscoitos & Panificação', cstIcms: '00', aliqIcms: 18.0, cstPis: '01', aliqPis: 1.65, aliqCofins: 7.6, tipo: 'TRIBUTADO_INTEGRAL', ibptFed: 5.3, ibptEst: 18.0 }
-    ];
-
-    for (const r of regrasDefault) {
-      await db.query(
-        `INSERT INTO var_matriz_tributaria (
-           empresa_id, ncm, cest, descricao_grupo, cst_icms, aliquota_icms,
-           reducao_bc_icms, aliquota_mva_st, cst_pis_cofins, aliquota_pis,
-           aliquota_cofins, tipo_regra, ibpt_federal, ibpt_estadual
-         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
-         ON CONFLICT DO NOTHING`,
-        [
-          empresa, r.ncm, r.cest, r.grupo, r.cstIcms, r.aliqIcms,
-          r.redBc || 0, r.mva || 0, r.cstPis, r.aliqPis,
-          r.aliqCofins, r.tipo, r.ibptFed, r.ibptEst
-        ]
-      );
-    }
-
-    const recarregado = await db.query(
-      `SELECT * FROM var_matriz_tributaria WHERE empresa_id = $1 ORDER BY descricao_grupo ASC`,
-      [empresa]
-    );
-    return recarregado.rows;
-  }
-
   return res.rows;
 }
 
@@ -3361,16 +3410,16 @@ export async function listarEnderecamentosWms(db, empresaId) {
   const empresa = exigirUuid(empresaId, 'empresa');
   try {
     const res = await db.query(
-      `SELECT e.*, i.sku, i.codigo_barras, i.descricao as descricao_item
+      `SELECT e.*, i.sku, i.ean as codigo_barras, i.nome as descricao_item
        FROM var_enderecamento_wms e
-       LEFT JOIN est_itens i ON i.id = e.item_id
+       LEFT JOIN est_itens i ON i.empresa_id = e.empresa_id AND i.id = e.item_id
        WHERE e.empresa_id = $1
        ORDER BY e.rua ASC, e.predio ASC, e.andar ASC`,
       [empresa]
     );
     return res.rows;
   } catch (err) {
-    if (err.code === '42P01') return [];
+    if (err.code === '42P01' || err.code === '42703') return [];
     throw err;
   }
 }
@@ -3443,7 +3492,7 @@ export async function registrarAvariaPerda(db, empresaId, dados) {
   if (itemId) {
     await db.query(
       `UPDATE est_saldos
-       SET saldo = GREATEST(0, saldo - $3), atualizado_em = CURRENT_TIMESTAMP
+       SET quantidade = GREATEST(0, quantidade - $3), atualizado_em = CURRENT_TIMESTAMP
        WHERE empresa_id = $1 AND item_id = $2`,
       [empresa, itemId, qtd]
     );
@@ -3622,38 +3671,6 @@ export async function listarPedidosCompraFornecedor(db, empresaId) {
      ORDER BY p.criado_em DESC LIMIT 50`,
     [empresa]
   );
-
-  if (res.rows.length === 0) {
-    // Sementes iniciais com fornecedores supermercadistas brasileiros
-    const defaultPedidos = [
-      { forn: 'AMBEV S/A (Bebidas)', num: 'PC-849102', total: 18450.00, cond: 'Boleto 21/28 ddl', dias: 28, status: 'CONFIRMADO' },
-      { forn: 'COCA-COLA FEMSA BRASIL', num: 'PC-849105', total: 14200.00, cond: 'Boleto 28 ddl', dias: 28, status: 'ENVIADO' },
-      { forn: 'JBS S/A (Friboi Carnes)', num: 'PC-849110', total: 32600.00, cond: 'Boleto 14 ddl', dias: 14, status: 'ENTREGUE_PARCIAL' },
-      { forn: 'NESTLÉ BRASIL LTDA', num: 'PC-849118', total: 9800.00, cond: 'Boleto 30 ddl', dias: 30, status: 'ENVIADO' },
-      { forn: 'M. DIAS BRANCO (Massas)', num: 'PC-849122', total: 6450.00, cond: 'Boleto 28 ddl', dias: 28, status: 'CONFIRMADO' }
-    ];
-
-    for (const p of defaultPedidos) {
-      await db.query(
-        `INSERT INTO var_pedidos_compra (
-           empresa_id, nome_fornecedor, numero_pedido, valor_total, condicao_pagamento, prazo_dias, status
-         ) VALUES ($1, $2, $3, $4, $5, $6, $7)
-         ON CONFLICT DO NOTHING`,
-        [empresa, p.forn, p.num, p.total, p.cond, p.dias, p.status]
-      );
-    }
-
-    const recarregado = await db.query(
-      `SELECT p.*,
-              (SELECT COUNT(*) FROM var_pedido_compra_itens WHERE pedido_id = p.id) as total_itens
-       FROM var_pedidos_compra p
-       WHERE p.empresa_id = $1
-       ORDER BY p.criado_em DESC LIMIT 50`,
-      [empresa]
-    );
-    return recarregado.rows;
-  }
-
   return res.rows;
 }
 
@@ -3663,23 +3680,6 @@ export async function listarCampanhasSelinhos(db, empresaId) {
     `SELECT * FROM var_campanhas_selinhos WHERE empresa_id = $1 ORDER BY criado_em DESC`,
     [empresa]
   );
-
-  if (res.rows.length === 0) {
-    // Campanha oficial de selinhos Pão de Açúcar / St. Marche style
-    await db.query(
-      `INSERT INTO var_campanhas_selinhos (
-         empresa_id, nome_campanha, valor_por_selo, premio_destaque, selos_necessarios, data_inicio, data_fim, ativo
-       ) VALUES ($1, 'Coleção Facas Chef Master Inox', 30.00, 'Faca do Chef 8 polegadas Forjada', 30, CURRENT_DATE, CURRENT_DATE + INTERVAL '60 days', true)`,
-      [empresa]
-    );
-
-    const recarregado = await db.query(
-      `SELECT * FROM var_campanhas_selinhos WHERE empresa_id = $1 ORDER BY criado_em DESC`,
-      [empresa]
-    );
-    return recarregado.rows;
-  }
-
   return res.rows;
 }
 
@@ -3778,7 +3778,24 @@ export async function obterDreSupermercado(db, empresaId, options = {}) {
     [empresa]
   );
 
-  const fatBruto = Number(rVendas.rows[0]?.fat_bruto || 0) || 168450.00;
+  const fatBruto = Number(rVendas.rows[0]?.fat_bruto || 0);
+  if (fatBruto === 0) {
+    return {
+      mes_ano: mesAno,
+      semDados: true,
+      faturamento_bruto: 0,
+      impostos_vendas: 0,
+      receita_liquida: 0,
+      cmv_custo_mercadorias: 0,
+      lucro_bruto: 0,
+      despesas_pessoal: 0,
+      despesas_energia_refrigeracao: 0,
+      custo_quebras_perdas: 0,
+      outras_despesas_loja: 0,
+      ebitda_operacional: 0,
+      margem_ebitda_pct: 0
+    };
+  }
   const impostos = fatBruto * 0.082; // Média ICMS/PIS/COFINS efetiva no Lucro Real supermercadista
   const receitaLiquida = fatBruto - impostos;
   const cmv = fatBruto * 0.715; // 71.5% CMV padrão ABRAS
@@ -3829,24 +3846,63 @@ export async function obterDreSupermercado(db, empresaId, options = {}) {
 export async function exportarSpedFiscalBlocoK(db, empresaId) {
   const empresa = exigirUuid(empresaId, 'empresa');
 
-  // Gerar linhas padrão do SPED Bloco K (K200, K230, K235) para padaria e açougue
-  const registros = [
-    { registro: '|K001|0|', desc: 'Abertura do Bloco K com dados' },
-    { registro: '|K200|20261101|FRANGO-RESF|850.000|0|', desc: 'Estoque Escriturado: Frango Inteiro Resfriado' },
-    { registro: '|K200|20261101|CARNE-TRASEIRO|1240.000|0|', desc: 'Estoque Escriturado: Traseiro Bovino com Osso' },
-    { registro: '|K200|20261101|FARINHA-TRIGO-ESP|2500.000|0|', desc: 'Estoque Escriturado: Farinha de Trigo Especial' },
-    { registro: '|K230|20261101|20261101|OP-PAD-101|PAO-FRANCES|320.000||', desc: 'Itens Produzidos: Pão Francês Tradicional 50g' },
-    { registro: '|K235|20261101|FARINHA-TRIGO-ESP|200.000||OP-PAD-101|', desc: 'Insumo Consumido: Farinha de Trigo na OP-PAD-101' },
-    { registro: '|K235|20261101|FERMENTO-BIOLOGICO|8.000||OP-PAD-101|', desc: 'Insumo Consumido: Fermento Biológico Fresco' },
-    { registro: '|K230|20261101|20261101|OP-ACO-205|PICANHA-RESF|45.500||', desc: 'Item Desossado Produzido: Picanha Resfriada' },
-    { registro: '|K230|20261101|20261101|OP-ACO-205|ALCATRA-MIGNON|82.000||', desc: 'Item Desossado Produzido: Alcatra com Mignon' },
-    { registro: '|K990|10|', desc: 'Encerramento do Bloco K com 10 registros' }
-  ];
+  const dataRef = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+  const rEst = await db.query(
+    `SELECT i.sku, i.nome, COALESCE(SUM(s.quantidade), 0) AS saldo
+     FROM est_itens i
+     JOIN est_saldos s ON s.empresa_id = i.empresa_id AND s.item_id = i.id
+     WHERE i.empresa_id = $1 AND i.ativo = true AND s.quantidade > 0
+     GROUP BY i.id, i.sku, i.nome
+     ORDER BY i.nome ASC LIMIT 100`,
+    [empresa]
+  ).catch(() => ({ rows: [] }));
+
+  const rProd = await db.query(
+    `SELECT id, receita_nome, quantidade_obtida, criado_em
+     FROM var_producao_padaria
+     WHERE empresa_id = $1
+     ORDER BY criado_em DESC LIMIT 50`,
+    [empresa]
+  ).catch(() => ({ rows: [] }));
+
+  if (rEst.rows.length === 0 && rProd.rows.length === 0) {
+    return {
+      sucesso: true,
+      semDados: true,
+      totalRegistros: 0,
+      registros: [],
+      conteudoSped: '',
+      nomeArquivo: `SPED_EFD_ICMS_IPI_BLOCO_K_${new Date().toISOString().slice(0, 7)}.TXT`
+    };
+  }
+
+  const registros = [{ registro: '|K001|0|', desc: 'Abertura do Bloco K com dados reais' }];
+  for (const e of rEst.rows) {
+    const cod = (e.sku || e.nome || 'ITEM').toUpperCase().replace(/\s+/g, '-').slice(0, 20);
+    registros.push({
+      registro: `|K200|${dataRef}|${cod}|${Number(e.saldo).toFixed(3)}|0||`,
+      desc: `Estoque Escriturado: ${e.nome}`
+    });
+  }
+  for (const p of rProd.rows) {
+    const dt = p.criado_em ? new Date(p.criado_em).toISOString().slice(0, 10).replace(/-/g, '') : dataRef;
+    const opId = `OP-${String(p.id).slice(0, 6).toUpperCase()}`;
+    const cod = String(p.receita_nome || 'PROD').toUpperCase().replace(/\s+/g, '-').slice(0, 20);
+    registros.push({
+      registro: `|K230|${dt}|${dt}|${opId}|${cod}|${Number(p.quantidade_obtida || 0).toFixed(3)}||`,
+      desc: `Ordem de Produção: ${p.receita_nome}`
+    });
+  }
+  registros.push({
+    registro: `|K990|${registros.length + 1}|`,
+    desc: `Encerramento do Bloco K com ${registros.length + 1} registros`
+  });
 
   const arquivoSped = registros.map(r => r.registro).join('\r\n');
 
   return {
     sucesso: true,
+    semDados: false,
     totalRegistros: registros.length,
     registros,
     conteudoSped: arquivoSped,
@@ -3905,34 +3961,6 @@ export async function listarEtiquetasEletronicasEsl(db, empresaId) {
     `SELECT * FROM var_etiquetas_eletronicas_esl WHERE empresa_id = $1 ORDER BY gondola_endereco ASC`,
     [empresa]
   );
-
-  if (res.rows.length === 0) {
-    const defaultEsl = [
-      { esl: 'ESL-G01-01', desc: 'Arroz Tipo 1 Camil 5kg', reg: 29.90, club: 26.90, atac: 24.90, end: 'R01-P01-A01-V01', bat: 98 },
-      { esl: 'ESL-G01-02', desc: 'Feijão Carioca Kicaldo 1kg', reg: 8.49, club: 7.99, atac: 7.49, end: 'R01-P01-A02-V01', bat: 95 },
-      { esl: 'ESL-G02-01', desc: 'Cerveja Heineken 350ml Sleek', reg: 5.79, club: 4.99, atac: 4.69, end: 'R02-P01-A01-V01', bat: 100 },
-      { esl: 'ESL-G03-01', desc: 'Picanha Bovina Resfriada kg', reg: 69.90, club: 59.90, atac: 54.90, end: 'R03-P01-A01-V01', bat: 92 },
-      { esl: 'ESL-G04-01', desc: 'Leite Integral Piracanjuba 1L', reg: 4.99, club: 4.49, atac: 4.19, end: 'R04-P01-A01-V01', bat: 97 }
-    ];
-
-    for (const e of defaultEsl) {
-      await db.query(
-        `INSERT INTO var_etiquetas_eletronicas_esl (
-           empresa_id, codigo_esl, descricao, preco_regular, preco_clube,
-           preco_atacarejo, gondola_endereco, bateria_pct, status_sincronizacao
-         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'SINCRONIZADO')
-         ON CONFLICT DO NOTHING`,
-        [empresa, e.esl, e.desc, e.reg, e.club, e.atac, e.end, e.bat]
-      );
-    }
-
-    const recarregado = await db.query(
-      `SELECT * FROM var_etiquetas_eletronicas_esl WHERE empresa_id = $1 ORDER BY gondola_endereco ASC`,
-      [empresa]
-    );
-    return recarregado.rows;
-  }
-
   return res.rows;
 }
 
@@ -4000,32 +4028,6 @@ export async function listarPedidosRotisseriaKds(db, empresaId) {
     `SELECT * FROM var_rotisseria_pedidos WHERE empresa_id = $1 ORDER BY criado_em DESC LIMIT 40`,
     [empresa]
   );
-
-  if (res.rows.length === 0) {
-    const defaultKds = [
-      { com: 'ROT-101', tipo: 'ROTISSERIA_QUENTE', item: 'Frango Assado Especial com Farofa e Batatas', v: 49.90, st: 'EM_PREPARO', min: 20 },
-      { com: 'ROT-102', tipo: 'BUFFET_PESO', item: 'Buffet por Quilo Almoço Executivo', peso: 0.680, v: 44.20, st: 'PRONTO_RETIRADA', min: 0 },
-      { com: 'ROT-103', tipo: 'PIZZA_SUSHI', item: 'Pizza Grande Calabresa com Borda Catupiry', v: 54.90, st: 'EM_PREPARO', min: 25 },
-      { com: 'ROT-104', tipo: 'ROTISSERIA_QUENTE', item: 'Costela Bovina no Bafo 1kg', v: 59.90, st: 'ENTREGUE_PDV', min: 0 }
-    ];
-
-    for (const k of defaultKds) {
-      await db.query(
-        `INSERT INTO var_rotisseria_pedidos (
-           empresa_id, numero_comanda, tipo, descricao_item, peso_kg, valor_total, status, tempo_estimado_min
-         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-         ON CONFLICT DO NOTHING`,
-        [empresa, k.com, k.tipo, k.item, k.peso || null, k.v, k.st, k.min]
-      );
-    }
-
-    const recarregado = await db.query(
-      `SELECT * FROM var_rotisseria_pedidos WHERE empresa_id = $1 ORDER BY criado_em DESC LIMIT 40`,
-      [empresa]
-    );
-    return recarregado.rows;
-  }
-
   return res.rows;
 }
 
@@ -4129,25 +4131,6 @@ export async function listarValesCompra(db, empresaId) {
     `SELECT * FROM var_vales_compra WHERE empresa_id = $1 ORDER BY criado_em DESC LIMIT 50`,
     [empresa]
   );
-
-  if (res.rows.length === 0) {
-    // Sementes iniciais
-    await db.query(
-      `INSERT INTO var_vales_compra (
-         empresa_id, codigo_vale, cpf_cliente, nome_cliente, valor_original,
-         saldo_restante, motivo_devolucao, data_validade, status
-       ) VALUES ($1, 'VALE-892101', '384.912.840-02', 'Rodrigo Gonçalves', 89.90, 89.90, 'Troca de Fardo de Cerveja Lote Duplicado', CURRENT_DATE + INTERVAL '30 days', 'ATIVO')
-       ON CONFLICT DO NOTHING`,
-      [empresa]
-    );
-
-    const recarregado = await db.query(
-      `SELECT * FROM var_vales_compra WHERE empresa_id = $1 ORDER BY criado_em DESC LIMIT 50`,
-      [empresa]
-    );
-    return recarregado.rows;
-  }
-
   return res.rows;
 }
 
@@ -4202,32 +4185,6 @@ export async function listarMalotesTesouraria(db, empresaId) {
     `SELECT * FROM var_tesouraria_malotes WHERE empresa_id = $1 ORDER BY data_recolhimento DESC LIMIT 40`,
     [empresa]
   );
-
-  if (res.rows.length === 0) {
-    const defaultMalotes = [
-      { mal: 'MAL-78401', lacre: 'LAC-902144', transp: 'BRINKS', ced: 34500.00, moe: 1250.00, resp: 'Carlos Tesoureiro', st: 'COLETADO_CARRO_FORTE' },
-      { mal: 'MAL-78402', lacre: 'LAC-902188', transp: 'PROSEGUR', ced: 42800.00, moe: 890.00, resp: 'Carlos Tesoureiro', st: 'DEPOSITADO_CONCILIADO' },
-      { mal: 'MAL-78403', lacre: 'LAC-902205', transp: 'BRINKS', ced: 21400.00, moe: 450.00, resp: 'Mariana Supervisora', st: 'AGUARDANDO_COLETA' }
-    ];
-
-    for (const m of defaultMalotes) {
-      await db.query(
-        `INSERT INTO var_tesouraria_malotes (
-           empresa_id, numero_malote, numero_lacre, empresa_transporte,
-           valor_cedulas, valor_moedas, valor_total, responsavel_tesouraria, status
-         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-         ON CONFLICT DO NOTHING`,
-        [empresa, m.mal, m.lacre, m.transp, m.ced, m.moe, m.ced + m.moe, m.resp, m.st]
-      );
-    }
-
-    const recarregado = await db.query(
-      `SELECT * FROM var_tesouraria_malotes WHERE empresa_id = $1 ORDER BY data_recolhimento DESC LIMIT 40`,
-      [empresa]
-    );
-    return recarregado.rows;
-  }
-
   return res.rows;
 }
 
@@ -4246,89 +4203,6 @@ export async function listarPedidosPicking(db, empresaId, filtros = {}) {
      ORDER BY p.data_pedido DESC LIMIT 50`,
     [empresa]
   );
-
-  if (!res.rows || res.rows.length === 0) {
-    // Semente demonstrativa de alta fidelidade para e-commerce / clique & retire
-    const seedPedidos = [
-      {
-        num: 'PED-ECOMM-9102',
-        canal: 'ECOMMERCE',
-        cli: 'Mariana Duarte Prado',
-        tel: '(11) 98455-1122',
-        st: 'EM_SEPARACAO',
-        op: 'Lucas Separador',
-        tot: 348.60,
-        subst: true,
-        itens: [
-          { ean: '7891000100103', desc: 'Arroz Agulhinha Tipo 1 Camil 5kg', corr: 'Corredor 02 - A01', qtd: 2, sep: 2, st: 'COLETADO' },
-          { ean: '7891000245002', desc: 'Leite UHT Integral Piracanjuba 1L', corr: 'Corredor 05 - B03', qtd: 12, sep: 12, st: 'COLETADO' },
-          { ean: '7894900010015', desc: 'Refrigerante Coca-Cola 2L', corr: 'Corredor 06 - C02', qtd: 3, sep: 0, st: 'PENDENTE' },
-          { ean: '7891025114138', desc: 'Detergente Líquido Ypê Maçã 500ml', corr: 'Corredor 09 - D01', qtd: 4, sep: 0, st: 'PENDENTE' }
-        ]
-      },
-      {
-        num: 'PED-RETIRE-8841',
-        canal: 'CLIQUE_RETIRE',
-        cli: 'Fernando Botelho Neves',
-        tel: '(11) 97120-3344',
-        st: 'AGUARDANDO_PICKING',
-        op: null,
-        tot: 182.40,
-        subst: true,
-        itens: [
-          { ean: '7891000315507', desc: 'Café Torrado e Moído Pilão 500g', corr: 'Corredor 03 - A04', qtd: 2, sep: 0, st: 'PENDENTE' },
-          { ean: '7894321711261', desc: 'Açúcar Refinado União 1kg', corr: 'Corredor 03 - B01', qtd: 3, sep: 0, st: 'PENDENTE' },
-          { ean: '7891962051016', desc: 'Óleo de Soja Soya Pet 900ml', corr: 'Corredor 04 - A02', qtd: 4, sep: 0, st: 'PENDENTE' }
-        ]
-      },
-      {
-        num: 'PED-IFOOD-7730',
-        canal: 'IFOOD_MERCADO',
-        cli: 'Beatriz Vasconcelos',
-        tel: '(11) 99881-2299',
-        st: 'SEPARADO',
-        op: 'Juliana Express',
-        tot: 95.80,
-        subst: false,
-        itens: [
-          { ean: '7891000053508', desc: 'Biscoito Recheado Passatempo 130g', corr: 'Corredor 07 - A03', qtd: 4, sep: 4, st: 'COLETADO' },
-          { ean: '7892840222949', desc: 'Salgadinho Doritos Queijo Nacho 140g', corr: 'Corredor 07 - B02', qtd: 2, sep: 2, st: 'COLETADO' }
-        ]
-      }
-    ];
-
-    for (const p of seedPedidos) {
-      const insP = await db.query(
-        `INSERT INTO var_picking_pedidos (
-           empresa_id, numero_pedido, canal, cliente_nome, cliente_telefone,
-           status, operador_picking, itens_total, itens_separados, valor_total, substituicoes_autorizadas
-         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-         RETURNING id`,
-        [empresa, p.num, p.canal, p.cli, p.tel, p.st, p.op, p.itens.length, p.itens.filter(i => i.st === 'COLETADO').length, p.tot, p.subst]
-      );
-      const pedId = insP.rows[0].id;
-      for (const it of p.itens) {
-        await db.query(
-          `INSERT INTO var_picking_itens (
-             pedido_id, codigo_barras, descricao, corredor_endereco,
-             quantidade_solicitada, quantidade_separada, status
-           ) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-          [pedId, it.ean, it.desc, it.corr, it.qtd, it.sep, it.st]
-        );
-      }
-    }
-
-    const rec = await db.query(
-      `SELECT p.*,
-              (SELECT json_agg(i.*) FROM var_picking_itens i WHERE i.pedido_id = p.id) as itens
-       FROM var_picking_pedidos p
-       WHERE p.empresa_id = $1
-       ORDER BY p.data_pedido DESC`,
-      [empresa]
-    );
-    return rec.rows;
-  }
-
   return res.rows;
 }
 
@@ -4377,34 +4251,6 @@ export async function listarItensRemarcacaoDesperdicio(db, empresaId) {
      ORDER BY dias_para_vencer ASC, data_vencimento ASC LIMIT 50`,
     [empresa]
   );
-
-  if (!res.rows || res.rows.length === 0) {
-    const seedDesperdicio = [
-      { desc: 'Iogurte Grego Frutas Vermelhas Vigor 100g', ean: '7891234567890', lote: 'LT-8812', dias: 2, vcto: '2026-11-11', orig: 4.99, descPct: 50.00, rem: 2.49, qtd: 24, st: 'REMARCADO_GONDOLA' },
-      { desc: 'Presunto Cozido Fatiado Sadia 200g', ean: '7891515234001', lote: 'LT-9021', dias: 3, vcto: '2026-11-12', orig: 8.90, descPct: 30.00, rem: 6.23, qtd: 15, st: 'REMARCADO_GONDOLA' },
-      { desc: 'Pão de Forma Tradicional Wickbold 500g', ean: '7896001201019', lote: 'LT-7740', dias: 1, vcto: '2026-11-10', orig: 9.50, descPct: 50.00, rem: 4.75, qtd: 8, st: 'REMARCADO_GONDOLA' },
-      { desc: 'Ricota Fresca Tirolez 400g', ean: '7896024103017', lote: 'LT-9110', dias: 5, vcto: '2026-11-14', orig: 14.80, descPct: 20.00, rem: 11.84, qtd: 12, st: 'REMARCADO_GONDOLA' }
-    ];
-
-    for (const d of seedDesperdicio) {
-      await db.query(
-        `INSERT INTO var_remarcacao_validade_desperdicio (
-           empresa_id, descricao, codigo_barras, lote_codigo, data_vencimento,
-           dias_para_vencer, preco_original, percentual_desconto, preco_remarcado,
-           quantidade_lote, status
-         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-         ON CONFLICT DO NOTHING`,
-        [empresa, d.desc, d.ean, d.lote, d.vcto, d.dias, d.orig, d.descPct, d.rem, d.qtd, d.st]
-      );
-    }
-
-    const rec = await db.query(
-      `SELECT * FROM var_remarcacao_validade_desperdicio WHERE empresa_id = $1 ORDER BY dias_para_vencer ASC`,
-      [empresa]
-    );
-    return rec.rows;
-  }
-
   return res.rows;
 }
 
@@ -4441,35 +4287,6 @@ export async function listarConciliacaoCartoes(db, empresaId, filtros = {}) {
      ORDER BY data_venda DESC LIMIT 50`,
     [empresa]
   );
-
-  if (!res.rows || res.rows.length === 0) {
-    const seedConciliacao = [
-      { adq: 'STONE', band: 'VISA_CREDITO', dtVenda: '2026-11-08', dtRepasse: '2026-12-08', bruto: 14500.00, mdrContr: 2.10, mdrCob: 2.10, liqEsp: 14195.50, liqPago: 14195.50, div: 0.00, st: 'CONCILIADO_OK' },
-      { adq: 'CIELO', band: 'MASTERCARD_DEBITO', dtVenda: '2026-11-08', dtRepasse: '2026-11-09', bruto: 9200.00, mdrContr: 0.95, mdrCob: 1.25, liqEsp: 9112.60, liqPago: 9085.00, div: 27.60, st: 'DIVERGENCIA_TAXA' },
-      { adq: 'REDE', band: 'ELO_CREDITO', dtVenda: '2026-11-08', dtRepasse: '2026-12-08', bruto: 6800.00, mdrContr: 2.40, mdrCob: 2.40, liqEsp: 6636.80, liqPago: 6636.80, div: 0.00, st: 'CONCILIADO_OK' },
-      { adq: 'VR_BENEFICIOS', band: 'ALELO_ALIMENTACAO', dtVenda: '2026-11-08', dtRepasse: '2026-11-23', bruto: 12400.00, mdrContr: 3.50, mdrCob: 3.50, liqEsp: 11966.00, liqPago: 0.00, div: 0.00, st: 'AGUARDANDO_REPASSE' },
-      { adq: 'PAGBANK_PIX', band: 'PIX_DINAMICO', dtVenda: '2026-11-09', dtRepasse: '2026-11-09', bruto: 18950.00, mdrContr: 0.40, mdrCob: 0.40, liqEsp: 18874.20, liqPago: 18874.20, div: 0.00, st: 'CONCILIADO_OK' }
-    ];
-
-    for (const c of seedConciliacao) {
-      await db.query(
-        `INSERT INTO var_conciliacao_cartoes (
-           empresa_id, adquirente, bandeira, data_venda, data_previsao_repasse,
-           valor_bruto_pdv, taxa_mdr_contratada_pct, taxa_mdr_cobrada_pct,
-           valor_liquido_esperado, valor_liquido_pago, divergencia_nominal, status
-         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-         ON CONFLICT DO NOTHING`,
-        [empresa, c.adq, c.band, c.dtVenda, c.dtRepasse, c.bruto, c.mdrContr, c.mdrCob, c.liqEsp, c.liqPago, c.div, c.st]
-      ).catch(() => {});
-    }
-
-    const rec = await db.query(
-      `SELECT * FROM var_conciliacao_cartoes WHERE empresa_id = $1 ORDER BY data_venda DESC`,
-      [empresa]
-    );
-    return rec.rows;
-  }
-
   return res.rows;
 }
 
@@ -4503,33 +4320,6 @@ export async function listarAcordosComerciais(db, empresaId) {
      ORDER BY data_acordo DESC LIMIT 50`,
     [empresa]
   );
-
-  if (!res.rows || res.rows.length === 0) {
-    const seedAcordos = [
-      { forn: 'Ambev S/A', cnpj: '07.526.557/0001-00', tipo: 'PONTA_GONDOLA', val: 5000.00, vig: 'Novembro/2026', forma: 'DESCONTO_DUPLICATA', st: 'ATIVO_A_FATURAR' },
-      { forn: 'Coca-Cola FEMSA Brasil', cnpj: '45.997.418/0001-53', tipo: 'ILHA_CONGELADOS', val: 7500.00, vig: 'Novembro/2026', forma: 'DESCONTO_DUPLICATA', st: 'ATIVO_A_FATURAR' },
-      { forn: 'Nestlé Brasil Ltda', cnpj: '60.409.075/0001-52', tipo: 'TABLOIDE_OFERTAS', val: 3200.00, vig: 'Quinzena 1 Nov/2026', forma: 'BONIFICACAO_PRODUTOS', st: 'LIQUIDADO_CREDITO' },
-      { forn: 'JBS Friboi Carnes', cnpj: '02.916.265/0001-00', tipo: 'REBATE_SELLOUT', val: 12000.00, vig: 'Outubro/2026', forma: 'DEPOSITO_CONTA', st: 'LIQUIDADO_CREDITO' }
-    ];
-
-    for (const a of seedAcordos) {
-      await db.query(
-        `INSERT INTO var_acordos_fornecedores_verbas (
-           empresa_id, fornecedor_nome, fornecedor_cnpj, tipo_acordo,
-           valor_acordado, periodo_vigencia, forma_liquidacao, status
-         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-         ON CONFLICT DO NOTHING`,
-        [empresa, a.forn, a.cnpj, a.tipo, a.val, a.vig, a.forma, a.st]
-      );
-    }
-
-    const rec = await db.query(
-      `SELECT * FROM var_acordos_fornecedores_verbas WHERE empresa_id = $1 ORDER BY data_acordo DESC`,
-      [empresa]
-    );
-    return rec.rows;
-  }
-
   return res.rows;
 }
 
@@ -4579,34 +4369,6 @@ export async function listarOcorrenciasPrevencaoPerdas(db, empresaId, filtros = 
      ORDER BY data_ocorrencia DESC LIMIT 50`,
     [empresa]
   );
-
-  if (!res.rows || res.rows.length === 0) {
-    const seedPerdas = [
-      { num: 'BOP-2026-1042', tipo: 'FURTO_EXTERNO', loc: 'Antena EAS Saída Principal', ean: '7891000315507', desc: 'Whisky Johnnie Walker Black Label 1L', qtd: 1, cUni: 149.90, cTot: 149.90, eas: true, fisc: 'Marcos Segurança', st: 'RECUPERADO_PARCIAL' },
-      { num: 'BOP-2026-1043', tipo: 'QUEBRA_OPERACIONAL', loc: 'Corredor 06 - Bebidas', ean: '7894900010015', desc: 'Cerveja Heineken Long Neck 330ml (Caixa 6 un)', qtd: 2, cUni: 32.50, cTot: 65.00, eas: false, fisc: 'Carlos Repositor', st: 'BAIXADO_ESTOQUE' },
-      { num: 'BOP-2026-1044', tipo: 'AVARIA_TRANSPORTE', loc: 'Doca 01 - Descarga Furgão', ean: '7891000245002', desc: 'Leite UHT Integral Piracanjuba 1L (Fardo 12un)', qtd: 3, cUni: 58.80, cTot: 176.40, eas: false, fisc: 'Roberto Doca', st: 'RESSARCIMENTO_FORNECEDOR' },
-      { num: 'BOP-2026-1045', tipo: 'FURTO_EXTERNO', loc: 'Antena EAS Saída 02', ean: '7891025114138', desc: 'Picanha Bovina Friboi Peça Vácuo 1.4kg', qtd: 1, cUni: 98.00, cTot: 98.00, eas: true, fisc: 'Marcos Segurança', st: 'LIVRO_POLICIAL_REGISTRADO' }
-    ];
-
-    for (const p of seedPerdas) {
-      await db.query(
-        `INSERT INTO var_ocorrencias_prevencao_perdas (
-           empresa_id, numero_boletim, tipo_perda, local_ocorrencia, codigo_barras,
-           descricao_item, quantidade, custo_unitario, custo_total_perda, disparo_antena_eas,
-           fiscal_responsavel, status
-         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-         ON CONFLICT DO NOTHING`,
-        [empresa, p.num, p.tipo, p.loc, p.ean, p.desc, p.qtd, p.cUni, p.cTot, p.eas, p.fisc, p.st]
-      );
-    }
-
-    const rec = await db.query(
-      `SELECT * FROM var_ocorrencias_prevencao_perdas WHERE empresa_id = $1 ORDER BY data_ocorrencia DESC`,
-      [empresa]
-    );
-    return rec.rows;
-  }
-
   return res.rows;
 }
 
@@ -4648,69 +4410,6 @@ export async function listarLotesAcougueSif(db, empresaId) {
      ORDER BY data_recebimento DESC LIMIT 50`,
     [empresa]
   );
-
-  if (!res.rows || res.rows.length === 0) {
-    const seedSif = [
-      {
-        lote: 'BOV-SIF-2026-881',
-        frigo: 'JBS S/A - Barra do Garças MT',
-        sif: 'SIF 4200',
-        corte: 'Traseiro Especial Bovino (Alcatra / Contrafilé / Filé Mignon)',
-        abate: '2026-11-04',
-        rec: '2026-11-06',
-        val: '2026-12-06',
-        peso: 138.50,
-        faz: 'Fazenda Santa Helena - MT (SISBOV 12894)',
-        gta: 'GTA-MT-2026/891244',
-        qr: 'https://setpoint.kytto.com.br/rastreabilidade/BOV-SIF-2026-881'
-      },
-      {
-        lote: 'BOV-SIF-2026-882',
-        frigo: 'Marfrig Global Foods - Tangará da Serra MT',
-        sif: 'SIF 1751',
-        corte: 'Dianteiro Bovino com Osso (Acém / Peito / Paleta)',
-        abate: '2026-11-05',
-        rec: '2026-11-07',
-        val: '2026-12-07',
-        peso: 114.20,
-        faz: 'Agropecuária Vale Verde - MT (SISBOV 99120)',
-        gta: 'GTA-MT-2026/892015',
-        qr: 'https://setpoint.kytto.com.br/rastreabilidade/BOV-SIF-2026-882'
-      },
-      {
-        lote: 'SUI-SIF-2026-504',
-        frigo: 'BRF S/A - Lucas do Rio Verde MT',
-        sif: 'SIF 2110',
-        corte: 'Carcaça Suína Resfriada (Costela / Pernil / Lombo)',
-        abate: '2026-11-06',
-        rec: '2026-11-08',
-        val: '2026-11-28',
-        peso: 86.40,
-        faz: 'Granja Esperança Suínos - MT (SISBOV 44102)',
-        gta: 'GTA-MT-2026/893110',
-        qr: 'https://setpoint.kytto.com.br/rastreabilidade/SUI-SIF-2026-504'
-      }
-    ];
-
-    for (const s of seedSif) {
-      await db.query(
-        `INSERT INTO var_acougue_rastreabilidade_sif (
-           empresa_id, lote_acougue, frigorifico_nome, sif_numero, tipo_corte_carcaca,
-           data_abate, data_recebimento, data_validade, peso_recebido_kg, fazenda_origem,
-           gta_numero, qr_code_rastreabilidade, status
-         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'DESOSSA_CONCLUIDA')
-         ON CONFLICT DO NOTHING`,
-        [empresa, s.lote, s.frigo, s.sif, s.corte, s.abate, s.rec, s.val, s.peso, s.faz, s.gta, s.qr]
-      );
-    }
-
-    const rec = await db.query(
-      `SELECT * FROM var_acougue_rastreabilidade_sif WHERE empresa_id = $1 ORDER BY data_recebimento DESC`,
-      [empresa]
-    );
-    return rec.rows;
-  }
-
   return res.rows;
 }
 
@@ -4748,57 +4447,6 @@ export async function listarPlanogramasGondola(db, empresaId) {
      ORDER BY codigo_modulo ASC`,
     [empresa]
   );
-
-  if (!res.rows || res.rows.length === 0) {
-    const seedPlanogramas = [
-      {
-        mod: 'MOD-GON-01',
-        cat: 'Mercearia Básica (Arroz, Feijão e Óleo)',
-        corr: 'Corredor 02',
-        prat: 4,
-        met: 3.60,
-        rent: 6200.00,
-        itens: [
-          { andar: 'Prateleira 1 (Topo)', produtos: ['Arroz Integral Camil 1kg (3 facings)', 'Arroz Parboilizado 1kg (2 facings)'], foco: 'Margem Alta' },
-          { andar: 'Prateleira 2 (Nível Olhos)', produtos: ['Arroz Agulhinha Tipo 1 Camil 5kg (6 facings)', 'Arroz Tio João 5kg (5 facings)'], foco: 'Produto Âncora / Giro Alto' },
-          { andar: 'Prateleira 3 (Nível Mãos)', produtos: ['Feijão Carioca Camil 1kg (5 facings)', 'Feijão Preto Kicaldo 1kg (4 facings)'], foco: 'Rotina' },
-          { andar: 'Prateleira 4 (Base/Chão)', produtos: ['Fardo Feijão 10x1kg (Empilhado)', 'Fardo Arroz 6x5kg (Empilhado)'], foco: 'Pesados / Atacarejo' }
-        ]
-      },
-      {
-        mod: 'MOD-GON-02',
-        cat: 'Bebidas & Cervejas Especiais',
-        corr: 'Corredor 06',
-        prat: 4,
-        met: 2.80,
-        rent: 8900.00,
-        itens: [
-          { andar: 'Prateleira 1 (Topo)', produtos: ['Cervejas Artesanais IPA / Weiss 500ml (8 facings)'], foco: 'Super Premium' },
-          { andar: 'Prateleira 2 (Nível Olhos)', produtos: ['Heineken Long Neck 330ml (8 facings)', 'Corona Extra 330ml (6 facings)'], foco: 'Giro Rápido Premium' },
-          { andar: 'Prateleira 3 (Nível Mãos)', produtos: ['Amstel Lata 350ml (10 facings)', 'Brahma Duplo Malte Lata (10 facings)'], foco: 'Volume Varejo' },
-          { andar: 'Prateleira 4 (Base/Chão)', produtos: ['Pack Refrigerante Coca-Cola 2L (6 facings)', 'Pack Guaraná 2L (4 facings)'], foco: 'Pesados Volume' }
-        ]
-      }
-    ];
-
-    for (const pl of seedPlanogramas) {
-      await db.query(
-        `INSERT INTO var_planogramas_gondola (
-           empresa_id, codigo_modulo, categoria_nome, corredor, numero_prateleiras,
-           metragem_linear_metros, rentabilidade_metro_mes, produtos_alocados, status
-         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'VIGENTE')
-         ON CONFLICT DO NOTHING`,
-        [empresa, pl.mod, pl.cat, pl.corr, pl.prat, pl.met, pl.rent, JSON.stringify(pl.itens)]
-      );
-    }
-
-    const rec = await db.query(
-      `SELECT * FROM var_planogramas_gondola WHERE empresa_id = $1 ORDER BY codigo_modulo ASC`,
-      [empresa]
-    );
-    return rec.rows;
-  }
-
   return res.rows;
 }
 
@@ -4806,48 +4454,55 @@ export async function consultarPrecoKioskMultimidia(db, empresaId, dados) {
   const { codigoBarras, terminalId } = dados;
   const ean = String(codigoBarras || '').trim();
 
-  // Buscar dados reais do produto
-  const catalogo = {
-    '7891000100103': { desc: 'Arroz Agulhinha Tipo 1 Camil 5kg', vVar: 28.90, vAtac: 26.50, vClube: 25.90, nut: { calorias: '170 kcal (50g)', carboidratos: '38g', proteinas: '3.6g', sodio: '0mg' }, aler: 'NÃO CONTÉM GLÚTEN' },
-    '7891000245002': { desc: 'Leite UHT Integral Piracanjuba 1L', vVar: 5.49, vAtac: 4.99, vClube: 4.79, nut: { calorias: '118 kcal (200ml)', carboidratos: '9.0g', proteinas: '6.0g', gordurasTotais: '6.0g', calcio: '220mg' }, aler: 'CONTÉM LEITE E DERIVADOS. CONTÉM LACTOSE.' },
-    '7894900010015': { desc: 'Refrigerante Coca-Cola 2L', vVar: 10.99, vAtac: 9.99, vClube: 9.49, nut: { calorias: '149 kcal (350ml)', acucares: '37g', sodio: '18mg' }, aler: 'NÃO CONTÉM GLÚTEN' },
-    '7891000315507': { desc: 'Café Torrado e Moído Pilão 500g Tradicional', vVar: 19.90, vAtac: 18.50, vClube: 17.90, nut: { calorias: '0 kcal', cafeina: 'Forte' }, aler: 'NÃO CONTÉM GLÚTEN' }
-  };
+  // Buscar dados reais do produto cadastrado na empresa
+  const prodRes = await db.query(
+    `SELECT i.id, i.nome, i.ean, i.sku, i.preco_venda,
+            (SELECT MIN(f.preco_unitario) FROM var_atacarejo_faixas f WHERE f.empresa_id = i.empresa_id AND f.item_id = i.id AND f.ativo = true) AS preco_atacarejo
+     FROM est_itens i
+     WHERE i.empresa_id = $1 AND i.ativo = true AND (i.ean = $2 OR i.sku = $2 OR i.plu = $2)
+     LIMIT 1`,
+    [empresaId, ean]
+  ).catch(() => ({ rows: [] }));
 
-  const item = catalogo[ean] || {
-    desc: `Produto Código ${ean}`,
-    vVar: 14.90,
-    vAtac: 13.50,
-    vClube: 12.90,
-    nut: { info: 'Consultar embalagem oficial do fabricante' },
-    aler: 'Pode conter traços de soja e trigo'
-  };
+  if (!prodRes.rows[0]) {
+    return {
+      sucesso: false,
+      encontrado: false,
+      semDados: true,
+      mensagem: 'Produto não encontrado no catálogo desta empresa.'
+    };
+  }
+
+  const row = prodRes.rows[0];
+  const precoVar = Number(row.preco_venda || 0);
+  const precoAtac = row.preco_atacarejo !== null ? Number(row.preco_atacarejo) : null;
 
   await db.query(
     `INSERT INTO var_kiosk_consultas_preco (
        empresa_id, terminal_kiosk, codigo_barras, descricao_produto,
        preco_varejo, preco_atacarejo, preco_clube, tabela_nutricional, alergicos_info
      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-    [empresaId, terminalId || 'BUSCA-PRECO-01', ean, item.desc, item.vVar, item.vAtac, item.vClube, JSON.stringify(item.nut), item.aler]
-  );
+    [empresaId, terminalId || 'BUSCA-PRECO-01', ean, row.nome, precoVar, precoAtac, null, JSON.stringify({}), null]
+  ).catch(() => null);
 
   kyttoEventBus.emit('supermercado.consulta_preco_terminal_kiosk', {
     empresaId,
     ean,
-    produto: item.desc,
+    produto: row.nome,
     terminal: terminalId || 'BUSCA-PRECO-01'
   });
 
   return {
     sucesso: true,
+    encontrado: true,
     produto: {
-      codigoBarras: ean,
-      descricao: item.desc,
-      precoVarejo: item.vVar,
-      precoAtacarejo: item.vAtac,
-      precoClube: item.vClube,
-      nutricional: item.nut,
-      alergicos: item.aler
+      codigoBarras: row.ean || ean,
+      descricao: row.nome,
+      precoVarejo: precoVar,
+      precoAtacarejo: precoAtac,
+      precoClube: null,
+      nutricional: null,
+      alergicos: null
     }
   };
 }
@@ -4873,58 +4528,6 @@ export async function listarAuditoriaFraudePdv(db, empresaId, { status = 'TODOS'
   }
 
   let rows = res.rows || [];
-  if (rows.length === 0) {
-    rows = [
-      {
-        id: 'aud-fraude-001',
-        terminal_id: 'PDV-02',
-        operador_id: 'OP-104',
-        operador_nome: 'Lucas Silva (Caixa 02)',
-        tipo_evento: 'CANCELAMENTO_ITEM',
-        numero_cupom: 'NFCe-004812',
-        item_cancelado: 'Picanha Bovina Resfriada Fatiada 1.2kg',
-        valor_evento: 119.88,
-        motivo_informado: 'Cliente desistiu do item após conferência do total',
-        score_risco: 4,
-        requer_autorizacao_fiscal: true,
-        fiscal_autorizador: 'Marcos Gerente',
-        status: 'JUSTIFICADO',
-        criado_em: new Date(Date.now() - 3600000 * 2).toISOString()
-      },
-      {
-        id: 'aud-fraude-002',
-        terminal_id: 'PDV-04',
-        operador_id: 'OP-109',
-        operador_nome: 'Camila Ferreira (Caixa 04)',
-        tipo_evento: 'GAVETA_SEM_VENDA',
-        numero_cupom: 'SEM_CUPOM',
-        item_cancelado: '-',
-        valor_evento: 0.00,
-        motivo_informado: 'Abertura manual de gaveta repetida sem venda registrada (No-Sale)',
-        score_risco: 5,
-        requer_autorizacao_fiscal: true,
-        fiscal_autorizador: null,
-        status: 'EM_ANALISE',
-        criado_em: new Date(Date.now() - 1800000).toISOString()
-      },
-      {
-        id: 'aud-fraude-003',
-        terminal_id: 'PDV-01',
-        operador_id: 'OP-101',
-        operador_nome: 'Mariana Costa (Caixa 01)',
-        tipo_evento: 'DESCONTO_MANUAL_ELEVADO',
-        numero_cupom: 'NFCe-004890',
-        item_cancelado: 'Azeite de Oliva Extra Virgem 500ml',
-        valor_evento: 24.50,
-        motivo_informado: 'Desconto de 40% aplicado no item (avariado/amassado)',
-        score_risco: 3,
-        requer_autorizacao_fiscal: true,
-        fiscal_autorizador: 'Marcos Gerente',
-        status: 'JUSTIFICADO',
-        criado_em: new Date(Date.now() - 900000).toISOString()
-      }
-    ];
-  }
 
   const totalEventos = rows.length;
   const altoRisco = rows.filter(r => (r.score_risco || 0) >= 4).length;
@@ -4932,11 +4535,12 @@ export async function listarAuditoriaFraudePdv(db, empresaId, { status = 'TODOS'
 
   return {
     sucesso: true,
+    semDados: rows.length === 0,
     resumo: {
       totalEventos,
       altoRisco,
       valorTotalAuditado: valorTotalAuditado.toFixed(2),
-      indiceAuditoriaPdv: '99.4%'
+      indiceAuditoriaPdv: rows.length > 0 ? `${Math.max(0, 100 - altoRisco).toFixed(1)}%` : null
     },
     eventos: rows
   };
@@ -5002,46 +4606,10 @@ export async function listarTabloidesEncartes(db, empresaId) {
   }
 
   let tabloides = res.rows || [];
-  if (tabloides.length === 0) {
-    tabloides = [
-      {
-        id: 'tab-001',
-        titulo: 'Quarta & Quinta do Hortifrúti Especial',
-        tema: 'HORTIFRUTI',
-        data_inicio: '2026-11-10',
-        data_fim: '2026-11-12',
-        status: 'PUBLICADO',
-        total_itens: 4,
-        visualizacoes_digitais: 1420,
-        disparos_whatsapp: 850,
-        itens: [
-          { descricao: 'Maçã Fuji Nacional Selecionada kg', preco_de: 11.90, preco_por: 7.99, desconto_pct: 32.8, departamento: 'Hortifrúti', destaque_capa: true },
-          { descricao: 'Banana Prata Climatizada kg', preco_de: 8.50, preco_por: 5.49, desconto_pct: 35.4, departamento: 'Hortifrúti', destaque_capa: true },
-          { descricao: 'Tomate Longa Vida Especial kg', preco_de: 9.90, preco_por: 6.89, desconto_pct: 30.4, departamento: 'Hortifrúti', destaque_capa: false },
-          { descricao: 'Batata Inglesa Lavada kg', preco_de: 7.80, preco_por: 4.99, desconto_pct: 36.0, departamento: 'Hortifrúti', destaque_capa: false }
-        ]
-      },
-      {
-        id: 'tab-002',
-        titulo: 'Festival da Carne & Cerveja do Fim de Semana',
-        tema: 'CARNES',
-        data_inicio: '2026-11-13',
-        data_fim: '2026-11-15',
-        status: 'DISPARADO_WHATSAPP',
-        total_itens: 3,
-        visualizacoes_digitais: 2890,
-        disparos_whatsapp: 1600,
-        itens: [
-          { descricao: 'Picanha Bovina Resfriada Fatiada kg', preco_de: 89.90, preco_por: 69.90, desconto_pct: 22.2, departamento: 'Açougue', destaque_capa: true },
-          { descricao: 'Contrafilé Bovino Grill kg', preco_de: 58.90, preco_por: 44.90, desconto_pct: 23.7, departamento: 'Açougue', destaque_capa: true },
-          { descricao: 'Cerveja Puro Malte Long Neck 330ml', preco_de: 6.99, preco_por: 4.89, desconto_pct: 30.0, departamento: 'Bebidas', destaque_capa: true }
-        ]
-      }
-    ];
-  }
 
   return {
     sucesso: true,
+    semDados: tabloides.length === 0,
     totalTabloides: tabloides.length,
     tabloides
   };
@@ -5106,59 +4674,17 @@ export async function listarTradeMarketingEspacos(db, empresaId) {
   }
 
   let rows = res.rows || [];
-  if (rows.length === 0) {
-    rows = [
-      {
-        id: 'tm-001',
-        codigo_espaco: 'PG-01 (Ponta de Gôndola)',
-        tipo_espaco: 'PONTA_DE_GONDOLA',
-        setor_loja: 'Corredor Central de Bebidas',
-        fornecedor_locatario: 'Ambev S/A',
-        marca_exibida: 'Brahma Duplo Malte & Spaten',
-        valor_mensal_locacao: 4500.00,
-        data_inicio: '2026-11-01',
-        data_fim: '2026-11-30',
-        status: 'ATIVO',
-        conferido_auditoria: true
-      },
-      {
-        id: 'tm-002',
-        codigo_espaco: 'ILHA-02 (Ilha Promocional)',
-        tipo_espaco: 'ILHA_CENTRAL',
-        setor_loja: 'Frente do Hortifrúti',
-        fornecedor_locatario: 'Nestlé Brasil Ltda',
-        marca_exibida: 'Ninho Fases & Nescau',
-        valor_mensal_locacao: 3800.00,
-        data_inicio: '2026-11-01',
-        data_fim: '2026-11-30',
-        status: 'ATIVO',
-        conferido_auditoria: true
-      },
-      {
-        id: 'tm-003',
-        codigo_espaco: 'CHECK-04 (Check-stand Frente Caixa)',
-        tipo_espaco: 'CHECKOUT_CHECKSTAND',
-        setor_loja: 'Frente de Caixa PDV 01 ao 04',
-        fornecedor_locatario: 'Mondelez Brasil',
-        marca_exibida: 'Chocolates Lacta & Balas Halls',
-        valor_mensal_locacao: 2200.00,
-        data_inicio: '2026-11-01',
-        data_fim: '2026-11-30',
-        status: 'ATIVO',
-        conferido_auditoria: true
-      }
-    ];
-  }
 
   const receitaTotalTrade = rows.reduce((acc, r) => acc + Number(r.valor_mensal_locacao || 0), 0);
   const espacosLocados = rows.filter(r => r.status === 'ATIVO').length;
 
   return {
     sucesso: true,
+    semDados: rows.length === 0,
     resumo: {
       receitaTotalTrade: receitaTotalTrade.toFixed(2),
       espacosLocados,
-      taxaOcupacao: '100%'
+      taxaOcupacao: rows.length > 0 ? `${Math.round((espacosLocados / rows.length) * 100)}%` : '0%'
     },
     espacos: rows
   };
@@ -5195,49 +4721,20 @@ export async function listarAuditoriaNoturnaPerdas(db, empresaId) {
   }
 
   let rows = res.rows || [];
-  if (rows.length === 0) {
-    rows = [
-      {
-        id: 'aud-not-001',
-        data_auditoria: '2026-11-09',
-        turno: 'NOTURNO',
-        auditor_responsavel: 'Carlos Santos (Líder Prevenção de Perdas)',
-        corredor_vistoriado: 'Corredor 04 — Perfumaria, Desodorantes e Lâminas',
-        itens_vistoriados: 180,
-        itens_avariados: 2,
-        embalagens_violadas: 3,
-        perda_estimada_rs: 142.50,
-        indice_perda_calculado: 0.85,
-        relatorio_conclusao: 'Vistoria noturna de pontos cegos. Três embalagens de desodorante aerosol encontradas vazias atrás da prateleira inferior. Câmeras ajustadas.',
-        status: 'CONCLUIDO'
-      },
-      {
-        id: 'aud-not-002',
-        data_auditoria: '2026-11-08',
-        turno: 'NOTURNO',
-        auditor_responsavel: 'Carlos Santos (Líder Prevenção de Perdas)',
-        corredor_vistoriado: 'Corredor 08 — Frios, Iogurtes e Queijos Embalados',
-        itens_vistoriados: 240,
-        itens_avariados: 5,
-        embalagens_violadas: 1,
-        perda_estimada_rs: 98.70,
-        indice_perda_calculado: 0.62,
-        relatorio_conclusao: 'Identificados potes de iogurte estourados por empilhamento excessivo de reposição. Orientada equipe de mercearia noturna.',
-        status: 'CONCLUIDO'
-      }
-    ];
-  }
 
   const perdaTotalEstimada = rows.reduce((acc, r) => acc + Number(r.perda_estimada_rs || 0), 0);
-  const mediaIndicePerda = (rows.reduce((acc, r) => acc + Number(r.indice_perda_calculado || 0), 0) / (rows.length || 1)).toFixed(2);
+  const mediaIndicePerda = rows.length > 0
+    ? (rows.reduce((acc, r) => acc + Number(r.indice_perda_calculado || 0), 0) / rows.length).toFixed(2)
+    : null;
 
   return {
     sucesso: true,
+    semDados: rows.length === 0,
     resumo: {
       perdaTotalEstimada: perdaTotalEstimada.toFixed(2),
-      mediaIndicePerda: `${mediaIndicePerda}%`,
+      mediaIndicePerda: mediaIndicePerda !== null ? `${mediaIndicePerda}%` : null,
       metaAbras: '1.30%',
-      conformidadeAbras: Number(mediaIndicePerda) <= 1.30 ? 'DENTRO DA META' : 'ATENÇÃO'
+      conformidadeAbras: mediaIndicePerda === null ? 'SEM VISTORIAS' : (Number(mediaIndicePerda) <= 1.30 ? 'DENTRO DA META' : 'ATENÇÃO')
     },
     auditorias: rows
   };

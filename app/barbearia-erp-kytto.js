@@ -5241,3 +5241,143 @@ export async function estornarVendaRevenda(empresaId, vendaId, dados = {}) {
   const input = { ...dados, sourceType: 'revenda', sourceId: vendaId, actionId: dados.actionId ?? dados.action_id, idempotencyKey: dados.idempotencyKey ?? dados.idempotency_key ?? dados.chaveIdempotencia, operador: dados.operador ?? dados.usuarioId ?? dados.usuario, approvedBy: dados.approvedBy ?? dados.approved_by, confirmado: dados.confirmado === true };
   return executeDinoReversal({ empresaId, lojaId }, input, adaptersParaEstorno(empresaId, { ...dados, lojaId }));
 }
+
+/**
+ * Visão oficial e auditável `ia_agendamentos_resumo` (Fase A)
+ * Retorna indicadores reais por período e empresa com regras de cálculo explícitas.
+ */
+export function obterResumoAgendamentosIa(empresaId, { de = '', ate = '', lojaId = '' } = {}) {
+  const estado = estadoEmpresa(empresaId, false);
+  const dIni = String(de || '').slice(0, 10);
+  const dFim = String(ate || '').slice(0, 10);
+
+  const comandasPagasPorAgendamento = new Map();
+  for (const cmd of Object.values(estado.comandas || {})) {
+    if (!cmd || cmd.empresaId !== String(empresaId)) continue;
+    if (['paga', 'em_conta', 'fechada'].includes(String(cmd.status || '').toLowerCase())) {
+      if (cmd.agendamentoId) comandasPagasPorAgendamento.set(String(cmd.agendamentoId), cmd);
+      for (const it of cmd.itens || []) {
+        if (it?.agendamentoId) comandasPagasPorAgendamento.set(String(it.agendamentoId), cmd);
+      }
+    }
+  }
+
+  const todosAgendamentosEmpresa = Object.values(estado.agendamentos || {}).filter((ag) => ag && ag.empresaId === String(empresaId));
+  const canceladosPorSlot = new Map();
+  for (const ag of todosAgendamentosEmpresa) {
+    if (ag.status === 'cancelado') {
+      const dSlot = String(ag.dataAgenda || (ag.dataHora || '').slice(0, 10));
+      const hSlot = String(ag.horaLocal || '');
+      if (ag.profissionalId && dSlot && hSlot) {
+        canceladosPorSlot.set(`${ag.profissionalId}|${dSlot}|${hSlot}`, ag);
+      }
+    }
+  }
+
+  const agendamentos = todosAgendamentosEmpresa.filter((ag) => {
+    if (lojaId && ag.lojaId && String(ag.lojaId) !== String(lojaId)) return false;
+    const dAg = String(ag.dataAgenda || (ag.dataHora || '').slice(0, 10));
+    if (dIni && dAg < dIni) return false;
+    if (dFim && dAg > dFim) return false;
+    return true;
+  });
+
+  const porOrigem = { whatsapp_ia: 0, link_publico: 0, admin: 0, outros: 0 };
+  let confirmados = 0;
+  let concluidosQtd = 0;
+  let concluidosValor = 0;
+  let remarcados = 0;
+  const canceladosPorMotivo = {};
+  const canceladosPorQuem = { cliente: 0, equipe: 0, sistema: 0 };
+  let totalCancelados = 0;
+  const vagasRecuperadasLista = [];
+  let valorRecuperado = 0;
+
+  for (const ag of agendamentos) {
+    const orig = String(ag.origem || 'admin').toLowerCase();
+    if (orig.includes('whatsapp') || orig.includes('ia') || orig.includes('trex') || orig.includes('bot')) {
+      porOrigem.whatsapp_ia += 1;
+    } else if (orig.includes('public') || orig.includes('online') || orig.includes('site') || orig.includes('link')) {
+      porOrigem.link_publico += 1;
+    } else if (orig.includes('admin') || orig.includes('painel') || orig.includes('recepcao')) {
+      porOrigem.admin += 1;
+    } else {
+      porOrigem.outros += 1;
+    }
+
+    if (ag.status === 'confirmado' || ag.confirmacaoAutomatica?.status === 'confirmado') {
+      confirmados += 1;
+    }
+
+    const comandaVinculada = comandasPagasPorAgendamento.get(String(ag.id));
+    if (ag.status === 'concluido' || comandaVinculada) {
+      concluidosQtd += 1;
+      const val = comandaVinculada
+        ? Number(comandaVinculada.totalPago || comandaVinculada.total || ag.valor || 0)
+        : Number(ag.valorRecebido || ag.valor || 0);
+      concluidosValor += val;
+    }
+
+    if ((Array.isArray(ag.historicoRemarcacoes) && ag.historicoRemarcacoes.length > 0) || ag.remarcadoDeId) {
+      remarcados += 1;
+    }
+
+    if (ag.status === 'cancelado') {
+      totalCancelados += 1;
+      const mot = String(ag.motivoCancelamento || 'outro').trim() || 'outro';
+      canceladosPorMotivo[mot] = (canceladosPorMotivo[mot] || 0) + 1;
+      const quem = String(ag.canceladoPor || 'equipe').toLowerCase();
+      if (quem.includes('cliente')) canceladosPorQuem.cliente += 1;
+      else if (quem.includes('sistema')) canceladosPorQuem.sistema += 1;
+      else canceladosPorQuem.equipe += 1;
+    } else {
+      const dSlot = String(ag.dataAgenda || (ag.dataHora || '').slice(0, 10));
+      const hSlot = String(ag.horaLocal || '');
+      const canceladoMesmoHorario = ag.vagaOrigemId
+        ? estado.agendamentos?.[ag.vagaOrigemId]
+        : canceladosPorSlot.get(`${ag.profissionalId}|${dSlot}|${hSlot}`);
+      if (canceladoMesmoHorario && canceladoMesmoHorario.id !== ag.id) {
+        const valRec = Number(ag.valorRecebido || ag.valor || 0);
+        valorRecuperado += valRec;
+        vagasRecuperadasLista.push({
+          agendamentoId: ag.id,
+          vagaOrigemId: canceladoMesmoHorario.id,
+          dataAgenda: dSlot,
+          horaLocal: hSlot,
+          profissionalId: ag.profissionalId,
+          profissionalNome: estado.profissionais?.[ag.profissionalId]?.nome || ag.profissionalNome || '',
+          statusAtual: ag.status,
+          valor: Number(valRec.toFixed(2)),
+        });
+      }
+    }
+  }
+
+  return {
+    visao: 'ia_agendamentos_resumo',
+    empresaId: String(empresaId),
+    periodo: { de: dIni || null, ate: dFim || null },
+    criados: { total: agendamentos.length, porOrigem },
+    confirmados: { total: confirmados },
+    concluidos: { total: concluidosQtd, valorTotal: Number(concluidosValor.toFixed(2)) },
+    cancelados: { total: totalCancelados, porMotivo: canceladosPorMotivo, porQuem: canceladosPorQuem },
+    remarcados: { total: remarcados },
+    vagasRecuperadas: {
+      total: vagasRecuperadasLista.length,
+      valorRecuperado: Number(valorRecuperado.toFixed(2)),
+      itens: vagasRecuperadasLista,
+    },
+    auditoriaProfissionais: {
+      totalProfissionaisAtivos: Object.values(estado.profissionais || {}).filter((p) => p.ativo !== false && !p.consolidadoEm).length,
+      agendamentosSemProfissional: agendamentos.filter((a) => !a.profissionalId || !estado.profissionais?.[a.profissionalId]).length,
+      cancelamentosSemMotivo: agendamentos.filter((a) => a.status === 'cancelado' && !String(a.motivoCancelamento || '').trim()).length,
+    },
+    regrasDeCalculo: {
+      criados: 'Contagem de agendamentos em estado.agendamentos filtrados por empresaId e intervalo de dataAgenda.',
+      confirmados: "Agendamentos com status === 'confirmado' ou confirmacaoAutomatica.status === 'confirmado'.",
+      concluidos: "Agendamentos com status === 'concluido' ou vinculados a comanda com status 'paga'/'em_conta'.",
+      cancelados: "Agendamentos com status === 'cancelado' e motivo registrado em motivoCancelamento.",
+      vagaRecuperada: 'Contabilizada exclusivamente quando um novo agendamento ativo ocupa o mesmo profissionalId, dataAgenda e horaLocal de um agendamento anteriormente cancelado (vagaOrigemId).',
+    },
+  };
+}

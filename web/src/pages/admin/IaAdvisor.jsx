@@ -32,7 +32,7 @@ export default function IaAdvisor() {
     setErro(null);
     try {
       const res = await api.get('/api/admin/ia-advisor/dashboard');
-      setDashboard(res.data);
+      setDashboard(res?.data || res);
     } catch (err) {
       console.error('Erro ao carregar IA Advisor:', err);
       setErro('Não foi possível carregar os dados do IA Advisor.');
@@ -49,7 +49,7 @@ export default function IaAdvisor() {
         aumentoAtendimentosPercentual: demanda,
         novosColaboradores: colaboradores
       });
-      setResultadoSimulacao(res.data);
+      setResultadoSimulacao(res?.data || res);
     } catch (err) {
       console.error('Erro na simulação:', err);
     } finally {
@@ -127,7 +127,7 @@ export default function IaAdvisor() {
             color: '#cbd5e1',
             border: '1px solid rgba(255, 255, 255, 0.1)'
           }}>
-            Score de Saúde: <strong style={{ color: '#4ade80' }}>{dashboard?.scoreSaude || 92}/100</strong>
+            Score de Saúde: <strong style={{ color: '#4ade80' }}>{dashboard?.scoreSaude != null ? `${dashboard.scoreSaude}/100` : 'Sem base'}</strong>
           </div>
           <button
             onClick={carregarDashboard}
@@ -181,12 +181,12 @@ export default function IaAdvisor() {
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px' }}>
             <span style={{ color: '#10b981', fontWeight: '600', display: 'flex', alignItems: 'center' }}>
-              <ArrowUpRight size={16} /> Probabilidade: {forecast?.probabilidadeMeta || 85}%
+              <ArrowUpRight size={16} /> {forecast?.probabilidadeMeta != null ? `Probabilidade: ${forecast.probabilidadeMeta}%` : 'Sem meta mensal definida'}
             </span>
-            <span style={{ color: '#94a3b8' }}>· Meta: {forecast?.metaEmpresaFormatada || 'R$ 25.000,00'}</span>
+            <span style={{ color: '#94a3b8' }}>· Meta: {forecast?.metaEmpresaFormatada || 'Não cadastrada'}</span>
           </div>
           <div style={{ marginTop: '14px', width: '100%', height: '6px', background: '#e2e8f0', borderRadius: '3px', overflow: 'hidden' }}>
-            <div style={{ width: `${Math.min(100, forecast?.percentualAtingido || 45)}%`, height: '100%', background: '#3b82f6', borderRadius: '3px' }} />
+            <div style={{ width: `${Math.min(100, Number(forecast?.percentualAtingido || 0))}%`, height: '100%', background: '#3b82f6', borderRadius: '3px' }} />
           </div>
         </div>
 

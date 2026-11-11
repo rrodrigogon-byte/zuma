@@ -634,7 +634,7 @@ export default function Empresas() {
                     >
                       ✏️ Editar
                     </button>
-                    {isPlatformAdmin && emp.id !== 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6' && (
+                    {isPlatformAdmin && emp.id !== empresaAtiva?.id && (
                       <button
                         type="button"
                         className="btn btn-ghost btn-sm"

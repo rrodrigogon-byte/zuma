@@ -26,7 +26,7 @@ function obterLojaMatriz(empresaId) {
 /**
  * Realiza previsão preditiva de faturamento para o mês atual com base na velocidade de vendas.
  */
-export function calcularForecastFaturamento(empresaId) {
+export function calcularForecastFaturamento(empresaId, opcoes = {}) {
   if (!empresaId) {
     return {
       semDados: true,
@@ -55,6 +55,13 @@ export function calcularForecastFaturamento(empresaId) {
 
   let receitaRealizada = 0;
   let metaEmpresa = 0;
+  if (Number(opcoes.receitaRealizadaPg || 0) > 0) {
+    receitaRealizada = Number(opcoes.receitaRealizadaPg);
+  }
+  if (Number(opcoes.metaEmpresaPg || 0) > 0) {
+    metaEmpresa = Number(opcoes.metaEmpresaPg);
+  }
+  if (receitaRealizada <= 0) {
   try {
     const dre = financeiro.dreGerencial ? financeiro.dreGerencial({ empresaId, lojaId, mes: mesFormatado, legacy: true }) : null;
     receitaRealizada = dre?.receitaBruta?.total || 0;
@@ -62,6 +69,7 @@ export function calcularForecastFaturamento(empresaId) {
     // Fallback: consulta lançamentos diretos ou comandas
     const comandas = barbearia.listarComandasAbertas ? barbearia.listarComandasAbertas(empresaId) : [];
     receitaRealizada = comandas.reduce((acc, c) => acc + Number(c.total || 0), 0);
+  }
   }
 
   // Recupera meta real cadastrada no banco para esta empresa específica
@@ -213,18 +221,19 @@ export function simularCenario(empresaId, parametros = {}) {
     }
   } catch (_) {}
 
+  if (receitaAtual <= 0 && Number(parametros.receitaRealizadaPg || 0) > 0) {
+    receitaAtual = Number(parametros.receitaRealizadaPg);
+    custosAtuais = Number(parametros.custosAtuaisPg || (receitaAtual * 0.45));
+    despesasAtuais = Number(parametros.despesasAtuaisPg || (receitaAtual * 0.2));
+  }
+
   if (receitaAtual <= 0) {
-    const baseline = 10000;
-    const reajustePreco = Number(parametros.reajustePrecoPercentual || 0) / 100;
-    const aumentoDemanda = Number(parametros.aumentoAtendimentosPercentual || 0) / 100;
-    const novosColaboradores = Math.max(0, Number(parametros.novosColaboradores || 0));
-    const receitaSimulada = Number(((baseline * (1 + reajustePreco) * (1 + aumentoDemanda)) + (novosColaboradores * 6000)).toFixed(2));
     return {
       semDados: true,
-      mensagem: 'Sem base financeira consolidada para o mês atual nesta empresa. Simulação projetada em baseline referencial.',
-      atual: { receitaBruta: baseline, custos: baseline * 0.45, despesas: baseline * 0.2, lucroLiquido: baseline * 0.35, margemLiquida: 35 },
-      simulado: { receitaBruta: receitaSimulada, custos: Number((receitaSimulada * 0.45).toFixed(2)), despesas: baseline * 0.2 + (novosColaboradores * 1200), lucroLiquido: Number((receitaSimulada * 0.35).toFixed(2)), margemLiquida: 35 },
-      parecerIa: `Cenário simulado com sucesso. Com reajuste de ${(reajustePreco * 100).toFixed(0)}% e demanda de +${(aumentoDemanda * 100).toFixed(0)}%, a receita projetada atinge R$ ${receitaSimulada.toFixed(2)}.`
+      mensagem: 'Sem receitas registradas no mês atual nesta empresa para simular cenário.',
+      atual: null,
+      simulado: null,
+      parecerIa: 'Registre vendas ou lançamentos financeiros no mês atual para habilitar a simulação sobre a base real da empresa.'
     };
   }
 

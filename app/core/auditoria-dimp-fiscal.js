@@ -2,12 +2,11 @@
  * ============================================================================
  * KYTTO ERP ENTERPRISE - MOTOR DE AUDITORIA FISCAL PREVENTIVA DIMP VS FISCAL
  * ============================================================================
- * Cruzamento eletrônico preventivo entre os meios de pagamento (Cartões TEF/POS,
- * Pix Dinâmico e Carteiras Digitais - DIMP) e os documentos fiscais emitidos
- * (NFC-e mod 65, NF-e mod 55 e NFS-e DPS Sefin Nacional).
+ * Cruzamento eletrônico preventivo entre os meios de pagamento reais (Cartões
+ * TEF/POS e Pix) e os documentos fiscais emitidos (NFC-e mod 65, NF-e mod 55
+ * e NFS-e DPS Sefin Nacional) da empresa ativa.
  *
  * Base Legal: Convênio ICMS 134/2016, Ato COTEPE/ICMS 65/2018 e SEFAZ-MT.
- * Previne autuações por omissão de receita e malha fina estadual e federal.
  */
 
 export const ADQUIRENTES_DIMP = {
@@ -19,172 +18,137 @@ export const ADQUIRENTES_DIMP = {
   MERCADO_PAGO: { codigo: '006', nome: 'Mercado Pago Instituição de Pagamento', cnpj: '10573521000191' }
 };
 
-/**
- * Realiza a auditoria cruzada de um período confrontando transações DIMP vs Notas Fiscais
- * @param {Object} params
- * @param {string} params.empresaId
- * @param {string} params.mes - MM (ex: '10')
- * @param {string} params.ano - AAAA (ex: '2026')
- * @param {Array} params.transacoesMeiosPagamento - Vendas em cartão e Pix
- * @param {Array} params.documentosFiscais - NFC-e, NF-e e NFS-e emitidas
- */
 export function executarAuditoriaDimpFiscal({
-  empresaId = 'emp-dino-01',
-  mes = '10',
-  ano = '2026',
-  transacoesMeiosPagamento = null,
-  documentosFiscais = null
+  empresaId,
+  mes = String(new Date().getMonth() + 1).padStart(2, '0'),
+  ano = String(new Date().getFullYear()),
+  transacoesMeiosPagamento = [],
+  documentosFiscais = [],
+  vendasSemDocumento = [],
 } = {}) {
-  // Transações simuladas do período (se não fornecidas) baseadas na operação real de Dino Barbearia
-  const pagamentos = transacoesMeiosPagamento || [
-    { id: 'tef-01', data: `${ano}-${mes}-05`, adquirente: 'SICREDI', tipo: 'CARTAO_CREDITO', valor: 4500.00, nsu: '10293847', bandeira: 'Mastercard' },
-    { id: 'tef-02', data: `${ano}-${mes}-10`, adquirente: 'SICREDI', tipo: 'CARTAO_DEBITO', valor: 3800.00, nsu: '10293848', bandeira: 'Visa' },
-    { id: 'tef-03', data: `${ano}-${mes}-15`, adquirente: 'STONE', tipo: 'CARTAO_CREDITO', valor: 6200.00, nsu: '55667788', bandeira: 'Elo' },
-    { id: 'tef-04', data: `${ano}-${mes}-20`, adquirente: 'STONE', tipo: 'CARTAO_DEBITO', valor: 2900.00, nsu: '55667789', bandeira: 'Mastercard' },
-    { id: 'pix-01', data: `${ano}-${mes}-22`, adquirente: 'SICREDI', tipo: 'PIX_DINAMICO', valor: 7400.00, nsu: 'PIX-998877', bandeira: 'Pix' },
-    { id: 'tef-05', data: `${ano}-${mes}-28`, adquirente: 'CIELO', tipo: 'CARTAO_CREDITO', valor: 5100.00, nsu: '77889900', bandeira: 'Visa' },
-    { id: 'pix-02', data: `${ano}-${mes}-30`, adquirente: 'SICREDI', tipo: 'PIX_DINAMICO', valor: 3600.00, nsu: 'PIX-998878', bandeira: 'Pix' }
-  ];
+  if (!empresaId) {
+    throw new Error('Identificador da empresa ativa é obrigatório para auditoria DIMP.');
+  }
+  const pagamentos = Array.isArray(transacoesMeiosPagamento) ? transacoesMeiosPagamento : [];
+  const docsFiscais = Array.isArray(documentosFiscais) ? documentosFiscais : [];
+  const pendentesReais = Array.isArray(vendasSemDocumento) ? vendasSemDocumento : [];
 
-  // Documentos fiscais emitidos no período
-  const docsFiscais = documentosFiscais || [
-    { numero: 1042, modelo: '65', tipo: 'NFC-e', data: `${ano}-${mes}-05`, valorTotal: 4500.00, chaveAcesso: '51261050073355000260650010000010421876543210' },
-    { numero: 1043, modelo: '65', tipo: 'NFC-e', data: `${ano}-${mes}-10`, valorTotal: 3800.00, chaveAcesso: '51261050073355000260650010000010431876543211' },
-    { numero: 315, modelo: '55', tipo: 'NF-e', data: `${ano}-${mes}-15`, valorTotal: 6200.00, chaveAcesso: '51261050073355000260550010000003151876543219' },
-    { numero: 1044, modelo: '65', tipo: 'NFC-e', data: `${ano}-${mes}-20`, valorTotal: 2900.00, chaveAcesso: '51261050073355000260650010000010441876543212' },
-    { numero: 501, modelo: 'NFS-e', tipo: 'NFS-e DPS', data: `${ano}-${mes}-22`, valorTotal: 7400.00, chaveAcesso: '51079250073355000260000000000000000000000501' },
-    { numero: 1045, modelo: '65', tipo: 'NFC-e', data: `${ano}-${mes}-28`, valorTotal: 3100.00, chaveAcesso: '51261050073355000260650010000010451876543213' }
-    // Venda de 28/10 tem R$ 2.000 pendente de emissão + Venda de 30/10 tem R$ 3.600 pendente!
-  ];
+  const totalMeiosPagamento = Number(pagamentos.reduce((acc, p) => acc + Number(p.valor || 0), 0).toFixed(2));
+  const totalCartaoCredito = Number(pagamentos.filter((p) => p.tipo === 'CARTAO_CREDITO').reduce((acc, p) => acc + Number(p.valor || 0), 0).toFixed(2));
+  const totalCartaoDebito = Number(pagamentos.filter((p) => p.tipo === 'CARTAO_DEBITO').reduce((acc, p) => acc + Number(p.valor || 0), 0).toFixed(2));
+  const totalPix = Number(pagamentos.filter((p) => p.tipo === 'PIX_DINAMICO' || p.tipo === 'PIX').reduce((acc, p) => acc + Number(p.valor || 0), 0).toFixed(2));
 
-  // Totalizadores
-  const totalMeiosPagamento = pagamentos.reduce((acc, p) => acc + p.valor, 0);
-  const totalCartaoCredito = pagamentos.filter(p => p.tipo === 'CARTAO_CREDITO').reduce((acc, p) => acc + p.valor, 0);
-  const totalCartaoDebito = pagamentos.filter(p => p.tipo === 'CARTAO_DEBITO').reduce((acc, p) => acc + p.valor, 0);
-  const totalPix = pagamentos.filter(p => p.tipo === 'PIX_DINAMICO').reduce((acc, p) => acc + p.valor, 0);
+  const totalFiscalEmitido = Number(docsFiscais.reduce((acc, d) => acc + Number(d.valorTotal || 0), 0).toFixed(2));
+  const totalNfce = Number(docsFiscais.filter((d) => String(d.modelo) === '65').reduce((acc, d) => acc + Number(d.valorTotal || 0), 0).toFixed(2));
+  const totalNfe = Number(docsFiscais.filter((d) => String(d.modelo) === '55').reduce((acc, d) => acc + Number(d.valorTotal || 0), 0).toFixed(2));
+  const totalNfse = Number(docsFiscais.filter((d) => String(d.modelo).toUpperCase().includes('NFS')).reduce((acc, d) => acc + Number(d.valorTotal || 0), 0).toFixed(2));
 
-  const totalFiscalEmitido = docsFiscais.reduce((acc, d) => acc + d.valorTotal, 0);
-  const totalNfce = docsFiscais.filter(d => d.modelo === '65').reduce((acc, d) => acc + d.valorTotal, 0);
-  const totalNfe = docsFiscais.filter(d => d.modelo === '55').reduce((acc, d) => acc + d.valorTotal, 0);
-  const totalNfse = docsFiscais.filter(d => d.modelo === 'NFS-e').reduce((acc, d) => acc + d.valorTotal, 0);
-
-  // Divergência apurada
   const diferencaNaoFaturada = Math.max(0, Number((totalMeiosPagamento - totalFiscalEmitido).toFixed(2)));
   const percentualCobertura = totalMeiosPagamento > 0
-    ? Number(((totalFiscalEmitido / totalMeiosPagamento) * 100).toFixed(2))
-    : 100;
+    ? Number(Math.min(100, (totalFiscalEmitido / totalMeiosPagamento) * 100).toFixed(2))
+    : (docsFiscais.length > 0 ? 100 : 0);
 
-  let nivelRisco = 'BAIXO';
-  let parecerFiscal = 'Cobertura fiscal dentro da margem de conformidade.';
+  let nivelRisco = 'ZERO';
+  let parecerFiscal = 'Nenhuma divergência apurada no período selecionado.';
   let acaoRecomendada = 'Nenhuma ação necessária.';
 
-  if (diferencaNaoFaturada > 5000) {
+  if (pagamentos.length === 0 && docsFiscais.length === 0) {
+    nivelRisco = 'ZERO';
+    parecerFiscal = 'Sem movimentações eletrônicas ou documentos fiscais registrados nesta competência.';
+    acaoRecomendada = 'Selecione outra competência ou registre vendas na empresa ativa.';
+  } else if (diferencaNaoFaturada > 5000) {
     nivelRisco = 'ALTO';
-    parecerFiscal = `ALERTA DE MALHA FINA: Omissão de receita de R$ ${diferencaNaoFaturada.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} detectada em relação à DIMP.`;
-    acaoRecomendada = 'Emitir NFC-e ou NF-e complementar das vendas em cartão/Pix imediatamente antes do fechamento do mês.';
+    parecerFiscal = `Divergência de R$ ${diferencaNaoFaturada.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} entre recebimentos eletrônicos (DIMP) e documentos fiscais emitidos.`;
+    acaoRecomendada = 'Revisar individualmente cada operação pendente e emitir documento fiscal em homologação/produção conforme regime.';
   } else if (diferencaNaoFaturada > 0) {
     nivelRisco = 'MEDIO';
-    parecerFiscal = `Atenção: Diferença de R$ ${diferencaNaoFaturada.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} entre pagamentos eletrônicos e notas emitidas.`;
-    acaoRecomendada = 'Verificar pedidos fechados no PDV que não geraram transmissão fiscal automática.';
+    parecerFiscal = `Diferença de R$ ${diferencaNaoFaturada.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} entre pagamentos eletrônicos e notas emitidas.`;
+    acaoRecomendada = 'Conferir vendas sem documento fiscal vinculado na competência.';
   } else {
     nivelRisco = 'ZERO';
-    parecerFiscal = '100% dos recebimentos eletrônicos (Cartão e Pix) possuem respaldo em documentos fiscais emitidos.';
-    acaoRecomendada = 'Arquivo pronto para transmissão e validação no SPED Fiscal.';
+    parecerFiscal = 'Recebimentos eletrônicos (Cartão e Pix) conciliados com os documentos fiscais emitidos no período.';
+    acaoRecomendada = 'Competência conciliada para escrituração fiscal.';
   }
 
-  // Agrupamento por Adquirente DIMP
-  const resumoAdquirentes = Object.keys(ADQUIRENTES_DIMP).map(key => {
+  const resumoAdquirentes = Object.keys(ADQUIRENTES_DIMP).map((key) => {
     const adq = ADQUIRENTES_DIMP[key];
-    const transAdq = pagamentos.filter(p => p.adquirente === key);
-    const totalAdq = transAdq.reduce((acc, p) => acc + p.valor, 0);
+    const transAdq = pagamentos.filter((p) => String(p.adquirente || '').toUpperCase() === key);
+    const totalAdq = Number(transAdq.reduce((acc, p) => acc + Number(p.valor || 0), 0).toFixed(2));
     return {
       chave: key,
       nome: adq.nome,
       cnpj: adq.cnpj,
       quantidadeTransacoes: transAdq.length,
-      valorTotal: totalAdq
+      valorTotal: totalAdq,
     };
-  }).filter(a => a.quantidadeTransacoes > 0);
-
-  // Lote de vendas pendentes para emissão em 1 clique
-  const vendasPendentesEmissao = [
-    {
-      idVenda: 'vd-8891',
-      data: `${ano}-${mes}-28`,
-      meioPagamento: 'CARTAO_CREDITO',
-      adquirente: 'CIELO',
-      nsu: '77889900',
-      valorFaltante: 2000.00,
-      cliente: 'Consumidor Final',
-      itensSugeridos: [{ descricao: 'Kit Barba & Cabelo Especial', ncm: '33059000', valor: 2000.00 }]
-    },
-    {
-      idVenda: 'vd-8899',
-      data: `${ano}-${mes}-30`,
-      meioPagamento: 'PIX_DINAMICO',
-      adquirente: 'SICREDI',
-      nsu: 'PIX-998878',
-      valorFaltante: 3600.00,
-      cliente: 'Consumidor Final',
-      itensSugeridos: [{ descricao: 'Pacote Barbearia Mensal Premium', codigoServico: '060101', valor: 3600.00 }]
-    }
-  ];
+  }).filter((a) => a.quantidadeTransacoes > 0);
 
   return {
     sucesso: true,
+    semDados: pagamentos.length === 0 && docsFiscais.length === 0,
     empresaId,
-    periodo: `${mes}/${ano}`,
+    periodo: `${String(mes).padStart(2, '0')}/${ano}`,
+    ambientePadrao: 2,
+    ambienteDescricao: 'Homologação (tpAmb=2)',
     dataAuditoria: new Date().toISOString(),
     totaisMeiosPagamento: {
       totalGeral: totalMeiosPagamento,
       cartaoCredito: totalCartaoCredito,
       cartaoDebito: totalCartaoDebito,
       pix: totalPix,
-      quantidadeTransacoes: pagamentos.length
+      quantidadeTransacoes: pagamentos.length,
     },
     totaisDocumentosFiscais: {
       totalGeral: totalFiscalEmitido,
       nfce: totalNfce,
       nfe: totalNfe,
       nfse: totalNfse,
-      quantidadeDocumentos: docsFiscais.length
+      quantidadeDocumentos: docsFiscais.length,
     },
     analiseDivergencia: {
       diferencaNaoFaturada,
       percentualCobertura,
       nivelRisco,
       parecerFiscal,
-      acaoRecomendada
+      acaoRecomendada,
     },
     resumoAdquirentes,
-    vendasPendentesEmissao,
-    podeRegularizarEmLote: vendasPendentesEmissao.length > 0
+    vendasPendentesEmissao: pendentesReais,
+    podeRegularizarEmLote: false,
   };
 }
 
-/**
- * Executa a regularização fiscal em lote de vendas pendentes
- */
-export function regularizarPendenciasDimp({ empresaId = 'emp-dino-01', itensRegularizar = [] } = {}) {
-  const notasEmitidas = itensRegularizar.map((item, index) => ({
-    numeroNota: 1046 + index,
+export function regularizarPendenciasDimp({ empresaId, itensRegularizar = [], tpAmb = 2 } = {}) {
+  if (!empresaId) {
+    throw new Error('Empresa ativa é obrigatória.');
+  }
+  if (!Array.isArray(itensRegularizar) || itensRegularizar.length !== 1) {
+    throw new Error('Apenas 1 item pode ser regularizado por confirmação individual.');
+  }
+  const item = itensRegularizar[0];
+  const ambiente = Number(tpAmb) === 1 ? 1 : 2;
+  if (ambiente === 1) {
+    throw new Error('Emissão direta na tela DIMP permitida apenas em ambiente de Homologação (tpAmb=2).');
+  }
+  const valor = Number(item.valorFaltante || item.valor || 0);
+  const notaEmitida = {
+    idVenda: item.idVenda || item.id || null,
+    nsu: item.nsu || null,
     modelo: item.codigoServico ? 'NFS-e' : '65',
-    tipo: item.codigoServico ? 'NFS-e DPS' : 'NFC-e',
-    valor: item.valorFaltante,
-    chaveAcesso: `5126105007335500026065001000001046187654321${index}`,
-    protocoloAutorizacao: `15126000099887${index}`,
-    status: 'AUTORIZADA'
-  }));
-
-  const totalRegularizado = notasEmitidas.reduce((acc, n) => acc + n.valor, 0);
+    tipo: item.codigoServico ? 'NFS-e DPS (Homologação)' : 'NFC-e (Homologação)',
+    tpAmb: 2,
+    valor,
+    status: 'HOMOLOGACAO_REGISTRADA',
+    registradoEm: new Date().toISOString(),
+  };
 
   return {
     sucesso: true,
-    mensagem: `Regularização de R$ ${totalRegularizado.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} realizada com sucesso. Risco de malha fina DIMP eliminado!`,
-    totalRegularizado,
-    quantidadeNotasEmitidas: notasEmitidas.length,
-    notasEmitidas,
-    novoNivelRisco: 'ZERO',
-    novoPercentualCobertura: 100.00
+    tpAmb: 2,
+    ambiente: 'homologacao',
+    mensagem: `Validação individual em Homologação (tpAmb=2) concluída para NSU ${item.nsu || item.idVenda || 'avulso'} (R$ ${valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}).`,
+    totalRegularizado: valor,
+    quantidadeNotasEmitidas: 1,
+    notasEmitidas: [notaEmitida],
   };
 }

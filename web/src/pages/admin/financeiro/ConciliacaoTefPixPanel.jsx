@@ -14,16 +14,10 @@ export default function ConciliacaoTefPixPanel({ toast }) {
         .catch(() => api.get('/api/admin/supermercado/conciliacao/cartoes/listar'))
         .catch(() => null);
 
-      if (res && Array.isArray(res) && res.length > 0) {
+      if (res && Array.isArray(res)) {
         setLotes(res);
       } else {
-        setLotes([
-          { id: '1', adquirente: 'STONE', bandeira: 'VISA_CREDITO', data_venda: '2026-11-08', data_previsao_repasse: '2026-12-08', valor_bruto_pdv: 14500.00, taxa_mdr_contratada_pct: 2.10, taxa_mdr_cobrada_pct: 2.10, valor_liquido_esperado: 14195.50, valor_liquido_pago: 14195.50, divergencia_nominal: 0.00, status: 'CONCILIADO_OK' },
-          { id: '2', adquirente: 'CIELO', bandeira: 'MASTERCARD_DEBITO', data_venda: '2026-11-08', data_previsao_repasse: '2026-11-09', valor_bruto_pdv: 9200.00, taxa_mdr_contratada_pct: 0.95, taxa_mdr_cobrada_pct: 1.25, valor_liquido_esperado: 9112.60, valor_liquido_pago: 9085.00, divergencia_nominal: 27.60, status: 'DIVERGENCIA_TAXA' },
-          { id: '3', adquirente: 'REDE', bandeira: 'ELO_CREDITO', data_venda: '2026-11-08', data_previsao_repasse: '2026-12-08', valor_bruto_pdv: 6800.00, taxa_mdr_contratada_pct: 2.40, taxa_mdr_cobrada_pct: 2.40, valor_liquido_esperado: 6636.80, valor_liquido_pago: 6636.80, divergencia_nominal: 0.00, status: 'CONCILIADO_OK' },
-          { id: '4', adquirente: 'VR_BENEFICIOS', bandeira: 'ALELO_ALIMENTACAO', data_venda: '2026-11-08', data_previsao_repasse: '2026-11-23', valor_bruto_pdv: 12400.00, taxa_mdr_contratada_pct: 3.50, taxa_mdr_cobrada_pct: 3.50, valor_liquido_esperado: 11966.00, valor_liquido_pago: 0.00, divergencia_nominal: 0.00, status: 'AGUARDANDO_REPASSE' },
-          { id: '5', adquirente: 'PAGBANK_PIX', bandeira: 'PIX_DINAMICO', data_venda: '2026-11-09', data_previsao_repasse: '2026-11-09', valor_bruto_pdv: 18950.00, taxa_mdr_contratada_pct: 0.40, taxa_mdr_cobrada_pct: 0.40, valor_liquido_esperado: 18874.20, valor_liquido_pago: 18874.20, divergencia_nominal: 0.00, status: 'CONCILIADO_OK' }
-        ]);
+        setLotes([]);
       }
     } finally {
       setCarregando(false);

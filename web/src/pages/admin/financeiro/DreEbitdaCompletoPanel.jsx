@@ -17,30 +17,20 @@ export default function DreEbitdaCompletoPanel({ toast }) {
       if (res && res.faturamento_bruto !== undefined) {
         setDadosDre(res);
       } else {
-        // Fallback robusto e sintético
-        const fatBruto = 186450.00;
-        const impostos = fatBruto * 0.082;
-        const recLiq = fatBruto - impostos;
-        const cmv = fatBruto * 0.715;
-        const lucroBruto = recLiq - cmv;
-        const pessoal = fatBruto * 0.095;
-        const energia = fatBruto * 0.038;
-        const quebras = fatBruto * 0.012;
-        const outras = fatBruto * 0.045;
-        const ebitda = lucroBruto - (pessoal + energia + quebras + outras);
         setDadosDre({
           mes_ano: mesAno,
-          faturamento_bruto: fatBruto,
-          impostos_vendas: impostos,
-          receita_liquida: recLiq,
-          cmv_custo_mercadorias: cmv,
-          lucro_bruto: lucroBruto,
-          despesas_pessoal: pessoal,
-          despesas_energia_refrigeracao: energia,
-          custo_quebras_perdas: quebras,
-          outras_despesas_loja: outras,
-          ebitda_operacional: ebitda,
-          margem_ebitda_pct: (ebitda / fatBruto) * 100
+          semDados: true,
+          faturamento_bruto: 0,
+          impostos_vendas: 0,
+          receita_liquida: 0,
+          cmv_custo_mercadorias: 0,
+          lucro_bruto: 0,
+          despesas_pessoal: 0,
+          despesas_energia_refrigeracao: 0,
+          custo_quebras_perdas: 0,
+          outras_despesas_loja: 0,
+          ebitda_operacional: 0,
+          margem_ebitda_pct: 0
         });
       }
     } finally {

@@ -168,6 +168,7 @@ import { vincularClienteAoAtendimento } from './dino-clientes-vinculo.js';
 import * as dinoBi from './dino-bi.js';
 import * as dinoMetas from './dino-metas.js';
 import * as dinoGamificacao from './dino-metas-gamificacao.js';
+import { createOpenApiAndMcpRouter } from './routes/openapi-mcp-routes.js';
 import * as dinoCarteiraClientes from './dino-carteira-clientes.js';
 import { obterDetalhesCaixaOperacao } from './dino-caixa-detalhes.js';
 import {
@@ -335,22 +336,86 @@ app.get('/api/publico/cobranca/:id', (req, res) => {
 
 
 app.get('/install.sh', (req, res) => {
-  const installScriptPath = path.resolve(__dirname, '../bin/kytto-install-onpremise.sh');
-  if (fs.existsSync(installScriptPath)) {
-    res.type('text/x-sh; charset=utf-8');
-    return res.sendFile(installScriptPath);
+  const candidates = [
+    path.resolve(__dirname, 'bin/kytto-install-onpremise.sh'),
+    path.resolve(__dirname, '../bin/kytto-install-onpremise.sh'),
+  ];
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) {
+      res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+      return res.sendFile(candidate);
+    }
   }
   return res.status(404).send('#!/bin/bash\necho "Script de instalacao nao encontrado."\nexit 1\n');
 });
 
 app.get('/health', async (req, res) => {
+  const persistencia = protecaoDados.situacao().status;
   const assets = staticAssetReadiness();
   if (!assets.ready) return res.status(503).json({ status: 'not_ready' });
-  if (process.env.COMMERCE_CORE_ENABLED !== '1') return res.status(200).json({ status: 'ready' });
+  const evoConfigured = Boolean(process.env.EVOLUTION_API_KEY && process.env.EVOLUTION_API_URL);
+  const metaConfigured = Boolean(process.env.WHATSAPP_ACCESS_TOKEN || process.env.META_WHATSAPP_TOKEN || process.env.WAHA_CONTROL_URL || process.env.CHATBOT_BACKEND_URL);
+  let canalAtivo = metaConfigured ? 'meta_cloud_api' : (evoConfigured ? 'evolution' : (process.env.FEATURE_WHATSAPP_AI === 'true' ? 'meta_cloud_api' : 'nenhum'));
+  let ultimoEnvio = null;
+  let ultimaMensagemRecebida = null;
+  let tamanhoFila = 0;
+  if (process.env.COMMERCE_CORE_ENABLED !== '1') {
+    return res.status(200).json({
+      status: 'ready',
+      persistencia,
+      ai: process.env.FEATURE_WHATSAPP_AI,
+      gemini: !!process.env.GEMINI_API_KEY,
+      evolution: canalAtivo !== 'nenhum',
+      canalAtivo,
+      ultimoEnvio,
+      ultimaMensagemRecebida,
+      tamanhoFila,
+    });
+  }
   try {
     const schema = await checkCommerceSchemaReadiness(commerceDb);
     if (!schema.ready) return res.status(503).json({ status: 'not_ready' });
-    return res.status(200).json({ status: 'ready' });
+    try {
+      const [msgRes, filaRes, chRes] = await Promise.all([
+        commerceDb.queryRead(
+          `SELECT
+             MAX(criado_em) FILTER (WHERE direcao = 'saida') AS ultimo_envio,
+             MAX(criado_em) FILTER (WHERE direcao = 'entrada') AS ultima_recebida
+           FROM whatsapp_ai_messages`
+        ),
+        commerceDb.queryRead(
+          `SELECT COUNT(*)::int AS pendentes
+             FROM tarefas_integracao_canais
+            WHERE status IN ('pendente', 'processando', 'agendada')`
+        ),
+        commerceDb.queryRead(
+          `SELECT status, configuracao
+             FROM canais_integracao
+            WHERE provedor = 'whatsapp' AND status = 'ativo'
+            ORDER BY ultimo_evento_em DESC NULLS LAST
+            LIMIT 1`
+        ),
+      ]);
+      ultimoEnvio = msgRes.rows?.[0]?.ultimo_envio || null;
+      ultimaMensagemRecebida = msgRes.rows?.[0]?.ultima_recebida || null;
+      tamanhoFila = Number(filaRes.rows?.[0]?.pendentes || 0);
+      const ch = chRes.rows?.[0];
+      if (ch) {
+        const transp = String(ch.configuracao?.transporte || ch.configuracao?.provider || '').toLowerCase();
+        canalAtivo = transp === 'evolution' ? 'evolution' : 'meta_cloud_api';
+      }
+    } catch (_e) { /* telemetria opcional */ }
+    return res.status(200).json({
+      status: 'ready',
+      persistencia,
+      ai: process.env.FEATURE_WHATSAPP_AI,
+      gemini: !!process.env.GEMINI_API_KEY,
+      evolution: canalAtivo !== 'nenhum',
+      canalAtivo,
+      ultimoEnvio,
+      ultimaMensagemRecebida,
+      tamanhoFila,
+    });
   } catch {
     return res.status(503).json({ status: 'not_ready' });
   }
@@ -5351,9 +5416,15 @@ app.get('/api/admin/barbearia/analytics', async (req, res) => {
       unassignedRecords,
       profit: { current: profitFor(currentWindow, commerceCurrent), previous: profitFor(previousWindow, commercePrevious) },
       goals: await metasDoMes({ empresaId, now, barbershopInput, commerceContext, profitFor, scopeLevel: lojaId ? 'unit' : 'company', unidadeUnica: await empresaComUnidadeUnica(commerceContext) }),
-      funnel: commerceAvailable ? { current: funnelSummary(empresaId, range.fromDate, range.toDate), previous: funnelSummary(empresaId, range.previousFromDate, range.previousToDate) } : null,
+      funnel: (() => {
+        if (!commerceAvailable) return null;
+        const curr = funnelSummary(empresaId, range.fromDate, range.toDate);
+        if (!curr || !(Number(curr.visit) > 0)) return null;
+        return { current: curr, previous: funnelSummary(empresaId, range.previousFromDate, range.previousToDate) };
+      })(),
     }, { period: range.days, now, window: range });
-    const resposta = { ok: true, ...analytics };
+    const iaAgendamentosResumo = barbeariaErpKytto.obterResumoAgendamentosIa(empresaId, { de: range.fromDate, ate: range.toDate, lojaId });
+    const resposta = { ok: true, ...analytics, iaAgendamentosResumo };
     // resultado incompleto por falha passageira do Commerce não fica guardado
     if (commerceAvailable || process.env.COMMERCE_CORE_ENABLED !== '1') guardarRespostaCurta(chaveCache, resposta);
     res.json(resposta);
@@ -5361,6 +5432,25 @@ app.get('/api/admin/barbearia/analytics', async (req, res) => {
     res.status(400).json({ error: error.message || 'Não foi possível carregar os indicadores.', code: error.code || 'DINO_ANALYTICS_UNAVAILABLE' });
   }
 });
+
+app.get('/api/admin/barbearia/ia-agendamentos-resumo', auth, requireStaff, (req, res) => {
+  try {
+    const empresaId = legacyEmpresaId(req);
+    const lojaId = legacyLojaId(req);
+    const de = String(req.query?.de || req.query?.inicio || '').trim();
+    const ate = String(req.query?.ate || req.query?.fim || '').trim();
+    const resumo = barbeariaErpKytto.obterResumoAgendamentosIa(empresaId, { de, ate, lojaId });
+    res.json({ ok: true, ...resumo });
+  } catch (error) {
+    res.status(400).json({ error: error.message || 'Não foi possível gerar o resumo de agendamentos da IA.' });
+  }
+});
+
+app.use('/api', createOpenApiAndMcpRouter({
+  auth,
+  obterEmpresaIdToken: (req) => legacyEmpresaId(req),
+  barbearia: barbeariaErpKytto,
+}));
 
 // Agenda por período (vários dias) e por profissional: a recepção enxerga tudo o que foi
 // marcado (inclusive pelo WhatsApp) sem procurar dia a dia.

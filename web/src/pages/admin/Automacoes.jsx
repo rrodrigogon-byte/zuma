@@ -190,17 +190,17 @@ export default function Automacoes({ defaultTab }) {
       const payload = {
         comprovante: 'COMPROVANTE-SINCRONIZADO-2026',
         data: new Date().toISOString(),
-        origem: 'Ultra',
-        destino: 'Nossa Gente',
+        origem: 'Kytto PDV',
+        destino: 'Kytto Financeiro',
         descricao: 'Comprovante auditado e replicado com hashing SHA-256'
       };
       const res = await api.post('/api/admin/automacoes/storage/armazenar', {
         conteudo: JSON.stringify(payload, null, 2),
-        nomeOriginal: `comprovante_nossa_gente_ultra_${Date.now()}.json`,
+        nomeOriginal: `comprovante_kytto_erp_${Date.now()}.json`,
         tipoMime: 'application/json',
-        origem: 'Ultra',
-        destino: 'Nossa Gente',
-        metadados: { integracao: 'Nossa Gente x Ultra', usuario: 'diretoria-kytto' }
+        origem: 'Kytto PDV',
+        destino: 'Kytto Financeiro',
+        metadados: { integracao: 'Kytto Event Bus', usuario: 'diretoria-kytto' }
       });
       if (res && res.ok) {
         setSucessoMsg('Cópia segura armazenada com sucesso com hash SHA-256 e auditoria!');
@@ -249,8 +249,8 @@ export default function Automacoes({ defaultTab }) {
       setSucessoMsg('');
       setErroMsg('');
       const json = await api.post('/api/admin/automacoes/eventos/disparar-teste', {
-        origem: 'Nossa Gente',
-        destino: 'Ultra',
+        origem: 'Kytto Equipe',
+        destino: 'Kytto ERP',
         tipo: 'cadastro.colaborador_sincronizado',
         dados: {
           colaborador: 'Dino Master Barbeiro',
@@ -641,14 +641,14 @@ export default function Automacoes({ defaultTab }) {
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
                   <span style={{ fontSize: '18px' }}>⚡</span>
                   <h2 style={{ fontSize: '20px', fontWeight: 800, margin: 0, color: '#0f172a' }}>
-                    Barramento de Eventos Internos (Nossa Gente × Ultra / A2)
+                    Barramento de Eventos Internos Kytto ERP
                   </h2>
                   <span style={{ fontSize: '11px', background: 'rgba(16, 185, 129, 0.12)', color: '#10b981', padding: '2px 8px', borderRadius: '6px', fontWeight: 700, border: '1px solid rgba(16, 185, 129, 0.25)' }}>
                     ● 100% Síncrono em Memória
                   </span>
                 </div>
                 <p style={{ fontSize: '13px', color: '#64748b', margin: 0 }}>
-                  Prioridade arquitetural de sincronização desacoplada por evento interno entre os sistemas Nossa Gente e Ultra.
+                  Sincronização desacoplada por evento interno entre os módulos operacionais, fiscais e financeiros do Kytto ERP.
                 </p>
               </div>
 
@@ -672,7 +672,7 @@ export default function Automacoes({ defaultTab }) {
                     boxShadow: '0 2px 4px rgba(79, 70, 229, 0.25)',
                     opacity: disparandoTeste ? 0.7 : 1
                   }}
-                  title="Disparar evento sob demanda entre Nossa Gente e Ultra"
+                  title="Disparar evento interno sob demanda no Kytto ERP"
                 >
                   <Play style={{ width: 14, height: 14 }} />
                   {disparandoTeste ? 'Disparando...' : '🧪 Testar Evento Interno'}
@@ -737,7 +737,7 @@ export default function Automacoes({ defaultTab }) {
               <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '12px 16px' }}>
                 <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Diretriz de Integração</div>
                 <div style={{ fontSize: '16px', fontWeight: 800, color: '#f59e0b', marginTop: '4px' }}>Evento Interno</div>
-                <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>Nossa Gente ➔ Ultra</div>
+                <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>Kytto Módulos ➔ Core</div>
               </div>
             </div>
           </div>
@@ -790,8 +790,8 @@ export default function Automacoes({ defaultTab }) {
                   }}
                 >
                   <option value="todas">Todas as Origens</option>
-                  <option value="Nossa Gente">Nossa Gente</option>
-                  <option value="Ultra">Ultra</option>
+                  <option value="Kytto Equipe">Kytto Equipe</option>
+                  <option value="Kytto PDV">Kytto PDV</option>
                   <option value="Kytto ERP">Kytto ERP</option>
                   <option value="Fiscal SEFAZ-MT">Fiscal SEFAZ-MT</option>
                 </select>
@@ -826,7 +826,7 @@ export default function Automacoes({ defaultTab }) {
                              payloadStr.includes(b);
                     })
                     .map((evt) => {
-                      const isNG = evt.origem === 'Nossa Gente';
+                      const isNG = evt.origem === 'Kytto Equipe';
                       return (
                         <tr key={evt.id} style={{ borderBottom: '1px solid #f1f5f9', transition: 'background 0.1s ease' }}>
                           <td style={{ padding: '10px 12px', color: '#64748b', whiteSpace: 'nowrap', fontFamily: 'monospace' }}>
@@ -845,7 +845,7 @@ export default function Automacoes({ defaultTab }) {
                               color: isNG ? '#4f46e5' : '#b45309',
                               border: isNG ? '1px solid rgba(99, 102, 241, 0.25)' : '1px solid rgba(245, 158, 11, 0.25)'
                             }}>
-                              {evt.origem || 'Kytto ERP'} ➔ {evt.destino || 'Ultra'}
+                              {evt.origem || 'Kytto ERP'} ➔ {evt.destino || 'Kytto Core'}
                             </span>
                           </td>
                           <td style={{ padding: '10px 12px', color: '#334155', maxWidth: '320px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -903,7 +903,7 @@ export default function Automacoes({ defaultTab }) {
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
                   <span style={{ fontSize: '20px' }}>🛡️</span>
                   <h2 style={{ fontSize: '20px', fontWeight: 800, margin: 0, color: '#0f172a' }}>
-                    Armazenamento Seguro de Imagens & Dados (Nossa Gente × Ultra)
+                    Armazenamento Seguro de Imagens & Dados Kytto ERP
                   </h2>
                   <span style={{ fontSize: '11px', background: 'rgba(16, 185, 129, 0.12)', color: '#10b981', padding: '2px 8px', borderRadius: '6px', fontWeight: 700, border: '1px solid rgba(16, 185, 129, 0.25)' }}>
                     ● Hashing Criptográfico SHA-256

@@ -17,19 +17,10 @@ export default function MatrizTributariaPanel({ toast }) {
         .catch(() => api.get('/api/admin/supermercado/tributario/matriz'))
         .catch(() => null);
 
-      if (res && Array.isArray(res) && res.length > 0) {
+      if (res && Array.isArray(res)) {
         setRegras(res);
       } else {
-        // Fallback semente rica se banco estiver offline
-        setRegras([
-          { id: '1', ncm: '10063021', cest: '1700100', descricao_grupo: 'Arroz Parboilizado / Polido (Cesta Básica)', regime_tributario: 'LUCRO_REAL', cst_icms: '20', aliquota_icms: '7.00', reducao_bc_icms: '33.33', aliquota_mva_st: '0.00', cst_pis_cofins: '06', aliquota_pis: '0.00', aliquota_cofins: '0.00', tipo_regra: 'CESTA_BASICA', ibpt_federal: '2.10', ibpt_estadual: '7.00' },
-          { id: '2', ncm: '02013000', cest: '1708100', descricao_grupo: 'Carnes Bovinas Desossadas / Cortes Frescos', regime_tributario: 'LUCRO_REAL', cst_icms: '20', aliquota_icms: '7.00', reducao_bc_icms: '41.67', aliquota_mva_st: '0.00', cst_pis_cofins: '06', aliquota_pis: '0.00', aliquota_cofins: '0.00', tipo_regra: 'CESTA_BASICA', ibpt_federal: '4.50', ibpt_estadual: '7.00' },
-          { id: '3', ncm: '22030000', cest: '0300100', descricao_grupo: 'Cervejas & Chopp', regime_tributario: 'LUCRO_REAL', cst_icms: '60', aliquota_icms: '25.00', reducao_bc_icms: '0.00', aliquota_mva_st: '70.00', cst_pis_cofins: '04', aliquota_pis: '0.00', aliquota_cofins: '0.00', tipo_regra: 'MONOFASICO', ibpt_federal: '9.40', ibpt_estadual: '25.00' },
-          { id: '4', ncm: '33072010', cest: '2002300', descricao_grupo: 'Desodorantes & Antitranspirantes', regime_tributario: 'LUCRO_REAL', cst_icms: '60', aliquota_icms: '18.00', reducao_bc_icms: '0.00', aliquota_mva_st: '52.00', cst_pis_cofins: '04', aliquota_pis: '0.00', aliquota_cofins: '0.00', tipo_regra: 'SUBSTITUICAO_TRIBUTARIA', ibpt_federal: '12.50', ibpt_estadual: '18.00' },
-          { id: '5', ncm: '07133399', cest: '1700200', descricao_grupo: 'Feijão Comum Cores/Preto (Cesta Básica)', regime_tributario: 'LUCRO_REAL', cst_icms: '40', aliquota_icms: '0.00', reducao_bc_icms: '0.00', aliquota_mva_st: '0.00', cst_pis_cofins: '06', aliquota_pis: '0.00', aliquota_cofins: '0.00', tipo_regra: 'ISENTO_ALIMENTAR', ibpt_federal: '0.00', ibpt_estadual: '0.00' },
-          { id: '6', ncm: '19059090', cest: '1703100', descricao_grupo: 'Pães, Biscoitos & Panificação', regime_tributario: 'LUCRO_REAL', cst_icms: '00', aliquota_icms: '18.00', reducao_bc_icms: '0.00', aliquota_mva_st: '0.00', cst_pis_cofins: '01', aliquota_pis: '1.65', aliquota_cofins: '7.60', tipo_regra: 'TRIBUTADO_INTEGRAL', ibpt_federal: '5.30', ibpt_estadual: '18.00' },
-          { id: '7', ncm: '22021000', cest: '0300700', descricao_grupo: 'Refrigerantes & Águas Aromatizadas', regime_tributario: 'LUCRO_REAL', cst_icms: '60', aliquota_icms: '18.00', reducao_bc_icms: '0.00', aliquota_mva_st: '45.00', cst_pis_cofins: '04', aliquota_pis: '0.00', aliquota_cofins: '0.00', tipo_regra: 'MONOFASICO', ibpt_federal: '7.20', ibpt_estadual: '18.00' }
-        ]);
+        setRegras([]);
       }
     } finally {
       setCarregando(false);

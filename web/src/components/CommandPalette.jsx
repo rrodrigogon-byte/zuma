@@ -17,7 +17,7 @@ export default function CommandPalette({ isOpen, onClose }) {
     { id: 'cliente-novo', categoria: 'Ações Rápidas', icone: '👤', titulo: 'Cadastrar Novo Cliente', descricao: 'Adicionar cadastro na carteira do salão', rota: '/admin/barbearia-erp?area=relacionamento&tab=Clientes' },
 
     // Módulos Principais
-    { id: 'mod-eventbus', categoria: 'Módulos do ERP', icone: '⚡', titulo: 'Barramento de Eventos Internos (Nossa Gente × Ultra)', descricao: 'Monitor em tempo real de sincronização por evento interno', rota: '/admin/barramento-eventos' },
+    { id: 'mod-eventbus', categoria: 'Módulos do ERP', icone: '⚡', titulo: 'Barramento de Eventos Internos Kytto', descricao: 'Monitor em tempo real de sincronização por evento interno', rota: '/admin/barramento-eventos' },
     { id: 'mod-barbearia', categoria: 'Módulos do ERP', icone: '💈', titulo: 'Barbearia & Salão ERP', descricao: 'Agenda, atendimento, catálogo e gestão operacional', rota: '/admin/barbearia-erp' },
     { id: 'mod-financeiro', categoria: 'Módulos do ERP', icone: '📈', titulo: 'Financeiro Central (KPIs em k)', descricao: 'DRE, Fluxo de Caixa, Contas a Receber e a Pagar', rota: '/admin/financeiro' },
     { id: 'mod-comprador-ia', categoria: 'Módulos do ERP', icone: '🤖', titulo: 'Comprador Inteligente IA', descricao: 'Motor autônomo de compras, ROP, EOQ e cotações', rota: '/admin/comprador-inteligente' },

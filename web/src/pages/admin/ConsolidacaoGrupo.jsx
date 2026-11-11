@@ -444,7 +444,7 @@ export default function ConsolidacaoGrupo() {
               </div>
             </div>
 
-            {/* KPI 3: Colaboradores (Nossa Gente) */}
+            {/* KPI 3: Colaboradores */}
             <div style={{
               background: 'var(--card, #fff)',
               border: '1px solid var(--line, #EADFD4)',
@@ -770,7 +770,7 @@ export default function ConsolidacaoGrupo() {
             </div>
           )}
 
-          {/* ── ABA 3: BARRAMENTO DE EVENTOS INTERNOS (NOSSA GENTE × ULTRA) ── */}
+          {/* ── ABA 3: BARRAMENTO DE EVENTOS INTERNOS KYTTO ── */}
           {abaAtiva === 'eventos' && (
             <div style={{ display: 'grid', gap: 20 }}>
               {/* Cards de Métricas do Barramento */}

@@ -1,36 +1,60 @@
 /**
  * Rotas da API para Kytto Advisor - Copilot Executivo & Operacional
- * 
- * Kytto ERP - Inteligência Artificial para Gestão
  */
 
 import { Router } from 'express';
-import { 
-  calcularForecastFaturamento, 
-  auditarAnomaliasERiscos, 
-  simularCenario, 
-  sugerirCrossSelling 
+import {
+  calcularForecastFaturamento,
+  auditarAnomaliasERiscos,
+  simularCenario,
+  sugerirCrossSelling,
 } from '../core/ia-advisor-executivo.js';
-import { EMPRESA_DINO_ID } from '../modules/empresas/servico.js';
+import { query as consultar } from '../db-pg.js';
+
+async function obterBaseFinanceiraRealMes(empresaId) {
+  if (!empresaId) return { receitaRealizadaPg: 0, custosAtuaisPg: 0, despesasAtuaisPg: 0 };
+  const agora = new Date();
+  const competencia = `${agora.getFullYear()}-${String(agora.getMonth() + 1).padStart(2, '0')}`;
+  try {
+    const res = await consultar(
+      `SELECT
+         COALESCE(SUM(CASE WHEN tipo = 'receita' THEN valor ELSE 0 END), 0)::numeric(14,2) AS receitas,
+         COALESCE(SUM(CASE WHEN tipo = 'despesa' AND COALESCE(natureza_dre, '') ILIKE '%custo%' THEN valor ELSE 0 END), 0)::numeric(14,2) AS custos,
+         COALESCE(SUM(CASE WHEN tipo = 'despesa' AND COALESCE(natureza_dre, '') NOT ILIKE '%custo%' THEN valor ELSE 0 END), 0)::numeric(14,2) AS despesas
+       FROM fin_lancamentos
+       WHERE empresa_id = $1
+         AND status != 'cancelado'
+         AND TO_CHAR(data_competencia, 'YYYY-MM') = $2`,
+      [empresaId, competencia]
+    );
+    const row = res.rows?.[0] || {};
+    return {
+      receitaRealizadaPg: Number(row.receitas || 0),
+      custosAtuaisPg: Number(row.custos || 0),
+      despesasAtuaisPg: Number(row.despesas || 0),
+    };
+  } catch (_e) {
+    return { receitaRealizadaPg: 0, custosAtuaisPg: 0, despesasAtuaisPg: 0 };
+  }
+}
 
 export function createIaAdvisorRouter({ obterEmpresaId = () => null } = {}) {
   const router = Router();
 
-  // Forecast preditivo de faturamento do mês
-  router.get('/forecast', (req, res) => {
+  router.get('/forecast', async (req, res) => {
     try {
-      const empresaId = req.query.empresaId || obterEmpresaId(req);
-      const forecast = calcularForecastFaturamento(empresaId);
+      const empresaId = obterEmpresaId(req) || req.query.empresaId;
+      const basePg = await obterBaseFinanceiraRealMes(empresaId);
+      const forecast = calcularForecastFaturamento(empresaId, basePg);
       res.json(forecast);
     } catch (err) {
       res.status(500).json({ error: err.message, code: 'IA_FORECAST_ERROR' });
     }
   });
 
-  // Auditoria contínua de anomalias e riscos operacionais
   router.get('/auditoria-riscos', (req, res) => {
     try {
-      const empresaId = req.query.empresaId || obterEmpresaId(req);
+      const empresaId = obterEmpresaId(req) || req.query.empresaId;
       const auditoria = auditarAnomaliasERiscos(empresaId);
       res.json(auditoria);
     } catch (err) {
@@ -38,11 +62,11 @@ export function createIaAdvisorRouter({ obterEmpresaId = () => null } = {}) {
     }
   });
 
-  // Simulador de Cenários Interativo "What-If"
-  router.post('/simulador-cenarios', (req, res) => {
+  router.post('/simulador-cenarios', async (req, res) => {
     try {
-      const empresaId = req.body.empresaId || obterEmpresaId(req);
-      const parametros = req.body || {};
+      const empresaId = obterEmpresaId(req) || req.body?.empresaId;
+      const basePg = await obterBaseFinanceiraRealMes(empresaId);
+      const parametros = { ...(req.body || {}), ...basePg };
       const simulacao = simularCenario(empresaId, parametros);
       res.json(simulacao);
     } catch (err) {
@@ -50,7 +74,6 @@ export function createIaAdvisorRouter({ obterEmpresaId = () => null } = {}) {
     }
   });
 
-  // Recomendação preditiva de Venda Casada (Cross-Selling)
   router.get('/cross-selling', (req, res) => {
     try {
       const { servico } = req.query;
@@ -61,39 +84,49 @@ export function createIaAdvisorRouter({ obterEmpresaId = () => null } = {}) {
     }
   });
 
-  // Painel Geral Unificado do Advisor (KPIs + Riscos + Forecast)
-  router.get('/dashboard', (req, res) => {
+  router.get('/dashboard', async (req, res) => {
     try {
-      const empresaId = req.query.empresaId || obterEmpresaId(req);
-      const forecast = calcularForecastFaturamento(empresaId);
+      const empresaId = obterEmpresaId(req) || req.query.empresaId;
+      const basePg = await obterBaseFinanceiraRealMes(empresaId);
+      const forecast = calcularForecastFaturamento(empresaId, basePg);
       const auditoria = auditarAnomaliasERiscos(empresaId);
+
+      const acoesPrioritarias = [];
+      if (forecast.receitaRealizada > 0) {
+        acoesPrioritarias.push({
+          prioridade: 1,
+          categoria: 'Financeiro',
+          titulo: 'Acompanhamento de Faturamento Mensal',
+          descricao: forecast.metaEmpresa
+            ? `Faturamento realizado em ${forecast.receitaRealizadaFormatada}. Restam ${formatarMoeda(Math.max(0, forecast.metaEmpresa - forecast.receitaRealizada))} para atingir a meta cadastrada.`
+            : `Faturamento realizado no mês: ${forecast.receitaRealizadaFormatada} (média diária de ${forecast.mediaDiariaFormatada}). Defina uma meta mensal para calcular o percentual de atingimento.`,
+        });
+      }
+      if (auditoria.riscos?.some((r) => r.tipo === 'ruptura_estoque')) {
+        acoesPrioritarias.push({
+          prioridade: acoesPrioritarias.length + 1,
+          categoria: 'Estoque',
+          titulo: 'Ponto de pedido atingido',
+          descricao: auditoria.riscos.find((r) => r.tipo === 'ruptura_estoque')?.titulo,
+        });
+      }
+      if (auditoria.riscos?.some((r) => r.tipo === 'churn_vip')) {
+        acoesPrioritarias.push({
+          prioridade: acoesPrioritarias.length + 1,
+          categoria: 'CRM',
+          titulo: 'Campanha de retorno de clientes',
+          descricao: auditoria.riscos.find((r) => r.tipo === 'churn_vip')?.titulo,
+        });
+      }
 
       res.json({
         empresaId,
         geradoEm: new Date().toISOString(),
-        scoreSaude: auditoria.scoreSaudeOperacional,
+        semDados: Boolean(forecast.semDados && acoesPrioritarias.length === 0),
+        scoreSaude: forecast.semDados ? null : auditoria.scoreSaudeOperacional,
         forecast,
         auditoria,
-        acoesPrioritarias: [
-          {
-            prioridade: 1,
-            categoria: 'Financeiro',
-            titulo: 'Revisar metas da semana',
-            descricao: `Faturamento atual em ${forecast.receitaRealizadaFormatada}. Faltam ${formatarMoeda(Math.max(0, forecast.metaEmpresa - forecast.receitaRealizada))} para bater a meta.`
-          },
-          {
-            prioridade: 2,
-            categoria: 'Estoque',
-            titulo: 'Ponto de pedido atingido',
-            descricao: auditoria.riscos.find(r => r.tipo === 'ruptura_estoque')?.titulo || 'Níveis de estoque normais.'
-          },
-          {
-            prioridade: 3,
-            categoria: 'CRM',
-            titulo: 'Campanha de resgate VIP',
-            descricao: auditoria.riscos.find(r => r.tipo === 'churn_vip')?.titulo || 'Base VIP com frequência ativa.'
-          }
-        ]
+        acoesPrioritarias,
       });
     } catch (err) {
       res.status(500).json({ error: err.message, code: 'IA_DASHBOARD_ERROR' });

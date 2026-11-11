@@ -64,11 +64,10 @@ export function createVarejoMulticanalRouter() {
   // Rodízio da Fila da Vez e Upsell da Barbearia Dino
   router.get('/barbearia/rodizio-upsell', (req, res) => {
     const barbeirosDino = [
-      { id: 'usr-dino-bruno', nome: 'Bruno Mendes', ativo: true, presente: true },
+      { id: 'usr-dino-bruno', nome: 'Bruno Mendes Pedroso', ativo: true, presente: true },
       { id: 'usr-dino-nati', nome: 'Natani Dobler (Nati)', ativo: true, presente: true },
       { id: 'usr-dino-david', nome: 'David Kauã', ativo: true, presente: true },
-      { id: 'usr-dino-ester', nome: 'Steffany Marielly (Ster)', ativo: true, presente: true },
-      { id: 'usr-dino-guilherme', nome: 'Guilherme Cunha (Dino)', ativo: true, presente: true }
+      { id: 'usr-dino-ester', nome: 'Steffany Marielly (Ster)', ativo: true, presente: true }
     ];
 
     const atendimentosExemplo = [

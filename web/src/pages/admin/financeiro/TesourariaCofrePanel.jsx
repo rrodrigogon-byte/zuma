@@ -17,14 +17,10 @@ export default function TesourariaCofrePanel({ toast }) {
         .catch(() => api.get('/api/admin/supermercado/tesouraria/malotes/listar'))
         .catch(() => null);
 
-      if (res && Array.isArray(res) && res.length > 0) {
+      if (res && Array.isArray(res)) {
         setMalotes(res);
       } else {
-        setMalotes([
-          { id: '1', numero_malote: 'MAL-78403', numero_lacre: 'LAC-902205', empresa_transporte: 'BRINKS', valor_cedulas: '21400.00', valor_moedas: '450.00', valor_total: '21850.00', responsavel_tesouraria: 'Mariana Supervisora', data_recolhimento: '2026-11-09T23:34:58.806Z', status: 'AGUARDANDO_COLETA' },
-          { id: '2', numero_malote: 'MAL-78402', numero_lacre: 'LAC-902188', empresa_transporte: 'PROSEGUR', valor_cedulas: '42800.00', valor_moedas: '890.00', valor_total: '43690.00', responsavel_tesouraria: 'Carlos Tesoureiro', data_recolhimento: '2026-11-09T23:34:58.804Z', status: 'DEPOSITADO_CONCILIADO' },
-          { id: '3', numero_malote: 'MAL-78401', numero_lacre: 'LAC-902155', empresa_transporte: 'BRINKS', valor_cedulas: '18500.00', valor_moedas: '320.00', valor_total: '18820.00', responsavel_tesouraria: 'Mariana Supervisora', data_recolhimento: '2026-11-08T18:20:00.000Z', status: 'DEPOSITADO_CONCILIADO' }
-        ]);
+        setMalotes([]);
       }
     } finally {
       setCarregando(false);
@@ -163,6 +159,13 @@ export default function TesourariaCofrePanel({ toast }) {
             </tr>
           </thead>
           <tbody>
+            {malotes.length === 0 && (
+              <tr>
+                <td colSpan={7} style={{ padding: 32, textAlign: 'center', color: '#94a3b8' }}>
+                  Nenhum malote registrado para esta empresa. Clique em "Novo Malote de Carro-Forte" para registrar.
+                </td>
+              </tr>
+            )}
             {malotes.map((m, idx) => (
               <tr key={m.id || idx} style={{ borderBottom: '1px solid #f1f5f9', background: idx % 2 === 0 ? '#ffffff' : '#fafafa' }}>
                 <td style={{ padding: '10px 16px' }}>
