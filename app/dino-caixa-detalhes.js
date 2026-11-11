@@ -59,6 +59,21 @@ function labelMeio(meio) {
   return mapa[meio] || meio;
 }
 
+/**
+ * Obtém o subtotal real de um item da comanda respeitando subtotal === 0
+ * (ex: procedimentos inclusos em pacote ou clube, onde precoUnitario > 0 mas subtotal === 0).
+ */
+export function obterSubtotalBrutoItemComanda(it) {
+  if (!it) return 0;
+  if (it.subtotal !== undefined && it.subtotal !== null && it.subtotal !== '') {
+    const val = Number(it.subtotal);
+    if (Number.isFinite(val)) return Number(val.toFixed(2));
+  }
+  const unit = Number(it.precoUnitario ?? it.preco ?? 0);
+  const qtd = Number(it.quantidade ?? 1);
+  return Number((unit * qtd).toFixed(2));
+}
+
 export function obterDetalhesCaixaOperacao(empresaId, caixaId, options = {}) {
   const caixa = caixaKytto.obterCaixa(empresaId, caixaId);
   if (!caixa) return null;
@@ -79,15 +94,16 @@ export function obterDetalhesCaixaOperacao(empresaId, caixaId, options = {}) {
   const todasComandasEmpresa = barbeariaErpKytto.listarComandasBarbearia(empresaId, {}) || [];
   const comandasPorIdCaixa = todasComandasEmpresa.filter((c) =>
     c.status !== 'cancelada' &&
+    !c.estornada &&
     (c.pagamentos || []).some((p) => String(p.caixaId) === String(caixa.id) && !p.estornado && !p.cancelado)
   );
 
   // Unifica sem duplicidade
   const mapaComandas = new Map();
   for (const c of [...comandasDia, ...comandasPorIdCaixa]) {
-    if (c.status !== 'cancelada') {
+    if (c.status !== 'cancelada' && !c.estornada) {
       const dataAtend = c.dataAtendimento ? String(c.dataAtendimento).slice(0, 10) : (c.criadoEm ? String(c.criadoEm).slice(0, 10) : caixa.data);
-      if (dataAtend !== caixa.data && !comandasPorIdCaixa.some(cp => cp.id === c.id)) {
+      if (dataAtend !== caixa.data && !comandasPorIdCaixa.some((cp) => cp.id === c.id)) {
         continue;
       }
       mapaComandas.set(c.id, c);
@@ -114,10 +130,19 @@ export function obterDetalhesCaixaOperacao(empresaId, caixaId, options = {}) {
 
   const comandasPorMeio = {};
   const itensRelatorioFechamento = [];
+  const faturadoPorComandaNoCaixa = new Map();
   let totalFaturado = 0;
 
   for (const c of comandas) {
-    const pags = c.pagamentos || [];
+    const pags = (c.pagamentos || []).filter((p) => {
+      if (p.estornado || p.cancelado) return false;
+      if (p.caixaId && String(p.caixaId) !== String(caixa.id)) {
+        const dataAtend = c.dataAtendimento ? String(c.dataAtendimento).slice(0, 10) : '';
+        if (dataAtend !== caixa.data) return false;
+      }
+      return true;
+    });
+
     const numeroComanda = c.numeroComanda ? `Nº${c.numeroComanda}` : `Nº${String(c.id).slice(-4)}`;
     const clienteNome = c.clienteNome || 'Avulso';
     const itensFormatados = (c.itens || []).map((it) => ({
@@ -125,17 +150,21 @@ export function obterDetalhesCaixaOperacao(empresaId, caixaId, options = {}) {
       nome: it.nome,
       tipo: it.tipo,
       quantidade: it.quantidade || 1,
-      precoUnitario: it.precoUnitario || it.preco || 0,
-      subtotal: it.subtotal || 0,
+      precoUnitario: it.precoUnitario ?? it.preco ?? 0,
+      subtotal: obterSubtotalBrutoItemComanda(it),
       profissionalId: it.profissionalId || c.profissionalId || null,
       profissionalNome: mapaProf[it.profissionalId]?.nome || mapaProf[c.profissionalId]?.nome || 'Barbeiro',
     }));
     const dataAtendFormatada = c.dataAtendimento || (c.criadoEm ? String(c.criadoEm).slice(0, 10) : caixa.data);
 
+    let somaPagamentosComanda = 0;
+
     for (const p of pags) {
       const meioNorm = normalizarMeio(p.meio);
       const valor = Number(p.valor || 0);
       const bandeira = p.bandeira ? String(p.bandeira).trim() : null;
+
+      somaPagamentosComanda = Number((somaPagamentosComanda + valor).toFixed(2));
 
       if (!formasPagamento[meioNorm]) {
         formasPagamento[meioNorm] = { meio: meioNorm, label: labelMeio(meioNorm), total: 0, quantidade: 0, bandeiras: {} };
@@ -170,6 +199,7 @@ export function obterDetalhesCaixaOperacao(empresaId, caixaId, options = {}) {
         clienteNome,
         valor,
         totalComanda: c.total,
+        desconto: Number(c.desconto || 0),
         meio: p.meio,
         meioFormatado: labelMeio(meioNorm),
         bandeira: bandeira || '',
@@ -199,6 +229,7 @@ export function obterDetalhesCaixaOperacao(empresaId, caixaId, options = {}) {
           clienteNome,
           valor,
           totalComanda: c.total,
+          desconto: Number(c.desconto || 0),
           meio: p.meio,
           meioFormatado: labelMeio(meioNorm),
           bandeira,
@@ -226,6 +257,8 @@ export function obterDetalhesCaixaOperacao(empresaId, caixaId, options = {}) {
         registradoEm: p.registradoEm || c.atualizadoEm,
       });
     }
+
+    faturadoPorComandaNoCaixa.set(c.id, somaPagamentosComanda);
   }
 
   // Ordena itens do relatório por data/hora ou comanda
@@ -236,19 +269,52 @@ export function obterDetalhesCaixaOperacao(empresaId, caixaId, options = {}) {
   const dinheiroEsperado = Number((Number(caixa.valorAbertura || 0) + Number(formasPagamento.dinheiro.total || 0) + totalSuprimentos - totalSangrias).toFixed(2));
 
   // Cálculo consolidado de comissões dos barbeiros nas comandas deste caixa
+  // Conciliado 100% com o valor efetivamente faturado no caixa (respeitando subtotal === 0 de pacotes/clubes e descontos de comanda)
   const mapaComissoesProf = {};
   let totalGorjetas = 0;
+  let totalDescontosCaixa = 0;
 
   for (const c of comandas) {
     if (c.status === 'cancelada' || c.estornada) continue;
-    totalGorjetas = Number((totalGorjetas + Number(c.gorjeta || 0)).toFixed(2));
 
-    for (const it of c.itens || []) {
+    const itens = c.itens || [];
+    const subtotaisBrutos = itens.map((it) => obterSubtotalBrutoItemComanda(it));
+    const somaBrutaComanda = Number(subtotaisBrutos.reduce((s, v) => s + v, 0).toFixed(2));
+    const pagoComandaNoCaixa = Number(faturadoPorComandaNoCaixa.get(c.id) || 0);
+
+    // Se a comanda possui valor bruto > 0 mas ainda não teve nenhum pagamento/fechamento no caixa (ex: comanda aberta),
+    // ela não entrou no Total Faturado deste caixa e não deve inflar o rateio de comissões do caixa.
+    if (somaBrutaComanda > 0 && pagoComandaNoCaixa === 0) {
+      continue;
+    }
+
+    totalGorjetas = Number((totalGorjetas + Number(c.gorjeta || 0)).toFixed(2));
+    if (somaBrutaComanda > pagoComandaNoCaixa) {
+      totalDescontosCaixa = Number((totalDescontosCaixa + (somaBrutaComanda - pagoComandaNoCaixa)).toFixed(2));
+    }
+
+    const indicesComValor = subtotaisBrutos.map((v, idx) => (v > 0 ? idx : -1)).filter((idx) => idx >= 0);
+    const ultimoIdxComValor = indicesComValor.length > 0 ? indicesComValor[indicesComValor.length - 1] : -1;
+    let acumuladoLiquidoComanda = 0;
+
+    for (let idx = 0; idx < itens.length; idx++) {
+      const it = itens[idx];
+      const subtotalBruto = subtotaisBrutos[idx];
+      let subtotalItem = 0;
+
+      if (somaBrutaComanda > 0 && subtotalBruto > 0) {
+        if (idx === ultimoIdxComValor) {
+          subtotalItem = Number(Math.max(0, pagoComandaNoCaixa - acumuladoLiquidoComanda).toFixed(2));
+        } else {
+          subtotalItem = Number((subtotalBruto * (pagoComandaNoCaixa / somaBrutaComanda)).toFixed(2));
+          acumuladoLiquidoComanda = Number((acumuladoLiquidoComanda + subtotalItem).toFixed(2));
+        }
+      }
+
       const profId = it.profissionalId || c.profissionalId || '__sem_profissional__';
       const prof = mapaProf[profId];
       const nomeProf = prof?.nome || (profId === '__sem_profissional__' ? 'Sem Barbeiro Definido' : 'Profissional');
       const comissaoPercent = Number(prof?.comissaoPercentual ?? prof?.comissaoServicos ?? 50);
-      const subtotalItem = Number(it.subtotal || (Number(it.precoUnitario || 0) * Number(it.quantidade || 1)));
 
       if (!mapaComissoesProf[profId]) {
         mapaComissoesProf[profId] = {
@@ -257,11 +323,18 @@ export function obterDetalhesCaixaOperacao(empresaId, caixaId, options = {}) {
           totalServicos: 0,
           totalProdutos: 0,
           totalFaturado: 0,
+          totalDescontos: 0,
           comissaoPercent,
           valorComissao: 0,
           quantidadeServicos: 0,
           quantidadeProdutos: 0,
         };
+      }
+
+      if (subtotalBruto > subtotalItem) {
+        mapaComissoesProf[profId].totalDescontos = Number(
+          ((mapaComissoesProf[profId].totalDescontos || 0) + (subtotalBruto - subtotalItem)).toFixed(2)
+        );
       }
 
       if (it.tipo === 'produto') {
@@ -291,6 +364,9 @@ export function obterDetalhesCaixaOperacao(empresaId, caixaId, options = {}) {
 
   const listaComissoes = Object.values(mapaComissoesProf);
   const totalComissoesGeral = Number(listaComissoes.reduce((soma, p) => soma + p.valorComissao, 0).toFixed(2));
+  const totalServicosGeral = Number(listaComissoes.reduce((soma, p) => soma + p.totalServicos, 0).toFixed(2));
+  const totalProdutosGeral = Number(listaComissoes.reduce((soma, p) => soma + p.totalProdutos, 0).toFixed(2));
+  const totalFaturadoRateio = Number((totalServicosGeral + totalProdutosGeral).toFixed(2));
 
   return {
     caixa: {
@@ -310,11 +386,16 @@ export function obterDetalhesCaixaOperacao(empresaId, caixaId, options = {}) {
     },
     formasPagamento,
     totalFaturado,
+    totalDescontosCaixa,
     dinheiroEsperado,
     totalGorjetas,
     comissoes: {
       profissionais: listaComissoes,
       totalComissoes: totalComissoesGeral,
+      totalServicos: totalServicosGeral,
+      totalProdutos: totalProdutosGeral,
+      totalFaturadoRateio,
+      conciliadoComCaixa: Math.abs(totalFaturado - totalFaturadoRateio) < 0.01,
     },
     comandasPorMeio,
     itensRelatorioFechamento,
@@ -323,19 +404,22 @@ export function obterDetalhesCaixaOperacao(empresaId, caixaId, options = {}) {
       id: c.id,
       numeroComanda: c.numeroComanda,
       clienteNome: c.clienteNome || 'Avulso',
+      subtotal: c.subtotal,
+      desconto: Number(c.desconto || 0),
       total: c.total,
       totalPago: c.totalPago,
       status: c.status,
       dataAtendimento: c.dataAtendimento || (c.criadoEm ? String(c.criadoEm).slice(0, 10) : caixa.data),
       profissionalId: c.profissionalId || null,
       profissionalNome: mapaProf[c.profissionalId]?.nome || 'Barbeiro',
-      pagamentos: c.pagamentos || [],
+      pagamentos: (c.pagamentos || []).filter((p) => !p.estornado && !p.cancelado),
       itens: (c.itens || []).map((it) => ({
         id: it.id,
         nome: it.nome,
+        tipo: it.tipo,
         quantidade: it.quantidade || 1,
-        precoUnitario: it.precoUnitario || it.preco || 0,
-        subtotal: it.subtotal || 0,
+        precoUnitario: it.precoUnitario ?? it.preco ?? 0,
+        subtotal: obterSubtotalBrutoItemComanda(it),
         profissionalId: it.profissionalId || c.profissionalId || null,
         profissionalNome: mapaProf[it.profissionalId]?.nome || mapaProf[c.profissionalId]?.nome || 'Barbeiro',
       })),

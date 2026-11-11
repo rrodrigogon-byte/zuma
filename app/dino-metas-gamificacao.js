@@ -337,7 +337,7 @@ const rawCmd = cmd.fechadaEm || cmd.atualizadoEm || cmd.criadoEm || '';
         if (!profId || !stats[profId]) return;
 
         let qtd = Math.max(1, Math.round(Number(item.quantidade || item.qtd || 1)));
-        const valor = Number(item.subtotal || item.valor || 0);
+        const valor = Number(item.subtotal !== undefined && item.subtotal !== null ? item.subtotal : (item.valor || 0));
 
         // Se quantidade veio 1 mas o serviço cadastrado tem preço unitário fixo e o valor total é múltiplo exato
         if (qtd === 1 && valor > 0 && item.servicoId) {
@@ -400,7 +400,7 @@ const rawCmd = cmd.fechadaEm || cmd.atualizadoEm || cmd.criadoEm || '';
         if (!profId || !stats[profId]) continue;
 
         const qtd = Math.max(1, Number(prod.quantidade || 1));
-        const valor = Number(prod.subtotal || prod.valor || 0);
+        const valor = Number(prod.subtotal !== undefined && prod.subtotal !== null ? prod.subtotal : (prod.valor || 0));
 
         if (noDia) {
           stats[profId].dia.produtosQtd += qtd;

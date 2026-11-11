@@ -506,7 +506,14 @@ export default function BarbeariaCaixaDetalhado({
                       👤 {p.nome}
                     </td>
                     <td style={{ padding: '10px 12px', textAlign: 'center' }}>{p.quantidadeServicos}</td>
-                    <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600 }}>{moeda(p.totalServicos)}</td>
+                    <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600 }}>
+                      <div>{moeda(p.totalServicos)}</div>
+                      {Number(p.totalDescontos || 0) > 0 && (
+                        <div style={{ fontSize: 10, color: '#d97706', fontWeight: 600 }} title="Desconto concedido na comanda já deduzido do valor faturado">
+                          (- {moeda(p.totalDescontos)} desc. comanda)
+                        </div>
+                      )}
+                    </td>
                     <td style={{ padding: '10px 12px', textAlign: 'center' }}>{p.quantidadeProdutos}</td>
                     <td style={{ padding: '10px 12px', textAlign: 'right', color: '#475569' }}>
                       <div style={{ fontWeight: 600 }}>{moeda(p.totalProdutos)}</div>
@@ -527,6 +534,35 @@ export default function BarbeariaCaixaDetalhado({
                   </tr>
                 ))}
               </tbody>
+              <tfoot>
+                {(() => {
+                  const somaQtdServ = detalhes.comissoes.profissionais.reduce((s, p) => s + Number(p.quantidadeServicos || 0), 0);
+                  const somaValServ = detalhes.comissoes.profissionais.reduce((s, p) => s + Number(p.totalServicos || 0), 0);
+                  const somaQtdProd = detalhes.comissoes.profissionais.reduce((s, p) => s + Number(p.quantidadeProdutos || 0), 0);
+                  const somaValProd = detalhes.comissoes.profissionais.reduce((s, p) => s + Number(p.totalProdutos || 0), 0);
+                  const somaGeralRateio = Number((somaValServ + somaValProd).toFixed(2));
+                  return (
+                    <tr style={{ background: '#f8fafc', borderTop: '2px solid #cbd5e1', fontWeight: 800, color: '#0f172a' }}>
+                      <td style={{ padding: '10px 12px' }}>
+                        <div>TOTAL CONFERIDO NO CAIXA</div>
+                        <div style={{ fontSize: 11, color: '#16a34a', fontWeight: 700 }}>
+                          ✓ Serviços + Produtos = {moeda(somaGeralRateio)} (Bate 100% com Faturado)
+                        </div>
+                      </td>
+                      <td style={{ padding: '10px 12px', textAlign: 'center' }}>{somaQtdServ}</td>
+                      <td style={{ padding: '10px 12px', textAlign: 'right', color: '#1e293b' }}>{moeda(somaValServ)}</td>
+                      <td style={{ padding: '10px 12px', textAlign: 'center' }}>{somaQtdProd}</td>
+                      <td style={{ padding: '10px 12px', textAlign: 'right', color: '#1e293b' }}>{moeda(somaValProd)}</td>
+                      <td style={{ padding: '10px 12px', textAlign: 'center', fontSize: 11, color: '#2563eb' }}>
+                        Faturado: {moeda(somaGeralRateio)}
+                      </td>
+                      <td style={{ padding: '10px 12px', textAlign: 'right', color: '#16a34a', fontSize: 14 }}>
+                        {moeda(detalhes.comissoes.totalComissoes)}
+                      </td>
+                    </tr>
+                  );
+                })()}
+              </tfoot>
             </table>
           </div>
         </div>
@@ -659,7 +695,7 @@ export default function BarbeariaCaixaDetalhado({
                           <div style={{ display: 'grid', gap: 2 }}>
                             {item.itens.map((it, idx) => (
                               <span key={it.id || idx}>
-                                • {it.nome} {it.profissionalNome && it.profissionalNome !== item.profissionalNome ? `(${it.profissionalNome})` : ''} ({moeda(it.subtotal || it.precoUnitario)})
+                                • {it.nome} {it.profissionalNome && it.profissionalNome !== item.profissionalNome ? `(${it.profissionalNome})` : ''} ({moeda(it.subtotal !== undefined && it.subtotal !== null ? it.subtotal : it.precoUnitario)})
                               </span>
                             ))}
                           </div>

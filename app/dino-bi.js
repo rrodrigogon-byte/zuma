@@ -188,7 +188,7 @@ export function retailSold({ commands = [], retailSales = [], products = [] }, w
     if (sale.status !== 'pago' || sale.comandaId || !inWindow(sale.pagoEm || sale.criadoEm, window)) continue;
     for (const item of list(sale.itens)) {
       const quantidade = num(item.quantidade || 1);
-      rows.push({ produtoId: item.produtoId, nome: item.nome || item.produtoNome || 'Produto', quantidade, receita: num(item.subtotal || num(item.precoUnitario) * quantidade), custo: (cost.get(item.produtoId) ?? num(item.custoUnitario)) * quantidade, profissionalId: sale.profissionalId || '', at: sale.pagoEm || sale.criadoEm });
+      rows.push({ produtoId: item.produtoId, nome: item.nome || item.produtoNome || 'Produto', quantidade, receita: item.subtotal !== undefined && item.subtotal !== null ? num(item.subtotal) : num(item.precoUnitario) * quantidade, custo: (cost.get(item.produtoId) ?? num(item.custoUnitario)) * quantidade, profissionalId: sale.profissionalId || '', at: sale.pagoEm || sale.criadoEm });
     }
   }
   for (const command of list(commands)) {
