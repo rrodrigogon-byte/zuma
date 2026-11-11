@@ -19,6 +19,7 @@ function pad(value) {
 export function normalizeAgendaTime(value) {
   if (!value) return ''
   let str = plain(value)
+  const isPmHint = /\b(da tarde|a tarde|de tarde|da noite|a noite|de noite)\b/i.test(str)
   // Remove menções explícitas de data no formato DD/MM, DD/MM/AAAA ou AAAA-MM-DD (ex: "12/11 as 17h")
   str = str.replace(/\b\d{4}-\d{2}-\d{2}\b/g, ' ')
   str = str.replace(/\b\d{1,2}\/\d{1,2}(?:\/\d{2,4})?\b/g, ' ')
@@ -26,15 +27,19 @@ export function normalizeAgendaTime(value) {
   str = str.replace(/\b(hoje|amanha|depois de amanha|segunda|terca|quarta|quinta|sexta|sabado|domingo)\b/gi, ' ')
   str = str.replace(/\b(dia\s+\d{1,2}(?:\/\d{1,2})?)\b/gi, ' ')
   str = str.replace(/\b(as|a|para|pras?|umas?|de|pelas?|por volta d[ae]s?|por volta de)\b/gi, ' ')
-  str = str.replace(/\b(da tarde|da noite|da manha|da madrugada)\b/gi, ' ')
+  str = str.replace(/\b(da tarde|a tarde|de tarde|da noite|a noite|de noite|da manha|da madrugada)\b/gi, ' ')
+  // Converte "14 e meia" / "14h e meia" / "2 e meia" -> "14:30" / "2:30"
+  str = str.replace(/\b(\d{1,2})\s*h?\s+e\s+meia\b/gi, '$1:30')
+  // Converte "14 e 15" / "quero as 14 e 15" / "14h e 45" -> "14:15" / "14:45"
+  str = str.replace(/\b(\d{1,2})\s*h?\s+e\s+(\d{1,2})\b/gi, '$1:$2')
   str = str.replace(/\s*(horas?|hrs?|hs?|minutos?|mins?|m)\b/gi, ' ')
-  str = str.replace(/[?!,;()]/g, ' ').replace(/\s+/g, ' ').trim()
+  str = str.replace(/[?!;()]/g, ' ').replace(/\s+/g, ' ').trim()
   if (!str) return ''
-
-  // Casa 18:45, 18h45, 18.45 ou 18 45
-  let match = str.match(/\b(\d{1,2})\s*[:h.\s]\s*(\d{2})(?::\d{2})?\b/)
+  const adjustPm = (h) => (isPmHint && h >= 1 && h <= 11 ? h + 12 : h)
+  // Casa 18:45, 18h45, 18.45, 18,45, 18-45 ou 18 45
+  let match = str.match(/\b(\d{1,2})\s*[:h.,\-\s]\s*(\d{2})(?::\d{2})?\b/)
   if (match) {
-    const hour = Number(match[1])
+    const hour = adjustPm(Number(match[1]))
     const minute = Number(match[2])
     if (Number.isInteger(hour) && Number.isInteger(minute) && hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59) {
       return `${pad(hour)}:${pad(minute)}`
@@ -44,7 +49,7 @@ export function normalizeAgendaTime(value) {
   // Casa 4 dígitos juntos como "1845"
   match = str.match(/\b(\d{2})(\d{2})\b/)
   if (match) {
-    const hour = Number(match[1])
+    const hour = adjustPm(Number(match[1]))
     const minute = Number(match[2])
     if (Number.isInteger(hour) && Number.isInteger(minute) && hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59) {
       return `${pad(hour)}:${pad(minute)}`
@@ -53,7 +58,7 @@ export function normalizeAgendaTime(value) {
   // Casa hora cheia (ex: "18h", "18")
   match = str.match(/\b(\d{1,2})\s*h?\b/)
   if (match) {
-    const hour = Number(match[1])
+    const hour = adjustPm(Number(match[1]))
     if (Number.isInteger(hour) && hour >= 0 && hour <= 23) {
       return `${pad(hour)}:00`
     }
@@ -114,7 +119,18 @@ function validIso(year, month, day) {
 export function matchAgendaSlot(value, slots = []) {
   const wanted = normalizeAgendaTime(value)
   if (!wanted) return ''
-  return (Array.isArray(slots) ? slots : []).find((slot) => normalizeAgendaTime(slot) === wanted) || ''
+  const list = Array.isArray(slots) ? slots : []
+  const direct = list.find((slot) => normalizeAgendaTime(slot) === wanted)
+  if (direct) return direct
+  // Se o cliente disse "2:15" ou "3h" sem "da tarde" e a agenda tem "14:15" / "15:00"
+  const [hStr, mStr] = wanted.split(':')
+  const h = Number(hStr)
+  if (h >= 1 && h <= 6) {
+    const pmWanted = `${pad(h + 12)}:${mStr}`
+    const pmMatch = list.find((slot) => normalizeAgendaTime(slot) === pmWanted)
+    if (pmMatch) return pmMatch
+  }
+  return ''
 }
 
 /**

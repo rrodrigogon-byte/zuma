@@ -448,8 +448,18 @@ async function historyForSession(session) {
       ORDER BY criado_em DESC LIMIT 35`,
     [session.empresa_id, session.loja_id, session.id],
   );
+  // Evita ressuscitar assuntos inacabados de dias anteriores (> 12h de hiato entre mensagens)
+  const ordered = result.rows.reverse();
+  let startIdx = 0;
+  for (let i = 1; i < ordered.length; i++) {
+    const prevAt = ordered[i - 1]?.criado_em ? new Date(ordered[i - 1].criado_em).getTime() : NaN;
+    const currAt = ordered[i]?.criado_em ? new Date(ordered[i].criado_em).getTime() : NaN;
+    if (Number.isFinite(prevAt) && Number.isFinite(currAt) && (currAt - prevAt) > 12 * 3600 * 1000) {
+      startIdx = i;
+    }
+  }
   // A enquete enviada entra no histórico com as opções numeradas: o voto ("2" ou o nome) faz sentido.
-  return result.rows.reverse().map(row => {
+  return ordered.slice(startIdx).map(row => {
     const isStaff = row.papel === 'assistant' && (row.autor === 'equipe' || row.interacao === 'organic');
     const staffPrefix = isStaff ? `[Equipe da Loja / Atendente Humano${row.autor_nome ? `: ${row.autor_nome}` : ''}] ` : '';
     return {
@@ -1627,7 +1637,7 @@ export function presenceConfirmIntent(text) {
   }
   const value = semEmojis;
   if (!value) return false;
-  return /^(confirmo|confirmando|confirmado|confirmada|confirmo presenca|confirmo sim|sim confirmo|confirma|confirma pra mim|pode confirmar|pode ser sim|sim pode ser|estarei ai|estarei la|vou sim|vou|vou comparecer|confirmadissimo|ok confirmado|ta confirmado|esta confirmado|confirmar|sim confirmar|pode deixar marcado|vou querer esse|deixa marcado|deixa esse|marca esse|pode marcar|to a caminho|estou a caminho|chegando|ja to chegando|ja cheguei|to chegando)( obrigad[oa])?$/.test(value)
+  return /^(confirmo|confirmando|confirmado|confirmada|confirmo presenca|confirmo sim|sim confirmo|confirma|confirma pra mim|pode confirmar|pode ser sim|sim pode ser|estarei ai|estarei la|sim estarei la|sim estarei ai|vou sim|vou|vou comparecer|confirmadissimo|ok confirmado|ta confirmado|esta confirmado|confirmar|sim confirmar|pode deixar marcado|vou querer esse|deixa marcado|deixa esse|marca esse|pode marcar|to a caminho|estou a caminho|chegando|ja to chegando|ja cheguei|to chegando)( obrigad[oa])?$/.test(value)
     || /^(sim|ok|pode ser|com certeza|fechado|fechou|perfeito|beleza|blz|bora|show|tamo junto|combinado|certo|marcado|ta marcado|opa vou|partiu|fechado entao|combinado entao)( obrigad[oa])?$/.test(value);
 }
 

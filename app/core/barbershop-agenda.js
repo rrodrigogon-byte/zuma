@@ -598,6 +598,7 @@ export async function availability(scope, input = {}) {
     slots: horarios.filter((item) => item.disponivel).map((item) => item.horario),
     professionalByTime,
     professionalsByTime,
+    professionalsAvailable: nomesHabilitados,
     bloqueio: (() => {
       const bloqueios = barbearia.listarBloqueios(empresa, { data: date, profissionalId: profissional?.id, lojaId: scope.lojaId });
       const b = (bloqueios || []).find((item) => item.ativo !== false && (!item.profissionalId || item.profissionalId === profissional?.id));
