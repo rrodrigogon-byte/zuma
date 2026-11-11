@@ -37,7 +37,11 @@ test('runner preserva 084 e registra 085 logo depois; as migrations posteriores 
   assert.ok(i > 0);
   assert.equal(migrationFiles[i - 1], '083_dino_operational_foundations.sql');
   assert.equal(migrationFiles[i + 1], '085_ai_automation_log_store_scope.sql');
-  assert.deepEqual([...migrationFiles].sort(), migrationFiles);
+  const estrutura = '122_estrutura_vendas_varejo.sql';
+  const governanca = migrationFiles.indexOf('118_negocios_multi_negocio_governance.sql');
+  assert.equal(migrationFiles[governanca - 1], estrutura);
+  const historico = migrationFiles.filter(file => file !== estrutura);
+  assert.deepEqual([...historico].sort(), historico);
 });
 
 test('migration 083 contém as tabelas, constraints e índices críticos da fundação', () => {

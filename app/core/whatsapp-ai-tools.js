@@ -1476,13 +1476,13 @@ async function toolPrepareAppointment(context, args = {}) {
       return {
         ok: false,
         code: 'CUSTOMER_NAME_REQUIRED',
-        horarioReservado: `${friendlyWhen(date, time)} com ${nomeProf}`,
+        horarioDisponivel: `${friendlyWhen(date, time)} com ${nomeProf}`,
         servico: nomeServ,
         profissional: nomeProf,
         data: date,
         horario: time,
         pergunta: 'Qual o seu nome completo para eu confirmar o agendamento?',
-        instrucao: `O horário de ${time} no dia ${date} com ${nomeProf} está LIVRE e reservado! Diga de forma calorosa e direta: "Perfeito! Às ${time} com o ${nomeProf} tá reservado. Qual o seu nome completo para eu confirmar o agendamento?". NUNCA diga que o serviço não foi encontrado. Assim que o cliente responder o nome, chame preparar_agendamento de novo passando customerName.`,
+        instrucao: `O horário de ${time} no dia ${date} com ${nomeProf} está disponível agora. Diga de forma calorosa e direta: "Perfeito! Às ${time} com ${nomeProf} está livre no momento. Qual o seu nome completo para eu confirmar o agendamento?". NUNCA diga que o serviço não foi encontrado. Assim que o cliente responder o nome, chame preparar_agendamento de novo passando customerName.`,
       };
     }
     throw err;

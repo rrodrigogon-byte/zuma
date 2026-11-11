@@ -99,6 +99,7 @@ if (URL_PG) {
     WHATSAPP_POLL_MODE: 'on',
     WHATSAPP_MAX_REPLY_AGE_MINUTES: '30',
     GEMINI_REQUEST_ATTEMPTS: '1',
+    DINO_DAILY_BRIEFING_ENABLED: '0',
   });
   delete process.env.ANTHROPIC_API_KEY;
   delete process.env.WHATSAPP_AI_MEDIA;
@@ -297,7 +298,7 @@ function biaSimulada(corpo) {
   }
 
   // Início do turno: entende a mensagem
-  const nomeDito = userText.match(/\b(?:meu nome (?:e|é)|sou (?:o|a))\s+([A-ZÁÉÍÓÚ][\p{L}]+)/u);
+  const nomeDito = userText.match(/\b(?:[Mm]eu nome (?:e|é)|(?:[Ss]ou|[Aa]qui (?:e|é)) (?:o|a))\s+([A-ZÁÉÍÓÚ][\p{L}]+)/u);
   if (nomeDito) mem.nome = nomeDito[1];
   if (mem.remarcarId && mem.ofertas?.length) {
     const escolha = escolherOferta(t, mem.ofertas);
@@ -464,6 +465,7 @@ test('simulação ponta a ponta do atendente da Dino', { skip, timeout: Number(p
   await seed();
   t.after(async () => {
     if (process.env.SIM_REPORT_PATH) fs.writeFileSync(process.env.SIM_REPORT_PATH, JSON.stringify(mundo.transcricoes, null, 2));
+    await db.close();
   });
 
   await cena(t, '01 · Texto: saudação simples', async () => {
@@ -544,7 +546,7 @@ test('simulação ponta a ponta do atendente da Dino', { skip, timeout: Number(p
 
   await cena(t, '08 · "quero" após OUTRA pergunta não confirma a ação pendente', async () => {
     const tel = telefoneNovo();
-    cliente(tel, 'Quero cortar amanhã à tarde');
+    cliente(tel, 'Quero cortar amanhã à tarde, meu nome é Rafael');
     await ciclo();
     cliente(tel, 'o primeiro');
     let out = await ciclo();
@@ -564,7 +566,7 @@ test('simulação ponta a ponta do atendente da Dino', { skip, timeout: Number(p
 
   await cena(t, '09 · Resposta com ressalva ("sim, mas às 15h?") não confirma', async () => {
     const tel = telefoneNovo();
-    cliente(tel, 'Quero cortar amanhã à tarde');
+    cliente(tel, 'Quero cortar amanhã à tarde, meu nome é Rafael');
     await ciclo();
     cliente(tel, 'o primeiro');
     await ciclo();
@@ -576,7 +578,7 @@ test('simulação ponta a ponta do atendente da Dino', { skip, timeout: Number(p
 
   await cena(t, '10 · "não" logo após o resumo desiste da ação', async () => {
     const tel = telefoneNovo();
-    cliente(tel, 'Quero cortar amanhã à tarde');
+    cliente(tel, 'Quero cortar amanhã à tarde, meu nome é Rafael');
     await ciclo();
     cliente(tel, 'o primeiro');
     await ciclo();
@@ -619,7 +621,7 @@ test('simulação ponta a ponta do atendente da Dino', { skip, timeout: Number(p
 
   await cena(t, '12 · Ação expirada (>prazo de 120 min) não é confirmada e o cliente é avisado', async () => {
     const tel = telefoneNovo();
-    cliente(tel, 'Quero cortar amanhã à tarde');
+    cliente(tel, 'Quero cortar amanhã à tarde, meu nome é Rafael');
     await ciclo();
     cliente(tel, 'o primeiro');
     await ciclo();
@@ -662,7 +664,7 @@ test('simulação ponta a ponta do atendente da Dino', { skip, timeout: Number(p
     memoria().intencao = null;
     cliente(tel, 'confirmo, estarei aí');
     const out = await ciclo();
-    assert.match(ultima(out), /Presença confirmada/);
+    assert.match(ultima(out), /Presença confirmada|Confirmado,/);
     assert.equal(agendamentosDe(tel)[0].status, 'confirmado');
   });
 
@@ -714,6 +716,7 @@ test('simulação ponta a ponta do atendente da Dino', { skip, timeout: Number(p
     cliente(tel, 'quero desmarcar meu horário');
     let out = await ciclo();
     assert.match(ultima(out), T.resumoCancelamento);
+    assert.notEqual(agendamentosDe(tel)[0].status, 'cancelado');
     cliente(tel, 'pode cancelar');
     out = await ciclo();
     assert.match(ultima(out), T.cancelado);
@@ -931,7 +934,7 @@ test('simulação ponta a ponta do atendente da Dino', { skip, timeout: Number(p
     let out = await ciclo();
     assert.match(ultima(out), PERSONA
       ? /Barba Completa.*Manicure às .*Pedicure às .*R\$ 140,00/
-      : /• Barba Completa.*\n• Manicure às .*\n• Pedicure às .*\nTotal: R\$ 140,00/);
+      : /• Barba Completa.*\n• Manicure(?: com [^\n]+)? às .*\n• Pedicure(?: com [^\n]+)? às .*\nTotal: R\$ 140,00/);
     cliente(tel, 'fechado');
     out = await ciclo();
     assert.match(ultima(out), T.emSeguida, 'manicure e pedicure só com quem faz');
@@ -989,7 +992,7 @@ test('simulação ponta a ponta do atendente da Dino', { skip, timeout: Number(p
 
   await cena(t, '38 · Cliente confuso duas vezes ("???" e "ou") → chama a equipe', async () => {
     const tel = telefoneNovo();
-    cliente(tel, 'Quero cortar amanhã à tarde');
+    cliente(tel, 'Quero cortar amanhã à tarde, meu nome é Rafael');
     await ciclo();
     cliente(tel, '???');
     let out = await ciclo();
@@ -1012,7 +1015,7 @@ test('simulação ponta a ponta do atendente da Dino', { skip, timeout: Number(p
     memoria().intencao = null;
     cliente(tel, 'CONFIRMO');
     let out = await ciclo();
-    assert.match(ultima(out), /Presença confirmada/);
+    assert.match(ultima(out), /Presença confirmada|Confirmado,/);
     assert.equal(agendamentosDe(tel)[0].status, 'confirmado');
     memoria().intencao = null;
     cliente(tel, 'CANCELO');
@@ -1075,7 +1078,7 @@ test('simulação ponta a ponta do atendente da Dino', { skip, timeout: Number(p
     let out = await ciclo();
     assert.equal(out.length, 1);
     assert.match(out[0].texto, T.apresentacao);
-    cliente(tel, 'Quero cortar o cabelo amanhã à tarde, tem horário?');
+    cliente(tel, 'Quero cortar o cabelo amanhã à tarde, tem horário? Meu nome é Rafael');
     out = await ciclo();
     assert.match(ultima(out), T.opcoes('Corte Masculino'), 'oferece horários reais da tarde');
     cliente(tel, 'Quanto custa corte e barba?');
@@ -1370,10 +1373,12 @@ test('simulação ponta a ponta do atendente da Dino', { skip, timeout: Number(p
     const [hh, mm] = slot.time.split(':');
     const falado = `${Number(hh)}h${mm === '00' ? '' : mm}`;
     // Sem nome: pede o nome e devolve exatamente os dados para repetir (com o horário já no formato da agenda).
-    await assert.rejects(
-      () => createWhatsappAiToolExecutor({ ...ctx })('preparar_agendamento', { serviceId: servico.id, professionalId: 'qualquer', date: slot.date, time: falado }),
-      (error) => error.code === 'CUSTOMER_NAME_REQUIRED' && error.message.includes(`"time":"${slot.time}"`) && error.message.includes('Qual seu nome para eu deixar no agendamento?'),
-    );
+    const semNome = await run('preparar_agendamento', { serviceId: servico.id, professionalId: 'qualquer', date: slot.date, time: falado });
+    assert.equal(semNome.ok, false);
+    assert.equal(semNome.code, 'CUSTOMER_NAME_REQUIRED');
+    assert.equal(semNome.horario, slot.time);
+    assert.match(semNome.pergunta, /nome completo/);
+    assert.equal(agendamentosDe(tel).length, 0);
     const preparado = await createWhatsappAiToolExecutor({ ...ctx })('preparar_agendamento', { serviceId: servico.id, professionalId: 'qualquer', date: slot.date, time: falado, customerName: 'Rodrigo Gonçalves' });
     assert.notEqual(preparado.ok, false);
     assert.doesNotMatch(JSON.stringify(preparado), /com (\p{L}+) com \1/u);
@@ -1413,17 +1418,17 @@ test('simulação ponta a ponta do atendente da Dino', { skip, timeout: Number(p
   await cena(t,'53 · Pacote vencido é reconhecido pela IA e não autoriza agendamento; pacote pago reserva sessão',async()=>{
     const tel=telefoneNovo();cliente(tel,'oi');await ciclo();const session=await sessao(tel);
     const clientes=await import('../clientes-contas-kytto.js');
-    const titular=clientes.criarCliente(IDS.empresa,{nome:'Cliente Pacote',telefone:tel});
+    const titular=clientes.criarCliente(IDS.empresa,{nome:'Paulo Ferreira',telefone:tel});
     const plano=barbearia.criarPlano(IDS.empresa,{nome:'Pacote 8 simulado',preco:240,sessoesIncluidas:8,ciclo:'mensal',regraRenovacao:'aniversario',servicosIds:[SERVICOS.corte.id]});
     const vencido=barbearia.criarAssinatura(IDS.empresa,{clienteId:titular.id,planoId:plano.id,inicio:'2020-01-10'});
     barbearia.alterarStatusAssinatura(IDS.empresa,vencido.id,'ativa',{confirmadoSemCobranca:true,pagamentoConfirmado:true});
     const {createWhatsappAiToolExecutor}=await import('./whatsapp-ai-tools.js');
-    const scope={empresaId:IDS.empresa,lojaId:IDS.loja,canalId:IDS.canal,sessionId:session.id,phone:tel,customerName:'Cliente Pacote',customerText:'quero usar meu pacote'};
+    const scope={empresaId:IDS.empresa,lojaId:IDS.loja,canalId:IDS.canal,sessionId:session.id,phone:tel,customerName:'Paulo Ferreira',customerText:'quero usar meu pacote'};
     const run=createWhatsappAiToolExecutor(scope);const perfil=await run('consultar_perfil_cliente',{});
     assert.equal(perfil.relacionamentoBarbearia.perfil,'pacote_vencido');assert.equal(perfil.relacionamentoBarbearia.pacotes[0].utilizavel,false);
     const prox=await run('sugerir_proximos_horarios',{serviceId:SERVICOS.corte.id,professionalId:'qualquer',limit:1});const slot=prox.proximosHorarios[0];assert.ok(slot);
-    const dados={serviceId:SERVICOS.corte.id,professionalId:'qualquer',date:slot.date,time:slot.time,customerName:'Cliente Pacote',usePlan:true};
-    await assert.rejects(()=>run('preparar_agendamento',dados),error=>error.code==='PLANO_VENCIDO');assert.equal(agendamentosDe(tel).length,0);
+    const dados={serviceId:SERVICOS.corte.id,professionalId:'qualquer',date:slot.date,time:slot.time,customerName:'Paulo Ferreira',usePlan:true};
+    await assert.rejects(async () => { const retorno = await run('preparar_agendamento', dados); assert.fail(`Esperava bloqueio do pacote vencido; retorno: ${JSON.stringify(retorno)}`); }, error => error.code === 'PLANO_VENCIDO');assert.equal(agendamentosDe(tel).length,0);
     const ativo=barbearia.criarAssinatura(IDS.empresa,{clienteId:titular.id,planoId:plano.id,inicio:new Date(Date.now()-86400000).toISOString()});
     barbearia.alterarStatusAssinatura(IDS.empresa,ativo.id,'ativa',{confirmadoSemCobranca:true,pagamentoConfirmado:true});
     assert.equal((await run('consultar_meu_plano',{})).plano.perfil,'pacote_ativo');

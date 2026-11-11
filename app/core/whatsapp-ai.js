@@ -112,7 +112,7 @@ import {
   STICKERS_RESTRITAS,
 } from './whatsapp-ai-persona.js';
 import { bubbleDelayMs, splitBubbles, styleModelText } from './whatsapp-ai-style.js';
-import { AGENDA_PUBLICA_DINO_BASE, agendaCalendarText, ensureToolLinks, extractFastScheduleChoice, fixWeekdayMistakes, obterLinkAgendaDino, serviceWithProfessional, toolMoneyValues, unbackedPrices, withSelfBookingAgendaOption } from './whatsapp-ai-normalize.js';
+import { agendaCalendarText, ensureToolLinks, extractFastScheduleChoice, fixWeekdayMistakes, obterLinkAgendaDino, serviceWithProfessional, toolMoneyValues, unbackedPrices, withSelfBookingAgendaOption } from './whatsapp-ai-normalize.js';
 import { enviarFigurinha as enviarFigurinhaPersona, figurinhaDisponivel, figurinhaSuportada } from './whatsapp-figurinhas.js';
 import { mapWhatsappAiProviderLatency24h, WHATSAPP_AI_PROVIDER_RUNS_24H_CHANNEL_SQL } from './whatsapp-ai-provider-metrics.js';
 
@@ -2027,23 +2027,6 @@ async function deterministicResponseCore(task, channel, session, message) {
       const prepared = await toolPrepareCancellation({ ...context, customerText: message.text }, {});
       if (prepared?.ok && prepared.acao) {
         session.acao_pendente = { actionId: prepared.acao.id, type: prepared.acao.tipo, summary: prepared.acao.resumo, mostrado: true, preparadoEm: new Date().toISOString() };
-        const cancelamentoDireto = !String(message.text || '').includes('?')
-          && /\b(cancelo|cancela|cancelar|pode cancelar|quero cancelar|desmarca|desmarcar|desmarco)\b/i.test(plain(message.text));
-        if (cancelamentoDireto) {
-          try {
-            const confirmedCancel = await confirmPendingAction(context);
-            if (confirmedCancel?.ok !== false) {
-              session.acao_pendente = null;
-              await recordConfirmedInCrm(context, { type: 'cancelamento', summary: prepared.acao.resumo }).catch(() => null);
-              const baseCancel = persona ? personaConfirmationReply(persona, confirmedCancel, message.externalId) : confirmationReply(confirmedCancel);
-              return {
-                text: `${baseCancel}\n📅 Quando quiser marcar um novo horário: ${AGENDA_PUBLICA_DINO_BASE}`,
-                kind: 'confirmed',
-                actionType: 'cancelamento',
-              };
-            }
-          } catch (_) {}
-        }
         await db.query(`UPDATE whatsapp_ai_sessions SET acao_pendente = acao_pendente || '{"mostrado":true}'::jsonb WHERE id = $1 AND empresa_id = $2 AND loja_id = $3`, [session.id, session.empresa_id, session.loja_id]);
         const lead = persona ? 'Tranquilo, acontece! Já preparei o cancelamento do seu horário:' : 'Foi mal pelo imprevisto! Já preparei o cancelamento do seu horário:';
         return {
