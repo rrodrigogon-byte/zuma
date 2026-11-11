@@ -92,10 +92,10 @@ export async function executarHigienizacaoGapsProducao(db, { listarComandasBarbe
     // 2. Atualizar NCM nos est_itens legítimos da Barbearia Dino e salvar fis_classificacoes
     for (const [sku, cfg] of Object.entries(NCM_POR_SKU_DINO)) {
       const up = await db.query(
-        `UPDATE est_itens SET ncm = $1, cfop_padrao = $2, cest = $3
-          WHERE empresa_id = $4::uuid AND sku = $5
+        `UPDATE est_itens SET ncm = $1
+          WHERE empresa_id = $2::uuid AND sku = $3
           RETURNING id::text`,
-        [cfg.ncm, cfg.cfop, cfg.cest, DINO_EMPRESA_ID, sku]
+        [cfg.ncm, DINO_EMPRESA_ID, sku]
       );
       for (const row of up.rows) {
         await db.query(
