@@ -62,13 +62,16 @@ test('cota de espaço das cópias vem do ambiente, com padrão de 300 MB', () =>
 
 test('rotinaDoLider não executa em instância que não é líder', async () => {
   let execucoes = 0;
+  let agora = Date.now();
   const pool = { connect: async () => ({ query: async () => ({ rows: [{ ok: false }] }), release() {}, on() {} }) };
-  const protecao = criarProtecaoDados({ getPool: () => pool, caminhoBanco: () => '/x.json', env: { DATABASE_URL: 'postgres://x' }, log: silencioso });
+  const protecao = criarProtecaoDados({ getPool: () => pool, caminhoBanco: () => '/x.json', agora: () => agora, env: { DATABASE_URL: 'postgres://x' }, log: silencioso });
   assert.equal(await protecao.disputarLideranca(), false);
   const timer = protecao.rotinaDoLider('teste', 5, () => { execucoes += 1; }, { imediata: true });
   await new Promise((r) => setTimeout(r, 30));
   clearInterval(timer);
   assert.equal(execucoes, 0);
+  assert.ok(!protecao.situacao().problemas.includes('outra_instancia_ativa'));
+  agora += 3 * 60_000;
   assert.ok(protecao.situacao().problemas.includes('outra_instancia_ativa'));
 });
 

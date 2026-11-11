@@ -76,7 +76,7 @@ test('agendamentos pelo pacote reservam saldo e cancelamento libera a sessão',(
  for(let i=0;i<4;i++)appointments.push(bar.criarAgendamento(f.emp,{clienteId:f.cliente.id,clienteNome:f.cliente.nome,servicoId:f.servico.id,profissionalId:profissional.id,usarPlano:true,dataHora:`2027-01-12T${String(10+i).padStart(2,'0')}:00:00-04:00`},opcoes));
  assert.ok(appointments.every(a=>a.assinaturaId===f.ass.id));
  assert.throws(()=>bar.criarAgendamento(f.emp,{clienteId:f.cliente.id,clienteNome:f.cliente.nome,servicoId:f.servico.id,profissionalId:profissional.id,usarPlano:true,dataHora:'2027-01-12T15:00:00-04:00'},opcoes),{code:'LIMITE_DO_CICLO'});
- bar.alterarStatusAgendamento(f.emp,appointments[0].id,'cancelado');
+ bar.alterarStatusAgendamento(f.emp,appointments[0].id,'cancelado', { motivoCancelamento: 'solicitado_pelo_cliente' });
  assert.ok(bar.criarAgendamento(f.emp,{clienteId:f.cliente.id,clienteNome:f.cliente.nome,servicoId:f.servico.id,profissionalId:profissional.id,usarPlano:true,dataHora:'2027-01-12T15:00:00-04:00'},opcoes).assinaturaId);
 });
 test('editar regra do catálogo preserva contrato legado sem snapshot prévio',async()=>{

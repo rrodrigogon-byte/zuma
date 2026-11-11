@@ -58,6 +58,7 @@ export const OPENAPI_31_SPEC = {
         parameters: [
           { name: 'de', in: 'query', schema: { type: 'string', format: 'date' } },
           { name: 'ate', in: 'query', schema: { type: 'string', format: 'date' } },
+          { name: 'origem', in: 'query', schema: { type: 'string', enum: ['whatsapp_ia'] }, description: 'Restringe a visão à origem WhatsApp IA.' },
         ],
         responses: {
           200: {

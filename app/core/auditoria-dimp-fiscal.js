@@ -131,14 +131,15 @@ export function regularizarPendenciasDimp({ empresaId, itensRegularizar = [], tp
     throw new Error('Emissão direta na tela DIMP permitida apenas em ambiente de Homologação (tpAmb=2).');
   }
   const valor = Number(item.valorFaltante || item.valor || 0);
-  const notaEmitida = {
+  if (!Number.isFinite(valor) || valor <= 0) throw new Error('Informe o valor positivo do documento pendente.');
+  const validacao = {
     idVenda: item.idVenda || item.id || null,
     nsu: item.nsu || null,
     modelo: item.codigoServico ? 'NFS-e' : '65',
     tipo: item.codigoServico ? 'NFS-e DPS (Homologação)' : 'NFC-e (Homologação)',
     tpAmb: 2,
     valor,
-    status: 'HOMOLOGACAO_REGISTRADA',
+    status: 'VALIDACAO_LOCAL',
     registradoEm: new Date().toISOString(),
   };
 
@@ -146,9 +147,10 @@ export function regularizarPendenciasDimp({ empresaId, itensRegularizar = [], tp
     sucesso: true,
     tpAmb: 2,
     ambiente: 'homologacao',
-    mensagem: `Validação individual em Homologação (tpAmb=2) concluída para NSU ${item.nsu || item.idVenda || 'avulso'} (R$ ${valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}).`,
-    totalRegularizado: valor,
-    quantidadeNotasEmitidas: 1,
-    notasEmitidas: [notaEmitida],
+    mensagem: 'Validação local concluída. A operação continua pendente de emissão no módulo fiscal.',
+    totalRegularizado: 0,
+    quantidadeNotasEmitidas: 0,
+    notasEmitidas: [],
+    validacao,
   };
 }

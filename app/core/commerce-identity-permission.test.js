@@ -66,7 +66,7 @@ test('não aceita empresa enviada no cabeçalho sem membership correspondente', 
   }, async () => {
     await assert.rejects(
       () => requireCommercePermission(request(), 'reports.read'),
-      error => error?.code === 'TENANT_CONTEXT_REQUIRED',
+      error => error?.code === 'STORE_SCOPE_MISMATCH',
     );
   });
   assert.equal(permissionQueryExecuted, false);
@@ -91,13 +91,9 @@ test('mesmo e-mail de dois IDs SQL não pode escolher tenant por header legado',
 });
 
 test('admin principal validado pelo servidor conserva membership própria diante de e-mail SQL homônimo', async () => {
-  const context = await withQueryReadStub(async sql => {
-    if (sql.includes('FROM commerce_operational_invites')) return { rows: [] };
-    if (sql.includes('SELECT u.id FROM usuarios u')) return { rows: [{ id: USUARIO }, { id: 'other-tenant-user-id' }] };
-    if (sql.includes('FROM usuarios u')) return { rows: [{ usuario_id: USUARIO, empresa_id: EMPRESA, loja_id: LOJA, role_id: ROLE }] };
-    if (sql.includes('commerce_role_permissions')) return { rows: [{ ok: 1 }] };
-    throw new Error('consulta inesperada');
-  }, () => requireCommercePermission(request({ user: { email: 'gestor.dino@example.local', mainAdmin: true } }), 'reports.read'));
+  const context = await withQueryReadStub(async () => {
+    throw new Error('a sessão assinada não deve buscar identidade por e-mail');
+  }, () => requireCommercePermission(request({ user: { id: USUARIO, email: 'gestor.dino@example.local', mainAdmin: true } }), 'reports.read'));
   assert.equal(context.usuarioId, USUARIO);
   assert.equal(context.empresaId, EMPRESA);
 });

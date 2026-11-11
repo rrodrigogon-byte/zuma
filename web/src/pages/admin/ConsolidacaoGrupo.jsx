@@ -420,7 +420,7 @@ export default function ConsolidacaoGrupo() {
               </div>
               <div style={{ fontSize: 11, color: dados?.consolidacaoFinanceira?.dadoParcial ? '#f59e0b' : '#10b981', fontWeight: 700, marginTop: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
                 <ShieldCheck style={{ width: 14, height: 14 }} />
-                <span>{dados?.consolidacaoFinanceira?.dadoParcial ? 'Dado Parcial · Sem movimentação em algumas unidades' : 'Dados Reais Consolidados da Holding'}</span>
+                <span>{dados?.consolidacaoFinanceira?.dadoParcial ? 'Dado Parcial · Sem movimentação em algumas unidades' : 'Receita apurada e DRE com estimativas'}</span>
               </div>
             </div>
 

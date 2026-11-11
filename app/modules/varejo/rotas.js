@@ -77,10 +77,10 @@ export function createVarejoAdminRouter({ db, escopoDaRequisicao, fuso = 'Americ
   router.get('/transferencias', rota('inventory.read', async ({ empresaId, lojaId }) => ({ transferencias: await svc.listarTransferencias(db, empresaId, { lojaId }) })));
   router.post('/transferencias', rota('inventory.write', ({ req, empresaId, lojaRestrita, usuario }) => svc.criarTransferencia(db, empresaId, req.body || {}, { usuario, lojaRestrita }), 201));
   router.post('/transferencias/:id/:acao(enviar|receber|cancelar)', rota('inventory.write', ({ req, empresaId, lojaRestrita, usuario }) => svc.acaoTransferencia(db, empresaId, req.params.id, req.params.acao, { recebidos: req.body?.recebidos, motivoFalta: req.body?.motivoFalta, usuario, lojaRestrita })));
-  router.post('/venda', rota('sales.write', ({ req, empresaId, lojaRestrita, lojaId, usuario }) => svc.registrarVenda(db, empresaId, req.body || {}, { usuario, lojaId: lojaRestrita || lojaId }), 201));
-  router.post('/vendas', rota('sales.write', ({ req, empresaId, lojaRestrita, lojaId, usuario }) => svc.registrarVenda(db, empresaId, req.body || {}, { usuario, lojaId: lojaRestrita || lojaId }), 201));
-  router.post('/sync-offline', rota('sales.write', ({ req, empresaId, lojaRestrita, lojaId, usuario }) => svc.sincronizarFilaOffline(db, empresaId, req.body || {}, { usuario, lojaId: lojaRestrita || lojaId })));
-  router.post('/caixa/fechamento-cego', rota('sales.write', ({ req, empresaId, lojaRestrita, lojaId, usuario }) => svc.fechamentoCegoCaixa(db, empresaId, req.body || {}, { usuario, lojaId: lojaRestrita || lojaId })));
+  router.post('/venda', rota('orders.write', ({ req, empresaId, lojaRestrita, lojaId, usuario }) => svc.registrarVenda(db, empresaId, req.body || {}, { usuario, lojaId: lojaRestrita || lojaId }), 201));
+  router.post('/vendas', rota('orders.write', ({ req, empresaId, lojaRestrita, lojaId, usuario }) => svc.registrarVenda(db, empresaId, req.body || {}, { usuario, lojaId: lojaRestrita || lojaId }), 201));
+  router.post('/sync-offline', rota('orders.write', ({ req, empresaId, lojaRestrita, lojaId, usuario }) => svc.sincronizarFilaOffline(db, empresaId, req.body || {}, { usuario, lojaId: lojaRestrita || lojaId })));
+  router.post('/caixa/fechamento-cego', rota('orders.write', ({ req, empresaId, lojaRestrita, lojaId, usuario }) => svc.fechamentoCegoCaixa(db, empresaId, req.body || {}, { usuario, lojaId: lojaRestrita || lojaId })));
   // Novas rotas para o módulo expandido de supermercado
   router.get(['/dashboard', '/resumo-dashboard'], rota('catalog.read', async ({ req, empresaId, lojaId }) => {
     const dash = await svc.resumoDashboard(db, empresaId, { lojaId, periodo: req.query.periodo || 'hoje' });
@@ -98,36 +98,13 @@ export function createVarejoAdminRouter({ db, escopoDaRequisicao, fuso = 'Americ
       ...dash
     };
   }));
-  router.get('/vendas', rota('sales.read', async ({ req, empresaId, lojaId }) => ({ vendas: await svc.listarVendas(db, empresaId, { lojaId, limit: req.query.limit, offset: req.query.offset }) })));
-  router.post('/vendas/:id/cancelar', rota('sales.write', async ({ req, empresaId, usuario }) => {
-    const senha = String(req.body?.senha || req.body?.senhaGerente || '').trim();
-    const userRole = String(req.user?.role || '').toLowerCase();
-    const isGestor = ['admin', 'gerente', 'administrador', 'organizador', 'mestre'].includes(userRole)
-      || String(req.user?.email || '').toLowerCase().includes('jhenyffer')
-      || String(req.user?.nome || '').toLowerCase().includes('jhenyffer');
-    const senhasValidas = ['123456', '1234', 'admin', 'dino2026', 'kytto2026', '0000', 'Gui99172020*'];
-    if (!isGestor && !senhasValidas.includes(senha)) {
-      throw new ErroDominio('UNAUTHORIZED', 'Senha de gerente inválida para cancelamento de venda.', 403);
-    }
-    return svc.cancelarVenda(db, empresaId, req.params.id, {
-      usuario: req.user?.nome || usuario,
-      motivo: req.body?.motivo || 'Cancelamento autorizado pelo gerente'
-    });
-  }));
-  router.post('/vendas/:id/reabrir', rota('sales.write', async ({ req, empresaId, usuario }) => {
-    const senha = String(req.body?.senha || req.body?.senhaGerente || '').trim();
-    const userRole = String(req.user?.role || '').toLowerCase();
-    const isGestor = ['admin', 'gerente', 'administrador', 'organizador', 'mestre'].includes(userRole)
-      || String(req.user?.email || '').toLowerCase().includes('jhenyffer')
-      || String(req.user?.nome || '').toLowerCase().includes('jhenyffer');
-    const senhasValidas = ['123456', '1234', 'admin', 'dino2026', 'kytto2026', '0000', 'Gui99172020*'];
-    if (!isGestor && !senhasValidas.includes(senha)) {
-      throw new ErroDominio('UNAUTHORIZED', 'Senha de gerente inválida para reabertura de venda.', 403);
-    }
-    return svc.reabrirVenda(db, empresaId, req.params.id, {
-      usuario: req.user?.nome || usuario
-    });
-  }));
+  router.get('/vendas', rota('orders.read', async ({ req, empresaId, lojaId }) => ({ vendas: await svc.listarVendas(db, empresaId, { lojaId, limit: req.query.limit, offset: req.query.offset }) })));
+  router.post('/vendas/:id/cancelar', rota('orders.refund', ({ req, empresaId, lojaId, usuario }) =>
+    svc.cancelarVenda(db, empresaId, req.params.id, {
+      lojaId, usuario, motivo: req.body?.motivo,
+    })));
+  router.post('/vendas/:id/reabrir', rota('orders.refund', ({ req, empresaId, lojaId, usuario }) =>
+    svc.reabrirVenda(db, empresaId, req.params.id, { lojaId, usuario })));
   router.delete('/produtos/:id', rota('catalog.write', ({ req, empresaId }) => svc.inativarProduto(db, empresaId, req.params.id)));
   router.put('/produtos/:id/configuracao-loja', rota('catalog.write', ({ req, empresaId, lojaRestrita, lojaId }) => {
     const corpo = { ...(req.body || {}) };
@@ -145,24 +122,8 @@ export function createVarejoAdminRouter({ db, escopoDaRequisicao, fuso = 'Americ
   }));
   router.get('/margem/resumo', rota('catalog.read', async ({ empresaId, lojaId }) => ({ resumo: (await svc.analiseMargemCurvaABC(db, empresaId, { lojaId })).resumo })));
 
-  router.post('/emitir-nfce', rota('sales.write', async () => {
-    const chaveAcesso = `512611${String(Date.now()).slice(0, 14).padEnd(14, '0')}65001${String(Date.now()).slice(-9)}1${Math.floor(10000000 + Math.random() * 89999999)}1`;
-    const protocolo = `15126${String(Date.now()).slice(-10)}`;
-    const qrCodeUrl = `http://www.sefaz.mt.gov.br/nfce/consultanfce?chNFe=${chaveAcesso}`;
-    return {
-      sucesso: true,
-      nfce: {
-        modelo: '65',
-        serie: '001',
-        numero: String(Date.now()).slice(-6),
-        chaveAcesso,
-        protocolo,
-        qrCodeUrl,
-        emitidoEm: new Date().toISOString(),
-        ambiente: 'homologacao',
-        situacao: 'autorizado'
-      }
-    };
+  router.post('/emitir-nfce', rota('orders.write', async () => {
+    throw new ErroDominio('NFCE_INDISPONIVEL_NO_PDV', 'A emissão de NFC-e está indisponível neste PDV. Consulte o módulo fiscal.', 503);
   }));
 
   // ── Caixa e Operações de Frente de Caixa (PDV) ──

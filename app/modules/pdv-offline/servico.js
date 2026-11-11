@@ -43,28 +43,6 @@ export async function listarTerminais(db, empresaId, { lojaId = null } = {}) {
     `SELECT t.*, l.nome AS loja_nome, (SELECT COUNT(*) FROM pdv_dispositivos d WHERE d.empresa_id = t.empresa_id AND d.terminal_id = t.id AND d.ativo) AS total_dispositivos
        FROM pdv_terminais t LEFT JOIN lojas l ON l.id = t.loja_id AND l.empresa_id = t.empresa_id
       WHERE t.empresa_id = $1 AND ($2::uuid IS NULL OR t.loja_id = $2::uuid) ORDER BY t.codigo`, [exigirUuid(empresaId, 'empresa'), lojaId]);
-  if (r.rows.length === 0) {
-    try {
-      const lojaRes = await db.query(`SELECT id FROM lojas WHERE empresa_id = $1 ORDER BY CASE WHEN codigo = 'MATRIZ' THEN 0 ELSE 1 END LIMIT 1`, [empresaId]);
-      const lojaMatriz = lojaRes.rows[0]?.id;
-      if (lojaMatriz) {
-        const token = novoToken();
-        await db.query(
-          `INSERT INTO pdv_terminais (empresa_id, loja_id, codigo, nome, identificador_dispositivo, token_hash, modo_offline_habilitado, ativo)
-           VALUES ($1, $2, 'CX-01', 'Caixa Principal - Bancada', 'terminal-bancada-01', $3, true, true)
-           ON CONFLICT DO NOTHING`,
-          [empresaId, lojaMatriz, hashToken(token)]
-        );
-        const refetch = await db.query(
-          `SELECT t.*, l.nome AS loja_nome, 0 AS total_dispositivos
-             FROM pdv_terminais t LEFT JOIN lojas l ON l.id = t.loja_id AND l.empresa_id = t.empresa_id
-            WHERE t.empresa_id = $1 ORDER BY t.codigo`, [empresaId]);
-        if (refetch.rows.length > 0) return refetch.rows.map(terminalDto);
-      }
-    } catch {
-      // auto-provisionamento não bloqueia
-    }
-  }
   return r.rows.map(terminalDto);
 }
 

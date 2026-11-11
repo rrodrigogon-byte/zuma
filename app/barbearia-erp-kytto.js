@@ -2675,11 +2675,12 @@ export function registrarConsumoInternoComandaBarbearia(empresaId, comandaId, da
 
 export function listarComandasBarbearia(empresaId, filtros = {}) {
   const dataFiltro = filtros.data ? String(filtros.data).slice(0, 10) : null;
+  const lojaId = legacyLojaIdFromCommerce(filtros.lojaId, empresaId);
   return Object.values(estadoEmpresa(empresaId, false).comandas)
     .filter((item) => !filtros.agendamentoId || item.agendamentoId === String(filtros.agendamentoId) || (item.itens || []).some(i => i.agendamentoId === String(filtros.agendamentoId)))
     .filter((item) => !filtros.pendentes || ['aberta', 'aguardando_pagamento', 'parcialmente_paga'].includes(item.status))
     .filter((item) => !filtros.status || item.status === String(filtros.status))
-    .filter((item) => !filtros.lojaId || !item.lojaId || item.lojaId === String(filtros.lojaId))
+    .filter((item) => !lojaId || legacyLojaIdFromCommerce(item.lojaId, empresaId) === lojaId)
     .filter((item) => !filtros.clienteId || item.clienteId === String(filtros.clienteId))
     .filter((item) => !filtros.caixaId || item.caixaId === String(filtros.caixaId) || (item.pagamentos || []).some(p => String(p.caixaId) === String(filtros.caixaId)))
     .filter((item) => {
@@ -4269,6 +4270,40 @@ export function resolverProfissionalDisponivel(empresaId, dados = {}) {
   return { profissional: { ...livre.profissional }, dataHora: livre.dataHora, dataAgenda: contexto.dataAgenda, horaLocal };
 }
 
+function chaveVagaAgendamento(agendamento) {
+  const { empresaId, lojaId, profissionalId, dataAgenda, horaLocal } = agendamento;
+  return profissionalId && dataAgenda && horaLocal
+    ? JSON.stringify([empresaId, lojaId || '', profissionalId, dataAgenda, horaLocal])
+    : null;
+}
+
+function ocupaVagaRecuperada(agendamento) {
+  return !agendamento.encaixe && ['agendado', 'confirmado', 'em_atendimento', 'concluido'].includes(agendamento.status);
+}
+
+function cancelamentoLiberaVaga(agendamento, chave, criadoEm) {
+  if (agendamento?.status !== 'cancelado' || agendamento.encaixe
+    || chaveVagaAgendamento(agendamento) !== chave) return false;
+  const canceladoEm = Date.parse(agendamento.canceladoEm);
+  return canceladoEm < Date.parse(criadoEm)
+    && !(agendamento.historicoRemarcacoes || []).some((mudanca) => Date.parse(mudanca.registradoEm) >= canceladoEm);
+}
+
+function identificarVagaLiberada(agendamentos, novo) {
+  const chave = chaveVagaAgendamento(novo);
+  if (!chave || !ocupaVagaRecuperada(novo)) return null;
+  let cancelamento = null;
+  for (const agendamento of Object.values(agendamentos)) {
+    if (!agendamento || chaveVagaAgendamento(agendamento) !== chave) continue;
+    if (ocupaVagaRecuperada(agendamento)) return null;
+    if (cancelamentoLiberaVaga(agendamento, chave, novo.criadoEm)
+      && (!cancelamento || Date.parse(agendamento.canceladoEm) > Date.parse(cancelamento.canceladoEm))) {
+      cancelamento = agendamento;
+    }
+  }
+  return cancelamento?.id ?? null;
+}
+
 // `opcoes.permitirEncaixe`: só o painel da equipe passa (nunca o link público nem a IA).
 // O encaixe aceita sobreposição com outro atendimento do mesmo profissional e fica marcado.
 export function criarAgendamento(empresaId, dados = {}, opcoes = {}) {
@@ -4307,7 +4342,9 @@ export function criarAgendamento(empresaId, dados = {}, opcoes = {}) {
   if(agendamento.usarPlano) agendamento.assinaturaId=validarAgendamentoComPlano(empresaId,agendamento,opcoes);
   const id = novoId('age', estado.agendamentos);
   const agora = dataAtual();
-  estado.agendamentos[id] = { id, empresaId: String(empresaId), ...agendamento, criadoEm: agora, atualizadoEm: agora };
+  const novo = { id, empresaId: String(empresaId), ...agendamento, criadoEm: agora, atualizadoEm: agora };
+  const vagaOrigemId = identificarVagaLiberada(estado.agendamentos, novo);
+  estado.agendamentos[id] = vagaOrigemId ? { ...novo, vagaOrigemId } : novo;
   save();
   return { ...estado.agendamentos[id] };
 }
@@ -4332,7 +4369,7 @@ export function atualizarAgendamento(empresaId, agendamentoId, dados = {}, opcoe
     }
     agendamento.motivoCancelamento = motivoInformado || 'pedido_do_cliente';
     agendamento.canceladoPor = texto(dados.canceladoPor ?? dados.cancelado_por ?? dados.usuario ?? atual.canceladoPor ?? 'equipe', 80);
-    agendamento.canceladoEm = atual.canceladoEm || dataAtual();
+    agendamento.canceladoEm = statusAntes === 'cancelado' && atual.canceladoEm ? atual.canceladoEm : dataAtual();
     agendamento.canalCancelamento = texto(dados.canalCancelamento ?? dados.canal ?? dados.origem ?? atual.canalCancelamento ?? 'painel_admin', 60);
     agendamento.origemCancelamento = agendamento.canalCancelamento;
   }
@@ -4344,9 +4381,13 @@ export function atualizarAgendamento(empresaId, agendamentoId, dados = {}, opcoe
     : duracaoAtendimentoProfissional(servico, profissional, obterCalendarioLoja(estado, agendamento.lojaId));
   const precoCalculado = calcularPrecoServicoHorario(servico, profissional, agendamento.horaLocal);
   const valorEsperado = agendamento.servicoId === atual.servicoId && Number(atual.valor) > 0 ? atual.valor : precoCalculado;
-  agendamento.valor = dados.valor !== undefined && Number(dados.valor) > 0 ? dinheiro(dados.valor, valorEsperado) : valorEsperado;
+  if (dados.valor !== undefined && (!Number.isFinite(Number(dados.valor)) || Math.round(Number(dados.valor) * 100) !== Math.round(valorEsperado * 100))) {
+    throw new Error('O valor do agendamento não pode ser alterado. Use a comanda para ajustes auditados.');
+  }
+  agendamento.valor = valorEsperado;
   const mudouHorarioOuProf = ['dataHora', 'dataAgenda', 'horaLocal', 'profissionalId'].some((campo) => String(antes[campo] || '') !== String(agendamento[campo] || ''));
   if (mudouHorarioOuProf) {
+    if (atual.vagaOrigemId) agendamento.vagaOrigemId = null;
     validarCalendarioAgendamento(estado, agendamento, agendamento.profissionalId ? estado.profissionais[agendamento.profissionalId] : null);
     if (verificarConflito(estado, agendamento, atual.id)) {
       if (opcoes.permitirEncaixe !== true) throw new Error('Horário indisponível para o profissional selecionado.');
@@ -4424,7 +4465,7 @@ export function alterarStatusAgendamento(empresaId, agendamentoId, status, dados
     observacoes: texto(dados.observacoes ?? atual.observacoes, 600),
     motivoCancelamento: motivoCancelamentoResolvido,
     canceladoPor,
-    canceladoEm: novoStatus === 'cancelado' ? (atual.canceladoEm || dataAtual()) : atual.canceladoEm,
+    canceladoEm: novoStatus === 'cancelado' && (atual.status !== 'cancelado' || !atual.canceladoEm) ? dataAtual() : atual.canceladoEm,
     canalCancelamento,
     origemCancelamento: novoStatus === 'cancelado' ? canalCancelamento : atual.origemCancelamento,
     atualizadoEm: dataAtual(),
@@ -5275,37 +5316,29 @@ export async function estornarVendaRevenda(empresaId, vendaId, dados = {}) {
  * Visão oficial e auditável `ia_agendamentos_resumo` (Fase A)
  * Retorna indicadores reais por período e empresa com regras de cálculo explícitas.
  */
-export function obterResumoAgendamentosIa(empresaId, { de = '', ate = '', lojaId = '' } = {}) {
+export function obterResumoAgendamentosIa(empresaId, { de = '', ate = '', lojaId = '', profissionalId = '', somenteIa = false } = {}) {
   const estado = estadoEmpresa(empresaId, false);
   const dIni = String(de || '').slice(0, 10);
   const dFim = String(ate || '').slice(0, 10);
+  const daUnidade = (registro) => !lojaId || String(registro.lojaId || '') === String(lojaId);
+  const chaveComanda = (loja, id) => JSON.stringify([String(loja || ''), String(id)]);
 
   const comandasPagasPorAgendamento = new Map();
   for (const cmd of Object.values(estado.comandas || {})) {
-    if (!cmd || cmd.empresaId !== String(empresaId)) continue;
-    if (['paga', 'em_conta', 'fechada'].includes(String(cmd.status || '').toLowerCase())) {
-      if (cmd.agendamentoId) comandasPagasPorAgendamento.set(String(cmd.agendamentoId), cmd);
-      for (const it of cmd.itens || []) {
-        if (it?.agendamentoId) comandasPagasPorAgendamento.set(String(it.agendamentoId), cmd);
+    if (!cmd || cmd.empresaId !== String(empresaId) || !daUnidade(cmd)) continue;
+    if (!cmd.reaberta && ['paga', 'em_conta', 'fechada'].includes(String(cmd.status || '').toLowerCase())) {
+      if (cmd.agendamentoId) comandasPagasPorAgendamento.set(chaveComanda(cmd.lojaId, cmd.agendamentoId), cmd);
+      for (const item of cmd.itens || []) {
+        if (item?.agendamentoId) comandasPagasPorAgendamento.set(chaveComanda(cmd.lojaId, item.agendamentoId), cmd);
       }
     }
   }
 
-  const todosAgendamentosEmpresa = Object.values(estado.agendamentos || {}).filter((ag) => ag && ag.empresaId === String(empresaId));
-  const canceladosPorSlot = new Map();
-  for (const ag of todosAgendamentosEmpresa) {
-    if (ag.status === 'cancelado') {
-      const dSlot = String(ag.dataAgenda || (ag.dataHora || '').slice(0, 10));
-      const hSlot = String(ag.horaLocal || '');
-      if (ag.profissionalId && dSlot && hSlot) {
-        canceladosPorSlot.set(`${ag.profissionalId}|${dSlot}|${hSlot}`, ag);
-      }
-    }
-  }
-
-  const agendamentos = todosAgendamentosEmpresa.filter((ag) => {
-    if (lojaId && ag.lojaId && String(ag.lojaId) !== String(lojaId)) return false;
-    const dAg = String(ag.dataAgenda || (ag.dataHora || '').slice(0, 10));
+  const agendamentos = Object.values(estado.agendamentos || {}).filter((ag) => {
+    if (!ag || ag.empresaId !== String(empresaId) || !daUnidade(ag)) return false;
+    if (somenteIa && ag.origem !== 'whatsapp_ia') return false;
+    if (profissionalId && ag.profissionalId !== profissionalId) return false;
+    const dAg = ag.dataAgenda || diaOperacional(ag.dataHora);
     if (dIni && dAg < dIni) return false;
     if (dFim && dAg > dFim) return false;
     return true;
@@ -5315,16 +5348,19 @@ export function obterResumoAgendamentosIa(empresaId, { de = '', ate = '', lojaId
   let confirmados = 0;
   let concluidosQtd = 0;
   let concluidosValor = 0;
+  const comandasContabilizadas = new Set();
   let remarcados = 0;
-  const canceladosPorMotivo = {};
-  const canceladosPorQuem = { cliente: 0, equipe: 0, sistema: 0 };
+  const canceladosPorMotivo = Object.create(null);
+  const canceladosPorQuem = { cliente: 0, equipe: 0, sistema: 0, sem_registro: 0 };
+  const cancelamentosIa = [];
   let totalCancelados = 0;
   const vagasRecuperadasLista = [];
+  const vagasContabilizadas = new Set();
   let valorRecuperado = 0;
 
   for (const ag of agendamentos) {
     const orig = String(ag.origem || 'admin').toLowerCase();
-    if (orig.includes('whatsapp') || orig.includes('ia') || orig.includes('trex') || orig.includes('bot')) {
+    if (ag.origem === 'whatsapp_ia') {
       porOrigem.whatsapp_ia += 1;
     } else if (orig.includes('public') || orig.includes('online') || orig.includes('site') || orig.includes('link')) {
       porOrigem.link_publico += 1;
@@ -5334,17 +5370,15 @@ export function obterResumoAgendamentosIa(empresaId, { de = '', ate = '', lojaId
       porOrigem.outros += 1;
     }
 
-    if (ag.status === 'confirmado' || ag.confirmacaoAutomatica?.status === 'confirmado') {
-      confirmados += 1;
-    }
-
-    const comandaVinculada = comandasPagasPorAgendamento.get(String(ag.id));
-    if (ag.status === 'concluido' || comandaVinculada) {
+    const comandaVinculada = comandasPagasPorAgendamento.get(chaveComanda(ag.lojaId, ag.id));
+    if (comandaVinculada && ag.status !== 'cancelado' && ag.status !== 'nao_compareceu') {
       concluidosQtd += 1;
-      const val = comandaVinculada
-        ? Number(comandaVinculada.totalPago || comandaVinculada.total || ag.valor || 0)
-        : Number(ag.valorRecebido || ag.valor || 0);
-      concluidosValor += val;
+      if (!comandasContabilizadas.has(comandaVinculada.id)) {
+        comandasContabilizadas.add(comandaVinculada.id);
+        concluidosValor += dinheiro(comandaVinculada.total ?? comandaVinculada.totalPago);
+      }
+    } else if (ag.status === 'confirmado') {
+      confirmados += 1;
     }
 
     if ((Array.isArray(ag.historicoRemarcacoes) && ag.historicoRemarcacoes.length > 0) || ag.remarcadoDeId) {
@@ -5353,43 +5387,56 @@ export function obterResumoAgendamentosIa(empresaId, { de = '', ate = '', lojaId
 
     if (ag.status === 'cancelado') {
       totalCancelados += 1;
-      const mot = String(ag.motivoCancelamento || 'outro').trim() || 'outro';
-      canceladosPorMotivo[mot] = (canceladosPorMotivo[mot] || 0) + 1;
-      const quem = String(ag.canceladoPor || 'equipe').toLowerCase();
+      const motivo = String(ag.motivoCancelamento || '').trim() || 'sem_registro';
+      canceladosPorMotivo[motivo] = (canceladosPorMotivo[motivo] || 0) + 1;
+      const quem = String(ag.canceladoPor || '').trim().toLowerCase();
       if (quem.includes('cliente')) canceladosPorQuem.cliente += 1;
       else if (quem.includes('sistema')) canceladosPorQuem.sistema += 1;
-      else canceladosPorQuem.equipe += 1;
-    } else {
-      const dSlot = String(ag.dataAgenda || (ag.dataHora || '').slice(0, 10));
-      const hSlot = String(ag.horaLocal || '');
-      const canceladoMesmoHorario = ag.vagaOrigemId
-        ? estado.agendamentos?.[ag.vagaOrigemId]
-        : canceladosPorSlot.get(`${ag.profissionalId}|${dSlot}|${hSlot}`);
-      if (canceladoMesmoHorario && canceladoMesmoHorario.id !== ag.id) {
-        const valRec = Number(ag.valorRecebido || ag.valor || 0);
-        valorRecuperado += valRec;
-        vagasRecuperadasLista.push({
-          agendamentoId: ag.id,
-          vagaOrigemId: canceladoMesmoHorario.id,
-          dataAgenda: dSlot,
-          horaLocal: hSlot,
-          profissionalId: ag.profissionalId,
-          profissionalNome: estado.profissionais?.[ag.profissionalId]?.nome || ag.profissionalNome || '',
-          statusAtual: ag.status,
-          valor: Number(valRec.toFixed(2)),
-        });
-      }
+      else if (quem) canceladosPorQuem.equipe += 1;
+      else canceladosPorQuem.sem_registro += 1;
+      if (somenteIa) cancelamentosIa.push({
+        agendamentoId: ag.id,
+        dataAgenda: ag.dataAgenda || diaOperacional(ag.dataHora),
+        motivo,
+        canceladoEm: ag.canceladoEm || null,
+        canal: ag.canalCancelamento || null,
+      });
+      continue;
     }
+
+    const chave = chaveVagaAgendamento(ag);
+    const cancelado = ag.vagaOrigemId && estado.agendamentos[ag.vagaOrigemId];
+    if (!chave || !ocupaVagaRecuperada(ag) || vagasContabilizadas.has(chave)
+      || !cancelamentoLiberaVaga(cancelado, chave, ag.criadoEm)) continue;
+    const valor = dinheiro(ag.valor);
+    vagasContabilizadas.add(chave);
+    valorRecuperado += valor;
+    vagasRecuperadasLista.push({
+      agendamentoId: ag.id,
+      vagaOrigemId: cancelado.id,
+      dataAgenda: ag.dataAgenda,
+      horaLocal: ag.horaLocal,
+      profissionalId: ag.profissionalId,
+      profissionalNome: estado.profissionais?.[ag.profissionalId]?.nome || ag.profissionalNome || '',
+      statusAtual: ag.status,
+      valor,
+    });
   }
 
   return {
     visao: 'ia_agendamentos_resumo',
     empresaId: String(empresaId),
+    origem: somenteIa ? 'whatsapp_ia' : null,
     periodo: { de: dIni || null, ate: dFim || null },
     criados: { total: agendamentos.length, porOrigem },
     confirmados: { total: confirmados },
     concluidos: { total: concluidosQtd, valorTotal: Number(concluidosValor.toFixed(2)) },
-    cancelados: { total: totalCancelados, porMotivo: canceladosPorMotivo, porQuem: canceladosPorQuem },
+    cancelados: {
+      total: totalCancelados,
+      porMotivo: canceladosPorMotivo,
+      porQuem: canceladosPorQuem,
+      ...(somenteIa && { itens: cancelamentosIa }),
+    },
     remarcados: { total: remarcados },
     vagasRecuperadas: {
       total: vagasRecuperadasLista.length,
@@ -5403,10 +5450,10 @@ export function obterResumoAgendamentosIa(empresaId, { de = '', ate = '', lojaId
     },
     regrasDeCalculo: {
       criados: 'Contagem de agendamentos em estado.agendamentos filtrados por empresaId e intervalo de dataAgenda.',
-      confirmados: "Agendamentos com status === 'confirmado' ou confirmacaoAutomatica.status === 'confirmado'.",
-      concluidos: "Agendamentos com status === 'concluido' ou vinculados a comanda com status 'paga'/'em_conta'.",
-      cancelados: "Agendamentos com status === 'cancelado' e motivo registrado em motivoCancelamento.",
-      vagaRecuperada: 'Contabilizada exclusivamente quando um novo agendamento ativo ocupa o mesmo profissionalId, dataAgenda e horaLocal de um agendamento anteriormente cancelado (vagaOrigemId).',
+      confirmados: 'Agendamentos atualmente confirmados sem comanda fechada vinculada.',
+      concluidos: 'Atendimentos com comanda fechada vinculada, excluídos cancelamentos e faltas. O total soma cada comanda uma vez.',
+      cancelados: 'Agendamentos atualmente cancelados. Sem motivo informado, a categoria é sem_registro.',
+      vagaRecuperada: 'Uma nova reserva ativa com vínculo gravado, na mesma empresa, unidade, profissional, data e horário, criada depois do cancelamento. Uma ocorrência por horário. O valor soma o preço dos serviços reservados.',
     },
   };
 }

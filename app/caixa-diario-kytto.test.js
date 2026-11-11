@@ -26,7 +26,7 @@ test('isola abertura por empresa e unidade e impede movimento em caixa de outra 
   assert.equal(caixa.listarCaixas(EMPRESA_A, { data: DATA, lojaId: 'loja-a' }).length, 1);
   assert.equal(caixa.listarCaixas(EMPRESA_A, { data: DATA, lojaId: 'loja-b' }).length, 1);
   assert.equal(caixa.listarCaixas(EMPRESA_B, { data: DATA }).length, 0);
-  assert.throws(() => caixa.abrirCaixa(EMPRESA_A, { numeroCaixa: 1, dataOperacao: `${DATA}T09:00:00.000Z`, lojaId: 'loja-a', valorAbertura: 10 }), /Já existe/);
+  assert.throws(() => caixa.abrirCaixa(EMPRESA_A, { numeroCaixa: 1, dataOperacao: `${DATA}T09:00:00.000Z`, lojaId: 'loja-a', valorAbertura: 10 }), /já está aberto nesta unidade/);
   assert.throws(() => caixa.registrarMovimento(EMPRESA_A, { caixaId: caixaOutraLoja.id, lojaId: 'loja-a', tipo: 'suprimento', valor: 10 }), /Caixa não pertence/);
   assert.equal(caixa.obterCaixa(EMPRESA_A, caixaA.id).lojaId, 'loja-a');
 });

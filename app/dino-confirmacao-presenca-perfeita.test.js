@@ -32,13 +32,12 @@ test('presenceConfirmIntent deve reconhecer todas as variações de confirmaçã
   }
 });
 
-test('findOwnAppointment deve selecionar o agendamento mais próximo quando há múltiplos agendamentos', () => {
+test('findOwnAppointment exige uma escolha quando há múltiplos agendamentos', () => {
   const ag1 = { id: 'ag-1', dataHora: '2026-11-07T08:00:00-04:00', status: 'agendado', servico: { nome: 'Corte Club' } };
   const ag2 = { id: 'ag-2', dataHora: '2026-11-07T11:00:00-04:00', status: 'agendado', servico: { nome: 'Barba' } };
 
-  // Sem ref, deve pegar o primeiro cronológico (ag1)
-  const selecionado = findOwnAppointment([ag2, ag1]);
-  assert.equal(selecionado.id, 'ag-1', 'Deveria selecionar o agendamento mais próximo (ag-1)');
+  assert.equal(findOwnAppointment([ag2, ag1]), null);
+  assert.equal(findOwnAppointment([ag2, ag1], 'ag-1')?.id, 'ag-1');
 });
 
 test('confirmNextAppointment deve confirmar presença na barbearia e retornar mensagem calorosa', async () => {

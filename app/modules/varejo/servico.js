@@ -122,7 +122,7 @@ export async function salvarConfigBalanca(db, empresaId, dados = {}) {
   if (!/^2\d?$/.test(cfg.prefixo)) throw new ErroDominio('VALIDATION_ERROR', 'Prefixo da balança: 2 ou 2 + um dígito');
   if (cfg.prefixo.length + cfg.digitosPlu + cfg.digitosValor > 12) throw new ErroDominio('VALIDATION_ERROR', 'Prefixo, PLU e valor não cabem no EAN-13');
   await db.query(
-    `INSERT INTO var_balanca_config (empresa_id, prefixo, digitos_plu, digitos_valor, tipo_valor, validade_dias) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+    `INSERT INTO var_balanca_config (empresa_id, prefixo, digitos_plu, digitos_valor, tipo_valor, validade_dias) VALUES ($1, $2, $3, $4, $5, $6)
      ON CONFLICT (empresa_id) DO UPDATE SET prefixo = EXCLUDED.prefixo, digitos_plu = EXCLUDED.digitos_plu, digitos_valor = EXCLUDED.digitos_valor,
        tipo_valor = EXCLUDED.tipo_valor, validade_dias = EXCLUDED.validade_dias, atualizado_em = CURRENT_TIMESTAMP`,
     [empresa, cfg.prefixo, cfg.digitosPlu, cfg.digitosValor, cfg.tipoValor, cfg.validadeDias]);
@@ -684,25 +684,27 @@ export async function listarVendas(db, empresaId, { lojaId = null, limit = 50, o
   }));
 }
 
-export async function cancelarVenda(db, empresaId, vendaId, { usuario = null, motivo = 'Cancelamento autorizado pelo gerente' } = {}) {
+export async function cancelarVenda(db, empresaId, vendaId, { lojaId = null, usuario = null, motivo = 'Cancelamento autorizado pelo gerente' } = {}) {
   const empresa = exigirUuid(empresaId, 'empresa');
   await db.query("ALTER TABLE var_vendas ADD COLUMN IF NOT EXISTS status VARCHAR(30) DEFAULT 'paga'").catch(() => null);
   await db.query("ALTER TABLE var_vendas ADD COLUMN IF NOT EXISTS cancelada_em TIMESTAMPTZ").catch(() => null);
   await db.query("ALTER TABLE var_vendas ADD COLUMN IF NOT EXISTS cancelada_por VARCHAR(180)").catch(() => null);
 
   return transacao(db, async (q) => {
-    const vRes = await q('SELECT * FROM var_vendas WHERE id = $1 AND empresa_id = $2', [vendaId, empresa]);
-    if (!vRes.rows[0]) throw new Error('Venda não encontrada');
+    const vRes = await q('SELECT * FROM var_vendas WHERE id = $1 AND empresa_id = $2 AND ($3::uuid IS NULL OR loja_id = $3::uuid) FOR UPDATE', [vendaId, empresa, lojaId]);
+    if (!vRes.rows[0]) throw new ErroDominio('NOT_FOUND', 'Venda não encontrada', 404);
     const venda = vRes.rows[0];
+    if (venda.status === 'cancelada') return { sucesso: true, vendaId: venda.id, status: 'cancelada' };
+    if (!venda.loja_id) throw new ErroDominio('STORE_SCOPE_REQUIRED', 'Identifique a unidade antes de estornar a venda.', 409);
 
-    const iRes = await q('SELECT * FROM var_venda_itens WHERE venda_id = $1', [vendaId]);
+    const iRes = await q('SELECT * FROM var_venda_itens WHERE venda_id = $1 AND empresa_id = $2', [vendaId, empresa]);
     for (const item of iRes.rows) {
       if (item.item_id && Number(item.quantidade) > 0) {
         await q(
           `UPDATE est_saldos SET quantidade = quantidade + $1, atualizado_em = CURRENT_TIMESTAMP
            WHERE empresa_id = $2 AND item_id = $3 AND ($4::uuid IS NULL OR loja_id = $4::uuid)`,
           [Number(item.quantidade), empresa, item.item_id, venda.loja_id]
-        ).catch(() => null);
+        );
       }
     }
 
@@ -732,7 +734,7 @@ export async function cancelarVenda(db, empresaId, vendaId, { usuario = null, mo
   });
 }
 
-export async function reabrirVenda(db, empresaId, vendaId, { usuario = null } = {}) {
+export async function reabrirVenda(db, empresaId, vendaId, { lojaId = null, usuario = null } = {}) {
   const empresa = exigirUuid(empresaId, 'empresa');
   await db.query("ALTER TABLE var_vendas ADD COLUMN IF NOT EXISTS status VARCHAR(30) DEFAULT 'paga'").catch(() => null);
 
@@ -757,11 +759,11 @@ export async function reabrirVenda(db, empresaId, vendaId, { usuario = null } = 
        FROM var_vendas v
   LEFT JOIN var_venda_itens vi ON vi.venda_id = v.id
   LEFT JOIN est_itens i ON i.id = vi.item_id
-      WHERE v.id = $1 AND v.empresa_id = $2
+      WHERE v.id = $1 AND v.empresa_id = $2 AND ($3::uuid IS NULL OR v.loja_id = $3::uuid)
    GROUP BY v.id`,
-    [vendaId, empresa]
+    [vendaId, empresa, lojaId]
   );
-  if (!vRes.rows[0]) throw new Error('Venda não encontrada');
+  if (!vRes.rows[0]) throw new ErroDominio('NOT_FOUND', 'Venda não encontrada', 404);
   const venda = vRes.rows[0];
 
   await db.query("UPDATE var_vendas SET status = 'em_edicao' WHERE id = $1", [vendaId]);

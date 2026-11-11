@@ -37,7 +37,7 @@ test('automação é opt-in e novos agendamentos herdam uma cópia limpa do esta
   });
 });
 
-test('segunda etapa exige a primeira mensagem e cancelamento ocorre só depois do prazo, mantendo histórico', () => {
+test('segunda etapa exige a primeira mensagem e a agenda permanece reservada após o prazo', () => {
   atualizarConfiguracao(EMPRESA, { confirmacaoAutomaticaAtiva: true });
   const { agendamento } = fixture();
   assert.equal(registrarConfirmacaoAutomaticaEnviada(EMPRESA, agendamento.id, 'segunda', {
@@ -53,13 +53,8 @@ test('segunda etapa exige a primeira mensagem e cancelamento ocorre só depois d
   assert.equal(second.confirmacaoAutomatica.status, 'segunda_enviada');
   assert.equal(second.confirmacaoAutomatica.prazoRespostaAte, '2030-06-10T12:45:00.000Z');
   assert.equal(cancelarPorFaltaConfirmacao(EMPRESA, agendamento.id, { lojaId: LOJA, agora: '2030-06-10T12:44:59.999Z' }), null);
-  const canceled = cancelarPorFaltaConfirmacao(EMPRESA, agendamento.id, { lojaId: LOJA, agora: '2030-06-10T12:45:00.000Z' });
-  assert.equal(canceled.status, 'cancelado');
-  assert.equal(canceled.motivoCancelamento, 'falta_confirmacao');
-  assert.equal(canceled.confirmacaoAutomatica.status, 'cancelado_falta_confirmacao');
-  assert.equal(canceled.historicoStatus[0].motivo, 'falta_confirmacao');
-  assert.equal(canceled.historicoStatus[0].origem, 'confirmacao_automatica');
-  assert.equal(cancelarPorFaltaConfirmacao(EMPRESA, agendamento.id, { lojaId: LOJA, agora: '2030-06-10T12:46:00.000Z' }), null, 'replay não cria um segundo cancelamento');
+  assert.equal(cancelarPorFaltaConfirmacao(EMPRESA, agendamento.id, { lojaId: LOJA, agora: '2030-06-10T12:45:00.000Z' }), null);
+  assert.equal(obterConfiguracao(EMPRESA).cancelamentoAutomaticoPorFaltaConfirmacao, false);
 });
 
 test('cliente pode confirmar dentro do prazo e isso desativa a fila de cancelamento', () => {

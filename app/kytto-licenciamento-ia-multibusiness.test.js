@@ -95,6 +95,9 @@ test('6. IA Advisor: Auditoria de Anomalias e Riscos Operacionais', () => {
 
 test('7. IA Advisor: Simulador de Cenários "What-If"', () => {
   const simulacao = simularCenario(EMPRESA_DINO_ID, {
+    receitaRealizadaPg: 10000,
+    custosAtuaisPg: 3000,
+    despesasAtuaisPg: 2000,
     reajustePrecoPercentual: 10,
     aumentoAtendimentosPercentual: 15,
     novosColaboradores: 1

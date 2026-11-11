@@ -343,6 +343,7 @@ export async function enviarBriefingDiarioDino({
 }
 
 export async function verificarEEnviarBriefingDiario() {
+  if (process.env.DINO_DAILY_BRIEFING_ENABLED === '0') return { ok: false, motivo: 'desativado' };
   const agora = dataHoraCuiaba();
   // Dispara a partir das 08:30 da manhã até as 21:00
   const horaMinuto = agora.hora * 60 + agora.minuto;

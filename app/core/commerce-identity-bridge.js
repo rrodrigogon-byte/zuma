@@ -129,17 +129,6 @@ export async function resolveCommerceIdentity(req) {
     values,
   );
   if (!result.rows.length) {
-    // Fallback de resiliência para operador/organizador da Dino Barbearia com contexto autenticado
-    const targetEmpresa = empresaId || clean(user?.empresaId);
-    if (targetEmpresa === DINO_COMMERCE_EMPRESA_ID || targetEmpresa === 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6') {
-      if (user?.role === 'operador' || user?.role === 'organizador' || user?.perfil === 'operador') {
-        return tenantContext({
-          empresaId: DINO_COMMERCE_EMPRESA_ID,
-          lojaId: lojaId || DINO_COMMERCE_LOJA_ID,
-          usuarioId: user.id || null,
-        });
-      }
-    }
     throw new CommerceError('Acesso negado: você não possui permissão para acessar os dados desta empresa.', 'STORE_SCOPE_MISMATCH');
   }
   const uniqueTenants = [...new Set(result.rows.map(row => row.empresa_id))];
@@ -160,7 +149,7 @@ export async function resolveCommerceIdentity(req) {
 export async function requireCommercePermission(req, permissionInput) {
   const permission = clean(permissionInput, 120);
   if (!permission) throw new CommerceError('permissão do Commerce é obrigatória', 'PERMISSION_DENIED');
-  if (req.user?.platformAdmin === true || req.user?.role === 'admin' || req.user?.role === 'organizador' || req.user?.role === 'gerente' || req.user?.mainAdmin === true) {
+  if (req.user?.platformAdmin === true || req.user?.mainAdmin === true) {
     return resolveCommerceIdentity(req);
   }
   if (req.user?.pgOperational === true && permission === 'users.write') {
@@ -183,9 +172,6 @@ export async function requireCommercePermission(req, permissionInput) {
     [context.empresaId, permission, context.usuarioId, context.lojaId],
   );
   if (!result.rows[0]) {
-    if (req.user?.role === 'organizador' || req.user?.role === 'admin' || req.user?.role === 'gerente') {
-      return context;
-    }
     throw new CommerceError('permissão insuficiente para esta operação', 'PERMISSION_DENIED', { permission });
   }
   return context;

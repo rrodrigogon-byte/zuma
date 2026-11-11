@@ -45,7 +45,7 @@ test('persona T-Rex gera mensagem de confirmação da véspera e do dia no forma
     loja: 'Barbearia Dino',
   });
   assert.match(msgVespera, /^Opa, Waltemir!/);
-  assert.match(msgVespera, /Passando pra confirmar seu horário de amanhã: às 9h, Corte e Barba com Dino/);
+  assert.match(msgVespera, /amanhã, às 9h, Corte e Barba com Dino/);
   assert.match(msgVespera, /Responda CONFIRMO, REMARCAR ou CANCELO/);
 
   const msgDia = personaAppointmentMessage(persona, {
@@ -58,11 +58,11 @@ test('persona T-Rex gera mensagem de confirmação da véspera e do dia no forma
     loja: 'Barbearia Dino',
   });
   assert.match(msgDia, /^Opa, Waltemir!/);
-  assert.match(msgDia, /Passando pra confirmar seu horário de hoje: às 9h, Corte e Barba com Dino/);
+  assert.match(msgDia, /hoje: às 9h, Corte e Barba com Dino/);
   assert.match(msgDia, /Responda CONFIRMO, REMARCAR ou CANCELO/);
 });
 
-test('processarConfirmacoesDiarias enfileira confirmações de hoje e da véspera para agendamentos pendentes', async () => {
+test('processarConfirmacoesDiarias enfileira confirmações de hoje e da véspera para agendamentos pendentes', async (t) => {
   reset();
   const mock = mockQueueDatabase();
   try {
@@ -74,7 +74,8 @@ test('processarConfirmacoesDiarias enfileira confirmações de hoje e da vésper
     const prof = criarProfissional(EMPRESA_DINO, { nome: 'Dino' });
     const serv = criarServico(EMPRESA_DINO, { nome: 'Corte e barba com Dino', duracaoMinutos: 45, preco: 300 });
 
-    const now = new Date();
+    const now = new Date('2026-11-11T12:00:00-04:00');
+    t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-11-11T05:00:00-04:00') });
     const formatter = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Cuiaba' });
     const hoje = formatter.format(now);
     const amanha = formatter.format(new Date(now.valueOf() + 24 * 60 * 60 * 1000));
@@ -103,7 +104,8 @@ test('processarConfirmacoesDiarias enfileira confirmações de hoje e da vésper
       horaLocal: '10:00',
     });
 
-    const total = await processarConfirmacoesDiarias({ forcar: true });
+    t.mock.timers.setTime(now.valueOf());
+    const total = await processarConfirmacoesDiarias({ forcar: true, agora: now, intervaloMs: 0 });
     assert.equal(total, 2);
 
     const inserts = mock.captured.filter((item) => /INSERT INTO tarefas_integracao_canais/.test(item.sql));
@@ -118,7 +120,7 @@ test('processarConfirmacoesDiarias enfileira confirmações de hoje e da vésper
   }
 });
 
-test('janela matinal das 07h00 as 09h00 envia confirmacao do dia, e vespera envia um dia antes', async () => {
+test('janela matinal das 07h00 as 09h00 envia confirmacao do dia, e vespera envia um dia antes', async (t) => {
   reset();
   const mock = mockQueueDatabase();
   try {
@@ -130,7 +132,8 @@ test('janela matinal das 07h00 as 09h00 envia confirmacao do dia, e vespera envi
     const prof = criarProfissional(EMPRESA_DINO, { nome: 'Dino' });
     const serv = criarServico(EMPRESA_DINO, { nome: 'Corte', duracaoMinutos: 30, preco: 100 });
 
-    const now = new Date();
+    const now = new Date('2026-11-11T12:00:00-04:00');
+    t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-11-11T05:00:00-04:00') });
     const formatter = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Cuiaba' });
     const hoje = formatter.format(now);
     const amanha = formatter.format(new Date(now.valueOf() + 24 * 60 * 60 * 1000));
@@ -202,7 +205,7 @@ test('presenceConfirmIntent reconhece variações de confirmação do cliente', 
   }
 });
 
-test('confirmAttendance confirma todos os agendamentos do cliente no mesmo dia (ex.: barba e corte sequenciais)', async () => {
+test('confirmAttendance confirma todos os agendamentos do cliente no mesmo dia (ex.: barba e corte sequenciais)', async (t) => {
   reset();
   const { confirmAttendance } = await import('./barbershop-agenda.js');
   const cliente = criarCliente(EMPRESA_DINO, { nome: 'Jeferson Zucchi ( Dino )', telefone: '65999887766' });
@@ -210,7 +213,8 @@ test('confirmAttendance confirma todos os agendamentos do cliente no mesmo dia (
   const serv1 = criarServico(EMPRESA_DINO, { nome: 'Barba Club', duracaoMinutos: 30, preco: 0.01 });
   const serv2 = criarServico(EMPRESA_DINO, { nome: 'Corte Club', duracaoMinutos: 30, preco: 0.01 });
 
-  const now = new Date();
+  const now = new Date('2026-11-11T12:00:00-04:00');
+    t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-11-11T05:00:00-04:00') });
   const formatter = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Cuiaba' });
   const hoje = formatter.format(now);
 

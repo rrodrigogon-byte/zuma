@@ -121,7 +121,7 @@ test('lista de espera: vaga aberta avisa quem pediu aquele dia e período, sem r
   assert.throws(() => captacao.entrarListaEspera(EMPRESA, { nome: 'Ana', telefone: '65911110001', data: '2020-01-01', servicoId: corte.id, lojaId: LOJA }), { code: 'DATA_PASSADA' });
 
   const ag = agendar({ profissional: bruno, servico: corte, data: dia, hora: '09:00' });
-  const cancelado = barbearia.alterarStatusAgendamento(EMPRESA, ag.id, 'cancelado');
+  const cancelado = barbearia.alterarStatusAgendamento(EMPRESA, ag.id, 'cancelado', { motivoCancelamento: 'solicitado_pelo_cliente' });
   const todos = captacao.candidatosParaVaga(EMPRESA, cancelado, { incluirSemConsentimento: true });
   assert.deepEqual(todos.map((item) => item.nome), ['Ana', 'Caio'], 'manhã + qualquer período, na ordem de chegada');
   const candidatos = captacao.candidatosParaVaga(EMPRESA, cancelado);

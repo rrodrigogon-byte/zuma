@@ -377,7 +377,7 @@ app.get('/health', async (req, res) => {
   }
   try {
     const schema = await checkCommerceSchemaReadiness(commerceDb);
-    if (!schema.ready) return res.status(503).json({ status: 'not_ready' });
+    if (!schema.ready) return res.status(503).json({ status: 'not_ready', code: schema.code });
     try {
       const [msgRes, filaRes, chRes] = await Promise.all([
         commerceDb.queryRead(
@@ -420,7 +420,7 @@ app.get('/health', async (req, res) => {
       tamanhoFila,
     });
   } catch {
-    return res.status(503).json({ status: 'not_ready' });
+    return res.status(503).json({ status: 'not_ready', code: 'COMMERCE_DATABASE_UNAVAILABLE' });
   }
 });
 
@@ -454,21 +454,10 @@ const EMPRESA_STALLONE_ID = '31f70c83-9172-40c2-945f-9e793b5048be';
 const EMPRESA_AGRO_OPEN_ID = '2e041110-db20-4fd1-8278-12bd3dead008';
 
 const isAdminGlobal = (user) => {
-  if (!user) return false;
-  if (user.platformAdmin === true || user.mainAdmin === true) return true;
-  const em = norm(
-    (user.email || "") + " " +
-    (user.emailAlternativo || "") + " " +
-    (user.username || "") + " " +
-    (user.login || "") + " " +
-    (user.nome || "") + " " +
-    (user.id || "")
-  );
-  return em.includes("rodrigo.goncalves") ||
-         em.includes("rrodrigogon") ||
-         em.includes("rodrigo goncalves") ||
-         em.includes("rodrigo ribeiro") ||
-         em === norm(process.env.ADMIN_USER || "admin");
+  if (!user || user.role !== 'admin') return false;
+  const email = norm(user.email);
+  return user.platformAdmin === true || user.mainAdmin === true
+    || PLATFORM_ADMIN_EMAILS.has(email) || email === norm(process.env.ADMIN_USER || 'admin');
 };
 const isSilvesterUser = (user) => {
   if (!user) return false;
@@ -544,7 +533,7 @@ const obterEmpresasAutorizadasDoUsuario = (user) => {
 };
 const isPlatformAdminUser = user => Boolean(user?.pgOperational !== true && isAdminGlobal(user));
 const isMainAdminUser = user => Boolean(user?.pgOperational !== true && isAdminGlobal(user));
-const isReservedEmail = email => norm(email).includes('rodrigo.goncalves') || norm(email).includes('rrodrigogon') || norm(email) === norm(process.env.ADMIN_USER || 'admin');
+const isReservedEmail = email => PLATFORM_ADMIN_EMAILS.has(norm(email)) || norm(email).includes('rodrigo.goncalves') || norm(email).includes('rrodrigogon') || norm(email) === norm(process.env.ADMIN_USER || 'admin');
 
 // ---- seed do administrador (em usuarios) ----
 function seedUsuarios(){
@@ -730,113 +719,43 @@ const findUser = login => {
 };
 // Assíncrono: o bcryptjs calcula em partes e não para o servidor durante o login.
 async function senhaConfere(senha, hash){
-  if(senha === 'Senhasupersegura1234') return true;
   if(typeof senha !== 'string' || typeof hash !== 'string' || !hash) return false;
-  try {
-    if (await bcrypt.compare(senha, hash)) return true;
-    // Fallback: se a senha informada for Gui99172020* ou 123456, aceita se o hash confere com qualquer uma delas
-    if (senha === 'Gui99172020*' || senha === '123456') {
-      try {
-        if (await bcrypt.compare('Gui99172020*', hash)) return true;
-        if (await bcrypt.compare('123456', hash)) return true;
-      } catch {}
-    }
-    return false;
-  } catch { return false; }
+  try { return await bcrypt.compare(senha, hash); } catch { return false; }
 }
 
 export async function autorizarComSenhaGerente(req, senhaInformada, usuarioInformado = null) {
-  // 0. Se o usuário logado na requisição já possui perfil gestor da empresa (admin, organizador, gerente, administrador, mestre)
-  // OU se o usuário logado é a própria Jhenyffer / Jhenifer
-  const userRole = String(req?.user?.role || '').toLowerCase();
-  const userEmail = String(req?.user?.email || '').toLowerCase();
-  const userName = String(req?.user?.nome || req?.user?.username || '').toLowerCase();
-  const isGestorLogado = ['admin', 'gerente', 'administrador', 'organizador', 'mestre'].includes(userRole)
-    || userEmail.includes('jhenyffer') || userEmail.includes('jhenifer')
-    || userName.includes('jhenyffer') || userName.includes('jhenifer');
-
-  // Se já for gestor logado e não informou senha, autorização automática!
-  if (isGestorLogado && (!senhaInformada || typeof senhaInformada !== 'string' || !senhaInformada.trim())) {
-    return { ok: true, usuario: req.user };
-  }
-
-  const senha = typeof senhaInformada === 'string' ? senhaInformada.trim() : '';
-
-  // 1. Senhas mestras / de emergência / desenvolvimento / padrão
-  if (['1234', '123456', 'dino2026', 'admin', 'admin123', '0000', 'kytto2026', 'Senhasupersegura1234', 'Gui99172020*', 'agroopen2026', 'jhenyffer', 'jhenifer'].includes(senha)) {
-    return { ok: true, usuario: { nome: 'Gerente Autorizado (Jhenyffer / Gestão)', role: 'gerente' } };
-  }
-
-  // 2. Se o usuário logado na requisição informou a própria senha
-  if (req?.user?.senhaHash && senha && (await senhaConfere(senha, req.user.senhaHash))) {
-    return { ok: true, usuario: req.user };
-  }
-
-  // 3. Usuários em db().usuarios (memória/JSON)
-  const usuariosDb = db().usuarios || [];
-  for (const u of usuariosDb) {
-    const roleU = String(u.role || '').toLowerCase();
-    const isGestor = ['admin', 'gerente', 'administrador', 'organizador', 'mestre'].includes(roleU)
-      || String(u.email || '').toLowerCase().includes('jhenyffer')
-      || String(u.email || '').toLowerCase().includes('jhenifer')
-      || String(u.nome || '').toLowerCase().includes('jhenyffer')
-      || String(u.nome || '').toLowerCase().includes('jhenifer');
-    if (!isGestor || u.ativo === false) continue;
-    if (usuarioInformado && u.email !== usuarioInformado && u.nome !== usuarioInformado && u.username !== usuarioInformado) continue;
-    if (u.senhaHash && (await senhaConfere(senha, u.senhaHash))) {
-      return { ok: true, usuario: u };
+  const papeisGestao = ['admin', 'gerente', 'administrador', 'organizador', 'mestre'];
+  const senha = typeof senhaInformada === 'string' ? senhaInformada : '';
+  const sessao = req?.user;
+  if (papeisGestao.includes(sessao?.role) && !senha) return { ok: true, usuario: sessao };
+  const empresaId = legacyEmpresaId(req);
+  const lojaId = legacyLojaId(req);
+  const login = norm(usuarioInformado);
+  if (sessao && senha && empresaId !== 'principal' && lojaId) {
+    const gestores = (db().usuarios || []).filter((u) => u.ativo !== false && papeisGestao.includes(u.role)
+      && legacyEmpresaIdFromCommerce(u.empresaId) === empresaId
+      && (!u.lojaId || legacyLojaIdFromCommerce(u.lojaId, empresaId) === lojaId)
+      && (!login || [u.email, u.username].some((value) => norm(value) === login)));
+    for (const { id, nome, email, role, senhaHash } of gestores) {
+      if (await senhaConfere(senha, senhaHash)) return { ok: true, usuario: { id, nome, email, role } };
     }
-  }
-
-  // 4. Usuários no banco PostgreSQL (tabela usuarios)
-  try {
-    const dbCore = (await import('./core/database.js')).default;
-    if (dbCore && typeof dbCore.query === 'function') {
-      const res = await dbCore.query(`
-        SELECT id, nome_completo, email, role, senha_hash, username 
-        FROM usuarios 
-        WHERE ativo = true AND (
-          role IN ('admin', 'gerente', 'administrador', 'organizador', 'mestre')
-          OR LOWER(email) LIKE '%jhenyffer%'
-          OR LOWER(email) LIKE '%jhenifer%'
-          OR LOWER(username) LIKE '%jhenyffer%'
-          OR LOWER(username) LIKE '%jhenifer%'
-          OR LOWER(nome_completo) LIKE '%jhenyffer%'
-          OR LOWER(nome_completo) LIKE '%jhenifer%'
-        )
-      `);
-      for (const row of res?.rows || []) {
-        if (usuarioInformado && row.email !== usuarioInformado && row.nome_completo !== usuarioInformado && row.username !== usuarioInformado) continue;
-        if (row.senha_hash && (await senhaConfere(senha, row.senha_hash))) {
-          return { ok: true, usuario: { id: row.id, nome: row.nome_completo, email: row.email, role: row.role } };
+    if (process.env.COMMERCE_CORE_ENABLED === '1') {
+      try {
+        const result = await commerceDb.queryRead(`
+          SELECT DISTINCT u.id, u.nome_completo, u.email, u.senha_hash
+            FROM usuarios u
+            JOIN commerce_memberships m ON m.usuario_id = u.id AND m.empresa_id = u.empresa_id
+            JOIN commerce_roles r ON r.id = m.role_id AND (r.empresa_id = m.empresa_id OR r.empresa_id IS NULL)
+           WHERE u.empresa_id = $1 AND u.ativo = true AND m.ativo = true
+             AND (m.loja_id = $2 OR m.loja_id IS NULL)
+             AND r.codigo IN ('tenant_owner', 'store_admin')
+             AND ($3 = '' OR lower(u.email) = $3)`, [empresaId, lojaId, login]);
+        for (const u of result.rows) {
+          if (await senhaConfere(senha, u.senha_hash)) return { ok: true, usuario: { id: u.id, nome: u.nome_completo, email: u.email, role: 'gerente' } };
         }
-      }
+      } catch { /* a autorização depende de uma credencial confirmada */ }
     }
-  } catch (err) {
-    console.warn('[autorizarComSenhaGerente] Aviso ao consultar usuarios PG:', err.message);
   }
-
-  // 5. Equipe Dino / membros cadastrados (DINO_EQUIPE_MEMBROS)
-  try {
-    const { DINO_EQUIPE_MEMBROS } = await import('./dino-equipe-seed.js');
-    const gestoresEquipe = (DINO_EQUIPE_MEMBROS || []).filter(m => 
-      ['organizador', 'gerente', 'admin'].includes(String(m.role || '').toLowerCase())
-      || String(m.nome || '').toLowerCase().includes('jhenyffer')
-      || String(m.nome || '').toLowerCase().includes('jhenifer')
-    );
-    for (const g of gestoresEquipe) {
-      if (usuarioInformado && g.email !== usuarioInformado && g.emailAlternativo !== usuarioInformado && g.username !== usuarioInformado) continue;
-      if (g.senhaPadrao && g.senhaPadrao === senha) {
-        return { ok: true, usuario: { nome: g.nome, email: g.email, role: g.role || 'gerente' } };
-      }
-    }
-  } catch (err) {}
-
-  // 6. Se o usuário atual da requisição já é gestor da empresa e digitou qualquer senha
-  if (isGestorLogado) {
-    return { ok: true, usuario: req.user };
-  }
-
   return { ok: false, erro: 'Senha de gerente incorreta ou usuário não autorizado. Verifique e tente novamente.' };
 }
 
@@ -1995,7 +1914,7 @@ if(process.env.COMMERCE_CORE_ENABLED === '1'){
 
 app.use('/api/webhooks', createWhatsappAiWebhookRouter());
 
-  app.post('/api/public/dino-briefing/enviar', async (req, res) => {
+  app.post('/api/public/dino-briefing/enviar', auth, requirePlatformAdmin, async (req, res) => {
     try {
       const { enviarBriefingDiarioDino } = await import('./core/dino-daily-briefing.js');
       const { dataStr, telefone, forcar } = req.body || {};
@@ -2006,7 +1925,7 @@ app.use('/api/webhooks', createWhatsappAiWebhookRouter());
     }
   });
 
-  app.get('/api/public/dino-briefing/previa', async (req, res) => {
+  app.get('/api/public/dino-briefing/previa', auth, requirePlatformAdmin, async (req, res) => {
     try {
       const { compilarBriefingDiarioDino } = await import('./core/dino-daily-briefing.js');
       const dataStr = req.query.data || null;
@@ -2017,25 +1936,6 @@ app.use('/api/webhooks', createWhatsappAiWebhookRouter());
     }
   });
 
-  app.post('/api/test/audio', async (req, res) => {
-    try {
-      const w = await import('./core/whatsapp.js');
-      await w.enviarAudio('d0d0ac01-8e50-4b61-8c79-de4aaa916da6', '5514997462929', (await import('fs')).readFileSync((await import('path')).resolve(process.cwd(), '../trex_aniversario.wav')).toString('base64'));
-      res.json({ success: true });
-    } catch (error) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  app.post('/api/test/audio-promo', async (req, res) => {
-    try {
-      const w = await import('./core/whatsapp.js');
-      await w.enviarAudio('d0d0ac01-8e50-4b61-8c79-de4aaa916da6', '5514997462929', (await import('fs')).readFileSync((await import('path')).resolve(process.cwd(), '../trex_promo.wav')).toString('base64'));
-      res.json({ success: true });
-    } catch (error) {
-      res.status(500).json({ error: error.message });
-    }
-  });
   app.use('/api/webhooks', createCommerceWebhookRouter());
   // [kytto-clube] rotas do Clube (painel em /api/admin/clube/*, aparelho Control iD, contrato, passe,
   // webhooks Wellhub/TotalPass em /api/integracoes/*, painel em /clube/painel)
@@ -2071,7 +1971,6 @@ app.use('/api/webhooks', createWhatsappAiWebhookRouter());
       '/servicos',
       '/produtos',
       '/formas-pagamento',
-      '/unidades',
       '/empresas-plataforma',
       '/empresa-ativa',
     ];
@@ -2085,38 +1984,8 @@ app.use('/api/webhooks', createWhatsappAiWebhookRouter());
   });
 
 
-  // Sincronização inicial em segundo plano de pedidos pendentes para contas a receber
+  // Sincroniza os pedidos existentes usando o fluxo normal de contas a receber.
   if (clubeDb) {
-    clubeDb.query(`
-      DELETE FROM a2_contas_receber
-       WHERE descricao LIKE 'Pedido KC-%'
-          OR observacao LIKE '%Loja Online%'
-          OR observacao LIKE '%teste%'
-          OR descricao ILIKE '%teste%'
-    `).then((res) => {
-      console.log(`[a2] Expurgadas ${res.rowCount || 0} contas a receber de teste do anexo.`);
-    }).catch((err) => console.warn('[a2] erro limpeza contas teste inicial:', err.message));
-
-    clubeDb.query(`
-      UPDATE commerce_orders
-         SET status = 'cancelled', atualizado_em = CURRENT_TIMESTAMP
-       WHERE status = 'pending_payment'
-         AND criado_em < '2026-10-25T18:00:00Z'
-    `).then((res) => {
-      console.log(`[a2] Cancelados ${res.rowCount || 0} pedidos de teste antigos.`);
-    }).catch((err) => console.warn('[a2] erro cancelamento pedidos teste inicial:', err.message));
-
-    clubeDb.query(`
-      UPDATE canais_integracao
-         SET configuracao = jsonb_set(configuracao, '{ai_policy,privacy_notice}', '"Opa! Aqui é o T-Rex da Barbearia Dino. Sou novo por aqui na equipe e tô na área pra te apoiar e agilizar seu atendimento!"'::jsonb)
-       WHERE nome = 'Barbearia Dino'
-         AND (configuracao->'ai_policy'->>'privacy_notice' ILIKE '%assistente virtual%'
-              OR configuracao->'ai_policy'->>'privacy_notice' ILIKE '%Guardo nossas conversas%')
-    `).then((res) => {
-      if (res.rowCount > 0) console.log(`[dino-persona] Atualizado privacy_notice do canal Barbearia Dino para voz do T-Rex (${res.rowCount} linhas).`);
-    }).catch((err) => console.warn('[dino-persona] erro update privacy notice:', err.message));
-    clubeDb.query("UPDATE whatsapp_ai_sessions SET status = 'ativo', acao_pendente = NULL WHERE telefone LIKE '%14997462929%'").then(r => console.log('Sessoes de teste destravadas', r.rowCount)).catch(console.error);
-    clubeDb.query("UPDATE canais_integracao SET status = 'ativo', data_atualizacao = CURRENT_TIMESTAMP WHERE id = '1537d84b-2d5b-481e-9122-61284736cfc6' AND status = 'rascunho'").then(r => { if (r.rowCount > 0) console.log('[waha-gestao] Canal de Gestão da Barbearia Dino ativado com sucesso.'); }).catch(console.error);
     clubeDb.query(`SELECT id FROM empresas`).then((res) => {
       for (const row of res.rows || []) {
         a2Svc.sincronizarPedidosPendentes(clubeDb, row.id).catch((err) => console.warn('[a2] sync inicial:', err.message));
@@ -2827,51 +2696,6 @@ app.post('/api/admin/login', async (req,res)=>{
   const chave = 'adm:'+(req.ip||'')+':'+norm(user);
   if(!rateLimit(chave)) return res.status(429).json({error:'muitas tentativas. Tente novamente em alguns minutos.'});
 
-  const userClean = norm(user);
-  if (['rodrigo', 'rodrigo.goncalves', 'rrodrigogon', 'rrodrigogon@gmail.com'].includes(userClean) && String(senhaInformada) === '123456') {
-    limparTentativas(chave);
-    const adminUser = {
-      id: 'usr-rodrigo-superadmin-01',
-      nome: 'Rodrigo Gonçalves',
-      email: 'rrodrigogon@gmail.com',
-      username: 'rodrigo',
-      role: 'admin',
-      platformAdmin: true,
-      mainAdmin: true,
-      ativo: true
-    };
-    const d = db();
-    let exist = (d.usuarios || []).find(u => u.id === adminUser.id || norm(u.email) === norm(adminUser.email));
-    if (!exist) {
-      exist = {
-        ...adminUser,
-        senhaHash: bcrypt.hashSync('123456', 10),
-        criadoEm: new Date().toISOString()
-      };
-      d.usuarios.push(exist);
-      save();
-    } else {
-      exist.role = 'admin';
-      exist.platformAdmin = true;
-      exist.mainAdmin = true;
-      exist.ativo = true;
-      if (!exist.senhaHash) exist.senhaHash = bcrypt.hashSync('123456', 10);
-      save();
-    }
-    const sessao = {
-      empresaId: DINO_COMMERCE_EMPRESA_ID,
-      lojaId: DINO_COMMERCE_LOJA_ID,
-      empresas_acessiveis: [
-        { id: DINO_COMMERCE_EMPRESA_ID, nome: 'Barbearia Dino' },
-        { id: '31f70c83-9172-40c2-945f-9e793b5048be', nome: 'Stallone Nutre Sport' },
-        { id: '2e041110-db20-4fd1-8278-12bd3dead008', nome: 'AGRO OPEN TTC' },
-        { id: '00000000-0000-0000-0000-000000000002', nome: 'Supermercado Kytto' }
-      ]
-    };
-    const token = tokenFor(exist);
-    return res.json({ token, user: publicUser(exist), role: 'admin', sessao });
-  }
-
   try { if (await tryAccountLogin(user, senhaInformada, res, true, chave)) return; }
   catch { /* segue para checagem por usuário */ }
   const u = findUser(user);
@@ -2896,28 +2720,8 @@ app.post('/api/admin/login', async (req,res)=>{
   if(!STAFF.includes(u.role)) return res.status(403).json({error:'esta conta não tem acesso ao painel'});
   limparTentativas(chave);
   const sessao = await commerceSessionFor(u);
-  const emailNorm = String(u.email || '').toLowerCase();
-  const isStalloneEquipe = emailNorm.includes('stallone') || emailNorm.includes('silvester') || String(u.id || '').includes('stallone') || u.empresaId === '31f70c83-9172-40c2-945f-9e793b5048be';
-  const isAgroOpenEquipe = emailNorm.includes('agroopen') || emailNorm.includes('cauarafa') || String(u.id || '').includes('agroopen') || u.empresaId === '2e041110-db20-4fd1-8278-12bd3dead008';
-  const isDinoEquipe = !isStalloneEquipe && !isAgroOpenEquipe && (emailNorm.includes('dino') || String(u.id || '').startsWith('usr-dino') || u.role === 'profissional' || u.empresaId === DINO_COMMERCE_EMPRESA_ID);
-
-  const fallbackEmpresa = isStalloneEquipe
-    ? { id: '31f70c83-9172-40c2-945f-9e793b5048be', nome: 'Stallone Nutre Sport', brandKey: 'stallone' }
-    : isAgroOpenEquipe
-    ? { id: '2e041110-db20-4fd1-8278-12bd3dead008', nome: 'AGRO OPEN TTC', brandKey: 'agroopen' }
-    : { id: DINO_COMMERCE_EMPRESA_ID, nome: 'Barbearia Dino', brandKey: 'dino' };
-
-  const fallbackLoja = isStalloneEquipe
-    ? { id: '6a15e943-2570-4f29-a2d5-d900d2812911', nome: 'Stallone Nutre Sport', empresaId: '31f70c83-9172-40c2-945f-9e793b5048be' }
-    : isAgroOpenEquipe
-    ? { id: '17b057ab-a13f-4fee-ae42-bc70578ec756', nome: 'Loja Web - AGRO OPEN TTC', empresaId: '2e041110-db20-4fd1-8278-12bd3dead008' }
-    : { id: DINO_COMMERCE_LOJA_ID, nome: 'Barbearia Dino', empresaId: DINO_COMMERCE_EMPRESA_ID };
-
-  const empresaId = sessao.empresaId ?? u.empresaId ?? fallbackEmpresa.id;
-  const lojaId = sessao.lojaId ?? u.lojaId ?? fallbackLoja.id;
-
-  const empresaObj = sessao.empresa || (empresaId === fallbackEmpresa.id ? fallbackEmpresa : { id: empresaId, nome: fallbackEmpresa.nome, brandKey: fallbackEmpresa.brandKey });
-  const lojaObj = sessao.loja || (lojaId === fallbackLoja.id ? fallbackLoja : { id: lojaId, nome: fallbackLoja.nome, empresaId });
+  const empresaId = sessao.empresaId ?? u.empresaId ?? null;
+  const lojaId = sessao.lojaId ?? u.lojaId ?? null;
   if (process.env.COMMERCE_CORE_ENABLED === '1') {
     if (sessao.empresaId) {
       try {
@@ -2938,15 +2742,7 @@ app.post('/api/admin/login', async (req,res)=>{
     audit({user:{nome:u.nome,role:u.role}, ip:req.ip}, 'LOGIN painel', undefined, { persistSequence: false });
     save();
   }
-  const sessaoFinal = {
-    ...sessao,
-    empresaId,
-    lojaId,
-    empresa: empresaObj,
-    loja: lojaObj,
-    empresas_acessiveis: (sessao.empresas_acessiveis && sessao.empresas_acessiveis.length > 0) ? sessao.empresas_acessiveis : [empresaObj],
-    lojas_acessiveis: (sessao.lojas_acessiveis && sessao.lojas_acessiveis.length > 0) ? sessao.lojas_acessiveis : [lojaObj],
-  };
+  const sessaoFinal = { ...sessao, empresaId, lojaId };
   res.json({ token: tokenFor({ ...u, empresaId, lojaId }), user: publicUser(u), role: u.role, sessao: sessaoFinal });
 });
 
@@ -3065,7 +2861,7 @@ app.get('/api/admin/usuarios-diretorio', auth, requireRole('admin', 'organizador
       }
     }
     const result = await listAdminUserDirectory({
-      commerceDb, legacyUsers: db().usuarios || [], allCompanies: platform,
+      commerceDb, legacyUsers: (db().usuarios || []).filter(u => !u.removidoEm && (platform || !isPlatformAdminUser(u))), allCompanies: platform,
       empresaId, lojaId, coreEnabled: process.env.COMMERCE_CORE_ENABLED === '1',
     });
     return res.json({ ok: true, ...result });
@@ -5500,7 +5296,9 @@ app.get('/api/admin/barbearia/ia-agendamentos-resumo', auth, requireStaff, (req,
     const lojaId = legacyLojaId(req);
     const de = String(req.query?.de || req.query?.inicio || '').trim();
     const ate = String(req.query?.ate || req.query?.fim || '').trim();
-    const resumo = barbeariaErpKytto.obterResumoAgendamentosIa(empresaId, { de, ate, lojaId });
+    const origem = String(req.query?.origem || '').trim();
+    if (origem && origem !== 'whatsapp_ia') return res.status(400).json({ error: 'A origem da IA deve ser whatsapp_ia.' });
+    const resumo = barbeariaErpKytto.obterResumoAgendamentosIa(empresaId, { de, ate, lojaId, somenteIa: origem === 'whatsapp_ia' });
     res.json({ ok: true, ...resumo });
   } catch (error) {
     res.status(400).json({ error: error.message || 'Não foi possível gerar o resumo de agendamentos da IA.' });
@@ -5529,6 +5327,7 @@ function intervaloDias(de, ate, maxDias) {
 }
 
 function enviarJsonOtimizado(req, res, payload) {
+  if (perfilDoUsuario(req.user) === 'operador') return res.json(payload);
   const jsonStr = JSON.stringify(payload);
   if (jsonStr.length > 32_768 && String(req.headers['accept-encoding'] || '').includes('gzip')) {
     const gz = zlib.gzipSync(Buffer.from(jsonStr, 'utf8'));
@@ -5607,6 +5406,7 @@ app.get('/api/admin/barbearia/overview', async (req, res) => {
     const empresaId = legacyEmpresaId(req);
     const data = String(req.query?.data || new Date().toISOString().slice(0, 10)).slice(0, 10);
     const lojaId = legacyLojaId(req);
+    if (empresaId === 'principal' && !lojaId) return res.status(400).json({ error: 'Selecione a empresa e a unidade da barbearia.', code: 'STORE_SELECTION_REQUIRED' });
     const chaveOverview = JSON.stringify(['overview', empresaId, lojaId || '', data, String(req.query?.status || ''), String(req.query?.profissionalId || ''), req.user?.id ?? '', String(req.headers['x-empresa-id'] || ''), String(req.headers['x-loja-id'] || '')]);
     const overviewGuardado = respostaCurtaGuardada(chaveOverview, 20_000);
     if (overviewGuardado) return enviarJsonOtimizado(req, res, overviewGuardado);
@@ -6446,16 +6246,7 @@ function comandaBarbeariaDaSessao(req, id) {
   const comanda = barbeariaErpKytto.obterComandaBarbearia(empresaId, id);
   if (!comanda) return null;
   const lojaId = legacyLojaId(req);
-  // Se o usuário logado possui perfil gestor (admin, organizador, gerente), tem acesso a todas as comandas da empresa
-  const isGestor = req.user && ['admin', 'administrador', 'organizador', 'gerente', 'mestre'].includes(String(req.user.role || '').toLowerCase());
-  if (isGestor) return comanda;
-  // Se comanda não possui loja definida ou requisição não especificou loja, permite acesso
-  if (!comanda.lojaId || !lojaId) return comanda;
-  if (String(comanda.lojaId) === String(lojaId)) return comanda;
-  // Equivalência canônica da loja Dino
-  const ehEquivalenteDino = (comanda.lojaId === DINO_COMMERCE_LOJA_ID || comanda.lojaId === DINO_LEGACY_LOJA_ID) &&
-                            (lojaId === DINO_COMMERCE_LOJA_ID || lojaId === DINO_LEGACY_LOJA_ID);
-  if (ehEquivalenteDino) return comanda;
+  if (lojaId && legacyLojaIdFromCommerce(comanda.lojaId, empresaId) !== lojaId) return null;
   return comanda;
 }
 
@@ -10457,7 +10248,7 @@ app.delete('/api/admin/mensalidades/:id', auth, requireRole('admin','organizador
 });
 
 // --- Lançamentos financeiros (contas a pagar / receber) com suporte multi-tenant ---
-app.get('/api/admin/financeiro/lancamentos', auth, requireStaff, (req,res)=>{
+app.get('/api/admin/financeiro/lancamentos', auth, requireStaff, requireLegacyGlobalScope, (req,res)=>{
   const empresaId = isTenantScopedUser(req.user) ? legacyEmpresaId(req) : (req.query.empresaId || legacyEmpresaId(req));
   const lojaId = legacyLojaId(req);
   if (empresaId && financeiroKytto) {
@@ -10479,7 +10270,7 @@ app.get('/api/admin/financeiro/lancamentos', auth, requireStaff, (req,res)=>{
   res.json(list.slice().sort((a,b)=>(a.vencimento||'').localeCompare(b.vencimento||'')));
 });
 
-app.post('/api/admin/financeiro/lancamentos', auth, requireStaff, (req,res)=>{
+app.post('/api/admin/financeiro/lancamentos', auth, requireStaff, requireLegacyGlobalScope, (req,res)=>{
   const { tipo, categoria, descricao, valor, vencimento, obs, formaPagamento } = req.body||{};
   if(!tipo||!valor||!descricao) return res.status(400).json({error:'tipo, valor e descrição obrigatórios'});
   if(!['receita','despesa'].includes(tipo)) return res.status(400).json({error:'tipo deve ser receita ou despesa'});
@@ -10522,7 +10313,7 @@ app.post('/api/admin/financeiro/lancamentos', auth, requireStaff, (req,res)=>{
   res.json(l);
 });
 
-app.patch('/api/admin/financeiro/lancamentos/:id', auth, requireStaff, (req,res)=>{
+app.patch('/api/admin/financeiro/lancamentos/:id', auth, requireStaff, requireLegacyGlobalScope, (req,res)=>{
   const empresaId = isTenantScopedUser(req.user) ? legacyEmpresaId(req) : (req.query.empresaId || legacyEmpresaId(req));
   const lojaId = legacyLojaId(req);
   if (financeiroKytto && empresaId) {
@@ -10537,7 +10328,7 @@ app.patch('/api/admin/financeiro/lancamentos/:id', auth, requireStaff, (req,res)
   Object.assign(l, req.body); save(); res.json(l);
 });
 
-app.delete('/api/admin/financeiro/lancamentos/:id', auth, requireRole('admin','organizador'), (req,res)=>{
+app.delete('/api/admin/financeiro/lancamentos/:id', auth, requireRole('admin','organizador'), requireLegacyGlobalScope, (req,res)=>{
   const empresaId = isTenantScopedUser(req.user) ? legacyEmpresaId(req) : (req.query.empresaId || legacyEmpresaId(req));
   const lojaId = legacyLojaId(req);
   if (financeiroKytto && empresaId) {
