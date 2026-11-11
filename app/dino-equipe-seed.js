@@ -339,6 +339,7 @@ export function provisionarEquipeDino({ commerceDb = null } = {}) {
       for (const membro of PROFISSIONAIS_DINO_OFICIAIS) {
         const casaMembro = (p) => {
           if (p.consolidadoEm) return false;
+          if (['prof-mv1a1nmm-008', 'prof-mv1a1ngb-007', 'prof-mv1a1ntu-009'].includes(p.id)) return false;
           if (membro.idCanonico && p.id === membro.idCanonico) return true;
           const pNome = normalizar(p.nome);
           const pApelido = normalizar(p.apelido);
@@ -356,10 +357,6 @@ export function provisionarEquipeDino({ commerceDb = null } = {}) {
         const prof = profissionaisAtualizados.find(casaMembro);
 
         if (prof) {
-          if ((prof.ativo === false || prof.removidoEm) && prof.id !== 'prof-mtj69hhx-002') {
-            continue;
-          }
-
           const horarioInicio = prof.horarioInicio || membro.horarioInicioPadrao || '08:00';
           const horarioFim = prof.horarioFim || membro.horarioFimPadrao || '20:00';
           const diasTrabalho = Array.isArray(prof.diasTrabalho) && prof.diasTrabalho.length > 0
@@ -410,6 +407,17 @@ export function provisionarEquipeDino({ commerceDb = null } = {}) {
       }
 
       if (estado) {
+        if (!estado.servicos || Object.keys(estado.servicos).length === 0) {
+          try {
+            barbeariaErpKytto.criarServico(empId, {
+              nome: 'Corte Masculino',
+              categoria: 'Cabelo',
+              preco: 90,
+              duracaoMinutos: 45,
+              ativo: true,
+            });
+          } catch {}
+        }
         sanearProfissionaisEAgendamentosDino(estado, empId);
       }
     } catch (e) {
@@ -472,5 +480,5 @@ export function provisionarEquipeDino({ commerceDb = null } = {}) {
   }
 
   save();
-  return { ok: true };
+  return { ok: true, totalMembros: PROFISSIONAIS_DINO_OFICIAIS.length };
 }

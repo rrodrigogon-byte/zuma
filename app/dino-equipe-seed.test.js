@@ -9,10 +9,10 @@ import { profissionalDoUsuario } from './dino-modo-barbeiro.js';
 test('dino-equipe-seed: provisiona 8 profissionais da Dino no ERP e cria credenciais de login', () => {
   const resultado = provisionarEquipeDino();
   assert.equal(resultado.ok, true);
-  assert.equal(resultado.totalMembros, 8);
+  assert.equal(resultado.totalMembros, PROFISSIONAIS_DINO_OFICIAIS.length);
 
   const profs = barbeariaErpKytto.listarProfissionais(DINO_EMPRESA_CANONICA);
-  assert.ok(profs.length >= 8, 'Deve ter pelo menos 8 profissionais cadastrados');
+  assert.ok(profs.length >= PROFISSIONAIS_DINO_OFICIAIS.length, 'Deve ter todos os profissionais oficiais ativos cadastrados');
 
   const usuarios = db().usuarios;
 
