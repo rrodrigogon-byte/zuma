@@ -264,18 +264,38 @@ export default function AgendamentoOnline() {
       if (data.politicas) setPoliticas(data.politicas)
 
       // Auto-selecionar barbeiro quando acessado via link individual (/agendar/:slug/:barbeiro ou ?barbeiro=...)
+      const dataParam = searchParams.get('data') || ''
+      if (/^\d{4}-\d{2}-\d{2}$/.test(dataParam)) {
+        setDataSel(dataParam)
+      }
+      let matchedProf = null
       if (barbeiroParam && profs.length > 0) {
         const bSlug = slugify(barbeiroParam)
-        const match = profs.find(p =>
+        matchedProf = profs.find(p =>
           p.id === barbeiroParam ||
           p.slug === bSlug ||
+          slugify(p.apelido || '') === bSlug ||
           slugify(p.nome) === bSlug ||
           slugify(p.nome).includes(bSlug) ||
           bSlug.includes(slugify(p.nome))
         )
-        if (match) {
-          setProfissionalSel(match)
-          setBarbeiroPreselecionado(match)
+        if (matchedProf) {
+          setProfissionalSel(matchedProf)
+          setBarbeiroPreselecionado(matchedProf)
+        }
+      }
+      const servicoParam = searchParams.get('servico') || searchParams.get('servico_id') || ''
+      const listaServ = data.servicos || []
+      if (servicoParam && listaServ.length > 0) {
+        const sSlug = slugify(servicoParam)
+        const sMatch = listaServ.find(sv =>
+          sv.id === servicoParam ||
+          slugify(sv.nome) === sSlug ||
+          slugify(sv.nome).includes(sSlug)
+        )
+        if (sMatch) {
+          setServicoSel(sMatch)
+          if (matchedProf) setPasso(3)
         }
       }
     } catch (err) {

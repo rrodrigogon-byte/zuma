@@ -112,7 +112,7 @@ import {
   STICKERS_RESTRITAS,
 } from './whatsapp-ai-persona.js';
 import { bubbleDelayMs, splitBubbles, styleModelText } from './whatsapp-ai-style.js';
-import { agendaCalendarText, ensureToolLinks, fixWeekdayMistakes, serviceWithProfessional, toolMoneyValues, unbackedPrices } from './whatsapp-ai-normalize.js';
+import { agendaCalendarText, ensureToolLinks, extractFastScheduleChoice, fixWeekdayMistakes, obterLinkAgendaDino, serviceWithProfessional, toolMoneyValues, unbackedPrices, withSelfBookingAgendaOption } from './whatsapp-ai-normalize.js';
 import { enviarFigurinha as enviarFigurinhaPersona, figurinhaDisponivel, figurinhaSuportada } from './whatsapp-figurinhas.js';
 import { mapWhatsappAiProviderLatency24h, WHATSAPP_AI_PROVIDER_RUNS_24H_CHANNEL_SQL } from './whatsapp-ai-provider-metrics.js';
 
@@ -2145,6 +2145,31 @@ async function deterministicResponseCore(task, channel, session, message) {
   const isSupplements = segLower === 'suplementos' || persona?.id === 'stallone';
   const isSports = segLower === 'esporte' || persona?.id === 'agro_open';
   const isBarbershop = segLower === 'barbearia' || persona?.id === 'trex' || (!isSupplements && !isSports && channel.configuracao?.capabilities?.manageAppointments !== false);
+  if (isBarbershop && !session.acao_pendente) {
+    const lastAssMsg = [...priorHistory].reverse().find((item) => item.role === 'assistant')?.text || '';
+    const fastChoice = extractFastScheduleChoice(message.text, lastAssMsg);
+    if (fastChoice) {
+      try {
+        const fastExec = createWhatsappAiToolExecutor(toolContext);
+        const prep = await fastExec('preparar_agendamento', {
+          serviceId: fastChoice.servico,
+          professionalId: fastChoice.profissional,
+          date: fastChoice.data,
+          time: fastChoice.horario,
+          customerName: context.customerName,
+        });
+        if (prep?.ok) {
+          const pendingFast = (await db.query(`SELECT acao_pendente FROM whatsapp_ai_sessions WHERE id = $1 AND empresa_id = $2 AND loja_id = $3`, [session.id, session.empresa_id, session.loja_id])).rows[0]?.acao_pendente;
+          if (pendingFast?.actionId) {
+            await db.query(`UPDATE whatsapp_ai_sessions SET acao_pendente = acao_pendente || '{"mostrado":true}'::jsonb WHERE id = $1 AND empresa_id = $2 AND loja_id = $3 AND acao_pendente->>'actionId' = $4`, [session.id, session.empresa_id, session.loja_id, String(pendingFast.actionId)]);
+            return { text: pendingActionPrompt(pendingFast, persona), kind: 'fast_slot_prepared', model: 'deterministic_fast_slot', provider: 'system' };
+          }
+        }
+      } catch {
+        // Em caso de ambiguidade ou falta de nome, segue para o fluxo normal com ferramentas.
+      }
+    }
+  }
 
   const barbershopToolNames = new Set([
     'listar_servicos', 'listar_profissionais', 'consultar_disponibilidade', 'sugerir_proximos_horarios',
@@ -2287,6 +2312,14 @@ async function deterministicResponseCore(task, channel, session, message) {
       }
       replyText = composeReplyWithNewAction(replyText, pendingNow, persona);
       await db.query(`UPDATE whatsapp_ai_sessions SET acao_pendente = acao_pendente || '{"mostrado":true}'::jsonb WHERE id = $1 AND empresa_id = $2 AND loja_id = $3 AND acao_pendente->>'actionId' = $4`, [session.id, session.empresa_id, session.loja_id, String(pendingNow.actionId)]);
+    }
+    if (isBarbershop && !pendingNow && !session.acao_pendente) {
+      replyText = withSelfBookingAgendaOption(replyText, {
+        userText: message.text,
+        toolResults: presentationContext.toolResults,
+        isBarbershop: true,
+        hasPendingAction: false,
+      });
     }
     const jaTemPergunta = String(replyText || '').includes('?');
     if (!jaTemPergunta && shouldAskPersonalization({ policy, consent: profileResult.consent, session, pendingAction: Boolean(pendingNow || session.acao_pendente), persona })) {

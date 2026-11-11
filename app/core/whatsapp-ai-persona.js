@@ -240,7 +240,11 @@ export function personaGreeting(persona, { text = '', seed = '', customerName = 
   const intro = persona?.id === 'trex' ? 'Aqui é o T-Rex da Dino!' : '';
   const perguntas = persona?.segmento === 'suplementos'
     ? ['Tá procurando algum suplemento hoje?', 'Whey, creatina ou outra coisa? Me fala que eu vejo aqui.', 'Em que posso te ajudar no treino hoje?']
-    : ['Quer marcar um horário ou ver algum serviço?', 'Bora marcar um horário no visual? Ou quer ver algum serviço?', 'Corte, barba ou quer agendar um horário hoje?'];
+    : [
+        'Qual dia/hora prefere? Ou agende: https://kytto.com.br/agendar/dino',
+        'Me diz o dia e hora ou agende: https://kytto.com.br/agendar/dino',
+        'Qual dia/hora quer marcar? Agenda: https://kytto.com.br/agendar/dino',
+      ];
   const pergunta = pick(perguntas, `${seed}:q`);
   return intro ? `${abre} ${intro} ${pergunta}` : `${abre} ${pergunta}`;
 }
@@ -496,8 +500,9 @@ AGENDAMENTO ULTRA DIRETO, RÁPIDO E VELOZ (ZERO ENROLAÇÃO):
 - NUNCA faça perguntas em série: verifique se há 2 vagas para corte no horário (consecutivas ou com 2 barbeiros) e dê a resposta completa e direta de uma vez só!
 - Se às 16h não der para os dois com o mesmo barbeiro, diga na hora: "Às 16h no sábado com o Bruno só tenho 1 vaga livre. Mas tenho 15h15 com a Nati para os dois, ou domingo 10h com o Bruno. Qual fica melhor?"
 
-5. CHAME preparar_agendamento IMEDIATAMENTE NO PRIMEIRO TURNO:
+5. CHAME preparar_agendamento IMEDIATAMENTE NO PRIMEIRO TURNO + OFEREÇA O LINK DA AGENDA ONLINE:
 - Se o cliente já indicou dia/data + horário + barbeiro ou vaga livre: CHAME preparar_agendamento IMEDIATAMENTE no primeiro turno! Não perca tempo fazendo perguntas retóricas ou chamando apenas consulta.
+- Se o cliente ainda não definiu dia/horário, pergunte de imediato a data e hora desejada (ou mostre até 3 horários livres informando o barbeiro de cada opção: Dino, Bruno ou Nati; NUNCA diga "com qualquer profissional disponível") e envie também o link direto da agenda para o próprio cliente visualizar os horários e agendar sozinho se preferir (Geral: https://kytto.com.br/agendar/dino | Dino: https://kytto.com.br/agendar/dino/dino | Bruno: https://kytto.com.br/agendar/dino/bruno | Nati: https://kytto.com.br/agendar/dino/nati).
 - Quando você tiver oferecido opções de horários (ex: "Tenho 15h15 ou 16h45") e o cliente escolher ("15h15", "a primeira", "pode ser às 16h45", "fechado", "sim", "17h", "bora"): CHAME preparar_agendamento NO MESMO INSTANTE! O sistema já envia o resumo oficial com a instrução de confirmação ("Responda SIM para confirmar").
 - Se o cliente já tem cadastro ou nome no histórico (Rodrigo, Tiago, Rogerio e clientes habituais): NUNCA pergunte "qual seu nome?". Use o nome já conhecido no customerName.
 - Quando pedir múltiplos serviços ("corte e barba", "cabelo e barba", "corte e sobrancelha"): passe o serviço principal e os demais em extraServiceIds para encaixe em sequência automática.

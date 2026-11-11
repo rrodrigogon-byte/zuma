@@ -6,8 +6,8 @@ import { provisionarEquipeDino, DINO_EMPRESA_CANONICA } from '../dino-equipe-see
 import { availability } from './barbershop-agenda.js';
 import { declineWithNewRequest, formatForWhatsapp } from './whatsapp-ai-intents.js';
 import { withPendingReminder, presenceConfirmIntent } from './whatsapp-ai.js';
-import { personaSystemBlock, resolvePersona } from './whatsapp-ai-persona.js';
-import { normalizeAgendaTime, matchAgendaSlot } from './whatsapp-ai-normalize.js';
+import { personaSystemBlock, personaGreeting, resolvePersona } from './whatsapp-ai-persona.js';
+import { normalizeAgendaTime, matchAgendaSlot, obterLinkAgendaDino, withSelfBookingAgendaOption, extractFastScheduleChoice } from './whatsapp-ai-normalize.js';
 import { servicosEquivalentes } from './whatsapp-ai-tools.js';
 
 provisionarEquipeDino();
@@ -98,4 +98,52 @@ test('Auditoria Conversas 10/11 — 8. Persona proíbe repetir "Opa, [Nome]!" e 
   assert.match(prompt, /PROIBIDO repetir "Opa, \[Nome\]!"/);
   assert.match(prompt, /PROIBIDO escrever "com qualquer profissional disponível"/);
   assert.match(prompt, /Ex-profissionais que NÃO trabalham mais na Barbearia Dino/i);
+});
+
+test('link direto da agenda online por barbeiro e geral (obterLinkAgendaDino)', () => {
+  assert.equal(obterLinkAgendaDino({ professionalIdOrName: 'Bruno Mendes Pedroso' }), 'https://kytto.com.br/agendar/dino/bruno');
+  assert.equal(obterLinkAgendaDino({ professionalIdOrName: 'Nati' }), 'https://kytto.com.br/agendar/dino/nati');
+  assert.equal(obterLinkAgendaDino({ professionalIdOrName: 'Dino' }), 'https://kytto.com.br/agendar/dino/dino');
+  assert.equal(obterLinkAgendaDino({ professionalIdOrName: 'Ester' }), 'https://kytto.com.br/agendar/dino/ester');
+  assert.equal(obterLinkAgendaDino({ professionalIdOrName: 'qualquer' }), 'https://kytto.com.br/agendar/dino');
+  assert.equal(obterLinkAgendaDino({ professionalIdOrName: 'Bruno ou Nati' }), 'https://kytto.com.br/agendar/dino');
+});
+
+test('withSelfBookingAgendaOption inclui link da agenda do profissional e pergunta data/hora quando necessário', () => {
+  const rNati = withSelfBookingAgendaOption(
+    'Para corte amanhã, quarta 11/11, tenho às 14h15, 14h30 ou 14h45 com a Nati, por R$ 100. Qual desses horários fica melhor pra você?',
+    { userText: 'Com qual barbeiro?', isBarbershop: true }
+  );
+  assert.match(rNati, /https:\/\/kytto\.com\.br\/agendar\/dino\/nati/);
+
+  const rBruno = withSelfBookingAgendaOption(
+    'Tenho vaga com o Bruno hoje às 18h30',
+    { userText: 'Quero cortar com o Bruno', isBarbershop: true }
+  );
+  assert.match(rBruno, /Qual dia e horário fica melhor pra você\?/);
+  assert.match(rBruno, /https:\/\/kytto\.com\.br\/agendar\/dino\/bruno/);
+
+  const rConfirm = withSelfBookingAgendaOption(
+    'Perfeito! Confere pra mim: Corte Masculino com Nati para Maneco.\n👉 Responda *SIM* para confirmar, ou *NÃO* para mudar.',
+    { userText: 'Quero as 14 e 15', isBarbershop: true, hasPendingAction: true }
+  );
+  assert.doesNotMatch(rConfirm, /agendar\/dino/);
+});
+
+test('atalho determinístico ultrarrápido (extractFastScheduleChoice): reconhece "Quero as 14 e 15" após oferta de horários', () => {
+  const lastAss = 'Para corte, amanhã, quarta 11/11, tenho às 14h15, 14h30 ou 14h45 com a Nati, por R$ 100. Qual desses horários fica melhor pra você?';
+  const choice = extractFastScheduleChoice('Quero as 14 e 15', lastAss, { now: new Date('2026-11-10T22:00:00Z') });
+  assert.deepEqual(choice, {
+    servico: 'Corte',
+    profissional: 'Nati',
+    data: '2026-11-11',
+    horario: '14:15',
+  });
+});
+
+test('saudação inicial já pergunta dia/hora e envia o link direto da agenda em <= 120 chars', () => {
+  const p = resolvePersona({ persona: { id: 'trex' } }, {});
+  const msg = personaGreeting(p, { text: 'Oi, boa tarde', seed: 's1', customerName: 'Maneco' });
+  assert.ok(msg.length <= 120, `tamanho ${msg.length} > 120: ${msg}`);
+  assert.match(msg, /https:\/\/kytto\.com\.br\/agendar\/dino/);
 });

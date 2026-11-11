@@ -349,3 +349,141 @@ export function cleanCustomerDisplayName(rawName, { firstNameOnly = false } = {}
     return word.split('-').map((part) => part ? part.charAt(0).toUpperCase() + part.slice(1) : part).join('-')
   }).join(' ')
 }
+
+
+export const AGENDA_PUBLICA_DINO_BASE = 'https://kytto.com.br/agendar/dino'
+
+/**
+ * Retorna o link direto da agenda pública online (geral ou exclusiva do profissional).
+ */
+export function obterLinkAgendaDino({ professionalIdOrName = '', date = '', serviceIdOrName = '' } = {}) {
+  const p = String(professionalIdOrName || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim()
+  let slugProf = ''
+  if (p && p !== 'qualquer' && !p.includes(' ou ')) {
+    if (/\b(dino|guilherme|prof-mtj67o7r-001)\b/.test(p)) slugProf = 'dino'
+    else if (/\b(bruno|mendes|prof-mtj69hhx-002)\b/.test(p)) slugProf = 'bruno'
+    else if (/\b(nati|natani|naty|dobler|prof-mv1bx3sc-011)\b/.test(p)) slugProf = 'nati'
+    else if (/\b(ester|steffany|prof-mv1a1o0o-010)\b/.test(p)) slugProf = 'ester'
+  }
+  const base = slugProf ? `${AGENDA_PUBLICA_DINO_BASE}/${slugProf}` : AGENDA_PUBLICA_DINO_BASE
+  const params = []
+  if (/^\d{4}-\d{2}-\d{2}$/.test(String(date || '').trim())) {
+    params.push(`data=${encodeURIComponent(String(date).trim())}`)
+  }
+  if (serviceIdOrName && String(serviceIdOrName).trim().length <= 40) {
+    params.push(`servico=${encodeURIComponent(String(serviceIdOrName).trim())}`)
+  }
+  return params.length ? `${base}?${params.join('&')}` : base
+}
+
+/**
+ * Garante que respostas sobre horários/agendamento tragam a opção do link direto da agenda
+ * para o próprio cliente visualizar os horários do profissional e agendar sozinho se preferir.
+ */
+export function withSelfBookingAgendaOption(replyText, { userText = '', toolResults = [], isBarbershop = true, hasPendingAction = false } = {}) {
+  const base = String(replyText || '').trim()
+  if (!base || !isBarbershop || hasPendingAction) return base
+  if (/https?:\/\/[^\s]*\/agendar\//i.test(base)) return base
+  if (/c[oó]digo.*confirmad|agendamento confirmado|cancelamento confirmado|remarca[cç][aã]o confirmada|responda\s+\*?sim\*?/i.test(base)) {
+    return base
+  }
+
+  const combined = `${userText} ${base}`.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+  const temToolAgenda = Array.isArray(toolResults) && toolResults.some((r) => r && (Array.isArray(r.horariosDisponiveis) || Array.isArray(r.opcoes) || r.linkAgenda))
+  const falaDeAgenda = temToolAgenda || /\b(agendar|agenda|horario|horarios|vaga|vagas|corte|cortar|barba|disponibilidade|marcar|manha|tarde|noite|amanha|hoje)\b/.test(combined)
+  if (!falaDeAgenda) return base
+
+  const mencoes = []
+  if (/\b(bruno|mendes)\b/.test(combined)) mencoes.push({ nome: 'do Bruno', slug: 'bruno' })
+  if (/\b(nati|natani|naty)\b/.test(combined)) mencoes.push({ nome: 'da Nati', slug: 'nati' })
+  if (/\b(dino|guilherme)\b/.test(combined) && !/barbearia dino|trex da dino|t-rex da dino/.test(combined)) {
+    mencoes.push({ nome: 'do Dino', slug: 'dino' })
+  }
+  if (/\b(ester|steffany)\b/.test(combined)) mencoes.push({ nome: 'da Ester', slug: 'ester' })
+
+  const unico = mencoes.length === 1 ? mencoes[0] : null
+  const link = unico ? `${AGENDA_PUBLICA_DINO_BASE}/${unico.slug}` : AGENDA_PUBLICA_DINO_BASE
+  const rotulo = unico ? `ver a agenda ${unico.nome} e agendar direto` : 'ver a agenda completa e agendar direto'
+
+  let textoFinal = base
+  if (!textoFinal.includes('?')) {
+    textoFinal = `${textoFinal} Qual dia e horário fica melhor pra você?`
+  }
+  return `${textoFinal}\n📅 Se preferir ${rotulo}: ${link}`
+}
+
+/**
+ * Detecta de forma determinística (em < 1ms) quando o cliente escolheu um horário que
+ * acabou de ser oferecido pelo T-Rex (ex.: "Quero as 14 e 15", "14:15", "pode ser às 14h30").
+ */
+export function extractFastScheduleChoice(userText, lastAssistantText, { now = new Date() } = {}) {
+  const rawUser = String(userText || '').trim()
+  const rawAssistant = String(lastAssistantText || '').trim()
+  if (!rawUser || !rawAssistant || rawUser.length > 80 || rawUser.includes('?')) return null
+  if (/\b(cancelar|desmarcar|remarcar|nao|não|outro dia|outra data)\b/i.test(rawUser)) return null
+
+  const slot = normalizeAgendaTime(rawUser)
+  if (!slot) return null
+
+  const [hh, mm] = slot.split(':')
+  const hNum = Number(hh)
+  const slotPatterns = [
+    slot,
+    `${hNum}:${mm}`,
+    mm === '00' ? `${hNum}h` : `${hNum}h${mm}`,
+    mm === '00' ? `${hh}h` : `${hh}h${mm}`,
+  ]
+  const assistantLower = rawAssistant.toLowerCase()
+  const offeredInAssistant = slotPatterns.some((pat) => {
+    const idx = assistantLower.indexOf(pat.toLowerCase())
+    if (idx < 0) return false
+    const after = assistantLower.slice(idx + pat.length, idx + pat.length + 2)
+    return !/^\d/.test(after)
+  })
+  if (!offeredInAssistant) return null
+
+  const combined = `${rawAssistant} ${rawUser}`.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+  let servico = 'Corte'
+  if (/\bcorte\s+e\s+barba\b|\bcombo\b/.test(combined)) servico = 'Corte e barba'
+  else if (/\bbarba\b/.test(combined) && !/\bcorte\b/.test(combined)) servico = 'Barba'
+  else if (/\bsobrancelha\b/.test(combined)) servico = 'Sobrancelha'
+
+  let profissional = 'qualquer'
+  const userNorm = rawUser.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+  if (/\bbruno\b/.test(userNorm)) profissional = 'Bruno'
+  else if (/\bnati|natani|naty\b/.test(userNorm)) profissional = 'Nati'
+  else if (/\bdino\b/.test(userNorm)) profissional = 'Dino'
+  else {
+    const profsInAss = []
+    if (/\bbruno\b/.test(combined)) profsInAss.push('Bruno')
+    if (/\b(nati|natani|naty)\b/.test(combined)) profsInAss.push('Nati')
+    if (/\bdino\b/.test(combined) && !/barbearia dino|t-rex da dino|trex da dino/.test(combined)) profsInAss.push('Dino')
+    if (profsInAss.length === 1) profissional = profsInAss[0]
+  }
+
+  let data = ''
+  const isoMatch = rawAssistant.match(/\b(20\d{2}-\d{2}-\d{2})\b/)
+  const brMatch = rawAssistant.match(/\b(\d{1,2})\/(\d{1,2})(?:\/(20\d{2}))?\b/)
+  const baseDate = new Date(now.valueOf() - 4 * 3600 * 1000)
+  const year = baseDate.getUTCFullYear()
+  if (isoMatch) {
+    data = isoMatch[1]
+  } else if (brMatch) {
+    const d = String(brMatch[1]).padStart(2, '0')
+    const m = String(brMatch[2]).padStart(2, '0')
+    const y = brMatch[3] || String(year)
+    data = `${y}-${m}-${d}`
+  } else if (/\bamanha\b/.test(combined)) {
+    const am = new Date(baseDate.valueOf() + 86400000)
+    data = am.toISOString().slice(0, 10)
+  } else if (/\bhoje\b/.test(combined)) {
+    data = baseDate.toISOString().slice(0, 10)
+  }
+  if (!data) return null
+
+  return { servico, profissional, data, horario: slot }
+}

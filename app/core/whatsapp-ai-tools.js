@@ -9,7 +9,7 @@ import { quoteAvailableShipping } from './commerce-shipping.js';
 import { requiresPickupOnly, PICKUP_ONLY_ERROR_CODE } from './commerce-pickup-rules.js';
 import { productDetails, productCard } from './whatsapp-product-card.js';
 import { createPaymentAttempt, publicPaymentMethods } from './payment-adapters.js';
-import { cleanCustomerDisplayName, formatPersonName, matchAgendaSlot, normalizeAgendaDate, serviceWithProfessional } from './whatsapp-ai-normalize.js';
+import { AGENDA_PUBLICA_DINO_BASE, cleanCustomerDisplayName, formatPersonName, matchAgendaSlot, normalizeAgendaDate, obterLinkAgendaDino, serviceWithProfessional } from './whatsapp-ai-normalize.js';
 // Agenda única: quando a empresa usa a agenda da barbearia (a do admin e do link
 // público), a IA lê e grava nela; senão segue o caminho PostgreSQL antigo.
 import {
@@ -686,7 +686,17 @@ async function toolServices(context) {
 }
 
 async function toolProfessionals(context) {
-  return { ok: true, dataClassification: 'untrusted_business_data', profissionais: sanitizeToolData(await listSchedulingProfessionals(contextScope(context))) };
+  const lista = await listSchedulingProfessionals(contextScope(context));
+  const enriquecida = (Array.isArray(lista) ? lista : []).map((item) => ({
+    ...item,
+    linkAgenda: obterLinkAgendaDino({ professionalIdOrName: item.apelido || item.nome || item.id }),
+  }));
+  return {
+    ok: true,
+    dataClassification: 'untrusted_business_data',
+    profissionais: sanitizeToolData(enriquecida),
+    linkAgendaGeral: AGENDA_PUBLICA_DINO_BASE,
+  };
 }
 
 async function toolAvailability(context, args = {}) {
@@ -708,10 +718,13 @@ async function toolAvailability(context, args = {}) {
       duracaoTexto: `${Number(disponibilidade.service?.duracaoMinutos || 30)} min`,
       // Valor por horário calculado pelo sistema (regra do Dino: diurno x após 18h09).
       valoresPorHorario: Object.fromEntries((disponibilidade?.slots || []).slice(0, 40).map((time) => [time, brl(precoNoHorario(disponibilidade.service, disponibilidade.professional, time, servicesList))])),
+      linkAgenda: obterLinkAgendaDino({ professionalIdOrName: disponibilidade?.professional?.nome || args.professionalId }),
+      linkAgendaGeral: AGENDA_PUBLICA_DINO_BASE,
     }),
+    linkAgenda: obterLinkAgendaDino({ professionalIdOrName: disponibilidade?.professional?.nome || args.professionalId }),
     instrucao: ((disponibilidade?.slots || []).length > 0
-      ? `Se o horário pedido ESTIVER livre nos slots para ${dataFormatada}, chame preparar_agendamento IMEDIATAMENTE nesta mesma resposta para apresentar o resumo ao cliente sem enrolação. Se o horário pedido não estiver em slots, ofereça os 3 horários livres mais próximos dele em ${dataFormatada}, com o valor de cada um. Não pergunte período.`
-      : `Não há horários disponíveis para ${disponibilidade.professional?.nome || 'este profissional'} em ${dataFormatada}.`)
+      ? `Se o horário pedido ESTIVER livre nos slots para ${dataFormatada}, chame preparar_agendamento IMEDIATAMENTE nesta mesma resposta para apresentar o resumo ao cliente sem enrolação. Se o horário pedido não estiver em slots, ofereça os 3 horários livres mais próximos dele em ${dataFormatada} (sempre dizendo o barbeiro de cada horário pelo campo professionalByTime), pergunte qual data e hora fica melhor, e envie o link direto da agenda (${obterLinkAgendaDino({ professionalIdOrName: disponibilidade?.professional?.nome || args.professionalId })}) para o próprio cliente ver todos os horários e agendar sozinho se preferir.`
+      : `Não há horários disponíveis para ${disponibilidade.professional?.nome || 'este profissional'} em ${dataFormatada}. Envie também o link da agenda (${AGENDA_PUBLICA_DINO_BASE}) para ele escolher outro dia/barbeiro.`)
       + (disponibilidade?.bloqueio?.ativo ? ` ATENÇÃO: A agenda de ${disponibilidade.professional?.nome || 'profissional'} está BLOQUEADA em ${dataFormatada} (${disponibilidade.bloqueio.motivo || 'ausência/viagem'}). Avise com clareza e simpatia que a agenda está fechada em ${dataFormatada} e ofereça agendar em outra data (ou com outro barbeiro da equipe, como Bruno).` : ''),
   };
 }
@@ -972,6 +985,8 @@ async function toolNextSlots(context, args = {}) {
     })()),
     periodo: result.period,
     diasConsultados: result.searchedDays,
+    linkAgenda: obterLinkAgendaDino({ professionalIdOrName: args.professionalId }),
+    linkAgendaGeral: AGENDA_PUBLICA_DINO_BASE,
     instrucao: result.slots.length
       ? 'Ofereça exatamente 3 opções concretas (dia da semana + data + hora + profissional + valor) numa mensagem só, SEMPRE informando o nome do barbeiro disponível em cada opção (campo professional, ex.: "com o Bruno ou a Nati"). NUNCA diga "com qualquer profissional disponível". Fale em "horário extra"/"atendimento exclusivo noturno" só para opções com horarioExtra=true. Depois que o cliente escolher, use preparar_agendamento.'
       : 'Não há vaga no período. Ofereça ampliar o período/outro profissional ou entrar na lista de espera (entrar_lista_espera) para ser avisado se abrir horário.',

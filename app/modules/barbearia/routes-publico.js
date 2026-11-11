@@ -102,13 +102,15 @@ export function formatarCpf(cpf) {
 }
 
 function profissionalPublico(item) {
+  const nomeCurto = texto(item.apelido || item.nome, 100);
   return {
     id: item.id,
     nome: item.nome,
+    apelido: nomeCurto,
     especialidade: item.especialidade || 'Barbeiro',
     foto_emoji: texto(item.fotoEmoji, 8) || '✂️',
     foto_url: texto(item.fotoUrl, 500) || '',
-    slug: slug(item.nome) || item.id,
+    slug: slug(item.apelido || item.nome) || item.id,
   };
 }
 
@@ -126,7 +128,12 @@ router.get('/:slug', (req, res) => {
     const identidade = identidadePublica(req.params.slug);
     if (!identidade) return res.status(404).json({ ok: false, error: 'Estabelecimento não encontrado.' });
     const profissionais = barbearia.listarProfissionais(identidade.empresaId)
-      .filter((item) => item.ativo !== false)
+      .filter((item) => {
+        if (item.ativo === false || item.atendeCliente === false) return false;
+        const n = slug(item.nome || '');
+        if (n.includes('jhenyffer') || n.includes('joao-victor') || n.includes('david') || n.includes('amanda')) return false;
+        return true;
+      })
       .map(profissionalPublico);
     const servicos = barbearia.listarServicos(identidade.empresaId)
       .filter((item) => item.ativo !== false && item.permiteAgendamentoOnline !== false)
