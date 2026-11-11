@@ -8,7 +8,11 @@
 
 import * as caixaKytto from './caixa-diario-kytto.js';
 import * as barbeariaErpKytto from './barbearia-erp-kytto.js';
-import { isProdutoBebida } from './core/dino-regras-comissoes.js';
+import {
+  isProdutoBebida,
+  obterPercentualComissaoServico,
+  obterPercentualComissaoProduto,
+} from './core/dino-regras-comissoes.js';
 
 function formatarDataHora(iso) {
   if (!iso) return '—';
@@ -314,7 +318,11 @@ export function obterDetalhesCaixaOperacao(empresaId, caixaId, options = {}) {
       const profId = it.profissionalId || c.profissionalId || '__sem_profissional__';
       const prof = mapaProf[profId];
       const nomeProf = prof?.nome || (profId === '__sem_profissional__' ? 'Sem Barbeiro Definido' : 'Profissional');
-      const comissaoPercent = Number(prof?.comissaoPercentual ?? prof?.comissaoServicos ?? 50);
+      const comissaoPercent = obterPercentualComissaoServico(prof, null, profId);
+      const comissaoServItemPercent = obterPercentualComissaoServico(prof, it, profId);
+      const comissaoProdPadrao = profId === '__sem_profissional__'
+        ? 0
+        : Number(prof?.percentualComissaoProduto ?? prof?.comissaoProdutos ?? 10);
 
       if (!mapaComissoesProf[profId]) {
         mapaComissoesProf[profId] = {
@@ -325,7 +333,10 @@ export function obterDetalhesCaixaOperacao(empresaId, caixaId, options = {}) {
           totalFaturado: 0,
           totalDescontos: 0,
           comissaoPercent,
+          comissaoProdPercent: comissaoProdPadrao,
           valorComissao: 0,
+          valorComissaoServicos: 0,
+          valorComissaoProdutos: 0,
           quantidadeServicos: 0,
           quantidadeProdutos: 0,
         };
@@ -339,7 +350,7 @@ export function obterDetalhesCaixaOperacao(empresaId, caixaId, options = {}) {
 
       if (it.tipo === 'produto') {
         const isBebida = isProdutoBebida(it);
-        const comissaoProdPercent = isBebida ? 0 : Number(prof?.comissaoProdutos ?? 10);
+        const comissaoProdPercent = obterPercentualComissaoProduto(prof, it, profId);
         mapaComissoesProf[profId].totalProdutos = Number((mapaComissoesProf[profId].totalProdutos + subtotalItem).toFixed(2));
         mapaComissoesProf[profId].quantidadeProdutos += Number(it.quantidade || 1);
         if (isBebida) {
@@ -349,12 +360,14 @@ export function obterDetalhesCaixaOperacao(empresaId, caixaId, options = {}) {
           mapaComissoesProf[profId].totalRevenda = Number(((mapaComissoesProf[profId].totalRevenda || 0) + subtotalItem).toFixed(2));
           mapaComissoesProf[profId].quantidadeRevenda = (mapaComissoesProf[profId].quantidadeRevenda || 0) + Number(it.quantidade || 1);
           const valorComissaoProd = Number((subtotalItem * (comissaoProdPercent / 100)).toFixed(2));
+          mapaComissoesProf[profId].valorComissaoProdutos = Number(((mapaComissoesProf[profId].valorComissaoProdutos || 0) + valorComissaoProd).toFixed(2));
           mapaComissoesProf[profId].valorComissao = Number((mapaComissoesProf[profId].valorComissao + valorComissaoProd).toFixed(2));
         }
       } else {
         mapaComissoesProf[profId].totalServicos = Number((mapaComissoesProf[profId].totalServicos + subtotalItem).toFixed(2));
         mapaComissoesProf[profId].quantidadeServicos += Number(it.quantidade || 1);
-        const valorComissaoServ = Number((subtotalItem * (comissaoPercent / 100)).toFixed(2));
+        const valorComissaoServ = Number((subtotalItem * (comissaoServItemPercent / 100)).toFixed(2));
+        mapaComissoesProf[profId].valorComissaoServicos = Number(((mapaComissoesProf[profId].valorComissaoServicos || 0) + valorComissaoServ).toFixed(2));
         mapaComissoesProf[profId].valorComissao = Number((mapaComissoesProf[profId].valorComissao + valorComissaoServ).toFixed(2));
       }
 

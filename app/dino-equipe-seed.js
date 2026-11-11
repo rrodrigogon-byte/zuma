@@ -268,6 +268,31 @@ export function sanearProfissionaisEAgendamentosDino(estado, empId = DINO_EMPRES
     dinoCanonico.nomeCivil = 'Guilherme Cunha Martins';
   }
 
+  // 3b. Garantir que Nati (ativa ou histórica) tenha sempre percentualComissao = 40% e percentualComissaoProduto = 10%
+  for (const p of Object.values(estado.profissionais)) {
+    if (!p) continue;
+    const pNome = normalizar(p.nome);
+    const pApelido = normalizar(p.apelido);
+    if (pNome === 'nati' || pNome.includes('natani') || pApelido === 'nati') {
+      p.percentualComissao = 40;
+      p.comissaoPercentual = 40;
+      p.comissaoServicos = 40;
+      p.percentualComissaoProduto = Number(p.percentualComissaoProduto || 10);
+    }
+  }
+
+  // 3c. Alinhar fechadaEm de comandas finalizadas com dataAtendimento explícita (ex.: comandas de 02/11 lançadas em 07/11)
+  for (const cmd of Object.values(estado.comandas)) {
+    if (!cmd || cmd.status === 'cancelada') continue;
+    const dAtend = cmd.dataAtendimento ? String(cmd.dataAtendimento).slice(0, 10) : '';
+    if (/^\d{4}-\d{2}-\d{2}$/.test(dAtend) && (cmd.status === 'paga' || cmd.status === 'em_conta')) {
+      const dFech = cmd.fechadaEm ? String(cmd.fechadaEm).slice(0, 10) : '';
+      if (dFech !== dAtend) {
+        cmd.fechadaEm = `${dAtend}T12:00:00.000Z`;
+      }
+    }
+  }
+
   // 4. Atribuir profissional aos agendamentos que estavam sem profissionalId ou com ID inexistente
   const servicos = estado.servicos || {};
   const fallbackBrunoId = brunoCanonico?.id || 'prof-mtj69hhx-002';
@@ -381,7 +406,7 @@ export function provisionarEquipeDino({ commerceDb = null } = {}) {
             telefone: prof.telefone || membro.telefone,
             especialidade: prof.especialidade || membro.especialidade,
             atendeCliente,
-            percentualComissao: prof.percentualComissao ?? membro.comissaoServicos,
+            percentualComissao: ehNati ? 40 : (prof.percentualComissao ?? membro.comissaoServicos),
             percentualComissaoProduto: prof.percentualComissaoProduto ?? membro.comissaoProdutos,
             faixasComissaoServico: prof.faixasComissaoServico?.length ? prof.faixasComissaoServico : (membro.faixasComissaoServico || []),
             faixasComissaoProduto: prof.faixasComissaoProduto?.length ? prof.faixasComissaoProduto : (membro.faixasComissaoProduto || []),

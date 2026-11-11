@@ -517,6 +517,11 @@ export default function BarbeariaCaixaDetalhado({
                     <td style={{ padding: '10px 12px', textAlign: 'center' }}>{p.quantidadeProdutos}</td>
                     <td style={{ padding: '10px 12px', textAlign: 'right', color: '#475569' }}>
                       <div style={{ fontWeight: 600 }}>{moeda(p.totalProdutos)}</div>
+                      {Number(p.totalRevenda || 0) > 0 && (
+                        <div style={{ fontSize: 10, color: '#4f46e5', fontWeight: 700 }} title="Produtos cosméticos/revenda comissionados">
+                          🧴 {moeda(p.totalRevenda)} revenda ({p.comissaoProdPercent ?? 10}%)
+                        </div>
+                      )}
                       {Number(p.totalBebidas || 0) > 0 && (
                         <div style={{ fontSize: 10, color: '#059669', fontWeight: 700 }} title="Bebidas não geram comissão">
                           🍺 {moeda(p.totalBebidas)} bebidas (0%)
@@ -524,12 +529,24 @@ export default function BarbeariaCaixaDetalhado({
                       )}
                     </td>
                     <td style={{ padding: '10px 12px', textAlign: 'center' }}>
-                      <span style={{ background: '#e0f2fe', color: '#0369a1', padding: '2px 6px', borderRadius: 4, fontWeight: 700, fontSize: 11 }}>
-                        {p.comissaoPercent}%
-                      </span>
+                      <div style={{ display: 'inline-flex', flexDirection: 'column', gap: 2, alignItems: 'center' }}>
+                        <span style={{ background: '#e0f2fe', color: '#0369a1', padding: '2px 6px', borderRadius: 4, fontWeight: 700, fontSize: 11 }}>
+                          {p.comissaoPercent}% serv.
+                        </span>
+                        {Number(p.totalRevenda || 0) > 0 && (
+                          <span style={{ background: '#ede9fe', color: '#5b21b6', padding: '1px 5px', borderRadius: 4, fontWeight: 700, fontSize: 10 }}>
+                            {p.comissaoProdPercent ?? 10}% prod.
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 800, color: '#16a34a', fontSize: 14 }}>
-                      {moeda(p.valorComissao)}
+                      <div>{moeda(p.valorComissao)}</div>
+                      {Number(p.valorComissaoProdutos || 0) > 0 && (
+                        <div style={{ fontSize: 10, color: '#64748b', fontWeight: 600 }}>
+                          Serv: {moeda(p.valorComissaoServicos || 0)} + Prod: {moeda(p.valorComissaoProdutos || 0)}
+                        </div>
+                      )}
                     </td>
                   </tr>
                 ))}

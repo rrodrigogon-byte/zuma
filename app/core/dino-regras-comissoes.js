@@ -59,7 +59,9 @@ export function isProdutoBebida(item = {}) {
  */
 export function calcularComissaoItemProduto(item, prof = {}) {
   const isBebida = isProdutoBebida(item);
-  const subtotal = Number(item.subtotal || (Number(item.precoUnitario || item.preco || 0) * Number(item.quantidade || 1)));
+  const subtotal = (item && item.subtotal !== undefined && item.subtotal !== null && item.subtotal !== '')
+    ? Number(item.subtotal)
+    : (Number(item?.precoUnitario ?? item?.preco ?? 0) * Number(item?.quantidade ?? 1));
 
   if (isBebida) {
     return {
@@ -70,7 +72,7 @@ export function calcularComissaoItemProduto(item, prof = {}) {
     };
   }
 
-  const comissaoPercent = Number(item.comissaoPercentual ?? prof?.comissaoProdutos ?? prof?.percentualComissaoProduto ?? 10);
+  const comissaoPercent = Number(item?.comissaoPercentual ?? prof?.percentualComissaoProduto ?? prof?.comissaoProdutos ?? 10);
   const valorComissao = Number((subtotal * (comissaoPercent / 100)).toFixed(2));
 
   return {
@@ -79,4 +81,47 @@ export function calcularComissaoItemProduto(item, prof = {}) {
     percentualAplicado: comissaoPercent,
     valorComissao,
   };
+}
+
+/**
+ * Obtém o percentual de comissão de serviços configurado para o profissional
+ * respeitando `percentualComissao`, `comissaoPercentual`, `comissaoServicos` e exceções por serviço (`comissoesPorServico`).
+ */
+export function obterPercentualComissaoServico(prof = null, item = null, profId = '') {
+  if (!prof || profId === '__sem_profissional__') return 0;
+  const servicoId = item?.servicoId ? String(item.servicoId) : '';
+  if (servicoId && prof.comissoesPorServico && Object.prototype.hasOwnProperty.call(prof.comissoesPorServico, servicoId)) {
+    const exc = Number(prof.comissoesPorServico[servicoId]);
+    if (Number.isFinite(exc) && (exc > 0 || Number(item?.subtotal ?? item?.precoUnitario ?? 0) === 0)) {
+      return exc;
+    }
+  }
+  const nomeNorm = String(prof.nome || prof.apelido || '').toLowerCase().trim();
+  const raw = prof.percentualComissao ?? prof.comissaoPercentual ?? prof.comissaoServicos;
+  if (raw !== undefined && raw !== null && raw !== '') {
+    const val = Number(raw);
+    if (Number.isFinite(val)) {
+      if ((nomeNorm === 'nati' || nomeNorm.includes('natani')) && val === 50 && !prof.comissaoCustomizadaManual) {
+        return 40;
+      }
+      return val;
+    }
+  }
+  if (nomeNorm === 'nati' || nomeNorm.includes('natani')) return 40;
+  if (nomeNorm === 'ester' || nomeNorm === 'ster' || nomeNorm.includes('jhenyffer')) return 0;
+  return 50;
+}
+
+/**
+ * Obtém o percentual de comissão de produtos de revenda configurado para o profissional
+ */
+export function obterPercentualComissaoProduto(prof = null, item = null, profId = '') {
+  if (isProdutoBebida(item)) return 0;
+  if (!prof || profId === '__sem_profissional__') return 0;
+  const raw = item?.comissaoPercentual ?? prof.percentualComissaoProduto ?? prof.comissaoProdutos;
+  if (raw !== undefined && raw !== null && raw !== '') {
+    const val = Number(raw);
+    if (Number.isFinite(val)) return val;
+  }
+  return 10;
 }

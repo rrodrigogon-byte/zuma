@@ -3,7 +3,10 @@ import test from 'node:test';
 import {
   isProdutoBebida,
   calcularComissaoItemProduto,
+  obterPercentualComissaoServico,
+  obterPercentualComissaoProduto,
 } from './core/dino-regras-comissoes.js';
+import { calcularComissoesEstado } from './barbearia-erp-kytto.js';
 import { executeDinoReversal, createDinoReversalMemoryAdapter } from './core/dino-reversal-coordinator.js';
 
 test('isProdutoBebida identifica corretamente todas as bebidas e exclui cosmeticos', () => {
@@ -100,4 +103,78 @@ test('executeDinoReversal permite novo cancelamento se a tentativa anterior fico
 
   assert.equal(res.status, 'completed');
   assert.equal(res.actionId, 'act-cancel-cmdbar-mvvcv362-017-novo');
+});
+
+test('obterPercentualComissaoServico respeita percentualComissao=40 da Nati, 50 do Bruno/Dino e subtotal===0', () => {
+  const profNati = { id: 'prof-mv1bx3sc-011', nome: 'Nati', percentualComissao: 40, percentualComissaoProduto: 10 };
+  const profBruno = { id: 'prof-mtj69hhx-002', nome: 'Bruno Mendes Pedroso', percentualComissao: 50, percentualComissaoProduto: 10 };
+  const profDino = { id: 'prof-mtj67o7r-001', nome: 'Dino', percentualComissao: 50, percentualComissaoProduto: 10 };
+
+  assert.equal(obterPercentualComissaoServico(profNati, null, profNati.id), 40);
+  assert.equal(obterPercentualComissaoServico(profBruno, null, profBruno.id), 50);
+  assert.equal(obterPercentualComissaoServico(profDino, null, profDino.id), 50);
+  assert.equal(obterPercentualComissaoServico(null, null, '__sem_profissional__'), 0);
+
+  // Produto com subtotal === 0 (cortesia/pacote) não deve usar precoUnitario
+  const prodZero = calcularComissaoItemProduto({ nome: 'Pomada', precoUnitario: 90, quantidade: 1, subtotal: 0 }, profBruno);
+  assert.equal(prodZero.subtotal, 0);
+  assert.equal(prodZero.valorComissao, 0);
+  assert.equal(obterPercentualComissaoProduto(profNati, { nome: 'Cerveja Heineken', categoria: 'Bebidas & Bar' }, profNati.id), 0);
+  assert.equal(obterPercentualComissaoProduto(profDino, { nome: 'Defrisante', categoria: 'Revenda' }, profDino.id), 10);
+});
+
+test('calcularComissoesEstado considera dataAtendimento (ex.: 02/11 lancado em 07/11) e respeita subtotal===0 e Nati 40%', () => {
+  const estado = {
+    profissionais: {
+      'prof-mtj69hhx-002': { id: 'prof-mtj69hhx-002', nome: 'Bruno Mendes Pedroso', percentualComissao: 50, percentualComissaoProduto: 10, ativo: true },
+      'prof-mv1bx3sc-011': { id: 'prof-mv1bx3sc-011', nome: 'Nati', percentualComissao: 40, percentualComissaoProduto: 10, ativo: true },
+    },
+    comandas: {
+      'cmd-02-11': {
+        id: 'cmd-02-11',
+        empresaId: 'emp-1',
+        status: 'paga',
+        dataAtendimento: '2026-11-02',
+        fechadaEm: '2026-11-07T19:11:41.567Z',
+        profissionalId: 'prof-mtj69hhx-002',
+        desconto: 0,
+        itens: [
+          { tipo: 'servico', nome: 'BARBA PREMIUM', precoUnitario: 100, quantidade: 1, subtotal: 0, profissionalId: 'prof-mtj69hhx-002' },
+          { tipo: 'pacote', nome: 'Pacote 4 Procedimentos', precoUnitario: 300, quantidade: 1, subtotal: 300, profissionalId: 'prof-mtj69hhx-002' },
+          { tipo: 'servico', nome: 'Selagem', precoUnitario: 800, quantidade: 1, subtotal: 800, profissionalId: 'prof-mtj69hhx-002' },
+        ],
+        pagamentos: [{ meio: 'pix', valor: 1100 }],
+      },
+      'cmd-03-11-nati': {
+        id: 'cmd-03-11-nati',
+        empresaId: 'emp-1',
+        status: 'paga',
+        dataAtendimento: '2026-11-03',
+        fechadaEm: '2026-11-03T12:00:00.000Z',
+        profissionalId: 'prof-mv1bx3sc-011',
+        desconto: 0,
+        itens: [
+          { tipo: 'servico', nome: 'Procedimentos Nati', precoUnitario: 1090, quantidade: 1, subtotal: 1090, profissionalId: 'prof-mv1bx3sc-011' },
+          { tipo: 'produto', nome: 'Cerveja Heineken Long Neck 330ml', categoria: 'Bebidas & Bar', precoUnitario: 12, quantidade: 1, subtotal: 12, profissionalId: 'prof-mv1bx3sc-011' },
+        ],
+        pagamentos: [{ meio: 'credito', valor: 1102 }],
+      },
+    },
+    agendamentos: {},
+    vendasRevenda: {},
+    configuracao: { taxasPagamento: {} },
+  };
+
+  const res02 = calcularComissoesEstado(estado, 'emp-1', { data: '2026-11-02' });
+  const bruno02 = res02.porProfissional.find((p) => p.profissionalId === 'prof-mtj69hhx-002');
+  assert.equal(bruno02.brutoServicos, 1100);
+  assert.equal(bruno02.comissaoServicos, 550);
+
+  const res03 = calcularComissoesEstado(estado, 'emp-1', { data: '2026-11-03' });
+  const nati03 = res03.porProfissional.find((p) => p.profissionalId === 'prof-mv1bx3sc-011');
+  assert.equal(nati03.percentualComissao, 40);
+  assert.equal(nati03.brutoServicos, 1090);
+  assert.equal(nati03.comissaoServicos, 436);
+  assert.equal(nati03.comissaoProdutos, 0);
+  assert.equal(nati03.repasse, 436);
 });

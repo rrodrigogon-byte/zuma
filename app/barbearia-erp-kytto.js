@@ -2999,7 +2999,9 @@ export function alterarItemComandaFinalizada(empresaId, comandaId, itemId, dados
     : atual.precoUnitario;
 
   const valorUnitarioAntigo = Number(atual.precoUnitario || atual.preco || 0);
-  const subtotalAntigoItem = Number(atual.subtotal || (valorUnitarioAntigo * (atual.quantidade || 1)));
+  const subtotalAntigoItem = (atual.subtotal !== undefined && atual.subtotal !== null && atual.subtotal !== '')
+    ? Number(atual.subtotal)
+    : (valorUnitarioAntigo * (atual.quantidade || 1));
   const subtotalNovoItem = atual.coberturaPlano ? 0 : dinheiro(precoUnitario * quantidade);
 
   const subtotalAtual = Number((comanda.itens || []).reduce((soma, item) => soma + Number(item.subtotal || 0), 0).toFixed(2));
@@ -4646,15 +4648,34 @@ export function calcularComissoesEstado(estado, empresaId, { data = '', lojaId =
   const comandasTodas = Object.values(estado.comandas || {})
     .filter(filtrarLoja)
     .filter((item) => capturedOnly ? item.status === 'paga' : (item.status === 'paga' || item.status === 'em_conta'));
+  const dataOperacionalComanda = (comanda) => {
+    const dAtend = comanda?.dataAtendimento ? String(comanda.dataAtendimento).slice(0, 10) : '';
+    if (/^\d{4}-\d{2}-\d{2}$/.test(dAtend)) return dAtend;
+    return diaOperacional(comanda?.fechadaEm || comanda?.atualizadoEm || comanda?.criadoEm);
+  };
+  const obterSubtotalItem = (item) => {
+    if (item && item.subtotal !== undefined && item.subtotal !== null && item.subtotal !== '') {
+      const val = Number(item.subtotal);
+      if (Number.isFinite(val)) return Number(val.toFixed(2));
+    }
+    return Number((Number(item?.precoUnitario ?? item?.preco ?? 0) * Number(item?.quantidade ?? 1)).toFixed(2));
+  };
   const comandasPagas = comandasTodas
-    .filter((item) => noFiltro(diaOperacional(item.fechadaEm || item.atualizadoEm)));
+    .filter((item) => noFiltro(dataOperacionalComanda(item)));
   // Atendimento que virou comanda conta só pela comanda, mesmo que ela seja paga em outro dia.
   const agendamentosEmComanda = new Set(comandasTodas.flatMap((item) => [item.agendamentoId, ...(item.itens || []).map(i => i.agendamentoId)]).filter(Boolean));
   // Desconto da comanda reduz a base de comissão proporcionalmente em cada item.
   const fatorDesconto = (comanda) => {
-    const subtotal = (comanda.itens || []).reduce((soma, item) => soma + Number(item.subtotal || 0), 0);
+    const subtotal = (comanda.itens || []).reduce((soma, item) => soma + obterSubtotalItem(item), 0);
+    if (subtotal <= 0) return 1;
     const desconto = Math.min(subtotal, Math.max(0, Number(comanda.desconto || 0)));
-    return subtotal > 0 ? (subtotal - desconto) / subtotal : 1;
+    const somaPags = (comanda.pagamentos || [])
+      .filter((p) => !p.estornado && !p.cancelado)
+      .reduce((s, p) => s + Number(p.valor || 0), 0);
+    const liquidoRef = (somaPags > 0 && somaPags < subtotal && desconto === 0)
+      ? somaPags
+      : Math.max(0, subtotal - desconto);
+    return liquidoRef / subtotal;
   };
   // Comanda paga com mais de um meio: a taxa de maquininha é rateada pelo valor de cada meio.
   const rateioPagamentos = (comanda) => {
@@ -4665,7 +4686,7 @@ export function calcularComissoesEstado(estado, empresaId, { data = '', lojaId =
   // Parte do item no valor da comanda: a tarifa fixa da maquininha é cobrada uma vez por
   // pagamento, então cada item carrega só a sua parte dela.
   const pesoNaComanda = (comanda, subtotalItem) => {
-    const subtotal = (comanda.itens || []).reduce((soma, item) => soma + Number(item.subtotal || 0), 0);
+    const subtotal = (comanda.itens || []).reduce((soma, item) => soma + obterSubtotalItem(item), 0);
     return subtotal > 0 ? Math.max(0, Math.min(1, Number(subtotalItem || 0) / subtotal)) : 1;
   };
   // O cálculo exportado é puro: o wrapper legado injeta a leitura do ledger.
@@ -4689,13 +4710,17 @@ export function calcularComissoesEstado(estado, empresaId, { data = '', lojaId =
     .filter((item) => noFiltro(diaOperacional(item.criadoEm)));
   const servicosComanda = comandasPagas.flatMap((comanda) => (comanda.itens || [])
     .filter((item) => ['servico', 'pacote', 'plano', 'outro', 'avulso'].includes(item.tipo))
-    .map((item) => ({ ...item, origemTipo: 'comanda', origemId: comanda.id, clienteNome: comanda.clienteNome || '', dataRef: diaOperacional(comanda.fechadaEm || comanda.atualizadoEm), nomeItem: item.nome, profissionalId: item.profissionalId || comanda.profissionalId, valorRecebido: dinheiro(Number(item.subtotal || 0) * fatorDesconto(comanda)), valor: dinheiro(Number(item.subtotal || 0) * fatorDesconto(comanda)), pesoNaComanda: pesoNaComanda(comanda, Number(item.subtotal || 0)), rateio: rateioPagamentos(comanda), meioPagamento: comanda.pagamentos?.find((pagamento) => pagamento.meio !== 'conta')?.meio || comanda.pagamento })));
+    .map((item) => {
+      const subBruto = obterSubtotalItem(item);
+      const valLiq = dinheiro(subBruto * fatorDesconto(comanda));
+      return { ...item, origemTipo: 'comanda', origemId: comanda.id, clienteNome: comanda.clienteNome || '', dataRef: dataOperacionalComanda(comanda), nomeItem: item.nome, profissionalId: item.profissionalId || comanda.profissionalId, valorRecebido: valLiq, valor: valLiq, pesoNaComanda: pesoNaComanda(comanda, subBruto), rateio: rateioPagamentos(comanda), meioPagamento: comanda.pagamentos?.find((pagamento) => pagamento.meio !== 'conta')?.meio || comanda.pagamento };
+    }));
   const produtosComanda = comandasPagas.map((comanda) => {
     const itensProduto = (comanda.itens || []).filter((item) => item.tipo === 'produto');
     const itensComissionaveis = itensProduto.filter((item) => !isProdutoBebida(item));
     const itensBebidas = itensProduto.filter((item) => isProdutoBebida(item));
-    const totalComissionavel = dinheiro(itensComissionaveis.reduce((soma, item) => soma + Number(item.subtotal || 0), 0) * fatorDesconto(comanda));
-    const totalBebidas = dinheiro(itensBebidas.reduce((soma, item) => soma + Number(item.subtotal || 0), 0) * fatorDesconto(comanda));
+    const totalComissionavel = dinheiro(itensComissionaveis.reduce((soma, item) => soma + obterSubtotalItem(item), 0) * fatorDesconto(comanda));
+    const totalBebidas = dinheiro(itensBebidas.reduce((soma, item) => soma + obterSubtotalItem(item), 0) * fatorDesconto(comanda));
     return {
       id: comanda.id,
       clienteNome: comanda.clienteNome || '',
@@ -4707,11 +4732,11 @@ export function calcularComissoesEstado(estado, empresaId, { data = '', lojaId =
       itensBebidas,
       total: totalComissionavel,
       totalBebidas,
-      totalGeralProdutos: dinheiro(itensProduto.reduce((soma, item) => soma + Number(item.subtotal || 0), 0) * fatorDesconto(comanda)),
+      totalGeralProdutos: dinheiro(itensProduto.reduce((soma, item) => soma + obterSubtotalItem(item), 0) * fatorDesconto(comanda)),
       pagamento: { meioPagamento: comanda.pagamentos?.find((pagamento) => pagamento.meio !== 'conta')?.meio || comanda.pagamento },
       rateio: rateioPagamentos(comanda),
-      pesoNaComanda: pesoNaComanda(comanda, itensProduto.reduce((soma, item) => soma + Number(item.subtotal || 0), 0)),
-      criadoEm: comanda.fechadaEm || comanda.atualizadoEm,
+      pesoNaComanda: pesoNaComanda(comanda, itensProduto.reduce((soma, item) => soma + obterSubtotalItem(item), 0)),
+      criadoEm: comanda.dataAtendimento ? `${dataOperacionalComanda(comanda)}T12:00:00.000Z` : (comanda.fechadaEm || comanda.atualizadoEm),
     };
   });
   const vendas = [...vendasLegadas, ...produtosComanda.filter((item) => item.total > 0)];
