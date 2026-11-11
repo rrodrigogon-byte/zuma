@@ -368,3 +368,26 @@ Em **11/11/2026**, foi realizada uma auditoria profunda diretamente no banco de 
    - Cruzamento automático dos telefones de `whatsapp_ai_sessions` com o cadastro de clientes e comandas da Barbearia Dino, reduzindo para **zero (`sem_nome = 0`)** as sessões sem identificação na fila humana e devolvendo automaticamente ao agente **T-Rex (`status = ativo`)** as conversas esquecidas em `humano` há mais de 12 horas sem interação.
 
 ![Print 56 - Classificação Fiscal 100% Correta (222 de 222 sem erros ou avisos)](prints/56-fiscal-classificacao-100-ok-zero-erros-dino.png)
+
+
+---
+
+## 36. Conciliação 100% entre Total Faturado do Caixa e Rateio de Comissões dos Barbeiros (v40)
+
+### 36.1. Diagnóstico da Causa Raiz (Relato Operacional da Jhenyffer Andrade)
+Na conferência de dois caixas fechados na **Barbearia Dino** (`02/11/2026` e `03/11/2026`), a operadora Jhenyffer Andrade reportou que o **Total Faturado do Caixa** não batia com a soma de **Total Serviços + Total Produtos** na tabela de **Rateio de Comissões dos Barbeiros no Caixa**:
+1. **Caixa 1 (`02/11/2026` — `R$ 1.400,00` faturados vs `R$ 1.500,01` no rateio anterior, diferença de `+R$ 100,01`)**:
+   - **Causa raiz**: O módulo `app/dino-caixa-detalhes.js` calculava o valor do item com a expressão `Number(it.subtotal || (Number(it.precoUnitario || 0) * Number(it.quantidade || 1)))`. Em JavaScript, quando `it.subtotal === 0` (caso de procedimentos realizados dentro de pacotes ou clubes já pagos ou inclusos na venda do pacote na mesma comanda), o operador `||` tratava `0` como *falsy* e caía no fallback `precoUnitario * quantidade`!
+   - Na comanda **`#cmdbar-mw6s32p1-038` (Juliano Garcia)**, o cliente comprou o `Pacote 4 Procedimentos Premiun` (`subtotal: R$ 300,00`) e realizou no ato a `BARBA PREMIUM (BRUNO OU NATI)` inclusa no pacote (`precoUnitario: R$ 100,00`, **`subtotal: R$ 0,00`**). O bug somava `R$ 100,00` indevidos para o Bruno!
+   - Na comanda **`#cmdbar-mw6sghso-041` (Renan Sidoni)**, o cliente realizou `Barba Club` (`precoUnitario: R$ 0,01`, **`subtotal: R$ 0,00`**). O bug somava `R$ 0,01` indevido para o Bruno!
+2. **Caixa 2 (`03/11/2026` — `R$ 2.342,00` faturados vs `R$ 2.392,00` no rateio anterior, diferença de `+R$ 50,00`)**:
+   - **Causa raiz**: Na comanda **`#cmdbar-mwc672xf-074` (Alexson Dias)**, o serviço bruto era `R$ 150,00`, porém foi concedido um **desconto de `R$ 50,00`** na comanda (`total pago no caixa: R$ 100,00`). O rateio do caixa somava o valor bruto do item (`R$ 150,00`) sem deduzir o desconto da comanda (`- R$ 50,00`). O mesmo ocorria no caixa de `27/10/2026` na comanda `#cmdbar-mvvclzkv-009` (Heitor Campos, desconto de `R$ 9,00`).
+
+### 36.2. Correção Definitiva Implementada em Produção (`PRD`)
+- **Função `obterSubtotalBrutoItemComanda(it)` (`app/dino-caixa-detalhes.js`, `app/dino-bi.js`, `app/dino-dashboard.js`, `app/dino-metas-gamificacao.js`)**: Passou a verificar explicitamente `it.subtotal !== undefined && it.subtotal !== null`, preservando `0.00` sempre que um procedimento é coberto por pacote ou assinatura/clube.
+- **Rateio Proporcional Líquido Conciliado com o Caixa (`app/dino-caixa-detalhes.js`)**: Para cada comanda faturada no caixa, o valor dos itens é conciliado proporcionalmente ao montante efetivamente recebido na comanda (`pagoComandaNoCaixa / somaBrutaComanda`), deduzindo descontos concedidos na comanda e exibindo a indicação `(- R$ XX,XX desc. comanda)` na coluna do profissional. Comandas abertas ainda sem recebimento no caixa não inflam o rateio financeiro até serem pagas.
+- **Rodapé Oficial `TOTAL CONFERIDO NO CAIXA` (`web/src/pages/admin/BarbeariaCaixaDetalhado.jsx`)**: Adicionada linha totalizadora no rodapé da tabela de comissões exibindo a soma exata de `Qtd Serv.`, `Total Serviços`, `Qtd Prod.`, `Total Produtos`, o selo verde `✓ Serviços + Produtos = R$ ... (Bate 100% com Faturado)` e o `Total de Comissões a Pagar`.
+
+![Print 57 - Caixa 02/11/2026 Conciliado em R$ 1.400,00](prints/57-caixa-fechamento-conciliado-1400-comissoes.png)
+
+![Print 58 - Caixa 03/11/2026 Conciliado em R$ 2.342,00 com Desconto de Comanda Deduzido](prints/58-caixa-fechamento-conciliado-2342-comissoes.png)
