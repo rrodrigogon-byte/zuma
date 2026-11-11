@@ -185,6 +185,7 @@ export function formatActionSummary(summary) {
  */
 export function formatForWhatsapp(text) {
   let out = String(text ?? '').replace(/\r\n/g, '\n');
+  out = out.replace(/^\s*\[(?:Equipe da Loja|Atendente Humano|Cliente|T-Rex|Sistema)[^\]]*\]\s*/gim, '');
   out = out.replace(/^\s{0,3}#{1,6}\s+(.+)$/gm, '*$1*');                 // títulos → negrito
   out = out.replace(/\[([^\]\n]+)\]\((https?:\/\/[^)\s]+)\)/g, '$1: $2');  // [texto](link)
   out = out.replace(/__([^_\n]+?)__/g, '_$1_');                            // __x__ → _x_

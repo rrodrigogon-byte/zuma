@@ -1618,17 +1618,16 @@ export function presenceConfirmIntent(text) {
   const raw = String(text ?? '')
     .replace(/^\[(?:áudio|audio|mensagem de voz|foto|imagem|documento)(?:\s+transcrit[oa]|\s+enviad[oa])?\]\s*/i, '')
     .trim();
-  if (!raw || raw.length > 100) return false;
-  // Se o cliente respondeu com emoji de positivo/joinha/acordo (ex.: 👍, 🤝, 🙏, ✅, 💈, ✂️)
-  if (EMOJIS_CONFIRMACAO_PRESENCA.test(raw)) {
-    // Não pode conter negação ou dúvida
-    const semEmojis = plain(raw).replace(/[^a-z0-9 ]/g, ' ').trim();
-    if (/\b(nao|cancel|desmar|remarc|troc|mud|duvid|sera)\b/i.test(semEmojis)) return false;
+  if (!raw || raw.length > 100 || raw.includes('?')) return false;
+  const semEmojis = plain(raw).replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+  if (/\b(nao|cancel|desmar|remarc|reagend|imprevisto|reuniao|troc|mud|duvid|sera|outro|adiar|atras|depois|amanha|tarde|manha|noite|horario|vaga|marquei|agendei|dia\s+\d)\b/i.test(semEmojis)) return false;
+  // Se o cliente respondeu com emoji de positivo/joinha/acordo (ex.: 👍, 🤝, ✅, 💈, ✂️) e texto curto
+  if (EMOJIS_CONFIRMACAO_PRESENCA.test(raw) && semEmojis.split(' ').filter(Boolean).length <= 5) {
     return true;
   }
-  const value = plain(raw).replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+  const value = semEmojis;
   if (!value) return false;
-  return /^(confirmo|confirmando|confirmado|confirmada|confirmo presenca|confirmo sim|sim confirmo|confirma|confirma pra mim|pode confirmar|pode ser sim|sim pode ser|estarei ai|estarei la|vou sim|vou|vou comparecer|confirmadissimo|ok confirmado|ta confirmado|esta confirmado|confirmar|sim confirmar|pode deixar marcado|vou querer esse|deixa marcado|deixa esse|marca esse|pode marcar|to a caminho|estou a caminho|chegando|ja to chegando|ja cheguei|to chegando|corte cabelo e barba|corte e barba|corte|barba)( obrigad[oa])?$/.test(value)
+  return /^(confirmo|confirmando|confirmado|confirmada|confirmo presenca|confirmo sim|sim confirmo|confirma|confirma pra mim|pode confirmar|pode ser sim|sim pode ser|estarei ai|estarei la|vou sim|vou|vou comparecer|confirmadissimo|ok confirmado|ta confirmado|esta confirmado|confirmar|sim confirmar|pode deixar marcado|vou querer esse|deixa marcado|deixa esse|marca esse|pode marcar|to a caminho|estou a caminho|chegando|ja to chegando|ja cheguei|to chegando)( obrigad[oa])?$/.test(value)
     || /^(sim|ok|pode ser|com certeza|fechado|fechou|perfeito|beleza|blz|bora|show|tamo junto|combinado|certo|marcado|ta marcado|opa vou|partiu|fechado entao|combinado entao)( obrigad[oa])?$/.test(value);
 }
 

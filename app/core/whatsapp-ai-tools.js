@@ -1970,28 +1970,59 @@ async function toolPreparePromotion(context, args = {}) {
 // O cliente (e o modelo) usa o "Código" da confirmação (ex.: 5D0FDE32), não o id interno
 // (age-...). Em 30/10 "pode cancelar esse corte de amanhã" voltou "não encontrei" logo depois
 // de marcar. Aceita id, código ou, se o contato tem um único horário futuro, esse horário.
-export function findOwnAppointment(appointments = [], ref = '') {
+export function findOwnAppointment(appointments = [], ref = '', fallbackText = '') {
   const lista = (appointments || [])
     .filter((item) => !['cancelado', 'concluido', 'nao_compareceu'].includes(String(item?.status)))
     .sort((a, b) => new Date(a.dataHora).valueOf() - new Date(b.dataHora).valueOf());
   const alvo = String(ref || '').trim();
+  const getIsoDate = (item) => item.dataAgenda || (item.dataHora ? localDateIso(new Date(item.dataHora)) : '');
+  const matchPorDataOuDia = (texto) => {
+    const t = String(texto || '').trim().toLowerCase();
+    if (!t) return null;
+    const isoMatch = t.match(/(\d{4}-\d{2}-\d{2})/);
+    if (isoMatch) {
+      const m = lista.filter((it) => getIsoDate(it) === isoMatch[1]);
+      if (m.length === 1) return m[0];
+    }
+    const brMatch = t.match(/\b(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b/);
+    if (brMatch) {
+      const dd = brMatch[1].padStart(2, '0');
+      const mm = brMatch[2].padStart(2, '0');
+      const m = lista.filter((it) => getIsoDate(it).endsWith(`-${mm}-${dd}`));
+      if (m.length === 1) return m[0];
+    }
+    const diaMatch = t.match(/\bdia\s+(\d{1,2})\b/) || (/^\d{1,2}$/.test(t) ? [null, t] : null);
+    if (diaMatch) {
+      const dd = diaMatch[1].padStart(2, '0');
+      const m = lista.filter((it) => getIsoDate(it).endsWith(`-${dd}`));
+      if (m.length === 1) return m[0];
+    }
+    return null;
+  };
   if (alvo) {
     const norm = alvo.replace(/^#/, '').toLowerCase();
     const achado = lista.find((item) => item.id === alvo)
       || lista.find((item) => String(item.codigo || '').toLowerCase() === norm)
       || lista.find((item) => String(item.id || '').toLowerCase().endsWith(norm) && norm.length >= 4)
+      || matchPorDataOuDia(alvo)
       || lista.find((item) => String(item.servico?.nome || '').toLowerCase().includes(norm))
       || lista.find((item) => String(item.profissional?.nome || '').toLowerCase().includes(norm));
     if (achado) return achado;
+    return null;
   }
-  // Se não foi informada referência, prioriza o próximo agendamento cronológico ativo
-  return lista.length ? lista[0] : null;
+  if (fallbackText) {
+    const porTexto = matchPorDataOuDia(fallbackText);
+    if (porTexto) return porTexto;
+  }
+  // Só assume automaticamente quando há exatamente 1 horário futuro; com 2+, exige escolher qual
+  return lista.length === 1 ? lista[0] : null;
 }
 
 function appointmentNotFound(appointments = []) {
   const futuros = (appointments || []).filter((item) => !['cancelado', 'concluido', 'nao_compareceu'].includes(String(item?.status)));
   if (futuros.length > 1) {
-    return new WhatsappAiToolError(`o contato tem ${futuros.length} agendamentos: use consultar_meus_agendamentos e pergunte qual (dia, hora e serviço); depois chame de novo com o id`, 'APPOINTMENT_AMBIGUOUS');
+    const resumo = futuros.map((it) => `${it.id} (${it.dataAgenda || (it.dataHora ? localDateIso(new Date(it.dataHora)) : '')} às ${it.horaLocal || ''} - ${it.servico?.nome || 'Serviço'})`).join('; ');
+    return new WhatsappAiToolError(`o contato tem ${futuros.length} agendamentos futuros [${resumo}]: passe o appointmentId correspondente ao dia pedido pelo cliente ou pergunte qual deles deseja alterar/cancelar`, 'APPOINTMENT_AMBIGUOUS');
   }
   return new WhatsappAiToolError('agendamento não encontrado para este contato', 'APPOINTMENT_NOT_FOUND');
 }
@@ -2000,7 +2031,7 @@ async function toolPrepareReschedule(context, args = {}) {
   const scope = contextScope(context);
   const date = normalizeAgendaDate(args.date, localDateIso()) || cleanText(args.date, 10);
   const appointments = await listWhatsappCustomerAppointments(scope, { includePast: false, limit: 20, toleranceHours: 6 });
-  const appointment = findOwnAppointment(appointments, cleanText(args.appointmentId, 80));
+  const appointment = findOwnAppointment(appointments, cleanText(args.appointmentId, 80), context?.customerText || '');
   if (!appointment) throw appointmentNotFound(appointments);
   const appointmentId = appointment.id;
   const availability = await listSchedulingAvailability(scope, { serviceId: appointment.servico.id, professionalId: appointment.profissional.id, date });
@@ -2027,7 +2058,7 @@ async function toolPrepareCancellation(context, args = {}) {
   }
   const scope = contextScope(context);
   const appointments = await listWhatsappCustomerAppointments(scope, { includePast: false, limit: 20, toleranceHours: 6 });
-  const appointment = findOwnAppointment(appointments, cleanText(args.appointmentId, 80));
+  const appointment = findOwnAppointment(appointments, cleanText(args.appointmentId, 80), context?.customerText || '');
   if (!appointment) throw appointmentNotFound(appointments);
   const appointmentId = appointment.id;
   return savePreparedAction(scope, 'cancelamento', { appointmentId }, `Cancelamento de ${appointment.servico.nome} com ${appointment.profissional.nome}, ${appointment.dataAgenda && appointment.horaLocal ? friendlyWhen(appointment.dataAgenda, appointment.horaLocal) : new Intl.DateTimeFormat('pt-BR', { timeZone: AGENDA_TZ, dateStyle: 'short', timeStyle: 'short' }).format(new Date(appointment.dataHora))}.`);

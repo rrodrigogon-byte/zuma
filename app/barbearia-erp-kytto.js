@@ -1099,15 +1099,33 @@ export function resolverProfissionalIdSeguro(estado, profissionalId) {
 
 export function listarProfissionais(empresaId, { incluirInativos = false } = {}) {
   const est = estadoEmpresa(empresaId, false);
-  // Auto-recuperação garantida: Bruno Mendes Pedroso é barbeiro oficial titular ativo da Barbearia Dino
-  for (const p of Object.values(est.profissionais || {})) {
+  // Auto-recuperação garantida e deduplicação de Bruno (mantém apenas o registro canônico prof-mtj69hhx-002 ativo)
+  const brunosValidos = Object.values(est.profissionais || {}).filter((p) => {
     const n = String(p.nome || '').toLowerCase();
     const ap = String(p.apelido || '').toLowerCase();
-    if ((n.includes('bruno') || ap === 'bruno') && !n.includes('bruno rafael')) {
-      if (p.ativo === false || p.removidoEm || p.excluido) {
-        p.ativo = true;
-        p.removidoEm = null;
-        p.excluido = false;
+    return (n.includes('bruno') || ap === 'bruno') && !n.includes('bruno rafael');
+  });
+  if (brunosValidos.length > 0) {
+    const titular = brunosValidos.find((p) => p.id === 'prof-mtj69hhx-002')
+      || brunosValidos.find((p) => p.ativo !== false && !p.removidoEm && !p.excluido)
+      || brunosValidos[0];
+    if (titular.ativo === false || titular.removidoEm || titular.excluido) {
+      titular.ativo = true;
+      titular.removidoEm = null;
+      titular.excluido = false;
+    }
+    for (const dup of brunosValidos) {
+      if (dup.id !== titular.id) {
+        if (dup.ativo !== false || !dup.excluido) {
+          dup.ativo = false;
+          dup.excluido = true;
+          dup.removidoEm = dup.removidoEm || new Date().toISOString();
+        }
+        for (const ag of Object.values(est.agendamentos || {})) {
+          if (ag && ag.profissionalId === dup.id) {
+            ag.profissionalId = titular.id;
+          }
+        }
       }
     }
   }
@@ -4138,10 +4156,11 @@ function contextoDisponibilidadePublica(empresaId, dados = {}) {
   return { estado, dataAgenda, servico, lojaId, calendario, profissionais };
 }
 
-function disponibilidadeNoHorario(contexto, horaLocal, utcOffset) {
+function profissionaisDisponiveisNoHorario(contexto, horaLocal, utcOffset) {
   const { estado, dataAgenda, servico, lojaId, calendario, profissionais } = contexto;
   const dataHora = dataHoraPublica(dataAgenda, horaLocal, utcOffset);
-  if (new Date(dataHora).valueOf() < Date.now() + Number(calendario.antecedenciaMinutos || 0) * 60000) return null;
+  if (new Date(dataHora).valueOf() < Date.now() + Number(calendario.antecedenciaMinutos || 0) * 60000) return [];
+  const livres = [];
   for (const profissional of profissionais) {
     const duracaoMinutos = duracaoAtendimentoProfissional(servico, profissional, calendario);
     const candidato = {
@@ -4155,10 +4174,17 @@ function disponibilidadeNoHorario(contexto, horaLocal, utcOffset) {
     };
     try {
       validarCalendarioAgendamento(estado, candidato, profissional);
-      if (!verificarConflito(estado, candidato)) return { profissional, dataHora, duracaoMinutos };
+      if (!verificarConflito(estado, candidato)) {
+        livres.push({ profissional, dataHora, duracaoMinutos });
+      }
     } catch (_) {}
   }
-  return null;
+  return livres;
+}
+
+function disponibilidadeNoHorario(contexto, horaLocal, utcOffset) {
+  const livres = profissionaisDisponiveisNoHorario(contexto, horaLocal, utcOffset);
+  return livres[0] || null;
 }
 
 export function listarHorariosDisponiveis(empresaId, dados = {}) {
@@ -4177,8 +4203,16 @@ export function listarHorariosDisponiveis(empresaId, dados = {}) {
   const horarios = [];
   for (let minuto = abertura; minuto + duracao <= fechamento; minuto += intervalo) {
     const horario = horaPublica(minuto);
-    const livre = disponibilidadeNoHorario(contexto, horario, dados.utcOffset ?? dados.utc_offset);
-    horarios.push({ horario, disponivel: Boolean(livre) });
+    const livres = profissionaisDisponiveisNoHorario(contexto, horario, dados.utcOffset ?? dados.utc_offset);
+    const livre = livres[0] || null;
+    const nomesLivres = [...new Set(livres.map((item) => item.profissional.apelido || item.profissional.nome).filter(Boolean))];
+    horarios.push({
+      horario,
+      disponivel: Boolean(livre),
+      profissionalId: livre?.profissional?.id || null,
+      profissionalNome: nomesLivres.length > 1 ? nomesLivres.join(' ou ') : (nomesLivres[0] || null),
+      profissionaisDisponiveis: nomesLivres,
+    });
   }
   return horarios;
 }

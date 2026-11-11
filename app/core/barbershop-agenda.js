@@ -558,6 +558,27 @@ export async function availability(scope, input = {}) {
   } catch (erro) {
     throw traduzirErro(erro);
   }
+  const professionalByTime = {};
+  const professionalsByTime = {};
+  for (const item of horarios) {
+    if (item.disponivel && item.profissionalNome) {
+      professionalByTime[item.horario] = item.profissionalNome;
+    }
+    if (item.disponivel && Array.isArray(item.profissionaisDisponiveis) && item.profissionaisDisponiveis.length) {
+      professionalsByTime[item.horario] = item.profissionaisDisponiveis;
+    }
+  }
+  const nomesNoDia = [...new Set(Object.values(professionalsByTime).flat())];
+  const nomesHabilitados = (() => {
+    if (nomesNoDia.length) return nomesNoDia;
+    const hab = Array.isArray(servico.profissionaisIds) && servico.profissionaisIds.length
+      ? profs.filter((p) => p.ativo !== false && servico.profissionaisIds.includes(p.id))
+      : profs.filter((p) => p.ativo !== false);
+    return hab.map((p) => p.apelido || p.nome).filter(Boolean);
+  })();
+  const nomeProfissionalExibicao = profissional
+    ? (profissional.apelido || profissional.nome)
+    : (nomesHabilitados.length ? nomesHabilitados.join(' ou ') : 'Bruno ou Nati');
   const ehDino = barbearia.ehProfissionalDino(profissional) || String(servico?.nome || '').toLowerCase().includes('dino');
   const tabelaValores = ehDino ? {
     tipo: 'dino_24x7',
@@ -573,8 +594,10 @@ export async function availability(scope, input = {}) {
   return {
     date,
     service: { id: servico.id, nome: servico.nome, duracaoMinutos: Number(servico.duracaoMinutos || 0) || (barbearia.duracaoAtendimentoProfissional ? barbearia.duracaoAtendimentoProfissional(servico, profissional, barbearia.obterConfiguracao(empresa)) : 30), preco: Number(servico.preco || 0) },
-    professional: profissional ? { id: profissional.id, nome: profissional.nome, duracaoAtendimentoMinutos: profissional.duracaoAtendimentoMinutos || null } : { id: 'qualquer', nome: 'qualquer profissional disponível' },
+    professional: profissional ? { id: profissional.id, nome: profissional.nome, duracaoAtendimentoMinutos: profissional.duracaoAtendimentoMinutos || null } : { id: 'qualquer', nome: nomeProfissionalExibicao },
     slots: horarios.filter((item) => item.disponivel).map((item) => item.horario),
+    professionalByTime,
+    professionalsByTime,
     bloqueio: (() => {
       const bloqueios = barbearia.listarBloqueios(empresa, { data: date, profissionalId: profissional?.id, lojaId: scope.lojaId });
       const b = (bloqueios || []).find((item) => item.ativo !== false && (!item.profissionalId || item.profissionalId === profissional?.id));
