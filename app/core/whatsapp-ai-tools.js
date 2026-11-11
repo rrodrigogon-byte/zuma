@@ -2923,9 +2923,17 @@ export async function confirmPendingAction(context) {
             criados.push(await createScheduledAppointment(trx, scope, { ...action.solicitacao, ...item, combo: undefined, actionId: `${action.id}:${index + 1}` }));
           }
         } catch (error) {
-          // Tudo ou nada: se um serviço da visita não encaixa mais, desfaz os já criados.
-          for (const criado of criados) await cancelWhatsappAppointment(trx, scope, criado.id).catch(() => null);
-          throw error;
+          if (error?.code !== 'ALREADY_BOOKED') {
+            for (const criado of criados) {
+              await cancelWhatsappAppointment(trx, scope, criado.id, {
+                motivo: 'rollback_tecnico_combo_indisponivel',
+                canceladoPor: 'equipe',
+                canalCancelamento: 'whatsapp_ia',
+                silencioso: true,
+              }).catch(() => null);
+            }
+            throw error;
+          }
         }
         response = { ...response, extras: criados.slice(1) };
       }

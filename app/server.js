@@ -344,18 +344,15 @@ app.get('/install.sh', (req, res) => {
 });
 
 app.get('/health', async (req, res) => {
-  // O estado da persistência é informativo aqui: o health principal não reinicia o
-  // serviço por causa de uma cópia atrasada (use /health/persistencia para alertar).
-  const persistencia = protecaoDados.situacao().status;
   const assets = staticAssetReadiness();
-  if (!assets.ready) return res.status(503).json({ status: 'not_ready', code: 'STATIC_ASSETS_INCOMPLETE', missingAssets: assets.missing });
-  if (process.env.COMMERCE_CORE_ENABLED !== '1') return res.status(200).json({ status: 'ready', persistencia, ai: process.env.FEATURE_WHATSAPP_AI, gemini: !!process.env.GEMINI_API_KEY, evolution: !!process.env.EVOLUTION_API_KEY });
+  if (!assets.ready) return res.status(503).json({ status: 'not_ready' });
+  if (process.env.COMMERCE_CORE_ENABLED !== '1') return res.status(200).json({ status: 'ready' });
   try {
     const schema = await checkCommerceSchemaReadiness(commerceDb);
-    if (!schema.ready) return res.status(503).json({ status: 'not_ready', code: schema.code });
-    return res.status(200).json({ status: 'ready', persistencia, ai: process.env.FEATURE_WHATSAPP_AI, gemini: !!process.env.GEMINI_API_KEY, evolution: !!process.env.EVOLUTION_API_KEY });
+    if (!schema.ready) return res.status(503).json({ status: 'not_ready' });
+    return res.status(200).json({ status: 'ready' });
   } catch {
-    return res.status(503).json({ status: 'not_ready', code: 'COMMERCE_DATABASE_UNAVAILABLE' });
+    return res.status(503).json({ status: 'not_ready' });
   }
 });
 
@@ -2125,106 +2122,68 @@ app.use('/api/webhooks', createWhatsappAiWebhookRouter());
   });
   app.use('/api/admin/empresas', auth, requireStaff, empresasRouter);
 
+  const resolverEmpresaDaSessao = (req) => {
+    if (isAdminGlobal(req.user)) {
+      return req.headers['x-empresa-id'] ? String(req.headers['x-empresa-id']).trim() : (req.user?.empresaId ? String(req.user.empresaId).trim() : null);
+    }
+    return req.user?.empresaId ? String(req.user.empresaId).trim() : (legacyEmpresaId(req) || null);
+  };
+
   // [kytto-automacoes] Motor corporativo de automações e barramento central de eventos internos
   const automacoesRouter = createAutomacoesRouter({
-    obterEmpresaIdDoUsuario: (req) => {
-      if (isAdminGlobal(req.user)) {
-        return req.headers['x-empresa-id'] ? String(req.headers['x-empresa-id']).trim() : 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
-      }
-      return req.user?.empresaId ? String(req.user.empresaId).trim() : (legacyEmpresaId(req) || 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6');
-    },
+    obterEmpresaIdDoUsuario: resolverEmpresaDaSessao,
     isPlatformAdmin: (req) => isAdminGlobal(req.user)
   });
   app.use('/api/admin/automacoes', auth, requireStaff, automacoesRouter);
 
   // [kytto-licenciamento] Módulo de Licenciamento, Planos e Gestão de Instâncias Multi-Business (SaaS e On-Premise)
   const licenciamentoRouter = createLicenciamentoRouter({
-    obterEmpresaId: (req) => {
-      if (isAdminGlobal(req.user)) {
-        return req.headers['x-empresa-id'] ? String(req.headers['x-empresa-id']).trim() : 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
-      }
-      return req.user?.empresaId ? String(req.user.empresaId).trim() : (legacyEmpresaId(req) || 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6');
-    },
+    obterEmpresaId: resolverEmpresaDaSessao,
     isPlatformAdmin: (req) => isAdminGlobal(req.user)
   });
   app.use('/api/admin/licenciamento', auth, requireStaff, licenciamentoRouter);
 
   // [kytto-ia-advisor] Copilot de IA Executiva e Operacional Kytto Advisor
   const iaAdvisorRouter = createIaAdvisorRouter({
-    obterEmpresaId: (req) => {
-      if (isAdminGlobal(req.user)) {
-        return req.headers['x-empresa-id'] ? String(req.headers['x-empresa-id']).trim() : null;
-      }
-      return req.user?.empresaId ? String(req.user.empresaId).trim() : (legacyEmpresaId(req) || null);
-    }
+    obterEmpresaId: resolverEmpresaDaSessao
   });
   app.use('/api/admin/ia-advisor', auth, requireStaff, iaAdvisorRouter);
 
   // [kytto-boletos] Boleto Bancário Registrado & Pix Cobrança Híbrido (Sicredi, Sicoob, Itaú, BB, Bradesco)
   const boletosRouter = createBoletosRouter({
-    obterEmpresaId: (req) => {
-      if (isAdminGlobal(req.user)) {
-        return req.headers['x-empresa-id'] ? String(req.headers['x-empresa-id']).trim() : 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
-      }
-      return req.user?.empresaId ? String(req.user.empresaId).trim() : (legacyEmpresaId(req) || 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6');
-    }
+    obterEmpresaId: resolverEmpresaDaSessao
   });
   app.use('/api/admin/boletos', auth, requireStaff, boletosRouter);
 
   // [kytto-fiscal-avancado] ICMS-ST MT & Manifestação do Destinatário (MD-e)
   const fiscalAvancadoRouter = createFiscalAvancadoRouter({
-    obterEmpresaId: (req) => {
-      if (isAdminGlobal(req.user)) {
-        return req.headers['x-empresa-id'] ? String(req.headers['x-empresa-id']).trim() : 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
-      }
-      return req.user?.empresaId ? String(req.user.empresaId).trim() : (legacyEmpresaId(req) || 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6');
-    }
+    obterEmpresaId: resolverEmpresaDaSessao
   });
   app.use('/api/admin/fiscal-avancado', auth, requireStaff, fiscalAvancadoRouter);
 
   // [kytto-sped] EFD ICMS/IPI & EFD Contribuições Avançado com Bloco C, E, H e Pré-PVA
   const spedRouter = createSpedAdminRouter({
-    obterEmpresaIdDoUsuario: (req) => {
-      if (isAdminGlobal(req.user)) {
-        return req.headers['x-empresa-id'] ? String(req.headers['x-empresa-id']).trim() : 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
-      }
-      return req.user?.empresaId ? String(req.user.empresaId).trim() : (legacyEmpresaId(req) || 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6');
-    }
+    obterEmpresaIdDoUsuario: resolverEmpresaDaSessao
   });
   app.use('/api/admin/sped', auth, requireStaff, spedRouter);
 
   // [kytto-delivery] Central de Entregas, Motoboys, Roteirização e Régua WhatsApp
   const deliveryRouter = createDeliveryAdminRouter({
-    obterEmpresaIdDoUsuario: (req) => {
-      if (isAdminGlobal(req.user)) {
-        return req.headers['x-empresa-id'] ? String(req.headers['x-empresa-id']).trim() : 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
-      }
-      return req.user?.empresaId ? String(req.user.empresaId).trim() : (legacyEmpresaId(req) || 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6');
-    }
+    obterEmpresaIdDoUsuario: resolverEmpresaDaSessao
   });
   app.use('/api/admin/delivery', auth, requireStaff, deliveryRouter);
 
   // [kytto-dimp] Auditoria Preventiva DIMP vs Documentos Fiscais
   const dimpRouter = createDimpRoutes({
     auth,
-    obterEmpresaId: (req) => {
-      if (isAdminGlobal(req.user)) {
-        return req.headers['x-empresa-id'] ? String(req.headers['x-empresa-id']).trim() : 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
-      }
-      return req.user?.empresaId ? String(req.user.empresaId).trim() : (legacyEmpresaId(req) || 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6');
-    }
+    obterEmpresaId: resolverEmpresaDaSessao
   });
   app.use('/api/admin/dimp-auditoria', auth, requireStaff, dimpRouter);
 
   // [kytto-supply-chain] Cotações de Compras (RFQ), Pedidos de Compra e 3-Way Matching
   const supplyChainRouter = createSupplyChainRoutes({
     auth,
-    obterEmpresaId: (req) => {
-      if (isAdminGlobal(req.user)) {
-        return req.headers['x-empresa-id'] ? String(req.headers['x-empresa-id']).trim() : 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
-      }
-      return req.user?.empresaId ? String(req.user.empresaId).trim() : (legacyEmpresaId(req) || 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6');
-    }
+    obterEmpresaId: resolverEmpresaDaSessao
   });
   app.use('/api/admin/supply-chain', auth, requireStaff, supplyChainRouter);
   app.use('/api/admin/fiscal/reforma-tributaria', auth, requireStaff, createReformaTributariaRouter());

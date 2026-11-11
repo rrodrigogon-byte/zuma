@@ -1154,7 +1154,8 @@ export function excluirProfissional(empresaId, profissionalId, { forcar = false 
   if (!atual || atual.empresaId !== String(empresaId)) return null;
 
   // Trava de segurança: impede exclusão acidental de profissionais titulares oficiais
-  if (isProfissionalProtegido(atual.nome, atual.apelido) && !forcar) {
+  const isDinoTenant = ['d0d0ac01-8e50-4b61-8c79-de4aaa916da6', 'emp_dino', 'dino'].includes(String(empresaId || '').toLowerCase());
+  if (isDinoTenant && isProfissionalProtegido(atual.nome, atual.apelido) && !forcar) {
     throw new Error(`O profissional titular ${atual.nome} é protegido e essencial para a operação da Dino Barbearia. Ação bloqueada.`);
   }
 
@@ -3352,6 +3353,18 @@ export function refecharComandaBarbearia(empresaId, comandaId, dados = {}) {
       } catch {}
     }
 
+    // Sincronizar agendamentos vinculados para concluído quando a comanda está paga
+    const idsAgendamentosRefechados = [...new Set([comanda.agendamentoId, ...(comanda.itens || []).map((i) => i?.agendamentoId)].filter(Boolean))];
+    for (const agId of idsAgendamentosRefechados) {
+      const ag = estado.agendamentos?.[String(agId)];
+      if (ag && ag.status !== 'cancelado') {
+        ag.status = 'concluido';
+        ag.comandaId = comanda.id;
+        ag.concluidoEm = ag.concluidoEm || comanda.fechadaEm || dataAtual();
+        ag.atualizadoEm = dataAtual();
+      }
+    }
+
     // Emitir evento para o ecossistema (metas, roleta, DRE, conciliação)
     try {
       kyttoEventBus.emitir('comanda.fechada', {
@@ -3676,6 +3689,16 @@ export function registrarPagamentoComandaBarbearia(empresaId, comandaId, dados =
       comanda.dataAtendimento = String(dataFechEfetiva).slice(0, 10);
       const horaCriacao = comanda.criadoEm ? String(comanda.criadoEm).slice(11) : '12:00:00.000Z';
       comanda.criadoEm = `${comanda.dataAtendimento}T${horaCriacao}`;
+    }
+    const idsAgendamentosVinculados = [...new Set([comanda.agendamentoId, ...(comanda.itens || []).map((i) => i?.agendamentoId)].filter(Boolean))];
+    for (const agId of idsAgendamentosVinculados) {
+      const ag = estado.agendamentos?.[String(agId)];
+      if (ag && ag.status !== 'cancelado') {
+        ag.status = 'concluido';
+        ag.comandaId = comanda.id;
+        ag.concluidoEm = ag.concluidoEm || comanda.fechadaEm || comanda.atualizadoEm;
+        ag.atualizadoEm = comanda.atualizadoEm;
+      }
     }
   }
   if (faturada && !possuiConta && clienteId && comanda.totalPago > Number(comanda.fidelidadeValorPontuado || 0)) {
@@ -4027,15 +4050,17 @@ export function validarCalendarioAgendamento(estado, agendamento, profissional) 
   const dataLocal = new Date(`${dataAgenda}T12:00:00Z`);
   if (Number.isNaN(dataLocal.valueOf())) throw new Error('Data operacional inválida.');
   const diaSemana = dataLocal.getUTCDay();
+  const isDino24x7 = ehProfissionalDino(profissional);
+  if (!isDino24x7 && calendario.feriados?.includes(dataAgenda)) {
+    throw new Error('A unidade não recebe reservas nesta data: feriado configurado.');
+  }
   // Escala e dias de trabalho do profissional: SEMPRE checados e respeitados
   if (profissional && Array.isArray(profissional.diasTrabalho) && profissional.diasTrabalho.length > 0) {
     if (!profissional.diasTrabalho.includes(diaSemana)) {
       throw new Error(`O profissional ${profissional.nome || ''} não atende neste dia da semana.`);
     }
   }
-  const isDino24x7 = ehProfissionalDino(profissional);
   if (!isDino24x7) {
-    if (calendario.feriados?.includes(dataAgenda)) throw new Error('A unidade não recebe reservas nesta data: feriado configurado.');
     if (Array.isArray(calendario.diasFuncionamento) && !calendario.diasFuncionamento.includes(diaSemana)) throw new Error('A unidade não funciona neste dia da semana.');
     const [hora, minuto] = agendamento.horaLocal.split(':').map(Number);
     const inicioMinutos = hora * 60 + minuto;
@@ -4243,6 +4268,19 @@ export function atualizarAgendamento(empresaId, agendamentoId, dados = {}, opcoe
   const agendamento = agendamentoNormalizado(dados, atual, opcoes);
   const STATUS_VALIDOS = ['agendado', 'confirmado', 'concluido', 'cancelado', 'nao_compareceu'];
   agendamento.status = (dados.status && STATUS_VALIDOS.includes(dados.status)) ? dados.status : atual.status;
+  if (agendamento.status === 'cancelado') {
+    const motivoInformado = texto(dados.motivoCancelamento ?? dados.motivo_cancelamento ?? dados.motivo ?? atual.motivoCancelamento, 120);
+    if (!motivoInformado && opcoes.permitirSemMotivoLegado !== true) {
+      const err = new Error('Selecione um motivo de cancelamento da lista oficial antes de confirmar.');
+      err.code = 'CANCEL_REASON_REQUIRED';
+      throw err;
+    }
+    agendamento.motivoCancelamento = motivoInformado || 'pedido_do_cliente';
+    agendamento.canceladoPor = texto(dados.canceladoPor ?? dados.cancelado_por ?? dados.usuario ?? atual.canceladoPor ?? 'equipe', 80);
+    agendamento.canceladoEm = atual.canceladoEm || dataAtual();
+    agendamento.canalCancelamento = texto(dados.canalCancelamento ?? dados.canal ?? dados.origem ?? atual.canalCancelamento ?? 'painel_admin', 60);
+    agendamento.origemCancelamento = agendamento.canalCancelamento;
+  }
   if (!agendamento.servicoId || !estado.servicos[agendamento.servicoId] || estado.servicos[agendamento.servicoId].ativo === false) throw new Error('Serviço ativo é obrigatório.');
   const profissional = agendamento.profissionalId ? estado.profissionais[agendamento.profissionalId] : null;
   const servico = estado.servicos[agendamento.servicoId];
@@ -4313,19 +4351,30 @@ export function alterarStatusAgendamento(empresaId, agendamentoId, status, dados
   const canceladoPor = novoStatus === 'cancelado'
     ? texto(dados.canceladoPor ?? dados.cancelado_por ?? (dados.origem === 'cliente' ? 'cliente' : (dados.origem === 'atendente' ? 'atendente' : atual.canceladoPor || 'equipe')), 80)
     : atual.canceladoPor;
+  const motivoCancelamentoResolvido = novoStatus === 'cancelado'
+    ? texto(dados.motivoCancelamento ?? dados.motivo_cancelamento ?? dados.motivo ?? atual.motivoCancelamento, 120)
+    : atual.motivoCancelamento;
+  if (novoStatus === 'cancelado' && !motivoCancelamentoResolvido && dados.permitirSemMotivoLegado !== true) {
+    const erroMotivo = new Error('Selecione um motivo de cancelamento da lista oficial antes de confirmar.');
+    erroMotivo.code = 'CANCEL_REASON_REQUIRED';
+    throw erroMotivo;
+  }
   if (atual.status === 'concluido' && atual.financeiroLancamentoId && novoStatus !== 'concluido') {
     throw new Error('Não é possível alterar status de atendimento já faturado no financeiro.');
   }
   // Na Barbearia Dino e Kytto: Confirmação de cliente e recepção NUNCA expira nem é bloqueada!
   // Se o cliente ou a equipe confirmou, o agendamento é imediatamente confirmado com sucesso.
+  const canalCancelamento = novoStatus === 'cancelado'
+    ? texto(dados.canalCancelamento ?? dados.canal ?? dados.origem ?? atual.canalCancelamento ?? canceladoPor ?? 'painel_admin', 80)
+    : atual.canalCancelamento;
   Object.assign(atual, {
     status: novoStatus,
     observacoes: texto(dados.observacoes ?? atual.observacoes, 600),
-    motivoCancelamento: novoStatus === 'cancelado'
-      ? texto(dados.motivoCancelamento ?? dados.motivo_cancelamento ?? atual.motivoCancelamento, 120)
-      : atual.motivoCancelamento,
+    motivoCancelamento: motivoCancelamentoResolvido,
     canceladoPor,
-    origemCancelamento: novoStatus === 'cancelado' ? texto(dados.origem || canceladoPor, 80) : atual.origemCancelamento,
+    canceladoEm: novoStatus === 'cancelado' ? (atual.canceladoEm || dataAtual()) : atual.canceladoEm,
+    canalCancelamento,
+    origemCancelamento: novoStatus === 'cancelado' ? canalCancelamento : atual.origemCancelamento,
     atualizadoEm: dataAtual(),
   });
   if (novoStatus === 'confirmado') {
@@ -4412,7 +4461,80 @@ export function sanearConfirmacoesDino(empresaId) {
   const estado = estadoEmpresa(empresaId);
   let restaurados = 0;
   let prazosLimpos = 0;
+  let concluidosSincronizados = 0;
+  let motivosPreenchidos = 0;
+
+  // 0. Garantir profissionais históricos da AVEC (ex.: prof-mv1a1nmm-008 -> David Kauã Araújo Moraes) e unificar Bruno
+  estado.profissionais ||= {};
+  if (!estado.profissionais['prof-mv1a1nmm-008']) {
+    estado.profissionais['prof-mv1a1nmm-008'] = {
+      id: 'prof-mv1a1nmm-008',
+      empresaId: String(empresaId),
+      nome: 'David Kauã Araújo Moraes',
+      apelido: 'David',
+      especialidade: 'Barbeiro (Histórico AVEC)',
+      tipo: 'parceiro',
+      percentualComissao: 40,
+      percentualComissaoProduto: 10,
+      ativo: false,
+      atendeAgenda: false,
+      historicoAvec: true,
+      removidoEm: dataAtual(),
+      criadoEm: dataAtual(),
+      atualizadoEm: dataAtual(),
+    };
+  } else {
+    estado.profissionais['prof-mv1a1nmm-008'].nome = 'David Kauã Araújo Moraes';
+    estado.profissionais['prof-mv1a1nmm-008'].apelido = 'David';
+    estado.profissionais['prof-mv1a1nmm-008'].ativo = false;
+  }
+  if (estado.profissionais['prof-mvsqchmy-023'] && estado.profissionais['prof-mtj69hhx-002']) {
+    estado.profissionais['prof-mtj69hhx-002'].nome = 'Bruno Mendes Pedroso';
+    estado.profissionais['prof-mtj69hhx-002'].apelido = 'Bruno';
+    estado.profissionais['prof-mvsqchmy-023'].ativo = false;
+    estado.profissionais['prof-mvsqchmy-023'].oculto = true;
+    estado.profissionais['prof-mvsqchmy-023'].consolidadoEm = 'prof-mtj69hhx-002';
+    for (const ag of Object.values(estado.agendamentos || {})) {
+      if (ag && ag.profissionalId === 'prof-mvsqchmy-023') ag.profissionalId = 'prof-mtj69hhx-002';
+    }
+    for (const cmd of Object.values(estado.comandas || {})) {
+      if (cmd && cmd.profissionalId === 'prof-mvsqchmy-023') cmd.profissionalId = 'prof-mtj69hhx-002';
+      for (const it of cmd?.itens || []) {
+        if (it && it.profissionalId === 'prof-mvsqchmy-023') it.profissionalId = 'prof-mtj69hhx-002';
+      }
+    }
+  }
+
+  // 0.1 Sincronizar comandas pagas com seus agendamentos vinculados
+  for (const cmd of Object.values(estado.comandas || {})) {
+    if (!cmd || (cmd.status !== 'paga' && cmd.status !== 'em_conta')) continue;
+    const agIds = [...new Set([cmd.agendamentoId, ...(cmd.itens || []).map((i) => i?.agendamentoId)].filter(Boolean))];
+    for (const agId of agIds) {
+      const ag = estado.agendamentos?.[String(agId)];
+      if (ag && ag.status !== 'concluido' && ag.status !== 'cancelado') {
+        ag.status = 'concluido';
+        ag.comandaId = cmd.id;
+        ag.concluidoEm = ag.concluidoEm || cmd.fechadaEm || dataAtual();
+        ag.atualizadoEm = dataAtual();
+        concluidosSincronizados++;
+      }
+    }
+  }
+
   for (const ag of Object.values(estado.agendamentos || {})) {
+    // Garantir profissional vinculado em 100% dos agendamentos
+    if (!ag.profissionalId || !estado.profissionais[ag.profissionalId]) {
+      const srvNome = String(estado.servicos?.[ag.servicoId]?.nome || ag.servicoNome || '').toLowerCase();
+      const cliNome = String(ag.clienteNome || '').toLowerCase();
+      if (srvNome.includes('dino') || srvNome.includes('prótese') || srvNome.includes('protese') || cliNome.includes('dino')) {
+        ag.profissionalId = 'prof-mtj67o7r-001';
+      } else if (srvNome.includes('nati') || cliNome.includes('nati')) {
+        ag.profissionalId = estado.profissionais['prof-mtj6b9fg-003'] ? 'prof-mtj6b9fg-003' : 'prof-mtj69hhx-002';
+      } else {
+        ag.profissionalId = 'prof-mtj69hhx-002';
+      }
+      ag.profissionalAtribuidoAutomaticamente = true;
+    }
     // 1. Limpar travas de prazo em todos os agendamentos
     if (ag.confirmacaoAutomatica?.prazoRespostaAte || ag.confirmacaoAutomatica?.status === 'segunda_enviada') {
       ag.confirmacaoAutomatica.prazoRespostaAte = null;
@@ -4438,9 +4560,17 @@ export function sanearConfirmacoesDino(empresaId) {
         restaurados++;
       }
     }
+    // 3. Preencher motivo e trilha de auditoria em cancelamentos legados que estavam em branco
+    if (ag.status === 'cancelado' && !String(ag.motivoCancelamento || '').trim()) {
+      ag.motivoCancelamento = ag.origem === 'avec' ? 'importado_cancelado_avec' : 'cancelamento_operacional_balcao';
+      ag.canceladoPor = ag.canceladoPor || 'equipe';
+      ag.canceladoEm = ag.canceladoEm || ag.atualizadoEm || ag.criadoEm || dataAtual();
+      ag.canalCancelamento = ag.canalCancelamento || ag.origem || 'painel_admin';
+      motivosPreenchidos++;
+    }
   }
-  if (prazosLimpos > 0 || restaurados > 0) save();
-  return { prazosLimpos, restaurados };
+  if (prazosLimpos > 0 || restaurados > 0 || concluidosSincronizados > 0 || motivosPreenchidos > 0) save();
+  return { prazosLimpos, restaurados, concluidosSincronizados, motivosPreenchidos };
 }
 
 export function recebimentoAgendamentoVerificado(empresaId, agendamento) {

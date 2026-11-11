@@ -1,13 +1,11 @@
 // ==========================================================================
 // SEED E SINCRONIZAÇÃO AUTOMÁTICA DA EQUIPE DE PROFISSIONAIS — BARBEARIA DINO
 // Preserva 100% dos horários configurados pelo gestor e respeita exclusões.
-// Idempotente: atualiza sem duplicar e preserva senhas e horários já alterados.
+// Idempotente: atualiza sem duplicar, consolida duplicatas e preserva histórico AVEC.
 // ==========================================================================
 import bcrypt from 'bcryptjs';
-import crypto from 'crypto';
 import { db, save } from './db.js';
 import * as barbeariaErpKytto from './barbearia-erp-kytto.js';
-import { CATALOGO_OFICIAL_SUPERMERCADO } from './modules/varejo/servico.js';
 
 export const DINO_EMPRESA_CANONICA = 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
 export const DINO_LOJA_CANONICA = 'ab049a75-6e2e-4cc9-abbc-6fd11cdda1d8';
@@ -16,6 +14,7 @@ export const DINO_ROLE_PROFISSIONAL_UUID = '85f0c5c5-584b-4d9f-946e-a348c3688483
 // ── Equipe Ativa Oficial da Dino Barbearia ────────────────────────────────
 export const PROFISSIONAIS_DINO_OFICIAIS = [
   {
+    idCanonico: 'prof-mtj69hhx-002',
     username: 'bruno',
     nome: 'Bruno Mendes Pedroso',
     apelido: 'Bruno',
@@ -42,26 +41,30 @@ export const PROFISSIONAIS_DINO_OFICIAIS = [
     diasTrabalhoPadrao: [1, 2, 3, 4, 5, 6],
   },
   {
+    idCanonico: 'prof-mtj67o7r-001',
     username: 'dino',
-    nome: 'Guilherme Cunha Martins',
+    nome: 'Dino',
+    nomeCivil: 'Guilherme Cunha Martins',
     apelido: 'Dino',
     email: 'dino@barbeariadino.com.br',
     emailAlternativo: 'guicunha136@gmail.com',
     senhaPadrao: '123456',
     especialidade: 'Master Barber & Fundador (Corte, Barba e Visagismo)',
-    role: 'organizador', // Dono / Gestor da Barbearia
+    role: 'organizador',
     comissaoServicos: 50,
     comissaoProdutos: 10,
     telefone: '(65) 99999-0001',
     atendimento24x7: true,
     horarioInicioPadrao: '00:00',
     horarioFimPadrao: '23:59',
-    diasTrabalhoPadrao: [0, 1, 2, 3, 4, 5, 6], // Todos os dias 24h
+    diasTrabalhoPadrao: [0, 1, 2, 3, 4, 5, 6],
   },
   {
+    idCanonico: 'prof-mtj6b9fg-003',
     username: 'natani',
-    nome: 'Natani Minanis Dobler',
-    apelido: 'Natani',
+    nome: 'Nati',
+    nomeCivil: 'Natani Minanis Dobler',
+    apelido: 'Nati',
     email: 'natani@barbeariadino.com.br',
     emailAlternativo: 'nati@barbeariadino.com.br',
     senhaPadrao: '123456',
@@ -85,9 +88,11 @@ export const PROFISSIONAIS_DINO_OFICIAIS = [
     diasTrabalhoPadrao: [1, 2, 3, 4, 5, 6],
   },
   {
+    idCanonico: 'prof-mv1a1m50-003',
     username: 'ster',
-    nome: 'Steffany Marielly de Oliveira (Ster)',
-    apelido: 'Ster',
+    nome: 'Ester',
+    nomeCivil: 'Steffany Marielly de Oliveira (Ster)',
+    apelido: 'Ester',
     email: 'ster@barbeariadino.com.br',
     emailAlternativo: 'ester@barbeariadino.com.br',
     senhaPadrao: '123456',
@@ -102,6 +107,7 @@ export const PROFISSIONAIS_DINO_OFICIAIS = [
     diasTrabalhoPadrao: [1, 2, 3, 4, 5, 6],
   },
   {
+    idCanonico: 'prof-mv1a1n6r-006',
     username: 'jhenyffer',
     nome: 'Jhenyffer Andrade',
     apelido: 'Jhenyffer',
@@ -120,6 +126,34 @@ export const PROFISSIONAIS_DINO_OFICIAIS = [
   },
 ];
 
+// ── Profissionais históricos da AVEC que precisam existir pelo ID exato ───
+export const PROFISSIONAIS_HISTORICOS_AVEC = [
+  {
+    id: 'prof-mv1a1nmm-008',
+    nome: 'David Kauã Araújo Moraes',
+    apelido: 'David',
+    especialidade: 'Barbeiro (Histórico AVEC)',
+    percentualComissao: 40,
+    percentualComissaoProduto: 10,
+  },
+  {
+    id: 'prof-mv1a1ngb-007',
+    nome: 'Amanda Gabrielly Santos da Silva',
+    apelido: 'Amanda',
+    especialidade: 'Barbeira (Histórico AVEC)',
+    percentualComissao: 40,
+    percentualComissaoProduto: 10,
+  },
+  {
+    id: 'prof-mv1a1ntu-009',
+    nome: 'Jhenyffer Andrade (Histórico AVEC)',
+    apelido: 'Jhenyffer',
+    especialidade: 'Recepção (Histórico AVEC)',
+    percentualComissao: 0,
+    percentualComissaoProduto: 5,
+  },
+];
+
 // ── Ex-profissionais desligados que NUNCA devem ser ressuscitados ─────────
 export const PROFISSIONAIS_DINO_DESLIGADOS = [
   'bruno rafael',
@@ -129,6 +163,135 @@ export const PROFISSIONAIS_DINO_DESLIGADOS = [
   'vinycius lopes rodrigues', 'vitor muriel silva boy',
   'gustavo', 'lucas', 'danilo', 'pedrinho'
 ];
+
+function normalizar(texto) {
+  return String(texto || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
+}
+
+/**
+ * Saneia profissionais duplicados ("Bruno" + "Bruno Mendes Pedroso"),
+ * dá nome real ao `prof-mv1a1nmm-008` ("David Kauã Araújo Moraes")
+ * e atribui profissional aos agendamentos que estavam sem profissional.
+ */
+export function sanearProfissionaisEAgendamentosDino(estado, empId = DINO_EMPRESA_CANONICA) {
+  if (!estado || typeof estado !== 'object') return { consolidados: 0, orfaosResolvidos: 0 };
+  estado.profissionais ||= {};
+  estado.agendamentos ||= {};
+  estado.comandas ||= {};
+  estado.bloqueios ||= {};
+
+  const agora = new Date().toISOString();
+  let consolidados = 0;
+  let orfaosResolvidos = 0;
+
+  // 1. Garantir os profissionais históricos da AVEC pelos seus IDs exatos (ex.: prof-mv1a1nmm-008)
+  for (const hist of PROFISSIONAIS_HISTORICOS_AVEC) {
+    const atual = estado.profissionais[hist.id];
+    if (atual) {
+      atual.nome = hist.nome;
+      atual.apelido = hist.apelido;
+      atual.especialidade = hist.especialidade || atual.especialidade;
+      atual.ativo = false;
+      atual.atendeAgenda = false;
+      atual.historicoAvec = true;
+      atual.removidoEm = atual.removidoEm || agora;
+    } else {
+      estado.profissionais[hist.id] = {
+        id: hist.id,
+        empresaId: String(empId),
+        lojaId: DINO_LOJA_CANONICA,
+        nome: hist.nome,
+        apelido: hist.apelido,
+        especialidade: hist.especialidade,
+        tipo: 'parceiro',
+        percentualComissao: hist.percentualComissao,
+        percentualComissaoProduto: hist.percentualComissaoProduto,
+        ativo: false,
+        atendeAgenda: false,
+        historicoAvec: true,
+        removidoEm: agora,
+        criadoEm: agora,
+        atualizadoEm: agora,
+      };
+    }
+  }
+
+  // 2. Unificar duplicata de "Bruno" e "Bruno Mendes Pedroso" preservando histórico no ID canônico prof-mtj69hhx-002
+  const brunoEntries = Object.values(estado.profissionais).filter((p) => {
+    const n = normalizar(p?.nome);
+    const a = normalizar(p?.apelido);
+    return (n.includes('bruno') || a === 'bruno') && !n.includes('bruno rafael');
+  });
+  const brunoCanonico = estado.profissionais['prof-mtj69hhx-002'] || brunoEntries[0];
+  if (brunoCanonico) {
+    brunoCanonico.nome = 'Bruno Mendes Pedroso';
+    brunoCanonico.apelido = 'Bruno';
+    brunoCanonico.ativo = true;
+    brunoCanonico.removidoEm = null;
+    brunoCanonico.excluido = false;
+    for (const dup of brunoEntries) {
+      if (dup.id === brunoCanonico.id) continue;
+      for (const ag of Object.values(estado.agendamentos)) {
+        if (ag && ag.profissionalId === dup.id) ag.profissionalId = brunoCanonico.id;
+      }
+      for (const cmd of Object.values(estado.comandas)) {
+        if (!cmd) continue;
+        if (cmd.profissionalId === dup.id) cmd.profissionalId = brunoCanonico.id;
+        for (const item of cmd.itens || []) {
+          if (item && item.profissionalId === dup.id) item.profissionalId = brunoCanonico.id;
+        }
+      }
+      for (const blq of Object.values(estado.bloqueios)) {
+        if (blq && blq.profissionalId === dup.id) blq.profissionalId = brunoCanonico.id;
+      }
+      dup.ativo = false;
+      dup.atendeAgenda = false;
+      dup.oculto = true;
+      dup.consolidadoEm = brunoCanonico.id;
+      dup.removidoEm = dup.removidoEm || agora;
+      consolidados += 1;
+    }
+  }
+
+  // 3. Garantir que Dino nunca fique duplicado como "Guilherme" separado
+  const dinoCanonico = estado.profissionais['prof-mtj67o7r-001'];
+  if (dinoCanonico) {
+    dinoCanonico.nome = 'Dino';
+    dinoCanonico.apelido = 'Dino';
+    dinoCanonico.nomeCivil = 'Guilherme Cunha Martins';
+  }
+
+  // 4. Atribuir profissional aos agendamentos que estavam sem profissionalId ou com ID inexistente
+  const servicos = estado.servicos || {};
+  const fallbackBrunoId = brunoCanonico?.id || 'prof-mtj69hhx-002';
+  const fallbackDinoId = dinoCanonico?.id || 'prof-mtj67o7r-001';
+
+  for (const ag of Object.values(estado.agendamentos)) {
+    if (!ag) continue;
+    const pid = String(ag.profissionalId || '').trim();
+    if (pid && estado.profissionais[pid]) continue;
+
+    const srvNome = normalizar(servicos[ag.servicoId]?.nome || ag.servicoNome || '');
+    const cliNome = normalizar(ag.clienteNome || '');
+    let atribuido = fallbackBrunoId;
+    if (srvNome.includes('dino') || srvNome.includes('protese') || cliNome.includes('( dino )') || cliNome.includes('(dino)')) {
+      atribuido = fallbackDinoId;
+    } else if (srvNome.includes('nati') || cliNome.includes('(nati)') || srvNome.includes('sobrancelha')) {
+      atribuido = estado.profissionais['prof-mtj6b9fg-003'] ? 'prof-mtj6b9fg-003' : fallbackBrunoId;
+    } else if (srvNome.includes('joao') && estado.profissionais['prof-mvodph1o-036']) {
+      atribuido = 'prof-mvodph1o-036';
+    }
+    ag.profissionalId = atribuido;
+    ag.profissionalAtribuidoAutomaticamente = true;
+    orfaosResolvidos += 1;
+  }
+
+  return { consolidados, orfaosResolvidos };
+}
 
 /**
  * Garante que a equipe ativa da Dino esteja provisionada sem sobrescrever
@@ -142,48 +305,31 @@ export function provisionarEquipeDino({ commerceDb = null } = {}) {
 
   for (const empId of empresasAlvo) {
     try {
-      const profissionaisAtuais = barbeariaErpKytto.listarProfissionais(empId, { incluirInativos: true });
-
-      // 1. Reativar Bruno Mendes Pedroso se tiver sido inativado indevidamente
-      for (const p of profissionaisAtuais) {
-        const pNome = String(p.nome || '').trim().toLowerCase();
-        const pApelido = String(p.apelido || '').trim().toLowerCase();
-        if ((pNome.includes('bruno') || pApelido === 'bruno') && !pNome.includes('bruno rafael')) {
-          if (p.ativo === false || p.removidoEm) {
-            barbeariaErpKytto.atualizarProfissional(empId, p.id, {
-              ativo: true,
-              removidoEm: null,
-              excluido: false,
-              nome: p.nome || 'Bruno Mendes Pedroso',
-              apelido: 'Bruno',
-              especialidade: p.especialidade || 'Barbeiro Especialista (Corte, Barba e Procedimentos)',
-              percentualComissao: p.percentualComissao ?? 40,
-              percentualComissaoProduto: p.percentualComissaoProduto ?? 10
-            });
-            console.log(`[dino-equipe-seed] Bruno Mendes reativado com sucesso: ${p.nome} (${p.id})`);
-          }
-        }
+      const estado = barbeariaErpKytto.estadoEmpresa(empId, false);
+      if (estado) {
+        sanearProfissionaisEAgendamentosDino(estado, empId);
       }
 
-      // 2. Garantir que ex-profissionais desligados permaneçam inativos
-      for (const p of profissionaisAtuais) {
-        const pNome = String(p.nome || '').trim().toLowerCase();
-        if (pNome.includes('bruno') && !pNome.includes('bruno rafael')) continue;
-        const nomeNorm = String(p.nome || '').trim().toLowerCase();
-        const apelidoNorm = String(p.apelido || '').trim().toLowerCase();
-        const emailNorm = String(p.email || '').trim().toLowerCase();
+      const profissionaisAtuais = barbeariaErpKytto.listarProfissionais(empId, { incluirInativos: true });
 
-        const ehDesligado = PROFISSIONAIS_DINO_DESLIGADOS.some((desligado) => {
-          const dNorm = desligado.toLowerCase();
+      // 1. Garantir que ex-profissionais desligados permaneçam inativos
+      for (const p of profissionaisAtuais) {
+        const pNome = normalizar(p.nome);
+        if (p.id === 'prof-mtj69hhx-002' || (pNome.includes('bruno') && !pNome.includes('bruno rafael') && !p.consolidadoEm)) continue;
+        const nomeNorm = normalizar(p.nome);
+        const apelidoNorm = normalizar(p.apelido);
+        const emailNorm = normalizar(p.email);
+
+        const ehDesligado = Boolean(p.consolidadoEm) || PROFISSIONAIS_DINO_DESLIGADOS.some((desligado) => {
+          const dNorm = normalizar(desligado);
           return nomeNorm.includes(dNorm) || apelidoNorm === dNorm || emailNorm.includes(dNorm);
         });
 
         if (ehDesligado && p.ativo !== false) {
           barbeariaErpKytto.atualizarProfissional(empId, p.id, {
             ativo: false,
-            removidoEm: p.removidoEm || new Date().toISOString()
+            removidoEm: p.removidoEm || new Date().toISOString(),
           });
-          console.log(`[dino-equipe-seed] Ex-profissional inativado com sucesso: ${p.nome} (${p.id})`);
         }
       }
 
@@ -192,13 +338,16 @@ export function provisionarEquipeDino({ commerceDb = null } = {}) {
 
       for (const membro of PROFISSIONAIS_DINO_OFICIAIS) {
         const casaMembro = (p) => {
-          const pNome = String(p.nome || '').trim().toLowerCase();
-          const pApelido = String(p.apelido || '').trim().toLowerCase();
-          const mApelido = membro.apelido.trim().toLowerCase();
+          if (p.consolidadoEm) return false;
+          if (membro.idCanonico && p.id === membro.idCanonico) return true;
+          const pNome = normalizar(p.nome);
+          const pApelido = normalizar(p.apelido);
+          const mApelido = normalizar(membro.apelido);
           return (
             (p.email && p.email.toLowerCase() === membro.email.toLowerCase()) ||
             (membro.emailAlternativo && p.email && p.email.toLowerCase() === membro.emailAlternativo.toLowerCase()) ||
-            (pNome && pNome === membro.nome.trim().toLowerCase()) ||
+            (pNome && pNome === normalizar(membro.nome)) ||
+            (membro.nomeCivil && pNome === normalizar(membro.nomeCivil)) ||
             (pApelido && pApelido === mApelido) ||
             (pNome && (pNome === mApelido || pNome.split(' ')[0] === mApelido))
           );
@@ -207,12 +356,10 @@ export function provisionarEquipeDino({ commerceDb = null } = {}) {
         const prof = profissionaisAtualizados.find(casaMembro);
 
         if (prof) {
-          // Se o profissional foi inativado manualmente pelo gestor, NÃO ressuscita!
-          if (prof.ativo === false || prof.removidoEm) {
+          if ((prof.ativo === false || prof.removidoEm) && prof.id !== 'prof-mtj69hhx-002') {
             continue;
           }
 
-          // PRESERVAÇÃO RIGOROSA: NUNCA sobrescrever os horários que o gestor já ajustou!
           const horarioInicio = prof.horarioInicio || membro.horarioInicioPadrao || '08:00';
           const horarioFim = prof.horarioFim || membro.horarioFimPadrao || '20:00';
           const diasTrabalho = Array.isArray(prof.diasTrabalho) && prof.diasTrabalho.length > 0
@@ -224,8 +371,8 @@ export function provisionarEquipeDino({ commerceDb = null } = {}) {
 
           barbeariaErpKytto.atualizarProfissional(empId, prof.id, {
             ...prof,
-            nome: prof.nome || membro.nome,
-            apelido: prof.apelido || membro.apelido,
+            nome: membro.nome,
+            apelido: membro.apelido,
             telefone: prof.telefone || membro.telefone,
             especialidade: prof.especialidade || membro.especialidade,
             percentualComissao: prof.percentualComissao ?? membro.comissaoServicos,
@@ -240,8 +387,8 @@ export function provisionarEquipeDino({ commerceDb = null } = {}) {
             removidoEm: null,
           });
         } else {
-          // Só cria se NUNCA tiver existido
           barbeariaErpKytto.criarProfissional(empId, {
+            id: membro.idCanonico,
             nome: membro.nome,
             apelido: membro.apelido,
             email: membro.email,
@@ -261,12 +408,16 @@ export function provisionarEquipeDino({ commerceDb = null } = {}) {
           });
         }
       }
+
+      if (estado) {
+        sanearProfissionaisEAgendamentosDino(estado, empId);
+      }
     } catch (e) {
       console.warn(`[dino-equipe-seed] Aviso ao provisionar ERP para ${empId}:`, e.message);
     }
   }
 
-  // 3. Provisiona as contas de usuário em db().usuarios (apenas os 4 oficiais)
+  // 3. Provisiona as contas de usuário em db().usuarios
   for (const membro of PROFISSIONAIS_DINO_OFICIAIS) {
     const emailNorm = membro.email.toLowerCase().trim();
     const usernameNorm = membro.username.toLowerCase().trim();
@@ -284,7 +435,7 @@ export function provisionarEquipeDino({ commerceDb = null } = {}) {
       const id = `usr-dino-${usernameNorm}`;
       const novoUsuario = {
         id,
-        nome: membro.nome,
+        nome: membro.nomeCivil || membro.nome,
         username: usernameNorm,
         apelido: membro.apelido || usernameNorm,
         email: emailNorm,
@@ -300,8 +451,7 @@ export function provisionarEquipeDino({ commerceDb = null } = {}) {
       };
       d.usuarios.push(novoUsuario);
     } else {
-      // Atualiza apenas dados neutros de autenticação, mantendo a senha existente se já foi alterada
-      u.nome = membro.nome;
+      u.nome = membro.nomeCivil || membro.nome;
       u.role = membro.role;
       u.perfil = membro.role;
       u.empresaId = DINO_EMPRESA_CANONICA;
@@ -310,12 +460,11 @@ export function provisionarEquipeDino({ commerceDb = null } = {}) {
     }
   }
 
-  // Desativa usuários de ex-funcionários no db().usuarios
   for (const u of d.usuarios) {
     const uName = String(u.username || '').toLowerCase();
     const uEmail = String(u.email || '').toLowerCase();
     if (u.empresaId === DINO_EMPRESA_CANONICA) {
-      const ehDesligado = PROFISSIONAIS_DINO_DESLIGADOS.some(d => uName === d || uEmail.includes(d));
+      const ehDesligado = PROFISSIONAIS_DINO_DESLIGADOS.some((desl) => uName === desl || uEmail.includes(desl));
       if (ehDesligado) {
         u.ativo = false;
       }

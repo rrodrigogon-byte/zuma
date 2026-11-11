@@ -2451,9 +2451,19 @@ export default function Supermercado() {
                 )}
 
                 {formaPagamento === 'pix' && (() => {
-                  const chavePixEfetiva = empresaAtiva?.chave_pix || empresaAtiva?.pix_chave || empresaAtiva?.cnpj || 'financeiro@kytto.com.br';
+                  const chavePixEfetiva = String(empresaAtiva?.chave_pix || empresaAtiva?.pix_chave || empresaAtiva?.pixKey || '').trim();
                   const nomeEmpresaEfetivo = empresaAtiva?.nome || 'SUPERMERCADO KYTTO';
                   const cidadeEmpresaEfetiva = empresaAtiva?.cidade || 'TANGARA DA SERRA';
+                  if (!chavePixEfetiva) {
+                    return (
+                      <div className="super-pix-payment-box" role="alert">
+                        <div className="pix-details-col">
+                          <div className="pix-key-pill"><strong>Chave PIX não cadastrada</strong></div>
+                          <div className="pix-val-pill">Cadastre a chave PIX em <strong>Configurações › Recebimentos</strong> para habilitar o recebimento via PIX.</div>
+                        </div>
+                      </div>
+                    );
+                  }
                   const payloadPixOficial = gerarPixCopiaECola({
                     chavePix: chavePixEfetiva,
                     nomeRecebedor: nomeEmpresaEfetivo,

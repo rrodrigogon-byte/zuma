@@ -100,7 +100,8 @@ function playErrorBuzz() {
 
 
 export function gerarPixCopiaECola({ chavePix, nomeRecebedor, cidadeRecebedor, valor, txid }) {
-  const chave = String(chavePix || 'financeiro@kytto.com.br').trim();
+  const chave = String(chavePix || '').trim();
+  if (!chave) return '';
   const nome = String(nomeRecebedor || 'SUPERMERCADO KYTTO').slice(0, 25).normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase();
   const cidade = String(cidadeRecebedor || 'TANGARA DA SERRA').slice(0, 15).normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase();
   const idTx = String(txid || `PDV${Date.now()}`).replace(/[^a-zA-Z0-9]/g, '').slice(0, 25);
@@ -612,6 +613,14 @@ export default function SupermercadoPdvExclusivo({ onVoltarAdmin = null }) {
       playErrorBuzz();
       showToast('O caixa está fechado! Abra o caixa para operar vendas.');
       return;
+    }
+    if (formaPagamento === 'pix') {
+      const chavePixEmpresa = String(empresaAtiva?.chave_pix || empresaAtiva?.pix_chave || empresaAtiva?.pixKey || '').trim();
+      if (!chavePixEmpresa) {
+        playErrorBuzz();
+        showToast('Cadastre a chave PIX em Configurações › Recebimentos antes de concluir uma venda via PIX.');
+        return;
+      }
     }
 
     setCarregando(true);
@@ -1133,9 +1142,19 @@ export default function SupermercadoPdvExclusivo({ onVoltarAdmin = null }) {
             )}
 
             {formaPagamento === 'pix' && (() => {
-              const chavePixEfetiva = empresaAtiva?.chave_pix || empresaAtiva?.pix_chave || empresaAtiva?.cnpj || 'financeiro@kytto.com.br';
+              const chavePixEfetiva = String(empresaAtiva?.chave_pix || empresaAtiva?.pix_chave || empresaAtiva?.pixKey || '').trim();
               const nomeEmpresaEfetivo = empresaAtiva?.nome || 'SUPERMERCADO KYTTO';
               const cidadeEmpresaEfetiva = empresaAtiva?.cidade || 'TANGARA DA SERRA';
+              if (!chavePixEfetiva) {
+                return (
+                  <div className="pdv-pix-box" role="alert">
+                    <div className="pdv-pix-info">
+                      <div className="pdv-pix-key"><strong>Chave PIX não cadastrada</strong></div>
+                      <div className="pdv-pix-total">Cadastre a chave PIX em <strong>Configurações › Recebimentos</strong> para habilitar o recebimento via PIX nesta empresa.</div>
+                    </div>
+                  </div>
+                );
+              }
               const payloadPixOficial = gerarPixCopiaECola({
                 chavePix: chavePixEfetiva,
                 nomeRecebedor: nomeEmpresaEfetivo,

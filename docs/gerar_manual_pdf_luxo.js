@@ -275,7 +275,7 @@ const htmlContent = `
 
     <div class="capa-rodape">
       <div>
-        <strong>Unidade:</strong> Barbearia Dino (Cuiabá - MT)<br>
+        <strong>Unidade:</strong> Barbearia Dino (Tangará da Serra - MT)<br>
         <strong>Plataforma:</strong> Kytto Gestão Barbearia ERP
       </div>
       <div style="text-align: right;">
@@ -570,7 +570,7 @@ const htmlContent = `
           <td style="width: 50%; border: none; padding: 35px 20px; text-align: center; vertical-align: bottom;">
             <div style="font-size: 12px; color: #64748b; line-height: 1.8;">
               <strong>Data da Homologação:</strong> _____ / _____ / 2026<br>
-              <strong>Cidade:</strong> Cuiabá — MT<br>
+              <strong>Cidade:</strong> Tangará da Serra — MT<br>
               <strong>Status:</strong> ✅ Capacitado e Apto para Operação
             </div>
           </td>

@@ -1200,7 +1200,7 @@ export default function BarbeariaCaixaDetalhado({
             <div id="cupom-termico-imprimir" style={{ padding: '20px 24px', overflowY: 'auto', flex: 1, color: '#000000', background: '#ffffff', fontFamily: 'Courier New, monospace', fontSize: 12, lineHeight: 1.4 }}>
               <div style={{ textAlign: 'center', marginBottom: 10 }}>
                 <div style={{ fontWeight: 800, fontSize: 16 }}>BARBEARIA DINO</div>
-                <div style={{ fontSize: 10, color: '#444' }}>Cuiabá - MT · Tel: (65) 99352-2260</div>
+                <div style={{ fontSize: 10, color: '#444' }}>Tangará da Serra - MT · Tel: (65) 99352-2260</div>
                 <div style={{ fontWeight: 700, margin: '6px 0 2px' }}>FECHAMENTO DE CAIXA (80MM)</div>
                 <div>----------------------------------------</div>
               </div>

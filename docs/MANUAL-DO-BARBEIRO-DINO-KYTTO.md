@@ -187,10 +187,10 @@ Eu, abaixo assinado, declaro ter recebido o treinamento e as instruções do **M
 
 \
 **Barbearia Dino & Kytto Gestão**  
-*Cuiabá / MT — Novembro de 2026*  
+*Tangará da Serra / MT — Novembro de 2026*  
 
 \
-__________________________________________________________________  
+__________________________________________________________________
 **Assinatura do Profissional / Barbeiro**  
 Nome:  
 Data: _____/_____/2026  

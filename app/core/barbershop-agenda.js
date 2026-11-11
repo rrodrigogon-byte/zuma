@@ -614,7 +614,16 @@ function criarNaAgendaDaBarbearia(scope, input = {}) {
     }
   }
   if (profissional && servico && Array.isArray(servico.profissionaisIds) && servico.profissionaisIds.length > 0 && !servico.profissionaisIds.includes(profissional.id)) {
-    const alternativo = servicos.find((s) => s.id !== servico.id && (!Array.isArray(s.profissionaisIds) || s.profissionaisIds.length === 0 || s.profissionaisIds.includes(profissional.id)));
+    const nomeOriginal = String(servico.nome || '').toLowerCase();
+    const palavraChave = nomeOriginal.includes('barba') && !nomeOriginal.includes('corte')
+      ? 'barba'
+      : nomeOriginal.includes('sobrancelha')
+        ? 'sobrancelha'
+        : nomeOriginal.includes('corte')
+          ? 'corte'
+          : '';
+    const compativeisProf = servicos.filter((s) => s.id !== servico.id && s.ativo !== false && (!Array.isArray(s.profissionaisIds) || s.profissionaisIds.length === 0 || s.profissionaisIds.includes(profissional.id)));
+    const alternativo = (palavraChave && compativeisProf.find((s) => String(s.nome || '').toLowerCase().includes(palavraChave))) || compativeisProf[0];
     if (alternativo) {
       servico = alternativo;
       input.serviceId = alternativo.id;
@@ -660,7 +669,8 @@ function criarNaAgendaDaBarbearia(scope, input = {}) {
     const limite = Math.max(1, Number.parseInt(process.env.WHATSAPP_AGENDAMENTO_MAX_VISITAS_POR_TELEFONE || process.env.AGENDAMENTO_PUBLICO_MAX_POR_TELEFONE || '4', 10));
     const servicosNaVisita = futurosDoTelefone.filter((item) => `${item.dataAgenda}|${limpo(item.clienteNome, 160).toLowerCase()}` === estaVisita).length;
     if ((!visitas.has(estaVisita) && visitas.size >= limite) || servicosNaVisita >= 4) throw new SchedulingError('este telefone já tem horários marcados; remarque ou cancele um deles antes', 'PHONE_LIMIT');
-    const mesmoServico = futurosDoTelefone.some((item) => `${item.dataAgenda}|${limpo(item.clienteNome, 160).toLowerCase()}` === estaVisita && item.servicoId === limpo(input.serviceId, 100));
+    const ehItemComboSecundario = String(input.actionId || '').includes(':');
+    const mesmoServico = !ehItemComboSecundario && futurosDoTelefone.some((item) => `${item.dataAgenda}|${limpo(item.clienteNome, 160).toLowerCase()}` === estaVisita && item.servicoId === limpo(input.serviceId, 100));
     if (mesmoServico) throw new SchedulingError('este cliente já tem este serviço marcado neste dia', 'ALREADY_BOOKED');
     const vinculo = vincularClienteAoAtendimento(empresa, { clienteNome: input.customerName, clienteTelefone: input.customerPhone }, { origem: 'whatsapp_ia' });
     // O cliente iniciou a conversa no WhatsApp para marcar: os avisos do próprio
@@ -864,21 +874,27 @@ export async function rescheduleAppointment(trx, scope, input = {}) {
   }
 }
 
-export async function cancelAppointment(trx, scope, appointmentId) {
+export async function cancelAppointment(trx, scope, appointmentId, options = {}) {
   exigirEscopoOperacional(scope);
   if (await agendaSource(scope) === 'postgres') return pgCancel(trx, scope, appointmentId);
   const empresa = chaveEmpresa(scope);
   try {
     const atual = agendamentoDoContato(empresa, scope.phone, appointmentId, scope.lojaId);
+    const motivo = limpo(options.motivo || 'Cancelado pelo cliente no WhatsApp', 120);
+    const canceladoPor = limpo(options.canceladoPor || 'cliente', 80);
+    const canalCancelamento = limpo(options.canalCancelamento || 'whatsapp_ia', 60);
     const cancelado = barbearia.alterarStatusAgendamento(empresa, atual.id, 'cancelado', {
       lojaId: scope.lojaId,
-      origem: 'cliente',
-      canceladoPor: 'cliente',
-      motivoCancelamento: 'Cancelado pelo cliente no WhatsApp',
-      observacoes: `${atual.observacoes ? `${atual.observacoes} · ` : ''}Cancelado pelo cliente no WhatsApp`,
+      origem: canalCancelamento,
+      canalCancelamento,
+      canceladoPor,
+      motivoCancelamento: motivo,
+      observacoes: `${atual.observacoes ? `${atual.observacoes} · ` : ''}${motivo}`,
     });
     const contexto = { empresaId: scope.empresaId, lojaId: scope.lojaId, legacyEmpresaId: empresa };
-    notificarDepois(contexto, cancelado, 'cancelado');
+    if (options.silencioso !== true) {
+      notificarDepois(contexto, cancelado, 'cancelado');
+    }
     const candidatos = captacao.candidatosParaVaga(empresa, atual);
     setImmediate(() => { avisarListaEspera(contexto, cancelado, candidatos).catch(() => null); });
     return { ...respostaAgendamento(empresa, cancelado), listaEsperaCandidatos: candidatos.length };
