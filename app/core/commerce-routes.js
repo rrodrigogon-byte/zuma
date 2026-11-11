@@ -25,7 +25,7 @@ import { createShippingAccount, failShippingLabel, finalizeShippingCancellation,
 import { shippingProviders } from './shipping-adapters.js';
 import { recordStorefrontEvent } from '../storefront-funnel.js';
 import { commerceMediaIdForIdempotencyKey, deleteCommerceImage, newCommerceMediaId, streamCommerceImage, uploadCommerceImage } from './commerce-media.js';
-import { claimWhatsappAiHandoff, clearWhatsappAiPendingAction, closeWhatsappAiHandoff, getWhatsappAiConversation, sendWhatsappAiStaffMessage, configureWhatsappAiChannel, configureWhatsappAiPolicy, listWhatsappAiSessions, releaseWhatsappAiHandoff, syncWhatsappAiWebhook, testWhatsappAiGemini, whatsappAiOperationalStatus, configureWhatsappAiHandoff, diagnosticoAgendaVendaWhatsappAi, whatsappChannelType } from './whatsapp-ai.js';
+import { claimWhatsappAiHandoff, clearWhatsappAiPendingAction, closeWhatsappAiHandoff, confirmWhatsappAiPendingAction, getWhatsappAiConversation, sendWhatsappAiStaffMessage, configureWhatsappAiChannel, configureWhatsappAiPolicy, listWhatsappAiSessions, releaseWhatsappAiHandoff, syncWhatsappAiWebhook, testWhatsappAiGemini, whatsappAiOperationalStatus, configureWhatsappAiHandoff, diagnosticoAgendaVendaWhatsappAi, whatsappChannelType } from './whatsapp-ai.js';
 import { campaignMetrics, cancelCampaign, confirmCampaign, createCampaign, listCampaignAudience, listCampaigns, previewCampaign, updateCampaignConsent } from './commerce-campaigns.js';
 import { cartRecoveryMetrics, listAbandonedCarts, syncPublicCart } from './commerce-abandoned-carts.js';
 import { consumePublicRateLimit, consumeWebhookRateLimit, createWebhookAuditAdapter, publicRequestFingerprint, webhookPayloadHash, webhookRequestId } from './commerce-public-rate-limit.js';
@@ -2515,6 +2515,14 @@ export function createCommerceAdminRouter() {
       const context = await withWhatsappLoja(await requirePermission(req, isOp ? 'customers.write' : 'settings.write'));
       const tipoCanal = whatsappTipoCanal(req);
       res.json(await clearWhatsappAiPendingAction({ ...context, tipoCanal }, req.params.id));
+    } catch (error) { jsonError(res, error); }
+  });
+  router.post('/whatsapp-ai/sessions/:id/confirm-pending', async (req, res) => {
+    try {
+      const isOp = req.user?.role === 'operador' || req.user?.perfil === 'operador';
+      const context = await withWhatsappLoja(await requirePermission(req, isOp ? 'customers.write' : 'settings.write'));
+      const tipoCanal = whatsappTipoCanal(req);
+      res.json(await confirmWhatsappAiPendingAction({ ...context, tipoCanal }, req.params.id));
     } catch (error) { jsonError(res, error); }
   });
   router.get('/cart-recovery', async (req, res) => {

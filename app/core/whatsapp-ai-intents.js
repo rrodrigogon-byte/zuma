@@ -18,12 +18,15 @@ const EMOJI_CANCEL = /^(?:❌|✖️|👎|👎🏻|👎🏼|👎🏽|👎🏾|�
 const CONFIRM_PHRASES = new Set([
   'confirmar', 'confirmo', 'confirma', 'confirmado', 'confirmada', 'sim confirmar', 'pode confirmar', 'pode concluir',
   'sim', 's', 'ss', 'siim', 'simm', 'sim sim', 'sim pode', 'sim por favor', 'sim pfv', 'sim pf', 'sim obrigado', 'sim obrigada',
+  'o sim', 'oh sim', 'e sim', 'eh sim', 'ah sim', 'aham', 'aham sim', 'uhum', 'uhum sim', 'isso sim', 'vai sim', 'claro sim',
+  'sim agendar', 'sim marcar', 'sim pode agendar', 'sim pode marcar', 'sim pode confirmar', 'isso pode marcar', 'isso pode agendar',
   'pode', 'pode sim', 'pode ser', 'pode marcar', 'pode agendar', 'pode reservar', 'pode fazer', 'pode fechar', 'pode mandar', 'pode separar',
-  'pode remarcar', 'pode seguir', 'pode prosseguir',
+  'pode remarcar', 'pode seguir', 'pode prosseguir', 'pode deixar',
   'isso', 'isso mesmo', 'isso ai', 'exatamente', 'certo', 'certinho', 'correto', 'perfeito', 'otimo', 'show', 'top', 'massa', 'joia',
   'fechado', 'fechou', 'fecha', 'combinado', 'beleza', 'blz', 'bele', 'ok', 'okay', 'okk', 'ok pode', 'ok obrigado', 'ta bom', 'ta otimo', 'ta certo',
   'ta perfeito', 'tudo certo', 'bora', 'vamos', 'manda ver', 'manda bala', 'quero', 'quero sim', 'marca', 'marca ai', 'agenda ai',
   'yes', 'claro', 'claro que sim', 'com certeza', 'positivo', 'afirmativo', 'concordo', 'de acordo', 'aceito', 'valeu pode marcar',
+  'fechado pode marcar', 'fechado pode agendar', 'combinado pode marcar',
 ]);
 
 const CANCEL_PHRASES = new Set([
@@ -94,7 +97,7 @@ export function confirmIntent(text, { actionType = '' } = {}) {
   if (CAVEAT.test(value)) return null;
   if (CONFIRM_PHRASES.has(value)) return 'confirm';
   // "sim, pode marcar obrigado" / "ok fechado" / "beleza pode ser"
-  const stripped = value.replace(/\b(obrigado|obrigada|obg|vlw|valeu|por favor|pfv|pf|entao|ai|sim|ok|blz|beleza)\b/g, ' ').replace(/\s+/g, ' ').trim();
+  const stripped = value.replace(/\b(obrigado|obrigada|obg|vlw|valeu|por favor|pfv|pf|entao|ai|o|oh|e|eh|ah|aham|uhum|agendar|marcar|confirmar|sim|ok|blz|beleza)\b/g, ' ').replace(/\s+/g, ' ').trim();
   if (!stripped) return /\b(sim|ok|blz|beleza)\b/.test(value) ? 'confirm' : null;
   if (CONFIRM_PHRASES.has(stripped)) return 'confirm';
   return null;
@@ -105,7 +108,7 @@ export const CONFIRMATION_HINT = '👉 Responda *SIM* para confirmar, ou *NÃO* 
 // Palavras explícitas: valem a qualquer momento enquanto a ação está pendente
 // (comportamento anterior). As respostas naturais acima só valem quando a ÚLTIMA
 // mensagem do atendente foi o próprio resumo/toque (ver naturalConfirmationAllowed).
-const STRICT_CONFIRM = new Set(['confirmar', 'confirmo', 'sim confirmar', 'pode confirmar', 'pode concluir']);
+const STRICT_CONFIRM = new Set(['confirmar', 'confirmo', 'sim confirmar', 'pode confirmar', 'pode concluir', 'sim agendar', 'sim pode agendar', 'pode deixar agendado', 'pode deixar marcado']);
 const STRICT_CANCEL = new Set(['cancelar', 'cancela', 'nao confirmar', 'desistir']);
 
 export function strictConfirmIntent(text, { actionType = '' } = {}) {
@@ -121,7 +124,7 @@ export function strictConfirmIntent(text, { actionType = '' } = {}) {
 export function naturalConfirmationAllowed(lastAssistantText) {
   const text = String(lastAssistantText || '');
   if (text.includes(CONFIRMATION_HINT)) return true;
-  return /\b(?:responda\s+(?:\*?sim\*?|\*?n[aã]o\*?)|para\s+confirmar|confere\s+(?:a[ií]|pra\s+mim)|posso\s+confirmar|vamos\s+agendar|posso\s+deixar\s+marcado|deseja\s+confirmar|quer\s+confirmar|fechado\?|tudo\s+certo\?)\b/i.test(text);
+  return /\b(?:responda\s+(?:\*?sim\*?|\*?n[aã]o\*?)|para\s+confirmar|confere\s+(?:a[ií]|pra\s+mim)|posso\s+(?:confirmar|agendar|marcar)|vamos\s+agendar|posso\s+deixar\s+marcado|deseja\s+confirmar|quer\s+(?:confirmar|agendar|marcar)|prefere\s+que\s+eu\s+marque|fechado\?|tudo\s+certo\?)\b/i.test(text);
 }
 
 /**
@@ -139,7 +142,7 @@ export function resolveConfirmation(text, { actionType = '', lastAssistantText =
 // curto logo depois confirma, desde que a parte de cima NÃO tenha feito outra pergunta;
 // "quero" fica de fora (costuma responder a oferta, não ao resumo).
 export const PENDING_REMINDER_HINT = 'Para fechar, responda CONFIRMAR; para desistir, DESISTIR.';
-const REMINDER_YES = new Set(['sim', 's', 'ss', 'pode', 'pode sim', 'sim pode', 'ok', 'okay', 'beleza', 'blz', 'fechado', 'fechou', 'confirma', 'pode confirmar', 'sim confirma', 'sim pode confirmar', 'pode fechar', 'sim pode fechar']);
+const REMINDER_YES = new Set(['sim', 's', 'ss', 'o sim', 'oh sim', 'e sim', 'eh sim', 'sim agendar', 'sim marcar', 'pode', 'pode sim', 'sim pode', 'pode agendar', 'pode marcar', 'ok', 'okay', 'beleza', 'blz', 'fechado', 'fechou', 'confirma', 'confirmar', 'confirmo', 'pode confirmar', 'sim confirma', 'sim pode confirmar', 'pode fechar', 'sim pode fechar']);
 export function afterPendingReminder(lastAssistantText) {
   const text = String(lastAssistantText || '');
   const at = text.indexOf(PENDING_REMINDER_HINT);

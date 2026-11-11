@@ -426,7 +426,18 @@ export function extractFastScheduleChoice(userText, lastAssistantText, { now = n
   if (!rawUser || !rawAssistant || rawUser.length > 80 || rawUser.includes('?')) return null
   if (/\b(cancelar|desmarcar|remarcar|nao|não|outro dia|outra data)\b/i.test(rawUser)) return null
 
-  const slot = normalizeAgendaTime(rawUser)
+  let slot = normalizeAgendaTime(rawUser)
+  const userClean = rawUser.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()
+  if (!slot) {
+    const offeredMatches = [...rawAssistant.matchAll(/\b([01]?\d|2[0-3])(?:h(\d{2})?|:(\d{2}))\b/gi)]
+      .map((m) => `${String(m[1]).padStart(2, '0')}:${m[2] || m[3] || '00'}`)
+    const uniqueOffered = [...new Set(offeredMatches)]
+    if (uniqueOffered.length >= 1 && /\b(o primeiro|a primeira|primeira opcao|esse primeiro)\b/.test(userClean)) {
+      slot = uniqueOffered[0]
+    } else if (uniqueOffered.length === 1 && /^(sim|isso|isso mesmo|pode|pode ser|pode agendar|pode marcar|fechado|fechou|quero|ok|combinado|bora|sim agendar)$/.test(userClean.replace(/[^a-z ]/g, ' ').replace(/\s+/g, ' ').trim())) {
+      slot = uniqueOffered[0]
+    }
+  }
   if (!slot) return null
 
   const [hh, mm] = slot.split(':')
@@ -434,6 +445,8 @@ export function extractFastScheduleChoice(userText, lastAssistantText, { now = n
   const slotPatterns = [
     slot,
     `${hNum}:${mm}`,
+    `${hNum}h${mm}`,
+    `${hh}h${mm}`,
     mm === '00' ? `${hNum}h` : `${hNum}h${mm}`,
     mm === '00' ? `${hh}h` : `${hh}h${mm}`,
   ]
@@ -448,9 +461,27 @@ export function extractFastScheduleChoice(userText, lastAssistantText, { now = n
 
   const combined = `${rawAssistant} ${rawUser}`.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
   let servico = 'Corte'
-  if (/\bcorte\s+e\s+barba\b|\bcombo\b/.test(combined)) servico = 'Corte e barba'
+  const extraServiceIds = []
+  if (/\bcorte\s+e\s+barba\b|\bbarba\s+e\s+corte\b|\bcabelo\s+e\s+barba\b|\bcombo\b/.test(combined)) servico = 'Corte e barba'
+  else if (/\b(desondulacao|selagem|progressiva|relaxamento)\b/.test(combined)) {
+    if (/\b(corte|cabelo)\b/.test(combined)) {
+      servico = 'Corte'
+      extraServiceIds.push('Desondulação (Selagem)')
+    } else {
+      servico = 'Desondulação (Selagem)'
+    }
+  } else if (/\blimpeza\s+de\s+pele\b/.test(combined)) servico = 'Limpeza de Pele'
+  else if (/\bdetox\s+de\s+barba\b/.test(combined)) servico = 'Detox de barba'
+  else if (/\bdetox\b/.test(combined)) servico = 'Detox Capilar'
+  else if (/\bdermaplaning\b/.test(combined)) servico = 'Dermaplaning'
+  else if (/\bbanho\s+de\s+gelo\b/.test(combined)) servico = 'Banho de Gelo'
+  else if (/\b(coloracao|tonalizacao|tintura)\b/.test(combined)) servico = 'Coloração Tonalização'
   else if (/\bbarba\b/.test(combined) && !/\bcorte\b/.test(combined)) servico = 'Barba'
   else if (/\bsobrancelha\b/.test(combined)) servico = 'Sobrancelha'
+
+  if (/\bsobrancelha\b/.test(combined) && servico !== 'Sobrancelha' && !extraServiceIds.includes('Design de Sobrancelha')) {
+    extraServiceIds.push('Design de Sobrancelha')
+  }
 
   let profissional = 'qualquer'
   const userNorm = rawUser.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
@@ -485,5 +516,5 @@ export function extractFastScheduleChoice(userText, lastAssistantText, { now = n
   }
   if (!data) return null
 
-  return { servico, profissional, data, horario: slot }
+  return { servico, profissional, data, horario: slot, ...(extraServiceIds.length ? { extraServiceIds } : {}) }
 }

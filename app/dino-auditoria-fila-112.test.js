@@ -1,9 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { matchAgendaName } from './core/whatsapp-ai-tools.js';
+import { matchAgendaName, findOwnAppointment } from './core/whatsapp-ai-tools.js';
 import { verificarStatusBarbeiroDino, BARBEIROS_ATIVOS_DINO } from './core/barbershop-agenda.js';
-import { confirmIntent, declineWithNewRequest } from './core/whatsapp-ai-intents.js';
-import { serviceWithProfessional } from './core/whatsapp-ai-normalize.js';
+import { confirmIntent, resolveConfirmation, declineWithNewRequest } from './core/whatsapp-ai-intents.js';
+import { serviceWithProfessional, extractFastScheduleChoice } from './core/whatsapp-ai-normalize.js';
 
 test('Auditoria 112 Conversas Fila — 1. Resolução de corte-masculino e Corte cabelo masculino (Conversa #100)', () => {
   const servicos = [
@@ -49,4 +49,48 @@ test('Auditoria 112 Conversas Fila — 4. Caso Fernanda (#71): desambiguação d
   assert.equal(serviceWithProfessional('CORTE PREMIUM (BRUNO OU NATI)', 'Nati'), 'CORTE PREMIUM com Nati');
   assert.equal(serviceWithProfessional('CORTE PREMIUM (BRUNO OU NATI)', 'Bruno ou Nati'), 'CORTE PREMIUM (BRUNO OU NATI)');
   assert.equal(serviceWithProfessional('Corte com Bruno ou Nati', 'Nati'), 'Corte com Bruno ou Nati');
+});
+
+test('Auditoria 112 Conversas Fila — 5. Confirmações coloquiais ("o sim", "sim, agendar") e escolha de 1ª opção / horário único (#25, #42, #112)', () => {
+  assert.equal(confirmIntent('o sim'), 'confirm');
+  assert.equal(confirmIntent('ô sim'), 'confirm');
+  assert.equal(confirmIntent('sim, agendar'), 'confirm');
+  assert.equal(resolveConfirmation('sim, agendar', { lastAssistantText: 'Qual desses fica melhor para os dois?' }), 'confirm');
+  assert.equal(resolveConfirmation('sim', { lastAssistantText: 'Quinta-feira, 12/11, às 10h15, por R$ 100. É um corte, certo? Posso agendar pra você?' }), 'confirm');
+
+  const singleChoice = extractFastScheduleChoice(
+    'sim',
+    'Fechado, Flávio! Quinta-feira, 12/11, às 10h15, por R$ 100. É um corte, certo? Posso agendar pra você?',
+    { now: new Date('2026-11-11T12:00:00Z') }
+  );
+  assert.equal(singleChoice?.horario, '10:15');
+  assert.equal(singleChoice?.data, '2026-11-12');
+
+  const firstOption = extractFastScheduleChoice(
+    'O primeiro',
+    'Fala, Pedro Henrique! Qual dos horários com o Dino você prefere que eu marque? Hoje, 11/11, às 20h00 ou 20h15?',
+    { now: new Date('2026-11-11T12:00:00Z') }
+  );
+  assert.equal(firstOption?.horario, '20:00');
+  assert.equal(firstOption?.profissional, 'Dino');
+});
+
+test('Auditoria 112 Conversas Fila — 6. Catálogo completo (Desondulação/Selagem, Limpeza de Pele, Detox) e busca por dia da semana (#74, Rodrigo #9139)', () => {
+  const servicos = [
+    { id: 'srv-corte', nome: 'CORTE PREMIUM', preco: 100 },
+    { id: 'srv-selagem', nome: 'Desondulação (Selagem)', preco: 150 },
+    { id: 'srv-limpeza', nome: 'Limpeza de Pele', preco: 60 },
+    { id: 'srv-detox', nome: 'Detox Capilar', preco: 50 },
+  ];
+  assert.equal(matchAgendaName('desondulação', servicos).item?.id, 'srv-selagem');
+  assert.equal(matchAgendaName('selagem', servicos).item?.id, 'srv-selagem');
+  assert.equal(matchAgendaName('progressiva', servicos).item?.id, 'srv-selagem');
+  assert.equal(matchAgendaName('limpeza de pele', servicos).item?.id, 'srv-limpeza');
+
+  const agendamentos = [
+    { id: 'ag-quarta', dataAgenda: '2026-11-11', dataHora: '2026-11-11T18:00:00-04:00', status: 'agendado', servico: { nome: 'Corte Club' }, profissional: { nome: 'Dino' } },
+    { id: 'ag-sexta', dataAgenda: '2026-11-13', dataHora: '2026-11-13T15:30:00-04:00', status: 'agendado', servico: { nome: 'Desondulação (Selagem)' }, profissional: { nome: 'Bruno' } },
+  ];
+  const achadoSexta = findOwnAppointment(agendamentos, '', 'Quero cancelar meu horário de sexta');
+  assert.equal(achadoSexta?.id, 'ag-sexta');
 });

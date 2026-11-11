@@ -367,6 +367,42 @@ export default function WhatsappHumanQueue({
     }
   }
 
+  async function requestConfirmPending(item) {
+    if (!canClaim || !selection || claimLockRef.current || claimingId) return
+    const controller = new AbortController()
+    claimLockRef.current = controller
+    claimControllerRef.current = controller
+    setClaimingId(item.id)
+    setError('')
+    setErrorContextKey('')
+    setNotice('')
+    setNoticeContextKey('')
+    try {
+      const canalQuery = tipoCanal === 'cliente' ? '' : `?canal=${tipoCanal}`
+      await api.post(`${HUMAN_QUEUE_PATH}/${encodeURIComponent(item.id)}/confirm-pending${canalQuery}`, {}, {
+        headers: { 'X-Empresa-Id': selection.empresaId, 'X-Loja-Id': selection.canonicalLojaId },
+        signal: controller.signal,
+      })
+      if (!mountedRef.current || claimLockRef.current !== controller || contextKeyRef.current !== contextKey || !openRef.current) return
+      const refreshed = await loadQueue()
+      if (refreshed && mountedRef.current && contextKeyRef.current === contextKey) {
+        setNotice('Agendamento confirmado e gravado com sucesso na agenda da barbearia!')
+        setNoticeContextKey(contextKey)
+        if (typeof onChanged === 'function') await onChanged()
+      }
+    } catch (caught) {
+      if (!mountedRef.current || claimLockRef.current !== controller || caught?.name === 'AbortError' || contextKeyRef.current !== contextKey || !openRef.current) return
+      setError(queueErrorMessage(caught))
+      setErrorContextKey(contextKey)
+    } finally {
+      if (claimControllerRef.current === controller) claimControllerRef.current = null
+      if (claimLockRef.current === controller) {
+        claimLockRef.current = null
+        if (mountedRef.current && contextKeyRef.current === contextKey) setClaimingId('')
+      }
+    }
+  }
+
   async function confirmClaim() {
     const dialog = claimDialog
     if (!dialog || dialog.contextKey !== contextKey || !canClaim || claimLockRef.current || claimingId) return
@@ -581,9 +617,14 @@ export default function WhatsappHumanQueue({
                       <b>⏳ Aguardando SIM:</b> {item.pendingSummary || 'Confirmação de agendamento pendente'}
                     </span>
                     {canClaim && (
-                      <button type="button" className="c360-btn ghost" style={{ padding: '3px 8px', fontSize: 11 }} disabled={Boolean(claimingId)} onClick={() => requestClearPending(item)} title="Remove a ação pendente do rodapé desta conversa">
-                        🧹 Destravar pendência
-                      </button>
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                        <button type="button" className="c360-btn primary" style={{ padding: '3px 8px', fontSize: 11 }} disabled={Boolean(claimingId)} onClick={() => requestConfirmPending(item)} title="Confirma e grava o agendamento pendente imediatamente na agenda">
+                          ✅ Fechar Agendamento
+                        </button>
+                        <button type="button" className="c360-btn ghost" style={{ padding: '3px 8px', fontSize: 11 }} disabled={Boolean(claimingId)} onClick={() => requestClearPending(item)} title="Remove a ação pendente do rodapé desta conversa">
+                          🧹 Destravar pendência
+                        </button>
+                      </div>
                     )}
                   </div>
                 )}

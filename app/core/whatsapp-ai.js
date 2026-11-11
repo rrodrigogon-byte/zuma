@@ -112,7 +112,7 @@ import {
   STICKERS_RESTRITAS,
 } from './whatsapp-ai-persona.js';
 import { bubbleDelayMs, splitBubbles, styleModelText } from './whatsapp-ai-style.js';
-import { agendaCalendarText, ensureToolLinks, extractFastScheduleChoice, fixWeekdayMistakes, obterLinkAgendaDino, serviceWithProfessional, toolMoneyValues, unbackedPrices, withSelfBookingAgendaOption } from './whatsapp-ai-normalize.js';
+import { AGENDA_PUBLICA_DINO_BASE, agendaCalendarText, ensureToolLinks, extractFastScheduleChoice, fixWeekdayMistakes, obterLinkAgendaDino, serviceWithProfessional, toolMoneyValues, unbackedPrices, withSelfBookingAgendaOption } from './whatsapp-ai-normalize.js';
 import { enviarFigurinha as enviarFigurinhaPersona, figurinhaDisponivel, figurinhaSuportada } from './whatsapp-figurinhas.js';
 import { mapWhatsappAiProviderLatency24h, WHATSAPP_AI_PROVIDER_RUNS_24H_CHANNEL_SQL } from './whatsapp-ai-provider-metrics.js';
 
@@ -2011,9 +2011,26 @@ async function deterministicResponseCore(task, channel, session, message) {
 
   if (!session.acao_pendente && isCancellationRequest(message.text) && session.status !== 'humano') {
     try {
-      const prepared = await toolPrepareCancellation(context, {});
+      const prepared = await toolPrepareCancellation({ ...context, customerText: message.text }, {});
       if (prepared?.ok && prepared.acao) {
         session.acao_pendente = { actionId: prepared.acao.id, type: prepared.acao.tipo, summary: prepared.acao.resumo, mostrado: true, preparadoEm: new Date().toISOString() };
+        const cancelamentoDireto = !String(message.text || '').includes('?')
+          && /\b(cancelo|cancela|cancelar|pode cancelar|quero cancelar|desmarca|desmarcar|desmarco)\b/i.test(plain(message.text));
+        if (cancelamentoDireto) {
+          try {
+            const confirmedCancel = await confirmPendingAction(context);
+            if (confirmedCancel?.ok !== false) {
+              session.acao_pendente = null;
+              await recordConfirmedInCrm(context, { type: 'cancelamento', summary: prepared.acao.resumo }).catch(() => null);
+              const baseCancel = persona ? personaConfirmationReply(persona, confirmedCancel, message.externalId) : confirmationReply(confirmedCancel);
+              return {
+                text: `${baseCancel}\n📅 Quando quiser marcar um novo horário: ${AGENDA_PUBLICA_DINO_BASE}`,
+                kind: 'confirmed',
+                actionType: 'cancelamento',
+              };
+            }
+          } catch (_) {}
+        }
         await db.query(`UPDATE whatsapp_ai_sessions SET acao_pendente = acao_pendente || '{"mostrado":true}'::jsonb WHERE id = $1 AND empresa_id = $2 AND loja_id = $3`, [session.id, session.empresa_id, session.loja_id]);
         const lead = persona ? 'Tranquilo, acontece! Já preparei o cancelamento do seu horário:' : 'Foi mal pelo imprevisto! Já preparei o cancelamento do seu horário:';
         return {
@@ -2157,10 +2174,29 @@ async function deterministicResponseCore(task, channel, session, message) {
           date: fastChoice.data,
           time: fastChoice.horario,
           customerName: context.customerName,
+          ...(fastChoice.extraServiceIds?.length ? { extraServiceIds: fastChoice.extraServiceIds } : {}),
         });
         if (prep?.ok) {
           const pendingFast = (await db.query(`SELECT acao_pendente FROM whatsapp_ai_sessions WHERE id = $1 AND empresa_id = $2 AND loja_id = $3`, [session.id, session.empresa_id, session.loja_id])).rows[0]?.acao_pendente;
           if (pendingFast?.actionId) {
+            const validCustomerName = context.customerName && !/^(cliente|whatsapp|contato|usuario|usuário)$/i.test(String(context.customerName).trim());
+            if (validCustomerName) {
+              try {
+                const confirmedFast = await confirmPendingAction(context);
+                if (confirmedFast?.ok !== false) {
+                  await recordConfirmedInCrm(context, pendingFast).catch(() => null);
+                  const baseConfirm = persona ? personaConfirmationReply(persona, confirmedFast, message.externalId) : confirmationReply(confirmedFast);
+                  return {
+                    text: `${baseConfirm}`,
+                    kind: 'confirmed',
+                    actionType: confirmedFast?.type || 'agendamento',
+                    model: 'deterministic_fast_slot_committed',
+                    provider: 'system',
+                    ...(persona && persona.figurinhas && !stickerAlreadySentToday(session) && figurinhaDisponivel('agendado') ? { sticker: 'agendado' } : {}),
+                  };
+                }
+              } catch (_) {}
+            }
             await db.query(`UPDATE whatsapp_ai_sessions SET acao_pendente = acao_pendente || '{"mostrado":true}'::jsonb WHERE id = $1 AND empresa_id = $2 AND loja_id = $3 AND acao_pendente->>'actionId' = $4`, [session.id, session.empresa_id, session.loja_id, String(pendingFast.actionId)]);
             return { text: pendingActionPrompt(pendingFast, persona), kind: 'fast_slot_prepared', model: 'deterministic_fast_slot', provider: 'system' };
           }
@@ -2293,8 +2329,14 @@ async function deterministicResponseCore(task, channel, session, message) {
     }
     if (pendingNow?.actionId && pendingNow.actionId !== (session.acao_pendente?.actionId || null)) {
       const intentMsg = resolveConfirmation(message.text, { actionType: pendingNow.type, lastAssistantText });
-      const lastAssPerguntouConfirmacao = /quer confirmar|confere a[íi]|responda sim|posso confirmar|deseja confirmar|vamos agendar|confirma/i.test(lastAssistantText);
-      if (intentMsg === 'confirm' && lastAssPerguntouConfirmacao) {
+      const lastAssPerguntouConfirmacao = /quer confirmar|confere a[íi]|responda sim|posso (confirmar|agendar|marcar)|deseja confirmar|vamos agendar|confirma|qual (desses|deles|hor[aá]rio|fica melhor|prefere)/i.test(lastAssistantText);
+      const validCustomerName = context.customerName && !/^(cliente|whatsapp|contato|usuario|usuário)$/i.test(String(context.customerName).trim());
+      const choseOfferedSlot = Boolean(extractFastScheduleChoice(message.text, lastAssistantText));
+      const explicitBookingOrder = !String(message.text || '').includes('?')
+        && /\b(pode\s+(agendar|marcar|fechar|confirmar|deixar)|marca\s+(ai|aí|esse|as|às|pra\s+mim)|agende|agenda\s+ai|agenda\s+aí|sim[,!\s]+agendar|deixa\s+(agendado|marcado))\b/i.test(plain(message.text));
+      const shouldAutoCommit = (intentMsg === 'confirm' && lastAssPerguntouConfirmacao)
+        || (validCustomerName && (pendingNow.type === 'agendamento' || pendingNow.type === 'remarcacao') && (choseOfferedSlot || explicitBookingOrder));
+      if (shouldAutoCommit) {
         try {
           const confirmed = await confirmPendingAction(context);
           if (confirmed?.ok !== false) {
@@ -2987,6 +3029,36 @@ export async function clearWhatsappAiPendingAction(context = {}, sessionId) {
     await auditHandoff(trx, context, updated.rows[0].id, 'pending_action_cleared', {});
     return { ok: true, id: updated.rows[0].id, status: updated.rows[0].status, hasPendingAction: false };
   });
+}
+
+export async function confirmWhatsappAiPendingAction(context = {}, sessionId) {
+  const empresaId = requiredTenantUuid(context.empresaId, 'empresaId');
+  const lojaId = requiredTenantUuid(context.lojaId, 'lojaId');
+  const normalizedSessionId = cleanText(sessionId, 60);
+  const sessionRow = (await db.queryRead(
+    `SELECT id, telefone, nome, status, acao_pendente FROM whatsapp_ai_sessions WHERE id = $1 AND empresa_id = $2 AND loja_id = $3`,
+    [normalizedSessionId, empresaId, lojaId],
+  )).rows[0];
+  if (!sessionRow) {
+    const error = new Error('sessão não encontrada nesta unidade');
+    error.code = 'WHATSAPP_AI_SESSION_NOT_FOUND';
+    throw error;
+  }
+  const confirmed = await confirmPendingAction({
+    empresaId,
+    lojaId,
+    sessionId: sessionRow.id,
+    phone: sessionRow.telefone,
+    customerName: resolverNomeCliente(empresaId, sessionRow.telefone, sessionRow.nome),
+    usuarioId: context.usuarioId || null,
+  });
+  if (sessionRow.acao_pendente) {
+    await recordConfirmedInCrm(
+      { empresaId, lojaId, sessionId: sessionRow.id, phone: sessionRow.telefone },
+      sessionRow.acao_pendente,
+    ).catch(() => null);
+  }
+  return { ok: true, id: sessionRow.id, status: sessionRow.status, hasPendingAction: false, confirmed };
 }
 
 export async function getWhatsappAiConversation(context = {}, sessionId, { limit = 300 } = {}) {

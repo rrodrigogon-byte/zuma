@@ -152,6 +152,38 @@ const APELIDOS_SERVICOS = {
   'nariz': ['depilacao masculina - nariz', 'depilacao nariz', 'nariz'],
   'depilacao masculina nariz': ['depilacao masculina - nariz', 'depilacao nariz', 'nariz'],
   'depilacao nariz': ['depilacao masculina - nariz', 'depilacao nariz', 'nariz'],
+  'orelha': ['depilacao masculina - orelha', 'depilacao orelha', 'orelha'],
+  'depilacao orelha': ['depilacao masculina - orelha', 'depilacao orelha', 'orelha'],
+  'nariz e orelha': ['depilacao masculina - nariz e orelha', 'nariz e orelha'],
+  'depilacao nariz e orelha': ['depilacao masculina - nariz e orelha', 'nariz e orelha'],
+  'desondulacao': ['desondulacao (selagem)', 'desondulacao', 'selagem'],
+  'desondulacao selagem': ['desondulacao (selagem)', 'desondulacao', 'selagem'],
+  'selagem': ['desondulacao (selagem)', 'desondulacao', 'selagem'],
+  'progressiva': ['desondulacao (selagem)', 'desondulacao', 'selagem'],
+  'relaxamento': ['desondulacao (selagem)', 'desondulacao', 'selagem'],
+  'alisamento': ['desondulacao (selagem)', 'desondulacao', 'selagem'],
+  'detox capilar': ['detox capilar'],
+  'detox': ['detox capilar'],
+  'detox de barba': ['detox de barba'],
+  'detox barba': ['detox de barba'],
+  'limpeza de pele': ['limpeza de pele'],
+  'limpeza pele': ['limpeza de pele'],
+  'dermaplaning': ['dermaplaning'],
+  'banho de gelo': ['banho de gelo'],
+  'coloracao': ['coloracao tonalizacao', 'coloracao'],
+  'tonalizacao': ['coloracao tonalizacao', 'tonalizacao'],
+  'coloracao tonalizacao': ['coloracao tonalizacao'],
+  'tintura': ['coloracao tonalizacao'],
+  'pintar cabelo': ['coloracao tonalizacao'],
+  'corte visagista': ['corte visagista'],
+  'visagismo': ['corte visagista'],
+  'massagem': ['massagem relaxante na cadeira', 'massagem'],
+  'massagem relaxante': ['massagem relaxante na cadeira', 'massagem'],
+  'protese capilar': ['protese capilar'],
+  'manutencao protese': ['manutecao protese', 'manutencao protese'],
+  'manutencao de protese': ['manutecao protese', 'manutencao protese'],
+  'corte club': ['corte club'],
+  'barba club': ['barba club'],
   'pezinho': ['pezinho', 'acabamento'],
   'acabamento': ['pezinho', 'acabamento'],
   'corte infantil': ['corte infantil agendamento online', 'corte infantil', 'corte com bruno ou nati agendamento online', 'corte com dino agendamento online'],
@@ -1468,6 +1500,11 @@ export function categoriaDoServico(nome) {
   const plano = textoPlano(nome);
   if (/\b(combo|corte e barba|barba e corte|cabelo e barba|barba e cabelo)\b/.test(plano)) return 'combo';
   if (/\bvisagista\b/.test(plano)) return 'corte visagista';
+  if (/\b(desondula|selagem|progressiva|relaxamento)\b/.test(plano)) return 'desondulacao';
+  if (/\b(colora|tonaliza|tintura)\b/.test(plano)) return 'coloracao';
+  if (/\blimpeza de pele\b/.test(plano)) return 'limpeza de pele';
+  if (/\bdetox de barba\b/.test(plano)) return 'detox de barba';
+  if (/\bdetox\b/.test(plano)) return 'detox capilar';
   if (/\b(corte|cabelo)\b/.test(plano)) return 'corte';
   if (/\bbarba\b/.test(plano)) return 'barba';
   if (/\bsobrancelha\b/.test(plano)) return 'sobrancelha';
@@ -2008,25 +2045,45 @@ export function findOwnAppointment(appointments = [], ref = '', fallbackText = '
   const alvo = String(ref || '').trim();
   const getIsoDate = (item) => item.dataAgenda || (item.dataHora ? localDateIso(new Date(item.dataHora)) : '');
   const matchPorDataOuDia = (texto) => {
-    const t = String(texto || '').trim().toLowerCase();
+    const t = String(texto || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
     if (!t) return null;
+    const hojeIso = localDateIso();
+    const amanhaIso = addDaysIso(hojeIso, 1);
     const isoMatch = t.match(/(\d{4}-\d{2}-\d{2})/);
     if (isoMatch) {
       const m = lista.filter((it) => getIsoDate(it) === isoMatch[1]);
-      if (m.length === 1) return m[0];
+      if (m.length >= 1) return m[0];
     }
     const brMatch = t.match(/\b(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b/);
     if (brMatch) {
       const dd = brMatch[1].padStart(2, '0');
       const mm = brMatch[2].padStart(2, '0');
       const m = lista.filter((it) => getIsoDate(it).endsWith(`-${mm}-${dd}`));
-      if (m.length === 1) return m[0];
+      if (m.length >= 1) return m[0];
     }
     const diaMatch = t.match(/\bdia\s+(\d{1,2})\b/) || (/^\d{1,2}$/.test(t) ? [null, t] : null);
     if (diaMatch) {
       const dd = diaMatch[1].padStart(2, '0');
       const m = lista.filter((it) => getIsoDate(it).endsWith(`-${dd}`));
-      if (m.length === 1) return m[0];
+      if (m.length >= 1) return m[0];
+    }
+    if (/\bhoje\b/.test(t)) {
+      const m = lista.filter((it) => getIsoDate(it) === hojeIso);
+      if (m.length >= 1) return m[0];
+    }
+    if (/\bamanha\b/.test(t)) {
+      const m = lista.filter((it) => getIsoDate(it) === amanhaIso);
+      if (m.length >= 1) return m[0];
+    }
+    const mapaDias = { domingo: 0, segunda: 1, terca: 2, quarta: 3, quinta: 4, sexta: 5, sabado: 6 };
+    for (const [nomeDia, dow] of Object.entries(mapaDias)) {
+      if (new RegExp(`\\b${nomeDia}(?:-feira)?\\b`).test(t)) {
+        const m = lista.filter((it) => {
+          const iso = getIsoDate(it);
+          return iso && new Date(`${iso}T12:00:00Z`).getUTCDay() === dow;
+        });
+        if (m.length >= 1) return m[0];
+      }
     }
     return null;
   };
@@ -2045,7 +2102,14 @@ export function findOwnAppointment(appointments = [], ref = '', fallbackText = '
     const porTexto = matchPorDataOuDia(fallbackText);
     if (porTexto) return porTexto;
   }
-  // Só assume automaticamente quando há exatamente 1 horário futuro; com 2+, exige escolher qual
+  if (lista.length > 1 && fallbackText) {
+    const hojeIso = localDateIso();
+    const amanhaIso = addDaysIso(hojeIso, 1);
+    const deHoje = lista.filter((it) => getIsoDate(it) === hojeIso);
+    if (deHoje.length === 1) return deHoje[0];
+    const deAmanha = lista.filter((it) => getIsoDate(it) === amanhaIso);
+    if (deHoje.length === 0 && deAmanha.length === 1) return deAmanha[0];
+  }
   return lista.length === 1 ? lista[0] : null;
 }
 
@@ -2080,7 +2144,7 @@ async function toolPrepareCancellation(context, args = {}) {
   const rawText = String(context?.customerText || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
   // Segurança estrita: o cliente PRECISA ter solicitado expressamente o cancelamento ou desmarcação
   // Frases como "não posso hoje", "tem amanhã?", "não quero produto" NÃO autorizam cancelamento!
-  const pediuCancelamentoExplicitamente = /\b(cancelar|cancela|cancelamento|desmarcar|desmarca|desmarque|desmarquem|anular)\b/i.test(rawText);
+  const pediuCancelamentoExplicitamente = /\b(cancelar|cancela|cancelo|cancelamento|desmarcar|desmarca|desmarco|desmarque|desmarquem|anular|nao vou (?:conseguir|poder) ir|nao deu certo de (?:eu )?ir|nao poderei ir|imprevisto nao vou)\b/i.test(rawText);
   if (!pediuCancelamentoExplicitamente && !args.confirmacaoExpressa) {
     throw new WhatsappAiToolError(
       'Cancelamento bloqueado por segurança: o cliente não solicitou expressamente o cancelamento do agendamento (frases como "não posso hoje", "tem mais tarde?", "não quero" não autorizam cancelamento). Se o cliente quiser outro dia ou horário, use sugerir_proximos_horarios ou preparar_remarcacao.',

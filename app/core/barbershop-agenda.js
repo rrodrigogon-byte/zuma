@@ -786,7 +786,8 @@ function agendamentosDoTelefone(empresa, phone, { includePast = false, lojaId, t
     .filter((item) => !unidade || !item.lojaId || String(item.lojaId) === unidade)
     .filter((item) => phoneMatchKey(item.clienteTelefone) === chave)
     .filter((item) => includeCancelled || !['cancelado', 'nao_compareceu'].includes(item.status))
-    .filter((item) => includePast || item.dataAgenda === diaHoje || instanteAgendamento(item) >= limitePassado);
+    .filter((item) => includePast || item.dataAgenda === diaHoje || instanteAgendamento(item) >= limitePassado)
+    .sort((a, b) => instanteAgendamento(a) - instanteAgendamento(b));
 }
 
 function horarioLocalLegivel(dataHora) {
@@ -809,6 +810,7 @@ export async function listCustomerAppointments(scope, { includePast = false, lim
       codigo: item.codigoConfirmacao || null,
       dataHora: item.dataHora,
       dataAgenda: item.dataAgenda,
+      diaSemana: item.dataAgenda ? new Intl.DateTimeFormat('pt-BR', { timeZone: 'UTC', weekday: 'long' }).format(new Date(`${String(item.dataAgenda).slice(0, 10)}T12:00:00Z`)) : '',
       horaLocal: item.horaLocal,
       status: item.status,
       duracaoMinutos: Number(item.duracaoMinutos || 30),

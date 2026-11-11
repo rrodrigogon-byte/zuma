@@ -164,6 +164,10 @@ export default function WhatsappConversationPanel({
     await acao('limparPendencia', () => api.post(`${HUMAN_QUEUE_PATH}/${encodeURIComponent(sessionId)}/clear-pending${canalQuery}`, {}, { headers }), 'Ação pendente removida com sucesso! O cliente não receberá mais cobrança de SIM no rodapé.')
   }
 
+  async function confirmarPendencia() {
+    await acao('confirmarPendencia', () => api.post(`${HUMAN_QUEUE_PATH}/${encodeURIComponent(sessionId)}/confirm-pending${canalQuery}`, {}, { headers }), 'Agendamento confirmado e gravado com sucesso na agenda da barbearia!')
+  }
+
   async function inserirHorariosLivresHoje() {
     if (ocupado) return
     setOcupado('horarios')
@@ -230,9 +234,14 @@ export default function WhatsappConversationPanel({
             <strong>⏳ Ação pendente aguardando SIM:</strong> {sessao.pendingSummary || 'Confirmação pendente no T-Rex'}
           </span>
           {canAct && (
-            <button type="button" className="c360-btn ghost" style={{ padding: '4px 10px', fontSize: 12 }} onClick={limparPendencia} disabled={Boolean(ocupado)}>
-              {ocupado === 'limparPendencia' ? 'Limpando…' : '🧹 Destravar pendência'}
-            </button>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              <button type="button" className="c360-btn primary" style={{ padding: '4px 10px', fontSize: 12 }} onClick={confirmarPendencia} disabled={Boolean(ocupado)}>
+                {ocupado === 'confirmarPendencia' ? 'Confirmando…' : '✅ Fechar Agendamento'}
+              </button>
+              <button type="button" className="c360-btn ghost" style={{ padding: '4px 10px', fontSize: 12 }} onClick={limparPendencia} disabled={Boolean(ocupado)}>
+                {ocupado === 'limparPendencia' ? 'Limpando…' : '🧹 Destravar pendência'}
+              </button>
+            </div>
           )}
         </div>
       )}
