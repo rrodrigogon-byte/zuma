@@ -667,6 +667,24 @@ export async function processAppointmentNotificationTask(task = {}) {
   );
   const canal = channelResult.rows[0];
   if (!canal) return { skipped: true, reason: 'whatsapp_channel_inactive' };
+  if (evento === 'cancelado') {
+    const motivoLower = String(agendamento.motivoCancelamento || agendamento.observacaoCancelamento || '').toLowerCase();
+    if (/\b(duplicidade|duplicad|erro_lancamento|ajuste_interno|remarcac|teste|limpeza)\b/.test(motivoLower)) {
+      return { skipped: true, reason: 'internal_cancellation_reason' };
+    }
+    try {
+      const sessRes = await db.query(
+        `SELECT status, ultima_interacao_em FROM whatsapp_ai_sessions
+          WHERE canal_id = $1 AND ${phoneMatchKeySql('telefone')} = ${phoneMatchKeySql('$2')}
+          ORDER BY atualizado_em DESC NULLS LAST LIMIT 1`,
+        [task.canal_id, elegibilidade.telefone],
+      );
+      const sessRow = sessRes.rows[0];
+      if (sessRow && String(sessRow.status) === 'humano') {
+        return { skipped: true, reason: 'session_in_human_handoff' };
+      }
+    } catch (_) { /* prossegue se não conseguir consultar sessão */ }
+  }
   await db.query(
     `UPDATE tarefas_integracao_canais SET delivery_started_at = CURRENT_TIMESTAMP
       WHERE id = $1 AND status = 'processando' AND lease_token = $2::uuid`,

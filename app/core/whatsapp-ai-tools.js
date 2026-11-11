@@ -731,11 +731,42 @@ async function toolProfessionals(context) {
   };
 }
 
+function extractTimeConstraintFromText(rawText = '') {
+  const t = String(rawText || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  let notAfter = '';
+  let notBefore = '';
+  const beforeMatch = t.match(/\b(?:antes\s+d[ae]s?|ate\s+[ao]?s?)\s*(\d{1,2})(?:\s*[:h]\s*(\d{2}))?\b/);
+  if (beforeMatch && Number(beforeMatch[1]) < 24) {
+    notAfter = `${beforeMatch[1].padStart(2, '0')}:${beforeMatch[2] || '00'}`;
+  }
+  const afterMatch = t.match(/\b(?:depois\s+d[ae]s?|a\s+partir\s+d[ae]s?|apos\s+as?)\s*(\d{1,2})(?:\s*[:h]\s*(\d{2}))?\b/);
+  if (afterMatch && Number(afterMatch[1]) < 24) {
+    notBefore = `${afterMatch[1].padStart(2, '0')}:${afterMatch[2] || '00'}`;
+  }
+  return { notAfter, notBefore };
+}
+
+async function resolveRescheduleContext(scope, rawText = '', fallbackDate = '') {
+  const t = String(rawText || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const isRescheduleText = /\b(mudar|remarcar|trocar|antecipar|adiar|alterar|mais\s+cedo|mais\s+tarde|outro\s+horario)\b/.test(t) || /\btenho\s+um\s+hor[aá]rio\b/.test(t);
+  const explicitServiceInText = /\b(corte|cabelo|barba|combo|sobrancelha|selagem|desondulacao|progressiva|limpeza|detox|coloracao|tintura|protese|depilacao|massagem)\b/.test(t);
+  const appointments = await listWhatsappCustomerAppointments(scope, { includePast: false, limit: 15, toleranceHours: 6 }).catch(() => []);
+  const matched = findOwnAppointment(appointments, fallbackDate, rawText || fallbackDate);
+  const isClub = appointments.some((a) => /\b(club|clube|plano|pacote|assinatura)\b/i.test(`${a?.servico?.nome || ''} ${a?.clienteNome || ''}`))
+    || /\b(club|clube|plano|pacote|assinatura)\b/i.test(String(scope?.customerName || ''));
+  return { isRescheduleText, explicitServiceInText, matchedAppointment: matched, isClub };
+}
+
 async function toolAvailability(context, args = {}) {
   const scope = contextScope(context);
-  const professionalId = await resolveAgendaId(scope, args.professionalId, 'professionalId', { allowAny: true });
-  const serviceId = await resolveAgendaId(scope, args.serviceId, 'serviceId', { professionalId });
   const date = normalizeAgendaDate(args.date, localDateIso()) || cleanText(args.date, 10);
+  const resCtx = await resolveRescheduleContext(scope, context?.customerText || '', date);
+  const effectiveProfArg = args.professionalId || (resCtx.isRescheduleText && resCtx.matchedAppointment?.profissional?.id ? resCtx.matchedAppointment.profissional.id : '');
+  const professionalId = await resolveAgendaId(scope, effectiveProfArg, 'professionalId', { allowAny: true });
+  const effectiveServiceArg = (!resCtx.explicitServiceInText && resCtx.isRescheduleText && resCtx.matchedAppointment?.servico?.id)
+    ? resCtx.matchedAppointment.servico.id
+    : args.serviceId;
+  const serviceId = await resolveAgendaId(scope, effectiveServiceArg, 'serviceId', { professionalId });
   const disponibilidade = await listSchedulingAvailability(scope, { serviceId, professionalId, date });
   const servicesList = await listSchedulingServices(scope).catch(() => []);
   const dataFormatada = friendlyWhen(date, '08:00').split(' às ')[0];
@@ -898,7 +929,7 @@ function minutesOf(hhmm) {
   return match ? Number(match[1]) * 60 + Number(match[2]) : NaN;
 }
 
-export async function earliestSlots({ fetchDay, fromDate, days = 7, period = 'qualquer', limit = 6, notBefore = '', aroundTime = '' } = {}) {
+export async function earliestSlots({ fetchDay, fromDate, days = 7, period = 'qualquer', limit = 6, notBefore = '', notAfter = '', aroundTime = '' } = {}) {
   const safeDays = Math.min(14, Math.max(1, Number(days) || 7));
   const safeLimit = Math.min(10, Math.max(1, Number(limit) || 6));
   const wanted = normalizePeriod(period);
@@ -918,6 +949,7 @@ export async function earliestSlots({ fetchDay, fromDate, days = 7, period = 'qu
     }
     let candidates = (Array.isArray(day?.slots) ? day.slots : [])
       .filter((time) => !(offset === 0 && notBefore && String(time) <= notBefore))
+      .filter((time) => !(offset === 0 && notAfter && String(time) >= notAfter))
       .filter((time) => wanted === 'qualquer' || periodOf(time) === wanted);
     if (wanted === 'qualquer') {
       // Madrugada só entra no dia se não houver horário comercial nem noturno.
@@ -948,7 +980,14 @@ function localTimeHHMM(now = new Date()) {
 
 async function toolNextSlots(context, args = {}) {
   const scope = contextScope(context);
+  const today = localDateIso();
+  const askedFrom = normalizeAgendaDate(args.fromDate, today);
+  const fromDate = askedFrom && askedFrom >= today ? askedFrom : today;
+  const resCtx = await resolveRescheduleContext(scope, context?.customerText || '', fromDate);
   let rawService = cleanText(args.serviceId, 100);
+  if (resCtx.isRescheduleText && !resCtx.explicitServiceInText && resCtx.matchedAppointment?.servico?.id) {
+    rawService = resCtx.matchedAppointment.servico.id;
+  }
   if (!rawService) {
     const servicos = await listSchedulingServices(scope).catch(() => []);
     const principal = (servicos || []).find((s) => /corte/i.test(s.nome)) || servicos?.[0];
@@ -956,10 +995,11 @@ async function toolNextSlots(context, args = {}) {
     else throw new WhatsappAiToolError('informe o serviço (id de listar_servicos)', 'SERVICE_REQUIRED');
   }
   const serviceId = await resolveAgendaId(scope, rawService, 'serviceId');
-  const professionalId = await resolveAgendaId(scope, args.professionalId || 'qualquer', 'professionalId', { allowAny: true });
-  const today = localDateIso();
-  const askedFrom = normalizeAgendaDate(args.fromDate, today);
-  const fromDate = askedFrom && askedFrom >= today ? askedFrom : today;
+  const rawProfArg = args.professionalId || (resCtx.isRescheduleText && resCtx.matchedAppointment?.profissional?.id ? resCtx.matchedAppointment.profissional.id : 'qualquer');
+  const professionalId = await resolveAgendaId(scope, rawProfArg, 'professionalId', { allowAny: true });
+  const timeConstraints = extractTimeConstraintFromText(context?.customerText || '');
+  const effectiveNotBefore = timeConstraints.notBefore || (fromDate === today ? localTimeHHMM() : '');
+  const effectiveNotAfter = timeConstraints.notAfter || '';
   // Agenda PostgreSQL não aceita "qualquer": junta os horários de cada profissional ativo.
   const multiProfessional = professionalId === 'qualquer' && await agendaSource(scope) === 'postgres';
   const professionals = multiProfessional ? (await listSchedulingProfessionals(scope) || []).filter((item) => item?.id) : [];
@@ -989,12 +1029,36 @@ async function toolNextSlots(context, args = {}) {
     days: args.days,
     period: args.period,
     limit: Number(args.limit) > 0 ? args.limit : 3,
-    notBefore: fromDate === today ? localTimeHHMM() : '',
+    notBefore: effectiveNotBefore,
+    notAfter: effectiveNotAfter,
     aroundTime: /^\d{1,2}:\d{2}$/.test(String(args.aroundTime || '')) ? String(args.aroundTime).padStart(5, '0') : '',
   });
+  let alternativasMesmoDiaOutroProfissional = [];
+  if (professionalId !== 'qualquer' && !result.slots.some((s) => s.date === fromDate)) {
+    const outrosProfs = (await listSchedulingProfessionals(scope).catch(() => []))
+      .filter((p) => p?.id && p.id !== professionalId && !barbeariaErp.ehProfissionalDino(p));
+    for (const outro of outrosProfs) {
+      const dayOutro = await listSchedulingAvailability(scope, { serviceId, professionalId: outro.id, date: fromDate }).catch(() => null);
+      const slotsOutro = (dayOutro?.slots || [])
+        .filter((t) => !(effectiveNotBefore && String(t) <= effectiveNotBefore))
+        .filter((t) => !(effectiveNotAfter && String(t) >= effectiveNotAfter))
+        .slice(0, 3);
+      for (const t of slotsOutro) {
+        alternativasMesmoDiaOutroProfissional.push({
+          date: fromDate,
+          time: String(t).slice(0, 5),
+          quando: friendlyWhen(fromDate, String(t).slice(0, 5)),
+          professional: outro.nome || outro.apelido,
+        });
+      }
+    }
+  }
   return {
     ok: true,
     dataClassification: 'untrusted_business_data',
+    assinanteClub: resCtx.isClub,
+    ...(resCtx.matchedAppointment ? { agendamentoAtualCliente: { id: resCtx.matchedAppointment.id, data: resCtx.matchedAppointment.dataAgenda, hora: resCtx.matchedAppointment.horaLocal, servico: resCtx.matchedAppointment.servico?.nome, profissional: resCtx.matchedAppointment.profissional?.nome } } : {}),
+    ...(alternativasMesmoDiaOutroProfissional.length ? { alternativasMesmoDiaOutroProfissional } : {}),
     proximosHorarios: sanitizeToolData(await (async () => {
       // Valor de cada opção (o Dino muda de preço depois das 18h09).
       const servicos = await listSchedulingServices(scope).catch(() => []);
@@ -1003,6 +1067,7 @@ async function toolNextSlots(context, args = {}) {
       const profs = professionalId === 'qualquer' ? [] : await listSchedulingProfessionals(scope).catch(() => []);
       const prof = (profs || []).find((item) => item.id === professionalId) || null;
       const duracaoMinutos = Number(servico.duracaoMinutos || 30);
+      const isServicoClub = /\b(club|clube)\b/i.test(String(servico.nome || '')) || resCtx.isClub;
       return result.slots.map((slot) => {
         const profSlot = prof || (slot.professional ? { nome: slot.professional } : null);
         return {
@@ -1010,7 +1075,7 @@ async function toolNextSlots(context, args = {}) {
           quando: friendlyWhen(slot.date, slot.time),
           duracaoMinutos,
           duracaoTexto: `${duracaoMinutos} min`,
-          valor: brl(precoNoHorario(servico, profSlot, slot.time, servicos)),
+          valor: isServicoClub && !barbeariaErp.ehProfissionalDino(profSlot || {}) ? 'Incluso no Plano Club' : brl(precoNoHorario(servico, profSlot, slot.time, servicos)),
           horarioExtra: horarioExtraDoDino(servico, profSlot, slot.time)
         };
       });
@@ -1020,7 +1085,7 @@ async function toolNextSlots(context, args = {}) {
     linkAgenda: obterLinkAgendaDino({ professionalIdOrName: args.professionalId }),
     linkAgendaGeral: AGENDA_PUBLICA_DINO_BASE,
     instrucao: result.slots.length
-      ? 'Ofereça exatamente 3 opções concretas (dia da semana + data + hora + profissional + valor) numa mensagem só, SEMPRE informando o nome do barbeiro disponível em cada opção (campo professional, ex.: "com o Bruno ou a Nati"). NUNCA diga "com qualquer profissional disponível". Fale em "horário extra"/"atendimento exclusivo noturno" só para opções com horarioExtra=true. Depois que o cliente escolher, use preparar_agendamento.'
+      ? `Ofereça exatamente 3 opções concretas (dia da semana + data + hora + profissional${resCtx.isClub ? ' — sem cobrar valor avulso pois o cliente é assinante Club' : ' + valor'}) numa mensagem só, SEMPRE informando o nome do barbeiro disponível em cada opção.${alternativasMesmoDiaOutroProfissional.length ? ` Se no dia pedido (${fromDate}) o profissional titular estiver lotado, ofereça também as opções do mesmo dia com outro barbeiro de alternativasMesmoDiaOutroProfissional (${alternativasMesmoDiaOutroProfissional.map((a) => `${a.quando} com ${a.professional}`).join(', ')}).` : ''} Depois que o cliente escolher, use preparar_agendamento ou preparar_remarcacao.`
       : 'Não há vaga no período. Ofereça ampliar o período/outro profissional ou entrar na lista de espera (entrar_lista_espera) para ser avisado se abrir horário.',
   };
 }

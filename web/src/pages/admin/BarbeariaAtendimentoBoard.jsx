@@ -510,7 +510,7 @@ export default function BarbeariaAtendimentoBoard({
         item,
         motivo: 'Solicitado pelo cliente via WhatsApp / telefone',
         motivoCustom: '',
-        notificarCliente: true,
+        notificarCliente: false,
       })
       return
     }

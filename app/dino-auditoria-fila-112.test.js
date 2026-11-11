@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { matchAgendaName, findOwnAppointment } from './core/whatsapp-ai-tools.js';
+import { matchAgendaName, findOwnAppointment, earliestSlots } from './core/whatsapp-ai-tools.js';
 import { verificarStatusBarbeiroDino, BARBEIROS_ATIVOS_DINO } from './core/barbershop-agenda.js';
 import { confirmIntent, resolveConfirmation, declineWithNewRequest } from './core/whatsapp-ai-intents.js';
 import { serviceWithProfessional, extractFastScheduleChoice } from './core/whatsapp-ai-normalize.js';
@@ -93,4 +93,29 @@ test('Auditoria 112 Conversas Fila — 6. Catálogo completo (Desondulação/Sel
   ];
   const achadoSexta = findOwnAppointment(agendamentos, '', 'Quero cancelar meu horário de sexta');
   assert.equal(achadoSexta?.id, 'ag-sexta');
+});
+
+test('Auditoria 112 Conversas Fila — 7. Caso Pablo Selle (#8): remarcação antes das 17:00 na quinta preserva dia e filtra notAfter', async () => {
+  const agendamentos = [
+    { id: 'ag-seg', dataAgenda: '2026-11-09', dataHora: '2026-11-09T17:00:00-04:00', status: 'confirmado', servico: { id: 'srv-barba', nome: 'BARBA PREMIUM' }, profissional: { id: 'prof-bruno', nome: 'Bruno' } },
+    { id: 'ag-qui', dataAgenda: '2026-11-12', dataHora: '2026-11-12T17:30:00-04:00', status: 'agendado', servico: { id: 'srv-barba', nome: 'BARBA PREMIUM' }, profissional: { id: 'prof-bruno', nome: 'Bruno' } },
+  ];
+  const achadoQuinta = findOwnAppointment(agendamentos, '', 'Tenho um horário com o Bruno na quinta 17:00, preciso que mantenha na quinta mais cedo, antes das 17:00');
+  assert.equal(achadoQuinta?.id, 'ag-qui');
+
+  const res = await earliestSlots({
+    fetchDay: async (date) => ({
+      slots: date === '2026-11-12' ? ['10:45', '11:00', '14:00', '17:30', '18:00'] : ['15:30'],
+      professional: { nome: 'Bruno' },
+    }),
+    fromDate: '2026-11-12',
+    days: 2,
+    limit: 3,
+    notAfter: '17:00',
+  });
+  assert.deepEqual(res.slots.map((s) => `${s.date} ${s.time}`), [
+    '2026-11-12 10:45',
+    '2026-11-12 11:00',
+    '2026-11-12 14:00',
+  ]);
 });
