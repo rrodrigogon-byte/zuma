@@ -870,7 +870,12 @@ export function expirarSinais(opcoes = {}) {
       }
       if (agendamento?.status === 'agendado') {
         try {
-          const cancelado = barbearia.alterarStatusAgendamento(empresaId, agendamentoId, 'cancelado', { observacoes: texto(`${agendamento.observacoes || ''} · Cancelado: sinal não pago no prazo`, 600) });
+          const cancelado = barbearia.alterarStatusAgendamento(empresaId, agendamentoId, 'cancelado', {
+            motivoCancelamento: 'sinal_nao_pago_no_prazo',
+            canceladoPor: 'sistema',
+            origem: 'expiracao_sinal',
+            observacoes: texto(`${agendamento.observacoes || ''} · Cancelado: sinal não pago no prazo`, 600),
+          });
           if (cancelado) liberados.push({ empresaId, agendamento: cancelado });
         } catch (_) { /* já mudou de status */ }
       }

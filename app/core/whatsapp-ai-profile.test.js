@@ -130,9 +130,9 @@ test('resolvedor usa somente agregados permitidos quando os consentimentos estã
   const originalQuery = db.query;
   db.queryRead = async (sql, params) => {
     assert.equal(params[0], IDS.empresaId);
+    if (sql.includes("tags->'preferencias' AS preferencias")) return { rows: [{ nome: 'Cliente Consentido', total_visitas: 2, ultima_visita: new Date().toISOString(), preferencias: { horario_preferido: 'tarde' } }] };
     if (sql.includes('FROM clientes\n')) return { rows: [{ id: '55555555-5555-4555-8555-555555555555', nome: 'Cliente Consentido' }] };
     if (sql.includes('WITH matching_customers')) return { rows: [{ customer_count: 1, distinct_name_count: 1, customer_name: 'Cliente Consentido', order_count: 3, last_order_at: new Date().toISOString(), categories: [{ name: 'Perfumes', frequency: 3 }] }] };
-    if (sql.includes('FROM clientes_barbearia')) return { rows: [{ nome: 'Cliente Consentido', total_visitas: 2, ultima_visita: new Date().toISOString(), preferencias: { horario_preferido: 'tarde' } }] };
     if (sql.includes('FROM consentimentos_cliente')) return { rows: [{ finalidade: 'atendimento_personalizado', concedido: true }, { finalidade: 'marketing', concedido: true }] };
     throw new Error(`consulta inesperada: ${sql.slice(0, 80)}`);
   };
@@ -182,7 +182,7 @@ test('resolvedor não consulta histórico sem consentimento de personalização'
     assert.equal(result.profile.identity.relationship, 'não personalizado');
     assert.deepEqual(result.profile.observedFacts, {});
     assert.equal(seen.some(sql => sql.includes('WITH matching_customers')), false);
-    assert.equal(seen.some(sql => sql.includes('FROM clientes_barbearia')), false);
+    assert.equal(seen.some(sql => sql.includes("tags->'preferencias' AS preferencias")), false);
   } finally {
     db.queryRead = originalRead;
     db.query = originalQuery;

@@ -2675,11 +2675,12 @@ export function registrarConsumoInternoComandaBarbearia(empresaId, comandaId, da
 
 export function listarComandasBarbearia(empresaId, filtros = {}) {
   const dataFiltro = filtros.data ? String(filtros.data).slice(0, 10) : null;
+  const lojaId = legacyLojaIdFromCommerce(filtros.lojaId, empresaId);
   return Object.values(estadoEmpresa(empresaId, false).comandas)
     .filter((item) => !filtros.agendamentoId || item.agendamentoId === String(filtros.agendamentoId) || (item.itens || []).some(i => i.agendamentoId === String(filtros.agendamentoId)))
     .filter((item) => !filtros.pendentes || ['aberta', 'aguardando_pagamento', 'parcialmente_paga'].includes(item.status))
     .filter((item) => !filtros.status || item.status === String(filtros.status))
-    .filter((item) => !filtros.lojaId || !item.lojaId || item.lojaId === String(filtros.lojaId))
+    .filter((item) => !lojaId || legacyLojaIdFromCommerce(item.lojaId, empresaId) === lojaId)
     .filter((item) => !filtros.clienteId || item.clienteId === String(filtros.clienteId))
     .filter((item) => !filtros.caixaId || item.caixaId === String(filtros.caixaId) || (item.pagamentos || []).some(p => String(p.caixaId) === String(filtros.caixaId)))
     .filter((item) => {
@@ -4380,7 +4381,10 @@ export function atualizarAgendamento(empresaId, agendamentoId, dados = {}, opcoe
     : duracaoAtendimentoProfissional(servico, profissional, obterCalendarioLoja(estado, agendamento.lojaId));
   const precoCalculado = calcularPrecoServicoHorario(servico, profissional, agendamento.horaLocal);
   const valorEsperado = agendamento.servicoId === atual.servicoId && Number(atual.valor) > 0 ? atual.valor : precoCalculado;
-  agendamento.valor = dados.valor !== undefined && Number(dados.valor) > 0 ? dinheiro(dados.valor, valorEsperado) : valorEsperado;
+  if (dados.valor !== undefined && (!Number.isFinite(Number(dados.valor)) || Math.round(Number(dados.valor) * 100) !== Math.round(valorEsperado * 100))) {
+    throw new Error('O valor do agendamento não pode ser alterado. Use a comanda para ajustes auditados.');
+  }
+  agendamento.valor = valorEsperado;
   const mudouHorarioOuProf = ['dataHora', 'dataAgenda', 'horaLocal', 'profissionalId'].some((campo) => String(antes[campo] || '') !== String(agendamento[campo] || ''));
   if (mudouHorarioOuProf) {
     if (atual.vagaOrigemId) agendamento.vagaOrigemId = null;

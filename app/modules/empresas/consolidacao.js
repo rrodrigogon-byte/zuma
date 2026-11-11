@@ -1,6 +1,5 @@
 import { emitirEventoInterno } from '../a2/eventos.js';
 import * as barbearia from '../../barbearia-erp-kytto.js';
-import { db as commerceDb } from '../../core/database.js';
 import { listarEmpresas } from './servico.js';
 
 // Grupos Econômicos Padrão da Plataforma (Holdings)
@@ -99,10 +98,10 @@ const MULTI_BUSINESS_MAP = {
  * Retorna os grupos empresariais com suas empresas vinculadas.
  */
 export async function listarGruposEmpresariais(db) {
-  let grupos = [...GRUPOS_PADRAO];
+  let grupos = GRUPOS_PADRAO.map(grupo => ({ ...grupo, empresas: [] }));
 
   try {
-    const res = await commerceDb.queryRead(`
+    const res = await (db.queryRead || db.query).call(db,`
       SELECT g.id, g.nome, g.slug, g.cnpj, g.razao_social, g.ativo,
              COALESCE(jsonb_agg(jsonb_build_object('id', e.id, 'nome', e.nome, 'cnpj', e.cnpj, 'ativa', e.ativa)
                ORDER BY e.nome) FILTER (WHERE e.id IS NOT NULL), '[]'::jsonb) AS empresas
@@ -112,7 +111,7 @@ export async function listarGruposEmpresariais(db) {
        ORDER BY g.nome ASC
     `);
     if (res?.rows?.length > 0) {
-      grupos = res.rows.map(r => ({
+      return res.rows.map(r => ({
         id: r.id,
         nome: r.nome,
         slug: r.slug,
@@ -175,7 +174,7 @@ export async function obterConsolidacaoGrupo(db, { grupoId = '', periodo = 'mes_
 
     // 1. Vendas de Varejo / Supermercado (var_vendas)
     try {
-      const vRes = await commerceDb.queryRead(
+      const vRes = await (db.queryRead || db.query).call(db,
         `SELECT COALESCE(SUM(total), 0)::numeric AS total, COUNT(*)::int AS count
            FROM var_vendas
           WHERE empresa_id = $1`,
@@ -189,7 +188,7 @@ export async function obterConsolidacaoGrupo(db, { grupoId = '', periodo = 'mes_
 
     // 2. Pedidos E-commerce / Loja (commerce_orders)
     try {
-      const oRes = await commerceDb.queryRead(
+      const oRes = await (db.queryRead || db.query).call(db,
         `SELECT COALESCE(SUM(total), 0)::numeric AS total, COUNT(*)::int AS count
            FROM commerce_orders
           WHERE empresa_id = $1`,
@@ -225,7 +224,7 @@ export async function obterConsolidacaoGrupo(db, { grupoId = '', periodo = 'mes_
 
     if (colaboradoresEmpresa === 0) {
       try {
-        const mRes = await commerceDb.queryRead(
+        const mRes = await (db.queryRead || db.query).call(db,
           `SELECT COUNT(DISTINCT usuario_id)::int AS total
              FROM commerce_memberships
             WHERE empresa_id = $1 AND ativo = true`,
@@ -240,7 +239,7 @@ export async function obterConsolidacaoGrupo(db, { grupoId = '', periodo = 'mes_
     const isUuidEmp = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(empId || ''));
     // 4. Estoque Real da Empresa (est_saldos + est_itens)
     if (isUuidEmp) try {
-      const eRes = await commerceDb.queryRead(
+      const eRes = await (db.queryRead || db.query).call(db,
         `SELECT COALESCE(SUM(s.quantidade * COALESCE(NULLIF(i.preco_venda, 0), i.custo_medio, 0)), 0)::numeric AS estoque_venda
            FROM est_saldos s
            JOIN est_itens i ON i.id = s.item_id AND i.empresa_id = s.empresa_id
@@ -254,7 +253,7 @@ export async function obterConsolidacaoGrupo(db, { grupoId = '', periodo = 'mes_
 
     // 5. Lançamentos Financeiros (fin_lancamentos)
     if (isUuidEmp) try {
-      const fRes = await commerceDb.queryRead(
+      const fRes = await (db.queryRead || db.query).call(db,
         `SELECT COALESCE(SUM(CASE WHEN tipo = 'RECEITA' THEN valor ELSE 0 END), 0)::numeric AS receitas,
                 COALESCE(SUM(CASE WHEN tipo = 'DESPESA' THEN valor ELSE 0 END), 0)::numeric AS despesas
            FROM fin_lancamentos
@@ -326,7 +325,7 @@ export async function obterConsolidacaoGrupo(db, { grupoId = '', periodo = 'mes_
   return {
     grupo: grupoAtivo,
     periodo,
-    statusAuditoria: 'DADOS_REAIS',
+    statusAuditoria: 'DADOS_REAIS_COM_ESTIMATIVAS',
     consolidacaoFinanceira: {
       receitaBruta: receitaBrutaConsolidada,
       deducoesImpostos: deducoesImpostosConsolidada,

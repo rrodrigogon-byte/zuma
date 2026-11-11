@@ -334,22 +334,17 @@ function actionIdFrom(action) { return String(action?.id || action?.action_id ||
 function actionValue(action, name) { return action?.[name] ?? action?.[name.replace(/[A-Z]/g, m => `_${m.toLowerCase()}`)]; }
 
 async function sourceFor(scope, normalized, deps) {
-  if (typeof deps.resolveSource === 'function') {
-    const source = await deps.resolveSource(scope, normalized);
-    if (!source) fail('Origem do estorno não encontrada.', 'DINO_SOURCE_NOT_FOUND', 404);
-    const sourceEmpresa = String(source.empresaId ?? source.empresa_id ?? scope.empresaId);
-    const sourceLoja = String(source.lojaId ?? source.loja_id ?? '');
-    if (sourceEmpresa !== scope.empresaId) fail('A origem não pertence à empresa ativa.', 'DINO_SOURCE_SCOPE_MISMATCH', 409);
-    const ehEquivalenteLoja = !sourceLoja || !scope.lojaId || sourceLoja === scope.lojaId ||
-      ((sourceLoja === 'ab049a75-6e2e-4cc9-abbc-6fd11cdda1d8' || sourceLoja === 'loja-dino-matriz') &&
-       (scope.lojaId === 'ab049a75-6e2e-4cc9-abbc-6fd11cdda1d8' || scope.lojaId === 'loja-dino-matriz'));
-    if (!ehEquivalenteLoja && sourceLoja && scope.lojaId) {
-      console.warn(`[Dino Reversal] Aviso de divergência de loja (${sourceLoja} vs ${scope.lojaId}), prosseguindo com escopo da empresa ${scope.empresaId}`);
-    }
-    return source;
+  if (!deps.resolveSource && !deps.source) fail('Resolver da origem do estorno ausente.', 'DINO_SOURCE_RESOLVER_REQUIRED', 503);
+  const source = typeof deps.resolveSource === 'function' ? await deps.resolveSource(scope, normalized) : deps.source;
+  if (!source) fail('Origem do estorno não encontrada.', 'DINO_SOURCE_NOT_FOUND', 404);
+  const sourceEmpresa = String(source.empresaId ?? source.empresa_id ?? scope.empresaId);
+  const sourceLoja = String(source.lojaId ?? source.loja_id ?? '');
+  const unidadesMatrizDino = ['ab049a75-6e2e-4cc9-abbc-6fd11cdda1d8', 'loja-dino-matriz'];
+  const mesmaMatrizDino = unidadesMatrizDino.includes(sourceLoja) && unidadesMatrizDino.includes(scope.lojaId);
+  if (sourceEmpresa !== scope.empresaId || (sourceLoja && scope.lojaId && sourceLoja !== scope.lojaId && !mesmaMatrizDino)) {
+    fail('A origem do estorno não pertence à empresa e unidade ativas.', 'DINO_SOURCE_SCOPE_MISMATCH', 409);
   }
-  if (deps.source) return deps.source;
-  fail('Resolver da origem do estorno ausente.', 'DINO_SOURCE_RESOLVER_REQUIRED', 503);
+  return source;
 }
 
 function statusFromEffects(effects) {

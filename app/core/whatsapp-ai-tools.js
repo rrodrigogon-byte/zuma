@@ -2170,6 +2170,7 @@ export function findOwnAppointment(appointments = [], ref = '', fallbackText = '
       || lista.find((item) => String(item.servico?.nome || '').toLowerCase().includes(norm))
       || lista.find((item) => String(item.profissional?.nome || '').toLowerCase().includes(norm));
     if (achado) return achado;
+    if (lista.length === 1 && /^(sim|confirmo|confirmar|ok)$/i.test(alvo)) return lista[0];
     return null;
   }
   if (fallbackText) {

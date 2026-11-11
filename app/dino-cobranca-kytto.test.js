@@ -165,7 +165,7 @@ test('InfinitePay: confirmação só depois de conferir na InfinitePay; equipe n
   // Horário cancelado com sinal pendente: a cobrança é cancelada; se o cliente pagar mesmo assim, vira "revisar" (sem erro em loop).
   const outro = agendar({ ...base, hora: '12:00', telefone: '65999990009' });
   const sinal2 = await cobranca.criarSinalDoAgendamento(EMPRESA, outro, { adapter });
-  barbearia.alterarStatusAgendamento(EMPRESA, outro.id, 'cancelado');
+  barbearia.alterarStatusAgendamento(EMPRESA, outro.id, 'cancelado', { motivoCancelamento: 'solicitado_pelo_cliente' });
   assert.equal(cobranca.cancelarSinalPendente(EMPRESA, outro.id, LOJA), true);
   const nsu2 = chamadas.filter((c) => c[0] === 'link').at(-1)[1];
   const pagoCancelado = await cobranca.confirmarPelaInfinitePay({ order_nsu: nsu2, transaction_nsu: 'pago', invoice_slug: invoiceSlug }, { adapter });

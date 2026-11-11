@@ -740,7 +740,7 @@ export async function salvarCadastro(db, empresaId, tipo, corpo = {}, registroId
     barramentoA2.emit('cadastro_atualizado', { empresaId: empresa, tipo, acao: 'atualizar', id: dto.id, payload: dto });
     return dto;
   }
-  const result = await db.query(`INSERT INTO ${cfg.tabela} (empresa_id, ${cfg.campos.join(',')}) VALUES ($1, ${cfg.campos.map((_, index) => `${index + 2}`).join(',')}) RETURNING *`, [empresa, ...valores]);
+  const result = await db.query(`INSERT INTO ${cfg.tabela} (empresa_id, ${cfg.campos.join(',')}) VALUES ($1, ${cfg.campos.map((_, index) => `$${index + 2}`).join(',')}) RETURNING *`, [empresa, ...valores]);
   const dto = cadastroDto(tipo, result.rows[0]);
   if (tipo === 'funcionarios') {
     try {

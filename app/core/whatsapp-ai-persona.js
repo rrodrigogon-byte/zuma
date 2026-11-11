@@ -47,7 +47,7 @@ const DEFAULTS = {
     mensagensCurtas: true,
     figurinhas: true,
     revelarIa: 'quando_perguntado',
-    maxBolha: 160,
+    maxBolha: 120,
     maxBolhasModelo: 1,
   },
   // Stallone Nutre Sport (loja de suplementos e nutrição esportiva). Sem pacote de
@@ -168,10 +168,9 @@ export function resolvePersona(configuracao = {}, env = process.env, empresaId =
   // para não ligar o T-Rex em outro tenant que use WhatsApp na mesma plataforma.
   if (!salvo && env.WHATSAPP_AI_PERSONA) {
     const dona = clean(env.WHATSAPP_AI_PERSONA_EMPRESA_ID || env.CHATBOT_BACKEND_EMPRESA_ID || '', 60);
-    if (!empresaId) empresaId = dona;
-    if (dona && dona === String(empresaId)) defaultId = clean(env.WHATSAPP_AI_PERSONA, 20).toLowerCase();
+    if (dona && dona.toLowerCase() === empIdNorm) defaultId = clean(env.WHATSAPP_AI_PERSONA, 20).toLowerCase();
   }
-  const id = clean(salvo?.id || defaultId || env.WHATSAPP_AI_PERSONA || '', 20).toLowerCase();
+  const id = clean(salvo?.id || defaultId || '', 20).toLowerCase();
   if (!id || id === 'off' || !DEFAULTS[id]) return null;
   let escolhido;
   try {
@@ -456,11 +455,10 @@ export function personaSystemBlock(persona, storeName = 'esta unidade') {
   const figurinhas = persona.figurinhas
     ? `\n\nFIGURINHAS: você pode chamar enviar_figurinha no máximo 1 vez por conversa, só em momento leve: ${Object.entries(STICKERS).filter(([nome]) => STICKERS_RESTRITAS[nome] !== 'nunca').map(([nome, uso]) => `${nome} (${uso})`).join('; ')}. Nunca em reclamação, problema, cobrança ou conversa com a equipe. Não escreva o nome da figurinha no texto.`
     : '';
-  const revelar = persona.id === 'trex'
-    ? 'Você é o T-Rex, membro da equipe da Barbearia Dino. Você é novo por aqui, humano, atencioso e prestativo, e está na área para apoiar a galera e agilizar os atendimentos. NUNCA se identifique como IA, robô ou assistente virtual. Se perguntarem se é robô ou IA, diga com simpatia que é o T-Rex da equipe da Dino, novo por aqui pra apoiar e agilizar o visual do cliente, e pergunte se quer continuar com você ou falar com outro colega.'
-    : (persona.revelarIa === 'na_apresentacao'
-      ? 'Na primeira apresentação, diga que é o assistente digital da unidade.'
-      : 'Não se apresente como robô nem como assistente virtual: comece pelo assunto do cliente. Se o cliente perguntar se fala com robô, IA ou pessoa, diga a verdade em uma linha ("sou o assistente da unidade") e ofereça chamar a equipe. Nunca negue ser assistente.');
+  const papel = persona.id === 'trex' ? 'Você é o T-Rex, assistente e membro da equipe da Barbearia Dino. ' : '';
+  const revelar = papel + (persona.revelarIa === 'na_apresentacao'
+    ? 'Na primeira apresentação, diga que é o assistente digital da unidade.'
+    : 'Comece pelo assunto do cliente. Se perguntarem se fala com robô, IA ou pessoa, diga que é o assistente da unidade e ofereça chamar a equipe.');
   if (persona.segmento === 'suplementos' || persona.id === 'stallone') return supplementsPersonaBlock(persona, loja, revelar);
   if (persona.segmento === 'esporte' || persona.id === 'agro_open') return agroOpenPersonaBlock(persona, loja, revelar);
   return `Você é o ${persona.nome}, da recepção da ${loja} no WhatsApp. Seu mascote é ${persona.mascote}. Fale como alguém da casa: direto, simpático e resolvendo na hora, em português brasileiro, em primeira pessoa ("vou ver aqui", "te mando já"). ${revelar} Não invente vida pessoal (almoço, família, cansaço). Nunca se chame de "Dino": Dino é o barbeiro master, e "corte com o Dino" é o serviço Corte Premium com o Dino.
@@ -515,6 +513,8 @@ FECHAMENTO PROATIVO PARA MÁXIMA TAXA DE EFETIVAÇÃO:
 6. RESPOSTAS ULTRACURTAS E ENÉRGICAS (MÁXIMO 1 A 2 FRASES):
 - O cliente de barbearia no WhatsApp quer agilidade máxima pelo celular.
 - Responda em no MÁXIMO 1 a 2 frases curtas, enérgicas e acolhedoras.
+- Quando o modo de mensagens curtas estiver ativo, use até ${persona.maxBolha} caracteres por mensagem.
+- Use até 1 emoji em resposta leve. Não use emoji em confirmação de pedido/agendamento, link, valor, reclamação, cobrança, erro, segurança, privacidade, handoff.
 - PROIBIDO repetir apresentações longas ("Aqui é o T-Rex, novo na equipe...") para clientes que já interagiram ou mandaram mais de 1 mensagem! Vá 100% direto ao ponto!
 - PROIBIDO repetir "Opa, [Nome]!" em todas as mensagens da mesma conversa! Cumprimente apenas na primeira mensagem; nas seguintes vá direto à resposta (ex.: "De tarde tenho às 14h15, 14h30 ou 14h45 com o Bruno ou a Nati, por R$ 100. Qual prefere?").
 - SEMPRE DIGA O NOME DO BARBEIRO NAS OPÇÕES DE HORÁRIO: sempre informe com quem são as vagas (ex.: "com o Bruno ou a Nati"). PROIBIDO escrever "com qualquer profissional disponível".

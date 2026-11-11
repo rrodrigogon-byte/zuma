@@ -564,14 +564,10 @@ export async function listarClassificaveis(db, empresaId) {
 
 async function classificacaoDe(q, empresa, fonte, fonteId, categoria = null, categoriaChave = null) {
   const chave = categoriaChave || (categoria ? `bar:${categoria}` : '__nenhuma__');
-  const r = await q("SELECT * FROM fis_classificacoes WHERE empresa_id = $1 AND ((fonte = $2 AND fonte_id = $3) OR (fonte = 'categoria' AND fonte_id = $4) OR (fonte = 'categoria' AND fonte_id IN ('barbearia:revenda', 'barbearia:servicos'))) ORDER BY (fonte = 'categoria'), (fonte_id = 'barbearia:revenda') DESC", [empresa, fonte, String(fonteId), chave]);
-  if (r.rows[0]) return classificacaoDto(r.rows[0]);
-  return {
-    fonte: 'categoria', fonteId: 'padrao:geral', tipo: 'produto',
-    ncm: null, cest: null, cfop: '5102', origem: '0', csosn: '102', cstIcms: '00',
-    aliquotaIcms: 0, cstPis: '49', cstCofins: '49', aliquotaPis: 0, aliquotaCofins: 0,
-    unidadeTributavel: 'UN', cstIbsCbs: '000', cClassTrib: '000001'
-  };
+  const r = await q(`SELECT * FROM fis_classificacoes
+     WHERE empresa_id = $1 AND ((fonte = $2 AND fonte_id = $3) OR (fonte = 'categoria' AND fonte_id = $4))
+     ORDER BY (fonte = $2 AND fonte_id = $3) DESC LIMIT 1`, [empresa, fonte, String(fonteId), chave]);
+  return r.rows[0] ? classificacaoDto(r.rows[0]) : null;
 }
 
 export const CATEGORIA_BARBEARIA_REVENDA = 'barbearia:revenda';
@@ -1699,8 +1695,8 @@ export async function danfe(db, empresaId, id, { lojaRestrita = null, autoPrint 
   const emitente = (await db.query('SELECT * FROM fis_emitentes WHERE empresa_id = $1 AND id = $2', [empresa, doc.emitente_id])).rows[0]
     || (await db.query('SELECT * FROM fis_emitentes WHERE empresa_id = $1 AND ativo = true ORDER BY loja_id NULLS LAST LIMIT 1', [empresa])).rows[0];
   if (doc.modelo === 'nfse') {
-    const xml = doc.xml_autorizado || doc.xml_assinado;
-    if (!xml) throw new ErroDominio('DANFE_INDISPONIVEL', 'NFS-e ainda sem XML', 422);
+    const xml = doc.xml_autorizado;
+    if (!xml) throw new ErroDominio('DANFE_INDISPONIVEL', 'NFS-e ainda sem XML autorizado', 422);
     return gerarDanfseHtml(xml, {
       emitente,
       cancelada: doc.status === 'cancelado',

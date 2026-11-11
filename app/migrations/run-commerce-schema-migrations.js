@@ -102,6 +102,8 @@ const migrationFiles = [
   '115_supermercado_fase6_antifurto_rastreabilidade_planograma_kiosk.sql',
   '116_supermercado_fase7_auditoria_fraude_tabloide_trade.sql',
   '117_empresas_canonicas_e_lancamentos_todas_empresas.sql',
+  // A 118 requer a estrutura de vendas antes de vincular cada negócio.
+  '122_estrutura_vendas_varejo.sql',
   '118_negocios_multi_negocio_governance.sql',
   '119_supermercado_seed_enterprise_operacoes.sql',
   '120_corrigir_emitentes_fiscais_todas_empresas.sql',
@@ -235,19 +237,22 @@ async function applyMigration(client, fileName) {
   }
 }
 
-export async function runCommerceSchemaMigrations({ dryRun = false, db = dbPg } = {}) {
+export async function runCommerceSchemaMigrations({ dryRun = false, db = dbPg, through = null } = {}) {
+  const end = through === null ? migrationFiles.length : migrationFiles.indexOf(through) + 1;
+  if (!end) throw new Error(`Migration de destino ausente do manifesto: ${through}`);
+  const files = migrationFiles.slice(0, end);
   if (dryRun) {
     console.log('Dry-run: nenhuma conexão ou escrita foi executada.');
-    for (const fileName of migrationFiles) console.log(`- ${fileName}`);
-    return { applied: [], files: [...migrationFiles], dryRun: true };
+    for (const fileName of files) console.log(`- ${fileName}`);
+    return { applied: [], files, dryRun: true };
   }
 
-  if (!hasManagedDatabaseUrl()) {
+  if (db === dbPg && !hasManagedDatabaseUrl()) {
     if (process.env.COMMERCE_SCHEMA_REQUIRED === '1') {
       throw new Error('Schema do Commerce Core requer DATABASE_URL/POSTGRES_URL ou DB_HOST + DB_NAME + DB_USER + DB_PASSWORD; fallback local bloqueado.');
     }
     console.warn('Schema Commerce Core não executado: conexão PostgreSQL gerenciada ausente; serviço legado preservado.');
-    return { applied: [], files: [...migrationFiles], dryRun: false, skipped: true };
+    return { applied: [], files, dryRun: false, skipped: true };
   }
 
   const client = await db.acquireClient();
@@ -257,10 +262,10 @@ export async function runCommerceSchemaMigrations({ dryRun = false, db = dbPg } 
     await client.query('SELECT pg_advisory_lock($1)', [advisoryLockKey]);
     lockAcquired = true;
     const applied = [];
-    for (const fileName of migrationFiles) {
+    for (const fileName of files) {
       if (await applyMigration(client, fileName)) applied.push(fileName);
     }
-    return { applied, files: [...migrationFiles], dryRun: false };
+    return { applied, files, dryRun: false };
   } finally {
     try {
       if (lockAcquired) await client.query('SELECT pg_advisory_unlock($1)', [advisoryLockKey]);

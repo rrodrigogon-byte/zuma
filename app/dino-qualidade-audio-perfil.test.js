@@ -15,13 +15,14 @@ test('Qualidade T-Rex: Reconhecimento de confirmações vindas de áudios transc
     '[audio transcrito] To a caminho',
     '[mensagem de voz] Confirmado',
     '[áudio transcrito] 👍',
-    '[áudio transcrito] 💈',
-    '[áudio transcrito] corte cabelo e barba'
+    '[áudio transcrito] 💈'
   ];
 
   for (const audioMsg of casosAudio) {
     assert.equal(presenceConfirmIntent(audioMsg), true, `Deveria confirmar presença a partir de áudio: "${audioMsg}"`);
   }
+
+  assert.equal(presenceConfirmIntent('[áudio transcrito] corte cabelo e barba'), false);
 
   const lastAssistant = `Seu horário... ${CONFIRMATION_HINT}`;
   assert.equal(resolveConfirmation('[áudio transcrito] sim', { lastAssistantText: lastAssistant }), 'confirm');

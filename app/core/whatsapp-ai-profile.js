@@ -254,7 +254,7 @@ async function barbershopProfile(empresaId, phone) {
       `SELECT nome,
               COALESCE(tags->>'total_visitas', '0')::int AS total_visitas,
               criado_em AS ultima_visita,
-              COALESCE(tags->>'preferencias', '') AS preferencias
+              tags->'preferencias' AS preferencias
          FROM clientes
         WHERE empresa_id = $1 AND ativo = true
           AND ${phoneMatchKeySql('telefone')} = ${phoneMatchKeySql('$2')}

@@ -754,22 +754,13 @@ async function normalizeWhatsappQueueStoreSelector(req) {
   const result = await db.queryRead(
     `SELECT id FROM lojas
       WHERE empresa_id = $1
-        AND (lower(codigo) = lower($2) OR lower(id::text) = lower($2) OR lower(nome) = lower($2) OR lower(nome) ILIKE '%' || lower($2) || '%')
+        AND (lower(codigo) = lower($2) OR lower(nome) = lower($2))
         AND COALESCE(ativa, true) = true
-      LIMIT 1`,
+      LIMIT 2`,
     [requestedEmpresaId, requestedLojaId],
   );
-  if (!result.rows[0]) {
-    const fallback = await db.queryRead(
-      `SELECT id FROM lojas WHERE empresa_id = $1 AND COALESCE(ativa, true) = true ORDER BY data_criacao ASC LIMIT 1`,
-      [requestedEmpresaId]
-    );
-    if (fallback.rows[0]) {
-      req.headers['x-loja-id'] = fallback.rows[0].id;
-      delete req.commerceAdminContext;
-      return requestedLojaId;
-    }
-    const error = new Error('unidade selecionada não encontrada nesta empresa');
+  if (result.rows.length !== 1) {
+    const error = new Error('selecione uma unidade válida e sem ambiguidade nesta empresa');
     error.code = 'WHATSAPP_AI_STORE_SELECTOR_INVALID';
     throw error;
   }

@@ -39,29 +39,27 @@ test('listarGruposEmpresariais retorna holdings com empresas associadas', async 
   assert.ok(grupos[0].nome.includes('Silvester Holding') || grupos[0].nome.includes('Kytto'));
 });
 
-test('obterConsolidacaoGrupo calcula DRE consolidado e metricas multi-business', async () => {
-  const mockDb = { query: async () => ({ rows: [] }) };
-  const consolidado = await obterConsolidacaoGrupo(mockDb, { periodo: 'mes_atual' });
-
-  assert.ok(consolidado.grupo);
-  assert.ok(consolidado.consolidacaoFinanceira);
-  assert.ok(consolidado.consolidacaoFinanceira.receitaBruta > 0);
-  assert.ok(consolidado.consolidacaoFinanceira.lucroLiquido > 0);
-  assert.ok(consolidado.consolidacaoFinanceira.margemLiquidaPercentual > 0);
-
-  // Validação DRE
+test('obterConsolidacaoGrupo calcula a DRE a partir das empresas do grupo e indica falta de dados', async () => {
+  const empresaId = '31f70c83-9172-40c2-945f-9e793b5048be';
+  const semMovimento = 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
+  const mockDb = { query: async (sql, params) => {
+    if (sql.includes('FROM grupos_empresariais')) return { rows: [{ id: 'grupo-fixture', nome: 'Grupo teste', empresas: [
+      { id: empresaId, nome: 'Varejo fixture' }, { id: semMovimento, nome: 'Serviços fixture' },
+    ] }] };
+    assert.ok([empresaId, semMovimento].includes(params[0]));
+    if (params[0] === empresaId && sql.includes('FROM var_vendas')) return { rows: [{ total: 1000, count: 2 }] };
+    if (params[0] === empresaId && sql.includes('FROM fin_lancamentos')) return { rows: [{ despesas: 200 }] };
+    return { rows: [] };
+  } };
+  const consolidado = await obterConsolidacaoGrupo(mockDb, { grupoId: 'grupo-fixture', periodo: 'mes_atual' });
+  assert.equal(consolidado.grupo.id, 'grupo-fixture');
   const fin = consolidado.consolidacaoFinanceira;
+  assert.equal(fin.receitaBruta, 1000);
   assert.equal(fin.receitaLiquida, fin.receitaBruta - fin.deducoesImpostos);
-  assert.equal(fin.lucroBruto, fin.receitaLiquida - fin.custoInsumosMercadorias);
-
-  // Validação Multi-Business
-  assert.ok(Array.isArray(consolidado.segmentosMultiBusiness));
-  assert.ok(consolidado.segmentosMultiBusiness.some(s => s.tipo === 'barbearia_beleza'));
-  assert.ok(consolidado.segmentosMultiBusiness.some(s => s.tipo === 'ecommerce_omnichannel'));
-
-  // Validação de Empresas
-  assert.ok(Array.isArray(consolidado.empresas));
-  assert.ok(consolidado.empresas.length >= 1);
-  assert.ok(consolidado.empresas[0].faturamento > 0);
-  assert.ok(consolidado.empresas[0].participacaoNoGrupoPercentual > 0);
+  assert.equal(fin.lucroBruto, fin.receitaLiquida - fin.custosInsumosCMV);
+  assert.equal(fin.lucroLiquido, 590);
+  assert.equal(fin.dadoParcial, true);
+  assert.equal(consolidado.empresas[0].participacaoNoGrupoPercentual, 100);
+  assert.equal(consolidado.empresas[1].faturamento, 0);
+  assert.equal(consolidado.empresas[1].dadoParcial, true);
 });

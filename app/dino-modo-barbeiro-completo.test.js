@@ -10,13 +10,13 @@ test('Dino Modo Barbeiro Completo: seed, login, agenda, comanda, comissão e met
   const empId = 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6'
   const lojaId = 'ab049a75-6e2e-4cc9-abbc-6fd11cdda1d8'
 
-  // 1. Garante que os 8 profissionais existem no seed
+  // 1. Garante que os profissionais oficiais existem no seed
   const resSeed = provisionarEquipeDino()
   assert.equal(resSeed.ok, true)
-  assert.equal(resSeed.totalMembros, 8)
+  assert.equal(resSeed.totalMembros, PROFISSIONAIS_DINO_OFICIAIS.length)
 
   const profs = barbeariaErpKytto.listarProfissionais(empId)
-  assert.ok(profs.length >= 8, 'Deve conter pelo menos os 8 profissionais cadastrados')
+  assert.ok(profs.length >= PROFISSIONAIS_DINO_OFICIAIS.length, 'Deve conter pelo menos os profissionais oficiais cadastrados')
 
   const bruno = profs.find(p => p.nome.toLowerCase().includes('bruno'))
   assert.ok(bruno, 'Bruno deve estar cadastrado como profissional')
@@ -63,7 +63,9 @@ test('Dino Modo Barbeiro Completo: seed, login, agenda, comanda, comissão e met
   })
 
   // 4. Cria agendamento para Bruno
-  const diaUtil = '2026-10-26'
+  const futuro = new Date(Date.now() + 7 * 86400000)
+  while ([0, 6].includes(futuro.getUTCDay())) futuro.setUTCDate(futuro.getUTCDate() + 1)
+  const diaUtil = futuro.toISOString().slice(0, 10)
   const agendamento = barbeariaErpKytto.criarAgendamento(empId, {
     clienteNome: 'Cliente Teste Dino',
     clienteTelefone: '(65) 99999-1234',

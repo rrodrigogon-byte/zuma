@@ -916,32 +916,32 @@ test('CEP e cotação agregada possuem rate limit antes dos handlers públicos',
 
 test('cadastro de método de entrega rejeita sessão sem membership', async () => {
   const response = await invoke(shippingMethodCreateHandler(), async () => ({ rows: [] }));
-  assert.equal(response.statusCode, 401);
-  assert.equal(response.body.code, 'TENANT_CONTEXT_REQUIRED');
+  assert.equal(response.statusCode, 403);
+  assert.equal(response.body.code, 'STORE_SCOPE_MISMATCH');
 });
 
 test('reconciliação de etiqueta rejeita sessão sem membership antes de qualquer mutação', async () => {
   const response = await invoke(shippingLabelReconcileHandler(), async () => ({ rows: [] }));
-  assert.equal(response.statusCode, 401);
-  assert.equal(response.body.code, 'TENANT_CONTEXT_REQUIRED');
+  assert.equal(response.statusCode, 403);
+  assert.equal(response.body.code, 'STORE_SCOPE_MISMATCH');
 });
 
 test('visão administrativa de carrinhos rejeita sessão sem membership', async () => {
   const response = await invoke(cartRecoveryHandler(), async () => ({ rows: [] }));
-  assert.equal(response.statusCode, 401);
-  assert.equal(response.body.code, 'TENANT_CONTEXT_REQUIRED');
+  assert.equal(response.statusCode, 403);
+  assert.equal(response.body.code, 'STORE_SCOPE_MISMATCH');
 });
 
 test('endpoint de reconciliação rejeita sessão sem membership antes do gateway', async () => {
   const response = await invoke(paymentSyncHandler(), async () => ({ rows: [] }));
-  assert.equal(response.statusCode, 401);
-  assert.equal(response.body.code, 'TENANT_CONTEXT_REQUIRED');
+  assert.equal(response.statusCode, 403);
+  assert.equal(response.body.code, 'STORE_SCOPE_MISMATCH');
 });
 
 test('endpoint de provedores rejeita sessão sem membership efetiva', async () => {
   const response = await invoke(providerHandler(), async () => ({ rows: [] }));
-  assert.equal(response.statusCode, 401);
-  assert.equal(response.body.code, 'TENANT_CONTEXT_REQUIRED');
+  assert.equal(response.statusCode, 403);
+  assert.equal(response.body.code, 'STORE_SCOPE_MISMATCH');
 });
 
 test('endpoint de provedores rejeita membership sem payments.read', async () => {

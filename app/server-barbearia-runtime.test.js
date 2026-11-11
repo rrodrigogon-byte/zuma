@@ -79,7 +79,7 @@ test('domínio Dino resolve empresa e unidade canônicas sem cabeçalhos de sele
       headers: { Authorization: `Bearer ${login.body.token}`, 'X-Forwarded-Host': 'setpoint.kytto.com.br' },
     });
     assert.equal(outroHost.response.status, 400);
-    assert.equal(outroHost.body.error, 'lojaId é obrigatório para o lançamento financeiro operacional.');
+    assert.equal(outroHost.body.code, 'STORE_SELECTION_REQUIRED');
   } finally {
     processo.kill('SIGTERM');
     await Promise.race([once(processo, 'exit'), new Promise((resolve) => setTimeout(resolve, 3000))]);
@@ -306,9 +306,12 @@ test('server.js efetivo expõe Barbearia no contrato administrativo', async () =
     assert.equal(overview.body.fidelidade.membros.length, 0);
     assert.equal(overview.body.produtos.length, 1);
     assert.equal(overview.body.vendas.length, 1);
-    assert.equal(overview.body.comandas.length, 1);
-    assert.equal(overview.body.resumoComandas.pagas, 1);
-    assert.equal(overview.body.comissoes.porProfissional.length, 1);
+    assert.equal(overview.body.comandas.length, 0, 'recebimentos de hoje não aparecem na visão de 2030');
+    const hojeOperacional = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Cuiaba', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+    const overviewCaixa = await request(base, `/api/admin/barbearia/overview?data=${hojeOperacional}`, { headers });
+    assert.ok(overviewCaixa.body.comandas.some(item => item.id === comanda.body.comanda.id));
+    assert.equal(overviewCaixa.body.resumoComandas.pagas, 1);
+    assert.equal(overviewCaixa.body.comissoes.porProfissional.length, 1);
     assert.deepEqual(overview.body.notificacoesAgenda, { queued: 0, sent: 0, failed: 0, canceled: 0 });
     assert.equal(overview.body.documentosFiscais.length, 1);
     assert.equal(overview.body.integracoes.whatsapp.envioManualDisponivel, false);

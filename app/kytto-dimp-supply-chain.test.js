@@ -3,8 +3,7 @@ import assert from 'node:assert/strict';
 
 import {
   executarAuditoriaDimpFiscal,
-  regularizarPendenciasDimp,
-  ADQUIRENTES_DIMP
+  regularizarPendenciasDimp
 } from './core/auditoria-dimp-fiscal.js';
 
 import {
@@ -21,16 +20,23 @@ test('1. Auditoria Preventiva DIMP vs Fiscal deve calcular divergências e risco
   const auditoria = executarAuditoriaDimpFiscal({
     empresaId: 'emp-dino-01',
     mes: '10',
-    ano: '2026'
+    ano: '2026',
+    transacoesMeiosPagamento: [
+      { adquirente: 'REDE', tipo: 'CARTAO_CREDITO', valor: 3000 },
+      { adquirente: 'CIELO', tipo: 'CARTAO_DEBITO', valor: 2000 },
+      { adquirente: 'STONE', tipo: 'PIX', valor: 4000 },
+    ],
+    documentosFiscais: [{ modelo: '65', valorTotal: 3000 }],
+    vendasSemDocumento: [{ idVenda: 'venda-fixture', valorFaltante: 6000 }],
   });
 
   assert.equal(auditoria.sucesso, true);
   assert.equal(auditoria.periodo, '10/2026');
-  assert.ok(auditoria.totaisMeiosPagamento.totalGeral > 0, 'Total de meios de pagamento deve ser maior que zero');
-  assert.ok(auditoria.totaisDocumentosFiscais.totalGeral > 0, 'Total de notas emitidas deve ser maior que zero');
+  assert.equal(auditoria.totaisMeiosPagamento.totalGeral, 9000);
+  assert.equal(auditoria.totaisDocumentosFiscais.totalGeral, 3000);
 
   // Identificação da diferença não faturada
-  assert.ok(auditoria.analiseDivergencia.diferencaNaoFaturada > 0, 'Deve identificar diferença não faturada');
+  assert.equal(auditoria.analiseDivergencia.diferencaNaoFaturada, 6000);
   assert.equal(auditoria.analiseDivergencia.nivelRisco, 'ALTO');
   assert.ok(auditoria.vendasPendentesEmissao.length > 0, 'Deve listar vendas pendentes de emissão');
 
@@ -38,20 +44,18 @@ test('1. Auditoria Preventiva DIMP vs Fiscal deve calcular divergências e risco
   assert.ok(auditoria.resumoAdquirentes.length >= 3, 'Deve conter pelo menos 3 adquirentes com movimentação');
 });
 
-test('2. Regularização fiscal em lote deve emitir notas pendentes e zerar o risco DIMP', () => {
-  const auditoria = executarAuditoriaDimpFiscal({ empresaId: 'emp-dino-01' });
-  const pendencias = auditoria.vendasPendentesEmissao;
-
-  const resultado = regularizarPendenciasDimp({
-    empresaId: 'emp-dino-01',
-    itensRegularizar: pendencias
-  });
-
+test('2. DIMP valida uma pendência em homologação e mantém a emissão em aberto', () => {
+  const empresaId = 'empresa-fixture';
+  const item = { idVenda: 'venda-fixture', valorFaltante: 42 };
+  assert.throws(() => regularizarPendenciasDimp({ empresaId, itensRegularizar: [item, item] }), /confirmação individual/);
+  assert.throws(() => regularizarPendenciasDimp({ empresaId, itensRegularizar: [item], tpAmb: 1 }), /Homologação/);
+  const resultado = regularizarPendenciasDimp({ empresaId, itensRegularizar: [item] });
   assert.equal(resultado.sucesso, true);
-  assert.equal(resultado.novoNivelRisco, 'ZERO');
-  assert.equal(resultado.novoPercentualCobertura, 100.00);
-  assert.equal(resultado.quantidadeNotasEmitidas, pendencias.length);
-  assert.ok(resultado.totalRegularizado > 0);
+  assert.equal(resultado.quantidadeNotasEmitidas, 0);
+  assert.equal(resultado.totalRegularizado, 0);
+  assert.deepEqual(resultado.notasEmitidas, []);
+  assert.equal(resultado.validacao.status, 'VALIDACAO_LOCAL');
+  assert.equal(resultado.validacao.valor, 42);
 });
 
 test('3. Supply Chain: Deve listar cotações RFQ e comparar propostas de fornecedores (CIF vs FOB)', () => {

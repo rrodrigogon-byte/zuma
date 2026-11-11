@@ -1,7 +1,6 @@
 import { db, save } from '../db.js';
 import * as cadastrosMestres from '../cadastros-mestres-kytto.js';
 import * as barbearia from '../barbearia-erp-kytto.js';
-import * as clientes from '../clientes-contas-kytto.js';
 import { queueAppointmentNotifications } from './barbershop-appointment-notifications.js';
 
 export function obterEmpresasBarbearia() {
@@ -21,42 +20,6 @@ export function obterEmpresasBarbearia() {
     for (const k of Object.keys(raiz?.barbeariaKytto?.empresas || {})) ids.add(k);
   } catch {}
   return Array.from(ids);
-}
-
-function garantirConsentimentoAgendamento(empresaId, ag) {
-  try {
-    const clienteId = ag.clienteId;
-    if (clienteId) {
-      const cli = clientes.obterCliente(empresaId, clienteId);
-      if (cli && cli.consentimentos?.whatsapp?.atendimento?.origem !== 'opt_out' && cli.consentimentos?.whatsapp?.atendimento?.concedido !== true) {
-        clientes.atualizarConsentimentoCliente(empresaId, clienteId, {
-          canal: 'whatsapp',
-          finalidade: 'atendimento',
-          concedido: true,
-          origem: 'agendamento_barbearia',
-        });
-      }
-    } else if (ag.clienteTelefone) {
-      let cli = null;
-      try {
-        const todos = Object.values(clientes.clientesPersistidos?.(empresaId)?.clientes || {});
-        const digits = ag.clienteTelefone.replace(/\D/g, '').slice(-8);
-        cli = todos.find((c) => c.telefone && c.telefone.replace(/\D/g, '').endsWith(digits));
-      } catch {}
-      if (!cli) {
-        cli = clientes.criarCliente(empresaId, { nome: ag.clienteNome || 'Cliente', telefone: ag.clienteTelefone });
-      }
-      if (cli?.id) {
-        ag.clienteId = cli.id;
-        clientes.atualizarConsentimentoCliente(empresaId, cli.id, {
-          canal: 'whatsapp',
-          finalidade: 'atendimento',
-          concedido: true,
-          origem: 'agendamento_barbearia',
-        });
-      }
-    }
-  } catch {}
 }
 
 export async function processarConfirmacoesDiarias(options = {}) {
@@ -91,7 +54,6 @@ export async function processarConfirmacoesDiarias(options = {}) {
           // Evita reenvio se já enviado na manhã de hoje
           if (ag.confirmacaoDiaData === hoje) continue;
 
-          garantirConsentimentoAgendamento(empresaId, ag);
           const res = await queueAppointmentNotifications(
             { empresaId, legacyEmpresaId: empresaId, lojaId: ag.lojaId },
             ag,
@@ -121,7 +83,6 @@ export async function processarConfirmacoesDiarias(options = {}) {
           // Evita reenvio se já enviado na véspera
           if (ag.lembreteVesperaData === hoje) continue;
 
-          garantirConsentimentoAgendamento(empresaId, ag);
           const res = await queueAppointmentNotifications(
             { empresaId, legacyEmpresaId: empresaId, lojaId: ag.lojaId },
             ag,

@@ -142,7 +142,7 @@ test('serviço restrito a profissional só pode ser agendado por quem está habi
 
   // Dino consultando Barba com Dino -> OK
   const horariosDino = barbearia.listarHorariosDisponiveis(empresaId, {
-    data: '2026-11-05',
+    data: new Date(Date.now() + 14 * 86400000).toISOString().slice(0, 10),
     servicoId: servDino.id,
     profissionalId: profDino.id,
   });
@@ -151,7 +151,7 @@ test('serviço restrito a profissional só pode ser agendado por quem está habi
   // Nati consultando Barba com Dino -> Erro "Este profissional não realiza este serviço."
   assert.throws(
     () => barbearia.listarHorariosDisponiveis(empresaId, {
-      data: '2026-11-05',
+      data: new Date(Date.now() + 14 * 86400000).toISOString().slice(0, 10),
       servicoId: servDino.id,
       profissionalId: profNati.id,
     }),
@@ -160,7 +160,7 @@ test('serviço restrito a profissional só pode ser agendado por quem está habi
 
   // Nati consultando Corte Premium Nati -> OK
   const horariosNati = barbearia.listarHorariosDisponiveis(empresaId, {
-    data: '2026-11-05',
+    data: new Date(Date.now() + 14 * 86400000).toISOString().slice(0, 10),
     servicoId: servNati.id,
     profissionalId: profNati.id,
   });
