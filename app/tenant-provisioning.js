@@ -151,7 +151,7 @@ export async function sincronizarTenantsEquipes(commerceDb) {
         [emailsDesligados]
       );
       await commerceDb.query(
-        `UPDATE commerce_memberships SET ativo = false, data_atualizacao = NOW() WHERE usuario_id IN (SELECT id FROM usuarios WHERE lower(btrim(email)) = ANY($1::text[]))`,
+        `UPDATE commerce_memberships SET ativo = false WHERE usuario_id IN (SELECT id FROM usuarios WHERE lower(btrim(email)) = ANY($1::text[]))`,
         [emailsDesligados]
       );
       await commerceDb.query(

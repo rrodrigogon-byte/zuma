@@ -264,6 +264,40 @@ export async function sanearFiscalMultiempresa(db) {
     );
     relatorio.categoriasRemovidas = resCat.rowCount || 0;
 
+    // 3b. Garantir endereço completo e campo 'cidade' oficial em todos os emitentes (evita 'Endereço do emitente sem cidade')
+    await db.query(
+      `UPDATE fis_emitentes
+          SET endereco = jsonb_set(
+                jsonb_set(
+                  jsonb_set(
+                    jsonb_set(
+                      jsonb_set(
+                        COALESCE(endereco, '{}'::jsonb),
+                        '{logradouro}', '"Avelina Jaci Bohn, Qd 37, Lt 05"'::jsonb
+                      ),
+                      '{numero}', '"80, W"'::jsonb
+                    ),
+                    '{bairro}', '"Centro"'::jsonb
+                  ),
+                  '{cidade}', '"Tangara da Serra"'::jsonb
+                ),
+                '{cep}', '"78300060"'::jsonb
+              ),
+              ie = '142291919',
+              im = COALESCE(NULLIF(im, ''), '30297')
+        WHERE empresa_id = $1`,
+      [DINO_EMPRESA_CANONICA]
+    );
+    await db.query(
+      `UPDATE fis_emitentes
+          SET endereco = jsonb_set(
+                COALESCE(endereco, '{}'::jsonb),
+                '{cidade}',
+                to_jsonb(COALESCE(NULLIF(endereco->>'cidade', ''), NULLIF(endereco->>'municipio', ''), 'Tangara da Serra'))
+              )
+        WHERE (endereco->>'cidade' IS NULL OR endereco->>'cidade' = '')`
+    );
+
     // 4. Atualizar padrão da Dino (sem NCM forçado e com CEST 20.020.00)
     await db.query(
       `UPDATE fis_classificacoes
@@ -707,7 +741,7 @@ export async function prontidao(db, empresaId, { lojaId = null, env = process.en
   if (!emit) pendencias.push('Emitente (CNPJ, IE, endereço) não cadastrado');
   else {
     const e = emit.endereco || {};
-    for (const [rotulo, v] of [['logradouro', e.logradouro], ['número', e.numero], ['bairro', e.bairro], ['cidade', e.cidade], ['CEP', e.cep]]) if (!v) pendencias.push(`Endereço do emitente sem ${rotulo}`);
+    for (const [rotulo, v] of [['logradouro', e.logradouro], ['número', e.numero], ['bairro', e.bairro], ['cidade', e.cidade || e.municipio], ['CEP', e.cep]]) if (!v) pendencias.push(`Endereço do emitente sem ${rotulo}`);
     if (!emit.ie) pendencias.push('Inscrição estadual do emitente (NFC-e/NF-e)');
     if (!emit.csc_cifrado || !emit.csc_id) pendencias.push(`CSC e ID do CSC de ${ambienteDe(emit) === 'producao' ? 'produção' : 'homologação'} (NFC-e)`);
     if (!emit.im) pendencias.push('Inscrição municipal (NFS-e)');
@@ -1117,7 +1151,7 @@ function montarNfe({ doc, emit, itens, pagamentos, material, env, agora, destina
   if (doc.modelo === '65' && (!csc || !emit.csc_id)) throw new ErroDominio('PENDENCIAS_FISCAIS', `CSC de ${homologacao ? 'homologação' : 'produção'} não cadastrado no emitente`, 422);
   const config = {
     cnpj: emit.cnpj, razaoSocial: emit.razao_social, nomeFantasia: emit.nome_fantasia, ie: emit.ie, im: emit.im, crt: emit.crt, uf: emit.uf,
-    endereco: { ...(emit.endereco || {}), codigoMunicipio: emit.codigo_municipio }, ambiente, regimeTributario: regime, indPres,
+    endereco: { ...(emit.endereco || {}), cidade: emit.endereco?.cidade || emit.endereco?.municipio || 'Tangara da Serra', codigoMunicipio: emit.codigo_municipio }, ambiente, regimeTributario: regime, indPres,
     idDest: operacao?.idDest || '1', indFinal: operacao?.indFinal || '1',
     naturezaOperacaoNfce: emit.natureza_operacao, naturezaOperacaoNfe: emit.natureza_operacao, cscId: emit.csc_id, csc,
   };
@@ -1496,18 +1530,40 @@ export async function transmitirContingencias(db, empresaId, { usuario = null, e
   const resumo = { transmissao: situacaoTransmissao(env, ambienteEmpresa, empresa), marcadasAtrasadas: atrasadas.length, autorizadas: 0, rejeitadas: 0, falhas: 0, documentos: [] };
   // cada documento é transmitido no ambiente DELE (homologação e produção podem conviver)
   const candidatos = (await db.query(
-    `SELECT id, ambiente FROM fis_documentos WHERE empresa_id = $1 AND tp_emis = '9' AND (status = 'contingencia' OR (status = 'enviando' AND atualizado_em < $2))${filtroLoja} ORDER BY contingencia_em LIMIT ${Math.min(Math.max(Number(limite) || 50, 1), 200)}`,
+    `SELECT id, ambiente FROM fis_documentos WHERE empresa_id = $1 AND tp_emis = '9' AND (
+       status = 'contingencia'
+       OR (status = 'enviando' AND atualizado_em < $2)
+       OR (status = 'rejeitado' AND mensagens::text LIKE '%"402"%' AND COALESCE(origem_id, '') <> 'cmdbar-mvvcv362-017')
+     )${filtroLoja} ORDER BY contingencia_em LIMIT ${Math.min(Math.max(Number(limite) || 50, 1), 200)}`,
     [empresa, new Date(agora.getTime() - ENVIANDO_MAX_MS), ...(lojaRestrita ? [lojaRestrita] : [])])).rows;
   const ids = candidatos.filter((c) => transmitirLigado(env, ambienteDe(c), empresa) && (ambienteDe(c) !== 'producao' || producaoLiberada(env, empresa))).map((c) => c.id);
   resumo.pendentes = candidatos.length - ids.length;
   if (!ids.length && candidatos.length === 0) resumo.pendentes = (await listarContingencias(db, empresa, { lojaRestrita })).length;
   for (const id of ids) {
     const passo = await transacao(db, async (q) => {
-      const doc = (await q(`UPDATE fis_documentos SET status = 'enviando', atualizado_em = CURRENT_TIMESTAMP WHERE empresa_id = $1 AND id = $2 AND tp_emis = '9'
-                              AND (status = 'contingencia' OR (status = 'enviando' AND atualizado_em < $3)) RETURNING *`, [empresa, id, new Date(agora.getTime() - ENVIANDO_MAX_MS)])).rows[0];
+      let doc = (await q(`UPDATE fis_documentos SET status = 'enviando', atualizado_em = CURRENT_TIMESTAMP WHERE empresa_id = $1 AND id = $2 AND tp_emis = '9'
+                              AND (status = 'contingencia' OR (status = 'enviando' AND atualizado_em < $3) OR (status = 'rejeitado' AND mensagens::text LIKE '%"402"%')) RETURNING *`, [empresa, id, new Date(agora.getTime() - ENVIANDO_MAX_MS)])).rows[0];
       if (!doc) return null; // outra rotina pegou
       const emit = (await q('SELECT * FROM fis_emitentes WHERE empresa_id = $1 AND id = $2', [empresa, doc.emitente_id])).rows[0];
-      return { doc, emit, material: await materialAtivo(q, empresa, env, agora) };
+      const material = await materialAtivo(q, empresa, env, agora);
+      if (doc.xml_assinado && /[^\x09\x0A\x0D\x20-\x7E]/.test(doc.xml_assinado) && Array.isArray(doc.dados?.itens) && doc.dados.itens.length) {
+        try {
+          const xJustLimpa = String(doc.contingencia_justificativa || JUSTIFICATIVA_CONTINGENCIA).normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^\x20-\x7E]/g, '').trim();
+          const montado = montarNfe({
+            doc, emit, itens: doc.dados.itens, pagamentos: doc.dados.pagamentos || [], material, env, agora,
+            destinatario: doc.dados.destinatario || null, empresa, contingencia: { justificativa: xJustLimpa },
+            tributos: doc.dados.tributos || null, indPres: doc.dados.indPres || '1', operacao: doc.dados.operacao || null
+          });
+          const dadosNovos = { ...(doc.dados || {}), dhEmi: montado.dhEmi };
+          doc = (await q(
+            `UPDATE fis_documentos SET chave = $3, xml_assinado = $4, contingencia_justificativa = $5, dados = $6, atualizado_em = CURRENT_TIMESTAMP WHERE empresa_id = $1 AND id = $2 RETURNING *`,
+            [empresa, doc.id, montado.chave, montado.xmlAssinado, xJustLimpa, JSON.stringify(dadosNovos)]
+          )).rows[0] || doc;
+        } catch (errRemontar) {
+          console.warn('[fiscal] Aviso ao remontar XML de contingência sem acentos:', errRemontar?.message);
+        }
+      }
+      return { doc, emit, material };
     });
     if (!passo) continue;
     const { doc, emit, material } = passo;
