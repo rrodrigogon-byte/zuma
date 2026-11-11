@@ -325,14 +325,17 @@ export function criarProtecaoDados({ getPool, caminhoBanco, estadoGravacao = () 
   function situacao() {
     const gravacao = estadoGravacao() || {};
     const problemas = [];
+    const emJanelaDeTrocaDeploy = (agora() - iniciadoEm) < 3 * 60 * 1000;
     if (gravacao.ultimoErro) problemas.push('falha_gravacao_local');
-    if (estado.lider === false) problemas.push('outra_instancia_ativa');
+    if (estado.lider === false && !emJanelaDeTrocaDeploy) problemas.push('outra_instancia_ativa');
     if (estado.destino === 'nenhum') problemas.push('sem_copia_externa');
     if (estado.destino === 'postgres') {
       // A diária nunca é pulada: sem cópia em 26 h (ou 2 h após o boot), está atrasada.
       const referencia = estado.ultimaCopiaEm ? Date.parse(estado.ultimaCopiaEm) : iniciadoEm - 24 * 3600000;
       if (souLider() && agora() - referencia > 26 * 3600000) problemas.push('copia_externa_atrasada');
-      if (estado.ultimoErro) problemas.push('falha_copia_externa');
+      if (estado.ultimoErro && !String(estado.ultimoErro).startsWith('cópia local') && !String(estado.ultimoErro).startsWith('limpeza das cópias locais')) {
+        problemas.push('falha_copia_externa');
+      }
     }
     return { status: problemas.length ? 'degradada' : 'ok', problemas, instancia: { lider: estado.lider, liderDesde: estado.liderDesde, outraInstanciaDetectadaEm: estado.outraInstanciaDetectadaEm },
       copiaExterna: { destino: estado.destino, ultimaCopiaEm: estado.ultimaCopiaEm, ultimaCopiaId: estado.ultimaCopiaId, ultimaCopiaTipo: estado.ultimaCopiaTipo,
@@ -342,9 +345,14 @@ export function criarProtecaoDados({ getPool, caminhoBanco, estadoGravacao = () 
   }
 
   // ── Agenda ────────────────────────────────────────────────────────────────
-  function iniciar({ intervaloCopiaMs = 60 * 60 * 1000, intervaloTravaMs = 60 * 1000 } = {}) {
+  function iniciar({ intervaloCopiaMs = 60 * 60 * 1000, intervaloTravaMs = 15 * 1000 } = {}) {
     disputarLideranca().then(() => ciclo()).catch((error) => registrarErro('início', error));
-    const trava = setInterval(() => { disputarLideranca().catch(() => {}); }, intervaloTravaMs);
+    const trava = setInterval(() => {
+      const eraLider = souLider();
+      disputarLideranca().then((agoraLider) => {
+        if (!eraLider && agoraLider && !estado.ultimaCopiaEm) return ciclo();
+      }).catch(() => {});
+    }, intervaloTravaMs);
     trava.unref?.();
     const copia = setInterval(() => { ciclo().catch(() => {}); }, intervaloCopiaMs);
     copia.unref?.();

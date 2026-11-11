@@ -45,11 +45,30 @@ export default function WhatsappConversationPanel({
   const [ocupado, setOcupado] = useState('')
   const [retomar, setRetomar] = useState(true)
   const [confirmar, setConfirmar] = useState('')
+  const [nomesProfissionaisBanco, setNomesProfissionaisBanco] = useState([])
   const listaRef = useRef(null)
   const ultimoIdRef = useRef('')
   const vivoRef = useRef(true)
   const canalQuery = tipoCanal === 'cliente' ? '' : `?canal=${tipoCanal}`
   const headers = { 'X-Empresa-Id': empresaId || '', 'X-Loja-Id': lojaId || '' }
+
+  useEffect(() => {
+    let ativo = true
+    api.get('/api/admin/barbearia/profissionais', { headers: { 'X-Empresa-Id': empresaId || '', 'X-Loja-Id': lojaId || '' } })
+      .then((res) => {
+        if (!ativo) return
+        const lista = Array.isArray(res) ? res : (res?.profissionais || res?.items || [])
+        const nomes = [...new Set(
+          lista
+            .filter((p) => p && p.ativo !== false && p.atendeCliente !== false && !p.historicoAvec && !p.consolidadoEm)
+            .map((p) => String(p.apelido || p.nome || '').trim().split(' ')[0])
+            .filter(Boolean)
+        )]
+        setNomesProfissionaisBanco(nomes)
+      })
+      .catch(() => {})
+    return () => { ativo = false }
+  }, [empresaId, lojaId])
 
   const carregar = useCallback(async () => {
     if (!sessionId) return
@@ -168,9 +187,10 @@ export default function WhatsappConversationPanel({
         const respAmanha = await api.get(`/api/admin/barbearia/horarios-livres?data=${amanhaIso}&servicoId=${encodeURIComponent(corte.id)}&profissionalId=qualquer`, { headers })
         const horariosAmanha = (Array.isArray(respAmanha) ? respAmanha : (respAmanha?.horarios || [])).filter((h) => h.disponivel)
         const opcoesAmanha = horariosAmanha.slice(0, 4).map((h) => `${h.horario}${h.profissionalNome ? ` (com ${h.profissionalNome})` : ''}`).join(', ')
+        const equipeLabel = nomesProfissionaisBanco.length ? `com ${nomesProfissionaisBanco.join(', ')}` : 'na agenda da equipe'
         const sugestao = opcoesAmanha
           ? `Para hoje a agenda já fechou, mas para amanhã tenho às ${opcoesAmanha}. Qual fica melhor pra você?`
-          : 'Vou verificar um encaixe na agenda com o Bruno ou a Nati e já te confirmo!'
+          : `Vou verificar um encaixe ${equipeLabel} e já te confirmo!`
         setTexto((prev) => prev ? `${prev} ${sugestao}` : sugestao)
         setAviso('Horários livres de amanhã inseridos na mensagem!')
       }
@@ -234,8 +254,8 @@ export default function WhatsappConversationPanel({
       {encerrada ? <p className="wa-conv__rodape">Conversa no histórico. Se o cliente escrever de novo, o T-Rex volta a atender.</p> : <>
         {podeResponder ? <>
           <div className="wa-conv__macros" aria-label="Respostas Rápidas">
-            <button type="button" className="wa-conv__macro-btn" style={{ background: 'rgba(20, 184, 122, 0.18)', borderColor: '#14b87a', fontWeight: 700 }} onClick={inserirHorariosLivresHoje} disabled={Boolean(ocupado)} title="Consulta a agenda real do Bruno e da Nati e escreve os próximos horários livres">
-              {ocupado === 'horarios' ? '⏳ Consultando agenda…' : '⚡ Inserir Horários Livres (Bruno/Nati)'}
+            <button type="button" className="wa-conv__macro-btn" style={{ background: 'rgba(20, 184, 122, 0.18)', borderColor: '#14b87a', fontWeight: 700 }} onClick={inserirHorariosLivresHoje} disabled={Boolean(ocupado)} title="Consulta a agenda real dos profissionais ativos no banco e escreve os próximos horários livres">
+              {ocupado === 'horarios' ? '⏳ Consultando agenda…' : `⚡ Inserir Horários Livres${nomesProfissionaisBanco.length ? ` (${nomesProfissionaisBanco.join('/')})` : ''}`}
             </button>
             {RESPOSTAS_RAPIDAS.map((m, idx) => (
               <button key={idx} type="button" className="wa-conv__macro-btn" onClick={() => setTexto((prev) => prev ? `${prev} ${m.texto}` : m.texto)} title={m.texto}>

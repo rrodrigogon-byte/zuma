@@ -218,3 +218,32 @@ test('Fase A: Simulação em memória sobre o snapshot real da Barbearia Dino (z
   assert.equal(canceladosSemMotivo.length, 0, 'Zero cancelamentos sem motivo');
   assert.equal(comandasPagasComAgNaoConcluido.length, 0, '100% das comandas pagas com agendamento concluído');
 });
+
+test('Anti-regressão P0 (10/11 22h10): ausência de dados fixos em Relatórios Dino, PDV PIX, Fila Humana e Bundle', () => {
+  const relDesempenho = fs.readFileSync(new URL('../web/src/pages/admin/relatorios/dino/RelatorioDesempenhoProfissional.jsx', import.meta.url), 'utf8');
+  const relRetorno = fs.readFileSync(new URL('../web/src/pages/admin/relatorios/dino/RelatorioRetornoProfissional.jsx', import.meta.url), 'utf8');
+  const pdvExclusivo = fs.readFileSync(new URL('../web/src/pages/admin/varejo/SupermercadoPdvExclusivo.jsx', import.meta.url), 'utf8');
+  const waConvPanel = fs.readFileSync(new URL('../web/src/pages/admin/dino/WhatsappConversationPanel.jsx', import.meta.url), 'utf8');
+
+  assert.equal(relDesempenho.includes('Guilherme Cunha'), false, 'RelatorioDesempenhoProfissional não pode conter Guilherme Cunha fixo');
+  assert.equal(relRetorno.includes('Guilherme Cunha'), false, 'RelatorioRetornoProfissional não pode conter Guilherme Cunha fixo');
+  assert.equal(relDesempenho.toLowerCase().includes('ticket caiu 15%'), false);
+  assert.equal(relRetorno.toLowerCase().includes('retenção 85%'), false);
+  assert.equal(pdvExclusivo.includes('financeiro@kytto.com.br'), false, 'SupermercadoPdvExclusivo não pode usar financeiro@kytto.com.br como chave PIX');
+
+  assert.equal(waConvPanel.includes('(Bruno/Nati)'), false, 'WhatsappConversationPanel deve ler profissionais ativos do banco');
+  assert.equal(waConvPanel.includes('com o Bruno ou a Nati'), false, 'WhatsappConversationPanel não deve ter fallback fixo com Bruno ou Nati');
+  assert.equal(waConvPanel.includes('/api/admin/barbearia/profissionais'), true);
+
+  const assetsDir = new URL('./public/assets/', import.meta.url);
+  if (fs.existsSync(assetsDir)) {
+    for (const file of fs.readdirSync(assetsDir)) {
+      if (!file.endsWith('.js')) continue;
+      const content = fs.readFileSync(new URL(`./public/assets/${file}`, import.meta.url), 'utf8');
+      assert.equal(content.includes('Guilherme Cunha'), false, `Bundle ${file} não pode conter Guilherme Cunha`);
+      assert.equal(content.includes('financeiro@kytto.com.br'), false, `Bundle ${file} não pode conter financeiro@kytto.com.br`);
+      assert.equal(content.toLowerCase().includes('ticket caiu 15%'), false, `Bundle ${file} não pode conter ticket caiu 15%`);
+      assert.equal(content.toLowerCase().includes('retenção 85%'), false, `Bundle ${file} não pode conter retenção 85%`);
+    }
+  }
+});
