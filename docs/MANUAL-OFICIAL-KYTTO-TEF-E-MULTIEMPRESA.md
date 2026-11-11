@@ -664,3 +664,24 @@ Para elevar a **Nota Geral Ponderada** da matriz comparativa (`K Matriz` / `Resu
 ![Print 54 — Módulo Agro & Agropecuária: Balança, Romaneio, Silos, NFP-e e Receituário Agronômico CREA-MT](prints/54-agro-erp-balanca-silos-nfpe-crea.png)
 
 ![Print 55 — Central de Implantação Guiada & Go-Live: 100% Homologado (10/10 Etapas Auditadas no PostgreSQL)](prints/55-implantacao-golive-100-homologado.png)
+
+
+---
+
+## 35. Diagnóstico de Produção Live, Saneamento de Gaps e Mapa de Oportunidades (Versão v39)
+
+Em **11/11/2026**, foi realizada uma auditoria profunda diretamente no banco de dados **PostgreSQL de produção (`dpg-da73bqe7bikc73ep1480-a`)** e nos endpoints ao vivo (`https://kytto.com.br`) nas 4 empresas ativas do ecossistema (**Barbearia Dino**, **Agro Open TTC**, **Stallone Nutre Sport** e **Supermercado Kytto**). Todos os gaps residuais identificados foram imediatamente saneados em produção:
+
+1. **Higienização Definitiva de Estoque (`est_itens`) e Classificação Fiscal 100% Correta (`222/222`)**:
+   - Removidos **35 SKUs espúrios de supermercado** (`CAR-001..004`, `HF-001..006`, `MER-001..007`, `PAD-001..002`, etc.) que haviam sido injetados por migração antiga nas tabelas `est_itens` da **Barbearia Dino** e da **Agro Open TTC**;
+   - Classificados todos os **10 itens reais de estoque da Barbearia Dino** (`POM-001`, `OLE-002`, `BLM-003`, `SHP-004`, `MNX-005`, `CER-006`, `POS-007`, `PRF-008`, `CAF-009`, `SNC-010`) e as **6 variantes da Loja Online**, além da correção do CEST da categoria `barbearia:revenda` (`20.005.00` para **`20.020.00`**) e dos 8 avisos do Convênio ICMS 142/2018 (`03.006.00`, `03.010.00`, `17.107.00`, `17.053.00`, `20.002.00`);
+   - Resultado em produção (`/api/admin/fiscal/classificacoes/analise`): **Todas (222) · Sem classificação (0) · Com erro (0) · Com aviso (0) · Corretas (222)**.
+2. **Blindagem Preventiva contra Rejeição `750` (SEFAZ-MT) e `E1235`/`E0120` (Sefin Nacional)**:
+   - Em `app/modules/fiscal/servico.js`, toda **NFC-e (Modelo 65) com valor `>= R$ 1.000,00` sem CPF/CNPJ no destinatário** é bloqueada preventivamente antes de reservar numeração na SEFAZ-MT (evitando a Rejeição `750` ocorrida na NFC-e #17 de R$ 2.139,00);
+   - Para emitentes do Simples Nacional (`opSimpNac = 3`) em Tangará da Serra (`5107958`), o gerador da DPS garante `<totTrib><pTotTribSN>6.00</pTotTribSN></totTrib>` e omite `<IM>` quando o município não exige tabela complementar no CNC, prevenindo as rejeições `E1235` e `E0120`.
+3. **Sincronização Retroativa e Contínua com o Razão Financeiro Central (`fin_lancamentos`)**:
+   - Todas as comandas fechadas/pagas com valor positivo da **Barbearia Dino** foram sincronizadas de forma idempotente (`chave = barbearia_comanda:<id>`) com a tabela `fin_lancamentos` do PostgreSQL, elevando o saldo liquidado de `R$ 14,67` para **`R$ 3.979,67` (18 lançamentos pagos)** e alimentando o DRE e a Consolidação do Grupo Holding.
+4. **Enriquecimento de Nomes e Retorno Automático (> 12h) na Fila Humana do WhatsApp (`whatsapp_ai_sessions`)**:
+   - Cruzamento automático dos telefones de `whatsapp_ai_sessions` com o cadastro de clientes e comandas da Barbearia Dino, reduzindo para **zero (`sem_nome = 0`)** as sessões sem identificação na fila humana e devolvendo automaticamente ao agente **T-Rex (`status = ativo`)** as conversas esquecidas em `humano` há mais de 12 horas sem interação.
+
+![Print 56 - Classificação Fiscal 100% Correta (222 de 222 sem erros ou avisos)](prints/56-fiscal-classificacao-100-ok-zero-erros-dino.png)
