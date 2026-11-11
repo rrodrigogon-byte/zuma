@@ -127,13 +127,22 @@ export async function sincronizarTenantsEquipes(commerceDb) {
             const roleId = u.isOwner ? config.roleIdOwner : config.roleIdStaff;
             const lojaId = u.isOwner ? null : config.lojaId;
 
-            await commerceDb.query(
-              `INSERT INTO commerce_memberships (id, usuario_id, empresa_id, loja_id, role_id, ativo, data_criacao, data_atualizacao)
-               VALUES (gen_random_uuid(), $1, $2, $3, $4, true, NOW(), NOW())
-               ON CONFLICT (usuario_id, empresa_id) 
-               DO UPDATE SET loja_id = EXCLUDED.loja_id, role_id = EXCLUDED.role_id, ativo = true, data_atualizacao = NOW()`,
-              [userId, config.empresaId, lojaId, roleId]
+            const memExist = await commerceDb.query(
+              `SELECT id FROM commerce_memberships WHERE usuario_id = $1 AND empresa_id = $2 LIMIT 1`,
+              [userId, config.empresaId]
             );
+            if (memExist.rows?.[0]?.id) {
+              await commerceDb.query(
+                `UPDATE commerce_memberships SET loja_id = $2, role_id = $3, ativo = true, atualizado_em = NOW() WHERE id = $1`,
+                [memExist.rows[0].id, lojaId, roleId]
+              );
+            } else {
+              await commerceDb.query(
+                `INSERT INTO commerce_memberships (id, usuario_id, empresa_id, loja_id, role_id, ativo, criado_em, atualizado_em)
+                 VALUES (gen_random_uuid(), $1, $2, $3, $4, true, NOW(), NOW())`,
+                [userId, config.empresaId, lojaId, roleId]
+              );
+            }
           }
         } catch (dbErr) {
           console.warn(`[tenant-provisioning] Aviso ao sincronizar usuário ${u.username} no PostgreSQL:`, dbErr.message);

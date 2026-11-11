@@ -37,6 +37,7 @@ import { gerarDuplaElim, reportDupla } from './doubleelim.js';
 import { criarPix, consultarStatus, pagamentosAtivos, pixInfo, gerarBrCode } from './pagamentos.js';
 import { simulateCheckout, createIdempotencyKey, reservationExpiry, publicCheckoutOrder, consumeCoupon, availableShipping } from './checkout-core.js';
 import crypto from 'crypto';
+import zlib from 'zlib';
 import fs from 'fs';
 import QRCode from 'qrcode';
 import { wpp } from './whatsapp.js';
@@ -630,13 +631,14 @@ function seedUsuarios(){
   } else {
     const uBruno = d.usuarios.find(u => norm(u.username) === 'bruno' || norm(u.email).includes('bruno@'));
     if (uBruno) {
-      uBruno.role = 'profissional';
-      uBruno.perfil = 'profissional';
-      uBruno.empresaId = DINO_COMMERCE_EMPRESA_ID;
-      uBruno.lojaId = DINO_COMMERCE_LOJA_ID;
-      uBruno.senhaHash = bcrypt.hashSync('123456', 10);
-      uBruno.ativo = true;
-      save();
+      let alterouBruno = false;
+      if (uBruno.role !== 'profissional') { uBruno.role = 'profissional'; alterouBruno = true; }
+      if (uBruno.perfil !== 'profissional') { uBruno.perfil = 'profissional'; alterouBruno = true; }
+      if (uBruno.empresaId !== DINO_COMMERCE_EMPRESA_ID) { uBruno.empresaId = DINO_COMMERCE_EMPRESA_ID; alterouBruno = true; }
+      if (uBruno.lojaId !== DINO_COMMERCE_LOJA_ID) { uBruno.lojaId = DINO_COMMERCE_LOJA_ID; alterouBruno = true; }
+      if (!uBruno.senhaHash) { uBruno.senhaHash = bcrypt.hashSync('123456', 10); alterouBruno = true; }
+      if (uBruno.ativo !== true) { uBruno.ativo = true; alterouBruno = true; }
+      if (alterouBruno) save();
     }
   }
 
@@ -663,13 +665,14 @@ function seedUsuarios(){
   } else {
     const uSter = d.usuarios.find(u => norm(u.username) === 'ster' || norm(u.email).includes('ster@') || norm(u.username) === 'ester');
     if (uSter) {
-      uSter.role = 'operador';
-      uSter.perfil = 'operador';
-      uSter.empresaId = DINO_COMMERCE_EMPRESA_ID;
-      uSter.lojaId = DINO_COMMERCE_LOJA_ID;
-      uSter.senhaHash = bcrypt.hashSync('123456', 10);
-      uSter.ativo = true;
-      save();
+      let alterouSter = false;
+      if (uSter.role !== 'operador') { uSter.role = 'operador'; alterouSter = true; }
+      if (uSter.perfil !== 'operador') { uSter.perfil = 'operador'; alterouSter = true; }
+      if (uSter.empresaId !== DINO_COMMERCE_EMPRESA_ID) { uSter.empresaId = DINO_COMMERCE_EMPRESA_ID; alterouSter = true; }
+      if (uSter.lojaId !== DINO_COMMERCE_LOJA_ID) { uSter.lojaId = DINO_COMMERCE_LOJA_ID; alterouSter = true; }
+      if (!uSter.senhaHash) { uSter.senhaHash = bcrypt.hashSync('123456', 10); alterouSter = true; }
+      if (uSter.ativo !== true) { uSter.ativo = true; alterouSter = true; }
+      if (alterouSter) save();
     }
   }
   // [kytto-tef] Purga transações simuladas indevidas de 09/11 sem maquininha física na Dino
@@ -687,9 +690,7 @@ function seedUsuarios(){
   }
 }
 seedUsuarios();
-try { provisionarEquipeDino({ commerceDb }); } catch (err) { console.warn('Aviso ao provisionar equipe Dino:', err.message); }
-try { sincronizarTenantsEquipes(commerceDb); } catch (err) { console.warn('Aviso ao sincronizar tenants:', err.message); }
-executarHigienizacaoGapsProducao(commerceDb, { listarComandasBarbearia: barbeariaErpKytto.listarComandasBarbearia, listarClientesBarbearia: barbeariaErpKytto.listarAgendamentos }).then((resHig) => console.log('[Higienização Produção]', JSON.stringify(resHig))).catch((err) => console.warn('Aviso na higienização:', err.message));
+// Rotinas pesadas de provisionamento e higienização rodam após hydrate() + listen() para não bloquear o boot nem gerar 502 no Render.
 const findUser = login => {
   const n = norm(login);
   if (!n) return null;
@@ -5021,36 +5022,52 @@ const EQUIVALENCIAS_DINO_CLIENTES = new Set([
   'emp-kytto-001',
   'dino',
 ]);
-
+const _cacheClientesBarbearia = new Map();
+const _cacheIndicesBarbearia = new Map();
 function clientesBarbeariaSomenteLeitura(empresaId) {
+  const escopo = EQUIVALENCIAS_DINO_CLIENTES.has(String(empresaId)) ? 'dino_canonico' : String(empresaId);
+  const versao = estadoGravacao()?.alteracoes ?? null;
+  const guardado = _cacheClientesBarbearia.get(escopo);
+  if (guardado && guardado.versao === versao && Date.now() - guardado.em < 60_000) {
+    return guardado.lista;
+  }
   const root = db();
   const empresas = EQUIVALENCIAS_DINO_CLIENTES.has(String(empresaId))
     ? Array.from(EQUIVALENCIAS_DINO_CLIENTES)
     : [String(empresaId)];
   const mapa = new Map();
   for (const emp of empresas) {
-    const clientes = root.clientesKytto?.empresas?.[emp]?.clientes || {};
+    const clientes = root?.clientesKytto?.empresas?.[emp]?.clientes || {};
     for (const cliente of Object.values(clientes)) {
       if (cliente && cliente.status !== 'deletado' && !mapa.has(cliente.id)) {
         mapa.set(cliente.id, cliente);
       }
     }
   }
-  return Array.from(mapa.values())
+  const lista = Array.from(mapa.values())
     .sort((a, b) => COLLATOR_PT_BR.compare(String(a.nome || ''), String(b.nome || '')))
     .map(sanitizarClienteBarbearia);
+  if (_cacheClientesBarbearia.size >= 20) _cacheClientesBarbearia.clear();
+  _cacheClientesBarbearia.set(escopo, { versao, em: Date.now(), lista });
+  return lista;
 }
-
-// Índices de profissionais, serviços e clientes montados uma vez por requisição.
-// Antes cada agendamento listava (e ordenava) todos os clientes de novo: com ~1 mil
-// agendamentos e 3,3 mil clientes a visão geral passava de 20 s.
+// Índices de profissionais, serviços e clientes memoizados por versão de estado.
 function indicesAgendaBarbearia(empresaId, clientesJaListados = null) {
+  const escopo = EQUIVALENCIAS_DINO_CLIENTES.has(String(empresaId)) ? 'dino_canonico' : String(empresaId);
+  const versao = estadoGravacao()?.alteracoes ?? null;
+  const guardado = _cacheIndicesBarbearia.get(escopo);
+  if (guardado && guardado.versao === versao && Date.now() - guardado.em < 60_000) {
+    return guardado.indices;
+  }
   const porId = (lista) => new Map(lista.map(item => [item.id, item]));
-  return {
+  const indices = {
     profissionais: porId(barbeariaErpKytto.listarProfissionais(empresaId, { incluirInativos: true })),
     servicos: porId(barbeariaErpKytto.listarServicos(empresaId, { incluirInativos: true })),
     clientes: porId(clientesJaListados || clientesBarbeariaSomenteLeitura(empresaId)),
   };
+  if (_cacheIndicesBarbearia.size >= 20) _cacheIndicesBarbearia.clear();
+  _cacheIndicesBarbearia.set(escopo, { versao, em: Date.now(), indices });
+  return indices;
 }
 
 function enriquecerAgendamentoBarbearia(empresaId, agendamento, indices = null) {
@@ -5091,9 +5108,16 @@ function agruparPorCliente(lista) {
   return mapa;
 }
 
+const _cacheRelacionamentoBarbearia = new Map();
 function resumoRelacionamentoBarbearia(req, clientesJaListados = null) {
   const empresaId = legacyEmpresaId(req);
   const lojaId = legacyLojaId(req);
+  const chaveRel = `${empresaId}|${lojaId || ''}`;
+  const versaoRel = estadoGravacao()?.alteracoes ?? null;
+  const guardadoRel = _cacheRelacionamentoBarbearia.get(chaveRel);
+  if (guardadoRel && guardadoRel.versao === versaoRel && Date.now() - guardadoRel.em < 60_000) {
+    return guardadoRel.valor;
+  }
   const clientes = clientesJaListados || clientesBarbeariaSomenteLeitura(empresaId);
   // Só os campos de cliente/status/data são usados aqui: dispensa o enriquecimento.
   const agenda = barbeariaErpKytto.listarAgendamentos(empresaId, { lojaId });
@@ -5137,7 +5161,7 @@ function resumoRelacionamentoBarbearia(req, clientesJaListados = null) {
     }
     return totais;
   }, { whatsappAtendimento: 0, whatsappMarketing: 0, emailAtendimento: 0, emailMarketing: 0 });
-  return {
+  const resultadoRel = {
     indicadores: {
       clientesAtivos: clientes.length,
       clientesComVisita: porCliente.filter((item) => item.visitas > 0).length,
@@ -5147,25 +5171,39 @@ function resumoRelacionamentoBarbearia(req, clientesJaListados = null) {
     },
     consentimentos, porCliente,
   };
+  if (_cacheRelacionamentoBarbearia.size >= 20) _cacheRelacionamentoBarbearia.clear();
+  _cacheRelacionamentoBarbearia.set(chaveRel, { versao: versaoRel, em: Date.now(), valor: resultadoRel });
+  return resultadoRel;
 }
-
 function relatorioOperacionalBarbearia(empresaId, { data, lojaId } = {}) {
-  // um formatador por relatório (antes era um por recebimento)
   const formatoDiaRelatorio = new Intl.DateTimeFormat('en-CA', { timeZone: process.env.KYTTO_TIMEZONE || 'America/Cuiaba', year: 'numeric', month: '2-digit', day: '2-digit' });
-  // O relatório usa só ids, status e valores: lê a agenda sem enriquecer.
   const agenda = barbeariaErpKytto.listarAgendamentos(empresaId, { data, lojaId });
   const recebimentos = barbeariaErpKytto.listarAgendamentos(empresaId, { lojaId });
   const profissionais = barbeariaErpKytto.listarProfissionais(empresaId, { incluirInativos: true });
-  const porStatus = Object.fromEntries([...new Set(agenda.map(item => item.status))].map(status => [status, agenda.filter(item => item.status === status).length]));
+  const porStatus = {};
+  for (const item of agenda) {
+    if (item?.status) porStatus[item.status] = (porStatus[item.status] || 0) + 1;
+  }
+  const diaAlvo = data ? String(data).slice(0, 10) : '';
+  const faturamentoPorProf = new Map();
+  for (const item of recebimentos) {
+    if (!item?.profissionalId || !item?.financeiroLancamentoId || item.status !== 'concluido') continue;
+    const lancamento = barbeariaErpKytto.recebimentoAgendamentoVerificado(empresaId, item);
+    if (!lancamento) continue;
+    const diaPagamento = lancamento.pagoEm ? formatoDiaRelatorio.format(new Date(lancamento.pagoEm)) : '';
+    if (!diaAlvo || diaPagamento === diaAlvo) {
+      faturamentoPorProf.set(item.profissionalId, (faturamentoPorProf.get(item.profissionalId) || 0) + Number(lancamento.valor || 0));
+    }
+  }
   const porProfissional = profissionais.map(profissional => {
     const itens = agenda.filter(item => item.profissionalId === profissional.id);
-    return { profissionalId: profissional.id, profissionalNome: profissional.nome, atendimentos: itens.length,
+    return {
+      profissionalId: profissional.id,
+      profissionalNome: profissional.nome,
+      atendimentos: itens.length,
       concluidos: itens.filter(item => item.status === 'concluido').length,
-      faturamento: Number(recebimentos.filter(item => item.profissionalId === profissional.id).reduce((soma, item) => {
-        const lancamento = barbeariaErpKytto.recebimentoAgendamentoVerificado(empresaId, item);
-        const diaPagamento = lancamento?.pagoEm ? formatoDiaRelatorio.format(new Date(lancamento.pagoEm)) : '';
-        return soma + (lancamento && (!data || diaPagamento === String(data).slice(0, 10)) ? Number(lancamento.valor) : 0);
-      }, 0).toFixed(2)) };
+      faturamento: Number((faturamentoPorProf.get(profissional.id) || 0).toFixed(2)),
+    };
   });
   return { data, totalAgendamentos: agenda.length, porStatus, porProfissional };
 }
@@ -5490,16 +5528,33 @@ function intervaloDias(de, ate, maxDias) {
   return { de: inicio, ate: fim, dias };
 }
 
+function enviarJsonOtimizado(req, res, payload) {
+  const jsonStr = JSON.stringify(payload);
+  if (jsonStr.length > 32_768 && String(req.headers['accept-encoding'] || '').includes('gzip')) {
+    const gz = zlib.gzipSync(Buffer.from(jsonStr, 'utf8'));
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.setHeader('Content-Encoding', 'gzip');
+    res.setHeader('Vary', 'Accept-Encoding');
+    return res.send(gz);
+  }
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  return res.send(jsonStr);
+}
+
 app.get('/api/admin/barbearia/agenda-periodo', (req, res) => {
   try {
     const empresaId = legacyEmpresaId(req);
     const { de, ate } = intervaloDias(req.query?.de, req.query?.ate, 62);
     const lojaId = legacyLojaId(req);
+    const chaveCache = JSON.stringify(['agenda-periodo', empresaId, lojaId || '', de, ate, String(req.query?.profissionalId || ''), String(req.query?.status || ''), String(req.query?.historico || '')]);
+    const guardada = respostaCurtaGuardada(chaveCache, 15_000);
+    if (guardada) return enviarJsonOtimizado(req, res, guardada);
+    const indices = indicesAgendaBarbearia(empresaId);
     const itens = listarAgendamentosBarbearia(empresaId, {
       de, ate, lojaId,
       profissionalId: req.query?.profissionalId || undefined,
       status: req.query?.status || undefined,
-    });
+    }, indices);
     // Histórico importado do Avec (somente leitura), ligado aos profissionais ativos.
     // Não entra quando o filtro de status pede algo diferente de "concluído".
     const statusPedido = String(req.query?.status || '');
@@ -5511,7 +5566,9 @@ app.get('/api/admin/barbearia/agenda-periodo', (req, res) => {
       antesDe: barbeariaErpKytto.listarAgendamentos(empresaId, { lojaId }).reduce((menor, item) => { const dia = String(item?.dataAgenda || item?.dataHora || '').slice(0, 10); return /^\d{4}-\d{2}-\d{2}$/.test(dia) && (!menor || dia < menor) ? dia : menor; }, ''),
     });
     const bloqueios = barbeariaErpKytto.listarBloqueios(empresaId, { de, ate, lojaId, profissionalId: req.query?.profissionalId });
-    res.json({ ok: true, de, ate, total: itens.length, itens, totalHistorico: historico.length, historico, bloqueios });
+    const resposta = { ok: true, de, ate, total: itens.length, itens, totalHistorico: historico.length, historico, bloqueios };
+    guardarRespostaCurta(chaveCache, resposta);
+    enviarJsonOtimizado(req, res, resposta);
   } catch (error) {
     res.status(400).json({ error: error.message || 'Não foi possível carregar a agenda do período.' });
   }
@@ -5550,6 +5607,9 @@ app.get('/api/admin/barbearia/overview', async (req, res) => {
     const empresaId = legacyEmpresaId(req);
     const data = String(req.query?.data || new Date().toISOString().slice(0, 10)).slice(0, 10);
     const lojaId = legacyLojaId(req);
+    const chaveOverview = JSON.stringify(['overview', empresaId, lojaId || '', data, String(req.query?.status || ''), String(req.query?.profissionalId || ''), req.user?.id ?? '', String(req.headers['x-empresa-id'] || ''), String(req.headers['x-loja-id'] || '')]);
+    const overviewGuardado = respostaCurtaGuardada(chaveOverview, 20_000);
+    if (overviewGuardado) return enviarJsonOtimizado(req, res, overviewGuardado);
     const clientes = clientesBarbeariaSomenteLeitura(empresaId);
     const caixas = caixaKytto.listarCaixas(empresaId, { data, lojaId: legacyLojaId(req) });
     const dashboard = barbeariaErpKytto.obterDashboard(empresaId, {
@@ -5578,7 +5638,7 @@ app.get('/api/admin/barbearia/overview', async (req, res) => {
     const whatsappAi = await whatsappAiIntegrationForBarbearia(req);
     const wppGlobalPermitido = legacyWppAllowedForBarbearia(req, whatsappAi);
     const notificacoesAgenda = await appointmentNotificationMetrics({ empresaId, lojaId }).catch(() => ({ queued: 0, sent: 0, failed: 0, canceled: 0 }));
-    res.json({
+    const payloadOverview = {
       ok: true,
       dashboard,
       agendamentos: listarAgendamentosBarbearia(empresaId, { data, status: req.query?.status, profissionalId: req.query?.profissionalId, lojaId }, indicesOverview),
@@ -5605,8 +5665,9 @@ app.get('/api/admin/barbearia/overview', async (req, res) => {
        notificacoesAgenda,
 
              integracoes: { whatsapp: { id: whatsapp.id, nome: whatsapp.nome, ativo: Boolean(whatsapp.ativo), credencialConfigurada: Boolean(wppGlobalPermitido && wpp.ativo() && whatsapp.credencialConfigurada !== false), envioManualDisponivel: Boolean(wppGlobalPermitido && wpp.ativo()), ai: whatsappAi }, ia: { configurada: aiConfigured, modelo: process.env.GEMINI_API_KEY ? (process.env.GEMINI_MODEL || 'gemini-2.5-flash') : (process.env.AI_MODEL || process.env.OPENAI_MODEL || 'regras-dino-local'), analiseOperacionalDisponivel: true, fallbackLocal: true, whatsapp: whatsappAi }, commerce },
-
-    });
+    };
+    guardarRespostaCurta(chaveOverview, payloadOverview);
+    enviarJsonOtimizado(req, res, payloadOverview);
   } catch (error) { res.status(400).json({ error: error.message }); }
 });
 
@@ -11583,9 +11644,19 @@ process.on('uncaughtException', (e)=> console.error('uncaughtException:', e?.mes
   // Fechamento do dia no WhatsApp do dono (DINO_RESUMO_DIARIO=on).
   startResumoDiarioWorker();
   void inicializarBloqueiosEquipe().catch(() => null);
+  setTimeout(() => {
+    try { provisionarEquipeDino({ commerceDb }); } catch (err) { console.warn('Aviso ao provisionar equipe Dino:', err.message); }
+    try { sincronizarTenantsEquipes(commerceDb); } catch (err) { console.warn('Aviso ao sincronizar tenants:', err.message); }
+    executarHigienizacaoGapsProducao(commerceDb, { listarComandasBarbearia: barbeariaErpKytto.listarComandasBarbearia, listarClientesBarbearia: barbeariaErpKytto.listarAgendamentos }).then((resHig) => console.log('[Higienização Produção]', JSON.stringify(resHig))).catch((err) => console.warn('Aviso na higienização:', err.message));
+  }, 4000).unref?.();
   for (const empId of ['d0d0ac01-8e50-4b61-8c79-de4aaa916da6', 'emp_dino', 'emp-kytto-001', 'dino']) {
     try { barbeariaErpKytto.sanearConfirmacoesDino(empId); } catch {}
-    try { barbeariaErpKytto.atualizarConfiguracao(empId, { confirmacaoAutomaticaAtiva: false, cancelamentoAutomaticoPorFaltaConfirmacao: false }); } catch {}
+    try {
+      const cfgAtual = barbeariaErpKytto.obterConfiguracao(empId);
+      if (cfgAtual?.confirmacaoAutomaticaAtiva !== false || cfgAtual?.cancelamentoAutomaticoPorFaltaConfirmacao !== false) {
+        barbeariaErpKytto.atualizarConfiguracao(empId, { confirmacaoAutomaticaAtiva: false, cancelamentoAutomaticoPorFaltaConfirmacao: false });
+      }
+    } catch {}
     try {
       const planos = barbeariaErpKytto.listarPlanos(empId, { incluirInativos: true });
       for (const p of planos) {

@@ -237,8 +237,9 @@ export async function obterConsolidacaoGrupo(db, { grupoId = '', periodo = 'mes_
       } catch {}
     }
 
+    const isUuidEmp = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(empId || ''));
     // 4. Estoque Real da Empresa (est_saldos + est_itens)
-    try {
+    if (isUuidEmp) try {
       const eRes = await commerceDb.queryRead(
         `SELECT COALESCE(SUM(s.quantidade * COALESCE(NULLIF(i.preco_venda, 0), i.custo_medio, 0)), 0)::numeric AS estoque_venda
            FROM est_saldos s
@@ -252,7 +253,7 @@ export async function obterConsolidacaoGrupo(db, { grupoId = '', periodo = 'mes_
     } catch {}
 
     // 5. Lançamentos Financeiros (fin_lancamentos)
-    try {
+    if (isUuidEmp) try {
       const fRes = await commerceDb.queryRead(
         `SELECT COALESCE(SUM(CASE WHEN tipo = 'RECEITA' THEN valor ELSE 0 END), 0)::numeric AS receitas,
                 COALESCE(SUM(CASE WHEN tipo = 'DESPESA' THEN valor ELSE 0 END), 0)::numeric AS despesas

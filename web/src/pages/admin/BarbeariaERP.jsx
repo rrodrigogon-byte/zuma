@@ -603,7 +603,20 @@ const TABS_AUTONOMAS = new Set([
 
 export default function BarbeariaERP({ tabInicial } = {}) {
   const { toast } = useToast();
-  const { user, empresaAtiva, lojaAtiva, lojasAcessiveis, perfil } = useAuth();
+  const { user, empresaAtiva, empresasAcessiveis, trocarEmpresa, lojaAtiva, lojasAcessiveis, perfil } = useAuth();
+  useEffect(() => {
+    if (!empresaAtiva || isDinoBrandContext(empresaAtiva)) return;
+    const idAtual = String(empresaAtiva.id || "").toLowerCase();
+    const nomeAtual = String(empresaAtiva.nome || "").toLowerCase();
+    // Se a empresa ativa no seletor for o clube de tênis (Agro Open) ou outra vertical sem barbearia,
+    // seleciona automaticamente a Barbearia Dino ao entrar no módulo Barbearia ERP.
+    if (idAtual.includes("11111111") || idAtual === "principal" || nomeAtual.includes("agro open")) {
+      const empDino = (empresasAcessiveis || []).find((e) => isDinoBrandContext(e));
+      if (empDino && typeof trocarEmpresa === "function") {
+        trocarEmpresa(empDino);
+      }
+    }
+  }, [empresaAtiva, empresasAcessiveis, trocarEmpresa]);
   // operador: só as abas da operação do dia (comissões, metas e indicadores ficam com a administração)
   const operador = perfil === "operador";
   const areasVisiveis = operador
@@ -927,8 +940,10 @@ export default function BarbeariaERP({ tabInicial } = {}) {
         .get("/api/admin/commerce/whatsapp-ai/sessions?limit=20")
         .catch(() => ({ items: [] }));
       if (!isCurrent()) return;
-      setDadosCarregados(true);
-      setAgendaRevisao((n) => n + 1);
+      setDadosCarregados((jaCarregado) => {
+        if (jaCarregado) setAgendaRevisao((n) => n + 1);
+        return true;
+      });
       setWhatsappAiSessions(
         Array.isArray(aiSessions?.items) ? aiSessions.items : [],
       );

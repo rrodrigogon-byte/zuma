@@ -1,0 +1,1 @@
+import{j as i}from"./index-C7N2Zg-p.js";import n from"./DinoInteligenciaVendasIa-BecWic6A.js";function t(){return i.jsx("div",{style:{padding:"24px 28px",maxWidth:1400,margin:"0 auto"},children:i.jsx(n,{})})}export{t as default};
