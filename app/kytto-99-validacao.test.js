@@ -247,3 +247,21 @@ test('Anti-regressão P0 (10/11 22h10): ausência de dados fixos em Relatórios 
     }
   }
 });
+
+test('Fases B e C: consolidacao.js consulta est_saldos real (sem saldo_estoque inexistente) e componentes padronizados existem', () => {
+  const consolidacaoCode = fs.readFileSync(path.join(ROOT, 'app/modules/empresas/consolidacao.js'), 'utf8');
+  assert.equal(consolidacaoCode.includes('saldo_estoque'), false, 'Não deve consultar coluna inexistente saldo_estoque em est_itens');
+  assert.equal(consolidacaoCode.includes('FROM est_saldos'), true, 'Deve consultar est_saldos real');
+
+  const componentesEsperados = [
+    'web/src/components/EstadoVazio.jsx',
+    'web/src/components/ConfirmarAcao.jsx',
+    'web/src/components/TrilhaDeMigalhas.jsx',
+    'web/src/components/AtalhosTeclado.jsx',
+    'web/src/components/ExportadorRelatorio.jsx',
+    'web/src/components/ConciliadorFinanceiro.jsx',
+  ];
+  for (const rel of componentesEsperados) {
+    assert.equal(fs.existsSync(path.join(ROOT, rel)), true, `Componente ${rel} deve existir`);
+  }
+});

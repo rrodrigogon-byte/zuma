@@ -171,7 +171,7 @@ export async function obterConsolidacaoGrupo(db, { grupoId = '', periodo = 'mes_
     let transacoesEmpresa = 0;
     let estoqueEmpresa = 0;
     let despesasEmpresa = 0;
-    let colaboradoresEmpresa = 5;
+    let colaboradoresEmpresa = 0;
 
     // 1. Vendas de Varejo / Supermercado (var_vendas)
     try {
@@ -201,30 +201,49 @@ export async function obterConsolidacaoGrupo(db, { grupoId = '', periodo = 'mes_
       }
     } catch {}
 
-    // 3. Comandas de Salão / Barbearia Dino (bar_comandas ou estado da empresa)
-    if (empId === 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6') {
-      try {
-        const estadoDino = barbearia.estadoEmpresa(empId, false);
-        const comandas = Object.values(estadoDino?.comandas || {});
-        const profissionais = Object.values(estadoDino?.profissionais || {}).filter(p => p.ativo !== false);
-        colaboradoresEmpresa = profissionais.length || 8;
-        let fatDino = 0;
-        for (const c of comandas) {
-          fatDino += Number(c.total || c.valorTotal || 0);
+    // 3. Comandas de Salão / Barbearia (estado da empresa multi-tenant)
+    try {
+      const estadoBarbearia = barbearia.estadoEmpresa(empId, false);
+      if (estadoBarbearia) {
+        const comandas = Object.values(estadoBarbearia.comandas || {});
+        const profissionais = Object.values(estadoBarbearia.profissionais || {}).filter(p => p && p.ativo !== false);
+        if (profissionais.length > 0) {
+          colaboradoresEmpresa = profissionais.length;
         }
-        if (fatDino > 0) {
-          faturamentoEmpresa = fatDino;
-          transacoesEmpresa = comandas.length;
+        let fatBarbearia = 0;
+        for (const c of comandas) {
+          if (c && c.status !== 'cancelada') {
+            fatBarbearia += Number(c.total || c.valorTotal || 0);
+          }
+        }
+        if (fatBarbearia > 0) {
+          faturamentoEmpresa += fatBarbearia;
+          transacoesEmpresa += comandas.filter(c => c && c.status !== 'cancelada').length;
+        }
+      }
+    } catch {}
+
+    if (colaboradoresEmpresa === 0) {
+      try {
+        const mRes = await commerceDb.queryRead(
+          `SELECT COUNT(DISTINCT usuario_id)::int AS total
+             FROM commerce_memberships
+            WHERE empresa_id = $1 AND ativo = true`,
+          [empId]
+        );
+        if (mRes?.rows?.[0]) {
+          colaboradoresEmpresa = Number(mRes.rows[0].total || 0);
         }
       } catch {}
     }
 
-    // 4. Estoque Real da Empresa (est_itens)
+    // 4. Estoque Real da Empresa (est_saldos + est_itens)
     try {
       const eRes = await commerceDb.queryRead(
-        `SELECT COALESCE(SUM(saldo_estoque * preco_venda), 0)::numeric AS estoque_venda
-           FROM est_itens
-          WHERE empresa_id = $1`,
+        `SELECT COALESCE(SUM(s.quantidade * COALESCE(NULLIF(i.preco_venda, 0), i.custo_medio, 0)), 0)::numeric AS estoque_venda
+           FROM est_saldos s
+           JOIN est_itens i ON i.id = s.item_id AND i.empresa_id = s.empresa_id
+          WHERE s.empresa_id = $1`,
         [empId]
       );
       if (eRes?.rows?.[0]) {
