@@ -13,6 +13,7 @@
 
 import { buildEquipeDesempenho } from './dino-equipe-desempenho.js';
 import { buildComparativo } from './dino-painel-gestao.js';
+import { obterResumoAgendamentosIa } from './barbearia-erp-kytto.js';
 
 const TIME_ZONE = 'America/Cuiaba';
 const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
@@ -266,7 +267,10 @@ export function registerGestaoSalaoAvancadaRoutes(app, { db, legacyEmpresaId, le
         profissionalId
       });
 
-      res.json(resultado);
+      const agendamentosTrex = obterResumoAgendamentosIa(empresaId, {
+        lojaId, de: inicio, ate: fim, profissionalId, somenteIa: true,
+      });
+      res.json({ ...resultado, agendamentosTrex });
     } catch (err) {
       console.error('Erro em gestao-salao-avancada:', err);
       res.status(500).json({ ok: false, error: err.message || 'Erro ao processar gestão do salão' });

@@ -5500,7 +5500,9 @@ app.get('/api/admin/barbearia/ia-agendamentos-resumo', auth, requireStaff, (req,
     const lojaId = legacyLojaId(req);
     const de = String(req.query?.de || req.query?.inicio || '').trim();
     const ate = String(req.query?.ate || req.query?.fim || '').trim();
-    const resumo = barbeariaErpKytto.obterResumoAgendamentosIa(empresaId, { de, ate, lojaId });
+    const origem = String(req.query?.origem || '').trim();
+    if (origem && origem !== 'whatsapp_ia') return res.status(400).json({ error: 'A origem da IA deve ser whatsapp_ia.' });
+    const resumo = barbeariaErpKytto.obterResumoAgendamentosIa(empresaId, { de, ate, lojaId, somenteIa: origem === 'whatsapp_ia' });
     res.json({ ok: true, ...resumo });
   } catch (error) {
     res.status(400).json({ error: error.message || 'Não foi possível gerar o resumo de agendamentos da IA.' });

@@ -9,13 +9,66 @@ import {
   HelpCircle, RefreshCw, Zap
 } from 'lucide-react';
 
-const fmtMoney = (v) => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+const fmtMoney = fmtR;
 const fmtK = (v) => moneyK(v || 0);
+const fmtDataAgenda = new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Cuiaba', dateStyle: 'short' });
+
+function AgendamentosTrex({ resumo }) {
+  if (!resumo) return null;
+  const { criados, confirmados, concluidos, cancelados, remarcados, vagasRecuperadas } = resumo;
+  const indicadores = [
+    ['Criados', criados.total],
+    ['Confirmados', confirmados.total],
+    ['Concluídos com comanda', concluidos.total],
+    ['Cancelados', cancelados.total],
+    ['Remarcados', remarcados.total],
+    ['Vagas recuperadas', vagasRecuperadas.total],
+  ];
+  return (
+    <section aria-labelledby="agendamentos-trex" style={{ background: 'var(--card, #fff)', border: '1px solid var(--border, #e2e8f0)', borderRadius: 16, padding: '16px 20px', marginBottom: 24 }}>
+      <h2 id="agendamentos-trex" style={{ fontSize: 18, margin: 0 }}>Agendamentos do T-Rex</h2>
+      <p>Fonte: agenda do WhatsApp IA, pela data do atendimento.</p>
+      {criados.total === 0 ? (
+        <p>Nenhum agendamento do T-Rex no período e nos filtros selecionados.</p>
+      ) : (
+        <>
+          <dl style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(140px, 100%), 1fr))', gap: 12 }}>
+            {indicadores.map(([rotulo, valor]) => (
+              <div key={rotulo}>
+                <dt>{rotulo}</dt>
+                <dd style={{ fontWeight: 700, margin: 0 }}>{valor.toLocaleString('pt-BR')}</dd>
+              </div>
+            ))}
+          </dl>
+          {vagasRecuperadas.total > 0 && <p>Valor dos serviços reservados nas vagas recuperadas: <strong>{fmtMoney(vagasRecuperadas.valorRecuperado)}</strong>.</p>}
+          {cancelados.total > 0 && (
+            <details>
+              <summary>Motivos dos cancelamentos</summary>
+              <ul>
+                {cancelados.itens.map((item) => {
+                  const data = new Date(`${item.dataAgenda}T12:00:00Z`);
+                  const dia = Number.isNaN(data.getTime()) ? 'Data não registrada' : fmtDataAgenda.format(data);
+                  return <li key={item.agendamentoId}>{dia} · {item.motivo === 'sem_registro' ? 'Motivo não registrado' : item.motivo.replaceAll('_', ' ')}</li>;
+                })}
+              </ul>
+            </details>
+          )}
+          <details>
+            <summary>Como os indicadores são calculados</summary>
+            <p>{resumo.regrasDeCalculo.concluidos}</p>
+            <p>{resumo.regrasDeCalculo.vagaRecuperada}</p>
+          </details>
+        </>
+      )}
+    </section>
+  );
+}
 
 export default function GestaoSalaoAvancada() {
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState(null);
   const [erro, setErro] = useState('');
+  const [versaoConsulta, setVersaoConsulta] = useState(0);
 
   // Período
   const today = new Date();
@@ -49,13 +102,16 @@ export default function GestaoSalaoAvancada() {
     }
   };
 
-  const carregarDados = () => {
+  useEffect(() => {
+    let atual = true;
     setLoading(true);
     setErro('');
-    const url = `/api/admin/barbearia/gestao-salao-avancada?inicio=${inicio}&fim=${fim}${selectedProfId ? `&profissionalId=${selectedProfId}` : ''}`;
+    const params = new URLSearchParams({ inicio, fim });
+    if (selectedProfId) params.set('profissionalId', selectedProfId);
     
-    api.get(url)
+    api.get(`/api/admin/barbearia/gestao-salao-avancada?${params}`)
       .then(res => {
+        if (!atual) return;
         if (res && res.ok) {
           setData(res);
         } else {
@@ -63,15 +119,11 @@ export default function GestaoSalaoAvancada() {
         }
       })
       .catch(err => {
-        console.error('Erro na requisição:', err);
-        setErro(err.message || 'Falha de comunicação com o servidor.');
+        if (atual) setErro(err.message || 'Falha de comunicação com o servidor.');
       })
-      .finally(() => setLoading(false));
-  };
-
-  useEffect(() => {
-    carregarDados();
-  }, [inicio, fim, selectedProfId]);
+      .finally(() => { if (atual) setLoading(false); });
+    return () => { atual = false; };
+  }, [inicio, fim, selectedProfId, versaoConsulta]);
 
   const employees = data?.employees || [];
   const selectedEmp = selectedProfId ? employees.find(e => e.id === selectedProfId) : null;
@@ -108,7 +160,7 @@ export default function GestaoSalaoAvancada() {
         <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
           <button 
             type="button" 
-            onClick={carregarDados}
+            onClick={() => setVersaoConsulta((atual) => atual + 1)}
             style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 14px', borderRadius: 10, border: '1px solid var(--border, #e2e8f0)', background: 'var(--card, #fff)', color: 'var(--fg, #0f172a)', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}
           >
             <RefreshCw size={14} className={loading ? 'animate-spin' : ''} /> Atualizar
@@ -214,6 +266,7 @@ export default function GestaoSalaoAvancada() {
 
       {!loading && !erro && (
         <>
+          <AgendamentosTrex resumo={data?.agendamentosTrex} />
           {/* Banner de Diagnóstico Executivo da IA */}
           <div style={{
             background: 'linear-gradient(135deg, #1e1b4b 0%, #0f172a 100%)',
