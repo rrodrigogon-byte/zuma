@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { MCP_READONLY_TOOLS, createOpenApiAndMcpRouter } from './routes/openapi-mcp-routes.js';
 
 test('Catálogo de Ferramentas MCP Kytto ERP', () => {
-  assert.ok(MCP_READONLY_TOOLS.length >= 13, 'Deve conter pelo menos 13 ferramentas MCP');
+  assert.ok(MCP_READONLY_TOOLS.length >= 15, 'Deve conter pelo menos 15 ferramentas MCP');
 
   const names = MCP_READONLY_TOOLS.map(t => t.name);
   assert.ok(names.includes('palatare_cardapio'), 'Deve ter ferramenta palatare_cardapio');
@@ -14,6 +14,8 @@ test('Catálogo de Ferramentas MCP Kytto ERP', () => {
   assert.ok(names.includes('palatare_delivery'), 'Deve ter ferramenta palatare_delivery');
   assert.ok(names.includes('concreto_cargas'), 'Deve ter ferramenta concreto_cargas');
   assert.ok(names.includes('concreto_dosagem'), 'Deve ter ferramenta concreto_dosagem');
+  assert.ok(names.includes('concreto_ensaios'), 'Deve ter ferramenta concreto_ensaios');
+  assert.ok(names.includes('concreto_silos'), 'Deve ter ferramenta concreto_silos');
   assert.ok(names.includes('holding_consolidacao'), 'Deve ter ferramenta holding_consolidacao');
 });
 
