@@ -65,8 +65,29 @@ function getAgendaSlotStatus(item) {
   if (item.status === 'concluido') {
     return (item.financeiroLancamentoId || item.financeiro_lancamento_id) ? 'concluido' : 'comanda_aberta';
   }
+  if (item.status === 'comanda_aberta') return 'comanda_aberta';
   if (item.status === 'cancelado' || item.status === 'nao_compareceu' || item.status === 'cancelado_falta_confirmacao') return 'cancelado';
+  if (item.status === 'confirmado' || item.confirmado === true || item.confirmacaoAutomatica?.status === 'confirmado') {
+    return 'confirmado';
+  }
   return item.status || 'agendado';
+}
+
+const STATUS_ROTULOS = {
+  confirmado: "✓ Confirmado",
+  agendado: "⏳ Aguardando conf.",
+  em_atendimento: "✂️ Na cadeira",
+  comanda_aberta: "📋 Comanda aberta",
+  concluido: "✔ Comanda paga",
+  cancelado: "✕ Cancelado",
+  bloqueado: "🔒 Bloqueado",
+  nao_compareceu: "✕ Não compareceu",
+};
+
+function rotuloStatusAgendamento(item) {
+  if (!item) return "";
+  const st = getAgendaSlotStatus(item);
+  return STATUS_ROTULOS[st] || STATUS[item?.status] || item?.status || "Agendado";
 }
 
 function chaveDiaCuiaba(dataOuIso) {
@@ -95,12 +116,43 @@ function processarItensEEncaixes(lista) {
     return (hh || 0) * 60 + (mm || 0);
   }
 
-  // Ordena agendamentos por hora de início
-  agendamentos.sort((a, b) =>
-    (horaDoItem(a) || "00:00").localeCompare(horaDoItem(b) || "00:00")
-  );
+  // Ordena agendamentos por hora de início e antiguidade de criação
+  agendamentos.sort((a, b) => {
+    const diffHora = (horaDoItem(a) || "00:00").localeCompare(horaDoItem(b) || "00:00");
+    if (diffHora !== 0) return diffHora;
+    const tA = new Date(a.criadoEm || a.criado_em || 0).getTime();
+    const tB = new Date(b.criadoEm || b.criado_em || 0).getTime();
+    return tA - tB;
+  });
 
-  // Analisa encaixes e sobreposições
+  // Inicializa propriedades
+  for (const ag of agendamentos) {
+    ag.isEncaixe = ag.encaixe === true || ag.tipo_agendamento === "encaixe" || ag.isEncaixe === true;
+    ag.temColisao = false;
+    ag.noBloqueio = false;
+  }
+
+  // 1. Checa sobreposição com horários bloqueados
+  for (const ag of agendamentos) {
+    const agHora = horaDoItem(ag);
+    const agIni = toMins(agHora);
+    const agDur = Number(ag.duracao || ag.duracaoMinutos || 30);
+    const agFim = agIni + agDur;
+    for (const b of bloqueios) {
+      const bHoraIni = b.horaLocal || "08:00";
+      const bIni = toMins(bHoraIni);
+      const bDur = Number(b.duracao || 60);
+      const bFim = bIni + bDur;
+      if (agIni < bFim && agFim > bIni) {
+        ag.isEncaixe = true;
+        ag.noBloqueio = true;
+        ag.motivoBloqueio = b.servicoNome || b.clienteNome;
+        break;
+      }
+    }
+  }
+
+  // 2. Analisa sobreposição entre agendamentos do mesmo barbeiro (sem marcar ambos como encaixe)
   for (let i = 0; i < agendamentos.length; i++) {
     const ag = agendamentos[i];
     const agHora = horaDoItem(ag);
@@ -108,48 +160,34 @@ function processarItensEEncaixes(lista) {
     const agDur = Number(ag.duracao || ag.duracaoMinutos || 30);
     const agFim = agIni + agDur;
 
-    let eEncaixe =
-      ag.encaixe === true ||
-      ag.tipo_agendamento === "encaixe" ||
-      ag.isEncaixe === true;
-    let colidiu = false;
-    let noBloqueio = false;
-
-    // 1. Checa sobreposição com outros agendamentos do mesmo barbeiro
-    for (let j = 0; j < agendamentos.length; j++) {
-      if (i === j) continue;
+    for (let j = i + 1; j < agendamentos.length; j++) {
       const outro = agendamentos[j];
       const outroHora = horaDoItem(outro);
       const outroIni = toMins(outroHora);
       const outroDur = Number(outro.duracao || outro.duracaoMinutos || 30);
       const outroFim = outroIni + outroDur;
-      // Houve sobreposição de horário real
+
+      // Houve sobreposição real de horário
       if (agIni < outroFim && agFim > outroIni) {
-        eEncaixe = true;
-        colidiu = true;
+        ag.temColisao = true;
+        outro.temColisao = true;
         ag.colideComId = outro.id;
+        outro.colideComId = ag.id;
         ag.colideComCliente = outro.clienteNome || outro.cliente_nome;
-        break;
+        outro.colideComCliente = ag.clienteNome || ag.cliente_nome;
+
+        // Identifica quem é o encaixe: se um já tiver flag explícita de encaixe, preserva;
+        // caso contrário, o primeiro agendamento na grade é o titular e o subsequente é o encaixe.
+        if (outro.isEncaixe && !ag.isEncaixe) {
+          // outro é o encaixe, ag permanece titular
+        } else if (ag.isEncaixe && !outro.isEncaixe) {
+          // ag é o encaixe, outro permanece titular
+        } else {
+          ag.isEncaixe = false;
+          outro.isEncaixe = true;
+        }
       }
     }
-
-    // 2. Checa se o atendimento foi agendado em horário bloqueado
-    for (const b of bloqueios) {
-      const bHoraIni = b.horaLocal || "08:00";
-      const bIni = toMins(bHoraIni);
-      const bDur = Number(b.duracao || 60);
-      const bFim = bIni + bDur;
-      if (agIni < bFim && agFim > bIni) {
-        eEncaixe = true;
-        noBloqueio = true;
-        ag.motivoBloqueio = b.servicoNome || b.clienteNome;
-        break;
-      }
-    }
-
-    ag.isEncaixe = eEncaixe;
-    ag.temColisao = colidiu;
-    ag.noBloqueio = noBloqueio;
   }
 
   // Combina bloqueios e agendamentos ordenados por horário
@@ -1109,13 +1147,14 @@ export default function BarbeariaAgendaPeriodo({
     const hora = horaDoItem(item);
     const valorFormatado = formatarMoeda(item.valor);
     const eEncaixe = item.isEncaixe;
+    const statusSlot = getAgendaSlotStatus(item);
 
     return (
       <button
         type="button"
         key={item.id}
         className={`dino-cal-event-card ${eEncaixe ? "is-encaixe" : ""}`}
-        data-status={eEncaixe ? "encaixe" : getAgendaSlotStatus(item)}
+        data-status={statusSlot}
         data-encaixe={eEncaixe ? "true" : "false"}
         onClick={() =>
           item.status === "em_atendimento" || item.status === "concluido"
@@ -1124,15 +1163,15 @@ export default function BarbeariaAgendaPeriodo({
         }
         title={
           eEncaixe
-            ? `⚡ ENCAIXE: ${item.clienteNome || "Cliente"} às ${hora}. ${item.noBloqueio ? "Agendado durante bloqueio!" : "Sobreposição na agenda!"}`
-            : `Clique para gerenciar ou remanejar o agendamento de ${item.clienteNome || item.cliente_nome}`
+            ? `⚡ ENCAIXE (${rotuloStatusAgendamento(item)}): ${item.clienteNome || "Cliente"} às ${hora}. ${item.noBloqueio ? "Agendado durante bloqueio!" : "Sobreposição na agenda!"}`
+            : `Clique para gerenciar (${rotuloStatusAgendamento(item)}): ${item.clienteNome || item.cliente_nome} às ${hora}`
         }
       >
         <div className="dino-cal-event-time">
           <span>{hora}</span>
           <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
             {eEncaixe && (
-              <span className="dino-cal-encaixe-pill" title="Atendimento de encaixe na grade">
+              <span className="dino-cal-encaixe-pill" title="Atendimento de encaixe sobreposto na grade">
                 ⚡ ENCAIXE {item.noBloqueio ? "NO BLOQUEIO" : ""}
               </span>
             )}
@@ -1151,8 +1190,8 @@ export default function BarbeariaAgendaPeriodo({
           {item.origem === "whatsapp_ia" && (
             <span className="dino-cal-event-wpp-badge">🤖 IA</span>
           )}
-          <span className="dino-cal-event-status-badge">
-            {eEncaixe ? "⚡ Encaixe" : (STATUS[item.status] || item.status)}
+          <span className={`dino-cal-event-status-badge status-${statusSlot}`}>
+            {rotuloStatusAgendamento(item)}
           </span>
         </div>
       </button>
@@ -1721,13 +1760,14 @@ export default function BarbeariaAgendaPeriodo({
                           }
 
                           const eEncaixe = item.isEncaixe;
+                          const statusSlot = getAgendaSlotStatus(item);
 
                           return (
                             <button
                               type="button"
                               key={item.id}
                               className={`dino-cal-event-card ${eEncaixe ? "is-encaixe" : ""}`}
-                              data-status={eEncaixe ? "encaixe" : getAgendaSlotStatus(item)}
+                              data-status={statusSlot}
                               data-encaixe={eEncaixe ? "true" : "false"}
                               onClick={() =>
                                 item.status === "em_atendimento" ||
@@ -1737,15 +1777,15 @@ export default function BarbeariaAgendaPeriodo({
                               }
                               title={
                                 eEncaixe
-                                  ? `⚡ ENCAIXE: ${item.clienteNome || "Cliente"} às ${hora}. ${item.noBloqueio ? "Agendado durante bloqueio!" : "Sobreposição na agenda!"}`
-                                  : `Abrir agendamento: ${item.clienteNome || "Cliente"} às ${hora}`
+                                  ? `⚡ ENCAIXE (${rotuloStatusAgendamento(item)}): ${item.clienteNome || "Cliente"} às ${hora}. ${item.noBloqueio ? "Agendado durante bloqueio!" : "Sobreposição na agenda!"}`
+                                  : `Abrir agendamento (${rotuloStatusAgendamento(item)}): ${item.clienteNome || "Cliente"} às ${hora}`
                               }
                             >
                               <div className="dino-cal-event-time">
                                 <span>{hora || "00:00"}</span>
                                 <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                                   {eEncaixe && (
-                                    <span className="dino-cal-encaixe-pill" title="Atendimento de encaixe na grade">
+                                    <span className="dino-cal-encaixe-pill" title="Atendimento de encaixe sobreposto na grade">
                                       ⚡ ENCAIXE
                                     </span>
                                   )}
@@ -1784,10 +1824,9 @@ export default function BarbeariaAgendaPeriodo({
                                   </span>
                                 )}
                                 <span
-                                  className="dino-cal-event-status-badge"
-                                  style={{ color: "var(--text)" }}
+                                  className={`dino-cal-event-status-badge status-${statusSlot}`}
                                 >
-                                  {eEncaixe ? "⚡ Encaixe" : (STATUS[item.status] || item.status)}
+                                  {rotuloStatusAgendamento(item)}
                                 </span>
                               </div>
                             </button>
@@ -2278,15 +2317,17 @@ export default function BarbeariaAgendaPeriodo({
                                     )}
 
                                     {/* 2. Agendamentos e Encaixes */}
-                                    {stat.agendamentos.map((ag) => (
+                                    {stat.agendamentos.map((ag) => {
+                                      const stSlot = getAgendaSlotStatus(ag);
+                                      return (
                                       <button
                                         type="button"
                                         key={ag.id}
                                         className={`dino-cal-slot-busy-pill dino-cal-event-card ${ag.isEncaixe ? "is-encaixe" : ""}`}
-                                        data-status={ag.isEncaixe ? "encaixe" : getAgendaSlotStatus(ag)}
+                                        data-status={stSlot}
                                         data-encaixe={ag.isEncaixe ? "true" : "false"}
                                         onClick={() => onOpenAppointment?.(ag)}
-                                        title={`${ag.isEncaixe ? "⚡ ENCAIXE: " : ""}${ag.clienteNome || ag.cliente_nome || "Cliente"} - ${ag.servicoNome || ag.servico_nome} às ${horaDoItem(ag)}`}
+                                        title={`${ag.isEncaixe ? "⚡ ENCAIXE: " : ""}${ag.clienteNome || ag.cliente_nome || "Cliente"} (${rotuloStatusAgendamento(ag)}) - ${ag.servicoNome || ag.servico_nome} às ${horaDoItem(ag)}`}
                                       >
                                         <span className="dino-cal-slot-busy-pill-name">
                                           {ag.isEncaixe && <span className="dino-cal-encaixe-mini-badge">⚡ ENCAIXE</span>}
@@ -2295,8 +2336,12 @@ export default function BarbeariaAgendaPeriodo({
                                         <span className="dino-cal-slot-busy-pill-srv">
                                           {ag.servicoNome || ag.servico_nome || "Serviço"} · {horaDoItem(ag)}
                                         </span>
+                                        <span className={`dino-cal-event-status-badge status-${stSlot}`} style={{ marginTop: 2, alignSelf: "flex-start" }}>
+                                          {rotuloStatusAgendamento(ag)}
+                                        </span>
                                       </button>
-                                    ))}
+                                      );
+                                    })}
                                   </div>
                                 ) : (
                                   <button
