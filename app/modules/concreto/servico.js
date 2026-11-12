@@ -545,6 +545,184 @@ export const SILOS_INSUMOS_INICIAIS = [
 // =====================================================================
 // 5. INICIALIZAÇÃO E OBTENÇÃO CONSOLIDADA DOS DADOS
 // =====================================================================
+
+// =====================================================================
+// DADOS INICIAIS DE MINERAÇÃO SERRANO & MEDIÇÕES DE OBRAS
+// =====================================================================
+export const DRAGAS_MINERACAO_INICIAIS = [
+  {
+    id: 'draga-01',
+    codigo: 'DRG-SEP-01',
+    nome: 'Draga Flutuante Sepotuba I',
+    local: 'Rio Sepotuba · Córrego das Pedras (Tangará da Serra/MT)',
+    licencaAmbiental: 'LAO nº 3418/2024 · SEMA-MT',
+    registroANM: 'Processo ANM 866.421/2019',
+    vazaoM3H: 45,
+    bombaDragagemPolegadas: 8,
+    operador: 'Almir Rogério dos Santos',
+    status: 'em_operacao',
+    horimetroHoras: 3420,
+    producaoHojeM3: 180,
+    tipoExtracao: 'Areia Média Lavada de Leito de Rio'
+  },
+  {
+    id: 'draga-02',
+    codigo: 'DRG-FOR-02',
+    nome: 'Draga Flutuante Formoso II',
+    local: 'Rio Formoso · Distrito de Progresso (Tangará da Serra/MT)',
+    licencaAmbiental: 'LAO nº 4120/2025 · SEMA-MT',
+    registroANM: 'Processo ANM 866.904/2021',
+    vazaoM3H: 35,
+    bombaDragagemPolegadas: 6,
+    operador: 'Benedito Santana Pereira',
+    status: 'em_operacao',
+    horimetroHoras: 2150,
+    producaoHojeM3: 140,
+    tipoExtracao: 'Areia Grossa de Dragagem com Seixo'
+  }
+];
+
+export const PATIOS_MINERACAO_INICIAIS = [
+  {
+    id: 'patio-areia-media',
+    codigo: 'PAT-AM-01',
+    nome: 'Pátio Areia Média Lavada Rio (Mineração Própria)',
+    capacidadeM3: 2500,
+    estoqueAtualM3: 1420,
+    densidadeKgM3: 1500,
+    umidadeSuperficialPercent: 4.8,
+    custoExtracaoM3: 42.00,
+    precoVendaM3: 65.00
+  },
+  {
+    id: 'patio-areia-grossa',
+    codigo: 'PAT-AG-02',
+    nome: 'Pátio Areia Grossa Selecionada (Mineração Própria)',
+    capacidadeM3: 2000,
+    estoqueAtualM3: 980,
+    densidadeKgM3: 1550,
+    umidadeSuperficialPercent: 5.2,
+    custoExtracaoM3: 45.00,
+    precoVendaM3: 72.00
+  },
+  {
+    id: 'patio-brita-0',
+    codigo: 'PAT-BR0-03',
+    nome: 'Box Brita 0 (Pedrisco Basáltico 4,8 a 9,5 mm)',
+    capacidadeM3: 1500,
+    estoqueAtualM3: 620,
+    densidadeKgM3: 1400,
+    umidadeSuperficialPercent: 1.2,
+    custoAquisicaoM3: 85.00,
+    precoVendaM3: 115.00
+  },
+  {
+    id: 'patio-brita-1',
+    codigo: 'PAT-BR1-04',
+    nome: 'Box Brita 1 Granítica Estrutural (9,5 a 19 mm)',
+    capacidadeM3: 3000,
+    estoqueAtualM3: 1850,
+    densidadeKgM3: 1450,
+    umidadeSuperficialPercent: 1.0,
+    custoAquisicaoM3: 92.00,
+    precoVendaM3: 125.00
+  }
+];
+
+export const VENDAS_AGREGADOS_INICIAIS = [
+  {
+    id: 'vda-agr-501',
+    numeroRomaneio: 'ROM-AGR-501',
+    data: '2026-11-12 09:15',
+    cliente: 'Construtora MT Horizon Ltda',
+    cnpjCliente: '28.910.420/0001-90',
+    obraDestino: 'Pavimentação Loteamento Jardim dos Ipês',
+    veiculoPlaca: 'RAQ-3E89 (Caçamba Basculante)',
+    motorista: 'Claudemir Gomes',
+    produtoId: 'ins-areia-med',
+    produtoNome: 'Areia Média Lavada de Rio (Mineração Própria)',
+    pesoBrutoKg: 28450,
+    taraKg: 12250,
+    pesoLiquidoKg: 16200,
+    volumeM3: 10.8,
+    precoUnitarioM3: 65.00,
+    valorTotal: 702.00,
+    aliquotaCfemPercent: 1.5,
+    valorCfem: 10.53,
+    statusNfe: 'autorizada',
+    nfeNumero: '004819'
+  },
+  {
+    id: 'vda-agr-502',
+    numeroRomaneio: 'ROM-AGR-502',
+    data: '2026-11-12 10:40',
+    cliente: 'Loteamento Residencial Tangará',
+    cnpjCliente: '34.567.890/0001-12',
+    obraDestino: 'Base para Asfalto e Drenagem',
+    veiculoPlaca: 'QBE-9102 (Caçamba Três Eixos)',
+    motorista: 'Jonas Viana de Oliveira',
+    produtoId: 'ins-brita-1',
+    produtoNome: 'Brita 1 Granítica Estrutural',
+    pesoBrutoKg: 31800,
+    taraKg: 13100,
+    pesoLiquidoKg: 18700,
+    volumeM3: 12.9,
+    precoUnitarioM3: 125.00,
+    valorTotal: 1612.50,
+    aliquotaCfemPercent: 1.5,
+    valorCfem: 24.19,
+    statusNfe: 'autorizada',
+    nfeNumero: '004820'
+  }
+];
+
+export const MEDICOES_OBRAS_INICIAIS = [
+  {
+    id: 'med-2026-01',
+    numero: 'MED-2026/01',
+    cliente: 'Construtora MT Horizon',
+    cnpjCliente: '28.910.420/0001-90',
+    obra: 'Edifício Residencial Serra Dourada',
+    endereco: 'Rua José Corsino, 450, Jardim Europa, Tangará da Serra/MT',
+    periodoInicio: '2026-11-01',
+    periodoFim: '2026-11-15',
+    volumeTotalM3: 56.0,
+    cargasIds: ['crg-1001', 'crg-1002'],
+    eventosBombeamento: 2,
+    taxaBombaTotal: 1500.00,
+    valorBrutoConcreto: 25020.00,
+    valorBrutoTotal: 26520.00,
+    retencaoTecnicaPercent: 5.0,
+    valorRetencaoTecnica: 1326.00,
+    valorLiquidoFaturar: 25194.00,
+    status: 'aguardando_aprovacao_engenheiro',
+    engenheiroFiscalObra: 'Eng. Marcelo Tavares (CREA-MT 039820)',
+    condicaoPagamento: 'Boleto bancário faturado 28 DDL'
+  },
+  {
+    id: 'med-2026-02',
+    numero: 'MED-2026/02',
+    cliente: 'Grupo Moradda Incorporadora',
+    cnpjCliente: '19.820.140/0001-44',
+    obra: 'Edifício Residencial Belvedere Tower',
+    endereco: 'Rua José Corsino, 880, Jardim Europa, Tangará da Serra/MT',
+    periodoInicio: '2026-11-01',
+    periodoFim: '2026-11-10',
+    volumeTotalM3: 40.0,
+    cargasIds: ['crg-0998'],
+    eventosBombeamento: 1,
+    taxaBombaTotal: 800.00,
+    valorBrutoConcreto: 17600.00,
+    valorBrutoTotal: 18400.00,
+    retencaoTecnicaPercent: 0,
+    valorRetencaoTecnica: 0,
+    valorLiquidoFaturar: 18400.00,
+    status: 'faturado_boleto',
+    engenheiroFiscalObra: 'Eng. Roberto Alcantara (CREA-MT 028114)',
+    condicaoPagamento: 'Boleto bancário 14 DDL (Emitido Kytto ERP)'
+  }
+];
+
 export function inicializarDatastoreConcreto() {
   const data = db();
   if (!Array.isArray(data.concreto_cargas)) data.concreto_cargas = [];
@@ -555,6 +733,10 @@ export function inicializarDatastoreConcreto() {
   if (!Array.isArray(data.concreto_silos)) data.concreto_silos = [];
   if (!Array.isArray(data.concreto_compras)) data.concreto_compras = [];
   if (!Array.isArray(data.concreto_ordens_producao)) data.concreto_ordens_producao = [];
+  if (!Array.isArray(data.concreto_mineracao_dragas)) data.concreto_mineracao_dragas = [];
+  if (!Array.isArray(data.concreto_mineracao_patios)) data.concreto_mineracao_patios = [];
+  if (!Array.isArray(data.concreto_vendas_agregados)) data.concreto_vendas_agregados = [];
+  if (!Array.isArray(data.concreto_medicoes_obras)) data.concreto_medicoes_obras = [];
 
   // Popular se vazio
   if (data.concreto_cargas.length === 0) {
@@ -581,6 +763,18 @@ export function inicializarDatastoreConcreto() {
   if (data.concreto_ordens_producao.length === 0) {
     data.concreto_ordens_producao = ORDENS_PRODUCAO_INICIAIS.map(op => ({ ...op, empresaId: CONCRETO_EMPRESA_ID }));
   }
+  if (data.concreto_mineracao_dragas.length === 0) {
+    data.concreto_mineracao_dragas = DRAGAS_MINERACAO_INICIAIS.map(d => ({ ...d, empresaId: CONCRETO_EMPRESA_ID }));
+  }
+  if (data.concreto_mineracao_patios.length === 0) {
+    data.concreto_mineracao_patios = PATIOS_MINERACAO_INICIAIS.map(p => ({ ...p, empresaId: CONCRETO_EMPRESA_ID }));
+  }
+  if (data.concreto_vendas_agregados.length === 0) {
+    data.concreto_vendas_agregados = VENDAS_AGREGADOS_INICIAIS.map(v => ({ ...v, empresaId: CONCRETO_EMPRESA_ID }));
+  }
+  if (data.concreto_medicoes_obras.length === 0) {
+    data.concreto_medicoes_obras = MEDICOES_OBRAS_INICIAIS.map(m => ({ ...m, empresaId: CONCRETO_EMPRESA_ID }));
+  }
 
   save();
   return data;
@@ -603,6 +797,10 @@ export async function obterDadosConcreto(empresaId = CONCRETO_EMPRESA_ID) {
   const silos = (data.concreto_silos || []).filter(s => !s.empresaId || s.empresaId === empId);
   const compras = (data.concreto_compras || []).filter(c => !c.empresaId || c.empresaId === empId);
   const ordensProducao = (data.concreto_ordens_producao || []).filter(op => !op.empresaId || op.empresaId === empId);
+  const dragas = (data.concreto_mineracao_dragas || []).filter(d => !d.empresaId || d.empresaId === empId);
+  const patiosMineracao = (data.concreto_mineracao_patios || []).filter(p => !p.empresaId || p.empresaId === empId);
+  const vendasAgregados = (data.concreto_vendas_agregados || []).filter(v => !v.empresaId || v.empresaId === empId);
+  const medicoesObras = (data.concreto_medicoes_obras || []).filter(m => !m.empresaId || m.empresaId === empId);
   const listasTecnicas = gerarListaTecnicaBOM();
 
   // KPIs Industriais
@@ -627,6 +825,10 @@ export async function obterDadosConcreto(empresaId = CONCRETO_EMPRESA_ID) {
     ordensProducao,
     listasTecnicas,
     insumosCatalogo: INSUMOS_MATERIA_PRIMA,
+    dragas,
+    patiosMineracao,
+    vendasAgregados,
+    medicoesObras,
     kpis: {
       volumeProgramadoHoje,
       volumeEntregueHoje,
@@ -1303,4 +1505,320 @@ export async function registrarMovimentacaoInsumoSilo(siloId, tipoMov, quantidad
 
   save();
   return { ok: true, silo };
+}
+
+
+// =====================================================================
+// 10. MÓDULO SERRANO MINERAÇÃO (DRAGAGEM DE AREIA & EXPEDIÇÃO DE AGREGADOS)
+// =====================================================================
+export async function listarMineracao(empresaId = CONCRETO_EMPRESA_ID) {
+  const data = inicializarDatastoreConcreto();
+  const dragas = (data.concreto_mineracao_dragas || []).filter(d => !d.empresaId || d.empresaId === empresaId);
+  const patios = (data.concreto_mineracao_patios || []).filter(p => !p.empresaId || p.empresaId === empresaId);
+  const vendas = (data.concreto_vendas_agregados || []).filter(v => !v.empresaId || v.empresaId === empresaId);
+  const totalAreiaExtraidaHoje = dragas.reduce((acc, d) => acc + (Number(d.producaoHojeM3) || 0), 0);
+  const faturamentoAgregadosHoje = vendas.reduce((acc, v) => acc + (Number(v.valorTotal) || 0), 0);
+  const totalCfemApurado = vendas.reduce((acc, v) => acc + (Number(v.valorCfem) || 0), 0);
+
+  return {
+    ok: true,
+    dragas,
+    patios,
+    vendas,
+    resumo: {
+      totalAreiaExtraidaHoje,
+      faturamentoAgregadosHoje,
+      totalCfemApurado,
+      royaltiesAliquota: '1.5% (Lei 13.540/2017)',
+      licencasSemaMt: 'Regulares'
+    }
+  };
+}
+
+export async function registrarExtracaoDraga(dragaId, dados, empresaId = CONCRETO_EMPRESA_ID) {
+  const data = inicializarDatastoreConcreto();
+  const draga = (data.concreto_mineracao_dragas || []).find(d => d.id === dragaId);
+  if (!draga) throw new Error(`Draga ${dragaId} não encontrada.`);
+
+  const volumeM3 = Number(dados.volumeM3) || 0;
+  draga.producaoHojeM3 = (Number(draga.producaoHojeM3) || 0) + volumeM3;
+  if (dados.horimetro) draga.horimetroHoras = Number(dados.horimetro);
+  if (dados.status) draga.status = dados.status;
+
+  // Atualizar estoque no pátio de areia correspondente
+  const patioId = dados.patioId || (dragaId === 'draga-01' ? 'patio-areia-media' : 'patio-areia-grossa');
+  const patio = (data.concreto_mineracao_patios || []).find(p => p.id === patioId);
+  if (patio) {
+    patio.estoqueAtualM3 = Math.min(patio.capacidadeM3, +(patio.estoqueAtualM3 + volumeM3).toFixed(2));
+    if (dados.umidadeSuperficial) patio.umidadeSuperficialPercent = Number(dados.umidadeSuperficial);
+  }
+
+  save();
+  return { ok: true, draga, patio };
+}
+
+export async function emitirRomaneioVendaAgregado(dados, empresaId = CONCRETO_EMPRESA_ID) {
+  const data = inicializarDatastoreConcreto();
+  const numeroSeq = (data.concreto_vendas_agregados?.length || 0) + 503;
+  const pesoBruto = Number(dados.pesoBrutoKg) || 0;
+  const tara = Number(dados.taraKg) || 0;
+  const pesoLiquido = Math.max(0, pesoBruto - tara);
+  const densidade = dados.produtoId?.includes('brita') ? 1450 : 1500;
+  const volumeM3 = +(pesoLiquido / densidade).toFixed(2);
+  const precoUnitario = Number(dados.precoUnitarioM3) || (dados.produtoId?.includes('brita') ? 125.00 : 65.00);
+  const valorTotal = +(volumeM3 * precoUnitario).toFixed(2);
+  const valorCfem = +(valorTotal * 0.015).toFixed(2); // 1.5% CFEM
+
+  const novoRomaneio = {
+    id: `vda-agr-${numeroSeq}`,
+    numeroRomaneio: `ROM-AGR-${numeroSeq}`,
+    data: new Date().toISOString().replace('T', ' ').slice(0, 16),
+    empresaId,
+    cliente: dados.cliente || 'Cliente Balança Balcão',
+    cnpjCliente: dados.cnpjCliente || '00.000.000/0001-00',
+    obraDestino: dados.obraDestino || 'Obras Tangará da Serra/MT',
+    veiculoPlaca: dados.veiculoPlaca || 'RAQ-1234',
+    motorista: dados.motorista || 'Motorista Próprio',
+    produtoId: dados.produtoId || 'ins-areia-med',
+    produtoNome: dados.produtoNome || 'Areia Média Lavada Rio (Serrano Mineração)',
+    pesoBrutoKg: pesoBruto,
+    taraKg: tara,
+    pesoLiquidoKg: pesoLiquido,
+    volumeM3,
+    precoUnitarioM3: precoUnitario,
+    valorTotal,
+    aliquotaCfemPercent: 1.5,
+    valorCfem,
+    statusNfe: 'autorizada',
+    nfeNumero: `00${numeroSeq + 4310}`
+  };
+
+  data.concreto_vendas_agregados.unshift(novoRomaneio);
+
+  // Dar baixa no estoque do pátio
+  const patio = (data.concreto_mineracao_patios || []).find(p => p.id === (dados.patioId || 'patio-areia-media'));
+  if (patio) {
+    patio.estoqueAtualM3 = Math.max(0, +(patio.estoqueAtualM3 - volumeM3).toFixed(2));
+  }
+
+  save();
+  return { ok: true, romaneio: novoRomaneio };
+}
+
+// =====================================================================
+// 11. CONTROLE ESTATÍSTICO DE RESISTÊNCIA DO CONCRETO NBR 12655
+// =====================================================================
+export function calcularEstatisticaResistenciaLote(loteId, empresaId = CONCRETO_EMPRESA_ID) {
+  const data = inicializarDatastoreConcreto();
+  const ensaio = (data.concreto_ensaios || []).find(e => e.lote === loteId || e.id === loteId);
+  if (!ensaio) throw new Error(`Lote de ensaio ${loteId} não encontrado.`);
+
+  const fckProjeto = Number(ensaio.fckProjeto) || 30;
+  const cps28d = (ensaio.corposProva || []).filter(cp => cp.idadeDias === 28 && cp.tensaoMpa != null);
+  const tensoes = cps28d.map(cp => Number(cp.tensaoMpa));
+
+  if (tensoes.length === 0) {
+    return {
+      ok: true,
+      lote: ensaio.lote,
+      fckProjeto,
+      status: ensaio.status,
+      mensagem: 'Aguardando rompimento aos 28 dias para apuração do fck estimado NBR 12655.'
+    };
+  }
+
+  // Estatística Amostral NBR 12655
+  const n = tensoes.length;
+  const soma = tensoes.reduce((a, b) => a + b, 0);
+  const media = +(soma / n).toFixed(2);
+  const variancia = tensoes.reduce((acc, val) => acc + Math.pow(val - media, 2), 0) / (n > 1 ? n - 1 : 1);
+  const desvioPadrao = +(Math.sqrt(variancia)).toFixed(2);
+  const coeficienteVariacao = +((desvioPadrao / media) * 100).toFixed(1);
+
+  // fck estimado conforme NBR 12655 para n >= 2 (amostragem 1:1)
+  const fckEstimado = Math.min(...tensoes);
+  const percentualAtingido = +((fckEstimado / fckProjeto) * 100).toFixed(1);
+  const aprovado = fckEstimado >= fckProjeto;
+
+  return {
+    ok: true,
+    lote: ensaio.lote,
+    cliente: ensaio.cliente,
+    obra: ensaio.obra,
+    fckProjeto,
+    nCorposProva28d: n,
+    tensoesIndividuais: tensoes,
+    resistenciaMediaMpa: media,
+    desvioPadraoMpa: desvioPadrao,
+    coeficienteVariacaoPercent: coeficienteVariacao,
+    fckEstimado28d: fckEstimado,
+    percentualFckAtingido: percentualAtingido,
+    conformidadeEstrutural: aprovado ? 'CONFORME (NBR 12655)' : 'NÃO CONFORME (ABRIR INVESTIGAÇÃO NBR 7680)',
+    responsavelTecnico: ensaio.responsavelTecnico,
+    laudoNumero: ensaio.laudoNumero
+  };
+}
+
+// =====================================================================
+// 12. GERADOR DE ROMANEIO OFICIAL NBR 7212 (HTML TIMBRADO PARA IMPRESSÃO)
+// =====================================================================
+export async function gerarHtmlRomaneioOficial(cargaId, empresaId = CONCRETO_EMPRESA_ID) {
+  const data = inicializarDatastoreConcreto();
+  const carga = (data.concreto_cargas || []).find(c => c.id === cargaId || c.numero === Number(cargaId));
+  if (!carga) throw new Error(`Carga ${cargaId} não encontrada.`);
+
+  const v1 = carga.viagens?.[0] || { betoneira: 'BT-01', motorista: 'Marcos Silveira', volume: 8 };
+
+  const html = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Romaneio de Entrega NBR 7212 - Carga #${carga.numero}</title>
+  <style>
+    body { font-family: Arial, Helvetica, sans-serif; font-size: 11px; color: #111; margin: 0; padding: 20px; background: #FFF; }
+    .header { border-bottom: 2px solid #EA580C; padding-bottom: 10px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; }
+    .title { font-size: 16px; font-weight: bold; color: #0F172A; text-transform: uppercase; }
+    .subtitle { font-size: 10px; color: #64748B; }
+    .doc-num { font-size: 14px; font-weight: bold; color: #EA580C; text-align: right; }
+    .box { border: 1px solid #CBD5E1; border-radius: 6px; padding: 8px 12px; margin-bottom: 10px; }
+    .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+    .grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+    .label { font-size: 9px; font-weight: bold; color: #64748B; text-transform: uppercase; }
+    .value { font-size: 12px; font-weight: bold; color: #0F172A; }
+    .alert-nbr { background: #FEF3C7; border: 1px solid #F59E0B; padding: 8px; border-radius: 4px; font-size: 10px; color: #92400E; margin-bottom: 10px; }
+    .signatures { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-top: 30px; text-align: center; }
+    .line { border-top: 1px solid #111; margin-top: 40px; padding-top: 4px; font-weight: bold; font-size: 10px; }
+    @media print { body { padding: 0; } }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div>
+      <div class="title">🚚 SERRANO CONCRETO USINADO & MINERAÇÃO</div>
+      <div class="subtitle">Tangará da Serra - MT · CNPJ: 51.499.928/0001-01 · Inscrição Estadual: 13.567.890-3 · RNTRC: 056256077</div>
+      <div class="subtitle">Central Telefônica: (65) 99946-4899 / (65) 99996-3795 · RT: Engª Karin Prestes (CREA-MT 027300)</div>
+    </div>
+    <div>
+      <div class="doc-num">ROMANEIO OFICIAL NBR 7212</div>
+      <div style="font-size: 13px; font-weight: bold; text-align: right;">Carga Nº ${carga.numero}</div>
+      <div style="font-size: 10px; text-align: right; color: #64748B;">Data: ${new Date().toLocaleDateString('pt-BR')}</div>
+    </div>
+  </div>
+
+  <div class="box">
+    <div class="label">DADOS DO CLIENTE & OBRA DE CONCRETAGEM</div>
+    <div class="grid-2" style="margin-top: 4px;">
+      <div><span class="label">Cliente / Construtora:</span> <span class="value">${carga.cliente}</span></div>
+      <div><span class="label">Local / Obra:</span> <span class="value">${carga.obra}</span></div>
+      <div style="grid-column: span 2;"><span class="label">Endereço da Obra:</span> <span class="value">${carga.endereco}</span></div>
+    </div>
+  </div>
+
+  <div class="box">
+    <div class="label">ESPECIFICAÇÕES TÉCNICAS DO CONCRETO (NBR 7212 / NBR 8953)</div>
+    <div class="grid" style="margin-top: 4px;">
+      <div><span class="label">Resistência de Projeto (FCK):</span> <div class="value" style="color: #EA580C;">${carga.fck}</div></div>
+      <div><span class="label">Slump de Projeto:</span> <div class="value">${carga.slump}</div></div>
+      <div><span class="label">Volume Total Programado:</span> <div class="value">${carga.volumeM3} m³</div></div>
+      <div><span class="label">Sistema de Descarga:</span> <div class="value">${carga.bomba}</div></div>
+    </div>
+  </div>
+
+  <div class="box">
+    <div class="label">TELEMETRIA DA BETONEIRA & HORÁRIOS NORMATIVOS (NBR 7212)</div>
+    <div class="grid" style="margin-top: 4px;">
+      <div><span class="label">Veículo Betoneira:</span> <div class="value">${v1.betoneira || 'BT-01'}</div></div>
+      <div><span class="label">Motorista / Operador:</span> <div class="value">${v1.motorista || 'Marcos Silveira'}</div></div>
+      <div><span class="label">Horário Adição de Água na Usina:</span> <div class="value">${v1.saida || '08:15'}</div></div>
+      <div><span class="label">Tempo Limite Descarga (150 min):</span> <div class="value" style="color: #DC2626;">Máximo 2h30 da adição de água</div></div>
+      <div><span class="label">Horário Chegada na Obra:</span> <div class="value">${v1.chegada || '____:____'}</div></div>
+      <div><span class="label">Início da Descarga:</span> <div class="value">____:____</div></div>
+      <div><span class="label">Término da Descarga:</span> <div class="value">${v1.fimDescarga || '____:____'}</div></div>
+      <div><span class="label">Slump Test Medido na Obra:</span> <div class="value">____ ± 2 cm</div></div>
+    </div>
+  </div>
+
+  <div class="alert-nbr">
+    <strong>⚠️ ADVERTÊNCIA NORMATIVA NBR 7212 (ITEM 5.4.3):</strong> É expressamente proibida a adição de água no caminhão betoneira na obra sem a prévia autorização por escrito do engenheiro responsável estrutural. Qualquer água adicional não prevista no traço anula a garantia tecnológica da resistência FCK contratada.
+  </div>
+
+  <div class="box">
+    <div class="label">CORPOS DE PROVA MOLDADOS (NBR 5738 / CONTROLE TECNOLÓGICO)</div>
+    <div class="grid-2" style="margin-top: 4px;">
+      <div><span class="label">Identificação do Lote:</span> <span class="value">${carga.laudoCp || 'CP-2026-089 (4 corpos de prova)'}</span></div>
+      <div><span class="label">Idades de Ruptura Homologadas:</span> <span class="value">7 dias (controle prévio) e 28 dias (característica)</span></div>
+    </div>
+  </div>
+
+  <div class="signatures">
+    <div>
+      <div class="line">ASSINATURA DO MOTORISTA DA BETONEIRA<br><span style="font-size: 9px; color: #64748B;">Serrano Concreto Usinado</span></div>
+    </div>
+    <div>
+      <div class="line">RECEBIDO NA OBRA (ENCARREGADO / ENGENHEIRO)<br><span style="font-size: 9px; color: #64748B;">Nome Legível e Assinatura</span></div>
+    </div>
+  </div>
+</body>
+</html>`;
+
+  return { ok: true, cargaId: carga.id, numero: carga.numero, html };
+}
+
+// =====================================================================
+// 13. MÓDULO DE MEDIÇÕES DE OBRAS & CONTRATOS DE CONCRETO
+// =====================================================================
+export async function listarMedicoesObras(empresaId = CONCRETO_EMPRESA_ID) {
+  const data = inicializarDatastoreConcreto();
+  const medicoes = (data.concreto_medicoes_obras || []).filter(m => !m.empresaId || m.empresaId === empresaId);
+  return { ok: true, medicoes };
+}
+
+export async function criarMedicaoObra(dados, empresaId = CONCRETO_EMPRESA_ID) {
+  const data = inicializarDatastoreConcreto();
+  const numeroSeq = (data.concreto_medicoes_obras?.length || 0) + 1;
+  const volTotal = Number(dados.volumeTotalM3) || 0;
+  const precoM3 = Number(dados.precoMedioM3) || 440.00;
+  const taxaBomba = Number(dados.taxaBombaTotal) || 0;
+  const valorBrutoConcreto = +(volTotal * precoM3).toFixed(2);
+  const valorBrutoTotal = +(valorBrutoConcreto + taxaBomba).toFixed(2);
+  const retencaoPerc = Number(dados.retencaoTecnicaPercent) || 0;
+  const valorRetencao = +(valorBrutoTotal * (retencaoPerc / 100)).toFixed(2);
+  const valorLiquido = +(valorBrutoTotal - valorRetencao).toFixed(2);
+
+  const novaMedicao = {
+    id: `med-2026-0${numeroSeq}`,
+    numero: `MED-2026/0${numeroSeq}`,
+    empresaId,
+    cliente: dados.cliente || 'Construtora',
+    cnpjCliente: dados.cnpjCliente || '00.000.000/0001-00',
+    obra: dados.obra || 'Obra Comercial',
+    endereco: dados.endereco || 'Tangará da Serra/MT',
+    periodoInicio: dados.periodoInicio || new Date().toISOString().slice(0, 10),
+    periodoFim: dados.periodoFim || new Date().toISOString().slice(0, 10),
+    volumeTotalM3: volTotal,
+    cargasIds: dados.cargasIds || [],
+    eventosBombeamento: Number(dados.eventosBombeamento) || 1,
+    taxaBombaTotal: taxaBomba,
+    valorBrutoConcreto,
+    valorBrutoTotal,
+    retencaoTecnicaPercent: retencaoPerc,
+    valorRetencaoTecnica: valorRetencao,
+    valorLiquidoFaturar: valorLiquido,
+    status: 'aguardando_aprovacao_engenheiro',
+    engenheiroFiscalObra: dados.engenheiroFiscalObra || 'Eng. Fiscal Responsável',
+    condicaoPagamento: dados.condicaoPagamento || 'Boleto 28 DDL'
+  };
+
+  data.concreto_medicoes_obras.unshift(novaMedicao);
+  save();
+  return { ok: true, medicao: novaMedicao };
+}
+
+export async function atualizarStatusMedicao(medicaoId, status) {
+  const data = inicializarDatastoreConcreto();
+  const medicao = (data.concreto_medicoes_obras || []).find(m => m.id === medicaoId || m.numero === medicaoId);
+  if (!medicao) throw new Error(`Medição ${medicaoId} não encontrada.`);
+  medicao.status = status;
+  save();
+  return { ok: true, medicao };
 }

@@ -17,7 +17,15 @@ import {
   calcularCustoConcretoAvancado,
   listarOrdensProducao,
   criarOrdemProducao,
-  concluirOrdemProducao
+  concluirOrdemProducao,
+  listarMineracao,
+  registrarExtracaoDraga,
+  emitirRomaneioVendaAgregado,
+  calcularEstatisticaResistenciaLote,
+  gerarHtmlRomaneioOficial,
+  listarMedicoesObras,
+  criarMedicaoObra,
+  atualizarStatusMedicao
 } from './servico.js';
 import { CONCRETO_EMPRESA_ID } from '../../concreto-usina-seed.js';
 
@@ -211,6 +219,98 @@ export function criarRotasConcreto() {
     try {
       const { tipo, quantidade, motivo } = req.body;
       const resultado = await registrarMovimentacaoInsumoSilo(req.params.id, tipo, quantidade, motivo);
+      return res.json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+
+  // 15. Módulo Serrano Mineração: Listar dragas, pátios e vendas de agregados
+  router.get('/mineracao', async (req, res) => {
+    try {
+      const empresaId = resolverEmpresa(req);
+      const resultado = await listarMineracao(empresaId);
+      return res.json(resultado);
+    } catch (e) {
+      return res.status(500).json({ ok: false, error: e.message });
+    }
+  });
+
+  // 16. Registrar extração de draga
+  router.post('/mineracao/extracao', async (req, res) => {
+    try {
+      const empresaId = resolverEmpresa(req);
+      const { dragaId, volumeM3, horimetro, status, umidadeSuperficial } = req.body;
+      const resultado = await registrarExtracaoDraga(dragaId, { volumeM3, horimetro, status, umidadeSuperficial }, empresaId);
+      return res.json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  // 17. Emitir romaneio de venda de agregados na balança com CFEM
+  router.post('/mineracao/venda-agregados', async (req, res) => {
+    try {
+      const empresaId = resolverEmpresa(req);
+      const resultado = await emitirRomaneioVendaAgregado(req.body, empresaId);
+      return res.json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  // 18. Controle Estatístico NBR 12655 do lote de ensaio
+  router.get('/ensaios/:lote/estatistica', async (req, res) => {
+    try {
+      const empresaId = resolverEmpresa(req);
+      const resultado = calcularEstatisticaResistenciaLote(req.params.lote, empresaId);
+      return res.json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  // 19. Gerar Romaneio Oficial NBR 7212 em HTML para visualização e impressão
+  router.get('/cargas/:id/romaneio-html', async (req, res) => {
+    try {
+      const empresaId = resolverEmpresa(req);
+      const resultado = await gerarHtmlRomaneioOficial(req.params.id, empresaId);
+      if (req.query.formato === 'html') {
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        return res.send(resultado.html);
+      }
+      return res.json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  // 20. Medições de Obras Construtora
+  router.get('/medicoes', async (req, res) => {
+    try {
+      const empresaId = resolverEmpresa(req);
+      const resultado = await listarMedicoesObras(empresaId);
+      return res.json(resultado);
+    } catch (e) {
+      return res.status(500).json({ ok: false, error: e.message });
+    }
+  });
+
+  router.post('/medicoes', async (req, res) => {
+    try {
+      const empresaId = resolverEmpresa(req);
+      const resultado = await criarMedicaoObra(req.body, empresaId);
+      return res.json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  router.put('/medicoes/:id/status', async (req, res) => {
+    try {
+      const { status } = req.body;
+      const resultado = await atualizarStatusMedicao(req.params.id, status);
       return res.json(resultado);
     } catch (e) {
       return res.status(400).json({ ok: false, error: e.message });

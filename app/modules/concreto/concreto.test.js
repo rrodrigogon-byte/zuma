@@ -19,6 +19,14 @@ import {
   listarOrdensProducao,
   criarOrdemProducao,
   concluirOrdemProducao,
+  listarMineracao,
+  registrarExtracaoDraga,
+  emitirRomaneioVendaAgregado,
+  calcularEstatisticaResistenciaLote,
+  gerarHtmlRomaneioOficial,
+  listarMedicoesObras,
+  criarMedicaoObra,
+  atualizarStatusMedicao,
   INSUMOS_MATERIA_PRIMA,
   TRACOS_NORMATIZADOS
 } from './servico.js';
@@ -161,4 +169,103 @@ test('6. Ordens de Produção (OP) de Concreto com Baixa nos Silos', async () =>
   assert.equal(resConcluir.ok, true);
   assert.equal(resConcluir.ordemProducao.status, 'concluida');
   assert.ok(resConcluir.silosAtualizados.length >= 3, 'Deve atualizar cimento, areia e brita');
+});
+
+
+test('7. Serrano Mineração: Dragas, pátios de areia e venda de agregados com CFEM', async () => {
+  const resMin = await listarMineracao(CONCRETO_EMPRESA_ID);
+  assert.equal(resMin.ok, true);
+  assert.ok(resMin.dragas.length >= 2, 'Deve ter pelo menos 2 dragas');
+  assert.ok(resMin.patios.length >= 4, 'Deve ter pátios de areia e brita');
+  assert.ok(resMin.vendas.length >= 2, 'Deve ter romaneios de venda avulsa');
+  assert.ok(resMin.resumo.totalAreiaExtraidaHoje > 0);
+  assert.ok(resMin.resumo.totalCfemApurado > 0);
+
+  // Registrar extração de draga
+  const resExtracao = await registrarExtracaoDraga('draga-01', {
+    volumeM3: 45,
+    horimetro: 3425,
+    status: 'em_operacao',
+    umidadeSuperficial: 4.6
+  }, CONCRETO_EMPRESA_ID);
+  assert.equal(resExtracao.ok, true);
+  assert.ok(resExtracao.draga.producaoHojeM3 >= 225);
+
+  // Emitir romaneio de venda de areia na balança com CFEM
+  const resVenda = await emitirRomaneioVendaAgregado({
+    cliente: 'Construtora Pantanal Norte',
+    cnpjCliente: '12.345.678/0001-99',
+    obraDestino: 'Obras de Drenagem Av. Brasil',
+    veiculoPlaca: 'RAQ-4455',
+    motorista: 'Sebastião Alves',
+    produtoId: 'ins-areia-med',
+    produtoNome: 'Areia Média Lavada de Rio (Serrano Mineração)',
+    pesoBrutoKg: 27500,
+    taraKg: 12500,
+    precoUnitarioM3: 65.00
+  }, CONCRETO_EMPRESA_ID);
+  assert.equal(resVenda.ok, true);
+  assert.equal(resVenda.romaneio.pesoLiquidoKg, 15000);
+  assert.equal(resVenda.romaneio.volumeM3, 10);
+  assert.equal(resVenda.romaneio.valorTotal, 650.00);
+  assert.equal(resVenda.romaneio.valorCfem, 9.75); // 1.5% CFEM
+});
+
+test('8. Controle Estatístico NBR 12655 do lote de ensaio (fck estimado e conformidade)', async () => {
+  const est88 = calcularEstatisticaResistenciaLote('CP-2026-088', CONCRETO_EMPRESA_ID);
+  assert.equal(est88.ok, true);
+  assert.equal(est88.fckProjeto, 30);
+  assert.equal(est88.nCorposProva28d, 2);
+  assert.ok(est88.fckEstimado28d >= 34.0);
+  assert.ok(est88.percentualFckAtingido > 100);
+  assert.ok(est88.conformidadeEstrutural.includes('CONFORME'));
+
+  const est89 = calcularEstatisticaResistenciaLote('CP-2026-089', CONCRETO_EMPRESA_ID);
+  assert.equal(est89.ok, true);
+  assert.equal(est89.fckProjeto, 30);
+  assert.ok(est89.mensagem.includes('Aguardando rompimento'));
+});
+
+test('9. Gerador de Romaneio Oficial NBR 7212 em HTML para visualização e impressão', async () => {
+  const resRom = await gerarHtmlRomaneioOficial('crg-1001', CONCRETO_EMPRESA_ID);
+  assert.equal(resRom.ok, true);
+  assert.equal(resRom.numero, 1001);
+  assert.ok(resRom.html.includes('ROMANEIO OFICIAL NBR 7212'));
+  assert.ok(resRom.html.includes('SERRANO CONCRETO USINADO & MINERAÇÃO'));
+  assert.ok(resRom.html.includes('Construtora MT Horizon'));
+  assert.ok(resRom.html.includes('FCK 30 MPa (Brita 1)'));
+  assert.ok(resRom.html.includes('150 min'));
+  assert.ok(resRom.html.includes('ADVERTÊNCIA NORMATIVA NBR 7212'));
+});
+
+test('10. Medições de Obras Construtora e Faturamento Periódico', async () => {
+  const resMed = await listarMedicoesObras(CONCRETO_EMPRESA_ID);
+  assert.equal(resMed.ok, true);
+  assert.ok(resMed.medicoes.length >= 2);
+
+  // Criar nova medição
+  const resCriar = await criarMedicaoObra({
+    cliente: 'Construtora Tangará Obras',
+    cnpjCliente: '33.444.555/0001-22',
+    obra: 'Galpão Logístico Agro MT',
+    periodoInicio: '2026-11-01',
+    periodoFim: '2026-11-12',
+    volumeTotalM3: 48,
+    precoMedioM3: 410.00,
+    taxaBombaTotal: 1200.00,
+    retencaoTecnicaPercent: 5.0,
+    cargasIds: ['crg-1001']
+  }, CONCRETO_EMPRESA_ID);
+
+  assert.equal(resCriar.ok, true);
+  assert.ok(resCriar.medicao.numero.startsWith('MED-2026/0'));
+  assert.equal(resCriar.medicao.volumeTotalM3, 48);
+  assert.equal(resCriar.medicao.valorBrutoTotal, 20880.00); // 48*410 + 1200
+  assert.equal(resCriar.medicao.valorRetencaoTecnica, 1044.00); // 5%
+  assert.equal(resCriar.medicao.valorLiquidoFaturar, 19836.00);
+
+  // Atualizar status
+  const resStatus = await atualizarStatusMedicao(resCriar.medicao.id, 'aprovado_faturado');
+  assert.equal(resStatus.ok, true);
+  assert.equal(resStatus.medicao.status, 'aprovado_faturado');
 });
