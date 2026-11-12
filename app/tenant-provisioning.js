@@ -49,6 +49,18 @@ export const TENANTS_OFICIAIS = {
     ]
   }
 ,
+  casanova: {
+    empresaId: 'b7b7ac01-8e50-4b61-8c79-de4aaa916db1',
+    lojaId: 'b7b7ac01-8e50-4b61-8c79-de4aaa916db2',
+    nome: 'Casa Nova Imóveis & Construtora',
+    slug: 'casanova',
+    roleIdOwner: 'b125e523-957d-4d12-a881-56b958ecec45',
+    roleIdStaff: '85f0c5c5-584b-4d9f-946e-a348c3688483',
+    usuarios: [
+      { id: 'usr-casanova-keyuser-01', username: 'casanova', email: 'casanova@casanovaimoveistga.com.br', nome: 'Key User - Imóveis (Casa Nova)', role: 'keyuser', pgRole: 'keyuser_imoveis', isOwner: false },
+      { id: 'usr-casanova-admin-01', username: 'admin_casanova', email: 'contato@casanovaimoveistga.com.br', nome: 'Administrador Casa Nova', role: 'organizador', pgRole: 'gerente', isOwner: true },
+    ]
+  },
   palatare: {
     empresaId: 'c1c1ac01-8e50-4b61-8c79-de4aaa916da9',
     lojaId: 'c1c1ac01-8e50-4b61-8c79-de4aaa916da0',

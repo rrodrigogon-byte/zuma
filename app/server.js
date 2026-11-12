@@ -1131,6 +1131,14 @@ const requireStaff = (req,res,next)=> {
   if ((perfil === 'operador' || perfil === 'profissional') && !isTenantScopedUser(req.user)) {
     return res.status(403).json({ error: 'Este perfil precisa estar vinculado a uma empresa.', code: 'EMPRESA_REQUIRED' });
   }
+  // keyuser (homologação e validação de módulo restrito): restrito exclusivamente às rotas autorizadas
+  if (perfil === 'keyuser' || req.user?.role === 'keyuser') {
+    const url = String(req.originalUrl || '').split('?')[0];
+    const permitida = url.includes('/imoveis') || url.includes('/imovel') || url.includes('/public/info') || url.startsWith('/api/auth');
+    if (!permitida) {
+      return res.status(403).json({ error: 'Acesso restrito ao módulo de Imóveis para Key User.', code: 'KEYUSER_MODULE_RESTRICTED' });
+    }
+  }
   // profissional (barbeiro, manicure…): só o app do profissional, em qualquer rota de equipe
   if (perfil === 'profissional') {
     const url = String(req.originalUrl || '').split('?')[0];
