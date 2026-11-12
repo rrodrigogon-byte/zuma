@@ -394,8 +394,9 @@ export default function Cardapio() {
       {loading ? (
         <p style={{ color: 'var(--muted)' }}>Carregando…</p>
       ) : (
-        CATEGORIAS.map((cat) => {
+        (Object.keys(grouped).length > 0 ? Object.keys(grouped) : CATEGORIAS).map((cat) => {
           const lista = grouped[cat] || []
+          if (lista.length === 0 && Object.keys(grouped).length > 0) return null
           return (
             <section key={cat} style={{ marginBottom: 32 }}>
               {/* Cabeçalho da categoria */}
@@ -410,7 +411,7 @@ export default function Cardapio() {
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <h2 style={{ fontSize: 16, fontWeight: 700, color: '#fff', margin: 0 }}>{cat}</h2>
+                  <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary, #0f172a)', margin: 0 }}>{cat}</h2>
                   <span
                     className="badge"
                     style={{ background: '#FF6B2C22', color: '#FF6B2C', border: '1px solid #FF6B2C44' }}
@@ -712,7 +713,7 @@ function ItemCard({ item, isFirst, isLast, busy, onToggleCozinha, onToggleDispon
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontWeight: 600, color: '#fff', fontSize: 14 }}>
+          <div style={{ fontWeight: 600, color: 'var(--text-primary, #0f172a)', fontSize: 14 }}>
             {item.emoji ? <span style={{ marginRight: 6, fontSize: 16 }}>{item.emoji}</span> : null}
             {item.nome}
           </div>
