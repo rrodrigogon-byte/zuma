@@ -41,7 +41,7 @@ test('Auditoria Conversas 10/11 — 3. Horários com professionalId="qualquer" t
   const disp = await availability(SCOPE_DINO, {
     serviceId: corte.id,
     professionalId: 'qualquer',
-    date: '2026-11-11',
+    date: new Date(Date.now() + 24 * 3600000).toISOString().slice(0, 10),
   });
   assert.ok(disp.slots.length > 0, 'Deve retornar horários disponíveis na quarta-feira');
   assert.ok(disp.professionalByTime && typeof disp.professionalByTime === 'object', 'Deve retornar mapa professionalByTime');
