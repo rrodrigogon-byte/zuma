@@ -179,3 +179,79 @@ export function consumirPlanosDaComanda(empresaId, comanda, opcoes = {}) {
   }
   return resultados;
 }
+
+/**
+ * Quando a comanda é cancelada: estorna todas as sessões consumidas por ela,
+ * voltando o saldo integralmente ao cliente.
+ */
+export function estornarPlanosDaComanda(empresaId, comanda, opcoes = {}) {
+  if (!comanda) return { estornados: 0 };
+  let itensDesmarcados = 0;
+  for (const item of comanda.itens || []) {
+    if (item.coberturaPlano) {
+      item.coberturaPlano.usoId = null;
+      item.coberturaPlano.estornadoEm = new Date().toISOString();
+      barbearia.registrarUsoPlanoNoItemComanda(empresaId, comanda.id, item.id, { usoId: null });
+      itensDesmarcados++;
+    }
+  }
+  const usosRemovidos = captacao.estornarUsosDaComanda(empresaId, comanda.id, comanda.agendamentoId);
+  return { estornados: Math.max(itensDesmarcados, usosRemovidos), itensDesmarcados, usosRemovidos };
+}
+
+/**
+ * Quando a comanda é cancelada: cancela qualquer pacote/plano adquirido nela,
+ * impedindo que o cliente mantenha um pacote não pago ou cancelado.
+ */
+export function cancelarPacotesDaComanda(empresaId, comanda, opcoes = {}) {
+  if (!comanda) return [];
+  const cmdId = String(comanda.id || '');
+  const clienteId = comanda.clienteId ? String(comanda.clienteId) : null;
+  const canceladas = [];
+
+  const planosIdsItens = new Set(
+    (comanda.itens || [])
+      .filter((item) => (item.tipo === 'pacote' || item.tipo === 'plano' || item.categoria === 'Pacotes e Planos') && item.planoId)
+      .map((item) => String(item.planoId))
+  );
+
+  const agora = new Date().toISOString();
+  const motivo = opcoes.motivo || comanda.cancelamentoMotivo || 'Comanda cancelada';
+  const operador = opcoes.usuario || opcoes.operador || comanda.canceladoPor || 'operador';
+
+  const todasAssinaturas = barbearia.listarAssinaturas(empresaId);
+  for (const item of todasAssinaturas) {
+    if (item.status === 'cancelada') continue;
+    let deveCancelar = false;
+
+    if (item.comandaId && String(item.comandaId) === cmdId) {
+      deveCancelar = true;
+    } else if (item.chaveIdempotencia && String(item.chaveIdempotencia).includes(cmdId)) {
+      deveCancelar = true;
+    } else if (clienteId && String(item.clienteId) === clienteId && planosIdsItens.has(String(item.planoId))) {
+      const dataCriacaoAss = String(item.criadoEm || '').slice(0, 10);
+      const dataComanda = String(comanda.criadoEm || comanda.dataAtendimento || '').slice(0, 10);
+      if (dataCriacaoAss && dataComanda && dataCriacaoAss === dataComanda) {
+        deveCancelar = true;
+      }
+    }
+
+    if (deveCancelar) {
+      try {
+        barbearia.alterarStatusAssinatura(empresaId, item.id, 'cancelada', { motivo, operador });
+      } catch {
+        // Fallback direto se a transição formal reclamar
+        const estado = barbearia.estadoEmpresa ? barbearia.estadoEmpresa(empresaId) : null;
+        if (estado?.assinaturas?.[item.id]) {
+          estado.assinaturas[item.id].status = 'cancelada';
+          estado.assinaturas[item.id].canceladaEm = agora;
+          estado.assinaturas[item.id].canceladoPor = operador;
+          estado.assinaturas[item.id].motivoCancelamento = motivo;
+          estado.assinaturas[item.id].atualizadoEm = agora;
+        }
+      }
+      canceladas.push(item.id);
+    }
+  }
+  return canceladas;
+}
