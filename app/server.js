@@ -1045,7 +1045,7 @@ function auth(req,res,next){
 }
 function authCompleto(req,res,next){
   const h = req.headers.authorization || '';
-  const token = h.startsWith('Bearer ') ? h.slice(7) : null;
+  const token = (h.startsWith('Bearer ') ? h.slice(7) : null) || (req.query?.token ? String(req.query.token) : null);
   if(!token) return res.status(401).json({error:"sem token"});
   try { req.user = jwt.verify(token, JWT_SECRET); }
   catch(e){ return res.status(401).json({error:'token inválido'}); }

@@ -720,11 +720,14 @@ export default function ConcretoUsinaERP() {
 
                               <button
                                 type="button"
-                                className="btn-serrano"
-                                style={{ padding: '6px 12px', fontSize: 12 }}
-                                onClick={() => window.open(`/api/admin/concreto/cargas/${c.id}/romaneio-html?formato=html`, '_blank')}
-                                title="Imprimir Romaneio Oficial A4"
-                              >
+                              className="btn-serrano"
+                              style={{ padding: '6px 12px', fontSize: 12 }}
+                              onClick={() => {
+                                const token = localStorage.getItem('sp_token') || '';
+                                window.open(`/api/admin/concreto/cargas/${c.id}/romaneio-html?formato=html&token=${encodeURIComponent(token)}`, '_blank');
+                              }}
+                              title="Imprimir Romaneio Oficial A4"
+                            >
                                 🖨️ Imprimir
                               </button>
                             </div>
@@ -1539,7 +1542,10 @@ export default function ConcretoUsinaERP() {
               <button
                 type="button"
                 className="btn-serrano"
-                onClick={() => window.open(`/api/admin/concreto/cargas/${modalRomaneioAberto.id}/romaneio-html?formato=html`, '_blank')}
+                onClick={() => {
+                  const token = localStorage.getItem('sp_token') || '';
+                  window.open(`/api/admin/concreto/cargas/${modalRomaneioAberto.id}/romaneio-html?formato=html&token=${encodeURIComponent(token)}`, '_blank');
+                }}
               >
                 🖨️ Imprimir Romaneio A4
               </button>
@@ -1547,7 +1553,10 @@ export default function ConcretoUsinaERP() {
               <button
                 type="button"
                 className="btn-serrano"
-                onClick={() => window.open(`/api/admin/concreto/balanca/tickets/tkt-bal-${modalRomaneioAberto.numero}/html`, '_blank')}
+                onClick={() => {
+                  const token = localStorage.getItem('sp_token') || '';
+                  window.open(`/api/admin/concreto/balanca/tickets/tkt-bal-${modalRomaneioAberto.numero}/html?formato=html&token=${encodeURIComponent(token)}`, '_blank');
+                }}
               >
                 ⚖️ Imprimir Ticket 80mm
               </button>
