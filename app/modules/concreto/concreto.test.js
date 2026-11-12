@@ -33,6 +33,8 @@ import {
   registrarEntradaVeiculo,
   concluirSegundaPesagemBalanca,
   listarTicketsBalanca,
+  obterConfiguracoesBalanca,
+  salvarConfiguracoesBalanca,
   listarMedicoesObras,
   criarMedicaoObra,
   atualizarStatusMedicao,
@@ -434,4 +436,26 @@ test('16. Fluxo de Dupla Pesagem Rodoviária: 1ª Pesagem Entrada e 2ª Pesagem 
   const resListar = await listarTicketsBalanca(CONCRETO_EMPRESA_ID, { termo: 'CAR-15' });
   assert.equal(resListar.ok, true);
   assert.ok(resListar.total >= 1);
+});
+
+test('17. Configurações da Balança Rodoviária 80t: Consulta e Atualização de Hardware', async () => {
+  // 1. Obter configurações padrão
+  const resCfg = await obterConfiguracoesBalanca(CONCRETO_EMPRESA_ID);
+  assert.equal(resCfg.ok, true);
+  assert.equal(resCfg.configuracoes.modeloIndicador, 'Toledo Prix 9094');
+  assert.equal(resCfg.configuracoes.divisaoMetrologicaKg, 10);
+  assert.equal(resCfg.configuracoes.aliquotaCfemMinerais, 1.5);
+
+  // 2. Atualizar configurações técnicas
+  const resSalvar = await salvarConfiguracoesBalanca({
+    portaSerial: 'COM4',
+    baudRate: 19200,
+    tempoAberturaCancelaSegundos: 15,
+    impressoraTermicaPadrao: 'Epson TM-T20X Guarita 1'
+  }, CONCRETO_EMPRESA_ID);
+
+  assert.equal(resSalvar.ok, true);
+  assert.equal(resSalvar.configuracoes.portaSerial, 'COM4');
+  assert.equal(resSalvar.configuracoes.baudRate, 19200);
+  assert.equal(resSalvar.configuracoes.tempoAberturaCancelaSegundos, 15);
 });

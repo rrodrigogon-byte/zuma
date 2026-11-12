@@ -32,6 +32,8 @@ import {
   registrarEntradaVeiculo,
   concluirSegundaPesagemBalanca,
   listarTicketsBalanca,
+  obterConfiguracoesBalanca,
+  salvarConfiguracoesBalanca,
   listarMedicoesObras,
   criarMedicaoObra,
   atualizarStatusMedicao
@@ -426,6 +428,28 @@ export function criarRotasConcreto() {
       const empresaId = resolverEmpresa(req);
       const resultado = await concluirSegundaPesagemBalanca(req.body, empresaId);
       return res.status(201).json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  // 30. Obter Configurações da Balança Rodoviária 80t
+  router.get('/balanca/configuracoes', async (req, res) => {
+    try {
+      const empresaId = resolverEmpresa(req);
+      const resultado = await obterConfiguracoesBalanca(empresaId);
+      return res.json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  // 31. Salvar Configurações da Balança Rodoviária 80t
+  router.post('/balanca/configuracoes', async (req, res) => {
+    try {
+      const empresaId = resolverEmpresa(req);
+      const resultado = await salvarConfiguracoesBalanca(req.body, empresaId);
+      return res.json(resultado);
     } catch (e) {
       return res.status(400).json({ ok: false, error: e.message });
     }

@@ -2571,3 +2571,62 @@ export async function listarTicketsBalanca(empresaId = CONCRETO_EMPRESA_ID, filt
   }
   return { ok: true, total: lista.length, tickets: lista };
 }
+
+// =====================================================================
+// 15. CONFIGURAÇÕES COMPLETAS DE HARDWARE E AUTOMAÇÃO DA BALANÇA
+// =====================================================================
+export const CONFIGURACOES_BALANCA_PADRAO = {
+  modeloIndicador: 'Toledo Prix 9094',
+  protocoloComunicacao: 'Toledo P03 Contínuo',
+  portaSerial: 'COM3',
+  baudRate: 9600,
+  dataBits: 8,
+  paridade: 'N',
+  stopBits: 1,
+  capacidadeMaximaKg: 80000,
+  divisaoMetrologicaKg: 10,
+  ipCameraEntradaLpr: '192.168.1.120',
+  ipCameraSaidaLpr: '192.168.1.121',
+  ipControladorCancelas: '192.168.1.150',
+  tempoAberturaCancelaSegundos: 10,
+  fechamentoAutomaticoAposBarreira: true,
+  impressaoAutomaticaTicket: true,
+  viasImpressaoTicket: 2,
+  emitirRomaneioA4Simultaneo: false,
+  impressoraTermicaPadrao: 'Epson TM-T20X (Rede 192.168.1.200)',
+  aliquotaCfemMinerais: 1.5,
+  toleranciaContranPercent: 5.0,
+  cabecalhoTicket: {
+    razaoSocial: 'SERRANO CONCRETO USINADO & MINERAÇÃO LTDA',
+    nomeFantasia: 'Serrano Concreto & Mineração',
+    cnpj: '03.849.201/0001-10',
+    inscricaoEstadual: '13.489.201-9',
+    endereco: 'Rodovia MT-358 km 08 · Zona Rural · Tangará da Serra/MT',
+    telefone: '(65) 3326-4400',
+    portariaInmetro: 'IPEM-MT / INMETRO Portaria 042/2026'
+  }
+};
+
+export async function obterConfiguracoesBalanca(empresaId = CONCRETO_EMPRESA_ID) {
+  const data = inicializarDatastoreConcreto();
+  const cfg = data.concreto_configuracoes_balanca || { ...CONFIGURACOES_BALANCA_PADRAO, empresaId };
+  return { ok: true, configuracoes: cfg };
+}
+
+export async function salvarConfiguracoesBalanca(novasConfigs, empresaId = CONCRETO_EMPRESA_ID) {
+  const data = inicializarDatastoreConcreto();
+  const atual = data.concreto_configuracoes_balanca || { ...CONFIGURACOES_BALANCA_PADRAO, empresaId };
+  const mesclado = {
+    ...atual,
+    ...novasConfigs,
+    empresaId,
+    cabecalhoTicket: {
+      ...(atual.cabecalhoTicket || {}),
+      ...(novasConfigs.cabecalhoTicket || {})
+    },
+    atualizadoEm: new Date().toISOString()
+  };
+  data.concreto_configuracoes_balanca = mesclado;
+  save();
+  return { ok: true, configuracoes: mesclado };
+}
