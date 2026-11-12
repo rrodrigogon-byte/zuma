@@ -618,7 +618,7 @@ function WhatsappConexaoEmpresa() {
             {ia ? <ul className="dadm-check">
               <Check ok={conexao.providerConfigured}>{tipoCanal === 'cliente' ? 'Backend configurado' : 'Controle WAHA configurado'}</Check>
               <Check ok={tipoCanal !== 'cliente' ? state === 'open' && grupoOperacional : state === 'open' && Boolean(conexao.phoneMasked)} hint={tipoCanal !== 'cliente' ? (grupoOperacional ? 'sessão e grupo allowlisted' : 'salve um grupo Admin') : (state === 'open' && !conexao.phoneMasked ? 'sessão aberta, número não informado' : undefined)}>{tipoCanal !== 'cliente' ? 'Sessão e grupo Admin identificados' : 'Número identificado pelo backend'}</Check>
-              <Check ok={Boolean(ia.gemini?.configured)} hint={ia.gemini?.model}>Gemini configurado</Check>
+              <Check ok={Boolean(ia.gemini?.configured)} hint={ia.gemini?.model ? `KyttoIA (${ia.gemini.model})` : undefined}>KyttoIA configurada</Check>
               <Check ok={Boolean(ia.featureEnabled)} hint="FEATURE_WHATSAPP_AI=true">IA liberada no servidor</Check>
               <Check ok={ia.channel?.status === 'ativo'}>Canal do atendente ativo</Check>
               <Check ok={outbound.ready} hint={outbound.label}>{tipoCanal === 'cliente' ? 'Prontidão do envio' : 'Prontidão WAHA deste perfil'}</Check>

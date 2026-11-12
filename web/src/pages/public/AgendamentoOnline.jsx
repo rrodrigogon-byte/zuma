@@ -36,6 +36,63 @@ const theme = {
   yellow: '#E0B24B',
 }
 
+
+const PRODUTOS_UPSELL_DINO = [
+  {
+    id: 'pom-matte-80g',
+    nome: 'Pomada Modeladora Efeito Matte Dino',
+    volume: '80g',
+    preco: 45.00,
+    emoji: '🧴',
+    descricao: 'Fixação forte e efeito natural sem brilho. O produto mais pedido pelos clientes.',
+    badge: 'Mais Vendido',
+  },
+  {
+    id: 'oleo-barba-30ml',
+    nome: 'Óleo Hidratante para Barba Premium Dino',
+    volume: '30ml',
+    preco: 38.00,
+    emoji: '🧔',
+    descricao: 'Hidratação profunda, fios macios e alinhados com aroma amadeirado nobre.',
+    badge: 'Essencial Barba',
+  },
+  {
+    id: 'balm-pos-barba-100g',
+    nome: 'Balm Modelador & Pós-Barba Dino',
+    volume: '100g',
+    preco: 42.00,
+    emoji: '✨',
+    descricao: 'Acalma a pele pós-lâmina, previne foliculite e perfuma a barba no dia a dia.',
+    badge: 'Toque Macio',
+  },
+  {
+    id: 'shampoo-antiqueda-250ml',
+    nome: 'Shampoo Fortalecedor Antiqueda Dino',
+    volume: '250ml',
+    preco: 48.00,
+    emoji: '🌿',
+    descricao: 'Controle de oleosidade e fortalecimento dos fios de cabelo desde a raiz.',
+    badge: 'Cuidado Capilar',
+  },
+];
+
+function obterEstiloServico(nomeServico = '') {
+  const n = String(nomeServico).toLowerCase();
+  if (n.includes('combo') || n.includes('completo') || (n.includes('cabelo') && n.includes('barba'))) {
+    return { emoji: '👑', tag: 'Experiência Completa', cor: '#E0B24B', desc: 'Corte + Barba alinhada com toalha quente e finalização premium.' };
+  }
+  if (n.includes('barba')) {
+    return { emoji: '🧔', tag: 'Barba Terapia', cor: '#E0B24B', desc: 'Alinhamento navalhado, toalha quente e óleos essenciais hidratantes.' };
+  }
+  if (n.includes('degrade') || n.includes('fade') || n.includes('navalha')) {
+    return { emoji: '💈', tag: 'Fade & Degradê', cor: '#6E7CE0', desc: 'Graduação milimétrica da zero à tesoura com acabamento impecável.' };
+  }
+  if (n.includes('pezinho') || n.includes('acabamento') || n.includes('sobrancelha')) {
+    return { emoji: '⚡', tag: 'Manutenção Rápida', cor: '#A855F7', desc: 'Contornos nítidos e limpeza dos fios para eventos e manutenção.' };
+  }
+  return { emoji: '✂️', tag: 'Corte Tradicional', cor: '#38BDF8', desc: 'Tesoura, máquina e finalização com pomada e styling profissional.' };
+}
+
 const s = {
   page: {
     minHeight: '100vh',
@@ -213,6 +270,7 @@ export default function AgendamentoOnline() {
   const [form, setForm] = useState({ nome: '', cpf: '', telefone: '', observacoes: '' })
   const [agendamento, setAgendamento] = useState(null)
   const [consentimento, setConsentimento] = useState(false)
+  const [produtosUpsellSel, setProdutosUpsellSel] = useState([])
   // Consentimento separado por finalidade: aviso de vaga ≠ confirmação/lembrete do agendamento.
   const [consentimentoEspera, setConsentimentoEspera] = useState(false)
   const [politicas, setPoliticas] = useState({ cancelamentoHoras: 4 })
@@ -392,7 +450,13 @@ export default function AgendamentoOnline() {
           cliente_nome: nome,
           cliente_cpf: cpfLimpo,
           cliente_telefone: telefone,
-          observacoes: form.observacoes,
+          observacoes: [
+            form.observacoes,
+            produtosUpsellSel.length > 0
+              ? `🧴 PRODUTOS INCLUÍDOS PARA RETIRADA NO ATENDIMENTO: ${produtosUpsellSel.map(p => `${p.nome} (${p.volume}) - R$ ${p.preco.toFixed(2)}`).join(' + ')}`
+              : null,
+          ].filter(Boolean).join(' | '),
+          produtos_upsell: produtosUpsellSel,
           consentimento_whatsapp: consentimento === true,
           ...(indicacao ? { indicacao } : {}),
           ...(canal ? { canal, campanha } : {}),
@@ -607,26 +671,74 @@ export default function AgendamentoOnline() {
                 Nenhum serviço disponível para este profissional no momento.
               </p>
             )}
-            {servicosExibidos.map(sv => (
-              <button
-                type="button"
-                key={sv.id}
-                aria-pressed={servicoSel?.id === sv.id}
-                style={s.servicoCard(servicoSel?.id === sv.id)}
-                onClick={() => { setServicoSel(sv); setErroFluxo('') }}
-              >
-                <span>
-                  <span style={{ display: 'block', fontWeight: 700, fontSize: 14 }}>{sv.nome}</span>
-                  <span style={{ display: 'block', color: theme.muted, fontSize: 12, marginTop: 2 }}>⏱ {sv.duracao_min} min</span>
-                </span>
-                <span style={{ textAlign: 'right' }}>
-                  <span style={{ display: 'block', fontWeight: 800, color: theme.green, fontSize: 15 }}>
-                    {sv.preco_rotulo || `R$ ${parseFloat(sv.preco).toFixed(2).replace('.', ',')}`}
-                  </span>
-                  {servicoSel?.id === sv.id && <span aria-hidden="true" style={{ display: 'block', fontSize: 16, marginTop: 2 }}>✓</span>}
-                </span>
-              </button>
-            ))}
+            {servicosExibidos.map(sv => {
+              const estilo = obterEstiloServico(sv.nome);
+              const selecionado = servicoSel?.id === sv.id;
+              return (
+                <button
+                  type="button"
+                  key={sv.id}
+                  aria-pressed={selecionado}
+                  style={{
+                    ...s.servicoCard(selecionado),
+                    padding: "14px 16px",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 14,
+                    boxShadow: selecionado ? "0 4px 16px rgba(110,124,224,0.25)" : "none",
+                  }}
+                  onClick={() => { setServicoSel(sv); setErroFluxo(""); }}
+                >
+                  <div style={{
+                    width: 48,
+                    height: 48,
+                    borderRadius: 14,
+                    background: selecionado ? "rgba(110,124,224,0.25)" : "rgba(255,255,255,0.04)",
+                    border: `1.5px solid ${selecionado ? theme.green : estilo.cor}40`,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontSize: 26,
+                    flexShrink: 0,
+                  }}>
+                    {estilo.emoji}
+                  </div>
+                  <div style={{ flex: 1, textAlign: "left" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                      <span style={{ fontWeight: 800, fontSize: 15, color: theme.cream }}>{sv.nome}</span>
+                      <span style={{
+                        fontSize: 10,
+                        fontWeight: 800,
+                        textTransform: "uppercase",
+                        letterSpacing: ".4px",
+                        padding: "2px 7px",
+                        borderRadius: 6,
+                        background: `${estilo.cor}22`,
+                        color: estilo.cor,
+                      }}>
+                        {estilo.tag}
+                      </span>
+                    </div>
+                    <span style={{ display: "block", color: theme.muted, fontSize: 12, marginTop: 3 }}>
+                      {estilo.desc}
+                    </span>
+                    <span style={{ display: "inline-block", color: theme.muted, fontSize: 11, marginTop: 4 }}>
+                      ⏱ {sv.duracao_min} min de cadeira
+                    </span>
+                  </div>
+                  <div style={{ textAlign: "right", flexShrink: 0 }}>
+                    <span style={{ display: "block", fontWeight: 800, color: theme.green, fontSize: 16 }}>
+                      {sv.preco_rotulo || `R$ ${parseFloat(sv.preco).toFixed(2).replace(".", ",")}`}
+                    </span>
+                    {selecionado ? (
+                      <span aria-hidden="true" style={{ display: "inline-block", fontSize: 12, color: "#fff", background: theme.green, padding: "2px 8px", borderRadius: 10, marginTop: 4, fontWeight: 700 }}>✓ Escolhido</span>
+                    ) : (
+                      <span style={{ display: "inline-block", fontSize: 11, color: theme.muted, marginTop: 4 }}>Selecionar</span>
+                    )}
+                  </div>
+                </button>
+              );
+            })}
           </div>
         </div>
         <button
@@ -1010,12 +1122,115 @@ export default function AgendamentoOnline() {
               <span style={{ color: theme.muted }}>Horário</span>
               <span style={{ fontWeight: 700 }}>{horarioSel}</span>
             </div>
+            {produtosUpsellSel.map(prod => (
+              <div key={prod.id} style={{ display: 'flex', justifyContent: 'space-between', color: '#E0B24B' }}>
+                <span>🧴 {prod.nome} ({prod.volume})</span>
+                <span style={{ fontWeight: 700 }}>+ R$ {prod.preco.toFixed(2).replace('.', ',')}</span>
+              </div>
+            ))}
             <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: `1px solid ${theme.line}`, paddingTop: 8, marginTop: 4 }}>
-              <span style={{ color: theme.muted }}>Valor</span>
-              <span style={{ fontWeight: 800, color: theme.green, fontSize: 15 }}>
-                {servicoSel?.preco_rotulo || `R$ ${parseFloat(servicoSel?.preco || 0).toFixed(2).replace('.', ',')}`}
+              <span style={{ color: theme.muted }}>Valor Total do Atendimento</span>
+              <span style={{ fontWeight: 800, color: theme.green, fontSize: 17 }}>
+                R$ {((parseFloat(servicoSel?.preco || 0) + produtosUpsellSel.reduce((acc, p) => acc + p.preco, 0))).toFixed(2).replace('.', ',')}
               </span>
             </div>
+          </div>
+        </div>
+
+        
+        {/* CARROSSEL / VITRINE DE PERFUMARIA & PRODUTOS DINO (UPSELL) */}
+        <div style={{
+          ...s.card,
+          background: 'linear-gradient(180deg, rgba(224,178,75,0.08) 0%, rgba(22,25,34,0.95) 100%)',
+          border: '1.5px solid rgba(224,178,75,0.4)',
+          borderRadius: 16,
+          padding: 20,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+            <span style={{ fontSize: 26 }}>🧴</span>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 800, color: '#E0B24B', textTransform: 'uppercase', letterSpacing: '.6px' }}>
+                Vitrine de Perfumaria & Cuidados Pessoais
+              </div>
+              <div style={{ fontSize: 12, color: theme.muted, marginTop: 2 }}>
+                Deseja incluir produtos oficiais Dino para retirar no seu atendimento?
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {PRODUTOS_UPSELL_DINO.map(prod => {
+              const estaSelecionado = produtosUpsellSel.some(p => p.id === prod.id);
+              return (
+                <div
+                  key={prod.id}
+                  style={{
+                    background: estaSelecionado ? 'rgba(224,178,75,0.15)' : 'rgba(255,255,255,0.03)',
+                    border: `1.5px solid ${estaSelecionado ? '#E0B24B' : theme.line}`,
+                    borderRadius: 12,
+                    padding: '12px 14px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: 12,
+                    transition: 'all .2s ease',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <span style={{ fontSize: 26 }}>{prod.emoji}</span>
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{ fontWeight: 800, fontSize: 13, color: theme.cream }}>{prod.nome}</span>
+                        {prod.badge && (
+                          <span style={{
+                            fontSize: 9,
+                            fontWeight: 800,
+                            background: 'rgba(224,178,75,0.2)',
+                            color: '#E0B24B',
+                            padding: '2px 5px',
+                            borderRadius: 4,
+                            textTransform: 'uppercase',
+                          }}>
+                            {prod.badge}
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ fontSize: 11, color: theme.muted, marginTop: 2 }}>
+                        {prod.descricao}
+                      </div>
+                      <div style={{ fontSize: 13, fontWeight: 800, color: '#E0B24B', marginTop: 4 }}>
+                        R$ {prod.preco.toFixed(2).replace('.', ',')}
+                      </div>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    style={{
+                      background: estaSelecionado ? '#E0B24B' : 'transparent',
+                      color: estaSelecionado ? '#000' : '#E0B24B',
+                      border: '1.5px solid #E0B24B',
+                      borderRadius: 8,
+                      padding: '6px 12px',
+                      fontSize: 12,
+                      fontWeight: 800,
+                      cursor: 'pointer',
+                      flexShrink: 0,
+                      transition: 'all .15s ease',
+                    }}
+                    onClick={() => {
+                      if (estaSelecionado) {
+                        setProdutosUpsellSel(prev => prev.filter(p => p.id !== prod.id));
+                      } else {
+                        setProdutosUpsellSel(prev => [...prev, prod]);
+                      }
+                    }}
+                  >
+                    {estaSelecionado ? '✓ Incluído' : '+ Incluir'}
+                  </button>
+                </div>
+              );
+            })}
           </div>
         </div>
 

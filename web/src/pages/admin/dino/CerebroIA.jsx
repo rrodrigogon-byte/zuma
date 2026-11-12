@@ -13,7 +13,7 @@ import './dino-admin.css'
 const BASE = '/api/admin/barbearia/cerebro-ia'
 const TABS = [['ativacao', 'Ativação'], ['geral', 'Visão geral'], ['aprendizado', 'Aprendizados'], ['ofertas', 'Grafo e ofertas'], ['automacoes', 'Automações']]
 const TASK_LABEL = { classificar: 'Classificar intenção', resumir_extrair: 'Resumir e extrair fatos', propor_resposta: 'Redigir respostas', avaliar: 'IA avaliadora', venda_consultiva: 'Venda consultiva', responder_reserva: 'Reserva do atendimento' }
-const PROVIDER = { gemini: 'Gemini', anthropic: 'Claude', openai: 'GPT' }
+const PROVIDER = { gemini: 'KyttoIA', anthropic: 'Claude', openai: 'GPT' }
 const KEY_ENV = { gemini: 'GEMINI_API_KEY', anthropic: 'ANTHROPIC_API_KEY', openai: 'OPENAI_API_KEY' }
 const REL = { AGENDOU: 'agendou', COMPROU: 'comprou', ATENDIDO_POR: 'atendido por', INDICOU: 'indicou', PERGUNTOU: 'perguntou', INTERESSE: 'interesse' }
 const NODE_COLOR = { cliente: '#4B57A6', profissional: '#7C8494', servico: '#2E9E7B', produto: '#E0A83B', interesse: '#D96A5B' }

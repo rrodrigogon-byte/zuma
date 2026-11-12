@@ -3183,7 +3183,7 @@ export default function BarbeariaERP({ tabInicial } = {}) {
     if (
       status === "ativo" &&
       !window.confirm(
-        "Confirmar a ativação do atendente IA no WhatsApp desta unidade? Mensagens recebidas passarão a ser processadas pelo Gemini e poderão preparar ações sujeitas a confirmação do cliente.",
+        "Confirmar a ativação do atendente IA no WhatsApp desta unidade? Mensagens recebidas passarão a ser processadas pela KyttoIA e poderão preparar ações sujeitas a confirmação do cliente.",
       )
     )
       return;
@@ -3330,7 +3330,7 @@ export default function BarbeariaERP({ tabInicial } = {}) {
   async function testarGeminiWhatsappAi() {
     if (
       !window.confirm(
-        "Executar um diagnóstico curto do Gemini? O teste consome uma chamada mínima e não envia mensagem nem executa ferramentas.",
+        "Executar um diagnóstico curto da KyttoIA? O teste consome uma chamada mínima e não envia mensagem nem executa ferramentas.",
       )
     )
       return;
@@ -3339,7 +3339,7 @@ export default function BarbeariaERP({ tabInicial } = {}) {
         api.post("/api/admin/commerce/whatsapp-ai/diagnostics/gemini", {
           confirmed: true,
         }),
-      "Gemini respondeu ao diagnóstico com sucesso.",
+      "KyttoIA respondeu ao diagnóstico com sucesso.",
     );
   }
 
@@ -12602,7 +12602,7 @@ export default function BarbeariaERP({ tabInicial } = {}) {
                   <small style={styles.sub}>Ativação separada do deploy</small>
                 </div>
                 <div style={styles.readinessItem}>
-                  <strong>Gemini</strong>
+                  <strong>KyttoIA</strong>
                   <span
                     style={{
                       fontWeight: 800,
@@ -12677,7 +12677,7 @@ export default function BarbeariaERP({ tabInicial } = {}) {
                   </small>
                 </div>
                 <div style={styles.readinessItem}>
-                  <strong>Latência Gemini</strong>
+                  <strong>Latência KyttoIA</strong>
                   <span style={{ fontWeight: 800 }}>
                     {Number(whatsappAi.provider24h?.avgLatencyMs || 0)} ms
                   </span>
@@ -13329,7 +13329,7 @@ export default function BarbeariaERP({ tabInicial } = {}) {
                   disabled={salvando || !whatsappAi.gemini?.configured}
                   onClick={testarGeminiWhatsappAi}
                 >
-                  Testar Gemini
+                  Testar KyttoIA
                 </button>
                 {!whatsappAi.channel && (
                   <button

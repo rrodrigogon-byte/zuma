@@ -18,6 +18,35 @@ function dataHojeIso() {
   return `${ano}-${mes}-${dia}`
 }
 
+
+function calcularComissoesESeparacao(prof) {
+  const faturamentoTotalDia = Number(prof.dia?.faturamentoTotal || 0);
+  const faturamentoProdutosDia = Number(prof.dia?.produtosValor || 0);
+  const faturamentoServicosDia = Math.max(0, faturamentoTotalDia - faturamentoProdutosDia);
+
+  // Comissões estritas: 40% serviços, 10% produtos de perfumaria
+  const comissaoServicos = faturamentoServicosDia * 0.40;
+  const comissaoProdutos = faturamentoProdutosDia * 0.10;
+  const comissaoTotalDia = comissaoServicos + comissaoProdutos;
+
+  // Alerta dourado de próximo bônus (meta de faturamento semanal para atingir 47% de comissão)
+  const metaBonusSemanal = 8000;
+  const faturamentoSemanal = Number(prof.semana?.faturamentoTotal || 0);
+  const faltamParaBonus = Math.max(0, metaBonusSemanal - faturamentoSemanal);
+  const progressoBonus = Math.min(100, Math.round((faturamentoSemanal / metaBonusSemanal) * 100));
+
+  return {
+    faturamentoServicosDia,
+    faturamentoProdutosDia,
+    comissaoServicos,
+    comissaoProdutos,
+    comissaoTotalDia,
+    faltamParaBonus,
+    progressoBonus,
+    exibirAlertaDourado: faltamParaBonus > 0 && faltamParaBonus <= 3000,
+  };
+}
+
 export default function DinoMetasRoletaPanel() {
   const { toast } = useToast()
 
@@ -348,6 +377,43 @@ export default function DinoMetasRoletaPanel() {
                         </div>
                       )}
                     </div>
+
+                    {(() => {
+                      const dadosComissao = calcularComissoesESeparacao(prof);
+                      return (
+                        <>
+                          {/* SEPARAÇÃO ESTRITA DE COMISSÕES: SERVIÇOS 40% | PERFUMARIA 10% */}
+                          <div className="dino-comissoes-split-box">
+                            <div className="dino-comissao-pill servicos">
+                              <span className="dino-comissao-pill-label">✂️ Serviços (40%)</span>
+                              <span className="dino-comissao-pill-val">{fmtR(dadosComissao.comissaoServicos)}</span>
+                              <span style={{ fontSize: 9, color: 'var(--muted)' }}>Fat: {fmtR(dadosComissao.faturamentoServicosDia)}</span>
+                            </div>
+                            <div className="dino-comissao-pill perfumaria">
+                              <span className="dino-comissao-pill-label">🧴 Perfumaria (10%)</span>
+                              <span className="dino-comissao-pill-val">{fmtR(dadosComissao.comissaoProdutos)}</span>
+                              <span style={{ fontSize: 9, color: 'var(--muted)' }}>Fat: {fmtR(dadosComissao.faturamentoProdutosDia)}</span>
+                            </div>
+                          </div>
+
+                          {/* ALERTA DOURADO: PROXIMIDADE DO BÔNUS DE 47% DE COMISSÃO */}
+                          {dadosComissao.exibirAlertaDourado && (
+                            <div className="dino-alerta-bonus-dourado">
+                              <div className="dino-alerta-bonus-topo">
+                                <span>🏆 Próximo Bônus</span>
+                                <span className="dino-alerta-bonus-faixa">Meta: 47% de comissão</span>
+                              </div>
+                              <div className="dino-alerta-bonus-msg">
+                                Faltam <strong>{fmtR(dadosComissao.faltamParaBonus)}</strong> para <strong>{prof.nome.split(' ')[0]}</strong> atingir <strong>47% de comissão</strong> na semana!
+                              </div>
+                              <div className="dino-alerta-bonus-barra">
+                                <div className="dino-alerta-bonus-fill" style={{ width: `${dadosComissao.progressoBonus}%` }} />
+                              </div>
+                            </div>
+                          )}
+                        </>
+                      );
+                    })()}
 
                     {/* Barras de Metas */}
                     <div className="dino-metas-track-list">

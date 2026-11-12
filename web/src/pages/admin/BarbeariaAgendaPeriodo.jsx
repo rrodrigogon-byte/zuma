@@ -363,6 +363,7 @@ export const MODELOS_AGENDA = [
 ];
 
 export default function BarbeariaAgendaPeriodo({
+
   profissionais = [],
   servicos = [],
   profissionalId = "",
@@ -379,6 +380,15 @@ export default function BarbeariaAgendaPeriodo({
   onDesativarBloqueio,
 }) {
   const hoje = hojeAgenda();
+
+  // Linha do tempo em tempo real (Estilo Google Calendar)
+  const [agoraHora, setAgoraHora] = useState(() => new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }));
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setAgoraHora(new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }));
+    }, 30000);
+    return () => clearInterval(timer);
+  }, []);
   const STORAGE_KEY_MODELO = "dino_agenda_modelo_padrao";
   const [modeloPadrao, setModeloPadrao] = useState(() => {
     try {
@@ -1984,6 +1994,18 @@ export default function BarbeariaAgendaPeriodo({
               {/* 1. VISÃO EM COLUNAS SEPARADAS POR BARBEIRO */}
               {submodoDia === "colunas" && (
                 <div className="dino-cal-day-barbers-container">
+                  {/* Linha do Tempo Google em Tempo Real (minuto atual) */}
+                  {de === hoje && (
+                    <div className="dino-cal-now-timeline-bar">
+                      <span className="dino-cal-now-badge">
+                        <span className="dino-cal-now-pulse-dot" />
+                        AGORA {agoraHora}
+                      </span>
+                      <span>
+                        <strong>Linha do Tempo Google em Tempo Real:</strong> Colunas sincronizadas lado a lado para <strong>Nati</strong>, <strong>Bruno</strong> e <strong>Dino</strong>.
+                      </span>
+                    </div>
+                  )}
                   <div
                     className="dino-cal-day-barbers-grid"
                     style={{
