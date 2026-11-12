@@ -129,6 +129,75 @@ export default function DinoRecuperacaoAvecPanel({ onAbrirAgenda, empresaId }) {
   const [testandoEnvio, setTestandoEnvio] = useState(false)
   const [testeFeedback, setTesteFeedback] = useState(null)
   const [antibanData, setAntibanData] = useState(null)
+  const [comQuemAgendar, setComQuemAgendar] = useState('habitual') // 'habitual', 'equipe', 'especifico'
+  const [profissionalFixo, setProfissionalFixo] = useState('dino') // 'dino', 'nati', 'bruno'
+  const [vozRemetente, setVozRemetente] = useState('institucional') // 'institucional', 'pessoal'
+  const [incluirLinkAgendamento, setIncluirLinkAgendamento] = useState(true)
+
+  const textoPreviaWhatsApp = useMemo(() => {
+    let profNome = 'Dino'
+    let linkExemplo = 'https://kytto.com.br/agendar/dino/dino'
+
+    if (comQuemAgendar === 'equipe') {
+      profNome = 'a equipe da barbearia'
+      linkExemplo = 'https://kytto.com.br/agendar/dino'
+    } else if (comQuemAgendar === 'especifico') {
+      if (profissionalFixo === 'nati') {
+        profNome = 'a Nati'
+        linkExemplo = 'https://kytto.com.br/agendar/dino/nati'
+      } else if (profissionalFixo === 'bruno') {
+        profNome = 'o Bruno'
+        linkExemplo = 'https://kytto.com.br/agendar/dino/bruno'
+      } else {
+        profNome = 'o Dino'
+        linkExemplo = 'https://kytto.com.br/agendar/dino/dino'
+      }
+    } else {
+      profNome = 'o seu barbeiro habitual (Dino, Nati ou Bruno)'
+      linkExemplo = 'https://kytto.com.br/agendar/dino/dino'
+    }
+
+    if (tipoMensagem === 'unica') {
+      let txt = msgCampanha
+        .replace(/\{Nome do Cliente\}|\{Nome\}/g, 'Rodrigo')
+        .replace(/\{Profissional\}/g, profNome)
+        .replace(/\{Link Agendamento\}/g, linkExemplo)
+        .replace(/\{Ultima Visita\}/g, '15/08/2026')
+        .replace(/\{Dias Sem Vir\}/g, '78')
+      if (incluirLinkAgendamento && !txt.includes(linkExemplo)) {
+        txt += `\n\nAgende online direto pelo link:\n${linkExemplo}`
+      }
+      if (!txt.toUpperCase().includes('PARAR') && !txt.toUpperCase().includes('SAIR')) {
+        txt += '\n\n_Para não receber mensagens, responda PARAR._'
+      }
+      return txt
+    }
+
+    // personalizada_modelo
+    let corpo = ''
+    if (vozRemetente === 'pessoal' && comQuemAgendar !== 'equipe') {
+      const nomeBarber = comQuemAgendar === 'especifico'
+        ? (profissionalFixo === 'nati' ? 'a Nati' : profissionalFixo === 'bruno' ? 'o Bruno' : 'o Dino')
+        : 'seu barbeiro'
+      corpo = `Olá Rodrigo! Tudo bem? Aqui é ${nomeBarber} da Barbearia Dino! 💈\n\nSentimos sua falta por aqui! Faz um tempinho que você não vem dar aquele trato no visual com a gente.\n\nQue tal reservar um horário comigo essa semana?`
+    } else if (comQuemAgendar === 'equipe') {
+      corpo = `Olá Rodrigo! Tudo bem? Aqui é da Barbearia Dino! 💈\n\nSentimos sua falta por aqui! Notamos que faz um tempinho que você não vem dar aquele trato no visual com a gente.\n\nPodemos reservar um horário especial com a equipe da barbearia essa semana?`
+    } else if (comQuemAgendar === 'especifico') {
+      const nomeBarber = profissionalFixo === 'nati' ? 'a Nati' : profissionalFixo === 'bruno' ? 'o Bruno' : 'o Dino'
+      corpo = `Olá Rodrigo! Tudo bem? Aqui é da Barbearia Dino! 💈\n\nSentimos sua falta por aqui! Notamos que faz um tempinho que você não vem dar aquele trato no visual com a gente.\n\nPodemos reservar um horário especial com ${nomeBarber} essa semana?`
+    } else {
+      corpo = `Olá Rodrigo! Tudo bem? Aqui é da Barbearia Dino! 💈\n\nSentimos sua falta por aqui! Notamos que faz um tempinho que você não vem dar aquele trato no visual com a gente.\n\nPodemos reservar um horário especial com ${profNome} essa semana?`
+    }
+
+    if (incluirLinkAgendamento) {
+      corpo += `\n\nAgende direto pelo link exclusivo:\n${linkExemplo}\n\nOu se preferir, pode me responder por aqui com o dia que fica melhor pra você!`
+    } else {
+      corpo += '\n\nMe avisa por aqui qual dia e período fica melhor pra você!'
+    }
+
+    corpo += '\n\n_Para não receber mensagens, responda PARAR._'
+    return corpo
+  }, [comQuemAgendar, profissionalFixo, vozRemetente, incluirLinkAgendamento, tipoMensagem, msgCampanha])
 
   useEffect(() => {
     if (modalCampanhaCRM) {
@@ -287,6 +356,10 @@ export default function DinoRecuperacaoAvecPanel({ onAbrirAgenda, empresaId }) {
         mensagem: msgCampanha,
         usarMensagemPersonalizadaPorModelo: tipoMensagem === 'personalizada_modelo',
         escopo: escopoEnvio,
+        comQuemAgendar,
+        profissionalFixo,
+        vozRemetente,
+        incluirLinkAgendamento,
       }
 
       if (escopoEnvio === 'selecionados') {
@@ -334,6 +407,11 @@ export default function DinoRecuperacaoAvecPanel({ onAbrirAgenda, empresaId }) {
         testeApenas: true,
         testeTelefone: limpo,
         mensagem: msgCampanha,
+        usarMensagemPersonalizadaPorModelo: tipoMensagem === 'personalizada_modelo',
+        comQuemAgendar,
+        profissionalFixo,
+        vozRemetente,
+        incluirLinkAgendamento,
       })
       if (res?.ok) {
         setTesteFeedback({ tipo: 'sucesso', texto: `Mensagem de teste enviada com sucesso para ${res.destinatario}!` })
@@ -1545,6 +1623,174 @@ export default function DinoRecuperacaoAvecPanel({ onAbrirAgenda, empresaId }) {
                     </div>
                   </div>
 
+                  {/* CONFIGURAÇÃO DO PROFISSIONAL & REMETENTE */}
+                  <div style={{ background: 'var(--surface-2)', padding: '14px', borderRadius: 10, border: '1px solid var(--line)', display: 'grid', gap: 12 }}>
+                    <div>
+                      <label style={{ fontSize: '13px', fontWeight: 800, color: 'var(--fg)', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                        <span>✂️</span> Com quem será o agendamento?
+                      </label>
+                      <span style={{ fontSize: '12px', color: 'var(--muted)', display: 'block', marginBottom: 10 }}>
+                        Escolha se a mensagem convida para o barbeiro habitual de cada cliente, para a equipe geral ou para um barbeiro específico.
+                      </span>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 8 }}>
+                        <label style={{
+                          display: 'flex',
+                          alignItems: 'flex-start',
+                          gap: 8,
+                          padding: '10px 12px',
+                          borderRadius: 8,
+                          border: `1.5px solid ${comQuemAgendar === 'habitual' ? '#10b981' : 'var(--line)'}`,
+                          background: comQuemAgendar === 'habitual' ? 'rgba(16, 185, 129, 0.08)' : 'var(--surface)',
+                          cursor: 'pointer',
+                        }}>
+                          <input
+                            type="radio"
+                            name="comQuemAgendar"
+                            checked={comQuemAgendar === 'habitual'}
+                            onChange={() => setComQuemAgendar('habitual')}
+                            style={{ marginTop: 2, cursor: 'pointer' }}
+                          />
+                          <div>
+                            <strong style={{ fontSize: '12.5px', color: comQuemAgendar === 'habitual' ? '#10b981' : 'var(--fg)', display: 'block' }}>
+                              🎯 Barbeiro Habitual do Cliente
+                            </strong>
+                            <span style={{ fontSize: '11.5px', color: 'var(--muted)', lineHeight: 1.35, display: 'block', marginTop: 2 }}>
+                              Cada cliente recebe com o seu barbeiro habitual (Dino, Nati ou Bruno).
+                            </span>
+                          </div>
+                        </label>
+
+                        <label style={{
+                          display: 'flex',
+                          alignItems: 'flex-start',
+                          gap: 8,
+                          padding: '10px 12px',
+                          borderRadius: 8,
+                          border: `1.5px solid ${comQuemAgendar === 'equipe' ? '#3b82f6' : 'var(--line)'}`,
+                          background: comQuemAgendar === 'equipe' ? 'rgba(59, 130, 246, 0.08)' : 'var(--surface)',
+                          cursor: 'pointer',
+                        }}>
+                          <input
+                            type="radio"
+                            name="comQuemAgendar"
+                            checked={comQuemAgendar === 'equipe'}
+                            onChange={() => setComQuemAgendar('equipe')}
+                            style={{ marginTop: 2, cursor: 'pointer' }}
+                          />
+                          <div>
+                            <strong style={{ fontSize: '12.5px', color: comQuemAgendar === 'equipe' ? '#3b82f6' : 'var(--fg)', display: 'block' }}>
+                              👥 Equipe da Barbearia (Geral)
+                            </strong>
+                            <span style={{ fontSize: '11.5px', color: 'var(--muted)', lineHeight: 1.35, display: 'block', marginTop: 2 }}>
+                              Convida para agendar com "a equipe da barbearia", sem citar nome específico.
+                            </span>
+                          </div>
+                        </label>
+
+                        <label style={{
+                          display: 'flex',
+                          alignItems: 'flex-start',
+                          gap: 8,
+                          padding: '10px 12px',
+                          borderRadius: 8,
+                          border: `1.5px solid ${comQuemAgendar === 'especifico' ? '#a855f7' : 'var(--line)'}`,
+                          background: comQuemAgendar === 'especifico' ? 'rgba(168, 85, 247, 0.08)' : 'var(--surface)',
+                          cursor: 'pointer',
+                        }}>
+                          <input
+                            type="radio"
+                            name="comQuemAgendar"
+                            checked={comQuemAgendar === 'especifico'}
+                            onChange={() => setComQuemAgendar('especifico')}
+                            style={{ marginTop: 2, cursor: 'pointer' }}
+                          />
+                          <div style={{ flex: 1 }}>
+                            <strong style={{ fontSize: '12.5px', color: comQuemAgendar === 'especifico' ? '#a855f7' : 'var(--fg)', display: 'block' }}>
+                              💈 Barbeiro Específico Fixo
+                            </strong>
+                            <span style={{ fontSize: '11.5px', color: 'var(--muted)', lineHeight: 1.35, display: 'block', marginTop: 2 }}>
+                              Dispara para a agenda de um único profissional escolhido.
+                            </span>
+                          </div>
+                        </label>
+                      </div>
+                    </div>
+
+                    {/* SELETOR DO BARBEIRO QUANDO ESPECÍFICO */}
+                    {comQuemAgendar === 'especifico' && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--surface)', padding: '10px 12px', borderRadius: 8, border: '1px solid var(--line)' }}>
+                        <label style={{ fontSize: '12.5px', fontWeight: 700, color: 'var(--fg)', whiteSpace: 'nowrap' }}>
+                          Barbeiro Selecionado:
+                        </label>
+                        <select
+                          value={profissionalFixo}
+                          onChange={(e) => setProfissionalFixo(e.target.value)}
+                          style={{
+                            flex: 1,
+                            padding: '6px 10px',
+                            borderRadius: 6,
+                            border: '1px solid var(--line)',
+                            background: 'var(--surface-2)',
+                            color: 'var(--fg)',
+                            fontSize: '13px',
+                            fontWeight: 700,
+                          }}
+                        >
+                          <option value="dino">💈 Dino</option>
+                          <option value="nati">💈 Nati</option>
+                          <option value="bruno">💈 Bruno</option>
+                        </select>
+                      </div>
+                    )}
+
+                    {/* QUEM ASSINA E LINK DA AGENDA */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 12, paddingTop: 4 }}>
+                      <div>
+                        <label style={{ fontSize: '12.5px', fontWeight: 700, color: 'var(--fg)', display: 'block', marginBottom: 6 }}>
+                          🗣️ Quem Assina a Mensagem?
+                        </label>
+                        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '12.5px', cursor: 'pointer', color: 'var(--fg)' }}>
+                            <input
+                              type="radio"
+                              name="vozRemetente"
+                              checked={vozRemetente === 'institucional'}
+                              onChange={() => setVozRemetente('institucional')}
+                              style={{ cursor: 'pointer' }}
+                            />
+                            <span>Institucional (<em>"Aqui é da Barbearia Dino..."</em>)</span>
+                          </label>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '12.5px', cursor: 'pointer', color: 'var(--fg)' }}>
+                            <input
+                              type="radio"
+                              name="vozRemetente"
+                              checked={vozRemetente === 'pessoal'}
+                              onChange={() => setVozRemetente('pessoal')}
+                              style={{ cursor: 'pointer' }}
+                            />
+                            <span>Pessoal do Barbeiro (<em>"Aqui é o/a [Barbeiro]..."</em>)</span>
+                          </label>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label style={{ fontSize: '12.5px', fontWeight: 700, color: 'var(--fg)', display: 'block', marginBottom: 6 }}>
+                          🔗 Link de Agendamento Online
+                        </label>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '12.5px', cursor: 'pointer', color: 'var(--fg)' }}>
+                          <input
+                            type="checkbox"
+                            checked={incluirLinkAgendamento}
+                            onChange={(e) => setIncluirLinkAgendamento(e.target.checked)}
+                            style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                          />
+                          <span><strong>Incluir link da agenda do barbeiro</strong> para o cliente agendar sozinho em 1 clique</span>
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+
                   {/* ESTRATÉGIA DE MENSAGEM */}
                   <div style={{ background: 'var(--surface-2)', padding: '12px 14px', borderRadius: 10, border: '1px solid var(--line)' }}>
                     <label style={{ fontSize: '12.5px', fontWeight: 700, color: 'var(--fg)', display: 'block', marginBottom: 8 }}>
@@ -1684,14 +1930,7 @@ export default function DinoRecuperacaoAvecPanel({ onAbrirAgenda, empresaId }) {
                         whiteSpace: 'pre-wrap',
                       }}
                     >
-                      {tipoMensagem === 'personalizada_modelo'
-                        ? 'Olá Rodrigo! Aqui é da Barbearia Dino! 💈\n\nSentimos sua falta por aqui! Notamos que faz um tempinho que você não vem dar aquele trato no visual com a gente.\n\nPodemos reservar um horário especial com o Dino essa semana?'
-                        : msgCampanha
-                            .replace(/\{Nome\}/g, 'Rodrigo')
-                            .replace(/\{Profissional\}/g, 'Dino')
-                            .replace(/\{Link Agendamento\}/g, 'https://kytto.com.br/barbeiro/dino')
-                            .replace(/\{Ultima Visita\}/g, '15/08/2026')
-                            .replace(/\{Dias Sem Vir\}/g, '78')}
+                      {textoPreviaWhatsApp}
                       <div style={{ textAlign: 'right', fontSize: 10, color: 'rgba(255,255,255,0.6)', marginTop: 4 }}>
                         14:30 ✓✓
                       </div>

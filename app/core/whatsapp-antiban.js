@@ -80,71 +80,224 @@ export function processarSpintax(texto = '', rng = Math.random) {
 }
 
 /**
- * Gera mensagem humanizada com variação de Spintax e rodapé de opt-out.
+ * Resolve o barbeiro, o slug do link de agendamento online e o tom de voz da mensagem.
+ * Permite direcionar para o barbeiro habitual de cada cliente (dinâmico),
+ * para a equipe geral da barbearia (neutro) ou para um barbeiro específico.
  */
-export function gerarMensagemHumanizadaDino({
-  template = '',
+export function resolverDadosBarbeiroCampanha({
+  comQuemAgendar = 'habitual',
+  profissionalFixo = '',
+  vozRemetente = 'institucional',
   cliente = {},
-  profissional = '',
-  modelo = '',
-  link = '',
-  incluirOptOut = true,
-  rng = Math.random,
-}) {
-  const nomeCompleto = String(cliente.nome || 'Cliente').trim();
-  const primeiroNome = nomeCompleto.split(' ')[0] || 'Cliente';
-  const statusProf = verificarStatusBarbeiroDino(profissional);
-  const profNome = statusProf.ativo
-    ? statusProf.nomeExibicao
-    : '{um dos nossos barbeiros especialistas|a nossa equipe de ponta da Barbearia Dino|um dos nossos profissionais (como o Bruno ou a Nati)}';
+  empresaSlug = 'dino',
+} = {}) {
+  const modo = ['habitual', 'equipe', 'especifico'].includes(comQuemAgendar) ? comQuemAgendar : 'habitual';
+  const voz = ['institucional', 'pessoal'].includes(vozRemetente) ? vozRemetente : 'institucional';
+  const slugEmpresa = empresaSlug || 'dino';
 
-  // Se nenhum template foi fornecido, usamos um gerador padrão com rico Spintax
-  let baseTemplate = template;
-  if (!baseTemplate) {
-    if (modelo === 'essencial') {
-      baseTemplate = '{Olá|Oi|Opa|E aí} {Nome}! {Tudo bem?|Como vai?|Tudo certo por aí?}\n\n' +
-        '{Passando para dar um alô da|Uma mensagem rápida aqui da|Dando uma passada aqui da} Barbearia Dino. ' +
-        '{Notamos que faz um tempo que você não vem dar um talento no visual.|Sentimos sua falta por aqui ultimamente!|Faz alguns dias que você não renova o corte com a gente.}\n\n' +
-        '{Criamos agora uma opção super prática com o corte Essencial por um valor bem acessível, perfeito para manter o estilo em dia sem pesar.|Estamos com o atendimento Essencial com valores novos e mais acessíveis, ideal pra quem quer manter o corte alinhado com praticidade.}\n\n' +
-        '{Que tal garantir seu horário para esta semana?|Se quiser reservar seu horário com a gente, é bem rápido:}\n{Link Agendamento}';
-    } else if (modelo === 'premium') {
-      baseTemplate = '{Olá|Oi|Opa|E aí} {Nome}! {Tudo bem?|Como você está?|Tudo certo?}\n\n' +
-        '{Passando para dar um alô da|Dando uma passada aqui da} Barbearia Dino. ' +
-        '{Sentimos sua falta por aqui nos últimos tempos!|Faz um tempinho que você não vem relaxar e renovar o visual conosco.}\n\n' +
-        '{Preparamos uma experiência completa e diferenciada no atendimento Premium, com todo o conforto, cerveja gelada e o padrão de excelência de sempre.|Queremos te convidar para conhecer nosso atendimento Premium, com corte impecável e o tratamento VIP que você merece.}\n\n' +
-        '{Gostaria de agendar seu horário? Pode reservar diretamente pelo link abaixo ou responder aqui mesmo:}\n{Link Agendamento}';
-    } else {
-      baseTemplate = '{Olá|Oi|Opa|E aí} {Nome}! {Tudo bem?|Como vão as coisas?|Tudo certo por aí?}\n\n' +
-        '{Dando uma passada rápida da|Passando aqui da} Barbearia Dino. ' +
-        '{Sentimos sua falta por aqui!|Faz um tempo que a gente não se vê aqui na barbearia.}\n\n' +
-        '{Que tal aproveitar esses dias para renovar o corte e o visual?|Estamos com a agenda aberta e horários excelentes para esta semana.}\n\n' +
-        '{Pode agendar direto pelo link abaixo ou falar comigo aqui:}\n{Link Agendamento}';
-    }
+  const mapaBarbeiros = {
+    dino: { slug: 'dino', apelido: 'Dino', artigo: 'o', genero: 'm' },
+    bruno: { slug: 'bruno', apelido: 'Bruno', artigo: 'o', genero: 'm' },
+    nati: { slug: 'nati', apelido: 'Nati', artigo: 'a', genero: 'f' },
+  };
+
+  function normalizarSlug(str) {
+    if (!str) return '';
+    const s = String(str).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+    if (s.includes('nati') || s.includes('naty') || s.includes('natani') || s.includes('dobler')) return 'nati';
+    if (s.includes('bruno') || s.includes('mendes')) return 'bruno';
+    if (s.includes('dino') || s.includes('guilherme')) return 'dino';
+    return '';
   }
 
-  // Substitui variáveis conhecidas
-  let textoFinal = baseTemplate
-    .replace(/\{Nome do Cliente\}|\{Nome\}/g, primeiroNome)
-    .replace(/\{Nome Completo\}/g, nomeCompleto)
-    .replace(/\{Profissional\}/g, profNome)
-    .replace(/\{Ultima Visita\}/g, cliente.ultimaVisita ? new Date(cliente.ultimaVisita).toLocaleDateString('pt-BR') : 'recente')
-    .replace(/\{Dias Sem Vir\}/g, String(cliente.diasSemVir || ''))
-    .replace(/\{Link Agendamento\}/g, link || `https://kytto.com.br/barbeiro/dino?t=${cliente.telefone || ''}`);
+  // 1. Modo Equipe da Barbearia (Geral / Neutro)
+  if (modo === 'equipe') {
+    return {
+      modo: 'equipe',
+      barbeiroSlug: '',
+      nomeExibicao: '{a nossa equipe de especialistas|a equipe da Barbearia Dino|um dos nossos profissionais}',
+      comigoOuComProfissional: '{com a nossa equipe de especialistas|com a equipe da Barbearia Dino|com um dos nossos profissionais}',
+      linkAgendamento: `https://kytto.com.br/agendar/${slugEmpresa}`,
+      vozEfetiva: 'institucional',
+      saudacaoVoz: '{Aqui é da Barbearia Dino! 💈|Uma mensagem rápida aqui da Barbearia Dino! 💈}',
+      ehPessoal: false,
+    };
+  }
 
-  // Aplica o motor de Spintax para que a mensagem gerada seja única
-  textoFinal = processarSpintax(textoFinal, rng).trim();
+  // 2. Modo Específico (campanha de um barbeiro específico)
+  if (modo === 'especifico') {
+    const slug = normalizarSlug(profissionalFixo) || 'dino';
+    const b = mapaBarbeiros[slug] || { slug, apelido: profissionalFixo || 'Dino', artigo: 'o', genero: 'm' };
+    const nomeComArtigo = `${b.artigo} ${b.apelido}`;
+    const link = `https://kytto.com.br/agendar/${slugEmpresa}/${b.slug}`;
 
-  // Adiciona rodapé amigável de Opt-Out caso solicitado e ainda não presente
-  if (incluirOptOut && !textoFinal.toUpperCase().includes('SAIR')) {
+    if (voz === 'pessoal') {
+      return {
+        modo: 'especifico',
+        barbeiroSlug: b.slug,
+        nomeExibicao: b.apelido,
+        comigoOuComProfissional: 'comigo',
+        linkAgendamento: link,
+        vozEfetiva: 'pessoal',
+        saudacaoVoz: `{Aqui é ${nomeComArtigo} da Barbearia Dino! 💈|Aqui é ${nomeComArtigo} falando da Barbearia Dino! 💈}`,
+        ehPessoal: true,
+      };
+    }
+
+    return {
+      modo: 'especifico',
+      barbeiroSlug: b.slug,
+      nomeExibicao: nomeComArtigo,
+      comigoOuComProfissional: `com ${nomeComArtigo}`,
+      linkAgendamento: link,
+      vozEfetiva: 'institucional',
+      saudacaoVoz: '{Aqui é da Barbearia Dino! 💈|Passando aqui da Barbearia Dino! 💈}',
+      ehPessoal: false,
+    };
+  }
+
+  // 3. Modo Habitual (dinâmico por cliente)
+  const profOrig = cliente.profissionalPreferido || cliente.profissional || '';
+  const statusProf = verificarStatusBarbeiroDino(profOrig);
+  const slugHabitual = normalizarSlug(profOrig || statusProf.nomeExibicao);
+
+  if (statusProf.ativo && slugHabitual && mapaBarbeiros[slugHabitual]) {
+    const b = mapaBarbeiros[slugHabitual];
+    const nomeComArtigo = `${b.artigo} ${b.apelido}`;
+    const link = `https://kytto.com.br/agendar/${slugEmpresa}/${b.slug}`;
+
+    if (voz === 'pessoal') {
+      return {
+        modo: 'habitual',
+        barbeiroSlug: b.slug,
+        nomeExibicao: b.apelido,
+        comigoOuComProfissional: 'comigo',
+        linkAgendamento: link,
+        vozEfetiva: 'pessoal',
+        saudacaoVoz: `{Aqui é ${nomeComArtigo} da Barbearia Dino! 💈|${nomeComArtigo} da Barbearia Dino passando por aqui! 💈}`,
+        ehPessoal: true,
+      };
+    }
+
+    return {
+      modo: 'habitual',
+      barbeiroSlug: b.slug,
+      nomeExibicao: nomeComArtigo,
+      comigoOuComProfissional: `com ${nomeComArtigo}`,
+      linkAgendamento: link,
+      vozEfetiva: 'institucional',
+      saudacaoVoz: '{Aqui é da Barbearia Dino! 💈|Passando para dar um alô da Barbearia Dino! 💈}',
+      ehPessoal: false,
+    };
+  }
+
+  // Caso o cliente não tenha preferência ou o barbeiro habitual tenha saído (ex-barbeiro)
+  return {
+    modo: 'habitual',
+    barbeiroSlug: '',
+    nomeExibicao: '{um dos nossos barbeiros especialistas|a nossa equipe da Barbearia Dino|um dos nossos profissionais (como o Bruno ou a Nati)}',
+    comigoOuComProfissional: '{com um dos nossos barbeiros especialistas|com a equipe da Barbearia Dino|com um dos nossos profissionais (como o Bruno ou a Nati)}',
+    linkAgendamento: `https://kytto.com.br/agendar/${slugEmpresa}`,
+    vozEfetiva: 'institucional',
+    saudacaoVoz: '{Aqui é da Barbearia Dino! 💈|Uma mensagem rápida aqui da Barbearia Dino! 💈}',
+    ehPessoal: false,
+  };
+}
+
+ /**
+  * Gera mensagem humanizada com variação de Spintax e rodapé de opt-out.
+  */
+ export function gerarMensagemHumanizadaDino({
+   template = '',
+   cliente = {},
+   profissional = '',
+   modelo = '',
+   link = '',
+   incluirOptOut = true,
+   rng = Math.random,
+   comQuemAgendar = 'habitual',
+   profissionalFixo = '',
+   vozRemetente = 'institucional',
+   incluirLinkAgendamento = true,
+   empresaSlug = 'dino',
+ }) {
+   const dadosBarbeiro = resolverDadosBarbeiroCampanha({
+     comQuemAgendar,
+     profissionalFixo,
+     vozRemetente,
+     cliente: { ...cliente, profissionalPreferido: profissional || cliente.profissionalPreferido },
+     empresaSlug,
+   });
+
+   const nomeCompleto = String(cliente.nome || 'Cliente').trim();
+   const primeiroNome = nomeCompleto.split(' ')[0] || 'Cliente';
+   const linkEfetivo = link || dadosBarbeiro.linkAgendamento;
+ 
+   // Se nenhum template foi fornecido, usamos um gerador padrão com rico Spintax
+   let baseTemplate = template;
+   if (!baseTemplate) {
+     const saudacaoAbertura = '{Olá|Oi|Opa|E aí} {Nome}! {Tudo bem?|Como vai?|Tudo certo por aí?}';
+     const identificacaoRemetente = dadosBarbeiro.saudacaoVoz;
+     const faltaTexto = '{Sentimos sua falta por aqui!|Notamos que faz um tempinho que você não vem dar aquele trato no visual com a gente.|Faz alguns dias que você não renova o corte conosco.}';
+ 
+     let corpoModelo = '';
+     if (modelo === 'essencial') {
+       corpoModelo = '{Estruturamos nosso atendimento com a opção Essencial — com valores super acessíveis para manter o estilo em dia com máxima praticidade.|Estamos com o corte Essencial por um valor bem acessível, perfeito para renovar o visual no dia a dia com a qualidade de sempre.}';
+     } else if (modelo === 'premium') {
+       corpoModelo = '{Preparamos uma experiência completa no atendimento Premium, com todo o conforto, cerveja gelada e o padrão de excelência que você merece.|Queremos te convidar para o atendimento Premium, com corte impecável, barboterapia e o cuidado VIP de sempre.}';
+     } else if (modelo === 'club') {
+       corpoModelo = '{Estamos com novidades especiais para retorno dos clientes Club, com condições imperdíveis para você manter o visual sempre alinhado com a melhor economia.|Preparamos uma condição exclusiva de retorno do Club para você voltar a aproveitar cortes ilimitados com o melhor custo-benefício.}';
+     } else {
+       corpoModelo = '{Estamos com a agenda aberta e horários excelentes para esta semana.|Que tal aproveitar esses dias para dar aquele talento no corte e na barba?}';
+     }
+ 
+     const perguntaAgendamento = dadosBarbeiro.ehPessoal
+       ? '{Podemos reservar um horário comigo essa semana?|Que tal marcar seu corte ou barba comigo nesses próximos dias?|Bora dar aquele trato no visual comigo essa semana?}'
+       : `{Podemos reservar um horário especial ${dadosBarbeiro.comigoOuComProfissional} essa semana?|Que tal marcar seu horário ${dadosBarbeiro.comigoOuComProfissional} para esses próximos dias?|Gostaria de garantir seu horário ${dadosBarbeiro.comigoOuComProfissional} essa semana?}`;
+ 
+     let blocoLink = '';
+     if (incluirLinkAgendamento) {
+       blocoLink = '\n\n{Você pode escolher seu serviço e horário livre direto pelo link abaixo:\n{Link Agendamento}|Agende direto pelo link com total praticidade:\n{Link Agendamento}|Para agendar sozinho direto pelo link:\n{Link Agendamento}}' +
+         '\n\n{Ou se preferir, pode me responder por aqui com o dia que fica melhor pra você!|Ou se preferir, é só me responder aqui que eu vejo um horário bom pra você!}';
+     } else {
+       blocoLink = '\n\n{Me avisa por aqui qual dia e período fica melhor pra você!|É só me responder aqui que já vejo um horário excelente pra você!}';
+     }
+ 
+     baseTemplate = `${saudacaoAbertura}\n\n${identificacaoRemetente}\n${faltaTexto}\n\n${corpoModelo}\n\n${perguntaAgendamento}${blocoLink}`;
+   }
+ 
+   // Substitui variáveis conhecidas
+   let textoFinal = baseTemplate
+     .replace(/\{Nome do Cliente\}|\{Nome\}/g, primeiroNome)
+     .replace(/\{Nome Completo\}/g, nomeCompleto)
+     .replace(/\{Profissional\}/g, dadosBarbeiro.nomeExibicao)
+     .replace(/\{Ultima Visita\}/g, cliente.ultimaVisita ? new Date(cliente.ultimaVisita).toLocaleDateString('pt-BR') : 'recente')
+     .replace(/\{Dias Sem Vir\}/g, String(cliente.diasSemVir || ''))
+     .replace(/\{Link Agendamento\}/g, linkEfetivo);
+ 
+   // Aplica o motor de Spintax para que a mensagem gerada seja única
+   textoFinal = processarSpintax(textoFinal, rng).trim();
+ 
+   // Se o link foi solicitado mas o template customizado não contém o link gerado, adiciona no final
+   if (incluirLinkAgendamento && !textoFinal.includes(linkEfetivo) && !textoFinal.includes('http')) {
+     const ctaLink = processarSpintax(
+       `\n\n{Agende online direto pelo link:\n${linkEfetivo}|Você também pode agendar direto pelo link:\n${linkEfetivo}}`,
+       rng
+     );
+     textoFinal += ctaLink;
+   }
+ 
+  // Adiciona rodapé amigável de Opt-Out (diretriz obrigatória da Meta)
+  if (incluirOptOut && !textoFinal.toUpperCase().includes('PARAR') && !textoFinal.toUpperCase().includes('SAIR')) {
     const optOutRodape = processarSpintax(
-      '\n\n_{Se preferir não receber nossos avisos, responda SAIR.|Para não receber mensagens, responda SAIR.|Caso não queira receber lembretes ou novidades, é só responder SAIR.}_',
+      '\n\n_{Caso prefira não receber nossos lembretes, responda SAIR ou PARAR.|Para não receber mensagens, responda SAIR ou PARAR.|Se não quiser mais receber avisos, responda SAIR ou PARAR.}_',
       rng
     );
     textoFinal += optOutRodape;
   }
-
-  return textoFinal;
-}
+ 
+   return textoFinal;
+ }
 
 /**
  * Calcula cadência humanizada com jitter (variação aleatória).

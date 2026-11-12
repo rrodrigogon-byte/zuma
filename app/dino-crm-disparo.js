@@ -85,6 +85,10 @@ export async function dispararCampanhaCRM({
   testeTelefone = '',
   escopo = 'filtrados',
   ignorarJanelaHorario = false,
+  comQuemAgendar = 'habitual',
+  profissionalFixo = '',
+  vozRemetente = 'institucional',
+  incluirLinkAgendamento = true,
 }) {
   // 1. Modo de teste (envio único imediato para conferência do gestor)
   if (testeApenas) {
@@ -98,7 +102,10 @@ export async function dispararCampanhaCRM({
       cliente: { nome: 'Cliente Teste (Rodrigo)', ultimaVisita: '2026-08-15', diasSemVir: 78 },
       profissional: 'Dino',
       modelo: 'essencial',
-      link: `https://kytto.com.br/barbeiro/dino?t=${telTeste}`,
+      comQuemAgendar,
+      profissionalFixo,
+      vozRemetente,
+      incluirLinkAgendamento: Boolean(incluirLinkAgendamento),
       incluirOptOut: true,
     });
 
@@ -187,6 +194,10 @@ export async function dispararCampanhaCRM({
     status: 'processando',
     alvos: clientesValidos.length,
     enviados: 0,
+    comQuemAgendar,
+    profissionalFixo,
+    vozRemetente,
+    incluirLinkAgendamento: Boolean(incluirLinkAgendamento),
     falhas: 0,
     puladosOptOut: 0,
     pausadaPorLimiteDiario: false,
@@ -242,16 +253,17 @@ export async function dispararCampanhaCRM({
 
       // 6.2 Geração de mensagem humanizada com variação de Spintax
       try {
-        const templateEscolhido = usarMensagemPersonalizadaPorModelo && c.mensagemWhatsapp
-          ? c.mensagemWhatsapp
-          : mensagem;
+        const templateEscolhido = usarMensagemPersonalizadaPorModelo ? undefined : (mensagem || undefined);
 
         const textoFinal = gerarMensagemHumanizadaDino({
-          template: templateEscolhido || undefined,
+          template: templateEscolhido,
           cliente: c,
           profissional: c.profissionalPreferido,
           modelo: c.modeloRecomendado,
-          link: `https://kytto.com.br/barbeiro/dino?t=${c.telefoneLimpo}`,
+          comQuemAgendar,
+          profissionalFixo,
+          vozRemetente,
+          incluirLinkAgendamento: Boolean(incluirLinkAgendamento),
           incluirOptOut: true,
         });
 
