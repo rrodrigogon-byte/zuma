@@ -23,6 +23,7 @@ import {
   emitirRomaneioVendaAgregado,
   calcularEstatisticaResistenciaLote,
   gerarHtmlRomaneioOficial,
+  gerarHtmlLaudoOficial,
   assinarEntregaCarga,
   obterRomaneioCompleto,
   emitirTicketPesagemBalanca,
@@ -191,7 +192,19 @@ export function criarRotasConcreto() {
   });
 
   // 10. Calculadora de dosagem NBR 7212
-  router.post('/dosagem/calcular', (req, res) => {
+    // 9b. Emitir Laudo Oficial A4 em HTML para impressão ou visualização (NBR 5739)
+  router.get('/ensaios/:loteId/laudo/html', async (req, res) => {
+    try {
+      const empresaId = resolverEmpresa(req);
+      const html = await gerarHtmlLaudoOficial(req.params.loteId, empresaId);
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      return res.send(html);
+    } catch (e) {
+      return res.status(404).send(`<h1>Erro ao gerar Laudo Técnico NBR 5739</h1><p>${e.message}</p>`);
+    }
+  });
+
+router.post('/dosagem/calcular', (req, res) => {
     try {
       const dosagem = calcularDosagemAvancada(req.body);
       return res.json({ ok: true, dosagem });

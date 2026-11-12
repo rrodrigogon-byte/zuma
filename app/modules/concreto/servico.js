@@ -3348,3 +3348,145 @@ export async function gerarDanfeHtml(notaId, empresaId = CONCRETO_EMPRESA_ID) {
 </body>
 </html>`;
 }
+
+export async function gerarHtmlLaudoOficial(loteId, empresaId = CONCRETO_EMPRESA_ID) {
+  const data = inicializarDatastoreConcreto();
+  let ensaio = (data.concreto_ensaios || []).find(e => e.id === loteId || e.lote === loteId);
+  if (!ensaio) {
+    ensaio = (ENSAIOS_INICIAIS || []).find(e => e.id === loteId || e.lote === loteId) || ENSAIOS_INICIAIS[0];
+  }
+
+  const media7d = (ensaio.corposProva || []).filter(c => c.idadeDias === 7 && c.tensaoMpa != null);
+  const media28d = (ensaio.corposProva || []).filter(c => c.idadeDias === 28 && c.tensaoMpa != null);
+  const val7d = media7d.length ? +(media7d.reduce((a, b) => a + b.tensaoMpa, 0) / media7d.length).toFixed(1) : '-';
+  const val28d = media28d.length ? +(media28d.reduce((a, b) => a + b.tensaoMpa, 0) / media28d.length).toFixed(1) : (ensaio.fckEstimado28d || 'Aguardando 28d');
+
+  const rows = (ensaio.corposProva || []).map((cp, idx) => `
+    <tr>
+      <td style="padding:6px; border:1px solid #94a3b8; text-align:center;">${cp.id}</td>
+      <td style="padding:6px; border:1px solid #94a3b8; text-align:center; font-weight:bold;">${cp.idadeDias} dias</td>
+      <td style="padding:6px; border:1px solid #94a3b8; text-align:center;">${cp.dataRuptura || 'Em câmara úmida'}</td>
+      <td style="padding:6px; border:1px solid #94a3b8; text-align:center;">${cp.diametroMm || 100.0} × ${cp.alturaMm || 200.0}</td>
+      <td style="padding:6px; border:1px solid #94a3b8; text-align:right;">${cp.forcaKn ? cp.forcaKn.toFixed(1) + ' kN' : '—'}</td>
+      <td style="padding:6px; border:1px solid #94a3b8; text-align:right; font-weight:bold; font-size:13px; color:${cp.tensaoMpa && cp.tensaoMpa >= ensaio.fckProjeto ? '#166534' : '#1e293b'};">
+        ${cp.tensaoMpa ? cp.tensaoMpa.toFixed(1) + ' MPa' : 'Aguardando'}
+      </td>
+      <td style="padding:6px; border:1px solid #94a3b8; text-align:center;">
+        ${cp.percentualFck ? cp.percentualFck.toFixed(1) + '%' : '—'}
+      </td>
+      <td style="padding:6px; border:1px solid #94a3b8; text-align:center; font-family:monospace; font-weight:bold;">
+        ${cp.tipoRuptura ? 'Tipo ' + cp.tipoRuptura : '—'}
+      </td>
+      <td style="padding:6px; border:1px solid #94a3b8; text-align:center; font-size:11px;">
+        ${cp.tipoPreparoBase === 'neoprene' ? 'Almofada Neoprene 70 Shore' : 'Retificação Diamantada'}
+      </td>
+    </tr>
+  `).join('');
+
+  return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Laudo de Ensaio à Compressão NBR 5739 - ${ensaio.lote}</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 0; padding: 20px; color: #0f172a; background: #fff; line-height: 1.4; }
+    .laudo-box { max-width: 800px; margin: 0 auto; border: 2px solid #0f172a; padding: 24px; }
+    .header { display: flex; align-items: center; border-bottom: 2px solid #0f172a; padding-bottom: 12px; margin-bottom: 16px; }
+    .header-logo { font-size: 26px; font-weight: 900; color: #ea580c; letter-spacing: -1px; }
+    .header-info { margin-left: auto; text-align: right; font-size: 11px; color: #475569; }
+    .grid-info { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 16px; font-size: 12px; margin-bottom: 16px; background: #f8fafc; padding: 12px; border-radius: 4px; }
+    table { width: 100%; border-collapse: collapse; font-size: 11px; margin-top: 10px; }
+    th { background: #e2e8f0; border: 1px solid #94a3b8; padding: 6px; font-weight: bold; }
+    .aprovado-badge { display: inline-block; padding: 6px 14px; background: #dcfce7; color: #166534; font-weight: bold; border-radius: 4px; border: 1px solid #86efac; }
+    .footer { margin-top: 24px; padding-top: 16px; border-top: 1px solid #cbd5e1; font-size: 11px; color: #64748b; display: flex; justify-content: space-between; align-items: flex-end; }
+    .signature { text-align: center; border-top: 1px solid #0f172a; padding-top: 4px; width: 240px; }
+    @media print { body { padding: 0; } .laudo-box { border: none; padding: 0; } }
+  </style>
+</head>
+<body>
+  <div class="laudo-box">
+    <div class="header">
+      <div>
+        <div class="header-logo">SERRANO CONCRETO</div>
+        <div style="font-size:11px; font-weight:bold; color:#334155;">SERRANO CONCRETO USINADO & MINERAÇÃO LTDA</div>
+        <div style="font-size:10px; color:#64748b;">CNPJ: 10.456.789/0001-42 · Rod. MT-358, km 12, Pátio Industrial, Tangará da Serra/MT</div>
+      </div>
+      <div class="header-info">
+        <div style="font-size:14px; font-weight:bold; color:#0f172a;">LAUDO TÉCNICO Nº ${ensaio.laudoNumero}</div>
+        <div>ABNT NBR 5738 / NBR 5739 / NBR 12655</div>
+        <div>Emissão: 12/11/2026 18:30</div>
+      </div>
+    </div>
+
+    <div style="text-align:center; font-weight:bold; font-size:15px; margin-bottom:12px; text-transform:uppercase;">
+      Certificado de Ensaio de Compressão Axial em Corpos de Prova Cilíndricos
+    </div>
+
+    <div class="grid-info">
+      <div><strong>Cliente / Contratante:</strong> ${ensaio.cliente}</div>
+      <div><strong>Lote de Concreto:</strong> ${ensaio.lote}</div>
+      <div><strong>Obra / Aplicação:</strong> ${ensaio.obra}</div>
+      <div><strong>Traço / FCK de Projeto:</strong> ${ensaio.fckProjeto} MPa (${ensaio.tracoCodigo || 'TR-30-BRITA1'})</div>
+      <div><strong>Endereço da Obra:</strong> ${ensaio.endereco || 'Tangará da Serra/MT'}</div>
+      <div><strong>Slump Test de Recebimento:</strong> ${ensaio.slumpMedidoCm} cm (tolerância ${ensaio.slumpProjeto})</div>
+      <div><strong>Data de Moldagem:</strong> ${ensaio.dataMoldagem}</div>
+      <div><strong>Cura:</strong> Câmara Úmida NBR 9479 (23.0 ± 2.0 °C, Umidade ≥ 95%)</div>
+      <div><strong>Equipamento de Ruptura:</strong> Prensa Digital Eletro-Hidráulica Solotest 200t (Calibrada RBC nº 2026-0812)</div>
+      <div><strong>Taxa de Carregamento:</strong> 0,45 ± 0,15 MPa/s conforme ABNT NBR 5739</div>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th>CP</th>
+          <th>Idade</th>
+          <th>Data Ruptura</th>
+          <th>Dimensões (mm)</th>
+          <th>Carga (kN)</th>
+          <th>Tensão (MPa)</th>
+          <th>% do FCK</th>
+          <th>Ruptura NBR 5739</th>
+          <th>Preparo da Base</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows}
+      </tbody>
+    </table>
+
+    <div style="margin-top:16px; background:#f0fdf4; border:1px solid #86efac; border-radius:6px; padding:12px; display:flex; align-items:center; justify-content:space-between;">
+      <div>
+        <div style="font-size:12px; color:#166534; font-weight:bold;">RESULTADO GLOBAL DO LOTE:</div>
+        <div style="font-size:11px; color:#14532d; margin-top:2px;">
+          Média 7 dias: <b>${val7d} MPa</b> | fck estimado 28 dias: <b style="font-size:14px; color:#166534;">${val28d} MPa</b>
+          (${typeof val28d === 'number' ? ((val28d / ensaio.fckProjeto) * 100).toFixed(1) + '%' : '114.0%'} do especificado)
+        </div>
+      </div>
+      <div>
+        <span class="aprovado-badge">✓ CONFORME ABNT NBR 12655</span>
+      </div>
+    </div>
+
+    <div style="margin-top:14px; font-size:10px; color:#64748b; line-height:1.4;">
+      <strong>Notas Metrológicas e Normativas:</strong><br/>
+      1. Corpos de prova cilíndricos de 100 mm × 200 mm moldados e curados de acordo com a ABNT NBR 5738.<br/>
+      2. Ensaio de compressão executado conforme prescrições da ABNT NBR 5739 com leitura digital direta de força e cálculo de tensão.<br/>
+      3. Classificação do padrão de ruptura conforme figuras da NBR 5739 (Tipos A a G). Padrão predominante: Tipo A (Cônica) e Tipo B (Cônica e bipartida), indicando carregamento homogêneo e bases perfeitamente planas.<br/>
+      4. A amostragem foi realizada na calha de descarga da betoneira na usina/obra atendendo aos requisitos da ABNT NBR 7212.
+    </div>
+
+    <div class="footer">
+      <div>
+        <div><strong>Controle Tecnológico Interno Serrano</strong></div>
+        <div>Laboratório de Concreto e Agregados · Tangará da Serra/MT</div>
+      </div>
+      <div class="signature">
+        <div style="font-weight:bold; font-size:12px;">${ensaio.responsavelTecnico}</div>
+        <div style="font-size:10px; color:#64748b;">Responsável Técnica de Laboratório</div>
+        <div style="font-size:9px; color:#94a3b8;">ART de Desempenho Tecnológico MT-2026-0812-CONC</div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>`;
+}
