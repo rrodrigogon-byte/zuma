@@ -17,7 +17,7 @@ import { db } from './db.js';
 
 test('Palatare Pizzaria & Restaurante: dados cadastrais, CNPJ e identidade visual', () => {
   assert.equal(PALATARE_EMPRESA_ID, 'c1c1ac01-8e50-4b61-8c79-de4aaa916da9');
-  assert.equal(PALATARE_LOJA_ID, 'loj-palatare-matriz-01');
+  assert.equal(PALATARE_LOJA_ID, 'c1c1ac01-8e50-4b61-8c79-de4aaa916da0');
   assert.equal(PALATARE_CNPJ, '52.184.920/0001-00');
   assert.equal(validarCnpj(PALATARE_CNPJ), true);
   assert.equal(PALATARE_DADOS_EMPRESA.tipoNegocio, 'restaurante');

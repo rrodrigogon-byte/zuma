@@ -51,7 +51,7 @@ export const TENANTS_OFICIAIS = {
 ,
   palatare: {
     empresaId: 'c1c1ac01-8e50-4b61-8c79-de4aaa916da9',
-    lojaId: 'loj-palatare-matriz-01',
+    lojaId: 'c1c1ac01-8e50-4b61-8c79-de4aaa916da0',
     nome: 'Palatare Pizzaria & Restaurante',
     slug: 'palatare',
     roleIdOwner: 'b125e523-957d-4d12-a881-56b958ecec45',
