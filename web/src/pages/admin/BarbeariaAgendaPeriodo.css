@@ -2115,3 +2115,97 @@
 .dino-cal-event-card[data-status="confirmado"] * {
   color: #ffffff !important;
 }
+
+/* PILAR 3: Linha do Tempo Google em Tempo Real na Agenda */
+.dino-cal-now-timeline-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  border-left: 4px solid #EF4444;
+  border-radius: 8px;
+  padding: 8px 14px;
+  margin-bottom: 12px;
+  font-size: 12px;
+  color: #B91C1C;
+}
+
+.dino-cal-now-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #EF4444;
+  color: #fff;
+  font-weight: 800;
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  letter-spacing: .4px;
+  box-shadow: 0 2px 6px rgba(239, 68, 68, 0.4);
+}
+
+.dino-cal-now-pulse-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #fff;
+  animation: pulsoAgoraDot 1.2s infinite ease-in-out;
+}
+
+@keyframes pulsoAgoraDot {
+  0% { transform: scale(0.8); opacity: 0.6; }
+  50% { transform: scale(1.4); opacity: 1; }
+  100% { transform: scale(0.8); opacity: 0.6; }
+}
+
+.dino-cal-now-line-marker {
+  position: relative;
+  width: 100%;
+  margin: 12px 0 16px;
+  display: flex;
+  align-items: center;
+}
+
+.dino-cal-now-line-marker::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: #EF4444;
+  box-shadow: 0 0 8px rgba(239, 68, 68, 0.6);
+  z-index: 2;
+}
+
+.dino-cal-now-line-tag {
+  position: relative;
+  z-index: 3;
+  background: #EF4444;
+  color: #fff;
+  font-weight: 800;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 12px;
+  margin-left: 8px;
+  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.4);
+}
+
+.dino-cal-event-card.em-atendimento-agora {
+  border: 2px solid #EF4444 !important;
+  box-shadow: 0 0 12px rgba(239, 68, 68, 0.35) !important;
+  position: relative;
+}
+
+.dino-cal-atendimento-agora-pill {
+  position: absolute;
+  top: -8px;
+  right: 8px;
+  background: #EF4444;
+  color: #fff;
+  font-size: 9px;
+  font-weight: 800;
+  padding: 1px 6px;
+  border-radius: 4px;
+  box-shadow: 0 2px 4px rgba(239, 68, 68, 0.5);
+}
