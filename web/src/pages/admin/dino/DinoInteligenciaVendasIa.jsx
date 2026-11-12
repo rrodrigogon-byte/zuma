@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { api, fmtR } from '../../../lib/api';
+import { useAuth } from '../../../lib/auth';
 
 const COR = {
   verde: '#16a34a',
@@ -39,17 +40,56 @@ function mapearIcone(nome = '') {
 }
 
 export default function DinoInteligenciaVendasIa() {
+  const { user, isPlatformAdmin: authIsPlatformAdmin } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [empresasAutorizadas, setEmpresasAutorizadas] = useState(EMPRESAS_CANONICAS);
-  const [ehAdminPlataforma, setEhAdminPlataforma] = useState(false);
+
+  // Identificação estrita por usuário:
+  // - Rodrigo Gonçalves (rodrigo.goncalves / rrodrigogon / admin): Proprietário do Sistema, visualiza TODAS as empresas.
+  // - Guilherme (guilherme / guicunha / dino / gui): Gestor Barbearia Dino, visualiza APENAS a Barbearia Dino.
+  // - Silvester (silvester / silvestre / stallone): Gestor Stallone & Agro Open, visualiza APENAS essas duas empresas.
+  // - Demais usuários: visualizam apenas a empresa vinculada.
+  const ident = String(user?.email || user?.username || user?.login || '').toLowerCase().trim();
+  const ehRodrigoProprietario = Boolean(
+    authIsPlatformAdmin ||
+    user?.platformAdmin === true ||
+    user?.mainAdmin === true ||
+    ident.includes('rodrigo.goncalves') ||
+    ident.includes('rrodrigogon') ||
+    ident === 'admin'
+  );
+  const ehGuilhermeDino = !ehRodrigoProprietario && (
+    ident.includes('guilherme') || ident.includes('guicunha') || ident.includes('dino') || ident === 'gui'
+  );
+  const ehSilvester = !ehRodrigoProprietario && (
+    ident.includes('silvester') || ident.includes('silvestre') || ident.includes('stallone')
+  );
+
+  const empresasIniciais = ehRodrigoProprietario
+    ? EMPRESAS_CANONICAS
+    : ehGuilhermeDino
+      ? [EMPRESAS_CANONICAS[0]] // Apenas Barbearia Dino
+      : ehSilvester
+        ? [EMPRESAS_CANONICAS[1], EMPRESAS_CANONICAS[2]] // Stallone e Agro Open
+        : [EMPRESAS_CANONICAS[0]];
+
+  const [empresasAutorizadas, setEmpresasAutorizadas] = useState(empresasIniciais);
+  const [ehAdminPlataforma, setEhAdminPlataforma] = useState(ehRodrigoProprietario);
   const empresaParam = searchParams.get('empresa') || searchParams.get('empresaId') || '';
+
+  const empresaIdSeguraInicial = ehRodrigoProprietario
+    ? (empresaParam || 'dino')
+    : ehGuilhermeDino
+      ? 'dino'
+      : ehSilvester
+        ? (['stallone', 'agroopen'].includes(empresaParam) ? empresaParam : 'stallone')
+        : 'dino';
 
   const [dados, setDados] = useState(null);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState(null);
   const [abaAtiva, setAbaAtiva] = useState('reativacao');
   const [filtroPropensao, setFiltroPropensao] = useState('todos');
-  const [empresaAtivaId, setEmpresaAtivaId] = useState(empresaParam || 'dino');
+  const [empresaAtivaId, setEmpresaAtivaId] = useState(empresaIdSeguraInicial);
   const [mensagemSucesso, setMensagemSucesso] = useState('');
 
   // Estado das opções de mensagem selecionadas por cliente { [clienteId]: 'suave' | 'fechamento' | 'lembrete' }
@@ -94,10 +134,22 @@ export default function DinoInteligenciaVendasIa() {
     let ativo = true;
     (async () => {
       try {
+        const resAuth = await api.get('/api/admin/inteligencia-vendas/empresas-autorizadas').catch(() => null);
+        if (!ativo) return;
+        if (resAuth && Array.isArray(resAuth.empresas) && resAuth.empresas.length > 0) {
+          setEhAdminPlataforma(Boolean(resAuth.ehAdminPlataforma));
+          setEmpresasAutorizadas(resAuth.empresas);
+          setEmpresaAtivaId(prev => {
+            const permitida = resAuth.empresas.find(item => item.id === prev);
+            return permitida ? permitida.id : resAuth.empresas[0].id;
+          });
+          return;
+        }
+
         const res = await api.get('/api/admin/empresas');
         if (!ativo) return;
         const bruta = res?.empresas || res || [];
-        const ehAdmin = Boolean(res?.ehAdminPlataforma);
+        const ehAdmin = ehRodrigoProprietario || Boolean(res?.ehAdminPlataforma);
         setEhAdminPlataforma(ehAdmin);
 
         const lista = (Array.isArray(bruta) ? bruta : []).filter(e => {
@@ -119,11 +171,20 @@ export default function DinoInteligenciaVendasIa() {
           };
         });
 
-        if (lista.length > 0) {
-          setEmpresasAutorizadas(lista);
+        // Se não for Admin Global (Rodrigo), filtra estritamente por perfil do usuário
+        const listaFiltrada = ehAdmin
+          ? lista
+          : ehGuilhermeDino
+            ? lista.filter(x => x.id === 'dino')
+            : ehSilvester
+              ? lista.filter(x => x.id === 'stallone' || x.id === 'agroopen')
+              : lista.slice(0, 1);
+
+        if (listaFiltrada.length > 0) {
+          setEmpresasAutorizadas(listaFiltrada);
           setEmpresaAtivaId(prev => {
-            const achou = lista.find(item => item.id === prev);
-            return achou ? achou.id : lista[0].id;
+            const achou = listaFiltrada.find(item => item.id === prev);
+            return achou ? achou.id : listaFiltrada[0].id;
           });
         }
       } catch (err) {
@@ -155,6 +216,11 @@ export default function DinoInteligenciaVendasIa() {
   }, [empresaParam, empresaAtivaId, carregarInteligencia]);
 
   const trocarEmpresa = (novaEmpresaId) => {
+    const permitida = empresasAutorizadas.some(e => e.id === novaEmpresaId);
+    if (!ehRodrigoProprietario && !permitida) {
+      console.warn('Troca de empresa bloqueada por perfil:', novaEmpresaId);
+      return;
+    }
     setEmpresaAtivaId(novaEmpresaId);
     setSearchParams({ empresaId: novaEmpresaId });
     try {
@@ -327,11 +393,60 @@ export default function DinoInteligenciaVendasIa() {
         border: `1px solid ${COR.line}`,
         boxShadow: '0 2px 6px rgba(0,0,0,0.03)'
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 13, fontWeight: 800, color: COR.muted, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-            {ehAdminPlataforma && empresasAutorizadas.length > 1 ? 'Empresa Ativa:' : 'Empresa Vinculada:'}
-          </span>
-          {ehAdminPlataforma && empresasAutorizadas.length > 1 ? (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          {ehRodrigoProprietario ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{
+                padding: '4px 10px',
+                borderRadius: 8,
+                background: 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)',
+                border: '1px solid #f59e0b',
+                color: '#92400e',
+                fontWeight: 800,
+                fontSize: 11,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 5
+              }}>
+                👑 Rodrigo Gonçalves · Proprietário Kytto (Acesso Global)
+              </span>
+              <span style={{ fontSize: 12, fontWeight: 700, color: COR.muted }}>Empresa Ativa:</span>
+            </div>
+          ) : ehGuilhermeDino ? (
+            <span style={{
+              padding: '4px 10px',
+              borderRadius: 8,
+              background: '#dbeafe',
+              border: '1px solid #3b82f6',
+              color: '#1e40af',
+              fontWeight: 800,
+              fontSize: 11,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 5
+            }}>
+              💈 Barbearia Dino · Visão Exclusiva (Guilherme Cunha)
+            </span>
+          ) : ehSilvester ? (
+            <span style={{
+              padding: '4px 10px',
+              borderRadius: 8,
+              background: '#dcfce7',
+              border: '1px solid #16a34a',
+              color: '#15803d',
+              fontWeight: 800,
+              fontSize: 11,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 5
+            }}>
+              💪 Gestão Stallone & Agro Open (Silvester)
+            </span>
+          ) : (
+            <span style={{ fontSize: 12, fontWeight: 700, color: COR.muted }}>Empresa Vinculada:</span>
+          )}
+
+          {ehRodrigoProprietario && empresasAutorizadas.length > 1 ? (
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
               {empresasAutorizadas.map(emp => (
                 <button
@@ -357,6 +472,32 @@ export default function DinoInteligenciaVendasIa() {
                 </button>
               ))}
             </div>
+          ) : ehSilvester && empresasAutorizadas.length > 1 ? (
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {empresasAutorizadas.map(emp => (
+                <button
+                  key={emp.id}
+                  onClick={() => trocarEmpresa(emp.id)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    padding: '7px 14px',
+                    borderRadius: 10,
+                    border: `1.5px solid ${empresaAtivaId === emp.id ? COR.verde : COR.line}`,
+                    background: empresaAtivaId === emp.id ? COR.verdeClaro : '#fff',
+                    color: empresaAtivaId === emp.id ? COR.verdeEscuro : COR.fg,
+                    fontWeight: empresaAtivaId === emp.id ? 800 : 600,
+                    fontSize: 12,
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  <span>{emp.icone}</span>
+                  <span>{emp.nome}</span>
+                </button>
+              ))}
+            </div>
           ) : (
             <div style={{
               display: 'inline-flex',
@@ -371,7 +512,7 @@ export default function DinoInteligenciaVendasIa() {
               fontSize: 13
             }}>
               <span>{empresasAutorizadas.find(e => e.id === empresaAtivaId)?.icone || '🏢'}</span>
-              <span>{empresasAutorizadas.find(e => e.id === empresaAtivaId)?.nome || 'Empresa Vinculada'}</span>
+              <span>{empresasAutorizadas.find(e => e.id === empresaAtivaId)?.nome || 'Barbearia Dino'}</span>
             </div>
           )}
         </div>

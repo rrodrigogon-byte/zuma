@@ -4538,7 +4538,7 @@ app.use('/api/admin/barbearia', auth, requireStaff, resolverEscopoBarbearia, exi
 registerEquipePerformanceRoutes(app, { db, legacyEmpresaId, legacyLojaId, requireCommercePermission, salesReport, dataVersion: () => estadoGravacao()?.alteracoes ?? null });
 registerPainelGestaoRoutes(app, { db, save, audit, legacyEmpresaId, legacyLojaId, dataVersion: () => estadoGravacao()?.alteracoes ?? null });
 registerGestaoSalaoAvancadaRoutes(app, { db, legacyEmpresaId, legacyLojaId });
-registerInteligenciaVendasRoutes(app, { db, legacyEmpresaId, legacyLojaId });
+registerInteligenciaVendasRoutes(app, { db, legacyEmpresaId, legacyLojaId, auth, requireStaff, isAdminGlobal, isGuilhermeUser, isSilvesterUser, obterEmpresasAutorizadasDoUsuario });
 registerCustomer360Routes(app, { legacyEmpresaId, legacyLojaId, clientesKytto, barbeariaErpKytto, canaisFidelidadeKytto, listarAgendamentosBarbearia, requireCommercePermission, audit, save, coberturasDoCliente: comandaPlanoKytto.coberturasDoCliente });
 registerDinoRecuperacaoAvecRoutes(app, { legacyEmpresaId, legacyLojaId, barbeariaErpKytto, listarAgendamentosBarbearia });
 registerDinoAntibanRoutes(app, { legacyEmpresaId, legacyLojaId });
