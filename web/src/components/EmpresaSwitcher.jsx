@@ -9,7 +9,8 @@ function iconeEmpresa(emp) {
   if (emp.logoUrl) {
     return <img src={emp.logoUrl} alt={emp.nome || ''} style={{ width: 22, height: 22, borderRadius: '50%', objectFit: 'cover' }} />;
   }
-  if (tipo === 'restaurante' || nome.includes('palatare') || nome.includes('pizza')) return '🍕';
+  if (tipo === "restaurante" || nome.includes("palatare") || nome.includes("pizza")) return "🍕";
+  if (tipo === "concreto" || nome.includes("concreto") || nome.includes("serrano") || nome.includes("usina")) return "🚚";
   if (tipo === 'barbearia' || nome.includes('dino')) return '💈';
   if (tipo === 'supermercado') return '🛒';
   if (tipo === 'esporte' || nome.includes('agro')) return '🎾';

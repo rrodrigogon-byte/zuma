@@ -194,6 +194,7 @@ import { perfilDoUsuario, profissionalPode, operadorPodeNaBarbearia, respostaPar
 import { profissionalDoUsuario } from './dino-modo-barbeiro.js';
 import { provisionarEquipeDino } from './dino-equipe-seed.js';
 import { provisionarPalatarePizzaria, PALATARE_EMPRESA_ID } from './palatare-pizzaria-seed.js';
+import { provisionarConcretoUsina, CONCRETO_EMPRESA_ID } from './concreto-usina-seed.js';
 import { sincronizarTenantsEquipes } from './tenant-provisioning.js';
 import { executarHigienizacaoGapsProducao } from './core/higienizar-gaps-producao.js';
 import { sincronizarBloqueioNoPostgres, desativarBloqueioNoPostgres, inicializarBloqueiosEquipe } from './core/barbearia-bloqueios-sync.js';
@@ -514,6 +515,20 @@ const isPalatareUser = (user) => {
   );
   return em.includes("palatare") || em.includes("pizzaria");
 };
+
+const isConcretoUser = (user) => {
+  if (!user) return false;
+  if (isAdminGlobal(user)) return false;
+  const em = norm(
+    (user.email || "") + " " +
+    (user.emailAlternativo || "") + " " +
+    (user.username || "") + " " +
+    (user.login || "") + " " +
+    (user.nome || "") + " " +
+    (user.id || "")
+  );
+  return em.includes("concreto") || em.includes("serrano") || em.includes("usina") || em.includes("despacho");
+};
 const obterEmpresasAutorizadasDoUsuario = (user) => {
   if (!user) return [];
   if (isAdminGlobal(user)) {
@@ -547,6 +562,13 @@ const obterEmpresasAutorizadasDoUsuario = (user) => {
     return [
       EMPRESA_PALATARE_ID,
       "palatare"
+    ];
+  }
+  if (isConcretoUser(user)) {
+    // Concreto: APENAS Serrano Concreto Usinado
+    return [
+      CONCRETO_EMPRESA_ID,
+      "concreto"
     ];
   }
   if (user?.empresaId) {
@@ -2218,6 +2240,19 @@ app.use('/api/webhooks', createWhatsappAiWebhookRouter());
     }
     return varejoRouter(req, res, next);
   });
+  // [kytto-concreto] Módulo de Concreto Usinado, Cargas e Usina
+  app.get('/api/admin/concreto/dados', auth, requireStaff, async (req, res) => {
+    try {
+      const data = clubeDb();
+      const cargas = data.concreto_cargas || [];
+      const catalogo = data.concreto_produtos || [];
+      const frota = data.concreto_frota || [];
+      return res.json({ ok: true, cargas, catalogo, frota });
+    } catch (e) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
   app.use(['/api/pdv', '/api/admin/pdv'], auth, requireStaff, (req, res, next) => {
     return varejoRouter(req, res, next);
   });
@@ -11471,6 +11506,7 @@ process.on('uncaughtException', (e)=> console.error('uncaughtException:', e?.mes
     try { provisionarEquipeDino({ commerceDb }); } catch (err) { console.warn('Aviso ao provisionar equipe Dino:', err.message); }
     try { sincronizarTenantsEquipes(commerceDb); } catch (err) { console.warn('Aviso ao sincronizar tenants:', err.message); }
     try { provisionarPalatarePizzaria({ commerceDb }); } catch (err) { console.warn('Aviso ao provisionar Palatare:', err.message); }
+    try { provisionarConcretoUsina({ commerceDb }); } catch (err) { console.warn('Aviso ao provisionar Concreto:', err.message); }
     executarHigienizacaoGapsProducao(commerceDb, { listarComandasBarbearia: barbeariaErpKytto.listarComandasBarbearia, listarClientesBarbearia: barbeariaErpKytto.listarAgendamentos }).then((resHig) => console.log('[Higienização Produção]', JSON.stringify(resHig))).catch((err) => console.warn('Aviso na higienização:', err.message));
   }, 4000).unref?.();
   for (const empId of ['d0d0ac01-8e50-4b61-8c79-de4aaa916da6', 'emp_dino', 'emp-kytto-001', 'dino']) {

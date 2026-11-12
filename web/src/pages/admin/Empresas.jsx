@@ -7,7 +7,8 @@ import Modal from '../../components/Modal'
 
 const TIPOS_NEGOCIO = [
   { id: 'barbearia', label: 'Barbearia & Perfumaria', icon: '💈' },
-  { id: 'restaurante', label: 'Pizzaria, Restaurante & Gastronomia', icon: '🍕' },
+  { id: "restaurante", label: "Pizzaria, Restaurante & Gastronomia", icon: "🍕" },
+  { id: "concreto", label: "Usina de Concreto Usinado & Artefatos", icon: "🚚" },
   { id: 'loja', label: 'Loja / Suplementos & Nutrição', icon: '🏪' },
   { id: 'esporte', label: 'Complexo Esportivo / Tênis & Beach', icon: '🎾' },
   { id: 'bar', label: 'Bar, Restaurante & Conveniência', icon: '🍻' },
@@ -345,7 +346,15 @@ export default function Empresas() {
               ? 'Painel corporativo e gestão global da holding Kytto (Acesso Exclusivo: Rodrigo Gonçalves / rrodrigogon).'
               : (empresas.length > 1
                   ? 'Empresas autorizadas sob sua gestão (Stallone & Agro Open). Alterne e opere entre elas com isolamento total.'
-                  : 'Dados cadastrais, fiscais e operacionais exclusivos da sua barbearia no ERP Kytto.')}
+                  : (() => {
+                      const t = String(empresaAtiva?.tipoNegocio || empresaAtiva?.tipo_negocio || "").toLowerCase();
+                      const desc = t === "restaurante" ? "do seu restaurante e pizzaria"
+                        : t === "concreto" ? "da sua usina de concreto e artefatos"
+                        : t === "barbearia" ? "da sua barbearia"
+                        : t === "supermercado" ? "do seu supermercado"
+                        : "da sua empresa";
+                      return `Dados cadastrais, fiscais e operacionais exclusivos ${desc} no ERP Kytto.`;
+                    })())}
             {empresaAtiva && (
               <span style={{ marginLeft: 8, padding: '2px 8px', borderRadius: 6, background: 'rgba(255,107,44,.12)', color: '#FF6B2C', fontWeight: 700 }}>
                 Unidade ativa: {empresaAtiva.nomeFantasia || empresaAtiva.nome}

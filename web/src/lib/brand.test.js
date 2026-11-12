@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { applyBrand, applyThemeMode, brandThemeMode, stalloneEntryFromHost, commerceDisplayName, DINO_BARBERSHOP_LOGO, DINO_COMMERCE_LOGO, isDinoBrandContext, normalizeThemeMode, resolveBrand, storedThemeMode } from './brand.js'
+import { applyBrand, applyThemeMode, brandThemeMode, stalloneEntryFromHost, commerceDisplayName, DINO_BARBERSHOP_LOGO, DINO_COMMERCE_LOGO, isDinoBrandContext, isRestauranteBrandContext, isConcretoBrandContext, normalizeThemeMode, resolveBrand, storedThemeMode } from './brand.js'
 
 test('Barbearia Dino e Dino Perfumaria usam assets de marca distintos', () => {
   assert.equal(DINO_BARBERSHOP_LOGO, '/brand/dino-barbearia-logo.png')
@@ -139,3 +139,17 @@ test('clube/academia ganha o menu do clube; Dino, Stallone e outras empresas nã
   assert.equal(isClubeBrandContext(null), false)
   assert.equal(brandFromContext({ nome: 'AGRO OPEN TTC' }), 'kytto', 'só o menu muda; a marca continua Kytto')
 })
+
+test("isRestauranteBrandContext identifica Palatare Pizzaria e isola de barbearia", () => {
+  assert.equal(isRestauranteBrandContext({ nome: "Palatare Pizzaria & Restaurante", tipoNegocio: "restaurante" }), true);
+  assert.equal(isRestauranteBrandContext({ id: "c1c1ac01-8e50-4b61-8c79-de4aaa916da9", nome: "Palatare Pizzaria" }), true);
+  assert.equal(isRestauranteBrandContext({ nome: "Barbearia Dino", tipoNegocio: "barbearia" }), false);
+  assert.equal(isDinoBrandContext({ nome: "Palatare Pizzaria", tipoNegocio: "restaurante" }), false, "Palatare NUNCA deve ser Dino");
+});
+
+test("isConcretoBrandContext identifica Serrano Concreto Usinado e isola de barbearia", () => {
+  assert.equal(isConcretoBrandContext({ nome: "Serrano Concreto Usinado", tipoNegocio: "concreto" }), true);
+  assert.equal(isConcretoBrandContext({ id: "c2c2ac01-8e50-4b61-8c79-de4aaa916da2", nome: "Serrano Concreto" }), true);
+  assert.equal(isConcretoBrandContext({ nome: "Barbearia Dino", tipoNegocio: "barbearia" }), false);
+  assert.equal(isDinoBrandContext({ nome: "Serrano Concreto", tipoNegocio: "concreto" }), false, "Concreto NUNCA deve ser Dino");
+});

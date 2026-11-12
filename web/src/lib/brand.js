@@ -128,7 +128,35 @@ export function isClubeBrandContext(...contexts) {
   })
 }
 
-export const isDinoBrand = (brand) => brand === 'dino'
+export const PALATARE_LOGO = "/palatare-logo.png"
+export const PALATARE_BANNER = "/palatare-banner.png"
+export const CONCRETO_LOGO = "/brand/concreto-usina-logo.png"
+
+export function isRestauranteBrandContext(...contexts) {
+  return contexts.some((context) => {
+    const values = context && typeof context === "object"
+      ? [context.tipoNegocio, context.tipo_negocio, context.segmento, context.vertical, context.brandKey, context.brand_key, context.slug, context.codigo, context.alias, context.nome, context.nome_fantasia, context.razaoSocial]
+      : [context]
+    return values.some((value) => {
+      const v = String(value || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+      return /\brestaurante\b|\bpizzaria\b|\bpalatare\b|\bgastronomia\b/.test(v)
+    })
+  })
+}
+
+export function isConcretoBrandContext(...contexts) {
+  return contexts.some((context) => {
+    const values = context && typeof context === "object"
+      ? [context.tipoNegocio, context.tipo_negocio, context.segmento, context.vertical, context.brandKey, context.brand_key, context.slug, context.codigo, context.alias, context.nome, context.nome_fantasia, context.razaoSocial]
+      : [context]
+    return values.some((value) => {
+      const v = String(value || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+      return /\bconcreto\b|\busina\b|\bconcreteira\b|\bbetoneira\b|\bserrano\b|\bartefatos de cimento\b/.test(v)
+    })
+  })
+}
+
+export const isDinoBrand = (brand) => brand === "dino" 
 export const isStalloneBrand = (brand) => brand === 'stallone'
 /** Marcas com loja de tema escolhível (sistema/claro/escuro) guardado no navegador. */
 export const brandHasThemeChoice = (brand) => BRAND_KEYS.includes(brand)

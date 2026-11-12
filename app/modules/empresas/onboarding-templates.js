@@ -107,6 +107,38 @@ export const TEMPLATES_NEGOCIO = {
     moduloPrincipal: 'supermercado'
   },
 
+
+  concreto: {
+    id: "concreto",
+    icon: "🚚",
+    label: "Usina de Concreto Usinado & Artefatos",
+    tagline: "Concreteiras, usinas dosadoras de concreto, bombeamento, frotas de betoneiras e controle tecnológico de obras.",
+    servicos: [
+      { nome: "Serviço de Caminhão Bomba Lança 32m (até 25 m³)", preco: 750, duracaoMinutos: 180, categoria: "Bombeamento", grupoServico: "bombeamento" },
+      { nome: "Bombeamento Adicional por m³ excedente", preco: 25, duracaoMinutos: 0, categoria: "Bombeamento", grupoServico: "bombeamento" },
+      { nome: "Serviço de Bomba Estacionária (Mangote 100m)", preco: 850, duracaoMinutos: 240, categoria: "Bombeamento", grupoServico: "bombeamento" },
+      { nome: "Taxa de Espera de Betoneira na Obra (hora excedente)", preco: 120, duracaoMinutos: 60, categoria: "Logística", grupoServico: "espera" },
+      { nome: "Ensaio de Slump Test na Obra com Laudo", preco: 50, duracaoMinutos: 15, categoria: "Laboratório", grupoServico: "ensaios" },
+      { nome: "Moldagem e Ruptura de Corpos de Prova (7 e 28 dias)", preco: 180, duracaoMinutos: 0, categoria: "Laboratório", grupoServico: "ensaios" }
+    ],
+    produtos: [
+      { nome: "Concreto Usinado FCK 20 MPa (Pisos e Baldrames)", precoVenda: 380, custoUnitario: 240, categoria: "Concreto Usinado", unidade: "m³", estoqueAtual: 500, estoqueMinimo: 50 },
+      { nome: "Concreto Usinado FCK 25 MPa (Lajes, Vigas e Pilares)", precoVenda: 410, custoUnitario: 265, categoria: "Concreto Usinado", unidade: "m³", estoqueAtual: 500, estoqueMinimo: 50 },
+      { nome: "Concreto Usinado FCK 30 MPa (Estrutural Pesado)", precoVenda: 440, custoUnitario: 290, categoria: "Concreto Usinado", unidade: "m³", estoqueAtual: 500, estoqueMinimo: 50 },
+      { nome: "Concreto Usinado FCK 35 MPa (Pisos Industriais)", precoVenda: 480, custoUnitario: 320, categoria: "Concreto Usinado", unidade: "m³", estoqueAtual: 300, estoqueMinimo: 40 },
+      { nome: "Concreto Usinado FCK 40 MPa (Obras Especiais / Pontes)", precoVenda: 520, custoUnitario: 350, categoria: "Concreto Usinado", unidade: "m³", estoqueAtual: 200, estoqueMinimo: 30 },
+      { nome: "Concreto Bombeável Brita 0 (Pedrisco) FCK 25 MPa", precoVenda: 425, custoUnitario: 280, categoria: "Concretos Especiais", unidade: "m³", estoqueAtual: 300, estoqueMinimo: 40 },
+      { nome: "Concreto Auto-adensável (CAA) FCK 30 MPa", precoVenda: 475, custoUnitario: 315, categoria: "Concretos Especiais", unidade: "m³", estoqueAtual: 200, estoqueMinimo: 30 },
+      { nome: "Concreto com Fibras Estruturais FCK 30 MPa", precoVenda: 465, custoUnitario: 310, categoria: "Concretos Especiais", unidade: "m³", estoqueAtual: 250, estoqueMinimo: 30 },
+      { nome: "Cimento Portland CP II-F-32 a Granel (ton)", precoVenda: 680, custoUnitario: 520, categoria: "Insumos de Usina", unidade: "ton", estoqueAtual: 120, estoqueMinimo: 25 },
+      { nome: "Areia Média Lavada de Rio (m³)", precoVenda: 95, custoUnitario: 65, categoria: "Insumos de Usina", unidade: "m³", estoqueAtual: 450, estoqueMinimo: 80 },
+      { nome: "Brita 1 Granítica Selecionada (m³)", precoVenda: 110, custoUnitario: 75, categoria: "Insumos de Usina", unidade: "m³", estoqueAtual: 580, estoqueMinimo: 100 },
+      { nome: "Brita 0 / Pedrisco Basáltico (m³)", precoVenda: 115, custoUnitario: 78, categoria: "Insumos de Usina", unidade: "m³", estoqueAtual: 320, estoqueMinimo: 60 }
+    ],
+    comissoes: { baseServicos: 3, baseProdutos: 2 },
+    moduloPrincipal: "concreto"
+  },
+
   restaurante: {
     id: 'restaurante',
     icon: '🍕',

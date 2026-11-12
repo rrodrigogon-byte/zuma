@@ -73,6 +73,19 @@ export const TENANTS_OFICIAIS = {
       { id: 'usr-palatare-pizzaiolo-01', username: 'pizzaiolo', email: 'cozinha@palatarepizzaria.com.br', nome: 'Chef Pizzaiolo Palatare', role: 'operador', pgRole: 'operador' },
       { id: 'usr-palatare-atendente-01', username: 'atendente_palatare', email: 'atendimento@palatarepizzaria.com.br', nome: 'Atendente Palatare', role: 'operador', pgRole: 'operador' },
     ]
+  },
+  concreto: {
+    empresaId: "c2c2ac01-8e50-4b61-8c79-de4aaa916da2",
+    lojaId: "c2c2ac01-8e50-4b61-8c79-de4aaa916da0",
+    nome: "Serrano Concreto Usinado",
+    slug: "concreto",
+    roleIdOwner: "b125e523-957d-4d12-a881-56b958ecec45",
+    roleIdStaff: "85f0c5c5-584b-4d9f-946e-a348c3688483",
+    usuarios: [
+      { id: "usr-concreto-admin-01", username: "concreto", email: "gerente@serranoconcreto.com.br", nome: "Gerente Usina Serrano", role: "organizador", pgRole: "gerente", isOwner: true },
+      { id: "usr-concreto-operador-01", username: "operador_usina", email: "usina@serranoconcreto.com.br", nome: "Operador Central Dosadora", role: "operador", pgRole: "operador" },
+      { id: "usr-concreto-despacho-01", username: "despacho", email: "despacho@serranoconcreto.com.br", nome: "Despacho & Balança", role: "operador", pgRole: "operador" },
+    ]
   }
 };
 

@@ -606,17 +606,26 @@ export default function BarbeariaERP({ tabInicial } = {}) {
   const { user, empresaAtiva, empresasAcessiveis, trocarEmpresa, lojaAtiva, lojasAcessiveis, perfil } = useAuth();
   useEffect(() => {
     if (!empresaAtiva || isDinoBrandContext(empresaAtiva)) return;
-    const idAtual = String(empresaAtiva.id || "").toLowerCase();
+    const tipo = String(empresaAtiva.tipoNegocio || empresaAtiva.tipo_negocio || "").toLowerCase();
     const nomeAtual = String(empresaAtiva.nome || "").toLowerCase();
-    // Se a empresa ativa no seletor for o clube de tênis (Agro Open) ou outra vertical sem barbearia,
-    // seleciona automaticamente a Barbearia Dino ao entrar no módulo Barbearia ERP.
-    if (idAtual.includes("11111111") || idAtual === "principal" || nomeAtual.includes("agro open")) {
-      const empDino = (empresasAcessiveis || []).find((e) => isDinoBrandContext(e));
-      if (empDino && typeof trocarEmpresa === "function") {
-        trocarEmpresa(empDino);
-      }
+    // Se a empresa ativa no seletor não for barbearia:
+    // 1. Se o usuário tiver acesso à Barbearia Dino, troca automaticamente para a Dino para operar o módulo
+    const empDino = (empresasAcessiveis || []).find((e) => isDinoBrandContext(e));
+    if (empDino && typeof trocarEmpresa === "function") {
+      trocarEmpresa(empDino);
+      return;
     }
-  }, [empresaAtiva, empresasAcessiveis, trocarEmpresa]);
+    // 2. Se for Pizzaria/Restaurante (Palatare), redireciona imediatamente para o Cardápio & Mesas
+    if (tipo === "restaurante" || nomeAtual.includes("palatare") || nomeAtual.includes("pizzaria")) {
+      navigate("/admin/cardapio", { replace: true });
+      return;
+    }
+    // 3. Se for Concreto Usinado, redireciona para o ERP de Concreto
+    if (tipo === "concreto" || nomeAtual.includes("concreto")) {
+      navigate("/admin/concreto", { replace: true });
+      return;
+    }
+  }, [empresaAtiva, empresasAcessiveis, trocarEmpresa, navigate]);
   // operador: só as abas da operação do dia (comissões, metas e indicadores ficam com a administração)
   const operador = perfil === "operador";
   const areasVisiveis = operador
@@ -14336,7 +14345,7 @@ export default function BarbeariaERP({ tabInicial } = {}) {
                   fontFamily: "var(--font-display)",
                 }}
               >
-                {empresaAtiva?.nome || configuracao?.nomePublico || "Empresa"} · {configuracao?.ramo || "Barbearia & Salão"}
+                {isDinoBrand ? `${empresaAtiva?.nome || "Barbearia Dino"} · Barbearia & Salão` : (configuracao?.nomePublico || "Barbearia Dino · Barbearia & Salão")}
               </h1>
               <p style={{ margin: 0, color: "var(--muted)", maxWidth: 720 }}>
                 A operação da unidade em um fluxo único: agenda, atendimento,

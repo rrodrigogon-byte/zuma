@@ -7,7 +7,7 @@ import { catalogoPorArea, contagemPorEstado, ESTADOS } from '../lib/catalogo-mod
 import { itemVisivelNoPerfil } from '../lib/perfis-menu'
 import { useAuth } from '../lib/auth'
 import { api } from '../lib/api'
-import { applyThemeMode, DINO_BARBERSHOP_LOGO, isClubeBrandContext, isDinoBrandContext, isStalloneBrandContext, STALLONE_LOGO, storedThemeMode } from '../lib/brand'
+import { applyThemeMode, DINO_BARBERSHOP_LOGO, isClubeBrandContext, isDinoBrandContext, isStalloneBrandContext, isRestauranteBrandContext, isConcretoBrandContext, PALATARE_LOGO, CONCRETO_LOGO, STALLONE_LOGO, storedThemeMode } from '../lib/brand'
 import { DINO_STORE, isDinoDedicatedHost } from '../lib/dino-scope'
 import { empresaSemUnidade, sincronizarContextoComercial } from '../lib/contexto-comercial'
 import { useMenuEmGaveta } from '../lib/modo-menu'
@@ -110,7 +110,7 @@ const NAV_ADMIN_GROUPS = [
       { to: '/admin/pagamentos',icon: '💳', label: 'Pagamentos' },
       { to: '/admin/notas',    icon: '🧾', label: 'Notas Fiscais' },
       { to: '/admin/cadastros-mestres', icon: '🗂️', label: 'Cadastros Mestres' },
-      { to: '/admin/empresas', icon: '🏢', label: 'Minha Barbearia' },
+      { to: '/admin/empresas', icon: '🏢', label: 'Minha Empresa' },
       { to: '/admin/clientes', icon: '👥', label: 'Clientes & Contas' },
       { to: '/admin/contas-receber', icon: '💰', label: 'Contas a Receber' },
       { to: '/admin/fechamento-diario', icon: '🔐', label: 'Fechamento Diário' },
@@ -473,6 +473,142 @@ const NAV_STALLONE_PUBLIC = [
   { to: '/ecommerce/stallone', icon: '↗', label: 'Abrir loja Stallone' },
 ]
 
+
+export const NAV_RESTAURANTE_GROUPS = [
+  {
+    label: 'Hoje na Pizzaria', aberto: true,
+    items: [
+      { to: '/admin', icon: '📊', label: 'Painel do Restaurante', end: true },
+      { to: '/admin/inteligencia-vendas', icon: '🚀', label: 'Como Vender Mais com IA' },
+      { to: '/admin/mesas', icon: '🍽️', label: 'Mesas & Salão' },
+      { to: '/kds', icon: '👨‍🍳', label: 'Cozinha & KDS', badge: true },
+      { to: '/pdv', icon: '🛒', label: 'PDV & Caixa', badge: true },
+      { to: '/garcom', icon: '🧑‍🍳', label: 'Modo Garçom' },
+      { to: '/admin/delivery', icon: '🛵', label: 'Central Delivery & Balcão' },
+    ],
+  },
+  {
+    label: 'Cardápio & Produção', aberto: true,
+    items: [
+      { to: '/admin/cardapio', icon: '🍕', label: 'Cardápio' },
+      { to: '/admin/modificadores-combos', icon: '➕', label: 'Bordas, Adicionais & Combos' },
+      { to: '/admin/estoque', icon: '📦', label: 'Estoque de Insumos' },
+      { to: '/admin/fichas-tecnicas', icon: '🧪', label: 'Fichas Técnicas & Receitas' },
+      { to: '/admin/perdas-inventario', icon: '🧾', label: 'Perdas & Inventário' },
+      { to: '/admin/reservas', icon: '📅', label: 'Reservas & Fila' },
+    ],
+  },
+  {
+    label: 'Atendimento & Clientes',
+    items: [
+      { to: '/admin/clientes', icon: '👥', label: 'Clientes' },
+      { to: '/admin/whatsapp', icon: '💬', label: 'WhatsApp Pedidos' },
+      { to: '/admin/cupons', icon: '🎟️', label: 'Cupons & Promoções' },
+      { to: '/admin/pdv-offline', icon: '📡', label: 'PDV Offline & Periféricos' },
+    ],
+  },
+  {
+    label: 'Financeiro & Caixa',
+    items: [
+      { to: '/admin/fechamento-diario', icon: '🔐', label: 'Fechamento de Caixa', razao: true },
+      { to: '/admin/financeiro', icon: '💰', label: 'Financeiro' },
+      { to: '/admin/contas-pagar', icon: '🧾', label: 'Contas a Pagar', razao: true },
+      { to: '/admin/contas-receber', icon: '💳', label: 'Contas a Receber', razao: true },
+      { to: '/admin/pagamentos', icon: '💵', label: 'Pagamentos' },
+      { to: '/admin/dre', icon: '📈', label: 'DRE & Margens' },
+    ],
+  },
+  {
+    label: 'Fiscal',
+    items: [
+      { to: '/admin/notas', icon: '🧾', label: 'Notas Fiscais (NFC-e / NF-e)' },
+      { to: '/admin/fiscal/config', icon: '⚙️', label: 'Configuração Fiscal' },
+      { to: '/admin/fiscal/classificacao', icon: '🏷️', label: 'Classificação Fiscal (NCM)' },
+    ],
+  },
+  {
+    label: 'Gestão da Empresa',
+    items: [
+      { to: '/admin/empresas', icon: '🏢', label: 'Minha Empresa' },
+      { to: '/admin/cadastros-mestres', icon: '🗂️', label: 'Fornecedores & Equipe' },
+      { to: '/admin/usuarios', icon: '👥', label: 'Usuários & Acessos' },
+      { to: '/admin/lojas', icon: '🏬', label: 'Unidades / Filiais' },
+      { to: '/admin/configuracoes', icon: '🛠️', label: 'Configurações' },
+      { to: '/admin/auditoria', icon: '🔍', label: 'Auditoria' },
+    ],
+  },
+]
+
+export const NAV_CONCRETO_GROUPS = [
+  {
+    label: 'Hoje na Usina', aberto: true,
+    items: [
+      { to: '/admin/concreto', icon: '🚚', label: 'Programação de Cargas' },
+      { to: '/admin/concreto?tab=frota', icon: '🚛', label: 'Frota de Betoneiras & Bombas' },
+      { to: '/admin/concreto?tab=pedidos', icon: '📋', label: 'Pedidos de Concreto & Obras' },
+      { to: '/admin/concreto?tab=romaneios', icon: '🧾', label: 'Romaneios & Tickets Pesagem' },
+      { to: '/pdv', icon: '⚖️', label: 'Balança & Balcão' },
+    ],
+  },
+  {
+    label: 'Tecnologia & Traços', aberto: true,
+    items: [
+      { to: '/admin/concreto?tab=tracos', icon: '🏭', label: 'Traços de Concreto (FCK 20-40)' },
+      { to: '/admin/concreto?tab=ensaios', icon: '🧪', label: 'Slump & Corpos de Prova' },
+      { to: '/admin/concreto?tab=insumos', icon: '📦', label: 'Silos de Cimento, Areia & Britas' },
+      { to: '/admin/estoque', icon: '📦', label: 'Estoque Geral de Insumos' },
+      { to: '/admin/perdas-inventario', icon: '🧾', label: 'Perdas & Inventário' },
+    ],
+  },
+  {
+    label: 'Comercial & Obras',
+    items: [
+      { to: '/admin/clientes', icon: '🏗️', label: 'Construtoras & Obras' },
+      { to: '/admin/propostas', icon: '📜', label: 'Propostas & Cotações m³' },
+      { to: '/admin/whatsapp', icon: '💬', label: 'WhatsApp Usina & Despacho' },
+    ],
+  },
+  {
+    label: 'Financeiro & Custos',
+    items: [
+      { to: '/admin/financeiro', icon: '💰', label: 'Financeiro' },
+      { to: '/admin/contas-receber', icon: '💳', label: 'Medições & Contas a Receber', razao: true },
+      { to: '/admin/contas-pagar', icon: '🧾', label: 'Contas a Pagar (Cimento, Brita, Diesel)', razao: true },
+      { to: '/admin/fechamento-diario', icon: '🔐', label: 'Fechamento Diário de Cargas', razao: true },
+      { to: '/admin/pagamentos', icon: '💵', label: 'Pagamentos' },
+      { to: '/admin/dre', icon: '📈', label: 'DRE da Usina' },
+    ],
+  },
+  {
+    label: 'Fiscal',
+    items: [
+      { to: '/admin/notas', icon: '🧾', label: 'Notas Fiscais (NF-e / NFS-e Bomba)' },
+      { to: '/admin/fiscal/config', icon: '⚙️', label: 'Configuração Fiscal' },
+      { to: '/admin/fiscal/classificacao', icon: '🏷️', label: 'Classificação Fiscal (NCM)' },
+    ],
+  },
+  {
+    label: 'Gestão da Usina',
+    items: [
+      { to: '/admin/empresas', icon: '🏢', label: 'Minha Usina' },
+      { to: '/admin/cadastros-mestres', icon: '🗂️', label: 'Motoristas, Operadores & Fornecedores' },
+      { to: '/admin/usuarios', icon: '👥', label: 'Usuários & Acessos' },
+      { to: '/admin/lojas', icon: '🏬', label: 'Pátios / Filiais' },
+      { to: '/admin/configuracoes', icon: '🛠️', label: 'Configurações' },
+      { to: '/admin/auditoria', icon: '🔍', label: 'Auditoria' },
+    ],
+  },
+]
+
+const NAV_PALATARE_PUBLIC = [
+  { to: 'https://www.instagram.com/palataretga/', icon: '↗', label: 'Instagram @palataretga', novaGuia: true },
+  { to: 'https://wa.me/message/QYC36PECPJISF1', icon: '🛵', label: 'WhatsApp Pedidos', novaGuia: true },
+]
+
+const NAV_CONCRETO_PUBLIC = [
+  { to: '/admin/concreto', icon: '🚚', label: 'Painel da Usina' },
+]
+
 const NAV_DINO_PUBLIC = [
   { to: '/perfumaria/dino', icon: '↗', label: 'Abrir loja Dino' },
   { to: '/agendar/dino', icon: '▣', label: 'Agendamento público' },
@@ -709,7 +845,9 @@ export default function Sidebar() {
   const pendentes = usePendingOrders(isStaff)
   const isDino = isDinoDedicatedHost() || isDinoBrandContext(empresaAtiva)
   const isStallone = !isDino && isStalloneBrandContext(empresaAtiva)
-  const isClube = !isDino && !isStallone && isClubeBrandContext(empresaAtiva)
+  const isRestaurante = !isDino && !isStallone && isRestauranteBrandContext(empresaAtiva)
+  const isConcreto = !isDino && !isStallone && !isRestaurante && isConcretoBrandContext(empresaAtiva)
+  const isClube = !isDino && !isStallone && !isRestaurante && !isConcreto && isClubeBrandContext(empresaAtiva)
   const [themeMode, setThemeMode] = useState(() => storedThemeMode())
   const contextoSemUnidade = Boolean(user && isStaff && empresaAtiva?.id) && (empresaSemUnidade(lojasAcessiveis, empresaAtiva?.id) || !lojaAtiva?.id)
   // Corrige no carregamento o contexto antigo do navegador em que a unidade perdeu o
@@ -836,11 +974,37 @@ export default function Sidebar() {
               className="kytto-mark sidebar-brand-kytto"
               style={{ width: 184, height: 52, objectFit: 'contain', objectPosition: 'left center' }}
             />
-            <img
-              src={DINO_BARBERSHOP_LOGO}
-              alt="Barbearia Dino — desde 1997"
-              className="sidebar-brand-dino"
-            />
+            {isDino && (
+              <img
+                src={DINO_BARBERSHOP_LOGO}
+                alt="Barbearia Dino — desde 1997"
+                className="sidebar-brand-dino"
+              />
+            )}
+            {isRestaurante && (
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 8 }}>
+                <img
+                  src="/palatare-logo.png"
+                  alt="Palatare Pizzaria"
+                  style={{ width: 38, height: 38, borderRadius: "50%", border: "1.5px solid #C5A059", background: "#000", objectFit: "contain" }}
+                />
+                <div>
+                  <div style={{ color: "#FFFFFF", fontWeight: 800, fontSize: 13, lineHeight: 1.1 }}>PALATARE</div>
+                  <div style={{ color: "#C5A059", fontWeight: 700, fontSize: 9, textTransform: "uppercase", letterSpacing: "0.5px" }}>Pizzaria & Restaurante</div>
+                </div>
+              </div>
+            )}
+            {isConcreto && (
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 8 }}>
+                <div style={{ width: 38, height: 38, borderRadius: 8, background: "#F59E0B", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20 }}>
+                  🚚
+                </div>
+                <div>
+                  <div style={{ color: "#FFFFFF", fontWeight: 800, fontSize: 13, lineHeight: 1.1 }}>SERRANO</div>
+                  <div style={{ color: "#F59E0B", fontWeight: 700, fontSize: 9, textTransform: "uppercase", letterSpacing: "0.5px" }}>Concreto Usinado & Usina</div>
+                </div>
+              </div>
+            )}
             <div className="sidebar-brand-subtitle" style={{
               marginTop: 8, color: 'var(--brand-header-text)', fontFamily: 'var(--font-mono)',
               fontSize: 9, fontWeight: 800, letterSpacing: '.16em', textTransform: 'uppercase', opacity: .92,
@@ -916,12 +1080,66 @@ export default function Sidebar() {
             ))}
           </div>
         )}
-        {isStaff && !isDino && !isStallone && <Section label={isClube ? 'Balcão, bar e portaria' : 'Operações'} items={opVisiveis(isClube ? NAV_OP.filter((item) => item.to !== '/loja-atendimento') : NAV_OP)} onNavClick={handleNavClick} badgesMap={badgesMap} sidebarCollapsed={recolhido} />}
-        {isOrg && <AdminGroups groups={isDino ? NAV_DINO_GROUPS : isStallone ? NAV_STALLONE_GROUPS : isClube ? NAV_CLUBE_GROUPS : NAV_ADMIN_GROUPS} onNavClick={handleNavClick} isPlatformAdmin={isPlatformAdmin} empresa={empresaDoMenu} usuarioDeEmpresa={usuarioDeEmpresa} sidebarCollapsed={recolhido} compacto={isClube} />}
+        {isStaff && !isDino && !isStallone && (
+  <Section
+    label={isRestaurante ? "Operação de Salão & Cozinha" : isConcreto ? "Operação da Usina" : isClube ? "Balcão, bar e portaria" : "Operações"}
+    items={opVisiveis(
+      isRestaurante
+        ? [
+            { to: "/pdv", icon: "🛒", label: "PDV Balcão", badge: true },
+            { to: "/garcom", icon: "🧑‍🍳", label: "Modo Garçom", badge: false },
+            { to: "/kds", icon: "👨‍🍳", label: "Cozinha / KDS", badge: true },
+          ]
+        : isConcreto
+        ? [
+            { to: "/admin/concreto", icon: "🚚", label: "Expedição & Cargas", badge: true },
+            { to: "/pdv", icon: "⚖️", label: "Balança & Balcão", badge: false },
+          ]
+        : isClube
+        ? NAV_OP.filter((item) => item.to !== "/loja-atendimento")
+        : NAV_OP
+    )}
+    onNavClick={handleNavClick}
+    badgesMap={badgesMap}
+    sidebarCollapsed={recolhido}
+  />
+)}
+        {isOrg && (
+  <AdminGroups
+    groups={
+      isDino
+        ? NAV_DINO_GROUPS
+        : isStallone
+        ? NAV_STALLONE_GROUPS
+        : isRestaurante
+        ? NAV_RESTAURANTE_GROUPS
+        : isConcreto
+        ? NAV_CONCRETO_GROUPS
+        : isClube
+        ? NAV_CLUBE_GROUPS
+        : NAV_ADMIN_GROUPS
+    }
+    onNavClick={handleNavClick}
+    isPlatformAdmin={isPlatformAdmin}
+    empresa={empresaDoMenu}
+    usuarioDeEmpresa={usuarioDeEmpresa}
+    sidebarCollapsed={recolhido}
+    compacto={isClube || isRestaurante || isConcreto}
+  />
+)}
         {isPlatformAdmin && <Section label="Administração da Plataforma" items={NAV_PLATFORM} onNavClick={handleNavClick} sidebarCollapsed={recolhido} />}
         {isPlatformAdmin && <BackofficePlataforma empresa={empresaDoMenu} onNavClick={handleNavClick} sidebarCollapsed={recolhido} />}
         {isAtleta && <Section label="Portal do Atleta" items={NAV_ATLETA} onNavClick={handleNavClick} sidebarCollapsed={recolhido} />}
-        <Section label={isDino ? 'Dino público' : isStallone ? 'Stallone público' : 'Site Público'} items={isDino ? NAV_DINO_PUBLIC : isStallone ? NAV_STALLONE_PUBLIC : NAV_PUBLIC} onNavClick={handleNavClick} sidebarCollapsed={recolhido} />
+        <Section
+  label={
+    isDino ? "Dino público" : isStallone ? "Stallone público" : isRestaurante ? "Palatare público" : isConcreto ? "Usina pública" : "Site Público"
+  }
+  items={
+    isDino ? NAV_DINO_PUBLIC : isStallone ? NAV_STALLONE_PUBLIC : isRestaurante ? NAV_PALATARE_PUBLIC : isConcreto ? NAV_CONCRETO_PUBLIC : NAV_PUBLIC
+  }
+  onNavClick={handleNavClick}
+  sidebarCollapsed={recolhido}
+/>
 
         {/* Bottom user area */}
         <div style={{ marginTop: 'auto', padding: recolhido ? '10px 8px' : '12px 16px', borderTop: '1px solid var(--line)' }}>

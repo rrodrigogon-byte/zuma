@@ -36,6 +36,27 @@ export const EMPRESA_DINO_ID = 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
 
 const EMPRESAS_CANONICAS_PADRAO = [
   {
+    id: "c2c2ac01-8e50-4b61-8c79-de4aaa916da2",
+    nome: "Serrano Concreto Usinado",
+    nomeFantasia: "Serrano Concreto",
+    razaoSocial: "SERRANO CONCRETO E ARTEFATOS DE CIMENTO LTDA",
+    cnpj: "51.499.928/0001-01",
+    cnpjNormalizado: "51499928000101",
+    inscricaoEstadual: "13.567.890-3",
+    inscricaoMunicipal: "77410",
+    tipoNegocio: "concreto",
+    telefone: "(65) 3326-7000",
+    email: "comercial@serranoconcreto.com.br",
+    website: "https://concreto.kytto.com.br",
+    logoUrl: "/brand/concreto-usina-logo.png",
+    enderecoCidade: "Tangará da Serra",
+    enderecoEstado: "MT",
+    endereco: "Av. Inácio Bittencourt Cardoso, s/n, Distrito Industrial, Zona Leste, Tangará da Serra/MT, CEP 78300-000",
+    ativa: true,
+    permitirEstoqueNegativo: false,
+    totalLojas: 1
+  },
+  {
     id: 'c1c1ac01-8e50-4b61-8c79-de4aaa916da9',
     nome: 'Palatare Pizzaria & Restaurante',
     nomeFantasia: 'Palatare Pizzaria',
