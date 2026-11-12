@@ -1004,11 +1004,15 @@ function ordenarPorData(a, b) {
 
 export function obterConfiguracao(empresaId) {
   const configuracao = estadoEmpresa(empresaId, false).configuracao;
-  const isDino = ['d0d0ac01-8e50-4b61-8c79-de4aaa916da6', 'emp_dino', 'dino'].includes(String(empresaId || '').toLowerCase());
+  const isDino = ['d0d0ac01-8e50-4b61-8c79-de4aaa916da6', 'emp_dino', 'emp-kytto-001', 'dino'].includes(String(empresaId || '').toLowerCase());
   // Na Dino Barbearia, NUNCA ativar cancelamento automático por falta de confirmação!
   const ativa = isDino ? false : configuracao.confirmacaoAutomaticaAtiva === true;
+  const horarioFechamento = isDino
+    ? (configuracao.horarioFechamento === '20:00' ? '19:00' : (configuracao.horarioFechamento || '19:00'))
+    : (configuracao.horarioFechamento || '20:00');
   return {
     ...configuracao,
+    horarioFechamento,
     confirmacaoAutomaticaAtiva: ativa,
     cancelamentoAutomaticoPorFaltaConfirmacao: false,
     lojas: { ...(configuracao.lojas || {}) },
@@ -1017,9 +1021,11 @@ export function obterConfiguracao(empresaId) {
 
 function obterCalendarioLoja(estado, lojaId) {
   const id = String(lojaId || '');
+  const base = { ...estado.configuracao };
+  if (base.horarioFechamento === '20:00') base.horarioFechamento = '19:00';
   return id && estado.configuracao.lojas?.[id]
-    ? { ...estado.configuracao, ...estado.configuracao.lojas[id], lojas: undefined }
-    : { ...estado.configuracao, lojas: undefined };
+    ? { ...base, ...estado.configuracao.lojas[id], lojas: undefined }
+    : { ...base, lojas: undefined };
 }
 
 export function obterConfiguracaoLoja(empresaId, lojaId) {

@@ -2752,7 +2752,7 @@ async function toolScheduleReturnReminder(context, args = {}) {
     dataPrevista: dataAlvo,
     dataFormatada: `${dia}/${mes}/${ano}`,
     servico,
-    mensagemHumana: `Fechado! Deixei anotado com carinho: vou te avisar no dia ${dia}/${mes}/${ano} para renovar seu ${servico} e manter seu visual sempre na régua!`,
+    mensagemHumana: `Perfeito! Deixei agendado: entraremos em contato no dia ${dia}/${mes}/${ano} para lembrar da renovação do seu ${servico} e manter seu corte impecável!`
   };
 }
 

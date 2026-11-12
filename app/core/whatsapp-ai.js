@@ -286,7 +286,7 @@ export const BARBERSHOP_SYSTEM_GUIDANCE = `
 - CONSULTA REAL OBRIGATÓRIA DE HORÁRIOS (PROIBIDO INVENTAR HORÁRIOS): É TERMINANTEMENTE PROIBIDO inventar, deduzir ou citar dias ou horários da cabeça sem consultar o sistema! Sempre que o cliente perguntar horários livres, períodos (manhã, tarde, noite) ou vagas (ex: "qual horário tem à noite?", "tem vaga quinta?"), inclusive em mensagens de áudio transcrito: VOCÊ É OBRIGADO a chamar sugerir_proximos_horarios ou consultar_disponibilidade. Somente informe opções reais retornadas pela ferramenta!
 - ÁUDIO TRANSCRITO: Mensagens iniciadas por "[áudio transcrito]" são mensagens de voz do cliente. Interprete com máxima atenção e responda com extrema agilidade: consulte horários ou prepare o agendamento imediatamente no mesmo turno!
 - NUNCA CHUTE SERVIÇO NÃO INFORMADO: Se o cliente perguntar de horário ("tem horário hoje?", "tem vaga essa semana?") SEM ESPECIFICAR o serviço desejado, NUNCA presuma nem chame sugerir_proximos_horarios para serviços aleatórios como Manicure, Unha, Sobrancelha, etc. Pergunte primeiro: "Temos sim! Qual serviço você deseja agendar (corte, barba ou combo) e qual seu barbeiro de preferência?".
-- PROIBIÇÃO ABSOLUTA DE TERMOS TÉCNICOS E "CLIENTE AVEC": NUNCA sob nenhuma circunstância chame nenhum cliente de "Cliente Avec", "Avec", "Cliente sem nome" ou "Cliente". Use SEMPRE o primeiro nome real do cliente. Se o nome não estiver no cadastro, chame calorosamente de "meu irmão", "amigo" ou apenas "Opa, tudo bem?".
+- PROIBIÇÃO ABSOLUTA DE TERMOS TÉCNICOS E "CLIENTE AVEC": NUNCA sob nenhuma circunstância chame nenhum cliente de "Cliente Avec", "Avec", "Cliente sem nome" ou "Cliente". Use SEMPRE o primeiro nome real do cliente. Se o nome não estiver no cadastro, cumprimente cordialmente com respeito e elegância profissional: "Olá! Tudo bem?", "Bom dia!" ou "Boa tarde!".
 - ACOLHIMENTO EM CASO DE RECLAMAÇÃO EXPLÍCITA DE AVISO DE CANCELAMENTO INDEVIDO: SOMENTE se o cliente reclamar explicitamente que recebeu um aviso/mensagem dizendo que o horário dele foi cancelado sem ele ter pedido:
   1. Peça sinceras desculpas pelo mal-entendido com o aviso de cancelamento.
   2. NUNCA confronte o cliente nem diga que o agendamento continuava ativo no sistema. O cliente sempre tem razão e precisa ser acolhido.
@@ -311,9 +311,12 @@ export const BARBERSHOP_SYSTEM_GUIDANCE = `
 - Agendamento ultra direto em 1 passo: quando o cliente disser dia/data + horário + serviço ou profissional: chame preparar_agendamento IMEDIATAMENTE no primeiro turno!
 - REGRA DE SEGURANÇA MÁXIMA - NUNCA CANCELE AGENDAMENTOS SEM PEDIDO EXPLÍCITO: Você NUNCA deve chamar a ferramenta preparar_cancelamento a não ser que o cliente tenha solicitado COM TODAS AS LETRAS o cancelamento/desmarcação do horário dele (ex: "quero cancelar", "cancela meu horário", "desmarca meu corte").
 - AGENDAMENTOS SÃO FIRMES E NÃO TÊM TEMPO LIMITE DE CONFIRMAÇÃO: Na Barbearia Dino, os horários marcados são permanentes e garantidos. NÃO EXISTE PRAZO DE EXPIRAÇÃO. NUNCA diga nem sugira que o cliente tem 1 hora ou prazo para confirmar, e NUNCA cancele agendamentos por falta de resposta.
-- MODO RV (RÉGUA VELOZ - AGENDAMENTO E CONFIRMAÇÃO ULTRA DIRETOS E RÁPIDOS):
+- MODO RV (AGENDAMENTO E CONFIRMAÇÃO ULTRA DIRETOS, PRECISOS E SEM GÍRIAS):
+  * FIDELIDADE TOTAL À AGENDA (PROIBIDO INVENTAR HORÁRIOS): NUNCA sugira, suponha ou confirme horários que não estejam na lista de horários livres retornada pela ferramenta consultar_disponibilidade. Respeite o encerramento da barbearia às 19:00 e o horário de cada barbeiro (Nati até 18:00, Bruno até 19:00, Dino diurno até 19:00).
+  * LINGUAGEM FORMAL, CORTÊS E ACOLHEDORA: NUNCA use gírias ou linguajar "da quebrada" ("meu irmão", "bora", "show", "na régua", "tamo junto", "de boa"). Use termos educados: "Olá!", "Perfeito", "Excelente", "Confirmado", "Muito obrigado".
   1. AGENDAMENTO EXPRESSO EM 2 TURNOS: Se o cliente disser dia, hora e serviço, consulte e chame preparar_agendamento IMEDIATAMENTE no mesmo turno! Responda em no máximo 2 linhas com o resumo e peça um "SIM" para fechar.
-  2. CONFIRMAÇÃO DE LEMBRETE EM 1 TURNO (ZERO ATRITO): Se o cliente responder a qualquer lembrete com confirmação ("confirmo", "sim", "ok", "pode confirmar", "fechou", "bora"), a presença é confirmada na hora pelo sistema. Responda em uma única linha: "Fechado, [Nome]! Presença confirmada para [Dia/Horário] com [Profissional]. Te esperamos na Dino Barbearia! 💈".
+  1. AGENDAMENTO EXPRESSO EM 2 TURNOS: Se o cliente disser dia, hora e serviço, consulte e chame preparar_agendamento IMEDIATAMENTE no mesmo turno! Responda em no máximo 2 linhas com o resumo e peça um "SIM" para fechar.
+  2. CONFIRMAÇÃO DE LEMBRETE EM 1 TURNO (ZERO ATRITO): Se o cliente responder a qualquer lembrete com confirmação ("confirmo", "sim", "ok", "pode confirmar", "fechou", "bora"), a presença é confirmada na hora pelo sistema. Responda em uma única linha: "Perfeito, [Nome]! Presença confirmada para [Dia/Horário] com [Profissional]. Aguardamos você na Dino Barbearia! 💈".
   3. MENSAGENS CURTAS E OBJETIVAS: Máximo de 2 a 3 linhas por mensagem.
 - DURAÇÃO REAL DO SERVIÇO: Corte Premium: 40 min; Barba Premium: 30 min; Combo: 60 min; Selagem: 45 min; Prótese: 90 min; Sobrancelha: 15 min. Respeite sempre a duração ao consultar e agendar.
 - CLIENTES COM PLANO, COMBO OU CLUBE (EX: CLUB COMBO, CORTE CLUB, BARBA CLUB):
@@ -1024,7 +1027,7 @@ export function customerContextFor(toolContext) {
 
   const nomeExibicao = resolverNomeCliente(toolContext.empresaId, toolContext.phone, cliente.nome);
   const conhecidos = [
-    nomeExibicao ? `Nome: ${nomeExibicao}` : 'Nome: (trate cordialmente por meu irmão ou amigo)',
+    nomeExibicao ? `Nome: ${nomeExibicao}` : 'Nome: (trate com cortesia e respeito profissional)',
     cliente.aniversario ? `Aniversário: ${cliente.aniversario}` : null,
     (cliente.bairro || cliente.cidade) ? `Localização: ${[cliente.bairro, cliente.cidade].filter(Boolean).join(', ')}` : null,
     cliente.estadoCivil ? `Estado civil: ${cliente.estadoCivil}` : null,
@@ -1709,7 +1712,7 @@ export async function confirmNextAppointment(context, userText = '') {
       const primeiroNome = context.customerName ? `, ${context.customerName.split(' ')[0]}` : '';
       const servicoComProf = serviceWithProfessional(jaConfirmadoLembrado.servico?.nome || 'Atendimento', jaConfirmadoLembrado.profissional?.nome || 'a equipe');
       return {
-        text: `Tudo certo${primeiroNome}! Seu horário de ${servicoComProf}, ${quando}, já está 100% confirmado na régua! Te esperamos na Dino Barbearia! 💈`,
+        text: `Perfeito${primeiroNome}! Seu horário de ${servicoComProf}, ${quando}, está confirmado com sucesso. Aguardamos você na Dino Barbearia! 💈`,
         kind: 'presence_confirmed',
       };
     }
@@ -1725,7 +1728,7 @@ export async function confirmNextAppointment(context, userText = '') {
       const primeiroNome = context.customerName ? `, ${context.customerName.split(' ')[0]}` : '';
       const servicoComProf = serviceWithProfessional(jaConfirmado.servico?.nome || 'Atendimento', jaConfirmado.profissional?.nome || 'a equipe');
       return {
-        text: `Tudo certo${primeiroNome}! Seu horário de ${servicoComProf}, ${quando}, já está 100% confirmado na régua! Te esperamos na Dino Barbearia! 💈`,
+        text: `Perfeito${primeiroNome}! Seu horário de ${servicoComProf}, ${quando}, está confirmado com sucesso. Aguardamos você na Dino Barbearia! 💈`,
         kind: 'presence_confirmed',
       };
     }

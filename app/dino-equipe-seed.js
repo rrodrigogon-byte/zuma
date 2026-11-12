@@ -37,7 +37,7 @@ export const PROFISSIONAIS_DINO_OFICIAIS = [
     telefone: '(65) 99999-0002',
     atendimento24x7: false,
     horarioInicioPadrao: '08:00',
-    horarioFimPadrao: '20:00',
+    horarioFimPadrao: '19:00',
     diasTrabalhoPadrao: [1, 2, 3, 4, 5, 6],
   },
   {
@@ -83,8 +83,8 @@ export const PROFISSIONAIS_DINO_OFICIAIS = [
     ],
     telefone: '(65) 99999-0004',
     atendimento24x7: false,
-    horarioInicioPadrao: '07:00',
-    horarioFimPadrao: '19:00',
+    horarioInicioPadrao: '08:00',
+    horarioFimPadrao: '18:00',
     diasTrabalhoPadrao: [1, 2, 3, 4, 5, 6],
     atendeCliente: true,
   },
@@ -104,7 +104,7 @@ export const PROFISSIONAIS_DINO_OFICIAIS = [
     telefone: '(65) 99352-2260',
     atendimento24x7: false,
     horarioInicioPadrao: '08:00',
-    horarioFimPadrao: '20:00',
+    horarioFimPadrao: '19:00',
     diasTrabalhoPadrao: [1, 2, 3, 4, 5, 6],
     atendeCliente: false,
   },
@@ -123,7 +123,7 @@ export const PROFISSIONAIS_DINO_OFICIAIS = [
     telefone: '(65) 99999-0007',
     atendimento24x7: false,
     horarioInicioPadrao: '08:00',
-    horarioFimPadrao: '20:00',
+    horarioFimPadrao: '19:00',
     diasTrabalhoPadrao: [1, 2, 3, 4, 5, 6],
     atendeCliente: false,
   },
@@ -386,11 +386,10 @@ export function provisionarEquipeDino({ commerceDb = null } = {}) {
 
         if (prof) {
           // PRESERVAÇÃO RIGOROSA: NUNCA sobrescrever os horários que o gestor já ajustou!
-          const ehNati = membro.username === 'natani' || String(prof.nome || '').toLowerCase().includes('natani');
-          const horarioInicio = (ehNati && (!prof.horarioInicio || prof.horarioInicio === '08:00'))
-            ? '07:00'
-            : (prof.horarioInicio || membro.horarioInicioPadrao || '08:00');
-          const horarioFim = prof.horarioFim || membro.horarioFimPadrao || '20:00';
+          const ehNati = membro.username === 'natani' || String(prof.nome || '').toLowerCase().includes('natani') || String(prof.apelido || '').toLowerCase() === 'nati';
+          const ehBruno = membro.username === 'bruno' || String(prof.nome || '').toLowerCase().includes('bruno');
+          const horarioInicio = ehNati ? '08:00' : (prof.horarioInicio || membro.horarioInicioPadrao || '08:00');
+          const horarioFim = ehNati ? '18:00' : (ehBruno ? '19:00' : (prof.horarioFim === '20:00' ? '19:00' : (prof.horarioFim || membro.horarioFimPadrao || '19:00')));
           const diasTrabalho = Array.isArray(prof.diasTrabalho) && prof.diasTrabalho.length > 0
             ? prof.diasTrabalho
             : (membro.diasTrabalhoPadrao || [1, 2, 3, 4, 5, 6]);
