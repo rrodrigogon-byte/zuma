@@ -136,6 +136,7 @@ const NAV_ADMIN_GROUPS = [
       { to: '/admin/supermercado',  icon: '🏪', label: 'Supermercado' },
       { to: '/admin/loja-moda',     icon: '👗', label: 'Loja de Moda' },
       { to: '/admin/barbearia-erp', icon: '✂️', label: 'Barbearia ERP' },
+      { to: '/admin/sorteios', icon: '🎁', label: 'Sorteios & Prêmios' },
       { to: '/admin/oficina',       icon: '🔧', label: 'Oficina Mecânica' },
       { to: '/admin/agropecuaria',  icon: '🌾', label: 'Agropecuária & Pet' },
       { to: '/admin/varejo',        icon: '🛒', label: 'Varejo Geral' },
@@ -211,6 +212,7 @@ const NAV_DINO_GROUPS = [
       { to: '/admin/barbearia-erp?area=relacionamento&tab=Avalia%C3%A7%C3%B5es+%28NPS%29', icon: '★', label: 'Avaliações (NPS)' },
       { to: '/admin/barbearia-erp?area=relacionamento&tab=Origem+dos+clientes', icon: '⌖', label: 'Origem dos clientes' },
       { to: '/admin/barbearia-erp?area=relacionamento&tab=Fidelidade', icon: '☆', label: 'Fidelidade' },
+      { to: '/admin/sorteios', icon: '🎁', label: 'Sorteios & Prêmios' },
       { to: '/admin/whatsapp', icon: '✆', label: 'WhatsApp' },
       { to: '/admin/whatsapp-gestao', icon: '▣', label: 'WhatsApp Gestão' },
       { to: '/admin/whatsapp-lancamentos', icon: '🧾', label: 'WhatsApp Lançamentos' },
@@ -627,6 +629,7 @@ const NAV_CONCRETO_PUBLIC = [
 
 const NAV_DINO_PUBLIC = [
   { to: '/perfumaria/dino', icon: '↗', label: 'Abrir loja Dino' },
+  { to: '/sorteios/dino', icon: '🎁', label: 'Consultar Sorteios' },
   { to: '/agendar/dino', icon: '▣', label: 'Agendamento público' },
 ]
 

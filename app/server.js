@@ -78,6 +78,8 @@ import { createVarejoAdminRouter } from './modules/varejo/rotas.js';
 import { createVerticaisRouter } from './modules/verticais-kytto.js';
 import { createErpAdminRouter } from './modules/erp/rotas.js';
 import { createBarAdminRouter } from './modules/bar/rotas-multiempresa.js';
+import { criarRotasSorteios, criarRotasPublicasSorteios } from './modules/sorteios/rotas.js';
+import { emitirBilhetes } from './modules/sorteios/servico.js';
 import * as barService from './modules/bar/servico.js';
 import { responderErro as responderErroBarra } from './modules/acesso/banco.js';
 import { registrarExtensaoWhatsappAi } from './core/whatsapp-ai-extensoes.js';
@@ -2231,6 +2233,10 @@ app.use('/api/webhooks', createWhatsappAiWebhookRouter());
   // [kytto-varejo] Supermercado/varejo sobre o estoque único: preço por unidade, promoções, lotes, etiquetas e transferências.
   const varejoRouter = createVarejoAdminRouter({ db: clubeDb, escopoDaRequisicao: escopoComercial, fuso: FUSO_KYTTO });
   app.use('/api/admin/varejo', auth, requireStaff, varejoRouter);
+  // [kytto-sorteios] Módulo de Sorteios & Campanhas Premiadas Kytto (Barbearia, Perfumaria e E-commerce)
+  const sorteiosRouter = criarRotasSorteios({ legacyEmpresaId, audit });
+  app.use(['/api/admin/sorteios', '/api/admin/sorteio'], auth, requireStaff, sorteiosRouter);
+  app.use(['/api/publico/sorteios', '/api/public/sorteios'], criarRotasPublicasSorteios());
   // [kytto-erp] Hub Central ERP 360: Propostas Comerciais, Ordens de Serviço, Romaneios e Patrimônio
   const erpRouter = createErpAdminRouter({ db: clubeDb, escopoDaRequisicao: escopoComercial });
   app.use('/api/admin/erp', auth, requireStaff, erpRouter);
@@ -6507,7 +6513,30 @@ async function posFaturamentoComanda(req, comanda) {
         barbeariaErpKytto.registrarBaixaLojaNoItemComanda(empresaId, comanda.id, item.id, { ok: false, erro: 'Sem permissão de estoque na loja virtual; peça à gestão para concluir a baixa.' });
         loja.push({ itemId: item.id, ok: false });
       }
-      return { planos, loja };
+        // [kytto-sorteios] Emissão automática de Números da Sorte para o cliente
+  let sorteio = null;
+  try {
+    const valorPagoTotal = Number(comanda.totalPago || comanda.totalFaturado || comanda.total || 0);
+    const resSorteio = await emitirBilhetes({
+      empresaId,
+      cliente: {
+        id: comanda.clienteId,
+        nome: comanda.clienteNome,
+        telefone: comanda.clienteTelefone,
+      },
+      valor: valorPagoTotal,
+      itens: comanda.itens || [],
+      origem: 'barbearia_comanda',
+      documentoId: comanda.id,
+      emitidoPor: req.user?.nome || req.user?.email || 'Faturamento Comanda Dino',
+    });
+    if (resSorteio?.bilhetesGerados > 0) {
+      sorteio = resSorteio;
+    }
+  } catch (errSorteio) {
+    console.warn('[comanda] emissao sorteio:', errSorteio.message);
+  }
+  return { planos, loja, sorteio };
     }
     for (const item of itensLoja) {
       try {
@@ -6535,6 +6564,10 @@ function avisosPosFaturamento(pos) {
   if (planosFalhos.length) avisos.push(`Uso do plano não registrado em ${planosFalhos.length} item(ns): ${planosFalhos[0].erro}`);
   const lojaFalhos = (pos?.loja || []).filter((x) => !x.ok);
   if (lojaFalhos.length) avisos.push(`Baixa de estoque da loja pendente em ${lojaFalhos.length} item(ns). Use "Baixar estoque da loja" na comanda.`);
+    if (pos?.sorteio?.bilhetesGerados > 0) {
+    const numExemplo = pos.sorteio.bilhetes[0]?.numeroSorte || '';
+    avisos.push(`🎉 Cliente ganhou ${pos.sorteio.bilhetesGerados} Número(s) da Sorte para o Mega Sorteio Dino! (${numExemplo})`);
+  }
   return avisos;
 }
 

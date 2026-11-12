@@ -198,6 +198,8 @@ const LojaModa        = lazy(() => import('./pages/admin/LojaModa'))
 const PalatarePizzariaSuite = lazyWithRetry(() => import("./pages/admin/PalatarePizzariaSuite"))
 const ConcretoUsinaERP = lazyWithRetry(() => import("./pages/admin/ConcretoUsinaERP"))
 const BarbeariaERP    = lazyWithRetry(() => import("./pages/admin/BarbeariaERP"))
+const SorteiosCampanhas = lazyWithRetry(() => import('./pages/admin/SorteiosCampanhas'))
+const SorteiosPublico   = lazyWithRetry(() => import('./pages/public/SorteiosPublico'))
 const Barbearia       = lazyWithRetry(() => import('./pages/admin/Barbearia'))
 const InteligenciaVendasPage = lazyWithRetry(() => import('./pages/admin/InteligenciaVendasPage'))
 const Omnichannel     = lazy(() => import('./pages/admin/Omnichannel'))
@@ -409,11 +411,13 @@ export default function App() {
           <Route path="/admin/fiscal/config" element={<TenantAware tenant={<Layout><Fiscal abaInicial="situacao" /></Layout>} legacy={<Layout><EscolhaEmpresa modulo="Configuração de NF-e e NFC-e" /></Layout>} />} />
           <Route path="/admin/fiscal/classificacao" element={<TenantAware tenant={<Layout><Fiscal abaInicial="classificacao" /></Layout>} legacy={<Layout><EscolhaEmpresa modulo="Classificação fiscal" /></Layout>} />} />
           <Route path="/admin/loja-moda"       element={<Layout><LojaModa /></Layout>} />
-          <Route path="/admin/pizzaria" element={<Layout><PalatarePizzariaSuite /></Layout>} />
+<Route path="/admin/pizzaria" element={<Layout><PalatarePizzariaSuite /></Layout>} />
           <Route path="/admin/pizzaria-erp" element={<Layout><PalatarePizzariaSuite /></Layout>} />
           <Route path="/admin/palatare" element={<Layout><PalatarePizzariaSuite /></Layout>} />
           <Route path="/admin/concreto" element={<Layout><ConcretoUsinaERP /></Layout>} />
           <Route path="/admin/usina-concreto" element={<Layout><ConcretoUsinaERP /></Layout>} />
+<Route path="/admin/sorteios" element={<Layout><SorteiosCampanhas /></Layout>} />
+          <Route path="/admin/sorteio" element={<Layout><SorteiosCampanhas /></Layout>} />
           <Route path="/admin/barbearia-erp"   element={<Layout><BarbeariaERP /></Layout>} />
           <Route path="/admin/barbearia"        element={<Layout><Barbearia /></Layout>} />
           <Route path="/admin/inteligencia-vendas" element={<Layout><InteligenciaVendasPage /></Layout>} />
@@ -463,6 +467,10 @@ export default function App() {
         <Route path="/pedido/:codigo" element={<Layout marketing><AcompanharPedido /></Layout>} />
         <Route path="/pedido/:storeAlias/:codigo" element={<AcompanharPedido />} />
         <Route path="/cardapio/mesa/:token" element={<CardapioMesaPublico />} />
+        <Route path="/sorteios/:slug" element={<SorteiosPublico />} />
+        <Route path="/sorteios" element={<SorteiosPublico />} />
+        <Route path="/sorteio/:slug" element={<SorteiosPublico />} />
+        <Route path="/sorteio" element={<SorteiosPublico />} />
         <Route path="/agendar/:slug" element={<AgendamentoOnline />} />
         <Route path="/agendar/:slug/:barbeiro" element={<AgendamentoOnline />} />
         <Route path="/avaliar/:slug" element={<AvaliarAtendimento />} />
