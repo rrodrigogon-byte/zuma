@@ -352,6 +352,28 @@ export const MCP_READONLY_TOOLS = [
     },
   },
   {
+    name: 'concreto_mineracao',
+    description: 'Consulta operações da Serrano Mineração: dragas nos rios Sepotuba e Formoso, pátios de areia lavada, romaneios de balança e royalties CFEM.',
+    readOnlyHint: true,
+    inputSchema: {
+      type: 'object',
+      properties: {},
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'concreto_medicoes',
+    description: 'Consulta medições periódicas de concretagem por construtora/obra (faturamento quinzenal/mensal e retenções técnicas).',
+    readOnlyHint: true,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        cliente: { type: 'string', description: 'Nome da construtora ou obra' }
+      },
+      additionalProperties: false,
+    },
+  },
+  {
     name: 'holding_consolidacao',
     description: 'Relatório executivo consolidado da holding Grupo Serrano & Palatare (concreto usinado + pizzaria gourmet).',
     readOnlyHint: true,
@@ -827,6 +849,23 @@ export function createOpenApiAndMcpRouter({ auth, obterEmpresaIdToken, barbearia
         silosEstoque: dados.silos || [],
         siloPrincipal: 'Silo Convicta Vertical 96 Toneladas',
         mineracaoPropria: 'Serrano Mineração (Areia Média e Grossa de Rio)'
+      };
+    }
+    if (name === 'concreto_mineracao') {
+      const { listarMineracao } = await import('../modules/concreto/servico.js').catch(() => ({}));
+      const resMin = typeof listarMineracao === 'function' ? await listarMineracao() : {};
+      return {
+        unidade: 'Serrano Mineração · Dragagem & Pátio de Agregados',
+        localizacao: 'Tangará da Serra / MT (Rios Sepotuba e Formoso)',
+        ...resMin
+      };
+    }
+    if (name === 'concreto_medicoes') {
+      const { listarMedicoesObras } = await import('../modules/concreto/servico.js').catch(() => ({}));
+      const resMed = typeof listarMedicoesObras === 'function' ? await listarMedicoesObras() : { medicoes: [] };
+      return {
+        empresa: 'Serrano Concreto Usinado',
+        medicoesObras: resMed.medicoes || []
       };
     }
 
