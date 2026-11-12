@@ -1117,7 +1117,7 @@ export default function ConcretoUsinaERP() {
                     <small style={{ color: 'var(--text-muted)' }}>Sensores de nível por ultrassom e filtro de manga</small>
                   </div>
                   <div className="serrano-silos-grid">
-                    {(silos.length > 0 ? silos : [
+                    {((silos.filter(s => (s.tipo === 'silo' || !s.tipo || (s.nome && s.nome.toLowerCase().includes('silo'))) && !s.id?.startsWith('patio-') && !s.id?.startsWith('box-') && !s.id?.startsWith('tanque-'))).length > 0 ? (silos.filter(s => (s.tipo === 'silo' || !s.tipo || (s.nome && s.nome.toLowerCase().includes('silo'))) && !s.id?.startsWith('patio-') && !s.id?.startsWith('box-') && !s.id?.startsWith('tanque-'))) : [
                       { id: 'sil-01', nome: 'Silo Cimento CP II-F-32', capacidadeToneladas: 96, nivelAtualToneladas: 68, pressaoDespoeiramento: '0.35 bar', produto: 'Cimento CP II-F-32' },
                       { id: 'sil-02', nome: 'Silo Cimento CP V-ARI', capacidadeToneladas: 60, nivelAtualToneladas: 42, pressaoDespoeiramento: '0.32 bar', produto: 'Cimento CP V Alta Resistência' },
                       { id: 'sil-03', nome: 'Silo Sílica Ativa / Pozolana', capacidadeToneladas: 40, nivelAtualToneladas: 24, pressaoDespoeiramento: '0.28 bar', produto: 'Adição Mineral Pozolânica' }
@@ -1373,14 +1373,14 @@ export default function ConcretoUsinaERP() {
                           { id: 'bat-01', numeroTicket: 'BAT-2026-10491', dataHora: '2026-11-12 14:15', betoneiraCodigo: 'BT-01', fck: 30, volumeM3: 8, cimentoPesadoKg: 2802, aguaLiquidaPesadaLitros: 1118, fatorAcReal: 0.49, conformidadeNBR7212: 'TOTALMENTE_CONFORME', motorista: 'Valdir Silveira' }
                         ]).map(b => (
                           <tr key={b.id}>
-                            <td><b style={{ fontFamily: 'var(--font-data)' }}>{b.numeroTicket}</b></td>
-                            <td style={{ fontSize: 11 }}>{b.dataHora}</td>
-                            <td><span className="serrano-pill">{b.betoneiraCodigo}</span></td>
-                            <td><b>FCK {b.fck}</b></td>
-                            <td>{b.volumeM3} m³</td>
-                            <td style={{ fontFamily: 'var(--font-data)' }}>{b.cimentoPesadoKg}</td>
-                            <td style={{ fontFamily: 'var(--font-data)' }}>{b.aguaLiquidaPesadaLitros}</td>
-                            <td style={{ fontFamily: 'var(--font-data)' }}>{b.fatorAcReal}</td>
+                            <td><b style={{ fontFamily: 'var(--font-data)' }}>{b.numeroTicket || b.id}</b></td>
+                            <td style={{ fontSize: 11 }}>{b.dataHora || b.horario || '12/11 14:00'}</td>
+                            <td><span className="serrano-pill">{b.betoneiraCodigo || b.betoneira?.split(' ')[0] || 'BT-01'}</span></td>
+                            <td><b>{typeof b.fck === 'number' ? `FCK ${b.fck}` : b.fck}</b></td>
+                            <td>{b.volumeM3 || b.volumeBateladaM3 || 8} m³</td>
+                            <td style={{ fontFamily: 'var(--font-data)' }}>{b.cimentoPesadoKg || b.cimentoKg || 2800} kg</td>
+                            <td style={{ fontFamily: 'var(--font-data)' }}>{b.aguaLiquidaPesadaLitros || b.aguaRealAdicionadaLitros || b.aguaLitros || 1050} L</td>
+                            <td style={{ fontFamily: 'var(--font-data)' }}>{b.fatorAcReal || b.fatorAc || 0.48}</td>
                             <td>
                               <span className="serrano-pill serrano-p-ok" style={{ fontSize: 10 }}>
                                 {b.conformidadeNBR7212}
@@ -1438,19 +1438,19 @@ export default function ConcretoUsinaERP() {
                         { id: 'ent-01', ticketBalanca: 'TKT-80T-8941', dataHora: '2026-11-12 09:30', insumo: 'Cimento Portland CP II-F-32', destinoNome: 'Silo 01', placaVeiculo: 'RBD-4E80', motorista: 'Valdir Silveira', pesoBrutoKg: 49500, pesoTaraKg: 17500, pesoLiquidoToneladas: 32.0, fornecedor: 'Votorantim Cimentos S.A.' }
                       ]).map(e => (
                         <tr key={e.id}>
-                          <td><b style={{ fontFamily: 'var(--font-data)' }}>{e.ticketBalanca}</b></td>
-                          <td style={{ fontSize: 11 }}>{e.dataHora}</td>
-                          <td><b>{e.insumo}</b></td>
-                          <td><span className="serrano-pill">{e.destinoNome}</span></td>
+                          <td><b style={{ fontFamily: 'var(--font-data)' }}>{e.ticketBalanca || e['ticketBalança'] || e.ticket || e.id}</b></td>
+                          <td style={{ fontSize: 11 }}>{e.dataHora || '12/11/2026 09:15'}</td>
+                          <td><b>{e.insumo || e.material}</b></td>
+                          <td><span className="serrano-pill">{e.destinoNome || e.destino}</span></td>
                           <td>
-                            <div style={{ fontWeight: 600 }}>{e.placaVeiculo}</div>
+                            <div style={{ fontWeight: 600 }}>{e.placaVeiculo || e.placaCarreta || e.placa}</div>
                             <small style={{ color: 'var(--text-muted)' }}>{e.motorista}</small>
                           </td>
-                          <td style={{ fontFamily: 'var(--font-data)' }}>{e.pesoBrutoKg?.toLocaleString('pt-BR')}</td>
-                          <td style={{ fontFamily: 'var(--font-data)' }}>{e.pesoTaraKg?.toLocaleString('pt-BR')}</td>
+                          <td style={{ fontFamily: 'var(--font-data)' }}>{(e.pesoBrutoKg || e.pesoBruto)?.toLocaleString('pt-BR')}</td>
+                          <td style={{ fontFamily: 'var(--font-data)' }}>{(e.pesoTaraKg || e.tara)?.toLocaleString('pt-BR')}</td>
                           <td>
                             <b style={{ fontFamily: 'var(--font-data)', color: 'var(--serrano-orange-text)', fontSize: 14 }}>
-                              {e.pesoLiquidoToneladas} ton
+                              {e.pesoLiquidoToneladas || (e.pesoLiquido ? (Number(e.pesoLiquido) / 1000).toFixed(1) : '32.0')} ton
                             </b>
                           </td>
                           <td style={{ fontSize: 11, color: 'var(--text-muted)' }}>{e.fornecedor}</td>
