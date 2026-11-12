@@ -249,8 +249,86 @@ export default function Mesas() {
 
   if (loading && !fisicas.length) return <div className="page"><p style={{ color:'var(--muted)' }}>Carregando…</p></div>
 
+  const empresaAtivaData = typeof localStorage !== 'undefined' ? (() => {
+    try { return JSON.parse(localStorage.getItem('sp_empresa_ativa') || localStorage.getItem('empresa_ativa') || 'null') } catch { return null }
+  })() : null
+  const isPalatare = empresaAtivaData?.id === 'c1c1ac01-8e50-4b61-8c79-de4aaa916da9' || /palatare/i.test(empresaAtivaData?.nome || '')
   return (
     <div className="page">
+      
+      {/* Banner de Alto Padrão - Palatare Pizzaria */}
+      {isPalatare && (
+        <div style={{
+          background: 'linear-gradient(135deg, #0d0d0d 0%, #171717 100%)',
+          border: '1px solid #C5A059',
+          borderRadius: 14,
+          padding: '16px 20px',
+          marginBottom: 24,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: 16,
+          boxShadow: '0 8px 24px rgba(0,0,0,0.45)'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+            <img src="/palatare-logo.png" alt="Palatare Pizzaria" style={{ width: 68, height: 68, borderRadius: '50%', border: '2px solid #C5A059', objectFit: 'contain', background: '#000' }} />
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                <h2 style={{ margin: 0, fontSize: 18, fontWeight: 900, color: '#FFFFFF', letterSpacing: '0.5px' }}>PALATARE PIZZARIA & RESTAURANTE</h2>
+                <span style={{ background: '#D32F2F', color: '#fff', fontSize: 11, fontWeight: 800, padding: '3px 8px', borderRadius: 4, textTransform: 'uppercase' }}>Padrão Alto</span>
+                <span style={{ background: '#1c1917', border: '1px solid #C5A059', color: '#C5A059', fontSize: 11, fontWeight: 800, padding: '3px 8px', borderRadius: 4 }}>4.7 ★ no Google & Restaurant Guru</span>
+              </div>
+              <p style={{ margin: '6px 0 0', fontSize: 13, color: '#E2E8F0' }}>
+                📍 R. João do Prado Arantes (Rua 14), 307 W · Centro · Tangará da Serra/MT · 🕒 Ter a Dom 18h às 23h · 🍕 Rodízio Ter, Qua e Sex
+              </p>
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+            <a
+              href="https://www.instagram.com/palataretga/"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                background: 'linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%)',
+                color: '#fff',
+                fontSize: 12,
+                fontWeight: 800,
+                padding: '8px 14px',
+                borderRadius: 8,
+                textDecoration: 'none',
+                boxShadow: '0 2px 8px rgba(220,39,67,0.3)'
+              }}
+            >
+              📸 @palataretga
+            </a>
+            <a
+              href="https://wa.me/message/QYC36PECPJISF1"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                background: '#25D366',
+                color: '#fff',
+                fontSize: 12,
+                fontWeight: 800,
+                padding: '8px 14px',
+                borderRadius: 8,
+                textDecoration: 'none',
+                boxShadow: '0 2px 8px rgba(37,211,102,0.3)'
+              }}
+            >
+              🛵 WhatsApp (65) 99999-0090
+            </a>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:24, flexWrap:'wrap', gap:12 }}>
         <h1 className="page-title" style={{ margin:0 }}>🍽️ Mesas</h1>

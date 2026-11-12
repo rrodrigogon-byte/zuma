@@ -40,7 +40,7 @@ const EMPRESAS_CANONICAS_PADRAO = [
     nome: 'Palatare Pizzaria & Restaurante',
     nomeFantasia: 'Palatare Pizzaria',
     razaoSocial: 'PALATARE PIZZARIA E RESTAURANTE LTDA',
-    cnpj: '52.184.920/0001-00',
+    cnpj: '31.002.650/0001-08',
     cnpjNormalizado: '52184920000100',
     inscricaoEstadual: '13.789.456-1',
     inscricaoMunicipal: '45890',

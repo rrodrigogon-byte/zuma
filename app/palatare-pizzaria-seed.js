@@ -2,76 +2,98 @@ import { db, save } from './db.js';
 
 export const PALATARE_EMPRESA_ID = 'c1c1ac01-8e50-4b61-8c79-de4aaa916da9';
 export const PALATARE_LOJA_ID = 'c1c1ac01-8e50-4b61-8c79-de4aaa916da0';
-export const PALATARE_CNPJ = '52.184.920/0001-00';
-export const PALATARE_CNPJ_NUM = '52184920000100';
+export const PALATARE_CNPJ = '31.002.650/0001-08';
+export const PALATARE_CNPJ_NUM = '31002650000108';
 
 export const PALATARE_DADOS_EMPRESA = {
   id: PALATARE_EMPRESA_ID,
   nome: 'Palatare Pizzaria & Restaurante',
   nomeFantasia: 'Palatare Pizzaria',
-  razaoSocial: 'Palatare Pizzaria & Restaurante LTDA',
+  razaoSocial: 'Palatare Restaurante e Pizzaria LTDA',
   cnpj: PALATARE_CNPJ,
-  inscricaoEstadual: 'ISENTO',
+  inscricaoEstadual: '13.789.456-1',
   inscricaoMunicipal: '99201',
   tipoNegocio: 'restaurante',
   segmento: 'alimentacao',
-  telefone: '(65) 99812-4040',
+  telefone: '(65) 99999-0090',
+  whatsapp: '(65) 99999-0090',
+  instagram: '@palataretga',
+  instagramUrl: 'https://www.instagram.com/palataretga/',
   email: 'contato@palatarepizzaria.com.br',
   website: 'https://palatare.kytto.com.br',
-  enderecoLogradouro: 'Avenida Brasil',
-  enderecoNumero: '1420',
-  enderecoComplemento: 'Salão Principal',
+  enderecoLogradouro: 'Rua João do Prado Arantes (Rua 14)',
+  enderecoNumero: '307 W',
+  enderecoComplemento: 'Setor W',
   enderecoBairro: 'Centro',
   enderecoCidade: 'Tangará da Serra',
   enderecoEstado: 'MT',
-  enderecoCep: '78300000',
+  enderecoCep: '78300076',
+  horarioFuncionamento: 'Terça a Domingo das 18:00 às 23:00 (Segunda-feira fechado)',
+  rodizioDias: 'Terças, Quartas e Sextas-feiras',
+  avaliacaoNota: '4.7 ★',
+  avaliacaoFonte: 'Google & Restaurant Guru (Top #2 Pizzaria de Tangará da Serra)',
   logoUrl: '/palatare-logo.png',
+  bannerUrl: '/palatare-banner.png',
   ativa: true,
   permitirEstoqueNegativo: false,
   totalLojas: 1,
 };
 
 export const PALATARE_CARDAPIO_INICIAL = [
-  // Pizzas Tradicionais
-  { nome: 'Pizza Calabresa Especial (Grande 8 Fatias)', categoria: 'Pizzas Tradicionais', setor: 'cozinha', preco: 68.00, unidade: 'un', estoque: 50, minimo: 10, ordem: 10, descricao: 'Molho pelati italiano, muçarela artesanal, calabresa defumada fatiada, cebola roxa e orégano fresco.' },
-  { nome: 'Pizza Margherita Di Bufala (Grande 8 Fatias)', categoria: 'Pizzas Tradicionais', setor: 'cozinha', preco: 72.00, unidade: 'un', estoque: 40, minimo: 10, ordem: 20, descricao: 'Molho pelati, muçarela de búfala fresca, rodelas de tomate caqui, queijo parmesão ralado na hora e folhas de manjericão fresco.' },
-  { nome: 'Pizza Quatro Queijos Nobres (Grande 8 Fatias)', categoria: 'Pizzas Tradicionais', setor: 'cozinha', preco: 76.00, unidade: 'un', estoque: 40, minimo: 10, ordem: 30, descricao: 'Molho especial, muçarela fatiada, provolone defumado, gorgonzola italiano cremoso e catupiry original.' },
-  { nome: 'Pizza Frango com Catupiry Original (Grande)', categoria: 'Pizzas Tradicionais', setor: 'cozinha', preco: 70.00, unidade: 'un', estoque: 45, minimo: 10, ordem: 40, descricao: 'Peito de frango desfiado temperado com ervas finas, milho verde selecionado e generosa camada de Catupiry original.' },
-  { nome: 'Pizza Portuguesa Tradicional (Grande 8 Fatias)', categoria: 'Pizzas Tradicionais', setor: 'cozinha', preco: 74.00, unidade: 'un', estoque: 35, minimo: 8, ordem: 50, descricao: 'Presunto cozido magro picado, muçarela, ovos cozidos, cebola em rodelas, ervilhas frescas e azeitonas pretas chilenas.' },
+  // Destaques da Casa & Rodízio Oficial
+  { nome: 'Rodízio de Pizzas Tradicional Palatare (Ter, Qua e Sex)', categoria: 'Rodízio & Experiências', setor: 'cozinha', preco: 59.90, unidade: 'pessoa', estoque: 100, minimo: 10, ordem: 5, descricao: 'Mais de 30 sabores doces e salgados assados no ponto perfeito, massas artesanais e calzones servidos à vontade à mesa.' },
 
-  // Pizzas Especiais & Premium
-  { nome: 'Pizza Palatare Especial da Casa (Grande)', categoria: 'Pizzas Especiais', setor: 'cozinha', preco: 89.00, unidade: 'un', estoque: 30, minimo: 5, ordem: 60, descricao: 'Molho especial de tomate san marzano, presunto de parma italiano, figos caramelizados ao balsâmico, rúcula fresca e lascas de grana padano.' },
-  { nome: 'Pizza Filé Mignon ao Gorgonzola (Grande)', categoria: 'Pizzas Especiais', setor: 'cozinha', preco: 92.00, unidade: 'un', estoque: 25, minimo: 5, ordem: 70, descricao: 'Tiras macias de filé mignon grelhado, queijo muçarela, creme de gorgonzola dolce e cebola caramelizada crocante.' },
-  { nome: 'Pizza Camarão com Catupiry Trufado (Grande)', categoria: 'Pizzas Especiais', setor: 'cozinha', preco: 98.00, unidade: 'un', estoque: 20, minimo: 5, ordem: 80, descricao: 'Camarões rosa salteados no azeite extravirgem e alho, muçarela, catupiry original e toque de azeite trufado.' },
-  { nome: 'Pizza Shimeji & Shitake no Alho Poró (Grande)', categoria: 'Pizzas Especiais', setor: 'cozinha', preco: 82.00, unidade: 'un', estoque: 25, minimo: 5, ordem: 90, descricao: 'Mix de cogumelos frescos shimeji e shitake puxados na manteiga e shoyu, alho-poró fininho e muçarela.' },
-  { nome: 'Pizza Pepperoni Importado & Mel Picante (Grande)', categoria: 'Pizzas Especiais', setor: 'cozinha', preco: 79.00, unidade: 'un', estoque: 30, minimo: 8, ordem: 100, descricao: 'Fatias generosas de pepperoni premium crocante, muçarela, gotas de mel de flor de laranjeira infusionado com pimenta dedo-de-moça.' },
+  // Pizzas Mais Pedidas & Especiais de Tangará da Serra
+  { nome: 'Pizza de Picanha Especial da Palatare (Grande 8 Fatias)', categoria: 'Pizzas Especiais', setor: 'cozinha', preco: 89.00, unidade: 'un', estoque: 40, minimo: 10, ordem: 10, descricao: 'Eleita favorita pelos clientes de Tangará: lâminas de picanha grelhada ao ponto, muçarela especial, alho tostado crocante, vinagrete da casa e orégano fresco.' },
+  { nome: 'Pizza Filé Mignon ao Gorgonzola (Grande 8 Fatias)', categoria: 'Pizzas Especiais', setor: 'cozinha', preco: 92.00, unidade: 'un', estoque: 35, minimo: 10, ordem: 20, descricao: 'Carro-chefe da casa: tiras suculentas de filé mignon grelhado, muçarela, molho pelati italiano, creme de gorgonzola dolce e cebola caramelizada.' },
+  { nome: 'Pizza Carne Seca com Catupiry Original (Grande 8 Fatias)', categoria: 'Pizzas Especiais', setor: 'cozinha', preco: 78.00, unidade: 'un', estoque: 35, minimo: 10, ordem: 30, descricao: 'Carne seca artesanal desfiada na manteiga de garrafa, cebola roxa fininha, muçarela e generosa cobertura de Catupiry original.' },
+  { nome: 'Pizza Palatare da Casa (Parma, Figos & Rúcula)', categoria: 'Pizzas Especiais', setor: 'cozinha', preco: 89.00, unidade: 'un', estoque: 30, minimo: 5, ordem: 40, descricao: 'Molho de tomate San Marzano, presunto de Parma italiano, figos caramelizados no balsâmico, rúcula fresca e lascas de Grana Padano.' },
+  { nome: 'Pizza Camarão ao Catupiry Trufado (Grande)', categoria: 'Pizzas Especiais', setor: 'cozinha', preco: 98.00, unidade: 'un', estoque: 25, minimo: 5, ordem: 50, descricao: 'Camarões rosa salteados no azeite extravirgem e alho confit, muçarela, Catupiry original e finalização com azeite trufado.' },
+  { nome: 'Pizza Shimeji & Cogumelos Frescos no Alho Poró', categoria: 'Pizzas Especiais', setor: 'cozinha', preco: 82.00, unidade: 'un', estoque: 25, minimo: 5, ordem: 60, descricao: 'Mix selecionado de cogumelos shimeji frescos salteados na manteiga e shoyu, rodelas de alho-poró e queijo muçarela artesanal.' },
+  { nome: 'Pizza Pepperoni Importado & Mel Picante (Grande)', categoria: 'Pizzas Especiais', setor: 'cozinha', preco: 79.00, unidade: 'un', estoque: 30, minimo: 8, ordem: 70, descricao: 'Fatias generosas de pepperoni premium crocante, muçarela, fios de mel de flor de laranjeira infusionado com pimenta dedo-de-moça.' },
+
+  // Pizzas Tradicionais
+  { nome: 'Pizza Calabresa Artesanal Especial (Grande 8 Fatias)', categoria: 'Pizzas Tradicionais', setor: 'cozinha', preco: 68.00, unidade: 'un', estoque: 50, minimo: 10, ordem: 80, descricao: 'Molho pelati italiano, muçarela artesanal, calabresa defumada fatiada, cebola roxa e orégano fresco.' },
+  { nome: 'Pizza Margherita Di Bufala & Manjericão (Grande)', categoria: 'Pizzas Tradicionais', setor: 'cozinha', preco: 72.00, unidade: 'un', estoque: 40, minimo: 10, ordem: 90, descricao: 'Molho pelati, muçarela de búfala fresca, rodelas de tomate caqui, queijo parmesão ralado na hora e folhas de manjericão fresco.' },
+  { nome: 'Pizza Quatro Queijos Nobres (Grande 8 Fatias)', categoria: 'Pizzas Tradicionais', setor: 'cozinha', preco: 76.00, unidade: 'un', estoque: 40, minimo: 10, ordem: 100, descricao: 'Muçarela fatiada, provolone defumado, gorgonzola italiano cremoso e catupiry original forneados.' },
+  { nome: 'Pizza Frango com Catupiry Original (Grande 8 Fatias)', categoria: 'Pizzas Tradicionais', setor: 'cozinha', preco: 70.00, unidade: 'un', estoque: 45, minimo: 10, ordem: 110, descricao: 'Peito de frango desfiado temperado com ervas finas, milho verde selecionado e Catupiry original cremoso.' },
+  { nome: 'Pizza Portuguesa Tradicional (Grande 8 Fatias)', categoria: 'Pizzas Tradicionais', setor: 'cozinha', preco: 74.00, unidade: 'un', estoque: 35, minimo: 8, ordem: 120, descricao: 'Presunto cozido nobre, muçarela, ovos cozidos, cebola em rodelas, ervilhas frescas e azeitonas pretas chilenas.' },
+
+  // Calzones Tradicionais
+  { nome: 'Calzone Tradicional Palatare Especial', categoria: 'Calzones & Massas Fechadas', setor: 'cozinha', preco: 68.00, unidade: 'un', estoque: 20, minimo: 5, ordem: 130, descricao: 'Massa artesanal assada em formato meia-lua, recheada com muçarela, presunto parma, tomate concassé, manjericão e catupiry, polvilhada com parmesão.' },
+  { nome: 'Calzone Quatro Queijos & Alho Poró', categoria: 'Calzones & Massas Fechadas', setor: 'cozinha', preco: 64.00, unidade: 'un', estoque: 20, minimo: 5, ordem: 140, descricao: 'Massa crocante por fora e cremosa por dentro, recheio de muçarela, provolone, gorgonzola, catupiry e tiras de alho-poró.' },
+
+  // Bordas Recheadas
+  { nome: 'Borda Recheada de Catupiry Original', categoria: 'Bordas Recheadas', setor: 'cozinha', preco: 14.00, unidade: 'un', estoque: 100, minimo: 20, ordem: 150, descricao: 'Borda artesanal enrolada e recheada com legítimo Catupiry cremoso.' },
+  { nome: 'Borda Recheada de Cheddar Cremoso', categoria: 'Bordas Recheadas', setor: 'cozinha', preco: 14.00, unidade: 'un', estoque: 100, minimo: 20, ordem: 160, descricao: 'Borda recheada com queijo cheddar cremoso especial para pizza.' },
+  { nome: 'Borda Recheada de Chocolate ao Leite Derretido', categoria: 'Bordas Recheadas', setor: 'cozinha', preco: 16.00, unidade: 'un', estoque: 100, minimo: 20, ordem: 170, descricao: 'Borda recheada com generoso chocolate ao leite nobre forneado e derretido.' },
 
   // Pizzas Doces
-  { nome: 'Pizza Doce Nutella com Morangos Frescos', categoria: 'Pizzas Doces', setor: 'cozinha', preco: 62.00, unidade: 'un', estoque: 30, minimo: 6, ordem: 110, descricao: 'Generosa camada de Nutella original, fatias de morangos frescos selecionados e raspas de chocolate belga ao leite.' },
-  { nome: 'Pizza Doce Banana Nevada com Canela e Mel', categoria: 'Pizzas Doces', setor: 'cozinha', preco: 54.00, unidade: 'un', estoque: 30, minimo: 6, ordem: 120, descricao: 'Fatias de banana nanica caramelizadas, creme de queijo suave, canela em pó, leite condensado e gotas de chocolate branco forneadas.' },
+  { nome: 'Pizza Doce Nutella com Morangos Frescos', categoria: 'Pizzas Doces', setor: 'cozinha', preco: 62.00, unidade: 'un', estoque: 30, minimo: 6, ordem: 180, descricao: 'Generosa camada de Nutella original, fatias de morangos frescos selecionados e raspas de chocolate belga ao leite.' },
+  { nome: 'Pizza Doce Banana Nevada com Canela e Mel', categoria: 'Pizzas Doces', setor: 'cozinha', preco: 54.00, unidade: 'un', estoque: 30, minimo: 6, ordem: 190, descricao: 'Fatias de banana caramelizadas, creme de queijo suave, canela em pó, leite condensado e gotas de chocolate branco forneadas.' },
 
   // Pratos & Massas
-  { nome: 'Lasanha à Bolonhesa Clássica Palatare', categoria: 'Pratos & Massas', setor: 'cozinha', preco: 52.00, unidade: 'prato', estoque: 20, minimo: 5, ordem: 130, descricao: 'Massa artesanal fresca feita na casa, ragu de carnes selecionadas lentamente cozido por 6 horas, molho bechamel cremoso e gratinada com queijo parmesão.' },
-  { nome: 'Fettuccine ao Molho Alfredo com Tiras de Filé', categoria: 'Pratos & Massas', setor: 'cozinha', preco: 58.00, unidade: 'prato', estoque: 25, minimo: 5, ordem: 140, descricao: 'Massa artesanal fettuccine fresca envolta em molho alfredo clássico de manteiga da terra, creme de leite fresco e queijo parmesão, servida com medalhão de filé mignon.' },
-  { nome: 'Gnocchi de Batata ao Pomodoro & Burrata', categoria: 'Pratos & Massas', setor: 'cozinha', preco: 56.00, unidade: 'prato', estoque: 20, minimo: 5, ordem: 150, descricao: 'Nhoque artesanal leve de batata asterix, molho pomodoro de tomates rasteiros com manjericão e coração de burrata fresca inteira.' },
+  { nome: 'Lasanha à Bolonhesa Clássica Palatare', categoria: 'Pratos & Massas', setor: 'cozinha', preco: 52.00, unidade: 'prato', estoque: 20, minimo: 5, ordem: 200, descricao: 'Massa artesanal fresca feita na casa, ragu de carnes selecionadas lentamente cozido por 6 horas, molho bechamel cremoso e gratinada com queijo parmesão.' },
+  { nome: 'Fettuccine ao Molho Alfredo com Tiras de Filé', categoria: 'Pratos & Massas', setor: 'cozinha', preco: 58.00, unidade: 'prato', estoque: 25, minimo: 5, ordem: 210, descricao: 'Massa artesanal fettuccine fresca envolta em molho alfredo clássico de manteiga da terra, creme de leite fresco e queijo parmesão, com medalhão de filé mignon.' },
+  { nome: 'Gnocchi de Batata ao Pomodoro & Burrata', categoria: 'Pratos & Massas', setor: 'cozinha', preco: 56.00, unidade: 'prato', estoque: 20, minimo: 5, ordem: 220, descricao: 'Nhoque artesanal leve de batata asterix, molho pomodoro de tomates rasteiros com manjericão e coração de burrata fresca inteira.' },
 
-  // Entradas & Porções
-  { nome: 'Bruschetta Tradicional Pomodoro & Basílico (4 un)', categoria: 'Entradas & Petiscos', setor: 'cozinha', preco: 28.00, unidade: 'porcao', estoque: 40, minimo: 10, ordem: 160, descricao: 'Pão italiano ciabatta tostado com azeite de alho, tomates concassé marinados no azeite extravirgem, manjericão fresco e lascas de parmesão.' },
-  { nome: 'Carpaccio de Filé Mignon com Alcaparras', categoria: 'Entradas & Petiscos', setor: 'cozinha', preco: 44.00, unidade: 'porcao', estoque: 20, minimo: 5, ordem: 170, descricao: 'Finas lâminas de filé mignon cru temperado, molho clássico de alcaparras, mostarda dijon e azeite, rúcula selvagem e lascas de grana padano.' },
+  // Entradas & Petiscos
+  { nome: 'Bruschetta Tradicional Pomodoro & Basílico (4 un)', categoria: 'Entradas & Petiscos', setor: 'cozinha', preco: 28.00, unidade: 'porcao', estoque: 40, minimo: 10, ordem: 230, descricao: 'Pão italiano ciabatta tostado com azeite de alho, tomates concassé marinados no azeite extravirgem, manjericão fresco e lascas de parmesão.' },
+  { nome: 'Carpaccio de Filé Mignon com Alcaparras', categoria: 'Entradas & Petiscos', setor: 'cozinha', preco: 44.00, unidade: 'porcao', estoque: 20, minimo: 5, ordem: 240, descricao: 'Finas lâminas de filé mignon cru temperado, molho clássico de alcaparras, mostarda dijon e azeite, rúcula selvagem e lascas de grana padano.' },
 
   // Vinhos & Adega
-  { nome: 'Vinho Tinto Cabernet Sauvignon Reserva 750ml', categoria: 'Vinhos & Adega', setor: 'bar', preco: 98.00, unidade: 'garrafa', estoque: 24, minimo: 6, ordem: 180, descricao: 'Vinho tinto seco encorpado com notas de frutas vermelhas maduras, baunilha e taninos sedosos. Harmonização perfeita com carnes e massas.' },
+  { nome: 'Vinho Tinto Cabernet Sauvignon Reserva 750ml', categoria: 'Vinhos & Adega', setor: 'bar', preco: 98.00, unidade: 'garrafa', estoque: 24, minimo: 6, ordem: 250, descricao: 'Vinho tinto seco encorpado com notas de frutas vermelhas maduras, baunilha e taninos sedosos. Harmonização perfeita com carnes e massas.' },
 
   // Bebidas & Chopps
-  { nome: 'Chopp Pilsen Artesanal 500ml', categoria: 'Bebidas & Chopps', setor: 'bar', preco: 15.00, unidade: 'copo', estoque: 100, minimo: 20, ordem: 190, descricao: 'Chopp pilsen artesanal gelado, cremoso e refrescante tirado na torneira.' },
-  { nome: 'Cerveja Long Neck Stella Artois 330ml', categoria: 'Bebidas & Chopps', setor: 'bar', preco: 12.00, unidade: 'garrafa', estoque: 60, minimo: 15, ordem: 200, descricao: 'Cerveja premium puro malte clássica gelada.' },
-  { nome: 'Refrigerante Lata 350ml (Coca / Guaraná)', categoria: 'Bebidas & Chopps', setor: 'bar', preco: 7.50, unidade: 'lata', estoque: 80, minimo: 20, ordem: 210, descricao: 'Refrigerante lata gelado (Coca-Cola Original, Zero ou Guaraná Antarctica).' },
-  { nome: 'Água Mineral com Gás 500ml', categoria: 'Bebidas & Chopps', setor: 'bar', preco: 5.00, unidade: 'garrafa', estoque: 60, minimo: 15, ordem: 220, descricao: 'Água mineral natural gaseificada gelada.' },
-  { nome: 'Suco Natural de Laranja 500ml', categoria: 'Bebidas & Chopps', setor: 'bar', preco: 12.00, unidade: 'copo', estoque: 40, minimo: 10, ordem: 230, descricao: 'Suco 100% natural espremido na hora.' },
+  { nome: 'Chopp Pilsen Artesanal 500ml', categoria: 'Bebidas & Chopps', setor: 'bar', preco: 15.00, unidade: 'copo', estoque: 100, minimo: 20, ordem: 260, descricao: 'Chopp pilsen artesanal gelado, cremoso e refrescante tirado na torneira.' },
+  { nome: 'Cerveja Long Neck Stella Artois 330ml', categoria: 'Bebidas & Chopps', setor: 'bar', preco: 12.00, unidade: 'garrafa', estoque: 60, minimo: 15, ordem: 270, descricao: 'Cerveja premium puro malte clássica gelada.' },
+  { nome: 'Refrigerante Lata 350ml (Coca / Guaraná)', categoria: 'Bebidas & Chopps', setor: 'bar', preco: 7.50, unidade: 'lata', estoque: 80, minimo: 20, ordem: 280, descricao: 'Refrigerante lata gelado (Coca-Cola Original, Zero ou Guaraná Antarctica).' },
+  { nome: 'Água Mineral com Gás 500ml', categoria: 'Bebidas & Chopps', setor: 'bar', preco: 5.00, unidade: 'garrafa', estoque: 60, minimo: 15, ordem: 290, descricao: 'Água mineral natural gaseificada gelada.' },
+  { nome: 'Suco Natural de Laranja 500ml', categoria: 'Bebidas & Chopps', setor: 'bar', preco: 12.00, unidade: 'copo', estoque: 40, minimo: 10, ordem: 300, descricao: 'Suco 100% natural espremido na hora da fruta selecionada.' },
 
   // Sobremesas
-  { nome: 'Petit Gâteau com Sorvete de Creme', categoria: 'Sobremesas', setor: 'cozinha', preco: 32.00, unidade: 'un', estoque: 20, minimo: 5, ordem: 240, descricao: 'Bolo de chocolate com recheio cremoso quente, acompanhado de sorvete de creme artesanal.' },
-  { nome: 'Tiramisù Italiano Clássico', categoria: 'Sobremesas', setor: 'cozinha', preco: 28.00, unidade: 'un', estoque: 15, minimo: 4, ordem: 250, descricao: 'Sobremesa clássica italiana com biscoitos savoiardi embebidos em café, creme de queijo mascarpone e cacau em pó.' }
+  { nome: 'Petit Gâteau com Sorvete de Creme', categoria: 'Sobremesas', setor: 'cozinha', preco: 32.00, unidade: 'un', estoque: 20, minimo: 5, ordem: 310, descricao: 'Bolo de chocolate com recheio cremoso quente, acompanhado de sorvete de creme artesanal.' },
+  { nome: 'Tiramisù Italiano Clássico', categoria: 'Sobremesas', setor: 'cozinha', preco: 28.00, unidade: 'un', estoque: 15, minimo: 4, ordem: 320, descricao: 'Sobremesa clássica italiana com biscoitos savoiardi embebidos em café, creme de queijo mascarpone e cacau em pó.' }
 ];
 
 export const PALATARE_MESAS_INICIAIS = [

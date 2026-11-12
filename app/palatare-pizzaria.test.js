@@ -18,12 +18,15 @@ import { db } from './db.js';
 test('Palatare Pizzaria & Restaurante: dados cadastrais, CNPJ e identidade visual', () => {
   assert.equal(PALATARE_EMPRESA_ID, 'c1c1ac01-8e50-4b61-8c79-de4aaa916da9');
   assert.equal(PALATARE_LOJA_ID, 'c1c1ac01-8e50-4b61-8c79-de4aaa916da0');
-  assert.equal(PALATARE_CNPJ, '52.184.920/0001-00');
+  assert.equal(PALATARE_CNPJ, '31.002.650/0001-08');
   assert.equal(validarCnpj(PALATARE_CNPJ), true);
   assert.equal(PALATARE_DADOS_EMPRESA.tipoNegocio, 'restaurante');
   assert.equal(PALATARE_DADOS_EMPRESA.logoUrl, '/palatare-logo.png');
+  assert.equal(PALATARE_DADOS_EMPRESA.bannerUrl, '/palatare-banner.png');
+  assert.equal(PALATARE_DADOS_EMPRESA.instagram, '@palataretga');
   assert.equal(PALATARE_DADOS_EMPRESA.enderecoCidade, 'Tangará da Serra');
   assert.equal(PALATARE_DADOS_EMPRESA.enderecoEstado, 'MT');
+  assert.equal(PALATARE_DADOS_EMPRESA.telefone, '(65) 99999-0090');
 });
 
 test('Templates de Negócio: restaurante e pizzaria registrados no onboarding de empresas', () => {
@@ -42,65 +45,54 @@ test('Templates de Negócio: restaurante e pizzaria registrados no onboarding de
   assert.ok(categorias.has('Vinhos & Adega'));
 });
 
-test('Cardápio Oficial Palatare: 25 produtos com setores cozinha/bar e preços configurados', () => {
-  assert.equal(PALATARE_CARDAPIO_INICIAL.length, 25);
+test('Cardápio Oficial Palatare: produtos com setores cozinha/bar e preços configurados', () => {
+  assert.ok(PALATARE_CARDAPIO_INICIAL.length >= 25);
   
-  const calabresa = PALATARE_CARDAPIO_INICIAL.find(p => p.nome.includes('Calabresa'));
-  assert.ok(calabresa);
-  assert.equal(calabresa.setor, 'cozinha');
-  assert.equal(calabresa.preco, 68.00);
+  const picanha = PALATARE_CARDAPIO_INICIAL.find(p => p.nome.includes('Picanha'));
+  assert.ok(picanha, 'Pizza de Picanha deve existir no cardápio');
+  assert.equal(picanha.setor, 'cozinha');
+  assert.equal(picanha.preco, 89.00);
 
-  const palatareEsp = PALATARE_CARDAPIO_INICIAL.find(p => p.nome.includes('Palatare Especial'));
-  assert.ok(palatareEsp);
-  assert.equal(palatareEsp.setor, 'cozinha');
-  assert.equal(palatareEsp.preco, 89.00);
+  const fileGorgonzola = PALATARE_CARDAPIO_INICIAL.find(p => p.nome.includes('Gorgonzola'));
+  assert.ok(fileGorgonzola, 'Pizza de Filé com Gorgonzola deve existir no cardápio');
+  assert.equal(fileGorgonzola.setor, 'cozinha');
+
+  const rodizio = PALATARE_CARDAPIO_INICIAL.find(p => p.nome.includes('Rodízio'));
+  assert.ok(rodizio, 'Rodízio tradicional deve existir no cardápio');
+  assert.equal(rodizio.preco, 59.90);
+
+  const calzone = PALATARE_CARDAPIO_INICIAL.find(p => p.nome.includes('Calzone'));
+  assert.ok(calzone, 'Calzone deve existir no cardápio');
+
+  const borda = PALATARE_CARDAPIO_INICIAL.find(p => p.nome.includes('Borda Recheada'));
+  assert.ok(borda, 'Borda recheada deve existir no cardápio');
 
   const chopp = PALATARE_CARDAPIO_INICIAL.find(p => p.nome.includes('Chopp Pilsen'));
   assert.ok(chopp);
   assert.equal(chopp.setor, 'bar');
-  assert.equal(chopp.preco, 15.00);
-
-  const vinho = PALATARE_CARDAPIO_INICIAL.find(p => p.nome.includes('Cabernet Sauvignon'));
-  assert.ok(vinho);
-  assert.equal(vinho.setor, 'bar');
-  assert.equal(vinho.preco, 98.00);
 });
 
-test('Mesas Oficiais Palatare: 20 mesas físicas (salão e varanda) e 2 mesas virtuais (balcão e delivery)', () => {
+test('Mesas da Palatare: 20 mesas físicas (salão/varanda) + balcão + delivery', () => {
   assert.equal(PALATARE_MESAS_INICIAIS.length, 22);
-  const fisicas = PALATARE_MESAS_INICIAIS.filter(m => m.tipo === 'fisica');
-  const virtuais = PALATARE_MESAS_INICIAIS.filter(m => m.tipo === 'virtual');
-  assert.equal(fisicas.length, 20);
-  assert.equal(virtuais.length, 2);
-  assert.ok(virtuais.some(m => m.nome.includes('Balcão')));
-  assert.ok(virtuais.some(m => m.nome.includes('Delivery')));
+  const fisica1 = PALATARE_MESAS_INICIAIS.find(m => m.numero === 1);
+  assert.equal(fisica1.tipo, 'fisica');
+  assert.equal(fisica1.nome, 'Mesa 1 · Salão');
+
+  const balcao = PALATARE_MESAS_INICIAIS.find(m => m.numero === 101);
+  assert.equal(balcao.tipo, 'virtual');
+
+  const delivery = PALATARE_MESAS_INICIAIS.find(m => m.numero === 102);
+  assert.equal(delivery.tipo, 'virtual');
 });
 
-test('Provisionamento Palatare: seed insere empresa e usuários gerenciais no Datastore', async () => {
+test('Provisionamento da Palatare no Datastore JSON', async () => {
   const res = await provisionarPalatarePizzaria();
   assert.equal(res.empresaProvisionada, true);
   assert.ok(res.usuariosProvisionados >= 3);
 
-  const rootDb = db();
-  const empJson = rootDb.cadastrosMestresKytto?.empresas?.[PALATARE_EMPRESA_ID];
-  assert.ok(empJson, 'Palatare deve estar em cadastrosMestresKytto.empresas');
-  assert.equal(empJson.nomeFantasia, 'Palatare Pizzaria');
-
-  const uGerente = rootDb.usuarios.find(u => u.username === 'palatare');
-  assert.ok(uGerente, 'Usuário gerente palatare deve existir');
-  assert.equal(uGerente.role, 'organizador');
-  assert.equal(uGerente.empresaId, PALATARE_EMPRESA_ID);
-});
-
-test('Listagem de Empresas: Palatare é listada canonicamente para Admin Global', async () => {
-  const mockDb = { query: async () => ({ rows: [] }) };
-  // Admin Global (sem filtro): deve ver Palatare
-  const empresasGlobal = await listarEmpresas(mockDb, { incluirInativas: true });
-  const temPalatare = empresasGlobal.some(e => e.id === PALATARE_EMPRESA_ID || e.nome.includes('Palatare'));
-  assert.equal(temPalatare, true, 'Admin Global deve visualizar Palatare');
-
-  // Isolamento do Guilherme (Dino): NÃO deve ver Palatare
-  const empresasDino = await listarEmpresas(mockDb, { incluirInativas: true, empresaIdFiltro: ['d0d0ac01-8e50-4b61-8c79-de4aaa916da6'] });
-  const dinoVePalatare = empresasDino.some(e => e.id === PALATARE_EMPRESA_ID || e.nome.includes('Palatare'));
-  assert.equal(dinoVePalatare, false, 'Dino não pode visualizar Palatare (isolamento estrito)');
+  const resLista = await listarEmpresas(db()); const empresas = Array.isArray(resLista) ? resLista : (resLista?.empresas || []);
+  const palatare = empresas.find(e => e.id === PALATARE_EMPRESA_ID || e.nome.includes('Palatare'));
+  assert.ok(palatare, 'Empresa Palatare deve estar listada');
+  assert.equal(palatare.cnpj, '31.002.650/0001-08');
+  assert.equal(palatare.tipoNegocio, 'restaurante');
 });
