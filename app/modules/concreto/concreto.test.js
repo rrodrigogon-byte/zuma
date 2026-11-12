@@ -28,6 +28,11 @@ import {
   obterRomaneioCompleto,
   emitirTicketPesagemBalanca,
   gerarHtmlTicketBalanca,
+  obterStatusBalancaAutomacao,
+  executarComandoBalanca,
+  registrarEntradaVeiculo,
+  concluirSegundaPesagemBalanca,
+  listarTicketsBalanca,
   listarMedicoesObras,
   criarMedicaoObra,
   atualizarStatusMedicao,
@@ -339,4 +344,94 @@ test('13. Emissão de Ticket de Pesagem da Balança Rodoviária de Mineração (
   assert.ok(resHtml.html.includes('TICKET DE PESAGEM RODOVIÁRIA'));
   assert.ok(resHtml.html.includes('21.000 kg'));
   assert.ok(resHtml.html.includes('Toledo 80t'));
+});
+
+test('14. Automação da Balança Rodoviária 80t Toledo: Status e Hardware de Semáforos e Cancelas', async () => {
+  const resStatus = await obterStatusBalancaAutomacao(CONCRETO_EMPRESA_ID);
+  assert.equal(resStatus.ok, true);
+  assert.ok(resStatus.hardware);
+  assert.equal(resStatus.hardware.capacidadeMaximaKg, 80000);
+  assert.ok(['verde', 'vermelho'].includes(resStatus.hardware.semaforoEntrada));
+  assert.ok(['aberta', 'fechada', 'movimento'].includes(resStatus.hardware.cancelaEntrada));
+  assert.ok(resStatus.estatisticasHoje.totalVeiculosHoje >= 3);
+  assert.ok(resStatus.veiculosNoPatio.length >= 1);
+  assert.ok(resStatus.ultimosTickets.length >= 3);
+});
+
+test('15. Execução de Comandos Remotos na Balança: Cancelas, Semáforos e Simulação de Veículo', async () => {
+  // 1. Abrir cancela de entrada remotamente
+  const cmd1 = await executarComandoBalanca('abrir_cancela_entrada', {}, CONCRETO_EMPRESA_ID);
+  assert.equal(cmd1.ok, true);
+  assert.equal(cmd1.hardware.cancelaEntrada, 'aberta');
+  assert.equal(cmd1.hardware.semaforoEntrada, 'verde');
+
+  // 2. Simular posicionamento de veículo na balança (Betoneira BT-01)
+  const cmdSim = await executarComandoBalanca('simular_veiculo', {
+    placa: 'BT-01 (RRA-4E80)',
+    modelo: 'Caminhão Betoneira VW Constellation 26.280',
+    pesoBrutoKg: 33480,
+    taraKg: 14280,
+    foraPosicao: false
+  }, CONCRETO_EMPRESA_ID);
+  assert.equal(cmdSim.ok, true);
+  assert.equal(cmdSim.hardware.pesoAtualKg, 33480);
+  assert.equal(cmdSim.hardware.pesoLiquidoAtualKg, 19200);
+  assert.equal(cmdSim.hardware.posicionamentoCorreto, true);
+  assert.equal(cmdSim.hardware.sensorPresencaPlataforma, true);
+
+  // 3. Simular alerta de eixo fora da plataforma
+  const cmdAlerta = await executarComandoBalanca('simular_veiculo', {
+    foraPosicao: true,
+    pesoBrutoKg: 30000
+  }, CONCRETO_EMPRESA_ID);
+  assert.equal(cmdAlerta.hardware.posicionamentoCorreto, false);
+  assert.equal(cmdAlerta.hardware.sensorBarreiraEntrada, true);
+
+  // 4. Liberar e zerar balança
+  const cmdZerar = await executarComandoBalanca('zerar_balanca', {}, CONCRETO_EMPRESA_ID);
+  assert.equal(cmdZerar.hardware.pesoAtualKg, 0);
+  assert.equal(cmdZerar.hardware.zeroRastreado, true);
+});
+
+test('16. Fluxo de Dupla Pesagem Rodoviária: 1ª Pesagem Entrada e 2ª Pesagem Saída', async () => {
+  // 1. Entrada de Caçamba Basculante vazia para carregar brita (Tara)
+  const resEntrada = await registrarEntradaVeiculo({
+    placaVeiculo: 'CAR-15 (QBZ-7710)',
+    motorista: 'Laércio Silveira',
+    transportadora: 'TransParecis',
+    cliente: 'Construtora Vale do Sepotuba',
+    tipoMaterial: 'Brita 1 Granítica',
+    tipoOperacao: 'expedicao_agregados',
+    taraKg: 13200
+  }, CONCRETO_EMPRESA_ID);
+
+  assert.equal(resEntrada.ok, true);
+  assert.equal(resEntrada.veiculoPatio.taraEntradaKg, 13200);
+  assert.equal(resEntrada.veiculoPatio.status, 'carregando_no_patio');
+
+  // 2. Concluir 2ª pesagem na saída (carregado com 32.400 kg brutos)
+  const resSaida = await concluirSegundaPesagemBalanca({
+    patioId: resEntrada.veiculoPatio.id,
+    placaVeiculo: 'CAR-15 (QBZ-7710)',
+    modeloVeiculo: 'Caminhão Caçamba Basculante 3 Eixos',
+    motorista: 'Laércio Silveira',
+    cliente: 'Construtora Vale do Sepotuba',
+    tipoMaterial: 'Brita 1 Granítica',
+    pesoBrutoKg: 32400,
+    taraKg: 13200,
+    densidadeKgM3: 1450,
+    precoUnitarioM3: 125.00
+  }, CONCRETO_EMPRESA_ID);
+
+  assert.equal(resSaida.ok, true);
+  assert.equal(resSaida.ticket.pesoLiquidoKg, 19200); // 32400 - 13200
+  assert.equal(resSaida.ticket.volumeCalculadoM3, 13.24); // 19200 / 1450
+  assert.equal(resSaida.ticket.valorTotal, 1655.00); // 13.24 * 125
+  assert.equal(resSaida.ticket.valorCfem, 24.82); // 1.5% CFEM mineração
+  assert.ok(resSaida.ticket.codigoAutenticidade.startsWith('BAL-TOLEDO-'));
+
+  // 3. Listar tickets e verificar presença
+  const resListar = await listarTicketsBalanca(CONCRETO_EMPRESA_ID, { termo: 'CAR-15' });
+  assert.equal(resListar.ok, true);
+  assert.ok(resListar.total >= 1);
 });

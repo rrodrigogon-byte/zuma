@@ -1311,7 +1311,7 @@ app.use('/api/admin/commerce', (req, res, next) => {
 });
 
 // Módulos de /api/admin que separam dados por empresa e podem ser usados por tenant.
-const TENANT_ADMIN_MODULES = new Set(['sorteios', 'sorteio', 'palatare', 'pizzaria', 'concreto', 'a2', 'bar', 'barbearia', 'commerce', 'commerce-session', 'usuarios', 'usuarios-diretorio', 'platform', 'fidelidade', 'login', 'auditoria', 'modificadores', 'combos', 'clube', 'unidades', 'empresas', 'plataforma', 'razao', 'suprimentos', 'fiscal', 'salao', 'varejo', 'supermercado', 'pdv-offline', 'minhas-permissoes', 'cupons', 'omnichannel', 'pdv', 'dino-captacao', 'clientes-360', 'relatorios', 'estoque', 'cardapio', 'fichas-tecnicas', 'erp', 'fechamento-diario', 'compras', 'whatsapp', 'whatsapp-gestao', 'ia', 'gamificacao', 'barber', 'barbeiro', 'crm', 'financeiro', 'automacoes', 'eventos', 'licenciamento', 'ia-advisor', 'inteligencia-vendas', 'vender-mais', 'tef', 'boletos', 'fiscal-avancado', 'sped', 'delivery', 'dimp-auditoria', 'supply-chain', 'reforma-tributaria', 'varejo-multicanal', 'oficina', 'agro', 'agropecuaria', 'cte-mdfe', 'implantacao']);
+const TENANT_ADMIN_MODULES = new Set(['sorteios', 'sorteio', 'palatare', 'pizzaria', 'concreto', 'balanca', 'balanca-rodoviaria', 'a2', 'bar', 'barbearia', 'commerce', 'commerce-session', 'usuarios', 'usuarios-diretorio', 'platform', 'fidelidade', 'login', 'auditoria', 'modificadores', 'combos', 'clube', 'unidades', 'empresas', 'plataforma', 'razao', 'suprimentos', 'fiscal', 'salao', 'varejo', 'supermercado', 'pdv-offline', 'minhas-permissoes', 'cupons', 'omnichannel', 'pdv', 'dino-captacao', 'clientes-360', 'relatorios', 'estoque', 'cardapio', 'fichas-tecnicas', 'erp', 'fechamento-diario', 'compras', 'whatsapp', 'whatsapp-gestao', 'ia', 'gamificacao', 'barber', 'barbeiro', 'crm', 'financeiro', 'automacoes', 'eventos', 'licenciamento', 'ia-advisor', 'inteligencia-vendas', 'vender-mais', 'tef', 'boletos', 'fiscal-avancado', 'sped', 'delivery', 'dimp-auditoria', 'supply-chain', 'reforma-tributaria', 'varejo-multicanal', 'oficina', 'agro', 'agropecuaria', 'cte-mdfe', 'implantacao']);
 
 // [kytto-clube] Kytto Clube & Academia (catraca, contrato digital, agenda, retenção, Wellhub/TotalPass).
 // Usa o pool do Commerce que já existe (não abre outro pool) e a mesma resolução de empresa e
@@ -2250,6 +2250,10 @@ app.use('/api/webhooks', createWhatsappAiWebhookRouter());
   // [kytto-concreto] Módulo de Concreto Usinado, Cargas, Central e Usina
   const concretoRouter = criarRotasConcreto();
   app.use('/api/admin/concreto', auth, requireStaff, concretoRouter);
+  app.use('/api/admin/balanca-rodoviaria', auth, requireStaff, (req, res, next) => {
+    req.url = '/balanca' + (req.url === '/' ? '' : req.url);
+    return concretoRouter(req, res, next);
+  });
 
   // [kytto-palatare] Módulo de Pizzaria Suite, Montador de Pizzas & CRM Gastronômico 360°
   app.get('/api/admin/palatare/dados', auth, requireStaff, async (req, res) => {

@@ -27,6 +27,11 @@ import {
   obterRomaneioCompleto,
   emitirTicketPesagemBalanca,
   gerarHtmlTicketBalanca,
+  obterStatusBalancaAutomacao,
+  executarComandoBalanca,
+  registrarEntradaVeiculo,
+  concluirSegundaPesagemBalanca,
+  listarTicketsBalanca,
   listarMedicoesObras,
   criarMedicaoObra,
   atualizarStatusMedicao
@@ -365,6 +370,62 @@ export function criarRotasConcreto() {
         return res.send(resultado.html);
       }
       return res.json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  // 25. Obter Status da Balança Rodoviária 80t, Automação, Semáforos e Cancelas
+  router.get('/balanca/status', async (req, res) => {
+    try {
+      const empresaId = resolverEmpresa(req);
+      const resultado = await obterStatusBalancaAutomacao(empresaId);
+      return res.json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  // 26. Executar Comando Remoto na Balança Rodoviária 80t (Cancelas, Semáforos, etc.)
+  router.post('/balanca/comando', async (req, res) => {
+    try {
+      const empresaId = resolverEmpresa(req);
+      const { comando, payload } = req.body;
+      const resultado = await executarComandoBalanca(comando, payload, empresaId);
+      return res.json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  // 27. Listar Todos os Tickets de Balança Rodoviária com Filtros
+  router.get('/balanca/tickets', async (req, res) => {
+    try {
+      const empresaId = resolverEmpresa(req);
+      const resultado = await listarTicketsBalanca(empresaId, req.query);
+      return res.json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  // 28. Registrar 1ª Pesagem (Entrada de Veículo no Pátio)
+  router.post('/balanca/entrada', async (req, res) => {
+    try {
+      const empresaId = resolverEmpresa(req);
+      const resultado = await registrarEntradaVeiculo(req.body, empresaId);
+      return res.status(201).json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  // 29. Concluir 2ª Pesagem (Saída e Emissão de Ticket com Líquido)
+  router.post('/balanca/saida', async (req, res) => {
+    try {
+      const empresaId = resolverEmpresa(req);
+      const resultado = await concluirSegundaPesagemBalanca(req.body, empresaId);
+      return res.status(201).json(resultado);
     } catch (e) {
       return res.status(400).json({ ok: false, error: e.message });
     }

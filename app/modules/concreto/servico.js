@@ -777,6 +777,9 @@ export function inicializarDatastoreConcreto() {
   if (data.concreto_medicoes_obras.length === 0) {
     data.concreto_medicoes_obras = MEDICOES_OBRAS_INICIAIS.map(m => ({ ...m, empresaId: CONCRETO_EMPRESA_ID }));
   }
+  if (data.concreto_tickets_balanca.length === 0) {
+    data.concreto_tickets_balanca = TICKETS_BALANCA_INICIAIS.map(t => ({ ...t, empresaId: CONCRETO_EMPRESA_ID }));
+  }
 
   save();
   return data;
@@ -2148,4 +2151,423 @@ export async function atualizarStatusMedicao(medicaoId, status) {
   medicao.status = status;
   save();
   return { ok: true, medicao };
+}
+
+// =====================================================================
+// 14. AUTOMAÇÃO DA BALANÇA RODOVIÁRIA 80T TOLEDO, SEMÁFOROS E OPERAÇÃO REMOTA
+// =====================================================================
+export const TICKETS_BALANCA_INICIAIS = [
+  {
+    id: 'tkt-9841',
+    numeroTicket: 'TKT-BAL-9841',
+    empresaId: CONCRETO_EMPRESA_ID,
+    dataHora: '12/11/2026 14:28',
+    dataHoraEntrada: '12/11/2026 14:10',
+    dataHoraSaida: '12/11/2026 14:28',
+    balanca: 'Balança Rodoviária 80t Toledo · Usina Serrano (Rodovia MT-358 km 08)',
+    modeloIndicador: 'Toledo Prix 9094 / Células de Carga Digitais 80.000 kg',
+    operador: 'Paulo Cezar (Matrícula 042 - IPEM-MT)',
+    cliente: 'Construtora MT Horizon Ltda',
+    cnpjCpfCliente: '18.492.301/0001-92',
+    obraDestino: 'Edifício Residencial Ilhas do Lago · Tangará da Serra/MT',
+    veiculoPlaca: 'BT-01 (RRA-4E80)',
+    modeloVeiculo: 'Caminhão Betoneira VW Constellation 26.280 8x4 (8m³)',
+    motorista: 'Marcos Silveira',
+    cpfMotorista: '821.492.011-84',
+    transportadora: 'Frota Própria Serrano Concreto',
+    tipoOperacao: 'Expedição de Concreto Usinado',
+    tipoMaterial: 'Concreto Usinado Estrutural FCK 30 MPa (Slump 12±2cm)',
+    pesoBrutoKg: 33480,
+    taraKg: 14280,
+    pesoLiquidoKg: 19200,
+    densidadeKgM3: 2400,
+    volumeCalculadoM3: 8.0,
+    precoUnitarioM3: 420.00,
+    valorTotal: 3360.00,
+    valorCfem: 0,
+    aliquotaCfemPercent: 0,
+    status: 'concluido',
+    statusSemaforo: 'verde',
+    cancelaLiberada: true,
+    posicionamentoPlataforma: '100% Ok (Sensores Dianteiro e Traseiro Desobstruídos)',
+    modoOperacao: 'remoto',
+    codigoAutenticidade: 'BAL-TOLEDO-A79B3F40E2C18901'
+  },
+  {
+    id: 'tkt-9840',
+    numeroTicket: 'TKT-BAL-9840',
+    empresaId: CONCRETO_EMPRESA_ID,
+    dataHora: '12/11/2026 13:52',
+    dataHoraEntrada: '12/11/2026 13:35',
+    dataHoraSaida: '12/11/2026 13:52',
+    balanca: 'Balança Rodoviária 80t Toledo · Usina Serrano (Rodovia MT-358 km 08)',
+    modeloIndicador: 'Toledo Prix 9094 / Células de Carga Digitais 80.000 kg',
+    operador: 'Operação Remota CCO (Guarita Automatizada)',
+    cliente: 'Pavimentadora & Construtora Guimarães',
+    cnpjCpfCliente: '04.192.839/0001-44',
+    obraDestino: 'Obras de Duplicação MT-358 · Trecho Tangará-Nova Olímpia',
+    veiculoPlaca: 'CAR-04 (QBO-4892)',
+    modeloVeiculo: 'Cavalo Scania R450 + Caçamba Basculante Rossetti 3 Eixos',
+    motorista: 'Valdir Silvestre',
+    cpfMotorista: '492.381.902-15',
+    transportadora: 'TransGrãos & Minérios Tangará',
+    tipoOperacao: 'Expedição de Agregados / Mineração',
+    tipoMaterial: 'Areia Média Lavada de Rio (Jazida Sepotuba)',
+    pesoBrutoKg: 46250,
+    taraKg: 15450,
+    pesoLiquidoKg: 30800,
+    densidadeKgM3: 1500,
+    volumeCalculadoM3: 20.53,
+    precoUnitarioM3: 65.00,
+    valorTotal: 1334.45,
+    valorCfem: 20.02,
+    aliquotaCfemPercent: 1.5,
+    status: 'concluido',
+    statusSemaforo: 'verde',
+    cancelaLiberada: true,
+    posicionamentoPlataforma: '100% Ok (Sensores Dianteiro e Traseiro Desobstruídos)',
+    modoOperacao: 'remoto',
+    codigoAutenticidade: 'BAL-TOLEDO-B83C1A72F9D04128'
+  },
+  {
+    id: 'tkt-9839',
+    numeroTicket: 'TKT-BAL-9839',
+    empresaId: CONCRETO_EMPRESA_ID,
+    dataHora: '12/11/2026 11:15',
+    dataHoraEntrada: '12/11/2026 10:48',
+    dataHoraSaida: '12/11/2026 11:15',
+    balanca: 'Balança Rodoviária 80t Toledo · Usina Serrano (Rodovia MT-358 km 08)',
+    modeloIndicador: 'Toledo Prix 9094 / Células de Carga Digitais 80.000 kg',
+    operador: 'Paulo Cezar (Matrícula 042 - IPEM-MT)',
+    cliente: 'Serrano Concreto Usinado Ltda (Recepção de Insumo)',
+    cnpjCpfCliente: '03.849.201/0001-10',
+    obraDestino: 'Silo 01 de Cimento CP-II F 32 (Usina Tangará)',
+    veiculoPlaca: 'SIL-02 (KAJ-1204)',
+    modeloVeiculo: 'Carreta Silo Rodoviário Cimento a Granel 4 Eixos',
+    motorista: 'Donizete Aparecido',
+    cpfMotorista: '601.294.182-33',
+    transportadora: 'Transportadora Votoran / Cimento MT',
+    tipoOperacao: 'Recepção de Matéria-Prima (Cimento CP-II)',
+    tipoMaterial: 'Cimento CP-II F 32 a Granel',
+    pesoBrutoKg: 52100,
+    taraKg: 15100,
+    pesoLiquidoKg: 37000,
+    densidadeKgM3: 1400,
+    volumeCalculadoM3: 26.43,
+    precoUnitarioM3: 620.00,
+    valorTotal: 22940.00,
+    valorCfem: 0,
+    aliquotaCfemPercent: 0,
+    status: 'concluido',
+    statusSemaforo: 'verde',
+    cancelaLiberada: true,
+    posicionamentoPlataforma: '100% Ok',
+    modoOperacao: 'remoto',
+    codigoAutenticidade: 'BAL-TOLEDO-94CF2810AA12B763'
+  }
+];
+
+let estadoHardwareBalanca = {
+  semaforoEntrada: 'verde',
+  cancelaEntrada: 'fechada',
+  semaforoSaida: 'vermelho',
+  cancelaSaida: 'fechada',
+  sensorBarreiraEntrada: false,
+  sensorBarreiraSaida: false,
+  sensorPresencaPlataforma: false,
+  posicionamentoCorreto: true,
+  pesoAtualKg: 0,
+  estabilidade: 'estavel',
+  taraAtualKg: 0,
+  pesoLiquidoAtualKg: 0,
+  zeroRastreado: true,
+  capacidadeMaximaKg: 80000,
+  divisaoKg: 10,
+  cameraLprAtiva: true,
+  placaDetectada: '',
+  rfidDetectado: '',
+  confiancaLpr: 0.98,
+  modoOperacao: 'remoto',
+  interfoneAtivo: false,
+  mensagemInterfone: 'Aguardando aproximação de veículo...',
+  veiculoAtual: null,
+  veiculosNoPatio: [
+    {
+      id: 'patio-01',
+      ticketEntradaId: 'tkt-ent-101',
+      placa: 'CAR-08 (JZZ-4190)',
+      motorista: 'Ademir Fagundes',
+      transportadora: 'TransGrãos Tangará',
+      tipoVeiculo: 'Caçamba Basculante Toco 2 Eixos',
+      cliente: 'Pavimentadora Parecis',
+      produto: 'Brita 1 Granítica',
+      dataHoraEntrada: '12/11/2026 16:45',
+      taraEntradaKg: 11200,
+      status: 'carregando_no_patio'
+    },
+    {
+      id: 'patio-02',
+      ticketEntradaId: 'tkt-ent-102',
+      placa: 'ROD-03 (OBK-8211)',
+      motorista: 'Sebastião Moreira',
+      transportadora: 'Frota Própria Serrano',
+      tipoVeiculo: 'Rodotrem 9 Eixos Basculante',
+      cliente: 'Usina Serrano (Transferência)',
+      produto: 'Areia Grossa de Rio',
+      dataHoraEntrada: '12/11/2026 17:10',
+      taraEntradaKg: 24500,
+      status: 'carregando_no_patio'
+    }
+  ]
+};
+
+export async function obterStatusBalancaAutomacao(empresaId = CONCRETO_EMPRESA_ID) {
+  const data = inicializarDatastoreConcreto();
+  const tickets = (data.concreto_tickets_balanca || []).filter(t => !t.empresaId || t.empresaId === empresaId);
+  const totalKg = tickets.reduce((acc, t) => acc + (Number(t.pesoLiquidoKg) || 0), 0);
+  const totalTon = +(totalKg / 1000).toFixed(2);
+  const totalValor = tickets.reduce((acc, t) => acc + (Number(t.valorTotal) || 0), 0);
+
+  return {
+    ok: true,
+    hardware: { ...estadoHardwareBalanca },
+    estatisticasHoje: {
+      totalVeiculosHoje: tickets.length,
+      totalToneladasHoje: totalTon,
+      tempoMedioPesagemSegundos: 38,
+      veiculosNoPatioQtd: estadoHardwareBalanca.veiculosNoPatio.length,
+      faturamentoPesagensHoje: totalValor
+    },
+    veiculoAtual: estadoHardwareBalanca.veiculoAtual,
+    veiculosNoPatio: estadoHardwareBalanca.veiculosNoPatio,
+    ultimosTickets: tickets.slice(0, 15)
+  };
+}
+
+export async function executarComandoBalanca(comando, payload = {}, empresaId = CONCRETO_EMPRESA_ID) {
+  const data = inicializarDatastoreConcreto();
+
+  switch (comando) {
+    case 'abrir_cancela_entrada':
+      estadoHardwareBalanca.cancelaEntrada = 'aberta';
+      estadoHardwareBalanca.semaforoEntrada = 'verde';
+      break;
+    case 'fechar_cancela_entrada':
+      estadoHardwareBalanca.cancelaEntrada = 'fechada';
+      break;
+    case 'abrir_cancela_saida':
+      estadoHardwareBalanca.cancelaSaida = 'aberta';
+      estadoHardwareBalanca.semaforoSaida = 'verde';
+      break;
+    case 'fechar_cancela_saida':
+      estadoHardwareBalanca.cancelaSaida = 'fechada';
+      break;
+    case 'alternar_semaforo_entrada':
+      estadoHardwareBalanca.semaforoEntrada = estadoHardwareBalanca.semaforoEntrada === 'verde' ? 'vermelho' : 'verde';
+      break;
+    case 'alternar_semaforo_saida':
+      estadoHardwareBalanca.semaforoSaida = estadoHardwareBalanca.semaforoSaida === 'verde' ? 'vermelho' : 'verde';
+      break;
+    case 'zerar_balanca':
+      estadoHardwareBalanca.pesoAtualKg = 0;
+      estadoHardwareBalanca.taraAtualKg = 0;
+      estadoHardwareBalanca.pesoLiquidoAtualKg = 0;
+      estadoHardwareBalanca.zeroRastreado = true;
+      estadoHardwareBalanca.estabilidade = 'estavel';
+      break;
+    case 'tara_manual':
+      estadoHardwareBalanca.taraAtualKg = Number(payload.taraKg) || 0;
+      estadoHardwareBalanca.pesoLiquidoAtualKg = Math.max(0, estadoHardwareBalanca.pesoAtualKg - estadoHardwareBalanca.taraAtualKg);
+      break;
+    case 'simular_veiculo': {
+      const peso = Number(payload.pesoBrutoKg) || 33480;
+      const tara = Number(payload.taraKg) || 14280;
+      const foraPosicao = Boolean(payload.foraPosicao);
+
+      estadoHardwareBalanca.sensorPresencaPlataforma = true;
+      estadoHardwareBalanca.sensorBarreiraEntrada = foraPosicao;
+      estadoHardwareBalanca.sensorBarreiraSaida = false;
+      estadoHardwareBalanca.posicionamentoCorreto = !foraPosicao;
+      estadoHardwareBalanca.semaforoEntrada = 'vermelho';
+      estadoHardwareBalanca.cancelaEntrada = 'fechada';
+      estadoHardwareBalanca.semaforoSaida = 'vermelho';
+      estadoHardwareBalanca.cancelaSaida = 'fechada';
+
+      estadoHardwareBalanca.pesoAtualKg = peso;
+      estadoHardwareBalanca.taraAtualKg = tara;
+      estadoHardwareBalanca.pesoLiquidoAtualKg = Math.max(0, peso - tara);
+      estadoHardwareBalanca.zeroRastreado = false;
+      estadoHardwareBalanca.estabilidade = 'estavel';
+
+      estadoHardwareBalanca.placaDetectada = payload.placa || 'BT-01 (RRA-4E80)';
+      estadoHardwareBalanca.rfidDetectado = payload.rfid || 'TAG-MT-0428';
+      estadoHardwareBalanca.mensagemInterfone = foraPosicao 
+        ? 'Atenção motorista: reposicione o veículo! Eixo dianteiro fora da plataforma.'
+        : 'Veículo posicionado. Aguardando estabilização da pesagem...';
+
+      estadoHardwareBalanca.veiculoAtual = {
+        placa: estadoHardwareBalanca.placaDetectada,
+        rfid: estadoHardwareBalanca.rfidDetectado,
+        modelo: payload.modelo || 'Caminhão Betoneira VW Constellation 26.280',
+        motorista: payload.motorista || 'Marcos Silveira',
+        cpfMotorista: payload.cpfMotorista || '821.492.011-84',
+        transportadora: payload.transportadora || 'Frota Própria Serrano Concreto',
+        cliente: payload.cliente || 'Construtora MT Horizon',
+        produto: payload.produto || 'Concreto Usinado Estrutural FCK 30 MPa',
+        pesoBrutoKg: peso,
+        taraKg: tara,
+        pesoLiquidoKg: Math.max(0, peso - tara),
+        tipoOperacao: payload.tipoOperacao || 'expedicao_concreto',
+        posicionamentoCorreto: !foraPosicao
+      };
+      break;
+    }
+    case 'remover_veiculo':
+      estadoHardwareBalanca.sensorPresencaPlataforma = false;
+      estadoHardwareBalanca.sensorBarreiraEntrada = false;
+      estadoHardwareBalanca.sensorBarreiraSaida = false;
+      estadoHardwareBalanca.posicionamentoCorreto = true;
+      estadoHardwareBalanca.pesoAtualKg = 0;
+      estadoHardwareBalanca.taraAtualKg = 0;
+      estadoHardwareBalanca.pesoLiquidoAtualKg = 0;
+      estadoHardwareBalanca.zeroRastreado = true;
+      estadoHardwareBalanca.estabilidade = 'estavel';
+      estadoHardwareBalanca.placaDetectada = '';
+      estadoHardwareBalanca.rfidDetectado = '';
+      estadoHardwareBalanca.veiculoAtual = null;
+      estadoHardwareBalanca.cancelaSaida = 'aberta';
+      estadoHardwareBalanca.semaforoSaida = 'verde';
+      estadoHardwareBalanca.mensagemInterfone = 'Pesagem concluída! Pista liberada. Boa viagem!';
+      break;
+    case 'interfone_voz':
+      estadoHardwareBalanca.interfoneAtivo = true;
+      estadoHardwareBalanca.mensagemInterfone = payload.mensagem || 'Operação Remota CCO: Por favor desligue o motor do veículo.';
+      break;
+    case 'modo_operacao':
+      if (['remoto', 'local', 'autoatendimento'].includes(payload.modo)) {
+        estadoHardwareBalanca.modoOperacao = payload.modo;
+      }
+      break;
+    default:
+      throw new Error(`Comando de automação desconhecido: ${comando}`);
+  }
+
+  return { ok: true, comando, hardware: { ...estadoHardwareBalanca } };
+}
+
+export async function registrarEntradaVeiculo(dados, empresaId = CONCRETO_EMPRESA_ID) {
+  const data = inicializarDatastoreConcreto();
+  const id = `patio-${Date.now()}`;
+  const dataAtual = new Date().toLocaleDateString('pt-BR', { timeZone: 'America/Cuiaba' });
+  const horaAtual = new Date().toLocaleTimeString('pt-BR', { timeZone: 'America/Cuiaba', hour: '2-digit', minute: '2-digit' });
+
+  const novoItemPatio = {
+    id,
+    ticketEntradaId: `tkt-ent-${Date.now().toString().slice(-4)}`,
+    placa: dados.placaVeiculo || 'CAR-09 (MTZ-9910)',
+    modeloVeiculo: dados.modeloVeiculo || 'Caminhão Caçamba Basculante',
+    motorista: dados.motorista || 'Motorista Terceiro',
+    cpfMotorista: dados.cpfMotorista || '000.000.000-00',
+    transportadora: dados.transportadora || 'Transportadora Terceirizada',
+    cliente: dados.cliente || 'Construtora / Terceiro',
+    cnpjCpfCliente: dados.cnpjCpfCliente || '00.000.000/0001-00',
+    obraDestino: dados.obraDestino || 'Obras em Tangará da Serra/MT',
+    produto: dados.tipoMaterial || 'Areia Média Lavada',
+    tipoOperacao: dados.tipoOperacao || 'expedicao_agregados',
+    dataHoraEntrada: `${dataAtual} ${horaAtual}`,
+    taraEntradaKg: Number(dados.taraKg) || Number(dados.pesoAtualKg) || 12000,
+    status: 'carregando_no_patio'
+  };
+
+  estadoHardwareBalanca.veiculosNoPatio.unshift(novoItemPatio);
+  estadoHardwareBalanca.cancelaEntrada = 'aberta';
+  estadoHardwareBalanca.semaforoEntrada = 'verde';
+  estadoHardwareBalanca.mensagemInterfone = `Entrada registrada para ${novoItemPatio.placa}. Siga até o pátio de carregamento!`;
+
+  return { ok: true, veiculoPatio: novoItemPatio };
+}
+
+export async function concluirSegundaPesagemBalanca(dados, empresaId = CONCRETO_EMPRESA_ID) {
+  const data = inicializarDatastoreConcreto();
+  const seq = (data.concreto_tickets_balanca?.length || 0) + 9842;
+  const dataAtual = new Date().toLocaleDateString('pt-BR', { timeZone: 'America/Cuiaba' });
+  const horaAtual = new Date().toLocaleTimeString('pt-BR', { timeZone: 'America/Cuiaba', hour: '2-digit', minute: '2-digit' });
+
+  const pesoBruto = Number(dados.pesoBrutoKg) || Number(estadoHardwareBalanca.pesoAtualKg) || 35000;
+  const tara = Number(dados.taraKg) || Number(estadoHardwareBalanca.taraAtualKg) || 12000;
+  const pesoLiquido = Math.max(0, pesoBruto - tara);
+  const densidade = Number(dados.densidadeKgM3) || (dados.tipoMaterial?.toLowerCase().includes('brita') ? 1450 : dados.tipoMaterial?.toLowerCase().includes('concreto') ? 2400 : 1500);
+  const volumeM3 = +(pesoLiquido / densidade).toFixed(2);
+  const precoM3 = Number(dados.precoUnitarioM3) || (dados.tipoMaterial?.toLowerCase().includes('concreto') ? 420.00 : 65.00);
+  const valorTotal = +(volumeM3 * precoM3).toFixed(2);
+  const eMineral = dados.tipoMaterial?.toLowerCase().includes('areia') || dados.tipoMaterial?.toLowerCase().includes('brita');
+  const valorCfem = eMineral ? +(valorTotal * 0.015).toFixed(2) : 0;
+
+  const hashSha256 = crypto.createHash('sha256').update(`TKT-${seq}|${dados.placaVeiculo}|${pesoLiquido}|${new Date().toISOString()}`).digest('hex');
+
+  const novoTicket = {
+    id: `tkt-${seq}`,
+    numeroTicket: `TKT-BAL-${seq}`,
+    empresaId,
+    dataHora: `${dataAtual} ${horaAtual}`,
+    dataHoraEntrada: dados.dataHoraEntrada || `${dataAtual} 13:00`,
+    dataHoraSaida: `${dataAtual} ${horaAtual}`,
+    balanca: 'Balança Rodoviária 80t Toledo · Usina Serrano (Rodovia MT-358 km 08)',
+    modeloIndicador: 'Toledo Prix 9094 / Células de Carga Digitais 80.000 kg',
+    operador: dados.operador || 'Operação Remota CCO (Guarita Automatizada)',
+    cliente: dados.cliente || 'Construtora / Terceiro',
+    cnpjCpfCliente: dados.cnpjCpfCliente || '00.000.000/0001-00',
+    obraDestino: dados.obraDestino || 'Obras em Tangará da Serra/MT',
+    veiculoPlaca: dados.placaVeiculo || 'CAR-08 (JZZ-4190)',
+    modeloVeiculo: dados.modeloVeiculo || 'Caminhão Caçamba Basculante 3 Eixos',
+    motorista: dados.motorista || 'Ademir Fagundes',
+    cpfMotorista: dados.cpfMotorista || '521.849.012-33',
+    transportadora: dados.transportadora || 'TransGrãos Tangará',
+    tipoOperacao: dados.tipoOperacao || 'Expedição de Agregados / Mineração',
+    tipoMaterial: dados.tipoMaterial || 'Brita 1 Granítica',
+    pesoBrutoKg: pesoBruto,
+    taraKg: tara,
+    pesoLiquidoKg: pesoLiquido,
+    densidadeKgM3: densidade,
+    volumeCalculadoM3: volumeM3,
+    precoUnitarioM3: precoM3,
+    valorTotal,
+    valorCfem,
+    aliquotaCfemPercent: eMineral ? 1.5 : 0,
+    assinaturaMotoristaBase64: dados.assinaturaMotoristaBase64 || null,
+    status: 'concluido',
+    statusSemaforo: 'verde',
+    cancelaLiberada: true,
+    posicionamentoPlataforma: '100% Ok (Sensores Dianteiro e Traseiro Desobstruídos)',
+    modoOperacao: estadoHardwareBalanca.modoOperacao,
+    codigoAutenticidade: `BAL-TOLEDO-${hashSha256.slice(0, 16).toUpperCase()}`
+  };
+
+  data.concreto_tickets_balanca.unshift(novoTicket);
+  if (dados.patioId) {
+    estadoHardwareBalanca.veiculosNoPatio = estadoHardwareBalanca.veiculosNoPatio.filter(p => p.id !== dados.patioId);
+  }
+  save();
+
+  estadoHardwareBalanca.cancelaSaida = 'aberta';
+  estadoHardwareBalanca.semaforoSaida = 'verde';
+  estadoHardwareBalanca.mensagemInterfone = `Pesagem final concluída (${novoTicket.pesoLiquidoKg.toLocaleString('pt-BR')} kg líquidos). Cancela liberada!`;
+
+  return { ok: true, ticket: novoTicket };
+}
+
+export async function listarTicketsBalanca(empresaId = CONCRETO_EMPRESA_ID, filtros = {}) {
+  const data = inicializarDatastoreConcreto();
+  let lista = (data.concreto_tickets_balanca || []).filter(t => !t.empresaId || t.empresaId === empresaId);
+  if (filtros.termo) {
+    const t = filtros.termo.toLowerCase();
+    lista = lista.filter(x => 
+      x.numeroTicket?.toLowerCase().includes(t) ||
+      x.veiculoPlaca?.toLowerCase().includes(t) ||
+      x.motorista?.toLowerCase().includes(t) ||
+      x.cliente?.toLowerCase().includes(t) ||
+      x.tipoMaterial?.toLowerCase().includes(t)
+    );
+  }
+  return { ok: true, total: lista.length, tickets: lista };
 }
