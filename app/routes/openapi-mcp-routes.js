@@ -10,6 +10,19 @@
 
 import { Router } from 'express';
 import { query as consultar } from '../db-pg.js';
+import {
+  PALATARE_CARDAPIO_INICIAL,
+  PALATARE_CONFIG_MONTADOR,
+  PALATARE_KDS_FILA,
+  PALATARE_RODIZIO_CONFIG,
+  PALATARE_CLIENTES_CRM,
+  PALATARE_DELIVERY_ZONAS,
+} from '../palatare-pizzaria-seed.js';
+import {
+  CONCRETO_CARGAS_INICIAIS,
+  CONCRETO_CATALOGO_INICIAL,
+} from '../concreto-usina-seed.js';
+import { obterConsolidacaoGrupo } from '../modules/empresas/consolidacao.js';
 
 export const OPENAPI_31_SPEC = {
   openapi: '3.1.0',
@@ -167,6 +180,116 @@ export const MCP_READONLY_TOOLS = [
     inputSchema: {
       type: 'object',
       properties: {},
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'palatare_cardapio',
+    description: 'Consulta o cardápio completo da Palatare Pizzaria (pizzas tradicionais, especiais, calzones, bordas, massas, bebidas).',
+    readOnlyHint: true,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        categoria: { type: 'string', description: 'Categoria opcional para filtro (ex: pizza, calzone, massa, sobremesa, bebida)' },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'palatare_montador',
+    description: 'Calcula e valida a composição de uma pizza fracionada (1/1, 1/2, 1/3, 1/4) aplicando regra da maior fração, bordas e adicionais.',
+    readOnlyHint: true,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        tamanho: { type: 'string', description: 'brotinho, media, grande ou familia' },
+        sabores: { type: 'array', items: { type: 'string' }, description: 'Nomes ou IDs dos sabores' },
+        borda: { type: 'string', description: 'Nome da borda recheada opcional' },
+        massa: { type: 'string', description: 'Tipo de massa opcional' },
+      },
+      required: ['tamanho', 'sabores'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'palatare_kds',
+    description: 'Consulta o estado em tempo real da linha de produção do forno a lenha a 400°C (bancada, forno, corte e rota).',
+    readOnlyHint: true,
+    inputSchema: {
+      type: 'object',
+      properties: {},
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'palatare_rodizio',
+    description: 'Consulta as mesas ativas de rodízio no salão, semáforo atual (verde/amarelo/vermelho), fatias servidas e pré-conta.',
+    readOnlyHint: true,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        mesa: { type: 'string', description: 'Número da mesa opcional (ex: "2", "5")' },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'palatare_crm_cliente',
+    description: 'Retorna o DNA gastronômico de clientes de Tangará da Serra (sabores favoritos, borda preferida, restrições e classificação RFV/LTV).',
+    readOnlyHint: true,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        busca: { type: 'string', description: 'Nome, telefone ou sabor procurado' },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'palatare_delivery',
+    description: 'Consulta zonas de entrega, taxas de motoboy e tempo estimado para bairros de Tangará da Serra/MT.',
+    readOnlyHint: true,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        bairro: { type: 'string', description: 'Nome do bairro em Tangará da Serra' },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'concreto_cargas',
+    description: 'Consulta a programação de cargas de concreto usinado, status das betoneiras, bombas lança e traços FCK.',
+    readOnlyHint: true,
+    inputSchema: {
+      type: 'object',
+      properties: {},
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'concreto_dosagem',
+    description: 'Calculadora de dosagem de traços de concreto por m³ (cimento, areia, brita, água/cimento, slump NBR 7212).',
+    readOnlyHint: true,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        fck: { type: 'integer', description: 'FCK desejado em MPa (20, 25, 30, 35 ou 40)' },
+        volumeM3: { type: 'number', description: 'Volume total em metros cúbicos (m³)' },
+      },
+      required: ['fck', 'volumeM3'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'holding_consolidacao',
+    description: 'Relatório executivo consolidado da holding Grupo Serrano & Palatare (concreto usinado + pizzaria gourmet).',
+    readOnlyHint: true,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        periodo: { type: 'string', description: 'mes_atual ou ano_atual' },
+      },
       additionalProperties: false,
     },
   },
@@ -396,6 +519,209 @@ export function createOpenApiAndMcpRouter({ auth, obterEmpresaIdToken, barbearia
         contasAReceberProximos7Dias: receber7Dias,
         contasAPagarProximos7Dias: pagar7Dias,
         titulosVencendo7Dias: titulosVencendo,
+      };
+    }
+
+    // ==========================================
+    // EXTENSÃO GASTRONÔMICA: PALATARE PIZZARIA
+    // ==========================================
+    if (name === 'palatare_cardapio') {
+      const cat = String(args.categoria || '').toLowerCase().trim();
+      let itens = PALATARE_CARDAPIO_INICIAL || [];
+      if (cat) {
+        itens = itens.filter(i => String(i.categoria || '').toLowerCase().includes(cat) || String(i.nome || '').toLowerCase().includes(cat));
+      }
+      return {
+        empresa: 'Palatare Pizzaria & Restaurante',
+        cidade: 'Tangará da Serra/MT',
+        totalItens: itens.length,
+        categoriaFiltro: cat || 'todas',
+        itens: itens.map(i => ({
+          id: i.id,
+          nome: i.nome,
+          categoria: i.categoria,
+          preco: i.preco,
+          descricao: i.descricao,
+          destaque: i.destaque || false
+        }))
+      };
+    }
+
+    if (name === 'palatare_montador') {
+      const tamanhoKey = String(args.tamanho || 'grande').toLowerCase();
+      const tamanhoObj = (PALATARE_CONFIG_MONTADOR?.tamanhos || []).find(t => t.id === tamanhoKey) || PALATARE_CONFIG_MONTADOR?.tamanhos?.[2];
+      const saboresInput = Array.isArray(args.sabores) ? args.sabores : [args.sabores || 'Pizza Filé Mignon ao Gorgonzola'];
+      
+      const cardapio = PALATARE_CARDAPIO_INICIAL || [];
+      const saboresResolvidos = saboresInput.map(sInput => {
+        const item = cardapio.find(c => c.id === sInput || c.nome.toLowerCase().includes(String(sInput).toLowerCase())) || cardapio[0];
+        return item;
+      });
+
+      // Regra da Maior Fração
+      const precos = saboresResolvidos.map(s => Number(s.preco || 0));
+      const maiorPreco = Math.max(...precos, Number(tamanhoObj?.precoBase || 76));
+
+      // Borda e Massa
+      let valorBorda = 0;
+      let bordaNome = args.borda || 'Tradicional';
+      if (args.borda) {
+        const bObj = (PALATARE_CONFIG_MONTADOR?.bordas || []).find(b => b.nome.toLowerCase().includes(String(args.borda).toLowerCase()));
+        if (bObj) {
+          valorBorda = Number(bObj.preco || 0);
+          bordaNome = bObj.nome;
+        }
+      }
+
+      const valorTotal = maiorPreco + valorBorda;
+
+      return {
+        tamanho: tamanhoObj?.nome,
+        fatias: tamanhoObj?.fatias,
+        diametro: tamanhoObj?.diametro,
+        fracoes: saboresResolvidos.map((s, idx) => ({
+          fracao: `1/${saboresResolvidos.length}`,
+          sabor: s.nome,
+          precoCatalogo: s.preco
+        })),
+        regraPrecificacao: 'Cobrança pela Maior Fração',
+        precoBaseSabor: maiorPreco,
+        borda: { nome: bordaNome, adicional: valorBorda },
+        massa: args.massa || 'Napolitana Fermentação Natural 48h (Levain)',
+        valorTotalPizza: Number(valorTotal.toFixed(2))
+      };
+    }
+
+    if (name === 'palatare_kds') {
+      return {
+        empresa: 'Palatare Pizzaria & Restaurante',
+        fornoTemperaturaAtual: '410°C (Forno a Lenha de Reflorestamento)',
+        tempoMedioCoccao: '4 minutos',
+        filaAoVivo: PALATARE_KDS_FILA || [],
+        resumoPracas: {
+          bancadaMontagem: (PALATARE_KDS_FILA || []).filter(p => p.status === 'bancada').length,
+          fornoLenha: (PALATARE_KDS_FILA || []).filter(p => p.status === 'forno').length,
+          corteFinalizacao: (PALATARE_KDS_FILA || []).filter(p => p.status === 'corte').length,
+          emRota: (PALATARE_KDS_FILA || []).filter(p => p.status === 'rota').length,
+        }
+      };
+    }
+
+    if (name === 'palatare_rodizio') {
+      const mesas = PALATARE_RODIZIO_CONFIG?.mesasEmRodizioHoje || [];
+      if (args.mesa) {
+        const m = mesas.find(x => String(x.mesa) === String(args.mesa));
+        return m || { aviso: `Mesa ${args.mesa} não encontrada no rodízio.` };
+      }
+      return {
+        empresa: 'Palatare Pizzaria & Restaurante',
+        diasOficiais: PALATARE_RODIZIO_CONFIG?.diasOficiais,
+        precoAdulto: PALATARE_RODIZIO_CONFIG?.precoAdulto,
+        precoCrianca: PALATARE_RODIZIO_CONFIG?.precoCrianca,
+        mesasEmRodizio: mesas,
+        totalAdultosSalão: mesas.reduce((acc, m) => acc + (m.adultos || 0), 0),
+        totalFatiasServidas: mesas.reduce((acc, m) => acc + (m.fatiasServidas || 0), 0),
+      };
+    }
+
+    if (name === 'palatare_crm_cliente') {
+      const busca = String(args.busca || '').toLowerCase().trim();
+      let clientes = PALATARE_CLIENTES_CRM || [];
+      if (busca) {
+        clientes = clientes.filter(c => 
+          c.nome.toLowerCase().includes(busca) || 
+          c.telefone.includes(busca) || 
+          c.bairro.toLowerCase().includes(busca) ||
+          (c.saboresFavoritos || []).some(s => s.toLowerCase().includes(busca))
+        );
+      }
+      return {
+        totalEncontrados: clientes.length,
+        clientes: clientes.map(c => ({
+          id: c.id,
+          nome: c.nome,
+          profissao: c.profissao,
+          bairro: c.bairro,
+          canal: c.canal,
+          classificacaoRfv: c.classificacaoRfv,
+          aniversario: c.aniversario,
+          saboresFavoritos: c.saboresFavoritos,
+          bordaFavorita: c.bordaFavorita,
+          massaFavorita: c.massaFavorita,
+          restricoes: c.restricoes,
+          totalPedidos: c.totalPedidos,
+          ltvTotal: c.ltvTotal,
+          ticketMedio: c.ticketMedio,
+          diasDesdeUltimoPedido: c.diasDesdeUltimoPedido
+        }))
+      };
+    }
+
+    if (name === 'palatare_delivery') {
+      const zonas = PALATARE_DELIVERY_ZONAS || [];
+      const bairro = String(args.bairro || '').toLowerCase().trim();
+      if (bairro) {
+        const z = zonas.find(x => x.bairro.toLowerCase().includes(bairro));
+        return z || { aviso: `Bairro '${args.bairro}' sob consulta direta da central (Tangará da Serra).`, taxaEstimada: 12.00, tempoEstimado: '30-40 min' };
+      }
+      return {
+        cidade: 'Tangará da Serra/MT',
+        totalZonas: zonas.length,
+        zonas
+      };
+    }
+
+    // ==========================================
+    // EXTENSÃO INDUSTRIAL: SERRANO CONCRETO
+    // ==========================================
+    if (name === 'concreto_cargas') {
+      return {
+        empresa: 'Serrano Concreto Usinado',
+        usinaCapacidade: '80 m³/h (Central Dosadora Automatizada)',
+        cargasProgramadasHoje: CONCRETO_CARGAS_INICIAIS || [],
+        catalogoTracos: CONCRETO_CATALOGO_INICIAL || []
+      };
+    }
+
+    if (name === 'concreto_dosagem') {
+      const fck = Number(args.fck || 25);
+      const volumeM3 = Number(args.volumeM3 || 8);
+      // Traço médio NBR 7212 (Cimento, Areia, Brita 1, Água)
+      const tracosFck = {
+        20: { cimentoKgM3: 300, areiaKgM3: 720, britaKgM3: 1050, aguaLitrosM3: 180, ac: 0.60 },
+        25: { cimentoKgM3: 350, areiaKgM3: 680, britaKgM3: 1040, aguaLitrosM3: 175, ac: 0.50 },
+        30: { cimentoKgM3: 400, areiaKgM3: 650, britaKgM3: 1020, aguaLitrosM3: 170, ac: 0.42 },
+        35: { cimentoKgM3: 440, areiaKgM3: 620, britaKgM3: 1010, aguaLitrosM3: 165, ac: 0.38 },
+        40: { cimentoKgM3: 480, areiaKgM3: 590, britaKgM3: 1000, aguaLitrosM3: 160, ac: 0.33 }
+      };
+      const tra = tracosFck[fck] || tracosFck[25];
+      return {
+        fck: `${fck} MPa`,
+        volumeTotal: `${volumeM3} m³`,
+        normaTecnica: 'ABNT NBR 7212 / NBR 8953 / NBR 5738',
+        dosagemPorM3: tra,
+        materiaPrimaTotalCarga: {
+          cimentoKg: Math.round(tra.cimentoKgM3 * volumeM3),
+          areiaMediaKg: Math.round(tra.areiaKgM3 * volumeM3),
+          brita1Kg: Math.round(tra.britaKgM3 * volumeM3),
+          aguaLitros: Math.round(tra.aguaLitrosM3 * volumeM3),
+          aditivoPlastificanteLitros: Number((volumeM3 * 2.5).toFixed(1))
+        },
+        betoneirasRecomendadas: Math.ceil(volumeM3 / 8)
+      };
+    }
+
+    // ==========================================
+    // EXTENSÃO HOLDING: GRUPO SERRANO & PALATARE
+    // ==========================================
+    if (name === 'holding_consolidacao') {
+      const periodo = args.periodo || 'mes_atual';
+      const consolidado = await obterConsolidacaoGrupo({}, { grupoId: 'grp-serrano-palatare-03', periodo });
+      return {
+        holding: 'Serrano & Palatare Participações S/A',
+        grupoId: 'grp-serrano-palatare-03',
+        periodo,
+        dadosConsolidados: consolidado
       };
     }
 
