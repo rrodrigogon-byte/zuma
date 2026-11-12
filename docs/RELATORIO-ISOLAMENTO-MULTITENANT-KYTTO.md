@@ -407,7 +407,7 @@ Com base na extração e auditoria direta dos registros no PostgreSQL de produç
       - 10/11/2026: 597 mensagens (251 recebidas de clientes / 346 enviadas pelo T-Rex)
       - 11/11/2026: 466 mensagens (196 recebidas de clientes / 270 enviadas pelo T-Rex)
   • Clientes Únicos Atendidos: 171 sessões ativas com diálogos completos
-  • Provedor de Inteligência Artificial: Google Gemini 2.5 Flash
+  • Provedor de Inteligência Artificial: KyttoIA (KyttoIA 2.5 Flash / Modo RV)
   • Disponibilidade e Taxa de Sucesso LLM: 100,00% (219 execuções bem-sucedidas / 0 falhas)
   • Latência Média de Resposta: 1.505 ms a 1.550 ms (1,5 segundos)
   • Latência P95 (95% dos atendimentos): 2.604 ms (2,6 segundos)
@@ -466,7 +466,7 @@ A auditoria dos dois últimos dias identificou 4 pontos cruciais de aprendizado,
 | Mensagens de Áudio                 | Clientes que mandavam voz ficavam sem resposta.     | 100% transcrito via Speech-to-Text em tempo real.     |
 | Confirmação de Presença            | Exigia fluxo longo de perguntas e confirmações.     | 1 Turno RV: "Confirmo", "Sim" ou "Ok" já confirma.    |
 | Coexistência Humano / IA           | Robô respondia por cima do atendente humano.        | Handoff com identificação de atendente transparente.  |
-| Latência de Resposta               | Acima de 4 a 6 segundos com eventuais timeouts.     | Média de 1,5 segundos (Gemini 2.5 Flash sem quedas).  |
+| Latência de Resposta               | Acima de 4 a 6 segundos com eventuais timeouts.     | Média de 1,5 segundos (KyttoIA 2.5 Flash sem quedas). |
 | Clientes de Planos e Clubes        | Cobrava valor avulso de tabela (R$ 100 / R$ 300).   | Reconhece assinatura ativa e confirma sem custo extra.|
 +------------------------------------+-----------------------------------------------------+-------------------------------------------------------+
 ```

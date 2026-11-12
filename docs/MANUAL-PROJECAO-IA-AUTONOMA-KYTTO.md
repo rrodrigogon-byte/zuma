@@ -18,7 +18,7 @@ A tela de Projeção de faturamento passa a reunir quatro camadas em um só luga
 3. **Alertas operacionais:** risco de meta, queda recente, agenda insuficiente, perdas/cancelamentos, revenda e profissionais abaixo do ritmo.
 4. **Simulador:** variação hipotética de atendimentos, ticket médio, revenda e ocupação, sem salvar ou alterar qualquer dado operacional.
 
-A IA usa o roteador existente do Kytto, com cadeia configurável de provedores. A rota padrão é Gemini smart, seguida pelos fallbacks configurados para OpenAI e Claude. A aplicação registra provedor, modelo, latência, status e custo estimado no histórico do roteador quando o banco de observabilidade estiver disponível.
+A IA usa o roteador existente do Kytto, com cadeia configurável de provedores. A rota padrão é KyttoIA (KyttoIA 2.5 Flash), seguida pelos fallbacks configurados para OpenAI e Claude. A aplicação registra provedor, modelo, latência, status e custo estimado no histórico do roteador quando o banco de observabilidade estiver disponível.
 
 ## 2. Como acessar
 
@@ -230,7 +230,7 @@ Com sessão de gestão, validar a rota de inteligência, a atualização assínc
 **A IA pode afirmar que o fechamento será exatamente R$ 90 mil?**
 Não. Ela pode dizer que a projeção determinística está em R$ 90 mil e explicar os fatos que levaram a esse valor. A previsão é uma estimativa.
 
-**O que acontece se o Gemini cair?**
+**O que acontece se a KyttoIA cair?**
 O roteador tenta os provedores configurados. Se nenhum responder, o sistema usa a leitura determinística local, registra a falha e mantém a tela funcional.
 
 **A IA aprende sozinha com cada nova venda?**

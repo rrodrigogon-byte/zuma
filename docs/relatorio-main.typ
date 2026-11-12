@@ -289,7 +289,7 @@ Todas as contas operacionais foram sincronizadas com credenciais padronizadas pa
 
 == Otimização de Latência e Agendamento Confiável
 Avaliando os registros de chamadas do assistente de WhatsApp (*T-Rex*), identificamos momentos em que a IA demorava a responder ou se perdia ao interpretar nomes compostos de serviços. Implementamos melhorias cruciais:
-1. *Latência Mínima:* Ativação do parâmetro `thinkingBudget: 0` para o modelo `gemini-2.5-flash`, reduzindo o tempo de resposta no WhatsApp de 8s para menos de 1.8s.
+1. *Latência Mínima:* Ativação do parâmetro `thinkingBudget: 0` para o motor *KyttoIA* (*KyttoIA 2.5 Flash*), reduzindo o tempo de resposta no WhatsApp de 8s para menos de 1.8s.
 2. *Consulta Mandatória:* Proibição de inventar horários — a IA consulta obrigatoriamente a API de disponibilidade antes de oferecer slots de atendimento.
 3. *Resolução de Serviços Compostos:* Normalização inteligente para termos como `"CORTE E BARBA PREMIUM"`, mapeando para o identificador correto independentemente de traços ou maiúsculas.
 
