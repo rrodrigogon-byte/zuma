@@ -1055,9 +1055,6 @@ export default function ConcretoUsinaERP() {
                 <div style={{ background: 'var(--surface-2)', padding: 14, borderRadius: 8, border: '1px solid var(--joint)' }}>
                   <small style={{ color: 'var(--text-muted)', fontSize: 11, fontWeight: 700, textTransform: 'uppercase' }}>Cimento em Silos 96t</small>
                   <div style={{ fontFamily: 'var(--font-display)', fontSize: 26, fontWeight: 800, color: 'var(--serrano-orange-text)' }}>
-                    {((silos.length > 0 ? silos : [
-                      { nivelAtualToneladas: 68 }, { nivelAtualToneladas: 42 }
-                    ]).reduce((acc, s) => acc + (Number(s.nivelAtualToneladas || s.nivelAtualTon || 0)), 0)).toFixed(1)} <span style={{ fontSize: 16 }}>ton</span>
                   </div>
                   <small style={{ color: 'var(--status-ok)', fontSize: 11 }}>● Pressão despoeiramento: 0.35 bar (Normal)</small>
                 </div>
@@ -1125,9 +1122,9 @@ export default function ConcretoUsinaERP() {
                       { id: 'sil-02', nome: 'Silo Cimento CP V-ARI', capacidadeToneladas: 60, nivelAtualToneladas: 42, pressaoDespoeiramento: '0.32 bar', produto: 'Cimento CP V Alta Resistência' },
                       { id: 'sil-03', nome: 'Silo Sílica Ativa / Pozolana', capacidadeToneladas: 40, nivelAtualToneladas: 24, pressaoDespoeiramento: '0.28 bar', produto: 'Adição Mineral Pozolânica' }
                     ]).map((s, idx) => {
-                      const cap = Number(s.capacidadeToneladas || s.capacidadeTon || 96);
-                      const niv = Number(s.nivelAtualToneladas || s.nivelAtualTon || 0);
-                      const perc = Math.min(100, Math.round((niv / cap) * 100));
+                      const cap = Number(s.capacidadeTotalTon || s.capacidadeToneladas || s.capacidadeTon || 96);
+                      const niv = Number(s.estoqueAtualTon || s.nivelAtualToneladas || s.nivelAtualTon || 0);
+                      const perc = Number(s.nivelPercent || Math.min(100, Math.round((niv / cap) * 100)));
                       return (
                         <div key={s.id || idx} className="serrano-silo-card">
                           <div className="serrano-silo-bar-wrap">
