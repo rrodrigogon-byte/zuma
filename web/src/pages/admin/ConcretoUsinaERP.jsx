@@ -23,6 +23,52 @@ export default function ConcretoUsinaERP() {
   const [ensaios, setEnsaios] = useState([]);
   const [propostas, setPropostas] = useState([]);
   const [silos, setSilos] = useState([]);
+  const [compras, setCompras] = useState([]);
+  const [ordensProducao, setOrdensProducao] = useState([]);
+  const [listasTecnicas, setListasTecnicas] = useState([]);
+  const [insumosCatalogo, setInsumosCatalogo] = useState([]);
+
+  // Modais de Compras e Ordens de Produção
+  const [modalNovaCompraAberto, setModalNovaCompraAberto] = useState(false);
+  const [modalRecebimentoAberto, setModalRecebimentoAberto] = useState(null);
+  const [modalNovaOpAberto, setModalNovaOpAberto] = useState(false);
+  const [modalConcluirOpAberto, setModalConcluirOpAberto] = useState(null);
+
+  // Form Nova Compra de Insumo
+  const [formCompra, setFormCompra] = useState({
+    insumoId: 'ins-cim-cp2',
+    quantidade: 40,
+    precoUnitario: 580.00,
+    fornecedor: 'Votorantim Cimentos S/A (Nobres/MT)',
+    formaPagamento: 'Boleto 30 DDL',
+    notaFiscal: '',
+    observacoes: ''
+  });
+
+  // Form Recebimento e Pesagem na Balança
+  const [formRecebimento, setFormRecebimento] = useState({
+    pesoBalançaEntradaTon: '',
+    notaFiscal: '',
+    responsavelRecebimento: 'Carlos Eduardo (Operador de Usina)'
+  });
+
+  // Form Nova OP
+  const [formOp, setFormOp] = useState({
+    cliente: '',
+    obra: '',
+    fck: 25,
+    volumeM3: 16,
+    betoneirasEscaladas: ['BT-01', 'BT-02'],
+    operador: 'Carlos Eduardo'
+  });
+
+  // Simulador de Custos Industriais
+  const [custoFck, setCustoFck] = useState(25);
+  const [custoVolume, setCustoVolume] = useState(16);
+  const [custoDistancia, setCustoDistancia] = useState(12);
+  const [custoTipoBomba, setCustoTipoBomba] = useState('Bomba Lança 32m');
+  const [custoMargemDesejada, setCustoMargemDesejada] = useState(18);
+  const [simulacaoCustos, setSimulacaoCustos] = useState(null);
   const [empresa, setEmpresa] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -93,6 +139,10 @@ export default function ConcretoUsinaERP() {
         setEnsaios(res.ensaios || []);
         setPropostas(res.propostas || []);
         setSilos(res.silos || []);
+        setCompras(res.compras || []);
+        setOrdensProducao(res.ordensProducao || []);
+        setListasTecnicas(res.listasTecnicas || []);
+        setInsumosCatalogo(res.insumosCatalogo || []);
       }
     } catch (e) {
       toast('Erro ao carregar dados da Usina Serrano: ' + (e.message || 'Falha de conexão'), 'error');
@@ -225,6 +275,89 @@ export default function ConcretoUsinaERP() {
       toast('Erro ao registrar rompimento: ' + err.message, 'error');
     }
   };
+
+  const handleCriarCompra = async (e) => {
+    e.preventDefault();
+    try {
+      const res = await api.post('/api/admin/concreto/compras', formCompra);
+      if (res?.ok) {
+        toast(`Pedido de compra #${res.pedido.numero} registrado com sucesso!`, 'success');
+        setModalNovaCompraAberto(false);
+        carregarDados();
+      }
+    } catch (err) {
+      toast('Erro ao criar pedido de compra: ' + err.message, 'error');
+    }
+  };
+
+  const handleRegistrarRecebimento = async (e) => {
+    e.preventDefault();
+    if (!modalRecebimentoAberto) return;
+    try {
+      const res = await api.post(`/api/admin/concreto/compras/${modalRecebimentoAberto.id}/recebimento`, formRecebimento);
+      if (res?.ok) {
+        toast(`Entrada do pedido #${res.pedido.numero} confirmada! Silo abastecido.`, 'success');
+        setModalRecebimentoAberto(null);
+        carregarDados();
+      }
+    } catch (err) {
+      toast('Erro ao registrar pesagem na balança: ' + err.message, 'error');
+    }
+  };
+
+  const handleCriarOp = async (e) => {
+    e.preventDefault();
+    if (!formOp.cliente || !formOp.obra) {
+      toast('Informe o cliente e a obra para a Ordem de Produção!', 'warning');
+      return;
+    }
+    try {
+      const res = await api.post('/api/admin/concreto/ordens-producao', formOp);
+      if (res?.ok) {
+        toast(`Ordem de Produção #${res.ordemProducao.numero} criada!`, 'success');
+        setModalNovaOpAberto(false);
+        carregarDados();
+      }
+    } catch (err) {
+      toast('Erro ao gerar Ordem de Produção: ' + err.message, 'error');
+    }
+  };
+
+  const handleConcluirOp = async (opId) => {
+    try {
+      const res = await api.post(`/api/admin/concreto/ordens-producao/${opId}/concluir`, {});
+      if (res?.ok) {
+        toast(`OP #${res.ordemProducao.numero} concluída e baixa realizada nos silos!`, 'success');
+        setModalConcluirOpAberto(null);
+        carregarDados();
+      }
+    } catch (err) {
+      toast('Erro ao concluir OP: ' + err.message, 'error');
+    }
+  };
+
+  const carregarSimulacaoCustos = async () => {
+    try {
+      const res = await api.post('/api/admin/concreto/custos/calcular', {
+        fck: custoFck,
+        volumeM3: custoVolume,
+        distanciaKm: custoDistancia,
+        tipoBomba: custoTipoBomba,
+        margemDesejadaPercent: custoMargemDesejada
+      });
+      if (res?.ok) {
+        setSimulacaoCustos(res.custos);
+      }
+    } catch (err) {
+      console.error('Erro na simulação de custos:', err);
+    }
+  };
+
+  useEffect(() => {
+    if (abaAtiva === 'custos') {
+      carregarSimulacaoCustos();
+    }
+  }, [abaAtiva, custoFck, custoVolume, custoDistancia, custoTipoBomba, custoMargemDesejada]);
 
   const handleCriarProposta = async (e) => {
     e.preventDefault();
@@ -392,7 +525,11 @@ export default function ConcretoUsinaERP() {
         {[
           { id: 'cargas', label: '🚚 Cargas & Despacho ao Vivo', count: cargas.length },
           { id: 'central', label: '🏭 Central Dosadora (NBR 7212)' },
-          { id: 'tracos', label: '📊 Tabela de Traços & FCK', count: catalogo.filter(c => c.categoria === 'Concreto Usinado' || c.categoria === 'Concretos Especiais').length },
+          { id: 'lista_tecnica', label: '📋 Lista Técnica (BOM) & Fichas FCK', count: listasTecnicas.length || 7 },
+          { id: 'compras', label: '🛒 Compras de Insumos & Silos', count: compras.length },
+          { id: 'custos', label: '💡 Cálculo de Custos & Precificação' },
+          { id: 'ordens_producao', label: '⚙️ Ordens de Produção (OP)', count: ordensProducao.length },
+          { id: 'tracos', label: '📊 Catálogo Comercial FCK', count: catalogo.filter(c => c.categoria === 'Concreto Usinado' || c.categoria === 'Concretos Especiais').length },
           { id: 'laboratorio', label: '🔬 Laboratório & CPs (NBR 5738/5739)', count: ensaios.length },
           { id: 'frota', label: '🚛 Frota & Telemetria', count: frota.length },
           { id: 'mineracao', label: '⛏️ Serrano Mineração & Silos 96t', count: silos.length },

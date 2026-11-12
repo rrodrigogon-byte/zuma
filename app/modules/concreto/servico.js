@@ -7,7 +7,164 @@ import {
   CONCRETO_CARGAS_INICIAIS 
 } from '../../concreto-usina-seed.js';
 
-// Constantes e Traços Normatizados NBR 7212 / NBR 8953 / NBR 6118
+// =====================================================================
+// 1. CONSTANTES E CATÁLOGO DE INSUMOS DE MATÉRIA-PRIMA
+// =====================================================================
+export const INSUMOS_MATERIA_PRIMA = [
+  {
+    id: 'ins-cim-cp2',
+    codigo: 'INS-CIM-CP2',
+    nome: 'Cimento Portland CP II-F-32 a Granel',
+    categoria: 'Cimento',
+    unidade: 'ton',
+    custoUnitario: 580.00,
+    fornecedorPadrao: 'Votorantim Cimentos S/A (Fábrica Nobres/MT)',
+    siloVinculadoId: 'silo-01',
+    siloVinculadoNome: 'Silo Convicta Vertical 96 Toneladas',
+    estoqueMinimo: 20,
+    leadTimeDias: 2,
+    fatorConversaoKg: 1000
+  },
+  {
+    id: 'ins-cim-cp5',
+    codigo: 'INS-CIM-CP5',
+    nome: 'Cimento Portland CP V-ARI (Alta Resistência Inicial)',
+    categoria: 'Cimento',
+    unidade: 'ton',
+    custoUnitario: 640.00,
+    fornecedorPadrao: 'Cimento Itambé / Votorantim',
+    siloVinculadoId: 'silo-02',
+    siloVinculadoNome: 'Silo Auxiliar Vertical 60 Toneladas',
+    estoqueMinimo: 15,
+    leadTimeDias: 3,
+    fatorConversaoKg: 1000
+  },
+  {
+    id: 'ins-areia-med',
+    codigo: 'INS-AREIA-MED',
+    nome: 'Areia Média Lavada de Rio (Mineração Própria)',
+    categoria: 'Agregado Miúdo',
+    unidade: 'm³',
+    custoUnitario: 42.00,
+    fornecedorPadrao: 'Serrano Mineração Própria (Tangará da Serra/MT)',
+    siloVinculadoId: 'patio-01',
+    siloVinculadoNome: 'Pátio de Areia Média Lavada',
+    estoqueMinimo: 100,
+    leadTimeDias: 1,
+    densidadeKgM3: 1500
+  },
+  {
+    id: 'ins-areia-gro',
+    codigo: 'INS-AREIA-GRO',
+    nome: 'Areia Grossa Selecionada de Dragagem',
+    categoria: 'Agregado Miúdo',
+    unidade: 'm³',
+    custoUnitario: 45.00,
+    fornecedorPadrao: 'Serrano Mineração Própria (Tangará da Serra/MT)',
+    siloVinculadoId: 'patio-02',
+    siloVinculadoNome: 'Pátio de Areia Grossa de Dragagem',
+    estoqueMinimo: 80,
+    leadTimeDias: 1,
+    densidadeKgM3: 1550
+  },
+  {
+    id: 'ins-brita-0',
+    codigo: 'INS-BRITA-0',
+    nome: 'Brita 0 / Pedrisco Basáltico (4,8 a 9,5 mm)',
+    categoria: 'Agregado Graúdo',
+    unidade: 'm³',
+    custoUnitario: 85.00,
+    fornecedorPadrao: 'Pedreira Serra dos Parecis Ltda',
+    siloVinculadoId: 'patio-03',
+    siloVinculadoNome: 'Box Brita 0 (Pedrisco)',
+    estoqueMinimo: 60,
+    leadTimeDias: 1,
+    densidadeKgM3: 1400
+  },
+  {
+    id: 'ins-brita-1',
+    codigo: 'INS-BRITA-1',
+    nome: 'Brita 1 Granítica Estrutural (9,5 a 19 mm)',
+    categoria: 'Agregado Graúdo',
+    unidade: 'm³',
+    custoUnitario: 92.00,
+    fornecedorPadrao: 'Pedreira Serra dos Parecis Ltda',
+    siloVinculadoId: 'patio-04',
+    siloVinculadoNome: 'Box Brita 1 (Granito Basalto)',
+    estoqueMinimo: 120,
+    leadTimeDias: 1,
+    densidadeKgM3: 1450
+  },
+  {
+    id: 'ins-adit-plast',
+    codigo: 'INS-ADIT-PLAST',
+    nome: 'Aditivo Plastificante Polifuncional Multiflux NBR 11768',
+    categoria: 'Aditivo Químico',
+    unidade: 'L',
+    custoUnitario: 6.80,
+    fornecedorPadrao: 'Vedacit / MC-Bauchemie Brasil',
+    siloVinculadoId: 'tanque-01',
+    siloVinculadoNome: 'Tanque Dosador Aditivo Plastificante Multiflux',
+    estoqueMinimo: 500,
+    leadTimeDias: 4
+  },
+  {
+    id: 'ins-adit-retard',
+    codigo: 'INS-ADIT-RETARD',
+    nome: 'Aditivo Retardador de Pega para Tempo Quente NBR 11768',
+    categoria: 'Aditivo Químico',
+    unidade: 'L',
+    custoUnitario: 8.20,
+    fornecedorPadrao: 'Vedacit / Sika Brasil',
+    siloVinculadoId: 'tanque-02',
+    siloVinculadoNome: 'Tanque Dosador Aditivo Retardador de Pega',
+    estoqueMinimo: 300,
+    leadTimeDias: 4
+  },
+  {
+    id: 'ins-fibra-poli',
+    codigo: 'INS-FIBRA-POLI',
+    nome: 'Microfibras Sintéticas de Polipropileno para Pisos',
+    categoria: 'Adicional Técnico',
+    unidade: 'kg',
+    custoUnitario: 28.00,
+    fornecedorPadrao: 'Maccaferri do Brasil Ltda',
+    siloVinculadoId: 'deposito-01',
+    siloVinculadoNome: 'Depósito de Fibras Sintéticas',
+    estoqueMinimo: 50,
+    leadTimeDias: 5
+  },
+  {
+    id: 'ins-diesel-s10',
+    codigo: 'INS-DIESEL-S10',
+    nome: 'Óleo Diesel S10 para Frota e Pá Carregadeira',
+    categoria: 'Combustível',
+    unidade: 'L',
+    custoUnitario: 5.95,
+    fornecedorPadrao: 'Distribuidora Petrobras Tangará da Serra',
+    siloVinculadoId: 'tanque-diesel',
+    siloVinculadoNome: 'Tanque Aéreo de Combustível da Usina (10.000 L)',
+    estoqueMinimo: 1500,
+    leadTimeDias: 1
+  },
+  {
+    id: 'ins-agua-poco',
+    codigo: 'INS-AGUA-POCO',
+    nome: 'Água Desmineralizada / Poço Artesiano Industrial',
+    categoria: 'Insumo Básico',
+    unidade: 'm³',
+    custoUnitario: 2.50,
+    fornecedorPadrao: 'Captação Própria Usina Serrano',
+    siloVinculadoId: 'caixa-dagua',
+    siloVinculadoNome: 'Reservatório Elevado 30.000 L',
+    estoqueMinimo: 10,
+    leadTimeDias: 0
+  }
+];
+
+// =====================================================================
+// 2. LISTAS TÉCNICAS (BOM - BILL OF MATERIALS) DE CADA TRAÇO
+// =====================================================================
 export const TRACOS_NORMATIZADOS = {
   15: { cimentoKg: 260, areiaM3: 0.68, britaM3: 0.88, aguaL: 185, aditivoL: 2.0, fatorAc: 0.65, slumpPadrao: '10 ± 2 cm', descricao: 'Concreto Magro / Regularização de Fundações' },
   20: { cimentoKg: 300, areiaM3: 0.65, britaM3: 0.85, aguaL: 180, aditivoL: 2.4, fatorAc: 0.55, slumpPadrao: '12 ± 2 cm', descricao: 'Pisos residenciais, calçadas, baldrames e estacas' },
@@ -17,6 +174,241 @@ export const TRACOS_NORMATIZADOS = {
   40: { cimentoKg: 460, areiaM3: 0.52, britaM3: 0.75, aguaL: 160, aditivoL: 3.8, fatorAc: 0.38, slumpPadrao: '16 ± 2 cm', descricao: 'Obras de arte especiais, pontes e concreto de alta resistência' },
   45: { cimentoKg: 500, areiaM3: 0.50, britaM3: 0.72, aguaL: 155, aditivoL: 4.2, fatorAc: 0.35, slumpPadrao: '16 ± 2 cm', descricao: 'Concreto de altíssimo desempenho (CAD) e pré-moldados pesados' },
 };
+
+/**
+ * Monta as Fichas Técnicas / BOM completas de fabricação de concreto
+ */
+export function gerarListaTecnicaBOM() {
+  const fcks = [15, 20, 25, 30, 35, 40, 45];
+  return fcks.map(fck => {
+    const t = TRACOS_NORMATIZADOS[fck];
+    const cimentoTon = t.cimentoKg / 1000;
+    const cimentoCusto = cimentoTon * (fck >= 40 ? 640 : 580);
+    const areiaCusto = t.areiaM3 * 42.00;
+    const britaCusto = t.britaM3 * 92.00;
+    const aguaCusto = (t.aguaL / 1000) * 2.50;
+    const aditivoCusto = t.aditivoL * 6.80;
+    const fibraKg = fck === 35 ? 1.2 : 0;
+    const fibraCusto = fibraKg * 28.00;
+
+    const custoInsumosM3 = +(cimentoCusto + areiaCusto + britaCusto + aguaCusto + aditivoCusto + fibraCusto).toFixed(2);
+    const perdaAderenciaPercent = 1.5;
+    const custoInsumosComPerda = +(custoInsumosM3 * (1 + perdaAderenciaPercent / 100)).toFixed(2);
+
+    return {
+      id: `bom-fck-${fck}`,
+      codigo: `BOM-FCK-${fck}`,
+      fck,
+      nome: `Concreto Usinado FCK ${fck} MPa`,
+      descricao: t.descricao,
+      normaReferencia: 'ABNT NBR 7212 / NBR 8953 / NBR 6118',
+      slumpPadrao: t.slumpPadrao,
+      fatorAguaCimento: t.fatorAc,
+      teorArgamassaPercent: fck >= 30 ? 53 : 51,
+      proporcaoMassa: `1 : ${(t.areiaM3 * 1500 / t.cimentoKg).toFixed(2)} : ${(t.britaM3 * 1450 / t.cimentoKg).toFixed(2)} : ${t.fatorAc}`,
+      perdaAderenciaPercent,
+      componentes: [
+        { insumoId: fck >= 40 ? 'ins-cim-cp5' : 'ins-cim-cp2', nome: fck >= 40 ? 'Cimento CP V-ARI' : 'Cimento CP II-F-32', consumo: t.cimentoKg, unidade: 'kg', custoUnitarioKg: fck >= 40 ? 0.64 : 0.58, subtotalCusto: +cimentoCusto.toFixed(2) },
+        { insumoId: 'ins-areia-med', nome: 'Areia Média Lavada Rio', consumo: t.areiaM3, unidade: 'm³', consumoKg: Math.round(t.areiaM3 * 1500), custoUnitario: 42.00, subtotalCusto: +areiaCusto.toFixed(2) },
+        { insumoId: 'ins-brita-1', nome: 'Brita 1 Granítica', consumo: t.britaM3, unidade: 'm³', consumoKg: Math.round(t.britaM3 * 1450), custoUnitario: 92.00, subtotalCusto: +britaCusto.toFixed(2) },
+        { insumoId: 'ins-agua-poco', nome: 'Água de Amassamento', consumo: t.aguaL, unidade: 'L', custoUnitario: 0.0025, subtotalCusto: +aguaCusto.toFixed(2) },
+        { insumoId: 'ins-adit-plast', nome: 'Aditivo Plastificante Multiflux', consumo: t.aditivoL, unidade: 'L', custoUnitario: 6.80, subtotalCusto: +aditivoCusto.toFixed(2) },
+        ...(fibraKg > 0 ? [{ insumoId: 'ins-fibra-poli', nome: 'Microfibras Sintéticas Polipropileno', consumo: fibraKg, unidade: 'kg', custoUnitario: 28.00, subtotalCusto: +fibraCusto.toFixed(2) }] : [])
+      ],
+      custoDiretoInsumosM3: custoInsumosComPerda,
+      precoSugeridoVendaM3: fck === 15 ? 340 : fck === 20 ? 380 : fck === 25 ? 410 : fck === 30 ? 440 : fck === 35 ? 480 : fck === 40 ? 520 : 570
+    };
+  });
+}
+
+// =====================================================================
+// 3. COMPRAS INICIAIS DE MATÉRIAS-PRIMAS
+// =====================================================================
+export const COMPRAS_INICIAIS = [
+  {
+    id: 'pc-2026-048',
+    numero: 'PC-2026-048',
+    data: '2026-11-08',
+    fornecedor: 'Votorantim Cimentos S/A (Nobres/MT)',
+    insumoId: 'ins-cim-cp2',
+    insumoNome: 'Cimento Portland CP II-F-32 a Granel',
+    siloDestinoId: 'silo-01',
+    siloDestinoNome: 'Silo Convicta Vertical 96 Toneladas',
+    quantidade: 45.0,
+    unidade: 'ton',
+    precoUnitario: 580.00,
+    valorTotal: 26100.00,
+    notaFiscal: 'NF-e 108.432',
+    pesoBalançaEntradaTon: 45.12,
+    formaPagamento: 'Boleto Bancário 30 DDL',
+    status: 'entregue_pesado',
+    responsavelRecebimento: 'Carlos Eduardo (Operador de Usina)'
+  },
+  {
+    id: 'pc-2026-049',
+    numero: 'PC-2026-049',
+    data: '2026-11-09',
+    fornecedor: 'Pedreira Serra dos Parecis Ltda',
+    insumoId: 'ins-brita-1',
+    insumoNome: 'Brita 1 Granítica Estrutural',
+    siloDestinoId: 'patio-04',
+    siloDestinoNome: 'Box Brita 1',
+    quantidade: 30.0,
+    unidade: 'm³',
+    precoUnitario: 92.00,
+    valorTotal: 2760.00,
+    notaFiscal: 'NF-e 045.119',
+    pesoBalançaEntradaTon: 43.5,
+    formaPagamento: 'PIX à Vista com Desconto',
+    status: 'entregue_pesado',
+    responsavelRecebimento: 'Carlos Eduardo'
+  },
+  {
+    id: 'pc-2026-050',
+    numero: 'PC-2026-050',
+    data: '2026-11-10',
+    fornecedor: 'Vedacit / MC-Bauchemie Brasil',
+    insumoId: 'ins-adit-plast',
+    insumoNome: 'Aditivo Plastificante Multiflux IBC 1000L',
+    siloDestinoId: 'tanque-01',
+    siloDestinoNome: 'Tanque Dosador Aditivo Plastificante',
+    quantidade: 1000,
+    unidade: 'L',
+    precoUnitario: 6.80,
+    valorTotal: 6800.00,
+    notaFiscal: 'NF-e 092.841',
+    formaPagamento: 'Boleto Bancário 28 DDL',
+    status: 'entregue_pesado',
+    responsavelRecebimento: 'Engª Karin Prestes'
+  },
+  {
+    id: 'pc-2026-051',
+    numero: 'PC-2026-051',
+    data: '2026-11-11',
+    fornecedor: 'Votorantim Cimentos S/A (Nobres/MT)',
+    insumoId: 'ins-cim-cp2',
+    insumoNome: 'Cimento Portland CP II-F-32 a Granel (Bitrem 42t)',
+    siloDestinoId: 'silo-01',
+    siloDestinoNome: 'Silo Convicta Vertical 96 Toneladas',
+    quantidade: 42.0,
+    unidade: 'ton',
+    precoUnitario: 580.00,
+    valorTotal: 24360.00,
+    notaFiscal: 'NF-e 108.995',
+    formaPagamento: 'Boleto Bancário 30 DDL',
+    status: 'em_transito',
+    previsaoEntrega: '2026-11-13'
+  },
+  {
+    id: 'pc-2026-052',
+    numero: 'PC-2026-052',
+    data: '2026-11-12',
+    fornecedor: 'Distribuidora Petrobras Tangará da Serra',
+    insumoId: 'ins-diesel-s10',
+    insumoNome: 'Óleo Diesel S10 para Frota de Betoneiras',
+    siloDestinoId: 'tanque-diesel',
+    siloDestinoNome: 'Tanque Próprio de Combustível Usina',
+    quantidade: 5000,
+    unidade: 'L',
+    precoUnitario: 5.95,
+    valorTotal: 29750.00,
+    notaFiscal: 'Aguardando Faturamento',
+    formaPagamento: 'Faturado 15 DDL',
+    status: 'solicitado',
+    previsaoEntrega: '2026-11-14'
+  }
+];
+
+// =====================================================================
+// 4. ORDENS DE PRODUÇÃO (OP) DE CONCRETO
+// =====================================================================
+export const ORDENS_PRODUCAO_INICIAIS = [
+  {
+    id: 'op-2026-091',
+    numero: 'OP-2026-091',
+    dataHora: '2026-11-11 08:30:00',
+    cargaId: 'crg-0998',
+    cliente: 'Grupo Moradda Incorporadora',
+    obra: 'Edifício Residencial Belvedere Tower',
+    fck: 30,
+    volumeM3: 40,
+    totalBateladas: 5,
+    betoneirasEscaladas: ['BT-01', 'BT-02', 'BT-03'],
+    consumoTeorico: {
+      cimentoKg: 15200,
+      areiaKg: 34800,
+      britaKg: 46400,
+      aguaL: 6800,
+      aditivoL: 120
+    },
+    consumoRealBalança: {
+      cimentoKg: 15240,
+      areiaKg: 35120,
+      britaKg: 46280,
+      aguaL: 6720,
+      aditivoL: 121
+    },
+    status: 'concluida',
+    operador: 'Carlos Eduardo',
+    aprovadoEngenharia: true,
+    laudoCpVinculado: 'CP-2026-088'
+  },
+  {
+    id: 'op-2026-092',
+    numero: 'OP-2026-092',
+    dataHora: '2026-11-12 07:15:00',
+    cargaId: 'crg-1001',
+    cliente: 'Construtora MT Horizon',
+    obra: 'Edifício Residencial Serra Dourada · Lajes 4º Pav.',
+    fck: 30,
+    volumeM3: 24,
+    totalBateladas: 3,
+    betoneirasEscaladas: ['BT-01', 'BT-02', 'BT-03'],
+    consumoTeorico: {
+      cimentoKg: 9120,
+      areiaKg: 20880,
+      britaKg: 27840,
+      aguaL: 4080,
+      aditivoL: 72
+    },
+    consumoRealBalança: {
+      cimentoKg: 9140,
+      areiaKg: 21020,
+      britaKg: 27790,
+      aguaL: 4040,
+      aditivoL: 72
+    },
+    status: 'concluida',
+    operador: 'Carlos Eduardo',
+    aprovadoEngenharia: true,
+    laudoCpVinculado: 'CP-2026-089'
+  },
+  {
+    id: 'op-2026-093',
+    numero: 'OP-2026-093',
+    dataHora: '2026-11-12 13:45:00',
+    cargaId: 'crg-1002',
+    cliente: 'AgroLog Transportes & Logística',
+    obra: 'Piso Industrial Galpão de Cargas · Etapa 2',
+    fck: 35,
+    volumeM3: 32,
+    totalBateladas: 4,
+    betoneirasEscaladas: ['BT-04', 'BT-05'],
+    consumoTeorico: {
+      cimentoKg: 13440,
+      areiaKg: 26400,
+      britaKg: 34944,
+      aguaL: 5280,
+      aditivoL: 108.8,
+      fibrasKg: 38.4
+    },
+    consumoRealBalança: null,
+    status: 'em_producao',
+    operador: 'Carlos Eduardo',
+    aprovadoEngenharia: true,
+    laudoCpVinculado: 'CP-2026-090'
+  }
+];
 
 export const ENSAIOS_INICIAIS = [
   {
@@ -106,7 +498,7 @@ export const PROPOSTAS_INICIAIS = [
     tipoBomba: 'Bomba Lança 32m',
     precoM3: 440.00,
     subtotalConcreto: 21120.00,
-    taxaBomba: 1325.00, // 750 (25m³) + 23m³ * 25
+    taxaBomba: 1325.00,
     freteKm: 0,
     totalProposta: 22445.00,
     condicaoPagamento: 'Boleto 14/28 DDL faturado',
@@ -129,7 +521,7 @@ export const PROPOSTAS_INICIAIS = [
     precoM3: 480.00,
     subtotalConcreto: 30720.00,
     taxaBomba: 0,
-    freteKm: 250.00, // Fora do perímetro urbano
+    freteKm: 250.00,
     totalProposta: 30970.00,
     condicaoPagamento: 'Entrada 50% PIX + 50% após término da concretagem',
     status: 'enviada',
@@ -147,11 +539,12 @@ export const SILOS_INSUMOS_INICIAIS = [
   { id: 'tanque-01', codigo: 'TNQ-ADITIVO-PLAST', nome: 'Tanque Dosador Aditivo Plastificante Multiflux', tipo: 'aditivo', insumo: 'Aditivo Plastificante Polifuncional NBR 11768', capacidadeTotalL: 3000, estoqueAtualL: 2150, nivelPercent: 71.6, fornecedor: 'Vedacit / MC-Bauchemie', alertaMinimoL: 500 },
   { id: 'tanque-02', codigo: 'TNQ-ADITIVO-RETARD', nome: 'Tanque Dosador Aditivo Retardador de Pega (Tempo Quente)', tipo: 'aditivo', insumo: 'Aditivo Retardador de Pega NBR 11768', capacidadeTotalL: 2000, estoqueAtualL: 1400, nivelPercent: 70.0, fornecedor: 'Vedacit / Sika', alertaMinimoL: 300 },
   { id: 'deposito-01', codigo: 'DEP-FIBRAS', nome: 'Depósito de Fibras Sintéticas de Polipropileno', tipo: 'adicional', insumo: 'Fibras Estruturais para Piso Industrial (Sacos 1kg)', capacidadeTotalKg: 500, estoqueAtualKg: 320, nivelPercent: 64.0, fornecedor: 'Maccaferri', alertaMinimoKg: 50 },
+  { id: 'tanque-diesel', codigo: 'TNQ-DIESEL-S10', nome: 'Tanque Próprio de Combustível da Usina (10.000 L)', tipo: 'combustivel', insumo: 'Óleo Diesel S10 para Frota e Pá Carregadeira', capacidadeTotalL: 10000, estoqueAtualL: 6800, nivelPercent: 68.0, fornecedor: 'Distribuidora Petrobras Tangará', alertaMinimoL: 1500 }
 ];
 
-/**
- * Garante que as tabelas de concreto no datastore contenham dados inicializados
- */
+// =====================================================================
+// 5. INICIALIZAÇÃO E OBTENÇÃO CONSOLIDADA DOS DADOS
+// =====================================================================
 export function inicializarDatastoreConcreto() {
   const data = db();
   if (!Array.isArray(data.concreto_cargas)) data.concreto_cargas = [];
@@ -160,6 +553,8 @@ export function inicializarDatastoreConcreto() {
   if (!Array.isArray(data.concreto_ensaios)) data.concreto_ensaios = [];
   if (!Array.isArray(data.concreto_propostas)) data.concreto_propostas = [];
   if (!Array.isArray(data.concreto_silos)) data.concreto_silos = [];
+  if (!Array.isArray(data.concreto_compras)) data.concreto_compras = [];
+  if (!Array.isArray(data.concreto_ordens_producao)) data.concreto_ordens_producao = [];
 
   // Popular se vazio
   if (data.concreto_cargas.length === 0) {
@@ -180,14 +575,17 @@ export function inicializarDatastoreConcreto() {
   if (data.concreto_silos.length === 0) {
     data.concreto_silos = SILOS_INSUMOS_INICIAIS.map(s => ({ ...s, empresaId: CONCRETO_EMPRESA_ID }));
   }
+  if (data.concreto_compras.length === 0) {
+    data.concreto_compras = COMPRAS_INICIAIS.map(c => ({ ...c, empresaId: CONCRETO_EMPRESA_ID }));
+  }
+  if (data.concreto_ordens_producao.length === 0) {
+    data.concreto_ordens_producao = ORDENS_PRODUCAO_INICIAIS.map(op => ({ ...op, empresaId: CONCRETO_EMPRESA_ID }));
+  }
 
   save();
   return data;
 }
 
-/**
- * Retorna todos os dados consolidados do módulo de Concreto & Mineração
- */
 export async function obterDadosConcreto(empresaId = CONCRETO_EMPRESA_ID) {
   const data = inicializarDatastoreConcreto();
 
@@ -198,13 +596,18 @@ export async function obterDadosConcreto(empresaId = CONCRETO_EMPRESA_ID) {
   const ensaios = (data.concreto_ensaios || []).filter(e => !e.empresaId || e.empresaId === empresaId);
   const propostas = (data.concreto_propostas || []).filter(p => !p.empresaId || p.empresaId === empresaId);
   const silos = (data.concreto_silos || []).filter(s => !s.empresaId || s.empresaId === empresaId);
+  const compras = (data.concreto_compras || []).filter(c => !c.empresaId || c.empresaId === empresaId);
+  const ordensProducao = (data.concreto_ordens_producao || []).filter(op => !op.empresaId || op.empresaId === empresaId);
+  const listasTecnicas = gerarListaTecnicaBOM();
 
-  // KPIs
+  // KPIs Industriais
   const volumeProgramadoHoje = cargas.reduce((acc, c) => acc + (Number(c.volumeM3) || 0), 0);
   const volumeEntregueHoje = cargas.filter(c => c.status === 'concluido').reduce((acc, c) => acc + (Number(c.volumeM3) || 0), 0);
   const betoneirasOperando = frota.filter(f => f.status !== 'disponivel').length;
   const faturamentoHoje = cargas.reduce((acc, c) => acc + (Number(c.valorTotal) || 0), 0);
-  const laudosConformesPercent = 100; // Todos aprovados conforme NBR 5739
+  const laudosConformesPercent = 100;
+  const comprasPendentesValor = compras.filter(c => c.status !== 'entregue_pesado').reduce((acc, c) => acc + (Number(c.valorTotal) || 0), 0);
+  const totalOrdensProducao = ordensProducao.length;
 
   return {
     ok: true,
@@ -215,20 +618,320 @@ export async function obterDadosConcreto(empresaId = CONCRETO_EMPRESA_ID) {
     ensaios,
     propostas,
     silos,
+    compras,
+    ordensProducao,
+    listasTecnicas,
+    insumosCatalogo: INSUMOS_MATERIA_PRIMA,
     kpis: {
       volumeProgramadoHoje,
       volumeEntregueHoje,
       betoneirasOperando,
       totalFrota: frota.length,
       faturamentoHoje,
-      laudosConformesPercent
+      laudosConformesPercent,
+      comprasPendentesValor,
+      totalOrdensProducao
     }
   };
 }
 
-/**
- * Cadastra uma nova Carga / Concretagem
- */
+// =====================================================================
+// 6. MOTOR DE COMPRAS DE MATÉRIA-PRIMA
+// =====================================================================
+export async function listarComprasInsumos(empresaId = CONCRETO_EMPRESA_ID) {
+  const data = inicializarDatastoreConcreto();
+  const compras = (data.concreto_compras || []).filter(c => !c.empresaId || c.empresaId === empresaId);
+  return { ok: true, compras, insumosCatalogo: INSUMOS_MATERIA_PRIMA };
+}
+
+export async function criarPedidoCompraInsumo(dados, empresaId = CONCRETO_EMPRESA_ID) {
+  const data = inicializarDatastoreConcreto();
+
+  const insumo = INSUMOS_MATERIA_PRIMA.find(i => i.id === dados.insumoId || i.codigo === dados.insumoId);
+  if (!insumo) throw new Error(`Insumo ${dados.insumoId} não cadastrado no catálogo.`);
+
+  const quantidade = Number(dados.quantidade);
+  if (!quantidade || quantidade <= 0) throw new Error('Quantidade inválida para pedido de compra.');
+
+  const precoUnitario = dados.precoUnitario != null ? Number(dados.precoUnitario) : insumo.custoUnitario;
+  const valorTotal = +(quantidade * precoUnitario).toFixed(2);
+
+  const ultimoNum = (data.concreto_compras || []).reduce((max, c) => {
+    const num = parseInt(String(c.numero).replace(/\D/g, ''), 10);
+    return isNaN(num) ? max : Math.max(max, num);
+  }, 50);
+  const proximoNum = ultimoNum + 1;
+  const numeroPedido = `PC-2026-${String(proximoNum).padStart(3, '0')}`;
+
+  const novoPedido = {
+    id: `pc-${Date.now()}`,
+    numero: numeroPedido,
+    empresaId,
+    data: new Date().toISOString().slice(0, 10),
+    fornecedor: dados.fornecedor || insumo.fornecedorPadrao,
+    insumoId: insumo.id,
+    insumoNome: insumo.nome,
+    siloDestinoId: dados.siloDestinoId || insumo.siloVinculadoId,
+    siloDestinoNome: dados.siloDestinoNome || insumo.siloVinculadoNome,
+    quantidade,
+    unidade: insumo.unidade,
+    precoUnitario,
+    valorTotal,
+    formaPagamento: dados.formaPagamento || 'Boleto 30 DDL',
+    notaFiscal: dados.notaFiscal || 'Aguardando Emissão',
+    previsaoEntrega: dados.previsaoEntrega || new Date(Date.now() + insumo.leadTimeDias * 86400000).toISOString().slice(0, 10),
+    status: 'solicitado',
+    observacoes: dados.observacoes || ''
+  };
+
+  data.concreto_compras.unshift(novoPedido);
+  save();
+  return { ok: true, pedido: novoPedido };
+}
+
+export async function registrarRecebimentoPesagemCompra(pedidoId, dadosRecebimento) {
+  const data = inicializarDatastoreConcreto();
+  const pedido = (data.concreto_compras || []).find(c => c.id === pedidoId || c.numero === pedidoId);
+  if (!pedido) throw new Error(`Pedido de compra ${pedidoId} não encontrado.`);
+
+  pedido.status = 'entregue_pesado';
+  pedido.dataEntrada = new Date().toISOString().slice(0, 10);
+  pedido.pesoBalançaEntradaTon = dadosRecebimento.pesoBalançaEntradaTon ? Number(dadosRecebimento.pesoBalançaEntradaTon) : pedido.quantidade;
+  if (dadosRecebimento.notaFiscal) pedido.notaFiscal = dadosRecebimento.notaFiscal;
+  if (dadosRecebimento.responsavelRecebimento) pedido.responsavelRecebimento = dadosRecebimento.responsavelRecebimento;
+
+  // Creditar no Silo / Pátio correspondente
+  const silo = (data.concreto_silos || []).find(s => s.id === pedido.siloDestinoId || s.codigo === pedido.siloDestinoId);
+  if (silo) {
+    const qtdEntrada = pedido.pesoBalançaEntradaTon || pedido.quantidade;
+    if (silo.estoqueAtualTon != null) {
+      silo.estoqueAtualTon = Math.min(silo.capacidadeTotalTon, +(silo.estoqueAtualTon + qtdEntrada).toFixed(2));
+      silo.nivelPercent = Math.round((silo.estoqueAtualTon / silo.capacidadeTotalTon) * 100);
+    } else if (silo.estoqueAtualM3 != null) {
+      silo.estoqueAtualM3 = Math.min(silo.capacidadeTotalM3, +(silo.estoqueAtualM3 + qtdEntrada).toFixed(2));
+      silo.nivelPercent = Math.round((silo.estoqueAtualM3 / silo.capacidadeTotalM3) * 100);
+    } else if (silo.estoqueAtualL != null) {
+      silo.estoqueAtualL = Math.min(silo.capacidadeTotalL, Math.round(silo.estoqueAtualL + qtdEntrada));
+      silo.nivelPercent = Math.round((silo.estoqueAtualL / silo.capacidadeTotalL) * 100);
+    }
+    silo.ultimoCarregamento = new Date().toISOString().slice(0, 10);
+  }
+
+  save();
+  return { ok: true, pedido, siloAtualizado: silo };
+}
+
+// =====================================================================
+// 7. MOTOR DE CUSTOS E FORMAÇÃO DE PREÇO (COSTING ENGINE)
+// =====================================================================
+export function calcularCustoConcretoAvancado(params = {}) {
+  const fck = Number(params.fck) || 25;
+  const volumeM3 = Number(params.volumeM3) || 8;
+  const distanciaKm = Number(params.distanciaKm) || 12; // Média urbana/perímetro Tangará da Serra
+  const usaBomba = Boolean(params.tipoBomba && String(params.tipoBomba).toLowerCase().includes('bomba'));
+  const bdiPercent = Number(params.bdiPercent) || 25.0; // BDI Industrial
+
+  // 1. Busca BOM do traço
+  const listaBOM = gerarListaTecnicaBOM();
+  const bom = listaBOM.find(b => b.fck === fck) || listaBOM.find(b => b.fck === 25);
+  const cpvInsumosM3 = bom.custoDiretoInsumosM3;
+  const totalCpvInsumos = +(cpvInsumosM3 * volumeM3).toFixed(2);
+
+  // 2. Custos Operacionais de Usinagem da Central Convicta (por m³)
+  const energiaEletricaUsinaM3 = 8.50; // Consumo kWh dos motores da esteira e misturador
+  const maoDeObraOperacionalM3 = 14.00; // Operador de usina + laboratorista + pá carregadeira
+  const manutencaoDepreciacaoM3 = 7.50; // Desgaste de chapas de desgaste, balança e células
+  const custoUsinagemM3 = +(energiaEletricaUsinaM3 + maoDeObraOperacionalM3 + manutencaoDepreciacaoM3).toFixed(2);
+  const totalCustoUsinagem = +(custoUsinagemM3 * volumeM3).toFixed(2);
+
+  // 3. Custos Logísticos de Transporte em Caminhão Betoneira 8x4 / 6x4
+  // Consumo médio: 1,8 km/litro de Diesel S10 (R$ 5,95/L) com balão girando sob carga
+  const consumoDieselPorKm = 5.95 / 1.8; // ~ R$ 3,30 por km rodado
+  const freteBaseUrbanoM3 = 22.00; // Até 15 km de raio
+  const freteKmExcedenteM3 = distanciaKm > 15 ? (distanciaKm - 15) * 1.80 : 0;
+  const custoFreteM3 = +(freteBaseUrbanoM3 + freteKmExcedenteM3).toFixed(2);
+  const totalCustoFrete = +(custoFreteM3 * volumeM3).toFixed(2);
+
+  // 4. Custos de Bombeamento (se aplicável)
+  let custoBombaM3 = 0;
+  let totalCustoBomba = 0;
+  if (usaBomba) {
+    const taxaFixaMobilizacao = 750.00;
+    const taxaExcedenteM3 = volumeM3 > 25 ? (volumeM3 - 25) * 25.00 : 0;
+    totalCustoBomba = +(taxaFixaMobilizacao + taxaExcedenteM3).toFixed(2);
+    custoBombaM3 = +(totalCustoBomba / volumeM3).toFixed(2);
+  }
+
+  // 5. Custo Direto Industrial Total (CPV + Usinagem + Frete + Bomba)
+  const custoDiretoTotalM3 = +(cpvInsumosM3 + custoUsinagemM3 + custoFreteM3 + custoBombaM3).toFixed(2);
+  const totalCustoDireto = +(totalCpvInsumos + totalCustoUsinagem + totalCustoFrete + totalCustoBomba).toFixed(2);
+
+  // 6. Tributos Incidentes sobre o Faturamento (Simples / Lucro Presumido Tangará)
+  // ISSQN Tangará da Serra: 3,0% | PIS/COFINS: 3,65% | IRPJ/CSLL Presumido: 4,80% = 11,45%
+  const cargaTributariaPercent = 11.45;
+
+  // 7. Formação de Preço
+  // Preço de Venda = Custo Direto / (1 - (Tributos% + Margem% + DespesasAdm%)/100)
+  const despesasAdmPercent = 5.0; // Despesas de escritório, comercial e TI
+  const margemLucroDesejadaPercent = Number(params.margemDesejadaPercent) || 18.0;
+  const divisorMarkup = (100 - (cargaTributariaPercent + despesasAdmPercent + margemLucroDesejadaPercent)) / 100;
+
+  const precoSugeridoVendaM3 = +(custoDiretoTotalM3 / Math.max(0.4, divisorMarkup)).toFixed(2);
+  const totalPrecoSugerido = +(precoSugeridoVendaM3 * volumeM3).toFixed(2);
+
+  // Margem de Contribuição
+  const tributosUnitario = +(precoSugeridoVendaM3 * (cargaTributariaPercent / 100)).toFixed(2);
+  const receitaLiquidaM3 = +(precoSugeridoVendaM3 - tributosUnitario).toFixed(2);
+  const margemContribuicaoM3 = +(receitaLiquidaM3 - custoDiretoTotalM3).toFixed(2);
+  const margemContribuicaoPercent = +((margemContribuicaoM3 / precoSugeridoVendaM3) * 100).toFixed(1);
+
+  return {
+    fck,
+    volumeM3,
+    distanciaKm,
+    usaBomba,
+    traçoNome: bom.nome,
+    proporcaoMassa: bom.proporcaoMassa,
+    decomposicaoCustosM3: {
+      cpvInsumos: cpvInsumosM3,
+      usinagemCentral: custoUsinagemM3,
+      freteBetoneira: custoFreteM3,
+      servicoBomba: custoBombaM3,
+      custoDiretoTotal: custoDiretoTotalM3
+    },
+    totaisLote: {
+      totalCpvInsumos,
+      totalCustoUsinagem,
+      totalCustoFrete,
+      totalCustoBomba,
+      totalCustoDireto
+    },
+    precificacao: {
+      tributosPercent: cargaTributariaPercent,
+      despesasAdmPercent,
+      margemLucroDesejadaPercent,
+      precoSugeridoVendaM3,
+      totalPrecoSugerido,
+      margemContribuicaoM3,
+      margemContribuicaoPercent
+    },
+    componentesBOM: bom.componentes
+  };
+}
+
+// =====================================================================
+// 8. ORDENS DE PRODUÇÃO (OP) & BAIXA ESTEQUIOMÉTRICA DE SILOS
+// =====================================================================
+export async function listarOrdensProducao(empresaId = CONCRETO_EMPRESA_ID) {
+  const data = inicializarDatastoreConcreto();
+  const ordens = (data.concreto_ordens_producao || []).filter(op => !op.empresaId || op.empresaId === empresaId);
+  return { ok: true, ordens };
+}
+
+export async function criarOrdemProducao(dados, empresaId = CONCRETO_EMPRESA_ID) {
+  const data = inicializarDatastoreConcreto();
+
+  const fck = Number(dados.fck) || 25;
+  const volumeM3 = Number(dados.volumeM3) || 8;
+  const listaBOM = gerarListaTecnicaBOM();
+  const bom = listaBOM.find(b => b.fck === fck) || listaBOM.find(b => b.fck === 25);
+
+  const ultimoNum = (data.concreto_ordens_producao || []).reduce((max, op) => {
+    const num = parseInt(String(op.numero).replace(/\D/g, ''), 10);
+    return isNaN(num) ? max : Math.max(max, num);
+  }, 90);
+  const proximoNum = ultimoNum + 1;
+  const numeroOP = `OP-2026-${String(proximoNum).padStart(3, '0')}`;
+
+  const cimentoTeoricoKg = Math.round(bom.componentes.find(c => c.insumoId.includes('cim'))?.consumo * volumeM3 || 0);
+  const areiaTeoricaKg = Math.round(bom.componentes.find(c => c.insumoId.includes('areia'))?.consumoKg * volumeM3 || 0);
+  const britaTeoricaKg = Math.round(bom.componentes.find(c => c.insumoId.includes('brita'))?.consumoKg * volumeM3 || 0);
+  const aguaTeoricaL = Math.round(bom.componentes.find(c => c.insumoId.includes('agua'))?.consumo * volumeM3 || 0);
+  const aditivoTeoricoL = +(bom.componentes.find(c => c.insumoId.includes('adit'))?.consumo * volumeM3 || 0).toFixed(1);
+
+  const novaOP = {
+    id: `op-${Date.now()}`,
+    numero: numeroOP,
+    empresaId,
+    dataHora: new Date().toISOString().replace('T', ' ').slice(0, 19),
+    cargaId: dados.cargaId || null,
+    cliente: dados.cliente || 'Produção Interna / Carga Avulsa',
+    obra: dados.obra || 'Obra Padrão Tangará da Serra',
+    fck,
+    volumeM3,
+    totalBateladas: Math.ceil(volumeM3 / 8),
+    betoneirasEscaladas: dados.betoneirasEscaladas || ['BT-01'],
+    consumoTeorico: {
+      cimentoKg: cimentoTeoricoKg,
+      areiaKg: areiaTeoricaKg,
+      britaKg: britaTeoricaKg,
+      aguaL: aguaTeoricaL,
+      aditivoL: aditivoTeoricoL
+    },
+    consumoRealBalança: null,
+    status: 'planejada',
+    operador: dados.operador || 'Carlos Eduardo',
+    aprovadoEngenharia: true,
+    laudoCpVinculado: dados.laudoCpVinculado || null
+  };
+
+  data.concreto_ordens_producao.unshift(novaOP);
+  save();
+  return { ok: true, ordemProducao: novaOP };
+}
+
+export async function concluirOrdemProducao(opId, consumoRealBalança = null) {
+  const data = inicializarDatastoreConcreto();
+  const op = (data.concreto_ordens_producao || []).find(o => o.id === opId || o.numero === opId);
+  if (!op) throw new Error(`Ordem de produção ${opId} não encontrada.`);
+
+  op.status = 'concluida';
+  op.consumoRealBalança = consumoRealBalança || op.consumoTeorico;
+
+  // Realizar baixa automática de estoque nos silos e pátios
+  const cimentoKg = op.consumoRealBalança.cimentoKg || op.consumoTeorico.cimentoKg;
+  const cimentoTon = +(cimentoKg / 1000).toFixed(2);
+  const areiaKg = op.consumoRealBalança.areiaKg || op.consumoTeorico.areiaKg;
+  const areiaM3 = +(areiaKg / 1500).toFixed(2);
+  const britaKg = op.consumoRealBalança.britaKg || op.consumoTeorico.britaKg;
+  const britaM3 = +(britaKg / 1450).toFixed(2);
+  const aditivoL = Math.round(op.consumoRealBalança.aditivoL || op.consumoTeorico.aditivoL);
+
+  // Baixa no Silo 1 (Cimento CP II)
+  const silo1 = (data.concreto_silos || []).find(s => s.id === 'silo-01' || s.codigo === 'SILO-01');
+  if (silo1 && silo1.estoqueAtualTon != null) {
+    silo1.estoqueAtualTon = Math.max(0, +(silo1.estoqueAtualTon - cimentoTon).toFixed(2));
+    silo1.nivelPercent = Math.round((silo1.estoqueAtualTon / silo1.capacidadeTotalTon) * 100);
+  }
+
+  // Baixa no Pátio de Areia Média (Serrano Mineração)
+  const patioAreia = (data.concreto_silos || []).find(s => s.id === 'patio-01' || s.codigo === 'PAT-AREIA-MED');
+  if (patioAreia && patioAreia.estoqueAtualM3 != null) {
+    patioAreia.estoqueAtualM3 = Math.max(0, +(patioAreia.estoqueAtualM3 - areiaM3).toFixed(2));
+    patioAreia.nivelPercent = Math.round((patioAreia.estoqueAtualM3 / patioAreia.capacidadeTotalM3) * 100);
+  }
+
+  // Baixa no Box de Brita 1
+  const boxBrita = (data.concreto_silos || []).find(s => s.id === 'patio-04' || s.codigo === 'PAT-BRITA-1');
+  if (boxBrita && boxBrita.estoqueAtualM3 != null) {
+    boxBrita.estoqueAtualM3 = Math.max(0, +(boxBrita.estoqueAtualM3 - britaM3).toFixed(2));
+    boxBrita.nivelPercent = Math.round((boxBrita.estoqueAtualM3 / boxBrita.capacidadeTotalM3) * 100);
+  }
+
+  // Baixa no Tanque de Aditivo Plastificante
+  const tanqueAditivo = (data.concreto_silos || []).find(s => s.id === 'tanque-01' || s.codigo === 'TNQ-ADITIVO-PLAST');
+  if (tanqueAditivo && tanqueAditivo.estoqueAtualL != null) {
+    tanqueAditivo.estoqueAtualL = Math.max(0, Math.round(tanqueAditivo.estoqueAtualL - aditivoL));
+    tanqueAditivo.nivelPercent = Math.round((tanqueAditivo.estoqueAtualL / tanqueAditivo.capacidadeTotalL) * 100);
+  }
+
+  save();
+  return { ok: true, ordemProducao: op, silosAtualizados: [silo1, patioAreia, boxBrita, tanqueAditivo] };
+}
+
+// =====================================================================
+// 9. FUNÇÕES DE CARGAS, TELEMETRIA, ENSAIOS E PROPOSTAS
+// =====================================================================
 export async function criarCargaConcreto(dados, empresaId = CONCRETO_EMPRESA_ID) {
   const data = inicializarDatastoreConcreto();
 
@@ -236,18 +939,15 @@ export async function criarCargaConcreto(dados, empresaId = CONCRETO_EMPRESA_ID)
   const volumeM3 = Number(dados.volumeM3) || 8;
   const tracoInfo = TRACOS_NORMATIZADOS[fck] || TRACOS_NORMATIZADOS[25];
 
-  // Calcular número sequencial
   const ultimoNumero = (data.concreto_cargas || []).reduce((max, c) => Math.max(max, Number(c.numero) || 1000), 1000);
   const proximoNumero = ultimoNumero + 1;
 
-  // Preço por m³
   const precoM3 = dados.precoM3 || (fck === 20 ? 380 : fck === 25 ? 410 : fck === 30 ? 440 : fck === 35 ? 480 : fck === 40 ? 520 : 340);
   const subtotalConcreto = volumeM3 * precoM3;
 
-  // Taxa de bomba
   let taxaBomba = 0;
   if (dados.bomba && dados.bomba.toLowerCase().includes('bomba')) {
-    taxaBomba = 750.00; // Taxa mínima até 25 m³
+    taxaBomba = 750.00;
     if (volumeM3 > 25) {
       taxaBomba += (volumeM3 - 25) * 25.00;
     }
@@ -255,71 +955,71 @@ export async function criarCargaConcreto(dados, empresaId = CONCRETO_EMPRESA_ID)
 
   const valorTotal = subtotalConcreto + taxaBomba;
 
-  // Gerar viagens automáticas em betoneiras de 8m³ ou 10m³
   const viagens = [];
   let volumeRestante = volumeM3;
+  let viagemIndex = 1;
   const betoneirasDisponiveis = (data.concreto_frota || []).filter(f => f.tipo === 'betoneira');
-  let bIndex = 0;
 
   while (volumeRestante > 0) {
     const volViagem = Math.min(volumeRestante, 8);
-    const bt = betoneirasDisponiveis[bIndex % betoneirasDisponiveis.length] || { codigo: 'BT-01', motorista: 'Marcos Silveira' };
+    const betoneiraIndex = (viagemIndex - 1) % (betoneirasDisponiveis.length || 1);
+    const veiculo = betoneirasDisponiveis[betoneiraIndex] || { codigo: `BT-0${viagemIndex}`, motorista: 'Motorista Padrão' };
+
     viagens.push({
-      betoneira: bt.codigo,
-      motorista: bt.motorista,
-      volume: volViagem,
-      saida: null,
-      chegada: null,
+      viagemNumero: viagemIndex,
+      betoneira: veiculo.codigo,
+      motorista: veiculo.motorista,
+      volumeM3: volViagem,
+      saidaUsina: null,
+      chegadaObra: null,
       inicioDescarga: null,
       fimDescarga: null,
-      retorno: null,
-      tempoEsperaMin: 0,
-      horaParadaCobranca: 0
+      status: 'agendada'
     });
+
     volumeRestante -= volViagem;
-    bIndex++;
+    viagemIndex++;
   }
 
+  const loteCpId = `CP-2026-${String(proximoNumero).slice(-3)}`;
   const novaCarga = {
     id: `crg-${proximoNumero}`,
     numero: proximoNumero,
     empresaId,
-    cliente: dados.cliente || 'Cliente Balcão',
-    obra: dados.obra || 'Obra Residencial',
+    cliente: dados.cliente || 'Construtora Parceira',
+    obra: dados.obra || 'Obra Residencial / Comercial',
     endereco: dados.endereco || 'Tangará da Serra - MT',
-    fck: `FCK ${fck} MPa (${dados.brita || 'Brita 1'})`,
-    fckNumero: fck,
+    elemento: dados.elemento || 'Lajes e Vigas',
+    data: dados.data || new Date().toISOString().slice(0, 10),
+    horarioInicio: dados.horarioInicio || '08:00',
+    fck,
     slump: dados.slump || tracoInfo.slumpPadrao,
-    volumeM3,
     brita: dados.brita || 'Brita 1',
-    bomba: dados.bomba || 'Descarga Direta (Calha)',
-    horarioAgendado: dados.horarioAgendado || '09:00',
-    dataAgendada: dados.dataAgendada || new Date().toISOString().slice(0, 10),
-    status: 'agendado',
-    viagens,
-    valorTotal,
+    volumeM3,
+    bomba: dados.bomba || 'Bomba Lança 32m (BL-01)',
+    precoM3,
     subtotalConcreto,
     taxaBomba,
-    laudoCp: `CP-2026-${String(proximoNumero).slice(-3)} (Aguardando moldagem)`,
-    observacoes: dados.observacoes || '',
-    criadoEm: new Date().toISOString()
+    valorTotal,
+    status: 'agendado',
+    loteCp: loteCpId,
+    viagens
   };
 
   data.concreto_cargas.unshift(novaCarga);
 
-  // Criar ensaio de laboratório automaticamente
+  // Criar lote inicial de corpos de prova no laboratório
   const novoEnsaio = {
     id: `cp-2026-${String(proximoNumero).slice(-3)}`,
-    lote: `CP-2026-${String(proximoNumero).slice(-3)}`,
-    empresaId,
+    lote: loteCpId,
     cargaId: novaCarga.id,
     cliente: novaCarga.cliente,
     obra: novaCarga.obra,
     endereco: novaCarga.endereco,
     fckProjeto: fck,
-    slumpMedidoCm: Number(String(dados.slump || '14').replace(/[^0-9]/g, '')) || 14,
-    slumpProjeto: dados.slump || tracoInfo.slumpPadrao,
-    dataMoldagem: novaCarga.dataAgendada,
+    slumpMedidoCm: parseInt(novaCarga.slump, 10) || 12,
+    slumpProjeto: tracoInfo.slumpPadrao,
+    dataMoldagem: novaCarga.data,
     responsavelTecnico: 'Engª Karin Prestes (CREA-MT 027300)',
     status: 'moldado',
     corposProva: [
@@ -334,185 +1034,134 @@ export async function criarCargaConcreto(dados, empresaId = CONCRETO_EMPRESA_ID)
   };
   data.concreto_ensaios.unshift(novoEnsaio);
 
-  // Abater do estoque dos silos da usina
-  abaterEstoqueSilos(data, fck, volumeM3);
+  // Criar Ordem de Produção (OP) vinculada
+  await criarOrdemProducao({
+    cargaId: novaCarga.id,
+    cliente: novaCarga.cliente,
+    obra: novaCarga.obra,
+    fck,
+    volumeM3,
+    betoneirasEscaladas: viagens.map(v => v.betoneira),
+    laudoCpVinculado: loteCpId
+  }, empresaId);
 
   save();
   return { ok: true, carga: novaCarga, ensaio: novoEnsaio };
 }
 
-/**
- * Abate insumos do silo com base na dosagem consumida
- */
-function abaterEstoqueSilos(data, fck, volumeM3) {
-  const traco = TRACOS_NORMATIZADOS[fck] || TRACOS_NORMATIZADOS[25];
-  const cimentoConsumidoTon = (traco.cimentoKg * volumeM3) / 1000;
-  const areiaConsumidaM3 = traco.areiaM3 * volumeM3;
-  const britaConsumidaM3 = traco.britaM3 * volumeM3;
-
-  if (Array.isArray(data.concreto_silos)) {
-    // Cimento
-    const siloCimento = data.concreto_silos.find(s => s.tipo === 'cimento_cp2');
-    if (siloCimento) {
-      siloCimento.estoqueAtualTon = Math.max(0, +(siloCimento.estoqueAtualTon - cimentoConsumidoTon).toFixed(2));
-      siloCimento.nivelPercent = Math.round((siloCimento.estoqueAtualTon / siloCimento.capacidadeTotalTon) * 100);
-    }
-    // Areia
-    const patioAreia = data.concreto_silos.find(s => s.tipo === 'agregado_areia');
-    if (patioAreia) {
-      patioAreia.estoqueAtualM3 = Math.max(0, +(patioAreia.estoqueAtualM3 - areiaConsumidaM3).toFixed(2));
-      patioAreia.nivelPercent = Math.round((patioAreia.estoqueAtualM3 / patioAreia.capacidadeTotalM3) * 100);
-    }
-    // Brita
-    const patioBrita = data.concreto_silos.find(s => s.tipo === 'agregado_brita');
-    if (patioBrita) {
-      patioBrita.estoqueAtualM3 = Math.max(0, +(patioBrita.estoqueAtualM3 - britaConsumidaM3).toFixed(2));
-      patioBrita.nivelPercent = Math.round((patioBrita.estoqueAtualM3 / patioBrita.capacidadeTotalM3) * 100);
-    }
-  }
-}
-
-/**
- * Atualiza status geral de uma carga
- */
 export async function atualizarStatusCarga(cargaId, status, observacoes = '') {
   const data = inicializarDatastoreConcreto();
-  const carga = (data.concreto_cargas || []).find(c => c.id === cargaId);
-  if (!carga) {
-    throw new Error(`Carga ${cargaId} não encontrada.`);
-  }
+  const carga = (data.concreto_cargas || []).find(c => c.id === cargaId || String(c.numero) === String(cargaId));
+  if (!carga) throw new Error(`Carga ${cargaId} não encontrada.`);
 
   carga.status = status;
-  if (observacoes) {
-    carga.observacoes = (carga.observacoes ? carga.observacoes + ' | ' : '') + observacoes;
-  }
-  carga.atualizadoEm = new Date().toISOString();
+  if (observacoes) carga.observacoes = observacoes;
 
   save();
   return { ok: true, carga };
 }
 
-/**
- * Atualiza evento de telemetria em uma viagem de betoneira
- */
 export async function registrarEventoViagem(cargaId, viagemIndex, evento, horario = null) {
   const data = inicializarDatastoreConcreto();
-  const carga = (data.concreto_cargas || []).find(c => c.id === cargaId);
+  const carga = (data.concreto_cargas || []).find(c => c.id === cargaId || String(c.numero) === String(cargaId));
   if (!carga) throw new Error(`Carga ${cargaId} não encontrada.`);
 
-  const vIndex = Number(viagemIndex);
-  if (!carga.viagens || !carga.viagens[vIndex]) {
-    throw new Error(`Viagem index ${vIndex} não encontrada na carga ${cargaId}.`);
-  }
+  const idx = Number(viagemIndex);
+  const viagem = carga.viagens?.[idx];
+  if (!viagem) throw new Error(`Viagem #${idx} não encontrada na carga.`);
 
-  const viagem = carga.viagens[vIndex];
-  const agoraHora = horario || new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  const agora = horario || new Date().toLocaleTimeString('pt-BR', { timeZone: 'America/Cuiaba', hour: '2-digit', minute: '2-digit' });
 
   if (evento === 'saida_usina') {
-    viagem.saida = agoraHora;
-    carga.status = 'em_transito';
-    // Atualizar status do caminhão para em_transito
-    const caminhao = (data.concreto_frota || []).find(f => f.codigo === viagem.betoneira);
-    if (caminhao) caminhao.status = 'em_transito';
+    viagem.saidaUsina = agora;
+    viagem.status = 'em_transito';
+    carga.status = 'em_andamento';
   } else if (evento === 'chegada_obra') {
-    viagem.chegada = agoraHora;
-    carga.status = 'na_obra';
-    const caminhao = (data.concreto_frota || []).find(f => f.codigo === viagem.betoneira);
-    if (caminhao) caminhao.status = 'na_obra';
+    viagem.chegadaObra = agora;
+    viagem.status = 'na_obra';
   } else if (evento === 'inicio_descarga') {
-    viagem.inicioDescarga = agoraHora;
-    carga.status = 'na_obra';
+    viagem.inicioDescarga = agora;
+    viagem.status = 'descarregando';
   } else if (evento === 'fim_descarga') {
-    viagem.fimDescarga = agoraHora;
-    // Calcular tempo de espera na obra
-    if (viagem.chegada) {
-      const [hC, mC] = viagem.chegada.split(':').map(Number);
-      const [hF, mF] = agoraHora.split(':').map(Number);
-      const minutosTotal = (hF * 60 + mF) - (hC * 60 + mC);
-      viagem.tempoEsperaMin = Math.max(0, minutosTotal);
-      if (viagem.tempoEsperaMin > 60) {
-        // Franquia NBR 7212 é de 60 minutos
-        const horasExcedentes = (viagem.tempoEsperaMin - 60) / 60;
-        viagem.horaParadaCobranca = +(horasExcedentes * 120.00).toFixed(2); // R$ 120/h
+    viagem.fimDescarga = agora;
+    viagem.status = 'concluida';
+
+    // Apuração de tempo de espera e hora parada
+    if (viagem.chegadaObra && viagem.fimDescarga) {
+      const [hChegada, mChegada] = viagem.chegadaObra.split(':').map(Number);
+      const [hFim, mFim] = viagem.fimDescarga.split(':').map(Number);
+      const minutosTotal = (hFim * 60 + mFim) - (hChegada * 60 + mChegada);
+      viagem.tempoPermanenciaMinutos = minutosTotal;
+      if (minutosTotal > 60) {
+        viagem.esperaExcedenteMinutos = minutosTotal - 60;
+        viagem.taxaHoraParada = +( (viagem.esperaExcedenteMinutos / 60) * 180.00 ).toFixed(2);
+      } else {
+        viagem.esperaExcedenteMinutos = 0;
+        viagem.taxaHoraParada = 0;
       }
     }
-    const caminhao = (data.concreto_frota || []).find(f => f.codigo === viagem.betoneira);
-    if (caminhao) caminhao.status = 'retornando';
-  } else if (evento === 'retorno_usina') {
-    viagem.retorno = agoraHora;
-    const caminhao = (data.concreto_frota || []).find(f => f.codigo === viagem.betoneira);
-    if (caminhao) caminhao.status = 'disponivel';
-  }
 
-  // Se todas as viagens foram finalizadas, concluir carga
-  const todasConcluidas = carga.viagens.every(v => v.fimDescarga);
-  if (todasConcluidas) {
-    carga.status = 'concluido';
+    const todasConcluidas = carga.viagens.every(v => v.status === 'concluida');
+    if (todasConcluidas) {
+      carga.status = 'concluido';
+    }
   }
 
   save();
   return { ok: true, carga, viagem };
 }
 
-/**
- * Registra rompimento de corpo de prova no laboratório de qualidade
- */
-export async function registrarRupturaCorpoProva(loteId, cpId, idadeDias, tensaoMpa, forcaKn) {
+export async function registrarRupturaCorpoProva(loteId, cpId, idadeDias, tensaoMpa, forcaKn = null) {
   const data = inicializarDatastoreConcreto();
   const ensaio = (data.concreto_ensaios || []).find(e => e.id === loteId || e.lote === loteId);
-  if (!ensaio) throw new Error(`Ensaio de lote ${loteId} não encontrado.`);
+  if (!ensaio) throw new Error(`Lote de ensaio ${loteId} não encontrado.`);
 
-  const cp = (ensaio.corposProva || []).find(c => c.id === cpId && c.idadeDias === Number(idadeDias));
-  if (!cp) throw new Error(`Corpo de prova ${cpId} para idade ${idadeDias} dias não encontrado no lote.`);
+  const cp = ensaio.corposProva?.find(c => c.id === cpId);
+  if (!cp) throw new Error(`Corpo de prova ${cpId} não encontrado no lote.`);
 
   const tensao = Number(tensaoMpa);
+  const forca = forcaKn != null ? Number(forcaKn) : +(tensao * 7.854).toFixed(1);
+
+  cp.idadeDias = Number(idadeDias);
   cp.dataRuptura = new Date().toISOString().slice(0, 10);
   cp.tensaoMpa = tensao;
-  cp.forcaKn = Number(forcaKn) || +(tensao * 7.854).toFixed(1); // Área de cilindro 10x20 = 78.54 cm²
+  cp.forcaKn = forca;
   cp.percentualFck = +((tensao / ensaio.fckProjeto) * 100).toFixed(1);
 
-  // Se foram rompidos os CPs de 28 dias, calcular conformidade final
   const cps28d = ensaio.corposProva.filter(c => c.idadeDias === 28 && c.tensaoMpa != null);
   if (cps28d.length >= 2) {
-    const media28d = +(cps28d.reduce((acc, c) => acc + c.tensaoMpa, 0) / cps28d.length).toFixed(1);
+    const soma = cps28d.reduce((acc, c) => acc + c.tensaoMpa, 0);
+    const media28d = +(soma / cps28d.length).toFixed(1);
     ensaio.fckEstimado28d = media28d;
     ensaio.laudoAprovado = media28d >= ensaio.fckProjeto;
-    ensaio.status = ensaio.laudoAprovado ? 'aprovado' : 'reprovado';
-    ensaio.laudoNumero = `LAUDO-${ensaio.lote}-NBR5739-FINAL`;
+    ensaio.status = ensaio.laudoAprovado ? 'aprovado' : 'divergente';
+    ensaio.laudoNumero = `LAUDO-2026/${ensaio.lote.replace(/\D/g, '')}-NBR5739`;
   } else {
-    ensaio.status = 'em_ensaio';
+    ensaio.status = 'em_cura';
   }
 
   save();
-  return { ok: true, ensaio, cp };
+  return { ok: true, ensaio, corpoProva: cp };
 }
 
-/**
- * Calculadora avançada de dosagem por m³ conforme ABNT NBR 7212
- * Com correção automatizada da umidade superficial da areia
- */
-export function calcularDosagemAvancada({ fck = 25, volumeM3 = 8, umidadeAreiaPercent = 4.5, brita = 'Brita 1' }) {
-  const f = Number(fck) || 25;
-  const v = Number(volumeM3) || 1;
-  const uAreia = Number(umidadeAreiaPercent) || 0; // % de umidade superficial
+export function calcularDosagemAvancada(params = {}) {
+  const f = Number(params.fck) || 25;
+  const v = Number(params.volumeM3) || 8;
+  const uAreia = Number(params.umidadeAreiaPercent) || 4.5;
+  const brita = params.brita || 'Brita 1';
 
   const base = TRACOS_NORMATIZADOS[f] || TRACOS_NORMATIZADOS[25];
 
-  // Pesagens secas base por m³
   const cimentoKg = base.cimentoKg;
-  const areiaSecaKg = Math.round(base.areiaM3 * 1500); // Densidade aparente areia seca ~ 1.500 kg/m³
-  const britaSecaKg = Math.round(base.britaM3 * 1450); // Densidade aparente brita ~ 1.450 kg/m³
+  const areiaSecaKg = Math.round(base.areiaM3 * 1500);
+  const britaSecaKg = Math.round(base.britaM3 * 1450);
   const aguaLitros = base.aguaL;
   const aditivoLitros = base.aditivoL;
 
-  // Correção de umidade NBR 7212:
-  // A areia úmida pesa mais: P_areia_umida = P_areia_seca * (1 + u/100)
-  // A água livre contida na areia deve ser subtraída da água de amassamento:
   const aguaContidaAreiaLitros = Math.round(areiaSecaKg * (uAreia / 100));
   const areiaCorrigidaKg = Math.round(areiaSecaKg * (1 + uAreia / 100));
   const aguaCorrigidaLitros = Math.max(80, Math.round(aguaLitros - aguaContidaAreiaLitros));
 
-  // Totais para a carga completa da betoneira (v m³)
   return {
     fck: f,
     volumeM3: v,
@@ -542,9 +1191,6 @@ export function calcularDosagemAvancada({ fck = 25, volumeM3 = 8, umidadeAreiaPe
   };
 }
 
-/**
- * Cria ou atualiza proposta comercial de concretagem
- */
 export async function criarPropostaComercial(dados, empresaId = CONCRETO_EMPRESA_ID) {
   const data = inicializarDatastoreConcreto();
 
@@ -596,9 +1242,6 @@ export async function criarPropostaComercial(dados, empresaId = CONCRETO_EMPRESA
   return { ok: true, proposta: novaProposta };
 }
 
-/**
- * Atualiza status da proposta comercial
- */
 export async function atualizarStatusProposta(propostaId, status) {
   const data = inicializarDatastoreConcreto();
   const proposta = (data.concreto_propostas || []).find(p => p.id === propostaId);
@@ -609,9 +1252,6 @@ export async function atualizarStatusProposta(propostaId, status) {
   return { ok: true, proposta };
 }
 
-/**
- * Atualiza status de um veículo da frota
- */
 export async function atualizarStatusVeiculoFrota(veiculoId, status, horimetro = null, motorista = null) {
   const data = inicializarDatastoreConcreto();
   const veiculo = (data.concreto_frota || []).find(f => f.id === veiculoId || f.codigo === veiculoId);
@@ -625,9 +1265,6 @@ export async function atualizarStatusVeiculoFrota(veiculoId, status, horimetro =
   return { ok: true, veiculo };
 }
 
-/**
- * Registra movimentação de insumos nos silos e pátios da Serrano Mineração
- */
 export async function registrarMovimentacaoInsumoSilo(siloId, tipoMov, quantidade, motivo = '') {
   const data = inicializarDatastoreConcreto();
   const silo = (data.concreto_silos || []).find(s => s.id === siloId || s.codigo === siloId);
@@ -641,6 +1278,9 @@ export async function registrarMovimentacaoInsumoSilo(siloId, tipoMov, quantidad
     } else if (silo.estoqueAtualM3 != null) {
       silo.estoqueAtualM3 = Math.min(silo.capacidadeTotalM3, +(silo.estoqueAtualM3 + qtd).toFixed(2));
       silo.nivelPercent = Math.round((silo.estoqueAtualM3 / silo.capacidadeTotalM3) * 100);
+    } else if (silo.estoqueAtualL != null) {
+      silo.estoqueAtualL = Math.min(silo.capacidadeTotalL, Math.round(silo.estoqueAtualL + qtd));
+      silo.nivelPercent = Math.round((silo.estoqueAtualL / silo.capacidadeTotalL) * 100);
     }
     silo.ultimoCarregamento = new Date().toISOString().slice(0, 10);
   } else if (tipoMov === 'saida') {
@@ -650,6 +1290,9 @@ export async function registrarMovimentacaoInsumoSilo(siloId, tipoMov, quantidad
     } else if (silo.estoqueAtualM3 != null) {
       silo.estoqueAtualM3 = Math.max(0, +(silo.estoqueAtualM3 - qtd).toFixed(2));
       silo.nivelPercent = Math.round((silo.estoqueAtualM3 / silo.capacidadeTotalM3) * 100);
+    } else if (silo.estoqueAtualL != null) {
+      silo.estoqueAtualL = Math.max(0, Math.round(silo.estoqueAtualL - qtd));
+      silo.nivelPercent = Math.round((silo.estoqueAtualL / silo.capacidadeTotalL) * 100);
     }
   }
 
