@@ -1,0 +1,1 @@
+{"error":"asset not found","code":"STATIC_ASSET_NOT_FOUND"}
