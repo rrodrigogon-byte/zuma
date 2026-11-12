@@ -129,7 +129,7 @@ export async function provisionarPalatarePizzaria({ commerceDb } = {}) {
       { id: 'usr-palatare-atendente-01', username: 'atendente_palatare', email: 'atendimento@palatarepizzaria.com.br', nome: 'Atendente Salão & Delivery', role: 'operador' },
     ];
 
-    const senhaHashPadrao = bcrypt.hashSync('123456', 10);
+    const SENHA_PADRAO_HASH = bcrypt.hashSync('123456', 10);
     for (const u of usuariosSeed) {
       const idx = rootDb.usuarios.findIndex(item => 
         (item.username && item.username.toLowerCase() === u.username.toLowerCase()) ||
@@ -141,7 +141,7 @@ export async function provisionarPalatarePizzaria({ commerceDb } = {}) {
         nome: u.nome,
         email: u.email,
         emailAlternativo: u.emailAlt || '',
-        senhaHash: senhaHashPadrao,
+        senhaHash: SENHA_PADRAO_HASH,
         role: u.role,
         empresaId: PALATARE_EMPRESA_ID,
         lojaId: PALATARE_LOJA_ID,
@@ -149,9 +149,17 @@ export async function provisionarPalatarePizzaria({ commerceDb } = {}) {
         criadoEm: new Date().toISOString()
       };
       if (idx >= 0) {
-        rootDb.usuarios[idx] = { ...rootDb.usuarios[idx], ...userPayload, id: rootDb.usuarios[idx].id || u.id };
+        rootDb.usuarios[idx] = { 
+          ...rootDb.usuarios[idx], 
+          ...userPayload, 
+          senhaHash: rootDb.usuarios[idx].senhaHash || SENHA_PADRAO_HASH,
+          id: rootDb.usuarios[idx].id || u.id 
+        };
       } else {
-        rootDb.usuarios.push(userPayload);
+        rootDb.usuarios.push({
+          ...userPayload,
+          senhaHash: SENHA_PADRAO_HASH
+        });
       }
       resultados.usuariosProvisionados++;
     }

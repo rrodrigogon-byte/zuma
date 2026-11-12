@@ -53,6 +53,8 @@ export function createEmpresasAdminRouter({ db, isPlatformAdmin = () => false, o
         autorizadas = ['d0d0ac01-8e50-4b61-8c79-de4aaa916da6', 'dino'];
       } else if (em.includes('agroopen') || em.includes('caua') || em.includes('rafa') || em.includes('agro open')) {
         autorizadas = ['2e041110-db20-4fd1-8278-12bd3dead008', 'emp-agro-open', 'agroopen'];
+      } else if (em.includes('palatare') || em.includes('pizzaria')) {
+        autorizadas = ['c1c1ac01-8e50-4b61-8c79-de4aaa916da9', 'palatare'];
       } else {
         const empId = obterEmpresaIdDoUsuario(req) || req.user?.empresaId || null;
         autorizadas = empId ? [empId] : [];
