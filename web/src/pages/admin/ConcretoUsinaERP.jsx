@@ -802,6 +802,527 @@ export default function ConcretoUsinaERP() {
         </div>
       )}
 
+      {/* ABA NOVA: LISTA TÉCNICA (BOM) & FICHAS DE FABRICAÇÃO */}
+      {abaAtiva === 'lista_tecnica' && (
+        <div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 12 }}>
+            <div>
+              <h2 style={{ fontSize: 20, fontWeight: 800, margin: 0, color: '#FFFFFF' }}>
+                Lista Técnica (BOM) & Fichas de Fabricação de Concreto Usinado
+              </h2>
+              <p style={{ fontSize: 12, color: '#94A3B8', margin: '4px 0 0' }}>
+                Engenharia de dosagem NBR 7212 / NBR 8953 / NBR 6118 com proporção em massa, consumo por m³ e apuração do custo direto de matéria-prima.
+              </p>
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <span style={{ background: '#0F172A', border: '1px solid #334155', color: '#10B981', padding: '6px 14px', borderRadius: 8, fontSize: 12, fontWeight: 700 }}>
+                ✓ 7 Traços Homologados pela RT Engª Karin Prestes
+              </span>
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(460px, 1fr))', gap: 20 }}>
+            {listasTecnicas.map(bom => (
+              <div key={bom.id} style={{ background: '#1E293B', border: '1px solid #334155', borderRadius: 14, padding: 20, boxShadow: '0 4px 12px rgba(0,0,0,0.2)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ background: '#D97706', color: '#FFF', padding: '2px 8px', borderRadius: 6, fontSize: 11, fontWeight: 900 }}>
+                        {bom.codigo}
+                      </span>
+                      <span style={{ fontSize: 12, color: '#94A3B8' }}>{bom.normaReferencia}</span>
+                    </div>
+                    <h3 style={{ margin: '6px 0 2px', fontSize: 18, fontWeight: 900, color: '#FFFFFF' }}>
+                      {bom.nome}
+                    </h3>
+                    <p style={{ margin: 0, fontSize: 12, color: '#94A3B8' }}>{bom.descricao}</p>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontSize: 10, color: '#94A3B8', textTransform: 'uppercase' }}>Custo Insumos / m³</div>
+                    <div style={{ fontSize: 20, fontWeight: 900, color: '#F59E0B' }}>
+                      R$ {bom.custoDiretoInsumosM3?.toFixed(2)}
+                    </div>
+                    <div style={{ fontSize: 10, color: '#10B981' }}>Tabela: R$ {bom.precoSugeridoVendaM3?.toFixed(2)}</div>
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, background: '#0F172A', padding: 10, borderRadius: 10, marginBottom: 14, textAlign: 'center', fontSize: 11 }}>
+                  <div>
+                    <div style={{ color: '#64748B' }}>Traço em Massa</div>
+                    <div style={{ fontWeight: 800, color: '#E2E8F0', marginTop: 2 }}>{bom.proporcaoMassa}</div>
+                  </div>
+                  <div>
+                    <div style={{ color: '#64748B' }}>Slump Alvo</div>
+                    <div style={{ fontWeight: 800, color: '#38BDF8', marginTop: 2 }}>{bom.slumpPadrao}</div>
+                  </div>
+                  <div>
+                    <div style={{ color: '#64748B' }}>Fator a/c</div>
+                    <div style={{ fontWeight: 800, color: '#A78BFA', marginTop: 2 }}>{bom.fatorAguaCimento}</div>
+                  </div>
+                  <div>
+                    <div style={{ color: '#64748B' }}>Perda Aderência</div>
+                    <div style={{ fontWeight: 800, color: '#F87171', marginTop: 2 }}>{bom.perdaAderenciaPercent}%</div>
+                  </div>
+                </div>
+
+                <div style={{ borderTop: '1px solid #334155', paddingTop: 10 }}>
+                  <div style={{ fontSize: 11, fontWeight: 800, color: '#CBD5E1', textTransform: 'uppercase', marginBottom: 8 }}>
+                    Composição Estequiométrica de Matérias-Primas por m³:
+                  </div>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
+                    <thead>
+                      <tr style={{ color: '#64748B', borderBottom: '1px solid #334155' }}>
+                        <th style={{ textAlign: 'left', padding: '4px 0' }}>Componente</th>
+                        <th style={{ textAlign: 'center', padding: '4px 0' }}>Consumo</th>
+                        <th style={{ textAlign: 'right', padding: '4px 0' }}>Custo Unit.</th>
+                        <th style={{ textAlign: 'right', padding: '4px 0' }}>Subtotal / m³</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {bom.componentes.map((c, i) => (
+                        <tr key={i} style={{ borderBottom: '1px solid rgba(51, 65, 85, 0.4)', color: '#E2E8F0' }}>
+                          <td style={{ padding: '6px 0' }}>{c.nome}</td>
+                          <td style={{ padding: '6px 0', textAlign: 'center', fontWeight: 700, color: '#38BDF8' }}>
+                            {c.consumo} {c.unidade} {c.consumoKg && <span style={{ color: '#64748B', fontSize: 10 }}>({c.consumoKg} kg)</span>}
+                          </td>
+                          <td style={{ padding: '6px 0', textAlign: 'right', color: '#94A3B8' }}>
+                            R$ {c.custoUnitarioKg ? `${c.custoUnitarioKg.toFixed(2)}/kg` : `${c.custoUnitario.toFixed(2)}/${c.unidade}`}
+                          </td>
+                          <td style={{ padding: '6px 0', textAlign: 'right', fontWeight: 800, color: '#FCD34D' }}>
+                            R$ {c.subtotalCusto?.toFixed(2)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ABA NOVA: COMPRAS DE MATÉRIAS-PRIMAS */}
+      {abaAtiva === 'compras' && (
+        <div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 12 }}>
+            <div>
+              <h2 style={{ fontSize: 20, fontWeight: 800, margin: 0, color: '#FFFFFF' }}>
+                Gestão de Compras de Matérias-Primas & Abastecimento de Silos
+              </h2>
+              <p style={{ fontSize: 12, color: '#94A3B8', margin: '4px 0 0' }}>
+                Pedidos de cimento a granel em bitrem (Votorantim Nobres), carretas de brita, aditivos químicos e óleo diesel com pesagem na balança.
+              </p>
+            </div>
+            <button
+              onClick={() => setModalNovaCompraAberto(true)}
+              style={{
+                background: '#10B981',
+                color: '#0F172A',
+                border: 'none',
+                padding: '10px 20px',
+                borderRadius: 8,
+                fontWeight: 800,
+                fontSize: 13,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                boxShadow: '0 4px 12px rgba(16, 185, 129, 0.3)'
+              }}
+            >
+              + Novo Pedido de Compra
+            </button>
+          </div>
+
+          {/* Cards de Insumos Homologados */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 14, marginBottom: 24 }}>
+            {insumosCatalogo.slice(0, 4).map(ins => (
+              <div key={ins.id} style={{ background: '#1E293B', border: '1px solid #334155', borderRadius: 12, padding: 14 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                  <span style={{ fontSize: 10, background: '#334155', color: '#E2E8F0', padding: '2px 6px', borderRadius: 4, fontWeight: 700 }}>
+                    {ins.categoria}
+                  </span>
+                  <span style={{ fontSize: 11, color: '#F59E0B', fontWeight: 800 }}>Lead Time: {ins.leadTimeDias}d</span>
+                </div>
+                <h4 style={{ margin: '8px 0 4px', fontSize: 13, fontWeight: 800, color: '#FFF' }}>{ins.nome}</h4>
+                <div style={{ fontSize: 11, color: '#94A3B8' }}>{ins.fornecedorPadrao}</div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 10, borderTop: '1px solid #334155', paddingTop: 8 }}>
+                  <span style={{ fontSize: 11, color: '#64748B' }}>Custo Homologado:</span>
+                  <span style={{ fontSize: 14, fontWeight: 900, color: '#10B981' }}>R$ {ins.custoUnitario.toFixed(2)} / {ins.unidade}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Tabela de Pedidos de Compra */}
+          <div style={{ background: '#1E293B', border: '1px solid #334155', borderRadius: 14, overflow: 'hidden' }}>
+            <div style={{ padding: '14px 20px', borderBottom: '1px solid #334155', background: '#0F172A', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontWeight: 800, fontSize: 14, color: '#FFF' }}>Histórico de Pedidos de Compra & Entradas na Balança</span>
+              <span style={{ fontSize: 12, color: '#94A3B8' }}>{compras.length} pedidos registrados</span>
+            </div>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+              <thead>
+                <tr style={{ background: '#1E293B', color: '#94A3B8', borderBottom: '1px solid #334155' }}>
+                  <th style={{ padding: '12px 16px', textAlign: 'left' }}>Pedido</th>
+                  <th style={{ padding: '12px 16px', textAlign: 'left' }}>Data</th>
+                  <th style={{ padding: '12px 16px', textAlign: 'left' }}>Fornecedor</th>
+                  <th style={{ padding: '12px 16px', textAlign: 'left' }}>Insumo / Destino</th>
+                  <th style={{ padding: '12px 16px', textAlign: 'center' }}>Quantidade</th>
+                  <th style={{ padding: '12px 16px', textAlign: 'right' }}>Valor Total</th>
+                  <th style={{ padding: '12px 16px', textAlign: 'center' }}>Status</th>
+                  <th style={{ padding: '12px 16px', textAlign: 'right' }}>Ação</th>
+                </tr>
+              </thead>
+              <tbody>
+                {compras.map(c => (
+                  <tr key={c.id} style={{ borderBottom: '1px solid #334155', color: '#E2E8F0' }}>
+                    <td style={{ padding: '12px 16px', fontWeight: 800, color: '#F59E0B' }}>{c.numero}</td>
+                    <td style={{ padding: '12px 16px' }}>{c.data}</td>
+                    <td style={{ padding: '12px 16px', fontWeight: 600 }}>{c.fornecedor}</td>
+                    <td style={{ padding: '12px 16px' }}>
+                      <div style={{ fontWeight: 700, color: '#FFF' }}>{c.insumoNome}</div>
+                      <div style={{ fontSize: 11, color: '#64748B' }}>Destino: {c.siloDestinoNome}</div>
+                    </td>
+                    <td style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 800, color: '#38BDF8' }}>
+                      {c.quantidade} {c.unidade}
+                    </td>
+                    <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 900, color: '#FCD34D' }}>
+                      R$ {c.valorTotal?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    </td>
+                    <td style={{ padding: '12px 16px', textAlign: 'center' }}>
+                      <span style={{
+                        padding: '4px 10px',
+                        borderRadius: 12,
+                        fontSize: 11,
+                        fontWeight: 800,
+                        background: c.status === 'entregue_pesado' ? 'rgba(16, 185, 129, 0.15)' : c.status === 'em_transito' ? 'rgba(59, 130, 246, 0.15)' : 'rgba(245, 158, 11, 0.15)',
+                        color: c.status === 'entregue_pesado' ? '#10B981' : c.status === 'em_transito' ? '#60A5FA' : '#F59E0B',
+                        border: `1px solid ${c.status === 'entregue_pesado' ? '#10B981' : c.status === 'em_transito' ? '#3B82F6' : '#D97706'}`
+                      }}>
+                        {c.status === 'entregue_pesado' ? '✓ Entregue & Pesado' : c.status === 'em_transito' ? '🚛 Em Trânsito' : '⏳ Solicitado'}
+                      </span>
+                    </td>
+                    <td style={{ padding: '12px 16px', textAlign: 'right' }}>
+                      {c.status !== 'entregue_pesado' && (
+                        <button
+                          onClick={() => {
+                            setModalRecebimentoAberto(c);
+                            setFormRecebimento({ pesoBalançaEntradaTon: c.quantidade, notaFiscal: '', responsavelRecebimento: 'Carlos Eduardo' });
+                          }}
+                          style={{
+                            background: '#0F172A',
+                            border: '1px solid #10B981',
+                            color: '#10B981',
+                            padding: '6px 12px',
+                            borderRadius: 6,
+                            fontSize: 11,
+                            fontWeight: 700,
+                            cursor: 'pointer'
+                          }}
+                        >
+                          ⚖️ Pesar & Abastecer Silo
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ABA NOVA: CÁLCULO DE CUSTOS & FORMAÇÃO DE PREÇO */}
+      {abaAtiva === 'custos' && (
+        <div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 12 }}>
+            <div>
+              <h2 style={{ fontSize: 20, fontWeight: 800, margin: 0, color: '#FFFFFF' }}>
+                Simulador Industrial de Custos, Frete & Formação de Preço
+              </h2>
+              <p style={{ fontSize: 12, color: '#94A3B8', margin: '4px 0 0' }}>
+                Decomposição analítica do CPV de matérias-primas, custos operacionais da central Convicta, frete por raio rodoviário e BDI/margem líquida.
+              </p>
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 20 }}>
+            {/* Painel de Parâmetros de Simulação */}
+            <div style={{ background: '#1E293B', border: '1px solid #334155', borderRadius: 14, padding: 20 }}>
+              <h3 style={{ margin: '0 0 16px', fontSize: 16, fontWeight: 800, color: '#FFF' }}>
+                Parâmetros da Concretagem
+              </h3>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, color: '#94A3B8', marginBottom: 4 }}>Resistência FCK (MPa):</label>
+                  <select
+                    value={custoFck}
+                    onChange={e => setCustoFck(Number(e.target.value))}
+                    style={{ width: '100%', padding: '10px 12px', borderRadius: 8, background: '#0F172A', border: '1px solid #334155', color: '#FFF', fontWeight: 800 }}
+                  >
+                    <option value={15}>FCK 15 MPa (Magro)</option>
+                    <option value={20}>FCK 20 MPa (Pisos e Baldrames)</option>
+                    <option value={25}>FCK 25 MPa (Lajes e Vigas)</option>
+                    <option value={30}>FCK 30 MPa (Estrutural Pesado)</option>
+                    <option value={35}>FCK 35 MPa (Piso Industrial c/ Fibras)</option>
+                    <option value={40}>FCK 40 MPa (Obras Especiais / Pontes)</option>
+                    <option value={45}>FCK 45 MPa (CAD Pré-Moldado)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, color: '#94A3B8', marginBottom: 4 }}>Volume Solicitado (m³):</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="500"
+                    value={custoVolume}
+                    onChange={e => setCustoVolume(Number(e.target.value))}
+                    style={{ width: '100%', padding: '10px 12px', borderRadius: 8, background: '#0F172A', border: '1px solid #334155', color: '#FFF', fontWeight: 800 }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, color: '#94A3B8', marginBottom: 4 }}>Distância da Obra (km da Usina):</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="150"
+                    value={custoDistancia}
+                    onChange={e => setCustoDistancia(Number(e.target.value))}
+                    style={{ width: '100%', padding: '10px 12px', borderRadius: 8, background: '#0F172A', border: '1px solid #334155', color: '#FFF', fontWeight: 800 }}
+                  />
+                  <div style={{ fontSize: 10, color: '#64748B', marginTop: 2 }}>Até 15 km: raio urbano. Acima: adicional R$ 1,80/km/m³</div>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, color: '#94A3B8', marginBottom: 4 }}>Método de Lançamento:</label>
+                  <select
+                    value={custoTipoBomba}
+                    onChange={e => setCustoTipoBomba(e.target.value)}
+                    style={{ width: '100%', padding: '10px 12px', borderRadius: 8, background: '#0F172A', border: '1px solid #334155', color: '#FFF', fontWeight: 800 }}
+                  >
+                    <option value="Descarga Direta (Calha)">Descarga Direta por Calha</option>
+                    <option value="Bomba Lança 32m">Bomba Lança 32m Schwing</option>
+                    <option value="Bomba Lança 36m">Bomba Lança 36m Schwing</option>
+                  </select>
+                </div>
+
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#94A3B8', marginBottom: 4 }}>
+                    <span>Margem Líquida Alvo:</span>
+                    <strong style={{ color: '#10B981' }}>{custoMargemDesejada}%</strong>
+                  </div>
+                  <input
+                    type="range"
+                    min="10"
+                    max="30"
+                    step="1"
+                    value={custoMargemDesejada}
+                    onChange={e => setCustoMargemDesejada(Number(e.target.value))}
+                    style={{ width: '100%' }}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Resultado da Decomposição de Custos e Precificação */}
+            {simulacaoCustos && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                <div style={{ background: '#1E293B', border: '1px solid #334155', borderRadius: 14, padding: 20 }}>
+                  <h3 style={{ margin: '0 0 14px', fontSize: 16, fontWeight: 800, color: '#FFF' }}>
+                    Decomposição dos Custos Industriais por m³:
+                  </h3>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
+                    <div style={{ background: '#0F172A', border: '1px solid #334155', padding: 12, borderRadius: 10, textAlign: 'center' }}>
+                      <div style={{ fontSize: 11, color: '#64748B' }}>1. CPV Insumos</div>
+                      <div style={{ fontSize: 18, fontWeight: 900, color: '#F59E0B', marginTop: 4 }}>
+                        R$ {simulacaoCustos.decomposicaoCustosM3.cpvInsumos.toFixed(2)}
+                      </div>
+                      <div style={{ fontSize: 10, color: '#94A3B8' }}>Cimento, Areia, Brita, Aditivos</div>
+                    </div>
+                    <div style={{ background: '#0F172A', border: '1px solid #334155', padding: 12, borderRadius: 10, textAlign: 'center' }}>
+                      <div style={{ fontSize: 11, color: '#64748B' }}>2. Usinagem Central</div>
+                      <div style={{ fontSize: 18, fontWeight: 900, color: '#38BDF8', marginTop: 4 }}>
+                        R$ {simulacaoCustos.decomposicaoCustosM3.usinagemCentral.toFixed(2)}
+                      </div>
+                      <div style={{ fontSize: 10, color: '#94A3B8' }}>Energia, Operador, Manutenção</div>
+                    </div>
+                    <div style={{ background: '#0F172A', border: '1px solid #334155', padding: 12, borderRadius: 10, textAlign: 'center' }}>
+                      <div style={{ fontSize: 11, color: '#64748B' }}>3. Frete Betoneira</div>
+                      <div style={{ fontSize: 18, fontWeight: 900, color: '#A78BFA', marginTop: 4 }}>
+                        R$ {simulacaoCustos.decomposicaoCustosM3.freteBetoneira.toFixed(2)}
+                      </div>
+                      <div style={{ fontSize: 10, color: '#94A3B8' }}>Diesel S10, Pneus, Motorista</div>
+                    </div>
+                    <div style={{ background: '#0F172A', border: '1px solid #334155', padding: 12, borderRadius: 10, textAlign: 'center' }}>
+                      <div style={{ fontSize: 11, color: '#64748B' }}>4. Bombeamento</div>
+                      <div style={{ fontSize: 18, fontWeight: 900, color: '#EC4899', marginTop: 4 }}>
+                        R$ {simulacaoCustos.decomposicaoCustosM3.servicoBomba.toFixed(2)}
+                      </div>
+                      <div style={{ fontSize: 10, color: '#94A3B8' }}>Bomba Lança Schwing</div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Formação de Preço e BDI */}
+                <div style={{ background: '#0F172A', border: '1.5pt solid #F59E0B', borderRadius: 14, padding: 20 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                    <div>
+                      <h4 style={{ margin: 0, fontSize: 16, fontWeight: 900, color: '#FFF' }}>
+                        Formação de Preço de Venda Recomendada (BDI Industrial)
+                      </h4>
+                      <p style={{ margin: '2px 0 0', fontSize: 11, color: '#94A3B8' }}>
+                        Tributos: ISSQN 3% + PIS/COFINS 3,65% + IRPJ/CSLL 4,8% (Total 11,45%) · Despesas Adm: 5%
+                      </p>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontSize: 11, color: '#94A3B8', textTransform: 'uppercase' }}>Preço Sugerido / m³</div>
+                      <div style={{ fontSize: 26, fontWeight: 900, color: '#10B981' }}>
+                        R$ {simulacaoCustos.precificacao.precoSugeridoVendaM3.toFixed(2)}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, borderTop: '1px solid #334155', paddingTop: 14 }}>
+                    <div>
+                      <div style={{ fontSize: 11, color: '#64748B' }}>Valor Total do Lote ({custoVolume} m³):</div>
+                      <div style={{ fontSize: 20, fontWeight: 900, color: '#FCD34D' }}>
+                        R$ {simulacaoCustos.precificacao.totalPrecoSugerido.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      </div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 11, color: '#64748B' }}>Margem de Contribuição / m³:</div>
+                      <div style={{ fontSize: 18, fontWeight: 800, color: '#10B981' }}>
+                        R$ {simulacaoCustos.precificacao.margemContribuicaoM3.toFixed(2)} ({simulacaoCustos.precificacao.margemContribuicaoPercent}%)
+                      </div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 11, color: '#64748B' }}>Custo Direto Industrial Total:</div>
+                      <div style={{ fontSize: 18, fontWeight: 800, color: '#E2E8F0' }}>
+                        R$ {simulacaoCustos.totaisLote.totalCustoDireto.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ABA NOVA: ORDENS DE PRODUÇÃO (OP) */}
+      {abaAtiva === 'ordens_producao' && (
+        <div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 12 }}>
+            <div>
+              <h2 style={{ fontSize: 20, fontWeight: 800, margin: 0, color: '#FFFFFF' }}>
+                Ordens de Produção (OP) & Baixa Automatizada nos Silos
+              </h2>
+              <p style={{ fontSize: 12, color: '#94A3B8', margin: '4px 0 0' }}>
+                Controle de bateladas da central Convicta, comparação entre consumo teórico e pesagem real nas células de carga e baixa nos estoques.
+              </p>
+            </div>
+            <button
+              onClick={() => setModalNovaOpAberto(true)}
+              style={{
+                background: '#3B82F6',
+                color: '#FFFFFF',
+                border: 'none',
+                padding: '10px 20px',
+                borderRadius: 8,
+                fontWeight: 800,
+                fontSize: 13,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                boxShadow: '0 4px 12px rgba(59, 130, 246, 0.3)'
+              }}
+            >
+              + Nova Ordem de Produção
+            </button>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            {ordensProducao.map(op => (
+              <div key={op.id} style={{ background: '#1E293B', border: '1px solid #334155', borderRadius: 14, padding: 18 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 10 }}>
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ background: '#3B82F6', color: '#FFF', padding: '2px 8px', borderRadius: 6, fontSize: 11, fontWeight: 900 }}>
+                        {op.numero}
+                      </span>
+                      <span style={{ fontSize: 12, color: '#94A3B8' }}>{op.dataHora}</span>
+                      <span style={{
+                        padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 800,
+                        background: op.status === 'concluida' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(59, 130, 246, 0.15)',
+                        color: op.status === 'concluida' ? '#10B981' : '#60A5FA'
+                      }}>
+                        {op.status === 'concluida' ? '✓ Produção Concluída' : '⚙️ Em Produção'}
+                      </span>
+                    </div>
+                    <h3 style={{ margin: '6px 0 2px', fontSize: 17, fontWeight: 800, color: '#FFF' }}>
+                      {op.obra} · {op.cliente}
+                    </h3>
+                    <div style={{ fontSize: 12, color: '#94A3B8' }}>
+                      Traço: <strong style={{ color: '#F59E0B' }}>FCK {op.fck} MPa</strong> · Volume: <strong style={{ color: '#38BDF8' }}>{op.volumeM3} m³</strong> ({op.totalBateladas} bateladas de ~8m³) · Operador: {op.operador}
+                    </div>
+                  </div>
+
+                  {op.status !== 'concluida' && (
+                    <button
+                      onClick={() => handleConcluirOp(op.id)}
+                      style={{
+                        background: '#10B981',
+                        color: '#0F172A',
+                        border: 'none',
+                        padding: '8px 16px',
+                        borderRadius: 8,
+                        fontWeight: 800,
+                        fontSize: 12,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      ✓ Concluir & Baixar Silos
+                    </button>
+                  )}
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 10, background: '#0F172A', padding: 12, borderRadius: 10, marginTop: 12, fontSize: 11 }}>
+                  <div>
+                    <div style={{ color: '#64748B' }}>Cimento (Teórico / Real)</div>
+                    <div style={{ fontWeight: 800, color: '#E2E8F0', marginTop: 2 }}>
+                      {op.consumoTeorico.cimentoKg} kg / <span style={{ color: '#F59E0B' }}>{op.consumoRealBalança ? `${op.consumoRealBalança.cimentoKg} kg` : 'Pesando...'}</span>
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ color: '#64748B' }}>Areia Média (Teórico / Real)</div>
+                    <div style={{ fontWeight: 800, color: '#E2E8F0', marginTop: 2 }}>
+                      {op.consumoTeorico.areiaKg} kg / <span style={{ color: '#F59E0B' }}>{op.consumoRealBalança ? `${op.consumoRealBalança.areiaKg} kg` : 'Pesando...'}</span>
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ color: '#64748B' }}>Brita 1 (Teórico / Real)</div>
+                    <div style={{ fontWeight: 800, color: '#E2E8F0', marginTop: 2 }}>
+                      {op.consumoTeorico.britaKg} kg / <span style={{ color: '#F59E0B' }}>{op.consumoRealBalança ? `${op.consumoRealBalança.britaKg} kg` : 'Pesando...'}</span>
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ color: '#64748B' }}>Aditivo Plastificante</div>
+                    <div style={{ fontWeight: 800, color: '#A78BFA', marginTop: 2 }}>
+                      {op.consumoTeorico.aditivoL} L
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* ABA 2: CENTRAL DOSADORA & CALCULADORA NBR 7212 */}
       {abaAtiva === 'central' && (
         <div>
@@ -1839,6 +2360,284 @@ export default function ConcretoUsinaERP() {
                 🖨️ Imprimir Laudo Oficial
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL NOVO PEDIDO DE COMPRA DE MATÉRIA-PRIMA */}
+      {modalNovaCompraAberto && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          zIndex: 9999, padding: 20
+        }}>
+          <div style={{ background: '#1E293B', border: '1px solid #334155', borderRadius: 16, maxWidth: 520, width: '100%', padding: 24 }}>
+            <h3 style={{ margin: '0 0 14px', fontSize: 18, fontWeight: 900, color: '#FFFFFF' }}>
+              Novo Pedido de Compra de Matéria-Prima
+            </h3>
+            <form onSubmit={handleCriarCompra} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, color: '#94A3B8', marginBottom: 4 }}>Insumo Desejado:</label>
+                <select
+                  value={formCompra.insumoId}
+                  onChange={e => {
+                    const sel = insumosCatalogo.find(i => i.id === e.target.value);
+                    setFormCompra({
+                      ...formCompra,
+                      insumoId: e.target.value,
+                      fornecedor: sel ? sel.fornecedorPadrao : formCompra.fornecedor,
+                      precoUnitario: sel ? sel.custoUnitario : formCompra.precoUnitario
+                    });
+                  }}
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: 8, background: '#0F172A', border: '1px solid #334155', color: '#FFF' }}
+                >
+                  {insumosCatalogo.map(ins => (
+                    <option key={ins.id} value={ins.id}>{ins.nome} ({ins.unidade})</option>
+                  ))}
+                </select>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, color: '#94A3B8', marginBottom: 4 }}>Quantidade:</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    required
+                    value={formCompra.quantidade}
+                    onChange={e => setFormCompra({ ...formCompra, quantidade: Number(e.target.value) })}
+                    style={{ width: '100%', padding: '10px 12px', borderRadius: 8, background: '#0F172A', border: '1px solid #334155', color: '#FFF', fontWeight: 800 }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, color: '#94A3B8', marginBottom: 4 }}>Preço Unitário (R$):</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    required
+                    value={formCompra.precoUnitario}
+                    onChange={e => setFormCompra({ ...formCompra, precoUnitario: Number(e.target.value) })}
+                    style={{ width: '100%', padding: '10px 12px', borderRadius: 8, background: '#0F172A', border: '1px solid #334155', color: '#FFF' }}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: 12, color: '#94A3B8', marginBottom: 4 }}>Fornecedor Homologado:</label>
+                <input
+                  type="text"
+                  required
+                  value={formCompra.fornecedor}
+                  onChange={e => setFormCompra({ ...formCompra, fornecedor: e.target.value })}
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: 8, background: '#0F172A', border: '1px solid #334155', color: '#FFF' }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: 12, color: '#94A3B8', marginBottom: 4 }}>Condição de Pagamento:</label>
+                <select
+                  value={formCompra.formaPagamento}
+                  onChange={e => setFormCompra({ ...formCompra, formaPagamento: e.target.value })}
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: 8, background: '#0F172A', border: '1px solid #334155', color: '#FFF' }}
+                >
+                  <option value="Boleto 30 DDL">Boleto 30 DDL</option>
+                  <option value="Boleto 14/28 DDL">Boleto 14/28 DDL</option>
+                  <option value="PIX à Vista c/ Desconto">PIX à Vista com Desconto</option>
+                  <option value="Faturado 15 DDL">Faturado 15 DDL</option>
+                </select>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 14 }}>
+                <button
+                  type="button"
+                  onClick={() => setModalNovaCompraAberto(false)}
+                  style={{ padding: '8px 14px', borderRadius: 8, background: '#334155', color: '#FFF', border: 'none', cursor: 'pointer' }}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  style={{ padding: '8px 18px', borderRadius: 8, background: '#10B981', color: '#0F172A', fontWeight: 800, border: 'none', cursor: 'pointer' }}
+                >
+                  Emitir Pedido de Compra
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL REGISTRAR RECEBIMENTO E PESAGEM NA BALANÇA */}
+      {modalRecebimentoAberto && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          zIndex: 9999, padding: 20
+        }}>
+          <div style={{ background: '#1E293B', border: '1px solid #334155', borderRadius: 16, maxWidth: 480, width: '100%', padding: 24 }}>
+            <h3 style={{ margin: '0 0 10px', fontSize: 18, fontWeight: 900, color: '#FFFFFF' }}>
+              Pesagem e Recebimento na Balança Rodoviária
+            </h3>
+            <p style={{ fontSize: 12, color: '#94A3B8', margin: '0 0 14px' }}>
+              Pedido: <strong style={{ color: '#F59E0B' }}>{modalRecebimentoAberto.numero}</strong> · {modalRecebimentoAberto.insumoNome}
+            </p>
+
+            <form onSubmit={handleRegistrarRecebimento} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, color: '#94A3B8', marginBottom: 4 }}>
+                  Peso Líquido Apurado na Balança ({modalRecebimentoAberto.unidade}):
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  required
+                  value={formRecebimento.pesoBalançaEntradaTon}
+                  onChange={e => setFormRecebimento({ ...formRecebimento, pesoBalançaEntradaTon: e.target.value })}
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: 8, background: '#0F172A', border: '1px solid #334155', color: '#FFF', fontSize: 16, fontWeight: 800 }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: 12, color: '#94A3B8', marginBottom: 4 }}>Número da NF-e de Entrada:</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Ex: NF-e 109.845"
+                  value={formRecebimento.notaFiscal}
+                  onChange={e => setFormRecebimento({ ...formRecebimento, notaFiscal: e.target.value })}
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: 8, background: '#0F172A', border: '1px solid #334155', color: '#FFF' }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: 12, color: '#94A3B8', marginBottom: 4 }}>Responsável pelo Recebimento:</label>
+                <input
+                  type="text"
+                  required
+                  value={formRecebimento.responsavelRecebimento}
+                  onChange={e => setFormRecebimento({ ...formRecebimento, responsavelRecebimento: e.target.value })}
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: 8, background: '#0F172A', border: '1px solid #334155', color: '#FFF' }}
+                />
+              </div>
+
+              <div style={{ background: '#0F172A', padding: 12, borderRadius: 8, fontSize: 11, color: '#94A3B8' }}>
+                💡 Ao confirmar, o estoque no <strong>{modalRecebimentoAberto.siloDestinoNome}</strong> será incrementado automaticamente e o custo médio atualizado.
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 12 }}>
+                <button
+                  type="button"
+                  onClick={() => setModalRecebimentoAberto(null)}
+                  style={{ padding: '8px 14px', borderRadius: 8, background: '#334155', color: '#FFF', border: 'none', cursor: 'pointer' }}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  style={{ padding: '8px 18px', borderRadius: 8, background: '#10B981', color: '#0F172A', fontWeight: 800, border: 'none', cursor: 'pointer' }}
+                >
+                  Confirmar Entrada no Silo
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL NOVA ORDEM DE PRODUÇÃO (OP) */}
+      {modalNovaOpAberto && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          zIndex: 9999, padding: 20
+        }}>
+          <div style={{ background: '#1E293B', border: '1px solid #334155', borderRadius: 16, maxWidth: 520, width: '100%', padding: 24 }}>
+            <h3 style={{ margin: '0 0 14px', fontSize: 18, fontWeight: 900, color: '#FFFFFF' }}>
+              Criar Nova Ordem de Produção (OP)
+            </h3>
+            <form onSubmit={handleCriarOp} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, color: '#94A3B8', marginBottom: 4 }}>Cliente / Construtora:</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Ex: Construtora Moradda"
+                  value={formOp.cliente}
+                  onChange={e => setFormOp({ ...formOp, cliente: e.target.value })}
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: 8, background: '#0F172A', border: '1px solid #334155', color: '#FFF' }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: 12, color: '#94A3B8', marginBottom: 4 }}>Obra / Elemento Estrutural:</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Ex: Edifício Garden - Vigas e Pilares"
+                  value={formOp.obra}
+                  onChange={e => setFormOp({ ...formOp, obra: e.target.value })}
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: 8, background: '#0F172A', border: '1px solid #334155', color: '#FFF' }}
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, color: '#94A3B8', marginBottom: 4 }}>Traço FCK (MPa):</label>
+                  <select
+                    value={formOp.fck}
+                    onChange={e => setFormOp({ ...formOp, fck: Number(e.target.value) })}
+                    style={{ width: '100%', padding: '10px 12px', borderRadius: 8, background: '#0F172A', border: '1px solid #334155', color: '#FFF', fontWeight: 800 }}
+                  >
+                    <option value={15}>FCK 15 MPa</option>
+                    <option value={20}>FCK 20 MPa</option>
+                    <option value={25}>FCK 25 MPa</option>
+                    <option value={30}>FCK 30 MPa</option>
+                    <option value={35}>FCK 35 MPa</option>
+                    <option value={40}>FCK 40 MPa</option>
+                    <option value={45}>FCK 45 MPa</option>
+                  </select>
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, color: '#94A3B8', marginBottom: 4 }}>Volume Total (m³):</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="200"
+                    required
+                    value={formOp.volumeM3}
+                    onChange={e => setFormOp({ ...formOp, volumeM3: Number(e.target.value) })}
+                    style={{ width: '100%', padding: '10px 12px', borderRadius: 8, background: '#0F172A', border: '1px solid #334155', color: '#FFF', fontWeight: 800 }}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: 12, color: '#94A3B8', marginBottom: 4 }}>Operador da Central Convicta:</label>
+                <input
+                  type="text"
+                  required
+                  value={formOp.operador}
+                  onChange={e => setFormOp({ ...formOp, operador: e.target.value })}
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: 8, background: '#0F172A', border: '1px solid #334155', color: '#FFF' }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 14 }}>
+                <button
+                  type="button"
+                  onClick={() => setModalNovaOpAberto(false)}
+                  style={{ padding: '8px 14px', borderRadius: 8, background: '#334155', color: '#FFF', border: 'none', cursor: 'pointer' }}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  style={{ padding: '8px 18px', borderRadius: 8, background: '#3B82F6', color: '#FFF', fontWeight: 800, border: 'none', cursor: 'pointer' }}
+                >
+                  Gerar Ordem de Produção
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
