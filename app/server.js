@@ -194,7 +194,7 @@ import { perfilDoUsuario, profissionalPode, operadorPodeNaBarbearia, respostaPar
 import { profissionalDoUsuario } from './dino-modo-barbeiro.js';
 import { provisionarEquipeDino } from './dino-equipe-seed.js';
 import { provisionarPalatarePizzaria, PALATARE_EMPRESA_ID } from './palatare-pizzaria-seed.js';
-import { provisionarConcretoUsina, CONCRETO_EMPRESA_ID } from './concreto-usina-seed.js';
+import { provisionarConcretoUsina, CONCRETO_EMPRESA_ID, CONCRETO_DADOS_EMPRESA } from './concreto-usina-seed.js';
 import { sincronizarTenantsEquipes } from './tenant-provisioning.js';
 import { executarHigienizacaoGapsProducao } from './core/higienizar-gaps-producao.js';
 import { sincronizarBloqueioNoPostgres, desativarBloqueioNoPostgres, inicializarBloqueiosEquipe } from './core/barbearia-bloqueios-sync.js';
@@ -2243,11 +2243,12 @@ app.use('/api/webhooks', createWhatsappAiWebhookRouter());
   // [kytto-concreto] Módulo de Concreto Usinado, Cargas e Usina
   app.get('/api/admin/concreto/dados', auth, requireStaff, async (req, res) => {
     try {
-      const data = clubeDb();
+      const data = db();
       const cargas = data.concreto_cargas || [];
       const catalogo = data.concreto_produtos || [];
       const frota = data.concreto_frota || [];
-      return res.json({ ok: true, cargas, catalogo, frota });
+      const empresa = data.empresas?.[CONCRETO_EMPRESA_ID] || CONCRETO_DADOS_EMPRESA;
+      return res.json({ ok: true, empresa, cargas, catalogo, frota });
     } catch (e) {
       return res.status(500).json({ error: e.message });
     }
