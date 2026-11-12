@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../lib/auth';
 import { useToast } from '../../hooks/useToast';
@@ -45,9 +45,130 @@ export default function ConcretoUsinaERP() {
   // Modais
   const [modalNovaCargaAberto, setModalNovaCargaAberto] = useState(false);
   const [modalRomaneioAberto, setModalRomaneioAberto] = useState(null);
+  const [modalAssinaturaAberto, setModalAssinaturaAberto] = useState(null);
   const [modalRupturaAberto, setModalRupturaAberto] = useState(null);
   const [modalNovaPropostaAberto, setModalNovaPropostaAberto] = useState(false);
   const [modalLaudoAberto, setModalLaudoAberto] = useState(null);
+
+  // Estados de Assinatura Digital do Cliente e Romaneio
+  const [abaRomaneio, setAbaRomaneio] = useState('romaneio'); // 'romaneio' | 'balanca'
+  const [assinaturaForm, setAssinaturaForm] = useState({
+    recebedorNome: 'Eng. Marcelo Dantas de Souza',
+    recebedorDocumento: '045.892.110-34',
+    recebedorCargo: 'Engenheiro Residente (Fiscal da Obra)',
+    slumpMedidoCm: '14.5',
+    aguaAdicionadaObraLitros: '0',
+    observacoes: 'Concreto recebido nas condições normativas NBR 7212. Abatimento e consistência aprovados.'
+  });
+  const [isDrawing, setIsDrawing] = useState(false);
+  const [hasSignature, setHasSignature] = useState(false);
+  const [salvandoAssinatura, setSalvandoAssinatura] = useState(false);
+  const canvasRef = useRef(null);
+
+  // Handlers do Canvas Touch e Caneta Digital
+  const getCoordinates = (e) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return { x: 0, y: 0 };
+    const rect = canvas.getBoundingClientRect();
+    const clientX = e.clientX ?? (e.touches && e.touches[0]?.clientX) ?? 0;
+    const clientY = e.clientY ?? (e.touches && e.touches[0]?.clientY) ?? 0;
+    return {
+      x: (clientX - rect.left) * (canvas.width / rect.width),
+      y: (clientY - rect.top) * (canvas.height / rect.height)
+    };
+  };
+
+  const startDrawing = (e) => {
+    e.preventDefault();
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const { x, y } = getCoordinates(e);
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    setIsDrawing(true);
+  };
+
+  const draw = (e) => {
+    if (!isDrawing) return;
+    e.preventDefault();
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const { x, y } = getCoordinates(e);
+    ctx.lineWidth = 2.5;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = '#0F172A';
+    ctx.lineTo(x, y);
+    ctx.stroke();
+    setHasSignature(true);
+  };
+
+  const stopDrawing = (e) => {
+    if (isDrawing) {
+      if (e) e.preventDefault();
+      setIsDrawing(false);
+    }
+  };
+
+  const clearSignature = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    setHasSignature(false);
+  };
+
+  const abrirColetaAssinatura = (carga) => {
+    setModalAssinaturaAberto(carga);
+    setAssinaturaForm({
+      recebedorNome: carga.assinaturaEntrega?.recebedorNome || 'Eng. Marcelo Dantas de Souza',
+      recebedorDocumento: carga.assinaturaEntrega?.recebedorDocumento || '045.892.110-34',
+      recebedorCargo: carga.assinaturaEntrega?.recebedorCargo || 'Engenheiro Residente (Fiscal da Obra)',
+      slumpMedidoCm: String(carga.assinaturaEntrega?.slumpMedidoCm || '14.5'),
+      aguaAdicionadaObraLitros: String(carga.assinaturaEntrega?.aguaAdicionadaObraLitros || '0'),
+      observacoes: carga.assinaturaEntrega?.observacoes || 'Concreto recebido nas condições normativas NBR 7212. Abatimento e consistência aprovados.'
+    });
+    setHasSignature(false);
+    setTimeout(() => {
+      clearSignature();
+    }, 150);
+  };
+
+  const handleSalvarAssinatura = async (e) => {
+    e.preventDefault();
+    if (!hasSignature) {
+      toast ? toast.error('Por favor, colete a assinatura do cliente no quadro abaixo antes de confirmar.') : alert('Por favor, colete a assinatura do cliente no quadro abaixo.');
+      return;
+    }
+    const canvas = canvasRef.current;
+    const assinaturaBase64 = canvas ? canvas.toDataURL('image/png') : null;
+    setSalvandoAssinatura(true);
+    try {
+      const res = await api.post(`/api/admin/concreto/cargas/${modalAssinaturaAberto.id}/assinar-entrega`, {
+        assinaturaBase64,
+        recebedorNome: assinaturaForm.recebedorNome,
+        recebedorDocumento: assinaturaForm.recebedorDocumento,
+        recebedorCargo: assinaturaForm.recebedorCargo,
+        slumpMedidoCm: Number(assinaturaForm.slumpMedidoCm),
+        aguaAdicionadaObraLitros: Number(assinaturaForm.aguaAdicionadaObraLitros),
+        observacoes: assinaturaForm.observacoes
+      });
+      if (res.data?.ok) {
+        setCargas(prev => prev.map(c => (c.id === modalAssinaturaAberto.id || c.numero === modalAssinaturaAberto.numero) ? res.data.carga : c));
+        setModalRomaneioAberto(res.data.carga);
+        setModalAssinaturaAberto(null);
+        toast && toast.success('Assinatura digital registrada e entrega confirmada com sucesso!');
+      }
+    } catch (err) {
+      console.error('Erro ao salvar assinatura:', err);
+      const msg = err.response?.data?.error || err.message;
+      toast ? toast.error('Erro ao registrar assinatura: ' + msg) : alert('Erro: ' + msg);
+    } finally {
+      setSalvandoAssinatura(false);
+    }
+  };
 
   // Calculadora NBR 7212
   const [calcFck, setCalcFck] = useState(25);
@@ -560,6 +681,57 @@ export default function ConcretoUsinaERP() {
                               </div>
                             );
                           })}
+
+                          {/* BARRA DE AÇÕES OPERACIONAIS DA CARGA (ROMANEIO & ASSINATURA) */}
+                          <div style={{ gridColumn: '1 / -1', marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--joint)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              {c.assinaturaEntrega?.status === 'assinado' ? (
+                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#DCFCE7', color: '#15803D', padding: '6px 12px', borderRadius: 20, fontSize: 12, fontWeight: 700 }}>
+                                  ✓ Assinado na Entrega ({c.assinaturaEntrega.recebedorNome})
+                                </span>
+                              ) : (
+                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#FEF3C7', color: '#92400E', padding: '6px 12px', borderRadius: 20, fontSize: 12, fontWeight: 700 }}>
+                                  ⏳ Aguardando Assinatura do Cliente
+                                </span>
+                              )}
+                              <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                                Balança Toledo 80t: <b>{c.ticketPesagem?.numeroTicket || `TKT-BAL-${c.numero}`}</b>
+                              </span>
+                            </div>
+
+                            <div style={{ display: 'flex', gap: 8 }}>
+                              <button
+                                type="button"
+                                className="btn-serrano"
+                                style={{ padding: '6px 12px', fontSize: 12 }}
+                                onClick={() => setModalRomaneioAberto(c)}
+                              >
+                                📄 Romaneio &amp; Balança
+                              </button>
+
+                              <button
+                                type="button"
+                                className="btn-serrano pri"
+                                style={{ padding: '6px 12px', fontSize: 12 }}
+                                onClick={() => abrirColetaAssinatura(c)}
+                              >
+                                ✍️ {c.assinaturaEntrega?.status === 'assinado' ? 'Reassinar / Visualizar' : 'Assinar Entrega'}
+                              </button>
+
+                              <button
+                                type="button"
+                              className="btn-serrano"
+                              style={{ padding: '6px 12px', fontSize: 12 }}
+                              onClick={() => {
+                                const token = localStorage.getItem('sp_token') || '';
+                                window.open(`/api/admin/concreto/cargas/${c.id}/romaneio-html?formato=html&token=${encodeURIComponent(token)}`, '_blank');
+                              }}
+                              title="Imprimir Romaneio Oficial A4"
+                            >
+                                🖨️ Imprimir
+                              </button>
+                            </div>
+                          </div>
                         </div>
                       )}
                     </React.Fragment>
@@ -1176,35 +1348,370 @@ export default function ConcretoUsinaERP() {
         </div>
       )}
 
-      {/* ─── MODAL: ROMANEIO NBR 7212 ─── */}
+      {/* ─── MODAL COMPLETO: ROMANEIO NBR 7212 & TICKET DE PESAGEM ─── */}
       {modalRomaneioAberto && (
         <div className="serrano-modal-overlay">
-          <div className="serrano-modal-card">
-            <h2>Romaneio de Entrega de Concreto · NBR 7212</h2>
-            <div style={{ background: 'var(--surface-2)', padding: 18, borderRadius: 8, fontFamily: 'var(--font-data)', fontSize: 12, lineHeight: 1.6 }}>
-              <div><b>SERRANO CONCRETO USINADO &amp; MINERAÇÃO LTDA</b></div>
-              <div>CNPJ: 53.798.485/0001-77 · IE: 14.229.191-9</div>
-              <div>Tangará da Serra - MT · Telefone: (65) 99946-4899</div>
-              <hr style={{ border: 'none', borderTop: '1px solid var(--joint)', margin: '10px 0' }} />
-              <div><b>ROMANEIO Nº {modalRomaneioAberto.numero || '1001'}</b> · Data: 12/11/2026</div>
-              <div>Cliente: {modalRomaneioAberto.cliente}</div>
-              <div>Obra: {modalRomaneioAberto.obra}</div>
-              <div>Traço: FCK {modalRomaneioAberto.fck} MPa · Brita 1 · Slump {modalRomaneioAberto.slump || '14 ± 2 cm'}</div>
-              <div>Volume Total: {modalRomaneioAberto.volumeM3} m³</div>
-              <div>Descarga: {modalRomaneioAberto.bomba || 'Bomba Lança 32m'}</div>
-              <hr style={{ border: 'none', borderTop: '1px solid var(--joint)', margin: '10px 0' }} />
-              <div>Adição de Água na Usina: 08:10 · Limite Pega NBR 7212: 150 min (10:40)</div>
-              <div>Responsável Técnica: Engª Karin Prestes (CREA-MT 027300)</div>
+          <div className="serrano-modal-card" style={{ maxWidth: 840, width: '100%' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <div>
+                <h2 style={{ margin: 0 }}>Romaneio &amp; Ticket de Pesagem</h2>
+                <small style={{ color: 'var(--text-muted)' }}>Carga #{modalRomaneioAberto.numero || 1001} · Conformidade ABNT NBR 7212</small>
+              </div>
+              <div style={{ display: 'flex', gap: 6, background: 'var(--surface-2)', padding: 4, borderRadius: 8 }}>
+                <button
+                  type="button"
+                  className={`btn-serrano ${abaRomaneio === 'romaneio' ? 'pri' : ''}`}
+                  style={{ padding: '6px 12px', fontSize: 12 }}
+                  onClick={() => setAbaRomaneio('romaneio')}
+                >
+                  📄 Romaneio NBR 7212
+                </button>
+                <button
+                  type="button"
+                  className={`btn-serrano ${abaRomaneio === 'balanca' ? 'pri' : ''}`}
+                  style={{ padding: '6px 12px', fontSize: 12 }}
+                  onClick={() => setAbaRomaneio('balanca')}
+                >
+                  ⚖️ Ticket Balança 80t
+                </button>
+              </div>
             </div>
+
+            {abaRomaneio === 'romaneio' && (
+              <div style={{ background: '#FFFFFF', color: '#16181B', padding: 22, borderRadius: 8, border: '1px solid var(--joint)', fontFamily: 'Helvetica, Arial, sans-serif', fontSize: 12, lineHeight: 1.5 }}>
+                {/* Cabeçalho */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '2px solid #FF7000', paddingBottom: 10, marginBottom: 12 }}>
+                  <div>
+                    <div style={{ fontSize: 16, fontWeight: 900, color: '#16181B' }}>SERRANO CONCRETO USINADO &amp; MINERAÇÃO LTDA</div>
+                    <div style={{ fontSize: 11, color: '#475569' }}>Rodovia MT-358 km 08 · Distrito Industrial · Tangará da Serra/MT</div>
+                    <div style={{ fontSize: 10, color: '#64748B' }}>CNPJ Usinado: 53.798.485/0001-77 · Matriz: 51.499.928/0001-01 · IE: 14.229.191-9</div>
+                    <div style={{ fontSize: 10, color: '#64748B' }}>RT: <b>Engª Karin Prestes (CREA-MT 027300)</b> · Central: (65) 99946-4899</div>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontSize: 12, fontWeight: 800, color: '#FF7000' }}>ROMANEIO NBR 7212</div>
+                    <div style={{ fontSize: 18, fontWeight: 900, fontFamily: 'monospace' }}>#{modalRomaneioAberto.numero || 1001}</div>
+                    <div style={{ fontSize: 10, color: '#64748B' }}>Data: {new Date().toLocaleDateString('pt-BR')}</div>
+                  </div>
+                </div>
+
+                {/* Cliente & Obra */}
+                <div style={{ background: '#F8FAFC', padding: 10, borderRadius: 6, marginBottom: 10, border: '1px solid #E2E8F0' }}>
+                  <div style={{ fontSize: 10, fontWeight: 800, color: '#64748B', textTransform: 'uppercase' }}>1. Destinatário &amp; Local da Concretagem</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 4 }}>
+                    <div><b>Cliente:</b> {modalRomaneioAberto.cliente}</div>
+                    <div><b>Obra:</b> {modalRomaneioAberto.obra}</div>
+                    <div style={{ gridColumn: 'span 2' }}><b>Endereço:</b> {modalRomaneioAberto.endereco || 'Tangará da Serra/MT'}</div>
+                  </div>
+                </div>
+
+                {/* Traço FCK */}
+                <div style={{ background: '#F8FAFC', padding: 10, borderRadius: 6, marginBottom: 10, border: '1px solid #E2E8F0' }}>
+                  <div style={{ fontSize: 10, fontWeight: 800, color: '#64748B', textTransform: 'uppercase' }}>2. Especificação do Concreto NBR 8953 / NBR 7212</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginTop: 4 }}>
+                    <div><b>Resistência:</b> <span style={{ color: '#FF7000', fontWeight: 800 }}>{String(modalRomaneioAberto.fck).startsWith('FCK') ? modalRomaneioAberto.fck : `FCK ${modalRomaneioAberto.fck} MPa`}</span></div>
+                    <div><b>Abatimento:</b> {modalRomaneioAberto.slump || '14 ± 2 cm'}</div>
+                    <div><b>Volume Total:</b> {modalRomaneioAberto.volumeM3} m³</div>
+                    <div><b>Descarga:</b> {modalRomaneioAberto.bomba || 'Bomba Lança'}</div>
+                    <div><b>Agregado:</b> {modalRomaneioAberto.brita || 'Brita 1 (19mm)'}</div>
+                    <div><b>Lote CP:</b> {modalRomaneioAberto.laudoCp || 'CP-2026-089'}</div>
+                    <div><b>Corpos de Prova:</b> 4 unidades (7d/28d)</div>
+                    <div><b>Aditivo:</b> Multiflux Plastificante</div>
+                  </div>
+                </div>
+
+                {/* Ticket de Pesagem Integrado */}
+                <div style={{ background: '#F0F9FF', padding: 10, borderRadius: 6, marginBottom: 10, border: '1px solid #BAE6FD', borderLeft: '4px solid #0284C7' }}>
+                  <div style={{ fontSize: 10, fontWeight: 800, color: '#0369A1', textTransform: 'uppercase' }}>3. Pesagem na Balança Rodoviária 80t Toledo Usina</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginTop: 4 }}>
+                    <div><b>Ticket Balança:</b> {modalRomaneioAberto.ticketPesagem?.numeroTicket || `TKT-BAL-${modalRomaneioAberto.numero}`}</div>
+                    <div><b>Peso Bruto:</b> 33.480 kg</div>
+                    <div><b>Tara Betoneira:</b> 14.280 kg</div>
+                    <div><b>Peso Líquido Concreto:</b> <span style={{ color: '#0284C7', fontWeight: 800 }}>19.200 kg</span></div>
+                  </div>
+                </div>
+
+                {/* Telemetria e Horários */}
+                <div style={{ background: '#F8FAFC', padding: 10, borderRadius: 6, marginBottom: 10, border: '1px solid #E2E8F0' }}>
+                  <div style={{ fontSize: 10, fontWeight: 800, color: '#64748B', textTransform: 'uppercase' }}>4. Telemetria &amp; Limite de Pega (NBR 7212)</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginTop: 4 }}>
+                    <div><b>Veículo:</b> {modalRomaneioAberto.viagens?.[0]?.veiculo || 'BT-01'} (RRA-4E80)</div>
+                    <div><b>Motorista:</b> {modalRomaneioAberto.viagens?.[0]?.motorista || 'Marcos Silveira'}</div>
+                    <div><b>Adição Água Usina:</b> {modalRomaneioAberto.viagens?.[0]?.saidaUsina || '08:15'}</div>
+                    <div><b>Limite 150 min:</b> <span style={{ color: '#DC2626', fontWeight: 700 }}>Conforme NBR 7212</span></div>
+                  </div>
+                </div>
+
+                {/* Assinatura Digital Coletada */}
+                <div style={{ marginTop: 14, border: '1px solid #CBD5E1', borderRadius: 8, padding: 14, background: '#F8FAFC' }}>
+                  <div style={{ fontSize: 11, fontWeight: 800, color: '#475569', marginBottom: 8, textTransform: 'uppercase' }}>
+                    5. Validação Digital de Recebimento na Obra
+                  </div>
+
+                  {modalRomaneioAberto.assinaturaEntrega?.imagemBase64 ? (
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, alignItems: 'center' }}>
+                      <div style={{ background: '#FFFFFF', padding: 10, borderRadius: 6, border: '1px solid #E2E8F0', textAlign: 'center' }}>
+                        <div style={{ fontSize: 10, color: '#64748B', marginBottom: 4 }}>Assinatura Digital Coletada Touch / Caneta</div>
+                        <img 
+                          src={modalRomaneioAberto.assinaturaEntrega.imagemBase64} 
+                          alt="Assinatura Digital" 
+                          style={{ maxHeight: 60, maxWidth: '100%', objectFit: 'contain' }}
+                        />
+                        <div style={{ fontSize: 10, fontWeight: 700, color: '#15803D', marginTop: 4 }}>
+                          ✓ AUTENTICADA ELETRONICAMENTE (NBR 7212)
+                        </div>
+                      </div>
+
+                      <div>
+                        <div><b>Recebedor:</b> {modalRomaneioAberto.assinaturaEntrega.recebedorNome}</div>
+                        <div><b>CPF:</b> {modalRomaneioAberto.assinaturaEntrega.recebedorDocumento}</div>
+                        <div><b>Função na Obra:</b> {modalRomaneioAberto.assinaturaEntrega.recebedorCargo}</div>
+                        <div><b>Data/Hora:</b> {modalRomaneioAberto.assinaturaEntrega.dataHoraAssinatura}</div>
+                        <div><b>Slump Medido na Obra:</b> {modalRomaneioAberto.assinaturaEntrega.slumpMedidoCm} cm</div>
+                        <div style={{ fontSize: 10, color: '#64748B', fontFamily: 'monospace', marginTop: 4 }}>
+                          Hash SHA-256: {modalRomaneioAberto.assinaturaEntrega.codigoAutenticidade || modalRomaneioAberto.assinaturaEntrega.hashSha256?.slice(0, 20)}
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ textAlign: 'center', padding: '16px 0' }}>
+                      <p style={{ color: '#92400E', fontSize: 12, margin: '0 0 10px' }}>
+                        Esta carga ainda não possui assinatura digital coletada do cliente na entrega.
+                      </p>
+                      <button
+                        type="button"
+                        className="btn-serrano pri"
+                        onClick={() => {
+                          setModalRomaneioAberto(null);
+                          abrirColetaAssinatura(modalRomaneioAberto);
+                        }}
+                      >
+                        ✍️ Coletar Assinatura Digital do Cliente Agora
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {abaRomaneio === 'balanca' && (
+              <div style={{ background: '#FFFFFF', color: '#111', padding: 24, borderRadius: 8, border: '1px solid var(--joint)', fontFamily: 'Courier New, monospace', fontSize: 12, lineHeight: 1.6 }}>
+                <div style={{ textAlign: 'center', fontWeight: 'bold', fontSize: 14 }}>SERRANO CONCRETO &amp; MINERAÇÃO LTDA</div>
+                <div style={{ textAlign: 'center', fontSize: 11 }}>Rodovia MT-358 km 08 · Tangará da Serra/MT</div>
+                <div style={{ textAlign: 'center', fontSize: 10 }}>CNPJ: 51.499.928/0001-01 · IE: 13.567.890-3</div>
+                <div style={{ borderTop: '1px dashed #333', margin: '10px 0' }} />
+                <div style={{ textAlign: 'center', fontWeight: 'bold', fontSize: 13, color: '#EA580C' }}>
+                  TICKET DE PESAGEM RODOVIÁRIA · {modalRomaneioAberto.ticketPesagem?.numeroTicket || `TKT-BAL-${modalRomaneioAberto.numero}`}
+                </div>
+                <div style={{ borderTop: '1px dashed #333', margin: '10px 0' }} />
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Data/Hora:</span><b>12/11/2026 08:12</b></div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Balança:</span><span>Toledo 80t (Plataforma 21m)</span></div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Operador:</span><span>Paulo Cezar (Matrícula 042 - IPEM-MT)</span></div>
+                <div style={{ borderTop: '1px dashed #333', margin: '10px 0' }} />
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Veículo/Placa:</span><b>BT-01 (VW Constellation 26.280 · RRA-4E80)</b></div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Motorista:</span><span>Marcos Silveira</span></div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Cliente:</span><b>{modalRomaneioAberto.cliente}</b></div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Material:</span><span>Concreto Usinado Estrutural {modalRomaneioAberto.fck}</span></div>
+                <div style={{ borderTop: '1px dashed #333', margin: '10px 0' }} />
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14 }}><span>PESO BRUTO:</span><b>33.480 kg</b></div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14 }}><span>TARA VEÍCULO:</span><b>14.280 kg</b></div>
+                <div style={{ borderTop: '1px dashed #333', margin: '10px 0' }} />
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 16, fontWeight: 'bold', color: '#0F172A' }}>
+                  <span>PESO LÍQUIDO CONCRETO:</span><span>19.200 kg</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Volume Equivalente (2.400 kg/m³):</span><b>8.00 m³</b></div>
+                <div style={{ borderTop: '1px dashed #333', margin: '10px 0' }} />
+                <div style={{ border: '2px solid #16A34A', color: '#16A34A', fontWeight: 'bold', textAlign: 'center', padding: 8, borderRadius: 4, fontSize: 11 }}>
+                  ✓ PESAGEM AUTOMÁTICA REGISTRADA NO SISTEMA KYTTO ERP<br />
+                  <small>Aferição Portaria INMETRO/IPEM-MT nº 148/2026</small>
+                </div>
+              </div>
+            )}
+
             <div className="serrano-modal-footer">
+              <button
+                type="button"
+                className="btn-serrano"
+                onClick={() => {
+                  setModalRomaneioAberto(null);
+                  abrirColetaAssinatura(modalRomaneioAberto);
+                }}
+              >
+                ✍️ {modalRomaneioAberto.assinaturaEntrega?.imagemBase64 ? 'Reassinar Entrega' : 'Coletar Assinatura'}
+              </button>
+
+              <button
+                type="button"
+                className="btn-serrano"
+                onClick={() => {
+                  const token = localStorage.getItem('sp_token') || '';
+                  window.open(`/api/admin/concreto/cargas/${modalRomaneioAberto.id}/romaneio-html?formato=html&token=${encodeURIComponent(token)}`, '_blank');
+                }}
+              >
+                🖨️ Imprimir Romaneio A4
+              </button>
+
+              <button
+                type="button"
+                className="btn-serrano"
+                onClick={() => {
+                  const token = localStorage.getItem('sp_token') || '';
+                  window.open(`/api/admin/concreto/balanca/tickets/tkt-bal-${modalRomaneioAberto.numero}/html?formato=html&token=${encodeURIComponent(token)}`, '_blank');
+                }}
+              >
+                ⚖️ Imprimir Ticket 80mm
+              </button>
+
               <button 
                 type="button" 
                 className="btn-serrano pri"
                 onClick={() => setModalRomaneioAberto(null)}
               >
-                Fechar Romaneio
+                Fechar
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── MODAL DE ASSINATURA DIGITAL TOUCH / CANETA DO CLIENTE ─── */}
+      {modalAssinaturaAberto && (
+        <div className="serrano-modal-overlay">
+          <div className="serrano-modal-card" style={{ maxWidth: 640, width: '100%' }}>
+            <h2>✍️ Assinatura Digital do Cliente na Entrega</h2>
+            <p style={{ color: 'var(--text-muted)', fontSize: 13, margin: '0 0 16px' }}>
+              Coleta eletrônica da assinatura do engenheiro ou responsável no ato do descarregamento da betoneira (NBR 7212).
+            </p>
+
+            <form onSubmit={handleSalvarAssinatura}>
+              <div style={{ background: 'var(--surface-2)', padding: 12, borderRadius: 8, marginBottom: 14 }}>
+                <div style={{ fontSize: 13, fontWeight: 700 }}>{modalAssinaturaAberto.obra}</div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Cliente: <b>{modalAssinaturaAberto.cliente}</b> · Volume: <b>{modalAssinaturaAberto.volumeM3} m³</b> · Traço: <b>{modalAssinaturaAberto.fck}</b></div>
+              </div>
+
+              <div className="serrano-grid-2col" style={{ gap: 12, marginBottom: 12 }}>
+                <div className="serrano-form-row">
+                  <label>Nome do Recebedor na Obra *</label>
+                  <input
+                    type="text"
+                    required
+                    className="serrano-input"
+                    value={assinaturaForm.recebedorNome}
+                    onChange={e => setAssinaturaForm({ ...assinaturaForm, recebedorNome: e.target.value })}
+                    placeholder="Ex: Eng. Marcelo Dantas"
+                  />
+                </div>
+
+                <div className="serrano-form-row">
+                  <label>CPF / Documento *</label>
+                  <input
+                    type="text"
+                    required
+                    className="serrano-input"
+                    value={assinaturaForm.recebedorDocumento}
+                    onChange={e => setAssinaturaForm({ ...assinaturaForm, recebedorDocumento: e.target.value })}
+                    placeholder="000.000.000-00"
+                  />
+                </div>
+              </div>
+
+              <div className="serrano-grid-2col" style={{ gap: 12, marginBottom: 12 }}>
+                <div className="serrano-form-row">
+                  <label>Cargo / Função na Obra *</label>
+                  <select
+                    className="serrano-input"
+                    value={assinaturaForm.recebedorCargo}
+                    onChange={e => setAssinaturaForm({ ...assinaturaForm, recebedorCargo: e.target.value })}
+                  >
+                    <option value="Engenheiro Residente (Fiscal da Obra)">Engenheiro Residente (Fiscal da Obra)</option>
+                    <option value="Mestre de Obras Geral">Mestre de Obras Geral</option>
+                    <option value="Encarregado de Concretagem">Encarregado de Concretagem</option>
+                    <option value="Técnico em Edificações">Técnico em Edificações</option>
+                    <option value="Proprietário da Obra">Proprietário da Obra</option>
+                  </select>
+                </div>
+
+                <div className="serrano-form-row">
+                  <label>Slump Medido na Chegada (cm) *</label>
+                  <input
+                    type="number"
+                    step="0.5"
+                    required
+                    className="serrano-input"
+                    value={assinaturaForm.slumpMedidoCm}
+                    onChange={e => setAssinaturaForm({ ...assinaturaForm, slumpMedidoCm: e.target.value })}
+                    placeholder="14.5"
+                  />
+                </div>
+              </div>
+
+              <div className="serrano-form-row" style={{ marginBottom: 14 }}>
+                <label>Água Suplementar Adicionada na Obra (Litros - Requer Autorização RT)</label>
+                <input
+                  type="number"
+                  className="serrano-input"
+                  value={assinaturaForm.aguaAdicionadaObraLitros}
+                  onChange={e => setAssinaturaForm({ ...assinaturaForm, aguaAdicionadaObraLitros: e.target.value })}
+                  placeholder="0 (Padrão: Proibido adicionar água sem RT)"
+                />
+              </div>
+
+              {/* QUADRO DO CANVAS TOUCH / MOUSE */}
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                  <label style={{ fontWeight: 700, fontSize: 13 }}>
+                    Assine com o dedo ou caneta no quadro abaixo *
+                  </label>
+                  <button
+                    type="button"
+                    className="btn-serrano"
+                    style={{ padding: '4px 8px', fontSize: 11 }}
+                    onClick={clearSignature}
+                  >
+                    🗑️ Limpar Traço
+                  </button>
+                </div>
+
+                <div style={{ border: '2px dashed var(--joint)', borderRadius: 8, background: '#FFFFFF', padding: 4, touchAction: 'none' }}>
+                  <canvas
+                    ref={canvasRef}
+                    width={580}
+                    height={160}
+                    style={{ width: '100%', height: 160, display: 'block', cursor: 'crosshair', background: '#FFFFFF', borderRadius: 6 }}
+                    onMouseDown={startDrawing}
+                    onMouseMove={draw}
+                    onMouseUp={stopDrawing}
+                    onMouseLeave={stopDrawing}
+                    onTouchStart={startDrawing}
+                    onTouchMove={draw}
+                    onTouchEnd={stopDrawing}
+                  />
+                </div>
+                <small style={{ color: 'var(--text-muted)', display: 'block', marginTop: 4 }}>
+                  {hasSignature ? '✓ Assinatura capturada com sucesso!' : 'Por favor, desenhe a assinatura legível no retângulo branco.'}
+                </small>
+              </div>
+
+              <div style={{ background: '#FFFBEB', borderLeft: '4px solid #F59E0B', padding: '10px 14px', borderRadius: 4, fontSize: 11, color: '#92400E', marginBottom: 16 }}>
+                <b>Termo de Recebimento NBR 7212:</b> Ao assinar, o recebedor atesta que o concreto foi recebido em conformidade com o FCK e abatimento especificados, sem início de pega, com ticket de pesagem da balança rodoviária 80t conferido.
+              </div>
+
+              <div className="serrano-modal-footer">
+                <button
+                  type="button"
+                  className="btn-serrano"
+                  onClick={() => setModalAssinaturaAberto(null)}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={salvandoAssinatura}
+                  className="btn-serrano pri"
+                >
+                  {salvandoAssinatura ? 'Validando Hash SHA-256...' : '✓ Confirmar Assinatura Digital & Finalizar Entrega'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

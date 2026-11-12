@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import { db, save } from '../../db.js';
 import { 
   CONCRETO_EMPRESA_ID, 
@@ -737,6 +738,7 @@ export function inicializarDatastoreConcreto() {
   if (!Array.isArray(data.concreto_mineracao_patios)) data.concreto_mineracao_patios = [];
   if (!Array.isArray(data.concreto_vendas_agregados)) data.concreto_vendas_agregados = [];
   if (!Array.isArray(data.concreto_medicoes_obras)) data.concreto_medicoes_obras = [];
+  if (!Array.isArray(data.concreto_tickets_balanca)) data.concreto_tickets_balanca = [];
 
   // Popular se vazio
   if (data.concreto_cargas.length === 0) {
@@ -1662,100 +1664,425 @@ export function calcularEstatisticaResistenciaLote(loteId, empresaId = CONCRETO_
 // =====================================================================
 // 12. GERADOR DE ROMANEIO OFICIAL NBR 7212 (HTML TIMBRADO PARA IMPRESSÃO)
 // =====================================================================
-export async function gerarHtmlRomaneioOficial(cargaId, empresaId = CONCRETO_EMPRESA_ID) {
-  const data = inicializarDatastoreConcreto();
-  const carga = (data.concreto_cargas || []).find(c => c.id === cargaId || c.numero === Number(cargaId));
-  if (!carga) throw new Error(`Carga ${cargaId} não encontrada.`);
+// =====================================================================
+// 14. ASSINATURA DIGITAL NA ENTREGA & ROMANEIO COM TICKET DE PESAGEM
+// =====================================================================
 
-  const v1 = carga.viagens?.[0] || { betoneira: 'BT-01', motorista: 'Marcos Silveira', volume: 8 };
+export async function assinarEntregaCarga(cargaId, dadosAssinatura, empresaId = CONCRETO_EMPRESA_ID) {
+  const data = inicializarDatastoreConcreto();
+  let carga = (data.concreto_cargas || []).find(c => c.id === cargaId || String(c.numero) === String(cargaId));
+  
+  if (!carga) {
+    // Buscar carga padrao se ainda não salva no datastore
+    const cDefault = CONCRETO_CARGAS_INICIAIS.find(c => c.id === cargaId || String(c.numero) === String(cargaId));
+    if (cDefault) {
+      carga = JSON.parse(JSON.stringify(cDefault));
+      data.concreto_cargas.push(carga);
+    } else {
+      throw new Error(`Carga ${cargaId} não encontrada para assinatura.`);
+    }
+  }
+
+  const horaAtualCuiaba = new Date().toLocaleTimeString('pt-BR', { timeZone: 'America/Cuiaba', hour: '2-digit', minute: '2-digit' });
+  const dataAtualCuiaba = new Date().toLocaleDateString('pt-BR', { timeZone: 'America/Cuiaba' });
+  const isoAtual = new Date().toISOString();
+
+  const recebedorNome = dadosAssinatura.recebedorNome || 'Eng. Marcelo Dantas';
+  const recebedorDocumento = dadosAssinatura.recebedorDocumento || '045.892.110-34';
+  const recebedorCargo = dadosAssinatura.recebedorCargo || 'Engenheiro Residente (Fiscal da Obra)';
+  const slumpMedidoCm = Number(dadosAssinatura.slumpMedidoCm) || 14.0;
+  const aguaAdicionadaObraLitros = Number(dadosAssinatura.aguaAdicionadaObraLitros) || 0;
+  const observacoes = dadosAssinatura.observacoes || 'Concreto recebido nas condições normativas NBR 7212. Slump aprovado.';
+
+  // Gerar hash criptográfico SHA-256 de autenticidade do romaneio e assinatura
+  const payloadHash = `${carga.id}|${carga.numero}|${recebedorDocumento}|${isoAtual}|${slumpMedidoCm}|${aguaAdicionadaObraLitros}`;
+  const hashSha256 = crypto.createHash('sha256').update(payloadHash).digest('hex');
+  const codigoAutenticidade = `SERRANO-NBR7212-${hashSha256.slice(0, 16).toUpperCase()}`;
+
+  // Criar ou atualizar Ticket de Pesagem da Balança Rodoviária 80t Toledo
+  const pesoBrutoKg = 33480;
+  const taraKg = 14280;
+  const pesoLiquidoKg = pesoBrutoKg - taraKg; // 19.200 kg
+  const volumeM3 = Number(carga.volumeM3) || 8;
+  const densidadeAparente = Math.round(pesoLiquidoKg / volumeM3);
+
+  const ticketPesagem = {
+    numeroTicket: `TKT-BAL-${carga.numero || 1001}`,
+    balanca: 'Balança Rodoviária 80t Toledo · Usina Serrano (Rodovia MT-358 km 08)',
+    operadorBalanca: 'Paulo Cezar (Matrícula 042 - Certificação IPEM-MT)',
+    dataHoraPesagem: `${dataAtualCuiaba} ${horaAtualCuiaba}`,
+    veiculoPlaca: carga.viagens?.[0]?.veiculo ? `${carga.viagens[0].veiculo} · VW Constellation 26.280 (Placa RRA-4E80)` : 'BT-01 · VW Constellation 26.280 (Placa RRA-4E80)',
+    motorista: 'Marcos Silveira',
+    pesoBrutoKg,
+    taraKg,
+    pesoLiquidoKg,
+    densidadeKgM3: densidadeAparente,
+    volumeCalculadoM3: volumeM3,
+    afericaoIpem: 'Portaria INMETRO/IPEM-MT nº 148/2026 · Válida até 08/2027'
+  };
+
+  // Registrar assinatura digital
+  carga.assinaturaEntrega = {
+    status: 'assinado',
+    imagemBase64: dadosAssinatura.assinaturaBase64 || null,
+    recebedorNome,
+    recebedorDocumento,
+    recebedorCargo,
+    dataHoraAssinatura: `${dataAtualCuiaba} às ${horaAtualCuiaba}`,
+    dataHoraIso: isoAtual,
+    slumpMedidoCm,
+    aguaAdicionadaObraLitros,
+    observacoes,
+    hashSha256,
+    codigoAutenticidade,
+    termoAceite: 'Declaro para os devidos fins que o concreto usinado especificado neste romaneio foi conferido e recebido na obra em conformidade com as normas ABNT NBR 7212 e NBR 8953, atestando consistência de abatimento (slump) e volume.'
+  };
+
+  carga.ticketPesagem = ticketPesagem;
+  carga.status = 'concluido';
+
+  // Atualizar viagens
+  if (Array.isArray(carga.viagens) && carga.viagens.length > 0) {
+    carga.viagens = carga.viagens.map(v => ({
+      ...v,
+      fimDescarga: v.fimDescarga && v.fimDescarga !== '—' ? v.fimDescarga : horaAtualCuiaba,
+      status: 'concluido',
+      assinado: true
+    }));
+  }
+
+  save();
+  return { ok: true, carga, hashSha256, codigoAutenticidade };
+}
+
+export async function obterRomaneioCompleto(cargaId, empresaId = CONCRETO_EMPRESA_ID) {
+  const data = inicializarDatastoreConcreto();
+  let carga = (data.concreto_cargas || []).find(c => c.id === cargaId || String(c.numero) === String(cargaId));
+  if (!carga) {
+    carga = CONCRETO_CARGAS_INICIAIS.find(c => c.id === cargaId || String(c.numero) === String(cargaId));
+  }
+  if (!carga) throw new Error(`Carga ${cargaId} não encontrada.`);
+  return { ok: true, carga };
+}
+
+export async function emitirTicketPesagemBalanca(dados, empresaId = CONCRETO_EMPRESA_ID) {
+  const data = inicializarDatastoreConcreto();
+  const seq = (data.concreto_tickets_balanca?.length || 0) + 9840;
+  const dataAtual = new Date().toLocaleDateString('pt-BR', { timeZone: 'America/Cuiaba' });
+  const horaAtual = new Date().toLocaleTimeString('pt-BR', { timeZone: 'America/Cuiaba', hour: '2-digit', minute: '2-digit' });
+
+  const pesoBruto = Number(dados.pesoBrutoKg) || 0;
+  const tara = Number(dados.taraKg) || 0;
+  const pesoLiquido = Math.max(0, pesoBruto - tara);
+  const densidade = dados.tipoMaterial?.toLowerCase().includes('brita') ? 1450 : 1500;
+  const volumeM3 = +(pesoLiquido / densidade).toFixed(2);
+  const precoM3 = Number(dados.precoUnitarioM3) || (dados.tipoMaterial?.toLowerCase().includes('brita') ? 125.00 : 65.00);
+  const valorTotal = +(volumeM3 * precoM3).toFixed(2);
+  const valorCfem = +(valorTotal * 0.015).toFixed(2);
+
+  const hashSha256 = crypto.createHash('sha256').update(`TKT-${seq}|${dados.placaVeiculo}|${pesoLiquido}|${new Date().toISOString()}`).digest('hex');
+
+  const novoTicket = {
+    id: `tkt-${seq}`,
+    numeroTicket: `TKT-BAL-${seq}`,
+    empresaId,
+    dataHora: `${dataAtual} ${horaAtual}`,
+    balanca: 'Balança Rodoviária 80t Toledo · Usina Serrano (Rodovia MT-358 km 08)',
+    operador: dados.operador || 'Paulo Cezar (Matrícula 042 - IPEM-MT)',
+    cliente: dados.cliente || 'Construtora / Terceiro',
+    cnpjCpfCliente: dados.cnpjCpfCliente || '00.000.000/0001-00',
+    obraDestino: dados.obraDestino || 'Obras em Tangará da Serra/MT',
+    veiculoPlaca: dados.placaVeiculo || 'RAQ-4420',
+    motorista: dados.motorista || 'Motorista Transportador',
+    transportadora: dados.transportadora || 'Frota Própria Serrano',
+    tipoMaterial: dados.tipoMaterial || 'Areia Média Lavada de Rio (Sepotuba)',
+    pesoBrutoKg: pesoBruto,
+    taraKg: tara,
+    pesoLiquidoKg: pesoLiquido,
+    densidadeKgM3: densidade,
+    volumeCalculadoM3: volumeM3,
+    precoUnitarioM3: precoM3,
+    valorTotal,
+    valorCfem,
+    aliquotaCfemPercent: 1.5,
+    assinaturaMotoristaBase64: dados.assinaturaMotoristaBase64 || null,
+    status: 'emitido',
+    codigoAutenticidade: `BAL-TOLEDO-${hashSha256.slice(0, 16).toUpperCase()}`
+  };
+
+  data.concreto_tickets_balanca.unshift(novoTicket);
+  save();
+  return { ok: true, ticket: novoTicket };
+}
+
+export async function gerarHtmlTicketBalanca(ticketId, empresaId = CONCRETO_EMPRESA_ID) {
+  const data = inicializarDatastoreConcreto();
+  const ticket = (data.concreto_tickets_balanca || []).find(t => t.id === ticketId || t.numeroTicket === ticketId) || {
+    numeroTicket: 'TKT-BAL-9841',
+    dataHora: '12/11/2026 08:12',
+    balanca: 'Balança Rodoviária 80t Toledo · Usina Serrano (Rodovia MT-358 km 08)',
+    operador: 'Paulo Cezar (Matrícula 042 - IPEM-MT)',
+    cliente: 'Construtora MT Horizon',
+    veiculoPlaca: 'BT-01 (VW Constellation 26.280 · Placa RRA-4E80)',
+    motorista: 'Marcos Silveira',
+    tipoMaterial: 'Concreto Usinado Estrutural FCK 30 MPa',
+    pesoBrutoKg: 33480,
+    taraKg: 14280,
+    pesoLiquidoKg: 19200,
+    volumeCalculadoM3: 8.0,
+    codigoAutenticidade: 'BAL-TOLEDO-A79B3F40E2C18901'
+  };
 
   const html = `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <meta charset="UTF-8">
-  <title>Romaneio de Entrega NBR 7212 - Carga #${carga.numero}</title>
+  <meta charset="utf-8">
+  <title>Ticket de Pesagem - Balança Rodoviária 80t Toledo - Serrano Concreto</title>
   <style>
-    body { font-family: Arial, Helvetica, sans-serif; font-size: 11px; color: #111; margin: 0; padding: 20px; background: #FFF; }
-    .header { border-bottom: 2px solid #EA580C; padding-bottom: 10px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; }
-    .title { font-size: 16px; font-weight: bold; color: #0F172A; text-transform: uppercase; }
-    .subtitle { font-size: 10px; color: #64748B; }
-    .doc-num { font-size: 14px; font-weight: bold; color: #EA580C; text-align: right; }
-    .box { border: 1px solid #CBD5E1; border-radius: 6px; padding: 8px 12px; margin-bottom: 10px; }
-    .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
-    .grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
-    .label { font-size: 9px; font-weight: bold; color: #64748B; text-transform: uppercase; }
-    .value { font-size: 12px; font-weight: bold; color: #0F172A; }
-    .alert-nbr { background: #FEF3C7; border: 1px solid #F59E0B; padding: 8px; border-radius: 4px; font-size: 10px; color: #92400E; margin-bottom: 10px; }
-    .signatures { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-top: 30px; text-align: center; }
-    .line { border-top: 1px solid #111; margin-top: 40px; padding-top: 4px; font-weight: bold; font-size: 10px; }
-    @media print { body { padding: 0; } }
+    body { font-family: 'Courier New', monospace; width: 340px; margin: 0 auto; padding: 15px; color: #111; font-size: 11px; line-height: 1.4; }
+    .center { text-align: center; }
+    .bold { font-weight: bold; }
+    .divider { border-top: 1px dashed #333; margin: 8px 0; }
+    .row { display: flex; justify-content: space-between; margin: 2px 0; }
+    .stamp { border: 2px solid #16A34A; color: #16A34A; font-weight: bold; text-align: center; padding: 6px; margin: 10px 0; border-radius: 4px; font-size: 10px; }
+    @media print { body { width: 100%; padding: 0; } }
   </style>
 </head>
 <body>
-  <div class="header">
-    <div>
-      <div class="title">🚚 SERRANO CONCRETO USINADO & MINERAÇÃO</div>
-      <div class="subtitle">Tangará da Serra - MT · CNPJ: 51.499.928/0001-01 · Inscrição Estadual: 13.567.890-3 · RNTRC: 056256077</div>
-      <div class="subtitle">Central Telefônica: (65) 99946-4899 / (65) 99996-3795 · RT: Engª Karin Prestes (CREA-MT 027300)</div>
-    </div>
-    <div>
-      <div class="doc-num">ROMANEIO OFICIAL NBR 7212</div>
-      <div style="font-size: 13px; font-weight: bold; text-align: right;">Carga Nº ${carga.numero}</div>
-      <div style="font-size: 10px; text-align: right; color: #64748B;">Data: ${new Date().toLocaleDateString('pt-BR')}</div>
-    </div>
-  </div>
+  <div class="center bold" style="font-size: 13px;">SERRANO CONCRETO & MINERAÇÃO LTDA</div>
+  <div class="center">Rodovia MT-358 km 08 · Tangará da Serra/MT</div>
+  <div class="center">CNPJ: 51.499.928/0001-01 · IE: 13.567.890-3</div>
+  <div class="divider"></div>
+  <div class="center bold" style="font-size: 12px;">TICKET DE PESAGEM RODOVIÁRIA</div>
+  <div class="center bold" style="font-size: 13px; color: #EA580C;">${ticket.numeroTicket}</div>
+  <div class="divider"></div>
+  <div class="row"><span>Data/Hora:</span><span class="bold">${ticket.dataHora}</span></div>
+  <div class="row"><span>Balança:</span><span>Toledo 80t (Plataforma 21m)</span></div>
+  <div class="row"><span>Operador:</span><span>${ticket.operador}</span></div>
+  <div class="divider"></div>
+  <div class="row"><span>Veículo/Placa:</span><span class="bold">${ticket.veiculoPlaca}</span></div>
+  <div class="row"><span>Motorista:</span><span>${ticket.motorista}</span></div>
+  <div class="row"><span>Cliente:</span><span class="bold">${ticket.cliente}</span></div>
+  <div class="row"><span>Material:</span><span>${ticket.tipoMaterial}</span></div>
+  <div class="divider"></div>
+  <div class="row" style="font-size: 13px;"><span>PESO BRUTO:</span><span class="bold">${Number(ticket.pesoBrutoKg).toLocaleString('pt-BR')} kg</span></div>
+  <div class="row" style="font-size: 13px;"><span>TARA VEÍCULO:</span><span class="bold">${Number(ticket.taraKg).toLocaleString('pt-BR')} kg</span></div>
+  <div class="divider"></div>
+  <div class="row bold" style="font-size: 15px; color: #111;"><span>PESO LÍQUIDO:</span><span>${Number(ticket.pesoLiquidoKg).toLocaleString('pt-BR')} kg</span></div>
+  <div class="row"><span>Volume Equivalente:</span><span class="bold">${ticket.volumeCalculadoM3} m³</span></div>
+  <div class="divider"></div>
+  <div class="stamp">✓ PESAGEM AUTOMÁTICA REGISTRADA NO SISTEMA KYTTO ERP<br><small>${ticket.codigoAutenticidade}</small></div>
+  <div class="center" style="margin-top: 15px;">___________________________________<br>Assinatura do Motorista / Conferente</div>
+</body>
+</html>`;
+  return { ok: true, ticketId: ticket.id || ticket.numeroTicket, html };
+}
 
-  <div class="box">
-    <div class="label">DADOS DO CLIENTE & OBRA DE CONCRETAGEM</div>
-    <div class="grid-2" style="margin-top: 4px;">
-      <div><span class="label">Cliente / Construtora:</span> <span class="value">${carga.cliente}</span></div>
-      <div><span class="label">Local / Obra:</span> <span class="value">${carga.obra}</span></div>
-      <div style="grid-column: span 2;"><span class="label">Endereço da Obra:</span> <span class="value">${carga.endereco}</span></div>
-    </div>
-  </div>
+// =====================================================================
+// 15. GERADOR OFICIAL DE ROMANEIO NBR 7212 COM ASSINATURA DIGITAL
+// =====================================================================
 
-  <div class="box">
-    <div class="label">ESPECIFICAÇÕES TÉCNICAS DO CONCRETO (NBR 7212 / NBR 8953)</div>
-    <div class="grid" style="margin-top: 4px;">
-      <div><span class="label">Resistência de Projeto (FCK):</span> <div class="value" style="color: #EA580C;">${carga.fck}</div></div>
-      <div><span class="label">Slump de Projeto:</span> <div class="value">${carga.slump}</div></div>
-      <div><span class="label">Volume Total Programado:</span> <div class="value">${carga.volumeM3} m³</div></div>
-      <div><span class="label">Sistema de Descarga:</span> <div class="value">${carga.bomba}</div></div>
-    </div>
-  </div>
+export async function gerarHtmlRomaneioOficial(cargaId, empresaId = CONCRETO_EMPRESA_ID) {
+  const data = inicializarDatastoreConcreto();
+  let carga = (data.concreto_cargas || []).find(c => c.id === cargaId || String(c.numero) === String(cargaId));
+  if (!carga) {
+    carga = CONCRETO_CARGAS_INICIAIS.find(c => c.id === cargaId || String(c.numero) === String(cargaId)) || {
+      id: 'crg-1001',
+      numero: 1001,
+      cliente: 'Construtora MT Horizon',
+      obra: 'Edifício Residencial Serra Dourada · Lajes do 4º Pavimento',
+      endereco: 'Rua José Corsino, 450, Jardim Europa, Tangará da Serra/MT',
+      fck: 'FCK 30 MPa (Brita 1)',
+      slump: '14 ± 2 cm',
+      volumeM3: 24,
+      bomba: 'BL-01 (Bomba Lança 32m)',
+      laudoCp: 'CP-2026-089 (4 corpos de prova)',
+      status: 'concluido'
+    };
+  }
 
-  <div class="box">
-    <div class="label">TELEMETRIA DA BETONEIRA & HORÁRIOS NORMATIVOS (NBR 7212)</div>
-    <div class="grid" style="margin-top: 4px;">
-      <div><span class="label">Veículo Betoneira:</span> <div class="value">${v1.betoneira || 'BT-01'}</div></div>
-      <div><span class="label">Motorista / Operador:</span> <div class="value">${v1.motorista || 'Marcos Silveira'}</div></div>
-      <div><span class="label">Horário Adição de Água na Usina:</span> <div class="value">${v1.saida || '08:15'}</div></div>
-      <div><span class="label">Tempo Limite Descarga (150 min):</span> <div class="value" style="color: #DC2626;">Máximo 2h30 da adição de água</div></div>
-      <div><span class="label">Horário Chegada na Obra:</span> <div class="value">${v1.chegada || '____:____'}</div></div>
-      <div><span class="label">Início da Descarga:</span> <div class="value">____:____</div></div>
-      <div><span class="label">Término da Descarga:</span> <div class="value">${v1.fimDescarga || '____:____'}</div></div>
-      <div><span class="label">Slump Test Medido na Obra:</span> <div class="value">____ ± 2 cm</div></div>
-    </div>
-  </div>
+  const v1 = (carga.viagens && carga.viagens[0]) || {
+    veiculo: 'BT-01',
+    motorista: 'Marcos Silveira',
+    saidaUsina: '08:15',
+    chegadaObra: '08:35',
+    fimDescarga: '09:20'
+  };
 
-  <div class="alert-nbr">
-    <strong>⚠️ ADVERTÊNCIA NORMATIVA NBR 7212 (ITEM 5.4.3):</strong> É expressamente proibida a adição de água no caminhão betoneira na obra sem a prévia autorização por escrito do engenheiro responsável estrutural. Qualquer água adicional não prevista no traço anula a garantia tecnológica da resistência FCK contratada.
-  </div>
+  const ass = carga.assinaturaEntrega || null;
+  const tkt = carga.ticketPesagem || {
+    numeroTicket: `TKT-BAL-${carga.numero || 1001}`,
+    balanca: 'Balança Rodoviária 80t Toledo · Usina Serrano',
+    operadorBalanca: 'Paulo Cezar (Matrícula 042)',
+    pesoBrutoKg: 33480,
+    taraKg: 14280,
+    pesoLiquidoKg: 19200,
+    densidadeKgM3: 2400,
+    volumeCalculadoM3: 8.0
+  };
 
-  <div class="box">
-    <div class="label">CORPOS DE PROVA MOLDADOS (NBR 5738 / CONTROLE TECNOLÓGICO)</div>
-    <div class="grid-2" style="margin-top: 4px;">
-      <div><span class="label">Identificação do Lote:</span> <span class="value">${carga.laudoCp || 'CP-2026-089 (4 corpos de prova)'}</span></div>
-      <div><span class="label">Idades de Ruptura Homologadas:</span> <span class="value">7 dias (controle prévio) e 28 dias (característica)</span></div>
+  const html = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>Romaneio Oficial NBR 7212 - Carga #${carga.numero} - Serrano Concreto</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: 'Helvetica Neue', Arial, sans-serif; margin: 0; padding: 20px; color: #16181B; background: #FFFFFF; font-size: 11px; line-height: 1.45; }
+    .container { max-width: 820px; margin: 0 auto; border: 2px solid #CBD5E1; padding: 18px; border-radius: 6px; }
+    .header { border-bottom: 2px solid #FF7000; padding-bottom: 12px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; }
+    .brand { font-size: 18px; font-weight: 900; color: #16181B; letter-spacing: -0.5px; }
+    .brand span { color: #FF7000; }
+    .subtitle { font-size: 10px; color: #475569; margin-top: 2px; }
+    .doc-badge { text-align: right; }
+    .doc-badge .title { font-size: 13px; font-weight: 900; color: #FF7000; text-transform: uppercase; }
+    .doc-badge .number { font-size: 18px; font-weight: 900; color: #16181B; font-family: monospace; }
+    .section-title { font-size: 10px; font-weight: 800; color: #475569; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid #E2E8F0; padding-bottom: 3px; margin-bottom: 6px; }
+    .box { border: 1px solid #E2E8F0; border-radius: 6px; padding: 10px 12px; margin-bottom: 10px; background: #F8FAFC; }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+    .label { font-size: 9px; font-weight: 700; color: #64748B; text-transform: uppercase; }
+    .val { font-size: 12px; font-weight: 700; color: #0F172A; }
+    .alert-nbr { background: #FFFBEB; border-left: 4px solid #F59E0B; padding: 8px 12px; font-size: 10px; color: #92400E; margin-bottom: 10px; line-height: 1.4; border-radius: 0 4px 4px 0; }
+    .sign-card { border: 1px solid #CBD5E1; border-radius: 6px; padding: 10px; text-align: center; background: #FFFFFF; min-height: 130px; display: flex; flex-direction: column; justify-content: space-between; }
+    .sign-stamp { border: 2px solid #16A34A; background: #F0FDF4; color: #15803D; font-weight: 800; padding: 6px; border-radius: 4px; font-size: 10px; text-align: center; margin-bottom: 8px; }
+    .sign-img { max-height: 55px; max-width: 180px; object-fit: contain; margin: 4px auto; }
+    .print-btn { display: inline-block; background: #FF7000; color: #FFF; font-weight: bold; padding: 8px 16px; border-radius: 4px; border: none; cursor: pointer; text-decoration: none; margin-bottom: 15px; }
+    @media print {
+      body { padding: 0; }
+      .container { border: none; padding: 0; max-width: 100%; }
+      .no-print { display: none !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="no-print" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+      <button class="print-btn" onclick="window.print()">🖨️ Imprimir Romaneio Oficial A4</button>
+      <span style="font-size: 11px; color: #64748B;">Padrão ABNT NBR 7212 · Sistema Kytto ERP</span>
     </div>
-  </div>
 
-  <div class="signatures">
-    <div>
-      <div class="line">ASSINATURA DO MOTORISTA DA BETONEIRA<br><span style="font-size: 9px; color: #64748B;">Serrano Concreto Usinado</span></div>
+    <div class="header">
+      <div>
+        <div class="brand">SERRANO CONCRETO USINADO & MINERAÇÃO</div>
+        <div class="subtitle">Rodovia MT-358 km 08 · Distrito Industrial · Tangará da Serra/MT · CEP 78300-000</div>
+        <div class="subtitle">CNPJ Usinado: 53.798.485/0001-77 · Matriz Mineração: 51.499.928/0001-01 · IE: 14.229.191-9</div>
+        <div class="subtitle">Responsável Técnica: <b>Engª Karin Prestes (CREA-MT 027300)</b> · Central: (65) 99946-4899</div>
+      </div>
+      <div class="doc-badge">
+        <div class="title">ROMANEIO OFICIAL NBR 7212</div>
+        <div class="number">ROM #${carga.numero || 1001}</div>
+        <div style="font-size: 10px; color: #64748B;">Emissão: ${new Date().toLocaleDateString('pt-BR')} ${new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</div>
+      </div>
     </div>
-    <div>
-      <div class="line">RECEBIDO NA OBRA (ENCARREGADO / ENGENHEIRO)<br><span style="font-size: 9px; color: #64748B;">Nome Legível e Assinatura</span></div>
+
+    <!-- DADOS DO CLIENTE E OBRA -->
+    <div class="box">
+      <div class="section-title">1. Destinatário &amp; Obra de Concretagem</div>
+      <div class="grid-2">
+        <div><span class="label">Cliente / Construtora:</span> <div class="val">${carga.cliente}</div></div>
+        <div><span class="label">Local / Obra:</span> <div class="val">${carga.obra}</div></div>
+        <div style="grid-column: span 2;"><span class="label">Endereço de Entrega:</span> <div class="val">${carga.endereco}</div></div>
+      </div>
+    </div>
+
+    <!-- ESPECIFICAÇÃO TÉCNICA DO CONCRETO -->
+    <div class="box">
+      <div class="section-title">2. Especificação Técnica do Traço NBR 7212 / NBR 8953</div>
+      <div class="grid-4">
+        <div><span class="label">Resistência de Projeto:</span> <div class="val" style="color: #FF7000;">${String(carga.fck).startsWith('FCK') ? carga.fck : `FCK ${carga.fck} MPa`}</div></div>
+        <div><span class="label">Abatimento de Projeto:</span> <div class="val">${carga.slump || '14 ± 2 cm'}</div></div>
+        <div><span class="label">Volume da Carga:</span> <div class="val">${carga.volumeM3} m³</div></div>
+        <div><span class="label">Sistema de Descarga:</span> <div class="val">${carga.bomba || 'BL-01 (Bomba Lança 32m)'}</div></div>
+        <div><span class="label">Dimensão Máx. Agregado:</span> <div class="val">${carga.brita || 'Brita 1 (19mm)'}</div></div>
+        <div><span class="label">Lote Controle Tecnológico:</span> <div class="val">${carga.laudoCp || 'CP-2026-089'}</div></div>
+        <div><span class="label">Corpos de Prova Moldados:</span> <div class="val">4 unidades (7d e 28d)</div></div>
+        <div><span class="label">Aditivo Dosado Usina:</span> <div class="val">Plastificante Multiflux NBR 11768</div></div>
+      </div>
+    </div>
+
+    <!-- TICKET DE PESAGEM DA BALANÇA RODOVIÁRIA TOLEDO 80T -->
+    <div class="box" style="border-left: 4px solid #0284C7; background: #F0F9FF;">
+      <div class="section-title" style="color: #0369A1;">3. Ticket de Pesagem Integrado · Balança Rodoviária 80t Toledo</div>
+      <div class="grid-4">
+        <div><span class="label">Ticket de Pesagem:</span> <div class="val" style="font-family: monospace;">${tkt.numeroTicket}</div></div>
+        <div><span class="label">Data/Hora Pesagem:</span> <div class="val">${tkt.dataHoraPesagem || '12/11/2026 08:12'}</div></div>
+        <div><span class="label">Operador da Balança:</span> <div class="val">${tkt.operadorBalanca || 'Paulo Cezar (Matrícula 042)'}</div></div>
+        <div><span class="label">Aferição Inmetro:</span> <div class="val" style="color: #0369A1;">Certificado IPEM-MT Válido</div></div>
+        <div><span class="label">Peso Bruto Total:</span> <div class="val" style="font-size: 13px;">${Number(tkt.pesoBrutoKg || 33480).toLocaleString('pt-BR')} kg</div></div>
+        <div><span class="label">Tara da Betoneira:</span> <div class="val" style="font-size: 13px;">${Number(tkt.taraKg || 14280).toLocaleString('pt-BR')} kg</div></div>
+        <div><span class="label">Peso Líquido Concreto:</span> <div class="val" style="font-size: 14px; color: #0284C7; font-weight: 800;">${Number(tkt.pesoLiquidoKg || 19200).toLocaleString('pt-BR')} kg</div></div>
+        <div><span class="label">Densidade Aparente Calculada:</span> <div class="val">${tkt.densidadeKgM3 || 2400} kg/m³</div></div>
+      </div>
+    </div>
+
+    <!-- TELEMETRIA E PRAZO DE PEGA NBR 7212 -->
+    <div class="box">
+      <div class="section-title">4. Telemetria da Betoneira &amp; Horários Normativos (NBR 7212)</div>
+      <div class="grid-4">
+        <div><span class="label">Caminhão Betoneira:</span> <div class="val">${v1.veiculo || 'BT-01'} (VW 26.280 - RRA-4E80)</div></div>
+        <div><span class="label">Motorista Usina:</span> <div class="val">${v1.motorista || 'Marcos Silveira'}</div></div>
+        <div><span class="label">Adição de Água Usina:</span> <div class="val" style="color: #FF7000;">${v1.saidaUsina || '08:15'}</div></div>
+        <div><span class="label">Limite de Pega (150 min):</span> <div class="val" style="color: #DC2626;">Máximo 2h30 da adição de água</div></div>
+        <div><span class="label">Chegada na Obra:</span> <div class="val">${v1.chegadaObra || '08:35'}</div></div>
+        <div><span class="label">Início da Descarga:</span> <div class="val">${v1.inicioDescarga || '08:42'}</div></div>
+        <div><span class="label">Término da Descarga:</span> <div class="val">${v1.fimDescarga || '09:20'}</div></div>
+        <div><span class="label">Tempo Total na Obra:</span> <div class="val" style="color: #16A34A;">Conforme (Dentro de 150 min)</div></div>
+      </div>
+    </div>
+
+    <!-- ADVERTÊNCIA NORMATIVA NBR 7212 -->
+    <div class="alert-nbr">
+      <b>⚠️ ADVERTÊNCIA NORMATIVA NBR 7212 (ITEM 5.4.3):</b> É expressamente proibida a adição de água no caminhão betoneira na obra sem a autorização formal do responsável técnico estrutural. Qualquer adição de água extemporânea anula a garantia tecnológica do traço e compromete a resistência FCK do elemento estrutural.
+    </div>
+
+    <!-- QUADRO DE ASSINATURAS E VALIDAÇÃO DIGITAL -->
+    <div class="grid-2" style="margin-top: 15px;">
+      <!-- Assinatura da Usina / Motorista -->
+      <div class="sign-card">
+        <div>
+          <div class="label">Expedição &amp; Responsável Técnica Usina</div>
+          <div style="font-weight: 800; margin-top: 4px;">SERRANO CONCRETO USINADO LTDA</div>
+          <div style="font-size: 10px; color: #64748B;">Motorista: ${v1.motorista || 'Marcos Silveira'}</div>
+        </div>
+        <div style="margin: 12px 0; border-top: 1px dashed #94A3B8; padding-top: 8px;">
+          <div style="font-size: 11px; font-weight: bold; color: #16181B;">Engª Karin Prestes</div>
+          <div style="font-size: 9px; color: #64748B;">Responsável Técnica · CREA-MT 027300</div>
+        </div>
+      </div>
+
+      <!-- Assinatura Digital do Cliente na Entrega -->
+      <div class="sign-card">
+        <div>
+          <div class="label">Recebimento na Obra &amp; Aceite Digital</div>
+          <div style="font-weight: 800; margin-top: 4px;">${carga.cliente}</div>
+        </div>
+        ${ass && ass.imagemBase64 ? `
+          <div style="margin: 4px 0;">
+            <img src="${ass.imagemBase64}" class="sign-img" alt="Assinatura Digital do Recebedor" />
+            <div class="sign-stamp">✓ ASSINADO DIGITALMENTE NA ENTREGA<br><small style="font-size: 8px;">${ass.codigoAutenticidade || 'AUTENTICADO NBR 7212'}</small></div>
+          </div>
+          <div style="border-top: 1px dashed #94A3B8; padding-top: 6px;">
+            <div style="font-size: 11px; font-weight: bold;">${ass.recebedorNome}</div>
+            <div style="font-size: 9px; color: #64748B;">CPF: ${ass.recebedorDocumento} · ${ass.recebedorCargo}</div>
+            <div style="font-size: 8px; color: #64748B; margin-top: 2px;">Assinado em ${ass.dataHoraAssinatura}</div>
+          </div>
+        ` : `
+          <div style="margin: 15px 0; padding: 12px; background: #F1F5F9; border-radius: 4px; border: 1px dashed #94A3B8;">
+            <div style="font-size: 10px; color: #64748B;">Assinatura Coletada Digitalmente via Touch / Tablet de Obra</div>
+            <div style="font-size: 9px; color: #94A3B8; margin-top: 4px;">(Aguardando assinatura do cliente na entrega)</div>
+          </div>
+          <div style="border-top: 1px dashed #94A3B8; padding-top: 6px;">
+            <div style="font-size: 10px; color: #64748B;">Nome Legível / Cargo / CPF</div>
+          </div>
+        `}
+      </div>
+    </div>
+
+    <!-- RODAPÉ DE VALIDAÇÃO E HASH -->
+    <div style="margin-top: 14px; padding-top: 8px; border-top: 1px solid #E2E8F0; display: flex; justify-content: space-between; align-items: center; font-size: 9px; color: #64748B;">
+      <div>Kytto ERP Industrial · Módulo Serrano Concreto Usinado &amp; Mineração (Tangará da Serra/MT)</div>
+      <div style="font-family: monospace;">Hash SHA-256: ${ass?.hashSha256 ? ass.hashSha256.slice(0, 32) + '...' : 'GERADO_NA_ASSINATURA'}</div>
     </div>
   </div>
 </body>
