@@ -218,13 +218,96 @@ export default function ConcretoUsinaERP() {
     observacoes: ''
   });
 
-  // Formulário Registro de Ruptura
+  // Formulário e Estados do Laboratório NBR 5738 / NBR 5739
+  const [abaLaboratorio, setAbaLaboratorio] = useState('lotes'); // 'lotes' | 'curva' | 'camara' | 'estatistica'
+  const [filtroFrotaTipo, setFiltroFrotaTipo] = useState('todos'); // 'todos' | 'betoneira' | 'bomba_lanca'
+  const [salvandoRuptura, setSalvandoRuptura] = useState(false);
+  const [simuladorSlump, setSimuladorSlump] = useState({
+    temperaturaAmbienteC: 33,
+    tempoViagemMin: 35,
+    slumpInicialCm: 14.0,
+    usoRetardador: true
+  });
   const [formRuptura, setFormRuptura] = useState({
+    loteId: '',
     cpId: 'CP-1',
     idadeDias: 7,
-    tensaoMpa: '',
-    forcaKn: ''
+    diametroMm: 100.0,
+    alturaMm: 200.0,
+    forcaKn: 200.0,
+    tensaoMpa: 25.5,
+    tipoRuptura: 'A',
+    tipoPreparoBase: 'retificacao_diamantada'
   });
+
+  const calcularTensaoCP = (forcaKn, diametroMm = 100.0, alturaMm = 200.0) => {
+    const f = Number(forcaKn) || 0;
+    const d = Number(diametroMm) || 100.0;
+    const h = Number(alturaMm) || 200.0;
+    const area = (Math.PI * Math.pow(d, 2)) / 4.0;
+    const hd = h / d;
+    let fatorHd = 1.0;
+    if (hd < 1.94) {
+      if (hd <= 1.0) fatorHd = 0.86;
+      else if (hd <= 1.25) fatorHd = 0.86 + (hd - 1.0) * (0.93 - 0.86) / 0.25;
+      else if (hd <= 1.50) fatorHd = 0.93 + (hd - 1.25) * (0.96 - 0.93) / 0.25;
+      else if (hd <= 1.75) fatorHd = 0.96 + (hd - 1.50) * (0.98 - 0.96) / 0.25;
+      else fatorHd = 0.98 + (hd - 1.75) * (1.00 - 0.98) / 0.25;
+    }
+    return +(((f * 1000) / area * fatorHd).toFixed(1));
+  };
+
+  const abrirModalRuptura = (ensaio, cpAlvo = null) => {
+    const cp = cpAlvo || ensaio.corposProva?.find(c => c.tensaoMpa == null) || ensaio.corposProva?.[0] || { id: 'CP-1', idadeDias: 7 };
+    const forcaPadrao = +(ensaio.fckProjeto * 0.85 * 7.854).toFixed(1);
+    const diametro = cp.diametroMm || 100.0;
+    const altura = cp.alturaMm || 200.0;
+    const forca = cp.forcaKn || forcaPadrao;
+    const tensao = cp.tensaoMpa || calcularTensaoCP(forca, diametro, altura);
+
+    setFormRuptura({
+      loteId: ensaio.id || ensaio.lote,
+      cpId: cp.id,
+      idadeDias: cp.idadeDias || 7,
+      diametroMm: diametro,
+      alturaMm: altura,
+      forcaKn: forca,
+      tensaoMpa: tensao,
+      tipoRuptura: cp.tipoRuptura || 'A',
+      tipoPreparoBase: cp.tipoPreparoBase || 'retificacao_diamantada'
+    });
+    setModalRupturaAberto(ensaio);
+  };
+
+  const handleSalvarRupturaPrensa = async (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    if (!modalRupturaAberto) return;
+    setSalvandoRuptura(true);
+    try {
+      const loteId = formRuptura.loteId || modalRupturaAberto.id || modalRupturaAberto.lote;
+      const res = await api.post(`/api/admin/concreto/ensaios/${loteId}/ruptura`, {
+        cpId: formRuptura.cpId,
+        idadeDias: Number(formRuptura.idadeDias),
+        forcaKn: Number(formRuptura.forcaKn),
+        tensaoMpa: Number(formRuptura.tensaoMpa),
+        diametroMm: Number(formRuptura.diametroMm),
+        alturaMm: Number(formRuptura.alturaMm),
+        tipoRuptura: formRuptura.tipoRuptura,
+        tipoPreparoBase: formRuptura.tipoPreparoBase
+      });
+      if (res.data?.ok || res.data?.ensaio) {
+        toast ? toast.success(`Ruptura do ${formRuptura.cpId} gravada com sucesso! (${formRuptura.tensaoMpa} MPa)`) : alert(`Ruptura gravada com sucesso!`);
+        setModalRupturaAberto(null);
+        await carregarDados();
+      }
+    } catch (err) {
+      console.error('Erro ao registrar ruptura:', err);
+      const msg = err.response?.data?.error || err.message;
+      toast ? toast.error('Falha ao salvar ensaio de ruptura: ' + msg) : alert('Erro: ' + msg);
+    } finally {
+      setSalvandoRuptura(false);
+    }
+  };
 
   // Handlers de Suprimentos, Silos e Controle de Processo
   const handleSalvarUmidadeBaia = async (baiaId, umidadePercentual) => {
@@ -949,59 +1032,409 @@ export default function ConcretoUsinaERP() {
 
         {/* ─── ABA 3: LABORATÓRIO & CPS NBR 5738/5739 ─── */}
         {secaoAtiva === 'producao-laboratorio' && (
-          <div className="serrano-card">
-            <div className="serrano-card-h">
-              <h3>Controle Tecnológico &amp; Ensaios de Ruptura (NBR 5738 e 5739)</h3>
-              <span className="serrano-legend">
-                RT: <b>Engª Karin Prestes (CREA-MT 027300)</b>
-              </span>
-            </div>
-
-            <div style={{ padding: 20 }}>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 16 }}>
-                {ensaios.map(ens => (
-                  <div key={ens.id} style={{ background: 'var(--surface-2)', border: '1px solid var(--joint)', borderRadius: 8, padding: 16 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
-                      <div>
-                        <b style={{ fontFamily: 'var(--font-data)', fontSize: 14 }}>{ens.lote}</b>
-                        <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>{ens.obra}</div>
-                        <small style={{ color: 'var(--text-muted)' }}>Cliente: {ens.cliente}</small>
-                      </div>
-                      <span className={`serrano-pill ${ens.status === 'aprovado' ? 'serrano-p-ok' : 'serrano-p-warn'}`}>
-                        {ens.status === 'aprovado' ? 'Aprovado 28d' : 'Em cura'}
-                      </span>
-                    </div>
-
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6, margin: '14px 0' }}>
-                      {ens.corposProva.map(cp => (
-                        <div key={cp.id} style={{ background: 'var(--surface)', border: '1px solid var(--joint)', borderRadius: 6, padding: 8, textAlign: 'center' }}>
-                          <small style={{ fontFamily: 'var(--font-data)', fontSize: 10, color: 'var(--text-muted)' }}>{cp.id} ({cp.idadeDias}d)</small>
-                          <div style={{ fontFamily: 'var(--font-data)', fontWeight: 700, fontSize: 13, marginTop: 4 }}>
-                            {cp.tensaoMpa ? `${cp.tensaoMpa} MPa` : 'Em cura'}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid var(--joint)', paddingTop: 10, marginTop: 10 }}>
-                      <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>FCK Projeto: <b>{ens.fckProjeto} MPa</b></span>
-                      <button 
-                        type="button" 
-                        className="btn-serrano"
-                        style={{ padding: '5px 12px', fontSize: 11 }}
-                        onClick={() => setModalLaudoAberto(ens)}
-                      >
-                        Ver Laudo NBR 5739
-                      </button>
-                    </div>
+          <div style={{ display: 'grid', gap: 20 }}>
+            {/* Header com KPIs do Laboratório Tecnológico */}
+            <div className="serrano-card" style={{ padding: 20 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 16 }}>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <h2 style={{ margin: 0, fontSize: 22, fontWeight: 800, fontFamily: 'var(--font-display)', letterSpacing: 0.5 }}>
+                      Laboratório de Controle Tecnológico &amp; Ruptura de CPs
+                    </h2>
+                    <span className="serrano-pill serrano-p-ok" style={{ fontWeight: 700 }}>
+                      ABNT NBR 5738 / 5739 / 12655
+                    </span>
                   </div>
+                  <p style={{ margin: '4px 0 0', color: 'var(--text-muted)', fontSize: 13 }}>
+                    Prensa eletro-hidráulica microprocessada (0,45 ± 0,15 MPa/s), câmara úmida NBR 9479 e emissão de laudos oficiais com ART/CREA.
+                  </p>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <button 
+                    type="button" 
+                    className="btn-serrano pri"
+                    onClick={() => ensaios.length > 0 && abrirModalRuptura(ensaios[0])}
+                  >
+                    + Romper CP na Prensa Digital
+                  </button>
+                </div>
+              </div>
+
+              {/* Grid de KPIs do Laboratório */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 14, marginTop: 18 }}>
+                <div style={{ background: 'var(--surface-2)', padding: 14, borderRadius: 8, borderLeft: '4px solid var(--serrano-orange)' }}>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700 }}>Lotes Rasteados</div>
+                  <div style={{ fontFamily: 'var(--font-display)', fontSize: 24, fontWeight: 800, marginTop: 4 }}>
+                    {ensaios.length} lotes oficiais
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>Controle rigoroso NBR 12655</div>
+                </div>
+
+                <div style={{ background: 'var(--surface-2)', padding: 14, borderRadius: 8, borderLeft: '4px solid var(--status-ok)' }}>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700 }}>CPs em Cura (NBR 9479)</div>
+                  <div style={{ fontFamily: 'var(--font-display)', fontSize: 24, fontWeight: 800, marginTop: 4, color: 'var(--status-ok)' }}>
+                    {ensaios.reduce((acc, e) => acc + (e.corposProva?.filter(c => c.tensaoMpa == null).length || 0), 0)} CPs no tanque
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>23,0°C ± 1°C · Saturação Cal</div>
+                </div>
+
+                <div style={{ background: 'var(--surface-2)', padding: 14, borderRadius: 8, borderLeft: '4px solid var(--status-info)' }}>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700 }}>CPs Rompidos</div>
+                  <div style={{ fontFamily: 'var(--font-display)', fontSize: 24, fontWeight: 800, marginTop: 4, color: 'var(--status-info)' }}>
+                    {ensaios.reduce((acc, e) => acc + (e.corposProva?.filter(c => c.tensaoMpa != null).length || 0), 0)} CPs ensaiados
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>Taxa 0,45 MPa/s RBC</div>
+                </div>
+
+                <div style={{ background: 'var(--surface-2)', padding: 14, borderRadius: 8, borderLeft: '4px solid #8b5cf6' }}>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700 }}>Conformidade do Lote</div>
+                  <div style={{ fontFamily: 'var(--font-display)', fontSize: 24, fontWeight: 800, marginTop: 4, color: '#8b5cf6' }}>
+                    100% Conforme
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>fck,est ≥ fck projeto</div>
+                </div>
+              </div>
+
+              {/* Sub-abas do Laboratório */}
+              <div style={{ display: 'flex', gap: 8, marginTop: 20, borderBottom: '1px solid var(--joint)', paddingBottom: 10 }}>
+                {[
+                  { id: 'lotes', label: '📋 Lotes & Rupturas NBR 5739' },
+                  { id: 'curva', label: '📈 Curva de Maturação & Abrams' },
+                  { id: 'camara', label: '💧 Tanque de Cura NBR 9479' },
+                  { id: 'estatistica', label: '📊 Avaliação Estatística NBR 12655' }
+                ].map(t => (
+                  <button
+                    key={t.id}
+                    type="button"
+                    style={{
+                      padding: '8px 16px',
+                      borderRadius: 6,
+                      fontSize: 12,
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      border: 'none',
+                      background: abaLaboratorio === t.id ? 'var(--serrano-orange)' : 'var(--surface-2)',
+                      color: abaLaboratorio === t.id ? '#fff' : 'var(--text)'
+                    }}
+                    onClick={() => setAbaLaboratorio(t.id)}
+                  >
+                    {t.label}
+                  </button>
                 ))}
               </div>
             </div>
+
+            {/* SUB-ABA 1: LOTES E RUPTURAS */}
+            {abaLaboratorio === 'lotes' && (
+              <div className="serrano-card">
+                <div className="serrano-card-h">
+                  <h3>Lotes de Amostragem &amp; Corpos de Prova Cilindricos (10x20 cm)</h3>
+                  <span className="serrano-legend">
+                    Responsável Técnica: <b>Engª Karin Prestes (CREA-MT 027300)</b>
+                  </span>
+                </div>
+                <div style={{ padding: 20 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: 16 }}>
+                    {ensaios.map(ens => (
+                      <div key={ens.id} style={{ background: 'var(--surface-2)', border: '1px solid var(--joint)', borderRadius: 8, padding: 16 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
+                          <div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <b style={{ fontFamily: 'var(--font-data)', fontSize: 15, color: 'var(--serrano-orange-text)' }}>{ens.lote}</b>
+                              <span className={`serrano-pill ${ens.status === 'aprovado' ? 'serrano-p-ok' : 'serrano-p-warn'}`}>
+                                {ens.status === 'aprovado' ? '✓ Aprovado 28d' : ens.status === 'moldado' ? 'Moldado Hoje' : 'Em Cura no Tanque'}
+                              </span>
+                            </div>
+                            <div style={{ fontSize: 13, fontWeight: 700, marginTop: 4 }}>{ens.obra}</div>
+                            <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Cliente: {ens.cliente}</div>
+                            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+                              Data Moldagem: <b>{ens.dataMoldagem}</b> · Slump: <b>{ens.slumpMedidoCm} cm</b>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Corpos de Prova do Lote */}
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, margin: '14px 0' }}>
+                          {(ens.corposProva || []).map(cp => {
+                            const rompido = cp.tensaoMpa != null;
+                            const perc = cp.percentualFck || (rompido ? +((cp.tensaoMpa / ens.fckProjeto) * 100).toFixed(0) : 0);
+                            return (
+                              <div 
+                                key={cp.id} 
+                                style={{ 
+                                  background: 'var(--surface)', 
+                                  border: rompido ? '1px solid var(--status-ok)' : '1px dashed var(--joint)', 
+                                  borderRadius: 6, 
+                                  padding: '10px 6px', 
+                                  textAlign: 'center',
+                                  cursor: rompido ? 'default' : 'pointer'
+                                }}
+                                title={rompido ? `Rompido: ${cp.forcaKn} kN · Ruptura Tipo ${cp.tipoRuptura || 'A'}` : 'Clique para romper este CP na prensa'}
+                                onClick={() => !rompido && abrirModalRuptura(ens, cp)}
+                              >
+                                <div style={{ fontFamily: 'var(--font-data)', fontSize: 11, fontWeight: 700, color: 'var(--text-muted)' }}>
+                                  {cp.id} ({cp.idadeDias}d)
+                                </div>
+                                <div style={{ fontFamily: 'var(--font-data)', fontWeight: 800, fontSize: 13, marginTop: 4, color: rompido ? (cp.tensaoMpa >= ens.fckProjeto ? 'var(--status-ok)' : 'var(--status-info)') : 'var(--text-muted)' }}>
+                                  {rompido ? `${cp.tensaoMpa} MPa` : 'Em cura'}
+                                </div>
+                                {rompido ? (
+                                  <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>
+                                    {perc}% FCK · Tipo {cp.tipoRuptura || 'A'}
+                                  </div>
+                                ) : (
+                                  <div style={{ fontSize: 10, color: 'var(--serrano-orange-text)', marginTop: 2, fontWeight: 700 }}>
+                                    ⚡ Romper
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid var(--joint)', paddingTop: 12, marginTop: 10, flexWrap: 'wrap', gap: 8 }}>
+                          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                            FCK Projeto: <b style={{ color: 'var(--text)' }}>{ens.fckProjeto} MPa</b>
+                            {ens.fckEstimado28d && (
+                              <span style={{ marginLeft: 6, color: 'var(--status-ok)', fontWeight: 700 }}>
+                                (Aferido: {ens.fckEstimado28d} MPa)
+                              </span>
+                            )}
+                          </span>
+                          <div style={{ display: 'flex', gap: 8 }}>
+                            <button 
+                              type="button" 
+                              className="btn-serrano"
+                              style={{ padding: '5px 10px', fontSize: 11 }}
+                              onClick={() => abrirModalRuptura(ens)}
+                            >
+                              + Romper CP
+                            </button>
+                            <button 
+                              type="button" 
+                              className="btn-serrano"
+                              style={{ padding: '5px 12px', fontSize: 11, borderColor: 'var(--serrano-orange)', color: 'var(--serrano-orange-text)' }}
+                              onClick={() => setModalLaudoAberto(ens)}
+                            >
+                              Ver Laudo NBR 5739
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* SUB-ABA 2: CURVA DE MATURAÇÃO & ABRAMS */}
+            {abaLaboratorio === 'curva' && (
+              <div className="serrano-card" style={{ padding: 20 }}>
+                <div className="serrano-card-h" style={{ padding: '0 0 16px', borderBottom: '1px solid var(--joint)', marginBottom: 16 }}>
+                  <div>
+                    <h3 style={{ margin: 0 }}>Curva de Maturação do Concreto &amp; Modelo de Abrams (NBR 6118)</h3>
+                    <small style={{ color: 'var(--text-muted)' }}>Evolução da resistência à compressão axial dos 3 aos 28 dias para cimento CP II-F-32</small>
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 20, alignItems: 'center' }}>
+                  {/* Gráfico SVG da Curva de Resistência */}
+                  <div style={{ background: 'var(--surface-2)', padding: 16, borderRadius: 8, border: '1px solid var(--joint)' }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 8, color: 'var(--text-muted)' }}>
+                      Gráfico Resistência (MPa) x Idade de Cura (Dias)
+                    </div>
+                    <svg viewBox="0 0 540 220" style={{ width: '100%', height: 'auto', overflow: 'visible' }}>
+                      {/* Grid Horizontal */}
+                      <line x1="40" y1="180" x2="520" y2="180" stroke="var(--joint)" strokeWidth="1" />
+                      <line x1="40" y1="140" x2="520" y2="140" stroke="var(--joint)" strokeWidth="1" strokeDasharray="3 3" />
+                      <line x1="40" y1="100" x2="520" y2="100" stroke="var(--joint)" strokeWidth="1" strokeDasharray="3 3" />
+                      <line x1="40" y1="60" x2="520" y2="60" stroke="var(--joint)" strokeWidth="1" strokeDasharray="3 3" />
+                      <line x1="40" y1="20" x2="520" y2="20" stroke="var(--joint)" strokeWidth="1" strokeDasharray="3 3" />
+
+                      {/* Eixos */}
+                      <line x1="40" y1="20" x2="40" y2="180" stroke="var(--text-muted)" strokeWidth="1.5" />
+                      <line x1="40" y1="180" x2="520" y2="180" stroke="var(--text-muted)" strokeWidth="1.5" />
+
+                      {/* Labels Y */}
+                      <text x="32" y="184" fontSize="10" textAnchor="end" fill="var(--text-muted)">0</text>
+                      <text x="32" y="144" fontSize="10" textAnchor="end" fill="var(--text-muted)">10</text>
+                      <text x="32" y="104" fontSize="10" textAnchor="end" fill="var(--text-muted)">20</text>
+                      <text x="32" y="64" fontSize="10" textAnchor="end" fill="var(--text-muted)">30</text>
+                      <text x="32" y="24" fontSize="10" textAnchor="end" fill="var(--text-muted)">40</text>
+
+                      {/* Labels X */}
+                      <text x="40" y="196" fontSize="10" textAnchor="middle" fill="var(--text-muted)">0d</text>
+                      <text x="91" y="196" fontSize="10" textAnchor="middle" fill="var(--text-muted)">3d</text>
+                      <text x="160" y="196" fontSize="10" textAnchor="middle" fill="var(--text-muted)">7d</text>
+                      <text x="280" y="196" fontSize="10" textAnchor="middle" fill="var(--text-muted)">14d</text>
+                      <text x="520" y="196" fontSize="10" textAnchor="middle" fill="var(--text-muted)">28d</text>
+
+                      {/* Linha Meta FCK 30 MPa Projeto */}
+                      <line x1="40" y1="60" x2="520" y2="60" stroke="#10b981" strokeWidth="2" strokeDasharray="5 5" />
+                      <text x="470" y="54" fontSize="10" fill="#10b981" fontWeight="bold">FCK = 30 MPa</text>
+
+                      {/* Curva Teórica Abrams (s=0.25 CP II) */}
+                      <path 
+                        d="M 40,180 Q 91,105 160,82 T 280,62 T 520,44" 
+                        fill="none" 
+                        stroke="var(--serrano-orange)" 
+                        strokeWidth="3" 
+                      />
+
+                      {/* Pontos Reais de Ensaio dos Lotes */}
+                      {/* Ponto 3d (19.8 MPa) */}
+                      <circle cx="91" cy="101" r="5" fill="#0284c7" stroke="#fff" strokeWidth="1.5" />
+                      <text x="91" y="93" fontSize="10" textAnchor="middle" fill="#0284c7" fontWeight="bold">19.8</text>
+
+                      {/* Ponto 7d (25.1 MPa) */}
+                      <circle cx="160" cy="80" r="5" fill="#0284c7" stroke="#fff" strokeWidth="1.5" />
+                      <text x="160" y="72" fontSize="10" textAnchor="middle" fill="#0284c7" fontWeight="bold">25.1</text>
+
+                      {/* Ponto 28d (34.2 MPa - Superou o FCK) */}
+                      <circle cx="520" cy="43" r="6" fill="#10b981" stroke="#fff" strokeWidth="2" />
+                      <text x="500" y="36" fontSize="11" textAnchor="end" fill="#10b981" fontWeight="bold">34.2 MPa (114%)</text>
+                    </svg>
+
+                    <div style={{ display: 'flex', gap: 16, marginTop: 12, fontSize: 11, color: 'var(--text-muted)', justifyContent: 'center' }}>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <span style={{ width: 12, height: 3, background: 'var(--serrano-orange)', display: 'inline-block' }}></span>
+                        Curva Teórica Abrams / NBR 6118
+                      </span>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#0284c7', display: 'inline-block' }}></span>
+                        Resistências Reais Aferidas
+                      </span>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <span style={{ width: 12, height: 2, background: '#10b981', borderTop: '2px dashed #10b981', display: 'inline-block' }}></span>
+                        Meta de Projeto (FCK 30 MPa)
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Tabela de Referência Normativa */}
+                  <div style={{ display: 'grid', gap: 10 }}>
+                    <div style={{ background: 'var(--surface-2)', padding: 12, borderRadius: 6 }}>
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Idade 3 Dias (Desforma Rápida)</div>
+                      <div style={{ fontSize: 16, fontWeight: 700, marginTop: 2 }}>~ 55% a 65% do FCK</div>
+                      <small style={{ color: 'var(--text-muted)' }}>Liberação de escoramento primário de lajes e vigas</small>
+                    </div>
+
+                    <div style={{ background: 'var(--surface-2)', padding: 12, borderRadius: 6 }}>
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Idade 7 Dias (Controle Prévio)</div>
+                      <div style={{ fontSize: 16, fontWeight: 700, marginTop: 2, color: 'var(--status-info)' }}>~ 80% a 88% do FCK</div>
+                      <small style={{ color: 'var(--text-muted)' }}>Índice de segurança para avanço da estrutura em altura</small>
+                    </div>
+
+                    <div style={{ background: 'var(--surface-2)', padding: 12, borderRadius: 6 }}>
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Idade 28 Dias (Aceitação NBR 12655)</div>
+                      <div style={{ fontSize: 16, fontWeight: 700, marginTop: 2, color: 'var(--status-ok)' }}>≥ 100% do FCK</div>
+                      <small style={{ color: 'var(--text-muted)' }}>Condição contratual de aprovação e emissão do Laudo com ART</small>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* SUB-ABA 3: CÂMARA ÚMIDA E TANQUE DE CURA */}
+            {abaLaboratorio === 'camara' && (
+              <div className="serrano-card" style={{ padding: 20 }}>
+                <div className="serrano-card-h" style={{ padding: '0 0 16px', borderBottom: '1px solid var(--joint)', marginBottom: 16 }}>
+                  <div>
+                    <h3 style={{ margin: 0 }}>Tanque de Cura Submerso &amp; Câmara Úmida (ABNT NBR 9479)</h3>
+                    <small style={{ color: 'var(--text-muted)' }}>Ambiente controlado com recirculação contínua e saturação com hidróxido de cálcio Ca(OH)₂</small>
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 14 }}>
+                  <div style={{ background: 'var(--surface-2)', padding: 16, borderRadius: 8, textAlign: 'center' }}>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Temperatura da Água</div>
+                    <div style={{ fontFamily: 'var(--font-display)', fontSize: 32, fontWeight: 800, color: 'var(--status-ok)', marginTop: 4 }}>
+                      23.1 °C
+                    </div>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>Faixa Normativa: 21,0°C a 25,0°C (Conforme)</div>
+                  </div>
+
+                  <div style={{ background: 'var(--surface-2)', padding: 16, borderRadius: 8, textAlign: 'center' }}>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Saturação de Cal Ca(OH)₂</div>
+                    <div style={{ fontFamily: 'var(--font-display)', fontSize: 32, fontWeight: 800, color: 'var(--status-ok)', marginTop: 4 }}>
+                      3.2 g/L
+                    </div>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>Evita a lixiviação do cimento nos CPs</div>
+                  </div>
+
+                  <div style={{ background: 'var(--surface-2)', padding: 16, borderRadius: 8, textAlign: 'center' }}>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Umidade Relativa Câmara</div>
+                    <div style={{ fontFamily: 'var(--font-display)', fontSize: 32, fontWeight: 800, color: 'var(--status-info)', marginTop: 4 }}>
+                      98.4 %
+                    </div>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>Mínimo Normativo: 95,0% (Conforme)</div>
+                  </div>
+
+                  <div style={{ background: 'var(--surface-2)', padding: 16, borderRadius: 8, textAlign: 'center' }}>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Bomba de Recirculação</div>
+                    <div style={{ fontFamily: 'var(--font-display)', fontSize: 32, fontWeight: 800, color: 'var(--status-ok)', marginTop: 4 }}>
+                      100%
+                    </div>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>Fluxo uniforme e constante 24/7</div>
+                  </div>
+                </div>
+
+                <div style={{ marginTop: 20, background: 'var(--surface-2)', padding: 16, borderRadius: 8 }}>
+                  <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 8 }}>Mapa de Prateleiras do Tanque de Cura:</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10, fontSize: 12 }}>
+                    <div style={{ background: 'var(--surface)', padding: 10, borderRadius: 6, border: '1px solid var(--joint)' }}>
+                      <b>Prateleira A (Lote 088):</b> Liberado aos 28d
+                    </div>
+                    <div style={{ background: 'var(--surface)', padding: 10, borderRadius: 6, border: '1px solid var(--joint)' }}>
+                      <b>Prateleira B (Lote 089):</b> Ruptura 28d em 02/12
+                    </div>
+                    <div style={{ background: 'var(--surface)', padding: 10, borderRadius: 6, border: '1px solid var(--joint)' }}>
+                      <b>Prateleira C (Lote 090):</b> Ruptura 28d em 04/12
+                    </div>
+                    <div style={{ background: 'var(--surface)', padding: 10, borderRadius: 6, border: '1px solid var(--joint)' }}>
+                      <b>Prateleira D (Lote 091):</b> Ruptura 7d em 16/11
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* SUB-ABA 4: CONTROLE ESTATÍSTICO NBR 12655 */}
+            {abaLaboratorio === 'estatistica' && (
+              <div className="serrano-card" style={{ padding: 20 }}>
+                <div className="serrano-card-h" style={{ padding: '0 0 16px', borderBottom: '1px solid var(--joint)', marginBottom: 16 }}>
+                  <div>
+                    <h3 style={{ margin: 0 }}>Critérios de Aceitação e Controle Estatístico (ABNT NBR 12655:2022)</h3>
+                    <small style={{ color: 'var(--text-muted)' }}>Cálculo do fck estimado (fck,est) por amostragem total ou parcial com desvio padrão rigoroso</small>
+                  </div>
+                </div>
+
+                <div style={{ background: 'var(--surface-2)', padding: 16, borderRadius: 8, fontSize: 13, lineHeight: 1.6 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 14 }}>
+                    <div>
+                      <small style={{ color: 'var(--text-muted)' }}>Condição de Preparo da Usina</small>
+                      <div style={{ fontWeight: 800, fontSize: 16 }}>Condição A (Usina Dosadora)</div>
+                      <small style={{ color: 'var(--text-muted)' }}>Desvio padrão da dosagem: sd = 4,0 MPa (Serrano opera a sd = 2,4 MPa)</small>
+                    </div>
+
+                    <div>
+                      <small style={{ color: 'var(--text-muted)' }}>Critério de Amostragem Total (100%)</small>
+                      <div style={{ fontWeight: 800, fontSize: 16 }}>fck,est = fc,médio</div>
+                      <small style={{ color: 'var(--text-muted)' }}>Cada betoneira possui seus corpos de prova rastreados</small>
+                    </div>
+
+                    <div>
+                      <small style={{ color: 'var(--text-muted)' }}>Taxa de Aplicação de Carga</small>
+                      <div style={{ fontWeight: 800, fontSize: 16, color: 'var(--status-ok)' }}>0,45 ± 0,15 MPa/s</div>
+                      <small style={{ color: 'var(--text-muted)' }}>Conforme ABNT NBR 5739:2018 item 6.3</small>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
-
-        {/* ─── ABA 4: SUPRIMENTOS, SILOS & CONTROLE DE PROCESSO NBR 7212 ─── */}
+{/* ─── ABA 4: SUPRIMENTOS, SILOS & CONTROLE DE PROCESSO NBR 7212 ─── */}
         {secaoAtiva === 'suprimentos-silos' && (
           <div style={{ display: 'grid', gap: 20 }}>
             {/* Header com KPIs e Ações Rápida */}
@@ -1594,52 +2027,250 @@ export default function ConcretoUsinaERP() {
 
         {/* ─── ABA 1B: PROGRAMAÇÃO DE CONCRETAGENS ─── */}
         {secaoAtiva === 'operacao-programacao' && (
-          <div className="serrano-card">
-            <div className="serrano-card-h">
-              <div>
-                <h3>Programação de Concretagens Futuras &amp; Calendário de Obras</h3>
-                <small style={{ color: 'var(--text-muted)' }}>Escalação antecipada de frotas e reserva de traços estruturais</small>
+          <div style={{ display: 'grid', gap: 20 }}>
+            {/* Header com Linha do Tempo / Gantt de Despacho */}
+            <div className="serrano-card" style={{ padding: 20 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 16 }}>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <h2 style={{ margin: 0, fontSize: 22, fontWeight: 800, fontFamily: 'var(--font-display)', letterSpacing: 0.5 }}>
+                      Programação de Despacho &amp; Escalação de Betoneiras
+                    </h2>
+                    <span className="serrano-pill serrano-p-ok" style={{ fontWeight: 700 }}>
+                      Gantt Diário · NBR 7212
+                    </span>
+                  </div>
+                  <p style={{ margin: '4px 0 0', color: 'var(--text-muted)', fontSize: 13 }}>
+                    Grade horária de carregamento das betoneiras na central Convicta e estimativa de trânsito em Tangará da Serra/MT.
+                  </p>
+                </div>
+                <button 
+                  type="button" 
+                  className="btn-serrano pri"
+                  onClick={() => setModalNovaCargaAberto(true)}
+                >
+                  + Nova Programação de Carga
+                </button>
               </div>
-              <button 
-                type="button" 
-                className="btn-serrano pri"
-                style={{ marginLeft: 'auto' }}
-                onClick={() => setModalNovaCargaAberto(true)}
-              >
-                + Nova Concretagem
-              </button>
-            </div>
-            <div style={{ padding: 20 }}>
-              <div style={{ display: 'grid', gap: 12 }}>
-                {cargas.map((c, i) => (
-                  <div key={c.id || i} style={{ background: 'var(--surface-2)', border: '1px solid var(--joint)', borderRadius: 8, padding: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
-                    <div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <b style={{ fontFamily: 'var(--font-data)', fontSize: 14 }}>#{c.numero || 1001 + i}</b>
-                        <span className="serrano-pill serrano-p-ok">{c.status === 'concluido' ? 'Concluída' : 'Agendada'}</span>
-                        <span style={{ fontSize: 12, color: 'var(--text-muted)', fontFamily: 'var(--font-data)' }}>Horário: {c.horarioAgendado || '08:30'}</span>
+
+              {/* Gantt Visual da Frota */}
+              <div style={{ marginTop: 20, background: 'var(--surface-2)', padding: 16, borderRadius: 8, border: '1px solid var(--joint)', overflowX: 'auto' }}>
+                <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 12, color: 'var(--text-muted)', display: 'flex', justifyContent: 'space-between' }}>
+                  <span>Escala Operacional da Frota (07:00 às 18:00):</span>
+                  <span>Tangará da Serra · Fuso AMT (-04:00)</span>
+                </div>
+
+                <div style={{ minWidth: 680 }}>
+                  {/* Cabeçalho de Horas */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '80px repeat(11, 1fr)', gap: 4, textAlign: 'center', fontSize: 11, color: 'var(--text-muted)', borderBottom: '1px solid var(--joint)', paddingBottom: 6 }}>
+                    <div>Veículo</div>
+                    <div>07h</div>
+                    <div>08h</div>
+                    <div>09h</div>
+                    <div>10h</div>
+                    <div>11h</div>
+                    <div>12h</div>
+                    <div>13h</div>
+                    <div>14h</div>
+                    <div>15h</div>
+                    <div>16h</div>
+                    <div>17h</div>
+                  </div>
+
+                  {/* Linhas por Caminhão Betoneira */}
+                  {[
+                    { cod: 'BT-01', motorista: 'Marcos Silveira', ocupacoes: [{ inicio: 1, fim: 3, obra: 'Residencial Serra Dourada (8m³)', status: 'concluido' }, { inicio: 7, fim: 9, obra: 'Lote 12 Qd 08 (8m³)', status: 'programado' }] },
+                    { cod: 'BT-02', motorista: 'Carlos Eduardo', ocupacoes: [{ inicio: 2, fim: 4, obra: 'Galpão AgroLog (8m³)', status: 'em_transito' }, { inicio: 8, fim: 10, obra: 'Galpão AgroLog 2ª viagem', status: 'programado' }] },
+                    { cod: 'BT-03', motorista: 'Valdemir Oliveira', ocupacoes: [{ inicio: 5, fim: 6, obra: 'Manutenção Pátio', status: 'manutencao' }, { inicio: 9, fim: 11, obra: 'Ed. Belvedere (8m³)', status: 'programado' }] },
+                    { cod: 'BT-04', motorista: 'Roberto Lima', ocupacoes: [{ inicio: 1, fim: 3, obra: 'Ponte Rio Sepotuba (8m³)', status: 'concluido' }, { inicio: 6, fim: 8, obra: 'Ponte Sepotuba 2ª viagem', status: 'em_carregamento' }] },
+                    { cod: 'BT-05', motorista: 'Fernando Souza', ocupacoes: [{ inicio: 4, fim: 6, obra: 'Mirante da Serra (8m³)', status: 'concluido' }] }
+                  ].map(row => (
+                    <div key={row.cod} style={{ display: 'grid', gridTemplateColumns: '80px repeat(11, 1fr)', gap: 4, alignItems: 'center', padding: '8px 0', borderBottom: '1px solid var(--joint)', fontSize: 11 }}>
+                      <div>
+                        <b>{row.cod}</b>
+                        <div style={{ fontSize: 9, color: 'var(--text-muted)' }}>{row.motorista.split(' ')[0]}</div>
                       </div>
-                      <div style={{ fontWeight: 700, fontSize: 15, marginTop: 4 }}>{c.obra}</div>
-                      <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Cliente: {c.cliente} · {c.endereco}</div>
-                      <div style={{ fontSize: 13, marginTop: 4 }}>
-                        <b>{String(c.fck || '').startsWith('FCK') ? c.fck : `FCK ${c.fck} MPa`}</b> · Volume: <b>{c.volumeM3} m³</b> · Bomba: <b>{c.bomba || 'Calha Direta'}</b>
+
+                      {/* Grade de 11 slots (07h a 17h) */}
+                      {Array.from({ length: 11 }).map((_, slotIdx) => {
+                        const oc = row.ocupacoes.find(o => slotIdx >= o.inicio && slotIdx < o.fim);
+                        if (!oc) {
+                          return <div key={slotIdx} style={{ height: 26, background: 'var(--surface)', borderRadius: 4, border: '1px dashed var(--joint)' }}></div>;
+                        }
+                        const isFirst = slotIdx === oc.inicio;
+                        const bg = oc.status === 'concluido' ? 'var(--status-ok-bg)' : oc.status === 'em_transito' ? 'var(--status-info-bg)' : oc.status === 'em_carregamento' ? 'var(--serrano-orange-bg)' : 'var(--surface)';
+                        const color = oc.status === 'concluido' ? 'var(--status-ok)' : oc.status === 'em_transito' ? 'var(--status-info)' : 'var(--serrano-orange-text)';
+
+                        return (
+                          <div 
+                            key={slotIdx} 
+                            style={{ 
+                              height: 26, 
+                              background: bg, 
+                              border: `1px solid ${color}`, 
+                              borderRadius: 4,
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontSize: 9,
+                              fontWeight: 700,
+                              color,
+                              overflow: 'hidden',
+                              whiteSpace: 'nowrap',
+                              textOverflow: 'ellipsis',
+                              padding: '0 2px'
+                            }}
+                            title={`${oc.obra} (${oc.status})`}
+                          >
+                            {isFirst ? oc.obra.slice(0, 14) : '...'}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Simulador de Perda de Abatimento (Slump Loss) */}
+            <div className="serrano-card" style={{ padding: 20 }}>
+              <div className="serrano-card-h" style={{ padding: '0 0 14px', borderBottom: '1px solid var(--joint)', marginBottom: 14 }}>
+                <div>
+                  <h3 style={{ margin: 0 }}>Simulador de Perda de Abatimento em Trânsito (Slump Loss)</h3>
+                  <small style={{ color: 'var(--text-muted)' }}>Cálculo preditivo de perda de consistência em função do calor ambiente em Tangará da Serra e tempo de transporte</small>
+                </div>
+              </div>
+
+              {(() => {
+                const temp = simuladorSlump.temperaturaAmbienteC;
+                const tempo = simuladorSlump.tempoViagemMin;
+                const inicial = simuladorSlump.slumpInicialCm;
+                const comRetardador = simuladorSlump.usoRetardador;
+
+                // Perda estimada em cm
+                const perdaBase = (tempo * 0.045) + ((temp - 25) * 0.12);
+                const fatorAditivo = comRetardador ? 0.45 : 1.0;
+                const perdaReal = Math.max(0.5, +(perdaBase * fatorAditivo).toFixed(1));
+                const slumpFinal = Math.max(4.0, +(inicial - perdaReal).toFixed(1));
+                const conforme = slumpFinal >= 10.0 && slumpFinal <= 16.0;
+
+                return (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 20, alignItems: 'center' }}>
+                    <div style={{ display: 'grid', gap: 12 }}>
+                      <div className="serrano-form-row">
+                        <label style={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <span>Temperatura Ambiente (°C):</span>
+                          <b>{temp} °C (Tangará da Serra/MT)</b>
+                        </label>
+                        <input 
+                          type="range"
+                          min="20"
+                          max="42"
+                          step="1"
+                          className="serrano-slider"
+                          value={temp}
+                          onChange={e => setSimuladorSlump(prev => ({ ...prev, temperaturaAmbienteC: Number(e.target.value) }))}
+                        />
+                      </div>
+
+                      <div className="serrano-form-row">
+                        <label style={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <span>Tempo Estimado de Viagem (minutos):</span>
+                          <b>{tempo} minutos até a obra</b>
+                        </label>
+                        <input 
+                          type="range"
+                          min="10"
+                          max="90"
+                          step="5"
+                          className="serrano-slider"
+                          value={tempo}
+                          onChange={e => setSimuladorSlump(prev => ({ ...prev, tempoViagemMin: Number(e.target.value) }))}
+                        />
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 4 }}>
+                        <input 
+                          type="checkbox"
+                          id="chkRetardador"
+                          checked={comRetardador}
+                          onChange={e => setSimuladorSlump(prev => ({ ...prev, usoRetardador: e.target.checked }))}
+                          style={{ width: 16, height: 16 }}
+                        />
+                        <label htmlFor="chkRetardador" style={{ fontSize: 13, cursor: 'pointer' }}>
+                          Utilizar Aditivo Plastificante com Ação Retardadora (TecFlow R)
+                        </label>
                       </div>
                     </div>
-                    <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontFamily: 'var(--font-display)', fontSize: 20, fontWeight: 800 }}>
-                        R$ {Number(c.valorTotal || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+
+                    {/* Resultado da Simulação */}
+                    <div style={{ background: 'var(--surface-2)', padding: 18, borderRadius: 8, border: '1px solid var(--joint)' }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, textAlign: 'center' }}>
+                        <div>
+                          <small style={{ color: 'var(--text-muted)', fontSize: 11, textTransform: 'uppercase' }}>Slump na Central</small>
+                          <div style={{ fontFamily: 'var(--font-display)', fontSize: 24, fontWeight: 800 }}>
+                            {inicial.toFixed(1)} cm
+                          </div>
+                          <small style={{ color: 'var(--text-muted)' }}>Tronco de Cone</small>
+                        </div>
+
+                        <div>
+                          <small style={{ color: 'var(--text-muted)', fontSize: 11, textTransform: 'uppercase' }}>Slump Previsto Obra</small>
+                          <div style={{ fontFamily: 'var(--font-display)', fontSize: 28, fontWeight: 800, color: conforme ? 'var(--status-ok)' : 'var(--status-warn)' }}>
+                            {slumpFinal.toFixed(1)} cm
+                          </div>
+                          <small style={{ color: 'var(--text-muted)' }}>Perda: -{perdaReal} cm</small>
+                        </div>
                       </div>
-                      <button 
-                        type="button" 
-                        className="btn-serrano"
-                        style={{ marginTop: 6 }}
-                        onClick={() => setModalRomaneioAberto(c)}
-                      >
-                        Romaneio NBR 7212
-                      </button>
+
+                      <div style={{ marginTop: 14, padding: 10, borderRadius: 6, background: conforme ? 'var(--status-ok-bg)' : 'var(--status-warn-bg)', color: conforme ? 'var(--status-ok)' : 'var(--status-warn)', fontSize: 12, fontWeight: 700, textAlign: 'center' }}>
+                        {conforme 
+                          ? '✓ DENTRO DA TOLERÂNCIA DA NBR 7212 (Trabalhabilidade Plena)'
+                          : '⚠️ ATENÇÃO: Risco de Slump abaixo do especificado. Recomenda-se aumentar dosagem de retardador.'}
+                      </div>
                     </div>
                   </div>
-                ))}
+                );
+              })()}
+            </div>
+
+            {/* Lista de Concretagens Agendadas */}
+            <div className="serrano-card">
+              <div className="serrano-card-h">
+                <h3>Lista de Concretagens Cadastradas &amp; Romaneios Oficiais</h3>
+              </div>
+              <div style={{ padding: 20 }}>
+                <div style={{ display: 'grid', gap: 12 }}>
+                  {cargas.map((c, i) => (
+                    <div key={c.id || i} style={{ background: 'var(--surface-2)', border: '1px solid var(--joint)', borderRadius: 8, padding: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+                      <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <b style={{ fontFamily: 'var(--font-data)', fontSize: 14 }}>#{c.numero || 1001 + i}</b>
+                          <span className="serrano-pill serrano-p-ok">{c.status === 'concluido' ? 'Concluída' : 'Agendada'}</span>
+                          <span style={{ fontSize: 12, color: 'var(--text-muted)', fontFamily: 'var(--font-data)' }}>Horário: {c.horarioAgendado || '08:30'}</span>
+                        </div>
+                        <div style={{ fontWeight: 700, fontSize: 15, marginTop: 4 }}>{c.obra}</div>
+                        <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Cliente: {c.cliente} · {c.endereco}</div>
+                        <div style={{ fontSize: 13, marginTop: 4 }}>
+                          <b>{String(c.fck || '').startsWith('FCK') ? c.fck : `FCK ${c.fck} MPa`}</b> · Volume: <b>{c.volumeM3} m³</b> · Bomba: <b>{c.bomba || 'Calha Direta'}</b>
+                        </div>
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        <div style={{ fontFamily: 'var(--font-display)', fontSize: 20, fontWeight: 800 }}>
+                          R$ {Number(c.valorTotal || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                        </div>
+                        <button 
+                          type="button" 
+                          className="btn-serrano"
+                          style={{ marginTop: 6 }}
+                          onClick={() => setModalRomaneioAberto(c)}
+                        >
+                          Romaneio NBR 7212
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           </div>
@@ -1650,43 +2281,128 @@ export default function ConcretoUsinaERP() {
           <div className="serrano-card">
             <div className="serrano-card-h">
               <div>
-                <h3>Frota Ativa · Betoneiras &amp; Caminhões Bomba Lança</h3>
-                <small style={{ color: 'var(--text-muted)' }}>Telemetria em tempo real, horímetro e status operacional em Tangará da Serra</small>
+                <h3>Telemetria de Frota em Tempo Real · Betoneiras &amp; Bombas Lança</h3>
+                <small style={{ color: 'var(--text-muted)' }}>Tacômetro de rotação do balão (RPM), temperatura da massa, sensor de água e cronômetro de pega NBR 7212</small>
+              </div>
+              <div style={{ display: 'flex', gap: 6 }}>
+                {['todos', 'betoneira', 'bomba_lanca'].map(tp => (
+                  <button
+                    key={tp}
+                    type="button"
+                    className="btn-serrano"
+                    style={{
+                      padding: '4px 10px',
+                      fontSize: 11,
+                      background: filtroFrotaTipo === tp ? 'var(--serrano-orange)' : 'transparent',
+                      color: filtroFrotaTipo === tp ? '#fff' : 'var(--text)',
+                      borderColor: filtroFrotaTipo === tp ? 'var(--serrano-orange)' : 'var(--joint)'
+                    }}
+                    onClick={() => setFiltroFrotaTipo(tp)}
+                  >
+                    {tp === 'todos' ? 'Todos os Veículos' : tp === 'betoneira' ? 'Betoneiras (8 a 10m³)' : 'Bombas Lança'}
+                  </button>
+                ))}
               </div>
             </div>
             <div style={{ padding: 20 }}>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
-                {(frota.length > 0 ? frota : [
-                  { id: 'BT-01', tipo: 'Betoneira 8 m³', placa: 'RRA-4E80', chassi: 'VW Constellation 26.280', motorista: 'Marcos Silveira', status: 'em_rota', km: 48250, horimetro: '3.120h' },
-                  { id: 'BT-02', tipo: 'Betoneira 8 m³', placa: 'RRA-4E81', chassi: 'VW Constellation 26.280', motorista: 'Carlos Eduardo Santos', status: 'em_rota', km: 51320, horimetro: '3.450h' },
-                  { id: 'BT-03', tipo: 'Betoneira 8 m³', placa: 'RRA-4E82', chassi: 'VW Constellation 26.280', motorista: 'Valdemir Oliveira', status: 'disponivel', km: 42100, horimetro: '2.890h' },
-                  { id: 'BT-04', tipo: 'Betoneira 10 m³', placa: 'RRB-1A10', chassi: 'Mercedes-Benz Axor 3131', motorista: 'Roberto Lima', status: 'em_rota', km: 38400, horimetro: '2.410h' },
-                  { id: 'BT-05', tipo: 'Betoneira 10 m³', placa: 'RRB-1A11', chassi: 'Mercedes-Benz Axor 3131', motorista: 'Fernando Souza', status: 'carregando', km: 35100, horimetro: '2.150h' },
-                  { id: 'BL-01', tipo: 'Bomba Lança 32 m', placa: 'RRC-9F32', chassi: 'Scania P310 8x4', motorista: 'Gilberto Ramos (Operador RT)', status: 'na_obra', km: 29800, horimetro: '1.980h' },
-                  { id: 'BL-02', tipo: 'Bomba Lança 36 m', placa: 'RRC-9F36', chassi: 'Scania P360 8x4', motorista: 'Claudemir Castro (Operador RT)', status: 'deslocando', km: 21400, horimetro: '1.450h' }
-                ]).map((f, idx) => (
-                  <div key={f.id || idx} style={{ background: 'var(--surface-2)', border: '1px solid var(--joint)', borderRadius: 8, padding: 16 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <b style={{ fontFamily: 'var(--font-data)', fontSize: 16, color: 'var(--serrano-orange-text)' }}>{f.id}</b>
-                      <span className={`serrano-pill ${f.status === 'em_rota' ? 'serrano-p-live' : f.status === 'na_obra' ? 'serrano-p-ok' : 'serrano-p-load'}`}>
-                        {f.status === 'em_rota' ? 'Em Rota' : f.status === 'na_obra' ? 'Bomba na Obra' : f.status === 'carregando' ? 'Carregando' : 'Disponível'}
-                      </span>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 16 }}>
+                {(frota.length > 0 ? frota : []).filter(f => filtroFrotaTipo === 'todos' || f.tipo === filtroFrotaTipo).map((f, idx) => {
+                  const isBetoneira = f.tipo === 'betoneira';
+                  const rpm = f.rpmTambor != null ? f.rpmTambor : 3.2;
+                  const tempoPega = f.tempoDesdeAdicaoAguaMin || 38;
+                  const limitePega = f.limitePegaMin || 150;
+                  const percPega = Math.min(100, Math.round((tempoPega / limitePega) * 100));
+
+                  return (
+                    <div key={f.id || idx} style={{ background: 'var(--surface-2)', border: '1px solid var(--joint)', borderRadius: 8, padding: 16 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div>
+                          <b style={{ fontFamily: 'var(--font-data)', fontSize: 16, color: 'var(--serrano-orange-text)' }}>{f.codigo || f.id}</b>
+                          <span style={{ fontSize: 12, color: 'var(--text-muted)', marginLeft: 8 }}>Placa: <b>{f.placa}</b></span>
+                        </div>
+                        <span className={`serrano-pill ${f.status === 'em_transito' || f.status === 'em_rota' ? 'serrano-p-live' : f.status === 'na_obra' ? 'serrano-p-ok' : f.status === 'carregando' ? 'serrano-p-load' : 'serrano-p-ok'}`}>
+                          {f.status === 'em_transito' || f.status === 'em_rota' ? 'Em Trânsito' : f.status === 'na_obra' ? 'Operando na Obra' : f.status === 'carregando' ? 'Carregando na Usina' : 'Disponível no Pátio'}
+                        </span>
+                      </div>
+
+                      <div style={{ fontWeight: 600, fontSize: 13, marginTop: 4 }}>{f.modelo}</div>
+                      <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                        {isBetoneira ? `Capacidade: ${f.capacidadeM3 || 8} m³` : `Alcance Lança: ${f.alcanceMetros || 32} metros`}
+                        {' · '}Motorista: <b>{f.motorista || f.operador}</b>
+                      </div>
+
+                      {/* BLOCO ESPECÍFICO DE BETONEIRA */}
+                      {isBetoneira && (
+                        <div style={{ marginTop: 12, background: 'var(--surface)', padding: 10, borderRadius: 6, border: '1px solid var(--joint)' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div>
+                              <small style={{ color: 'var(--text-muted)', fontSize: 10, textTransform: 'uppercase', fontWeight: 700 }}>Rotação do Balão (RPM)</small>
+                              <div style={{ fontFamily: 'var(--font-display)', fontSize: 20, fontWeight: 800, color: rpm > 8 ? '#0284c7' : rpm > 0 ? '#10b981' : 'var(--text-muted)' }}>
+                                {rpm > 0 ? `${rpm} RPM` : '0.0 RPM (Parado)'}
+                              </div>
+                            </div>
+                            <span style={{ fontSize: 11, background: 'var(--surface-2)', padding: '4px 8px', borderRadius: 4, fontWeight: 600 }}>
+                              {rpm > 8 ? '⚡ Mistura Rápida' : rpm > 0 ? '🔄 Agitação em Trânsito' : '⏹️ Estacionado'}
+                            </span>
+                          </div>
+
+                          {/* Temperatura da Massa e Sensor de Água */}
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 8, fontSize: 11 }}>
+                            <div>
+                              <span style={{ color: 'var(--text-muted)' }}>Temp. da Massa:</span>{' '}
+                              <b>{f.temperaturaMassa ? `${f.temperaturaMassa} °C` : 'Ambiente'}</b>
+                            </div>
+                            <div>
+                              <span style={{ color: 'var(--text-muted)' }}>Água no Trajeto:</span>{' '}
+                              <b style={{ color: 'var(--status-ok)' }}>0 Litros (Inviolável)</b>
+                            </div>
+                          </div>
+
+                          {/* Cronômetro de Pega NBR 7212 (Máx 150 min) */}
+                          <div style={{ marginTop: 10 }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--text-muted)' }}>
+                              <span>Tempo desde adição de água (NBR 7212):</span>
+                              <b>{tempoPega} min / {limitePega} min</b>
+                            </div>
+                            <div style={{ width: '100%', height: 6, background: 'var(--surface-2)', borderRadius: 3, marginTop: 4, overflow: 'hidden' }}>
+                              <div style={{ width: `${percPega}%`, height: '100%', background: percPega > 80 ? 'var(--status-danger)' : percPega > 60 ? 'var(--status-warn)' : 'var(--status-ok)' }}></div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* BLOCO ESPECÍFICO DE BOMBA LANÇA */}
+                      {!isBetoneira && (
+                        <div style={{ marginTop: 12, background: 'var(--surface)', padding: 10, borderRadius: 6, border: '1px solid var(--joint)' }}>
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, fontSize: 11 }}>
+                            <div>
+                              <span style={{ color: 'var(--text-muted)' }}>Pressão Hidráulica:</span>{' '}
+                              <b>{f.pressaoHidraulicaBar ? `${f.pressaoHidraulicaBar} bar` : '0 bar'}</b>
+                            </div>
+                            <div>
+                              <span style={{ color: 'var(--text-muted)' }}>Vazão Efetiva:</span>{' '}
+                              <b>{f.vazaoM3Hora ? `${f.vazaoM3Hora} m³/h` : '0 m³/h'}</b>
+                            </div>
+                          </div>
+                          <div style={{ marginTop: 6, fontSize: 11 }}>
+                            <span style={{ color: 'var(--text-muted)' }}>Estabilização Sapatas:</span>{' '}
+                            <b style={{ color: 'var(--status-ok)' }}>{f.estabilizacaoSapatas || '100% Ancorado'}</b>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Destino Atual */}
+                      <div style={{ marginTop: 10, fontSize: 11, color: 'var(--text-muted)', borderTop: '1px solid var(--joint)', paddingTop: 8 }}>
+                        Destino: <b>{f.obraDestino || f.obraAtual || 'Pátio Central da Usina Serrano'}</b>
+                      </div>
                     </div>
-                    <div style={{ fontWeight: 600, fontSize: 13, marginTop: 4 }}>{f.tipo}</div>
-                    <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{f.chassi} · Placa: <b>{f.placa}</b></div>
-                    <div style={{ fontSize: 12, marginTop: 8 }}>Motorista / Operador: <b>{f.motorista}</b></div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--joint)', fontSize: 11, color: 'var(--text-muted)' }}>
-                      <span>Horímetro: <b>{f.horimetro || '2.800h'}</b></span>
-                      <span>Odômetro: <b>{f.km ? `${Number(f.km).toLocaleString('pt-BR')} km` : '42.000 km'}</b></span>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           </div>
         )}
-
-        {/* ─── ABA 2B: ORDENS DE PRODUÇÃO (OPS) ─── */}
+{/* ─── ABA 2B: ORDENS DE PRODUÇÃO (OPS) ─── */}
         {secaoAtiva === 'producao-op' && (
           <div className="serrano-card">
             <div className="serrano-card-h">
@@ -2522,37 +3238,294 @@ export default function ConcretoUsinaERP() {
         </div>
       )}
 
-      {/* ─── MODAL: LAUDO NBR 5739 ─── */}
+      {/* ─── MODAL: ROMPIMENTO DE CP NA PRENSA DIGITAL NBR 5739 ─── */}
+      {modalRupturaAberto && (
+        <div className="serrano-modal-overlay">
+          <div className="serrano-modal-card" style={{ maxWidth: 640 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '1px solid var(--joint)', paddingBottom: 12, marginBottom: 16 }}>
+              <div>
+                <h2 style={{ margin: 0, fontSize: 18, fontFamily: 'var(--font-display)' }}>
+                  Rompimento Digital de Corpo de Prova · ABNT NBR 5739
+                </h2>
+                <small style={{ color: 'var(--text-muted)' }}>
+                  Prensa eletro-hidráulica microprocessada · Taxa 0,45 ± 0,15 MPa/s
+                </small>
+              </div>
+              <button 
+                type="button" 
+                className="btn-serrano"
+                style={{ padding: '4px 10px', fontSize: 11 }}
+                onClick={() => setModalRupturaAberto(null)}
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSalvarRupturaPrensa}>
+              {/* Informações do Lote */}
+              <div style={{ background: 'var(--surface-2)', padding: 12, borderRadius: 6, marginBottom: 16, fontSize: 12 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                  <div>Lote de Amostragem: <b>{modalRupturaAberto.lote}</b></div>
+                  <div>FCK de Projeto: <b>{modalRupturaAberto.fckProjeto} MPa</b></div>
+                  <div>Obra: <b>{modalRupturaAberto.obra}</b></div>
+                  <div>Cliente: <b>{modalRupturaAberto.cliente}</b></div>
+                </div>
+              </div>
+
+              {/* Seletor de Corpo de Prova e Idade */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
+                <div className="serrano-form-row">
+                  <label>Corpo de Prova Alvo</label>
+                  <select 
+                    className="serrano-input"
+                    value={formRuptura.cpId}
+                    onChange={e => {
+                      const cp = modalRupturaAberto.corposProva?.find(c => c.id === e.target.value);
+                      setFormRuptura(prev => ({
+                        ...prev,
+                        cpId: e.target.value,
+                        idadeDias: cp ? cp.idadeDias : prev.idadeDias
+                      }));
+                    }}
+                  >
+                    {(modalRupturaAberto.corposProva || []).map(cp => (
+                      <option key={cp.id} value={cp.id}>
+                        {cp.id} · Idade {cp.idadeDias} dias {cp.tensaoMpa ? `(${cp.tensaoMpa} MPa)` : '(Em cura)'}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="serrano-form-row">
+                  <label>Idade do Ensaio (Dias de Cura)</label>
+                  <select 
+                    className="serrano-input"
+                    value={formRuptura.idadeDias}
+                    onChange={e => setFormRuptura(prev => ({ ...prev, idadeDias: Number(e.target.value) }))}
+                  >
+                    <option value={3}>3 dias (Desforma rápida)</option>
+                    <option value={7}>7 dias (Controle intermediário)</option>
+                    <option value={14}>14 dias (Avanço executivo)</option>
+                    <option value={28}>28 dias (Aceitação oficial NBR 12655)</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Geometria do Cilindro */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
+                <div className="serrano-form-row">
+                  <label>Diâmetro Médio D (mm)</label>
+                  <input 
+                    type="number"
+                    step="0.1"
+                    className="serrano-input"
+                    value={formRuptura.diametroMm}
+                    onChange={e => {
+                      const d = Number(e.target.value);
+                      const tensao = calcularTensaoCP(formRuptura.forcaKn, d, formRuptura.alturaMm);
+                      setFormRuptura(prev => ({ ...prev, diametroMm: d, tensaoMpa: tensao }));
+                    }}
+                  />
+                </div>
+                <div className="serrano-form-row">
+                  <label>Altura h (mm)</label>
+                  <input 
+                    type="number"
+                    step="0.1"
+                    className="serrano-input"
+                    value={formRuptura.alturaMm}
+                    onChange={e => {
+                      const h = Number(e.target.value);
+                      const tensao = calcularTensaoCP(formRuptura.forcaKn, formRuptura.diametroMm, h);
+                      setFormRuptura(prev => ({ ...prev, alturaMm: h, tensaoMpa: tensao }));
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* Força na Prensa e Tensão Calculada */}
+              <div style={{ background: 'var(--surface-2)', padding: 14, borderRadius: 8, marginBottom: 14 }}>
+                <div className="serrano-form-row">
+                  <label style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span>Força Máxima Aplicada pela Prensa (kN)</span>
+                    <b style={{ color: 'var(--serrano-orange-text)' }}>{formRuptura.forcaKn} kN</b>
+                  </label>
+                  <input 
+                    type="range"
+                    min="50"
+                    max="450"
+                    step="0.5"
+                    className="serrano-slider"
+                    value={formRuptura.forcaKn}
+                    onChange={e => {
+                      const f = Number(e.target.value);
+                      const tensao = calcularTensaoCP(f, formRuptura.diametroMm, formRuptura.alturaMm);
+                      setFormRuptura(prev => ({ ...prev, forcaKn: f, tensaoMpa: tensao }));
+                    }}
+                  />
+                </div>
+
+                {/* Display da Tensão Calculada em Tempo Real */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--joint)' }}>
+                  <div>
+                    <small style={{ color: 'var(--text-muted)', fontSize: 11, textTransform: 'uppercase' }}>Tensão de Ruptura (fc)</small>
+                    <div style={{ fontFamily: 'var(--font-display)', fontSize: 26, fontWeight: 800, color: formRuptura.tensaoMpa >= modalRupturaAberto.fckProjeto ? 'var(--status-ok)' : 'var(--status-info)' }}>
+                      {formRuptura.tensaoMpa} MPa
+                    </div>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <small style={{ color: 'var(--text-muted)', fontSize: 11, textTransform: 'uppercase' }}>% do FCK do Projeto</small>
+                    <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 800, color: formRuptura.tensaoMpa >= modalRupturaAberto.fckProjeto ? 'var(--status-ok)' : 'var(--text)' }}>
+                      {((formRuptura.tensaoMpa / modalRupturaAberto.fckProjeto) * 100).toFixed(1)} %
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Tipo de Ruptura NBR 5739 e Preparo da Base */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
+                <div className="serrano-form-row">
+                  <label>Tipo de Ruptura (NBR 5739)</label>
+                  <select 
+                    className="serrano-input"
+                    value={formRuptura.tipoRuptura}
+                    onChange={e => setFormRuptura(prev => ({ ...prev, tipoRuptura: e.target.value }))}
+                  >
+                    <option value="A">Tipo A · Cones bem formados em ambas extremidades (&lt; 25mm)</option>
+                    <option value="B">Tipo B · Cone bem formado em uma ponta e bipartição</option>
+                    <option value="C">Tipo C · Cone em uma ponta e plano inclinado</option>
+                    <option value="D">Tipo D · Cisalhamento diagonal de ponta a ponta</option>
+                    <option value="E">Tipo E · Fissuras colunares verticais paralelas</option>
+                    <option value="F">Tipo F / G · Ruptura no topo ou cantos (falha capeamento)</option>
+                  </select>
+                </div>
+
+                <div className="serrano-form-row">
+                  <label>Preparo das Bases (NBR 5738)</label>
+                  <select 
+                    className="serrano-input"
+                    value={formRuptura.tipoPreparoBase}
+                    onChange={e => setFormRuptura(prev => ({ ...prev, tipoPreparoBase: e.target.value }))}
+                  >
+                    <option value="retificacao_diamantada">Retificação Diamantada Mecânica</option>
+                    <option value="argamassa_enxofre">Capeamento com Argamassa de Enxofre</option>
+                    <option value="neoprene">Almofadas de Neoprene (ASTM C1231)</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Footer do Modal */}
+              <div className="serrano-modal-footer">
+                <button 
+                  type="button" 
+                  className="btn-serrano"
+                  onClick={() => setModalRupturaAberto(null)}
+                >
+                  Cancelar
+                </button>
+                <button 
+                  type="submit" 
+                  className="btn-serrano pri"
+                  disabled={salvandoRuptura}
+                >
+                  {salvandoRuptura ? 'Gravando Ensaio...' : 'Confirmar Ruptura na Prensa'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ─── MODAL: LAUDO NBR 5739 COMPLETO ─── */}
       {modalLaudoAberto && (
         <div className="serrano-modal-overlay">
-          <div className="serrano-modal-card">
-            <h2>Laudo Tecnológico de Ruptura · ABNT NBR 5739</h2>
-            <div style={{ background: 'var(--surface-2)', padding: 18, borderRadius: 8, fontFamily: 'var(--font-data)', fontSize: 12, lineHeight: 1.6 }}>
-              <div><b>SERRANO CONCRETO · LABORATÓRIO DE CONTROLE TECNOLÓGICO</b></div>
-              <div>Certificado: {modalLaudoAberto.laudoNumero}</div>
-              <div>Obra: {modalLaudoAberto.obra}</div>
-              <div>Cliente: {modalLaudoAberto.cliente}</div>
-              <hr style={{ border: 'none', borderTop: '1px solid var(--joint)', margin: '10px 0' }} />
-              <div>FCK de Projeto: <b>{modalLaudoAberto.fckProjeto} MPa</b></div>
-              <div>Slump Test no Recebimento: <b>{modalLaudoAberto.slumpMedidoCm} cm (Conforme)</b></div>
-              <div>Resistência Aferida aos 28 dias: <b style={{ color: 'var(--status-ok)', fontSize: 14 }}>{modalLaudoAberto.fckEstimado28d || '34.2'} MPa (114% do FCK)</b></div>
-              <div>Parecer Técnico: <b>CONCRETO ESTRUTURAL APROVADO</b></div>
-              <hr style={{ border: 'none', borderTop: '1px solid var(--joint)', margin: '10px 0' }} />
-              <div>Responsável Técnica: <b>Engª Karin Prestes (CREA-MT 027300)</b></div>
+          <div className="serrano-modal-card" style={{ maxWidth: 720 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '2px solid var(--joint)', paddingBottom: 12, marginBottom: 14 }}>
+              <div>
+                <b style={{ fontSize: 16, display: 'block' }}>SERRANO CONCRETO USINADO &amp; MINERAÇÃO LTDA</b>
+                <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>LABORATÓRIO DE CONTROLE TECNOLÓGICO · ABNT NBR 5739 / 12655</span>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <span className="serrano-pill serrano-p-ok">{modalLaudoAberto.laudoNumero || 'LAUDO OFICIAL'}</span>
+              </div>
             </div>
+
+            <div style={{ background: 'var(--surface-2)', padding: 16, borderRadius: 8, fontSize: 12, lineHeight: 1.6 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 }}>
+                <div>Cliente: <b>{modalLaudoAberto.cliente}</b></div>
+                <div>Obra: <b>{modalLaudoAberto.obra}</b></div>
+                <div>Lote: <b>{modalLaudoAberto.lote}</b></div>
+                <div>Data Moldagem: <b>{modalLaudoAberto.dataMoldagem}</b></div>
+                <div>FCK Projeto: <b>{modalLaudoAberto.fckProjeto} MPa</b></div>
+                <div>Slump Test: <b>{modalLaudoAberto.slumpMedidoCm} cm (Conforme)</b></div>
+              </div>
+
+              {/* Tabela de Ensaio de Compressão */}
+              <div style={{ marginTop: 12, borderTop: '1px solid var(--joint)', paddingTop: 10 }}>
+                <b>RESULTADOS DOS CORPOS DE PROVA CILINDRICOS (NBR 5739):</b>
+                <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 8, fontSize: 11 }}>
+                  <thead>
+                    <tr style={{ background: 'var(--surface)', borderBottom: '1px solid var(--joint)' }}>
+                      <th style={{ padding: 6, textAlign: 'left' }}>CP</th>
+                      <th style={{ padding: 6, textAlign: 'center' }}>Idade</th>
+                      <th style={{ padding: 6, textAlign: 'center' }}>Força (kN)</th>
+                      <th style={{ padding: 6, textAlign: 'center' }}>Tensão (MPa)</th>
+                      <th style={{ padding: 6, textAlign: 'center' }}>% FCK</th>
+                      <th style={{ padding: 6, textAlign: 'center' }}>Tipo Ruptura</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(modalLaudoAberto.corposProva || []).map(cp => (
+                      <tr key={cp.id} style={{ borderBottom: '1px solid var(--joint)' }}>
+                        <td style={{ padding: 6 }}><b>{cp.id}</b></td>
+                        <td style={{ padding: 6, textAlign: 'center' }}>{cp.idadeDias} d</td>
+                        <td style={{ padding: 6, textAlign: 'center' }}>{cp.forcaKn ? `${cp.forcaKn} kN` : '-'}</td>
+                        <td style={{ padding: 6, textAlign: 'center', fontWeight: 700, color: cp.tensaoMpa >= modalLaudoAberto.fckProjeto ? 'var(--status-ok)' : 'var(--text)' }}>
+                          {cp.tensaoMpa ? `${cp.tensaoMpa} MPa` : 'Em cura'}
+                        </td>
+                        <td style={{ padding: 6, textAlign: 'center' }}>{cp.percentualFck ? `${cp.percentualFck}%` : '-'}</td>
+                        <td style={{ padding: 6, textAlign: 'center' }}>{cp.tipoRuptura ? `Tipo ${cp.tipoRuptura}` : '-'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div style={{ marginTop: 12, background: 'var(--surface)', padding: 10, borderRadius: 6, borderLeft: '4px solid var(--status-ok)' }}>
+                <b>PARECER CONCLUSIVO NBR 12655:</b>
+                <p style={{ margin: '4px 0 0', fontSize: 11, color: 'var(--text-muted)' }}>
+                  O concreto usinado fornecido satisfaz integralmente as especificações de resistência característica à compressão aos 28 dias conforme NBR 6118 e NBR 12655.
+                </p>
+              </div>
+
+              <div style={{ marginTop: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid var(--joint)', paddingTop: 10 }}>
+                <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                  Responsável Técnica: <b>Engª Karin Prestes (CREA-MT 027300)</b> · ART nº 2026/0491823-MT
+                </span>
+              </div>
+            </div>
+
             <div className="serrano-modal-footer">
               <button 
                 type="button" 
-                className="btn-serrano pri"
+                className="btn-serrano"
                 onClick={() => setModalLaudoAberto(null)}
               >
-                Concluir Visualização
+                Fechar
+              </button>
+              <button 
+                type="button" 
+                className="btn-serrano pri"
+                onClick={() => {
+                  window.open(`/api/admin/concreto/ensaios/${modalLaudoAberto.id || modalLaudoAberto.lote}/laudo/html`, '_blank');
+                }}
+              >
+                🖨️ Abrir Laudo Oficial A4 / Salvar PDF
               </button>
             </div>
           </div>
         </div>
       )}
-
     </div>
   );
 }

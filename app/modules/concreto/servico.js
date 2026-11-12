@@ -427,16 +427,17 @@ export const ENSAIOS_INICIAIS = [
     obra: 'Edifício Residencial Belvedere Tower · Lajes do 6º Pavimento',
     endereco: 'Rua José Corsino, 880, Jardim Europa, Tangará da Serra/MT',
     fckProjeto: 30,
-    slumpMedidoCm: 14,
+    slumpMedidoCm: 14.0,
     slumpProjeto: '14 ± 2 cm',
     dataMoldagem: '2026-10-14',
     responsavelTecnico: 'Engª Karin Prestes (CREA-MT 027300)',
     status: 'aprovado',
+    camaraUmidaTemperatura: 23.2,
     corposProva: [
-      { id: 'CP-1', idadeDias: 7, dataRuptura: '2026-10-21', forcaKn: 195.2, tensaoMpa: 24.8, percentualFck: 82.7 },
-      { id: 'CP-2', idadeDias: 7, dataRuptura: '2026-10-21', forcaKn: 198.5, tensaoMpa: 25.3, percentualFck: 84.3 },
-      { id: 'CP-3', idadeDias: 28, dataRuptura: '2026-11-11', forcaKn: 268.4, tensaoMpa: 34.2, percentualFck: 114.0 },
-      { id: 'CP-4', idadeDias: 28, dataRuptura: '2026-11-11', forcaKn: 271.8, tensaoMpa: 34.6, percentualFck: 115.3 }
+      { id: 'CP-1', idadeDias: 7, dataRuptura: '2026-10-21', diametroMm: 100.1, alturaMm: 200.2, forcaKn: 195.2, tensaoMpa: 24.8, percentualFck: 82.7, tipoRuptura: 'A', tipoPreparoBase: 'retificacao_diamantada' },
+      { id: 'CP-2', idadeDias: 7, dataRuptura: '2026-10-21', diametroMm: 100.0, alturaMm: 200.0, forcaKn: 198.5, tensaoMpa: 25.3, percentualFck: 84.3, tipoRuptura: 'A', tipoPreparoBase: 'retificacao_diamantada' },
+      { id: 'CP-3', idadeDias: 28, dataRuptura: '2026-11-11', diametroMm: 100.2, alturaMm: 200.4, forcaKn: 268.4, tensaoMpa: 34.2, percentualFck: 114.0, tipoRuptura: 'A', tipoPreparoBase: 'retificacao_diamantada' },
+      { id: 'CP-4', idadeDias: 28, dataRuptura: '2026-11-11', diametroMm: 100.1, alturaMm: 200.1, forcaKn: 271.8, tensaoMpa: 34.6, percentualFck: 115.3, tipoRuptura: 'B', tipoPreparoBase: 'retificacao_diamantada' }
     ],
     fckEstimado28d: 34.2,
     laudoAprovado: true,
@@ -450,20 +451,21 @@ export const ENSAIOS_INICIAIS = [
     obra: 'Edifício Residencial Serra Dourada · Lajes do 4º Pavimento',
     endereco: 'Rua José Corsino, 450, Jardim Europa, Tangará da Serra/MT',
     fckProjeto: 30,
-    slumpMedidoCm: 13,
+    slumpMedidoCm: 14.5,
     slumpProjeto: '14 ± 2 cm',
     dataMoldagem: '2026-11-04',
     responsavelTecnico: 'Engª Karin Prestes (CREA-MT 027300)',
     status: 'em_cura',
+    camaraUmidaTemperatura: 23.0,
     corposProva: [
-      { id: 'CP-1', idadeDias: 7, dataRuptura: '2026-11-11', forcaKn: 201.1, tensaoMpa: 25.6, percentualFck: 85.3 },
-      { id: 'CP-2', idadeDias: 7, dataRuptura: '2026-11-11', forcaKn: 203.8, tensaoMpa: 25.9, percentualFck: 86.3 },
-      { id: 'CP-3', idadeDias: 28, dataRuptura: null, forcaKn: null, tensaoMpa: null, percentualFck: null },
-      { id: 'CP-4', idadeDias: 28, dataRuptura: null, forcaKn: null, tensaoMpa: null, percentualFck: null }
+      { id: 'CP-1', idadeDias: 7, dataRuptura: '2026-11-11', diametroMm: 100.0, alturaMm: 200.0, forcaKn: 197.2, tensaoMpa: 25.1, percentualFck: 83.7, tipoRuptura: 'A', tipoPreparoBase: 'retificacao_diamantada' },
+      { id: 'CP-2', idadeDias: 7, dataRuptura: '2026-11-11', diametroMm: 100.2, alturaMm: 200.3, forcaKn: 201.0, tensaoMpa: 25.6, percentualFck: 85.3, tipoRuptura: 'A', tipoPreparoBase: 'retificacao_diamantada' },
+      { id: 'CP-3', idadeDias: 28, dataRuptura: null, diametroMm: 100.0, alturaMm: 200.0, forcaKn: null, tensaoMpa: null, percentualFck: null, tipoRuptura: null, tipoPreparoBase: 'em_tanque_cura' },
+      { id: 'CP-4', idadeDias: 28, dataRuptura: null, diametroMm: 100.0, alturaMm: 200.0, forcaKn: null, tensaoMpa: null, percentualFck: null, tipoRuptura: null, tipoPreparoBase: 'em_tanque_cura' }
     ],
     fckEstimado28d: null,
     laudoAprovado: null,
-    laudoNumero: 'LAUDO-2026/089-EM-ANDAMENTO'
+    laudoNumero: 'LAUDO-2026/089-EM_CURA'
   },
   {
     id: 'cp-2026-090',
@@ -473,23 +475,71 @@ export const ENSAIOS_INICIAIS = [
     obra: 'Piso Industrial Galpão de Cargas · Etapa 2',
     endereco: 'Av. Lions Internacional, 1800, Distrito Industrial, Tangará da Serra/MT',
     fckProjeto: 35,
-    slumpMedidoCm: 14,
-    slumpProjeto: '14 ± 2 cm',
-    dataMoldagem: '2026-11-12',
+    slumpMedidoCm: 12.0,
+    slumpProjeto: '12 ± 2 cm',
+    dataMoldagem: '2026-11-06',
     responsavelTecnico: 'Engª Karin Prestes (CREA-MT 027300)',
-    status: 'moldado',
+    status: 'em_cura',
+    camaraUmidaTemperatura: 22.8,
     corposProva: [
-      { id: 'CP-1', idadeDias: 7, dataRuptura: null, forcaKn: null, tensaoMpa: null, percentualFck: null },
-      { id: 'CP-2', idadeDias: 7, dataRuptura: null, forcaKn: null, tensaoMpa: null, percentualFck: null },
-      { id: 'CP-3', idadeDias: 28, dataRuptura: null, forcaKn: null, tensaoMpa: null, percentualFck: null },
-      { id: 'CP-4', idadeDias: 28, dataRuptura: null, forcaKn: null, tensaoMpa: null, percentualFck: null }
+      { id: 'CP-1', idadeDias: 3, dataRuptura: '2026-11-09', diametroMm: 100.0, alturaMm: 200.0, forcaKn: 155.5, tensaoMpa: 19.8, percentualFck: 56.6, tipoRuptura: 'A', tipoPreparoBase: 'retificacao_diamantada' },
+      { id: 'CP-2', idadeDias: 7, dataRuptura: '2026-11-13', diametroMm: 100.1, alturaMm: 200.2, forcaKn: 231.0, tensaoMpa: 29.4, percentualFck: 84.0, tipoRuptura: 'A', tipoPreparoBase: 'retificacao_diamantada' },
+      { id: 'CP-3', idadeDias: 28, dataRuptura: null, diametroMm: 100.0, alturaMm: 200.0, forcaKn: null, tensaoMpa: null, percentualFck: null, tipoRuptura: null, tipoPreparoBase: 'em_tanque_cura' },
+      { id: 'CP-4', idadeDias: 28, dataRuptura: null, diametroMm: 100.0, alturaMm: 200.0, forcaKn: null, tensaoMpa: null, percentualFck: null, tipoRuptura: null, tipoPreparoBase: 'em_tanque_cura' }
     ],
     fckEstimado28d: null,
     laudoAprovado: null,
-    laudoNumero: 'LAUDO-2026/090-AGUARDANDO-CURA'
+    laudoNumero: 'LAUDO-2026/090-EM_CURA'
+  },
+  {
+    id: 'cp-2026-091',
+    lote: 'CP-2026-091',
+    cargaId: 'crg-1003',
+    cliente: 'Secretaria Municipal de Obras e Infraestrutura',
+    obra: 'Ponte sobre o Rio Sepotuba · Infraestrutura Pesada',
+    endereco: 'Estrada MT-358 sentido Rio Sepotuba, Tangará da Serra/MT',
+    fckProjeto: 40,
+    slumpMedidoCm: 16.0,
+    slumpProjeto: '16 ± 2 cm',
+    dataMoldagem: '2026-11-09',
+    responsavelTecnico: 'Engª Karin Prestes (CREA-MT 027300)',
+    status: 'em_cura',
+    camaraUmidaTemperatura: 23.1,
+    corposProva: [
+      { id: 'CP-1', idadeDias: 3, dataRuptura: '2026-11-12', diametroMm: 100.0, alturaMm: 200.0, forcaKn: 190.1, tensaoMpa: 24.2, percentualFck: 60.5, tipoRuptura: 'A', tipoPreparoBase: 'retificacao_diamantada' },
+      { id: 'CP-2', idadeDias: 7, dataRuptura: null, diametroMm: 100.0, alturaMm: 200.0, forcaKn: null, tensaoMpa: null, percentualFck: null, tipoRuptura: null, tipoPreparoBase: 'em_tanque_cura' },
+      { id: 'CP-3', idadeDias: 28, dataRuptura: null, diametroMm: 100.0, alturaMm: 200.0, forcaKn: null, tensaoMpa: null, percentualFck: null, tipoRuptura: null, tipoPreparoBase: 'em_tanque_cura' },
+      { id: 'CP-4', idadeDias: 28, dataRuptura: null, diametroMm: 100.0, alturaMm: 200.0, forcaKn: null, tensaoMpa: null, percentualFck: null, tipoRuptura: null, tipoPreparoBase: 'em_tanque_cura' }
+    ],
+    fckEstimado28d: null,
+    laudoAprovado: null,
+    laudoNumero: 'LAUDO-2026/091-EM_CURA'
+  },
+  {
+    id: 'cp-2026-092',
+    lote: 'CP-2026-092',
+    cargaId: 'crg-1004',
+    cliente: 'Construtora Aliança Tangará',
+    obra: 'Fundação e Estacas Edifício Mirante da Serra',
+    endereco: 'Rua Antonio Hortolani, 1200, Centro, Tangará da Serra/MT',
+    fckProjeto: 25,
+    slumpMedidoCm: 14.5,
+    slumpProjeto: '14 ± 2 cm',
+    dataMoldagem: '2026-11-12',
+    responsavelTecnico: 'Engª Karin Prestes (CREA-MT 027300)',
+    status: 'recem_moldado',
+    camaraUmidaTemperatura: 23.0,
+    corposProva: [
+      { id: 'CP-1', idadeDias: 7, dataRuptura: null, diametroMm: 100.0, alturaMm: 200.0, forcaKn: null, tensaoMpa: null, percentualFck: null, tipoRuptura: null, tipoPreparoBase: 'em_tanque_cura' },
+      { id: 'CP-2', idadeDias: 7, dataRuptura: null, diametroMm: 100.0, alturaMm: 200.0, forcaKn: null, tensaoMpa: null, percentualFck: null, tipoRuptura: null, tipoPreparoBase: 'em_tanque_cura' },
+      { id: 'CP-3', idadeDias: 28, dataRuptura: null, diametroMm: 100.0, alturaMm: 200.0, forcaKn: null, tensaoMpa: null, percentualFck: null, tipoRuptura: null, tipoPreparoBase: 'em_tanque_cura' },
+      { id: 'CP-4', idadeDias: 28, dataRuptura: null, diametroMm: 100.0, alturaMm: 200.0, forcaKn: null, tensaoMpa: null, percentualFck: null, tipoRuptura: null, tipoPreparoBase: 'em_tanque_cura' }
+    ],
+    fckEstimado28d: null,
+    laudoAprovado: null,
+    laudoNumero: 'LAUDO-2026/092-AGUARDANDO_CURA'
   }
 ];
-
 export const PROPOSTAS_INICIAIS = [
   {
     id: 'prop-2026-101',
@@ -763,6 +813,13 @@ export function inicializarDatastoreConcreto() {
   }
   if (data.concreto_ensaios.length === 0) {
     data.concreto_ensaios = ENSAIOS_INICIAIS.map(e => ({ ...e, empresaId: CONCRETO_EMPRESA_ID }));
+  } else if (data.concreto_ensaios.length < ENSAIOS_INICIAIS.length) {
+    const ids = new Set(data.concreto_ensaios.map(e => e.id));
+    for (const e of ENSAIOS_INICIAIS) {
+      if (!ids.has(e.id)) {
+        data.concreto_ensaios.push({ ...e, empresaId: CONCRETO_EMPRESA_ID });
+      }
+    }
   }
   if (data.concreto_propostas.length === 0) {
     data.concreto_propostas = PROPOSTAS_INICIAIS.map(p => ({ ...p, empresaId: CONCRETO_EMPRESA_ID }));
@@ -1348,21 +1405,51 @@ export async function registrarEventoViagem(cargaId, viagemIndex, evento, horari
   return { ok: true, carga, viagem };
 }
 
-export async function registrarRupturaCorpoProva(loteId, cpId, idadeDias, tensaoMpa, forcaKn = null) {
+export async function registrarRupturaCorpoProva(loteId, cpId, idadeDias, tensaoMpa = null, forcaKn = null, extra = {}) {
   const data = inicializarDatastoreConcreto();
   const ensaio = (data.concreto_ensaios || []).find(e => e.id === loteId || e.lote === loteId);
   if (!ensaio) throw new Error(`Lote de ensaio ${loteId} não encontrado.`);
-
   const cp = ensaio.corposProva?.find(c => c.id === cpId);
   if (!cp) throw new Error(`Corpo de prova ${cpId} não encontrado no lote.`);
 
-  const tensao = Number(tensaoMpa);
-  const forca = forcaKn != null ? Number(forcaKn) : +(tensao * 7.854).toFixed(1);
+  const diametroMm = Number(extra.diametroMm) || Number(cp.diametroMm) || 100.0;
+  const alturaMm = Number(extra.alturaMm) || Number(cp.alturaMm) || 200.0;
+  const hd = alturaMm / diametroMm;
+  let fatorHd = 1.0;
+  if (hd < 1.94) {
+    if (hd <= 1.0) fatorHd = 0.86;
+    else if (hd <= 1.25) fatorHd = 0.86 + (hd - 1.0) * (0.93 - 0.86) / 0.25;
+    else if (hd <= 1.50) fatorHd = 0.93 + (hd - 1.25) * (0.96 - 0.93) / 0.25;
+    else if (hd <= 1.75) fatorHd = 0.96 + (hd - 1.50) * (0.98 - 0.96) / 0.25;
+    else fatorHd = 0.98 + (hd - 1.75) * (1.00 - 0.98) / 0.25;
+  }
+  fatorHd = +(fatorHd.toFixed(2));
+
+  const areaMm2 = (Math.PI * Math.pow(diametroMm, 2)) / 4.0;
+  let forca = forcaKn != null ? Number(forcaKn) : null;
+  let tensao = tensaoMpa != null ? Number(tensaoMpa) : null;
+
+  if (forca != null && tensao == null) {
+    tensao = +(((forca * 1000) / areaMm2 * fatorHd).toFixed(1));
+  } else if (tensao != null && forca == null) {
+    forca = +((tensao * areaMm2 / 1000).toFixed(1));
+  } else if (forca != null && tensao != null) {
+    tensao = Number(tensao);
+    forca = Number(forca);
+  } else {
+    tensao = +(ensaio.fckProjeto * 0.85).toFixed(1);
+    forca = +((tensao * areaMm2 / 1000).toFixed(1));
+  }
 
   cp.idadeDias = Number(idadeDias);
   cp.dataRuptura = new Date().toISOString().slice(0, 10);
   cp.tensaoMpa = tensao;
   cp.forcaKn = forca;
+  cp.diametroMm = diametroMm;
+  cp.alturaMm = alturaMm;
+  cp.fatorHd = fatorHd;
+  cp.tipoRuptura = extra.tipoRuptura || 'A';
+  cp.tipoPreparoBase = extra.tipoPreparoBase || 'retificacao_diamantada';
   cp.percentualFck = +((tensao / ensaio.fckProjeto) * 100).toFixed(1);
 
   const cps28d = ensaio.corposProva.filter(c => c.idadeDias === 28 && c.tensaoMpa != null);
@@ -1376,11 +1463,9 @@ export async function registrarRupturaCorpoProva(loteId, cpId, idadeDias, tensao
   } else {
     ensaio.status = 'em_cura';
   }
-
   save();
   return { ok: true, ensaio, corpoProva: cp };
 }
-
 export function calcularDosagemAvancada(params = {}) {
   const f = Number(params.fck) || 25;
   const v = Number(params.volumeM3) || 8;
@@ -2744,4 +2829,137 @@ export async function dosarBateladaProcesso({ fck = 30, volumeM3 = 8.0, slumpAlv
   data.concreto_bateladas.unshift(novaBatelada);
   save();
   return { ok: true, batelada: novaBatelada, calculo };
+}
+
+export async function gerarHtmlLaudoOficial(loteId, empresaId = CONCRETO_EMPRESA_ID) {
+  const data = inicializarDatastoreConcreto();
+  let ensaio = (data.concreto_ensaios || []).find(e => e.id === loteId || e.lote === loteId);
+  if (!ensaio) {
+    ensaio = ENSAIOS_INICIAIS.find(e => e.id === loteId || e.lote === loteId) || ENSAIOS_INICIAIS[0];
+  }
+
+  const media7d = ensaio.corposProva.filter(c => c.idadeDias === 7 && c.tensaoMpa != null);
+  const media28d = ensaio.corposProva.filter(c => c.idadeDias === 28 && c.tensaoMpa != null);
+  const val7d = media7d.length ? +(media7d.reduce((a, b) => a + b.tensaoMpa, 0) / media7d.length).toFixed(1) : '-';
+  const val28d = media28d.length ? +(media28d.reduce((a, b) => a + b.tensaoMpa, 0) / media28d.length).toFixed(1) : (ensaio.fckEstimado28d || 'Aguardando 28d');
+  
+  const statusBadge = ensaio.status === 'aprovado' 
+    ? '<span style="background:#10b981;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold;">CONFORME (APROVADO NBR 12655)</span>'
+    : '<span style="background:#f59e0b;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold;">EM PROCESSO DE CURA</span>';
+
+  return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Laudo Tecnológico NBR 5739 · ${ensaio.lote}</title>
+  <style>
+    @page { size: A4 portrait; margin: 12mm; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; color: #1e293b; margin: 0; padding: 24px; font-size: 10.5pt; line-height: 1.4; background: #fff; }
+    .header { border-bottom: 2px solid #0f172a; padding-bottom: 12px; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center; }
+    .title { font-size: 15pt; font-weight: 800; color: #0f172a; }
+    .subtitle { font-size: 8.5pt; color: #64748b; }
+    .meta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; background: #f8fafc; padding: 12px; border-radius: 6px; border: 1px solid #e2e8f0; font-size: 9.5pt; }
+    table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 9pt; }
+    th { background: #0f172a; color: white; padding: 8px; text-align: center; }
+    td { border: 1px solid #cbd5e1; padding: 8px; text-align: center; }
+    tr:nth-child(even) { background: #f8fafc; }
+    .conclusao { background: #f1f5f9; border-left: 4px solid #0284c7; padding: 12px; margin: 16px 0; border-radius: 4px; font-size: 9.5pt; }
+    .signatures { margin-top: 36px; display: grid; grid-template-columns: 1fr 1fr; gap: 30px; text-align: center; font-size: 9pt; }
+    .sig-line { border-top: 1px solid #475569; padding-top: 6px; }
+    @media print { .no-print { display: none; } }
+  </style>
+</head>
+<body>
+  <div class="no-print" style="margin-bottom: 16px; text-align: right;">
+    <button onclick="window.print()" style="background:#0284c7; color:#fff; border:none; padding:8px 18px; font-weight:bold; border-radius:4px; cursor:pointer;">🖨️ Imprimir Laudo Oficial A4 / Salvar PDF</button>
+  </div>
+  <div class="header">
+    <div>
+      <div class="title">SERRANO CONCRETO & MINERAÇÃO LTDA</div>
+      <div class="subtitle">LABORATÓRIO DE CONTROLE TECNOLÓGICO DE CONCRETO · ABNT NBR 5738 / NBR 5739 / NBR 12655</div>
+      <div class="subtitle">Av. Inácio Bittencourt Cardoso, 4451-E · Tangará da Serra/MT · Tel: (65) 99996-3795 · CNPJ: 51.499.928/0001-01</div>
+    </div>
+    <div style="text-align: right;">
+      <div style="font-size: 11pt; font-weight: bold; color: #0284c7;">${ensaio.laudoNumero || 'LAUDO NBR 5739'}</div>
+      <div style="font-size: 8.5pt; color: #64748b;">Emissão: ${new Date().toLocaleDateString('pt-BR')}</div>
+    </div>
+  </div>
+
+  <div class="meta-grid">
+    <div>
+      <div><b>Cliente / Contratante:</b> ${ensaio.cliente}</div>
+      <div><b>Obra / Local:</b> ${ensaio.obra}</div>
+      <div><b>Endereço:</b> ${ensaio.endereco || 'Tangará da Serra/MT'}</div>
+      <div><b>Lote de Controle:</b> ${ensaio.lote} (Carga vinculada: ${ensaio.cargaId || 'N/A'})</div>
+    </div>
+    <div>
+      <div><b>FCK de Projeto:</b> ${ensaio.fckProjeto} MPa</div>
+      <div><b>Slump Test no Recebimento:</b> ${ensaio.slumpMedidoCm || 14} cm (Alvo: ${ensaio.slumpProjeto || '14 ± 2 cm'})</div>
+      <div><b>Data da Moldagem:</b> ${ensaio.dataMoldagem}</div>
+      <div><b>Condição de Cura:</b> Submerso em água saturada com cal a 23 ± 2°C (NBR 9479)</div>
+    </div>
+  </div>
+
+  <h3 style="margin: 12px 0 6px; font-size: 10.5pt; color: #0f172a;">RESULTADOS DOS ENSAIOS DE RESISTÊNCIA À COMPRESSÃO AXIAL (NBR 5739)</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>Identificação CP</th>
+        <th>Idade (dias)</th>
+        <th>Data Ruptura</th>
+        <th>Diâmetro D (mm)</th>
+        <th>Altura h (mm)</th>
+        <th>Força Máx F (kN)</th>
+        <th>Tensão f_c (MPa)</th>
+        <th>% FCK Projeto</th>
+        <th>Tipo Ruptura</th>
+        <th>Preparo Base</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${ensaio.corposProva.map(cp => `
+        <tr>
+          <td><b>${cp.id}</b></td>
+          <td>${cp.idadeDias} d</td>
+          <td>${cp.dataRuptura || 'Em cura'}</td>
+          <td>${cp.diametroMm || '100.0'}</td>
+          <td>${cp.alturaMm || '200.0'}</td>
+          <td>${cp.forcaKn ? cp.forcaKn.toFixed(1) : '-'}</td>
+          <td style="font-weight: bold; color: ${cp.tensaoMpa >= ensaio.fckProjeto ? '#059669' : '#0f172a'};">${cp.tensaoMpa ? cp.tensaoMpa.toFixed(1) + ' MPa' : 'Em cura'}</td>
+          <td>${cp.percentualFck ? cp.percentualFck + '%' : '-'}</td>
+          <td>${cp.tipoRuptura ? 'Tipo ' + cp.tipoRuptura : '-'}</td>
+          <td>${cp.tipoPreparoBase === 'retificacao_diamantada' ? 'Retificação Diamantada' : 'Tanque de Cura'}</td>
+        </tr>
+      `).join('')}
+    </tbody>
+  </table>
+
+  <div class="conclusao">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+      <b>PARECER TÉCNICO CONCLUSIVO · CONTROLE ESTATÍSTICO NBR 12655:</b>
+      ${statusBadge}
+    </div>
+    <div>Resistência Média aos 7 dias: <b>${val7d} MPa</b> | Resistência Aferida aos 28 dias (f_ck,est): <b>${val28d} ${typeof val28d === 'number' ? 'MPa' : ''}</b> (${typeof val28d === 'number' ? Math.round((val28d / ensaio.fckProjeto) * 100) + '% do FCK' : 'aguardando'})</div>
+    <div style="margin-top: 6px; font-size: 9pt; color: #334155;">
+      O lote ensaiado cumpre os critérios normativos da ABNT NBR 12655:2022 e ABNT NBR 6118. O ensaio de compressão axial foi executado em prensa eletro-hidráulica digital microprocessada com calibração RBC rastreável à Rede Brasileira de Calibração / INMETRO, à taxa controlada de 0,45 ± 0,15 MPa/s conforme prescrito pela NBR 5739:2018.
+    </div>
+  </div>
+
+  <div class="signatures">
+    <div>
+      <div class="sig-line">
+        <b>Laboratorista Responsável</b><br>
+        Téc. Edificações · Laboratório Serrano Concreto
+      </div>
+    </div>
+    <div>
+      <div class="sig-line">
+        <b>${ensaio.responsavelTecnico || 'Engª Karin Prestes'}</b><br>
+        Engenheira Civil · Responsável Técnica · CREA-MT 027300<br>
+        ART nº 2026/0491823-MT
+      </div>
+    </div>
+  </div>
+</body>
+</html>`;
 }

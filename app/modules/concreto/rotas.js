@@ -23,6 +23,7 @@ import {
   emitirRomaneioVendaAgregado,
   calcularEstatisticaResistenciaLote,
   gerarHtmlRomaneioOficial,
+  gerarHtmlLaudoOficial,
   assinarEntregaCarga,
   obterRomaneioCompleto,
   emitirTicketPesagemBalanca,
@@ -174,14 +175,31 @@ export function criarRotasConcreto() {
     }
   });
 
-  // 9. Registrar ensaio de ruptura de CP no laboratório
+  // 9. Registrar ensaio de ruptura de CP no laboratório (NBR 5738 / NBR 5739)
   router.post('/ensaios/:loteId/ruptura', async (req, res) => {
     try {
-      const { cpId, idadeDias, tensaoMpa, forcaKn } = req.body;
-      const resultado = await registrarRupturaCorpoProva(req.params.loteId, cpId, idadeDias, tensaoMpa, forcaKn);
+      const { cpId, idadeDias, tensaoMpa, forcaKn, diametroMm, alturaMm, tipoRuptura, tipoPreparoBase } = req.body;
+      const resultado = await registrarRupturaCorpoProva(req.params.loteId, cpId, idadeDias, tensaoMpa, forcaKn, {
+        diametroMm,
+        alturaMm,
+        tipoRuptura,
+        tipoPreparoBase
+      });
       return res.json(resultado);
     } catch (e) {
       return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  // 9b. Emitir Laudo Oficial A4 em HTML para impressão ou visualização (NBR 5739)
+  router.get('/ensaios/:loteId/laudo/html', async (req, res) => {
+    try {
+      const empresaId = resolverEmpresa(req);
+      const html = await gerarHtmlLaudoOficial(req.params.loteId, empresaId);
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      return res.send(html);
+    } catch (e) {
+      return res.status(404).send(`<h1>Erro ao gerar Laudo Técnico NBR 5739</h1><p>${e.message}</p>`);
     }
   });
 
