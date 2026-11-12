@@ -552,71 +552,52 @@ export const NAV_RESTAURANTE_GROUPS = [
 
 export const NAV_CONCRETO_GROUPS = [
   {
-    label: 'Hoje na Usina', aberto: true,
+    label: "Operação", aberto: true,
     items: [
-      { to: '/admin/concreto', icon: '🚚', label: 'Programação de Cargas' },
-      { to: '/admin/concreto?tab=frota', icon: '🚛', label: 'Frota de Betoneiras & Bombas' },
-      { to: '/admin/concreto?tab=pedidos', icon: '📋', label: 'Pedidos de Concreto & Obras' },
-      { to: '/admin/concreto?tab=romaneios', icon: '🧾', label: 'Romaneios & Tickets Pesagem' },
-      { to: '/pdv', icon: '⚖️', label: 'Balança & Balcão' },
+      { to: "/admin/concreto?secao=operacao-despacho", icon: "🚚", label: "Despacho ao Vivo" },
+      { to: "/admin/concreto?secao=operacao-programacao", icon: "📅", label: "Programação de Cargas" },
+      { to: "/admin/concreto?secao=operacao-frota", icon: "🚛", label: "Frota & Telemetria" },
+      { to: "/pdv", icon: "⚖️", label: "Balança Rodoviária & Balcão" },
     ],
   },
   {
-    label: 'Tecnologia & Traços', aberto: true,
+    label: "Produção", aberto: true,
     items: [
-      { to: '/admin/concreto?tab=tracos', icon: '🏭', label: 'Traços de Concreto (FCK 20-40)' },
-      { to: '/admin/concreto?tab=ensaios', icon: '🧪', label: 'Slump & Corpos de Prova' },
-      { to: '/admin/concreto?tab=insumos', icon: '📦', label: 'Silos de Cimento, Areia & Britas' },
-      { to: '/admin/estoque', icon: '📦', label: 'Estoque Geral de Insumos' },
-      { to: '/admin/perdas-inventario', icon: '🧾', label: 'Perdas & Inventário' },
+      { to: "/admin/concreto?secao=producao-central", icon: "🏭", label: "Central Dosadora (NBR 7212)" },
+      { to: "/admin/concreto?secao=producao-op", icon: "📋", label: "Ordens de Produção" },
+      { to: "/admin/concreto?secao=producao-laboratorio", icon: "🔬", label: "Laboratório & CPs (NBR 5739)" },
+      { to: "/admin/fichas-tecnicas", icon: "🧪", label: "Traços & Fichas Técnicas FCK" },
     ],
   },
   {
-    label: 'Comercial & Obras',
+    label: "Suprimentos", aberto: true,
     items: [
-      { to: '/admin/clientes', icon: '🏗️', label: 'Construtoras & Obras' },
-      { to: '/admin/propostas', icon: '📜', label: 'Propostas & Cotações m³' },
-      { to: '/admin/whatsapp', icon: '💬', label: 'WhatsApp Usina & Despacho' },
+      { to: "/admin/concreto?secao=suprimentos-silos", icon: "⛏️", label: "Mineração & Silos 96t" },
+      { to: "/admin/concreto?secao=suprimentos-compras", icon: "📦", label: "Compras de Insumos" },
+      { to: "/admin/estoque", icon: "📦", label: "Estoque Geral da Usina" },
+      { to: "/admin/perdas-inventario", icon: "🧾", label: "Perdas & Inventário" },
     ],
   },
   {
-    label: 'Financeiro & Custos',
+    label: "Comercial", aberto: true,
     items: [
-      { to: '/admin/financeiro', icon: '💰', label: 'Financeiro' },
-      { to: '/admin/contas-receber', icon: '💳', label: 'Medições & Contas a Receber', razao: true },
-      { to: '/admin/contas-pagar', icon: '🧾', label: 'Contas a Pagar (Cimento, Brita, Diesel)', razao: true },
-      { to: '/admin/fechamento-diario', icon: '🔐', label: 'Fechamento Diário de Cargas', razao: true },
-      { to: '/admin/pagamentos', icon: '💵', label: 'Pagamentos' },
-      { to: '/admin/dre', icon: '📈', label: 'DRE da Usina' },
+      { to: "/admin/concreto?secao=comercial-propostas", icon: "💼", label: "Orçamentos & Propostas" },
+      { to: "/admin/concreto?secao=comercial-custos", icon: "📊", label: "Custos & Preços (FCK)" },
+      { to: "/admin/clientes", icon: "🏗️", label: "Construtoras & Obras" },
+      { to: "/admin/whatsapp", icon: "💬", label: "WhatsApp Usina & Despacho" },
     ],
   },
   {
-    label: 'Fiscal',
+    label: "Empresa", aberto: true,
     items: [
-      { to: '/admin/notas', icon: '🧾', label: 'Notas Fiscais (NF-e / NFS-e Bomba)' },
-      { to: '/admin/fiscal/config', icon: '⚙️', label: 'Configuração Fiscal' },
-      { to: '/admin/fiscal/classificacao', icon: '🏷️', label: 'Classificação Fiscal (NCM)' },
+      { to: "/admin/concreto?secao=empresa-holding", icon: "🏢", label: "Holding & Dados Fiscais" },
+      { to: "/admin/financeiro", icon: "💰", label: "Financeiro & Medições" },
+      { to: "/admin/notas", icon: "🧾", label: "Notas Fiscais (NF-e / MDF-e)" },
+      { to: "/admin/cadastros-mestres", icon: "🗂️", label: "Motoristas & Fornecedores" },
+      { to: "/admin/configuracoes", icon: "⚙️", label: "Configurações" },
     ],
   },
-  {
-    label: 'Gestão da Usina',
-    items: [
-      { to: '/admin/empresas', icon: '🏢', label: 'Minha Usina' },
-      { to: '/admin/cadastros-mestres', icon: '🗂️', label: 'Motoristas, Operadores & Fornecedores' },
-      { to: '/admin/usuarios', icon: '👥', label: 'Usuários & Acessos' },
-      { to: '/admin/lojas', icon: '🏬', label: 'Pátios / Filiais' },
-      { to: '/admin/configuracoes', icon: '🛠️', label: 'Configurações' },
-      { to: '/admin/auditoria', icon: '🔍', label: 'Auditoria' },
-    ],
-  },
-  {
-    label: 'Grupo Serrano & Palatare', aberto: true,
-    items: [
-      { to: '/admin/concreto', icon: '🚚', label: 'Serrano Concreto Usinado' },
-      { to: '/admin/consolidacao-grupo', icon: '🏢', label: 'Holding & Consolidação' },
-    ],
-  },
-]
+];
 
 const NAV_PALATARE_PUBLIC = [
   { to: 'https://www.instagram.com/palataretga/', icon: '↗', label: 'Instagram @palataretga', novaGuia: true },
@@ -865,7 +846,9 @@ export default function Sidebar() {
   const isDino = isDinoDedicatedHost() || isDinoBrandContext(empresaAtiva)
   const isStallone = !isDino && isStalloneBrandContext(empresaAtiva)
   const isRestaurante = !isDino && !isStallone && isRestauranteBrandContext(empresaAtiva)
-  const isConcreto = !isDino && !isStallone && !isRestaurante && isConcretoBrandContext(empresaAtiva)
+  const location = useLocation()
+  const naRotaConcreto = location.pathname.startsWith('/admin/concreto') || location.pathname.startsWith('/admin/usina-concreto')
+  const isConcreto = (!isDino && !isStallone && !isRestaurante && isConcretoBrandContext(empresaAtiva)) || naRotaConcreto
   const isClube = !isDino && !isStallone && !isRestaurante && !isConcreto && isClubeBrandContext(empresaAtiva)
   const [themeMode, setThemeMode] = useState(() => storedThemeMode())
   const contextoSemUnidade = Boolean(user && isStaff && empresaAtiva?.id) && (empresaSemUnidade(lojasAcessiveis, empresaAtiva?.id) || !lojaAtiva?.id)
@@ -1015,12 +998,12 @@ export default function Sidebar() {
             )}
             {isConcreto && (
               <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 8 }}>
-                <div style={{ width: 38, height: 38, borderRadius: 8, background: "#F59E0B", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20 }}>
-                  🚚
+                <div style={{ width: 38, height: 38, borderRadius: 8, background: "#FF7000", color: "#16181B", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 900, fontSize: 16 }}>
+                  SC
                 </div>
                 <div>
-                  <div style={{ color: "#FFFFFF", fontWeight: 800, fontSize: 13, lineHeight: 1.1 }}>SERRANO</div>
-                  <div style={{ color: "#F59E0B", fontWeight: 700, fontSize: 9, textTransform: "uppercase", letterSpacing: "0.5px" }}>Concreto Usinado & Usina</div>
+                  <div style={{ color: "#FFFFFF", fontWeight: 800, fontSize: 13, lineHeight: 1.1 }}>SERRANO CONCRETO</div>
+                  <div style={{ color: "#FF7000", fontWeight: 700, fontSize: 9, textTransform: "uppercase", letterSpacing: "0.5px" }}>Usinado & Mineração</div>
                 </div>
               </div>
             )}

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../lib/auth';
 import { useToast } from '../../hooks/useToast';
 import { api } from '../../lib/api';
@@ -19,7 +20,9 @@ export default function ConcretoUsinaERP() {
 
   // Estados de layout e tema
   const [themeDark, setThemeDark] = useState(false);
-  const [secaoAtiva, setSecaoAtiva] = useState('operacao-despacho');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const secaoAtiva = searchParams.get('secao') || 'operacao-despacho';
+  const setSecaoAtiva = (s) => setSearchParams({ secao: s });
   const [busca, setBusca] = useState('');
   const [cargasAbertas, setCargasAbertas] = useState({ '#1002': true });
 
@@ -250,134 +253,7 @@ export default function ConcretoUsinaERP() {
     <div className={`serrano-wrapper ${themeDark ? 'serrano-theme-dark' : ''}`}>
       
       {/* ─── BARRA LATERAL ESPECIALIZADA DA USINA (5 ÁREAS FÍSICAS) ─── */}
-      <aside className="serrano-sidebar" aria-label="Menu da Usina de Concreto">
-        <div className="serrano-sb-brand">
-          <div className="serrano-mark" aria-hidden="true">SC</div>
-          <div>
-            <b>Serrano</b>
-            <small>Concreto &amp; Mineração</small>
-          </div>
-        </div>
-
-        {/* 1. OPERAÇÃO */}
-        <div className="serrano-sb-group">
-          <h5>Operação</h5>
-          <button
-            type="button"
-            className={`serrano-sb-item ${secaoAtiva === 'operacao-despacho' ? 'ativo' : ''}`}
-            onClick={() => setSecaoAtiva('operacao-despacho')}
-          >
-            <svg viewBox="0 0 24 24"><path d="M3 7h11v9H3zM14 10h4l3 3v3h-7"/><circle cx="7" cy="17.5" r="1.8"/><circle cx="17" cy="17.5" r="1.8"/></svg>
-            Despacho ao vivo
-            <span className="serrano-badge-count">{cargas.length}</span>
-          </button>
-          <button
-            type="button"
-            className={`serrano-sb-item ${secaoAtiva === 'operacao-programacao' ? 'ativo' : ''}`}
-            onClick={() => setSecaoAtiva('operacao-programacao')}
-          >
-            <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>
-            Programação
-          </button>
-          <button
-            type="button"
-            className={`serrano-sb-item ${secaoAtiva === 'operacao-frota' ? 'ativo' : ''}`}
-            onClick={() => setSecaoAtiva('operacao-frota')}
-          >
-            <svg viewBox="0 0 24 24"><path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>
-            Frota &amp; telemetria
-            <span className="serrano-badge-count">{frota.length}</span>
-          </button>
-        </div>
-
-        {/* 2. PRODUÇÃO */}
-        <div className="serrano-sb-group">
-          <h5>Produção</h5>
-          <button
-            type="button"
-            className={`serrano-sb-item ${secaoAtiva === 'producao-central' ? 'ativo' : ''}`}
-            onClick={() => setSecaoAtiva('producao-central')}
-          >
-            <svg viewBox="0 0 24 24"><path d="M3 21V10l5 3V10l5 3V5h4l1 16z"/></svg>
-            Central dosadora
-          </button>
-          <button
-            type="button"
-            className={`serrano-sb-item ${secaoAtiva === 'producao-op' ? 'ativo' : ''}`}
-            onClick={() => setSecaoAtiva('producao-op')}
-          >
-            <svg viewBox="0 0 24 24"><path d="M5 4h14v16H5zM9 9h6M9 13h6M9 17h3"/></svg>
-            Ordens de produção
-            <span className="serrano-badge-count">{cargas.filter(c => c.status !== 'concluido').length}</span>
-          </button>
-          <button
-            type="button"
-            className={`serrano-sb-item ${secaoAtiva === 'producao-laboratorio' ? 'ativo' : ''}`}
-            onClick={() => setSecaoAtiva('producao-laboratorio')}
-          >
-            <svg viewBox="0 0 24 24"><path d="M9 3h6M10 3v6l-5 9a2 2 0 0 0 2 3h10a2 2 0 0 0 2-3l-5-9V3"/></svg>
-            Laboratório &amp; CPs
-            <span className="serrano-badge-count">{ensaios.length}</span>
-          </button>
-        </div>
-
-        {/* 3. SUPRIMENTOS */}
-        <div className="serrano-sb-group">
-          <h5>Suprimentos</h5>
-          <button
-            type="button"
-            className={`serrano-sb-item ${secaoAtiva === 'suprimentos-silos' ? 'ativo' : ''}`}
-            onClick={() => setSecaoAtiva('suprimentos-silos')}
-          >
-            <svg viewBox="0 0 24 24"><path d="M3 20l6-11 4 6 3-4 5 9z"/></svg>
-            Mineração &amp; silos
-            <span className="serrano-badge-count">{silos.length}</span>
-          </button>
-          <button
-            type="button"
-            className={`serrano-sb-item ${secaoAtiva === 'suprimentos-compras' ? 'ativo' : ''}`}
-            onClick={() => setSecaoAtiva('suprimentos-compras')}
-          >
-            <svg viewBox="0 0 24 24"><path d="M4 5h2l2 11h11l2-8H7"/><circle cx="10" cy="20" r="1.4"/><circle cx="18" cy="20" r="1.4"/></svg>
-            Compras
-          </button>
-        </div>
-
-        {/* 4. COMERCIAL */}
-        <div className="serrano-sb-group">
-          <h5>Comercial</h5>
-          <button
-            type="button"
-            className={`serrano-sb-item ${secaoAtiva === 'comercial-propostas' ? 'ativo' : ''}`}
-            onClick={() => setSecaoAtiva('comercial-propostas')}
-          >
-            <svg viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6zM14 3v5h5"/></svg>
-            Orçamentos
-            <span className="serrano-badge-count">{propostas.length}</span>
-          </button>
-          <button
-            type="button"
-            className={`serrano-sb-item ${secaoAtiva === 'comercial-custos' ? 'ativo' : ''}`}
-            onClick={() => setSecaoAtiva('comercial-custos')}
-          >
-            <svg viewBox="0 0 24 24"><path d="M4 19V9M10 19V5M16 19v-7M22 19H2"/></svg>
-            Custos &amp; preços
-          </button>
-        </div>
-
-        {/* 5. EMPRESA */}
-        <div className="serrano-sb-group">
-          <h5>Empresa</h5>
-          <button
-            type="button"
-            className={`serrano-sb-item ${secaoAtiva === 'empresa-holding' ? 'ativo' : ''}`}
-            onClick={() => setSecaoAtiva('empresa-holding')}
-          >
-            <svg viewBox="0 0 24 24"><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M9 22v-4h6v4M8 6h.01M16 6h.01M8 10h.01M16 10h.01M8 14h.01M16 14h.01"/></svg>
-            Holding &amp; Dados Fiscais
-          </button>
-        </div>
-      </aside>
+      
 
       {/* ─── ÁREA PRINCIPAL ─── */}
       <main className="serrano-main">
@@ -415,6 +291,34 @@ export default function ConcretoUsinaERP() {
         </header>
 
         {/* Page Header (Título + Ações) */}
+                {/* BARRA DE NAVEGAÇÃO DE FLUXO DA USINA */}
+        <nav className="serrano-nav-tabs" aria-label="Navegação da Usina">
+          {[
+            { id: "operacao-despacho", label: "Despacho ao Vivo", icon: "🚚", count: cargas.length },
+            { id: "operacao-programacao", label: "Programação de Cargas", icon: "📅" },
+            { id: "operacao-frota", label: "Frota & Telemetria", icon: "🚛", count: frota.length },
+            { id: "producao-central", label: "Central Dosadora NBR 7212", icon: "🏭" },
+            { id: "producao-op", label: "Ordens de Produção", icon: "📋" },
+            { id: "producao-laboratorio", label: "Laboratório & CPs (NBR 5739)", icon: "🔬", count: ensaios.length },
+            { id: "suprimentos-silos", label: "Mineração & Silos 96t", icon: "⛏️", count: silos.length },
+            { id: "comercial-propostas", label: "Orçamentos & Propostas", icon: "💼", count: propostas.length },
+            { id: "empresa-holding", label: "Holding & Dados Fiscais", icon: "🏢" },
+          ].map(tab => (
+            <button
+              key={tab.id}
+              type="button"
+              className={`serrano-tab-pill ${secaoAtiva === tab.id ? "ativo" : ""}`}
+              onClick={() => setSecaoAtiva(tab.id)}
+            >
+              <span>{tab.icon}</span>
+              {tab.label}
+              {tab.count !== undefined && tab.count > 0 && (
+                <span className="serrano-tab-badge">{tab.count}</span>
+              )}
+            </button>
+          ))}
+        </nav>
+
         <div className="serrano-ph">
           <div>
             <h1>Despacho ao vivo</h1>
