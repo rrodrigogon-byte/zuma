@@ -276,3 +276,21 @@ test('Anti-regressão TDZ (12/11): navigate e searchParams devem ser declarados 
   assert.ok(idxEffect !== -1, 'useEffect deve existir em BarbeariaERP.jsx');
   assert.ok(idxNav < idxEffect, 'useNavigate deve ser declarado antes de qualquer useEffect em BarbeariaERP.jsx para evitar Temporal Dead Zone (TDZ)');
 });
+
+test('Agenda Dino: preservação de cores por status em encaixes e distinção visual confirmado vs agendado', () => {
+  const agendaJsx = fs.readFileSync(path.join(ROOT, 'web/src/pages/admin/BarbeariaAgendaPeriodo.jsx'), 'utf8');
+  const agendaCss = fs.readFileSync(path.join(ROOT, 'web/src/pages/admin/BarbeariaAgendaPeriodo.css'), 'utf8');
+
+  // 1. data-status não pode ser mascarado para "encaixe"
+  assert.equal(agendaJsx.includes('data-status={eEncaixe ? "encaixe"'), false, 'data-status não deve ser mascarado como encaixe no card');
+  assert.equal(agendaJsx.includes('data-status={ag.isEncaixe ? "encaixe"'), false, 'data-status não deve ser mascarado como encaixe na matriz horária');
+
+  // 2. CSS de encaixe não pode forçar background vermelho destrutivo com !important
+  assert.equal(agendaCss.includes('.dino-cal-event-card.is-encaixe,\n.dino-cal-event-card[data-status="encaixe"]'), false, 'is-encaixe não pode forçar fundo vermelho sobre o status');
+
+  // 3. Confirmado vs Agendado devem ter cores de fundo e borda distintas
+  assert.ok(agendaCss.includes('[data-status="confirmado"]'), 'Regra para confirmado deve existir');
+  assert.ok(agendaCss.includes('[data-status="agendado"]'), 'Regra para agendado deve existir');
+  assert.ok(agendaCss.includes('.status-confirmado'), 'Badge de confirmado deve existir');
+  assert.ok(agendaCss.includes('.status-agendado'), 'Badge de agendado deve existir');
+});

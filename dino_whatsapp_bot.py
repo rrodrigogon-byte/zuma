@@ -167,7 +167,7 @@ def run_automation(test_client_name=None):
         return
 
     for client in clients:
-        if True:
+        if check_15_days_absence(client["last_visit"]):
             print(f"🔎 Cliente {client['name']} ausente há 15+ dias (Última visita registrada na base: {client['last_visit']}).")
             slots = get_available_slots()
             send_whatsapp_message(client, slots)

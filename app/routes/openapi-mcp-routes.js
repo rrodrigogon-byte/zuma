@@ -282,6 +282,28 @@ export const MCP_READONLY_TOOLS = [
     },
   },
   {
+    name: 'concreto_ensaios',
+    description: 'Consulta o controle tecnológico de concreto usinado: lotes de corpos de prova (CP), slump test e laudos NBR 5739.',
+    readOnlyHint: true,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        lote: { type: 'string', description: 'Número do lote do CP (ex: CP-2026-088)' }
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'concreto_silos',
+    description: 'Consulta níveis de estoque industrial: Silo Convicta 96t (cimento), Silo 60t e pátios da Serrano Mineração.',
+    readOnlyHint: true,
+    inputSchema: {
+      type: 'object',
+      properties: {},
+      additionalProperties: false,
+    },
+  },
+  {
     name: 'holding_consolidacao',
     description: 'Relatório executivo consolidado da holding Grupo Serrano & Palatare (concreto usinado + pizzaria gourmet).',
     readOnlyHint: true,
@@ -675,11 +697,42 @@ export function createOpenApiAndMcpRouter({ auth, obterEmpresaIdToken, barbearia
     // EXTENSÃO INDUSTRIAL: SERRANO CONCRETO
     // ==========================================
     if (name === 'concreto_cargas') {
+      const { obterDadosConcreto } = await import('../modules/concreto/servico.js').catch(() => ({}));
+      const dados = typeof obterDadosConcreto === 'function' ? await obterDadosConcreto() : {};
       return {
         empresa: 'Serrano Concreto Usinado',
         usinaCapacidade: '80 m³/h (Central Dosadora Automatizada)',
-        cargasProgramadasHoje: CONCRETO_CARGAS_INICIAIS || [],
-        catalogoTracos: CONCRETO_CATALOGO_INICIAL || []
+        cargasProgramadasHoje: dados.cargas || CONCRETO_CARGAS_INICIAIS || [],
+        catalogoTracos: dados.catalogo || CONCRETO_CATALOGO_INICIAL || [],
+        frota: dados.frota || []
+      };
+    }
+
+    if (name === 'concreto_ensaios') {
+      const { obterDadosConcreto } = await import('../modules/concreto/servico.js').catch(() => ({}));
+      const dados = typeof obterDadosConcreto === 'function' ? await obterDadosConcreto() : {};
+      const lote = String(args.lote || '').trim().toUpperCase();
+      const ensaios = dados.ensaios || [];
+      if (lote) {
+        const e = ensaios.find(x => x.lote.toUpperCase() === lote || x.id.toUpperCase() === lote);
+        return e || { aviso: "Lote " + lote + " nao localizado no laboratorio.", ensaiosDisponiveis: ensaios.map(x => x.lote) };
+      }
+      return {
+        laboratorio: 'Laboratório Tecnológico Serrano Concreto',
+        responsavelTecnica: 'Engª Karin Prestes (CREA-MT 027300)',
+        totalEnsaios: ensaios.length,
+        ensaios
+      };
+    }
+
+    if (name === 'concreto_silos') {
+      const { obterDadosConcreto } = await import('../modules/concreto/servico.js').catch(() => ({}));
+      const dados = typeof obterDadosConcreto === 'function' ? await obterDadosConcreto() : {};
+      return {
+        unidade: 'Serrano Concreto & Mineração Tangará da Serra/MT',
+        silosEstoque: dados.silos || [],
+        siloPrincipal: 'Silo Convicta Vertical 96 Toneladas',
+        mineracaoPropria: 'Serrano Mineração (Areia Média e Grossa de Rio)'
       };
     }
 

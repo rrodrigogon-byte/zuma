@@ -1865,25 +1865,17 @@
   background: color-mix(in srgb, #e05c5c 5%, var(--card));
 }
 
-/* ── ESTILO AVEC: ENCAIXES NA GRADE (TERRACOTA / VINHO ESCURO) ── */
+/* ── ESTILO ENCAIXE SOBREPOSTO NA GRADE (MANTÉM AS CORES DE STATUS) ── */
 .dino-cal-event-card.is-encaixe,
-.dino-cal-event-card[data-status="encaixe"],
 .dino-cal-slot-busy-pill.is-encaixe {
-  background: linear-gradient(135deg, #7c2d12 0%, #991b1b 100%) !important;
-  border-left: 5px solid #ef4444 !important;
-  border-color: #b91c1c !important;
-  color: #ffffff !important;
-  box-shadow: 0 4px 12px rgba(153, 27, 27, 0.25) !important;
-}
-
-.dino-cal-event-card.is-encaixe *,
-.dino-cal-slot-busy-pill.is-encaixe * {
-  color: #ffffff !important;
+  box-shadow: 0 0 0 2px #ea580c, 0 4px 14px rgba(234, 88, 12, 0.22) !important;
+  border-top: 2px dashed #fb923c !important;
+  border-bottom: 2px dashed #fb923c !important;
 }
 
 .dino-cal-encaixe-pill,
 .dino-cal-encaixe-mini-badge {
-  background: #dc2626 !important;
+  background: linear-gradient(135deg, #c2410c 0%, #ea580c 100%) !important;
   color: #ffffff !important;
   font-size: 10px !important;
   font-weight: 800 !important;
@@ -1894,6 +1886,7 @@
   align-items: center;
   gap: 4px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  text-transform: uppercase;
 }
 
 /* ── ESTILO AVEC: BLOQUEIO DE AGENDA (SLATE PROFISSIONAL) ── */
@@ -1955,7 +1948,161 @@
   width: 100%;
 }
 
-/* Cores Fiéis ao Avec (Verde Pinho para Agendamento Regular) */
+/* ── PALETA DE STATUS FIEL, CONTRASTADA E PROFISSIONAL (AVEC/DINO) ── */
+
+/* 1. CONFIRMADO: Verde Pinho com Borda Esmeralda Viva */
+.dino-cal-event-card[data-status="confirmado"],
+.dino-cal-slot-busy-pill[data-status="confirmado"] {
+  background: #14382c !important;
+  border-left: 5.5px solid #10b981 !important;
+  border: 1px solid #1a4d3c !important;
+  color: #ffffff !important;
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.15);
+}
+.dino-cal-event-card[data-status="confirmado"] .dino-cal-event-client,
+.dino-cal-slot-busy-pill[data-status="confirmado"] .dino-cal-slot-busy-pill-name {
+  color: #ffffff !important;
+  font-weight: 700;
+}
+.dino-cal-event-card[data-status="confirmado"] .dino-cal-event-service,
+.dino-cal-event-card[data-status="confirmado"] .dino-cal-event-time span {
+  color: #a7f3d0 !important;
+}
+
+/* 2. AGENDADO (Aguardando Confirmação): Azul Ardósia Distinto */
+.dino-cal-event-card[data-status="agendado"],
+.dino-cal-slot-busy-pill[data-status="agendado"] {
+  background: #18283f !important;
+  border-left: 5.5px solid #38bdf8 !important;
+  border: 1px solid #1e3a5f !important;
+  color: #ffffff !important;
+  box-shadow: 0 2px 8px rgba(56, 189, 248, 0.15);
+}
+.dino-cal-event-card[data-status="agendado"] .dino-cal-event-client,
+.dino-cal-slot-busy-pill[data-status="agendado"] .dino-cal-slot-busy-pill-name {
+  color: #ffffff !important;
+  font-weight: 700;
+}
+.dino-cal-event-card[data-status="agendado"] .dino-cal-event-service,
+.dino-cal-event-card[data-status="agendado"] .dino-cal-event-time span {
+  color: #bae6fd !important;
+}
+
+/* 3. EM ATENDIMENTO (Na Cadeira): Roxo Ametista */
+.dino-cal-event-card[data-status="em_atendimento"],
+.dino-cal-slot-busy-pill[data-status="em_atendimento"] {
+  background: #281442 !important;
+  border-left: 5.5px solid #a855f7 !important;
+  border: 1px solid #3b1d61 !important;
+  color: #ffffff !important;
+  box-shadow: 0 2px 8px rgba(168, 85, 247, 0.18);
+}
+.dino-cal-event-card[data-status="em_atendimento"] .dino-cal-event-client,
+.dino-cal-slot-busy-pill[data-status="em_atendimento"] .dino-cal-slot-busy-pill-name {
+  color: #ffffff !important;
+  font-weight: 700;
+}
+.dino-cal-event-card[data-status="em_atendimento"] .dino-cal-event-service,
+.dino-cal-event-card[data-status="em_atendimento"] .dino-cal-event-time span {
+  color: #e9d5ff !important;
+}
+
+/* 4. COMANDA ABERTA (Aguardando Pagamento no Caixa): Âmbar Ocre */
+.dino-cal-event-card[data-status="comanda_aberta"],
+.dino-cal-slot-busy-pill[data-status="comanda_aberta"] {
+  background: #381c08 !important;
+  border-left: 5.5px solid #f59e0b !important;
+  border: 1px solid #4d260c !important;
+  color: #ffffff !important;
+  box-shadow: 0 2px 8px rgba(245, 158, 11, 0.18);
+}
+.dino-cal-event-card[data-status="comanda_aberta"] .dino-cal-event-client,
+.dino-cal-slot-busy-pill[data-status="comanda_aberta"] .dino-cal-slot-busy-pill-name {
+  color: #ffffff !important;
+  font-weight: 700;
+}
+.dino-cal-event-card[data-status="comanda_aberta"] .dino-cal-event-service,
+.dino-cal-event-card[data-status="comanda_aberta"] .dino-cal-event-time span {
+  color: #fde68a !important;
+}
+
+/* 5. CONCLUÍDO (Comanda Paga e Fechada): Verde Mentol Escuro */
+.dino-cal-event-card[data-status="concluido"],
+.dino-cal-slot-busy-pill[data-status="concluido"] {
+  background: #0d281e !important;
+  border-left: 5.5px solid #34d399 !important;
+  border: 1px solid #143d2e !important;
+  color: #ffffff !important;
+  opacity: 0.95;
+}
+.dino-cal-event-card[data-status="concluido"] .dino-cal-event-client,
+.dino-cal-slot-busy-pill[data-status="concluido"] .dino-cal-slot-busy-pill-name {
+  color: #ffffff !important;
+  font-weight: 700;
+}
+.dino-cal-event-card[data-status="concluido"] .dino-cal-event-service,
+.dino-cal-event-card[data-status="concluido"] .dino-cal-event-time span {
+  color: #6ee7b7 !important;
+}
+
+/* 6. CANCELADO / NÃO COMPARECEU */
+.dino-cal-event-card[data-status="cancelado"],
+.dino-cal-event-card[data-status="nao_compareceu"],
+.dino-cal-slot-busy-pill[data-status="cancelado"] {
+  background: #1e1e1e !important;
+  border-left: 5.5px solid #ef4444 !important;
+  border: 1px solid #2d2d2d !important;
+  color: #9ca3af !important;
+  opacity: 0.72;
+}
+.dino-cal-event-card[data-status="cancelado"] .dino-cal-event-client,
+.dino-cal-event-card[data-status="nao_compareceu"] .dino-cal-event-client {
+  text-decoration: line-through;
+  color: #9ca3af !important;
+}
+
+/* ── BADGES DE STATUS NO RODAPÉ DO CARD ── */
+.dino-cal-event-status-badge {
+  font-size: 10px !important;
+  font-weight: 800 !important;
+  padding: 2px 7px !important;
+  border-radius: 4px !important;
+  letter-spacing: 0.03em;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  text-transform: uppercase;
+}
+.dino-cal-event-status-badge.status-confirmado {
+  background: #064e3b !important;
+  color: #6ee7b7 !important;
+  border: 1px solid #059669;
+}
+.dino-cal-event-status-badge.status-agendado {
+  background: #1e3a8a !important;
+  color: #93c5fd !important;
+  border: 1px solid #2563eb;
+}
+.dino-cal-event-status-badge.status-em_atendimento {
+  background: #4c1d95 !important;
+  color: #d8b4fe !important;
+  border: 1px solid #7c3aed;
+}
+.dino-cal-event-status-badge.status-comanda_aberta {
+  background: #78350f !important;
+  color: #fde68a !important;
+  border: 1px solid #d97706;
+}
+.dino-cal-event-status-badge.status-concluido {
+  background: #064e3b !important;
+  color: #a7f3d0 !important;
+  border: 1px solid #10b981;
+}
+.dino-cal-event-status-badge.status-cancelado {
+  background: #7f1d1d !important;
+  color: #fca5a5 !important;
+  border: 1px solid #dc2626;
+}
 .dino-cal-event-card[data-status="agendado"],
 .dino-cal-event-card[data-status="confirmado"] {
   background: #1e463a !important;

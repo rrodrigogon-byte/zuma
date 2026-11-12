@@ -5,14 +5,13 @@ import { availability } from '../app/core/barbershop-agenda.js';
 import { provisionarEquipeDino, DINO_EMPRESA_CANONICA } from '../app/dino-equipe-seed.js';
 import * as barbearia from '../app/barbearia-erp-kytto.js';
 
-describe('T-Rex Barbearia Dino - Persona Formal e Fidelidade Estrita de Agenda', () => {
-  it('1. O prompt do T-Rex deve banir girias ("da quebrada") e exigir postura formal e cortes', () => {
+describe('T-Rex Barbearia Dino - Naturalidade Acolhedora, Regra de 2 Opções e Agenda Precisa', () => {
+  it('1. O prompt do T-Rex deve banir girias e formalismo forcado ("Peço sinceras desculpas"), exigindo naturalidade', () => {
     provisionarEquipeDino();
     const persona = resolvePersona({ personaId: 'trex' }, process.env, DINO_EMPRESA_CANONICA);
     const prompt = personaSystemBlock(persona, 'Barbearia Dino');
 
     // Verificar se proíbe expressamente gírias informais
-    assert.match(prompt, /POSTURA CORPORATIVA, CORTÊS E FORMAL/i);
     assert.match(prompt, /PROIBIÇÃO TOTAL DE GÍRIAS E LINGUAJAR INFORMAL/i);
     assert.match(prompt, /"meu irmão"/i);
     assert.match(prompt, /"tá na régua"/i);
@@ -22,7 +21,12 @@ describe('T-Rex Barbearia Dino - Persona Formal e Fidelidade Estrita de Agenda',
     assert.match(prompt, /"de boa"/i);
     assert.match(prompt, /"foi mal"/i);
 
-    // Verificar saudações formais exigidas
+    // Verificar proibição de formalismo forçado / engessado de call center
+    assert.match(prompt, /PROIBIÇÃO DE LINGUAGEM ENGESSADA DE CALL CENTER/i);
+    assert.match(prompt, /"Peço sinceras desculpas pelo ocorrido"/i);
+    assert.match(prompt, /"Lamento pelo mal-entendido"/i);
+
+    // Verificar saudações naturais e acolhedoras exigidas
     assert.match(prompt, /Olá, \[Nome\]! Tudo bem\?/i);
     assert.match(prompt, /Perfeito!/i);
     assert.match(prompt, /Agendamento confirmado com sucesso!/i);
@@ -32,7 +36,23 @@ describe('T-Rex Barbearia Dino - Persona Formal e Fidelidade Estrita de Agenda',
     assert.doesNotMatch(prompt, /usa "meu irmão", "bora", "show demais"/i);
   });
 
-  it('2. O prompt do T-Rex deve impor fidelidade estrita aos slots da agenda', () => {
+  it('2. O prompt do T-Rex deve impor a REGRA DE DUAS OPÇÕES + LINK DE APOIO + CONDUÇÃO ATIVA NO WHATSAPP', () => {
+    const persona = resolvePersona({ personaId: 'trex' }, process.env, DINO_EMPRESA_CANONICA);
+    const prompt = personaSystemBlock(persona, 'Barbearia Dino');
+
+    // Verificar regra das duas opções
+    assert.match(prompt, /REGRA DAS DUAS OPÇÕES DE AGENDA/i);
+    assert.match(prompt, /DUAS opções reais de horários/i);
+
+    // Verificar link da agenda de apoio
+    assert.match(prompt, /https:\/\/kytto\.com\.br\/agendar\/dino/i);
+
+    // Verificar que NUNCA abandona o cliente no link e busca sempre finalizar no chat
+    assert.match(prompt, /CONTINUIDADE TOTAL DO ATENDIMENTO \(NUNCA ABANDONE O CLIENTE NO LINK\)/i);
+    assert.match(prompt, /buscar SEMPRE finalizar o agendamento completo pelo próprio chat/i);
+  });
+
+  it('3. O prompt do T-Rex deve impor fidelidade estrita aos slots da agenda', () => {
     const persona = resolvePersona({ personaId: 'trex' }, process.env, DINO_EMPRESA_CANONICA);
     const prompt = personaSystemBlock(persona, 'Barbearia Dino');
 
@@ -43,7 +63,7 @@ describe('T-Rex Barbearia Dino - Persona Formal e Fidelidade Estrita de Agenda',
     assert.match(prompt, /Encerramento da barbearia: 19:00/i);
   });
 
-  it('3. A agenda real da Barbearia Dino deve respeitar os limites de horario de Nati e Bruno', async () => {
+  it('4. A agenda real da Barbearia Dino deve respeitar os limites de horario de Nati e Bruno', async () => {
     provisionarEquipeDino();
     const scope = { empresaId: DINO_EMPRESA_CANONICA, lojaId: 'loja-1' };
     const profs = barbearia.listarProfissionais(DINO_EMPRESA_CANONICA);
@@ -80,7 +100,7 @@ describe('T-Rex Barbearia Dino - Persona Formal e Fidelidade Estrita de Agenda',
     assert.ok(ultimoSlotBruno <= '18:30', `Último slot do Bruno (${ultimoSlotBruno}) deve ser no máximo 18:30`);
   });
 
-  it('4. A configuracao da loja Dino deve fechar as 19h00', () => {
+  it('5. A configuracao da loja Dino deve fechar as 19h00', () => {
     const config = barbearia.obterConfiguracao(DINO_EMPRESA_CANONICA);
     assert.strictEqual(config.horarioFechamento, '19:00', 'Fechamento da loja Dino deve ser 19:00');
   });

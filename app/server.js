@@ -197,6 +197,7 @@ import { profissionalDoUsuario } from './dino-modo-barbeiro.js';
 import { provisionarEquipeDino } from './dino-equipe-seed.js';
 import { provisionarPalatarePizzaria, PALATARE_EMPRESA_ID, PALATARE_DADOS_EMPRESA } from './palatare-pizzaria-seed.js';
 import { provisionarConcretoUsina, CONCRETO_EMPRESA_ID, CONCRETO_DADOS_EMPRESA } from './concreto-usina-seed.js';
+import { criarRotasConcreto } from './modules/concreto/rotas.js';
 import { sincronizarTenantsEquipes } from './tenant-provisioning.js';
 import { executarHigienizacaoGapsProducao } from './core/higienizar-gaps-producao.js';
 import { sincronizarBloqueioNoPostgres, desativarBloqueioNoPostgres, inicializarBloqueiosEquipe } from './core/barbearia-bloqueios-sync.js';
@@ -2246,19 +2247,9 @@ app.use('/api/webhooks', createWhatsappAiWebhookRouter());
     }
     return varejoRouter(req, res, next);
   });
-  // [kytto-concreto] Módulo de Concreto Usinado, Cargas e Usina
-  app.get('/api/admin/concreto/dados', auth, requireStaff, async (req, res) => {
-    try {
-      const data = db();
-      const cargas = data.concreto_cargas || [];
-      const catalogo = data.concreto_produtos || [];
-      const frota = data.concreto_frota || [];
-      const empresa = data.empresas?.[CONCRETO_EMPRESA_ID] || CONCRETO_DADOS_EMPRESA;
-      return res.json({ ok: true, empresa, cargas, catalogo, frota });
-    } catch (e) {
-      return res.status(500).json({ error: e.message });
-    }
-  });
+  // [kytto-concreto] Módulo de Concreto Usinado, Cargas, Central e Usina
+  const concretoRouter = criarRotasConcreto();
+  app.use('/api/admin/concreto', auth, requireStaff, concretoRouter);
 
   // [kytto-palatare] Módulo de Pizzaria Suite, Montador de Pizzas & CRM Gastronômico 360°
   app.get('/api/admin/palatare/dados', auth, requireStaff, async (req, res) => {
