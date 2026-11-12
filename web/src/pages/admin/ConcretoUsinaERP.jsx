@@ -33,6 +33,12 @@ export default function ConcretoUsinaERP() {
   const [ensaios, setEnsaios] = useState([]);
   const [propostas, setPropostas] = useState([]);
   const [silos, setSilos] = useState([]);
+  const [compras, setCompras] = useState([]);
+  const [ordensProducao, setOrdensProducao] = useState([]);
+  const [dragas, setDragas] = useState([]);
+  const [patiosMineracao, setPatiosMineracao] = useState([]);
+  const [vendasAgregados, setVendasAgregados] = useState([]);
+  const [medicoesObras, setMedicoesObras] = useState([]);
   const [empresa, setEmpresa] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -103,6 +109,12 @@ export default function ConcretoUsinaERP() {
         setEnsaios(res.ensaios || []);
         setPropostas(res.propostas || []);
         setSilos(res.silos || []);
+        setCompras(res.compras || []);
+        setOrdensProducao(res.ordensProducao || []);
+        setDragas(res.dragas || []);
+        setPatiosMineracao(res.patiosMineracao || []);
+        setVendasAgregados(res.vendasAgregados || []);
+        setMedicoesObras(res.medicoesObras || []);
       }
     } catch (e) {
       toast('Erro ao carregar dados da Usina Serrano: ' + (e.message || 'Falha de conexão'), 'error');
@@ -482,7 +494,7 @@ export default function ConcretoUsinaERP() {
                           <small>{c.cliente}</small>
                         </span>
                         <span>
-                          FCK {c.fck} MPa · {c.brita || 'Brita 1'}
+                          {String(c.fck || '').startsWith('FCK') ? c.fck : `FCK ${c.fck} MPa · ${c.brita || 'Brita 1'}`}
                           <br />
                           <small style={{ color: 'var(--text-muted)' }}>slump {c.slump || '14 ± 2 cm'}</small>
                         </span>
@@ -833,6 +845,240 @@ export default function ConcretoUsinaERP() {
                   <b style={{ display: 'block', fontSize: 14 }}>Barramento SEFAZ-MT: Ativo e Sincronizado</b>
                   <small style={{ color: 'var(--status-ok)' }}>● Emissão autorizada de CT-e, Romaneios NBR 7212 e MDF-e de frota própria</small>
                 </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+
+        {/* ─── ABA 1B: PROGRAMAÇÃO DE CONCRETAGENS ─── */}
+        {secaoAtiva === 'operacao-programacao' && (
+          <div className="serrano-card">
+            <div className="serrano-card-h">
+              <div>
+                <h3>Programação de Concretagens Futuras &amp; Calendário de Obras</h3>
+                <small style={{ color: 'var(--text-muted)' }}>Escalação antecipada de frotas e reserva de traços estruturais</small>
+              </div>
+              <button 
+                type="button" 
+                className="btn-serrano pri"
+                style={{ marginLeft: 'auto' }}
+                onClick={() => setModalNovaCargaAberto(true)}
+              >
+                + Nova Concretagem
+              </button>
+            </div>
+            <div style={{ padding: 20 }}>
+              <div style={{ display: 'grid', gap: 12 }}>
+                {cargas.map((c, i) => (
+                  <div key={c.id || i} style={{ background: 'var(--surface-2)', border: '1px solid var(--joint)', borderRadius: 8, padding: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <b style={{ fontFamily: 'var(--font-data)', fontSize: 14 }}>#{c.numero || 1001 + i}</b>
+                        <span className="serrano-pill serrano-p-ok">{c.status === 'concluido' ? 'Concluída' : 'Agendada'}</span>
+                        <span style={{ fontSize: 12, color: 'var(--text-muted)', fontFamily: 'var(--font-data)' }}>Horário: {c.horarioAgendado || '08:30'}</span>
+                      </div>
+                      <div style={{ fontWeight: 700, fontSize: 15, marginTop: 4 }}>{c.obra}</div>
+                      <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Cliente: {c.cliente} · {c.endereco}</div>
+                      <div style={{ fontSize: 13, marginTop: 4 }}>
+                        <b>{String(c.fck || '').startsWith('FCK') ? c.fck : `FCK ${c.fck} MPa`}</b> · Volume: <b>{c.volumeM3} m³</b> · Bomba: <b>{c.bomba || 'Calha Direta'}</b>
+                      </div>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontFamily: 'var(--font-display)', fontSize: 20, fontWeight: 800 }}>
+                        R$ {Number(c.valorTotal || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      </div>
+                      <button 
+                        type="button" 
+                        className="btn-serrano"
+                        style={{ marginTop: 6 }}
+                        onClick={() => setModalRomaneioAberto(c)}
+                      >
+                        Romaneio NBR 7212
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ─── ABA 1C: FROTA & TELEMETRIA ─── */}
+        {secaoAtiva === 'operacao-frota' && (
+          <div className="serrano-card">
+            <div className="serrano-card-h">
+              <div>
+                <h3>Frota Ativa · Betoneiras &amp; Caminhões Bomba Lança</h3>
+                <small style={{ color: 'var(--text-muted)' }}>Telemetria em tempo real, horímetro e status operacional em Tangará da Serra</small>
+              </div>
+            </div>
+            <div style={{ padding: 20 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
+                {(frota.length > 0 ? frota : [
+                  { id: 'BT-01', tipo: 'Betoneira 8 m³', placa: 'RRA-4E80', chassi: 'VW Constellation 26.280', motorista: 'Marcos Silveira', status: 'em_rota', km: 48250, horimetro: '3.120h' },
+                  { id: 'BT-02', tipo: 'Betoneira 8 m³', placa: 'RRA-4E81', chassi: 'VW Constellation 26.280', motorista: 'Carlos Eduardo Santos', status: 'em_rota', km: 51320, horimetro: '3.450h' },
+                  { id: 'BT-03', tipo: 'Betoneira 8 m³', placa: 'RRA-4E82', chassi: 'VW Constellation 26.280', motorista: 'Valdemir Oliveira', status: 'disponivel', km: 42100, horimetro: '2.890h' },
+                  { id: 'BT-04', tipo: 'Betoneira 10 m³', placa: 'RRB-1A10', chassi: 'Mercedes-Benz Axor 3131', motorista: 'Roberto Lima', status: 'em_rota', km: 38400, horimetro: '2.410h' },
+                  { id: 'BT-05', tipo: 'Betoneira 10 m³', placa: 'RRB-1A11', chassi: 'Mercedes-Benz Axor 3131', motorista: 'Fernando Souza', status: 'carregando', km: 35100, horimetro: '2.150h' },
+                  { id: 'BL-01', tipo: 'Bomba Lança 32 m', placa: 'RRC-9F32', chassi: 'Scania P310 8x4', motorista: 'Gilberto Ramos (Operador RT)', status: 'na_obra', km: 29800, horimetro: '1.980h' },
+                  { id: 'BL-02', tipo: 'Bomba Lança 36 m', placa: 'RRC-9F36', chassi: 'Scania P360 8x4', motorista: 'Claudemir Castro (Operador RT)', status: 'deslocando', km: 21400, horimetro: '1.450h' }
+                ]).map((f, idx) => (
+                  <div key={f.id || idx} style={{ background: 'var(--surface-2)', border: '1px solid var(--joint)', borderRadius: 8, padding: 16 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <b style={{ fontFamily: 'var(--font-data)', fontSize: 16, color: 'var(--serrano-orange-text)' }}>{f.id}</b>
+                      <span className={`serrano-pill ${f.status === 'em_rota' ? 'serrano-p-live' : f.status === 'na_obra' ? 'serrano-p-ok' : 'serrano-p-load'}`}>
+                        {f.status === 'em_rota' ? 'Em Rota' : f.status === 'na_obra' ? 'Bomba na Obra' : f.status === 'carregando' ? 'Carregando' : 'Disponível'}
+                      </span>
+                    </div>
+                    <div style={{ fontWeight: 600, fontSize: 13, marginTop: 4 }}>{f.tipo}</div>
+                    <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{f.chassi} · Placa: <b>{f.placa}</b></div>
+                    <div style={{ fontSize: 12, marginTop: 8 }}>Motorista / Operador: <b>{f.motorista}</b></div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--joint)', fontSize: 11, color: 'var(--text-muted)' }}>
+                      <span>Horímetro: <b>{f.horimetro || '2.800h'}</b></span>
+                      <span>Odômetro: <b>{f.km ? `${Number(f.km).toLocaleString('pt-BR')} km` : '42.000 km'}</b></span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ─── ABA 2B: ORDENS DE PRODUÇÃO (OPS) ─── */}
+        {secaoAtiva === 'producao-op' && (
+          <div className="serrano-card">
+            <div className="serrano-card-h">
+              <div>
+                <h3>Ordens de Produção (Bateladas Industriais &amp; Pesagem dos Silos)</h3>
+                <small style={{ color: 'var(--text-muted)' }}>Rastreabilidade de bateladas NBR 7212 com consumo real de cimento e agregados</small>
+              </div>
+            </div>
+            <div style={{ padding: 20 }}>
+              <div style={{ display: 'grid', gap: 12 }}>
+                {(ordensProducao.length > 0 ? ordensProducao : [
+                  { numero: 'OP-2026-091', dataHora: '2026-11-12 08:30:00', obra: 'Edifício Residencial Serra Dourada · Lajes 4º Pav.', cliente: 'Construtora MT Horizon', fck: 30, volumeM3: 24, totalBateladas: 3, betoneirasEscaladas: ['BT-01', 'BT-02', 'BT-03'], status: 'concluida' },
+                  { numero: 'OP-2026-092', dataHora: '2026-11-12 13:45:00', obra: 'Piso Industrial Galpão de Cargas · Etapa 2', cliente: 'AgroLog Transportes & Logística', fck: 35, volumeM3: 32, totalBateladas: 4, betoneirasEscaladas: ['BT-04', 'BT-05'], status: 'em_pesagem' },
+                  { numero: 'OP-2026-093', dataHora: '2026-11-12 16:15:00', obra: 'Casa Térrea Lote 12 Qd. 08 · Vigas e Baldrames', cliente: 'Eng. Marcelo Dantas', fck: 25, volumeM3: 16, totalBateladas: 2, betoneirasEscaladas: ['BT-03'], status: 'programada' }
+                ]).map((op, idx) => (
+                  <div key={op.numero || idx} style={{ background: 'var(--surface-2)', border: '1px solid var(--joint)', borderRadius: 8, padding: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <b style={{ fontFamily: 'var(--font-data)', fontSize: 15, color: 'var(--serrano-orange-text)' }}>{op.numero}</b>
+                        <span className={`serrano-pill ${op.status === 'concluida' ? 'serrano-p-ok' : op.status === 'em_pesagem' ? 'serrano-p-live' : 'serrano-p-load'}`}>
+                          {op.status === 'concluida' ? 'Concluída' : op.status === 'em_pesagem' ? 'Pesagem dos Silos' : 'Programada'}
+                        </span>
+                        <small style={{ color: 'var(--text-muted)' }}>{op.dataHora}</small>
+                      </div>
+                      <div style={{ fontWeight: 700, fontSize: 14, marginTop: 4 }}>{op.obra}</div>
+                      <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Cliente: {op.cliente}</div>
+                      <div style={{ fontSize: 13, marginTop: 4 }}>
+                        Traço: <b>FCK {op.fck} MPa</b> · Volume: <b>{op.volumeM3} m³</b> ({op.totalBateladas} bateladas de usina) · Veículos: <b>{(op.betoneirasEscaladas || []).join(', ')}</b>
+                      </div>
+                    </div>
+                    <div>
+                      <button 
+                        type="button" 
+                        className="btn-serrano"
+                        onClick={() => alert(`Ordem de Produção ${op.numero} impressa com sucesso!`)}
+                      >
+                        Imprimir Ordem
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ─── ABA 3B: COMPRAS DE INSUMOS ─── */}
+        {secaoAtiva === 'suprimentos-compras' && (
+          <div className="serrano-card">
+            <div className="serrano-card-h">
+              <div>
+                <h3>Compras de Insumos &amp; Reposição de Silos (Suprimentos da Usina)</h3>
+                <small style={{ color: 'var(--text-muted)' }}>Cimento a granel, agregados graúdos, aditivos e sílica ativa</small>
+              </div>
+            </div>
+            <div style={{ padding: 20 }}>
+              <div style={{ display: 'grid', gap: 12 }}>
+                {(compras.length > 0 ? compras : [
+                  { numero: 'PC-2026-041', fornecedor: 'Votorantim Cimentos (Nobres/MT)', insumo: 'Cimento CP II-F-32 Granel', quantidade: '36 ton', precoUnitario: 520, valorTotal: 18720, status: 'entregue', siloDestino: 'Silo 01' },
+                  { numero: 'PC-2026-042', fornecedor: 'Basf Master Builders Solutions', insumo: 'Aditivo Plastificante MasterPozzolith', quantidade: '1.000 L', precoUnitario: 14.50, valorTotal: 14500, status: 'entregue', siloDestino: 'Reservatório Aditivos' },
+                  { numero: 'PC-2026-043', fornecedor: 'Pedreira Serra Dourada (Tangará/MT)', insumo: 'Brita 1 Granítica 9,5 a 19mm', quantidade: '120 ton', precoUnitario: 68.00, valorTotal: 8160, status: 'em_transito', siloDestino: 'Baia Brita 1' },
+                  { numero: 'PC-2026-044', fornecedor: 'Votorantim Cimentos (Nobres/MT)', insumo: 'Cimento CP V Alta Resistência', quantidade: '32 ton', precoUnitario: 590, valorTotal: 18880, status: 'em_transito', siloDestino: 'Silo 02' }
+                ]).map((pc, idx) => (
+                  <div key={pc.numero || idx} style={{ background: 'var(--surface-2)', border: '1px solid var(--joint)', borderRadius: 8, padding: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <b style={{ fontFamily: 'var(--font-data)', fontSize: 14 }}>{pc.numero}</b>
+                        <span className={`serrano-pill ${pc.status === 'entregue' ? 'serrano-p-ok' : 'serrano-p-live'}`}>
+                          {pc.status === 'entregue' ? 'Entregue no Silo' : 'Em Trânsito'}
+                        </span>
+                        <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Destino: <b>{pc.siloDestino}</b></span>
+                      </div>
+                      <div style={{ fontWeight: 700, fontSize: 14, marginTop: 4 }}>{pc.insumo}</div>
+                      <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Fornecedor: {pc.fornecedor}</div>
+                      <div style={{ fontSize: 12, marginTop: 4 }}>Quantidade: <b>{pc.quantidade}</b> · Unitário: <b>R$ {Number(pc.precoUnitario || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</b></div>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontFamily: 'var(--font-display)', fontSize: 20, fontWeight: 800 }}>
+                        R$ {Number(pc.valorTotal || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ─── ABA 4B: CUSTOS & PREÇOS ─── */}
+        {secaoAtiva === 'comercial-custos' && (
+          <div className="serrano-card">
+            <div className="serrano-card-h">
+              <div>
+                <h3>Cálculo de Custos Industriais &amp; Precificação de Concreto (Tangará da Serra)</h3>
+                <small style={{ color: 'var(--text-muted)' }}>Custo direto de insumos (BOM), frete, energia, bombeamento e margem de contribuição</small>
+              </div>
+            </div>
+            <div style={{ padding: 20 }}>
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 13 }}>
+                  <thead>
+                    <tr style={{ background: 'var(--surface-2)', borderBottom: '2px solid var(--joint)' }}>
+                      <th style={{ padding: 10 }}>Traço / FCK</th>
+                      <th style={{ padding: 10 }}>Cimento (kg)</th>
+                      <th style={{ padding: 10 }}>Areia (m³)</th>
+                      <th style={{ padding: 10 }}>Brita (m³)</th>
+                      <th style={{ padding: 10 }}>Aditivo (L)</th>
+                      <th style={{ padding: 10 }}>Custo Direto / m³</th>
+                      <th style={{ padding: 10 }}>Preço Tabela / m³</th>
+                      <th style={{ padding: 10 }}>Margem Bruta</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[
+                      { fck: 'FCK 20 MPa', cim: '300 kg', areia: '0.65 m³', brita: '0.85 m³', adit: '2.4 L', custo: 248.50, preco: 380.00, margem: '34.6%' },
+                      { fck: 'FCK 25 MPa (Padrão)', cim: '340 kg', areia: '0.62 m³', brita: '0.82 m³', adit: '2.7 L', custo: 274.20, preco: 410.00, margem: '33.1%' },
+                      { fck: 'FCK 30 MPa (Estrutural)', cim: '380 kg', areia: '0.58 m³', brita: '0.80 m³', adit: '3.0 L', custo: 301.80, preco: 440.00, margem: '31.4%' },
+                      { fck: 'FCK 35 MPa (Piso Industrial)', cim: '420 kg', areia: '0.55 m³', brita: '0.78 m³', adit: '3.4 L', custo: 332.10, preco: 480.00, margem: '30.8%' },
+                      { fck: 'FCK 40 MPa (Alta Resistência)', cim: '460 kg', areia: '0.52 m³', brita: '0.75 m³', adit: '3.8 L', custo: 365.40, preco: 530.00, margem: '31.1%' }
+                    ].map((row, idx) => (
+                      <tr key={idx} style={{ borderBottom: '1px solid var(--joint)' }}>
+                        <td style={{ padding: 10, fontWeight: 700 }}>{row.fck}</td>
+                        <td style={{ padding: 10 }}>{row.cim}</td>
+                        <td style={{ padding: 10 }}>{row.areia}</td>
+                        <td style={{ padding: 10 }}>{row.brita}</td>
+                        <td style={{ padding: 10 }}>{row.adit}</td>
+                        <td style={{ padding: 10, fontFamily: 'var(--font-data)', fontWeight: 600 }}>R$ {row.custo.toFixed(2)}</td>
+                        <td style={{ padding: 10, fontFamily: 'var(--font-data)', fontWeight: 700, color: 'var(--serrano-orange-text)' }}>R$ {row.preco.toFixed(2)}</td>
+                        <td style={{ padding: 10 }}><span className="serrano-pill serrano-p-ok">{row.margem}</span></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </div>
           </div>
