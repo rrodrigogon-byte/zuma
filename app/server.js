@@ -2253,6 +2253,7 @@ app.use('/api/webhooks', createWhatsappAiWebhookRouter());
   app.use('/api/admin/balanca-rodoviaria', auth, requireStaff, (req, res, next) => {
     req.url = '/balanca' + (req.url === '/' ? '' : req.url);
     return concretoRouter(req, res, next);
+  });
 
   // [kytto-concreto] Módulo de Concreto Usinado, Cargas e Usina
   app.get('/api/admin/concreto/dados', auth, requireStaff, async (req, res) => {
