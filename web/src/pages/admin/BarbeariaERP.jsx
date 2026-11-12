@@ -3,6 +3,7 @@ import BarbeariaNovoAgendamentoModal from "./BarbeariaNovoAgendamentoModal";
 import BarbeariaComandasAbertas from "./BarbeariaComandasAbertas";
 import BarbeariaAtendimentoBoard from "./BarbeariaAtendimentoBoard";
 import BarbeariaPlanosAssinaturasPanel from "./BarbeariaPlanosAssinaturasPanel";
+import BarbeariaFichaCompletaClienteModal from "./BarbeariaFichaCompletaClienteModal";
 import BarbeariaHistoricoCliente from "./BarbeariaHistoricoCliente";
 import {
   lazy,
@@ -757,6 +758,7 @@ export default function BarbeariaERP({ tabInicial } = {}) {
   });
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState("");
+  const [modalFichaCompleta, setModalFichaCompleta] = useState(null);
   const [modal, setModal] = useState(null);
   const [modalItemValor, setModalItemValor] = useState(null);
   const [modalReabrir, setModalReabrir] = useState(null);
@@ -10974,6 +10976,23 @@ export default function BarbeariaERP({ tabInicial } = {}) {
               nome={agendamento.clienteNome}
             />
             <div style={styles.modalActions}>
+              <button
+                type="button"
+                style={{
+                  ...styles.primary,
+                  background: "linear-gradient(135deg, #1e3a8a, #0284c7)",
+                  color: "#fff",
+                  border: "1px solid #38bdf8",
+                  fontWeight: 700,
+                }}
+                onClick={() => setModalFichaCompleta({
+                  clienteId: agendamento.clienteId || agendamento.clienteCrmId,
+                  telefone: agendamento.clienteTelefone,
+                  nome: agendamento.clienteNome,
+                })}
+              >
+                🔍 Ficha 360 (Pacotes, Créditos & Comandas)
+              </button>
               {clienteCrm ? (
                 <button
                   type="button"
@@ -14539,6 +14558,16 @@ export default function BarbeariaERP({ tabInicial } = {}) {
         {renderModalItemValor()}
         {renderModalReabrir()}
         {renderModalRefechar()}
+      <BarbeariaFichaCompletaClienteModal
+        aberto={Boolean(modalFichaCompleta)}
+        onClose={() => setModalFichaCompleta(null)}
+        clienteId={modalFichaCompleta?.clienteId}
+        telefone={modalFichaCompleta?.telefone}
+        nome={modalFichaCompleta?.nome}
+        onClienteAtualizado={() => {
+          if (typeof carregar === 'function') carregar();
+        }}
+      />
     </div>
   );
 }

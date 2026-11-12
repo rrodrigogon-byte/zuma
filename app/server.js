@@ -12,6 +12,7 @@ import { createAgroRouter, createAgropecuariaRouter, createCteMdfeRouter, create
 import { situacaoMemoria } from './vigia-memoria.js';
 import { registerAvecMixRoutes } from './avec-revenue-mix-routes.js';
 import { loadAvecMix } from './core/avec-revenue-mix.js';
+import * as barbeariaClienteFicha360 from './barbearia-cliente-ficha-360.js';
 import express from 'express';
 import { createPerformanceMetrics, eventLoopMetrics } from './core/performance-metrics.js';
 import { cleanCustomerDisplayName } from './core/whatsapp-ai-normalize.js';
@@ -8174,6 +8175,33 @@ app.post('/api/admin/barbearia/clientes', (req, res) => {
   try { res.status(201).json({ ok: true, cliente: sanitizarClienteBarbearia(clientesKytto.criarCliente(legacyEmpresaId(req), req.body || {})) }); }
   catch (error) { res.status(400).json({ error: error.message }); }
 });
+app.get('/api/admin/barbearia/clientes/:id/ficha-completa', (req, res) => {
+  try {
+    const empresaId = legacyEmpresaId(req);
+    const ficha = barbeariaClienteFicha360.obterFichaCompletaCliente(empresaId, req.params.id, {
+      telefone: req.query?.telefone,
+      nome: req.query?.nome,
+    });
+    res.json(ficha);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+app.post('/api/admin/barbearia/clientes/:id/movimento-credito', (req, res) => {
+  try {
+    const empresaId = legacyEmpresaId(req);
+    const resultado = barbeariaClienteFicha360.registrarMovimentoCreditoCliente(empresaId, req.params.id, {
+      ...(req.body || {}),
+      usuario: req.user?.email || req.user?.nome || 'Operador',
+    });
+    audit(req, 'MOVIMENTO CREDITO BARBEARIA', `${req.params.id} tipo=${req.body?.tipo} valor=${req.body?.valor}`);
+    res.json(resultado);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
 app.patch('/api/admin/barbearia/clientes/:id', (req, res) => {
   try {
     const cliente = clientesKytto.atualizarCliente(legacyEmpresaId(req), req.params.id, req.body || {});
