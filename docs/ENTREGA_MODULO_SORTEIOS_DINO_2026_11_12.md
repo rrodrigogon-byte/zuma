@@ -1,82 +1,70 @@
 # Módulo Oficial de Sorteios & Campanhas Premiadas Kytto
 ## Barbearia Dino, Perfumaria & Loja Online (E-commerce)
 
-**Data de Implantação:** 12 de Novembro de 2026  
+**Data de Implantação e Atualização:** 12 de Novembro de 2026  
 **Ambiente:** Produção (PRD) — `https://kytto.com.br` e `https://setpoint.kytto.com.br`  
 **Responsável Técnico:** Rodrigo Gonçalves / Equipe de Engenharia Kytto  
-**Status do Deploy no Render:** `LIVE` (Serviço `setpoint` - `srv-d8iudokm0tmc73c07iog`, commit `1dd51be1e`)
+**Status do Deploy no Render:** `LIVE` (Serviço `setpoint` - `srv-d8iudokm0tmc73c07iog`, commit `d9af74155`)
 
 ---
 
-## 1. Visão Geral da Solução
+## 1. Visão Geral da Solução Completa
 
-Atendendo à demanda de Dino para impulsionar as vendas e o engajamento dos seus negócios (**Barbearia Dino**, **Loja de Produtos & Perfumaria** e **E-commerce**), foi concebido, desenvolvido e colocado em produção o **Módulo de Sorteios & Campanhas Premiadas Kytto**.
+Atendendo com excelência à solicitação de Dino para alavancar as vendas e o engajamento dos seus negócios (**Barbearia Dino**, **Loja de Produtos & Perfumaria** e **E-commerce**), o **Módulo Oficial de Sorteios & Campanhas Premiadas Kytto** foi integralmente entregue e aprimorado em ambiente de produção.
 
-O módulo conecta o fluxo de atendimento presencial e digital diretamente a um motor de fidelização com premiações auditadas matematicamente via criptografia SHA-256 (RFC 7518), garantindo credibilidade absoluta perante os clientes e conformidade com a LGPD.
+A plataforma unifica o atendimento presencial de barbearia, as compras físicas de perfumaria e o e-commerce em um ecossistema com apuração ao vivo por roleta digital auditada criptograficamente via SHA-256 (RFC 7518) e portal de transparência para os clientes.
 
 ---
 
-## 2. Principais Funcionalidades Entregues
+## 2. Funcionalidades Completas Entregues em Produção
 
-### 2.1. Regras de Pontuação Inteligentes e Flexíveis
+### 2.1. Regras de Pontuação Inteligentes e Atrativas
 - **Serviços da Barbearia (Cabelo, Barba, Combos):** A cada R$ 50,00 gastos na comanda, o cliente recebe automaticamente **1 Número da Sorte**.
-- **Perfumaria e Cosméticos (Loja & Balcão):** Compras de itens de perfumaria fina e cosméticos pontuam **EM DOBRO (2x)**: a cada R$ 50,00 gastos, o cliente recebe **2 Números da Sorte**.
-- **Membros do Clube Dino:** Assinantes ativos do clube de assinaturas recebem **+3 bilhetes bônus** por campanha como benefício de fidelidade.
-- **Emissão Manual de Cortesia (Balcão):** Permite que Dino e gerentes emitam números da sorte como brinde ou cortesia para ações de encantamento e recuperação de clientes.
+- **Perfumaria e Cosméticos (Loja & Balcão):** Compras de produtos pontuam **EM DOBRO (2x)**: a cada R$ 50,00, o cliente recebe **2 Números da Sorte**, alavancando a saída de perfumes e produtos de cuidado masculino.
+- **Assinantes do Clube Dino:** Clientes com planos mensais ativos recebem **+3 bilhetes bônus de largada** em cada edição para valorizar a fidelidade.
+- **Emissão Manual de Cortesia (Balcão):** Permite ao Dino ou gerente emitir bilhetes avulsos de cortesia no balcão com botão para **enviar imediatamente para o WhatsApp do cliente**.
 
-### 2.2. Geração Automática Integrada ao Fechamento de Comandas
-- No encerramento da comanda presencial via PDV (`posFaturamentoComanda`), o sistema identifica o cliente, calcula os valores de serviços e itens de perfumaria, gera os bilhetes da sorte em tempo real e anexa o aviso comemorativo no extrato e via WhatsApp.
+### 2.2. Automação no Pós-Faturamento de Comandas
+- No encerramento da comanda no PDV presencial (`posFaturamentoComanda`), o sistema calcula os bilhetes com base no mix de serviços e produtos e anexa a mensagem comemorativa no extrato.
 
-### 2.3. Sorteador Oficial com Roleta Digital e Auditoria Criptográfica
-- **Interface de Roleta Digital ao Vivo:** Animação gráfica de roleta com som e efeito confete para realizar sorteios presenciais na barbearia ou em lives no Instagram.
-- **Motor Criptográfico Determinístico SHA-256 (RFC 7518):** O sorteio gera um hash criptográfico imutável baseado no ID da campanha, lista ordenada de bilhetes concorrentes, semente temporal e chave do tenant, provando que não há interferência humana ou manipulação de resultados.
-- **Certificado de Auditoria:** Cada ganhador possui um código de validação público para conferência.
+### 2.3. Sorteador Oficial com Roleta Digital e Efeitos Sonoros
+- **Roleta Digital Interativa com Áudio Sintético Web Audio:** O sorteador emite cliques mecânicos realistas desacelerando durante o suspense da roleta e fanfarra de vitória ao revelar o bilhete contemplado.
+- **Auditoria Criptográfica SHA-256 (RFC 7518):** Geração de semente temporal e hash criptográfico imutável, provando a lisura do sorteio.
+- **Disparo Direto para o WhatsApp do Ganhador:** Mensagem oficial formatada com código de validação e prêmio para envio em 1 clique.
 
-### 2.4. Portal Público do Cliente (`/sorteios/dino`)
-- **Consulta por WhatsApp/Telefone:** O cliente acessa `https://kytto.com.br/sorteios/dino`, digita seu número de celular e visualiza instantaneamente todos os seus bilhetes gerados, o histórico de compras vinculadas e se algum bilhete foi premiado.
-- **Regulamento e Transparência:** Regras claras de participação e pontuação.
-- **Hall de Ganhadores com Proteção LGPD:** Exibição pública dos ganhadores com anonimização automática do sobrenome (ex: *Rodrigo G.*).
+### 2.4. Gestão e Exportação para Auditoria
+- **Exportação de Bilhetes em CSV:** Botão exclusivo no painel administrativo para exportar todos os bilhetes emitidos com colunas auditáveis (Número, Cliente, WhatsApp, Origem, Valor da Compra, Data, Premiado e Hash SHA-256).
 
-### 2.5. Integração com WhatsApp
-- Disparo oficial com mensagem formatada parabenizando o ganhador, contendo o bilhete premiado, prêmio conquistado, hash de auditoria e link para combinar a entrega.
+### 2.5. Portal Público do Cliente (`/sorteios/dino`)
+- **Contagem Regressiva ao Vivo:** Exibe dias, horas e minutos restantes para o próximo sorteio.
+- **Consulta com Máscara de WhatsApp:** Digitação assistida `(65) 99999-9999` para o cliente ver seus bilhetes ativos e premiados.
+- **Botão "Guardar no WhatsApp":** Permite ao cliente salvar seus números ou compartilhar no status.
+- **Botões de Conversão Imediata:** Links diretos para *"Agendar Horário na Barbearia"* e *"Perfumaria com 2x Bilhetes"*.
+- **Hall de Ganhadores com Anonimização LGPD:** Divulgação segura preservando a privacidade do cliente.
+
+### 2.6. Acessos e Atalhos no ERP Dino
+- **Ações Rápidas Globais (`+ Criar / Lançar`):** Atalho `🎁 Sorteios & Prêmios` disponível no topo de todas as telas.
+- **Menu Lateral do ERP:** Ícone de presente `🎁` com link direto.
+- **Aba de Relacionamento:** Integrado dentro da área de relacionamento do `BarbeariaERP`.
 
 ---
 
-## 3. URLs e Links Oficiais em Produção
+## 3. Links Oficiais de Acesso em Produção
 
-| Recurso | URL em Produção | Acesso |
+| Recurso | URL em Produção | Descrição |
 | :--- | :--- | :--- |
-| **Painel de Gestão de Sorteios** | `https://kytto.com.br/admin/sorteios` | Acesso restrito (Dino / Administradores) |
-| **Portal Público do Cliente** | `https://kytto.com.br/sorteios/dino` | Acesso público (Clientes da Barbearia) |
-| **API Pública de Sorteios** | `https://kytto.com.br/api/publico/sorteios/dino` | Retorno JSON público de campanhas ativas |
-| **Consulta Pública de Bilhetes** | `https://kytto.com.br/api/publico/sorteios/dino/meus-bilhetes?telefone=...` | Busca de bilhetes por telefone/WhatsApp |
-| **Atalho no Menu ERP Dino** | Ícone de presente 🎁 na barra lateral do ERP | Acesso rápido pelo painel operacional |
+| **Painel Administrativo de Sorteios** | [https://kytto.com.br/admin/sorteios](https://kytto.com.br/admin/sorteios) | Gestão de campanhas, emissão de bilhetes, exportação CSV e roleta ao vivo |
+| **Portal Público de Consulta do Cliente** | [https://kytto.com.br/sorteios/dino](https://kytto.com.br/sorteios/dino) | Consulta de bilhetes por WhatsApp, regulamento e contagem regressiva |
+| **Barbearia ERP Dino** | [https://kytto.com.br/admin/barbearia-erp](https://kytto.com.br/admin/barbearia-erp) | Central operacional com atalho em Ações Rápidas |
+| **Agendamento Online Dino** | [https://kytto.com.br/agendar/dino](https://kytto.com.br/agendar/dino) | Agendamento público integrado aos sorteios |
+| **Catálogo Perfumaria Dino** | [https://kytto.com.br/perfumaria/dino](https://kytto.com.br/perfumaria/dino) | E-commerce e catálogo de perfumes com pontuação 2x |
+| **API Pública de Sorteios** | `https://kytto.com.br/api/publico/sorteios/dino` | Endpoint JSON de campanhas e prêmios |
 
 ---
 
-## 4. Evidências dos Testes de Homologação em Produção (PRD)
+## 4. Evidências Técnicas e de Homologação
 
-### 4.1. Suíte de Testes Unitários Automatizada
-Executada com 100% de sucesso (`9 de 9 testes aprovados`):
-- `app/modules/sorteios/sorteios.test.js`
-- Testes cobrindo: provisionamento de campanhas, emissão por serviços, emissão com pontuação 2x de perfumaria, emissão manual de cortesia, consulta pública por telefone, algoritmo determinístico SHA-256 e LGPD.
-
-### 4.2. Teste de Fluxo Real em Produção (Live HTTP)
-1. **Autenticação Admin:** Usuário `dino@barbeariadino.com.br` autenticado com sucesso e token JWT multi-tenant gerado.
-2. **Listagem de Campanhas (`GET /api/admin/sorteios`):** Status `200 OK` — retornou a campanha oficial *"Mega Sorteio de Fim de Ano Dino: Moto 0km & Kit Perfumaria de Luxo"*.
-3. **Emissão de Bilhetes no Balcão (`POST /api/admin/sorteios/:id/emitir-manual`):** Status `201 Created` — emitidos 3 bilhetes da sorte para o cliente *Rodrigo Gonçalves* (`Série 01 - Nº 000001`, `000002` e `000003`) com hashes individuais SHA-256.
-4. **Consulta Pública (`GET /api/publico/sorteios/dino/meus-bilhetes?telefone=65999056008`):** Status `200 OK` — retornou os bilhetes vinculados ao WhatsApp do cliente no portal público.
-5. **Apuração do Sorteio Oficial (`POST /api/admin/sorteios/:id/sortear`):** Status `200 OK` — bilhete sorteado com sucesso via SHA-256 RFC 7518:
-   - **Ganhador:** Rodrigo Gonçalves
-   - **Bilhete:** Série 01 - Nº 000003
-   - **Prêmio:** Moto Honda Fan 160 0km (ou R$ 18.000 no Pix direto)
-   - **Hash de Auditoria:** `35c77a9b8d2fc5f84ba9f5218bb6ef0fa6c44da90b0d0f51774876d9a9e8995e`
-6. **Notificação WhatsApp Ganhador (`POST /api/admin/sorteios/:id/notificar-ganhador`):** Mensagem oficial gerada e pronta para disparo em 1 clique.
-
----
-
-## 5. Estrutura do Banco de Dados (Migration 122)
-
-- **`sorteios_campanhas`**: Cadastro das campanhas, prêmios, critérios de pontuação, status e auditoria do sorteio.
-- **`sorteios_bilhetes`**: Tabela de números da sorte emitidos, com unicidade por campanha, vínculo de cliente e hash SHA-256 de autenticidade.
-- **`sorteios_ganhadores`**: Registro imutável das apurações oficiais com semente de auditoria e status de entrega de prêmios.
+1. **Deploy no Render:** Serviço `setpoint` (`srv-d8iudokm0tmc73c07iog`), commit `d9af74155`, deploy `dep-dbqqt38473hc738bqvig` finalizado com status **LIVE**.
+2. **Banco de Dados PostgreSQL:** Migration 122 aplicada com sucesso com tabelas de campanhas, bilhetes e ganhadores.
+3. **Testes Unitários:** 9 de 9 testes aprovados (`node --test app/modules/sorteios/sorteios.test.js`).
+4. **Navegação Real:** Telas visualizadas e validadas diretamente nos domínios de produção.
