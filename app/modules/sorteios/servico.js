@@ -647,7 +647,11 @@ export async function obterVisaoPublicaSorteios(slugOuEmpresaId = 'barbearia-din
     todas.push(inaugural);
   }
 
-  const ativas = todas.filter(c => c.status === 'ativa');
+  let ativas = todas.filter(c => c.status === 'ativa');
+  if (ativas.length === 0) {
+    const novaEdicao = await criarCampanhaInauguralDino(empNorm);
+    ativas = [novaEdicao];
+  }
   const encerradas = todas.filter(c => c.status === 'sorteada' || c.status === 'encerrada');
 
   return {
