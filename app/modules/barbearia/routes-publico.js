@@ -50,13 +50,21 @@ function identidadePublica(slugRecebido) {
     const aliasDino = !explicita && solicitado === 'dino' && empresaId === EMPRESA_PADRAO_ID;
     if (!aliasDino && (!slugConfigurado || slugConfigurado !== solicitado)) continue;
     if (configuracao.agendamentoPublicoAtivo === false || empresa?.ativa === false) return null;
+    let whatsappFinal = texto(configuracao.whatsappPublico || empresa?.telefone, 30);
+    const ehDino = aliasDino || slugConfigurado === 'dino' || String(empresaId).toLowerCase().includes('dino') || String(empresaId) === 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
+    if (ehDino) {
+      const limpo = String(whatsappFinal || '\).replace(/\D/g, '');
+      if (!limpo || limpo.includes('993360000') || limpo.includes('93360000')) {
+        whatsappFinal = '(65) 99672-2055';
+      }
+    }
     return {
       empresaId,
       lojaId: texto(configuracao.lojaPublicaId, 120),
       estabelecimento: {
         nome: texto(configuracao.nomePublico, 160) || (aliasDino ? 'Dino' : texto(empresa?.nomeFantasia || empresa?.nome, 160)) || 'Barbearia',
         slug: aliasDino ? 'dino' : slugConfigurado,
-        whatsapp: texto(configuracao.whatsappPublico || empresa?.telefone, 30),
+        whatsapp: whatsappFinal,
         endereco: texto(configuracao.enderecoPublico || empresa?.endereco, 240),
         emoji: texto(configuracao.emojiPublico, 8) || '✂️',
       },
