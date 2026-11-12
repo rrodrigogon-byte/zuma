@@ -23,6 +23,10 @@ import {
   emitirRomaneioVendaAgregado,
   calcularEstatisticaResistenciaLote,
   gerarHtmlRomaneioOficial,
+  assinarEntregaCarga,
+  obterRomaneioCompleto,
+  emitirTicketPesagemBalanca,
+  gerarHtmlTicketBalanca,
   listarMedicoesObras,
   criarMedicaoObra,
   atualizarStatusMedicao
@@ -311,6 +315,55 @@ export function criarRotasConcreto() {
     try {
       const { status } = req.body;
       const resultado = await atualizarStatusMedicao(req.params.id, status);
+      return res.json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+
+  // 21. Assinatura Digital do Cliente na Entrega da Carga (NBR 7212)
+  router.post('/cargas/:id/assinar-entrega', async (req, res) => {
+    try {
+      const empresaId = resolverEmpresa(req);
+      const resultado = await assinarEntregaCarga(req.params.id, req.body, empresaId);
+      return res.json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  // 22. Obter Romaneio Completo Estruturado
+  router.get('/cargas/:id/romaneio', async (req, res) => {
+    try {
+      const empresaId = resolverEmpresa(req);
+      const resultado = await obterRomaneioCompleto(req.params.id, empresaId);
+      return res.json(resultado);
+    } catch (e) {
+      return res.status(404).json({ ok: false, error: e.message });
+    }
+  });
+
+  // 23. Emissão de Ticket de Pesagem da Balança Rodoviária 80t
+  router.post('/balanca/tickets', async (req, res) => {
+    try {
+      const empresaId = resolverEmpresa(req);
+      const resultado = await emitirTicketPesagemBalanca(req.body, empresaId);
+      return res.status(201).json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  // 24. Imprimir / Visualizar Ticket de Pesagem da Balança Rodoviária em HTML
+  router.get('/balanca/tickets/:id/html', async (req, res) => {
+    try {
+      const empresaId = resolverEmpresa(req);
+      const resultado = await gerarHtmlTicketBalanca(req.params.id, empresaId);
+      if (req.query.formato === 'html' || !req.headers.accept?.includes('application/json')) {
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        return res.send(resultado.html);
+      }
       return res.json(resultado);
     } catch (e) {
       return res.status(400).json({ ok: false, error: e.message });

@@ -1054,6 +1054,49 @@ export function registrarUsoAssinatura(empresaId, assinaturaId, dados = {}, opco
 }
 
 /**
+ * Estorna todos os usos vinculados a uma comanda (por comandaId ou chave da comanda),
+ * restaurando o saldo de sessões da assinatura do cliente.
+ */
+export function estornarUsosDaComanda(empresaId, comandaId, agendamentoId = null) {
+  const estado = captacao(empresaId);
+  const cmdId = String(comandaId || '');
+  const agId = agendamentoId ? String(agendamentoId) : null;
+  let totalEstornados = 0;
+  for (const [assId, controle] of Object.entries(estado.assinaturas || {})) {
+    if (!Array.isArray(controle.usos)) continue;
+    const anterior = controle.usos.length;
+    controle.usos = controle.usos.filter((uso) => {
+      if (cmdId && uso.comandaId === cmdId) return false;
+      if (cmdId && uso.agendamentoId && (uso.agendamentoId === cmdId || uso.agendamentoId.startsWith(`comanda:${cmdId}:`))) return false;
+      if (agId && uso.agendamentoId === agId) return false;
+      return true;
+    });
+    const estornados = anterior - controle.usos.length;
+    if (estornados > 0) {
+      totalEstornados += estornados;
+    }
+  }
+  if (totalEstornados > 0) {
+    save();
+  }
+  return totalEstornados;
+}
+
+export function estornarUsoAssinatura(empresaId, assinaturaId, filtro = {}) {
+  const controle = controleAssinatura(empresaId, String(assinaturaId));
+  if (!Array.isArray(controle.usos)) return 0;
+  const anterior = controle.usos.length;
+  controle.usos = controle.usos.filter((uso) => {
+    if (filtro.usoId && uso.id === filtro.usoId) return false;
+    if (filtro.agendamentoId && uso.agendamentoId === filtro.agendamentoId) return false;
+    if (filtro.comandaId && uso.comandaId === filtro.comandaId) return false;
+    return true;
+  });
+  if (controle.usos.length !== anterior) save();
+  return anterior - controle.usos.length;
+}
+
+/**
  * Chamado quando um atendimento é concluído: se o cliente tem plano ativo, em
  * dia e com saldo que cobre o serviço, desconta uma sessão (idempotente).
  * Nunca lança: o atendimento já foi concluído.

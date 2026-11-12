@@ -1114,3 +1114,16 @@ body,
 html:not([data-theme='dark']) .stallone-logo-on-dark { display: none !important; }
 html[data-theme='dark'] .stallone-logo-on-light { display: none !important; }
 .checkout-pickup-only{margin:10px 0 0;padding:10px 12px;border-radius:10px;border:1px solid var(--accent, #E32935);background:var(--accent-soft, rgba(227,41,53,.08));font-size:.88rem;font-weight:600}
+
+/* Rolagem touch mobile suave e fluida em telas de agendamento online */
+html, body, #root {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: auto;
+}
+@media (max-width: 600px) {
+  html, body {
+    overflow-x: hidden;
+    overflow-y: auto;
+    touch-action: pan-y;
+  }
+}

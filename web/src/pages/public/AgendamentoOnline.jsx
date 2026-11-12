@@ -96,10 +96,15 @@ function obterEstiloServico(nomeServico = '') {
 const s = {
   page: {
     minHeight: '100vh',
+    height: 'auto',
     background: theme.bg,
     color: theme.cream,
     fontFamily: "'Plus Jakarta Sans', 'Inter', system-ui, sans-serif",
-    padding: '0 0 60px',
+    padding: '0 0 140px',
+    overflowY: 'auto',
+    overflowX: 'hidden',
+    WebkitOverflowScrolling: 'touch',
+    touchAction: 'pan-y',
   },
   header: {
     background: theme.surface,
@@ -111,7 +116,7 @@ const s = {
   brandLogo: { display: 'block', width: 132, height: 132, objectFit: 'contain', margin: '0 auto 12px', padding: 8, background: '#FFFFFF', borderRadius: 20, boxShadow: '0 12px 28px rgba(0,0,0,.24)' },
   nomeEstab: { fontSize: 22, fontWeight: 800, color: theme.cream, fontFamily: "'Sora', 'Plus Jakarta Sans', sans-serif", letterSpacing: '-.2px' },
   subtitulo: { fontSize: 13, color: theme.muted, marginTop: 4 },
-  container: { maxWidth: 520, margin: '0 auto', padding: '24px 16px' },
+  container: { maxWidth: 520, margin: '0 auto', padding: '20px 16px 100px', touchAction: 'pan-y' },
   card: {
     background: theme.card,
     border: `1px solid ${theme.line}`,
@@ -171,9 +176,9 @@ const s = {
 
   }),
   sucesso: {
-    textAlign: 'center', padding: '40px 24px',
+    textAlign: 'center', padding: '32px 18px',
     background: theme.card, border: `1px solid ${theme.line}`,
-    borderRadius: 20,
+    borderRadius: 20, touchAction: 'pan-y',
   },
   alerta: {
     padding: '12px 14px', marginBottom: 16, borderRadius: 10,
@@ -1384,20 +1389,24 @@ export default function AgendamentoOnline() {
             ))}
           </div>
 
-          {/* Botão WhatsApp */}
+          {/* Botão WhatsApp com T-Rex e Atendente */}
           {estabelecimento?.whatsapp && (
             <a
-              href={linkWhatsApp(estabelecimento.whatsapp, `Olá! Solicitei o serviço ${servicoSel?.nome} para ${dataSel} às ${horarioSel}. Código: ${agendamento?.codigo}`)}
+              href={linkWhatsApp(estabelecimento.whatsapp, `Olá! Solicitei o serviço ${servicoSel?.nome || 'agendamento'} para ${dataSel} às ${horarioSel}. Código: ${agendamento?.codigo || ''}`)}
               target="_blank"
               rel="noopener noreferrer"
               style={{
-                display: 'block', padding: '14px',
-                background: '#2D6F9E', color: '#fff',
-                borderRadius: 12, textDecoration: 'none',
-                fontSize: 14, fontWeight: 800, marginBottom: 12,
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
+                padding: '16px 20px',
+                background: 'linear-gradient(135deg, #25D366, #128C7E)', color: '#FFFFFF',
+                borderRadius: 14, textDecoration: 'none',
+                fontSize: 15, fontWeight: 800, marginBottom: 14,
+                boxShadow: '0 4px 14px rgba(37,211,102,.35)',
+                transition: 'transform .15s ease',
               }}
             >
-              💬 Falar com o estabelecimento
+              <span style={{ fontSize: 20 }}>💬</span>
+              <span>Falar com o estabelecimento</span>
             </a>
           )}
 

@@ -362,6 +362,30 @@ export const MCP_READONLY_TOOLS = [
     },
   },
   {
+    name: 'concreto_romaneio',
+    description: 'Consulta o Romaneio de Carga NBR 7212 com ticket de pesagem da balança rodoviária 80t e assinatura digital do cliente na entrega.',
+    readOnlyHint: true,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        cargaId: { type: 'string', description: 'ID ou número da carga (ex: 1001 ou crg-1001)' }
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'concreto_balanca',
+    description: 'Consulta tickets de pesagem da balança rodoviária 80t Toledo da usina e mineração (pesagem bruta, tara, líquido e assinatura).',
+    readOnlyHint: true,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        ticketId: { type: 'string', description: 'ID ou número do ticket de pesagem' }
+      },
+      additionalProperties: false,
+    },
+  },
+  {
     name: 'concreto_medicoes',
     description: 'Consulta medições periódicas de concretagem por construtora/obra (faturamento quinzenal/mensal e retenções técnicas).',
     readOnlyHint: true,
@@ -858,6 +882,27 @@ export function createOpenApiAndMcpRouter({ auth, obterEmpresaIdToken, barbearia
         unidade: 'Serrano Mineração · Dragagem & Pátio de Agregados',
         localizacao: 'Tangará da Serra / MT (Rios Sepotuba e Formoso)',
         ...resMin
+      };
+    }
+    if (name === 'concreto_romaneio') {
+      const { obterRomaneioCompleto } = await import('../modules/concreto/servico.js').catch(() => ({}));
+      const cargaId = args?.cargaId || '1001';
+      const res = typeof obterRomaneioCompleto === 'function' ? await obterRomaneioCompleto(cargaId) : {};
+      return {
+        empresa: 'Serrano Concreto Usinado & Mineração Ltda',
+        norma: 'ABNT NBR 7212 / NBR 8953',
+        romaneio: res.carga || {}
+      };
+    }
+    if (name === 'concreto_balanca') {
+      const { inicializarDatastoreConcreto } = await import('../modules/concreto/servico.js').catch(() => ({}));
+      const data = typeof inicializarDatastoreConcreto === 'function' ? inicializarDatastoreConcreto() : {};
+      const tickets = data.concreto_tickets_balanca || [];
+      return {
+        empresa: 'Serrano Concreto & Mineração',
+        balanca: 'Balança Rodoviária 80t Toledo (MT-358)',
+        totalTickets: tickets.length,
+        tickets
       };
     }
     if (name === 'concreto_medicoes') {

@@ -7,6 +7,7 @@ export { PENDING_REMINDER_HINT };
 import { MEDIA_SYSTEM_GUIDANCE } from './whatsapp-ai-media.js';
 import crypto from 'node:crypto';
 import { db } from './database.js';
+import { db as jsonDb, save as jsonSave } from '../db.js';
 import { fluxoFinanceiro, resumoFinanceiro } from '../financeiro-central-kytto.js';
 import { buildDinoGestaoSnapshot, buildDinoGestaoSystemPrompt, DINO_GESTAO_TOOLS } from '../dino-gestao-ia.js';
 import { runGeminiWithTools, configuredGeminiModel } from './gemini-client.js';
@@ -325,6 +326,25 @@ export const BARBERSHOP_SYSTEM_GUIDANCE = `
   * NUNCA cite cobrança avulsa de tabela (R$ 100 ou R$ 300) para clientes que já possuem plano/clube ativo! Diga com acolhimento: "Como o seu corte/barba já está coberto no seu plano mensal, seu horário fica sem custo avulso!". Só informe valor para procedimentos adicionais fora do plano ou horários noturnos exclusivos.
 - COMANDOS COMPOSTOS E MULTI-INTENÇÃO:
   * Se o cliente pedir duas ações na mesma mensagem (ex.: "quero mudar a Nati de amanhã para hoje e cancelar o Dino de amanhã"), processe com clareza em duas etapas sem misturar os profissionais nem confundir qual deve ser remarcado e qual deve ser cancelado.
+- LOCALIZAÇÃO E HORÁRIO DE ATENDIMENTO (RESPOSTA INSTANTÂNEA):
+  * Endereço oficial: Rua Antônio Hortolani, nº 62-N, Centro, Tangará da Serra - MT, CEP 78300-055 (em frente à praça / centro comercial, com fácil estacionamento).
+  * Horário de funcionamento: Segunda a Sábado das 07h30 às 19h00 (último horário de corte às 18h30). Domingo fechado.
+  * Responda em no máximo 2 linhas objetivas: "Ficamos na Rua Antônio Hortolani, nº 62-N, Centro de Tangará da Serra - MT (estacionamento em frente). Atendemos de segunda a sábado das 07h30 às 19h00! Quer aproveitar e já garantir seu horário?"
+- TABELA DE PREÇOS OFICIAL E FORMAS DE PAGAMENTO:
+  * Equipe (Bruno Mendes e Nati): Corte Masculino Premium: R$ 100,00 (40 min) | Barba Premium: R$ 100,00 (30 min) | Combo Corte + Barba: R$ 200,00 (60 min) | Desondulação / Selagem: R$ 150,00 | Sobrancelha: R$ 30,00.
+  * Atendimento com Mestre Dino: Corte com Dino R$ 300,00 (08h às 18h) / R$ 600,00 (após 18h09) | Barba com Dino R$ 300,00 / R$ 600,00.
+  * Club Dino (planos mensais sem cobrança avulsa para assinantes): Corte Club R$ 160/mês | Barba Club R$ 160/mês | Club Combo R$ 280/mês.
+  * Formas de pagamento: Pix, Cartão de Crédito, Débito e Dinheiro.
+  * Responda sempre com clareza, transparência e simpatia em 2 a 3 linhas.
+- SERVIÇOS DE CORTE E BARBA (DETALHAMENTO E EXPERIÊNCIA):
+  * Corte Premium (40 min): Visagismo adaptado ao formato do seu rosto e estilo (fade/degradê na régua, navalhado, corte social na tesoura ou clássico), lavagem com shampoo refrescante e finalização com pomada modeladora Dino.
+  * Barba Premium (30 min): Ritual tradicional com toalha quente relaxante, vapor de ozônio para abrir os poros e amaciar os fios, alinhamento simétrico com lâmina descartável, esfoliação, loção pós-barba refrescante e óleo hidratante especial.
+  * Combo Corte + Barba (60 min): A experiência completa de cabelo e barba alinhados na mesma sessão.
+- AGENDAMENTOS DIRETOS 100% CONCLUÍDOS SEM INTERVENÇÃO HUMANA:
+  * Quando o cliente pedir para marcar ou disser dia/horário/barbeiro: consulte a agenda no mesmo turno via consultar_disponibilidade ou sugerir_proximos_horarios.
+  * Se o horário estiver livre, chame preparar_agendamento imediatamente e apresente o resumo claro pedindo a confirmação.
+  * Assim que o cliente disser "sim", "confirmo", "pode marcar" ou "ok": conclua o agendamento no sistema NA HORA, confirmando data, horário, barbeiro e endereço, sem transferir para atendente humano.
+  * Conduza o processo completo de ponta a ponta no WhatsApp com agilidade, acolhimento e precisão técnica.
 - REMARCAÇÕES EM MÚLTIPLOS TURNOS (PERSISTÊNCIA DO AGENDAMENTO FOCAL):
   * Quando o cliente já indicou qual agendamento deseja trocar (ex.: "tenho quinta 17h, quero antes ou outro dia") e após ver as opções responder "posso na sexta 15:30", vincule diretamente a troca para esse agendamento original sem exigir código de confirmação.
 `;
@@ -1493,6 +1513,26 @@ export function managementSystemPrompt(channel, snapshot) {
 }
 
 async function managementResponse(task, channel, session, message, context) {
+  // ── Solicitação de agendamento via site (botão "Falar com o estabelecimento") ──
+  // Cliente envia: "Olá! Solicitei o serviço [SERVIÇO] para [DATA] às [HORA]. Código: [CÓDIGO]"
+  // Responde imediatamente com o T-Rex acolhendo e confirmando, e chama o atendente humano.
+  const webBookingMatch = message.text && /solicitei\s+o\s+servi[çc]o|c[oó]digo:\s*([a-z0-9]{6,12})/i.test(message.text);
+  if (webBookingMatch) {
+    const webBookingReply = await handleWebBookingGreetingAndHandoff(context, message.text, { channel, session, persona });
+    if (webBookingReply) return webBookingReply;
+  }
+
+  // ── Dúvida sobre agendamento já existente (áudio transcrito ou texto) ──
+  // Cliente pergunta: "Só queria confirmar se o horário das 17:30 tá vago mesmo", "fiz agendamento pelo link com a Nati às 17:30", etc.
+  const perguntaAgendamentoExistente = message.text && (
+    /\b(?:s[oó]\s+(?:queria|ia)\s+confirmar|queria\s+confirmar|fiz\s+(?:um\s+)?agendamento|t[aá]\s+(?:dispon[ií]vel|vago|confirmado)\s+mesmo|confirmar\s+se\s+o\s+hor[aá]rio)\b/i.test(message.text) ||
+    (/\b(?:nati|bruno|dino)\b/i.test(message.text) && /\b(?:17:30|18:00|19:00|\d{1,2}:\d{2})\b/.test(message.text) && /\b(?:confirmar|dispon[ií]vel|vago|agendamento|marcado)\b/i.test(message.text))
+  );
+  if (perguntaAgendamentoExistente) {
+    const confirmacaoExistenteReply = await responderConfirmacaoAgendamentoExistente(context, message.text, { channel, session, persona });
+    if (confirmacaoExistenteReply) return confirmacaoExistenteReply;
+  }
+
   if (session.status === 'humano') return { text: null, kind: 'human_queue' };
   if (handoffIntent(message.text)) {
     await putSessionInHandoff(session, 'pedido_do_cliente', 3);
@@ -1665,6 +1705,243 @@ export function presenceConfirmIntent(text) {
   if (!value) return false;
   return /^(confirmo|confirmando|confirmado|confirmada|confirmo presenca|confirmo sim|sim confirmo|confirma|confirma pra mim|pode confirmar|pode ser sim|sim pode ser|estarei ai|estarei la|sim estarei la|sim estarei ai|vou sim|vou|vou comparecer|confirmadissimo|ok confirmado|ta confirmado|esta confirmado|confirmar|sim confirmar|pode deixar marcado|vou querer esse|deixa marcado|deixa esse|marca esse|pode marcar|to a caminho|estou a caminho|chegando|ja to chegando|ja cheguei|to chegando)( obrigad[oa])?$/.test(value)
     || /^(sim|ok|pode ser|com certeza|fechado|fechou|perfeito|beleza|blz|bora|show|tamo junto|combinado|certo|marcado|ta marcado|opa vou|partiu|fechado entao|combinado entao)( obrigad[oa])?$/.test(value);
+}
+
+
+/**
+ * Aviso de cliente que clicou em "Falar com o estabelecimento" no agendamento online.
+ * Envia mensagem para o WhatsApp da equipe (attendant_phone) e insere notificação no painel admin.
+ */
+async function notificarEquipeAtendimentoWeb(session, { codigo, servico, profissional, data, hora, clienteNome }) {
+  try {
+    const channel = (await db.queryRead(
+      `SELECT nome, configuracao FROM canais_integracao
+         WHERE empresa_id = $1 AND loja_id = $2 AND id = $3 AND provedor = 'whatsapp' LIMIT 1`,
+      [session.empresa_id, session.loja_id, session.canal_id],
+    )).rows[0];
+    const handoff = channel?.configuracao?.handoff || {};
+    const destino = String(handoff.attendant_phone || handoff.sales_phone || process.env.GESTOR_TELEFONE || '5565999056008').replace(/\D/g, '');
+    if (destino.length >= 10) {
+      const numero = destino.startsWith('55') ? destino : `55${destino}`;
+      const textoMsg = [
+        '💈 *Agendamento Web · Cliente solicitou contato no WhatsApp*',
+        `Código: ${codigo || '-'}`,
+        `Serviço: ${servico || '-'}`,
+        `Profissional: ${profissional || '-'}`,
+        `Data/Horário: ${data || '-'} às ${hora || '-'}`,
+        `Cliente: ${clienteNome || 'Cliente'} (${session.telefone || '-'})`,
+        'Origem: Botão "Falar com o estabelecimento" do agendamento online',
+      ].join('\n');
+      await enviarMensagem({
+        empresa_id: session.empresa_id,
+        loja_id: session.loja_id,
+        canal_id: session.canal_id,
+        whatsapp_instance: channel?.configuracao?.instance || 'dino',
+      }, numero, textoMsg).catch(() => null);
+    }
+  } catch (e) {
+    console.warn('[whatsapp-ai] Erro ao notificar equipe sobre atendimento web:', e.message);
+  }
+}
+
+/**
+ * Trata quando o cliente chega com a mensagem do agendamento web:
+ * "Olá! Solicitei o serviço BARBA PREMIUM para 2026-11-12 às 17:30. Código: 2B662EC9"
+ * Responde imediatamente com o T-Rex acolhendo e confirmando o agendamento real, e chama o atendente humano.
+ */
+export async function handleWebBookingGreetingAndHandoff(context, text, { channel, session, persona } = {}) {
+  try {
+    const codigoMatch = String(text || '').match(/c[oó]digo:\s*([a-z0-9]{6,12})/i) || String(text || '').match(/\b([a-z0-9]{8})\b/i);
+    const codigoBuscado = codigoMatch ? codigoMatch[1].toUpperCase() : '';
+
+    const servicoMatch = String(text || '').match(/servi[çc]o\s+([^,.\n]+?)\s+para/i);
+    const dataMatch = String(text || '').match(/para\s+(\d{4}-\d{2}-\d{2}|\d{1,2}\/\d{1,2}(?:\/\d{2,4})?)/i);
+    const horaMatch = String(text || '').match(/[àa]s\s+(\d{1,2}:\d{2})/i);
+
+    let agendamento = null;
+    const empresaId = session.empresa_id;
+
+    // 1. Tentar buscar pelo executor oficial
+    try {
+      const run = createWhatsappAiToolExecutor({ ...context, toolResults: undefined, toolLinks: undefined });
+      const lista = await run('consultar_meus_agendamentos', { limit: 10 }).catch(() => null);
+      if (Array.isArray(lista?.agendamentos)) {
+        if (codigoBuscado) {
+          agendamento = lista.agendamentos.find((a) => String(a.codigo || a.id || '').toUpperCase().includes(codigoBuscado));
+        }
+        if (!agendamento) {
+          agendamento = lista.agendamentos.find((a) => !['cancelado', 'nao_compareceu'].includes(String(a.status)));
+        }
+      }
+    } catch {}
+
+    // 2. Tentar diretamente no ERP
+    if (!agendamento) {
+      try {
+        const todos = barbearia.listarAgendamentos(empresaId, {});
+        if (Array.isArray(todos)) {
+          if (codigoBuscado) {
+            agendamento = todos.find((a) => String(a.codigoConfirmacao || a.codigo || a.id || '').toUpperCase().includes(codigoBuscado));
+          }
+          if (!agendamento && session.telefone) {
+            const telLimpo = String(session.telefone).replace(/\D/g, '');
+            agendamento = todos.find((a) => {
+              const aTel = String(a.clienteTelefone || '').replace(/\D/g, '');
+              return aTel && (aTel === telLimpo || aTel.slice(-8) === telLimpo.slice(-8));
+            });
+          }
+        }
+      } catch {}
+    }
+
+    const servico = agendamento?.servico?.nome || agendamento?.servicoNome || (servicoMatch ? servicoMatch[1].trim() : 'atendimento');
+    let profissional = agendamento?.profissional?.nome || agendamento?.profissionalNome || '';
+    if (!profissional && agendamento?.profissionalId) {
+      try {
+        const profs = barbearia.listarProfissionais(empresaId, { incluirInativos: true });
+        const pObj = profs.find((p) => p.id === agendamento.profissionalId);
+        if (pObj) profissional = pObj.apelido || pObj.nome;
+      } catch {}
+    }
+    if (!profissional) profissional = 'nossa equipe';
+
+    let dataAgenda = agendamento?.dataAgenda || (dataMatch ? dataMatch[1].trim() : '');
+    let horaLocal = agendamento?.horaLocal || agendamento?.horarioInicio || (horaMatch ? horaMatch[1].trim() : '');
+    const codigoFinal = agendamento?.codigoConfirmacao || agendamento?.codigo || codigoBuscado || '';
+
+    // Formatar data legível
+    let dataLegivel = dataAgenda;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(dataAgenda)) {
+      const [ano, mes, dia] = dataAgenda.split('-');
+      const hoje = new Date().toISOString().slice(0, 10);
+      dataLegivel = dataAgenda === hoje ? `hoje, ${dia}/${mes}` : `${dia}/${mes}`;
+    }
+
+    const clienteNome = cleanCustomerDisplayName(agendamento?.clienteNome || context.customerName || session.nome || '');
+    const saudacao = clienteNome ? `Olá, ${clienteNome}!` : 'Olá!';
+
+    const resposta = `${saudacao} Confirmadíssimo: recebi a sua solicitação do site e o seu agendamento de *${servico}* com *${profissional}* para ${dataLegivel} às *${horaLocal}* já está 100% garantido na nossa agenda (Código: *${codigoFinal}*)! 💈\n\nJá notifiquei também nossa equipe de atendimento na barbearia para acompanhar você por aqui caso queira tirar dúvidas ou ajustar algum detalhe. Estamos te esperando!`;
+
+    // 1. Notificar equipe pelo WhatsApp
+    void notificarEquipeAtendimentoWeb(session, {
+      codigo: codigoFinal,
+      servico,
+      profissional,
+      data: dataLegivel,
+      hora: horaLocal,
+      clienteNome: clienteNome || 'Cliente',
+    });
+
+    // 2. Inserir notificação no sininho do painel administrativo
+    try {
+      const d = jsonDb();
+      d.contatos = d.contatos || [];
+      d.contatos.push({
+        tipo: 'agendamento_web_contato',
+        nome: `Atendimento Web · ${clienteNome || 'Cliente'} (${codigoFinal})`,
+        mensagem: `Cliente solicitou contato pelo WhatsApp para o agendamento ${servico} às ${horaLocal} com ${profissional}. Código: ${codigoFinal}`,
+        criadoEm: new Date().toISOString(),
+        telefone: session.telefone,
+      });
+      jsonSave();
+    } catch {}
+
+    // 3. Atualizar status e dados da sessão para atendimento humano (memória e banco)
+    if (session) {
+      session.status = 'humano';
+      session.handoff_reason = 'solicitacao_web_atendente';
+      session.estado = {
+        ...(session.estado || {}),
+        solicitacaoWeb: { codigo: codigoFinal, servico, profissional, data: dataLegivel, hora: horaLocal },
+        atendenteNotificadoEm: new Date().toISOString(),
+      };
+    }
+    await db.query(
+      `UPDATE whatsapp_ai_sessions 
+       SET status = 'humano', 
+           handoff_reason = 'solicitacao_web_atendente', 
+           estado = COALESCE(estado, '{}'::jsonb) || jsonb_build_object('solicitacaoWeb', $4::jsonb, 'atendenteNotificadoEm', CURRENT_TIMESTAMP::text)
+       WHERE id = $1 AND empresa_id = $2 AND loja_id = $3`,
+      [session.id, session.empresa_id, session.loja_id, JSON.stringify({ codigo: codigoFinal, servico, profissional, data: dataLegivel, hora: horaLocal })]
+    ).catch(() => null);
+
+    return { text: resposta, kind: 'web_booking_welcome_handoff' };
+  } catch (err) {
+    console.warn('[whatsapp-ai] Erro ao tratar saudacao de agendamento web:', err.message);
+    return null;
+  }
+}
+
+/**
+ * Responde dúvidas sobre agendamentos já existentes (perguntas de áudio ou texto:
+ * "queria confirmar se tá vago mesmo", "fiz agendamento às 17:30 com a Nati", etc.)
+ */
+export async function responderConfirmacaoAgendamentoExistente(context, userText, { channel, session, persona } = {}) {
+  try {
+    const run = createWhatsappAiToolExecutor({ ...context, toolResults: undefined, toolLinks: undefined });
+    const lista = await run('consultar_meus_agendamentos', { limit: 10 }).catch(() => null);
+    const agora = Date.now();
+    const diaHoje = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Cuiaba' }).format(new Date(agora));
+    let validos = (lista?.agendamentos || [])
+      .filter((item) => item?.id && !['cancelado', 'nao_compareceu'].includes(String(item.status)))
+      .sort((a, b) => new Date(a.dataHora) - new Date(b.dataHora));
+
+    if (!validos.length) {
+      try {
+        const empId = session?.empresa_id || context?.empresaId || 'd0d0ac01-8e50-4b61-8c79-de4aaa916da6';
+        const tel = session?.telefone || context?.phone;
+        const doErp = barbearia.listarAgendamentos(empId, { telefone: tel });
+        if (Array.isArray(doErp)) {
+          const servicosMap = new Map(barbearia.listarServicos(empId, { incluirInativos: true }).map((s) => [s.id, s]));
+          const profsMap = new Map(barbearia.listarProfissionais(empId, { incluirInativos: true }).map((p) => [p.id, p]));
+          validos = doErp
+            .filter((item) => item?.id && !['cancelado', 'nao_compareceu'].includes(String(item.status)))
+            .map((item) => ({
+              ...item,
+              servico: servicosMap.get(item.servicoId) || { nome: item.servicoNome || 'Atendimento' },
+              profissional: profsMap.get(item.profissionalId) || { nome: item.profissionalNome || 'Profissional' },
+            }))
+            .sort((a, b) => new Date(a.dataHora) - new Date(b.dataHora));
+        }
+      } catch {}
+    }
+
+    if (!validos.length) return null;
+
+    // Se o cliente mencionou horário (ex: 17:30) ou profissional (Nati, Bruno)
+    const textNorm = plain(userText);
+    const achadoPorHoraEProf = validos.find((item) => {
+      const horaItem = String(item.horaLocal || '').trim();
+      const profNome = plain(item.profissional?.nome || item.profissionalNome || '');
+      return Boolean(horaItem && textNorm.includes(horaItem) && (!profNome || textNorm.includes(profNome)));
+    });
+    const achadoPorHora = validos.find((item) => {
+      const horaItem = String(item.horaLocal || '').trim();
+      return Boolean(horaItem && textNorm.includes(horaItem));
+    });
+    const achadoPorProf = validos.find((item) => {
+      const profNome = plain(item.profissional?.nome || item.profissionalNome || '');
+      return Boolean(profNome && textNorm.includes(profNome));
+    });
+    const achado = achadoPorHoraEProf || achadoPorHora || achadoPorProf || validos[0];
+
+    if (!achado) return null;
+
+    const servico = achado.servico?.nome || achado.servicoNome || 'atendimento';
+    const profissional = achado.profissional?.nome || achado.profissionalNome || 'nossa equipe';
+    const hora = achado.horaLocal || (achado.dataHora ? new Date(achado.dataHora).toLocaleTimeString('pt-BR', { timeZone: 'America/Cuiaba', hour: '2-digit', minute: '2-digit' }) : 'horário marcado');
+    const dataAgenda = achado.dataAgenda || diaHoje;
+    const dataLegivel = dataAgenda === diaHoje ? 'hoje' : `no dia ${dataAgenda.split('-').reverse().slice(0, 2).join('/')}`;
+    const clienteNome = cleanCustomerDisplayName(achado.clienteNome || context.customerName || session.nome || '');
+    const saudacao = clienteNome ? `Olá, ${clienteNome}!` : 'Olá!';
+
+    const resposta = `${saudacao} Consultei a nossa agenda aqui e o seu agendamento de *${servico}* com *${profissional}* para ${dataLegivel} às *${hora}* está confirmadíssimo e garantido! 💈\n\nPode chegar com antecedência tranquilo. Qualquer dúvida ou se precisar de algo, nossa equipe também já está acompanhando aqui no WhatsApp!`;
+
+    return { text: resposta, kind: 'existing_booking_confirmation' };
+  } catch (err) {
+    console.warn('[whatsapp-ai] Erro ao responder confirmacao de agendamento existente:', err.message);
+    return null;
+  }
 }
 
 export async function confirmNextAppointment(context, userText = '') {

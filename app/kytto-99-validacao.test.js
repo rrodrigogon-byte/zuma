@@ -294,3 +294,51 @@ test('Agenda Dino: preservação de cores por status em encaixes e distinção v
   assert.ok(agendaCss.includes('.status-confirmado'), 'Badge de confirmado deve existir');
   assert.ok(agendaCss.includes('.status-agendado'), 'Badge de agendado deve existir');
 });
+
+test('Cancelamento de comanda com pacote: cancela pacote na ficha do cliente e volta saldo de sessões consumidas', async () => {
+  const barbearia = await import('./barbearia-erp-kytto.js');
+  const comandaPlano = await import('./barbearia-comanda-plano.js');
+  const emp = 'emp_teste_anti_regressao_pacote_' + Date.now();
+
+  const serv = barbearia.criarServico(emp, { nome: 'Corte Dino', preco: 60, duracaoMinutos: 30, ativo: true });
+  const plano = barbearia.criarPlano(emp, {
+    nome: 'Pacote 4 Sessões',
+    preco: 200,
+    categoriaPlano: 'pacote',
+    sessoesIncluidas: 4,
+    servicosIds: [serv.id],
+    ativo: true,
+  });
+
+  const cliId = 'cli_teste_cancelamento';
+  const comanda = barbearia.criarComandaBarbearia(emp, {
+    lojaId: 'loja-1',
+    clienteId: cliId,
+    clienteNome: 'Cliente Teste Pacote',
+    itens: [{ tipo: 'pacote', planoId: plano.id, preco: 200, quantidade: 1 }],
+  });
+
+  // Simula recebimento que criou a assinatura
+  const ass = barbearia.criarAssinatura(emp, {
+    clienteId: cliId,
+    clienteNome: 'Cliente Teste Pacote',
+    planoId: plano.id,
+    origem: 'comanda',
+    comandaId: comanda.id,
+  });
+  barbearia.alterarStatusAssinatura(emp, ass.id, 'ativa', { confirmadoSemCobranca: true });
+
+  // Verifica que estava ativo
+  assert.equal(comandaPlano.coberturasDoCliente(emp, cliId).length, 1);
+
+  // Cancela a comanda
+  await barbearia.cancelarComandaBarbearia(emp, comanda.id, {
+    motivo: 'Cancelamento de comanda com pacote',
+    cancelarFinalizada: true,
+  });
+
+  // Verifica que o pacote foi cancelado e não aparece mais na ficha do cliente
+  const assCancelada = barbearia.obterAssinatura(emp, ass.id);
+  assert.equal(assCancelada.status, 'cancelada', 'Assinatura deve ficar cancelada após comanda ser cancelada');
+  assert.equal(comandaPlano.coberturasDoCliente(emp, cliId).length, 0, 'Cliente não pode manter plano ativo de comanda cancelada');
+});

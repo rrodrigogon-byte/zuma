@@ -24,6 +24,10 @@ import {
   emitirRomaneioVendaAgregado,
   calcularEstatisticaResistenciaLote,
   gerarHtmlRomaneioOficial,
+  assinarEntregaCarga,
+  obterRomaneioCompleto,
+  emitirTicketPesagemBalanca,
+  gerarHtmlTicketBalanca,
   listarMedicoesObras,
   criarMedicaoObra,
   atualizarStatusMedicao,
@@ -268,4 +272,71 @@ test('10. Medições de Obras Construtora e Faturamento Periódico', async () =>
   const resStatus = await atualizarStatusMedicao(resCriar.medicao.id, 'aprovado_faturado');
   assert.equal(resStatus.ok, true);
   assert.equal(resStatus.medicao.status, 'aprovado_faturado');
+});
+
+
+test('11. Assinatura Digital do Cliente na Entrega da Carga (NBR 7212)', async () => {
+  const assinaturaMock = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+  
+  const resAss = await assinarEntregaCarga('crg-1001', {
+    assinaturaBase64: assinaturaMock,
+    recebedorNome: 'Eng. Marcelo Dantas de Souza',
+    recebedorDocumento: '045.892.110-34',
+    recebedorCargo: 'Engenheiro Residente (Fiscal da Obra)',
+    slumpMedidoCm: 14.5,
+    aguaAdicionadaObraLitros: 0,
+    observacoes: 'Recebido com abatimento e temperatura conformes NBR 7212.'
+  }, CONCRETO_EMPRESA_ID);
+
+  assert.equal(resAss.ok, true);
+  assert.ok(resAss.hashSha256);
+  assert.ok(resAss.codigoAutenticidade.startsWith('SERRANO-NBR7212-'));
+  assert.equal(resAss.carga.status, 'concluido');
+  assert.equal(resAss.carga.assinaturaEntrega.status, 'assinado');
+  assert.equal(resAss.carga.assinaturaEntrega.recebedorNome, 'Eng. Marcelo Dantas de Souza');
+  assert.equal(resAss.carga.assinaturaEntrega.slumpMedidoCm, 14.5);
+  assert.equal(resAss.carga.ticketPesagem.numeroTicket, 'TKT-BAL-1001');
+  assert.equal(resAss.carga.ticketPesagem.pesoLiquidoKg, 19200);
+
+  // Consultar Romaneio Completo
+  const resRom = await obterRomaneioCompleto('crg-1001', CONCRETO_EMPRESA_ID);
+  assert.equal(resRom.ok, true);
+  assert.equal(resRom.carga.assinaturaEntrega.recebedorDocumento, '045.892.110-34');
+});
+
+test('12. Emissão de Romaneio HTML com Ticket de Pesagem e Assinatura Digital', async () => {
+  const resHtml = await gerarHtmlRomaneioOficial('crg-1001', CONCRETO_EMPRESA_ID);
+  assert.equal(resHtml.ok, true);
+  assert.ok(resHtml.html.includes('ROMANEIO OFICIAL NBR 7212'));
+  assert.ok(resHtml.html.includes('Ticket de Pesagem Integrado · Balança Rodoviária 80t Toledo'));
+  assert.ok(resHtml.html.includes('TKT-BAL-1001'));
+  assert.ok(resHtml.html.includes('19.200 kg'));
+  assert.ok(resHtml.html.includes('ASSINADO DIGITALMENTE NA ENTREGA'));
+  assert.ok(resHtml.html.includes('Eng. Marcelo Dantas de Souza'));
+  assert.ok(resHtml.html.includes('Engª Karin Prestes'));
+});
+
+test('13. Emissão de Ticket de Pesagem da Balança Rodoviária de Mineração (CFEM)', async () => {
+  const resTicket = await emitirTicketPesagemBalanca({
+    cliente: 'Construtora Serra dos Parecis',
+    placaVeiculo: 'RAQ-5520',
+    motorista: 'Sebastião dos Santos',
+    tipoMaterial: 'Areia Média Lavada de Rio (Sepotuba)',
+    pesoBrutoKg: 34500,
+    taraKg: 13500,
+    precoUnitarioM3: 65.00
+  }, CONCRETO_EMPRESA_ID);
+
+  assert.equal(resTicket.ok, true);
+  assert.ok(resTicket.ticket.numeroTicket.startsWith('TKT-BAL-'));
+  assert.equal(resTicket.ticket.pesoLiquidoKg, 21000);
+  assert.equal(resTicket.ticket.volumeCalculadoM3, 14.0); // 21000 / 1500
+  assert.equal(resTicket.ticket.valorTotal, 910.00); // 14 * 65
+  assert.equal(resTicket.ticket.valorCfem, 13.65); // 1.5%
+
+  const resHtml = await gerarHtmlTicketBalanca(resTicket.ticket.id, CONCRETO_EMPRESA_ID);
+  assert.equal(resHtml.ok, true);
+  assert.ok(resHtml.html.includes('TICKET DE PESAGEM RODOVIÁRIA'));
+  assert.ok(resHtml.html.includes('21.000 kg'));
+  assert.ok(resHtml.html.includes('Toledo 80t'));
 });

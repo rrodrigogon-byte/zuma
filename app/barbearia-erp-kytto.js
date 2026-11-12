@@ -1,5 +1,5 @@
 import { serviceGroup } from './core/service-groups.js';
-import { validarAgendamentoComPlano } from './dino-captacao-kytto.js';
+import { validarAgendamentoComPlano, estornarUsosDaComanda } from './dino-captacao-kytto.js';
 import { subscriptionStart } from './core/subscription-calendar.js';
 import crypto from 'node:crypto';
 import { identificarCliente, indiceIdentidadeClientes } from './barbearia-identidade.js';
@@ -1857,6 +1857,8 @@ function assinaturaNormalizada(dados = {}, anterior = {}, plano = {}) {
     profissionalNome,
     precoContratado,
     ehVip,
+    comandaId: texto(dados.comandaId ?? dados.comanda_id ?? anterior.comandaId, 120) || null,
+    origem: texto(dados.origem ?? anterior.origem, 60) || null,
   };
 }
 
@@ -3501,6 +3503,21 @@ export function removerItemComandaBarbearia(empresaId, comandaId, itemId, dados 
     }
 
     sincronizarReservasOperacao(empresaId, comanda, estado, { origem: 'comanda_barbearia', expiresAt: comanda.reservaEstoqueExpiresAt });
+    if (itemRemovido.coberturaPlano) {
+      try {
+        estornarUsosDaComanda(empresaId, comanda.id);
+      } catch {}
+    }
+    if (itemRemovido.tipo === 'pacote' || itemRemovido.tipo === 'plano') {
+      const chaveItem = `comanda-${comanda.id}-item-${itemRemovido.id}`;
+      for (const ass of Object.values(estado.assinaturas || {})) {
+        if ((ass.comandaId === comanda.id || ass.chaveIdempotencia === chaveItem) && ass.status !== 'cancelada') {
+          ass.status = 'cancelada';
+          ass.canceladaEm = dataAtual();
+          ass.motivoCancelamento = 'Item de pacote removido da comanda';
+        }
+      }
+    }
     comanda.atualizadoEm = dataAtual();
     comanda.historicoAlteracoes = comanda.historicoAlteracoes || [];
     comanda.historicoAlteracoes.push({
@@ -3532,6 +3549,10 @@ export function alterarStatusComandaBarbearia(empresaId, comandaId, status, dado
   if (novoStatus === 'cancelada' && (Number(comanda.totalPago || 0) > 0 || Number(comanda.totalFaturado || 0) > 0 || (comanda.pagamentos || []).length > 0)) throw new Error('Uma comanda com cobrança registrada só pode ser cancelada pelo fluxo financeiro apropriado.');
   comanda.status = novoStatus;
   comanda.observacoes = dados.observacoes !== undefined ? texto(dados.observacoes, 600) : comanda.observacoes;
+  if (novoStatus === 'cancelada') {
+    comanda.canceladaEm = dataAtual();
+    cancelarPacotesEEstornarUsosComanda(empresaId, comanda, dados);
+  }
   comanda.atualizadoEm = dataAtual();
   save();
   return copiarComandaBarbearia(comanda);
@@ -3847,6 +3868,82 @@ export function alterarPagamentoComandaBarbearia(empresaId, comandaId, dados = {
   return copiarComandaBarbearia(comanda);
 }
 
+/**
+ * Ao cancelar uma comanda:
+ * 1. Cancela qualquer pacote/plano adquirido/lançado nesta comanda, inativando a assinatura na ficha do cliente.
+ * 2. Estorna todas as sessões de pacotes consumidas nesta comanda, devolvendo o saldo integralmente ao cliente.
+ */
+export function cancelarPacotesEEstornarUsosComanda(empresaId, comanda, dados = {}) {
+  if (!comanda) return { assinaturasCanceladas: [], usosEstornados: 0 };
+  const estado = estadoEmpresa(empresaId);
+  const cmdId = String(comanda.id || '');
+  const clienteId = comanda.clienteId ? String(comanda.clienteId) : null;
+  const agora = dataAtual();
+  const motivo = dados.motivo || comanda.cancelamentoMotivo || 'Comanda cancelada';
+  const operador = dados.usuario || dados.operador || comanda.canceladoPor || 'operador';
+
+  // 1. Estorna as sessões consumidas na comanda (volta o saldo ao cliente)
+  for (const item of comanda.itens || []) {
+    if (item.coberturaPlano) {
+      item.coberturaPlano.usoId = null;
+      item.coberturaPlano.estornadoEm = agora;
+    }
+  }
+  let usosEstornados = 0;
+  try {
+    usosEstornados = estornarUsosDaComanda(empresaId, comanda.id, comanda.agendamentoId);
+  } catch (err) {
+    console.warn(`[comanda] aviso ao estornar usos de plano da comanda ${comanda.id}:`, err.message);
+  }
+
+  // 2. Cancela qualquer pacote/plano adquirido/lançado nesta comanda
+  const planosIdsItens = new Set(
+    (comanda.itens || [])
+      .filter((item) => (item.tipo === 'pacote' || item.tipo === 'plano' || item.categoria === 'Pacotes e Planos') && item.planoId)
+      .map((item) => String(item.planoId))
+  );
+
+  const assinaturasCanceladas = [];
+  for (const ass of Object.values(estado.assinaturas || {})) {
+    if (ass.empresaId !== String(empresaId)) continue;
+    if (ass.status === 'cancelada') continue;
+
+    let deveCancelar = false;
+
+    // A) Criada por esta comanda diretamente
+    if (ass.comandaId && String(ass.comandaId) === cmdId) {
+      deveCancelar = true;
+    }
+    // B) Chave de idempotência vinculada à comanda
+    else if (ass.chaveIdempotencia && String(ass.chaveIdempotencia).includes(cmdId)) {
+      deveCancelar = true;
+    }
+    // C) Assinatura do mesmo cliente com o mesmo planoId do item da comanda, criada na mesma data
+    else if (clienteId && String(ass.clienteId) === clienteId && planosIdsItens.has(String(ass.planoId))) {
+      const dataCriacaoAss = String(ass.criadoEm || '').slice(0, 10);
+      const dataComanda = String(comanda.criadoEm || comanda.dataAtendimento || '').slice(0, 10);
+      if (dataCriacaoAss && dataComanda && dataCriacaoAss === dataComanda) {
+        deveCancelar = true;
+      }
+    }
+
+    if (deveCancelar) {
+      ass.status = 'cancelada';
+      ass.canceladaEm = agora;
+      ass.canceladoPor = operador;
+      ass.motivoCancelamento = motivo;
+      ass.atualizadoEm = agora;
+      assinaturasCanceladas.push(ass.id);
+    }
+  }
+
+  if (assinaturasCanceladas.length > 0 || usosEstornados > 0) {
+    save();
+  }
+
+  return { assinaturasCanceladas, usosEstornados };
+}
+
 export async function cancelarComandaBarbearia(empresaId, comandaId, dados = {}) {
   const estado = estadoEmpresa(empresaId);
   const comanda = estado.comandas[String(comandaId)];
@@ -3910,6 +4007,7 @@ export async function cancelarComandaBarbearia(empresaId, comandaId, dados = {})
       }
       ag.atualizadoEm = dataAtual();
     }
+    cancelarPacotesEEstornarUsosComanda(empresaId, comanda, dados);
     comanda.atualizadoEm = dataAtual();
     save();
     const atualizada = estado.comandas[String(comandaId)];
@@ -3924,6 +4022,7 @@ export async function cancelarComandaBarbearia(empresaId, comandaId, dados = {})
     comanda.canceladaEm = dataAtual();
     comanda.canceladoPor = dados.usuario || dados.operador || 'operador';
     comanda.cancelamentoMotivo = dados.motivo || 'Cancelamento manual';
+    cancelarPacotesEEstornarUsosComanda(empresaId, comanda, dados);
     comanda.atualizadoEm = dataAtual();
     save();
     return copiarComandaBarbearia(comanda);
@@ -4668,8 +4767,53 @@ export function sanearConfirmacoesDino(empresaId) {
       motivosPreenchidos++;
     }
   }
-  if (prazosLimpos > 0 || restaurados > 0 || concluidosSincronizados > 0 || motivosPreenchidos > 0) save();
-  return { prazosLimpos, restaurados, concluidosSincronizados, motivosPreenchidos };
+  // 4. Saneamento de comandas canceladas: cancelamento de pacotes pendentes e estorno de saldo
+  const resPacotes = sanearComandasCanceladasEPacotes(empresaId);
+
+  if (prazosLimpos > 0 || restaurados > 0 || concluidosSincronizados > 0 || motivosPreenchidos > 0 || resPacotes.totalAssinaturasCanceladas > 0 || resPacotes.totalUsosEstornados > 0) save();
+  return { prazosLimpos, restaurados, concluidosSincronizados, motivosPreenchidos, ...resPacotes };
+}
+
+/**
+ * Saneamento de comandas canceladas e pacotes:
+ * Garante que nenhuma assinatura permaneça ativa a partir de comanda cancelada,
+ * e que nenhum saldo de sessão fique indevidamente debitado.
+ */
+export function sanearComandasCanceladasEPacotes(empresaId) {
+  const estado = estadoEmpresa(empresaId);
+  let totalAssinaturasCanceladas = 0;
+  let totalUsosEstornados = 0;
+
+  for (const comanda of Object.values(estado.comandas || {})) {
+    if (comanda.empresaId !== String(empresaId)) continue;
+    if (comanda.status !== 'cancelada') continue;
+
+    const res = cancelarPacotesEEstornarUsosComanda(empresaId, comanda, {
+      motivo: 'Saneamento automático: cancelamento de pacote e estorno de saldo de comanda cancelada',
+      usuario: 'Saneamento Automático'
+    });
+    totalAssinaturasCanceladas += res.assinaturasCanceladas.length;
+    totalUsosEstornados += res.usosEstornados;
+  }
+
+  // Também varre assinaturas cujo comandaId aponte para comanda cancelada
+  for (const ass of Object.values(estado.assinaturas || {})) {
+    if (ass.empresaId !== String(empresaId)) continue;
+    if (ass.status === 'cancelada') continue;
+    if (ass.comandaId) {
+      const cmd = estado.comandas[ass.comandaId];
+      if (!cmd || cmd.status === 'cancelada') {
+        ass.status = 'cancelada';
+        ass.canceladaEm = dataAtual();
+        ass.motivoCancelamento = 'Comanda de origem cancelada';
+        ass.atualizadoEm = dataAtual();
+        totalAssinaturasCanceladas++;
+      }
+    }
+  }
+
+  if (totalAssinaturasCanceladas > 0 || totalUsosEstornados > 0) save();
+  return { totalAssinaturasCanceladas, totalUsosEstornados };
 }
 
 export function recebimentoAgendamentoVerificado(empresaId, agendamento) {
