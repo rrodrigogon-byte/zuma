@@ -1995,7 +1995,7 @@ export default function BarbeariaAgendaPeriodo({
               {submodoDia === "colunas" && (
                 <div className="dino-cal-day-barbers-container">
                   {/* Linha do Tempo Google em Tempo Real (minuto atual) */}
-                  {de === hojeIso && (
+                  {de === hoje && (
                     <div className="dino-cal-now-timeline-bar">
                       <span className="dino-cal-now-badge">
                         <span className="dino-cal-now-pulse-dot" />
