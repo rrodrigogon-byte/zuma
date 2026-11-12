@@ -9,14 +9,21 @@ import {
   criarPropostaComercial,
   atualizarStatusProposta,
   atualizarStatusVeiculoFrota,
-  registrarMovimentacaoInsumoSilo
+  registrarMovimentacaoInsumoSilo,
+  gerarListaTecnicaBOM,
+  listarComprasInsumos,
+  criarPedidoCompraInsumo,
+  registrarRecebimentoPesagemCompra,
+  calcularCustoConcretoAvancado,
+  listarOrdensProducao,
+  criarOrdemProducao,
+  concluirOrdemProducao
 } from './servico.js';
 import { CONCRETO_EMPRESA_ID } from '../../concreto-usina-seed.js';
 
 export function criarRotasConcreto() {
   const router = Router();
 
-  // Middleware para obter empresaId seguro do token ou escopo
   const resolverEmpresa = (req) => {
     return req.empresaId || req.headers['x-empresa-id'] || CONCRETO_EMPRESA_ID;
   };
@@ -32,7 +39,87 @@ export function criarRotasConcreto() {
     }
   });
 
-  // 2. Criar nova carga
+  // 2. Lista Técnica / BOM de fabricação de concreto
+  router.get('/lista-tecnica', (req, res) => {
+    try {
+      const listas = gerarListaTecnicaBOM();
+      return res.json({ ok: true, listasTecnicas: listas });
+    } catch (e) {
+      return res.status(500).json({ ok: false, error: e.message });
+    }
+  });
+
+  // 3. Compras de Matérias-Primas
+  router.get('/compras', async (req, res) => {
+    try {
+      const empresaId = resolverEmpresa(req);
+      const resultado = await listarComprasInsumos(empresaId);
+      return res.json(resultado);
+    } catch (e) {
+      return res.status(500).json({ ok: false, error: e.message });
+    }
+  });
+
+  router.post('/compras', async (req, res) => {
+    try {
+      const empresaId = resolverEmpresa(req);
+      const resultado = await criarPedidoCompraInsumo(req.body, empresaId);
+      return res.status(201).json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  router.post('/compras/:id/recebimento', async (req, res) => {
+    try {
+      const resultado = await registrarRecebimentoPesagemCompra(req.params.id, req.body);
+      return res.json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  // 4. Calculadora Industrial de Custos e Formação de Preço
+  router.post('/custos/calcular', (req, res) => {
+    try {
+      const custos = calcularCustoConcretoAvancado(req.body);
+      return res.json({ ok: true, custos });
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  // 5. Ordens de Produção (OP)
+  router.get('/ordens-producao', async (req, res) => {
+    try {
+      const empresaId = resolverEmpresa(req);
+      const resultado = await listarOrdensProducao(empresaId);
+      return res.json(resultado);
+    } catch (e) {
+      return res.status(500).json({ ok: false, error: e.message });
+    }
+  });
+
+  router.post('/ordens-producao', async (req, res) => {
+    try {
+      const empresaId = resolverEmpresa(req);
+      const resultado = await criarOrdemProducao(req.body, empresaId);
+      return res.status(201).json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  router.post('/ordens-producao/:id/concluir', async (req, res) => {
+    try {
+      const resultado = await concluirOrdemProducao(req.params.id, req.body.consumoRealBalança);
+      return res.json(resultado);
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+  });
+
+  // 6. Criar nova carga
   router.post('/cargas', async (req, res) => {
     try {
       const empresaId = resolverEmpresa(req);
@@ -43,7 +130,7 @@ export function criarRotasConcreto() {
     }
   });
 
-  // 3. Atualizar status de uma carga
+  // 7. Atualizar status de uma carga
   router.put('/cargas/:id/status', async (req, res) => {
     try {
       const { status, observacoes } = req.body;
@@ -54,7 +141,7 @@ export function criarRotasConcreto() {
     }
   });
 
-  // 4. Registrar evento de viagem da betoneira (telemetria ao vivo)
+  // 8. Registrar evento de viagem da betoneira (telemetria ao vivo)
   router.post('/cargas/:id/viagens/:index/evento', async (req, res) => {
     try {
       const { evento, horario } = req.body;
@@ -65,7 +152,7 @@ export function criarRotasConcreto() {
     }
   });
 
-  // 5. Registrar ensaio de ruptura de CP no laboratório
+  // 9. Registrar ensaio de ruptura de CP no laboratório
   router.post('/ensaios/:loteId/ruptura', async (req, res) => {
     try {
       const { cpId, idadeDias, tensaoMpa, forcaKn } = req.body;
@@ -76,7 +163,7 @@ export function criarRotasConcreto() {
     }
   });
 
-  // 6. Calculadora de dosagem NBR 7212
+  // 10. Calculadora de dosagem NBR 7212
   router.post('/dosagem/calcular', (req, res) => {
     try {
       const dosagem = calcularDosagemAvancada(req.body);
@@ -86,7 +173,7 @@ export function criarRotasConcreto() {
     }
   });
 
-  // 7. Criar proposta comercial
+  // 11. Criar proposta comercial
   router.post('/propostas', async (req, res) => {
     try {
       const empresaId = resolverEmpresa(req);
@@ -97,7 +184,7 @@ export function criarRotasConcreto() {
     }
   });
 
-  // 8. Atualizar status de proposta comercial
+  // 12. Atualizar status de proposta comercial
   router.put('/propostas/:id/status', async (req, res) => {
     try {
       const { status } = req.body;
@@ -108,7 +195,7 @@ export function criarRotasConcreto() {
     }
   });
 
-  // 9. Atualizar status de veículo da frota
+  // 13. Atualizar status de veículo da frota
   router.put('/frota/:id/status', async (req, res) => {
     try {
       const { status, horimetro, motorista } = req.body;
@@ -119,7 +206,7 @@ export function criarRotasConcreto() {
     }
   });
 
-  // 10. Movimentação no silo ou pátio da mineração
+  // 14. Movimentação no silo ou pátio da mineração
   router.post('/silos/:id/movimento', async (req, res) => {
     try {
       const { tipo, quantidade, motivo } = req.body;
